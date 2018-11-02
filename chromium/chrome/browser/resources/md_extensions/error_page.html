@@ -1,46 +1,92 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_container_shadow_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
-<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_outline_manager.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://extensions/code_section.html">
-<link rel="import" href="chrome://extensions/item_util.html">
-<link rel="import" href="chrome://extensions/navigation_helper.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
+<link rel="import" href="code_section.html">
+<link rel="import" href="item_util.html">
+<link rel="import" href="navigation_helper.html">
 
 <dom-module id="extensions-error-page">
   <template>
-    <style include="cr-icons cr-hidden-style">
+    <style include="paper-button-style cr-icons cr-shared-style">
+      :host {
+        display: block;
+        height: 100%;
+      }
+
+      #container {
+        height: 100%;
+        overflow: overlay;
+      }
+
+      iron-icon {
+        --iron-icon-fill-color: var(--paper-grey-500);
+        @apply(--cr-icon-height-width);
+      }
+
+      iron-icon[icon=warning] {
+        --iron-icon-fill-color: var(--paper-orange-500);
+      }
+
+      iron-icon[icon=error] {
+        --iron-icon-fill-color: var(--paper-red-700);
+      }
+
+      /* TODO(dpapad): There is a lot of duplicated styling between
+       * detail_view.html and error_page.html. Refactor such that no duplication
+       * happens.*/
       #main {
+        @apply(--shadow-elevation-2dp);
         background-color: white;
-        height: 800px;
-        width: 90%;
+        margin: auto;
+        min-height: 100%;
+        width: 640px;
+      }
+
+      .section {
+        padding: 0 var(--cr-section-padding);
       }
 
       #heading {
-        color: var(--paper-grey-600);
         height: 40px;
         margin-bottom: 30px;
         padding: 8px 12px 0;
+        @apply(--cr-title-text);
       }
 
       #errors-list {
         min-height: 100px;
-        padding: 0 10px;
       }
 
       .error-item {
-        align-items: center;
-        color: var(--paper-grey-800);
-        display: flex;
-        margin: 5px 0;
+        @apply(--cr-section);
+        padding-left: 0;
+      }
+
+      .error-item button[is='paper-icon-button-light'] {
+        -webkit-margin-end: 0;
       }
 
       .error-item.selected {
-        background-color: #ccc;
+        background-color: rgba(0, 0, 0, 0.08);
+      }
+
+      .error-item .start {
+        align-items: center;
+        align-self: stretch;  /* Makes the tappable area fill its parent. */
+        display: flex;
+        flex: 1;
+        padding: 0 var(--cr-section-padding);
       }
 
       .error-message {
@@ -48,48 +94,135 @@
         flex-grow: 1;
       }
 
-      .icon-severity-info {
-        /* TODO(devlin): 1x/2x versions? */
-        content: url(error_severity_info.png);
+      #devtools-controls {
+        padding: 0 var(--cr-section-padding);
       }
 
-      .icon-severity-warning {
-        content: url(error_severity_warning.png);
+      #stack-trace-heading {
+        @apply(--cr-title-text);
+        align-items: center;
+        display: flex;
+        height: var(--cr-section-min-height);
       }
 
-      .icon-severity-fatal {
-        content: url(error_severity_fatal.png);
+      #stack-trace-container {
+        list-style: none;
+        margin-top: 0;
+        padding: 0;
+      }
+
+      #stack-trace-container li {
+        cursor: pointer;
+        font-family: monospace;
+        padding: 4px;
+      }
+
+      #stack-trace-container li.selected,
+      #stack-trace-container li:hover {
+        background: var(--google-blue-100);
+      }
+
+      #dev-tool-button {
+        margin-bottom: 20px;
+        max-width: 300px;
+      }
+
+      extensions-code-section {
+        background: white;
+        height: 200px;
+      }
+
+      /* TODO(scottchen): extract to shared location from settings. */
+      .separator {
+        --separator-gaps: 9px;
+        -webkit-border-start: var(--cr-separator-line);
+        -webkit-margin-end: var(--cr-section-padding);
+        /**
+         * Makes the tappable area fill its parent.
+         * TODO(scottchen): This is an explicit reminder to override once
+         * .separator styling is extracted from settings.
+         */
+        -webkit-margin-start: 0;
+        flex-shrink: 0;
+        height: calc(var(--cr-section-min-height) -
+            var(--separator-gaps));
+
+      }
+
+      /* TODO(scottchen): extract to shared location from settings. */
+      .separator + button[is='paper-icon-button-light'] {
+        -webkit-margin-start: var(--cr-icon-ripple-margin);
+      }
+
+      :host-context(.focus-outline-visible) .start:focus {
+        outline: -webkit-focus-ring-color auto 5px;
+      }
+
+      .start:focus {
+        outline: none;
       }
     </style>
-    <div id="main">
-      <div id="heading">
-        <button id="close-button" is="paper-icon-button-light"
-            class="icon-arrow-back no-overlap" on-tap="onCloseButtonTap_">
-        </button>
-        <span>$i18n{errorsPageHeading}</span>
-      </div>
-      <iron-list id="errors-list" items="[[calculateShownItems_(data.*)]]">
-        <template>
-          <div class$="[[computeErrorClass_(selectedError_, item)]]"
-              error="[[item]]"
-              tabindex$="[[tabIndex]]"
-              on-tap="onErrorItemTap_" on-keydown="onErrorItemKeydown_">
-            <img class$="[[computeErrorIconClass_(item)]]">
-            <div class="error-message">[[item.message]]</div>
-            <button is="paper-icon-button-light" class="icon-delete-gray"
-                on-tap="onDeleteErrorTap_" tabindex$="[[tabIndex]]"></button>
+    <div id="container">
+      <div id="main">
+        <div id="heading">
+          <button id="close-button" is="paper-icon-button-light"
+              class="icon-arrow-back no-overlap" on-tap="onCloseButtonTap_">
+          </button>
+          <span>$i18n{errorsPageHeading}</span>
+        </div>
+        <div class="section">
+          <extensions-code-section id="code-section"
+              could-not-display-code="$i18n{noErrorsToShow}">
+          </extensions-code-section>
+          <div id="errors-list">
+            <template is="dom-repeat" items="[[entries_]]">
+              <div class="item-container">
+                <div class$="error-item
+                    [[computeErrorClass_(item, selectedEntry_)]]">
+                  <div actionable class=" start" on-tap="onErrorItemAction_"
+                      on-keydown="onErrorItemAction_" tabindex="0">
+                    <iron-icon icon$="[[computeErrorIcon_(item)]]"></iron-icon>
+                    <div class="error-message">[[item.message]]</div>
+                    <div class$="cr-icon [[iconName_(index, selectedEntry_)]]"
+                        hidden="[[!computeIsRuntimeError_(item)]]">
+                    </div>
+                  </div>
+                  <div class="separator"></div>
+                  <button is="paper-icon-button-light" class="icon-delete-gray"
+                      on-tap="onDeleteErrorAction_"
+                      on-keydown="onDeleteErrorAction_">
+                  </button>
+                </div>
+                <template is="dom-if" if="[[computeIsRuntimeError_(item)]]">
+                  <iron-collapse opened="[[isOpened_(index, selectedEntry_)]]">
+                    <div id="devtools-controls">
+                      <div id="stack-trace-heading">
+                        $i18n{stackTrace}
+                      </div>
+                      <ul id="stack-trace-container">
+                        <template is="dom-repeat" items="[[item.stackTrace]]">
+                          <li on-tap="onStackFrameTap_"
+                              hidden="[[!shouldDisplayFrame_(item.url)]]"
+                              class$="[[getStackFrameClass_(item,
+                                  selectedStackFrame_)]]">
+                            [[getStackTraceLabel_(item)]]
+                          </li>
+                        </template>
+                      </ul>
+                      <paper-button id="dev-tool-button" class="action-button"
+                          disabled="[[!item.canInspect]]"
+                          on-tap="onDevToolButtonTap_">
+                        $i18n{openInDevtool}
+                      </paper-button>
+                    </div>
+                  </iron-collapse>
+                </template>
+              </div>
+            </template>
           </div>
-        </template>
-      </iron-list>
-      <div id="content-view">
-        <extensions-code-section id="code-section"
-            could-not-display-code="$i18n{noErrorsToShow}">
-        </extensions-code-section>
-      </div>
-      <div id="devtools-controls">
-        <!--TODO-->
+        </div>
       </div>
     </div>
   </template>
-  <script src="chrome://extensions/error_page.js"></script>
+  <script src="error_page.js"></script>
 </dom-module>

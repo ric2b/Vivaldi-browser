@@ -67,8 +67,6 @@ std::unique_ptr<content::NavigationEntry> MakeNavigationEntryForTest() {
   navigation_entry->SetOriginalRequestURL(test_data::kOriginalRequestURL);
   navigation_entry->SetIsOverridingUserAgent(test_data::kIsOverridingUserAgent);
   navigation_entry->SetTimestamp(test_data::kTimestamp);
-  navigation_entry->SetExtraData(kSearchTermsKey,
-                                 test_data::kSearchTerms);
   SetPasswordStateInNavigation(test_data::kPasswordState,
                                navigation_entry.get());
   navigation_entry->GetFavicon().valid = true;
@@ -195,8 +193,8 @@ TEST_F(ContentSerializedNavigationBuilderTest, ToNavigationEntry) {
           test_data::kIndex, *old_navigation_entry);
 
   const std::unique_ptr<content::NavigationEntry> new_navigation_entry(
-      ContentSerializedNavigationBuilder::ToNavigationEntry(
-          &navigation, NULL));
+      ContentSerializedNavigationBuilder::ToNavigationEntry(&navigation,
+                                                            nullptr));
 
   EXPECT_EQ(test_data::kReferrerURL, new_navigation_entry->GetReferrer().url);
   EXPECT_EQ(test_data::kReferrerPolicy,
@@ -213,9 +211,6 @@ TEST_F(ContentSerializedNavigationBuilderTest, ToNavigationEntry) {
             new_navigation_entry->GetOriginalRequestURL());
   EXPECT_EQ(test_data::kIsOverridingUserAgent,
             new_navigation_entry->GetIsOverridingUserAgent());
-  base::string16 search_terms;
-  new_navigation_entry->GetExtraData(kSearchTermsKey, &search_terms);
-  EXPECT_EQ(test_data::kSearchTerms, search_terms);
   EXPECT_EQ(test_data::kHttpStatusCode,
             new_navigation_entry->GetHttpStatusCode());
   ASSERT_EQ(3U, new_navigation_entry->GetRedirectChain().size());

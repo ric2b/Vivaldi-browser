@@ -6,17 +6,17 @@
 #define CHROME_BROWSER_MEDIA_GALLERIES_WIN_MTP_DEVICE_DELEGATE_IMPL_WIN_H_
 
 #include <stdint.h>
+#include <wrl/client.h>
 
 #include <memory>
-#include <queue>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/files/file.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
-#include "base/win/scoped_comptr.h"
 #include "chrome/browser/media_galleries/fileapi/mtp_device_async_delegate.h"
 #include "storage/browser/fileapi/async_file_util.h"
 
@@ -73,13 +73,13 @@ class MTPDeviceDelegateImplWin : public MTPDeviceAsyncDelegate {
 
   // Used to represent pending task details.
   struct PendingTaskInfo {
-    PendingTaskInfo(const tracked_objects::Location& location,
+    PendingTaskInfo(const base::Location& location,
                     const base::Callback<base::File::Error(void)>& task,
                     const base::Callback<void(base::File::Error)>& reply);
     PendingTaskInfo(const PendingTaskInfo& other);
     ~PendingTaskInfo();
 
-    const tracked_objects::Location location;
+    const base::Location location;
     const base::Callback<base::File::Error(void)> task;
     const base::Callback<void(base::File::Error)> reply;
   };
@@ -254,7 +254,7 @@ class MTPDeviceDelegateImplWin : public MTPDeviceAsyncDelegate {
 
   // A list of pending tasks that needs to be run when the device is
   // initialized or when the current task in progress is complete.
-  std::queue<PendingTaskInfo> pending_tasks_;
+  base::queue<PendingTaskInfo> pending_tasks_;
 
   // Used to make sure only one task is in progress at any time.
   bool task_in_progress_;

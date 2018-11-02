@@ -36,7 +36,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/html/HTMLTextAreaElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutListItem.h"
@@ -48,7 +48,9 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "platform/geometry/IntRect.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -73,7 +75,7 @@ static bool IsNonTextAreaFormControl(const LayoutObject* layout_object) {
     return false;
   const Element* element = ToElement(node);
 
-  return (element->IsFormControlElement() && !isHTMLTextAreaElement(element));
+  return (element->IsFormControlElement() && !IsHTMLTextAreaElement(element));
 }
 
 static bool IsPotentialClusterRoot(const LayoutObject* layout_object) {
@@ -592,7 +594,8 @@ void TextAutosizer::UpdatePageInfo() {
              ->GetViewportDescription()
              .IsSpecifiedByAuthor()) {
       page_info_.device_scale_adjustment_ =
-          document_->GetSettings()->GetDeviceScaleAdjustment();
+          document_->GetPage()->GetChromeClient().WindowToViewportScalar(
+              document_->GetSettings()->GetDeviceScaleAdjustment());
     } else {
       page_info_.device_scale_adjustment_ = 1.0f;
     }
@@ -726,6 +729,14 @@ bool TextAutosizer::ClusterHasEnoughTextToAutosize(
 
   // 4 lines of text is considered enough to autosize.
   float minimum_text_length_to_autosize = WidthFromBlock(width_provider) * 4;
+  if (LocalFrameView* view = document_->View()) {
+    minimum_text_length_to_autosize =
+        document_->GetPage()
+            ->GetChromeClient()
+            .ViewportToScreen(IntRect(0, 0, minimum_text_length_to_autosize, 0),
+                              view)
+            .Width();
+  }
 
   float length = 0;
   LayoutObject* descendant = root->FirstChild();
@@ -1121,7 +1132,7 @@ void TextAutosizer::ApplyMultiplier(LayoutObject* layout_object,
     return;
 
   // We need to clone the layoutObject style to avoid breaking style sharing.
-  RefPtr<ComputedStyle> style = ComputedStyle::Clone(current_style);
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Clone(current_style);
   style->SetTextAutosizingMultiplier(multiplier);
   style->SetUnique();
 
@@ -1401,7 +1412,7 @@ void TextAutosizer::CheckSuperclusterConsistency() {
   potentially_inconsistent_superclusters.clear();
 }
 
-DEFINE_TRACE(TextAutosizer) {
+void TextAutosizer::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
 }
 

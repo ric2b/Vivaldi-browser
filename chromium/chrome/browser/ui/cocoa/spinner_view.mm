@@ -6,17 +6,19 @@
 
 #import <QuartzCore/QuartzCore.h>
 
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/mac/sdk_forward_declarations.h"
+#import "chrome/browser/ui/cocoa/md_util.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/base/theme_provider.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/native_theme/native_theme.h"
 
 namespace {
-const CGFloat kDegrees90               = (M_PI / 2);
-const CGFloat kDegrees180              = (M_PI);
-const CGFloat kDegrees270              = (3 * M_PI / 2);
-const CGFloat kDegrees360              = (2 * M_PI);
+const CGFloat kDegrees90 = gfx::DegToRad(90.0f);
+const CGFloat kDegrees180 = gfx::DegToRad(180.0f);
+const CGFloat kDegrees270 = gfx::DegToRad(270.0f);
+const CGFloat kDegrees360 = gfx::DegToRad(360.0f);
 const CGFloat kDesignWidth             = 28.0;
 const CGFloat kArcRadius               = 12.5;
 const CGFloat kArcDiameter             = kArcRadius * 2.0;
@@ -182,7 +184,7 @@ NSString* const kRotationAnimationName = @"RotationAnimationName";
   // Create the first half of the arc animation, where it grows from a short
   // block to its full length.
   base::scoped_nsobject<CAMediaTimingFunction> timingFunction(
-      [[CAMediaTimingFunction alloc] initWithControlPoints:0.4 :0.0 :0.2 :1]);
+      [CAMediaTimingFunction.cr_materialEaseInOutTimingFunction retain]);
   base::scoped_nsobject<CAKeyframeAnimation> firstHalfAnimation(
       [[CAKeyframeAnimation alloc] init]);
   [firstHalfAnimation setTimingFunction:timingFunction];

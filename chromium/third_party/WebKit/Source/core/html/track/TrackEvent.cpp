@@ -25,7 +25,7 @@
 
 #include "core/html/track/TrackEvent.h"
 
-#include "bindings/core/v8/VideoTrackOrAudioTrackOrTextTrack.h"
+#include "bindings/core/v8/video_track_or_audio_track_or_text_track.h"
 #include "core/html/track/AudioTrack.h"
 #include "core/html/track/TextTrack.h"
 #include "core/html/track/VideoTrack.h"
@@ -42,12 +42,12 @@ TrackEvent::TrackEvent(const AtomicString& type,
     return;
 
   const VideoTrackOrAudioTrackOrTextTrack& track = initializer.track();
-  if (track.isVideoTrack())
-    track_ = track.getAsVideoTrack();
-  else if (track.isAudioTrack())
-    track_ = track.getAsAudioTrack();
-  else if (track.isTextTrack())
-    track_ = track.getAsTextTrack();
+  if (track.IsVideoTrack())
+    track_ = track.GetAsVideoTrack();
+  else if (track.IsAudioTrack())
+    track_ = track.GetAsAudioTrack();
+  else if (track.IsTextTrack())
+    track_ = track.GetAsTextTrack();
   else
     NOTREACHED();
 }
@@ -64,20 +64,20 @@ void TrackEvent::track(VideoTrackOrAudioTrackOrTextTrack& return_value) {
 
   switch (track_->GetType()) {
     case WebMediaPlayer::kTextTrack:
-      return_value.setTextTrack(ToTextTrack(track_.Get()));
+      return_value.SetTextTrack(ToTextTrack(track_.Get()));
       break;
     case WebMediaPlayer::kAudioTrack:
-      return_value.setAudioTrack(ToAudioTrack(track_.Get()));
+      return_value.SetAudioTrack(ToAudioTrack(track_.Get()));
       break;
     case WebMediaPlayer::kVideoTrack:
-      return_value.setVideoTrack(ToVideoTrack(track_.Get()));
+      return_value.SetVideoTrack(ToVideoTrack(track_.Get()));
       break;
     default:
       NOTREACHED();
   }
 }
 
-DEFINE_TRACE(TrackEvent) {
+void TrackEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(track_);
   Event::Trace(visitor);
 }

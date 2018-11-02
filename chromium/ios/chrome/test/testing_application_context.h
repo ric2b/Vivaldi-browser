@@ -6,6 +6,7 @@
 #define IOS_CHROME_TEST_TESTING_APPLICATION_CONTEXT_H_
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
@@ -33,8 +34,6 @@ class TestingApplicationContext : public ApplicationContext {
   void OnAppEnterForeground() override;
   void OnAppEnterBackground() override;
   bool WasLastShutdownClean() override;
-  void SetIsShuttingDown() override;
-  bool IsShuttingDown() override;
 
   PrefService* GetLocalState() override;
   net::URLRequestContextGetter* GetSystemURLRequestContext() override;
@@ -52,7 +51,6 @@ class TestingApplicationContext : public ApplicationContext {
   gcm::GCMDriver* GetGCMDriver() override;
   component_updater::ComponentUpdateService* GetComponentUpdateService()
       override;
-  CRLSetFetcher* GetCRLSetFetcher() override;
   physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
 
  private:
@@ -62,7 +60,6 @@ class TestingApplicationContext : public ApplicationContext {
   ios::ChromeBrowserStateManager* chrome_browser_state_manager_;
   std::unique_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
   bool was_last_shutdown_clean_;
-  bool is_shutting_down_;
 
   DISALLOW_COPY_AND_ASSIGN(TestingApplicationContext);
 };

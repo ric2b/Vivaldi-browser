@@ -95,7 +95,8 @@ enum WebAXRole {
   kWebAXRoleColorWell,
   kWebAXRoleColumnHeader,
   kWebAXRoleColumn,
-  kWebAXRoleComboBox,
+  kWebAXRoleComboBoxGrouping,
+  kWebAXRoleComboBoxMenuButton,
   kWebAXRoleComplementary,
   kWebAXRoleContentInfo,
   kWebAXRoleDate,
@@ -182,6 +183,7 @@ enum WebAXRole {
   kWebAXRoleTable,
   kWebAXRoleTerm,
   kWebAXRoleTextField,
+  kWebAXRoleTextFieldWithComboBox,
   kWebAXRoleTime,
   kWebAXRoleTimer,
   kWebAXRoleToggleButton,
@@ -199,6 +201,13 @@ enum class WebAXDefaultActionVerb {
   kActivate,
   kCheck,
   kClick,
+
+  // A click will be performed on one of the object's ancestors.
+  // This happens when the object itself is not clickable, but one of its
+  // ancestors has click handlers attached which are able to capture the click
+  // as it bubbles up.
+  kClickAncestor,
+
   kJump,
   kOpen,
   kPress,

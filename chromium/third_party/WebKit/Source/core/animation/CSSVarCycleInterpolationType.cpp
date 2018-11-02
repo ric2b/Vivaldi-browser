@@ -10,6 +10,7 @@
 #include "core/css/PropertyRegistration.h"
 #include "core/css/resolver/CSSVariableResolver.h"
 #include "core/css/resolver/StyleBuilder.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -120,7 +121,7 @@ void CSSVarCycleInterpolationType::Apply(
     const NonInterpolableValue*,
     InterpolationEnvironment& environment) const {
   StyleBuilder::ApplyProperty(
-      GetProperty().CssProperty(),
+      GetProperty().GetCSSProperty(),
       ToCSSInterpolationEnvironment(environment).GetState(),
       *CSSCustomPropertyDeclaration::Create(GetProperty().CustomPropertyName(),
                                             CSSValueUnset));

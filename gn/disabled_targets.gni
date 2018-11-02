@@ -57,7 +57,7 @@ _disabled_targets = [
 
   #gin.gyp
   ":gin_shell",
-  ":gin_test",
+  #":gin_test",
 
   #net.gyp
   ":net_perftests",

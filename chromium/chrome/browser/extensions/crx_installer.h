@@ -14,12 +14,14 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/version.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/webstore_installer.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/sync/model/string_ordinal.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/preload_check.h"
 #include "extensions/browser/sandboxed_unpacker.h"
@@ -70,6 +72,9 @@ class PreloadCheckGroup;
 // and won't safely be able to clean up UI thread notification listeners.
 class CrxInstaller : public SandboxedUnpackerClient {
  public:
+  // A callback to be executed when the install finishes.
+  using InstallerResultCallback = ExtensionSystem::InstallUpdateCallback;
+
   // Used in histograms; do not change order.
   enum OffStoreInstallAllowReason {
     OffStoreInstallDisallowed,
@@ -99,6 +104,13 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // Install the crx in |source_file|.
   void InstallCrx(const base::FilePath& source_file);
   void InstallCrxFile(const CRXFileInfo& source_file);
+
+  // Install the unpacked crx in |unpacked_dir|.
+  // If |delete_source_| is true, |unpacked_dir| will be removed at the end of
+  // the installation.
+  void InstallUnpackedCrx(const std::string& extension_id,
+                          const std::string& public_key,
+                          const base::FilePath& unpacked_dir);
 
   // Convert the specified user script into an extension and install it.
   void InstallUserScript(const base::FilePath& source_file,
@@ -200,6 +212,10 @@ class CrxInstaller : public SandboxedUnpackerClient {
     set_install_flag(kInstallFlagDoNotSync, val);
   }
 
+  void set_installer_callback(InstallerResultCallback callback) {
+    installer_callback_ = std::move(callback);
+  }
+
   bool did_handle_successfully() const { return did_handle_successfully_; }
 
   Profile* profile() { return profile_; }
@@ -231,18 +247,20 @@ class CrxInstaller : public SandboxedUnpackerClient {
 
   // SandboxedUnpackerClient
   void OnUnpackFailure(const CrxInstallError& error) override;
-  void OnUnpackSuccess(const base::FilePath& temp_dir,
-                       const base::FilePath& extension_dir,
-                       std::unique_ptr<base::DictionaryValue> original_manifest,
-                       const Extension* extension,
-                       const SkBitmap& install_icon) override;
+  void OnUnpackSuccess(
+      const base::FilePath& temp_dir,
+      const base::FilePath& extension_dir,
+      std::unique_ptr<base::DictionaryValue> original_manifest,
+      const Extension* extension,
+      const SkBitmap& install_icon,
+      const base::Optional<int>& dnr_ruleset_checksum) override;
 
   // Called on the UI thread to start the requirements, policy and blacklist
   // checks on the extension.
   void CheckInstall();
 
   // Runs on the UI thread. Callback from PreloadCheckGroup.
-  void OnInstallChecksComplete(PreloadCheck::Errors errors);
+  void OnInstallChecksComplete(const PreloadCheck::Errors& errors);
 
   // Runs on the UI thread. Confirms the installation to the ExtensionService.
   void ConfirmInstall();
@@ -440,6 +458,10 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // The flags for ExtensionService::OnExtensionInstalled.
   int install_flags_;
 
+  // The checksum for the indexed ruleset corresponding to the Declarative Net
+  // Request API.
+  base::Optional<int> dnr_ruleset_checksum_;
+
   // Checks that may run before installing the extension.
   std::unique_ptr<PreloadCheck> policy_check_;
   std::unique_ptr<PreloadCheck> requirements_check_;
@@ -447,6 +469,9 @@ class CrxInstaller : public SandboxedUnpackerClient {
 
   // Runs the above checks.
   std::unique_ptr<PreloadCheckGroup> check_group_;
+
+  // Invoked when the install is completed.
+  InstallerResultCallback installer_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(CrxInstaller);
 };

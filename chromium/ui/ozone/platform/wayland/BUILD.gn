@@ -20,6 +20,8 @@ source_set("wayland") {
     "ozone_platform_wayland.h",
     "wayland_connection.cc",
     "wayland_connection.h",
+    "wayland_cursor.cc",
+    "wayland_cursor.h",
     "wayland_keyboard.cc",
     "wayland_keyboard.h",
     "wayland_object.cc",
@@ -32,6 +34,11 @@ source_set("wayland") {
     "wayland_surface_factory.h",
     "wayland_window.cc",
     "wayland_window.h",
+    "xdg_surface_wrapper.h",
+    "xdg_surface_wrapper_v5.cc",
+    "xdg_surface_wrapper_v5.h",
+    "xdg_surface_wrapper_v6.cc",
+    "xdg_surface_wrapper_v6.h",
   ]
 
   import("//ui/base/ui_features.gni")
@@ -48,8 +55,9 @@ source_set("wayland") {
     "//skia",
     "//third_party/wayland:wayland_client",
     "//third_party/wayland-protocols:xdg_shell_protocol",
+    "//ui/base",
     "//ui/base:ui_features",
-    "//ui/display",
+    "//ui/display/manager",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
     "//ui/events/ozone:events_ozone_layout",

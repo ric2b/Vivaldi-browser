@@ -37,19 +37,40 @@ bool IsViewUnfocusableChildOfFocusableAncestor(View* view) {
   return false;
 }
 
+ui::AXPlatformNode* FromNativeWindow(gfx::NativeWindow native_window) {
+  Widget* widget = Widget::GetWidgetForNativeWindow(native_window);
+  if (!widget)
+    return nullptr;
+
+  View* view = widget->GetRootView();
+  if (!view)
+    return nullptr;
+
+  gfx::NativeViewAccessible native_view_accessible =
+      view->GetNativeViewAccessible();
+  if (!native_view_accessible)
+    return nullptr;
+
+  return ui::AXPlatformNode::FromNativeViewAccessible(native_view_accessible);
+}
+
 }  // namespace
 
 NativeViewAccessibilityBase::NativeViewAccessibilityBase(View* view)
-    : view_(view),
-      parent_widget_(nullptr),
-      ax_node_(ui::AXPlatformNode::Create(this)) {
+    : view_(view) {
+  ax_node_ = ui::AXPlatformNode::Create(this);
   DCHECK(ax_node_);
+
+  static bool first_time = true;
+  if (first_time) {
+    ui::AXPlatformNode::RegisterNativeWindowHandler(
+        base::BindRepeating(&FromNativeWindow));
+    first_time = false;
+  }
 }
 
 NativeViewAccessibilityBase::~NativeViewAccessibilityBase() {
   ax_node_->Destroy();
-  if (parent_widget_)
-    parent_widget_->RemoveObserver(this);
 }
 
 gfx::NativeViewAccessible NativeViewAccessibilityBase::GetNativeObject() {
@@ -143,8 +164,11 @@ gfx::NativeViewAccessible NativeViewAccessibilityBase::GetParent() {
   if (view_->parent())
     return view_->parent()->GetNativeViewAccessible();
 
-  if (parent_widget_)
-    return parent_widget_->GetRootView()->GetNativeViewAccessible();
+  if (Widget* widget = view_->GetWidget()) {
+    Widget* top_widget = widget->GetTopLevelWidget();
+    if (top_widget && widget != top_widget && top_widget->GetRootView())
+      return top_widget->GetRootView()->GetNativeViewAccessible();
+  }
 
   return nullptr;
 }
@@ -203,6 +227,10 @@ ui::AXPlatformNode* NativeViewAccessibilityBase::GetFromNodeID(int32_t id) {
   return nullptr;
 }
 
+int NativeViewAccessibilityBase::GetIndexInParent() const {
+  return -1;
+}
+
 gfx::AcceleratedWidget
 NativeViewAccessibilityBase::GetTargetForNativeAccessibilityEvent() {
   return gfx::kNullAcceleratedWidget;
@@ -217,18 +245,9 @@ bool NativeViewAccessibilityBase::ShouldIgnoreHoveredStateForTesting() {
   return false;
 }
 
-void NativeViewAccessibilityBase::OnWidgetDestroying(Widget* widget) {
-  if (parent_widget_ == widget) {
-    parent_widget_->RemoveObserver(this);
-    parent_widget_ = nullptr;
-  }
-}
-
-void NativeViewAccessibilityBase::SetParentWidget(Widget* parent_widget) {
-  if (parent_widget_)
-    parent_widget_->RemoveObserver(this);
-  parent_widget_ = parent_widget;
-  parent_widget_->AddObserver(this);
+bool NativeViewAccessibilityBase::IsOffscreen() const {
+  // TODO: need to implement.
+  return false;
 }
 
 gfx::RectF NativeViewAccessibilityBase::GetBoundsInScreen() const {
@@ -255,18 +274,6 @@ void NativeViewAccessibilityBase::PopulateChildWidgetVector(
 
     if (widget->GetNativeWindowProperty(kWidgetNativeViewHostKey))
       continue;
-
-    gfx::NativeViewAccessible child_widget_accessible =
-        child_widget->GetRootView()->GetNativeViewAccessible();
-    ui::AXPlatformNode* child_widget_platform_node =
-        ui::AXPlatformNode::FromNativeViewAccessible(child_widget_accessible);
-    if (child_widget_platform_node) {
-      NativeViewAccessibilityBase* child_widget_view_accessibility =
-          static_cast<NativeViewAccessibilityBase*>(
-              child_widget_platform_node->GetDelegate());
-      if (child_widget_view_accessibility->parent_widget() != widget)
-        child_widget_view_accessibility->SetParentWidget(widget);
-    }
 
     result_child_widgets->push_back(child_widget);
   }

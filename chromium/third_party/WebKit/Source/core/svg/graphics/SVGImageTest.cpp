@@ -31,14 +31,14 @@ class SVGImageTest : public ::testing::Test {
   }
 
   void PumpFrame() {
-    Image* image = image_.Get();
+    Image* image = image_.get();
     std::unique_ptr<SkCanvas> null_canvas = SkMakeNullCanvas();
     SkiaPaintCanvas canvas(null_canvas.get());
     PaintFlags flags;
     FloatRect dummy_rect(0, 0, 100, 100);
     image->Draw(&canvas, flags, dummy_rect, dummy_rect,
                 kDoNotRespectImageOrientation,
-                Image::kDoNotClampImageToSourceRect);
+                Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
   }
 
  private:
@@ -60,13 +60,15 @@ class SVGImageTest : public ::testing::Test {
 
     void AsyncLoadCompleted(const blink::Image*) override {}
 
-    DEFINE_INLINE_VIRTUAL_TRACE() { ImageObserver::Trace(visitor); }
+    virtual void Trace(blink::Visitor* visitor) {
+      ImageObserver::Trace(visitor);
+    }
 
    private:
     bool should_pause_;
   };
   Persistent<PauseControlImageObserver> observer_;
-  RefPtr<SVGImage> image_;
+  scoped_refptr<SVGImage> image_;
 };
 
 const char kAnimatedDocument[] =

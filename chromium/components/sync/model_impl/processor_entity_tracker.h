@@ -80,8 +80,9 @@ class ProcessorEntityTracker {
   // Applies a local change to this item.
   void MakeLocalChange(std::unique_ptr<EntityData> data);
 
-  // Applies a local deletion to this item.
-  void Delete();
+  // Applies a local deletion to this item. Returns true if entity was
+  // previously committed to server and tombstone should be sent.
+  bool Delete();
 
   // Initializes a message representing this item's uncommitted state
   // and assumes that it is forwarded to the sync engine for commiting.
@@ -95,7 +96,7 @@ class ProcessorEntityTracker {
   // unset IsUnsynced().  If many local changes occur in quick succession, it's
   // possible that the committed item was already out of date by the time it
   // reached the server.
-  void ReceiveCommitResponse(const CommitResponseData& data);
+  void ReceiveCommitResponse(const CommitResponseData& data, bool commit_only);
 
   // Clears any in-memory sync state associated with outstanding commits.
   void ClearTransientSyncState();

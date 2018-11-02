@@ -25,6 +25,7 @@
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
@@ -415,6 +416,13 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   info->home_page.url = ManifestURL::GetHomepageURL(&extension).spec();
   info->home_page.specified = ManifestURL::SpecifiedHomepageURL(&extension);
 
+  // Developer and web store URLs.
+  // TODO(dschuyler) after MD extensions releases (expected in m64), look into
+  // removing the |home_page.url| and |home_page.specified| above.
+  info->manifest_home_page_url =
+      ManifestURL::GetManifestHomePageURL(&extension).spec();
+  info->web_store_url = ManifestURL::GetWebStoreURL(&extension).spec();
+
   info->id = extension.id();
 
   // Incognito access.
@@ -516,14 +524,21 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   // Permissions.
   PermissionMessages messages =
       extension.permissions_data()->GetPermissionMessages();
-  // TODO(devlin): We need to include retained device/file info. We also need
-  // to indicate which can be removed and which can't.
-  for (const PermissionMessage& message : messages)
-    info->permissions.push_back(base::UTF16ToUTF8(message.message()));
+  // TODO(devlin): We need to indicate which permissions can be removed and
+  // which can't.
+  info->permissions.reserve(messages.size());
+  for (const PermissionMessage& message : messages) {
+    info->permissions.push_back(developer::Permission());
+    developer::Permission& permission_message = info->permissions.back();
+    permission_message.message = base::UTF16ToUTF8(message.message());
+    permission_message.submessages.reserve(message.submessages().size());
+    for (const auto& submessage : message.submessages())
+      permission_message.submessages.push_back(base::UTF16ToUTF8(submessage));
+  }
 
   // Runs on all urls.
   ScriptingPermissionsModifier permissions_modifier(
-      browser_context_, make_scoped_refptr(&extension));
+      browser_context_, base::WrapRefCounted(&extension));
   info->run_on_all_urls.is_enabled =
       (FeatureSwitch::scripts_require_action()->IsEnabled() &&
        permissions_modifier.CanAffectExtension(
@@ -599,6 +614,13 @@ const std::string& ExtensionInfoGenerator::GetDefaultIconUrl(
 std::string ExtensionInfoGenerator::GetIconUrlFromImage(
     const gfx::Image& image,
     bool should_greyscale) {
+  // Ignore |should_greyscale| if MD Extensions are enabled.
+  // TODO(dpapad): Remove should_greyscale logic once non-MD Extensions UI is
+  // removed.
+  should_greyscale =
+      should_greyscale &&
+      !base::FeatureList::IsEnabled(features::kMaterialDesignExtensions);
+
   scoped_refptr<base::RefCountedMemory> data;
   if (should_greyscale) {
     color_utils::HSL shift = {-1, 0, 0.6};

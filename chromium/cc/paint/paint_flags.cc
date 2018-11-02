@@ -4,7 +4,9 @@
 
 #include "cc/paint/paint_flags.h"
 
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_op_buffer.h"
+#include "third_party/skia/include/core/SkFlattenableSerialization.h"
 
 namespace {
 
@@ -32,7 +34,17 @@ PaintFlags::PaintFlags() {
 
 PaintFlags::PaintFlags(const PaintFlags& flags) = default;
 
+PaintFlags::PaintFlags(PaintFlags&& other) = default;
+
 PaintFlags::~PaintFlags() = default;
+
+PaintFlags& PaintFlags::operator=(const PaintFlags& other) = default;
+
+PaintFlags& PaintFlags::operator=(PaintFlags&& other) = default;
+
+void PaintFlags::setImageFilter(sk_sp<PaintFilter> filter) {
+  image_filter_ = std::move(filter);
+}
 
 bool PaintFlags::nothingToDraw() const {
   // Duplicated from SkPaint to avoid having to construct an SkPaint to
@@ -108,7 +120,8 @@ SkPaint PaintFlags::ToSkPaint() const {
   paint.setMaskFilter(mask_filter_);
   paint.setColorFilter(color_filter_);
   paint.setDrawLooper(draw_looper_);
-  paint.setImageFilter(image_filter_);
+  if (image_filter_)
+    paint.setImageFilter(image_filter_->cached_sk_filter_);
   paint.setTextSize(text_size_);
   paint.setColor(color_);
   paint.setStrokeWidth(width_);
@@ -126,6 +139,73 @@ SkPaint PaintFlags::ToSkPaint() const {
 
 bool PaintFlags::IsValid() const {
   return PaintOp::IsValidPaintFlagsSkBlendMode(getBlendMode());
+}
+
+static bool AreFlattenablesEqual(SkFlattenable* left, SkFlattenable* right) {
+  sk_sp<SkData> left_data(SkValidatingSerializeFlattenable(left));
+  sk_sp<SkData> right_data(SkValidatingSerializeFlattenable(right));
+  if (left_data->size() != right_data->size())
+    return false;
+  if (!left_data->equals(right_data.get()))
+    return false;
+  return true;
+}
+
+bool PaintFlags::operator==(const PaintFlags& other) const {
+  // Can't just ToSkPaint and operator== here as SkPaint does pointer
+  // comparisons on all the ref'd skia objects on the SkPaint, which
+  // is not true after serialization.
+  if (!PaintOp::AreEqualEvenIfNaN(getTextSize(), other.getTextSize()))
+    return false;
+  if (getColor() != other.getColor())
+    return false;
+  if (!PaintOp::AreEqualEvenIfNaN(getStrokeWidth(), other.getStrokeWidth()))
+    return false;
+  if (!PaintOp::AreEqualEvenIfNaN(getStrokeMiter(), other.getStrokeMiter()))
+    return false;
+  if (getBlendMode() != other.getBlendMode())
+    return false;
+  if (getStrokeCap() != other.getStrokeCap())
+    return false;
+  if (getStrokeJoin() != other.getStrokeJoin())
+    return false;
+  if (getStyle() != other.getStyle())
+    return false;
+  if (getTextEncoding() != other.getTextEncoding())
+    return false;
+  if (getHinting() != other.getHinting())
+    return false;
+  if (getFilterQuality() != other.getFilterQuality())
+    return false;
+
+  // TODO(enne): compare typeface too
+  if (!AreFlattenablesEqual(getPathEffect().get(), other.getPathEffect().get()))
+    return false;
+  if (!AreFlattenablesEqual(getMaskFilter().get(), other.getMaskFilter().get()))
+    return false;
+  if (!AreFlattenablesEqual(getColorFilter().get(),
+                            other.getColorFilter().get()))
+    return false;
+  if (!AreFlattenablesEqual(getLooper().get(), other.getLooper().get()))
+    return false;
+
+  // TODO(khushalsagar): Add filter comparison when adding serialization for it.
+
+  if (!getShader() != !other.getShader())
+    return false;
+  if (getShader() && *getShader() != *other.getShader())
+    return false;
+  return true;
+}
+
+bool PaintFlags::HasDiscardableImages() const {
+  if (!shader_)
+    return false;
+  else if (shader_->shader_type() == PaintShader::Type::kImage)
+    return shader_->paint_image().IsLazyGenerated();
+  else if (shader_->shader_type() == PaintShader::Type::kPaintRecord)
+    return shader_->paint_record()->HasDiscardableImages();
+  return false;
 }
 
 }  // namespace cc

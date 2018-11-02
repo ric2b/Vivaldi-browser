@@ -30,9 +30,6 @@ namespace chromeos {
 
 namespace {
 
-void DoNothingWithCallStatus(DBusMethodCallStatus call_status) {
-}
-
 void ErrorCallbackFunction(const std::string& error_name,
                            const std::string& error_message) {
   LOG(ERROR) << "Shill Error: " << error_name << " : " << error_message;
@@ -148,10 +145,10 @@ class TestListener : public internal::ShillPropertyHandler::Listener {
   }
 
   // Map of list-type -> paths
-  std::map<std::string, std::vector<std::string> > entries_;
+  std::map<std::string, std::vector<std::string>> entries_;
   // Map of list-type -> map of paths -> update counts
-  std::map<std::string, std::map<std::string, int> > property_updates_;
-  std::map<std::string, std::map<std::string, int> > initial_property_updates_;
+  std::map<std::string, std::map<std::string, int>> property_updates_;
+  std::map<std::string, std::map<std::string, int>> initial_property_updates_;
   // Map of list-type -> list update counts
   std::map<std::string, int > list_updates_;
   int technology_list_updates_;
@@ -169,7 +166,7 @@ class ShillPropertyHandlerTest : public testing::Test {
         device_test_(NULL),
         service_test_(NULL),
         profile_test_(NULL) {}
-  ~ShillPropertyHandlerTest() override {}
+  ~ShillPropertyHandlerTest() override = default;
 
   void SetUp() override {
     // Initialize DBusThreadManager with a stub implementation.
@@ -423,26 +420,22 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerIPConfigPropertyChanged) {
 
   base::Value ip_address("192.168.1.1");
   DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
-      dbus::ObjectPath(kTestIPConfigPath),
-      shill::kAddressProperty, ip_address,
-      base::Bind(&DoNothingWithCallStatus));
+      dbus::ObjectPath(kTestIPConfigPath), shill::kAddressProperty, ip_address,
+      EmptyVoidDBusMethodCallback());
   base::ListValue dns_servers;
   dns_servers.AppendString("192.168.1.100");
   dns_servers.AppendString("192.168.1.101");
   DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
-      dbus::ObjectPath(kTestIPConfigPath),
-      shill::kNameServersProperty, dns_servers,
-      base::Bind(&DoNothingWithCallStatus));
+      dbus::ObjectPath(kTestIPConfigPath), shill::kNameServersProperty,
+      dns_servers, EmptyVoidDBusMethodCallback());
   base::Value prefixlen(8);
   DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
-      dbus::ObjectPath(kTestIPConfigPath),
-      shill::kPrefixlenProperty, prefixlen,
-      base::Bind(&DoNothingWithCallStatus));
+      dbus::ObjectPath(kTestIPConfigPath), shill::kPrefixlenProperty, prefixlen,
+      EmptyVoidDBusMethodCallback());
   base::Value gateway("192.0.0.1");
   DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
-      dbus::ObjectPath(kTestIPConfigPath),
-      shill::kGatewayProperty, gateway,
-      base::Bind(&DoNothingWithCallStatus));
+      dbus::ObjectPath(kTestIPConfigPath), shill::kGatewayProperty, gateway,
+      EmptyVoidDBusMethodCallback());
   base::RunLoop().RunUntilIdle();
 
   // Add a service with an empty ipconfig and then update

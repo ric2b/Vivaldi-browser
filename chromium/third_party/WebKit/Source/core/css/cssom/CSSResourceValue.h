@@ -5,18 +5,17 @@
 #ifndef CSSResourceValue_h
 #define CSSResourceValue_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSStyleValue.h"
-
 #include "platform/loader/fetch/Resource.h"
 
 namespace blink {
 
 class CORE_EXPORT CSSResourceValue : public CSSStyleValue {
-  WTF_MAKE_NONCOPYABLE(CSSResourceValue);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  virtual ~CSSResourceValue() {}
+  virtual ~CSSResourceValue() = default;
 
   const String state() const {
     switch (Status()) {
@@ -35,12 +34,15 @@ class CORE_EXPORT CSSResourceValue : public CSSStyleValue {
     }
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { CSSStyleValue::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { CSSStyleValue::Trace(visitor); }
 
  protected:
-  CSSResourceValue() {}
+  CSSResourceValue() = default;
 
   virtual ResourceStatus Status() const = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CSSResourceValue);
 };
 
 }  // namespace blink

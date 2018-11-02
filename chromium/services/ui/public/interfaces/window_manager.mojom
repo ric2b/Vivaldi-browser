@@ -4,12 +4,13 @@
 
 module ui.mojom;
 
-import "cc/ipc/frame_sink_id.mojom";
-import "cc/ipc/local_surface_id.mojom";
+import "gpu/ipc/common/surface_handle.mojom";
 import "services/ui/public/interfaces/cursor/cursor.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
 import "services/ui/public/interfaces/window_manager_constants.mojom";
 import "services/ui/public/interfaces/window_tree_constants.mojom";
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
 import "skia/public/interfaces/bitmap.mojom";
 import "ui/base/mojo/ui_base_types.mojom";
 import "ui/display/mojo/display.mojom";
@@ -93,6 +94,10 @@ interface WindowManager {
   // The application icon; typically larger for shelf icons, etc. Type: SkBitmap
   const string kAppIcon_Property = "prop:app-icon";
 
+  // Whether the window is trying to draw attention to itself (e.g. pulsing its
+  // shelf icon). Type: bool.
+  const string kDrawAttention_Property = "prop:draw-attention";
+
   // Used to explicitly control whether a window appears in the most recently
   // used list of windows. Maps to aura::client::kExcludeFromMruKey. Type: bool.
   const string kExcludeFromMru_Property = "prop:exclude_from_mru";
@@ -159,13 +164,19 @@ interface WindowManager {
   // Called immediately when the WindowManager is obtained.
   OnConnect();
 
+  // Called to notify about the real AcceleratedWidget associated with a
+  // display. This is called only when mus is not hosting viz, and requires the
+  // window manager to instead host viz.
+  WmOnAcceleratedWidgetForDisplay(int64 display_id,
+                                  gpu.mojom.SurfaceHandle surface_handle);
+
   // Called when a new display is added. |root| gives the root window specific
   // to this WindowManager for |display|. |local_surface_id| identifies the ID
   // to use to submit CompositorFrames.
   WmNewDisplayAdded(display.mojom.Display display,
                     WindowData root,
                     bool parent_drawn,
-                    cc.mojom.LocalSurfaceId? local_surface_id);
+                    viz.mojom.LocalSurfaceId? local_surface_id);
 
   // Called when a display is removed. The root of the specified display is
   // still valid. It is expected the client calls DeleteWindow() shortly after
@@ -188,10 +199,10 @@ interface WindowManager {
   WmSetCanFocus(uint32 window_id, bool can_focus);
 
   // Asks the WindowManager to create a new window.
-  // |requesting_client_id| is the id of the client issuing the request. This
-  // allows the window manager to track top level windows by client.
+  // |frame_sink_id| is the FrameSinkId for the new window. Window manager
+  // tracks top level windows by client with |frame_sink_id|.client_id().
   WmCreateTopLevelWindow(uint32 change_id,
-                         uint16 requesting_client_id,
+                         viz.mojom.FrameSinkId frame_sink_id,
                          map<string, array<uint8>> properties);
 
   // A WindowTreeClient is considered "janky" by Mus when it stops ACK'ing input
@@ -237,6 +248,9 @@ interface WindowManager {
   // Asks the WindowManager to stack |window_id| as the first child of its
   // window manager owned parent.
   WmStackAtTop(uint32 change_id, uint32 window_id);
+
+  // Asks the WindowManager to perform |action| on |window_id|.
+  WmPerformWmAction(uint32 window_id, string action);
 
   // An accelerator registered via AddAccelerator() has been triggered. If
   // |ack_id| is non-zero the accelerator matches a PRE_TARGET and must be
@@ -292,29 +306,31 @@ interface WindowManagerClient {
   // The cursor will automatically be unhidden on the next mouse event.
   SetKeyEventsThatDontHideCursor(array<EventMatcher> dont_hide_cursor_list);
 
-  // Sets the root of a particular display. This is only applicable when the
-  // WindowTree was created with a value of false for
-  // |automatically_create_display_roots| (see
+  // Sets the root window for a new |display|. This is only applicable if the
+  // WindowTree does not |automatically_create_display_roots| (see
   // WindowManagerWindowTreeFactory::CreateWindowTree() for details).
-  // |local_surface_id| identifies the ID to use to submit CompositorFrames.
-  // base::nullopt indicates failure.
-  // This function may also be used to move an existing display root to a new
-  // display.
+  // This may also be called to move an existing root window to a new display.
+  // |mirrors| contains a list of physical displays presenting contents mirrored
+  // from another physical display, or from part of a virtual unified display.
   SetDisplayRoot(display.mojom.Display display,
                  WmViewportMetrics viewport_metrics,
                  bool is_primary_display,
-                 uint32 window_id) => (bool success);
+                 uint32 window_id,
+                 array<display.mojom.Display> mirrors) => (bool success);
 
-  // Configures the metrics for the displays and notifies observers. This is
-  // only applicable when WindowTree was created with a value of false for
-  // |automatically_create_display_roots|. This *must* be called after any
-  // display related changes to inform observers, for example, after calling
-  // SetDisplayRoot() this must be called to inform observers of the display
-  // changes.
-  SetDisplayConfiguration(array<display.mojom.Display> displays,
-                          array<WmViewportMetrics> viewport_metrics,
-                          int64 primary_display_id,
-                          int64 internal_display_id) => (bool success);
+  // Configures metrics for the displays and notifies observers. This is only
+  // applicable if the WindowTree does not |automatically_create_display_roots|.
+  // This *must* be called after any display related changes to inform
+  // observers, for example, after calling SetDisplayRoot() this must be called
+  // to inform observers of the display changes.
+  // |mirrors| contains a list of physical displays presenting contents mirrored
+  // from another physical display, or from part of a virtual unified display.
+  SetDisplayConfiguration(
+      array<display.mojom.Display> displays,
+      array<WmViewportMetrics> viewport_metrics,
+      int64 primary_display_id,
+      int64 internal_display_id,
+      array<display.mojom.Display> mirrors) => (bool success);
 
   // Swaps the display roots of the two displays.
   SwapDisplayRoots(int64 display_id1, int64 display_id2) => (bool success);

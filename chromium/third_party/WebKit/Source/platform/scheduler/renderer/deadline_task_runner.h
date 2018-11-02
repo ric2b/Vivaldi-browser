@@ -11,7 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "platform/PlatformExport.h"
-#include "platform/scheduler/base/cancelable_closure_holder.h"
+#include "platform/scheduler/child/cancelable_closure_holder.h"
 
 namespace blink {
 namespace scheduler {
@@ -31,7 +31,7 @@ class PLATFORM_EXPORT DeadlineTaskRunner {
   //              posted to run after |delay|.
   //
   // Once the deadline task has run, we reset.
-  void SetDeadline(const tracked_objects::Location& from_here,
+  void SetDeadline(const base::Location& from_here,
                    base::TimeDelta delay,
                    base::TimeTicks now);
 

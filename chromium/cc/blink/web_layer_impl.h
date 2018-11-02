@@ -43,11 +43,6 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
 
   cc::Layer* layer() const;
 
-  // If set to true, content opaqueness cannot be changed using setOpaque.
-  // However, it can still be modified using SetContentsOpaque on the
-  // cc::Layer.
-  void SetContentsOpaqueIsFixed(bool fixed);
-
   // WebLayer implementation.
   int Id() const override;
   void InvalidateRect(const blink::WebRect&) override;
@@ -65,12 +60,13 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
   void SetMaskLayer(blink::WebLayer* mask) override;
   void SetOpacity(float opacity) override;
   float Opacity() const override;
+  void SetContentsOpaqueIsFixed(bool fixed) override;
+
   void SetBlendMode(blink::WebBlendMode blend_mode) override;
   blink::WebBlendMode BlendMode() const override;
   void SetIsRootForIsolatedGroup(bool root) override;
   bool IsRootForIsolatedGroup() override;
-  void SetShouldHitTest(bool should_hit_test) override;
-  bool ShouldHitTest() override;
+  void SetHitTestableWithoutDrawsContent(bool should_hit_test) override;
   void SetOpaque(bool opaque) override;
   bool Opaque() const override;
   void SetPosition(const blink::WebFloatPoint& position) override;
@@ -131,12 +127,9 @@ class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
   cc::Layer* CcLayer() override;
   void SetElementId(const cc::ElementId&) override;
   cc::ElementId GetElementId() const override;
-  void SetCompositorMutableProperties(uint32_t properties) override;
-  uint32_t CompositorMutableProperties() const override;
   void SetHasWillChangeTransformHint(bool has_will_change) override;
   void ShowScrollbars() override;
-  void SetScrollBoundaryBehavior(
-      const blink::WebScrollBoundaryBehavior&) override;
+  void SetOverscrollBehavior(const blink::WebOverscrollBehavior&) override;
 
   void SetScrollParent(blink::WebLayer* parent) override;
   void SetClipParent(blink::WebLayer* parent) override;

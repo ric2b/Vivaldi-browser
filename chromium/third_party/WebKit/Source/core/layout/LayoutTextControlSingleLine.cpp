@@ -25,20 +25,21 @@
 #include "core/layout/LayoutTextControlSingleLine.h"
 
 #include "core/CSSValueKeywords.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/input/KeyboardEventManager.h"
+#include "core/input_type_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
+#include "core/paint/AdjustPaintOffsetScope.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ThemePainter.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 
 namespace blink {
 
@@ -66,14 +67,17 @@ inline HTMLElement* LayoutTextControlSingleLine::InnerSpinButtonElement()
       ShadowElementNames::SpinButton()));
 }
 
+// TODO(wangxianzhu): Move this into TextControlSingleLinePainter.
 void LayoutTextControlSingleLine::Paint(const PaintInfo& paint_info,
                                         const LayoutPoint& paint_offset) const {
   LayoutTextControl::Paint(paint_info, paint_offset);
 
   if (ShouldPaintSelfBlockBackground(paint_info.phase) &&
       should_draw_caps_lock_indicator_) {
-    if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-            paint_info.context, *this, paint_info.phase))
+    // TODO(wangxianzhu): This display item may have conflicting id with the
+    // normal background. Should we allocate another DisplayItem::Type?
+    if (DrawingRecorder::UseCachedDrawingIfPossible(paint_info.context, *this,
+                                                    paint_info.phase))
       return;
 
     LayoutRect contents_rect = ContentBoxRect();
@@ -84,13 +88,15 @@ void LayoutTextControlSingleLine::Paint(const PaintInfo& paint_info,
     else
       contents_rect.SetX((Size().Width() - contents_rect.Width()) / 2);
 
-    // Convert the rect into the coords used for painting the content
-    contents_rect.MoveBy(paint_offset + Location());
+    // Convert the rect into the coords used for painting the content.
+    AdjustPaintOffsetScope adjustment(*this, paint_info, paint_offset);
+    const auto& local_paint_info = adjustment.GetPaintInfo();
+    contents_rect.MoveBy(adjustment.AdjustedPaintOffset());
     IntRect snapped_rect = PixelSnappedIntRect(contents_rect);
-    LayoutObjectDrawingRecorder recorder(paint_info.context, *this,
-                                         paint_info.phase, snapped_rect);
-    LayoutTheme::GetTheme().Painter().PaintCapsLockIndicator(*this, paint_info,
-                                                             snapped_rect);
+    DrawingRecorder recorder(local_paint_info.context, *this,
+                             local_paint_info.phase);
+    LayoutTheme::GetTheme().Painter().PaintCapsLockIndicator(
+        *this, local_paint_info, snapped_rect);
   }
 }
 
@@ -124,7 +130,7 @@ void LayoutTextControlSingleLine::UpdateLayout() {
 
   HTMLElement* placeholder_element = InputElement()->PlaceholderElement();
   if (LayoutBox* placeholder_box =
-          placeholder_element ? placeholder_element->GetLayoutBox() : 0) {
+          placeholder_element ? placeholder_element->GetLayoutBox() : nullptr) {
     LayoutSize inner_editor_size;
 
     if (inner_editor_layout_object)
@@ -280,7 +286,7 @@ LayoutUnit LayoutTextControlSingleLine::PreferredContentLogicalWidth(
   if (includes_decoration) {
     HTMLElement* spin_button = InnerSpinButtonElement();
     if (LayoutBox* spin_layout_object =
-            spin_button ? spin_button->GetLayoutBox() : 0) {
+            spin_button ? spin_button->GetLayoutBox() : nullptr) {
       result += spin_layout_object->BorderAndPaddingLogicalWidth();
       // Since the width of spinLayoutObject is not calculated yet,
       // spinLayoutObject->logicalWidth() returns 0.
@@ -298,9 +304,10 @@ LayoutUnit LayoutTextControlSingleLine::ComputeControlLogicalHeight(
   return line_height + non_content_height;
 }
 
-RefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
+scoped_refptr<ComputedStyle>
+LayoutTextControlSingleLine::CreateInnerEditorStyle(
     const ComputedStyle& start_style) const {
-  RefPtr<ComputedStyle> text_block_style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> text_block_style = ComputedStyle::Create();
   text_block_style->InheritFrom(start_style);
   AdjustInnerEditorStyle(*text_block_style);
 
@@ -313,8 +320,10 @@ RefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   int computed_line_height =
       LineHeight(true, kHorizontalLine, kPositionOfInteriorLineBoxes).ToInt();
   // Do not allow line-height to be smaller than our default.
-  if (text_block_style->FontSize() >= computed_line_height)
-    text_block_style->SetLineHeight(ComputedStyle::InitialLineHeight());
+  if (text_block_style->FontSize() >= computed_line_height) {
+    text_block_style->SetLineHeight(
+        ComputedStyleInitialValues::InitialLineHeight());
+  }
 
   // We'd like to remove line-height if it's unnecessary because
   // overflow:scroll clips editing text by line-height.
@@ -327,8 +336,10 @@ RefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   // TODO(tkent): This should be done during layout.
   if (logical_height.IsPercentOrCalc() ||
       (logical_height.IsFixed() &&
-       logical_height.GetFloatValue() > computed_line_height))
-    text_block_style->SetLineHeight(ComputedStyle::InitialLineHeight());
+       logical_height.GetFloatValue() > computed_line_height)) {
+    text_block_style->SetLineHeight(
+        ComputedStyleInitialValues::InitialLineHeight());
+  }
 
   text_block_style->SetDisplay(EDisplay::kBlock);
   text_block_style->SetUnique();
@@ -339,7 +350,7 @@ RefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   text_block_style->SetOverflowX(EOverflow::kScroll);
   // overflow-y:visible doesn't work because overflow-x:scroll makes a layer.
   text_block_style->SetOverflowY(EOverflow::kScroll);
-  RefPtr<ComputedStyle> no_scrollbar_style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> no_scrollbar_style = ComputedStyle::Create();
   no_scrollbar_style->SetStyleType(kPseudoIdScrollbar);
   no_scrollbar_style->SetDisplay(EDisplay::kNone);
   text_block_style->AddCachedPseudoStyle(no_scrollbar_style);
@@ -362,8 +373,9 @@ void LayoutTextControlSingleLine::Autoscroll(const IntPoint& position) {
 }
 
 LayoutUnit LayoutTextControlSingleLine::ScrollWidth() const {
-  if (LayoutBox* inner =
-          InnerEditorElement() ? InnerEditorElement()->GetLayoutBox() : 0) {
+  if (LayoutBox* inner = InnerEditorElement()
+                             ? InnerEditorElement()->GetLayoutBox()
+                             : nullptr) {
     // Adjust scrollWidth to inculde input element horizontal paddings and
     // decoration width
     LayoutUnit adjustment = ClientWidth() - inner->ClientWidth();
@@ -373,8 +385,9 @@ LayoutUnit LayoutTextControlSingleLine::ScrollWidth() const {
 }
 
 LayoutUnit LayoutTextControlSingleLine::ScrollHeight() const {
-  if (LayoutBox* inner =
-          InnerEditorElement() ? InnerEditorElement()->GetLayoutBox() : 0) {
+  if (LayoutBox* inner = InnerEditorElement()
+                             ? InnerEditorElement()->GetLayoutBox()
+                             : nullptr) {
     // Adjust scrollHeight to include input element vertical paddings and
     // decoration height
     LayoutUnit adjustment = ClientHeight() - inner->ClientHeight();
@@ -412,7 +425,7 @@ void LayoutTextControlSingleLine::AddOverflowFromChildren() {
 }
 
 HTMLInputElement* LayoutTextControlSingleLine::InputElement() const {
-  return toHTMLInputElement(GetNode());
+  return ToHTMLInputElement(GetNode());
 }
 
 }  // namespace blink

@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -42,22 +41,21 @@ class GLShareGroup;
 }
 
 namespace gpu {
-struct GpuPreferences;
-class PreemptionFlag;
-class Scheduler;
-class SyncPointManager;
-struct SyncToken;
-namespace gles2 {
-class MailboxManager;
-class ProgramCache;
-}
-}
 
-namespace gpu {
+struct GpuPreferences;
+struct SyncToken;
 class GpuChannel;
 class GpuChannelManagerDelegate;
 class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
+class Scheduler;
+class SyncPointManager;
+
+namespace gles2 {
+class MailboxManager;
+class Outputter;
+class ProgramCache;
+}  // namespace gles2
 
 // A GpuChannelManager is a thread responsible for issuing rendering commands
 // managing the lifetimes of GPU channels and forwarding IPC requests from the
@@ -106,6 +104,7 @@ class GPU_EXPORT GpuChannelManager {
   ServiceDiscardableManager* discardable_manager() {
     return &discardable_manager_;
   }
+  gles2::Outputter* outputter();
   gles2::ProgramCache* program_cache();
   gles2::ShaderTranslatorCache* shader_translator_cache() {
     return &shader_translator_cache_;
@@ -132,6 +131,8 @@ class GPU_EXPORT GpuChannelManager {
   void set_low_end_mode_for_testing(bool mode) {
     is_running_on_low_end_mode_ = mode;
   }
+
+  void OnApplicationBackgroundedForTesting();
 #endif
 
   bool is_exiting_for_lost_context() { return exiting_for_lost_context_; }
@@ -143,8 +144,6 @@ class GPU_EXPORT GpuChannelManager {
   SyncPointManager* sync_point_manager() const { return sync_point_manager_; }
 
  private:
-  friend class GpuChannelManagerTest;
-
   void InternalDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
   void InternalDestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id,
                                           int client_id);
@@ -175,9 +174,8 @@ class GPU_EXPORT GpuChannelManager {
 
   scoped_refptr<gl::GLShareGroup> share_group_;
 
-  scoped_refptr<PreemptionFlag> preemption_flag_;
-
   std::unique_ptr<gles2::MailboxManager> mailbox_manager_;
+  std::unique_ptr<gles2::Outputter> outputter_;
   GpuMemoryManager gpu_memory_manager_;
   Scheduler* scheduler_;
   // SyncPointManager guaranteed to outlive running MessageLoop.

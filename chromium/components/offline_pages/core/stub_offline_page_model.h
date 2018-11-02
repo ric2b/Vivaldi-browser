@@ -35,18 +35,12 @@ class StubOfflinePageModel : public OfflinePageModel, public KeyedService {
                               const DeletePageCallback& callback) override;
   void DeletePagesByClientIds(const std::vector<ClientId>& client_ids,
                               const DeletePageCallback& callback) override;
-  void GetPagesMatchingQuery(
-      std::unique_ptr<OfflinePageModelQuery> query,
-      const MultipleOfflinePageItemCallback& callback) override;
   void GetPagesByClientIds(
       const std::vector<ClientId>& client_ids,
       const MultipleOfflinePageItemCallback& callback) override;
   void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) override;
-  void CheckPagesExistOffline(
-      const std::set<GURL>& urls,
-      const CheckPagesExistOfflineCallback& callback) override;
   void GetAllPages(const MultipleOfflinePageItemCallback& callback) override;
   void GetOfflineIdsForClientId(
       const ClientId& client_id,
@@ -61,13 +55,22 @@ class StubOfflinePageModel : public OfflinePageModel, public KeyedService {
   void GetPagesByRequestOrigin(
       const std::string& origin,
       const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesRemovedOnCacheReset(
+      const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesByNamespace(
+      const std::string& name_space,
+      const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesSupportedByDownloads(
+      const MultipleOfflinePageItemCallback& callback) override;
+  const base::FilePath& GetArchiveDirectory(
+      const std::string& name_space) const override;
   ClientPolicyController* GetPolicyController() override;
-  bool is_loaded() const override;
   OfflineEventLogger* GetLogger() override;
 
  private:
   ClientPolicyController policy_controller_;
   std::vector<int64_t> offline_ids_;
+  base::FilePath archive_directory_;
 };
 
 }  // namespace offline_pages

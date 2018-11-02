@@ -27,7 +27,9 @@ class ImageBurnerClient;
 class ImageLoaderClient;
 class LorgnetteManagerClient;
 class MediaAnalyticsClient;
+class SmbProviderClient;
 class UpstartClient;
+class VirtualFileProviderClient;
 
 // D-Bus clients used only in the browser process.
 // TODO(jamescook): Move this under //chrome/browser. http://crbug.com/647367
@@ -55,7 +57,9 @@ class CHROMEOS_EXPORT DBusClientsBrowser {
   std::unique_ptr<ImageLoaderClient> image_loader_client_;
   std::unique_ptr<LorgnetteManagerClient> lorgnette_manager_client_;
   std::unique_ptr<MediaAnalyticsClient> media_analytics_client_;
+  std::unique_ptr<SmbProviderClient> smb_provider_client_;
   std::unique_ptr<UpstartClient> upstart_client_;
+  std::unique_ptr<VirtualFileProviderClient> virtual_file_provider_client_;
 
   DISALLOW_COPY_AND_ASSIGN(DBusClientsBrowser);
 };

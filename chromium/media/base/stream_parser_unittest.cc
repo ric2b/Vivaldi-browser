@@ -63,15 +63,14 @@ static void GenerateBuffers(const int* decode_timestamps,
 
 class StreamParserTest : public testing::Test {
  protected:
-  StreamParserTest() {}
+  StreamParserTest() = default;
 
   // Returns the number of buffers in |merged_buffers_| for which |predicate|
   // returns true.
   size_t CountMatchingMergedBuffers(
       bool (*predicate)(scoped_refptr<StreamParserBuffer> buffer)) {
-    return static_cast<size_t>(count_if(merged_buffers_.begin(),
-                                        merged_buffers_.end(),
-                                        predicate));
+    return static_cast<size_t>(std::count_if(merged_buffers_.begin(),
+                                             merged_buffers_.end(), predicate));
   }
 
   // Appends test audio buffers in the sequence described by |decode_timestamps|

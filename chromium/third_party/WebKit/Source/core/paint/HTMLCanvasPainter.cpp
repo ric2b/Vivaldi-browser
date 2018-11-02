@@ -7,12 +7,27 @@
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/layout/LayoutHTMLCanvas.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/geometry/LayoutPoint.h"
+#include "platform/graphics/ScopedInterpolationQuality.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 
 namespace blink {
+
+namespace {
+
+InterpolationQuality InterpolationQualityForCanvas(const ComputedStyle& style) {
+  if (style.ImageRendering() == EImageRendering::kWebkitOptimizeContrast)
+    return kInterpolationLow;
+
+  if (style.ImageRendering() == EImageRendering::kPixelated)
+    return kInterpolationNone;
+
+  return CanvasDefaultInterpolationQuality;
+}
+
+}  // namespace
 
 void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
                                       const LayoutPoint& paint_offset) {
@@ -24,7 +39,7 @@ void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
   paint_rect.MoveBy(paint_offset);
 
   HTMLCanvasElement* canvas =
-      toHTMLCanvasElement(layout_html_canvas_.GetNode());
+      ToHTMLCanvasElement(layout_html_canvas_.GetNode());
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       canvas->RenderingContext() &&
@@ -38,12 +53,11 @@ void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
     }
   }
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          context, layout_html_canvas_, paint_info.phase))
+  if (DrawingRecorder::UseCachedDrawingIfPossible(context, layout_html_canvas_,
+                                                  paint_info.phase))
     return;
 
-  LayoutObjectDrawingRecorder drawing_recorder(context, layout_html_canvas_,
-                                               paint_info.phase, content_rect);
+  DrawingRecorder recorder(context, layout_html_canvas_, paint_info.phase);
 
   bool clip = !content_rect.Contains(paint_rect);
   if (clip) {
@@ -52,22 +66,11 @@ void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
     context.Clip(FloatRect(content_rect));
   }
 
-  // FIXME: InterpolationNone should be used if ImageRenderingOptimizeContrast
-  // is set.  See bug for more details: crbug.com/353716.
-  InterpolationQuality interpolation_quality =
-      layout_html_canvas_.Style()->ImageRendering() ==
-              EImageRendering::kWebkitOptimizeContrast
-          ? kInterpolationLow
-          : CanvasDefaultInterpolationQuality;
-  if (layout_html_canvas_.Style()->ImageRendering() ==
-      EImageRendering::kPixelated)
-    interpolation_quality = kInterpolationNone;
-
-  InterpolationQuality previous_interpolation_quality =
-      context.ImageInterpolationQuality();
-  context.SetImageInterpolationQuality(interpolation_quality);
-  canvas->Paint(context, paint_rect);
-  context.SetImageInterpolationQuality(previous_interpolation_quality);
+  {
+    ScopedInterpolationQuality interpolation_quality_scope(
+        context, InterpolationQualityForCanvas(layout_html_canvas_.StyleRef()));
+    canvas->Paint(context, paint_rect);
+  }
 
   if (clip)
     context.Restore();

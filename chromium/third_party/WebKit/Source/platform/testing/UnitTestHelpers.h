@@ -26,8 +26,8 @@
 #ifndef UnitTestHelpers_h
 #define UnitTestHelpers_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/Timer.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -66,7 +66,7 @@ String CoreTestDataPath(const String& relative_path = String());
 // specified.
 String PlatformTestDataPath(const String& relative_path = String());
 
-PassRefPtr<SharedBuffer> ReadFromFile(const String& path);
+scoped_refptr<SharedBuffer> ReadFromFile(const String& path);
 
 }  // namespace testing
 }  // namespace blink

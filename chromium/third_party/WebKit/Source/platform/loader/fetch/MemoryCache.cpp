@@ -28,8 +28,8 @@
 #include "platform/weborigin/SecurityOriginHash.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/AutoReset.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/MathExtras.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/Platform.h"
 
@@ -60,7 +60,7 @@ MemoryCache* ReplaceMemoryCacheForTesting(MemoryCache* cache) {
   return old_cache;
 }
 
-DEFINE_TRACE(MemoryCacheEntry) {
+void MemoryCacheEntry::Trace(blink::Visitor* visitor) {
   visitor->template RegisterWeakMembers<MemoryCacheEntry,
                                         &MemoryCacheEntry::ClearResourceWeak>(
       this);
@@ -97,7 +97,7 @@ MemoryCache::~MemoryCache() {
     Platform::Current()->CurrentThread()->RemoveTaskObserver(this);
 }
 
-DEFINE_TRACE(MemoryCache) {
+void MemoryCache::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_maps_);
   MemoryCacheDumpClient::Trace(visitor);
   MemoryCoordinatorClient::Trace(visitor);

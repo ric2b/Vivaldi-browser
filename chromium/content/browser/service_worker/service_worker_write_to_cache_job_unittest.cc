@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -36,6 +37,7 @@
 #include "net/url_request/url_request_test_util.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -47,9 +49,6 @@ const char kHeaders[] =
     "Expires: Thu, 1 Jan 2100 20:00:00 GMT\n"
     "\n";
 const char kScriptCode[] = "// no script code\n";
-
-void EmptyCallback() {
-}
 
 // The blocksize that ServiceWorkerWriteToCacheJob reads/writes at a time.
 const int kBlockSize = 16 * 1024;
@@ -318,9 +317,10 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
         TRAFFIC_ANNOTATION_FOR_TESTS);
     ServiceWorkerRequestHandler::InitializeHandler(
         request_.get(), context_wrapper(), &blob_storage_context_, process_id,
-        provider_id, false, FETCH_REQUEST_MODE_NO_CORS,
-        FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        std::string() /* integrity */, RESOURCE_TYPE_SERVICE_WORKER,
+        provider_id, false, network::mojom::FetchRequestMode::kNoCORS,
+        network::mojom::FetchCredentialsMode::kOmit,
+        FetchRedirectMode::FOLLOW_MODE, std::string() /* integrity */,
+        false /* keepalive */, RESOURCE_TYPE_SERVICE_WORKER,
         REQUEST_CONTEXT_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_FRAME_TYPE_NONE,
         scoped_refptr<ResourceRequestBody>());
   }
@@ -332,7 +332,8 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
 
     // A new unstored registration/version.
     registration_ = new ServiceWorkerRegistration(
-        ServiceWorkerRegistrationOptions(scope_), 1L, context()->AsWeakPtr());
+        blink::mojom::ServiceWorkerRegistrationOptions(scope_), 1L,
+        context()->AsWeakPtr());
     version_ =
         new ServiceWorkerVersion(registration_.get(), script_url_,
                                  NextVersionId(), context()->AsWeakPtr());
@@ -341,7 +342,8 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     ASSERT_TRUE(host);
     SetUpScriptRequest(helper_->mock_render_process_id(), host->provider_id());
 
-    context()->storage()->LazyInitialize(base::Bind(&EmptyCallback));
+    context()->storage()->LazyInitializeForTest(
+        base::BindOnce(&base::DoNothing));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -363,7 +365,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     request_->Start();
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(net::URLRequestStatus::SUCCESS, request_->status().status());
-    int incumbent_resource_id =
+    int64_t incumbent_resource_id =
         version_->script_cache_map()->LookupResourceId(script_url_);
     EXPECT_NE(kInvalidServiceWorkerResourceId, incumbent_resource_id);
 
@@ -379,7 +381,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     return incumbent_resource_id;
   }
 
-  int GetResourceId(ServiceWorkerVersion* version) {
+  int64_t GetResourceId(ServiceWorkerVersion* version) {
     return version->script_cache_map()->LookupResourceId(script_url_);
   }
 
@@ -402,7 +404,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     return new_version;
   }
 
-  void VerifyResource(int id, const std::string& expected) {
+  void VerifyResource(int64_t id, const std::string& expected) {
     ASSERT_NE(kInvalidServiceWorkerResourceId, id);
     bool is_equal = false;
     std::unique_ptr<ServiceWorkerResponseReader> reader =
@@ -471,7 +473,7 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, SSLCertificateError) {
   request_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::URLRequestStatus::FAILED, request_->status().status());
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, request_->status().error());
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, request_->status().error());
   EXPECT_EQ(kInvalidServiceWorkerResourceId,
             version_->script_cache_map()->LookupResourceId(script_url_));
 }
@@ -506,7 +508,7 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest, SSLCertificateError) {
   request_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::URLRequestStatus::FAILED, request_->status().status());
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, request_->status().error());
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, request_->status().error());
   EXPECT_EQ(kInvalidServiceWorkerResourceId,
             version_->script_cache_map()->LookupResourceId(script_url_));
 }
@@ -532,7 +534,7 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest, CertStatusError) {
   request_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::URLRequestStatus::FAILED, request_->status().status());
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, request_->status().error());
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, request_->status().error());
   EXPECT_EQ(kInvalidServiceWorkerResourceId,
             version_->script_cache_map()->LookupResourceId(script_url_));
 }
@@ -543,7 +545,7 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, CertStatusError) {
   request_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::URLRequestStatus::FAILED, request_->status().status());
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE, request_->status().error());
+  EXPECT_EQ(net::ERR_CERT_DATE_INVALID, request_->status().error());
   EXPECT_EQ(kInvalidServiceWorkerResourceId,
             version_->script_cache_map()->LookupResourceId(script_url_));
 }

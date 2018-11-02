@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_BROWSER_WEB_CONTENTS_WEB_DRAG_DEST_MAC_H_
+#define CONTENT_BROWSER_WEB_CONTENTS_WEB_DRAG_DEST_MAC_H_
+
 #import <Cocoa/Cocoa.h>
 
 #include <memory>
@@ -10,7 +13,7 @@
 #include "content/browser/loader/global_routing_id.h"
 #include "content/common/content_export.h"
 #include "content/public/common/drop_data.h"
-#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 
 #include "content/public/browser/web_drag_dest_delegate.h"
 
@@ -92,7 +95,7 @@ CONTENT_EXPORT
 // Helper to call WebWidgetHostInputEventRouter::GetRenderWidgetHostAtPoint().
 - (content::RenderWidgetHostImpl*)
 GetRenderWidgetHostAtPoint:(const NSPoint&)viewPoint
-             transformedPt:(gfx::Point*)transformedPt;
+             transformedPt:(gfx::PointF*)transformedPt;
 
 // Sets |dragStartProcessID_| and |dragStartViewID_|.
 - (void)setDragStartTrackersForProcess:(int)processID;
@@ -119,3 +122,5 @@ GetRenderWidgetHostAtPoint:(const NSPoint&)viewPoint
 - (NSPoint)flipWindowPointToScreen:(const NSPoint&)windowPoint
                               view:(NSView*)view;
 @end
+
+#endif  // CONTENT_BROWSER_WEB_CONTENTS_WEB_DRAG_DEST_MAC_H_

@@ -26,8 +26,9 @@
 
 #include "platform/graphics/Image.h"
 
+#include "build/build_config.h"
+#include "platform/Histogram.h"
 #include "platform/Length.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
@@ -35,12 +36,14 @@
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/ScopedInterpolationQuality.h"
 #include "platform/graphics/paint/PaintImage.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/paint/PaintShader.h"
 #include "platform/instrumentation/PlatformInstrumentation.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
+#include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
@@ -51,12 +54,34 @@
 #include <tuple>
 
 namespace blink {
+namespace {
+
+bool HasCheckerableDimensions(const IntSize& size) {
+  CheckedNumeric<size_t> checked_size = 4u;
+  checked_size *= size.Width();
+  checked_size *= size.Height();
+
+// The constants used here should remain consistent with the values used for
+// LayerTreeSettings in render_widget_compositor.cc.
+#if defined(OS_ANDROID)
+  static const size_t kMinImageSizeCheckered = 512 * 1024;
+#else
+  static const size_t kMinImageSizeCheckered = 1 * 1024 * 1024;
+#endif
+
+  return checked_size.ValueOrDefault(std::numeric_limits<size_t>::max()) >=
+         kMinImageSizeCheckered;
+}
+
+}  // namespace
 
 Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
       image_observer_(observer),
       stable_image_id_(PaintImage::GetNextId()),
-      is_multipart_(is_multipart) {}
+      is_multipart_(is_multipart),
+      high_contrast_classification_(
+          HighContrastClassification::kNotClassified) {}
 
 Image::~Image() {}
 
@@ -66,12 +91,12 @@ Image* Image::NullImage() {
   return null_image;
 }
 
-PassRefPtr<Image> Image::LoadPlatformResource(const char* name) {
+scoped_refptr<Image> Image::LoadPlatformResource(const char* name) {
   const WebData& resource = Platform::Current()->GetDataResource(name);
   if (resource.IsEmpty())
     return Image::NullImage();
 
-  RefPtr<Image> image = BitmapImage::Create();
+  scoped_refptr<Image> image = BitmapImage::Create();
   image->SetData(resource, true);
   return image;
 }
@@ -80,10 +105,10 @@ bool Image::SupportsType(const String& type) {
   return MIMETypeRegistry::IsSupportedImageResourceMIMEType(type);
 }
 
-Image::SizeAvailability Image::SetData(RefPtr<SharedBuffer> data,
+Image::SizeAvailability Image::SetData(scoped_refptr<SharedBuffer> data,
                                        bool all_data_received) {
   encoded_image_data_ = std::move(data);
-  if (!encoded_image_data_.Get())
+  if (!encoded_image_data_.get())
     return kSizeAvailable;
 
   int length = encoded_image_data_->size();
@@ -103,6 +128,9 @@ void Image::DrawTiledBackground(GraphicsContext& ctxt,
                                 const FloatSize& scaled_tile_size,
                                 SkBlendMode op,
                                 const FloatSize& repeat_spacing) {
+  if (scaled_tile_size.IsEmpty())
+    return;
+
   FloatSize intrinsic_tile_size(Size());
   if (HasRelativeSize()) {
     intrinsic_tile_size.SetWidth(scaled_tile_size.Width());
@@ -121,7 +149,7 @@ void Image::DrawTiledBackground(GraphicsContext& ctxt,
   if (one_tile_rect.Contains(dest_rect)) {
     const FloatRect visible_src_rect =
         ComputeSubsetForTile(one_tile_rect, dest_rect, intrinsic_tile_size);
-    ctxt.DrawImage(this, dest_rect, &visible_src_rect, op,
+    ctxt.DrawImage(this, kSyncDecode, dest_rect, &visible_src_rect, op,
                    kDoNotRespectImageOrientation);
     return;
   }
@@ -218,12 +246,10 @@ void Image::DrawTiledBorder(GraphicsContext& ctxt,
 
   // TODO(cavalcantii): see crbug.com/662507.
   if ((h_rule == kRoundTile) || (v_rule == kRoundTile)) {
-    InterpolationQuality previous_interpolation_quality =
-        ctxt.ImageInterpolationQuality();
-    ctxt.SetImageInterpolationQuality(kInterpolationLow);
+    ScopedInterpolationQuality interpolation_quality_scope(ctxt,
+                                                           kInterpolationLow);
     DrawPattern(ctxt, src_rect, tile_scale_factor, pattern_phase, op, dst_rect,
                 FloatSize());
-    ctxt.SetImageInterpolationQuality(previous_interpolation_quality);
   } else {
     DrawPattern(ctxt, src_rect, tile_scale_factor, pattern_phase, op, dst_rect,
                 spacing);
@@ -304,7 +330,9 @@ void Image::DrawPattern(GraphicsContext& context,
   // Fetch this now as subsetting may swap the image.
   auto image_id = image.GetSkImage()->uniqueID();
 
-  image = image.MakeSubset(EnclosingIntRect(norm_src_rect));
+  image = PaintImageBuilder::WithCopy(std::move(image))
+              .make_subset(EnclosingIntRect(norm_src_rect))
+              .TakePaintImage();
   if (!image)
     return;
 
@@ -339,21 +367,18 @@ void Image::DrawPattern(GraphicsContext& context,
     PlatformInstrumentation::DidDrawLazyPixelRef(image_id);
 }
 
-PassRefPtr<Image> Image::ImageForDefaultFrame() {
-  RefPtr<Image> image(this);
+scoped_refptr<Image> Image::ImageForDefaultFrame() {
+  scoped_refptr<Image> image(this);
 
   return image;
 }
 
-void Image::InitPaintImageBuilder(PaintImageBuilder& builder) {
+PaintImageBuilder Image::CreatePaintImageBuilder() {
   auto animation_type = MaybeAnimated() ? PaintImage::AnimationType::ANIMATED
                                         : PaintImage::AnimationType::STATIC;
-  auto completion_state = CurrentFrameIsComplete()
-                              ? PaintImage::CompletionState::DONE
-                              : PaintImage::CompletionState::PARTIALLY_DONE;
-  builder.set_id(stable_image_id_)
+  return PaintImageBuilder::WithDefault()
+      .set_id(stable_image_id_)
       .set_animation_type(animation_type)
-      .set_completion_state(completion_state)
       .set_is_multipart(is_multipart_);
 }
 
@@ -408,6 +433,38 @@ FloatRect Image::ComputeSubsetForTile(const FloatRect& tile,
   subset.SetHeight(dest.Height() / scale.Height());
 
   return subset;
+}
+
+// static
+void Image::RecordCheckerableImageUMA(Image& image, ImageType type) {
+  // This enum is used in UMA counting so should be treated as append only.
+  // Please keep it in sync with CheckerableImageType in enums.xml.
+  enum class CheckerableImageType {
+    kCheckerableImg = 0,
+    kCheckerableSvg = 1,
+    kCheckerableCss = 2,
+    kNotCheckerable = 3,
+    kCount = 4
+  };
+
+  CheckerableImageType checkerable_type = CheckerableImageType::kNotCheckerable;
+  if (image.IsSizeAvailable() && !image.MaybeAnimated() &&
+      HasCheckerableDimensions(image.Size())) {
+    switch (type) {
+      case ImageType::kImg:
+        checkerable_type = CheckerableImageType::kCheckerableImg;
+        break;
+      case ImageType::kSvg:
+        checkerable_type = CheckerableImageType::kCheckerableSvg;
+        break;
+      case ImageType::kCss:
+        checkerable_type = CheckerableImageType::kCheckerableCss;
+        break;
+    }
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Blink.CheckerableImageCount", checkerable_type,
+                            CheckerableImageType::kCount);
 }
 
 }  // namespace blink

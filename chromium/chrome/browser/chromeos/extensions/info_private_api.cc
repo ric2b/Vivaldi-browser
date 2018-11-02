@@ -266,8 +266,15 @@ std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
         NetworkHandler::Get()->network_state_handler()->GetDeviceStateByType(
             chromeos::NetworkTypePattern::Cellular());
     std::string home_provider_id;
-    if (cellular_device)
-      home_provider_id = cellular_device->home_provider_id();
+    if (cellular_device) {
+      if (!cellular_device->country_code().empty()) {
+        home_provider_id = base::StringPrintf(
+            "%s (%s)", cellular_device->operator_name().c_str(),
+            cellular_device->country_code().c_str());
+      } else {
+        home_provider_id = cellular_device->operator_name();
+      }
+    }
     return base::MakeUnique<base::Value>(home_provider_id);
   }
 
@@ -344,10 +351,7 @@ std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
   }
 
   if (property_name == kPropertySupportedTimezones) {
-    std::unique_ptr<base::ListValue> values =
-        chromeos::system::GetTimezoneList();
-    // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-    return std::move(values);
+    return chromeos::system::GetTimezoneList();
   }
 
   const char* pref_name = GetBoolPrefNameForApiProperty(property_name.c_str());

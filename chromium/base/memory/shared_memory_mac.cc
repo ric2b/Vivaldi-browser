@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_mach_vm.h"
 #include "base/memory/shared_memory_helper.h"
@@ -29,9 +30,9 @@
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 
-#if defined(OS_MACOSX)
-#include "base/mac/foundation_util.h"
-#endif  // OS_MACOSX
+#if defined(OS_IOS)
+#error "MacOS only - iOS uses shared_memory_posix.cc"
+#endif
 
 namespace base {
 
@@ -143,31 +144,32 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
   // This function theoretically can block on the disk. Both profiling of real
   // users and local instrumentation shows that this is a real problem.
   // https://code.google.com/p/chromium/issues/detail?id=466437
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  ThreadRestrictions::ScopedAllowIO allow_io;
 
-  ScopedFILE fp;
+  ScopedFD fd;
   ScopedFD readonly_fd;
 
   FilePath path;
-  bool result = CreateAnonymousSharedMemory(options, &fp, &readonly_fd, &path);
+  bool result = CreateAnonymousSharedMemory(options, &fd, &readonly_fd, &path);
   if (!result)
     return false;
-  DCHECK(fp);  // Should be guaranteed by CreateAnonymousSharedMemory().
+  // Should be guaranteed by CreateAnonymousSharedMemory().
+  DCHECK(fd.is_valid());
 
   // Get current size.
   struct stat stat;
-  if (fstat(fileno(fp.get()), &stat) != 0)
+  if (fstat(fd.get(), &stat) != 0)
     return false;
   const size_t current_size = stat.st_size;
   if (current_size != options.size) {
-    if (HANDLE_EINTR(ftruncate(fileno(fp.get()), options.size)) != 0)
+    if (HANDLE_EINTR(ftruncate(fd.get(), options.size)) != 0)
       return false;
   }
   requested_size_ = options.size;
 
   int mapped_file = -1;
   int readonly_mapped_file = -1;
-  result = PrepareMapFile(std::move(fp), std::move(readonly_fd), &mapped_file,
+  result = PrepareMapFile(std::move(fd), std::move(readonly_fd), &mapped_file,
                           &readonly_mapped_file);
   shm_ = SharedMemoryHandle(FileDescriptor(mapped_file, false), options.size,
                             UnguessableToken::Create());
@@ -194,14 +196,14 @@ bool SharedMemory::MapAt(off_t offset, size_t bytes) {
     mapped_id_ = shm_.GetGUID();
     SharedMemoryTracker::GetInstance()->IncrementMemoryUsage(*this);
   } else {
-    memory_ = NULL;
+    memory_ = nullptr;
   }
 
   return success;
 }
 
 bool SharedMemory::Unmap() {
-  if (memory_ == NULL)
+  if (!memory_)
     return false;
 
   SharedMemoryTracker::GetInstance()->DecrementMemoryUsage(*this);
@@ -215,7 +217,7 @@ bool SharedMemory::Unmap() {
                          mapped_size_);
       break;
   }
-  memory_ = NULL;
+  memory_ = nullptr;
   mapped_size_ = 0;
   mapped_id_ = UnguessableToken();
   return true;
@@ -251,7 +253,7 @@ SharedMemoryHandle SharedMemory::GetReadOnlyHandle() {
   }
 
   DCHECK(shm_.IsValid());
-  base::SharedMemoryHandle new_handle;
+  SharedMemoryHandle new_handle;
   bool success = MakeMachSharedMemoryHandleReadOnly(&new_handle, shm_, memory_);
   if (success)
     new_handle.SetOwnershipPassesToIPC(true);

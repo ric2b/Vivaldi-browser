@@ -30,6 +30,8 @@
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLSpanElement.h"
@@ -92,6 +94,12 @@ void InsertTextCommand::SetEndingSelectionWithoutValidation(
 // layout that typically results from text removal.
 bool InsertTextCommand::PerformTrivialReplace(const String& text,
                                               bool select_inserted_text) {
+  // We may need to manipulate neighboring whitespace if we're deleting text.
+  // This case is tested in
+  // InsertTextCommandTest_InsertEmptyTextAfterWhitespaceThatNeedsFixup.
+  if (text.IsEmpty())
+    return false;
+
   if (!EndingSelection().IsRange())
     return false;
 
@@ -147,7 +155,11 @@ bool InsertTextCommand::PerformOverwrite(const String& text,
 void InsertTextCommand::DoApply(EditingState* editing_state) {
   DCHECK_EQ(text_.find('\n'), kNotFound);
 
-  if (!EndingVisibleSelection().IsNonOrphanedCaretOrRange())
+  // TODO(editing-dev): We shouldn't construct an InsertTextCommand with none or
+  // invalid selection.
+  const VisibleSelection& visible_selection = EndingVisibleSelection();
+  if (visible_selection.IsNone() ||
+      !visible_selection.IsValidFor(GetDocument()))
     return;
 
   // Delete the current selection.
@@ -158,8 +170,7 @@ void InsertTextCommand::DoApply(EditingState* editing_state) {
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
     bool end_of_selection_was_at_start_of_block =
         IsStartOfBlock(EndingVisibleSelection().VisibleEnd());
-    DeleteSelection(editing_state, false, true, false, false);
-    if (editing_state->IsAborted())
+    if (!DeleteSelection(editing_state, false, true, false, false))
       return;
     // deleteSelection eventually makes a new endingSelection out of a Position.
     // If that Position doesn't have a layoutObject (e.g. it is on a <frameset>
@@ -179,6 +190,9 @@ void InsertTextCommand::DoApply(EditingState* editing_state) {
   }
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  // Reached by InsertTextCommandTest.NoVisibleSelectionAfterDeletingSelection
+  ABORT_EDITING_COMMAND_IF(EndingVisibleSelection().IsNone());
 
   Position start_position(EndingVisibleSelection().Start());
 
@@ -288,10 +302,11 @@ void InsertTextCommand::DoApply(EditingState* editing_state) {
 
   if (!select_inserted_text_) {
     SelectionInDOMTree::Builder builder;
-    builder.SetAffinity(EndingVisibleSelection().Affinity());
+    const VisibleSelection& selection = EndingVisibleSelection();
+    builder.SetAffinity(selection.Affinity());
     builder.SetIsDirectional(EndingSelection().IsDirectional());
-    if (EndingVisibleSelection().End().IsNotNull())
-      builder.Collapse(EndingVisibleSelection().End());
+    if (selection.End().IsNotNull())
+      builder.Collapse(selection.End());
     SetEndingSelection(SelectionForUndoStep::From(builder.Build()));
   }
 }

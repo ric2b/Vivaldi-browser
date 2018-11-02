@@ -132,10 +132,14 @@ TestExtensionsBrowserClient::MaybeCreateResourceBundleRequestJob(
 }
 
 bool TestExtensionsBrowserClient::AllowCrossRendererResourceLoad(
-    net::URLRequest* request,
+    const GURL& url,
+    content::ResourceType resource_type,
+    ui::PageTransition page_transition,
+    int child_id,
     bool is_incognito,
     const Extension* extension,
-    InfoMap* extension_info_map) {
+    const ExtensionSet& extensions,
+    const ProcessMap& process_map) {
   return false;
 }
 
@@ -234,7 +238,7 @@ TestExtensionsBrowserClient::CreateUpdateClient(
     content::BrowserContext* context) {
   return update_client_factory_.is_null()
              ? nullptr
-             : make_scoped_refptr(update_client_factory_.Run());
+             : base::WrapRefCounted(update_client_factory_.Run());
 }
 
 bool TestExtensionsBrowserClient::IsLockScreenContext(

@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "components/metrics/delegating_provider.h"
 #include "components/metrics/metrics_provider.h"
@@ -25,6 +25,7 @@ class PrefService;
 namespace metrics {
 class MetricsServiceClient;
 class UkmBrowserTest;
+class UkmEGTestHelper;
 }
 
 namespace ukm {
@@ -76,8 +77,9 @@ class UkmService : public UkmRecorderImpl {
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
  private:
-  friend ::ukm::debug::DebugPage;
   friend ::metrics::UkmBrowserTest;
+  friend ::metrics::UkmEGTestHelper;
+  friend ::ukm::debug::DebugPage;
 
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, AddEntryWithEmptyMetrics);
   FRIEND_TEST_ALL_PREFIXES(UkmServiceTest, EntryBuilderAndSerialization);
@@ -132,7 +134,7 @@ class UkmService : public UkmRecorderImpl {
   // The scheduler for determining when uploads should happen.
   std::unique_ptr<metrics::MetricsRotationScheduler> scheduler_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   bool initialize_started_;
   bool initialize_complete_;

@@ -49,7 +49,7 @@ BattOrSampleConverter::BattOrSampleConverter(
   baseline_voltage_ /= calibration_frame.size();
 }
 
-BattOrSampleConverter::~BattOrSampleConverter() {}
+BattOrSampleConverter::~BattOrSampleConverter() = default;
 
 BattOrSample BattOrSampleConverter::ToSample(const RawBattOrSample& sample,
                                              size_t sample_number) const {
@@ -89,6 +89,12 @@ BattOrSample BattOrSampleConverter::ToSample(const RawBattOrSample& sample,
   double time_ms = double(sample_number) / eeprom_.sd_sample_rate * 1000;
 
   return BattOrSample{time_ms, voltage, current};
+}
+
+float BattOrSampleConverter::ToWatts(const RawBattOrSample& raw_sample) const {
+  BattOrSample sample = ToSample(raw_sample, 0);
+
+  return sample.current_mA * sample.voltage_mV * 1e-6f;
 }
 
 BattOrSample BattOrSampleConverter::MinSample() const {

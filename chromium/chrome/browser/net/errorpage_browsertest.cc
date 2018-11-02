@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -50,10 +51,15 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/url_loader.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "net/http/failing_http_transaction_factory.h"
@@ -192,12 +198,93 @@ void AddInterceptorForURL(const GURL& url,
                                                           std::move(handler));
 }
 
+void SetNetworkFactoryForTesting(Browser* browser,
+                                 content::mojom::URLLoaderFactory* factory) {
+  content::WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+
+  auto* storage_partition = content::BrowserContext::GetDefaultStoragePartition(
+      web_contents->GetBrowserContext());
+  storage_partition->SetNetworkFactoryForTesting(factory);
+}
+
+// An url loader that fails a configurable number of requests, then succeeds
+// all requests after that, keeping count of failures and successes.
+class FailFirstNRequestsURLLoaderFactory
+    : public content::mojom::URLLoaderFactory {
+ public:
+  explicit FailFirstNRequestsURLLoaderFactory(int32_t requests_to_fail,
+                                              int32_t* requests,
+                                              int32_t* failures)
+      : requests_(requests),
+        failures_(failures),
+        requests_to_fail_(requests_to_fail) {}
+
+  // content::mojom::URLLoaderFactory implementation.
+  void CreateLoaderAndStart(content::mojom::URLLoaderRequest request,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const content::ResourceRequest& url_request,
+                            content::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
+    (*requests_)++;
+    if (*failures_ < requests_to_fail_) {
+      (*failures_)++;
+      network::URLLoaderCompletionStatus status;
+      status.error_code = net::ERR_CONNECTION_RESET;
+      client->OnComplete(status);
+    } else {
+      std::string headers = URLRequestTestJob::test_headers();
+      net::HttpResponseInfo info;
+      info.headers =
+          new net::HttpResponseHeaders(net::HttpUtil::AssembleRawHeaders(
+              URLRequestTestJob::test_headers().c_str(),
+              URLRequestTestJob::test_headers().length()));
+      content::ResourceResponseHead response;
+      response.headers = info.headers;
+      response.headers->GetMimeType(&response.mime_type);
+      client->OnReceiveResponse(response, base::nullopt, nullptr);
+
+      std::string body = URLRequestTestJob::test_data_1();
+      uint32_t bytes_written = body.size();
+      mojo::DataPipe data_pipe;
+      data_pipe.producer_handle->WriteData(body.data(), &bytes_written,
+                                           MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
+      client->OnStartLoadingResponseBody(std::move(data_pipe.consumer_handle));
+
+      network::URLLoaderCompletionStatus status;
+      status.error_code = net::OK;
+      client->OnComplete(status);
+    }
+  }
+
+  void Clone(content::mojom::URLLoaderFactoryRequest factory) override {
+    NOTREACHED();
+  }
+
+ private:
+  int32_t* requests_;
+  int32_t* failures_;
+  int32_t requests_to_fail_;
+
+  DISALLOW_COPY_AND_ASSIGN(FailFirstNRequestsURLLoaderFactory);
+};
+
+// TODO(dougt): FailFirstNRequestsInterceptor can be removed as soon as the
+// Network Service is the only code path.
+
 // An interceptor that fails a configurable number of requests, then succeeds
 // all requests after that, keeping count of failures and successes.
 class FailFirstNRequestsInterceptor : public net::URLRequestInterceptor {
  public:
-  explicit FailFirstNRequestsInterceptor(int requests_to_fail)
-      : requests_(0), failures_(0), requests_to_fail_(requests_to_fail) {}
+  explicit FailFirstNRequestsInterceptor(int32_t requests_to_fail,
+                                         int32_t* requests,
+                                         int32_t* failures)
+      : requests_(requests),
+        failures_(failures),
+        requests_to_fail_(requests_to_fail) {}
   ~FailFirstNRequestsInterceptor() override {}
 
   // net::URLRequestInterceptor implementation
@@ -205,9 +292,9 @@ class FailFirstNRequestsInterceptor : public net::URLRequestInterceptor {
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    requests_++;
-    if (failures_ < requests_to_fail_) {
-      failures_++;
+    (*requests_)++;
+    if (*failures_ < requests_to_fail_) {
+      (*failures_)++;
       // Note: net::ERR_CONNECTION_RESET does not summon the Link Doctor; see
       // NetErrorHelperCore::GetErrorPageURL.
       return new URLRequestFailedJob(request,
@@ -221,15 +308,10 @@ class FailFirstNRequestsInterceptor : public net::URLRequestInterceptor {
     }
   }
 
-  int requests() const { return requests_; }
-  int failures() const { return failures_; }
-
  private:
-  // These are mutable because MaybeCreateJob is const but we want this state
-  // for testing.
-  mutable int requests_;
-  mutable int failures_;
-  int requests_to_fail_;
+  int32_t* requests_;
+  int32_t* failures_;
+  int32_t requests_to_fail_;
 
   DISALLOW_COPY_AND_ASSIGN(FailFirstNRequestsInterceptor);
 };
@@ -264,7 +346,7 @@ class LinkDoctorInterceptor : public net::URLRequestInterceptor {
         root_http.AppendASCII("mock-link-doctor.json"));
   }
 
-  void WaitForRequests(int requests_to_wait_for) {
+  void WaitForRequests(int32_t requests_to_wait_for) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK_EQ(-1, requests_to_wait_for_);
     DCHECK(!run_loop_);
@@ -283,7 +365,7 @@ class LinkDoctorInterceptor : public net::URLRequestInterceptor {
   // It is up to the caller to wait until all relevant requests has been
   // created, either through calling WaitForRequests or some other manner,
   // before calling this method.
-  int num_requests() const {
+  int32_t num_requests() const {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     return num_requests_;
   }
@@ -298,8 +380,8 @@ class LinkDoctorInterceptor : public net::URLRequestInterceptor {
   }
 
   // These are only used on the UI thread.
-  int num_requests_;
-  int requests_to_wait_for_;
+  int32_t num_requests_;
+  int32_t requests_to_wait_for_;
   std::unique_ptr<base::RunLoop> run_loop_;
 
   // This prevents any risk of flake if any test doesn't wait for a request
@@ -366,7 +448,7 @@ class ErrorPageTest : public InProcessBrowserTest {
   // the title to change to |expected_title|.
   void NavigateToURLAndWaitForTitle(const GURL& url,
                                     const std::string& expected_title,
-                                    int num_navigations) {
+                                    int32_t num_navigations) {
     content::TitleWatcher title_watcher(
         browser()->tab_strip_model()->GetActiveWebContents(),
         base::ASCIIToUTF16(expected_title));
@@ -381,7 +463,7 @@ class ErrorPageTest : public InProcessBrowserTest {
   // Navigates back in the history and waits for |num_navigations| to occur, and
   // the title to change to |expected_title|.
   void GoBackAndWaitForTitle(const std::string& expected_title,
-                             int num_navigations) {
+                             int32_t num_navigations) {
     NavigateHistoryAndWaitForTitle(expected_title,
                                    num_navigations,
                                    HISTORY_NAVIGATE_BACK);
@@ -390,17 +472,17 @@ class ErrorPageTest : public InProcessBrowserTest {
   // Navigates forward in the history and waits for |num_navigations| to occur,
   // and the title to change to |expected_title|.
   void GoForwardAndWaitForTitle(const std::string& expected_title,
-                                int num_navigations) {
+                                int32_t num_navigations) {
     NavigateHistoryAndWaitForTitle(expected_title,
                                    num_navigations,
                                    HISTORY_NAVIGATE_FORWARD);
   }
 
-  void GoBackAndWaitForNavigations(int num_navigations) {
+  void GoBackAndWaitForNavigations(int32_t num_navigations) {
     NavigateHistory(num_navigations, HISTORY_NAVIGATE_BACK);
   }
 
-  void GoForwardAndWaitForNavigations(int num_navigations) {
+  void GoForwardAndWaitForNavigations(int32_t num_navigations) {
     NavigateHistory(num_navigations, HISTORY_NAVIGATE_FORWARD);
   }
 
@@ -495,7 +577,7 @@ class ErrorPageTest : public InProcessBrowserTest {
   // Navigates the browser the indicated direction in the history and waits for
   // |num_navigations| to occur and the title to change to |expected_title|.
   void NavigateHistoryAndWaitForTitle(const std::string& expected_title,
-                                      int num_navigations,
+                                      int32_t num_navigations,
                                       HistoryNavigationDirection direction) {
     content::TitleWatcher title_watcher(
         browser()->tab_strip_model()->GetActiveWebContents(),
@@ -507,7 +589,7 @@ class ErrorPageTest : public InProcessBrowserTest {
               base::ASCIIToUTF16(expected_title));
   }
 
-  void NavigateHistory(int num_navigations,
+  void NavigateHistory(int32_t num_navigations,
                        HistoryNavigationDirection direction) {
     content::TestNavigationObserver test_navigation_observer(
         browser()->tab_strip_model()->GetActiveWebContents(),
@@ -562,7 +644,7 @@ void InterceptNetworkTransactions(net::URLRequestContextGetter* getter,
 // button to launch a network diagnostics tool.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, FileNotFound) {
   // Create an empty temp directory, to be sure there's no file in it.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   GURL non_existent_file_url =
@@ -842,9 +924,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, DNSError_DoClickLink) {
 // Test that a DNS error occuring in an iframe does not result in showing
 // navigation corrections.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, IFrameDNSError_Basic) {
+  ASSERT_TRUE(embedded_test_server()->Start());
   NavigateToURLAndWaitForTitle(
-      net::URLRequestMockHTTPJob::GetMockUrl("iframe_dns_error.html"), "Blah",
-      1);
+      embedded_test_server()->GetURL("/iframe_dns_error.html"), "Blah", 1);
   // We expect to have two history entries, since we started off with navigation
   // to "about:blank" and then navigated to "iframe_dns_error.html".
   EXPECT_EQ(2,
@@ -862,8 +944,12 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, IFrameDNSError_Basic) {
 // Test that a DNS error occuring in an iframe does not result in an
 // additional session history entry.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, MAYBE_IFrameDNSError_GoBack) {
-  NavigateToFileURL("title2.html");
-  NavigateToFileURL("iframe_dns_error.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title2.html"));
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/iframe_dns_error.html"));
   GoBackAndWaitForTitle("Title Of Awesomeness", 1);
   EXPECT_EQ(0, link_doctor_interceptor()->num_requests());
 }
@@ -891,13 +977,16 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, MAYBE_IFrameDNSError_GoBackAndForward) {
 // To ensure that the main document has completed loading, JavaScript is used to
 // inject an iframe after loading is done.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, IFrameDNSError_JavaScript) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
   content::WebContents* wc =
       browser()->tab_strip_model()->GetActiveWebContents();
   GURL fail_url =
       URLRequestFailedJob::GetMockHttpUrl(net::ERR_NAME_NOT_RESOLVED);
 
   // Load a regular web page, in which we will inject an iframe.
-  NavigateToFileURL("title2.html");
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title2.html"));
 
   // We expect to have two history entries, since we started off with navigation
   // to "about:blank" and then navigated to "title2.html".
@@ -954,8 +1043,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, IFrameDNSError_JavaScript) {
 // Checks that navigation corrections are not loaded when we receive an actual
 // 404 page.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, Page404) {
-  NavigateToURLAndWaitForTitle(
-      net::URLRequestMockHTTPJob::GetMockUrl("page404.html"), "SUCCESS", 1);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  NavigateToURLAndWaitForTitle(embedded_test_server()->GetURL("/page404.html"),
+                               "SUCCESS", 1);
   EXPECT_EQ(0, link_doctor_interceptor()->num_requests());
 }
 
@@ -976,7 +1066,10 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, Empty404) {
 // Checks that a local error page is shown in response to a 500 error page
 // without a body.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, Empty500) {
-  NavigateToFileURL("errorpage/empty500.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/errorpage/empty500.html"));
   // This depends on the non-internationalized error ID string in
   // localized_error.cc.
   ExpectDisplayingLocalErrorPage(browser(), "HTTP ERROR 500");
@@ -989,8 +1082,9 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, Empty500) {
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, StaleCacheStatus) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Load cache with entry with "nocache" set, to create stale
-  // cache.
-  GURL test_url(embedded_test_server()->GetURL("/nocache.html"));
+  // cache.  Currently it needs to at least have an etag for the cache to
+  // not give up on it entirely, however. See https://crbug.com/784520
+  GURL test_url(embedded_test_server()->GetURL("/nocache-with-etag.html"));
   NavigateToURLAndWaitForTitle(test_url, "Nocache Test Page", 1);
 
   // Reload same URL after forcing an error from the the network layer;
@@ -1050,7 +1144,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, CheckEasterEggIsNotDisabled) {
   std::string command = base::StringPrintf(
       "var hasDisableContainer = document.querySelectorAll('.snackbar').length;"
       "domAutomationController.send(hasDisableContainer);");
-  int result;
+  int32_t result;
   EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
                web_contents, command, &result));
   EXPECT_EQ(0, result);
@@ -1070,25 +1164,42 @@ class ErrorPageAutoReloadTest : public InProcessBrowserTest {
     command_line->AppendSwitch(switches::kEnableOfflineAutoReload);
   }
 
-  void InstallInterceptor(const GURL& url, int requests_to_fail) {
-    interceptor_ = new FailFirstNRequestsInterceptor(requests_to_fail);
-    std::unique_ptr<net::URLRequestInterceptor> owned_interceptor(interceptor_);
+  void RemoveInterceptor() {
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+      SetNetworkFactoryForTesting(browser(), nullptr);
+    }
+  }
 
-    // Tests don't need to wait for this task to complete before using the
-    // filter; any requests that might be affected by it will end up in the IO
-    // thread's message loop after this posted task anyway.
-    //
-    // Ownership of the interceptor is passed to an object the IO thread, but a
-    // pointer is kept in the test fixture.  As soon as anything calls
-    // URLRequestFilter::ClearHandlers(), |interceptor_| can become invalid.
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::BindOnce(&AddInterceptorForURL, url,
-                                           base::Passed(&owned_interceptor)));
+  void InstallInterceptor(const GURL& url, int32_t requests_to_fail) {
+    requests_ = failures_ = 0;
+
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+      url_loader_factory_ =
+          std::make_unique<FailFirstNRequestsURLLoaderFactory>(
+              requests_to_fail, &requests_, &failures_);
+
+      SetNetworkFactoryForTesting(browser(), url_loader_factory_.get());
+    } else {
+      std::unique_ptr<net::URLRequestInterceptor> owned_interceptor(
+          new FailFirstNRequestsInterceptor(requests_to_fail, &requests_,
+                                            &failures_));
+
+      // Tests don't need to wait for this task to complete before using the
+      // filter; any requests that might be affected by it will end up in the IO
+      // thread's message loop after this posted task anyway.
+      //
+      // Ownership of the interceptor is passed to an object the IO thread, but
+      // a pointer is kept in the test fixture.  As soon as anything calls
+      // URLRequestFilter::ClearHandlers(), |interceptor_| can become invalid.
+      BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                              base::BindOnce(&AddInterceptorForURL, url,
+                                             base::Passed(&owned_interceptor)));
+    }
   }
 
   void NavigateToURLAndWaitForTitle(const GURL& url,
                                     const std::string& expected_title,
-                                    int num_navigations) {
+                                    int32_t num_navigations) {
     content::TitleWatcher title_watcher(
         browser()->tab_strip_model()->GetActiveWebContents(),
         base::ASCIIToUTF16(expected_title));
@@ -1100,12 +1211,13 @@ class ErrorPageAutoReloadTest : public InProcessBrowserTest {
               title_watcher.WaitAndGetTitle());
   }
 
-  FailFirstNRequestsInterceptor* interceptor() {
-    return interceptor_;
-  }
+  int32_t interceptor_requests() const { return requests_; }
+  int32_t interceptor_failures() const { return failures_; }
 
  private:
-  FailFirstNRequestsInterceptor* interceptor_;
+  std::unique_ptr<FailFirstNRequestsURLLoaderFactory> url_loader_factory_;
+  int32_t requests_;
+  int32_t failures_;
 };
 
 // Fails on official mac_trunk build. See crbug.com/465789.
@@ -1116,26 +1228,27 @@ class ErrorPageAutoReloadTest : public InProcessBrowserTest {
 #endif
 IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, MAYBE_AutoReload) {
   GURL test_url("http://error.page.auto.reload");
-  const int kRequestsToFail = 2;
+  const int32_t kRequestsToFail = 2;
   InstallInterceptor(test_url, kRequestsToFail);
   NavigateToURLAndWaitForTitle(test_url, "Test One", kRequestsToFail + 1);
   // Note that the interceptor updates these variables on the IO thread,
   // but this function reads them on the main thread. The requests have to be
   // created (on the IO thread) before NavigateToURLAndWaitForTitle returns or
   // this becomes racey.
-  EXPECT_EQ(kRequestsToFail, interceptor()->failures());
-  EXPECT_EQ(kRequestsToFail + 1, interceptor()->requests());
+  EXPECT_EQ(kRequestsToFail, interceptor_failures());
+  EXPECT_EQ(kRequestsToFail + 1, interceptor_requests());
+  RemoveInterceptor();
 }
 
 IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, ManualReloadNotSuppressed) {
   GURL test_url("http://error.page.auto.reload");
-  const int kRequestsToFail = 3;
+  const int32_t kRequestsToFail = 3;
   InstallInterceptor(test_url, kRequestsToFail);
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(), test_url, 2);
 
-  EXPECT_EQ(2, interceptor()->failures());
-  EXPECT_EQ(2, interceptor()->requests());
+  EXPECT_EQ(2, interceptor_failures());
+  EXPECT_EQ(2, interceptor_requests());
 
   ToggleHelpBox(browser());
   EXPECT_TRUE(IsDisplayingText(
@@ -1151,6 +1264,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, ManualReloadNotSuppressed) {
   EXPECT_FALSE(IsDisplayingText(
       browser(), l10n_util::GetStringUTF8(
                      IDS_ERRORPAGES_SUGGESTION_CHECK_CONNECTION_HEADER)));
+  RemoveInterceptor();
 }
 
 // Make sure that a same document navigation does not cause issues with the
@@ -1164,8 +1278,8 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, IgnoresSameDocumentNavigation) {
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(), test_url, 2);
 
-  EXPECT_EQ(2, interceptor()->failures());
-  EXPECT_EQ(2, interceptor()->requests());
+  EXPECT_EQ(2, interceptor_failures());
+  EXPECT_EQ(2, interceptor_requests());
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -1175,16 +1289,62 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, IgnoresSameDocumentNavigation) {
 
   // Same-document navigation on an error page should not have resulted in a
   // new navigation, so no new requests should have been issued.
-  EXPECT_EQ(2, interceptor()->failures());
-  EXPECT_EQ(2, interceptor()->requests());
+  EXPECT_EQ(2, interceptor_failures());
+  EXPECT_EQ(2, interceptor_requests());
 
   // Wait for the second auto reload, which succeeds.
   content::TestNavigationObserver observer2(web_contents, 1);
   observer2.Wait();
 
-  EXPECT_EQ(2, interceptor()->failures());
-  EXPECT_EQ(3, interceptor()->requests());
+  EXPECT_EQ(2, interceptor_failures());
+  EXPECT_EQ(3, interceptor_requests());
+  RemoveInterceptor();
 }
+
+// A url loader that fails matching requests with net::ERR_ADDRESS_UNREACHABLE,
+// otherwise it passes the request to a default loader.
+class AddressUnreachableURLLoaderFactory
+    : public content::mojom::URLLoaderFactory {
+ public:
+  AddressUnreachableURLLoaderFactory(content::mojom::URLLoaderFactory* loader,
+                                     const GURL& url)
+      : default_loader_(loader), url_(url) {}
+
+  // content::mojom::URLLoaderFactory implementation.
+  void CreateLoaderAndStart(content::mojom::URLLoaderRequest request,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const content::ResourceRequest& url_request,
+                            content::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
+    if (url_ == url_request.url) {
+      network::URLLoaderCompletionStatus status;
+
+      status.error_code = net::ERR_ADDRESS_UNREACHABLE;
+      client->OnComplete(status);
+      return;
+    }
+
+    default_loader_->CreateLoaderAndStart(
+        std::move(request), routing_id, request_id, options, url_request,
+        std::move(client), traffic_annotation);
+  }
+
+  void Clone(content::mojom::URLLoaderFactoryRequest factory) override {
+    NOTREACHED();
+  }
+
+ private:
+  content::mojom::URLLoaderFactory* default_loader_;
+  GURL url_;
+
+  DISALLOW_COPY_AND_ASSIGN(AddressUnreachableURLLoaderFactory);
+};
+
+// TODO(dougt): AddressUnreachableInterceptor can be removed as soon as the
+// Network Service is the only code path.
 
 // Interceptor that fails all requests with net::ERR_ADDRESS_UNREACHABLE.
 class AddressUnreachableInterceptor : public net::URLRequestInterceptor {
@@ -1196,8 +1356,7 @@ class AddressUnreachableInterceptor : public net::URLRequestInterceptor {
   net::URLRequestJob* MaybeInterceptRequest(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestFailedJob(request,
-                                   network_delegate,
+    return new URLRequestFailedJob(request, network_delegate,
                                    net::ERR_ADDRESS_UNREACHABLE);
   }
 
@@ -1213,15 +1372,35 @@ class ErrorPageNavigationCorrectionsFailTest : public ErrorPageTest {
  public:
   // InProcessBrowserTest:
   void SetUpOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::AddFilters));
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+      content::WebContents* web_contents =
+          browser()->tab_strip_model()->GetActiveWebContents();
+      auto* storage_partition =
+          content::BrowserContext::GetDefaultStoragePartition(
+              web_contents->GetBrowserContext());
+      content::mojom::URLLoaderFactory* default_network_factory =
+          storage_partition->GetURLLoaderFactoryForBrowserProcess();
+
+      url_loader_factory_ =
+          std::make_unique<AddressUnreachableURLLoaderFactory>(
+              default_network_factory, google_util::LinkDoctorBaseURL());
+      SetNetworkFactoryForTesting(browser(), url_loader_factory_.get());
+    } else {
+      BrowserThread::PostTask(
+          BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::AddFilters));
+    }
   }
 
   void TearDownOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::RemoveFilters));
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+      SetNetworkFactoryForTesting(browser(), nullptr);
+    } else {
+      BrowserThread::PostTask(
+          BrowserThread::IO, FROM_HERE,
+          base::BindOnce(
+              &ErrorPageNavigationCorrectionsFailTest::RemoveFilters));
+    }
   }
 
  private:
@@ -1243,6 +1422,8 @@ class ErrorPageNavigationCorrectionsFailTest : public ErrorPageTest {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     net::URLRequestFilter::GetInstance()->ClearHandlers();
   }
+
+  std::unique_ptr<AddressUnreachableURLLoaderFactory> url_loader_factory_;
 };
 
 // Make sure that when corrections fail to load, the network error page is
@@ -1271,7 +1452,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageNavigationCorrectionsFailTest,
   ASSERT_TRUE(embedded_test_server()->Start());
   // Load cache with entry with "nocache" set, to create stale
   // cache.
-  GURL test_url(embedded_test_server()->GetURL("/nocache.html"));
+  GURL test_url(embedded_test_server()->GetURL("/nocache-with-etag.html"));
   NavigateToURLAndWaitForTitle(test_url, "Nocache Test Page", 1);
 
   // Reload same URL after forcing an error from the the network layer;

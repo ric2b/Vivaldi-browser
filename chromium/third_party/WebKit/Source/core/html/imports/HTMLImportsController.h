@@ -70,11 +70,11 @@ class HTMLImportsController final
   HTMLImportLoader* LoaderAt(size_t i) const { return loaders_[i]; }
   HTMLImportLoader* LoaderFor(const Document&) const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void Dispose();
 
-  DECLARE_TRACE_WRAPPERS();
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit HTMLImportsController(Document&);

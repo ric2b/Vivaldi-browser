@@ -5,13 +5,16 @@
 #include "components/payments/content/payment_response_helper.h"
 
 #include <string>
+#include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payment_request_delegate.h"
@@ -34,7 +37,8 @@ PaymentResponseHelper::PaymentResponseHelper(
       delegate_(delegate),
       selected_instrument_(selected_instrument),
       payment_request_delegate_(payment_request_delegate),
-      selected_contact_profile_(selected_contact_profile) {
+      selected_contact_profile_(selected_contact_profile),
+      weak_ptr_factory_(this) {
   DCHECK(spec_);
   DCHECK(selected_instrument_);
   DCHECK(delegate_);
@@ -48,18 +52,11 @@ PaymentResponseHelper::PaymentResponseHelper(
 
     is_waiting_for_shipping_address_normalization_ = true;
 
-    // Use the country code from the profile if it is set, otherwise infer it
-    // from the |app_locale_|.
-    std::string country_code = base::UTF16ToUTF8(
-        selected_shipping_profile->GetRawInfo(autofill::ADDRESS_HOME_COUNTRY));
-    if (!autofill::data_util::IsValidCountryCode(country_code)) {
-      country_code =
-          autofill::AutofillCountry::CountryCodeForLocale(app_locale_);
-    }
-
-    payment_request_delegate_->GetAddressNormalizer()
-        ->StartAddressNormalization(*selected_shipping_profile, country_code,
-                                    /*timeout_seconds=*/5, this);
+    payment_request_delegate_->GetAddressNormalizer()->NormalizeAddressAsync(
+        *selected_shipping_profile,
+        /*timeout_seconds=*/5,
+        base::BindOnce(&PaymentResponseHelper::OnAddressNormalized,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Start to get the instrument details. Will call back into
@@ -126,6 +123,7 @@ void PaymentResponseHelper::OnInstrumentDetailsReady(
 }
 
 void PaymentResponseHelper::OnAddressNormalized(
+    bool success,
     const autofill::AutofillProfile& normalized_profile) {
   if (is_waiting_for_shipping_address_normalization_) {
     shipping_address_ = normalized_profile;
@@ -134,13 +132,6 @@ void PaymentResponseHelper::OnAddressNormalized(
     if (!is_waiting_for_instrument_details_)
       GeneratePaymentResponse();
   }
-}
-
-void PaymentResponseHelper::OnCouldNotNormalize(
-    const autofill::AutofillProfile& profile) {
-  // Since the phone number is formatted in either case, this profile should be
-  // used.
-  OnAddressNormalized(profile);
 }
 
 void PaymentResponseHelper::GeneratePaymentResponse() {
@@ -190,8 +181,8 @@ void PaymentResponseHelper::GeneratePaymentResponse() {
 
     const std::string default_region_code =
         autofill::AutofillCountry::CountryCodeForLocale(app_locale_);
-    payment_response->payer_phone =
-        data_util::FormatPhoneForResponse(original_number, default_region_code);
+    payment_response->payer_phone = autofill::i18n::FormatPhoneForResponse(
+        original_number, default_region_code);
   }
 
   delegate_->OnPaymentResponseReady(std::move(payment_response));

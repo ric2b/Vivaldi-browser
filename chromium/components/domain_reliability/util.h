@@ -14,11 +14,14 @@
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "base/tracked_objects.h"
 #include "components/domain_reliability/domain_reliability_export.h"
 #include "components/domain_reliability/uploader.h"
 #include "net/http/http_response_info.h"
 #include "net/url_request/url_request_status.h"
+
+namespace base {
+class Location;
+}
 
 namespace domain_reliability {
 
@@ -66,7 +69,7 @@ class DOMAIN_RELIABILITY_EXPORT MockableTime : public base::Clock,
    public:
     virtual ~Timer();
 
-    virtual void Start(const tracked_objects::Location& posted_from,
+    virtual void Start(const base::Location& posted_from,
                        base::TimeDelta delay,
                        const base::Closure& user_task) = 0;
     virtual void Stop() = 0;

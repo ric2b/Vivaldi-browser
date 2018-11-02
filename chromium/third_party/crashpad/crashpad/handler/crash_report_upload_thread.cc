@@ -23,16 +23,20 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "client/settings.h"
+#include "handler/minidump_to_upload_parameters.h"
 #include "snapshot/minidump/process_snapshot_minidump.h"
 #include "snapshot/module_snapshot.h"
 #include "util/file/file_reader.h"
 #include "util/misc/metrics.h"
+#include "util/misc/uuid.h"
 #include "util/net/http_body.h"
 #include "util/net/http_multipart_builder.h"
 #include "util/net/http_transport.h"
+#include "util/net/url.h"
 #include "util/stdlib/map_insert.h"
 
 #if defined(OS_MACOSX)
@@ -42,68 +46,6 @@
 namespace crashpad {
 
 namespace {
-
-void InsertOrReplaceMapEntry(std::map<std::string, std::string>* map,
-                             const std::string& key,
-                             const std::string& value) {
-  std::string old_value;
-  if (!MapInsertOrReplace(map, key, value, &old_value)) {
-    LOG(WARNING) << "duplicate key " << key << ", discarding value "
-                 << old_value;
-  }
-}
-
-// Given a minidump file readable by |minidump_file_reader|, returns a map of
-// key-value pairs to use as HTTP form parameters for upload to a Breakpad
-// server. The map is built by combining the process simple annotations map with
-// each module’s simple annotations map. In the case of duplicate keys, the map
-// will retain the first value found for any key, and will log a warning about
-// discarded values. Each module’s annotations vector is also examined and built
-// into a single string value, with distinct elements separated by newlines, and
-// stored at the key named “list_annotations”, which supersedes any other key
-// found by that name. The client ID stored in the minidump is converted to
-// a string and stored at the key named “guid”, which supersedes any other key
-// found by that name.
-//
-// In the event of an error reading the minidump file, a message will be logged.
-std::map<std::string, std::string> BreakpadHTTPFormParametersFromMinidump(
-    FileReader* minidump_file_reader) {
-  ProcessSnapshotMinidump minidump_process_snapshot;
-  if (!minidump_process_snapshot.Initialize(minidump_file_reader)) {
-    return std::map<std::string, std::string>();
-  }
-
-  std::map<std::string, std::string> parameters =
-      minidump_process_snapshot.AnnotationsSimpleMap();
-
-  std::string list_annotations;
-  for (const ModuleSnapshot* module : minidump_process_snapshot.Modules()) {
-    for (const auto& kv : module->AnnotationsSimpleMap()) {
-      if (!parameters.insert(kv).second) {
-        LOG(WARNING) << "duplicate key " << kv.first << ", discarding value "
-                     << kv.second;
-      }
-    }
-
-    for (std::string annotation : module->AnnotationsVector()) {
-      list_annotations.append(annotation);
-      list_annotations.append("\n");
-    }
-  }
-
-  if (!list_annotations.empty()) {
-    // Remove the final newline character.
-    list_annotations.resize(list_annotations.size() - 1);
-
-    InsertOrReplaceMapEntry(&parameters, "list_annotations", list_annotations);
-  }
-
-  UUID client_id;
-  minidump_process_snapshot.ClientID(&client_id);
-  InsertOrReplaceMapEntry(&parameters, "guid", client_id.ToString());
-
-  return parameters;
-}
 
 // Calls CrashReportDatabase::RecordUploadAttempt() with |successful| set to
 // false upon destruction unless disarmed by calling Fire() or Disarm(). Fire()
@@ -143,28 +85,25 @@ class CallRecordUploadAttempt {
 
 CrashReportUploadThread::CrashReportUploadThread(CrashReportDatabase* database,
                                                  const std::string& url,
-                                                 bool watch_pending_reports,
-                                                 bool rate_limit,
-                                                 bool upload_gzip)
-    : url_(url),
+                                                 const Options& options)
+    : options_(options),
+      url_(url),
       // When watching for pending reports, check every 15 minutes, even in the
       // absence of a signal from the handler thread. This allows for failed
       // uploads to be retried periodically, and for pending reports written by
       // other processes to be recognized.
-      thread_(watch_pending_reports ? 15 * 60.0 : WorkerThread::kIndefiniteWait,
+      thread_(options.watch_pending_reports ? 15 * 60.0
+                                            : WorkerThread::kIndefiniteWait,
               this),
       known_pending_report_uuids_(),
-      database_(database),
-      watch_pending_reports_(watch_pending_reports),
-      rate_limit_(rate_limit),
-      upload_gzip_(upload_gzip) {
-}
+      database_(database) {}
 
 CrashReportUploadThread::~CrashReportUploadThread() {
 }
 
 void CrashReportUploadThread::Start() {
-  thread_.Start(watch_pending_reports_ ? 0.0 : WorkerThread::kIndefiniteWait);
+  thread_.Start(
+      options_.watch_pending_reports ? 0.0 : WorkerThread::kIndefiniteWait);
 }
 
 void CrashReportUploadThread::Stop() {
@@ -197,7 +136,7 @@ void CrashReportUploadThread::ProcessPendingReports() {
   // Known pending reports are always processed (above). The rest of this
   // function is concerned with scanning for pending reports not already known
   // to this thread.
-  if (!watch_pending_reports_) {
+  if (!options_.watch_pending_reports) {
     return;
   }
 
@@ -260,7 +199,7 @@ void CrashReportUploadThread::ProcessPendingReport(
   //
   // TODO(mark): Provide a proper rate-limiting strategy and allow for failed
   // upload attempts to be retried.
-  if (!report.upload_explicitly_requested && rate_limit_) {
+  if (!report.upload_explicitly_requested && options_.rate_limit) {
     time_t last_upload_attempt_time;
     if (settings->GetLastUploadAttemptTime(&last_upload_attempt_time)) {
       time_t now = time(nullptr);
@@ -344,22 +283,33 @@ CrashReportUploadThread::UploadResult CrashReportUploadThread::UploadReport(
     std::string* response_body) {
   std::map<std::string, std::string> parameters;
 
-  {
-    FileReader minidump_file_reader;
-    if (!minidump_file_reader.Open(report->file_path)) {
-      // If the minidump file can’t be opened, all hope is lost.
-      return UploadResult::kPermanentFailure;
-    }
+  FileReader minidump_file_reader;
+  if (!minidump_file_reader.Open(report->file_path)) {
+    // If the minidump file can’t be opened, all hope is lost.
+    return UploadResult::kPermanentFailure;
+  }
 
-    // If the minidump file could be opened, ignore any errors that might occur
-    // when attempting to interpret it. This may result in its being uploaded
-    // with few or no parameters, but as long as there’s a dump file, the server
-    // can decide what to do with it.
-    parameters = BreakpadHTTPFormParametersFromMinidump(&minidump_file_reader);
+  FileOffset start_offset = minidump_file_reader.SeekGet();
+  if (start_offset < 0) {
+    return UploadResult::kPermanentFailure;
+  }
+
+  // Ignore any errors that might occur when attempting to interpret the
+  // minidump file. This may result in its being uploaded with few or no
+  // parameters, but as long as there’s a dump file, the server can decide what
+  // to do with it.
+  ProcessSnapshotMinidump minidump_process_snapshot;
+  if (minidump_process_snapshot.Initialize(&minidump_file_reader)) {
+    parameters =
+        BreakpadHTTPFormParametersFromMinidump(&minidump_process_snapshot);
+  }
+
+  if (!minidump_file_reader.SeekSet(start_offset)) {
+    return UploadResult::kPermanentFailure;
   }
 
   HTTPMultipartBuilder http_multipart_builder;
-  http_multipart_builder.SetGzipEnabled(upload_gzip_);
+  http_multipart_builder.SetGzipEnabled(options_.upload_gzip);
 
   static constexpr char kMinidumpKey[] = "upload_file_minidump";
 
@@ -379,11 +329,10 @@ CrashReportUploadThread::UploadResult CrashReportUploadThread::UploadReport(
 #else
       report->file_path.BaseName().value(),
 #endif
-      report->file_path,
+      &minidump_file_reader,
       "application/octet-stream");
 
   std::unique_ptr<HTTPTransport> http_transport(HTTPTransport::Create());
-  http_transport->SetURL(url_);
   HTTPHeaders content_headers;
   http_multipart_builder.PopulateContentHeaders(&content_headers);
   for (const auto& content_header : content_headers) {
@@ -392,6 +341,31 @@ CrashReportUploadThread::UploadResult CrashReportUploadThread::UploadReport(
   http_transport->SetBodyStream(http_multipart_builder.GetBodyStream());
   // TODO(mark): The timeout should be configurable by the client.
   http_transport->SetTimeout(60.0);  // 1 minute.
+
+  std::string url = url_;
+  if (options_.identify_client_via_url) {
+    // Add parameters to the URL which identify the client to the server.
+    static constexpr struct {
+      const char* key;
+      const char* url_field_name;
+    } kURLParameterMappings[] = {
+        {"prod", "product"},
+        {"ver", "version"},
+        {"guid", "guid"},
+    };
+
+    for (const auto& parameter_mapping : kURLParameterMappings) {
+      const auto it = parameters.find(parameter_mapping.key);
+      if (it != parameters.end()) {
+        url.append(
+            base::StringPrintf("%c%s=%s",
+                               url.find('?') == std::string::npos ? '?' : '&',
+                               parameter_mapping.url_field_name,
+                               URLEncode(it->second).c_str()));
+      }
+    }
+  }
+  http_transport->SetURL(url);
 
   if (!http_transport->ExecuteSynchronously(response_body)) {
     return UploadResult::kRetry;

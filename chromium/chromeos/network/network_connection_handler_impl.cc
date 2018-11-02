@@ -105,15 +105,10 @@ NetworkConnectionHandlerImpl::ConnectRequest::ConnectRequest(
       success_callback(success),
       error_callback(error) {}
 
-NetworkConnectionHandlerImpl::ConnectRequest::~ConnectRequest() {}
+NetworkConnectionHandlerImpl::ConnectRequest::~ConnectRequest() = default;
 
 NetworkConnectionHandlerImpl::ConnectRequest::ConnectRequest(
-    const ConnectRequest& other)
-    : service_path(other.service_path),
-      profile_path(other.profile_path),
-      connect_state(other.connect_state),
-      success_callback(other.success_callback),
-      error_callback(other.error_callback) {}
+    const ConnectRequest& other) = default;
 
 NetworkConnectionHandlerImpl::NetworkConnectionHandlerImpl()
     : cert_loader_(NULL),
@@ -175,8 +170,7 @@ void NetworkConnectionHandlerImpl::LoggedInStateChanged() {
 }
 
 void NetworkConnectionHandlerImpl::OnCertificatesLoaded(
-    const net::CertificateList& cert_list,
-    bool initial_load) {
+    const net::ScopedCERTCertificateList& cert_list) {
   certificates_loaded_ = true;
   NET_LOG_EVENT("Certificates Loaded", "");
   if (queued_connect_)
@@ -410,9 +404,11 @@ void NetworkConnectionHandlerImpl::VerifyConfiguredAndConnect(
   service_properties.GetStringWithoutPathExpansion(shill::kProfileProperty,
                                                    &profile);
   ::onc::ONCSource onc_source = onc::ONC_SOURCE_NONE;
-  const base::DictionaryValue* policy =
-      managed_configuration_handler_->FindPolicyByGuidAndProfile(guid, profile,
-                                                                 &onc_source);
+  const base::DictionaryValue* policy = nullptr;
+  if (!profile.empty()) {
+    policy = managed_configuration_handler_->FindPolicyByGuidAndProfile(
+        guid, profile, &onc_source);
+  }
 
   if (IsNetworkProhibitedByPolicy(type, guid, profile)) {
     ErrorCallbackForPendingRequest(service_path, kErrorUnmanagedNetwork);
@@ -529,9 +525,7 @@ bool NetworkConnectionHandlerImpl::IsNetworkProhibitedByPolicy(
     const std::string& type,
     const std::string& guid,
     const std::string& profile_path) {
-  if (!logged_in_)
-    return false;
-  if (type != shill::kTypeWifi)
+  if (!logged_in_ || type != shill::kTypeWifi)
     return false;
   const base::DictionaryValue* global_network_config =
       managed_configuration_handler_->GetGlobalConfigFromPolicy(
@@ -545,6 +539,9 @@ bool NetworkConnectionHandlerImpl::IsNetworkProhibitedByPolicy(
       !policy_prohibites) {
     return false;
   }
+  // If |profile_path| is empty, this is not a policy network.
+  if (profile_path.empty())
+    return true;
   return !managed_configuration_handler_->FindPolicyByGuidAndProfile(
       guid, profile_path, nullptr /* onc_source */);
 }

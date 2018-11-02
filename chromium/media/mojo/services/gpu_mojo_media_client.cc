@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "build/build_config.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/cdm_factory.h"
@@ -18,16 +19,20 @@
 #include "base/memory/ptr_util.h"
 #include "media/base/android/android_cdm_factory.h"
 #include "media/filters/android/media_codec_audio_decoder.h"
+#include "media/gpu/android/android_video_surface_chooser_impl.h"
+#include "media/gpu/android/avda_codec_allocator.h"
 #include "media/gpu/android/media_codec_video_decoder.h"
 #include "media/gpu/android/video_frame_factory_impl.h"
-#include "media/gpu/android_video_surface_chooser_impl.h"
-#include "media/gpu/avda_codec_allocator.h"
 #include "media/mojo/interfaces/media_drm_storage.mojom.h"
 #include "media/mojo/interfaces/provision_fetcher.mojom.h"
 #include "media/mojo/services/mojo_media_drm_storage.h"
 #include "media/mojo/services/mojo_provision_fetcher.h"
 #include "services/service_manager/public/cpp/connect.h"
 #endif  // defined(OS_ANDROID)
+
+#if defined(OS_WIN)
+#include "media/gpu/windows/d3d11_video_decoder.h"
+#endif  // defined(OS_WIN)
 
 namespace media {
 
@@ -53,8 +58,10 @@ std::unique_ptr<MediaDrmStorage> CreateMediaDrmStorage(
   return base::MakeUnique<MojoMediaDrmStorage>(
       std::move(media_drm_storage_ptr));
 }
+#endif  // defined(OS_ANDROID)
 
-#if BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER)
+#if BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER) || \
+    BUILDFLAG(ENABLE_D3D11_VIDEO_DECODER)
 gpu::GpuCommandBufferStub* GetGpuCommandBufferStub(
     base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
     base::UnguessableToken channel_token,
@@ -69,18 +76,21 @@ gpu::GpuCommandBufferStub* GetGpuCommandBufferStub(
 
   return channel->LookupCommandBuffer(route_id);
 }
-#endif  // BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER)
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER || D3D11)
 
 }  // namespace
 
 GpuMojoMediaClient::GpuMojoMediaClient(
+    const gpu::GpuPreferences& gpu_preferences,
     scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
-    base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager)
-    : gpu_task_runner_(std::move(gpu_task_runner)),
-      media_gpu_channel_manager_(std::move(media_gpu_channel_manager)) {}
+    base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
+    AndroidOverlayMojoFactoryCB android_overlay_factory_cb)
+    : gpu_preferences_(gpu_preferences),
+      gpu_task_runner_(std::move(gpu_task_runner)),
+      media_gpu_channel_manager_(std::move(media_gpu_channel_manager)),
+      android_overlay_factory_cb_(std::move(android_overlay_factory_cb)) {}
 
-GpuMojoMediaClient::~GpuMojoMediaClient() {}
+GpuMojoMediaClient::~GpuMojoMediaClient() = default;
 
 void GpuMojoMediaClient::Initialize(
     service_manager::Connector* connector,
@@ -102,21 +112,30 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     MediaLog* media_log,
     mojom::CommandBufferIdPtr command_buffer_id,
-    OutputWithReleaseMailboxCB output_cb) {
+    OutputWithReleaseMailboxCB output_cb,
+    RequestOverlayInfoCB request_overlay_info_cb) {
 #if BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER)
+  auto get_stub_cb =
+      base::Bind(&GetGpuCommandBufferStub, media_gpu_channel_manager_,
+                 command_buffer_id->channel_token, command_buffer_id->route_id);
   return base::MakeUnique<MediaCodecVideoDecoder>(
+      gpu_preferences_, std::move(output_cb), DeviceInfo::GetInstance(),
+      AVDACodecAllocator::GetInstance(gpu_task_runner_),
+      base::MakeUnique<AndroidVideoSurfaceChooserImpl>(
+          DeviceInfo::GetInstance()->IsSetOutputSurfaceSupported()),
+      android_overlay_factory_cb_, std::move(request_overlay_info_cb),
+      base::MakeUnique<VideoFrameFactoryImpl>(gpu_task_runner_,
+                                              std::move(get_stub_cb)),
+      context_ref_factory_->CreateRef());
+#elif BUILDFLAG(ENABLE_D3D11_VIDEO_DECODER)
+  return base::MakeUnique<D3D11VideoDecoder>(
       gpu_task_runner_,
       base::Bind(&GetGpuCommandBufferStub, media_gpu_channel_manager_,
                  command_buffer_id->channel_token, command_buffer_id->route_id),
-      std::move(output_cb), DeviceInfo::GetInstance(),
-      AVDACodecAllocator::GetInstance(),
-      base::MakeUnique<AndroidVideoSurfaceChooserImpl>(
-          DeviceInfo::GetInstance()->IsSetOutputSurfaceSupported()),
-      base::MakeUnique<VideoFrameFactoryImpl>(),
-      context_ref_factory_->CreateRef());
+      std::move(output_cb));
 #else
   return nullptr;
-#endif  // BUILDFLAG(ENABLE_MEDIA_CODEC_VIDEO_DECODER)
+#endif  // BUILDFLAG(ENABLE_{MEDIA_CODEC | D3D11}_VIDEO_DECODER)
 }
 
 std::unique_ptr<CdmFactory> GpuMojoMediaClient::CreateCdmFactory(

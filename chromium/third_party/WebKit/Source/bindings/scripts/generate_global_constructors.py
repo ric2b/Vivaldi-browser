@@ -27,9 +27,9 @@ import sys
 
 from collections import defaultdict
 from utilities import get_file_contents
+from utilities import get_first_interface_name_from_idl
 from utilities import get_interface_exposed_arguments
 from utilities import get_interface_extended_attributes_from_idl
-from utilities import idl_filename_to_interface_name
 from utilities import is_non_legacy_callback_interface_from_idl
 from utilities import read_file_to_list
 from utilities import read_pickle_file
@@ -72,10 +72,10 @@ def interface_name_to_constructors(interface_name):
 
 
 def record_global_constructors(idl_filename):
-    interface_name = idl_filename_to_interface_name(idl_filename)
     full_path = os.path.realpath(idl_filename)
     idl_file_contents = get_file_contents(full_path)
     extended_attributes = get_interface_extended_attributes_from_idl(idl_file_contents)
+    interface_name = get_first_interface_name_from_idl(idl_file_contents)
 
     # An interface property is produced for every non-callback interface
     # that does not have [NoInterfaceObject].
@@ -133,15 +133,18 @@ def generate_global_constructors_list(interface_name, extended_attributes):
 
 
 def write_global_constructors_partial_interface(interface_name, idl_filename, constructor_attributes_list):
+    idl_basename = os.path.basename(idl_filename)
+    basename = os.path.splitext(idl_basename)[0]
     # FIXME: replace this with a simple Jinja template
-    lines = (['partial interface %s {\n' % interface_name] +
+    lines = (['[\n',
+              '    ImplementedAs=%s\n' % basename,
+              '] partial interface %s {\n' % interface_name] +
              ['    %s;\n' % constructor_attribute
               # FIXME: sort by interface name (not first by extended attributes)
               for constructor_attribute in sorted(constructor_attributes_list)] +
              ['};\n'])
     write_file(''.join(lines), idl_filename)
     header_filename = os.path.splitext(idl_filename)[0] + '.h'
-    idl_basename = os.path.basename(idl_filename)
     write_file(HEADER_FORMAT.format(idl_basename=idl_basename), header_filename)
 
 

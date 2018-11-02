@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">ከግራ ወደ ቀኝ</translation>
 <translation id="1546280085599573572">ይህ ቅጥያ የመነሻ አዝራሩን ጠቅ ሲያደርጉ የሚታየውን ገጽ ቀይሮታል።</translation>
 <translation id="1588438908519853928">መደበኛ</translation>
-<translation id="1616206807336925449">ይህ ቅጥያ ምንም ልዩ ፈቃዶችን አይፈልግም።</translation>
 <translation id="1635033183663317347">በእርስዎ ኃላፊ የተጫነ።</translation>
 <translation id="1723824996674794290">&amp;አዲስ መስኮት</translation>
 <translation id="1729533290416704613">እንዲሁም ከኦምኒቦክሱ ሆነው ሲፈልጉ የሚታየውን ገጽ ይቆጣጠራል።</translation>
@@ -101,7 +100,6 @@
 <translation id="4394049700291259645">አሰናክል</translation>
 <translation id="4423482519432579560">&amp;ፊደል አራሚ</translation>
 <translation id="4522570452068850558">ዝርዝሮች</translation>
-<translation id="4552089082226364758">ብልጭታ</translation>
 <translation id="4557136421275541763">ማስጠንቀቂያ፦</translation>
 <translation id="4593021220803146968">&amp;ወደዚህ ሂድ <ph name="URL" /></translation>
 <translation id="4595560905247879544">መተግበሪያዎች እና ቅጥያዎች በአስተዳዳሪው ብቻ ነው ሊቀየሩ የሚችሉት (<ph name="CUSTODIAN_NAME" />)።</translation>
@@ -136,7 +134,6 @@
 <translation id="5556459405103347317">ዳግም ጫን</translation>
 <translation id="5575473780076478375">የማንነትን የማያሳውቅ ቅጥያ፦ <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">እንዲሁም የመነሻ አዝራሩን ጠቅ ሲያደርጉት ምን ገጽ እንደሚታይ ይቆጣጠራል።</translation>
-<translation id="5646376287012673985">አካባቢ</translation>
 <translation id="5715711091495208045">የተሰኪ አስማሚ፦ <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ተሰሚ/ኦዲዮ አስ&amp;ቀምጥ እንደ…</translation>
 <translation id="5780973441651030252">የሂደት ቅድሚያ</translation>
@@ -175,7 +172,6 @@
 <translation id="6900284862687837908">የጀርባ መተግበሪያ፦ <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">የፋይል መዳረሻ ሻር</translation>
 <translation id="6974053822202609517">ከቀኝ ወደ ግራ</translation>
-<translation id="7013485839273047434">ተጨማሪ ቅጥያዎችን ያግኙ</translation>
 <translation id="708060913198414444">የኦዲዮ አድራሻ &amp;ቅዳ</translation>
 <translation id="7144878232160441200">እንደገና ሞክር</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" />ን በማውረድ ላይ...</translation>
@@ -184,7 +180,6 @@
 <translation id="7361297102842600584"><ph name="PLUGIN_NAME" />ን ለማሄድ በቀኝ-ጠቅ ያድርጉ</translation>
 <translation id="7401543881546089382">አቋረጭ ይሰርዙ</translation>
 <translation id="7427348830195639090">የጀርባው ገጽ፦ <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">ጃቫስክሪፕት</translation>
 <translation id="7554791636758816595">አዲስ ትር</translation>
 <translation id="7564847347806291057">ሂደቱን ግታ</translation>
 <translation id="7629827748548208700">ትር፦ <ph name="TAB_NAME" /></translation>
@@ -237,7 +232,6 @@ nil</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> በድርጅት መመሪያ ታግዷል</translation>
 <translation id="9170848237812810038">&amp;ቀልብስ</translation>
 <translation id="9215293857209265904">«<ph name="EXTENSION_NAME" />» ታክሏል</translation>
-<translation id="9219103736887031265">ምስሎች</translation>
 <translation id="93766956588638423">ቅጥያ ይጠግኑ</translation>
 <translation id="994289308992179865">&amp;ደጋግም</translation>
 <translation id="998747458861718449">&amp;መርምር</translation>

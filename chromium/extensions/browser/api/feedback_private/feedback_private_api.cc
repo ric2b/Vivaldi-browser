@@ -12,10 +12,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_base.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -216,7 +218,9 @@ ExtensionFunction::ResponseAction FeedbackPrivateReadLogSourceFunction::Run() {
           api_params->params, extension_id(),
           base::Bind(&FeedbackPrivateReadLogSourceFunction::OnCompleted,
                      this))) {
-    return RespondNow(Error("Unable to initiate fetch from log source."));
+    return RespondNow(Error(base::StringPrintf(
+        "Unable to initiate fetch from log source %s.",
+        feedback_private::ToString(api_params->params.source))));
   }
 
   return RespondLater();
@@ -291,7 +295,8 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
 
   if (feedback_info.send_histograms) {
     auto histograms = std::make_unique<std::string>();
-    *histograms = base::StatisticsRecorder::ToJSON(std::string());
+    *histograms =
+        base::StatisticsRecorder::ToJSON(base::JSON_VERBOSITY_LEVEL_FULL);
     if (!histograms->empty())
       feedback_data->SetAndCompressHistograms(std::move(histograms));
   }

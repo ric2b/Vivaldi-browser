@@ -10,10 +10,6 @@
  * the window.navigator.object.
  */
 
-// TODO(crbug.com/435046) This only contains method signatures.
-// Implement the JavaScript API and types according to the spec:
-// https://w3c.github.io/webappsec-credential-management
-
 // TODO(crbug.com/435046) After get, store, preventSilentAccess are
 // implemented app-side, make sure that all tests at
 // https://w3c-test.org/credential-management/idl.https.html
@@ -28,7 +24,7 @@
 __gCrWeb.credentialManager = {
 
   /**
-   * Used to apply unique requestId fields to messages sent to host.
+   * Used to apply unique promiseId fields to messages sent to host.
    * Those IDs can be later used to call a corresponding resolver/rejecter.
    * @private {number}
    */
@@ -37,7 +33,7 @@ __gCrWeb.credentialManager = {
   /**
    * Stores the functions for resolving Promises returned by
    * navigator.credentials method calls. A resolver for a call with
-   * requestId: |id| is stored at resolvers_[id].
+   * promiseId: |id| is stored at resolvers_[id].
    * @type {!Object<number, function(?Credential)|function()>}
    * @private
    */
@@ -46,7 +42,7 @@ __gCrWeb.credentialManager = {
   /**
    * Stores the functions for rejecting Promises returned by
    * navigator.credentials method calls. A rejecter for a call with
-   * requestId: |id| is stored at rejecters_[id].
+   * promiseId: |id| is stored at rejecters_[id].
    * @type {!Object<number, function(?Error)>}
    * @private
    */
@@ -56,19 +52,19 @@ __gCrWeb.credentialManager = {
 __gCrWeb['credentialManager'] = __gCrWeb.credentialManager;
 
 /**
- * Creates and returns a Promise with given |requestId|. The Promise's executor
+ * Creates and returns a Promise with given |promiseId|. The Promise's executor
  * function stores resolver and rejecter functions in
- * __gCrWeb['credentialManager'] under the key |requestId| so they can be called
+ * __gCrWeb['credentialManager'] under the key |promiseId| so they can be called
  * from the host after executing app side code.
- * @param {number} requestId The number assigned to newly created Promise.
+ * @param {number} promiseId The number assigned to newly created Promise.
  * @return {!Promise<?Credential>|!Promise<!Credential>|!Promise<void>}
  *     The created Promise.
  * @private
  */
-__gCrWeb.credentialManager.createPromise_ = function(requestId) {
+__gCrWeb.credentialManager.createPromise_ = function(promiseId) {
   return new Promise(function(resolve, reject) {
-    __gCrWeb.credentialManager.resolvers_[requestId] = resolve;
-    __gCrWeb.credentialManager.rejecters_[requestId] = reject;
+    __gCrWeb.credentialManager.resolvers_[promiseId] = resolve;
+    __gCrWeb.credentialManager.rejecters_[promiseId] = reject;
   });
 };
 
@@ -82,16 +78,16 @@ __gCrWeb.credentialManager.createPromise_ = function(requestId) {
  * @private
  */
 __gCrWeb.credentialManager.invokeOnHost_ = function(command, options) {
-  var requestId = __gCrWeb.credentialManager.nextId_++;
+  var promiseId = __gCrWeb.credentialManager.nextId_++;
   var message = {
     'command': command,
-    'requestId': requestId
+    'promiseId': promiseId
   };
   if (options) {
     Object.assign(message, options);
   }
   __gCrWeb.message.invokeOnHost(message);
-  return __gCrWeb.credentialManager.createPromise_(requestId);
+  return __gCrWeb.credentialManager.createPromise_(promiseId);
 };
 
 /**
@@ -183,10 +179,10 @@ function PasswordCredential(init) {
 
   // Perform following steps:
   // https://w3c.github.io/webappsec-credential-management/#abstract-opdef-create-a-passwordcredential-from-passwordcredentialdata
-  if (!data.id) {
+  if (!data.id || typeof data.id != 'string') {
     throw new TypeError('id must be a non-empty string');
   }
-  if (!data.password) {
+  if (!data.password || typeof data.password != 'string') {
     throw new TypeError('password must be a non-empty string');
   }
   if (data.iconURL && !data.iconURL.startsWith('https://')) {
@@ -260,10 +256,10 @@ Object.defineProperty(PasswordCredential.prototype, Symbol.toStringTag,
  * @constructor
  */
 function FederatedCredential(init) {
-  if (!init.id) {
+  if (!init.id || typeof init.id != 'string') {
     throw new TypeError('id must be a non-empty string');
   }
-  if (!init.provider) {
+  if (!init.provider || typeof init.provider != 'string') {
     throw new TypeError('provider must be a non-empty string');
   }
   if (!init.provider.startsWith('https://') &&
@@ -410,7 +406,10 @@ var FederatedCredentialRequestOptions;
  * The CredentialCreationOptions dictionary, for more information see
  * https://w3c.github.io/webappsec-credential-management/#credentialcreationoptions-dictionary
  * @dict
- * @typedef {Object}
+ * @typedef {{
+ *     password: ?PasswordCredentialInit,
+ *     federated: ?FederatedCredentialInit
+ * }}
  */
 var CredentialCreationOptions;
 
@@ -474,7 +473,30 @@ CredentialsContainer.prototype.preventSilentAccess = function() {
  *     of the request.
  */
 CredentialsContainer.prototype.create = function(options) {
-  // TODO(crbug.com/435046) Implement |create| as JS function
+  // According to
+  // https://w3c.github.io/webappsec-credential-management/#abstract-opdef-create-a-credential,
+  // we should also check for secure context. Instead it is done only in
+  // browser-side methods. Since public JS interface is exposed, user can create
+  // a Credential using a constructor anyway.
+  return new Promise(function(resolve, reject) {
+    try {
+      if (options && options.password && !options.federated) {
+        resolve(new PasswordCredential(options.password));
+        return;
+      }
+      if (options && options.federated && !options.password) {
+        resolve(new FederatedCredential(options.federated));
+        return;
+      }
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    reject(Object.create(DOMException.prototype, {
+      name: {value: DOMException.NOT_SUPPORTED_ERR},
+      message: {value: 'Invalid CredentialRequestOptions'}
+    }));
+  });
 };
 
 /**

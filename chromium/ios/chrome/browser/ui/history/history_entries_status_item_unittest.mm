@@ -13,6 +13,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
+#include "testing/platform_test.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -37,10 +38,6 @@
     _delegateCalledForBrowsingDataURL;
 - (void)historyEntriesStatusItem:(HistoryEntriesStatusItem*)item
                didRequestOpenURL:(const GURL&)URL {
-  GURL syncURL(l10n_util::GetStringUTF8(IDS_IOS_HISTORY_SYNC_LEARN_MORE_URL));
-  if (URL == syncURL) {
-    self.delegateCalledForSyncURL = YES;
-  }
   GURL browsingDataURL(kHistoryMyActivityURL);
   if (URL == browsingDataURL) {
     self.delegateCalledForBrowsingDataURL = YES;
@@ -50,70 +47,45 @@
 
 namespace {
 
+using HistoryEntriesStatusItemTest = PlatformTest;
+
 // Tests that configuring a cell for HistoryEntriesStatusItem with hidden
-// property set to YES results in an empty label.
-TEST(HistoryEntriesStatusItemTest, TestHidden) {
+// property set to YES results in an empty label, regardless of what
+// showsOtherBrowsingDataNotice is set to.
+TEST_F(HistoryEntriesStatusItemTest, TestHidden) {
   HistoryEntriesStatusItem* item =
       [[HistoryEntriesStatusItem alloc] initWithType:0];
   item.hidden = YES;
+  item.showsOtherBrowsingDataNotice = YES;
   HistoryEntriesStatusCell* cell = [[HistoryEntriesStatusCell alloc] init];
   [item configureCell:cell];
   EXPECT_FALSE(cell.textLabel.text);
 }
 
 // Tests that configuring a cell for HistoryEntriesStatusItem with
-// possible HistoryEntriesStatus values shows a label with the correct text.
-TEST(HistoryEntriesStatusItemTest, TestEntriesStatus) {
-  HistoryEntriesStatusItem* item =
-      [[HistoryEntriesStatusItem alloc] initWithType:0];
-  HistoryEntriesStatusCell* cell = [[HistoryEntriesStatusCell alloc] init];
-  NSRange range;
-
-  item.entriesStatus = NO_ENTRIES;
-  [item configureCell:cell];
-  NSString* no_entries_text = l10n_util::GetNSString(IDS_HISTORY_NO_RESULTS);
-  EXPECT_NSEQ(no_entries_text, cell.textLabel.text);
-
-  item.entriesStatus = SYNCED_ENTRIES;
-  [item configureCell:cell];
-  NSString* synced_entries_text =
-      l10n_util::GetNSString(IDS_IOS_HISTORY_HAS_SYNCED_RESULTS);
-  synced_entries_text = ParseStringWithLink(synced_entries_text, &range);
-  EXPECT_NSEQ(synced_entries_text, cell.textLabel.text);
-
-  item.entriesStatus = LOCAL_ENTRIES;
-  [item configureCell:cell];
-  NSString* local_entries_text =
-      l10n_util::GetNSString(IDS_IOS_HISTORY_NO_SYNCED_RESULTS);
-  local_entries_text = ParseStringWithLink(local_entries_text, &range);
-  EXPECT_NSEQ(local_entries_text, cell.textLabel.text);
-}
-
-// Tests that configuring a cell for HistoryEntriesStatusItem with
 // showsOtherBrowsingDataNotice set to YES adds other browsing
-// data text to the label.
-TEST(HistoryEntriesStatusItemTest, TestOtherBrowsingDataNotice) {
+// data text to the label, while set to NO has no text.
+TEST_F(HistoryEntriesStatusItemTest, TestOtherBrowsingDataNotice) {
   HistoryEntriesStatusItem* item =
       [[HistoryEntriesStatusItem alloc] initWithType:0];
   HistoryEntriesStatusCell* cell = [[HistoryEntriesStatusCell alloc] init];
   item.hidden = NO;
-  item.entriesStatus = SYNCED_ENTRIES;
   item.showsOtherBrowsingDataNotice = YES;
   [item configureCell:cell];
-  NSString* label_text = [NSString
-      stringWithFormat:@"%@ %@", l10n_util::GetNSString(
-                                     IDS_IOS_HISTORY_HAS_SYNCED_RESULTS),
-                       l10n_util::GetNSString(
-                           IDS_IOS_HISTORY_OTHER_FORMS_OF_HISTORY)];
+  NSString* label_text =
+      l10n_util::GetNSString(IDS_IOS_HISTORY_OTHER_FORMS_OF_HISTORY);
   NSRange range;
   label_text = ParseStringWithLink(label_text, &range);
-  label_text = ParseStringWithLink(label_text, &range);
   EXPECT_NSEQ(label_text, cell.textLabel.text);
+
+  item.showsOtherBrowsingDataNotice = NO;
+  [item configureCell:cell];
+  EXPECT_NSEQ(nil, cell.textLabel.text);
 }
 
 // Tests that tapping on links on a configured cell invokes
 // the HistoryEntriesStatusItemDelegate method.
-TEST(HistoryEntriesStatusItemTest, TestDelegate) {
+TEST_F(HistoryEntriesStatusItemTest, TestDelegate) {
   HistoryEntriesStatusItem* item =
       [[HistoryEntriesStatusItem alloc] initWithType:0];
   HistoryEntriesStatusCell* cell = [[HistoryEntriesStatusCell alloc] init];
@@ -121,7 +93,6 @@ TEST(HistoryEntriesStatusItemTest, TestDelegate) {
       [[MockEntriesStatusItemDelegate alloc] init];
   item.delegate = delegate;
   item.hidden = NO;
-  item.entriesStatus = SYNCED_ENTRIES;
   item.showsOtherBrowsingDataNotice = YES;
   [item configureCell:cell];
 
@@ -129,15 +100,6 @@ TEST(HistoryEntriesStatusItemTest, TestDelegate) {
   cell.frame = CGRectMake(0, 0, 360, 100);
   [cell setNeedsLayout];
   [cell layoutIfNeeded];
-
-  // Tap link for more info on sync.
-  GURL sync_url(l10n_util::GetStringUTF8(IDS_IOS_HISTORY_SYNC_LEARN_MORE_URL));
-  NSValue* tap_rect =
-      [[cell.labelLinkController tapRectsForURL:sync_url] objectAtIndex:0];
-  CGRect status_rect = [tap_rect CGRectValue];
-  [cell.labelLinkController
-      tapLabelAtPoint:CGPointMake(CGRectGetMidX(status_rect),
-                                  CGRectGetMidY(status_rect))];
 
   // Tap link for more info on browsing data.
   GURL browsing_data_url(kHistoryMyActivityURL);
@@ -148,8 +110,7 @@ TEST(HistoryEntriesStatusItemTest, TestDelegate) {
                                   CGRectGetMidY(browsing_data_rect))];
 
   base::test::ios::WaitUntilCondition(^bool() {
-    return delegate.delegateCalledForSyncURL &&
-           delegate.delegateCalledForBrowsingDataURL;
+    return delegate.delegateCalledForBrowsingDataURL;
   });
 }
 }  // namespace

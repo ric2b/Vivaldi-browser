@@ -9,9 +9,9 @@
 
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/tray_action/test_tray_action_client.h"
 #include "ash/tray_action/tray_action_observer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 
 using ash::mojom::TrayActionState;
@@ -48,31 +48,6 @@ class ScopedTestStateObserver : public TrayActionObserver {
   DISALLOW_COPY_AND_ASSIGN(ScopedTestStateObserver);
 };
 
-class TestTrayActionClient : public mojom::TrayActionClient {
- public:
-  TestTrayActionClient() : binding_(this) {}
-
-  ~TestTrayActionClient() override = default;
-
-  mojom::TrayActionClientPtr CreateInterfacePtrAndBind() {
-    mojom::TrayActionClientPtr ptr;
-    binding_.Bind(mojo::MakeRequest(&ptr));
-    return ptr;
-  }
-
-  // mojom::TrayActionClient:
-  void RequestNewLockScreenNote() override { action_requests_count_++; }
-
-  int action_requests_count() const { return action_requests_count_; }
-
- private:
-  mojo::Binding<ash::mojom::TrayActionClient> binding_;
-
-  int action_requests_count_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(TestTrayActionClient);
-};
-
 using TrayActionTest = AshTestBase;
 
 }  // namespace
@@ -93,7 +68,7 @@ TEST_F(TrayActionTest, NoTrayActionClient) {
   EXPECT_EQ(0u, observer.observed_states().size());
 
   std::unique_ptr<TestTrayActionClient> action_client =
-      base::MakeUnique<TestTrayActionClient>();
+      std::make_unique<TestTrayActionClient>();
   tray_action->SetClient(action_client->CreateInterfacePtrAndBind(),
                          TrayActionState::kLaunching);
 
@@ -103,7 +78,7 @@ TEST_F(TrayActionTest, NoTrayActionClient) {
   observer.ClearObservedStates();
 
   action_client.reset();
-  base::RunLoop().RunUntilIdle();
+  tray_action->FlushMojoForTesting();
 
   EXPECT_EQ(TrayActionState::kNotAvailable,
             tray_action->GetLockScreenNoteState());
@@ -139,7 +114,7 @@ TEST_F(TrayActionTest, StateChangeNotificationOnConnectionLoss) {
   observer.ClearObservedStates();
 
   action_client.reset();
-  base::RunLoop().RunUntilIdle();
+  tray_action->FlushMojoForTesting();
 
   EXPECT_EQ(TrayActionState::kNotAvailable,
             tray_action->GetLockScreenNoteState());
@@ -174,14 +149,6 @@ TEST_F(TrayActionTest, NormalStateProgression) {
   EXPECT_TRUE(tray_action->IsLockScreenNoteActive());
   ASSERT_EQ(1u, observer.observed_states().size());
   EXPECT_EQ(TrayActionState::kActive, observer.observed_states()[0]);
-
-  observer.ClearObservedStates();
-  tray_action->UpdateLockScreenNoteState(TrayActionState::kBackground);
-  EXPECT_EQ(TrayActionState::kBackground,
-            tray_action->GetLockScreenNoteState());
-  EXPECT_FALSE(tray_action->IsLockScreenNoteActive());
-  ASSERT_EQ(1u, observer.observed_states().size());
-  EXPECT_EQ(TrayActionState::kBackground, observer.observed_states()[0]);
   observer.ClearObservedStates();
 
   tray_action->UpdateLockScreenNoteState(TrayActionState::kNotAvailable);
@@ -218,22 +185,52 @@ TEST_F(TrayActionTest, RequestAction) {
   tray_action->SetClient(action_client.CreateInterfacePtrAndBind(),
                          TrayActionState::kNotAvailable);
 
-  EXPECT_EQ(0, action_client.action_requests_count());
-  tray_action->RequestNewLockScreenNote();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(0, action_client.action_requests_count());
+  EXPECT_TRUE(action_client.note_origins().empty());
+  tray_action->RequestNewLockScreenNote(
+      mojom::LockScreenNoteOrigin::kLockScreenButtonTap);
+  tray_action->FlushMojoForTesting();
+  EXPECT_TRUE(action_client.note_origins().empty());
 
   tray_action->UpdateLockScreenNoteState(TrayActionState::kAvailable);
-  tray_action->RequestNewLockScreenNote();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(1, action_client.action_requests_count());
+  tray_action->RequestNewLockScreenNote(
+      mojom::LockScreenNoteOrigin::kTrayAction);
+  tray_action->FlushMojoForTesting();
+  EXPECT_EQ(std::vector<mojom::LockScreenNoteOrigin>(
+                {mojom::LockScreenNoteOrigin::kTrayAction}),
+            action_client.note_origins());
 }
 
 // Tests that there is no crash if handler is not set.
 TEST_F(TrayActionTest, RequestActionWithNoHandler) {
   TrayAction* tray_action = Shell::Get()->tray_action();
-  tray_action->RequestNewLockScreenNote();
-  base::RunLoop().RunUntilIdle();
+  tray_action->RequestNewLockScreenNote(
+      mojom::LockScreenNoteOrigin::kLockScreenButtonTap);
+  tray_action->FlushMojoForTesting();
+}
+
+TEST_F(TrayActionTest, CloseLockScreenNote) {
+  TrayAction* tray_action = Shell::Get()->tray_action();
+
+  TestTrayActionClient action_client;
+  tray_action->SetClient(action_client.CreateInterfacePtrAndBind(),
+                         TrayActionState::kNotAvailable);
+
+  tray_action->UpdateLockScreenNoteState(TrayActionState::kActive);
+  EXPECT_TRUE(action_client.close_note_reasons().empty());
+  tray_action->CloseLockScreenNote(
+      mojom::CloseLockScreenNoteReason::kUnlockButtonPressed);
+  tray_action->FlushMojoForTesting();
+  EXPECT_EQ(std::vector<mojom::CloseLockScreenNoteReason>(
+                {mojom::CloseLockScreenNoteReason::kUnlockButtonPressed}),
+            action_client.close_note_reasons());
+}
+
+// Tests that there is no crash if handler is not set.
+TEST_F(TrayActionTest, CloseLockScreenNoteWithNoHandler) {
+  TrayAction* tray_action = Shell::Get()->tray_action();
+  tray_action->CloseLockScreenNote(
+      mojom::CloseLockScreenNoteReason::kUnlockButtonPressed);
+  tray_action->FlushMojoForTesting();
 }
 
 }  // namespace ash

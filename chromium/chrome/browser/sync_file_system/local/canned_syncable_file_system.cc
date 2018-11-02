@@ -61,7 +61,7 @@ void AssignAndQuit(base::TaskRunner* original_task_runner,
 
 template <typename R, typename CallbackType>
 R RunOnThread(base::SingleThreadTaskRunner* task_runner,
-              const tracked_objects::Location& location,
+              const base::Location& location,
               base::OnceCallback<void(CallbackType callback)> task) {
   R result;
   base::RunLoop run_loop;
@@ -77,7 +77,7 @@ R RunOnThread(base::SingleThreadTaskRunner* task_runner,
 }
 
 void RunOnThread(base::SingleThreadTaskRunner* task_runner,
-                 const tracked_objects::Location& location,
+                 const base::Location& location,
                  base::OnceClosure task) {
   base::RunLoop run_loop;
   task_runner->PostTaskAndReply(
@@ -657,7 +657,7 @@ void CannedSyncableFileSystem::DoWriteString(
   EXPECT_TRUE(io_task_runner_->RunsTasksInCurrentSequence());
   EXPECT_TRUE(is_filesystem_opened_);
   MockBlobURLRequestContext* url_request_context(
-      new MockBlobURLRequestContext(file_system_context_.get()));
+      new MockBlobURLRequestContext());
   WriteHelper* helper = new WriteHelper(url_request_context, data);
   operation_runner()->Write(url_request_context, url,
                             helper->scoped_text_blob()->GetBlobDataHandle(), 0,

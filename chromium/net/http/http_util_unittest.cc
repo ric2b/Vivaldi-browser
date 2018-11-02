@@ -726,6 +726,7 @@ TEST(HttpUtilTest, GenerateAcceptLanguageHeader) {
 
 // HttpResponseHeadersTest.GetMimeType also tests ParseContentType.
 TEST(HttpUtilTest, ParseContentType) {
+  // clang-format off
   const struct {
     const char* const content_type;
     const char* const expected_mime_type;
@@ -739,10 +740,11 @@ TEST(HttpUtilTest, ParseContentType) {
       true,
       ""
     },
+    // Parameter name is "charset ", not "charset".  See https://crbug.com/772834.
     { "text/html; charset =utf-8",
       "text/html",
-      "utf-8",
-      true,
+      "",
+      false,
       ""
     },
     { "text/html; charset= utf-8",
@@ -763,23 +765,27 @@ TEST(HttpUtilTest, ParseContentType) {
       false,
       "\"WebKit-ada-df-dsf-adsfadsfs\""
     },
+    // Parameter name is "boundary ", not "boundary".
+    // See https://crbug.com/772834.
     { "text/html; boundary =\"WebKit-ada-df-dsf-adsfadsfs\"",
       "text/html",
       "",
       false,
-      "\"WebKit-ada-df-dsf-adsfadsfs\""
+      ""
     },
+    // Parameter value includes leading space.  See https://crbug.com/772834.
     { "text/html; boundary= \"WebKit-ada-df-dsf-adsfadsfs\"",
       "text/html",
       "",
       false,
-      "\"WebKit-ada-df-dsf-adsfadsfs\""
+      " \"WebKit-ada-df-dsf-adsfadsfs\""
     },
+    // Parameter value includes leading space.  See https://crbug.com/772834.
     { "text/html; boundary= \"WebKit-ada-df-dsf-adsfadsfs\"   ",
       "text/html",
       "",
       false,
-      "\"WebKit-ada-df-dsf-adsfadsfs\""
+      " \"WebKit-ada-df-dsf-adsfadsfs\""
     },
     { "text/html; boundary=\"WebKit-ada-df-dsf-adsfadsfs  \"",
       "text/html",
@@ -793,8 +799,23 @@ TEST(HttpUtilTest, ParseContentType) {
       false,
       "WebKit-ada-df-dsf-adsfadsfs"
     },
+    { "text/html; charset=\"utf-8\"",
+      "text/html",
+      "utf-8",
+      true,
+      ""
+    },
+    // Regression test for https://crbug.com/772350:
+    // Single quotes are not delimiters but must be treated as part of charset.
+    { "text/html; charset='utf-8'",
+      "text/html",
+      "'utf-8'",
+      true,
+      ""
+    },
     // TODO(abarth): Add more interesting test cases.
   };
+  // clang-format on
   for (size_t i = 0; i < arraysize(tests); ++i) {
     std::string mime_type;
     std::string charset;

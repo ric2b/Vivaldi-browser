@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/stl_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -23,7 +24,6 @@
 #include "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/web/public/web_thread.h"
-#include "net/base/sdch_manager.h"
 #include "net/cookies/cookie_store.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/extras/sqlite/sqlite_channel_id_store.h"
@@ -31,7 +31,6 @@
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
-#include "net/sdch/sdch_owner.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -187,7 +186,8 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
   DCHECK(!channel_id_path_.empty());
   channel_id_store = new net::SQLiteChannelIDStore(
       channel_id_path_,
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::DB));
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND}));
 
   net::ChannelIDService* channel_id_service = new net::ChannelIDService(
       new net::DefaultChannelIDStore(channel_id_store.get()));

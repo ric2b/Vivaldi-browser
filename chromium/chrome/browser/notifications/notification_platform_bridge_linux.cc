@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_macros.h"
@@ -25,11 +26,13 @@
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/dbus/dbus_thread_linux.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration_linux.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
@@ -38,9 +41,12 @@
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
 #include "net/base/escape.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/message_center/notification.h"
 
 namespace {
 
@@ -70,12 +76,26 @@ const char kCapabilityPersistence[] = "persistence";
 const char kCapabilitySound[] = "sound";
 
 // Button IDs.
+const char kCloseButtonId[] = "close";
 const char kDefaultButtonId[] = "default";
 const char kSettingsButtonId[] = "settings";
 
 // Max image size; specified in the FDO notification specification.
 const int kMaxImageWidth = 200;
 const int kMaxImageHeight = 100;
+
+// Notification on-screen time, in milliseconds.
+const int32_t kExpireTimeout = 25000;
+
+// The maximum amount of characters for displaying the full origin path.
+const size_t kMaxAllowedOriginLength = 28;
+
+// Notification urgency levels, as specified in the FDO notification spec.
+enum FdoUrgency {
+  URGENCY_LOW = 0,
+  URGENCY_NORMAL = 1,
+  URGENCY_CRITICAL = 2,
+};
 
 // The values in this enumeration correspond to those of the
 // Linux.NotificationPlatformBridge.InitializationStatus histogram, so
@@ -94,7 +114,8 @@ int ClampInt(int value, int low, int hi) {
   return std::max(std::min(value, hi), low);
 }
 
-base::string16 CreateNotificationTitle(const Notification& notification) {
+base::string16 CreateNotificationTitle(
+    const message_center::Notification& notification) {
   base::string16 title;
   if (notification.type() == message_center::NOTIFICATION_TYPE_PROGRESS) {
     title += base::FormatPercent(notification.progress());
@@ -104,30 +125,27 @@ base::string16 CreateNotificationTitle(const Notification& notification) {
   return title;
 }
 
-gfx::Image DeepCopyImage(const gfx::Image& image) {
-  if (image.IsEmpty())
-    return gfx::Image();
-  std::unique_ptr<gfx::ImageSkia> image_skia(image.CopyImageSkia());
-  return gfx::Image(*image_skia);
+void EscapeUnsafeCharacters(std::string* message) {
+  // Canonical's notification development guidelines recommends only
+  // escaping the '&', '<', and '>' characters:
+  // https://wiki.ubuntu.com/NotificationDevelopmentGuidelines
+  base::ReplaceChars(*message, "&", "&amp;", message);
+  base::ReplaceChars(*message, "<", "&lt;", message);
+  base::ReplaceChars(*message, ">", "&gt;", message);
 }
 
 int NotificationPriorityToFdoUrgency(int priority) {
-  enum FdoUrgency {
-    LOW = 0,
-    NORMAL = 1,
-    CRITICAL = 2,
-  };
   switch (priority) {
     case message_center::MIN_PRIORITY:
     case message_center::LOW_PRIORITY:
-      return LOW;
+      return URGENCY_LOW;
     case message_center::HIGH_PRIORITY:
     case message_center::MAX_PRIORITY:
-      return CRITICAL;
+      return URGENCY_CRITICAL;
     default:
       NOTREACHED();
     case message_center::DEFAULT_PRIORITY:
-      return NORMAL;
+      return URGENCY_NORMAL;
   }
 }
 
@@ -157,11 +175,12 @@ gfx::Image ResizeImageToFdoMaxSize(const gfx::Image& image) {
 // Runs once the profile has been loaded in order to perform a given
 // |operation| on a notification.
 void ProfileLoadedCallback(NotificationCommon::Operation operation,
-                           NotificationCommon::Type notification_type,
-                           const std::string& origin,
+                           NotificationHandler::Type notification_type,
+                           const GURL& origin,
                            const std::string& notification_id,
-                           int action_index,
-                           const base::NullableString16& reply,
+                           const base::Optional<int>& action_index,
+                           const base::Optional<base::string16>& reply,
+                           const base::Optional<bool>& by_user,
                            Profile* profile) {
   if (!profile)
     return;
@@ -170,22 +189,33 @@ void ProfileLoadedCallback(NotificationCommon::Operation operation,
       NotificationDisplayServiceFactory::GetForProfile(profile);
   display_service->ProcessNotificationOperation(operation, notification_type,
                                                 origin, notification_id,
-                                                action_index, reply);
+                                                action_index, reply, by_user);
+}
+
+bool ShouldAddCloseButton(const std::string& server_name) {
+  // Cinnamon doesn't add a close button on notifications.  With eg. calendar
+  // notifications, which are stay-on-screen, this can lead to a situation where
+  // the only way to dismiss a notification is to click on it, which would
+  // create an unwanted web navigation.  For this reason, manually add a close
+  // button. (https://crbug.com/804637)
+  return server_name == "cinnamon";
 }
 
 void ForwardNotificationOperationOnUiThread(
     NotificationCommon::Operation operation,
-    NotificationCommon::Type notification_type,
-    const std::string& origin,
+    NotificationHandler::Type notification_type,
+    const GURL& origin,
     const std::string& notification_id,
-    int action_index,
+    const base::Optional<int>& action_index,
+    const base::Optional<bool>& by_user,
     const std::string& profile_id,
     bool is_incognito) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   g_browser_process->profile_manager()->LoadProfile(
       profile_id, is_incognito,
       base::Bind(&ProfileLoadedCallback, operation, notification_type, origin,
-                 notification_id, action_index, base::NullableString16()));
+                 notification_id, action_index, base::nullopt /* reply */,
+                 by_user));
 }
 
 class ResourceFile {
@@ -193,6 +223,7 @@ class ResourceFile {
   explicit ResourceFile(const base::FilePath& file_path)
       : file_path_(file_path) {
     DCHECK(!file_path.empty());
+    DCHECK(file_path.IsAbsolute());
   }
   ~ResourceFile() { base::DeleteFile(file_path_, false); }
 
@@ -215,7 +246,7 @@ std::unique_ptr<ResourceFile> WriteDataToTmpFile(
   if (!base::CreateTemporaryFile(&file_path))
     return nullptr;
 
-  auto resource_file = base::MakeUnique<ResourceFile>(file_path);
+  auto resource_file = std::make_unique<ResourceFile>(file_path);
   if (base::WriteFile(file_path, data->front_as<char>(), data_len) !=
       data_len) {
     resource_file.reset();
@@ -230,6 +261,12 @@ NotificationPlatformBridge* NotificationPlatformBridge::Create() {
   return new NotificationPlatformBridgeLinux();
 }
 
+// static
+bool NotificationPlatformBridge::CanHandleType(
+    NotificationHandler::Type notification_type) {
+  return notification_type != NotificationHandler::Type::TRANSIENT;
+}
+
 class NotificationPlatformBridgeLinuxImpl
     : public NotificationPlatformBridge,
       public content::NotificationObserver,
@@ -238,12 +275,7 @@ class NotificationPlatformBridgeLinuxImpl
   explicit NotificationPlatformBridgeLinuxImpl(scoped_refptr<dbus::Bus> bus)
       : bus_(bus) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    // While the tasks in NotificationPlatformBridgeLinux merely need
-    // to run in sequence, many APIs in ::dbus are required to be
-    // called from the same thread (https://crbug.com/130984), so
-    // |task_runner_| is created as the single-threaded flavor.
-    task_runner_ = base::CreateSingleThreadTaskRunnerWithTraits(
-        {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
+    task_runner_ = chrome::GetDBusTaskRunner();
     registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                    content::NotificationService::AllSources());
   }
@@ -255,33 +287,30 @@ class NotificationPlatformBridgeLinuxImpl
   // count will go to 0 and the object would be prematurely
   // destructed.
   void Init() {
+    product_logo_png_bytes_ =
+        gfx::Image(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+                       IDR_PRODUCT_LOGO_256))
+            .As1xPNGBytes();
     PostTaskToTaskRunnerThread(base::BindOnce(
         &NotificationPlatformBridgeLinuxImpl::InitOnTaskRunner, this));
   }
 
-  void Display(NotificationCommon::Type notification_type,
-               const std::string& notification_id,
-               const std::string& profile_id,
-               bool is_incognito,
-               const Notification& notification) override {
+  void Display(
+      NotificationHandler::Type notification_type,
+      const std::string& profile_id,
+      bool is_incognito,
+      const message_center::Notification& notification,
+      std::unique_ptr<NotificationCommon::Metadata> metadata) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    // Notifications contain gfx::Image's which have reference counts
-    // that are not thread safe.  Because of this, we duplicate the
-    // notification and its images.  Wrap the notification in a
-    // unique_ptr to transfer ownership of the notification (and the
-    // non-thread-safe reference counts) to the task runner thread.
-    auto notification_copy = base::MakeUnique<Notification>(notification);
-    notification_copy->set_icon(DeepCopyImage(notification_copy->icon()));
-    notification_copy->set_image(body_images_supported_.value()
-                                     ? DeepCopyImage(notification_copy->image())
-                                     : gfx::Image());
-    notification_copy->set_small_image(gfx::Image());
-    for (size_t i = 0; i < notification_copy->buttons().size(); i++)
-      notification_copy->SetButtonIcon(i, gfx::Image());
+    // Make a deep copy of the notification as its resources cannot safely
+    // be passed between threads.
+    auto notification_copy = message_center::Notification::DeepCopy(
+        notification, body_images_supported_.value(),
+        /*include_small_image=*/false, /*include_icon_images=*/false);
 
     PostTaskToTaskRunnerThread(base::BindOnce(
         &NotificationPlatformBridgeLinuxImpl::DisplayOnTaskRunner, this,
-        notification_type, notification_id, profile_id, is_incognito,
+        notification_type, profile_id, is_incognito,
         base::Passed(&notification_copy)));
   }
 
@@ -322,7 +351,7 @@ class NotificationPlatformBridgeLinuxImpl
   friend class base::RefCountedThreadSafe<NotificationPlatformBridgeLinuxImpl>;
 
   struct NotificationData {
-    NotificationData(NotificationCommon::Type notification_type,
+    NotificationData(NotificationHandler::Type notification_type,
                      const std::string& notification_id,
                      const std::string& profile_id,
                      bool is_incognito,
@@ -338,7 +367,7 @@ class NotificationPlatformBridgeLinuxImpl
     uint32_t dbus_id = 0;
 
     // Same parameters used by NotificationPlatformBridge::Display().
-    NotificationCommon::Type notification_type;
+    NotificationHandler::Type notification_type;
     const std::string notification_id;
     const std::string profile_id;
     const bool is_incognito;
@@ -361,9 +390,7 @@ class NotificationPlatformBridgeLinuxImpl
   };
 
   ~NotificationPlatformBridgeLinuxImpl() override {
-    DCHECK(!bus_);
-    DCHECK(!notification_proxy_);
-    DCHECK(notifications_.empty());
+    DCHECK(clean_up_on_task_runner_called_);
   }
 
   void Observe(int type,
@@ -404,7 +431,7 @@ class NotificationPlatformBridgeLinuxImpl
       bus_options.bus_type = dbus::Bus::SESSION;
       bus_options.connection_type = dbus::Bus::PRIVATE;
       bus_options.dbus_task_runner = task_runner_;
-      bus_ = make_scoped_refptr(new dbus::Bus(bus_options));
+      bus_ = base::MakeRefCounted<dbus::Bus>(bus_options);
     }
 
     notification_proxy_ =
@@ -440,6 +467,17 @@ class NotificationPlatformBridgeLinuxImpl
         &NotificationPlatformBridgeLinuxImpl::SetBodyImagesSupported, this,
         base::ContainsKey(capabilities_, kCapabilityBodyImages)));
 
+    dbus::MethodCall get_server_information_call(kFreedesktopNotificationsName,
+                                                 "GetServerInformation");
+    std::unique_ptr<dbus::Response> server_information_response =
+        notification_proxy_->CallMethodAndBlock(
+            &get_server_information_call,
+            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT);
+    if (server_information_response) {
+      dbus::MessageReader reader(server_information_response.get());
+      reader.PopString(&server_name_);
+    }
+
     connected_signals_barrier_ = base::BarrierClosure(
         2, base::Bind(&NotificationPlatformBridgeLinuxImpl::
                           OnConnectionInitializationFinishedOnTaskRunner,
@@ -463,40 +501,49 @@ class NotificationPlatformBridgeLinuxImpl
       bus_->ShutdownAndBlock();
     bus_ = nullptr;
     notification_proxy_ = nullptr;
+    product_logo_png_bytes_ = nullptr;
+    product_logo_file_.reset();
+    product_logo_file_watcher_.reset();
     notifications_.clear();
+    clean_up_on_task_runner_called_ = true;
   }
 
   // Makes the "Notify" call to D-Bus.
-  void DisplayOnTaskRunner(NotificationCommon::Type notification_type,
-                           const std::string& notification_id,
-                           const std::string& profile_id,
-                           bool is_incognito,
-                           std::unique_ptr<Notification> notification) {
+  void DisplayOnTaskRunner(
+      NotificationHandler::Type notification_type,
+      const std::string& profile_id,
+      bool is_incognito,
+      std::unique_ptr<message_center::Notification> notification) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
     NotificationData* data =
-        FindNotificationData(notification_id, profile_id, is_incognito);
+        FindNotificationData(notification->id(), profile_id, is_incognito);
     if (data) {
       // Update an existing notification.
       data->notification_type = notification_type;
       data->resource_files.clear();
     } else {
       // Send the notification for the first time.
-      data =
-          new NotificationData(notification_type, notification_id, profile_id,
-                               is_incognito, notification->origin_url());
+      data = new NotificationData(notification_type, notification->id(),
+                                  profile_id, is_incognito,
+                                  notification->origin_url());
       notifications_.emplace(data, base::WrapUnique(data));
     }
 
     dbus::MethodCall method_call(kFreedesktopNotificationsName, kMethodNotify);
     dbus::MessageWriter writer(&method_call);
 
-    // app_name passed implicitly via desktop-entry.
-    writer.AppendString("");
+    // app_name
+    writer.AppendString(l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
 
     writer.AppendUint32(data->dbus_id);
 
-    // app_icon passed implicitly via desktop-entry.
-    writer.AppendString("");
+    // app_icon
+    if (!product_logo_file_) {
+      RewriteProductLogoFile();
+    }
+    writer.AppendString(
+        product_logo_file_ ? "file://" + product_logo_file_->file_path().value()
+                           : "");
 
     writer.AppendString(
         base::UTF16ToUTF8(CreateNotificationTitle(*notification)));
@@ -507,44 +554,53 @@ class NotificationPlatformBridgeLinuxImpl
           base::ContainsKey(capabilities_, kCapabilityBodyMarkup);
 
       if (notification->UseOriginAsContextMessage()) {
-        std::string url_display_text = net::EscapeForHTML(
+        std::string url_display_text =
             base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
                 notification->origin_url(),
-                url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS)));
-        if (base::ContainsKey(capabilities_, kCapabilityBodyHyperlinks)) {
+                url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
+        if (url_display_text.size() > kMaxAllowedOriginLength) {
+          std::string domain_and_registry =
+              net::registry_controlled_domains::GetDomainAndRegistry(
+                  notification->origin_url(),
+                  net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+          // localhost, raw IPs etc. are not handled by GetDomainAndRegistry.
+          if (!domain_and_registry.empty()) {
+            url_display_text = domain_and_registry;
+          }
+        }
+        EscapeUnsafeCharacters(&url_display_text);
+        if (body_markup &&
+            base::ContainsKey(capabilities_, kCapabilityBodyHyperlinks)) {
           body << "<a href=\""
-               << net::EscapePath(notification->origin_url().spec()) << "\">"
-               << url_display_text << "</a>";
+               << net::EscapeForHTML(notification->origin_url().spec()) << "\">"
+               << url_display_text << "</a>\n\n";
         } else {
-          body << url_display_text;
+          body << url_display_text << "\n\n";
         }
       } else if (!notification->context_message().empty()) {
         std::string context =
             base::UTF16ToUTF8(notification->context_message());
         if (body_markup)
-          context = net::EscapeForHTML(context);
-        body << context;
+          EscapeUnsafeCharacters(&context);
+        body << context << "\n\n";
       }
 
       std::string message = base::UTF16ToUTF8(notification->message());
       if (body_markup)
-        message = net::EscapeForHTML(message);
-      if (body.tellp())
-        body << "\n";
-      body << message;
+        EscapeUnsafeCharacters(&message);
+      if (!message.empty())
+        body << message << "\n";
 
       if (notification->type() == message_center::NOTIFICATION_TYPE_MULTIPLE) {
         for (const auto& item : notification->items()) {
-          if (body.tellp())
-            body << "\n";
           const std::string title = base::UTF16ToUTF8(item.title);
           const std::string message = base::UTF16ToUTF8(item.message);
           // TODO(peter): Figure out the right way to internationalize
           // this for RTL languages.
           if (body_markup)
-            body << "<b>" << title << "</b> " << message;
+            body << "<b>" << title << "</b> " << message << "\n";
           else
-            body << title << " - " << message;
+            body << title << " - " << message << "\n";
         }
       } else if (notification->type() ==
                      message_center::NOTIFICATION_TYPE_IMAGE &&
@@ -552,16 +608,16 @@ class NotificationPlatformBridgeLinuxImpl
         std::unique_ptr<ResourceFile> image_file = WriteDataToTmpFile(
             ResizeImageToFdoMaxSize(notification->image()).As1xPNGBytes());
         if (image_file) {
-          if (body.tellp())
-            body << "\n";
           body << "<img src=\""
                << net::EscapePath(image_file->file_path().value())
-               << "\" alt=\"\"/>";
+               << "\" alt=\"\"/>\n";
           data->resource_files.push_back(std::move(image_file));
         }
       }
     }
-    writer.AppendString(body.str());
+    std::string body_str = body.str();
+    base::TrimString(body_str, "\n", &body_str);
+    writer.AppendString(body_str);
 
     // Even-indexed elements in this vector are action IDs passed back to
     // us in OnActionInvoked().  Odd-indexed ones contain the button text.
@@ -572,22 +628,25 @@ class NotificationPlatformBridgeLinuxImpl
         // FDO notification buttons can contain either an icon or a label,
         // but not both, and the type of all buttons must be the same (all
         // labels or all icons), so always use labels.
-        const std::string id = base::SizeTToString(data->action_end++);
+        const std::string id = base::NumberToString(data->action_end++);
         const std::string label = base::UTF16ToUTF8(button_info.title);
         actions.push_back(id);
         actions.push_back(label);
       }
-      if (notification->clickable()) {
-        // Special case: the pair ("default", "") will not add a button,
-        // but instead makes the entire notification clickable.
-        actions.push_back(kDefaultButtonId);
-        actions.push_back("");
-      }
+      // Special case: the id "default" will not add a button, but
+      // instead makes the entire notification clickable.
+      actions.push_back(kDefaultButtonId);
+      actions.push_back("Activate");
       // Always add a settings button for web notifications.
-      if (notification_type != NotificationCommon::EXTENSION) {
+      if (notification_type != NotificationHandler::Type::EXTENSION) {
         actions.push_back(kSettingsButtonId);
         actions.push_back(
             l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_SETTINGS));
+      }
+      if (ShouldAddCloseButton(server_name_)) {
+        actions.push_back(kCloseButtonId);
+        actions.push_back(
+            l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_CLOSE));
       }
     }
     writer.AppendArrayOfStrings(actions);
@@ -597,9 +656,20 @@ class NotificationPlatformBridgeLinuxImpl
     dbus::MessageWriter urgency_writer(nullptr);
     hints_writer.OpenDictEntry(&urgency_writer);
     urgency_writer.AppendString("urgency");
-    urgency_writer.AppendVariantOfUint32(
-        NotificationPriorityToFdoUrgency(notification->priority()));
+    uint32_t urgency =
+        notification->never_timeout()
+            ? URGENCY_CRITICAL
+            : NotificationPriorityToFdoUrgency(notification->priority());
+    urgency_writer.AppendVariantOfUint32(urgency);
     hints_writer.CloseContainer(&urgency_writer);
+
+    if (notification->silent()) {
+      dbus::MessageWriter suppress_sound_writer(nullptr);
+      hints_writer.OpenDictEntry(&suppress_sound_writer);
+      suppress_sound_writer.AppendString("suppress-sound");
+      suppress_sound_writer.AppendVariantOfBool(true);
+      hints_writer.CloseContainer(&suppress_sound_writer);
+    }
 
     std::unique_ptr<base::Environment> env = base::Environment::Create();
     base::FilePath desktop_file(
@@ -631,8 +701,12 @@ class NotificationPlatformBridgeLinuxImpl
 
     const int32_t kExpireTimeoutDefault = -1;
     const int32_t kExpireTimeoutNever = 0;
-    writer.AppendInt32(notification->never_timeout() ? kExpireTimeoutNever
-                                                     : kExpireTimeoutDefault);
+    writer.AppendInt32(
+        notification->never_timeout()
+            ? kExpireTimeoutNever
+            : base::ContainsKey(capabilities_, kCapabilityPersistence)
+                  ? kExpireTimeoutDefault
+                  : kExpireTimeout);
 
     std::unique_ptr<dbus::Response> response =
         notification_proxy_->CallMethodAndBlock(
@@ -674,7 +748,7 @@ class NotificationPlatformBridgeLinuxImpl
       bool incognito,
       const GetDisplayedNotificationsCallback& callback) const {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    auto displayed = base::MakeUnique<std::set<std::string>>();
+    auto displayed = std::make_unique<std::set<std::string>>();
     for (const auto& pair : notifications_) {
       NotificationData* data = pair.first;
       if (data->profile_id == profile_id && data->is_incognito == incognito)
@@ -713,12 +787,13 @@ class NotificationPlatformBridgeLinuxImpl
 
   void ForwardNotificationOperation(NotificationData* data,
                                     NotificationCommon::Operation operation,
-                                    int action_index) {
+                                    const base::Optional<int>& action_index,
+                                    const base::Optional<bool>& by_user) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
     PostTaskToUiThread(base::BindOnce(
         ForwardNotificationOperationOnUiThread, operation,
-        data->notification_type, data->origin_url.spec(), data->notification_id,
-        action_index, data->profile_id, data->is_incognito));
+        data->notification_type, data->origin_url, data->notification_id,
+        action_index, by_user, data->profile_id, data->is_incognito));
   }
 
   void OnActionInvoked(dbus::Signal* signal) {
@@ -736,9 +811,15 @@ class NotificationPlatformBridgeLinuxImpl
       return;
 
     if (action == kDefaultButtonId) {
-      ForwardNotificationOperation(data, NotificationCommon::CLICK, -1);
+      ForwardNotificationOperation(data, NotificationCommon::CLICK,
+                                   base::nullopt /* action_index */,
+                                   base::nullopt /* by_user */);
     } else if (action == kSettingsButtonId) {
-      ForwardNotificationOperation(data, NotificationCommon::SETTINGS, -1);
+      ForwardNotificationOperation(data, NotificationCommon::SETTINGS,
+                                   base::nullopt /* action_index */,
+                                   base::nullopt /* by_user */);
+    } else if (action == kCloseButtonId) {
+      CloseOnTaskRunner(data->profile_id, data->notification_id);
     } else {
       size_t id;
       if (!base::StringToSizeT(action, &id))
@@ -748,7 +829,7 @@ class NotificationPlatformBridgeLinuxImpl
       if (id_zero_based >= n_buttons)
         return;
       ForwardNotificationOperation(data, NotificationCommon::CLICK,
-                                   id_zero_based);
+                                   id_zero_based, base::nullopt /* by_user */);
     }
   }
 
@@ -763,7 +844,10 @@ class NotificationPlatformBridgeLinuxImpl
     if (!data)
       return;
 
-    ForwardNotificationOperation(data, NotificationCommon::CLOSE, -1);
+    // TODO(peter): Can we support |by_user| appropriately here?
+    ForwardNotificationOperation(data, NotificationCommon::CLOSE,
+                                 base::nullopt /* action_index */,
+                                 true /* by_user */);
     notifications_.erase(data);
   }
 
@@ -804,6 +888,15 @@ class NotificationPlatformBridgeLinuxImpl
     connected_signals_barrier_.Run();
   }
 
+  void OnProductLogoFileChanged(const base::FilePath& path, bool error) {
+    // |error| should always be false on Linux.
+    DCHECK(!error);
+    // This callback runs whenever the file is deleted or modified.
+    // In either case, we want to rewrite the file.
+    product_logo_file_.reset();
+    product_logo_file_watcher_.reset();
+  }
+
   void RecordMetricsForCapabilities() {
     // Histogram macros must be called with the same name for each
     // callsite, so we can't roll the below into a nice loop.
@@ -836,6 +929,25 @@ class NotificationPlatformBridgeLinuxImpl
                           base::ContainsKey(capabilities_, kCapabilitySound));
   }
 
+  void RewriteProductLogoFile() {
+    product_logo_file_watcher_.reset();
+    product_logo_file_ = WriteDataToTmpFile(product_logo_png_bytes_);
+    if (!product_logo_file_)
+      return;
+    // Temporary files may periodically get cleaned up on Linux.
+    // Watch for file deletion and rewrite the file in case we have a
+    // long-running Chrome process.
+    product_logo_file_watcher_ = std::make_unique<base::FilePathWatcher>();
+    if (!product_logo_file_watcher_->Watch(
+            product_logo_file_->file_path(), false,
+            base::Bind(
+                &NotificationPlatformBridgeLinuxImpl::OnProductLogoFileChanged,
+                this))) {
+      product_logo_file_.reset();
+      product_logo_file_watcher_.reset();
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Members used only on the UI thread.
 
@@ -861,7 +973,13 @@ class NotificationPlatformBridgeLinuxImpl
 
   std::unordered_set<std::string> capabilities_;
 
+  std::string server_name_;
+
   base::Closure connected_signals_barrier_;
+
+  scoped_refptr<base::RefCountedMemory> product_logo_png_bytes_;
+  std::unique_ptr<ResourceFile> product_logo_file_;
+  std::unique_ptr<base::FilePathWatcher> product_logo_file_watcher_;
 
   // A std::set<std::unique_ptr<T>> doesn't work well because
   // eg. std::set::erase(T) would require a std::unique_ptr<T>
@@ -870,6 +988,8 @@ class NotificationPlatformBridgeLinuxImpl
   using UnorderedUniqueSet = std::unordered_map<T*, std::unique_ptr<T>>;
 
   UnorderedUniqueSet<NotificationData> notifications_;
+
+  bool clean_up_on_task_runner_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPlatformBridgeLinuxImpl);
 };
@@ -886,13 +1006,13 @@ NotificationPlatformBridgeLinux::NotificationPlatformBridgeLinux(
 NotificationPlatformBridgeLinux::~NotificationPlatformBridgeLinux() = default;
 
 void NotificationPlatformBridgeLinux::Display(
-    NotificationCommon::Type notification_type,
-    const std::string& notification_id,
+    NotificationHandler::Type notification_type,
     const std::string& profile_id,
     bool is_incognito,
-    const Notification& notification) {
-  impl_->Display(notification_type, notification_id, profile_id, is_incognito,
-                 notification);
+    const message_center::Notification& notification,
+    std::unique_ptr<NotificationCommon::Metadata> metadata) {
+  impl_->Display(notification_type, profile_id, is_incognito, notification,
+                 std::move(metadata));
 }
 
 void NotificationPlatformBridgeLinux::Close(

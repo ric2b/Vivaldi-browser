@@ -8,14 +8,16 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "components/arc/arc_session_runner.h"
+#include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -23,6 +25,15 @@
 namespace arc {
 
 namespace {
+
+constexpr int kContainerStarting =
+    static_cast<int>(ArcContainerLifetimeEvent::CONTAINER_STARTING);
+constexpr int kContainerFailedToStart =
+    static_cast<int>(ArcContainerLifetimeEvent::CONTAINER_FAILED_TO_START);
+constexpr int kContainerCrashedEarly =
+    static_cast<int>(ArcContainerLifetimeEvent::CONTAINER_CRASHED_EARLY);
+constexpr int kContainerCrashed =
+    static_cast<int>(ArcContainerLifetimeEvent::CONTAINER_CRASHED);
 
 class DoNothingObserver : public ArcSessionRunner::Observer {
  public:
@@ -45,7 +56,7 @@ class ArcSessionRunnerTest : public testing::Test,
 
   void SetUp() override {
     chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        base::MakeUnique<chromeos::FakeSessionManagerClient>());
+        std::make_unique<chromeos::FakeSessionManagerClient>());
     chromeos::DBusThreadManager::Initialize();
 
     stop_reason_ = ArcStopReason::SHUTDOWN;
@@ -55,7 +66,7 @@ class ArcSessionRunnerTest : public testing::Test,
 
     // We inject FakeArcSession here so we do not need task_runner.
     arc_session_runner_ =
-        base::MakeUnique<ArcSessionRunner>(base::Bind(FakeArcSession::Create));
+        std::make_unique<ArcSessionRunner>(base::Bind(FakeArcSession::Create));
     arc_session_runner_->AddObserver(this);
   }
 
@@ -89,19 +100,19 @@ class ArcSessionRunnerTest : public testing::Test,
   void ResetArcSessionFactory(
       const ArcSessionRunner::ArcSessionFactory& factory) {
     arc_session_runner_->RemoveObserver(this);
-    arc_session_runner_ = base::MakeUnique<ArcSessionRunner>(factory);
+    arc_session_runner_ = std::make_unique<ArcSessionRunner>(factory);
     arc_session_runner_->AddObserver(this);
   }
 
   static std::unique_ptr<ArcSession> CreateSuspendedArcSession() {
-    auto arc_session = base::MakeUnique<FakeArcSession>();
+    auto arc_session = std::make_unique<FakeArcSession>();
     arc_session->SuspendBoot();
     return std::move(arc_session);
   }
 
   static std::unique_ptr<ArcSession> CreateBootFailureArcSession(
       ArcStopReason reason) {
-    auto arc_session = base::MakeUnique<FakeArcSession>();
+    auto arc_session = std::make_unique<FakeArcSession>();
     arc_session->EnableBootFailureEmulation(reason);
     return std::move(arc_session);
   }
@@ -157,13 +168,14 @@ TEST_F(ArcSessionRunnerTest, Basic) {
       },
       arc_session_runner(), &observer));
 
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
 
-  arc_session_runner()->RequestStop(false);
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  arc_session_runner()->RequestStop();
+  EXPECT_FALSE(arc_session());
   EXPECT_TRUE(observer.stopped_called());
 }
 
@@ -172,14 +184,29 @@ TEST_F(ArcSessionRunnerTest, Basic) {
 TEST_F(ArcSessionRunnerTest, StopMidStartup) {
   ResetArcSessionFactory(
       base::Bind(&ArcSessionRunnerTest::CreateSuspendedArcSession));
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
-  EXPECT_FALSE(arc_session_runner()->IsStopped());
-  EXPECT_FALSE(arc_session_runner()->IsRunning());
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_FALSE(arc_session()->is_running());
 
-  arc_session_runner()->RequestStop(false);
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  arc_session_runner()->RequestStop();
+  EXPECT_FALSE(arc_session());
+  EXPECT_FALSE(restarting());
+}
+
+// Does the same for mini instance.
+TEST_F(ArcSessionRunnerTest, StopMidStartup_MiniInstance) {
+  ResetArcSessionFactory(
+      base::Bind(&ArcSessionRunnerTest::CreateSuspendedArcSession));
+  EXPECT_FALSE(arc_session());
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_FALSE(arc_session()->is_running());
+
+  arc_session_runner()->RequestStop();
+  EXPECT_FALSE(arc_session());
 }
 
 // If the boot procedure is failed, then restarting mechanism should not
@@ -188,123 +215,145 @@ TEST_F(ArcSessionRunnerTest, BootFailure) {
   ResetArcSessionFactory(
       base::Bind(&ArcSessionRunnerTest::CreateBootFailureArcSession,
                  ArcStopReason::GENERIC_BOOT_FAILURE));
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
   EXPECT_EQ(ArcStopReason::GENERIC_BOOT_FAILURE, stop_reason());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
+  EXPECT_FALSE(restarting());
 }
 
-// Does the same with the mini instance for login screen.
-TEST_F(ArcSessionRunnerTest, BootFailureForLoginScreen) {
+// Does the same with the mini instance.
+TEST_F(ArcSessionRunnerTest, BootFailure_MiniInstance) {
   ResetArcSessionFactory(
       base::Bind(&ArcSessionRunnerTest::CreateBootFailureArcSession,
-                 ArcStopReason::CRASH));
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+                 ArcStopReason::GENERIC_BOOT_FAILURE));
+  EXPECT_FALSE(arc_session());
 
-  chromeos::DBusThreadManager::Get()
-      ->GetSessionManagerClient()
-      ->EmitLoginPromptVisible();
   // If starting the mini instance fails, arc_session_runner()'s state goes back
   // to STOPPED, but its observers won't be notified.
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  EXPECT_FALSE(arc_session());
   EXPECT_FALSE(stopped_called());
 
   // Also make sure that RequestStart() works just fine after the boot
   // failure.
   ResetArcSessionFactory(base::Bind(FakeArcSession::Create));
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
+}
+
+// Similary, CRASH should do same for GENERIC_BOOT_FAILURE case, because
+// in mini instance, Mojo connection should not be established.
+TEST_F(ArcSessionRunnerTest, Crash_MiniInstance) {
+  ResetArcSessionFactory(
+      base::Bind(&ArcSessionRunnerTest::CreateBootFailureArcSession,
+                 ArcStopReason::CRASH));
+  EXPECT_FALSE(arc_session());
+
+  // If starting the mini instance fails, arc_session_runner()'s state goes back
+  // to STOPPED, but its observers won't be notified.
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  EXPECT_FALSE(arc_session());
+  EXPECT_FALSE(stopped_called());
 }
 
 // Tests that RequestStart() works even after EmitLoginPromptVisibleCalled()
 // is called.
-TEST_F(ArcSessionRunnerTest, StartWithLoginScreenInstance) {
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+TEST_F(ArcSessionRunnerTest, Upgrade) {
+  EXPECT_FALSE(arc_session());
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_FALSE(arc_session()->is_running());
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
+}
+
+// We expect mini instance starts to run if EmitLoginPromptVisible signal is
+// emitted.
+TEST_F(ArcSessionRunnerTest, EmitLoginPromptVisible) {
+  EXPECT_FALSE(arc_session());
+
+  SetArcAvailableCommandLineForTesting(base::CommandLine::ForCurrentProcess());
 
   chromeos::DBusThreadManager::Get()
       ->GetSessionManagerClient()
       ->EmitLoginPromptVisible();
-  EXPECT_FALSE(arc_session_runner()->IsStopped());
-  EXPECT_FALSE(arc_session_runner()->IsRunning());
+  ASSERT_TRUE(arc_session());
+  EXPECT_FALSE(arc_session()->is_running());
+}
 
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+// We expect mini instance does not start on EmitLoginPromptVisible when ARC
+// is not available.
+TEST_F(ArcSessionRunnerTest, EmitLoginPromptVisible_NoOp) {
+  EXPECT_FALSE(arc_session());
+
+  chromeos::DBusThreadManager::Get()
+      ->GetSessionManagerClient()
+      ->EmitLoginPromptVisible();
+  EXPECT_FALSE(arc_session());
 }
 
 // If the instance is stopped, it should be re-started.
 TEST_F(ArcSessionRunnerTest, Restart) {
   arc_session_runner()->SetRestartDelayForTesting(base::TimeDelta());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
 
   // Simulate a connection loss.
   ASSERT_TRUE(arc_session());
   arc_session()->StopWithReason(ArcStopReason::CRASH);
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
+  EXPECT_TRUE(restarting());
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  EXPECT_TRUE(restarting_called());
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
 
-  arc_session_runner()->RequestStop(false);
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  arc_session_runner()->RequestStop();
+  EXPECT_FALSE(arc_session());
 }
 
-// Makes sure OnSessionStopped is called on stop.
-TEST_F(ArcSessionRunnerTest, OnSessionStopped) {
+TEST_F(ArcSessionRunnerTest, GracefulStop) {
   arc_session_runner()->SetRestartDelayForTesting(base::TimeDelta());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
-
-  // Simulate boot failure.
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
   ASSERT_TRUE(arc_session());
-  arc_session()->StopWithReason(ArcStopReason::GENERIC_BOOT_FAILURE);
-  EXPECT_EQ(ArcStopReason::GENERIC_BOOT_FAILURE, stop_reason());
-  EXPECT_TRUE(restarting());
-  EXPECT_FALSE(restarting_called());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(restarting_called());
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
-
-  // Simulate crash.
-  ASSERT_TRUE(arc_session());
-  arc_session()->StopWithReason(ArcStopReason::CRASH);
-  EXPECT_EQ(ArcStopReason::CRASH, stop_reason());
-  EXPECT_TRUE(restarting());
-  EXPECT_FALSE(restarting_called());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(restarting_called());
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  EXPECT_TRUE(arc_session()->is_running());
 
   // Graceful stop.
-  arc_session_runner()->RequestStop(false);
+  arc_session_runner()->RequestStop();
   EXPECT_EQ(ArcStopReason::SHUTDOWN, stop_reason());
   EXPECT_FALSE(restarting());
   EXPECT_FALSE(restarting_called());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 }
 
 TEST_F(ArcSessionRunnerTest, Shutdown) {
   arc_session_runner()->SetRestartDelayForTesting(base::TimeDelta());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
-  arc_session_runner()->RequestStart();
-  EXPECT_TRUE(arc_session_runner()->IsRunning());
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  ASSERT_TRUE(arc_session());
+  EXPECT_TRUE(arc_session()->is_running());
 
   // Simulate shutdown.
   arc_session_runner()->OnShutdown();
   EXPECT_EQ(ArcStopReason::SHUTDOWN, stop_reason());
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 }
 
 // Removing the same observer more than once should be okay.
 TEST_F(ArcSessionRunnerTest, RemoveObserverTwice) {
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
   DoNothingObserver do_nothing_observer;
   arc_session_runner()->AddObserver(&do_nothing_observer);
@@ -315,10 +364,127 @@ TEST_F(ArcSessionRunnerTest, RemoveObserverTwice) {
 
 // Removing an unknown observer should be allowed.
 TEST_F(ArcSessionRunnerTest, RemoveUnknownObserver) {
-  EXPECT_TRUE(arc_session_runner()->IsStopped());
+  EXPECT_FALSE(arc_session());
 
   DoNothingObserver do_nothing_observer;
   arc_session_runner()->RemoveObserver(&do_nothing_observer);
+}
+
+// Tests UMA recording on mini instance -> full instance -> shutdown case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_StartUpgradeShutdown) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1 /* count of the sample */);
+
+  // Boot continue should not increase the count.
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+
+  // "0" should be recorded as a restart count on shutdown.
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount",
+                            0 /* sample */, 1 /* count of the sample */);
+}
+
+// Tests UMA recording on full instance -> shutdown case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_StartShutdown) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+  // "0" should be recorded as a restart count on shutdown.
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount", 0, 1);
+}
+
+// Tests UMA recording on mini instance -> full instance -> crash -> shutdown
+// case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_CrashTwice) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->SetRestartDelayForTesting(base::TimeDelta());
+  EXPECT_FALSE(arc_session());
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+
+  // Stop the instance with CRASH.
+  arc_session()->StopWithReason(ArcStopReason::CRASH);
+  tester.ExpectBucketCount("Arc.ContainerLifetimeEvent", kContainerCrashed, 1);
+  tester.ExpectTotalCount("Arc.ContainerLifetimeEvent", 2);
+
+  // Restart the instance, then crash the instance again. The second CRASH
+  // should not affect Arc.ContainerLifetimeEvent.
+  base::RunLoop().RunUntilIdle();
+  arc_session()->StopWithReason(ArcStopReason::CRASH);
+  tester.ExpectBucketCount("Arc.ContainerLifetimeEvent", kContainerCrashed, 1);
+  tester.ExpectTotalCount("Arc.ContainerLifetimeEvent", 2);
+
+  // However, "2" should be recorded as a restart count on shutdown.
+  base::RunLoop().RunUntilIdle();
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount", 2, 1);
+}
+
+// Tests UMA recording on mini instance -> crash -> shutdown case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_CrashMini) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+
+  // Stop the instance with CRASH.
+  arc_session()->StopWithReason(ArcStopReason::CRASH);
+  tester.ExpectBucketCount("Arc.ContainerLifetimeEvent", kContainerCrashedEarly,
+                           1);
+  tester.ExpectTotalCount("Arc.ContainerLifetimeEvent", 2);
+
+  // In this case, no restart happened. "0" should be recorded.
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount", 0, 1);
+}
+
+// Tests UMA recording on mini instance -> boot fail -> shutdown case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_BootFail) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::MINI_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+
+  arc_session()->StopWithReason(ArcStopReason::GENERIC_BOOT_FAILURE);
+  tester.ExpectBucketCount("Arc.ContainerLifetimeEvent",
+                           kContainerFailedToStart, 1);
+  tester.ExpectTotalCount("Arc.ContainerLifetimeEvent", 2);
+
+  // No restart happened. "0" should be recorded.
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount", 0, 1);
+}
+
+// Tests UMA recording on full instance -> low disk -> shutdown case.
+TEST_F(ArcSessionRunnerTest, UmaRecording_LowDisk) {
+  base::HistogramTester tester;
+
+  arc_session_runner()->RequestStart(ArcInstanceMode::FULL_INSTANCE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+
+  // We don't record UMA for LOW_DISK_SPACE.
+  arc_session()->StopWithReason(ArcStopReason::LOW_DISK_SPACE);
+  tester.ExpectUniqueSample("Arc.ContainerLifetimeEvent", kContainerStarting,
+                            1);
+
+  // No restart happened. "0" should be recorded.
+  arc_session_runner()->OnShutdown();
+  tester.ExpectUniqueSample("Arc.ContainerRestartAfterCrashCount", 0, 1);
 }
 
 }  // namespace arc

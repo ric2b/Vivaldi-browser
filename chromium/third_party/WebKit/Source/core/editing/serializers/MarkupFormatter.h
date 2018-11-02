@@ -27,10 +27,10 @@
 #ifndef MarkupFormatter_h
 #define MarkupFormatter_h
 
+#include "base/macros.h"
 #include "core/editing/EditingStrategy.h"
 #include "core/editing/serializers/Serialization.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -69,7 +69,6 @@ enum EntityMask {
 enum class SerializationType { kAsOwnerDocument, kForcedXML };
 
 class MarkupFormatter final {
-  WTF_MAKE_NONCOPYABLE(MarkupFormatter);
   STACK_ALLOCATED();
 
  public:
@@ -121,6 +120,8 @@ class MarkupFormatter final {
 
   const EAbsoluteURLs resolve_urls_method_;
   SerializationType serialization_type_;
+
+  DISALLOW_COPY_AND_ASSIGN(MarkupFormatter);
 };
 
 }  // namespace blink

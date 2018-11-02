@@ -22,8 +22,8 @@
 #ifndef ProcessingInstruction_h
 #define ProcessingInstruction_h
 
+#include "core/css/StyleEngineContext.h"
 #include "core/dom/CharacterData.h"
-#include "core/dom/StyleEngineContext.h"
 #include "core/loader/resource/StyleSheetResource.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
 #include "platform/loader/fetch/ResourceOwner.h"
@@ -43,7 +43,7 @@ class ProcessingInstruction final : public CharacterData,
                                        const String& target,
                                        const String& data);
   ~ProcessingInstruction() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   const String& target() const { return target_; }
   const String& LocalHref() const { return local_href_; }
@@ -63,7 +63,7 @@ class ProcessingInstruction final : public CharacterData,
     // Detach event listener from its processing instruction.
     virtual void Detach() = 0;
 
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
 
   void SetEventListenerForXSLT(DetachableEventListener* listener) {

@@ -47,14 +47,7 @@ void KeyboardUI::EnsureCaretInWorkArea() {
       contents_window->IsVisible() ? contents_window->GetBoundsInScreen()
                                    : gfx::Rect();
 
-  // Use new virtual keyboard behavior only if the flag enabled and in
-  // non-sticky mode.
-  const bool new_vk_behavior =
-      (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-           ::switches::kDisableNewVirtualKeyboardBehavior) &&
-       !keyboard_controller_->keyboard_locked());
-
-  if (new_vk_behavior) {
+  if (keyboard_controller_->IsOverscrollAllowed()) {
     GetInputMethod()->SetOnScreenKeyboardBounds(keyboard_bounds_in_screen);
   } else if (GetInputMethod()->GetTextInputClient()) {
     GetInputMethod()->GetTextInputClient()->EnsureCaretNotInRect(

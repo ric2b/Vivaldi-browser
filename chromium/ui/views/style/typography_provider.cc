@@ -10,67 +10,65 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/view.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
 #endif
 
-using gfx::Font;
-
 namespace views {
 namespace {
 
-Font::Weight GetValueBolderThan(Font::Weight weight) {
+gfx::Font::Weight GetValueBolderThan(gfx::Font::Weight weight) {
   switch (weight) {
-    case Font::Weight::BOLD:
-      return Font::Weight::EXTRA_BOLD;
-    case Font::Weight::EXTRA_BOLD:
-    case Font::Weight::BLACK:
-      return Font::Weight::BLACK;
+    case gfx::Font::Weight::BOLD:
+      return gfx::Font::Weight::EXTRA_BOLD;
+    case gfx::Font::Weight::EXTRA_BOLD:
+    case gfx::Font::Weight::BLACK:
+      return gfx::Font::Weight::BLACK;
     default:
-      return Font::Weight::BOLD;
+      return gfx::Font::Weight::BOLD;
   }
 }
 
 }  // namespace
 
 // static
-Font::Weight TypographyProvider::MediumWeightForUI() {
+gfx::Font::Weight TypographyProvider::MediumWeightForUI() {
 #if defined(OS_MACOSX)
   // System fonts are not user-configurable on Mac, so there's a simpler check.
   // However, 10.9 and 10.11 do not ship with a MEDIUM weight system font.  In
   // that case, trying to use MEDIUM there will give a bold font, which will
   // look worse with the surrounding NORMAL text than just using NORMAL.
   return (base::mac::IsOS10_9() || base::mac::IsOS10_11())
-             ? Font::Weight::NORMAL
-             : Font::Weight::MEDIUM;
+             ? gfx::Font::Weight::NORMAL
+             : gfx::Font::Weight::MEDIUM;
 #else
   // NORMAL may already have at least MEDIUM weight. Return NORMAL in that case
   // since trying to return MEDIUM would actually make the font lighter-weight
   // than the surrounding text. For example, Windows can be configured to use a
   // BOLD font for dialog text; deriving MEDIUM from that would replace the BOLD
   // attribute with something lighter.
-  if (ResourceBundle::GetSharedInstance()
-          .GetFontListWithDelta(0, Font::NORMAL, Font::Weight::NORMAL)
-          .GetFontWeight() < Font::Weight::MEDIUM)
-    return Font::Weight::MEDIUM;
-  return Font::Weight::NORMAL;
+  if (ui::ResourceBundle::GetSharedInstance()
+          .GetFontListWithDelta(0, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL)
+          .GetFontWeight() < gfx::Font::Weight::MEDIUM)
+    return gfx::Font::Weight::MEDIUM;
+  return gfx::Font::Weight::NORMAL;
 #endif
 }
 
 const gfx::FontList& DefaultTypographyProvider::GetFont(int context,
                                                         int style) const {
   int size_delta;
-  Font::Weight font_weight;
+  gfx::Font::Weight font_weight;
   GetDefaultFont(context, style, &size_delta, &font_weight);
-  return ResourceBundle::GetSharedInstance().GetFontListWithDelta(
-      size_delta, Font::NORMAL, font_weight);
+  return ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
+      size_delta, gfx::Font::NORMAL, font_weight);
 }
 
-SkColor DefaultTypographyProvider::GetColor(
-    int context,
-    int style,
-    const ui::NativeTheme& theme) const {
+SkColor DefaultTypographyProvider::GetColor(const views::View& view,
+                                            int context,
+                                            int style) const {
   ui::NativeTheme::ColorId color_id =
       ui::NativeTheme::kColorId_LabelEnabledColor;
   if (context == style::CONTEXT_BUTTON_MD) {
@@ -92,7 +90,10 @@ SkColor DefaultTypographyProvider::GetColor(
   } else if (style == style::STYLE_DISABLED) {
     color_id = ui::NativeTheme::kColorId_LabelDisabledColor;
   }
-  return theme.GetSystemColor(color_id);
+
+  const ui::NativeTheme* native_theme = view.GetNativeTheme();
+  DCHECK(native_theme);
+  return native_theme->GetSystemColor(color_id);
 }
 
 int DefaultTypographyProvider::GetLineHeight(int context, int style) const {
@@ -103,8 +104,8 @@ int DefaultTypographyProvider::GetLineHeight(int context, int style) const {
 void DefaultTypographyProvider::GetDefaultFont(int context,
                                                int style,
                                                int* size_delta,
-                                               Font::Weight* font_weight) {
-  *font_weight = Font::Weight::NORMAL;
+                                               gfx::Font::Weight* font_weight) {
+  *font_weight = gfx::Font::Weight::NORMAL;
 
   switch (context) {
     case style::CONTEXT_BUTTON_MD:
@@ -124,14 +125,15 @@ void DefaultTypographyProvider::GetDefaultFont(int context,
 
   switch (style) {
     case style::STYLE_TAB_ACTIVE:
-      *font_weight = Font::Weight::BOLD;
+      *font_weight = gfx::Font::Weight::BOLD;
       break;
     case style::STYLE_DIALOG_BUTTON_DEFAULT:
       // Only non-MD default buttons should "increase" in boldness.
       if (context == style::CONTEXT_BUTTON) {
         *font_weight = GetValueBolderThan(
-            ResourceBundle::GetSharedInstance()
-                .GetFontListWithDelta(*size_delta, Font::NORMAL, *font_weight)
+            ui::ResourceBundle::GetSharedInstance()
+                .GetFontListWithDelta(*size_delta, gfx::Font::NORMAL,
+                                      *font_weight)
                 .GetFontWeight());
       }
       break;

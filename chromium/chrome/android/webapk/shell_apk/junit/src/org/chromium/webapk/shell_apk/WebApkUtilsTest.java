@@ -4,13 +4,12 @@
 
 package org.chromium.webapk.shell_apk;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 
@@ -18,10 +17,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mockito;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
-import org.robolectric.res.builder.RobolectricPackageManager;
+import org.robolectric.shadows.ShadowPackageManager;
 
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.webapk.lib.common.WebApkConstants;
@@ -43,15 +42,13 @@ public class WebApkUtilsTest {
             BROWSER_INSTALLED_SUPPORTING_WEBAPKS, ANOTHER_BROWSER_INSTALLED_SUPPORTING_WEBAPKS};
 
     private Context mContext;
-    private RobolectricPackageManager mPackageManager;
+    private ShadowPackageManager mPackageManager;
 
     @Before
     public void setUp() {
         mContext = RuntimeEnvironment.application;
-        WebApkTestHelper.setUpPackageManager();
 
-        mPackageManager = Mockito.spy(RuntimeEnvironment.getRobolectricPackageManager());
-        RuntimeEnvironment.setRobolectricPackageManager(mPackageManager);
+        mPackageManager = Shadows.shadowOf(mContext.getPackageManager());
 
         WebApkUtils.resetCachedHostPackageForTesting();
     }
@@ -82,21 +79,48 @@ public class WebApkUtilsTest {
 
     /**
      * Test that MainActivity appends the start URL as a paramater if |loggedIntentUrlParam| in
-     * WebAPK metadata is set to true.
+     * WebAPK metadata is set and {@link intentStartUrl} is outside of the scope specified in the
+     * manifest meta data.
      */
     @Test
-    public void testLoggedIntentUrlParamWhenRewrite() {
-        final String intentStartUrl = "https://www.g.com/page?a=A";
+    public void testLoggedIntentUrlParamWhenRewriteOutOfScope() {
+        final String intentStartUrl = "https://maps.google.com/page?a=A";
+        final String manifestStartUrl = "https://www.google.com/maps";
         final String manifestScope = "https://www.google.com";
         final String expectedRewrittenStartUrl =
-                "https://www.google.com/page?a=A&originalUrl=https%253A%252F%252Fwww.g.com%252Fpage%253Fa%253DA";
+                "https://www.google.com/maps?originalUrl=https%3A%2F%2Fmaps.google.com%2Fpage%3Fa%3DA";
         final String browserPackageName = "browser.support.webapks";
 
         Bundle bundle = new Bundle();
-        bundle.putString(WebApkMetaDataKeys.START_URL, intentStartUrl);
+        bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
         bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
+
+        Assert.assertEquals(expectedRewrittenStartUrl,
+                WebApkUtils.rewriteIntentUrlIfNecessary(intentStartUrl, bundle));
+    }
+
+    /**
+     * Test that MainActivity appends the start URL as a paramater if |loggedIntentUrlParam| in
+     * WebAPK metadata is set and {@link intentStartUrl} is in the scope specified in the manifest
+     * meta data.
+     */
+    @Test
+    public void testLoggedIntentUrlParamWhenRewriteInScope() {
+        final String intentStartUrl = "https://www.google.com/maps/search/A";
+        final String manifestStartUrl = "https://www.google.com/maps?force=qVTs2FOxxTmHHo79-pwa";
+        final String manifestScope = "https://www.google.com";
+        final String expectedRewrittenStartUrl =
+                "https://www.google.com/maps?force=qVTs2FOxxTmHHo79-pwa&intent="
+                + "https%3A%2F%2Fwww.google.com%2Fmaps%2Fsearch%2FA";
+        final String browserPackageName = "browser.support.webapks";
+
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
+        bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "intent");
 
         Assert.assertEquals(expectedRewrittenStartUrl,
                 WebApkUtils.rewriteIntentUrlIfNecessary(intentStartUrl, bundle));
@@ -227,6 +251,48 @@ public class WebApkUtilsTest {
     }
 
     /**
+     * Tests that a WebAPK should be launched as a tab if Chrome's version number is lower than
+     * {@link WebApkUtils#MINIMUM_REQUIRED_CHROME_VERSION}.
+     */
+    @Test
+    public void testShouldLaunchInTabWhenChromeVersionIsTooLow() {
+        String versionName = "56.0.0000.0";
+        Assert.assertTrue(WebApkUtils.shouldLaunchInTab(versionName));
+    }
+
+    /**
+     * Tests that a WebAPK should not be launched as a tab if Chrome's version is higher or equal to
+     * {@link WebApkUtils#MINIMUM_REQUIRED_CHROME_VERSION}.
+     */
+    @Test
+    public void testShouldNotLaunchInTabWithNewVersionOfChrome() {
+        String versionName = "57.0.0000.0";
+        Assert.assertFalse(WebApkUtils.shouldLaunchInTab(versionName));
+    }
+
+    /** Tests that a WebAPK should not be launched as a tab in a developer build of Chrome. */
+    @Test
+    public void testShouldNotLaunchInTabWithDevBuild() {
+        String versionName = "Developer Build";
+        Assert.assertFalse(WebApkUtils.shouldLaunchInTab(versionName));
+    }
+
+    /**
+     * Tests that {@link WebApkUtils#isInstalled} returns false for an installed but disabled app.
+     */
+    @Test
+    public void testReturnFalseForInstalledButDisabledApp() {
+        String packageName = BROWSER_INSTALLED_SUPPORTING_WEBAPKS;
+        PackageInfo info = new PackageInfo();
+        info.packageName = packageName;
+        info.applicationInfo = new ApplicationInfo();
+        info.applicationInfo.enabled = false;
+        mPackageManager.addPackage(info);
+
+        Assert.assertFalse(WebApkUtils.isInstalled(mContext.getPackageManager(), packageName));
+    }
+
+    /**
      * Uninstall a browser. Note: this function only works for uninstalling the non default browser.
      */
     private void uninstallBrowser(String packageName) {
@@ -244,6 +310,8 @@ public class WebApkUtilsTest {
     private static ResolveInfo newResolveInfo(String packageName) {
         ActivityInfo activityInfo = new ActivityInfo();
         activityInfo.packageName = packageName;
+        activityInfo.applicationInfo = new ApplicationInfo();
+        activityInfo.applicationInfo.enabled = true;
         ResolveInfo resolveInfo = new ResolveInfo();
         resolveInfo.activityInfo = activityInfo;
         return resolveInfo;
@@ -258,18 +326,15 @@ public class WebApkUtilsTest {
             return;
         }
 
-        for (String name : browsersToInstall) {
-            mPackageManager.addResolveInfoForIntent(intent, newResolveInfo(name));
-        }
-
         ResolveInfo defaultBrowserInfo = null;
         if (defaultBrowser != null) {
             defaultBrowserInfo = newResolveInfo(defaultBrowser);
             mPackageManager.addResolveInfoForIntent(intent, defaultBrowserInfo);
         }
 
-        Mockito.when(mPackageManager.resolveActivity(any(Intent.class), anyInt()))
-                .thenReturn(defaultBrowserInfo);
+        for (String name : browsersToInstall) {
+            mPackageManager.addResolveInfoForIntent(intent, newResolveInfo(name));
+        }
     }
 
     private void setHostBrowserInSharedPreferences(String hostBrowserPackage) {

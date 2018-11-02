@@ -36,10 +36,6 @@ extern const char kChromeVersionSwitch[];
 // Indicates that crash reporting is enabled for the current user.
 extern const char kEnableCrashReportingSwitch[];
 
-// Specifies the name of experiment group in the alternate engine field trial
-// for a Software Reporter run.
-extern const char kEngineExperimentGroupSwitch[];
-
 // Specify the engine to use.
 extern const char kEngineSwitch[];
 
@@ -58,6 +54,9 @@ extern const char kRegistrySuffixSwitch[];
 // software reporter (which may include multiple invocations of the reporter
 /// binary, each generating a report). An ASCII, base-64 encoded random string.
 extern const char kSessionIdSwitch[];
+
+// Indicates the group name for the SRTPrompt field trial.
+extern const char kSRTPromptFieldTrialGroupNameSwitch[];
 
 // Indicates that metrics reporting is enabled for the current user.
 extern const char kUmaUserSwitch[];
@@ -92,7 +91,11 @@ extern const wchar_t kVersionValueName[];
 constexpr int kSwReporterCleanupNeeded = 0;
 constexpr int kSwReporterNothingFound = 2;
 constexpr int kSwReporterPostRebootCleanupNeeded = 4;
+constexpr int kSwReporterNonRemovableOnly = 10;
 constexpr int kSwReporterDelayedPostRebootCleanupNeeded = 15;
+constexpr int kSwReporterSuspiciousOnly = 32;
+constexpr int kSwReporterTimeoutWithoutUwS = 34;
+constexpr int kSwReporterTimeoutWithUwS = 35;
 
 // Values to be passed to the kChromePromptSwitch of the Chrome Cleanup Tool to
 // indicate how the user interacted with the accept button.

@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 // IPC messages for extensions.
-// Multiply-included message file, hence no include guard.
+
+#ifndef EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
+#define EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 
 #include <stdint.h>
 
@@ -158,7 +160,7 @@ IPC_STRUCT_BEGIN(ExtensionMsg_ExecuteCode_Params)
   IPC_STRUCT_MEMBER(bool, match_about_blank)
 
   // When to inject the code.
-  IPC_STRUCT_MEMBER(int, run_at)
+  IPC_STRUCT_MEMBER(extensions::UserScript::RunLocation, run_at)
 
   // Whether to execute code in the main world (as opposed to an isolated
   // world).
@@ -276,9 +278,16 @@ IPC_STRUCT_TRAITS_BEGIN(extensions::EventFilteringInfo)
   IPC_STRUCT_TRAITS_MEMBER(window_exposed_by_default)
 IPC_STRUCT_TRAITS_END()
 
+// Identifier containing info about a service worker, used in event listener
+// IPCs.
+IPC_STRUCT_BEGIN(ServiceWorkerIdentifier)
+  IPC_STRUCT_MEMBER(GURL, scope)
+  IPC_STRUCT_MEMBER(int, thread_id)
+IPC_STRUCT_END()
+
 // Singly-included section for custom IPC traits.
-#ifndef EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
-#define EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
+#ifndef INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
+#define INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 
 // IPC_MESSAGE macros choke on extra , in the std::map, when expanding. We need
 // to typedef it to avoid that.
@@ -346,7 +355,7 @@ struct ExtensionMsg_Loaded_Params {
 };
 
 struct ExtensionHostMsg_AutomationQuerySelector_Error {
-  enum Value { kNone, kNoMainFrame, kNoDocument, kNodeDestroyed };
+  enum Value { kNone, kNoDocument, kNodeDestroyed };
 
   ExtensionHostMsg_AutomationQuerySelector_Error() : value(kNone) {}
 
@@ -358,7 +367,6 @@ namespace IPC {
 template <>
 struct ParamTraits<URLPattern> {
   typedef URLPattern param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -369,7 +377,6 @@ struct ParamTraits<URLPattern> {
 template <>
 struct ParamTraits<extensions::URLPatternSet> {
   typedef extensions::URLPatternSet param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -380,7 +387,6 @@ struct ParamTraits<extensions::URLPatternSet> {
 template <>
 struct ParamTraits<extensions::APIPermission::ID> {
   typedef extensions::APIPermission::ID param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -391,7 +397,6 @@ struct ParamTraits<extensions::APIPermission::ID> {
 template <>
 struct ParamTraits<extensions::APIPermissionSet> {
   typedef extensions::APIPermissionSet param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -402,7 +407,6 @@ struct ParamTraits<extensions::APIPermissionSet> {
 template <>
 struct ParamTraits<extensions::ManifestPermissionSet> {
   typedef extensions::ManifestPermissionSet param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -413,7 +417,6 @@ struct ParamTraits<extensions::ManifestPermissionSet> {
 template <>
 struct ParamTraits<HostID> {
   typedef HostID param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -424,7 +427,6 @@ struct ParamTraits<HostID> {
 template <>
 struct ParamTraits<ExtensionMsg_PermissionSetStruct> {
   typedef ExtensionMsg_PermissionSetStruct param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -444,7 +446,7 @@ struct ParamTraits<ExtensionMsg_Loaded_Params> {
 
 }  // namespace IPC
 
-#endif  // EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
+#endif  // INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 
 IPC_ENUM_TRAITS_MAX_VALUE(
     ExtensionHostMsg_AutomationQuerySelector_Error::Value,
@@ -570,10 +572,6 @@ IPC_MESSAGE_ROUTED1(ExtensionMsg_UpdateBrowserWindowId,
 IPC_MESSAGE_ROUTED1(ExtensionMsg_SetTabId,
                     int /* id of tab */)
 
-// Zoom the Vivaldi UI
-IPC_MESSAGE_ROUTED1(ExtensionMsg_ZoomVivaldiUI,
-                    double /* Zoom factor */)
-
 // Tell the renderer to update an extension's permission set.
 IPC_MESSAGE_CONTROL1(ExtensionMsg_UpdatePermissions,
                      ExtensionMsg_UpdatePermissions_Params)
@@ -658,7 +656,7 @@ IPC_MESSAGE_CONTROL3(ExtensionMsg_SetSessionInfo,
                      bool /* is_lock_screen_context */)
 
 // Notify the renderer that its window has closed.
-IPC_MESSAGE_ROUTED0(ExtensionMsg_AppWindowClosed)
+IPC_MESSAGE_ROUTED1(ExtensionMsg_AppWindowClosed, bool /* send_onclosed */)
 
 // Notify the renderer that an extension wants notifications when certain
 // searches match the active page.  This message replaces the old set of
@@ -735,19 +733,27 @@ IPC_MESSAGE_CONTROL3(ExtensionHostMsg_RemoveLazyServiceWorkerListener,
 
 // Notify the browser that the given extension added a listener to instances of
 // the named event that satisfy the filter.
-IPC_MESSAGE_CONTROL4(ExtensionHostMsg_AddFilteredListener,
-                     std::string /* extension_id */,
-                     std::string /* name */,
-                     base::DictionaryValue /* filter */,
-                     bool /* lazy */)
+// If |sw_identifier| is specified, it implies that the listener is for a
+// service worker, and the param is used to identify the worker.
+IPC_MESSAGE_CONTROL5(
+    ExtensionHostMsg_AddFilteredListener,
+    std::string /* extension_id */,
+    std::string /* name */,
+    base::Optional<ServiceWorkerIdentifier> /* sw_identifier */,
+    base::DictionaryValue /* filter */,
+    bool /* lazy */)
 
 // Notify the browser that the given extension is no longer interested in
 // instances of the named event that satisfy the filter.
-IPC_MESSAGE_CONTROL4(ExtensionHostMsg_RemoveFilteredListener,
-                     std::string /* extension_id */,
-                     std::string /* name */,
-                     base::DictionaryValue /* filter */,
-                     bool /* lazy */)
+// If |sw_identifier| is specified, it implies that the listener is for a
+// service worker, and the param is used to identify the worker.
+IPC_MESSAGE_CONTROL5(
+    ExtensionHostMsg_RemoveFilteredListener,
+    std::string /* extension_id */,
+    std::string /* name */,
+    base::Optional<ServiceWorkerIdentifier> /* sw_identifier */,
+    base::DictionaryValue /* filter */,
+    bool /* lazy */)
 
 // Notify the browser that an event has finished being dispatched.
 IPC_MESSAGE_ROUTED1(ExtensionHostMsg_EventAck, int /* message_id */)
@@ -866,7 +872,7 @@ IPC_SYNC_MESSAGE_CONTROL0_1(ExtensionHostMsg_GenerateUniqueID,
 
 // Notify the browser that an app window is ready and can resume resource
 // requests.
-IPC_MESSAGE_CONTROL1(ExtensionHostMsg_AppWindowReady, int /* route_id */)
+IPC_MESSAGE_ROUTED0(ExtensionHostMsg_AppWindowReady)
 
 // Sent by the renderer when the draggable regions are updated.
 IPC_MESSAGE_ROUTED1(ExtensionHostMsg_UpdateDraggableRegions,
@@ -892,8 +898,8 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_AddDOMActionToActivityLog,
 //
 // * ExtensionMsg_WatchPages was received, updating the set of conditions.
 // * A new page is loaded.  This will be sent after
-//   FrameHostMsg_DidCommitProvisionalLoad. Currently this only fires for the
-//   main frame.
+//   mojom::FrameHost::DidCommitProvisionalLoad. Currently this only fires for
+//   the main frame.
 // * Something changed on an existing frame causing the set of matching searches
 //   to change.
 IPC_MESSAGE_ROUTED1(ExtensionHostMsg_OnWatchedPageChange,
@@ -972,3 +978,5 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_IncrementServiceWorkerActivity,
 IPC_MESSAGE_CONTROL2(ExtensionHostMsg_DecrementServiceWorkerActivity,
                      int64_t /* service_worker_version_id */,
                      std::string /* request_uuid */)
+
+#endif  // EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_

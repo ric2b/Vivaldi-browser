@@ -26,9 +26,7 @@ class WebServiceWorkerRequest;
 
 // Implementation of the BackgroundFetchManager JavaScript object, accessible
 // by developers through ServiceWorkerRegistration.backgroundFetch.
-class MODULES_EXPORT BackgroundFetchManager final
-    : public GarbageCollected<BackgroundFetchManager>,
-      public ScriptWrappable {
+class MODULES_EXPORT BackgroundFetchManager final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -47,7 +45,7 @@ class MODULES_EXPORT BackgroundFetchManager final
   ScriptPromise get(ScriptState*, const String& id);
   ScriptPromise getIds(ScriptState*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   friend class BackgroundFetchManagerTest;
@@ -67,9 +65,9 @@ class MODULES_EXPORT BackgroundFetchManager final
   void DidGetRegistration(ScriptPromiseResolver*,
                           mojom::blink::BackgroundFetchError,
                           BackgroundFetchRegistration*);
-  void DidGetIds(ScriptPromiseResolver*,
-                 mojom::blink::BackgroundFetchError,
-                 const Vector<String>& ids);
+  void DidGetDeveloperIds(ScriptPromiseResolver*,
+                          mojom::blink::BackgroundFetchError,
+                          const Vector<String>& developer_ids);
 
   Member<ServiceWorkerRegistration> registration_;
   Member<BackgroundFetchBridge> bridge_;

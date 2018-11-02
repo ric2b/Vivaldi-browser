@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service_factory.h"
 #include "chrome/common/pref_names.h"
+#include "components/arc/connection_holder.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync/model/sync_change_processor.h"
 #include "components/sync/model/sync_data.h"
@@ -198,7 +199,7 @@ syncer::SyncDataList ArcPackageSyncableService::GetAllSyncData(
 }
 
 syncer::SyncError ArcPackageSyncableService::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   if (!sync_processor_.get()) {
     return syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
@@ -406,7 +407,7 @@ void ArcPackageSyncableService::InstallPackage(const ArcSyncItem* sync_item) {
     return;
   }
 
-  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_instance_holder(),
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_connection_holder(),
                                                InstallPackage);
   if (!instance)
     return;
@@ -428,7 +429,7 @@ void ArcPackageSyncableService::UninstallPackage(const ArcSyncItem* sync_item) {
     return;
   }
 
-  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_instance_holder(),
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_connection_holder(),
                                                UninstallPackage);
   if (!instance)
     return;

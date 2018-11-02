@@ -35,8 +35,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_switches.h"
-#include "components/safe_browsing_db/notification_types.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/notification_types.h"
+#include "components/safe_browsing/db/util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -84,7 +84,6 @@ int GetThreatSeverity(ListType threat) {
     case BINURL:              // Falls through.
     case CSDWHITELIST:        // Falls through.
     case DOWNLOADWHITELIST:   // Falls through.
-    case MODULEWHITELIST:     // Falls through.
     case EXTENSIONBLACKLIST:  // Falls through.
     case IPBLACKLIST:
       return 0;
@@ -276,7 +275,6 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
       enable_extension_blacklist_(false),
       enable_ip_blacklist_(false),
       enable_unwanted_software_blacklist_(true),
-      enable_module_whitelist_(true),
       update_in_progress_(false),
       database_update_in_progress_(false),
       closing_database_(false),
@@ -465,31 +463,6 @@ bool LocalSafeBrowsingDatabaseManager::MatchDownloadWhitelistString(
     return true;
   }
   return database_->ContainsDownloadWhitelistedString(str);
-}
-
-bool LocalSafeBrowsingDatabaseManager::MatchModuleWhitelistString(
-    const std::string& str) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!enabled_ || !enable_module_whitelist_ || !MakeDatabaseAvailable()) {
-    return true;
-  }
-  return database_->ContainsModuleWhitelistedString(str);
-}
-
-bool LocalSafeBrowsingDatabaseManager::IsMalwareKillSwitchOn() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!enabled_ || !MakeDatabaseAvailable()) {
-    return true;
-  }
-  return database_->IsMalwareIPMatchKillSwitchOn();
-}
-
-bool LocalSafeBrowsingDatabaseManager::IsCsdWhitelistKillSwitchOn() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!enabled_ || !MakeDatabaseAvailable()) {
-    return true;
-  }
-  return database_->IsCsdWhitelistKillSwitchOn();
 }
 
 bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(
@@ -827,7 +800,7 @@ SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase() {
       safe_browsing_task_runner_, enable_download_protection_,
       enable_csd_whitelist_, enable_download_whitelist_,
       enable_extension_blacklist_, enable_ip_blacklist_,
-      enable_unwanted_software_blacklist_, enable_module_whitelist_);
+      enable_unwanted_software_blacklist_);
 
   database->Init(SafeBrowsingService::GetBaseFilename());
   {

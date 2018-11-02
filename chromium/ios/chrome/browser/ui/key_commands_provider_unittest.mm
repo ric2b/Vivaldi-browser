@@ -18,7 +18,9 @@ namespace {
 
 typedef PlatformTest KeyCommandsProviderTest;
 
-TEST(KeyCommandsProviderTest, NoTabs_EditingText_ReturnsObjects) {
+using KeyCommandsProviderTest = PlatformTest;
+
+TEST_F(KeyCommandsProviderTest, NoTabs_EditingText_ReturnsObjects) {
   KeyCommandsProvider* provider = [[KeyCommandsProvider alloc] init];
   id mockConsumer =
       [OCMockObject mockForProtocol:@protocol(KeyCommandsPlumbing)];
@@ -26,11 +28,12 @@ TEST(KeyCommandsProviderTest, NoTabs_EditingText_ReturnsObjects) {
   [[[mockConsumer expect] andReturnUnsignedInteger:0] tabsCount];
 
   EXPECT_NE(nil, [provider keyCommandsForConsumer:mockConsumer
+                               baseViewController:nil
                                        dispatcher:dispatcher
                                       editingText:YES]);
 }
 
-TEST(KeyCommandsProviderTest, ReturnsKeyCommandsObjects) {
+TEST_F(KeyCommandsProviderTest, ReturnsKeyCommandsObjects) {
   KeyCommandsProvider* provider = [[KeyCommandsProvider alloc] init];
   id mockConsumer =
       [OCMockObject mockForProtocol:@protocol(KeyCommandsPlumbing)];
@@ -39,13 +42,14 @@ TEST(KeyCommandsProviderTest, ReturnsKeyCommandsObjects) {
   [[[mockConsumer expect] andReturnUnsignedInteger:0] tabsCount];
 
   for (id element in [provider keyCommandsForConsumer:mockConsumer
+                                   baseViewController:nil
                                            dispatcher:dispatcher
                                           editingText:YES]) {
     EXPECT_TRUE([element isKindOfClass:[UIKeyCommand class]]);
   }
 }
 
-TEST(KeyCommandsProviderTest, MoreKeyboardCommandsWhenTabs) {
+TEST_F(KeyCommandsProviderTest, MoreKeyboardCommandsWhenTabs) {
   KeyCommandsProvider* provider = [[KeyCommandsProvider alloc] init];
   id mockConsumer =
       [OCMockObject mockForProtocol:@protocol(KeyCommandsPlumbing)];
@@ -55,6 +59,7 @@ TEST(KeyCommandsProviderTest, MoreKeyboardCommandsWhenTabs) {
   [[[mockConsumer expect] andReturnUnsignedInteger:0] tabsCount];
   NSUInteger numberOfKeyCommandsWithoutTabs =
       [[provider keyCommandsForConsumer:mockConsumer
+                     baseViewController:nil
                              dispatcher:dispatcher
                             editingText:NO] count];
 
@@ -62,13 +67,14 @@ TEST(KeyCommandsProviderTest, MoreKeyboardCommandsWhenTabs) {
   [[[mockConsumer expect] andReturnUnsignedInteger:1] tabsCount];
   NSUInteger numberOfKeyCommandsWithTabs =
       [[provider keyCommandsForConsumer:mockConsumer
+                     baseViewController:nil
                              dispatcher:dispatcher
                             editingText:NO] count];
 
   EXPECT_GT(numberOfKeyCommandsWithTabs, numberOfKeyCommandsWithoutTabs);
 }
 
-TEST(KeyCommandsProviderTest, LessKeyCommandsWhenTabsAndEditingText) {
+TEST_F(KeyCommandsProviderTest, LessKeyCommandsWhenTabsAndEditingText) {
   KeyCommandsProvider* provider = [[KeyCommandsProvider alloc] init];
   id mockConsumer =
       [OCMockObject mockForProtocol:@protocol(KeyCommandsPlumbing)];
@@ -78,6 +84,7 @@ TEST(KeyCommandsProviderTest, LessKeyCommandsWhenTabsAndEditingText) {
   [[[mockConsumer expect] andReturnUnsignedInteger:1] tabsCount];
   NSUInteger numberOfKeyCommandsWhenNotEditingText =
       [[provider keyCommandsForConsumer:mockConsumer
+                     baseViewController:nil
                              dispatcher:dispatcher
                             editingText:NO] count];
 
@@ -85,6 +92,7 @@ TEST(KeyCommandsProviderTest, LessKeyCommandsWhenTabsAndEditingText) {
   [[[mockConsumer expect] andReturnUnsignedInteger:1] tabsCount];
   NSUInteger numberOfKeyCommandsWhenEditingText =
       [[provider keyCommandsForConsumer:mockConsumer
+                     baseViewController:nil
                              dispatcher:dispatcher
                             editingText:YES] count];
 

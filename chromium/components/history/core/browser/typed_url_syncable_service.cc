@@ -194,8 +194,8 @@ syncer::SyncMergeResult TypedUrlSyncableService::MergeDataAndStartSyncing(
       sync_processor_->ProcessSyncChanges(FROM_HERE, new_changes));
 
   if (!merge_result.error().IsSet()) {
-    WriteToHistoryBackend(&new_synced_urls, &updated_synced_urls, NULL,
-                          &new_synced_visits, NULL);
+    WriteToHistoryBackend(&new_synced_urls, &updated_synced_urls, nullptr,
+                          &new_synced_visits, nullptr);
   }
 
   history_backend_observer_.Add(history_backend_);
@@ -233,7 +233,7 @@ syncer::SyncDataList TypedUrlSyncableService::GetAllSyncData(
 }
 
 syncer::SyncError TypedUrlSyncableService::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
@@ -1004,11 +1004,9 @@ bool TypedUrlSyncableService::FixupURLAndGetVisits(URLRow* url,
   size_t num_expired_visits = 0;
   for (auto& visit : *visits) {
     base::Time time = visit.visit_time;
-    if (history_backend_->IsExpiredVisitTime(time)) {
-      ++num_expired_visits;
-    } else {
+    if (!history_backend_->IsExpiredVisitTime(time))
       break;
-    }
+    ++num_expired_visits;
   }
   if (num_expired_visits != 0) {
     if (num_expired_visits == visits->size()) {

@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/buildflag.h"
 #include "content/public/common/content_client.h"
@@ -31,6 +32,7 @@
 #include "media/filters/context_3d.h"
 #include "media/media_features.h"
 #include "media/renderers/default_renderer_factory.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -101,6 +103,31 @@ class FrameFetchContext : public media::ResourceFetchContext {
   blink::WebLocalFrame* frame_;
   DISALLOW_COPY_AND_ASSIGN(FrameFetchContext);
 };
+
+void ObtainAndSetContextProvider(
+    base::OnceCallback<void(viz::ContextProvider*)>
+        set_context_provider_callback,
+    media::GpuVideoAcceleratorFactories* factories) {
+  viz::ContextProvider* context_provider = factories->GetMediaContextProvider();
+  std::move(set_context_provider_callback).Run(context_provider);
+}
+
+// Obtains the media ContextProvider and calls the given callback on the same
+// thread this is called on. Obtaining the media ContextProvider requires
+// getting GPuVideoAcceleratorFactories, which must be done on the main
+// thread.
+void PostMediaContextProviderToCallback(
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+    base::OnceCallback<void(viz::ContextProvider*)>
+        set_context_provider_callback) {
+  base::PostTaskAndReplyWithResult(
+      main_task_runner.get(), FROM_HERE, base::BindOnce([]() {
+        return content::RenderThreadImpl::current()->GetGpuFactories();
+      }),
+      base::BindOnce(&ObtainAndSetContextProvider,
+                     std::move(set_context_provider_callback)));
+}
+
 }  // namespace
 
 namespace content {
@@ -129,16 +156,9 @@ void MediaFactory::SetupMojo() {
   GetRemoterFactory()->Create(std::move(remoting_source),
                               mojo::MakeRequest(&remoter));
   remoting_sink_observer_ =
-      base::MakeUnique<media::remoting::SinkAvailabilityObserver>(
+      std::make_unique<media::remoting::SinkAvailabilityObserver>(
           std::move(remoting_source_request), std::move(remoter));
 #endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
-}
-
-media::Context3D GetSharedMainThreadContext3D(
-    scoped_refptr<ui::ContextProviderCommandBuffer> provider) {
-  if (!provider)
-    return media::Context3D();
-  return media::Context3D(provider->ContextGL(), provider->GrContext());
 }
 
 #if defined(OS_ANDROID)
@@ -177,7 +197,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
     blink::WebContentDecryptionModule* initial_cdm,
     const blink::WebString& sink_id,
-    blink::WebLayerTreeView* layer_tree_view) {
+    blink::WebLayerTreeView* layer_tree_view,
+    const cc::LayerTreeSettings& settings) {
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
   blink::WebSecurityOrigin security_origin =
       render_frame_->GetWebFrame()->GetSecurityOrigin();
@@ -201,14 +222,6 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       AudioDeviceFactory::NewSwitchableAudioRendererSink(
           AudioDeviceFactory::kSourceMediaElement,
           render_frame_->GetRoutingID(), 0, sink_id.Utf8(), security_origin);
-  // We need to keep a reference to the context provider (see crbug.com/610527)
-  // but media/ can't depend on cc/, so for now, just keep a reference in the
-  // callback.
-  // TODO(piman): replace media::Context3D to scoped_refptr<ContextProvider> in
-  // media/ once ContextProvider is in gpu/.
-  media::WebMediaPlayerParams::Context3DCB context_3d_cb = base::Bind(
-      &GetSharedMainThreadContext3D,
-      RenderThreadImpl::current()->SharedMainThreadContextProvider());
 
   const WebPreferences webkit_preferences =
       render_frame_->GetWebkitPreferences();
@@ -256,13 +269,13 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 #endif
 
   if (!fetch_context_) {
-    fetch_context_ = base::MakeUnique<FrameFetchContext>(web_frame);
+    fetch_context_ = std::make_unique<FrameFetchContext>(web_frame);
     DCHECK(!url_index_);
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     // Set buffer size to 64kb (default is 32kb) : 1<<16 == 64kb
-    url_index_ = base::MakeUnique<media::UrlIndex>(fetch_context_.get(), 16);
+    url_index_ = std::make_unique<media::UrlIndex>(fetch_context_.get(), 16);
 #else
-    url_index_ = base::MakeUnique<media::UrlIndex>(fetch_context_.get());
+    url_index_ = std::make_unique<media::UrlIndex>(fetch_context_.get());
 #endif
   }
   DCHECK_EQ(static_cast<FrameFetchContext*>(fetch_context_.get())->frame(),
@@ -271,6 +284,26 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   if (!watch_time_recorder_provider_) {
     remote_interfaces_->GetInterface(
         mojo::MakeRequest(&watch_time_recorder_provider_));
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner>
+      video_frame_compositor_task_runner;
+  std::unique_ptr<blink::WebVideoFrameSubmitter> submitter;
+  if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)) {
+    // TODO(lethalantidote): Use a separate task_runner. https://crbug/753605.
+    video_frame_compositor_task_runner =
+        render_thread->GetMediaThreadTaskRunner();
+    submitter = blink::WebVideoFrameSubmitter::Create(
+        base::BindRepeating(
+            &PostMediaContextProviderToCallback,
+            RenderThreadImpl::current()->GetCompositorMainThreadTaskRunner()),
+        RenderThreadImpl::current()->GetSharedBitmapManager(),
+        RenderThreadImpl::current()->GetGpuMemoryBufferManager(), settings);
+  } else {
+    video_frame_compositor_task_runner =
+        render_thread->compositor_task_runner()
+            ? render_thread->compositor_task_runner()
+            : base::ThreadTaskRunnerHandle::Get();
   }
 
   DCHECK(layer_tree_view);
@@ -287,7 +320,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 #endif
           render_thread->GetMediaThreadTaskRunner(),
           render_thread->GetWorkerTaskRunner(),
-          render_thread->compositor_task_runner(), context_3d_cb,
+          render_thread->compositor_task_runner(),
+          video_frame_compositor_task_runner,
           base::Bind(&v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
                      base::Unretained(blink::MainThreadIsolate())),
           initial_cdm, media_surface_manager_, request_routing_token_cb_,
@@ -297,11 +331,17 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           watch_time_recorder_provider_.get(),
           base::Bind(&MediaFactory::CreateVideoDecodeStatsRecorder,
                      base::Unretained(this)),
-          base::Bind(&blink::WebSurfaceLayerBridge::Create, layer_tree_view)));
+          base::Bind(&blink::WebSurfaceLayerBridge::Create, layer_tree_view),
+          RenderThreadImpl::current()->SharedMainThreadContextProvider()));
+
+  std::unique_ptr<media::VideoFrameCompositor> vfc =
+      std::make_unique<media::VideoFrameCompositor>(
+          params->video_frame_compositor_task_runner(), std::move(submitter));
 
   media::WebMediaPlayerImpl* media_player = new media::WebMediaPlayerImpl(
       web_frame, client, encrypted_client, GetWebMediaPlayerDelegate(),
-      std::move(factory_selector), url_index_.get(), std::move(params));
+      std::move(factory_selector), url_index_.get(), std::move(vfc),
+      std::move(params));
 
 #if defined(OS_ANDROID)  // WMPI_CAST
   media_player->SetMediaPlayerManager(GetMediaPlayerManager());
@@ -334,7 +374,7 @@ MediaFactory::CreateRendererFactorySelector(
   if (!render_thread)
     return nullptr;
 
-  auto factory_selector = base::MakeUnique<media::RendererFactorySelector>();
+  auto factory_selector = std::make_unique<media::RendererFactorySelector>();
 
 #if defined(OS_ANDROID)
   DCHECK(remote_interfaces_);
@@ -342,7 +382,7 @@ MediaFactory::CreateRendererFactorySelector(
   // The only MojoRendererService that is registered at the RenderFrameHost
   // level uses the MediaPlayerRenderer as its underlying media::Renderer.
   auto mojo_media_player_renderer_factory =
-      base::MakeUnique<media::MojoRendererFactory>(
+      std::make_unique<media::MojoRendererFactory>(
           media::MojoRendererFactory::GetGpuFactoriesCB(),
           remote_interfaces_->get());
 
@@ -350,7 +390,7 @@ MediaFactory::CreateRendererFactorySelector(
   // might fallback to it if the final redirected URL is an HLS url.
   factory_selector->AddFactory(
       media::RendererFactorySelector::FactoryType::MEDIA_PLAYER,
-      base::MakeUnique<MediaPlayerRendererClientFactory>(
+      std::make_unique<MediaPlayerRendererClientFactory>(
           render_thread->compositor_task_runner(),
           std::move(mojo_media_player_renderer_factory),
           base::Bind(&StreamTextureWrapperImpl::Create,
@@ -373,7 +413,7 @@ MediaFactory::CreateRendererFactorySelector(
   if (use_mojo_renderer_factory) {
     factory_selector->AddFactory(
         media::RendererFactorySelector::FactoryType::MOJO,
-        base::MakeUnique<media::MojoRendererFactory>(
+        std::make_unique<media::MojoRendererFactory>(
             base::Bind(&RenderThreadImpl::GetGpuFactories,
                        base::Unretained(render_thread)),
             GetMediaInterfaceFactory()));
@@ -386,7 +426,7 @@ MediaFactory::CreateRendererFactorySelector(
   if (!use_mojo_renderer_factory) {
     factory_selector->AddFactory(
         media::RendererFactorySelector::FactoryType::DEFAULT,
-        base::MakeUnique<media::DefaultRendererFactory>(
+        std::make_unique<media::DefaultRendererFactory>(
             media_log, decoder_factory,
             base::Bind(&RenderThreadImpl::GetGpuFactories,
                        base::Unretained(render_thread))));
@@ -408,7 +448,7 @@ MediaFactory::CreateRendererFactorySelector(
   *out_media_observer = remoting_controller->GetWeakPtr();
 
   auto courier_factory =
-      base::MakeUnique<media::remoting::CourierRendererFactory>(
+      std::make_unique<media::remoting::CourierRendererFactory>(
           std::move(remoting_controller));
 
   // base::Unretained is safe here because |factory_selector| owns
@@ -440,7 +480,7 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
 
   return new WebMediaPlayerMS(
       frame, client, GetWebMediaPlayerDelegate(),
-      base::MakeUnique<RenderMediaLog>(url::Origin(security_origin).GetURL()),
+      std::make_unique<RenderMediaLog>(url::Origin(security_origin).GetURL()),
       CreateMediaStreamRendererFactory(), render_thread->GetIOTaskRunner(),
       compositor_task_runner, render_thread->GetMediaThreadTaskRunner(),
       render_thread->GetWorkerTaskRunner(), render_thread->GetGpuFactories(),

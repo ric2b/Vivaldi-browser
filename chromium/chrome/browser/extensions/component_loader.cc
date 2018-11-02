@@ -20,8 +20,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/pdf/pdf_extension_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/hotword_service.h"
-#include "chrome/browser/search/hotword_service_factory.h"
 #include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -90,7 +88,8 @@ std::string GenerateId(const base::DictionaryValue* manifest,
 #if defined(OS_CHROMEOS)
 std::unique_ptr<base::DictionaryValue> LoadManifestOnFileThread(
     const base::FilePath& root_directory,
-    const base::FilePath::CharType* manifest_filename) {
+    const base::FilePath::CharType* manifest_filename,
+    bool localize_manifest) {
   DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
   std::string error;
   std::unique_ptr<base::DictionaryValue> manifest(
@@ -101,9 +100,13 @@ std::unique_ptr<base::DictionaryValue> LoadManifestOnFileThread(
                << ": " << error;
     return nullptr;
   }
-  bool localized = extension_l10n_util::LocalizeExtension(
-      root_directory, manifest.get(), &error);
-  CHECK(localized) << error;
+
+  if (localize_manifest) {
+    bool localized = extension_l10n_util::LocalizeExtension(
+        root_directory, manifest.get(), &error);
+    CHECK(localized) << error;
+  }
+
   return manifest;
 }
 
@@ -172,7 +175,7 @@ std::unique_ptr<base::DictionaryValue> ComponentLoader::ParseManifest(
   JSONStringValueDeserializer deserializer(manifest_contents);
   std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
-  if (!manifest.get() || !manifest->IsType(base::Value::Type::DICTIONARY)) {
+  if (!manifest.get() || !manifest->is_dict()) {
     LOG(ERROR) << "Failed to parse extension manifest.";
     return std::unique_ptr<base::DictionaryValue>();
   }
@@ -186,7 +189,7 @@ std::string ComponentLoader::Add(int manifest_resource_id,
     return std::string();
 
   base::StringPiece manifest_contents =
-      ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           manifest_resource_id);
   return Add(manifest_contents, root_directory, true);
 }
@@ -326,12 +329,15 @@ void ComponentLoader::AddGalleryExtension() {
 void ComponentLoader::AddZipArchiverExtension() {
 #if defined(OS_CHROMEOS)
   base::FilePath resources_path;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableZipArchiverOnFileManager) &&
+  if ((base::CommandLine::ForCurrentProcess()->HasSwitch(
+           chromeos::switches::kEnableZipArchiverPacker) ||
+       chromeos::switches::IsZipArchiverUnpackerEnabled()) &&
       PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
-    AddComponentFromDir(
+    AddWithNameAndDescriptionFromDir(
         resources_path.Append(extension_misc::kZipArchiverExtensionPath),
-        extension_misc::kZipArchiverExtensionId, base::Closure());
+        extension_misc::kZipArchiverExtensionId,
+        l10n_util::GetStringUTF8(IDS_ZIP_ARCHIVER_NAME),
+        l10n_util::GetStringUTF8(IDS_ZIP_ARCHIVER_DESCRIPTION));
   }
 #endif  // defined(OS_CHROMEOS)
 }
@@ -350,24 +356,6 @@ void ComponentLoader::AddHangoutServicesExtension() {
 #if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
   Add(IDR_HANGOUT_SERVICES_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("hangout_services")));
-#endif
-}
-
-void ComponentLoader::AddHotwordAudioVerificationApp() {
-#if defined(ENABLE_HOTWORDING)
-  if (HotwordServiceFactory::IsAlwaysOnAvailable()) {
-    Add(IDR_HOTWORD_AUDIO_VERIFICATION_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("hotword_audio_verification")));
-  }
-#endif
-}
-
-void ComponentLoader::AddHotwordHelperExtension() {
-#if defined(ENABLE_HOTWORDING)
-  if (HotwordServiceFactory::IsHotwordAllowed(profile_)) {
-    Add(IDR_HOTWORD_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("hotword")));
-  }
 #endif
 }
 
@@ -412,7 +400,7 @@ void ComponentLoader::AddWithNameAndDescription(
     return;
 
   base::StringPiece manifest_contents =
-      ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           manifest_resource_id);
 
   // The Value is kept for the lifetime of the ComponentLoader. This is
@@ -602,8 +590,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     AddWebstoreWidgetExtension();
 
     AddHangoutServicesExtension();
-    AddHotwordAudioVerificationApp();
-    AddHotwordHelperExtension();
     AddImageLoaderExtension();
 
     bool install_feedback = enable_background_extensions_during_testing;
@@ -712,20 +698,47 @@ void ComponentLoader::AddComponentFromDir(
 
   base::PostTaskAndReplyWithResult(
       GetExtensionFileTaskRunner().get(), FROM_HERE,
-      base::Bind(&LoadManifestOnFileThread, root_directory, manifest_filename),
+      base::Bind(&LoadManifestOnFileThread, root_directory, manifest_filename,
+                 true),
       base::Bind(&ComponentLoader::FinishAddComponentFromDir,
                  weak_factory_.GetWeakPtr(), root_directory, extension_id,
-                 done_cb));
+                 base::nullopt, base::nullopt, done_cb));
+}
+
+void ComponentLoader::AddWithNameAndDescriptionFromDir(
+    const base::FilePath& root_directory,
+    const char* extension_id,
+    const std::string& name_string,
+    const std::string& description_string) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  base::PostTaskAndReplyWithResult(
+      GetExtensionFileTaskRunner().get(), FROM_HERE,
+      base::Bind(&LoadManifestOnFileThread, root_directory,
+                 extensions::kManifestFilename, false),
+      base::Bind(&ComponentLoader::FinishAddComponentFromDir,
+                 weak_factory_.GetWeakPtr(), root_directory, extension_id,
+                 name_string, description_string, base::Closure()));
 }
 
 void ComponentLoader::FinishAddComponentFromDir(
     const base::FilePath& root_directory,
     const char* extension_id,
+    const base::Optional<std::string>& name_string,
+    const base::Optional<std::string>& description_string,
     const base::Closure& done_cb,
     std::unique_ptr<base::DictionaryValue> manifest) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!manifest)
     return;  // Error already logged.
+
+  if (name_string)
+    manifest->SetString(manifest_keys::kName, name_string.value());
+
+  if (description_string) {
+    manifest->SetString(manifest_keys::kDescription,
+                        description_string.value());
+  }
+
   std::string actual_extension_id =
       Add(std::move(manifest), root_directory, false);
   CHECK_EQ(extension_id, actual_extension_id);

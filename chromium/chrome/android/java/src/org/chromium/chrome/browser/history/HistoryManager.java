@@ -29,6 +29,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
+import org.chromium.chrome.browser.preferences.PrefChangeRegistrar.PrefObserver;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager;
@@ -38,6 +41,7 @@ import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.widget.selection.SelectableBottomSheetContent.SelectableBottomSheetContentManager;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
@@ -53,7 +57,8 @@ import java.util.List;
  */
 public class HistoryManager implements OnMenuItemClickListener, SignInStateObserver,
                                        SelectionObserver<HistoryItem>, SearchDelegate,
-                                       SnackbarController {
+                                       SnackbarController, PrefObserver,
+                                       SelectableBottomSheetContentManager<HistoryItem> {
     private static final int FAVICON_MAX_CACHE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
     private static final int MEGABYTES_TO_BYTES =  1024 * 1024;
     private static final String METRICS_PREFIX = "Android.HistoryPage.";
@@ -71,6 +76,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     private final TextView mEmptyView;
     private final RecyclerView mRecyclerView;
     private final SnackbarManager mSnackbarManager;
+    private final PrefChangeRegistrar mPrefChangeRegistrar;
     private LargeIconBridge mLargeIconBridge;
 
     private boolean mIsSearching;
@@ -112,8 +118,8 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mToolbar = (HistoryManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.history_toolbar, mSelectionDelegate, R.string.menu_history, null,
                 R.id.normal_menu_group, R.id.selection_mode_menu_group,
-                FeatureUtilities.isChromeHomeModernEnabled() ? R.color.modern_toolbar_bg
-                                                             : R.color.modern_primary_color,
+                FeatureUtilities.isChromeHomeEnabled() ? R.color.modern_toolbar_bg
+                                                       : R.color.modern_primary_color,
                 this, true);
         mToolbar.setManager(this);
         mToolbar.initializeSearchView(this, R.string.history_manager_search, R.id.search_menu_id);
@@ -164,6 +170,11 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
 
         // 9. Listen to changes in sign in state.
         SigninManager.get(mActivity).addSignInStateObserver(this);
+
+        // 10. Create PrefChangeRegistrar to receive notifications on preference changes.
+        mPrefChangeRegistrar = new PrefChangeRegistrar();
+        mPrefChangeRegistrar.addObserver(Pref.ALLOW_DELETING_BROWSER_HISTORY, this);
+        mPrefChangeRegistrar.addObserver(Pref.INCOGNITO_MODE_AVAILABILITY, this);
 
         recordUserAction("Show");
     }
@@ -228,36 +239,37 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         return false;
     }
 
-    /**
-     * @return The view that shows the main browsing history UI.
-     */
+    @Override
     public ViewGroup getView() {
         return mSelectableListLayout;
     }
 
-    /**
-     * See {@link SelectableListLayout#detachToolbarView()}.
-     */
+    @Override
+    public RecyclerView getRecyclerView() {
+        return mRecyclerView;
+    }
+
+    @Override
+    public TextView getEmptyView() {
+        return mEmptyView;
+    }
+
+    @Override
     public SelectableListToolbar<HistoryItem> detachToolbarView() {
         return mSelectableListLayout.detachToolbarView();
     }
 
     /**
-     * @return The vertical scroll offset of the content view.
+     * Called when the bottom sheet content/activity/native page is destroyed.
      */
-    public int getVerticalScrollOffset() {
-        return mRecyclerView.computeVerticalScrollOffset();
-    }
-
-    /**
-     * Called when the activity/native page is destroyed.
-     */
+    @Override
     public void onDestroyed() {
         mSelectableListLayout.onDestroyed();
         mHistoryAdapter.onDestroyed();
         mLargeIconBridge.destroy();
         mLargeIconBridge = null;
         SigninManager.get(mActivity).removeSignInStateObserver(this);
+        mPrefChangeRegistrar.destroy();
     }
 
     /**
@@ -386,11 +398,6 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     }
 
     @VisibleForTesting
-    TextView getEmptyViewForTests() {
-        return mEmptyView;
-    }
-
-    @VisibleForTesting
     public HistoryAdapter getAdapterForTests() {
         return mHistoryAdapter;
     }
@@ -452,6 +459,12 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
 
     @Override
     public void onSignedOut() {
+        mToolbar.onSignInStateChange();
+        mHistoryAdapter.onSignInStateChange();
+    }
+
+    @Override
+    public void onPreferenceChange() {
         mToolbar.onSignInStateChange();
         mHistoryAdapter.onSignInStateChange();
     }

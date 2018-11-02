@@ -14,6 +14,7 @@
 #include "core/css/CSSVariableData.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/PropertyRegistry.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/parser/CSSParserToken.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/css/parser/CSSPropertyParser.h"
@@ -21,7 +22,7 @@
 #include "core/css/resolver/StyleBuilderConverter.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/css/resolver/StyleResolverStats.h"
-#include "core/dom/StyleEngine.h"
+#include "core/style/ComputedStyle.h"
 #include "core/style/StyleInheritedVariables.h"
 #include "core/style/StyleNonInheritedVariables.h"
 #include "platform/wtf/Vector.h"
@@ -67,16 +68,17 @@ CSSVariableData* CSSVariableResolver::ValueForCustomProperty(
     return variable_data;
 
   bool unused_cycle_detected;
-  RefPtr<CSSVariableData> new_variable_data =
+  scoped_refptr<CSSVariableData> new_variable_data =
       ResolveCustomProperty(name, *variable_data, unused_cycle_detected);
   if (!registration) {
     inherited_variables_->SetVariable(name, new_variable_data);
-    return new_variable_data.Get();
+    return new_variable_data.get();
   }
 
   const CSSValue* parsed_value = nullptr;
   if (new_variable_data) {
-    parsed_value = new_variable_data->ParseForSyntax(registration->Syntax());
+    parsed_value = new_variable_data->ParseForSyntax(
+        registration->Syntax(), state_.GetDocument().GetSecureContextMode());
     if (!parsed_value)
       new_variable_data = nullptr;
   }
@@ -89,10 +91,10 @@ CSSVariableData* CSSVariableResolver::ValueForCustomProperty(
   }
   if (!new_variable_data)
     return registration->InitialVariableData();
-  return new_variable_data.Get();
+  return new_variable_data.get();
 }
 
-RefPtr<CSSVariableData> CSSVariableResolver::ResolveCustomProperty(
+scoped_refptr<CSSVariableData> CSSVariableResolver::ResolveCustomProperty(
     AtomicString name,
     const CSSVariableData& variable_data,
     bool& cycle_detected) {
@@ -168,36 +170,6 @@ bool CSSVariableResolver::ResolveVariableReference(
   return true;
 }
 
-void CSSVariableResolver::ResolveApplyAtRule(
-    CSSParserTokenRange& range,
-    Vector<CSSParserToken>& result,
-    Vector<String>& result_backing_strings) {
-  DCHECK(range.Peek().GetType() == kAtKeywordToken &&
-         EqualIgnoringASCIICase(range.Peek().Value(), "apply"));
-  range.ConsumeIncludingWhitespace();
-  const CSSParserToken& variable_name = range.ConsumeIncludingWhitespace();
-  // TODO(timloh): Should we actually be consuming this?
-  if (range.Peek().GetType() == kSemicolonToken)
-    range.Consume();
-
-  CSSVariableData* variable_data =
-      ValueForCustomProperty(variable_name.Value().ToAtomicString());
-  if (!variable_data)
-    return;  // Invalid custom property
-
-  CSSParserTokenRange rule = variable_data->TokenRange();
-  rule.ConsumeWhitespace();
-  if (rule.Peek().GetType() != kLeftBraceToken)
-    return;
-  CSSParserTokenRange rule_contents = rule.ConsumeBlock();
-  rule.ConsumeWhitespace();
-  if (!rule.AtEnd())
-    return;
-
-  result.AppendRange(rule_contents.begin(), rule_contents.end());
-  result_backing_strings.AppendVector(variable_data->BackingStrings());
-}
-
 bool CSSVariableResolver::ResolveTokenRange(
     CSSParserTokenRange range,
     bool disallow_animation_tainted,
@@ -210,10 +182,6 @@ bool CSSVariableResolver::ResolveTokenRange(
       success &= ResolveVariableReference(
           range.ConsumeBlock(), disallow_animation_tainted, result,
           result_backing_strings, result_is_animation_tainted);
-    } else if (range.Peek().GetType() == kAtKeywordToken &&
-               EqualIgnoringASCIICase(range.Peek().Value(), "apply") &&
-               RuntimeEnabledFeatures::CSSApplyAtRulesEnabled()) {
-      ResolveApplyAtRule(range, result, result_backing_strings);
     } else {
       result.push_back(range.Consume());
     }
@@ -225,7 +193,7 @@ const CSSValue* CSSVariableResolver::ResolveVariableReferences(
     CSSPropertyID id,
     const CSSValue& value,
     bool disallow_animation_tainted) {
-  DCHECK(!isShorthandProperty(id));
+  DCHECK(!CSSProperty::Get(id).IsShorthand());
 
   if (value.IsPendingSubstitutionValue()) {
     return ResolvePendingSubstitutions(id, ToCSSPendingSubstitutionValue(value),
@@ -281,7 +249,7 @@ const CSSValue* CSSVariableResolver::ResolvePendingSubstitutions(
     if (ResolveTokenRange(shorthand_value->VariableDataValue()->Tokens(),
                           disallow_animation_tainted, tokens, backing_strings,
                           is_animation_tainted)) {
-      HeapVector<CSSProperty, 256> parsed_properties;
+      HeapVector<CSSPropertyValue, 256> parsed_properties;
 
       if (CSSPropertyParser::ParseValue(
               shorthand_property_id, false, CSSParserTokenRange(tokens),
@@ -303,7 +271,7 @@ const CSSValue* CSSVariableResolver::ResolvePendingSubstitutions(
   return CSSUnsetValue::Create();
 }
 
-RefPtr<CSSVariableData>
+scoped_refptr<CSSVariableData>
 CSSVariableResolver::ResolveCustomPropertyAnimationKeyframe(
     const CSSCustomPropertyDeclaration& keyframe,
     bool& cycle_detected) {

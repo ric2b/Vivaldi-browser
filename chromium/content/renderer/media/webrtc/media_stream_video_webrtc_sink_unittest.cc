@@ -48,8 +48,9 @@ class MediaStreamVideoWebRtcSinkTest : public ::testing::Test {
 
  private:
   MockMediaStreamRegistry registry_;
-  // A ChildProcess and a MessageLoopForUI are both needed to fool the Tracks
-  // and Sources in |registry_| into believing they are on the right threads.
+  // A ChildProcess is needed to fool the Tracks and Sources into believing they
+  // are on the right threads. A ScopedTaskEnvironment must be instantiated
+  // before ChildProcess to prevent it from leaking a TaskScheduler.
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   const ChildProcess child_process_;
 };
@@ -59,14 +60,6 @@ TEST_F(MediaStreamVideoWebRtcSinkTest, NoiseReductionDefaultsToNotSet) {
   MediaStreamVideoWebRtcSink my_sink(track_, &dependency_factory_);
   EXPECT_TRUE(my_sink.webrtc_video_track());
   EXPECT_FALSE(my_sink.SourceNeedsDenoisingForTesting());
-}
-
-// TODO(guidou): Remove this test. http://crbug.com/706408
-TEST_F(MediaStreamVideoWebRtcSinkTest, NoiseReductionConstraintPassThrough) {
-  SetVideoTrack(base::Optional<bool>(true));
-  MediaStreamVideoWebRtcSink my_sink(track_, &dependency_factory_);
-  EXPECT_TRUE(my_sink.SourceNeedsDenoisingForTesting());
-  EXPECT_TRUE(*(my_sink.SourceNeedsDenoisingForTesting()));
 }
 
 }  // namespace

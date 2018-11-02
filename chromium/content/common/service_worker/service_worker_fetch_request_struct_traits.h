@@ -13,31 +13,12 @@
 namespace mojo {
 
 template <>
-struct EnumTraits<blink::mojom::FetchCredentialsMode,
-                  content::FetchCredentialsMode> {
-  static blink::mojom::FetchCredentialsMode ToMojom(
-      content::FetchCredentialsMode input);
-
-  static bool FromMojom(blink::mojom::FetchCredentialsMode input,
-                        content::FetchCredentialsMode* out);
-};
-
-template <>
 struct EnumTraits<blink::mojom::FetchRedirectMode, content::FetchRedirectMode> {
   static blink::mojom::FetchRedirectMode ToMojom(
       content::FetchRedirectMode input);
 
   static bool FromMojom(blink::mojom::FetchRedirectMode input,
                         content::FetchRedirectMode* out);
-};
-
-template <>
-struct EnumTraits<blink::mojom::FetchRequestMode, content::FetchRequestMode> {
-  static blink::mojom::FetchRequestMode ToMojom(
-      content::FetchRequestMode input);
-
-  static bool FromMojom(blink::mojom::FetchRequestMode input,
-                        content::FetchRequestMode* out);
 };
 
 template <>
@@ -73,7 +54,7 @@ struct EnumTraits<blink::mojom::ServiceWorkerFetchType,
 template <>
 struct StructTraits<blink::mojom::FetchAPIRequestDataView,
                     content::ServiceWorkerFetchRequest> {
-  static content::FetchRequestMode mode(
+  static network::mojom::FetchRequestMode mode(
       const content::ServiceWorkerFetchRequest& request) {
     return request.mode;
   }
@@ -114,7 +95,7 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
     return request.blob_size;
   }
 
-  static storage::mojom::BlobPtr blob(
+  static blink::mojom::BlobPtr blob(
       const content::ServiceWorkerFetchRequest& request) {
     if (!request.blob)
       return nullptr;
@@ -126,9 +107,14 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
     return request.referrer;
   }
 
-  static content::FetchCredentialsMode credentials_mode(
+  static network::mojom::FetchCredentialsMode credentials_mode(
       const content::ServiceWorkerFetchRequest& request) {
     return request.credentials_mode;
+  }
+
+  static blink::mojom::FetchCacheMode cache_mode(
+      const content::ServiceWorkerFetchRequest& request) {
+    return request.cache_mode;
   }
 
   static content::FetchRedirectMode redirect_mode(
@@ -139,6 +125,10 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
   static const std::string& integrity(
       const content::ServiceWorkerFetchRequest& request) {
     return request.integrity;
+  }
+
+  static bool keepalive(const content::ServiceWorkerFetchRequest& request) {
+    return request.keepalive;
   }
 
   static const std::string& client_id(

@@ -159,16 +159,6 @@ var SourceEntry = (function() {
               break;
           }
           break;
-        case EventSourceType.FILESTREAM:
-          this.description_ = e.params.file_name;
-          break;
-        case EventSourceType.IPV6_PROBE_JOB:
-          if (e.type == EventType.IPV6_PROBE_RUNNING &&
-              e.phase == EventPhase.PHASE_END) {
-            this.description_ = e.params.ipv6_supported ? 'IPv6 Supported' :
-                                                          'IPv6 Not Supported';
-          }
-          break;
       }
 
       if (this.description_ == undefined)
@@ -345,7 +335,7 @@ var SourceEntry = (function() {
      */
     createTablePrinter: function() {
       return createLogEntryTablePrinter(
-          this.entries_, SourceTracker.getInstance().getPrivacyStripping(),
+          this.entries_,
           SourceTracker.getInstance().getUseRelativeTimes() ?
               timeutil.getBaseTime() :
               0,

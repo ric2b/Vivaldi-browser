@@ -265,6 +265,12 @@ function FileManager() {
   this.metadataUpdateController_ = null;
 
   /**
+   * Last modified controller.
+   * @private {LastModifiedController}
+   */
+  this.lastModifiedController_ = null;
+
+  /**
    * Component for main window and its misc UI parts.
    * @type {MainWindowComponent}
    * @private
@@ -534,6 +540,12 @@ FileManager.prototype = /** @struct */ {
       listBeingUpdated.endBatchUpdates();
       listBeingUpdated = null;
     });
+    this.volumeManager_.addEventListener(
+        VolumeManagerCommon.ARCHIVE_OPENED_EVENT_TYPE, function(event) {
+          assert(event.detail.mountPoint);
+          if (window.isFocused())
+            this.directoryModel_.changeDirectoryEntry(event.detail.mountPoint);
+        }.bind(this));
 
     this.directoryModel_.addEventListener(
         'directory-changed',
@@ -586,6 +598,8 @@ FileManager.prototype = /** @struct */ {
         assert(this.folderShortcutsModel_),
         this.fileBrowserBackground_.driveSyncHandler,
         this.selectionHandler_, assert(this.ui_));
+    this.lastModifiedController_ = new LastModifiedController(
+        this.ui_.listContainer.table, this.directoryModel_);
 
     this.quickViewModel_ = new QuickViewModel();
     var fileListSelectionModel = /** @type {!cr.ui.ListSelectionModel} */ (
@@ -1019,7 +1033,7 @@ FileManager.prototype = /** @struct */ {
   /**
    * Constructs table and grid (heavy operation).
    * @private
-   **/
+   */
   FileManager.prototype.initFileList_ = function() {
     var singleSelection =
         this.dialogType == DialogType.SELECT_OPEN_FILE ||

@@ -27,25 +27,24 @@
 #define MediaStreamTrack_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 #include "platform/mediastream/MediaStreamSource.h"
 #include "platform/wtf/Forward.h"
-#include "public/platform/WebMediaConstraints.h"
 
 namespace blink {
 
 class AudioSourceProvider;
-class ExceptionState;
 class ImageCapture;
 class MediaTrackCapabilities;
 class MediaTrackConstraints;
 class MediaStream;
 class MediaTrackSettings;
+class ScriptPromiseResolver;
 class ScriptState;
 
 class MODULES_EXPORT MediaStreamTrack
@@ -74,7 +73,7 @@ class MODULES_EXPORT MediaStreamTrack
 
   String readyState() const;
 
-  void stopTrack(ExceptionState&);
+  void stopTrack(ExecutionContext*);
   virtual MediaStreamTrack* clone(ScriptState*);
 
   // This function is called when constrains have been successfully applied.
@@ -108,7 +107,7 @@ class MODULES_EXPORT MediaStreamTrack
 
   std::unique_ptr<AudioSourceProvider> CreateWebAudioSource();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class CanvasCaptureMediaStreamTrack;
@@ -119,13 +118,14 @@ class MODULES_EXPORT MediaStreamTrack
   void SourceChangedState() override;
 
   void PropagateTrackEnded();
+  void applyConstraintsImageCapture(ScriptPromiseResolver*,
+                                    const MediaTrackConstraints&);
 
   MediaStreamSource::ReadyState ready_state_;
   HeapHashSet<Member<MediaStream>> registered_media_streams_;
   bool is_iterating_registered_media_streams_;
   bool stopped_;
   Member<MediaStreamComponent> component_;
-  WebMediaConstraints constraints_;
   Member<ImageCapture> image_capture_;
 };
 

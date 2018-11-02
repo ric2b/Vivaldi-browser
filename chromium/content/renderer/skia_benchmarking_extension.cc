@@ -11,8 +11,8 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/base/math_util.h"
-#include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "content/renderer/render_thread_impl.h"
 #include "gin/arguments.h"
 #include "gin/data_object_builder.h"
@@ -210,12 +210,12 @@ void SkiaBenchmarking::Rasterize(gin::Arguments* args) {
     std::unique_ptr<base::Value> params_value =
         content::V8ValueConverter::Create()->FromV8Value(params, context);
 
-    const base::DictionaryValue* params_dict = NULL;
+    const base::DictionaryValue* params_dict = nullptr;
     if (params_value.get() && params_value->GetAsDictionary(&params_dict)) {
       params_dict->GetDouble("scale", &scale);
       params_dict->GetInteger("stop", &stop_index);
 
-      const base::Value* clip_value = NULL;
+      const base::Value* clip_value = nullptr;
       if (params_dict->Get("clip", &clip_value))
         cc::MathUtil::FromValue(clip_value, &clip_rect);
     }
@@ -243,11 +243,11 @@ void SkiaBenchmarking::Rasterize(gin::Arguments* args) {
   picture->picture->playback(&benchmarking_canvas, &controller);
 
   blink::WebArrayBuffer buffer =
-      blink::WebArrayBuffer::Create(bitmap.getSize(), 1);
+      blink::WebArrayBuffer::Create(bitmap.computeByteSize(), 1);
   uint32_t* packed_pixels = reinterpret_cast<uint32_t*>(bitmap.getPixels());
   uint8_t* buffer_pixels = reinterpret_cast<uint8_t*>(buffer.Data());
   // Swizzle from native Skia format to RGBA as we copy out.
-  for (size_t i = 0; i < bitmap.getSize(); i += 4) {
+  for (size_t i = 0; i < bitmap.computeByteSize(); i += 4) {
     uint32_t c = packed_pixels[i >> 2];
     buffer_pixels[i] = SkGetPackedR32(c);
     buffer_pixels[i + 1] = SkGetPackedG32(c);

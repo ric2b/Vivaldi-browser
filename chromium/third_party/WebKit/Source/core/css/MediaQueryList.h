@@ -20,10 +20,11 @@
 #ifndef MediaQueryList_h
 #define MediaQueryList_h
 
+#include "base/macros.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventTarget.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -47,12 +48,11 @@ class CORE_EXPORT MediaQueryList final
       public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MediaQueryList);
-  WTF_MAKE_NONCOPYABLE(MediaQueryList);
 
  public:
   static MediaQueryList* Create(ExecutionContext*,
                                 MediaQueryMatcher*,
-                                RefPtr<MediaQuerySet>);
+                                scoped_refptr<MediaQuerySet>);
   ~MediaQueryList() override;
 
   String media() const;
@@ -74,7 +74,7 @@ class CORE_EXPORT MediaQueryList final
   bool MediaFeaturesChanged(
       HeapVector<Member<MediaQueryListListener>>* listeners_to_notify);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   // From ScriptWrappable
   bool HasPendingActivity() const final;
@@ -86,16 +86,19 @@ class CORE_EXPORT MediaQueryList final
   ExecutionContext* GetExecutionContext() const override;
 
  private:
-  MediaQueryList(ExecutionContext*, MediaQueryMatcher*, RefPtr<MediaQuerySet>);
+  MediaQueryList(ExecutionContext*,
+                 MediaQueryMatcher*,
+                 scoped_refptr<MediaQuerySet>);
 
   bool UpdateMatches();
 
   Member<MediaQueryMatcher> matcher_;
-  RefPtr<MediaQuerySet> media_;
-  using ListenerList = HeapListHashSet<Member<MediaQueryListListener>>;
+  scoped_refptr<MediaQuerySet> media_;
+  using ListenerList = HeapLinkedHashSet<Member<MediaQueryListListener>>;
   ListenerList listeners_;
   bool matches_dirty_;
   bool matches_;
+  DISALLOW_COPY_AND_ASSIGN(MediaQueryList);
 };
 
 }  // namespace blink

@@ -168,6 +168,11 @@
             "type": "boolean",
             "name": "isFullscreen",
             "description": "This is used to set a webview as fullscreen or not. This is needed for updating the pseudo-style :fullscreen when going in and out of fullscreen not via element.requestFullscreen and element.cancelFullscreen ."
+          },
+          {
+            "type": "boolean",
+            "name": "skipWindowState",
+            "description": "Skip restoring window after webview is restored."
           }
         ]
       },

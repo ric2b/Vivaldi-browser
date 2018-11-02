@@ -9,6 +9,7 @@
 #include "core/geometry/DOMRect.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/workers/WorkerThread.h"
+#include "modules/imagecapture/Point2D.h"
 #include "modules/shapedetection/DetectedText.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
@@ -20,13 +21,8 @@ TextDetector* TextDetector::Create(ExecutionContext* context) {
 
 TextDetector::TextDetector(ExecutionContext* context) : ShapeDetector() {
   auto request = mojo::MakeRequest(&text_service_);
-  if (context->IsDocument()) {
-    LocalFrame* frame = ToDocument(context)->GetFrame();
-    if (frame)
-      frame->GetInterfaceProvider().GetInterface(std::move(request));
-  } else {
-    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
-    thread->GetInterfaceProvider().GetInterface(std::move(request));
+  if (auto* interface_provider = context->GetInterfaceProvider()) {
+    interface_provider->GetInterface(std::move(request));
   }
 
   text_service_.set_connection_error_handler(ConvertToBaseCallback(WTF::Bind(
@@ -58,10 +54,18 @@ void TextDetector::OnDetectText(
 
   HeapVector<Member<DetectedText>> detected_text;
   for (const auto& text : text_detection_results) {
+    HeapVector<Point2D> corner_points;
+    for (const auto& corner_point : text->corner_points) {
+      Point2D point;
+      point.setX(corner_point.x);
+      point.setY(corner_point.y);
+      corner_points.push_back(point);
+    }
     detected_text.push_back(DetectedText::Create(
         text->raw_value,
         DOMRect::Create(text->bounding_box.x, text->bounding_box.y,
-                        text->bounding_box.width, text->bounding_box.height)));
+                        text->bounding_box.width, text->bounding_box.height),
+        corner_points));
   }
 
   resolver->Resolve(detected_text);
@@ -76,7 +80,7 @@ void TextDetector::OnTextServiceConnectionError() {
   text_service_.reset();
 }
 
-DEFINE_TRACE(TextDetector) {
+void TextDetector::Trace(blink::Visitor* visitor) {
   ShapeDetector::Trace(visitor);
   visitor->Trace(text_service_requests_);
 }

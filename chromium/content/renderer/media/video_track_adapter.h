@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "content/common/content_export.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "media/base/video_frame.h"
 #include "ui/gfx/geometry/size.h"
@@ -21,15 +22,15 @@ namespace content {
 
 struct CONTENT_EXPORT VideoTrackAdapterSettings {
   VideoTrackAdapterSettings();
-  VideoTrackAdapterSettings(
-      int max_width,
-      int max_height,
-      double min_aspect_ratio,
-      double max_aspect_ratio,
-      double max_frame_rate,
-      const base::Optional<gfx::Size>& expected_native_resolution);
+  VideoTrackAdapterSettings(int max_width,
+                            int max_height,
+                            double min_aspect_ratio,
+                            double max_aspect_ratio,
+                            double max_frame_rate);
   VideoTrackAdapterSettings(const VideoTrackAdapterSettings& other);
   VideoTrackAdapterSettings& operator=(const VideoTrackAdapterSettings& other);
+  bool operator==(const VideoTrackAdapterSettings& other) const;
+
   int max_width;
   int max_height;
   double min_aspect_ratio;
@@ -38,8 +39,6 @@ struct CONTENT_EXPORT VideoTrackAdapterSettings {
   // is necessary.
   // TODO(guidou): Change this to base::Optional. http://crbug.com/734528
   double max_frame_rate;
-  // If supplied, this can be used to detect frames from a rotated device.
-  base::Optional<gfx::Size> expected_native_size;
 };
 
 // VideoTrackAdapter is a helper class used by MediaStreamVideoSource used for
@@ -69,6 +68,8 @@ class VideoTrackAdapter
                 VideoCaptureDeliverFrameCB frame_callback,
                 const VideoTrackAdapterSettings& settings);
   void RemoveTrack(const MediaStreamVideoTrack* track);
+  void ReconfigureTrack(const MediaStreamVideoTrack* track,
+                        const VideoTrackAdapterSettings& settings);
 
   // Delivers |frame| to all tracks that have registered a callback.
   // Must be called on the IO-thread.
@@ -87,12 +88,14 @@ class VideoTrackAdapter
                             const OnMutedCallback& on_muted_callback);
   void StopFrameMonitoring();
 
-  static void CalculateTargetSize(bool is_rotated,
-                                  const gfx::Size& input_size,
-                                  const gfx::Size& max_frame_size,
-                                  double min_aspect_ratio,
-                                  double max_aspect_ratio,
-                                  gfx::Size* desired_size);
+  void SetSourceFrameSize(const gfx::Size& source_frame_size);
+
+  // Exported for testing.
+  CONTENT_EXPORT static void CalculateTargetSize(
+      bool is_rotated,
+      const gfx::Size& input_size,
+      const VideoTrackAdapterSettings& settings,
+      gfx::Size* desired_size);
 
  private:
   virtual ~VideoTrackAdapter();
@@ -102,11 +105,14 @@ class VideoTrackAdapter
                     VideoCaptureDeliverFrameCB frame_callback,
                     const VideoTrackAdapterSettings& settings);
   void RemoveTrackOnIO(const MediaStreamVideoTrack* track);
+  void ReconfigureTrackOnIO(const MediaStreamVideoTrack* track,
+                            const VideoTrackAdapterSettings& settings);
 
   void StartFrameMonitoringOnIO(
     const OnMutedCallback& on_muted_state_callback,
     double source_frame_rate);
   void StopFrameMonitoringOnIO();
+  void SetSourceFrameSizeOnIO(const gfx::Size& frame_size);
 
   // Compare |frame_counter_snapshot| with the current |frame_counter_|, and
   // inform of the situation (muted, not muted) via |set_muted_state_callback|.
@@ -143,6 +149,9 @@ class VideoTrackAdapter
 
   // Frame rate configured on the video source, accessed on the IO-thread.
   float source_frame_rate_;
+
+  // Resolution configured on the video source, accessed on the IO-thread.
+  base::Optional<gfx::Size> source_frame_size_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoTrackAdapter);
 };

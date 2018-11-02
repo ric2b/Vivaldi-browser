@@ -14,7 +14,6 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -140,7 +139,7 @@ MockConnect::MockConnect(IoMode io_mode, int r, IPEndPoint addr) :
     peer_addr(addr) {
 }
 
-MockConnect::~MockConnect() {}
+MockConnect::~MockConnect() = default;
 
 void SocketDataProvider::OnEnableTCPFastOpenIfSupported() {}
 
@@ -179,8 +178,7 @@ StaticSocketDataHelper::StaticSocketDataHelper(MockRead* reads,
       write_count_(writes_count) {
 }
 
-StaticSocketDataHelper::~StaticSocketDataHelper() {
-}
+StaticSocketDataHelper::~StaticSocketDataHelper() = default;
 
 const MockRead& StaticSocketDataHelper::PeekRead() const {
   CHECK(!AllReadDataConsumed());
@@ -249,8 +247,7 @@ StaticSocketDataProvider::StaticSocketDataProvider(MockRead* reads,
     : helper_(reads, reads_count, writes, writes_count) {
 }
 
-StaticSocketDataProvider::~StaticSocketDataProvider() {
-}
+StaticSocketDataProvider::~StaticSocketDataProvider() = default;
 
 MockRead StaticSocketDataProvider::OnRead() {
   CHECK(!helper_.AllReadDataConsumed());
@@ -297,23 +294,18 @@ void StaticSocketDataProvider::Reset() {
 SSLSocketDataProvider::SSLSocketDataProvider(IoMode mode, int result)
     : connect(mode, result),
       next_proto(kProtoUnknown),
-      client_cert_sent(false),
       cert_request_info(NULL),
-      cert_status(0),
-      channel_id_sent(false),
-      connection_status(0),
-      token_binding_negotiated(false) {
+      channel_id_service(NULL) {
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_TLS1_2,
-                                &connection_status);
+                                &ssl_info.connection_status);
   // Set to TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
-  SSLConnectionStatusSetCipherSuite(0xcc14, &connection_status);
+  SSLConnectionStatusSetCipherSuite(0xcca9, &ssl_info.connection_status);
 }
 
 SSLSocketDataProvider::SSLSocketDataProvider(
     const SSLSocketDataProvider& other) = default;
 
-SSLSocketDataProvider::~SSLSocketDataProvider() {
-}
+SSLSocketDataProvider::~SSLSocketDataProvider() = default;
 
 SequencedSocketData::SequencedSocketData(MockRead* reads,
                                          size_t reads_count,
@@ -698,13 +690,12 @@ void SequencedSocketData::OnWriteComplete() {
   NET_TRACE(1, " *** ") << "Done";
 }
 
-SequencedSocketData::~SequencedSocketData() {
-}
+SequencedSocketData::~SequencedSocketData() = default;
 
 MockClientSocketFactory::MockClientSocketFactory()
     : enable_read_if_ready_(false) {}
 
-MockClientSocketFactory::~MockClientSocketFactory() {}
+MockClientSocketFactory::~MockClientSocketFactory() = default;
 
 void MockClientSocketFactory::AddSocketDataProvider(
     SocketDataProvider* data) {
@@ -860,7 +851,7 @@ crypto::ECPrivateKey* MockClientSocket::GetChannelIDKey() const {
   return NULL;
 }
 
-MockClientSocket::~MockClientSocket() {}
+MockClientSocket::~MockClientSocket() = default;
 
 void MockClientSocket::RunCallbackAsync(const CompletionCallback& callback,
                                         int result) {
@@ -1248,15 +1239,9 @@ NextProto MockSSLClientSocket::GetNegotiatedProtocol() const {
   return data_->next_proto;
 }
 
-bool MockSSLClientSocket::GetSSLInfo(SSLInfo* ssl_info) {
-  ssl_info->Reset();
-  ssl_info->cert = data_->cert;
-  ssl_info->cert_status = data_->cert_status;
-  ssl_info->client_cert_sent = data_->client_cert_sent;
-  ssl_info->channel_id_sent = data_->channel_id_sent;
-  ssl_info->connection_status = data_->connection_status;
-  ssl_info->token_binding_negotiated = data_->token_binding_negotiated;
-  ssl_info->token_binding_key_param = data_->token_binding_key_param;
+bool MockSSLClientSocket::GetSSLInfo(SSLInfo* requested_ssl_info) {
+  requested_ssl_info->Reset();
+  *requested_ssl_info = data_->ssl_info;
   return true;
 }
 
@@ -1543,8 +1528,7 @@ TestSocketRequest::TestSocketRequest(
   DCHECK(completion_count);
 }
 
-TestSocketRequest::~TestSocketRequest() {
-}
+TestSocketRequest::~TestSocketRequest() = default;
 
 void TestSocketRequest::OnComplete(int result) {
   SetResult(result);
@@ -1559,7 +1543,7 @@ const int ClientSocketPoolTest::kIndexOutOfBounds = -1;
 const int ClientSocketPoolTest::kRequestNotFound = -2;
 
 ClientSocketPoolTest::ClientSocketPoolTest() : completion_count_(0) {}
-ClientSocketPoolTest::~ClientSocketPoolTest() {}
+ClientSocketPoolTest::~ClientSocketPoolTest() = default;
 
 int ClientSocketPoolTest::GetOrderOfRequest(size_t index) const {
   index--;
@@ -1599,7 +1583,7 @@ MockTransportClientSocketPool::MockConnectJob::MockConnectJob(
     const CompletionCallback& callback)
     : socket_(std::move(socket)), handle_(handle), user_callback_(callback) {}
 
-MockTransportClientSocketPool::MockConnectJob::~MockConnectJob() {}
+MockTransportClientSocketPool::MockConnectJob::~MockConnectJob() = default;
 
 int MockTransportClientSocketPool::MockConnectJob::Connect() {
   int rv = socket_->Connect(base::Bind(&MockConnectJob::OnConnect,
@@ -1669,7 +1653,7 @@ MockTransportClientSocketPool::MockTransportClientSocketPool(
       release_count_(0),
       cancel_count_(0) {}
 
-MockTransportClientSocketPool::~MockTransportClientSocketPool() {}
+MockTransportClientSocketPool::~MockTransportClientSocketPool() = default;
 
 int MockTransportClientSocketPool::RequestSocket(
     const std::string& group_name,
@@ -1725,7 +1709,7 @@ MockSOCKSClientSocketPool::MockSOCKSClientSocketPool(
                             NULL),
       transport_pool_(transport_pool) {}
 
-MockSOCKSClientSocketPool::~MockSOCKSClientSocketPool() {}
+MockSOCKSClientSocketPool::~MockSOCKSClientSocketPool() = default;
 
 int MockSOCKSClientSocketPool::RequestSocket(const std::string& group_name,
                                              const void* socket_params,

@@ -2,23 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
+#include "content/browser/renderer_host/input/synthetic_smooth_move_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_tap_gesture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/input/synthetic_gesture_params.h"
-#include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/tracing_controller.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -26,7 +31,7 @@
 
 namespace {
 
-const char kMouseUpDownDataURL[] =
+const char kDataURL[] =
     "data:text/html;charset=utf-8,"
     "<!DOCTYPE html>"
     "<html>"
@@ -34,6 +39,14 @@ const char kMouseUpDownDataURL[] =
     "<title>Mouse event trace events reported.</title>"
     "<script src=\"../../resources/testharness.js\"></script>"
     "<script src=\"../../resources/testharnessreport.js\"></script>"
+    "<script>"
+    "  let i=0;"
+    "  document.addEventListener('mousemove', () => {"
+    "    var end = performance.now() + 20;"
+    "    while(performance.now() < end);"
+    "    document.body.style.backgroundColor = 'rgb(' + (i++) + ',0,0)'"
+    "  });"
+    "</script>"
     "<style>"
     "body {"
     "  height:3000px;"
@@ -77,7 +90,7 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
 
  protected:
   void LoadURL() {
-    const GURL data_url(kMouseUpDownDataURL);
+    const GURL data_url(kDataURL);
     NavigateToURL(shell(), data_url);
 
     RenderWidgetHostImpl* host = GetWidgetHost();
@@ -95,11 +108,34 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
 
     GetWidgetHost()->QueueSyntheticGesture(
         std::move(gesture),
-        base::Bind(&MouseLatencyBrowserTest::OnSyntheticGestureCompleted,
-                   base::Unretained(this)));
+        base::BindOnce(&MouseLatencyBrowserTest::OnSyntheticGestureCompleted,
+                       base::Unretained(this)));
 
     // Runs until we get the OnSyntheticGestureCompleted callback
-    runner_ = base::MakeUnique<base::RunLoop>();
+    runner_ = std::make_unique<base::RunLoop>();
+    runner_->Run();
+  }
+
+  // Generate mouse events drag from |position|.
+  void DoSyncCoalescedMoves(const gfx::PointF position,
+                            const gfx::Vector2dF& delta1,
+                            const gfx::Vector2dF& delta2) {
+    SyntheticSmoothMoveGestureParams params;
+    params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_DRAG_INPUT;
+    params.start_point.SetPoint(position.x(), position.y());
+    params.distances.push_back(delta1);
+    params.distances.push_back(delta2);
+
+    std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
+        new SyntheticSmoothMoveGesture(params));
+
+    GetWidgetHost()->QueueSyntheticGesture(
+        std::move(gesture),
+        base::BindOnce(&MouseLatencyBrowserTest::OnSyntheticGestureCompleted,
+                       base::Unretained(this)));
+
+    // Runs until we get the OnSyntheticGestureCompleted callback
+    runner_ = std::make_unique<base::RunLoop>();
     runner_->Run();
   }
 
@@ -117,18 +153,19 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
     base::RunLoop run_loop;
     ASSERT_TRUE(TracingController::GetInstance()->StartTracing(
         trace_config, run_loop.QuitClosure()));
+    run_loop.Run();
   }
 
   const base::Value& StopTracing() {
     bool success = TracingController::GetInstance()->StopTracing(
-        TracingController::CreateStringSink(
+        TracingController::CreateStringEndpoint(
             base::Bind(&MouseLatencyBrowserTest::OnTraceDataCollected,
                        base::Unretained(this))));
     EXPECT_TRUE(success);
 
     // Runs until we get the OnTraceDataCollected callback, which populates
     // trace_data_;
-    runner_ = base::MakeUnique<base::RunLoop>();
+    runner_ = std::make_unique<base::RunLoop>();
     runner_->Run();
     return trace_data_;
   }
@@ -145,8 +182,7 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
 // MouseDown events in the case where no swap is generated.
 // Disabled on Android because we don't support synthetic mouse input on
 // Android (crbug.com/723618).
-// Test is flaky on Linux (crbug.com/736836).
-#if defined (OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID)
 #define MAYBE_MouseDownAndUpRecordedWithoutSwap \
   DISABLED_MouseDownAndUpRecordedWithoutSwap
 #else
@@ -157,8 +193,12 @@ IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
                        MAYBE_MouseDownAndUpRecordedWithoutSwap) {
   LoadURL();
 
+  auto filter = std::make_unique<InputMsgWatcher>(
+      GetWidgetHost(), blink::WebInputEvent::kMouseUp);
   StartTracing();
   DoSyncClick(gfx::PointF(100, 100));
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED,
+            filter->GetAckStateWaitIfNecessary());
   const base::Value& trace_data = StopTracing();
 
   const base::DictionaryValue* trace_data_dict;
@@ -183,10 +223,67 @@ IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
   }
 
   // We see two events per async slice, a begin and an end.
-  EXPECT_THAT(
-      trace_event_names,
-      testing::ElementsAre("InputLatency::MouseDown", "InputLatency::MouseDown",
-                           "InputLatency::MouseUp", "InputLatency::MouseUp"));
+  EXPECT_THAT(trace_event_names,
+              testing::UnorderedElementsAre(
+                  "InputLatency::MouseDown", "InputLatency::MouseDown",
+                  "InputLatency::MouseUp", "InputLatency::MouseUp"));
+}
+
+// Ensures that LatencyInfo async slices are reported correctly for MouseMove
+// events in the case where events are coalesced. (crbug.com/771165).
+// Disabled on Android because we don't support synthetic mouse input on Android
+// (crbug.com/723618).
+#if defined(OS_ANDROID)
+#define MAYBE_CoalescedMouseMovesCorrectlyTerminated \
+  DISABLED_CoalescedMouseMovesCorrectlyTerminated
+#else
+// Test fails/flakes on multiple platforms. https://crbug.com/789096
+#define MAYBE_CoalescedMouseMovesCorrectlyTerminated \
+  DISABLED_CoalescedMouseMovesCorrectlyTerminated
+#endif
+IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
+                       MAYBE_CoalescedMouseMovesCorrectlyTerminated) {
+  LoadURL();
+
+  auto filter = std::make_unique<InputMsgWatcher>(
+      GetWidgetHost(), blink::WebInputEvent::kMouseUp);
+  StartTracing();
+  DoSyncCoalescedMoves(gfx::PointF(100, 100), gfx::Vector2dF(150, 150),
+                       gfx::Vector2dF(250, 250));
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED,
+            filter->GetAckStateWaitIfNecessary());
+  content::MainThreadFrameObserver observer(GetWidgetHost());
+  observer.Wait();
+  const base::Value& trace_data = StopTracing();
+
+  const base::DictionaryValue* trace_data_dict;
+  trace_data.GetAsDictionary(&trace_data_dict);
+  ASSERT_TRUE(trace_data.GetAsDictionary(&trace_data_dict));
+
+  const base::ListValue* traceEvents;
+  ASSERT_TRUE(trace_data_dict->GetList("traceEvents", &traceEvents));
+
+  std::map<std::string, int> trace_ids;
+
+  for (size_t i = 0; i < traceEvents->GetSize(); ++i) {
+    const base::DictionaryValue* traceEvent;
+    ASSERT_TRUE(traceEvents->GetDictionary(i, &traceEvent));
+
+    std::string name;
+    ASSERT_TRUE(traceEvent->GetString("name", &name));
+
+    if (name != "InputLatency::MouseMove")
+      continue;
+
+    std::string id;
+    if (traceEvent->GetString("id", &id))
+      ++trace_ids[id];
+  }
+
+  for (auto i : trace_ids) {
+    // Each trace id should show up once for the begin, and once for the end.
+    EXPECT_EQ(2, i.second);
+  }
 }
 
 }  // namespace content

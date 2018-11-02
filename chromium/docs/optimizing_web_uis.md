@@ -6,7 +6,7 @@ In order to build with a fast configuration, try setting these options in your
 GN args:
 
 ```
-use_vulcanize = true
+optimize_webui = true
 is_debug = false
 ```
 
@@ -120,7 +120,5 @@ To mark a WebUI's resources compressed, you'll need to do something like:
 ```c++
 WebUIDataSource* data_source = WebUIDataSource::Create(...);
 data_source->SetDefaultResource(IDR_MY_PAGE);
-std::unordered_set<std::string> exclusions;
-exclusions.insert("strings.js");  // if required
-data_source->UseGzip(exclusions);
+data_source->UseGzip({"strings.js", ...});  // Omit arg to compress everything
 ```

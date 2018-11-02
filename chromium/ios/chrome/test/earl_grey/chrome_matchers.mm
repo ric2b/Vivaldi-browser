@@ -13,17 +13,22 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 #import "ios/chrome/browser/ui/payments/payment_request_error_view_controller.h"
+#import "ios/chrome/browser/ui/payments/payment_request_picker_view_controller.h"
 #import "ios/chrome/browser/ui/payments/payment_request_view_controller.h"
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/import_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/static_content/static_html_view_controller.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -98,16 +103,6 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id) {
       l10n_util::GetNSStringWithFixup(message_id));
 }
 
-id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id) {
-  return web::WebViewContainingBlockedImage(
-      std::move(image_id), chrome_test_util::GetCurrentWebState());
-}
-
-id<GREYMatcher> WebViewContainingLoadedImage(std::string image_id) {
-  return web::WebViewContainingLoadedImage(
-      std::move(image_id), chrome_test_util::GetCurrentWebState());
-}
-
 id<GREYMatcher> CancelButton() {
   return ButtonWithAccessibilityLabelId(IDS_CANCEL);
 }
@@ -176,6 +171,14 @@ id<GREYMatcher> CollectionViewSwitchCell(NSString* accessibilityIdentifier,
                     nil);
 }
 
+id<GREYMatcher> SyncSwitchCell(NSString* accessibilityLabel, BOOL is_on) {
+  return grey_allOf(grey_accessibilityLabel(accessibilityLabel),
+                    grey_accessibilityValue(
+                        is_on ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF)),
+                    grey_sufficientlyVisible(), nil);
+}
+
 id<GREYMatcher> OpenLinkInNewTabButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
 }
@@ -192,6 +195,10 @@ id<GREYMatcher> AccountConsistencySetupSigninButton() {
 id<GREYMatcher> AccountConsistencyConfirmationOkButton() {
   return ButtonWithAccessibilityLabelId(
       IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON);
+}
+
+id<GREYMatcher> AddAccountButton() {
+  return grey_accessibilityID(kSettingsAccountsAddAccountCellId);
 }
 
 id<GREYMatcher> SignOutAccountsButton() {
@@ -271,6 +278,56 @@ id<GREYMatcher> PaymentRequestView() {
 // Returns matcher for the error confirmation view for payment request.
 id<GREYMatcher> PaymentRequestErrorView() {
   return grey_accessibilityID(kPaymentRequestErrorCollectionViewID);
+}
+
+id<GREYMatcher> VoiceSearchButton() {
+  return grey_allOf(grey_accessibilityID(kSettingsVoiceSearchCellId),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton), nil);
+}
+
+id<GREYMatcher> SettingsCollectionView() {
+  return grey_accessibilityID(kSettingsCollectionViewId);
+}
+
+id<GREYMatcher> ClearBrowsingHistoryButton() {
+  return grey_accessibilityID(kClearBrowsingHistoryCellId);
+}
+
+id<GREYMatcher> ClearCookiesButton() {
+  return grey_accessibilityID(kClearCookiesCellId);
+}
+
+id<GREYMatcher> ClearCacheButton() {
+  return grey_accessibilityID(kClearCacheCellId);
+}
+
+id<GREYMatcher> ClearSavedPasswordsButton() {
+  return grey_accessibilityID(kClearSavedPasswordsCellId);
+}
+
+id<GREYMatcher> ContentSuggestionCollectionView() {
+  return grey_accessibilityID(
+      [ContentSuggestionsViewController collectionAccessibilityIdentifier]);
+}
+
+id<GREYMatcher> WarningMessageView() {
+  return grey_accessibilityID(kWarningMessageAccessibilityID);
+}
+
+id<GREYMatcher> PaymentRequestPickerRow() {
+  return grey_accessibilityID(kPaymentRequestPickerRowAccessibilityID);
+}
+
+id<GREYMatcher> PaymentRequestPickerSearchBar() {
+  return grey_accessibilityID(kPaymentRequestPickerSearchBarAccessibilityID);
+}
+
+id<GREYMatcher> BookmarksMenuButton() {
+  return grey_accessibilityID(kToolsMenuBookmarksId);
+}
+
+id<GREYMatcher> RecentTabsMenuButton() {
+  return grey_accessibilityID(kToolsMenuOtherDevicesId);
 }
 
 }  // namespace chrome_test_util

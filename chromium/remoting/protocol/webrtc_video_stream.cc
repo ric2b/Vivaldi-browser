@@ -6,8 +6,10 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "remoting/base/constants.h"
 #include "remoting/codec/webrtc_video_encoder_proxy.h"
 #include "remoting/codec/webrtc_video_encoder_vpx.h"
@@ -21,11 +23,34 @@
 #include "third_party/webrtc/api/test/fakeconstraints.h"
 #include "third_party/webrtc/media/base/videocapturer.h"
 
+#if defined(USE_H264_ENCODER)
+#include "remoting/codec/webrtc_video_encoder_gpu.h"
+#endif
+
 namespace remoting {
 namespace protocol {
 
+namespace {
+
 const char kStreamLabel[] = "screen_stream";
 const char kVideoLabel[] = "screen_video";
+
+std::string EncodeResultToString(WebrtcVideoEncoder::EncodeResult result) {
+  using EncodeResult = WebrtcVideoEncoder::EncodeResult;
+
+  switch (result) {
+    case EncodeResult::SUCCEEDED:
+      return "Succeeded";
+    case EncodeResult::FRAME_SIZE_EXCEEDS_CAPABILITY:
+      return "Frame size exceeds capability";
+    case EncodeResult::UNKNOWN_ERROR:
+      return "Unknown error";
+  }
+  NOTREACHED();
+  return "";
+}
+
+}  // namespace
 
 struct WebrtcVideoStream::FrameStats {
   // The following fields is not null only for one frame after each incoming
@@ -41,8 +66,22 @@ struct WebrtcVideoStream::FrameStats {
   uint32_t capturer_id = 0;
 };
 
-WebrtcVideoStream::WebrtcVideoStream()
-    : video_stats_dispatcher_(kStreamLabel), weak_factory_(this) {}
+WebrtcVideoStream::WebrtcVideoStream(const SessionOptions& session_options)
+    : video_stats_dispatcher_(kStreamLabel),
+      session_options_(session_options),
+      weak_factory_(this) {
+  encoder_selector_.RegisterEncoder(
+      base::Bind(&WebrtcVideoEncoderVpx::IsSupportedByVP8),
+      base::Bind(&WebrtcVideoEncoderVpx::CreateForVP8));
+  encoder_selector_.RegisterEncoder(
+      base::Bind(&WebrtcVideoEncoderVpx::IsSupportedByVP9),
+      base::Bind(&WebrtcVideoEncoderVpx::CreateForVP9));
+#if defined(USE_H264_ENCODER)
+  encoder_selector_.RegisterEncoder(
+      base::Bind(&WebrtcVideoEncoderGpu::IsSupportedByH264),
+      base::Bind(&WebrtcVideoEncoderGpu::CreateForH264));
+#endif
+}
 
 WebrtcVideoStream::~WebrtcVideoStream() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -102,7 +141,7 @@ void WebrtcVideoStream::Start(
   result = peer_connection_->AddStream(stream_.get());
   DCHECK(result);
 
-  scheduler_.reset(new WebrtcFrameSchedulerSimple());
+  scheduler_.reset(new WebrtcFrameSchedulerSimple(session_options_));
   scheduler_->Start(
       webrtc_transport_->video_encoder_factory(),
       base::Bind(&WebrtcVideoStream::CaptureNextFrame, base::Unretained(this)));
@@ -163,13 +202,22 @@ void WebrtcVideoStream::OnCaptureResult(
     }
 
     current_frame_stats_->capturer_id = frame->capturer_id();
+
+    if (!encoder_) {
+      encoder_selector_.SetDesktopFrame(*frame);
+      encoder_ = encoder_selector_.CreateEncoder();
+
+      // TODO(zijiehe): Permanently stop the video stream if we cannot create an
+      // encoder for the |frame|.
+    }
   }
 
-  DCHECK(encoder_);
-  current_frame_stats_->encode_started_time = base::TimeTicks::Now();
-  encoder_->Encode(
-      std::move(frame), frame_params,
-      base::Bind(&WebrtcVideoStream::OnFrameEncoded, base::Unretained(this)));
+  if (encoder_) {
+    current_frame_stats_->encode_started_time = base::TimeTicks::Now();
+    encoder_->Encode(
+        std::move(frame), frame_params,
+        base::Bind(&WebrtcVideoStream::OnFrameEncoded, base::Unretained(this)));
+  }
 }
 
 void WebrtcVideoStream::OnChannelInitialized(
@@ -194,6 +242,7 @@ void WebrtcVideoStream::CaptureNextFrame() {
 }
 
 void WebrtcVideoStream::OnFrameEncoded(
+    WebrtcVideoEncoder::EncodeResult encode_result,
     std::unique_ptr<WebrtcVideoEncoder::EncodedFrame> frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -201,6 +250,14 @@ void WebrtcVideoStream::OnFrameEncoded(
 
   HostFrameStats stats;
   scheduler_->OnFrameEncoded(frame.get(), &stats);
+
+  if (encode_result != WebrtcVideoEncoder::EncodeResult::SUCCEEDED) {
+    LOG(ERROR) << "Video encoder returns error "
+               << EncodeResultToString(encode_result);
+    // TODO(zijiehe): Restart the video stream.
+    encoder_.reset();
+    return;
+  }
 
   if (!frame) {
     return;
@@ -249,18 +306,21 @@ void WebrtcVideoStream::OnFrameEncoded(
 
 void WebrtcVideoStream::OnEncoderCreated(webrtc::VideoCodecType codec_type) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  // The preferred codec id depends on the order of
+  // |encoder_selector_|.RegisterEncoder().
   if (codec_type == webrtc::kVideoCodecVP8) {
-    encoder_ = base::MakeUnique<WebrtcVideoEncoderProxy>(
-        WebrtcVideoEncoderVpx::CreateForVP8(), encode_task_runner_);
+    LOG(WARNING) << "VP8 video codec is preferred.";
+    encoder_selector_.SetPreferredCodec(0);
   } else if (codec_type == webrtc::kVideoCodecVP9) {
-    encoder_ = base::MakeUnique<WebrtcVideoEncoderProxy>(
-        WebrtcVideoEncoderVpx::CreateForVP9(), encode_task_runner_);
+    LOG(WARNING) << "VP9 video codec is preferred.";
+    encoder_selector_.SetPreferredCodec(1);
   } else if (codec_type == webrtc::kVideoCodecH264) {
-    // TODO(gusss): Whenever the H264 encoder is ready, this is how it will be
-    // initialized.
-    // encoder_ = base::MakeUnique<WebrtcVideoEncoderProxy>(
-    //     WebrtcVideoEncoderGpu::CreateForH264(), encode_task_runner_);
+#if defined(USE_H264_ENCODER)
+    LOG(WARNING) << "H264 video codec is preferred.";
+    encoder_selector_.SetPreferredCodec(2);
+#else
     NOTIMPLEMENTED();
+#endif
   } else {
     LOG(FATAL) << "Unknown codec type: " << codec_type;
   }

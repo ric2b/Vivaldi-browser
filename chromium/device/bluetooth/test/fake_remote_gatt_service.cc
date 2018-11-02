@@ -29,7 +29,13 @@ FakeRemoteGattService::FakeRemoteGattService(
       device_(device),
       last_characteristic_id_(0) {}
 
-FakeRemoteGattService::~FakeRemoteGattService() {}
+FakeRemoteGattService::~FakeRemoteGattService() = default;
+
+bool FakeRemoteGattService::AllResponsesConsumed() {
+  return std::all_of(
+      fake_characteristics_.begin(), fake_characteristics_.end(),
+      [](const auto& e) { return e.second->AllResponsesConsumed(); });
+}
 
 std::string FakeRemoteGattService::AddFakeCharacteristic(
     const device::BluetoothUUID& characteristic_uuid,

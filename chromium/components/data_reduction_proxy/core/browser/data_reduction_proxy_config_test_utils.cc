@@ -49,8 +49,8 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
                                configurator,
                                event_creator),
       tick_clock_(nullptr),
-      is_captive_portal_(false) {
-}
+      is_captive_portal_(false),
+      add_default_proxy_bypass_rules_(true) {}
 
 TestDataReductionProxyConfig::~TestDataReductionProxyConfig() {
 }
@@ -65,10 +65,6 @@ TestDataReductionProxyParams* TestDataReductionProxyConfig::test_params() {
 
 DataReductionProxyConfigValues* TestDataReductionProxyConfig::config_values() {
   return config_values_.get();
-}
-
-void TestDataReductionProxyConfig::ResetLoFiStatusForTest() {
-  lofi_off_ = false;
 }
 
 void TestDataReductionProxyConfig::SetTickClock(base::TickClock* tick_clock) {
@@ -117,6 +113,15 @@ bool TestDataReductionProxyConfig::GetIsCaptivePortal() const {
   return is_captive_portal_;
 }
 
+bool TestDataReductionProxyConfig::ShouldAddDefaultProxyBypassRules() const {
+  return add_default_proxy_bypass_rules_;
+}
+
+void TestDataReductionProxyConfig::SetShouldAddDefaultProxyBypassRules(
+    bool add_default_proxy_bypass_rules) {
+  add_default_proxy_bypass_rules_ = add_default_proxy_bypass_rules;
+}
+
 MockDataReductionProxyConfig::MockDataReductionProxyConfig(
     std::unique_ptr<DataReductionProxyConfigValues> config_values,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
@@ -130,10 +135,6 @@ MockDataReductionProxyConfig::MockDataReductionProxyConfig(
                                    event_creator) {}
 
 MockDataReductionProxyConfig::~MockDataReductionProxyConfig() {
-}
-
-void MockDataReductionProxyConfig::ResetLoFiStatusForTest() {
-  lofi_off_ = false;
 }
 
 }  // namespace data_reduction_proxy

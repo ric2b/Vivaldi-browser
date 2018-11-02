@@ -6,6 +6,7 @@
 
 #import "base/logging.h"
 #import "base/mac/foundation_util.h"
+#import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/chrome/browser/ui/payments/payment_request_picker_row.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -71,6 +72,13 @@ NSString* const kPaymentRequestPickerSearchBarAccessibilityID =
     _appBar = [[MDCAppBar alloc] init];
     [self addChildViewController:_appBar.headerViewController];
     ConfigureAppBarWithCardStyle(_appBar);
+
+    // Set up leading (back) button.
+    UIBarButtonItem* backButton =
+        [ChromeIcon templateBarButtonItemWithImage:[ChromeIcon backIcon]
+                                            target:self
+                                            action:@selector(onBack)];
+    self.appBar.navigationBar.backItem = backButton;
   }
   return self;
 }
@@ -89,8 +97,6 @@ NSString* const kPaymentRequestPickerSearchBarAccessibilityID =
   [super viewDidLoad];
 
   self.tableView.delegate = self;
-  self.tableView.layoutMargins = UIEdgeInsetsZero;
-  self.tableView.separatorInset = UIEdgeInsetsZero;
 
   const bool isFullScreen =
       !IsIPadIdiom() || ([self navigationController].modalPresentationStyle !=
@@ -230,8 +236,25 @@ NSString* const kPaymentRequestPickerSearchBarAccessibilityID =
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (self.selectedRow) {
+    NSIndexPath* oldSelectedIndexPath = [self indexPathForRow:self.selectedRow];
+    self.selectedRow = nil;
+
+    // Update the previously selected row if it is displaying.
+    if (oldSelectedIndexPath) {
+      UITableViewCell* cell =
+          [self.tableView cellForRowAtIndexPath:oldSelectedIndexPath];
+      cell.accessoryType = UITableViewCellAccessoryNone;
+      cell.accessibilityTraits &= ~UIAccessibilityTraitSelected;
+    }
+  }
+
   self.selectedRow =
       [[self rowsInSection:indexPath.section] objectAtIndex:indexPath.row];
+
+  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
+  cell.accessoryType = UITableViewCellAccessoryCheckmark;
+  cell.accessibilityTraits |= UIAccessibilityTraitSelected;
 
   [_delegate paymentRequestPickerViewController:self
                                    didSelectRow:self.selectedRow];
@@ -259,6 +282,9 @@ NSString* const kPaymentRequestPickerSearchBarAccessibilityID =
 
 #pragma mark - Private
 
+- (void)onBack {
+  [self.delegate paymentRequestPickerViewControllerDidFinish:self];
+}
 // Creates a mapping from section titles to rows in that section, for currently
 // displaying rows, and updates |sectionTitleToSectionRowsMap|.
 - (void)updateSectionTitleToSectionRowsMap {

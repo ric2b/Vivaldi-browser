@@ -26,12 +26,11 @@
 #ifndef HTMLStackItem_h
 #define HTMLStackItem_h
 
-#include "core/HTMLNames.h"
-#include "core/MathMLNames.h"
-#include "core/SVGNames.h"
 #include "core/dom/Element.h"
 #include "core/html/parser/AtomicHTMLToken.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/html_names.h"
+#include "core/mathml_names.h"
+#include "core/svg_names.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
@@ -180,7 +179,7 @@ class HTMLStackItem : public GarbageCollectedFinalized<HTMLStackItem> {
            tag_name == HTMLNames::xmpTag;
   }
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(node_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(node_); }
 
  private:
   HTMLStackItem(ContainerNode* node, ItemType type) : node_(node) {

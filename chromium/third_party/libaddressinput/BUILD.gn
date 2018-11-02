@@ -36,14 +36,8 @@ grit("strings") {
 }
 
 config("libaddressinput_config") {
-  defines = [
-    "I18N_ADDRESSINPUT_USE_BASICTYPES_OVERRIDE=1",
-    "I18N_ADDRESS_VALIDATION_DATA_URL=\"https://chromium-i18n.appspot.com/ssl-aggregate-address/\"",
-  ]
-  include_dirs = [
-    "src/cpp/include",
-    "chromium/override",
-  ]
+  defines = [ "I18N_ADDRESS_VALIDATION_DATA_URL=\"https://chromium-i18n.appspot.com/ssl-aggregate-address/\"" ]
+  include_dirs = [ "src/cpp/include" ]
 }
 
 # This target provides basic functionality which is cooked into the build.
@@ -143,6 +137,19 @@ static_library("libaddressinput") {
   ]
 }
 
+if (is_ios) {
+  bundle_data("countryinfo_test_bundle_data") {
+    testonly = true
+    sources = [
+      "//third_party/libaddressinput/src/testdata/countryinfo.txt",
+    ]
+    outputs = [
+      "{{bundle_resources_dir}}/" +
+          "{{source_root_relative_dir}}/{{source_file_part}}",
+    ]
+  }
+}
+
 # This target provides utilities for tests of libaddressinput.
 source_set("test_support") {
   testonly = true
@@ -160,11 +167,18 @@ source_set("test_support") {
 
   defines = [ "TEST_DATA_DIR=\"src/third_party/libaddressinput/src/testdata\"" ]
 
+  data = [
+    "//third_party/libaddressinput/src/testdata/",
+  ]
+
   include_dirs = [ "src/cpp/src" ]
 
   deps = [
     ":libaddressinput",
   ]
+  if (is_ios) {
+    deps += [ ":countryinfo_test_bundle_data" ]
+  }
 }
 
 test("libaddressinput_unittests") {
@@ -207,7 +221,6 @@ test("libaddressinput_unittests") {
     "src/cpp/test/testdata_source_test.cc",
     "src/cpp/test/util/json_test.cc",
     "src/cpp/test/util/md5_unittest.cc",
-    "src/cpp/test/util/scoped_ptr_unittest.cc",
     "src/cpp/test/util/string_compare_test.cc",
     "src/cpp/test/util/string_split_unittest.cc",
     "src/cpp/test/util/string_util_test.cc",

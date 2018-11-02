@@ -18,16 +18,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsDelayedProvider;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 
 /**
  * Unit test suite for partner homepage.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(ChromeJUnit4ClassRunner.class)
 public class PartnerHomepageUnitTest {
     @Rule
     public BasePartnerBrowserCustomizationUnitTestRule mTestRule =
@@ -41,11 +41,13 @@ public class PartnerHomepageUnitTest {
 
     @Before
     public void setUp() throws Exception {
-        mHomepageManager = HomepageManager.getInstance(mTestRule.getContextWrapper());
+        mHomepageManager = HomepageManager.getInstance();
         Assert.assertNotNull(mHomepageManager);
 
         Assert.assertNotSame(
                 TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI, TEST_CUSTOM_HOMEPAGE_URI);
+
+        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
     }
 
     /**
@@ -59,10 +61,9 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        // Note that unlike other tests in this file, we do not call
-        // PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
-        // here to test if Chrome ignores a customizations provider that is not from
-        // a system package.
+        // Note that unlike other tests in this file, we test if Chrome ignores a customizations
+        // provider that is not from a system package.
+        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(false);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -80,9 +81,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isInitialized());
         Assert.assertFalse(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertNull(PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertFalse(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
     }
 
     /**
@@ -96,7 +97,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_NO_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -113,13 +113,13 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isInitialized());
         Assert.assertFalse(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertNull(PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertFalse(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
     }
 
     /**
-     * Everything is enabled for using partner homepage, except that the homepage prefererence is
+     * Everything is enabled for using partner homepage, except that the homepage preference is
      * disabled.
      */
     @Test
@@ -131,7 +131,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -150,9 +149,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertEquals(TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI,
                 PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertTrue(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
     }
 
     /**
@@ -168,7 +167,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(false);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -187,10 +185,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertEquals(TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI,
                 PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertTrue(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertTrue(HomepageManager.isHomepageEnabled());
         Assert.assertTrue(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertEquals(TEST_CUSTOM_HOMEPAGE_URI,
-                HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertEquals(TEST_CUSTOM_HOMEPAGE_URI, HomepageManager.getHomepageUri());
     }
 
     /**
@@ -205,7 +202,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_DELAYED_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -221,9 +217,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertFalse(PartnerBrowserCustomizations.isInitialized());
         Assert.assertFalse(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertNull(PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertFalse(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
 
         PartnerBrowserCustomizations.setOnInitializeAsyncFinished(mTestRule.getCallback(), 2000);
 
@@ -232,9 +228,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isInitialized());
         Assert.assertFalse(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertNull(PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertFalse(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
     }
 
     /**
@@ -251,7 +247,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_DELAYED_PROVIDER);
         mTestRule.setDelayProviderUriPathForDelay(
@@ -269,9 +264,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertFalse(PartnerBrowserCustomizations.isInitialized());
         Assert.assertFalse(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertNull(PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         Assert.assertFalse(HomepageManager.shouldShowHomepageSetting());
-        Assert.assertNull(HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+        Assert.assertNull(HomepageManager.getHomepageUri());
 
         PartnerBrowserCustomizations.setOnInitializeAsyncFinished(mTestRule.getCallback(), 3000);
 
@@ -281,10 +276,10 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertEquals(TestPartnerBrowserCustomizationsDelayedProvider.HOMEPAGE_URI,
                 PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertTrue(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertTrue(HomepageManager.isHomepageEnabled());
         Assert.assertTrue(HomepageManager.shouldShowHomepageSetting());
         Assert.assertEquals(TestPartnerBrowserCustomizationsDelayedProvider.HOMEPAGE_URI,
-                HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+                HomepageManager.getHomepageUri());
     }
 
     /**
@@ -300,7 +295,6 @@ public class PartnerHomepageUnitTest {
         mHomepageManager.setPrefHomepageUseDefaultUri(true);
         mHomepageManager.setPrefHomepageCustomUri(TEST_CUSTOM_HOMEPAGE_URI);
 
-        PartnerBrowserCustomizations.ignoreBrowserProviderSystemPackageCheckForTests(true);
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -319,9 +313,9 @@ public class PartnerHomepageUnitTest {
         Assert.assertTrue(PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled());
         Assert.assertEquals(TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI,
                 PartnerBrowserCustomizations.getHomePageUrl());
-        Assert.assertTrue(HomepageManager.isHomepageEnabled(mTestRule.getContextWrapper()));
+        Assert.assertTrue(HomepageManager.isHomepageEnabled());
         Assert.assertTrue(HomepageManager.shouldShowHomepageSetting());
         Assert.assertEquals(TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI,
-                HomepageManager.getHomepageUri(mTestRule.getContextWrapper()));
+                HomepageManager.getHomepageUri());
     }
 }

@@ -22,6 +22,7 @@
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "ui/app_list/app_list_switches.h"
+#include "ui/app_list/app_list_util.h"
 #include "ui/events/event_constants.h"
 
 namespace app_list {
@@ -40,7 +41,7 @@ ExtensionAppResult::ExtensionAppResult(Profile* profile,
 
   is_platform_app_ = extension->is_platform_app();
   icon_ = extensions::ChromeAppIconService::Get(profile)->CreateIcon(
-      this, app_id, GetPreferredIconDimension());
+      this, app_id, GetPreferredIconDimension(this));
 
   StartObservingExtensionRegistry();
 }
@@ -50,7 +51,6 @@ ExtensionAppResult::~ExtensionAppResult() {
 }
 
 void ExtensionAppResult::Open(int event_flags) {
-  RecordHistogram(APP_SEARCH_RESULT);
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile())->GetInstalledExtension(
           app_id());
@@ -61,11 +61,13 @@ void ExtensionAppResult::Open(int event_flags) {
   if (!extensions::util::IsAppLaunchable(app_id(), profile()))
     return;
 
-  // Check if enable flow is already running or should be started
+  // Check if enable flow is already running or should be started.
   if (RunExtensionEnableFlow())
     return;
 
+  // Record the search metrics if the SearchResult is not a suggested app.
   if (display_type() != DISPLAY_RECOMMENDATION) {
+    RecordHistogram(APP_SEARCH_RESULT);
     extensions::RecordAppListSearchLaunch(extension);
     base::RecordAction(base::UserMetricsAction("AppList_ClickOnAppFromSearch"));
   }

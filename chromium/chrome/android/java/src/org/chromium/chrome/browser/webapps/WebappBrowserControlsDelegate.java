@@ -9,7 +9,6 @@ import android.text.TextUtils;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate;
-import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 
 class WebappBrowserControlsDelegate extends TabStateBrowserControlsVisibilityDelegate {
@@ -24,8 +23,9 @@ class WebappBrowserControlsDelegate extends TabStateBrowserControlsVisibilityDel
     public boolean canShowBrowserControls() {
         if (!super.canShowBrowserControls()) return false;
 
-        return shouldShowBrowserControls(
-                mActivity.getWebappInfo(), mTab.getUrl(), mTab.getSecurityLevel());
+        return shouldShowBrowserControls(mActivity.scopePolicy(), mActivity.getWebappInfo(),
+                mTab.getUrl(), mTab.getSecurityLevel(),
+                mActivity.getBrowserSession() != null && mActivity.didVerificationFail());
     }
 
     @Override
@@ -33,7 +33,7 @@ class WebappBrowserControlsDelegate extends TabStateBrowserControlsVisibilityDel
         return canAutoHideBrowserControls(mTab.getSecurityLevel());
     }
 
-    boolean canAutoHideBrowserControls(int securityLevel) {
+    static boolean canAutoHideBrowserControls(int securityLevel) {
         // Allow auto-hiding browser controls unless they are shown because of low security level.
         return !shouldShowBrowserControlsForSecurityLevel(securityLevel);
     }
@@ -44,30 +44,53 @@ class WebappBrowserControlsDelegate extends TabStateBrowserControlsVisibilityDel
      * @param info data of a Web App
      * @param url The webapp's current URL
      * @param securityLevel The security level for the webapp's current URL.
+     * @param twaVerificationFailed Whether a verification attempt for TWA to client has failed.
      * @return Whether the browser controls should be shown for {@code url}.
      */
-    boolean shouldShowBrowserControls(WebappInfo info, String url, int securityLevel) {
+    static boolean shouldShowBrowserControls(WebappScopePolicy scopePolicy, WebappInfo info,
+            String url, int securityLevel, boolean twaVerificationFailed) {
         // Do not show browser controls when URL is not ready yet.
         if (TextUtils.isEmpty(url)) return false;
 
-        return shouldShowBrowserControlsForUrl(info, url)
+        // If this is a Trusted Web Activity that has failed verification, always show browser
+        // controls independent of policy/webapp info.
+        return twaVerificationFailed || shouldShowBrowserControlsForUrl(scopePolicy, info, url)
                 || shouldShowBrowserControlsForDisplayMode(info)
                 || shouldShowBrowserControlsForSecurityLevel(securityLevel);
+    }
+
+    /**
+     * Determines whether the close button should be shown in the PWA toolbar.
+     *
+     * This is called by {@link WebappActivity}, but contained here as it uses the same concepts
+     * that are used to determine visibility of the browser toolbar.
+     */
+    static boolean shouldShowToolbarCloseButton(WebappActivity activity) {
+        // Show if we're on the URL requiring browser controls, i.e. off-scope.
+        return shouldShowBrowserControlsForUrl(activity.scopePolicy(), activity.mWebappInfo,
+                       activity.getActivityTab().getUrl())
+                // Also keep shown if toolbar is not visible, so that during the in and off-scope
+                // transitions we avoid button flickering when toolbar is appearing/disappearing.
+                || !shouldShowBrowserControls(activity.scopePolicy(), activity.mWebappInfo,
+                           activity.getActivityTab().getUrl(),
+                           activity.getActivityTab().getSecurityLevel(),
+                           activity.getBrowserSession() != null && activity.didVerificationFail());
     }
 
     /**
      * Returns whether the browser controls should be shown when a webapp is navigated to
      * {@code url}.
      */
-    protected boolean shouldShowBrowserControlsForUrl(WebappInfo info, String url) {
-        return !UrlUtilities.sameDomainOrHost(info.uri().toString(), url, true);
+    private static boolean shouldShowBrowserControlsForUrl(
+            WebappScopePolicy scopePolicy, WebappInfo webappInfo, String url) {
+        return !scopePolicy.isUrlInScope(webappInfo, url);
     }
 
-    private boolean shouldShowBrowserControlsForSecurityLevel(int securityLevel) {
+    private static boolean shouldShowBrowserControlsForSecurityLevel(int securityLevel) {
         return securityLevel == ConnectionSecurityLevel.DANGEROUS;
     }
 
-    private boolean shouldShowBrowserControlsForDisplayMode(WebappInfo info) {
+    private static boolean shouldShowBrowserControlsForDisplayMode(WebappInfo info) {
         return info.displayMode() != WebDisplayMode.STANDALONE
                 && info.displayMode() != WebDisplayMode.FULLSCREEN;
     }

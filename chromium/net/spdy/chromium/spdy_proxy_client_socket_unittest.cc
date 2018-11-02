@@ -4,13 +4,11 @@
 
 #include "net/spdy/chromium/spdy_proxy_client_socket.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/base/address_list.h"
@@ -188,8 +186,9 @@ void SpdyProxyClientSocketTest::Initialize(MockRead* reads,
   session_deps_.socket_factory->AddSocketDataProvider(data_.get());
 
   SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-  ASSERT_TRUE(ssl.cert);
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   session_deps_.host_resolver->set_synchronous_mode(true);
@@ -297,14 +296,14 @@ void SpdyProxyClientSocketTest::AssertWriteLength(int len) {
 
 void SpdyProxyClientSocketTest::PopulateConnectRequestIR(
     SpdyHeaderBlock* block) {
-  (*block)[spdy_util_.GetMethodKey()] = "CONNECT";
-  (*block)[spdy_util_.GetHostKey()] = kOriginHostPort;
+  (*block)[kHttp2MethodHeader] = "CONNECT";
+  (*block)[kHttp2AuthorityHeader] = kOriginHostPort;
   (*block)["user-agent"] = kUserAgent;
 }
 
 void SpdyProxyClientSocketTest::PopulateConnectReplyIR(SpdyHeaderBlock* block,
                                                        const char* status) {
-  (*block)[spdy_util_.GetStatusKey()] = status;
+  (*block)[kHttp2StatusHeader] = status;
 }
 
 // Constructs a standard SPDY HEADERS frame for a CONNECT request.

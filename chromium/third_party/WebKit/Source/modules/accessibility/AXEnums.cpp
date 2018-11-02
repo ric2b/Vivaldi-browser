@@ -4,9 +4,6 @@
 
 #include "modules/accessibility/AXEnums.h"
 
-#include "core/HTMLElementTypeHelpers.h"
-#include "core/dom/Element.h"
-#include "core/dom/Node.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/StringHash.h"
@@ -33,7 +30,8 @@ STATIC_ASSERT_ENUM(kWebAXRoleCheckBox, kCheckBoxRole);
 STATIC_ASSERT_ENUM(kWebAXRoleColorWell, kColorWellRole);
 STATIC_ASSERT_ENUM(kWebAXRoleColumnHeader, kColumnHeaderRole);
 STATIC_ASSERT_ENUM(kWebAXRoleColumn, kColumnRole);
-STATIC_ASSERT_ENUM(kWebAXRoleComboBox, kComboBoxRole);
+STATIC_ASSERT_ENUM(kWebAXRoleComboBoxGrouping, kComboBoxGroupingRole);
+STATIC_ASSERT_ENUM(kWebAXRoleComboBoxMenuButton, kComboBoxMenuButtonRole);
 STATIC_ASSERT_ENUM(kWebAXRoleComplementary, kComplementaryRole);
 STATIC_ASSERT_ENUM(kWebAXRoleContentInfo, kContentInfoRole);
 STATIC_ASSERT_ENUM(kWebAXRoleDate, kDateRole);
@@ -120,6 +118,7 @@ STATIC_ASSERT_ENUM(kWebAXRoleTableHeaderContainer, kTableHeaderContainerRole);
 STATIC_ASSERT_ENUM(kWebAXRoleTable, kTableRole);
 STATIC_ASSERT_ENUM(kWebAXRoleTerm, kTermRole);
 STATIC_ASSERT_ENUM(kWebAXRoleTextField, kTextFieldRole);
+STATIC_ASSERT_ENUM(kWebAXRoleTextFieldWithComboBox, kTextFieldWithComboBoxRole);
 STATIC_ASSERT_ENUM(kWebAXRoleTime, kTimeRole);
 STATIC_ASSERT_ENUM(kWebAXRoleTimer, kTimerRole);
 STATIC_ASSERT_ENUM(kWebAXRoleToggleButton, kToggleButtonRole);
@@ -136,6 +135,8 @@ STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kActivate,
                    AXDefaultActionVerb::kActivate);
 STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kCheck, AXDefaultActionVerb::kCheck);
 STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kClick, AXDefaultActionVerb::kClick);
+STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kClickAncestor,
+                   AXDefaultActionVerb::kClickAncestor);
 STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kJump, AXDefaultActionVerb::kJump);
 STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kOpen, AXDefaultActionVerb::kOpen);
 STATIC_ASSERT_ENUM(WebAXDefaultActionVerb::kPress, AXDefaultActionVerb::kPress);

@@ -6,12 +6,13 @@
 
 #include <map>
 
+#include "base/containers/adapters.h"
 #include "base/format_macros.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/trace_event/trace_event_argument.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer.h"
 
 namespace profiling {
@@ -21,51 +22,179 @@ namespace {
 // Maps strings to integers for the JSON string table.
 using StringTable = std::map<std::string, size_t>;
 
+constexpr uint32_t kAllocatorCount =
+    static_cast<uint32_t>(AllocatorType::kCount);
+
 struct BacktraceNode {
-  BacktraceNode(size_t sid, size_t p) : string_id(sid), parent(p) {}
+  BacktraceNode(size_t string_id, size_t parent)
+      : string_id_(string_id), parent_(parent) {}
 
   static constexpr size_t kNoParent = static_cast<size_t>(-1);
 
+  size_t string_id() const { return string_id_; }
+  size_t parent() const { return parent_; }
+
   bool operator<(const BacktraceNode& other) const {
-    if (string_id == other.string_id)
-      return parent < other.parent;
-    return string_id < other.string_id;
+    return std::tie(string_id_, parent_) <
+           std::tie(other.string_id_, other.parent_);
   }
 
-  size_t string_id;
-  size_t parent;  // kNoParent indicates no parent.
+ private:
+  const size_t string_id_;
+  const size_t parent_;  // kNoParent indicates no parent.
 };
 
 using BacktraceTable = std::map<BacktraceNode, size_t>;
 
-// Used as a map key to uniquify an allocation with a given size and stack.
-// Since backtraces are uniquified, this does pointer comparisons on the
-// backtrace to give a stable ordering, even if that ordering has no
-// intrinsic meaning.
+// Used as a temporary map key to uniquify an allocation with a given context
+// and stack. A lock is held when dumping bactraces that guarantees that no
+// Backtraces will be created or destroyed during the lifetime of that
+// structure. Therefore it's safe to use a raw pointer Since backtraces are
+// uniquified, this does pointer comparisons on the backtrace to give a stable
+// ordering, even if that ordering has no intrinsic meaning.
 struct UniqueAlloc {
-  UniqueAlloc(const Backtrace* bt, size_t sz) : backtrace(bt), size(sz) {}
+ public:
+  UniqueAlloc(const Backtrace* bt, int ctx_id)
+      : backtrace(bt), context_id(ctx_id) {}
 
   bool operator<(const UniqueAlloc& other) const {
-    return std::tie(backtrace, size) < std::tie(other.backtrace, other.size);
+    return std::tie(backtrace, context_id) <
+           std::tie(other.backtrace, other.context_id);
   }
 
-  const Backtrace* backtrace;
-  size_t size;
+  const Backtrace* backtrace = nullptr;
+  const int context_id = 0;
 };
 
-using UniqueAllocCount = std::map<UniqueAlloc, int>;
+struct UniqueAllocMetrics {
+  size_t size = 0;
+  size_t count = 0;
+};
 
-// Trace events support different "types" of allocations which various
-// subsystems annotate stuff with for other types of tracing. For our purposes
-// we only have one type, and use this ID.
-constexpr int kTypeId = 0;
+using UniqueAllocationMap = std::map<UniqueAlloc, UniqueAllocMetrics>;
+
+// The hardcoded ID for having no context for an allocation.
+constexpr int kUnknownTypeId = 0;
+
+const char* StringForAllocatorType(uint32_t type) {
+  switch (static_cast<AllocatorType>(type)) {
+    case AllocatorType::kMalloc:
+      return "malloc";
+    case AllocatorType::kPartitionAlloc:
+      return "partition_alloc";
+    case AllocatorType::kOilpan:
+      return "blink_gc";
+    default:
+      NOTREACHED();
+      return "unknown";
+  }
+}
+
+std::string ProcessNameFromProcessType(mojom::ProcessType process_type) {
+  switch (process_type) {
+    case mojom::ProcessType::BROWSER:
+      return "Browser";
+    case mojom::ProcessType::RENDERER:
+      return "Renderer";
+    case mojom::ProcessType::GPU:
+      return "Gpu";
+    case mojom::ProcessType::OTHER:
+      return "Other";
+  }
+  return "Unknown";
+}
+
+std::string ProcessMainThreadNameFromProcessType(
+    mojom::ProcessType process_type) {
+  switch (process_type) {
+    case mojom::ProcessType::BROWSER:
+      return "CrBrowserMain";
+    case mojom::ProcessType::RENDERER:
+      return "CrRendererMain";
+    case mojom::ProcessType::GPU:
+      return "CrGpuMain";
+    case mojom::ProcessType::OTHER:
+      return "CrOtherMain";
+  }
+  return "CrUnknownMain";
+}
 
 // Writes a dummy process name entry given a PID. When we have more information
 // on a process it can be filled in here. But for now the tracing tools expect
 // this entry since everything is associated with a PID.
-void WriteProcessName(int pid, std::ostream& out) {
+void WriteProcessName(int pid, const ExportParams& params, std::ostream& out) {
   out << "{ \"pid\":" << pid << ", \"ph\":\"M\", \"name\":\"process_name\", "
-      << "\"args\":{\"name\":\"Browser process\"}}";
+      << "\"args\":{\"name\":\""
+      << ProcessNameFromProcessType(params.process_type) << "\"}},";
+
+  // Catapult needs a thread named "CrBrowserMain" to recognize Chrome browser.
+  out << "{ \"pid\":" << pid << ", \"ph\":\"M\", \"name\":\"thread_name\", "
+      << "\"tid\": 1,"
+      << "\"args\":{\"name\":\""
+      << ProcessMainThreadNameFromProcessType(params.process_type) << "\"}},";
+
+  // At least, one event must be present on the thread to avoid being pruned.
+  out << "{ \"name\": \"MemlogTraceEvent\", \"cat\": \"memlog\", "
+      << "\"ph\": \"B\", \"ts\": 1, \"pid\": " << pid << ", "
+      << "\"tid\": 1, \"args\": {}}";
+}
+
+// Writes the top-level allocators section. This section is used by the tracing
+// UI to show a small summary for each allocator. It's necessary as a
+// placeholder to allow the stack-viewing UI to be shown.
+//
+// Each array should be the number of allocators long.
+void WriteAllocatorsSummary(size_t total_size[],
+                            size_t total_count[],
+                            std::ostream& out) {
+  out << "\"allocators\":{\n";
+  for (uint32_t i = 0; i < kAllocatorCount; i++) {
+    const char* alloc_type = StringForAllocatorType(i);
+
+    // Overall sizes.
+    static constexpr char kAttrsSizeBody[] = R"(
+      "%s": {
+        "attrs": {
+          "virtual_size": {
+            "type": "scalar",
+            "units": "bytes",
+            "value": "%zx"
+          },
+          "size": {
+            "type": "scalar",
+            "units": "bytes",
+            "value": "%zx"
+          }
+        }
+      },)";
+    out << base::StringPrintf(kAttrsSizeBody, alloc_type, total_size[i],
+                              total_size[i]);
+
+    // Allocated objects.
+    static constexpr char kAttrsObjectsBody[] = R"(
+      "%s/allocated_objects": {
+        "attrs": {
+          "shim_allocated_objects_count": {
+            "type": "scalar",
+            "units": "objects",
+            "value": "%zx"
+          },
+          "shim_allocated_objects_size": {
+            "type": "scalar",
+            "units": "bytes",
+            "value": "%zx"
+          }
+        }
+      })";
+    out << base::StringPrintf(kAttrsObjectsBody, alloc_type, total_count[i],
+                              total_size[i]);
+
+    // Comma except for the last time.
+    if (i < kAllocatorCount - 1)
+      out << ',';
+    out << "\n";
+  }
+  out << "},\n";
 }
 
 // Writes the dictionary keys to preceed a "dumps" trace argument.
@@ -86,7 +215,6 @@ void WriteDumpsFooter(std::ostream& out) {
 // Writes the dictionary keys to preceed a "heaps_v2" trace argument inside a
 // "dumps". This is "v2" heap dump format.
 void WriteHeapsV2Header(std::ostream& out) {
-  out << "\"level_of_detail\":\"detailed\",\n";
   out << "\"heaps_v2\": {\n";
 }
 
@@ -95,12 +223,10 @@ void WriteHeapsV2Footer(std::ostream& out) {
   out << "}";  // heaps_v2
 }
 
-void WriteMemoryMaps(
-    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
-    std::ostream& out) {
+void WriteMemoryMaps(const ExportParams& params, std::ostream& out) {
   base::trace_event::TracedValue traced_value;
-  memory_instrumentation::TracingObserver::MemoryMapsAsValueInto(maps,
-                                                                 &traced_value);
+  memory_instrumentation::TracingObserver::MemoryMapsAsValueInto(
+      params.maps, &traced_value, params.is_argument_filtering_enabled);
   out << "\"process_mmaps\":" << traced_value.ToString();
 }
 
@@ -109,6 +235,33 @@ size_t AddOrGetString(std::string str, StringTable* string_table) {
   auto result = string_table->emplace(std::move(str), string_table->size());
   // "result.first" is an iterator into the map.
   return result.first->second;
+}
+
+// Processes the context information needed for the give set of allocations.
+// Strings are added for each referenced context and a mapping between
+// context IDs and string IDs is filled in for each.
+void FillContextStrings(const UniqueAllocationMap& allocations,
+                        const std::map<std::string, int>& context_map,
+                        StringTable* string_table,
+                        std::map<int, size_t>* context_to_string_map) {
+  std::set<int> used_context;
+  for (const auto& alloc : allocations)
+    used_context.insert(alloc.first.context_id);
+
+  if (used_context.find(kUnknownTypeId) != used_context.end()) {
+    // Hard code a string for the unknown context type.
+    context_to_string_map->emplace(kUnknownTypeId,
+                                   AddOrGetString("[unknown]", string_table));
+  }
+
+  // The context map is backwards from what we need, so iterate through the
+  // whole thing and see which ones are used.
+  for (const auto& context : context_map) {
+    if (used_context.find(context.second) != used_context.end()) {
+      size_t string_id = AddOrGetString(context.first, string_table);
+      context_to_string_map->emplace(context.second, string_id);
+    }
+  }
 }
 
 size_t AddOrGetBacktraceNode(BacktraceNode node,
@@ -126,7 +279,8 @@ size_t AppendBacktraceStrings(const Backtrace& backtrace,
                               BacktraceTable* backtrace_table,
                               StringTable* string_table) {
   int parent = -1;
-  for (const Address& addr : backtrace.addrs()) {
+  // Addresses must be outputted in reverse order.
+  for (const Address& addr : base::Reversed(backtrace.addrs())) {
     static constexpr char kPcPrefix[] = "pc:";
     // std::numeric_limits<>::digits gives the number of bits in the value.
     // Dividing by 4 gives the number of hex digits needed to store the value.
@@ -181,52 +335,76 @@ void WriteMapNodes(const BacktraceTable& nodes, std::ostream& out) {
       first_time = false;
 
     out << "{\"id\":" << node.second;
-    out << ",\"name_sid\":" << node.first.string_id;
-    if (node.first.parent != BacktraceNode::kNoParent)
-      out << ",\"parent\":" << node.first.parent;
+    out << ",\"name_sid\":" << node.first.string_id();
+    if (node.first.parent() != BacktraceNode::kNoParent)
+      out << ",\"parent\":" << node.first.parent();
     out << "}";
+  }
+  out << "]";
+}
+
+// Write the types array in the maps section. These are the context for each
+// allocation and just maps IDs to string IDs.
+//    "types":[
+//      {"id":1, "name_sid":123},
+//    ]
+void WriteTypeNodes(const std::map<int, size_t>& type_to_string,
+                    std::ostream& out) {
+  out << "\"types\":[";
+
+  bool first_time = true;
+  for (const auto& type : type_to_string) {
+    if (!first_time)
+      out << ",\n";
+    else
+      first_time = false;
+
+    out << "{\"id\":" << type.first << ",\"name_sid\":" << type.second << "}";
   }
   out << "]";
 }
 
 // Writes the number of matching allocations array which looks like:
 //   "counts":[1, 1, 2]
-void WriteCounts(const UniqueAllocCount& alloc_counts, std::ostream& out) {
+void WriteCounts(const UniqueAllocationMap& allocations, std::ostream& out) {
   out << "\"counts\":[";
   bool first_time = true;
-  for (const auto& cur : alloc_counts) {
+  for (const auto& cur : allocations) {
     if (!first_time)
-      out << ",\n";
+      out << ",";
     else
       first_time = false;
-    out << cur.second;
+    out << cur.second.count;
   }
   out << "]";
 }
 
-// Writes the sizes of each allocation which looks like:
+// Writes the total sizes of each allocation which looks like:
 //   "sizes":[32, 64, 12]
-void WriteSizes(const UniqueAllocCount& alloc_counts, std::ostream& out) {
+void WriteSizes(const UniqueAllocationMap& allocations, std::ostream& out) {
   out << "\"sizes\":[";
   bool first_time = true;
-  for (const auto& cur : alloc_counts) {
+  for (const auto& cur : allocations) {
     if (!first_time)
-      out << ",\n";
+      out << ",";
     else
       first_time = false;
-    out << cur.first.size;
+    out << cur.second.size;
   }
   out << "]";
 }
 
 // Writes the types array of integers which looks like:
-//   "types":[0, 0, 0]
-void WriteTypes(const UniqueAllocCount& alloc_counts, std::ostream& out) {
+//   "types":[0, 0, 1]
+void WriteTypes(const UniqueAllocationMap& allocations, std::ostream& out) {
   out << "\"types\":[";
-  for (size_t i = 0; i < alloc_counts.size(); i++) {
-    if (i != 0)
+  bool first_time = true;
+  for (const auto& cur : allocations) {
+    if (!first_time)
       out << ",";
-    out << kTypeId;
+    else
+      first_time = false;
+    out << cur.first.context_id;
   }
   out << "]";
 }
@@ -234,14 +412,14 @@ void WriteTypes(const UniqueAllocCount& alloc_counts, std::ostream& out) {
 // Writes the nodes array which indexes for each allocation into the maps nodes
 // array written above. It looks like:
 //   "nodes":[1, 5, 10]
-void WriteAllocatorNodes(const UniqueAllocCount& alloc_counts,
+void WriteAllocatorNodes(const UniqueAllocationMap& allocations,
                          const std::map<const Backtrace*, size_t>& backtraces,
                          std::ostream& out) {
   out << "\"nodes\":[";
   bool first_time = true;
-  for (const auto& cur : alloc_counts) {
+  for (const auto& cur : allocations) {
     if (!first_time)
-      out << ",\n";
+      out << ",";
     else
       first_time = false;
     auto found = backtraces.find(cur.first.backtrace);
@@ -252,20 +430,19 @@ void WriteAllocatorNodes(const UniqueAllocCount& alloc_counts,
 
 }  // namespace
 
+ExportParams::ExportParams() = default;
+ExportParams::~ExportParams() = default;
+
 void ExportAllocationEventSetToJSON(
     int pid,
-    const AllocationEventSet& event_set,
-    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
-    std::ostream& out,
+    const ExportParams& params,
     std::unique_ptr<base::DictionaryValue> metadata_dict,
-    size_t min_size_threshold,
-    size_t min_count_threshold) {
+    std::ostream& out) {
   out << "{ \"traceEvents\": [";
-  WriteProcessName(pid, out);
+  WriteProcessName(pid, params, out);
   out << ",\n";
   WriteDumpsHeader(pid, out);
-  ExportMemoryMapsAndV2StackTraceToJSON(
-      event_set, maps, out, min_size_threshold, min_count_threshold);
+  ExportMemoryMapsAndV2StackTraceToJSON(params, out);
   WriteDumpsFooter(out);
   out << "]";
 
@@ -279,45 +456,55 @@ void ExportAllocationEventSetToJSON(
   out << "}\n";
 }
 
-void ExportMemoryMapsAndV2StackTraceToJSON(
-    const AllocationEventSet& event_set,
-    const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
-    std::ostream& out,
-    size_t min_size_threshold,
-    size_t min_count_threshold) {
+void ExportMemoryMapsAndV2StackTraceToJSON(const ExportParams& params,
+                                           std::ostream& out) {
   // Start dictionary.
   out << "{\n";
 
-  WriteMemoryMaps(maps, out);
+  WriteMemoryMaps(params, out);
   out << ",\n";
 
   // Write level of detail.
   out << R"("level_of_detail": "detailed")"
       << ",\n";
 
-  // Write the top-level allocators section. This section is used by the tracing
-  // UI to show a small summary for each allocator. It's necessary as a
-  // placeholder to allow the stack-viewing UI to be shown.
-  // TODO: Fill in placeholders for "value". https://crbug.com/758434.
-  out << R"(
-  "allocators": {
-    "malloc": {
-      "attrs": {
-        "virtual_size": {
-          "type": "scalar",
-          "units": "bytes",
-          "value": "1234"
-        },
-        "size": {
-          "type": "scalar",
-          "units": "bytes",
-          "value": "1234"
-        }
+  // Aggregate stats for each allocator type.
+  size_t total_size[kAllocatorCount] = {0};
+  size_t total_count[kAllocatorCount] = {0};
+  UniqueAllocationMap filtered_allocations[kAllocatorCount];
+  for (const auto& alloc_pair : params.allocs) {
+    uint32_t allocator_index =
+        static_cast<uint32_t>(alloc_pair.first.allocator());
+    size_t alloc_count = alloc_pair.second;
+    size_t alloc_size = alloc_pair.first.size();
+
+    size_t alloc_total_size = alloc_size * alloc_count;
+    total_size[allocator_index] += alloc_total_size;
+    total_count[allocator_index] += alloc_count;
+
+    UniqueAlloc unique_alloc(alloc_pair.first.backtrace(),
+                             alloc_pair.first.context_id());
+    UniqueAllocMetrics& unique_alloc_metrics =
+        filtered_allocations[allocator_index][unique_alloc];
+    unique_alloc_metrics.size += alloc_total_size;
+    unique_alloc_metrics.count += alloc_count;
+  }
+
+  // Filter irrelevant allocations.
+  // TODO(crbug:763595): Leave placeholders for pruned allocations.
+  for (uint32_t i = 0; i < kAllocatorCount; i++) {
+    for (auto alloc = filtered_allocations[i].begin();
+         alloc != filtered_allocations[i].end();) {
+      if (alloc->second.size < params.min_size_threshold &&
+          alloc->second.count < params.min_count_threshold) {
+        alloc = filtered_allocations[i].erase(alloc);
+      } else {
+        ++alloc;
       }
     }
-  },
-  )";
+  }
 
+  WriteAllocatorsSummary(total_size, total_count, out);
   WriteHeapsV2Header(out);
 
   // Output Heaps_V2 format version. Currently "1" is the only valid value.
@@ -325,27 +512,12 @@ void ExportMemoryMapsAndV2StackTraceToJSON(
 
   StringTable string_table;
 
-  // We hardcode one type, "[unknown]".
-  size_t type_string_id = AddOrGetString("[unknown]", &string_table);
-
-  // Aggregate allocations. Allocations of the same size and stack get grouped.
-  UniqueAllocCount alloc_counts;
-  for (const auto& alloc : event_set) {
-    UniqueAlloc unique_alloc(alloc.backtrace(), alloc.size());
-    alloc_counts[unique_alloc]++;
-  }
-
-  // Filter irrelevant allocations.
-  for (auto alloc = alloc_counts.begin(); alloc != alloc_counts.end();) {
-    size_t alloc_count = alloc->second;
-    size_t alloc_size = alloc->first.size;
-    size_t alloc_total_size = alloc_size * alloc_count;
-    if (alloc_total_size < min_size_threshold &&
-        alloc_count < min_count_threshold) {
-      alloc = alloc_counts.erase(alloc);
-    } else {
-      ++alloc;
-    }
+  // Put all required context strings in the string table and generate a
+  // mapping from allocation context_id to string ID.
+  std::map<int, size_t> context_to_string_map;
+  for (uint32_t i = 0; i < kAllocatorCount; i++) {
+    FillContextStrings(filtered_allocations[i], params.context_map,
+                       &string_table, &context_to_string_map);
   }
 
   // Find all backtraces referenced by the set and not filtered. The backtrace
@@ -355,8 +527,10 @@ void ExportMemoryMapsAndV2StackTraceToJSON(
   //
   // The map maps backtrace keys to node IDs (computed below).
   std::map<const Backtrace*, size_t> backtraces;
-  for (const auto& alloc : alloc_counts)
-    backtraces.emplace(alloc.first.backtrace, 0);
+  for (size_t i = 0; i < kAllocatorCount; i++) {
+    for (const auto& alloc : filtered_allocations[i])
+      backtraces.emplace(alloc.first.backtrace, 0);
+  }
 
   // Write each backtrace, converting the string for the stack entry to string
   // IDs. The backtrace -> node ID will be filled in at this time.
@@ -371,20 +545,29 @@ void ExportMemoryMapsAndV2StackTraceToJSON(
   out << ",\n";
   WriteMapNodes(nodes, out);
   out << ",\n";
-  out << "\"types\":[{\"id\":" << kTypeId << ",\"name_sid\":" << type_string_id
-      << "}]";
+  WriteTypeNodes(context_to_string_map, out);
   out << "},\n";  // End of maps section.
 
   // Allocators section.
-  out << "\"allocators\":{\"malloc\":{\n";
-  WriteCounts(alloc_counts, out);
-  out << ",\n";
-  WriteSizes(alloc_counts, out);
-  out << ",\n";
-  WriteTypes(alloc_counts, out);
-  out << ",\n";
-  WriteAllocatorNodes(alloc_counts, backtraces, out);
-  out << "}}\n";  // End of allocators section.
+  out << "\"allocators\":{\n";
+  for (uint32_t i = 0; i < kAllocatorCount; i++) {
+    out << "  \"" << StringForAllocatorType(i) << "\":{\n    ";
+
+    WriteCounts(filtered_allocations[i], out);
+    out << ",\n    ";
+    WriteSizes(filtered_allocations[i], out);
+    out << ",\n    ";
+    WriteTypes(filtered_allocations[i], out);
+    out << ",\n    ";
+    WriteAllocatorNodes(filtered_allocations[i], backtraces, out);
+    out << "\n  }";
+
+    // Comma every time but the last.
+    if (i < kAllocatorCount - 1)
+      out << ',';
+    out << "\n";
+  }
+  out << "}\n";  // End of allocators section.
 
   WriteHeapsV2Footer(out);
 

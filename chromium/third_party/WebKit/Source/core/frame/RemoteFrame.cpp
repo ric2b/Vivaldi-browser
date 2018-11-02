@@ -7,7 +7,6 @@
 #include "bindings/core/v8/WindowProxy.h"
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/dom/RemoteSecurityContext.h"
-#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteDOMWindow.h"
 #include "core/frame/RemoteFrameClient.h"
@@ -17,9 +16,10 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/PluginScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/loader/fetch/ResourceTimingInfo.h"
+#include "platform/plugins/PluginScriptForbiddenScope.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebLayer.h"
 
@@ -44,7 +44,7 @@ RemoteFrame::~RemoteFrame() {
   DCHECK(!view_);
 }
 
-DEFINE_TRACE(RemoteFrame) {
+void RemoteFrame::Trace(blink::Visitor* visitor) {
   visitor->Trace(view_);
   visitor->Trace(security_context_);
   Frame::Trace(visitor);
@@ -70,7 +70,7 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
   FrameLoader::SetReferrerForFrameRequest(frame_request);
 
   frame_request.GetResourceRequest().SetHasUserGesture(
-      UserGestureIndicator::ProcessingUserGesture());
+      Frame::HasTransientUserActivation(this));
   Client()->Navigate(frame_request.GetResourceRequest(),
                      frame_request.ReplacesCurrentItem());
 }
@@ -78,6 +78,11 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
 void RemoteFrame::Reload(FrameLoadType frame_load_type,
                          ClientRedirectPolicy client_redirect_policy) {
   Client()->Reload(frame_load_type, client_redirect_policy);
+}
+
+void RemoteFrame::AddResourceTiming(const ResourceTimingInfo& info) {
+  DCHECK(info.IsMainResource());
+  // TODO(dcheng): Perform origin check, filter out fields, and forward via IPC.
 }
 
 void RemoteFrame::Detach(FrameDetachType type) {

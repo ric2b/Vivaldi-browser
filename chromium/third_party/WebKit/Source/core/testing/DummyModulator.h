@@ -29,20 +29,15 @@ class DummyModulator : public Modulator {
  public:
   DummyModulator();
   virtual ~DummyModulator();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   ScriptModuleResolver* GetScriptModuleResolver() override;
   WebTaskRunner* TaskRunner() override;
   ReferrerPolicy GetReferrerPolicy() override;
-  SecurityOrigin* GetSecurityOrigin() override;
+  SecurityOrigin* GetSecurityOriginForFetch() override;
   ScriptState* GetScriptState() override;
 
   void FetchTree(const ModuleScriptFetchRequest&, ModuleTreeClient*) override;
-  void FetchTreeInternal(const ModuleScriptFetchRequest&,
-                         const AncestorList&,
-                         ModuleGraphLevel,
-                         ModuleTreeReachedUrlSet*,
-                         ModuleTreeClient*) override;
   void FetchSingle(const ModuleScriptFetchRequest&,
                    ModuleGraphLevel,
                    SingleModuleClient*) override;
@@ -53,8 +48,14 @@ class DummyModulator : public Modulator {
                             ModuleGraphLevel,
                             ModuleScriptLoaderClient*) override;
   bool HasValidContext() override;
+  void ResolveDynamically(const String& specifier,
+                          const KURL&,
+                          const ReferrerScriptInfo&,
+                          ScriptPromiseResolver*) override;
+  ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const override;
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
+                             const ScriptFetchOptions&,
                              AccessControlStatus,
                              const TextPosition&,
                              ExceptionState&) override;
@@ -62,7 +63,8 @@ class DummyModulator : public Modulator {
   ScriptModuleState GetRecordStatus(ScriptModule) override;
   ScriptValue GetError(const ModuleScript*) override;
   Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
-  void ExecuteModule(const ModuleScript*) override;
+  ScriptValue ExecuteModule(const ModuleScript*, CaptureEvalErrorFlag) override;
+  ModuleScriptFetcher* CreateModuleScriptFetcher() override;
 
   Member<ScriptModuleResolver> resolver_;
 };

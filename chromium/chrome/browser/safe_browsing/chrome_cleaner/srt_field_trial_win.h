@@ -52,9 +52,14 @@ enum PromptTypeHistogramValue {
   PROMPT_TYPE_MAX,
 };
 
-// When enabled, all user interaction with the Chrome Cleaner will happen from
-// within Chrome.
-extern const base::Feature kInBrowserCleanerUIFeature;
+// When enabled, shows a prompt dialog if a cleanup requires a reboot and the
+// Settings page is not the current active tab.
+extern const base::Feature kRebootPromptDialogFeature;
+
+// When enabled, users can initiate cleanups from the Settings page.
+extern const base::Feature kUserInitiatedChromeCleanupsFeature;
+
+extern const char kSRTPromptTrial[];
 
 // Returns true if this Chrome is in a field trial group which shows the SRT
 // prompt.
@@ -64,15 +69,21 @@ bool IsInSRTPromptFieldTrialGroups();
 // elevation icon, i.e., the SRT won't ask for elevation on startup.
 bool SRTPromptNeedsElevationIcon();
 
-// Returns true if this Chrome is in a field trial group which enables running
-// the SwReporter.
-bool IsSwReporterEnabled();
+// Returns true if feature kUserInitiatedChromeCleanupsFeature is enabled.
+bool UserInitiatedCleanupsEnabled();
 
 // Returns the correct SRT download URL for the current field trial.
 GURL GetSRTDownloadURL();
 
 // Returns the value of the incoming SRT seed.
 std::string GetIncomingSRTSeed();
+
+// Returns the group name in the SRTPrompt field trial.
+std::string GetSRTFieldTrialGroupName();
+
+// Returns true if the kRebootPromptDialogFeature is enabled and the prompt
+// dialog is modal.
+bool IsRebootPromptModal();
 
 // Records a value for the SRT Prompt Histogram.
 void RecordSRTPromptHistogram(SRTPromptHistogramValue value);

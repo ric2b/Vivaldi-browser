@@ -4,7 +4,8 @@
 
 #include "ash/login/ui/user_switch_flip_animation.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/interpolated_transform.h"
@@ -20,9 +21,9 @@ std::unique_ptr<ui::InterpolatedTransform> BuildRotation(int width,
   gfx::Transform to_center;
   to_center.Translate(width / 2.f, 0);
   auto move_to_center =
-      base::MakeUnique<ui::InterpolatedConstantTransform>(to_center);
+      std::make_unique<ui::InterpolatedConstantTransform>(to_center);
 
-  auto rotate = base::MakeUnique<ui::InterpolatedAxisAngleRotation>(
+  auto rotate = std::make_unique<ui::InterpolatedAxisAngleRotation>(
       gfx::Vector3dF(0, 1, 0), start_degrees, end_degrees);
 
   gfx::Transform from_center;
@@ -30,7 +31,7 @@ std::unique_ptr<ui::InterpolatedTransform> BuildRotation(int width,
     from_center.RotateAboutYAxis(180);
   from_center.Translate(-width / 2.f, 0);
   auto move_from_center =
-      base::MakeUnique<ui::InterpolatedConstantTransform>(from_center);
+      std::make_unique<ui::InterpolatedConstantTransform>(from_center);
 
   rotate->SetChild(std::move(move_to_center));
   move_from_center->SetChild(std::move(rotate));
@@ -56,7 +57,7 @@ UserSwitchFlipAnimation::UserSwitchFlipAnimation(int width,
                                          true /*horizontal_flip*/);
 }
 
-UserSwitchFlipAnimation::~UserSwitchFlipAnimation() {}
+UserSwitchFlipAnimation::~UserSwitchFlipAnimation() = default;
 
 void UserSwitchFlipAnimation::OnStart(ui::LayerAnimationDelegate* delegate) {}
 
@@ -69,7 +70,8 @@ bool UserSwitchFlipAnimation::OnProgress(double current,
     current *= 2;
     const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
     delegate->SetTransformFromAnimation(
-        first_half_transform_->Interpolate(tweened));
+        first_half_transform_->Interpolate(tweened),
+        ui::PropertyChangeReason::FROM_ANIMATION);
   }
 
   // Second half.
@@ -80,7 +82,8 @@ bool UserSwitchFlipAnimation::OnProgress(double current,
     current = (current - 0.5) * 2;
     const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
     delegate->SetTransformFromAnimation(
-        second_half_transform_->Interpolate(tweened));
+        second_half_transform_->Interpolate(tweened),
+        ui::PropertyChangeReason::FROM_ANIMATION);
   }
 
   return true;

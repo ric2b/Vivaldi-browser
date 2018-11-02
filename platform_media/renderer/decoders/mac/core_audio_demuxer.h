@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef MEDIA_FILTERS_CORE_AUDIO_DEMUXER_H_
-#define MEDIA_FILTERS_CORE_AUDIO_DEMUXER_H_
+#ifndef PLATFORM_MEDIA_RENDERER_DECODERS_MAC_CORE_AUDIO_DEMUXER_H_
+#define PLATFORM_MEDIA_RENDERER_DECODERS_MAC_CORE_AUDIO_DEMUXER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <AudioToolbox/AudioFileStream.h>
 
@@ -105,4 +108,4 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
 
 }  // namespace media
 
-#endif  // MEDIA_FILTERS_CORE_AUDIO_DEMUXER_H_
+#endif  // PLATFORM_MEDIA_RENDERER_DECODERS_MAC_CORE_AUDIO_DEMUXER_H_

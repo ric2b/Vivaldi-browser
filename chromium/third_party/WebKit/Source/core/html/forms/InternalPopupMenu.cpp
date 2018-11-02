@@ -5,21 +5,20 @@
 #include "core/html/forms/InternalPopupMenu.h"
 
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
 #include "core/css/CSSFontSelector.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeComputedStyle.h"
-#include "core/dom/StyleEngine.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLHRElement.h"
-#include "core/html/HTMLOptGroupElement.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLOptGroupElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/PagePopup.h"
@@ -28,6 +27,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/text/PlatformLocale.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebMouseEvent.h"
 #include "public/web/WebColorChooser.h"
 
@@ -71,14 +71,14 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
     return new PopupMenuCSSFontSelector(document, owner_font_selector);
   }
 
-  ~PopupMenuCSSFontSelector();
+  ~PopupMenuCSSFontSelector() override;
 
   // We don't override willUseFontData() for now because the old PopupListBox
   // only worked with fonts loaded when opening the popup.
-  RefPtr<FontData> GetFontData(const FontDescription&,
-                               const AtomicString&) override;
+  scoped_refptr<FontData> GetFontData(const FontDescription&,
+                                      const AtomicString&) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
@@ -97,7 +97,7 @@ PopupMenuCSSFontSelector::PopupMenuCSSFontSelector(
 
 PopupMenuCSSFontSelector::~PopupMenuCSSFontSelector() {}
 
-RefPtr<FontData> PopupMenuCSSFontSelector::GetFontData(
+scoped_refptr<FontData> PopupMenuCSSFontSelector::GetFontData(
     const FontDescription& description,
     const AtomicString& name) {
   return owner_font_selector_->GetFontData(description, name);
@@ -107,7 +107,7 @@ void PopupMenuCSSFontSelector::FontsNeedUpdate(FontSelector* font_selector) {
   DispatchInvalidationCallbacks();
 }
 
-DEFINE_TRACE(PopupMenuCSSFontSelector) {
+void PopupMenuCSSFontSelector::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_font_selector_);
   CSSFontSelector::Trace(visitor);
   FontSelectorClient::Trace(visitor);
@@ -223,7 +223,7 @@ InternalPopupMenu::~InternalPopupMenu() {
   DCHECK(!popup_);
 }
 
-DEFINE_TRACE(InternalPopupMenu) {
+void InternalPopupMenu::Trace(blink::Visitor* visitor) {
   visitor->Trace(chrome_client_);
   visitor->Trace(owner_element_);
   PopupMenu::Trace(visitor);
@@ -272,14 +272,14 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   const HeapVector<Member<HTMLElement>>& items = owner_element.GetListItems();
   for (; context.list_index_ < items.size(); ++context.list_index_) {
     Element& child = *items[context.list_index_];
-    if (!isHTMLOptGroupElement(child.parentNode()))
+    if (!IsHTMLOptGroupElement(child.parentNode()))
       context.FinishGroupIfNecessary();
-    if (isHTMLOptionElement(child))
-      AddOption(context, toHTMLOptionElement(child));
-    else if (isHTMLOptGroupElement(child))
-      AddOptGroup(context, toHTMLOptGroupElement(child));
-    else if (isHTMLHRElement(child))
-      AddSeparator(context, toHTMLHRElement(child));
+    if (auto* option = ToHTMLOptionElementOrNull(child))
+      AddOption(context, *option);
+    else if (auto* optgroup = ToHTMLOptGroupElementOrNull(child))
+      AddOptGroup(context, *optgroup);
+    else if (auto* hr = ToHTMLHRElementOrNull(child))
+      AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();
   PagePopupClient::AddString("],\n", data);
@@ -498,8 +498,9 @@ void InternalPopupMenu::UpdateFromElement(UpdateReason) {
   if (needs_update_)
     return;
   needs_update_ = true;
-  TaskRunnerHelper::Get(TaskType::kUserInteraction,
-                        &OwnerElement().GetDocument())
+  OwnerElement()
+      .GetDocument()
+      .GetTaskRunner(TaskType::kUserInteraction)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&InternalPopupMenu::Update, WrapPersistent(this)));
 }
@@ -523,31 +524,31 @@ void InternalPopupMenu::Update() {
     return;
   }
 
-  RefPtr<SharedBuffer> data = SharedBuffer::Create();
-  PagePopupClient::AddString("window.updateData = {\n", data.Get());
-  PagePopupClient::AddString("type: \"update\",\n", data.Get());
-  ItemIterationContext context(*owner_element_->GetComputedStyle(), data.Get());
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
+  PagePopupClient::AddString("window.updateData = {\n", data.get());
+  PagePopupClient::AddString("type: \"update\",\n", data.get());
+  ItemIterationContext context(*owner_element_->GetComputedStyle(), data.get());
   context.SerializeBaseStyle();
-  PagePopupClient::AddString("children: [", data.Get());
+  PagePopupClient::AddString("children: [", data.get());
   const HeapVector<Member<HTMLElement>>& items = owner_element_->GetListItems();
   for (; context.list_index_ < items.size(); ++context.list_index_) {
     Element& child = *items[context.list_index_];
-    if (!isHTMLOptGroupElement(child.parentNode()))
+    if (!IsHTMLOptGroupElement(child.parentNode()))
       context.FinishGroupIfNecessary();
-    if (isHTMLOptionElement(child))
-      AddOption(context, toHTMLOptionElement(child));
-    else if (isHTMLOptGroupElement(child))
-      AddOptGroup(context, toHTMLOptGroupElement(child));
-    else if (isHTMLHRElement(child))
-      AddSeparator(context, toHTMLHRElement(child));
+    if (auto* option = ToHTMLOptionElementOrNull(child))
+      AddOption(context, *option);
+    else if (auto* optgroup = ToHTMLOptGroupElementOrNull(child))
+      AddOptGroup(context, *optgroup);
+    else if (auto* hr = ToHTMLHRElementOrNull(child))
+      AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();
-  PagePopupClient::AddString("],\n", data.Get());
+  PagePopupClient::AddString("],\n", data.get());
   IntRect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
       owner_element_->VisibleBoundsInVisualViewport(),
       OwnerElement().GetDocument().View());
-  AddProperty("anchorRectInScreen", anchor_rect_in_screen, data.Get());
-  PagePopupClient::AddString("}\n", data.Get());
+  AddProperty("anchorRectInScreen", anchor_rect_in_screen, data.get());
+  PagePopupClient::AddString("}\n", data.get());
   popup_->PostMessage(String::FromUTF8(data->Data(), data->size()));
 }
 

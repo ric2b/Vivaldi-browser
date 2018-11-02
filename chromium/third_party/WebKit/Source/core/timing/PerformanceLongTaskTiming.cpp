@@ -6,7 +6,7 @@
 #include "core/frame/DOMWindow.h"
 #include "core/timing/SubTaskAttribution.h"
 #include "core/timing/TaskAttributionTiming.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -57,7 +57,7 @@ TaskAttributionVector PerformanceLongTaskTiming::attribution() const {
   return attribution_;
 }
 
-DEFINE_TRACE(PerformanceLongTaskTiming) {
+void PerformanceLongTaskTiming::Trace(blink::Visitor* visitor) {
   visitor->Trace(attribution_);
   PerformanceEntry::Trace(visitor);
 }

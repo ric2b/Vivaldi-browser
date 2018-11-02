@@ -75,6 +75,8 @@ void RecordBlobItemSizeStats(const DataElement& input_element) {
       UMA_HISTOGRAM_COUNTS_1M("Storage.BlobItemSize.CacheEntry",
                               (length - input_element.offset()) / 1024);
       break;
+    case DataElement::TYPE_RAW_FILE:
+    case DataElement::TYPE_DATA_PIPE:
     case DataElement::TYPE_UNKNOWN:
       NOTREACHED();
       break;
@@ -168,7 +170,10 @@ BlobStorageContext::BlobFlattener::BlobFlattener(
       }
 
       // Validate our reference has good offset & length.
-      if (input_element.offset() + length > ref_entry->total_size()) {
+      uint64_t end_byte;
+      if (!base::CheckAdd(input_element.offset(), length)
+               .AssignIfValid(&end_byte) ||
+          end_byte > ref_entry->total_size()) {
         status = BlobStatus::ERR_INVALID_CONSTRUCTION_ARGUMENTS;
         return;
       }
@@ -252,7 +257,7 @@ BlobStorageContext::BlobFlattener::BlobFlattener(
   }
 }
 
-BlobStorageContext::BlobFlattener::~BlobFlattener() {}
+BlobStorageContext::BlobFlattener::~BlobFlattener() = default;
 
 BlobStorageContext::BlobSlice::BlobSlice(const BlobEntry& source,
                                          uint64_t slice_offset,
@@ -349,7 +354,8 @@ BlobStorageContext::BlobSlice::BlobSlice(const BlobEntry& source,
         element->SetToFileSystemUrlRange(
             source_item->filesystem_url(), source_item->offset() + item_offset,
             read_size, source_item->expected_modification_time());
-        data_item = new BlobDataItem(std::move(element));
+        data_item = new BlobDataItem(std::move(element),
+                                     source_item->file_system_context());
         break;
       }
       case DataElement::TYPE_DISK_CACHE_ENTRY: {
@@ -365,7 +371,9 @@ BlobStorageContext::BlobSlice::BlobSlice(const BlobEntry& source,
                              source_item->disk_cache_side_stream_index());
         break;
       }
+      case DataElement::TYPE_RAW_FILE:
       case DataElement::TYPE_BLOB:
+      case DataElement::TYPE_DATA_PIPE:
       case DataElement::TYPE_UNKNOWN:
         CHECK(false) << "Illegal blob item type: " << type;
     }
@@ -375,7 +383,7 @@ BlobStorageContext::BlobSlice::BlobSlice(const BlobEntry& source,
   }
 }
 
-BlobStorageContext::BlobSlice::~BlobSlice() {}
+BlobStorageContext::BlobSlice::~BlobSlice() = default;
 
 BlobStorageContext::BlobStorageContext()
     : memory_controller_(base::FilePath(), scoped_refptr<base::TaskRunner>()),
@@ -387,7 +395,7 @@ BlobStorageContext::BlobStorageContext(
     : memory_controller_(std::move(storage_directory), std::move(file_runner)),
       ptr_factory_(this) {}
 
-BlobStorageContext::~BlobStorageContext() {}
+BlobStorageContext::~BlobStorageContext() = default;
 
 std::unique_ptr<BlobDataHandle> BlobStorageContext::GetBlobDataFromUUID(
     const std::string& uuid) {
@@ -788,11 +796,13 @@ void BlobStorageContext::FinishBuilding(BlobEntry* entry) {
           copy.dest_item->set_item(std::move(new_item));
           break;
         }
+        case DataElement::TYPE_RAW_FILE:
         case DataElement::TYPE_UNKNOWN:
         case DataElement::TYPE_BLOB:
         case DataElement::TYPE_BYTES_DESCRIPTION:
         case DataElement::TYPE_FILE_FILESYSTEM:
         case DataElement::TYPE_DISK_CACHE_ENTRY:
+        case DataElement::TYPE_DATA_PIPE:
           NOTREACHED();
           break;
       }

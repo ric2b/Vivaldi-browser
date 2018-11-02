@@ -36,10 +36,12 @@ enum class CheckerImagingDecision {
   // Vetoed because checkering of images has been disabled.
   kVetoedForceDisable = 9,
 
-  // Vetoed because we only checker images on tiles required for activation.
-  kVetoedNotRequiredForActivation = 10,
+  // 10 used to be kVetoedNotRequiredForActivation.
 
-  kCheckerImagingDecisionCount,
+  // Sync was requested by the embedder.
+  kVetoedSyncRequested = 11,
+
+  kCheckerImagingDecisionCount
 };
 
 std::string ToString(PaintImage::Id paint_image_id,
@@ -213,6 +215,8 @@ void CheckerImageTracker::ClearTracker(bool can_clear_decode_policy_tracking) {
   // they should be accompanied with an invalidation during paint.
   image_id_to_decode_.clear();
 
+  decoding_mode_map_.clear();
+
   if (can_clear_decode_policy_tracking) {
     image_async_decode_state_.clear();
   } else {
@@ -254,6 +258,17 @@ void CheckerImageTracker::DidFinishImageDecode(
     return;
   }
 
+  // We might have flipped this to sync while updating the hints. That function
+  // would have also requested an invalidation, so we can just schedule the next
+  // decode here.
+  if (it->second.policy == DecodePolicy::SYNC) {
+    DCHECK(decoding_mode_map_.find(image_id) != decoding_mode_map_.end());
+    DCHECK_EQ(decoding_mode_map_[image_id], PaintImage::DecodingMode::kSync);
+
+    ScheduleNextImageDecode();
+    return;
+  }
+
   it->second.policy = DecodePolicy::SYNC;
   images_pending_invalidation_.insert(image_id);
   ScheduleNextImageDecode();
@@ -261,8 +276,7 @@ void CheckerImageTracker::DidFinishImageDecode(
 }
 
 bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
-                                             WhichTree tree,
-                                             bool required_for_activation) {
+                                             WhichTree tree) {
   const PaintImage& image = draw_image.paint_image();
   PaintImage::Id image_id = image.stable_id();
   TRACE_EVENT1("cc", "CheckerImageTracker::ShouldCheckerImage", "image_id",
@@ -290,6 +304,18 @@ bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
       std::pair<PaintImage::Id, DecodeState>(image_id, DecodeState()));
   auto it = insert_result.first;
   if (insert_result.second) {
+    CheckerImagingDecision decision = CheckerImagingDecision::kCanChecker;
+    auto decoding_mode_it = decoding_mode_map_.find(image_id);
+    PaintImage::DecodingMode decoding_mode_hint =
+        decoding_mode_it == decoding_mode_map_.end()
+            ? PaintImage::DecodingMode::kUnspecified
+            : decoding_mode_it->second;
+    // If the mode is sync, then don't checker this image.
+    // TODO(vmpstr): Figure out if we should do something different in other
+    // cases.
+    if (decoding_mode_hint == PaintImage::DecodingMode::kSync)
+      decision = CheckerImagingDecision::kVetoedSyncRequested;
+
     // The following conditions must be true for an image to be checkerable:
     //
     // 1) Complete: The data for the image should have been completely loaded.
@@ -303,18 +329,20 @@ bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
     // 4) Multipart images: Multipart images can be used to display mjpg video
     // frames, checkering which would cause each video frame to flash and
     // therefore should not be checkered.
-    CheckerImagingDecision decision = GetCheckerImagingDecision(
-        image, draw_image.src_rect(), min_image_bytes_to_checker_,
-        image_controller_->image_cache_max_limit_bytes());
+    //
+    // Note that we only need to do this check if we didn't veto above in this
+    // block.
     if (decision == CheckerImagingDecision::kCanChecker) {
-      if (force_disabled_) {
-        // Get the decision for all the veto reasons first, so we can UMA the
-        // images that were not checkered only because checker-imaging was force
-        // disabled.
-        decision = CheckerImagingDecision::kVetoedForceDisable;
-      } else if (!required_for_activation) {
-        decision = CheckerImagingDecision::kVetoedNotRequiredForActivation;
-      }
+      decision = GetCheckerImagingDecision(
+          image, draw_image.src_rect(), min_image_bytes_to_checker_,
+          image_controller_->image_cache_max_limit_bytes());
+    }
+
+    if (decision == CheckerImagingDecision::kCanChecker && force_disabled_) {
+      // Get the decision for all the veto reasons first, so we can UMA the
+      // images that were not checkered only because checker-imaging was force
+      // disabled.
+      decision = CheckerImagingDecision::kVetoedForceDisable;
     }
 
     it->second.policy = decision == CheckerImagingDecision::kCanChecker
@@ -362,6 +390,7 @@ void CheckerImageTracker::UpdateDecodeState(const DrawImage& draw_image,
   decode_state->filter_quality =
       std::max(decode_state->filter_quality, draw_image.filter_quality());
   decode_state->color_space = draw_image.target_color_space();
+  decode_state->frame_index = draw_image.frame_index();
 }
 
 void CheckerImageTracker::ScheduleNextImageDecode() {
@@ -400,7 +429,7 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
         it->second.filter_quality,
         SkMatrix::MakeScale(it->second.scale.width(),
                             it->second.scale.height()),
-        it->second.color_space);
+        it->second.frame_index, it->second.color_space);
     outstanding_image_decode_.emplace(candidate);
     break;
   }
@@ -423,6 +452,43 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
 
   image_id_to_decode_.emplace(image_id, std::make_unique<ScopedDecodeHolder>(
                                             image_controller_, request_id));
+}
+
+void CheckerImageTracker::UpdateImageDecodingHints(
+    base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+        decoding_mode_map) {
+  // Merge the |decoding_mode_map| with our member map, keeping the more
+  // conservative values.
+  // TODO(vmpstr): Figure out if and how do we clear this value to ensure that
+  // if we no longer have any kSync images, for example, then we can loosen the
+  // requirement on the decoding mode for that image id.
+  for (auto pair : decoding_mode_map) {
+    PaintImage::Id id = pair.first;
+    PaintImage::DecodingMode decoding_mode = pair.second;
+
+    // In case we already have this image as async, it implies that we are
+    // currently displaying this content as checkered. We can flip the state to
+    // sync here and add the image to be invalidated. The invalidation should
+    // happen shortly after, since this function should be called in a commit.
+    auto state_it = image_async_decode_state_.find(id);
+    if (state_it != image_async_decode_state_.end()) {
+      auto& state = state_it->second;
+      if (state.policy == DecodePolicy::ASYNC &&
+          decoding_mode == PaintImage::DecodingMode::kSync) {
+        state.policy = DecodePolicy::SYNC;
+        images_pending_invalidation_.insert(id);
+      }
+    }
+
+    // Update the decoding hints map.
+    auto decoding_mode_it = decoding_mode_map_.find(id);
+    if (decoding_mode_it == decoding_mode_map_.end()) {
+      decoding_mode_map_[id] = decoding_mode;
+    } else {
+      decoding_mode_it->second =
+          PaintImage::GetConservative(decoding_mode_it->second, decoding_mode);
+    }
+  }
 }
 
 }  // namespace cc

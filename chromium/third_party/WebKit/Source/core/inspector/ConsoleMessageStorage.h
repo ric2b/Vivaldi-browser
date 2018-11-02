@@ -5,6 +5,7 @@
 #ifndef ConsoleMessageStorage_h
 #define ConsoleMessageStorage_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -16,8 +17,6 @@ class ExecutionContext;
 
 class CORE_EXPORT ConsoleMessageStorage
     : public GarbageCollected<ConsoleMessageStorage> {
-  WTF_MAKE_NONCOPYABLE(ConsoleMessageStorage);
-
  public:
   ConsoleMessageStorage();
 
@@ -27,11 +26,13 @@ class CORE_EXPORT ConsoleMessageStorage
   ConsoleMessage* at(size_t index) const;
   int ExpiredCount() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   int expired_count_;
   HeapDeque<Member<ConsoleMessage>> messages_;
+
+  DISALLOW_COPY_AND_ASSIGN(ConsoleMessageStorage);
 };
 
 }  // namespace blink

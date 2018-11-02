@@ -12,9 +12,9 @@
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
-#include "cc/output/managed_memory_policy.h"
 #include "cc/scheduler/scheduler_settings.h"
 #include "cc/tiles/tile_manager_settings.h"
+#include "cc/trees/managed_memory_policy.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_settings.h"
@@ -87,14 +87,11 @@ class CC_EXPORT LayerTreeSettings {
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
   ManagedMemoryPolicy gpu_memory_policy;
   ManagedMemoryPolicy software_memory_policy;
-  size_t decoded_image_cache_budget_bytes = 128 * 1024 * 1024;
   size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
   viz::ResourceFormat preferred_tile_format;
 
-  bool enable_color_correct_rasterization = false;
-
-  bool enable_mask_tiling = false;
+  bool enable_mask_tiling = true;
 
   // If set to true, the compositor may selectively defer image decodes to the
   // Image Decode Service and raster tiles without images until the decode is
@@ -145,6 +142,12 @@ class CC_EXPORT LayerTreeSettings {
   // Whether to use out of process raster.  If true, whenever gpu raster
   // would have been used, out of process gpu raster will be used instead.
   bool enable_oop_rasterization = false;
+
+  // Whether images should be animated in the compositor.
+  bool enable_image_animations = false;
+
+  // Whether to use edge anti-aliasing for all layer types that supports it.
+  bool enable_edge_anti_aliasing = true;
 };
 
 }  // namespace cc

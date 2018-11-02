@@ -16,6 +16,7 @@
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/reflector.h"
 #include "ui/compositor/test/fake_context_factory.h"
@@ -28,7 +29,7 @@ namespace test {
 
 MashTestSuite::MashTestSuite(int argc, char** argv) : TestSuite(argc, argv) {}
 
-MashTestSuite::~MashTestSuite() {}
+MashTestSuite::~MashTestSuite() = default;
 
 void MashTestSuite::Initialize() {
   base::TestSuite::Initialize();
@@ -36,11 +37,13 @@ void MashTestSuite::Initialize() {
 
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kOverrideUseSoftwareGLForTests);
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kMus, switches::kMusHostVizValue);
 
   // Load ash mus strings and resources; not 'common' (Chrome) resources.
   base::FilePath resources;
   PathService::Get(base::DIR_MODULE, &resources);
-  resources = resources.Append(FILE_PATH_LITERAL("ash_mus_resources.pak"));
+  resources = resources.Append(FILE_PATH_LITERAL("ash_service_resources.pak"));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(resources);
 
   ash::AshTestHelper::config_ = ash::Config::MASH;

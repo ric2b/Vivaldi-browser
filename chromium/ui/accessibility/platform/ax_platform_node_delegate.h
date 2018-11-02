@@ -47,6 +47,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // be a native accessible object implemented by another class.
   virtual gfx::NativeViewAccessible GetParent() = 0;
 
+  // Get the index in parent. Typically this is the AXNode's index_in_parent_.
+  virtual int GetIndexInParent() const = 0;
+
   // Get the number of children of this node.
   virtual int GetChildCount() = 0;
 
@@ -72,6 +75,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // Return the node within this node's subtree (inclusive) that currently
   // has focus.
   virtual gfx::NativeViewAccessible GetFocus() = 0;
+
+  // Get whether this node is offscreen.
+  virtual bool IsOffscreen() const = 0;
 
   virtual AXPlatformNode* GetFromNodeID(int32_t id) = 0;
 

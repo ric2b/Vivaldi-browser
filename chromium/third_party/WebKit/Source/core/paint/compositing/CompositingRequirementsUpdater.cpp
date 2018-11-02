@@ -243,9 +243,32 @@ void CompositingRequirementsUpdater::Update(
   // scrolling and animation bounds is implemented (crbug.com/252472).
   Vector<PaintLayer*> unclipped_descendants;
   IntRect absolute_descendant_bounding_box;
-  UpdateRecursive(0, root, overlap_test_request_map, recursion_data,
+  UpdateRecursive(nullptr, root, overlap_test_request_map, recursion_data,
                   saw3d_transform, unclipped_descendants,
                   absolute_descendant_bounding_box, compositing_reasons_stats);
+}
+
+void CompositingRequirementsUpdater::MaybeEnableCompositedScrolling(
+    PaintLayer* layer,
+    CompositingReasons& reasons) {
+  // Add CompositingReasonOverflowScrollingTouch for layers that do not
+  // already have it but need it.
+  // Note that m_compositingReasonFinder.directReasons(layer) already includes
+  // CompositingReasonOverflowScrollingTouch for anything that has
+  // layer->needsCompositedScrolling() true. That is, for cases where we
+  // explicitly decide not to have LCD text or cases where the layer will
+  // still support LCD text even if the layer is composited.
+  if (reasons && layer->ScrollsOverflow() &&
+      !layer->NeedsCompositedScrolling()) {
+    // We can get here for a scroller that will be composited for some other
+    // reason and hence will already use grayscale AA text. We recheck for
+    // needsCompositedScrolling ignoring LCD to correctly add the
+    // CompositingReasonOverflowScrollingTouch reason to layers that can
+    // support it with grayscale AA text.
+    layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
+    if (layer->NeedsCompositedScrolling())
+      reasons |= kCompositingReasonOverflowScrollingTouch;
+  }
 }
 
 void CompositingRequirementsUpdater::UpdateRecursive(
@@ -278,6 +301,10 @@ void CompositingRequirementsUpdater::UpdateRecursive(
                                                 false) &
        kCompositingReasonOverflowScrollingTouch);
 
+  bool use_clipped_bounding_rect =
+      !has_composited_scrolling_ancestor ||
+      layer->AncestorScrollingLayer()->IsRootLayer();
+
   // We have to promote the sticky element to work around the bug
   // (https://crbug.com/698358) of not being able to invalidate the ancestor
   // after updating the sticky layer position.
@@ -301,24 +328,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     if (layer->IsRootLayer() && compositor->RootShouldAlwaysComposite())
       reasons_to_composite |= kCompositingReasonRoot;
 
-    // Add CompositingReasonOverflowScrollingTouch for layers that do not
-    // already have it but need it.
-    // Note that m_compositingReasonFinder.directReasons(layer) already includes
-    // CompositingReasonOverflowScrollingTouch for anything that has
-    // layer->needsCompositedScrolling() true. That is, for cases where we
-    // explicitly decide not to have LCD text or cases where the layer will
-    // still support LCD text even if the layer is composited.
-    if (reasons_to_composite && layer->ScrollsOverflow() &&
-        !layer->NeedsCompositedScrolling()) {
-      // We can get here for a scroller that will be composited for some other
-      // reason and hence will already use grayscale AA text. We recheck for
-      // needsCompositedScrolling ignoring LCD to correctly add the
-      // CompositingReasonOverflowScrollingTouch reason to layers that can
-      // support it with grayscale AA text.
-      layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
-      if (layer->NeedsCompositedScrolling())
-        reasons_to_composite |= kCompositingReasonOverflowScrollingTouch;
-    }
+    MaybeEnableCompositedScrolling(layer, reasons_to_composite);
   }
 
   if ((reasons_to_composite & kCompositingReasonOverflowScrollingTouch) &&
@@ -355,7 +365,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     // Remove irrelevant unclipped descendants in reverse order so our stored
     // indices remain valid.
     for (size_t i = 0; i < unclipped_descendants_to_remove.size(); i++) {
-      unclipped_descendants.erase(unclipped_descendants_to_remove.at(
+      unclipped_descendants.EraseAt(unclipped_descendants_to_remove.at(
           unclipped_descendants_to_remove.size() - i - 1));
     }
 
@@ -367,14 +377,14 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     }
   }
 
-  const IntRect& abs_bounds = has_composited_scrolling_ancestor
-                                  ? layer->UnclippedAbsoluteBoundingBox()
-                                  : layer->ClippedAbsoluteBoundingBox();
+  const IntRect& abs_bounds = use_clipped_bounding_rect
+                                  ? layer->ClippedAbsoluteBoundingBox()
+                                  : layer->UnclippedAbsoluteBoundingBox();
   absolute_descendant_bounding_box = abs_bounds;
   if (current_recursion_data.testing_overlap_ &&
       !RequiresCompositingOrSquashing(direct_reasons)) {
-    bool overlaps = overlap_map.OverlapsLayers(
-        abs_bounds, !has_composited_scrolling_ancestor);
+    bool overlaps =
+        overlap_map.OverlapsLayers(abs_bounds, use_clipped_bounding_rect);
     overlap_compositing_reason =
         overlaps ? kCompositingReasonOverlap : kCompositingReasonNone;
   }
@@ -503,6 +513,13 @@ void CompositingRequirementsUpdater::UpdateRecursive(
         compositor->RootShouldAlwaysComposite()) {
       reasons_to_composite |= kCompositingReasonRoot;
       current_recursion_data.subtree_is_compositing_ = true;
+      // Try again to enable composited scrolling if root became composited due
+      // to subtree_is_compositing_ or overlap.
+      // TODO(skobes): At this point we've already done recursion to descendant
+      // layers, possibly with has_composited_scrolling_ancestor_ == false.
+      // We should refactor overlap testing etc. to be independent of having
+      // composited scrolling ancestors. See crbug.com/777672, crbug.com/782991.
+      MaybeEnableCompositedScrolling(layer, reasons_to_composite);
     } else {
       compositor->SetCompositingModeEnabled(false);
       reasons_to_composite = kCompositingReasonNone;
@@ -514,7 +531,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     // for overlap.
     if (child_recursion_data.compositing_ancestor_ &&
         !child_recursion_data.compositing_ancestor_->IsRootLayer())
-      overlap_map.Add(layer, abs_bounds, !has_composited_scrolling_ancestor);
+      overlap_map.Add(layer, abs_bounds, use_clipped_bounding_rect);
 
     // Now check for reasons to become composited that depend on the state of
     // descendant layers.
@@ -532,7 +549,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
       // second-from-top context of the stack.
       overlap_map.BeginNewOverlapTestingContext();
       overlap_map.Add(layer, absolute_descendant_bounding_box,
-                      !has_composited_scrolling_ancestor);
+                      use_clipped_bounding_rect);
       will_be_composited_or_squashed = true;
     }
 

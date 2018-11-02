@@ -16,7 +16,6 @@
 #include "base/observer_list.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/login/easy_unlock/bootstrap_manager.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_impl.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/chromeos/policy/cloud_external_data_policy_observer.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
+#include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -55,8 +55,8 @@ class ChromeUserManagerImpl
       public content::NotificationObserver,
       public policy::CloudExternalDataPolicyObserver::Delegate,
       public policy::DeviceLocalAccountPolicyService::Observer,
-      public MultiProfileUserControllerDelegate,
-      public BootstrapManager::Delegate {
+      public policy::MinimumVersionPolicyHandler::Observer,
+      public MultiProfileUserControllerDelegate {
  public:
   ~ChromeUserManagerImpl() override;
 
@@ -67,7 +67,6 @@ class ChromeUserManagerImpl
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // UserManagerInterface implementation:
-  BootstrapManager* GetBootstrapManager() override;
   MultiProfileUserController* GetMultiProfileUserController() override;
   UserImageManager* GetUserImageManager(const AccountId& account_id) override;
   SupervisedUserManager* GetSupervisedUserManager() override;
@@ -91,6 +90,9 @@ class ChromeUserManagerImpl
   bool IsUserNonCryptohomeDataEphemeral(
       const AccountId& account_id) const override;
   bool AreSupervisedUsersAllowed() const override;
+  bool IsGuestSessionAllowed() const override;
+  bool IsGaiaUserAllowed(const user_manager::User& user) const override;
+  bool IsUserAllowed(const user_manager::User& user) const override;
   void UpdateLoginState(const user_manager::User* active_user,
                         const user_manager::User* primary_user,
                         bool is_current_user_owner) const override;
@@ -131,6 +133,9 @@ class ChromeUserManagerImpl
 
   void StopPolicyObserverForTesting();
 
+  // policy::MinimumVersionPolicyHandler::Observer implementation.
+  void OnMinimumVersionStateChanged() override;
+
   // UserManagerBase implementation:
   bool AreEphemeralUsersEnabled() const override;
   void OnUserRemoved(const AccountId& account_id) override;
@@ -166,10 +171,12 @@ class ChromeUserManagerImpl
   void KioskAppLoggedIn(user_manager::User* user) override;
   void ArcKioskAppLoggedIn(user_manager::User* user) override;
   void PublicAccountUserLoggedIn(user_manager::User* user) override;
-  void RegularUserLoggedIn(const AccountId& account_id) override;
-  void RegularUserLoggedInAsEphemeral(const AccountId& account_id) override;
+  void RegularUserLoggedIn(const AccountId& account_id,
+                           const user_manager::UserType user_type) override;
+  void RegularUserLoggedInAsEphemeral(
+      const AccountId& account_id,
+      const user_manager::UserType user_type) override;
   void SupervisedUserLoggedIn(const AccountId& account_id) override;
-  bool HasPendingBootstrap(const AccountId& account_id) const override;
 
  private:
   friend class SupervisedUserManagerImpl;
@@ -218,9 +225,6 @@ class ChromeUserManagerImpl
   // MultiProfileUserControllerDelegate implementation:
   void OnUserNotAllowed(const std::string& user_email) override;
 
-  // BootstrapManager::Delegate implementation:
-  void RemovePendingBootstrapUser(const AccountId& account_id) override;
-
   // Update the number of users.
   void UpdateNumberOfUsers();
 
@@ -233,6 +237,9 @@ class ChromeUserManagerImpl
 
   // Removes user from the list of the users who should be reported.
   void RemoveReportingUser(const AccountId& account_id);
+
+  // Checks if constraint defined by minimum version policy is satisfied.
+  bool MinVersionConstraintsSatisfied() const;
 
   // Creates a user for the given device local account.
   std::unique_ptr<user_manager::User> CreateUserFromDeviceLocalAccount(
@@ -265,6 +272,12 @@ class ChromeUserManagerImpl
   // access.
   FlowMap specific_flows_;
 
+  // Cros settings change subscriptions.
+  std::unique_ptr<CrosSettings::ObserverSubscription> allow_guest_subscription_;
+  std::unique_ptr<CrosSettings::ObserverSubscription>
+      allow_supervised_user_subscription_;
+  std::unique_ptr<CrosSettings::ObserverSubscription> users_subscription_;
+
   std::unique_ptr<CrosSettings::ObserverSubscription>
       local_accounts_subscription_;
 
@@ -277,8 +290,6 @@ class ChromeUserManagerImpl
   // Observer for the policy that can be used to manage wallpapers.
   std::unique_ptr<policy::CloudExternalDataPolicyObserver>
       wallpaper_policy_observer_;
-
-  std::unique_ptr<BootstrapManager> bootstrap_manager_;
 
   base::WeakPtrFactory<ChromeUserManagerImpl> weak_factory_;
 

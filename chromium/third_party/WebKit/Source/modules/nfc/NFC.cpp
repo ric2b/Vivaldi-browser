@@ -20,6 +20,7 @@
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace {
 const char kJsonMimePostfix[] = "+json";
@@ -209,9 +210,10 @@ struct TypeConverter<Optional<Vector<uint8_t>>, blink::ScriptValue> {
       return mojo::ConvertTo<Vector<uint8_t>>(string);
     }
 
-    if (value->IsArrayBuffer())
+    if (value->IsArrayBuffer()) {
       return mojo::ConvertTo<Vector<uint8_t>>(
-          blink::V8ArrayBuffer::toImpl(value.As<v8::Object>()));
+          blink::V8ArrayBuffer::ToImpl(value.As<v8::Object>()));
+    }
 
     return WTF::nullopt;
   }
@@ -290,14 +292,14 @@ struct TypeConverter<NFCMessagePtr, blink::DOMArrayBuffer*> {
 template <>
 struct TypeConverter<NFCMessagePtr, blink::NFCPushMessage> {
   static NFCMessagePtr Convert(const blink::NFCPushMessage& message) {
-    if (message.isString())
-      return NFCMessage::From(message.getAsString());
+    if (message.IsString())
+      return NFCMessage::From(message.GetAsString());
 
-    if (message.isNFCMessage())
-      return NFCMessage::From(message.getAsNFCMessage());
+    if (message.IsNFCMessage())
+      return NFCMessage::From(message.GetAsNFCMessage());
 
-    if (message.isArrayBuffer())
-      return NFCMessage::From(message.getAsArrayBuffer());
+    if (message.IsArrayBuffer())
+      return NFCMessage::From(message.GetAsArrayBuffer());
 
     NOTREACHED();
     return nullptr;
@@ -501,16 +503,16 @@ ScriptPromise RejectIfInvalidNFCPushMessage(
     ScriptState* script_state,
     const NFCPushMessage& push_message) {
   // If NFCPushMessage of invalid type, reject promise with TypeError
-  if (!push_message.isNFCMessage() && !push_message.isString() &&
-      !push_message.isArrayBuffer()) {
+  if (!push_message.IsNFCMessage() && !push_message.IsString() &&
+      !push_message.IsArrayBuffer()) {
     return RejectWithTypeError(script_state,
                                "Invalid NFCPushMessage type was provided.");
   }
 
-  if (push_message.isNFCMessage()) {
+  if (push_message.IsNFCMessage()) {
     // https://w3c.github.io/web-nfc/#the-push-method
     // If NFCMessage.records is empty, reject promise with TypeError
-    const NFCMessage& message = push_message.getAsNFCMessage();
+    const NFCMessage& message = push_message.GetAsNFCMessage();
     if (!message.hasRecords() || message.records().IsEmpty()) {
       return RejectWithTypeError(script_state,
                                  "Empty NFCMessage was provided.");
@@ -524,7 +526,7 @@ ScriptPromise RejectIfInvalidNFCPushMessage(
 
 bool SetURL(const String& origin,
             device::mojom::blink::NFCMessagePtr& message) {
-  KURL origin_url(kParsedURLString, origin);
+  KURL origin_url(origin);
 
   if (!message->url.IsEmpty() && origin_url.CanSetPathname()) {
     origin_url.SetPath(message->url);
@@ -751,7 +753,7 @@ ScriptPromise NFC::watch(ScriptState* script_state,
 
   // https://w3c.github.io/web-nfc/#dom-nfc-watch (Step 9)
   if (options.hasURL() && !options.url().IsEmpty()) {
-    KURL pattern_url(kParsedURLString, options.url());
+    KURL pattern_url(options.url());
     if (!pattern_url.IsValid() || pattern_url.Protocol() != kProtocolHttps) {
       return RejectWithDOMException(script_state, kSyntaxError,
                                     "Invalid URL pattern was provided.");
@@ -813,7 +815,7 @@ void NFC::PageVisibilityChanged() {
 
   // NFC operations should be suspended.
   // https://w3c.github.io/web-nfc/#nfc-suspended
-  if (GetPage()->VisibilityState() == kPageVisibilityStateVisible)
+  if (GetPage()->VisibilityState() == mojom::PageVisibilityState::kVisible)
     nfc_->ResumeNFCOperations();
   else
     nfc_->SuspendNFCOperations();
@@ -915,11 +917,12 @@ void NFC::OnWatchRegistered(MessageCallback* callback,
   }
 }
 
-DEFINE_TRACE(NFC) {
-  PageVisibilityObserver::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+void NFC::Trace(blink::Visitor* visitor) {
   visitor->Trace(requests_);
   visitor->Trace(callbacks_);
+  ScriptWrappable::Trace(visitor);
+  PageVisibilityObserver::Trace(visitor);
+  ContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

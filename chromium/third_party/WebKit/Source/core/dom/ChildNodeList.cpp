@@ -36,6 +36,17 @@ Node* ChildNodeList::VirtualOwnerNode() const {
 
 ChildNodeList::~ChildNodeList() {}
 
+void ChildNodeList::ChildrenChanged(
+    const ContainerNode::ChildrenChange& change) {
+  if (change.IsChildInsertion()) {
+    collection_index_cache_.NodeInserted();
+  } else if (change.IsChildRemoval()) {
+    collection_index_cache_.NodeRemoved();
+  } else {
+    collection_index_cache_.Invalidate();
+  }
+}
+
 Node* ChildNodeList::TraverseForwardToOffset(unsigned offset,
                                              Node& current_node,
                                              unsigned& current_offset) const {
@@ -47,7 +58,7 @@ Node* ChildNodeList::TraverseForwardToOffset(unsigned offset,
     if (++current_offset == offset)
       return next;
   }
-  return 0;
+  return nullptr;
 }
 
 Node* ChildNodeList::TraverseBackwardToOffset(unsigned offset,
@@ -61,10 +72,10 @@ Node* ChildNodeList::TraverseBackwardToOffset(unsigned offset,
     if (--current_offset == offset)
       return previous;
   }
-  return 0;
+  return nullptr;
 }
 
-DEFINE_TRACE(ChildNodeList) {
+void ChildNodeList::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_);
   visitor->Trace(collection_index_cache_);
   NodeList::Trace(visitor);

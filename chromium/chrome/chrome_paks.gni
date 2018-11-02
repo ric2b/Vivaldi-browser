@@ -52,18 +52,19 @@ template("chrome_repack_percent") {
       deps += invoker.deps
     }
 
-    if (use_ash) {
-      sources +=
-          [ "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak" ]
-      deps += [ "//ash/resources" ]
-    }
     if (toolkit_views) {
       sources += [ "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak" ]
       deps += [ "//ui/views/resources" ]
     }
     if (is_chromeos) {
-      sources += [ "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/chromeos/resources" ]
+      sources += [
+        "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
+        "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
+      ]
+      deps += [
+        "//ash/resources",
+        "//ui/chromeos/resources",
+      ]
     }
     if (enable_extensions) {
       sources += [ "$root_gen_dir/extensions/extensions_browser_resources_${percent}_percent.pak" ]
@@ -94,13 +95,13 @@ template("chrome_extra_paks") {
       "$root_gen_dir/chrome/common_resources.pak",
       "$root_gen_dir/chrome/invalidations_resources.pak",
       "$root_gen_dir/chrome/net_internals_resources.pak",
-      "$root_gen_dir/chrome/password_manager_internals_resources.pak",
       "$root_gen_dir/chrome/quota_internals_resources.pak",
       "$root_gen_dir/chrome/task_scheduler_internals_resources.pak",
       "$root_gen_dir/chrome/translate_internals_resources.pak",
       "$root_gen_dir/components/components_resources.pak",
       "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
       "$root_gen_dir/content/content_resources.pak",
+      "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
       "$root_gen_dir/net/net_resources.pak",
       "$root_gen_dir/ui/resources/webui_resources.pak",
     ]
@@ -109,7 +110,6 @@ template("chrome_extra_paks") {
       "//chrome/browser:resources",
       "//chrome/browser/resources:invalidations_resources",
       "//chrome/browser/resources:net_internals_resources",
-      "//chrome/browser/resources:password_manager_internals_resources",
       "//chrome/browser/resources:quota_internals_resources",
       "//chrome/browser/resources:task_scheduler_internals_resources",
       "//chrome/browser/resources:translate_internals_resources",
@@ -117,6 +117,7 @@ template("chrome_extra_paks") {
       "//components/resources",
       "//content:resources",
       "//content/browser/tracing:resources",
+      "//mojo/public/js:resources",
       "//net:net_resources",
       "//third_party/WebKit/public:resources",
       "//ui/resources",
@@ -158,16 +159,22 @@ template("chrome_extra_paks") {
     }
     if (enable_extensions) {
       sources += [
+        "$root_gen_dir/chrome/extensions_resources.pak",
         "$root_gen_dir/chrome/sync_file_system_internals_resources.pak",
         "$root_gen_dir/extensions/extensions_renderer_resources.pak",
         "$root_gen_dir/extensions/extensions_resources.pak",
       ]
       deps += [
+        "//chrome/browser/resources:extensions_resources",
         "//chrome/browser/resources:sync_file_system_internals_resources",
         "//extensions:extensions_resources",
       ]
     }
-    if (enable_vr) {
+    if (enable_print_preview) {
+      sources += [ "$root_gen_dir/chrome/print_preview_resources.pak" ]
+      deps += [ "//chrome/browser/resources:print_preview_resources" ]
+    }
+    if (enable_gvr_services) {
       sources += [ "$root_gen_dir/chrome/vr_shell_resources.pak" ]
       deps += [ "//chrome/browser/resources:vr_shell_resources" ]
     }

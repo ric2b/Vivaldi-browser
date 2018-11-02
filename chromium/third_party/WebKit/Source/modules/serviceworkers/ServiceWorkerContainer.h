@@ -45,6 +45,7 @@
 #include "platform/wtf/Forward.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
+#include "public/platform/modules/serviceworker/service_worker_registration.mojom-blink.h"
 
 namespace blink {
 
@@ -66,9 +67,9 @@ class MODULES_EXPORT ServiceWorkerContainer final
 
   static ServiceWorkerContainer* Create(ExecutionContext*,
                                         NavigatorServiceWorker*);
-  ~ServiceWorkerContainer();
+  ~ServiceWorkerContainer() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   ServiceWorker* controller() { return controller_; }
   ScriptPromise ready(ScriptState*);
@@ -77,6 +78,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   void RegisterServiceWorkerImpl(ExecutionContext*,
                                  const KURL& script_url,
                                  const KURL& scope,
+                                 mojom::ServiceWorkerUpdateViaCache,
                                  std::unique_ptr<RegistrationCallbacks>);
 
   ScriptPromise registerServiceWorker(ScriptState*,
@@ -87,13 +89,13 @@ class MODULES_EXPORT ServiceWorkerContainer final
 
   void ContextDestroyed(ExecutionContext*) override;
 
-  // WebServiceWorkerProviderClient overrides.
+  // WebServiceWorkerProviderClient implementation.
   void SetController(std::unique_ptr<WebServiceWorker::Handle>,
                      bool should_notify_controller_change) override;
   void DispatchMessageEvent(std::unique_ptr<WebServiceWorker::Handle>,
                             const WebString& message,
-                            WebMessagePortChannelArray) override;
-  void CountFeature(uint32_t feature) override;
+                            WebVector<MessagePortChannel>) override;
+  void CountFeature(mojom::WebFeature) override;
 
   // EventTarget overrides.
   ExecutionContext* GetExecutionContext() const override {
@@ -108,10 +110,10 @@ class MODULES_EXPORT ServiceWorkerContainer final
   ServiceWorkerContainer(ExecutionContext*, NavigatorServiceWorker*);
 
   class GetRegistrationForReadyCallback;
-  typedef ScriptPromiseProperty<Member<ServiceWorkerContainer>,
-                                Member<ServiceWorkerRegistration>,
-                                Member<ServiceWorkerRegistration>>
-      ReadyProperty;
+  using ReadyProperty =
+      ScriptPromiseProperty<Member<ServiceWorkerContainer>,
+                            Member<ServiceWorkerRegistration>,
+                            Member<ServiceWorkerRegistration>>;
   ReadyProperty* CreateReadyProperty();
 
   WebServiceWorkerProvider* provider_;

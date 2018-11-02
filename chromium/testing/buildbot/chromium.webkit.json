@@ -330,7 +330,7 @@
               "os": "Mac-10.10.5"
             }
           ],
-          "shards": 2
+          "shards": 4
         }
       }
     ],
@@ -379,7 +379,7 @@
               "os": "Mac-10.11.6"
             }
           ],
-          "shards": 2
+          "shards": 4
         }
       }
     ],
@@ -409,6 +409,32 @@
         "test": "wtf_unittests"
       }
     ],
+    "isolated_scripts": [
+      {
+        "args": [
+          "--debug"
+        ],
+        "isolate_name": "webkit_layout_tests_exparchive",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+        },
+        "name": "webkit_layout_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "none",
+              "os": "Mac-10.11.6"
+            }
+          ],
+          "shards": 4
+        }
+      }
+    ],
     "scripts": [
       {
         "name": "webkit_lint",
@@ -433,6 +459,31 @@
       },
       {
         "test": "wtf_unittests"
+      }
+    ],
+    "isolated_scripts": [
+      {
+        "isolate_name": "webkit_layout_tests_exparchive",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
+        },
+        "name": "webkit_layout_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.12.6",
+              "pool": "Chrome-GPU"
+            }
+          ],
+          "shards": 4
+        }
       }
     ],
     "scripts": [
@@ -478,49 +529,11 @@
             {
               "gpu": "8086:0a2e",
               "hidpi": "0",
-              "os": "Mac-10.12.5"
+              "os": "Mac-10.12.6"
             }
           ],
-          "shards": 2
+          "shards": 4
         }
-      }
-    ],
-    "scripts": [
-      {
-        "name": "webkit_lint",
-        "script": "webkit_lint.py"
-      },
-      {
-        "name": "webkit_python_tests",
-        "script": "webkit_python_tests.py"
-      }
-    ]
-  },
-  "WebKit Mac10.9": {
-    "gtest_tests": [
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "blink_heap_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "blink_platform_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "wtf_unittests"
       }
     ],
     "scripts": [
@@ -632,7 +645,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "os": "Windows-10-10586"
+              "os": "Windows-10-14393"
             }
           ],
           "shards": 5
@@ -651,32 +664,7 @@
     ]
   },
   "WebKit Win7": {
-    "gtest_tests": [
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "blink_heap_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "blink_platform_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "wtf_unittests"
-      }
-    ],
+    "gtest_tests": [],
     "isolated_scripts": [
       {
         "isolate_name": "webkit_layout_tests_exparchive",
@@ -695,7 +683,7 @@
               "os": "Windows-7-SP1"
             }
           ],
-          "shards": 5
+          "shards": 2
         }
       }
     ],
@@ -737,33 +725,7 @@
         "test": "wtf_unittests"
       }
     ],
-    "isolated_scripts": [
-      {
-        "args": [
-          "--debug",
-          "--time-out-ms",
-          "60000"
-        ],
-        "isolate_name": "webkit_layout_tests_exparchive",
-        "merge": {
-          "args": [
-            "--verbose"
-          ],
-          "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
-        },
-        "name": "webkit_layout_tests",
-        "results_handler": "layout tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-7-SP1"
-            }
-          ],
-          "shards": 10
-        }
-      }
-    ],
+    "isolated_scripts": [],
     "scripts": [
       {
         "name": "webkit_lint",

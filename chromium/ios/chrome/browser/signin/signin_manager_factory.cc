@@ -12,13 +12,14 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/account_tracker_service_factory.h"
 #include "ios/chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_client_factory.h"
+#include "ios/chrome/browser/signin/signin_error_controller_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory_observer.h"
 
 namespace ios {
@@ -31,6 +32,7 @@ SigninManagerFactory::SigninManagerFactory()
   DependsOn(ios::GaiaCookieManagerServiceFactory::GetInstance());
   DependsOn(OAuth2TokenServiceFactory::GetInstance());
   DependsOn(ios::AccountTrackerServiceFactory::GetInstance());
+  DependsOn(ios::SigninErrorControllerFactory::GetInstance());
 }
 
 SigninManagerFactory::~SigninManagerFactory() {}
@@ -89,12 +91,13 @@ std::unique_ptr<KeyedService> SigninManagerFactory::BuildServiceInstanceFor(
       ios::AccountTrackerServiceFactory::GetForBrowserState(
           chrome_browser_state),
       ios::GaiaCookieManagerServiceFactory::GetForBrowserState(
+          chrome_browser_state),
+      ios::SigninErrorControllerFactory::GetForBrowserState(
           chrome_browser_state)));
   service->Initialize(GetApplicationContext()->GetLocalState());
   for (auto& observer : observer_list_)
     observer.SigninManagerCreated(service.get());
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-  return std::move(service);
+  return service;
 }
 
 void SigninManagerFactory::BrowserStateShutdown(web::BrowserState* context) {

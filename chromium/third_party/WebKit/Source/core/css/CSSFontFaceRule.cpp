@@ -21,8 +21,8 @@
 
 #include "core/css/CSSFontFaceRule.h"
 
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -32,7 +32,7 @@ CSSFontFaceRule::CSSFontFaceRule(StyleRuleFontFace* font_face_rule,
                                  CSSStyleSheet* parent)
     : CSSRule(parent), font_face_rule_(font_face_rule) {}
 
-CSSFontFaceRule::~CSSFontFaceRule() {}
+CSSFontFaceRule::~CSSFontFaceRule() = default;
 
 CSSStyleDeclaration* CSSFontFaceRule::style() const {
   if (!properties_cssom_wrapper_)
@@ -60,7 +60,7 @@ void CSSFontFaceRule::Reattach(StyleRuleBase* rule) {
     properties_cssom_wrapper_->Reattach(font_face_rule_->MutableProperties());
 }
 
-DEFINE_TRACE(CSSFontFaceRule) {
+void CSSFontFaceRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(font_face_rule_);
   visitor->Trace(properties_cssom_wrapper_);
   CSSRule::Trace(visitor);

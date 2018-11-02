@@ -26,15 +26,15 @@
 #include "core/loader/TextTrackLoader.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/SharedBuffer.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -42,10 +42,10 @@ TextTrackLoader::TextTrackLoader(TextTrackLoaderClient& client,
                                  Document& document)
     : client_(client),
       document_(document),
-      cue_load_timer_(TaskRunnerHelper::Get(TaskType::kNetworking, &document),
+      cue_load_timer_(document.GetTaskRunner(TaskType::kNetworking),
                       this,
                       &TextTrackLoader::CueLoadTimerFired),
-      state_(kIdle),
+      state_(kLoading),
       new_cues_available_(false) {}
 
 TextTrackLoader::~TextTrackLoader() {}
@@ -71,13 +71,13 @@ bool TextTrackLoader::RedirectReceived(Resource* resource,
                                        const ResourceResponse&) {
   DCHECK_EQ(this->GetResource(), resource);
   if (resource->GetResourceRequest().GetFetchRequestMode() ==
-          WebURLRequest::kFetchRequestModeCORS ||
+          network::mojom::FetchRequestMode::kCORS ||
       GetDocument().GetSecurityOrigin()->CanRequestNoSuborigin(request.Url()))
     return true;
 
   CorsPolicyPreventedLoad(GetDocument().GetSecurityOrigin(), request.Url());
   if (!cue_load_timer_.IsActive())
-    cue_load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    cue_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   ClearResource();
   return false;
 }
@@ -111,14 +111,18 @@ void TextTrackLoader::CorsPolicyPreventedLoad(SecurityOrigin* security_origin,
 
 void TextTrackLoader::NotifyFinished(Resource* resource) {
   DCHECK_EQ(this->GetResource(), resource);
-  if (state_ != kFailed)
-    state_ = resource->ErrorOccurred() ? kFailed : kFinished;
-
-  if (state_ == kFinished && cue_parser_)
+  if (cue_parser_)
     cue_parser_->Flush();
 
+  if (state_ != kFailed) {
+    if (resource->ErrorOccurred() || !cue_parser_)
+      state_ = kFailed;
+    else
+      state_ = kFinished;
+  }
+
   if (!cue_load_timer_.IsActive())
-    cue_load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    cue_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   CancelLoad();
 }
@@ -152,14 +156,14 @@ void TextTrackLoader::NewCuesParsed() {
     return;
 
   new_cues_available_ = true;
-  cue_load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  cue_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void TextTrackLoader::FileFailedToParse() {
   state_ = kFailed;
 
   if (!cue_load_timer_.IsActive())
-    cue_load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    cue_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   CancelLoad();
 }
@@ -171,7 +175,7 @@ void TextTrackLoader::GetNewCues(
     cue_parser_->GetNewCues(output_cues);
 }
 
-DEFINE_TRACE(TextTrackLoader) {
+void TextTrackLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
   visitor->Trace(cue_parser_);
   visitor->Trace(document_);

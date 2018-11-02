@@ -31,12 +31,13 @@ class CSSCustomFontData final : public CustomFontData {
  public:
   enum FallbackVisibility { kInvisibleFallback, kVisibleFallback };
 
-  static RefPtr<CSSCustomFontData> Create(RemoteFontFaceSource* source,
-                                          FallbackVisibility visibility) {
-    return AdoptRef(new CSSCustomFontData(source, visibility));
+  static scoped_refptr<CSSCustomFontData> Create(
+      RemoteFontFaceSource* source,
+      FallbackVisibility visibility) {
+    return base::AdoptRef(new CSSCustomFontData(source, visibility));
   }
 
-  ~CSSCustomFontData() override {}
+  ~CSSCustomFontData() override = default;
 
   bool ShouldSkipDrawing() const override {
     if (font_face_source_)
@@ -53,7 +54,7 @@ class CSSCustomFontData final : public CustomFontData {
 
   bool IsLoading() const override { return is_loading_; }
   bool IsLoadingFallback() const override { return true; }
-  void ClearFontFaceSource() override { font_face_source_ = 0; }
+  void ClearFontFaceSource() override { font_face_source_ = nullptr; }
 
  private:
   CSSCustomFontData(RemoteFontFaceSource* source, FallbackVisibility visibility)

@@ -7,6 +7,7 @@ package org.chromium.incrementalinstall;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Build;
+import android.os.Process;
 import android.util.Log;
 
 import java.io.File;
@@ -33,7 +34,7 @@ final class ClassLoaderPatcher {
                 new File(context.getApplicationInfo().dataDir, "incremental-install-files");
         mClassLoader = context.getClassLoader();
         mLibcoreOs = Reflect.getField(Class.forName("libcore.io.Libcore"), "os");
-        mProcessUid = (Integer) Reflect.invokeMethod(mLibcoreOs, "getuid");
+        mProcessUid = Process.myUid();
         mIsPrimaryProcess = context.getApplicationInfo().uid == mProcessUid;
         Log.i(TAG, "uid=" + mProcessUid + " (isPrimary=" + mIsPrimaryProcess + ")");
     }
@@ -42,10 +43,9 @@ final class ClassLoaderPatcher {
      * Loads all dex files within |dexDir| into the app's ClassLoader.
      */
     @SuppressLint({
-            "SetWorldReadable",
-            "SetWorldWritable",
-            })
-    void loadDexFiles(File dexDir) throws ReflectiveOperationException, FileNotFoundException {
+            "SetWorldReadable", "SetWorldWritable",
+    })
+    File[] loadDexFiles(File dexDir) throws ReflectiveOperationException, FileNotFoundException {
         Log.i(TAG, "Installing dex files from: " + dexDir);
         File[] dexFilesArr = dexDir.listFiles();
         if (dexFilesArr == null) {
@@ -100,6 +100,7 @@ final class ClassLoaderPatcher {
         Object[] dexElements = (Object[]) Reflect.getField(dexPathList, "dexElements");
         dexElements = addDexElements(dexFilesArr, optimizedDir, dexElements);
         Reflect.setField(dexPathList, "dexElements", dexElements);
+        return dexFilesArr;
     }
 
     /**

@@ -32,18 +32,21 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/common/zygote_commands_linux.h"
+#include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/content_descriptors.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/result_codes.h"
-#include "content/public/common/sandbox_linux.h"
 #include "content/public/common/send_zygote_child_ping_linux.h"
 #include "content/public/common/zygote_fork_delegate_linux.h"
 #include "ipc/ipc_channel.h"
 #include "sandbox/linux/services/credentials.h"
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "services/service_manager/embedder/set_process_title.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
+#include "services/service_manager/sandbox/sandbox.h"
+#include "third_party/icu/source/i18n/unicode/timezone.h"
 
 // See https://chromium.googlesource.com/chromium/src/+/master/docs/linux_zygote.md
 
@@ -84,7 +87,7 @@ void KillAndReap(pid_t pid, ZygoteForkDelegate* helper) {
   // Kill the child process in case it's not already dead, so we can safely
   // perform a blocking wait.
   PCHECK(0 == kill(pid, SIGKILL));
-  PCHECK(pid == HANDLE_EINTR(waitpid(pid, NULL, 0)));
+  PCHECK(pid == HANDLE_EINTR(waitpid(pid, nullptr, 0)));
 }
 
 }  // namespace
@@ -114,7 +117,7 @@ bool Zygote::ProcessRequests() {
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_handler = &SIGCHLDHandler;
-  PCHECK(sigaction(SIGCHLD, &action, NULL) == 0);
+  PCHECK(sigaction(SIGCHLD, &action, nullptr) == 0);
 
   // Block SIGCHLD until a child might be ready to reap.
   sigset_t sigset;
@@ -164,7 +167,7 @@ bool Zygote::ProcessRequests() {
     if (pfd.revents & POLLIN) {
       // This function call can return multiple times, once per fork().
       if (HandleRequestFromBrowser(kZygoteSocketPairFd)) {
-        PCHECK(sigprocmask(SIG_SETMASK, &orig_sigmask, NULL) == 0);
+        PCHECK(sigprocmask(SIG_SETMASK, &orig_sigmask, nullptr) == 0);
         return true;
       }
     }
@@ -176,7 +179,7 @@ bool Zygote::ProcessRequests() {
 
 bool Zygote::ReapChild(const base::TimeTicks& now, ZygoteProcessInfo* child) {
   pid_t pid = child->internal_pid;
-  pid_t r = HANDLE_EINTR(waitpid(pid, NULL, WNOHANG));
+  pid_t r = HANDLE_EINTR(waitpid(pid, nullptr, WNOHANG));
   if (r > 0) {
     if (r != pid) {
       DLOG(ERROR) << "While waiting for " << pid << " to terminate, "
@@ -222,11 +225,11 @@ bool Zygote::GetProcessInfo(base::ProcessHandle pid,
 }
 
 bool Zygote::UsingSUIDSandbox() const {
-  return sandbox_flags_ & kSandboxLinuxSUID;
+  return sandbox_flags_ & service_manager::SandboxLinux::kSUID;
 }
 
 bool Zygote::UsingNSSandbox() const {
-  return sandbox_flags_ & kSandboxLinuxUserNS;
+  return sandbox_flags_ & service_manager::SandboxLinux::kUserNS;
 }
 
 bool Zygote::HandleRequestFromBrowser(int fd) {
@@ -249,7 +252,7 @@ bool Zygote::HandleRequestFromBrowser(int fd) {
     CHECK(extra_children_.empty());
 #endif
     for (base::ProcessHandle pid : extra_children_) {
-      PCHECK(pid == HANDLE_EINTR(waitpid(pid, NULL, 0)));
+      PCHECK(pid == HANDLE_EINTR(waitpid(pid, nullptr, 0)));
     }
     _exit(0);
     return false;
@@ -417,7 +420,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
                             std::string* uma_name,
                             int* uma_sample,
                             int* uma_boundary_value) {
-  ZygoteForkDelegate* helper = NULL;
+  ZygoteForkDelegate* helper = nullptr;
   for (auto i = helpers_.begin(); i != helpers_.end(); ++i) {
     if ((*i)->CanHelp(process_type, uma_name, uma_sample, uma_boundary_value)) {
       helper = i->get();
@@ -442,8 +445,8 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
     CHECK_NE(pid, 0);
   } else {
     CreatePipe(&read_pipe, &write_pipe);
-    if (sandbox_flags_ & kSandboxLinuxPIDNS &&
-        sandbox_flags_ & kSandboxLinuxUserNS) {
+    if (sandbox_flags_ & service_manager::SandboxLinux::kPIDNS &&
+        sandbox_flags_ & service_manager::SandboxLinux::kUserNS) {
       pid = sandbox::NamespaceSandbox::ForkInNewPidNamespace(
           /*drop_capabilities_in_child=*/true);
     } else {
@@ -578,6 +581,17 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
       channel_id = arg.substr(channel_id_prefix.length());
   }
 
+  if (process_type == switches::kRendererProcess) {
+    // timezone_id is obtained from ICU in zygote host so that it can't be
+    // invalid. For an unknown reason, if an invalid ID is passed down here,
+    // the worst result would be that timezone would be set to Etc/Unknown.
+    base::string16 timezone_id;
+    if (!iter.ReadString16(&timezone_id))
+      return -1;
+    icu::TimeZone::adoptDefault(icu::TimeZone::createTimeZone(
+        icu::UnicodeString(FALSE, timezone_id.data(), timezone_id.length())));
+  }
+
   if (!iter.ReadInt(&numfds))
     return -1;
   if (numfds != static_cast<int>(fds.size()))
@@ -616,7 +630,7 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
 
     // Reset the process-wide command line to our new command line.
     base::CommandLine::Reset();
-    base::CommandLine::Init(0, NULL);
+    base::CommandLine::Init(0, nullptr);
     base::CommandLine::ForCurrentProcess()->InitFromArgv(args);
 
     // Update the process title. The argv was already cached by the call to

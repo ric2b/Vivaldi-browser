@@ -68,6 +68,12 @@ using content::RenderThread;
 
 namespace android_webview {
 
+namespace {
+constexpr char kThrottledErrorDescription[] =
+    "Request throttled. Visit http://dev.chromium.org/throttling for more "
+    "information.";
+}  // namespace
+
 AwContentRendererClient::AwContentRendererClient() {}
 
 AwContentRendererClient::~AwContentRendererClient() {}
@@ -89,7 +95,7 @@ void AwContentRendererClient::RenderThreadStarted() {
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   if (!spellcheck_) {
-    spellcheck_ = base::MakeUnique<SpellCheck>();
+    spellcheck_ = base::MakeUnique<SpellCheck>(this);
     thread->AddObserver(spellcheck_.get());
   }
 #endif
@@ -177,7 +183,7 @@ void AwContentRendererClient::RenderFrameCreated(
   }
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
-  new SpellCheckProvider(render_frame, spellcheck_.get());
+  new SpellCheckProvider(render_frame, spellcheck_.get(), this);
 #endif
 }
 
@@ -206,12 +212,13 @@ void AwContentRendererClient::GetNavigationErrorStrings(
     const blink::WebURLError& error,
     std::string* error_html,
     base::string16* error_description) {
-  if (error_description) {
-    if (error.localized_description.IsEmpty())
-      *error_description = base::ASCIIToUTF16(net::ErrorToString(error.reason));
-    else
-      *error_description = error.localized_description.Utf16();
-  }
+  std::string err;
+  if (error.reason() == net::ERR_TEMPORARILY_THROTTLED)
+    err = kThrottledErrorDescription;
+  else
+    err = net::ErrorToString(error.reason());
+  if (error_description)
+    *error_description = base::ASCIIToUTF16(err);
 
   if (!error_html)
     return;
@@ -221,7 +228,7 @@ void AwContentRendererClient::GetNavigationErrorStrings(
   std::string url_string = gurl.possibly_invalid_spec();
   int reason_id = IDS_AW_WEBPAGE_CAN_NOT_BE_LOADED;
 
-  if (error.reason == net::ERR_BLOCKED_BY_ADMINISTRATOR) {
+  if (error.reason() == net::ERR_BLOCKED_BY_ADMINISTRATOR) {
     // This creates a different error page giving considerably more
     // detail, and possibly allowing the user to request access.
     // Get the details this needs from the browser.
@@ -245,9 +252,6 @@ void AwContentRendererClient::GetNavigationErrorStrings(
         reason_id = IDS_AW_WEBPAGE_PARENTAL_PERMISSION_NEEDED;
     }
   }
-
-  std::string err = error.localized_description.Utf8(
-      blink::WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
 
   if (err.empty())
     reason_id = IDS_AW_WEBPAGE_TEMPORARILY_DOWN;
@@ -273,7 +277,7 @@ void AwContentRendererClient::GetNavigationErrorStrings(
   else
     replacements.push_back("");
   *error_html = base::ReplaceStringPlaceholders(
-      ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           IDR_AW_LOAD_ERROR_HTML),
       replacements, nullptr);
 }
@@ -363,6 +367,10 @@ bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
   }
   return false;
 }
+
+void AwContentRendererClient::GetInterface(
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {}
 
 bool AwContentRendererClient::UsingSafeBrowsingMojoService() {
   if (safe_browsing_)

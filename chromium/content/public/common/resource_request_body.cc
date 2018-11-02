@@ -54,6 +54,17 @@ void ResourceRequestBody::AppendFileRange(
                                       expected_modification_time);
 }
 
+void ResourceRequestBody::AppendRawFileRange(
+    base::File file,
+    const base::FilePath& file_path,
+    uint64_t offset,
+    uint64_t length,
+    const base::Time& expected_modification_time) {
+  elements_.push_back(Element());
+  elements_.back().SetToFileRange(std::move(file), file_path, offset, length,
+                                  expected_modification_time);
+}
+
 void ResourceRequestBody::AppendBlob(const std::string& uuid) {
   elements_.push_back(Element());
   elements_.back().SetToBlob(uuid);
@@ -67,6 +78,12 @@ void ResourceRequestBody::AppendFileSystemFileRange(
   elements_.push_back(Element());
   elements_.back().SetToFileSystemUrlRange(url, offset, length,
                                            expected_modification_time);
+}
+
+void ResourceRequestBody::AppendDataPipe(
+    network::mojom::DataPipeGetterPtr data_pipe_getter) {
+  elements_.push_back(Element());
+  elements_.back().SetToDataPipe(std::move(data_pipe_getter));
 }
 
 std::vector<base::FilePath> ResourceRequestBody::GetReferencedFiles() const {

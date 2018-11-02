@@ -372,7 +372,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     @Override
     public OverlayPanelContent createNewOverlayPanelContent() {
         return new OverlayPanelContent(new OverlayContentDelegate(),
-                new OverlayContentProgressObserver(), mActivity);
+                new OverlayContentProgressObserver(), mActivity, getBarHeight());
     }
 
     /**
@@ -467,8 +467,8 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     // ============================================================================================
 
     @Override
-    protected void onAnimationFinished() {
-        super.onAnimationFinished();
+    protected void onHeightAnimationFinished() {
+        super.onHeightAnimationFinished();
 
         if (getPanelState() == PanelState.PEEKED || getPanelState() == PanelState.CLOSED) {
             setBasePageTextControlsVisibility(true);
@@ -503,9 +503,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
      * Handles the beginning of the swipe gesture.
      */
     public void handleSwipeStart() {
-        if (animationIsRunning()) {
-            cancelHeightAnimation();
-        }
+        cancelHeightAnimation();
 
         mHasDetectedTouchGesture = false;
         mInitialPanelHeight = getHeight();
@@ -799,12 +797,9 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
      */
     protected void resizePanelContentViewCore(float width, float height) {
         if (!isShowing()) return;
-        if (getContentViewCore() != null) {
-            getOverlayPanelContent().onSizeChanged(
-                    (int) (width / mPxToDp), (int) (height / mPxToDp));
-            getOverlayPanelContent().onPhysicalBackingSizeChanged(
-                    (int) (width / mPxToDp), (int) (height / mPxToDp));
-        }
+        getOverlayPanelContent().onSizeChanged((int) (width / mPxToDp), (int) (height / mPxToDp));
+        getOverlayPanelContent().onPhysicalBackingSizeChanged(
+                (int) (width / mPxToDp), (int) (height / mPxToDp));
     }
 
     @Override
@@ -833,7 +828,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     @Override
     public boolean updateOverlay(long time, long dt) {
         if (isPanelOpened()) setBasePageTextControlsVisibility(false);
-        return super.onUpdateAnimation(time, false);
+        return true;
     }
 
     @Override

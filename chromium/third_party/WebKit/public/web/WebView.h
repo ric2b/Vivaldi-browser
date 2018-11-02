@@ -36,13 +36,8 @@
 #include "public/platform/WebDisplayMode.h"
 #include "public/platform/WebDragOperation.h"
 #include "public/platform/WebFocusType.h"
-#include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebString.h"
-#include "public/platform/WebVector.h"
-
-namespace gfx {
-class ICCProfile;
-}
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-shared.h"
 
 namespace blink {
 
@@ -91,15 +86,10 @@ class WebView : protected WebWidget {
   using WebWidget::ThemeChanged;
   using WebWidget::HandleInputEvent;
   using WebWidget::SetCursorVisibilityState;
-  using WebWidget::HasTouchEventHandlersAt;
   using WebWidget::ApplyViewportDeltas;
   using WebWidget::MouseCaptureLost;
   using WebWidget::SetFocus;
-  using WebWidget::CompositionRange;
   using WebWidget::SelectionBounds;
-  using WebWidget::SelectionTextDirection;
-  using WebWidget::IsSelectionAnchorFirst;
-  using WebWidget::SetTextDirection;
   using WebWidget::IsAcceleratedCompositingActive;
   using WebWidget::IsWebView;
   using WebWidget::IsPagePopup;
@@ -118,9 +108,10 @@ class WebView : protected WebWidget {
   // as appropriate. It is legal to modify settings before completing
   // initialization.
   //
-  // client may be null, while WebPageVisibilityState defines the initial
+  // client may be null, while PageVisibilityState defines the initial
   // visibility of the page.
-  BLINK_EXPORT static WebView* Create(WebViewClient*, WebPageVisibilityState);
+  BLINK_EXPORT static WebView* Create(WebViewClient*,
+                                      mojom::PageVisibilityState);
 
   // Initializes the various client interfaces.
   virtual void SetCredentialManagerClient(WebCredentialManagerClient*) = 0;
@@ -184,12 +175,9 @@ class WebView : protected WebWidget {
   // send it.
   virtual void ClearFocusedElement() = 0;
 
-  // If it is editable, scrolls the element currently in focus into |rect|,
-  // where |rect| is in viewport space.
+  // If it is editable, scrolls the element currently in focus into view.
   // Returns false if there is currently no currently focused element.
-  virtual bool ScrollFocusedEditableElementIntoRect(const WebRect&) {
-    return false;
-  }
+  virtual bool ScrollFocusedEditableElementIntoView() { return false; }
 
   // Smooth scroll the root layer to |targetX|, |targetY| in |durationMs|.
   virtual void SmoothScroll(int target_x, int target_y, long duration_ms) {}
@@ -302,8 +290,7 @@ class WebView : protected WebWidget {
   // level.
   virtual void SetZoomFactorForDeviceScaleFactor(float) = 0;
 
-  // Set and reset the device color profile.
-  virtual void SetDeviceColorProfile(const gfx::ICCProfile&) = 0;
+  virtual float ZoomFactorForDeviceScaleFactor() = 0;
 
   // Resize the view at the same time as changing the state of the top
   // controls. If |browserControlsShrinkLayout| is true, the embedder shrunk the
@@ -341,7 +328,7 @@ class WebView : protected WebWidget {
   // Data exchange -------------------------------------------------------
 
   // Do a hit test at given point and return the HitTestResult.
-  virtual WebHitTestResult HitTestResultAt(const WebPoint&) = 0;
+  WebHitTestResult HitTestResultAt(const WebPoint&) override = 0;
 
   // Do a hit test equivalent to what would be done for a GestureTap event
   // that has width/height corresponding to the supplied |tapArea|.
@@ -435,7 +422,7 @@ class WebView : protected WebWidget {
   // Visibility -----------------------------------------------------------
 
   // Sets the visibility of the WebView.
-  virtual void SetVisibilityState(WebPageVisibilityState visibility_state,
+  virtual void SetVisibilityState(mojom::PageVisibilityState visibility_state,
                                   bool is_initial_state) {}
 
   // PageOverlay ----------------------------------------------------------

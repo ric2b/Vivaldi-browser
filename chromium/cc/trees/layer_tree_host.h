@@ -33,18 +33,19 @@
 #include "cc/input/scrollbar.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_list_iterator.h"
-#include "cc/output/layer_tree_frame_sink.h"
-#include "cc/output/swap_promise.h"
 #include "cc/trees/compositor_mode.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy.h"
+#include "cc/trees/swap_promise.h"
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/target_property.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/surfaces/surface_reference_owner.h"
 #include "components/viz/common/surfaces/surface_sequence_generator.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -60,9 +61,10 @@ class MutatorEvents;
 class MutatorHost;
 struct PendingPageScaleAnimation;
 class RenderingStatsInstrumentation;
-struct ScrollBoundaryBehavior;
+struct OverscrollBehavior;
 class TaskGraphRunner;
 class UIResourceManager;
+class UkmRecorderFactory;
 struct RenderingStats;
 struct ScrollAndScaleSet;
 
@@ -80,6 +82,8 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
     // compositor thread may make sync calls to this thread, analogous to the
     // raster worker threads.
     scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner;
+
+    std::unique_ptr<UkmRecorderFactory> ukm_recorder_factory;
 
     InitParams();
     ~InitParams();
@@ -147,7 +151,8 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
       std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink);
 
   // Forces the host to immediately release all references to the
-  // LayerTreeFrameSink, if any. Can be safely called any time.
+  // LayerTreeFrameSink, if any. Can be safely called any time, but the
+  // compositor should not be visible.
   std::unique_ptr<LayerTreeFrameSink> ReleaseLayerTreeFrameSink();
 
   // Frame Scheduling (main and compositor frames) requests -------
@@ -294,8 +299,7 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
                                 float bottom_height,
                                 bool shrink);
   void SetBrowserControlsShownRatio(float ratio);
-  void SetScrollBoundaryBehavior(
-      const ScrollBoundaryBehavior& scroll_boundary_behavior);
+  void SetOverscrollBehavior(const OverscrollBehavior& overscroll_behavior);
 
   void SetPageScaleFactorAndLimits(float page_scale_factor,
                                    float min_page_scale_factor,
@@ -306,13 +310,6 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
 
   void set_background_color(SkColor color) { background_color_ = color; }
   SkColor background_color() const { return background_color_; }
-
-  void set_has_transparent_background(bool transparent) {
-    has_transparent_background_ = transparent;
-  }
-  bool has_transparent_background() const {
-    return has_transparent_background_;
-  }
 
   void StartPageScaleAnimation(const gfx::Vector2d& target_offset,
                                bool use_anchor,
@@ -349,6 +346,7 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
   // UseLayerLists() is true, which also implies that Slimming Paint
   // v2 is enabled.
   PropertyTrees* property_trees() { return &property_trees_; }
+  const PropertyTrees* property_trees() const { return &property_trees_; }
 
   void SetNeedsDisplayOnAllLayers();
 
@@ -501,11 +499,14 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
       ElementId element_id) const override;
 
   void QueueImageDecode(const PaintImage& image,
-                        const base::Callback<void(bool)>& callback);
+                        base::OnceCallback<void(bool)> callback);
+  void ImageDecodesFinished(const std::vector<std::pair<int, bool>>& results);
 
   void RequestBeginMainFrameNotExpected(bool new_state);
 
   float recording_scale_factor() const { return recording_scale_factor_; }
+
+  void SetURLForUkm(const GURL& url);
 
  protected:
   LayerTreeHost(InitParams* params, CompositorMode mode);
@@ -537,6 +538,7 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
   base::WeakPtr<InputHandler> input_handler_weak_ptr_;
 
   scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner_;
+  std::unique_ptr<UkmRecorderFactory> ukm_recorder_factory_;
 
  private:
   friend class LayerTreeHostSerializationTest;
@@ -609,7 +611,7 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
   float top_controls_height_ = 0.f;
   float top_controls_shown_ratio_ = 0.f;
   bool browser_controls_shrink_blink_size_ = false;
-  ScrollBoundaryBehavior scroll_boundary_behavior_;
+  OverscrollBehavior overscroll_behavior_;
 
   float bottom_controls_height_ = 0.f;
 
@@ -626,7 +628,6 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
   bool defer_commits_ = false;
 
   SkColor background_color_ = SK_ColorWHITE;
-  bool has_transparent_background_ = false;
 
   LayerSelection selection_;
 
@@ -669,8 +670,10 @@ class CC_EXPORT LayerTreeHost : public viz::SurfaceReferenceOwner,
 
   MutatorHost* mutator_host_;
 
-  std::vector<std::pair<PaintImage, base::Callback<void(bool)>>>
+  std::vector<std::pair<PaintImage, base::OnceCallback<void(bool)>>>
       queued_image_decodes_;
+  std::unordered_map<int, base::OnceCallback<void(bool)>>
+      pending_image_decodes_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHost);
 };

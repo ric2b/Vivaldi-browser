@@ -32,6 +32,7 @@
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/RefCounted.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -41,9 +42,9 @@ class FileList;
 class Font;
 class FontDescription;
 class HTMLInputElement;
-class LayoutObject;
 class LengthSize;
 class Locale;
+class Node;
 class PlatformChromeClient;
 class Theme;
 class ThemePainter;
@@ -87,18 +88,16 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // portion of the theme, e.g., LayoutThemeMac.cpp for Mac OS X.
 
   // These methods return the theme's extra style sheets rules, to let each
-  // platform adjust the default CSS rules in html.css, quirks.css or
-  // mediaControls.css.
+  // platform adjust the default CSS rules in html.css or quirks.css
   virtual String ExtraDefaultStyleSheet();
   virtual String ExtraQuirksStyleSheet();
-  virtual String ExtraMediaControlsStyleSheet();
   virtual String ExtraFullscreenStyleSheet();
 
-  // A method to obtain the baseline position for a "leaf" control. This will
-  // only be used if a baseline position cannot be determined by examining child
-  // content. Checkboxes and radio buttons are examples of controls that need to
-  // do this.
-  virtual LayoutUnit BaselinePosition(const LayoutObject*) const;
+  // A method to obtain the baseline position adjustment needed for a "leaf"
+  // control. This will only be used if a baseline position cannot be determined
+  // by examining child content.
+  // Checkboxes and radio buttons are examples of controls that need to do this.
+  LayoutUnit BaselinePositionAdjustment(const ComputedStyle&) const;
 
   // A method for asking if a control is a container or not.  Leaf controls have
   // to have some special behavior (like the baseline position API above).
@@ -110,15 +109,19 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
   // Some controls may spill out of their containers (e.g., the check on an OSX
   // 10.9 checkbox). Add this "visual overflow" to the object's border box rect.
-  virtual void AddVisualOverflow(const LayoutObject&, IntRect& border_box);
+  virtual void AddVisualOverflow(const Node*,
+                                 const ComputedStyle&,
+                                 IntRect& border_box);
 
   // This method is called whenever a control state changes on a particular
   // themed object, e.g., the mouse becomes pressed or a control becomes
   // disabled. The ControlState parameter indicates which state has changed
   // (from having to not having, or vice versa).
-  bool ControlStateChanged(LayoutObject&, ControlState) const;
+  bool ControlStateChanged(const Node*,
+                           const ComputedStyle&,
+                           ControlState) const;
 
-  bool ShouldDrawDefaultFocusRing(const LayoutObject&) const;
+  bool ShouldDrawDefaultFocusRing(const Node*, const ComputedStyle&) const;
 
   // A method asking if the theme's controls actually care about redrawing when
   // hovered.
@@ -161,8 +164,8 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   }
   virtual void PlatformColorsDidChange();
 
-  void SetCaretBlinkInterval(double);
-  virtual double CaretBlinkInterval() const;
+  void SetCaretBlinkInterval(TimeDelta);
+  virtual TimeDelta CaretBlinkInterval() const;
 
   // System fonts and colors for CSS.
   virtual void SystemFont(CSSValueID system_font_id,
@@ -274,17 +277,17 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
  public:
   // Methods for state querying
-  static ControlStates ControlStatesForLayoutObject(const LayoutObject&);
-  static bool IsActive(const LayoutObject&);
-  static bool IsChecked(const LayoutObject&);
-  static bool IsIndeterminate(const LayoutObject&);
-  static bool IsEnabled(const LayoutObject&);
-  static bool IsFocused(const LayoutObject&);
-  static bool IsPressed(const LayoutObject&);
-  static bool IsSpinUpButtonPartPressed(const LayoutObject&);
-  static bool IsHovered(const LayoutObject&);
-  static bool IsSpinUpButtonPartHovered(const LayoutObject&);
-  static bool IsReadOnlyControl(const LayoutObject&);
+  static ControlStates ControlStatesForNode(const Node*, const ComputedStyle&);
+  static bool IsActive(const Node*);
+  static bool IsChecked(const Node*);
+  static bool IsIndeterminate(const Node*);
+  static bool IsEnabled(const Node*);
+  static bool IsFocused(const Node*);
+  static bool IsPressed(const Node*);
+  static bool IsSpinUpButtonPartPressed(const Node*);
+  static bool IsHovered(const Node*);
+  static bool IsSpinUpButtonPartHovered(const Node*);
+  static bool IsReadOnlyControl(const Node*);
 
  private:
   // This function is to be implemented in your platform-specific theme
@@ -293,7 +296,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
   Color custom_focus_ring_color_;
   bool has_custom_focus_ring_color_;
-  double caret_blink_interval_ = 0.5;
+  TimeDelta caret_blink_interval_ = TimeDelta::FromMilliseconds(500);
 
   // This color is expected to be drawn on a semi-transparent overlay,
   // making it more transparent than its alpha value indicates.

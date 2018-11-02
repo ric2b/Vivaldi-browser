@@ -4,6 +4,7 @@
 
 #include "chromeos/network/certificate_helper.h"
 
+#include <cert.h>
 #include <certdb.h>
 #include <pk11pub.h>
 #include <secport.h>
@@ -12,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/url_formatter/url_formatter.h"
 #include "net/cert/nss_cert_database_chromeos.h"
+#include "net/cert/x509_util_nss.h"
 
 namespace chromeos {
 namespace certificate {
@@ -29,7 +31,7 @@ std::string Stringize(char* nss_text, const std::string& alternative_text) {
   return !s.empty() ? s : alternative_text;
 }
 
-std::string GetNickname(net::X509Certificate::OSCertHandle cert_handle) {
+std::string GetNickname(CERTCertificate* cert_handle) {
   if (!cert_handle->nickname)
     return std::string();
   std::string name = cert_handle->nickname;
@@ -43,7 +45,7 @@ std::string GetNickname(net::X509Certificate::OSCertHandle cert_handle) {
 
 }  // namespace
 
-net::CertType GetCertType(net::X509Certificate::OSCertHandle cert_handle) {
+net::CertType GetCertType(CERTCertificate* cert_handle) {
   CERTCertTrust trust = {0};
   CERT_GetCertTrust(cert_handle, &trust);
 
@@ -63,28 +65,25 @@ net::CertType GetCertType(net::X509Certificate::OSCertHandle cert_handle) {
   return net::OTHER_CERT;
 }
 
-std::string GetCertTokenName(net::X509Certificate::OSCertHandle cert_handle) {
+std::string GetCertTokenName(CERTCertificate* cert_handle) {
   std::string token;
   if (cert_handle->slot)
     token = PK11_GetTokenName(cert_handle->slot);
   return token;
 }
 
-std::string GetIssuerCommonName(net::X509Certificate::OSCertHandle cert_handle,
-                                const std::string& alternative_text) {
-  return Stringize(CERT_GetCommonName(&cert_handle->issuer), alternative_text);
+std::string GetIssuerDisplayName(CERTCertificate* cert_handle) {
+  return net::x509_util::GetCERTNameDisplayName(&cert_handle->issuer);
 }
 
-std::string GetCertNameOrNickname(
-    net::X509Certificate::OSCertHandle cert_handle) {
+std::string GetCertNameOrNickname(CERTCertificate* cert_handle) {
   std::string name = GetCertAsciiNameOrNickname(cert_handle);
   if (!name.empty())
     name = base::UTF16ToUTF8(url_formatter::IDNToUnicode(name));
   return name;
 }
 
-std::string GetCertAsciiNameOrNickname(
-    net::X509Certificate::OSCertHandle cert_handle) {
+std::string GetCertAsciiNameOrNickname(CERTCertificate* cert_handle) {
   std::string alternative_text = GetNickname(cert_handle);
   return Stringize(CERT_GetCommonName(&cert_handle->subject), alternative_text);
 }

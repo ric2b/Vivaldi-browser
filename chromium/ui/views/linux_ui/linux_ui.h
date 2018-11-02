@@ -8,12 +8,14 @@
 #include <string>
 
 #include "base/callback.h"
+#include "build/buildflag.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ime/linux/linux_input_method_context_factory.h"
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #include "ui/gfx/linux_font_delegate.h"
 #include "ui/shell_dialogs/shell_dialog_linux.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/features.h"
 #include "ui/views/linux_ui/status_icon_linux.h"
 #include "ui/views/views_export.h"
 
@@ -22,6 +24,10 @@
 
 namespace aura {
 class Window;
+}
+
+namespace base {
+class TimeDelta;
 }
 
 namespace color_utils {
@@ -41,8 +47,11 @@ class Border;
 class DeviceScaleFactorObserver;
 class LabelButton;
 class LabelButtonBorder;
-class NavButtonProvider;
 class WindowButtonOrderObserver;
+
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+class NavButtonProvider;
+#endif
 
 // Adapter class with targets to render like different toolkits. Set by any
 // project that wants to do linux desktop native rendering.
@@ -93,7 +102,7 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   virtual SkColor GetActiveSelectionFgColor() const = 0;
   virtual SkColor GetInactiveSelectionBgColor() const = 0;
   virtual SkColor GetInactiveSelectionFgColor() const = 0;
-  virtual double GetCursorBlinkInterval() const = 0;
+  virtual base::TimeDelta GetCursorBlinkInterval() const = 0;
 
   // Returns a NativeTheme that will provide system colors and draw system
   // style widgets.
@@ -140,9 +149,6 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   virtual void RemoveWindowButtonOrderObserver(
       WindowButtonOrderObserver* observer) = 0;
 
-  // Determines whether the user's window manager is Unity.
-  virtual bool UnityIsRunning() = 0;
-
   // What action we should take when the user middle clicks on non-client
   // area. The default is lowering the window.
   virtual NonClientMiddleClickAction GetNonClientMiddleClickAction() = 0;
@@ -170,9 +176,15 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   virtual void RemoveDeviceScaleFactorObserver(
       DeviceScaleFactorObserver* observer) = 0;
 
+  // Only used on GTK to indicate if the dark GTK theme variant is
+  // preferred.
+  virtual bool PreferDarkTheme() const = 0;
+
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
   // Returns a new NavButtonProvider, or nullptr if the underlying
   // toolkit does not support drawing client-side navigation buttons.
   virtual std::unique_ptr<NavButtonProvider> CreateNavButtonProvider() = 0;
+#endif
 };
 
 }  // namespace views

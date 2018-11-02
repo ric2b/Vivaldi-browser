@@ -19,8 +19,7 @@ FaviconImageResult::~FaviconImageResult() {}
 // FaviconRawBitmapResult
 
 FaviconRawBitmapResult::FaviconRawBitmapResult()
-    : expired(false), icon_type(INVALID_ICON) {
-}
+    : expired(false), icon_type(IconType::kInvalid) {}
 
 FaviconRawBitmapResult::FaviconRawBitmapResult(
     const FaviconRawBitmapResult& other) = default;

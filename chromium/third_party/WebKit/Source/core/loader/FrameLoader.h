@@ -171,11 +171,13 @@ class CORE_EXPORT FrameLoader final {
 
   void UpdateForSameDocumentNavigation(const KURL&,
                                        SameDocumentNavigationSource,
-                                       RefPtr<SerializedScriptValue>,
+                                       scoped_refptr<SerializedScriptValue>,
                                        HistoryScrollRestorationType,
                                        FrameLoadType,
                                        Document*);
 
+  bool ShouldSerializeScrollAnchor();
+  void SaveScrollAnchor();
   void SaveScrollState();
   void RestoreScrollPositionAndViewState();
 
@@ -216,7 +218,7 @@ class CORE_EXPORT FrameLoader final {
 
   void DetachProvisionalDocumentLoader(DocumentLoader*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   static void SetReferrerForFrameRequest(FrameLoadRequest&);
 
@@ -244,7 +246,7 @@ class CORE_EXPORT FrameLoader final {
                  HistoryItem*);
 
   void LoadInSameDocument(const KURL&,
-                          PassRefPtr<SerializedScriptValue> state_object,
+                          scoped_refptr<SerializedScriptValue> state_object,
                           FrameLoadType,
                           HistoryItem*,
                           ClientRedirectPolicy,
@@ -263,10 +265,12 @@ class CORE_EXPORT FrameLoader final {
   std::unique_ptr<TracedValue> ToTracedValue() const;
   void TakeObjectSnapshot() const;
 
-  DocumentLoader* CreateDocumentLoader(const ResourceRequest&,
-                                       const FrameLoadRequest&,
-                                       FrameLoadType,
-                                       NavigationType);
+  DocumentLoader* CreateDocumentLoader(
+      const ResourceRequest&,
+      const FrameLoadRequest&,
+      FrameLoadType,
+      NavigationType,
+      const base::UnguessableToken& devtools_navigation_token);
 
   LocalFrameClient* Client() const;
 

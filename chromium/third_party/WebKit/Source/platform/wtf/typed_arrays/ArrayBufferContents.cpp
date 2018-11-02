@@ -29,7 +29,7 @@
 
 #include <string.h>
 #if defined(OS_LINUX)
-#include "sandbox/linux/services/resource_limits.h"
+#include "sandbox/linux/services/resource_limits.h"  // nogncheck
 #endif
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "platform/wtf/Assertions.h"
@@ -53,14 +53,14 @@ ArrayBufferContents::AdjustAmountOfExternalAllocatedMemoryFunction
 #endif
 
 ArrayBufferContents::ArrayBufferContents()
-    : holder_(AdoptRef(new DataHolder())) {}
+    : holder_(base::AdoptRef(new DataHolder())) {}
 
 ArrayBufferContents::ArrayBufferContents(
     unsigned num_elements,
     unsigned element_byte_size,
     SharingType is_shared,
     ArrayBufferContents::InitializationPolicy policy)
-    : holder_(AdoptRef(new DataHolder())) {
+    : holder_(base::AdoptRef(new DataHolder())) {
   // Do not allow 32-bit overflow of the total size.
   unsigned total_size = num_elements * element_byte_size;
   if (num_elements) {
@@ -75,7 +75,7 @@ ArrayBufferContents::ArrayBufferContents(
 ArrayBufferContents::ArrayBufferContents(DataHandle data,
                                          unsigned size_in_bytes,
                                          SharingType is_shared)
-    : holder_(AdoptRef(new DataHolder())) {
+    : holder_(base::AdoptRef(new DataHolder())) {
   if (data) {
     holder_->Adopt(std::move(data), size_in_bytes, is_shared);
   } else {
@@ -90,7 +90,7 @@ ArrayBufferContents::ArrayBufferContents(DataHandle data,
 ArrayBufferContents::~ArrayBufferContents() {}
 
 void ArrayBufferContents::Neuter() {
-  holder_.Clear();
+  holder_ = nullptr;
 }
 
 void ArrayBufferContents::Transfer(ArrayBufferContents& other) {
@@ -150,14 +150,12 @@ void* ArrayBufferContents::ReserveMemory(size_t size) {
   }
 #endif
 
-  // TODO(crbug.com/735209): On Windows this commits all the memory, rather than
-  // just reserving it. This is very bad and should be fixed, but we don't use
-  // this feature on Windows at all yet.
-  return base::AllocPages(hint, size, align, base::PageInaccessible);
+  constexpr bool commit = true;
+  return base::AllocPages(hint, size, align, base::PageInaccessible, !commit);
 }
 
 void ArrayBufferContents::FreeMemory(void* data) {
-  PartitionFreeGeneric(Partitions::ArrayBufferPartition(), data);
+  Partitions::ArrayBufferPartition()->Free(data);
 }
 
 void ArrayBufferContents::ReleaseReservedMemory(void* data, size_t size) {

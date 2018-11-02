@@ -154,6 +154,7 @@ class EVENTS_EXPORT Event {
   // |this| is not a PointerEvent.
   bool IsMousePointerEvent() const;
   bool IsTouchPointerEvent() const;
+  bool IsPenPointerEvent() const;
 
   bool IsGestureEvent() const {
     switch (type_) {
@@ -211,6 +212,11 @@ class EVENTS_EXPORT Event {
            ((type_ == ET_SCROLL_FLING_START ||
            type_ == ET_SCROLL_FLING_CANCEL) &&
            !(flags() & EF_FROM_TOUCH));
+  }
+
+  bool IsPinchEvent() const {
+    return type_ == ET_GESTURE_PINCH_BEGIN ||
+           type_ == ET_GESTURE_PINCH_UPDATE || type_ == ET_GESTURE_PINCH_END;
   }
 
   bool IsScrollGestureEvent() const {
@@ -378,7 +384,7 @@ class EVENTS_EXPORT LocatedEvent : public Event {
     gfx::Point offset = gfx::ToFlooredPoint(location_);
     T::ConvertPointToTarget(source, target, &offset);
     gfx::Vector2d diff = gfx::ToFlooredPoint(location_) - offset;
-    location_= location_ - diff;
+    location_ = location_ - diff;
   }
 
  protected:
@@ -482,6 +488,8 @@ struct EVENTS_EXPORT PointerDetails {
   // of kWheelDelta.
   // Note: offset_.x() > 0/offset_.y() > 0 means scroll left/up.
   gfx::Vector2d offset;
+
+  // If you add fields please update ui/events/mojo/event.mojom.
 };
 
 class EVENTS_EXPORT MouseEvent : public LocatedEvent {
@@ -656,6 +664,9 @@ class EVENTS_EXPORT MouseWheelEvent : public MouseEvent {
   gfx::Vector2d offset_;
 };
 
+// NOTE: Pen (stylus) events use TouchEvent with POINTER_TYPE_PEN. They were
+// originally implemented as MouseEvent but switched to TouchEvent when UX
+// decided not to show hover effects for pen.
 class EVENTS_EXPORT TouchEvent : public LocatedEvent {
  public:
   explicit TouchEvent(const base::NativeEvent& native_event);

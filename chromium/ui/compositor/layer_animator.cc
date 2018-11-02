@@ -86,25 +86,26 @@ LayerAnimator* LayerAnimator::CreateImplicitAnimator() {
 // It is worth noting that SetFoo avoids invoking the usual animation machinery
 // if the transition duration is zero -- in this case we just set the property
 // on the layer animation delegate immediately.
-#define ANIMATED_PROPERTY(type, property, name, member_type, member)    \
-  void LayerAnimator::Set##name(type value) {                           \
-    base::TimeDelta duration = GetTransitionDuration();                 \
-    if (duration.is_zero() && delegate() &&                             \
-        (preemption_strategy_ != ENQUEUE_NEW_ANIMATION)) {              \
-      StopAnimatingProperty(LayerAnimationElement::property);           \
-      delegate()->Set##name##FromAnimation(value);                      \
-      return;                                                           \
-    }                                                                   \
-    std::unique_ptr<LayerAnimationElement> element =                    \
-        LayerAnimationElement::Create##name##Element(value, duration);  \
-    element->set_tween_type(tween_type_);                               \
-    StartAnimation(new LayerAnimationSequence(std::move(element)));     \
-  }                                                                     \
-                                                                        \
-  member_type LayerAnimator::GetTarget##name() const {                  \
-    LayerAnimationElement::TargetValue target(delegate());              \
-    GetTargetValue(&target);                                            \
-    return target.member;                                               \
+#define ANIMATED_PROPERTY(type, property, name, member_type, member)   \
+  void LayerAnimator::Set##name(type value) {                          \
+    base::TimeDelta duration = GetTransitionDuration();                \
+    if (duration.is_zero() && delegate() &&                            \
+        (preemption_strategy_ != ENQUEUE_NEW_ANIMATION)) {             \
+      StopAnimatingProperty(LayerAnimationElement::property);          \
+      delegate()->Set##name##FromAnimation(                            \
+          value, PropertyChangeReason::NOT_FROM_ANIMATION);            \
+      return;                                                          \
+    }                                                                  \
+    std::unique_ptr<LayerAnimationElement> element =                   \
+        LayerAnimationElement::Create##name##Element(value, duration); \
+    element->set_tween_type(tween_type_);                              \
+    StartAnimation(new LayerAnimationSequence(std::move(element)));    \
+  }                                                                    \
+                                                                       \
+  member_type LayerAnimator::GetTarget##name() const {                 \
+    LayerAnimationElement::TargetValue target(delegate());             \
+    GetTargetValue(&target);                                           \
+    return target.member;                                              \
   }
 
 ANIMATED_PROPERTY(
@@ -271,8 +272,7 @@ void LayerAnimator::StartTogether(
 
   bool wait_for_group_start = false;
   for (iter = animations.begin(); iter != animations.end(); ++iter)
-    wait_for_group_start |= (*iter)->IsFirstElementThreaded();
-
+    wait_for_group_start |= (*iter)->IsFirstElementThreaded(delegate_);
   int group_id = cc::AnimationIdProvider::NextGroupId();
 
   // These animations (provided they don't animate any common properties) will
@@ -309,7 +309,7 @@ void LayerAnimator::ScheduleTogether(
 
   bool wait_for_group_start = false;
   for (iter = animations.begin(); iter != animations.end(); ++iter)
-    wait_for_group_start |= (*iter)->IsFirstElementThreaded();
+    wait_for_group_start |= (*iter)->IsFirstElementThreaded(delegate_);
 
   int group_id = cc::AnimationIdProvider::NextGroupId();
 
@@ -332,11 +332,10 @@ void LayerAnimator::SchedulePauseForProperties(
                             properties_to_pause, duration)));
 }
 
-bool LayerAnimator::IsAnimatingProperty(
-    LayerAnimationElement::AnimatableProperty property) const {
-  for (AnimationQueue::const_iterator queue_iter = animation_queue_.begin();
-       queue_iter != animation_queue_.end(); ++queue_iter) {
-    if ((*queue_iter)->properties() & property)
+bool LayerAnimator::IsAnimatingOnePropertyOf(
+    LayerAnimationElement::AnimatableProperties properties) const {
+  for (auto& layer_animation_sequence : animation_queue_) {
+    if (layer_animation_sequence->properties() & properties)
       return true;
   }
   return false;
@@ -358,8 +357,11 @@ void LayerAnimator::StopAnimatingProperty(
 }
 
 void LayerAnimator::AddObserver(LayerAnimationObserver* observer) {
-  if (!observers_.HasObserver(observer))
+  if (!observers_.HasObserver(observer)) {
     observers_.AddObserver(observer);
+    for (auto& layer_animation_sequence : animation_queue_)
+      layer_animation_sequence->AddObserver(observer);
+  }
 }
 
 void LayerAnimator::RemoveObserver(LayerAnimationObserver* observer) {
@@ -369,6 +371,23 @@ void LayerAnimator::RemoveObserver(LayerAnimationObserver* observer) {
        queue_iter != animation_queue_.end(); ++queue_iter) {
     (*queue_iter)->RemoveObserver(observer);
   }
+}
+
+void LayerAnimator::AddOwnedObserver(
+    std::unique_ptr<ImplicitAnimationObserver> animation_observer) {
+  owned_observer_list_.push_back(std::move(animation_observer));
+}
+
+void LayerAnimator::RemoveAndDestroyOwnedObserver(
+    ImplicitAnimationObserver* animation_observer) {
+  owned_observer_list_.erase(
+      std::remove_if(
+          owned_observer_list_.begin(), owned_observer_list_.end(),
+          [animation_observer](
+              const std::unique_ptr<ImplicitAnimationObserver>& other) {
+            return other.get() == animation_observer;
+          }),
+      owned_observer_list_.end());
 }
 
 void LayerAnimator::OnThreadedAnimationStarted(
@@ -403,7 +422,7 @@ void LayerAnimator::OnThreadedAnimationStarted(
     // Ensure that each sequence is only Started once, regardless of the
     // number of sequences in the group that have threaded first elements.
     if (((*iter).sequence()->animation_group_id() == group_id) &&
-        !(*iter).sequence()->IsFirstElementThreaded() &&
+        !(*iter).sequence()->IsFirstElementThreaded(delegate_) &&
         (*iter).sequence()->waiting_for_group_start()) {
       (*iter).sequence()->set_start_time(start_time);
       (*iter).sequence()->set_waiting_for_group_start(false);
@@ -544,9 +563,8 @@ LayerAnimationSequence* LayerAnimator::RemoveAnimation(
     }
   }
 
-  if (!to_return.get() ||
-      !to_return->waiting_for_group_start() ||
-      !to_return->IsFirstElementThreaded())
+  if (!to_return.get() || !to_return->waiting_for_group_start() ||
+      !to_return->IsFirstElementThreaded(delegate_))
     return to_return.release();
 
   // The removed sequence may have been responsible for making other sequences
@@ -557,7 +575,7 @@ LayerAnimationSequence* LayerAnimator::RemoveAnimation(
   for (AnimationQueue::iterator queue_iter = animation_queue_.begin();
        queue_iter != animation_queue_.end(); ++queue_iter) {
     if (((*queue_iter)->animation_group_id() == group_id) &&
-        (*queue_iter)->IsFirstElementThreaded()) {
+        (*queue_iter)->IsFirstElementThreaded(delegate_)) {
       is_wait_still_needed = true;
       break;
     }
@@ -853,7 +871,7 @@ bool LayerAnimator::StartSequenceImmediately(LayerAnimationSequence* sequence) {
   AddToQueueIfNotPresent(sequence);
 
   if (!sequence->waiting_for_group_start() ||
-      sequence->IsFirstElementThreaded()) {
+      sequence->IsFirstElementThreaded(delegate_)) {
     sequence->set_start_time(start_time);
     sequence->Start(delegate());
   }

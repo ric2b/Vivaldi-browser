@@ -18,7 +18,7 @@ class SurfaceManager;
 // blocked on that surface ID. SurfaceDependencyTracker observes when
 // dependent frames activate, and informs blocked surfaces.
 //
-// When a blocking cc::CompositorFrame is first submitted,
+// When a blocking CompositorFrame is first submitted,
 // SurfaceDependencyTracker will begin listening for BeginFrames, setting a
 // deadline some number of BeginFrames in the future. If there are unresolved
 // dependencies when the deadline hits, then SurfaceDependencyTracker will clear
@@ -30,15 +30,15 @@ class VIZ_SERVICE_EXPORT SurfaceDependencyTracker {
   explicit SurfaceDependencyTracker(SurfaceManager* surface_manager);
   ~SurfaceDependencyTracker();
 
-  // Called when |surface| has a pending cc::CompositorFrame and it wishes to be
+  // Called when |surface| has a pending CompositorFrame and it wishes to be
   // informed when that surface's dependencies are resolved.
   void RequestSurfaceResolution(Surface* surface);
 
   void OnSurfaceActivated(Surface* surface);
   void OnSurfaceDependenciesChanged(
       Surface* surface,
-      const base::flat_set<SurfaceId>& added_dependencies,
-      const base::flat_set<SurfaceId>& removed_dependencies);
+      const base::flat_set<FrameSinkId>& added_dependencies,
+      const base::flat_set<FrameSinkId>& removed_dependencies);
   void OnSurfaceDiscarded(Surface* surface);
 
  private:
@@ -51,7 +51,7 @@ class VIZ_SERVICE_EXPORT SurfaceDependencyTracker {
 
   // Indicates whether |surface| is late. A surface is late if it hasn't had its
   // first activation before a embedder is forced to activate its own
-  // cc::CompositorFrame. A surface may no longer be considered late if the set
+  // CompositorFrame. A surface may no longer be considered late if the set
   // of activation dependencies for dependent surfaces change.
   bool IsSurfaceLate(Surface* surface);
 
@@ -62,12 +62,10 @@ class VIZ_SERVICE_EXPORT SurfaceDependencyTracker {
 
   SurfaceManager* const surface_manager_;
 
-  // A map from a SurfaceId to the set of Surfaces blocked on that SurfaceId.
-  std::unordered_map<SurfaceId, base::flat_set<SurfaceId>, SurfaceIdHash>
+  // A map from a FrameSinkId to the set of Surfaces that are blocked on
+  // surfaces associated with that FrameSinkId.
+  std::unordered_map<FrameSinkId, base::flat_set<SurfaceId>, FrameSinkIdHash>
       blocked_surfaces_from_dependency_;
-
-  // The set of SurfaceIds corresponding that are known to have blockers.
-  base::flat_set<SurfaceId> blocked_surfaces_by_id_;
 
   // The set of SurfaceIds corresponding to Surfaces that have active
   // CompositorFrames with missing dependencies.

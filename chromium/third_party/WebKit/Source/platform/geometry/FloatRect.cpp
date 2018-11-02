@@ -78,6 +78,28 @@ bool FloatRect::IsExpressibleAsIntRect() const {
          isWithinIntRange(MaxX()) && isWithinIntRange(MaxY());
 }
 
+void FloatRect::ShiftXEdgeTo(float edge) {
+  float delta = edge - X();
+  SetX(edge);
+  SetWidth(std::max(0.0f, Width() - delta));
+}
+
+void FloatRect::ShiftMaxXEdgeTo(float edge) {
+  float delta = edge - MaxX();
+  SetWidth(std::max(0.0f, Width() + delta));
+}
+
+void FloatRect::ShiftYEdgeTo(float edge) {
+  float delta = edge - Y();
+  SetY(edge);
+  SetHeight(std::max(0.0f, Height() - delta));
+}
+
+void FloatRect::ShiftMaxYEdgeTo(float edge) {
+  float delta = edge - MaxY();
+  SetHeight(std::max(0.0f, Height() + delta));
+}
+
 bool FloatRect::Intersects(const FloatRect& other) const {
   // Checking emptiness handles negative widths as well as zero.
   return !IsEmpty() && !other.IsEmpty() && X() < other.MaxX() &&
@@ -170,6 +192,10 @@ float FloatRect::SquaredDistanceTo(const FloatPoint& point) const {
   return (point - closest_point).DiagonalLengthSquared();
 }
 
+FloatRect::operator SkRect() const {
+  return SkRect::MakeXYWH(X(), Y(), Width(), Height());
+}
+
 FloatRect::operator gfx::RectF() const {
   return gfx::RectF(X(), Y(), Width(), Height());
 }
@@ -208,6 +234,10 @@ FloatRect MapRect(const FloatRect& r,
   return FloatRect(dest_rect.X() + (r.X() - src_rect.X()) * width_scale,
                    dest_rect.Y() + (r.Y() - src_rect.Y()) * height_scale,
                    r.Width() * width_scale, r.Height() * height_scale);
+}
+
+std::ostream& operator<<(std::ostream& ostream, const FloatRect& rect) {
+  return ostream << rect.ToString();
 }
 
 String FloatRect::ToString() const {

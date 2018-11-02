@@ -7,10 +7,10 @@
 
 #include <vector>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/app_list/app_list_export.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/views/app_list_page.h"
 #include "ui/app_list/views/search_result_container_view.h"
 
@@ -46,7 +46,6 @@ class APP_LIST_EXPORT SearchResultPageView
   void OnAnimationUpdated(double progress,
                           AppListModel::State from_state,
                           AppListModel::State to_state) override;
-  int GetSearchBoxZHeight() const override;
   void OnHidden() override;
   gfx::Rect GetSearchBoxBounds() const override;
   views::View* GetSelectedView() const override;
@@ -58,6 +57,8 @@ class APP_LIST_EXPORT SearchResultPageView
 
   views::View* contents_view() { return contents_view_; }
 
+  views::View* first_result_view() const { return first_result_view_; }
+
  private:
   // Separator between SearchResultContainerView.
   class HorizontalSeparator;
@@ -66,6 +67,9 @@ class APP_LIST_EXPORT SearchResultPageView
   // controls (eg, arrow keys), as opposed to linear controls (eg, Tab).
   void SetSelectedIndex(int index, bool directional_movement);
   bool IsValidSelectionIndex(int index);
+
+  // Sort the result container views.
+  void ReorderSearchResultContainers();
 
   // The SearchResultContainerViews that compose the search page. All owned by
   // the views hierarchy.
@@ -76,10 +80,14 @@ class APP_LIST_EXPORT SearchResultPageView
   // -1 indicates no selection.
   int selected_index_;
 
-  const bool is_fullscreen_app_list_enabled_;
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
 
   // View containing SearchCardView instances. Owned by view hierarchy.
   views::View* const contents_view_;
+
+  // The first search result's view or nullptr if there's no search result.
+  views::View* first_result_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageView);
 };

@@ -33,12 +33,16 @@ class TestObject {
       : foo_(foo), bar_(bar), state_(State::VALUE_CONSTRUCTED) {}
 
   TestObject(const TestObject& other)
-      : foo_(other.foo_), bar_(other.bar_), state_(State::COPY_CONSTRUCTED) {}
+      : foo_(other.foo_),
+        bar_(other.bar_),
+        state_(State::COPY_CONSTRUCTED),
+        move_ctors_count_(other.move_ctors_count_) {}
 
   TestObject(TestObject&& other)
       : foo_(std::move(other.foo_)),
         bar_(std::move(other.bar_)),
-        state_(State::MOVE_CONSTRUCTED) {
+        state_(State::MOVE_CONSTRUCTED),
+        move_ctors_count_(other.move_ctors_count_ + 1) {
     other.state_ = State::MOVED_FROM;
   }
 
@@ -46,6 +50,7 @@ class TestObject {
     foo_ = other.foo_;
     bar_ = other.bar_;
     state_ = State::COPY_ASSIGNED;
+    move_ctors_count_ = other.move_ctors_count_;
     return *this;
   }
 
@@ -53,6 +58,7 @@ class TestObject {
     foo_ = other.foo_;
     bar_ = other.bar_;
     state_ = State::MOVE_ASSIGNED;
+    move_ctors_count_ = other.move_ctors_count_;
     other.state_ = State::MOVED_FROM;
     return *this;
   }
@@ -61,6 +67,7 @@ class TestObject {
     using std::swap;
     swap(foo_, other->foo_);
     swap(bar_, other->bar_);
+    swap(move_ctors_count_, other->move_ctors_count_);
     state_ = State::SWAPPED;
     other->state_ = State::SWAPPED;
   }
@@ -71,11 +78,13 @@ class TestObject {
 
   int foo() const { return foo_; }
   State state() const { return state_; }
+  int move_ctors_count() const { return move_ctors_count_; }
 
  private:
   int foo_;
   double bar_;
   State state_;
+  int move_ctors_count_ = 0;
 };
 
 // Implementing Swappable concept.
@@ -205,6 +214,14 @@ TEST(OptionalTest, MoveConstructor) {
 
 TEST(OptionalTest, MoveValueConstructor) {
   {
+    constexpr float value = 0.1f;
+    constexpr Optional<float> o(std::move(value));
+
+    EXPECT_TRUE(o);
+    EXPECT_EQ(0.1f, o.value());
+  }
+
+  {
     float value = 0.1f;
     Optional<float> o(std::move(value));
 
@@ -231,6 +248,12 @@ TEST(OptionalTest, MoveValueConstructor) {
 }
 
 TEST(OptionalTest, ConstructorForwardArguments) {
+  {
+    constexpr Optional<float> a(base::in_place, 0.1f);
+    EXPECT_TRUE(a);
+    EXPECT_EQ(0.1f, a.value());
+  }
+
   {
     Optional<float> a(base::in_place, 0.1f);
     EXPECT_TRUE(a);
@@ -1341,6 +1364,16 @@ TEST(OptionalTest, Reset_NoOp) {
 
   a.reset();
   EXPECT_FALSE(a.has_value());
+}
+
+TEST(OptionalTest, AssignFromRValue) {
+  Optional<TestObject> a;
+  EXPECT_FALSE(a.has_value());
+
+  TestObject obj;
+  a = std::move(obj);
+  EXPECT_TRUE(a.has_value());
+  EXPECT_EQ(1, a->move_ctors_count());
 }
 
 }  // namespace base

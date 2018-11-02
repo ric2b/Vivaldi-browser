@@ -15,6 +15,7 @@
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
@@ -129,7 +130,7 @@ class GLManager : private GpuControl {
 
   // GpuControl implementation.
   void SetGpuControlClient(GpuControlClient*) override;
-  Capabilities GetCapabilities() override;
+  const Capabilities& GetCapabilities() const override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
                       size_t height,
@@ -150,8 +151,7 @@ class GLManager : private GpuControl {
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  void AddLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) override;
+  void SetSnapshotRequested() override;
 
   size_t GetSharedMemoryBytesAllocated() const;
 
@@ -165,6 +165,7 @@ class GLManager : private GpuControl {
   gpu::GpuPreferences gpu_preferences_;
 
   gles2::MailboxManagerImpl owned_mailbox_manager_;
+  gles2::TraceOutputter outputter_;
   gles2::ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   std::unique_ptr<gles2::ShaderTranslatorCache> translator_cache_;
@@ -182,6 +183,8 @@ class GLManager : private GpuControl {
   uint64_t next_fence_sync_release_ = 1;
 
   bool use_iosurface_memory_buffers_ = false;
+
+  Capabilities capabilities_;
 
   // Used on Android to virtualize GL for all contexts.
   static int use_count_;

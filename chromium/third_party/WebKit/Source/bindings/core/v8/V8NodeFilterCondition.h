@@ -58,10 +58,10 @@ class V8NodeFilterCondition final
   }
 
   ~V8NodeFilterCondition();
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-  DECLARE_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor* visitor) {}
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
-  unsigned acceptNode(Node*, ExceptionState&) const;
+  unsigned acceptNode(Node*, ExceptionState&);
   v8::Local<v8::Value> Callback(v8::Isolate* isolate) const {
     return filter_.NewLocal(isolate);
   }
@@ -69,8 +69,9 @@ class V8NodeFilterCondition final
  private:
   V8NodeFilterCondition(v8::Local<v8::Value> filter, ScriptState*);
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   TraceWrapperV8Reference<v8::Object> filter_;
+  bool active_flag_;
 };
 
 }  // namespace blink

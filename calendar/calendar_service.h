@@ -78,6 +78,11 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<CreateEventResult>)>
       CreateEventCallback;
 
+  // Provides the results of multiple event create. See CreateEventsResult in
+  // event_type.h.
+  typedef base::Callback<void(std::shared_ptr<CreateEventsResult>)>
+      CreateEventsCallback;
+
   // Provides the result of a event update. See UpdateEventResult in
   // event_type.h.
   typedef base::Callback<void(std::shared_ptr<UpdateEventResult>)>
@@ -111,6 +116,11 @@ class CalendarService : public KeyedService {
   base::CancelableTaskTracker::TaskId CreateCalendarEvent(
       EventRow ev,
       const CreateEventCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateCalendarEvents(
+      std::vector<calendar::EventRow> events,
+      const CreateEventsCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateCalendarEvent(

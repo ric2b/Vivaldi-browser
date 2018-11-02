@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
+#include "base/ios/ios_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -161,6 +162,13 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
 
 // Tests "Open in New Tab" on context menu.
 - (void)testContextMenuOpenInNewTab {
+  // TODO(crbug.com/764691): This test is flaky on iOS 11.  The bots retry
+  // failures, so this test sometimes appears green because it passes on the
+  // retry.
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   // Set up test simple http server.
   std::map<GURL, std::string> responses;
   GURL initialURL = web::test::HttpServer::MakeUrl(kUrlInitialPage);
@@ -176,87 +184,6 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   [ChromeEarlGrey waitForMainTabCount:1];
 
   LongPressElementAndTapOnButton(kDestinationLinkID, OpenLinkInNewTabButton());
-
-  SelectTabAtIndexInCurrentMode(1U);
-
-  // Verify url and tab count.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
-                                          destinationURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-  [ChromeEarlGrey waitForMainTabCount:2];
-}
-
-// Tests "Open in New Tab" on context menu  on a link that requires scrolling
-// on the page to verify that context menu can be properly triggered in the
-// current screen view.
-- (void)testContextMenuOpenInNewTabFromTallPage {
-// TODO(crbug.com/755888): Reenable this test.
-#if !TARGET_IPHONE_SIMULATOR
-  if (!IsIPadIdiom()) {
-    EARL_GREY_TEST_DISABLED(@"Failing constently on iPhone devices.");
-  }
-#endif
-
-  // Set up test simple http server.
-  std::map<GURL, std::string> responses;
-  GURL initialURL =
-      web::test::HttpServer::MakeUrl("http://scenarioContextMenuOpenInNewTab");
-  GURL destinationURL = web::test::HttpServer::MakeUrl("http://destination");
-
-  // The initial page contains a link to the destination page that is below a
-  // really tall div so that scrolling is required.
-  responses[initialURL] =
-      "<div style='height:4000px'></div>"
-      "<a style='margin-left:50px' href='" +
-      destinationURL.spec() + "' id='link'>link</a>";
-  responses[destinationURL] = kDestinationHtml;
-
-  web::test::SetUpSimpleHttpServer(responses);
-  [ChromeEarlGrey loadURL:initialURL];
-  [ChromeEarlGrey waitForMainTabCount:1];
-
-  // Scroll down on the web view to make the link visible.
-  // grey_swipeFastInDirecton will quickly scroll towards the bottom, and then
-  // grey_scrollToContentEdge guarantees the content edge is reached. Two
-  // methods are used because the first one is much faster, but doesn't
-  // guarantee the link becomes visible.
-  // TODO(crbug.com/702272): Try to replace this with one EarlGrey method call.
-  [[EarlGrey
-      selectElementWithMatcher:WebViewScrollView(
-                                   chrome_test_util::GetCurrentWebState())]
-      performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewScrollView(
-                                   chrome_test_util::GetCurrentWebState())]
-      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
-
-  [ChromeEarlGrey waitForWebViewContainingText:kDestinationLinkID];
-
-  LongPressElementAndTapOnButton(kDestinationLinkID, OpenLinkInNewTabButton());
-
-  // Earl Grey cannot preperly synchronize some animations, so adding a
-  // WaitUntilCondition to wait for the new tab opening animation to finish
-  // and the scroll view to become interactable.
-  ConditionBlock condition = ^{
-    NSError* error = nil;
-    [[EarlGrey
-        selectElementWithMatcher:WebViewScrollView(
-                                     chrome_test_util::GetCurrentWebState())]
-        assertWithMatcher:grey_interactable()
-                    error:&error];
-    return !error;
-  };
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout, condition),
-             @"Web view did not become interactable");
-
-  // Make the toolbar visible by scrolling up on the web view to select the
-  // newly opened tab.
-  [[EarlGrey
-      selectElementWithMatcher:WebViewScrollView(
-                                   chrome_test_util::GetCurrentWebState())]
-      performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
-  [ChromeEarlGreyUI waitForToolbarVisible:YES];
 
   SelectTabAtIndexInCurrentMode(1U);
 

@@ -2,8 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/features.gni")
 import("//build/config/nacl/config.gni")
+import("//components/nacl/features.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//testing/test.gni")
 
@@ -127,6 +127,7 @@ if (is_linux) {
       "//ipc",
       "//mojo/edk/system",
       "//sandbox/linux:sandbox_services",
+      "//services/service_manager/sandbox",
       "//url/ipc:url_ipc",
     ]
 
@@ -193,6 +194,7 @@ if (is_win && target_cpu == "x86" && current_cpu == "x64") {
       "//content/public/common:static_switches",
       "//mojo/edk/system",
       "//sandbox",
+      "//services/service_manager/sandbox:sandbox",
     ]
   }
 }
@@ -233,6 +235,7 @@ if (is_nacl_nonsfi) {
       "//ppapi/proxy",
       "//sandbox/linux:sandbox",
       "//services/service_manager/public/cpp",
+      "//services/service_manager/sandbox",
     ]
   }
 

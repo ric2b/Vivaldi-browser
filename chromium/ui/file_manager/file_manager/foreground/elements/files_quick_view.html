@@ -6,7 +6,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-toolbar/paper-toolbar.html">
 <link rel="import" href="files_icon_button.html">
 <link rel="import" href="files_metadata_box.html">
 <link rel="import" href="files_safe_media.html">
@@ -17,23 +16,35 @@
   <link rel="import" type="css" href="files_quick_view.css">
   <template>
     <dialog id="dialog">
-      <paper-toolbar id="toolbar">
-        <div>[[filePath]]</div>
-        <div id="buttons">
+      <div id="toolbar">
+        <div class="buttons-group">
+           <paper-button on-tap="close" i18n-values="aria-label:QUICK_VIEW_CLOSE_BUTTON_LABEL" tabindex="0" has-tooltip>
+             <iron-icon icon="files:arrow-back"></iron-icon>
+           </paper-button>
+        </div>
+        <div id="file-path">[[filePath]]</div>
+        <div class="buttons-group">
            <paper-button id="open-button" on-tap="onOpenInNewButtonTap" hidden$="[[!hasTask]]" i18n-values="aria-label:QUICK_VIEW_OPEN_IN_NEW_BUTTON_LABEL" tabindex="0" has-tooltip>
              <iron-icon icon="files:open-in-new"></iron-icon>
            </paper-button>
            <files-icon-button toggles id="metadata-button" on-tap="onMetadataButtonTap_" active="{{metadataBoxActive}}" i18n-values="aria-label:QUICK_VIEW_TOGGLE_METADATA_BOX_BUTTON_LABEL" tabindex="0" has-tooltip>
            </files-icon-button>
         </div>
-	<files-tooltip></files-tooltip>
-      </paper-toolbar>
+      </div>
       <div id="mainPanel">
         <div id="contentPanel" metadata-box-active$="[[metadataBoxActive]]" on-tap="onContentPanelTap_">
           <div id="innerContentPanel" type$="[[type]]" tabindex="0">
             <!-- PDF, Text -->
             <template is="dom-if" if="[[browsable]]">
-              <webview class="content" src="[[contentUrl]]"></webview>
+              <webview on-loadstart='applyTextCss' class="content" src="[[contentUrl]]"></webview>
+            </template>
+            <!-- document/HTML -->
+            <template is="dom-if" if="[[isHtml_(type, subtype)]]">
+              <files-safe-media hidden="[[!contentUrl]]" type="html" class="content" src="[[contentUrl]]"></files-safe-media>
+              <template is="dom-if" if="[[!contentUrl]]">
+                <div generic-thumbnail="[[type]]"></div>
+                <div class="no-preview">[[noPreviewText]]</div>
+              </template>
             </template>
             <!-- Image -->
             <template is="dom-if" if="[[isImage_(type)]]">
@@ -69,7 +80,7 @@
                 <div class="no-preview">[[noPlaybackText]]</div>
               </template>
             </template>
-            <div hidden="[[!isUnsupported_(type, browsable)]]">
+            <div hidden="[[!isUnsupported_(type, subtype, browsable)]]">
               <div generic-thumbnail$="[[type]]"></div>
               <div class="no-preview">[[noPreviewText]]</div>
             </div>
@@ -77,6 +88,7 @@
           </div> <!-- contentPanel -->
         <files-metadata-box id="metadata-box" hidden$="[[!metadataBoxActive]]"></file-metadata-box>
       </div> <!-- mainPanel -->
+      <files-tooltip></files-tooltip>
     </dialog>
   </template>
 </dom-module>

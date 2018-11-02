@@ -13,9 +13,7 @@
 
 namespace blink {
 
-class PhotoCapabilities final
-    : public GarbageCollectedFinalized<PhotoCapabilities>,
-      public ScriptWrappable {
+class PhotoCapabilities final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -40,7 +38,7 @@ class PhotoCapabilities final
   }
   bool IsRedEyeReductionControllable() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   PhotoCapabilities() = default;

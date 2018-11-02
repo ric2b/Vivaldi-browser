@@ -118,6 +118,13 @@ void PrintContext::ComputePageRectsWithPageSizeInternal(
     int page_logical_left = inline_direction_end > inline_direction_start
                                 ? inline_direction_start
                                 : inline_direction_start - page_logical_width;
+    if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+      ScrollableArea* scrollable_area =
+          GetFrame()->View()->LayoutViewportScrollableArea();
+      IntSize frame_scroll = scrollable_area->ScrollOffsetInt();
+      page_logical_left -= frame_scroll.Width();
+      page_logical_top -= frame_scroll.Height();
+    }
     IntRect page_rect(page_logical_left, page_logical_top, page_logical_width,
                       page_logical_height);
     if (!is_horizontal)
@@ -171,8 +178,9 @@ int PrintContext::PageNumberForElement(Element* element,
     return -1;
 
   FloatSize scaled_page_size = page_size_in_pixels;
-  scaled_page_size.Scale(frame->View()->ContentsSize().Width() /
-                         page_rect.Width());
+  scaled_page_size.Scale(
+      frame->View()->LayoutViewportScrollableArea()->ContentsSize().Width() /
+      page_rect.Width());
   print_context->ComputePageRectsWithPageSize(scaled_page_size);
 
   int top = box->PixelSnappedOffsetTop(box->OffsetParent());
@@ -242,7 +250,7 @@ String PrintContext::PageProperty(LocalFrame* frame,
   // want to collect @page rules and figure out what declarations apply on a
   // given page (that may or may not exist).
   print_context->BeginPrintMode(800, 1000);
-  RefPtr<ComputedStyle> style = document->StyleForPage(page_number);
+  scoped_refptr<ComputedStyle> style = document->StyleForPage(page_number);
 
   // Implement formatters for properties we care about.
   if (!strcmp(property_name, "margin-left")) {
@@ -296,8 +304,9 @@ int PrintContext::NumberOfPages(LocalFrame* frame,
   print_context->BeginPrintMode(page_rect.Width(), page_rect.Height());
   // Account for shrink-to-fit.
   FloatSize scaled_page_size = page_size_in_pixels;
-  scaled_page_size.Scale(frame->View()->ContentsSize().Width() /
-                         page_rect.Width());
+  scaled_page_size.Scale(
+      frame->View()->LayoutViewportScrollableArea()->ContentsSize().Width() /
+      page_rect.Width());
   print_context->ComputePageRectsWithPageSize(scaled_page_size);
   return print_context->PageCount();
 }
@@ -307,7 +316,7 @@ bool PrintContext::IsFrameValid() const {
          !frame_->GetDocument()->GetLayoutViewItem().IsNull();
 }
 
-DEFINE_TRACE(PrintContext) {
+void PrintContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(linked_destinations_);
 }

@@ -44,7 +44,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -63,7 +62,6 @@
 
 using content::DevToolsAgentHost;
 using content::RenderProcessHost;
-using content::RenderViewHost;
 using content::RenderWidgetHost;
 using content::WebContents;
 
@@ -271,8 +269,7 @@ class ExtensionDevToolsClientHost : public content::DevToolsAgentHostClient,
   void InfoBarDismissed();
 
   // DevToolsAgentHostClient interface.
-  void AgentHostClosed(DevToolsAgentHost* agent_host,
-                       bool replaced_with_another_client) override;
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override;
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override;
 
@@ -368,10 +365,8 @@ ExtensionDevToolsClientHost::~ExtensionDevToolsClientHost() {
 
 // DevToolsAgentHostClient implementation.
 void ExtensionDevToolsClientHost::AgentHostClosed(
-    DevToolsAgentHost* agent_host, bool replaced_with_another_client) {
+    DevToolsAgentHost* agent_host) {
   DCHECK(agent_host == agent_host_.get());
-  if (replaced_with_another_client)
-    detach_reason_ = api::debugger::DETACH_REASON_REPLACED_WITH_DEVTOOLS;
   SendDetachedEvent();
   delete this;
 }
@@ -442,7 +437,7 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
     return;
 
   std::unique_ptr<base::Value> result = base::JSONReader::Read(message);
-  if (!result || !result->IsType(base::Value::Type::DICTIONARY))
+  if (!result || !result->is_dict())
     return;
   base::DictionaryValue* dictionary =
       static_cast<base::DictionaryValue*>(result.get());

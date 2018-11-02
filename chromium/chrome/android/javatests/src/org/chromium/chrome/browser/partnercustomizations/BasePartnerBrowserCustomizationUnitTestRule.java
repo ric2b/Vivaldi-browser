@@ -13,7 +13,6 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
-import org.chromium.base.CommandLine;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsDelayedProvider;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 
@@ -23,13 +22,13 @@ import java.util.concurrent.Semaphore;
  * Basic shared functionality for partner customization unit tests.
  */
 public class BasePartnerBrowserCustomizationUnitTestRule implements TestRule {
-    public static final String PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER =
+    static final String PARTNER_BROWSER_CUSTOMIZATIONS_PROVIDER =
             TestPartnerBrowserCustomizationsProvider.class.getName();
-    public static final String PARTNER_BROWSER_CUSTOMIZATIONS_NO_PROVIDER =
+    static final String PARTNER_BROWSER_CUSTOMIZATIONS_NO_PROVIDER =
             TestPartnerBrowserCustomizationsProvider.class.getName() + "INVALID";
-    public static final String PARTNER_BROWSER_CUSTOMIZATIONS_DELAYED_PROVIDER =
+    static final String PARTNER_BROWSER_CUSTOMIZATIONS_DELAYED_PROVIDER =
             TestPartnerBrowserCustomizationsDelayedProvider.class.getName();
-    public static final long DEFAULT_TIMEOUT_MS = 500;
+    static final long DEFAULT_TIMEOUT_MS = 500;
 
     private final Runnable mCallback = new Runnable() {
         @Override
@@ -47,7 +46,7 @@ public class BasePartnerBrowserCustomizationUnitTestRule implements TestRule {
      *
      * @param uriPath The path to be delayed.
      */
-    public void setDelayProviderUriPathForDelay(String uriPath) {
+    void setDelayProviderUriPathForDelay(String uriPath) {
         PartnerBrowserCustomizations.setProviderAuthorityForTests(
                 PARTNER_BROWSER_CUSTOMIZATIONS_DELAYED_PROVIDER);
         Uri uri = PartnerBrowserCustomizations.buildQueryUri(uriPath);
@@ -59,27 +58,25 @@ public class BasePartnerBrowserCustomizationUnitTestRule implements TestRule {
         return new Statement() {
             @Override
             public void evaluate() throws Throwable {
-                CommandLine.init(null);
                 base.evaluate();
             }
         };
     }
 
-    public Context getContextWrapper() {
-        ContextWrapper context = new ContextWrapper(InstrumentationRegistry.getContext()) {
+    Context getContextWrapper() {
+        return new ContextWrapper(InstrumentationRegistry.getContext()) {
             @Override
             public Context getApplicationContext() {
                 return getBaseContext();
             }
         };
-        return context;
     }
 
     public Runnable getCallback() {
         return mCallback;
     }
 
-    public Semaphore getCallbackLock() {
+    Semaphore getCallbackLock() {
         return mCallbackLock;
     }
 }

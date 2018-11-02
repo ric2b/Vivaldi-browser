@@ -28,6 +28,7 @@
 #define SelectionModifier_h
 
 #include "base/macros.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisibleSelection.h"
 #include "platform/LayoutUnit.h"
 #include "platform/wtf/Allocator.h"
@@ -46,14 +47,18 @@ class SelectionModifier {
  public:
   // |frame| is used for providing settings.
   SelectionModifier(const LocalFrame& /* frame */,
-                    const VisibleSelection&,
+                    const SelectionInDOMTree&,
                     LayoutUnit);
-  SelectionModifier(const LocalFrame&, const VisibleSelection&);
+  SelectionModifier(const LocalFrame&, const SelectionInDOMTree&);
 
   LayoutUnit XPosForVerticalArrowNavigation() const {
     return x_pos_for_vertical_arrow_navigation_;
   }
-  const VisibleSelection& Selection() const { return selection_; }
+
+  // TODO(editing-dev): We should rename |Selection()| to
+  // |ComputeVisibleSelectionDeprecated()| and introduce |GetSelection()|
+  // to return |current_selection_|.
+  VisibleSelection Selection() const;
 
   bool Modify(SelectionModifyAlteration,
               SelectionModifyDirection,
@@ -63,6 +68,8 @@ class SelectionModifier {
                                  SelectionModifyVerticalDirection);
 
  private:
+  // TODO(editing-dev): We should make |GetFrame()| to return |LocalFrame&|
+  // since it can not be |nullptr|.
   LocalFrame* GetFrame() const { return frame_; }
 
   static bool ShouldAlwaysUseDirectionalSelection(LocalFrame*);
@@ -97,7 +104,14 @@ class SelectionModifier {
                                            bool skips_space_when_moving_right);
 
   Member<LocalFrame> frame_;
+  // TODO(editing-dev): We should get rid of |selection_| once we change
+  // all member functions not to use |selection_|.
+  // |selection_| is used as implicit parameter or a cache instead of pass it.
   VisibleSelection selection_;
+  // TODO(editing-dev): We should introduce |GetSelection()| to return
+  // |result_| to replace |Selection().AsSelection()|.
+  // |current_selection_| holds initial value and result of |Modify()|.
+  SelectionInDOMTree current_selection_;
   LayoutUnit x_pos_for_vertical_arrow_navigation_;
 
   DISALLOW_COPY_AND_ASSIGN(SelectionModifier);

@@ -32,7 +32,6 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
@@ -53,11 +52,14 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.ConversionUtils;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
 import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
+import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content_public.browser.DownloadState;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -67,6 +69,7 @@ import org.chromium.ui.widget.Toast;
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -124,17 +127,16 @@ public class DownloadUtils {
     public static boolean showDownloadManager(@Nullable Activity activity, @Nullable Tab tab) {
         // Figure out what tab was last being viewed by the user.
         if (activity == null) activity = ApplicationStatus.getLastTrackedFocusedActivity();
+
+        if (openDownloadsManagerInBottomSheet(activity)) return true;
+
         if (tab == null && activity instanceof ChromeTabbedActivity) {
             tab = ((ChromeTabbedActivity) activity).getActivityTab();
         }
 
         Context appContext = ContextUtils.getApplicationContext();
-        if (activity instanceof ChromeActivity
-                && ((ChromeActivity) activity).getBottomSheet() != null) {
-            ((ChromeActivity) activity)
-                    .getBottomSheetContentController()
-                    .showContentAndOpenSheet(R.id.action_downloads);
-        } else if (DeviceFormFactor.isTablet()) {
+
+        if (DeviceFormFactor.isTablet()) {
             // Download Home shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
             if (tab == null || !tab.isInitialized()) {
@@ -178,6 +180,43 @@ public class DownloadUtils {
             tracker.notifyEvent(EventConstants.DOWNLOAD_HOME_OPENED);
         }
 
+        return true;
+    }
+
+    /**
+     * @param activity The activity the download manager should be displayed in if applicable or
+     *                 the last tracked focused activity.
+     * @return Whether the downloads manager was opened in the Chrome Home bottom sheet.
+     */
+    private static boolean openDownloadsManagerInBottomSheet(Activity activity) {
+        if (!FeatureUtilities.isChromeHomeEnabled()) return false;
+
+        Context appContext = ContextUtils.getApplicationContext();
+
+        ChromeTabbedActivity tabbedActivity = null;
+        if (activity instanceof ChromeTabbedActivity) {
+            tabbedActivity = (ChromeTabbedActivity) activity;
+        } else {
+            // Iterate through all activities looking for an instance of ChromeTabbedActivity.
+            List<WeakReference<Activity>> list = ApplicationStatus.getRunningActivities();
+            for (WeakReference<Activity> ref : list) {
+                Activity currentActivity = ref.get();
+                if (currentActivity instanceof ChromeTabbedActivity) {
+                    tabbedActivity = (ChromeTabbedActivity) currentActivity;
+                }
+            }
+        }
+
+        if (tabbedActivity == null) return false;
+
+        tabbedActivity.getBottomSheetContentController().showContentAndOpenSheet(
+                R.id.action_downloads);
+
+        // Bring the ChromeTabbedActivity to the front.
+        Intent intent = new Intent(appContext, tabbedActivity.getClass());
+        intent.addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        appContext.startActivity(intent);
         return true;
     }
 
@@ -241,10 +280,7 @@ public class DownloadUtils {
                     tab.getUrl(), DownloadUiActionFlags.PROMPT_DUPLICATE, origin);
         } else {
             // Otherwise, the download can be started immediately.
-            final OfflinePageDownloadBridge bridge =
-                    new OfflinePageDownloadBridge(tab.getProfile());
-            bridge.startDownload(tab, origin);
-            bridge.destroy();
+            OfflinePageDownloadBridge.startDownload(tab, origin);
             DownloadUtils.recordDownloadPageMetrics(tab);
         }
 
@@ -300,6 +336,7 @@ public class DownloadUtils {
             fileIntent.setDataAndType(fileUri, normalizedMimeType);
         }
         fileIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        fileIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         fileIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         setOriginalUrlAndReferralExtraToIntent(fileIntent, originalUrl, referrer);
         return fileIntent;
@@ -340,7 +377,7 @@ public class DownloadUtils {
         for (int i = 0; i < items.size(); i++) {
             DownloadHistoryItemWrapper wrappedItem  = items.get(i);
 
-            if (wrappedItem instanceof DownloadHistoryItemWrapper.OfflinePageItemWrapper) {
+            if (wrappedItem.isOfflinePage()) {
                 if (offlinePagesString.length() != 0) {
                     offlinePagesString.append("\n");
                 }
@@ -700,6 +737,38 @@ public class DownloadUtils {
     }
 
     /**
+     * Determine what String to show for a given offline page in download home.
+     * @param item The offline item representing the offline page.
+     * @return String representing the current status.
+     */
+    public static String getOfflinePageStatusString(OfflineItem item) {
+        Context context = ContextUtils.getApplicationContext();
+        switch (item.state) {
+            case OfflineItemState.COMPLETE:
+                return context.getString(R.string.download_notification_completed);
+            case OfflineItemState.PENDING:
+                return context.getString(R.string.download_notification_pending);
+            case OfflineItemState.PAUSED:
+                return context.getString(R.string.download_notification_paused);
+            case OfflineItemState.IN_PROGRESS: // intentional fall through
+            case OfflineItemState.CANCELLED: // intentional fall through
+            case OfflineItemState.INTERRUPTED: // intentional fall through
+            case OfflineItemState.FAILED:
+                break;
+            case OfflineItemState.MAX_DOWNLOAD_STATE:
+            default:
+                assert false : "Unexpected OfflineItemState: " + item.state;
+        }
+
+        long bytesReceived = item.receivedBytes;
+        if (bytesReceived == 0) {
+            return context.getString(R.string.download_started);
+        }
+
+        return DownloadUtils.getStringForDownloadedBytes(context, bytesReceived);
+    }
+
+    /**
      * Determine what String to show for a given download in download home.
      * @param item Download to check the status of.
      * @return String representing the current download status.
@@ -837,25 +906,26 @@ public class DownloadUtils {
      * @return Resource ID of the corresponding icon.
      */
     public static int getIconResId(int fileType, @IconSize int iconSize) {
+        // TODO(huayinz): Make image view size same as icon size so that 36dp icons can be removed.
         switch (fileType) {
             case DownloadFilter.FILTER_PAGE:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_site_white_24dp
-                                                   : R.drawable.ic_drive_site_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_globe_24dp
+                                                   : R.drawable.ic_globe_36dp;
             case DownloadFilter.FILTER_VIDEO:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_videocam_white_24dp
-                                                   : R.drawable.ic_videocam_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_videocam_24dp
+                                                   : R.drawable.ic_videocam_36dp;
             case DownloadFilter.FILTER_AUDIO:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_music_note_white_24dp
-                                                   : R.drawable.ic_music_note_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_music_note_24dp
+                                                   : R.drawable.ic_music_note_36dp;
             case DownloadFilter.FILTER_IMAGE:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_image_white_24dp
-                                                   : R.drawable.ic_image_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_image_24dp
+                                                   : R.drawable.ic_drive_image_36dp;
             case DownloadFilter.FILTER_DOCUMENT:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_text_white_24dp
-                                                   : R.drawable.ic_drive_text_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_document_24dp
+                                                   : R.drawable.ic_drive_document_36dp;
             default:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_file_white_24dp
-                                                   : R.drawable.ic_drive_file_white_36dp;
+                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_file_24dp
+                                                   : R.drawable.ic_drive_file_36dp;
         }
     }
 

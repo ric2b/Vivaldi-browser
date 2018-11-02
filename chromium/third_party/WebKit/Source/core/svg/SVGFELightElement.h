@@ -22,9 +22,9 @@
 #ifndef SVGFELightElement_h
 #define SVGFELightElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedNumber.h"
 #include "core/svg/SVGElement.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/LightSource.h"
 #include "platform/heap/Handle.h"
 
@@ -34,7 +34,7 @@ class Filter;
 
 class SVGFELightElement : public SVGElement {
  public:
-  virtual RefPtr<LightSource> GetLightSource(Filter*) const = 0;
+  virtual scoped_refptr<LightSource> GetLightSource(Filter*) const = 0;
   static SVGFELightElement* FindLightElement(const SVGElement&);
 
   FloatPoint3D GetPosition() const;
@@ -65,7 +65,7 @@ class SVGFELightElement : public SVGElement {
     return limiting_cone_angle_.Get();
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   SVGFELightElement(const QualifiedName&, Document&);

@@ -19,8 +19,8 @@
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "media/base/decode_capabilities.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "ui/base/page_transition_types.h"
@@ -41,12 +41,8 @@ class WebFrame;
 class WebLocalFrame;
 class WebMIDIAccessor;
 class WebMIDIAccessorClient;
-class WebMediaStreamCenter;
-class WebMediaStreamCenterClient;
 class WebPlugin;
 class WebPrescientNetworking;
-class WebRTCPeerConnectionHandler;
-class WebRTCPeerConnectionHandlerClient;
 class WebSocketHandshakeThrottle;
 class WebSpeechSynthesizer;
 class WebSpeechSynthesizerClient;
@@ -121,6 +117,10 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual bool ShouldSuppressErrorPage(RenderFrame* render_frame,
                                        const GURL& url);
 
+  // Returns false for new tab page activities, which should be filtered out in
+  // UseCounter; returns true otherwise.
+  virtual bool ShouldTrackUseCounter(const GURL& url);
+
   // Returns the information to display when a navigation error occurs.
   // If |error_html| is not null then it may be set to a HTML page containing
   // the details of the error and maybe links to more info.
@@ -150,17 +150,6 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual void DeferMediaLoad(RenderFrame* render_frame,
                               bool has_played_media_before,
                               const base::Closure& closure);
-
-  // Allows the embedder to override creating a WebMediaStreamCenter. If it
-  // returns NULL the content layer will create the stream center.
-  virtual std::unique_ptr<blink::WebMediaStreamCenter>
-  OverrideCreateWebMediaStreamCenter(blink::WebMediaStreamCenterClient* client);
-
-  // Allows the embedder to override creating a WebRTCPeerConnectionHandler. If
-  // it returns NULL the content layer will create the connection handler.
-  virtual std::unique_ptr<blink::WebRTCPeerConnectionHandler>
-  OverrideCreateWebRTCPeerConnectionHandler(
-      blink::WebRTCPeerConnectionHandlerClient* client);
 
   // Allows the embedder to override creating a WebMIDIAccessor.  If it
   // returns NULL the content layer will create the MIDI accessor.
@@ -194,9 +183,9 @@ class CONTENT_EXPORT ContentRendererClient {
   // all widgets are hidden.
   virtual bool RunIdleHandlerWhenWidgetsHidden();
 
-  // Returns true if the renderer process should allow shared timer suspension
+  // Returns true if the renderer process should allow task suspension
   // after the process has been backgrounded. Defaults to false.
-  virtual bool AllowStoppingTimersWhenProcessBackgrounded();
+  virtual bool AllowStoppingWhenProcessBackgrounded();
 
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
@@ -256,7 +245,7 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual blink::WebPrescientNetworking* GetPrescientNetworking();
   virtual bool ShouldOverridePageVisibilityState(
       const RenderFrame* render_frame,
-      blink::WebPageVisibilityState* override_state);
+      blink::mojom::PageVisibilityState* override_state);
 
   // Returns true if the given Pepper plugin is external (requiring special
   // startup steps).
@@ -383,6 +372,17 @@ class CONTENT_EXPORT ContentRendererClient {
   // Whether the renderer allows idle media players to be automatically
   // suspended after a period of inactivity.
   virtual bool AllowIdleMediaSuspend();
+
+  // Called when a resource at |url| is loaded using an otherwise-valid legacy
+  // Symantec certificate that will be distrusted in future. Allows the embedder
+  // to override the message that is added to the console to inform developers
+  // that their certificate will be distrusted in future. If the method returns
+  // true, then |*console_message| will be printed to the console; otherwise a
+  // generic mesage will be used.
+  virtual bool OverrideLegacySymantecCertConsoleMessage(
+      const GURL& url,
+      base::Time cert_validity_start,
+      std::string* console_messsage);
 };
 
 }  // namespace content

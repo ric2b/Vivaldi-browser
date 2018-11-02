@@ -27,8 +27,6 @@
 
 #include "core/dom/LayoutTreeBuilder.h"
 
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/Node.h"
@@ -36,12 +34,13 @@
 #include "core/dom/Text.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/fullscreen/Fullscreen.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutFullScreen.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutView.h"
 #include "core/svg/SVGElement.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -91,7 +90,7 @@ bool LayoutTreeBuilderForElement::ShouldCreateLayoutObject() const {
   if (!layout_object_parent_)
     return false;
 
-  LayoutObject* parent_layout_object = this->ParentLayoutObject();
+  LayoutObject* parent_layout_object = ParentLayoutObject();
   if (!parent_layout_object)
     return false;
   if (!parent_layout_object->CanHaveChildren())
@@ -107,13 +106,13 @@ ComputedStyle& LayoutTreeBuilderForElement::Style() const {
 
 DISABLE_CFI_PERF
 void LayoutTreeBuilderForElement::CreateLayoutObject() {
-  ComputedStyle& style = this->Style();
+  ComputedStyle& style = Style();
 
   LayoutObject* new_layout_object = node_->CreateLayoutObject(style);
   if (!new_layout_object)
     return;
 
-  LayoutObject* parent_layout_object = this->ParentLayoutObject();
+  LayoutObject* parent_layout_object = ParentLayoutObject();
 
   if (!parent_layout_object->IsChildAllowed(new_layout_object, style)) {
     new_layout_object->Destroy();
@@ -127,7 +126,7 @@ void LayoutTreeBuilderForElement::CreateLayoutObject() {
   new_layout_object->SetIsInsideFlowThread(
       parent_layout_object->IsInsideFlowThread());
 
-  LayoutObject* next_layout_object = this->NextLayoutObject();
+  LayoutObject* next_layout_object = NextLayoutObject();
   node_->SetLayoutObject(new_layout_object);
   new_layout_object->SetStyle(
       &style);  // setStyle() can depend on layoutObject() already being set.
@@ -164,7 +163,7 @@ void LayoutTreeBuilderForText::CreateLayoutObject() {
   new_layout_object->SetIsInsideFlowThread(
       layout_object_parent_->IsInsideFlowThread());
 
-  LayoutObject* next_layout_object = this->NextLayoutObject();
+  LayoutObject* next_layout_object = NextLayoutObject();
   node_->SetLayoutObject(new_layout_object);
   // Parent takes care of the animations, no need to call setAnimatableStyle.
   new_layout_object->SetStyle(&style);

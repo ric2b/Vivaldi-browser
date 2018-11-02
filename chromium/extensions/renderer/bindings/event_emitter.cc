@@ -8,6 +8,7 @@
 
 #include "extensions/renderer/bindings/api_event_listeners.h"
 #include "extensions/renderer/bindings/exception_handler.h"
+#include "extensions/renderer/bindings/js_runner.h"
 #include "gin/data_object_builder.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_context_data.h"
@@ -18,13 +19,9 @@ gin::WrapperInfo EventEmitter::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 EventEmitter::EventEmitter(bool supports_filters,
                            std::unique_ptr<APIEventListeners> listeners,
-                           const binding::RunJSFunction& run_js,
-                           const binding::RunJSFunctionSync& run_js_sync,
                            ExceptionHandler* exception_handler)
     : supports_filters_(supports_filters),
       listeners_(std::move(listeners)),
-      run_js_(run_js),
-      run_js_sync_(run_js_sync),
       exception_handler_(exception_handler) {}
 
 EventEmitter::~EventEmitter() {}
@@ -138,7 +135,7 @@ void EventEmitter::Dispatch(gin::Arguments* arguments) {
   // potentially tweak the result object through prototype manipulation (which
   // also means we should never use this for security decisions).
   bool run_sync = true;
-  std::vector<v8::Global<v8::Value>> listener_responses;
+  std::vector<v8::Local<v8::Value>> listener_responses;
   DispatchImpl(context, &v8_args, nullptr, run_sync, &listener_responses);
 
   if (!listener_responses.size()) {
@@ -156,9 +153,7 @@ void EventEmitter::Dispatch(gin::Arguments* arguments) {
     for (size_t i = 0; i < listener_responses.size(); ++i) {
       // TODO(devlin): With more than 2^32 - 2 listeners, this can get nasty.
       // We shouldn't reach that point, but it would be good to add enforcement.
-      CHECK(v8_responses
-                ->CreateDataProperty(context, i,
-                                     listener_responses[i].Get(isolate))
+      CHECK(v8_responses->CreateDataProperty(context, i, listener_responses[i])
                 .ToChecked());
     }
 
@@ -169,27 +164,28 @@ void EventEmitter::Dispatch(gin::Arguments* arguments) {
   arguments->Return(result);
 }
 
-void EventEmitter::DispatchImpl(
-    v8::Local<v8::Context> context,
-    std::vector<v8::Local<v8::Value>>* args,
-    const EventFilteringInfo* filter,
-    bool run_sync,
-    std::vector<v8::Global<v8::Value>>* out_values) {
+void EventEmitter::DispatchImpl(v8::Local<v8::Context> context,
+                                std::vector<v8::Local<v8::Value>>* args,
+                                const EventFilteringInfo* filter,
+                                bool run_sync,
+                                std::vector<v8::Local<v8::Value>>* out_values) {
   // Note that |listeners_| can be modified during handling.
   std::vector<v8::Local<v8::Function>> listeners =
       listeners_->GetListeners(filter, context);
 
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch try_catch(isolate);
+  JSRunner* js_runner = JSRunner::Get(context);
   for (const auto& listener : listeners) {
     if (run_sync) {
       DCHECK(out_values);
-      v8::Global<v8::Value> result =
-          run_js_sync_.Run(listener, context, args->size(), args->data());
-      if (!result.IsEmpty() && !result.Get(isolate)->IsUndefined())
+      v8::MaybeLocal<v8::Value> maybe_result = js_runner->RunJSFunctionSync(
+          listener, context, args->size(), args->data());
+      v8::Local<v8::Value> result;
+      if (maybe_result.ToLocal(&result) && !result->IsUndefined())
         out_values->push_back(std::move(result));
     } else {
-      run_js_.Run(listener, context, args->size(), args->data());
+      js_runner->RunJSFunction(listener, context, args->size(), args->data());
     }
 
     if (try_catch.HasCaught()) {

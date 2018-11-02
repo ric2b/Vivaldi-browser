@@ -20,13 +20,13 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/ozone/evdev/event_converter_evdev.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/events_ozone_evdev_export.h"
-#include "ui/events/ozone/evdev/scoped_input_device.h"
 #include "ui/events/ozone/evdev/touch_evdev_debug_buffer.h"
 
 namespace ui {
@@ -38,7 +38,7 @@ struct InProgressTouchEvdev;
 class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
     : public EventConverterEvdev {
  public:
-  TouchEventConverterEvdev(ScopedInputDevice fd,
+  TouchEventConverterEvdev(base::ScopedFD fd,
                            base::FilePath path,
                            int id,
                            const EventDeviceInfo& devinfo,
@@ -92,13 +92,14 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
   void ReleaseTouches();
   void ReleaseButtons();
   void CancelAllTouches();
+  bool IsPalm(const InProgressTouchEvdev& touch);
   // Normalize pressure value to [0, 1].
   float ScalePressure(int32_t value);
 
   int NextTrackingId();
 
   // Input device file descriptor.
-  ScopedInputDevice input_device_fd_;
+  base::ScopedFD input_device_fd_;
 
   // Dispatcher for events.
   DeviceEventDispatcherEvdev* dispatcher_;
@@ -132,6 +133,12 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
   // Input range for y-axis.
   float y_min_tuxels_;
   float y_num_tuxels_;
+
+  // The resolution of ABS_MT_TOUCH_MAJOR/MINOR might be different from the
+  // resolution of ABS_MT_POSITION_X/Y. As we use the (position range, display
+  // pixels) to resize touch event radius, we have to scale major/minor.
+  float touch_major_scale_ = 1.0f;
+  float touch_minor_scale_ = 1.0f;
 
   // Number of touch points reported by driver
   int touch_points_ = 0;

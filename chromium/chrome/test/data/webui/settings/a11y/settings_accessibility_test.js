@@ -5,14 +5,12 @@
 /** @fileoverview Runs the Polymer Accessibility Settings tests. */
 
 /** @const {string} Path to root from chrome/test/data/webui/settings/a11y. */
-var ROOT_PATH = '../../../../../../';
+const ROOT_PATH = '../../../../../../';
 
 // Polymer BrowserTest fixture and aXe-core accessibility audit.
 GEN_INCLUDE([
-  'accessibility_audit_rules.js',
-  'accessibility_test.js',
+  ROOT_PATH + 'chrome/test/data/webui/a11y/accessibility_test.js',
   ROOT_PATH + 'chrome/test/data/webui/polymer_browser_test_base.js',
-  ROOT_PATH + 'third_party/axe-core/axe.js',
 ]);
 
 /**
@@ -25,21 +23,16 @@ function SettingsAccessibilityTest() {}
 // Default accessibility audit options. Specify in test definition to use.
 SettingsAccessibilityTest.axeOptions = {
   'rules': {
-    // TODO(hcarmona): enable 'region' after addressing violation.
-    'region': {enabled: false},
     // Disable 'skip-link' check since there are few tab stops before the main
     // content.
     'skip-link': {enabled: false},
+  // TODO(crbug.com/761461): enable after addressing flaky tests.
+    'color-contrast': {enabled: false},
   }
 };
 
 // Default accessibility audit options. Specify in test definition to use.
 SettingsAccessibilityTest.violationFilter = {
-  // TODO(crbug.com/748608): remove this exception once the color contrast issue
-  // is resolved.
-  'color-contrast': function(nodeResult) {
-    return nodeResult.element.id === 'prompt';
-  },
   // Polymer components use aria-active-attribute.
   'aria-valid-attr': function(nodeResult) {
     return nodeResult.element.hasAttribute('aria-active-attribute');
@@ -50,7 +43,7 @@ SettingsAccessibilityTest.prototype = {
   __proto__: PolymerTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/',
+  browsePreload: 'chrome://settings/',
 
   // Include files that define the mocha tests.
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([

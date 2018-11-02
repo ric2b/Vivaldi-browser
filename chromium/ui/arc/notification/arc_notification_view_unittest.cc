@@ -19,8 +19,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
-#include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/message_view_factory.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -84,33 +83,23 @@ class TestContentViewDelegate : public ArcNotificationContentViewDelegate {
   }
   bool IsExpanded() const override { return false; }
   void SetExpanded(bool expanded) override {}
+  void OnContainerAnimationStarted() override {}
+  void OnContainerAnimationEnded() override {}
 };
 
-class TestNotificationDelegate : public message_center::NotificationDelegate {
+std::unique_ptr<message_center::MessageView> CreateCustomMessageViewForTest(
+    message_center::MessageViewDelegate* controller,
+    const message_center::Notification& notification) {
+  return std::make_unique<ArcNotificationView>(
+      std::make_unique<TestNotificationContentsView>(),
+      std::make_unique<TestContentViewDelegate>(), controller, notification);
+}
+
+class TestMessageViewDelegate : public message_center::MessageViewDelegate {
  public:
-  TestNotificationDelegate() = default;
+  TestMessageViewDelegate() = default;
 
-  // NotificateDelegate
-  std::unique_ptr<message_center::MessageView> CreateCustomMessageView(
-      message_center::MessageCenterController* controller,
-      const message_center::Notification& notification) override {
-    return base::MakeUnique<ArcNotificationView>(
-        base::MakeUnique<TestNotificationContentsView>(),
-        base::MakeUnique<TestContentViewDelegate>(), controller, notification);
-  }
-
- private:
-  ~TestNotificationDelegate() override = default;
-
-  DISALLOW_COPY_AND_ASSIGN(TestNotificationDelegate);
-};
-
-class TestMessageCenterController
-    : public message_center::MessageCenterController {
- public:
-  TestMessageCenterController() = default;
-
-  // MessageCenterController
+  // MessageViewDelegate
   void ClickOnNotification(const std::string& notification_id) override {
     // For this test, this method should not be invoked.
     NOTREACHED();
@@ -121,20 +110,16 @@ class TestMessageCenterController
     removed_ids_.insert(notification_id);
   }
 
-  std::unique_ptr<ui::MenuModel> CreateMenuModel(
-      const message_center::NotifierId& notifier_id,
-      const base::string16& display_source) override {
-    // For this test, this method should not be invoked.
-    NOTREACHED();
-    return nullptr;
-  }
-
-  bool HasClickedListener(const std::string& notification_id) override {
-    return false;
-  }
-
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override {
+    // For this test, this method should not be invoked.
+    NOTREACHED();
+  }
+
+  void ClickOnNotificationButtonWithReply(
+      const std::string& notification_id,
+      int button_index,
+      const base::string16& reply) override {
     // For this test, this method should not be invoked.
     NOTREACHED();
   }
@@ -153,7 +138,7 @@ class TestMessageCenterController
  private:
   std::set<std::string> removed_ids_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestMessageCenterController);
+  DISALLOW_COPY_AND_ASSIGN(TestMessageViewDelegate);
 };
 
 class TestTextInputClient : public ui::DummyTextInputClient {
@@ -181,16 +166,17 @@ class ArcNotificationViewTest : public views::ViewsTestBase {
   void SetUp() override {
     views::ViewsTestBase::SetUp();
 
-    notification_delegate_ = new TestNotificationDelegate;
+    message_center::MessageViewFactory::SetCustomNotificationViewFactory(
+        base::Bind(&CreateCustomMessageViewForTest));
 
-    notification_ = base::MakeUnique<message_center::Notification>(
+    notification_ = std::make_unique<message_center::Notification>(
         message_center::NOTIFICATION_TYPE_CUSTOM,
         std::string("notification id"), base::UTF8ToUTF16("title"),
         base::UTF8ToUTF16("message"), gfx::Image(),
         base::UTF8ToUTF16("display source"), GURL(),
-        message_center::NotifierId(message_center::NotifierId::APPLICATION,
-                                   "extension_id"),
-        message_center::RichNotificationData(), notification_delegate_.get());
+        message_center::NotifierId(message_center::NotifierId::ARC_APPLICATION,
+                                   "test_app_id"),
+        message_center::RichNotificationData(), nullptr);
 
     notification_view_.reset(static_cast<ArcNotificationView*>(
         message_center::MessageViewFactory::Create(controller(), *notification_,
@@ -270,7 +256,7 @@ class ArcNotificationViewTest : public views::ViewsTestBase {
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, dx, 0));
   }
 
-  TestMessageCenterController* controller() { return &controller_; }
+  TestMessageViewDelegate* controller() { return &controller_; }
   message_center::Notification* notification() { return notification_.get(); }
   TestNotificationContentsView* contents_view() {
     return static_cast<TestNotificationContentsView*>(
@@ -280,8 +266,7 @@ class ArcNotificationViewTest : public views::ViewsTestBase {
   ArcNotificationView* notification_view() { return notification_view_.get(); }
 
  private:
-  TestMessageCenterController controller_;
-  scoped_refptr<TestNotificationDelegate> notification_delegate_;
+  TestMessageViewDelegate controller_;
   std::unique_ptr<message_center::Notification> notification_;
   std::unique_ptr<ArcNotificationView> notification_view_;
 

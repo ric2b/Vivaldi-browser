@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.content.browser.RenderCoordinates;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.display.DisplayAndroid;
 
@@ -37,7 +36,7 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
     private final Map<View, Position> mAnchorViews = new LinkedHashMap<>();
 
     private final AwContentsClient mContentsClient;
-    private final RenderCoordinates mRenderCoordinates;
+    private final AwScrollOffsetManager mScrollManager;
 
     /**
      * Represents the position of an anchor view.
@@ -64,10 +63,10 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
 
     @VisibleForTesting
     public AwViewAndroidDelegate(ViewGroup containerView, AwContentsClient contentsClient,
-            RenderCoordinates renderCoordinates) {
+            AwScrollOffsetManager scrollManager) {
         mContainerView = containerView;
         mContentsClient = contentsClient;
-        mRenderCoordinates = renderCoordinates;
+        mScrollManager = scrollManager;
     }
 
     @Override
@@ -105,40 +104,32 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
             }
             containerView.addView(anchorView);
             if (position != null) {
-                float scale = display.getDipScale();
-                setViewPosition(anchorView, position.mX, position.mY,
-                        position.mWidth, position.mHeight, scale,
-                        position.mLeftMargin, position.mTopMargin);
+                setViewPosition(anchorView, position.mX, position.mY, position.mWidth,
+                        position.mHeight, position.mLeftMargin, position.mTopMargin);
             }
         }
     }
 
-    @SuppressWarnings("deprecation")  // AbsoluteLayout
+    @SuppressWarnings("deprecation") // AbsoluteLayout
     @Override
     public void setViewPosition(View anchorView, float x, float y, float width, float height,
-            float scale, int leftMargin, int topMargin) {
+            int leftMargin, int topMargin) {
         ViewGroup containerView = getContainerView();
         if (!mAnchorViews.containsKey(anchorView) || containerView == null) return;
 
         mAnchorViews.put(anchorView, new Position(x, y, width, height, leftMargin, topMargin));
 
         if (containerView instanceof FrameLayout) {
-            super.setViewPosition(anchorView, x, y, width, height, scale, leftMargin, topMargin);
+            super.setViewPosition(anchorView, x, y, width, height, leftMargin, topMargin);
             return;
         }
-        // This fixes the offset due to a difference in
-        // scrolling model of WebView vs. Chrome.
-        // TODO(sgurun) fix this to use mContainerViewAtCreation.getScroll[X/Y]()
-        // as it naturally accounts for scroll differences between
-        // these models.
-        leftMargin += mRenderCoordinates.getScrollXPixInt();
-        topMargin += mRenderCoordinates.getScrollYPixInt();
+        // This fixes the offset due to a difference in scrolling model of WebView vs. Chrome.
+        leftMargin += mScrollManager.getScrollX();
+        topMargin += mScrollManager.getScrollY();
 
-        int scaledWidth = Math.round(width * scale);
-        int scaledHeight = Math.round(height * scale);
         android.widget.AbsoluteLayout.LayoutParams lp =
                 new android.widget.AbsoluteLayout.LayoutParams(
-                    scaledWidth, scaledHeight, leftMargin, topMargin);
+                        Math.round(width), Math.round(height), leftMargin, topMargin);
         anchorView.setLayoutParams(lp);
     }
 

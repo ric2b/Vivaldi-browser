@@ -44,16 +44,16 @@ class PopStateEvent final : public Event {
  public:
   ~PopStateEvent() override;
   static PopStateEvent* Create();
-  static PopStateEvent* Create(RefPtr<SerializedScriptValue>, History*);
+  static PopStateEvent* Create(scoped_refptr<SerializedScriptValue>, History*);
   static PopStateEvent* Create(ScriptState*,
                                const AtomicString&,
                                const PopStateEventInit&);
 
   ScriptValue state(ScriptState*) const;
   SerializedScriptValue* SerializedState() const {
-    return serialized_state_.Get();
+    return serialized_state_.get();
   }
-  void SetSerializedState(RefPtr<SerializedScriptValue> state) {
+  void SetSerializedState(scoped_refptr<SerializedScriptValue> state) {
     DCHECK(!serialized_state_);
     serialized_state_ = std::move(state);
   }
@@ -61,17 +61,17 @@ class PopStateEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   PopStateEvent();
   PopStateEvent(ScriptState*, const AtomicString&, const PopStateEventInit&);
-  PopStateEvent(RefPtr<SerializedScriptValue>, History*);
+  PopStateEvent(scoped_refptr<SerializedScriptValue>, History*);
 
-  RefPtr<SerializedScriptValue> serialized_state_;
-  RefPtr<DOMWrapperWorld> world_;
+  scoped_refptr<SerializedScriptValue> serialized_state_;
+  scoped_refptr<DOMWrapperWorld> world_;
   TraceWrapperV8Reference<v8::Value> state_;
   Member<History> history_;
 };

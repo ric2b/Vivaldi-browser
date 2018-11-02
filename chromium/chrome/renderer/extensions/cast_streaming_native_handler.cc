@@ -31,8 +31,8 @@
 #include "chrome/renderer/media/cast_rtp_stream.h"
 #include "chrome/renderer/media/cast_session.h"
 #include "chrome/renderer/media/cast_udp_transport.h"
-#include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/media_stream_utils.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/extension.h"
 #include "extensions/renderer/extension_bindings_system.h"
 #include "extensions/renderer/script_context.h"
@@ -927,7 +927,7 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
     std::unique_ptr<base::Value> options_value =
         V8ValueConverter::Create()->FromV8Value(args[8],
                                                 context()->v8_context());
-    if (!options_value->IsType(base::Value::Type::NONE)) {
+    if (!options_value->is_none()) {
       options = base::DictionaryValue::From(std::move(options_value));
       if (!options) {
         args.GetIsolate()->ThrowException(v8::Exception::TypeError(

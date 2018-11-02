@@ -30,6 +30,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "google_apis/gaia/gaia_switches.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -37,8 +38,11 @@
 namespace chromeos {
 
 namespace {
-const char kGAIAHost[] = "accounts.google.com";
-}
+
+constexpr char kGAIAHost[] = "accounts.google.com";
+constexpr char kTestAllScopeAccessToken[] = "fake-all-scope-token";
+
+}  // namespace
 
 // static
 const char OobeBaseTest::kFakeUserEmail[] = "fake-email@gmail.com";
@@ -57,8 +61,9 @@ OobeBaseTest::OobeBaseTest()
   set_chromeos_user_ = false;
 }
 
-OobeBaseTest::~OobeBaseTest() {
-}
+OobeBaseTest::~OobeBaseTest() {}
+
+void OobeBaseTest::RegisterAdditionalRequestHandlers() {}
 
 void OobeBaseTest::SetUp() {
   base::FilePath test_data_dir;
@@ -112,7 +117,7 @@ void OobeBaseTest::SetUpOnMainThread() {
       UserSessionManager::GetInstance());
   session_manager_test_api.SetShouldObtainTokenHandleInTests(false);
 
-  LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest();
+  LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest();
 
   // Wait for OobeUI to finish loading.
   base::RunLoop run_loop;
@@ -148,8 +153,7 @@ void OobeBaseTest::SetUpCommandLine(base::CommandLine* command_line) {
   GURL gaia_url = gaia_https_forwarder_.GetURLForSSLHost(std::string());
   command_line->AppendSwitchASCII(::switches::kGaiaUrl, gaia_url.spec());
   command_line->AppendSwitchASCII(::switches::kLsoUrl, gaia_url.spec());
-  command_line->AppendSwitchASCII(::switches::kGoogleApisUrl,
-                                  gaia_url.spec());
+  command_line->AppendSwitchASCII(::switches::kGoogleApisUrl, gaia_url.spec());
 
   fake_gaia_->Initialize();
   fake_gaia_->set_issue_oauth_code_cookie(true);
@@ -160,15 +164,11 @@ void OobeBaseTest::InitHttpsForwarders() {
       kGAIAHost, embedded_test_server()->base_url()));
 }
 
-void OobeBaseTest::RegisterAdditionalRequestHandlers() {
-}
-
 void OobeBaseTest::SimulateNetworkOffline() {
   NetworkPortalDetector::CaptivePortalState offline_state;
   offline_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE;
   network_portal_detector_->SetDetectionResultsForTesting(
-      FakeShillManagerClient::kFakeEthernetNetworkGuid,
-      offline_state);
+      FakeShillManagerClient::kFakeEthernetNetworkGuid, offline_state);
   network_portal_detector_->NotifyObserversForTesting();
 }
 
@@ -182,8 +182,7 @@ void OobeBaseTest::SimulateNetworkOnline() {
   online_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE;
   online_state.response_code = 204;
   network_portal_detector_->SetDetectionResultsForTesting(
-      FakeShillManagerClient::kFakeEthernetNetworkGuid,
-      online_state);
+      FakeShillManagerClient::kFakeEthernetNetworkGuid, online_state);
   network_portal_detector_->NotifyObserversForTesting();
 }
 
@@ -196,8 +195,7 @@ void OobeBaseTest::SimulateNetworkPortal() {
   NetworkPortalDetector::CaptivePortalState portal_state;
   portal_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL;
   network_portal_detector_->SetDetectionResultsForTesting(
-      FakeShillManagerClient::kFakeEthernetNetworkGuid,
-      portal_state);
+      FakeShillManagerClient::kFakeEthernetNetworkGuid, portal_state);
   network_portal_detector_->NotifyObserversForTesting();
 }
 
@@ -218,8 +216,7 @@ WebUILoginDisplay* OobeBaseTest::GetLoginDisplay() {
   ExistingUserController* controller =
       ExistingUserController::current_controller();
   CHECK(controller);
-  return static_cast<WebUILoginDisplay*>(
-      controller->login_display());
+  return static_cast<WebUILoginDisplay*>(controller->login_display());
 }
 
 void OobeBaseTest::WaitForGaiaPageLoad() {
@@ -275,6 +272,20 @@ void OobeBaseTest::SetSignFormField(const std::string& field_id,
   base::ReplaceSubstringsAfterOffset(&js, 0, "$FieldId", field_id);
   base::ReplaceSubstringsAfterOffset(&js, 0, "$FieldValue", field_value);
   ExecuteJsInSigninFrame(js);
+}
+
+void OobeBaseTest::SetupFakeGaiaForLogin(const std::string& user_email,
+                                         const std::string& gaia_id,
+                                         const std::string& refresh_token) {
+  if (!gaia_id.empty())
+    fake_gaia_->MapEmailToGaiaId(user_email, gaia_id);
+
+  FakeGaia::AccessTokenInfo token_info;
+  token_info.token = kTestAllScopeAccessToken;
+  token_info.audience = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+  token_info.email = user_email;
+  token_info.any_scope = true;
+  fake_gaia_->IssueOAuthToken(refresh_token, token_info);
 }
 
 }  // namespace chromeos

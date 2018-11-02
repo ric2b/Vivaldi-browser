@@ -28,61 +28,39 @@
 
 #include "core/CoreExport.h"
 #include "core/editing/EditingBoundary.h"
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/PositionWithAffinity.h"
-#include "core/editing/VisiblePosition.h"
+#include "core/editing/Forward.h"
+#include "platform/geometry/LayoutRect.h"
 #include "platform/text/TextDirection.h"
+#include "platform/wtf/text/icu/UnicodeIcu.h"
 
 namespace blink {
 
-class LayoutRect;
 class LayoutUnit;
 class LayoutObject;
 class Node;
 class IntPoint;
-class InlineBox;
+class IntRect;
 class LocalFrame;
 
-enum EWordSide { kRightWordIfOnBoundary = false, kLeftWordIfOnBoundary = true };
-
-struct InlineBoxPosition {
-  InlineBox* inline_box;
-  int offset_in_box;
-
-  InlineBoxPosition() : inline_box(nullptr), offset_in_box(0) {}
-
-  InlineBoxPosition(InlineBox* inline_box, int offset_in_box)
-      : inline_box(inline_box), offset_in_box(offset_in_box) {
-    DCHECK(inline_box);
-    DCHECK_GE(offset_in_box, 0);
-  }
-
-  bool operator==(const InlineBoxPosition& other) const {
-    return inline_box == other.inline_box &&
-           offset_in_box == other.offset_in_box;
-  }
-
-  bool operator!=(const InlineBoxPosition& other) const {
-    return !operator==(other);
-  }
+// |EWordSiste| is used as a parameter of |StartOfWord()| and |EndOfWord()|
+// to control a returning position when they are called for a position before
+// word boundary.
+enum EWordSide {
+  kNextWordIfOnBoundary = false,
+  kPreviousWordIfOnBoundary = true
 };
 
 // This struct represents local caret rectangle in |layout_object|.
 struct LocalCaretRect {
-  LayoutObject* layout_object = nullptr;
+  const LayoutObject* layout_object = nullptr;
   LayoutRect rect;
 
   LocalCaretRect() = default;
-  LocalCaretRect(LayoutObject* layout_object, const LayoutRect& rect)
+  LocalCaretRect(const LayoutObject* layout_object, const LayoutRect& rect)
       : layout_object(layout_object), rect(rect) {}
 
   bool IsEmpty() const { return !layout_object || rect.IsEmpty(); }
 };
-
-// The print for |InlineBoxPosition| is available only for testing
-// in "webkit_unit_tests", and implemented in
-// "core/editing/VisibleUnitsTest.cpp".
-std::ostream& operator<<(std::ostream&, const InlineBoxPosition&);
 
 // offset functions on Node
 CORE_EXPORT int CaretMinOffset(const Node*);
@@ -104,8 +82,6 @@ CORE_EXPORT int CaretMaxOffset(const Node*);
 // last position in the last atomic node in boundary for all of the positions
 // in boundary after the last candidate, where
 // endsOfNodeAreVisuallyDistinctPositions(boundary).
-// FIXME: This function should never be called when the line box tree is dirty.
-// See https://bugs.webkit.org/show_bug.cgi?id=97264
 CORE_EXPORT Position MostBackwardCaretPosition(
     const Position&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
@@ -160,26 +136,26 @@ PreviousPositionOf(const VisiblePositionInFlatTree&,
 // returned Position should be canonicalized with |previousBoundary()| by
 // TextItetator.
 CORE_EXPORT Position StartOfWordPosition(const VisiblePosition&,
-                                         EWordSide = kRightWordIfOnBoundary);
+                                         EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePosition StartOfWord(const VisiblePosition&,
-                                        EWordSide = kRightWordIfOnBoundary);
+                                        EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT PositionInFlatTree
 StartOfWordPosition(const VisiblePositionInFlatTree&,
-                    EWordSide = kRightWordIfOnBoundary);
+                    EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePositionInFlatTree
 StartOfWord(const VisiblePositionInFlatTree&,
-            EWordSide = kRightWordIfOnBoundary);
+            EWordSide = kNextWordIfOnBoundary);
 // TODO(yoichio): Replace |endOfWord| to |endOfWordPosition| because returned
 // Position should be canonicalized with |nextBoundary()| by TextItetator.
 CORE_EXPORT Position EndOfWordPosition(const VisiblePosition&,
-                                       EWordSide = kRightWordIfOnBoundary);
+                                       EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePosition EndOfWord(const VisiblePosition&,
-                                      EWordSide = kRightWordIfOnBoundary);
+                                      EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT PositionInFlatTree
 EndOfWordPosition(const VisiblePositionInFlatTree&,
-                  EWordSide = kRightWordIfOnBoundary);
+                  EWordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePositionInFlatTree
-EndOfWord(const VisiblePositionInFlatTree&, EWordSide = kRightWordIfOnBoundary);
+EndOfWord(const VisiblePositionInFlatTree&, EWordSide = kNextWordIfOnBoundary);
 VisiblePosition PreviousWordPosition(const VisiblePosition&);
 VisiblePosition NextWordPosition(const VisiblePosition&);
 
@@ -262,15 +238,11 @@ VisiblePosition NextParagraphPosition(const VisiblePosition&, LayoutUnit x);
 CORE_EXPORT bool IsStartOfParagraph(
     const VisiblePosition&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
-CORE_EXPORT bool IsStartOfParagraph(
-    const VisiblePositionInFlatTree&,
-    EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
+CORE_EXPORT bool IsStartOfParagraph(const VisiblePositionInFlatTree&);
 CORE_EXPORT bool IsEndOfParagraph(
     const VisiblePosition&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
-CORE_EXPORT bool IsEndOfParagraph(
-    const VisiblePositionInFlatTree&,
-    EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
+CORE_EXPORT bool IsEndOfParagraph(const VisiblePositionInFlatTree&);
 bool InSameParagraph(const VisiblePosition&,
                      const VisiblePosition&,
                      EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
@@ -303,26 +275,12 @@ CORE_EXPORT bool IsEndOfEditableOrNonEditableContent(const VisiblePosition&);
 CORE_EXPORT bool IsEndOfEditableOrNonEditableContent(
     const VisiblePositionInFlatTree&);
 
-CORE_EXPORT InlineBoxPosition ComputeInlineBoxPosition(const Position&,
-                                                       TextAffinity);
-CORE_EXPORT InlineBoxPosition
-ComputeInlineBoxPosition(const Position&,
-                         TextAffinity,
-                         TextDirection primary_direction);
-CORE_EXPORT InlineBoxPosition
-ComputeInlineBoxPosition(const PositionInFlatTree&, TextAffinity);
-CORE_EXPORT InlineBoxPosition
-ComputeInlineBoxPosition(const PositionInFlatTree&,
-                         TextAffinity,
-                         TextDirection primary_direction);
-CORE_EXPORT InlineBoxPosition ComputeInlineBoxPosition(const VisiblePosition&);
-
 // Rect is local to the returned layoutObject
 CORE_EXPORT LocalCaretRect
 LocalCaretRectOfPosition(const PositionWithAffinity&);
 CORE_EXPORT LocalCaretRect
 LocalCaretRectOfPosition(const PositionInFlatTreeWithAffinity&);
-bool HasRenderedNonAnonymousDescendantsWithHeight(LayoutObject*);
+bool HasRenderedNonAnonymousDescendantsWithHeight(const LayoutObject*);
 
 // Returns a hit-tested VisiblePosition for the given point in contents-space
 // coordinates.
@@ -350,12 +308,20 @@ typedef unsigned (*BoundarySearchFunction)(const UChar*,
                                            BoundarySearchContextAvailability,
                                            bool& need_more_context);
 
-Position NextBoundary(const VisiblePosition&, BoundarySearchFunction);
+CORE_EXPORT Position NextBoundary(const VisiblePosition&,
+                                  BoundarySearchFunction);
 PositionInFlatTree NextBoundary(const VisiblePositionInFlatTree&,
                                 BoundarySearchFunction);
 Position PreviousBoundary(const VisiblePosition&, BoundarySearchFunction);
 PositionInFlatTree PreviousBoundary(const VisiblePositionInFlatTree&,
                                     BoundarySearchFunction);
+
+PositionWithAffinity HonorEditingBoundaryAtOrAfter(const PositionWithAffinity&,
+                                                   const Position&);
+
+PositionInFlatTreeWithAffinity HonorEditingBoundaryAtOrAfter(
+    const PositionInFlatTreeWithAffinity&,
+    const PositionInFlatTree&);
 
 PositionWithAffinity HonorEditingBoundaryAtOrBefore(const PositionWithAffinity&,
                                                     const Position&);

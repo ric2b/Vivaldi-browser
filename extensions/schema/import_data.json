@@ -370,6 +370,11 @@
             "type": "string"
           },
           {
+            "name": "urls",
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          {
             "type": "function",
             "name": "callback",
             "parameters": [

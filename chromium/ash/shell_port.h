@@ -14,6 +14,7 @@
 #include "ash/wm/lock_state_observer.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
+#include "services/viz/public/interfaces/compositing/video_detector_observer.mojom.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/base/cursor/cursor_data.h"
 #include "ui/base/ui_base_types.h"
@@ -44,7 +45,6 @@ namespace ash {
 class AcceleratorController;
 class AshWindowTreeHost;
 struct AshWindowTreeHostInitParams;
-class ImmersiveFullscreenController;
 class KeyboardUI;
 class RootWindowController;
 class WindowCycleEventFilter;
@@ -72,21 +72,13 @@ class ASH_EXPORT ShellPort {
 
   virtual Config GetAshConfig() const = 0;
 
-  // Returns true if the first window shown on first run should be
-  // unconditionally maximized, overriding the heuristic that normally chooses
-  // the window size.
-  bool IsForceMaximizeOnFirstRun();
+  // If a system-modal dialog window is currently open, returns the ID of the
+  // system modal window container that contains the window.
+  // If no system-modal dialogs are open it returns -1.
+  int GetOpenSystemModalWindowContainerId();
 
   // Returns true if a system-modal dialog window is currently open.
   bool IsSystemModalWindowOpen();
-
-  // Creates a modal background (a partially-opaque fullscreen window) on all
-  // displays for |window|.
-  void CreateModalBackground(aura::Window* window);
-
-  // Called when a modal window is removed. It will activate another modal
-  // window if any, or remove modal screens on all displays.
-  void OnModalWindowRemoved(aura::Window* removed);
 
   // The return value from this is supplied to AshTouchTransformController; see
   // it and TouchTransformSetter for details.
@@ -137,9 +129,6 @@ class ASH_EXPORT ShellPort {
   virtual std::unique_ptr<WorkspaceEventHandler> CreateWorkspaceEventHandler(
       aura::Window* workspace_window) = 0;
 
-  virtual std::unique_ptr<ImmersiveFullscreenController>
-  CreateImmersiveFullscreenController() = 0;
-
   // Creates the KeyboardUI. This is called early on.
   virtual std::unique_ptr<KeyboardUI> CreateKeyboardUI() = 0;
 
@@ -164,12 +153,6 @@ class ASH_EXPORT ShellPort {
   // TODO(jamescook): Remove this when VirtualKeyboardController has been moved.
   virtual void ToggleIgnoreExternalKeyboard() = 0;
 
-  // Enable or disable the laser pointer.
-  virtual void SetLaserPointerEnabled(bool enabled) = 0;
-
-  // Enable or disable the partial magnifier.
-  virtual void SetPartialMagnifierEnabled(bool enabled) = 0;
-
   virtual void CreatePointerWatcherAdapter() = 0;
 
   // Creates an AshWindowTreeHost. A return value of null results in a platform
@@ -185,6 +168,10 @@ class ASH_EXPORT ShellPort {
   // Called any time the set up system modal and blocking containers needs to
   // sent to the server.
   virtual void UpdateSystemModalAndBlockingContainers() = 0;
+
+  // Adds an observer for viz::VideoDetector.
+  virtual void AddVideoDetectorObserver(
+      viz::mojom::VideoDetectorObserverPtr observer) = 0;
 
  protected:
   ShellPort();

@@ -10,9 +10,10 @@
 #include "platform/WaitableEvent.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/audio/AudioUtilities.h"
+#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,7 +30,7 @@ class FIFOClient {
       : fifo_(fifo),
         bus_(AudioBus::Create(fifo->NumberOfChannels(), bus_length)),
         client_thread_(Platform::Current()->CreateThread("client thread")),
-        done_event_(WTF::MakeUnique<WaitableEvent>()),
+        done_event_(std::make_unique<WaitableEvent>()),
         jitter_range_ms_(jitter_range_ms) {}
 
   WaitableEvent* Start(double duration_ms, double interval_ms) {
@@ -45,13 +46,9 @@ class FIFOClient {
   virtual void Stop(int callback_counter) = 0;
   virtual void RunTask() = 0;
 
-  void Pull(size_t frames_to_pull) {
-    fifo_->Pull(bus_.Get(), frames_to_pull);
-  }
+  void Pull(size_t frames_to_pull) { fifo_->Pull(bus_.get(), frames_to_pull); }
 
-  void Push() {
-    fifo_->Push(bus_.Get());
-  }
+  void Push() { fifo_->Push(bus_.get()); }
 
  private:
   void RunTaskOnOwnThread() {
@@ -72,8 +69,13 @@ class FIFOClient {
     }
   }
 
+  // Should be instantiated before calling Platform::Current()->CreateThread().
+  // Do not place this after the |client_thread_| below.
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform_;
+
   PushPullFIFO* fifo_;
-  RefPtr<AudioBus> bus_;
+  scoped_refptr<AudioBus> bus_;
   std::unique_ptr<WebThread> client_thread_;
   std::unique_ptr<WaitableEvent> done_event_;
 

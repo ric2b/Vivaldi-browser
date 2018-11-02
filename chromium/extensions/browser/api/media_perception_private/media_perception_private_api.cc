@@ -41,9 +41,11 @@ MediaPerceptionPrivateSetStateFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   if (params->state.status != media_perception::STATUS_RUNNING &&
       params->state.status != media_perception::STATUS_SUSPENDED &&
-      params->state.status != media_perception::STATUS_RESTARTING) {
+      params->state.status != media_perception::STATUS_RESTARTING &&
+      params->state.status != media_perception::STATUS_STOPPED) {
     return RespondNow(
-        Error("Status can only be set to RUNNING, SUSPENDED or RESTARTING."));
+        Error("Status can only be set to RUNNING, SUSPENDED, RESTARTING, or "
+              "STOPPED."));
   }
 
   // Check that device context is only provided with SetState RUNNING.
@@ -52,6 +54,14 @@ MediaPerceptionPrivateSetStateFunction::Run() {
     return RespondNow(
         Error("Only provide deviceContext with SetState RUNNING."));
   }
+
+  // Check that video stream parameters are only provided with SetState RUNNING.
+  if (params->state.status != media_perception::STATUS_RUNNING &&
+      params->state.video_stream_param.get() != nullptr) {
+    return RespondNow(
+        Error("SetState: status must be RUNNING to set videoStreamParam."));
+  }
+
   MediaPerceptionAPIManager* manager =
       MediaPerceptionAPIManager::Get(browser_context());
   manager->SetState(
@@ -85,6 +95,33 @@ MediaPerceptionPrivateGetDiagnosticsFunction::Run() {
 void MediaPerceptionPrivateGetDiagnosticsFunction::GetDiagnosticsCallback(
     media_perception::Diagnostics diagnostics) {
   Respond(OneArgument(diagnostics.ToValue()));
+}
+
+MediaPerceptionPrivateSetAnalyticsComponentFunction::
+    MediaPerceptionPrivateSetAnalyticsComponentFunction() {}
+
+MediaPerceptionPrivateSetAnalyticsComponentFunction::
+    ~MediaPerceptionPrivateSetAnalyticsComponentFunction() {}
+
+ExtensionFunction::ResponseAction
+MediaPerceptionPrivateSetAnalyticsComponentFunction::Run() {
+  std::unique_ptr<media_perception::SetAnalyticsComponent::Params> params =
+      media_perception::SetAnalyticsComponent::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  MediaPerceptionAPIManager* manager =
+      MediaPerceptionAPIManager::Get(browser_context());
+  manager->SetAnalyticsComponent(
+      params->component,
+      base::BindOnce(&MediaPerceptionPrivateSetAnalyticsComponentFunction::
+                         OnAnalyticsComponentSet,
+                     this));
+  return RespondLater();
+}
+
+void MediaPerceptionPrivateSetAnalyticsComponentFunction::
+    OnAnalyticsComponentSet(media_perception::ComponentState component_state) {
+  Respond(OneArgument(component_state.ToValue()));
 }
 
 }  // namespace extensions

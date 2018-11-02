@@ -21,7 +21,7 @@ CanMakePaymentRespondWithObserver::CanMakePaymentRespondWithObserver(
     : RespondWithObserver(context, event_id, observer) {}
 
 void CanMakePaymentRespondWithObserver::OnResponseRejected(
-    WebServiceWorkerResponseError error) {
+    blink::mojom::ServiceWorkerResponseError error) {
   PaymentHandlerUtils::ReportResponseError(GetExecutionContext(),
                                            "CanMakePaymentEvent", error);
 
@@ -39,7 +39,7 @@ void CanMakePaymentRespondWithObserver::OnResponseFulfilled(
                             exception_state);
   if (exception_state.HadException()) {
     exception_state.ClearException();
-    OnResponseRejected(kWebServiceWorkerResponseErrorNoV8Instance);
+    OnResponseRejected(blink::mojom::ServiceWorkerResponseError::kNoV8Instance);
     return;
   }
 
@@ -50,10 +50,10 @@ void CanMakePaymentRespondWithObserver::OnResponseFulfilled(
 void CanMakePaymentRespondWithObserver::OnNoResponse() {
   DCHECK(GetExecutionContext());
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToCanMakePaymentEvent(event_id_, false, event_dispatch_time_);
+      ->RespondToCanMakePaymentEvent(event_id_, true, event_dispatch_time_);
 }
 
-DEFINE_TRACE(CanMakePaymentRespondWithObserver) {
+void CanMakePaymentRespondWithObserver::Trace(blink::Visitor* visitor) {
   RespondWithObserver::Trace(visitor);
 }
 

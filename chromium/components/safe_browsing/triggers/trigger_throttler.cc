@@ -79,6 +79,7 @@ size_t GetDailyQuotaForTrigger(
     const std::vector<TriggerTypeAndQuotaItem>& trigger_quota_list) {
   switch (trigger_type) {
     case TriggerType::SECURITY_INTERSTITIAL:
+    case TriggerType::GAIA_PASSWORD_REUSE:
       return kUnlimitedTriggerQuota;
     case TriggerType::AD_SAMPLE:
       // These triggers have quota configured via Finch, lookup the value in
@@ -135,8 +136,8 @@ bool TriggerThrottler::TriggerCanFire(const TriggerType trigger_type) const {
   // Nth-from-last entry (where N is the quota) to see if it happened within
   // the current day or earlier.
   base::Time min_timestamp = clock_->Now() - kOneDayTimeDelta;
-  const size_t pos = timestamps.size() - trigger_quota + 1;
-  return timestamps[pos] < min_timestamp.ToTimeT();
+  const size_t pos = timestamps.size() - trigger_quota;
+  return timestamps.at(pos) < min_timestamp.ToTimeT();
 }
 
 void TriggerThrottler::TriggerFired(const TriggerType trigger_type) {

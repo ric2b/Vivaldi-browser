@@ -25,16 +25,7 @@ namespace {
 
 const char kErrorUnknown[] = "Unknown";
 
-bool ConvertListValueToStringVector(const base::ListValue& string_list,
-                                    std::vector<std::string>* result) {
-  for (size_t i = 0; i < string_list.GetSize(); ++i) {
-    std::string str;
-    if (!string_list.GetString(i, &str))
-      return false;
-    result->push_back(str);
-  }
-  return true;
-}
+const char kDefaultCellularNetworkPath[] = "/cellular";
 
 bool IsCaptivePortalState(const base::DictionaryValue& properties, bool log) {
   std::string state;
@@ -77,6 +68,12 @@ bool IsCaptivePortalState(const base::DictionaryValue& properties, bool log) {
   return is_captive_portal;
 }
 
+std::string GetStringFromDictionary(const base::DictionaryValue& dict,
+                                    const char* key) {
+  const base::Value* v = dict.FindKey(key);
+  return v ? v->GetString() : std::string();
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -84,7 +81,7 @@ namespace chromeos {
 NetworkState::NetworkState(const std::string& path)
     : ManagedState(MANAGED_TYPE_NETWORK, path) {}
 
-NetworkState::~NetworkState() {}
+NetworkState::~NetworkState() = default;
 
 bool NetworkState::PropertyChanged(const std::string& key,
                                    const base::Value& value) {
@@ -187,16 +184,17 @@ bool NetworkState::PropertyChanged(const std::string& key,
       return false;
     }
 
-    if (vpn_provider_type == shill::kProviderThirdPartyVpn) {
-      // If the network uses a third-party VPN provider, copy over the
-      // provider's extension ID, which is held in |shill::kHostProperty|.
-      if (!dict->GetStringWithoutPathExpansion(
-              shill::kHostProperty, &third_party_vpn_provider_extension_id_)) {
+    if (vpn_provider_type == shill::kProviderThirdPartyVpn ||
+        vpn_provider_type == shill::kProviderArcVpn) {
+      // If the network uses a third-party or Arc VPN provider,
+      // |shill::kHostProperty| contains the extension ID or Arc package name.
+      if (!dict->GetStringWithoutPathExpansion(shill::kHostProperty,
+                                               &vpn_provider_id_)) {
         NET_LOG(ERROR) << "Failed to parse " << path() << "." << key;
         return false;
       }
     } else {
-      third_party_vpn_provider_extension_id_.clear();
+      vpn_provider_id_.clear();
     }
 
     vpn_provider_type_ = vpn_provider_type;
@@ -243,9 +241,10 @@ void NetworkState::GetStateProperties(base::DictionaryValue* dictionary) const {
   dictionary->SetKey(shill::kProfileProperty, base::Value(profile_path()));
   dictionary->SetKey(shill::kPriorityProperty, base::Value(priority_));
 
-  if (visible()) {
+  if (visible())
     dictionary->SetKey(shill::kStateProperty, base::Value(connection_state()));
-  }
+  if (!device_path().empty())
+    dictionary->SetKey(shill::kDeviceProperty, base::Value(device_path()));
 
   // VPN properties.
   if (NetworkTypePattern::VPN().MatchesType(type())) {
@@ -255,10 +254,10 @@ void NetworkState::GetStateProperties(base::DictionaryValue* dictionary) const {
         new base::DictionaryValue);
     provider_property->SetKey(shill::kTypeProperty,
                               base::Value(vpn_provider_type_));
-    if (vpn_provider_type_ == shill::kProviderThirdPartyVpn) {
-      provider_property->SetKey(
-          shill::kHostProperty,
-          base::Value(third_party_vpn_provider_extension_id_));
+    if (vpn_provider_type_ == shill::kProviderThirdPartyVpn ||
+        vpn_provider_type_ == shill::kProviderArcVpn) {
+      provider_property->SetKey(shill::kHostProperty,
+                                base::Value(vpn_provider_id_));
     }
     dictionary->SetWithoutPathExpansion(shill::kProviderProperty,
                                         std::move(provider_property));
@@ -310,41 +309,30 @@ void NetworkState::GetStateProperties(base::DictionaryValue* dictionary) const {
 
 void NetworkState::IPConfigPropertiesChanged(
     const base::DictionaryValue& properties) {
-  for (base::DictionaryValue::Iterator iter(properties); !iter.IsAtEnd();
-       iter.Advance()) {
-    std::string key = iter.key();
-    const base::Value& value = iter.value();
+  ipv4_config_.Clear();
+  ipv4_config_.MergeDictionary(&properties);
+}
 
-    if (key == shill::kAddressProperty) {
-      GetStringValue(key, value, &ip_address_);
-    } else if (key == shill::kGatewayProperty) {
-      GetStringValue(key, value, &gateway_);
-    } else if (key == shill::kNameServersProperty) {
-      const base::ListValue* dns_servers;
-      if (value.GetAsList(&dns_servers)) {
-        dns_servers_.clear();
-        ConvertListValueToStringVector(*dns_servers, &dns_servers_);
-      }
-    } else if (key == shill::kPrefixlenProperty) {
-      GetIntegerValue(key, value, &prefix_length_);
-    } else if (key == shill::kWebProxyAutoDiscoveryUrlProperty) {
-      std::string url_string;
-      if (GetStringValue(key, value, &url_string)) {
-        if (url_string.empty()) {
-          web_proxy_auto_discovery_url_ = GURL();
-        } else {
-          GURL gurl(url_string);
-          if (gurl.is_valid()) {
-            web_proxy_auto_discovery_url_ = gurl;
-          } else {
-            NET_LOG(ERROR) << "Invalid WebProxyAutoDiscoveryUrl: " << path()
-                           << ": " << url_string;
-            web_proxy_auto_discovery_url_ = GURL();
-          }
-        }
-      }
-    }
+std::string NetworkState::GetIpAddress() const {
+  return GetStringFromDictionary(ipv4_config_, shill::kAddressProperty);
+}
+
+std::string NetworkState::GetGateway() const {
+  return GetStringFromDictionary(ipv4_config_, shill::kGatewayProperty);
+}
+
+GURL NetworkState::GetWebProxyAutoDiscoveryUrl() const {
+  std::string url = GetStringFromDictionary(
+      ipv4_config_, shill::kWebProxyAutoDiscoveryUrlProperty);
+  if (url.empty())
+    return GURL();
+  GURL gurl(url);
+  if (!gurl.is_valid()) {
+    NET_LOG(ERROR) << "Invalid WebProxyAutoDiscoveryUrl: " << path() << ": "
+                   << url;
+    return GURL();
   }
+  return gurl;
 }
 
 bool NetworkState::RequiresActivation() const {
@@ -399,9 +387,18 @@ bool NetworkState::IsInProfile() const {
   return !profile_path_.empty() || type() == shill::kTypeEthernetEap;
 }
 
+bool NetworkState::IsNonProfileType() const {
+  return type() == kTypeTether || IsDefaultCellular();
+}
+
 bool NetworkState::IsPrivate() const {
   return !profile_path_.empty() &&
          profile_path_ != NetworkProfileHandler::GetSharedProfilePath();
+}
+
+bool NetworkState::IsDefaultCellular() const {
+  return type() == shill::kTypeCellular &&
+         path() == kDefaultCellularNetworkPath;
 }
 
 std::string NetworkState::GetHexSsid() const {
@@ -409,17 +406,22 @@ std::string NetworkState::GetHexSsid() const {
 }
 
 std::string NetworkState::GetDnsServersAsString() const {
+  const base::Value* listv = ipv4_config_.FindKey(shill::kNameServersProperty);
+  if (!listv)
+    return std::string();
   std::string result;
-  for (size_t i = 0; i < dns_servers_.size(); ++i) {
-    if (i != 0)
+  for (const auto& v : listv->GetList()) {
+    if (!result.empty())
       result += ",";
-    result += dns_servers_[i];
+    result += v.GetString();
   }
   return result;
 }
 
 std::string NetworkState::GetNetmask() const {
-  return network_util::PrefixLengthToNetmask(prefix_length_);
+  const base::Value* v = ipv4_config_.FindKey(shill::kPrefixlenProperty);
+  int prefixlen = v ? v->GetInt() : -1;
+  return network_util::PrefixLengthToNetmask(prefixlen);
 }
 
 std::string NetworkState::GetSpecifier() const {
@@ -429,9 +431,9 @@ std::string NetworkState::GetSpecifier() const {
   }
   if (type() == shill::kTypeWifi)
     return name() + "_" + security_class_;
-  if (!name().empty())
+  if (type() != shill::kTypeCellular && !name().empty())
     return name();
-  return type();  // For unnamed networks such as ethernet.
+  return type();  // For unnamed networks, i.e. Ethernet and Cellular.
 }
 
 void NetworkState::SetGuid(const std::string& guid) {
@@ -478,6 +480,17 @@ bool NetworkState::NetworkStateIsCaptivePortal(
 bool NetworkState::ErrorIsValid(const std::string& error) {
   // Shill uses "Unknown" to indicate an unset or cleared error state.
   return !error.empty() && error != kErrorUnknown;
+}
+
+// static
+std::unique_ptr<NetworkState> NetworkState::CreateDefaultCellular(
+    const std::string& device_path) {
+  auto new_state = std::make_unique<NetworkState>(kDefaultCellularNetworkPath);
+  new_state->set_type(shill::kTypeCellular);
+  new_state->set_update_received();
+  new_state->set_visible(true);
+  new_state->device_path_ = device_path;
+  return new_state;
 }
 
 }  // namespace chromeos

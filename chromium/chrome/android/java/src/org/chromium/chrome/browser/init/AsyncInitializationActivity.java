@@ -13,6 +13,7 @@ import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Process;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
@@ -36,6 +37,7 @@ import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.metrics.MemoryUma;
@@ -244,8 +246,27 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
         TraceEvent.end("AsyncInitializationActivity.onCreate()");
     }
 
+    /**
+     * Called from onCreate() to give derived classes a chance to dispatch the intent using
+     * {@link LaunchIntentDispatcher}. If the method returns anything other than Action.CONTINUE,
+     * the activity is aborted. Default implementation returns Action.CONTINUE.
+     * @param intent intent to dispatch
+     * @return {@link LaunchIntentDispatcher.Action} to take
+     */
+    protected @LaunchIntentDispatcher.Action int maybeDispatchLaunchIntent(Intent intent) {
+        return LaunchIntentDispatcher.Action.CONTINUE;
+    }
+
     private final void onCreateInternal(Bundle savedInstanceState) {
         setIntent(validateIntent(getIntent()));
+
+        @LaunchIntentDispatcher.Action
+        int dispatchAction = maybeDispatchLaunchIntent(getIntent());
+        if (dispatchAction != LaunchIntentDispatcher.Action.CONTINUE) {
+            abortLaunch();
+            return;
+        }
+
         if (DocumentModeAssassin.getInstance().isMigrationNecessary()) {
             super.onCreate(null);
 
@@ -287,6 +308,19 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     private void abortLaunch() {
         super.onCreate(null);
         ApiCompatibilityUtils.finishAndRemoveTask(this);
+        overridePendingTransition(0, R.anim.no_anim);
+
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP
+                || Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP_MR1) {
+            // On L ApiCompatibilityUtils.finishAndRemoveTask() sometimes fails, which causes
+            // NPE in onStart() later, see crbug.com/781396. We can't let this activity to
+            // start, and we don't want to crash either. So try finishing one more time and
+            // suicide if that fails.
+            if (!isFinishing()) {
+                finish();
+                if (!isFinishing()) Process.killProcess(Process.myPid());
+            }
+        }
     }
 
     /**
@@ -397,10 +431,13 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     @Override
     public void onResume() {
         super.onResume();
-        mNativeInitializationController.onResume();
-        if (mLaunchBehindWorkaround != null) mLaunchBehindWorkaround.onResume();
+
+        // Start by setting the launch as cold or warm. It will be used in some resume handlers.
         mIsWarmOnResume = !mFirstResumePending || hadWarmStart();
         mFirstResumePending = false;
+
+        mNativeInitializationController.onResume();
+        if (mLaunchBehindWorkaround != null) mLaunchBehindWorkaround.onResume();
     }
 
     @CallSuper

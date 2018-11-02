@@ -4,11 +4,16 @@
 
 #include "modules/serviceworkers/FetchRespondWithObserver.h"
 
+#include <memory>
+#include <utility>
+
 #include <v8.h>
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8Response.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/UseCounter.h"
+#include "core/frame/WebFeature.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "modules/fetch/BodyStreamBuffer.h"
@@ -16,87 +21,75 @@
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
+
+using blink::mojom::ServiceWorkerResponseError;
 
 namespace blink {
 namespace {
 
 // Returns the error message to let the developer know about the reason of the
 // unusual failures.
-const String GetMessageForResponseError(WebServiceWorkerResponseError error,
+const String GetMessageForResponseError(ServiceWorkerResponseError error,
                                         const KURL& request_url) {
   String error_message = "The FetchEvent for \"" + request_url.GetString() +
                          "\" resulted in a network error response: ";
   switch (error) {
-    case kWebServiceWorkerResponseErrorPromiseRejected:
+    case ServiceWorkerResponseError::kPromiseRejected:
       error_message = error_message + "the promise was rejected.";
       break;
-    case kWebServiceWorkerResponseErrorDefaultPrevented:
+    case ServiceWorkerResponseError::kDefaultPrevented:
       error_message =
           error_message +
           "preventDefault() was called without calling respondWith().";
       break;
-    case kWebServiceWorkerResponseErrorNoV8Instance:
+    case ServiceWorkerResponseError::kNoV8Instance:
       error_message =
           error_message +
           "an object that was not a Response was passed to respondWith().";
       break;
-    case kWebServiceWorkerResponseErrorResponseTypeError:
+    case ServiceWorkerResponseError::kResponseTypeError:
       error_message = error_message +
                       "the promise was resolved with an error response object.";
       break;
-    case kWebServiceWorkerResponseErrorResponseTypeOpaque:
+    case ServiceWorkerResponseError::kResponseTypeOpaque:
       error_message =
           error_message +
           "an \"opaque\" response was used for a request whose type "
           "is not no-cors";
       break;
-    case kWebServiceWorkerResponseErrorResponseTypeNotBasicOrDefault:
+    case ServiceWorkerResponseError::kResponseTypeNotBasicOrDefault:
       NOTREACHED();
       break;
-    case kWebServiceWorkerResponseErrorBodyUsed:
+    case ServiceWorkerResponseError::kBodyUsed:
       error_message =
           error_message +
           "a Response whose \"bodyUsed\" is \"true\" cannot be used "
           "to respond to a request.";
       break;
-    case kWebServiceWorkerResponseErrorResponseTypeOpaqueForClientRequest:
+    case ServiceWorkerResponseError::kResponseTypeOpaqueForClientRequest:
       error_message = error_message +
                       "an \"opaque\" response was used for a client request.";
       break;
-    case kWebServiceWorkerResponseErrorResponseTypeOpaqueRedirect:
+    case ServiceWorkerResponseError::kResponseTypeOpaqueRedirect:
       error_message = error_message +
                       "an \"opaqueredirect\" type response was used for a "
                       "request whose redirect mode is not \"manual\".";
       break;
-    case kWebServiceWorkerResponseErrorBodyLocked:
+    case ServiceWorkerResponseError::kBodyLocked:
       error_message = error_message +
                       "a Response whose \"body\" is locked cannot be used to "
                       "respond to a request.";
       break;
-    case kWebServiceWorkerResponseErrorNoForeignFetchResponse:
-      error_message =
-          error_message +
-          "an object that was not a ForeignFetchResponse was passed "
-          "to respondWith().";
-      break;
-    case kWebServiceWorkerResponseErrorForeignFetchHeadersWithoutOrigin:
-      error_message =
-          error_message +
-          "headers were specified for a response without an explicit origin.";
-      break;
-    case kWebServiceWorkerResponseErrorForeignFetchMismatchedOrigin:
-      error_message = error_message +
-                      "origin in response does not match origin of request.";
-      break;
-    case kWebServiceWorkerResponseErrorRedirectedResponseForNotFollowRequest:
+    case ServiceWorkerResponseError::kRedirectedResponseForNotFollowRequest:
       error_message = error_message +
                       "a redirected response was used for a request whose "
                       "redirect mode is not \"follow\".";
       break;
-    case kWebServiceWorkerResponseErrorDataPipeCreationFailed:
+    case ServiceWorkerResponseError::kDataPipeCreationFailed:
       error_message = error_message + "insufficient resources.";
       break;
-    case kWebServiceWorkerResponseErrorUnknown:
+    case ServiceWorkerResponseError::kUnknown:
     default:
       error_message = error_message + "an unexpected error occurred.";
       break;
@@ -131,7 +124,9 @@ class FetchLoaderClient final
   void DidFetchDataLoadedDataPipe() override { handle_->Completed(); }
   void DidFetchDataLoadFailed() override { handle_->Aborted(); }
 
-  DEFINE_INLINE_TRACE() { FetchDataLoader::Client::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    FetchDataLoader::Client::Trace(visitor);
+  }
 
  private:
   std::unique_ptr<WebServiceWorkerStreamHandle> handle_;
@@ -143,7 +138,7 @@ FetchRespondWithObserver* FetchRespondWithObserver::Create(
     ExecutionContext* context,
     int fetch_event_id,
     const KURL& request_url,
-    WebURLRequest::FetchRequestMode request_mode,
+    network::mojom::FetchRequestMode request_mode,
     WebURLRequest::FetchRedirectMode redirect_mode,
     WebURLRequest::FrameType frame_type,
     WebURLRequest::RequestContext request_context,
@@ -154,7 +149,7 @@ FetchRespondWithObserver* FetchRespondWithObserver::Create(
 }
 
 void FetchRespondWithObserver::OnResponseRejected(
-    WebServiceWorkerResponseError error) {
+    ServiceWorkerResponseError error) {
   DCHECK(GetExecutionContext());
   GetExecutionContext()->AddConsoleMessage(
       ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel,
@@ -172,25 +167,25 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
   DCHECK(GetExecutionContext());
   if (!V8Response::hasInstance(value.V8Value(),
                                ToIsolate(GetExecutionContext()))) {
-    OnResponseRejected(kWebServiceWorkerResponseErrorNoV8Instance);
+    OnResponseRejected(ServiceWorkerResponseError::kNoV8Instance);
     return;
   }
-  Response* response = V8Response::toImplWithTypeCheck(
+  Response* response = V8Response::ToImplWithTypeCheck(
       ToIsolate(GetExecutionContext()), value.V8Value());
   // "If one of the following conditions is true, return a network error:
   //   - |response|'s type is |error|.
   //   - |request|'s mode is not |no-cors| and response's type is |opaque|.
   //   - |request| is a client request and |response|'s type is neither
   //     |basic| nor |default|."
-  const FetchResponseData::Type response_type =
+  const network::mojom::FetchResponseType response_type =
       response->GetResponse()->GetType();
-  if (response_type == FetchResponseData::kErrorType) {
-    OnResponseRejected(kWebServiceWorkerResponseErrorResponseTypeError);
+  if (response_type == network::mojom::FetchResponseType::kError) {
+    OnResponseRejected(ServiceWorkerResponseError::kResponseTypeError);
     return;
   }
-  if (response_type == FetchResponseData::kOpaqueType) {
-    if (request_mode_ != WebURLRequest::kFetchRequestModeNoCORS) {
-      OnResponseRejected(kWebServiceWorkerResponseErrorResponseTypeOpaque);
+  if (response_type == network::mojom::FetchResponseType::kOpaque) {
+    if (request_mode_ != network::mojom::FetchRequestMode::kNoCORS) {
+      OnResponseRejected(ServiceWorkerResponseError::kResponseTypeOpaque);
       return;
     }
 
@@ -201,37 +196,49 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
     // Spec issue: https://github.com/whatwg/fetch/issues/101
     if (IsClientRequest(frame_type_, request_context_)) {
       OnResponseRejected(
-          kWebServiceWorkerResponseErrorResponseTypeOpaqueForClientRequest);
+          ServiceWorkerResponseError::kResponseTypeOpaqueForClientRequest);
       return;
     }
   }
   if (redirect_mode_ != WebURLRequest::kFetchRedirectModeManual &&
-      response_type == FetchResponseData::kOpaqueRedirectType) {
-    OnResponseRejected(
-        kWebServiceWorkerResponseErrorResponseTypeOpaqueRedirect);
+      response_type == network::mojom::FetchResponseType::kOpaqueRedirect) {
+    OnResponseRejected(ServiceWorkerResponseError::kResponseTypeOpaqueRedirect);
     return;
   }
   if (redirect_mode_ != WebURLRequest::kFetchRedirectModeFollow &&
       response->redirected()) {
     OnResponseRejected(
-        kWebServiceWorkerResponseErrorRedirectedResponseForNotFollowRequest);
+        ServiceWorkerResponseError::kRedirectedResponseForNotFollowRequest);
     return;
   }
   if (response->IsBodyLocked()) {
-    OnResponseRejected(kWebServiceWorkerResponseErrorBodyLocked);
+    OnResponseRejected(ServiceWorkerResponseError::kBodyLocked);
     return;
   }
   if (response->bodyUsed()) {
-    OnResponseRejected(kWebServiceWorkerResponseErrorBodyUsed);
+    OnResponseRejected(ServiceWorkerResponseError::kBodyUsed);
     return;
   }
 
   WebServiceWorkerResponse web_response;
   response->PopulateWebServiceWorkerResponse(web_response);
+
+  // UseCounter for cross origin CORS responses to "same-origin" requests.
+  // See https://crbug.com/784018.
+  if (request_mode_ == network::mojom::FetchRequestMode::kSameOrigin &&
+      !web_response.UrlList().empty() &&
+      !SecurityOrigin::AreSameSchemeHostPort(
+          request_url_, *(web_response.UrlList().end() - 1))) {
+    UseCounter::Count(
+        GetExecutionContext(),
+        WebFeature::kRespondToSameOriginRequestWithCrossOriginResponse);
+  }
+
   BodyStreamBuffer* buffer = response->InternalBodyBuffer();
   if (buffer) {
-    RefPtr<BlobDataHandle> blob_data_handle = buffer->DrainAsBlobDataHandle(
-        BytesConsumer::BlobSizePolicy::kAllowBlobWithInvalidSize);
+    scoped_refptr<BlobDataHandle> blob_data_handle =
+        buffer->DrainAsBlobDataHandle(
+            BytesConsumer::BlobSizePolicy::kAllowBlobWithInvalidSize);
     if (blob_data_handle) {
       // Handle the blob response body.
       web_response.SetBlobDataHandle(blob_data_handle);
@@ -244,14 +251,14 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
     mojo::ScopedDataPipeConsumerHandle consumer;
     MojoResult result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
     if (result != MOJO_RESULT_OK) {
-      OnResponseRejected(kWebServiceWorkerResponseErrorDataPipeCreationFailed);
+      OnResponseRejected(ServiceWorkerResponseError::kDataPipeCreationFailed);
       return;
     }
     DCHECK(producer.is_valid());
     DCHECK(consumer.is_valid());
 
     std::unique_ptr<WebServiceWorkerStreamHandle> body_stream_handle =
-        WTF::MakeUnique<WebServiceWorkerStreamHandle>(std::move(consumer));
+        std::make_unique<WebServiceWorkerStreamHandle>(std::move(consumer));
     ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
         ->RespondToFetchEventWithResponseStream(event_id_, web_response,
                                                 body_stream_handle.get(),
@@ -275,7 +282,7 @@ FetchRespondWithObserver::FetchRespondWithObserver(
     ExecutionContext* context,
     int fetch_event_id,
     const KURL& request_url,
-    WebURLRequest::FetchRequestMode request_mode,
+    network::mojom::FetchRequestMode request_mode,
     WebURLRequest::FetchRedirectMode redirect_mode,
     WebURLRequest::FrameType frame_type,
     WebURLRequest::RequestContext request_context,
@@ -287,7 +294,7 @@ FetchRespondWithObserver::FetchRespondWithObserver(
       frame_type_(frame_type),
       request_context_(request_context) {}
 
-DEFINE_TRACE(FetchRespondWithObserver) {
+void FetchRespondWithObserver::Trace(blink::Visitor* visitor) {
   RespondWithObserver::Trace(visitor);
 }
 

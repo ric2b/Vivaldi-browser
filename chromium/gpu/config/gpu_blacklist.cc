@@ -17,8 +17,7 @@ GpuBlacklist::~GpuBlacklist() {
 
 // static
 std::unique_ptr<GpuBlacklist> GpuBlacklist::Create() {
-  GpuControlListData data(kSoftwareRenderingListVersion,
-                          kSoftwareRenderingListEntryCount,
+  GpuControlListData data(kSoftwareRenderingListEntryCount,
                           kSoftwareRenderingListEntries);
   return Create(data);
 }
@@ -39,12 +38,10 @@ std::unique_ptr<GpuBlacklist> GpuBlacklist::Create(
                             GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE);
   list->AddSupportedFeature("accelerated_video_decode",
                             GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE);
-  list->AddSupportedFeature("accelerated_video_encode",
-                            GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE);
-  list->AddSupportedFeature("panel_fitting", GPU_FEATURE_TYPE_PANEL_FITTING);
   list->AddSupportedFeature("gpu_rasterization",
                             GPU_FEATURE_TYPE_GPU_RASTERIZATION);
-  list->AddSupportedFeature("webgl2", GPU_FEATURE_TYPE_WEBGL2);
+  list->AddSupportedFeature("accelerated_webgl2",
+                            GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
   return list;
 }
 

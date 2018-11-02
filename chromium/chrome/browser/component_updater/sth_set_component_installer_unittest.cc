@@ -17,11 +17,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "components/safe_json/testing_json_parser.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/cert/signed_tree_head.h"
 #include "net/cert/sth_observer.h"
 #include "net/test/ct_test_util.h"
+#include "services/data_decoder/public/cpp/testing_json_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -45,7 +45,7 @@ class STHSetComponentInstallerTest : public PlatformTest {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
     observer_.reset(new StoringSTHObserver());
-    traits_.reset(new STHSetComponentInstallerTraits(observer_.get()));
+    policy_.reset(new STHSetComponentInstallerPolicy(observer_.get()));
   }
 
   void WriteSTHToFile(const std::string& sth_json,
@@ -63,16 +63,16 @@ class STHSetComponentInstallerTest : public PlatformTest {
 
   void CreateSTHsDir(const base::DictionaryValue& manifest,
                      const base::FilePath& sths_dir) {
-    ASSERT_FALSE(traits_->VerifyInstallation(manifest, temp_dir_.GetPath()));
+    ASSERT_FALSE(policy_->VerifyInstallation(manifest, temp_dir_.GetPath()));
     ASSERT_TRUE(base::CreateDirectory(sths_dir));
   }
 
   void LoadSTHs(const base::DictionaryValue& manifest,
                 const base::FilePath& sths_dir) {
-    ASSERT_TRUE(traits_->VerifyInstallation(manifest, temp_dir_.GetPath()));
+    ASSERT_TRUE(policy_->VerifyInstallation(manifest, temp_dir_.GetPath()));
 
     const base::Version v("1.0");
-    traits_->LoadSTHsFromDisk(sths_dir, v);
+    policy_->LoadSTHsFromDisk(sths_dir, v);
     // Drain the RunLoop created by the TestBrowserThreadBundle
     base::RunLoop().RunUntilIdle();
   }
@@ -82,10 +82,10 @@ class STHSetComponentInstallerTest : public PlatformTest {
 
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<StoringSTHObserver> observer_;
-  // |traits_| should be destroyed before the |observer_| as it holds a pointer
+  // |policy_| should be destroyed before the |observer_| as it holds a pointer
   // to it.
-  std::unique_ptr<STHSetComponentInstallerTraits> traits_;
-  safe_json::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  std::unique_ptr<STHSetComponentInstallerPolicy> policy_;
+  data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(STHSetComponentInstallerTest);

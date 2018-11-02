@@ -35,6 +35,7 @@ namespace blink {
 
 class LayoutBlockFlow;
 class LayoutMultiColumnSpannerPlaceholder;
+struct NGPhysicalBoxStrut;
 class ShapeOutsideInfo;
 
 struct PaintInfo;
@@ -612,6 +613,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutUnit MarginRight() const override {
     return margin_box_outsets_.Right();
   }
+  void SetMargin(const NGPhysicalBoxStrut&);
   void SetMarginTop(LayoutUnit margin) { margin_box_outsets_.SetTop(margin); }
   void SetMarginBottom(LayoutUnit margin) {
     margin_box_outsets_.SetBottom(margin);
@@ -800,7 +802,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void SetSpannerPlaceholder(LayoutMultiColumnSpannerPlaceholder&);
   void ClearSpannerPlaceholder();
   LayoutMultiColumnSpannerPlaceholder* SpannerPlaceholder() const final {
-    return rare_data_ ? rare_data_->spanner_placeholder_ : 0;
+    return rare_data_ ? rare_data_->spanner_placeholder_ : nullptr;
   }
 
   // A pagination strut is the amount of space needed to push an in-flow block-
@@ -1049,9 +1051,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual PaginationBreakability GetPaginationBreakability() const;
 
   LayoutRect LocalCaretRect(
-      InlineBox*,
+      const InlineBox*,
       int caret_offset,
-      LayoutUnit* extra_width_to_end_of_line = nullptr) override;
+      LayoutUnit* extra_width_to_end_of_line = nullptr) const override;
 
   // Returns whether content which overflows should be clipped. This is not just
   // because of overflow clip, but other types of clip as well, such as
@@ -1065,13 +1067,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutRect ClipRect(const LayoutPoint& location) const;
 
   // Returns the combination of overflow clip, contain: paint clip and CSS clip
-  // for this object, in local space.
-  LayoutRect ClippingRect() const;
+  // for this object.
+  LayoutRect ClippingRect(const LayoutPoint& location) const;
 
   virtual void PaintBoxDecorationBackground(const PaintInfo&,
                                             const LayoutPoint&) const;
   virtual void PaintMask(const PaintInfo&, const LayoutPoint&) const;
-  void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) override;
+  void ImageChanged(WrappedImagePtr,
+                    CanDeferInvalidation,
+                    const IntRect* = nullptr) override;
   ResourcePriority ComputeResourcePriority() const final;
 
   void LogicalExtentAfterUpdatingLogicalWidth(const LayoutUnit& logical_top,
@@ -1088,8 +1092,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return LayoutUnit(-1);
   }  // Returns -1 if we should skip this box when computing the baseline of an
      // inline-block.
-
-  virtual Node* NodeForHitTest() const { return GetNode(); }
 
   bool ShrinkToAvoidFloats() const;
   virtual bool AvoidsFloats() const;
@@ -1268,7 +1270,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       return false;
 
     LayoutRect layout_overflow_rect = overflow_->LayoutOverflowRect();
-    LayoutRect no_overflow_rect = this->NoOverflowRect();
+    LayoutRect no_overflow_rect = NoOverflowRect();
     return layout_overflow_rect.X() < no_overflow_rect.X() ||
            layout_overflow_rect.MaxX() > no_overflow_rect.MaxX();
   }
@@ -1278,7 +1280,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       return false;
 
     LayoutRect layout_overflow_rect = overflow_->LayoutOverflowRect();
-    LayoutRect no_overflow_rect = this->NoOverflowRect();
+    LayoutRect no_overflow_rect = NoOverflowRect();
     return layout_overflow_rect.Y() < no_overflow_rect.Y() ||
            layout_overflow_rect.MaxY() > no_overflow_rect.MaxY();
   }
@@ -1449,10 +1451,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                                const HitTestLocation& location_in_container,
                                const LayoutPoint& accumulated_offset,
                                HitTestAction);
-  void AddLayerHitTestRects(LayerHitTestRects&,
-                            const PaintLayer* current_composited_layer,
-                            const LayoutPoint& layer_offset,
-                            const LayoutRect& container_rect) const override;
+  void AddLayerHitTestRects(
+      LayerHitTestRects&,
+      const PaintLayer* current_composited_layer,
+      const LayoutPoint& layer_offset,
+      TouchAction supported_fast_actions,
+      const LayoutRect& container_rect,
+      TouchAction container_whitelisted_touch_action) const override;
   void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                const LayoutPoint& layer_offset) const override;
 
@@ -1577,7 +1582,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutBoxRareData& EnsureRareData() {
     if (!rare_data_)
-      rare_data_ = WTF::MakeUnique<LayoutBoxRareData>();
+      rare_data_ = std::make_unique<LayoutBoxRareData>();
     return *rare_data_.get();
   }
 

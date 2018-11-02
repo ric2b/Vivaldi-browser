@@ -33,17 +33,15 @@ namespace vr {
 // functionality.
 class AnimationPlayer final {
  public:
-  AnimationPlayer();
-  ~AnimationPlayer();
-
   static int GetNextAnimationId();
   static int GetNextGroupId();
+
+  AnimationPlayer();
+  ~AnimationPlayer();
 
   cc::AnimationTarget* target() const { return target_; }
   void set_target(cc::AnimationTarget* target) { target_ = target; }
 
-  // Animations for properties already being animated are enqueued. Animation
-  // groups are not currently supported. crbug.com/742358
   void AddAnimation(std::unique_ptr<cc::Animation> animation);
   void RemoveAnimation(int animation_id);
   void RemoveAnimations(int target_property);
@@ -62,6 +60,7 @@ class AnimationPlayer final {
   }
 
   void SetTransitionedProperties(const std::set<int>& properties);
+  void SetTransitionDuration(base::TimeDelta delta);
 
   // TODO(754820): Remove duplicate code from the transition functions
   // by using templates.
@@ -84,12 +83,26 @@ class AnimationPlayer final {
 
   bool IsAnimatingProperty(int property) const;
 
-  // TODO(754822): Implement target getters for other value types.
-  gfx::SizeF GetTargetSizeValue(int target_property) const;
+  float GetTargetFloatValue(int target_property, float default_value) const;
+  cc::TransformOperations GetTargetTransformOperationsValue(
+      int target_property,
+      const cc::TransformOperations& default_value) const;
+  gfx::SizeF GetTargetSizeValue(int target_property,
+                                const gfx::SizeF& default_value) const;
+  SkColor GetTargetColorValue(int target_property, SkColor default_value) const;
 
  private:
   void StartAnimations(base::TimeTicks monotonic_time);
+  template <typename ValueType>
+  void TransitionValueTo(base::TimeTicks monotonic_time,
+                         int target_property,
+                         const ValueType& current,
+                         const ValueType& target);
   cc::Animation* GetRunningAnimationForProperty(int target_property) const;
+  cc::Animation* GetAnimationForProperty(int target_property) const;
+  template <typename ValueType>
+  ValueType GetTargetValue(int target_property,
+                           const ValueType& default_value) const;
 
   cc::AnimationTarget* target_ = nullptr;
   Animations animations_;

@@ -4,8 +4,17 @@
 
 #include "content/browser/site_per_process_browsertest.h"
 
+#include <Cocoa/Cocoa.h>
+
+#include "base/mac/mac_util.h"
+#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include "content/browser/renderer_host/render_widget_host_view_mac.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
+#import "third_party/ocmock/ocmock_extensions.h"
 
 namespace content {
 
@@ -56,54 +65,6 @@ class TextInputClientMacHelper {
   scoped_refptr<MessageLoopRunner> loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TextInputClientMacHelper);
-};
-
-// Class to detect incoming gesture event acks for scrolling tests.
-class InputEventAckWaiter
-    : public content::RenderWidgetHost::InputEventObserver {
- public:
-  InputEventAckWaiter(blink::WebInputEvent::Type ack_type_waiting_for)
-      : message_loop_runner_(new content::MessageLoopRunner),
-        ack_type_waiting_for_(ack_type_waiting_for),
-        desired_ack_type_received_(false) {}
-  ~InputEventAckWaiter() override {}
-
-  void OnInputEventAck(const blink::WebInputEvent& event) override {
-    if (event.GetType() != ack_type_waiting_for_)
-      return;
-
-    // Ignore synthetic GestureScrollBegin/Ends.
-    if ((event.GetType() == blink::WebInputEvent::kGestureScrollBegin &&
-         static_cast<const blink::WebGestureEvent&>(event)
-             .data.scroll_begin.synthetic) ||
-        (event.GetType() == blink::WebInputEvent::kGestureScrollEnd &&
-         static_cast<const blink::WebGestureEvent&>(event)
-             .data.scroll_end.synthetic)) {
-      return;
-    }
-
-    desired_ack_type_received_ = true;
-    if (message_loop_runner_->loop_running())
-      message_loop_runner_->Quit();
-  }
-
-  void Wait() {
-    if (!desired_ack_type_received_) {
-      message_loop_runner_->Run();
-    }
-  }
-
-  void Reset() {
-    desired_ack_type_received_ = false;
-    message_loop_runner_ = new content::MessageLoopRunner;
-  }
-
- private:
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-  blink::WebInputEvent::Type ack_type_waiting_for_;
-  bool desired_ack_type_received_;
-
-  DISALLOW_COPY_AND_ASSIGN(InputEventAckWaiter);
 };
 
 }  // namespace
@@ -186,14 +147,20 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   RenderWidgetHost* child_rwh =
       child_iframe_node->current_frame_host()->GetRenderWidgetHost();
 
-  std::unique_ptr<InputEventAckWaiter> gesture_scroll_begin_ack_observer =
-      base::MakeUnique<InputEventAckWaiter>(
-          blink::WebInputEvent::kGestureScrollBegin);
-  std::unique_ptr<InputEventAckWaiter> gesture_scroll_end_ack_observer =
-      base::MakeUnique<InputEventAckWaiter>(
-          blink::WebInputEvent::kGestureScrollEnd);
-  child_rwh->AddInputEventObserver(gesture_scroll_begin_ack_observer.get());
-  child_rwh->AddInputEventObserver(gesture_scroll_end_ack_observer.get());
+  InputEventAckWaiter gesture_scroll_begin_ack_observer(
+      child_rwh, base::BindRepeating([](InputEventAckSource, InputEventAckState,
+                                        const blink::WebInputEvent& event) {
+        return event.GetType() == blink::WebInputEvent::kGestureScrollBegin &&
+               !static_cast<const blink::WebGestureEvent&>(event)
+                    .data.scroll_begin.synthetic;
+      }));
+  InputEventAckWaiter gesture_scroll_end_ack_observer(
+      child_rwh, base::BindRepeating([](InputEventAckSource, InputEventAckState,
+                                        const blink::WebInputEvent& event) {
+        return event.GetType() == blink::WebInputEvent::kGestureScrollEnd &&
+               !static_cast<const blink::WebGestureEvent&>(event)
+                    .data.scroll_end.synthetic;
+      }));
 
   RenderWidgetHostViewBase* child_rwhv =
       static_cast<RenderWidgetHostViewBase*>(child_rwh->GetView());
@@ -215,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
   scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseNone;
   child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
-  gesture_scroll_begin_ack_observer->Wait();
+  gesture_scroll_begin_ack_observer.Wait();
 
   scroll_event.delta_y = -2.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseChanged;
@@ -232,9 +199,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
     scroll_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
     scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseNone;
     child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
-    gesture_scroll_end_ack_observer->Wait();
-    gesture_scroll_begin_ack_observer->Reset();
-    gesture_scroll_end_ack_observer->Reset();
+    gesture_scroll_end_ack_observer.Wait();
+    gesture_scroll_begin_ack_observer.Reset();
+    gesture_scroll_end_ack_observer.Reset();
   }
 
   // We now go into a fling.
@@ -243,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseBegan;
   child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
   if (!child_rwhv->wheel_scroll_latching_enabled())
-    gesture_scroll_begin_ack_observer->Wait();
+    gesture_scroll_begin_ack_observer.Wait();
 
   scroll_event.delta_y = -2.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseNone;
@@ -255,7 +222,122 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseNone;
   scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseEnded;
   child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
-  gesture_scroll_end_ack_observer->Wait();
+  gesture_scroll_end_ack_observer.Wait();
+}
+
+namespace {
+
+NSEventPhase PhaseForEventType(NSEventType type) {
+  if (type == NSEventTypeBeginGesture)
+    return NSEventPhaseBegan;
+  if (type == NSEventTypeEndGesture)
+    return NSEventPhaseEnded;
+  return NSEventPhaseChanged;
+}
+
+id MockGestureEvent(NSEventType type, double magnification, int x, int y) {
+  id event = [OCMockObject mockForClass:[NSEvent class]];
+  NSEventPhase phase = PhaseForEventType(type);
+  NSPoint locationInWindow = NSMakePoint(x, y);
+  CGFloat deltaX = 0;
+  CGFloat deltaY = 0;
+  NSTimeInterval timestamp = 1;
+  NSUInteger modifierFlags = 0;
+
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(type)] type];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(phase)] phase];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(locationInWindow)]
+      locationInWindow];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(deltaX)] deltaX];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(deltaY)] deltaY];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(timestamp)] timestamp];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(modifierFlags)]
+      modifierFlags];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(magnification)]
+      magnification];
+  return event;
+}
+
+bool ShouldSendGestureEvents() {
+#if defined(MAC_OS_X_VERSION_10_11) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_11
+  return base::mac::IsAtMostOS10_10();
+#endif
+  return true;
+}
+
+void SendMacTouchpadPinchSequenceWithExpectedTarget(
+    RenderWidgetHostViewBase* root_view,
+    const gfx::Point& gesture_point,
+    RenderWidgetHostViewBase*& router_touchpad_gesture_target,
+    RenderWidgetHostViewBase* expected_target) {
+  auto* root_view_mac = static_cast<RenderWidgetHostViewMac*>(root_view);
+  RenderWidgetHostViewCocoa* cocoa_view = root_view_mac->cocoa_view();
+
+  NSEvent* pinchBeginEvent = MockGestureEvent(
+      NSEventTypeBeginGesture, 0, gesture_point.x(), gesture_point.y());
+  if (ShouldSendGestureEvents())
+    [cocoa_view beginGestureWithEvent:pinchBeginEvent];
+  [cocoa_view magnifyWithEvent:pinchBeginEvent];
+  // We don't check the gesture target yet, since on mac the GesturePinchBegin
+  // isn't sent until the first PinchUpdate.
+
+  NSEvent* pinchUpdateEvent = MockGestureEvent(
+      NSEventTypeMagnify, 0.25, gesture_point.x(), gesture_point.y());
+  [cocoa_view magnifyWithEvent:pinchUpdateEvent];
+  EXPECT_EQ(expected_target, router_touchpad_gesture_target);
+
+  NSEvent* pinchEndEvent = MockGestureEvent(
+      NSEventTypeEndGesture, 0, gesture_point.x(), gesture_point.y());
+  [cocoa_view magnifyWithEvent:pinchEndEvent];
+  if (ShouldSendGestureEvents())
+    [cocoa_view endGestureWithEvent:pinchEndEvent];
+  EXPECT_EQ(expected_target, router_touchpad_gesture_target);
+}
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
+                       InputEventRouterTouchpadGestureTargetTest) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/frame_tree/page_with_positioned_nested_frames.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContentsImpl* contents = web_contents();
+  FrameTreeNode* root = contents->GetFrameTree()->root();
+  ASSERT_EQ(1U, root->child_count());
+
+  GURL frame_url(
+      embedded_test_server()->GetURL("b.com", "/page_with_click_handler.html"));
+  NavigateFrameToURL(root->child_at(0), frame_url);
+  auto* child_frame_host = root->child_at(0)->current_frame_host();
+
+  // Synchronize with the child and parent renderers to guarantee that the
+  // surface information required for event hit testing is ready.
+  auto* rwhv_child =
+      static_cast<RenderWidgetHostViewBase*>(child_frame_host->GetView());
+  WaitForChildFrameSurfaceReady(child_frame_host);
+
+  // All touches & gestures are sent to the main frame's view, and should be
+  // routed appropriately from there.
+  auto* rwhv_parent = static_cast<RenderWidgetHostViewBase*>(
+      contents->GetRenderWidgetHostView());
+
+  RenderWidgetHostInputEventRouter* router = contents->GetInputEventRouter();
+  EXPECT_EQ(nullptr, router->touchpad_gesture_target_.target);
+
+  gfx::Point main_frame_point(25, 575);
+  gfx::Point child_center(150, 450);
+
+  // Send touchpad pinch sequence to main-frame.
+  SendMacTouchpadPinchSequenceWithExpectedTarget(
+      rwhv_parent, main_frame_point, router->touchpad_gesture_target_.target,
+      rwhv_parent);
+
+  // Send touchpad pinch sequence to child.
+  SendMacTouchpadPinchSequenceWithExpectedTarget(
+      rwhv_parent, child_center, router->touchpad_gesture_target_.target,
+      rwhv_child);
 }
 
 }  // namespace content

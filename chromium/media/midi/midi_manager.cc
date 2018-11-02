@@ -94,8 +94,8 @@ void MidiManager::Shutdown() {
         shutdown_synchronously = true;
       } else {
         session_thread_runner_->PostTask(
-            FROM_HERE, base::Bind(&MidiManager::ShutdownOnSessionThread,
-                                  base::Unretained(this)));
+            FROM_HERE, base::BindOnce(&MidiManager::ShutdownOnSessionThread,
+                                      base::Unretained(this)));
       }
       session_thread_runner_ = nullptr;
     } else {
@@ -129,11 +129,11 @@ void MidiManager::StartSession(MidiManagerClient* client) {
     if (initialization_state_ == InitializationState::COMPLETED) {
       // Platform dependent initialization was already finished for previously
       // initialized clients.
-      if (result_ == Result::OK) {
+      if (result_ == Result::OK)
         AddInitialPorts(client);
-        clients_.insert(client);
-      }
+
       // Complete synchronously with |result_|;
+      clients_.insert(client);
       client->CompleteStartSession(result_);
       return;
     }
@@ -218,8 +218,9 @@ void MidiManager::CompleteInitialization(Result result) {
         complete_asynchronously = true;
       } else {
         session_thread_runner_->PostTask(
-            FROM_HERE, base::Bind(&MidiManager::CompleteInitializationInternal,
-                                  base::Unretained(this), result));
+            FROM_HERE,
+            base::BindOnce(&MidiManager::CompleteInitializationInternal,
+                           base::Unretained(this), result));
       }
     }
   }
@@ -285,10 +286,10 @@ void MidiManager::CompleteInitializationInternal(Result result) {
   result_ = result;
 
   for (auto* client : pending_clients_) {
-    if (result_ == Result::OK) {
+    if (result_ == Result::OK)
       AddInitialPorts(client);
-      clients_.insert(client);
-    }
+
+    clients_.insert(client);
     client->CompleteStartSession(result_);
   }
   pending_clients_.clear();

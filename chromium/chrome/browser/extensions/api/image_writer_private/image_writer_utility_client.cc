@@ -33,7 +33,7 @@ class ImageWriterUtilityClient::RemovableStorageWriterClientImpl
       extensions::mojom::RemovableStorageWriterClientPtr* interface)
       : binding_(this, mojo::MakeRequest(interface)),
         image_writer_utility_client_(owner) {
-    base::ThreadRestrictions::AssertIOAllowed();
+    base::AssertBlockingAllowed();
 
     binding_.set_connection_error_handler(
         base::BindOnce(&ImageWriterUtilityClient::UtilityProcessError,
@@ -70,7 +70,7 @@ ImageWriterUtilityClient::~ImageWriterUtilityClient() = default;
 scoped_refptr<ImageWriterUtilityClient> ImageWriterUtilityClient::Create() {
   if (g_factory_for_testing)
     return g_factory_for_testing->Run();
-  return make_scoped_refptr(new ImageWriterUtilityClient());
+  return base::WrapRefCounted(new ImageWriterUtilityClient());
 }
 
 // static

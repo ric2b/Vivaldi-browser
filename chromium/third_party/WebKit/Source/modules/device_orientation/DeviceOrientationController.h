@@ -5,7 +5,6 @@
 #ifndef DeviceOrientationController_h
 #define DeviceOrientationController_h
 
-#include "core/dom/Document.h"
 #include "core/frame/DeviceSingleWindowEventController.h"
 #include "modules/ModulesExport.h"
 
@@ -34,7 +33,7 @@ class MODULES_EXPORT DeviceOrientationController
   void SetOverride(DeviceOrientationData*);
   void ClearOverride();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   explicit DeviceOrientationController(Document&);

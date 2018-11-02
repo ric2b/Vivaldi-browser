@@ -12,12 +12,11 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/signin/core/browser/account_reconcilor.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 
-namespace signin {
-struct DiceResponseParams;
-}
-
+class AboutSigninInternals;
 class AccountTrackerService;
 class GaiaAuthFetcher;
 class GoogleServiceAuthError;
@@ -29,6 +28,22 @@ class Profile;
 // Exposed for testing.
 extern const int kDiceTokenFetchTimeoutSeconds;
 
+// Delegate interface for processing a dice request.
+class ProcessDiceHeaderDelegate {
+ public:
+  virtual ~ProcessDiceHeaderDelegate() = default;
+
+  // Asks the delegate to enable sync for the |account_id|.
+  // Called after the account was seeded in the account tracker service and
+  // after the refresh token was fetched and updated in the token service.
+  virtual void EnableSync(const std::string& account_id) = 0;
+
+  // Handles a failure in the token exchange (i.e. shows the error to the user).
+  virtual void HandleTokenExchangeFailure(
+      const std::string& email,
+      const GoogleServiceAuthError& error) = 0;
+};
+
 // Processes the Dice responses from Gaia.
 class DiceResponseHandler : public KeyedService {
  public:
@@ -39,11 +54,14 @@ class DiceResponseHandler : public KeyedService {
   DiceResponseHandler(SigninClient* signin_client,
                       SigninManager* signin_manager,
                       ProfileOAuth2TokenService* profile_oauth2_token_service,
-                      AccountTrackerService* account_tracker_service);
+                      AccountTrackerService* account_tracker_service,
+                      AccountReconcilor* account_reconcilor,
+                      AboutSigninInternals* about_signin_internals);
   ~DiceResponseHandler() override;
 
   // Must be called when receiving a Dice response header.
-  void ProcessDiceHeader(const signin::DiceResponseParams& dice_params);
+  void ProcessDiceHeader(const signin::DiceResponseParams& dice_params,
+                         std::unique_ptr<ProcessDiceHeaderDelegate> delegate);
 
   // Returns the number of pending DiceTokenFetchers. Exposed for testing.
   size_t GetPendingDiceTokenFetchersCountForTesting() const;
@@ -56,6 +74,8 @@ class DiceResponseHandler : public KeyedService {
                      const std::string& email,
                      const std::string& authorization_code,
                      SigninClient* signin_client,
+                     AccountReconcilor* account_reconcilor,
+                     std::unique_ptr<ProcessDiceHeaderDelegate> delegate,
                      DiceResponseHandler* dice_response_handler);
     ~DiceTokenFetcher() override;
 
@@ -64,6 +84,11 @@ class DiceResponseHandler : public KeyedService {
     const std::string& authorization_code() const {
       return authorization_code_;
     }
+    bool should_enable_sync() const { return should_enable_sync_; }
+    void set_should_enable_sync(bool should_enable_sync) {
+      should_enable_sync_ = should_enable_sync;
+    }
+    ProcessDiceHeaderDelegate* delegate() { return delegate_.get(); }
 
    private:
     // Called by |timeout_closure_| when the request times out.
@@ -74,11 +99,16 @@ class DiceResponseHandler : public KeyedService {
         const GaiaAuthConsumer::ClientOAuthResult& result) override;
     void OnClientOAuthFailure(const GoogleServiceAuthError& error) override;
 
+    // Lock the account reconcilor while tokens are being fetched.
+    std::unique_ptr<AccountReconcilor::Lock> account_reconcilor_lock_;
+
     std::string gaia_id_;
     std::string email_;
     std::string authorization_code_;
+    std::unique_ptr<ProcessDiceHeaderDelegate> delegate_;
     DiceResponseHandler* dice_response_handler_;
     base::CancelableClosure timeout_closure_;
+    bool should_enable_sync_;
     std::unique_ptr<GaiaAuthFetcher> gaia_auth_fetcher_;
 
     DISALLOW_COPY_AND_ASSIGN(DiceTokenFetcher);
@@ -93,21 +123,27 @@ class DiceResponseHandler : public KeyedService {
                              const std::string& email);
 
   // Process the Dice signin action.
-  void ProcessDiceSigninHeader(const std::string& gaia_id,
-                               const std::string& email,
-                               const std::string& authorization_code);
+  void ProcessDiceSigninHeader(
+      const std::string& gaia_id,
+      const std::string& email,
+      const std::string& authorization_code,
+      std::unique_ptr<ProcessDiceHeaderDelegate> delegate);
+
+  // Process the Dice enable sync action.
+  void ProcessEnableSyncHeader(
+      const std::string& gaia_id,
+      const std::string& email,
+      std::unique_ptr<ProcessDiceHeaderDelegate> delegate);
 
   // Process the Dice signout action.
-  void ProcessDiceSignoutHeader(const std::vector<std::string>& gaia_ids,
-                                const std::vector<std::string>& emails);
+  void ProcessDiceSignoutHeader(
+      const std::vector<signin::DiceResponseParams::AccountInfo>&
+          account_infos);
 
   // Called after exchanging an OAuth 2.0 authorization code for a refresh token
   // after DiceAction::SIGNIN.
-  void OnTokenExchangeSuccess(
-      DiceTokenFetcher* token_fetcher,
-      const std::string& gaia_id,
-      const std::string& email,
-      const GaiaAuthConsumer::ClientOAuthResult& result);
+  void OnTokenExchangeSuccess(DiceTokenFetcher* token_fetcher,
+                              const std::string& refresh_token);
   void OnTokenExchangeFailure(DiceTokenFetcher* token_fetcher,
                               const GoogleServiceAuthError& error);
 
@@ -115,6 +151,8 @@ class DiceResponseHandler : public KeyedService {
   SigninClient* signin_client_;
   ProfileOAuth2TokenService* token_service_;
   AccountTrackerService* account_tracker_service_;
+  AccountReconcilor* account_reconcilor_;
+  AboutSigninInternals* about_signin_internals_;
   std::vector<std::unique_ptr<DiceTokenFetcher>> token_fetchers_;
 
   DISALLOW_COPY_AND_ASSIGN(DiceResponseHandler);

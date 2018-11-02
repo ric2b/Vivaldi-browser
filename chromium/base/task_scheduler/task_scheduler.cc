@@ -27,19 +27,26 @@ TaskScheduler::InitParams::InitParams(
     const SchedulerWorkerPoolParams& background_worker_pool_params_in,
     const SchedulerWorkerPoolParams& background_blocking_worker_pool_params_in,
     const SchedulerWorkerPoolParams& foreground_worker_pool_params_in,
-    const SchedulerWorkerPoolParams& foreground_blocking_worker_pool_params_in)
+    const SchedulerWorkerPoolParams& foreground_blocking_worker_pool_params_in,
+    SharedWorkerPoolEnvironment shared_worker_pool_environment_in)
     : background_worker_pool_params(background_worker_pool_params_in),
       background_blocking_worker_pool_params(
           background_blocking_worker_pool_params_in),
       foreground_worker_pool_params(foreground_worker_pool_params_in),
       foreground_blocking_worker_pool_params(
-          foreground_blocking_worker_pool_params_in) {}
+          foreground_blocking_worker_pool_params_in),
+      shared_worker_pool_environment(shared_worker_pool_environment_in) {}
 
 TaskScheduler::InitParams::~InitParams() = default;
 
 #if !defined(OS_NACL)
 // static
 void TaskScheduler::CreateAndStartWithDefaultParams(StringPiece name) {
+  Create(name);
+  GetInstance()->StartWithDefaultParams();
+}
+
+void TaskScheduler::StartWithDefaultParams() {
   // Values were chosen so that:
   // * There are few background threads.
   // * Background threads never outnumber foreground threads.
@@ -52,12 +59,10 @@ void TaskScheduler::CreateAndStartWithDefaultParams(StringPiece name) {
 
   constexpr TimeDelta kSuggestedReclaimTime = TimeDelta::FromSeconds(30);
 
-  Create(name);
-  GetInstance()->Start(
-      {{kBackgroundMaxThreads, kSuggestedReclaimTime},
-       {kBackgroundBlockingMaxThreads, kSuggestedReclaimTime},
-       {kForegroundMaxThreads, kSuggestedReclaimTime},
-       {kForegroundBlockingMaxThreads, kSuggestedReclaimTime}});
+  Start({{kBackgroundMaxThreads, kSuggestedReclaimTime},
+         {kBackgroundBlockingMaxThreads, kSuggestedReclaimTime},
+         {kForegroundMaxThreads, kSuggestedReclaimTime},
+         {kForegroundBlockingMaxThreads, kSuggestedReclaimTime}});
 }
 #endif  // !defined(OS_NACL)
 

@@ -4,10 +4,13 @@
 
 package org.chromium.android_webview;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.Build;
+import android.support.annotation.VisibleForTesting;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +34,7 @@ import org.chromium.ui.display.DisplayAndroid;
  * is owned by AwContents.java and AutofillProviderAndroid is owned by native
  * AwContents.
  */
+@TargetApi(Build.VERSION_CODES.O)
 public class AwAutofillProvider extends AutofillProvider {
     private static class FocusField {
         public final short fieldIndex;
@@ -73,13 +77,15 @@ public class AwAutofillProvider extends AutofillProvider {
                 ViewStructure child = structure.newChild(index++);
                 int virtualId = toVirtualId(sessionId, fieldIndex++);
                 child.setAutofillId(structure.getAutofillId(), virtualId);
-                if (field.mAutocompleteAttr != null) {
+                if (field.mAutocompleteAttr != null && !field.mAutocompleteAttr.isEmpty()) {
                     child.setAutofillHints(field.mAutocompleteAttr.split(" +"));
                 }
                 child.setHint(field.mPlaceholder);
                 child.setHtmlInfo(child.newHtmlInfoBuilder("input")
                                           .addAttribute("name", field.mName)
                                           .addAttribute("type", field.mType)
+                                          .addAttribute("label", field.mLabel)
+                                          .addAttribute("id", field.mId)
                                           .build());
                 switch (field.getControlType()) {
                     case FormFieldData.TYPE_LIST:
@@ -148,8 +154,18 @@ public class AwAutofillProvider extends AutofillProvider {
         public AutofillValue getFieldNewValue(int index) {
             FormFieldData field = mFormData.mFields.get(index);
             if (field == null) return null;
-            String value = field.getValue();
-            return AutofillValue.forText(value);
+            switch (field.getControlType()) {
+                case FormFieldData.TYPE_LIST:
+                    int i = findIndex(field.mOptionValues, field.getValue());
+                    if (i == -1) return null;
+                    return AutofillValue.forList(i);
+                case FormFieldData.TYPE_TOGGLE:
+                    return AutofillValue.forToggle(field.isChecked());
+                case FormFieldData.TYPE_TEXT:
+                    return AutofillValue.forText(field.getValue());
+                default:
+                    return null;
+            }
         }
 
         public int getVirtualId(short index) {
@@ -192,7 +208,15 @@ public class AwAutofillProvider extends AutofillProvider {
     private long mNativeAutofillProvider;
 
     public AwAutofillProvider(Context context, ViewGroup containerView) {
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
         mAutofillManager = new AwAutofillManager(context);
+        mContainerView = containerView;
+    }
+
+    @VisibleForTesting
+    public AwAutofillProvider(ViewGroup containerView, AwAutofillManager manager) {
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        mAutofillManager = manager;
         mContainerView = containerView;
     }
 
@@ -269,8 +293,30 @@ public class AwAutofillProvider extends AutofillProvider {
         notifyVirtualValueChanged(index);
     }
 
+    @Override
+    public void onTextFieldDidScroll(int index, float x, float y, float width, float height) {
+        // crbug.com/730764 - from P and above, Android framework listens to the onScrollChanged()
+        // and repositions the autofill UI automatically.
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O_MR1) return;
+        if (mRequest == null) return;
+
+        short sIndex = (short) index;
+        FocusField focusField = mRequest.getFocusField();
+        if (focusField == null || sIndex != focusField.fieldIndex) return;
+
+        int virtualId = mRequest.getVirtualId(sIndex);
+        Rect absBound = transformToWindowBounds(new RectF(x, y, x + width, y + height));
+        // Notify the new position to the Android framework. Note that we do not call
+        // notifyVirtualViewExited() here intentionally to avoid flickering.
+        mAutofillManager.notifyVirtualViewEntered(mContainerView, virtualId, absBound);
+
+        // Update focus field position.
+        mRequest.setFocusField(new FocusField(focusField.fieldIndex, absBound));
+    }
+
     private void notifyVirtualValueChanged(int index) {
         AutofillValue autofillValue = mRequest.getFieldNewValue(index);
+        if (autofillValue == null) return;
         mAutofillManager.notifyVirtualValueChanged(
                 mContainerView, mRequest.getVirtualId((short) index), autofillValue);
     }

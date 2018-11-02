@@ -12,9 +12,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "cc/output/output_surface_client.h"
-#include "cc/output/output_surface_frame.h"
-#include "cc/output/software_output_device.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/output_surface_frame.h"
+#include "components/viz/service/display/software_output_device.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/latency/latency_info.h"
@@ -22,7 +22,7 @@
 namespace content {
 
 SoftwareBrowserCompositorOutputSurface::SoftwareBrowserCompositorOutputSurface(
-    std::unique_ptr<cc::SoftwareOutputDevice> software_device,
+    std::unique_ptr<viz::SoftwareOutputDevice> software_device,
     const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : BrowserCompositorOutputSurface(std::move(software_device),
@@ -35,7 +35,7 @@ SoftwareBrowserCompositorOutputSurface::
 }
 
 void SoftwareBrowserCompositorOutputSurface::BindToClient(
-    cc::OutputSurfaceClient* client) {
+    viz::OutputSurfaceClient* client) {
   DCHECK(client);
   DCHECK(!client_);
   client_ = client;
@@ -69,7 +69,7 @@ void SoftwareBrowserCompositorOutputSurface::Reshape(
 }
 
 void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
-    cc::OutputSurfaceFrame frame) {
+    viz::OutputSurfaceFrame frame) {
   DCHECK(client_);
   base::TimeTicks swap_time = base::TimeTicks::Now();
   for (auto& latency : frame.latency_info) {
@@ -85,18 +85,33 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
                      frame.latency_info));
 
   gfx::VSyncProvider* vsync_provider = software_device()->GetVSyncProvider();
-  if (vsync_provider)
-    vsync_provider->GetVSyncParameters(update_vsync_parameters_callback_);
+  if (vsync_provider) {
+    vsync_provider->GetVSyncParameters(
+        base::Bind(&SoftwareBrowserCompositorOutputSurface::UpdateVSyncCallback,
+                   weak_factory_.GetWeakPtr()));
+  }
 
+  ++swap_id_;
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback,
-          weak_factory_.GetWeakPtr()));
+          weak_factory_.GetWeakPtr(), swap_id_));
 }
 
-void SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback() {
-  client_->DidReceiveSwapBuffersAck();
+void SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback(
+    uint64_t swap_id) {
+  client_->DidReceiveSwapBuffersAck(swap_id);
+  client_->DidReceivePresentationFeedback(
+      swap_id,
+      gfx::PresentationFeedback(base::TimeTicks::Now(), refresh_interval_, 0u));
+}
+
+void SoftwareBrowserCompositorOutputSurface::UpdateVSyncCallback(
+    const base::TimeTicks timebase,
+    const base::TimeDelta interval) {
+  refresh_interval_ = interval;
+  update_vsync_parameters_callback_.Run(timebase, interval);
 }
 
 bool SoftwareBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane() const {

@@ -5,6 +5,7 @@
 #include "content/renderer/media/media_stream_source.h"
 
 #include "base/callback_helpers.h"
+#include "base/logging.h"
 
 namespace content {
 
@@ -21,6 +22,10 @@ MediaStreamSource::~MediaStreamSource() {
 void MediaStreamSource::StopSource() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DoStopSource();
+  FinalizeStopSource();
+}
+
+void MediaStreamSource::FinalizeStopSource() {
   if (!stop_callback_.is_null())
     base::ResetAndReturn(&stop_callback_).Run(Owner());
   Owner().SetReadyState(blink::WebMediaStreamSource::kReadyStateEnded);
@@ -36,9 +41,9 @@ void MediaStreamSource::SetSourceMuted(bool is_muted) {
                             : blink::WebMediaStreamSource::kReadyStateLive);
 }
 
-void MediaStreamSource::SetDeviceInfo(const StreamDeviceInfo& device_info) {
+void MediaStreamSource::SetDevice(const MediaStreamDevice& device) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  device_info_ = device_info;
+  device_ = device;
 }
 
 void MediaStreamSource::SetStopCallback(

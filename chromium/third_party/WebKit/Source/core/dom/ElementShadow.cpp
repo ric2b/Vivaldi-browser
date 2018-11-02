@@ -26,15 +26,15 @@
 
 #include "core/dom/ElementShadow.h"
 
+#include "core/css/StyleChangeReason.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/resolver/ScopedStyleResolver.h"
 #include "core/dom/ElementShadowV0.h"
 #include "core/dom/NodeTraversal.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/frame/Deprecation.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 
 namespace blink {
 
@@ -57,11 +57,9 @@ ShadowRoot& ElementShadow::AddShadowRoot(Element& shadow_host,
   EventDispatchForbiddenScope assert_no_event_dispatch;
   ScriptForbiddenScope forbid_script;
 
-  if (type == ShadowRootType::V0 && shadow_root_) {
-    DCHECK_EQ(shadow_root_->GetType(), ShadowRootType::V0);
-    Deprecation::CountDeprecation(shadow_host.GetDocument(),
-                                  WebFeature::kElementCreateShadowRootMultiple);
-  }
+  // Multiple ShadowRoots are removed.
+  // TODO(kochi): Further cleanup of unnecessary code for multiple shadow.
+  DCHECK(!shadow_root_);
 
   if (shadow_root_) {
     // TODO(hayato): Is the order, from the youngest to the oldest, important?
@@ -109,7 +107,7 @@ void ElementShadow::AppendShadowRoot(ShadowRoot& shadow_root) {
 
 void ElementShadow::Attach(const Node::AttachContext& context) {
   Node::AttachContext children_context(context);
-  children_context.resolved_style = 0;
+  children_context.resolved_style = nullptr;
 
   for (ShadowRoot* root = &YoungestShadowRoot(); root;
        root = root->OlderShadowRoot()) {
@@ -120,14 +118,22 @@ void ElementShadow::Attach(const Node::AttachContext& context) {
 
 void ElementShadow::Detach(const Node::AttachContext& context) {
   Node::AttachContext children_context(context);
-  children_context.resolved_style = 0;
+  children_context.resolved_style = nullptr;
 
   for (ShadowRoot* root = &YoungestShadowRoot(); root;
        root = root->OlderShadowRoot())
     root->DetachLayoutTree(children_context);
 }
 
+void ElementShadow::SetNeedsDistributionRecalcWillBeSetNeedsAssignmentRecalc() {
+  if (RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() && IsV1())
+    YoungestShadowRoot().SetNeedsAssignmentRecalc();
+  else
+    SetNeedsDistributionRecalc();
+}
+
 void ElementShadow::SetNeedsDistributionRecalc() {
+  DCHECK(!(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() && IsV1()));
   if (needs_distribution_recalc_)
     return;
   needs_distribution_recalc_ = true;
@@ -163,12 +169,12 @@ void ElementShadow::Distribute() {
     V0().Distribute();
 }
 
-DEFINE_TRACE(ElementShadow) {
+void ElementShadow::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_shadow_v0_);
   visitor->Trace(shadow_root_);
 }
 
-DEFINE_TRACE_WRAPPERS(ElementShadow) {
+void ElementShadow::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(element_shadow_v0_);
   visitor->TraceWrappers(shadow_root_);
 }

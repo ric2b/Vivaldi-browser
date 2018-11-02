@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/strings/string_piece.h"
+#include "components/autofill/content/renderer/html_based_username_detector.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -24,9 +25,25 @@ class WebInputElement;
 class WebLocalFrame;
 }
 
+namespace re2 {
+class RE2;
+}
+
 namespace autofill {
 
 struct PasswordForm;
+
+enum UsernameDetectionMethod {
+  NO_USERNAME_DETECTED,
+  BASE_HEURISTIC,
+  HTML_BASED_CLASSIFIER,
+  AUTOCOMPLETE_ATTRIBUTE,
+  SERVER_SIDE_PREDICTION,
+  USERNAME_DETECTION_METHOD_COUNT
+};
+
+// The caller of this function is responsible for deleting the returned object.
+re2::RE2* CreateMatcher(void* instance, const char* pattern);
 
 // Tests whether the given form is a GAIA reauthentication form.
 bool IsGaiaReauthenticationForm(const blink::WebFormElement& form);
@@ -45,17 +62,21 @@ typedef std::map<
 // the PasswordForm.
 // |form_predictions| is Autofill server response, if present it's used for
 // overwriting default username element selection.
+// |username_detector_cache| is used by the built-in HTML based username
+// detector to cache results. Can be null.
 std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
     const blink::WebFormElement& form,
     const FieldValueAndPropertiesMaskMap* nonscript_modified_values,
-    const FormsPredictionsMap* form_predictions);
+    const FormsPredictionsMap* form_predictions,
+    UsernameDetectorCache* username_detector_cache);
 
 // Same as CreatePasswordFormFromWebForm() but for input elements that are not
 // enclosed in <form> element.
 std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
     const blink::WebLocalFrame& frame,
     const FieldValueAndPropertiesMaskMap* nonscript_modified_values,
-    const FormsPredictionsMap* form_predictions);
+    const FormsPredictionsMap* form_predictions,
+    UsernameDetectorCache* username_detector_cache);
 
 // Checks in a case-insensitive way if the autocomplete attribute for the given
 // |element| is present and has the specified |value_in_lowercase|.

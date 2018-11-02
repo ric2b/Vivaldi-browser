@@ -35,7 +35,7 @@ class TestClient : public TestContentClient {
 
   base::RefCountedMemory* GetDataResourceBytes(
       int resource_id) const override {
-    base::RefCountedStaticMemory* bytes = NULL;
+    base::RefCountedStaticMemory* bytes = nullptr;
     if (resource_id == kDummyDefaultResourceId) {
       bytes = new base::RefCountedStaticMemory(
           kDummyDefaultResource, arraysize(kDummyDefaultResource));
@@ -84,7 +84,7 @@ class WebUIDataSourceTest : public testing::Test {
     WebUIDataSourceImpl* source_impl = static_cast<WebUIDataSourceImpl*>(
         source);
     source_impl->disable_load_time_data_defaults_for_testing();
-    source_ = make_scoped_refptr(source_impl);
+    source_ = base::WrapRefCounted(source_impl);
   }
 
   TestBrowserThreadBundle thread_bundle_;

@@ -20,7 +20,7 @@
 
 #include "core/svg/SVGForeignObjectElement.h"
 
-#include "core/dom/StyleChangeReason.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/svg/LayoutSVGForeignObject.h"
 #include "core/svg/SVGLength.h"
@@ -55,7 +55,7 @@ inline SVGForeignObjectElement::SVGForeignObjectElement(Document& document)
   UseCounter::Count(document, WebFeature::kSVGForeignObjectElement);
 }
 
-DEFINE_TRACE(SVGForeignObjectElement) {
+void SVGForeignObjectElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);
@@ -68,7 +68,7 @@ DEFINE_NODE_FACTORY(SVGForeignObjectElement)
 void SVGForeignObjectElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == width_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),

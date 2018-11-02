@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -16,6 +16,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/test_wallpaper_delegate.h"
+#include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "ash/wallpaper/wallpaper_view.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "base/command_line.h"
@@ -77,7 +78,7 @@ void RunAnimationForWidget(views::Widget* widget) {
 class TaskObserver : public base::MessageLoop::TaskObserver {
  public:
   TaskObserver() : processed_(false) {}
-  ~TaskObserver() override {}
+  ~TaskObserver() override = default;
 
   // MessageLoop::TaskObserver overrides.
   void WillProcessTask(const base::PendingTask& pending_task) override {}
@@ -93,12 +94,14 @@ class TaskObserver : public base::MessageLoop::TaskObserver {
   DISALLOW_COPY_AND_ASSIGN(TaskObserver);
 };
 
+// See content::RunAllTasksUntilIdle().
 void RunAllTasksUntilIdle() {
   while (true) {
-    base::TaskScheduler::GetInstance()->FlushForTesting();
-
     TaskObserver task_observer;
     base::MessageLoop::current()->AddTaskObserver(&task_observer);
+    // May spin message loop.
+    base::TaskScheduler::GetInstance()->FlushForTesting();
+
     base::RunLoop().RunUntilIdle();
     base::MessageLoop::current()->RemoveTaskObserver(&task_observer);
 
@@ -117,16 +120,34 @@ class TestWallpaperObserver : public mojom::WallpaperObserver {
   void OnWallpaperColorsChanged(
       const std::vector<SkColor>& prominent_colors) override {
     ++wallpaper_colors_changed_count_;
+    if (run_loop_)
+      run_loop_->Quit();
   }
 
   int wallpaper_colors_changed_count() const {
     return wallpaper_colors_changed_count_;
   }
 
+  void set_run_loop(base::RunLoop* loop) { run_loop_ = loop; }
+
  private:
+  base::RunLoop* run_loop_ = nullptr;
   int wallpaper_colors_changed_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TestWallpaperObserver);
+};
+
+class TestWallpaperControllerObserver : public WallpaperControllerObserver {
+ public:
+  TestWallpaperControllerObserver() = default;
+
+  void OnWallpaperDataChanged() override {}
+
+  void OnWallpaperBlurChanged() override { ++wallpaper_blur_changed_count_; }
+
+  void Reset() { wallpaper_blur_changed_count_ = 0; }
+
+  int wallpaper_blur_changed_count_ = 0;
 };
 
 }  // namespace
@@ -135,7 +156,7 @@ class WallpaperControllerTest : public AshTestBase {
  public:
   WallpaperControllerTest()
       : controller_(nullptr), wallpaper_delegate_(nullptr) {}
-  ~WallpaperControllerTest() override {}
+  ~WallpaperControllerTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -221,7 +242,6 @@ class WallpaperControllerTest : public AshTestBase {
     const gfx::ImageSkia kImage = CreateImage(10, 10, kCustomWallpaperColor);
     controller_->SetWallpaperImage(
         kImage, CreateWallpaperInfo(WALLPAPER_LAYOUT_STRETCH));
-    AddCommandLineSwitch(switches::kAshShelfColorEnabled);
     SetSessionState(SessionState::ACTIVE);
 
     EXPECT_TRUE(ShouldCalculateColors());
@@ -230,12 +250,6 @@ class WallpaperControllerTest : public AshTestBase {
   // Convenience function to set the SessionState.
   void SetSessionState(SessionState session_state) {
     GetSessionControllerClient()->SetSessionState(session_state);
-  }
-
-  // Convenience function to modify the kAshShelfColor command line value.
-  void AddCommandLineSwitch(const std::string& value_string) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kAshShelfColor, value_string);
   }
 
   // Helper function to create a |WallpaperInfo| struct with dummy values
@@ -573,21 +587,130 @@ TEST_F(WallpaperControllerTest, MojoWallpaperObserverTest) {
   TestWallpaperObserver observer;
   mojom::WallpaperObserverAssociatedPtr observer_ptr;
   mojo::AssociatedBinding<mojom::WallpaperObserver> binding(
-      &observer, mojo::MakeIsolatedRequest(&observer_ptr));
+      &observer, mojo::MakeRequestAssociatedWithDedicatedPipe(&observer_ptr));
   controller_->AddObserver(observer_ptr.PassInterface());
+  controller_->FlushForTesting();
 
-  // Mojo observer will asynchronously receive the observed event, thus a run
-  // loop needs to be spinned.
-  base::RunLoop().RunUntilIdle();
-  // When adding observer, OnWallpaperColorsChanged() is fired so that we start
-  // with count equals 1.
+  // Adding an observer fires OnWallpaperColorsChanged() immediately.
   EXPECT_EQ(1, observer.wallpaper_colors_changed_count());
 
   // Enable shelf coloring will set a customized wallpaper image and change
   // session state to ACTIVE, which will trigger wallpaper colors calculation.
+  base::RunLoop run_loop;
+  observer.set_run_loop(&run_loop);
   EnableShelfColoring();
-  base::RunLoop().RunUntilIdle();
+  // Color calculation may be asynchronous.
+  run_loop.Run();
+  // Mojo methods are called after color calculation finishes.
+  controller_->FlushForTesting();
   EXPECT_EQ(2, observer.wallpaper_colors_changed_count());
+}
+
+TEST_F(WallpaperControllerTest, WallpaperBlur) {
+  ASSERT_TRUE(controller_->IsBlurEnabled());
+  ASSERT_FALSE(controller_->IsWallpaperBlurred());
+
+  TestWallpaperControllerObserver observer;
+  controller_->AddObserver(&observer);
+
+  SetSessionState(SessionState::ACTIVE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOCKED);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(1, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOGGED_IN_NOT_ACTIVE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(2, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOGIN_SECONDARY);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(3, observer.wallpaper_blur_changed_count_);
+
+  // Blur state does not change below.
+  observer.Reset();
+  SetSessionState(SessionState::LOGIN_PRIMARY);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::OOBE);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::UNKNOWN);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  controller_->RemoveObserver(&observer);
+}
+
+TEST_F(WallpaperControllerTest, WallpaperBlurDisabledByPolicy) {
+  // Simulate DEVICE policy wallpaper.
+  const wallpaper::WallpaperInfo info("", WALLPAPER_LAYOUT_CENTER,
+                                      wallpaper::DEVICE, base::Time::Now());
+  const gfx::ImageSkia image = CreateImage(10, 10, kWallpaperColor);
+  controller_->SetWallpaperImage(image, info);
+  ASSERT_FALSE(controller_->IsBlurEnabled());
+  ASSERT_FALSE(controller_->IsWallpaperBlurred());
+
+  TestWallpaperControllerObserver observer;
+  controller_->AddObserver(&observer);
+
+  SetSessionState(SessionState::ACTIVE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOCKED);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOGGED_IN_NOT_ACTIVE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOGIN_SECONDARY);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOGIN_PRIMARY);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::OOBE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::UNKNOWN);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(0, observer.wallpaper_blur_changed_count_);
+
+  controller_->RemoveObserver(&observer);
+}
+
+TEST_F(WallpaperControllerTest, WallpaperBlurDuringLockScreenTransition) {
+  ASSERT_TRUE(controller_->IsBlurEnabled());
+  ASSERT_FALSE(controller_->IsWallpaperBlurred());
+
+  TestWallpaperControllerObserver observer;
+  controller_->AddObserver(&observer);
+
+  // Simulate lock and unlock sequence.
+  controller_->PrepareWallpaperForLockScreenChange(true);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(1, observer.wallpaper_blur_changed_count_);
+
+  SetSessionState(SessionState::LOCKED);
+  EXPECT_TRUE(controller_->IsWallpaperBlurred());
+
+  // Change of state to ACTIVE trigers post lock animation and
+  // PrepareWallpaperForLockScreenChange(false)
+  SetSessionState(SessionState::ACTIVE);
+  EXPECT_FALSE(controller_->IsWallpaperBlurred());
+  EXPECT_EQ(2, observer.wallpaper_blur_changed_count_);
+
+  controller_->RemoveObserver(&observer);
 }
 
 }  // namespace ash

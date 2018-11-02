@@ -24,7 +24,7 @@
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "url/gurl.h"
 
 namespace gfx {
@@ -54,6 +54,12 @@ enum class ButtonType {
   TEXT
 };
 
+enum class SettingsButtonHandler {
+  NONE,     // No button. This is the default.
+  TRAY,     // Button shown, the tray handles clicks. Only used on Chrome OS.
+  DELEGATE  // Button shown, notification's delegate handles action.
+};
+
 enum class SystemNotificationWarningLevel { NORMAL, WARNING, CRITICAL_WARNING };
 
 // Represents a button to be shown as part of a notification.
@@ -77,6 +83,15 @@ struct MESSAGE_CENTER_EXPORT ButtonInfo {
   // The placeholder string that should be displayed in the input field for TEXT
   // type buttons until the user has entered a response themselves.
   base::string16 placeholder;
+};
+
+// TODO(estade): add an ALWAYS value to mark notifications as additionally
+// visible over system fullscreen windows such as Chrome OS login so we don't
+// need to centrally track Ash system notification IDs.
+enum class FullscreenVisibility {
+  NONE,       // Don't show the notification over fullscreen (default).
+  OVER_USER,  // Show over the current fullscreened client window.
+              // windows (like Chrome OS login).
 };
 
 // Represents rich features available for notifications.
@@ -145,7 +160,7 @@ class MESSAGE_CENTER_EXPORT RichNotificationData {
   bool should_make_spoken_feedback_for_popup_updates = true;
 
   // Whether it should be possible for the user to click on the notification.
-  bool clickable = true;
+  bool clickable = false;
 
 #if defined(OS_CHROMEOS)
   // Flag if the notification is pinned. If true, the notification is pinned
@@ -179,11 +194,18 @@ class MESSAGE_CENTER_EXPORT RichNotificationData {
   // and hides the icon when the notification is expanded.
   // This is only effective when new style notification is enabled.
   bool use_image_as_icon = false;
+
+  // Controls whether a settings button should appear on the notification. See
+  // enum definition. TODO(estade): turn this into a boolean. See
+  // crbug.com/780342
+  SettingsButtonHandler settings_button_handler = SettingsButtonHandler::NONE;
+
+  FullscreenVisibility fullscreen_visibility = FullscreenVisibility::NONE;
 };
 
 class MESSAGE_CENTER_EXPORT Notification {
  public:
-  // Default constructor needed for generated mojom files
+  // Default constructor needed for generated mojom files.
   Notification();
 
   // Creates a new notification.
@@ -227,6 +249,15 @@ class MESSAGE_CENTER_EXPORT Notification {
   Notification& operator=(const Notification& other);
 
   virtual ~Notification();
+
+  // Performs a deep copy of |notification|, including images and (optionally)
+  // the body image, small image, and icon images which are not supported on all
+  // platforms.
+  static std::unique_ptr<Notification> DeepCopy(
+      const Notification& notification,
+      bool include_body_image,
+      bool include_small_image,
+      bool include_icon_images);
 
   // Copies the internal on-memory state from |base|, i.e. shown_as_popup,
   // is_read and never_timeout.
@@ -349,7 +380,7 @@ class MESSAGE_CENTER_EXPORT Notification {
   // filled by the |color|.
   // Otherwise, it uses alpha channel of the rasterized |small_image| for
   // masking.
-  gfx::Image GenerateMaskedSmallIcon(SkColor color) const;
+  gfx::Image GenerateMaskedSmallIcon(int dip_size, SkColor color) const;
 
   // Buttons, with icons fetched asynchronously.
   const std::vector<ButtonInfo>& buttons() const {
@@ -410,10 +441,27 @@ class MESSAGE_CENTER_EXPORT Notification {
     optional_fields_.use_image_as_icon = use_image_as_icon;
   }
 
+  bool should_show_settings_button() const {
+    return optional_fields_.settings_button_handler !=
+           SettingsButtonHandler::NONE;
+  }
+
+  FullscreenVisibility fullscreen_visibility() const {
+    return optional_fields_.fullscreen_visibility;
+  }
+  void set_fullscreen_visibility(FullscreenVisibility visibility) {
+    optional_fields_.fullscreen_visibility = visibility;
+  }
+
   NotificationDelegate* delegate() const { return delegate_.get(); }
 
   const RichNotificationData& rich_notification_data() const {
     return optional_fields_;
+  }
+
+  void set_delegate(scoped_refptr<NotificationDelegate> delegate) {
+    DCHECK(!delegate_);
+    delegate_ = delegate;
   }
 
   // Set the priority to SYSTEM. The system priority user needs to call this
@@ -422,7 +470,6 @@ class MESSAGE_CENTER_EXPORT Notification {
 
   // Delegate actions.
   void Display() const { delegate()->Display(); }
-  bool HasClickedListener() const { return delegate()->HasClickedListener(); }
   void Click() const { delegate()->Click(); }
   void ButtonClick(int index) const { delegate()->ButtonClick(index); }
   void Close(bool by_user) const { delegate()->Close(by_user); }

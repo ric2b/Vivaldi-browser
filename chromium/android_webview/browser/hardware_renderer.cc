@@ -14,7 +14,7 @@
 #include "android_webview/public/browser/draw_gl.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/compositor_frame.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -35,6 +35,10 @@ HardwareRenderer::HardwareRenderer(RenderThreadManager* state)
   DCHECK(last_egl_context_);
   surfaces_->GetFrameSinkManager()->surface_manager()->RegisterFrameSinkId(
       frame_sink_id_);
+#if DCHECK_IS_ON()
+  surfaces_->GetFrameSinkManager()->surface_manager()->SetFrameSinkDebugLabel(
+      frame_sink_id_, "HardwareRenderer");
+#endif
   CreateNewCompositorFrameSinkSupport();
 }
 
@@ -117,7 +121,7 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
           child_frame_->layer_tree_frame_sink_id;
     }
 
-    std::unique_ptr<cc::CompositorFrame> child_compositor_frame =
+    std::unique_ptr<viz::CompositorFrame> child_compositor_frame =
         std::move(child_frame_->frame);
 
     float device_scale_factor = child_compositor_frame->device_scale_factor();
@@ -158,7 +162,8 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
                  draw_info->clip_right - draw_info->clip_left,
                  draw_info->clip_bottom - draw_info->clip_top);
   surfaces_->DrawAndSwap(viewport, clip, transform, surface_size_,
-                         viz::SurfaceId(frame_sink_id_, child_id_));
+                         viz::SurfaceId(frame_sink_id_, child_id_),
+                         device_scale_factor_);
 }
 
 void HardwareRenderer::AllocateSurface() {
@@ -173,6 +178,7 @@ void HardwareRenderer::DestroySurface() {
   surfaces_->RemoveChildId(viz::SurfaceId(frame_sink_id_, child_id_));
   support_->EvictCurrentSurface();
   child_id_ = viz::LocalSurfaceId();
+  surfaces_->GetFrameSinkManager()->surface_manager()->GarbageCollectSurfaces();
 }
 
 void HardwareRenderer::DidReceiveCompositorFrameAck(
@@ -180,6 +186,13 @@ void HardwareRenderer::DidReceiveCompositorFrameAck(
   ReturnResourcesToCompositor(resources, compositor_id_,
                               last_submitted_layer_tree_frame_sink_id_);
 }
+
+void HardwareRenderer::DidPresentCompositorFrame(uint32_t presentation_token,
+                                                 base::TimeTicks time,
+                                                 base::TimeDelta refresh,
+                                                 uint32_t flags) {}
+
+void HardwareRenderer::DidDiscardCompositorFrame(uint32_t presentation_token) {}
 
 void HardwareRenderer::OnBeginFrame(const viz::BeginFrameArgs& args) {
   // TODO(tansell): Hook this up.
@@ -190,10 +203,6 @@ void HardwareRenderer::ReclaimResources(
   ReturnResourcesToCompositor(resources, compositor_id_,
                               last_submitted_layer_tree_frame_sink_id_);
 }
-
-void HardwareRenderer::WillDrawSurface(
-    const viz::LocalSurfaceId& local_surface_id,
-    const gfx::Rect& damage_rect) {}
 
 void HardwareRenderer::OnBeginFramePausedChanged(bool paused) {}
 

@@ -1,0 +1,118 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "content/renderer/service_worker/service_worker_timeout_timer.h"
+
+#include "base/stl_util.h"
+#include "base/time/default_tick_clock.h"
+#include "base/time/time.h"
+#include "content/common/service_worker/service_worker_utils.h"
+
+namespace content {
+
+namespace {
+
+int NextEventId() {
+  // Event id should not start from zero since HashMap in Blink requires
+  // non-zero keys.
+  static int s_next_event_id = 1;
+  CHECK_LT(s_next_event_id, std::numeric_limits<int>::max());
+  return s_next_event_id++;
+}
+
+}  // namespace
+
+// static
+constexpr base::TimeDelta ServiceWorkerTimeoutTimer::kIdleDelay;
+constexpr base::TimeDelta ServiceWorkerTimeoutTimer::kEventTimeout;
+constexpr base::TimeDelta ServiceWorkerTimeoutTimer::kUpdateInterval;
+
+ServiceWorkerTimeoutTimer::ServiceWorkerTimeoutTimer(
+    base::RepeatingClosure idle_callback)
+    : ServiceWorkerTimeoutTimer(std::move(idle_callback),
+                                std::make_unique<base::DefaultTickClock>()) {}
+
+ServiceWorkerTimeoutTimer::ServiceWorkerTimeoutTimer(
+    base::RepeatingClosure idle_callback,
+    std::unique_ptr<base::TickClock> tick_clock)
+    : idle_callback_(std::move(idle_callback)),
+      tick_clock_(std::move(tick_clock)) {
+  // |idle_callback_| will be invoked if no event happens in |kIdleDelay|.
+  idle_time_ = tick_clock_->NowTicks() + kIdleDelay;
+  timer_.Start(FROM_HERE, kUpdateInterval,
+               base::BindRepeating(&ServiceWorkerTimeoutTimer::UpdateStatus,
+                                   base::Unretained(this)));
+}
+
+ServiceWorkerTimeoutTimer::~ServiceWorkerTimeoutTimer() {
+  // Abort all callbacks.
+  for (auto& event : inflight_events_)
+    std::move(event.abort_callback).Run();
+};
+
+int ServiceWorkerTimeoutTimer::StartEvent(
+    base::OnceCallback<void(int /* event_id */)> abort_callback) {
+  idle_time_ = base::TimeTicks();
+  const int event_id = NextEventId();
+  std::set<EventInfo>::iterator iter;
+  bool is_inserted;
+  std::tie(iter, is_inserted) = inflight_events_.emplace(
+      event_id, tick_clock_->NowTicks() + kEventTimeout,
+      base::BindOnce(std::move(abort_callback), event_id));
+  DCHECK(is_inserted);
+  id_event_map_.emplace(event_id, iter);
+  return event_id;
+}
+
+void ServiceWorkerTimeoutTimer::EndEvent(int event_id) {
+  auto iter = id_event_map_.find(event_id);
+  DCHECK(iter != id_event_map_.end());
+  inflight_events_.erase(iter->second);
+  id_event_map_.erase(iter);
+  if (inflight_events_.empty())
+    idle_time_ = tick_clock_->NowTicks() + kIdleDelay;
+}
+
+void ServiceWorkerTimeoutTimer::UpdateStatus() {
+  if (!ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
+  base::TimeTicks now = tick_clock_->NowTicks();
+
+  // Abort all events exceeding |kEventTimeout|.
+  auto iter = inflight_events_.begin();
+  while (iter != inflight_events_.end() && iter->expiration_time <= now) {
+    int event_id = iter->id;
+    base::OnceClosure callback = std::move(iter->abort_callback);
+    iter = inflight_events_.erase(iter);
+    id_event_map_.erase(event_id);
+    std::move(callback).Run();
+  }
+
+  // If |inflight_events_| is empty, the worker is now idle.
+  if (inflight_events_.empty() && idle_time_.is_null())
+    idle_time_ = tick_clock_->NowTicks() + kIdleDelay;
+
+  if (!idle_time_.is_null() && idle_time_ < now)
+    idle_callback_.Run();
+}
+
+ServiceWorkerTimeoutTimer::EventInfo::EventInfo(
+    int id,
+    base::TimeTicks expiration_time,
+    base::OnceClosure abort_callback)
+    : id(id),
+      expiration_time(expiration_time),
+      abort_callback(std::move(abort_callback)) {}
+
+ServiceWorkerTimeoutTimer::EventInfo::~EventInfo() = default;
+
+bool ServiceWorkerTimeoutTimer::EventInfo::operator<(
+    const EventInfo& other) const {
+  if (expiration_time == other.expiration_time)
+    return id < other.id;
+  return expiration_time < other.expiration_time;
+}
+
+}  // namespace content

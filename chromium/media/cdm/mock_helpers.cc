@@ -10,7 +10,15 @@ MockCdmAuxiliaryHelper::MockCdmAuxiliaryHelper(
     std::unique_ptr<CdmAllocator> allocator)
     : allocator_(std::move(allocator)) {}
 
-MockCdmAuxiliaryHelper::~MockCdmAuxiliaryHelper() {}
+MockCdmAuxiliaryHelper::~MockCdmAuxiliaryHelper() = default;
+
+void MockCdmAuxiliaryHelper::SetFileReadCB(FileReadCB file_read_cb) {}
+
+cdm::FileIO* MockCdmAuxiliaryHelper::CreateCdmFileIO(
+    cdm::FileIOClient* client) {
+  NOTREACHED();
+  return nullptr;
+}
 
 cdm::Buffer* MockCdmAuxiliaryHelper::CreateCdmBuffer(size_t capacity) {
   return allocator_->CreateCdmBuffer(capacity);
@@ -36,8 +44,9 @@ void MockCdmAuxiliaryHelper::ChallengePlatform(const std::string& service_id,
                           "", "");
 }
 
-void MockCdmAuxiliaryHelper::GetStorageId(StorageIdCB callback) {
-  std::move(callback).Run(GetStorageIdCalled());
+void MockCdmAuxiliaryHelper::GetStorageId(uint32_t version,
+                                          StorageIdCB callback) {
+  std::move(callback).Run(version, GetStorageIdCalled(version));
 }
 
 }  // namespace media

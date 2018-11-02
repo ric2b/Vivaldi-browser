@@ -138,20 +138,19 @@ class WebRtcTextLogHandler
 
   void LogToCircularBuffer(const std::string& message);
 
-  void LogInitialInfoOnFileThread(const GenericDoneCallback& callback);
-  void LogInitialInfoOnIOThread(const net::NetworkInterfaceList& network_list,
-                                const GenericDoneCallback& callback);
-  void EnableBrowserProcessLoggingOnUIThread();
-  void DisableBrowserProcessLoggingOnUIThread();
+  void LogInitialInfoOnIOThread(const GenericDoneCallback& callback,
+                                const net::NetworkInterfaceList& network_list);
 
   // The render process ID this object belongs to.
   const int render_process_id_;
 
+  // Should be created by StartLogging().
   std::unique_ptr<WebRtcLogBuffer> log_buffer_;
 
   // These are only accessed on the IO thread, except when in STARTING state. In
   // this state we are protected since entering any function that alters the
   // state is not allowed.
+  // Should be created by StartLogging().
   std::unique_ptr<MetaDataMap> meta_data_;
 
   // These are only accessed on the IO thread.

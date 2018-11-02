@@ -5,11 +5,11 @@
 #ifndef BASE_RUN_LOOP_H_
 #define BASE_RUN_LOOP_H_
 
-#include <stack>
 #include <vector>
 
 #include "base/base_export.h"
 #include "base/callback.h"
+#include "base/containers/stack.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -175,12 +175,6 @@ class BASE_EXPORT RunLoop {
       // interface.
       bool IsNested() const;
 
-      // Returns true if the Delegate is allowed to process application tasks.
-      // This typically returns true except in nested RunLoops outside the scope
-      // of a ScopedNestableTaskAllowed as, by default, nested RunLoops are only
-      // meant to process system events.
-      bool ProcessingTasksAllowed() const;
-
      private:
       // Only a Delegate can instantiate a Delegate::Client.
       friend class Delegate;
@@ -201,11 +195,12 @@ class BASE_EXPORT RunLoop {
     // remaining tasks/messages. Run() calls can nest in which case each Quit()
     // call should result in the topmost active Run() call returning. The only
     // other trigger for Run() to return is Client::ShouldQuitWhenIdle() which
-    // the Delegate should probe before sleeping when it becomes idle. Run()
-    // implementations should also check Client::ProcessingTasksAllowed() before
-    // processing assigned application tasks (they should only process system
-    // tasks otherwise).
-    virtual void Run() = 0;
+    // the Delegate should probe before sleeping when it becomes idle.
+    // |application_tasks_allowed| is true if this is the first Run() call on
+    // the stack or it was made from a nested RunLoop of
+    // Type::kNestableTasksAllowed (otherwise this Run() level should only
+    // process system tasks).
+    virtual void Run(bool application_tasks_allowed) = 0;
     virtual void Quit() = 0;
 
     // Invoked right before a RunLoop enters a nested Run() call on this
@@ -220,7 +215,7 @@ class BASE_EXPORT RunLoop {
     // A vector-based stack is more memory efficient than the default
     // deque-based stack as the active RunLoop stack isn't expected to ever
     // have more than a few entries.
-    using RunLoopStack = std::stack<RunLoop*, std::vector<RunLoop*>>;
+    using RunLoopStack = base::stack<RunLoop*, std::vector<RunLoop*>>;
 
     bool allow_nesting_ = true;
     RunLoopStack active_run_loops_;

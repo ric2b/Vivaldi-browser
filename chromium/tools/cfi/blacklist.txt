@@ -1,5 +1,4 @@
-# TODO(thakis): Remove clang is past r310132, works around r309617.
-type:std::*
+[cfi-unrelated-cast|cfi-derived-cast]
 
 # e.g. RolloverProtectedTickClock
 fun:*MutableInstance*
@@ -12,6 +11,9 @@ fun:*ThreadSpecific*
 
 # Mesa contains several bad casts.
 src:*third_party/mesa*
+
+# LLVM's allocator
+src:*third_party/swiftshader/third_party/llvm-subzero/include/llvm/Support/Allocator.h*
 
 # Deliberate bad cast to derived class to hide functions.
 type:*BlockIUnknownMethods*
@@ -26,15 +28,8 @@ src:*nacl_message_scanner.cc*
 # src/base/win/event_trace_provider_unittest.cc
 type:*EtwTraceProvider*
 
-# These classes are used to communicate between chrome.exe and
-# chrome_child.dll (see src/sandbox/win/src/sandbox.h,
-# src/chrome/app/chrome_main.cc).
-type:sandbox::BrokerServices
-type:sandbox::TargetPolicy
-type:sandbox::TargetServices
-
-# Likewise (base/win/scoped_handle.cc).
-type:*ActiveVerifier*
+# b/64003142
+fun:*internal_default_instance*
 
 #############################################################################
 # Base class's constructor accesses a derived class.
@@ -59,13 +54,10 @@ fun:*DatabaseContext*contextDestroyed*
 # so exclude source file for now. 
 src:*LifecycleObserver.h*
 
-# Blink wtf::Vector cast on non-initialized data
-# https://crbug.com/568891
-src:*wtf/Vector.h*
-src:*wtf/PartitionAllocator.h*
-
 #############################################################################
 # Methods disabled due to perf considerations.
+
+[cfi-vcall]
 
 # Skia
 
@@ -111,5 +103,103 @@ fun:*nextBreakablePosition*
 fun:*supportsCachedOffsets*
 fun:*traceImpl*
 
-# b/64003142
-fun:*internal_default_instance*
+#############################################################################
+# Cross-DSO vcalls
+
+[cfi-vcall|cfi-unrelated-cast|cfi-derived-cast]
+
+# These classes are used to communicate between chrome.exe and
+# chrome_child.dll (see src/sandbox/win/src/sandbox.h,
+# src/chrome/app/chrome_main.cc).
+type:sandbox::BrokerServices
+type:sandbox::TargetPolicy
+type:sandbox::TargetServices
+
+# Likewise (base/win/scoped_handle.cc).
+type:*ActiveVerifier*
+
+#############################################################################
+# Disabled indirect calls
+
+[cfi-icall]
+
+######### Cross-DSO icalls using dynamically resolved symbols
+
+# ANGLE
+src:*third_party/angle/src/libANGLE/*
+src:*third_party/angle/src/third_party/libXNVCtrl/NVCtrl.c
+# third_party/angle/src/gpu_info_util/SystemInfo_libpci.cpp
+fun:*GetPCIDevicesWithLibPCI*
+# third_party/angle/src/common/event_tracer.cpp
+fun:*GetTraceCategoryEnabledFlag*
+fun:*AddTraceEvent*
+
+# PPAPI
+src:*ppapi/*
+src:*content/renderer/pepper*
+fun:*PpapiThread*
+fun:*BrokerProcessDispatcher*
+# ppapi code uses base::Callback to call into libppappi_test.so.
+# base/bind_internal.h
+fun:*FunctorTraits*
+
+# Calls to auto-generated stubs by generate_stubs.py
+src:*audio/pulse/pulse_stubs.cc
+
+# Calls to auto-generated stubs by generate_library_loader.py
+src:*device/udev_linux/udev1_loader.cc
+src:*net/proxy/proxy_config_service_linux.cc
+
+# Calls to auto-generated stubs by ui/gl/generate_bindings.py
+src:*ui/gl/gl_bindings_autogen_*
+
+src:*components/os_crypt/*
+src:*chrome/browser/password_manager/native_backend_libsecret*
+
+src:*content/browser/accessibility/browser_accessibility_auralinux.cc
+src:*ui/accessibility/platform/ax_platform_node_auralinux.cc
+src:*ui/accessibility/platform/ax_platform_atk_hyperlink.cc
+
+src:*chrome/browser/ui/zoom/chrome_zoom_level_prefs.cc
+src:*third_party/webrtc/modules/desktop_capture/x11/x_server_pixel_buffer.cc
+src:*media/cdm/*
+src:*third_party/swiftshader/*
+src:*base/native_library_unittest.cc
+
+# chrome/browser/ui/views/frame/global_menu_bar_x11.cc
+fun:*GlobalMenuBarX11*
+# net/cert/cert_verify_proc_nss.cc
+fun:*CertVerifyProcNSS*VerifyInternalImpl*
+
+# third_party/skia/include/gpu/gl/GrGLFunctions.h
+fun:*GrGLFunction*
+
+# chrome/browser/ui/libgtkui/gtk_util.cc
+fun:*AppendCssNodeToStyleContext*
+
+######### Function pointers cast to incorrect type signatures
+
+# libicu is currently compiled such that in libicu the 'UChar' type is a
+# defined as a char16_t internally, but for the rest of chromium it's an
+# unsigned short, causing mismatched type signatures for icalls to/from icu
+src:*third_party/icu/source/common/*
+src:*third_party/WebKit/Source/platform/wtf/*
+# v8/src/intl.cc
+fun:*LocaleConvertCase*
+
+# Casts away const qualifier
+# third_party/boringssl/src/crypto/pem/pem_lib.c
+fun:*PEM_ASN1_write*
+
+src:*third_party/libsrtp/*
+src:*third_party/libvpx/*
+src:*third_party/libxml/*
+src:*third_party/pdfium/third_party/lcms/*
+src:*third_party/sqlite/*
+src:*third_party/webrtc/*
+
+src:*v8/*
+
+######### Uncategorized
+
+src:*native_client/*

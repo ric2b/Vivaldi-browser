@@ -72,6 +72,9 @@ enum EffectiveConnectionType {
     [RaisesException] Element? elementFromPoint(Document document, double x, double y, boolean ignoreClipping, boolean allowChildFrameContent);
     [RaisesException] void clearHitTestCache(Document document);
 
+    // Allows inspection of the inner editor node.
+    [RaisesException] Element? innerEditorElement(Element container);
+
     // Animation testing.
     [RaisesException] void pauseAnimations(double pauseTime);
     bool isCompositedAnimation(Animation animation);
@@ -113,6 +116,8 @@ enum EffectiveConnectionType {
     unsigned long activeMarkerCountForNode(Node node);
     [RaisesException] Range markerRangeForNode(Node node, DOMString markerType, unsigned long index);
     [RaisesException] DOMString markerDescriptionForNode(Node node, DOMString markerType, unsigned long index);
+    [RaisesException] unsigned long markerBackgroundColorForNode(Node node, DOMString markerType, unsigned long index);
+    [RaisesException] unsigned long markerUnderlineColorForNode(Node node, DOMString markerType, unsigned long index);
     [RaisesException] void addTextMatchMarker(Range range, DOMString matchStatus);
     [RaisesException] void addCompositionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
     [RaisesException] void addActiveSuggestionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
@@ -130,6 +135,7 @@ enum EffectiveConnectionType {
     [RaisesException] boolean elementShouldAutoComplete(Element inputElement);
     [RaisesException] DOMString suggestedValue(Element inputElement);
     [RaisesException] void setSuggestedValue(Element inputElement, DOMString value);
+    [RaisesException] void setAutofilledValue(Element inputElement, DOMString value);
     [RaisesException] void setEditingValue(Element inputElement, DOMString value);
     [RaisesException] void setAutofilled(Element inputElement, boolean enabled);
 
@@ -146,15 +152,16 @@ enum EffectiveConnectionType {
 
     [RaisesException] long lastSpellCheckRequestSequence(Document document);
     [RaisesException] long lastSpellCheckProcessedSequence(Document document);
-    [RuntimeEnabled=IdleTimeSpellChecking, RaisesException] DOMString idleTimeSpellCheckerState(Document document);
-    [RuntimeEnabled=IdleTimeSpellChecking, RaisesException] void runIdleTimeSpellChecker(Document document);
+    [RaisesException] void cancelCurrentSpellCheckRequest(Document document);
+    [RaisesException] DOMString idleTimeSpellCheckerState(Document document);
+    [RaisesException] void runIdleTimeSpellChecker(Document document);
 
     sequence<DOMString> userPreferredLanguages();
     void setUserPreferredLanguages(sequence<DOMString> languages);
 
     unsigned long mediaKeysCount();
     unsigned long mediaKeySessionCount();
-    unsigned long suspendableObjectCount(Document document);
+    unsigned long pausableObjectCount(Document document);
     unsigned long wheelEventHandlerCount(Document document);
     unsigned long scrollEventHandlerCount(Document document);
     unsigned long touchStartOrMoveEventHandlerCount(Document document);
@@ -200,7 +207,8 @@ enum EffectiveConnectionType {
     const unsigned short LAYER_TREE_INCLUDES_ROOT_LAYER = 8;
     const unsigned short LAYER_TREE_INCLUDES_CLIP_AND_SCROLL_PARENTS = 16;
     const unsigned short LAYER_TREE_INCLUDES_COMPOSITING_REASONS = 32;
-    const unsigned short OUTPUT_AS_LAYER_TREE = 64;
+    const unsigned short LAYER_TREE_INCLUDES_PAINT_RECORDS = 64;
+    const unsigned short OUTPUT_AS_LAYER_TREE = 0x4000;
 
     [RaisesException] DOMString layerTreeAsText(Document document, optional unsigned short flags);
     [RaisesException] DOMString elementLayerTreeAsText(Element element, optional unsigned short flags);
@@ -324,6 +332,7 @@ enum EffectiveConnectionType {
     // These functions are for testing NetInfo. You must call clearNetworkConnectionInfoOverride() at the end.
     [RaisesException] void setNetworkConnectionInfoOverride(boolean onLine, DOMString type, double downlinkMaxMbps);
     [RaisesException] void setNetworkQualityInfoOverride(EffectiveConnectionType effective_type, unsigned long transport_rtt_msec, double downlink_throughput_mbps);
+    void setSaveDataEnabled(boolean enabled);
     void clearNetworkConnectionInfoOverride();
 
     // This function is for testing HitRegions on Canvas2D.
@@ -395,4 +404,14 @@ enum EffectiveConnectionType {
     boolean isLowEndDevice();
 
     sequence<DOMString> supportedTextEncodingLabels();
+
+    // When RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() and
+    // simulateRasterUnderInvalidation(true) is called, all changed pixels will
+    // be reported as raster under-invalidations.
+    void simulateRasterUnderInvalidations(boolean enable);
+
+    // Bypass the threshold of 'script-compile' of long-task attribution in
+    // PerformanceMonitor for testing. "PerformanceObserver should be observing
+    // 'longtask' while calling BypassLongCompileThresholdOnce.
+    [RaisesException] void BypassLongCompileThresholdOnce();
 };

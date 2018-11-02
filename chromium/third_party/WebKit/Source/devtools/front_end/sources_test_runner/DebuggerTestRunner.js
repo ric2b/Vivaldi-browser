@@ -75,7 +75,7 @@ SourcesTestRunner.runDebuggerTestSuite = function(testSuite) {
 };
 
 SourcesTestRunner.runTestFunction = function() {
-  TestRunner.evaluateInPage('scheduleTestFunction()');
+  TestRunner.evaluateInPageAnonymously('scheduleTestFunction()');
   TestRunner.addResult('Set timer for test function.');
 };
 
@@ -160,6 +160,10 @@ SourcesTestRunner.waitUntilResumed = function(callback) {
     callback();
   else
     SourcesTestRunner._waitUntilResumedCallback = callback;
+};
+
+SourcesTestRunner.waitUntilResumedPromise = function() {
+  return new Promise(resolve => SourcesTestRunner.waitUntilResumed(resolve));
 };
 
 SourcesTestRunner.resumeExecution = function(callback) {
@@ -414,6 +418,10 @@ SourcesTestRunner.showScriptSource = function(scriptName, callback) {
   }
 };
 
+SourcesTestRunner.showScriptSourcePromise = function(scriptName) {
+  return new Promise(resolve => SourcesTestRunner.showScriptSource(scriptName, resolve));
+};
+
 SourcesTestRunner.waitForScriptSource = function(scriptName, callback) {
   var panel = UI.panels.sources;
   var uiSourceCodes = panel._workspace.uiSourceCodes();
@@ -665,9 +673,7 @@ SourcesTestRunner.selectThread = function(target) {
 };
 
 SourcesTestRunner.evaluateOnCurrentCallFrame = function(code) {
-  return new Promise(
-      succ => TestRunner.debuggerModel.evaluateOnSelectedCallFrame(
-          code, 'console', false, true, false, false, TestRunner.safeWrap(succ)));
+  return TestRunner.debuggerModel.evaluateOnSelectedCallFrame({expression: code, objectGroup: 'console'});
 };
 
 SourcesTestRunner.waitJavaScriptSourceFrameBreakpoints = function(sourceFrame, inline) {
@@ -749,10 +755,8 @@ SourcesTestRunner.setEventListenerBreakpoint = function(id, enabled, targetName)
   }
 };
 
-TestRunner.initAsync(async function() {
-  await TestRunner.evaluateInPagePromise(`
-    function scheduleTestFunction() {
-      setTimeout(testFunction, 0);
-    }
-  `);
-});
+TestRunner.deprecatedInitAsync(`
+  function scheduleTestFunction() {
+    setTimeout(testFunction, 0);
+  }
+`);

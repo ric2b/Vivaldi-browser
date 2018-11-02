@@ -25,15 +25,15 @@
 
 #include "core/html/HTMLSourceElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/MediaList.h"
 #include "core/css/MediaQueryList.h"
 #include "core/css/MediaQueryMatcher.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPictureElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/html_names.h"
+#include "public/platform/TaskType.h"
 
 #define SOURCE_LOG_LEVEL 3
 
@@ -50,7 +50,7 @@ class HTMLSourceElement::Listener final : public MediaQueryListListener {
   }
 
   void ClearElement() { element_ = nullptr; }
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(element_);
     MediaQueryListListener::Trace(visitor);
   }
@@ -75,7 +75,7 @@ void HTMLSourceElement::CreateMediaQueryList(const AtomicString& media) {
     return;
   }
 
-  RefPtr<MediaQuerySet> set = MediaQuerySet::Create(media);
+  scoped_refptr<MediaQuerySet> set = MediaQuerySet::Create(media);
   media_query_list_ = MediaQueryList::Create(
       &GetDocument(), &GetDocument().GetMediaQueryMatcher(), set);
   AddMediaQueryListListener();
@@ -90,10 +90,10 @@ Node::InsertionNotificationRequest HTMLSourceElement::InsertedInto(
     ContainerNode* insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   Element* parent = parentElement();
-  if (IsHTMLMediaElement(parent))
-    ToHTMLMediaElement(parent)->SourceWasAdded(this);
-  if (isHTMLPictureElement(parent))
-    toHTMLPictureElement(parent)->SourceOrMediaChanged();
+  if (auto* media = ToHTMLMediaElementOrNull(parent))
+    media->SourceWasAdded(this);
+  if (auto* picture = ToHTMLPictureElementOrNull(parent))
+    picture->SourceOrMediaChanged();
   return kInsertionDone;
 }
 
@@ -101,11 +101,11 @@ void HTMLSourceElement::RemovedFrom(ContainerNode* removal_root) {
   Element* parent = parentElement();
   if (!parent && removal_root->IsElementNode())
     parent = ToElement(removal_root);
-  if (IsHTMLMediaElement(parent))
-    ToHTMLMediaElement(parent)->SourceWasRemoved(this);
-  if (isHTMLPictureElement(parent)) {
+  if (auto* media = ToHTMLMediaElementOrNull(parent))
+    media->SourceWasRemoved(this);
+  if (auto* picture = ToHTMLPictureElementOrNull(parent)) {
     RemoveMediaQueryListListener();
-    toHTMLPictureElement(parent)->SourceOrMediaChanged();
+    picture->SourceOrMediaChanged();
   }
   HTMLElement::RemovedFrom(removal_root);
 }
@@ -136,7 +136,8 @@ void HTMLSourceElement::ScheduleErrorEvent() {
   DVLOG(SOURCE_LOG_LEVEL) << "scheduleErrorEvent - " << (void*)this;
 
   pending_error_event_ =
-      TaskRunnerHelper::Get(TaskType::kDOMManipulation, &GetDocument())
+      GetDocument()
+          .GetTaskRunner(TaskType::kDOMManipulation)
           ->PostCancellableTask(
               BLINK_FROM_HERE,
               WTF::Bind(&HTMLSourceElement::DispatchPendingEvent,
@@ -173,19 +174,17 @@ void HTMLSourceElement::ParseAttribute(
     CreateMediaQueryList(params.new_value);
   if (name == srcsetAttr || name == sizesAttr || name == mediaAttr ||
       name == typeAttr) {
-    Element* parent = parentElement();
-    if (isHTMLPictureElement(parent))
-      toHTMLPictureElement(parent)->SourceOrMediaChanged();
+    if (auto* picture = ToHTMLPictureElementOrNull(parentElement()))
+      picture->SourceOrMediaChanged();
   }
 }
 
 void HTMLSourceElement::NotifyMediaQueryChanged() {
-  Element* parent = parentElement();
-  if (isHTMLPictureElement(parent))
-    toHTMLPictureElement(parent)->SourceOrMediaChanged();
+  if (auto* picture = ToHTMLPictureElementOrNull(parentElement()))
+    picture->SourceOrMediaChanged();
 }
 
-DEFINE_TRACE(HTMLSourceElement) {
+void HTMLSourceElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_query_list_);
   visitor->Trace(listener_);
   HTMLElement::Trace(visitor);

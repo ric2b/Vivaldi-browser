@@ -7,6 +7,7 @@
 #include <dwrite_2.h>
 #include <usp10.h>
 #include <wrl.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <map>
@@ -15,12 +16,10 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
-#include "base/win/scoped_comptr.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_fallback.h"
 #include "ui/gfx/platform_font_win.h"
@@ -154,11 +153,6 @@ const std::vector<Font>* CachedFontLinkSettings::GetLinkedFonts(
 
   cached_linked_fonts_[font_name] = std::vector<Font>();
   std::vector<Font>* linked_fonts = &cached_linked_fonts_[font_name];
-
-  // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "441028 QueryLinkedFontsFromRegistry()"));
 
   QueryLinkedFontsFromRegistry(font, &cached_system_fonts_, linked_fonts);
   return linked_fonts;
@@ -356,22 +350,22 @@ bool GetFallbackFont(const Font& font,
   DCHECK_GE(wcslen(text), static_cast<size_t>(text_length));
   text_length = std::min(wcslen(text), static_cast<size_t>(text_length));
 
-  base::win::ScopedComPtr<IDWriteFactory> factory;
+  Microsoft::WRL::ComPtr<IDWriteFactory> factory;
   gfx::win::CreateDWriteFactory(factory.GetAddressOf());
-  base::win::ScopedComPtr<IDWriteFactory2> factory2;
+  Microsoft::WRL::ComPtr<IDWriteFactory2> factory2;
   factory.CopyTo(factory2.GetAddressOf());
   if (!factory2) {
     // IDWriteFactory2 is not available before Win8.1
     return GetUniscribeFallbackFont(font, text, text_length, result);
   }
 
-  base::win::ScopedComPtr<IDWriteFontFallback> fallback;
+  Microsoft::WRL::ComPtr<IDWriteFontFallback> fallback;
   if (FAILED(factory2->GetSystemFontFallback(fallback.GetAddressOf())))
     return false;
 
   base::string16 locale = base::UTF8ToUTF16(base::i18n::GetConfiguredLocale());
 
-  base::win::ScopedComPtr<IDWriteNumberSubstitution> number_substitution;
+  Microsoft::WRL::ComPtr<IDWriteNumberSubstitution> number_substitution;
   if (FAILED(factory2->CreateNumberSubstitution(
           DWRITE_NUMBER_SUBSTITUTION_METHOD_NONE, locale.c_str(),
           true /* ignoreUserOverride */, number_substitution.GetAddressOf()))) {
@@ -379,13 +373,13 @@ bool GetFallbackFont(const Font& font,
   }
 
   uint32_t mapped_length = 0;
-  base::win::ScopedComPtr<IDWriteFont> mapped_font;
+  Microsoft::WRL::ComPtr<IDWriteFont> mapped_font;
   float scale = 0;
-  base::win::ScopedComPtr<IDWriteTextAnalysisSource> text_analysis;
+  Microsoft::WRL::ComPtr<IDWriteTextAnalysisSource> text_analysis;
   DWRITE_READING_DIRECTION reading_direction =
       base::i18n::IsRTL() ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT
                           : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
-  if (FAILED(Microsoft::WRL::MakeAndInitialize<gfx::win::TextAnalysisSource>(
+  if (FAILED(gfx::win::TextAnalysisSource::Create(
           text_analysis.GetAddressOf(), text, locale.c_str(),
           number_substitution.Get(), reading_direction))) {
     return false;

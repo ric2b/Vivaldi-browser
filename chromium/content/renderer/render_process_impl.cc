@@ -27,13 +27,13 @@
 #include "base/sys_info.h"
 #include "base/task_scheduler/initialization_util.h"
 #include "base/time/time.h"
-#include "content/child/site_isolation_stats_gatherer.h"
 #include "content/common/task_scheduler.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/loader/site_isolation_stats_gatherer.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "v8/include/v8.h"
 
@@ -42,19 +42,6 @@
 #endif
 
 namespace {
-
-const base::Feature kV8_ES2015_TailCalls_Feature {
-  "V8_ES2015_TailCalls", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
-const base::Feature kV8_ES2016_ExplicitTailCalls_Feature{
-    "V8_ES2016_ExplicitTailCalls", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kV8SerializeEagerFeature{"V8_Serialize_Eager",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kV8SerializeAgeCodeFeature{
-    "V8_Serialize_Age_Code", base::FEATURE_DISABLED_BY_DEFAULT};
 
 void SetV8FlagIfFeature(const base::Feature& feature, const char* v8_flag) {
   if (base::FeatureList::IsEnabled(feature)) {
@@ -83,7 +70,7 @@ GetDefaultTaskSchedulerInitParams() {
   constexpr int kMaxNumThreadsInForegroundBlockingPool = 1;
   constexpr auto kSuggestedReclaimTime = base::TimeDelta::FromSeconds(30);
 
-  return base::MakeUnique<base::TaskScheduler::InitParams>(
+  return std::make_unique<base::TaskScheduler::InitParams>(
       base::SchedulerWorkerPoolParams(kMaxNumThreadsInBackgroundPool,
                                       kSuggestedReclaimTime),
       base::SchedulerWorkerPoolParams(kMaxNumThreadsInBackgroundBlockingPool,
@@ -96,6 +83,14 @@ GetDefaultTaskSchedulerInitParams() {
       base::SchedulerWorkerPoolParams(kMaxNumThreadsInForegroundBlockingPool,
                                       kSuggestedReclaimTime));
 }
+
+#if DCHECK_IS_ON() && defined(SYZYASAN)
+void V8DcheckCallbackHandler(const char* file, int line, const char* message) {
+  // TODO(siggi): Set a crash key or a breadcrumb so the fact that we hit a
+  //     V8 DCHECK gets out in the crash report.
+  ::logging::LogMessage(file, line, logging::LOG_DCHECK).stream() << message;
+}
+#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
 
 }  // namespace
 
@@ -122,24 +117,48 @@ RenderProcessImpl::RenderProcessImpl(
   }
 #endif
 
+#if DCHECK_IS_ON() && defined(SYZYASAN)
+  // SyzyASAN official builds can ship with DCHECKs compiled in. Failing DCHECKs
+  // then are either fatal or simply log the error, based on a feature flag.
+  // Make sure V8 follows suit by setting a Dcheck handler that forwards to
+  // the Chrome base logging implementation.
+  v8::V8::SetDcheckErrorHandler(&V8DcheckCallbackHandler);
+
+  if (!base::FeatureList::IsEnabled(base::kSyzyAsanDCheckIsFatalFeature)) {
+    // These V8 flags default on in this build configuration. This triggers
+    // additional verification and code generation, which both slows down V8,
+    // and can lead to fatal CHECKs. Turn these flags down to get something
+    // closer to V8s normal performance and behavior.
+    constexpr char kDisabledFlags[] =
+        "--noturbo_verify "
+        "--noverify_csa "
+        "--noturbo_verify_allocation "
+        "--nodebug_code";
+
+    v8::V8::SetFlagsFromString(kDisabledFlags, sizeof(kDisabledFlags));
+  }
+#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
+
   if (base::SysInfo::IsLowEndDevice()) {
     std::string optimize_flag("--optimize-for-size");
     v8::V8::SetFlagsFromString(optimize_flag.c_str(),
                                static_cast<int>(optimize_flag.size()));
   }
 
-  SetV8FlagIfFeature(kV8_ES2015_TailCalls_Feature, "--harmony-tailcalls");
-  SetV8FlagIfFeature(kV8_ES2016_ExplicitTailCalls_Feature,
-                     "--harmony-explicit-tailcalls");
-  SetV8FlagIfFeature(kV8SerializeEagerFeature, "--serialize_eager");
-  SetV8FlagIfFeature(kV8SerializeAgeCodeFeature, "--serialize_age_code");
   SetV8FlagIfHasSwitch(switches::kDisableJavaScriptHarmonyShipping,
                        "--noharmony-shipping");
   SetV8FlagIfHasSwitch(switches::kJavaScriptHarmony, "--harmony");
+  SetV8FlagIfFeature(features::kModuleScriptsDynamicImport,
+                     "--harmony-dynamic-import");
+  SetV8FlagIfFeature(features::kModuleScriptsImportMetaUrl,
+                     "--harmony-import-meta");
   SetV8FlagIfFeature(features::kAsmJsToWebAssembly, "--validate-asm");
   SetV8FlagIfNotFeature(features::kAsmJsToWebAssembly, "--no-validate-asm");
   SetV8FlagIfNotFeature(features::kWebAssembly,
                         "--wasm-disable-structured-cloning");
+
+  SetV8FlagIfFeature(features::kV8VmFuture, "--future");
+  SetV8FlagIfNotFeature(features::kV8VmFuture, "--no-future");
   SetV8FlagIfFeature(features::kSharedArrayBuffer,
                      "--harmony-sharedarraybuffer");
   SetV8FlagIfNotFeature(features::kSharedArrayBuffer,

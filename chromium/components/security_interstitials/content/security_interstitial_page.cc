@@ -29,7 +29,7 @@ SecurityInterstitialPage::SecurityInterstitialPage(
     std::unique_ptr<SecurityInterstitialControllerClient> controller)
     : web_contents_(web_contents),
       request_url_(request_url),
-      interstitial_page_(NULL),
+      interstitial_page_(nullptr),
       create_view_(true),
       on_show_extended_reporting_pref_exists_(false),
       on_show_extended_reporting_pref_value_(false),
@@ -63,6 +63,18 @@ GURL SecurityInterstitialPage::request_url() const {
 
 void SecurityInterstitialPage::DontCreateViewForTesting() {
   create_view_ = false;
+}
+
+std::string SecurityInterstitialPage::GetHTMLContents() {
+  base::DictionaryValue load_time_data;
+  PopulateInterstitialStrings(&load_time_data);
+  webui::SetLoadTimeDataDefaults(controller()->GetApplicationLocale(),
+                                 &load_time_data);
+  std::string html = ui::ResourceBundle::GetSharedInstance()
+                         .GetRawDataResource(GetHTMLTemplateId())
+                         .as_string();
+  webui::AppendWebUiCssTextDefaults(&html);
+  return webui::GetI18nTemplateHtml(html, &load_time_data);
 }
 
 void SecurityInterstitialPage::Show() {
@@ -108,18 +120,6 @@ base::string16 SecurityInterstitialPage::GetFormattedHostName() const {
 
 int SecurityInterstitialPage::GetHTMLTemplateId() {
   return IDR_SECURITY_INTERSTITIAL_HTML;
-}
-
-std::string SecurityInterstitialPage::GetHTMLContents() {
-  base::DictionaryValue load_time_data;
-  PopulateInterstitialStrings(&load_time_data);
-  webui::SetLoadTimeDataDefaults(
-      controller()->GetApplicationLocale(), &load_time_data);
-  std::string html = ResourceBundle::GetSharedInstance()
-                         .GetRawDataResource(GetHTMLTemplateId())
-                         .as_string();
-  webui::AppendWebUiCssTextDefaults(&html);
-  return webui::GetI18nTemplateHtml(html, &load_time_data);
 }
 
 }  // security_interstitials

@@ -4,12 +4,11 @@
 <translation id="1128109161498068552">Ikke tillat noen sider å bruke systemeksklusive meldinger for å få tilgang til MIDI-enheter</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="119944043368869598">Tøm alle</translation>
-<translation id="1238150413700645698">Beskyttet innhold</translation>
 <translation id="1274977772557788323">Lagringsinnstillinger for Adobe Flash-avspiller</translation>
 <translation id="1433811987160647649">Spør før tilgang gis</translation>
 <translation id="150411034776756821">Fjern <ph name="SITE" /></translation>
-<translation id="1616206807336925449">Dette programtillegget krever ingen spesialtilganger.</translation>
 <translation id="1620510694547887537">Kamera</translation>
+<translation id="1698122934742150150">Bare for gjeldende privatøkt</translation>
 <translation id="1706625117072057435">Forstørrelsesnivåer</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1789575671122666129">Oppsprettsvindu</translation>
@@ -19,6 +18,7 @@
 <translation id="1994173015038366702">Nettadresse</translation>
 <translation id="225240747099314620">Tillat indentifisering for visning av beskyttet innhold (systemoppstart kan være nædvendig)</translation>
 <translation id="2277255602909579701">Alle kaker og sidedata</translation>
+<translation id="2318923050469484167">Nåværende privatøkt (<ph name="EMBEDDING" />)</translation>
 <translation id="2381756643783702095">Spør før forsendelse (anbefales)</translation>
 <translation id="2476578072172137802">Nettsideinnstillinger</translation>
 <translation id="2482878487686419369">Merknader</translation>
@@ -26,7 +26,7 @@
 <translation id="2812989263793994277">Ikke vis noen bilder</translation>
 <translation id="2904456025988372123">Spør når en side prøver å laste ned filer automatisk etter første fil</translation>
 <translation id="2913331724188855103">Tillat sider å lagre og lese kakedata (anbefales)</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
+<translation id="2916745397441987255">Søk i programtillegg</translation>
 <translation id="3013291976881901233">MIDI-enheter</translation>
 <translation id="302620147503052030">Vis knapp</translation>
 <translation id="3031601332414921114">Gjenoppta utskrift</translation>
@@ -57,12 +57,14 @@
 <translation id="5063480226653192405">Bruk</translation>
 <translation id="5068918910148307423">Ikke tillat nylig lukkede nettsider å fullføre forsendelse og mottak av data</translation>
 <translation id="5087249366037322692">Lagt til av tredjepart</translation>
+<translation id="5488468185303821006">Tillat i privatmodus</translation>
 <translation id="563535393368633106">Spør før tilgang gis (anbefales)</translation>
-<translation id="5646376287012673985">Plassering</translation>
 <translation id="5649053991847567735">Automatiske nedlastinger</translation>
 <translation id="5677928146339483299">Blokkert</translation>
+<translation id="5689516760719285838">Plassering</translation>
 <translation id="577624874850706961">Kakesøk</translation>
 <translation id="5804241973901381774">Tilganger</translation>
+<translation id="5838456317242088717">Nåværende privatøkt</translation>
 <translation id="5908769186679515905">Forhindre nettsider fra å spille av Flash-innhold</translation>
 <translation id="6011449291337289699">Fjern sidedata</translation>
 <translation id="6059925163896151826">USB-enheter</translation>

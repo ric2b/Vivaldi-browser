@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -31,7 +30,6 @@
 #include "content/browser/net/view_blob_internals_job_factory.h"
 #include "content/browser/net/view_http_cache_job_factory.h"
 #include "content/browser/resource_context_impl.h"
-#include "content/browser/webui/i18n_source_stream.h"
 #include "content/browser/webui/shared_resources_data_source.h"
 #include "content/browser/webui/url_data_source_impl.h"
 #include "content/browser/webui/web_ui_data_source_impl.h"
@@ -53,6 +51,7 @@
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "ui/base/template_expressions.h"
+#include "ui/base/webui/i18n_source_stream.h"
 #include "url/url_util.h"
 
 namespace content {
@@ -89,11 +88,6 @@ void CopyData(const scoped_refptr<net::IOBuffer>& buf,
               int buf_size,
               const scoped_refptr<base::RefCountedMemory>& data,
               int64_t data_offset) {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/455423 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "455423 URLRequestChromeJob::CompleteRead memcpy"));
   memcpy(buf->data(), data->front() + data_offset, buf_size);
 }
 
@@ -209,18 +203,17 @@ void URLRequestChromeJob::Start() {
   // https://crbug.com/616641.
   if (url.SchemeIs(kChromeDevToolsScheme)) {
     BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&URLRequestChromeJob::DelayStartForDevTools,
-                   weak_factory_.GetWeakPtr()));
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&URLRequestChromeJob::DelayStartForDevTools,
+                       weak_factory_.GetWeakPtr()));
     return;
   }
 
   // Start reading asynchronously so that all error reporting and data
   // callbacks happen as they would for network requests.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&URLRequestChromeJob::StartAsync, weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&URLRequestChromeJob::StartAsync,
+                                weak_factory_.GetWeakPtr()));
 
   TRACE_EVENT_ASYNC_BEGIN1("browser", "DataManager:Request", this, "URL",
       url.possibly_invalid_spec());
@@ -258,7 +251,7 @@ std::unique_ptr<net::SourceStream> URLRequestChromeJob::SetUpSourceStream() {
   }
 
   if (replacements_) {
-    source_stream = I18nSourceStream::Create(
+    source_stream = ui::I18nSourceStream::Create(
         std::move(source_stream), net::SourceStream::TYPE_NONE, replacements_);
   }
 
@@ -319,10 +312,10 @@ int URLRequestChromeJob::PostReadTask(scoped_refptr<net::IOBuffer> buf,
 
   base::PostTaskWithTraitsAndReply(
       FROM_HERE, {base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&CopyData, base::RetainedRef(buf), buf_size, data_,
-                 data_offset_),
-      base::Bind(&URLRequestChromeJob::ReadRawDataComplete,
-                 weak_factory_.GetWeakPtr(), buf_size));
+      base::BindOnce(&CopyData, base::RetainedRef(buf), buf_size, data_,
+                     data_offset_),
+      base::BindOnce(&URLRequestChromeJob::ReadRawDataComplete,
+                     weak_factory_.GetWeakPtr(), buf_size));
   data_offset_ += buf_size;
 
   return net::ERR_IO_PENDING;
@@ -331,9 +324,8 @@ int URLRequestChromeJob::PostReadTask(scoped_refptr<net::IOBuffer> buf,
 void URLRequestChromeJob::DelayStartForDevTools(
     const base::WeakPtr<URLRequestChromeJob>& job) {
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&URLRequestChromeJob::StartAsync, job));
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&URLRequestChromeJob::StartAsync, job));
 }
 
 void URLRequestChromeJob::StartAsync() {
@@ -445,7 +437,7 @@ URLDataManagerBackend::CreateProtocolHandler(
     ResourceContext* resource_context,
     ChromeBlobStorageContext* blob_storage_context) {
   DCHECK(resource_context);
-  return base::MakeUnique<ChromeProtocolHandler>(resource_context,
+  return std::make_unique<ChromeProtocolHandler>(resource_context,
                                                  blob_storage_context);
 }
 
@@ -540,8 +532,8 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
     // usually the UI thread, for this path.
     target_runner->PostTask(
         FROM_HERE,
-        base::Bind(&URLDataManagerBackend::CallStartRequest,
-                   base::RetainedRef(source), path, wc_getter, request_id));
+        base::BindOnce(&URLDataManagerBackend::CallStartRequest,
+                       base::RetainedRef(source), path, wc_getter, request_id));
   }
   return true;
 }

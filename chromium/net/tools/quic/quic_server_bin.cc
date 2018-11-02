@@ -13,6 +13,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "net/quic/chromium/crypto/proof_source_chromium.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_socket_address.h"
@@ -32,6 +33,7 @@ std::unique_ptr<net::ProofSource> CreateProofSource(
 }
 
 int main(int argc, char* argv[]) {
+  base::TaskScheduler::CreateAndStartWithDefaultParams("quic_server");
   base::AtExitManager exit_manager;
   base::MessageLoopForIO message_loop;
 
@@ -85,7 +87,7 @@ int main(int argc, char* argv[]) {
       CreateProofSource(line->GetSwitchValuePath("certificate_file"),
                         line->GetSwitchValuePath("key_file")),
       config, net::QuicCryptoServerConfig::ConfigOptions(),
-      net::AllSupportedVersions(), &response_cache);
+      net::AllSupportedTransportVersions(), &response_cache);
 
   int rc = server.CreateUDPSocketAndListen(
       net::QuicSocketAddress(net::QuicIpAddress::Any6(), FLAGS_port));

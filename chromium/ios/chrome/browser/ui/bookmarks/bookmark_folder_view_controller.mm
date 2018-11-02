@@ -405,6 +405,11 @@ const NSInteger BookmarkFolderSectionCount = 2;
   self.folderAddController = nil;
 }
 
+- (void)bookmarkFolderEditorWillCommitTitleChange:
+    (BookmarkFolderEditorViewController*)controller {
+  // Do nothing.
+}
+
 #pragma mark - BookmarkModelBridgeObserver
 
 - (void)bookmarkModelLoaded {
@@ -432,6 +437,19 @@ const NSInteger BookmarkFolderSectionCount = 2;
 
 - (void)bookmarkNodeDeleted:(const BookmarkNode*)bookmarkNode
                  fromFolder:(const BookmarkNode*)folder {
+  // Remove node from editedNodes if it is already deleted (possibly remotely by
+  // another sync device).
+  if (self.editedNodes.find(bookmarkNode) != self.editedNodes.end()) {
+    self.editedNodes.erase(bookmarkNode);
+    // if editedNodes becomes empty, nothing to move.  Exit the folder picker.
+    if (self.editedNodes.empty()) {
+      [self.delegate folderPickerDidCancel:self];
+    }
+    // Exit here because nodes in editedNodes cannot be any visible folders in
+    // folder picker.
+    return;
+  }
+
   if (!bookmarkNode->is_folder())
     return;
 

@@ -63,8 +63,8 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
 
   Document* getSVGDocument(ExceptionState&) const;
 
-  virtual bool LoadedNonEmptyDocument() const { return false; }
-  virtual void DidLoadNonEmptyDocument() {}
+  bool LoadedNonEmptyDocument() const { return did_load_non_empty_document_; }
+  void DidLoadNonEmptyDocument() { did_load_non_empty_document_ = true; }
 
   void SetEmbeddedContentView(EmbeddedContentView*);
   EmbeddedContentView* ReleaseEmbeddedContentView();
@@ -76,11 +76,20 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
     STACK_ALLOCATED();
 
    public:
-    PluginDisposeSuspendScope();
-    ~PluginDisposeSuspendScope();
+    PluginDisposeSuspendScope() { suspend_count_ += 2; }
+    ~PluginDisposeSuspendScope() {
+      suspend_count_ -= 2;
+      if (suspend_count_ == 1)
+        PerformDeferredPluginDispose();
+    }
 
    private:
     void PerformDeferredPluginDispose();
+
+    // Low bit indicates if there are plugins to dispose.
+    static int suspend_count_;
+
+    friend class HTMLFrameOwnerElement;
   };
 
   // FrameOwner overrides:
@@ -101,12 +110,12 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   bool AllowPaymentRequest() const override { return false; }
   bool IsDisplayNone() const override { return !embedded_content_view_; }
   AtomicString Csp() const override { return g_null_atom; }
-  const WebParsedFeaturePolicy& ContainerPolicy() const override;
+  const ParsedFeaturePolicy& ContainerPolicy() const override;
 
   // For unit tests, manually trigger the UpdateContainerPolicy method.
   void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   HTMLFrameOwnerElement(const QualifiedName& tag_name, Document&);
@@ -124,7 +133,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // policies, as "the origin of the URL in the frame's src attribute" (see
   // https://wicg.github.io/feature-policy/#iframe-allow-attribute).
   // This method is intended to be overridden by specific frame classes.
-  virtual RefPtr<SecurityOrigin> GetOriginForFeaturePolicy() const {
+  virtual scoped_refptr<SecurityOrigin> GetOriginForFeaturePolicy() const {
     return SecurityOrigin::CreateUnique();
   }
 
@@ -136,7 +145,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // TODO(loonybear): remove the boolean once the space separated feature list
   // syntax is deprecated.
   // https://crbug.com/761009.
-  virtual Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy(
+  virtual ParsedFeaturePolicy ConstructContainerPolicy(
       Vector<String>* /*  messages */,
       bool* /* old_syntax */) const = 0;
 
@@ -160,8 +169,9 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   Member<Frame> content_frame_;
   Member<EmbeddedContentView> embedded_content_view_;
   SandboxFlags sandbox_flags_;
+  bool did_load_non_empty_document_;
 
-  WebParsedFeaturePolicy container_policy_;
+  ParsedFeaturePolicy container_policy_;
 };
 
 DEFINE_ELEMENT_TYPE_CASTS(HTMLFrameOwnerElement, IsFrameOwnerElement());

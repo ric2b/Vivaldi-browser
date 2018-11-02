@@ -129,6 +129,7 @@ PageRequestSummary CreatePageRequestSummary(
   PageRequestSummary summary(main_frame_gurl);
   summary.initial_url = GURL(initial_url);
   summary.subresource_requests = subresource_requests;
+  summary.UpdateOrAddToOrigins(CreateURLRequestSummary(1, main_frame_url));
   for (auto& request_summary : subresource_requests)
     summary.UpdateOrAddToOrigins(request_summary);
   return summary;
@@ -187,13 +188,11 @@ ResourcePrefetchPredictor::Prediction CreatePrediction(
 PreconnectPrediction CreatePreconnectPrediction(
     std::string host,
     bool is_redirected,
-    std::vector<GURL> preconnect_origins,
-    std::vector<GURL> preresolve_hosts) {
+    const std::vector<PreconnectRequest>& requests) {
   PreconnectPrediction prediction;
   prediction.host = host;
   prediction.is_redirected = is_redirected;
-  prediction.preconnect_origins = preconnect_origins;
-  prediction.preresolve_hosts = preresolve_hosts;
+  prediction.requests = requests;
   return prediction;
 }
 
@@ -203,27 +202,31 @@ void PopulateTestConfig(LoadingPredictorConfig* config, bool small_db) {
     config->max_hosts_to_track = 2;
     config->min_url_visit_count = 2;
     config->max_resources_per_entry = 4;
+    config->max_origins_per_entry = 5;
     config->max_consecutive_misses = 2;
     config->max_redirect_consecutive_misses = 2;
     config->min_resource_confidence_to_trigger_prefetch = 0.5;
   }
+  config->is_host_learning_enabled = true;
   config->is_url_learning_enabled = true;
-  config->is_manifests_enabled = true;
   config->is_origin_learning_enabled = true;
   config->mode = LoadingPredictorConfig::LEARNING;
 }
 
 scoped_refptr<net::HttpResponseHeaders> MakeResponseHeaders(
     const char* headers) {
-  return make_scoped_refptr(new net::HttpResponseHeaders(
-      net::HttpUtil::AssembleRawHeaders(headers, strlen(headers))));
+  return base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(headers, strlen(headers)));
 }
 
-MockURLRequestJob::MockURLRequestJob(net::URLRequest* request,
-                                     const net::HttpResponseInfo& response_info,
-                                     const std::string& mime_type)
+MockURLRequestJob::MockURLRequestJob(
+    net::URLRequest* request,
+    const net::HttpResponseInfo& response_info,
+    const net::LoadTimingInfo& load_timing_info,
+    const std::string& mime_type)
     : net::URLRequestJob(request, nullptr),
       response_info_(response_info),
+      load_timing_info_(load_timing_info),
       mime_type_(mime_type) {}
 
 bool MockURLRequestJob::GetMimeType(std::string* mime_type) const {
@@ -239,6 +242,10 @@ void MockURLRequestJob::GetResponseInfo(net::HttpResponseInfo* info) {
   *info = response_info_;
 }
 
+void MockURLRequestJob::GetLoadTimingInfo(net::LoadTimingInfo* info) const {
+  *info = load_timing_info_;
+}
+
 MockURLRequestJobFactory::MockURLRequestJobFactory() {}
 MockURLRequestJobFactory::~MockURLRequestJobFactory() {}
 
@@ -251,7 +258,8 @@ net::URLRequestJob* MockURLRequestJobFactory::MaybeCreateJobWithProtocolHandler(
     const std::string& scheme,
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) const {
-  return new MockURLRequestJob(request, response_info_, mime_type_);
+  return new MockURLRequestJob(request, response_info_, load_timing_info_,
+                               mime_type_);
 }
 
 net::URLRequestJob* MockURLRequestJobFactory::MaybeInterceptRedirect(
@@ -288,7 +296,7 @@ std::unique_ptr<net::URLRequest> CreateURLRequest(
   request->set_site_for_cookies(url);
   content::ResourceRequestInfo::AllocateForTesting(
       request.get(), resource_type, nullptr, -1, -1, -1, is_main_frame, false,
-      false, true, content::PREVIEWS_OFF);
+      true, content::PREVIEWS_OFF, nullptr);
   request->Start();
   return request;
 }
@@ -371,18 +379,19 @@ std::ostream& operator<<(std::ostream& os, const NavigationID& navigation_id) {
   return os << navigation_id.tab_id << "," << navigation_id.main_frame_url;
 }
 
+std::ostream& operator<<(std::ostream& os, const PreconnectRequest& request) {
+  return os << "[" << request.origin << "," << request.num_sockets << ","
+            << request.allow_credentials << "]";
+}
+
 std::ostream& operator<<(std::ostream& os,
                          const PreconnectPrediction& prediction) {
   os << "[" << prediction.host << "," << prediction.is_redirected << "]"
      << std::endl;
 
-  os << "Preconnect:" << std::endl;
-  for (const auto& url : prediction.preconnect_origins)
-    os << "\t\t" << url << std::endl;
+  for (const auto& request : prediction.requests)
+    os << "\t\t" << request << std::endl;
 
-  os << "Preresolve:" << std::endl;
-  for (const auto& url : prediction.preresolve_hosts)
-    os << "\t\t" << url << std::endl;
   return os;
 }
 
@@ -483,11 +492,15 @@ bool operator==(const OriginStat& lhs, const OriginStat& rhs) {
          lhs.accessed_network() == rhs.accessed_network();
 }
 
+bool operator==(const PreconnectRequest& lhs, const PreconnectRequest& rhs) {
+  return lhs.origin == rhs.origin && lhs.num_sockets == rhs.num_sockets &&
+         lhs.allow_credentials == rhs.allow_credentials;
+}
+
 bool operator==(const PreconnectPrediction& lhs,
                 const PreconnectPrediction& rhs) {
   return lhs.is_redirected == rhs.is_redirected && lhs.host == rhs.host &&
-         lhs.preconnect_origins == rhs.preconnect_origins &&
-         lhs.preresolve_hosts == rhs.preresolve_hosts;
+         lhs.requests == rhs.requests;
 }
 
 }  // namespace predictors

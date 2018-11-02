@@ -5,7 +5,6 @@
 #ifndef DeviceMotionController_h
 #define DeviceMotionController_h
 
-#include "core/dom/Document.h"
 #include "core/frame/DeviceSingleWindowEventController.h"
 #include "modules/ModulesExport.h"
 
@@ -28,7 +27,7 @@ class MODULES_EXPORT DeviceMotionController final
   void DidAddEventListener(LocalDOMWindow*,
                            const AtomicString& event_type) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit DeviceMotionController(Document&);

@@ -26,19 +26,24 @@ const char kCommandPrefix[] = "translate";
 
 TranslateController::TranslateController(web::WebState* web_state,
                                          JsTranslateManager* manager)
-    : web::WebStateObserver(web_state),
+    : web_state_(web_state),
       observer_(nullptr),
       js_manager_(manager),
       weak_method_factory_(this) {
   DCHECK(js_manager_);
-  DCHECK(web::WebStateObserver::web_state());
-  web_state->AddScriptCommandCallback(
+  DCHECK(web_state_);
+  web_state_->AddObserver(this);
+  web_state_->AddScriptCommandCallback(
       base::Bind(&TranslateController::OnJavascriptCommandReceived,
                  base::Unretained(this)),
       kCommandPrefix);
 }
 
 TranslateController::~TranslateController() {
+  if (web_state_) {
+    web_state_->RemoveObserver(this);
+    web_state_ = nullptr;
+  }
 }
 
 void TranslateController::InjectTranslateScript(
@@ -80,7 +85,7 @@ bool TranslateController::OnJavascriptCommandReceived(
   value->GetAsString(&out_string);
   if (out_string == "translate.ready")
     return OnTranslateReady(command);
-  else if (out_string == "translate.status")
+  if (out_string == "translate.status")
     return OnTranslateComplete(command);
 
   NOTREACHED();
@@ -142,8 +147,11 @@ bool TranslateController::OnTranslateComplete(
 
 // web::WebStateObserver implementation.
 
-void TranslateController::WebStateDestroyed() {
-  web_state()->RemoveScriptCommandCallback(kCommandPrefix);
+void TranslateController::WebStateDestroyed(web::WebState* web_state) {
+  DCHECK_EQ(web_state_, web_state);
+  web_state_->RemoveScriptCommandCallback(kCommandPrefix);
+  web_state_->RemoveObserver(this);
+  web_state_ = nullptr;
 }
 
 }  // namespace translate

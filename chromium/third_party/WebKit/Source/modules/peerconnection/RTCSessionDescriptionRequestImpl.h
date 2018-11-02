@@ -31,10 +31,10 @@
 #ifndef RTCSessionDescriptionRequestImpl_h
 #define RTCSessionDescriptionRequestImpl_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "platform/heap/Handle.h"
 #include "platform/peerconnection/RTCSessionDescriptionRequest.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -62,7 +62,7 @@ class RTCSessionDescriptionRequestImpl final
   // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   RTCSessionDescriptionRequestImpl(ExecutionContext*,

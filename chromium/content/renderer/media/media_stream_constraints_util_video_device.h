@@ -10,9 +10,9 @@
 
 #include "base/optional.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_devices.mojom.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "media/capture/video_capture_types.h"
+#include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
 
 namespace blink {
 class WebString;
@@ -34,7 +34,8 @@ struct CONTENT_EXPORT VideoDeviceCaptureCapabilities {
       VideoDeviceCaptureCapabilities&& other);
 
   // Each field is independent of each other.
-  std::vector<::mojom::VideoInputDeviceCapabilitiesPtr> device_capabilities;
+  std::vector<blink::mojom::VideoInputDeviceCapabilitiesPtr>
+      device_capabilities;
   std::vector<media::PowerLineFrequency> power_line_capabilities;
   std::vector<base::Optional<bool>> noise_reduction_capabilities;
 };
@@ -106,7 +107,10 @@ struct CONTENT_EXPORT VideoDeviceCaptureCapabilities {
 // documentation.
 VideoCaptureSettings CONTENT_EXPORT SelectSettingsVideoDeviceCapture(
     const VideoDeviceCaptureCapabilities& capabilities,
-    const blink::WebMediaConstraints& constraints);
+    const blink::WebMediaConstraints& constraints,
+    int default_width,
+    int default_height,
+    double default_frame_rate);
 
 }  // namespace content
 

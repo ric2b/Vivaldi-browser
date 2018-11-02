@@ -9,6 +9,7 @@
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -31,18 +32,18 @@ ParentFrameTaskRunners::ParentFrameTaskRunners(LocalFrame* frame)
         TaskType::kNetworking, TaskType::kPostedMessage,
         TaskType::kCanvasBlobSerialization, TaskType::kUnthrottled}) {
     auto task_runner =
-        frame ? TaskRunnerHelper::Get(type, frame)
+        frame ? frame->GetTaskRunner(type)
               : Platform::Current()->MainThread()->GetWebTaskRunner();
     task_runners_.insert(type, std::move(task_runner));
   }
 }
 
-RefPtr<WebTaskRunner> ParentFrameTaskRunners::Get(TaskType type) {
+scoped_refptr<WebTaskRunner> ParentFrameTaskRunners::Get(TaskType type) {
   MutexLocker lock(task_runners_mutex_);
   return task_runners_.at(type);
 }
 
-DEFINE_TRACE(ParentFrameTaskRunners) {
+void ParentFrameTaskRunners::Trace(blink::Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
 }
 

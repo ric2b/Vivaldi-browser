@@ -67,13 +67,15 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/network_service.mojom.h"
 #include "content/public/test/test_fileapi_operation_waiter.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/accessibility_browser_test_utils.h"
 #include "ipc/ipc_security_test_util.h"
 #include "net/base/filename_util.h"
-#include "net/cookies/cookie_store.h"
+#include "net/base/io_buffer.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/filter/gzip_header.h"
 #include "net/filter/gzip_source_stream.h"
 #include "net/filter/mock_source_stream.h"
@@ -81,8 +83,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/python_utils.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/interfaces/cookie_manager.mojom.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -197,7 +198,7 @@ bool ExecuteScriptWithUserGestureControl(RenderFrameHost* frame,
     return false;
   }
 
-  DCHECK_EQ(base::Value::Type::STRING, value->GetType());
+  DCHECK_EQ(base::Value::Type::STRING, value->type());
   std::string actual_response;
   if (value->GetAsString(&actual_response))
     DCHECK_EQ(expected_response, actual_response);
@@ -384,40 +385,15 @@ void SimulateKeyPressImpl(WebContents* web_contents,
 }
 
 void GetCookiesCallback(std::string* cookies_out,
-                        base::WaitableEvent* event,
-                        const std::string& cookies) {
-  *cookies_out = cookies;
-  event->Signal();
+                        base::RunLoop* run_loop,
+                        const std::vector<net::CanonicalCookie>& cookies) {
+  *cookies_out = net::CanonicalCookie::BuildCookieLine(cookies);
+  run_loop->Quit();
 }
 
-void GetCookiesOnIOThread(const GURL& url,
-                          net::URLRequestContextGetter* context_getter,
-                          base::WaitableEvent* event,
-                          std::string* cookies) {
-  net::CookieStore* cookie_store =
-      context_getter->GetURLRequestContext()->cookie_store();
-  cookie_store->GetCookiesWithOptionsAsync(
-      url, net::CookieOptions(),
-      base::BindOnce(&GetCookiesCallback, cookies, event));
-}
-
-void SetCookieCallback(bool* result,
-                       base::WaitableEvent* event,
-                       bool success) {
+void SetCookieCallback(bool* result, base::RunLoop* run_loop, bool success) {
   *result = success;
-  event->Signal();
-}
-
-void SetCookieOnIOThread(const GURL& url,
-                         const std::string& value,
-                         net::URLRequestContextGetter* context_getter,
-                         base::WaitableEvent* event,
-                         bool* result) {
-  net::CookieStore* cookie_store =
-      context_getter->GetURLRequestContext()->cookie_store();
-  cookie_store->SetCookieWithOptionsAsync(
-      url, value, net::CookieOptions(),
-      base::BindOnce(&SetCookieCallback, result, event));
+  run_loop->Quit();
 }
 
 std::unique_ptr<net::test_server::HttpResponse>
@@ -600,7 +576,12 @@ void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents) {
 }
 
 bool WaitForLoadStop(WebContents* web_contents) {
+  WebContentsDestroyedObserver observer(web_contents);
   WaitForLoadStopWithoutSuccessCheck(web_contents);
+  if (observer.IsDestroyed()) {
+    LOG(ERROR) << "WebContents was destroyed during waiting for load stop.";
+    return false;
+  }
   return IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL);
 }
 
@@ -626,7 +607,7 @@ bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
 }
 
 void CrashTab(WebContents* web_contents) {
-  RenderProcessHost* rph = web_contents->GetRenderProcessHost();
+  RenderProcessHost* rph = web_contents->GetMainFrame()->GetProcess();
   RenderProcessHostWatcher watcher(
       rph, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   rph->Shutdown(0, false);
@@ -658,7 +639,7 @@ void WaitForResizeComplete(WebContents* web_contents) {
       web_contents->GetRenderViewHost()->GetWidget());
   if (!IsResizeComplete(&dispatcher_test, widget_host)) {
     WindowedNotificationObserver resize_observer(
-        NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
+        NOTIFICATION_RENDER_WIDGET_HOST_DID_COMPLETE_RESIZE_OR_REPAINT,
         base::Bind(IsResizeComplete, &dispatcher_test, widget_host));
     resize_observer.Wait();
   }
@@ -673,7 +654,7 @@ void WaitForResizeComplete(WebContents* web_contents) {
       web_contents->GetRenderViewHost()->GetWidget());
   if (!IsResizeComplete(widget_host)) {
     WindowedNotificationObserver resize_observer(
-        NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
+        NOTIFICATION_RENDER_WIDGET_HOST_DID_COMPLETE_RESIZE_OR_REPAINT,
         base::Bind(IsResizeComplete, widget_host));
     resize_observer.Wait();
   }
@@ -709,6 +690,32 @@ void SimulateMouseClickAt(WebContents* web_contents,
       mouse_event);
 }
 
+void SimulateRoutedMouseClickAt(WebContents* web_contents,
+                                int modifiers,
+                                blink::WebMouseEvent::Button button,
+                                const gfx::Point& point) {
+  content::WebContentsImpl* web_contents_impl =
+      static_cast<content::WebContentsImpl*>(web_contents);
+  content::RenderWidgetHostViewBase* rwhvb =
+      static_cast<content::RenderWidgetHostViewBase*>(
+          web_contents->GetRenderWidgetHostView());
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, modifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  mouse_event.button = button;
+  mouse_event.SetPositionInWidget(point.x(), point.y());
+  // Mac needs positionInScreen for events to plugins.
+  gfx::Rect offset = web_contents->GetContainerBounds();
+  mouse_event.SetPositionInScreen(point.x() + offset.x(),
+                                  point.y() + offset.y());
+  mouse_event.click_count = 1;
+  web_contents_impl->GetInputEventRouter()->RouteMouseEvent(rwhvb, &mouse_event,
+                                                            ui::LatencyInfo());
+  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  web_contents_impl->GetInputEventRouter()->RouteMouseEvent(rwhvb, &mouse_event,
+                                                            ui::LatencyInfo());
+}
+
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point) {
@@ -722,7 +729,8 @@ void SimulateMouseEvent(WebContents* web_contents,
 
 void SimulateMouseWheelEvent(WebContents* web_contents,
                              const gfx::Point& point,
-                             const gfx::Vector2d& delta) {
+                             const gfx::Vector2d& delta,
+                             const blink::WebMouseWheelEvent::Phase phase) {
   blink::WebMouseWheelEvent wheel_event(
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
@@ -730,9 +738,59 @@ void SimulateMouseWheelEvent(WebContents* web_contents,
   wheel_event.SetPositionInWidget(point.x(), point.y());
   wheel_event.delta_x = delta.x();
   wheel_event.delta_y = delta.y();
+  wheel_event.phase = phase;
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
   widget_host->ForwardWheelEvent(wheel_event);
+}
+
+#if !defined(OS_MACOSX)
+void SimulateMouseWheelCtrlZoomEvent(WebContents* web_contents,
+                                     const gfx::Point& point,
+                                     bool zoom_in,
+                                     blink::WebMouseWheelEvent::Phase phase) {
+  blink::WebMouseWheelEvent wheel_event(
+      blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kControlKey,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+
+  wheel_event.SetPositionInWidget(point.x(), point.y());
+  wheel_event.delta_y =
+      (zoom_in ? 1.0 : -1.0) * ui::MouseWheelEvent::kWheelDelta;
+  wheel_event.wheel_ticks_y = (zoom_in ? 1.0 : -1.0);
+  wheel_event.has_precise_scrolling_deltas = false;
+  wheel_event.phase = phase;
+  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
+      web_contents->GetRenderViewHost()->GetWidget());
+  widget_host->ForwardWheelEvent(wheel_event);
+}
+#endif  // !defined(OS_MACOSX)
+
+void SimulateGesturePinchSequence(WebContents* web_contents,
+                                  const gfx::Point& point,
+                                  float scale,
+                                  blink::WebGestureDevice source_device) {
+  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
+      web_contents->GetRenderViewHost()->GetWidget());
+
+  blink::WebGestureEvent pinch_begin(
+      blink::WebInputEvent::kGesturePinchBegin,
+      blink::WebInputEvent::kNoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  pinch_begin.source_device = source_device;
+  pinch_begin.x = point.x();
+  pinch_begin.y = point.y();
+  pinch_begin.global_x = point.x();
+  pinch_begin.global_y = point.y();
+  widget_host->ForwardGestureEvent(pinch_begin);
+
+  blink::WebGestureEvent pinch_update(pinch_begin);
+  pinch_update.SetType(blink::WebInputEvent::kGesturePinchUpdate);
+  pinch_update.data.pinch_update.scale = scale;
+  widget_host->ForwardGestureEvent(pinch_update);
+
+  blink::WebGestureEvent pinch_end(pinch_begin);
+  pinch_update.SetType(blink::WebInputEvent::kGesturePinchEnd);
+  widget_host->ForwardGestureEvent(pinch_end);
 }
 
 void SimulateGestureScrollSequence(WebContents* web_contents,
@@ -810,6 +868,14 @@ void SimulateGestureFlingSequence(WebContents* web_contents,
   fling_start.data.fling_start.velocity_x = velocity.x();
   fling_start.data.fling_start.velocity_y = velocity.y();
   widget_host->ForwardGestureEvent(fling_start);
+}
+
+void SimulateGestureEvent(WebContents* web_contents,
+                          const blink::WebGestureEvent& gesture_event,
+                          const ui::LatencyInfo& latency) {
+  RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
+      web_contents->GetRenderWidgetHostView());
+  view->ProcessGestureEvent(gesture_event, latency);
 }
 
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point) {
@@ -1112,11 +1178,9 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
   ids.insert(ids.end(), js_resource_ids.begin(), js_resource_ids.end());
 
   std::string script;
-  for (std::vector<int>::iterator iter = ids.begin();
-       iter != ids.end();
-       ++iter) {
+  for (int id : ids) {
     scoped_refptr<base::RefCountedMemory> bytes =
-        ResourceBundle::GetSharedInstance().LoadDataResourceBytes(*iter);
+        ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytes(id);
 
     if (HasGzipHeader(*bytes))
       AppendGzippedResource(*bytes, &script);
@@ -1141,17 +1205,15 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
 
 std::string GetCookies(BrowserContext* browser_context, const GURL& url) {
   std::string cookies;
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  net::URLRequestContextGetter* context_getter =
-      BrowserContext::GetDefaultStoragePartition(browser_context)->
-          GetURLRequestContext();
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&GetCookiesOnIOThread, url,
-                     base::RetainedRef(context_getter), &event, &cookies));
-  event.Wait();
+  base::RunLoop run_loop;
+  network::mojom::CookieManagerPtr cookie_manager;
+  BrowserContext::GetDefaultStoragePartition(browser_context)
+      ->GetNetworkContext()
+      ->GetCookieManager(mojo::MakeRequest(&cookie_manager));
+  cookie_manager->GetCookieList(
+      url, net::CookieOptions(),
+      base::BindOnce(&GetCookiesCallback, &cookies, &run_loop));
+  run_loop.Run();
   return cookies;
 }
 
@@ -1159,17 +1221,19 @@ bool SetCookie(BrowserContext* browser_context,
                const GURL& url,
                const std::string& value) {
   bool result = false;
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  net::URLRequestContextGetter* context_getter =
-      BrowserContext::GetDefaultStoragePartition(browser_context)->
-          GetURLRequestContext();
+  base::RunLoop run_loop;
+  network::mojom::CookieManagerPtr cookie_manager;
+  BrowserContext::GetDefaultStoragePartition(browser_context)
+      ->GetNetworkContext()
+      ->GetCookieManager(mojo::MakeRequest(&cookie_manager));
+  std::unique_ptr<net::CanonicalCookie> cc(net::CanonicalCookie::Create(
+      url, value, base::Time::Now(), net::CookieOptions()));
+  DCHECK(cc.get());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&SetCookieOnIOThread, url, value,
-                     base::RetainedRef(context_getter), &event, &result));
-  event.Wait();
+  cookie_manager->SetCanonicalCookie(
+      *cc.get(), true /* secure_source */, true /* modify_http_only */,
+      base::BindOnce(&SetCookieCallback, &result, &run_loop));
+  run_loop.Run();
   return result;
 }
 
@@ -1551,7 +1615,7 @@ void TitleWatcher::DidStopLoading() {
   TestTitle();
 }
 
-void TitleWatcher::TitleWasSet(NavigationEntry* entry, bool explicit_set) {
+void TitleWatcher::TitleWasSet(NavigationEntry* entry) {
   TestTitle();
 }
 
@@ -1572,9 +1636,9 @@ RenderProcessHostWatcher::RenderProcessHostWatcher(
   render_process_host_->AddObserver(this);
 }
 
-RenderProcessHostWatcher::RenderProcessHostWatcher(
-    WebContents* web_contents, WatchType type)
-    : render_process_host_(web_contents->GetRenderProcessHost()),
+RenderProcessHostWatcher::RenderProcessHostWatcher(WebContents* web_contents,
+                                                   WatchType type)
+    : render_process_host_(web_contents->GetMainFrame()->GetProcess()),
       type_(type),
       did_exit_normally_(true),
       message_loop_runner_(new MessageLoopRunner) {
@@ -1601,7 +1665,7 @@ void RenderProcessHostWatcher::RenderProcessExited(
 
 void RenderProcessHostWatcher::RenderProcessHostDestroyed(
     RenderProcessHost* host) {
-  render_process_host_ = NULL;
+  render_process_host_ = nullptr;
   if (type_ == WATCH_FOR_HOST_DESTRUCTION)
     message_loop_runner_->Quit();
 }
@@ -1643,7 +1707,7 @@ void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
 }
 
 void DOMMessageQueue::ClearQueue() {
-  message_queue_ = std::queue<std::string>();
+  message_queue_ = base::queue<std::string>();
 }
 
 bool DOMMessageQueue::WaitForMessage(std::string* message) {
@@ -1692,7 +1756,7 @@ WebContentsAddedObserver::WebContentsAddedObserver()
     : web_contents_created_callback_(
           base::Bind(&WebContentsAddedObserver::WebContentsCreated,
                      base::Unretained(this))),
-      web_contents_(NULL) {
+      web_contents_(nullptr) {
   WebContentsImpl::FriendWrapper::AddCreatedCallbackForTesting(
       web_contents_created_callback_);
 }
@@ -1728,6 +1792,18 @@ bool WebContentsAddedObserver::RenderViewCreatedCalled() {
   return false;
 }
 
+WebContentsDestroyedObserver::WebContentsDestroyedObserver(
+    WebContents* web_contents)
+    : WebContentsObserver(web_contents) {
+  DCHECK(web_contents);
+}
+
+WebContentsDestroyedObserver::~WebContentsDestroyedObserver() {}
+
+void WebContentsDestroyedObserver::WebContentsDestroyed() {
+  destroyed_ = true;
+}
+
 bool RequestFrame(WebContents* web_contents) {
   DCHECK(web_contents);
   return RenderWidgetHostImpl::From(
@@ -1752,7 +1828,7 @@ void FrameWatcher::WaitFrames(int frames_to_wait) {
   run_loop.Run();
 }
 
-const cc::CompositorFrameMetadata& FrameWatcher::LastMetadata() {
+const viz::CompositorFrameMetadata& FrameWatcher::LastMetadata() {
   return RenderWidgetHostImpl::From(
              web_contents()->GetRenderViewHost()->GetWidget())
       ->last_frame_metadata();
@@ -1803,20 +1879,21 @@ bool MainThreadFrameObserver::OnMessageReceived(const IPC::Message& msg) {
 
 InputMsgWatcher::InputMsgWatcher(RenderWidgetHost* render_widget_host,
                                  blink::WebInputEvent::Type type)
-    : BrowserMessageFilter(InputMsgStart),
+    : render_widget_host_(render_widget_host),
       wait_for_type_(type),
       ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN),
-      ack_source_(static_cast<uint32_t>(InputEventAckSource::UNKNOWN)) {
-  render_widget_host->GetProcess()->AddFilter(this);
+      ack_source_(InputEventAckSource::UNKNOWN) {
+  render_widget_host->AddInputEventObserver(this);
 }
 
-InputMsgWatcher::~InputMsgWatcher() {}
+InputMsgWatcher::~InputMsgWatcher() {
+  render_widget_host_->RemoveInputEventObserver(this);
+}
 
-void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
-                                  uint32_t ack_state,
-                                  uint32_t ack_source) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (wait_for_type_ == ack_type) {
+void InputMsgWatcher::OnInputEventAck(InputEventAckSource ack_source,
+                                      InputEventAckState ack_state,
+                                      const blink::WebInputEvent& event) {
+  if (event.GetType() == wait_for_type_) {
     ack_result_ = ack_state;
     ack_source_ = ack_source;
     if (!quit_.is_null())
@@ -1824,106 +1901,100 @@ void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
   }
 }
 
-bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (message.type() == InputHostMsg_HandleInputEvent_ACK::ID) {
-    InputHostMsg_HandleInputEvent_ACK::Param params;
-    InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
-    blink::WebInputEvent::Type ack_type = std::get<0>(params).type;
-    InputEventAckState ack_state = std::get<0>(params).state;
-    InputEventAckSource ack_source = std::get<0>(params).source;
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
-                       static_cast<uint32_t>(ack_source)));
-  }
-  return false;
-}
-
 bool InputMsgWatcher::HasReceivedAck() const {
   return ack_result_ != INPUT_EVENT_ACK_STATE_UNKNOWN;
 }
 
-uint32_t InputMsgWatcher::WaitForAck() {
+InputEventAckState InputMsgWatcher::WaitForAck() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (HasReceivedAck())
-    return ack_result_;
   base::RunLoop run_loop;
   base::AutoReset<base::Closure> reset_quit(&quit_, run_loop.QuitClosure());
   run_loop.Run();
   return ack_result_;
 }
 
-#if defined(OS_WIN)
-static void RunTaskAndSignalCompletion(const base::Closure& task,
-                                       base::WaitableEvent* completion) {
-  task.Run();
-  completion->Signal();
+InputEventAckState InputMsgWatcher::GetAckStateWaitIfNecessary() {
+  if (HasReceivedAck())
+    return ack_result_;
+  return WaitForAck();
 }
 
-static void RunTaskOnIOThreadAndWait(const base::Closure& task) {
-  base::WaitableEvent completion(
-      base::WaitableEvent::ResetPolicy::AUTOMATIC,
-      base::WaitableEvent::InitialState::NOT_SIGNALED);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&RunTaskAndSignalCompletion, task, &completion));
-  completion.Wait();
+InputEventAckWaiter::InputEventAckWaiter(RenderWidgetHost* render_widget_host,
+                                         InputEventAckPredicate predicate)
+    : render_widget_host_(render_widget_host),
+      predicate_(predicate),
+      event_received_(false) {
+  render_widget_host_->AddInputEventObserver(this);
 }
-#endif
 
-static void SetUpTestClipboard() {
-#if defined(OS_WIN)
-  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    RunTaskOnIOThreadAndWait(base::Bind(&SetUpTestClipboard));
-    return;
+namespace {
+InputEventAckWaiter::InputEventAckPredicate EventAckHasType(
+    blink::WebInputEvent::Type type) {
+  return base::BindRepeating(
+      [](blink::WebInputEvent::Type expected_type, InputEventAckSource source,
+         InputEventAckState state, const blink::WebInputEvent& event) {
+        return event.GetType() == expected_type;
+      },
+      type);
+}
+}  // namespace
+
+InputEventAckWaiter::InputEventAckWaiter(RenderWidgetHost* render_widget_host,
+                                         blink::WebInputEvent::Type type)
+    : InputEventAckWaiter(render_widget_host, EventAckHasType(type)) {}
+
+InputEventAckWaiter::~InputEventAckWaiter() {
+  render_widget_host_->RemoveInputEventObserver(this);
+}
+
+void InputEventAckWaiter::Wait() {
+  if (!event_received_) {
+    base::RunLoop run_loop;
+    quit_ = run_loop.QuitClosure();
+    run_loop.Run();
   }
-#endif
-  ui::TestClipboard::CreateForCurrentThread();
+}
+
+void InputEventAckWaiter::Reset() {
+  event_received_ = false;
+  quit_ = base::Closure();
+}
+
+void InputEventAckWaiter::OnInputEventAck(InputEventAckSource source,
+                                          InputEventAckState state,
+                                          const blink::WebInputEvent& event) {
+  if (predicate_.Run(source, state, event)) {
+    event_received_ = true;
+    if (quit_)
+      quit_.Run();
+  }
 }
 
 // TODO(dcheng): Make the test clipboard on different threads share the
 // same backing store. crbug.com/629765
+// TODO(slangley): crbug.com/775830 - Cleanup BrowserTestClipboardScope now that
+// there is no need to thread hop for Windows.
 BrowserTestClipboardScope::BrowserTestClipboardScope() {
-  SetUpTestClipboard();
-}
-
-static void TearDownTestClipboard() {
-#if defined(OS_WIN)
-  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    RunTaskOnIOThreadAndWait(base::Bind(&TearDownTestClipboard));
-    return;
-  }
-#endif
-  ui::Clipboard::DestroyClipboardForCurrentThread();
+  ui::TestClipboard::CreateForCurrentThread();
 }
 
 BrowserTestClipboardScope::~BrowserTestClipboardScope() {
-  TearDownTestClipboard();
+  ui::Clipboard::DestroyClipboardForCurrentThread();
 }
 
 void BrowserTestClipboardScope::SetRtf(const std::string& rtf) {
-#if defined(OS_WIN)
-  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    RunTaskOnIOThreadAndWait(base::Bind(&BrowserTestClipboardScope::SetRtf,
-                                        base::Unretained(this), rtf));
-    return;
-  }
-#endif
   ui::ScopedClipboardWriter clipboard_writer(ui::CLIPBOARD_TYPE_COPY_PASTE);
   clipboard_writer.WriteRTF(rtf);
 }
 
 void BrowserTestClipboardScope::SetText(const std::string& text) {
-#if defined(OS_WIN)
-  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    RunTaskOnIOThreadAndWait(base::Bind(&BrowserTestClipboardScope::SetText,
-                                        base::Unretained(this), text));
-    return;
-  }
-#endif
   ui::ScopedClipboardWriter clipboard_writer(ui::CLIPBOARD_TYPE_COPY_PASTE);
   clipboard_writer.WriteText(base::ASCIIToUTF16(text));
+}
+
+void BrowserTestClipboardScope::GetText(std::string* result) {
+  ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
+      ui::CLIPBOARD_TYPE_COPY_PASTE, result);
 }
 
 class FrameFocusedObserver::FrameTreeNodeObserverImpl
@@ -1979,6 +2050,15 @@ bool TestNavigationManager::WaitForRequestStart() {
   // user can always call WaitForWillStartRequest.
   DCHECK(desired_state_ == NavigationState::STARTED);
   return WaitForDesiredState();
+}
+
+void TestNavigationManager::ResumeNavigation() {
+  DCHECK(current_state_ == NavigationState::STARTED ||
+         current_state_ == NavigationState::RESPONSE);
+  DCHECK_EQ(current_state_, desired_state_);
+  DCHECK(navigation_paused_);
+  navigation_paused_ = false;
+  handle_->CallResumeForTesting();
 }
 
 bool TestNavigationManager::WaitForResponse() {
@@ -2119,22 +2199,6 @@ bool ConsoleObserverDelegate::DidAddMessageToConsole(
 }
 
 // static
-void PwnMessageHelper::CreateBlobWithPayload(RenderProcessHost* process,
-                                             std::string uuid,
-                                             std::string content_type,
-                                             std::string content_disposition,
-                                             std::string payload) {
-  std::vector<storage::DataElement> data_elements(1);
-  data_elements[0].SetToBytes(payload.c_str(), payload.size());
-
-  IPC::IpcSecurityTestUtil::PwnMessageReceived(
-      process->GetChannel(),
-      BlobStorageMsg_RegisterBlob(uuid, content_type, content_disposition,
-                                  data_elements));
-}
-
-
-// static
 void PwnMessageHelper::RegisterBlobURL(RenderProcessHost* process,
                                        GURL url,
                                        std::string uuid) {
@@ -2233,7 +2297,7 @@ class MockOverscrollControllerImpl : public OverscrollController,
 MockOverscrollController* MockOverscrollController::Create(
     RenderWidgetHostView* rwhv) {
   std::unique_ptr<MockOverscrollControllerImpl> mock =
-      base::MakeUnique<MockOverscrollControllerImpl>();
+      std::make_unique<MockOverscrollControllerImpl>();
   MockOverscrollController* raw_mock = mock.get();
 
   RenderWidgetHostViewAura* rwhva =
@@ -2244,5 +2308,43 @@ MockOverscrollController* MockOverscrollController::Create(
 }
 
 #endif  // defined(USE_AURA)
+
+ContextMenuFilter::ContextMenuFilter()
+    : content::BrowserMessageFilter(FrameMsgStart),
+      message_loop_runner_(new content::MessageLoopRunner),
+      handled_(false) {}
+
+bool ContextMenuFilter::OnMessageReceived(const IPC::Message& message) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  if (message.type() == FrameHostMsg_ContextMenu::ID) {
+    FrameHostMsg_ContextMenu::Param params;
+    FrameHostMsg_ContextMenu::Read(&message, &params);
+    content::ContextMenuParams menu_params = std::get<0>(params);
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&ContextMenuFilter::OnContextMenu, this, menu_params));
+  }
+  return false;
+}
+
+void ContextMenuFilter::Wait() {
+  if (!handled_)
+    message_loop_runner_->Run();
+}
+
+ContextMenuFilter::~ContextMenuFilter() {}
+
+void ContextMenuFilter::OnContextMenu(
+    const content::ContextMenuParams& params) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  handled_ = true;
+  last_params_ = params;
+  message_loop_runner_->Quit();
+}
+
+WebContents* GetEmbedderForGuest(content::WebContents* guest) {
+  CHECK(guest);
+  return static_cast<content::WebContentsImpl*>(guest)->GetOuterWebContents();
+}
 
 }  // namespace content

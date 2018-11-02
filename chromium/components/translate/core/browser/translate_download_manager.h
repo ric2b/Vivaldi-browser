@@ -64,13 +64,15 @@ class TranslateDownloadManager {
   }
 
   // Let the caller decide if and when we should fetch the language list from
-  // the translate server. This is a NOOP if prefs::kEnableTranslate is set to
-  // false.
+  // the translate server. This is a NOOP if prefs::kOfferTranslateEnabled is
+  // set to false.
   static void RequestLanguageList(PrefService* prefs);
 
   // Fills |languages| with the list of languages that the translate server can
-  // translate to and from.
-  static void GetSupportedLanguages(std::vector<std::string>* languages);
+  // translate to and from. May cause a language list request unless
+  // |translate_allowed| is false.
+  static void GetSupportedLanguages(bool translate_allowed,
+                                    std::vector<std::string>* languages);
 
   // Returns the last-updated time when Chrome received a language list from a
   // Translate server. Returns null time if Chrome hasn't received any lists.

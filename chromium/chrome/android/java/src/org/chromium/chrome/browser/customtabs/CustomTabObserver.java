@@ -149,11 +149,11 @@ class CustomTabObserver extends EmptyTabObserver {
                 // Intent to Load Start is recorded here to make sure we do not record
                 // failed/aborted page loads.
                 RecordHistogram.recordCustomTimesHistogram(
-                        histogramPrefix + ".IntentToFirstCommitNavigationTime2.ZoomedOut",
+                        histogramPrefix + ".IntentToFirstNavigationStartTime.ZoomedOut",
                         timeToPageLoadStartedMs, 50, TimeUnit.MINUTES.toMillis(10),
                         TimeUnit.MILLISECONDS, 50);
                 RecordHistogram.recordCustomTimesHistogram(
-                        histogramPrefix + ".IntentToFirstCommitNavigationTime2.ZoomedIn",
+                        histogramPrefix + ".IntentToFirstNavigationStartTime.ZoomedIn",
                         timeToPageLoadStartedMs, 200, 1000, TimeUnit.MILLISECONDS, 100);
             }
             // Same bounds and bucket count as PLT histograms.

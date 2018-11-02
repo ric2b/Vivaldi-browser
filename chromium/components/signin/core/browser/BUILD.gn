@@ -2,10 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//components/signin/features.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+}
+
+buildflag_header("signin_features") {
+  header = "signin_features.h"
+  flags = [
+    "ENABLE_DICE_SUPPORT=$enable_dice_support",
+    "ENABLE_MIRROR=$enable_mirror",
+  ]
 }
 
 # Split into its own target to allow the Identity Service to depend on it in
@@ -33,6 +42,8 @@ static_library("browser") {
     "account_investigator.h",
     "account_reconcilor.cc",
     "account_reconcilor.h",
+    "account_reconcilor_delegate.cc",
+    "account_reconcilor_delegate.h",
     "account_tracker_service.cc",
     "account_tracker_service.h",
     "child_account_info_fetcher.cc",
@@ -43,12 +54,18 @@ static_library("browser") {
     "child_account_info_fetcher_impl.h",
     "chrome_connected_header_helper.cc",
     "chrome_connected_header_helper.h",
+    "dice_account_reconcilor_delegate.cc",
+    "dice_account_reconcilor_delegate.h",
     "dice_header_helper.cc",
     "dice_header_helper.h",
     "gaia_cookie_manager_service.cc",
     "gaia_cookie_manager_service.h",
+    "mirror_account_reconcilor_delegate.cc",
+    "mirror_account_reconcilor_delegate.h",
     "profile_identity_provider.cc",
     "profile_identity_provider.h",
+    "profile_management_switches.cc",
+    "profile_management_switches.h",
     "profile_oauth2_token_service.cc",
     "profile_oauth2_token_service.h",
     "refresh_token_annotation_request.cc",
@@ -71,12 +88,16 @@ static_library("browser") {
     "signin_manager_base.h",
     "signin_metrics.cc",
     "signin_metrics.h",
+    "signin_pref_names.cc",
+    "signin_pref_names.h",
     "signin_status_metrics_provider.cc",
     "signin_status_metrics_provider.h",
     "signin_status_metrics_provider_base.cc",
     "signin_status_metrics_provider_base.h",
     "signin_status_metrics_provider_delegate.cc",
     "signin_status_metrics_provider_delegate.h",
+    "signin_switches.cc",
+    "signin_switches.h",
     "signin_tracker.cc",
     "signin_tracker.h",
     "webdata/token_service_table.cc",
@@ -96,8 +117,7 @@ static_library("browser") {
     "//components/keyed_service/core",
     "//components/prefs",
     "//components/signin/core/account_id",
-    "//components/signin/core/common",
-    "//components/signin/core/common:signin_features",
+    "//components/signin/core/browser:signin_features",
     "//google_apis",
     "//net",
     "//url",
@@ -125,6 +145,8 @@ static_library("browser") {
 
   if (!enable_dice_support) {
     sources -= [
+      "dice_account_reconcilor_delegate.cc",
+      "dice_account_reconcilor_delegate.h",
       "dice_header_helper.cc",
       "dice_header_helper.h",
     ]
@@ -179,13 +201,16 @@ source_set("unit_tests") {
     "access_token_fetcher_unittest.cc",
     "account_info_unittest.cc",
     "account_investigator_unittest.cc",
+    "account_reconcilor_unittest.cc",
     "account_tracker_service_unittest.cc",
+    "dice_account_reconcilor_delegate_unittest.cc",
     "gaia_cookie_manager_service_unittest.cc",
     "profile_management_switches_unittest.cc",
     "refresh_token_annotation_request_unittest.cc",
     "signin_error_controller_unittest.cc",
     "signin_header_helper_unittest.cc",
     "signin_investigator_unittest.cc",
+    "signin_manager_unittest.cc",
     "signin_status_metrics_provider_unittest.cc",
     "webdata/token_service_table_unittest.cc",
   ]
@@ -196,8 +221,9 @@ source_set("unit_tests") {
     "//components/content_settings/core/browser",
     "//components/os_crypt:test_support",
     "//components/pref_registry:pref_registry",
-    "//components/signin/core/common",
-    "//components/signin/core/common:signin_features",
+    "//components/prefs",
+    "//components/signin/core/browser:signin_features",
+    "//components/sync_preferences",
     "//components/sync_preferences:test_support",
     "//testing/gmock",
   ]
@@ -205,8 +231,13 @@ source_set("unit_tests") {
   if (is_chromeos) {
     sources -= [
       "account_investigator_unittest.cc",
+      "signin_manager_unittest.cc",
       "signin_status_metrics_provider_unittest.cc",
     ]
+  }
+
+  if (!enable_dice_support) {
+    sources -= [ "dice_account_reconcilor_delegate_unittest.cc" ]
   }
 }
 

@@ -4,11 +4,15 @@
 
 #include "components/viz/service/surfaces/surface_dependency_deadline.h"
 
+#include "base/metrics/histogram_macros.h"
+
 namespace viz {
 
 SurfaceDependencyDeadline::SurfaceDependencyDeadline(
+    SurfaceDeadlineClient* client,
     BeginFrameSource* begin_frame_source)
-    : begin_frame_source_(begin_frame_source) {
+    : client_(client), begin_frame_source_(begin_frame_source) {
+  DCHECK(client_);
   DCHECK(begin_frame_source_);
 }
 
@@ -21,14 +25,12 @@ void SurfaceDependencyDeadline::Set(uint32_t number_of_frames_to_deadline) {
   DCHECK_GT(number_of_frames_to_deadline, 0u);
   DCHECK(!number_of_frames_to_deadline_);
   number_of_frames_to_deadline_ = number_of_frames_to_deadline;
+  start_time_ = base::TimeTicks::Now();
   begin_frame_source_->AddObserver(this);
 }
 
 void SurfaceDependencyDeadline::Cancel() {
-  if (!number_of_frames_to_deadline_)
-    return;
-  begin_frame_source_->RemoveObserver(this);
-  number_of_frames_to_deadline_.reset();
+  CancelInternal(false);
 }
 
 bool SurfaceDependencyDeadline::InheritFrom(
@@ -36,12 +38,14 @@ bool SurfaceDependencyDeadline::InheritFrom(
   if (*this == other)
     return false;
 
-  Cancel();
+  CancelInternal(false);
   last_begin_frame_args_ = other.last_begin_frame_args_;
   begin_frame_source_ = other.begin_frame_source_;
   number_of_frames_to_deadline_ = other.number_of_frames_to_deadline_;
-  if (number_of_frames_to_deadline_)
+  if (number_of_frames_to_deadline_) {
+    start_time_ = base::TimeTicks::Now();
     begin_frame_source_->AddObserver(this);
+  }
   return true;
 }
 
@@ -62,9 +66,9 @@ void SurfaceDependencyDeadline::OnBeginFrame(const BeginFrameArgs& args) {
   if (--(*number_of_frames_to_deadline_) > 0)
     return;
 
-  Cancel();
-  for (auto& observer : observer_list_)
-    observer.OnDeadline();
+  CancelInternal(true);
+
+  client_->OnDeadline();
 }
 
 const BeginFrameArgs& SurfaceDependencyDeadline::LastUsedBeginFrameArgs()
@@ -73,5 +77,18 @@ const BeginFrameArgs& SurfaceDependencyDeadline::LastUsedBeginFrameArgs()
 }
 
 void SurfaceDependencyDeadline::OnBeginFrameSourcePausedChanged(bool paused) {}
+
+void SurfaceDependencyDeadline::CancelInternal(bool deadline) {
+  if (!number_of_frames_to_deadline_)
+    return;
+  begin_frame_source_->RemoveObserver(this);
+  number_of_frames_to_deadline_.reset();
+
+  UMA_HISTOGRAM_TIMES("Compositing.SurfaceDependencyDeadline.Duration",
+                      base::TimeTicks::Now() - start_time_);
+
+  UMA_HISTOGRAM_BOOLEAN("Compositing.SurfaceDependencyDeadline.DeadlineHit",
+                        deadline);
+}
 
 }  // namespace viz

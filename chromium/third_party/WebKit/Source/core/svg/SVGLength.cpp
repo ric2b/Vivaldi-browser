@@ -21,11 +21,11 @@
 
 #include "core/svg/SVGLength.h"
 
-#include "core/SVGNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValue.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/svg/SVGAnimationElement.h"
+#include "core/svg_names.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -42,7 +42,7 @@ SVGLength::SVGLength(SVGLengthMode mode)
 SVGLength::SVGLength(const SVGLength& o)
     : value_(o.value_), unit_mode_(o.unit_mode_) {}
 
-DEFINE_TRACE(SVGLength) {
+void SVGLength::Trace(blink::Visitor* visitor) {
   visitor->Trace(value_);
   SVGPropertyBase::Trace(visitor);
 }
@@ -136,14 +136,20 @@ float SVGLength::ScaleByPercentage(float input) const {
 }
 
 SVGParsingError SVGLength::SetValueAsString(const String& string) {
-  if (string.IsEmpty()) {
+  // TODO(fs): Preferably we wouldn't need to special-case the null
+  // string (which we'll get for example for removeAttribute.)
+  // Hopefully work on crbug.com/225807 can help here.
+  if (string.IsNull()) {
     value_ =
         CSSPrimitiveValue::Create(0, CSSPrimitiveValue::UnitType::kUserUnits);
     return SVGParseStatus::kNoError;
   }
 
-  CSSParserContext* svg_parser_context =
-      CSSParserContext::Create(kSVGAttributeMode);
+  // NOTE(ikilpatrick): We will always parse svg lengths in the insecure
+  // context mode. If a function/unit/etc will require a secure context check
+  // in the future, plumbing will need to be added.
+  CSSParserContext* svg_parser_context = CSSParserContext::Create(
+      kSVGAttributeMode, SecureContextMode::kInsecureContext);
   const CSSValue* parsed =
       CSSParser::ParseSingleValue(CSSPropertyX, string, svg_parser_context);
   if (!parsed || !parsed->IsPrimitiveValue())

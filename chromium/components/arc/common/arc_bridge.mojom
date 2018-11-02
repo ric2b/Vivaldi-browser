@@ -8,9 +8,11 @@ import "accessibility_helper.mojom";
 import "app.mojom";
 import "audio.mojom";
 import "auth.mojom";
+import "backup_settings.mojom";
 import "bluetooth.mojom";
 import "boot_phase_monitor.mojom";
 import "cast_receiver.mojom";
+import "cert_store.mojom";
 import "clipboard.mojom";
 import "crash_collector.mojom";
 import "enterprise_reporting.mojom";
@@ -20,6 +22,7 @@ import "intent_helper.mojom";
 import "kiosk.mojom";
 import "lock_screen.mojom";
 import "metrics.mojom";
+import "midis.mojom";
 import "net.mojom";
 import "notifications.mojom";
 import "obb_mounter.mojom";
@@ -28,6 +31,7 @@ import "policy.mojom";
 import "power.mojom";
 import "print.mojom";
 import "process.mojom";
+import "rotation_lock.mojom";
 import "storage_manager.mojom";
 import "tracing.mojom";
 import "tts.mojom";
@@ -37,9 +41,9 @@ import "voice_interaction_framework.mojom";
 import "volume_mounter.mojom";
 import "wallpaper.mojom";
 
-// Next MinVersion: 30
+// Next MinVersion: 34
 // Deprecated method IDs: 101, 105
-// Next method ID: 135
+// Next method ID: 139
 interface ArcBridgeHost {
   // Keep the entries alphabetical. In order to do so without breaking
   // compatibility with the ARC instance, explicitly assign each interface a
@@ -58,6 +62,9 @@ interface ArcBridgeHost {
   // Notifies Chrome that the AuthInstance interface is ready.
   [MinVersion=1] OnAuthInstanceReady@106(AuthInstance instance_ptr);
 
+  // Notifies Chrome that the BackupSettingsInstance interface is ready.
+  [MinVersion=33] OnBackupSettingsInstanceReady@138(BackupSettingsInstance instance_ptr);
+
   // Notifies Chrome that the BluetoothInstance interface is ready.
   [MinVersion=9] OnBluetoothInstanceReady@113(BluetoothInstance instance_ptr);
 
@@ -68,6 +75,10 @@ interface ArcBridgeHost {
   // Notifies Chrome that the CastReceiverInstance interface is ready.
   [MinVersion=27] OnCastReceiverInstanceReady@132(
       CastReceiverInstance instance_ptr);
+
+  // Notifies Chrome that the CertStoreInstance interface is ready.
+  [MinVersion=31] OnCertStoreInstanceReady@136(
+      CertStoreInstance instance_ptr);
 
   // Notifies Chrome that the ClipboardInstance interface is ready.
   [MinVersion=2] OnClipboardInstanceReady@109(ClipboardInstance instance_ptr);
@@ -100,6 +111,9 @@ interface ArcBridgeHost {
   // Notifies Chrome that the MetricsInstance interface is ready.
   [MinVersion=10] OnMetricsInstanceReady@116(MetricsInstance instance_ptr);
 
+  // Notifies Chrome that the MidisInstance interface is ready.
+  [MinVersion=30] OnMidisInstanceReady@135(MidisInstance instance_ptr);
+
   // Notifies Chrome that the NetInstance interface is ready.
   [MinVersion=5] OnNetInstanceReady@108(NetInstance instance_ptr);
 
@@ -123,6 +137,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the ProcessInstance interface is ready.
   OnProcessInstanceReady@104(ProcessInstance instance_ptr);
+
+  // Notifies Chrome that the RotationLockInstance interface is ready.
+  [MinVersion=32] OnRotationLockInstanceReady@137(RotationLockInstance instance_ptr);
 
   // Notifies Chrome that the StorageManagerInstance interface is ready.
   [MinVersion=12] OnStorageManagerInstanceReady@118(StorageManagerInstance instance_ptr);

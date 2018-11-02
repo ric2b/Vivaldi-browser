@@ -6,6 +6,10 @@ include_rules = [
   "+chrome/grit",
   "+chrome/install_static",
   "+chrome/installer/util",
+  "+chrome/services/file_util/public",
+  "+chrome/services/media_gallery_util/public",
+  "+chrome/services/util_win/public",
+  "+chrome/services/wifi_util_win/public",
   "+chrome_elf/blacklist",
   "+chrome_elf/chrome_elf_constants.h",
   "+chrome_elf/dll_hash",
@@ -16,7 +20,6 @@ include_rules = [
   "+device/base",
   "+device/bluetooth",
   "+device/geolocation",
-  "+device/hid",
   "+device/media_transfer_protocol",
   "+device/usb",
   "+device/vr/features/features.h",
@@ -43,12 +46,17 @@ include_rules = [
   "+ppapi/shared_impl",
   "+rlz",
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
-  "+services/data_decoder/public/cpp",
+  "+services/data_decoder/public",
   "+services/device/public/cpp/device_features.h",
   "+services/identity/public",
+  "+services/metrics/metrics_mojo_service.h",
   "+services/metrics/public",
+  "+services/network/public",
   "+services/preferences/public/cpp",
   "+services/preferences/public/interfaces",
+  "+services/proxy_resolver",  # Android runs the packaged proxy resolver
+                               # service in process and needs impl access.
+  "+services/proxy_resolver/public/interfaces",
   "+services/resource_coordinator/public/cpp",
   "+services/resource_coordinator/public/interfaces",
   "+services/service_manager",
@@ -60,13 +68,14 @@ include_rules = [
   "+third_party/boringssl/src/include",
   "+third_party/crashpad",
   "+third_party/cros_system_api",
+  "+third_party/libaom/av1_features.h",
+  "+third_party/metrics_proto",
 
   # Code under //ash runs out-of-process under mustash (chrome --mash) so it
   # must be accessed via mojo interfaces in //ash/public/interfaces. See
   # //ash/README.md.
   "-ash",
   "+ash/public",
-  "+ash/ash_switches.h",
 
   # chrome only needs switches from cc. All usage of the compositor is from
   # content. Definitely don't include generic stuff from cc/base here, if this
@@ -80,11 +89,11 @@ include_rules = [
   "+storage/common",
 
   "-chrome/browser/ui/views",
+  "+chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
   "+chrome/browser/ui/views/extensions/request_file_system_dialog_view.h",
-  "+chrome/browser/ui/views/try_chrome_dialog.h",
-  "+chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h",
+  "+chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h",
 
   # Explicitly disallow using SyncMessageFilter to prevent browser from
   # sending synchronous IPC messages on non-UI threads.
@@ -93,6 +102,8 @@ include_rules = [
   # Allows in-process use of NetworkService for URLRequestContext configuration.
   # Should be removed once the actual network service ships.
   "+content/public/network",
+
+  "+mash/quick_launch/public/interfaces",
 
   # Other libraries.
   "+libxml",
@@ -112,45 +123,51 @@ include_rules = [
   # No inclusion of WebKit from the browser, other than strictly enum/POD,
   # header-only types, and some selected common code.
   "-third_party/WebKit",
+  "+third_party/WebKit/common/feature_policy/feature_policy_feature.h",
   "+third_party/WebKit/public/platform/WebCache.h",
   "+third_party/WebKit/public/platform/WebDisplayMode.h",
-  "+third_party/WebKit/public/platform/WebFeaturePolicyFeature.h",
   "+third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h",
   "+third_party/WebKit/public/platform/WebGestureEvent.h",
-  "+third_party/WebKit/public/platform/web_feature.mojom.h",
   "+third_party/WebKit/public/platform/WebInputEvent.h",
   "+third_party/WebKit/public/platform/WebMouseEvent.h",
   "+third_party/WebKit/public/platform/WebMouseWheelEvent.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebSecurityStyle.h",
+  "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
+  "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
+  "+third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
+  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
+  "+third_party/WebKit/public/public_features.h",
+  "+third_party/WebKit/public/web/WebContextMenuData.h",
+  "+third_party/WebKit/public/web/WebFindOptions.h",
+  "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
+  "+third_party/WebKit/public/web/WebPluginAction.h",
+  "+third_party/WebKit/public/web/WebPresentationReceiverFlags.h",
+  "+third_party/WebKit/public/web/WebTextDirection.h",
+  "+third_party/WebKit/public/web/WebTriggeringEventInfo.h",
+
+  # Unlike other WebKit directories WebKit/common is for the files that
+  # are commonly referenced by renderer-side and browser-side code, and
+  # does not use Blink types like WTF.
+  "+third_party/WebKit/common",
+
+  # Allow mojo generated files in WebKit. These files use STL types and
+  # don't use WTF types.
+  "+third_party/WebKit/public/platform/web_feature.mojom.h",
   "+third_party/WebKit/public/platform/media_engagement.mojom.h",
   "+third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h",
   "+third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/insecure_input/insecure_input_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/installation/installation.mojom.h",
   "+third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h",
-  "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h",
   "+third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h",
-  "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
-  "+third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
-  "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   "+third_party/WebKit/public/platform/modules/webshare/webshare.mojom.h",
+  "+third_party/WebKit/public/platform/oom_intervention.mojom.h",
   "+third_party/WebKit/public/platform/site_engagement.mojom.h",
-  "+third_party/WebKit/public/public_features.h",
-  "+third_party/WebKit/public/web/WebContextMenuData.h",
-  "+third_party/WebKit/public/web/WebFindOptions.h",
-  "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
-  "+third_party/WebKit/public/web/WebPluginAction.h",
-  "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/window_features.mojom.h",
-
-  # Unlike other WebKit directories WebKit/common is for the files that
-  # are commonly referenced by renderer-side and browser-side code, and
-  # does not use Blink types like WTF.
-  "+third_party/WebKit/common",
 
   # The following restrictions are for ChromeOS and in particular mus/mash where
   # Ozone does not run in process. If the linux build transitions to Ozone then
@@ -179,5 +196,11 @@ specific_include_rules = {
   "fullscreen_chromeos\.cc": [
     "+ash/root_window_controller.h",
     "+ash/shell.h",
+  ],
+  "mash_service_registry.cc": [
+    "+mash/quick_launch/quick_launch.h",
+  ],
+  "display_info_provider_chromeos_unittest.cc": [
+    "+ui/events/devices/touch_device_transform.h"
   ]
 }

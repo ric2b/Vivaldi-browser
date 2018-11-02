@@ -32,13 +32,18 @@
 #define WebURLRequest_h
 
 #include <memory>
-#include "WebAddressSpace.h"
-#include "WebCachePolicy.h"
 #include "WebCommon.h"
 #include "WebHTTPBody.h"
 #include "WebReferrerPolicy.h"
+#include "WebSecurityOrigin.h"
+#include "services/network/public/interfaces/cors.mojom-shared.h"
+#include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
+
+namespace mojom {
+enum class FetchCacheMode : int32_t;
+}  // namespace mojom
 
 class ResourceRequest;
 class WebHTTPBody;
@@ -49,13 +54,15 @@ class WebURL;
 
 class WebURLRequest {
  public:
-  enum Priority {
-    kPriorityUnresolved = -1,
-    kPriorityVeryLow,
-    kPriorityLow,
-    kPriorityMedium,
-    kPriorityHigh,
-    kPriorityVeryHigh,
+  enum class Priority {
+    kUnresolved = -1,
+    kVeryLow,
+    kLow,
+    kMedium,
+    kHigh,
+    kVeryHigh,
+    kLowest = kVeryLow,
+    kHighest = kVeryHigh,
   };
 
   // Corresponds to Fetch's "context":
@@ -106,30 +113,8 @@ class WebURLRequest {
     kFrameTypeTopLevel
   };
 
-  enum FetchRequestMode : uint8_t {
-    kFetchRequestModeSameOrigin,
-    kFetchRequestModeNoCORS,
-    kFetchRequestModeCORS,
-    kFetchRequestModeCORSWithForcedPreflight,
-    kFetchRequestModeNavigate
-  };
-
-  enum FetchCredentialsMode : uint8_t {
-    kFetchCredentialsModeOmit,
-    kFetchCredentialsModeSameOrigin,
-    kFetchCredentialsModeInclude,
-    kFetchCredentialsModePassword
-  };
-
-  enum FetchRequestCacheMode : uint8_t {
-    kFetchRequestCacheModeDefault,
-    kFetchRequestCacheModeNoStore,
-    kFetchRequestCacheModeReload,
-    kFetchRequestCacheModeNoCache,
-    kFetchRequestCacheModeForceCache,
-    kFetchRequestCacheModeOnlyIfCached
-  };
-
+  // Corresponds to Fetch request's "redirect mode":
+  // https://fetch.spec.whatwg.org/#concept-request-redirect-mode
   enum FetchRedirectMode : uint8_t {
     kFetchRedirectModeFollow,
     kFetchRedirectModeError,
@@ -166,19 +151,15 @@ class WebURLRequest {
     kPreviewsOff = 1 << 5,  // Request a normal (non-Preview) version of
                             // the resource. Server transformations may
                             // still happen if the page is heavy.
+    kNoScriptOn = 1 << 6,   // Request that script be disabled for page load.
     kPreviewsStateLast = kPreviewsOff
   };
 
-  // Indicates which service workers will receive fetch events for this request.
+  // Indicates whether service workers will receive fetch events for this
+  // request. Same as ServiceWorkerMode in
+  // content/public/common/service_worker_modes.h.
   enum class ServiceWorkerMode : uint8_t {
-    // Relevant local and foreign service workers will get a fetch or
-    // foreignfetch event for this request.
     kAll,
-    // Only relevant foreign service workers will get a foreignfetch event for
-    // this request.
-    kForeign,
-    // Neither local nor foreign service workers will get events for this
-    // request.
     kNone
   };
 
@@ -217,8 +198,8 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT bool AllowStoredCredentials() const;
   BLINK_PLATFORM_EXPORT void SetAllowStoredCredentials(bool);
 
-  BLINK_PLATFORM_EXPORT WebCachePolicy GetCachePolicy() const;
-  BLINK_PLATFORM_EXPORT void SetCachePolicy(WebCachePolicy);
+  BLINK_PLATFORM_EXPORT mojom::FetchCacheMode GetCacheMode() const;
+  BLINK_PLATFORM_EXPORT void SetCacheMode(mojom::FetchCacheMode);
 
   BLINK_PLATFORM_EXPORT WebString HttpMethod() const;
   BLINK_PLATFORM_EXPORT void SetHTTPMethod(const WebString&);
@@ -272,10 +253,12 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT int RequestorID() const;
   BLINK_PLATFORM_EXPORT void SetRequestorID(int);
 
-  // A consumer controlled value intended to be used to identify the
-  // process of the requestor.
-  BLINK_PLATFORM_EXPORT int RequestorProcessID() const;
-  BLINK_PLATFORM_EXPORT void SetRequestorProcessID(int);
+  // The unique child id (not PID) of the process from which this request
+  // originated. In the case of out-of-process plugins, this allows to link back
+  // the request to the plugin process (as it is processed through a render view
+  // process).
+  BLINK_PLATFORM_EXPORT int GetPluginChildID() const;
+  BLINK_PLATFORM_EXPORT void SetPluginChildID(int);
 
   // Allows the request to be matched up with its app cache host.
   BLINK_PLATFORM_EXPORT int AppCacheHostID() const;
@@ -304,12 +287,16 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT void SetShouldResetAppCache(bool);
 
   // The request mode which will be passed to the ServiceWorker.
-  BLINK_PLATFORM_EXPORT FetchRequestMode GetFetchRequestMode() const;
-  BLINK_PLATFORM_EXPORT void SetFetchRequestMode(FetchRequestMode);
+  BLINK_PLATFORM_EXPORT network::mojom::FetchRequestMode GetFetchRequestMode()
+      const;
+  BLINK_PLATFORM_EXPORT void SetFetchRequestMode(
+      network::mojom::FetchRequestMode);
 
   // The credentials mode which will be passed to the ServiceWorker.
-  BLINK_PLATFORM_EXPORT FetchCredentialsMode GetFetchCredentialsMode() const;
-  BLINK_PLATFORM_EXPORT void SetFetchCredentialsMode(FetchCredentialsMode);
+  BLINK_PLATFORM_EXPORT network::mojom::FetchCredentialsMode
+  GetFetchCredentialsMode() const;
+  BLINK_PLATFORM_EXPORT void SetFetchCredentialsMode(
+      network::mojom::FetchCredentialsMode);
 
   // The redirect mode which is used in Fetch API.
   BLINK_PLATFORM_EXPORT FetchRedirectMode GetFetchRedirectMode() const;
@@ -356,6 +343,9 @@ class WebURLRequest {
 
   // https://wicg.github.io/cors-rfc1918/#external-request
   BLINK_PLATFORM_EXPORT bool IsExternalRequest() const;
+
+  BLINK_PLATFORM_EXPORT network::mojom::CORSPreflightPolicy
+  GetCORSPreflightPolicy() const;
 
   BLINK_PLATFORM_EXPORT LoadingIPCType GetLoadingIPCType() const;
 

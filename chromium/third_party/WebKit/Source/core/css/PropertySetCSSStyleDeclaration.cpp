@@ -22,22 +22,22 @@
 
 #include "core/css/PropertySetCSSStyleDeclaration.h"
 
+#include "base/macros.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSKeyframesRule.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSStyleSheet.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Element.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/StyleEngine.h"
 #include "core/html/custom/CustomElement.h"
 #include "core/html/custom/CustomElementDefinition.h"
+#include "core/html_names.h"
 #include "core/probe/CoreProbes.h"
-#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -53,7 +53,6 @@ static CustomElementDefinition* DefinitionIfStyleChangedCallback(
 }
 
 class StyleAttributeMutationScope {
-  WTF_MAKE_NONCOPYABLE(StyleAttributeMutationScope);
   STACK_ALLOCATED();
 
  public:
@@ -117,7 +116,7 @@ class StyleAttributeMutationScope {
     // We have to clear internal state before calling Inspector's code.
     AbstractPropertySetCSSStyleDeclaration* local_copy_style_decl =
         current_decl_;
-    current_decl_ = 0;
+    current_decl_ = nullptr;
 
     if (!should_notify_inspector_)
       return;
@@ -140,17 +139,18 @@ class StyleAttributeMutationScope {
   Member<MutationObserverInterestGroup> mutation_recipients_;
   Member<MutationRecord> mutation_;
   AtomicString old_value_;
+  DISALLOW_COPY_AND_ASSIGN(StyleAttributeMutationScope);
 };
 
 unsigned StyleAttributeMutationScope::scope_count_ = 0;
 AbstractPropertySetCSSStyleDeclaration*
-    StyleAttributeMutationScope::current_decl_ = 0;
+    StyleAttributeMutationScope::current_decl_ = nullptr;
 bool StyleAttributeMutationScope::should_notify_inspector_ = false;
 bool StyleAttributeMutationScope::should_deliver_ = false;
 
 }  // namespace
 
-DEFINE_TRACE(PropertySetCSSStyleDeclaration) {
+void PropertySetCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(property_set_);
   AbstractPropertySetCSSStyleDeclaration::Trace(visitor);
 }
@@ -162,11 +162,9 @@ unsigned AbstractPropertySetCSSStyleDeclaration::length() const {
 String AbstractPropertySetCSSStyleDeclaration::item(unsigned i) const {
   if (i >= PropertySet().PropertyCount())
     return "";
-  StylePropertySet::PropertyReference property = PropertySet().PropertyAt(i);
+  CSSPropertyValueSet::PropertyReference property = PropertySet().PropertyAt(i);
   if (property.Id() == CSSPropertyVariable)
     return ToCSSCustomPropertyDeclaration(property.Value()).GetName();
-  if (property.Id() == CSSPropertyApplyAtRule)
-    return "@apply";
   return getPropertyName(property.Id());
 }
 
@@ -174,12 +172,20 @@ String AbstractPropertySetCSSStyleDeclaration::cssText() const {
   return PropertySet().AsText();
 }
 
-void AbstractPropertySetCSSStyleDeclaration::setCSSText(const String& text,
-                                                        ExceptionState&) {
+void AbstractPropertySetCSSStyleDeclaration::setCSSText(
+    const ExecutionContext* execution_context,
+    const String& text,
+    ExceptionState&) {
   StyleAttributeMutationScope mutation_scope(this);
   WillMutate();
 
-  PropertySet().ParseDeclarationList(text, ContextStyleSheet());
+  // A null execution_context may be passed in by the inspector, this shouldn't
+  // occur normally.
+  const SecureContextMode mode = execution_context
+                                     ? execution_context->GetSecureContextMode()
+                                     : SecureContextMode::kInsecureContext;
+
+  PropertySet().ParseDeclarationList(text, mode, ContextStyleSheet());
 
   DidMutate(kPropertyChanged);
 
@@ -215,9 +221,7 @@ String AbstractPropertySetCSSStyleDeclaration::GetPropertyShorthand(
   CSSPropertyID property_id = cssPropertyID(property_name);
 
   // Custom properties don't have shorthands, so we can ignore them here.
-  if (!property_id || property_id == CSSPropertyVariable)
-    return String();
-  if (isShorthandProperty(property_id))
+  if (!property_id || !CSSProperty::Get(property_id).IsLonghand())
     return String();
   CSSPropertyID shorthand_id = PropertySet().GetPropertyShorthand(property_id);
   if (!shorthand_id)
@@ -236,6 +240,7 @@ bool AbstractPropertySetCSSStyleDeclaration::IsPropertyImplicit(
 }
 
 void AbstractPropertySetCSSStyleDeclaration::setProperty(
+    const ExecutionContext* execution_context,
     const String& property_name,
     const String& value,
     const String& priority,
@@ -249,6 +254,7 @@ void AbstractPropertySetCSSStyleDeclaration::setProperty(
     return;
 
   SetPropertyInternal(property_id, property_name, value, important,
+                      execution_context->GetSecureContextMode(),
                       exception_state);
 }
 
@@ -300,6 +306,7 @@ void AbstractPropertySetCSSStyleDeclaration::SetPropertyInternal(
     const String& custom_property_name,
     const String& value,
     bool important,
+    SecureContextMode secure_context_mode,
     ExceptionState&) {
   StyleAttributeMutationScope mutation_scope(this);
   WillMutate();
@@ -309,15 +316,15 @@ void AbstractPropertySetCSSStyleDeclaration::SetPropertyInternal(
     AtomicString atomic_name(custom_property_name);
 
     bool is_animation_tainted = IsKeyframeStyle();
-    did_change =
-        PropertySet()
-            .SetProperty(atomic_name, GetPropertyRegistry(), value, important,
-                         ContextStyleSheet(), is_animation_tainted)
-            .did_change;
+    did_change = PropertySet()
+                     .SetProperty(atomic_name, GetPropertyRegistry(), value,
+                                  important, secure_context_mode,
+                                  ContextStyleSheet(), is_animation_tainted)
+                     .did_change;
   } else {
     did_change = PropertySet()
                      .SetProperty(unresolved_property, value, important,
-                                  ContextStyleSheet())
+                                  secure_context_mode, ContextStyleSheet())
                      .did_change;
   }
 
@@ -346,17 +353,17 @@ bool AbstractPropertySetCSSStyleDeclaration::CssPropertyMatches(
   return PropertySet().PropertyMatches(property_id, *property_value);
 }
 
-DEFINE_TRACE(AbstractPropertySetCSSStyleDeclaration) {
+void AbstractPropertySetCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   CSSStyleDeclaration::Trace(visitor);
 }
 
 StyleRuleCSSStyleDeclaration::StyleRuleCSSStyleDeclaration(
-    MutableStylePropertySet& property_set_arg,
+    MutableCSSPropertyValueSet& property_set_arg,
     CSSRule* parent_rule)
     : PropertySetCSSStyleDeclaration(property_set_arg),
       parent_rule_(parent_rule) {}
 
-StyleRuleCSSStyleDeclaration::~StyleRuleCSSStyleDeclaration() {}
+StyleRuleCSSStyleDeclaration::~StyleRuleCSSStyleDeclaration() = default;
 
 void StyleRuleCSSStyleDeclaration::WillMutate() {
   if (parent_rule_ && parent_rule_->parentStyleSheet())
@@ -375,7 +382,7 @@ CSSStyleSheet* StyleRuleCSSStyleDeclaration::ParentStyleSheet() const {
 }
 
 void StyleRuleCSSStyleDeclaration::Reattach(
-    MutableStylePropertySet& property_set) {
+    MutableCSSPropertyValueSet& property_set) {
   property_set_ = &property_set;
 }
 
@@ -389,17 +396,18 @@ PropertyRegistry* StyleRuleCSSStyleDeclaration::GetPropertyRegistry() const {
   return node->GetDocument().GetPropertyRegistry();
 }
 
-DEFINE_TRACE(StyleRuleCSSStyleDeclaration) {
+void StyleRuleCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_rule_);
   PropertySetCSSStyleDeclaration::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(StyleRuleCSSStyleDeclaration) {
+void StyleRuleCSSStyleDeclaration::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(parent_rule_);
   PropertySetCSSStyleDeclaration::TraceWrappers(visitor);
 }
 
-MutableStylePropertySet& InlineCSSStyleDeclaration::PropertySet() const {
+MutableCSSPropertyValueSet& InlineCSSStyleDeclaration::PropertySet() const {
   return parent_element_->EnsureMutableInlineStyle();
 }
 
@@ -428,7 +436,7 @@ PropertyRegistry* InlineCSSStyleDeclaration::GetPropertyRegistry() const {
                          : nullptr;
 }
 
-DEFINE_TRACE(InlineCSSStyleDeclaration) {
+void InlineCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_element_);
   AbstractPropertySetCSSStyleDeclaration::Trace(visitor);
 }

@@ -18,12 +18,13 @@
 #include "headless/public/util/managed_dispatch_url_request_job.h"
 #include "headless/public/util/url_fetcher.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
 namespace net {
-class HttpResponseHeaders;
 class IOBuffer;
+class UploadElementReader;
 }  // namespace net
 
 namespace content {
@@ -45,7 +46,7 @@ class HEADLESS_EXPORT Request {
   virtual const net::HttpRequestHeaders& GetHttpRequestHeaders() const = 0;
 
   // The frame from which the request came from.
-  virtual int GetFrameTreeNodeId() const = 0;
+  virtual std::string GetDevToolsFrameId() const = 0;
 
   // The devtools agent host id for the page where the request came from.
   virtual std::string GetDevToolsAgentHostId() const = 0;
@@ -55,6 +56,9 @@ class HEADLESS_EXPORT Request {
 
   // Returns the size of the POST data, if any, from the net::URLRequest.
   virtual uint64_t GetPostDataSize() const = 0;
+
+  // Returns true if the fetch was issues by the browser.
+  virtual bool IsBrowserSideFetch() const = 0;
 
   enum class ResourceType {
     MAIN_FRAME = 0,
@@ -153,12 +157,13 @@ class HEADLESS_EXPORT GenericURLRequestJob
   uint64_t GetRequestId() const override;
   const net::HttpRequestHeaders& GetHttpRequestHeaders() const override;
   const net::URLRequest* GetURLRequest() const override;
-  int GetFrameTreeNodeId() const override;
+  std::string GetDevToolsFrameId() const override;
   std::string GetDevToolsAgentHostId() const override;
   std::string GetPostData() const override;
   uint64_t GetPostDataSize() const override;
   ResourceType GetResourceType() const override;
   bool IsAsync() const override;
+  bool IsBrowserSideFetch() const override;
 
  private:
   void PrepareCookies(const GURL& rewritten_url,
@@ -167,6 +172,9 @@ class HEADLESS_EXPORT GenericURLRequestJob
   void OnCookiesAvailable(const GURL& rewritten_url,
                           const std::string& method,
                           const net::CookieList& cookie_list);
+
+  const std::vector<std::unique_ptr<net::UploadElementReader>>*
+  GetInitializedReaders() const;
 
   std::unique_ptr<URLFetcher> url_fetcher_;
   net::HttpRequestHeaders extra_request_headers_;
@@ -179,8 +187,6 @@ class HEADLESS_EXPORT GenericURLRequestJob
   size_t body_size_ = 0;
   size_t read_offset_ = 0;
   net::LoadTimingInfo load_timing_info_;
-  const uint64_t request_id_;
-  static uint64_t next_request_id_;
 
   base::WeakPtrFactory<GenericURLRequestJob> weak_factory_;
 

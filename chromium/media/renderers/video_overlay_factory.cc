@@ -81,13 +81,13 @@ VideoOverlayFactory::VideoOverlayFactory(
     GpuVideoAcceleratorFactories* gpu_factories)
     : gpu_factories_(gpu_factories) {}
 
-VideoOverlayFactory::~VideoOverlayFactory() {}
+VideoOverlayFactory::~VideoOverlayFactory() = default;
 
 scoped_refptr<VideoFrame> VideoOverlayFactory::CreateFrame(
     const gfx::Size& size) {
   // Frame size empty => video has one dimension = 0.
-  // Dimension 0 case triggers a DCHECK later on in TextureMailbox if we push
-  // through the overlay path.
+  // Dimension 0 case triggers a DCHECK later on if we push through the overlay
+  // path.
   Texture* texture = size.IsEmpty() ? nullptr : GetTexture();
   if (!texture) {
     DVLOG(1) << "Create black frame " << size.width() << "x" << size.height();

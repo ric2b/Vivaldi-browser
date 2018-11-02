@@ -16,14 +16,13 @@ namespace cloud_devices {
 
 namespace printer {
 
-// Replaces ' with " to allow readable json constants in tests.
-// Makes sure that same json value represented by same strings to simplify
+// Replaces ' with " to allow readable JSON constants in tests.
+// Makes sure that same JSON value represented by same strings to simplify
 // comparison.
 std::string NormalizeJson(const std::string& json) {
   std::string result = json;
   base::ReplaceChars(result, "'", "\"", &result);
   std::unique_ptr<base::Value> value = base::JSONReader::Read(result);
-  DCHECK(value);
   base::JSONWriter::Write(*value, &result);
   return result;
 }
@@ -37,8 +36,8 @@ const char kCdd[] =
     "    }, {"
     "      'content_type': 'image/jpeg'"
     "    } ],"
-    "    'pwg_raster_config' : {"
-    "      'document_sheet_back' : 'MANUAL_TUMBLE',"
+    "    'pwg_raster_config': {"
+    "      'document_sheet_back': 'MANUAL_TUMBLE',"
     "      'reverse_order_streaming': true"
     "    },"
     "    'color': {"
@@ -199,8 +198,8 @@ const char kCjt[] =
     "{"
     "  'version': '1.0',"
     "  'print': {"
-    "    'pwg_raster_config' : {"
-    "      'document_sheet_back' : 'MANUAL_TUMBLE',"
+    "    'pwg_raster_config': {"
+    "      'document_sheet_back': 'MANUAL_TUMBLE',"
     "      'reverse_order_streaming': true"
     "    },"
     "    'color': {"

@@ -85,10 +85,10 @@ class SVGElementRareData
     return web_animated_attributes_;
   }
 
-  MutableStylePropertySet* AnimatedSMILStyleProperties() const {
+  MutableCSSPropertyValueSet* AnimatedSMILStyleProperties() const {
     return animated_smil_style_properties_.Get();
   }
-  MutableStylePropertySet* EnsureAnimatedSMILStyleProperties();
+  MutableCSSPropertyValueSet* EnsureAnimatedSMILStyleProperties();
 
   ComputedStyle* OverrideComputedStyle(Element*, const ComputedStyle*);
 
@@ -102,7 +102,7 @@ class SVGElementRareData
 
   AffineTransform* AnimateMotionTransform();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   Member<SVGElement> owner_;
@@ -116,8 +116,8 @@ class SVGElementRareData
   bool needs_override_computed_style_update_ : 1;
   bool web_animated_attributes_dirty_ : 1;
   HashSet<const QualifiedName*> web_animated_attributes_;
-  Member<MutableStylePropertySet> animated_smil_style_properties_;
-  RefPtr<ComputedStyle> override_computed_style_;
+  Member<MutableCSSPropertyValueSet> animated_smil_style_properties_;
+  scoped_refptr<ComputedStyle> override_computed_style_;
   // Used by <animateMotion>
   AffineTransform animate_motion_transform_;
 };

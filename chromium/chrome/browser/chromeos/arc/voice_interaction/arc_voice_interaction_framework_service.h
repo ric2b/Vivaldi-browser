@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -14,10 +15,8 @@
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "components/arc/common/voice_interaction_framework.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/session_manager/core/session_manager_observer.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 class KeyedServiceBaseFactory;
 
@@ -32,6 +31,7 @@ class Rect;
 namespace arc {
 
 class ArcBridgeService;
+class HighlighterControllerClient;
 
 // This provides voice interaction context (currently screenshots)
 // to ARC to be used by VoiceInteractionSession. This class lives on the UI
@@ -40,9 +40,8 @@ class ArcVoiceInteractionFrameworkService
     : public chromeos::CrasAudioHandler::AudioObserver,
       public KeyedService,
       public mojom::VoiceInteractionFrameworkHost,
-      public InstanceHolder<mojom::VoiceInteractionFrameworkInstance>::Observer,
-      public ArcSessionManager::Observer,
-      public session_manager::SessionManagerObserver {
+      public ConnectionObserver<mojom::VoiceInteractionFrameworkInstance>,
+      public ArcSessionManager::Observer {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -56,28 +55,20 @@ class ArcVoiceInteractionFrameworkService
                                       ArcBridgeService* bridge_service);
   ~ArcVoiceInteractionFrameworkService() override;
 
-  // InstanceHolder<mojom::VoiceInteractionFrameworkInstance> overrides.
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::VoiceInteractionFrameworkInstance> overrides.
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // mojom::VoiceInteractionFrameworkHost overrides.
-  void CaptureFocusedWindow(
-      const CaptureFocusedWindowCallback& callback) override;
-  void CaptureFullscreen(const CaptureFullscreenCallback& callback) override;
-  // TODO(kaznacheev) remove usages of this obsolete method from the container.
-  void OnMetalayerClosed() override;
-  void SetMetalayerEnabled(bool enabled) override;
-  void SetVoiceInteractionRunning(bool running) override;
-  void SetVoiceInteractionState(ash::VoiceInteractionState state) override;
+  void CaptureFullscreen(CaptureFullscreenCallback callback) override;
+  void SetVoiceInteractionState(
+      arc::mojom::VoiceInteractionState state) override;
 
   void ShowMetalayer();
   void HideMetalayer();
 
   // ArcSessionManager::Observer overrides.
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
-
-  // session_manager::SessionManagerObserver overrides.
-  void OnSessionStateChanged() override;
 
   // CrasAudioHandler::AudioObserver overrides.
   void OnHotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) override;
@@ -124,6 +115,14 @@ class ArcVoiceInteractionFrameworkService
   // Starts voice interaction OOBE flow.
   void StartVoiceInteractionOobe();
 
+  HighlighterControllerClient* GetHighlighterClientForTesting() const {
+    return highlighter_client_.get();
+  }
+
+  ash::mojom::VoiceInteractionState GetStateForTesting() const {
+    return state_;
+  }
+
   // For supporting ArcServiceManager::GetService<T>().
   static const char kArcServiceName[];
 
@@ -140,7 +139,6 @@ class ArcVoiceInteractionFrameworkService
 
   content::BrowserContext* context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager
-  mojo::Binding<mojom::VoiceInteractionFrameworkHost> binding_;
 
   // Whether there is a pending request to start/toggle voice interaction.
   bool is_request_pending_ = false;
@@ -155,7 +153,8 @@ class ArcVoiceInteractionFrameworkService
   // delay after boot before the service is ready. We wait for the container
   // to tell us if it is ready to quickly serve voice interaction requests.
   // We also give user proper feedback based on the state.
-  ash::VoiceInteractionState state_ = ash::VoiceInteractionState::NOT_READY;
+  ash::mojom::VoiceInteractionState state_ =
+      ash::mojom::VoiceInteractionState::NOT_READY;
 
   // The time when a user initated an interaction.
   base::TimeTicks user_interaction_start_time_;
@@ -166,6 +165,8 @@ class ArcVoiceInteractionFrameworkService
   // quota is 0, but we still get requests from the container side, we assume
   // something malicious is going on.
   int32_t context_request_remaining_count_ = 0;
+
+  std::unique_ptr<HighlighterControllerClient> highlighter_client_;
 
   base::WeakPtrFactory<ArcVoiceInteractionFrameworkService> weak_ptr_factory_;
 

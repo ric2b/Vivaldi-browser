@@ -60,8 +60,20 @@ class AURA_EXPORT WindowTargeter : public ui::EventTargeter {
   virtual std::unique_ptr<HitTestRects> GetExtraHitTestShapeRects(
       Window* target) const;
 
+  // If there is a target that takes priority over normal WindowTargeter (such
+  // as a capture window) this returns it.
+  Window* GetPriorityTargetInRootWindow(Window* root_window,
+                                        const ui::LocatedEvent& event);
+
   Window* FindTargetInRootWindow(Window* root_window,
                                  const ui::LocatedEvent& event);
+
+  // If |target| is not a child of |root_window|, then converts |event| to
+  // be relative to |root_window| and dispatches the event to |root_window|.
+  // Returns false if the |target| is a child of |root_window|.
+  bool ProcessEventIfTargetsDifferentRootWindow(Window* root_window,
+                                                Window* target,
+                                                ui::Event* event);
 
   // ui::EventTargeter:
   ui::EventTarget* FindTargetForEvent(ui::EventTarget* root,
@@ -98,8 +110,10 @@ class AURA_EXPORT WindowTargeter : public ui::EventTargeter {
   // extended bounds.
   virtual bool ShouldUseExtendedBounds(const aura::Window* window) const;
 
-  // Called after the hit-test area has been extended with SetInsets().
-  virtual void OnSetInsets();
+  // Called after the hit-test area has been extended with SetInsets(). The
+  // supplied insets are the values before the call to SetInsets().
+  virtual void OnSetInsets(const gfx::Insets& last_mouse_extend,
+                           const gfx::Insets& last_touch_extend);
 
   // Sets additional mouse and touch insets that are factored into the hit-test
   // regions returned by GetHitTestRects.

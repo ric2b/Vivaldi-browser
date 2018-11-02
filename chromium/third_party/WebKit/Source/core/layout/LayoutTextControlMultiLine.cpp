@@ -22,7 +22,7 @@
 
 #include "core/layout/LayoutTextControlMultiLine.h"
 
-#include "core/html/HTMLTextAreaElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutTheme.h"
 
@@ -67,7 +67,7 @@ float LayoutTextControlMultiLine::GetAvgCharWidth(
 
 LayoutUnit LayoutTextControlMultiLine::PreferredContentLogicalWidth(
     float char_width) const {
-  int factor = toHTMLTextAreaElement(GetNode())->cols();
+  int factor = ToHTMLTextAreaElement(GetNode())->cols();
   return static_cast<LayoutUnit>(ceilf(char_width * factor)) +
          ScrollbarThickness();
 }
@@ -75,7 +75,7 @@ LayoutUnit LayoutTextControlMultiLine::PreferredContentLogicalWidth(
 LayoutUnit LayoutTextControlMultiLine::ComputeControlLogicalHeight(
     LayoutUnit line_height,
     LayoutUnit non_content_height) const {
-  return line_height * toHTMLTextAreaElement(GetNode())->rows() +
+  return line_height * ToHTMLTextAreaElement(GetNode())->rows() +
          non_content_height;
 }
 
@@ -88,9 +88,9 @@ LayoutUnit LayoutTextControlMultiLine::BaselinePosition(
                                      line_position_mode);
 }
 
-RefPtr<ComputedStyle> LayoutTextControlMultiLine::CreateInnerEditorStyle(
+scoped_refptr<ComputedStyle> LayoutTextControlMultiLine::CreateInnerEditorStyle(
     const ComputedStyle& start_style) const {
-  RefPtr<ComputedStyle> text_block_style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> text_block_style = ComputedStyle::Create();
   text_block_style->InheritFrom(start_style);
   AdjustInnerEditorStyle(*text_block_style);
   text_block_style->SetDisplay(EDisplay::kBlock);

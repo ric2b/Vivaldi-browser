@@ -8,11 +8,12 @@
 #include "core/CoreExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-class LayoutText;
-class NGOffsetMappingResult;
+class LayoutObject;
+class NGOffsetMapping;
 
 // This is the helper class for constructing the DOM-to-TextContent offset
 // mapping. It holds an offset mapping, and provides APIs to modify the mapping
@@ -27,7 +28,13 @@ class CORE_EXPORT NGOffsetMappingBuilder {
 
   // Associate the offset mapping with a simple annotation with the given node
   // as its value.
-  void Annotate(const LayoutText*);
+  void Annotate(const LayoutObject*);
+
+  // Annotate the offset range with the given node.
+  void AnnotateRange(unsigned start, unsigned end, const LayoutObject*);
+
+  // Annotatie the offset range ending at domain end of the specified length.
+  void AnnotateSuffix(unsigned length, const LayoutObject*);
 
   // Append an identity offset mapping of the specified length with null
   // annotation to the builder.
@@ -59,12 +66,24 @@ class CORE_EXPORT NGOffsetMappingBuilder {
   // Composite the offset mapping held by another builder to this builder.
   void Composite(const NGOffsetMappingBuilder&);
 
+  // Set the destination string of the offset mapping.
+  void SetDestinationString(String);
+
+  // Called when entering a non-atomic inline node (e.g., SPAN), before
+  // collecting any of its inline descendants.
+  void EnterInline(const LayoutObject&);
+
+  // Called when exiting a non-atomic inline node (e.g., SPAN), after having
+  // collected all of its inline descendants.
+  void ExitInline(const LayoutObject&);
+
   // Finalize and return the offset mapping.
-  NGOffsetMappingResult Build() const;
+  // This method can only be called once, as it can invalidate the stored data.
+  NGOffsetMapping Build();
 
   // Exposed for testing only.
   Vector<unsigned> DumpOffsetMappingForTesting() const;
-  Vector<const LayoutText*> DumpAnnotationForTesting() const;
+  Vector<const LayoutObject*> DumpAnnotationForTesting() const;
 
  private:
   // A mock implementation of the offset mapping builder that stores the mapping
@@ -74,7 +93,17 @@ class CORE_EXPORT NGOffsetMappingBuilder {
 
   // A mock implementation that stores the annotation value of all offsets in
   // the plain way. It will be replaced by a real implementation for efficiency.
-  Vector<const LayoutText*> annotation_;
+  Vector<const LayoutObject*> annotation_;
+
+  // The destination string of the offset mapping.
+  String destination_string_;
+
+  struct InlineBoundary {
+    const LayoutObject* node;
+    size_t offset;
+    bool is_enter;
+  };
+  Vector<InlineBoundary> boundaries_;
 
   DISALLOW_COPY_AND_ASSIGN(NGOffsetMappingBuilder);
 };

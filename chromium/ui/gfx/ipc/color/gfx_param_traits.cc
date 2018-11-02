@@ -9,19 +9,6 @@
 
 namespace IPC {
 
-void ParamTraits<gfx::ColorSpace>::GetSize(base::PickleSizer* s,
-                                           const gfx::ColorSpace& p) {
-  GetParamSize(s, p.primaries_);
-  GetParamSize(s, p.transfer_);
-  GetParamSize(s, p.matrix_);
-  GetParamSize(s, p.range_);
-  GetParamSize(s, p.icc_profile_id_);
-  if (p.primaries_ == gfx::ColorSpace::PrimaryID::CUSTOM)
-    s->AddBytes(sizeof(p.custom_primary_matrix_));
-  if (p.transfer_ == gfx::ColorSpace::TransferID::CUSTOM)
-    s->AddBytes(sizeof(p.custom_transfer_params_));
-}
-
 void ParamTraits<gfx::ColorSpace>::Write(base::Pickle* m,
                                          const gfx::ColorSpace& p) {
   WriteParam(m, p.primaries_);
@@ -73,28 +60,29 @@ void ParamTraits<gfx::ColorSpace>::Log(const gfx::ColorSpace& p,
   l->append("<gfx::ColorSpace>");
 }
 
-void ParamTraits<gfx::ICCProfile>::GetSize(base::PickleSizer* s,
-                                           const gfx::ICCProfile& p) {
-  GetParamSize(s, p.id_);
-  GetParamSize(s, p.data_);
-}
-
 void ParamTraits<gfx::ICCProfile>::Write(base::Pickle* m,
                                          const gfx::ICCProfile& p) {
-  WriteParam(m, p.id_);
-  WriteParam(m, p.data_);
+  if (p.internals_) {
+    WriteParam(m, p.internals_->id_);
+    WriteParam(m, p.internals_->data_);
+  } else {
+    uint64_t id = 0;
+    std::vector<char> data;
+    WriteParam(m, id);
+    WriteParam(m, data);
+  }
 }
 
 bool ParamTraits<gfx::ICCProfile>::Read(const base::Pickle* m,
                                         base::PickleIterator* iter,
                                         gfx::ICCProfile* r) {
-  if (!ReadParam(m, iter, &r->id_))
+  uint64_t id;
+  std::vector<char> data;
+  if (!ReadParam(m, iter, &id))
     return false;
-  if (!ReadParam(m, iter, &r->data_))
+  if (!ReadParam(m, iter, &data))
     return false;
-  // Ensure that this entry is added to the global ICC profile cache, if it
-  // is not there already.
-  r->ComputeColorSpaceAndCache();
+  *r = gfx::ICCProfile::FromDataWithId(data.data(), data.size(), id);
   return true;
 }
 
@@ -104,13 +92,6 @@ void ParamTraits<gfx::ICCProfile>::Log(const gfx::ICCProfile& p,
 }
 
 }  // namespace IPC
-
-// Generate param traits size methods.
-#include "ipc/param_traits_size_macros.h"
-namespace IPC {
-#undef UI_GFX_IPC_COLOR_GFX_PARAM_TRAITS_MACROS_H_
-#include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
-}
 
 // Generate param traits write methods.
 #include "ipc/param_traits_write_macros.h"

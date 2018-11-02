@@ -26,7 +26,6 @@ class NetLog;
 class ProxyConfig;
 class ProxyInfo;
 class ProxyServer;
-class ProxyService;
 }
 
 namespace data_reduction_proxy {
@@ -57,7 +56,7 @@ class DataReductionProxyDelegate
   // net::ProxyDelegate implementation:
   void OnResolveProxy(const GURL& url,
                       const std::string& method,
-                      const net::ProxyService& proxy_service,
+                      const net::ProxyRetryInfoMap& proxy_retry_info,
                       net::ProxyInfo* result) override;
   void OnFallback(const net::ProxyServer& bad_proxy, int net_error) override;
   void OnBeforeTunnelRequest(const net::HostPortPair& proxy_server,
@@ -93,6 +92,7 @@ class DataReductionProxyDelegate
     QUIC_PROXY_STATUS_AVAILABLE,
     QUIC_PROXY_NOT_SUPPORTED,
     QUIC_PROXY_STATUS_MARKED_AS_BROKEN,
+    QUIC_PROXY_DISABLED_VIA_FIELD_TRIAL,
     QUIC_PROXY_STATUS_BOUNDARY
   };
 

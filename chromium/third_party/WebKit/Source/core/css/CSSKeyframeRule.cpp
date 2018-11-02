@@ -39,7 +39,7 @@ CSSKeyframeRule::CSSKeyframeRule(StyleRuleKeyframe* keyframe,
   SetParentRule(parent);
 }
 
-CSSKeyframeRule::~CSSKeyframeRule() {}
+CSSKeyframeRule::~CSSKeyframeRule() = default;
 
 void CSSKeyframeRule::setKeyText(const String& key_text,
                                  ExceptionState& exception_state) {
@@ -65,7 +65,7 @@ void CSSKeyframeRule::Reattach(StyleRuleBase*) {
   NOTREACHED();
 }
 
-DEFINE_TRACE(CSSKeyframeRule) {
+void CSSKeyframeRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(keyframe_);
   visitor->Trace(properties_cssom_wrapper_);
   CSSRule::Trace(visitor);

@@ -244,10 +244,7 @@ void MidiManagerAlsa::StartInitialization() {
   }
 
   // Initialize decoder.
-  snd_midi_event_t* tmp_decoder = nullptr;
-  snd_midi_event_new(0, &tmp_decoder);
-  ScopedSndMidiEventPtr decoder(tmp_decoder);
-  tmp_decoder = nullptr;
+  ScopedSndMidiEventPtr decoder = CreateScopedSndMidiEventPtr(0);
   snd_midi_event_no_status(decoder.get(), 1);
 
   // Initialize udev and monitor.
@@ -324,19 +321,11 @@ void MidiManagerAlsa::DispatchSendMidiData(MidiManagerClient* client,
                                            uint32_t port_index,
                                            const std::vector<uint8_t>& data,
                                            double timestamp) {
-  base::TimeDelta delay;
-  if (timestamp != 0.0) {
-    base::TimeTicks time_to_send =
-        base::TimeTicks() + base::TimeDelta::FromMicroseconds(
-                                timestamp * base::Time::kMicrosecondsPerSecond);
-    delay = std::max(time_to_send - base::TimeTicks::Now(), base::TimeDelta());
-  }
-
   service()->task_service()->PostBoundDelayedTask(
       kSendTaskRunner,
       base::BindOnce(&MidiManagerAlsa::SendMidiData, base::Unretained(this),
                      client, port_index, data),
-      delay);
+      MidiService::TimestampToTimeDeltaDelay(timestamp));
 }
 
 MidiManagerAlsa::MidiPort::Id::Id() = default;
@@ -856,11 +845,10 @@ std::string MidiManagerAlsa::AlsaCard::ExtractManufacturerString(
 void MidiManagerAlsa::SendMidiData(MidiManagerClient* client,
                                    uint32_t port_index,
                                    const std::vector<uint8_t>& data) {
-  snd_midi_event_t* encoder;
-  snd_midi_event_new(kSendBufferSize, &encoder);
+  ScopedSndMidiEventPtr encoder = CreateScopedSndMidiEventPtr(kSendBufferSize);
   for (const auto datum : data) {
     snd_seq_event_t event;
-    int result = snd_midi_event_encode_byte(encoder, datum, &event);
+    int result = snd_midi_event_encode_byte(encoder.get(), datum, &event);
     if (result == 1) {
       // Full event, send it.
       base::AutoLock lock(out_ports_lock_);
@@ -876,7 +864,6 @@ void MidiManagerAlsa::SendMidiData(MidiManagerClient* client,
       }
     }
   }
-  snd_midi_event_free(encoder);
 
   // Acknowledge send.
   AccumulateMidiBytesSent(client, data.size());
@@ -1389,10 +1376,15 @@ bool MidiManagerAlsa::Subscribe(uint32_t port_index,
   return true;
 }
 
-#if !defined(OS_CHROMEOS)
+MidiManagerAlsa::ScopedSndMidiEventPtr
+MidiManagerAlsa::CreateScopedSndMidiEventPtr(size_t size) {
+  snd_midi_event_t* coder;
+  snd_midi_event_new(size, &coder);
+  return ScopedSndMidiEventPtr(coder);
+}
+
 MidiManager* MidiManager::Create(MidiService* service) {
   return new MidiManagerAlsa(service);
 }
-#endif
 
 }  // namespace midi

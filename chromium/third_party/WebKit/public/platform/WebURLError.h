@@ -31,63 +31,63 @@
 #ifndef WebURLError_h
 #define WebURLError_h
 
-#include "WebString.h"
 #include "WebURL.h"
+#include "base/logging.h"
+#include "base/optional.h"
+#include "services/network/public/cpp/cors_error_status.h"
 
 namespace blink {
 
-class ResourceError;
-
+// TODO(yhirano): Change this to a class.
 struct WebURLError {
-  // A namespace for "reason" to support various layers generating resource
-  // errors.
-  enum class Domain {
-    // |reason| should be always zero. An error with this domain is considered
-    // as an empty error (== "no error").
-    // TODO(yhirano): Consider removing this domain.
-    kEmpty,
-
-    // The error is a "net" error. |reason| is an error code specified in
-    // net/base/net_error_list.h.
-    kNet,
-
-    // Used for testing.
-    kTest,
+ public:
+  enum class HasCopyInCache {
+    kFalse,
+    kTrue,
   };
-  Domain domain = Domain::kEmpty;
+  enum class IsWebSecurityViolation {
+    kFalse,
+    kTrue,
+  };
 
-  // A numeric error code detailing the reason for this error. A value
-  // of 0 means no error.
-  int reason = 0;
+  WebURLError() = delete;
+  // |reason| must not be 0.
+  BLINK_PLATFORM_EXPORT WebURLError(int reason, const WebURL&);
+  // |reason| must not be 0.
+  BLINK_PLATFORM_EXPORT WebURLError(int reason,
+                                    HasCopyInCache,
+                                    IsWebSecurityViolation,
+                                    const WebURL&);
+  BLINK_PLATFORM_EXPORT WebURLError(const network::CORSErrorStatus&,
+                                    HasCopyInCache,
+                                    const WebURL&);
 
-  // A flag showing whether or not "unreachableURL" has a copy in the
-  // cache that was too stale to return for this request.
-  bool stale_copy_in_cache = false;
+  int reason() const { return reason_; }
+  bool has_copy_in_cache() const { return has_copy_in_cache_; }
+  bool is_web_security_violation() const { return is_web_security_violation_; }
+  const WebURL& url() const { return url_; }
+  const base::Optional<network::CORSErrorStatus> cors_error_status() const {
+    return cors_error_status_;
+  }
+
+ private:
+  // A numeric error code detailing the reason for this error. The value must
+  // not be 0.
+  int reason_;
+
+  // A flag showing whether or not we have a (possibly stale) copy of the
+  // requested resource in the cache.
+  bool has_copy_in_cache_ = false;
 
   // True if this error is created for a web security violation.
-  bool is_web_security_violation = false;
+  bool is_web_security_violation_ = false;
 
   // The url that failed to load.
-  WebURL unreachable_url;
+  WebURL url_;
 
-  // A description for the error.
-  WebString localized_description;
-
-  WebURLError() = default;
-  // This constructor infers some members from the parameters.
-  BLINK_PLATFORM_EXPORT WebURLError(const WebURL&,
-                                    bool stale_copy_in_cache,
-                                    int reason);
-
-#if INSIDE_BLINK
-  BLINK_PLATFORM_EXPORT WebURLError(const ResourceError&);
-  BLINK_PLATFORM_EXPORT WebURLError& operator=(const ResourceError&);
-  BLINK_PLATFORM_EXPORT operator ResourceError() const;
-#endif
+  // Optional CORS error details.
+  base::Optional<network::CORSErrorStatus> cors_error_status_;
 };
-
-BLINK_PLATFORM_EXPORT std::ostream& operator<<(std::ostream&,
-                                               WebURLError::Domain);
 
 }  // namespace blink
 

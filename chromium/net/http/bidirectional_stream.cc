@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
@@ -60,9 +59,9 @@ std::unique_ptr<base::Value> NetLogCallback(const GURL* url,
 
 }  // namespace
 
-BidirectionalStream::Delegate::Delegate() {}
+BidirectionalStream::Delegate::Delegate() = default;
 
-BidirectionalStream::Delegate::~Delegate() {}
+BidirectionalStream::Delegate::~Delegate() = default;
 
 BidirectionalStream::BidirectionalStream(
     std::unique_ptr<BidirectionalStreamRequestInfo> request_info,

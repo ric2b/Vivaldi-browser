@@ -129,7 +129,7 @@ class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
     // Must set service to null first so that it is destroyed before the new
     // one is created.
     service_->Shutdown();
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
     service_.reset();
     service_.reset(new sessions::PersistentTabRestoreService(
         base::MakeUnique<ChromeTabRestoreServiceClient>(profile()),
@@ -178,7 +178,7 @@ class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
   void SynchronousLoadTabsFromLastSession() {
     // Ensures that the load is complete before continuing.
     service_->LoadTabsFromLastSession();
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   }
 
   sessions::LiveTab* live_tab() { return live_tab_.get(); }
@@ -730,7 +730,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
     SerializedNavigationEntry navigation =
         SerializedNavigationEntryTestHelper::CreateNavigation(
             base::StringPrintf("http://%d", static_cast<int>(i)),
-            base::SizeTToString(i));
+            base::NumberToString(i));
 
     auto tab = base::MakeUnique<Tab>();
     tab->navigations.push_back(navigation);

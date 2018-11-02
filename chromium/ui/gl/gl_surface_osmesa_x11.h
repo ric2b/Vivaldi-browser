@@ -5,10 +5,9 @@
 #ifndef UI_GL_GL_SURFACE_OSMESA_X11_H_
 #define UI_GL_GL_SURFACE_OSMESA_X11_H_
 
-#include <X11/Xlib.h>
-
 #include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_osmesa.h"
@@ -31,9 +30,13 @@ class GL_EXPORT GLSurfaceOSMesaX11 : public GLSurfaceOSMesa {
               ColorSpace color_space,
               bool alpha) override;
   bool IsOffscreen() override;
-  gfx::SwapResult SwapBuffers() override;
+  gfx::SwapResult SwapBuffers(const PresentationCallback& callback) override;
   bool SupportsPostSubBuffer() override;
-  gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
+  gfx::SwapResult PostSubBuffer(int x,
+                                int y,
+                                int width,
+                                int height,
+                                const PresentationCallback& callback) override;
 
  protected:
   ~GLSurfaceOSMesaX11() override;

@@ -66,16 +66,11 @@ class CONTENT_EXPORT WebUI {
   virtual int GetBindings() const = 0;
   virtual void SetBindings(int bindings) = 0;
 
-  // Whether this WebUI has a render frame associated with it. This will be true
-  // if the URL that created this WebUI was actually visited.
-  virtual bool HasRenderFrame() = 0;
-
   virtual void AddMessageHandler(
       std::unique_ptr<WebUIMessageHandler> handler) = 0;
 
   // Used by WebUIMessageHandlers. If the given message is already registered,
-  // the call has no effect unless |register_callback_overwrites_| is set to
-  // true.
+  // the call has no effect.
   typedef base::Callback<void(const base::ListValue*)> MessageCallback;
   virtual void RegisterMessageCallback(const std::string& message,
                                        const MessageCallback& callback) = 0;

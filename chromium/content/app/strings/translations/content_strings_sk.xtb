@@ -74,7 +74,7 @@
 <translation id="4151657705144244502">grafika</translation>
 <translation id="4201051445878709314">Zobraziť predchádzajúci mesiac</translation>
 <translation id="421884353938374759">výber farieb</translation>
-<translation id="4248100235867064564">panel ponuky</translation>
+<translation id="4248100235867064564">panel s ponukami</translation>
 <translation id="4254339807215791271">informácie o obsahu</translation>
 <translation id="4360991593054037559">Zadajte platnú hodnotu. Najbližšie platné hodnoty sú <ph name="VALID_VALUE_LOW" /> a <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4413860115965805769">tlačidlo ponuky</translation>
@@ -119,6 +119,7 @@
 <translation id="6398862346408813489">Zobraziť panel na výber mesiaca</translation>
 <translation id="6404546809543547843">posúvač časovej osi zvuku</translation>
 <translation id="648732519525291180">výber času</translation>
+<translation id="6550675742724504774">Možnosti</translation>
 <translation id="658823671542763450">prejsť do režimu celej obrazovky</translation>
 <translation id="663493177488814956">informačný kanál</translation>
 <translation id="6637586476836377253">denník</translation>
@@ -163,7 +164,6 @@
 <translation id="8451268428117625855">Vyberte súbor.</translation>
 <translation id="8461852803063341183">prepínač</translation>
 <translation id="8511325616783751178">tlačidlo rozbaľovacej ponuky</translation>
-<translation id="8519420564908284378">Prehrať na oboch obrazovkách</translation>
 <translation id="8534579021159131403">Minúty</translation>
 <translation id="8541249477527128034">ovládanie médií</translation>
 <translation id="8583702881314752957">zoznam definícií</translation>

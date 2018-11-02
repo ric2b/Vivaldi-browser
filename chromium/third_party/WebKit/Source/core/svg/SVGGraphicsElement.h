@@ -60,10 +60,11 @@ class CORE_EXPORT SVGGraphicsElement : public SVGElement, public SVGTests {
   SVGAnimatedTransformList* transform() { return transform_.Get(); }
   const SVGAnimatedTransformList* transform() const { return transform_.Get(); }
 
-  AffineTransform ComputeCTM(CTMScope mode,
-                             const SVGGraphicsElement* ancestor = 0) const;
+  AffineTransform ComputeCTM(
+      CTMScope mode,
+      const SVGGraphicsElement* ancestor = nullptr) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   SVGGraphicsElement(const QualifiedName&,
@@ -74,9 +75,10 @@ class CORE_EXPORT SVGGraphicsElement : public SVGElement, public SVGTests {
     return Element::SupportsFocus() || HasFocusEventListeners();
   }
 
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
   void SvgAttributeChanged(const QualifiedName&) override;
 
   Member<SVGAnimatedTransformList> transform_;

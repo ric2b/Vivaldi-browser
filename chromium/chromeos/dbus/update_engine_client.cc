@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -92,7 +93,7 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
   UpdateEngineClientImpl()
       : update_engine_proxy_(NULL), last_status_(), weak_ptr_factory_(this) {}
 
-  ~UpdateEngineClientImpl() override {}
+  ~UpdateEngineClientImpl() override = default;
 
   // UpdateEngineClient implementation:
   void AddObserver(Observer* observer) override {
@@ -126,11 +127,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
 
     VLOG(1) << "Requesting an update check";
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnRequestUpdateCheck,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnRequestUpdateCheck,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void RebootAfterUpdate() override {
@@ -140,10 +139,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
 
     VLOG(1) << "Requesting a reboot";
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnRebootAfterUpdate,
-                   weak_ptr_factory_.GetWeakPtr()));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnRebootAfterUpdate,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void Rollback() override {
@@ -155,10 +153,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
     writer.AppendBool(true /* powerwash */);
 
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnRollback,
-                   weak_ptr_factory_.GetWeakPtr()));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnRollback,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void CanRollbackCheck(const RollbackCheckCallback& callback) override {
@@ -168,11 +165,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
 
     VLOG(1) << "Requesting to get rollback availability status";
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnCanRollbackCheck,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnCanRollbackCheck,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   Status GetLastStatus() override { return last_status_; }
@@ -195,10 +190,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
             << "target_channel=" << target_channel << ", "
             << "is_powerwash_allowed=" << is_powerwash_allowed;
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnSetChannel,
-                   weak_ptr_factory_.GetWeakPtr()));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnSetChannel,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void GetChannel(bool get_current_channel,
@@ -212,11 +206,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
     VLOG(1) << "Requesting to get channel, get_current_channel="
             << get_current_channel;
     update_engine_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnGetChannel,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnGetChannel,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void GetEolStatus(const GetEolStatusCallback& callback) override {
@@ -226,8 +218,8 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
     VLOG(1) << "Requesting to get end of life status";
     update_engine_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnGetEolStatus,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpdateEngineClientImpl::OnGetEolStatus,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void SetUpdateOverCellularPermission(bool allowed,
@@ -243,8 +235,9 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
 
     return update_engine_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnSetUpdateOverCellularPermission,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(
+            &UpdateEngineClientImpl::OnSetUpdateOverCellularPermission,
+            weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void SetUpdateOverCellularOneTimePermission(
@@ -265,7 +258,7 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
 
     return update_engine_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(
+        base::BindOnce(
             &UpdateEngineClientImpl::OnSetUpdateOverCellularOneTimePermission,
             weak_ptr_factory_.GetWeakPtr(), callback));
   }
@@ -313,12 +306,11 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
         update_engine::kUpdateEngineInterface,
         update_engine::kGetStatus);
     update_engine_proxy_->CallMethodWithErrorCallback(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpdateEngineClientImpl::OnGetStatus,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&UpdateEngineClientImpl::OnGetStatusError,
-                   weak_ptr_factory_.GetWeakPtr()));
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpdateEngineClientImpl::OnGetStatus,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&UpdateEngineClientImpl::OnGetStatusError,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Called when a response for RequestUpdateCheck() is received.
@@ -609,7 +601,7 @@ class UpdateEngineClientFakeImpl : public UpdateEngineClientStubImpl {
   UpdateEngineClientFakeImpl() : weak_factory_(this) {
   }
 
-  ~UpdateEngineClientFakeImpl() override {}
+  ~UpdateEngineClientFakeImpl() override = default;
 
   // UpdateEngineClient implementation:
   void AddObserver(Observer* observer) override {
@@ -698,11 +690,9 @@ class UpdateEngineClientFakeImpl : public UpdateEngineClientStubImpl {
   DISALLOW_COPY_AND_ASSIGN(UpdateEngineClientFakeImpl);
 };
 
-UpdateEngineClient::UpdateEngineClient() {
-}
+UpdateEngineClient::UpdateEngineClient() = default;
 
-UpdateEngineClient::~UpdateEngineClient() {
-}
+UpdateEngineClient::~UpdateEngineClient() = default;
 
 // static
 UpdateEngineClient::UpdateCheckCallback

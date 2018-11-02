@@ -39,6 +39,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/SetSelectionOptions.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
@@ -497,7 +498,7 @@ bool Range::intersectsNode(Node* ref_node, ExceptionState& exception_state) {
 static inline Node* HighestAncestorUnderCommonRoot(Node* node,
                                                    Node* common_root) {
   if (node == common_root)
-    return 0;
+    return nullptr;
 
   DCHECK(common_root->contains(node));
 
@@ -514,7 +515,7 @@ static inline Node* ChildOfCommonRootBeforeOffset(Node* container,
   DCHECK(common_root);
 
   if (!common_root->contains(container))
-    return 0;
+    return nullptr;
 
   if (container == common_root) {
     container = container->firstChild();
@@ -1014,7 +1015,7 @@ DocumentFragment* Range::createContextualFragment(
     element = node->parentElement();
 
   // Step 2.
-  if (!element || isHTMLHtmlElement(element)) {
+  if (!element || IsHTMLHtmlElement(element)) {
     Document& document = node->GetDocument();
 
     if (document.IsSVGDocument()) {
@@ -1517,12 +1518,12 @@ static inline void BoundaryTextNodesMerged(RangeBoundaryPoint& boundary,
   if (boundary.Container() == old_node.GetNode()) {
     Node* const previous_sibling = old_node.GetNode().previousSibling();
     DCHECK(previous_sibling);
-    boundary.Set(*previous_sibling, boundary.Offset() + offset, 0);
+    boundary.Set(*previous_sibling, boundary.Offset() + offset, nullptr);
   } else if (boundary.Container() == old_node.GetNode().parentNode() &&
              boundary.Offset() == static_cast<unsigned>(old_node.Index())) {
     Node* const previous_sibling = old_node.GetNode().previousSibling();
     DCHECK(previous_sibling);
-    boundary.Set(*previous_sibling, offset, 0);
+    boundary.Set(*previous_sibling, offset, nullptr);
   }
 }
 
@@ -1556,7 +1557,7 @@ static inline void BoundaryTextNodeSplit(RangeBoundaryPoint& boundary,
              boundary_offset > old_node.length()) {
     Node* const next_sibling = old_node.nextSibling();
     DCHECK(next_sibling);
-    boundary.Set(*next_sibling, boundary_offset - old_node.length(), 0);
+    boundary.Set(*next_sibling, boundary_offset - old_node.length(), nullptr);
   }
 }
 
@@ -1781,10 +1782,11 @@ void Range::RemoveFromSelectionIfInDifferentRoot(Document& old_document) {
   selection.ClearDocumentCachedRange();
 }
 
-DEFINE_TRACE(Range) {
+void Range::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_document_);
   visitor->Trace(start_);
   visitor->Trace(end_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

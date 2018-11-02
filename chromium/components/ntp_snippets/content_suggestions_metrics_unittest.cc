@@ -23,27 +23,23 @@ TEST(ContentSuggestionsMetricsTest, ShouldLogOnSuggestionsShown) {
                     Category::FromKnownCategory(KnownCategories::ARTICLES),
                     /*position_in_category=*/3, base::Time::Now(),
                     /*score=*/0.01f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/false);
+                    base::Time::Now() - base::TimeDelta::FromHours(2));
   // Test corner cases for score.
   OnSuggestionShown(/*global_position=*/1,
                     Category::FromKnownCategory(KnownCategories::ARTICLES),
                     /*position_in_category=*/3, base::Time::Now(),
                     /*score=*/0.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/false);
+                    base::Time::Now() - base::TimeDelta::FromHours(2));
   OnSuggestionShown(/*global_position=*/1,
                     Category::FromKnownCategory(KnownCategories::ARTICLES),
                     /*position_in_category=*/3, base::Time::Now(),
                     /*score=*/1.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/false);
+                    base::Time::Now() - base::TimeDelta::FromHours(2));
   OnSuggestionShown(/*global_position=*/1,
                     Category::FromKnownCategory(KnownCategories::ARTICLES),
                     /*position_in_category=*/3, base::Time::Now(),
                     /*score=*/8.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/false);
+                    base::Time::Now() - base::TimeDelta::FromHours(2));
 
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
@@ -60,8 +56,7 @@ TEST(ContentSuggestionsMetricsTest,
   OnPageShown(std::vector<Category>(
                   {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
               /*suggestions_per_category=*/{0},
-              /*prefetched_suggestions_per_category=*/{0},
-              /*is_category_visible=*/{false}, /*is_offline=*/false);
+              /*is_category_visible=*/{false});
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
           "NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles"),
@@ -80,8 +75,7 @@ TEST(ContentSuggestionsMetricsTest,
   OnPageShown(std::vector<Category>(
                   {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
               /*suggestions_per_category=*/{0},
-              /*prefetched_suggestions_per_category=*/{0},
-              /*is_category_visible=*/{true}, /*is_offline=*/false);
+              /*is_category_visible=*/{true});
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
           "NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles"),
@@ -100,8 +94,7 @@ TEST(ContentSuggestionsMetricsTest,
   OnPageShown(std::vector<Category>(
                   {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
               /*suggestions_per_category=*/{10},
-              /*prefetched_suggestions_per_category=*/{0},
-              /*is_category_visible=*/{true}, /*is_offline=*/false);
+              /*is_category_visible=*/{true});
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
           "NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles"),
@@ -121,9 +114,7 @@ TEST(ContentSuggestionsMetricsTest,
                   {Category::FromKnownCategory(KnownCategories::ARTICLES),
                    Category::FromKnownCategory(KnownCategories::BOOKMARKS)}),
               /*suggestions_per_category=*/{10, 5},
-              /*prefetched_suggestions_per_category=*/{0, 0},
-              /*is_category_visible=*/{true, true},
-              /*is_offline=*/false);
+              /*is_category_visible=*/{true, true});
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
           "NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles"),
@@ -138,41 +129,6 @@ TEST(ContentSuggestionsMetricsTest,
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "NewTabPage.ContentSuggestions.SectionCountOnNtpOpened"),
               ElementsAre(base::Bucket(/*min=*/2, /*count=*/1)));
-}
-
-TEST(ContentSuggestionsMetricsTest, ShouldLogPrefetchedSuggestionsWhenShown) {
-  base::HistogramTester histogram_tester;
-  OnSuggestionShown(/*global_position=*/11,
-                    Category::FromKnownCategory(KnownCategories::ARTICLES),
-                    /*position_in_category=*/1, base::Time::Now(),
-                    /*score=*/1.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/false);
-  OnSuggestionShown(/*global_position=*/13,
-                    Category::FromKnownCategory(KnownCategories::ARTICLES),
-                    /*position_in_category=*/3, base::Time::Now(),
-                    /*score=*/1.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/true, /*is_offline=*/false);
-  OnSuggestionShown(/*global_position=*/15,
-                    Category::FromKnownCategory(KnownCategories::ARTICLES),
-                    /*position_in_category=*/5, base::Time::Now(),
-                    /*score=*/1.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/false, /*is_offline=*/true);
-  OnSuggestionShown(/*global_position=*/23,
-                    Category::FromKnownCategory(KnownCategories::ARTICLES),
-                    /*position_in_category=*/13, base::Time::Now(),
-                    /*score=*/1.0f,
-                    base::Time::Now() - base::TimeDelta::FromHours(2),
-                    /*is_prefetched=*/true, /*is_offline=*/true);
-
-  // Only the last call should be reported, because only there the user is
-  // offline and the suggestion was prefetched at the same time.
-  EXPECT_THAT(
-      histogram_tester.GetAllSamples(
-          "NewTabPage.ContentSuggestions.Shown.Articles.Prefetched.Offline"),
-      ElementsAre(base::Bucket(/*min=*/13, /*count=*/1)));
 }
 
 TEST(ContentSuggestionsMetricsTest, ShouldLogPrefetchedSuggestionsWhenOpened) {
@@ -208,38 +164,6 @@ TEST(ContentSuggestionsMetricsTest, ShouldLogPrefetchedSuggestionsWhenOpened) {
       histogram_tester.GetAllSamples(
           "NewTabPage.ContentSuggestions.Opened.Articles.Prefetched.Offline"),
       ElementsAre(base::Bucket(/*min=*/13, /*count=*/1)));
-}
-
-TEST(ContentSuggestionsMetricsTest,
-     ShouldLogPrefetchedSuggestionsCountWhenPageShown) {
-  base::HistogramTester histogram_tester;
-  OnPageShown(std::vector<Category>(
-                  {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
-              /*suggestions_per_category=*/{10},
-              /*prefetched_suggestions_per_category=*/{1},
-              /*is_category_visible=*/{false}, /*is_offline=*/false);
-  OnPageShown(std::vector<Category>(
-                  {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
-              /*suggestions_per_category=*/{10},
-              /*prefetched_suggestions_per_category=*/{2},
-              /*is_category_visible=*/{true}, /*is_offline=*/false);
-  OnPageShown(std::vector<Category>(
-                  {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
-              /*suggestions_per_category=*/{10},
-              /*prefetched_suggestions_per_category=*/{3},
-              /*is_category_visible=*/{false}, /*is_offline=*/true);
-  OnPageShown(std::vector<Category>(
-                  {Category::FromKnownCategory(KnownCategories::ARTICLES)}),
-              /*suggestions_per_category=*/{10},
-              /*prefetched_suggestions_per_category=*/{4},
-              /*is_category_visible=*/{true}, /*is_offline=*/true);
-
-  // Only the last call should be reported, because only there the user is
-  // offline and the section is visible at the same time.
-  EXPECT_THAT(histogram_tester.GetAllSamples("NewTabPage.ContentSuggestions."
-                                             "CountOnNtpOpenedIfVisible."
-                                             "Articles.Prefetched.Offline"),
-              ElementsAre(base::Bucket(/*min=*/4, /*count=*/1)));
 }
 
 }  // namespace

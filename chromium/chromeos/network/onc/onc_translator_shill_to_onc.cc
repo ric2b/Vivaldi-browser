@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -9,7 +10,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/network/network_profile_handler.h"
@@ -38,10 +38,41 @@ std::unique_ptr<base::Value> ConvertStringToValue(const std::string& str,
   } else {
     value = base::JSONReader::Read(str);
   }
-  if (value && value->GetType() != type)
+  if (value && value->type() != type)
     return nullptr;
 
   return value;
+}
+
+// If the network is configured with an installed certificate, a PKCS11 id will
+// be set which is provided for the UI to display certificate information.
+// Returns true if the PKCS11 id is available and set.
+bool SetPKCS11Id(const base::DictionaryValue* shill_dictionary,
+                 const char* cert_id_property,
+                 const char* cert_slot_property,
+                 base::DictionaryValue* onc_object) {
+  std::string shill_cert_id;
+  if (!shill_dictionary->GetStringWithoutPathExpansion(cert_id_property,
+                                                       &shill_cert_id) ||
+      shill_cert_id.empty()) {
+    return false;
+  }
+
+  std::string shill_slot;
+  std::string pkcs11_id;
+  if (shill_dictionary->GetStringWithoutPathExpansion(cert_slot_property,
+                                                      &shill_slot) &&
+      !shill_slot.empty()) {
+    pkcs11_id = shill_slot + ":" + shill_cert_id;
+  } else {
+    pkcs11_id = shill_cert_id;
+  }
+
+  onc_object->SetKey(::onc::client_cert::kClientCertType,
+                     base::Value(::onc::client_cert::kPKCS11Id));
+  onc_object->SetKey(::onc::client_cert::kClientCertPKCS11Id,
+                     base::Value(pkcs11_id));
+  return true;
 }
 
 // This class implements the translation of properties from the given
@@ -198,6 +229,9 @@ void ShillToONCTranslator::TranslateEthernet() {
   if (shill_network_type == shill::kTypeEthernetEap)
     onc_auth = ::onc::ethernet::k8021X;
   onc_object_->SetKey(::onc::ethernet::kAuthentication, base::Value(onc_auth));
+
+  if (shill_network_type == shill::kTypeEthernetEap)
+    TranslateAndAddNestedObject(::onc::ethernet::kEAP);
 }
 
 void ShillToONCTranslator::TranslateOpenVPN() {
@@ -214,6 +248,9 @@ void ShillToONCTranslator::TranslateOpenVPN() {
     onc_object_->SetWithoutPathExpansion(::onc::openvpn::kRemoteCertKU,
                                          std::move(certKUs));
   }
+
+  SetPKCS11Id(shill_dictionary_, shill::kOpenVPNClientCertIdProperty,
+              shill::kOpenVPNClientCertSlotProperty, onc_object_.get());
 
   for (const OncFieldSignature* field_signature = onc_signature_->fields;
        field_signature->onc_field_name != NULL; ++field_signature) {
@@ -263,11 +300,14 @@ void ShillToONCTranslator::TranslateIPsec() {
   CopyPropertiesAccordingToSignature();
   if (shill_dictionary_->HasKey(shill::kL2tpIpsecXauthUserProperty))
     TranslateAndAddNestedObject(::onc::ipsec::kXAUTH);
-  std::string client_cert_id;
-  shill_dictionary_->GetStringWithoutPathExpansion(
-      shill::kL2tpIpsecClientCertIdProperty, &client_cert_id);
-  std::string authentication_type =
-      client_cert_id.empty() ? ::onc::ipsec::kPSK : ::onc::ipsec::kCert;
+
+  std::string authentication_type;
+  if (SetPKCS11Id(shill_dictionary_, shill::kL2tpIpsecClientCertIdProperty,
+                  shill::kL2tpIpsecClientCertSlotProperty, onc_object_.get())) {
+    authentication_type = ::onc::ipsec::kCert;
+  } else {
+    authentication_type = ::onc::ipsec::kPSK;
+  }
   onc_object_->SetKey(::onc::ipsec::kAuthenticationType,
                       base::Value(authentication_type));
 }
@@ -322,6 +362,7 @@ void ShillToONCTranslator::TranslateVPN() {
 
   bool save_credentials;
   if (onc_provider_type != ::onc::vpn::kThirdPartyVpn &&
+      onc_provider_type != ::onc::vpn::kArcVpn &&
       shill_dictionary_->GetBooleanWithoutPathExpansion(
           shill::kSaveCredentialsProperty, &save_credentials)) {
     SetNestedOncValue(provider_type_dictionary, ::onc::vpn::kSaveCredentials,
@@ -651,9 +692,11 @@ void ShillToONCTranslator::TranslateEap() {
   std::string shill_cert_id;
   if (shill_dictionary_->GetStringWithoutPathExpansion(
           shill::kEapCertIdProperty, &shill_cert_id)) {
-    // Note: shill::kEapKeyIdProperty == shill::kEapCertIdProperty.
     onc_object_->SetKey(::onc::client_cert::kClientCertType,
                         base::Value(::onc::client_cert::kPKCS11Id));
+    // Note: shill::kEapCertIdProperty is already in the format slot:key_id.
+    // Note: shill::kEapKeyIdProperty has the same value as
+    //       shill::kEapCertIdProperty and is ignored.
     onc_object_->SetKey(::onc::client_cert::kClientCertPKCS11Id,
                         base::Value(shill_cert_id));
   }
@@ -688,13 +731,7 @@ void ShillToONCTranslator::SetNestedOncValue(
     const std::string& onc_dictionary_name,
     const std::string& onc_field_name,
     const base::Value& value) {
-  base::DictionaryValue* nested = nullptr;
-  if (!onc_object_->GetDictionaryWithoutPathExpansion(onc_dictionary_name,
-                                                      &nested)) {
-    nested = onc_object_->SetDictionaryWithoutPathExpansion(
-        onc_dictionary_name, base::MakeUnique<base::DictionaryValue>());
-  }
-  nested->SetKey(onc_field_name, value.Clone());
+  onc_object_->SetPath({onc_dictionary_name, onc_field_name}, value.Clone());
 }
 
 void ShillToONCTranslator::TranslateAndAddListOfObjects(
@@ -760,10 +797,10 @@ void ShillToONCTranslator::CopyProperty(
     return;
   }
 
-  if (shill_value->GetType() != field_signature->value_signature->onc_type) {
+  if (shill_value->type() != field_signature->value_signature->onc_type) {
     LOG(ERROR) << "Shill property '" << shill_property_name << "' with value "
                << *shill_value << " has base::Value::Type "
-               << shill_value->GetType() << " but ONC field '"
+               << shill_value->type() << " but ONC field '"
                << field_signature->onc_field_name << "' requires type "
                << field_signature->value_signature->onc_type << ": "
                << GetName();
@@ -779,7 +816,8 @@ void ShillToONCTranslator::TranslateWithTableAndSet(
     const std::string& onc_field_name) {
   std::string shill_value;
   if (!shill_dictionary_->GetStringWithoutPathExpansion(shill_property_name,
-                                                        &shill_value)) {
+                                                        &shill_value) ||
+      shill_value.empty()) {
     return;
   }
   std::string onc_value;

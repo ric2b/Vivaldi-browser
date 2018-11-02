@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "ash/shell.h"
-#include "ash/wm/window_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
@@ -17,7 +16,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "ui/aura/window.h"
@@ -33,21 +32,21 @@ const int64_t kActivationDelayMS = 200;
 inline float Clamp(float value, float low, float high) {
   return std::min(high, std::max(value, low));
 }
-}
+
+}  // namespace
 
 // static
 TabScrubber* TabScrubber::GetInstance() {
-  static TabScrubber* instance = NULL;
+  static TabScrubber* instance = nullptr;
   if (!instance)
     instance = new TabScrubber();
   return instance;
 }
 
 // static
-gfx::Point TabScrubber::GetStartPoint(
-    TabStrip* tab_strip,
-    int index,
-    TabScrubber::Direction direction) {
+gfx::Point TabScrubber::GetStartPoint(TabStripImpl* tab_strip,
+                                      int index,
+                                      TabScrubber::Direction direction) {
   int initial_tab_offset = Tab::GetPinnedWidth() / 2;
   // In RTL layouts the tabs are mirrored. We hence use GetMirroredBounds()
   // which will give us the correct bounds of tabs in RTL layouts as well as
@@ -76,6 +75,9 @@ TabScrubber::TabScrubber()
       activation_delay_(kActivationDelayMS),
       use_default_activation_delay_(true),
       weak_ptr_factory_(this) {
+  // TODO(mash): Add window server API to observe swipe gestures. Observing
+  // gestures on browser windows is not sufficient, as this feature works when
+  // the cursor is over the shelf, desktop, etc.
   ash::Shell::Get()->AddPreTargetHandler(this);
   registrar_.Add(
       this,
@@ -111,7 +113,11 @@ void TabScrubber::OnScrollEvent(ui::ScrollEvent* event) {
   BrowserView* browser_view =
       BrowserView::GetBrowserViewForNativeWindow(
           browser->window()->GetNativeWindow());
-  TabStrip* tab_strip = browser_view->tabstrip();
+  TabStripImpl* tab_strip = browser_view->tabstrip()->AsTabStripImpl();
+  if (!tab_strip) {
+    DLOG(WARNING) << "TabScrubber disabled for experimental tab strip.";
+    return;
+  }
 
   if (tab_strip->IsAnimating()) {
     FinishScrub(false);
@@ -220,13 +226,11 @@ void TabScrubber::TabStripDeleted(TabStrip* tab_strip) {
 }
 
 Browser* TabScrubber::GetActiveBrowser() {
-  aura::Window* active_window = ash::wm::GetActiveWindow();
-  if (!active_window)
-    return NULL;
-
-  Browser* browser = chrome::FindBrowserWithWindow(active_window);
-  if (!browser || browser->type() != Browser::TYPE_TABBED)
-    return NULL;
+  Browser* browser = chrome::FindLastActive();
+  if (!browser || browser->type() != Browser::TYPE_TABBED ||
+      !browser->window()->IsActive()) {
+    return nullptr;
+  }
 
   return browser;
 }
@@ -237,9 +241,14 @@ void TabScrubber::BeginScrub(Browser* browser,
   DCHECK(browser);
   DCHECK(browser_view);
 
+  tab_strip_ = browser_view->tabstrip()->AsTabStripImpl();
+  if (!tab_strip_) {
+    DLOG(WARNING) << "TabScrubber disabled for experimental tab strip.";
+    return;
+  }
+
   scrubbing_ = true;
   browser_ = browser;
-  tab_strip_ = browser_view->tabstrip();
 
   Direction direction = (x_offset < 0) ? LEFT : RIGHT;
   ScrubDirectionChanged(direction);
@@ -261,17 +270,18 @@ void TabScrubber::FinishScrub(bool activate) {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForNativeWindow(
             browser_->window()->GetNativeWindow());
-    TabStrip* tab_strip = browser_view->tabstrip();
-    if (activate && highlighted_tab_ != -1) {
-      Tab* tab = tab_strip->tab_at(highlighted_tab_);
-      tab->hover_controller()->HideImmediately();
-      int distance =
-          std::abs(
-              highlighted_tab_ - browser_->tab_strip_model()->active_index());
-      UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.ScrubDistance", distance, 1, 20, 21);
-      browser_->tab_strip_model()->ActivateTabAt(highlighted_tab_, true);
+    TabStripImpl* tab_strip = browser_view->tabstrip()->AsTabStripImpl();
+    if (tab_strip) {
+      if (activate && highlighted_tab_ != -1) {
+        Tab* tab = tab_strip->tab_at(highlighted_tab_);
+        tab->hover_controller()->HideImmediately();
+        int distance = std::abs(highlighted_tab_ -
+                                browser_->tab_strip_model()->active_index());
+        UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.ScrubDistance", distance, 1, 20, 21);
+        browser_->tab_strip_model()->ActivateTabAt(highlighted_tab_, true);
+      }
+      tab_strip->RemoveObserver(this);
     }
-    tab_strip->RemoveObserver(this);
   }
 
   browser_ = nullptr;

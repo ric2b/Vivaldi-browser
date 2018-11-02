@@ -69,13 +69,13 @@ class FakeSyncService : public SyncService {
   SyncTokenStatus GetSyncTokenStatus() const override;
   std::string QuerySyncStatusSummaryString() override;
   bool QueryDetailedSyncStatus(SyncStatus* result) override;
-  base::string16 GetLastSyncedTimeString() const override;
+  base::Time GetLastSyncedTime() const override;
   std::string GetEngineInitializationStateString() const override;
   SyncCycleSnapshot GetLastCycleSnapshot() const override;
   std::unique_ptr<base::Value> GetTypeStatusMap() override;
   const GURL& sync_service_url() const override;
   std::string unrecoverable_error_message() const override;
-  tracked_objects::Location unrecoverable_error_location() const override;
+  base::Location unrecoverable_error_location() const override;
   void AddProtocolEventObserver(ProtocolEventObserver* observer) override;
   void RemoveProtocolEventObserver(ProtocolEventObserver* observer) override;
   void AddTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;

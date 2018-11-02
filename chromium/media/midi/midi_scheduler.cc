@@ -11,6 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "media/midi/midi_manager.h"
+#include "media/midi/midi_service.h"
 
 namespace midi {
 
@@ -29,31 +30,23 @@ MidiScheduler::~MidiScheduler() {
 void MidiScheduler::PostSendDataTask(MidiManagerClient* client,
                                      size_t length,
                                      double timestamp,
-                                     const base::Closure& closure) {
+                                     base::OnceClosure closure) {
   DCHECK(client);
 
-  const base::Closure& weak_closure = base::Bind(
-      &MidiScheduler::InvokeClosure,
-      weak_factory_.GetWeakPtr(),
-      client,
-      length,
-      closure);
+  base::OnceClosure weak_closure =
+      base::BindOnce(&MidiScheduler::InvokeClosure, weak_factory_.GetWeakPtr(),
+                     client, length, std::move(closure));
 
-  base::TimeDelta delay;
-  if (timestamp != 0.0) {
-    base::TimeTicks time_to_send =
-        base::TimeTicks() + base::TimeDelta::FromMicroseconds(
-                                timestamp * base::Time::kMicrosecondsPerSecond);
-    delay = std::max(time_to_send - base::TimeTicks::Now(), base::TimeDelta());
-  }
-  task_runner_->PostDelayedTask(FROM_HERE, weak_closure, delay);
+  task_runner_->PostDelayedTask(
+      FROM_HERE, std::move(weak_closure),
+      MidiService::TimestampToTimeDeltaDelay(timestamp));
 }
 
 void MidiScheduler::InvokeClosure(MidiManagerClient* client,
                                   size_t length,
-                                  const base::Closure& closure) {
+                                  base::OnceClosure closure) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  closure.Run();
+  std::move(closure).Run();
   manager_->AccumulateMidiBytesSent(client, length);
 }
 

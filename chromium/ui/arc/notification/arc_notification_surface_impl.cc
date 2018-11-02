@@ -43,13 +43,12 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   bool CanFocus() override { return true; }
   void OnCaptureLost() override {}
   void OnPaint(const ui::PaintContext& context) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
-  bool HasHitTestMask() const override {
-    return notification_surface_->HasHitTestMask();
-  }
+  bool HasHitTestMask() const override { return true; }
   void GetHitTestMask(gfx::Path* mask) const override {
     notification_surface_->GetHitTestMask(mask);
   }
@@ -77,7 +76,7 @@ ArcNotificationSurfaceImpl::ArcNotificationSurfaceImpl(
     : surface_(surface) {
   DCHECK(surface);
   native_view_ =
-      base::MakeUnique<aura::Window>(new CustomWindowDelegate(surface));
+      std::make_unique<aura::Window>(new CustomWindowDelegate(surface));
   native_view_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   native_view_->set_owned_by_parent(false);
   native_view_->Init(ui::LAYER_NOT_DRAWN);
@@ -136,6 +135,14 @@ void ArcNotificationSurfaceImpl::FocusSurfaceWindow() {
   // user is about to use Direct Reply. In that case, we also need to focus the
   // surface window manually to send events to Android.
   return surface_->root_surface()->window()->Focus();
+}
+
+void ArcNotificationSurfaceImpl::SetAXTreeId(int32_t ax_tree_id) {
+  ax_tree_id_ = ax_tree_id;
+}
+
+int32_t ArcNotificationSurfaceImpl::GetAXTreeId() const {
+  return ax_tree_id_;
 }
 
 }  // namespace arc

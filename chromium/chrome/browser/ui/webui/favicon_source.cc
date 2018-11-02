@@ -82,14 +82,11 @@ void FaviconSource::StartDataRequest(
     // TODO(michaelbai): Change GetRawFavicon to support combination of
     // IconType.
     favicon_service->GetRawFavicon(
-        url,
-        favicon_base::FAVICON,
-        desired_size_in_pixel,
-        base::Bind(
-            &FaviconSource::OnFaviconDataAvailable,
-            base::Unretained(this),
-            IconRequest(
-                callback, url, parsed.size_in_dip, parsed.device_scale_factor)),
+        url, favicon_base::IconType::kFavicon, desired_size_in_pixel,
+        base::Bind(&FaviconSource::OnFaviconDataAvailable,
+                   base::Unretained(this),
+                   IconRequest(callback, url, parsed.size_in_dip,
+                               parsed.device_scale_factor)),
         &cancelable_task_tracker_);
   } else {
     // Intercept requests for prepopulated pages if TopSites exists.
@@ -101,15 +98,16 @@ void FaviconSource::StartDataRequest(
           ui::ScaleFactor resource_scale_factor =
               ui::GetSupportedScaleFactor(parsed.device_scale_factor);
           callback.Run(
-              ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-                  prepopulated_page.favicon_id, resource_scale_factor));
+              ui::ResourceBundle::GetSharedInstance()
+                  .LoadDataResourceBytesForScale(prepopulated_page.favicon_id,
+                                                 resource_scale_factor));
           return;
         }
       }
     }
 
     favicon_service->GetRawFaviconForPageURL(
-        url, favicon_base::FAVICON, desired_size_in_pixel,
+        url, {favicon_base::IconType::kFavicon}, desired_size_in_pixel,
         base::Bind(&FaviconSource::OnFaviconDataAvailable,
                    base::Unretained(this),
                    IconRequest(callback, url, parsed.size_in_dip,
@@ -194,7 +192,7 @@ void FaviconSource::SendDefaultResponse(const IconRequest& icon_request) {
   }
 
   base::RefCountedMemory* default_favicon =
-      ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
           resource_id,
           ui::GetSupportedScaleFactor(icon_request.device_scale_factor));
 

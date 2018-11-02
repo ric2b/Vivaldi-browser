@@ -52,7 +52,7 @@ crazy_context_t* GetCrazyContext() {
     // Ensure libraries located in the same directory as the linker
     // can be loaded before system ones.
     crazy_context_add_search_path_for_address(
-        s_crazy_context, reinterpret_cast<void*>(&s_crazy_context));
+        s_crazy_context, reinterpret_cast<void*>(&GetCrazyContext));
   }
 
   return s_crazy_context;
@@ -451,6 +451,11 @@ bool LegacyLinkerJNIInit(JavaVM* vm, JNIEnv* env) {
   LOG_INFO("Retrieving SDK version info");
   if (!InitSDKVersionInfo(env))
     return false;
+
+// Disable debugger support when needed. See https://crbug.com/796938
+#if defined(LEGACY_LINKER_DISABLE_DEBUGGER_SUPPORT)
+  crazy_set_debugger_support(false);
+#endif
 
   // Register native methods.
   jclass linker_class;

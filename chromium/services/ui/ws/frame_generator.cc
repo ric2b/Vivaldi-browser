@@ -7,11 +7,11 @@
 #include <utility>
 #include <vector>
 
-#include "cc/output/compositor_frame.h"
-#include "cc/quads/render_pass.h"
-#include "cc/quads/render_pass_draw_quad.h"
-#include "cc/quads/surface_draw_quad.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/render_pass_draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/common/quads/surface_draw_quad.h"
 
 namespace ui {
 
@@ -86,6 +86,17 @@ void FrameGenerator::ReclaimResources(
 void FrameGenerator::DidReceiveCompositorFrameAck(
     const std::vector<viz::ReturnedResource>& resources) {}
 
+void FrameGenerator::DidPresentCompositorFrame(uint32_t presentation_token,
+                                               base::TimeTicks time,
+                                               base::TimeDelta refresh,
+                                               uint32_t flags) {
+  NOTIMPLEMENTED();
+}
+
+void FrameGenerator::DidDiscardCompositorFrame(uint32_t presentation_token) {
+  NOTIMPLEMENTED();
+}
+
 void FrameGenerator::OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) {
   DCHECK(compositor_frame_sink_);
   current_begin_frame_ack_ = viz::BeginFrameAck(
@@ -99,7 +110,7 @@ void FrameGenerator::OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) {
   last_begin_frame_args_ = begin_frame_args;
 
   // TODO(fsamuel): We should add a trace for generating a top level frame.
-  cc::CompositorFrame frame(GenerateCompositorFrame());
+  viz::CompositorFrame frame(GenerateCompositorFrame());
   if (!local_surface_id_.is_valid() ||
       frame.size_in_pixels() != last_submitted_frame_size_ ||
       frame.device_scale_factor() != last_device_scale_factor_) {
@@ -114,34 +125,39 @@ void FrameGenerator::OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) {
   SetNeedsBeginFrame(false);
 }
 
-cc::CompositorFrame FrameGenerator::GenerateCompositorFrame() {
+viz::CompositorFrame FrameGenerator::GenerateCompositorFrame() {
   const int render_pass_id = 1;
   const gfx::Rect bounds(pixel_size_);
-  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   render_pass->SetNew(render_pass_id, bounds, bounds, gfx::Transform());
 
   DrawWindow(render_pass.get());
 
-  cc::CompositorFrame frame;
+  viz::CompositorFrame frame;
   frame.render_pass_list.push_back(std::move(render_pass));
   if (high_contrast_mode_enabled_) {
-    std::unique_ptr<cc::RenderPass> invert_pass = cc::RenderPass::Create();
+    std::unique_ptr<viz::RenderPass> invert_pass = viz::RenderPass::Create();
     invert_pass->SetNew(2, bounds, bounds, gfx::Transform());
     viz::SharedQuadState* shared_state =
         invert_pass->CreateAndAppendSharedQuadState();
     gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(
         pixel_size_, window_manager_surface_info_.device_scale_factor(),
         window_manager_surface_info_.device_scale_factor());
+    bool is_clipped = false;
+    bool are_contents_opaque = false;
     shared_state->SetAll(gfx::Transform(), gfx::Rect(scaled_bounds), bounds,
-                         bounds, false, 1.f, SkBlendMode::kSrcOver, 0);
-    auto* quad = invert_pass->CreateAndAppendDrawQuad<cc::RenderPassDrawQuad>();
+                         bounds, is_clipped, are_contents_opaque, 1.f,
+                         SkBlendMode::kSrcOver, 0);
+    auto* quad =
+        invert_pass->CreateAndAppendDrawQuad<viz::RenderPassDrawQuad>();
     frame.render_pass_list.back()->filters.Append(
         cc::FilterOperation::CreateInvertFilter(1.f));
     quad->SetNew(
         shared_state, bounds, bounds, render_pass_id, 0 /* mask_resource_id */,
         gfx::RectF() /* mask_uv_rect */, gfx::Size() /* mask_texture_size */,
         gfx::Vector2dF() /* filters_scale */,
-        gfx::PointF() /* filters_origin */, gfx::RectF() /* tex_coord_rect */);
+        gfx::PointF() /* filters_origin */, gfx::RectF() /* tex_coord_rect */,
+        false /* force_anti_aliasing_off */);
     frame.render_pass_list.push_back(std::move(invert_pass));
   }
   frame.metadata.device_scale_factor = device_scale_factor_;
@@ -173,7 +189,7 @@ viz::mojom::HitTestRegionListPtr FrameGenerator::GenerateHitTestRegionList()
   return hit_test_region_list;
 }
 
-void FrameGenerator::DrawWindow(cc::RenderPass* pass) {
+void FrameGenerator::DrawWindow(viz::RenderPass* pass) {
   DCHECK(window_manager_surface_info_.is_valid());
 
   const gfx::Rect bounds_at_origin(
@@ -192,16 +208,19 @@ void FrameGenerator::DrawWindow(cc::RenderPass* pass) {
 
   // TODO(fsamuel): These clipping and visible rects are incorrect. They need
   // to be populated from CompositorFrame structs.
-  sqs->SetAll(
-      quad_to_target_transform, gfx::Rect(scaled_bounds) /* layer_rect */,
-      bounds_at_origin /* visible_layer_bounds */,
-      bounds_at_origin /* clip_rect */, false /* is_clipped */,
-      1.0f /* opacity */, SkBlendMode::kSrcOver, 0 /* sorting-context_id */);
-  auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+  sqs->SetAll(quad_to_target_transform,
+              gfx::Rect(scaled_bounds) /* layer_rect */,
+              bounds_at_origin /* visible_layer_bounds */,
+              bounds_at_origin /* clip_rect */, false /* is_clipped */,
+              false /* are_contents_opaque */, 1.0f /* opacity */,
+              SkBlendMode::kSrcOver, 0 /* sorting-context_id */);
+  auto* quad = pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
   quad->SetAll(sqs, bounds_at_origin /* rect */,
                bounds_at_origin /* visible_rect */, true /* needs_blending*/,
                window_manager_surface_info_.id(),
-               cc::SurfaceDrawQuadType::PRIMARY, nullptr);
+               window_manager_surface_info_.id(),
+               SK_ColorWHITE /* default_background_color */,
+               false /* stretch_content_to_fill_bounds */);
 }
 
 void FrameGenerator::SetNeedsBeginFrame(bool needs_begin_frame) {

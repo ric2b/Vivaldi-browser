@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/mobile_config.h"
@@ -132,16 +133,16 @@ const chromeos::MobileConfig::Carrier* GetCarrier(
     const NetworkState* cellular) {
   const DeviceState* device = NetworkHandler::Get()->network_state_handler()->
       GetDeviceState(cellular->device_path());
-  std::string carrier_id = device ? device->home_provider_id() : "";
+  std::string carrier_id = device ? device->operator_name() : "";
   if (carrier_id.empty()) {
     NET_LOG_ERROR("Empty carrier ID for cellular network",
                   device ? device->path(): "No device");
-    return NULL;
+    return nullptr;
   }
 
   chromeos::MobileConfig* config = chromeos::MobileConfig::GetInstance();
   if (!config->IsReady())
-    return NULL;
+    return nullptr;
 
   return config->GetCarrier(carrier_id);
 }
@@ -267,11 +268,22 @@ void DataPromoNotification::ShowOptionalMobileDataPromoNotification() {
   const gfx::Image& icon =
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(icon_id);
 
+  std::unique_ptr<message_center::Notification> notification =
+      ash::system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kDataPromoNotificationId,
+          l10n_util::GetStringUTF16(IDS_MOBILE_DATA_NOTIFICATION_TITLE),
+          message, icon, base::string16() /* display_source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              ash::system_notifier::kNotifierNetwork),
+          message_center::RichNotificationData(),
+          new message_center::HandleNotificationClickedDelegate(base::Bind(
+              &NotificationClicked, default_network->guid(), info_url)),
+          kNotificationMobileDataIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->set_clickable(true);
   message_center::MessageCenter::Get()->AddNotification(
-      message_center::Notification::CreateSystemNotification(
-          kDataPromoNotificationId, base::string16() /* title */, message, icon,
-          ash::system_notifier::kNotifierNetwork,
-          base::Bind(&NotificationClicked, default_network->guid(), info_url)));
+      std::move(notification));
 
   SetShow3gPromoNotification(false);
   if (carrier_deal_promo_pref != kNotificationCountPrefDefault)
@@ -304,11 +316,21 @@ bool DataPromoNotification::ShowDataSaverNotification() {
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
           IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_DATASAVER);
 
-  message_center::MessageCenter::Get()->AddNotification(
+  std::unique_ptr<message_center::Notification> notification =
       message_center::Notification::CreateSystemNotification(
-          kDataSaverNotificationId, title, message, icon,
-          ash::system_notifier::kNotifierNetwork,
-          base::Bind(&NotificationClicked, "", kDataSaverExtensionUrl)));
+          message_center::NOTIFICATION_TYPE_SIMPLE, kDataSaverNotificationId,
+          title, message, icon, base::string16() /* display_source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              ash::system_notifier::kNotifierNetwork),
+          message_center::RichNotificationData(),
+          new message_center::HandleNotificationClickedDelegate(
+              base::Bind(&NotificationClicked, "", kDataSaverExtensionUrl)),
+          kNotificationMobileDataIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->set_clickable(true);
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
   base::RecordAction(base::UserMetricsAction("DataSaverPrompt_Shown"));
 
   if (DataSaverSwitchDemoMode()) {

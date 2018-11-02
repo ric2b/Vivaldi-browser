@@ -5,9 +5,31 @@
 #ifndef CSSDefaultInterpolationType_h
 #define CSSDefaultInterpolationType_h
 
+#include "core/CoreExport.h"
 #include "core/animation/InterpolationType.h"
 
 namespace blink {
+
+class CORE_EXPORT CSSDefaultNonInterpolableValue : public NonInterpolableValue {
+ public:
+  ~CSSDefaultNonInterpolableValue() final {}
+
+  static scoped_refptr<CSSDefaultNonInterpolableValue> Create(
+      const CSSValue* css_value) {
+    return base::AdoptRef(new CSSDefaultNonInterpolableValue(css_value));
+  }
+
+  const CSSValue* CssValue() const { return css_value_.Get(); }
+
+  DECLARE_NON_INTERPOLABLE_VALUE_TYPE();
+
+ private:
+  CSSDefaultNonInterpolableValue(const CSSValue*);
+
+  Persistent<const CSSValue> css_value_;
+};
+
+DEFINE_NON_INTERPOLABLE_VALUE_TYPE_CASTS(CSSDefaultNonInterpolableValue);
 
 // Never supports pairwise conversion while always supporting single conversion.
 // A catch all default for CSSValue interpolation.
@@ -21,7 +43,7 @@ class CSSDefaultInterpolationType : public InterpolationType {
   InterpolationValue MaybeConvertSingle(const PropertySpecificKeyframe&,
                                         const InterpolationEnvironment&,
                                         const InterpolationValue& underlying,
-                                        ConversionCheckers&) const;
+                                        ConversionCheckers&) const override;
 
   PairwiseInterpolationValue MaybeConvertPairwise(
       const PropertySpecificKeyframe& start_keyframe,

@@ -26,13 +26,13 @@
 #include "platform/graphics/DeferredImageDecoder.h"
 
 #include <memory>
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/graphics/DecodingImageGenerator.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-decoders/SegmentReader.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "third_party/skia/include/core/SkImage.h"
 
@@ -45,16 +45,15 @@ struct DeferredFrameData {
  public:
   DeferredFrameData()
       : orientation_(kDefaultImageOrientation),
-        duration_(0),
         is_received_(false) {}
 
   ImageOrientation orientation_;
-  float duration_;
+  TimeDelta duration_;
   bool is_received_;
 };
 
 std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::Create(
-    RefPtr<SharedBuffer> data,
+    scoped_refptr<SharedBuffer> data,
     bool data_complete,
     ImageDecoder::AlphaOption alpha_option,
     const ColorBehavior& color_behavior) {
@@ -111,7 +110,7 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   DCHECK_GT(decoded_size.height(), 0);
 
   sk_sp<SkROBuffer> ro_buffer(rw_buffer_->makeROBufferSnapshot());
-  RefPtr<SegmentReader> segment_reader =
+  scoped_refptr<SegmentReader> segment_reader =
       SegmentReader::CreateFromSkROBuffer(std::move(ro_buffer));
 
   // ImageFrameGenerator has the latest known alpha state. There will be a
@@ -126,8 +125,7 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   std::vector<FrameMetadata> frames(frame_data_.size());
   for (size_t i = 0; i < frame_data_.size(); ++i) {
     frames[i].complete = frame_data_[i].is_received_;
-    frames[i].duration =
-        base::TimeDelta::FromMillisecondsD(frame_data_[i].duration_);
+    frames[i].duration = FrameDurationAtIndex(i);
   }
 
   auto generator = DecodingImageGenerator::Create(
@@ -138,11 +136,11 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   return generator;
 }
 
-PassRefPtr<SharedBuffer> DeferredImageDecoder::Data() {
+scoped_refptr<SharedBuffer> DeferredImageDecoder::Data() {
   if (!rw_buffer_)
     return nullptr;
   sk_sp<SkROBuffer> ro_buffer(rw_buffer_->makeROBufferSnapshot());
-  RefPtr<SharedBuffer> shared_buffer = SharedBuffer::Create();
+  scoped_refptr<SharedBuffer> shared_buffer = SharedBuffer::Create();
   SkROBuffer::Iter it(ro_buffer.get());
   do {
     shared_buffer->Append(static_cast<const char*>(it.data()), it.size());
@@ -150,12 +148,12 @@ PassRefPtr<SharedBuffer> DeferredImageDecoder::Data() {
   return shared_buffer;
 }
 
-void DeferredImageDecoder::SetData(PassRefPtr<SharedBuffer> data,
+void DeferredImageDecoder::SetData(scoped_refptr<SharedBuffer> data,
                                    bool all_data_received) {
   SetDataInternal(std::move(data), all_data_received, true);
 }
 
-void DeferredImageDecoder::SetDataInternal(RefPtr<SharedBuffer> data,
+void DeferredImageDecoder::SetDataInternal(scoped_refptr<SharedBuffer> data,
                                            bool all_data_received,
                                            bool push_data_to_decoder) {
   if (metadata_decoder_) {
@@ -169,7 +167,7 @@ void DeferredImageDecoder::SetDataInternal(RefPtr<SharedBuffer> data,
     if (!rw_buffer_)
       rw_buffer_ = WTF::WrapUnique(new SkRWBuffer(data->size()));
 
-    const char* segment = 0;
+    const char* segment = nullptr;
     for (size_t length = data->GetSomeData(segment, rw_buffer_->size()); length;
          length = data->GetSomeData(segment, rw_buffer_->size())) {
       DCHECK_GE(data->size(), rw_buffer_->size() + length);
@@ -231,21 +229,21 @@ bool DeferredImageDecoder::FrameIsReceivedAtIndex(size_t index) const {
   return false;
 }
 
-float DeferredImageDecoder::FrameDurationAtIndex(size_t index) const {
-  float duration_ms = 0.f;
+TimeDelta DeferredImageDecoder::FrameDurationAtIndex(size_t index) const {
+  TimeDelta duration;
   if (metadata_decoder_)
-    duration_ms = metadata_decoder_->FrameDurationAtIndex(index);
+    duration = metadata_decoder_->FrameDurationAtIndex(index);
   if (index < frame_data_.size())
-    duration_ms = frame_data_[index].duration_;
+    duration = frame_data_[index].duration_;
 
   // Many annoying ads specify a 0 duration to make an image flash as quickly as
   // possible. We follow Firefox's behavior and use a duration of 100 ms for any
   // frames that specify a duration of <= 10 ms. See <rdar://problem/7689300>
   // and <http://webkit.org/b/36082> for more information.
-  const float duration_sec = duration_ms / 1000.f;
-  if (duration_sec < 0.011f)
-    return 0.100f;
-  return duration_sec;
+  if (duration <= TimeDelta::FromMilliseconds(10))
+    duration = TimeDelta::FromMilliseconds(100);
+
+  return duration;
 }
 
 ImageOrientation DeferredImageDecoder::OrientationAtIndex(size_t index) const {

@@ -22,7 +22,7 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
  public:
   TestWidgetDelegate(bool can_maximize, bool can_minimize)
       : can_maximize_(can_maximize), can_minimize_(can_minimize) {}
-  ~TestWidgetDelegate() override {}
+  ~TestWidgetDelegate() override = default;
 
   bool CanMaximize() const override { return can_maximize_; }
 
@@ -43,9 +43,9 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
 
   enum MinimizeAllowed { MINIMIZE_ALLOWED, MINIMIZE_DISALLOWED };
 
-  FrameCaptionButtonContainerViewTest() {}
+  FrameCaptionButtonContainerViewTest() = default;
 
-  ~FrameCaptionButtonContainerViewTest() override {}
+  ~FrameCaptionButtonContainerViewTest() override = default;
 
   // Creates a widget which allows maximizing based on |maximize_allowed|.
   // The caller takes ownership of the returned widget.
@@ -72,6 +72,7 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
       container->SetButtonImage(static_cast<CaptionButtonIcon>(icon),
                                 ash::kWindowControlCloseIcon);
     }
+    container->SizeToPreferredSize();
   }
 
   // Tests that |leftmost| and |rightmost| are at |container|'s edges.
@@ -148,7 +149,6 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   FrameCaptionButtonContainerView container(
       CreateTestWidget(MAXIMIZE_ALLOWED, MINIMIZE_ALLOWED));
   InitContainer(&container);
-  container.SetBoundsRect(gfx::Rect(container.GetPreferredSize()));
   container.Layout();
 
   FrameCaptionButtonContainerView::TestApi test(&container);

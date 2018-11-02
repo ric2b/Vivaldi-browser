@@ -8,7 +8,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/memory/ref_counted.h"
-#include "device/hid/hid_connection.h"
 #include "extensions/browser/api/api_resource_manager.h"
 
 namespace extensions {
@@ -26,11 +25,10 @@ ApiResourceManager<HidConnectionResource>::GetFactoryInstance() {
 
 HidConnectionResource::HidConnectionResource(
     const std::string& owner_extension_id,
-    scoped_refptr<device::HidConnection> connection)
-    : ApiResource(owner_extension_id), connection_(connection) {}
+    device::mojom::HidConnectionPtr connection)
+    : ApiResource(owner_extension_id), connection_(std::move(connection)) {}
 
 HidConnectionResource::~HidConnectionResource() {
-  connection_->Close();
 }
 
 bool HidConnectionResource::IsPersistent() const {

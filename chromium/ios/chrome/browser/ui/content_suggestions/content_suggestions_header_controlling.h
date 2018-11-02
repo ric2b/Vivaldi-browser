@@ -7,16 +7,23 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol ContentSuggestionsCollectionSynchronizing;
+
 // Controller for the ContentSuggestions header.
 @protocol ContentSuggestionsHeaderControlling
 
-// Whether the omnibox is currently focused.
-@property(nonatomic, assign, getter=isOmniboxFocused, readonly)
-    BOOL omniboxFocused;
+// Synchronizer for the header controller, allowing it to synchronize with its
+// collection.
+@property(nonatomic, weak) id<ContentSuggestionsCollectionSynchronizing>
+    collectionSynchronizer;
 
 // Updates the iPhone fakebox's frame based on the current scroll view |offset|
-// and |width|. |width| can be 0 to use the current view width.
-- (void)updateFakeOmniboxForOffset:(CGFloat)offset width:(CGFloat)width;
+// and |width|. |width| is the width of the screen, including the space outside
+// the safe area. The |safeAreaInsets| is relative to the view used to calculate
+// the |width|.
+- (void)updateFakeOmniboxForOffset:(CGFloat)offset
+                       screenWidth:(CGFloat)screenWidth
+                    safeAreaInsets:(UIEdgeInsets)safeAreaInsets;
 
 // Updates the fakeomnibox's width in order to be adapted to the new |width|,
 // without taking the y-position into account.
@@ -27,6 +34,16 @@
 
 // Calls layoutIfNeeded on the header.
 - (void)layoutHeader;
+
+// Returns the Y value to use for the scroll view's contentOffset when scrolling
+// the omnibox to the top of the screen.
+- (CGFloat)pinnedOffsetY;
+
+// Whether the omnibox is currently focused.
+- (BOOL)isOmniboxFocused;
+
+// Returns the height of the header.
+- (CGFloat)headerHeight;
 
 @end
 

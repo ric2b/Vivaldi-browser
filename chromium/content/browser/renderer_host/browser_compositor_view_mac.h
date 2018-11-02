@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
@@ -27,6 +28,8 @@ class BrowserCompositorMacClient {
   virtual NSView* BrowserCompositorMacGetNSView() const = 0;
   virtual SkColor BrowserCompositorMacGetGutterColor(SkColor color) const = 0;
   virtual void BrowserCompositorMacOnBeginFrame() = 0;
+  virtual viz::LocalSurfaceId GetLocalSurfaceId() const = 0;
+  virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
 };
 
 // This class owns a DelegatedFrameHost, and will dynamically attach and
@@ -62,9 +65,9 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   void DidCreateNewRendererCompositorFrameSink(
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
-                             cc::CompositorFrame frame);
+                             viz::CompositorFrame frame);
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack);
-  void SetHasTransparentBackground(bool transparent);
+  void SetBackgroundColor(SkColor background_color);
   void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
   void UpdateVSyncParameters(const base::TimeTicks& timebase,
                              const base::TimeDelta& interval);
@@ -104,10 +107,12 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
   gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
   bool DelegatedFrameCanCreateResizeLock() const override;
+  viz::LocalSurfaceId GetLocalSurfaceId() const override;
   std::unique_ptr<CompositorResizeLock> DelegatedFrameHostCreateResizeLock()
       override;
   void OnBeginFrame() override;
   bool IsAutoResizeEnabled() const override;
+  void OnFrameTokenChanged(uint32_t frame_token) override;
 
   // Returns nullptr if no compositor is attached.
   ui::Compositor* CompositorForTesting() const;
@@ -169,7 +174,7 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   std::unique_ptr<DelegatedFrameHost> delegated_frame_host_;
   std::unique_ptr<ui::Layer> root_layer_;
 
-  bool has_transparent_background_ = false;
+  SkColor background_color_ = SK_ColorWHITE;
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//third_party/WebKit/Source/bindings/bindings.gni")
@@ -34,7 +35,10 @@ component("controller") {
 
   sources = [
     "BlinkInitializer.cpp",
+    "BlinkInitializer.h",
     "ControllerExport.h",
+    "OomInterventionImpl.cpp",
+    "OomInterventionImpl.h",
   ]
 
   if (is_mac) {
@@ -54,14 +58,37 @@ group("webkit_unit_tests_data") {
   data = [
     "../core/testing/data/",
     "../core/paint/test_data/",
+    "../core/animation/test_data/",
   ]
 }
 
 test("webkit_unit_tests") {
+  deps = [
+    ":webkit_unit_tests_sources",
+  ]
+
+  data_deps = [
+    ":webkit_unit_tests_data",
+    "//content/shell:pak",
+  ]
+
+  if (is_android) {
+    deps += [
+      "//base:base_java",
+      "//content/public/android:content_java",
+      "//content/shell/android:content_shell_assets",
+      "//net/android:net_java",
+    ]
+  }
+}
+
+jumbo_source_set("webkit_unit_tests_sources") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ "*" ]
+  testonly = true
 
   sources = [
+    "OomInterventionImplTest.cpp",
     "tests/RunAllTests.cpp",
   ]
   sources += bindings_unittest_files
@@ -88,23 +115,9 @@ test("webkit_unit_tests") {
     "//v8",
   ]
 
-  data_deps = [
-    ":webkit_unit_tests_data",
-    "//content/shell:pak",
-  ]
-
   configs += [
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
     "//third_party/WebKit/Source/core:blink_core_pch",
   ]
-
-  if (is_android) {
-    deps += [
-      "//base:base_java",
-      "//content/public/android:content_java",
-      "//content/shell/android:content_shell_assets",
-      "//net/android:net_java",
-    ]
-  }
 }

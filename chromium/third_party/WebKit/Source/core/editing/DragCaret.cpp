@@ -27,6 +27,7 @@
 
 #include "core/editing/CaretDisplayItemClient.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/frame/Settings.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/paint/PaintLayer.h"
@@ -95,7 +96,7 @@ void DragCaret::NodeWillBeRemoved(Node& node) {
   Clear();
 }
 
-DEFINE_TRACE(DragCaret) {
+void DragCaret::Trace(blink::Visitor* visitor) {
   visitor->Trace(position_);
   SynchronousMutationObserver::Trace(visitor);
 }

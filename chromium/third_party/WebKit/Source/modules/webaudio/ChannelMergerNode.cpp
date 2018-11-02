@@ -56,11 +56,11 @@ ChannelMergerHandler::ChannelMergerHandler(AudioNode& node,
   Initialize();
 }
 
-PassRefPtr<ChannelMergerHandler> ChannelMergerHandler::Create(
+scoped_refptr<ChannelMergerHandler> ChannelMergerHandler::Create(
     AudioNode& node,
     float sample_rate,
     unsigned number_of_inputs) {
-  return AdoptRef(
+  return base::AdoptRef(
       new ChannelMergerHandler(node, sample_rate, number_of_inputs));
 }
 
@@ -97,7 +97,7 @@ void ChannelMergerHandler::Process(size_t frames_to_process) {
 void ChannelMergerHandler::SetChannelCount(unsigned long channel_count,
                                            ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   // channelCount must be 1.
   if (channel_count != 1) {
@@ -111,7 +111,7 @@ void ChannelMergerHandler::SetChannelCountMode(
     const String& mode,
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   // channcelCountMode must be 'explicit'.
   if (mode != "explicit") {

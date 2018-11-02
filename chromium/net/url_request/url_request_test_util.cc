@@ -9,7 +9,6 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -87,7 +86,7 @@ void TestURLRequestContext::Init() {
   }
   if (!ct_policy_enforcer()) {
     context_storage_.set_ct_policy_enforcer(
-        base::WrapUnique(new CTPolicyEnforcer));
+        std::make_unique<CTPolicyEnforcer>());
   }
   if (!ssl_config_service())
     context_storage_.set_ssl_config_service(new SSLConfigServiceDefaults());
@@ -163,7 +162,7 @@ TestURLRequestContextGetter::TestURLRequestContextGetter(
   DCHECK(network_task_runner_.get());
 }
 
-TestURLRequestContextGetter::~TestURLRequestContextGetter() {}
+TestURLRequestContextGetter::~TestURLRequestContextGetter() = default;
 
 TestURLRequestContext* TestURLRequestContextGetter::GetURLRequestContext() {
   if (!context_.get())
@@ -198,7 +197,7 @@ TestDelegate::TestDelegate()
       request_status_(ERR_IO_PENDING),
       buf_(new IOBuffer(kBufferSize)) {}
 
-TestDelegate::~TestDelegate() {}
+TestDelegate::~TestDelegate() = default;
 
 void TestDelegate::ClearFullRequestHeaders() {
   full_request_headers_.Clear();
@@ -635,7 +634,7 @@ bool TestNetworkDelegate::OnCanGetCookies(const URLRequest& request,
 }
 
 bool TestNetworkDelegate::OnCanSetCookie(const URLRequest& request,
-                                         const std::string& cookie_line,
+                                         const net::CanonicalCookie& cookie,
                                          CookieOptions* options) {
   bool allow = true;
   if (cookie_options_bit_mask_ & NO_SET_COOKIE)
@@ -668,9 +667,9 @@ bool TestNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
   return cancel_request_with_policy_violating_referrer_;
 }
 
-TestJobInterceptor::TestJobInterceptor() {}
+TestJobInterceptor::TestJobInterceptor() = default;
 
-TestJobInterceptor::~TestJobInterceptor() {}
+TestJobInterceptor::~TestJobInterceptor() = default;
 
 URLRequestJob* TestJobInterceptor::MaybeCreateJob(
     URLRequest* request,

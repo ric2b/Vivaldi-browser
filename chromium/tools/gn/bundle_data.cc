@@ -47,9 +47,9 @@ bool IsSourceFileFromAssetsCatalog(base::StringPiece source,
 
 }  // namespace
 
-BundleData::BundleData() {}
+BundleData::BundleData() = default;
 
-BundleData::~BundleData() {}
+BundleData::~BundleData() = default;
 
 void BundleData::AddBundleData(const Target* target) {
   DCHECK_EQ(target->output_type(), Target::BUNDLE_DATA);
@@ -133,6 +133,9 @@ void BundleData::GetOutputsAsSourceFiles(
   if (!assets_catalog_sources_.empty())
     outputs_as_source->push_back(GetCompiledAssetCatalogPath());
 
+  if (!partial_info_plist_.is_null())
+    outputs_as_source->push_back(partial_info_plist_);
+
   if (!code_signing_script_.is_null()) {
     std::vector<SourceFile> code_signing_output_files;
     SubstitutionWriter::GetListAsSourceFiles(code_signing_outputs_,
@@ -153,18 +156,12 @@ SourceFile BundleData::GetCompiledAssetCatalogPath() const {
 }
 
 SourceFile BundleData::GetBundleRootDirOutput(const Settings* settings) const {
-  const SourceDir& build_dir = settings->toolchain_output_dir();
-  std::string bundle_root_relative = RebasePath(root_dir().value(), build_dir);
+  std::string root_dir_value = root_dir().value();
+  size_t last_separator = root_dir_value.rfind('/');
+  if (last_separator != std::string::npos)
+    root_dir_value = root_dir_value.substr(0, last_separator);
 
-  size_t first_component = bundle_root_relative.find('/');
-  if (first_component != std::string::npos) {
-    base::StringPiece outermost_bundle_dir =
-        base::StringPiece(bundle_root_relative).substr(0, first_component);
-    std::string return_value(build_dir.value());
-    outermost_bundle_dir.AppendToString(&return_value);
-    return SourceFile(SourceFile::SWAP_IN, &return_value);
-  }
-  return SourceFile(root_dir().value());
+  return SourceFile(SourceFile::SWAP_IN, &root_dir_value);
 }
 
 SourceDir BundleData::GetBundleRootDirOutputAsDir(

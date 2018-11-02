@@ -21,13 +21,15 @@ def GetAllStorySets():
   benchmarks_to_skip = [
       'skpicture_printer_ct',
       'screenshot_ct',
+      'smoothness_ct',
       'repaint_ct',
       'rasterize_and_record_micro_ct',
       'multipage_skpicture_printer_ct',
       'loading.cluster_telemetry',
       'skpicture_printer',
       'cros_tab_switching.typical_24',
-      'multipage_skpicture_printer']
+      'multipage_skpicture_printer',
+      'leak_detection.cluster_telemetry']
 
   for benchmark in benchmark_finders.GetAllBenchmarks():
     if benchmark.Name() in benchmarks_to_skip:

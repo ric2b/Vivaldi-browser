@@ -125,7 +125,7 @@ bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
     if (!value.Get(kChildrenKey, &child_values))
       return false;
 
-    if (child_values->GetType() != base::Value::Type::LIST)
+    if (child_values->type() != base::Value::Type::LIST)
       return false;
 
     const base::ListValue* list_values =
@@ -147,7 +147,7 @@ bool ChromeBookmarkFileReader::DecodeChildren(
     if (!child_value_list.Get(i, &child_value))
       return false;
 
-    if (child_value->GetType() != base::Value::Type::DICTIONARY)
+    if (child_value->type() != base::Value::Type::DICTIONARY)
       return false;
 
     DecodeNode(*static_cast<const base::DictionaryValue*>(child_value));

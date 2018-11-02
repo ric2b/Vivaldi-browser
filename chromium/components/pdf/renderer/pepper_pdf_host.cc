@@ -4,9 +4,9 @@
 
 #include "components/pdf/renderer/pepper_pdf_host.h"
 
+#include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "components/pdf/renderer/pdf_accessibility_tree.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/referrer.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/render_frame.h"
@@ -22,10 +22,7 @@
 #include "ppapi/shared_impl/scoped_pp_resource.h"
 #include "ppapi/thunk/enter.h"
 #include "ppapi/thunk/ppb_image_data_api.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 
 namespace pdf {
 
@@ -102,6 +99,8 @@ int32_t PepperPDFHost::OnResourceMessageReceived(
         OnHostMsgSetAccessibilityPageInfo)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SelectionChanged,
                                       OnHostMsgSelectionChanged)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_DidScroll,
+                                      OnHostMsgDidScroll)
   PPAPI_END_MESSAGE_MAP()
   return PP_ERROR_FAILED;
 }
@@ -249,6 +248,16 @@ int32_t PepperPDFHost::OnHostMsgSelectionChanged(
 
   service->SelectionChanged(gfx::PointF(left.x, left.y), left_height,
                             gfx::PointF(right.x, right.y), right_height);
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgDidScroll(
+    ppapi::host::HostMessageContext* context) {
+  mojom::PdfService* service = GetRemotePdfService();
+  if (!service)
+    return PP_ERROR_FAILED;
+
+  service->DidScroll();
   return PP_OK;
 }
 

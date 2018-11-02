@@ -46,14 +46,14 @@ class CSSMediaRule final : public CSSConditionRule {
 
   MediaList* media() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   CSSMediaRule(StyleRuleMedia*, CSSStyleSheet*);
 
   CSSRule::Type type() const override { return kMediaRule; }
 
-  RefPtr<MediaQuerySet> MediaQueries() const;
+  scoped_refptr<MediaQuerySet> MediaQueries() const;
 
   mutable Member<MediaList> media_cssom_wrapper_;
 };

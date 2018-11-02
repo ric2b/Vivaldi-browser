@@ -41,7 +41,7 @@ constexpr char kDeviceName1[] = "Device1";
 
 blink::mojom::WebBluetoothServerClientAssociatedPtr CreateServerClient() {
   blink::mojom::WebBluetoothServerClientAssociatedPtr client;
-  mojo::MakeIsolatedRequest(&client);
+  mojo::MakeRequestAssociatedWithDedicatedPipe(&client);
   return client;
 }
 
@@ -101,7 +101,7 @@ class FrameConnectedBluetoothDevicesTest
 
   std::unique_ptr<NiceMockBluetoothGattConnection> GetConnection(
       const std::string& address) {
-    return base::MakeUnique<NiceMockBluetoothGattConnection>(adapter_.get(),
+    return std::make_unique<NiceMockBluetoothGattConnection>(adapter_.get(),
                                                              address);
   }
 

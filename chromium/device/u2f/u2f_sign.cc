@@ -2,33 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "u2f_sign.h"
+#include "device/u2f/u2f_sign.h"
 
-#include "base/memory/ptr_util.h"
+#include <utility>
+
+#include "device/u2f/u2f_discovery.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace device {
 
 U2fSign::U2fSign(const std::vector<std::vector<uint8_t>>& registered_keys,
                  const std::vector<uint8_t>& challenge_hash,
                  const std::vector<uint8_t>& app_param,
+                 std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
                  const ResponseCallback& cb)
-    : U2fRequest(cb),
+    : U2fRequest(std::move(discoveries), cb),
       registered_keys_(registered_keys),
       challenge_hash_(challenge_hash),
       app_param_(app_param),
       weak_factory_(this) {}
 
-U2fSign::~U2fSign() {}
+U2fSign::~U2fSign() = default;
 
 // static
 std::unique_ptr<U2fRequest> U2fSign::TrySign(
     const std::vector<std::vector<uint8_t>>& registered_keys,
     const std::vector<uint8_t>& challenge_hash,
     const std::vector<uint8_t>& app_param,
+    std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
     const ResponseCallback& cb) {
-  std::unique_ptr<U2fRequest> request =
-      std::make_unique<U2fSign>(registered_keys, challenge_hash, app_param, cb);
+  std::unique_ptr<U2fRequest> request = std::make_unique<U2fSign>(
+      registered_keys, challenge_hash, app_param, std::move(discoveries), cb);
   request->Start();
+
   return request;
 }
 
@@ -38,9 +44,9 @@ void U2fSign::TryDevice() {
   if (registered_keys_.size() == 0) {
     // Send registration (Fake enroll) if no keys were provided
     current_device_->Register(
-        kBogusAppParam, kBogusChallenge,
+        U2fRequest::GetBogusAppParam(), U2fRequest::GetBogusChallenge(),
         base::Bind(&U2fSign::OnTryDevice, weak_factory_.GetWeakPtr(),
-                   registered_keys_.cbegin()));
+                   registered_keys_.cend()));
     return;
   }
   // Try signing current device with the first registered key
@@ -56,7 +62,12 @@ void U2fSign::OnTryDevice(std::vector<std::vector<uint8_t>>::const_iterator it,
   switch (return_code) {
     case U2fReturnCode::SUCCESS:
       state_ = State::COMPLETE;
-      cb_.Run(return_code, response_data);
+      if (it == registered_keys_.cend()) {
+        // This was a response to a fake enrollment. Return an empty key handle.
+        cb_.Run(return_code, response_data, std::vector<uint8_t>());
+      } else {
+        cb_.Run(return_code, response_data, *it);
+      }
       break;
     case U2fReturnCode::CONDITIONS_NOT_SATISFIED: {
       // Key handle is accepted by this device, but waiting on user touch. Move
@@ -75,9 +86,9 @@ void U2fSign::OnTryDevice(std::vector<std::vector<uint8_t>>::const_iterator it,
         // No provided key was accepted by this device. Send registration
         // (Fake enroll) request to device.
         current_device_->Register(
-            kBogusAppParam, kBogusChallenge,
+            U2fRequest::GetBogusAppParam(), U2fRequest::GetBogusChallenge(),
             base::Bind(&U2fSign::OnTryDevice, weak_factory_.GetWeakPtr(),
-                       registered_keys_.cbegin()));
+                       registered_keys_.cend()));
       }
       break;
     default:

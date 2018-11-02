@@ -11,8 +11,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebInputEventResult.h"
+#include "public/platform/WebScopedVirtualTimePauser.h"
 #include "public/platform/scheduler/child/child_scheduler.h"
 #include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 #include "public/platform/scheduler/renderer/render_widget_scheduling_state.h"
@@ -60,10 +62,6 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Returns the loading task runner.  This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
   virtual scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() = 0;
-
-  // Returns the timer task runner.  This queue is intended for DOM Timers.
-  // TODO(alexclarke): Get rid of this default timer queue.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> TimerTaskRunner() = 0;
 
   // Returns a new RenderWidgetSchedulingState.  The signals from this will be
   // used to make scheduling decisions.
@@ -130,16 +128,38 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // constructed. Must be called on the main thread.
   virtual void SetRendererBackgrounded(bool backgrounded) = 0;
 
-  // Tells the scheduler that the render process should be suspended. This can
-  // only be done when the renderer is backgrounded. The renderer will be
-  // automatically resumed when foregrounded.
-  virtual void PauseRenderer() = 0;
+#if defined(OS_ANDROID)
+  // Android WebView has very strange WebView.pauseTimers/resumeTimers API.
+  // It's very old and very inconsistent. The API promises that this
+  // "pauses all layout, parsing, and JavaScript timers for all WebViews".
+  // Also CTS tests expect that loading tasks continue to run.
+  // We should change it to something consistent (e.g. stop all javascript)
+  // but changing WebView and CTS is a slow and painful process, so for
+  // the time being we're doing our best.
+  // DO NOT USE FOR ANYTHING EXCEPT ANDROID WEBVIEW API IMPLEMENTATION.
+  virtual void PauseTimersForAndroidWebView() = 0;
+  virtual void ResumeTimersForAndroidWebView() = 0;
+#endif  // defined(OS_ANDROID)
 
-  // Tells the scheduler that the render process should be resumed. This can
-  // only be done when the renderer is suspended. TabManager (in the future,
-  // MemoryCoordinator) will suspend the renderer again if continuously
-  // backgrounded.
-  virtual void ResumeRenderer() = 0;
+  // RAII handle for pausing the renderer. Renderer is paused while
+  // at least one pause handle exists.
+  class BLINK_PLATFORM_EXPORT RendererPauseHandle {
+   public:
+    RendererPauseHandle() {}
+    virtual ~RendererPauseHandle() {}
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(RendererPauseHandle);
+  };
+
+  // Tells the scheduler that the renderer process should be paused.
+  // Pausing means that all javascript callbacks should not fire.
+  // https://html.spec.whatwg.org/#pause
+  //
+  // Renderer will be resumed when the handle is destroyed.
+  // Handle should be destroyed before the renderer.
+  virtual std::unique_ptr<RendererPauseHandle> PauseRenderer()
+      WARN_UNUSED_RESULT = 0;
 
   enum class NavigatingFrameType { kMainFrame, kChildFrame };
 
@@ -159,27 +179,9 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Must be called from the main thread.
   virtual bool IsHighPriorityWorkAnticipated() = 0;
 
-  // Pauses the timer queues and increments the timer queue suspension count.
-  // May only be called from the main thread.
-  virtual void PauseTimerQueue() = 0;
-
-  // Decrements the timer queue suspension count and re-enables the timer queues
-  // if the suspension count is zero and the current schduler policy allows it.
-  virtual void ResumeTimerQueue() = 0;
-
-  // Pauses the timer queues by inserting a fence that blocks any tasks posted
-  // after this point from running. Orthogonal to PauseTimerQueue. Care must
-  // be taken when using this API to avoid fighting with the TaskQueueThrottler.
-  virtual void VirtualTimePaused() = 0;
-
-  // Removes the fence added by VirtualTimePaused allowing timers to execute
-  // normally. Care must be taken when using this API to avoid fighting with the
-  // TaskQueueThrottler.
-  virtual void VirtualTimeResumed() = 0;
-
-  // Sets whether to allow suspension of timers after the backgrounded signal is
+  // Sets whether to allow suspension of tasks after the backgrounded signal is
   // received via SetRendererBackgrounded(true). Defaults to disabled.
-  virtual void SetTimerQueueStoppingWhenBackgroundedEnabled(bool enabled) = 0;
+  virtual void SetStoppingWhenBackgroundedEnabled(bool enabled) = 0;
 
   // Sets the default blame context to which top level work should be
   // attributed in this renderer. |blame_context| must outlive this scheduler.
@@ -202,6 +204,14 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Sets the kind of renderer process. Should be called on the main thread
   // once.
   virtual void SetRendererProcessType(RendererProcessType type) = 0;
+
+  // Returns a WebScopedVirtualTimePauser which can be used to vote for pausing
+  // virtual time. Virtual time will be paused if any WebScopedVirtualTimePauser
+  // votes to pause it, and only unpaused only if all
+  // WebScopedVirtualTimePausers are either destroyed or vote to unpause.  Note
+  // the WebScopedVirtualTimePauser returned by this method is initially
+  // unpaused.
+  virtual WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser() = 0;
 
  protected:
   RendererScheduler();

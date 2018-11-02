@@ -15,14 +15,9 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "chrome/browser/android/vr_shell/vr_core_info.h"
-#include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
 #include "device/vr/android/gvr/gvr_delegate_provider.h"
 #include "device/vr/vr_service.mojom.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
-
-namespace content {
-class RenderWidgetHost;
-}
 
 namespace device {
 class VRDevice;
@@ -30,7 +25,6 @@ class VRDevice;
 
 namespace vr_shell {
 
-class DelegateWebContentsObserver;
 class VrShell;
 
 class VrShellDelegate : public device::GvrDelegateProvider {
@@ -54,44 +48,31 @@ class VrShellDelegate : public device::GvrDelegateProvider {
                        const base::android::JavaParamRef<jobject>& obj);
   void OnPause(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnResume(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-  void UpdateNonPresentingContext(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jlong context);
   bool IsClearActivatePending(JNIEnv* env,
                               const base::android::JavaParamRef<jobject>& obj);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-
-  void OnWebContentsFocused(content::RenderWidgetHost* host);
-  void OnWebContentsLostFocus(content::RenderWidgetHost* host);
 
   device::VRDevice* GetDevice();
 
   // device::GvrDelegateProvider implementation.
   void ExitWebVRPresent() override;
-  void CreateVRDisplayInfo(
-      const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-      uint32_t device_id) override;
 
  private:
   // device::GvrDelegateProvider implementation.
   void SetDeviceId(unsigned int device_id) override;
   void RequestWebVRPresent(device::mojom::VRSubmitFrameClientPtr submit_client,
                            device::mojom::VRPresentationProviderRequest request,
-                           const base::Callback<void(bool)>& callback) override;
-  void OnDisplayAdded(device::VRDisplayImpl* display) override;
-  void OnDisplayRemoved(device::VRDisplayImpl* display) override;
-  void OnListeningForActivateChanged(device::VRDisplayImpl* display) override;
-  void GetNextMagicWindowPose(
-      device::VRDisplayImpl* display,
-      device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback)
-      override;
+                           device::mojom::VRDisplayInfoPtr display_info,
+                           base::Callback<void(bool)> callback) override;
+  void OnListeningForActivateChanged(bool listening) override;
 
   void OnActivateDisplayHandled(bool will_not_present);
-  void OnFocusedAndActivatable(device::VRDisplayImpl* display);
-  void OnLostFocusedAndActivatable();
   void SetListeningForActivate(bool listening);
-  void SetPresentResult(bool success);
+  void OnPresentResult(device::mojom::VRSubmitFrameClientPtr submit_client,
+                       device::mojom::VRPresentationProviderRequest request,
+                       device::mojom::VRDisplayInfoPtr display_info,
+                       base::Callback<void(bool)> callback,
+                       bool success);
 
   std::unique_ptr<VrCoreInfo> MakeVrCoreInfo(JNIEnv* env);
 
@@ -99,15 +80,8 @@ class VrShellDelegate : public device::GvrDelegateProvider {
   unsigned int device_id_ = 0;
   VrShell* vr_shell_ = nullptr;
   base::Callback<void(bool)> present_callback_;
-  device::mojom::VRSubmitFrameClientPtr submit_client_;
-  device::mojom::VRPresentationProviderRequest presentation_provider_request_;
   bool pending_successful_present_request_ = false;
-  std::unique_ptr<gvr::GvrApi> gvr_api_;
 
-  std::map<content::RenderWidgetHost*, device::VRDisplayImpl*> displays_;
-  std::map<device::VRDisplayImpl*, std::unique_ptr<DelegateWebContentsObserver>>
-      observers_;
-  device::VRDisplayImpl* activatable_display_ = nullptr;
   base::CancelableClosure clear_activate_task_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 

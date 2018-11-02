@@ -5,6 +5,7 @@
 #ifndef GarbageCollected_h
 #define GarbageCollected_h
 
+#include "base/macros.h"
 #include "platform/heap/ThreadState.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
@@ -127,20 +128,23 @@ class PLATFORM_EXPORT GarbageCollectedMixin {
 //    GarbageCollectedMixinConstructorMarker's constructor takes care of
 //    this and the field is declared by way of USING_GARBAGE_COLLECTED_MIXIN().
 
-#define DEFINE_GARBAGE_COLLECTED_MIXIN_CONSTRUCTOR_MARKER(TYPE)          \
- public:                                                                 \
-  GC_PLUGIN_IGNORE("crbug.com/456823")                                   \
-  NO_SANITIZE_UNRELATED_CAST void* operator new(size_t size) {           \
-    void* object =                                                       \
-        TYPE::AllocateObject(size, IsEagerlyFinalizedType<TYPE>::value); \
-    ThreadState* state =                                                 \
-        ThreadStateFor<ThreadingTrait<TYPE>::kAffinity>::GetState();     \
-    state->EnterGCForbiddenScopeIfNeeded(                                \
-        &(reinterpret_cast<TYPE*>(object)->mixin_constructor_marker_));  \
-    return object;                                                       \
-  }                                                                      \
-  GarbageCollectedMixinConstructorMarker mixin_constructor_marker_;      \
-                                                                         \
+#define DEFINE_GARBAGE_COLLECTED_MIXIN_CONSTRUCTOR_MARKER(TYPE)           \
+ public:                                                                  \
+  GC_PLUGIN_IGNORE("crbug.com/456823")                                    \
+  NO_SANITIZE_UNRELATED_CAST void* operator new(size_t size) {            \
+    CHECK_GE(kLargeObjectSizeThreshold, size)                             \
+        << "GarbageCollectedMixin may not be a large object";             \
+    void* object =                                                        \
+        TYPE::AllocateObject(size, IsEagerlyFinalizedType<TYPE>::value);  \
+    ThreadState* state =                                                  \
+        ThreadStateFor<ThreadingTrait<TYPE>::kAffinity>::GetState();      \
+    state->EnterGCForbiddenScopeIfNeeded(                                 \
+        &(reinterpret_cast<TYPE*>(object)->mixin_constructor_marker_));   \
+    return object;                                                        \
+  }                                                                       \
+  GarbageCollectedMixinConstructorMarker<ThreadingTrait<TYPE>::kAffinity> \
+      mixin_constructor_marker_;                                          \
+                                                                          \
  private:
 
 // Mixins that wrap/nest others requires extra handling:
@@ -175,7 +179,10 @@ class PLATFORM_EXPORT GarbageCollectedMixin {
 // GarbageCollectedMixinConstructorMarker<> private field. By following Blink
 // convention of using the macro at the top of a class declaration, its
 // constructor will run first.
-class GarbageCollectedMixinConstructorMarker {
+class GarbageCollectedMixinConstructorMarkerBase {};
+template <ThreadAffinity affinity>
+class GarbageCollectedMixinConstructorMarker
+    : public GarbageCollectedMixinConstructorMarkerBase {
  public:
   GarbageCollectedMixinConstructorMarker() {
     // FIXME: if prompt conservative GCs are needed, forced GCs that
@@ -183,10 +190,33 @@ class GarbageCollectedMixinConstructorMarker {
     // For now, assume the next out-of-line allocation request will
     // happen soon enough and take care of it. Mixin objects aren't
     // overly common.
-    ThreadState* state = ThreadState::Current();
+    ThreadState* state = ThreadStateFor<affinity>::GetState();
     state->LeaveGCForbiddenScopeIfNeeded(this);
   }
 };
+
+// Merge two or more Mixins into one:
+//
+//  class A : public GarbageCollectedMixin {};
+//  class B : public GarbageCollectedMixin {};
+//  class C : public A, public B {
+//    // C::AdjustAndMark is now ambiguous because there are two candidates:
+//    // A::AdjustAndMark and B::AdjustAndMark.  Ditto for other functions.
+//
+//    MERGE_GARBAGE_COLLECTED_MIXINS();
+//    // The macro defines C::AdjustAndMark, etc. so that they are no longer
+//    // ambiguous. USING_GARBAGE_COLLECTED_MIXIN(TYPE) overrides them later
+//    // and provides the implementations.
+//  };
+#define MERGE_GARBAGE_COLLECTED_MIXINS()                          \
+ public:                                                          \
+  void AdjustAndMark(Visitor*) const override = 0;                \
+  HeapObjectHeader* GetHeapObjectHeader() const override = 0;     \
+  void AdjustAndTraceMarkedWrapper(const ScriptWrappableVisitor*) \
+      const override = 0;                                         \
+                                                                  \
+ private:                                                         \
+  using merge_garbage_collected_mixins_requires_semicolon = void
 
 // Base class for objects allocated in the Blink garbage-collected heap.
 //
@@ -212,8 +242,6 @@ class GarbageCollected;
 // the garbage collector determines that the object is no longer reachable.
 template <typename T>
 class GarbageCollectedFinalized : public GarbageCollected<T> {
-  WTF_MAKE_NONCOPYABLE(GarbageCollectedFinalized);
-
  protected:
   // finalizeGarbageCollectedObject is called when the object is freed from
   // the heap.  By default finalization means calling the destructor on the
@@ -223,13 +251,15 @@ class GarbageCollectedFinalized : public GarbageCollected<T> {
   // bit long to make name conflicts less likely.
   void FinalizeGarbageCollectedObject() { static_cast<T*>(this)->~T(); }
 
-  GarbageCollectedFinalized() {}
-  ~GarbageCollectedFinalized() {}
+  GarbageCollectedFinalized() = default;
+  ~GarbageCollectedFinalized() = default;
 
   template <typename U>
   friend struct HasFinalizer;
   template <typename U, bool>
   friend struct FinalizerTraitImpl;
+
+  DISALLOW_COPY_AND_ASSIGN(GarbageCollectedFinalized);
 };
 
 template <typename T,

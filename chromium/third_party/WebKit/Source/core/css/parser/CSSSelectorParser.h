@@ -5,14 +5,17 @@
 #ifndef CSSSelectorParser_h
 #define CSSSelectorParser_h
 
+#include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/css/parser/CSSParserSelector.h"
 #include "core/css/parser/CSSParserTokenRange.h"
-#include <memory>
 
 namespace blink {
 
 class CSSParserContext;
+class CSSParserTokenStream;
+class CSSParserObserver;
 class CSSSelectorList;
 class StyleSheetContents;
 
@@ -25,6 +28,10 @@ class CORE_EXPORT CSSSelectorParser {
   static CSSSelectorList ParseSelector(CSSParserTokenRange,
                                        const CSSParserContext*,
                                        StyleSheetContents*);
+  static CSSSelectorList ConsumeSelector(CSSParserTokenStream&,
+                                         const CSSParserContext*,
+                                         StyleSheetContents*,
+                                         CSSParserObserver*);
 
   static bool ConsumeANPlusB(CSSParserTokenRange&, std::pair<int, int>&);
 
@@ -34,6 +41,8 @@ class CORE_EXPORT CSSSelectorParser {
   // These will all consume trailing comments if successful
 
   CSSSelectorList ConsumeComplexSelectorList(CSSParserTokenRange&);
+  CSSSelectorList ConsumeComplexSelectorList(CSSParserTokenStream&,
+                                             CSSParserObserver*);
   CSSSelectorList ConsumeCompoundSelectorList(CSSParserTokenRange&);
 
   std::unique_ptr<CSSParserSelector> ConsumeComplexSelector(
@@ -72,14 +81,13 @@ class CORE_EXPORT CSSSelectorParser {
   void RecordUsageAndDeprecations(const CSSSelectorList&);
 
   Member<const CSSParserContext> context_;
-  Member<StyleSheetContents> style_sheet_;  // FIXME: Should be const
+  Member<const StyleSheetContents> style_sheet_;
 
   bool failed_parsing_ = false;
   bool disallow_pseudo_elements_ = false;
 
   class DisallowPseudoElementsScope {
     STACK_ALLOCATED();
-    WTF_MAKE_NONCOPYABLE(DisallowPseudoElementsScope);
 
    public:
     DisallowPseudoElementsScope(CSSSelectorParser* parser)
@@ -94,6 +102,7 @@ class CORE_EXPORT CSSSelectorParser {
    private:
     CSSSelectorParser* parser_;
     bool was_disallowed_;
+    DISALLOW_COPY_AND_ASSIGN(DisallowPseudoElementsScope);
   };
 };
 

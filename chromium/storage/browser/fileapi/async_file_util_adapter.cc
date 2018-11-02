@@ -140,6 +140,13 @@ void RunCreateOrOpenCallback(
     FileSystemOperationContext* context,
     const AsyncFileUtil::CreateOrOpenCallback& callback,
     base::File file) {
+  if (callback.IsCancelled()) {
+    // If |callback| been cancelled, free |file| on the correct task runner.
+    context->task_runner()->PostTask(
+        FROM_HERE, Bind([](base::File file) { file.Close(); }, Passed(&file)));
+    return;
+  }
+
   callback.Run(std::move(file), base::Closure());
 }
 
@@ -151,8 +158,7 @@ AsyncFileUtilAdapter::AsyncFileUtilAdapter(
   DCHECK(sync_file_util_.get());
 }
 
-AsyncFileUtilAdapter::~AsyncFileUtilAdapter() {
-}
+AsyncFileUtilAdapter::~AsyncFileUtilAdapter() = default;
 
 void AsyncFileUtilAdapter::CreateOrOpen(
     std::unique_ptr<FileSystemOperationContext> context,

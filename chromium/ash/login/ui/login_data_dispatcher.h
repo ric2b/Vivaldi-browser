@@ -5,8 +5,11 @@
 #ifndef ASH_LOGIN_UI_LOGIN_DATA_DISPATCHER_H_
 #define ASH_LOGIN_UI_LOGIN_DATA_DISPATCHER_H_
 
+#include <vector>
+
 #include "ash/ash_export.h"
-#include "ash/public/interfaces/user_info.mojom.h"
+#include "ash/public/interfaces/login_user_info.mojom.h"
+#include "ash/public/interfaces/tray_action.mojom.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -36,12 +39,30 @@ class ASH_EXPORT LoginDataDispatcher {
 
     // Called when the displayed set of users has changed.
     virtual void OnUsersChanged(
-        const std::vector<ash::mojom::UserInfoPtr>& users);
+        const std::vector<mojom::LoginUserInfoPtr>& users);
 
     // Called when pin should be enabled or disabled for |user|. By default, pin
     // should be disabled.
     virtual void OnPinEnabledForUserChanged(const AccountId& user,
                                             bool enabled);
+
+    // Called when the given user can click their pod to unlock.
+    virtual void OnClickToUnlockEnabledForUserChanged(const AccountId& user,
+                                                      bool enabled);
+
+    // Called when the lock screen note state changes.
+    virtual void OnLockScreenNoteStateChanged(mojom::TrayActionState state);
+
+    // Called when an easy unlock icon should be displayed.
+    virtual void OnShowEasyUnlockIcon(
+        const AccountId& user,
+        const mojom::EasyUnlockIconOptionsPtr& icon);
+
+    // Called when the info shown for dev and canary channels are changed.
+    virtual void OnDevChannelInfoChanged(
+        const std::string& os_version_label_text,
+        const std::string& enterprise_info_text,
+        const std::string& bluetooth_name);
   };
 
   LoginDataDispatcher();
@@ -50,9 +71,15 @@ class ASH_EXPORT LoginDataDispatcher {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  void NotifyUsers(const std::vector<ash::mojom::UserInfoPtr>& users);
-
+  void NotifyUsers(const std::vector<mojom::LoginUserInfoPtr>& users);
   void SetPinEnabledForUser(const AccountId& user, bool enabled);
+  void SetClickToUnlockEnabledForUser(const AccountId& user, bool enabled);
+  void SetLockScreenNoteState(mojom::TrayActionState state);
+  void ShowEasyUnlockIcon(const AccountId& user,
+                          const mojom::EasyUnlockIconOptionsPtr& icon);
+  void SetDevChannelInfo(const std::string& os_version_label_text,
+                         const std::string& enterprise_info_text,
+                         const std::string& bluetooth_name);
 
  private:
   base::ObserverList<Observer> observers_;

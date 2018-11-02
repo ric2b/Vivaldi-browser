@@ -32,11 +32,10 @@
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "components/user_manager/user_manager.h"
 #endif
 
 #if !defined(OS_ANDROID)
@@ -144,19 +143,20 @@ void ChildAccountService::AddChildStatusReceivedCallback(
     status_received_callback_list_.push_back(callback);
 }
 
-bool ChildAccountService::IsGoogleAuthenticated() {
+ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() {
   std::vector<gaia::ListedAccount> accounts;
   std::vector<gaia::ListedAccount> signed_out_accounts;
   if (!gaia_cookie_manager_->ListAccounts(&accounts, &signed_out_accounts,
                                           kGaiaCookieManagerSource)) {
-    return false;
+    return AuthState::PENDING;
   }
-  return !accounts.empty();
+  return accounts.empty() ? AuthState::NOT_AUTHENTICATED
+                          : AuthState::AUTHENTICATED;
 }
 
-std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
+std::unique_ptr<base::CallbackList<void()>::Subscription>
 ChildAccountService::ObserveGoogleAuthState(
-    const base::Callback<void(bool)>& callback) {
+    const base::Callback<void()>& callback) {
   return google_auth_state_observers_.Add(callback);
 }
 
@@ -191,6 +191,13 @@ bool ChildAccountService::SetActive(bool active) {
     settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
                                       base::MakeUnique<base::Value>(false));
 
+#if defined(OS_CHROMEOS)
+    // Mirror account consistency is required for child accounts on Chrome OS.
+    settings_service->SetLocalSetting(
+        supervised_users::kAccountConsistencyMirrorRequired,
+        base::MakeUnique<base::Value>(true));
+#endif
+
 #if !defined(OS_CHROMEOS)
     // This is also used by user policies (UserPolicySigninService), but since
     // child accounts can not also be Dasher accounts, there shouldn't be any
@@ -223,6 +230,10 @@ bool ChildAccountService::SetActive(bool active) {
                                       nullptr);
     settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
                                       nullptr);
+#if defined(OS_CHROMEOS)
+    settings_service->SetLocalSetting(
+        supervised_users::kAccountConsistencyMirrorRequired, nullptr);
+#endif
 
 #if !defined(OS_CHROMEOS)
     SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(false);
@@ -242,7 +253,6 @@ bool ChildAccountService::SetActive(bool active) {
 }
 
 void ChildAccountService::SetIsChildAccount(bool is_child_account) {
-  PropagateChildStatusToUser(is_child_account);
   if (profile_->IsChild() != is_child_account) {
     if (is_child_account) {
       profile_->GetPrefs()->SetString(prefs::kSupervisedUserId,
@@ -336,7 +346,7 @@ void ChildAccountService::OnGaiaAccountsInCookieUpdated(
     const std::vector<gaia::ListedAccount>& accounts,
     const std::vector<gaia::ListedAccount>& signed_out_accounts,
     const GoogleServiceAuthError& error) {
-  google_auth_state_observers_.Notify(!accounts.empty());
+  google_auth_state_observers_.Notify();
 }
 
 void ChildAccountService::StartFetchingFamilyInfo() {
@@ -364,7 +374,12 @@ void ChildAccountService::PropagateChildStatusToUser(bool is_child) {
   user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
   if (user) {
-    user_manager::UserManager::Get()->ChangeUserChildStatus(user, is_child);
+    // Note that supervised user is allowed to change type due to legacy
+    // initialization.
+    if (user->GetType() != user_manager::USER_TYPE_SUPERVISED) {
+      if (is_child != (user->GetType() == user_manager::USER_TYPE_CHILD))
+        LOG(FATAL) << "User child flag has changed: " << is_child;
+    }
   } else if (!chromeos::ProfileHelper::Get()->IsSigninProfile(profile_) &&
              !chromeos::ProfileHelper::Get()->IsLockScreenAppProfile(
                  profile_)) {

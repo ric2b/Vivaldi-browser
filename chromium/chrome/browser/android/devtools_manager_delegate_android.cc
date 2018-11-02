@@ -4,13 +4,14 @@
 
 #include "chrome/browser/android/devtools_manager_delegate_android.h"
 
+#include <map>
+
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/android/tab_android.h"
-#include "chrome/browser/devtools/devtools_network_protocol_handler.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/grit/browser_resources.h"
@@ -26,42 +27,54 @@ using content::WebContents;
 
 namespace {
 
-class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate,
-                         public content::DevToolsAgentHostClient {
+class ClientProxy : public content::DevToolsAgentHostClient {
  public:
-  explicit TabProxyDelegate(TabAndroid* tab)
-      : tab_id_(tab->GetAndroidId()),
-        title_(base::UTF16ToUTF8(tab->GetTitle())),
-        url_(tab->GetURL()),
-        agent_host_(tab->web_contents() ?
-            DevToolsAgentHost::GetOrCreateFor(tab->web_contents()) : nullptr) {
-  }
-
-  ~TabProxyDelegate() override {
-  }
+  explicit ClientProxy(content::DevToolsExternalAgentProxy* proxy)
+      : proxy_(proxy) {}
+  ~ClientProxy() override {}
 
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {
     proxy_->DispatchOnClientHost(message);
   }
 
-  void AgentHostClosed(DevToolsAgentHost* agent_host,
-                       bool replaced_with_another_client) override {
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override {
     proxy_->ConnectionClosed();
   }
 
+ private:
+  content::DevToolsExternalAgentProxy* proxy_;
+  DISALLOW_COPY_AND_ASSIGN(ClientProxy);
+};
+
+class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate {
+ public:
+  explicit TabProxyDelegate(TabAndroid* tab)
+      : tab_id_(tab->GetAndroidId()),
+        title_(base::UTF16ToUTF8(tab->GetTitle())),
+        url_(tab->GetURL()),
+        agent_host_(tab->web_contents()
+                        ? DevToolsAgentHost::GetOrCreateFor(tab->web_contents())
+                        : nullptr) {}
+
+  ~TabProxyDelegate() override {}
+
   void Attach(content::DevToolsExternalAgentProxy* proxy) override {
-    proxy_ = proxy;
+    proxies_[proxy].reset(new ClientProxy(proxy));
     MaterializeAgentHost();
     if (agent_host_)
-      agent_host_->AttachClient(this);
+      agent_host_->AttachClient(proxies_[proxy].get());
   }
 
-  void Detach() override {
+  void Detach(content::DevToolsExternalAgentProxy* proxy) override {
+    auto it = proxies_.find(proxy);
+    if (it == proxies_.end())
+      return;
     if (agent_host_)
-      agent_host_->DetachClient(this);
-    agent_host_ = nullptr;
-    proxy_ = nullptr;
+      agent_host_->DetachClient(it->second.get());
+    proxies_.erase(it);
+    if (proxies_.empty())
+      agent_host_ = nullptr;
   }
 
   std::string GetType() override {
@@ -116,9 +129,13 @@ class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate,
     return agent_host_ ? agent_host_->GetLastActivityTime() : base::TimeTicks();
   }
 
-  void SendMessageToBackend(const std::string& message) override {
+  void SendMessageToBackend(content::DevToolsExternalAgentProxy* proxy,
+                            const std::string& message) override {
+    auto it = proxies_.find(proxy);
+    if (it == proxies_.end())
+      return;
     if (agent_host_)
-      agent_host_->DispatchProtocolMessage(this, message);
+      agent_host_->DispatchProtocolMessage(it->second.get(), message);
   }
 
  private:
@@ -155,7 +172,8 @@ class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate,
   const std::string title_;
   const GURL url_;
   scoped_refptr<DevToolsAgentHost> agent_host_;
-  content::DevToolsExternalAgentProxy* proxy_;
+  std::map<content::DevToolsExternalAgentProxy*, std::unique_ptr<ClientProxy>>
+      proxies_;
   DISALLOW_COPY_AND_ASSIGN(TabProxyDelegate);
 };
 
@@ -172,20 +190,9 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHostForTab(TabAndroid* tab) {
 
 } //  namespace
 
-DevToolsManagerDelegateAndroid::DevToolsManagerDelegateAndroid()
-    : network_protocol_handler_(new DevToolsNetworkProtocolHandler()) {
-  content::DevToolsAgentHost::AddObserver(this);
-}
+DevToolsManagerDelegateAndroid::DevToolsManagerDelegateAndroid() = default;
 
-DevToolsManagerDelegateAndroid::~DevToolsManagerDelegateAndroid() {
-  content::DevToolsAgentHost::RemoveObserver(this);
-}
-
-base::DictionaryValue* DevToolsManagerDelegateAndroid::HandleCommand(
-    DevToolsAgentHost* agent_host,
-    base::DictionaryValue* command_dict) {
-  return network_protocol_handler_->HandleCommand(agent_host, command_dict);
-}
+DevToolsManagerDelegateAndroid::~DevToolsManagerDelegateAndroid() = default;
 
 std::string DevToolsManagerDelegateAndroid::GetTargetType(
     content::WebContents* web_contents) {
@@ -246,20 +253,11 @@ DevToolsManagerDelegateAndroid::CreateNewTarget(const GURL& url) {
 }
 
 std::string DevToolsManagerDelegateAndroid::GetDiscoveryPageHTML() {
-  return ResourceBundle::GetSharedInstance().GetRawDataResource(
-      IDR_DEVTOOLS_DISCOVERY_PAGE_HTML).as_string();
+  return ui::ResourceBundle::GetSharedInstance()
+      .GetRawDataResource(IDR_DEVTOOLS_DISCOVERY_PAGE_HTML)
+      .as_string();
 }
 
 bool DevToolsManagerDelegateAndroid::IsBrowserTargetDiscoverable() {
   return true;
-}
-
-void DevToolsManagerDelegateAndroid::DevToolsAgentHostAttached(
-    content::DevToolsAgentHost* agent_host) {
-  network_protocol_handler_->DevToolsAgentStateChanged(agent_host, true);
-}
-
-void DevToolsManagerDelegateAndroid::DevToolsAgentHostDetached(
-    content::DevToolsAgentHost* agent_host) {
-  network_protocol_handler_->DevToolsAgentStateChanged(agent_host, false);
 }

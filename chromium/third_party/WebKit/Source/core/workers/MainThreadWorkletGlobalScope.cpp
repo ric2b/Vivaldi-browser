@@ -10,22 +10,16 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/probe/CoreProbes.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 
 namespace blink {
 
 MainThreadWorkletGlobalScope::MainThreadWorkletGlobalScope(
     LocalFrame* frame,
-    const KURL& url,
-    const String& user_agent,
-    RefPtr<SecurityOrigin> security_origin,
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
     v8::Isolate* isolate,
     WorkerReportingProxy& reporting_proxy)
-    : WorkletGlobalScope(url,
-                         user_agent,
-                         std::move(security_origin),
-                         isolate,
-                         nullptr /* worker_clients */,
-                         reporting_proxy),
+    : WorkletGlobalScope(std::move(creation_params), isolate, reporting_proxy),
       ContextClient(frame) {}
 
 MainThreadWorkletGlobalScope::~MainThreadWorkletGlobalScope() {}
@@ -33,6 +27,15 @@ MainThreadWorkletGlobalScope::~MainThreadWorkletGlobalScope() {}
 WorkerThread* MainThreadWorkletGlobalScope::GetThread() const {
   NOTREACHED();
   return nullptr;
+}
+
+scoped_refptr<WebTaskRunner> MainThreadWorkletGlobalScope::GetTaskRunner(
+    TaskType type) {
+  DCHECK(IsContextThread());
+  // MainThreadWorkletGlobalScope lives on the main thread and its GetThread()
+  // doesn't return a valid worker thread. Instead, retrieve a task runner
+  // from the frame.
+  return GetFrame()->FrameScheduler()->GetTaskRunner(type);
 }
 
 // TODO(nhiroki): Add tests for termination.
@@ -53,7 +56,7 @@ CoreProbeSink* MainThreadWorkletGlobalScope::GetProbeSink() {
   return probe::ToCoreProbeSink(GetFrame());
 }
 
-DEFINE_TRACE(MainThreadWorkletGlobalScope) {
+void MainThreadWorkletGlobalScope::Trace(blink::Visitor* visitor) {
   WorkletGlobalScope::Trace(visitor);
   ContextClient::Trace(visitor);
 }

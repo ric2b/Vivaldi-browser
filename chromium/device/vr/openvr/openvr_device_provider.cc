@@ -11,34 +11,44 @@
 
 namespace device {
 
-OpenVRDeviceProvider::OpenVRDeviceProvider()
-    : initialized_(false), vr_system_(nullptr) {}
+OpenVRDeviceProvider::OpenVRDeviceProvider() = default;
 
-OpenVRDeviceProvider::~OpenVRDeviceProvider() {}
-
-void OpenVRDeviceProvider::GetDevices(std::vector<VRDevice*>* devices) {
-  if (initialized_) {
-    VRDevice* device = new OpenVRDevice(vr_system_);
-    devices->push_back(device);
-    GamepadDataFetcherManager::GetInstance()->AddFactory(
-        new OpenVRGamepadDataFetcher::Factory(device->id(), vr_system_));
-  }
+OpenVRDeviceProvider::~OpenVRDeviceProvider() {
+  device::GamepadDataFetcherManager::GetInstance()->RemoveSourceFactory(
+      device::GAMEPAD_SOURCE_OPENVR);
+  vr::VR_Shutdown();
 }
 
-void OpenVRDeviceProvider::Initialize() {
-  if (!initialized_ && vr::VR_IsRuntimeInstalled() && vr::VR_IsHmdPresent()) {
-    vr::EVRInitError init_error = vr::VRInitError_None;
-    vr_system_ =
-        vr::VR_Init(&init_error, vr::EVRApplicationType::VRApplication_Scene);
+void OpenVRDeviceProvider::Initialize(
+    base::Callback<void(VRDevice*)> add_device_callback,
+    base::Callback<void(VRDevice*)> remove_device_callback,
+    base::OnceClosure initialization_complete) {
+  CreateDevice();
+  if (device_)
+    add_device_callback.Run(device_.get());
+  initialized_ = true;
+  std::move(initialization_complete).Run();
+}
 
-    if (init_error != vr::VRInitError_None) {
-      LOG(ERROR) << vr::VR_GetVRInitErrorAsEnglishDescription(init_error);
-      vr_system_ = nullptr;
-      return;
-    }
+void OpenVRDeviceProvider::CreateDevice() {
+  if (!vr::VR_IsRuntimeInstalled() || !vr::VR_IsHmdPresent())
+    return;
 
-    initialized_ = true;
+  vr::EVRInitError init_error = vr::VRInitError_None;
+  vr::IVRSystem* vr_system =
+      vr::VR_Init(&init_error, vr::EVRApplicationType::VRApplication_Scene);
+
+  if (init_error != vr::VRInitError_None) {
+    LOG(ERROR) << vr::VR_GetVRInitErrorAsEnglishDescription(init_error);
+    return;
   }
+  device_ = std::make_unique<OpenVRDevice>(vr_system);
+  GamepadDataFetcherManager::GetInstance()->AddFactory(
+      new OpenVRGamepadDataFetcher::Factory(device_->GetId(), vr_system));
+}
+
+bool OpenVRDeviceProvider::Initialized() {
+  return initialized_;
 }
 
 }  // namespace device

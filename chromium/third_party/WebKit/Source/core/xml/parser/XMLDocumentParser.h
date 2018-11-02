@@ -29,10 +29,10 @@
 #include <libxml/tree.h>
 #include <memory>
 #include "core/dom/ParserContentPolicy.h"
-#include "core/dom/PendingScript.h"
 #include "core/dom/ScriptableDocumentParser.h"
-#include "core/loader/resource/ScriptResource.h"
 #include "core/xml/parser/XMLErrors.h"
+#include "core/xml/parser/XMLParserScriptRunner.h"
+#include "core/xml/parser/XMLParserScriptRunnerHost.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceClient.h"
 #include "platform/text/SegmentedString.h"
@@ -49,16 +49,14 @@ class Document;
 class DocumentFragment;
 class Element;
 class LocalFrameView;
-class ScriptElementBase;
 class Text;
 
 class XMLParserContext : public RefCounted<XMLParserContext> {
  public:
-  static RefPtr<XMLParserContext> CreateMemoryParser(xmlSAXHandlerPtr,
-                                                     void* user_data,
-                                                     const CString& chunk);
-  static RefPtr<XMLParserContext> CreateStringParser(xmlSAXHandlerPtr,
-                                                     void* user_data);
+  static scoped_refptr<XMLParserContext>
+  CreateMemoryParser(xmlSAXHandlerPtr, void* user_data, const CString& chunk);
+  static scoped_refptr<XMLParserContext> CreateStringParser(xmlSAXHandlerPtr,
+                                                            void* user_data);
   ~XMLParserContext();
   xmlParserCtxtPtr Context() const { return context_; }
 
@@ -69,7 +67,7 @@ class XMLParserContext : public RefCounted<XMLParserContext> {
 };
 
 class XMLDocumentParser final : public ScriptableDocumentParser,
-                                public PendingScriptClient {
+                                public XMLParserScriptRunnerHost {
   USING_GARBAGE_COLLECTED_MIXIN(XMLDocumentParser);
 
  public:
@@ -82,7 +80,7 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
     return new XMLDocumentParser(fragment, element, parser_content_policy);
   }
   ~XMLDocumentParser() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   // Exposed for callbacks:
   void HandleError(XMLErrors::ErrorType, const char* message, TextPosition);
@@ -97,7 +95,7 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   static bool ParseDocumentFragment(
       const String&,
       DocumentFragment*,
-      Element* parent = 0,
+      Element* parent = nullptr,
       ParserContentPolicy = kAllowScriptingContent);
 
   // Used by the XMLHttpRequest to check if the responseXML was well formed.
@@ -118,11 +116,11 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   void SetScriptStartPosition(TextPosition);
 
  private:
-  explicit XMLDocumentParser(Document&, LocalFrameView* = 0);
+  explicit XMLDocumentParser(Document&, LocalFrameView* = nullptr);
   XMLDocumentParser(DocumentFragment*, Element*, ParserContentPolicy);
 
   // From DocumentParser
-  void insert(const SegmentedString&) override;
+  void insert(const String&) override { NOTREACHED(); }
   void Append(const String&) override;
   void Finish() override;
   bool IsWaitingForScripts() const override;
@@ -131,8 +129,8 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   OrdinalNumber LineNumber() const override;
   OrdinalNumber ColumnNumber() const;
 
-  // from PendingScriptClient
-  void PendingScriptFinished(PendingScript*) override;
+  // XMLParserScriptRunnerHost
+  void NotifyScriptExecuted() override;
 
   void end();
 
@@ -181,14 +179,12 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   void DoWrite(const String&);
   void DoEnd();
 
-  bool has_view_;
-
   SegmentedString original_source_for_transform_;
 
   xmlParserCtxtPtr Context() const {
-    return context_ ? context_->Context() : 0;
+    return context_ ? context_->Context() : nullptr;
   }
-  RefPtr<XMLParserContext> context_;
+  scoped_refptr<XMLParserContext> context_;
   Deque<std::unique_ptr<PendingCallback>> pending_callbacks_;
   Vector<xmlChar> buffered_text_;
 
@@ -209,8 +205,7 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
 
   XMLErrors xml_errors_;
 
-  Member<PendingScript> pending_script_;
-  Member<ScriptElementBase> script_element_;
+  Member<XMLParserScriptRunner> script_runner_;
   TextPosition script_start_position_;
 
   bool parsing_fragment_;

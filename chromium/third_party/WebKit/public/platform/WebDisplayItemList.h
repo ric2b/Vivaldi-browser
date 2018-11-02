@@ -23,6 +23,7 @@ struct SkRect;
 class SkRRect;
 
 namespace cc {
+class DisplayItemList;
 class FilterOperations;
 }
 
@@ -37,8 +38,7 @@ class WebDisplayItemList {
   virtual ~WebDisplayItemList() {}
 
   virtual void AppendDrawingItem(const WebRect& visual_rect,
-                                 sk_sp<const cc::PaintRecord>,
-                                 const WebRect& record_bounds) {}
+                                 sk_sp<const cc::PaintRecord>) {}
 
   virtual void AppendClipItem(const WebRect& clip_rect,
                               const WebVector<SkRRect>& rounded_clip_rects) {}
@@ -68,6 +68,8 @@ class WebDisplayItemList {
   virtual void AppendScrollItem(const WebSize& scroll_offset,
                                 ScrollContainerId) {}
   virtual void AppendEndScrollItem() {}
+
+  virtual cc::DisplayItemList* GetCcDisplayItemList() { return nullptr; }
 };
 
 }  // namespace blink

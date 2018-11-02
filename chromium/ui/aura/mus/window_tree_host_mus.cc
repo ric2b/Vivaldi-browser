@@ -74,16 +74,16 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
 
   // Do not advertise accelerated widget; already set manually.
   const bool use_default_accelerated_widget = false;
-  SetPlatformWindow(base::MakeUnique<ui::StubWindow>(
+  SetPlatformWindow(std::make_unique<ui::StubWindow>(
       this, use_default_accelerated_widget, bounds_in_pixels));
 
   if (!init_params.use_classic_ime) {
-    input_method_ = base::MakeUnique<InputMethodMus>(this, window());
+    input_method_ = std::make_unique<InputMethodMus>(this, window());
     input_method_->Init(init_params.window_tree_client->connector());
     SetSharedInputMethod(input_method_.get());
   }
 
-  compositor()->SetHostHasTransparentBackground(true);
+  compositor()->SetBackgroundColor(SK_ColorTRANSPARENT);
 
   // Mus windows are assumed hidden.
   compositor()->SetVisible(false);
@@ -148,6 +148,10 @@ void WindowTreeHostMus::StackAtTop() {
   delegate_->OnWindowTreeHostStackAtTop(this);
 }
 
+void WindowTreeHostMus::PerformWmAction(const std::string& action) {
+  delegate_->OnWindowTreeHostPerformWmAction(this, action);
+}
+
 void WindowTreeHostMus::PerformWindowMove(
     ui::mojom::MoveLoopSource mus_source,
     const gfx::Point& cursor_location,
@@ -170,6 +174,17 @@ display::Display WindowTreeHostMus::GetDisplay() const {
   display::Display display;
   display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
   return display;
+}
+
+void WindowTreeHostMus::OverrideAcceleratedWidget(
+    gfx::AcceleratedWidget widget) {
+  bool was_visible = compositor()->IsVisible();
+  if (was_visible)
+    compositor()->SetVisible(false);
+  compositor()->ReleaseAcceleratedWidget();
+  OnAcceleratedWidgetAvailable(widget, GetDisplay().device_scale_factor());
+  if (was_visible)
+    compositor()->SetVisible(true);
 }
 
 std::unique_ptr<DisplayInitParams>

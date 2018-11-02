@@ -32,13 +32,13 @@ const int64_t kFlushIntervalInBytes = 10 << 20;  // 10MB.
 
 class CopyOrMoveOperationDelegate::CopyOrMoveImpl {
  public:
-  virtual ~CopyOrMoveImpl() {}
+  virtual ~CopyOrMoveImpl() = default;
   virtual void Run(
       const CopyOrMoveOperationDelegate::StatusCallback& callback) = 0;
   virtual void Cancel() = 0;
 
  protected:
-  CopyOrMoveImpl() {}
+  CopyOrMoveImpl() = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CopyOrMoveImpl);
@@ -522,6 +522,12 @@ class StreamCopyOrMoveImpl
       const CopyOrMoveOperationDelegate::StatusCallback& callback,
       const base::Time& last_modified,
       base::File::Error error) {
+    // Destruct StreamCopyHelper to close the destination file.
+    // This is important because some file system implementations update
+    // timestamps on file close and thus it should happen before we call
+    // TouchFile().
+    copy_helper_.reset();
+
     NotifyOnModifyFile(dest_url_);
     NotifyOnEndUpdate(dest_url_);
     if (cancel_requested_)
@@ -612,8 +618,7 @@ CopyOrMoveOperationDelegate::StreamCopyHelper::StreamCopyHelper(
       cancel_requested_(false),
       weak_factory_(this) {}
 
-CopyOrMoveOperationDelegate::StreamCopyHelper::~StreamCopyHelper() {
-}
+CopyOrMoveOperationDelegate::StreamCopyHelper::~StreamCopyHelper() = default;
 
 void CopyOrMoveOperationDelegate::StreamCopyHelper::Run(
     const StatusCallback& callback) {
@@ -755,8 +760,7 @@ CopyOrMoveOperationDelegate::CopyOrMoveOperationDelegate(
   same_file_system_ = src_root_.IsInSameFileSystem(dest_root_);
 }
 
-CopyOrMoveOperationDelegate::~CopyOrMoveOperationDelegate() {
-}
+CopyOrMoveOperationDelegate::~CopyOrMoveOperationDelegate() = default;
 
 void CopyOrMoveOperationDelegate::Run() {
   // Not supported; this should never be called.

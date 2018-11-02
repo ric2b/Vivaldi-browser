@@ -5,12 +5,12 @@
 #ifndef ScriptCustomElementDefinition_h
 #define ScriptCustomElementDefinition_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/html/custom/CustomElementDefinition.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/TraceWrapperV8Reference.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "v8.h"
 
 namespace blink {
@@ -42,7 +42,7 @@ class CORE_EXPORT ScriptCustomElementDefinition final
 
   virtual ~ScriptCustomElementDefinition() = default;
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   v8::Local<v8::Object> Constructor() const;
 
@@ -90,7 +90,7 @@ class CORE_EXPORT ScriptCustomElementDefinition final
                                                 v8::Isolate*,
                                                 ExceptionState&);
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   TraceWrapperV8Reference<v8::Object> constructor_;
   TraceWrapperV8Reference<v8::Function> connected_callback_;
   TraceWrapperV8Reference<v8::Function> disconnected_callback_;

@@ -8,19 +8,18 @@
 #include <set>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/base_i18n_switches.h"
 #include "base/i18n/bidi_line_iterator.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/char_iterator.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "third_party/harfbuzz-ng/src/hb.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -34,8 +33,15 @@
 #include "ui/gfx/harfbuzz_font_skia.h"
 #include "ui/gfx/range/range_f.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/gfx/switches.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/utf16_indexing.h"
+
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
+#include <hb.h>
 
 namespace gfx {
 
@@ -462,6 +468,7 @@ class HarfBuzzLineBreaker {
       }
     }
     line->segments.push_back(segment);
+    line->size.set_width(line->size.width() + segment.width());
 
     SkPaint paint;
     paint.setTypeface(run.skia_face);
@@ -470,11 +477,10 @@ class HarfBuzzLineBreaker {
     SkPaint::FontMetrics metrics;
     paint.getFontMetrics(&metrics);
 
-    line->size.set_width(line->size.width() + segment.width());
-    // TODO(dschuyler): Account for stylized baselines in string sizing.
-    max_descent_ = std::max(max_descent_, metrics.fDescent);
-    // fAscent is always negative.
-    max_ascent_ = std::max(max_ascent_, -metrics.fAscent);
+    // max_descent_ is y-down, fDescent is y-down, baseline_offset is y-down
+    max_descent_ = std::max(max_descent_, metrics.fDescent+run.baseline_offset);
+    // max_ascent_ is y-up, fAscent is y-down, baseline_offset is y-down
+    max_ascent_ = std::max(max_ascent_, -(metrics.fAscent+run.baseline_offset));
 
     if (run.is_rtl) {
       rtl_segments_.push_back(
@@ -708,7 +714,7 @@ void TextRunHarfBuzz::GetClusterAt(size_t pos,
   if (!success) {
     std::string glyph_to_char_string;
     for (size_t i = 0; i < glyph_count && i < glyph_to_char.size(); ++i) {
-      glyph_to_char_string += base::SizeTToString(i) + "->" +
+      glyph_to_char_string += base::NumberToString(i) + "->" +
                               base::UintToString(glyph_to_char[i]) + ", ";
     }
     LOG(ERROR) << " TextRunHarfBuzz error, please report at crbug.com/724880:"
@@ -732,14 +738,17 @@ RangeF TextRunHarfBuzz::GetGraphemeBounds(RenderTextHarfBuzz* render_text,
   const float cluster_begin_x = positions[glyphs.start()].x();
   const float cluster_end_x = glyphs.end() < glyph_count ?
       positions[glyphs.end()].x() : SkFloatToScalar(width);
+  DCHECK_LE(cluster_begin_x, cluster_end_x);
 
   // A cluster consists of a number of code points and corresponds to a number
   // of glyphs that should be drawn together. A cluster can contain multiple
   // graphemes. In order to place the cursor at a grapheme boundary inside the
   // cluster, we simply divide the cluster width by the number of graphemes.
   // Note: The first call to GetGraphemeIterator() can be expensive, so avoid
-  // doing it unless it's actually needed (when length > 1).
-  if (chars.length() > 1 && render_text->GetGraphemeIterator()) {
+  // doing it unless it's actually needed (when |code_point_count| > 1).
+  ptrdiff_t code_point_count = UTF16IndexToOffset(render_text->GetDisplayText(),
+                                                  chars.start(), chars.end());
+  if (code_point_count > 1 && render_text->GetGraphemeIterator()) {
     int before = 0;
     int total = 0;
     base::i18n::BreakIterator* grapheme_iterator =
@@ -752,18 +761,22 @@ RangeF TextRunHarfBuzz::GetGraphemeBounds(RenderTextHarfBuzz* render_text,
       }
     }
     DCHECK_GT(total, 0);
+
+    // It's possible for |text_index| to point to a diacritical mark, at the end
+    // of |chars|. In this case all the grapheme boundaries come before it. Just
+    // provide the bounds of the last grapheme.
+    if (before == total)
+      --before;
+
     if (total > 1) {
       if (is_rtl)
         before = total - before - 1;
       DCHECK_GE(before, 0);
       DCHECK_LT(before, total);
-      const int cluster_width = cluster_end_x - cluster_begin_x;
-      const int grapheme_begin_x = cluster_begin_x + static_cast<int>(0.5f +
-          cluster_width * before / static_cast<float>(total));
-      const int grapheme_end_x = cluster_begin_x + static_cast<int>(0.5f +
-          cluster_width * (before + 1) / static_cast<float>(total));
-      return RangeF(preceding_run_widths + grapheme_begin_x,
-                    preceding_run_widths + grapheme_end_x);
+      const float cluster_start = preceding_run_widths + cluster_begin_x;
+      const float average_width = (cluster_end_x - cluster_begin_x) / total;
+      return RangeF(cluster_start + average_width * before,
+                    cluster_start + average_width * (before + 1));
     }
   }
 
@@ -771,17 +784,26 @@ RangeF TextRunHarfBuzz::GetGraphemeBounds(RenderTextHarfBuzz* render_text,
                 preceding_run_widths + cluster_end_x);
 }
 
-float TextRunHarfBuzz::GetGraphemeWidthForCharRange(
+RangeF TextRunHarfBuzz::GetGraphemeSpanForCharRange(
     RenderTextHarfBuzz* render_text,
     const Range& char_range) const {
   if (char_range.is_empty())
-    return 0;
+    return RangeF();
+
   DCHECK(!char_range.is_reversed());
   DCHECK(range.Contains(char_range));
-  size_t left_index = is_rtl ? char_range.end() - 1 : char_range.start();
-  size_t right_index = is_rtl ? char_range.start() : char_range.end() - 1;
-  return GetGraphemeBounds(render_text, right_index).GetMax() -
-         GetGraphemeBounds(render_text, left_index).GetMin();
+  size_t left_index = char_range.start();
+  size_t right_index = gfx::UTF16OffsetToIndex(render_text->GetDisplayText(),
+                                               char_range.end(), -1);
+  DCHECK_LE(left_index, right_index);
+  if (is_rtl)
+    std::swap(left_index, right_index);
+
+  const RangeF left_span = GetGraphemeBounds(render_text, left_index);
+  return left_index == right_index
+             ? left_span
+             : RangeF(left_span.start(),
+                      GetGraphemeBounds(render_text, right_index).end());
 }
 
 SkScalar TextRunHarfBuzz::GetGlyphWidthForCharRange(
@@ -991,17 +1013,30 @@ std::vector<RenderText::FontSpan> RenderTextHarfBuzz::GetFontSpansForTesting() {
   return spans;
 }
 
-Range RenderTextHarfBuzz::GetGlyphBounds(size_t index) {
+Range RenderTextHarfBuzz::GetCursorSpan(const Range& text_range) {
+  DCHECK(!text_range.is_reversed());
   EnsureLayout();
+  const size_t index = text_range.start();
   const size_t run_index =
       GetRunContainingCaret(SelectionModel(index, CURSOR_FORWARD));
   internal::TextRunList* run_list = GetRunList();
   // Return edge bounds if the index is invalid or beyond the layout text size.
   if (run_index >= run_list->size())
     return Range(GetStringSize().width());
-  const size_t layout_index = TextIndexToDisplayIndex(index);
+
   internal::TextRunHarfBuzz* run = run_list->runs()[run_index].get();
-  RangeF bounds = run->GetGraphemeBounds(this, layout_index);
+
+  Range display_range(TextIndexToDisplayIndex(text_range.start()),
+                      TextIndexToDisplayIndex(text_range.end()));
+
+  // Although highly likely, there's no guarantee that a single text run is used
+  // for the entire cursor span. For example, Unicode Variation Selectors are
+  // incorrectly placed in the next run; see crbug.com/775404. (For these, the
+  // variation selector has zero width, so it's safe to ignore the second run).
+  // TODO(tapted): Change this to a DCHECK when crbug.com/775404 is fixed.
+  display_range = display_range.Intersect(run->range);
+
+  RangeF bounds = run->GetGraphemeSpanForCharRange(this, display_range);
   // If cursor is enabled, extend the last glyph up to the rightmost cursor
   // position since clients expect them to be contiguous.
   if (cursor_enabled() && run_index == run_list->size() - 1 &&
@@ -1147,8 +1182,8 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
       IsValidCursorIndex(range.GetMax())
           ? range.GetMax()
           : IndexOfAdjacentGrapheme(range.GetMax(), CURSOR_FORWARD);
-  Range display_range(TextIndexToDisplayIndex(start),
-                      TextIndexToDisplayIndex(end));
+  const Range display_range(TextIndexToDisplayIndex(start),
+                            TextIndexToDisplayIndex(end));
   DCHECK(Range(0, GetDisplayText().length()).Contains(display_range));
 
   std::vector<Rect> rects;
@@ -1160,30 +1195,23 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
     const internal::Line& line = lines()[line_index];
     // Only the last line can be empty.
     DCHECK(!line.segments.empty() || (line_index == lines().size() - 1));
+    const float line_start_x =
+        line.segments.empty()
+            ? 0
+            : run_list->runs()[line.segments[0].run]->preceding_run_widths;
 
-    float line_x = 0;
     for (const internal::LineSegment& segment : line.segments) {
       const Range intersection = segment.char_range.Intersect(display_range);
       DCHECK(!intersection.is_reversed());
       if (!intersection.is_empty()) {
         const internal::TextRunHarfBuzz& run = *run_list->runs()[segment.run];
-        float width = SkScalarToFloat(
-            run.GetGraphemeWidthForCharRange(this, intersection));
-        float x = line_x;
-        if (run.is_rtl) {
-          x += SkScalarToFloat(run.GetGraphemeWidthForCharRange(
-              this, gfx::Range(intersection.end(), segment.char_range.end())));
-        } else {
-          x += SkScalarToFloat(run.GetGraphemeWidthForCharRange(
-              this,
-              gfx::Range(segment.char_range.start(), intersection.start())));
-        }
-        int end_x = std::ceil(x + width);
-        int start_x = std::ceil(x);
+        RangeF selected_span =
+            run.GetGraphemeSpanForCharRange(this, intersection);
+        int start_x = std::ceil(selected_span.start() - line_start_x);
+        int end_x = std::ceil(selected_span.end() - line_start_x);
         gfx::Rect rect(start_x, 0, end_x - start_x, line.size.height());
         rects.push_back(rect + GetLineOffset(line_index));
       }
-      line_x += segment.width();
     }
   }
   return rects;
@@ -1230,13 +1258,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
 
     if (!display_text.empty()) {
       TRACE_EVENT0("ui", "RenderTextHarfBuzz:EnsureLayout1");
-
       ItemizeTextToRuns(display_text, display_run_list_.get());
-
-      // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
-      // fixed.
-      tracked_objects::ScopedTracker tracking_profile(
-          FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 ShapeRunList() 1"));
       ShapeRunList(display_text, display_run_list_.get());
     }
     update_display_run_list_ = false;
@@ -1245,12 +1267,6 @@ void RenderTextHarfBuzz::EnsureLayout() {
   }
 
   if (lines().empty()) {
-    // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
-    // fixed.
-    std::unique_ptr<tracked_objects::ScopedTracker> tracking_profile(
-        new tracked_objects::ScopedTracker(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 HarfBuzzLineBreaker")));
-
     internal::TextRunList* run_list = GetRunList();
     const int height = std::max(font_list().GetHeight(), min_line_height());
     HarfBuzzLineBreaker line_breaker(
@@ -1258,8 +1274,6 @@ void RenderTextHarfBuzz::EnsureLayout() {
         DetermineBaselineCenteringText(height, font_list()), height,
         word_wrap_behavior(), GetDisplayText(),
         multiline() ? &GetLineBreaks() : nullptr, *run_list);
-
-    tracking_profile.reset();
 
     if (multiline())
       line_breaker.ConstructMultiLines();
@@ -1386,8 +1400,18 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   // text. This is needed because leaving the runs set empty causes some clients
   // to misbehave since they expect non-zero text metrics from a non-empty text.
   base::i18n::BiDiLineIterator bidi_iterator;
-  if (!bidi_iterator.Open(text, GetTextDirection(text))) {
-    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+  base::i18n::BiDiLineIterator::CustomBehavior behavior =
+      base::i18n::BiDiLineIterator::CustomBehavior::NONE;
+
+  // If the feature flag is enabled, use the special URL behaviour on the Bidi
+  // algorithm, if this is a URL.
+  if (base::FeatureList::IsEnabled(features::kLeftToRightUrls) &&
+      directionality_mode() == DIRECTIONALITY_AS_URL) {
+    behavior = base::i18n::BiDiLineIterator::CustomBehavior::AS_URL;
+  }
+
+  if (!bidi_iterator.Open(text, GetTextDirection(text), behavior)) {
+    auto run = std::make_unique<internal::TextRunHarfBuzz>(
         font_list().GetPrimaryFont());
     run->range = Range(0, text.length());
     run_list_out->Add(std::move(run));
@@ -1408,7 +1432,7 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   internal::StyleIterator style(empty_colors, baselines(), weights(), styles());
 
   for (size_t run_break = 0; run_break < text.length();) {
-    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+    auto run = std::make_unique<internal::TextRunHarfBuzz>(
         font_list().GetPrimaryFont());
     run->range.set_start(run_break);
     run->italic = style.style(ITALIC);
@@ -1625,15 +1649,8 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
   // TODO(ckocagil): Should we determine the actual language?
   hb_buffer_set_language(buffer, hb_language_get_default());
 
-  {
-    // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
-    // fixed.
-    tracked_objects::ScopedTracker tracking_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 hb_shape()"));
-
-    // Shape the text.
-    hb_shape(harfbuzz_font, buffer, NULL, 0);
-  }
+  // Shape the text.
+  hb_shape(harfbuzz_font, buffer, NULL, 0);
 
   // Populate the run fields with the resulting glyph data in the buffer.
   unsigned int glyph_count = 0;
@@ -1646,21 +1663,34 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
   run->positions.reset(new SkPoint[run->glyph_count]);
   run->width = 0.0f;
 
+#if defined(OS_MACOSX)
+  // Mac 10.9 and 10.10 give a quirky offset for whitespace glyphs in RTL,
+  // which requires tests relying on the behavior of |glyph_width_for_test_|
+  // to also be given a zero x_offset, otherwise expectations get thrown off.
+  const bool force_zero_offset =
+      glyph_width_for_test_ > 0 && base::mac::IsAtMostOS10_10();
+#else
+  constexpr bool force_zero_offset = false;
+#endif
+
+  DCHECK(obscured() || glyph_spacing() == 0);
   for (size_t i = 0; i < run->glyph_count; ++i) {
     DCHECK_LE(infos[i].codepoint, std::numeric_limits<uint16_t>::max());
     run->glyphs[i] = static_cast<uint16_t>(infos[i].codepoint);
     run->glyph_to_char[i] = infos[i].cluster;
     const SkScalar x_offset =
-        HarfBuzzUnitsToSkiaScalar(hb_positions[i].x_offset);
+        force_zero_offset ? 0
+                          : HarfBuzzUnitsToSkiaScalar(hb_positions[i].x_offset);
     const SkScalar y_offset =
         HarfBuzzUnitsToSkiaScalar(hb_positions[i].y_offset);
     run->positions[i].set(run->width + x_offset, -y_offset);
-    run->width += (glyph_width_for_test_ > 0)
-                      ? glyph_width_for_test_
-                      : HarfBuzzUnitsToFloat(hb_positions[i].x_advance);
+    run->width +=
+        (glyph_width_for_test_ > 0)
+            ? glyph_width_for_test_
+            : HarfBuzzUnitsToFloat(hb_positions[i].x_advance) + glyph_spacing();
     // Round run widths if subpixel positioning is off to match native behavior.
     if (!run->render_params.subpixel_positioning)
-      run->width = std::floor(run->width + 0.5f);
+      run->width = std::round(run->width);
   }
 
   hb_buffer_destroy(buffer);
@@ -1676,11 +1706,6 @@ void RenderTextHarfBuzz::EnsureLayoutRunList() {
     if (!text.empty()) {
       TRACE_EVENT0("ui", "RenderTextHarfBuzz:EnsureLayoutRunList");
       ItemizeTextToRuns(text, &layout_run_list_);
-
-      // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
-      // fixed.
-      tracked_objects::ScopedTracker tracking_profile(
-          FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 ShapeRunList() 2"));
       ShapeRunList(text, &layout_run_list_);
     }
 

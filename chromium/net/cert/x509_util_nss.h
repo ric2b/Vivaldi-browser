@@ -46,6 +46,21 @@ CreateCERTCertificateFromX509Certificate(const X509Certificate* cert);
 NET_EXPORT ScopedCERTCertificateList
 CreateCERTCertificateListFromX509Certificate(const X509Certificate* cert);
 
+// Specify behavior if an intermediate certificate fails CERTCertificate
+// parsing. kFail means the function should return a failure result
+// immediately. kIgnore means the invalid intermediate is not added to the
+// output container.
+enum class InvalidIntermediateBehavior { kFail, kIgnore };
+
+// Returns a vector of CERTCertificates corresponding to |cert| and its
+// intermediates (if any). Returns an empty vector if the certificate could not
+// be converted. |invalid_intermediate_behavior| specifies behavior if
+// intermediates of |cert| could not be converted.
+NET_EXPORT ScopedCERTCertificateList
+CreateCERTCertificateListFromX509Certificate(
+    const X509Certificate* cert,
+    InvalidIntermediateBehavior invalid_intermediate_behavior);
+
 // Parses all of the certificates possible from |data|. |format| is a
 // bit-wise OR of X509Certificate::Format, indicating the possible formats the
 // certificates may have been serialized as. If an error occurs, an empty
@@ -55,6 +70,11 @@ CreateCERTCertificateListFromBytes(const char* data, size_t length, int format);
 
 // Increments the refcount of |cert| and returns a handle for that reference.
 NET_EXPORT ScopedCERTCertificate DupCERTCertificate(CERTCertificate* cert);
+
+// Increments the refcount of each element in |cerst| and returns a list of
+// handles for them.
+NET_EXPORT ScopedCERTCertificateList
+DupCERTCertificateList(const ScopedCERTCertificateList& certs);
 
 // Creates an X509Certificate from |cert|, with intermediates from |chain|.
 // Returns NULL on failure.
@@ -76,9 +96,18 @@ CreateX509CertificateFromCERTCertificate(
 NET_EXPORT scoped_refptr<X509Certificate>
 CreateX509CertificateFromCERTCertificate(CERTCertificate* cert);
 
+// Creates an X509Certificate for each element in |certs|.
+// Returns an empty list on failure.
+NET_EXPORT CertificateList CreateX509CertificateListFromCERTCertificates(
+    const ScopedCERTCertificateList& certs);
+
 // Obtains the DER encoded certificate data for |cert|. On success, returns
 // true and writes the DER encoded certificate to |*der_encoded|.
 NET_EXPORT bool GetDEREncoded(CERTCertificate* cert, std::string* der_encoded);
+
+// Obtains the PEM encoded certificate data for |cert|. On success, returns
+// true and writes the PEM encoded certificate to |*pem_encoded|.
+NET_EXPORT bool GetPEMEncoded(CERTCertificate* cert, std::string* pem_encoded);
 
 // Stores the values of all rfc822Name subjectAltNames from |cert_handle|
 // into |names|. If no names are present, clears |names|.
@@ -118,6 +147,17 @@ NET_EXPORT std::string GetDefaultUniqueNickname(CERTCertificate* nss_cert,
 // this order: CN, O and OU and returns the first non-empty one found.
 // This mirrors net::CertPrincipal::GetDisplayName.
 NET_EXPORT std::string GetCERTNameDisplayName(CERTName* name);
+
+// Stores the notBefore and notAfter times from |cert| into |*not_before| and
+// |*not_after|, returning true if successful. |not_before| or |not_after| may
+// be null.
+NET_EXPORT bool GetValidityTimes(CERTCertificate* cert,
+                                 base::Time* not_before,
+                                 base::Time* not_after);
+
+// Calculates the SHA-256 fingerprint of the certificate.  Returns an empty
+// (all zero) fingerprint on failure.
+NET_EXPORT SHA256HashValue CalculateFingerprint256(CERTCertificate* cert);
 
 } // namespace x509_util
 

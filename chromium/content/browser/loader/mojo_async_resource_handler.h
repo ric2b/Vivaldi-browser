@@ -14,8 +14,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/loader/resource_handler.h"
-#include "content/browser/loader/upload_progress_tracker.h"
 #include "content/common/content_export.h"
+#include "content/network/upload_progress_tracker.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -26,7 +26,7 @@
 
 class GURL;
 
-namespace tracked_objects {
+namespace base {
 class Location;
 }
 
@@ -82,6 +82,8 @@ class CONTENT_EXPORT MojoAsyncResourceHandler : public ResourceHandler,
   void FollowRedirect() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
+  void PauseReadingBodyFromNet() override;
+  void ResumeReadingBodyFromNet() override;
 
   void OnWritableForTesting();
   static void SetAllocationSizeForTesting(size_t size);
@@ -117,13 +119,14 @@ class CONTENT_EXPORT MojoAsyncResourceHandler : public ResourceHandler,
   // These functions can be overriden only for tests.
   virtual void ReportBadMessage(const std::string& error);
   virtual std::unique_ptr<UploadProgressTracker> CreateUploadProgressTracker(
-      const tracked_objects::Location& from_here,
+      const base::Location& from_here,
       UploadProgressTracker::UploadProgressReportCallback callback);
 
   void OnTransfer(mojom::URLLoaderRequest mojo_request,
                   mojom::URLLoaderClientPtr url_loader_client);
   void SendUploadProgress(const net::UploadProgress& progress);
   void OnUploadProgressACK();
+  static void InitializeResourceBufferConstants();
 
   ResourceDispatcherHostImpl* rdh_;
   mojo::Binding<mojom::URLLoader> binding_;

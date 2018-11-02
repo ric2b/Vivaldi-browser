@@ -31,9 +31,10 @@ class QUIC_EXPORT_PRIVATE NullDecrypter : public QuicDecrypter {
   // QuicDecrypter implementation
   bool SetKey(QuicStringPiece key) override;
   bool SetNoncePrefix(QuicStringPiece nonce_prefix) override;
+  bool SetIV(QuicStringPiece iv) override;
   bool SetPreliminaryKey(QuicStringPiece key) override;
   bool SetDiversificationNonce(const DiversificationNonce& nonce) override;
-  bool DecryptPacket(QuicVersion version,
+  bool DecryptPacket(QuicTransportVersion version,
                      QuicPacketNumber packet_number,
                      QuicStringPiece associated_data,
                      QuicStringPiece ciphertext,
@@ -43,12 +44,11 @@ class QUIC_EXPORT_PRIVATE NullDecrypter : public QuicDecrypter {
   QuicStringPiece GetKey() const override;
   QuicStringPiece GetNoncePrefix() const override;
 
-  const char* cipher_name() const override;
   uint32_t cipher_id() const override;
 
  private:
   bool ReadHash(QuicDataReader* reader, uint128* hash);
-  uint128 ComputeHash(QuicVersion version,
+  uint128 ComputeHash(QuicTransportVersion version,
                       QuicStringPiece data1,
                       QuicStringPiece data2) const;
 

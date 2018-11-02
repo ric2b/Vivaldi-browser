@@ -21,6 +21,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -42,8 +43,7 @@ void UnregisterServiceWorkerCallback(bool* called,
   *called = true;
 }
 
-void StopWorkerCallback(bool* called, ServiceWorkerStatusCode status) {
-  EXPECT_EQ(SERVICE_WORKER_OK, status) << ServiceWorkerStatusToString(status);
+void StopWorkerCallback(bool* called) {
   *called = true;
 }
 
@@ -54,7 +54,8 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
  public:
   PaymentAppForWorkerTestHelper()
       : EmbeddedWorkerTestHelper(base::FilePath()),
-        last_sw_registration_id_(kInvalidServiceWorkerRegistrationId) {}
+        last_sw_registration_id_(
+            blink::mojom::kInvalidServiceWorkerRegistrationId) {}
   ~PaymentAppForWorkerTestHelper() override {}
 
   void OnStartWorker(
@@ -63,9 +64,12 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
       const GURL& scope,
       const GURL& script_url,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     ServiceWorkerVersion* version =
         context()->GetLiveVersion(service_worker_version_id);
@@ -73,8 +77,10 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
     last_sw_scope_ = scope;
     EmbeddedWorkerTestHelper::OnStartWorker(
         embedded_worker_id, service_worker_version_id, scope, script_url,
-        pause_after_download, std::move(request), std::move(instance_host),
-        std::move(provider_info));
+        pause_after_download, std::move(dispatcher_request),
+        std::move(controller_request), std::move(service_worker_host),
+        std::move(instance_host), std::move(provider_info),
+        std::move(installed_scripts_info));
   }
 
   void OnPaymentRequestEvent(
@@ -139,7 +145,7 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   // Register service worker for payment manager.
   bool called = false;
   int64_t registration_id;
-  ServiceWorkerRegistrationOptions registration_opt(scope_url);
+  blink::mojom::ServiceWorkerRegistrationOptions registration_opt(scope_url);
   worker_helper_->context()->RegisterServiceWorker(
       sw_script_url, registration_opt, nullptr,
       base::Bind(&RegisterServiceWorkerCallback, &called, &registration_id));

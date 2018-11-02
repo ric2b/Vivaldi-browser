@@ -9,13 +9,11 @@
 the src/testing/buildbot directory and benchmark.csv in the src/tools/perf
 directory. Maintaining these files by hand is too unwieldy.
 """
-import argparse
 import collections
 import csv
 import json
 import os
 import re
-import sys
 import sets
 
 
@@ -31,8 +29,12 @@ from py_utils import discover
 from core.sharding_map_generator import load_benchmark_sharding_map
 
 
-# TODO(rnephew): Remove when no tests disable using
-# expectations.PermanentlyDisableBenchmark()
+_UNSCHEDULED_TELEMETRY_BENCHMARKS = set([
+  'experimental.startup.android.coldish',
+  'wasm'
+  ])
+
+
 ANDROID_BOT_TO_DEVICE_TYPE_MAP = {
   'Android Swarming N5X Tester': 'Nexus 5X',
   'Android Nexus5X Perf': 'Nexus 5X',
@@ -57,6 +59,14 @@ def add_builder(waterfall, name, additional_compile_targets=None):
 def add_tester(waterfall, name, perf_id, platform, target_bits=64,
                num_host_shards=1, num_device_shards=1, swarming=None,
                replace_system_webview=False):
+  """ Adds tester named |name| to |waterfall|.
+
+  Tests can be added via 'perf_tests', which expects a 2 element tuple of
+  (isolate_name, shard), or via 'perf_tests_with_args', which allows you
+  to specify command line arguments for the tests. 'perf_tests_with_args'
+  expects a tuple of 4 elements: (name, shard, test_args, isolate_name).
+  'test_args' is a list of strings pass via the test's command line.
+  """
   del perf_id # this will be needed
   waterfall['testers'][name] = {
     'platform': platform,
@@ -120,17 +130,29 @@ def get_fyi_waterfall_config():
   return waterfall
 
 
+# Additional compile targets to add to builders.
+# On desktop builders, chromedriver is added as an additional compile target.
+# The perf waterfall builds this target for each commit, and the resulting
+# ChromeDriver is archived together with Chrome for use in bisecting.
+# This can be used by Chrome test team, as well as by google3 teams for
+# bisecting Chrome builds with their web tests. For questions or to report
+# issues, please contact johnchen@chromium.org and stgao@chromium.org.
+BUILDER_ADDITIONAL_COMPILE_TARGETS = {
+    'Android Compile': ['microdump_stackwalk', 'angle_perftests'],
+    'Android arm64 Compile': ['microdump_stackwalk', 'angle_perftests'],
+    'Linux Builder': ['chromedriver'],
+    'Mac Builder': ['chromedriver'],
+    'Win Builder': ['chromedriver'],
+    'Win x64 Builder': ['chromedriver'],
+}
+
+
 def get_waterfall_config():
   waterfall = {'builders':{}, 'testers': {}}
 
-  waterfall = add_builder(
-      waterfall, 'Android Compile', additional_compile_targets=[
-          'microdump_stackwalk'
-      ])
-  waterfall = add_builder(
-      waterfall, 'Android arm64 Compile', additional_compile_targets=[
-          'microdump_stackwalk'
-      ])
+  for builder, targets in BUILDER_ADDITIONAL_COMPILE_TARGETS.items():
+    waterfall = add_builder(
+        waterfall, builder, additional_compile_targets=targets)
 
   # These configurations are taken from chromium_perf.py in
   # build/scripts/slave/recipe_modules/chromium_tests and must be kept in sync
@@ -140,7 +162,6 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build73-b1--device1', 'build73-b1--device2', 'build73-b1--device3',
@@ -156,6 +177,7 @@ def get_waterfall_config():
        'perf_tests': [
          ('tracing_perftests', 'build73-b1--device2'),
          ('gpu_perftests', 'build73-b1--device2'),
+         ('angle_perftests', 'build73-b1--device4'),
          #  ('cc_perftests', 'build73-b1--device2'),  # crbug.com/721757
         ]
       }
@@ -165,7 +187,6 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build13-b1--device1', 'build13-b1--device2', 'build13-b1--device3',
@@ -191,7 +212,6 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build15-b1--device1', 'build15-b1--device2', 'build15-b1--device3',
@@ -217,7 +237,6 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build9-b1--device1', 'build9-b1--device2', 'build9-b1--device3',
@@ -243,7 +262,6 @@ def get_waterfall_config():
     swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build17-b1--device1', 'build17-b1--device2', 'build17-b1--device3',
@@ -258,7 +276,7 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('tracing_perftests', 'build17-b1--device2'),
-         ('gpu_perftests', 'build18-b1--device2'),
+         # ('gpu_perftests', 'build18-b1--device2'), https://crbug.com/775219
          # ('cc_perftests', 'build47-b1--device2'), https://crbug.com/736150
         ]
       }
@@ -269,7 +287,6 @@ def get_waterfall_config():
     'android', swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build164-b1--device1', 'build164-b1--device2',
@@ -293,7 +310,6 @@ def get_waterfall_config():
     'android', swarming=[
       {
        'os': 'Android',
-       'android_devices': '1',
        'pool': 'Chrome-perf',
        'device_ids': [
            'build112-b1--device1', 'build112-b1--device2',
@@ -407,7 +423,8 @@ def get_waterfall_config():
            'build103-m1', 'build104-m1', 'build105-m1'
           ],
        'perf_tests': [
-         ('angle_perftests', 'build103-m1'),
+         # crbug.com/785291
+         # ('angle_perftests', 'build103-m1'),
          ('load_library_perf_tests', 'build103-m1'),
          ('performance_browser_tests', 'build103-m1'),
          ('media_perftests', 'build104-m1')]
@@ -436,7 +453,7 @@ def get_waterfall_config():
     'chromium-rel-win7-gpu-nvidia', 'win',
     swarming=[
       {
-       'gpu': '10de:104a',
+       'gpu': '10de:1cb3',
        'os': 'Windows-2008ServerR2-SP1',
        'pool': 'Chrome-perf',
        'device_ids': [
@@ -448,7 +465,15 @@ def get_waterfall_config():
          ('load_library_perf_tests', 'build94-m1'),
          # crbug.com/735679
          # ('performance_browser_tests', 'build94-m1'),
-         ('media_perftests', 'build95-m1')]
+         ('media_perftests', 'build95-m1')
+        ],
+        'perf_tests_with_args': [
+         ('passthrough_command_buffer_perftests', 'build94-m1',
+          ['--use-cmd-decoder=passthrough', '--use-angle=gl-null'],
+          'command_buffer_perftests'),
+         ('validating_command_buffer_perftests', 'build94-m1',
+          ['--use-cmd-decoder=validating', '--use-stub'],
+          'command_buffer_perftests')]
       }
     ])
 
@@ -554,20 +579,20 @@ def get_waterfall_config():
     waterfall, 'Linux Perf', 'linux-release', 'linux',
     swarming=[
       {
-       'gpu': '102b:0534',
+       'gpu': '10de:1cb3',
        'os': 'Ubuntu-14.04',
        'pool': 'Chrome-perf',
        'device_ids': [
-           'build148-m1', 'build149-m1',
-           'build150-m1', 'build151-m1', 'build152-m1'
+           'build27-a9', 'build28-a9', 'build29-a9',
+           'build30-a9', 'build31-a9',
           ],
        'perf_tests': [
          # crbug.com/698831
          # ('cc_perftests', 'build150-m1'),
-         ('load_library_perf_tests', 'build150-m1'),
-         ('net_perftests', 'build150-m1'),
-         ('tracing_perftests', 'build150-m1'),
-         ('media_perftests', 'build151-m1')]
+         ('load_library_perf_tests', 'build29-a9'),
+         ('net_perftests', 'build29-a9'),
+         ('tracing_perftests', 'build29-a9'),
+         ('media_perftests', 'build30-a9')]
       }
     ])
 
@@ -596,20 +621,15 @@ def generate_isolate_script_entry(swarming_dimensions, test_args,
       'ignore_task_failure': ignore_task_failure,
       'io_timeout': io_timeout if io_timeout else 600, # 10 minutes
       'dimension_sets': swarming_dimensions,
-      'upload_test_results': False,
+      'upload_test_results': True,
     }
-    if step_name in BENCHMARKS_TO_UPLOAD_TO_FLAKINESS_DASHBOARD:
-      result['swarming']['upload_test_results'] = True
   return result
 
 
-BENCHMARKS_TO_UPLOAD_TO_FLAKINESS_DASHBOARD = ['system_health.common_desktop',
-                                               'system_health.common_mobile',
-                                               'system_health.memory_desktop',
-                                               'system_health.memory_mobile']
-
-
-BENCHMARKS_TO_OUTPUT_HISTOGRAMS = []
+BENCHMARKS_TO_OUTPUT_HISTOGRAMS = [
+    'dummy_benchmark.noisy_benchmark_1',
+    'dummy_benchmark.stable_benchmark_1',
+]
 
 
 def generate_telemetry_test(swarming_dimensions, benchmark_name, browser):
@@ -677,17 +697,30 @@ def get_swarming_dimension(dimension, device_id):
   }
   if 'gpu' in dimension:
     complete_dimension['gpu'] = dimension['gpu']
-  if 'android_devices' in dimension:
-    complete_dimension['android_devices'] = dimension['android_devices']
   return complete_dimension
+
+
+def generate_cplusplus_isolate_script_entry(
+    dimension, name, shard, test_args, isolate_name):
+  return generate_isolate_script_entry(
+      [get_swarming_dimension(dimension, shard)], test_args, isolate_name,
+         name, ignore_task_failure=False)
 
 
 def generate_cplusplus_isolate_script_test(dimension):
   return [
-    generate_isolate_script_entry(
-        [get_swarming_dimension(dimension, shard)], [], name,
-        name, ignore_task_failure=False)
+    generate_cplusplus_isolate_script_entry(
+        dimension, name, shard, [], name)
     for name, shard in dimension['perf_tests']
+  ]
+
+
+def generate_cplusplus_isolate_script_test_with_args(dimension):
+  return [
+    generate_cplusplus_isolate_script_entry(
+        dimension, name, shard, test_args, isolate_name)
+    for name, shard, test_args, isolate_name
+        in dimension['perf_tests_with_args']
   ]
 
 
@@ -742,11 +775,11 @@ def ShouldBenchmarksBeScheduled(
   os_name = sanitize_os_name(os_name)
   e = ExpectationData(browser_name, os_name, device_type_name)
 
-  # TODO(rnephew): Remove when no tests disable using
-  # expectations.PermanentlyDisableBenchmark()
   b = benchmark()
-  if b.GetExpectations().IsBenchmarkDisabled(e, e):
-    return False
+  # TODO(rnephew): As part of the refactoring of TestConditions this will
+  # be refactored to make more sense. SUPPORTED_PLATFORMS was not the original
+  # intended use of TestConditions, so we actually want to test the opposite.
+  # If ShouldDisable() returns true, we should schedule the benchmark here.
   return any(t.ShouldDisable(e, e) for t in b.SUPPORTED_PLATFORMS)
 
 
@@ -775,18 +808,17 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
       device = None
       sharding_map = benchmark_sharding_map.get(name, None)
       device = sharding_map.get(benchmark.Name(), None)
-      if device is None:
-        raise ValueError('No sharding map for benchmark %r found. Please'
-                         ' disable the benchmark with @Disabled(\'all\'), and'
-                         ' file a bug with Speed>Benchmarks>Waterfall'
-                         ' component and cc martiniss@ and nednguyen@ to'
-                         ' execute the benchmark on the waterfall.' % (
+      if not device:
+        raise ValueError('No sharding map for benchmark %r found. Please '
+                         'add the benchmark to '
+                         '_UNSCHEDULED_TELEMETRY_BENCHMARKS list, '
+                         'then file a bug with Speed>Benchmarks>Waterfall '
+                         'component and assign to eyaich@ or ashleymarie@ to '
+                         'schedule the benchmark on the perf waterfall.' % (
                              benchmark.Name()))
       swarming_dimensions.append(get_swarming_dimension(
           dimension, device))
 
-    # TODO(rnephew): Remove when no tests disable using
-    # expectations.PermanentlyDisableBenchmark()
     if not ShouldBenchmarksBeScheduled(
         benchmark, name, swarming_dimensions[0]['os'], browser_name):
       continue
@@ -828,7 +860,10 @@ BLACKLISTED_DEVICES = []
 
 # List of benchmarks that are to never be run with reference builds.
 BENCHMARK_REF_BUILD_BLACKLIST = [
-  'power.idle_platform',
+  'loading.desktop',  # Long running benchmark.
+  'loading.mobile',  # Long running benchmark.
+  'power.idle_platform',  # No browser used in benchmark.
+  'v8.runtime_stats.top_25',  # Long running benchmark.
 ]
 
 
@@ -838,9 +873,13 @@ def current_benchmarks():
       path_util.GetChromiumSrcDir(), 'tools', 'perf', 'benchmarks')
   top_level_dir = os.path.dirname(benchmarks_dir)
 
-  all_benchmarks = discover.DiscoverClasses(
+  all_benchmarks = []
+
+  for b in discover.DiscoverClasses(
       benchmarks_dir, top_level_dir, benchmark_module.Benchmark,
-      index_by_class_name=True).values()
+      index_by_class_name=True).values():
+    if not b.Name() in _UNSCHEDULED_TELEMETRY_BENCHMARKS:
+      all_benchmarks.append(b)
 
   return sorted(all_benchmarks, key=lambda b: b.Name())
 
@@ -886,6 +925,9 @@ def generate_all_tests(waterfall):
     # Generate swarmed non-telemetry tests if present
     if config['swarming_dimensions'][0].get('perf_tests', False):
       isolated_scripts += generate_cplusplus_isolate_script_test(
+        config['swarming_dimensions'][0])
+    if config['swarming_dimensions'][0].get('perf_tests_with_args', False):
+      isolated_scripts += generate_cplusplus_isolate_script_test_with_args(
         config['swarming_dimensions'][0])
 
     isolated_scripts, devices_to_test_skipped = remove_blacklisted_device_tests(
@@ -938,26 +980,6 @@ def append_extra_tests(waterfall, tests):
         tests[key] = value
 
 
-def tests_are_up_to_date(waterfalls):
-  up_to_date = True
-  all_tests = {}
-  for w in waterfalls:
-    tests = generate_all_tests(w)
-    # Note: |all_tests| don't cover those manually-specified tests added by
-    # append_extra_tests().
-    all_tests.update(tests)
-    append_extra_tests(w, tests)
-    tests_data = json.dumps(tests, indent=2, separators=(',', ': '),
-                            sort_keys=True)
-    config_file = get_json_config_file_for_waterfall(w)
-    with open(config_file, 'r') as fp:
-      config_data = fp.read().strip()
-    up_to_date &= tests_data == config_data
-  verify_all_tests_in_benchmark_csv(all_tests,
-                                    get_all_waterfall_benchmarks_metadata())
-  return up_to_date
-
-
 def update_all_tests(waterfalls):
   all_tests = {}
   for w in waterfalls:
@@ -980,10 +1002,20 @@ def update_all_tests(waterfalls):
 BenchmarkMetadata = collections.namedtuple(
     'BenchmarkMetadata', 'emails component not_scheduled')
 NON_TELEMETRY_BENCHMARKS = {
-    'angle_perftests': BenchmarkMetadata('jmadill@chromium.org', None, False),
+    'angle_perftests': BenchmarkMetadata(
+        'jmadill@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'Internals>GPU>ANGLE', False),
+    'validating_command_buffer_perftests': BenchmarkMetadata(
+        'piman@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'Internals>GPU', False),
+    'passthrough_command_buffer_perftests': BenchmarkMetadata(
+        'piman@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'Internals>GPU>ANGLE', False),
     'net_perftests': BenchmarkMetadata('xunjieli@chromium.org', None, False),
     'cc_perftests': BenchmarkMetadata('enne@chromium.org', None, False),
-    'gpu_perftests': BenchmarkMetadata('reveman@chromium.org', None, False),
+    'gpu_perftests': BenchmarkMetadata(
+        'reveman@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'Internals>GPU', False),
     'tracing_perftests': BenchmarkMetadata(
         'kkraynov@chromium.org, primiano@chromium.org', None, False),
     'load_library_perf_tests': BenchmarkMetadata(None, None, False),
@@ -1038,9 +1070,8 @@ def verify_all_tests_in_benchmark_csv(tests, benchmark_metadata):
     elif 'scripts' in tests[t]:
       scripts = tests[t]['scripts']
     else:
-      assert('Android Compile' == t
-        or 'Android arm64 Compile' == t
-        or t.startswith('AAAAA')), 'Unknown test data %s' % t
+      assert(t in BUILDER_ADDITIONAL_COMPILE_TARGETS
+             or t.startswith('AAAAA')), 'Unknown test data %s' % t
     for s in scripts:
       name = s['name']
       name = re.sub('\\.reference$', '', name)
@@ -1124,33 +1155,11 @@ def update_benchmark_csv():
     writer.writerows(csv_data)
 
 
-def main(args):
-  parser = argparse.ArgumentParser(
-      description=('Generate perf test\' json config and benchmark.csv. '
-                   'This needs to be done anytime you add/remove any existing'
-                   'benchmarks in tools/perf/benchmarks.'))
-  parser.add_argument(
-      '--validate-only', action='store_true', default=False,
-      help=('Validate whether the perf json generated will be the same as the '
-            'existing configs. This does not change the contain of existing '
-            'configs'))
-  options = parser.parse_args(args)
-
+def main():
   waterfall = get_waterfall_config()
   waterfall['name'] = 'chromium.perf'
   fyi_waterfall = get_fyi_waterfall_config()
   fyi_waterfall['name'] = 'chromium.perf.fyi'
 
-  if options.validate_only:
-    if tests_are_up_to_date([fyi_waterfall, waterfall]):
-      print 'All the perf JSON config files are up-to-date. \\o/'
-      return 0
-    else:
-      print ('The perf JSON config files are not up-to-date. Please run %s '
-             'without --validate-only flag to update the perf JSON '
-             'configs and benchmark.csv.') % sys.argv[0]
-      return 1
-  else:
-    update_all_tests([fyi_waterfall, waterfall])
-    update_benchmark_csv()
-  return 0
+  update_all_tests([fyi_waterfall, waterfall])
+  update_benchmark_csv()

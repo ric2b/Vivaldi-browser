@@ -39,8 +39,8 @@ class SimpleFontData;
 class PLATFORM_EXPORT FontDataForRangeSet
     : public RefCounted<FontDataForRangeSet> {
  public:
-  explicit FontDataForRangeSet(PassRefPtr<SimpleFontData> font_data = nullptr,
-                               PassRefPtr<UnicodeRangeSet> range_set = nullptr)
+  explicit FontDataForRangeSet(scoped_refptr<SimpleFontData> font_data = nullptr,
+                               scoped_refptr<UnicodeRangeSet> range_set = nullptr)
       : font_data_(std::move(font_data)), range_set_(std::move(range_set)) {}
 
   FontDataForRangeSet(const FontDataForRangeSet& other);
@@ -53,21 +53,21 @@ class PLATFORM_EXPORT FontDataForRangeSet
   bool IsEntireRange() const {
     return !range_set_ || range_set_->IsEntireRange();
   }
-  UnicodeRangeSet* Ranges() const { return range_set_.Get(); }
-  bool HasFontData() const { return font_data_.Get(); }
-  const SimpleFontData* FontData() const { return font_data_.Get(); }
+  UnicodeRangeSet* Ranges() const { return range_set_.get(); }
+  bool HasFontData() const { return font_data_.get(); }
+  const SimpleFontData* FontData() const { return font_data_.get(); }
 
  protected:
-  RefPtr<SimpleFontData> font_data_;
-  RefPtr<UnicodeRangeSet> range_set_;
+  scoped_refptr<SimpleFontData> font_data_;
+  scoped_refptr<UnicodeRangeSet> range_set_;
 };
 
 class PLATFORM_EXPORT FontDataForRangeSetFromCache
     : public FontDataForRangeSet {
  public:
   explicit FontDataForRangeSetFromCache(
-      PassRefPtr<SimpleFontData> font_data,
-      PassRefPtr<UnicodeRangeSet> range_set = nullptr)
+      scoped_refptr<SimpleFontData> font_data,
+      scoped_refptr<UnicodeRangeSet> range_set = nullptr)
       : FontDataForRangeSet(std::move(font_data), std::move(range_set)) {}
   virtual ~FontDataForRangeSetFromCache();
 };

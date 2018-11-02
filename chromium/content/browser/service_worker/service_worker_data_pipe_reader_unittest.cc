@@ -15,6 +15,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -33,10 +34,11 @@ class MockServiceWorkerURLRequestJob : public ServiceWorkerURLRequestJob {
                                    "",
                                    nullptr,
                                    nullptr,
-                                   FETCH_REQUEST_MODE_NO_CORS,
-                                   FETCH_CREDENTIALS_MODE_OMIT,
+                                   network::mojom::FetchRequestMode::kNoCORS,
+                                   network::mojom::FetchCredentialsMode::kOmit,
                                    FetchRedirectMode::FOLLOW_MODE,
                                    std::string() /* integrity */,
+                                   false /* keepalive */,
                                    RESOURCE_TYPE_MAIN_FRAME,
                                    REQUEST_CONTEXT_TYPE_HYPERLINK,
                                    REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
@@ -76,10 +78,11 @@ class ServiceWorkerDataPipeReaderTest
       : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   void SetUp() override {
-    helper_ = base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath());
+    helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
     mock_url_request_job_ =
-        base::MakeUnique<MockServiceWorkerURLRequestJob>(this);
-    ServiceWorkerRegistrationOptions options(GURL("https://example.com/"));
+        std::make_unique<MockServiceWorkerURLRequestJob>(this);
+    blink::mojom::ServiceWorkerRegistrationOptions options(
+        GURL("https://example.com/"));
     registration_ = new ServiceWorkerRegistration(
         options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
@@ -100,7 +103,7 @@ class ServiceWorkerDataPipeReaderTest
         blink::mojom::ServiceWorkerStreamHandle::New();
     stream_handle->stream = std::move(data_pipe->consumer_handle);
     stream_handle->callback_request = mojo::MakeRequest(stream_callback);
-    return base::MakeUnique<ServiceWorkerDataPipeReader>(
+    return std::make_unique<ServiceWorkerDataPipeReader>(
         mock_url_request_job_.get(), version_, std::move(stream_handle));
   }
 

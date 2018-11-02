@@ -10,7 +10,9 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "content/common/appcache.mojom.h"
 #include "content/public/common/appcache_info.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 
 namespace net {
 class URLRequest;
@@ -21,17 +23,10 @@ namespace content {
 // Defines constants, types, and abstract classes used in the main
 // process and in child processes.
 
-enum AppCacheEventID {
-  APPCACHE_CHECKING_EVENT,
-  APPCACHE_ERROR_EVENT,
-  APPCACHE_NO_UPDATE_EVENT,
-  APPCACHE_DOWNLOADING_EVENT,
-  APPCACHE_PROGRESS_EVENT,
-  APPCACHE_UPDATE_READY_EVENT,
-  APPCACHE_CACHED_EVENT,
-  APPCACHE_OBSOLETE_EVENT,
-  APPCACHE_EVENT_ID_LAST = APPCACHE_OBSOLETE_EVENT
-};
+using mojom::AppCacheEventID;
+using mojom::AppCacheErrorReason;
+using mojom::AppCacheResourceInfo;
+using mojom::AppCacheErrorDetails;
 
 // Temporarily renumber them in wierd way, to help remove LOG_TIP from WebKit
 enum AppCacheLogLevel {
@@ -47,59 +42,12 @@ enum AppCacheNamespaceType {
   APPCACHE_NETWORK_NAMESPACE
 };
 
-enum AppCacheErrorReason {
-  APPCACHE_MANIFEST_ERROR,
-  APPCACHE_SIGNATURE_ERROR,
-  APPCACHE_RESOURCE_ERROR,
-  APPCACHE_CHANGED_ERROR,
-  APPCACHE_ABORT_ERROR,
-  APPCACHE_QUOTA_ERROR,
-  APPCACHE_POLICY_ERROR,
-  APPCACHE_UNKNOWN_ERROR,
-  APPCACHE_ERROR_REASON_LAST = APPCACHE_UNKNOWN_ERROR
-};
-
-// Type to hold information about a single appcache resource.
-struct CONTENT_EXPORT AppCacheResourceInfo {
-  AppCacheResourceInfo();
-  AppCacheResourceInfo(const AppCacheResourceInfo& other);
-  ~AppCacheResourceInfo();
-
-  GURL url;
-  int64_t size;
-  bool is_master;
-  bool is_manifest;
-  bool is_intercept;
-  bool is_fallback;
-  bool is_foreign;
-  bool is_explicit;
-  int64_t response_id;
-};
-
-struct CONTENT_EXPORT AppCacheErrorDetails {
-  AppCacheErrorDetails();
-  AppCacheErrorDetails(std::string message,
-               AppCacheErrorReason reason,
-               GURL url,
-               int status,
-               bool is_cross_origin);
-  ~AppCacheErrorDetails();
-
-  std::string message;
-  AppCacheErrorReason reason;
-  GURL url;
-  int status;
-  bool is_cross_origin;
-};
-
 typedef std::vector<AppCacheResourceInfo> AppCacheResourceInfoVector;
 
 struct CONTENT_EXPORT AppCacheNamespace {
   AppCacheNamespace();  // Type is APPCACHE_FALLBACK_NAMESPACE by default.
   AppCacheNamespace(AppCacheNamespaceType type, const GURL& url,
       const GURL& target, bool is_pattern);
-  AppCacheNamespace(AppCacheNamespaceType type, const GURL& url,
-      const GURL& target, bool is_pattern, bool is_executable);
   ~AppCacheNamespace();
 
   bool IsMatch(const GURL& url) const;
@@ -108,7 +56,6 @@ struct CONTENT_EXPORT AppCacheNamespace {
   GURL namespace_url;
   GURL target_url;
   bool is_pattern;
-  bool is_executable;
 };
 
 typedef std::vector<AppCacheNamespace> AppCacheNamespaceVector;
@@ -132,6 +79,13 @@ class CONTENT_EXPORT AppCacheFrontend {
                                 const GURL& manifest_url) = 0;
   virtual void OnLogMessage(int host_id, AppCacheLogLevel log_level,
                             const std::string& message) = 0;
+  // In the network service world, we pass the URLLoaderFactory instance to be
+  // used to issue subresource requeste in the |loader_factory_pipe_handle|
+  // parameter.
+  virtual void OnSetSubresourceFactory(
+      int host_id,
+      mojo::MessagePipeHandle loader_factory_pipe_handle) = 0;
+
   virtual ~AppCacheFrontend() {}
 };
 
@@ -145,10 +99,6 @@ class CONTENT_EXPORT AppCacheBackend {
                            const GURL& document_url,
                            const int64_t cache_document_was_loaded_from,
                            const GURL& manifest_url) = 0;
-  virtual void SelectCacheForWorker(
-                           int host_id,
-                           int parent_process_id,
-                           int parent_host_id) = 0;
   virtual void SelectCacheForSharedWorker(int host_id, int64_t appcache_id) = 0;
   virtual void MarkAsForeignEntry(int host_id,
                                   const GURL& document_url,

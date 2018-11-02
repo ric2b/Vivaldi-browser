@@ -42,8 +42,7 @@ class DOMRectReadOnly;
 class LayerRect;
 class Node;
 
-class LayerRectList final : public GarbageCollected<LayerRectList>,
-                            public ScriptWrappable {
+class LayerRectList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -57,7 +56,7 @@ class LayerRectList final : public GarbageCollected<LayerRectList>,
               int layer_offset_y,
               DOMRectReadOnly* layer_relative_rect);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   LayerRectList();

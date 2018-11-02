@@ -108,42 +108,6 @@ class BASE_EXPORT PickleIterator {
   FRIEND_TEST_ALL_PREFIXES(PickleTest, GetReadPointerAndAdvance);
 };
 
-// This class provides an interface analogous to base::Pickle's WriteFoo()
-// methods and can be used to accurately compute the size of a hypothetical
-// Pickle's payload without having to reference the Pickle implementation.
-class BASE_EXPORT PickleSizer {
- public:
-  PickleSizer();
-  ~PickleSizer();
-
-  // Returns the computed size of the payload.
-  size_t payload_size() const { return payload_size_; }
-
-  void AddBool() { return AddInt(); }
-  void AddInt() { AddPOD<int>(); }
-  void AddLong() { AddPOD<uint64_t>(); }
-  void AddUInt16() { return AddPOD<uint16_t>(); }
-  void AddUInt32() { return AddPOD<uint32_t>(); }
-  void AddInt64() { return AddPOD<int64_t>(); }
-  void AddUInt64() { return AddPOD<uint64_t>(); }
-  void AddFloat() { return AddPOD<float>(); }
-  void AddDouble() { return AddPOD<double>(); }
-  void AddString(const StringPiece& value);
-  void AddString16(const StringPiece16& value);
-  void AddData(int length);
-  void AddBytes(int length);
-  void AddAttachment();
-
- private:
-  // Just like AddBytes() but with a compile-time size for performance.
-  template<size_t length> void BASE_EXPORT AddBytesStatic();
-
-  template <typename T>
-  void AddPOD() { AddBytesStatic<sizeof(T)>(); }
-
-  size_t payload_size_ = 0;
-};
-
 // This class provides facilities for basic binary value packing and unpacking.
 //
 // The Pickle class supports appending primitive values (ints, strings, etc.)
@@ -222,36 +186,28 @@ class BASE_EXPORT Pickle {
   // Pickle, it is important to read them in the order in which they were added
   // to the Pickle.
 
-  bool WriteBool(bool value) {
-    return WriteInt(value ? 1 : 0);
-  }
-  bool WriteInt(int value) {
-    return WritePOD(value);
-  }
-  bool WriteLong(long value) {
+  void WriteBool(bool value) { WriteInt(value ? 1 : 0); }
+  void WriteInt(int value) { WritePOD(value); }
+  void WriteLong(long value) {
     // Always write long as a 64-bit value to ensure compatibility between
     // 32-bit and 64-bit processes.
-    return WritePOD(static_cast<int64_t>(value));
+    WritePOD(static_cast<int64_t>(value));
   }
-  bool WriteUInt16(uint16_t value) { return WritePOD(value); }
-  bool WriteUInt32(uint32_t value) { return WritePOD(value); }
-  bool WriteInt64(int64_t value) { return WritePOD(value); }
-  bool WriteUInt64(uint64_t value) { return WritePOD(value); }
-  bool WriteFloat(float value) {
-    return WritePOD(value);
-  }
-  bool WriteDouble(double value) {
-    return WritePOD(value);
-  }
-  bool WriteString(const StringPiece& value);
-  bool WriteString16(const StringPiece16& value);
+  void WriteUInt16(uint16_t value) { WritePOD(value); }
+  void WriteUInt32(uint32_t value) { WritePOD(value); }
+  void WriteInt64(int64_t value) { WritePOD(value); }
+  void WriteUInt64(uint64_t value) { WritePOD(value); }
+  void WriteFloat(float value) { WritePOD(value); }
+  void WriteDouble(double value) { WritePOD(value); }
+  void WriteString(const StringPiece& value);
+  void WriteString16(const StringPiece16& value);
   // "Data" is a blob with a length. When you read it out you will be given the
   // length. See also WriteBytes.
-  bool WriteData(const char* data, int length);
+  void WriteData(const char* data, int length);
   // "Bytes" is a blob with no length. The caller must specify the length both
   // when reading and writing. It is normally used to serialize PoD types of a
   // known size. See also WriteData.
-  bool WriteBytes(const void* data, int length);
+  void WriteBytes(const void* data, int length);
 
   // WriteAttachment appends |attachment| to the pickle. It returns
   // false iff the set is full or if the Pickle implementation does not support

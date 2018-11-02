@@ -7,8 +7,8 @@
 
 #include <string>
 
+#include "ash/app_list/model/app_list_item_list_observer.h"
 #include "base/macros.h"
-#include "ui/app_list/app_list_item_list_observer.h"
 #include "ui/app_list/views/apps_grid_view.h"
 #include "ui/app_list/views/apps_grid_view_folder_delegate.h"
 #include "ui/app_list/views/folder_header_view.h"
@@ -72,6 +72,8 @@ class AppListFolderView : public views::View,
 
   AppsGridView* items_grid_view() { return items_grid_view_; }
 
+  FolderHeaderView* folder_header_view() { return folder_header_view_; }
+
  private:
   void CalculateIdealBounds();
 
@@ -106,21 +108,22 @@ class AppListFolderView : public views::View,
   bool IsOEMFolder() const override;
   void SetRootLevelDragViewVisible(bool visible) override;
 
-  AppsContainerView* container_view_;  // Not owned.
+  AppsContainerView* container_view_;     // Not owned.
   AppListMainView* app_list_main_view_;   // Not Owned.
   FolderHeaderView* folder_header_view_;  // Owned by views hierarchy.
-  AppsGridView* items_grid_view_;  // Owned by the views hierarchy.
+  AppsGridView* items_grid_view_;         // Owned by the views hierarchy.
 
   std::unique_ptr<views::ViewModel> view_model_;
 
-  AppListModel* model_;  // Not owned.
+  AppListModel* model_;             // Not owned.
   AppListFolderItem* folder_item_;  // Not owned.
 
   bool hide_for_reparent_;
 
   base::string16 accessible_name_;
 
-  const bool is_fullscreen_app_list_enabled_;
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListFolderView);
 };

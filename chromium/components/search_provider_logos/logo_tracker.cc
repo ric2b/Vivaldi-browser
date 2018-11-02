@@ -8,15 +8,13 @@
 #include <utility>
 
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/time/default_clock.h"
+#include "base/time/clock.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "components/search_provider_logos/switches.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -54,28 +52,49 @@ std::unique_ptr<EncodedLogo> GetLogoFromCacheOnFileThread(LogoCache* logo_cache,
     return nullptr;
 
   if (metadata->source_url != logo_url || !IsLogoOkToShow(*metadata, now)) {
-    logo_cache->SetCachedLogo(NULL);
+    logo_cache->SetCachedLogo(nullptr);
     return nullptr;
   }
 
   return logo_cache->GetCachedLogo();
 }
 
+void NotifyAndClear(std::vector<EncodedLogoCallback>* encoded_callbacks,
+                    std::vector<LogoCallback>* decoded_callbacks,
+                    LogoCallbackReason type,
+                    const EncodedLogo* encoded_logo,
+                    const Logo* decoded_logo) {
+  auto opt_encoded_logo =
+      encoded_logo ? base::Optional<EncodedLogo>(*encoded_logo) : base::nullopt;
+  for (EncodedLogoCallback& callback : *encoded_callbacks) {
+    std::move(callback).Run(type, opt_encoded_logo);
+  }
+  encoded_callbacks->clear();
+
+  auto opt_decoded_logo =
+      decoded_logo ? base::Optional<Logo>(*decoded_logo) : base::nullopt;
+  for (LogoCallback& callback : *decoded_callbacks) {
+    std::move(callback).Run(type, opt_decoded_logo);
+  }
+  decoded_callbacks->clear();
+}
+
 }  // namespace
 
 LogoTracker::LogoTracker(
-    base::FilePath cached_logo_directory,
     scoped_refptr<net::URLRequestContextGetter> request_context_getter,
-    std::unique_ptr<LogoDelegate> delegate)
+    std::unique_ptr<LogoDelegate> delegate,
+    std::unique_ptr<LogoCache> logo_cache,
+    std::unique_ptr<base::Clock> clock)
     : is_idle_(true),
       is_cached_logo_valid_(false),
       logo_delegate_(std::move(delegate)),
       cache_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
-      logo_cache_(new LogoCache(cached_logo_directory),
+      logo_cache_(logo_cache.release(),
                   base::OnTaskRunnerDeleter(cache_task_runner_)),
-      clock_(base::MakeUnique<base::DefaultClock>()),
+      clock_(std::move(clock)),
       request_context_getter_(request_context_getter),
       weak_ptr_factory_(this) {}
 
@@ -97,9 +116,29 @@ void LogoTracker::SetServerAPI(
   append_queryparams_func_ = append_queryparams_func;
 }
 
-void LogoTracker::GetLogo(LogoObserver* observer) {
+void LogoTracker::GetLogo(LogoCallbacks callbacks) {
   DCHECK(!logo_url_.is_empty());
-  logo_observers_.AddObserver(observer);
+  DCHECK(callbacks.on_cached_decoded_logo_available ||
+         callbacks.on_cached_encoded_logo_available ||
+         callbacks.on_fresh_decoded_logo_available ||
+         callbacks.on_fresh_encoded_logo_available);
+
+  if (callbacks.on_cached_encoded_logo_available) {
+    on_cached_encoded_logo_.push_back(
+        std::move(callbacks.on_cached_encoded_logo_available));
+  }
+  if (callbacks.on_cached_decoded_logo_available) {
+    on_cached_decoded_logo_.push_back(
+        std::move(callbacks.on_cached_decoded_logo_available));
+  }
+  if (callbacks.on_fresh_encoded_logo_available) {
+    on_fresh_encoded_logo_.push_back(
+        std::move(callbacks.on_fresh_encoded_logo_available));
+  }
+  if (callbacks.on_fresh_decoded_logo_available) {
+    on_fresh_decoded_logo_.push_back(
+        std::move(callbacks.on_fresh_decoded_logo_available));
+  }
 
   if (is_idle_) {
     is_idle_ = false;
@@ -111,23 +150,10 @@ void LogoTracker::GetLogo(LogoObserver* observer) {
         base::Bind(&LogoTracker::OnCachedLogoRead,
                    weak_ptr_factory_.GetWeakPtr()));
   } else if (is_cached_logo_valid_) {
-    observer->OnLogoAvailable(cached_logo_.get(), true);
+    NotifyAndClear(&on_cached_encoded_logo_, &on_cached_decoded_logo_,
+                   LogoCallbackReason::DETERMINED, cached_encoded_logo_.get(),
+                   cached_logo_.get());
   }
-}
-
-void LogoTracker::RemoveObserver(LogoObserver* observer) {
-  logo_observers_.RemoveObserver(observer);
-}
-
-void LogoTracker::SetLogoCacheForTests(std::unique_ptr<LogoCache> cache) {
-  DCHECK(cache);
-  // Call reset() and release() to keep the deleter of the |logo_cache_| member
-  // and run it on the old value.
-  logo_cache_.reset(cache.release());
-}
-
-void LogoTracker::SetClockForTests(std::unique_ptr<base::Clock> clock) {
-  clock_ = std::move(clock);
 }
 
 void LogoTracker::ReturnToIdle(int outcome) {
@@ -143,41 +169,49 @@ void LogoTracker::ReturnToIdle(int outcome) {
   // Reset state.
   is_idle_ = true;
   cached_logo_.reset();
+  cached_encoded_logo_.reset();
   is_cached_logo_valid_ = false;
 
-  // Clear obsevers.
-  for (auto& observer : logo_observers_)
-    observer.OnObserverRemoved();
-  logo_observers_.Clear();
+  // Clear callbacks.
+  NotifyAndClear(&on_cached_encoded_logo_, &on_cached_decoded_logo_,
+                 LogoCallbackReason::CANCELED, nullptr, nullptr);
+  NotifyAndClear(&on_fresh_encoded_logo_, &on_fresh_decoded_logo_,
+                 LogoCallbackReason::CANCELED, nullptr, nullptr);
 }
 
 void LogoTracker::OnCachedLogoRead(std::unique_ptr<EncodedLogo> cached_logo) {
   DCHECK(!is_idle_);
 
   if (cached_logo) {
+    // Store the value of logo->encoded_image for use below. This ensures that
+    // logo->encoded_image is evaulated before base::Passed(&logo), which sets
+    // logo to NULL.
+    scoped_refptr<base::RefCountedString> encoded_image =
+        cached_logo->encoded_image;
     logo_delegate_->DecodeUntrustedImage(
-        cached_logo->encoded_image,
+        encoded_image,
         base::Bind(&LogoTracker::OnCachedLogoAvailable,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   cached_logo->metadata));
+                   weak_ptr_factory_.GetWeakPtr(), base::Passed(&cached_logo)));
   } else {
-    OnCachedLogoAvailable(LogoMetadata(), SkBitmap());
+    OnCachedLogoAvailable({}, SkBitmap());
   }
 }
 
-void LogoTracker::OnCachedLogoAvailable(const LogoMetadata& metadata,
-                                        const SkBitmap& image) {
+void LogoTracker::OnCachedLogoAvailable(
+    std::unique_ptr<EncodedLogo> encoded_logo,
+    const SkBitmap& image) {
   DCHECK(!is_idle_);
 
   if (!image.isNull()) {
     cached_logo_.reset(new Logo());
-    cached_logo_->metadata = metadata;
+    cached_logo_->metadata = encoded_logo->metadata;
     cached_logo_->image = image;
+    cached_encoded_logo_ = std::move(encoded_logo);
   }
   is_cached_logo_valid_ = true;
-  Logo* logo = cached_logo_.get();
-  for (auto& observer : logo_observers_)
-    observer.OnLogoAvailable(logo, true);
+  NotifyAndClear(&on_cached_encoded_logo_, &on_cached_decoded_logo_,
+                 LogoCallbackReason::DETERMINED, cached_encoded_logo_.get(),
+                 cached_logo_.get());
   FetchLogo();
 }
 
@@ -203,13 +237,7 @@ void LogoTracker::FetchLogo() {
       cached_logo_->metadata.expiration_time >= clock_->Now()) {
     fingerprint = cached_logo_->metadata.fingerprint;
   }
-  GURL url;
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kGoogleDoodleUrl)) {
-    url = GURL(command_line->GetSwitchValueASCII(switches::kGoogleDoodleUrl));
-  } else {
-    url = append_queryparams_func_.Run(logo_url_, fingerprint);
-  }
+  GURL url = append_queryparams_func_.Run(logo_url_, fingerprint);
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("logo_tracker", R"(
@@ -253,8 +281,8 @@ void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
     logo->metadata.source_url = logo_url_;
 
   if (!logo || !logo->encoded_image.get()) {
-    OnFreshLogoAvailable(std::move(logo), *parsing_failed, from_http_cache,
-                         SkBitmap());
+    OnFreshLogoAvailable(std::move(logo), /*download_failed=*/false,
+                         *parsing_failed, from_http_cache, SkBitmap());
   } else {
     // Store the value of logo->encoded_image for use below. This ensures that
     // logo->encoded_image is evaulated before base::Passed(&logo), which sets
@@ -264,23 +292,28 @@ void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
         encoded_image,
         base::Bind(&LogoTracker::OnFreshLogoAvailable,
                    weak_ptr_factory_.GetWeakPtr(), base::Passed(&logo),
-                   *parsing_failed, from_http_cache));
+                   /*download_failed=*/false, *parsing_failed,
+                   from_http_cache));
   }
 }
 
 void LogoTracker::OnFreshLogoAvailable(
     std::unique_ptr<EncodedLogo> encoded_logo,
+    bool download_failed,
     bool parsing_failed,
     bool from_http_cache,
     const SkBitmap& image) {
   DCHECK(!is_idle_);
 
-  int download_outcome = kDownloadOutcomeNotTracked;
+  LogoDownloadOutcome download_outcome = DOWNLOAD_OUTCOME_COUNT;
+  std::unique_ptr<Logo> logo;
 
-  if (encoded_logo && !encoded_logo->encoded_image.get() && cached_logo_ &&
-      !encoded_logo->metadata.fingerprint.empty() &&
-      encoded_logo->metadata.fingerprint ==
-          cached_logo_->metadata.fingerprint) {
+  if (download_failed) {
+    download_outcome = DOWNLOAD_OUTCOME_DOWNLOAD_FAILED;
+  } else if (encoded_logo && !encoded_logo->encoded_image.get() &&
+             cached_logo_ && !encoded_logo->metadata.fingerprint.empty() &&
+             encoded_logo->metadata.fingerprint ==
+                 cached_logo_->metadata.fingerprint) {
     // The cached logo was revalidated, i.e. its fingerprint was verified.
     // mime_type isn't sent when revalidating, so copy it from the cached logo.
     encoded_logo->metadata.mime_type = cached_logo_->metadata.mime_type;
@@ -290,7 +323,6 @@ void LogoTracker::OnFreshLogoAvailable(
     // Image decoding failed. Do nothing.
     download_outcome = DOWNLOAD_OUTCOME_DECODING_FAILED;
   } else {
-    std::unique_ptr<Logo> logo;
     // Check if the server returned a valid, non-empty response.
     if (encoded_logo) {
       UMA_HISTOGRAM_BOOLEAN("NewTabPage.LogoImageDownloaded", from_http_cache);
@@ -309,17 +341,70 @@ void LogoTracker::OnFreshLogoAvailable(
       else
         download_outcome = DOWNLOAD_OUTCOME_NO_LOGO_TODAY;
     }
-
-    // Notify observers if a new logo was fetched, or if the new logo is NULL
-    // but the cached logo was non-NULL.
-    if (logo || cached_logo_) {
-      for (auto& observer : logo_observers_)
-        observer.OnLogoAvailable(logo.get(), false);
-      SetCachedLogo(std::move(encoded_logo));
-    }
   }
 
-  DCHECK_NE(kDownloadOutcomeNotTracked, download_outcome);
+  LogoCallbackReason callback_type = LogoCallbackReason::FAILED;
+  switch (download_outcome) {
+    case DOWNLOAD_OUTCOME_NEW_LOGO_SUCCESS:
+      DCHECK(encoded_logo.get());
+      DCHECK(logo.get());
+      callback_type = LogoCallbackReason::DETERMINED;
+      break;
+
+    case DOWNLOAD_OUTCOME_PARSING_FAILED:
+    case DOWNLOAD_OUTCOME_NO_LOGO_TODAY:
+      // Clear the cached logo if it was non-null. Otherwise, report this as a
+      // revalidation of "no logo".
+      DCHECK(!encoded_logo.get());
+      DCHECK(!logo.get());
+      if (cached_logo_) {
+        callback_type = LogoCallbackReason::DETERMINED;
+      } else {
+        callback_type = LogoCallbackReason::REVALIDATED;
+      }
+      break;
+
+    case DOWNLOAD_OUTCOME_DOWNLOAD_FAILED:
+      // In the download failed, don't notify the callback at all, since the
+      // callback should continue to use the cached logo.
+      DCHECK(!encoded_logo.get());
+      DCHECK(!logo.get());
+      callback_type = LogoCallbackReason::FAILED;
+      break;
+
+    case DOWNLOAD_OUTCOME_DECODING_FAILED:
+      DCHECK(encoded_logo.get());
+      DCHECK(!logo.get());
+      encoded_logo.reset();
+      callback_type = LogoCallbackReason::FAILED;
+      break;
+
+    case DOWNLOAD_OUTCOME_LOGO_REVALIDATED:
+      // In the server reported that the cached logo is still current, don't
+      // notify the callback at all, since the callback should continue to use
+      // the cached logo.
+      DCHECK(encoded_logo.get());
+      DCHECK(!logo.get());
+      callback_type = LogoCallbackReason::REVALIDATED;
+      break;
+
+    case DOWNLOAD_OUTCOME_COUNT:
+      NOTREACHED();
+      return;
+  }
+
+  NotifyAndClear(&on_fresh_encoded_logo_, &on_fresh_decoded_logo_,
+                 callback_type, encoded_logo.get(), logo.get());
+
+  switch (callback_type) {
+    case LogoCallbackReason::DETERMINED:
+      SetCachedLogo(std::move(encoded_logo));
+      break;
+
+    default:
+      break;
+  }
+
   ReturnToIdle(download_outcome);
 }
 
@@ -328,7 +413,8 @@ void LogoTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   std::unique_ptr<net::URLFetcher> cleanup_fetcher(fetcher_.release());
 
   if (!source->GetStatus().is_success()) {
-    ReturnToIdle(DOWNLOAD_OUTCOME_DOWNLOAD_FAILED);
+    OnFreshLogoAvailable({}, /*download_failed=*/true, false, false,
+                         SkBitmap());
     return;
   }
 
@@ -337,7 +423,8 @@ void LogoTracker::OnURLFetchComplete(const net::URLFetcher* source) {
       response_code != net::URLFetcher::RESPONSE_CODE_INVALID) {
     // RESPONSE_CODE_INVALID is returned when fetching from a file: URL
     // (for testing). In all other cases we would have had a non-success status.
-    ReturnToIdle(DOWNLOAD_OUTCOME_DOWNLOAD_FAILED);
+    OnFreshLogoAvailable({}, /*download_failed=*/true, false, false,
+                         SkBitmap());
     return;
   }
 
@@ -368,7 +455,8 @@ void LogoTracker::OnURLFetchDownloadProgress(const net::URLFetcher* source,
                                              int64_t current_network_bytes) {
   if (total > kMaxDownloadBytes || current > kMaxDownloadBytes) {
     LOG(WARNING) << "Search provider logo exceeded download size limit";
-    ReturnToIdle(DOWNLOAD_OUTCOME_DOWNLOAD_FAILED);
+    OnFreshLogoAvailable({}, /*download_failed=*/true, false, false,
+                         SkBitmap());
   }
 }
 

@@ -29,7 +29,7 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
-#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_win.h"
+#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_impl_win.h"
 #include "sandbox/win/src/sandbox.h"
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
@@ -42,8 +42,8 @@
 #endif
 
 #if defined(OS_LINUX)
-#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/public/common/sandbox_init.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
 #endif
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -57,7 +57,7 @@
 #if defined(OS_WIN)
 sandbox::TargetServices* g_target_services = NULL;
 #else
-void* g_target_services = 0;
+void* g_target_services = nullptr;
 #endif
 
 namespace content {
@@ -111,7 +111,7 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 
   base::MessageLoop main_message_loop;
   base::PlatformThread::SetName("CrPPAPIMain");
-  base::trace_event::TraceLog::GetInstance()->SetProcessName("PPAPI Process");
+  base::trace_event::TraceLog::GetInstance()->set_process_name("PPAPI Process");
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventPpapiProcessSortIndex);
 
@@ -121,7 +121,10 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 #endif
 
 #if defined(OS_LINUX)
-  LinuxSandbox::InitializeSandbox();
+  service_manager::SandboxLinux::GetInstance()->InitializeSandbox(
+      service_manager::SandboxTypeFromCommandLine(command_line),
+      service_manager::SandboxLinux::PreSandboxHook(),
+      service_manager::SandboxLinux::Options());
 #endif
 
   ChildProcess ppapi_process;

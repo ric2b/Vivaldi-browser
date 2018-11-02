@@ -21,9 +21,7 @@ namespace payments {
 class PaymentRequestPaymentResponseAutofillPaymentInstrumentTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestPaymentResponseAutofillPaymentInstrumentTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_no_shipping_test.html") {}
+  PaymentRequestPaymentResponseAutofillPaymentInstrumentTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(
@@ -35,6 +33,7 @@ class PaymentRequestPaymentResponseAutofillPaymentInstrumentTest
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestPaymentResponseAutofillPaymentInstrumentTest,
     TestPaymentResponse) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   // Setup a credit card with an associated billing address.
   autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
   AddAutofillProfile(billing_address);
@@ -44,7 +43,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // Complete the Payment Request.
   InvokePaymentRequestUI();
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("123"));
 
   // Test that the card details were sent to the merchant.
@@ -66,9 +65,7 @@ IN_PROC_BROWSER_TEST_F(
 class PaymentRequestPaymentResponseShippingAddressTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestPaymentResponseShippingAddressTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_free_shipping_test.html") {}
+  PaymentRequestPaymentResponseShippingAddressTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestPaymentResponseShippingAddressTest);
@@ -78,6 +75,7 @@ class PaymentRequestPaymentResponseShippingAddressTest
 // shipping address and shipping option.
 IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseShippingAddressTest,
                        TestPaymentResponse) {
+  NavigateTo("/payment_request_free_shipping_test.html");
   // Create a billing address and a card that uses it.
   autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
   AddAutofillProfile(billing_address);
@@ -94,7 +92,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseShippingAddressTest,
 
   // Complete the Payment Request.
   InvokePaymentRequestUI();
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("123"));
 
   // Test that the shipping address was sent to the merchant.
@@ -113,9 +111,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseShippingAddressTest,
 class PaymentRequestPaymentResponseAllContactDetailsTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestPaymentResponseAllContactDetailsTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_contact_details_and_free_shipping_test.html") {}
+  PaymentRequestPaymentResponseAllContactDetailsTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestPaymentResponseAllContactDetailsTest);
@@ -125,6 +121,7 @@ class PaymentRequestPaymentResponseAllContactDetailsTest
 // details when all three details are requested.
 IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseAllContactDetailsTest,
                        TestPaymentResponse) {
+  NavigateTo("/payment_request_contact_details_and_free_shipping_test.html");
   // Setup a credit card with an associated billing address.
   autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
   AddAutofillProfile(billing_address);
@@ -134,7 +131,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseAllContactDetailsTest,
 
   // Complete the Payment Request.
   InvokePaymentRequestUI();
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("123"));
 
   // Test that the contact details were sent to the merchant.
@@ -146,9 +143,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseAllContactDetailsTest,
 class PaymentRequestPaymentResponseOneContactDetailTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestPaymentResponseOneContactDetailTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_email_and_free_shipping_test.html") {}
+  PaymentRequestPaymentResponseOneContactDetailTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestPaymentResponseOneContactDetailTest);
@@ -158,6 +153,7 @@ class PaymentRequestPaymentResponseOneContactDetailTest
 // details when all ont detail is requested.
 IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseOneContactDetailTest,
                        TestPaymentResponse) {
+  NavigateTo("/payment_request_email_and_free_shipping_test.html");
   // Setup a credit card with an associated billing address.
   autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
   AddAutofillProfile(billing_address);
@@ -167,7 +163,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentResponseOneContactDetailTest,
 
   // Complete the Payment Request.
   InvokePaymentRequestUI();
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("123"));
 
   // Test that the contact details were sent to the merchant.

@@ -19,9 +19,10 @@ DataElement::DataElement()
       offset_(0),
       length_(std::numeric_limits<uint64_t>::max()) {}
 
-DataElement::DataElement(const DataElement& other) = default;
+DataElement::~DataElement() = default;
 
-DataElement::~DataElement() {}
+DataElement::DataElement(DataElement&& other) = default;
+DataElement& DataElement::operator=(DataElement&& other) = default;
 
 void DataElement::SetToFilePathRange(
     const base::FilePath& path,
@@ -29,6 +30,19 @@ void DataElement::SetToFilePathRange(
     uint64_t length,
     const base::Time& expected_modification_time) {
   type_ = TYPE_FILE;
+  path_ = path;
+  offset_ = offset;
+  length_ = length;
+  expected_modification_time_ = expected_modification_time;
+}
+
+void DataElement::SetToFileRange(base::File file,
+                                 const base::FilePath& path,
+                                 uint64_t offset,
+                                 uint64_t length,
+                                 const base::Time& expected_modification_time) {
+  type_ = TYPE_RAW_FILE;
+  file_ = std::move(file);
   path_ = path;
   offset_ = offset;
   length_ = length;
@@ -62,6 +76,20 @@ void DataElement::SetToDiskCacheEntryRange(uint64_t offset, uint64_t length) {
   length_ = length;
 }
 
+void DataElement::SetToDataPipe(
+    network::mojom::DataPipeGetterPtr data_pipe_getter) {
+  type_ = TYPE_DATA_PIPE;
+  data_pipe_getter_ = std::move(data_pipe_getter);
+}
+
+base::File DataElement::ReleaseFile() {
+  return std::move(file_);
+}
+
+network::mojom::DataPipeGetterPtr DataElement::ReleaseDataPipeGetter() {
+  return std::move(data_pipe_getter_);
+}
+
 void PrintTo(const DataElement& x, std::ostream* os) {
   const uint64_t kMaxDataPrintLength = 40;
   *os << "<DataElement>{type: ";
@@ -80,6 +108,10 @@ void PrintTo(const DataElement& x, std::ostream* os) {
       *os << "TYPE_FILE, path: " << x.path().AsUTF8Unsafe()
           << ", expected_modification_time: " << x.expected_modification_time();
       break;
+    case DataElement::TYPE_RAW_FILE:
+      *os << "TYPE_RAW_FILE, path: " << x.path().AsUTF8Unsafe()
+          << ", expected_modification_time: " << x.expected_modification_time();
+      break;
     case DataElement::TYPE_BLOB:
       *os << "TYPE_BLOB, uuid: " << x.blob_uuid();
       break;
@@ -91,6 +123,9 @@ void PrintTo(const DataElement& x, std::ostream* os) {
       break;
     case DataElement::TYPE_BYTES_DESCRIPTION:
       *os << "TYPE_BYTES_DESCRIPTION";
+      break;
+    case DataElement::TYPE_DATA_PIPE:
+      *os << "TYPE_DATA_PIPE";
       break;
     case DataElement::TYPE_UNKNOWN:
       *os << "TYPE_UNKNOWN";
@@ -109,6 +144,9 @@ bool operator==(const DataElement& a, const DataElement& b) {
     case DataElement::TYPE_FILE:
       return a.path() == b.path() &&
              a.expected_modification_time() == b.expected_modification_time();
+    case DataElement::TYPE_RAW_FILE:
+      return a.path() == b.path() &&
+             a.expected_modification_time() == b.expected_modification_time();
     case DataElement::TYPE_BLOB:
       return a.blob_uuid() == b.blob_uuid();
     case DataElement::TYPE_FILE_FILESYSTEM:
@@ -119,6 +157,8 @@ bool operator==(const DataElement& a, const DataElement& b) {
       return true;
     case DataElement::TYPE_BYTES_DESCRIPTION:
       return true;
+    case DataElement::TYPE_DATA_PIPE:
+      return false;
     case DataElement::TYPE_UNKNOWN:
       NOTREACHED();
       return false;

@@ -22,25 +22,25 @@ Browser* FindBrowser() {
        ++browser_iterator) {
     Browser* browser = *browser_iterator;
     if (browser->is_type_tabbed() &&
-        (browser->window()->IsActive() || !browser->window()->IsMinimized()))
+        (browser->window()->IsActive() || !browser->window()->IsMinimized())) {
       return browser;
+    }
   }
 
   return nullptr;
 }
 
-void OpenSettingsPage(Browser* browser,
-                      WindowOpenDisposition disposition,
-                      bool skip_if_current_tab) {
+bool SettingsPageIsActiveTab(Browser* browser) {
   DCHECK(browser);
 
-  // Skip opening the settings page if it's already the currently active tab.
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  if (skip_if_current_tab && web_contents &&
-      web_contents->GetLastCommittedURL() == chrome::kChromeUISettingsURL) {
-    return;
-  }
+  return web_contents &&
+         web_contents->GetLastCommittedURL() == chrome::kChromeUISettingsURL;
+}
+
+void OpenSettingsPage(Browser* browser, WindowOpenDisposition disposition) {
+  DCHECK(browser);
 
   browser->OpenURL(content::OpenURLParams(
       GURL(chrome::kChromeUISettingsURL), content::Referrer(), disposition,

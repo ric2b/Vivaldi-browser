@@ -14,7 +14,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "extensions/browser/preload_check.h"
+#include "extensions/common/manifest.h"
 
 class ExtensionService;
 class Profile;
@@ -57,10 +59,6 @@ class UnpackedInstaller
                            std::string* extension_id,
                            bool only_allow_apps);
 
-  // Allows prompting for plugins to be disabled; intended for testing only.
-  bool prompt_for_plugins() { return prompt_for_plugins_; }
-  void set_prompt_for_plugins(bool val) { prompt_for_plugins_ = val; }
-
   // Allows overriding of whether modern manifest versions are required;
   // intended for testing.
   bool require_modern_manifest_version() const {
@@ -84,14 +82,12 @@ class UnpackedInstaller
   explicit UnpackedInstaller(ExtensionService* extension_service);
   virtual ~UnpackedInstaller();
 
-  // Must be called from the UI thread.
-  void ShowInstallPrompt();
-
-  // Begin management policy and requirements checks.
+  // Must be called from the UI thread. Begin management policy and requirements
+  // checks.
   void StartInstallChecks();
 
   // Callback from PreloadCheckGroup.
-  void OnInstallChecksComplete(PreloadCheck::Errors errors);
+  void OnInstallChecksComplete(const PreloadCheck::Errors& errors);
 
   // Verifies if loading unpacked extensions is allowed.
   bool IsLoadingUnpackedAllowed() const;
@@ -119,6 +115,20 @@ class UnpackedInstaller
   // Helper to get the Extension::CreateFlags for the installing extension.
   int GetFlags();
 
+  // Helper to load an extension. Should be called on a sequence where file IO
+  // is allowed. Loads the extension, validates extension locales and persists
+  // the ruleset for the Declarative Net Request API, if needed. In case of an
+  // error, returns false and populates |error|.
+  bool LoadExtension(Manifest::Location location,
+                     int flags,
+                     std::string* error);
+
+  // Reads the Declarative Net Request JSON ruleset for the extension, if it
+  // provided one, and persists the indexed ruleset. Returns false and populates
+  // |error| in case of an error. Should be called on a sequence where file IO
+  // is allowed.
+  bool IndexAndPersistRulesIfNeeded(std::string* error);
+
   const Extension* extension() { return extension_.get(); }
 
   // The service we will report results back to.
@@ -132,11 +142,7 @@ class UnpackedInstaller
   base::FilePath extension_path_;
 
   // The extension being installed.
-  scoped_refptr<const Extension> extension_;
-
-  // If true and the extension contains plugins, we prompt the user before
-  // loading.
-  bool prompt_for_plugins_;
+  scoped_refptr<Extension> extension_;
 
   // Whether to require the extension installed to have a modern manifest
   // version.
@@ -151,6 +157,10 @@ class UnpackedInstaller
 
   // Runs the above checks.
   std::unique_ptr<PreloadCheckGroup> check_group_;
+
+  // The checksum for the indexed ruleset corresponding to the Declarative Net
+  // Request API.
+  base::Optional<int> dnr_ruleset_checksum_;
 
   CompletionCallback callback_;
 

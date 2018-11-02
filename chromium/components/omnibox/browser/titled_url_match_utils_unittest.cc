@@ -8,12 +8,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/bookmarks/browser/titled_url_node.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
 using bookmarks::TitledUrlMatchToAutocompleteMatch;
@@ -24,7 +24,7 @@ namespace {
 // A simple AutocompleteProvider that does nothing.
 class MockAutocompleteProvider : public AutocompleteProvider {
  public:
-  MockAutocompleteProvider(Type type) : AutocompleteProvider(type) {}
+  explicit MockAutocompleteProvider(Type type) : AutocompleteProvider(type) {}
 
   void Start(const AutocompleteInput& input, bool minimal_changes) override {}
 
@@ -71,10 +71,8 @@ TEST(TitledUrlMatchUtilsTest, TitledUrlMatchToAutocompleteMatch) {
   scoped_refptr<MockAutocompleteProvider> provider =
       new MockAutocompleteProvider(AutocompleteProvider::Type::TYPE_BOOKMARK);
   TestSchemeClassifier classifier;
-  AutocompleteInput input(input_text, base::string16::npos, std::string(),
-                          GURL(), base::string16(),
-                          metrics::OmniboxEventProto::NTP, false, false, true,
-                          true, false, classifier);
+  AutocompleteInput input(input_text, metrics::OmniboxEventProto::NTP,
+                          classifier);
   const base::string16 fixed_up_input(input_text);
 
   AutocompleteMatch autocomplete_match = TitledUrlMatchToAutocompleteMatch(
@@ -129,10 +127,8 @@ TEST(TitledUrlMatchUtilsTest, EmptyInlineAutocompletion) {
   scoped_refptr<MockAutocompleteProvider> provider =
       new MockAutocompleteProvider(AutocompleteProvider::Type::TYPE_BOOKMARK);
   TestSchemeClassifier classifier;
-  AutocompleteInput input(input_text, base::string16::npos, std::string(),
-                          GURL(), base::string16(),
-                          metrics::OmniboxEventProto::NTP, false, false, true,
-                          true, false, classifier);
+  AutocompleteInput input(input_text, metrics::OmniboxEventProto::NTP,
+                          classifier);
   const base::string16 fixed_up_input(input_text);
 
   AutocompleteMatch autocomplete_match = TitledUrlMatchToAutocompleteMatch(

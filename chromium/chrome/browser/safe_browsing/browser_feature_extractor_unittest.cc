@@ -24,13 +24,14 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/test_database_manager.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -128,23 +129,12 @@ class BrowserFeatureExtractorTest : public ChromeRenderViewHostTestHarness {
   void NavigateAndCommit(const GURL& url,
                          const GURL& referrer,
                          ui::PageTransition type) {
-    web_contents()->GetController().LoadURL(
-        url, content::Referrer(referrer, blink::kWebReferrerPolicyDefault),
-        type, std::string());
-    int pending_id =
-        web_contents()->GetController().GetPendingEntry()->GetUniqueID();
-
-    content::RenderFrameHost* rfh =
-        WebContentsTester::For(web_contents())->GetPendingMainFrame();
-    if (!rfh) {
-      rfh = web_contents()->GetMainFrame();
-    }
-    WebContentsTester::For(web_contents())->ProceedWithCrossSiteNavigation();
-    WebContentsTester::For(web_contents())
-        ->TestDidNavigateWithReferrer(
-            rfh, pending_id, true, url,
-            content::Referrer(referrer, blink::kWebReferrerPolicyDefault),
-            type);
+    auto navigation = content::NavigationSimulator::CreateBrowserInitiated(
+        url, web_contents());
+    navigation->SetReferrer(
+        content::Referrer(referrer, blink::kWebReferrerPolicyDefault));
+    navigation->SetTransition(type);
+    navigation->Commit();
   }
 
   bool ExtractFeatures(ClientPhishingRequest* request) {

@@ -11,7 +11,6 @@
 #include "content/browser/browsing_data/conditional_cache_deletion_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
-#include "net/base/sdch_manager.h"
 #include "net/disk_cache/blockfile/backend_impl.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/disk_cache/memory/mem_backend_impl.h"
@@ -65,10 +64,10 @@ StoragePartitionHttpCacheDataRemover::CreateForURLsAndRange(
 StoragePartitionHttpCacheDataRemover::~StoragePartitionHttpCacheDataRemover() {}
 
 void StoragePartitionHttpCacheDataRemover::Remove(
-    const base::Closure& done_callback) {
+    base::OnceClosure done_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!done_callback.is_null());
-  done_callback_ = done_callback;
+  done_callback_ = std::move(done_callback);
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -88,7 +87,7 @@ void StoragePartitionHttpCacheDataRemover::ClearHttpCacheOnIOThread() {
 
 void StoragePartitionHttpCacheDataRemover::ClearedHttpCache() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  done_callback_.Run();
+  std::move(done_callback_).Run();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -129,15 +128,6 @@ void StoragePartitionHttpCacheDataRemover::DoClearCache(int rv) {
             ->quic_stream_factory()
             ->ClearCachedStatesInCryptoConfig(url_predicate_);
 
-        // Clear SDCH dictionary state.
-        net::SdchManager* sdch_manager =
-            getter->GetURLRequestContext()->sdch_manager();
-        // The test is probably overkill, since chrome should always have an
-        // SdchManager.  But in general the URLRequestContext  is *not*
-        // guaranteed to have an SdchManager, so checking is wise.
-        if (sdch_manager)
-          sdch_manager->ClearData();
-
         rv = http_cache->GetBackend(
             &cache_,
             base::Bind(&StoragePartitionHttpCacheDataRemover::DoClearCache,
@@ -170,12 +160,12 @@ void StoragePartitionHttpCacheDataRemover::DoClearCache(int rv) {
                 base::Bind(&StoragePartitionHttpCacheDataRemover::DoClearCache,
                            base::Unretained(this)));
           }
-          cache_ = NULL;
+          cache_ = nullptr;
         }
         break;
       }
       case CacheState::DONE: {
-        cache_ = NULL;
+        cache_ = nullptr;
         next_cache_state_ = CacheState::NONE;
 
         // Notify the UI thread that we are done.

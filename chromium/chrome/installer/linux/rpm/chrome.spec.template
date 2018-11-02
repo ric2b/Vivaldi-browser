@@ -20,7 +20,6 @@ Requires        : @@DEPENDS@@
 Requires(post)  : %{_sbindir}/update-alternatives
 Requires(preun) : %{_sbindir}/update-alternatives
 Autoreqprov     : No
-Conflicts       : @@REPLACES@@
 
 BuildRoot       : %{_tmppath}/%{name}-%{version}-root
 
@@ -87,13 +86,15 @@ rm -rf "$RPM_BUILD_ROOT"
 # Be explicit about the files we scatter throughout the system we don't
 # accidentally "own" stuff that's not ours (crbug.com/123990).
 /etc/cron.daily/@@PACKAGE@@
-%ghost %attr(755,root,root) /usr/bin/google-chrome
+%ghost %attr(755,root,root) /usr/bin/@@PACKAGE_ORIG@@
 /usr/bin/@@USR_BIN_SYMLINK_NAME@@
 /usr/share/appdata/@@PACKAGE@@.appdata.xml
 /usr/share/applications/@@PACKAGE@@.desktop
 /usr/share/gnome-control-center/default-apps/@@PACKAGE@@.xml
 %docdir /usr/share/man/man1
-/usr/share/man/man1/@@PACKAGE@@.1
+# These two files will be the same on non-stable channels.
+/usr/share/man/man1/@@PACKAGE@@.1.gz
+/usr/share/man/man1/@@USR_BIN_SYMLINK_NAME@@.1.gz
 
 #------------------------------------------------------------------------------
 #   Pre install script
@@ -175,8 +176,8 @@ case $CHANNEL in
     ;;
 esac
 
-%{_sbindir}/update-alternatives --install /usr/bin/google-chrome google-chrome \
-  /usr/bin/@@USR_BIN_SYMLINK_NAME@@ $PRIORITY
+%{_sbindir}/update-alternatives --install /usr/bin/@@PACKAGE_ORIG@@ \
+  @@PACKAGE_ORIG@@ /usr/bin/@@USR_BIN_SYMLINK_NAME@@ $PRIORITY
 
 exit 0
 
@@ -203,7 +204,7 @@ if [ "$mode" = "uninstall" ]; then
   remove_nss_symlinks
   remove_udev_symlinks
 
-  %{_sbindir}/update-alternatives --remove google-chrome \
+  %{_sbindir}/update-alternatives --remove @@PACKAGE_ORIG@@ \
     /usr/bin/@@USR_BIN_SYMLINK_NAME@@
 fi
 

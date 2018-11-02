@@ -9,6 +9,8 @@
 
 namespace blink {
 
+class SuggestionMarkerProperties;
+
 // A subclass of StyleableMarker used to store information specific to
 // suggestion markers (used to represent Android SuggestionSpans). In addition
 // to the formatting information StyleableMarker holds, we also store a list of
@@ -17,13 +19,11 @@ namespace blink {
 // SuggestionMarker a suggestion replace operation pertains to.
 class CORE_EXPORT SuggestionMarker final : public StyleableMarker {
  public:
+  enum class SuggestionType { kMisspelling, kNotMisspelling };
+
   SuggestionMarker(unsigned start_offset,
                    unsigned end_offset,
-                   const Vector<String>& suggestions,
-                   Color suggestion_highlight_color,
-                   Color underline_color,
-                   Thickness,
-                   Color background_color);
+                   const SuggestionMarkerProperties&);
 
   // DocumentMarker implementations
   MarkerType GetType() const final;
@@ -31,6 +31,7 @@ class CORE_EXPORT SuggestionMarker final : public StyleableMarker {
   // SuggestionMarker-specific
   int32_t Tag() const;
   const Vector<String>& Suggestions() const;
+  bool IsMisspelling() const;
   Color SuggestionHighlightColor() const;
 
   // Replace the suggestion at suggestion_index with new_suggestion.
@@ -45,6 +46,7 @@ class CORE_EXPORT SuggestionMarker final : public StyleableMarker {
   // identifier), and Java does not support unsigned ints.
   const int32_t tag_;
   Vector<String> suggestions_;
+  const SuggestionType suggestion_type_;
   const Color suggestion_highlight_color_;
 
   DISALLOW_COPY_AND_ASSIGN(SuggestionMarker);

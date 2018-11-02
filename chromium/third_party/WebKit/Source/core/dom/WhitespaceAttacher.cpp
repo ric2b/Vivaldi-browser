@@ -5,9 +5,10 @@
 #include "core/dom/WhitespaceAttacher.h"
 
 #include "core/dom/Element.h"
+#include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/Text.h"
 #include "core/layout/LayoutText.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 
 namespace blink {
 
@@ -55,6 +56,8 @@ void WhitespaceAttacher::DidVisitText(Text* text) {
   DCHECK(text);
   if (!last_text_node_ || !last_text_node_needs_reattach_) {
     SetLastTextNode(text);
+    if (reattach_all_whitespace_nodes_ && text->ContainsOnlyWhitespace())
+      last_text_node_needs_reattach_ = true;
     return;
   }
   // At this point we have a last_text_node_ which needs re-attachment.
@@ -72,6 +75,8 @@ void WhitespaceAttacher::DidVisitText(Text* text) {
       last_text_node_->ReattachLayoutTreeIfNeeded(Node::AttachContext());
   }
   SetLastTextNode(text);
+  if (reattach_all_whitespace_nodes_ && text->ContainsOnlyWhitespace())
+    last_text_node_needs_reattach_ = true;
 }
 
 void WhitespaceAttacher::DidVisitElement(Element* element) {

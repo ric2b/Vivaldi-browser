@@ -92,7 +92,7 @@ OfflineAudioContext* OfflineAudioContext::Create(
   OfflineAudioContext* audio_context =
       new OfflineAudioContext(document, number_of_channels, number_of_frames,
                               sample_rate, exception_state);
-  audio_context->SuspendIfNeeded();
+  audio_context->PauseIfNeeded();
 
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: OfflineAudioContext::OfflineAudioContext()\n",
@@ -151,7 +151,7 @@ OfflineAudioContext::~OfflineAudioContext() {
 #endif
 }
 
-DEFINE_TRACE(OfflineAudioContext) {
+void OfflineAudioContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(complete_resolver_);
   visitor->Trace(scheduled_suspends_);
   BaseAudioContext::Trace(visitor);
@@ -283,8 +283,8 @@ ScriptPromise OfflineAudioContext::suspendContext(ScriptState* script_state,
   }
 
   // Wait until the suspend map is available for the insertion. Here we should
-  // use AutoLocker because it locks the graph from the main thread.
-  AutoLocker locker(this);
+  // use GraphAutoLocker because it locks the graph from the main thread.
+  GraphAutoLocker locker(this);
 
   // If there is a duplicate suspension at the same quantized frame,
   // reject the promise.
@@ -367,6 +367,8 @@ void OfflineAudioContext::FireCompletionEvent() {
     complete_resolver_->Reject(DOMException::Create(
         kInvalidStateError, "the execution context does not exist"));
   }
+
+  is_rendering_started_ = false;
 }
 
 bool OfflineAudioContext::HandlePreOfflineRenderTasks() {
@@ -412,7 +414,7 @@ void OfflineAudioContext::ResolveSuspendOnMainThread(size_t frame) {
   SetContextState(kSuspended);
 
   // Wait until the suspend map is available for the removal.
-  AutoLocker locker(this);
+  GraphAutoLocker locker(this);
 
   // If the context is going away, m_scheduledSuspends could have had all its
   // entries removed.  Check for that here.
@@ -431,7 +433,7 @@ void OfflineAudioContext::RejectPendingResolvers() {
   DCHECK(IsMainThread());
 
   // Wait until the suspend map is available for removal.
-  AutoLocker locker(this);
+  GraphAutoLocker locker(this);
 
   // Offline context is going away so reject any promises that are still
   // pending.
@@ -456,6 +458,10 @@ bool OfflineAudioContext::ShouldSuspend() {
     return true;
 
   return false;
+}
+
+bool OfflineAudioContext::HasPendingActivity() const {
+  return is_rendering_started_;
 }
 
 }  // namespace blink

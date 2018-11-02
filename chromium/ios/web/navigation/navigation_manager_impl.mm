@@ -160,7 +160,24 @@ NavigationItemImpl* NavigationManagerImpl::GetCurrentItemImpl() const {
   return GetLastCommittedItemImpl();
 }
 
-void NavigationManagerImpl::GoToIndex(int index) {
+void NavigationManagerImpl::UpdateCurrentItemForReplaceState(
+    const GURL& url,
+    NSString* state_object) {
+  DCHECK(!GetTransientItem());
+  NavigationItemImpl* current_item = GetCurrentItemImpl();
+  current_item->SetURL(url);
+  current_item->SetSerializedStateObject(state_object);
+  current_item->SetHasStateBeenReplaced(true);
+  current_item->SetPostData(nil);
+  // If the change is to a committed item, notify interested parties.
+  if (current_item != GetPendingItem()) {
+    OnNavigationItemChanged();
+  }
+}
+
+void NavigationManagerImpl::GoToIndex(
+    int index,
+    NavigationInitiationType initiation_type) {
   if (index < 0 || index >= GetItemCount()) {
     NOTREACHED();
     return;
@@ -185,7 +202,11 @@ void NavigationManagerImpl::GoToIndex(int index) {
     delegate_->WillChangeUserAgentType();
   }
 
-  FinishGoToIndex(index);
+  FinishGoToIndex(index, initiation_type);
+}
+
+void NavigationManagerImpl::GoToIndex(int index) {
+  GoToIndex(index, NavigationInitiationType::USER_INITIATED);
 }
 
 NavigationItem* NavigationManagerImpl::GetLastCommittedItem() const {
@@ -340,7 +361,7 @@ NavigationItem* NavigationManagerImpl::GetLastCommittedNonAppSpecificItem()
   WebClient* client = GetWebClient();
   for (int index = GetLastCommittedItemIndex(); index >= 0; index--) {
     NavigationItem* item = GetItemAtIndex(index);
-    if (!client->IsAppSpecificURL(item->GetVirtualURL()))
+    if (!client->IsAppSpecificURL(item->GetURL()))
       return item;
   }
   return nullptr;

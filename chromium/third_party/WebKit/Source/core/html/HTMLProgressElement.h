@@ -22,7 +22,7 @@
 #define HTMLProgressElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/LabelableElement.h"
+#include "core/html/forms/LabelableElement.h"
 
 namespace blink {
 
@@ -47,7 +47,7 @@ class CORE_EXPORT HTMLProgressElement final : public LabelableElement {
 
   bool CanContainRangeEndPoint() const override { return false; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit HTMLProgressElement(Document&);

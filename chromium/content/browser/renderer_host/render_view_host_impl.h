@@ -135,11 +135,14 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // created with an opener. (The opener may have been closed since.)
   // The |proxy_route_id| is only used when creating a RenderView in swapped out
   // state.
+  // |devtools_frame_token| contains the devtools token for tagging requests and
+  // attributing them to the context frame.
   // |replicated_frame_state| contains replicated data for the top-level frame,
   // such as its name and sandbox flags.
   virtual bool CreateRenderView(
       int opener_frame_route_id,
       int proxy_route_id,
+      const base::UnguessableToken& devtools_frame_token,
       const FrameReplicationState& replicated_frame_state,
       bool window_was_created_with_opener);
 
@@ -161,6 +164,23 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
 
   // TODO(creis): Remove as part of http://crbug.com/418265.
   bool is_waiting_for_close_ack() const { return is_waiting_for_close_ack_; }
+
+  // Generate RenderViewCreated events for observers through the delegate.
+  // These events are only generated for active RenderViewHosts (which have a
+  // RenderFrameHost for the main frame) as well as inactive RenderViewHosts
+  // that have a pending main frame navigation; i.e., this is done only when
+  // GetMainFrame() is non-null.
+  //
+  // This function also ensures that a particular RenderViewHost never
+  // dispatches these events more than once.  For example, if a RenderViewHost
+  // transitions from active to inactive after a cross-process navigation
+  // (where it no longer has a main frame RenderFrameHost), and then back to
+  // active after another cross-process navigation, this function will filter
+  // out the second notification.
+  //
+  // TODO(alexmos): Deprecate RenderViewCreated and remove this.  See
+  // https://crbug.com/763548.
+  void DispatchRenderViewCreated();
 
   // Tells the renderer process to run the page's unload handler.
   // A ClosePage_ACK ack is sent back when the handler execution completes.
@@ -336,6 +356,13 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   std::unique_ptr<InputDeviceChangeObserver> input_device_change_observer_;
 
   bool updating_web_preferences_;
+
+  // This tracks whether this RenderViewHost has notified observers about its
+  // creation with RenderViewCreated.  RenderViewHosts may transition from
+  // active (with a RenderFrameHost for the main frame) to inactive state and
+  // then back to active, and for the latter transition, this avoids firing
+  // duplicate RenderViewCreated events.
+  bool has_notified_about_creation_;
 
   base::WeakPtrFactory<RenderViewHostImpl> weak_factory_;
 

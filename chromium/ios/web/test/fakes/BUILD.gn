@@ -7,14 +7,23 @@ source_set("fakes") {
   testonly = true
 
   deps = [
-    "//ios/web:web",
+    "//base",
+    "//ios/web/navigation:core",
+    "//ios/web/public:public",
+    "//ios/web/web_state/ui:crw_web_view_navigation_proxy",
     "//third_party/ocmock:ocmock",
   ]
 
   sources = [
-    "crw_test_back_forward_list.h",
-    "crw_test_back_forward_list.mm",
-    "test_navigation_manager_delegate.h",
-    "test_navigation_manager_delegate.mm",
+    "crw_fake_back_forward_list.h",
+    "crw_fake_back_forward_list.mm",
+    "crw_fake_nsurl_session_task.h",
+    "crw_fake_nsurl_session_task.mm",
+    "crw_fake_wk_navigation_response.h",
+    "crw_fake_wk_navigation_response.mm",
+    "fake_navigation_manager_delegate.h",
+    "fake_navigation_manager_delegate.mm",
   ]
+
+  libs = [ "WebKit.framework" ]
 }

@@ -3,6 +3,9 @@
 <translationbundle lang="pt-PT">
 <translation id="1002108253973310084">Foi detetada uma versão de protocolo incompatível. Certifique-se de que tem a versão mais recente do software instalada em ambos os computadores e tente novamente.</translation>
 <translation id="1050693411695664090">Má</translation>
+<translation id="1059802506829356230">• Aspeto e funcionalidade novos.
+• Desempenho, capacidade de resposta e fiabilidade melhorados.
+• Compatibilidade para a reprodução de áudio a partir de computadores Windows ou Linux.</translation>
 <translation id="1152528166145813711">Selecionar...</translation>
 <translation id="1199593201721843963">Desativar ligações remotas</translation>
 <translation id="1291443878853470558">Se pretende utilizar o Chromoting para aceder a este computador, é necessário ativar as ligações remotas.</translation>
@@ -51,7 +54,7 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 
 Para mais informações acerca da privacidade, consulte a Política de Privacidade da Google (http://goo.gl/SyrVzj) e a Política de Privacidade do Chrome (http://goo.gl/0uXE5d).</translation>
 <translation id="2124408767156847088">Aceda aos seus computadores em segurança a partir do seu dispositivo Android.</translation>
-<translation id="2208514473086078157">As definições da política não permitem a partilha deste computador como um anfitrião do Ambiente de Trabalho Remoto do Chrome. Contacte o administrador do sistema para obter assistência.</translation>
+<translation id="2208514473086078157">As definições da política não permitem a partilha deste computador como um anfitrião do Ambiente de Trabalho Remoto do Chrome. Contacte o gestor do sistema para obter assistência.</translation>
 <translation id="2220529011494928058">Comunicar um problema</translation>
 <translation id="2221097377466213233">Utilizar a tecla Ctrl direita para a tecla Win (⌘ no Mac)</translation>
 <translation id="2235518894410572517">Partilhar este computador para que outro utilizador o possa ver e controlar.</translation>
@@ -71,6 +74,7 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 <translation id="2509394361235492552">Ligado a <ph name="HOSTNAME" /></translation>
 <translation id="2512228156274966424">NOTA: Para garantir que todos os atalhos de teclado estão disponíveis, pode configurar o Ambiente de Trabalho Remoto do Chrome para "Abrir como janela".</translation>
 <translation id="2540992418118313681">Pretende partilhar este computador e permitir que outro utilizador o veja e controle?</translation>
+<translation id="2579271889603567289">Falha do anfitrião ou falha ao iniciar o anfitrião.</translation>
 <translation id="2599300881200251572">Este serviço permite receber ligações de clientes do Ambiente de Trabalho Remoto do Chrome.</translation>
 <translation id="2647232381348739934">Serviço Chromoting</translation>
 <translation id="2676780859508944670">Em execução...</translation>
@@ -81,6 +85,11 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 <translation id="2841013758207633010">Tempo</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2888969873284818612">Ocorreu um erro de rede. Quando o dispositivo estiver online novamente, reiniciamos a aplicação.</translation>
+<translation id="289405675947420287">Aceda ao seu computador em segurança a partir do seu dispositivo iOS. É rápido, simples e gratuito.
+
+• No computador ao qual pretende aceder remotamente, transfira a aplicação Ambiente de Trabalho Remoto do Chrome a partir da Web Store do Chrome.
+• Instale o software Ambiente de Trabalho Remoto do Chrome e siga as instruções para concluir a configuração.
+• No dispositivo iOS, abra a aplicação e toque em qualquer um dos computadores online para estabelecer ligação.</translation>
 <translation id="2894654864775534701">Atualmente, este computador é partilhado através de outra conta.</translation>
 <translation id="2919669478609886916">Está atualmente a partilhar este computador com outro utilizador. Pretende continuar a partilhar?</translation>
 <translation id="2921543551052660690">Iniciou sessão anteriormente como <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). Para aceder aos computadores nessa conta, <ph name="LINK_BEGIN" />inicie sessão no Chromium<ph name="LINK_END" /> com essa conta e reinstale o Chromoting.</translation>
@@ -95,10 +104,6 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 <translation id="3150823315463303127">O anfitrião não conseguiu ler a política.</translation>
 <translation id="3194245623920924351">Ambiente de Trabalho Remoto</translation>
 <translation id="3197730452537982411">Ambiente de Trabalho Remoto</translation>
-<translation id="321944585103975186">• Interface do utilizador reformulada.
-• Desempenho, capacidade de resposta e fiabilidade melhorados.
-• Compatibilidade para a reprodução de áudio a partir de computadores Windows ou Linux.
-• Compatibilidade com o teclado melhorada.</translation>
 <translation id="324272851072175193">Enviar estas instruções por email</translation>
 <translation id="3258789396564295715">Pode aceder com segurança ao computador utilizando o Ambiente de Trabalho Remoto do Chrome.</translation>
 <translation id="3286521253923406898">Controlador do Anfitrião do Chromoting</translation>
@@ -110,29 +115,17 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 <translation id="3362124771485993931">Voltar a introduzir o PIN</translation>
 <translation id="337167041784729019">Mostrar estatísticas</translation>
 <translation id="3385242214819933234">Proprietário do anfitrião inválido.</translation>
-<translation id="3403830762023901068">As definições da política não permitem a partilha deste computador como um anfitrião do Chromoting. Contacte o administrador do sistema para obter assistência.</translation>
+<translation id="3403830762023901068">As definições da política não permitem a partilha deste computador como um anfitrião do Chromoting. Contacte o gestor do sistema para obter assistência.</translation>
 <translation id="3423542133075182604">Processo de comunicação remota da chave de segurança</translation>
-<translation id="3426467947138417795">Ambiente de Trabalho Remoto do Chrome
-Ambiente de Trabalho Remoto
-PC remoto
-Computador remoto
-Acesso remoto
-Apoio técnico remoto</translation>
 <translation id="3581045510967524389">Não foi possível estabelecer ligação à rede. Verifique se o dispositivo está online.</translation>
 <translation id="3596628256176442606">Este serviço permite receber ligações de clientes do Chromoting.</translation>
 <translation id="3606997049964069799">Não tem sessão iniciada no Chromium. Inicie sessão e tente novamente.</translation>
 <translation id="3649256019230929621">Minimizar janela</translation>
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Saiba como</translation>
-<translation id="3718805989288361841">As definições de política do Ambiente de Trabalho Remoto do Chrome têm um erro. Contacte o seu administrador de sistema para obter assistência.</translation>
+<translation id="3718805989288361841">As definições de política do Ambiente de Trabalho Remoto do Chrome têm um erro. Contacte o seu gestor de sistema para obter assistência.</translation>
+<translation id="3759645055923345178">Quando a configuração estiver concluída, pode aceder ao computador a partir desta página ao introduzir o PIN ou o código de acesso.</translation>
 <translation id="3776024066357219166">A sessão do Ambiente de Trabalho Remoto do Chrome terminou.</translation>
-<translation id="3788372335219293587">Aceda ao seu computador em segurança a partir do seu dispositivo iOS. É rápido, simples e gratuito.
-
-• No computador ao qual pretende aceder remotamente, localize a aplicação Ambiente de Trabalho Remoto do Chrome na Web Store do Chrome em https://chrome.google.com/remotedesktop
-• Instale o software Ambiente de Trabalho Remoto do Chrome e siga as instruções para concluir a configuração.
-• No dispositivo iOS, abra a aplicação e toque em qualquer um dos computadores online para estabelecer ligação.
-
-Para obter informações acerca da privacidade, consulte a Política de Privacidade da Google (http://goo.gl/SyrVzj).</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Confirme a sua conta e PIN abaixo para permitir o acesso do Ambiente de Trabalho Remoto do Chrome.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -172,9 +165,17 @@ Para obter informações acerca da privacidade, consulte a Política de Privacid
 <translation id="4660011489602794167">Mostrar teclado</translation>
 <translation id="4703302905453407178">Um componente necessário deixou de funcionar. Comunique este problema aos programadores.</translation>
 <translation id="4703799847237267011">A sessão do Chromoting terminou.</translation>
+<translation id="4706355010316049867">Chrome
+Remoto
+Ambiente de trabalho
+Acesso
+Apoio técnico
+Computador
+PC</translation>
 <translation id="4736223761657662401">Histórico de Ligações</translation>
 <translation id="4741792197137897469">Falha na autenticação. Inicie sessão novamente no Chrome.</translation>
 <translation id="477305884757156764">A aplicação está demasiado lenta.</translation>
+<translation id="4784508858340177375">Falha do servidor X ou falha ao iniciar o servidor X.</translation>
 <translation id="4795786176190567663">Não tem autorização para executar essa ação.</translation>
 <translation id="4798680868612952294">Opções do rato</translation>
 <translation id="4804818685124855865">Desligar</translation>
@@ -215,6 +216,7 @@ Para obter informações acerca da privacidade, consulte a Política de Privacid
 <translation id="5773590752998175013">Data da sincronização</translation>
 <translation id="579702532610384533">Restabelecer ligação</translation>
 <translation id="5810269635982033450">O ecrã funciona como um trackpad</translation>
+<translation id="5823658491130719298">No computador ao qual pretende aceder remotamente, abra o Chrome e aceda a <ph name="INSTALLATION_LINK" />.</translation>
 <translation id="5841343754884244200">Opções de visualização</translation>
 <translation id="5843054235973879827">Porque é que isto é seguro?</translation>
 <translation id="5859141382851488196">Nova janela…</translation>
@@ -248,6 +250,7 @@ Para obter informações acerca da privacidade, consulte a Política de Privacid
 <translation id="6572345186230665992">Para Mac (OS X Mavericks 10.9 e superior)</translation>
 <translation id="6583902294974160967">Apoio técnico</translation>
 <translation id="6612717000975622067">Enviar Ctrl-Alt-Del</translation>
+<translation id="6654753848497929428">Partilhar</translation>
 <translation id="6668065415969892472">O seu PIN foi atualizado.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Todos os Direitos Reservados.</translation>
 <translation id="6705482892455291412">Assim que o código for introduzido, é-lhe solicitado que aceite a ligação e comece a sessão de partilha.</translation>
@@ -271,9 +274,6 @@ Para obter informações acerca da privacidade, consulte a Política de Privacid
 <translation id="7144878232160441200">Repetir</translation>
 <translation id="7149517134817561223">Aplicação para emitir comandos para o anfitrião do Ambiente de Trabalho Remoto do Chrome.</translation>
 <translation id="7215059001581613786">Introduza um PIN com seis ou mais dígitos.</translation>
-<translation id="7237767047212540055">No computador ao qual pretende aceder remotamente, abra o Chrome e aceda ao <ph name="INSTALLATION_LINK" />.
-Instale o software Ambiente de Trabalho Remoto do Chrome e siga as instruções para concluir a configuração.
-Quando a configuração estiver concluída, pode aceder ao computador a partir desta página ao introduzir o PIN ou o código de acesso.</translation>
 <translation id="7312846573060934304">O anfitrião está offline.</translation>
 <translation id="7319983568955948908">Terminar Partilha</translation>
 <translation id="7401733114166276557">Ambiente de Trabalho Remoto do Chrome</translation>
@@ -292,6 +292,7 @@ Quando a configuração estiver concluída, pode aceder ao computador a partir d
 <translation id="7782471917492991422">Verifique as definições de gestão de energia do computador e certifique-se de que não está configurado para suspender quando inativo.</translation>
 <translation id="7810127880729796595">Mostrar estatísticas (ligação: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Faltam alguns componentes necessários. Certifique-se de que está a executar a versão mais recente do Chrome e tente novamente.</translation>
+<translation id="7850909060902317210">Instale o software Ambiente de Trabalho Remoto do Chrome e siga as instruções para concluir a configuração.</translation>
 <translation id="7868137160098754906">Introduza o PIN para o computador remoto.</translation>
 <translation id="7869445566579231750">Não tem autorização para executar esta aplicação.</translation>
 <translation id="7895403300744144251">As políticas de segurança do computador remoto não permitem ligações a partir da sua conta.</translation>
@@ -327,6 +328,7 @@ Quando a configuração estiver concluída, pode aceder ao computador a partir d
 <translation id="8642984861538780905">Razoável</translation>
 <translation id="8712909229180978490">Não consigo ver os ficheiros guardados online no Google Drive.</translation>
 <translation id="8743328882720071828">Pretende permitir que <ph name="CLIENT_USERNAME" /> veja e controle o seu computador?</translation>
+<translation id="8747048596626351634">Falha da sessão ou falha ao iniciar a sessão. Se ~/.chrome-remote-desktop-session existir no computador remoto, certifique-se de que inicia um processo em primeiro plano de longa execução, como um gestor de janelas ou um ambiente de trabalho.</translation>
 <translation id="8759753423332885148">Saiba mais.</translation>
 <translation id="8791202241915690908">Transferir instalador do anfitrião do Chromoting</translation>
 <translation id="894763922177556086">Boa</translation>
@@ -335,6 +337,7 @@ Quando a configuração estiver concluída, pode aceder ao computador a partir d
 <translation id="8998327464021325874">Controlador do Anfitrião do Ambiente de Trabalho Remoto do Chrome</translation>
 <translation id="9016232822027372900">Estabelecer ligação mesmo assim</translation>
 <translation id="906458777597946297">Maximizar janela</translation>
+<translation id="9111855907838866522">Está ligado ao seu dispositivo remoto. Para abrir o menu, toque no ecrã com quatro dedos.</translation>
 <translation id="9126115402994542723">Não voltar a pedir um PIN ao ligar a este anfitrião a partir deste dispositivo.</translation>
 <translation id="9149580767411232853">Manter todo o ambiente de trabalho remoto visível</translation>
 <translation id="9149992051684092333">Para começar a partilhar o seu ambiente de trabalho, forneça o código de acesso abaixo à pessoa que o irá ajudar.</translation>

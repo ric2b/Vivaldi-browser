@@ -37,9 +37,10 @@ DetectedFace::DetectedFace(DOMRect* bounding_box,
                            const HeapVector<Landmark>& landmarks)
     : bounding_box_(bounding_box), landmarks_(landmarks) {}
 
-DEFINE_TRACE(DetectedFace) {
+void DetectedFace::Trace(blink::Visitor* visitor) {
   visitor->Trace(bounding_box_);
   visitor->Trace(landmarks_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

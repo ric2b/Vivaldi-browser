@@ -40,12 +40,16 @@ class ServiceConnectorImpl
 
 namespace content {
 
-ServiceVideoCaptureProvider::ServiceVideoCaptureProvider()
-    : ServiceVideoCaptureProvider(base::MakeUnique<ServiceConnectorImpl>()) {}
+ServiceVideoCaptureProvider::ServiceVideoCaptureProvider(
+    base::RepeatingCallback<void(const std::string&)> emit_log_message_cb)
+    : ServiceVideoCaptureProvider(std::make_unique<ServiceConnectorImpl>(),
+                                  std::move(emit_log_message_cb)) {}
 
 ServiceVideoCaptureProvider::ServiceVideoCaptureProvider(
-    std::unique_ptr<ServiceConnector> service_connector)
+    std::unique_ptr<ServiceConnector> service_connector,
+    base::RepeatingCallback<void(const std::string&)> emit_log_message_cb)
     : service_connector_(std::move(service_connector)),
+      emit_log_message_cb_(std::move(emit_log_message_cb)),
       usage_count_(0),
       launcher_has_connected_to_device_factory_(false),
       weak_ptr_factory_(this) {
@@ -60,6 +64,7 @@ ServiceVideoCaptureProvider::~ServiceVideoCaptureProvider() {
 void ServiceVideoCaptureProvider::GetDeviceInfosAsync(
     GetDeviceInfosCallback result_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  emit_log_message_cb_.Run("ServiceVideoCaptureProvider::GetDeviceInfosAsync");
   IncreaseUsageCount();
   LazyConnectToService();
   // Use a ScopedCallbackRunner to make sure that |result_callback| gets
@@ -74,7 +79,7 @@ void ServiceVideoCaptureProvider::GetDeviceInfosAsync(
 std::unique_ptr<VideoCaptureDeviceLauncher>
 ServiceVideoCaptureProvider::CreateDeviceLauncher() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return base::MakeUnique<ServiceVideoCaptureDeviceLauncher>(
+  return std::make_unique<ServiceVideoCaptureDeviceLauncher>(
       base::BindRepeating(&ServiceVideoCaptureProvider::ConnectToDeviceFactory,
                           weak_ptr_factory_.GetWeakPtr()));
 }
@@ -85,7 +90,7 @@ void ServiceVideoCaptureProvider::ConnectToDeviceFactory(
   IncreaseUsageCount();
   LazyConnectToService();
   launcher_has_connected_to_device_factory_ = true;
-  *out_factory = base::MakeUnique<VideoCaptureFactoryDelegate>(
+  *out_factory = std::make_unique<VideoCaptureFactoryDelegate>(
       &device_factory_,
       base::BindOnce(&ServiceVideoCaptureProvider::DecreaseUsageCount,
                      weak_ptr_factory_.GetWeakPtr()));
@@ -129,6 +134,8 @@ void ServiceVideoCaptureProvider::OnDeviceInfosReceived(
 
 void ServiceVideoCaptureProvider::OnLostConnectionToDeviceFactory() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  emit_log_message_cb_.Run(
+      "ServiceVideoCaptureProvider::OnLostConnectionToDeviceFactory");
   // This may indicate that the video capture service has crashed. Uninitialize
   // here, so that a new connection will be established when clients try to
   // reconnect.

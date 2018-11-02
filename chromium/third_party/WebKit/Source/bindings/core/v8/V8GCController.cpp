@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8BindingForCore.h"
@@ -44,12 +45,9 @@
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/bindings/WrapperTypeInfo.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/Vector.h"
 #include "platform/wtf/allocator/Partitions.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/Platform.h"
@@ -104,7 +102,7 @@ class MinorGCUnmodifiedWrapperVisitor : public v8::PersistentHandleVisitor {
 
     if (class_id == WrapperTypeInfo::kNodeClassId) {
       DCHECK(V8Node::hasInstance(wrapper, isolate_));
-      Node* node = V8Node::toImpl(wrapper);
+      Node* node = V8Node::ToImpl(wrapper);
       if (node->HasEventListeners()) {
         v8::Persistent<v8::Object>::Cast(*value).MarkActive();
         return;
@@ -144,11 +142,10 @@ class HeapSnaphotWrapperVisitor : public ScriptWrappableVisitor,
     if (class_id != WrapperTypeInfo::kNodeClassId)
       return;
 
-    DCHECK(!value->IsIndependent());
     v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(
         isolate_, v8::Persistent<v8::Object>::Cast(*value));
     DCHECK(V8Node::hasInstance(wrapper, isolate_));
-    Node* node = V8Node::toImpl(wrapper);
+    Node* node = V8Node::ToImpl(wrapper);
     Node* root = V8GCController::OpaqueRootForGC(isolate_, node);
     nodes_requiring_tracing_[root].push_back(node);
   }
@@ -169,7 +166,7 @@ class HeapSnaphotWrapperVisitor : public ScriptWrappableVisitor,
     AbortTracing();
 
     groups_.push_back(
-        std::make_pair(new SuspendableObjectsInfo(found_v8_wrappers_.size()),
+        std::make_pair(new PausableObjectsInfo(found_v8_wrappers_.size()),
                        std::move(found_v8_wrappers_)));
   }
 
@@ -295,8 +292,7 @@ void V8GCController::GcPrologue(v8::Isolate* isolate,
                                 v8::GCType type,
                                 v8::GCCallbackFlags flags) {
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kGcPrologue);
-  if (IsMainThread())
-    ScriptForbiddenScope::Enter();
+  ScriptForbiddenScope::Enter();
 
   // Attribute garbage collection to the all frames instead of a specific
   // frame.
@@ -390,8 +386,7 @@ void V8GCController::GcEpilogue(v8::Isolate* isolate,
       NOTREACHED();
   }
 
-  if (IsMainThread())
-    ScriptForbiddenScope::Exit();
+  ScriptForbiddenScope::Exit();
 
   if (BlameContext* blame_context =
           Platform::Current()->GetTopLevelBlameContext())
@@ -453,17 +448,17 @@ void V8GCController::GcEpilogue(v8::Isolate* isolate,
 
 void V8GCController::CollectGarbage(v8::Isolate* isolate, bool only_minor_gc) {
   v8::HandleScope handle_scope(isolate);
-  RefPtr<ScriptState> script_state = ScriptState::Create(
+  scoped_refptr<ScriptState> script_state = ScriptState::Create(
       v8::Context::New(isolate),
       DOMWrapperWorld::Create(isolate,
                               DOMWrapperWorld::WorldType::kGarbageCollector));
-  ScriptState::Scope scope(script_state.Get());
+  ScriptState::Scope scope(script_state.get());
   StringBuilder builder;
   builder.Append("if (gc) gc(");
   builder.Append(only_minor_gc ? "true" : "false");
   builder.Append(")");
   V8ScriptRunner::CompileAndRunInternalScript(
-      script_state.Get(), V8String(isolate, builder.ToString()), isolate);
+      script_state.get(), V8String(isolate, builder.ToString()), isolate);
   script_state->DisposePerContextData();
 }
 

@@ -38,9 +38,10 @@
 #include "SkTypeface.h"
 
 #include "build/build_config.h"
-#include "platform/FontFamilyNames.h"
 #include "platform/Language.h"
+#include "platform/font_family_names.h"
 #include "platform/fonts/AlternateFontFamily.h"
+#include "platform/fonts/BitmapGlyphsBlacklist.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
@@ -52,20 +53,6 @@
 #include "platform/wtf/text/CString.h"
 #include "public/platform/Platform.h"
 #include "public/platform/linux/WebSandboxSupport.h"
-
-#if !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
-#include "SkFontConfigInterface.h"
-
-static sk_sp<SkTypeface> typefaceForFontconfigInterfaceIdAndTtcIndex(
-    int fontconfigInterfaceId,
-    int ttcIndex) {
-  sk_sp<SkFontConfigInterface> fci(SkFontConfigInterface::RefGlobal());
-  SkFontConfigInterface::FontIdentity fontIdentity;
-  fontIdentity.fID = fontconfigInterfaceId;
-  fontIdentity.fTTCIndex = ttcIndex;
-  return fci->makeTypeface(fontIdentity);
-}
-#endif
 
 namespace blink {
 
@@ -109,7 +96,7 @@ AtomicString FontCache::GetFamilyNameForCharacter(
     bcp47_locales[locale_count++] = kAndroidColorEmojiLocale;
   SECURITY_DCHECK(locale_count <= kMaxLocales);
   sk_sp<SkTypeface> typeface(fm->matchFamilyStyleCharacter(
-      0, SkFontStyle(), bcp47_locales, locale_count, c));
+      nullptr, SkFontStyle(), bcp47_locales, locale_count, c));
   if (!typeface)
     return g_empty_atom;
 
@@ -121,7 +108,7 @@ AtomicString FontCache::GetFamilyNameForCharacter(
 
 void FontCache::PlatformInit() {}
 
-PassRefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
+scoped_refptr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
     const FontDescription& font_description,
     UChar32 character) {
   FontDescription substitute_description(font_description);
@@ -146,7 +133,7 @@ PassRefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
   return nullptr;
 }
 
-PassRefPtr<SimpleFontData> FontCache::GetLastResortFallbackFont(
+scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
     const FontDescription& description,
     ShouldRetain should_retain) {
   const FontFaceCreationParams fallback_creation_params(
@@ -224,7 +211,7 @@ PassRefPtr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   return FontDataFromFontPlatformData(font_platform_data, should_retain);
 }
 
-sk_sp<SkTypeface> FontCache::CreateTypeface(
+PaintTypeface FontCache::CreateTypeface(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     CString& name) {
@@ -232,11 +219,12 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
   // TODO(fuchsia): Revisit this and other font code for Fuchsia.
 
   if (creation_params.CreationType() == kCreateFontByFciIdAndTtcIndex) {
-    if (Platform::Current()->GetSandboxSupport())
-      return typefaceForFontconfigInterfaceIdAndTtcIndex(
+    if (Platform::Current()->GetSandboxSupport()) {
+      return PaintTypeface::FromFontConfigInterfaceIdAndTtcIndex(
           creation_params.FontconfigInterfaceId(), creation_params.TtcIndex());
-    return SkTypeface::MakeFromFile(creation_params.Filename().data(),
-                                    creation_params.TtcIndex());
+    }
+    return PaintTypeface::FromFilenameAndTtcIndex(
+        creation_params.Filename().data(), creation_params.TtcIndex());
   }
 #endif
 
@@ -252,11 +240,12 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
   }
 
 #if defined(OS_WIN)
+  // TODO(vmpstr): Deal with paint typeface here.
   if (sideloaded_fonts_) {
     HashMap<String, sk_sp<SkTypeface>>::iterator sideloaded_font =
         sideloaded_fonts_->find(name.data());
     if (sideloaded_font != sideloaded_fonts_->end())
-      return sideloaded_font->value;
+      return PaintTypeface::FromSkTypeface(sideloaded_font->value);
   }
 #endif
 
@@ -265,16 +254,20 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
   // the embedder provided font Manager rather than calling
   // SkTypeface::CreateFromName which may redirect the call to the default font
   // Manager.  On Windows the font manager is always present.
-  if (font_manager_)
-    return sk_sp<SkTypeface>(font_manager_->matchFamilyStyle(
+  if (font_manager_) {
+    // TODO(vmpstr): Handle creating paint typefaces here directly. We need to
+    // figure out whether it's safe to give |font_manager_| to PaintTypeface and
+    // what that means on the GPU side.
+    auto tf = sk_sp<SkTypeface>(font_manager_->matchFamilyStyle(
         name.data(), font_description.SkiaFontStyle()));
+    return PaintTypeface::FromSkTypeface(std::move(tf));
+  }
 #endif
 
   // FIXME: Use m_fontManager, matchFamilyStyle instead of
   // legacyCreateTypeface on all platforms.
-  sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
-  return sk_sp<SkTypeface>(
-      fm->legacyCreateTypeface(name.data(), font_description.SkiaFontStyle()));
+  return PaintTypeface::FromFamilyNameAndFontStyle(
+      name.data(), font_description.SkiaFontStyle());
 }
 
 #if !defined(OS_WIN)
@@ -284,20 +277,28 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
     float font_size,
     AlternateFontName) {
   CString name;
-  sk_sp<SkTypeface> tf =
+  PaintTypeface paint_tf =
       CreateTypeface(font_description, creation_params, name);
-  if (!tf)
+  if (!paint_tf)
     return nullptr;
 
-  return WTF::WrapUnique(new FontPlatformData(
-      tf, name.data(), font_size,
-      (font_description.Weight() >
-           FontSelectionValue(200) +
-               FontSelectionValue(tf->fontStyle().weight()) ||
-       font_description.IsSyntheticBold()),
-      ((font_description.Style() == ItalicSlopeValue()) && !tf->isItalic()) ||
-          font_description.IsSyntheticItalic(),
-      font_description.Orientation()));
+  const auto& tf = paint_tf.ToSkTypeface();
+  std::unique_ptr<FontPlatformData> font_platform_data =
+      WTF::WrapUnique(new FontPlatformData(
+          paint_tf, name.data(), font_size,
+          (font_description.Weight() >
+               FontSelectionValue(200) +
+                   FontSelectionValue(tf->fontStyle().weight()) ||
+           font_description.IsSyntheticBold()),
+          ((font_description.Style() == ItalicSlopeValue()) &&
+           !tf->isItalic()) ||
+              font_description.IsSyntheticItalic(),
+          font_description.Orientation()));
+
+  font_platform_data->SetAvoidEmbeddedBitmaps(
+      BitmapGlyphsBlacklist::AvoidEmbeddedBitmapsForTypeface(tf.get()));
+
+  return font_platform_data;
 }
 #endif  // !defined(OS_WIN)
 

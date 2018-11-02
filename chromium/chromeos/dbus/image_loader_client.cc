@@ -4,8 +4,11 @@
 
 #include "chromeos/dbus/image_loader_client.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
@@ -18,46 +21,57 @@ namespace {
 
 class ImageLoaderClientImpl : public ImageLoaderClient {
  public:
-  ImageLoaderClientImpl() {}
+  ImageLoaderClientImpl() = default;
 
-  ~ImageLoaderClientImpl() override {}
+  ~ImageLoaderClientImpl() override = default;
 
   void RegisterComponent(const std::string& name,
                          const std::string& version,
                          const std::string& component_folder_abs_path,
-                         const BoolDBusMethodCallback& callback) override {
+                         DBusMethodCallback<bool> callback) override {
     dbus::MethodCall method_call(imageloader::kImageLoaderServiceInterface,
                                  imageloader::kRegisterComponent);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(name);
     writer.AppendString(version);
     writer.AppendString(component_folder_abs_path);
-    proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&ImageLoaderClientImpl::OnBoolMethod, callback));
+    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                       base::BindOnce(&ImageLoaderClientImpl::OnBoolMethod,
+                                      std::move(callback)));
   }
 
   void LoadComponent(const std::string& name,
-                     const StringDBusMethodCallback& callback) override {
+                     DBusMethodCallback<std::string> callback) override {
     dbus::MethodCall method_call(imageloader::kImageLoaderServiceInterface,
                                  imageloader::kLoadComponent);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(name);
-    proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&ImageLoaderClientImpl::OnStringMethod, callback));
+    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                       base::BindOnce(&ImageLoaderClientImpl::OnStringMethod,
+                                      std::move(callback)));
+  }
+
+  void RemoveComponent(const std::string& name,
+                       DBusMethodCallback<bool> callback) override {
+    dbus::MethodCall method_call(imageloader::kImageLoaderServiceInterface,
+                                 imageloader::kRemoveComponent);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(name);
+    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                       base::BindOnce(&ImageLoaderClientImpl::OnBoolMethod,
+                                      std::move(callback)));
   }
 
   void RequestComponentVersion(
       const std::string& name,
-      const StringDBusMethodCallback& callback) override {
+      DBusMethodCallback<std::string> callback) override {
     dbus::MethodCall method_call(imageloader::kImageLoaderServiceInterface,
                                  imageloader::kGetComponentVersion);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(name);
-    proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&ImageLoaderClientImpl::OnStringMethod, callback));
+    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                       base::BindOnce(&ImageLoaderClientImpl::OnStringMethod,
+                                      std::move(callback)));
   }
 
  protected:
@@ -69,36 +83,36 @@ class ImageLoaderClientImpl : public ImageLoaderClient {
   }
 
  private:
-  static void OnBoolMethod(const BoolDBusMethodCallback& callback,
+  static void OnBoolMethod(DBusMethodCallback<bool> callback,
                            dbus::Response* response) {
     if (!response) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, false);
+      std::move(callback).Run(base::nullopt);
       return;
     }
     dbus::MessageReader reader(response);
     bool result = false;
     if (!reader.PopBool(&result)) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, false);
       LOG(ERROR) << "Invalid response: " << response->ToString();
+      std::move(callback).Run(base::nullopt);
       return;
     }
-    callback.Run(DBUS_METHOD_CALL_SUCCESS, result);
+    std::move(callback).Run(result);
   }
 
-  static void OnStringMethod(const StringDBusMethodCallback& callback,
+  static void OnStringMethod(DBusMethodCallback<std::string> callback,
                              dbus::Response* response) {
     if (!response) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+      std::move(callback).Run(base::nullopt);
       return;
     }
     dbus::MessageReader reader(response);
     std::string result;
     if (!reader.PopString(&result)) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+      std::move(callback).Run(base::nullopt);
       LOG(ERROR) << "Invalid response: " << response->ToString();
       return;
     }
-    callback.Run(DBUS_METHOD_CALL_SUCCESS, result);
+    std::move(callback).Run(std::move(result));
   }
 
   dbus::ObjectProxy* proxy_ = nullptr;
@@ -108,9 +122,9 @@ class ImageLoaderClientImpl : public ImageLoaderClient {
 
 }  // namespace
 
-ImageLoaderClient::ImageLoaderClient() {}
+ImageLoaderClient::ImageLoaderClient() = default;
 
-ImageLoaderClient::~ImageLoaderClient() {}
+ImageLoaderClient::~ImageLoaderClient() = default;
 
 // static
 ImageLoaderClient* ImageLoaderClient::Create() {

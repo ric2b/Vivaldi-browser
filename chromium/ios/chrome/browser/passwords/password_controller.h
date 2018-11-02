@@ -8,21 +8,32 @@
 
 #include <memory>
 
-#import "ios/chrome/browser/autofill/form_suggestion_provider.h"
+#import "components/autofill/ios/browser/form_suggestion_provider.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_manager_client.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_manager_driver.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 
 @protocol ApplicationCommands;
-@protocol FormInputAccessoryViewProvider;
+@class NotifyUserAutoSigninViewController;
+@protocol PasswordFormFiller;
 @protocol PasswordsUiDelegate;
-@class PasswordGenerationAgent;
+@class UIViewController;
 
 namespace password_manager {
-class PasswordGenerationManager;
 class PasswordManagerClient;
 class PasswordManagerDriver;
 }  // namespace password_manager
+
+// Delegate for registering view controller and displaying its view. Used to
+// add views to BVC.
+@protocol PasswordControllerDelegate
+
+// Adds |viewController| as child controller in order to display auto sign-in
+// notification. Returns YES if view was displayed, NO otherwise.
+- (BOOL)displaySignInNotification:(UIViewController*)viewController
+                        fromTabId:(NSString*)tabId;
+
+@end
 
 // Per-tab password controller. Handles password autofill and saving.
 @interface PasswordController : NSObject<CRWWebStateObserver,
@@ -32,15 +43,6 @@ class PasswordManagerDriver;
 // An object that can provide suggestions from this PasswordController.
 @property(nonatomic, readonly) id<FormSuggestionProvider> suggestionProvider;
 
-// An object that can provide an input accessory view from this
-// PasswordController.
-@property(nonatomic, readonly) id<FormInputAccessoryViewProvider>
-    accessoryViewProvider;
-
-// The PasswordGenerationManager owned by this PasswordController.
-@property(nonatomic, readonly)
-    password_manager::PasswordGenerationManager* passwordGenerationManager;
-
 // The PasswordManagerClient owned by this PasswordController.
 @property(nonatomic, readonly)
     password_manager::PasswordManagerClient* passwordManagerClient;
@@ -49,18 +51,22 @@ class PasswordManagerDriver;
 @property(nonatomic, readonly)
     password_manager::PasswordManagerDriver* passwordManagerDriver;
 
+// The PasswordFormFiller owned by this PasswordController.
+@property(nonatomic, readonly) id<PasswordFormFiller> passwordFormFiller;
+
 // The dispatcher used for the PasswordController. This property can return nil
 // even after being set to a non-nil object.
 @property(nonatomic, weak) id<ApplicationCommands> dispatcher;
 
+// Delegate used by this PasswordController to show UI on BVC.
+@property(weak, nonatomic) id<PasswordControllerDelegate> delegate;
+
 // |webState| should not be nil.
-- (instancetype)initWithWebState:(web::WebState*)webState
-             passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate;
+- (instancetype)initWithWebState:(web::WebState*)webState;
 
 // This is just for testing.
 - (instancetype)
    initWithWebState:(web::WebState*)webState
-passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate
              client:(std::unique_ptr<password_manager::PasswordManagerClient>)
                         passwordManagerClient NS_DESIGNATED_INITIALIZER;
 
@@ -69,13 +75,6 @@ passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate
 // Releases all tab-specific members. Must be called when the Tab is closing,
 // otherwise invalid memory might be accessed during destruction.
 - (void)detach;
-
-// Uses JavaScript to find password forms using the |webState_| and fills
-// them with the |username| and |password|. |completionHandler|, if not nil,
-// is called once per form filled.
-- (void)findAndFillPasswordForms:(NSString*)username
-                        password:(NSString*)password
-               completionHandler:(void (^)(BOOL))completionHandler;
 
 @end
 

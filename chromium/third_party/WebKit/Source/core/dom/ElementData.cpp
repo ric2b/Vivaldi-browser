@@ -30,7 +30,7 @@
 
 #include "core/dom/ElementData.h"
 
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/QualifiedName.h"
 #include "platform/wtf/Vector.h"
 
@@ -92,7 +92,7 @@ UniqueElementData* ElementData::MakeUniqueCopy() const {
 }
 
 bool ElementData::IsEquivalent(const ElementData* other) const {
-  AttributeCollection attributes = this->Attributes();
+  AttributeCollection attributes = Attributes();
   if (!other)
     return attributes.IsEmpty();
 
@@ -108,14 +108,14 @@ bool ElementData::IsEquivalent(const ElementData* other) const {
   return true;
 }
 
-DEFINE_TRACE(ElementData) {
+void ElementData::Trace(blink::Visitor* visitor) {
   if (is_unique_)
     ToUniqueElementData(this)->TraceAfterDispatch(visitor);
   else
     ToShareableElementData(this)->TraceAfterDispatch(visitor);
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(ElementData) {
+void ElementData::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(inline_style_);
 }
 
@@ -161,8 +161,8 @@ UniqueElementData::UniqueElementData(const UniqueElementData& other)
 
 UniqueElementData::UniqueElementData(const ShareableElementData& other)
     : ElementData(other, true) {
-  // An ShareableElementData should never have a mutable inline StylePropertySet
-  // attached.
+  // An ShareableElementData should never have a mutable inline
+  // CSSPropertyValueSet attached.
   DCHECK(!other.inline_style_ || !other.inline_style_->IsMutable());
   inline_style_ = other.inline_style_;
 
@@ -182,7 +182,7 @@ ShareableElementData* UniqueElementData::MakeShareableCopy() const {
   return new (slot) ShareableElementData(*this);
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(UniqueElementData) {
+void UniqueElementData::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(presentation_attribute_style_);
   ElementData::TraceAfterDispatch(visitor);
 }

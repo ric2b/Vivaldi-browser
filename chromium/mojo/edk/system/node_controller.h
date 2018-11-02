@@ -7,7 +7,6 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -16,11 +15,11 @@
 
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
 #include "build/build_config.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
 #include "mojo/edk/embedder/platform_shared_buffer.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/edk/system/atomic_flag.h"
@@ -135,7 +134,7 @@ class NodeController : public ports::NodeDelegate,
 
   using NodeMap = std::unordered_map<ports::NodeName,
                                      scoped_refptr<NodeChannel>>;
-  using OutgoingMessageQueue = std::queue<Channel::MessagePtr>;
+  using OutgoingMessageQueue = base::queue<Channel::MessagePtr>;
   using PortMap = std::map<std::string, ports::PortRef>;
 
   struct PeerConnection {
@@ -300,7 +299,7 @@ class NodeController : public ports::NodeDelegate,
   ports::NodeName broker_name_;
 
   // A queue of remote broker clients waiting to be connected to the broker.
-  std::queue<ports::NodeName> pending_broker_clients_;
+  base::queue<ports::NodeName> pending_broker_clients_;
 
   // Messages waiting to be relayed by the broker once it's known.
   std::unordered_map<ports::NodeName, OutgoingMessageQueue>

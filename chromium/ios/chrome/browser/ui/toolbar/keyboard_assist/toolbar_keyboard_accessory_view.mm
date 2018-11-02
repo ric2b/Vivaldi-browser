@@ -8,7 +8,6 @@
 
 #include "base/mac/foundation_util.h"
 #include "ios/chrome/browser/experimental_flags.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/keyboard_assist/toolbar_assistive_keyboard_views.h"
 #import "ios/chrome/browser/ui/toolbar/keyboard_assist/toolbar_assistive_keyboard_views_utils.h"
@@ -38,15 +37,13 @@
 
 - (instancetype)initWithButtons:(NSArray<NSString*>*)buttonTitles
                        delegate:(id<ToolbarAssistiveKeyboardDelegate>)delegate {
-  const CGFloat kViewHeight = 44.0;
-  CGFloat width = [[UIScreen mainScreen] bounds].size.width;
-  // TODO(crbug.com/734512): Have the creator of the view define the size.
-  CGRect frame = CGRectMake(0.0, 0.0, width, kViewHeight);
-
-  self = [super initWithFrame:frame inputViewStyle:UIInputViewStyleKeyboard];
+  self =
+      [super initWithFrame:CGRectZero inputViewStyle:UIInputViewStyleKeyboard];
   if (self) {
     _buttonTitles = buttonTitles;
     _delegate = delegate;
+    self.translatesAutoresizingMaskIntoConstraints = NO;
+    self.allowsSelfSizing = YES;
     [self addSubviews];
   }
   return self;
@@ -56,16 +53,18 @@
   if (!self.subviews.count)
     return;
 
-  const CGFloat kButtonMinWidth = 34.0;
-  const CGFloat kButtonHeight = 34.0;
+  const CGFloat kButtonMinWidth = 36.0;
+  const CGFloat kButtonHeight = 36.0;
   const CGFloat kBetweenShortcutButtonSpacing = 5.0;
   const CGFloat kBetweenSearchButtonSpacing = 12.0;
   const CGFloat kHorizontalMargin = 10.0;
+  const CGFloat kVerticalMargin = 4.0;
 
   // Create and add stackview filled with the shortcut buttons.
   UIStackView* shortcutStackView = [[UIStackView alloc] init];
   shortcutStackView.translatesAutoresizingMaskIntoConstraints = NO;
   shortcutStackView.spacing = kBetweenShortcutButtonSpacing;
+  shortcutStackView.alignment = UIStackViewAlignmentCenter;
   for (NSString* title in self.buttonTitles) {
     UIView* button = [self shortcutButtonWithTitle:title];
     [button setTranslatesAutoresizingMaskIntoConstraints:NO];
@@ -98,10 +97,17 @@
         constraintEqualToAnchor:layoutGuide.trailingAnchor
                        constant:-kHorizontalMargin],
     [searchStackView.trailingAnchor
-        constraintLessThanOrEqualToAnchor:shortcutStackView.leadingAnchor]
+        constraintLessThanOrEqualToAnchor:shortcutStackView.leadingAnchor],
+    [searchStackView.topAnchor constraintEqualToAnchor:layoutGuide.topAnchor
+                                              constant:kVerticalMargin],
+    [searchStackView.bottomAnchor
+        constraintEqualToAnchor:layoutGuide.bottomAnchor
+                       constant:-kVerticalMargin],
+    [shortcutStackView.topAnchor
+        constraintEqualToAnchor:searchStackView.topAnchor],
+    [shortcutStackView.bottomAnchor
+        constraintEqualToAnchor:searchStackView.bottomAnchor],
   ]];
-  AddSameCenterYConstraint(searchStackView, self);
-  AddSameCenterYConstraint(shortcutStackView, self);
 }
 
 - (UIView*)shortcutButtonWithTitle:(NSString*)title {

@@ -48,7 +48,7 @@ std::unique_ptr<base::DictionaryValue> LoadSchemaDictionary(
   // Tracking down http://crbug.com/121424
   char buf[128];
   base::snprintf(buf, arraysize(buf), "%s: (%d) '%s'", name.c_str(),
-                 result.get() ? static_cast<int>(result->GetType()) : -1,
+                 result.get() ? static_cast<int>(result->type()) : -1,
                  error_message.c_str());
 
   CHECK(result.get()) << error_message << " for schema " << schema;
@@ -234,15 +234,13 @@ base::StringPiece ExtensionAPI::GetSchemaStringPiece(
 
   ExtensionsClient* client = ExtensionsClient::Get();
   DCHECK(client);
-  if (default_configuration_initialized_ &&
-      client->IsAPISchemaGenerated(api_name)) {
-    base::StringPiece schema = client->GetAPISchema(api_name);
-    CHECK(!schema.empty());
-    schema_strings_[api_name] = schema;
-    return schema;
-  }
+  if (!default_configuration_initialized_)
+    return base::StringPiece();
 
-  return base::StringPiece();
+  base::StringPiece schema = client->GetAPISchema(api_name);
+  if (!schema.empty())
+    schema_strings_[api_name] = schema;
+  return schema;
 }
 
 const base::DictionaryValue* ExtensionAPI::GetSchema(

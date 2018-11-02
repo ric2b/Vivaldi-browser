@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <vector>
+
 #include "gpu/config/gpu_blacklist.h"
 #include "gpu/config/gpu_feature_type.h"
 #include "gpu/config/gpu_info.h"
@@ -47,7 +49,7 @@ class GpuBlacklistTest : public testing::Test {
         0,        // exceptions count
         nullptr,  // exceptions
     }};
-    GpuControlListData data("1.0", 1, kTestEntries);
+    GpuControlListData data(1, kTestEntries);
     std::unique_ptr<GpuBlacklist> blacklist = GpuBlacklist::Create(data);
     std::set<int> type =
         blacklist->MakeDecision(GpuBlacklist::kOsMacosx, "10.12.3", gpu_info());
@@ -95,16 +97,27 @@ GPU_BLACKLIST_FEATURE_TEST(FlashStage3DBaseline,
 GPU_BLACKLIST_FEATURE_TEST(AcceleratedVideoDecode,
                            GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE)
 
-GPU_BLACKLIST_FEATURE_TEST(AcceleratedVideoEncode,
-                           GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE)
-
-GPU_BLACKLIST_FEATURE_TEST(PanelFitting,
-                           GPU_FEATURE_TYPE_PANEL_FITTING)
-
 GPU_BLACKLIST_FEATURE_TEST(GpuRasterization,
                            GPU_FEATURE_TYPE_GPU_RASTERIZATION)
 
 GPU_BLACKLIST_FEATURE_TEST(WebGL2,
-                           GPU_FEATURE_TYPE_WEBGL2)
+                           GPU_FEATURE_TYPE_ACCELERATED_WEBGL2)
+
+// Test for invariant "Assume the newly last added entry has the largest ID".
+// See GpuControlList::GpuControlList.
+// It checks software_rendering_list.json
+TEST_F(GpuBlacklistTest, TestBlacklistIsValid) {
+  std::unique_ptr<GpuBlacklist> list(GpuBlacklist::Create());
+  uint32_t max_entry_id = list->max_entry_id();
+
+  std::vector<uint32_t> indices(list->num_entries());
+  int current = 0;
+  std::generate(indices.begin(), indices.end(),
+                [&current]() { return current++; });
+
+  auto entries = list->GetEntryIDsFromIndices(indices);
+  auto real_max_entry_id = *std::max_element(entries.begin(), entries.end());
+  EXPECT_EQ(real_max_entry_id, max_entry_id);
+}
 
 }  // namespace gpu

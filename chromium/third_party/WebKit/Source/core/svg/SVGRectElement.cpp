@@ -20,7 +20,7 @@
 
 #include "core/svg/SVGRectElement.h"
 
-#include "core/dom/StyleChangeReason.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/layout/svg/LayoutSVGRect.h"
 #include "core/svg/SVGLength.h"
 
@@ -61,7 +61,7 @@ inline SVGRectElement::SVGRectElement(Document& document)
   AddToPropertyMap(ry_);
 }
 
-DEFINE_TRACE(SVGRectElement) {
+void SVGRectElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);
@@ -119,7 +119,7 @@ Path SVGRectElement::AsPath() const {
 void SVGRectElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == x_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),

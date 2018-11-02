@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef MEDIA_BASE_PIPELINE_STATS_H_
-#define MEDIA_BASE_PIPELINE_STATS_H_
+#ifndef PLATFORM_MEDIA_COMMON_PIPELINE_STATS_H_
+#define PLATFORM_MEDIA_COMMON_PIPELINE_STATS_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <string>
 
@@ -83,4 +86,4 @@ MEDIA_EXPORT void DeserializeAndReport(const base::DictionaryValue& dictionary);
 }  // namespace pipeline_stats
 }  // namespace media
 
-#endif  // MEDIA_BASE_PIPELINE_STATS_H_
+#endif  // PLATFORM_MEDIA_COMMON_PIPELINE_STATS_H_

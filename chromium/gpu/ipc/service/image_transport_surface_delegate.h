@@ -10,7 +10,6 @@
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/latency/latency_info.h"
 
 #if defined(OS_MACOSX)
 #include "ui/base/cocoa/remote_layer_api.h"
@@ -19,6 +18,10 @@
 
 namespace IPC {
 class MessageFilter;
+}
+
+namespace gfx {
+struct PresentationFeedback;
 }
 
 namespace gpu {
@@ -41,16 +44,15 @@ struct GPU_EXPORT SwapBuffersCompleteParams {
   // the browser process.
   // https://crbug.com/604052
   // Only one of ca_context_id or io_surface may be non-0.
-  CAContextID ca_context_id;
-  bool fullscreen_low_power_ca_context_valid;
-  CAContextID fullscreen_low_power_ca_context_id;
+  CAContextID ca_context_id = 0;
+  bool fullscreen_low_power_ca_context_valid = false;
+  CAContextID fullscreen_low_power_ca_context_id = 0;
   gfx::ScopedRefCountedIOSurfaceMachPort io_surface;
   gfx::Size pixel_size;
-  float scale_factor;
+  float scale_factor = 1.f;
   gpu::TextureInUseResponses in_use_responses;
 #endif
-  std::vector<ui::LatencyInfo> latency_info;
-  gfx::SwapResult result;
+  gfx::SwapResponse response;
 };
 
 class GPU_EXPORT ImageTransportSurfaceDelegate {
@@ -63,7 +65,7 @@ class GPU_EXPORT ImageTransportSurfaceDelegate {
       SurfaceHandle child_window) = 0;
 #endif
 
-  // Tells the delegate that SwapBuffers returned and passes latency info.
+  // Tells the delegate that SwapBuffers returned.
   virtual void DidSwapBuffersComplete(SwapBuffersCompleteParams params) = 0;
 
   // Returns the features available for the ContextGroup.
@@ -71,15 +73,15 @@ class GPU_EXPORT ImageTransportSurfaceDelegate {
 
   virtual const GpuPreferences& GetGpuPreferences() const = 0;
 
-  using LatencyInfoCallback =
-      base::Callback<void(const std::vector<ui::LatencyInfo>&)>;
-  // |callback| is called when the delegate has updated LatencyInfo available.
-  virtual void SetLatencyInfoCallback(const LatencyInfoCallback& callback) = 0;
+  virtual void SetSnapshotRequestedCallback(const base::Closure& callback) = 0;
 
   // Informs the delegate about updated vsync parameters.
   virtual void UpdateVSyncParameters(base::TimeTicks timebase,
                                      base::TimeDelta interval) = 0;
 
+  // Tells the delegate a buffer has been presented.
+  virtual void BufferPresented(uint64_t swap_id,
+                               const gfx::PresentationFeedback& feedback) = 0;
   // Add IPC message filter.
   virtual void AddFilter(IPC::MessageFilter* message_filter) = 0;
   // Gets route ID for sending / receiving IPC messages.

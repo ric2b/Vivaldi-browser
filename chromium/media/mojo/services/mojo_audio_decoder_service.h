@@ -23,9 +23,8 @@ class MojoDecoderBufferReader;
 
 class MEDIA_MOJO_EXPORT MojoAudioDecoderService : public mojom::AudioDecoder {
  public:
-  MojoAudioDecoderService(
-      base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
-      std::unique_ptr<media::AudioDecoder> decoder);
+  MojoAudioDecoderService(MojoCdmServiceContext* mojo_cdm_service_context,
+                          std::unique_ptr<media::AudioDecoder> decoder);
 
   ~MojoAudioDecoderService() final;
 
@@ -47,7 +46,11 @@ class MEDIA_MOJO_EXPORT MojoAudioDecoderService : public mojom::AudioDecoder {
                      scoped_refptr<ContentDecryptionModule> cdm,
                      bool success);
 
+  // Called by |mojo_decoder_buffer_reader_| when read is finished.
   void OnReadDone(DecodeCallback callback, scoped_refptr<DecoderBuffer> buffer);
+
+  // Called by |mojo_decoder_buffer_reader_| when reset is finished.
+  void OnReaderFlushDone(ResetCallback callback);
 
   // Called by |decoder_| when DecoderBuffer is accepted or rejected.
   void OnDecodeStatus(DecodeCallback callback, media::DecodeStatus status);
@@ -61,7 +64,7 @@ class MEDIA_MOJO_EXPORT MojoAudioDecoderService : public mojom::AudioDecoder {
   std::unique_ptr<MojoDecoderBufferReader> mojo_decoder_buffer_reader_;
 
   // A helper object required to get CDM from CDM id.
-  base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context_;
+  MojoCdmServiceContext* const mojo_cdm_service_context_ = nullptr;
 
   // The destination for the decoded buffers.
   mojom::AudioDecoderClientAssociatedPtr client_;

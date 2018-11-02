@@ -4,7 +4,6 @@
 
 #include "net/dns/dns_transaction.h"
 
-#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
@@ -12,13 +11,13 @@
 
 #include "base/big_endian.h"
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -48,11 +47,6 @@
 namespace net {
 
 namespace {
-
-// Provide a common macro to simplify code and readability. We must use a
-// macro as the underlying HISTOGRAM macro creates static variables.
-#define DNS_HISTOGRAM(name, time) UMA_HISTOGRAM_CUSTOM_TIMES(name, time, \
-    base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1), 100)
 
 // Count labels in the fully-qualified name in DNS format.
 int CountLabels(const std::string& name) {
@@ -87,7 +81,7 @@ class DnsAttempt {
   explicit DnsAttempt(unsigned server_index)
       : result_(ERR_FAILED), server_index_(server_index) {}
 
-  virtual ~DnsAttempt() {}
+  virtual ~DnsAttempt() = default;
   // Starts the attempt. Returns ERR_IO_PENDING if cannot complete synchronously
   // and calls |callback| upon completion.
   virtual int Start(const CompletionCallback& callback) = 0;
@@ -217,11 +211,11 @@ class DnsUDPAttempt : public DnsAttempt {
       return ERR_DNS_MALFORMED_RESPONSE;
     if (rv == OK) {
       DCHECK_EQ(STATE_NONE, next_state_);
-      DNS_HISTOGRAM("AsyncDNS.UDPAttemptSuccess",
-                    base::TimeTicks::Now() - start_time_);
+      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptSuccess",
+                                   base::TimeTicks::Now() - start_time_);
     } else if (rv != ERR_IO_PENDING) {
-      DNS_HISTOGRAM("AsyncDNS.UDPAttemptFail",
-                    base::TimeTicks::Now() - start_time_);
+      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptFail",
+                                   base::TimeTicks::Now() - start_time_);
     }
     return rv;
   }
@@ -390,21 +384,16 @@ class DnsTCPAttempt : public DnsAttempt {
     set_result(rv);
     if (rv == OK) {
       DCHECK_EQ(STATE_NONE, next_state_);
-      DNS_HISTOGRAM("AsyncDNS.TCPAttemptSuccess",
-                    base::TimeTicks::Now() - start_time_);
+      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.TCPAttemptSuccess",
+                                   base::TimeTicks::Now() - start_time_);
     } else if (rv != ERR_IO_PENDING) {
-      DNS_HISTOGRAM("AsyncDNS.TCPAttemptFail",
-                    base::TimeTicks::Now() - start_time_);
+      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.TCPAttemptFail",
+                                   base::TimeTicks::Now() - start_time_);
     }
     return rv;
   }
 
   int DoConnectComplete(int rv) {
-    // TODO(rvargas): Remove ScopedTracker below once crbug.com/462784 is fixed.
-    tracked_objects::ScopedTracker tracking_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "462784 DnsTCPAttempt::DoConnectComplete"));
-
     DCHECK_NE(ERR_IO_PENDING, rv);
     if (rv < 0)
       return rv;
@@ -565,10 +554,12 @@ class DnsTransactionImpl : public DnsTransaction,
                      const std::string& hostname,
                      uint16_t qtype,
                      const DnsTransactionFactory::CallbackType& callback,
-                     const NetLogWithSource& net_log)
+                     const NetLogWithSource& net_log,
+                     const OptRecordRdata* opt_rdata)
       : session_(session),
         hostname_(hostname),
         qtype_(qtype),
+        opt_rdata_(opt_rdata),
         callback_(callback),
         net_log_(net_log),
         qnames_initial_size_(0),
@@ -679,8 +670,13 @@ class DnsTransactionImpl : public DnsTransaction,
   }
 
   void DoCallback(AttemptResult result) {
-    DCHECK(!callback_.is_null());
     DCHECK_NE(ERR_IO_PENDING, result.rv);
+
+    // TODO(mgersh): consider changing back to a DCHECK once
+    // https://crbug.com/779589 is fixed.
+    if (callback_.is_null())
+      return;
+
     const DnsResponse* response = result.attempt ?
         result.attempt->GetResponse() : NULL;
     CHECK(result.rv != OK || response != NULL);
@@ -714,7 +710,7 @@ class DnsTransactionImpl : public DnsTransaction,
     uint16_t id = session_->NextQueryId();
     std::unique_ptr<DnsQuery> query;
     if (attempts_.empty()) {
-      query.reset(new DnsQuery(id, qnames_.front(), qtype_));
+      query.reset(new DnsQuery(id, qnames_.front(), qtype_, opt_rdata_));
     } else {
       query = attempts_[0]->GetQuery()->CloneWithNewId(id);
     }
@@ -771,8 +767,15 @@ class DnsTransactionImpl : public DnsTransaction,
         previous_attempt->GetQuery()->CloneWithNewId(id);
 
     RecordLostPacketsIfAny();
-    // Cancel all other attempts, no point waiting on them.
-    attempts_.clear();
+
+    // Cancel all other attempts that have not received a response, no point
+    // waiting on them.
+    for (auto it = attempts_.begin(); it != attempts_.end();) {
+      if (!(*it)->is_completed())
+        it = attempts_.erase(it);
+      else
+        ++it;
+    }
 
     unsigned attempt_number = attempts_.size();
 
@@ -892,8 +895,12 @@ class DnsTransactionImpl : public DnsTransaction,
           session_->RecordServerSuccess(result.attempt->server_index());
           net_log_.EndEventWithNetErrorCode(
               NetLogEventType::DNS_TRANSACTION_QUERY, result.rv);
-          // Try next suffix.
-          qnames_.pop_front();
+          // Try next suffix. Check that qnames_ isn't already empty first,
+          // which can happen when there are two attempts running at once.
+          // TODO(mgersh): remove this workaround for https://crbug.com/774846
+          // when https://crbug.com/779589 is fixed.
+          if (!qnames_.empty())
+            qnames_.pop_front();
           if (qnames_.empty()) {
             return AttemptResult(ERR_NAME_NOT_RESOLVED, NULL);
           } else {
@@ -950,13 +957,14 @@ class DnsTransactionImpl : public DnsTransaction,
   scoped_refptr<DnsSession> session_;
   std::string hostname_;
   uint16_t qtype_;
+  const OptRecordRdata* opt_rdata_;
   // Cleared in DoCallback.
   DnsTransactionFactory::CallbackType callback_;
 
   NetLogWithSource net_log_;
 
   // Search list of fully-qualified DNS names to query next (in DNS format).
-  std::deque<std::string> qnames_;
+  base::circular_deque<std::string> qnames_;
   size_t qnames_initial_size_;
 
   // List of attempts for the current name.
@@ -991,11 +999,19 @@ class DnsTransactionFactoryImpl : public DnsTransactionFactory {
       const CallbackType& callback,
       const NetLogWithSource& net_log) override {
     return std::unique_ptr<DnsTransaction>(new DnsTransactionImpl(
-        session_.get(), hostname, qtype, callback, net_log));
+        session_.get(), hostname, qtype, callback, net_log, opt_rdata_.get()));
+  }
+
+  void AddEDNSOption(const OptRecordRdata::Opt& opt) override {
+    if (opt_rdata_ == nullptr)
+      opt_rdata_ = std::make_unique<OptRecordRdata>();
+
+    opt_rdata_->AddOpt(opt);
   }
 
  private:
   scoped_refptr<DnsSession> session_;
+  std::unique_ptr<OptRecordRdata> opt_rdata_;
 };
 
 }  // namespace

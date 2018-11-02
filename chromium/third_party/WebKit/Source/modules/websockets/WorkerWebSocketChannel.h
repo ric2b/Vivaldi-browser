@@ -33,6 +33,7 @@
 
 #include <stdint.h>
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerThreadLifecycleObserver.h"
@@ -42,7 +43,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebTraceLocation.h"
@@ -75,7 +75,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
   void Send(const DOMArrayBuffer&,
             unsigned byte_offset,
             unsigned byte_length) override;
-  void Send(PassRefPtr<BlobDataHandle>) override;
+  void Send(scoped_refptr<BlobDataHandle>) override;
   void SendTextAsCharVector(std::unique_ptr<Vector<char>>) override {
     NOTREACHED();
   }
@@ -88,7 +88,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
             std::unique_ptr<SourceLocation>) override;
   void Disconnect() override;  // Will suppress didClose().
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   class Bridge;
 
@@ -106,7 +106,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
 
    public:
     MainChannelClient(Bridge*,
-                      RefPtr<WebTaskRunner>,
+                      scoped_refptr<WebTaskRunner>,
                       WorkerThreadLifecycleContext*);
     ~MainChannelClient() override;
 
@@ -118,14 +118,14 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
                  mojom::blink::WebSocketPtr);
     void SendTextAsCharVector(std::unique_ptr<Vector<char>>);
     void SendBinaryAsCharVector(std::unique_ptr<Vector<char>>);
-    void SendBlob(PassRefPtr<BlobDataHandle>);
+    void SendBlob(scoped_refptr<BlobDataHandle>);
     void Close(int code, const String& reason);
     void Fail(const String& reason,
               MessageLevel,
               std::unique_ptr<SourceLocation>);
     void Disconnect();
 
-    DECLARE_VIRTUAL_TRACE();
+    void Trace(blink::Visitor*) override;
     // Promptly clear connection to bridge + loader proxy.
     EAGERLY_FINALIZE();
 
@@ -148,7 +148,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
     void ReleaseMainChannel();
 
     CrossThreadWeakPersistent<Bridge> bridge_;
-    RefPtr<WebTaskRunner> worker_networking_task_runner_;
+    scoped_refptr<WebTaskRunner> worker_networking_task_runner_;
     Member<DocumentWebSocketChannel> main_channel_;
   };
 
@@ -169,7 +169,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
     void Send(const DOMArrayBuffer&,
               unsigned byte_offset,
               unsigned byte_length);
-    void Send(PassRefPtr<BlobDataHandle>);
+    void Send(scoped_refptr<BlobDataHandle>);
     void Close(int code, const String& reason);
     void Fail(const String& reason,
               MessageLevel,
@@ -178,7 +178,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
 
     void ConnectOnMainThread(std::unique_ptr<SourceLocation>,
                              ThreadableLoadingContext*,
-                             RefPtr<WebTaskRunner>,
+                             scoped_refptr<WebTaskRunner>,
                              WorkerThreadLifecycleContext*,
                              const KURL&,
                              const String& protocol,
@@ -188,7 +188,7 @@ class WorkerWebSocketChannel final : public WebSocketChannel {
     // Returns null when |disconnect| has already been called.
     WebSocketChannelClient* Client() { return client_; }
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
     // Promptly clear connection to peer + loader proxy.
     EAGERLY_FINALIZE();
 

@@ -31,8 +31,7 @@ namespace blink {
 
 class Node;
 
-class CORE_EXPORT NodeList : public GarbageCollectedFinalized<NodeList>,
-                             public ScriptWrappable {
+class CORE_EXPORT NodeList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -46,9 +45,7 @@ class CORE_EXPORT NodeList : public GarbageCollectedFinalized<NodeList>,
   virtual bool IsEmptyNodeList() const { return false; }
   virtual bool IsChildNodeList() const { return false; }
 
-  virtual Node* VirtualOwnerNode() const { return 0; }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual Node* VirtualOwnerNode() const { return nullptr; }
 
  protected:
   NodeList() {}

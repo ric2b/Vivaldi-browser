@@ -72,6 +72,8 @@ const char kSeekCurrentMedia[] = "seekCurrentMedia";
 const char kSelectLocalMediaFile[] = "selectLocalMediaFile";
 const char kSetCurrentMediaMute[] = "setCurrentMediaMute";
 const char kSetCurrentMediaVolume[] = "setCurrentMediaVolume";
+const char kSetMediaRemotingEnabled[] = "setMediaRemotingEnabled";
+const char kHangoutsSetLocalPresent[] = "hangouts.setLocalPresent";
 
 // JS function names.
 const char kSetInitialData[] = "media_router.ui.setInitialData";
@@ -163,9 +165,10 @@ std::unique_ptr<base::DictionaryValue> RouteToValue(
   dictionary->SetString("sinkId", route.media_sink_id());
   dictionary->SetString("description", route.description());
   dictionary->SetBoolean("isLocal", route.is_local());
-  dictionary->SetBoolean("supportsWebUiController",
-                         is_web_ui_route_controller_available &&
-                             route.supports_media_route_controller());
+  dictionary->SetBoolean(
+      "supportsWebUiController",
+      is_web_ui_route_controller_available &&
+          route.controller_type() != RouteControllerType::kNone);
   dictionary->SetBoolean("canJoin", can_join);
   if (current_cast_mode > 0) {
     dictionary->SetInteger("currentCastMode", current_cast_mode);
@@ -351,6 +354,22 @@ void MediaRouterWebUIMessageHandler::UpdateMediaRouteStatus(
   status_value.SetInteger("duration", status.duration.InSeconds());
   status_value.SetInteger("currentTime", status.current_time.InSeconds());
   status_value.SetDouble("volume", status.volume);
+
+  if (status.hangouts_extra_data) {
+    base::Value hangouts_extra_data(base::Value::Type::DICTIONARY);
+    hangouts_extra_data.SetKey(
+        "localPresent", base::Value(status.hangouts_extra_data->local_present));
+    status_value.SetKey("hangoutsExtraData", std::move(hangouts_extra_data));
+  }
+
+  if (status.mirroring_extra_data) {
+    base::Value mirroring_extra_data(base::Value::Type::DICTIONARY);
+    mirroring_extra_data.SetKey(
+        "mediaRemotingEnabled",
+        base::Value(status.mirroring_extra_data->media_remoting_enabled));
+    status_value.SetKey("mirroringExtraData", std::move(mirroring_extra_data));
+  }
+
   web_ui()->CallJavascriptFunctionUnsafe(kUpdateRouteStatus,
                                          std::move(status_value));
 }
@@ -481,6 +500,14 @@ void MediaRouterWebUIMessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       kSetCurrentMediaVolume,
       base::Bind(&MediaRouterWebUIMessageHandler::OnSetCurrentMediaVolume,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kSetMediaRemotingEnabled,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnSetMediaRemotingEnabled,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kHangoutsSetLocalPresent,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnSetHangoutsLocalPresent,
                  base::Unretained(this)));
 }
 
@@ -835,7 +862,7 @@ void MediaRouterWebUIMessageHandler::OnReportTimeToInitialActionClose(
   DVLOG(1) << "OnReportTimeToInitialActionClose";
   double time_to_close;
   if (!args->GetDouble(0, &time_to_close)) {
-    VLOG(0) << "Unable to extract args.";
+    DVLOG(1) << "Unable to extract args.";
     return;
   }
   UMA_HISTOGRAM_TIMES("MediaRouter.Ui.Action.CloseLatency",
@@ -968,6 +995,42 @@ void MediaRouterWebUIMessageHandler::OnSetCurrentMediaVolume(
       media_router_ui_->GetMediaRouteController();
   if (route_controller && volume >= 0 && volume <= 1)
     route_controller->SetVolume(volume);
+}
+
+void MediaRouterWebUIMessageHandler::OnSetMediaRemotingEnabled(
+    const base::ListValue* args) {
+  bool media_remoting_enabled;
+  if (!args->GetBoolean(0, &media_remoting_enabled)) {
+    DVLOG(1) << "Unable to extract media remoting value";
+    return;
+  }
+  MirroringMediaRouteController* mirroring_controller =
+      MirroringMediaRouteController::From(
+          media_router_ui_->GetMediaRouteController());
+  if (!mirroring_controller) {
+    DVLOG(1) << "Unable to get mirroring controller";
+    return;
+  }
+
+  mirroring_controller->SetMediaRemotingEnabled(media_remoting_enabled);
+}
+
+void MediaRouterWebUIMessageHandler::OnSetHangoutsLocalPresent(
+    const base::ListValue* args) {
+  bool local_present;
+  if (!args->GetBoolean(0, &local_present)) {
+    DVLOG(1) << "Unable to extract local present";
+    return;
+  }
+  HangoutsMediaRouteController* hangouts_controller =
+      HangoutsMediaRouteController::From(
+          media_router_ui_->GetMediaRouteController());
+  if (!hangouts_controller) {
+    DVLOG(1) << "Unable to get hangouts controller";
+    return;
+  }
+
+  hangouts_controller->SetLocalPresent(local_present);
 }
 
 bool MediaRouterWebUIMessageHandler::ActOnIssueType(

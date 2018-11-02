@@ -96,8 +96,7 @@ GURL CreatePrivetParamURL(const std::string& path,
 PrivetInfoOperationImpl::PrivetInfoOperationImpl(
     PrivetHTTPClient* privet_client,
     const PrivetJSONOperation::ResultCallback& callback)
-    : privet_client_(privet_client), callback_(callback) {
-}
+    : privet_client_(privet_client), callback_(callback) {}
 
 PrivetInfoOperationImpl::~PrivetInfoOperationImpl() {
 }
@@ -118,7 +117,7 @@ PrivetHTTPClient* PrivetInfoOperationImpl::GetHTTPClient() {
 
 void PrivetInfoOperationImpl::OnError(PrivetURLFetcher* fetcher,
                                       PrivetURLFetcher::ErrorType error) {
-  callback_.Run(NULL);
+  callback_.Run(nullptr);
 }
 
 void PrivetInfoOperationImpl::OnParsedJson(PrivetURLFetcher* fetcher,
@@ -193,11 +192,8 @@ void PrivetRegisterOperationImpl::OnError(PrivetURLFetcher* fetcher,
     reason = FAILURE_UNKNOWN;
   }
 
-  delegate_->OnPrivetRegisterError(this,
-                                   current_action_,
-                                   reason,
-                                   visible_http_code,
-                                   NULL);
+  delegate_->OnPrivetRegisterError(this, current_action_, reason,
+                                   visible_http_code, nullptr);
 }
 
 void PrivetRegisterOperationImpl::OnParsedJson(
@@ -254,11 +250,8 @@ void PrivetRegisterOperationImpl::GetClaimTokenResponse(
   if (got_url || got_token) {
     delegate_->OnPrivetRegisterClaimToken(this, claimToken, GURL(claimUrl));
   } else {
-    delegate_->OnPrivetRegisterError(this,
-                                     current_action_,
-                                     FAILURE_MALFORMED_RESPONSE,
-                                     -1,
-                                     NULL);
+    delegate_->OnPrivetRegisterError(this, current_action_,
+                                     FAILURE_MALFORMED_RESPONSE, -1, nullptr);
   }
 }
 
@@ -276,11 +269,8 @@ void PrivetRegisterOperationImpl::OnPrivetInfoDone(
   // TODO(noamsml): Simplify error case and depracate HTTP error value in
   // OnPrivetRegisterError.
   if (!value) {
-    delegate_->OnPrivetRegisterError(this,
-                                     kPrivetActionNameInfo,
-                                     FAILURE_NETWORK,
-                                     -1,
-                                     NULL);
+    delegate_->OnPrivetRegisterError(this, kPrivetActionNameInfo,
+                                     FAILURE_NETWORK, -1, nullptr);
     return;
   }
 
@@ -292,11 +282,8 @@ void PrivetRegisterOperationImpl::OnPrivetInfoDone(
                                        -1,
                                        value);
     } else {
-      delegate_->OnPrivetRegisterError(this,
-                                       kPrivetActionNameInfo,
-                                       FAILURE_MALFORMED_RESPONSE,
-                                       -1,
-                                       NULL);
+      delegate_->OnPrivetRegisterError(this, kPrivetActionNameInfo,
+                                       FAILURE_MALFORMED_RESPONSE, -1, nullptr);
     }
     return;
   }
@@ -305,11 +292,8 @@ void PrivetRegisterOperationImpl::OnPrivetInfoDone(
 
   if (!value->GetString(kPrivetInfoKeyID, &id) ||
       id != expected_id_) {
-    delegate_->OnPrivetRegisterError(this,
-                                     kPrivetActionNameInfo,
-                                     FAILURE_MALFORMED_RESPONSE,
-                                     -1,
-                                     NULL);
+    delegate_->OnPrivetRegisterError(this, kPrivetActionNameInfo,
+                                     FAILURE_MALFORMED_RESPONSE, -1, nullptr);
   } else {
     delegate_->OnPrivetRegisterDone(this, id);
   }
@@ -361,8 +345,7 @@ PrivetJSONOperationImpl::PrivetJSONOperationImpl(
     : privet_client_(privet_client),
       path_(path),
       query_params_(query_params),
-      callback_(callback) {
-}
+      callback_(callback) {}
 
 PrivetJSONOperationImpl::~PrivetJSONOperationImpl() {
 }
@@ -381,7 +364,7 @@ PrivetHTTPClient* PrivetJSONOperationImpl::GetHTTPClient() {
 void PrivetJSONOperationImpl::OnError(
     PrivetURLFetcher* fetcher,
     PrivetURLFetcher::ErrorType error) {
-  callback_.Run(NULL);
+  callback_.Run(nullptr);
 }
 
 void PrivetJSONOperationImpl::OnParsedJson(PrivetURLFetcher* fetcher,

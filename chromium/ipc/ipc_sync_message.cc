@@ -6,8 +6,6 @@
 
 #include <stdint.h>
 
-#include <stack>
-
 #include "base/atomic_sequence_num.h"
 #include "base/logging.h"
 #include "build/build_config.h"
@@ -37,8 +35,7 @@ SyncMessage::SyncMessage(int32_t routing_id,
   WriteSyncHeader(this, header);
 }
 
-SyncMessage::~SyncMessage() {
-}
+SyncMessage::~SyncMessage() = default;
 
 MessageReplyDeserializer* SyncMessage::GetReplyDeserializer() {
   DCHECK(deserializer_.get());
@@ -103,11 +100,7 @@ bool SyncMessage::ReadSyncHeader(const Message& msg, SyncHeader* header) {
 bool SyncMessage::WriteSyncHeader(Message* msg, const SyncHeader& header) {
   DCHECK(msg->is_sync() || msg->is_reply());
   DCHECK(msg->payload_size() == 0);
-  bool result = msg->WriteInt(header.message_id);
-  if (!result) {
-    NOTREACHED();
-    return false;
-  }
+  msg->WriteInt(header.message_id);
 
   // Note: if you add anything here, you need to update kSyncMessageHeaderSize.
   DCHECK(kSyncMessageHeaderSize == msg->payload_size());

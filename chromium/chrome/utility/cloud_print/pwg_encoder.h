@@ -9,6 +9,8 @@
 
 #include <string>
 
+#include "base/macros.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace cloud_print {
 
@@ -16,7 +18,7 @@ class BitmapImage;
 
 struct PwgHeaderInfo {
   PwgHeaderInfo()
-      : dpi(300),
+      : dpi(300, 300),
         total_pages(1),
         flipx(false),
         flipy(false),
@@ -24,7 +26,7 @@ struct PwgHeaderInfo {
         duplex(false),
         tumble(false) {}
   enum ColorSpace { SGRAY = 18, SRGB = 19 };
-  uint32_t dpi;
+  gfx::Size dpi;
   uint32_t total_pages;
   bool flipx;
   bool flipy;
@@ -35,30 +37,15 @@ struct PwgHeaderInfo {
 
 class PwgEncoder {
  public:
-  PwgEncoder();
+  static std::string GetDocumentHeader();
 
-  void EncodeDocumentHeader(std::string *output) const;
-  bool EncodePage(const BitmapImage& image,
-                  const PwgHeaderInfo& pwg_header_info,
-                  std::string* output) const;
+  // Given an image, create a PWG of the image and put the compressed image data
+  // in the returned string, or return an empty string on failure.
+  static std::string EncodePage(const BitmapImage& image,
+                                const PwgHeaderInfo& pwg_header_info);
 
  private:
-  void EncodePageHeader(const BitmapImage& image,
-                        const PwgHeaderInfo& pwg_header_info,
-                        std::string* output) const;
-
-  template <typename InputStruct, class RandomAccessIterator>
-  void EncodeRow(RandomAccessIterator pos,
-                 RandomAccessIterator row_end,
-                 bool monochrome,
-                 std::string* output) const;
-
-  template <typename InputStruct>
-  bool EncodePageWithColorspace(const BitmapImage& image,
-                                const PwgHeaderInfo& pwg_header_info,
-                                std::string* output) const;
-
-  const uint8_t* GetRow(const BitmapImage& image, int row, bool flipy) const;
+  DISALLOW_IMPLICIT_CONSTRUCTORS(PwgEncoder);
 };
 
 }  // namespace cloud_print

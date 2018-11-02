@@ -12,6 +12,7 @@ executable("update_notifier") {
       "//components/prefs",
       "//ui/base",
       "//vivaldi/app:resources",
+      "//vivaldi/app:vivaldi_icon",
       "//vivaldi/browser:init_sparkle",
     ]
 

@@ -1,7 +1,6 @@
-asvitkine@chromium.org
-holte@chromium.org
-isherman@chromium.org
-mpearson@chromium.org
-rkaplow@chromium.org
+file://base/metrics/OWNERS
+
+per-file manifest.json=set noparent
+per-file manifest.json=file://ipc/SECURITY_OWNERS
 
 # COMPONENT: Internals>Metrics

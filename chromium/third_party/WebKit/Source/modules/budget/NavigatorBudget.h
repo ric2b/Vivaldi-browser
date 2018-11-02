@@ -22,10 +22,10 @@ class NavigatorBudget final : public GarbageCollected<NavigatorBudget>,
  public:
   static NavigatorBudget& From(Navigator&);
 
-  static BudgetService* budget(Navigator&);
-  BudgetService* budget();
+  static BudgetService* budget(ExecutionContext*, Navigator&);
+  BudgetService* budget(ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit NavigatorBudget(Navigator&);

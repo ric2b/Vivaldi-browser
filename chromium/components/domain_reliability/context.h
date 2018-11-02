@@ -41,6 +41,9 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   // trigger a new upload.
   static const int kMaxUploadDepthToSchedule;
 
+  using UploadAllowedCallback =
+      base::Callback<void(const GURL&, base::OnceCallback<void(bool)>)>;
+
   class DOMAIN_RELIABILITY_EXPORT Factory {
    public:
     virtual ~Factory();
@@ -53,6 +56,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
       const DomainReliabilityScheduler::Params& scheduler_params,
       const std::string& upload_reporter_string,
       const base::TimeTicks* last_network_change_time,
+      const UploadAllowedCallback& upload_allowed_callback,
       DomainReliabilityDispatcher* dispatcher,
       DomainReliabilityUploader* uploader,
       std::unique_ptr<const DomainReliabilityConfig> config);
@@ -61,10 +65,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   // Notifies the context of a beacon on its domain(s); may or may not save the
   // actual beacon to be uploaded, depending on the sample rates in the config,
   // but will increment one of the request counters in any case.
-  //
-  // Returns |true| if the beacon was queued or |false| if it was discarded,
-  // for metrics purposes.
-  bool OnBeacon(std::unique_ptr<DomainReliabilityBeacon> beacon);
+  void OnBeacon(std::unique_ptr<DomainReliabilityBeacon> beacon);
 
   // Called to clear browsing data, since beacons are like browsing history.
   void ClearBeacons();
@@ -87,6 +88,8 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
 
  private:
   void ScheduleUpload(base::TimeDelta min_delay, base::TimeDelta max_delay);
+  void CallUploadAllowedCallback();
+  void OnUploadAllowedCallbackComplete(bool allowed);
   void StartUpload();
   void OnUploadComplete(const DomainReliabilityUploader::UploadResult& result);
 
@@ -126,8 +129,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   // The last network change time is not tracked per-context, so this is a
   // pointer to that value in a wider (e.g. per-Monitor or unittest) scope.
   const base::TimeTicks* last_network_change_time_;
-
-  base::TimeTicks last_queued_beacon_time_;
+  const UploadAllowedCallback& upload_allowed_callback_;
 
   base::WeakPtrFactory<DomainReliabilityContext> weak_factory_;
 

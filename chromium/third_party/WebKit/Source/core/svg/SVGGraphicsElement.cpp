@@ -21,12 +21,12 @@
 
 #include "core/svg/SVGGraphicsElement.h"
 
-#include "core/SVGNames.h"
-#include "core/dom/StyleChangeReason.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/layout/LayoutObject.h"
 #include "core/svg/SVGElementRareData.h"
 #include "core/svg/SVGMatrixTearOff.h"
 #include "core/svg/SVGRectTearOff.h"
+#include "core/svg_names.h"
 #include "platform/transforms/AffineTransform.h"
 
 namespace blink {
@@ -44,15 +44,15 @@ SVGGraphicsElement::SVGGraphicsElement(const QualifiedName& tag_name,
 
 SVGGraphicsElement::~SVGGraphicsElement() {}
 
-DEFINE_TRACE(SVGGraphicsElement) {
+void SVGGraphicsElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(transform_);
   SVGElement::Trace(visitor);
   SVGTests::Trace(visitor);
 }
 
 static bool IsViewportElement(const Element& element) {
-  return (isSVGSVGElement(element) || isSVGSymbolElement(element) ||
-          isSVGForeignObjectElement(element) || isSVGImageElement(element));
+  return (IsSVGSVGElement(element) || IsSVGSymbolElement(element) ||
+          IsSVGForeignObjectElement(element) || IsSVGImageElement(element));
 }
 
 AffineTransform SVGGraphicsElement::ComputeCTM(
@@ -102,7 +102,7 @@ SVGMatrixTearOff* SVGGraphicsElement::getScreenCTM() {
 void SVGGraphicsElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == SVGNames::transformAttr) {
     AddPropertyToPresentationAttributeStyle(
         style, CSSPropertyTransform, transform_->CurrentValue()->CssValue());
@@ -152,7 +152,7 @@ SVGElement* SVGGraphicsElement::nearestViewportElement() const {
 }
 
 SVGElement* SVGGraphicsElement::farthestViewportElement() const {
-  SVGElement* farthest = 0;
+  SVGElement* farthest = nullptr;
   for (Element* current = ParentOrShadowHostElement(); current;
        current = current->ParentOrShadowHostElement()) {
     if (IsViewportElement(*current))

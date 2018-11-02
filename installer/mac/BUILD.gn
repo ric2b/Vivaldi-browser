@@ -1,10 +1,12 @@
 import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/command_action.gni")
 
 assert(is_mac)
 
-build_app_dmg_script_path = "//chrome/tools/build/mac/build_app_dmg"
-pkg_dmg_script_path = "//chrome/installer/mac/pkg-dmg"
+import("//vivaldi/gn/config/signer_features.gni")
+
+build_app_dmg_script_path = "//vivaldi/thirdparty/create_dmg/create-dmg"
 mac_signing_key = getenv("VIVALDI_SIGNING_KEY")
 mac_signing_id = getenv("VIVALDI_SIGNING_ID")
 
@@ -36,7 +38,7 @@ group("mac") {
 command_bash("build_dmg") {
   command = build_app_dmg_script_path
   deps = []
-  if (!perform_signing) {
+  if (!perform_signing || !is_full_mac_signer) {
     deps += [
               "//chrome/installer/mac",
               "//vivaldi:vivaldi",
@@ -44,9 +46,17 @@ command_bash("build_dmg") {
   }
   deps += signing_deps
 
+  icns = "//vivaldi/installer/mac/icons/$VIVALDI_RELEASE_KIND/disk_image.icns"
+  eula = "//vivaldi/installer/mac/licenses/en.rtf"
+  background = "//vivaldi/installer/mac/background/vivaldi_dmg_background.tif"
+
   inputs = [
+    background,
     command,
-    pkg_dmg_script_path,
+    eula,
+    icns,
+    "//vivaldi/thirdparty/create_dmg/support/dmg-license.py",
+    "//vivaldi/thirdparty/create_dmg/support/template.applescript",
   ]
 
   outputs = [
@@ -54,8 +64,19 @@ command_bash("build_dmg") {
   ]
 
   args = [
-    "vivaldi",
-    vivaldi_version_full,
+    "--volname","Vivaldi $vivaldi_version_full.dmg",
+    "--volicon", rebase_path(icns, root_build_dir),
+    "--eula", rebase_path(eula, root_build_dir),
+    "--background", rebase_path(background, root_build_dir),
+    "--window-pos", "100", "100",
+    "--window-size", "640", "480",
+    "--text-size", "13",
+    "--icon-size", "128",
+    "--icon", "Vivaldi", "224", "288",
+    "--app-drop-link", "416", "288",
+    "--no-internet-enable",
+    "Vivaldi.$vivaldi_version_full.dmg",
+    "Vivaldi.app",
   ]
 }
 
@@ -64,12 +85,14 @@ if (perform_signing) {
     deps = [
       ":sign_inner_bundle",
       ":sign_package",
+      ":create_tar",
     ]
   }
   command_bash("sign_inner_bundle") {
-    if (!perform_signing) {
+    if (!perform_signing || !is_full_mac_signer) {
       deps = [
         "//chrome/installer/mac",
+        "//vivaldi:vivaldi",
       ]
     }
     command = "$mac_packaging_dir/sign_versioned_dir.sh"
@@ -86,12 +109,16 @@ if (perform_signing) {
       mac_signing_id,
     ]
   }
+
   command_bash("sign_package") {
     deps = [
       ":sign_inner_bundle",
     ]
-    if (!perform_signing) {
-      deps += [ "//chrome/installer/mac" ]
+    if (!perform_signing || !is_full_mac_signer) {
+      deps += [
+        "//chrome/installer/mac",
+        "//vivaldi:vivaldi",
+      ]
     }
     command = "$mac_packaging_dir/sign_app.sh"
     inputs = [
@@ -105,6 +132,53 @@ if (perform_signing) {
       rebase_path(mac_app_name, root_build_dir),
       mac_signing_key,
       mac_signing_id,
+    ]
+  }
+
+  #correct permissions in app before tar-ing it.
+  system_command("chmod_app") {
+    deps = [
+      ":sign_inner_bundle",
+      ":sign_package",
+    ]
+    if (!perform_signing || !is_full_mac_signer) {
+      deps += [
+        "//chrome/installer/mac",
+        "//vivaldi:vivaldi",
+      ]
+    }
+    command = "find"
+    app_path = "$root_build_dir/Vivaldi.app"
+    inputs = [
+      mac_signed_inner_framework,
+    ]
+    outputs = [
+      "$root_gen_dir/chmod.done",
+    ]
+    args = [
+      rebase_path(app_path, root_build_dir),
+      "-exec", "chmod", "-h", "a-st+rX,u+w,go-w", "{}", ";"
+    ]
+  }
+
+  system_command("create_tar") {
+    deps = [
+      ":chmod_app",
+      ":sign_package",
+    ]
+    command = "tar"
+    app_path = "$root_build_dir/Vivaldi.app"
+    tar_path = "$root_build_dir/Vivaldi.$vivaldi_version_full.tar.xz"
+    inputs = [
+      "$root_gen_dir/chmod.done",
+      "$root_gen_dir/signed_package.done",
+    ]
+    outputs = [tar_path]
+
+    args = [
+      "cfJ",
+      rebase_path(tar_path, root_build_dir),
+      rebase_path(app_path, root_build_dir)
     ]
   }
 }

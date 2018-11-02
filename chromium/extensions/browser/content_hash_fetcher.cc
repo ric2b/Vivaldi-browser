@@ -26,6 +26,7 @@
 #include "extensions/browser/computed_hashes.h"
 #include "extensions/browser/content_hash_tree.h"
 #include "extensions/browser/content_verifier_delegate.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/verified_contents.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -350,10 +351,8 @@ void ContentHashFetcherJob::DoneFetchingVerifiedContents(bool success) {
     return;
   }
 
-  content::BrowserThread::PostBlockingPoolSequencedTask(
-      "ContentHashFetcher",
-      FROM_HERE,
-      base::Bind(&ContentHashFetcherJob::MaybeCreateHashes, this));
+  GetExtensionFileTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&ContentHashFetcherJob::MaybeCreateHashes, this));
 }
 
 void ContentHashFetcherJob::MaybeCreateHashes() {
@@ -455,7 +454,7 @@ void ContentHashFetcherJob::DispatchCallback() {
     if (cancelled_)
       return;
   }
-  callback_.Run(make_scoped_refptr(this));
+  callback_.Run(base::WrapRefCounted(this));
 }
 
 // ----

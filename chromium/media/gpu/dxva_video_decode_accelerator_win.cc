@@ -47,7 +47,9 @@
 #include "media/base/media_switches.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/base/win/mf_initializer.h"
+#include "media/filters/vp9_parser.h"
 #include "media/gpu/dxva_picture_buffer_win.h"
+#include "media/video/h264_parser.h"
 #include "media/video/video_decode_accelerator.h"
 #include "third_party/angle/include/EGL/egl.h"
 #include "third_party/angle/include/EGL/eglext.h"
@@ -236,29 +238,29 @@ enum {
 // If duration and sample time are not known, provide 0.
 // |min_size| specifies the minimum size of the buffer (might be required by
 // the decoder for input). If no alignment is required, provide 0.
-static base::win::ScopedComPtr<IMFSample> CreateInputSample(
+static Microsoft::WRL::ComPtr<IMFSample> CreateInputSample(
     const uint8_t* stream,
     uint32_t size,
     uint32_t min_size,
     int alignment) {
   CHECK(stream);
   CHECK_GT(size, 0U);
-  base::win::ScopedComPtr<IMFSample> sample;
+  Microsoft::WRL::ComPtr<IMFSample> sample;
   sample = mf::CreateEmptySampleWithBuffer(std::max(min_size, size), alignment);
   RETURN_ON_FAILURE(sample.Get(), "Failed to create empty sample",
-                    base::win::ScopedComPtr<IMFSample>());
+                    Microsoft::WRL::ComPtr<IMFSample>());
 
-  base::win::ScopedComPtr<IMFMediaBuffer> buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   HRESULT hr = sample->GetBufferByIndex(0, buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from sample",
-                       base::win::ScopedComPtr<IMFSample>());
+                       Microsoft::WRL::ComPtr<IMFSample>());
 
   DWORD max_length = 0;
   DWORD current_length = 0;
   uint8_t* destination = NULL;
   hr = buffer->Lock(&destination, &max_length, &current_length);
   RETURN_ON_HR_FAILURE(hr, "Failed to lock buffer",
-                       base::win::ScopedComPtr<IMFSample>());
+                       Microsoft::WRL::ComPtr<IMFSample>());
 
   CHECK_EQ(current_length, 0u);
   CHECK_GE(max_length, size);
@@ -266,11 +268,11 @@ static base::win::ScopedComPtr<IMFSample> CreateInputSample(
 
   hr = buffer->SetCurrentLength(size);
   RETURN_ON_HR_FAILURE(hr, "Failed to set buffer length",
-                       base::win::ScopedComPtr<IMFSample>());
+                       Microsoft::WRL::ComPtr<IMFSample>());
 
   hr = buffer->Unlock();
   RETURN_ON_HR_FAILURE(hr, "Failed to unlock buffer",
-                       base::win::ScopedComPtr<IMFSample>());
+                       Microsoft::WRL::ComPtr<IMFSample>());
 
   return sample;
 }
@@ -294,7 +296,7 @@ HRESULT CreateCOMObjectFromDll(HMODULE dll,
   RETURN_ON_FAILURE(get_class_object, "Failed to get DllGetClassObject pointer",
                     E_FAIL);
 
-  base::win::ScopedComPtr<IClassFactory> factory;
+  Microsoft::WRL::ComPtr<IClassFactory> factory;
   HRESULT hr = get_class_object(clsid, IID_PPV_ARGS(&factory));
   RETURN_ON_HR_FAILURE(hr, "DllGetClassObject failed", hr);
 
@@ -302,10 +304,43 @@ HRESULT CreateCOMObjectFromDll(HMODULE dll,
   return hr;
 }
 
+ConfigChangeDetector::~ConfigChangeDetector() {}
+
+// Provides functionality to detect H.264 stream configuration changes.
+// TODO(ananta)
+// Move this to a common place so that all VDA's can use this.
+class H264ConfigChangeDetector : public ConfigChangeDetector {
+ public:
+  H264ConfigChangeDetector();
+  ~H264ConfigChangeDetector() override;
+
+  // Detects stream configuration changes.
+  // Returns false on failure.
+  bool DetectConfig(const uint8_t* stream, unsigned int size) override;
+  VideoColorSpace current_color_space(
+      const VideoColorSpace& container_color_space) const override;
+
+ private:
+  // These fields are used to track the SPS/PPS in the H.264 bitstream and
+  // are eventually compared against the SPS/PPS in the bitstream to detect
+  // a change.
+  int last_sps_id_;
+  std::vector<uint8_t> last_sps_;
+  int last_pps_id_;
+  std::vector<uint8_t> last_pps_;
+  // We want to indicate configuration changes only after we see IDR slices.
+  // This flag tracks that we potentially have a configuration change which
+  // we want to honor after we see an IDR slice.
+  bool pending_config_changed_;
+
+  std::unique_ptr<H264Parser> parser_;
+
+  DISALLOW_COPY_AND_ASSIGN(H264ConfigChangeDetector);
+};
+
 H264ConfigChangeDetector::H264ConfigChangeDetector()
     : last_sps_id_(0),
       last_pps_id_(0),
-      config_changed_(false),
       pending_config_changed_(false) {}
 
 H264ConfigChangeDetector::~H264ConfigChangeDetector() {}
@@ -409,19 +444,88 @@ bool H264ConfigChangeDetector::DetectConfig(const uint8_t* stream,
   return true;
 }
 
-VideoColorSpace H264ConfigChangeDetector::current_color_space() const {
+VideoColorSpace H264ConfigChangeDetector::current_color_space(
+    const VideoColorSpace& container_color_space) const {
   if (!parser_)
-    return VideoColorSpace();
+    return container_color_space;
   // TODO(hubbe): Is using last_sps_id_ correct here?
   const H264SPS* sps = parser_->GetSPS(last_sps_id_);
-  if (sps)
+  if (sps && sps->GetColorSpace().IsSpecified()) {
     return sps->GetColorSpace();
-  return VideoColorSpace();
+  }
+  return container_color_space;
 }
+
+// Doesn't actually detect config changes, only color spaces.
+class VP9ConfigChangeDetector : public ConfigChangeDetector {
+ public:
+  VP9ConfigChangeDetector() : ConfigChangeDetector(), parser_(false) {}
+  ~VP9ConfigChangeDetector() override {}
+
+  // Detects stream configuration changes.
+  // Returns false on failure.
+  bool DetectConfig(const uint8_t* stream, unsigned int size) override {
+    parser_.SetStream(stream, size);
+    Vp9FrameHeader fhdr;
+    while (parser_.ParseNextFrame(&fhdr) == Vp9Parser::kOk) {
+      // TODO(hubbe): move the conversion from Vp9FrameHeader to VideoColorSpace
+      // into a common, reusable location.
+      color_space_.range = fhdr.color_range ? gfx::ColorSpace::RangeID::FULL
+                                            : gfx::ColorSpace::RangeID::INVALID;
+      color_space_.primaries = VideoColorSpace::PrimaryID::INVALID;
+      color_space_.transfer = VideoColorSpace::TransferID::INVALID;
+      color_space_.matrix = VideoColorSpace::MatrixID::INVALID;
+      switch (fhdr.color_space) {
+        case Vp9ColorSpace::RESERVED:
+        case Vp9ColorSpace::UNKNOWN:
+          break;
+        case Vp9ColorSpace::BT_601:
+        case Vp9ColorSpace::SMPTE_170:
+          color_space_.primaries = VideoColorSpace::PrimaryID::SMPTE170M;
+          color_space_.transfer = VideoColorSpace::TransferID::SMPTE170M;
+          color_space_.matrix = VideoColorSpace::MatrixID::SMPTE170M;
+          break;
+        case Vp9ColorSpace::BT_709:
+          color_space_.primaries = VideoColorSpace::PrimaryID::BT709;
+          color_space_.transfer = VideoColorSpace::TransferID::BT709;
+          color_space_.matrix = VideoColorSpace::MatrixID::BT709;
+          break;
+        case Vp9ColorSpace::SMPTE_240:
+          color_space_.primaries = VideoColorSpace::PrimaryID::SMPTE240M;
+          color_space_.transfer = VideoColorSpace::TransferID::SMPTE240M;
+          color_space_.matrix = VideoColorSpace::MatrixID::SMPTE240M;
+          break;
+        case Vp9ColorSpace::BT_2020:
+          color_space_.primaries = VideoColorSpace::PrimaryID::BT2020;
+          color_space_.transfer = VideoColorSpace::TransferID::BT2020_10;
+          color_space_.matrix = VideoColorSpace::MatrixID::BT2020_NCL;
+          break;
+        case Vp9ColorSpace::SRGB:
+          color_space_.primaries = VideoColorSpace::PrimaryID::BT709;
+          color_space_.transfer = VideoColorSpace::TransferID::IEC61966_2_1;
+          color_space_.matrix = VideoColorSpace::MatrixID::BT709;
+          break;
+      }
+    }
+    return true;
+  }
+  VideoColorSpace current_color_space(
+      const VideoColorSpace& container_color_space) const override {
+    // For VP9, container color spaces override video stream color spaces.
+    if (container_color_space.IsSpecified()) {
+      return container_color_space;
+    }
+    return color_space_;
+  }
+
+ private:
+  VideoColorSpace color_space_;
+  Vp9Parser parser_;
+};
 
 DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
     int32_t buffer_id,
-    base::win::ScopedComPtr<IMFSample> sample,
+    Microsoft::WRL::ComPtr<IMFSample> sample,
     const gfx::ColorSpace& color_space)
     : input_buffer_id(buffer_id),
       picture_buffer_id(-1),
@@ -531,7 +635,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
 
   // Unfortunately, the profile is currently unreliable for
   // VP9 (crbug.com/592074) so also try to use fp16 if HDR is on.
-  if (config_.target_color_space.IsHDR()) {
+  if (config.target_color_space.IsHDR()) {
     use_fp16_ = true;
   }
 
@@ -603,7 +707,10 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
       "Send MFT_MESSAGE_NOTIFY_START_OF_STREAM notification failed",
       PLATFORM_FAILURE, false);
 
-  config_change_detector_.reset(new H264ConfigChangeDetector);
+  if (codec_ == kCodecH264)
+    config_change_detector_.reset(new H264ConfigChangeDetector);
+  if (codec_ == kCodecVP9)
+    config_change_detector_.reset(new VP9ConfigChangeDetector);
 
   SetState(kNormal);
 
@@ -627,7 +734,7 @@ bool DXVAVideoDecodeAccelerator::CreateD3DDevManager() {
   RETURN_ON_HR_FAILURE(hr, "D3D9 driver does not support H/W format conversion",
                        false);
 
-  base::win::ScopedComPtr<IDirect3DDevice9> angle_device =
+  Microsoft::WRL::ComPtr<IDirect3DDevice9> angle_device =
       gl::QueryD3D9DeviceObjectFromANGLE();
   if (angle_device.Get())
     using_angle_device_ = true;
@@ -894,7 +1001,7 @@ void DXVAVideoDecodeAccelerator::Decode(
     return;
   }
 
-  base::win::ScopedComPtr<IMFSample> sample;
+  Microsoft::WRL::ComPtr<IMFSample> sample;
   RETURN_AND_NOTIFY_ON_FAILURE(shm.Map(bitstream_buffer.size()),
                                "Failed in base::SharedMemory::Map",
                                PLATFORM_FAILURE, );
@@ -1283,7 +1390,7 @@ gfx::Size DXVAVideoDecodeAccelerator::GetMaxResolutionForGUIDs(
   // a DXVA decoder instance for that resolution and profile. If that succeeds
   // we assume that the driver supports H/W H.264 decoding for that resolution.
   HRESULT hr = E_FAIL;
-  base::win::ScopedComPtr<ID3D11Device> device;
+  Microsoft::WRL::ComPtr<ID3D11Device> device;
   {
     TRACE_EVENT0("gpu,startup",
                  "GetMaxResolutionForGUIDs. QueryDeviceObjectFromANGLE");
@@ -1298,7 +1405,7 @@ gfx::Size DXVAVideoDecodeAccelerator::GetMaxResolutionForGUIDs(
   if (IsLegacyGPU(device.Get()))
     return max_resolution;
 
-  base::win::ScopedComPtr<ID3D11VideoDevice> video_device;
+  Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device;
   hr = device.CopyTo(IID_PPV_ARGS(&video_device));
   if (FAILED(hr))
     return max_resolution;
@@ -1341,7 +1448,7 @@ gfx::Size DXVAVideoDecodeAccelerator::GetMaxResolutionForGUIDs(
       if (FAILED(hr))
         return max_resolution;
 
-      base::win::ScopedComPtr<ID3D11VideoDecoder> video_decoder;
+      Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder;
       hr = video_device->CreateVideoDecoder(&desc, &config,
                                             video_decoder.GetAddressOf());
       if (!video_decoder)
@@ -1369,12 +1476,12 @@ bool DXVAVideoDecodeAccelerator::IsLegacyGPU(ID3D11Device* device) {
 
   legacy_gpu_determined = true;
 
-  base::win::ScopedComPtr<IDXGIDevice> dxgi_device;
+  Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
   HRESULT hr = device->QueryInterface(IID_PPV_ARGS(&dxgi_device));
   if (FAILED(hr))
     return legacy_gpu;
 
-  base::win::ScopedComPtr<IDXGIAdapter> adapter;
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
   hr = dxgi_device->GetAdapter(adapter.GetAddressOf());
   if (FAILED(hr))
     return legacy_gpu;
@@ -1564,7 +1671,7 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
 }
 
 bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
-  base::win::ScopedComPtr<IMFAttributes> attributes;
+  Microsoft::WRL::ComPtr<IMFAttributes> attributes;
   HRESULT hr = decoder_->GetAttributes(attributes.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get decoder attributes", false);
 
@@ -1640,7 +1747,7 @@ bool DXVAVideoDecodeAccelerator::SetDecoderMediaTypes() {
 }
 
 bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
-  base::win::ScopedComPtr<IMFMediaType> media_type;
+  Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "MFCreateMediaType failed", false);
 
@@ -1686,7 +1793,7 @@ bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
   bool result = SetTransformOutputType(decoder_.Get(), subtype, 0, 0);
 
   if (GetPictureBufferMechanism() == PictureBufferMechanism::BIND) {
-    base::win::ScopedComPtr<IMFAttributes> out_attributes;
+    Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
     HRESULT hr =
         decoder_->GetOutputStreamAttributes(0, out_attributes.GetAddressOf());
     RETURN_ON_HR_FAILURE(hr, "Failed to get stream attributes", false);
@@ -1759,7 +1866,7 @@ void DXVAVideoDecodeAccelerator::DoDecode(const gfx::ColorSpace& color_space) {
   if (D3D11Device())
     g_last_device_removed_reason = D3D11Device()->GetDeviceRemovedReason();
 
-  base::win::ScopedComPtr<IMFSample> output_sample;
+  Microsoft::WRL::ComPtr<IMFSample> output_sample;
   int retries = 10;
   while (true) {
     output_sample.Reset();
@@ -1824,7 +1931,7 @@ void DXVAVideoDecodeAccelerator::DoDecode(const gfx::ColorSpace& color_space) {
 }
 
 bool DXVAVideoDecodeAccelerator::ProcessOutputSample(
-    base::win::ScopedComPtr<IMFSample> sample,
+    Microsoft::WRL::ComPtr<IMFSample> sample,
     const gfx::ColorSpace& color_space) {
   RETURN_ON_FAILURE(sample, "Decode succeeded with NULL output sample", false);
 
@@ -1920,17 +2027,17 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
         continue;
       }
 
-      base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
+      Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
       HRESULT hr = pending_sample->output_sample->GetBufferByIndex(
           0, output_buffer.GetAddressOf());
       RETURN_AND_NOTIFY_ON_HR_FAILURE(
           hr, "Failed to get buffer from output sample", PLATFORM_FAILURE, );
 
-      base::win::ScopedComPtr<IDirect3DSurface9> surface;
-      base::win::ScopedComPtr<ID3D11Texture2D> d3d11_texture;
+      Microsoft::WRL::ComPtr<IDirect3DSurface9> surface;
+      Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture;
 
       if (use_dx11_) {
-        base::win::ScopedComPtr<IMFDXGIBuffer> dxgi_buffer;
+        Microsoft::WRL::ComPtr<IMFDXGIBuffer> dxgi_buffer;
         hr = output_buffer.CopyTo(dxgi_buffer.GetAddressOf());
         RETURN_AND_NOTIFY_ON_HR_FAILURE(
             hr, "Failed to get DXGIBuffer from output sample",
@@ -2179,9 +2286,9 @@ void DXVAVideoDecodeAccelerator::FlushInternal() {
   // Attempt to retrieve an output frame from the decoder. If we have one,
   // return and proceed when the output frame is processed. If we don't have a
   // frame then we are done.
-  VideoColorSpace color_space = config_change_detector_->current_color_space();
-  if (color_space == VideoColorSpace())
-    color_space = config_.container_color_space;
+  VideoColorSpace color_space = config_.container_color_space;
+  if (config_change_detector_)
+    color_space = config_change_detector_->current_color_space(color_space);
   DoDecode(color_space.ToGfxColorSpace());
   if (OutputSamplesPresent())
     return;
@@ -2203,7 +2310,7 @@ void DXVAVideoDecodeAccelerator::FlushInternal() {
 }
 
 void DXVAVideoDecodeAccelerator::DecodeInternal(
-    const base::win::ScopedComPtr<IMFSample>& sample) {
+    const Microsoft::WRL::ComPtr<IMFSample>& sample) {
   TRACE_EVENT0("media", "DXVAVideoDecodeAccelerator::DecodeInternal");
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
 
@@ -2231,9 +2338,9 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
     return;
   }
 
-  VideoColorSpace color_space = config_change_detector_->current_color_space();
-  if (color_space == VideoColorSpace())
-    color_space = config_.container_color_space;
+  VideoColorSpace color_space = config_.container_color_space;
+  if (config_change_detector_)
+    color_space = config_change_detector_->current_color_space(color_space);
 
   if (!inputs_before_decode_) {
     TRACE_EVENT_ASYNC_BEGIN0("gpu", "DXVAVideoDecodeAccelerator.Decoding",
@@ -2531,7 +2638,7 @@ void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
 }
 
 void DXVAVideoDecodeAccelerator::BindPictureBufferToSample(
-    base::win::ScopedComPtr<IMFSample> sample,
+    Microsoft::WRL::ComPtr<IMFSample> sample,
     int picture_buffer_id,
     int input_buffer_id) {
   TRACE_EVENT0("media",
@@ -2587,7 +2694,7 @@ void DXVAVideoDecodeAccelerator::BindPictureBufferToSample(
 void DXVAVideoDecodeAccelerator::CopyTexture(
     ID3D11Texture2D* src_texture,
     ID3D11Texture2D* dest_texture,
-    base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
+    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
     uint64_t keyed_mutex_value,
     int picture_buffer_id,
     int input_buffer_id,
@@ -2618,7 +2725,7 @@ void DXVAVideoDecodeAccelerator::CopyTexture(
   }
 
   // The input to the video processor is the output sample.
-  base::win::ScopedComPtr<IMFSample> input_sample_for_conversion;
+  Microsoft::WRL::ComPtr<IMFSample> input_sample_for_conversion;
   {
     base::AutoLock lock(decoder_lock_);
     PendingSampleInfo& sample_info = pending_output_samples_.front();
@@ -2635,9 +2742,9 @@ void DXVAVideoDecodeAccelerator::CopyTexture(
 
 void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
     ID3D11Texture2D* dest_texture,
-    base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
+    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
     uint64_t keyed_mutex_value,
-    base::win::ScopedComPtr<IMFSample> input_sample,
+    Microsoft::WRL::ComPtr<IMFSample> input_sample,
     int picture_buffer_id,
     int input_buffer_id) {
   TRACE_EVENT0("media",
@@ -2657,12 +2764,12 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
         PLATFORM_FAILURE, );
   }
 
-  base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
   hr = input_sample->GetBufferByIndex(0, output_buffer.GetAddressOf());
   RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to get buffer from output sample",
                                   PLATFORM_FAILURE, );
 
-  base::win::ScopedComPtr<IMFDXGIBuffer> dxgi_buffer;
+  Microsoft::WRL::ComPtr<IMFDXGIBuffer> dxgi_buffer;
   hr = output_buffer.CopyTo(dxgi_buffer.GetAddressOf());
   RETURN_AND_NOTIFY_ON_HR_FAILURE(
       hr, "Failed to get DXGIBuffer from output sample", PLATFORM_FAILURE, );
@@ -2671,7 +2778,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
   RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to get resource index",
                                   PLATFORM_FAILURE, );
 
-  base::win::ScopedComPtr<ID3D11Texture2D> dx11_decoding_texture;
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> dx11_decoding_texture;
   hr = dxgi_buffer->GetResource(
       IID_PPV_ARGS(dx11_decoding_texture.GetAddressOf()));
   RETURN_AND_NOTIFY_ON_HR_FAILURE(
@@ -2680,7 +2787,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
   D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC output_view_desc = {
       D3D11_VPOV_DIMENSION_TEXTURE2D};
   output_view_desc.Texture2D.MipSlice = 0;
-  base::win::ScopedComPtr<ID3D11VideoProcessorOutputView> output_view;
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> output_view;
   hr = video_device_->CreateVideoProcessorOutputView(
       dest_texture, enumerator_.Get(), &output_view_desc,
       output_view.GetAddressOf());
@@ -2691,7 +2798,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
   input_view_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
   input_view_desc.Texture2D.ArraySlice = index;
   input_view_desc.Texture2D.MipSlice = 0;
-  base::win::ScopedComPtr<ID3D11VideoProcessorInputView> input_view;
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView> input_view;
   hr = video_device_->CreateVideoProcessorInputView(
       dx11_decoding_texture.Get(), enumerator_.Get(), &input_view_desc,
       input_view.GetAddressOf());
@@ -2834,7 +2941,7 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
   } else {
     dx11_converter_output_color_space_ = gfx::ColorSpace::CreateSRGB();
     if (use_color_info_ || use_fp16_) {
-      base::win::ScopedComPtr<ID3D11VideoContext1> video_context1;
+      Microsoft::WRL::ComPtr<ID3D11VideoContext1> video_context1;
       HRESULT hr = video_context_.CopyTo(video_context1.GetAddressOf());
       if (SUCCEEDED(hr)) {
         if (use_fp16_ && config_.target_color_space.IsHDR() &&
@@ -2894,13 +3001,13 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
 bool DXVAVideoDecodeAccelerator::GetVideoFrameDimensions(IMFSample* sample,
                                                          int* width,
                                                          int* height) {
-  base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
   HRESULT hr = sample->GetBufferByIndex(0, output_buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from output sample", false);
 
   if (use_dx11_) {
-    base::win::ScopedComPtr<IMFDXGIBuffer> dxgi_buffer;
-    base::win::ScopedComPtr<ID3D11Texture2D> d3d11_texture;
+    Microsoft::WRL::ComPtr<IMFDXGIBuffer> dxgi_buffer;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture;
     hr = output_buffer.CopyTo(dxgi_buffer.GetAddressOf());
     RETURN_ON_HR_FAILURE(hr, "Failed to get DXGIBuffer from output sample",
                          false);
@@ -2915,7 +3022,7 @@ bool DXVAVideoDecodeAccelerator::GetVideoFrameDimensions(IMFSample* sample,
     *height = d3d11_texture_desc.Height;
     output_array_size_ = d3d11_texture_desc.ArraySize;
   } else {
-    base::win::ScopedComPtr<IDirect3DSurface9> surface;
+    Microsoft::WRL::ComPtr<IDirect3DSurface9> surface;
     hr = MFGetService(output_buffer.Get(), MR_BUFFER_SERVICE,
                       IID_PPV_ARGS(surface.GetAddressOf()));
     RETURN_ON_HR_FAILURE(hr, "Failed to get D3D surface from output sample",
@@ -2934,7 +3041,7 @@ bool DXVAVideoDecodeAccelerator::SetTransformOutputType(IMFTransform* transform,
                                                         int width,
                                                         int height) {
   HRESULT hr = E_FAIL;
-  base::win::ScopedComPtr<IMFMediaType> media_type;
+  Microsoft::WRL::ComPtr<IMFMediaType> media_type;
 
   for (uint32_t i = 0; SUCCEEDED(
            transform->GetOutputAvailableType(0, i, media_type.GetAddressOf()));
@@ -2960,10 +3067,12 @@ bool DXVAVideoDecodeAccelerator::SetTransformOutputType(IMFTransform* transform,
 
 HRESULT DXVAVideoDecodeAccelerator::CheckConfigChanged(IMFSample* sample,
                                                        bool* config_changed) {
-  if (codec_ != kCodecH264)
-    return S_FALSE;
+  if (!config_change_detector_) {
+    *config_changed = false;
+    return S_OK;
+  }
 
-  base::win::ScopedComPtr<IMFMediaBuffer> buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   HRESULT hr = sample->GetBufferByIndex(0, buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from input sample", hr);
 

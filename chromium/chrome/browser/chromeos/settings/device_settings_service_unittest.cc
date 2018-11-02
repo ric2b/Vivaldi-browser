@@ -13,13 +13,11 @@
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
-#include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
-#include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -101,7 +99,7 @@ TEST_F(DeviceSettingsServiceTest, LoadNoKey) {
 }
 
 TEST_F(DeviceSettingsServiceTest, LoadNoPolicy) {
-  device_settings_test_helper_.set_policy_blob(std::string());
+  session_manager_client_.set_device_policy(std::string());
   ReloadDeviceSettings();
 
   EXPECT_EQ(DeviceSettingsService::STORE_NO_POLICY,
@@ -112,7 +110,7 @@ TEST_F(DeviceSettingsServiceTest, LoadNoPolicy) {
 
 TEST_F(DeviceSettingsServiceTest, LoadValidationError) {
   device_policy_.policy().set_policy_data_signature("bad");
-  device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+  session_manager_client_.set_device_policy(device_policy_.GetBlob());
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
   ReloadDeviceSettings();
 
@@ -128,7 +126,7 @@ TEST_F(DeviceSettingsServiceTest, LoadValidationErrorFutureTimestamp) {
   device_policy_.policy_data().set_timestamp(
       (timestamp - base::Time::UnixEpoch()).InMilliseconds());
   device_policy_.Build();
-  device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+  session_manager_client_.set_device_policy(device_policy_.GetBlob());
   owner_key_util_->SetPublicKeyFromPrivateKey(*device_policy_.GetSigningKey());
   ReloadDeviceSettings();
 
@@ -149,12 +147,12 @@ TEST_F(DeviceSettingsServiceTest, LoadSuccess) {
 
 TEST_F(DeviceSettingsServiceTest, StoreFailure) {
   owner_key_util_->Clear();
-  device_settings_test_helper_.set_policy_blob(std::string());
+  session_manager_client_.set_device_policy(std::string());
   ReloadDeviceSettings();
   EXPECT_EQ(DeviceSettingsService::STORE_KEY_UNAVAILABLE,
             device_settings_service_.status());
 
-  device_settings_test_helper_.set_store_result(false);
+  session_manager_client_.set_store_device_policy_success(false);
   device_settings_service_.Store(
       device_policy_.GetCopy(),
       base::Bind(&DeviceSettingsServiceTest::SetOperationCompleted,
@@ -167,7 +165,7 @@ TEST_F(DeviceSettingsServiceTest, StoreFailure) {
 
 TEST_F(DeviceSettingsServiceTest, StoreSuccess) {
   owner_key_util_->Clear();
-  device_settings_test_helper_.set_policy_blob(std::string());
+  session_manager_client_.set_device_policy(std::string());
   ReloadDeviceSettings();
   EXPECT_EQ(DeviceSettingsService::STORE_KEY_UNAVAILABLE,
             device_settings_service_.status());

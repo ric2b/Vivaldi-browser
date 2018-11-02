@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_scanner.h"
+#include "components/autofill/core/browser/field_filler.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_regex_constants.h"
@@ -313,10 +314,10 @@ bool CreditCardField::LikelyCardTypeSelectField(AutofillScanner* scanner) {
 
   // We set |ignore_whitespace| to true on these calls because this is actually
   // a pretty common mistake; e.g., "Master card" instead of "Mastercard".
-  bool isSelect = (AutofillField::FindShortestSubstringMatchInSelect(
+  bool isSelect = (FieldFiller::FindShortestSubstringMatchInSelect(
                        l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_VISA), true,
                        field) >= 0) ||
-                  (AutofillField::FindShortestSubstringMatchInSelect(
+                  (FieldFiller::FindShortestSubstringMatchInSelect(
                        l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_MASTERCARD),
                        true, field) >= 0);
   return isSelect;

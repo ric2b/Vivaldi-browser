@@ -15,6 +15,8 @@
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "url/gurl.h"
 
 namespace {
@@ -43,10 +45,16 @@ void RecordPinnedResult(const std::string& histogram_suffix,
       is_pinned);
 }
 
+// Returns a new Connector that can be used on a different thread.
+std::unique_ptr<service_manager::Connector> GetClonedConnector() {
+  return content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->Clone();
+}
+
 }  // namespace
 
-WelcomeWin10Handler::WelcomeWin10Handler(bool inline_style_variant)
-    : inline_style_variant_(inline_style_variant), weak_ptr_factory_(this) {
+WelcomeWin10Handler::WelcomeWin10Handler() : weak_ptr_factory_(this) {
   // The check is started as early as possible because waiting for the page to
   // be fully loaded is unnecessarily wasting time.
   StartIsPinnedToTaskbarCheck();
@@ -58,8 +66,7 @@ WelcomeWin10Handler::~WelcomeWin10Handler() {
   bool pin_instructions_shown =
       pinned_state_result_.has_value() && !pinned_state_result_.value();
 
-  std::string histogram_suffix;
-  histogram_suffix += inline_style_variant_ ? "Inline" : "Sectioned";
+  std::string histogram_suffix = "Inline";
   histogram_suffix += pin_instructions_shown ? "Combined" : "Default";
 
   // Closing the page. Record whether the instructions were useful.
@@ -72,7 +79,8 @@ WelcomeWin10Handler::~WelcomeWin10Handler() {
     base::Closure error_callback =
         base::Bind(&RecordPinnedResult, histogram_suffix, false, false);
     shell_integration::win::GetIsPinnedToTaskbarState(
-        error_callback, base::Bind(&RecordPinnedResult, histogram_suffix));
+        GetClonedConnector(), error_callback,
+        base::Bind(&RecordPinnedResult, histogram_suffix));
   }
 }
 
@@ -139,7 +147,7 @@ void WelcomeWin10Handler::StartIsPinnedToTaskbarCheck() {
                  weak_ptr_factory_.GetWeakPtr(), false, true);
 
   shell_integration::win::GetIsPinnedToTaskbarState(
-      error_callback,
+      GetClonedConnector(), error_callback,
       base::Bind(&WelcomeWin10Handler::OnIsPinnedToTaskbarResult,
                  weak_ptr_factory_.GetWeakPtr()));
 }

@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 
 #if defined(OS_LINUX)
+#include <asm-generic/ioctls.h>
 #include <linux/serial.h>
 
 // The definition of struct termios2 is copied from asm-generic/termbits.h
@@ -293,8 +294,7 @@ SerialIoHandlerPosix::SerialIoHandlerPosix(
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
     : SerialIoHandler(ui_thread_task_runner) {}
 
-SerialIoHandlerPosix::~SerialIoHandlerPosix() {
-}
+SerialIoHandlerPosix::~SerialIoHandlerPosix() = default;
 
 void SerialIoHandlerPosix::AttemptRead(bool within_read) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

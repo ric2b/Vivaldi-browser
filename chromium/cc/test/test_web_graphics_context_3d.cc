@@ -31,7 +31,7 @@ static base::LazyInstance<base::Lock>::Leaky
     g_shared_namespace_lock = LAZY_INSTANCE_INITIALIZER;
 
 TestWebGraphicsContext3D::Namespace*
-    TestWebGraphicsContext3D::shared_namespace_ = NULL;
+    TestWebGraphicsContext3D::shared_namespace_ = nullptr;
 
 TestWebGraphicsContext3D::Namespace::Namespace()
     : next_buffer_id(1),
@@ -43,7 +43,7 @@ TestWebGraphicsContext3D::Namespace::Namespace()
 TestWebGraphicsContext3D::Namespace::~Namespace() {
   g_shared_namespace_lock.Get().AssertAcquired();
   if (shared_namespace_ == this)
-    shared_namespace_ = NULL;
+    shared_namespace_ = nullptr;
 }
 
 // static
@@ -66,7 +66,7 @@ TestWebGraphicsContext3D::TestWebGraphicsContext3D()
       width_(0),
       height_(0),
       scale_factor_(-1.f),
-      test_support_(NULL),
+      test_support_(nullptr),
       last_update_type_(NO_UPDATE),
       next_insert_fence_sync_(1),
       unpack_alignment_(4),
@@ -78,7 +78,7 @@ TestWebGraphicsContext3D::TestWebGraphicsContext3D()
 
 TestWebGraphicsContext3D::~TestWebGraphicsContext3D() {
   base::AutoLock lock(g_shared_namespace_lock.Get());
-  namespace_ = NULL;
+  namespace_ = nullptr;
 }
 
 void TestWebGraphicsContext3D::CreateNamespace() {
@@ -403,6 +403,8 @@ void TestWebGraphicsContext3D::getIntegerv(
     *value = unpack_alignment_;
   else if (pname == GL_FRAMEBUFFER_BINDING)
     *value = current_framebuffer_;
+  else if (pname == GL_MAX_SAMPLES)
+    *value = test_capabilities_.max_samples;
 }
 
 void TestWebGraphicsContext3D::getProgramiv(GLuint program,
@@ -477,9 +479,7 @@ void TestWebGraphicsContext3D::genMailboxCHROMIUM(GLbyte* mailbox) {
 GLuint TestWebGraphicsContext3D::createAndConsumeTextureCHROMIUM(
     GLenum target,
     const GLbyte* mailbox) {
-  GLuint texture_id = createTexture();
-  consumeTextureCHROMIUM(target, mailbox);
-  return texture_id;
+  return createTexture();
 }
 
 void TestWebGraphicsContext3D::loseContextCHROMIUM(GLenum current,
@@ -586,7 +586,7 @@ void* TestWebGraphicsContext3D::mapBufferCHROMIUM(GLenum target,
   DCHECK_EQ(target, buffers[bound_buffer_]->target);
   if (times_map_buffer_chromium_succeeds_ >= 0) {
     if (!times_map_buffer_chromium_succeeds_) {
-      return NULL;
+      return nullptr;
     }
     --times_map_buffer_chromium_succeeds_;
   }
@@ -609,7 +609,9 @@ GLuint TestWebGraphicsContext3D::createImageCHROMIUM(ClientBuffer buffer,
                                                      GLsizei width,
                                                      GLsizei height,
                                                      GLenum internalformat) {
-  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA);
+  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA ||
+         (test_capabilities_.texture_format_bgra8888 &&
+          internalformat == GL_BGRA_EXT));
   GLuint image_id = NextImageId();
   base::AutoLock lock(namespace_->lock);
   std::unordered_set<unsigned>& images = namespace_->images;
@@ -632,7 +634,9 @@ GLuint TestWebGraphicsContext3D::createGpuMemoryBufferImageCHROMIUM(
     GLsizei height,
     GLenum internalformat,
     GLenum usage) {
-  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA);
+  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA ||
+         (test_capabilities_.texture_format_bgra8888 &&
+          internalformat == GL_BGRA_EXT));
   GLuint image_id = NextImageId();
   base::AutoLock lock(namespace_->lock);
   std::unordered_set<unsigned>& images = namespace_->images;
@@ -769,6 +773,16 @@ void TestWebGraphicsContext3D::RetireRenderbufferId(GLuint id) {
 
 void TestWebGraphicsContext3D::SetMaxSamples(int max_samples) {
   test_capabilities_.max_samples = max_samples;
+}
+
+size_t TestWebGraphicsContext3D::NumFramebuffers() const {
+  base::AutoLock lock_for_framebuffer_access(namespace_->lock);
+  return framebuffer_set_.size();
+}
+
+size_t TestWebGraphicsContext3D::NumRenderbuffers() const {
+  base::AutoLock lock_for_renderbuffer_access(namespace_->lock);
+  return namespace_->renderbuffer_set.size();
 }
 
 TestWebGraphicsContext3D::TextureTargets::TextureTargets() {

@@ -4,13 +4,16 @@
 
 #include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
 
+#include <memory>
 #include <utility>
 
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_view_host.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/guest_view/app_view/app_view_guest.h"
@@ -60,10 +63,10 @@ void ExtensionsGuestViewManagerDelegate::DispatchEvent(
   if (!owner)
     return;  // Could happen at tab shutdown.
 
-  EventRouter::DispatchEventToSender(owner, guest->browser_context(),
-                                     guest->owner_host(), histogram_value,
-                                     event_name, std::move(event_args),
-                                     EventRouter::USER_GESTURE_UNKNOWN, info);
+  EventRouter::DispatchEventToSender(
+      owner->GetRenderViewHost(), guest->browser_context(), guest->owner_host(),
+      histogram_value, event_name, std::move(event_args),
+      EventRouter::USER_GESTURE_UNKNOWN, info);
 }
 
 bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(
@@ -84,7 +87,7 @@ bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(
       owner_extension,
       process_map->GetMostLikelyContextType(
           owner_extension,
-          guest->owner_web_contents()->GetRenderProcessHost()->GetID()),
+          guest->owner_web_contents()->GetMainFrame()->GetProcess()->GetID()),
       guest->GetOwnerSiteURL());
 
   return availability.is_available();

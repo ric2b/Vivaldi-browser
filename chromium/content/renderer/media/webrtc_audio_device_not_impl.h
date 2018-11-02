@@ -26,21 +26,11 @@ class CONTENT_EXPORT WebRtcAudioDeviceNotImpl
  public:
   WebRtcAudioDeviceNotImpl();
 
-  // webrtc::Module implementation.
-  // TODO(henrika): it is possible to add functionality in these methods.
-  // Only adding very basic support for now without triggering any callback
-  // in the webrtc::AudioDeviceObserver interface.
-  int64_t TimeUntilNextProcess() override;
-  void Process() override;
-
   // Methods in webrtc::AudioDeviceModule which are not yet implemented.
   // The idea is that we can move methods from this class to the real
   // implementation in WebRtcAudioDeviceImpl when needed.
 
-  int32_t RegisterEventObserver(
-      webrtc::AudioDeviceObserver* event_callback) override;
   int32_t ActiveAudioLayer(AudioLayer* audio_layer) const override;
-  webrtc::AudioDeviceModule::ErrorCode LastError() const override;
   int16_t PlayoutDevices() override;
   int16_t RecordingDevices() override;
   int32_t PlayoutDeviceName(uint16_t index,
@@ -55,10 +45,6 @@ class CONTENT_EXPORT WebRtcAudioDeviceNotImpl
   int32_t SetRecordingDevice(WindowsDeviceType device) override;
   int32_t InitPlayout() override;
   int32_t InitRecording() override;
-  int32_t SetWaveOutVolume(uint16_t volume_left,
-                           uint16_t volume_right) override;
-  int32_t WaveOutVolume(uint16_t* volume_left,
-                        uint16_t* volume_right) const override;
   int32_t InitSpeaker() override;
   bool SpeakerIsInitialized() const override;
   int32_t InitMicrophone() override;
@@ -68,38 +54,17 @@ class CONTENT_EXPORT WebRtcAudioDeviceNotImpl
   int32_t SpeakerVolume(uint32_t* volume) const override;
   int32_t MaxSpeakerVolume(uint32_t* max_volume) const override;
   int32_t MinSpeakerVolume(uint32_t* min_volume) const override;
-  int32_t SpeakerVolumeStepSize(uint16_t* step_size) const override;
   int32_t MicrophoneVolumeIsAvailable(bool* available) override;
-  int32_t MicrophoneVolumeStepSize(uint16_t* step_size) const override;
   int32_t SpeakerMuteIsAvailable(bool* available) override;
   int32_t SetSpeakerMute(bool enable) override;
   int32_t SpeakerMute(bool* enabled) const override;
   int32_t MicrophoneMuteIsAvailable(bool* available) override;
   int32_t SetMicrophoneMute(bool enable) override;
   int32_t MicrophoneMute(bool* enabled) const override;
-  int32_t MicrophoneBoostIsAvailable(bool* available) override;
-  int32_t SetMicrophoneBoost(bool enable) override;
-  int32_t MicrophoneBoost(bool* enabled) const override;
   int32_t SetStereoPlayout(bool enable) override;
   int32_t StereoPlayout(bool* enabled) const override;
   int32_t SetStereoRecording(bool enable) override;
   int32_t StereoRecording(bool* enabled) const override;
-  int32_t SetRecordingChannel(const ChannelType channel) override;
-  int32_t RecordingChannel(ChannelType* channel) const override;
-  int32_t SetPlayoutBuffer(const BufferType type, uint16_t size_ms) override;
-  int32_t PlayoutBuffer(BufferType* type, uint16_t* size_ms) const override;
-  int32_t CPULoad(uint16_t* load) const override;
-  int32_t StartRawOutputFileRecording(
-      const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]) override;
-  int32_t StopRawOutputFileRecording() override;
-  int32_t StartRawInputFileRecording(
-      const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]) override;
-  int32_t StopRawInputFileRecording() override;
-  int32_t SetRecordingSampleRate(const uint32_t samples_per_sec) override;
-  int32_t SetPlayoutSampleRate(const uint32_t samples_per_sec) override;
-  int32_t ResetAudioDevice() override;
-  int32_t SetLoudspeakerStatus(bool enable) override;
-  int32_t GetLoudspeakerStatus(bool* enabled) const override;
   int32_t SetAGC(bool enable) override;
   bool AGC() const override;
   bool BuiltInAECIsAvailable() const override;
@@ -117,7 +82,6 @@ class CONTENT_EXPORT WebRtcAudioDeviceNotImpl
   ~WebRtcAudioDeviceNotImpl() override {}
 
  private:
-  base::TimeTicks last_process_time_;
   DISALLOW_COPY_AND_ASSIGN(WebRtcAudioDeviceNotImpl);
 };
 

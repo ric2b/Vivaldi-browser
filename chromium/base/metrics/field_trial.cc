@@ -50,7 +50,11 @@ const char kActivationMarker = '*';
 // This is safe from race conditions because MakeIterable is a release operation
 // and GetNextOfType is an acquire operation, so memory writes before
 // MakeIterable happen before memory reads after GetNextOfType.
+#if defined(OS_FUCHSIA)  // TODO(752368): Not yet supported on Fuchsia.
+const bool kUseSharedMemoryForFieldTrials = false;
+#else
 const bool kUseSharedMemoryForFieldTrials = true;
+#endif
 
 // Constants for the field trial allocator.
 const char kAllocatorName[] = "FieldTrialAllocator";
@@ -65,25 +69,19 @@ const char kAllocatorName[] = "FieldTrialAllocator";
 const size_t kFieldTrialAllocationSize = 128 << 10;  // 128 KiB
 
 // Writes out string1 and then string2 to pickle.
-bool WriteStringPair(Pickle* pickle,
+void WriteStringPair(Pickle* pickle,
                      const StringPiece& string1,
                      const StringPiece& string2) {
-  if (!pickle->WriteString(string1))
-    return false;
-  if (!pickle->WriteString(string2))
-    return false;
-  return true;
+  pickle->WriteString(string1);
+  pickle->WriteString(string2);
 }
 
 // Writes out the field trial's contents (via trial_state) to the pickle. The
 // format of the pickle looks like:
 // TrialName, GroupName, ParamKey1, ParamValue1, ParamKey2, ParamValue2, ...
 // If there are no parameters, then it just ends at GroupName.
-bool PickleFieldTrial(const FieldTrial::State& trial_state, Pickle* pickle) {
-  if (!WriteStringPair(pickle, *trial_state.trial_name,
-                       *trial_state.group_name)) {
-    return false;
-  }
+void PickleFieldTrial(const FieldTrial::State& trial_state, Pickle* pickle) {
+  WriteStringPair(pickle, *trial_state.trial_name, *trial_state.group_name);
 
   // Get field trial params.
   std::map<std::string, std::string> params;
@@ -91,11 +89,8 @@ bool PickleFieldTrial(const FieldTrial::State& trial_state, Pickle* pickle) {
       *trial_state.trial_name, *trial_state.group_name, &params);
 
   // Write params to pickle.
-  for (const auto& param : params) {
-    if (!WriteStringPair(pickle, param.first, param.second))
-      return false;
-  }
-  return true;
+  for (const auto& param : params)
+    WriteStringPair(pickle, param.first, param.second);
 }
 
 // Created a time value based on |year|, |month| and |day_of_month| parameters.
@@ -248,14 +243,13 @@ int FieldTrialList::kNoExpirationYear = 0;
 //------------------------------------------------------------------------------
 // FieldTrial methods and members.
 
-FieldTrial::EntropyProvider::~EntropyProvider() {
-}
+FieldTrial::EntropyProvider::~EntropyProvider() = default;
 
-FieldTrial::State::State() {}
+FieldTrial::State::State() = default;
 
 FieldTrial::State::State(const State& other) = default;
 
-FieldTrial::State::~State() {}
+FieldTrial::State::~State() = default;
 
 bool FieldTrial::FieldTrialEntry::GetTrialAndGroupName(
     StringPiece* trial_name,
@@ -418,7 +412,7 @@ FieldTrial::FieldTrial(const std::string& trial_name,
       << "Trial " << trial_name << " is missing a default group name.";
 }
 
-FieldTrial::~FieldTrial() {}
+FieldTrial::~FieldTrial() = default;
 
 void FieldTrial::SetTrialRegistered() {
   DCHECK_EQ(kNotFinalized, group_);
@@ -486,19 +480,18 @@ bool FieldTrial::GetStateWhileLocked(State* field_trial_state) {
 // FieldTrialList methods and members.
 
 // static
-FieldTrialList* FieldTrialList::global_ = NULL;
+FieldTrialList* FieldTrialList::global_ = nullptr;
 
 // static
 bool FieldTrialList::used_without_global_ = false;
 
-FieldTrialList::Observer::~Observer() {
-}
+FieldTrialList::Observer::~Observer() = default;
 
 FieldTrialList::FieldTrialList(
     std::unique_ptr<const FieldTrial::EntropyProvider> entropy_provider)
     : entropy_provider_(std::move(entropy_provider)),
       observer_list_(new ObserverListThreadSafe<FieldTrialList::Observer>(
-          ObserverListBase<FieldTrialList::Observer>::NOTIFY_EXISTING_ONLY)) {
+          ObserverListPolicy::EXISTING_ONLY)) {
   DCHECK(!global_);
   DCHECK(!used_without_global_);
   global_ = this;
@@ -517,7 +510,7 @@ FieldTrialList::~FieldTrialList() {
     registered_.erase(it->first);
   }
   DCHECK_EQ(this, global_);
-  global_ = NULL;
+  global_ = nullptr;
 }
 
 // static
@@ -532,7 +525,7 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrial(
     int* default_group_number) {
   return FactoryGetFieldTrialWithRandomizationSeed(
       trial_name, total_probability, default_group_name, year, month,
-      day_of_month, randomization_type, 0, default_group_number, NULL);
+      day_of_month, randomization_type, 0, default_group_number, nullptr);
 }
 
 // static
@@ -604,7 +597,7 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
 // static
 FieldTrial* FieldTrialList::Find(const std::string& trial_name) {
   if (!global_)
-    return NULL;
+    return nullptr;
   AutoLock auto_lock(global_->lock_);
   return global_->PreLockedFind(trial_name);
 }
@@ -627,7 +620,7 @@ std::string FieldTrialList::FindFullName(const std::string& trial_name) {
 
 // static
 bool FieldTrialList::TrialExists(const std::string& trial_name) {
-  return Find(trial_name) != NULL;
+  return Find(trial_name) != nullptr;
 }
 
 // static
@@ -900,14 +893,14 @@ FieldTrial* FieldTrialList::CreateFieldTrial(
   DCHECK_GE(name.size(), 0u);
   DCHECK_GE(group_name.size(), 0u);
   if (name.empty() || group_name.empty() || !global_)
-    return NULL;
+    return nullptr;
 
   FieldTrial* field_trial = FieldTrialList::Find(name);
   if (field_trial) {
     // In single process mode, or when we force them from the command line,
     // we may have already created the field trial.
     if (field_trial->group_name_internal() != group_name)
-      return NULL;
+      return nullptr;
     return field_trial;
   }
   const int kTotalProbability = 100;
@@ -1140,8 +1133,9 @@ std::string FieldTrialList::SerializeSharedMemoryHandleMetadata(
 
 #if defined(OS_WIN) || defined(OS_FUCHSIA)
 
-template <class RawHandle>
-SharedMemoryHandle DeserializeImpl(const std::string& switch_value) {
+// static
+SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
+    const std::string& switch_value) {
   std::vector<base::StringPiece> tokens = base::SplitStringPiece(
       switch_value, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
 
@@ -1151,8 +1145,10 @@ SharedMemoryHandle DeserializeImpl(const std::string& switch_value) {
   int field_trial_handle = 0;
   if (!base::StringToInt(tokens[0], &field_trial_handle))
     return SharedMemoryHandle();
-  RawHandle handle = reinterpret_cast<RawHandle>(field_trial_handle);
-#if defined(OS_WIN)
+#if defined(OS_FUCHSIA)
+  zx_handle_t handle = static_cast<zx_handle_t>(field_trial_handle);
+#elif defined(OS_WIN)
+  HANDLE handle = reinterpret_cast<HANDLE>(field_trial_handle);
   if (base::IsCurrentProcessElevated()) {
     // base::LaunchElevatedProcess doesn't have a way to duplicate the handle,
     // but this process can since by definition it's not sandboxed.
@@ -1162,7 +1158,7 @@ SharedMemoryHandle DeserializeImpl(const std::string& switch_value) {
                     FALSE, DUPLICATE_SAME_ACCESS);
     CloseHandle(parent_handle);
   }
-#endif
+#endif  // defined(OS_WIN)
 
   base::UnguessableToken guid;
   if (!DeserializeGUIDFromStringPieces(tokens[1], tokens[2], &guid))
@@ -1173,16 +1169,6 @@ SharedMemoryHandle DeserializeImpl(const std::string& switch_value) {
     return SharedMemoryHandle();
 
   return SharedMemoryHandle(handle, static_cast<size_t>(size), guid);
-}
-
-// static
-SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
-    const std::string& switch_value) {
-#if defined(OS_WIN)
-  return DeserializeImpl<HANDLE>(switch_value);
-#else
-  return DeserializeImpl<mx_handle_t>(switch_value);
-#endif
 }
 
 #elif defined(OS_POSIX) && !defined(OS_NACL)
@@ -1358,10 +1344,7 @@ void FieldTrialList::AddToAllocatorWhileLocked(
     return;
 
   Pickle pickle;
-  if (!PickleFieldTrial(trial_state, &pickle)) {
-    NOTREACHED();
-    return;
-  }
+  PickleFieldTrial(trial_state, &pickle);
 
   size_t total_size = sizeof(FieldTrial::FieldTrialEntry) + pickle.size();
   FieldTrial::FieldTrialRef ref = allocator->Allocate(
@@ -1416,7 +1399,7 @@ const FieldTrial::EntropyProvider*
     FieldTrialList::GetEntropyProviderForOneTimeRandomization() {
   if (!global_) {
     used_without_global_ = true;
-    return NULL;
+    return nullptr;
   }
 
   return global_->entropy_provider_.get();
@@ -1425,7 +1408,7 @@ const FieldTrial::EntropyProvider*
 FieldTrial* FieldTrialList::PreLockedFind(const std::string& name) {
   RegistrationMap::iterator it = registered_.find(name);
   if (registered_.end() == it)
-    return NULL;
+    return nullptr;
   return it->second;
 }
 

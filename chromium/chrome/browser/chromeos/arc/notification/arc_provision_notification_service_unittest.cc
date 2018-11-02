@@ -10,22 +10,21 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -50,11 +49,12 @@ class MockArcProvisionNotificationServiceDelegate
 class ArcProvisionNotificationServiceTest : public testing::Test {
  protected:
   ArcProvisionNotificationServiceTest()
-      : user_manager_enabler_(new chromeos::FakeChromeUserManager()) {}
+      : user_manager_enabler_(
+            std::make_unique<chromeos::FakeChromeUserManager>()) {}
 
   void SetUp() override {
     chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        base::MakeUnique<chromeos::FakeSessionManagerClient>());
+        std::make_unique<chromeos::FakeSessionManagerClient>());
     chromeos::DBusThreadManager::Initialize();
 
     SetArcAvailableCommandLineForTesting(
@@ -68,11 +68,11 @@ class ArcProvisionNotificationServiceTest : public testing::Test {
     profile_builder.SetPath(temp_dir_.GetPath().AppendASCII("TestArcProfile"));
     profile_ = profile_builder.Build();
 
-    arc_service_manager_ = base::MakeUnique<ArcServiceManager>();
-    arc_session_manager_ = base::MakeUnique<ArcSessionManager>(
-        base::MakeUnique<ArcSessionRunner>(base::Bind(FakeArcSession::Create)));
+    arc_service_manager_ = std::make_unique<ArcServiceManager>();
+    arc_session_manager_ = std::make_unique<ArcSessionManager>(
+        std::make_unique<ArcSessionRunner>(base::Bind(FakeArcSession::Create)));
     std::unique_ptr<MockArcProvisionNotificationServiceDelegate>
-        mock_arc_provision_notification_service_delegate = base::MakeUnique<
+        mock_arc_provision_notification_service_delegate = std::make_unique<
             StrictMock<MockArcProvisionNotificationServiceDelegate>>();
     arc_provision_notification_service_delegate_ =
         mock_arc_provision_notification_service_delegate.get();
@@ -120,7 +120,7 @@ class ArcProvisionNotificationServiceTest : public testing::Test {
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
-  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<ArcServiceManager> arc_service_manager_;
@@ -141,11 +141,11 @@ TEST_F(ArcProvisionNotificationServiceTest,
        ManagedProvisionNotification_Basic) {
   // Set up managed ARC and assign managed values to all opt-in prefs.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->Initialize();
@@ -182,11 +182,11 @@ TEST_F(ArcProvisionNotificationServiceTest,
 
   // Set up managed ARC and assign managed values to all opt-in prefs.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
   // Set the pref that indicates that signing into ARC has already been
   // performed.
   profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
@@ -207,11 +207,11 @@ TEST_F(ArcProvisionNotificationServiceTest,
        ManagedProvisionNotification_Failure) {
   // Set up managed ARC and assign managed values to all opt-in prefs.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->Initialize();
@@ -244,11 +244,11 @@ TEST_F(ArcProvisionNotificationServiceTest,
        ManagedProvisionNotification_FailureNotStopping) {
   // Set up managed ARC and assign managed values to all opt-in prefs.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->Initialize();
@@ -287,7 +287,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
 
   // Set ARC to be managed.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcEnabled, base::MakeUnique<base::Value>(true));
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
 
   arc_session_manager()->SetProfile(profile());
   arc_session_manager()->Initialize();

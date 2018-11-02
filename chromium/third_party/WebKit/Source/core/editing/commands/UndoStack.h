@@ -31,6 +31,7 @@
 #ifndef UndoStack_h
 #define UndoStack_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/Forward.h"
@@ -44,7 +45,6 @@ class UndoStep;
 // |LocalFrame|, |UndoStack| is also 1:1 to |LocalFrame|.
 class UndoStack final : public GarbageCollected<UndoStack> {
   using UndoStepStack = HeapDeque<Member<UndoStep>>;
-  WTF_MAKE_NONCOPYABLE(UndoStack);
 
  public:
   static UndoStack* Create();
@@ -73,7 +73,7 @@ class UndoStack final : public GarbageCollected<UndoStack> {
 
   UndoStepRange UndoSteps() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   UndoStack();
@@ -81,6 +81,8 @@ class UndoStack final : public GarbageCollected<UndoStack> {
   bool in_redo_;
   UndoStepStack undo_stack_;
   UndoStepStack redo_stack_;
+
+  DISALLOW_COPY_AND_ASSIGN(UndoStack);
 };
 
 }  // namespace blink

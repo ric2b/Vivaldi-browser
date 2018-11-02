@@ -4,6 +4,8 @@
 
 #include "chromeos/dbus/biod/fake_biod_client.h"
 
+#include <vector>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
@@ -13,7 +15,7 @@
 #include "dbus/object_path.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using namespace biod;
+using biod::SCAN_RESULT_SUCCESS;
 
 namespace chromeos {
 
@@ -32,7 +34,7 @@ class FakeBiodClientTest : public testing::Test {
   FakeBiodClientTest()
       : task_runner_(new base::TestSimpleTaskRunner),
         task_runner_handle_(task_runner_) {}
-  ~FakeBiodClientTest() override {}
+  ~FakeBiodClientTest() override = default;
 
   // Returns the stored records for |user_id|. Verified to work in
   // TestGetRecordsForUser.
@@ -268,9 +270,7 @@ TEST_F(FakeBiodClientTest, TestDestroyingRecords) {
   EnrollNTestFingerprints(kTestUserId, kTestLabel, GenerateTestFingerprint(2),
                           2);
   EXPECT_EQ(2u, GetRecordsForUser(kTestUserId).size());
-  DBusMethodCallStatus returned_status;
-  fake_biod_client_.DestroyAllRecords(
-      base::Bind(&test_utils::CopyDBusMethodCallStatus, &returned_status));
+  fake_biod_client_.DestroyAllRecords(EmptyVoidDBusMethodCallback());
   EXPECT_EQ(0u, GetRecordsForUser(kTestUserId).size());
 }
 
@@ -305,10 +305,8 @@ TEST_F(FakeBiodClientTest, TestGetAndSetRecordLabels) {
   // Verify that by setting a new label, getting the label will return the value
   // of the new label.
   const std::string kNewLabelTwo = "Finger 2 New";
-  DBusMethodCallStatus returned_status;
-  fake_biod_client_.SetRecordLabel(
-      enrollment_paths[1], kNewLabelTwo,
-      base::Bind(&test_utils::CopyDBusMethodCallStatus, &returned_status));
+  fake_biod_client_.SetRecordLabel(enrollment_paths[1], kNewLabelTwo,
+                                   EmptyVoidDBusMethodCallback());
   fake_biod_client_.RequestRecordLabel(
       enrollment_paths[1], base::Bind(&test_utils::CopyString, &returned_str));
   task_runner_->RunUntilIdle();

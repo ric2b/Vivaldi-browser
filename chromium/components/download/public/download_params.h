@@ -37,26 +37,27 @@ struct SchedulingParams {
   };
 
   enum class BatteryRequirements {
-    // The download can occur under all battery scenarios.  Note that the
-    // DownloadService may still not run this download under extremely low
-    // battery conditions.
+    // The download can occur under all battery scenarios.
     BATTERY_INSENSITIVE = 0,
 
-    // The download can only occur when charging or in optimal battery
-    // conditions.
+    // The download can only occur when device is charging or above optimal
+    // battery percentage.
     BATTERY_SENSITIVE = 1,
 
+    // Download can only occur when the device is charging.
+    BATTERY_CHARGING = 2,
+
     // Last value of the enum.
-    COUNT = 2,
+    COUNT = 3,
   };
 
   enum class Priority {
     // The lowest priority.  Requires that the device is idle or Chrome is
-    // running.
+    // running. Gets paused or postponed during on-going navigation.
     LOW = 0,
 
     // The normal priority.  Requires that the device is idle or Chrome is
-    // running.
+    // running. Gets paused or postponed during on-going navigation.
     NORMAL = 1,
 
     // The highest background priority.  Does not require the device to be idle.
@@ -94,7 +95,7 @@ struct SchedulingParams {
 struct RequestParams {
  public:
   RequestParams();
-  RequestParams(const RequestParams& other) = default;
+  RequestParams(const RequestParams& other);
   ~RequestParams() = default;
 
   GURL url;
@@ -102,6 +103,10 @@ struct RequestParams {
   // The request method ("GET" is the default value).
   std::string method;
   net::HttpRequestHeaders request_headers;
+
+  // If the request will fetch HTTP error response body and treat them as
+  // a successful download.
+  bool fetch_error_body;
 };
 
 // The parameters that describe a download request made to the DownloadService.

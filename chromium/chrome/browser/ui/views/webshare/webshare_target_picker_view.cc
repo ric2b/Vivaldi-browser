@@ -55,9 +55,10 @@ int TargetPickerTableModel::RowCount() {
 base::string16 TargetPickerTableModel::GetText(int row, int /*column_id*/) {
   // Show "title (origin)", to disambiguate titles that are the same, and as a
   // security measure.
-  return base::UTF8ToUTF16(targets_[row].name() + " (" +
-                           targets_[row].manifest_url().GetOrigin().spec() +
-                           ")");
+  return l10n_util::GetStringFUTF16(
+      IDS_WEBSHARE_TARGET_DIALOG_ITEM_TEXT,
+      base::UTF8ToUTF16(targets_[row].name()),
+      base::UTF8ToUTF16(targets_[row].manifest_url().GetOrigin().spec()));
 }
 
 void TargetPickerTableModel::SetObserver(ui::TableModelObserver* observer) {}
@@ -85,7 +86,7 @@ WebShareTargetPickerView::WebShareTargetPickerView(
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   views::BoxLayout* layout = new views::BoxLayout(
       views::BoxLayout::kVertical,
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS),
+      provider->GetDialogInsetsForContentType(views::TEXT, views::CONTROL),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL));
   SetLayoutManager(layout);
 
@@ -165,7 +166,7 @@ bool WebShareTargetPickerView::IsDialogButtonEnabled(
 }
 
 void WebShareTargetPickerView::OnSelectionChanged() {
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void WebShareTargetPickerView::OnDoubleClick() {

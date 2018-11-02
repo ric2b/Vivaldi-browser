@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/output/output_surface_frame.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -23,7 +23,7 @@ class VulkanBrowserCompositorOutputSurface
     : public BrowserCompositorOutputSurface {
  public:
   VulkanBrowserCompositorOutputSurface(
-      scoped_refptr<cc::VulkanContextProvider> context,
+      scoped_refptr<viz::VulkanContextProvider> context,
       const UpdateVSyncParametersCallback& update_vsync_parameters_callback);
 
   ~VulkanBrowserCompositorOutputSurface() override;
@@ -31,8 +31,8 @@ class VulkanBrowserCompositorOutputSurface
   bool Initialize(gfx::AcceleratedWidget widget);
   void Destroy();
 
-  // cc::OutputSurface implementation.
-  void BindToClient(cc::OutputSurfaceClient* client) override;
+  // viz::OutputSurface implementation.
+  void BindToClient(viz::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
@@ -43,15 +43,17 @@ class VulkanBrowserCompositorOutputSurface
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override;
+               bool has_alpha,
+               bool use_stencil) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override;
+  void SetDrawRectangle(const gfx::Rect& rect) override;
 
  private:
   void SwapBuffersAck();
 
   std::unique_ptr<gpu::VulkanSurface> surface_;
-  cc::OutputSurfaceClient* client_ = nullptr;
+  viz::OutputSurfaceClient* client_ = nullptr;
   base::WeakPtrFactory<VulkanBrowserCompositorOutputSurface> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VulkanBrowserCompositorOutputSurface);

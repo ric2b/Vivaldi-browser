@@ -5,13 +5,13 @@
 #ifndef WebGLImageConversion_h
 #define WebGLImageConversion_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/skia/ImagePixelLocker.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Optional.h"
-#include "platform/wtf/RefPtr.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/khronos/GLES3/gl3.h"
@@ -249,7 +249,7 @@ class PLATFORM_EXPORT WebGLImageConversion final {
                                  unsigned height,
                                  GLenum format,
                                  GLenum type,
-                                 unsigned unpack_alignment,
+                                 const PixelStoreParams& unpack_params,
                                  bool flip_y,
                                  bool premultiply_alpha,
                                  const void* pixels,

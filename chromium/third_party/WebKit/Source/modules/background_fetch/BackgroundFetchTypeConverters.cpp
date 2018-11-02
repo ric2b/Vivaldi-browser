@@ -18,15 +18,10 @@ TypeConverter<blink::BackgroundFetchRegistration*,
   if (!mojoRegistration)
     return nullptr;
 
-  blink::HeapVector<blink::IconDefinition> icons;
-  icons.ReserveInitialCapacity(mojoRegistration->icons.size());
-
-  for (const auto& iconPtr : mojoRegistration->icons)
-    icons.push_back(iconPtr.To<blink::IconDefinition>());
-
   return new blink::BackgroundFetchRegistration(
-      mojoRegistration->id, std::move(icons),
-      mojoRegistration->total_download_size, mojoRegistration->title);
+      mojoRegistration->developer_id, mojoRegistration->unique_id,
+      mojoRegistration->upload_total, mojoRegistration->uploaded,
+      mojoRegistration->download_total, mojoRegistration->downloaded);
 }
 
 blink::mojom::blink::BackgroundFetchOptionsPtr TypeConverter<
@@ -43,7 +38,7 @@ blink::mojom::blink::BackgroundFetchOptionsPtr TypeConverter<
     mojoIcons.push_back(blink::mojom::blink::IconDefinition::From(icon));
 
   mojoOptions->icons = std::move(mojoIcons);
-  mojoOptions->total_download_size = options.totalDownloadSize();
+  mojoOptions->download_total = options.downloadTotal();
   mojoOptions->title = options.title();
 
   return mojoOptions;

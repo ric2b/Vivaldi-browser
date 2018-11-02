@@ -74,7 +74,7 @@ function FileTasks(
    * @const
    */
   this.taskHistory_ = taskHistory;
-};
+}
 
 FileTasks.prototype = {
   /**
@@ -100,6 +100,22 @@ FileTasks.VIDEO_PLAYER_ID = 'jcgeabjmjgoblfofpppfkcoakmfobdko';
 FileTasks.ZIP_UNPACKER_TASK_ID = 'oedeeodfidgoollimchfdnbmhcpnklnd|app|zip';
 
 /**
+ * The task id of unzip action of Zip Archiver app.
+ * @const
+ * @type {string}
+ */
+FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID =
+    'dmboannefpncccogfdikhmhpmdnddgoe|app|open';
+
+/**
+ * The task id of zip action of Zip Archiver app.
+ * @const
+ * @type {string}
+ */
+FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID =
+    'dmboannefpncccogfdikhmhpmdnddgoe|app|pack';
+
+/**
  * Available tasks in task menu button.
  * @enum {string}
  */
@@ -118,6 +134,13 @@ FileTasks.TaskPickerType = {
   OpenWith: 'OpenWith',
   MoreActions: 'MoreActions'
 };
+
+/**
+ * A promise to obtain '{enable,disable}-zip-archiver-unpacker' switch.
+ * @type {Promise<boolean>}
+ * @private
+ */
+FileTasks.zipArchiverUnpackerEnabledPromise_ = null;
 
 /**
  * Creates an instance of FileTasks for the specified list of entries with mime
@@ -147,12 +170,45 @@ FileTasks.create = function(
         Promise.reject();
         return;
       }
-      fulfill(FileTasks.annotateTasks_(assert(taskItems), entries));
+
+      // Filters out Pack with Zip Archiver task because it will be accessible
+      // via 'Zip selection' context menu button
+      taskItems = taskItems.filter(function(item) {
+        return item.taskId !== FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID;
+      });
+
+      // Filters out Unpack with Zip Archiver task if switch is not enabled.
+      // TODO(klemenko): Remove this when http://crbug/359837 is finished.
+      if (!FileTasks.zipArchiverUnpackerEnabledPromise_) {
+        FileTasks.zipArchiverUnpackerEnabledPromise_ =
+            new Promise(function(resolve, reject) {
+              // Disabled by default.
+              chrome.commandLinePrivate.hasSwitch(
+                  'enable-zip-archiver-unpacker', function(enabled) {
+                    resolve(enabled);
+                  });
+            });
+      }
+
+      FileTasks.zipArchiverUnpackerEnabledPromise_.then(function(
+          zipArchiverUnpackerEnabled) {
+        if (zipArchiverUnpackerEnabled) {
+          taskItems = taskItems.filter(function(item) {
+            return item.taskId !== FileTasks.ZIP_UNPACKER_TASK_ID;
+          });
+        } else {
+          taskItems = taskItems.filter(function(item) {
+            return item.taskId !== FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID;
+          });
+        }
+
+        fulfill(FileTasks.annotateTasks_(assert(taskItems), entries));
+      });
     });
   });
 
   var defaultTaskPromise = tasksPromise.then(function(tasks) {
-    return FileTasks.getDefaultTask(tasks);
+    return FileTasks.getDefaultTask(tasks, taskHistory);
   });
 
   return Promise.all([tasksPromise, defaultTaskPromise]).then(function(args) {
@@ -276,6 +332,20 @@ FileTasks.recordViewingFileTypeUMA_ = function(entries) {
 };
 
 /**
+ * Records trial of opening file grouped by root types.
+ *
+ * @param {?VolumeManagerCommon.RootType} rootType The type of the root where
+ *     entries are being opened.
+ * @private
+ */
+FileTasks.recordViewingRootTypeUMA_ = function(rootType) {
+  if (rootType !== null) {
+    metrics.recordEnum(
+        'ViewingRootType', rootType, VolumeManagerCommon.RootTypesForUMA);
+  }
+};
+
+/**
  * Returns true if the taskId is for an internal task.
  *
  * @param {string} taskId Task identifier.
@@ -374,13 +444,13 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
 
     // Add verb to title.
     if (task.verb) {
-      var verb_button_label = '';
+      var verbButtonLabel = '';
       switch (task.verb) {
         case chrome.fileManagerPrivate.Verb.ADD_TO:
-          verb_button_label = 'ADD_TO_VERB_BUTTON_LABEL';
+          verbButtonLabel = 'ADD_TO_VERB_BUTTON_LABEL';
           break;
         case chrome.fileManagerPrivate.Verb.PACK_WITH:
-          verb_button_label = 'PACK_WITH_VERB_BUTTON_LABEL';
+          verbButtonLabel = 'PACK_WITH_VERB_BUTTON_LABEL';
           break;
         case chrome.fileManagerPrivate.Verb.SHARE_WITH:
           // Even when the task has SHARE_WITH verb, we don't prefix the title
@@ -389,17 +459,17 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
           // appropriate verb.
           if (!(taskParts[1] == 'arc' &&
                 (taskParts[2] == 'send' || taskParts[2] == 'send_multiple'))) {
-            verb_button_label = 'SHARE_WITH_VERB_BUTTON_LABEL';
+            verbButtonLabel = 'SHARE_WITH_VERB_BUTTON_LABEL';
           }
           break;
         case chrome.fileManagerPrivate.Verb.OPEN_WITH:
-          verb_button_label = 'OPEN_WITH_VERB_BUTTON_LABEL';
+          verbButtonLabel = 'OPEN_WITH_VERB_BUTTON_LABEL';
           break;
         default:
           console.error('Invalid task verb: ' + task.verb + '.');
       }
-      if (verb_button_label)
-        task.title = loadTimeData.getStringF(verb_button_label, task.title);
+      if (verbButtonLabel)
+        task.title = loadTimeData.getStringF(verbButtonLabel, task.title);
     }
 
     result.push(task);
@@ -417,6 +487,8 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
  */
 FileTasks.prototype.executeDefault = function(opt_callback) {
   FileTasks.recordViewingFileTypeUMA_(this.entries_);
+  FileTasks.recordViewingRootTypeUMA_(
+      this.directoryModel_.getCurrentRootType());
   this.executeDefaultInternal_(opt_callback);
 };
 
@@ -433,6 +505,20 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
   if (this.defaultTask_ !== null) {
     this.executeInternal_(this.defaultTask_.taskId);
     callback(true, this.entries_);
+    return;
+  }
+
+  var nonGenericTasks = this.tasks_.filter(t => !t.isGenericFileHandler);
+  // If there is only one task that is not a generic file handler, it should be
+  // executed as a default task. If there are multiple tasks that are not
+  // generic file handlers, and none of them are considered as default, we show
+  // a task picker to ask the user to choose one.
+  if (nonGenericTasks.length >= 2) {
+    this.showTaskPicker(
+        this.ui_.defaultTaskPicker, str('OPEN_WITH_BUTTON_LABEL'),
+        '', function(task) {
+          this.execute(task.taskId);
+        }.bind(this), FileTasks.TaskPickerType.OpenWith);
     return;
   }
 
@@ -537,6 +623,8 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
  */
 FileTasks.prototype.execute = function(taskId) {
   FileTasks.recordViewingFileTypeUMA_(this.entries_);
+  FileTasks.recordViewingRootTypeUMA_(
+      this.directoryModel_.getCurrentRootType());
   this.executeInternal_(taskId);
 };
 
@@ -696,17 +784,21 @@ FileTasks.prototype.mountArchivesInternal_ = function() {
             tracker.stop();
             return;
           }
-          volumeInfo.resolveDisplayRoot(function(displayRoot) {
-            if (tracker.hasChanged) {
-              tracker.stop();
-              return;
-            }
-            this.directoryModel_.changeDirectoryEntry(displayRoot);
-          }, function() {
-            console.warn('Failed to resolve the display root after mounting.');
-            tracker.stop();
-          });
-        }, function(url, error) {
+          volumeInfo.resolveDisplayRoot(
+              function(displayRoot) {
+                if (tracker.hasChanged) {
+                  tracker.stop();
+                  return;
+                }
+                this.directoryModel_.changeDirectoryEntry(displayRoot);
+              }.bind(this),
+              function() {
+                console.warn(
+                    'Failed to resolve the display root after mounting.');
+                tracker.stop();
+              });
+        }.bind(this),
+        function(url, error) {
           tracker.stop();
           var path = util.extractFilePath(url);
           var namePos = path.lastIndexOf('/');
@@ -930,28 +1022,29 @@ FileTasks.prototype.showTaskPicker = function(
 
 /**
  * Gets the default task from tasks. In case there is no such task (i.e. all
- * tasks are generic file handlers), then return opt_taskToUseIfNoDefault or
- * null.
+ * tasks are generic file handlers), then return null.
  *
  * @param {!Array<!Object>} tasks The list of tasks from where to choose the
  *     default task.
- * @param {!Object=} opt_taskToUseIfNoDefault The task to return in case there
- *     is no default task available in tasks.
- * @return {Object} opt_taskToUseIfNoDefault or null in case
- *     opt_taskToUseIfNoDefault is undefined.
+ * @param {!TaskHistory} taskHistory
+ * @return {Object} the default task, or null if no default task found.
  */
-FileTasks.getDefaultTask = function(tasks, opt_taskToUseIfNoDefault) {
+FileTasks.getDefaultTask = function(tasks, taskHistory) {
+  // 1. Default app set for MIME or file extension by user, or built-in app.
   for (var i = 0; i < tasks.length; i++) {
     if (tasks[i].isDefault) {
       return tasks[i];
     }
   }
-  // If we haven't picked a default task yet, then just pick the first one
-  // which is not generic file handler.
-  for (var i = 0; i < tasks.length; i++) {
-    if (!tasks[i].isGenericFileHandler) {
-      return tasks[i];
-    }
+  var nonGenericTasks = tasks.filter(t => !t.isGenericFileHandler);
+  // 2. Most recently executed non-generic task.
+  var latest = nonGenericTasks[0];
+  if (latest && taskHistory.getLastExecutedTime(latest.taskId)) {
+    return latest;
   }
-  return opt_taskToUseIfNoDefault || null;
+  // 3. Sole non-generic handler.
+  if (nonGenericTasks.length == 1) {
+    return nonGenericTasks[0];
+  }
+  return null;
 };

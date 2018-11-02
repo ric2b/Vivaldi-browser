@@ -10,9 +10,6 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/window_util.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
@@ -24,6 +21,7 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/exo/shell_surface.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -151,7 +149,7 @@ class ArcAppWindowLauncherController::AppWindowInfo {
 
 ArcAppWindowLauncherController::ArcAppWindowLauncherController(
     ChromeLauncherController* owner)
-    : AppWindowLauncherController(owner) {
+    : AppWindowLauncherController(owner), tablet_observer_(this) {
   if (arc::IsArcAllowedForProfile(owner->profile())) {
     observed_profile_ = owner->profile();
     StartObserving(observed_profile_);
@@ -163,9 +161,7 @@ ArcAppWindowLauncherController::ArcAppWindowLauncherController(
 ArcAppWindowLauncherController::~ArcAppWindowLauncherController() {
   if (observed_profile_)
     StopObserving(observed_profile_);
-  if (observing_shell_ && ash::Shell::Get()->tablet_mode_controller()) {
-    ash::Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
-  }
+  tablet_observer_.RemoveAll();
   if (arc::ArcSessionManager::Get())
     arc::ArcSessionManager::Get()->RemoveObserver(this);
 }
@@ -224,7 +220,7 @@ void ArcAppWindowLauncherController::OnWindowVisibilityChanged(
   // Attach window to multi-user manager now to let it manage visibility state
   // of the ARC window correctly.
   if (GetWindowTaskId(window) > 0) {
-    chrome::MultiUserWindowManager::GetInstance()->SetWindowOwner(
+    MultiUserWindowManager::GetInstance()->SetWindowOwner(
         window,
         user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId());
   }
@@ -281,18 +277,17 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   if (task_id <= 0)
     return;
 
-  // We need to add the observer after exo started observing shell
-  // because we want to update the orientation after exo send
-  // the layout switch information.
-  if (!observing_shell_) {
-    observing_shell_ = true;
-    ash::Shell::Get()->tablet_mode_controller()->AddObserver(this);
-  }
+  TabletModeClient* tablet_mode_client = TabletModeClient::Get();
+
+  if (tablet_mode_client && !tablet_observer_.IsObserving(tablet_mode_client))
+    tablet_observer_.Add(tablet_mode_client);
 
   // Check if we have controller for this task.
   if (GetAppWindowForTask(task_id))
     return;
 
+  // TODO(msw): Set shelf item types earlier to avoid ShelfWindowWatcher races.
+  // (maybe use Widget::InitParams::mus_properties in cash too crbug.com/750334)
   window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_APP);
   window->SetProperty(aura::client::kAppType,
                       static_cast<int>(ash::AppType::ARC_APP));
@@ -314,11 +309,8 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   DCHECK(info->app_window()->controller());
   const ash::ShelfID shelf_id(info->app_window()->shelf_id());
   window->SetProperty(ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
-  if (ash::Shell::Get()
-          ->tablet_mode_controller()
-          ->IsTabletModeWindowManagerEnabled()) {
+  if (tablet_mode_client && tablet_mode_client->tablet_mode_enabled())
     SetOrientationLockForAppWindow(info->app_window());
-  }
 }
 
 void ArcAppWindowLauncherController::OnAppReadyChanged(
@@ -430,9 +422,8 @@ void ArcAppWindowLauncherController::OnTaskOrientationLockRequested(
         ScreenOrientationController::LockCompletionBehavior::None);
   }
 
-  if (ash::Shell::Get()
-          ->tablet_mode_controller()
-          ->IsTabletModeWindowManagerEnabled()) {
+  TabletModeClient* tablet_mode_client = TabletModeClient::Get();
+  if (tablet_mode_client && tablet_mode_client->tablet_mode_enabled()) {
     ArcAppWindow* app_window = info->app_window();
     if (app_window)
       SetOrientationLockForAppWindow(app_window);
@@ -461,14 +452,10 @@ void ArcAppWindowLauncherController::OnTaskSetActive(int32_t task_id) {
   ArcAppWindow* current_app_window = GetAppWindowForTask(task_id);
   if (current_app_window) {
     if (current_app_window->widget() && current_app_window->IsActive()) {
-      owner()->SetItemStatus(current_app_window->shelf_id(),
-                             ash::STATUS_ACTIVE);
       current_app_window->controller()->SetActiveWindow(
           current_app_window->GetNativeWindow());
-    } else {
-      owner()->SetItemStatus(current_app_window->shelf_id(),
-                             ash::STATUS_RUNNING);
     }
+    owner()->SetItemStatus(current_app_window->shelf_id(), ash::STATUS_RUNNING);
     // TODO(reveman): Figure out how to support fullscreen in interleaved
     // window mode.
     // if (new_active_app_it->second->widget()) {
@@ -492,14 +479,32 @@ ArcAppWindowLauncherController::ControllerForWindow(aura::Window* window) {
 
   for (auto& it : task_id_to_app_window_info_) {
     ArcAppWindow* app_window = it.second->app_window();
-    if (app_window &&
-        app_window->widget() ==
-            views::Widget::GetWidgetForNativeWindow(window)) {
+    if (app_window && app_window->widget() ==
+                          views::Widget::GetWidgetForNativeWindow(window)) {
       return it.second->app_window()->controller();
     }
   }
 
   return nullptr;
+}
+
+void ArcAppWindowLauncherController::OnItemDelegateDiscarded(
+    ash::ShelfItemDelegate* delegate) {
+  for (auto& it : task_id_to_app_window_info_) {
+    ArcAppWindow* app_window = it.second->app_window();
+    if (!app_window || app_window->controller() != delegate)
+      continue;
+
+    VLOG(1) << "Item controller was released externally for the app "
+            << delegate->shelf_id().app_id << ".";
+
+    auto it_controller =
+        app_shelf_group_to_controller_map_.find(app_window->app_shelf_id());
+    if (it_controller != app_shelf_group_to_controller_map_.end())
+      app_shelf_group_to_controller_map_.erase(it_controller);
+
+    UnregisterApp(it.second.get());
+  }
 }
 
 void ArcAppWindowLauncherController::OnArcOptInManagementCheckStarted() {
@@ -521,19 +526,19 @@ void ArcAppWindowLauncherController::OnWindowActivated(
   OnTaskSetActive(active_task_id_);
 }
 
-void ArcAppWindowLauncherController::OnTabletModeStarted() {
-  for (auto& it : task_id_to_app_window_info_) {
-    ArcAppWindow* app_window = it.second->app_window();
-    if (app_window)
-      SetOrientationLockForAppWindow(app_window);
+void ArcAppWindowLauncherController::OnTabletModeToggled(bool enabled) {
+  if (enabled) {
+    for (auto& it : task_id_to_app_window_info_) {
+      ArcAppWindow* app_window = it.second->app_window();
+      if (app_window)
+        SetOrientationLockForAppWindow(app_window);
+    }
+  } else {
+    ash::ScreenOrientationController* orientation_controller =
+        ash::Shell::Get()->screen_orientation_controller();
+    // Don't unlock one by one because it'll switch to next rotation.
+    orientation_controller->UnlockAll();
   }
-}
-
-void ArcAppWindowLauncherController::OnTabletModeEnded() {
-  ash::ScreenOrientationController* orientation_controller =
-      ash::Shell::Get()->screen_orientation_controller();
-  // Don't unlock one by one because it'll switch to next rotation.
-  orientation_controller->UnlockAll();
 }
 
 void ArcAppWindowLauncherController::StartObserving(Profile* profile) {

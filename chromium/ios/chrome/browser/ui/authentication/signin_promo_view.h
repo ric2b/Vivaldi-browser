@@ -60,6 +60,9 @@ extern NSString* const kSigninPromoCloseButtonId;
 // cropped first). Must only be called in the "Warm State" mode.
 - (void)setProfileImage:(UIImage*)image;
 
+// Resets the view to be reused.
+- (void)prepareForReuse;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_AUTHENTICATION_SIGN_PROMO_VIEW_H_

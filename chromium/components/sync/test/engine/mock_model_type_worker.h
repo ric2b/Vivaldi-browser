@@ -34,7 +34,6 @@ class MockModelTypeWorker : public CommitQueue {
   ~MockModelTypeWorker() override;
 
   // Implementation of ModelTypeWorker.
-  void EnqueueForCommit(const CommitRequestDataList& list) override;
   void NudgeForCommit() override;
 
   // Getters to inspect the requests sent to this object.
@@ -96,6 +95,11 @@ class MockModelTypeWorker : public CommitQueue {
   // Pops one pending commit from the front of the queue and send a commit
   // response to the processor for it.
   void AckOnePendingCommit();
+  void AckOnePendingCommit(int64_t version_offset);
+
+  // Pops one pending commit, but returns empty commit response list to indicate
+  // that commit failed for requested entities.
+  void FailOneCommit();
 
   // Set the encryption key to |ekn| and inform the processor with an update
   // containing the data in |update|, which defaults to an empty list.
@@ -113,7 +117,8 @@ class MockModelTypeWorker : public CommitQueue {
   // Returns a commit response that indicates a successful commit of the
   // given |request_data|. Updates server state accordingly.
   CommitResponseData SuccessfulCommitResponse(
-      const CommitRequestData& request_data);
+      const CommitRequestData& request_data,
+      int64_t version_offset);
 
   // Retrieve or set the server version.
   int64_t GetServerVersion(const std::string& tag_hash);

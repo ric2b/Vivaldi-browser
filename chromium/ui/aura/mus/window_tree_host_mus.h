@@ -29,7 +29,7 @@ class WindowTreeHostMusDelegate;
 struct DisplayInitParams;
 struct WindowTreeHostMusInitParams;
 
-class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
+class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform {
  public:
   explicit WindowTreeHostMus(WindowTreeHostMusInitParams init_params);
 
@@ -70,6 +70,9 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   // windows which we might not own.
   void StackAtTop();
 
+  // Requests that the window manager perform |action| on the window.
+  void PerformWmAction(const std::string& action);
+
   // Tells the window manager to take control of moving the window. Returns
   // true if the move wasn't canceled.
   void PerformWindowMove(ui::mojom::MoveLoopSource mus_source,
@@ -91,6 +94,10 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   void set_display_id(int64_t id) { display_id_ = id; }
   int64_t display_id() const { return display_id_; }
   display::Display GetDisplay() const;
+
+  // Forces WindowTreeHost to re-setup the compositor to use the provided
+  // |widget|.
+  void OverrideAcceleratedWidget(gfx::AcceleratedWidget widget);
 
   // aura::WindowTreeHostPlatform:
   void HideImpl() override;

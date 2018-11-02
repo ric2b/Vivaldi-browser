@@ -22,7 +22,17 @@
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 
+const char MediaEngagementService::kHistogramScoreAtStartupName[] =
+    "Media.Engagement.ScoreAtStartup";
+
+const char MediaEngagementService::kHistogramURLsDeletedScoreReductionName[] =
+    "Media.Engagement.URLsDeletedScoreReduction";
+
 namespace {
+
+// The current schema version of the MEI data. If this value is higher
+// than the stored value, all MEI data will be wiped.
+static const int kSchemaVersion = 3;
 
 // Returns the combined list of origins which have media engagement data.
 std::set<GURL> GetEngagementOriginsFromContentSettings(Profile* profile) {
@@ -61,14 +71,16 @@ bool MediaEngagementTimeFilterAdapter(
   return playback_time >= delete_begin && playback_time <= delete_end;
 }
 
-// The current schema version of the MEI data. If this value is higher
-// than the stored value, all MEI data will be wiped.
-static const int kSchemaVersion = 2;
+void RecordURLsDeletedScoreReduction(double previous_score,
+                                     double current_score) {
+  int difference = round((previous_score * 100) - (current_score * 100));
+  DCHECK_GE(difference, 0);
+  UMA_HISTOGRAM_PERCENTAGE(
+      MediaEngagementService::kHistogramURLsDeletedScoreReductionName,
+      difference);
+}
 
 }  // namespace
-
-const char MediaEngagementService::kHistogramScoreAtStartupName[] =
-    "Media.Engagement.ScoreAtStartup";
 
 // static
 bool MediaEngagementService::IsEnabled() {
@@ -90,7 +102,8 @@ void MediaEngagementService::CreateWebContentsObserver(
   if (!service)
     return;
   service->contents_observers_.insert(
-      new MediaEngagementContentsObserver(web_contents, service));
+      {web_contents,
+       new MediaEngagementContentsObserver(web_contents, service)});
 }
 
 // static
@@ -189,6 +202,8 @@ void MediaEngagementService::OnURLsDeleted(
 
     // If this results in zero visits then clear the score.
     if (score.visits() <= 0) {
+      // Score is now set to 0 so the reduction is equal to the original score.
+      RecordURLsDeletedScoreReduction(original_score, 0);
       Clear(kv.first);
       continue;
     }
@@ -197,6 +212,8 @@ void MediaEngagementService::OnURLsDeleted(
     // MEI score consistent.
     score.SetMediaPlaybacks(original_score * score.visits());
     score.Commit();
+
+    RecordURLsDeletedScoreReduction(original_score, score.actual_score());
   }
 }
 
@@ -268,6 +285,16 @@ MediaEngagementScore MediaEngagementService::CreateEngagementScore(
   return MediaEngagementScore(
       clock_.get(), url,
       HostContentSettingsMapFactory::GetForProfile(profile_));
+}
+
+MediaEngagementContentsObserver* MediaEngagementService::GetContentsObserverFor(
+    content::WebContents* web_contents) const {
+  const auto& it = contents_observers_.find(web_contents);
+  return it == contents_observers_.end() ? nullptr : it->second;
+}
+
+Profile* MediaEngagementService::profile() const {
+  return profile_;
 }
 
 bool MediaEngagementService::ShouldRecordEngagement(const GURL& url) const {

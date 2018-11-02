@@ -2202,6 +2202,22 @@ TEST_F(WidgetTest, CloseWidgetWhileAnimating) {
   EXPECT_EQ(widget_observer.bounds(), bounds);
 }
 
+// Test Widget::CloseAllSecondaryWidgets works as expected across platforms.
+// ChromeOS doesn't implement or need CloseAllSecondaryWidgets() since
+// everything is under a single root window.
+#if !defined(OS_CHROMEOS)
+TEST_F(WidgetTest, CloseAllSecondaryWidgets) {
+  Widget* widget1 = CreateNativeDesktopWidget();
+  Widget* widget2 = CreateNativeDesktopWidget();
+  TestWidgetObserver observer1(widget1);
+  TestWidgetObserver observer2(widget2);
+  widget1->Show();  // Just show the first one.
+  Widget::CloseAllSecondaryWidgets();
+  EXPECT_TRUE(observer1.widget_closed());
+  EXPECT_TRUE(observer2.widget_closed());
+}
+#endif
+
 // Test that the NativeWidget is still valid during OnNativeWidgetDestroying(),
 // and properties that depend on it are valid, when closed via CloseNow().
 TEST_F(WidgetTest, ValidDuringOnNativeWidgetDestroyingFromCloseNow) {
@@ -3597,9 +3613,11 @@ class ScaleFactorView : public View {
   ScaleFactorView() = default;
 
   // Overridden from ui::LayerDelegate:
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {
-    last_scale_factor_ = device_scale_factor;
-    View::OnDeviceScaleFactorChanged(device_scale_factor);
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {
+    last_scale_factor_ = new_device_scale_factor;
+    View::OnDeviceScaleFactorChanged(old_device_scale_factor,
+                                     new_device_scale_factor);
   }
 
   float last_scale_factor() const { return last_scale_factor_; };
@@ -3628,7 +3646,7 @@ TEST_F(WidgetTest, OnDeviceScaleFactorChanged) {
 
   // For views that are not layer-backed, adding the view won't notify the view
   // about the initial scale factor. Fake it.
-  view->OnDeviceScaleFactorChanged(scale_factor);
+  view->OnDeviceScaleFactorChanged(0.f, scale_factor);
   EXPECT_EQ(scale_factor, view->last_scale_factor());
 
   // Changes should be propagated.

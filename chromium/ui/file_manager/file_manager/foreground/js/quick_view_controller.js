@@ -161,7 +161,7 @@ QuickViewController.prototype.init_ = function(quickView) {
   quickView.onOpenInNewButtonTap = this.onOpenInNewButtonTap_.bind(this);
 
   var toolTip = this.quickView_.$$('files-tooltip');
-  var elems = this.quickView_.$.buttons.querySelectorAll('[has-tooltip]');
+  var elems = this.quickView_.$.toolbar.querySelectorAll('[has-tooltip]');
   toolTip.addTargets(elems);
 };
 
@@ -193,7 +193,7 @@ QuickViewController.prototype.onOpenInNewButtonTap_ = function(event) {
 };
 
 /**
- * Handles key event on listContainer if it's relevent to quick view.
+ * Handles key event on listContainer if it's relevant to quick view.
  *
  * @param {!Event} event A keyboard event.
  * @private
@@ -203,6 +203,7 @@ QuickViewController.prototype.onKeyDownToOpen_ = function(event) {
     return;
   if (event.key === ' ') {
     event.preventDefault();
+    event.stopImmediatePropagation();
     this.display_(QuickViewUma.WayToOpen.SPACE_KEY);
   }
 };
@@ -329,6 +330,7 @@ QuickViewController.prototype.onMetadataLoaded_ = function(
   return this.getQuickViewParameters_(entry, items, tasks)
       .then(function(params) {
         this.quickView_.type = params.type || '';
+        this.quickView_.subtype = params.subtype || '';
         this.quickView_.filePath = params.filePath || '';
         this.quickView_.hasTask = params.hasTask || false;
         this.quickView_.contentUrl = params.contentUrl || '';
@@ -342,6 +344,7 @@ QuickViewController.prototype.onMetadataLoaded_ = function(
 /**
  * @typedef {{
  *   type: string,
+ *   subtype: string,
  *   filePath: string,
  *   contentUrl: (string|undefined),
  *   videoPoster: (string|undefined),
@@ -369,6 +372,7 @@ QuickViewController.prototype.getQuickViewParameters_ = function(
   /** @type {!QuickViewParams} */
   var params = {
     type: type,
+    subtype: typeInfo.subtype,
     filePath: entry.name,
     hasTask: tasks.length > 0,
   };
@@ -441,6 +445,13 @@ QuickViewController.prototype.getQuickViewParameters_ = function(
                   }
                   return params;
                 });
+          case 'document':
+            if (typeInfo.subtype === 'HTML') {
+              params.contentUrl = URL.createObjectURL(file);
+              return params;
+            } else {
+              break;
+            }
         }
         var browsable = tasks.some(function(task) {
           return ['view-in-browser', 'view-pdf'].includes(

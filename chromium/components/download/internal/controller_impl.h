@@ -16,12 +16,14 @@
 #include "components/download/internal/controller.h"
 #include "components/download/internal/download_driver.h"
 #include "components/download/internal/entry.h"
+#include "components/download/internal/log_source.h"
 #include "components/download/internal/model.h"
 #include "components/download/internal/scheduler/device_status_listener.h"
 #include "components/download/internal/startup_status.h"
 #include "components/download/internal/stats.h"
 #include "components/download/public/client.h"
 #include "components/download/public/download_params.h"
+#include "components/download/public/navigation_monitor.h"
 #include "components/download/public/task_scheduler.h"
 
 namespace download {
@@ -29,7 +31,9 @@ namespace download {
 class ClientSet;
 class DownloadDriver;
 class FileMonitor;
+class LogSink;
 class Model;
+class NavigationMonitor;
 class Scheduler;
 
 struct Configuration;
@@ -41,14 +45,19 @@ struct SchedulingParams;
 class ControllerImpl : public Controller,
                        public DownloadDriver::Client,
                        public Model::Client,
-                       public DeviceStatusListener::Observer {
+                       public DeviceStatusListener::Observer,
+                       public NavigationMonitor::Observer,
+                       public LogSource {
  public:
-  // |config| is externally owned and must be guaranteed to outlive this class.
+  // |config| and |log_sink| are externally owned and must be guaranteed to
+  // outlive this class.
   ControllerImpl(Configuration* config,
+                 LogSink* log_sink,
                  std::unique_ptr<ClientSet> clients,
                  std::unique_ptr<DownloadDriver> driver,
                  std::unique_ptr<Model> model,
                  std::unique_ptr<DeviceStatusListener> device_status_listener,
+                 NavigationMonitor* navigation_monitor,
                  std::unique_ptr<Scheduler> scheduler,
                  std::unique_ptr<TaskScheduler> task_scheduler,
                  std::unique_ptr<FileMonitor> file_monitor,
@@ -78,6 +87,7 @@ class ControllerImpl : public Controller,
                         FailureType failure_type) override;
   void OnDownloadSucceeded(const DriverEntry& download) override;
   void OnDownloadUpdated(const DriverEntry& download) override;
+  bool IsTrackingDownload(const std::string& guid) const override;
 
   // Model::Client implementation.
   void OnModelReady(bool success) override;
@@ -92,6 +102,13 @@ class ControllerImpl : public Controller,
                      DownloadClient client,
                      const std::string& guid) override;
 
+  // LogSource implementation.
+  Controller::State GetControllerState() override;
+  const StartupStatus& GetStartupStatus() override;
+  LogSource::EntryDetailsList GetServiceDownloads() override;
+  base::Optional<EntryDetails> GetServiceDownload(
+      const std::string& guid) override;
+
   // Called when the file monitor and download file directory are initialized.
   void OnFileMonitorReady(bool success);
 
@@ -100,6 +117,9 @@ class ControllerImpl : public Controller,
 
   // DeviceStatusListener::Observer implementation.
   void OnDeviceStatusChanged(const DeviceStatus& device_status) override;
+
+  // NavigationMonitor::Observer implementation.
+  void OnNavigationEvent() override;
 
   // Checks if initialization is complete and successful.  If so, completes the
   // internal state initialization.
@@ -169,6 +189,10 @@ class ControllerImpl : public Controller,
   // reached maximum.
   void ActivateMoreDownloads();
 
+  // Whether the download should be paused or postponed in case of an active
+  // navigation is in progress.
+  bool ShouldBlockDownloadOnNavigation(Entry* entry);
+
   void RemoveCleanupEligibleDownloads();
 
   void HandleExternalDownload(const std::string& guid, bool active);
@@ -201,6 +225,7 @@ class ControllerImpl : public Controller,
   void KillTimedOutDownloads();
 
   Configuration* config_;
+  LogSink* log_sink_;
 
   // The directory in which the downloaded files are stored.
   const base::FilePath download_file_dir_;
@@ -210,6 +235,7 @@ class ControllerImpl : public Controller,
   std::unique_ptr<DownloadDriver> driver_;
   std::unique_ptr<Model> model_;
   std::unique_ptr<DeviceStatusListener> device_status_listener_;
+  NavigationMonitor* navigation_monitor_;
   std::unique_ptr<Scheduler> scheduler_;
   std::unique_ptr<TaskScheduler> task_scheduler_;
   std::unique_ptr<FileMonitor> file_monitor_;

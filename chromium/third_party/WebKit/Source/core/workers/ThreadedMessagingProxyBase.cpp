@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/loader/DocumentLoader.h"
@@ -14,9 +13,10 @@
 #include "core/loader/WorkerFetchContext.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerInspectorProxy.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/runtime_enabled_features.h"
+#include "platform/wtf/Time.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/web/WebFrameClient.h"
 
@@ -50,8 +50,6 @@ ThreadedMessagingProxyBase::ThreadedMessagingProxyBase(
     DCHECK(web_worker_fetch_context);
     web_worker_fetch_context->SetApplicationCacheHostID(
         document->Fetcher()->Context().ApplicationCacheHostID());
-    web_worker_fetch_context->SetDataSaverEnabled(
-        document->GetFrame()->GetSettings()->GetDataSaverEnabled());
     web_worker_fetch_context->SetIsOnSubframe(
         document->GetFrame() != document->GetFrame()->Tree().Top());
     ProvideWorkerFetchContextToWorker(worker_clients,
@@ -68,7 +66,7 @@ int ThreadedMessagingProxyBase::ProxyCount() {
   return g_live_messaging_proxy_count;
 }
 
-DEFINE_TRACE(ThreadedMessagingProxyBase) {
+void ThreadedMessagingProxyBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(execution_context_);
   visitor->Trace(worker_clients_);
   visitor->Trace(worker_inspector_proxy_);
@@ -77,14 +75,19 @@ DEFINE_TRACE(ThreadedMessagingProxyBase) {
 void ThreadedMessagingProxyBase::InitializeWorkerThread(
     std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params,
     const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data,
-    const KURL& script_url) {
+    const KURL& script_url,
+    const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(IsParentContextThread());
 
   Document* document = ToDocument(GetExecutionContext());
 
   worker_thread_ = CreateWorkerThread();
-  worker_thread_->Start(std::move(global_scope_creation_params),
-                        thread_startup_data, GetParentFrameTaskRunners());
+  worker_thread_->Start(
+      std::move(global_scope_creation_params), thread_startup_data,
+      std::make_unique<GlobalScopeInspectorCreationParams>(
+          GetWorkerInspectorProxy()->ShouldPauseOnWorkerStart(document),
+          stack_id),
+      GetParentFrameTaskRunners());
   WorkerThreadCreated();
   GetWorkerInspectorProxy()->WorkerThreadCreated(document, GetWorkerThread(),
                                                  script_url);

@@ -108,9 +108,7 @@ int FileSystemContext::GetPermissionPolicy(FileSystemType type) {
              FILE_PERMISSION_USE_FILE_PERMISSION;
 
     case kFileSystemTypeDeviceMedia:
-    case kFileSystemTypeItunes:
     case kFileSystemTypeNativeMedia:
-    case kFileSystemTypePicasa:
       return FILE_PERMISSION_USE_FILE_PERMISSION;
 
     // Following types are only accessed via IsolatedFileSystem, and
@@ -243,8 +241,8 @@ FileSystemContext::CreateQuotaReservationOnFileTaskRunner(
 void FileSystemContext::Shutdown() {
   if (!io_task_runner_->RunsTasksInCurrentSequence()) {
     io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&FileSystemContext::Shutdown,
-                              make_scoped_refptr(this)));
+        FROM_HERE,
+        base::Bind(&FileSystemContext::Shutdown, base::WrapRefCounted(this)));
     return;
   }
   operation_runner_->Shutdown();
@@ -504,8 +502,7 @@ void FileSystemContext::OpenPluginPrivateFileSystem(
       origin_url, type, filesystem_id, plugin_id, mode, std::move(callback));
 }
 
-FileSystemContext::~FileSystemContext() {
-}
+FileSystemContext::~FileSystemContext() = default;
 
 void FileSystemContext::DeleteOnCorrectSequence() const {
   if (!io_task_runner_->RunsTasksInCurrentSequence() &&

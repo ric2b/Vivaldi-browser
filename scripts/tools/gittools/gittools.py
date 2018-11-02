@@ -415,6 +415,9 @@ class Git:
     elif url.startswith('https://skia.googlesource.com/'):
       url = url.replace('https://skia.googlesource.com',
                          self.base_url+"/skia",1)
+    elif url.startswith('https://webrtc.googlesource.com/'):
+      url = url.replace('https://webrtc.googlesource.com',
+                         self.base_url+"/webrtc",1)
     elif re.search(r'^https://\w+.googlesource.com/', url):
       url = re.sub('^https://\w+.googlesource.com',
                          self.base_url+"/googlesource",1)

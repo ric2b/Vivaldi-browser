@@ -17,16 +17,13 @@
 
 class Browser;
 class Tab;
-class TabStrip;
+class TabStripImpl;
 
 namespace gfx {
 class Point;
 }
 
-// Class to enable quick tab switching via Ctrl-left-drag.
-// Notes: this is experimental, and disables ctrl-clicks. It should not be
-// enabled other than through flags until we implement 3 finger drag as the
-// mechanism to invoke it. At that point we will add test coverage.
+// Class to enable quick tab switching via horizontal 3 finger swipes.
 class TabScrubber : public ui::EventHandler,
                     public content::NotificationObserver,
                     public TabStripObserver {
@@ -38,7 +35,7 @@ class TabScrubber : public ui::EventHandler,
 
   // Returns the virtual position of a swipe starting in the tab at |index|,
   // base on the |direction|.
-  static gfx::Point GetStartPoint(TabStrip* tab_strip,
+  static gfx::Point GetStartPoint(TabStripImpl* tab_strip,
                                   int index,
                                   TabScrubber::Direction direction);
 
@@ -92,7 +89,7 @@ class TabScrubber : public ui::EventHandler,
   // false and there is no pending work.
   Browser* browser_;
   // The TabStrip of the active browser we're scrubbing.
-  TabStrip* tab_strip_;
+  TabStripImpl* tab_strip_;
   // The current accumulated x and y positions of a swipe, in
   // the coordinates of the TabStrip of |browser_|
   float swipe_x_;

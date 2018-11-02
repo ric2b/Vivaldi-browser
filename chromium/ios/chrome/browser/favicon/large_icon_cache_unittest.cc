@@ -9,6 +9,7 @@
 #include "components/favicon_base/favicon_types.h"
 #include "skia/ext/skia_utils_ios.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/platform_test.h"
 #include "ui/gfx/codec/png_codec.h"
 
 namespace {
@@ -33,12 +34,12 @@ favicon_base::FaviconRawBitmapResult CreateTestBitmap(int w,
 
   result.pixel_size = gfx::Size(w, h);
   result.icon_url = GURL(kDummyUrl);
-  result.icon_type = favicon_base::TOUCH_ICON;
+  result.icon_type = favicon_base::IconType::kTouchIcon;
   CHECK(result.is_valid());
   return result;
 }
 
-class LargeIconCacheTest : public testing::Test {
+class LargeIconCacheTest : public PlatformTest {
  public:
   LargeIconCacheTest() {
     expected_fallback_icon_style_.reset(new favicon_base::FallbackIconStyle());

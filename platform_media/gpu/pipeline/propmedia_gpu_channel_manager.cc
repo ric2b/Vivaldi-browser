@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be

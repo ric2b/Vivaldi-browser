@@ -25,7 +25,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
@@ -33,11 +32,15 @@ import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.locale.DefaultSearchEngineDialogHelperUtils;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManager.SearchEnginePromoType;
+import org.chromium.chrome.browser.search_engines.TemplateUrlService;
+import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.MultiActivityTestRule;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+
+import java.util.List;
 
 /**
  * Integration test suite for the first run experience.
@@ -46,7 +49,6 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 public class FirstRunIntegrationTest {
 
     @Rule
-    @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
     public MultiActivityTestRule mTestRule = new MultiActivityTestRule();
 
     private FirstRunActivityTestObserver mTestObserver = new FirstRunActivityTestObserver();
@@ -69,8 +71,7 @@ public class FirstRunIntegrationTest {
         runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
             @Override
             public void run() {
-                final Context context =
-                        InstrumentationRegistry.getInstrumentation().getTargetContext();
+                final Context context = InstrumentationRegistry.getTargetContext();
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://test.com"));
                 intent.setPackage(context.getPackageName());
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -86,7 +87,7 @@ public class FirstRunIntegrationTest {
         runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
             @Override
             public void run() {
-                Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+                Context context = InstrumentationRegistry.getTargetContext();
                 CustomTabsIntent customTabIntent = new CustomTabsIntent.Builder().build();
                 customTabIntent.intent.setPackage(context.getPackageName());
                 customTabIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -102,8 +103,7 @@ public class FirstRunIntegrationTest {
         runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
             @Override
             public void run() {
-                final Context context =
-                        InstrumentationRegistry.getInstrumentation().getTargetContext();
+                final Context context = InstrumentationRegistry.getTargetContext();
                 Intent intent = new Intent();
                 intent.setClassName(context, asyncClassName);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -119,8 +119,7 @@ public class FirstRunIntegrationTest {
         runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
             @Override
             public void run() {
-                final Context context =
-                        InstrumentationRegistry.getInstrumentation().getTargetContext();
+                final Context context = InstrumentationRegistry.getTargetContext();
                 Intent intent = new Intent();
                 intent.setClassName(context, asyncClassName);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -139,10 +138,13 @@ public class FirstRunIntegrationTest {
         final ActivityMonitor activityMonitor = new ActivityMonitor(asyncClassName, null, false);
         final ActivityMonitor freMonitor =
                 new ActivityMonitor(FirstRunActivity.class.getName(), null, false);
+        final ActivityMonitor tabbedFREMonitor =
+                new ActivityMonitor(TabbedModeFirstRunActivity.class.getName(), null, false);
 
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         instrumentation.addMonitor(activityMonitor);
         instrumentation.addMonitor(freMonitor);
+        instrumentation.addMonitor(tabbedFREMonitor);
         runnable.run();
 
         // The original activity should be started because it was directly specified.
@@ -162,7 +164,7 @@ public class FirstRunIntegrationTest {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return freMonitor.getHits() == 1;
+                return freMonitor.getHits() == 1 || tabbedFREMonitor.getHits() == 1;
             }
         });
     }
@@ -252,6 +254,11 @@ public class FirstRunIntegrationTest {
             public int getSearchEnginePromoShowType() {
                 return searchPromoType;
             }
+
+            @Override
+            public List<TemplateUrl> getSearchEnginesForPromoDialog(int promoType) {
+                return TemplateUrlService.getInstance().getSearchEngines();
+            }
         };
         LocaleManager.setInstanceForTest(mockManager);
 
@@ -281,7 +288,7 @@ public class FirstRunIntegrationTest {
         Assert.assertEquals(0, mTestObserver.updateCachedEngineCallback.getCallCount());
 
         // Accept the ToS.
-        if (freProperties.getBoolean(FirstRunActivity.SHOW_WELCOME_PAGE)) {
+        if (freProperties.getBoolean(FirstRunActivityBase.SHOW_WELCOME_PAGE)) {
             clickButton(mActivity, R.id.terms_accept, "Failed to accept ToS");
             mTestObserver.jumpToPageCallback.waitForCallback(
                     "Failed to try moving to the next screen", 0);
@@ -290,7 +297,7 @@ public class FirstRunIntegrationTest {
         }
 
         // Acknowledge that Data Saver will be enabled.
-        if (freProperties.getBoolean(FirstRunActivity.SHOW_DATA_REDUCTION_PAGE)) {
+        if (freProperties.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE)) {
             int jumpCallCount = mTestObserver.jumpToPageCallback.getCallCount();
             clickButton(mActivity, R.id.next_button, "Failed to skip data saver");
             mTestObserver.jumpToPageCallback.waitForCallback(
@@ -300,10 +307,10 @@ public class FirstRunIntegrationTest {
         // Select a default search engine.
         if (searchPromoType == LocaleManager.SEARCH_ENGINE_PROMO_DONT_SHOW) {
             Assert.assertFalse("Search engine page was shown.",
-                    freProperties.getBoolean(FirstRunActivity.SHOW_SEARCH_ENGINE_PAGE));
+                    freProperties.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         } else {
             Assert.assertTrue("Search engine page wasn't shown.",
-                    freProperties.getBoolean(FirstRunActivity.SHOW_SEARCH_ENGINE_PAGE));
+                    freProperties.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
             int jumpCallCount = mTestObserver.jumpToPageCallback.getCallCount();
             DefaultSearchEngineDialogHelperUtils.clickOnFirstEngine(
                     mActivity.findViewById(android.R.id.content));
@@ -313,7 +320,7 @@ public class FirstRunIntegrationTest {
         }
 
         // Don't sign in the user.
-        if (freProperties.getBoolean(FirstRunActivity.SHOW_SIGNIN_PAGE)) {
+        if (freProperties.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE)) {
             int jumpCallCount = mTestObserver.jumpToPageCallback.getCallCount();
             clickButton(mActivity, R.id.negative_button, "Failed to skip signing-in");
             mTestObserver.jumpToPageCallback.waitForCallback(

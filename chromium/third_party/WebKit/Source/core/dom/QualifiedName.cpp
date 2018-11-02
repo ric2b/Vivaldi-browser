@@ -19,12 +19,12 @@
 
 #include "core/dom/QualifiedName.h"
 
-#include "core/HTMLNames.h"
-#include "core/MathMLNames.h"
-#include "core/SVGNames.h"
-#include "core/XLinkNames.h"
-#include "core/XMLNSNames.h"
-#include "core/XMLNames.h"
+#include "core/html_names.h"
+#include "core/mathml_names.h"
+#include "core/svg_names.h"
+#include "core/xlink_names.h"
+#include "core/xml_names.h"
+#include "core/xmlns_names.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/StaticConstructors.h"
@@ -65,11 +65,11 @@ struct QNameComponentsTranslator {
                         const QualifiedNameData& data,
                         unsigned) {
     const QualifiedNameComponents& components = data.components_;
-    location = QualifiedName::QualifiedNameImpl::Create(
-                   AtomicString(components.prefix_),
-                   AtomicString(components.local_name_),
-                   AtomicString(components.namespace_), data.is_static_)
-                   .LeakRef();
+    auto name = QualifiedName::QualifiedNameImpl::Create(
+        AtomicString(components.prefix_), AtomicString(components.local_name_),
+        AtomicString(components.namespace_), data.is_static_);
+    name->AddRef();
+    location = name.get();
   }
 };
 
@@ -81,8 +81,9 @@ QualifiedName::QualifiedName(const AtomicString& p,
   QualifiedNameCache::AddResult add_result =
       GetQualifiedNameCache().AddWithTranslator<QNameComponentsTranslator>(
           data);
-  impl_ = add_result.is_new_entry ? AdoptRef(*add_result.stored_value)
-                                  : *add_result.stored_value;
+  impl_ = *add_result.stored_value;
+  if (add_result.is_new_entry)
+    impl_->Release();
 }
 
 QualifiedName::QualifiedName(const AtomicString& p,
@@ -93,8 +94,9 @@ QualifiedName::QualifiedName(const AtomicString& p,
   QualifiedNameCache::AddResult add_result =
       GetQualifiedNameCache().AddWithTranslator<QNameComponentsTranslator>(
           data);
-  impl_ = add_result.is_new_entry ? AdoptRef(*add_result.stored_value)
-                                  : *add_result.stored_value;
+  impl_ = *add_result.stored_value;
+  if (add_result.is_new_entry)
+    impl_->Release();
 }
 
 QualifiedName::~QualifiedName() {}
@@ -116,17 +118,16 @@ DEFINE_GLOBAL(QualifiedName, g_null_name);
 
 void QualifiedName::InitAndReserveCapacityForSize(unsigned size) {
   DCHECK(g_star_atom.Impl());
-  GetQualifiedNameCache().ReserveCapacityForSize(size +
-                                                 2 /*starAtom and nullAtom */);
+  GetQualifiedNameCache().ReserveCapacityForSize(
+      size + 2 /*g_star_atom and g_null_atom */);
   new ((void*)&g_any_name)
       QualifiedName(g_null_atom, g_star_atom, g_star_atom, true);
   new ((void*)&g_null_name)
       QualifiedName(g_null_atom, g_null_atom, g_null_atom, true);
 }
 
-const AtomicString& QualifiedName::LocalNameUpper() const {
-  if (!impl_->local_name_upper_)
-    impl_->local_name_upper_ = impl_->local_name_.UpperASCII();
+const AtomicString& QualifiedName::LocalNameUpperSlow() const {
+  impl_->local_name_upper_ = impl_->local_name_.UpperASCII();
   return impl_->local_name_upper_;
 }
 

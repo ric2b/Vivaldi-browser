@@ -14,8 +14,8 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "extensions/features/features.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/helper/vivaldi_app_helper.h"
@@ -60,7 +60,7 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     PrefService* prefs = profile->GetPrefs();
     web_prefs->tabs_to_links =
-        prefs->GetBoolean(vivaldiprefs::kVivaldiTabsToLinks);
+        prefs->GetBoolean(vivaldiprefs::kWebpagesTabFocusesLinks);
 #endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::VivaldiAppHelper* vivaldi_app_helper =

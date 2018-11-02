@@ -26,8 +26,8 @@
 #ifndef ChannelSplitterNode_h
 #define ChannelSplitterNode_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioNode.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -36,9 +36,8 @@ class ChannelSplitterOptions;
 
 class ChannelSplitterHandler final : public AudioHandler {
  public:
-  static PassRefPtr<ChannelSplitterHandler> Create(AudioNode&,
-                                                   float sample_rate,
-                                                   unsigned number_of_outputs);
+  static scoped_refptr<ChannelSplitterHandler>
+  Create(AudioNode&, float sample_rate, unsigned number_of_outputs);
 
   // AudioHandler
   void Process(size_t frames_to_process) override;

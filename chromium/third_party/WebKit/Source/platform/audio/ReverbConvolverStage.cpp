@@ -27,6 +27,8 @@
  */
 
 #include "platform/audio/ReverbConvolverStage.h"
+
+#include <memory>
 #include "platform/audio/ReverbAccumulationBuffer.h"
 #include "platform/audio/ReverbConvolver.h"
 #include "platform/audio/ReverbInputBuffer.h"
@@ -56,16 +58,16 @@ ReverbConvolverStage::ReverbConvolverStage(
   DCHECK(accumulation_buffer);
 
   if (!direct_mode_) {
-    fft_kernel_ = WTF::MakeUnique<FFTFrame>(fft_size);
+    fft_kernel_ = std::make_unique<FFTFrame>(fft_size);
     fft_kernel_->DoPaddedFFT(impulse_response + stage_offset, stage_length);
-    fft_convolver_ = WTF::MakeUnique<FFTConvolver>(fft_size);
+    fft_convolver_ = std::make_unique<FFTConvolver>(fft_size);
   } else {
     DCHECK(!stage_offset);
     DCHECK_LE(stage_length, fft_size / 2);
 
     direct_kernel_ = WTF::WrapUnique(new AudioFloatArray(fft_size / 2));
     direct_kernel_->CopyToRange(impulse_response, 0, stage_length);
-    direct_convolver_ = WTF::MakeUnique<DirectConvolver>(render_slice_size);
+    direct_convolver_ = std::make_unique<DirectConvolver>(render_slice_size);
   }
   temporary_buffer_.Allocate(render_slice_size);
 
@@ -138,7 +140,7 @@ void ReverbConvolverStage::Process(const float* source,
     temporary_buffer = temporary_buffer_.Data();
   } else {
     // Zero delay
-    pre_delayed_destination = 0;
+    pre_delayed_destination = nullptr;
     pre_delayed_source = source;
     temporary_buffer = pre_delay_buffer_.Data();
 

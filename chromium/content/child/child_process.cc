@@ -85,7 +85,7 @@ ChildProcess::~ChildProcess() {
     }
   }
 
-  g_lazy_tls.Pointer()->Set(NULL);
+  g_lazy_tls.Pointer()->Set(nullptr);
   io_thread_.Stop();
 
   if (initialized_task_scheduler_) {
@@ -118,13 +118,6 @@ void ChildProcess::ReleaseProcess() {
   if (main_thread_)  // null in unittests.
     main_thread_->OnProcessFinalRelease();
 }
-
-#if defined(OS_LINUX)
-void ChildProcess::SetIOThreadPriority(
-    base::ThreadPriority io_thread_priority) {
-  main_thread_->SetThreadPriority(io_thread_.GetThreadId(), io_thread_priority);
-}
-#endif
 
 ChildProcess* ChildProcess::current() {
   return g_lazy_tls.Pointer()->Get();

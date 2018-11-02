@@ -16,16 +16,6 @@ Security Critical: no
 Description: Used to reformat python code via format-webkitpy
 Local Modifications: None
 
-Name: BeautifulSoup - HTML parser
-Short Name: BeautifulSoup
-URL: http://www.crummy.com/software/BeautifulSoup/download/3.x/BeautifulSoup-3.2.1.tar.gz (?)
-Version: 3.2
-License: MIT
-License File: NOT_SHIPPED
-Security Critical: no
-Description: Used during the w3c import, other places
-Local Modifications: None
-
 Name: coverage - code coverage metrics for python
 Short Name: coverage
 URL: http://pypi.python.org/packages/source/c/coverage/coverage-3.5.1.tar.gz#md5=410d4c8155a4dab222f2bc51212d4a24
@@ -61,9 +51,9 @@ Local Modifications: None
 Name: web-platform-tests - Test Suites for Web Platform specifications
 Short Name: wpt
 URL: https://github.com/w3c/web-platform-tests/
-Version: 32aa301b33136f71b1e15594f07ea5345a6305db
+Version: 53008fece70040f1886d2ba5ff92a97eed1e4037
 License: LICENSES FOR W3C TEST SUITES (http://www.w3.org/Consortium/Legal/2008/04-testsuite-copyright.html)
-License File: wpt/wpt/LICENSE
+License File: wpt/wpt/LICENSE.md
 Security Critical: no
 Description: This includes code for the manifest tool, lint tool, and wptserve.
     Used to run all supported web-platform-tests as part of Blink

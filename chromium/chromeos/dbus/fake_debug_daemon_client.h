@@ -15,6 +15,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 
 namespace chromeos {
@@ -29,9 +30,9 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void Init(dbus::Bus* bus) override;
   void DumpDebugLogs(bool is_compressed,
                      int file_descriptor,
-                     const GetDebugLogsCallback& callback) override;
+                     VoidDBusMethodCallback callback) override;
   void SetDebugMode(const std::string& subsystem,
-                    const SetDebugModeCallback& callback) override;
+                    VoidDBusMethodCallback callback) override;
   std::string GetTracingAgentName() override;
   std::string GetTraceEventLabel() override;
   void StartAgentTracing(const base::trace_event::TraceConfig& trace_config,
@@ -39,23 +40,23 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void StopAgentTracing(const StopAgentTracingCallback& callback) override;
   void SetStopAgentTracingTaskRunner(
       scoped_refptr<base::TaskRunner> task_runner) override;
-  void GetRoutes(bool numeric,
-                 bool ipv6,
-                 const GetRoutesCallback& callback) override;
-  void GetNetworkStatus(const GetNetworkStatusCallback& callback) override;
-  void GetModemStatus(const GetModemStatusCallback& callback) override;
-  void GetWiMaxStatus(const GetWiMaxStatusCallback& callback) override;
-  void GetNetworkInterfaces(
-      const GetNetworkInterfacesCallback& callback) override;
+  void GetRoutes(
+      bool numeric,
+      bool ipv6,
+      DBusMethodCallback<std::vector<std::string>> callback) override;
+  void GetNetworkStatus(DBusMethodCallback<std::string> callback) override;
+  void GetModemStatus(DBusMethodCallback<std::string> callback) override;
+  void GetWiMaxStatus(DBusMethodCallback<std::string> callback) override;
+  void GetNetworkInterfaces(DBusMethodCallback<std::string> callback) override;
   void GetPerfOutput(base::TimeDelta duration,
                      const std::vector<std::string>& perf_args,
                      int file_descriptor,
-                     const DBusMethodErrorCallback& error_callback) override;
+                     VoidDBusMethodCallback callback) override;
   void GetScrubbedLogs(const GetLogsCallback& callback) override;
   void GetScrubbedBigLogs(const GetLogsCallback& callback) override;
   void GetAllLogs(const GetLogsCallback& callback) override;
   void GetLog(const std::string& log_name,
-              const GetLogCallback& callback) override;
+              DBusMethodCallback<std::string> callback) override;
   void GetUserLogFiles(const GetLogsCallback& callback) override;
   void TestICMP(const std::string& ip_address,
                 const TestICMPCallback& callback) override;
@@ -71,20 +72,17 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void RemoveRootfsVerification(
       const EnableDebuggingCallback& callback) override;
   void WaitForServiceToBeAvailable(
-      const WaitForServiceToBeAvailableCallback& callback) override;
+      WaitForServiceToBeAvailableCallback callback) override;
   void SetOomScoreAdj(const std::map<pid_t, int32_t>& pid_to_oom_score_adj,
                       const SetOomScoreAdjCallback& callback) override;
   void CupsAddManuallyConfiguredPrinter(
       const std::string& name,
       const std::string& uri,
       const std::string& ppd_contents,
-      const CupsAddPrinterCallback& callback,
-      const base::Closure& error_callback) override;
-  void CupsAddAutoConfiguredPrinter(
-      const std::string& name,
-      const std::string& uri,
-      const CupsAddPrinterCallback& callback,
-      const base::Closure& error_callback) override;
+      CupsAddPrinterCallback callback) override;
+  void CupsAddAutoConfiguredPrinter(const std::string& name,
+                                    const std::string& uri,
+                                    CupsAddPrinterCallback callback) override;
   void CupsRemovePrinter(const std::string& name,
                          const CupsRemovePrinterCallback& callback,
                          const base::Closure& error_callback) override;

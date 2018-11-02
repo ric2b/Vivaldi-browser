@@ -5,9 +5,8 @@
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
 
 #include "core/frame/WebLocalFrameImpl.h"
-#include "platform/wtf/Assertions.h"
+#include "platform/weborigin/KURL.h"
 #include "public/web/WebFrameClient.h"
-#include "public/web/WebNavigatorContentUtilsClient.h"
 
 namespace blink {
 
@@ -20,7 +19,7 @@ NavigatorContentUtilsClient::NavigatorContentUtilsClient(
     WebLocalFrameImpl* web_frame)
     : web_frame_(web_frame) {}
 
-DEFINE_TRACE(NavigatorContentUtilsClient) {
+void NavigatorContentUtilsClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_frame_);
 }
 
@@ -30,24 +29,10 @@ void NavigatorContentUtilsClient::RegisterProtocolHandler(const String& scheme,
   web_frame_->Client()->RegisterProtocolHandler(scheme, url, title);
 }
 
-NavigatorContentUtilsClient::CustomHandlersState
-NavigatorContentUtilsClient::IsProtocolHandlerRegistered(const String& scheme,
-                                                         const KURL& url) {
-  return static_cast<NavigatorContentUtilsClient::CustomHandlersState>(
-      web_frame_->Client()->IsProtocolHandlerRegistered(scheme, url));
-}
-
 void NavigatorContentUtilsClient::UnregisterProtocolHandler(
     const String& scheme,
     const KURL& url) {
   web_frame_->Client()->UnregisterProtocolHandler(scheme, url);
 }
-
-STATIC_ASSERT_ENUM(kWebCustomHandlersNew,
-                   NavigatorContentUtilsClient::kCustomHandlersNew);
-STATIC_ASSERT_ENUM(kWebCustomHandlersRegistered,
-                   NavigatorContentUtilsClient::kCustomHandlersRegistered);
-STATIC_ASSERT_ENUM(kWebCustomHandlersDeclined,
-                   NavigatorContentUtilsClient::kCustomHandlersDeclined);
 
 }  // namespace blink

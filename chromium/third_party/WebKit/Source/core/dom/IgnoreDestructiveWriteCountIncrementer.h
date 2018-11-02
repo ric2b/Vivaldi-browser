@@ -26,6 +26,7 @@
 #ifndef IgnoreDestructiveWriteCountIncrementer_h
 #define IgnoreDestructiveWriteCountIncrementer_h
 
+#include "base/macros.h"
 #include "core/dom/Document.h"
 #include "platform/wtf/Allocator.h"
 
@@ -33,11 +34,11 @@ namespace blink {
 
 class IgnoreDestructiveWriteCountIncrementer {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(IgnoreDestructiveWriteCountIncrementer);
 
  public:
   explicit IgnoreDestructiveWriteCountIncrementer(Document* document)
-      : count_(document ? &document->ignore_destructive_write_count_ : 0) {
+      : count_(document ? &document->ignore_destructive_write_count_
+                        : nullptr) {
     if (!count_)
       return;
     ++(*count_);
@@ -51,6 +52,7 @@ class IgnoreDestructiveWriteCountIncrementer {
 
  private:
   unsigned* count_;
+  DISALLOW_COPY_AND_ASSIGN(IgnoreDestructiveWriteCountIncrementer);
 };
 
 }  // namespace blink

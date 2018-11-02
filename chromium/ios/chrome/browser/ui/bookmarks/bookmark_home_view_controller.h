@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 
+@protocol ApplicationCommands;
 @protocol UrlLoader;
 class GURL;
 
@@ -25,11 +26,20 @@ class BookmarkNode;
 @class BookmarkHomeViewController;
 
 @protocol BookmarkHomeViewControllerDelegate
-// The view controller wants to be dismissed.
-// If |url| != GURL(), then the user has selected |url| for navigation.
+// The view controller wants to be dismissed. If |urls| is not empty, then
+// the user has selected to navigate to those URLs in the current tab mode.
 - (void)bookmarkHomeViewControllerWantsDismissal:
             (BookmarkHomeViewController*)controller
-                                 navigationToUrl:(const GURL&)url;
+                                navigationToUrls:(const std::vector<GURL>&)urls;
+
+// The view controller wants to be dismissed. If |urls| is not empty, then
+// the user has selected to navigate to those URLs with specified tab mode.
+- (void)bookmarkHomeViewControllerWantsDismissal:
+            (BookmarkHomeViewController*)controller
+                                navigationToUrls:(const std::vector<GURL>&)urls
+                                     inIncognito:(BOOL)inIncognito
+                                          newTab:(BOOL)newTab;
+
 @end
 
 // Class to navigate the bookmark hierarchy, needs subclassing for tablet /
@@ -49,10 +59,6 @@ class BookmarkNode;
 
   // The root node, whose child nodes are shown in the bookmark table view.
   const bookmarks::BookmarkNode* _rootNode;
-
-  // Container for bookmarksTableView and contextBar to enable the use of
-  // autolayout contraints.
-  UIView* _containerView;
 }
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
@@ -61,7 +67,14 @@ class BookmarkNode;
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
                   browserState:(ios::ChromeBrowserState*)browserState
+                    dispatcher:(id<ApplicationCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
+
+// Set to YES, only when this view controller instance is being created
+// from cached path. Once the view controller is shown, this is set to NO.
+// This is so that the cache code is called only once in viewWillAppear, and
+// not every time the view appears.
+@property(nonatomic, assign) BOOL isReconstructingFromCache;
 
 // Setter to set _rootNode value.
 - (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode;
@@ -71,12 +84,13 @@ class BookmarkNode;
 // cases.
 @property(nonatomic, weak) id<BookmarkHomeViewControllerDelegate> homeDelegate;
 
+// Dispatcher for sending commands.
+@property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
+
 // Dismisses any modal interaction elements. Note that this
 // method is currently used in case of handset only. In the future it
 // will be used by both cases.
 - (void)dismissModals;
-- (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode;
-
 @end
 
 @interface BookmarkHomeViewController (ExposedForTesting)

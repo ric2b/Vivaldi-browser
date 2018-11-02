@@ -4,6 +4,8 @@
 
 #include "modules/serviceworkers/NavigationPreloadManager.h"
 
+#include <memory>
+
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "core/dom/DOMException.h"
 #include "modules/serviceworkers/NavigationPreloadCallbacks.h"
@@ -24,13 +26,6 @@ ScriptPromise NavigationPreloadManager::disable(ScriptState* script_state) {
 ScriptPromise NavigationPreloadManager::setHeaderValue(
     ScriptState* script_state,
     const String& value) {
-  ServiceWorkerContainerClient* client =
-      ServiceWorkerContainerClient::From(registration_->GetExecutionContext());
-  if (!client || !client->Provider()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, DOMException::Create(kInvalidStateError, "No provider."));
-  }
-
   if (!IsValidHTTPHeaderValue(value)) {
     return ScriptPromise::Reject(
         script_state, V8ThrowException::CreateTypeError(
@@ -42,23 +37,15 @@ ScriptPromise NavigationPreloadManager::setHeaderValue(
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
   registration_->WebRegistration()->SetNavigationPreloadHeader(
-      value, client->Provider(),
-      WTF::MakeUnique<SetNavigationPreloadHeaderCallbacks>(resolver));
+      value, std::make_unique<SetNavigationPreloadHeaderCallbacks>(resolver));
   return promise;
 }
 
 ScriptPromise NavigationPreloadManager::getState(ScriptState* script_state) {
-  ServiceWorkerContainerClient* client =
-      ServiceWorkerContainerClient::From(registration_->GetExecutionContext());
-  if (!client || !client->Provider()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, DOMException::Create(kInvalidStateError, "No provider."));
-  }
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
   registration_->WebRegistration()->GetNavigationPreloadState(
-      client->Provider(),
-      WTF::MakeUnique<GetNavigationPreloadStateCallbacks>(resolver));
+      std::make_unique<GetNavigationPreloadStateCallbacks>(resolver));
   return promise;
 }
 
@@ -68,22 +55,16 @@ NavigationPreloadManager::NavigationPreloadManager(
 
 ScriptPromise NavigationPreloadManager::SetEnabled(bool enable,
                                                    ScriptState* script_state) {
-  ServiceWorkerContainerClient* client =
-      ServiceWorkerContainerClient::From(registration_->GetExecutionContext());
-  if (!client || !client->Provider()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, DOMException::Create(kInvalidStateError, "No provider."));
-  }
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
   registration_->WebRegistration()->EnableNavigationPreload(
-      enable, client->Provider(),
-      WTF::MakeUnique<EnableNavigationPreloadCallbacks>(resolver));
+      enable, std::make_unique<EnableNavigationPreloadCallbacks>(resolver));
   return promise;
 }
 
-DEFINE_TRACE(NavigationPreloadManager) {
+void NavigationPreloadManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(registration_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

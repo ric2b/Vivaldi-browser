@@ -30,8 +30,6 @@
 
 #include "core/events/WebInputEventConversion.h"
 
-#include "core/dom/Touch.h"
-#include "core/dom/TouchList.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
@@ -43,6 +41,8 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/input/Touch.h"
+#include "core/input/TouchList.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/page/Page.h"
 #include "platform/geometry/IntSize.h"
@@ -109,7 +109,7 @@ TEST(WebInputEventConversionTest, WebKeyboardEventBuilder) {
 
 TEST(WebInputEventConversionTest, WebMouseEventBuilder) {
   TouchEvent* event = TouchEvent::Create();
-  WebMouseEventBuilder mouse(0, 0, *event);
+  WebMouseEventBuilder mouse(nullptr, nullptr, *event);
   EXPECT_EQ(WebInputEvent::kUndefined, mouse.GetType());
 }
 
@@ -170,7 +170,6 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     web_gesture_event.data.scroll_update.velocity_y = 42;
     web_gesture_event.data.scroll_update.inertial_phase =
         WebGestureEvent::kMomentumPhase;
-    web_gesture_event.data.scroll_update.prevent_propagation = true;
 
     WebGestureEvent scaled_gesture_event =
         TransformWebGestureEvent(view, web_gesture_event);
@@ -188,7 +187,6 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     EXPECT_EQ(42, scaled_gesture_event.VelocityY());
     EXPECT_EQ(WebGestureEvent::kMomentumPhase,
               scaled_gesture_event.InertialPhase());
-    EXPECT_TRUE(scaled_gesture_event.PreventPropagation());
   }
 
   {

@@ -21,6 +21,10 @@ namespace content {
 class WebContents;
 }
 
+namespace password_manager {
+class PasswordFormMetricsRecorder;
+}
+
 class PasswordsModelDelegate;
 class Profile;
 
@@ -46,9 +50,10 @@ class ManagePasswordsBubbleModel {
   // by the user.
   void OnNeverForThisSiteClicked();
 
-  // Called by the view code when username is corrected using the edit button
-  // in PendingView.
-  void OnUsernameEdited(base::string16 new_username);
+  // Called by the view code when username or password is corrected using
+  // the username correction or password selection features in PendingView.
+  void OnCredentialEdited(base::string16 new_username,
+                          base::string16 new_password);
 
   // Called by the view code when the save button is clicked by the user.
   void OnSaveClicked();
@@ -111,6 +116,14 @@ class ManagePasswordsBubbleModel {
     return title_brand_link_range_;
   }
 
+#if defined(UNIT_TEST)
+  void set_hide_eye_icon(bool hide) { hide_eye_icon_ = hide; }
+#endif
+
+  bool hide_eye_icon() const { return hide_eye_icon_; }
+
+  bool enable_editing() const { return enable_editing_; }
+
   Profile* GetProfile() const;
   content::WebContents* GetWebContents() const;
 
@@ -158,6 +171,18 @@ class ManagePasswordsBubbleModel {
 
   // A bridge to ManagePasswordsUIController instance.
   base::WeakPtr<PasswordsModelDelegate> delegate_;
+
+  // True iff the eye icon should be hidden for privacy reasons.
+  bool hide_eye_icon_;
+
+  // True iff username/password editing should be enabled.
+  bool enable_editing_;
+
+  // Reference to metrics recorder of the PasswordForm presented to the user by
+  // |this|. We hold on to this because |delegate_| may not be able to provide
+  // the reference anymore when we need it.
+  scoped_refptr<password_manager::PasswordFormMetricsRecorder>
+      metrics_recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsBubbleModel);
 };

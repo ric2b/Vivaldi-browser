@@ -36,10 +36,14 @@ const CGFloat kIconSize = 35;
     if (@available(iOS 10, *)) {
       primaryEffect = [UIVibrancyEffect widgetPrimaryVibrancyEffect];
       secondaryEffect = [UIVibrancyEffect widgetSecondaryVibrancyEffect];
-    } else {
+    }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+    else {
       primaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
       secondaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
     }
+#endif  // !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED <
+        // __IPHONE_10_0
 
     UIVisualEffectView* primaryEffectView =
         [[UIVisualEffectView alloc] initWithEffect:primaryEffect];
@@ -49,6 +53,7 @@ const CGFloat kIconSize = 35;
          @[ primaryEffectView, secondaryEffectView ]) {
       [self addSubview:effectView];
       effectView.translatesAutoresizingMaskIntoConstraints = NO;
+      effectView.userInteractionEnabled = NO;
       [NSLayoutConstraint
           activateConstraints:ui_util::CreateSameConstraints(self, effectView)];
     }
@@ -80,20 +85,6 @@ const CGFloat kIconSize = 35;
     [secondaryEffectView.contentView addSubview:stack];
     [NSLayoutConstraint activateConstraints:ui_util::CreateSameConstraints(
                                                 secondaryEffectView, stack)];
-
-    // A transparent button constrained to the same size as the stack is added
-    // to handle taps on the stack view.
-    UIButton* actionButton = [[UIButton alloc] initWithFrame:CGRectZero];
-    actionButton.backgroundColor = [UIColor clearColor];
-    [actionButton addTarget:target
-                     action:actionSelector
-           forControlEvents:UIControlEventTouchUpInside];
-    actionButton.translatesAutoresizingMaskIntoConstraints = NO;
-    actionButton.accessibilityLabel = title;
-    [self addSubview:actionButton];
-    [NSLayoutConstraint activateConstraints:ui_util::CreateSameConstraints(
-                                                actionButton, stack)];
-
     UIImage* iconImage = [UIImage imageNamed:imageName];
     if (@available(iOS 10, *)) {
       iconImage =
@@ -116,6 +107,12 @@ const CGFloat kIconSize = 35;
       [icon.centerXAnchor constraintEqualToAnchor:circleView.centerXAnchor],
       [icon.centerYAnchor constraintEqualToAnchor:circleView.centerYAnchor],
     ]];
+
+    self.userInteractionEnabled = YES;
+    [self addTarget:target
+                  action:actionSelector
+        forControlEvents:UIControlEventTouchUpInside];
+    self.accessibilityLabel = title;
   }
   return self;
 }

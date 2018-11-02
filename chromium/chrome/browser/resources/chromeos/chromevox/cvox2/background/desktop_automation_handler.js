@@ -44,6 +44,9 @@ DesktopAutomationHandler = function(node) {
    */
   this.lastValueChanged_ = new Date(0);
 
+  /** @private {AutomationNode} */
+  this.lastValueTarget_ = null;
+
   this.addListener_(
       EventType.ACTIVEDESCENDANTCHANGED, this.onActiveDescendantChanged);
   this.addListener_(EventType.ALERT, this.onAlert);
@@ -59,6 +62,7 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(EventType.HOVER, this.onHover);
   this.addListener_(EventType.INVALID_STATUS_CHANGED, this.onEventIfInRange);
   this.addListener_(EventType.LOAD_COMPLETE, this.onLoadComplete);
+  this.addListener_(EventType.LOCATION_CHANGED, this.onLocationChanged);
   this.addListener_(EventType.MENU_END, this.onMenuEnd);
   this.addListener_(EventType.MENU_LIST_ITEM_SELECTED, this.onEventIfSelected);
   this.addListener_(EventType.MENU_START, this.onMenuStart);
@@ -203,11 +207,18 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onHover: function(evt) {
+    var target = evt.target;
+    if (!AutomationPredicate.object(target)) {
+      target = AutomationUtil.findNodePre(
+                   target, Dir.FORWARD, AutomationPredicate.object) ||
+          target;
+    }
     if (ChromeVoxState.instance.currentRange &&
-        evt.target == ChromeVoxState.instance.currentRange.start.node)
+        target == ChromeVoxState.instance.currentRange.start.node)
       return;
     Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
-    this.onEventDefault(evt);
+    this.onEventDefault(
+        new CustomAutomationEvent(evt.type, target, evt.eventFrom));
   },
 
   /**
@@ -291,11 +302,9 @@ DesktopAutomationHandler.prototype = {
 
     var node = evt.target;
 
-    // Discard focus events on embeddedObject.
-    if (node.role == RoleType.EMBEDDED_OBJECT)
+    // Discard focus events on embeddedObject and webView.
+    if (node.role == RoleType.EMBEDDED_OBJECT || node.role == RoleType.WEB_VIEW)
       return;
-
-    this.createTextEditHandlerIfNeeded_(evt.target);
 
     // Category flush speech triggered by events with no source. This includes
     // views.
@@ -322,6 +331,9 @@ DesktopAutomationHandler.prototype = {
     }
     var event = new CustomAutomationEvent(EventType.FOCUS, node, evt.eventFrom);
     this.onEventDefault(event);
+
+    // Refresh the handler, if needed, now that ChromeVox focus is up to date.
+    this.createTextEditHandlerIfNeeded_(node);
   },
 
   /**
@@ -380,6 +392,19 @@ DesktopAutomationHandler.prototype = {
   },
 
   /**
+   * Updates the focus ring if the location of the current range, or
+   * an ancestor of the current range, changes.
+   * @param {!AutomationEvent} evt
+   */
+  onLocationChanged: function(evt) {
+    var cur = ChromeVoxState.instance.currentRange;
+    if (AutomationUtil.isDescendantOf(cur.start.node, evt.target) ||
+        AutomationUtil.isDescendantOf(cur.end.node, evt.target)) {
+      new Output().withLocation(cur, null, evt.type).go();
+    }
+  },
+
+  /**
    * Provides all feedback once a change event in a text field fires.
    * @param {!AutomationEvent} evt
    * @private
@@ -427,7 +452,8 @@ DesktopAutomationHandler.prototype = {
       return;
 
     var t = evt.target;
-    if (t.state.focused || t.root.role == RoleType.DESKTOP ||
+    var fromDesktop = t.root.role == RoleType.DESKTOP;
+    if (t.state.focused || fromDesktop ||
         AutomationUtil.isDescendantOf(
             ChromeVoxState.instance.currentRange.start.node, t)) {
       if (new Date() - this.lastValueChanged_ <=
@@ -438,10 +464,17 @@ DesktopAutomationHandler.prototype = {
 
       var output = new Output();
 
-      if (t.root.role == RoleType.DESKTOP)
+      if (fromDesktop &&
+          (!this.lastValueTarget_ || this.lastValueTarget_ !== t)) {
         output.withQueueMode(cvox.QueueMode.FLUSH);
-
-      output.format('$value', evt.target).go();
+        var range = cursors.Range.fromNode(t);
+        output.withRichSpeechAndBraille(
+            range, range, Output.EventType.NAVIGATE);
+        this.lastValueTarget_ = t;
+      } else {
+        output.format('$value', t);
+      }
+      output.go();
     }
   },
 
@@ -543,6 +576,9 @@ DesktopAutomationHandler.prototype = {
          voxTarget.root.role != RoleType.DESKTOP &&
          voxTarget.root.url.indexOf(DesktopAutomationHandler.KEYBOARD_URL) !=
              0))
+      return false;
+
+    if (target.restriction == chrome.automation.Restriction.READ_ONLY)
       return false;
 
     if (!this.textEditHandler_ || this.textEditHandler_.node !== target) {

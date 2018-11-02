@@ -279,8 +279,7 @@ bool ValidateExtension(const Extension* extension,
   // not on the reserved list. We only warn, and do not block the loading of the
   // extension.
   std::string warning;
-  CheckForIllegalFilenames(extension->path(), &warning);
-  if (!warning.empty())
+  if (!CheckForIllegalFilenames(extension->path(), &warning))
     warnings->push_back(InstallWarning(warning));
 
   // Check that the extension does not include any Windows reserved filenames.
@@ -343,8 +342,9 @@ std::vector<base::FilePath> FindPrivateKeyFiles(
 bool CheckForIllegalFilenames(const base::FilePath& extension_path,
                               std::string* error) {
   // Reserved underscore names.
-  static const base::FilePath::CharType* reserved_names[] = {
-      kLocaleFolder, kPlatformSpecificFolder, FILE_PATH_LITERAL("__MACOSX"), };
+  static const base::FilePath::CharType* const reserved_names[] = {
+      kLocaleFolder, kPlatformSpecificFolder, FILE_PATH_LITERAL("__MACOSX"),
+  };
   CR_DEFINE_STATIC_LOCAL(
       std::set<base::FilePath::StringType>,
       reserved_underscore_names,
@@ -364,13 +364,8 @@ bool CheckForIllegalFilenames(const base::FilePath& extension_path,
     // Skip all that don't start with "_".
     if (filename.find_first_of(FILE_PATH_LITERAL("_")) != 0)
       continue;
-    // Treat inclusion of the kMetadataFolder as a warning, not a hard error.
-    if (filename == kMetadataFolder) {
-      *error =
-          "_metadata is a reserved directory that will not be allowed at "
-          "the time of Chrome Web Store upload.";
-    } else if (reserved_underscore_names.find(filename) ==
-               reserved_underscore_names.end()) {
+    if (reserved_underscore_names.find(filename) ==
+        reserved_underscore_names.end()) {
       *error = base::StringPrintf(
           "Cannot load extension with file or directory name %s. "
           "Filenames starting with \"_\" are reserved for use by the system.",
@@ -409,7 +404,7 @@ base::FilePath GetInstallTempDir(const base::FilePath& extensions_dir) {
   // Temp directory has never been used before, or in a rare error case.
   // Developers are not likely to see these situations often, so do an
   // explicit thread check.
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Create the temp directory as a sub-directory of the Extensions directory.
   // This guarantees it is on the same file system as the extension's eventual
@@ -569,6 +564,18 @@ base::FilePath GetVerifiedContentsPath(const base::FilePath& extension_path) {
 }
 base::FilePath GetComputedHashesPath(const base::FilePath& extension_path) {
   return extension_path.Append(kMetadataFolder).Append(kComputedHashesFilename);
+}
+base::FilePath GetIndexedRulesetPath(const base::FilePath& extension_path) {
+  return extension_path.Append(kMetadataFolder).Append(kIndexedRulesetFilename);
+}
+
+std::vector<base::FilePath> GetReservedMetadataFilePaths(
+    const base::FilePath& extension_path) {
+  return {
+      GetVerifiedContentsPath(extension_path),
+      GetComputedHashesPath(extension_path),
+      GetIndexedRulesetPath(extension_path),
+  };
 }
 
 }  // namespace file_util

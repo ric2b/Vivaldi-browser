@@ -12,8 +12,8 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/message_center/message_center_style.h"
-#include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -28,9 +28,9 @@ const char ArcNotificationView::kViewClassName[] = "ArcNotificationView";
 ArcNotificationView::ArcNotificationView(
     std::unique_ptr<views::View> contents_view,
     std::unique_ptr<ArcNotificationContentViewDelegate> contents_view_delegate,
-    message_center::MessageCenterController* controller,
+    message_center::MessageViewDelegate* delegate,
     const message_center::Notification& notification)
-    : message_center::MessageView(controller, notification),
+    : message_center::MessageView(delegate, notification),
       contents_view_(contents_view.get()),
       contents_view_delegate_(std::move(contents_view_delegate)) {
   DCHECK_EQ(message_center::NOTIFICATION_TYPE_CUSTOM, notification.type());
@@ -117,6 +117,16 @@ void ArcNotificationView::SetExpanded(bool expanded) {
     contents_view_delegate_->SetExpanded(expanded);
 }
 
+void ArcNotificationView::OnContainerAnimationStarted() {
+  if (contents_view_delegate_)
+    contents_view_delegate_->OnContainerAnimationStarted();
+}
+
+void ArcNotificationView::OnContainerAnimationEnded() {
+  if (contents_view_delegate_)
+    contents_view_delegate_->OnContainerAnimationEnded();
+}
+
 void ArcNotificationView::OnSlideChanged() {
   if (contents_view_delegate_)
     contents_view_delegate_->OnSlideChanged();
@@ -184,10 +194,10 @@ bool ArcNotificationView::OnKeyPressed(const ui::KeyEvent& event) {
 }
 
 void ArcNotificationView::ChildPreferredSizeChanged(View* child) {
-  // Notify MessageCenterController when the custom content changes size,
+  // Notify MessageViewDelegate when the custom content changes size,
   // as it may need to relayout.
-  if (controller())
-    controller()->UpdateNotificationSize(notification_id());
+  if (delegate())
+    delegate()->UpdateNotificationSize(notification_id());
 }
 
 bool ArcNotificationView::HandleAccessibleAction(
@@ -205,8 +215,7 @@ void ArcNotificationView::UpdateControlButtonsVisibilityWithNotification(
     return;
 
   GetControlButtonsView()->ShowSettingsButton(
-      notification.delegate() &&
-      notification.delegate()->ShouldDisplaySettingsButton());
+      notification.should_show_settings_button());
   GetControlButtonsView()->ShowCloseButton(!GetPinned());
   UpdateControlButtonsVisibility();
 }

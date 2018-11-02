@@ -42,9 +42,6 @@ const char kHungRendererOutstandingEventType[] = "hung-outstanding-event-type";
 const char kHungRendererLastEventType[] = "hung-last-event-type";
 const char kHungRendererReason[] = "hung-reason";
 
-const char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
-const char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
-
 const char kIsEnterpriseManaged[] = "is-enterprise-managed";
 
 // Registry values used to determine Chrome's update channel; see
@@ -83,8 +80,6 @@ const char kToolbarNibInfo[] = "toolbar-nib-info";
 #endif
 
 const char kViewCount[] = "view-count";
-
-const char kZeroEncodeDetails[] = "zero-encode-details";
 
 const char kUserCloudPolicyManagerConnectTrace[] =
     "user-cloud-policy-manager-connect-trace";
@@ -146,8 +141,6 @@ size_t RegisterChromeCrashKeys() {
     {kHungRendererOutstandingEventType, kSmallSize},
     {kHungRendererLastEventType, kSmallSize},
     {kHungRendererReason, kSmallSize},
-    {kThirdPartyModulesLoaded, kSmallSize},
-    {kThirdPartyModulesNotLoaded, kSmallSize},
     {kIsEnterpriseManaged, kSmallSize},
 #endif
     {kInputEventFilterSendFailure, kSmallSize},
@@ -164,27 +157,23 @@ size_t RegisterChromeCrashKeys() {
     {mac::kSendAction, kMediumSize},
     {mac::kNSEvent, kMediumSize},
     {mac::kToolbarNibInfo, kMediumSize},
-    {mac::kZombie, kMediumSize},
-    {mac::kZombieTrace, kMediumSize},
     // content/:
-    {"channel_error_bt", kMediumSize},
-    {"remove_route_bt", kMediumSize},
-    {"rwhvm_window", kMediumSize},
+    {"text-input-context-client", kMediumSize},
 // media/:
 #endif
-    {kBug464926CrashKey, kSmallSize},
     {kViewCount, kSmallSize},
-
-    // media/:
-    {kZeroEncodeDetails, kSmallSize},
-
-    // gin/:
-    {"v8-ignition", kSmallSize},
 
     // sandbox/:
 #if defined(OS_LINUX)
     {"seccomp-sigsys", kMediumSize},
 #endif
+
+    // Site isolation.  These keys help debug renderer kills such as
+    // https://crbug.com/773140.
+    {"requested_site_url", kSmallSize},
+    {"requested_origin", kSmallSize},
+    {"killed_process_origin_lock", kSmallSize},
+    {"site_isolation_mode", kSmallSize},
 
     // Temporary for https://crbug.com/626802.
     {"newframe_routing_id", kSmallSize},
@@ -195,19 +184,18 @@ size_t RegisterChromeCrashKeys() {
     {"newframe_widget_hidden", kSmallSize},
     {"newframe_replicated_origin", kSmallSize},
 
-    // Temporary for https://crbug.com/612711.
-    {"aci_wrong_sp_extension_id", kSmallSize},
-
-    // Temporary for https://crbug.com/697745.
-    {"engine_params", crash_keys::kMediumSize},
-    {"engine1_params", crash_keys::kMediumSize},
-    {"engine2_params", crash_keys::kMediumSize},
-
     // Temporary for https://crbug.com/685996.
     {kUserCloudPolicyManagerConnectTrace, kMediumSize},
 
+    // TODO(sunnyps): Remove after fixing crbug.com/724999.
+    {"gl-context-set-current-stack-trace", kMediumSize},
+
     // TODO(asvitkine): Remove after fixing https://crbug.com/736675
     {"bad_histogram", kMediumSize},
+
+    // Accessibility keys. Temporary for http://crbug.com/765490.
+    {"ax_tree_error", kSmallSize},
+    {"ax_tree_update", kMediumSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering
@@ -266,7 +254,6 @@ static bool IsBoringSwitch(const std::string& flag) {
     switches::kPpapiFlashArgs,
     switches::kPpapiFlashPath,
     switches::kRegisterPepperPlugins,
-    switches::kUIPrioritizeInGpuProcess,
     switches::kUseGL,
     switches::kUserDataDir,
     // Cros/CC flags are specified as raw strings to avoid dependency.

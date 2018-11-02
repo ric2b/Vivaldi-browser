@@ -2,11 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("instrumentation") {
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("instrumentation") {
   sources = [
     "PlatformInstrumentation.cpp",
     "PlatformInstrumentation.h",
-    "resource_coordinator/BlinkResourceCoordinatorBase.cpp",
     "resource_coordinator/BlinkResourceCoordinatorBase.h",
     "resource_coordinator/FrameResourceCoordinator.cpp",
     "resource_coordinator/FrameResourceCoordinator.h",
@@ -24,6 +25,7 @@ source_set("instrumentation") {
   ]
 
   public_deps = [
+    "//services/network/public/interfaces:interfaces_blink",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
     "//services/service_manager/public/interfaces:interfaces_blink",
     "//skia",
@@ -39,7 +41,7 @@ source_set("instrumentation") {
   ]
 }
 
-source_set("unit_tests") {
+jumbo_source_set("unit_tests") {
   testonly = true
 
   sources = [
@@ -50,6 +52,7 @@ source_set("unit_tests") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 

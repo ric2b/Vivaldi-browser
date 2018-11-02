@@ -21,7 +21,6 @@
 #ifndef SVGLinearGradientElement_h
 #define SVGLinearGradientElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGGradientElement.h"
 #include "platform/heap/Handle.h"
@@ -43,7 +42,7 @@ class SVGLinearGradientElement final : public SVGGradientElement {
   SVGAnimatedLength* x2() const { return x2_.Get(); }
   SVGAnimatedLength* y2() const { return y2_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGLinearGradientElement(Document&);

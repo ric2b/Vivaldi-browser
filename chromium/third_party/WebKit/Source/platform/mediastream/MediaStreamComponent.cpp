@@ -42,13 +42,13 @@ namespace blink {
 
 namespace {
 
-static int g_unique_id = 0;
+static int g_unique_media_stream_component_id = 0;
 
 }  // namespace
 
 // static
 int MediaStreamComponent::GenerateUniqueId() {
-  return ++g_unique_id;
+  return ++g_unique_media_stream_component_id;
 }
 
 MediaStreamComponent* MediaStreamComponent::Create(MediaStreamSource* source) {
@@ -79,7 +79,8 @@ MediaStreamComponent::MediaStreamComponent(
       unique_id_(GenerateUniqueId()),
       enabled_(enabled),
       muted_(muted),
-      content_hint_(content_hint) {
+      content_hint_(content_hint),
+      constraints_() {
   DCHECK(id_.length());
 }
 
@@ -153,7 +154,7 @@ void MediaStreamComponent::AudioSourceProviderImpl::ProvideInput(
   web_audio_source_provider_->ProvideInput(web_audio_data, frames_to_process);
 }
 
-DEFINE_TRACE(MediaStreamComponent) {
+void MediaStreamComponent::Trace(blink::Visitor* visitor) {
   visitor->Trace(source_);
 }
 

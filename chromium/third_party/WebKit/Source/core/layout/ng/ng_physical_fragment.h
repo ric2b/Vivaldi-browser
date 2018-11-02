@@ -5,19 +5,26 @@
 #ifndef NGPhysicalFragment_h
 #define NGPhysicalFragment_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/ng_break_token.h"
-#include "core/loader/resource/ImageResourceObserver.h"
-#include "platform/graphics/paint/DisplayItemClient.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/geometry/LayoutRect.h"
 
 namespace blink {
 
 class ComputedStyle;
 class LayoutObject;
+class Node;
+struct NGPhysicalOffsetRect;
 struct NGPixelSnappedPhysicalBoxStrut;
+
+class NGPhysicalFragment;
+
+struct CORE_EXPORT NGPhysicalFragmentTraits {
+  static void Destruct(const NGPhysicalFragment*);
+};
 
 // The NGPhysicalFragment contains the output geometry from layout. The
 // fragment stores all of its information in the physical coordinate system for
@@ -30,18 +37,8 @@ struct NGPixelSnappedPhysicalBoxStrut;
 // Layout code should only access geometry information through the
 // NGFragment wrapper classes which transforms information into the logical
 // coordinate system.
-//
-// NGPhysicalFragment is an ImageResourceObserver, which means that it gets
-// notified when associated images are changed.
-// This is used for 2 main use cases:
-// - reply to 'background-image' as we need to invalidate the background in this
-//   case.
-//   (See https://drafts.csswg.org/css-backgrounds-3/#the-background-image)
-// - image (<img>, svg <image>) or video (<video>) elements that are
-//   placeholders for displaying them.
-class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
-                                       public DisplayItemClient,
-                                       public ImageResourceObserver {
+class CORE_EXPORT NGPhysicalFragment
+    : public RefCounted<NGPhysicalFragment, NGPhysicalFragmentTraits> {
  public:
   enum NGFragmentType {
     kFragmentBox = 0,
@@ -50,13 +47,56 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
     // When adding new values, make sure the bit size of |type_| is large
     // enough to store.
   };
+  enum NGBoxType {
+    kNormalBox,
+    kAnonymousBox,
+    kInlineBlock,
+    kFloating,
+    kOutOfFlowPositioned,
+    kOldLayoutRoot,
+    // When adding new values, make sure the bit size of |box_type_| is large
+    // enough to store.
+
+    // Also, add after kMinimumBlockLayoutRoot if the box type is a block layout
+    // root, or before otherwise. See IsBlockLayoutRoot().
+    kMinimumBlockLayoutRoot = kInlineBlock
+  };
 
   ~NGPhysicalFragment();
 
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
+  bool IsContainer() const {
+    return Type() == NGFragmentType::kFragmentBox ||
+           Type() == NGFragmentType::kFragmentLineBox;
+  }
   bool IsBox() const { return Type() == NGFragmentType::kFragmentBox; }
   bool IsText() const { return Type() == NGFragmentType::kFragmentText; }
   bool IsLineBox() const { return Type() == NGFragmentType::kFragmentLineBox; }
+
+  // Returns the box type of this fragment.
+  NGBoxType BoxType() const { return static_cast<NGBoxType>(box_type_); }
+  // An inline block is represented as a kFragmentBox.
+  // TODO(eae): This isn't true for replaces elements at the moment.
+  bool IsInlineBlock() const { return BoxType() == NGBoxType::kInlineBlock; }
+  bool IsFloating() const { return BoxType() == NGBoxType::kFloating; }
+  bool IsOutOfFlowPositioned() const {
+    return BoxType() == NGBoxType::kOutOfFlowPositioned;
+  }
+  // A box fragment that do not exist in LayoutObject tree. Its LayoutObject is
+  // co-owned by other fragments.
+  bool IsAnonymousBox() const { return BoxType() == NGBoxType::kAnonymousBox; }
+  // A block sub-layout starts on this fragment. Inline blocks, floats, out of
+  // flow positioned objects are such examples. This may be false on NG/legacy
+  // boundary.
+  bool IsBlockLayoutRoot() const {
+    return BoxType() >= NGBoxType::kMinimumBlockLayoutRoot;
+  }
+
+  // |Offset()| is reliable only when this fragment was placed by LayoutNG
+  // parent. When the parent is not LayoutNG, the parent may move the
+  // |LayoutObject| after this fragment was placed. See comments in
+  // |LayoutNGBlockFlow::UpdateBlockLayout()| and crbug.com/788590
+  bool IsPlacedByLayoutNG() const;
 
   // The accessors in this class shouldn't be used by layout code directly,
   // instead should be accessed by the NGFragmentBase classes. These accessors
@@ -75,22 +115,22 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
     return offset_;
   }
 
-  NGBreakToken* BreakToken() const { return break_token_.Get(); }
+  NGBreakToken* BreakToken() const { return break_token_.get(); }
   const ComputedStyle& Style() const;
+  Node* GetNode() const;
 
   // GetLayoutObject should only be used when necessary for compatibility
   // with LegacyLayout.
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
-  // DisplayItemClient methods.
-  String DebugName() const override { return "NGPhysicalFragment"; }
+  // VisualRect of itself, not including contents, in the local coordinate.
+  NGPhysicalOffsetRect SelfVisualRect() const;
 
-  // TODO(layout-dev): Implement when we have oveflow support.
-  bool HasOverflowClip() const { return false; }
-  LayoutRect VisualRect() const {
-    return LayoutRect(LayoutPoint(), LayoutSize(Size().width, Size().height));
-  }
-  LayoutRect VisualOverflowRect() const { return VisualRect(); }
+  // VisualRect of itself including contents, in the local coordinate.
+  NGPhysicalOffsetRect VisualRectWithContents() const;
+
+  // Unite visual rect to propagate to parent's ContentsVisualRect.
+  void PropagateContentsVisualRect(NGPhysicalOffsetRect*) const;
 
   // Should only be used by the parent fragment's layout.
   void SetOffset(NGPhysicalOffset offset) {
@@ -101,40 +141,57 @@ class CORE_EXPORT NGPhysicalFragment : public RefCounted<NGPhysicalFragment>,
 
   bool IsPlaced() const { return is_placed_; }
 
-  RefPtr<NGPhysicalFragment> CloneWithoutOffset() const;
+  scoped_refptr<NGPhysicalFragment> CloneWithoutOffset() const;
 
   String ToString() const;
+
+  enum DumpFlag {
+    DumpHeaderText = 0x1,
+    DumpSubtree = 0x2,
+    DumpIndentation = 0x4,
+    DumpType = 0x8,
+    DumpOffset = 0x10,
+    DumpSize = 0x20,
+    DumpTextOffsets = 0x40,
+    DumpAll = -1
+  };
+  typedef int DumpFlags;
+
+  String DumpFragmentTree(DumpFlags) const;
 
 #ifndef NDEBUG
   void ShowFragmentTree() const;
 #endif
-
-  // Override RefCounted's deref() to ensure operator delete is called on the
-  // appropriate subclass type.
-  void Deref() const {
-    if (DerefBase())
-      Destroy();
-  }
 
  protected:
   NGPhysicalFragment(LayoutObject* layout_object,
                      const ComputedStyle& style,
                      NGPhysicalSize size,
                      NGFragmentType type,
-                     RefPtr<NGBreakToken> break_token = nullptr);
+                     scoped_refptr<NGBreakToken> break_token = nullptr);
 
   LayoutObject* layout_object_;
-  RefPtr<const ComputedStyle> style_;
+  scoped_refptr<const ComputedStyle> style_;
   NGPhysicalSize size_;
   NGPhysicalOffset offset_;
-  RefPtr<NGBreakToken> break_token_;
+  scoped_refptr<NGBreakToken> break_token_;
 
   unsigned type_ : 2;  // NGFragmentType
+  unsigned box_type_ : 3;  // NGBoxType
   unsigned is_placed_ : 1;
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
 
  private:
+  friend struct NGPhysicalFragmentTraits;
   void Destroy() const;
+};
+
+// Used for return value of traversing fragment tree.
+struct CORE_EXPORT NGPhysicalFragmentWithOffset {
+  const NGPhysicalFragment* fragment = nullptr;
+  NGPhysicalOffset offset_to_container_box;
+
+  NGPhysicalOffsetRect RectInContainerBox() const;
 };
 
 }  // namespace blink

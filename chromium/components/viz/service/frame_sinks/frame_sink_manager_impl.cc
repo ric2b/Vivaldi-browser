@@ -11,9 +11,11 @@
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display_embedder/display_provider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_impl.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_client.h"
 #include "components/viz/service/frame_sinks/primary_begin_frame_source.h"
 #include "components/viz/service/frame_sinks/root_compositor_frame_sink_impl.h"
+#include "components/viz/service/frame_sinks/video_capture/capturable_frame_sink.h"
 
 #if DCHECK_IS_ON()
 #include <sstream>
@@ -30,12 +32,18 @@ FrameSinkManagerImpl::FrameSinkSourceMapping::FrameSinkSourceMapping(
 FrameSinkManagerImpl::FrameSinkSourceMapping::~FrameSinkSourceMapping() =
     default;
 
+FrameSinkManagerImpl::SinkAndSupport::SinkAndSupport() = default;
+
+FrameSinkManagerImpl::SinkAndSupport::~SinkAndSupport() = default;
+
 FrameSinkManagerImpl::FrameSinkManagerImpl(
     SurfaceManager::LifetimeType lifetime_type,
     DisplayProvider* display_provider)
     : display_provider_(display_provider),
       surface_manager_(lifetime_type),
+      hit_test_manager_(this),
       binding_(this) {
+  surface_manager_.AddObserver(&hit_test_manager_);
   surface_manager_.AddObserver(this);
 }
 
@@ -47,6 +55,7 @@ FrameSinkManagerImpl::~FrameSinkManagerImpl() {
   DCHECK_EQ(clients_.size(), 0u);
   DCHECK_EQ(registered_sources_.size(), 0u);
   surface_manager_.RemoveObserver(this);
+  surface_manager_.RemoveObserver(&hit_test_manager_);
 }
 
 void FrameSinkManagerImpl::BindAndSetClient(
@@ -72,6 +81,8 @@ void FrameSinkManagerImpl::RegisterFrameSinkId(
     const FrameSinkId& frame_sink_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   surface_manager_.RegisterFrameSinkId(frame_sink_id);
+  if (video_detector_)
+    video_detector_->OnFrameSinkIdRegistered(frame_sink_id);
 }
 
 void FrameSinkManagerImpl::InvalidateFrameSinkId(
@@ -79,6 +90,14 @@ void FrameSinkManagerImpl::InvalidateFrameSinkId(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   compositor_frame_sinks_.erase(frame_sink_id);
   surface_manager_.InvalidateFrameSinkId(frame_sink_id);
+  if (video_detector_)
+    video_detector_->OnFrameSinkIdInvalidated(frame_sink_id);
+}
+
+void FrameSinkManagerImpl::SetFrameSinkDebugLabel(
+    const FrameSinkId& frame_sink_id,
+    const std::string& debug_label) {
+  surface_manager_.SetFrameSinkDebugLabel(frame_sink_id, debug_label);
 }
 
 void FrameSinkManagerImpl::CreateRootCompositorFrameSink(
@@ -93,15 +112,17 @@ void FrameSinkManagerImpl::CreateRootCompositorFrameSink(
   DCHECK_EQ(0u, compositor_frame_sinks_.count(frame_sink_id));
   DCHECK(display_provider_);
 
-  std::unique_ptr<BeginFrameSource> begin_frame_source;
+  std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source;
   auto display = display_provider_->CreateDisplay(
       frame_sink_id, surface_handle, renderer_settings, &begin_frame_source);
 
-  compositor_frame_sinks_[frame_sink_id] =
-      base::MakeUnique<RootCompositorFrameSinkImpl>(
-          this, frame_sink_id, std::move(display),
-          std::move(begin_frame_source), std::move(request), std::move(client),
-          std::move(display_private_request));
+  auto frame_sink = std::make_unique<RootCompositorFrameSinkImpl>(
+      this, frame_sink_id, std::move(display), std::move(begin_frame_source),
+      std::move(request), std::move(client),
+      std::move(display_private_request));
+  SinkAndSupport& entry = compositor_frame_sinks_[frame_sink_id];
+  entry.support = frame_sink->support();
+  entry.sink = std::move(frame_sink);
 }
 
 void FrameSinkManagerImpl::CreateCompositorFrameSink(
@@ -111,9 +132,11 @@ void FrameSinkManagerImpl::CreateCompositorFrameSink(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(0u, compositor_frame_sinks_.count(frame_sink_id));
 
-  compositor_frame_sinks_[frame_sink_id] =
-      base::MakeUnique<CompositorFrameSinkImpl>(
-          this, frame_sink_id, std::move(request), std::move(client));
+  auto frame_sink = std::make_unique<CompositorFrameSinkImpl>(
+      this, frame_sink_id, std::move(request), std::move(client));
+  SinkAndSupport& entry = compositor_frame_sinks_[frame_sink_id];
+  entry.support = frame_sink->support();
+  entry.sink = std::move(frame_sink);
 }
 
 void FrameSinkManagerImpl::RegisterFrameSinkHierarchy(
@@ -303,6 +326,14 @@ void FrameSinkManagerImpl::RecursivelyDetachBeginFrameSource(
   }
 }
 
+CapturableFrameSink* FrameSinkManagerImpl::FindCapturableFrameSink(
+    const FrameSinkId& frame_sink_id) {
+  const auto it = compositor_frame_sinks_.find(frame_sink_id);
+  if (it == compositor_frame_sinks_.end())
+    return nullptr;
+  return it->second.support;
+}
+
 bool FrameSinkManagerImpl::ChildContains(
     const FrameSinkId& child_frame_sink_id,
     const FrameSinkId& search_frame_sink_id) const {
@@ -349,13 +380,33 @@ void FrameSinkManagerImpl::OnSurfaceDamageExpected(const SurfaceId& surface_id,
                                                    const BeginFrameArgs& args) {
 }
 
-void FrameSinkManagerImpl::OnSurfaceWillDraw(const SurfaceId& surface_id) {}
+void FrameSinkManagerImpl::OnSurfaceSubtreeDamaged(
+    const SurfaceId& surface_id) {}
 
 void FrameSinkManagerImpl::OnClientConnectionLost(
     const FrameSinkId& frame_sink_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (client_)
     client_->OnClientConnectionClosed(frame_sink_id);
+}
+
+void FrameSinkManagerImpl::SubmitHitTestRegionList(
+    const SurfaceId& surface_id,
+    uint64_t frame_index,
+    mojom::HitTestRegionListPtr hit_test_region_list) {
+  hit_test_manager_.SubmitHitTestRegionList(surface_id, frame_index,
+                                            std::move(hit_test_region_list));
+}
+
+uint64_t FrameSinkManagerImpl::GetActiveFrameIndex(
+    const SurfaceId& surface_id) {
+  return surface_manager_.GetSurfaceForId(surface_id)->GetActiveFrameIndex();
+}
+
+void FrameSinkManagerImpl::OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
+                                               uint32_t frame_token) {
+  if (client_)
+    client_->OnFrameTokenChanged(frame_sink_id, frame_token);
 }
 
 void FrameSinkManagerImpl::OnAggregatedHitTestRegionListUpdated(
@@ -380,6 +431,22 @@ void FrameSinkManagerImpl::SwitchActiveAggregatedHitTestRegionList(
     client_->SwitchActiveAggregatedHitTestRegionList(frame_sink_id,
                                                      active_handle_index);
   }
+}
+
+void FrameSinkManagerImpl::AddVideoDetectorObserver(
+    mojom::VideoDetectorObserverPtr observer) {
+  if (!video_detector_)
+    video_detector_ = std::make_unique<VideoDetector>(&surface_manager_);
+  video_detector_->AddObserver(std::move(observer));
+}
+
+VideoDetector* FrameSinkManagerImpl::CreateVideoDetectorForTesting(
+    std::unique_ptr<base::TickClock> tick_clock,
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  DCHECK(!video_detector_);
+  video_detector_ = std::make_unique<VideoDetector>(
+      surface_manager(), std::move(tick_clock), task_runner);
+  return video_detector_.get();
 }
 
 }  // namespace viz

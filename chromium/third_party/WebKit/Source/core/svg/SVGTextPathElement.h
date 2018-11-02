@@ -20,7 +20,6 @@
 #ifndef SVGTextPathElement_h
 #define SVGTextPathElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGTextContentElement.h"
 #include "core/svg/SVGURIReference.h"
 #include "platform/heap/Handle.h"
@@ -72,7 +71,7 @@ class SVGTextPathElement final : public SVGTextContentElement,
     return spacing_.Get();
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGTextPathElement(Document&);

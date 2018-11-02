@@ -19,10 +19,9 @@
 
 namespace base {
 class MessageLoop;
-class SequencedWorkerPool;
 }
 
-namespace tracked_objects {
+namespace base {
 class Location;
 }
 
@@ -66,15 +65,8 @@ class WebThread {
     // The main thread in the browser.
     UI,
 
-    // This is the thread that interacts with the database.
-    DB,
-
-    // This is the thread that interacts with the file system.
-    FILE,
-
     // This is the thread that processes non-blocking IO, i.e. IPC and network.
-    // Blocking IO should happen on other threads like DB, FILE,
-    // FILE_USER_BLOCKING and CACHE depending on the usage.
+    // Blocking IO should happen in TaskScheduler.
     IO,
 
     // NOTE: do not add new threads here that are only used by a small number of
@@ -93,30 +85,29 @@ class WebThread {
   // otherwise.
   // They return true iff the thread existed and the task was posted.
   static bool PostTask(ID identifier,
-                       const tracked_objects::Location& from_here,
+                       const base::Location& from_here,
                        base::OnceClosure task);
   static bool PostDelayedTask(ID identifier,
-                              const tracked_objects::Location& from_here,
+                              const base::Location& from_here,
                               base::OnceClosure task,
                               base::TimeDelta delay);
   static bool PostNonNestableTask(ID identifier,
-                                  const tracked_objects::Location& from_here,
+                                  const base::Location& from_here,
                                   base::OnceClosure task);
-  static bool PostNonNestableDelayedTask(
-      ID identifier,
-      const tracked_objects::Location& from_here,
-      base::OnceClosure task,
-      base::TimeDelta delay);
+  static bool PostNonNestableDelayedTask(ID identifier,
+                                         const base::Location& from_here,
+                                         base::OnceClosure task,
+                                         base::TimeDelta delay);
 
   static bool PostTaskAndReply(ID identifier,
-                               const tracked_objects::Location& from_here,
+                               const base::Location& from_here,
                                base::OnceClosure task,
                                base::OnceClosure reply);
 
   template <typename ReturnType, typename ReplyArgType>
   static bool PostTaskAndReplyWithResult(
       ID identifier,
-      const tracked_objects::Location& from_here,
+      const base::Location& from_here,
       base::OnceCallback<ReturnType()> task,
       base::OnceCallback<void(ReplyArgType)> reply) {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -127,46 +118,10 @@ class WebThread {
 
   template <class T>
   static bool DeleteSoon(ID identifier,
-                         const tracked_objects::Location& from_here,
+                         const base::Location& from_here,
                          const T* object) {
     return GetTaskRunnerForThread(identifier)->DeleteSoon(from_here, object);
   }
-
-  // Simplified wrappers for posting to the blocking thread pool. Use this
-  // for doing things like blocking I/O.
-  //
-  // The first variant will run the task in the pool with no sequencing
-  // semantics, so may get run in parallel with other posted tasks. The second
-  // variant will all post a task with no sequencing semantics, and will post a
-  // reply task to the origin TaskRunner upon completion.  The third variant
-  // provides sequencing between tasks with the same sequence token name.
-  //
-  // These tasks are guaranteed to run before shutdown.
-  //
-  // If you need to provide different shutdown semantics (like you have
-  // something slow and noncritical that doesn't need to block shutdown),
-  // or you want to manually provide a sequence token (which saves a map
-  // lookup and is guaranteed unique without you having to come up with a
-  // unique string), you can access the sequenced worker pool directly via
-  // GetBlockingPool().
-  //
-  // If you need to PostTaskAndReplyWithResult, use
-  // base::PostTaskAndReplyWithResult() with GetBlockingPool() as the task
-  // runner.
-  static bool PostBlockingPoolTask(const tracked_objects::Location& from_here,
-                                   base::OnceClosure task);
-  static bool PostBlockingPoolTaskAndReply(
-      const tracked_objects::Location& from_here,
-      base::OnceClosure task,
-      base::OnceClosure reply);
-  static bool PostBlockingPoolSequencedTask(
-      const std::string& sequence_token_name,
-      const tracked_objects::Location& from_here,
-      base::OnceClosure task);
-
-  // Returns the thread pool used for blocking file I/O. Use this object to
-  // perform random blocking operations such as file writes.
-  static base::SequencedWorkerPool* GetBlockingPool() WARN_UNUSED_RESULT;
 
   // Callable on any thread.  Returns whether the given well-known thread is
   // initialized.
@@ -206,11 +161,11 @@ class WebThread {
   // Use these templates in conjunction with RefCountedThreadSafe or
   // std::unique_ptr when you want to ensure that an object is deleted on a
   // specific thread. This is needed when an object can hop between threads
-  // (i.e. IO -> FILE -> IO), and thread switching delays can mean that the
-  // final IO tasks executes before the FILE task's stack unwinds.
-  // This would lead to the object destructing on the FILE thread, which often
-  // is not what you want (i.e. to unregister from NotificationService, to
-  // notify other objects on the creating thread etc).
+  // (i.e. IO -> UI -> IO), and thread switching delays can mean that the final
+  // IO tasks executes before the UI task's stack unwinds. This would lead to
+  // the object destructing on the UI thread, which often is not what you want
+  // (i.e. to unregister from NotificationService, to notify other objects on
+  // the creating thread etc).
   template <ID thread>
   struct DeleteOnThread {
     template <typename T>
@@ -247,8 +202,6 @@ class WebThread {
   // std::unique_ptr<Foo, web::WebThread::DeleteOnIOThread> ptr;
   struct DeleteOnUIThread : public DeleteOnThread<UI> {};
   struct DeleteOnIOThread : public DeleteOnThread<IO> {};
-  struct DeleteOnFileThread : public DeleteOnThread<FILE> {};
-  struct DeleteOnDBThread : public DeleteOnThread<DB> {};
 
  private:
   friend class WebThreadImpl;

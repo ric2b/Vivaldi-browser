@@ -130,7 +130,7 @@ class TestUrlData : public UrlData {
   }
 
  protected:
-  ~TestUrlData() override {}
+  ~TestUrlData() override = default;
   const int block_shift_;
 
   std::unique_ptr<TestResourceMultiBuffer> test_multibuffer_;
@@ -158,8 +158,8 @@ class TestUrlIndex : public UrlIndex {
 
 class MockBufferedDataSourceHost : public BufferedDataSourceHost {
  public:
-  MockBufferedDataSourceHost() {}
-  virtual ~MockBufferedDataSourceHost() {}
+  MockBufferedDataSourceHost() = default;
+  virtual ~MockBufferedDataSourceHost() = default;
 
   MOCK_METHOD1(SetTotalBytes, void(int64_t total_bytes));
   MOCK_METHOD2(AddBufferedByteRange, void(int64_t start, int64_t end));
@@ -186,6 +186,7 @@ class MockMultibufferDataSource : public MultibufferDataSource {
   bool downloading() { return downloading_; }
   void set_downloading(bool downloading) { downloading_ = downloading; }
   bool range_supported() { return url_data_->range_supported(); }
+  void CallSeekTask() { SeekTask(); }
 
  private:
   // Whether the resource is downloading or deferred.
@@ -882,7 +883,7 @@ TEST_F(MultibufferDataSourceTest, StopDuringRead) {
   InitializeWith206Response();
 
   uint8_t buffer[256];
-  data_source_->Read(0, arraysize(buffer), buffer,
+  data_source_->Read(kDataSize, arraysize(buffer), buffer,
                      base::Bind(&MultibufferDataSourceTest::ReadCallback,
                                 base::Unretained(this)));
 
@@ -1542,7 +1543,7 @@ TEST_F(MultibufferDataSourceTest, CheckBufferSizeForSmallFiles) {
   EXPECT_EQ(3 << 20, preload_high());
   EXPECT_EQ(25 << 20, max_buffer_forward());
   EXPECT_EQ(kFileSize * 2, max_buffer_backward());
-  EXPECT_EQ(5013504 /* file size rounted up to blocks size */, buffer_size());
+  EXPECT_EQ(5013504 /* file size rounded up to blocks size */, buffer_size());
 
   data_source_->SetBitrate(80 << 20);  // 80 mbit / s
   base::RunLoop().RunUntilIdle();
@@ -1551,7 +1552,33 @@ TEST_F(MultibufferDataSourceTest, CheckBufferSizeForSmallFiles) {
   EXPECT_EQ(51 << 20, preload_high());
   EXPECT_EQ(51 << 20, max_buffer_forward());
   EXPECT_EQ(20 << 20, max_buffer_backward());
-  EXPECT_EQ(5013504 /* file size rounted up to blocks size */, buffer_size());
+  EXPECT_EQ(5013504 /* file size rounded up to blocks size */, buffer_size());
+}
+
+TEST_F(MultibufferDataSourceTest, CheckBufferSizeAfterReadingALot) {
+  InitializeWith206Response();
+
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+
+  const int to_read = 40;
+
+  for (int i = 1; i < to_read; i++) {
+    EXPECT_CALL(*this, ReadCallback(kDataSize));
+    EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * (i + 1)));
+    ReadAt(i * kDataSize);
+    ReceiveData(kDataSize);
+  }
+
+  data_source_->SetBitrate(1 << 20);  // 1 mbit / s
+  base::RunLoop().RunUntilIdle();
+  int64_t extra_buffer = to_read / 10 * kDataSize;
+  EXPECT_EQ(1 << 20, data_source_bitrate());
+  EXPECT_EQ((2 << 20) + extra_buffer, preload_low());
+  EXPECT_EQ((3 << 20) + extra_buffer, preload_high());
+  EXPECT_EQ(25 << 20, max_buffer_forward());
+  EXPECT_EQ(kFileSize * 2, max_buffer_backward());
+  EXPECT_EQ(5013504 /* file size rounded up to blocks size */, buffer_size());
 }
 
 // Provoke an edge case where the loading state may not end up transitioning
@@ -1591,6 +1618,81 @@ TEST_F(MultibufferDataSourceTest, Http_CheckLoadingTransition) {
 
   // Make sure we're not downloading anymore.
   EXPECT_EQ(data_source_->downloading(), false);
+  Stop();
+}
+
+TEST_F(MultibufferDataSourceTest, Http_Seek_Back) {
+  InitializeWith206Response();
+
+  // Read a bit from the beginning.
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+
+  ReadAt(kDataSize);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2));
+  ReceiveData(kDataSize);
+  ReadAt(kDataSize * 2);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
+  ReceiveData(kDataSize);
+
+  // Read some data from far ahead.
+  ReadAt(kFarReadPosition);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(kFarReadPosition,
+                                          kFarReadPosition + kDataSize));
+  Respond(response_generator_->Generate206(kFarReadPosition));
+  ReceiveData(kDataSize);
+
+  // This should not close the current connection, because we have
+  // more data buffered at this location than at kFarReadPosition.
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+  data_source_->CallSeekTask();
+  EXPECT_EQ(kFarReadPosition + kDataSize, loader()->Tell());
+
+  // Again, no seek.
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(kDataSize);
+  data_source_->CallSeekTask();
+  EXPECT_EQ(kFarReadPosition + kDataSize, loader()->Tell());
+
+  // Still no seek
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(kFarReadPosition);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(kDataSize);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(kDataSize * 2);
+  data_source_->CallSeekTask();
+  EXPECT_EQ(kFarReadPosition + kDataSize, loader()->Tell());
+
+  // Read some data from far ahead, but right before where we read before.
+  // This time we'll have one block buffered.
+  ReadAt(kFarReadPosition - kDataSize);
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(kFarReadPosition - kDataSize,
+                                          kFarReadPosition + kDataSize));
+  Respond(response_generator_->Generate206(kFarReadPosition - kDataSize));
+  ReceiveData(kDataSize);
+
+  // No Seek
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+  data_source_->CallSeekTask();
+  EXPECT_EQ(kFarReadPosition, loader()->Tell());
+
+  // Seek
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(kDataSize * 2);
+  data_source_->CallSeekTask();
+  EXPECT_EQ(kDataSize * 3, loader()->Tell());
+
   Stop();
 }
 

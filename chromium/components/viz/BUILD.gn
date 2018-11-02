@@ -12,6 +12,7 @@ viz_test("viz_unittests") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//components/viz/client:unit_tests",
     "//components/viz/common:unit_tests",
     "//components/viz/host:unit_tests",
     "//components/viz/service:unit_tests",
@@ -21,11 +22,9 @@ viz_test("viz_unittests") {
     "//mojo/edk/system",
   ]
 
-  if (!is_android) {
-    data = [
-      "test/data/",
-    ]
-  }
+  data = [
+    "test/data/",
+  ]
 
   data_deps = [
     "//third_party/mesa:osmesa",
@@ -40,6 +39,7 @@ viz_test("viz_perftests") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//components/viz/common:perf_tests",
     "//components/viz/service:perf_tests",
     "//components/viz/test:test_suite",
   ]

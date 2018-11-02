@@ -11,7 +11,10 @@ import static org.chromium.chrome.browser.vr_shell.VrTestFramework.POLL_TIMEOUT_
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DON_ENABLED;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
 
+import android.app.Activity;
 import android.os.Build;
+import android.os.SystemClock;
+import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -21,6 +24,7 @@ import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
@@ -30,6 +34,7 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.vr_shell.mock.MockVrIntentHandler;
 import org.chromium.chrome.browser.vr_shell.rules.VrActivityRestriction;
 import org.chromium.chrome.browser.vr_shell.util.NfcSimUtils;
@@ -41,8 +46,10 @@ import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.WebContents;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * End-to-end tests for transitioning between WebVR's magic window and
@@ -86,7 +93,7 @@ public class WebVrTransitionTest {
         VrTransitionUtils.enterPresentationAndWait(
                 mVrTestFramework.getFirstTabCvc(), mVrTestFramework.getFirstTabWebContents());
         Assert.assertTrue("VrShellDelegate is in VR", VrShellDelegate.isInVr());
-        mVrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
     }
 
     /**
@@ -96,32 +103,39 @@ public class WebVrTransitionTest {
     @Test
     @MediumTest
     @CommandLineFlags.Remove({"enable-webvr"})
+    @VrActivityRestriction({VrActivityRestriction.SupportedActivity.ALL})
     public void testWebVrDisabledWithoutFlagSet() throws InterruptedException {
         // TODO(bsheedy): Remove this test once WebVR is on by default without
         // requiring an origin trial.
         mVrTestFramework.loadUrlAndAwaitInitialization(
                 VrTestFramework.getHtmlTestFile("test_webvr_disabled_without_flag_set"),
                 PAGE_LOAD_TIMEOUT_S);
-        mVrTestFramework.waitOnJavaScriptStep(mVrTestFramework.getFirstTabWebContents());
-        mVrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.waitOnJavaScriptStep(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
     }
 
     /**
      * Tests that scanning the Daydream View NFC tag on supported devices fires the
-     * vrdisplayactivate event.
+     * vrdisplayactivate event and the event allows presentation without a user gesture.
      */
     @Test
-    @MediumTest
+    @LargeTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    @VrActivityRestriction({VrActivityRestriction.SupportedActivity.ALL})
     public void testNfcFiresVrdisplayactivate() throws InterruptedException {
         mVrTestFramework.loadUrlAndAwaitInitialization(
                 VrTestFramework.getHtmlTestFile("test_nfc_fires_vrdisplayactivate"),
                 PAGE_LOAD_TIMEOUT_S);
-        mVrTestFramework.runJavaScriptOrFail(
+        VrTestFramework.runJavaScriptOrFail(
                 "addListener()", POLL_TIMEOUT_LONG_MS, mVrTestFramework.getFirstTabWebContents());
         NfcSimUtils.simNfcScan(mVrTestRule.getActivity());
-        mVrTestFramework.waitOnJavaScriptStep(mVrTestFramework.getFirstTabWebContents());
-        mVrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.waitOnJavaScriptStep(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+        // VrCore has a 2000 ms debounce timeout on NFC scans. When run multiple times in different
+        // activities, it is possible for a latter test to be run in the 2 seconds after the
+        // previous test's NFC scan, causing it to fail flakily. So, wait 2 seconds to ensure that
+        // can't happen.
+        SystemClock.sleep(2000);
     }
 
     /**
@@ -131,13 +145,14 @@ public class WebVrTransitionTest {
     @Test
     @MediumTest
     @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @VrActivityRestriction({VrActivityRestriction.SupportedActivity.ALL})
     public void testPresentationPromiseUnresolvedDuringDon() throws InterruptedException {
         mVrTestFramework.loadUrlAndAwaitInitialization(
                 VrTestFramework.getHtmlTestFile("test_presentation_promise_unresolved_during_don"),
                 PAGE_LOAD_TIMEOUT_S);
         VrTransitionUtils.enterPresentationAndWait(
                 mVrTestFramework.getFirstTabCvc(), mVrTestFramework.getFirstTabWebContents());
-        mVrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
     }
 
     /**
@@ -146,27 +161,47 @@ public class WebVrTransitionTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-features=WebVrAutopresent")
+    @CommandLineFlags.Add("enable-features=WebVrAutopresentFromIntent")
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
     public void testTrustedIntentAllowsAutoPresent() throws InterruptedException {
         VrIntentUtils.setHandlerInstanceForTesting(new MockVrIntentHandler(
                 true /* useMockImplementation */, true /* treatIntentsAsTrusted */));
-        VrTransitionUtils.sendDaydreamAutopresentIntent(
-                VrTestFramework.getHtmlTestFile("test_webvr_autopresent"),
-                mVrTestRule.getActivity());
 
-        // Wait until the link is opened in a new tab
-        final ChromeActivity act = mVrTestRule.getActivity();
+        // Send an autopresent intent, which will open the link in a CCT
+        VrTransitionUtils.sendVrLaunchIntent(
+                VrTestFramework.getHtmlTestFile("test_webvr_autopresent"),
+                mVrTestRule.getActivity(), true /* autopresent */);
+
+        // Wait until a CCT is opened due to the intent
+        final AtomicReference<CustomTabActivity> cct = new AtomicReference<CustomTabActivity>();
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return act.getTabModelSelector().getTotalTabCount() == 2;
+                List<WeakReference<Activity>> list = ApplicationStatus.getRunningActivities();
+                for (WeakReference<Activity> ref : list) {
+                    Activity activity = ref.get();
+                    if (activity == null) continue;
+                    if (activity instanceof CustomTabActivity) {
+                        cct.set((CustomTabActivity) activity);
+                        return true;
+                    }
+                }
+                return false;
             }
         }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
 
-        WebContents wc = mVrTestRule.getActivity().getActivityTab().getWebContents();
-        mVrTestFramework.waitOnJavaScriptStep(wc);
-        mVrTestFramework.endTest(wc);
+        // Wait until the tab is ready
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                if (cct.get().getActivityTab() == null) return false;
+                return !cct.get().getActivityTab().isLoading();
+            }
+        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+
+        WebContents wc = cct.get().getActivityTab().getWebContents();
+        VrTestFramework.waitOnJavaScriptStep(wc);
+        VrTestFramework.endTest(wc);
     }
 
     /**

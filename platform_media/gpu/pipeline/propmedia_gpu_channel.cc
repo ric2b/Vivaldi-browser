@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -43,7 +43,7 @@ bool ProprietaryMediaGpuChannel::OnPipelineMessageReceived(
   if (channel_->scheduler())
     return false;
 
-  content::IPCMediaPipeline* pipeline = media_pipelines_.Lookup(msg.routing_id());
+  media::IPCMediaPipeline* pipeline = media_pipelines_.Lookup(msg.routing_id());
 
   if (pipeline)
       return pipeline->OnMessageReceived(msg);
@@ -60,8 +60,8 @@ void ProprietaryMediaGpuChannel::OnNewMediaPipeline(
   if (AllowHardwareDecode())
     command_buffer = channel_->LookupCommandBuffer(command_buffer_route_id);
 
-  std::unique_ptr<content::IPCMediaPipeline> ipc_media_pipeline(
-      new content::IPCMediaPipeline(this, route_id, command_buffer));
+  std::unique_ptr<media::IPCMediaPipeline> ipc_media_pipeline(
+      new media::IPCMediaPipeline(this, route_id, command_buffer));
 
   if (channel_->scheduler()) {
     SequenceId sequence_id = channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);

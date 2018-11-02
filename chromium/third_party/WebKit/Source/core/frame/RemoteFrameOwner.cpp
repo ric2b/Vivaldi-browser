@@ -12,7 +12,7 @@ namespace blink {
 
 RemoteFrameOwner::RemoteFrameOwner(
     SandboxFlags flags,
-    const WebParsedFeaturePolicy& container_policy,
+    const ParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties)
     : sandbox_flags_(flags),
       browsing_context_container_name_(
@@ -27,7 +27,7 @@ RemoteFrameOwner::RemoteFrameOwner(
       csp_(frame_owner_properties.required_csp),
       container_policy_(container_policy) {}
 
-DEFINE_TRACE(RemoteFrameOwner) {
+void RemoteFrameOwner::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   FrameOwner::Trace(visitor);
 }

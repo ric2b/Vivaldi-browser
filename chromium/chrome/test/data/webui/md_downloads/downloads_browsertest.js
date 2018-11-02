@@ -28,6 +28,9 @@ DownloadsTest.prototype = {
 
   /** @override */
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
+
+  /** @override */
+  runAccessibilityChecks: true,
 };
 
 /**
@@ -56,9 +59,9 @@ TEST_F('DownloadsItemTest', 'All', function() {
  * @constructor
  * @extends {DownloadsTest}
  */
-function DownloadsLayoutTest() {}
+function DownloadsManagerTest() {}
 
-DownloadsLayoutTest.prototype = {
+DownloadsManagerTest.prototype = {
   __proto__: DownloadsTest.prototype,
 
   /** @override */
@@ -66,11 +69,13 @@ DownloadsLayoutTest.prototype = {
 
   /** @override */
   extraLibraries: DownloadsTest.prototype.extraLibraries.concat([
-    'layout_tests.js',
+    ROOT_PATH + 'ui/webui/resources/js/cr.js',
+    ROOT_PATH + 'chrome/browser/resources/md_downloads/constants.js',
+    'manager_tests.js',
   ]),
 };
 
-TEST_F('DownloadsLayoutTest', 'All', function() {
+TEST_F('DownloadsManagerTest', 'All', function() {
   mocha.run();
 });
 

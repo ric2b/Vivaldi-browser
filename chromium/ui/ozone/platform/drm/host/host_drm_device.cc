@@ -81,7 +81,7 @@ void HostDrmDevice::RunObservers() {
   // The cursor is special since it will process input events on the IO thread
   // and can by-pass the UI thread. This means that we need to special case it
   // and notify it after all other observers/handlers are notified.
-  cursor_->SetDrmCursorProxy(base::MakeUnique<HostCursorProxy>(connector_));
+  cursor_->SetDrmCursorProxy(std::make_unique<HostCursorProxy>(connector_));
 
   // TODO(rjkroege): Call ResetDrmCursorProxy when the mojo connection to the
   // DRM thread is broken.
@@ -236,7 +236,7 @@ bool HostDrmDevice::GpuRelinquishDisplayControl() {
   auto callback =
       base::BindOnce(&HostDrmDevice::GpuRelinquishDisplayControlCallback,
                      weak_ptr_factory_.GetWeakPtr());
-  drm_device_ptr_->TakeDisplayControl(std::move(callback));
+  drm_device_ptr_->RelinquishDisplayControl(std::move(callback));
   return true;
 }
 
@@ -313,7 +313,7 @@ void HostDrmDevice::GpuRefreshNativeDisplaysCallback(
     std::vector<std::unique_ptr<display::DisplaySnapshot>> displays) const {
   DCHECK_CALLED_ON_VALID_THREAD(on_window_server_thread_);
   display_manager_->GpuHasUpdatedNativeDisplays(
-      CreateParamsFromSnapshot(displays));
+      CreateDisplaySnapshotParams(displays));
 }
 
 void HostDrmDevice::GpuDisableNativeDisplayCallback(int64_t display_id,

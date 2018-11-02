@@ -50,6 +50,10 @@ class LegacyNavigationManagerImpl : public NavigationManagerImpl {
   void CommitPendingItem() override;
   int GetIndexForOffset(int offset) const override;
   int GetPreviousItemIndex() const override;
+  void SetPreviousItemIndex(int previous_item_index) override;
+  void AddPushStateItemIfNecessary(const GURL& url,
+                                   NSString* state_object,
+                                   ui::PageTransition transition) override;
 
   // NavigationManager:
   BrowserState* GetBrowserState() const override;
@@ -84,7 +88,7 @@ class LegacyNavigationManagerImpl : public NavigationManagerImpl {
   NavigationItemImpl* GetLastCommittedItemImpl() const override;
   NavigationItemImpl* GetPendingItemImpl() const override;
   NavigationItemImpl* GetTransientItemImpl() const override;
-  void FinishGoToIndex(int index) override;
+  void FinishGoToIndex(int index, NavigationInitiationType type) override;
 
   // Returns true if the PageTransition for the underlying navigation item at
   // |index| has ui::PAGE_TRANSITION_IS_REDIRECT_MASK.

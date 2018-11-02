@@ -7,9 +7,10 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/address_normalization_manager.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_type.h"
-#include "components/payments/core/address_normalization_manager.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payment_shipping_option.h"
@@ -42,8 +43,8 @@ void PaymentResponseHelper::OnInstrumentDetailsReady(
   if (payment_request_->request_shipping()) {
     DCHECK(payment_request_->selected_shipping_profile());
     shipping_address_ = *payment_request_->selected_shipping_profile();
-    payment_request_->GetAddressNormalizationManager()->StartNormalizingAddress(
-        &shipping_address_);
+    payment_request_->GetAddressNormalizationManager()
+        ->NormalizeAddressUntilFinalized(&shipping_address_);
   }
 
   if (payment_request_->request_payer_name() ||
@@ -51,12 +52,12 @@ void PaymentResponseHelper::OnInstrumentDetailsReady(
       payment_request_->request_payer_phone()) {
     DCHECK(payment_request_->selected_contact_profile());
     contact_info_ = *payment_request_->selected_contact_profile();
-    payment_request_->GetAddressNormalizationManager()->StartNormalizingAddress(
-        &contact_info_);
+    payment_request_->GetAddressNormalizationManager()
+        ->NormalizeAddressUntilFinalized(&contact_info_);
   }
 
   payment_request_->GetAddressNormalizationManager()
-      ->FinalizePendingRequestsWithCompletionCallback(base::Bind(
+      ->FinalizeWithCompletionCallback(base::Bind(
           &PaymentResponseHelper::AddressNormalizationCompleted, AsWeakPtr()));
 }
 
@@ -65,7 +66,7 @@ void PaymentResponseHelper::OnInstrumentDetailsError() {
 }
 
 void PaymentResponseHelper::AddressNormalizationCompleted() {
-  web::PaymentResponse response;
+  payments::PaymentResponse response;
 
   response.payment_request_id =
       payment_request_->web_payment_request().payment_request_id;
@@ -103,8 +104,9 @@ void PaymentResponseHelper::AddressNormalizationCompleted() {
     const std::string default_region_code =
         autofill::AutofillCountry::CountryCodeForLocale(
             payment_request_->GetApplicationLocale());
-    response.payer_phone = base::UTF8ToUTF16(data_util::FormatPhoneForResponse(
-        original_number, default_region_code));
+    response.payer_phone =
+        base::UTF8ToUTF16(autofill::i18n::FormatPhoneForResponse(
+            original_number, default_region_code));
   }
 
   [consumer_ paymentResponseHelperDidCompleteWithPaymentResponse:response];

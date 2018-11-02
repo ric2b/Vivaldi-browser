@@ -49,11 +49,9 @@ class TokenRevoker : public GaiaAuthConsumer {
 TokenRevoker::TokenRevoker()
     : gaia_fetcher_(this,
                     GaiaConstants::kChromeOSSource,
-                    g_browser_process->system_request_context()) {
-}
+                    g_browser_process->system_request_context()) {}
 
-TokenRevoker::~TokenRevoker() {
-}
+TokenRevoker::~TokenRevoker() {}
 
 void TokenRevoker::Start(const std::string& token) {
   gaia_fetcher_.StartRevokeOAuth2Token(token);
@@ -165,8 +163,8 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
   bool check_license_type = false;
   // The license selection dialog is not used when doing Zero Touch.
   if (!enrollment_config_.is_mode_attestation()) {
-    check_license_type = base::CommandLine::ForCurrentProcess()->HasSwitch(
-        chromeos::switches::kEnterpriseEnableLicenseTypeSelection);
+    check_license_type = !base::CommandLine::ForCurrentProcess()->HasSwitch(
+        chromeos::switches::kEnterpriseDisableLicenseTypeSelection);
   }
 
   connector->ScheduleServiceInitialization(0);
@@ -199,8 +197,6 @@ void EnterpriseEnrollmentHelperImpl::UseLicenseType(policy::LicenseType type) {
 }
 
 void EnterpriseEnrollmentHelperImpl::GetDeviceAttributeUpdatePermission() {
-  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
-  LOG(WARNING) << "Get device attribute update permission";
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   // Don't update device attributes for Active Directory management.
@@ -263,8 +259,6 @@ void EnterpriseEnrollmentHelperImpl::OnTokenFetched(
 
 void EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished(
     policy::EnrollmentStatus status) {
-  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
-  LOG(WARNING) << "Enrollment finished";
   ReportEnrollmentStatus(status);
   if (oauth_status_ != OAUTH_NOT_STARTED)
     oauth_status_ = OAUTH_FINISHED;
@@ -304,8 +298,6 @@ void EnterpriseEnrollmentHelperImpl::OnLicenseMapObtained(
 
 void EnterpriseEnrollmentHelperImpl::OnDeviceAttributeUpdatePermission(
     bool granted) {
-  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
-  LOG(WARNING) << "Device attribute update permission granted=" << granted;
   status_consumer()->OnDeviceAttributeUpdatePermission(granted);
 }
 

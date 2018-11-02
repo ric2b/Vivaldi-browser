@@ -95,12 +95,12 @@ bool IsEdgeFavoritesLegacyMode() {
   if (context == nullptr)
     return false;
   xmlXPathRegisterNs(
-      context, reinterpret_cast<unsigned char*>("win10"),
-      reinterpret_cast<unsigned char*>(
+      context, reinterpret_cast<const xmlChar*>("win10"),
+      reinterpret_cast<const xmlChar*>(
           "http://schemas.microsoft.com/appx/manifest/foundation/windows10"));
 
   xmlXPathObjectPtr xpath_result = xmlXPathEvalExpression(
-      reinterpret_cast<unsigned char*>(
+      reinterpret_cast<const xmlChar*>(
           "string(/win10:Package/win10:Identity/@Version)"),
       context);
   if (xpath_result == nullptr || xpath_result->type != XPATH_STRING)

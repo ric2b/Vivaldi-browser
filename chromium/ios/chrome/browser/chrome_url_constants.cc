@@ -40,6 +40,8 @@ const char kChromeUINewTabHost[] = "newtab";
 const char kChromeUINTPTilesInternalsHost[] = "ntp-tiles-internals";
 const char kChromeUIOfflineHost[] = "offline";
 const char kChromeUIOmahaHost[] = "omaha";
+const char kChromeUIPasswordManagerInternalsHost[] =
+    "password-manager-internals";
 const char kChromeUIPhysicalWebHost[] = "physical-web";
 const char kChromeUIPolicyHost[] = "policy";
 const char kChromeUISignInInternalsHost[] = "signin-internals";
@@ -52,13 +54,21 @@ const char kChromeUIVersionHost[] = "version";
 // These hosts will also be suggested by BuiltinProvider.
 // 'histograms' is chrome WebUI on iOS, content WebUI on other platforms.
 const char* const kChromeHostURLs[] = {
-    kChromeUIBookmarksHost,       kChromeUIChromeURLsHost,
-    kChromeUICreditsHost,         kChromeUIFlagsHost,
-    kChromeUIHistogramHost,       kChromeUINetExportHost,
-    kChromeUINewTabHost,          kChromeUINTPTilesInternalsHost,
-    kChromeUISignInInternalsHost, kChromeUISuggestionsHost,
-    kChromeUISyncInternalsHost,   kChromeUIPhysicalWebHost,
-    kChromeUITermsHost,           kChromeUIVersionHost,
+    kChromeUIBookmarksHost,
+    kChromeUIChromeURLsHost,
+    kChromeUICreditsHost,
+    kChromeUIFlagsHost,
+    kChromeUIHistogramHost,
+    kChromeUINetExportHost,
+    kChromeUINewTabHost,
+    kChromeUINTPTilesInternalsHost,
+    kChromeUIPasswordManagerInternalsHost,
+    kChromeUISignInInternalsHost,
+    kChromeUISuggestionsHost,
+    kChromeUISyncInternalsHost,
+    kChromeUIPhysicalWebHost,
+    kChromeUITermsHost,
+    kChromeUIVersionHost,
 };
 const size_t kNumberOfChromeHostURLs = arraysize(kChromeHostURLs);
 
@@ -98,3 +108,9 @@ const char kGoogleHistoryURL[] = "https://history.google.com";
 
 const char kGoogleMyAccountURL[] =
     "https://myaccount.google.com/privacy#activitycontrols";
+
+const char kNewTabPageReferrerURL[] =
+    "chrome://do_not_consider_for_most_visited/new_tab_page";
+
+const char kReadingListReferrerURL[] =
+    "chrome://do_not_consider_for_most_visited/reading_list";

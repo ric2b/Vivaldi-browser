@@ -13,7 +13,7 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
+#include "public/platform/modules/serviceworker/service_worker_error_type.mojom-shared.h"
 #include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 #if INSIDE_BLINK
@@ -77,9 +77,13 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerResponse {
 
   mojo::ScopedMessagePipeHandle CloneBlobPtr() const;
 
+  WebString SideDataBlobUUID() const;
+  uint64_t SideDataBlobSize() const;
+  mojo::ScopedMessagePipeHandle CloneSideDataBlobPtr() const;
+
   // Provides a more detailed error when status() is zero.
-  void SetError(WebServiceWorkerResponseError);
-  WebServiceWorkerResponseError GetError() const;
+  void SetError(mojom::ServiceWorkerResponseError);
+  mojom::ServiceWorkerResponseError GetError() const;
 
   void SetResponseTime(base::Time);
   base::Time ResponseTime() const;
@@ -93,8 +97,10 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerResponse {
 #if INSIDE_BLINK
   const HTTPHeaderMap& Headers() const;
 
-  void SetBlobDataHandle(PassRefPtr<BlobDataHandle>);
-  PassRefPtr<BlobDataHandle> GetBlobDataHandle() const;
+  void SetBlobDataHandle(scoped_refptr<BlobDataHandle>);
+  scoped_refptr<BlobDataHandle> GetBlobDataHandle() const;
+
+  void SetSideDataBlobDataHandle(scoped_refptr<BlobDataHandle>);
 #endif
 
  private:

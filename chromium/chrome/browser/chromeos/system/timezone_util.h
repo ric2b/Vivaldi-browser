@@ -36,7 +36,7 @@ void ApplyTimeZone(const TimeZoneResponseData* timezone);
 // Returns true if given timezone preference is enterprise-managed.
 // Works for:
 // - prefs::kUserTimezone
-// - prefs::kResolveTimezoneByGeolocation
+// - prefs::kResolveTimezoneByGeolocationMethod
 bool IsTimezonePrefsManaged(const std::string& pref_name);
 
 // Updates system timezone from user profile data if needed.
@@ -55,6 +55,9 @@ bool PerUserTimezoneEnabled();
 
 // This is called from UI code to apply user-selected time zone.
 void SetTimezoneFromUI(Profile* profile, const std::string& timezone_id);
+
+// Returns true if fine-grained time zone detection is enabled.
+bool FineGrainedTimeZoneDetectionEnabled();
 
 }  // namespace system
 }  // namespace chromeos

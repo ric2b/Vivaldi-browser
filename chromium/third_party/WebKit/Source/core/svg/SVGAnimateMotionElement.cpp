@@ -21,13 +21,13 @@
 
 #include "core/svg/SVGAnimateMotionElement.h"
 
-#include "core/SVGNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/layout/LayoutObject.h"
 #include "core/svg/SVGMPathElement.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "core/svg/SVGPathElement.h"
 #include "core/svg/SVGPathUtilities.h"
+#include "core/svg_names.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -44,15 +44,15 @@ bool TargetCanHaveMotionTransform(const SVGElement& target) {
   // Spec: SVG 1.1 section 19.2.15
   // FIXME: svgTag is missing. Needs to be checked, if transforming <svg> could
   // cause problems.
-  return isSVGGElement(target) || isSVGDefsElement(target) ||
-         isSVGUseElement(target) || isSVGImageElement(target) ||
-         isSVGSwitchElement(target) || isSVGPathElement(target) ||
-         isSVGRectElement(target) || isSVGCircleElement(target) ||
-         isSVGEllipseElement(target) || isSVGLineElement(target) ||
-         isSVGPolylineElement(target) || isSVGPolygonElement(target) ||
-         isSVGTextElement(target) || isSVGClipPathElement(target) ||
-         isSVGMaskElement(target) || isSVGAElement(target) ||
-         isSVGForeignObjectElement(target);
+  return IsSVGGElement(target) || IsSVGDefsElement(target) ||
+         IsSVGUseElement(target) || IsSVGImageElement(target) ||
+         IsSVGSwitchElement(target) || IsSVGPathElement(target) ||
+         IsSVGRectElement(target) || IsSVGCircleElement(target) ||
+         IsSVGEllipseElement(target) || IsSVGLineElement(target) ||
+         IsSVGPolylineElement(target) || IsSVGPolygonElement(target) ||
+         IsSVGTextElement(target) || IsSVGClipPathElement(target) ||
+         IsSVGMaskElement(target) || IsSVGAElement(target) ||
+         IsSVGForeignObjectElement(target);
 }
 }
 

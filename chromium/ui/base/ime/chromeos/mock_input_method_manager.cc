@@ -187,10 +187,6 @@ void MockInputMethodManager::MaybeNotifyImeMenuActivationChanged() {}
 void MockInputMethodManager::OverrideKeyboardUrlRef(const std::string& keyset) {
 }
 
-bool MockInputMethodManager::IsEmojiHandwritingVoiceOnImeMenuEnabled() {
-  return true;
-}
-
 void MockInputMethodManager::SetImeMenuFeatureEnabled(ImeMenuFeature feature,
                                                       bool enabled) {
   if (enabled)
@@ -203,6 +199,8 @@ bool MockInputMethodManager::GetImeMenuFeatureEnabled(
     ImeMenuFeature feature) const {
   return features_enabled_state_ & feature;
 }
+
+void MockInputMethodManager::NotifyObserversImeExtraInputStateChange() {}
 
 }  // namespace input_method
 }  // namespace chromeos

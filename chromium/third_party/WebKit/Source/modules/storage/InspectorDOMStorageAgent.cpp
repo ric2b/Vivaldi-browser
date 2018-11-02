@@ -62,7 +62,7 @@ InspectorDOMStorageAgent::InspectorDOMStorageAgent(Page* page)
 
 InspectorDOMStorageAgent::~InspectorDOMStorageAgent() {}
 
-DEFINE_TRACE(InspectorDOMStorageAgent) {
+void InspectorDOMStorageAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
   InspectorBaseAgent::Trace(visitor);
 }
@@ -218,7 +218,7 @@ Response InspectorDOMStorageAgent::FindStorageArea(
     return Response::InternalError();
 
   InspectedFrames* inspected_frames =
-      InspectedFrames::Create(page_->DeprecatedLocalMainFrame());
+      new InspectedFrames(page_->DeprecatedLocalMainFrame(), String());
   frame = inspected_frames->FrameWithSecurityOrigin(security_origin);
   if (!frame)
     return Response::Error("Frame not found for the given security origin");

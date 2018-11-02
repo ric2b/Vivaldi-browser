@@ -32,12 +32,6 @@ TestBrowserThreadBundle::TestBrowserThreadBundle(int options)
 TestBrowserThreadBundle::~TestBrowserThreadBundle() {
   CHECK(threads_created_);
 
-  // To avoid memory leaks, we must ensure that any tasks posted to the blocking
-  // pool via PostTaskAndReply are able to reply back to the originating thread.
-  // Thus we must flush the blocking pool while the browser threads still exist.
-  base::RunLoop().RunUntilIdle();
-  BrowserThreadImpl::FlushThreadPoolHelperForTesting();
-
   // To ensure a clean teardown, each thread's message loop must be flushed
   // just before the thread is destroyed. But stopping a fake thread does not
   // automatically flush the message loop, so we have to do it manually.
@@ -55,17 +49,12 @@ TestBrowserThreadBundle::~TestBrowserThreadBundle() {
   base::RunLoop().RunUntilIdle();
   db_thread_->Stop();
   base::RunLoop().RunUntilIdle();
-  // This is the point at which we normally shut down the thread pool. So flush
-  // it again in case any shutdown tasks have been posted to the pool from the
-  // threads above.
-  BrowserThreadImpl::FlushThreadPoolHelperForTesting();
-  base::RunLoop().RunUntilIdle();
   ui_thread_->Stop();
   base::RunLoop().RunUntilIdle();
 
   // Skip the following step when TaskScheduler isn't managed by this
   // TestBrowserThreadBundle, otherwise it can hang (e.g.
-  // RunAllBlockingPoolTasksUntilIdle() hangs when the TaskScheduler is managed
+  // RunAllTasksUntilIdle() hangs when the TaskScheduler is managed
   // by an external ScopedTaskEnvironment with ExecutionMode::QUEUED). This is
   // fine as (1) it's rare and (2) it mimics production where BrowserThreads are
   // shutdown before TaskScheduler.
@@ -77,7 +66,7 @@ TestBrowserThreadBundle::~TestBrowserThreadBundle() {
     // merely uncover more issues (e.g. if a bad tasks is posted but never
     // blocked upon it could make a test flaky whereas by flushing we guarantee
     // it will blow up).
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
     CHECK(base::MessageLoop::current()->IsIdleForTesting());
   }
 
@@ -105,8 +94,8 @@ void TestBrowserThreadBundle::Init() {
   // Similar to Chrome's UI thread, we need to initialize COM separately for
   // this thread as we don't call Start() for the UI TestBrowserThread; it's
   // already started!
-  com_initializer_ = base::MakeUnique<base::win::ScopedCOMInitializer>();
-  CHECK(com_initializer_->succeeded());
+  com_initializer_ = std::make_unique<base::win::ScopedCOMInitializer>();
+  CHECK(com_initializer_->Succeeded());
 #endif
 
   // Create the ScopedTaskEnvironment if it doesn't already exist. A
@@ -115,7 +104,7 @@ void TestBrowserThreadBundle::Init() {
   // ScopedTaskEnvironment.
   if (!base::MessageLoop::current()) {
     scoped_task_environment_ =
-        base::MakeUnique<base::test::ScopedTaskEnvironment>(
+        std::make_unique<base::test::ScopedTaskEnvironment>(
             options_ & IO_MAINLOOP
                 ? base::test::ScopedTaskEnvironment::MainThreadType::IO
                 : base::test::ScopedTaskEnvironment::MainThreadType::UI);
@@ -125,7 +114,7 @@ void TestBrowserThreadBundle::Init() {
                                                  : base::MessageLoop::TYPE_UI));
 
   // Set the current thread as the UI thread.
-  ui_thread_ = base::MakeUnique<TestBrowserThread>(
+  ui_thread_ = std::make_unique<TestBrowserThread>(
       BrowserThread::UI, base::MessageLoop::current());
 
   if (!(options_ & DONT_CREATE_BROWSER_THREADS))
@@ -135,34 +124,22 @@ void TestBrowserThreadBundle::Init() {
 void TestBrowserThreadBundle::CreateBrowserThreads() {
   CHECK(!threads_created_);
 
-  if (options_ & REAL_DB_THREAD) {
-    db_thread_ = base::MakeUnique<TestBrowserThread>(BrowserThread::DB);
-    db_thread_->Start();
-  } else {
-    db_thread_ = base::MakeUnique<TestBrowserThread>(
-        BrowserThread::DB, base::MessageLoop::current());
-  }
-
-  if (options_ & REAL_FILE_THREAD) {
-    file_thread_ = base::MakeUnique<TestBrowserThread>(BrowserThread::FILE);
-    file_thread_->Start();
-  } else {
-    file_thread_ = base::MakeUnique<TestBrowserThread>(
-        BrowserThread::FILE, base::MessageLoop::current());
-  }
-
-  file_user_blocking_thread_ = base::MakeUnique<TestBrowserThread>(
+  db_thread_ = std::make_unique<TestBrowserThread>(
+      BrowserThread::DB, base::MessageLoop::current());
+  file_thread_ = std::make_unique<TestBrowserThread>(
+      BrowserThread::FILE, base::MessageLoop::current());
+  file_user_blocking_thread_ = std::make_unique<TestBrowserThread>(
       BrowserThread::FILE_USER_BLOCKING, base::MessageLoop::current());
-  process_launcher_thread_ = base::MakeUnique<TestBrowserThread>(
+  process_launcher_thread_ = std::make_unique<TestBrowserThread>(
       BrowserThread::PROCESS_LAUNCHER, base::MessageLoop::current());
-  cache_thread_ = base::MakeUnique<TestBrowserThread>(
+  cache_thread_ = std::make_unique<TestBrowserThread>(
       BrowserThread::CACHE, base::MessageLoop::current());
 
   if (options_ & REAL_IO_THREAD) {
-    io_thread_ = base::MakeUnique<TestBrowserThread>(BrowserThread::IO);
+    io_thread_ = std::make_unique<TestBrowserThread>(BrowserThread::IO);
     io_thread_->StartIOThread();
   } else {
-    io_thread_ = base::MakeUnique<TestBrowserThread>(
+    io_thread_ = std::make_unique<TestBrowserThread>(
         BrowserThread::IO, base::MessageLoop::current());
   }
 

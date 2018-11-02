@@ -28,11 +28,6 @@
 
 #pragma mark Call for action
 
-// Executes a Chrome command.  |sender| must implement the |-tag| method and
-// return the id of the command to execute.  See UIKit+ChromeExecuteCommand.h
-// for more details.
-- (void)chromeExecuteCommand:(id)sender;
-
 // Called to put the tab at index in focus.
 - (void)focusTabAtIndex:(NSUInteger)index;
 
@@ -55,6 +50,7 @@
 @interface KeyCommandsProvider : NSObject
 
 - (NSArray*)keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
+                baseViewController:(UIViewController*)baseViewController
                         dispatcher:
                             (id<ApplicationCommands, BrowserCommands>)dispatcher
                        editingText:(BOOL)editingText;

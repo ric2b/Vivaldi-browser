@@ -246,6 +246,12 @@ bool HFSIterator::Open() {
     return false;
   }
 
+  if (volume_header_.blockSize == 0) {
+    DLOG(ERROR) << "Invalid volume header block size "
+                << volume_header_.blockSize;
+    return false;
+  }
+
   if (!ReadCatalogFile())
     return false;
 
@@ -495,6 +501,11 @@ bool HFSBTreeIterator::Init(ReadStream* stream) {
   }
   ConvertBigEndian(&header_);
 
+  if (header_.nodeSize == 0) {
+    DLOG(ERROR) << "Invalid header: zero node size";
+    return false;
+  }
+
   current_leaf_number_ = header_.firstLeafNode;
   leaf_data_.resize(header_.nodeSize);
 
@@ -510,20 +521,40 @@ bool HFSBTreeIterator::Next() {
     return false;
 
   GetLeafData<uint16_t>();  // keyLength
-  auto parent_id = OSSwapBigToHostInt32(*GetLeafData<uint32_t>());
-  auto key_string_length = OSSwapBigToHostInt16(*GetLeafData<uint16_t>());
-  auto* key_string =
-      reinterpret_cast<uint16_t*>(&leaf_data_[current_leaf_offset_]);
-  for (uint16_t i = 0;
-       i < key_string_length;
-       ++i, current_leaf_offset_ += sizeof(uint16_t)) {
-    key_string[i] = OSSwapBigToHostInt16(key_string[i]);
+
+  uint32_t parent_id;
+  if (auto* parent_id_ptr = GetLeafData<uint32_t>()) {
+    parent_id = OSSwapBigToHostInt32(*parent_id_ptr);
+  } else {
+    return false;
   }
-  base::string16 key(key_string, key_string_length);
+
+  uint16_t key_string_length;
+  if (auto* key_string_length_ptr = GetLeafData<uint16_t>()) {
+    key_string_length = OSSwapBigToHostInt16(*key_string_length_ptr);
+  } else {
+    return false;
+  }
+
+  // Read and byte-swap the variable-length key string.
+  base::string16 key(key_string_length, '\0');
+  for (uint16_t i = 0; i < key_string_length; ++i) {
+    auto* character = GetLeafData<uint16_t>();
+    if (!character) {
+      DLOG(ERROR) << "Key string length points past leaf data";
+      return false;
+    }
+    key[i] = OSSwapBigToHostInt16(*character);
+  }
 
   // Read the record type and then rewind as the field is part of the catalog
   // structure that is read next.
-  current_record_.record_type = OSSwapBigToHostInt16(*GetLeafData<int16_t>());
+  auto* record_type = GetLeafData<int16_t>();
+  if (!record_type) {
+    DLOG(ERROR) << "Failed to read record type";
+    return false;
+  }
+  current_record_.record_type = OSSwapBigToHostInt16(*record_type);
   current_record_.unexported = false;
   current_leaf_offset_ -= sizeof(int16_t);
   switch (current_record_.record_type) {

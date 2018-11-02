@@ -9,14 +9,11 @@
 
 namespace blink {
 
-class CORE_EXPORT ReportBody : public GarbageCollectedFinalized<ReportBody>,
-                               public ScriptWrappable {
+class CORE_EXPORT ReportBody : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   virtual ~ReportBody() {}
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 };
 
 }  // namespace blink

@@ -26,10 +26,10 @@
 #ifndef WebGLContextGroup_h
 #define WebGLContextGroup_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 
 namespace blink {
@@ -61,9 +61,9 @@ class WebGLContextGroup final : public GarbageCollected<WebGLContextGroup>,
   // created, in order to validate itself.
   uint32_t NumberOfContextLosses() const;
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(contexts_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(contexts_); }
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   friend class WebGLObject;

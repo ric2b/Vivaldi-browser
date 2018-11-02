@@ -26,7 +26,7 @@
 
 #include "core/layout/LayoutTableRow.h"
 
-#include "core/HTMLNames.h"
+#include "core/html_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutState.h"
@@ -66,7 +66,7 @@ void LayoutTableRow::StyleDidChange(StyleDifference diff,
 
   if (!Parent())
     return;
-  LayoutTable* table = this->Table();
+  LayoutTable* table = Table();
   if (!table)
     return;
 
@@ -194,8 +194,13 @@ void LayoutTableRow::UpdateLayout() {
     cell->SetLogicalTop(LogicalTop());
     if (!cell->NeedsLayout())
       Section()->MarkChildForPaginationRelayoutIfNeeded(*cell, layouter);
-    if (cell->NeedsLayout())
+    if (cell->NeedsLayout()) {
+      // If we are laying out the cell's children clear its intrinsic
+      // padding so it doesn't skew the position of the content.
+      if (cell->CellChildrenNeedLayout())
+        cell->ClearIntrinsicPadding();
       cell->UpdateLayout();
+    }
     if (paginated)
       Section()->UpdateFragmentationInfoForChild(*cell);
   }
@@ -276,7 +281,7 @@ LayoutTableRow* LayoutTableRow::CreateAnonymousWithParent(
     const LayoutObject* parent) {
   LayoutTableRow* new_row =
       LayoutTableRow::CreateAnonymous(&parent->GetDocument());
-  RefPtr<ComputedStyle> new_style =
+  scoped_refptr<ComputedStyle> new_style =
       ComputedStyle::CreateAnonymousStyleWithDisplay(parent->StyleRef(),
                                                      EDisplay::kTableRow);
   new_row->SetStyle(std::move(new_style));

@@ -9,7 +9,7 @@
 
 #include <utility>
 
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -46,7 +46,7 @@ ACTION_P(SaveUniquePtrArg, dest) {
 class AuraDesktopCapturerTest : public testing::Test,
                                 public webrtc::DesktopCapturer::Callback {
  public:
-  AuraDesktopCapturerTest() {}
+  AuraDesktopCapturerTest() = default;
 
   void SetUp() override;
 
@@ -60,13 +60,13 @@ class AuraDesktopCapturerTest : public testing::Test,
 
  protected:
   void SimulateFrameCapture() {
-    std::unique_ptr<SkBitmap> bitmap(new SkBitmap());
+    SkBitmap bitmap;
     const SkImageInfo& info =
         SkImageInfo::Make(3, 4, kBGRA_8888_SkColorType, kPremul_SkAlphaType);
-    bitmap->installPixels(info, const_cast<unsigned char*>(frame_data), 12);
+    bitmap.installPixels(info, const_cast<unsigned char*>(frame_data), 12);
 
-    capturer_->OnFrameCaptured(
-        viz::CopyOutputResult::CreateBitmapResult(std::move(bitmap)));
+    capturer_->OnFrameCaptured(std::make_unique<viz::CopyOutputSkBitmapResult>(
+        gfx::Rect(0, 0, bitmap.width(), bitmap.height()), bitmap));
   }
 
   std::unique_ptr<AuraDesktopCapturer> capturer_;

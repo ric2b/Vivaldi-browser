@@ -28,12 +28,12 @@
 #ifndef LayoutTreeBuilder_h
 #define LayoutTreeBuilder_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/Document.h"
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/Node.h"
 #include "core/dom/Text.h"
 #include "core/layout/LayoutObject.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -91,7 +91,7 @@ class LayoutTreeBuilderForElement : public LayoutTreeBuilder<Element> {
       CreateLayoutObject();
   }
 
-  ComputedStyle* ResolvedStyle() const { return style_.Get(); }
+  ComputedStyle* ResolvedStyle() const { return style_.get(); }
 
  private:
   LayoutObject* ParentLayoutObject() const;
@@ -100,7 +100,7 @@ class LayoutTreeBuilderForElement : public LayoutTreeBuilder<Element> {
   ComputedStyle& Style() const;
   void CreateLayoutObject();
 
-  mutable RefPtr<ComputedStyle> style_;
+  mutable scoped_refptr<ComputedStyle> style_;
 };
 
 class LayoutTreeBuilderForText : public LayoutTreeBuilder<Text> {
@@ -110,7 +110,7 @@ class LayoutTreeBuilderForText : public LayoutTreeBuilder<Text> {
                            ComputedStyle* style_from_parent)
       : LayoutTreeBuilder(text, layout_parent), style_(style_from_parent) {}
 
-  RefPtr<ComputedStyle> style_;
+  scoped_refptr<ComputedStyle> style_;
   void CreateLayoutObject();
 };
 

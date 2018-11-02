@@ -15,13 +15,29 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
-#include "printing/pdf_metafile_skia.h"
+#include "content/public/browser/render_view_host.h"
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(headless::HeadlessPrintManager);
 
 namespace headless {
+
+struct HeadlessPrintManager::FrameDispatchHelper {
+  HeadlessPrintManager* manager;
+  content::RenderFrameHost* render_frame_host;
+
+  bool Send(IPC::Message* msg) { return render_frame_host->Send(msg); }
+
+  void OnGetDefaultPrintSettings(IPC::Message* reply_msg) {
+    manager->OnGetDefaultPrintSettings(reply_msg);
+  }
+
+  void OnScriptedPrint(const PrintHostMsg_ScriptedPrint_Params& scripted_params,
+                       IPC::Message* reply_msg) {
+    manager->OnScriptedPrint(scripted_params, reply_msg);
+  }
+};
 
 HeadlessPrintSettings::HeadlessPrintSettings()
     : landscape(false),
@@ -35,7 +51,7 @@ HeadlessPrintManager::HeadlessPrintManager(content::WebContents* web_contents)
   Reset();
 }
 
-HeadlessPrintManager::~HeadlessPrintManager() {}
+HeadlessPrintManager::~HeadlessPrintManager() = default;
 
 // static
 std::string HeadlessPrintManager::PrintResultToString(PrintResult result) {
@@ -217,14 +233,17 @@ bool HeadlessPrintManager::OnMessageReceived(
     return true;
   }
 
+  FrameDispatchHelper helper = {this, render_frame_host};
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(HeadlessPrintManager, message)
     IPC_MESSAGE_HANDLER(PrintHostMsg_ShowInvalidPrinterSettingsError,
                         OnShowInvalidPrinterSettingsError)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrintPage, OnDidPrintPage)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_GetDefaultPrintSettings,
-                                    OnGetDefaultPrintSettings)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_ScriptedPrint, OnScriptedPrint)
+    IPC_MESSAGE_FORWARD_DELAY_REPLY(
+        PrintHostMsg_GetDefaultPrintSettings, &helper,
+        FrameDispatchHelper::OnGetDefaultPrintSettings)
+    IPC_MESSAGE_FORWARD_DELAY_REPLY(PrintHostMsg_ScriptedPrint, &helper,
+                                    FrameDispatchHelper::OnScriptedPrint)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled || PrintManager::OnMessageReceived(message, render_frame_host);
@@ -292,18 +311,8 @@ void HeadlessPrintManager::OnDidPrintPage(
       ReleaseJob(METAFILE_MAP_ERROR);
       return;
     }
-    auto metafile = base::MakeUnique<printing::PdfMetafileSkia>(
-        printing::SkiaDocumentType::PDF);
-    if (!metafile->InitFromData(shared_buf->memory(), params.data_size)) {
-      ReleaseJob(METAFILE_INVALID_HEADER);
-      return;
-    }
-    std::vector<char> buffer;
-    if (!metafile->GetDataAsVector(&buffer)) {
-      ReleaseJob(METAFILE_GET_DATA_ERROR);
-      return;
-    }
-    data_ = std::string(buffer.data(), buffer.size());
+    data_ = std::string(static_cast<const char*>(shared_buf->memory()),
+                        params.data_size);
   } else {
     if (base::SharedMemory::IsHandleValid(params.metafile_data_handle)) {
       base::SharedMemory::CloseHandle(params.metafile_data_handle);

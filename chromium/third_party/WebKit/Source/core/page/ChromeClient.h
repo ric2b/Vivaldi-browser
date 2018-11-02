@@ -36,18 +36,18 @@
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Cursor.h"
 #include "platform/PlatformChromeClient.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/text/TextDirection.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Optional.h"
-#include "platform/wtf/Vector.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/WebDragOperation.h"
 #include "public/platform/WebEventListenerProperties.h"
 #include "public/platform/WebFocusType.h"
-#include "public/platform/WebScrollBoundaryBehavior.h"
+#include "public/platform/WebOverscrollBehavior.h"
 
 // To avoid conflicts with the CreateWindow macro from the Windows SDK...
 #undef CreateWindow
@@ -77,7 +77,6 @@ class PagePopup;
 class PagePopupClient;
 class PopupOpeningObserver;
 class WebDragData;
-class WebFrameScheduler;
 class WebImage;
 class WebLayer;
 class WebLayerTreeView;
@@ -144,7 +143,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                              const FloatSize& accumulated_overscroll,
                              const FloatPoint& position_in_viewport,
                              const FloatSize& velocity_in_viewport,
-                             const WebScrollBoundaryBehavior&) = 0;
+                             const WebOverscrollBehavior&) = 0;
 
   virtual bool ShouldReportDetailedMessageForSource(LocalFrame&,
                                                     const String& source) = 0;
@@ -231,7 +230,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual void OpenTextDataListChooser(HTMLInputElement&) = 0;
 
-  virtual void OpenFileChooser(LocalFrame*, RefPtr<FileChooser>) = 0;
+  virtual void OpenFileChooser(LocalFrame*, scoped_refptr<FileChooser>) = 0;
 
   // Asychronous request to enumerate all files in a directory chosen by the
   // user.
@@ -271,7 +270,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void UpdateEventRectsForSubframeIfNecessary(LocalFrame*) = 0;
   virtual void SetHasScrollEventHandlers(LocalFrame*, bool) = 0;
   virtual void SetNeedsLowLatencyInput(LocalFrame*, bool) = 0;
-
+  virtual void RequestUnbufferedInputEvents(LocalFrame*) = 0;
   virtual void SetTouchAction(LocalFrame*, TouchAction) = 0;
 
   // Checks if there is an opened popup, called by LayoutMenuList::showPopup().
@@ -331,7 +330,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual void DidUpdateBrowserControls() const {}
 
-  virtual void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&) {}
+  virtual void SetOverscrollBehavior(const WebOverscrollBehavior&) {}
 
   virtual void RegisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void UnregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
@@ -339,17 +338,9 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual FloatSize ElasticOverscroll() const { return FloatSize(); }
 
-  // Called when observed XHR, fetch, and other fetch request with non-GET
-  // method is initiated from javascript. At this time, it is not guaranteed
-  // that this is comprehensive.
-  virtual void DidObserveNonGetFetchFromScript() const {}
-
   virtual std::unique_ptr<WebFrameScheduler> CreateFrameScheduler(
-      BlameContext*) = 0;
-
-  // Returns the time of the beginning of the last beginFrame, in seconds, if
-  // any, and 0.0 otherwise.
-  virtual double LastFrameTimeMonotonic() const { return 0.0; }
+      BlameContext*,
+      WebFrameScheduler::FrameType) = 0;
 
   virtual void InstallSupplements(LocalFrame&);
 
@@ -358,10 +349,10 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void RequestDecode(LocalFrame*,
                              const PaintImage& image,
                              WTF::Function<void(bool)> callback) {
-    callback(false);
+    std::move(callback).Run(false);
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
   ~ChromeClient() override {}

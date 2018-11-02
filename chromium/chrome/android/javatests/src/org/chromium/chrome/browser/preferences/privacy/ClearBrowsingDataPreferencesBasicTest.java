@@ -71,6 +71,7 @@ public class ClearBrowsingDataPreferencesBasicTest {
             mSyncable = syncable;
         }
 
+        @Override
         public Set<Integer> getActiveDataTypes() {
             if (mSyncable) {
                 return CollectionUtil.newHashSet(ModelType.HISTORY_DELETE_DIRECTIVES);
@@ -81,10 +82,10 @@ public class ClearBrowsingDataPreferencesBasicTest {
     }
 
     private void setSyncable(final boolean syncable) {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         MockSyncContentResolverDelegate delegate = new MockSyncContentResolverDelegate();
         delegate.setMasterSyncAutomatically(syncable);
-        AndroidSyncSettings.overrideForTests(context, delegate);
+        AndroidSyncSettings.overrideForTests(context, delegate, null);
         if (syncable) {
             AndroidSyncSettings.enableChromeSync(context);
         } else {

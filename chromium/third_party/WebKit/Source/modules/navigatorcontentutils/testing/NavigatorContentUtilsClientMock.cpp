@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "NavigatorContentUtilsClientMock.h"
+#include "modules/navigatorcontentutils/testing/NavigatorContentUtilsClientMock.h"
 
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
-#include "platform/weborigin/KURL.h"
 #include "platform/wtf/text/StringHash.h"
 
 namespace blink {
@@ -20,19 +19,6 @@ void NavigatorContentUtilsClientMock::RegisterProtocolHandler(
   info.title = title;
 
   protocol_map_.Set(scheme, info);
-}
-
-NavigatorContentUtilsClient::CustomHandlersState
-NavigatorContentUtilsClientMock::IsProtocolHandlerRegistered(
-    const String& scheme,
-    const KURL& url) {
-  // "declined" state is checked by
-  // NavigatorContentUtils::isProtocolHandlerRegistered() before calling this
-  // function.
-  if (protocol_map_.Contains(scheme))
-    return NavigatorContentUtilsClient::kCustomHandlersRegistered;
-
-  return NavigatorContentUtilsClient::kCustomHandlersNew;
 }
 
 void NavigatorContentUtilsClientMock::UnregisterProtocolHandler(

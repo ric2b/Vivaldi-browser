@@ -34,9 +34,10 @@ class Receiver {
     }
     callback_ = std::move(callback);
     // base::Unretained is safe because |watcher_| is owned by |this|.
-    watcher_.Watch(handle_.get(),
-                   MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                   base::Bind(&Receiver::OnReadable, base::Unretained(this)));
+    MojoResult rv = watcher_.Watch(
+        handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+        base::Bind(&Receiver::OnReadable, base::Unretained(this)));
+    DCHECK_EQ(MOJO_RESULT_OK, rv);
     watcher_.ArmOrNotify();
   }
 
@@ -149,7 +150,7 @@ class Internal : public mojom::ServiceWorkerInstalledScriptsManager {
       scoped_refptr<ThreadSafeScriptContainer> script_container,
       mojom::ServiceWorkerInstalledScriptsManagerRequest request) {
     mojo::MakeStrongBinding(
-        base::MakeUnique<Internal>(std::move(script_container)),
+        std::make_unique<Internal>(std::move(script_container)),
         std::move(request));
   }
 
@@ -171,7 +172,7 @@ class Internal : public mojom::ServiceWorkerInstalledScriptsManager {
       mojom::ServiceWorkerScriptInfoPtr script_info) override {
     DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
     GURL script_url = script_info->script_url;
-    auto receivers = base::MakeUnique<BundledReceivers>(
+    auto receivers = std::make_unique<BundledReceivers>(
         std::move(script_info->meta_data), script_info->meta_data_size,
         std::move(script_info->body), script_info->body_size);
     receivers->Start(base::BindOnce(&Internal::OnScriptReceived,
@@ -223,25 +224,30 @@ WebServiceWorkerInstalledScriptsManagerImpl::Create(
     mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   auto script_container = base::MakeRefCounted<ThreadSafeScriptContainer>();
-  std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManager>
-      installed_scripts_manager =
-          base::WrapUnique<WebServiceWorkerInstalledScriptsManagerImpl>(
-              new WebServiceWorkerInstalledScriptsManagerImpl(
-                  std::move(installed_scripts_info->installed_urls),
-                  script_container));
+  mojom::ServiceWorkerInstalledScriptsManagerHostPtr manager_host_ptr(
+      std::move(installed_scripts_info->manager_host_ptr));
+  std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManager> manager =
+      base::WrapUnique<WebServiceWorkerInstalledScriptsManagerImpl>(
+          new WebServiceWorkerInstalledScriptsManagerImpl(
+              std::move(installed_scripts_info->installed_urls),
+              script_container, std::move(manager_host_ptr)));
   io_task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&Internal::Create, script_container,
                      std::move(installed_scripts_info->manager_request)));
-  return installed_scripts_manager;
+  return manager;
 }
 
 WebServiceWorkerInstalledScriptsManagerImpl::
     WebServiceWorkerInstalledScriptsManagerImpl(
         std::vector<GURL>&& installed_urls,
-        scoped_refptr<ThreadSafeScriptContainer> script_container)
+        scoped_refptr<ThreadSafeScriptContainer> script_container,
+        mojom::ServiceWorkerInstalledScriptsManagerHostPtr manager_host)
     : installed_urls_(installed_urls.begin(), installed_urls.end()),
-      script_container_(std::move(script_container)) {}
+      script_container_(std::move(script_container)),
+      manager_host_(
+          mojom::ThreadSafeServiceWorkerInstalledScriptsManagerHostPtr::Create(
+              std::move(manager_host))) {}
 
 WebServiceWorkerInstalledScriptsManagerImpl::
     ~WebServiceWorkerInstalledScriptsManagerImpl() = default;
@@ -254,11 +260,24 @@ bool WebServiceWorkerInstalledScriptsManagerImpl::IsScriptInstalled(
 std::unique_ptr<RawScriptData>
 WebServiceWorkerInstalledScriptsManagerImpl::GetRawScriptData(
     const blink::WebURL& script_url) {
+  TRACE_EVENT1("ServiceWorker",
+               "WebServiceWorkerInstalledScriptsManagerImpl::GetRawScriptData",
+               "script_url", script_url.GetString().Utf8());
   if (!IsScriptInstalled(script_url))
     return nullptr;
 
   ThreadSafeScriptContainer::ScriptStatus status =
       script_container_->GetStatusOnWorkerThread(script_url);
+  // If the script has already been taken, request the browser to send the
+  // script.
+  if (status == ThreadSafeScriptContainer::ScriptStatus::kTaken) {
+    script_container_->ResetOnWorkerThread(script_url);
+    (*manager_host_)->RequestInstalledScript(script_url);
+    status = script_container_->GetStatusOnWorkerThread(script_url);
+  }
+
+  // If the script has not been received at this point, wait for arrival by
+  // blocking the worker thread.
   if (status == ThreadSafeScriptContainer::ScriptStatus::kPending) {
     // Wait for arrival of the script.
     const bool success = script_container_->WaitOnWorkerThread(script_url);
@@ -271,17 +290,9 @@ WebServiceWorkerInstalledScriptsManagerImpl::GetRawScriptData(
 
   if (status == ThreadSafeScriptContainer::ScriptStatus::kFailed)
     return RawScriptData::CreateInvalidInstance();
-  DCHECK_EQ(ThreadSafeScriptContainer::ScriptStatus::kSuccess, status);
+  DCHECK_EQ(ThreadSafeScriptContainer::ScriptStatus::kReceived, status);
 
-  std::unique_ptr<RawScriptData> data =
-      script_container_->TakeOnWorkerThread(script_url);
-  // |data| is possible to be null when the script data has already been taken.
-  if (!data) {
-    // TODO(shimazu): Ask the browser process when the script has already been
-    // served.
-    return nullptr;
-  }
-  return data;
+  return script_container_->TakeOnWorkerThread(script_url);
 }
 
 }  // namespace content

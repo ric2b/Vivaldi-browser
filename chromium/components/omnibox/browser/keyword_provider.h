@@ -18,10 +18,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/keyword_extensions_delegate.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
 class AutocompleteProviderClient;
 class AutocompleteProviderListener;
@@ -77,6 +77,7 @@ class KeywordProvider : public AutocompleteProvider {
   // Returns the matching substituting keyword for |input|, or NULL if there
   // is no keyword for the specified input.  If the matching keyword was found,
   // updates |input|'s text and cursor position.
+  // |model| must be non-null.
   static const TemplateURL* GetSubstitutingTemplateURLForInput(
       TemplateURLService* model,
       AutocompleteInput* input);
@@ -92,6 +93,7 @@ class KeywordProvider : public AutocompleteProvider {
                                         const AutocompleteInput& input);
 
   // AutocompleteProvider:
+  void DeleteMatch(const AutocompleteMatch& match) override;
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
   void Stop(bool clear_cached_results,
             bool due_to_user_inactivity) override;
@@ -104,13 +106,17 @@ class KeywordProvider : public AutocompleteProvider {
   // Extracts the keyword from |input| into |keyword|. Any remaining characters
   // after the keyword are placed in |remaining_input|. Returns true if |input|
   // is valid and has a keyword. This makes use of SplitKeywordFromInput to
-  // extract the keyword and remaining string, and uses
-  // TemplateURLService::CleanUserInputKeyword to remove unnecessary characters.
+  // extract the keyword and remaining string, and uses |template_url_service|
+  // to validate and clean up the extracted keyword (e.g., to remove unnecessary
+  // characters).
   // In general use this instead of SplitKeywordFromInput.
   // Leading whitespace in |*remaining_input| will be trimmed.
-  static bool ExtractKeywordFromInput(const AutocompleteInput& input,
-                                      base::string16* keyword,
-                                      base::string16* remaining_input);
+  // |template_url_service| must be non-null.
+  static bool ExtractKeywordFromInput(
+      const AutocompleteInput& input,
+      const TemplateURLService* template_url_service,
+      base::string16* keyword,
+      base::string16* remaining_input);
 
   // Determines the relevance for some input, given its type, whether the user
   // typed the complete keyword (or close to it), and whether the user is in
@@ -133,7 +139,8 @@ class KeywordProvider : public AutocompleteProvider {
       size_t prefix_length,
       const base::string16& remaining_input,
       bool allowed_to_be_default_match,
-      int relevance);
+      int relevance,
+      bool deletable);
 
   // Fills in the "destination_url" and "contents" fields of |match| with the
   // provided user input and keyword data.
@@ -143,7 +150,22 @@ class KeywordProvider : public AutocompleteProvider {
 
   TemplateURLService* GetTemplateURLService() const;
 
+  // Removes any unnecessary characters from a user input keyword, returning
+  // the resulting keyword.  Usually this means it does transformations such as
+  // removing any leading scheme, "www." and trailing slash and returning the
+  // resulting string regardless of whether it's a registered keyword.
+  // However, if a |template_url_service| is provided and the function finds a
+  // registered keyword at any point before finishing those transformations,
+  // it'll return that keyword.
+  // |template_url_service| must be non-null.
+  static base::string16 CleanUserInputKeyword(
+      const TemplateURLService* template_url_service,
+      const base::string16& keyword);
+
   AutocompleteProviderListener* listener_;
+
+  // Input when searching against the keyword provider.
+  AutocompleteInput keyword_input_;
 
   // Model for the keywords.
   TemplateURLService* model_;

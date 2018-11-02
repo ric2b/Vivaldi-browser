@@ -37,7 +37,7 @@
 #include "core/events/TouchEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrame.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/StepRange.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ShadowElementNames.h"
@@ -91,7 +91,7 @@ bool SliderThumbElement::MatchesReadWritePseudoClass() const {
   return HostInput() && HostInput()->MatchesReadWritePseudoClass();
 }
 
-Node* SliderThumbElement::FocusDelegate() {
+const Node* SliderThumbElement::FocusDelegate() const {
   return HostInput();
 }
 
@@ -283,7 +283,7 @@ void SliderThumbElement::DetachLayoutTree(const AttachContext& context) {
 HTMLInputElement* SliderThumbElement::HostInput() const {
   // Only HTMLInputElement creates SliderThumbElement instances as its shadow
   // nodes.  So, ownerShadowHost() must be an HTMLInputElement.
-  return toHTMLInputElement(OwnerShadowHost());
+  return ToHTMLInputElement(OwnerShadowHost());
 }
 
 static const AtomicString& SliderThumbShadowPartId() {
@@ -328,7 +328,7 @@ inline SliderContainerElement::SliderContainerElement(Document& document)
 DEFINE_NODE_FACTORY(SliderContainerElement)
 
 HTMLInputElement* SliderContainerElement::HostInput() const {
-  return toHTMLInputElement(OwnerShadowHost());
+  return ToHTMLInputElement(OwnerShadowHost());
 }
 
 LayoutObject* SliderContainerElement::CreateLayoutObject(const ComputedStyle&) {

@@ -28,6 +28,9 @@
 
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/InlineBoxPosition.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -66,16 +69,20 @@ bool SelectionModifier::ShouldAlwaysUseDirectionalSelection(LocalFrame* frame) {
 
 SelectionModifier::SelectionModifier(
     const LocalFrame& frame,
-    const VisibleSelection& selection,
+    const SelectionInDOMTree& selection,
     LayoutUnit x_pos_for_vertical_arrow_navigation)
     : frame_(const_cast<LocalFrame*>(&frame)),
-      selection_(selection),
+      current_selection_(selection),
       x_pos_for_vertical_arrow_navigation_(
           x_pos_for_vertical_arrow_navigation) {}
 
 SelectionModifier::SelectionModifier(const LocalFrame& frame,
-                                     const VisibleSelection& selection)
+                                     const SelectionInDOMTree& selection)
     : SelectionModifier(frame, selection, NoXPosForVerticalArrowNavigation()) {}
+
+VisibleSelection SelectionModifier::Selection() const {
+  return CreateVisibleSelection(current_selection_);
+}
 
 static VisiblePosition ComputeVisibleExtent(
     const VisibleSelection& visible_selection) {
@@ -84,12 +91,22 @@ static VisiblePosition ComputeVisibleExtent(
 }
 
 TextDirection SelectionModifier::DirectionOfEnclosingBlock() const {
-  return DirectionOfEnclosingBlockOf(selection_.Extent());
+  const Position& selection_extent = selection_.Extent();
+
+  // TODO(editing-dev): Check for Position::IsNotNull is an easy fix for few
+  // editing/ layout tests, that didn't expect that (e.g.
+  // editing/selection/extend-byline-withfloat.html).
+  // That should be fixed in a more appropriate manner.
+  // We should either have SelectionModifier aborted earlier for null selection,
+  // or do not allow null selection in SelectionModifier at all.
+  return selection_extent.IsNotNull()
+             ? DirectionOfEnclosingBlockOf(selection_extent)
+             : TextDirection::kLtr;
 }
 
 static TextDirection DirectionOf(const VisibleSelection& visible_selection) {
-  InlineBox* start_box = nullptr;
-  InlineBox* end_box = nullptr;
+  const InlineBox* start_box = nullptr;
+  const InlineBox* end_box = nullptr;
   // Cache the VisiblePositions because visibleStart() and visibleEnd()
   // can cause layout, which has the potential to invalidate lineboxes.
   const VisiblePosition& start_position = visible_selection.VisibleStart();
@@ -136,9 +153,10 @@ static bool IsBaseStart(const VisibleSelection& visible_selection,
 // handle base/extent don't match to start/end, e.g. granularity != character,
 // and start/end adjustment in |visibleSelection::validate()| for range
 // selection.
-static SelectionInDOMTree PrepareToExtendSeelction(
-    const VisibleSelection& visible_selection,
+static SelectionInDOMTree PrepareToExtendSelection(
+    const SelectionInDOMTree& selection,
     SelectionModifyDirection direction) {
+  const VisibleSelection& visible_selection = CreateVisibleSelection(selection);
   if (visible_selection.Start().IsNull())
     return visible_selection.AsSelection();
   const bool base_is_start = IsBaseStart(visible_selection, direction);
@@ -150,9 +168,18 @@ static SelectionInDOMTree PrepareToExtendSeelction(
       .Build();
 }
 
+static SelectionInDOMTree PrepareToModifySelection(
+    const SelectionInDOMTree& selection,
+    SelectionModifyAlteration alter,
+    SelectionModifyDirection direction) {
+  return alter == SelectionModifyAlteration::kExtend
+             ? PrepareToExtendSelection(selection, direction)
+             : CreateVisibleSelection(selection).AsSelection();
+}
+
 VisiblePosition SelectionModifier::PositionForPlatform(
     bool is_get_start) const {
-  Settings* settings = GetFrame() ? GetFrame()->GetSettings() : nullptr;
+  Settings* settings = GetFrame()->GetSettings();
   if (settings && settings->GetEditingBehaviorType() == kEditingMacBehavior)
     return is_get_start ? selection_.VisibleStart() : selection_.VisibleEnd();
   // Linux and Windows always extend selections from the extent endpoint.
@@ -177,8 +204,7 @@ VisiblePosition SelectionModifier::NextWordPositionForPlatform(
   VisiblePosition position_after_current_word =
       NextWordPosition(original_position);
 
-  if (!GetFrame() ||
-      !GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight())
+  if (!GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight())
     return position_after_current_word;
   return CreateVisiblePosition(
       SkipWhitespace(position_after_current_word.DeepEquivalent()));
@@ -306,7 +332,6 @@ VisiblePosition SelectionModifier::ModifyMovingRight(
       return CreateVisiblePosition(selection_.Start(), selection_.Affinity());
     case TextGranularity::kWord: {
       const bool skips_space_when_moving_right =
-          GetFrame() &&
           GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight();
       return RightWordPosition(ComputeVisibleExtent(selection_),
                                skips_space_when_moving_right);
@@ -477,7 +502,6 @@ VisiblePosition SelectionModifier::ModifyMovingLeft(
       return CreateVisiblePosition(selection_.End(), selection_.Affinity());
     case TextGranularity::kWord: {
       const bool skips_space_when_moving_right =
-          GetFrame() &&
           GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight();
       return LeftWordPosition(ComputeVisibleExtent(selection_),
                               skips_space_when_moving_right);
@@ -585,10 +609,8 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       GetFrame()->GetDocument()->Lifecycle());
 
-  if (alter == SelectionModifyAlteration::kExtend) {
-    selection_ =
-        CreateVisibleSelection(PrepareToExtendSeelction(selection_, direction));
-  }
+  selection_ = CreateVisibleSelection(
+      PrepareToModifySelection(current_selection_, alter, direction));
 
   bool was_range = selection_.IsRange();
   VisiblePosition original_start_position = selection_.VisibleStart();
@@ -613,11 +635,11 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
 
   switch (alter) {
     case SelectionModifyAlteration::kMove:
-      selection_ = CreateVisibleSelection(
+      current_selection_ =
           SelectionInDOMTree::Builder()
               .Collapse(position.ToPositionWithAffinity())
               .SetIsDirectional(ShouldAlwaysUseDirectionalSelection(GetFrame()))
-              .Build());
+              .Build();
       break;
     case SelectionModifyAlteration::kExtend:
 
@@ -625,7 +647,6 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
           (granularity == TextGranularity::kWord ||
            granularity == TextGranularity::kParagraph ||
            granularity == TextGranularity::kLine) &&
-          GetFrame() &&
           !GetFrame()
                ->GetEditor()
                .Behavior()
@@ -646,18 +667,16 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
       // Standard Mac behavior when extending to a boundary is grow the
       // selection rather than leaving the base in place and moving the
       // extent. Matches NSTextView.
-      if (!GetFrame() ||
-          !GetFrame()
+      if (!GetFrame()
                ->GetEditor()
                .Behavior()
                .ShouldAlwaysGrowSelectionWhenExtendingToBoundary() ||
           selection_.IsCaret() || !IsBoundary(granularity)) {
-        selection_ =
-            CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                       .Collapse(selection_.Base())
-                                       .Extend(position.DeepEquivalent())
-                                       .SetIsDirectional(true)
-                                       .Build());
+        current_selection_ = SelectionInDOMTree::Builder()
+                                 .Collapse(selection_.Base())
+                                 .Extend(position.DeepEquivalent())
+                                 .SetIsDirectional(true)
+                                 .Build();
       } else {
         TextDirection text_direction = DirectionOfEnclosingBlock();
         if (direction == SelectionModifyDirection::kForward ||
@@ -665,7 +684,7 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
              direction == SelectionModifyDirection::kRight) ||
             (text_direction == TextDirection::kRtl &&
              direction == SelectionModifyDirection::kLeft)) {
-          selection_ = CreateVisibleSelection(
+          current_selection_ =
               SelectionInDOMTree::Builder()
                   .Collapse(selection_.IsBaseFirst()
                                 ? selection_.Base()
@@ -673,16 +692,16 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
                   .Extend(selection_.IsBaseFirst() ? position.DeepEquivalent()
                                                    : selection_.Extent())
                   .SetIsDirectional(true)
-                  .Build());
+                  .Build();
         } else {
-          selection_ = CreateVisibleSelection(
+          current_selection_ =
               SelectionInDOMTree::Builder()
                   .Collapse(selection_.IsBaseFirst() ? position.DeepEquivalent()
                                                      : selection_.Base())
                   .Extend(selection_.IsBaseFirst() ? selection_.Extent()
                                                    : position.DeepEquivalent())
                   .SetIsDirectional(true)
-                  .Build());
+                  .Build();
         }
       }
       break;
@@ -715,12 +734,11 @@ bool SelectionModifier::ModifyWithPageGranularity(
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       GetFrame()->GetDocument()->Lifecycle());
 
-  if (alter == SelectionModifyAlteration::kExtend) {
-    selection_ = CreateVisibleSelection(PrepareToExtendSeelction(
-        selection_, direction == SelectionModifyVerticalDirection::kUp
-                        ? SelectionModifyDirection::kBackward
-                        : SelectionModifyDirection::kForward));
-  }
+  selection_ = CreateVisibleSelection(PrepareToModifySelection(
+      current_selection_, alter,
+      direction == SelectionModifyVerticalDirection::kUp
+          ? SelectionModifyDirection::kBackward
+          : SelectionModifyDirection::kForward));
 
   VisiblePosition pos;
   LayoutUnit x_pos;
@@ -778,21 +796,21 @@ bool SelectionModifier::ModifyWithPageGranularity(
 
   switch (alter) {
     case SelectionModifyAlteration::kMove:
-      selection_ = CreateVisibleSelection(
+      current_selection_ =
           SelectionInDOMTree::Builder()
               .Collapse(result.ToPositionWithAffinity())
               .SetIsDirectional(ShouldAlwaysUseDirectionalSelection(GetFrame()))
               .SetAffinity(direction == SelectionModifyVerticalDirection::kUp
                                ? TextAffinity::kUpstream
                                : TextAffinity::kDownstream)
-              .Build());
+              .Build();
       break;
     case SelectionModifyAlteration::kExtend: {
-      selection_ = CreateVisibleSelection(SelectionInDOMTree::Builder()
-                                              .Collapse(selection_.Base())
-                                              .Extend(result.DeepEquivalent())
-                                              .SetIsDirectional(true)
-                                              .Build());
+      current_selection_ = SelectionInDOMTree::Builder()
+                               .Collapse(selection_.Base())
+                               .Extend(result.DeepEquivalent())
+                               .SetIsDirectional(true)
+                               .Build();
       break;
     }
   }
@@ -817,11 +835,11 @@ static LayoutUnit LineDirectionPointForBlockDirectionNavigationOf(
   // relative to the text, not absolute 'up'.
   const FloatPoint& caret_point = caret_rect.layout_object->LocalToAbsolute(
       FloatPoint(caret_rect.rect.Location()));
-  LayoutObject* const containing_block =
+  const LayoutObject* const containing_block =
       caret_rect.layout_object->ContainingBlock();
   // Just use ourselves to determine the writing mode if we have no containing
   // block.
-  LayoutObject* const layout_object =
+  const LayoutObject* const layout_object =
       containing_block ? containing_block : caret_rect.layout_object;
   return LayoutUnit(layout_object->IsHorizontalWritingMode() ? caret_point.X()
                                                              : caret_point.Y());
@@ -832,10 +850,6 @@ LayoutUnit SelectionModifier::LineDirectionPointForBlockDirectionNavigation(
   LayoutUnit x;
 
   if (selection_.IsNone())
-    return x;
-
-  LocalFrame* frame = pos.GetDocument()->GetFrame();
-  if (!frame)
     return x;
 
   if (x_pos_for_vertical_arrow_navigation_ ==

@@ -51,40 +51,43 @@ Registry::~Registry() {
 void Registry::RememberFileSystem(
     const ProvidedFileSystemInfo& file_system_info,
     const Watchers& watchers) {
-  auto file_system = base::MakeUnique<base::DictionaryValue>();
-  file_system->SetKey(kPrefKeyFileSystemId,
-                      base::Value(file_system_info.file_system_id()));
-  file_system->SetKey(kPrefKeyDisplayName,
-                      base::Value(file_system_info.display_name()));
-  file_system->SetKey(kPrefKeyWritable,
-                      base::Value(file_system_info.writable()));
-  file_system->SetKey(kPrefKeySupportsNotifyTag,
-                      base::Value(file_system_info.supports_notify_tag()));
-  file_system->SetKey(kPrefKeyOpenedFilesLimit,
-                      base::Value(file_system_info.opened_files_limit()));
+  base::Value file_system(base::Value::Type::DICTIONARY);
+  file_system.SetKey(kPrefKeyFileSystemId,
+                     base::Value(file_system_info.file_system_id()));
+  file_system.SetKey(kPrefKeyDisplayName,
+                     base::Value(file_system_info.display_name()));
+  file_system.SetKey(kPrefKeyWritable,
+                     base::Value(file_system_info.writable()));
+  file_system.SetKey(kPrefKeySupportsNotifyTag,
+                     base::Value(file_system_info.supports_notify_tag()));
+  file_system.SetKey(kPrefKeyOpenedFilesLimit,
+                     base::Value(file_system_info.opened_files_limit()));
+  // We don't need to write and read "persistent" field (in MountOptions) to
+  // and from preference because all filesystems which are remembered must be
+  // persistent.
 
-  auto watchers_value = base::MakeUnique<base::DictionaryValue>();
+  base::Value watchers_value(base::Value::Type::DICTIONARY);
 
   for (const auto& it : watchers) {
-    auto watcher = base::MakeUnique<base::DictionaryValue>();
-    watcher->SetKey(kPrefKeyWatcherEntryPath,
-                    base::Value(it.second.entry_path.value()));
-    watcher->SetKey(kPrefKeyWatcherRecursive, base::Value(it.second.recursive));
-    watcher->SetKey(kPrefKeyWatcherLastTag, base::Value(it.second.last_tag));
-    auto persistent_origins_value = base::MakeUnique<base::ListValue>();
+    base::Value watcher(base::Value::Type::DICTIONARY);
+    watcher.SetKey(kPrefKeyWatcherEntryPath,
+                   base::Value(it.second.entry_path.value()));
+    watcher.SetKey(kPrefKeyWatcherRecursive, base::Value(it.second.recursive));
+    watcher.SetKey(kPrefKeyWatcherLastTag, base::Value(it.second.last_tag));
+    base::Value persistent_origins_value(base::Value::Type::LIST);
     for (const auto& subscriber_it : it.second.subscribers) {
       // Only persistent subscribers should be stored in persistent storage.
       // Other ones should not be restired after a restart.
-      if (subscriber_it.second.persistent)
-        persistent_origins_value->AppendString(subscriber_it.first.spec());
+      if (subscriber_it.second.persistent) {
+        persistent_origins_value.GetList().emplace_back(
+            subscriber_it.first.spec());
+      }
     }
-    watcher->SetWithoutPathExpansion(kPrefKeyWatcherPersistentOrigins,
-                                     std::move(persistent_origins_value));
-    watchers_value->SetWithoutPathExpansion(it.second.entry_path.value(),
-                                            std::move(watcher));
+    watcher.SetKey(kPrefKeyWatcherPersistentOrigins,
+                   std::move(persistent_origins_value));
+    watchers_value.SetKey(it.second.entry_path.value(), std::move(watcher));
   }
-  file_system->SetWithoutPathExpansion(kPrefKeyWatchers,
-                                       std::move(watchers_value));
+  file_system.SetKey(kPrefKeyWatchers, std::move(watchers_value));
 
   PrefService* const pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
@@ -92,20 +95,19 @@ void Registry::RememberFileSystem(
   DictionaryPrefUpdate dict_update(pref_service,
                                    prefs::kFileSystemProviderMounted);
 
-  base::DictionaryValue* file_systems_per_extension_weak = NULL;
-  if (!dict_update->GetDictionaryWithoutPathExpansion(
-          file_system_info.extension_id(), &file_systems_per_extension_weak)) {
-    file_systems_per_extension_weak =
-        dict_update->SetDictionaryWithoutPathExpansion(
-            file_system_info.extension_id(),
-            base::MakeUnique<base::DictionaryValue>());
+  base::Value* file_systems_per_extension = dict_update->FindKeyOfType(
+      file_system_info.provider_id().ToString(), base::Value::Type::DICTIONARY);
+  if (!file_systems_per_extension) {
+    file_systems_per_extension =
+        dict_update->SetKey(file_system_info.provider_id().ToString(),
+                            base::Value(base::Value::Type::DICTIONARY));
   }
 
-  file_systems_per_extension_weak->SetWithoutPathExpansion(
-      file_system_info.file_system_id(), std::move(file_system));
+  file_systems_per_extension->SetKey(file_system_info.file_system_id(),
+                                     std::move(file_system));
 }
 
-void Registry::ForgetFileSystem(const std::string& extension_id,
+void Registry::ForgetFileSystem(const ProviderId& provider_id,
                                 const std::string& file_system_id) {
   PrefService* const pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
@@ -115,16 +117,16 @@ void Registry::ForgetFileSystem(const std::string& extension_id,
 
   base::DictionaryValue* file_systems_per_extension = NULL;
   if (!dict_update->GetDictionaryWithoutPathExpansion(
-          extension_id, &file_systems_per_extension))
+          provider_id.ToString(), &file_systems_per_extension))
     return;  // Nothing to forget.
 
   file_systems_per_extension->RemoveWithoutPathExpansion(file_system_id, NULL);
   if (file_systems_per_extension->empty())
-    dict_update->Remove(extension_id, NULL);
+    dict_update->Remove(provider_id.ToString(), NULL);
 }
 
 std::unique_ptr<Registry::RestoredFileSystems> Registry::RestoreFileSystems(
-    const std::string& extension_id) {
+    const ProviderId& provider_id) {
   PrefService* const pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
 
@@ -134,7 +136,7 @@ std::unique_ptr<Registry::RestoredFileSystems> Registry::RestoreFileSystems(
 
   const base::DictionaryValue* file_systems_per_extension = NULL;
   if (!file_systems->GetDictionaryWithoutPathExpansion(
-          extension_id, &file_systems_per_extension)) {
+          provider_id.ToString(), &file_systems_per_extension)) {
     return base::WrapUnique(new RestoredFileSystems);  // Nothing to restore.
   }
 
@@ -185,7 +187,7 @@ std::unique_ptr<Registry::RestoredFileSystems> Registry::RestoreFileSystems(
     options.opened_files_limit = opened_files_limit;
 
     RestoredFileSystem restored_file_system;
-    restored_file_system.extension_id = extension_id;
+    restored_file_system.provider_id = provider_id;
     restored_file_system.options = options;
 
     // Restore watchers. It's optional, since this field is new.
@@ -263,7 +265,8 @@ void Registry::UpdateWatcherTag(const ProvidedFileSystemInfo& file_system_info,
   base::DictionaryValue* watchers = NULL;
   base::DictionaryValue* watcher_value = NULL;
   if (!dict_update->GetDictionaryWithoutPathExpansion(
-          file_system_info.extension_id(), &file_systems_per_extension) ||
+          file_system_info.provider_id().ToString(),
+          &file_systems_per_extension) ||
       !file_systems_per_extension->GetDictionaryWithoutPathExpansion(
           file_system_info.file_system_id(), &file_system) ||
       !file_system->GetDictionaryWithoutPathExpansion(kPrefKeyWatchers,

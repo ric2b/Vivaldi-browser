@@ -26,13 +26,12 @@
 #ifndef DecodingImageGenerator_h
 #define DecodingImageGenerator_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/graphics/paint/PaintImage.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 
 class SkData;
@@ -56,12 +55,13 @@ class PLATFORM_EXPORT DecodingImageGenerator final
   static std::unique_ptr<SkImageGenerator> CreateAsSkImageGenerator(
       sk_sp<SkData>);
 
-  static sk_sp<DecodingImageGenerator> Create(PassRefPtr<ImageFrameGenerator>,
-                                              const SkImageInfo&,
-                                              PassRefPtr<SegmentReader>,
-                                              std::vector<FrameMetadata>,
-                                              PaintImage::ContentId,
-                                              bool all_data_received);
+  static sk_sp<DecodingImageGenerator> Create(
+      scoped_refptr<ImageFrameGenerator>,
+      const SkImageInfo&,
+      scoped_refptr<SegmentReader>,
+      std::vector<FrameMetadata>,
+      PaintImage::ContentId,
+      bool all_data_received);
 
   ~DecodingImageGenerator() override;
 
@@ -83,15 +83,15 @@ class PLATFORM_EXPORT DecodingImageGenerator final
   PaintImage::ContentId GetContentIdForFrame(size_t frame_index) const override;
 
  private:
-  DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>,
+  DecodingImageGenerator(scoped_refptr<ImageFrameGenerator>,
                          const SkImageInfo&,
-                         PassRefPtr<SegmentReader>,
+                         scoped_refptr<SegmentReader>,
                          std::vector<FrameMetadata>,
                          PaintImage::ContentId,
                          bool all_data_received);
 
-  RefPtr<ImageFrameGenerator> frame_generator_;
-  const RefPtr<SegmentReader> data_;  // Data source.
+  scoped_refptr<ImageFrameGenerator> frame_generator_;
+  const scoped_refptr<SegmentReader> data_;  // Data source.
   const bool all_data_received_;
   bool can_yuv_decode_;
   const PaintImage::ContentId complete_frame_content_id_;

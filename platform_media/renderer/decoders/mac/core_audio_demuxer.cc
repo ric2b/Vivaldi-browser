@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -112,12 +113,12 @@ void CoreAudioDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
                             const PipelineStatusCB& status_cb) {
   if (audio_stream_->Seek(time)) {
-    status_cb.Run(PIPELINE_OK);
+    status_cb.Run(PipelineStatus::PIPELINE_OK);
     return;
   }
   LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
              << ": PIPELINE_ERROR_ABORT";
-  status_cb.Run(PIPELINE_ERROR_ABORT);
+  status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
 }
 
 void CoreAudioDemuxer::Stop() {
@@ -226,14 +227,14 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
   if (!blocking_thread_.IsRunning()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PIPELINE_ERROR_ABORT);
+    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (read_size <= 0) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": DEMUXER_ERROR_COULD_NOT_OPEN";
-    status_cb.Run(DEMUXER_ERROR_COULD_NOT_OPEN);
+    status_cb.Run(PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN);
     return;
   }
 
@@ -258,7 +259,7 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PIPELINE_ERROR_ABORT);
+    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
   }
 
   if (input_format_found_) {
@@ -267,20 +268,20 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
       audio_stream_.reset();
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": DEMUXER_ERROR_NO_SUPPORTED_STREAMS";
-      status_cb.Run(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
+      status_cb.Run(PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
       return;
     }
 
     // Reset read offset to the beginning.
     ResetDataSourceOffset();
-    status_cb.Run(PIPELINE_OK);
+    status_cb.Run(PipelineStatus::PIPELINE_OK);
   }
 }
 
 void CoreAudioDemuxer::OnDataSourceError() {
   LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
              << ": PIPELINE_ERROR_READ";
-  host_->OnDemuxerError(PIPELINE_ERROR_READ);
+  host_->OnDemuxerError(PipelineStatus::PIPELINE_ERROR_READ);
 }
 
 void CoreAudioDemuxer::AudioPacketsProc(

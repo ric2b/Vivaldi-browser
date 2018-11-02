@@ -122,7 +122,6 @@ const base::FilePath::CharType kFrameworkExecutableName[] =
 
 #if defined(OS_WIN)
 const base::FilePath::CharType kBrowserResourcesDll[] = FPL("vivaldi.dll");
-const base::FilePath::CharType kChromeElfDllName[] = FPL("vivaldi_elf.dll");
 const base::FilePath::CharType kStatusTrayWindowClass[] =
     FPL("Vivaldi_StatusTrayWindow");
 #endif  // defined(OS_WIN)
@@ -140,6 +139,8 @@ const base::FilePath::CharType kCRLSetFilename[] =
     FPL("Certificate Revocation Lists");
 const base::FilePath::CharType kCustomDictionaryFileName[] =
     FPL("Custom Dictionary.txt");
+const base::FilePath::CharType kDownloadMetadataStoreFilename[] =
+    FPL("in_progress_download_metadata_store");
 const base::FilePath::CharType kDownloadServiceStorageDirname[] =
     FPL("Download Service");
 const base::FilePath::CharType kExtensionActivityLogFilename[] =
@@ -152,6 +153,8 @@ const base::FilePath::CharType kFirstRunSentinel[] = FPL("First Run");
 const base::FilePath::CharType kGCMStoreDirname[] = FPL("GCM Store");
 const base::FilePath::CharType kLocalStateFilename[] = FPL("Local State");
 const base::FilePath::CharType kMediaCacheDirname[] = FPL("Media Cache");
+const base::FilePath::CharType kNetworkPersistentStateFilename[] =
+    FPL("Network Persistent State");
 const base::FilePath::CharType kOfflinePageArchivesDirname[] =
     FPL("Offline Pages/archives");
 const base::FilePath::CharType kOfflinePageMetadataDirname[] =

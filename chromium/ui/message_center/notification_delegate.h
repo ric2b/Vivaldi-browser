@@ -16,10 +16,6 @@
 
 namespace message_center {
 
-class MessageCenterController;
-class MessageView;
-class Notification;
-
 // Delegate for a notification. This class has two roles: to implement callback
 // methods for notification, and to provide an identity of the associated
 // notification.
@@ -33,9 +29,6 @@ class MESSAGE_CENTER_EXPORT NotificationDelegate
   // user explicitly (as opposed to timeout/script), |by_user| should be true.
   virtual void Close(bool by_user);
 
-  // Returns true if the delegate can handle click event.
-  virtual bool HasClickedListener();
-
   // To be called when a desktop notification is clicked.
   virtual void Click();
 
@@ -48,24 +41,12 @@ class MESSAGE_CENTER_EXPORT NotificationDelegate
   virtual void ButtonClickWithReply(int button_index,
                                     const base::string16& reply);
 
-  // To be called when the user clicks the settings button in a notification.
-  // Returns whether the settings click was handled by the delegate.
-  virtual bool SettingsClick();
+  // To be called when the user clicks the settings button in a notification
+  // which has a CUSTOM settings button action.
+  virtual void SettingsClick();
 
-  // To be called in order to detect if a settings button should be displayed.
-  virtual bool ShouldDisplaySettingsButton();
-
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
-  // To be called to construct the message view for notifications whose type is
-  // NOTIFICATION_TYPE_CUSTOM.
-  virtual std::unique_ptr<MessageView> CreateCustomMessageView(
-      MessageCenterController* controller,
-      const Notification& notification);
-#endif
-
-  // Indicates whether this notification should be displayed when there is
-  // fullscreen content being displayed.
-  virtual bool ShouldDisplayOverFullscreen() const;
+  // Called when the user attempts to disable the notification.
+  virtual void DisableNotification();
 
  protected:
   virtual ~NotificationDelegate() {}
@@ -82,7 +63,6 @@ class MESSAGE_CENTER_EXPORT HandleNotificationClickedDelegate
 
   // message_center::NotificationDelegate overrides:
   void Click() override;
-  bool HasClickedListener() override;
 
  protected:
   ~HandleNotificationClickedDelegate() override;

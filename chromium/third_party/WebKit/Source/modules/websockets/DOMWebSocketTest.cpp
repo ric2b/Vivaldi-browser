@@ -51,7 +51,7 @@ class MockWebSocketChannel : public WebSocketChannel {
   MOCK_METHOD1(Send, void(const CString&));
   MOCK_METHOD3(Send, void(const DOMArrayBuffer&, unsigned, unsigned));
   MOCK_METHOD1(SendMock, void(BlobDataHandle*));
-  void Send(PassRefPtr<BlobDataHandle> handle) { SendMock(handle.Get()); }
+  void Send(scoped_refptr<BlobDataHandle> handle) { SendMock(handle.get()); }
   MOCK_METHOD1(SendTextAsCharVectorMock, void(Vector<char>*));
   void SendTextAsCharVector(std::unique_ptr<Vector<char>> vector) {
     SendTextAsCharVectorMock(vector.get());
@@ -78,7 +78,7 @@ class DOMWebSocketWithMockChannel final : public DOMWebSocket {
   static DOMWebSocketWithMockChannel* Create(ExecutionContext* context) {
     DOMWebSocketWithMockChannel* websocket =
         new DOMWebSocketWithMockChannel(context);
-    websocket->SuspendIfNeeded();
+    websocket->PauseIfNeeded();
     return websocket;
   }
 
@@ -91,7 +91,7 @@ class DOMWebSocketWithMockChannel final : public DOMWebSocket {
     return channel_.Get();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(channel_);
     DOMWebSocket::Trace(visitor);
   }

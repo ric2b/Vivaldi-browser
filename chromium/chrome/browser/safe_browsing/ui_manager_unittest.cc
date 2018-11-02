@@ -12,9 +12,10 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/util.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -70,12 +71,14 @@ class SafeBrowsingCallbackWaiter {
 
 class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
  public:
-  SafeBrowsingUIManagerTest() : ui_manager_(new SafeBrowsingUIManager(NULL)) {}
+  SafeBrowsingUIManagerTest()
+      : ChromeRenderViewHostTestHarness(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD),
+        ui_manager_(new SafeBrowsingUIManager(NULL)) {}
 
   ~SafeBrowsingUIManagerTest() override {}
 
   void SetUp() override {
-    SetThreadBundleOptions(content::TestBrowserThreadBundle::REAL_IO_THREAD);
     ChromeRenderViewHostTestHarness::SetUp();
     SafeBrowsingUIManager::CreateWhitelistForTesting(web_contents());
 
@@ -117,7 +120,7 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
     resource.is_subresource = is_subresource;
     resource.web_contents_getter =
         security_interstitials::UnsafeResource::GetWebContentsGetter(
-            web_contents()->GetRenderProcessHost()->GetID(),
+            web_contents()->GetMainFrame()->GetProcess()->GetID(),
             web_contents()->GetMainFrame()->GetRoutingID());
     resource.threat_type = SB_THREAT_TYPE_URL_MALWARE;
     return resource;
@@ -437,6 +440,7 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
                 false,                   // is_scout_reporting_enabled
                 false,                   // is_proceed_anyway_disabled
                 true,                    // should_open_links_in_new_tab
+                true,                    // always_show_back_to_safety
                 "cpn_safe_browsing")) {  // help_center_article_link
     // Don't delay details at all for the unittest.
     SetThreatDetailsProceedDelayForTesting(0);

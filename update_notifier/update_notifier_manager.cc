@@ -49,10 +49,6 @@ enum ScaleFactor;
 namespace vivaldi_update_notifier {
 
 namespace {
-// This is half of the size we want to use on the first read, because it
-// gets multiplied by 2 before being used.
-const size_t kInitialSizeOfProcessIdList = 50;
-
 const base::FilePath::StringType kVivaldiExecutable =
     FILE_PATH_LITERAL("vivaldi.exe");
 

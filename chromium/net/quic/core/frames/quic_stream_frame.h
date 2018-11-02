@@ -15,41 +15,12 @@
 
 namespace net {
 
-// Deleter for stream buffers. Copyable to support platforms where the deleter
-// of a unique_ptr must be copyable. Otherwise it would be nice for this to be
-// move-only.
-class QUIC_EXPORT_PRIVATE StreamBufferDeleter {
- public:
-  StreamBufferDeleter() : allocator_(nullptr) {}
-  explicit StreamBufferDeleter(QuicBufferAllocator* allocator)
-      : allocator_(allocator) {}
-
-  // Deletes |buffer| using |allocator_|.
-  void operator()(char* buffer) const;
-
- private:
-  // Not owned; must be valid so long as the buffer stored in the unique_ptr
-  // that owns |this| is valid.
-  QuicBufferAllocator* allocator_;
-};
-
-using UniqueStreamBuffer = std::unique_ptr<char[], StreamBufferDeleter>;
-
-// Allocates memory of size |size| using |allocator| for a QUIC stream buffer.
-QUIC_EXPORT_PRIVATE UniqueStreamBuffer
-NewStreamBuffer(QuicBufferAllocator* allocator, size_t size);
-
 struct QUIC_EXPORT_PRIVATE QuicStreamFrame {
   QuicStreamFrame();
   QuicStreamFrame(QuicStreamId stream_id,
                   bool fin,
                   QuicStreamOffset offset,
                   QuicStringPiece data);
-  QuicStreamFrame(QuicStreamId stream_id,
-                  bool fin,
-                  QuicStreamOffset offset,
-                  QuicPacketLength data_length,
-                  UniqueStreamBuffer buffer);
   QuicStreamFrame(QuicStreamId stream_id,
                   bool fin,
                   QuicStreamOffset offset,
@@ -64,20 +35,13 @@ struct QUIC_EXPORT_PRIVATE QuicStreamFrame {
   QuicPacketLength data_length;
   const char* data_buffer;
   QuicStreamOffset offset;  // Location of this data in the stream.
-  // TODO(fayang): When deprecating
-  // quic_reloadable_flag_quic_save_data_before_consumption2: (1) Remove buffer
-  // from QuicStreamFrame; (2) remove the constructor uses UniqueStreamBuffer
-  // and (3) Move definition of UniqueStreamBuffer to QuicStreamSendBuffer.
-  // nullptr when the QuicStreamFrame is received, and non-null when sent.
-  UniqueStreamBuffer buffer;
 
  private:
   QuicStreamFrame(QuicStreamId stream_id,
                   bool fin,
                   QuicStreamOffset offset,
                   const char* data_buffer,
-                  QuicPacketLength data_length,
-                  UniqueStreamBuffer buffer);
+                  QuicPacketLength data_length);
 
   DISALLOW_COPY_AND_ASSIGN(QuicStreamFrame);
 };

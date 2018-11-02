@@ -7,7 +7,7 @@
 #include "build/build_config.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
@@ -15,10 +15,11 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/threading/BackgroundTaskRunner.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 
@@ -29,20 +30,21 @@ namespace {
 const double kSlackBeforeDeadline =
     0.001;  // a small slack period between deadline and current time for safety
 
-// The encoding task is highly likely to switch from idle task to alternative
-// code path when the startTimeoutDelay is set to be below 150ms. As we want the
-// majority of encoding tasks to take the usual async idle task, we set a
-// lenient limit -- 200ms here. This limit still needs to be short enough for
-// the latency to be negligible to the user.
-const double kIdleTaskStartTimeoutDelay = 200.0;
+/* The value is based on user statistics on Nov 2017. */
+#if (defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN))
+const double kIdleTaskStartTimeoutDelayMs = 1000.0;
+#else
+const double kIdleTaskStartTimeoutDelayMs = 4000.0;  // For ChromeOS, Mobile
+#endif
+
 // We should be more lenient on completion timeout delay to ensure that the
 // switch from idle to main thread only happens to a minority of toBlob calls
 #if !defined(OS_ANDROID)
 // Png image encoding on 4k by 4k canvas on Mac HDD takes 5.7+ seconds
-const double kIdleTaskCompleteTimeoutDelay = 6700.0;
+const double kIdleTaskCompleteTimeoutDelayMs = 6700.0;
 #else
 // Png image encoding on 4k by 4k canvas on Android One takes 9.0+ seconds
-const double kIdleTaskCompleteTimeoutDelay = 10000.0;
+const double kIdleTaskCompleteTimeoutDelayMs = 10000.0;
 #endif
 
 bool IsDeadlineNearOrPassed(double deadline_seconds) {
@@ -151,12 +153,12 @@ CanvasAsyncBlobCreator* CanvasAsyncBlobCreator::Create(
     DOMUint8ClampedArray* unpremultiplied_rgba_image_data,
     const String& mime_type,
     const IntSize& size,
-    BlobCallback* callback,
+    V8BlobCallback* callback,
     double start_time,
-    Document* document) {
+    ExecutionContext* context) {
   return new CanvasAsyncBlobCreator(
       unpremultiplied_rgba_image_data, ConvertMimeTypeStringToEnum(mime_type),
-      size, callback, start_time, document, nullptr);
+      size, callback, start_time, context, nullptr);
 }
 
 CanvasAsyncBlobCreator* CanvasAsyncBlobCreator::Create(
@@ -164,22 +166,22 @@ CanvasAsyncBlobCreator* CanvasAsyncBlobCreator::Create(
     const String& mime_type,
     const IntSize& size,
     double start_time,
-    Document* document,
+    ExecutionContext* context,
     ScriptPromiseResolver* resolver) {
   return new CanvasAsyncBlobCreator(
       unpremultiplied_rgba_image_data, ConvertMimeTypeStringToEnum(mime_type),
-      size, nullptr, start_time, document, resolver);
+      size, nullptr, start_time, context, resolver);
 }
 
 CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(DOMUint8ClampedArray* data,
                                                MimeType mime_type,
                                                const IntSize& size,
-                                               BlobCallback* callback,
+                                               V8BlobCallback* callback,
                                                double start_time,
-                                               Document* document,
+                                               ExecutionContext* context,
                                                ScriptPromiseResolver* resolver)
     : data_(data),
-      document_(document),
+      context_(context),
       mime_type_(mime_type),
       start_time_(start_time),
       elapsed_time_(0),
@@ -193,9 +195,9 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(DOMUint8ClampedArray* data,
   src_data_.reset(info, data_->Data(), rowBytes);
   idle_task_status_ = kIdleTaskNotSupported;
   num_rows_completed_ = 0;
-  if (document) {
+  if (context->IsDocument()) {
     parent_frame_task_runner_ =
-        ParentFrameTaskRunners::Create(*document->GetFrame());
+        ParentFrameTaskRunners::Create(*ToDocument(context)->GetFrame());
   }
   if (script_promise_resolver_) {
     function_type_ = kOffscreenCanvasToBlobPromise;
@@ -210,7 +212,7 @@ void CanvasAsyncBlobCreator::Dispose() {
   // Eagerly let go of references to prevent retention of these
   // resources while any remaining posted tasks are queued.
   data_.Clear();
-  document_.Clear();
+  context_.Clear();
   parent_frame_task_runner_.Clear();
   callback_.Clear();
   script_promise_resolver_.Clear();
@@ -226,7 +228,7 @@ void CanvasAsyncBlobCreator::ScheduleAsyncBlobCreation(const double& quality) {
       IntSize size(src_data_.width(), src_data_.height());
       if (!ImageDataBuffer(size, data_->Data())
                .EncodeImage("image/webp", quality, &encoded_image_)) {
-        TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+        context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
             ->PostTask(
                 BLINK_FROM_HERE,
                 WTF::Bind(&CanvasAsyncBlobCreator::CreateNullAndReturnResult,
@@ -234,7 +236,7 @@ void CanvasAsyncBlobCreator::ScheduleAsyncBlobCreation(const double& quality) {
 
         return;
       }
-      TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+      context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
           ->PostTask(
               BLINK_FROM_HERE,
               WTF::Bind(&CanvasAsyncBlobCreator::CreateBlobAndReturnResult,
@@ -256,7 +258,7 @@ void CanvasAsyncBlobCreator::ScheduleAsyncBlobCreation(const double& quality) {
         BLINK_FROM_HERE,
         WTF::Bind(&CanvasAsyncBlobCreator::IdleTaskStartTimeoutEvent,
                   WrapPersistent(this), quality),
-        kIdleTaskStartTimeoutDelay);
+        kIdleTaskStartTimeoutDelayMs);
   }
 }
 
@@ -269,12 +271,12 @@ void CanvasAsyncBlobCreator::ScheduleInitiateEncoding(double quality) {
 
 void CanvasAsyncBlobCreator::InitiateEncoding(double quality,
                                               double deadline_seconds) {
-  RecordElapsedTimeHistogram(
-      kInitiateEncodingDelay, mime_type_,
-      WTF::MonotonicallyIncreasingTime() - schedule_initiate_start_time_);
   if (idle_task_status_ == kIdleTaskSwitchedToImmediateTask) {
     return;
   }
+  RecordElapsedTimeHistogram(
+      kInitiateEncodingDelay, mime_type_,
+      WTF::MonotonicallyIncreasingTime() - schedule_initiate_start_time_);
 
   DCHECK(idle_task_status_ == kIdleTaskNotStarted);
   idle_task_status_ = kIdleTaskStarted;
@@ -315,7 +317,7 @@ void CanvasAsyncBlobCreator::IdleEncodeRows(double deadline_seconds) {
   elapsed_time_ += (WTF::MonotonicallyIncreasingTime() - start_time);
   RecordElapsedTimeHistogram(kIdleEncodeDuration, mime_type_, elapsed_time_);
   if (IsDeadlineNearOrPassed(deadline_seconds)) {
-    TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+    context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
         ->PostTask(BLINK_FROM_HERE,
                    WTF::Bind(&CanvasAsyncBlobCreator::CreateBlobAndReturnResult,
                              WrapPersistent(this)));
@@ -340,7 +342,7 @@ void CanvasAsyncBlobCreator::ForceEncodeRowsOnCurrentThread() {
   if (IsMainThread()) {
     this->CreateBlobAndReturnResult();
   } else {
-    TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+    context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
         ->PostTask(
             BLINK_FROM_HERE,
             CrossThreadBind(&CanvasAsyncBlobCreator::CreateBlobAndReturnResult,
@@ -358,10 +360,10 @@ void CanvasAsyncBlobCreator::CreateBlobAndReturnResult() {
   Blob* result_blob = Blob::Create(encoded_image_.data(), encoded_image_.size(),
                                    ConvertMimeTypeEnumToString(mime_type_));
   if (function_type_ == kHTMLCanvasToBlobCallback) {
-    TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
-        ->PostTask(BLINK_FROM_HERE, WTF::Bind(&BlobCallback::handleEvent,
-                                              WrapPersistent(callback_.Get()),
-                                              WrapPersistent(result_blob)));
+    context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
+        ->PostTask(BLINK_FROM_HERE,
+                   WTF::Bind(&V8BlobCallback::InvokeAndReportException,
+                             callback_, nullptr, WrapPersistent(result_blob)));
   } else {
     script_promise_resolver_->Resolve(result_blob);
   }
@@ -374,10 +376,10 @@ void CanvasAsyncBlobCreator::CreateNullAndReturnResult() {
   if (function_type_ == kHTMLCanvasToBlobCallback) {
     DCHECK(IsMainThread());
     RecordIdleTaskStatusHistogram(idle_task_status_);
-    TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+    context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
         ->PostTask(BLINK_FROM_HERE,
-                   WTF::Bind(&BlobCallback::handleEvent,
-                             WrapPersistent(callback_.Get()), nullptr));
+                   WTF::Bind(&V8BlobCallback::InvokeAndReportException,
+                             callback_, nullptr, nullptr));
   } else {
     script_promise_resolver_->Reject(DOMException::Create(
         kEncodingError, "Encoding of the source image has failed."));
@@ -442,7 +444,7 @@ void CanvasAsyncBlobCreator::IdleTaskStartTimeoutEvent(double quality) {
         BLINK_FROM_HERE,
         WTF::Bind(&CanvasAsyncBlobCreator::IdleTaskCompleteTimeoutEvent,
                   WrapPersistent(this)),
-        kIdleTaskCompleteTimeoutDelay);
+        kIdleTaskCompleteTimeoutDelayMs);
   } else if (idle_task_status_ == kIdleTaskNotStarted) {
     // If the idle task does not start after a delay threshold, we will
     // force it to happen on main thread (even though it may cause more
@@ -452,7 +454,7 @@ void CanvasAsyncBlobCreator::IdleTaskStartTimeoutEvent(double quality) {
 
     DCHECK(mime_type_ == kMimeTypePng || mime_type_ == kMimeTypeJpeg);
     if (InitializeEncoder(quality)) {
-      TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+      context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
           ->PostTask(
               BLINK_FROM_HERE,
               WTF::Bind(&CanvasAsyncBlobCreator::ForceEncodeRowsOnCurrentThread,
@@ -477,7 +479,7 @@ void CanvasAsyncBlobCreator::IdleTaskCompleteTimeoutEvent() {
     SignalTaskSwitchInCompleteTimeoutEventForTesting();
 
     DCHECK(mime_type_ == kMimeTypePng || mime_type_ == kMimeTypeJpeg);
-    TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+    context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
         ->PostTask(
             BLINK_FROM_HERE,
             WTF::Bind(&CanvasAsyncBlobCreator::ForceEncodeRowsOnCurrentThread,
@@ -493,15 +495,14 @@ void CanvasAsyncBlobCreator::PostDelayedTaskToCurrentThread(
     const WebTraceLocation& location,
     WTF::Closure task,
     double delay_ms) {
-  TaskRunnerHelper::Get(TaskType::kCanvasBlobSerialization, document_)
+  context_->GetTaskRunner(TaskType::kCanvasBlobSerialization)
       ->PostDelayedTask(location, std::move(task),
                         TimeDelta::FromMillisecondsD(delay_ms));
 }
 
-DEFINE_TRACE(CanvasAsyncBlobCreator) {
-  visitor->Trace(document_);
+void CanvasAsyncBlobCreator::Trace(blink::Visitor* visitor) {
+  visitor->Trace(context_);
   visitor->Trace(data_);
-  visitor->Trace(callback_);
   visitor->Trace(parent_frame_task_runner_);
   visitor->Trace(script_promise_resolver_);
 }

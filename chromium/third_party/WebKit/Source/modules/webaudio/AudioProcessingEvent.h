@@ -26,11 +26,10 @@
 #ifndef AudioProcessingEvent_h
 #define AudioProcessingEvent_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/EventModules.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioProcessingEventInit.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -57,7 +56,7 @@ class AudioProcessingEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   AudioProcessingEvent();

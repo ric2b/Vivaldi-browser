@@ -16,13 +16,7 @@ namespace base {
 
 namespace {
 
-// Fuchsia doesn't set PATH, Windows doesn't set PWD. (Fuchsia may eventually
-// set PATH and then this can be removed again.)
-#if defined(OS_FUCHSIA)
-constexpr char kValidEnvironmentVariable[] = "PWD";
-#else
 constexpr char kValidEnvironmentVariable[] = "PATH";
-#endif
 
 }  // namespace
 
@@ -137,39 +131,39 @@ TEST_F(EnvironmentTest, AlterEnvironment) {
 #else
 
 TEST_F(EnvironmentTest, AlterEnvironment) {
-  const char* const empty[] = { NULL };
-  const char* const a2[] = { "A=2", NULL };
+  const char* const empty[] = {nullptr};
+  const char* const a2[] = {"A=2", nullptr};
   EnvironmentMap changes;
   std::unique_ptr<char* []> e;
 
   e = AlterEnvironment(empty, changes);
-  EXPECT_TRUE(e[0] == NULL);
+  EXPECT_TRUE(e[0] == nullptr);
 
   changes["A"] = "1";
   e = AlterEnvironment(empty, changes);
   EXPECT_EQ(std::string("A=1"), e[0]);
-  EXPECT_TRUE(e[1] == NULL);
+  EXPECT_TRUE(e[1] == nullptr);
 
   changes.clear();
   changes["A"] = std::string();
   e = AlterEnvironment(empty, changes);
-  EXPECT_TRUE(e[0] == NULL);
+  EXPECT_TRUE(e[0] == nullptr);
 
   changes.clear();
   e = AlterEnvironment(a2, changes);
   EXPECT_EQ(std::string("A=2"), e[0]);
-  EXPECT_TRUE(e[1] == NULL);
+  EXPECT_TRUE(e[1] == nullptr);
 
   changes.clear();
   changes["A"] = "1";
   e = AlterEnvironment(a2, changes);
   EXPECT_EQ(std::string("A=1"), e[0]);
-  EXPECT_TRUE(e[1] == NULL);
+  EXPECT_TRUE(e[1] == nullptr);
 
   changes.clear();
   changes["A"] = std::string();
   e = AlterEnvironment(a2, changes);
-  EXPECT_TRUE(e[0] == NULL);
+  EXPECT_TRUE(e[0] == nullptr);
 }
 
 #endif

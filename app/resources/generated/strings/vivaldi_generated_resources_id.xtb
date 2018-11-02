@@ -2,8 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
 <translation id="1018656279737460067">Di Batalkan</translation>
+<translation id="1026822031284433028">Muat Gambar</translation>
 <translation id="1031362278801463162">Memuat pratinjau</translation>
+<translation id="1047431265488717055">Salin &amp;Teks Tautan</translation>
 <translation id="1049795001945932310">&amp;Semua pengaturan bahasa</translation>
+<translation id="1054153489933238809">Buka &amp;Gambar Asli di Tab Baru</translation>
 <translation id="1056898198331236512">Peringatan</translation>
 <translation id="1084824384139382525">Salin ala&amp;mat tautan</translation>
 <translation id="114140604515785785">Direktori akar ekstensi:</translation>
@@ -29,13 +32,12 @@
 <translation id="1546280085599573572">Ekstensi ini telah mengubah halaman apa yang di tampilkan saat anda meng-klik tombol beranda.</translation>
 <translation id="1580652505892042215">Konteks:</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Buka Tautan Dengan...</translation>
 <translation id="159359590073980872">Tembolok gambar</translation>
 <translation id="1601560923496285236">Terapkan</translation>
 <translation id="1603914832182249871">(Penyamaran)</translation>
-<translation id="1616206807336925449">Ekstensi ini tidak memerlukan izin khusus.</translation>
 <translation id="1627276047960621195">Semua Deskriptor file</translation>
 <translation id="1635033183663317347">Di pasang oleh wali anda.</translation>
-<translation id="1681120471812444678">Menyiapkan untuk menambah pencetak…</translation>
 <translation id="1682548588986054654">Jendela Penyamaran Baru</translation>
 <translation id="1708338024780164500">(Tidak Aktif)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
@@ -48,7 +50,6 @@
 <translation id="1769104665586091481">Buka Tautan di &amp;Jendela Baru</translation>
 <translation id="1815083418640426271">Tempel sebagai Teks Biasa</translation>
 <translation id="1828901632669367785">Cetak Menggunakan Dialog Sistem...</translation>
-<translation id="1838288018605456492">Klik untuk menyiapkan</translation>
 <translation id="1846308012215045257">Kontrol-klik untuk menjalankan <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Putar &amp;searah jarum jam</translation>
 <translation id="1859234291848436338">Arah Penulisan</translation>
@@ -65,6 +66,7 @@
 <translation id="2087822576218954668">Pencetakan: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Muat Ulang &amp;Frame</translation>
 <translation id="2129825002735785149">Mutakhirkan plugin</translation>
+<translation id="2142328300403846845">Buka Tautan sebagai</translation>
 <translation id="2148892889047469596">Cast tab</translation>
 <translation id="2150139952286079145">Telusuri tujuan</translation>
 <translation id="215753907730220065">Keluar dari Tampilan Layar Penuh</translation>
@@ -75,6 +77,7 @@
 <translation id="220138918934036434">Sembunyikan tombol</translation>
 <translation id="2218515861914035131">Tempel sebagai teks biasa</translation>
 <translation id="2249605167705922988">misal: 1-5, 8, 11-13</translation>
+<translation id="225240747099314620">Izinkan pengidentifikasi untuk konten terlindungi (komputer mungkin butuh untuk di-restart)</translation>
 <translation id="2263497240924215535">Tidak Aktif</translation>
 <translation id="2280486287150724112">Batas kanan</translation>
 <translation id="2282146716419988068">Proses GPU</translation>
@@ -99,6 +102,7 @@
 <translation id="2509495747794740764">Jumlah skala harus berupa angka antara 10 dan 200.</translation>
 <translation id="253557089021624350">Penghitung keepalive</translation>
 <translation id="2550212893339833758">Memori yang di Tukar</translation>
+<translation id="2553440850688409052">Sembunyikan Plugin Ini</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Aktifkan ulang</translation>
@@ -118,7 +122,6 @@
 <translation id="2916745397441987255">Cari semua ekstensi</translation>
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
 <translation id="2941112035454246133">Rendah</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Ulang</translation>
 <translation id="299483336428448530">Di pasang oleh orang tua anda.</translation>
 <translation id="3003623123441819449">Tembolok CSS</translation>
@@ -131,7 +134,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Semua Tuas PENGGUNA</translation>
 <translation id="3129173833825111527">Batas kiri</translation>
-<translation id="3149510190863420837">Semua Aplikasi Chrome</translation>
 <translation id="3154429428035006212">Offline selama lebih dari satu bulan</translation>
 <translation id="3222066309010235055">Tampilan sebelumnya: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="32279126412636473">Muat Ulang</translation>
@@ -155,7 +157,6 @@
 <translation id="3378572629723696641">Ekstensi ini mungkin sudah rusak.</translation>
 <translation id="3396331542604645348">Pencetak yang di pilih tidak tersedia atau tidak terpasang dengan semestinya. Periksa printer anda atau coba pilih pencetak lainnya.</translation>
 <translation id="3435896845095436175">Aktifkan</translation>
-<translation id="3439970425423980614">Membuka PDF di Pratinjau</translation>
 <translation id="345693547134384690">Buka &amp;gambar di tab baru</translation>
 <translation id="3467267818798281173">Minta saran dari Google</translation>
 <translation id="3468745736289470383">Membagi Layar Anda</translation>
@@ -164,14 +165,13 @@
 <translation id="3511307672085573050">Salin Ala&amp;mat Tautan</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ingin membagikan pencetak &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; dengan kelompok yang anda miliki: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jika anda menerima, semua anggota kelompok akan dapat mencetak pada pencetak tersebut.</translation>
 <translation id="3587482841069643663">Semua</translation>
+<translation id="3618849550573277856">Cari “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">Buka tautan di jendela penya&amp;maran</translation>
-<translation id="3640006360782160348">Batal mempersiapkan pencetak</translation>
 <translation id="3678156199662914018">Ekstensi: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Permintaan Berbagi Layar</translation>
 <translation id="370665806235115550">Memuat...</translation>
 <translation id="3725367690636977613">Semua halaman</translation>
 <translation id="3727187387656390258">Periksa sembulan</translation>
-<translation id="3730639321086573427">Tujuan Lokal</translation>
 <translation id="3760460896538743390">Periksa Halaman Latar &amp;Belakang</translation>
 <translation id="3763401818161139108">Selalu jalankan pada <ph name="ORIGIN" /></translation>
 <translation id="3798449238516105146">Versi</translation>
@@ -192,6 +192,7 @@
 <translation id="3978267865113951599">(Bertabrakan)</translation>
 <translation id="3979395879372752341">Ekstensi baru di tambahkan (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Tambah ke Kamus</translation>
 <translation id="407520071244661467">Skala</translation>
 <translation id="4087089424473531098">Membuat ekstensi:
 
@@ -223,14 +224,12 @@
 <translation id="4478664379124702289">Simpan Tau&amp;tan sebagai...</translation>
 <translation id="4481249487722541506">Aktifkan ekstensi yang terbongkar...</translation>
 <translation id="4522570452068850558">Semua Detail</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4552495056028768700">Akses Halaman</translation>
 <translation id="4557136421275541763">Peringatan:</translation>
 <translation id="4579581181964204535">Tidak dapat cast <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Buka <ph name="URL" /></translation>
 <translation id="4595560905247879544">Semua aplikasi dan ekstensi hanya dapat di ubah oleh pengelola (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ekstensi telah mengubah apa yang ditampilkan halaman saat anda membuka tab baru.</translation>
-<translation id="4624768044135598934">Berhasil!</translation>
 <translation id="4628314759732363424">Ganti...</translation>
 <translation id="4643612240819915418">Buka Vide&amp;o di Tab Baru</translation>
 <translation id="4677772697204437347">Memori GPU</translation>
@@ -292,7 +291,6 @@
 <translation id="5581700288664681403">Memuat <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">Catatan</translation>
 <translation id="5627086634964711283">Juga mengontrol apa yang di tampilkan halaman saat anda meng-klik tombol Beranda.</translation>
-<translation id="5646376287012673985">Lokasi</translation>
 <translation id="5707185214361380026">Gagal untuk memuat ekstensi dari:</translation>
 <translation id="5715711091495208045">Perantara Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Maaf, kami tidak dapat memperlihatkan kode dari galat ini.</translation>
@@ -304,7 +302,6 @@
 <translation id="5828633471261496623">Mencetak...</translation>
 <translation id="5829401023154985950">Kelola...</translation>
 <translation id="583281660410589416">Tidak di Ketahui</translation>
-<translation id="5848934677402291689">Menyimpan ke dalam bentuk PDF sedang berlangsung</translation>
 <translation id="5849869942539715694">Kemas Ekstensi...</translation>
 <translation id="5910363049092958439">Sim&amp;pan Gambar sebagai...</translation>
 <translation id="59174027418879706">Di Aktifkan</translation>
@@ -336,8 +333,8 @@
 <translation id="6273677812470008672">Kualitas</translation>
 <translation id="6295855836753816081">Menyimpan...</translation>
 <translation id="6308937455967653460">Simpan tau&amp;tan sebagai...</translation>
+<translation id="6314335155547195432">Buat Kata Kunci</translation>
 <translation id="6326855256003666642">Penghitung Keepalive</translation>
-<translation id="6348109281845364640">Galat untuk menyiapkan pencetak</translation>
 <translation id="6370021412472292592">Tidak dapat memuat manifest.</translation>
 <translation id="6398765197997659313">Keluar dari tampilan layar penuh</translation>
 <translation id="6406303162637086258">Simulasikan mulai ulang browser</translation>
@@ -348,7 +345,6 @@
 <translation id="6452181791372256707">Tolak</translation>
 <translation id="6498249116389603658">&amp;Semua bahasa anda</translation>
 <translation id="6503077044568424649">Sering dibuka</translation>
-<translation id="650584126816009598">Pencetak anda telah siap.</translation>
 <translation id="6508261954199872201">Aplikasi: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Sali&amp;n gambar</translation>
 <translation id="6550675742724504774">Semua Opsi</translation>
@@ -364,8 +360,10 @@
 <translation id="6807889908376551050">Tampilkan Semua...</translation>
 <translation id="6812841287760418429">Simpan semua perubahan</translation>
 <translation id="682123305478866682">Cast desktop</translation>
+<translation id="6824564591481349393">Salin &amp;Alamat Surel</translation>
 <translation id="6841186874966388268">Galat</translation>
 <translation id="6886871292305414135">Buka tautan di &amp;tab baru</translation>
+<translation id="6892812721183419409">Buka Tautan sebagai <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikasi Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Cabut akses berkas</translation>
 <translation id="6916590542764765824">Mengelola Ekstensi</translation>
@@ -374,12 +372,12 @@
 <translation id="6955446738988643816">Periksa Sembulan</translation>
 <translation id="6970856801391541997">Cetak Halaman Khusus</translation>
 <translation id="6974053822202609517">Kanan ke Kiri</translation>
-<translation id="6982896539684144327">Pencetak dari <ph name="VENDOR_NAME" /> terdeteksi</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Pilih tujuan</translation>
 <translation id="7005848115657603926">Rentang halaman tidak sah, gunakan <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Batas bawah</translation>
 <translation id="7013485839273047434">Dapatkan ekstensi lainnya</translation>
+<translation id="7030031465713069059">Simpan Kata Kunci</translation>
 <translation id="708060913198414444">S&amp;alin alamat audio</translation>
 <translation id="7144878232160441200">Coba lagi</translation>
 <translation id="7175353351958621980">Di muat dari:</translation>
@@ -398,10 +396,9 @@
 <translation id="7412226954991670867">Memori GPU</translation>
 <translation id="7421925624202799674">&amp;Lihat Sumber Halaman</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">Menyiapkan pencetak...</translation>
 <translation id="7453008956351770337">Dengan memilih pencetak ini, anda memberikan izin untuk mengakses pencetak anda kepada ekstensi berikut:</translation>
+<translation id="7473891865547856676">Tidak, Terima Kasih</translation>
 <translation id="749028671485790643">Orang <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">Javascript</translation>
 <translation id="7551643184018910560">Sematkan ke rak</translation>
 <translation id="7554791636758816595">Tab Baru</translation>
 <translation id="7564847347806291057">Akhiri proses</translation>
@@ -424,7 +421,6 @@
 <translation id="7814458197256864873">&amp;Salin</translation>
 <translation id="7818135753970109980">Tema baru di tambahkan (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">S&amp;alin alamat video</translation>
-<translation id="7831493768366098287">Google Print</translation>
 <translation id="7849264908733290972">Buka Gambar d&amp;i Tab Baru</translation>
 <translation id="7857949311770343000">Apakah ini halaman tab baru yang anda harapkan?</translation>
 <translation id="786073089922909430">Layanan: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -436,7 +432,6 @@
 <translation id="7947962633355574091">S&amp;alin Alamat Video</translation>
 <translation id="7965010376480416255">Memori Bersama</translation>
 <translation id="7966241909927244760">S&amp;alin Alamat Gambar</translation>
-<translation id="7967437925638594022">Semua Ekstensi &amp; Aplikasi</translation>
 <translation id="7978412674231730200">Kunci pribadi</translation>
 <translation id="7982789257301363584">Jaringan</translation>
 <translation id="7997826902155442747">Prioritas Proses</translation>
@@ -449,13 +444,11 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8004582292198964060">Peramban</translation>
 <translation id="8023801379949507775">Mutakhirkan semua ekstensi sekarang</translation>
 <translation id="8032244173881942855">Tidak dapat cast tab.</translation>
-<translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Cetak sebagai gambar</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Kelola semua ekstensi</translation>
 <translation id="8180239481735238521">halaman</translation>
 <translation id="8188120771410500975">&amp;Periksa ejaan di beberapa bidang teks</translation>
-<translation id="8259581864063078725">Klick untuk menemukan applikasi cetak untuk menggunakan pencetak ini.</translation>
 <translation id="8261378640211443080">Ekstensi ini tidak tercantum dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah di tambahkan tanpa sepengetahuan anda.</translation>
 <translation id="8294431847097064396">Sumber</translation>
 <translation id="8335587457941836791">Batalkan sematan dari rak</translation>
@@ -468,6 +461,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8449008133205184768">Tempel dan Gaya harus Cocok</translation>
 <translation id="8463955938112983119"><ph name="PLUGIN_NAME" /> tidak aktif.</translation>
 <translation id="8465444703385715657"><ph name="PLUGIN_NAME" /> memerlukan izin anda untuk di jalankan</translation>
+<translation id="8496717697661868878">Jalankan Plugin Ini</translation>
 <translation id="8512476990829870887">Akhiri Proses</translation>
 <translation id="8523493869875972733">Simpan Semua Perubahan</translation>
 <translation id="8523849605371521713">Di tambahkan oleh kebijakan</translation>
@@ -502,7 +496,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8916476537757519021">Subkerangka Penyamaran: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Jangan Aktifkan Semua Ekstensi Mode Pengembang</translation>
 <translation id="8938356204940892126">Saya menyerah</translation>
-<translation id="8944779739948852228">Pencetak terdeteksi</translation>
 <translation id="895944840846194039">Memori JavaScript</translation>
 <translation id="8962083179518285172">Sembunyikan Detail</translation>
 <translation id="8996526648899750015">Tambahkan akun...</translation>
@@ -513,7 +506,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="9153341767479566106">Ekstensi lainnya gagal di muat:</translation>
 <translation id="9170848237812810038">&amp;Urung</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" di tambahkan</translation>
-<translation id="9219103736887031265">Gambar</translation>
 <translation id="93766956588638423">Perbaiki ekstensi</translation>
 <translation id="98515147261107953">Lanskap</translation>
 <translation id="994289308992179865">&amp;Putaran</translation>

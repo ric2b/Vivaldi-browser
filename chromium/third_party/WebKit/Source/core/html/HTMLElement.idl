@@ -33,7 +33,7 @@ interface HTMLElement : Element {
     [RuntimeCallStatsCounter=HTMLElementClick] void click();
     [CEReactions, CustomElementCallbacks] attribute long tabIndex;
     [CEReactions, RuntimeEnabled=InertAttribute, Reflect] attribute boolean inert;
-    void focus();
+    void focus(optional FocusOptions options);
     void blur();
     [CEReactions, Reflect] attribute DOMString accessKey;
     [CEReactions, CustomElementCallbacks] attribute boolean draggable;
@@ -58,8 +58,8 @@ interface HTMLElement : Element {
     [SameObject, PerWorldBindings, PutForwards=cssText] readonly attribute CSSStyleDeclaration style;
 
     // Non-standard APIs
-    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementInnerText] attribute DOMString innerText;
-    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute DOMString outerText;
+    [CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementInnerText] attribute [TreatNullAs=NullString] DOMString innerText;
+    [CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute [TreatNullAs=NullString] DOMString outerText;
 };
 
 HTMLElement implements GlobalEventHandlers;

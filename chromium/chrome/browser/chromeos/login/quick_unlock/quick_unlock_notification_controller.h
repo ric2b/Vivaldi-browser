@@ -7,21 +7,26 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "chrome/browser/notifications/notification_delegate.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/notification_delegate.h"
 #include "url/gurl.h"
 
-class Notification;
 class Profile;
+
+namespace message_cener {
+class Notification;
+}
 
 namespace chromeos {
 namespace quick_unlock {
 
 // Quick Unlock feature notification controller is responsible for managing the
 // new feature notification displayed to the user.
-class QuickUnlockNotificationController : public NotificationDelegate,
-                                          public content::NotificationObserver {
+class QuickUnlockNotificationController
+    : public message_center::NotificationDelegate,
+      public content::NotificationObserver {
  public:
   static QuickUnlockNotificationController* CreateForPin(Profile* profile);
   // Returns true if the notification needs to be displayed for the given
@@ -43,7 +48,6 @@ class QuickUnlockNotificationController : public NotificationDelegate,
     NotificationParams();
     ~NotificationParams();
 
-    std::string delegate_id;
     int title_message_id;
     int body_message_id;
     int icon_id;
@@ -63,9 +67,8 @@ class QuickUnlockNotificationController : public NotificationDelegate,
   // NotificationDelegate:
   void Close(bool by_user) override;
   void Click() override;
-  std::string id() const override;
 
-  std::unique_ptr<Notification> CreateNotification();
+  std::unique_ptr<message_center::Notification> CreateNotification();
   void SetNotificationPreferenceWasShown();
   void UnregisterObserver();
 

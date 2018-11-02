@@ -14,7 +14,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
-#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -23,13 +22,13 @@
 #include "chromeos/system/statistics_provider.h"
 #include "components/metrics/leak_detector/leak_detector.h"
 #include "components/metrics/metrics_service.h"
-#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
+#include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 #include "ui/display/display.h"
 #include "ui/events/event_utils.h"
 
@@ -86,7 +85,6 @@ void IncrementPrefValue(const char* path) {
 
 // Called on a background thread to load hardware class information.
 std::string GetHardwareClassOnBackgroundThread() {
-  base::ThreadRestrictions::AssertWaitAllowed();
   std::string hardware_class;
   chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
       "hardware_class", &hardware_class);
@@ -228,6 +226,11 @@ void ChromeOSMetricsProvider::ProvideStabilityMetrics(
 void ChromeOSMetricsProvider::ProvidePreviousSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto) {
   ProvideStabilityMetrics(uma_proto->mutable_system_profile());
+  // The enrollment status and ARC state of a client are not likely to change
+  // between browser restarts.  Hence, it's safe and useful to attach these
+  // values to a previous session log.
+  RecordEnrollmentStatus();
+  RecordArcState();
 }
 
 void ChromeOSMetricsProvider::ProvideCurrentSessionData(
@@ -338,7 +341,7 @@ void ChromeOSMetricsProvider::SetHardwareClass(base::Closure callback,
 }
 
 void ChromeOSMetricsProvider::RecordEnrollmentStatus() {
-  UMA_HISTOGRAM_ENUMERATION(
+  UMA_STABILITY_HISTOGRAM_ENUMERATION(
       "UMA.EnrollmentStatus", GetEnrollmentStatus(), ENROLLMENT_STATUS_MAX);
 }
 

@@ -4,11 +4,6 @@
 
 static_library("core") {
   sources = [
-    "address_normalization_manager.cc",
-    "address_normalization_manager.h",
-    "address_normalizer.h",
-    "address_normalizer_impl.cc",
-    "address_normalizer_impl.h",
     "autofill_payment_instrument.cc",
     "autofill_payment_instrument.h",
     "basic_card_response.cc",
@@ -29,6 +24,8 @@ static_library("core") {
     "payment_details.h",
     "payment_details_modifier.cc",
     "payment_details_modifier.h",
+    "payment_details_validation.cc",
+    "payment_details_validation.h",
     "payment_instrument.cc",
     "payment_instrument.h",
     "payment_item.cc",
@@ -37,6 +34,8 @@ static_library("core") {
     "payment_manifest_downloader.h",
     "payment_method_data.cc",
     "payment_method_data.h",
+    "payment_options.cc",
+    "payment_options.h",
     "payment_options_provider.h",
     "payment_prefs.cc",
     "payment_prefs.h",
@@ -44,6 +43,8 @@ static_library("core") {
     "payment_request_data_util.cc",
     "payment_request_data_util.h",
     "payment_request_delegate.h",
+    "payment_response.cc",
+    "payment_response.h",
     "payment_shipping_option.cc",
     "payment_shipping_option.h",
     "payments_profile_comparator.cc",
@@ -52,8 +53,8 @@ static_library("core") {
     "payments_validators.h",
     "strings_util.cc",
     "strings_util.h",
-    "subkey_requester.cc",
-    "subkey_requester.h",
+    "web_payment_request.cc",
+    "web_payment_request.h",
   ]
 
   deps = [
@@ -64,9 +65,9 @@ static_library("core") {
     "//components/link_header_util",
     "//components/pref_registry",
     "//components/strings:components_strings_grit",
-    "//components/ukm",
     "//net",
-    "//third_party/libphonenumber",
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/cpp:ukm_builders",
     "//third_party/re2",
     "//ui/base",
     "//url",
@@ -83,8 +84,8 @@ static_library("test_support") {
   sources = [
     "payments_test_util.cc",
     "payments_test_util.h",
-    "test_address_normalizer.cc",
-    "test_address_normalizer.h",
+    "test_payment_manifest_downloader.cc",
+    "test_payment_manifest_downloader.h",
     "test_payment_request_delegate.cc",
     "test_payment_request_delegate.h",
   ]
@@ -103,8 +104,6 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "address_normalization_manager_unittest.cc",
-    "address_normalizer_impl_unittest.cc",
     "autofill_payment_instrument_unittest.cc",
     "basic_card_response_unittest.cc",
     "can_make_payment_query_unittest.cc",
@@ -114,15 +113,18 @@ source_set("unit_tests") {
     "payment_currency_amount_unittest.cc",
     "payment_details_modifier_unittest.cc",
     "payment_details_unittest.cc",
+    "payment_details_validation_unittest.cc",
     "payment_item_unittest.cc",
     "payment_manifest_downloader_unittest.cc",
     "payment_method_data_unittest.cc",
+    "payment_options_unittest.cc",
     "payment_request_data_util_unittest.cc",
+    "payment_response_unittest.cc",
     "payment_shipping_option_unittest.cc",
     "payments_profile_comparator_unittest.cc",
     "payments_validators_unittest.cc",
     "strings_util_unittest.cc",
-    "subkey_requester_unittest.cc",
+    "web_payment_request_unittest.cc",
   ]
 
   deps = [
@@ -132,11 +134,11 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
-    "//components/metrics/proto",
     "//components/strings:components_strings_grit",
     "//components/ukm",
     "//components/ukm:test_support",
     "//net:test_support",
+    "//services/metrics/public/cpp:ukm_builders",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libaddressinput:test_support",
@@ -153,6 +155,7 @@ if (is_ios) {
       "//components/test/data/payments/alicepay_bobpay_charliepay_and_cards.js",
       "//components/test/data/payments/blob_url.js",
       "//components/test/data/payments/bobpay.js",
+      "//components/test/data/payments/bobpay_and_basic_card_with_modifier_optional_data.js",
       "//components/test/data/payments/bobpay_and_basic_card_with_modifiers.js",
       "//components/test/data/payments/bobpay_and_cards.js",
       "//components/test/data/payments/bobpay_ui_skip.js",
@@ -186,6 +189,7 @@ if (is_ios) {
       "//components/test/data/payments/payment_request_abort_test.html",
       "//components/test/data/payments/payment_request_alicepay_bobpay_charliepay_and_cards_test.html",
       "//components/test/data/payments/payment_request_blob_url_test.html",
+      "//components/test/data/payments/payment_request_bobpay_and_basic_card_with_modifier_optional_data_test.html",
       "//components/test/data/payments/payment_request_bobpay_and_basic_card_with_modifiers_test.html",
       "//components/test/data/payments/payment_request_bobpay_and_cards_test.html",
       "//components/test/data/payments/payment_request_bobpay_test.html",

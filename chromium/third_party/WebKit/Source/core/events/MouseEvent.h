@@ -25,7 +25,6 @@
 #define MouseEvent_h
 
 #include "core/CoreExport.h"
-#include "core/dom/events/EventDispatchMediator.h"
 #include "core/events/MouseEventInit.h"
 #include "core/events/UIEventWithKeyState.h"
 #include "public/platform/WebMenuSourceType.h"
@@ -116,8 +115,6 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   bool IsMouseEvent() const override;
   unsigned which() const override;
 
-  EventDispatchMediator* CreateMediator() override;
-
   int ClickCount() { return detail(); }
 
   const WebMouseEvent* NativeEvent() const { return native_event_.get(); }
@@ -132,24 +129,28 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
 
   // Note that these values are adjusted to counter the effects of zoom, so that
   // values exposed via DOM APIs are invariant under zooming.
-  // TODO(mustaq): Remove the PointerEvent specific code when mouse has
-  // fractional coordinates. See crbug.com/655786.
-  double screenX() const {
-    return IsPointerEvent() ? screen_location_.X()
-                            : static_cast<int>(screen_location_.X());
-  }
-  double screenY() const {
-    return IsPointerEvent() ? screen_location_.Y()
-                            : static_cast<int>(screen_location_.Y());
+  virtual double screenX() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? screen_location_.X()
+               : static_cast<int>(screen_location_.X());
   }
 
-  double clientX() const {
-    return IsPointerEvent() ? client_location_.X()
-                            : static_cast<int>(client_location_.X());
+  virtual double screenY() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? screen_location_.Y()
+               : static_cast<int>(screen_location_.Y());
   }
-  double clientY() const {
-    return IsPointerEvent() ? client_location_.Y()
-                            : static_cast<int>(client_location_.Y());
+
+  virtual double clientX() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? client_location_.X()
+               : static_cast<int>(client_location_.X());
+  }
+
+  virtual double clientY() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? client_location_.Y()
+               : static_cast<int>(client_location_.Y());
   }
 
   int movementX() const { return movement_delta_.X(); }
@@ -161,13 +162,16 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   int offsetX();
   int offsetY();
 
-  double pageX() const {
-    return IsPointerEvent() ? page_location_.X()
-                            : static_cast<int>(page_location_.X());
+  virtual double pageX() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? page_location_.X()
+               : static_cast<int>(page_location_.X());
   }
-  double pageY() const {
-    return IsPointerEvent() ? page_location_.Y()
-                            : static_cast<int>(page_location_.Y());
+
+  virtual double pageY() const {
+    return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+               ? page_location_.Y()
+               : static_cast<int>(page_location_.Y());
   }
 
   double x() const { return clientX(); }
@@ -182,7 +186,9 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   // the local frame.
   const DoublePoint& AbsoluteLocation() const { return absolute_location_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  DispatchEventResult DispatchEvent(EventDispatcher&) override;
+
+  virtual void Trace(blink::Visitor*);
 
  protected:
   MouseEvent(const AtomicString& type,
@@ -199,12 +205,12 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
              bool cancelable,
              AbstractView*,
              int detail,
-             int screen_x,
-             int screen_y,
-             int window_x,
-             int window_y,
-             int movement_x,
-             int movement_y,
+             double screen_x,
+             double screen_y,
+             double window_x,
+             double window_y,
+             double movement_x,
+             double movement_y,
              WebInputEvent::Modifiers,
              short button,
              unsigned short buttons,
@@ -225,17 +231,22 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
 
   void ReceivedTarget() override;
 
+  // TODO(eirage): Move these coordinates back to private when MouseEvent
+  // fractional flag is removed.
+  DoublePoint screen_location_;
+  DoublePoint client_location_;
+  DoublePoint page_location_;
+
  private:
-  friend class MouseEventDispatchMediator;
   void InitMouseEventInternal(const AtomicString& type,
                               bool can_bubble,
                               bool cancelable,
                               AbstractView*,
                               int detail,
-                              int screen_x,
-                              int screen_y,
-                              int client_x,
-                              int client_y,
+                              double screen_x,
+                              double screen_y,
+                              double client_x,
+                              double client_y,
                               WebInputEvent::Modifiers,
                               short button,
                               EventTarget* related_target,
@@ -243,16 +254,13 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
                               unsigned short buttons = 0);
 
   void InitCoordinates(const double client_x, const double client_y);
-  void InitCoordinatesFromRootFrame(int window_x, int window_y);
+  void InitCoordinatesFromRootFrame(double window_x, double window_y);
 
   void ComputePageLocation();
   void ComputeRelativePosition();
 
-  DoublePoint screen_location_;
-  DoublePoint client_location_;
   DoublePoint movement_delta_;
 
-  DoublePoint page_location_;
   DoublePoint layer_location_;
   DoublePoint offset_location_;
   DoublePoint absolute_location_;
@@ -268,17 +276,6 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   WebMenuSourceType menu_source_type_;
 
   std::unique_ptr<WebMouseEvent> native_event_;
-};
-
-class MouseEventDispatchMediator final : public EventDispatchMediator {
- public:
-  static MouseEventDispatchMediator* Create(MouseEvent*);
-
- private:
-  explicit MouseEventDispatchMediator(MouseEvent*);
-  MouseEvent& Event() const;
-
-  DispatchEventResult DispatchEvent(EventDispatcher&) const override;
 };
 
 DEFINE_EVENT_TYPE_CASTS(MouseEvent);

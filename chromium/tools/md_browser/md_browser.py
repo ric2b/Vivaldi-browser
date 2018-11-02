@@ -153,6 +153,8 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
       self._DoImage(full_path, 'image/png')
     elif path.lower().endswith('.jpg'):
       self._DoImage(full_path, 'image/jpeg')
+    elif path.lower().endswith('.svg'):
+      self._DoImage(full_path, 'image/svg+xml')
     elif os.path.isdir(full_path):
       self._DoDirListing(full_path)
     elif os.path.exists(full_path):
@@ -180,7 +182,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
     md = markdown.Markdown(extensions=extensions,
                            extension_configs=extension_configs,
-                           tab_length=2,
+                           tab_length=4,
                            output_format='html4')
 
     has_a_single_h1 = (len([line for line in contents.splitlines()

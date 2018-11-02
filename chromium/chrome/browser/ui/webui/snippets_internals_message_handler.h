@@ -60,6 +60,7 @@ class SnippetsInternalsMessageHandler
   void OnFullRefreshRequired() override;
   void ContentSuggestionsServiceShutdown() override;
 
+  void HandleInitializationCompleted(const base::ListValue* args);
   void HandleRefreshContent(const base::ListValue* args);
   void HandleDownload(const base::ListValue* args);
   void HandleClearCachedSuggestions(const base::ListValue* args);
@@ -80,6 +81,7 @@ class SnippetsInternalsMessageHandler
   void SendClassification();
   void SendRankerDebugData();
   void SendLastRemoteSuggestionsBackgroundFetchTime();
+  void SendWhetherSuggestionPushingPossible();
   void SendContentSuggestions();
   void SendBoolean(const std::string& name, bool value);
   void SendString(const std::string& name, const std::string& value);

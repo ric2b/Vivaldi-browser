@@ -19,8 +19,8 @@
 
 #include "core/layout/line/RootInlineBox.h"
 
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleEngine.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/VerticalPositionCache.h"
@@ -213,12 +213,12 @@ void RootInlineBox::Move(const LayoutSize& delta) {
 
 void RootInlineBox::ChildRemoved(InlineBox* box) {
   if (box->GetLineLayoutItem() == line_break_obj_)
-    SetLineBreakInfo(0, 0, BidiStatus());
+    SetLineBreakInfo(nullptr, 0, BidiStatus());
 
   for (RootInlineBox* prev = PrevRootBox();
        prev && prev->LineBreakObj() == box->GetLineLayoutItem();
        prev = prev->PrevRootBox()) {
-    prev->SetLineBreakInfo(0, 0, BidiStatus());
+    prev->SetLineBreakInfo(nullptr, 0, BidiStatus());
     prev->MarkDirty();
   }
 }
@@ -605,7 +605,7 @@ void RootInlineBox::AscentAndDescentForBox(
   if (box->IsText()) {
     GlyphOverflowAndFallbackFontsMap::iterator it =
         text_box_data_map.find(ToInlineTextBox(box));
-    used_fonts = it == text_box_data_map.end() ? 0 : &it->value.first;
+    used_fonts = it == text_box_data_map.end() ? nullptr : &it->value.first;
   }
 
   bool include_leading = IncludeLeadingForBox(box);

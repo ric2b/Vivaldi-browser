@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/timer/timer.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -29,6 +28,7 @@
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android_compositor.h"
+#include "ui/display/display_observer.h"
 
 struct ANativeWindow;
 
@@ -36,7 +36,6 @@ namespace cc {
 class AnimationHost;
 class Layer;
 class LayerTreeHost;
-class OutputSurface;
 }
 
 namespace viz {
@@ -44,6 +43,7 @@ class Display;
 class FrameSinkId;
 class FrameSinkManagerImpl;
 class HostFrameSinkManager;
+class OutputSurface;
 class VulkanContextProvider;
 }
 
@@ -59,7 +59,8 @@ class CONTENT_EXPORT CompositorImpl
       public cc::LayerTreeHostSingleThreadClient,
       public ui::UIResourceProvider,
       public ui::WindowAndroidCompositor,
-      public viz::HostFrameSinkClient {
+      public viz::HostFrameSinkClient,
+      public display::DisplayObserver {
  public:
   CompositorImpl(CompositorClient* client, gfx::NativeWindow root_window);
   ~CompositorImpl() override;
@@ -79,8 +80,9 @@ class CONTENT_EXPORT CompositorImpl
   // Compositor implementation.
   void SetRootLayer(scoped_refptr<cc::Layer> root) override;
   void SetSurface(jobject surface) override;
+  void SetBackgroundColor(int color) override;
   void SetWindowBounds(const gfx::Size& size) override;
-  void SetHasTransparentBackground(bool flag) override;
+  void SetDeferCommits(bool defer_commits) override;
   void SetRequiresAlphaChannel(bool flag) override;
   void SetNeedsComposite() override;
   ui::UIResourceProvider& GetUIResourceProvider() override;
@@ -125,6 +127,11 @@ class CONTENT_EXPORT CompositorImpl
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+  void OnFrameTokenChanged(uint32_t frame_token) override {}
+
+  // display::DisplayObserver implementation.
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics) override;
 
   void SetVisible(bool visible);
   void CreateLayerTreeHost();
@@ -136,15 +143,13 @@ class CONTENT_EXPORT CompositorImpl
 #endif
   void OnGpuChannelEstablished(
       scoped_refptr<gpu::GpuChannelHost> gpu_channel_host);
-  void OnGpuChannelTimeout();
   void InitializeDisplay(
-      std::unique_ptr<cc::OutputSurface> display_output_surface,
+      std::unique_ptr<viz::OutputSurface> display_output_surface,
       scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
       scoped_refptr<viz::ContextProvider> context_provider);
   void DidSwapBuffers();
 
   bool HavePendingReadbacks();
-  void SetBackgroundColor(int color);
 
   viz::FrameSinkId frame_sink_id_;
 
@@ -179,10 +184,6 @@ class CONTENT_EXPORT CompositorImpl
   // The number of SubmitFrame calls that have not returned and ACK'd from
   // the GPU thread.
   unsigned int pending_frames_;
-
-  size_t num_successive_context_creation_failures_;
-
-  base::OneShotTimer establish_gpu_channel_timeout_;
 
   // Whether there is a LayerTreeFrameSink request pending from the current
   // |host_|. Becomes |true| if RequestNewLayerTreeFrameSink is called, and

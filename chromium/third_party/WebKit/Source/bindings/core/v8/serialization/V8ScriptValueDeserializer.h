@@ -5,6 +5,7 @@
 #ifndef V8ScriptValueDeserializer_h
 #define V8ScriptValueDeserializer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/serialization/SerializationTag.h"
 #include "bindings/core/v8/serialization/SerializedColorParams.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
@@ -12,7 +13,6 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -35,11 +35,11 @@ class CORE_EXPORT V8ScriptValueDeserializer
 
  public:
   using Options = SerializedScriptValue::DeserializeOptions;
-  V8ScriptValueDeserializer(RefPtr<ScriptState>,
+  V8ScriptValueDeserializer(scoped_refptr<ScriptState>,
                             UnpackedSerializedScriptValue*,
                             const Options& = Options());
-  V8ScriptValueDeserializer(RefPtr<ScriptState>,
-                            RefPtr<SerializedScriptValue>,
+  V8ScriptValueDeserializer(scoped_refptr<ScriptState>,
+                            scoped_refptr<SerializedScriptValue>,
                             const Options& = Options());
 
   v8::Local<v8::Value> Deserialize();
@@ -47,7 +47,7 @@ class CORE_EXPORT V8ScriptValueDeserializer
  protected:
   virtual ScriptWrappable* ReadDOMObject(SerializationTag);
 
-  ScriptState* GetScriptState() const { return script_state_.Get(); }
+  ScriptState* GetScriptState() const { return script_state_.get(); }
 
   uint32_t Version() const { return version_; }
   bool ReadTag(SerializationTag* tag) {
@@ -82,27 +82,27 @@ class CORE_EXPORT V8ScriptValueDeserializer
   }
 
  private:
-  V8ScriptValueDeserializer(RefPtr<ScriptState>,
+  V8ScriptValueDeserializer(scoped_refptr<ScriptState>,
                             UnpackedSerializedScriptValue*,
-                            RefPtr<SerializedScriptValue>,
+                            scoped_refptr<SerializedScriptValue>,
                             const Options&);
   void Transfer();
 
   File* ReadFile();
   File* ReadFileIndex();
 
-  RefPtr<BlobDataHandle> GetOrCreateBlobDataHandle(const String& uuid,
-                                                   const String& type,
-                                                   uint64_t size);
+  scoped_refptr<BlobDataHandle> GetOrCreateBlobDataHandle(const String& uuid,
+                                                          const String& type,
+                                                          uint64_t size);
 
   // v8::ValueDeserializer::Delegate
   v8::MaybeLocal<v8::Object> ReadHostObject(v8::Isolate*) override;
   v8::MaybeLocal<v8::WasmCompiledModule> GetWasmModuleFromId(v8::Isolate*,
                                                              uint32_t) override;
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   Member<UnpackedSerializedScriptValue> unpacked_value_;
-  RefPtr<SerializedScriptValue> serialized_script_value_;
+  scoped_refptr<SerializedScriptValue> serialized_script_value_;
   v8::ValueDeserializer deserializer_;
 
   // Message ports which were transferred in.

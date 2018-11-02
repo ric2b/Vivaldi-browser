@@ -9,7 +9,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLLinkElement.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebDistillability.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -24,27 +24,16 @@ const unsigned kTextContentLengthSaturation = 1000;
 // sentences.
 const unsigned kParagraphLengthThreshold = 140;
 
-class DocumentStatisticsCollectorTest : public ::testing::Test {
+class DocumentStatisticsCollectorTest : public PageTestBase {
  protected:
-  void SetUp() override;
-
   void TearDown() override { ThreadState::Current()->CollectAllGarbage(); }
 
-  Document& GetDocument() const { return dummy_page_holder_->GetDocument(); }
-
   void SetHtmlInnerHTML(const String&);
-
- private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
 };
-
-void DocumentStatisticsCollectorTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-}
 
 void DocumentStatisticsCollectorTest::SetHtmlInnerHTML(
     const String& html_content) {
-  GetDocument().documentElement()->setInnerHTML((html_content));
+  GetDocument().documentElement()->SetInnerHTMLFromString((html_content));
 }
 
 // This test checks open graph articles can be recognized.
@@ -62,10 +51,11 @@ TEST_F(DocumentStatisticsCollectorTest, HasOpenGraphArticle) {
 
 // This test checks non-existence of open graph articles can be recognized.
 TEST_F(DocumentStatisticsCollectorTest, NoOpenGraphArticle) {
-  SetHtmlInnerHTML(
-      "<head>"
-      "    <meta property='og:type' content='movie' />"
-      "</head>");
+  SetHtmlInnerHTML(R"HTML(
+    <head>
+        <meta property='og:type' content='movie' />
+    </head>
+  )HTML");
   WebDistillabilityFeatures features =
       DocumentStatisticsCollector::CollectStatistics(GetDocument());
 
@@ -74,14 +64,15 @@ TEST_F(DocumentStatisticsCollectorTest, NoOpenGraphArticle) {
 
 // This test checks element counts are correct.
 TEST_F(DocumentStatisticsCollectorTest, CountElements) {
-  SetHtmlInnerHTML(
-      "<form>"
-      "    <input type='text'>"
-      "    <input type='password'>"
-      "</form>"
-      "<pre></pre>"
-      "<p><a>    </a></p>"
-      "<ul><li><p><a>    </a></p></li></ul>");
+  SetHtmlInnerHTML(R"HTML(
+    <form>
+        <input type='text'>
+        <input type='password'>
+    </form>
+    <pre></pre>
+    <p><a>    </a></p>
+    <ul><li><p><a>    </a></p></li></ul>
+  )HTML");
   WebDistillabilityFeatures features =
       DocumentStatisticsCollector::CollectStatistics(GetDocument());
 

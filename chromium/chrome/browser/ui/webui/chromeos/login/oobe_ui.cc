@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -185,10 +186,8 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   source->AddResourcePath(kProductLogoPath, IDR_PRODUCT_LOGO_64);
 
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
-  source->OverrideContentSecurityPolicyChildSrc(
-      base::StringPrintf(
-          "child-src chrome://terms/ %s/;",
-          extensions::kGaiaAuthExtensionOrigin));
+  source->OverrideContentSecurityPolicyChildSrc(base::StringPrintf(
+      "child-src %s/;", extensions::kGaiaAuthExtensionOrigin));
   source->OverrideContentSecurityPolicyObjectSrc(
       "object-src chrome:;");
 
@@ -535,10 +534,13 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
                                chromeos::switches::kDisableMdErrorScreen)
                                ? "off"
                                : "on");
+  localized_strings->SetString(
+      "showMdLogin", ash::switches::IsUsingWebUiLock() ? "off" : "on");
 }
 
 void OobeUI::AddWebUIHandler(std::unique_ptr<BaseWebUIHandler> handler) {
   webui_handlers_.push_back(handler.get());
+  webui_only_handlers_.push_back(handler.get());
   web_ui()->AddMessageHandler(std::move(handler));
 }
 
@@ -555,9 +557,16 @@ void OobeUI::InitializeHandlers() {
   ready_callbacks_.clear();
 
   // Notify 'initialize' for synchronously loaded screens.
-  for (BaseWebUIHandler* handler : webui_handlers_) {
-    if (handler->async_assets_load_id().empty())
+  for (BaseWebUIHandler* handler : webui_only_handlers_) {
+    if (handler->async_assets_load_id().empty()) {
       handler->InitializeBase();
+    }
+  }
+  for (BaseScreenHandler* handler : screen_handlers_) {
+    if (handler->async_assets_load_id().empty()) {
+      handler->InitializeBase();
+      ScreenInitialized(handler->oobe_screen());
+    }
   }
 
   // Instantiate the ShutdownPolicyHandler.
@@ -576,12 +585,33 @@ void OobeUI::CurrentScreenChanged(OobeScreen new_screen) {
     observer.OnCurrentScreenChanged(current_screen_, new_screen);
 }
 
+void OobeUI::ScreenInitialized(OobeScreen screen) {
+  for (Observer& observer : observer_list_)
+    observer.OnScreenInitialized(screen);
+}
+
+bool OobeUI::IsScreenInitialized(OobeScreen screen) {
+  for (BaseScreenHandler* handler : screen_handlers_) {
+    if (handler->oobe_screen() == screen) {
+      return handler->page_is_ready();
+    }
+  }
+  return false;
+}
+
 void OobeUI::OnScreenAssetsLoaded(const std::string& async_assets_load_id) {
   DCHECK(!async_assets_load_id.empty());
 
-  for (BaseWebUIHandler* handler : webui_handlers_) {
-    if (handler->async_assets_load_id() == async_assets_load_id)
+  for (BaseWebUIHandler* handler : webui_only_handlers_) {
+    if (handler->async_assets_load_id() == async_assets_load_id) {
       handler->InitializeBase();
+    }
+  }
+  for (BaseScreenHandler* handler : screen_handlers_) {
+    if (handler->async_assets_load_id() == async_assets_load_id) {
+      handler->InitializeBase();
+      ScreenInitialized(handler->oobe_screen());
+    }
   }
 }
 

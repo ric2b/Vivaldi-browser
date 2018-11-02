@@ -4,10 +4,7 @@
 
 #include "net/cert/caching_cert_verifier.h"
 
-#include <memory>
-
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -36,8 +33,8 @@ namespace {
 
 class MockCacheVisitor : public CachingCertVerifier::CacheVisitor {
  public:
-  MockCacheVisitor() {}
-  ~MockCacheVisitor() override {}
+  MockCacheVisitor() = default;
+  ~MockCacheVisitor() override = default;
 
   MOCK_METHOD5(VisitEntry,
                bool(const CachingCertVerifier::RequestParams& params,
@@ -52,7 +49,7 @@ class MockCacheVisitor : public CachingCertVerifier::CacheVisitor {
 class CachingCertVerifierTest : public ::testing::Test {
  public:
   CachingCertVerifierTest() : verifier_(std::make_unique<MockCertVerifier>()) {}
-  ~CachingCertVerifierTest() override {}
+  ~CachingCertVerifierTest() override = default;
 
  protected:
   CachingCertVerifier verifier_;

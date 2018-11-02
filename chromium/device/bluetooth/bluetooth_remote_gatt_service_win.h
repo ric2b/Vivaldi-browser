@@ -109,15 +109,15 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
 
   // The element of the set is the identifier of
   // BluetoothRemoteGattCharacteristicWin instance.
-  std::set<std::string> discovery_completed_included_charateristics_;
+  std::set<std::string> discovery_completed_included_characteristics_;
 
   // Flag indicates if discovery complete notification has been send out to
   // avoid duplicate notification.
   bool discovery_complete_notified_;
 
-  // Flag indicates if asynchronous discovery of included characteristic has
-  // completed.
-  bool included_characteristics_discovered_;
+  // Counts the number of asynchronous operations that are discovering
+  // characteristics.
+  int discovery_pending_count_;
 
   base::WeakPtrFactory<BluetoothRemoteGattServiceWin> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(BluetoothRemoteGattServiceWin);

@@ -5,11 +5,11 @@
 #ifndef PlaceholderImage_h
 #define PlaceholderImage_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageOrientation.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -24,9 +24,9 @@ class ImageObserver;
 // A generated placeholder image that shows a translucent gray rectangle.
 class PLATFORM_EXPORT PlaceholderImage final : public Image {
  public:
-  static PassRefPtr<PlaceholderImage> Create(ImageObserver* observer,
-                                             const IntSize& size) {
-    return AdoptRef(new PlaceholderImage(observer, size));
+  static scoped_refptr<PlaceholderImage> Create(ImageObserver* observer,
+                                                const IntSize& size) {
+    return base::AdoptRef(new PlaceholderImage(observer, size));
   }
 
   ~PlaceholderImage() override;
@@ -38,7 +38,8 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
             const FloatRect& dest_rect,
             const FloatRect& src_rect,
             RespectImageOrientationEnum,
-            ImageClampingMode) override;
+            ImageClampingMode,
+            ImageDecodingMode) override;
 
   void DestroyDecodedData() override;
 

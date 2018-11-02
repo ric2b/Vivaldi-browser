@@ -45,6 +45,8 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_power_manager_client.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/video_capture_device_arc_chromeos.h"
@@ -97,8 +99,7 @@ ACTION_P(RunClosure, closure) {
   closure.Run();
 }
 
-void DumpError(const tracked_objects::Location& location,
-               const std::string& message) {
+void DumpError(const base::Location& location, const std::string& message) {
   DPLOG(ERROR) << location.ToString() << " " << message;
 }
 
@@ -122,7 +123,7 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
   MOCK_METHOD0(DoResurrectLastOutputBuffer, void(void));
   MOCK_METHOD2(OnError,
-               void(const tracked_objects::Location& from_here,
+               void(const base::Location& from_here,
                     const std::string& reason));
   MOCK_CONST_METHOD0(GetBufferPoolUtilization, double(void));
   MOCK_METHOD0(OnStarted, void(void));
@@ -220,7 +221,7 @@ class MockImageCaptureClient
 
  private:
   friend class base::RefCountedThreadSafe<MockImageCaptureClient>;
-  virtual ~MockImageCaptureClient() {}
+  virtual ~MockImageCaptureClient() = default;
 
   mojom::PhotoStatePtr state_;
 };
@@ -231,7 +232,7 @@ class MojoEnabledTestEnvironment final : public testing::Environment {
  public:
   MojoEnabledTestEnvironment() : mojo_ipc_thread_("MojoIpcThread") {}
 
-  ~MojoEnabledTestEnvironment() final {}
+  ~MojoEnabledTestEnvironment() final = default;
 
   void SetUp() final {
     mojo::edk::Init();
@@ -272,6 +273,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
         image_capture_client_(new MockImageCaptureClient()),
 #if defined(OS_CHROMEOS)
         local_gpu_memory_buffer_manager_(new LocalGpuMemoryBufferManager()),
+        dbus_setter_(chromeos::DBusThreadManager::GetSetterForTesting()),
 #endif
         video_capture_device_factory_(VideoCaptureDeviceFactory::CreateFactory(
             base::ThreadTaskRunnerHandle::Get(),
@@ -284,6 +286,10 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
   }
 
   void SetUp() override {
+#if defined(OS_CHROMEOS)
+    dbus_setter_->SetPowerManagerClient(
+        base::MakeUnique<chromeos::FakePowerManagerClient>());
+#endif
 #if defined(OS_ANDROID)
     static_cast<VideoCaptureDeviceFactoryAndroid*>(
         video_capture_device_factory_.get())
@@ -388,6 +394,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
 #if defined(OS_CHROMEOS)
   const std::unique_ptr<LocalGpuMemoryBufferManager>
       local_gpu_memory_buffer_manager_;
+  std::unique_ptr<chromeos::DBusThreadManagerSetter> dbus_setter_;
 #endif
   const std::unique_ptr<VideoCaptureDeviceFactory>
       video_capture_device_factory_;

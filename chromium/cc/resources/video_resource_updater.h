@@ -17,23 +17,30 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/cc_export.h"
-#include "cc/resources/release_callback_impl.h"
-#include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/resource_id.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
-class SkCanvasVideoRenderer;
+class PaintCanvasVideoRenderer;
 class VideoFrame;
 }
 
+namespace gfx {
+class Rect;
+class Transform;
+}  // namespace gfx
+
 namespace viz {
 class ContextProvider;
+class RenderPass;
 }
 
 namespace cc {
-class ResourceProvider;
+class LayerTreeResourceProvider;
 
 class CC_EXPORT VideoFrameExternalResources {
  public:
@@ -47,30 +54,26 @@ class CC_EXPORT VideoFrameExternalResources {
     RGBA_RESOURCE,
     STREAM_TEXTURE_RESOURCE,
 
-    // TODO(danakj): Remove this and abstract TextureMailbox into
-    // "ExternalResource" that can hold a hardware or software backing.
     SOFTWARE_RESOURCE
   };
+  ResourceType type = NONE;
+  std::vector<viz::TransferableResource> resources;
+  std::vector<viz::ReleaseCallback> release_callbacks;
 
-  ResourceType type;
-  std::vector<viz::TextureMailbox> mailboxes;
-  std::vector<ReleaseCallbackImpl> release_callbacks;
-  bool read_lock_fences_enabled;
-  // Format of the storage of the resource, if known.
-  gfx::BufferFormat buffer_format;
-
-  // TODO(danakj): Remove these too.
-  std::vector<unsigned> software_resources;
-  ReleaseCallbackImpl software_release_callback;
+  // TODO(danakj): Remove these and use TransferableResources to send
+  // software things too.
+  unsigned software_resource = viz::kInvalidResourceId;
+  viz::ReleaseCallback software_release_callback;
 
   // Used by hardware textures which do not return values in the 0-1 range.
   // After a lookup, subtract offset and multiply by multiplier.
-  float offset;
-  float multiplier;
-  uint32_t bits_per_channel;
+  float offset = 0.f;
+  float multiplier = 1.f;
+  uint32_t bits_per_channel = 8;
 
   VideoFrameExternalResources();
-  VideoFrameExternalResources(const VideoFrameExternalResources& other);
+  VideoFrameExternalResources(VideoFrameExternalResources&& other);
+  VideoFrameExternalResources& operator=(VideoFrameExternalResources&& other);
   ~VideoFrameExternalResources();
 };
 
@@ -79,12 +82,30 @@ class CC_EXPORT VideoFrameExternalResources {
 class CC_EXPORT VideoResourceUpdater {
  public:
   VideoResourceUpdater(viz::ContextProvider* context_provider,
-                       ResourceProvider* resource_provider,
+                       LayerTreeResourceProvider* resource_provider,
                        bool use_stream_video_draw_quad);
   ~VideoResourceUpdater();
 
   VideoFrameExternalResources CreateExternalResourcesFromVideoFrame(
       scoped_refptr<media::VideoFrame> video_frame);
+
+  void SetUseR16ForTesting(bool use_r16_for_testing) {
+    use_r16_for_testing_ = use_r16_for_testing;
+  }
+
+  void ObtainFrameResources(scoped_refptr<media::VideoFrame> video_frame);
+  void ReleaseFrameResources();
+  void AppendQuads(viz::RenderPass* render_pass,
+                   scoped_refptr<media::VideoFrame> frame,
+                   gfx::Transform transform,
+                   gfx::Size rotated_size,
+                   gfx::Rect visible_layer_rect,
+                   gfx::Rect clip_rect,
+                   bool is_clipped,
+                   bool context_opaque,
+                   float draw_opacity,
+                   int sorting_context_id,
+                   gfx::Rect visible_quad_rect);
 
  private:
   class PlaneResource {
@@ -150,19 +171,17 @@ class CC_EXPORT VideoResourceUpdater {
       viz::ResourceFormat resource_format,
       const gfx::ColorSpace& color_space,
       bool software_resource,
-      bool immutable_hint,
       int unique_id,
       int plane_index);
   ResourceList::iterator AllocateResource(const gfx::Size& plane_size,
                                           viz::ResourceFormat format,
                                           const gfx::ColorSpace& color_space,
-                                          bool has_mailbox,
-                                          bool immutable_hint);
+                                          bool has_mailbox);
   void DeleteResource(ResourceList::iterator resource_it);
-  void CopyPlaneTexture(media::VideoFrame* video_frame,
-                        const gfx::ColorSpace& resource_color_space,
-                        const gpu::MailboxHolder& mailbox_holder,
-                        VideoFrameExternalResources* external_resources);
+  void CopyHardwarePlane(media::VideoFrame* video_frame,
+                         const gfx::ColorSpace& resource_color_space,
+                         const gpu::MailboxHolder& mailbox_holder,
+                         VideoFrameExternalResources* external_resources);
   VideoFrameExternalResources CreateForHardwarePlanes(
       scoped_refptr<media::VideoFrame> video_frame);
   VideoFrameExternalResources CreateForSoftwarePlanes(
@@ -171,19 +190,36 @@ class CC_EXPORT VideoResourceUpdater {
   static void RecycleResource(base::WeakPtr<VideoResourceUpdater> updater,
                               unsigned resource_id,
                               const gpu::SyncToken& sync_token,
-                              bool lost_resource,
-                              BlockingTaskRunner* main_thread_task_runner);
+                              bool lost_resource);
   static void ReturnTexture(base::WeakPtr<VideoResourceUpdater> updater,
                             const scoped_refptr<media::VideoFrame>& video_frame,
                             const gpu::SyncToken& sync_token,
-                            bool lost_resource,
-                            BlockingTaskRunner* main_thread_task_runner);
+                            bool lost_resource);
 
   viz::ContextProvider* context_provider_;
-  ResourceProvider* resource_provider_;
+  LayerTreeResourceProvider* resource_provider_;
   const bool use_stream_video_draw_quad_;
-  std::unique_ptr<media::SkCanvasVideoRenderer> video_renderer_;
+  std::unique_ptr<media::PaintCanvasVideoRenderer> video_renderer_;
   std::vector<uint8_t> upload_pixels_;
+  bool use_r16_for_testing_ = false;
+
+  VideoFrameExternalResources::ResourceType frame_resource_type_;
+  // TODO(danakj): Remove these, use TransferableResource for software path too.
+  unsigned software_resource_ = viz::kInvalidResourceId;
+  // Called once for |software_resource_|.
+  viz::ReleaseCallback software_release_callback_;
+
+  float frame_resource_offset_;
+  float frame_resource_multiplier_;
+  uint32_t frame_bits_per_channel_;
+
+  struct FrameResource {
+    FrameResource(viz::ResourceId id, gfx::Size size_in_pixels)
+        : id(id), size_in_pixels(size_in_pixels) {}
+    viz::ResourceId id;
+    gfx::Size size_in_pixels;
+  };
+  std::vector<FrameResource> frame_resources_;
 
   // Recycle resources so that we can reduce the number of allocations and
   // data transfers.

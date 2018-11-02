@@ -51,18 +51,18 @@ class AudioInputMessageFilter::AudioInputIPCImpl : public media::AudioInputIPC {
   int stream_id_;
 };
 
-AudioInputMessageFilter* AudioInputMessageFilter::g_filter = NULL;
+AudioInputMessageFilter* AudioInputMessageFilter::g_filter = nullptr;
 
 AudioInputMessageFilter::AudioInputMessageFilter(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
-    : sender_(NULL), io_task_runner_(io_task_runner) {
+    : sender_(nullptr), io_task_runner_(io_task_runner) {
   DCHECK(!g_filter);
   g_filter = this;
 }
 
 AudioInputMessageFilter::~AudioInputMessageFilter() {
   DCHECK_EQ(g_filter, this);
-  g_filter = NULL;
+  g_filter = nullptr;
 }
 
 // static
@@ -109,7 +109,7 @@ void AudioInputMessageFilter::OnFilterRemoved() {
 
 void AudioInputMessageFilter::OnChannelClosing() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
-  sender_ = NULL;
+  sender_ = nullptr;
 
   DLOG_IF(WARNING, !delegates_.IsEmpty())
       << "Not all audio devices have been closed.";
@@ -126,8 +126,6 @@ void AudioInputMessageFilter::OnStreamCreated(
     int stream_id,
     base::SharedMemoryHandle handle,
     base::SyncSocket::TransitDescriptor socket_descriptor,
-    uint32_t length,
-    uint32_t total_segments,
     bool initially_muted) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   LogMessage(stream_id, "OnStreamCreated");
@@ -143,8 +141,7 @@ void AudioInputMessageFilter::OnStreamCreated(
     return;
   }
   // Forward message to the stream delegate.
-  delegate->OnStreamCreated(handle, socket_handle, length, total_segments,
-                            initially_muted);
+  delegate->OnStreamCreated(handle, socket_handle, initially_muted);
 }
 
 void AudioInputMessageFilter::OnStreamError(int stream_id) {

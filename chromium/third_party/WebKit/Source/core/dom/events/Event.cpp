@@ -24,8 +24,10 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/events/EventDispatchMediator.h"
 #include "core/dom/events/EventTarget.h"
+#include "core/events/FocusEvent.h"
+#include "core/events/MouseEvent.h"
+#include "core/events/PointerEvent.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/UseCounter.h"
 #include "core/svg/SVGElement.h"
@@ -231,7 +233,7 @@ void Event::preventDefault() {
     prevent_default_called_during_passive_ = true;
 
     const LocalDOMWindow* window =
-        event_path_ ? event_path_->GetWindowEventContext().Window() : 0;
+        event_path_ ? event_path_->GetWindowEventContext().Window() : nullptr;
     if (window && handling_passive_ == PassiveMode::kPassive) {
       window->PrintErrorMessage(
           "Unable to preventDefault inside passive event listener invocation.");
@@ -252,6 +254,16 @@ void Event::SetTarget(EventTarget* target) {
   target_ = target;
   if (target_)
     ReceivedTarget();
+}
+
+void Event::SetRelatedTargetIfExists(EventTarget* related_target) {
+  if (IsMouseEvent()) {
+    ToMouseEvent(this)->SetRelatedTarget(related_target);
+  } else if (IsPointerEvent()) {
+    ToPointerEvent(this)->SetRelatedTarget(related_target);
+  } else if (IsFocusEvent()) {
+    ToFocusEvent(this)->SetRelatedTarget(related_target);
+  }
 }
 
 void Event::ReceivedTarget() {}
@@ -329,10 +341,6 @@ HeapVector<Member<EventTarget>> Event::PathInternal(ScriptState* script_state,
   return HeapVector<Member<EventTarget>>();
 }
 
-EventDispatchMediator* Event::CreateMediator() {
-  return EventDispatchMediator::Create(this);
-}
-
 EventTarget* Event::currentTarget() const {
   if (!current_target_)
     return nullptr;
@@ -363,11 +371,16 @@ void Event::setCancelBubble(ScriptState* script_state, bool cancel) {
     propagation_stopped_ = true;
 }
 
-DEFINE_TRACE(Event) {
+DispatchEventResult Event::DispatchEvent(EventDispatcher& dispatcher) {
+  return dispatcher.Dispatch();
+}
+
+void Event::Trace(blink::Visitor* visitor) {
   visitor->Trace(current_target_);
   visitor->Trace(target_);
   visitor->Trace(underlying_event_);
   visitor->Trace(event_path_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

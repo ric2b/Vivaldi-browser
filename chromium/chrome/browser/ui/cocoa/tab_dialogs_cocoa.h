@@ -20,6 +20,7 @@ class TabDialogsCocoa : public TabDialogs {
   void ShowHungRendererDialog(
       const content::WebContentsUnresponsiveState& unresponsive_state) override;
   void HideHungRendererDialog() override;
+  bool IsShowingHungRendererDialog() override;
   void ShowProfileSigninConfirmation(
       Browser* browser,
       Profile* profile,
@@ -27,10 +28,6 @@ class TabDialogsCocoa : public TabDialogs {
       std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate) override;
   void ShowManagePasswordsBubble(bool user_action) override;
   void HideManagePasswordsBubble() override;
-  base::WeakPtr<ValidationMessageBubble> ShowValidationMessage(
-      const gfx::Rect& anchor_in_root_view,
-      const base::string16& main_text,
-      const base::string16& sub_text) override;
 
  protected:
   content::WebContents* web_contents() const { return web_contents_; }

@@ -22,15 +22,22 @@ enum class ImageSerializationTag : uint32_t {
   // ImageData.
   kImageDataStorageFormatTag = 3,
   // followed by 1 if the image is origin clean and zero otherwise.
-  kOriginClean = 4,
+  kOriginCleanTag = 4,
   // followed by 1 if the image is premultiplied and zero otherwise.
-  kIsPremultiplied = 5,
-  kLast = kIsPremultiplied,
+  kIsPremultipliedTag = 5,
+  // followed by 1 if the image is known to be opaque (alpha = 1 everywhere)
+  kCanvasOpacityModeTag = 6,
+
+  kLast = kCanvasOpacityModeTag,
 };
 
 // This enumeration specifies the values used to serialize CanvasColorSpace.
 enum class SerializedColorSpace : uint32_t {
-  kLegacy = 0,
+  // Legacy sRGB color space is deprecated as of M65. Objects in legacy color
+  // space will be serialized as sRGB since the legacy behavior is now merged
+  // with sRGB color space. Deserialized objects with legacy color space also
+  // will be interpreted as sRGB.
+  kLegacyObsolete = 0,
   kSRGB = 1,
   kRec2020 = 2,
   kP3 = 3,
@@ -55,6 +62,12 @@ enum class SerializedImageDataStorageFormat : uint32_t {
   kLast = kFloat32,
 };
 
+enum class SerializedOpacityMode : uint32_t {
+  kNonOpaque = 0,
+  kOpaque = 1,
+  kLast = kOpaque,
+};
+
 class SerializedColorParams {
  public:
   SerializedColorParams();
@@ -62,6 +75,7 @@ class SerializedColorParams {
   SerializedColorParams(CanvasColorParams, ImageDataStorageFormat);
   SerializedColorParams(SerializedColorSpace,
                         SerializedPixelFormat,
+                        SerializedOpacityMode,
                         SerializedImageDataStorageFormat);
 
   CanvasColorParams GetCanvasColorParams() const;
@@ -70,15 +84,18 @@ class SerializedColorParams {
 
   void SetSerializedColorSpace(SerializedColorSpace);
   void SetSerializedPixelFormat(SerializedPixelFormat);
+  void SetSerializedOpacityMode(SerializedOpacityMode);
   void SetSerializedImageDataStorageFormat(SerializedImageDataStorageFormat);
 
   SerializedColorSpace GetSerializedColorSpace() const;
   SerializedPixelFormat GetSerializedPixelFormat() const;
   SerializedImageDataStorageFormat GetSerializedImageDataStorageFormat() const;
+  SerializedOpacityMode GetSerializedOpacityMode() const;
 
  private:
   SerializedColorSpace color_space_;
   SerializedPixelFormat pixel_format_;
+  SerializedOpacityMode opacity_mode_;
   SerializedImageDataStorageFormat storage_format_;
 };
 

@@ -22,6 +22,9 @@ namespace {
 
 class MockSchedulerWorkerDelegate : public SchedulerWorker::Delegate {
  public:
+  void OnCanScheduleSequence(scoped_refptr<Sequence> sequence) override {
+    ADD_FAILURE() << "Unexpected call to OnCanScheduleSequence().";
+  }
   void OnMainEntry(SchedulerWorker* worker) override {}
   scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) override {
     return nullptr;
@@ -40,17 +43,17 @@ class MockSchedulerWorkerDelegate : public SchedulerWorker::Delegate {
 class TaskSchedulerWorkerStackTest : public testing::Test {
  protected:
   void SetUp() override {
-    worker_a_ = make_scoped_refptr(new SchedulerWorker(
+    worker_a_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_));
+        &task_tracker_);
     ASSERT_TRUE(worker_a_);
-    worker_b_ = make_scoped_refptr(new SchedulerWorker(
+    worker_b_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_));
+        &task_tracker_);
     ASSERT_TRUE(worker_b_);
-    worker_c_ = make_scoped_refptr(new SchedulerWorker(
+    worker_c_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_));
+        &task_tracker_);
     ASSERT_TRUE(worker_c_);
   }
 

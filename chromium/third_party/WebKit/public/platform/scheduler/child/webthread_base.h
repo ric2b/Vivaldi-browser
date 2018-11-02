@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "public/platform/WebCommon.h"
@@ -47,7 +48,7 @@ class BLINK_PLATFORM_EXPORT WebThreadBase : public WebThread {
 
   // Returns the base::Bind-compatible task runner for posting tasks to this
   // thread. Can be called from any thread.
-  virtual base::SingleThreadTaskRunner* GetTaskRunner() const = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const = 0;
 
   // Returns the base::Bind-compatible task runner for posting idle tasks to
   // this thread. Can be called from any thread.

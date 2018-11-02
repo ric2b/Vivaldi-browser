@@ -40,6 +40,7 @@
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/mem.h"
 #include "third_party/boringssl/src/include/openssl/rsa.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -77,8 +78,6 @@ void StoreDigest(std::vector<uint8_t>* digest,
   callback.Run();
 }
 
-// See net::SSLPrivateKey::SignDigest for the expected padding and DigestInfo
-// prefixing.
 bool RsaSign(const std::vector<uint8_t>& digest,
              crypto::RSAPrivateKey* key,
              std::vector<uint8_t>* signature) {
@@ -86,28 +85,15 @@ bool RsaSign(const std::vector<uint8_t>& digest,
   if (!rsa_key)
     return false;
 
-  uint8_t* prefixed_digest = nullptr;
-  size_t prefixed_digest_len = 0;
-  int is_alloced = 0;
-  if (!RSA_add_pkcs1_prefix(&prefixed_digest, &prefixed_digest_len, &is_alloced,
-                            NID_sha1, digest.data(), digest.size())) {
-    return false;
-  }
-  size_t len = 0;
+  unsigned len = 0;
   signature->resize(RSA_size(rsa_key));
-  const int rv =
-      RSA_sign_raw(rsa_key, &len, signature->data(), signature->size(),
-                   prefixed_digest, prefixed_digest_len, RSA_PKCS1_PADDING);
-  if (is_alloced)
-    free(prefixed_digest);
-
-  if (rv) {
-    signature->resize(len);
-    return true;
-  } else {
+  if (!RSA_sign(NID_sha1, digest.data(), digest.size(), signature->data(), &len,
+                rsa_key)) {
     signature->clear();
     return false;
   }
+  signature->resize(len);
+  return true;
 }
 
 // Create a string that if evaluated in JavaScript returns a Uint8Array with

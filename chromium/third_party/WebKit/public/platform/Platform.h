@@ -43,11 +43,9 @@
 #include "WebCommon.h"
 #include "WebData.h"
 #include "WebDataConsumerHandle.h"
-#include "WebFeaturePolicy.h"
 #include "WebGamepadListener.h"
 #include "WebGestureDevice.h"
 #include "WebLocalizedString.h"
-#include "WebMessagePortChannel.h"
 #include "WebPlatformEventType.h"
 #include "WebSize.h"
 #include "WebSpeechSynthesizer.h"
@@ -56,13 +54,15 @@
 #include "WebString.h"
 #include "WebURLError.h"
 #include "WebURLLoader.h"
-#include "WebVector.h"
+#include "WebURLLoaderFactory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/time/time.h"
 #include "components/viz/common/quads/shared_bitmap.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -262,6 +262,10 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Return a LocalStorage namespace
   virtual std::unique_ptr<WebStorageNamespace> CreateLocalStorageNamespace();
 
+  // Return a SessionStorage namespace
+  virtual std::unique_ptr<WebStorageNamespace> CreateSessionStorageNamespace(
+      int64_t namespace_id);
+
   // FileSystem ----------------------------------------------------------
 
   // Must return non-null.
@@ -329,24 +333,13 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Returns a unique FrameSinkID for the current renderer process
   virtual viz::FrameSinkId GenerateFrameSinkId() { return viz::FrameSinkId(); }
 
-  // Message Ports -------------------------------------------------------
-
-  // Creates a Message Port Channel pair. This can be called on any thread.
-  // The returned objects should only be used on the thread they were created
-  // on.
-  virtual void CreateMessageChannel(
-      std::unique_ptr<WebMessagePortChannel>* channel1,
-      std::unique_ptr<WebMessagePortChannel>* channel2) {
-    *channel1 = nullptr;
-    *channel2 = nullptr;
-  }
-
   // Network -------------------------------------------------------------
 
-  // Returns a new WebURLLoader instance.
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      base::SingleThreadTaskRunner*) {
+  // Returns the platform's default URLLoaderFactory. It is expected that the
+  // returned value is stored and to be used for all the CreateURLLoader
+  // requests for the same loading context.
+  // TODO(kinuko): See if we can deprecate this too.
+  virtual std::unique_ptr<WebURLLoaderFactory> CreateDefaultURLLoaderFactory() {
     return nullptr;
   }
 
@@ -408,6 +401,8 @@ class BLINK_PLATFORM_EXPORT Platform {
     return WebString();
   }
 
+  virtual bool IsRendererSideResourceSchedulerEnabled() const { return false; }
+
   // Threads -------------------------------------------------------
 
   // Creates an embedder-defined thread.
@@ -444,12 +439,21 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Must return non-null.
   virtual WebScrollbarBehavior* ScrollbarBehavior() { return nullptr; }
 
-  // Sudden Termination --------------------------------------------------
+  // Process lifetime management -----------------------------------------
 
   // Disable/Enable sudden termination on a process level. When possible, it
   // is preferable to disable sudden termination on a per-frame level via
   // WebFrameClient::SuddenTerminationDisablerChanged.
+  // This method should only be called on the main thread.
   virtual void SuddenTerminationChanged(bool enabled) {}
+
+  // Increase/decrease the process refcount. The process won't shut itself
+  // down until this refcount reaches 0. The browser might still shut down the
+  // renderer through fast shutdown. See SuddenTerminationChanged to disable
+  // that.
+  // These methods should only be called on the main thread.
+  virtual void AddRefProcess() {}
+  virtual void ReleaseRefProcess() {}
 
   // System --------------------------------------------------------------
 
@@ -466,12 +470,18 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Returns an interface to the file task runner.
   WebTaskRunner* FileTaskRunner() const;
-  base::TaskRunner* BaseFileTaskRunner() const;
+  scoped_refptr<base::SingleThreadTaskRunner> BaseFileTaskRunner() const;
+
+  // Returns an interface to the IO task runner.
+  virtual scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() const {
+    return nullptr;
+  }
 
   // Testing -------------------------------------------------------------
 
   // Gets a pointer to URLLoaderMockFactory for testing. Will not be available
   // in production builds.
+  // TODO(kinuko,toyoshim): Deprecate this one. (crbug.com/751425)
   virtual WebURLLoaderMockFactory* GetURLLoaderMockFactory() { return nullptr; }
 
   // Record to a RAPPOR privacy-preserving metric, see:
@@ -554,11 +564,11 @@ class BLINK_PLATFORM_EXPORT Platform {
       const WebFloatPoint& velocity,
       const WebSize& cumulative_scroll);
 
-  // Whether the command line flag: --disable-gpu-compositing or --disable-gpu
-  // exists or not
+  // Whether the compositor is using gpu and expects gpu resources as inputs,
+  // or software based resources.
   // NOTE: This function should not be called from core/ and modules/, but
   // called by platform/graphics/ is fine.
-  virtual bool IsGPUCompositingEnabled() { return true; }
+  virtual bool IsGpuCompositingDisabled() { return true; }
 
   // WebRTC ----------------------------------------------------------
 
@@ -685,7 +695,9 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Web Notifications --------------------------------------------------
 
-  virtual WebNotificationManager* GetNotificationManager() { return nullptr; }
+  virtual WebNotificationManager* GetWebNotificationManager() {
+    return nullptr;
+  }
 
   // Push API------------------------------------------------------------
 
@@ -695,9 +707,11 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual WebSyncProvider* BackgroundSyncProvider() { return nullptr; }
 
-  // Experimental Framework ----------------------------------------------
+  // Origin Trials ------------------------------------------------------
 
-  virtual WebTrialTokenValidator* TrialTokenValidator() { return nullptr; }
+  // TODO(crbug.com/738505): Remove the Web layer and return a
+  // blink::TrialTokenValidator directly.
+  virtual std::unique_ptr<WebTrialTokenValidator> CreateTrialTokenValidator();
 
   // Media Capabilities --------------------------------------------------
 
@@ -717,24 +731,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // tools/v8_context_snapshot/v8_context_snapshot_generator is running (which
   // runs during Chromium's build step).
   virtual bool IsTakingV8ContextSnapshot() { return false; }
-
-  // Feature Policy -----------------------------------------------------
-
-  // Create a new feature policy object for a document, given its parent
-  // document's policy (may be nullptr), its container policy (may be empty),
-  // the header policy with which it was delivered (may be empty), and the
-  // document's origin.
-  virtual std::unique_ptr<WebFeaturePolicy> CreateFeaturePolicy(
-      const WebFeaturePolicy* parent_policy,
-      const WebParsedFeaturePolicy& container_policy,
-      const WebParsedFeaturePolicy& policy_header,
-      const WebSecurityOrigin&);
-
-  // Create a new feature policy for a document whose origin has changed, given
-  // the previous policy object and the new origin.
-  virtual std::unique_ptr<WebFeaturePolicy> DuplicateFeaturePolicyWithOrigin(
-      const WebFeaturePolicy&,
-      const WebSecurityOrigin&);
 
  protected:
   Platform();

@@ -202,23 +202,11 @@ Tree: v1.4.0
 Revision: 1d1c9439fe3a056356233e04171fd9c62f0857fb
 Tree link: https://github.com/PolymerElements/paper-checkbox/tree/v1.4.0
 
-Name: paper-drawer-panel
-Repository: https://github.com/PolymerElements/paper-drawer-panel.git
-Tree: v1.0.10
-Revision: 34c1d82dc3048dff33c83047bfaa95414e36d673
-Tree link: https://github.com/PolymerElements/paper-drawer-panel/tree/v1.0.10
-
 Name: paper-fab
 Repository: https://github.com/PolymerElements/paper-fab.git
 Tree: v1.2.0
 Revision: 691638ca9b922411926b916a592f01a5f25c1af8
 Tree link: https://github.com/PolymerElements/paper-fab/tree/v1.2.0
-
-Name: paper-header-panel
-Repository: https://github.com/PolymerElements/paper-header-panel.git
-Tree: v1.1.6
-Revision: 3bf4e4f22eb12dd98039bad0eaaa942c2e869961
-Tree link: https://github.com/PolymerElements/paper-header-panel/tree/v1.1.6
 
 Name: paper-icon-button
 Repository: https://github.com/PolymerElements/paper-icon-button.git
@@ -310,17 +298,11 @@ Tree: v1.3.0
 Revision: 2f279868a9c8965aba76017c7ee6008ac4879f6a
 Tree link: https://github.com/PolymerElements/paper-toggle-button/tree/v1.3.0
 
-Name: paper-toolbar
-Repository: https://github.com/PolymerElements/paper-toolbar.git
-Tree: v1.1.6
-Revision: 39b8ad381bd4ba7834ed8f30a938b49810b9204f
-Tree link: https://github.com/PolymerElements/paper-toolbar/tree/v1.1.6
-
 Name: paper-tooltip
 Repository: https://github.com/PolymerElements/paper-tooltip.git
-Tree: v1.1.3
-Revision: 05fe3cfcb0e7e6853fa337344227f74a2ec7e07e
-Tree link: https://github.com/PolymerElements/paper-tooltip/tree/v1.1.3
+Tree: v1.1.4
+Revision: c7c0a4d47e6ce30578f948986e9274d06fa2b94c
+Tree link: https://github.com/PolymerElements/paper-tooltip/tree/v1.1.4
 
 Name: polymer
 Repository: https://github.com/Polymer/polymer.git

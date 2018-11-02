@@ -25,8 +25,6 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
-#include "core/MediaTypeNames.h"
 #include "core/css/MediaQueryMatcher.h"
 #include "core/css/MediaValuesDynamic.h"
 #include "core/css/parser/SizesAttributeParser.h"
@@ -37,22 +35,25 @@
 #include "core/dom/SyncReattachContext.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/html/FormAssociated.h"
-#include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCanvasElement.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLImageFallbackHelper.h"
 #include "core/html/HTMLPictureElement.h"
 #include "core/html/HTMLSourceElement.h"
+#include "core/html/forms/FormAssociated.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLSrcsetParser.h"
+#include "core/html_names.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/api/LayoutImageItem.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/loader/resource/ImageResourceContent.h"
+#include "core/media_type_names.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/style/ContentData.h"
@@ -78,7 +79,7 @@ class HTMLImageElement::ViewportChangeListener final
       element_->NotifyViewportChanged();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(element_);
     MediaQueryListListener::Trace(visitor);
   }
@@ -95,7 +96,6 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       image_device_pixel_ratio_(1.0f),
       source_(nullptr),
       layout_disposition_(LayoutDisposition::kPrimaryContent),
-      decode_sequence_id_(0),
       form_was_set_by_parser_(false),
       element_created_by_parser_(created_by_parser),
       is_fallback_image_(false),
@@ -114,12 +114,11 @@ HTMLImageElement* HTMLImageElement::Create(Document& document,
 
 HTMLImageElement::~HTMLImageElement() {}
 
-DEFINE_TRACE(HTMLImageElement) {
+void HTMLImageElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_loader_);
   visitor->Trace(listener_);
   visitor->Trace(form_);
   visitor->Trace(source_);
-  visitor->Trace(decode_promise_resolvers_);
   HTMLElement::Trace(visitor);
 }
 
@@ -128,45 +127,6 @@ void HTMLImageElement::NotifyViewportChanged() {
   // And update the image's intrinsic dimensions when the viewport changes.
   // Picking of a better fitting resource is UA dependant, not spec required.
   SelectSourceURL(ImageLoader::kUpdateSizeChanged);
-}
-
-void HTMLImageElement::RequestDecode() {
-  DCHECK(!decode_promise_resolvers_.IsEmpty());
-  LocalFrame* frame = GetDocument().GetFrame();
-  // If we don't have the image, or the document doesn't have a frame, then
-  // reject the decode, since we can't plumb the request to the correct place.
-  if (!GetImageLoader().GetImage() ||
-      !GetImageLoader().GetImage()->GetImage() || !frame) {
-    DecodeRequestFinished(decode_sequence_id_, false);
-    return;
-  }
-  Image* image = GetImageLoader().GetImage()->GetImage();
-  frame->GetChromeClient().RequestDecode(
-      frame, image->PaintImageForCurrentFrame(),
-      WTF::Bind(&HTMLImageElement::DecodeRequestFinished,
-                WrapWeakPersistent(this), decode_sequence_id_));
-}
-
-void HTMLImageElement::DecodeRequestFinished(uint32_t sequence_id,
-                                             bool success) {
-  // If the sequence id attached with this callback doesn't match our current
-  // sequence id, then the source of the image has changed. In other words, the
-  // decode resolved/rejected by this callback was already rejected. Since we
-  // could have had a new decode request, we have to make sure not to
-  // resolve/reject those using the stale callback.
-  if (sequence_id != decode_sequence_id_)
-    return;
-
-  if (success) {
-    for (auto& resolver : decode_promise_resolvers_)
-      resolver->Resolve();
-  } else {
-    for (auto& resolver : decode_promise_resolvers_) {
-      resolver->Reject(DOMException::Create(
-          kEncodingError, "The source image cannot be decoded"));
-    }
-  }
-  decode_promise_resolvers_.clear();
 }
 
 HTMLImageElement* HTMLImageElement::CreateForJSConstructor(Document& document) {
@@ -205,7 +165,7 @@ bool HTMLImageElement::IsPresentationAttribute(
 void HTMLImageElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == widthAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyWidth, value);
   } else if (name == heightAttr) {
@@ -304,14 +264,6 @@ void HTMLImageElement::ParseAttribute(
     }
   } else if (name == srcAttr || name == srcsetAttr || name == sizesAttr) {
     SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
-    // Ensure to fail any pending decodes on possible source changes.
-    if (!decode_promise_resolvers_.IsEmpty() &&
-        params.old_value != params.new_value) {
-      DecodeRequestFinished(decode_sequence_id_, false);
-      // Increment the sequence id so that any in flight decode completion tasks
-      // will not trigger promise resolution for new decode requests.
-      ++decode_sequence_id_;
-    }
   } else if (name == usemapAttr) {
     SetIsLink(!params.new_value.IsNull());
   } else if (name == referrerpolicyAttr) {
@@ -323,6 +275,9 @@ void HTMLImageElement::ParseAttribute(
       UseCounter::Count(GetDocument(),
                         WebFeature::kHTMLImageElementReferrerPolicyAttribute);
     }
+  } else if (name == decodingAttr &&
+             RuntimeEnabledFeatures::ImageDecodingAttributeEnabled()) {
+    decoding_mode_ = ParseImageDecodingMode(params.new_value);
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -352,17 +307,17 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
   DCHECK(IsMainThread());
   Node* parent = parentNode();
   source_ = nullptr;
-  if (!parent || !isHTMLPictureElement(*parent))
+  if (!parent || !IsHTMLPictureElement(*parent))
     return ImageCandidate();
   for (Node* child = parent->firstChild(); child;
        child = child->nextSibling()) {
     if (child == this)
       return ImageCandidate();
 
-    if (!isHTMLSourceElement(*child))
+    if (!IsHTMLSourceElement(*child))
       continue;
 
-    HTMLSourceElement* source = toHTMLSourceElement(child);
+    HTMLSourceElement* source = ToHTMLSourceElement(child);
     if (!source->FastGetAttribute(srcAttr).IsNull()) {
       Deprecation::CountDeprecation(GetDocument(),
                                     WebFeature::kPictureSourceSrc);
@@ -401,7 +356,9 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
 
   switch (layout_disposition_) {
     case LayoutDisposition::kFallbackContent:
-      return new LayoutBlockFlow(this);
+      if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+        return new LayoutBlockFlow(this);
+      return new LayoutNGBlockFlow(this);
     case LayoutDisposition::kPrimaryContent: {
       LayoutImage* image = new LayoutImage(this);
       image->SetImageResource(LayoutImageResource::Create());
@@ -421,22 +378,15 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
   if (GetLayoutObject() && GetLayoutObject()->IsImage()) {
     LayoutImage* layout_image = ToLayoutImage(GetLayoutObject());
     LayoutImageResource* layout_image_resource = layout_image->ImageResource();
-    if (is_fallback_image_) {
-      float device_scale_factor =
-          blink::DeviceScaleFactorDeprecated(layout_image->GetFrame());
-      std::pair<Image*, float> broken_image_and_image_scale_factor =
-          ImageResourceContent::BrokenImage(device_scale_factor);
-      ImageResourceContent* new_image_resource =
-          ImageResourceContent::CreateLoaded(
-              broken_image_and_image_scale_factor.first);
-      layout_image->ImageResource()->SetImageResource(new_image_resource);
-    }
+    if (is_fallback_image_)
+      layout_image_resource->UseBrokenImage();
+
     if (layout_image_resource->HasImage())
       return;
 
-    if (!GetImageLoader().GetImage() && !layout_image_resource->CachedImage())
+    if (!GetImageLoader().GetContent() && !layout_image_resource->CachedImage())
       return;
-    layout_image_resource->SetImageResource(GetImageLoader().GetImage());
+    layout_image_resource->SetImageResource(GetImageLoader().GetContent());
   }
 }
 
@@ -449,8 +399,8 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
   if (listener_)
     GetDocument().GetMediaQueryMatcher().AddViewportListener(listener_);
   Node* parent = parentNode();
-  if (parent && isHTMLPictureElement(*parent))
-    toHTMLPictureElement(parent)->AddListenerToSourceChildren();
+  if (parent && IsHTMLPictureElement(*parent))
+    ToHTMLPictureElement(parent)->AddListenerToSourceChildren();
 
   bool image_was_modified = false;
   if (GetDocument().IsActive()) {
@@ -463,7 +413,7 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
 
   // If we have been inserted from a layoutObject-less document,
   // our loader may have not fetched the image, so do it now.
-  if ((insertion_point->isConnected() && !GetImageLoader().GetImage()) ||
+  if ((insertion_point->isConnected() && !GetImageLoader().GetContent()) ||
       image_was_modified)
     GetImageLoader().UpdateFromElement(ImageLoader::kUpdateNormal,
                                        referrer_policy_);
@@ -478,8 +428,8 @@ void HTMLImageElement::RemovedFrom(ContainerNode* insertion_point) {
   if (listener_) {
     GetDocument().GetMediaQueryMatcher().RemoveViewportListener(listener_);
     Node* parent = parentNode();
-    if (parent && isHTMLPictureElement(*parent))
-      toHTMLPictureElement(parent)->RemoveListenerFromSourceChildren();
+    if (parent && IsHTMLPictureElement(*parent))
+      ToHTMLPictureElement(parent)->RemoveListenerFromSourceChildren();
   }
   HTMLElement::RemovedFrom(insertion_point);
 }
@@ -495,13 +445,10 @@ unsigned HTMLImageElement::width() {
       return width;
 
     // if the image is available, use its width
-    if (GetImageLoader().GetImage()) {
-      return GetImageLoader()
-          .GetImage()
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr),
-                      1.0f)
-          .Width()
-          .ToUnsigned();
+    if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
+      return image_content
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Width();
     }
   }
 
@@ -519,58 +466,52 @@ unsigned HTMLImageElement::height() {
       return height;
 
     // if the image is available, use its height
-    if (GetImageLoader().GetImage()) {
-      return GetImageLoader()
-          .GetImage()
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr),
-                      1.0f)
-          .Height()
-          .ToUnsigned();
+    if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
+      return image_content
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Height();
     }
   }
 
   return LayoutBoxHeight();
 }
 
-unsigned HTMLImageElement::naturalWidth() const {
-  if (!GetImageLoader().GetImage())
-    return 0;
+LayoutSize HTMLImageElement::DensityCorrectedIntrinsicDimensions() const {
+  ImageResourceContent* image_resource = GetImageLoader().GetContent();
+  if (!image_resource || !image_resource->HasImage())
+    return LayoutSize();
+  float pixel_density = image_device_pixel_ratio_;
+  if (image_resource->HasDevicePixelRatioHeaderValue() &&
+      image_resource->DevicePixelRatioHeaderValue() > 0)
+    pixel_density = 1 / image_resource->DevicePixelRatioHeaderValue();
 
-  return GetImageLoader()
-      .GetImage()
-      ->ImageSize(
-          LayoutObject::ShouldRespectImageOrientation(GetLayoutObject()),
-          image_device_pixel_ratio_,
-          ImageResourceContent::kIntrinsicCorrectedToDPR)
-      .Width()
-      .ToUnsigned();
+  RespectImageOrientationEnum respect_image_orientation =
+      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject());
+  LayoutSize natural_size(
+      image_resource->IntrinsicSize(respect_image_orientation));
+  natural_size.Scale(pixel_density);
+  return natural_size;
+}
+
+unsigned HTMLImageElement::naturalWidth() const {
+  return DensityCorrectedIntrinsicDimensions().Width().ToUnsigned();
 }
 
 unsigned HTMLImageElement::naturalHeight() const {
-  if (!GetImageLoader().GetImage())
-    return 0;
-
-  return GetImageLoader()
-      .GetImage()
-      ->ImageSize(
-          LayoutObject::ShouldRespectImageOrientation(GetLayoutObject()),
-          image_device_pixel_ratio_,
-          ImageResourceContent::kIntrinsicCorrectedToDPR)
-      .Height()
-      .ToUnsigned();
+  return DensityCorrectedIntrinsicDimensions().Height().ToUnsigned();
 }
 
 unsigned HTMLImageElement::LayoutBoxWidth() const {
   LayoutBox* box = GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom(box->ContentBoxRect().PixelSnappedWidth(),
-                                     box)
+  return box ? AdjustForAbsoluteZoom::AdjustInt(
+                   box->ContentBoxRect().PixelSnappedWidth(), box)
              : 0;
 }
 
 unsigned HTMLImageElement::LayoutBoxHeight() const {
   LayoutBox* box = GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom(box->ContentBoxRect().PixelSnappedHeight(),
-                                     box)
+  return box ? AdjustForAbsoluteZoom::AdjustInt(
+                   box->ContentBoxRect().PixelSnappedHeight(), box)
              : 0;
 }
 
@@ -582,15 +523,15 @@ const String& HTMLImageElement::currentSrc() const {
   // Return the picked URL string in case of load error.
   if (GetImageLoader().HadError())
     return best_fit_image_url_;
-  // Initially, the pending request turns into current request when it is either
-  // available or broken.  We use the image's dimensions as a proxy to it being
-  // in any of these states.
-  if (!GetImageLoader().GetImage() ||
-      !GetImageLoader().GetImage()->GetImage() ||
-      !GetImageLoader().GetImage()->GetImage()->width())
+  // Initially, the pending request turns into current request when it is
+  // either available or broken. Check for the resource being in error or
+  // having an image to determine these states.
+  ImageResourceContent* image_content = GetImageLoader().GetContent();
+  if (!image_content ||
+      (!image_content->ErrorOccurred() && !image_content->HasImage()))
     return g_empty_atom;
 
-  return GetImageLoader().GetImage()->Url().GetString();
+  return image_content->Url().GetString();
 }
 
 bool HTMLImageElement::IsURLAttribute(const Attribute& attribute) const {
@@ -653,18 +594,7 @@ int HTMLImageElement::y() const {
 
 ScriptPromise HTMLImageElement::decode(ScriptState* script_state,
                                        ExceptionState& exception_state) {
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(kEncodingError,
-                                      "The source image cannot be decoded");
-    return ScriptPromise();
-  }
-  exception_state.ClearException();
-  decode_promise_resolvers_.push_back(
-      ScriptPromiseResolver::Create(script_state));
-  ScriptPromise promise = decode_promise_resolvers_.back()->Promise();
-  if (complete())
-    RequestDecode();
-  return promise;
+  return GetImageLoader().Decode(script_state, exception_state);
 }
 
 bool HTMLImageElement::complete() const {
@@ -697,7 +627,7 @@ Image* HTMLImageElement::ImageContents() {
   if (!GetImageLoader().ImageComplete())
     return nullptr;
 
-  return GetImageLoader().GetImage()->GetImage();
+  return GetImageLoader().GetContent()->GetImage();
 }
 
 bool HTMLImageElement::IsInteractiveContent() const {
@@ -706,19 +636,18 @@ bool HTMLImageElement::IsInteractiveContent() const {
 
 FloatSize HTMLImageElement::DefaultDestinationSize(
     const FloatSize& default_object_size) const {
-  ImageResourceContent* image = CachedImage();
-  if (!image)
+  ImageResourceContent* image_content = CachedImage();
+  if (!image_content)
     return FloatSize();
 
-  if (image->GetImage() && image->GetImage()->IsSVGImage())
-    return ToSVGImage(CachedImage()->GetImage())
-        ->ConcreteObjectSize(default_object_size);
+  Image* image = image_content->GetImage();
+  if (image->IsSVGImage())
+    return ToSVGImage(image)->ConcreteObjectSize(default_object_size);
 
-  LayoutSize size;
-  size = image->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject()), 1.0f);
+  LayoutSize size(image_content->IntrinsicSize(
+      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject())));
   if (GetLayoutObject() && GetLayoutObject()->IsLayoutImage() &&
-      image->GetImage() && !image->GetImage()->HasRelativeSize())
+      !image->HasRelativeSize())
     size.Scale(ToLayoutImage(GetLayoutObject())->ImageDevicePixelRatio());
   return FloatSize(size);
 }
@@ -781,19 +710,17 @@ void HTMLImageElement::SelectSourceURL(
 
   GetImageLoader().UpdateFromElement(behavior, referrer_policy_);
 
+  ImageResourceContent* image_content = GetImageLoader().GetContent();
   // Images such as data: uri's can return immediately and may already have
   // errored out.
-  bool image_has_loaded = GetImageLoader().GetImage() &&
-                          !GetImageLoader().GetImage()->IsLoading() &&
-                          !GetImageLoader().GetImage()->ErrorOccurred();
+  bool image_has_loaded = image_content && !image_content->IsLoading() &&
+                          !image_content->ErrorOccurred();
   bool image_still_loading =
       !image_has_loaded && GetImageLoader().HasPendingActivity() &&
       !GetImageLoader().HasPendingError() && !ImageSourceURL().IsEmpty();
-  bool image_has_image =
-      GetImageLoader().GetImage() && GetImageLoader().GetImage()->HasImage();
+  bool image_has_image = image_content && image_content->HasImage();
   bool image_is_document = GetImageLoader().IsLoadingImageDocument() &&
-                           GetImageLoader().GetImage() &&
-                           !GetImageLoader().GetImage()->ErrorOccurred();
+                           image_content && !image_content->ErrorOccurred();
 
   // Icky special case for deferred images:
   // A deferred image is not loading, does have pending activity, does not
@@ -831,10 +758,10 @@ void HTMLImageElement::EnsureCollapsedOrFallbackContent() {
   if (is_fallback_image_)
     return;
 
-  bool resource_error_indicates_element_should_be_collapsed =
-      GetImageLoader().GetImage() &&
-      GetImageLoader().GetImage()->GetResourceError().ShouldCollapseInitiator();
-  SetLayoutDisposition(resource_error_indicates_element_should_be_collapsed
+  ImageResourceContent* image_content = GetImageLoader().GetContent();
+  Optional<ResourceError> error =
+      image_content ? image_content->GetResourceError() : WTF::nullopt;
+  SetLayoutDisposition(error && error->ShouldCollapseInitiator()
                            ? LayoutDisposition::kCollapsed
                            : LayoutDisposition::kFallbackContent);
 }
@@ -868,7 +795,7 @@ void HTMLImageElement::SetLayoutDisposition(
   }
 }
 
-RefPtr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
   switch (layout_disposition_) {
     case LayoutDisposition::kPrimaryContent:  // Fall through.
     case LayoutDisposition::kCollapsed:
@@ -880,15 +807,6 @@ RefPtr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
       NOTREACHED();
       return nullptr;
   }
-}
-
-void HTMLImageElement::ImageNotifyFinished(bool success) {
-  if (decode_promise_resolvers_.IsEmpty())
-    return;
-  if (success)
-    RequestDecode();
-  else
-    DecodeRequestFinished(decode_sequence_id_, false);
 }
 
 void HTMLImageElement::AssociateWith(HTMLFormElement* form) {

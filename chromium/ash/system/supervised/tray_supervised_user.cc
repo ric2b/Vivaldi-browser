@@ -62,9 +62,16 @@ views::View* TraySupervisedUser::CreateDefaultView(LoginStatus status) {
   return tray_view;
 }
 
+void TraySupervisedUser::OnActiveUserSessionChanged(
+    const AccountId& account_id) {
+  OnUserSessionUpdated(account_id);
+}
+
+void TraySupervisedUser::OnUserSessionAdded(const AccountId& account_id) {
+  OnUserSessionUpdated(account_id);
+}
+
 void TraySupervisedUser::OnUserSessionUpdated(const AccountId& account_id) {
-  // NOTE: This doesn't use OnUserSessionAdded() because the custodian info
-  // isn't available until after the session starts.
   SessionController* session_controller = Shell::Get()->session_controller();
   if (!session_controller->IsUserSupervised())
     return;
@@ -92,14 +99,21 @@ void TraySupervisedUser::OnUserSessionUpdated(const AccountId& account_id) {
 }
 
 void TraySupervisedUser::CreateOrUpdateNotification() {
-  std::unique_ptr<Notification> notification(
-      message_center::Notification::CreateSystemNotification(
-          kNotificationId, base::string16() /* no title */,
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL),
           GetSupervisedUserMessage(),
           gfx::Image(
               gfx::CreateVectorIcon(GetSupervisedUserIcon(), kMenuIconColor)),
-          system_notifier::kNotifierSupervisedUser,
-          base::Closure() /* null callback */));
+          base::string16() /* display_source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierSupervisedUser),
+          message_center::RichNotificationData(), nullptr,
+          kNotificationSupervisedIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->SetSystemPriority();
   // AddNotification does an update if the notification already exists.
   MessageCenter::Get()->AddNotification(std::move(notification));
 }

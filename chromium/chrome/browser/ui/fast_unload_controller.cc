@@ -29,8 +29,6 @@
 #include "extensions/common/constants.h"
 #endif  // (ENABLE_EXTENSIONS)
 
-namespace chrome {
-
 ////////////////////////////////////////////////////////////////////////////////
 // FastUnloadController, public:
 
@@ -504,5 +502,3 @@ void FastUnloadController::PostTaskForProcessPendingTabs() {
       FROM_HERE, base::BindOnce(&FastUnloadController::ProcessPendingTabs,
                                 weak_factory_.GetWeakPtr(), false));
 }
-
-}  // namespace chrome

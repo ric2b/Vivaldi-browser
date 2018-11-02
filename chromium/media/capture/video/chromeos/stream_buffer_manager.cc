@@ -40,7 +40,9 @@ StreamBufferManager::~StreamBufferManager() {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   if (stream_context_) {
     for (const auto& buf : stream_context_->buffers) {
-      buf->Unmap();
+      if (buf) {
+        buf->Unmap();
+      }
     }
   }
 }
@@ -496,13 +498,13 @@ void StreamBufferManager::SubmitCaptureResult(uint32_t frame_number) {
   RegisterBuffer();
 }
 
-StreamBufferManager::StreamContext::StreamContext() {}
+StreamBufferManager::StreamContext::StreamContext() = default;
 
-StreamBufferManager::StreamContext::~StreamContext() {}
+StreamBufferManager::StreamContext::~StreamContext() = default;
 
 StreamBufferManager::CaptureResult::CaptureResult()
     : metadata(arc::mojom::CameraMetadata::New()) {}
 
-StreamBufferManager::CaptureResult::~CaptureResult() {}
+StreamBufferManager::CaptureResult::~CaptureResult() = default;
 
 }  // namespace media

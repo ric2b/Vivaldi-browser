@@ -52,10 +52,8 @@ const char WebRtcTestBase::kVideoCallConstraints1080p[] =
 const char WebRtcTestBase::kAudioOnlyCallConstraints[] = "{audio: true}";
 const char WebRtcTestBase::kVideoOnlyCallConstraints[] = "{video: true}";
 const char WebRtcTestBase::kOkGotStream[] = "ok-got-stream";
-const char WebRtcTestBase::kFailedWithPermissionDeniedError[] =
-    "failed-with-error-PermissionDeniedError";
-const char WebRtcTestBase::kFailedWithPermissionDismissedError[] =
-    "failed-with-error-PermissionDismissedError";
+const char WebRtcTestBase::kFailedWithNotAllowedError[] =
+    "failed-with-error-NotAllowedError";
 const char WebRtcTestBase::kAudioVideoCallConstraints360p[] =
    "{audio: true, video: {mandatory: {minWidth: 640, maxWidth: 640, "
    " minHeight: 360, maxHeight: 360}}}";
@@ -133,7 +131,7 @@ std::vector<std::string> JsonArrayToVectorOfStrings(
     const std::string& json_array) {
   std::unique_ptr<base::Value> value = base::JSONReader::Read(json_array);
   EXPECT_TRUE(value);
-  EXPECT_TRUE(value->IsType(base::Value::Type::LIST));
+  EXPECT_TRUE(value->is_list());
   std::unique_ptr<base::ListValue> list =
       base::ListValue::From(std::move(value));
   std::vector<std::string> vector;
@@ -141,7 +139,7 @@ std::vector<std::string> JsonArrayToVectorOfStrings(
   for (size_t i = 0; i < list->GetSize(); ++i) {
     base::Value* item;
     EXPECT_TRUE(list->Get(i, &item));
-    EXPECT_TRUE(item->IsType(base::Value::Type::STRING));
+    EXPECT_TRUE(item->is_string());
     std::string item_str;
     EXPECT_TRUE(item->GetAsString(&item_str));
     vector.push_back(std::move(item_str));
@@ -223,7 +221,7 @@ void WebRtcTestBase::GetUserMediaWithSpecificConstraintsAndDeny(
   EXPECT_TRUE(permissionRequestObserver.request_shown());
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       tab_contents->GetMainFrame(), "obtainGetUserMediaResult();", &result));
-  EXPECT_EQ(kFailedWithPermissionDeniedError, result);
+  EXPECT_EQ(kFailedWithNotAllowedError, result);
 }
 
 void WebRtcTestBase::GetUserMediaAndDismiss(
@@ -237,7 +235,7 @@ void WebRtcTestBase::GetUserMediaAndDismiss(
   // A dismiss should be treated like a deny.
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       tab_contents->GetMainFrame(), "obtainGetUserMediaResult();", &result));
-  EXPECT_EQ(kFailedWithPermissionDismissedError, result);
+  EXPECT_EQ(kFailedWithNotAllowedError, result);
 }
 
 void WebRtcTestBase::GetUserMediaAndExpectAutoAcceptWithoutPrompt(
@@ -279,7 +277,7 @@ void WebRtcTestBase::GetUserMediaAndExpectAutoDenyWithoutPrompt(
   EXPECT_FALSE(permissionRequestObserver.request_shown());
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       tab_contents->GetMainFrame(), "obtainGetUserMediaResult();", &result));
-  EXPECT_EQ(kFailedWithPermissionDeniedError, result);
+  EXPECT_EQ(kFailedWithNotAllowedError, result);
 }
 
 void WebRtcTestBase::GetUserMedia(content::WebContents* tab_contents,
@@ -584,7 +582,7 @@ void WebRtcTestBase::CreateAndAddStreams(content::WebContents* tab,
   EXPECT_EQ(
       "ok-streams-created-and-added",
       ExecuteJavascript(
-          "createAndAddStreams(" + base::SizeTToString(count) + ")", tab));
+          "createAndAddStreams(" + base::NumberToString(count) + ")", tab));
 }
 
 void WebRtcTestBase::VerifyRtpSenders(
@@ -592,7 +590,7 @@ void WebRtcTestBase::VerifyRtpSenders(
     base::Optional<size_t> expected_num_tracks) const {
   std::string javascript =
       expected_num_tracks ? "verifyRtpSenders(" +
-                                base::SizeTToString(*expected_num_tracks) + ")"
+                                base::NumberToString(*expected_num_tracks) + ")"
                           : "verifyRtpSenders()";
   EXPECT_EQ("ok-senders-verified", ExecuteJavascript(javascript, tab));
 }
@@ -602,7 +600,7 @@ void WebRtcTestBase::VerifyRtpReceivers(
     base::Optional<size_t> expected_num_tracks) const {
   std::string javascript =
       expected_num_tracks ? "verifyRtpReceivers(" +
-                                base::SizeTToString(*expected_num_tracks) + ")"
+                                base::NumberToString(*expected_num_tracks) + ")"
                           : "verifyRtpReceivers()";
   EXPECT_EQ("ok-receivers-verified", ExecuteJavascript(javascript, tab));
 }

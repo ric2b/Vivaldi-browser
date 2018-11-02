@@ -22,9 +22,10 @@ namespace device {
 FakeLocationProvider::FakeLocationProvider()
     : provider_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
-FakeLocationProvider::~FakeLocationProvider() {}
+FakeLocationProvider::~FakeLocationProvider() = default;
 
-void FakeLocationProvider::HandlePositionChanged(const Geoposition& position) {
+void FakeLocationProvider::HandlePositionChanged(
+    const mojom::Geoposition& position) {
   if (provider_task_runner_->BelongsToCurrentThread()) {
     // The location arbitrator unit tests rely on this method running
     // synchronously.
@@ -43,16 +44,15 @@ void FakeLocationProvider::SetUpdateCallback(
   callback_ = callback;
 }
 
-bool FakeLocationProvider::StartProvider(bool high_accuracy) {
+void FakeLocationProvider::StartProvider(bool high_accuracy) {
   state_ = high_accuracy ? HIGH_ACCURACY : LOW_ACCURACY;
-  return true;
 }
 
 void FakeLocationProvider::StopProvider() {
   state_ = STOPPED;
 }
 
-const Geoposition& FakeLocationProvider::GetPosition() {
+const mojom::Geoposition& FakeLocationProvider::GetPosition() {
   return position_;
 }
 

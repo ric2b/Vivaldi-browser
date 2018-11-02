@@ -79,8 +79,13 @@ class RealtimeAnalyser final {
   AudioFloatArray input_buffer_;
   unsigned write_index_;
 
+  unsigned GetWriteIndex() const { return AcquireLoad(&write_index_); }
+  void SetWriteIndex(unsigned new_index) {
+    ReleaseStore(&write_index_, new_index);
+  }
+
   // Input audio is downmixed to this bus before copying to m_inputBuffer.
-  RefPtr<AudioBus> down_mix_bus_;
+  scoped_refptr<AudioBus> down_mix_bus_;
 
   size_t fft_size_;
   std::unique_ptr<FFTFrame> analysis_frame_;

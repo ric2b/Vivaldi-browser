@@ -23,6 +23,9 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
+#include "base/process/process_handle.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 
@@ -51,7 +54,7 @@ enum : uint32_t {
 // managed elsewhere and which could be destructed first. An AtomicWord is
 // used instead of std::atomic because the latter can create global ctors
 // and dtors.
-subtle::AtomicWord g_allocator = 0;
+subtle::AtomicWord g_histogram_allocator = 0;
 
 // Take an array of range boundaries and create a proper BucketRanges object
 // which is returned to the caller. A return of nullptr indicates that the
@@ -103,7 +106,8 @@ PersistentSparseHistogramDataManager::PersistentSparseHistogramDataManager(
     PersistentMemoryAllocator* allocator)
     : allocator_(allocator), record_iterator_(allocator) {}
 
-PersistentSparseHistogramDataManager::~PersistentSparseHistogramDataManager() {}
+PersistentSparseHistogramDataManager::~PersistentSparseHistogramDataManager() =
+    default;
 
 PersistentSampleMapRecords*
 PersistentSparseHistogramDataManager::UseSampleMapRecords(uint64_t id,
@@ -186,7 +190,7 @@ PersistentSampleMapRecords::PersistentSampleMapRecords(
     uint64_t sample_map_id)
     : data_manager_(data_manager), sample_map_id_(sample_map_id) {}
 
-PersistentSampleMapRecords::~PersistentSampleMapRecords() {}
+PersistentSampleMapRecords::~PersistentSampleMapRecords() = default;
 
 PersistentSampleMapRecords* PersistentSampleMapRecords::Acquire(
     const void* user) {
@@ -273,7 +277,7 @@ PersistentHistogramAllocator::PersistentHistogramAllocator(
     : memory_allocator_(std::move(memory)),
       sparse_histogram_data_manager_(memory_allocator_.get()) {}
 
-PersistentHistogramAllocator::~PersistentHistogramAllocator() {}
+PersistentHistogramAllocator::~PersistentHistogramAllocator() = default;
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
     Reference ref) {
@@ -479,16 +483,8 @@ void PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
     return;
   }
 
-  // TODO(bcwhite): Remove this when crbug/744734 is fixed.
-  histogram->ValidateHistogramContents(true, -1);
-  existing->ValidateHistogramContents(true, -2);
-
   // Merge the delta from the passed object to the one in the SR.
   existing->AddSamples(*histogram->SnapshotDelta());
-
-  // TODO(bcwhite): Remove this when crbug/744734 is fixed.
-  histogram->ValidateHistogramContents(true, -3);
-  existing->ValidateHistogramContents(true, -4);
 }
 
 void PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
@@ -667,7 +663,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
       /*make_iterable=*/false);
 
   // Create the right type of histogram.
-  std::string name(histogram_data_ptr->name);
+  const char* name = histogram_data_ptr->name;
   std::unique_ptr<HistogramBase> histogram;
   switch (histogram_type) {
     case HISTOGRAM:
@@ -706,7 +702,6 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
     DCHECK_EQ(histogram_type, histogram->GetHistogramType());
     histogram->SetFlags(histogram_flags);
     RecordCreateHistogramResult(CREATE_HISTOGRAM_SUCCESS);
-    histogram->ValidateHistogramContents(true, 0);
   } else {
     RecordCreateHistogramResult(CREATE_HISTOGRAM_UNKNOWN_TYPE);
   }
@@ -733,8 +728,7 @@ PersistentHistogramAllocator::GetOrCreateStatisticsRecorderHistogram(
   // FactoryGet() which will create the histogram in the global persistent-
   // histogram allocator if such is set.
   base::Pickle pickle;
-  if (!histogram->SerializeInfo(&pickle))
-    return nullptr;
+  histogram->SerializeInfo(&pickle);
   PickleIterator iter(pickle);
   existing = DeserializeHistogramInfo(&iter);
   if (!existing)
@@ -754,7 +748,7 @@ void PersistentHistogramAllocator::RecordCreateHistogramResult(
     result_histogram->Add(result);
 }
 
-GlobalHistogramAllocator::~GlobalHistogramAllocator() {}
+GlobalHistogramAllocator::~GlobalHistogramAllocator() = default;
 
 // static
 void GlobalHistogramAllocator::CreateWithPersistentMemory(
@@ -794,7 +788,7 @@ bool GlobalHistogramAllocator::CreateWithFile(
     size = saturated_cast<size_t>(file.GetLength());
     mmfile->Initialize(std::move(file), MemoryMappedFile::READ_WRITE);
   } else {
-    mmfile->Initialize(std::move(file), {0, static_cast<int64_t>(size)},
+    mmfile->Initialize(std::move(file), {0, size},
                        MemoryMappedFile::READ_WRITE_EXTEND);
   }
   if (!mmfile->IsValid() ||
@@ -844,22 +838,71 @@ bool GlobalHistogramAllocator::CreateWithActiveFileInDir(const FilePath& dir,
 }
 
 // static
+FilePath GlobalHistogramAllocator::ConstructFilePath(const FilePath& dir,
+                                                     StringPiece name) {
+  return dir.AppendASCII(name).AddExtension(
+      PersistentMemoryAllocator::kFileExtension);
+}
+
+// static
+FilePath GlobalHistogramAllocator::ConstructFilePathForUploadDir(
+    const FilePath& dir,
+    StringPiece name,
+    base::Time stamp,
+    ProcessId pid) {
+  return ConstructFilePath(
+      dir,
+      StringPrintf("%.*s-%lX-%lX", static_cast<int>(name.length()), name.data(),
+                   static_cast<long>(stamp.ToTimeT()), static_cast<long>(pid)));
+}
+
+// static
+bool GlobalHistogramAllocator::ParseFilePath(const FilePath& path,
+                                             std::string* out_name,
+                                             Time* out_stamp,
+                                             ProcessId* out_pid) {
+  std::string filename = path.BaseName().AsUTF8Unsafe();
+  std::vector<base::StringPiece> parts = base::SplitStringPiece(
+      filename, "-.", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (parts.size() != 4)
+    return false;
+
+  if (out_name)
+    *out_name = parts[0].as_string();
+
+  if (out_stamp) {
+    int64_t stamp;
+    if (!HexStringToInt64(parts[1], &stamp))
+      return false;
+    *out_stamp = Time::FromTimeT(static_cast<time_t>(stamp));
+  }
+
+  if (out_pid) {
+    int64_t pid;
+    if (!HexStringToInt64(parts[2], &pid))
+      return false;
+    *out_pid = static_cast<ProcessId>(pid);
+  }
+
+  return true;
+}
+
+// static
 void GlobalHistogramAllocator::ConstructFilePaths(const FilePath& dir,
                                                   StringPiece name,
                                                   FilePath* out_base_path,
                                                   FilePath* out_active_path,
                                                   FilePath* out_spare_path) {
   if (out_base_path)
-    *out_base_path = MakeMetricsFilePath(dir, name);
+    *out_base_path = ConstructFilePath(dir, name);
 
   if (out_active_path) {
     *out_active_path =
-        MakeMetricsFilePath(dir, name.as_string().append("-active"));
+        ConstructFilePath(dir, name.as_string().append("-active"));
   }
 
   if (out_spare_path) {
-    *out_spare_path =
-        MakeMetricsFilePath(dir, name.as_string().append("-spare"));
+    *out_spare_path = ConstructFilePath(dir, name.as_string().append("-spare"));
   }
 }
 
@@ -872,20 +915,18 @@ void GlobalHistogramAllocator::ConstructFilePathsForUploadDir(
     FilePath* out_active_path,
     FilePath* out_spare_path) {
   if (out_upload_path) {
-    std::string name_stamp =
-        StringPrintf("%s-%X", name.c_str(),
-                     static_cast<unsigned int>(Time::Now().ToTimeT()));
-    *out_upload_path = MakeMetricsFilePath(upload_dir, name_stamp);
+    *out_upload_path = ConstructFilePathForUploadDir(
+        upload_dir, name, Time::Now(), GetCurrentProcId());
   }
 
   if (out_active_path) {
     *out_active_path =
-        MakeMetricsFilePath(active_dir, name + std::string("-active"));
+        ConstructFilePath(active_dir, name + std::string("-active"));
   }
 
   if (out_spare_path) {
     *out_spare_path =
-        MakeMetricsFilePath(active_dir, name + std::string("-spare"));
+        ConstructFilePath(active_dir, name + std::string("-spare"));
   }
 }
 
@@ -901,7 +942,7 @@ bool GlobalHistogramAllocator::CreateSpareFile(const FilePath& spare_path,
       return false;
 
     MemoryMappedFile mmfile;
-    mmfile.Initialize(std::move(spare_file), {0, static_cast<int64_t>(size)},
+    mmfile.Initialize(std::move(spare_file), {0, size},
                       MemoryMappedFile::READ_WRITE_EXTEND);
     success = mmfile.IsValid();
   }
@@ -948,8 +989,8 @@ void GlobalHistogramAllocator::Set(
   // Releasing or changing an allocator is extremely dangerous because it
   // likely has histograms stored within it. If the backing memory is also
   // also released, future accesses to those histograms will seg-fault.
-  CHECK(!subtle::NoBarrier_Load(&g_allocator));
-  subtle::Release_Store(&g_allocator,
+  CHECK(!subtle::NoBarrier_Load(&g_histogram_allocator));
+  subtle::Release_Store(&g_histogram_allocator,
                         reinterpret_cast<uintptr_t>(allocator.release()));
   size_t existing = StatisticsRecorder::GetHistogramCount();
 
@@ -960,7 +1001,7 @@ void GlobalHistogramAllocator::Set(
 // static
 GlobalHistogramAllocator* GlobalHistogramAllocator::Get() {
   return reinterpret_cast<GlobalHistogramAllocator*>(
-      subtle::Acquire_Load(&g_allocator));
+      subtle::Acquire_Load(&g_histogram_allocator));
 }
 
 // static
@@ -990,7 +1031,7 @@ GlobalHistogramAllocator::ReleaseForTesting() {
     DCHECK_NE(kResultHistogram, data->name);
   }
 
-  subtle::Release_Store(&g_allocator, 0);
+  subtle::Release_Store(&g_histogram_allocator, 0);
   return WrapUnique(histogram_allocator);
 };
 
@@ -1073,13 +1114,6 @@ void GlobalHistogramAllocator::ImportHistogramsToStatisticsRecorder() {
       break;
     StatisticsRecorder::RegisterOrDeleteDuplicate(histogram.release());
   }
-}
-
-// static
-FilePath GlobalHistogramAllocator::MakeMetricsFilePath(const FilePath& dir,
-                                                       StringPiece name) {
-  return dir.AppendASCII(name).AddExtension(
-      PersistentMemoryAllocator::kFileExtension);
 }
 
 }  // namespace base

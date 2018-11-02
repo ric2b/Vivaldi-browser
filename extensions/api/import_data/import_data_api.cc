@@ -9,6 +9,7 @@
 
 #include "app/vivaldi_resources.h"
 
+#include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -869,6 +870,12 @@ bool ImportDataSetStartupActionFunction::RunAsync() {
     startup_pref.type = SessionStartupPref::DEFAULT;
   } else if (content_settings == "urls") {
     startup_pref.type = SessionStartupPref::URLS;
+  }
+
+  // SessionStartupPref will erase existing urls regardless of applied type so
+  // we need to specify the list for the "url" type every time.
+  for (size_t i = 0; i < params->urls.size(); ++i) {
+    startup_pref.urls.push_back(GURL(params->urls[i]));
   }
 
   Profile* profile = GetProfile();

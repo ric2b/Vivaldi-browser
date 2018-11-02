@@ -30,23 +30,22 @@
 #include "core/css/MediaQueryEvaluator.h"
 
 #include "core/CSSValueKeywords.h"
-#include "core/MediaFeatureNames.h"
-#include "core/MediaFeatures.h"
-#include "core/MediaTypeNames.h"
-#include "core/css/CSSHelper.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSResolutionUnits.h"
 #include "core/css/CSSToLengthConversionData.h"
+#include "core/css/MediaFeatures.h"
 #include "core/css/MediaList.h"
 #include "core/css/MediaQuery.h"
 #include "core/css/MediaValuesDynamic.h"
 #include "core/css/MediaValuesInitialViewport.h"
+#include "core/css/media_feature_names.h"
 #include "core/css/resolver/MediaQueryResult.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/media_type_names.h"
 #include "core/probe/CoreProbes.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/ColorSpaceGamut.h"
 #include "platform/wtf/HashMap.h"
@@ -81,9 +80,9 @@ MediaQueryEvaluator::MediaQueryEvaluator(
   DCHECK(media_values);
 }
 
-MediaQueryEvaluator::~MediaQueryEvaluator() {}
+MediaQueryEvaluator::~MediaQueryEvaluator() = default;
 
-DEFINE_TRACE(MediaQueryEvaluator) {
+void MediaQueryEvaluator::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_values_);
 }
 

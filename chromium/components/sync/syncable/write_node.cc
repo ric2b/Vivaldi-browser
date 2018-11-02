@@ -85,6 +85,11 @@ void WriteNode::SetTitle(const std::string& title) {
     specifics.mutable_bookmark()->set_title(new_legal_title);
     SetEntitySpecifics(specifics);  // Does it's own encryption checking.
     title_matches = false;
+  } else if (GetModelType() == NOTES &&
+      specifics.notes().subject() != new_legal_title) {
+    specifics.mutable_notes()->set_subject(new_legal_title);
+    SetEntitySpecifics(specifics);  // Does it's own encryption checking.
+    title_matches = false;
   }
 
   // If the title matches and the NON_UNIQUE_NAME is properly overwritten as
@@ -165,7 +170,11 @@ void WriteNode::SetPasswordSpecifics(
 
 void WriteNode::SetEntitySpecifics(const sync_pb::EntitySpecifics& new_value) {
   ModelType new_specifics_type = GetModelTypeFromSpecifics(new_value);
+
+  // Purposefully crash if we have client only data, as this could result in
+  // sending password in plain text.
   CHECK(!new_value.password().has_client_only_encrypted_data());
+
   DCHECK_NE(new_specifics_type, UNSPECIFIED);
   DVLOG(1) << "Writing entity specifics of type "
            << ModelTypeToString(new_specifics_type);

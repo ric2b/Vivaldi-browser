@@ -20,6 +20,27 @@ namespace {
 // bucket.
 const int64_t kMaxFileSizeKB = 4 * 1024 * 1024; /* 4GB */
 
+// Enum used by UMA metrics to track various reasons of pausing a download.
+enum class PauseReason {
+  // The download was paused. The reason can be anything.
+  ANY = 0,
+
+  // The download was paused due to unsatisfied device criteria.
+  UNMET_DEVICE_CRITERIA = 1,
+
+  // The download was paused by client.
+  PAUSE_BY_CLIENT = 2,
+
+  // The download was paused due to external download.
+  EXTERNAL_DOWNLOAD = 3,
+
+  // The download was paused due to navigation.
+  EXTERNAL_NAVIGATION = 4,
+
+  // The count of entries for the enum.
+  COUNT = 5,
+};
+
 // Converts DownloadTaskType to histogram suffix.
 // Should maps to suffix string in histograms.xml.
 std::string TaskTypeToHistogramSuffix(DownloadTaskType task_type) {
@@ -66,6 +87,10 @@ std::string ClientToHistogramSuffix(DownloadClient client) {
       return "__Test__";
     case DownloadClient::OFFLINE_PAGE_PREFETCH:
       return "OfflinePage";
+    case DownloadClient::BACKGROUND_FETCH:
+      return "BackgroundFetch";
+    case DownloadClient::DEBUGGING:
+      return "Debugging";
     case DownloadClient::BOUNDARY:
       NOTREACHED();
       break;
@@ -90,6 +115,10 @@ std::string CompletionTypeToHistogramSuffix(CompletionType type) {
       return "Unknown";
     case CompletionType::CANCEL:
       return "Cancel";
+    case CompletionType::OUT_OF_RETRIES:
+      return "OutOfRetries";
+    case CompletionType::OUT_OF_RESUMPTIONS:
+      return "OutOfResumptions";
     case CompletionType::COUNT:
       NOTREACHED();
   }
@@ -133,6 +162,12 @@ void LogDatabaseRecords(Entry::State state, uint32_t record_count) {
   std::string name("Download.Service.Db.Records");
   name.append(".").append(EntryStateToHistogramSuffix(state));
   base::UmaHistogramCustomCounts(name, record_count, 1, 500, 50);
+}
+
+// Helper method to log the pause reason for a particular download.
+void LogDownloadPauseReason(PauseReason reason) {
+  UMA_HISTOGRAM_ENUMERATION("Download.Service.PauseReason", reason,
+                            PauseReason::COUNT);
 }
 
 }  // namespace
@@ -225,6 +260,25 @@ void LogDownloadCompletion(CompletionType type,
   base::UmaHistogramCustomCounts(name, file_size_kb, 1, kMaxFileSizeKB, 50);
 }
 
+void LogDownloadPauseReason(bool unmet_device_criteria,
+                            bool pause_by_client,
+                            bool external_navigation,
+                            bool external_download) {
+  LogDownloadPauseReason(PauseReason::ANY);
+
+  if (unmet_device_criteria)
+    LogDownloadPauseReason(PauseReason::UNMET_DEVICE_CRITERIA);
+
+  if (pause_by_client)
+    LogDownloadPauseReason(PauseReason::PAUSE_BY_CLIENT);
+
+  if (external_navigation)
+    LogDownloadPauseReason(PauseReason::EXTERNAL_NAVIGATION);
+
+  if (external_download)
+    LogDownloadPauseReason(PauseReason::EXTERNAL_DOWNLOAD);
+}
+
 void LogModelOperationResult(ModelAction action, bool success) {
   if (success) {
     UMA_HISTOGRAM_ENUMERATION("Download.Service.Db.Operation.Success", action,
@@ -306,6 +360,20 @@ void LogFileDirDiskUtilization(int64_t total_disk_space,
 
 void LogFilePathRenamed(bool renamed) {
   UMA_HISTOGRAM_BOOLEAN("Download.Service.Files.PathRenamed", renamed);
+}
+
+void LogEntryEvent(DownloadEvent event) {
+  UMA_HISTOGRAM_ENUMERATION("Download.Service.Entry.Event", event,
+                            DownloadEvent::COUNT);
+}
+
+void LogEntryResumptionCount(uint32_t resume_count) {
+  UMA_HISTOGRAM_COUNTS_100("Download.Service.Entry.ResumptionCount",
+                           resume_count);
+}
+
+void LogEntryRetryCount(uint32_t retry_count) {
+  UMA_HISTOGRAM_COUNTS_100("Download.Service.Entry.RetryCount", retry_count);
 }
 
 }  // namespace stats

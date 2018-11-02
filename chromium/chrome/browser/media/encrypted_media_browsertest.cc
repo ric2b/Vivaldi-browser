@@ -22,6 +22,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/key_system_names.h"
@@ -29,23 +30,16 @@
 #include "media/media_features.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/build_info.h"
-#endif
-
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-#include "chrome/browser/media/pepper_cdm_test_helper.h"
-#include "media/base/media_switches.h"
+#include "chrome/browser/media/library_cdm_test_helper.h"
 #include "media/cdm/cdm_paths.h"
 #endif
 
 #include "widevine_cdm_version.h"  //  In SHARED_INTERMEDIATE_DIR.
-
-namespace chrome {
 
 // Available key systems.
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
@@ -156,11 +150,12 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
   }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 
-  void RunEncryptedMediaTestPage(
-      const std::string& html_page,
-      const std::string& key_system,
-      base::StringPairs& query_params,
-      const std::string& expected_title) {
+  void RunEncryptedMediaTestPage(const std::string& html_page,
+                                 const std::string& key_system,
+                                 const base::StringPairs& query_params,
+                                 const std::string& expected_title) {
+    DVLOG(1) << "Mojo CDM " << (IsUsingMojoCdm() ? "" : " not") << " enabled.";
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::StringPairs new_query_params = query_params;
     StartLicenseServerIfNeeded(key_system, &new_query_params);
     RunMediaTestPage(html_page, new_query_params, expected_title, true);
@@ -203,7 +198,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
                                    const std::string& media_type,
                                    const std::string& key_system,
                                    SrcType src_type) {
-    std::string expected_title = kEnded;
+    std::string expected_title = media::kEnded;
     if (!IsPlayBackPossible(key_system)) {
       expected_title = kEmeUpdateFailed;
     }
@@ -231,7 +226,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
       return;
     license_server_.reset(new TestLicenseServer(std::move(config)));
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       EXPECT_TRUE(license_server_->Start());
     }
     query_params->push_back(
@@ -283,6 +278,10 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     command_line->AppendSwitch(switches::kIgnoreAutoplayRestrictionsForTests);
     command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                     "EncryptedMediaHdcpPolicyCheck");
+    // The test covers both mojo CDM and pepper CDM, so we need to disable the
+    // field trial testing config, which might enable mojo CDM unexpectedly.
+    command_line->AppendSwitch(
+        variations::switches::kDisableFieldTrialTestingConfig);
   }
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -305,15 +304,16 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     if (IsExternalClearKey(key_system)) {
+      // TODO(crbug.com/764143): Only RegisterPepperCdm() when we use pepper CDM
+      // after we update key system support query to use CdmRegistry.
       RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
                         media::kClearKeyCdmAdapterFileName,
                         media::kClearKeyCdmDisplayName,
                         media::kClearKeyCdmPepperMimeType);
       if (cdm_host_type == CdmHostType::kMojo) {
+        RegisterExternalClearKey(command_line);
         scoped_feature_list_.InitWithFeatures(
-            {media::kExternalClearKeyForTesting, media::kMojoCdm,
-             media::kSupportExperimentalCdmInterface},
-            {});
+            {media::kExternalClearKeyForTesting, media::kMojoCdm}, {});
       } else {
         // Pepper CDMs are conditionally compiled with or without support for
         // experimental CDMs, so media::kSupportExperimentalCdmInterface is
@@ -323,11 +323,15 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
       }
     } else {
       if (cdm_host_type == CdmHostType::kMojo) {
-        scoped_feature_list_.InitWithFeatures(
-            {media::kMojoCdm, media::kSupportExperimentalCdmInterface}, {});
+        scoped_feature_list_.InitWithFeatures({media::kMojoCdm}, {});
       }
     }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  }
+
+  // Check whether the test is actually using mojo CDM.
+  bool IsUsingMojoCdm() const {
+    return base::FeatureList::IsEnabled(media::kMojoCdm);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -343,6 +347,11 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase,
   // e.g. kExternalClearKeyFileIOTestKeySystem is used to test file IO.
   void TestNonPlaybackCases(const std::string& key_system,
                             const std::string& expected_title) {
+    // When mojo CDM is used, make sure the Clear Key CDM is properly registered
+    // in CdmRegistry.
+    if (IsUsingMojoCdm())
+      EXPECT_TRUE(IsLibraryCdmRegistered(media::kClearKeyCdmGuid));
+
     // Since we do not test playback, arbitrarily choose a test file and source
     // type.
     RunEncryptedMediaTest(kDefaultEmePlayer, "bear-a_enc-a.webm",
@@ -359,8 +368,6 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase,
                           session_to_load, false, PlayCount::ONCE,
                           expected_title);
   }
-
-  bool IsUsingMojoCdm() const { return GetParam() == CdmHostType::kMojo; }
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -406,8 +413,6 @@ class EncryptedMediaTest
 
   CdmHostType CurrentCdmHostType() { return std::tr1::get<2>(GetParam()); }
 
-  bool IsUsingMojoCdm() { return CurrentCdmHostType() == CdmHostType::kMojo; }
-
   void TestSimplePlayback(const std::string& encrypted_media,
                           const std::string& media_type) {
     RunSimpleEncryptedMediaTest(encrypted_media, media_type, CurrentKeySystem(),
@@ -419,7 +424,8 @@ class EncryptedMediaTest
     DCHECK(IsPlayBackPossible(CurrentKeySystem()));
     RunEncryptedMediaTest(kDefaultEmePlayer, encrypted_media, media_type,
                           CurrentKeySystem(), CurrentSourceType(),
-                          kNoSessionToLoad, false, PlayCount::TWICE, kEnded);
+                          kNoSessionToLoad, false, PlayCount::TWICE,
+                          media::kEnded);
   }
 
   void RunInvalidResponseTest() {
@@ -433,7 +439,7 @@ class EncryptedMediaTest
     RunEncryptedMediaTest(
         "encrypted_frame_size_change.html", "frame_size_change-av_enc-v.webm",
         kWebMVorbisAudioVP8Video, CurrentKeySystem(), CurrentSourceType(),
-        kNoSessionToLoad, false, PlayCount::ONCE, kEnded);
+        kNoSessionToLoad, false, PlayCount::ONCE, media::kEnded);
   }
 
   void TestConfigChange(ConfigChangeType config_change_type) {
@@ -455,7 +461,7 @@ class EncryptedMediaTest
         "configChangeType",
         base::IntToString(static_cast<int>(config_change_type)));
     RunEncryptedMediaTestPage("mse_config_change.html", CurrentKeySystem(),
-                              query_params, kEnded);
+                              query_params, media::kEnded);
   }
 
   void TestPolicyCheck() {
@@ -496,12 +502,12 @@ class EncryptedMediaTest
     query_params.push_back(
         std::make_pair("audioFormat", ConvertContainerFormat(audio_format)));
     RunEncryptedMediaTestPage("mse_different_containers.html",
-                              CurrentKeySystem(), query_params, kEnded);
+                              CurrentKeySystem(), query_params, media::kEnded);
   }
 
   void DisableEncryptedMedia() {
     PrefService* pref_service = browser()->profile()->GetPrefs();
-    pref_service->SetBoolean(prefs::kWebKitEncryptedMediaEnabled, false);
+    pref_service->SetBoolean(prefs::kEnableEncryptedMedia, false);
   }
 
  protected:
@@ -535,15 +541,11 @@ INSTANTIATE_TEST_CASE_P(MSE_ExternalClearKey,
                                 Values(SrcType::MSE),
                                 Values(CdmHostType::kPepper)));
 
-// External Clear Key does not work with mojo CDM on Mac yet.
-// See http://crbug.com/736106
-#if !defined(OS_MACOSX)
 INSTANTIATE_TEST_CASE_P(MSE_ExternalClearKey_Mojo,
                         EncryptedMediaTest,
                         Combine(Values(kExternalClearKeyKeySystem),
                                 Values(SrcType::MSE),
                                 Values(CdmHostType::kMojo)));
-#endif  // !defined(OS_MACOSX)
 #else   // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 // To reduce test time, only run ClearKey SRC tests when we are not running
 // ExternalClearKey SRC tests.
@@ -648,8 +650,9 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, EncryptedMediaDisabled) {
   DisableEncryptedMedia();
 
   // Clear Key key system is always supported.
-  std::string expected_title =
-      media::IsClearKey(CurrentKeySystem()) ? kEnded : kEmeNotSupportedError;
+  std::string expected_title = media::IsClearKey(CurrentKeySystem())
+                                   ? media::kEnded
+                                   : kEmeNotSupportedError;
 
   RunEncryptedMediaTest(kDefaultEmePlayer, "bear-a_enc-a.webm",
                         kWebMVorbisAudioOnly, CurrentKeySystem(),
@@ -737,13 +740,9 @@ INSTANTIATE_TEST_CASE_P(Pepper,
                         ECKEncryptedMediaTest,
                         Values(CdmHostType::kPepper));
 
-// External Clear Key does not work with mojo CDM on Mac yet.
-// See http://crbug.com/736106
-#if !defined(OS_MACOSX)
 INSTANTIATE_TEST_CASE_P(Mojo,
                         ECKEncryptedMediaTest,
                         Values(CdmHostType::kMojo));
-#endif  // !defined(OS_MACOSX)
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, InitializeCDMFail) {
   TestNonPlaybackCases(kExternalClearKeyInitializeFailKeySystem,
@@ -753,15 +752,6 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, InitializeCDMFail) {
 // When CDM crashes, we should still get a decode error and all sessions should
 // be closed.
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, CDMCrashDuringDecode) {
-// TODO(xhwang): This test times out when using mojo CDM, possibly due to the
-// crash pop-up dialog. See http://crbug.com/730766
-#if defined(OS_WIN)
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-#endif  // defined(OS_WIN)
-
   IgnorePluginCrash();
   TestNonPlaybackCases(kExternalClearKeyCrashKeySystem,
                        kEmeSessionClosedAndError);
@@ -782,25 +772,12 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, CDMExpectedCrash) {
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, FileIOTest) {
-  // TODO(jrummell): Support file IO in mojo CDM. See http://crbug.com/479923
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
   TestNonPlaybackCases(kExternalClearKeyFileIOTestKeySystem, kUnitTestSuccess);
 }
 
 // TODO(xhwang): Investigate how to fake capturing activities to test the
 // network link detection logic in OutputProtectionProxy.
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, OutputProtectionTest) {
-  // TODO(xhwang): Support output protection in mojo CDM. See
-  // http://crbug.com/479843
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
   TestNonPlaybackCases(kExternalClearKeyOutputProtectionTestKeySystem,
                        kUnitTestSuccess);
 }
@@ -813,7 +790,8 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, PlatformVerificationTest) {
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Renewal) {
-  TestPlaybackCase(kExternalClearKeyRenewalKeySystem, kNoSessionToLoad, kEnded);
+  TestPlaybackCase(kExternalClearKeyRenewalKeySystem, kNoSessionToLoad,
+                   media::kEnded);
 
   // Check renewal message received.
   bool receivedRenewalMessage = false;
@@ -826,22 +804,10 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Renewal) {
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadLoadableSession) {
-  // TODO(jrummell): Support file IO in mojo CDM. See http://crbug.com/479923
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
-  TestPlaybackCase(kExternalClearKeyKeySystem, kLoadableSession, kEnded);
+  TestPlaybackCase(kExternalClearKeyKeySystem, kLoadableSession, media::kEnded);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadUnknownSession) {
-  // TODO(jrummell): Support file IO in mojo CDM. See http://crbug.com/479923
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
   TestPlaybackCase(kExternalClearKeyKeySystem, kUnknownSession,
                    kEmeSessionNotFound);
 }
@@ -865,29 +831,25 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_VP9) {
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, VerifyCdmHostTest) {
-  // TODO(xhwang): Enable CDM host verification in mojo CDM. See
-  // http://crbug.com/730770
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
   TestNonPlaybackCases(kExternalClearKeyVerifyCdmHostTestKeySystem,
                        kUnitTestSuccess);
 }
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, StorageIdTest) {
-  // TODO(jrummell): Support Storage ID in mojo CDM. See
-  // http://crbug.com/478960
-  if (IsUsingMojoCdm()) {
-    DVLOG(0) << "Skipping test; Not working with mojo CDM yet.";
-    return;
-  }
-
   TestNonPlaybackCases(kExternalClearKeyStorageIdTestKeySystem,
                        kUnitTestSuccess);
 }
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-}  // namespace chrome
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MultipleCdmTypes) {
+  if (!IsUsingMojoCdm()) {
+    DVLOG(0) << "Skipping test; Mojo CDM specific.";
+    return;
+  }
+
+  base::StringPairs empty_query_params;
+  RunMediaTestPage("multiple_cdm_types.html", empty_query_params, media::kEnded,
+                   true);
+}
+
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

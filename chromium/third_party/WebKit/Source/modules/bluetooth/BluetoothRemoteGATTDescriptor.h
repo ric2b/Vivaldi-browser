@@ -25,9 +25,7 @@ class ScriptState;
 // BluetoothRemoteGATTDescriptor represents a GATT Descriptor, which is
 // a basic data element that provides further information about a peripheral's
 // characteristic.
-class BluetoothRemoteGATTDescriptor final
-    : public GarbageCollectedFinalized<BluetoothRemoteGATTDescriptor>,
-      public ScriptWrappable {
+class BluetoothRemoteGATTDescriptor final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -49,7 +47,7 @@ class BluetoothRemoteGATTDescriptor final
   ScriptPromise writeValue(ScriptState*, const DOMArrayPiece&);
 
   // Interface required by garbage collection.
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class DescriptorReadValueCallback;

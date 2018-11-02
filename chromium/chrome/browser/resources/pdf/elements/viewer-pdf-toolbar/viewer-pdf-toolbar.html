@@ -5,7 +5,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animation-runner-behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-toolbar/paper-toolbar.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="../icons.html">
 <link rel="import" href="../viewer-bookmarks-content/viewer-bookmarks-content.html">
@@ -22,15 +21,15 @@
       /* We introduce a wrapper aligner element to help with laying out the main
        * toolbar content without changing the bottom-aligned progress bar. */
       #aligner {
-        @apply(--layout-horizontal);
-        @apply(--layout-center);
+        align-items: center;
+        display: flex;
         padding: 0 8px;
         width: 100%;
       }
 
       #title {
         @apply(--layout-flex-5);
-        font-size: 107%;
+        font-size: 0.87rem;
         font-weight: 500;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -68,11 +67,23 @@
         width: 100%;
       }
 
-      paper-toolbar {
-        --paper-toolbar-background: rgb(50, 54, 57);
-        --paper-toolbar-height: 48px;
+      #toolbar {
         @apply(--shadow-elevation-2dp);
+        background-color: rgb(50, 54, 57);
         color: rgb(241, 241, 241);
+        display: flex;
+        height: 48px;
+        padding: 0 16px;
+      }
+
+      #progress-container {
+        bottom: 0;
+        left: 0;
+        margin: 0;
+        position: absolute;
+        right: 0;
+        top: auto;
+        width: auto;
       }
 
       .invisible {
@@ -103,8 +114,8 @@
         }
       }
     </style>
-    <paper-toolbar>
-      <div id="aligner" class="middle">
+    <div id="toolbar">
+      <div id="aligner">
         <span id="title" title="{{docTitle}}">
           <span>{{docTitle}}</span>
         </span>
@@ -145,10 +156,10 @@
           </viewer-toolbar-dropdown>
         </div>
       </div>
-      <div class="bottom fit">
+      <div id="progress-container">
         <paper-progress id="progress" value="{{loadProgress}}"></paper-progress>
       </div>
-    </paper-toolbar>
+    </div>
   </template>
   <script src="viewer-pdf-toolbar.js"></script>
 </dom-module>

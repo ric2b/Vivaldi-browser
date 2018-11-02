@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 
+#include "build/build_config.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/quic_types.h"
@@ -104,12 +105,8 @@ const QuicTime::Delta kTestLinkSmallRTTDelay =
 
 const char* CongestionControlTypeToString(CongestionControlType cc_type) {
   switch (cc_type) {
-    case kCubic:
-      return "CUBIC_PACKETS";
     case kCubicBytes:
       return "CUBIC_BYTES";
-    case kReno:
-      return "RENO_PACKETS";
     case kRenoBytes:
       return "RENO_BYTES";
     case kBBR:
@@ -165,11 +162,10 @@ string TestParamToString(const testing::TestParamInfo<TestParams>& params) {
 std::vector<TestParams> GetTestParams() {
   std::vector<TestParams> params;
   for (const CongestionControlType congestion_control_type :
-       {kBBR, kCubic, kCubicBytes, kReno, kRenoBytes, kPCC}) {
+       {kBBR, kCubicBytes, kRenoBytes, kPCC}) {
     params.push_back(
         TestParams(congestion_control_type, false, false, false, false));
-    if (congestion_control_type != kCubic &&
-        congestion_control_type != kCubicBytes) {
+    if (congestion_control_type != kCubicBytes) {
       continue;
     }
     params.push_back(
@@ -384,7 +380,7 @@ TEST_P(SendAlgorithmTest, AppLimitedBurstsOverWiredNetwork) {
 TEST_P(SendAlgorithmTest, SatelliteNetworkTransfer) {
   CreateSetup(kTestLinkWiredBandwidth, kTestSatellitePropagationDelay,
               kTestWiredBdp);
-  const QuicByteCount kTransferSizeBytes = 20 * 1024 * 1024;
+  const QuicByteCount kTransferSizeBytes = 12 * 1024 * 1024;
   const QuicTime::Delta maximum_elapsed_time =
       EstimatedElapsedTime(kTransferSizeBytes, kTestLinkWiredBandwidth,
                            kTestSatellitePropagationDelay) *

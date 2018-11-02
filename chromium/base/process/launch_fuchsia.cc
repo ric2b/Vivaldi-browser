@@ -5,11 +5,13 @@
 #include "base/process/launch.h"
 
 #include <launchpad/launchpad.h>
-#include <magenta/process.h>
-#include <magenta/processargs.h>
+#include <stdint.h>
 #include <unistd.h>
+#include <zircon/process.h>
+#include <zircon/processargs.h>
 
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/fuchsia/default_job.h"
 #include "base/logging.h"
 
@@ -61,6 +63,8 @@ Process LaunchProcess(const CommandLine& cmdline,
   return LaunchProcess(cmdline.argv(), options);
 }
 
+// TODO(768416): Investigate whether we can make LaunchProcess() create
+// unprivileged processes by default (no implicit capabilities are granted).
 Process LaunchProcess(const std::vector<std::string>& argv,
                       const LaunchOptions& options) {
   std::vector<const char*> argv_cstr;
@@ -74,15 +78,15 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   // status is tracked in the launchpad_t object, and launchpad_go() reports on
   // the final status, and cleans up |lp| (assuming it was even created).
   launchpad_t* lp = nullptr;
-  mx_handle_t job = options.job_handle != MX_HANDLE_INVALID ? options.job_handle
+  zx_handle_t job = options.job_handle != ZX_HANDLE_INVALID ? options.job_handle
                                                             : GetDefaultJob();
-  DCHECK_NE(MX_HANDLE_INVALID, job);
+  DCHECK_NE(ZX_HANDLE_INVALID, job);
 
   launchpad_create(job, argv_cstr[0], &lp);
   launchpad_load_from_file(lp, argv_cstr[0]);
   launchpad_set_args(lp, argv.size(), argv_cstr.data());
 
-  uint32_t to_clone = LP_CLONE_MXIO_NAMESPACE | LP_CLONE_DEFAULT_JOB;
+  uint32_t to_clone = options.clone_flags;
 
   std::unique_ptr<char* []> new_environ;
   char* const empty_environ = nullptr;
@@ -94,19 +98,21 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   if (!options.current_directory.empty()) {
     environ_modifications["PWD"] = options.current_directory.value();
   } else {
-    to_clone |= LP_CLONE_MXIO_CWD;
+    FilePath cwd;
+    base::GetCurrentDirectory(&cwd);
+    environ_modifications["PWD"] = cwd.value();
   }
 
   if (to_clone & LP_CLONE_DEFAULT_JOB) {
     // Override Fuchsia's built in default job cloning behavior with our own
-    // logic which uses |job| instead of mx_job_default().
+    // logic which uses |job| instead of zx_job_default().
     // This logic is based on the launchpad implementation.
-    mx_handle_t job_duplicate = MX_HANDLE_INVALID;
-    mx_status_t status =
-        mx_handle_duplicate(job, MX_RIGHT_SAME_RIGHTS, &job_duplicate);
-    if (status != MX_OK) {
-      LOG(ERROR) << "mx_handle_duplicate(job): "
-                 << mx_status_get_string(status);
+    zx_handle_t job_duplicate = ZX_HANDLE_INVALID;
+    zx_status_t status =
+        zx_handle_duplicate(job, ZX_RIGHT_SAME_RIGHTS, &job_duplicate);
+    if (status != ZX_OK) {
+      LOG(ERROR) << "zx_handle_duplicate(job): "
+                 << zx_status_get_string(status);
       return Process();
     }
     launchpad_add_handle(lp, job_duplicate, PA_HND(PA_JOB_DEFAULT, 0));
@@ -127,26 +133,30 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   bool stdio_already_mapped[3] = {false};
   for (const auto& src_target : options.fds_to_remap) {
     if (static_cast<size_t>(src_target.second) <
-        arraysize(stdio_already_mapped))
+        arraysize(stdio_already_mapped)) {
       stdio_already_mapped[src_target.second] = true;
+    }
     launchpad_clone_fd(lp, src_target.first, src_target.second);
   }
-  for (size_t stdio_fd = 0; stdio_fd < arraysize(stdio_already_mapped);
-       ++stdio_fd) {
-    if (!stdio_already_mapped[stdio_fd])
-      launchpad_clone_fd(lp, stdio_fd, stdio_fd);
+  if (to_clone & LP_CLONE_FDIO_STDIO) {
+    for (size_t stdio_fd = 0; stdio_fd < arraysize(stdio_already_mapped);
+         ++stdio_fd) {
+      if (!stdio_already_mapped[stdio_fd])
+        launchpad_clone_fd(lp, stdio_fd, stdio_fd);
+    }
+    to_clone &= ~LP_CLONE_FDIO_STDIO;
   }
 
   for (const auto& id_and_handle : options.handles_to_transfer) {
     launchpad_add_handle(lp, id_and_handle.handle, id_and_handle.id);
   }
 
-  mx_handle_t proc;
+  zx_handle_t proc;
   const char* errmsg;
-  mx_status_t status = launchpad_go(lp, &proc, &errmsg);
-  if (status != MX_OK) {
+  zx_status_t status = launchpad_go(lp, &proc, &errmsg);
+  if (status != ZX_OK) {
     LOG(ERROR) << "launchpad_go failed: " << errmsg
-               << ", status=" << mx_status_get_string(status);
+               << ", status=" << zx_status_get_string(status);
     return Process();
   }
 

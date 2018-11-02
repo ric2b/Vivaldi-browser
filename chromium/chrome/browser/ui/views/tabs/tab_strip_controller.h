@@ -13,7 +13,7 @@
 
 class GURL;
 class Tab;
-class TabStrip;
+class TabStripImpl;
 
 namespace gfx {
 class Point;
@@ -74,9 +74,6 @@ class TabStripController {
                                      const gfx::Point& p,
                                      ui::MenuSourceType source_type) = 0;
 
-  // Updates the loading animations of all the tabs.
-  virtual void UpdateLoadingAnimations() = 0;
-
   // Returns true if the associated TabStrip's delegate supports tab moving or
   // detaching. Used by the Frame to determine if dragging on the Tab
   // itself should move the window in cases where there's only one
@@ -91,7 +88,7 @@ class TabStripController {
 
   // Return true if this tab strip is compatible with the provided tab strip.
   // Compatible tab strips can transfer tabs during drag and drop.
-  virtual bool IsCompatibleWith(TabStrip* other) const = 0;
+  virtual bool IsCompatibleWith(TabStripImpl* other) const = 0;
 
   // Creates the new tab.
   virtual void CreateNewTab() = 0;

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -6,6 +6,8 @@
 
 #ifndef PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
 #define PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <map>
 #include <memory>

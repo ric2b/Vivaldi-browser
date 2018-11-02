@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_PLATFORM_MEDIA_PIPELINE_H_
-#define CONTENT_COMMON_GPU_MEDIA_PLATFORM_MEDIA_PIPELINE_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_PLATFORM_MEDIA_PIPELINE_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_PLATFORM_MEDIA_PIPELINE_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <string>
 
@@ -21,7 +24,7 @@ struct PlatformAudioConfig;
 struct PlatformVideoConfig;
 }
 
-namespace content {
+namespace media {
 class IPCDataSource;
 
 // An interface for the media pipeline using decoder infrastructure available
@@ -31,23 +34,23 @@ class IPCDataSource;
 class MEDIA_EXPORT PlatformMediaPipeline {
  public:
   using AudioConfigChangedCB =
-      base::Callback<void(const media::PlatformAudioConfig& audio_config)>;
+      base::Callback<void(const PlatformAudioConfig& audio_config)>;
   using VideoConfigChangedCB =
-      base::Callback<void(const media::PlatformVideoConfig& video_config)>;
+      base::Callback<void(const PlatformVideoConfig& video_config)>;
 
   using InitializeCB =
       base::Callback<void(bool success,
                           int bitrate,
-                          const media::PlatformMediaTimeInfo& time_info,
-                          const media::PlatformAudioConfig& audio_config,
-                          const media::PlatformVideoConfig& video_config)>;
+                          const PlatformMediaTimeInfo& time_info,
+                          const PlatformAudioConfig& audio_config,
+                          const PlatformVideoConfig& video_config)>;
   // A type of a callback ensuring that valid GL context is present. Relevant
   // for methods which use OpenGL API (e.g. dealing with hardware accelerated
   // video decoding). Return value indicates if GL context is available to use.
   using MakeGLContextCurrentCB = base::Callback<bool(void)>;
   // Passing a NULL |buffer| indicates a read/decoding error.
   using ReadDataCB =
-      base::Callback<void(const scoped_refptr<media::DataBuffer>& buffer)>;
+      base::Callback<void(const scoped_refptr<DataBuffer>& buffer)>;
   using SeekCB = base::Callback<void(bool success)>;
 
   virtual ~PlatformMediaPipeline() {}
@@ -64,6 +67,6 @@ class MEDIA_EXPORT PlatformMediaPipeline {
   virtual void Seek(base::TimeDelta time, const SeekCB& seek_cb) = 0;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_PLATFORM_MEDIA_PIPELINE_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_PLATFORM_MEDIA_PIPELINE_H_

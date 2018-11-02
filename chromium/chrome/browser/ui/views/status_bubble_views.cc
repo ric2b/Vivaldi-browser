@@ -39,13 +39,10 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
-#if defined(USE_ASH)
-#include "ash/shell.h"            // nogncheck
-#include "ash/wm/window_state.h"  // nogncheck
-#endif
-
-#if defined(USE_AURA)
-#include "services/ui/public/cpp/property_type_converters.h"  // nogncheck
+#if defined(OS_CHROMEOS)
+#include "ash/shell.h"                                           // mash-ok
+#include "ash/wm/window_state.h"                                 // mash-ok
+#include "services/ui/public/cpp/property_type_converters.h"     // nogncheck
 #include "services/ui/public/interfaces/window_manager.mojom.h"  // nogncheck
 #endif
 
@@ -657,7 +654,7 @@ void StatusBubbleViews::Init() {
     params.parent = frame->GetNativeView();
     params.context = frame->GetNativeWindow();
     params.name = "StatusBubble";
-#if defined(USE_AURA)
+#if defined(OS_CHROMEOS)
     params.mus_properties
         [ui::mojom::WindowManager::kWindowIgnoredByShelf_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(true);
@@ -668,12 +665,10 @@ void StatusBubbleViews::Init() {
     popup_->SetOpacity(0.f);
     popup_->SetContentsView(view_);
 #if defined(OS_CHROMEOS)
+    // Mash is handled via mus_properties.
     if (ash::Shell::HasInstance()) {
       ash::wm::GetWindowState(popup_->GetNativeWindow())
           ->set_ignored_by_shelf(true);
-    } else {
-      // TODO: need mash implementation.
-      NOTIMPLEMENTED();
     }
 #endif
     RepositionPopup();
@@ -799,8 +794,13 @@ void StatusBubbleViews::Hide() {
     view_->Hide();
 }
 
-void StatusBubbleViews::MouseMoved(const gfx::Point& location,
-                                   bool left_content) {
+void StatusBubbleViews::MouseMoved(bool left_content) {
+  MouseMovedAt(display::Screen::GetScreen()->GetCursorScreenPoint(),
+               left_content);
+}
+
+void StatusBubbleViews::MouseMovedAt(const gfx::Point& location,
+                                     bool left_content) {
   contains_mouse_ = !left_content;
   if (left_content) {
     RepositionPopup();

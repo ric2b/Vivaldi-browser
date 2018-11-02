@@ -14,7 +14,7 @@
 namespace blink {
 
 class LocalFrame;
-class MakeCredentialOptions;
+class MakePublicKeyCredentialOptions;
 class PublicKeyCredentialRequestOptions;
 
 class WebAuthenticationClient final
@@ -30,13 +30,13 @@ class WebAuthenticationClient final
   virtual ~WebAuthenticationClient();
 
   // WebAuthentication.idl
-  void DispatchMakeCredential(const MakeCredentialOptions&,
+  void DispatchMakeCredential(const MakePublicKeyCredentialOptions&,
                               std::unique_ptr<PublicKeyCallbacks>);
 
   void GetAssertion(const PublicKeyCredentialRequestOptions&,
                     PublicKeyCallbacks*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   void OnAuthenticatorConnectionError();

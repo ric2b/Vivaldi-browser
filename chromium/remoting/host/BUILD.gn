@@ -176,8 +176,6 @@ static_library("host") {
     "host_power_save_blocker.h",
     "host_secret.cc",
     "host_secret.h",
-    "host_session_options.cc",
-    "host_session_options.h",
     "host_status_logger.cc",
     "host_status_logger.h",
     "host_status_monitor.cc",
@@ -365,11 +363,10 @@ static_library("host") {
       "me2me_desktop_environment.cc",
       "me2me_desktop_environment.h",
     ]
-    deps += [ "//remoting/host/chromeos" ]
-
-    if (use_ash) {
-      deps += [ "//ash" ]
-    }
+    deps += [
+      "//ash",
+      "//remoting/host/chromeos",
+    ]
 
     if (use_ozone) {
       deps += [ "//ui/ozone" ]
@@ -399,6 +396,9 @@ static_library("host") {
 
   if (is_win) {
     deps += [
+      # On Windows, we use //media/gpu/MediaFoundationVideoEncodeAcceleratorWin
+      # to detect whether HW encoder is supported by the system.
+      "//media",
       "//remoting/host/win",
       "//remoting/host/win:messages",
       "//remoting/host/win:remoting_lib_idl",
@@ -474,7 +474,6 @@ source_set("unit_tests") {
     "host_experiment_session_plugin_unittest.cc",
     "host_extension_session_manager_unittest.cc",
     "host_power_save_blocker_unittest.cc",
-    "host_session_options_unittest.cc",
     "host_status_logger_unittest.cc",
     "ipc_desktop_environment_unittest.cc",
     "it2me/it2me_confirmation_dialog_proxy_unittest.cc",
@@ -545,7 +544,9 @@ source_set("unit_tests") {
 
   if (enable_me2me_host) {
     sources += [ "evaluate_capability_unittest.cc" ]
-    data_deps = [ "//remoting/test:capability_test_stub" ]
+    data_deps = [
+      "//remoting/test:capability_test_stub",
+    ]
   }
 }
 
@@ -740,7 +741,10 @@ if (enable_me2me_host) {
     }
 
     if (remoting_multi_process != 0) {
-      deps += [ "//mojo/edk/system" ]
+      deps += [
+        "//mojo/edk/embedder:headers",
+        "//mojo/edk/system",
+      ]
     }
   }
 

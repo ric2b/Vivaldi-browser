@@ -8,6 +8,7 @@
 #include "core/animation/LengthInterpolationFunctions.h"
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/LengthFunctions.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/wtf/PtrUtil.h"
@@ -63,11 +64,11 @@ InterpolationValue MaybeConvertKeyword(
     CSSValueID value_id,
     const StyleResolverState& state,
     InterpolationType::ConversionCheckers& conversion_checkers) {
-  if (FontSize::IsValidValueID(value_id)) {
+  if (FontSizeFunctions::IsValidValueID(value_id)) {
     bool is_monospace = state.Style()->GetFontDescription().IsMonospace();
     conversion_checkers.push_back(IsMonospaceChecker::Create(is_monospace));
     return ConvertFontSize(state.GetFontBuilder().FontSizeForKeyword(
-        FontSize::KeywordSize(value_id), is_monospace));
+        FontSizeFunctions::KeywordSize(value_id), is_monospace));
   }
 
   if (value_id != CSSValueSmaller && value_id != CSSValueLarger)
@@ -96,7 +97,7 @@ InterpolationValue CSSFontSizeInterpolationType::MaybeConvertNeutral(
 InterpolationValue CSSFontSizeInterpolationType::MaybeConvertInitial(
     const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
-  return MaybeConvertKeyword(FontSize::InitialValueID(), state,
+  return MaybeConvertKeyword(FontSizeFunctions::InitialValueID(), state,
                              conversion_checkers);
 }
 

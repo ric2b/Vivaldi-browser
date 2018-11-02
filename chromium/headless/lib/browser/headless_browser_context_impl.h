@@ -11,10 +11,11 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/unguessable_token.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
+#include "headless/lib/browser/headless_network_conditions.h"
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_browser_context.h"
@@ -47,11 +48,14 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
-  void SetFrameTreeNodeId(int render_process_id,
-                          int render_frame_routing_id,
-                          int frame_tree_node_id);
+  void SetDevToolsFrameToken(int render_process_id,
+                             int render_frame_routing_id,
+                             const base::UnguessableToken& devtools_frame_token,
+                             int frame_tree_node_id);
 
-  void RemoveFrameTreeNode(int render_process_id, int render_frame_routing_id);
+  void RemoveDevToolsFrameToken(int render_process_id,
+                                int render_frame_routing_id,
+                                int frame_tree_node_id);
 
   // BrowserContext implementation:
   std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
@@ -65,6 +69,7 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
+  content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
   content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
       override;
@@ -91,20 +96,30 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   HeadlessBrowserImpl* browser() const;
   const HeadlessBrowserContextOptions* options() const;
 
-  // Returns the FrameTreeNode id for the corresponding RenderFrameHost or -1
-  // if it can't be found. Can be called on any thread.
-  int GetFrameTreeNodeId(int render_process_id, int render_frame_id) const;
+  // Returns the DevTools frame token for the corresponding RenderFrameHost or
+  // null if can't be found. Can be called on any thread.
+  const base::UnguessableToken* GetDevToolsFrameToken(
+      int render_process_id,
+      int render_frame_id) const;
 
-  // Returns the FrameTreeNode id corresponding to |devtools_id| or -1 if it
-  // can't be found. Must be called on the IO thread.
-  int GetFrameTreeNodeIdForDevToolsFrameId(
-      const std::string& devtools_id) const;
+  // Returns the DevTools frame token for the corresponding frame tree node id
+  // or null if can't be found. Can be called on any thread.
+  const base::UnguessableToken* GetDevToolsFrameTokenForFrameTreeNodeId(
+      int frame_tree_node_id) const;
+
+  void SetRemoveHeaders(bool should_remove_headers);
+  bool ShouldRemoveHeaders() const;
 
   void NotifyChildContentsCreated(HeadlessWebContentsImpl* parent,
                                   HeadlessWebContentsImpl* child);
 
   // This will be called on the IO thread.
-  void NotifyUrlRequestFailed(net::URLRequest* request, int net_error);
+  void NotifyUrlRequestFailed(net::URLRequest* request,
+                              int net_error,
+                              bool canceled_by_devtools);
+
+  void SetNetworkConditions(HeadlessNetworkConditions conditions);
+  HeadlessNetworkConditions GetNetworkConditions() override;
 
  private:
   HeadlessBrowserContextImpl(
@@ -121,20 +136,26 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   base::FilePath path_;
   base::Lock observers_lock_;
   base::ObserverList<Observer> observers_;
+  bool should_remove_headers_;
 
   std::unordered_map<std::string, std::unique_ptr<HeadlessWebContents>>
       web_contents_map_;
 
-  // Guards |frame_tree_node_map_| from being concurrently written on the UI
-  // thread and read on the IO thread.
-  // TODO(alexclarke): Remove if we can add FrameTreeNode ID to
-  // URLRequestUserData. See https://crbug.com/715541
-  mutable base::Lock frame_tree_node_map_lock_;
-  std::map<std::pair<int, int>, int> frame_tree_node_map_;
+  // Guards |devtools_frame_token_map_| from being concurrently written on the
+  // UI thread and read on the IO thread.
+  // TODO(alexclarke): Remove if we can add DevTools frame token ID to
+  // ResourceRequestInfo. See https://crbug.com/715541
+  mutable base::Lock devtools_frame_token_map_lock_;
+  base::flat_map<std::pair<int, int>, base::UnguessableToken>
+      devtools_frame_token_map_;
+  base::flat_map<int, base::UnguessableToken>
+      frame_tree_node_id_to_devtools_frame_token_map_;
 
   std::unique_ptr<content::PermissionManager> permission_manager_;
 
   std::string id_;
+
+  HeadlessNetworkConditions network_conditions_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserContextImpl);
 };

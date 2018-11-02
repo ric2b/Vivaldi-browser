@@ -5,13 +5,13 @@
 #ifndef MediaDevices_h
 #define MediaDevices_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "core/dom/SuspendableObject.h"
+#include "core/dom/PausableObject.h"
 #include "core/dom/events/EventTarget.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "platform/AsyncMethodRunner.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 
 namespace blink {
 
@@ -23,7 +23,7 @@ class UserMediaController;
 class MODULES_EXPORT MediaDevices final
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<MediaDevices>,
-      public SuspendableObject {
+      public PausableObject {
   USING_GARBAGE_COLLECTED_MIXIN(MediaDevices);
   DEFINE_WRAPPERTYPEINFO();
   USING_PRE_FINALIZER(MediaDevices, Dispose);
@@ -47,12 +47,12 @@ class MODULES_EXPORT MediaDevices final
   // ScriptWrappable
   bool HasPendingActivity() const override;
 
-  // SuspendableObject overrides.
+  // PausableObject overrides.
   void ContextDestroyed(ExecutionContext*) override;
-  void Suspend() override;
-  void Resume() override;
+  void Pause() override;
+  void Unpause() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(devicechange);
 
@@ -74,6 +74,8 @@ class MODULES_EXPORT MediaDevices final
 
   bool observing_;
   bool stopped_;
+  // Async runner may be null when there is no valid execution context.
+  // No async work may be posted in this scenario.
   Member<AsyncMethodRunner<MediaDevices>> dispatch_scheduled_event_runner_;
   HeapVector<Member<Event>> scheduled_events_;
 };

@@ -4,6 +4,7 @@
 
 #include "tools/gn/template.h"
 
+#include <memory>
 #include <utility>
 
 #include "tools/gn/err.h"
@@ -22,8 +23,7 @@ Template::Template(const Scope* scope, const FunctionCallNode* def)
 Template::Template(std::unique_ptr<Scope> scope, const FunctionCallNode* def)
     : closure_(std::move(scope)), definition_(def) {}
 
-Template::~Template() {
-}
+Template::~Template() = default;
 
 Value Template::Invoke(Scope* scope,
                        const FunctionCallNode* invocation,
@@ -38,7 +38,7 @@ Value Template::Invoke(Scope* scope,
 
   // First run the invocation's block. Need to allocate the scope on the heap
   // so we can pass ownership to the template.
-  std::unique_ptr<Scope> invocation_scope(new Scope(scope));
+  std::unique_ptr<Scope> invocation_scope = std::make_unique<Scope>(scope);
   if (!FillTargetBlockScope(scope, invocation, template_name,
                             block, args, invocation_scope.get(), err))
     return Value();

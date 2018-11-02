@@ -55,17 +55,6 @@ public class CastMessageHandlerTest {
 
     private static final String SESSION_ID = "SESSION_ID";
     private static final String INVALID_SESSION_ID = "INVALID_SESSION_ID";
-    private static final String APP_STATUS = "status";
-    private static final String ORIGIN = "http://www.example.com/";
-    private static final String SOURCE_ID = new StringBuilder()
-            .append("https://google.com/cast#")
-            .append("__castAppId__=CCCCCCCC/")
-            .append("__castClientId__=00000000000000001/")
-            .append("__castAutoJoinPolicy__=origin_scoped/")
-            .append("__castLaunchTimeout__=10000")
-            .toString();
-    private static final int TAB_ID = 1;
-    private static final int CALLBACK_ID = 1;
     private static final String CLIENT_ID1 = "00000000000000001";
     private static final String CLIENT_ID2 = "00000000000000002";
     private static final String INVALID_CLIENT_ID = "xxxxxxxxxxxxxxxxx";
@@ -99,11 +88,13 @@ public class CastMessageHandlerTest {
         clientIds.add(CLIENT_ID1);
         clientIds.add(CLIENT_ID2);
         doAnswer(new Answer() {
-                public Object answer(InvocationOnMock invocation) {
-                    return clientIds;
-                }
-            })
-                .when(mRouteProvider).getClients();
+            @Override
+            public Object answer(InvocationOnMock invocation) {
+                return clientIds;
+            }
+        })
+                .when(mRouteProvider)
+                .getClients();
         doNothing().when(mRouteProvider).onMessage(anyString(), anyString());
         doNothing().when(mRouteProvider).onMessageSentResult(anyBoolean(), anyInt());
     }
@@ -274,8 +265,9 @@ public class CastMessageHandlerTest {
                 any(JSONObject.class), anyString(), anyString(), anyInt());
         for (String messageType : CastMessageHandler.getMediaMessageTypesForTest()) {
             // TODO(zqzhang): SET_VOLUME and STOP should not reach here?
-            if ("MEDIA_SET_VOLUME".equals(messageType) || "STOP_MEDIA".equals(messageType))
+            if ("MEDIA_SET_VOLUME".equals(messageType) || "STOP_MEDIA".equals(messageType)) {
                 continue;
+            }
             JSONObject innerMessage = new JSONObject().put("type", messageType);
             JSONObject message = buildCastV2Message(CLIENT_ID1, innerMessage);
             assertTrue(mMessageHandler.handleCastV2Message(message));

@@ -4,22 +4,41 @@
 
 #include "core/html/HTMLImageFallbackHelper.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/ElementRareData.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/Text.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLImageLoader.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLSpanElement.h"
 #include "core/html/HTMLStyleElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
 using namespace HTMLNames;
+
+static bool NoImageSourceSpecified(const Element& element) {
+  bool no_src_specified = !element.hasAttribute(srcAttr) ||
+                          element.getAttribute(srcAttr).IsNull() ||
+                          element.getAttribute(srcAttr).IsEmpty();
+  bool no_srcset_specified = !element.hasAttribute(srcsetAttr) ||
+                             element.getAttribute(srcsetAttr).IsNull();
+  return no_src_specified && no_srcset_specified;
+}
+
+static bool ElementRepresentsNothing(const Element& element) {
+  bool alt_is_set = !ToHTMLElement(element).AltText().IsNull();
+  bool alt_is_empty = alt_is_set && ToHTMLElement(element).AltText().IsEmpty();
+  bool src_is_set = !NoImageSourceSpecified(element);
+  if (src_is_set && alt_is_empty)
+    return true;
+  return !src_is_set && (!alt_is_set || alt_is_empty);
+}
 
 static bool ImageSmallerThanAltImage(int pixels_for_alt_image,
                                      const Length width,
@@ -60,9 +79,9 @@ void HTMLImageFallbackHelper::CreateAltTextShadowTree(Element& element) {
   alt_text->AppendChild(text);
 }
 
-RefPtr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
+scoped_refptr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
     Element& element,
-    RefPtr<ComputedStyle> new_style) {
+    scoped_refptr<ComputedStyle> new_style) {
   // If we have an author shadow root or have not created the UA shadow root
   // yet, bail early. We can't use ensureUserAgentShadowRoot() here because that
   // would alter the DOM tree during style recalc.
@@ -150,22 +169,33 @@ RefPtr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
                            : "right"));
     }
   } else {
-    // "If the element is an img element that represents nothing and the user
-    // agent does not expect this to change the user agent is expected to treat
-    // the element as an empty inline element."
-    //  - We achieve this by hiding the broken image so that the span is empty.
-    // "If the element is an img element that represents some text and the user
-    // agent does not expect this to change the user agent is expected to treat
-    // the element as a non-replaced phrasing element whose content is the text,
-    // optionally with an icon indicating that an image is missing, so that the
-    // user can request the image be displayed or investigate why it is not
-    // rendering."
-    //  - We opt not to display an icon, like Firefox.
     if (new_style->Display() == EDisplay::kInline) {
       new_style->SetWidth(Length());
       new_style->SetHeight(Length());
     }
-    broken_image->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueNone);
+    if (ElementRepresentsNothing(element)) {
+      // "If the element is an img element that represents nothing and the user
+      // agent does not expect this to change the user agent is expected to
+      // treat the element as an empty inline element."
+      //  - We achieve this by hiding the broken image so that the span is
+      //  empty.
+      broken_image->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueNone);
+    } else {
+      // "If the element is an img element that represents some text and the
+      // user agent does not expect this to change the user agent is expected to
+      // treat the element as a non-replaced phrasing element whose content is
+      // the text, optionally with an icon indicating that an image is missing,
+      // so that the user can request the image be displayed or investigate why
+      // it is not rendering."
+      broken_image->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueInline);
+      // Make sure the broken image icon appears on the appropriate side of
+      // the image for the element's writing direction.
+      broken_image->SetInlineStyleProperty(
+          CSSPropertyFloat,
+          AtomicString(new_style->Direction() == TextDirection::kLtr
+                           ? "left"
+                           : "right"));
+    }
   }
 
   return new_style;

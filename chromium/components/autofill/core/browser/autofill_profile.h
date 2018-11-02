@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/address.h"
@@ -27,7 +28,8 @@ namespace autofill {
 // implements the FormGroup interface so that owners of this object can request
 // form information from the profile, and the profile will delegate the request
 // to the requested form group type.
-class AutofillProfile : public AutofillDataModel {
+class AutofillProfile : public AutofillDataModel,
+                        public base::SupportsWeakPtr<AutofillProfile> {
  public:
   enum RecordType {
     // A profile stored and editable locally.
@@ -99,7 +101,7 @@ class AutofillProfile : public AutofillDataModel {
   bool EqualsSansOrigin(const AutofillProfile& profile) const;
 
   // Same as operator==, but ignores differences in guid and cares about
-  // differences in usage stats.
+  // differences in usage stats and validity state.
   bool EqualsForSyncPurposes(const AutofillProfile& profile) const;
 
   // Equality operators compare GUIDs, origins, language code, and the contents
@@ -164,10 +166,10 @@ class AutofillProfile : public AutofillDataModel {
   // Builds inferred label from the first |num_fields_to_include| non-empty
   // fields in |label_fields|. Uses as many fields as possible if there are not
   // enough non-empty fields.
-  base::string16 ConstructInferredLabel(
-      const std::vector<ServerFieldType>& label_fields,
-      size_t num_fields_to_include,
-      const std::string& app_locale) const;
+  base::string16 ConstructInferredLabel(const ServerFieldType* label_fields,
+                                        const size_t label_fields_size,
+                                        size_t num_fields_to_include,
+                                        const std::string& app_locale) const;
 
   const std::string& language_code() const { return language_code_; }
   void set_language_code(const std::string& language_code) {
@@ -197,16 +199,20 @@ class AutofillProfile : public AutofillDataModel {
   void set_has_converted(bool has_converted) { has_converted_ = has_converted; }
 
   // Returns the validity state of the specified autofill type.
-  ValidityState GetValidityState(ServerFieldType type);
+  ValidityState GetValidityState(ServerFieldType type) const;
 
   // Sets the validity state of the specified autofill type.
   void SetValidityState(ServerFieldType type, ValidityState validity);
 
   // Returns whether autofill does the validation of the specified |type|.
-  bool IsValidationSupportedForType(ServerFieldType type);
+  bool IsValidationSupportedForType(ServerFieldType type) const;
 
   // Returns the bitfield value representing the validity state of this profile.
-  int GetValidityBitfieldValue();
+  int GetValidityBitfieldValue() const;
+
+  // Sets the validity state of the profile based on the specified
+  // |bitfield_value|.
+  void SetValidityFromBitfieldValue(int bitfield_value);
 
  private:
   typedef std::vector<const FormGroup*> FormGroupList;

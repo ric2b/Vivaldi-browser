@@ -10,7 +10,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/vr/elements/render_text_wrapper.h"
-#include "chrome/browser/vr/toolbar_state.h"
+#include "chrome/browser/vr/model/color_scheme.h"
+#include "chrome/browser/vr/model/toolbar_state.h"
 #include "components/security_state/core/security_state.h"
 #include "components/toolbar/vector_icons.h"
 #include "components/url_formatter/url_formatter.h"
@@ -65,9 +66,8 @@ class TestUrlBarTexture : public UrlBarTexture {
                              const url::Parsed& parsed,
                              security_state::SecurityLevel security_level,
                              vr::RenderTextWrapper* render_text,
-                             const ColorScheme& color_scheme) {
-    ApplyUrlStyling(formatted_url, parsed, security_level, render_text,
-                    color_scheme);
+                             const UrlBarColors& colors) {
+    ApplyUrlStyling(formatted_url, parsed, security_level, render_text, colors);
   }
 
   void SetForceFontFallbackFailure(bool force) {
@@ -82,7 +82,7 @@ class TestUrlBarTexture : public UrlBarTexture {
 
     gfx::Size texture_size = GetPreferredTextureSize(kUrlWidthPixels);
     gfx::FontList font_list;
-    if (!GetFontList(texture_size.height(), text, &font_list))
+    if (!GetDefaultFontList(texture_size.height(), text, &font_list))
       return 0;
 
     return font_list.GetFonts().size();
@@ -98,6 +98,7 @@ class TestUrlBarTexture : public UrlBarTexture {
   const base::string16& security_text() { return rendered_security_text_; }
   const gfx::Rect url_rect() { return rendered_url_text_rect_; }
   const gfx::Rect security_rect() { return rendered_security_text_rect_; }
+  bool url_dirty() const { return UrlBarTexture::url_dirty(); }
 
  private:
   void OnUnsupportedFeature(UiUnsupportedMode mode) {
@@ -111,6 +112,9 @@ TestUrlBarTexture::TestUrlBarTexture()
     : UrlBarTexture(base::Bind(&TestUrlBarTexture::OnUnsupportedFeature,
                                base::Unretained(this))) {
   gfx::FontList::SetDefaultFontDescription("Arial, Times New Roman, 15px");
+  SetColors(ColorScheme::GetColorScheme(ColorScheme::kModeNormal).url_bar);
+  SetBackgroundColor(SK_ColorBLACK);
+  SetForegroundColor(SK_ColorWHITE);
 }
 
 class MockRenderText : public RenderTextWrapper {
@@ -142,18 +146,19 @@ class UrlEmphasisTest : public testing::Test {
     EXPECT_EQ(formatted_url, base::UTF8ToUTF16(expected_string));
     TestUrlBarTexture::TestUrlStyling(
         formatted_url, parsed, level, &mock_,
-        ColorScheme::GetColorScheme(ColorScheme::kModeNormal));
+        ColorScheme::GetColorScheme(ColorScheme::kModeNormal).url_bar);
     TestUrlBarTexture::TestUrlStyling(
         formatted_url, parsed, level, &mock_,
-        ColorScheme::GetColorScheme(ColorScheme::kModeIncognito));
+        ColorScheme::GetColorScheme(ColorScheme::kModeIncognito).url_bar);
   }
 
   testing::InSequence in_sequence_;
   MockRenderText mock_;
 };
 
-#if !defined(OS_LINUX)
+#if !defined(OS_LINUX) && !defined(OS_WIN)
 // TODO(crbug/731894): This test does not work on Linux.
+// TODO(crbug/770893): This test does not work on Windows.
 TEST(UrlBarTextureTest, WillNotFailOnNonAsciiURLs) {
   TestUrlBarTexture texture;
   EXPECT_EQ(3lu, texture.GetNumberOfFontFallbacksForURL(
@@ -268,29 +273,9 @@ TEST(UrlBarTextureTest, MaliciousRTLIsRenderedLTR) {
   }
 }
 
-TEST(UrlBarTexture, ElisionIsAnUnsupportedMode) {
-  TestUrlBarTexture texture;
-  texture.DrawURL(GURL(
-      "https://"
-      "thereisnopossiblewaythatthishostnamecouldbecontainedinthelimitedspacetha"
-      "tweareaffordedtousitsreallynotsomethingweshouldconsiderorplanfororpinour"
-      "hopesonlestwegetdisappointedor.sad.com"));
-  EXPECT_EQ(UiUnsupportedMode::kCouldNotElideURL, texture.unsupported_mode());
-}
-
 TEST(UrlBarTexture, ShortURLAreIndeedSupported) {
   TestUrlBarTexture texture;
   texture.DrawURL(GURL("https://short.com/"));
-  EXPECT_EQ(UiUnsupportedMode::kCount, texture.unsupported_mode());
-}
-
-TEST(UrlBarTexture, LongPathsDoNotRequireElisionAndAreSupported) {
-  TestUrlBarTexture texture;
-  texture.DrawURL(GURL(
-      "https://something.com/"
-      "thereisnopossiblewaythatthishostnamecouldbecontainedinthelimitedspacetha"
-      "tweareaffordedtousitsreallynotsomethingweshouldconsiderorplanfororpinour"
-      "hopesonlestwegetdisappointedorsad.com"));
   EXPECT_EQ(UiUnsupportedMode::kCount, texture.unsupported_mode());
 }
 
@@ -336,6 +321,16 @@ TEST(UrlBarTexture, OfflinePage) {
   EXPECT_EQ(texture.url_rect(), online_url_rect);
   EXPECT_TRUE(texture.security_text().empty());
   EXPECT_EQ(texture.url_text(), base::UTF8ToUTF16("https://host.com/page"));
+}
+
+TEST(UrlBarTexture, ColorChange) {
+  TestUrlBarTexture texture;
+  texture.DrawURL(GURL("https://short.com/"));
+  EXPECT_FALSE(texture.url_dirty());
+  UrlBarColors colors;
+  colors.insecure = SK_ColorRED;
+  texture.SetColors(colors);
+  EXPECT_TRUE(texture.url_dirty());
 }
 
 }  // namespace vr

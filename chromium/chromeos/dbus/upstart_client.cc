@@ -28,62 +28,74 @@ class UpstartClientImpl : public UpstartClient {
  public:
   UpstartClientImpl() : weak_ptr_factory_(this) {}
 
-  ~UpstartClientImpl() override {}
+  ~UpstartClientImpl() override = default;
 
   // UpstartClient override.
   void StartAuthPolicyService() override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStartMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
-    writer.AppendBool(true);  // Wait for response.
-    auth_proxy_->CallMethod(&method_call,
-                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                            base::Bind(&UpstartClientImpl::HandleAuthResponse,
-                                       weak_ptr_factory_.GetWeakPtr()));
+    writer.AppendBool(true /* wait for response */);
+    auth_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpstartClientImpl::HandleAuthResponse,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void RestartAuthPolicyService() override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartRestartMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
-    writer.AppendBool(true);  // Wait for response.
-    auth_proxy_->CallMethod(&method_call,
-                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                            base::Bind(&UpstartClientImpl::HandleAuthResponse,
-                                       weak_ptr_factory_.GetWeakPtr()));
+    writer.AppendBool(true /* wait for response */);
+    auth_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpstartClientImpl::HandleAuthResponse,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
-  void StartMediaAnalytics(const UpstartCallback& callback) override {
+  void StartMediaAnalytics(const std::vector<std::string>& upstart_env,
+                           const UpstartCallback& callback) override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStartMethod);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendArrayOfStrings(std::vector<std::string>());
-    writer.AppendBool(true);  // Wait for response.
+    writer.AppendArrayOfStrings(upstart_env);
+    writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpstartClientImpl::HandleStartMediaAnalyticsResponse,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void RestartMediaAnalytics(const UpstartCallback& callback) override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartRestartMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
-    writer.AppendBool(true);  // Wait for response.
+    writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpstartClientImpl::HandleStartMediaAnalyticsResponse,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void StopMediaAnalytics() override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStopMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
-    writer.AppendBool(true);  // Wait for response.
+    writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&UpstartClientImpl::HandleStopMediaAnalyticsResponse,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&UpstartClientImpl::HandleStopMediaAnalyticsResponse,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  void StopMediaAnalytics(const UpstartCallback& callback) override {
+    dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStopMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendArrayOfStrings(std::vector<std::string>());
+    writer.AppendBool(true /* wait for response */);
+    ma_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
  protected:
@@ -100,8 +112,8 @@ class UpstartClientImpl : public UpstartClient {
     LOG_IF(ERROR, !response) << "Failed to signal Upstart, response is null";
   }
 
-  void HandleStartMediaAnalyticsResponse(const UpstartCallback& callback,
-                                         dbus::Response* response) {
+  void HandleUpstartMediaAnalyticsResponse(const UpstartCallback& callback,
+                                           dbus::Response* response) {
     if (!response) {
       LOG(ERROR) << "Failed to signal Upstart, response is null.";
       callback.Run(false);
@@ -127,9 +139,9 @@ class UpstartClientImpl : public UpstartClient {
 
 }  // namespace
 
-UpstartClient::UpstartClient() {}
+UpstartClient::UpstartClient() = default;
 
-UpstartClient::~UpstartClient() {}
+UpstartClient::~UpstartClient() = default;
 
 // static
 UpstartClient* UpstartClient::Create() {

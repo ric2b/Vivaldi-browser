@@ -86,7 +86,7 @@ class SubtreeLayoutScope;
 // LayoutTableCell is positioned with respect to the enclosing
 // LayoutTableSection. See callers of
 // LayoutTableSection::setLogicalPositionForCell() for when it is placed.
-class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
+class CORE_EXPORT LayoutTableCell : public LayoutBlockFlow {
  public:
   explicit LayoutTableCell(Element*);
 
@@ -345,20 +345,24 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   void ComputePreferredLogicalWidths() override;
 
-  void AddLayerHitTestRects(LayerHitTestRects&,
-                            const PaintLayer* current_composited_layer,
-                            const LayoutPoint& layer_offset,
-                            const LayoutRect& container_rect) const override;
+  void AddLayerHitTestRects(
+      LayerHitTestRects&,
+      const PaintLayer* current_composited_layer,
+      const LayoutPoint& layer_offset,
+      TouchAction supported_fast_actions,
+      const LayoutRect& container_rect,
+      TouchAction container_whitelisted_touch_action) const override;
 
   PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
 
- private:
-  friend class LayoutTableCellTest;
-
+ protected:
   bool IsOfType(LayoutObjectType type) const override {
     return type == kLayoutObjectTableCell || LayoutBlockFlow::IsOfType(type);
   }
+
+ private:
+  friend class LayoutTableCellTest;
 
   void WillBeRemovedFromTree() override;
 
@@ -462,7 +466,7 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   // They are called during UpdateCollapsedBorderValues(). The 'start', 'end',
   // 'before', 'after' directions are all in the table's inline and block
   // directions.
-  inline CSSPropertyID ResolveBorderProperty(CSSPropertyID) const;
+  inline CSSPropertyID ResolveBorderProperty(const CSSProperty&) const;
   CollapsedBorderValue ComputeCollapsedStartBorder() const;
   CollapsedBorderValue ComputeCollapsedEndBorder() const;
   CollapsedBorderValue ComputeCollapsedBeforeBorder() const;

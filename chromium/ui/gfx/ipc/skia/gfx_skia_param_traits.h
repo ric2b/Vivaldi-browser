@@ -12,6 +12,7 @@
 #include "ui/gfx/ipc/skia/gfx_skia_ipc_export.h"
 
 class SkBitmap;
+struct SkImageInfo;
 
 namespace base {
 class Pickle;
@@ -25,9 +26,18 @@ class Transform;
 namespace IPC {
 
 template <>
+struct GFX_SKIA_IPC_EXPORT ParamTraits<SkImageInfo> {
+  using param_type = SkImageInfo;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
 struct GFX_SKIA_IPC_EXPORT ParamTraits<SkBitmap> {
   using param_type = SkBitmap;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -38,7 +48,6 @@ struct GFX_SKIA_IPC_EXPORT ParamTraits<SkBitmap> {
 template <>
 struct GFX_SKIA_IPC_EXPORT ParamTraits<gfx::Transform> {
   using param_type = gfx::Transform;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

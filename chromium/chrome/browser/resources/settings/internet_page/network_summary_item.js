@@ -85,8 +85,11 @@ Polymer({
           return this.i18n('tetherEnableBluetooth');
       }
       // Enabled or enabling states.
-      if (deviceState.State == CrOnc.DeviceState.ENABLED)
-        return CrOncStrings.networkListItemNotConnected;
+      if (deviceState.State == CrOnc.DeviceState.ENABLED) {
+        if (this.networkStateList.length > 0)
+          return CrOncStrings.networkListItemNotConnected;
+        return CrOncStrings.networkListItemNoNetwork;
+      }
       if (deviceState.State == CrOnc.DeviceState.ENABLING)
         return this.i18n('internetDeviceEnabling');
     }
@@ -127,17 +130,24 @@ Polymer({
   },
 
   /**
-   * Show the <network-siminfo> element if this is a disabled and locked
-   * cellular device.
    * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
    * @return {boolean}
    * @private
    */
   showSimInfo_: function(deviceState) {
-    if (!deviceState || deviceState.Type != CrOnc.Type.CELLULAR ||
-        this.deviceIsEnabled_(deviceState)) {
+    if (!deviceState || deviceState.Type != CrOnc.Type.CELLULAR)
       return false;
-    }
+    return this.simLockedOrAbsent_(deviceState);
+  },
+
+  /**
+   * @param {!CrOnc.DeviceStateProperties} deviceState
+   * @return {boolean}
+   * @private
+   */
+  simLockedOrAbsent_: function(deviceState) {
+    if (this.deviceIsEnabled_(deviceState))
+      return false;
     if (deviceState.SIMPresent === false)
       return true;
     var simLockType =
@@ -181,10 +191,23 @@ Polymer({
    * @private
    */
   enableToggleIsVisible_: function(deviceState) {
-    return !!deviceState && deviceState.Type != CrOnc.Type.ETHERNET &&
-        deviceState.Type != CrOnc.Type.VPN &&
-        (deviceState.Type == CrOnc.Type.TETHER ||
-         deviceState.State != CrOnc.DeviceState.UNINITIALIZED);
+    if (!deviceState)
+      return false;
+    switch (deviceState.Type) {
+      case CrOnc.Type.ETHERNET:
+      case CrOnc.Type.VPN:
+        return false;
+      case CrOnc.Type.TETHER:
+        return true;
+      case CrOnc.Type.WI_FI:
+      case CrOnc.Type.WI_MAX:
+        return deviceState.State != CrOnc.DeviceState.UNINITIALIZED;
+      case CrOnc.Type.CELLULAR:
+        return deviceState.State != CrOnc.DeviceState.UNINITIALIZED &&
+            !this.simLockedOrAbsent_(deviceState);
+    }
+    assertNotReached();
+    return false;
   },
 
   /**
@@ -304,6 +327,15 @@ Polymer({
     this.fire(
         'device-enabled-toggled', {enabled: !deviceIsEnabled, type: type});
     // Make sure this does not propagate to onDetailsTap_.
+    event.stopPropagation();
+  },
+
+  /**
+   * Make sure events in embedded components do not propagate to onDetailsTap_.
+   * @param {!Event} event
+   * @private
+   */
+  doNothing_: function(event) {
     event.stopPropagation();
   },
 });

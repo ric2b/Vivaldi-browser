@@ -33,7 +33,7 @@ class GlobalFetch {
     static ScopedFetcher* From(LocalDOMWindow&);
     static ScopedFetcher* From(WorkerGlobalScope&);
 
-    DECLARE_VIRTUAL_TRACE();
+    void Trace(blink::Visitor*) override;
   };
 
   static ScriptPromise fetch(ScriptState*,

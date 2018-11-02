@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 
 namespace signin {
 
@@ -46,6 +46,10 @@ SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(Disabled);
 SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(Mirror);
 // ScopedAccountConsistencyDiceFixAuthErrors:
 SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(DiceFixAuthErrors);
+// ScopedAccountConsistencyDicePrepareMigration:
+SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(DicePrepareMigration);
+// ScopedAccountConsistencyDiceMigration:
+SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(DiceMigration);
 // ScopedAccountConsistencyDice:
 SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(Dice);
 

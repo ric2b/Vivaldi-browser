@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
+#include "components/history/core/browser/default_top_sites_provider.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
 #include "components/history/core/browser/history_constants.h"
@@ -49,6 +50,12 @@ namespace {
 bool MockCanAddURLToHistory(const GURL& url) {
   return url.is_valid();
 }
+
+base::Time GetOldFaviconThreshold() {
+  return base::Time::Now() -
+         base::TimeDelta::FromDays(internal::kOnDemandFaviconIsOldAfterDays);
+}
+
 }  // namespace
 
 // ExpireHistoryTest -----------------------------------------------------------
@@ -139,9 +146,11 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
     TopSitesImpl::RegisterPrefs(pref_service_->registry());
 
     expirer_.SetDatabases(main_db_.get(), thumb_db_.get());
-    top_sites_ = new TopSitesImpl(pref_service_.get(), nullptr,
-                                  PrepopulatedPageList(),
-                                  base::Bind(MockCanAddURLToHistory));
+    top_sites_ = new TopSitesImpl(
+        pref_service_.get(), nullptr,
+        std::make_unique<history::DefaultTopSitesProvider>(
+            /*history_service=*/nullptr),
+        PrepopulatedPageList(), base::Bind(MockCanAddURLToHistory));
     WaitTopSitesLoadedObserver wait_top_sites_observer(top_sites_);
     top_sites_->Init(path().Append(kTopSitesFilename));
     wait_top_sites_observer.Run();
@@ -207,10 +216,10 @@ void ExpireHistoryTest::AddExampleData(URLID url_ids[3],
 
   // Two favicons. The first two URLs will share the same one, while the last
   // one will have a unique favicon.
-  favicon_base::FaviconID favicon1 =
-      thumb_db_->AddFavicon(GURL("http://favicon/url1"), favicon_base::FAVICON);
-  favicon_base::FaviconID favicon2 =
-      thumb_db_->AddFavicon(GURL("http://favicon/url2"), favicon_base::FAVICON);
+  favicon_base::FaviconID favicon1 = thumb_db_->AddFavicon(
+      GURL("http://favicon/url1"), favicon_base::IconType::kFavicon);
+  favicon_base::FaviconID favicon2 = thumb_db_->AddFavicon(
+      GURL("http://favicon/url2"), favicon_base::IconType::kFavicon);
 
   // Three URLs.
   URLRow url_row1(GURL("http://www.google.com/1"));
@@ -304,7 +313,7 @@ favicon_base::FaviconID ExpireHistoryTest::GetFavicon(
     const GURL& page_url,
     favicon_base::IconType icon_type) {
   std::vector<IconMapping> icon_mappings;
-  if (thumb_db_->GetIconMappingsForPageURL(page_url, icon_type,
+  if (thumb_db_->GetIconMappingsForPageURL(page_url, {icon_type},
                                            &icon_mappings)) {
     return icon_mappings[0].icon_id;
   }
@@ -375,7 +384,7 @@ TEST_F(ExpireHistoryTest, DeleteFaviconsIfPossible) {
   // Add a favicon record.
   const GURL favicon_url("http://www.google.com/favicon.ico");
   favicon_base::FaviconID icon_id =
-      thumb_db_->AddFavicon(favicon_url, favicon_base::FAVICON);
+      thumb_db_->AddFavicon(favicon_url, favicon_base::IconType::kFavicon);
   EXPECT_TRUE(icon_id);
   EXPECT_TRUE(HasFavicon(icon_id));
 
@@ -390,7 +399,8 @@ TEST_F(ExpireHistoryTest, DeleteFaviconsIfPossible) {
   }
 
   // Add back the favicon.
-  icon_id = thumb_db_->AddFavicon(favicon_url, favicon_base::TOUCH_ICON);
+  icon_id =
+      thumb_db_->AddFavicon(favicon_url, favicon_base::IconType::kTouchIcon);
   EXPECT_TRUE(icon_id);
   EXPECT_TRUE(HasFavicon(icon_id));
 
@@ -430,7 +440,7 @@ TEST_F(ExpireHistoryTest, DISABLED_DeleteURLAndFavicon) {
   URLRow last_row;
   ASSERT_TRUE(main_db_->GetURLRow(url_ids[2], &last_row));
   favicon_base::FaviconID favicon_id =
-      GetFavicon(last_row.url(), favicon_base::FAVICON);
+      GetFavicon(last_row.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(url_ids[2]));
@@ -444,7 +454,7 @@ TEST_F(ExpireHistoryTest, DISABLED_DeleteURLAndFavicon) {
 
   // All the normal data + the favicon should be gone.
   EnsureURLInfoGone(last_row, false);
-  EXPECT_FALSE(GetFavicon(last_row.url(), favicon_base::FAVICON));
+  EXPECT_FALSE(GetFavicon(last_row.url(), favicon_base::IconType::kFavicon));
   EXPECT_FALSE(HasFavicon(favicon_id));
 }
 
@@ -459,7 +469,7 @@ TEST_F(ExpireHistoryTest, DeleteURLWithoutFavicon) {
   URLRow last_row;
   ASSERT_TRUE(main_db_->GetURLRow(url_ids[1], &last_row));
   favicon_base::FaviconID favicon_id =
-      GetFavicon(last_row.url(), favicon_base::FAVICON);
+      GetFavicon(last_row.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(url_ids[1]));
@@ -498,7 +508,8 @@ TEST_F(ExpireHistoryTest, DeleteStarredVisitedURL) {
   EnsureURLInfoGone(url_row, false);
 
   // Yet the favicon should exist.
-  favicon_base::FaviconID favicon_id = GetFavicon(url, favicon_base::FAVICON);
+  favicon_base::FaviconID favicon_id =
+      GetFavicon(url, favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
 
   // Should still have the thumbnail.
@@ -510,8 +521,8 @@ TEST_F(ExpireHistoryTest, DeleteStarredVisitedURL) {
 TEST_F(ExpireHistoryTest, DeleteStarredUnvisitedURL) {
   // Create a bookmark associated with a favicon.
   const GURL url("http://www.google.com/starred");
-  favicon_base::FaviconID favicon =
-      thumb_db_->AddFavicon(GURL("http://favicon/url1"), favicon_base::FAVICON);
+  favicon_base::FaviconID favicon = thumb_db_->AddFavicon(
+      GURL("http://favicon/url1"), favicon_base::IconType::kFavicon);
   thumb_db_->AddIconMapping(url, favicon);
   StarURL(url);
 
@@ -519,7 +530,8 @@ TEST_F(ExpireHistoryTest, DeleteStarredUnvisitedURL) {
   expirer_.DeleteURL(url);
 
   // The favicon should exist.
-  favicon_base::FaviconID favicon_id = GetFavicon(url, favicon_base::FAVICON);
+  favicon_base::FaviconID favicon_id =
+      GetFavicon(url, favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
 
   // Unstar the URL and try again to delete it.
@@ -527,7 +539,7 @@ TEST_F(ExpireHistoryTest, DeleteStarredUnvisitedURL) {
   expirer_.DeleteURL(url);
 
   // The favicon should be gone.
-  favicon_id = GetFavicon(url, favicon_base::FAVICON);
+  favicon_id = GetFavicon(url, favicon_base::IconType::kFavicon);
   EXPECT_FALSE(HasFavicon(favicon_id));
 }
 
@@ -547,7 +559,8 @@ TEST_F(ExpireHistoryTest, DeleteURLs) {
   urls.push_back(GURL());
   for (size_t i = 0; i < arraysize(rows); ++i) {
     ASSERT_TRUE(main_db_->GetURLRow(url_ids[i], &rows[i]));
-    favicon_ids[i] = GetFavicon(rows[i].url(), favicon_base::FAVICON);
+    favicon_ids[i] =
+        GetFavicon(rows[i].url(), favicon_base::IconType::kFavicon);
     EXPECT_TRUE(HasFavicon(favicon_ids[i]));
     // TODO(sky): fix this, see comment in HasThumbnail.
     // EXPECT_TRUE(HasThumbnail(url_ids[i]));
@@ -605,14 +618,14 @@ TEST_F(ExpireHistoryTest, FlushRecentURLsUnstarred) {
 
   // Verify that the middle URL's favicon and thumbnail is still there.
   favicon_base::FaviconID favicon_id =
-      GetFavicon(url_row1.url(), favicon_base::FAVICON);
+      GetFavicon(url_row1.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(url_row1.id()));
 
   // Verify that the last URL was deleted.
   favicon_base::FaviconID favicon_id2 =
-      GetFavicon(url_row2.url(), favicon_base::FAVICON);
+      GetFavicon(url_row2.url(), favicon_base::IconType::kFavicon);
   EnsureURLInfoGone(url_row2, false);
   EXPECT_FALSE(HasFavicon(favicon_id2));
 }
@@ -655,14 +668,14 @@ TEST_F(ExpireHistoryTest, FlushURLsForTimes) {
 
   // Verify that the middle URL's favicon and thumbnail is still there.
   favicon_base::FaviconID favicon_id =
-      GetFavicon(url_row1.url(), favicon_base::FAVICON);
+      GetFavicon(url_row1.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(url_row1.id()));
 
   // Verify that the last URL was deleted.
   favicon_base::FaviconID favicon_id2 =
-      GetFavicon(url_row2.url(), favicon_base::FAVICON);
+      GetFavicon(url_row2.url(), favicon_base::IconType::kFavicon);
   EnsureURLInfoGone(url_row2, false);
   EXPECT_FALSE(HasFavicon(favicon_id2));
 }
@@ -706,7 +719,7 @@ TEST_F(ExpireHistoryTest, FlushRecentURLsUnstarredRestricted) {
 
   // Verify that the middle URL's favicon and thumbnail is still there.
   favicon_base::FaviconID favicon_id =
-      GetFavicon(url_row1.url(), favicon_base::FAVICON);
+      GetFavicon(url_row1.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(url_row1.id()));
@@ -758,11 +771,11 @@ TEST_F(ExpireHistoryTest, FlushRecentURLsStarred) {
   // exists in history, this should not be a privacy problem, we only update
   // the visit counts in this case for consistency anyway.
   favicon_base::FaviconID favicon_id =
-      GetFavicon(url_row1.url(), favicon_base::FAVICON);
+      GetFavicon(url_row1.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(new_url_row1.id()));
-  favicon_id = GetFavicon(url_row1.url(), favicon_base::FAVICON);
+  favicon_id = GetFavicon(url_row1.url(), favicon_base::IconType::kFavicon);
   EXPECT_TRUE(HasFavicon(favicon_id));
   // TODO(sky): fix this, see comment in HasThumbnail.
   // EXPECT_TRUE(HasThumbnail(new_url_row2.id()));
@@ -907,14 +920,14 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesDeleteUnstarred) {
   // Icon: old and not bookmarked case.
   GURL url("http://google.com/favicon.ico");
   favicon_base::FaviconID icon_id = thumb_db_->AddFavicon(
-      url, favicon_base::FAVICON, favicon, FaviconBitmapType::ON_DEMAND,
-      base::Time::Now() - base::TimeDelta::FromDays(100), gfx::Size());
+      url, favicon_base::IconType::kFavicon, favicon,
+      FaviconBitmapType::ON_DEMAND,
+      GetOldFaviconThreshold() - base::TimeDelta::FromSeconds(1), gfx::Size());
   ASSERT_NE(0, icon_id);
   GURL page_url("http://google.com/");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url, icon_id));
 
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(90));
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold());
 
   // The icon gets deleted.
   EXPECT_FALSE(thumb_db_->GetIconMappingsForPageURL(page_url, nullptr));
@@ -936,8 +949,9 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesNotDeleteStarred) {
   // Icon: old but bookmarked case.
   GURL url("http://google.com/favicon.ico");
   favicon_base::FaviconID icon_id = thumb_db_->AddFavicon(
-      url, favicon_base::FAVICON, favicon, FaviconBitmapType::ON_DEMAND,
-      base::Time::Now() - base::TimeDelta::FromDays(100), gfx::Size());
+      url, favicon_base::IconType::kFavicon, favicon,
+      FaviconBitmapType::ON_DEMAND,
+      GetOldFaviconThreshold() - base::TimeDelta::FromSeconds(1), gfx::Size());
   ASSERT_NE(0, icon_id);
   GURL page_url1("http://google.com/1");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url1, icon_id));
@@ -945,8 +959,7 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesNotDeleteStarred) {
   GURL page_url2("http://google.com/2");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url2, icon_id));
 
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(90));
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold());
 
   // Nothing gets deleted.
   EXPECT_TRUE(thumb_db_->GetFaviconHeader(icon_id, nullptr, nullptr));
@@ -968,8 +981,8 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesDeleteAfterLongDelay) {
   feature_list.InitAndEnableFeature(internal::kClearOldOnDemandFavicons);
 
   // Previous clearing (2 days ago).
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(92));
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold() -
+                                    base::TimeDelta::FromDays(2));
 
   // The blob does not encode any real bitmap, obviously.
   const unsigned char kBlob[] = "0";
@@ -979,14 +992,14 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesDeleteAfterLongDelay) {
   // Icon: old and not bookmarked case.
   GURL url("http://google.com/favicon.ico");
   favicon_base::FaviconID icon_id = thumb_db_->AddFavicon(
-      url, favicon_base::FAVICON, favicon, FaviconBitmapType::ON_DEMAND,
-      base::Time::Now() - base::TimeDelta::FromDays(100), gfx::Size());
+      url, favicon_base::IconType::kFavicon, favicon,
+      FaviconBitmapType::ON_DEMAND,
+      GetOldFaviconThreshold() - base::TimeDelta::FromSeconds(1), gfx::Size());
   ASSERT_NE(0, icon_id);
   GURL page_url("http://google.com/");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url, icon_id));
 
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(90));
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold());
 
   // The icon gets deleted.
   EXPECT_FALSE(thumb_db_->GetIconMappingsForPageURL(page_url, nullptr));
@@ -1002,8 +1015,7 @@ TEST_F(ExpireHistoryTest,
   feature_list.InitAndEnableFeature(internal::kClearOldOnDemandFavicons);
 
   // Previous clearing (5 minutes ago).
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(90) -
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold() -
                                     base::TimeDelta::FromMinutes(5));
 
   // The blob does not encode any real bitmap, obviously.
@@ -1014,16 +1026,16 @@ TEST_F(ExpireHistoryTest,
   // Icon: old but bookmarked case.
   GURL url("http://google.com/favicon.ico");
   favicon_base::FaviconID icon_id = thumb_db_->AddFavicon(
-      url, favicon_base::FAVICON, favicon, FaviconBitmapType::ON_DEMAND,
-      base::Time::Now() - base::TimeDelta::FromDays(100), gfx::Size());
+      url, favicon_base::IconType::kFavicon, favicon,
+      FaviconBitmapType::ON_DEMAND,
+      GetOldFaviconThreshold() - base::TimeDelta::FromSeconds(1), gfx::Size());
   ASSERT_NE(0, icon_id);
   GURL page_url1("http://google.com/1");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url1, icon_id));
   GURL page_url2("http://google.com/2");
   ASSERT_NE(0, thumb_db_->AddIconMapping(page_url2, icon_id));
 
-  expirer_.ClearOldOnDemandFavicons(base::Time::Now() -
-                                    base::TimeDelta::FromDays(90));
+  expirer_.ClearOldOnDemandFavicons(GetOldFaviconThreshold());
 
   // Nothing gets deleted.
   EXPECT_TRUE(thumb_db_->GetFaviconHeader(icon_id, nullptr, nullptr));

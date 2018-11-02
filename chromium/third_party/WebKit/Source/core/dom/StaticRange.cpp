@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Range.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "platform/bindings/ScriptState.h"
 
@@ -29,6 +30,16 @@ StaticRange::StaticRange(Document& document,
       end_container_(end_container),
       end_offset_(end_offset) {}
 
+// static
+StaticRange* StaticRange::Create(const EphemeralRange& range) {
+  DCHECK(!range.IsNull());
+  return new StaticRange(range.GetDocument(),
+                         range.StartPosition().ComputeContainerNode(),
+                         range.StartPosition().ComputeOffsetInContainerNode(),
+                         range.EndPosition().ComputeContainerNode(),
+                         range.EndPosition().ComputeOffsetInContainerNode());
+}
+
 void StaticRange::setStart(Node* container, unsigned offset) {
   start_container_ = container;
   start_offset_ = offset;
@@ -47,10 +58,11 @@ Range* StaticRange::toRange(ExceptionState& exception_state) const {
   return range;
 }
 
-DEFINE_TRACE(StaticRange) {
+void StaticRange::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_document_);
   visitor->Trace(start_container_);
   visitor->Trace(end_container_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

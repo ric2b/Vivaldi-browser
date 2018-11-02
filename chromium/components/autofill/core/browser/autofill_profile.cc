@@ -192,19 +192,24 @@ void GetFieldsForDistinguishingProfiles(
 }
 
 // Constants for the validity bitfield.
-static const size_t validity_bits_per_type = 2;
-static const size_t number_supported_types_for_validation = 7;
+static const size_t kValidityBitsPerType = 2;
 // The order is important to ensure a consistent bitfield value. New values
 // should be added at the end NOT at the start or middle.
-static const ServerFieldType
-    supported_types_for_validation[number_supported_types_for_validation] = {
-        ADDRESS_HOME_COUNTRY,
-        ADDRESS_HOME_STATE,
-        ADDRESS_HOME_ZIP,
-        ADDRESS_HOME_CITY,
-        ADDRESS_HOME_DEPENDENT_LOCALITY,
-        EMAIL_ADDRESS,
-        PHONE_HOME_WHOLE_NUMBER};
+static const ServerFieldType kSupportedTypesForValidation[] = {
+    ADDRESS_HOME_COUNTRY,
+    ADDRESS_HOME_STATE,
+    ADDRESS_HOME_ZIP,
+    ADDRESS_HOME_CITY,
+    ADDRESS_HOME_DEPENDENT_LOCALITY,
+    EMAIL_ADDRESS,
+    PHONE_HOME_WHOLE_NUMBER};
+
+static const size_t kNumSupportedTypesForValidation =
+    sizeof(kSupportedTypesForValidation) /
+    sizeof(kSupportedTypesForValidation[0]);
+
+static_assert(kNumSupportedTypesForValidation * kValidityBitsPerType <= 64,
+              "Not enough bits to encode profile validity information!");
 
 }  // namespace
 
@@ -263,6 +268,7 @@ AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
 
   server_id_ = profile.server_id();
   has_converted_ = profile.has_converted();
+  SetValidityFromBitfieldValue(profile.GetValidityBitfieldValue());
 
   return *this;
 }
@@ -363,6 +369,7 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
 bool AutofillProfile::EqualsSansOrigin(const AutofillProfile& profile) const {
   return guid() == profile.guid() &&
          language_code() == profile.language_code() &&
+         GetValidityBitfieldValue() == profile.GetValidityBitfieldValue() &&
          Compare(profile) == 0;
 }
 
@@ -551,7 +558,7 @@ void AutofillProfile::CreateDifferentiatingLabels(
     const std::string& app_locale,
     std::vector<base::string16>* labels) {
   const size_t kMinimalFieldsShown = 2;
-  CreateInferredLabels(profiles, NULL, UNKNOWN_TYPE, kMinimalFieldsShown,
+  CreateInferredLabels(profiles, nullptr, UNKNOWN_TYPE, kMinimalFieldsShown,
                        app_locale, labels);
   DCHECK_EQ(profiles.size(), labels->size());
 }
@@ -573,10 +580,9 @@ void AutofillProfile::CreateInferredLabels(
   // then used to detect which labels need further differentiating fields.
   std::map<base::string16, std::list<size_t> > labels_to_profiles;
   for (size_t i = 0; i < profiles.size(); ++i) {
-    base::string16 label =
-        profiles[i]->ConstructInferredLabel(fields_to_use,
-                                            minimal_fields_shown,
-                                            app_locale);
+    base::string16 label = profiles[i]->ConstructInferredLabel(
+        fields_to_use.data(), fields_to_use.size(), minimal_fields_shown,
+        app_locale);
     labels_to_profiles[label].push_back(i);
   }
 
@@ -597,7 +603,8 @@ void AutofillProfile::CreateInferredLabels(
 }
 
 base::string16 AutofillProfile::ConstructInferredLabel(
-    const std::vector<ServerFieldType>& included_fields,
+    const ServerFieldType* included_fields,
+    const size_t included_fields_size,
     size_t num_fields_to_use,
     const std::string& app_locale) const {
   // TODO(estade): use libaddressinput?
@@ -616,20 +623,17 @@ base::string16 AutofillProfile::ConstructInferredLabel(
   trimmed_profile.set_language_code(language_code());
 
   std::vector<ServerFieldType> remaining_fields;
-  for (std::vector<ServerFieldType>::const_iterator it =
-           included_fields.begin();
-       it != included_fields.end() && num_fields_to_use > 0;
-       ++it) {
+  for (size_t i = 0; i < included_fields_size && num_fields_to_use > 0; ++i) {
     AddressField address_field;
-    if (!i18n::FieldForType(*it, &address_field) ||
-        !::i18n::addressinput::IsFieldUsed(
-            address_field, address_region_code) ||
+    if (!i18n::FieldForType(included_fields[i], &address_field) ||
+        !::i18n::addressinput::IsFieldUsed(address_field,
+                                           address_region_code) ||
         address_field == ::i18n::addressinput::COUNTRY) {
-      remaining_fields.push_back(*it);
+      remaining_fields.push_back(included_fields[i]);
       continue;
     }
 
-    AutofillType autofill_type(*it);
+    AutofillType autofill_type(included_fields[i]);
     base::string16 field_value = GetInfo(autofill_type, app_locale);
     if (field_value.empty())
       continue;
@@ -702,15 +706,13 @@ void AutofillProfile::RecordAndLogUse() {
 }
 
 AutofillProfile::ValidityState AutofillProfile::GetValidityState(
-    ServerFieldType type) {
-  // Return valid for types that autofill does not validate.
+    ServerFieldType type) const {
+  // Return UNSUPPORTED for types that autofill does not validate.
   if (!IsValidationSupportedForType(type))
     return UNSUPPORTED;
 
-  if (!base::ContainsKey(validity_states_, type))
-    return UNVALIDATED;
-
-  return validity_states_[type];
+  auto it = validity_states_.find(type);
+  return (it == validity_states_.end()) ? UNVALIDATED : it->second;
 }
 
 void AutofillProfile::SetValidityState(ServerFieldType type,
@@ -719,34 +721,52 @@ void AutofillProfile::SetValidityState(ServerFieldType type,
   if (!IsValidationSupportedForType(type))
     return;
 
-  std::map<ServerFieldType, ValidityState>::iterator it =
-      validity_states_.find(type);
+  validity_states_[type] = validity;
+}
 
-  if (it != validity_states_.end()) {
-    it->second = validity;
-  } else {
-    validity_states_.insert(std::make_pair(type, validity));
+bool AutofillProfile::IsValidationSupportedForType(ServerFieldType type) const {
+  for (auto supported_type : kSupportedTypesForValidation) {
+    if (type == supported_type)
+      return true;
   }
+  return false;
 }
 
-bool AutofillProfile::IsValidationSupportedForType(ServerFieldType type) {
-  return std::find(supported_types_for_validation,
-                   supported_types_for_validation +
-                       number_supported_types_for_validation,
-                   type) !=
-         supported_types_for_validation + number_supported_types_for_validation;
-}
-
-int AutofillProfile::GetValidityBitfieldValue() {
+int AutofillProfile::GetValidityBitfieldValue() const {
   int validity_value = 0;
   size_t field_type_shift = 0;
-  for (ServerFieldType supported_type : supported_types_for_validation) {
+  for (ServerFieldType supported_type : kSupportedTypesForValidation) {
     DCHECK(GetValidityState(supported_type) != UNSUPPORTED);
     validity_value |= GetValidityState(supported_type) << field_type_shift;
-    field_type_shift += validity_bits_per_type;
+    field_type_shift += kValidityBitsPerType;
   }
 
+  // Check the the shift is still in range.
+  DCHECK_LE(field_type_shift, 64U);
+
   return validity_value;
+}
+
+void AutofillProfile::SetValidityFromBitfieldValue(int bitfield_value) {
+  // Compute the bitmask based on the number a bits per type. For example, this
+  // could be the two least significant bits (0b11).
+  const int kBitmask = (1 << kValidityBitsPerType) - 1;
+
+  for (ServerFieldType supported_type : kSupportedTypesForValidation) {
+    // Apply the bitmask to the bitfield value to get the validity value of the
+    // current |supported_type|.
+    int validity_value = bitfield_value & kBitmask;
+    if (validity_value < 0 || validity_value >= UNSUPPORTED) {
+      NOTREACHED();
+      continue;
+    }
+
+    SetValidityState(supported_type,
+                     static_cast<ValidityState>(validity_value));
+
+    // Shift the bitfield value to access the validity of the next field type.
+    bitfield_value = bitfield_value >> kValidityBitsPerType;
+  }
 }
 
 base::string16 AutofillProfile::GetInfoImpl(
@@ -854,7 +874,8 @@ void AutofillProfile::CreateInferredLabelsHelper(
     }
 
     (*labels)[it] = profile->ConstructInferredLabel(
-        label_fields, label_fields.size(), app_locale);
+        label_fields.data(), label_fields.size(), label_fields.size(),
+        app_locale);
   }
 }
 
@@ -898,16 +919,17 @@ FormGroup* AutofillProfile::MutableFormGroupForType(const AutofillType& type) {
     case PASSWORD_FIELD:
     case USERNAME_FIELD:
     case TRANSACTION:
-        return NULL;
+      return nullptr;
   }
 
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 bool AutofillProfile::EqualsSansGuid(const AutofillProfile& profile) const {
   return origin() == profile.origin() &&
          language_code() == profile.language_code() &&
+         GetValidityBitfieldValue() == profile.GetValidityBitfieldValue() &&
          Compare(profile) == 0;
 }
 
@@ -928,7 +950,8 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_SORTING_CODE)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_COUNTRY)) << " "
             << profile.language_code() << " "
-            << UTF16ToUTF8(profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER));
+            << UTF16ToUTF8(profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER)) << " "
+            << profile.GetValidityBitfieldValue();
 }
 
 }  // namespace autofill

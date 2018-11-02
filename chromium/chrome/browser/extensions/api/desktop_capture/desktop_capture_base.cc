@@ -30,6 +30,7 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using extensions::api::desktop_capture::ChooseDesktopMedia::Results::Options;
 using content::DesktopMediaID;
 
 namespace extensions {
@@ -57,7 +58,7 @@ DesktopCaptureChooseDesktopMediaFunctionBase::
 
 DesktopCaptureChooseDesktopMediaFunctionBase::
     ~DesktopCaptureChooseDesktopMediaFunctionBase() {
-  // RenderViewHost may be already destroyed.
+  // RenderFrameHost may be already destroyed.
   if (render_frame_host()) {
     DesktopCaptureRequestsRegistry::GetInstance()->RemoveRequest(
         render_frame_host()->GetProcess()->GetID(), request_id_);
@@ -70,7 +71,7 @@ void DesktopCaptureChooseDesktopMediaFunctionBase::Cancel() {
   scoped_refptr<DesktopCaptureChooseDesktopMediaFunctionBase> self(this);
   if (picker_) {
     picker_.reset();
-    SetResult(base::MakeUnique<base::Value>(std::string()));
+    SetResultList(Create(std::string(), Options()));
     SendResponse(true);
   }
 }
@@ -116,15 +117,15 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
           screen_list =
               g_picker_factory->CreateMediaList(DesktopMediaID::TYPE_SCREEN);
         } else {
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
           screen_list = base::MakeUnique<DesktopMediaListAsh>(
               DesktopMediaID::TYPE_SCREEN);
-#else   // !defined(USE_ASH)
+#else   // !defined(OS_CHROMEOS)
           screen_list = base::MakeUnique<NativeDesktopMediaList>(
               content::DesktopMediaID::TYPE_SCREEN,
               webrtc::DesktopCapturer::CreateScreenCapturer(
                   content::CreateDesktopCaptureOptions()));
-#endif  // !defined(USE_ASH)
+#endif  // !defined(OS_CHROMEOS)
         }
         have_screen_list = true;
         source_lists.push_back(std::move(screen_list));
@@ -139,10 +140,10 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
           window_list =
               g_picker_factory->CreateMediaList(DesktopMediaID::TYPE_WINDOW);
         } else {
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
           window_list = base::MakeUnique<DesktopMediaListAsh>(
               DesktopMediaID::TYPE_WINDOW);
-#else   // !defined(USE_ASH)
+#else   // !defined(OS_CHROMEOS)
           // NativeDesktopMediaList calls the capturers on a background thread.
           // This means that the two DesktopCapturer instances (for screens and
           // windows) created here cannot share the same DesktopCaptureOptions
@@ -152,7 +153,7 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
               content::DesktopMediaID::TYPE_WINDOW,
               webrtc::DesktopCapturer::CreateWindowCapturer(
                   content::CreateDesktopCaptureOptions()));
-#endif  // !defined(USE_ASH)
+#endif  // !defined(OS_CHROMEOS)
         }
         have_window_list = true;
         source_lists.push_back(std::move(window_list));
@@ -249,10 +250,9 @@ void DesktopCaptureChooseDesktopMediaFunctionBase::OnPickerDialogResults(
                                       extension()->name());
   }
 
-  api::desktop_capture::ChooseDesktopMedia::Results::Options options;
+  Options options;
   options.can_request_audio_track = source.audio_share;
-  results_ = api::desktop_capture::ChooseDesktopMedia::Results::Create(result,
-                                                                       options);
+  results_ = Create(result, options);
   SendResponse(true);
 }
 

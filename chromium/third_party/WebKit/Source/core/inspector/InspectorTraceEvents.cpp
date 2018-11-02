@@ -12,9 +12,9 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/animation/Animation.h"
 #include "core/animation/KeyframeEffectReadOnly.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/css/invalidation/InvalidationSet.h"
 #include "core/dom/DOMNodeIds.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -50,6 +50,7 @@ namespace blink {
 namespace {
 
 void* AsyncId(unsigned long identifier) {
+  // This value should be odd to avoid collisions with regular pointers.
   return reinterpret_cast<void*>((identifier << 1) | 1);
 }
 
@@ -77,7 +78,7 @@ String ToHexString(const void* p) {
 }
 
 void SetCallStack(TracedValue* value) {
-  static const unsigned char* trace_category_enabled = 0;
+  static const unsigned char* trace_category_enabled = nullptr;
   WTF_ANNOTATE_BENIGN_RACE(&trace_category_enabled, "trace_event category");
   if (!trace_category_enabled)
     trace_category_enabled = TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
@@ -88,7 +89,7 @@ void SetCallStack(TracedValue* value) {
   // So we collect the top frame with SourceLocation::capture() to get the
   // binding call site info.
   SourceLocation::Capture()->ToTracedValue(value, "stackTrace");
-  v8::Isolate::GetCurrent()->GetCpuProfiler()->CollectSample();
+  v8::CpuProfiler::CollectSample(v8::Isolate::GetCurrent());
 }
 
 void InspectorTraceEvents::Init(CoreProbeSink* instrumenting_agents,
@@ -103,7 +104,7 @@ void InspectorTraceEvents::Dispose() {
   instrumenting_agents_ = nullptr;
 }
 
-DEFINE_TRACE(InspectorTraceEvents) {
+void InspectorTraceEvents::Trace(blink::Visitor* visitor) {
   visitor->Trace(instrumenting_agents_);
   InspectorAgent::Trace(visitor);
 }
@@ -114,7 +115,8 @@ void InspectorTraceEvents::WillSendRequest(
     DocumentLoader* loader,
     ResourceRequest& request,
     const ResourceResponse& redirect_response,
-    const FetchInitiatorInfo&) {
+    const FetchInitiatorInfo&,
+    Resource::Type) {
   LocalFrame* frame = loader ? loader->GetFrame() : nullptr;
   TRACE_EVENT_INSTANT1(
       "devtools.timeline", "ResourceSendRequest", TRACE_EVENT_SCOPE_THREAD,
@@ -308,6 +310,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoFirstPage)
     DEFINE_STRING_MAPPING(PseudoFullScreen)
     DEFINE_STRING_MAPPING(PseudoFullScreenAncestor)
+    DEFINE_STRING_MAPPING(PseudoFullscreen)
     DEFINE_STRING_MAPPING(PseudoInRange)
     DEFINE_STRING_MAPPING(PseudoOutOfRange)
     DEFINE_STRING_MAPPING(PseudoWebKitCustomElement)
@@ -340,6 +343,25 @@ String UrlForFrame(LocalFrame* frame) {
   return url.GetString();
 }
 
+const char* CompileOptionsString(v8::ScriptCompiler::CompileOptions options) {
+  switch (options) {
+    case v8::ScriptCompiler::kNoCompileOptions:
+      return "no";
+    case v8::ScriptCompiler::kProduceParserCache:
+      return "parser";
+    case v8::ScriptCompiler::kConsumeParserCache:
+      return "parser";
+    case v8::ScriptCompiler::kProduceCodeCache:
+      return "code";
+    case v8::ScriptCompiler::kProduceFullCodeCache:
+      return "full code";
+    case v8::ScriptCompiler::kConsumeCodeCache:
+      return "code";
+  }
+  NOTREACHED();
+  return "";
+}
+
 }  // namespace
 
 namespace InspectorScheduleStyleInvalidationTrackingEvent {
@@ -368,24 +390,24 @@ const char InspectorScheduleStyleInvalidationTrackingEvent::kRuleSet[] =
     "ruleset";
 
 const char* ResourcePriorityString(ResourceLoadPriority priority) {
-  const char* priority_string = 0;
+  const char* priority_string = nullptr;
   switch (priority) {
-    case kResourceLoadPriorityVeryLow:
+    case ResourceLoadPriority::kVeryLow:
       priority_string = "VeryLow";
       break;
-    case kResourceLoadPriorityLow:
+    case ResourceLoadPriority::kLow:
       priority_string = "Low";
       break;
-    case kResourceLoadPriorityMedium:
+    case ResourceLoadPriority::kMedium:
       priority_string = "Medium";
       break;
-    case kResourceLoadPriorityHigh:
+    case ResourceLoadPriority::kHigh:
       priority_string = "High";
       break;
-    case kResourceLoadPriorityVeryHigh:
+    case ResourceLoadPriority::kVeryHigh:
       priority_string = "VeryHigh";
       break;
-    case kResourceLoadPriorityUnresolved:
+    case ResourceLoadPriority::kUnresolved:
       break;
   }
   return priority_string;
@@ -499,7 +521,7 @@ InspectorStyleInvalidatorInvalidateEvent::SelectorPart(
 std::unique_ptr<TracedValue>
 InspectorStyleInvalidatorInvalidateEvent::InvalidationList(
     ContainerNode& node,
-    const Vector<RefPtr<InvalidationSet>>& invalidation_list) {
+    const Vector<scoped_refptr<InvalidationSet>>& invalidation_list) {
   std::unique_ptr<TracedValue> value =
       FillCommonPart(node, kElementHasPendingInvalidationList);
   value->BeginArray("invalidationList");
@@ -791,10 +813,10 @@ static std::unique_ptr<TracedValue> GenericTimerData(ExecutionContext* context,
 std::unique_ptr<TracedValue> InspectorTimerInstallEvent::Data(
     ExecutionContext* context,
     int timer_id,
-    int timeout,
+    TimeDelta timeout,
     bool single_shot) {
   std::unique_ptr<TracedValue> value = GenericTimerData(context, timer_id);
-  value->SetInteger("timeout", timeout);
+  value->SetInteger("timeout", timeout.InMilliseconds());
   value->SetBoolean("singleShot", single_shot);
   SetCallStack(value.get());
   return value;
@@ -1031,10 +1053,57 @@ std::unique_ptr<TracedValue> InspectorParseScriptEvent::Data(
   return value;
 }
 
+InspectorCompileScriptEvent::V8CacheResult::ProduceResult::ProduceResult(
+    v8::ScriptCompiler::CompileOptions produce_options,
+    int cache_size)
+    : produce_options(produce_options), cache_size(cache_size) {
+  DCHECK(produce_options == v8::ScriptCompiler::kProduceParserCache ||
+         produce_options == v8::ScriptCompiler::kProduceCodeCache ||
+         produce_options == v8::ScriptCompiler::kProduceFullCodeCache);
+}
+
+InspectorCompileScriptEvent::V8CacheResult::ConsumeResult::ConsumeResult(
+    v8::ScriptCompiler::CompileOptions consume_options,
+    int cache_size,
+    bool rejected)
+    : consume_options(consume_options),
+      cache_size(cache_size),
+      rejected(rejected) {
+  DCHECK(consume_options == v8::ScriptCompiler::kConsumeParserCache ||
+         consume_options == v8::ScriptCompiler::kConsumeCodeCache);
+}
+
+InspectorCompileScriptEvent::V8CacheResult::V8CacheResult(
+    Optional<ProduceResult> produce_result,
+    Optional<ConsumeResult> consume_result)
+    : produce_result(std::move(produce_result)),
+      consume_result(std::move(consume_result)) {}
+
 std::unique_ptr<TracedValue> InspectorCompileScriptEvent::Data(
     const String& url,
-    const TextPosition& text_position) {
-  return FillLocation(url, text_position);
+    const TextPosition& text_position,
+    const V8CacheResult& cache_result,
+    bool streamed) {
+  std::unique_ptr<TracedValue> value = FillLocation(url, text_position);
+
+  if (cache_result.produce_result) {
+    value->SetString(
+        "cacheProduceOptions",
+        CompileOptionsString(cache_result.produce_result->produce_options));
+    value->SetInteger("producedCacheSize",
+                      cache_result.produce_result->cache_size);
+  }
+
+  if (cache_result.consume_result) {
+    value->SetString(
+        "cacheConsumeOptions",
+        CompileOptionsString(cache_result.consume_result->consume_options));
+    value->SetInteger("consumedCacheSize",
+                      cache_result.consume_result->cache_size);
+    value->SetBoolean("cacheRejected", cache_result.consume_result->rejected);
+  }
+  value->SetBoolean("streamed", streamed);
+  return value;
 }
 
 std::unique_ptr<TracedValue> InspectorFunctionCallEvent::Data(
@@ -1058,6 +1127,7 @@ std::unique_ptr<TracedValue> InspectorFunctionCallEvent::Data(
   value->SetString("scriptId", String::Number(location->ScriptId()));
   value->SetString("url", location->Url());
   value->SetInteger("lineNumber", location->LineNumber());
+  value->SetInteger("columnNumber", location->ColumnNumber());
   return value;
 }
 

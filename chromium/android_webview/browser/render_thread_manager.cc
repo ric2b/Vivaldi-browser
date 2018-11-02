@@ -12,17 +12,15 @@
 #include "android_webview/browser/hardware_renderer.h"
 #include "android_webview/browser/render_thread_manager_client.h"
 #include "android_webview/browser/scoped_app_gl_state_restore.h"
-#include "android_webview/common/aw_switches.h"
 #include "android_webview/public/browser/draw_gl.h"
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/output/compositor_frame.h"
+#include "components/viz/common/quads/compositor_frame.h"
 
 namespace android_webview {
 
@@ -100,8 +98,6 @@ RenderThreadManager::RenderThreadManager(
       compositor_frame_producer_(nullptr),
       has_received_frame_(false),
       renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()),
-      sync_on_draw_hardware_(base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSyncOnDrawHardware)),
       inside_hardware_release_(false),
       weak_factory_on_ui_thread_(this) {
   DCHECK(ui_loop_->BelongsToCurrentThread());
@@ -322,7 +318,8 @@ void RenderThreadManager::DrawGL(AwDrawGLInfo* draw_info) {
   ScopedAppGLStateRestore state_restore(
       draw_info->mode == AwDrawGLInfo::kModeDraw
           ? ScopedAppGLStateRestore::MODE_DRAW
-          : ScopedAppGLStateRestore::MODE_RESOURCE_MANAGEMENT);
+          : ScopedAppGLStateRestore::MODE_RESOURCE_MANAGEMENT,
+      draw_info->version < 3 /* save_restore */);
   ScopedAllowGL allow_gl;
   if (!hardware_renderer_ && draw_info->mode == AwDrawGLInfo::kModeDraw &&
       !IsInsideHardwareRelease() && HasFrameForHardwareRendererOnRT()) {

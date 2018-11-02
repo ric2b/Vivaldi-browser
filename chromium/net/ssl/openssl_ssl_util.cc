@@ -140,19 +140,9 @@ std::unique_ptr<base::Value> NetLogOpenSSLErrorCallback(
   return std::move(dict);
 }
 
-#if !BUILDFLAG(USE_BYTE_CERTS)
-bssl::UniquePtr<CRYPTO_BUFFER> OSCertHandleToBuffer(
-    X509Certificate::OSCertHandle os_handle) {
-  std::string der_encoded;
-  if (!X509Certificate::GetDEREncoded(os_handle, &der_encoded))
-    return nullptr;
-  return x509_util::CreateCryptoBuffer(der_encoded);
-}
-#endif
-
 }  // namespace
 
-void OpenSSLPutNetError(const tracked_objects::Location& location, int err) {
+void OpenSSLPutNetError(const base::Location& location, int err) {
   // Net error codes are negative. Encode them as positive numbers.
   err = -err;
   if (err < 0 || err > 0xfff) {
@@ -240,36 +230,12 @@ bool SetSSLChainAndKey(SSL* ssl,
                        X509Certificate* cert,
                        EVP_PKEY* pkey,
                        const SSL_PRIVATE_KEY_METHOD* custom_key) {
-#if BUILDFLAG(USE_BYTE_CERTS)
   std::vector<CRYPTO_BUFFER*> chain_raw;
   chain_raw.push_back(cert->os_cert_handle());
   for (X509Certificate::OSCertHandle handle :
        cert->GetIntermediateCertificates()) {
     chain_raw.push_back(handle);
   }
-#else
-  std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> chain;
-  std::vector<CRYPTO_BUFFER*> chain_raw;
-  bssl::UniquePtr<CRYPTO_BUFFER> buf =
-      OSCertHandleToBuffer(cert->os_cert_handle());
-  if (!buf) {
-    LOG(WARNING) << "Failed to import certificate";
-    return false;
-  }
-  chain_raw.push_back(buf.get());
-  chain.push_back(std::move(buf));
-
-  for (X509Certificate::OSCertHandle handle :
-       cert->GetIntermediateCertificates()) {
-    bssl::UniquePtr<CRYPTO_BUFFER> buf = OSCertHandleToBuffer(handle);
-    if (!buf) {
-      LOG(WARNING) << "Failed to import intermediate";
-      return false;
-    }
-    chain_raw.push_back(buf.get());
-    chain.push_back(std::move(buf));
-  }
-#endif
 
   if (!SSL_set_chain_and_key(ssl, chain_raw.data(), chain_raw.size(), pkey,
                              custom_key)) {

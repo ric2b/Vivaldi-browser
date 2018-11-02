@@ -41,6 +41,7 @@ class HttpTest : public CronetTestBase {
     [Cronet registerHttpProtocolHandler];
     NSURLSessionConfiguration* config =
         [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
     [Cronet installIntoSessionConfiguration:config];
     session_ = [NSURLSession sessionWithConfiguration:config
                                              delegate:delegate_
@@ -102,38 +103,6 @@ TEST_F(HttpTest, NSURLSessionReceivesData) {
   EXPECT_EQ(nil, [delegate_ error]);
   EXPECT_STREQ(grpc_support::kSimpleBodyValue,
                base::SysNSStringToUTF8([delegate_ responseBody]).c_str());
-}
-
-TEST_F(HttpTest, NSURLSessionReceivesBigHttpDataLoop) {
-  int iterations = 50;
-  long size = 10 * 1024 * 1024;
-  LOG(INFO) << "Downloading " << size << " bytes " << iterations << " times.";
-  NSTimeInterval elapsed_avg = 0;
-  NSTimeInterval elapsed_max = 0;
-  NSURL* url = net::NSURLWithGURL(GURL(TestServer::PrepareBigDataURL(size)));
-  for (int i = 0; i < iterations; ++i) {
-    [delegate_ reset];
-    __block BOOL block_used = NO;
-    NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
-    [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
-      block_used = YES;
-      EXPECT_EQ([request URL], url);
-      return YES;
-    }];
-    NSDate* start = [NSDate date];
-    StartDataTaskAndWaitForCompletion(task);
-    NSTimeInterval elapsed = -[start timeIntervalSinceNow];
-    elapsed_avg += elapsed;
-    if (elapsed > elapsed_max)
-      elapsed_max = elapsed;
-    EXPECT_TRUE(block_used);
-    EXPECT_EQ(nil, [delegate_ error]);
-    EXPECT_EQ(size, [delegate_ totalBytesReceived]);
-  }
-  // Release the response buffer.
-  TestServer::ReleaseBigDataURL();
-  LOG(INFO) << "Elapsed Average:" << elapsed_avg * 1000 / iterations
-            << "ms Max:" << elapsed_max * 1000 << "ms";
 }
 
 TEST_F(HttpTest, GetGlobalMetricsDeltas) {
@@ -199,7 +168,8 @@ TEST_F(HttpTest, NSURLSessionAcceptLanguage) {
   NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
   StartDataTaskAndWaitForCompletion(task);
   EXPECT_EQ(nil, [delegate_ error]);
-  ASSERT_STREQ("en-US,en", [[delegate_ responseBody] UTF8String]);
+  ASSERT_STREQ("en-US,en",
+               base::SysNSStringToUTF8([delegate_ responseBody]).c_str());
 }
 
 TEST_F(HttpTest, SetUserAgentIsExact) {
@@ -209,7 +179,8 @@ TEST_F(HttpTest, SetUserAgentIsExact) {
   NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
   StartDataTaskAndWaitForCompletion(task);
   EXPECT_EQ(nil, [delegate_ error]);
-  EXPECT_STREQ(kUserAgent, [[delegate_ responseBody] UTF8String]);
+  EXPECT_STREQ(kUserAgent,
+               base::SysNSStringToUTF8([delegate_ responseBody]).c_str());
 }
 
 TEST_F(HttpTest, SetCookie) {
@@ -416,6 +387,38 @@ TEST_F(HttpTest, BrotliHandleDecoding) {
   EXPECT_EQ(nil, [delegate_ error]);
   EXPECT_STREQ(base::SysNSStringToUTF8([delegate_ responseBody]).c_str(),
                "The quick brown fox jumps over the lazy dog");
+}
+
+TEST_F(HttpTest, PostRequest) {
+  // Create request body.
+  NSString* request_body = [NSString stringWithFormat:@"Post Data %i", rand()];
+  NSData* post_data = [request_body dataUsingEncoding:NSUTF8StringEncoding];
+
+  // Prepare the request.
+  NSURL* url = net::NSURLWithGURL(GURL(TestServer::EchoRequestBodyURL()));
+  NSMutableURLRequest* request = [[NSMutableURLRequest alloc] initWithURL:url];
+  request.HTTPMethod = @"POST";
+  request.HTTPBody = post_data;
+
+  // Set the request filter to check that the request was handled by the Cronet
+  // stack.
+  __block BOOL block_used = NO;
+  [Cronet setRequestFilterBlock:^(NSURLRequest* req) {
+    block_used = YES;
+    EXPECT_EQ([req URL], url);
+    return YES;
+  }];
+
+  // Send the request and wait for the response.
+  NSURLSessionDataTask* data_task = [session_ dataTaskWithRequest:request];
+  StartDataTaskAndWaitForCompletion(data_task);
+
+  // Verify that the response from the server matches the request body.
+  NSString* response_body = [delegate_ responseBody];
+  ASSERT_EQ(nil, [delegate_ error]);
+  ASSERT_STREQ(base::SysNSStringToUTF8(request_body).c_str(),
+               base::SysNSStringToUTF8(response_body).c_str());
+  ASSERT_TRUE(block_used);
 }
 
 }  // namespace cronet

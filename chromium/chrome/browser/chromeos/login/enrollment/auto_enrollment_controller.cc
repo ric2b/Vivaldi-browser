@@ -140,6 +140,7 @@ void AutoEnrollmentController::Start() {
       return;
     case policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT:
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT:
+    case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ZERO_TOUCH:
       // Abort re-start when there's already a final decision.
       return;
 
@@ -236,6 +237,8 @@ void AutoEnrollmentController::StartClient(
   if (state_keys.empty()) {
     LOG(ERROR) << "No state keys available";
     if (fre_requirement_ == EXPLICITLY_REQUIRED) {
+      // Retry to fetch the state keys. For devices where FRE is required to be
+      // checked, we can't proceed with empty state keys.
       g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
           ->GetStateKeysBroker()
@@ -254,10 +257,10 @@ void AutoEnrollmentController::StartClient(
       connector->device_management_service();
   service->ScheduleInitialization(0);
 
-  int power_initial = GetSanitizedArg(
-      chromeos::switches::kEnterpriseEnrollmentInitialModulus);
-  int power_limit = GetSanitizedArg(
-      chromeos::switches::kEnterpriseEnrollmentModulusLimit);
+  int power_initial =
+      GetSanitizedArg(chromeos::switches::kEnterpriseEnrollmentInitialModulus);
+  int power_limit =
+      GetSanitizedArg(chromeos::switches::kEnterpriseEnrollmentModulusLimit);
   if (power_initial > power_limit) {
     LOG(ERROR) << "Initial auto-enrollment modulus is larger than the limit, "
                   "clamping to the limit.";
@@ -288,6 +291,7 @@ void AutoEnrollmentController::UpdateState(
     case policy::AUTO_ENROLLMENT_STATE_CONNECTION_ERROR:
     case policy::AUTO_ENROLLMENT_STATE_SERVER_ERROR:
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT:
+    case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ZERO_TOUCH:
     case policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT:
       safeguard_timer_.Stop();
       break;
@@ -308,18 +312,16 @@ void AutoEnrollmentController::StartRemoveFirmwareManagementParameters() {
       ->GetCryptohomeClient()
       ->RemoveFirmwareManagementParametersFromTpm(
           request,
-          base::Bind(
+          base::BindOnce(
               &AutoEnrollmentController::OnFirmwareManagementParametersRemoved,
               weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AutoEnrollmentController::OnFirmwareManagementParametersRemoved(
-    chromeos::DBusMethodCallStatus call_status,
-    bool result,
-    const cryptohome::BaseReply& reply) {
-  if (!result) {
+    base::Optional<cryptohome::BaseReply> reply) {
+  if (!reply.has_value()) {
     LOG(ERROR) << "Failed to remove firmware management parameters, error: "
-               << reply.error();
+               << reply->error();
   }
 
   progress_callbacks_.Notify(state_);

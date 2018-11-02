@@ -201,7 +201,7 @@ class ScriptPromiseResolverKeepAlive : public ScriptPromiseResolver {
   static ScriptPromiseResolverKeepAlive* Create(ScriptState* script_state) {
     ScriptPromiseResolverKeepAlive* resolver =
         new ScriptPromiseResolverKeepAlive(script_state);
-    resolver->SuspendIfNeeded();
+    resolver->PauseIfNeeded();
     return resolver;
   }
 
@@ -292,7 +292,7 @@ TEST_F(ScriptPromiseResolverTest, suspend) {
                                          BlinkGC::kForcedGC);
   ASSERT_TRUE(ScriptPromiseResolverKeepAlive::IsAlive());
 
-  GetExecutionContext()->SuspendSuspendableObjects();
+  GetExecutionContext()->PausePausableObjects();
   resolver->Resolve("hello");
   ThreadState::Current()->CollectGarbage(BlinkGC::kNoHeapPointersOnStack,
                                          BlinkGC::kGCWithSweep,

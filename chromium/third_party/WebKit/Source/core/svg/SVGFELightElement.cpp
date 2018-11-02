@@ -21,11 +21,11 @@
 
 #include "core/svg/SVGFELightElement.h"
 
-#include "core/SVGNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/layout/LayoutObject.h"
 #include "core/svg/SVGFEDiffuseLightingElement.h"
 #include "core/svg/SVGFESpecularLightingElement.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -70,7 +70,7 @@ SVGFELightElement::SVGFELightElement(const QualifiedName& tag_name,
   AddToPropertyMap(limiting_cone_angle_);
 }
 
-DEFINE_TRACE(SVGFELightElement) {
+void SVGFELightElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(azimuth_);
   visitor->Trace(elevation_);
   visitor->Trace(x_);
@@ -119,12 +119,10 @@ void SVGFELightElement::SvgAttributeChanged(const QualifiedName& attr_name) {
       return;
 
     SVGElement::InvalidationGuard invalidation_guard(this);
-    if (isSVGFEDiffuseLightingElement(*parent))
-      toSVGFEDiffuseLightingElement(*parent).LightElementAttributeChanged(
-          this, attr_name);
-    else if (isSVGFESpecularLightingElement(*parent))
-      toSVGFESpecularLightingElement(*parent).LightElementAttributeChanged(
-          this, attr_name);
+    if (auto* diffuse = ToSVGFEDiffuseLightingElementOrNull(*parent))
+      diffuse->LightElementAttributeChanged(this, attr_name);
+    else if (auto* specular = ToSVGFESpecularLightingElementOrNull(*parent))
+      specular->LightElementAttributeChanged(this, attr_name);
 
     return;
   }

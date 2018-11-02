@@ -12,7 +12,7 @@ NinjaBundleDataTargetWriter::NinjaBundleDataTargetWriter(const Target* target,
                                                          std::ostream& out)
     : NinjaTargetWriter(target, out) {}
 
-NinjaBundleDataTargetWriter::~NinjaBundleDataTargetWriter() {}
+NinjaBundleDataTargetWriter::~NinjaBundleDataTargetWriter() = default;
 
 void NinjaBundleDataTargetWriter::Run() {
   if (target_->is_disabled())

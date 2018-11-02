@@ -11,6 +11,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kAutoUpdate);
   skip.insert(APIPermission::kBookmarksPrivate);
   skip.insert(APIPermission::kCalendar);
+  skip.insert(APIPermission::kContacts);
   skip.insert(APIPermission::kDevtoolsPrivate);
   skip.insert(APIPermission::kEditCommand);
   skip.insert(APIPermission::kExtensionActionUtils);

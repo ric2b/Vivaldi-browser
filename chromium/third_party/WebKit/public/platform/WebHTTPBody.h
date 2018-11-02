@@ -33,12 +33,11 @@
 
 #include "WebBlobData.h"
 #include "WebData.h"
-#include "WebNonCopyable.h"
 #include "WebString.h"
 #include "WebURL.h"
 
 #if INSIDE_BLINK
-#include "platform/wtf/RefPtr.h"
+#include "base/memory/scoped_refptr.h"
 #endif
 
 namespace blink {
@@ -83,18 +82,14 @@ class WebHTTPBody {
   // Append to the list of elements.
   BLINK_PLATFORM_EXPORT void AppendData(const WebData&);
   BLINK_PLATFORM_EXPORT void AppendFile(const WebString&);
-  // Passing -1 to fileLength means to the end of the file.
+  // Passing -1 to |file_length| means to the end of the file.
   BLINK_PLATFORM_EXPORT void AppendFileRange(const WebString&,
                                              long long file_start,
                                              long long file_length,
                                              double modification_time);
   BLINK_PLATFORM_EXPORT void AppendBlob(const WebString& uuid);
 
-  // Append a resource which is identified by the FileSystem URL.
-  BLINK_PLATFORM_EXPORT void AppendFileSystemURLRange(const WebURL&,
-                                                      long long start,
-                                                      long long length,
-                                                      double modification_time);
+  BLINK_PLATFORM_EXPORT void SetUniqueBoundary();
 
   // Identifies a particular form submission instance. A value of 0 is
   // used to indicate an unspecified identifier.
@@ -105,9 +100,9 @@ class WebHTTPBody {
   BLINK_PLATFORM_EXPORT void SetContainsPasswordData(bool);
 
 #if INSIDE_BLINK
-  BLINK_PLATFORM_EXPORT WebHTTPBody(WTF::RefPtr<EncodedFormData>);
-  BLINK_PLATFORM_EXPORT WebHTTPBody& operator=(WTF::RefPtr<EncodedFormData>);
-  BLINK_PLATFORM_EXPORT operator WTF::RefPtr<EncodedFormData>() const;
+  BLINK_PLATFORM_EXPORT WebHTTPBody(scoped_refptr<EncodedFormData>);
+  BLINK_PLATFORM_EXPORT WebHTTPBody& operator=(scoped_refptr<EncodedFormData>);
+  BLINK_PLATFORM_EXPORT operator scoped_refptr<EncodedFormData>() const;
 #endif
 
  private:

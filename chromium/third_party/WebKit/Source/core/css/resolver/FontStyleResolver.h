@@ -6,9 +6,10 @@
 #define FontStyleResolver_h
 
 #include "core/css/CSSPrimitiveValueMappings.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSValueIDMappings.h"
-#include "core/css/StylePropertySet.h"
 #include "platform/fonts/FontDescription.h"
+#include "platform/fonts/FontSelector.h"
 
 namespace blink {
 
@@ -20,7 +21,7 @@ class CORE_EXPORT FontStyleResolver {
   STATIC_ONLY(FontStyleResolver);
 
  public:
-  static FontDescription ComputeFont(const StylePropertySet&);
+  static FontDescription ComputeFont(const CSSPropertyValueSet&, FontSelector*);
 };
 
 }  // namespace blink

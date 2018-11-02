@@ -37,10 +37,11 @@ config("compiler") {
   # an Objective C struct won't be called, which is very bad.
   cflags_objcc = [ "-fobjc-call-cxx-cdtors" ]
 
-  cflags_c = [ "-std=c99" ]
-  cflags_objc = cflags_c
-
   ldflags = common_mac_flags
+
+  # Create a new read-only segment for protected memory. The default segments
+  # (__TEXT and __DATA) are mapped read-execute and read-write by default.
+  ldflags += [ "-segprot", "PROTECTED_MEMORY", "rw", "r" ]
 
   if (save_unstripped_output) {
     ldflags += [ "-Wcrl,unstripped," + rebase_path(root_out_dir) ]
@@ -83,12 +84,6 @@ config("mac_dynamic_flags") {
       "-Wl,-rpath,@loader_path/../../..",
     ]
   }
-}
-
-# On Mac, this is used only for executables.
-config("mac_executable_flags") {
-  # Remove this when targeting >=10.7 since it is the default in that config.
-  ldflags = [ "-Wl,-pie" ]  # Position independent.
 }
 
 # The ldflags referenced below are handled by

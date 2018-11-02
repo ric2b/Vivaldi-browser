@@ -58,7 +58,7 @@ class TranslateCollectionViewControllerTest
 
   std::unique_ptr<PrefService> CreateLocalState() {
     scoped_refptr<PrefRegistrySyncable> registry = new PrefRegistrySyncable();
-    registry->RegisterBooleanPref(prefs::kEnableTranslate, false,
+    registry->RegisterBooleanPref(prefs::kOfferTranslateEnabled, false,
                                   PrefRegistrySyncable::SYNCABLE_PREF);
     translate::TranslatePrefs::RegisterProfilePrefs(registry.get());
     registry->RegisterStringPref(
@@ -85,7 +85,7 @@ TEST_F(TranslateCollectionViewControllerTest, TestModelTranslateOff) {
 
 TEST_F(TranslateCollectionViewControllerTest, TestModelTranslateOn) {
   BooleanPrefMember translateEnabled;
-  translateEnabled.Init(prefs::kEnableTranslate, pref_service_.get());
+  translateEnabled.Init(prefs::kOfferTranslateEnabled, pref_service_.get());
   translateEnabled.SetValue(true);
   CreateController();
   EXPECT_EQ(2, NumberOfSections());
@@ -100,7 +100,7 @@ TEST_F(TranslateCollectionViewControllerTest, TestClearPreferences) {
       ChromeIOSTranslateClient::CreateTranslatePrefs(pref_service_.get()));
   translate_prefs->BlacklistSite(kBlacklistedSite);
   ASSERT_TRUE(translate_prefs->IsSiteBlacklisted(kBlacklistedSite));
-  translate_prefs->BlockLanguage(kLanguage1);
+  translate_prefs->AddToLanguageList(kLanguage1, /*force_blocked=*/true);
   ASSERT_TRUE(translate_prefs->IsBlockedLanguage(kLanguage1));
   translate_prefs->WhitelistLanguagePair(kLanguage1, kLanguage2);
   ASSERT_TRUE(

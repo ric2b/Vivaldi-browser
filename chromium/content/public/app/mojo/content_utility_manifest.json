@@ -6,7 +6,11 @@
       "provides": {
         "browser": [
           "content::mojom::Child",
+          "content::mojom::ChildControl",
+          "content::mojom::ChildHistogramFetcher",
+          "content::mojom::ChildHistogramFetcherFactory",
           "IPC::mojom::ChannelBootstrap",
+          "printing::mojom::PDFToPWGRasterConverter",
           "service_manager::mojom::ServiceFactory"
         ],
         "service_manager:service_factory": [
@@ -15,6 +19,9 @@
       },
       "requires": {
         "*": [ "app" ],
+        "content_browser": [
+          "font_cache"
+        ],
         "device": [
           "device:power_monitor",
           "device:time_zone_monitor"
@@ -44,6 +51,10 @@
     "v8_snapshot_64_data" : [{
       "path": "assets/snapshot_blob_64.bin",
       "platform": "android"
+    }],
+    "v8_context_snapshot_data" : [{
+      "path": "v8_context_snapshot.bin",
+      "platform": "linux"
     }]
   }
 }

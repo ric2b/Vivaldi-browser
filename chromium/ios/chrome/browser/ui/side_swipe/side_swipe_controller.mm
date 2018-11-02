@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
+#include "base/scoped_observer.h"
 #include "components/reading_list/core/reading_list_model.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/infobars/infobar_container_view.h"
@@ -15,12 +17,15 @@
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_side_swipe_provider.h"
 #import "ios/chrome/browser/ui/side_swipe/card_side_swipe_view.h"
 #import "ios/chrome/browser/ui/side_swipe/history_side_swipe_provider.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_navigation_view.h"
+#include "ios/chrome/browser/ui/side_swipe/side_swipe_toolbar_interacting.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_util.h"
 #import "ios/chrome/browser/ui/side_swipe_gesture_recognizer.h"
+#import "ios/chrome/browser/ui/tabs/requirements/tab_strip_highlighting.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
@@ -79,6 +84,10 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   // Bridge to observe the web state from Objective-C.
   std::unique_ptr<web::WebStateObserverBridge> webStateObserverBridge_;
 
+  // Scoped observer used to track registration of the WebStateObserverBridge.
+  std::unique_ptr<ScopedObserver<web::WebState, web::WebStateObserver>>
+      scopedWebStateObserver_;
+
   // Curtain over web view while waiting for it to load.
   UIView* curtain_;
 
@@ -116,7 +125,9 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 @synthesize inSwipe = inSwipe_;
 @synthesize swipeDelegate = swipeDelegate_;
+@synthesize toolbarInteractionHandler = _toolbarInteractionHandler;
 @synthesize snapshotDelegate = snapshotDelegate_;
+@synthesize tabStripDelegate = tabStripDelegate_;
 
 - (id)initWithTabModel:(TabModel*)model
           browserState:(ios::ChromeBrowserState*)browserState {
@@ -132,6 +143,12 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
         initWithReadingList:ReadingListModelFactory::GetForBrowserState(
                                 browserState)];
 
+    webStateObserverBridge_ =
+        std::make_unique<web::WebStateObserverBridge>(self);
+    scopedWebStateObserver_ =
+        std::make_unique<ScopedObserver<web::WebState, web::WebStateObserver>>(
+            webStateObserverBridge_.get());
+
     browserState_ = browserState;
   }
   return self;
@@ -139,6 +156,9 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 - (void)dealloc {
   [model_ removeObserver:self];
+
+  scopedWebStateObserver_.reset();
+  webStateObserverBridge_.reset();
 }
 
 - (void)addHorizontalGesturesToView:(UIView*)view {
@@ -210,17 +230,13 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   // Since the toolbar and the contentView can overlap, check the toolbar frame
   // first, and confirm the right gesture recognizer is firing.
   CGRect toolbarFrame =
-      CGRectInset([[[swipeDelegate_ toolbarController] view] frame], -1, -1);
+      CGRectInset([self.toolbarInteractionHandler toolbarView].frame, -1, -1);
   if (CGRectContainsPoint(toolbarFrame, location)) {
     if (![gesture isEqual:panGestureRecognizer_]) {
       return NO;
     }
 
-    if ([[swipeDelegate_ toolbarController] isOmniboxFirstResponder] ||
-        [[swipeDelegate_ toolbarController] showingOmniboxPopup]) {
-      return NO;
-    }
-    return YES;
+    return [self.toolbarInteractionHandler canBeginToolbarSwipe];
   }
 
   // Otherwise, only allow contentView touches with |swipeGestureRecognizer_|.
@@ -304,12 +320,14 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
   if (gesture.state == UIGestureRecognizerStateBegan) {
     // If the toolbar is hidden, move it to visible.
-    [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
+      [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    }
     [[model_ currentTab] updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
     [[NSNotificationCenter defaultCenter]
         postNotificationName:kSideSwipeWillStartNotification
                       object:nil];
-    [[swipeDelegate_ tabStripController] setHighlightsSelectedTab:YES];
+    [self.tabStripDelegate setHighlightsSelectedTab:YES];
     startingTabIndex_ = [model_ indexOfTab:[model_ currentTab]];
     [self createGreyCache:gesture.direction];
   } else if (gesture.state == UIGestureRecognizerStateChanged) {
@@ -360,7 +378,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
     // Redisplay the view if it was in overlay preview mode.
     [swipeDelegate_ displayTab:[model_ currentTab] isNewSelection:YES];
-    [[swipeDelegate_ tabStripController] setHighlightsSelectedTab:NO];
+    [self.tabStripDelegate setHighlightsSelectedTab:NO];
     [self deleteGreyCache];
     [[NSNotificationCenter defaultCenter]
         postNotificationName:kSideSwipeDidStopNotification
@@ -387,8 +405,10 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 // Show swipe to navigate.
 - (void)handleSwipeToNavigate:(SideSwipeGestureRecognizer*)gesture {
   if (gesture.state == UIGestureRecognizerStateBegan) {
-    // If the toolbar is hidden, move it to visible.
-    [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
+      // If the toolbar is hidden, move it to visible.
+      [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    }
 
     inSwipe_ = YES;
     [swipeDelegate_ updateAccessoryViewsForSideSwipeWithVisibility:NO];
@@ -414,7 +434,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     [pageSideSwipeView_ setTargetView:[swipeDelegate_ contentView]];
 
     [gesture.view insertSubview:pageSideSwipeView_
-                   belowSubview:[[swipeDelegate_ toolbarController] view]];
+                   belowSubview:[self.toolbarInteractionHandler toolbarView]];
   }
 
   __weak Tab* weakCurrentTab = [model_ currentTab];
@@ -429,8 +449,8 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
         }
 
         if (webState && webState->IsLoading()) {
-          webStateObserverBridge_.reset(
-              new web::WebStateObserverBridge(webState, self));
+          scopedWebStateObserver_->RemoveAll();
+          scopedWebStateObserver_->Add(webState);
           [self addCurtainWithCompletionHandler:^{
             inSwipe_ = NO;
           }];
@@ -448,8 +468,10 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 // Show horizontal swipe stack view for iPhone.
 - (void)handleiPhoneTabSwipe:(SideSwipeGestureRecognizer*)gesture {
   if (gesture.state == UIGestureRecognizerStateBegan) {
-    // If the toolbar is hidden, move it to visible.
-    [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
+      // If the toolbar is hidden, move it to visible.
+      [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
+    }
 
     inSwipe_ = YES;
 
@@ -466,6 +488,8 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
       tabSideSwipeView_ = [[CardSideSwipeView alloc] initWithFrame:frame
                                                          topMargin:headerHeight
                                                              model:model_];
+      tabSideSwipeView_.toolbarInteractionHandler =
+          self.toolbarInteractionHandler;
       [tabSideSwipeView_ setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                              UIViewAutoresizingFlexibleHeight];
       [tabSideSwipeView_ setDelegate:swipeDelegate_];
@@ -479,9 +503,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     [swipeDelegate_ updateAccessoryViewsForSideSwipeWithVisibility:NO];
 
     // Layout tabs with new snapshots in the current orientation.
-    [tabSideSwipeView_
-        updateViewsForDirection:gesture.direction
-                    withToolbar:[swipeDelegate_ toolbarController]];
+    [tabSideSwipeView_ updateViewsForDirection:gesture.direction];
 
     // Insert behind infobar container (which is below toolbar)
     // so card border doesn't look janky during animation.
@@ -520,7 +542,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 - (void)dismissCurtainWithCompletionHandler:(ProceduralBlock)completionHandler {
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
-  webStateObserverBridge_.reset();
+  scopedWebStateObserver_->RemoveAll();
   [curtain_ removeFromSuperview];
   curtain_ = nil;
   completionHandler();
@@ -532,6 +554,10 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   [self dismissCurtainWithCompletionHandler:^{
     inSwipe_ = NO;
   }];
+}
+
+- (void)webStateDestroyed:(web::WebState*)webState {
+  scopedWebStateObserver_->Remove(webState);
 }
 
 #pragma mark - TabModelObserver Methods

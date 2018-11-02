@@ -27,12 +27,13 @@ void WorkerDevToolsAgentHost::AttachSession(DevToolsSession* session) {
     AttachToWorker();
   }
   if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first)) {
-    host->Send(new DevToolsAgentMsg_Attach(
-        worker_id_.second, GetId(), session->session_id()));
+    session->SetRenderer(host, nullptr);
+    host->Send(
+        new DevToolsAgentMsg_Attach(worker_id_.second, session->session_id()));
   }
   session->SetFallThroughForNotFound(true);
   session->AddHandler(base::WrapUnique(new protocol::InspectorHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::NetworkHandler()));
+  session->AddHandler(base::WrapUnique(new protocol::NetworkHandler(GetId())));
   session->AddHandler(base::WrapUnique(new protocol::SchemaHandler()));
   OnAttachedStateChanged(true);
 }
@@ -104,9 +105,9 @@ void WorkerDevToolsAgentHost::WorkerReadyForInspection() {
     AttachToWorker();
     if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first)) {
       for (DevToolsSession* session : sessions()) {
-        host->Send(new DevToolsAgentMsg_Reattach(worker_id_.second, GetId(),
-                                                 session->session_id(),
-                                                 session->state_cookie()));
+        session->SetRenderer(host, nullptr);
+        host->Send(new DevToolsAgentMsg_Reattach(
+            worker_id_.second, session->session_id(), session->state_cookie()));
         for (const auto& pair : session->waiting_messages()) {
           int call_id = pair.first;
           const DevToolsSession::Message& message = pair.second;
@@ -126,6 +127,9 @@ void WorkerDevToolsAgentHost::WorkerRestarted(WorkerId worker_id) {
   DCHECK_EQ(WORKER_TERMINATED, state_);
   state_ = IsAttached() ? WORKER_PAUSED_FOR_REATTACH : WORKER_UNINSPECTED;
   worker_id_ = worker_id;
+  RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first);
+  for (DevToolsSession* session : sessions())
+    session->SetRenderer(host, nullptr);
   WorkerCreated();
 }
 
@@ -136,6 +140,8 @@ void WorkerDevToolsAgentHost::WorkerDestroyed() {
     for (auto* inspector : protocol::InspectorHandler::ForAgentHost(this))
       inspector->TargetCrashed();
     DetachFromWorker();
+    for (DevToolsSession* session : sessions())
+      session->SetRenderer(nullptr, nullptr);
   }
   state_ = WORKER_TERMINATED;
   Release();  // Balanced in WorkerCreated().
@@ -145,8 +151,10 @@ bool WorkerDevToolsAgentHost::IsTerminated() {
   return state_ == WORKER_TERMINATED;
 }
 
-WorkerDevToolsAgentHost::WorkerDevToolsAgentHost(WorkerId worker_id)
-    : DevToolsAgentHostImpl(base::GenerateGUID()),
+WorkerDevToolsAgentHost::WorkerDevToolsAgentHost(
+    const base::UnguessableToken& devtools_worker_token,
+    WorkerId worker_id)
+    : DevToolsAgentHostImpl(devtools_worker_token.ToString()),
       state_(WORKER_UNINSPECTED),
       worker_id_(worker_id) {
   WorkerCreated();

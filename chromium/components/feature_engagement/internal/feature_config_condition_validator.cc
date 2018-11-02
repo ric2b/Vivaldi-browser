@@ -4,9 +4,14 @@
 
 #include "components/feature_engagement/internal/feature_config_condition_validator.h"
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
 #include "base/feature_list.h"
 #include "components/feature_engagement/internal/availability_model.h"
 #include "components/feature_engagement/internal/configuration.h"
+#include "components/feature_engagement/internal/display_lock_controller.h"
 #include "components/feature_engagement/internal/event_model.h"
 #include "components/feature_engagement/internal/proto/event.pb.h"
 #include "components/feature_engagement/public/feature_list.h"
@@ -14,7 +19,7 @@
 namespace feature_engagement {
 
 FeatureConfigConditionValidator::FeatureConfigConditionValidator()
-    : currently_showing_(false), times_shown_(0u) {}
+    : currently_showing_(false) {}
 
 FeatureConfigConditionValidator::~FeatureConfigConditionValidator() = default;
 
@@ -23,6 +28,7 @@ ConditionValidator::Result FeatureConfigConditionValidator::MeetsConditions(
     const FeatureConfig& config,
     const EventModel& event_model,
     const AvailabilityModel& availability_model,
+    const DisplayLockController& display_lock_controller,
     uint32_t current_day) const {
   ConditionValidator::Result result(true);
   result.event_model_ready_ok = event_model.IsReady();
@@ -39,23 +45,49 @@ ConditionValidator::Result FeatureConfigConditionValidator::MeetsConditions(
         EventConfigMeetsConditions(event_config, event_model, current_day);
   }
 
-  result.session_rate_ok = config.session_rate.MeetsCriteria(times_shown_);
+  result.session_rate_ok =
+      SessionRateMeetsConditions(config.session_rate, feature);
 
   result.availability_model_ready_ok = availability_model.IsReady();
 
   result.availability_ok = AvailabilityMeetsConditions(
       feature, config.availability, availability_model, current_day);
 
+  result.display_lock_ok = !display_lock_controller.IsDisplayLocked();
+
   return result;
 }
 
 void FeatureConfigConditionValidator::NotifyIsShowing(
-    const base::Feature& feature) {
+    const base::Feature& feature,
+    const FeatureConfig& config,
+    const std::vector<std::string>& all_feature_names) {
   DCHECK(!currently_showing_);
   DCHECK(base::FeatureList::IsEnabled(feature));
 
   currently_showing_ = true;
-  ++times_shown_;
+
+  switch (config.session_rate_impact.type) {
+    case SessionRateImpact::Type::ALL:
+      for (const std::string& feature_name : all_feature_names)
+        ++times_shown_for_feature_[feature_name];
+      break;
+    case SessionRateImpact::Type::NONE:
+      // Intentionally ignore, since no features should be impacted.
+      break;
+    case SessionRateImpact::Type::EXPLICIT:
+      DCHECK(config.session_rate_impact.affected_features.has_value());
+      for (const std::string& feature_name :
+           config.session_rate_impact.affected_features.value()) {
+        DCHECK(std::find(all_feature_names.begin(), all_feature_names.end(),
+                         feature_name) != all_feature_names.end());
+        ++times_shown_for_feature_[feature_name];
+      }
+      break;
+    default:
+      // All cases should be covered.
+      NOTREACHED();
+  }
 }
 
 void FeatureConfigConditionValidator::NotifyDismissed(
@@ -117,6 +149,15 @@ bool FeatureConfigConditionValidator::AvailabilityMeetsConditions(
     days_available = 0u;
 
   return comparator.MeetsCriteria(days_available);
+}
+
+bool FeatureConfigConditionValidator::SessionRateMeetsConditions(
+    const Comparator session_rate,
+    const base::Feature& feature) const {
+  const auto it = times_shown_for_feature_.find(feature.name);
+  if (it == times_shown_for_feature_.end())
+    return session_rate.MeetsCriteria(0u);
+  return session_rate.MeetsCriteria(it->second);
 }
 
 }  // namespace feature_engagement

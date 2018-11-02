@@ -55,6 +55,7 @@ void TooltipIcon::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void TooltipIcon::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TOOLTIP;
   node_data->SetName(tooltip_);
 }
 
@@ -93,9 +94,8 @@ void TooltipIcon::ShowBubble() {
 
   if (mouse_inside_) {
     View* frame = bubble_->GetWidget()->non_client_view()->frame_view();
-    std::unique_ptr<MouseWatcherHost> host(
-        base::MakeUnique<MouseWatcherViewHost>(frame, gfx::Insets()));
-    mouse_watcher_ = base::MakeUnique<MouseWatcher>(host.release(), this);
+    mouse_watcher_ = std::make_unique<MouseWatcher>(
+        std::make_unique<MouseWatcherViewHost>(frame, gfx::Insets()), this);
     mouse_watcher_->Start();
   }
 }

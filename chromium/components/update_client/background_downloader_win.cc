@@ -35,8 +35,8 @@
 #include "components/update_client/utils.h"
 #include "url/gurl.h"
 
-using base::win::ScopedCoMem;
 using Microsoft::WRL::ComPtr;
+using base::win::ScopedCoMem;
 
 // The class BackgroundDownloader in this module is an adapter between
 // the CrxDownloader interface and the BITS service interfaces.
@@ -568,6 +568,8 @@ void BackgroundDownloader::EndDownload(HRESULT error) {
 
   const int error_to_report = SUCCEEDED(error) ? 0 : error;
 
+  DCHECK(static_cast<bool>(error_to_report) == !base::PathExists(response_));
+
   DownloadMetrics download_metrics;
   download_metrics.url = url();
   download_metrics.downloader = DownloadMetrics::kBits;
@@ -578,7 +580,8 @@ void BackgroundDownloader::EndDownload(HRESULT error) {
 
   Result result;
   result.error = error_to_report;
-  result.response = response_;
+  if (!result.error)
+    result.response = response_;
   result.downloaded_bytes = downloaded_bytes;
   result.total_bytes = total_bytes;
   main_task_runner()->PostTask(
@@ -681,19 +684,21 @@ HRESULT BackgroundDownloader::QueueBitsJob(const GURL& url,
                                            ComPtr<IBackgroundCopyJob>* job) {
   DCHECK(com_task_runner_->RunsTasksInCurrentSequence());
 
-  size_t num_jobs = 0;
-  GetBackgroundDownloaderJobCount(&num_jobs);
+  size_t num_jobs = std::numeric_limits<size_t>::max();
+  HRESULT hr = GetBackgroundDownloaderJobCount(&num_jobs);
+
+  // The metric records a large number if the job count can't be read.
   UMA_HISTOGRAM_COUNTS_100("UpdateClient.BackgroundDownloaderJobs", num_jobs);
 
   // Remove some old jobs from the BITS queue before creating new jobs.
   CleanupStaleJobs();
 
-  if (num_jobs >= kMaxQueuedJobs)
+  if (FAILED(hr) || num_jobs >= kMaxQueuedJobs)
     return MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF,
                         CrxDownloaderError::BITS_TOO_MANY_JOBS);
 
   ComPtr<IBackgroundCopyJob> local_job;
-  HRESULT hr = CreateOrOpenJob(url, &local_job);
+  hr = CreateOrOpenJob(url, &local_job);
   if (FAILED(hr)) {
     CleanupJob(local_job);
     return hr;

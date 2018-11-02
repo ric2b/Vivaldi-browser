@@ -32,6 +32,7 @@
 #define FrameSerializer_h
 
 #include "core/CoreExport.h"
+#include "core/dom/Attribute.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/KURLHash.h"
@@ -42,7 +43,6 @@
 
 namespace blink {
 
-class Attribute;
 class CSSRule;
 class CSSStyleSheet;
 class CSSValue;
@@ -52,7 +52,7 @@ class FontResource;
 class ImageResourceContent;
 class LocalFrame;
 class SharedBuffer;
-class StylePropertySet;
+class CSSPropertyValueSet;
 
 struct SerializedResource;
 
@@ -146,12 +146,12 @@ class CORE_EXPORT FrameSerializer final {
 
   void AddToResources(const String& mime_type,
                       ResourceHasCacheControlNoStoreHeader,
-                      RefPtr<const SharedBuffer>,
+                      scoped_refptr<const SharedBuffer>,
                       const KURL&);
   void AddImageToResources(ImageResourceContent*, const KURL&);
   void AddFontToResources(FontResource*);
 
-  void RetrieveResourcesForProperties(const StylePropertySet*, Document&);
+  void RetrieveResourcesForProperties(const CSSPropertyValueSet*, Document&);
   void RetrieveResourcesForCSSValue(const CSSValue&, Document&);
 
   Deque<SerializedResource>* resources_;

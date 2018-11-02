@@ -41,6 +41,7 @@ DelayNode::DelayNode(BaseAudioContext& context, double max_delay_time)
     : AudioNode(context),
       delay_time_(AudioParam::Create(context,
                                      kParamTypeDelayDelayTime,
+                                     "Delay.delayTime",
                                      0.0,
                                      0.0,
                                      max_delay_time)) {
@@ -95,7 +96,7 @@ DelayNode* DelayNode::Create(BaseAudioContext* context,
 
   node->HandleChannelOptions(options, exception_state);
 
-  node->delayTime()->setValue(options.delayTime());
+  node->delayTime()->setInitialValue(options.delayTime());
 
   return node;
 }
@@ -104,7 +105,7 @@ AudioParam* DelayNode::delayTime() {
   return delay_time_;
 }
 
-DEFINE_TRACE(DelayNode) {
+void DelayNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(delay_time_);
   AudioNode::Trace(visitor);
 }

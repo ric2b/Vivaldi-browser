@@ -4,10 +4,9 @@
 
 #include <stdint.h>
 
-#include <queue>
-
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
@@ -121,7 +120,7 @@ class MetadataRecorder : public base::RefCountedThreadSafe<MetadataRecorder> {
     RtpTimeTicks expected_rtp_timestamp;
     base::TimeTicks expected_reference_time;
   };
-  std::queue<Expectation> expectations_;
+  base::queue<Expectation> expectations_;
 
   DISALLOW_COPY_AND_ASSIGN(MetadataRecorder);
 };
@@ -170,7 +169,7 @@ class EndToEndFrameChecker
 
   MediaLog media_log_;
   FFmpegVideoDecoder decoder_;
-  std::queue<scoped_refptr<VideoFrame>> expectations_;
+  base::queue<scoped_refptr<VideoFrame>> expectations_;
   int count_frames_checked_;
 
   DISALLOW_COPY_AND_ASSIGN(EndToEndFrameChecker);
@@ -306,10 +305,10 @@ TEST_F(H264VideoToolboxEncoderTest, DISABLED_CheckFrameMetadataSequence) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Failed on mac_chromium_rel_ng trybot. http://crbug.com/627260
 TEST_F(H264VideoToolboxEncoderTest, DISABLED_CheckFramesAreDecodable) {
-  VideoDecoderConfig config(kCodecH264, H264PROFILE_MAIN, frame_->format(),
-                            COLOR_SPACE_UNSPECIFIED, frame_->coded_size(),
-                            frame_->visible_rect(), frame_->natural_size(),
-                            EmptyExtraData(), Unencrypted());
+  VideoDecoderConfig config(
+      kCodecH264, H264PROFILE_MAIN, frame_->format(), COLOR_SPACE_UNSPECIFIED,
+      VIDEO_ROTATION_0, frame_->coded_size(), frame_->visible_rect(),
+      frame_->natural_size(), EmptyExtraData(), Unencrypted());
   scoped_refptr<EndToEndFrameChecker> checker(new EndToEndFrameChecker(config));
 
   VideoEncoder::FrameEncodedCallback cb =

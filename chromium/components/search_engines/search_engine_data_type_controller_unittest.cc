@@ -14,7 +14,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/tracked_objects.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sync/driver/data_type_controller_mock.h"
 #include "components/sync/driver/fake_generic_change_processor.h"
@@ -115,7 +114,7 @@ TEST_F(SyncSearchEngineDataTypeControllerTest, StartURLServiceNotReady) {
 
   // Send the notification that the TemplateURLService has started.
   PreloadTemplateURLService();
-  EXPECT_EQ(NULL, search_engine_dtc_.GetSubscriptionForTesting());
+  EXPECT_EQ(nullptr, search_engine_dtc_.GetSubscriptionForTesting());
   EXPECT_EQ(syncer::DataTypeController::MODEL_LOADED,
             search_engine_dtc_.state());
 
@@ -173,7 +172,7 @@ TEST_F(SyncSearchEngineDataTypeControllerTest, StopBeforeLoaded) {
             search_engine_dtc_.state());
   EXPECT_FALSE(syncable_service_.syncing());
   search_engine_dtc_.Stop();
-  EXPECT_EQ(NULL, search_engine_dtc_.GetSubscriptionForTesting());
+  EXPECT_EQ(nullptr, search_engine_dtc_.GetSubscriptionForTesting());
   EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
             search_engine_dtc_.state());
   EXPECT_FALSE(syncable_service_.syncing());

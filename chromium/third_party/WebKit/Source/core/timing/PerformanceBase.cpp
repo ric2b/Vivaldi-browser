@@ -44,13 +44,13 @@
 #include "core/timing/PerformanceResourceTiming.h"
 #include "core/timing/PerformanceUserTiming.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TimeClamper.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -74,6 +74,12 @@ DOMHighResTimeStamp GetUnixAtZeroMonotonic() {
   return unix_at_zero_monotonic;
 }
 
+bool IsNavigationTimingType(
+    PerformanceBase::PerformanceMeasurePassedInParameterType type) {
+  return type != PerformanceBase::kObjectObject &&
+         type != PerformanceBase::kOther;
+}
+
 }  // namespace
 
 using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
@@ -82,7 +88,7 @@ static const size_t kDefaultResourceTimingBufferSize = 150;
 static const size_t kDefaultFrameTimingBufferSize = 150;
 
 PerformanceBase::PerformanceBase(double time_origin,
-                                 RefPtr<WebTaskRunner> task_runner)
+                                 scoped_refptr<WebTaskRunner> task_runner)
     : frame_timing_buffer_size_(kDefaultFrameTimingBufferSize),
       resource_timing_buffer_size_(kDefaultResourceTimingBufferSize),
       user_timing_(nullptr),
@@ -170,6 +176,8 @@ PerformanceEntryVector PerformanceBase::getEntriesByType(
         entries.AppendVector(user_timing_->GetMeasures());
       break;
     case PerformanceEntry::kPaint:
+      UseCounter::Count(GetExecutionContext(),
+                        WebFeature::kPaintTimingRequested);
       if (first_paint_timing_)
         entries.push_back(first_paint_timing_);
       if (first_contentful_paint_timing_)
@@ -231,6 +239,14 @@ PerformanceEntryVector PerformanceBase::getEntriesByName(
       entries.AppendVector(user_timing_->GetMeasures(name));
   }
 
+  if (entry_type.IsNull() || type == PerformanceEntry::kPaint) {
+    if (first_paint_timing_ && first_paint_timing_->name() == name)
+      entries.push_back(first_paint_timing_);
+    if (first_contentful_paint_timing_ &&
+        first_contentful_paint_timing_->name() == name)
+      entries.push_back(first_contentful_paint_timing_);
+  }
+
   std::sort(entries.begin(), entries.end(),
             PerformanceEntry::StartTimeCompareLessThan);
   return entries;
@@ -251,7 +267,7 @@ bool PerformanceBase::PassesTimingAllowCheck(
     const SecurityOrigin& initiator_security_origin,
     const AtomicString& original_timing_allow_origin,
     ExecutionContext* context) {
-  RefPtr<SecurityOrigin> resource_origin =
+  scoped_refptr<SecurityOrigin> resource_origin =
       SecurityOrigin::Create(response.Url());
   if (resource_origin->IsSameSchemeHostPort(&initiator_security_origin))
     return true;
@@ -322,6 +338,9 @@ void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
           info, allow_timing_details
                     ? PerformanceServerTiming::ShouldAllowTimingDetails::Yes
                     : PerformanceServerTiming::ShouldAllowTimingDetails::No);
+  if (serverTiming.size()) {
+    UseCounter::Count(context, WebFeature::kPerformanceServerTiming);
+  }
 
   if (info.RedirectChain().IsEmpty()) {
     PerformanceEntry* entry = PerformanceResourceTiming::Create(
@@ -345,7 +364,7 @@ void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
 
   ResourceLoadTiming* last_redirect_timing =
       redirect_chain.back().GetResourceLoadTiming();
-  DCHECK(last_redirect_timing);
+  CHECK(last_redirect_timing);
   double last_redirect_end_time = last_redirect_timing->ReceiveHeadersEnd();
 
   PerformanceEntry* entry = PerformanceResourceTiming::Create(
@@ -440,6 +459,35 @@ void PerformanceBase::measure(const String& measure_name,
                               const String& start_mark,
                               const String& end_mark,
                               ExceptionState& exception_state) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Performance.PerformanceMeasurePassedInParameter.StartMark",
+      ToPerformanceMeasurePassedInParameterType(start_mark),
+      kPerformanceMeasurePassedInParameterCount);
+  UMA_HISTOGRAM_ENUMERATION(
+      "Performance.PerformanceMeasurePassedInParameter.EndMark",
+      ToPerformanceMeasurePassedInParameterType(end_mark),
+      kPerformanceMeasurePassedInParameterCount);
+
+  ExecutionContext* execution_context = GetExecutionContext();
+  if (execution_context) {
+    PerformanceMeasurePassedInParameterType start_type =
+        ToPerformanceMeasurePassedInParameterType(start_mark);
+    PerformanceMeasurePassedInParameterType end_type =
+        ToPerformanceMeasurePassedInParameterType(end_mark);
+
+    if (start_type == kObjectObject) {
+      UseCounter::Count(execution_context,
+                        WebFeature::kPerformanceMeasurePassedInObject);
+    }
+
+    if (IsNavigationTimingType(start_type) ||
+        IsNavigationTimingType(end_type)) {
+      UseCounter::Count(
+          execution_context,
+          WebFeature::kPerformanceMeasurePassedInNavigationTiming);
+    }
+  }
+
   if (!user_timing_)
     user_timing_ = UserTiming::Create(*this);
   if (PerformanceEntry* entry = user_timing_->Measure(
@@ -476,10 +524,15 @@ void PerformanceBase::UpdatePerformanceObserverFilterOptions() {
 }
 
 void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) const {
+  bool observer_found = false;
   for (auto& observer : observers_) {
-    if (observer->FilterOptions() & entry.EntryTypeEnum())
+    if (observer->FilterOptions() & entry.EntryTypeEnum()) {
       observer->EnqueuePerformanceEntry(entry);
+      observer_found = true;
+    }
   }
+  if (observer_found && entry.EntryTypeEnum() == PerformanceEntry::kPaint)
+    UseCounter::Count(GetExecutionContext(), WebFeature::kPaintTimingObserved);
 }
 
 void PerformanceBase::NotifyObserversOfEntries(
@@ -496,7 +549,7 @@ bool PerformanceBase::HasObserverFor(
 
 void PerformanceBase::ActivateObserver(PerformanceObserver& observer) {
   if (active_observers_.IsEmpty())
-    deliver_observations_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    deliver_observations_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   active_observers_.insert(&observer);
 }
@@ -516,7 +569,7 @@ void PerformanceBase::ResumeSuspendedObservers() {
 }
 
 void PerformanceBase::DeliverObservationsTimerFired(TimerBase*) {
-  PerformanceObservers observers;
+  decltype(active_observers_) observers;
   active_observers_.Swap(observers);
   for (const auto& observer : observers) {
     if (observer->ShouldBeSuspended())
@@ -558,7 +611,7 @@ DOMHighResTimeStamp PerformanceBase::now() const {
   return MonotonicTimeToDOMHighResTimeStamp(MonotonicallyIncreasingTime());
 }
 
-DEFINE_TRACE(PerformanceBase) {
+void PerformanceBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_timing_buffer_);
   visitor->Trace(resource_timing_buffer_);
   visitor->Trace(navigation_timing_);
@@ -569,6 +622,13 @@ DEFINE_TRACE(PerformanceBase) {
   visitor->Trace(active_observers_);
   visitor->Trace(suspended_observers_);
   EventTargetWithInlineData::Trace(visitor);
+}
+
+void PerformanceBase::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  for (const auto& observer : observers_)
+    visitor->TraceWrappers(observer);
+  EventTargetWithInlineData::TraceWrappers(visitor);
 }
 
 }  // namespace blink

@@ -37,10 +37,15 @@ class GrContext;
 
 namespace gpu {
 struct Capabilities;
+struct GpuFeatureInfo;
 
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace viz {
+class GLHelper;
 }
 
 namespace blink {
@@ -52,16 +57,23 @@ class WebGraphicsContext3DProvider {
   virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
   virtual bool BindToCurrentThread() = 0;
   virtual GrContext* GetGrContext() = 0;
-  virtual gpu::Capabilities GetCapabilities() = 0;
+  virtual void InvalidateGrContext(uint32_t state) = 0;
+  virtual const gpu::Capabilities& GetCapabilities() const = 0;
+  virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const = 0;
+  // Creates a viz::GLHelper after first call and returns that instance. This
+  // method cannot return null.
+  virtual viz::GLHelper* GetGLHelper() = 0;
 
   // Returns true if the context is driven by software emulation of GL. In
   // this scenario, the compositor would not be using GPU.
+  // TODO(danakj): Make this IsSoftwareCompositing() instead, based on the
+  // CompositingModeWatcher.
   virtual bool IsSoftwareRendering() const = 0;
 
   virtual void SetLostContextCallback(const base::Closure&) = 0;
   virtual void SetErrorMessageCallback(
-      const base::Callback<void(const char* msg, int32_t id)>&) = 0;
-  virtual void SignalQuery(uint32_t, const base::Closure&) = 0;
+      base::RepeatingCallback<void(const char* msg, int32_t id)>) = 0;
+  virtual void SignalQuery(uint32_t, base::OnceClosure) = 0;
 };
 
 }  // namespace blink

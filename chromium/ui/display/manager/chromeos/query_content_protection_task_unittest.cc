@@ -12,11 +12,11 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/fake_display_snapshot.h"
 #include "ui/display/manager/chromeos/display_layout_manager.h"
 #include "ui/display/manager/chromeos/test/action_logger_util.h"
 #include "ui/display/manager/chromeos/test/test_display_layout_manager.h"
 #include "ui/display/manager/chromeos/test/test_native_display_delegate.h"
+#include "ui/display/manager/fake_display_snapshot.h"
 
 namespace display {
 namespace test {
@@ -157,8 +157,8 @@ TEST_F(QueryContentProtectionTaskTest, QueryWith2HDCPDisplays) {
   std::vector<std::unique_ptr<DisplaySnapshot>> displays;
   displays.push_back(CreateDisplaySnapshot(1, DISPLAY_CONNECTION_TYPE_HDMI));
   displays.push_back(CreateDisplaySnapshot(2, DISPLAY_CONNECTION_TYPE_DVI));
-  TestDisplayLayoutManager layout_manager(std::move(displays),
-                                          MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED);
+  TestDisplayLayoutManager layout_manager(
+      std::move(displays), MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
 
   QueryContentProtectionTask task(
       &layout_manager, &display_delegate_, 1,

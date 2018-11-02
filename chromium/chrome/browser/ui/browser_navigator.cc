@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/browser_navigator.h"
 
 #include <algorithm>
+#include <memory>
+#include <string>
 
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -20,11 +22,9 @@
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_helpers.h"
@@ -34,11 +34,13 @@
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/features/features.h"
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #endif
@@ -356,12 +358,29 @@ class ScopedTargetContentsOwner {
 
 content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
                                            const GURL& url) {
+  // Always create the new WebContents in a new SiteInstance (and therefore a
+  // new BrowsingInstance), *unless* there's a |params.opener|.
+  //
+  // Note that the SiteInstance below is only for the "initial" placement of the
+  // new WebContents (i.e. if subsequent navigation [including the initial
+  // navigation] triggers a cross-process transfer, then the opener and new
+  // contents can end up in separate processes).  This is fine, because even if
+  // subsequent navigation is cross-process (i.e. cross-SiteInstance), then it
+  // will stay in the same BrowsingInstance (creating frame proxies as needed)
+  // preserving the requested opener relationship along the way.
+  scoped_refptr<content::SiteInstance> initial_site_instance_for_new_contents =
+      params.opener
+          ? params.opener->GetSiteInstance()
+          : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url);
+
   WebContents::CreateParams create_params(
-      params.browser->profile(),
-      params.source_site_instance && !params.force_new_process_for_new_contents
-          ? params.source_site_instance
-          : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
+      params.browser->profile(), initial_site_instance_for_new_contents);
   create_params.main_frame_name = params.frame_name;
+  if (params.opener) {
+    create_params.opener_render_frame_id = params.opener->GetRoutingID();
+    create_params.opener_render_process_id =
+        params.opener->GetProcess()->GetID();
+  }
   if (params.source_contents) {
     create_params.initial_size =
         params.source_contents->GetContainerBounds().size();
@@ -398,11 +417,6 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
 bool SwapInPrerender(const GURL& url, chrome::NavigateParams* params) {
   Profile* profile =
       Profile::FromBrowserContext(params->target_contents->GetBrowserContext());
-  InstantSearchPrerenderer* prerenderer =
-      InstantSearchPrerenderer::GetForProfile(profile);
-  if (prerenderer && prerenderer->UsePrerenderedPage(url, params))
-    return true;
-
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
   return prerender_manager &&
@@ -440,12 +454,20 @@ void Navigate(NavigateParams* params) {
         source_browser->window()->GetDispositionForPopupBounds(
             params->window_bounds);
   }
+  // Trying to open a background tab when in an app browser results in
+  // focusing a regular browser window an opening a tab in the background
+  // of that window. Change the disposition to NEW_FOREGROUND_TAB so that
+  // the new tab is focused.
+  if (source_browser && source_browser->is_app() &&
+      params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+    params->disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  }
 
   params->browser = GetBrowserForDisposition(params);
   if (!params->browser)
     return;
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   if (source_browser && source_browser != params->browser) {
     // When the newly created browser was spawned by a browser which visits
     // another user's desktop, it should be shown on the same desktop as the
@@ -473,6 +495,7 @@ void Navigate(NavigateParams* params) {
   if (GetSourceProfile(params) != params->browser->profile()) {
     // A tab is being opened from a link from a different profile, we must reset
     // source information that may cause state to be shared.
+    params->opener = nullptr;
     params->source_contents = nullptr;
     params->source_site_instance = nullptr;
     params->referrer = content::Referrer();
@@ -566,6 +589,9 @@ void Navigate(NavigateParams* params) {
     // add it to the appropriate tabstrip.
   }
 
+  // We cannot call focus directly on the contents in Vivaldi as they are
+  // guestviews.
+  if (!params->browser->is_vivaldi()) {
   // If the user navigated from the omnibox, and the selected tab is going to
   // lose focus, then make sure the focus for the source tab goes away from the
   // omnibox.
@@ -574,6 +600,7 @@ void Navigate(NavigateParams* params) {
        params->disposition == WindowOpenDisposition::NEW_WINDOW) &&
       (params->tabstrip_add_types & TabStripModel::ADD_INHERIT_OPENER))
     params->source_contents->Focus();
+  }
 
   if (params->source_contents == params->target_contents ||
       (swapped_in_prerender &&
@@ -642,7 +669,8 @@ bool IsURLAllowedInIncognito(const GURL& url,
   // chrome://extensions is on the list because it redirects to
   // chrome://settings.
   if (url.scheme() == content::kChromeUIScheme &&
-      (url.host_piece() == chrome::kChromeUISettingsHost ||
+      (url.host_piece() == chrome::kChromeUIDownloadInternalsHost ||
+       url.host_piece() == chrome::kChromeUISettingsHost ||
        url.host_piece() == chrome::kChromeUIHelpHost ||
        url.host_piece() == chrome::kChromeUIHistoryHost ||
        url.host_piece() == chrome::kChromeUIExtensionsHost ||
@@ -655,9 +683,6 @@ bool IsURLAllowedInIncognito(const GURL& url,
        url.host_piece() == chrome::kChromeUIThumbnailHost2 ||
        url.host_piece() == chrome::kChromeUIThumbnailListHost ||
        url.host_piece() == chrome::kChromeUISuggestionsHost ||
-#if defined(OS_CHROMEOS)
-       url.host_piece() == chrome::kChromeUIVoiceSearchHost ||
-#endif
        url.host_piece() == chrome::kChromeUIDevicesHost)) {
     return false;
   }

@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_AUDIO_TAP_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_AUDIO_TAP_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_AUDIO_TAP_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_AUDIO_TAP_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #import <CoreAudio/CoreAudio.h>
 
@@ -23,7 +26,7 @@ namespace media {
 class DataBuffer;
 }  // namespace media
 
-namespace content {
+namespace media {
 
 // Used to grab decoded audio samples from an AVPlayerItem, see
 // |GetAudioMix()|.
@@ -32,7 +35,7 @@ class AVFAudioTap {
   using FormatKnownCB =
       base::Callback<void(const AudioStreamBasicDescription& format)>;
   using SamplesReadyCB =
-      base::Callback<void(const scoped_refptr<media::DataBuffer>& buffer)>;
+      base::Callback<void(const scoped_refptr<DataBuffer>& buffer)>;
 
   AVFAudioTap(AVAssetTrack* audio_track,
               const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
@@ -54,6 +57,6 @@ class AVFAudioTap {
   DISALLOW_COPY_AND_ASSIGN(AVFAudioTap);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_AUDIO_TAP_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_AUDIO_TAP_H_

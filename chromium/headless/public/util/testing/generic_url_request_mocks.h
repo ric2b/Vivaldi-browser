@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "headless/public/headless_export.h"
 #include "headless/public/util/generic_url_request_job.h"
 #include "headless/public/util/testing/generic_url_request_mocks.h"
 #include "net/cookies/cookie_store.h"
@@ -19,8 +18,7 @@
 
 namespace headless {
 
-class HEADLESS_EXPORT MockGenericURLRequestJobDelegate
-    : public GenericURLRequestJob::Delegate {
+class MockGenericURLRequestJobDelegate : public GenericURLRequestJob::Delegate {
  public:
   MockGenericURLRequestJobDelegate();
   ~MockGenericURLRequestJobDelegate() override;
@@ -41,7 +39,7 @@ class HEADLESS_EXPORT MockGenericURLRequestJobDelegate
 };
 
 // TODO(alexclarke): We may be able to replace this with the CookieMonster.
-class HEADLESS_EXPORT MockCookieStore : public net::CookieStore {
+class MockCookieStore : public net::CookieStore {
  public:
   MockCookieStore();
   ~MockCookieStore() override;
@@ -50,20 +48,6 @@ class HEADLESS_EXPORT MockCookieStore : public net::CookieStore {
   void SetCookieWithOptionsAsync(const GURL& url,
                                  const std::string& cookie_line,
                                  const net::CookieOptions& options,
-                                 SetCookiesCallback callback) override;
-
-  void SetCookieWithDetailsAsync(const GURL& url,
-                                 const std::string& name,
-                                 const std::string& value,
-                                 const std::string& domain,
-                                 const std::string& path,
-                                 base::Time creation_time,
-                                 base::Time expiration_time,
-                                 base::Time last_access_time,
-                                 bool secure,
-                                 bool http_only,
-                                 net::CookieSameSite same_site,
-                                 net::CookiePriority priority,
                                  SetCookiesCallback callback) override;
 
   void SetCanonicalCookieAsync(std::unique_ptr<net::CanonicalCookie> cookie,
@@ -126,13 +110,12 @@ class HEADLESS_EXPORT MockCookieStore : public net::CookieStore {
   DISALLOW_COPY_AND_ASSIGN(MockCookieStore);
 };
 
-class HEADLESS_EXPORT MockURLRequestDelegate
-    : public net::URLRequest::Delegate {
+class MockURLRequestDelegate : public net::URLRequest::Delegate {
  public:
   MockURLRequestDelegate();
   ~MockURLRequestDelegate() override;
 
-  void OnResponseStarted(net::URLRequest* request) override;
+  void OnResponseStarted(net::URLRequest* request, int net_error) override;
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override;
   const std::string& response_data() const;
   const net::IOBufferWithSize* metadata() const;

@@ -18,31 +18,31 @@ class {{exported}}{{cpp_class}} final {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
  public:
   {{cpp_class}}();
-  bool isNull() const { return m_type == SpecificTypeNone; }
+  bool IsNull() const { return type_ == SpecificType::kNone; }
 
   {% for member in members %}
-  bool is{{member.type_name}}() const { return m_type == {{member.specific_type_enum}}; }
-  {{member.rvalue_cpp_type}} getAs{{member.type_name}}() const;
-  void set{{member.type_name}}({{member.rvalue_cpp_type}});
-  static {{cpp_class}} from{{member.type_name}}({{member.rvalue_cpp_type}});
+  bool Is{{member.type_name}}() const { return type_ == SpecificType::{{member.specific_type_enum}}; }
+  {{member.rvalue_cpp_type}} GetAs{{member.type_name}}() const;
+  void Set{{member.type_name}}({{member.rvalue_cpp_type}});
+  static {{cpp_class}} From{{member.type_name}}({{member.rvalue_cpp_type}});
 
   {% endfor %}
   {{cpp_class}}(const {{cpp_class}}&);
   ~{{cpp_class}}();
   {{cpp_class}}& operator=(const {{cpp_class}}&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
-  enum SpecificTypes {
-    SpecificTypeNone,
+  enum class SpecificType {
+    kNone,
     {% for member in members %}
     {{member.specific_type_enum}},
     {% endfor %}
   };
-  SpecificTypes m_type;
+  SpecificType type_;
 
   {% for member in members %}
-  {{member.cpp_type}} m_{{member.cpp_name}};
+  {{member.cpp_type}} {{member.cpp_name}}_;
   {% endfor %}
 
   friend {{exported}}v8::Local<v8::Value> ToV8(const {{cpp_class}}&, v8::Local<v8::Object>, v8::Isolate*);
@@ -50,7 +50,7 @@ class {{exported}}{{cpp_class}} final {
 
 class {{v8_class}} final {
  public:
-  {{exported}}static void toImpl(v8::Isolate*, v8::Local<v8::Value>, {{cpp_class}}&, UnionTypeConversionMode, ExceptionState&);
+  {{exported}}static void ToImpl(v8::Isolate*, v8::Local<v8::Value>, {{cpp_class}}&, UnionTypeConversionMode, ExceptionState&);
 };
 
 {{exported}}v8::Local<v8::Value> ToV8(const {{cpp_class}}&, v8::Local<v8::Object>, v8::Isolate*);

@@ -12,8 +12,12 @@ namespace switches {
 // transparent.
 const char kDefaultBackgroundColor[] = "default-background-color";
 
-// Enable chrash reporter for headless.
+// Enable crash reporter for headless.
 const char kEnableCrashReporter[] = "enable-crash-reporter";
+
+// Disable crash reporter for headless. It is enabled by default in official
+// builds.
+const char kDisableCrashReporter[] = "disable-crash-reporter";
 
 // The directory breakpad should store minidumps in.
 const char kCrashDumpsDir[] = "crash-dumps-dir";
@@ -28,6 +32,16 @@ const char kDumpDom[] = "dump-dom";
 
 // Hide scrollbars from screenshots.
 const char kHideScrollbars[] = "hide-scrollbars";
+
+// Specifies which encryption storage backend to use. Possible values are
+// kwallet, kwallet5, gnome, gnome-keyring, gnome-libsecret, basic. Any other
+// value will lead to Chrome detecting the best backend automatically.
+// TODO(crbug.com/571003): Once PasswordStore no longer uses the Keyring or
+// KWallet for storing passwords, rename this flag to stop referencing
+// passwords. Do not rename it sooner, though; developers and testers might
+// rely on it keeping large amounts of testing passwords out of their Keyrings
+// or KWallets.
+const char kPasswordStore[] = "password-store";
 
 // Save a pdf file of the loaded page.
 const char kPrintToPDF[] = "print-to-pdf";
@@ -63,6 +77,12 @@ const char kRepl[] = "repl";
 
 // Save a screenshot of the loaded page.
 const char kScreenshot[] = "screenshot";
+
+// Causes SSL key material to be logged to the specified file for debugging
+// purposes. See
+// https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
+// for the format.
+const char kSSLKeyLogFile[] = "ssl-key-log-file";
 
 // Issues a stop after the specified number of milliseconds.  This cancels all
 // navigation and causes the DOMContentLoaded event to fire.

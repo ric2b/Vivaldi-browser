@@ -57,7 +57,7 @@ typedef ValidatingAuthenticator::ResultCallback ValidationResultCallback;
 
 }  // namespace
 
-It2MeHost::It2MeHost() {}
+It2MeHost::It2MeHost() = default;
 
 It2MeHost::~It2MeHost() {
   // Check that resources that need to be torn down on the UI thread are gone.
@@ -85,7 +85,8 @@ void It2MeHost::Connect(
   desktop_environment_factory_.reset(new It2MeDesktopEnvironmentFactory(
       host_context_->network_task_runner(),
       host_context_->video_capture_task_runner(),
-      host_context_->input_task_runner(), host_context_->ui_task_runner()));
+      host_context_->input_task_runner(), host_context_->ui_task_runner(),
+      host_context_->system_input_injector_factory()));
 
   // Switch to the network thread to start the actual connection.
   host_context_->network_task_runner()->PostTask(
@@ -557,8 +558,8 @@ void It2MeHost::OnConfirmationResult(
   }
 }
 
-It2MeHostFactory::It2MeHostFactory() {}
-It2MeHostFactory::~It2MeHostFactory() {}
+It2MeHostFactory::It2MeHostFactory() = default;
+It2MeHostFactory::~It2MeHostFactory() = default;
 
 scoped_refptr<It2MeHost> It2MeHostFactory::CreateIt2MeHost() {
   return new It2MeHost();

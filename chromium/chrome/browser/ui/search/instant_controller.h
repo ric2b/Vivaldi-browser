@@ -5,23 +5,19 @@
 #ifndef CHROME_BROWSER_UI_SEARCH_INSTANT_CONTROLLER_H_
 #define CHROME_BROWSER_UI_SEARCH_INSTANT_CONTROLLER_H_
 
-#include <stdint.h>
-
-#include <list>
 #include <memory>
-#include <string>
-#include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "chrome/browser/ui/search/instant_tab.h"
-#include "chrome/browser/ui/search/search_model.h"
+#include "base/scoped_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
-class BrowserInstantController;
+class Profile;
+class TabStripModel;
 
 namespace content {
 class WebContents;
-}
+}  // namespace content
 
 // InstantController is responsible for updating the theme and most visited info
 // of the current tab when
@@ -29,63 +25,40 @@ class WebContents;
 // * an open tab navigates to an NTP.
 //
 // InstantController is owned by Browser via BrowserInstantController.
-class InstantController : public InstantTab::Delegate {
+class InstantController : public TabStripModelObserver {
  public:
-  explicit InstantController(BrowserInstantController* browser);
+  explicit InstantController(Profile* profile, TabStripModel* tab_strip_model);
   ~InstantController() override;
 
-  // The search mode in the active tab has changed. Bind |instant_tab_| if the
-  // |new_mode| reflects an Instant NTP.
-  void SearchModeChanged(SearchModel::Origin old_origin,
-                         SearchModel::Origin new_origin);
-
-  // The user switched tabs. Bind |instant_tab_| if the newly active tab is an
-  // Instant NTP.
-  void ActiveTabChanged();
-
-  // Resets list of debug events.
-  void ClearDebugEvents();
-
-  // See comments for |debug_events_| below.
-  const std::list<std::pair<int64_t, std::string>>& debug_events() {
-    return debug_events_;
-  }
+  // TabStripModelObserver:
+  void TabDetachedAt(content::WebContents* contents, int index) override;
+  void TabDeactivated(content::WebContents* contents) override;
+  void ActiveTabChanged(content::WebContents* old_contents,
+                        content::WebContents* new_contents,
+                        int index,
+                        int reason) override;
+  void TabReplacedAt(TabStripModel* tab_strip_model,
+                     content::WebContents* old_contents,
+                     content::WebContents* new_contents,
+                     int index) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
-                           SearchDoesntReuseInstantTabWithoutSupport);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
-                           TypedSearchURLDoesntReuseInstantTab);
+  class TabObserver;
+
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
                            DispatchMVChangeEventWhileNavigatingBackToNTP);
 
-  // Overridden from InstantTab::Delegate:
-  // TODO(shishir): We assume that the WebContent's current RenderViewHost is
-  // the RenderViewHost being created which is not always true. Fix this.
-  void InstantTabAboutToNavigateMainFrame(const content::WebContents* contents,
-                                          const GURL& url) override;
-
-  // Adds a new event to |debug_events_| and also DVLOG's it. Ensures that
-  // |debug_events_| doesn't get too large.
-  void LogDebugEvent(const std::string& info) const;
-
-  // If the active tab is an Instant NTP, sets |instant_tab_| to point to it.
-  // Else, deletes any existing |instant_tab_|.
-  void ResetInstantTab();
+  void StartWatchingTab(content::WebContents* web_contents);
+  void StopWatchingTab(content::WebContents* web_contents);
 
   // Sends theme info and most visited items to the Instant renderer process.
   void UpdateInfoForInstantTab();
 
-  BrowserInstantController* const browser_;
+  Profile* const profile_;
+  ScopedObserver<TabStripModel, TabStripModelObserver> tab_strip_observer_;
 
-  // The instance of InstantTab maintained by InstantController.
-  std::unique_ptr<InstantTab> instant_tab_;
-
-  // The search model mode for the active tab.
-  SearchModel::Origin search_origin_;
-
-  // List of events and their timestamps, useful in debugging Instant behaviour.
-  mutable std::list<std::pair<int64_t, std::string>> debug_events_;
+  // Observes the currently active tab, and calls us back if it becomes an NTP.
+  std::unique_ptr<TabObserver> tab_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(InstantController);
 };

@@ -192,7 +192,8 @@ FaviconHandler::FaviconHandler(
           handler_type == FaviconDriverObserver::NON_TOUCH_LARGEST ||
           handler_type == FaviconDriverObserver::TOUCH_LARGEST),
       candidates_received_(false),
-      notification_icon_type_(favicon_base::INVALID_ICON),
+      error_other_than_404_found_(false),
+      notification_icon_type_(favicon_base::IconType::kInvalid),
       service_(service),
       delegate_(delegate),
       num_image_download_requests_(0),
@@ -204,17 +205,18 @@ FaviconHandler::~FaviconHandler() {
 }
 
 // static
-int FaviconHandler::GetIconTypesFromHandlerType(
+favicon_base::IconTypeSet FaviconHandler::GetIconTypesFromHandlerType(
     FaviconDriverObserver::NotificationIconType handler_type) {
   switch (handler_type) {
     case FaviconDriverObserver::NON_TOUCH_16_DIP:
     case FaviconDriverObserver::NON_TOUCH_LARGEST:
-      return favicon_base::FAVICON;
+      return {favicon_base::IconType::kFavicon};
     case FaviconDriverObserver::TOUCH_LARGEST:
-      return favicon_base::TOUCH_ICON | favicon_base::TOUCH_PRECOMPOSED_ICON |
-             favicon_base::WEB_MANIFEST_ICON;
+      return {favicon_base::IconType::kTouchIcon,
+              favicon_base::IconType::kTouchPrecomposedIcon,
+              favicon_base::IconType::kWebManifestIcon};
   }
-  return 0;
+  return {};
 }
 
 void FaviconHandler::FetchFavicon(const GURL& page_url, bool is_same_document) {
@@ -242,7 +244,7 @@ void FaviconHandler::FetchFavicon(const GURL& page_url, bool is_same_document) {
   non_manifest_original_candidates_.clear();
   candidates_.clear();
   notification_icon_url_ = GURL();
-  notification_icon_type_ = favicon_base::INVALID_ICON;
+  notification_icon_type_ = favicon_base::IconType::kInvalid;
   num_image_download_requests_ = 0;
   current_candidate_index_ = 0u;
   best_favicon_ = DownloadedFavicon();
@@ -291,12 +293,29 @@ void FaviconHandler::SetFavicon(const GURL& icon_url,
   // Associate the icon to all URLs in |page_urls_|, which contains page URLs
   // within the same site/document that have been considered to reliably share
   // the same icon candidates.
-  for (const GURL& page_url : page_urls_) {
-    if (ShouldSaveFavicon(page_url))
-      service_->SetFavicons(page_url, icon_url, icon_type, image);
-  }
+  if (!delegate_->IsOffTheRecord())
+    service_->SetFavicons(page_urls_, icon_url, icon_type, image);
 
   NotifyFaviconUpdated(icon_url, icon_type, image);
+}
+
+void FaviconHandler::MaybeDeleteFaviconMappings() {
+  DCHECK(candidates_received_);
+  DCHECK(got_favicon_from_history_);
+
+  // The order of these conditions is important because we want the feature
+  // state to be checked at the very end.
+  if (!error_other_than_404_found_ &&
+      notification_icon_type_ != favicon_base::IconType::kInvalid &&
+      base::FeatureList::IsEnabled(kAllowDeletionOfFaviconMappings)) {
+    if (!delegate_->IsOffTheRecord())
+      service_->DeleteFaviconMappings(page_urls_, notification_icon_type_);
+
+    delegate_->OnFaviconDeleted(last_page_url_, handler_type_);
+
+    notification_icon_url_ = GURL();
+    notification_icon_type_ = favicon_base::IconType::kInvalid;
+  }
 }
 
 void FaviconHandler::NotifyFaviconUpdated(
@@ -345,7 +364,8 @@ void FaviconHandler::OnUpdateCandidates(
 
   // |candidates| or |manifest_url| could have been modified via Javascript. If
   // neither changed, ignore the call.
-  if ((!manifests_feature_enabled || manifest_url_ == manifest_url) &&
+  if (candidates_received_ &&
+      (!manifests_feature_enabled || manifest_url_ == manifest_url) &&
       (non_manifest_original_candidates_.size() == candidates.size() &&
        std::equal(candidates.begin(), candidates.end(),
                   non_manifest_original_candidates_.begin(),
@@ -354,6 +374,7 @@ void FaviconHandler::OnUpdateCandidates(
   }
 
   candidates_received_ = true;
+  error_other_than_404_found_ = false;
   non_manifest_original_candidates_ = candidates;
   cancelable_task_tracker_for_candidates_.TryCancelAll();
   manifest_download_request_.Cancel();
@@ -382,7 +403,7 @@ void FaviconHandler::OnUpdateCandidates(
   // See if there is a cached favicon for the manifest. This will update the DB
   // mappings only if the manifest URL is cached.
   GetFaviconAndUpdateMappingsUnlessIncognito(
-      /*icon_url=*/manifest_url_, favicon_base::WEB_MANIFEST_ICON,
+      /*icon_url=*/manifest_url_, favicon_base::IconType::kWebManifestIcon,
       base::Bind(&FaviconHandler::OnFaviconDataForManifestFromFaviconService,
                  base::Unretained(this)));
 }
@@ -402,7 +423,7 @@ void FaviconHandler::OnFaviconDataForManifestFromFaviconService(
 
   if (has_valid_result &&
       (notification_icon_url_ != manifest_url_ ||
-       notification_icon_type_ != favicon_base::WEB_MANIFEST_ICON)) {
+       notification_icon_type_ != favicon_base::IconType::kWebManifestIcon)) {
     // There is a valid favicon. Notify any observers. It is useful to notify
     // the observers even if the favicon is expired or incomplete (incorrect
     // size) because temporarily showing the user an expired favicon or
@@ -447,7 +468,8 @@ void FaviconHandler::OnGotFinalIconURLCandidates(
 
   std::vector<FaviconCandidate> sorted_candidates;
   for (const FaviconURL& candidate : candidates) {
-    if (!candidate.icon_url.is_empty() && (candidate.icon_type & icon_types_)) {
+    if (!candidate.icon_url.is_empty() &&
+        (icon_types_.count(candidate.icon_type) != 0)) {
       sorted_candidates.push_back(
           FaviconCandidate::FromFaviconURL(candidate, desired_pixel_sizes));
     }
@@ -458,9 +480,7 @@ void FaviconHandler::OnGotFinalIconURLCandidates(
 
   candidates_ = std::move(sorted_candidates);
 
-  // TODO(davemoore) Should clear on empty url. Currently we ignore it.
-  // This appears to be what FF does as well.
-  if (current_candidate() && got_favicon_from_history_)
+  if (got_favicon_from_history_)
     OnGotInitialHistoryDataAndIconURLCandidates();
 }
 
@@ -477,6 +497,16 @@ int FaviconHandler::GetMaximalIconSize(
 }
 
 void FaviconHandler::OnGotInitialHistoryDataAndIconURLCandidates() {
+  DCHECK(candidates_received_);
+  DCHECK(got_favicon_from_history_);
+
+  if (candidates_.empty()) {
+    // The page lists no candidates that match our target |icon_types_|, so
+    // check if any existing mappings should be deleted.
+    MaybeDeleteFaviconMappings();
+    return;
+  }
+
   if (!initial_history_result_expired_or_incomplete_ &&
       current_candidate()->icon_url == notification_icon_url_ &&
       current_candidate()->icon_type == notification_icon_type_) {
@@ -504,14 +534,16 @@ void FaviconHandler::OnDidDownloadFavicon(
   // Mark download as finished.
   image_download_request_.Cancel();
 
-  if (bitmaps.empty() && http_status_code == 404) {
-    DVLOG(1) << "Failed to Download Favicon:" << image_url;
-    RecordDownloadOutcome(DownloadOutcome::FAILED);
-    service_->UnableToDownloadFavicon(image_url);
-  }
-
   bool request_next_icon = true;
-  if (!bitmaps.empty()) {
+  if (bitmaps.empty()) {
+    if (http_status_code == 404) {
+      DVLOG(1) << "Failed to Download Favicon:" << image_url;
+      RecordDownloadOutcome(DownloadOutcome::FAILED);
+      service_->UnableToDownloadFavicon(image_url);
+    } else if (http_status_code != 0) {
+      error_other_than_404_found_ = true;
+    }
+  } else {
     RecordDownloadOutcome(DownloadOutcome::SUCCEEDED);
     float score = 0.0f;
     gfx::ImageSkia image_skia;
@@ -552,15 +584,19 @@ void FaviconHandler::OnDidDownloadFavicon(
     // |num_image_download_requests_| can never be 0.
     RecordDownloadAttemptsForHandlerType(handler_type_,
                                          num_image_download_requests_);
-    // We have either found the ideal candidate or run out of candidates.
-    if (best_favicon_.candidate.icon_type != favicon_base::INVALID_ICON) {
+    if (best_favicon_.candidate.icon_type == favicon_base::IconType::kInvalid) {
+      // No valid icon found, so check if mappings should be deleted.
+      MaybeDeleteFaviconMappings();
+    } else {
+      // We have either found the ideal candidate or run out of candidates.
       // No more icons to request, set the favicon from the candidate. The
       // manifest URL, if available, is used instead of the icon URL.
       SetFavicon(manifest_url_.is_empty() ? best_favicon_.candidate.icon_url
                                           : manifest_url_,
                  best_favicon_.image,
-                 manifest_url_.is_empty() ? best_favicon_.candidate.icon_type
-                                          : favicon_base::WEB_MANIFEST_ICON);
+                 manifest_url_.is_empty()
+                     ? best_favicon_.candidate.icon_type
+                     : favicon_base::IconType::kWebManifestIcon);
     }
     // Clear download related state.
     current_candidate_index_ = candidates_.size();
@@ -583,14 +619,6 @@ bool FaviconHandler::HasPendingTasksForTest() {
          cancelable_task_tracker_for_candidates_.HasTrackedTasks();
 }
 
-bool FaviconHandler::ShouldSaveFavicon(const GURL& page_url) const {
-  if (!delegate_->IsOffTheRecord())
-    return true;
-
-  // Always save favicon if the page is bookmarked.
-  return delegate_->IsBookmarked(page_url);
-}
-
 void FaviconHandler::OnFaviconDataForInitialURLFromFaviconService(
     const std::vector<favicon_base::FaviconRawBitmapResult>&
         favicon_bitmap_results) {
@@ -604,24 +632,34 @@ void FaviconHandler::OnFaviconDataForInitialURLFromFaviconService(
                       !favicon_bitmap_results.empty();
 
   if (has_valid_result) {
+    // Propagate mappings to all redirects, in case the redirect chain is
+    // different from the one observed the previous time the page URL was
+    // visited.
+    //
+    // Do the propagation now because we want the propagation to occur in all
+    // scenarios and this is an easy way of guaranteeing it. For instance, we
+    // want the propagation to occur when:
+    // - The favicon in the database is expired.
+    // AND
+    // - Redownloading the favicon fails with a non-404 error code.
+    if (!delegate_->IsOffTheRecord() &&
+        base::FeatureList::IsEnabled(kAllowPropagationOfFaviconCacheHits)) {
+      service_->CloneFaviconMappingsForPages(last_page_url_, icon_types_,
+                                             page_urls_);
+    }
+
     // The db knows the favicon (although it may be out of date). Set the
     // favicon now, and if the favicon turns out to be expired (or the wrong
     // url) we'll fetch later on. This way the user doesn't see a flash of the
     // default favicon.
     NotifyFaviconUpdated(favicon_bitmap_results);
-
-    // For strict correctness, we should also set the database icon mappings for
-    // other URLs in |page_urls_| (same-document navigations like fragment
-    // navigations) because there is no guarantee that there is a mapping for
-    // the other page URLs (e.g. |last_page_url_| has a mapping because it's
-    // bookmarked but the rest don't).
   } else if(vivaldi::IsVivaldiRunning()) {
       const gfx::Image image;
       delegate_->OnFaviconUpdated(last_page_url_, handler_type_, GURL(), true,
                                   image);
   }
 
-  if (current_candidate())
+  if (candidates_received_)
     OnGotInitialHistoryDataAndIconURLCandidates();
 }
 

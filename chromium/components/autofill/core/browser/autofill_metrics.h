@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures_util.h"
@@ -24,6 +25,7 @@
 namespace autofill {
 
 class AutofillField;
+class CreditCard;
 
 class AutofillMetrics {
  public:
@@ -369,6 +371,9 @@ class AutofillMetrics {
     // User entered form data that appears to be a UPI Virtual Payment Address.
     USER_DID_ENTER_UPI_VPA,
 
+    // A field was populated by autofill.
+    FIELD_WAS_AUTOFILLED,
+
     NUM_USER_HAPPINESS_METRICS,
   };
 
@@ -424,7 +429,29 @@ class AutofillMetrics {
     // submitted. If the submission is not interrupted by JavaScript, the "form
     // submitted" event above will also be logged.
     FORM_EVENT_SUGGESTION_SHOWN_WILL_SUBMIT_ONCE,
+    // A dropdown with credit card suggestions was shown, but they were not used
+    // to fill the form. Depending on the user submitting a card known by the
+    // browser, submitting a card that the browser does not know about,
+    // submitting with an empty card number, submitting with a card number of
+    // wrong size or submitting with a card number that does not pass luhn
+    // check, one of the following will be triggered. At most one of the
+    // following five metrics will be triggered per submit.
+    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD,
+    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD,
+    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD,
+    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_WRONG_SIZE_CARD,
+    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD,
+
     NUM_FORM_EVENTS,
+  };
+
+  // Indicates submitted card information.
+  enum CardNumberStatus {
+    EMPTY_CARD,
+    WRONG_SIZE_CARD,
+    FAIL_LUHN_CHECK_CARD,
+    KNOWN_CARD,
+    UNKNOWN_CARD
   };
 
   // Form Events for autofill with bank name available for display.
@@ -683,7 +710,11 @@ class AutofillMetrics {
 
   static void LogServerQueryMetric(ServerQueryMetric metric);
 
-  static void LogUserHappinessMetric(UserHappinessMetric metric);
+  static void LogUserHappinessMetric(UserHappinessMetric metric,
+                                     FieldTypeGroup field_type_group);
+
+  static void LogUserHappinessMetric(UserHappinessMetric metric,
+                                     const std::set<FormType>& form_types);
 
   // Logs |event| to the unmask prompt events histogram.
   static void LogUnmaskPromptEvent(UnmaskPromptEvent event);
@@ -720,17 +751,16 @@ class AutofillMetrics {
   static void LogFormFillDurationFromLoadWithoutAutofill(
       const base::TimeDelta& duration);
 
-  // This should be called when a form that has been Autofilled is submitted.
-  // |duration| should be the time elapsed between the initial form interaction
-  // and submission.
-  static void LogFormFillDurationFromInteractionWithAutofill(
+  // This should be called when a form is submitted. |duration| should be the
+  // time elapsed between the initial form interaction and submission. This
+  // metric is sliced by |form_type| and |used_autofill|.
+  static void LogFormFillDurationFromInteraction(
+      const std::set<FormType>& form_types,
+      bool used_autofill,
       const base::TimeDelta& duration);
 
-  // This should be called when a fillable form that has not been Autofilled is
-  // submitted.  |duration| should be the time elapsed between the initial form
-  // interaction and submission.
-  static void LogFormFillDurationFromInteractionWithoutAutofill(
-      const base::TimeDelta& duration);
+  static void LogFormFillDuration(const std::string& metric,
+                                  const base::TimeDelta& duration);
 
   // This should be called each time a page containing forms is loaded.
   static void LogIsAutofillEnabledAtPageLoad(bool enabled);
@@ -750,12 +780,24 @@ class AutofillMetrics {
   // called once per address profile each time a new chrome profile is launched.
   static void LogStoredProfileDaysSinceLastUse(size_t days);
 
-  // This should be called each time a new chrome profile is launched.
-  static void LogStoredLocalCreditCardCount(size_t num_local_cards);
+  // Logs various metrics about the local and server cards associated with a
+  // profile. This should be called each time a new chrome profile is launched.
+  static void LogStoredCreditCardMetrics(
+      const std::vector<std::unique_ptr<CreditCard>>& local_cards,
+      const std::vector<std::unique_ptr<CreditCard>>& server_cards,
+      base::TimeDelta disused_data_threshold);
 
-  // This should be called each time a new chrome profile is launched.
-  static void LogStoredServerCreditCardCounts(size_t num_masked_cards,
-                                              size_t num_unmasked_cards);
+  // Log the number of autofill credit card suggestions suppressed because they
+  // have not been used for a long time and are expired. Note that these cards
+  // are only suppressed when the user has not typed any data into the field
+  // from which autofill is triggered. Credit cards matching something the user
+  // has types are always offered, regardless of how recently they have been
+  // used.
+  static void LogNumberOfCreditCardsSuppressedForDisuse(size_t num_cards);
+
+  // Log the number of autofill credit card deleted during major version upgrade
+  // because they have not been used for a long time and are expired.
+  static void LogNumberOfCreditCardsDeletedForDisuse(size_t num_cards);
 
   // Log the number of profiles available when an autofillable form is
   // submitted.
@@ -773,6 +815,12 @@ class AutofillMetrics {
   // autofill is triggered. Addresses matching something the user has types are
   // always offered, regardless of how recently they have been used.
   static void LogNumberOfAddressesSuppressedForDisuse(size_t num_profiles);
+
+  // Log the number of unverified autofill addresses deleted because they have
+  // not been used for a long time, and are not used as billing addresses of
+  // valid credit cards. Note the deletion only happens once per major version
+  // upgrade.
+  static void LogNumberOfAddressesDeletedForDisuse(size_t num_profiles);
 
   // Log the number of Autofill address suggestions presented to the user when
   // filling a form.
@@ -889,7 +937,8 @@ class AutofillMetrics {
 
     void OnWillSubmitForm();
 
-    void OnFormSubmitted();
+    void OnFormSubmitted(bool force_logging,
+                         const CardNumberStatus card_number_status);
 
     void SetBankNameAvailable();
 

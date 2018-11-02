@@ -7,13 +7,13 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <memory>
 #include <queue>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -165,17 +165,17 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner,
   // source. The returned TickClock will hold a reference to |this|.
   std::unique_ptr<TickClock> GetMockTickClock() const;
 
-  std::deque<TestPendingTask> TakePendingTasks();
+  base::circular_deque<TestPendingTask> TakePendingTasks();
   bool HasPendingTask() const;
   size_t GetPendingTaskCount() const;
   TimeDelta NextPendingTaskDelay() const;
 
   // SingleThreadTaskRunner:
   bool RunsTasksInCurrentSequence() const override;
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
                        TimeDelta delay) override;
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   TimeDelta delay) override;
 
@@ -227,7 +227,7 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner,
                        TestPendingTask* next_task);
 
   // RunLoop::Delegate:
-  void Run() override;
+  void Run(bool application_tasks_allowed) override;
   void Quit() override;
   void EnsureWorkScheduled() override;
 
@@ -246,7 +246,7 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner,
   // |tasks_lock_| is held.
   size_t next_task_ordinal_ = 0;
 
-  Lock tasks_lock_;
+  mutable Lock tasks_lock_;
   ConditionVariable tasks_lock_cv_;
 
   // Members used to in TestMockTimeTaskRunners of Type::kBoundToThread to take

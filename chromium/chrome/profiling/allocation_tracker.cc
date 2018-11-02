@@ -5,6 +5,7 @@
 #include "chrome/profiling/allocation_tracker.h"
 
 #include "base/callback.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/profiling/backtrace_storage.h"
 
 namespace profiling {
@@ -25,10 +26,22 @@ AllocationTracker::~AllocationTracker() {
 void AllocationTracker::OnHeader(const StreamHeader& header) {}
 
 void AllocationTracker::OnAlloc(const AllocPacket& alloc_packet,
-                                std::vector<Address>&& bt) {
+                                std::vector<Address>&& bt,
+                                std::string&& context) {
+  // Compute the context ID for this allocation, 0 means no context.
+  int context_id = 0;
+  if (!context.empty()) {
+    auto inserted_record = context_.emplace(
+        std::piecewise_construct, std::forward_as_tuple(std::move(context)),
+        std::forward_as_tuple(next_context_id_));
+    context_id = inserted_record.first->second;
+    if (inserted_record.second)
+      next_context_id_++;
+  }
+
   const Backtrace* backtrace = backtrace_storage_->Insert(std::move(bt));
-  live_allocs_.emplace(Address(alloc_packet.address), alloc_packet.size,
-                       backtrace);
+  live_allocs_.emplace(alloc_packet.allocator, Address(alloc_packet.address),
+                       alloc_packet.size, backtrace, context_id);
 }
 
 void AllocationTracker::OnFree(const FreePacket& free_packet) {
@@ -40,9 +53,44 @@ void AllocationTracker::OnFree(const FreePacket& free_packet) {
   }
 }
 
+void AllocationTracker::OnBarrier(const BarrierPacket& barrier_packet) {
+  RunnerSnapshotCallbackPair pair;
+  {
+    base::AutoLock lock(snapshot_lock_);
+    auto found = registered_snapshot_callbacks_.find(barrier_packet.barrier_id);
+    if (found == registered_snapshot_callbacks_.end()) {
+      DLOG(WARNING) << "Unexpected barrier";
+      return;
+    }
+    pair = std::move(found->second);
+    registered_snapshot_callbacks_.erase(found);
+  }
+
+  // Execute the callback outside of the lock. The arguments here must be
+  // copied.
+  pair.first->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](SnapshotCallback cb, AllocationCountMap counts,
+             ContextMap context) {
+            std::move(cb).Run(true, std::move(counts), std::move(context));
+          },
+          std::move(pair.second), AllocationEventSetToCountMap(live_allocs_),
+          context_));
+}
+
 void AllocationTracker::OnComplete() {
-  std::move(complete_callback_).Run();
-  // Danger: object may be deleted now.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                std::move(complete_callback_));
+}
+
+void AllocationTracker::SnapshotOnBarrier(
+    uint32_t barrier_id,
+    scoped_refptr<base::SequencedTaskRunner> callback_runner,
+    SnapshotCallback callback) {
+  base::AutoLock lock(snapshot_lock_);
+  registered_snapshot_callbacks_[barrier_id] =
+      std::make_pair(std::move(callback_runner), std::move(callback));
 }
 
 }  // namespace profiling

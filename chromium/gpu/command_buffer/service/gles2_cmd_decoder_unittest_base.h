@@ -23,6 +23,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/program_manager.h"
@@ -410,13 +411,28 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
                                      GLenum bind_target,
                                      GLenum target,
                                      GLint level,
-                                     GLenum internal_format,
                                      GLenum format,
                                      GLenum type,
                                      GLint xoffset,
                                      GLint yoffset,
                                      GLsizei width,
-                                     GLsizei height);
+                                     GLsizei height,
+                                     GLuint bound_pixel_unpack_buffer);
+
+  void SetupClearTexture3DExpectations(GLsizeiptr buffer_size,
+                                       GLenum target,
+                                       GLuint tex_service_id,
+                                       GLint level,
+                                       GLenum format,
+                                       GLenum type,
+                                       size_t tex_sub_image_3d_num_calls,
+                                       GLint* xoffset,
+                                       GLint* yoffset,
+                                       GLint* zoffset,
+                                       GLsizei* width,
+                                       GLsizei* height,
+                                       GLsizei* depth,
+                                       GLuint bound_pixel_unpack_buffer);
 
   void SetupExpectationsForRestoreClearState(GLclampf restore_red,
                                              GLclampf restore_green,
@@ -668,6 +684,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   scoped_refptr<gl::GLSurfaceStub> surface_;
   scoped_refptr<GLContextMock> context_;
   std::unique_ptr<FakeCommandBufferServiceBase> command_buffer_service_;
+  TraceOutputter outputter_;
   std::unique_ptr<MockGLES2Decoder> mock_decoder_;
   std::unique_ptr<GLES2Decoder> decoder_;
   MemoryTracker* memory_tracker_;
@@ -767,6 +784,8 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   void SetupMockGLBehaviors();
 
   void SetupInitStateManualExpectations(bool es3_capable);
+  void SetupInitStateManualExpectationsForWindowRectanglesEXT(GLenum mode,
+                                                              GLint count);
   void SetupInitStateManualExpectationsForDoLineWidth(GLfloat width);
 
   GpuPreferences gpu_preferences_;
@@ -859,8 +878,16 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
                                 &entries_processed);
   }
 
+  void SetBucketData(uint32_t bucket_id, const void* data, size_t data_size);
+
   template <typename T>
   T GetSharedMemoryAs() {
+    return reinterpret_cast<T>(shared_memory_address_);
+  }
+
+  template <typename T>
+  T GetSharedMemoryAsWithSize(size_t* out_shmem_size) {
+    *out_shmem_size = shared_memory_size_;
     return reinterpret_cast<T>(shared_memory_address_);
   }
 
@@ -870,13 +897,35 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
     return reinterpret_cast<T>(ptr);
   }
 
+  template <typename T>
+  T GetSharedMemoryAsWithOffsetAndSize(uint32_t offset,
+                                       size_t* out_shmem_size) {
+    EXPECT_LT(offset, shared_memory_size_);
+    *out_shmem_size = shared_memory_size_ - offset;
+    void* ptr = reinterpret_cast<int8_t*>(shared_memory_address_) + offset;
+    return reinterpret_cast<T>(ptr);
+  }
+
+  template <typename T>
+  T* GetImmediateAs() {
+    return reinterpret_cast<T*>(immediate_buffer_);
+  }
+
+  GLES2DecoderPassthroughImpl* GetDecoder() const { return decoder_.get(); }
   PassthroughResources* GetPassthroughResources() const {
     return group_->passthrough_resources();
   }
+  const base::circular_deque<GLES2DecoderPassthroughImpl::PendingReadPixels>&
+  GetPendingReadPixels() const {
+    return decoder_->pending_read_pixels_;
+  }
 
   GLint GetGLError();
+  void InjectGLError(GLenum error);
 
  protected:
+  void DoRequestExtension(const char* extension);
+
   void DoBindBuffer(GLenum target, GLuint client_id);
   void DoDeleteBuffer(GLuint client_id);
   void DoBufferData(GLenum target,
@@ -888,6 +937,31 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
                        GLsizeiptr size,
                        const void* data);
 
+  void DoBindTexture(GLenum target, GLuint client_id);
+  void DoTexImage2D(GLenum target,
+                    GLint level,
+                    GLenum internal_format,
+                    GLsizei width,
+                    GLsizei height,
+                    GLint border,
+                    GLenum format,
+                    GLenum type,
+                    uint32_t shared_memory_id,
+                    uint32_t shared_memory_offset);
+
+  void DoBindFramebuffer(GLenum target, GLuint client_id);
+  void DoFramebufferTexture2D(GLenum target,
+                              GLenum attachment,
+                              GLenum textarget,
+                              GLuint texture_client_id,
+                              GLint level);
+  void DoFramebufferRenderbuffer(GLenum target,
+                                 GLenum attachment,
+                                 GLenum renderbuffertarget,
+                                 GLuint renderbuffer);
+
+  void DoBindRenderbuffer(GLenum target, GLuint client_id);
+
   static const size_t kSharedBufferSize = 2048;
   static const uint32_t kSharedMemoryOffset = 132;
   static const uint32_t kInvalidSharedMemoryOffset = kSharedBufferSize + 1;
@@ -896,11 +970,17 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
 
   static const uint32_t kNewClientId = 501;
   static const GLuint kClientBufferId = 100;
+  static const GLuint kClientTextureId = 101;
+  static const GLuint kClientFramebufferId = 102;
+  static const GLuint kClientRenderbufferId = 103;
 
   int32_t shared_memory_id_;
   uint32_t shared_memory_offset_;
   void* shared_memory_address_;
   void* shared_memory_base_;
+  size_t shared_memory_size_;
+
+  uint32_t immediate_buffer_[64];
 
  private:
   ContextCreationAttribHelper context_creation_attribs_;
@@ -914,6 +994,7 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   std::unique_ptr<FakeCommandBufferServiceBase> command_buffer_service_;
+  TraceOutputter outputter_;
   std::unique_ptr<GLES2DecoderPassthroughImpl> decoder_;
   scoped_refptr<ContextGroup> group_;
 };

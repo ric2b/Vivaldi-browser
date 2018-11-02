@@ -7,6 +7,7 @@
 
 #include "components/omnibox/browser/omnibox_view.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/strings/string16.h"
@@ -15,7 +16,6 @@
 #include "build/build_config.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/toolbar/toolbar_model.h"
@@ -26,13 +26,33 @@
 base::string16 OmniboxView::StripJavascriptSchemas(const base::string16& text) {
   const base::string16 kJsPrefix(
       base::ASCIIToUTF16(url::kJavaScriptScheme) + base::ASCIIToUTF16(":"));
-  base::string16 out(text);
-  while (base::StartsWith(out, kJsPrefix,
-                          base::CompareCase::INSENSITIVE_ASCII)) {
-    base::TrimWhitespace(out.substr(kJsPrefix.length()), base::TRIM_LEADING,
-                         &out);
+
+  bool found_JavaScript = false;
+  size_t i = 0;
+  // Find the index of the first character that isn't whitespace, a control
+  // character, or a part of a JavaScript: scheme.
+  while (i < text.size()) {
+    if (base::IsUnicodeWhitespace(text[i]) || (text[i] < 0x20)) {
+      ++i;
+    } else {
+      if (!base::EqualsCaseInsensitiveASCII(text.substr(i, kJsPrefix.length()),
+                                            kJsPrefix))
+        break;
+
+      // We've found a JavaScript scheme. Continue searching to ensure that
+      // strings like "javascript:javascript:alert()" are fully stripped.
+      found_JavaScript = true;
+      i += kJsPrefix.length();
+    }
   }
-  return out;
+
+  // If we found any "JavaScript:" schemes in the text, return the text starting
+  // at the first non-whitespace/control character after the last instance of
+  // the scheme.
+  if (found_JavaScript)
+    return text.substr(i);
+
+  return text;
 }
 
 // static
@@ -67,11 +87,8 @@ void OmniboxView::OpenMatch(const AutocompleteMatch& match,
   // Invalid URLs such as chrome://history can end up here.
   if (!match.destination_url.is_valid() || !model_)
     return;
-  const AutocompleteMatch::Type match_type = match.type;
   model_->OpenMatch(
       match, disposition, alternate_nav_url, pasted_text, selected_line);
-  // WARNING: |match| may refer to a deleted object at this point!
-  OnMatchOpened(match_type);
 }
 
 bool OmniboxView::IsEditingOrEmpty() const {
@@ -125,9 +142,6 @@ bool OmniboxView::IsIndicatingQueryRefinement() const {
   // The default implementation always returns false.  Mobile ports can override
   // this method and implement as needed.
   return false;
-}
-
-void OmniboxView::OnMatchOpened(AutocompleteMatch::Type match_type) {
 }
 
 void OmniboxView::GetState(State* state) {

@@ -30,6 +30,8 @@
 
 #include "core/frame/Frame.h"
 
+#include <memory>
+
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -63,7 +65,7 @@ Frame::~Frame() {
   DCHECK_EQ(lifecycle_.GetState(), FrameLifecycle::kDetached);
 }
 
-DEFINE_TRACE(Frame) {
+void Frame::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_node_);
   visitor->Trace(page_);
   visitor->Trace(owner_);
@@ -77,7 +79,7 @@ void Frame::Detach(FrameDetachType type) {
   // By the time this method is called, the subclasses should have already
   // advanced to the Detaching state.
   DCHECK_EQ(lifecycle_.GetState(), FrameLifecycle::kDetaching);
-  client_->SetOpener(0);
+  client_->SetOpener(nullptr);
   // After this, we must no longer talk to the client since this clears
   // its owning reference back to our owning LocalFrame.
   client_->Detached(type);
@@ -180,14 +182,69 @@ void Frame::DidChangeVisibilityState() {
     child_frames[i]->DidChangeVisibilityState();
 }
 
+// TODO(mustaq): Should be merged with NotifyUserActivation() below but
+// not sure why this one doesn't update frame clients.  Could be related to
+// crbug.com/775930 .
 void Frame::UpdateUserActivationInFrameTree() {
-  has_received_user_gesture_ = true;
+  user_activation_state_.Activate();
   if (Frame* parent = Tree().Parent())
     parent->UpdateUserActivationInFrameTree();
 }
 
-bool Frame::IsFeatureEnabled(WebFeaturePolicyFeature feature) const {
-  WebFeaturePolicy* feature_policy = GetSecurityContext()->GetFeaturePolicy();
+void Frame::NotifyUserActivation() {
+  bool had_gesture = HasBeenActivated();
+  if (RuntimeEnabledFeatures::UserActivationV2Enabled() || !had_gesture)
+    UpdateUserActivationInFrameTree();
+  if (IsLocalFrame())
+    ToLocalFrame(this)->Client()->SetHasReceivedUserGesture(had_gesture);
+}
+
+bool Frame::ConsumeTransientUserActivation() {
+  for (Frame* parent = Tree().Parent(); parent;
+       parent = parent->Tree().Parent()) {
+    parent->user_activation_state_.ConsumeIfActive();
+  }
+  for (Frame* child = Tree().FirstChild(); child;
+       child = child->Tree().TraverseNext(this)) {
+    child->user_activation_state_.ConsumeIfActive();
+  }
+  return user_activation_state_.ConsumeIfActive();
+}
+
+// static
+std::unique_ptr<UserGestureIndicator> Frame::NotifyUserActivation(
+    Frame* frame,
+    UserGestureToken::Status status) {
+  if (frame)
+    frame->NotifyUserActivation();
+  return std::make_unique<UserGestureIndicator>(status);
+}
+
+// static
+bool Frame::HasTransientUserActivation(Frame* frame, bool checkIfMainThread) {
+  if (RuntimeEnabledFeatures::UserActivationV2Enabled()) {
+    return frame ? frame->HasTransientUserActivation() : false;
+  }
+
+  return checkIfMainThread
+             ? UserGestureIndicator::ProcessingUserGestureThreadSafe()
+             : UserGestureIndicator::ProcessingUserGesture();
+}
+
+// static
+bool Frame::ConsumeTransientUserActivation(Frame* frame,
+                                           bool checkIfMainThread) {
+  if (RuntimeEnabledFeatures::UserActivationV2Enabled()) {
+    return frame ? frame->ConsumeTransientUserActivation() : false;
+  }
+
+  return checkIfMainThread
+             ? UserGestureIndicator::ConsumeUserGestureThreadSafe()
+             : UserGestureIndicator::ConsumeUserGesture();
+}
+
+bool Frame::IsFeatureEnabled(FeaturePolicyFeature feature) const {
+  FeaturePolicy* feature_policy = GetSecurityContext()->GetFeaturePolicy();
   // The policy should always be initialized before checking it to ensure we
   // properly inherit the parent policy.
   DCHECK(feature_policy);

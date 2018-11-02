@@ -5,14 +5,15 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_JOB_COORDINATOR_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_JOB_COORDINATOR_H_
 
-#include <deque>
 #include <map>
 #include <memory>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_unregister_job.h"
 #include "content/common/content_export.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -28,7 +29,7 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
   ~ServiceWorkerJobCoordinator();
 
   void Register(const GURL& script_url,
-                const ServiceWorkerRegistrationOptions& options,
+                const blink::mojom::ServiceWorkerRegistrationOptions& options,
                 ServiceWorkerProviderHost* provider_host,
                 const ServiceWorkerRegisterJob::RegistrationCallback& callback);
 
@@ -86,7 +87,7 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
     void ClearForShutdown();
 
    private:
-    std::deque<std::unique_ptr<ServiceWorkerRegisterJobBase>> jobs_;
+    base::circular_deque<std::unique_ptr<ServiceWorkerRegisterJobBase>> jobs_;
 
     DISALLOW_COPY_AND_ASSIGN(JobQueue);
   };

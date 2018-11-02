@@ -15,9 +15,57 @@
 
 namespace download {
 
+// Helper class to listen to battery changes.
+class BatteryStatusListener : public base::PowerObserver {
+ public:
+  class Observer {
+   public:
+    // Called when device charging state changed.
+    virtual void OnPowerStateChange(bool on_battery_power) = 0;
+
+   protected:
+    virtual ~Observer() {}
+  };
+
+  BatteryStatusListener(const base::TimeDelta& battery_query_interval);
+  ~BatteryStatusListener() override;
+
+  int GetBatteryPercentage();
+  bool IsOnBatteryPower();
+
+  void Start(Observer* observer);
+  void Stop();
+
+ protected:
+  // Platform specific code should override to query the actual battery state.
+  virtual int GetBatteryPercentageInternal();
+
+ private:
+  // Updates battery percentage. Will throttle based on
+  // |battery_query_interval_| when |force| is false.
+  void UpdateBatteryPercentage(bool force);
+
+  // base::PowerObserver implementation.
+  void OnPowerStateChange(bool on_battery_power) override;
+
+  // Cached battery percentage.
+  int battery_percentage_;
+
+  // Interval to throttle battery queries. Cached value will be returned inside
+  // this interval.
+  base::TimeDelta battery_query_interval_;
+
+  // Time stamp to record last battery query.
+  base::Time last_battery_query_;
+
+  Observer* observer_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(BatteryStatusListener);
+};
+
 // Listens to network and battery status change and notifies the observer.
 class DeviceStatusListener : public NetworkStatusListener::Observer,
-                             public base::PowerObserver {
+                             public BatteryStatusListener::Observer {
  public:
   class Observer {
    public:
@@ -25,11 +73,17 @@ class DeviceStatusListener : public NetworkStatusListener::Observer,
     virtual void OnDeviceStatusChanged(const DeviceStatus& device_status) = 0;
   };
 
-  explicit DeviceStatusListener(const base::TimeDelta& delay);
+  explicit DeviceStatusListener(
+      const base::TimeDelta& startup_delay,
+      const base::TimeDelta& online_delay,
+      std::unique_ptr<BatteryStatusListener> battery_listener);
   ~DeviceStatusListener() override;
 
-  // Returns the current device status for download scheduling.
-  const DeviceStatus& CurrentDeviceStatus() const;
+  bool is_valid_state() { return is_valid_state_; }
+
+  // Returns the current device status for download scheduling. May update
+  // internal device status when called.
+  const DeviceStatus& CurrentDeviceStatus();
 
   // Starts/stops to listen network and battery change events, virtual for
   // testing.
@@ -49,28 +103,42 @@ class DeviceStatusListener : public NetworkStatusListener::Observer,
   // The observer that listens to device status change events.
   Observer* observer_;
 
-  // If we are actively listening to network and battery change events.
+  // If device status listener is started.
   bool listening_;
 
+  bool is_valid_state_;
+
  private:
+  // Start after a delay to wait for potential network stack setup.
+  void StartAfterDelay();
+
   // NetworkStatusListener::Observer implementation.
-  void OnConnectionTypeChanged(
+  void OnNetworkChanged(
       net::NetworkChangeNotifier::ConnectionType type) override;
 
-  // base::PowerObserver implementation.
+  // BatteryStatusListener::Observer implementation.
   void OnPowerStateChange(bool on_battery_power) override;
 
   // Notifies the observer about device status change.
   void NotifyStatusChange();
 
   // Called after a delay to notify the observer. See |delay_|.
-  void NotifyNetworkChangeAfterDelay(NetworkStatus network_status);
+  void NotifyNetworkChange();
 
-  // Used to notify the observer after a delay when network becomes connected.
+  // Used to start the device listener or notify network change after a delay.
   base::OneShotTimer timer_;
 
-  // The delay used by |timer_|.
-  base::TimeDelta delay_;
+  // The delay used on start up.
+  base::TimeDelta startup_delay_;
+
+  // The delay used when network status becomes online.
+  base::TimeDelta online_delay_;
+
+  // Pending network status used to update the current network status.
+  NetworkStatus pending_network_status_ = NetworkStatus::DISCONNECTED;
+
+  // Used to listen to battery status.
+  std::unique_ptr<BatteryStatusListener> battery_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceStatusListener);
 };

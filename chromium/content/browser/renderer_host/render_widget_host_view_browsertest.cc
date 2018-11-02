@@ -17,13 +17,13 @@
 #include "build/build_config.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/gpu_data_manager.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
@@ -34,8 +34,9 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "content/test/did_commit_provisional_load_interceptor.h"
 #include "media/base/video_frame.h"
-#include "media/renderers/skcanvas_video_renderer.h"
+#include "media/renderers/paint_canvas_video_renderer.h"
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -156,7 +157,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
   // Copy one frame using the CopyFromSurface API.
   void RunBasicCopyFromSurfaceTest() {
-    SET_UP_SURFACE_OR_PASS_TEST(NULL);
+    SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
     // Repeatedly call CopyFromBackingStore() since, on some platforms (e.g.,
     // Windows), the operation will fail until the first "present" has been
@@ -208,25 +209,20 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
 // Helps to ensure that a navigation is committed after a compositor frame was
 // submitted by the renderer, but before corresponding ACK is sent back.
-class CommitBeforeSwapAckSentHelper : public WebContentsObserver {
+class CommitBeforeSwapAckSentHelper
+    : public DidCommitProvisionalLoadInterceptor {
  public:
   explicit CommitBeforeSwapAckSentHelper(WebContents* web_contents)
-      : WebContentsObserver(web_contents) {}
+      : DidCommitProvisionalLoadInterceptor(web_contents) {}
 
  private:
-  void WaitForSwapCompositorFrame() {
+  // DidCommitProvisionalLoadInterceptor:
+  void WillDispatchDidCommitProvisionalLoad(
+      RenderFrameHost* render_frame_host,
+      ::FrameHostMsg_DidCommitProvisionalLoad_Params*) override {
     base::MessageLoop::ScopedNestableTaskAllower allow(
         base::MessageLoop::current());
     FrameWatcher(web_contents()).WaitFrames(1);
-  }
-
-  bool OnMessageReceived(const IPC::Message& message,
-                         RenderFrameHost* rfh) override {
-    IPC_BEGIN_MESSAGE_MAP(CommitBeforeSwapAckSentHelper, message)
-      IPC_MESSAGE_HANDLER_GENERIC(FrameHostMsg_DidCommitProvisionalLoad,
-                                  WaitForSwapCompositorFrame())
-    IPC_END_MESSAGE_MAP()
-    return false;
   }
 
   DISALLOW_COPY_AND_ASSIGN(CommitBeforeSwapAckSentHelper);
@@ -268,16 +264,19 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
   {
     CommitBeforeSwapAckSentHelper commit_helper(web_contents);
     EXPECT_TRUE(WaitForLoadStop(web_contents));
-    EXPECT_NE(web_contents->GetRenderProcessHost(),
-              new_web_contents->GetRenderProcessHost());
+    EXPECT_NE(web_contents->GetMainFrame()->GetProcess(),
+              new_web_contents->GetMainFrame()->GetProcess());
   }
 
   // Go back and verify that the renderer continues to draw new frames.
   shell()->GoBackOrForward(-1);
   EXPECT_TRUE(WaitForLoadStop(web_contents));
-  EXPECT_EQ(web_contents->GetRenderProcessHost(),
-            new_web_contents->GetRenderProcessHost());
-  FrameWatcher(web_contents).WaitFrames(5);
+  EXPECT_EQ(web_contents->GetMainFrame()->GetProcess(),
+            new_web_contents->GetMainFrame()->GetProcess());
+  MainThreadFrameObserver observer(
+      web_contents->GetRenderViewHost()->GetWidget());
+  for (int i = 0; i < 5; ++i)
+    observer.Wait();
 }
 
 enum CompositingMode {
@@ -306,7 +305,7 @@ class CompositingRenderWidgetHostViewBrowserTest
   bool SetUpSourceSurface(const char* wait_message) override {
     content::DOMMessageQueue message_queue;
     NavigateToURL(shell(), TestUrl());
-    if (wait_message != NULL) {
+    if (wait_message != nullptr) {
       std::string result(wait_message);
       if (!message_queue.WaitForMessage(&result)) {
         EXPECT_TRUE(false) << "WaitForMessage " << result << " failed.";
@@ -372,7 +371,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // when the RenderWidgetHostView is deleting in the middle of an async copy.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        CopyFromSurface_CallbackDespiteDelete) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
   base::RunLoop run_loop;
   GetRenderWidgetHostView()->CopyFromSurface(
@@ -390,7 +389,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // async copy.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        CopyFromSurfaceToVideoFrame_CallbackDespiteDelete) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
   base::RunLoop run_loop;
   scoped_refptr<media::VideoFrame> dest =
@@ -409,7 +408,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // until at least one DeliverFrameCallback has been invoked.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        FrameSubscriberTest) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
 
   base::RunLoop run_loop;
@@ -427,7 +426,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest, CopyTwice) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
 
   base::RunLoop run_loop;
@@ -568,7 +567,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
       return;
     }
 
-    media::SkCanvasVideoRenderer video_renderer;
+    media::PaintCanvasVideoRenderer video_renderer;
 
     SkBitmap bitmap;
     bitmap.allocN32Pixels(video_frame->visible_rect().width(),
@@ -680,14 +679,11 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
                        run_loop.QuitClosure());
         rwhv->CopyFromSurfaceToVideoFrame(copy_rect, video_frame, callback);
       } else {
-        if (!content::GpuDataManager::GetInstance()
-                 ->CanUseGpuBrowserCompositor()) {
-          // Skia rendering can cause color differences, particularly in the
-          // middle two columns.
-          SetAllowableError(2);
-          SetExcludeRect(gfx::Rect(output_size.width() / 2 - 1, 0, 2,
-                                   output_size.height()));
-        }
+        // Skia rendering can cause color differences, particularly in the
+        // middle two columns.
+        SetAllowableError(2);
+        SetExcludeRect(
+            gfx::Rect(output_size.width() / 2 - 1, 0, 2, output_size.height()));
 
         const ReadbackRequestCallback callback =
             base::Bind(&CompositingRenderWidgetHostViewBrowserTestTabCapture::
@@ -991,6 +987,80 @@ IN_PROC_BROWSER_TEST_P(
                                 video_frame);
 }
 
+class CompositingRenderWidgetHostViewBrowserTestHiDPI
+    : public CompositingRenderWidgetHostViewBrowserTest {
+ public:
+  CompositingRenderWidgetHostViewBrowserTestHiDPI() {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* cmd) override {
+    CompositingRenderWidgetHostViewBrowserTest::SetUpCommandLine(cmd);
+    cmd->AppendSwitchASCII(switches::kForceDeviceScaleFactor,
+                           base::StringPrintf("%f", scale()));
+  }
+
+  GURL TestUrl() override { return GURL(test_url_); }
+
+  void SetTestUrl(const std::string& url) { test_url_ = url; }
+
+  bool ShouldContinueAfterTestURLLoad() {
+    // Short-circuit a pass for platforms where setting up high-DPI fails.
+    const float actual_scale_factor =
+        GetScaleFactorForView(GetRenderWidgetHostView());
+    if (actual_scale_factor != scale()) {
+      LOG(WARNING) << "Blindly passing this test; unable to force device scale "
+                   << "factor: seems to be " << actual_scale_factor
+                   << " but expected " << scale();
+      return false;
+    }
+    VLOG(1)
+        << ("Successfully forced device scale factor.  Moving forward with "
+            "this test!  :-)");
+    return true;
+  }
+
+  static float scale() { return 2.0f; }
+
+ private:
+  std::string test_url_;
+
+  DISALLOW_COPY_AND_ASSIGN(CompositingRenderWidgetHostViewBrowserTestHiDPI);
+};
+
+IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestHiDPI,
+                       ScrollOffset) {
+  const int kContentHeight = 2000;
+  const int kScrollAmount = 100;
+
+  SetTestUrl(
+      base::StringPrintf("data:text/html,<!doctype html>"
+                         "<div class='box'></div>"
+                         "<style>"
+                         "body { padding: 0; margin: 0; }"
+                         ".box { position: absolute;"
+                         "        background: #0ff;"
+                         "        width: 100%%;"
+                         "        height: %dpx;"
+                         "}"
+                         "</style>"
+                         "<script>"
+                         "  addEventListener(\"scroll\", function() {"
+                         "      domAutomationController.send(\"DONE\"); });"
+                         "  window.scrollTo(0, %d);"
+                         "</script>",
+                         kContentHeight, kScrollAmount));
+
+  SET_UP_SURFACE_OR_PASS_TEST("\"DONE\"");
+  if (!ShouldContinueAfterTestURLLoad())
+    return;
+
+  RenderWidgetHostViewBase* rwhv = GetRenderWidgetHostView();
+  gfx::Vector2dF scroll_offset = rwhv->GetLastScrollOffset();
+
+  EXPECT_EQ(scroll_offset.x(), 0);
+  EXPECT_EQ(scroll_offset.y(), kScrollAmount);
+}
+
 #if defined(OS_CHROMEOS)
 // On ChromeOS there is no software compositing.
 static const auto kTestCompositingModes = testing::Values(GL_COMPOSITING);
@@ -1009,6 +1079,9 @@ INSTANTIATE_TEST_CASE_P(
     GLAndSoftwareCompositing,
     CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI,
     kTestCompositingModes);
+INSTANTIATE_TEST_CASE_P(GLAndSoftwareCompositing,
+                        CompositingRenderWidgetHostViewBrowserTestHiDPI,
+                        kTestCompositingModes);
 
 #endif  // !defined(OS_ANDROID)
 

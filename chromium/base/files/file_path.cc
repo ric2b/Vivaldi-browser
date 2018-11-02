@@ -169,11 +169,9 @@ bool IsEmptyOrSpecialCase(const StringType& path) {
 
 }  // namespace
 
-FilePath::FilePath() {
-}
+FilePath::FilePath() = default;
 
-FilePath::FilePath(const FilePath& that) : path_(that.path_) {
-}
+FilePath::FilePath(const FilePath& that) = default;
 FilePath::FilePath(FilePath&& that) noexcept = default;
 
 FilePath::FilePath(StringPieceType path) {
@@ -183,13 +181,9 @@ FilePath::FilePath(StringPieceType path) {
     path_.erase(nul_pos, StringType::npos);
 }
 
-FilePath::~FilePath() {
-}
+FilePath::~FilePath() = default;
 
-FilePath& FilePath::operator=(const FilePath& that) {
-  path_ = that.path_;
-  return *this;
-}
+FilePath& FilePath::operator=(const FilePath& that) = default;
 
 FilePath& FilePath::operator=(FilePath&& that) = default;
 
@@ -260,7 +254,7 @@ void FilePath::GetComponents(std::vector<StringType>* components) const {
 }
 
 bool FilePath::IsParent(const FilePath& child) const {
-  return AppendRelativePath(child, NULL);
+  return AppendRelativePath(child, nullptr);
 }
 
 bool FilePath::AppendRelativePath(const FilePath& child,
@@ -299,7 +293,7 @@ bool FilePath::AppendRelativePath(const FilePath& child,
     ++child_comp;
   }
 
-  if (path != NULL) {
+  if (path != nullptr) {
     for (; child_comp != child_components.end(); ++child_comp) {
       *path = path->Append(*child_comp);
     }
@@ -669,14 +663,6 @@ FilePath FilePath::FromUTF16Unsafe(StringPiece16 utf16) {
   return FilePath(utf16);
 }
 #endif
-
-void FilePath::GetSizeForPickle(PickleSizer* sizer) const {
-#if defined(OS_WIN)
-  sizer->AddString16(path_);
-#else
-  sizer->AddString(path_);
-#endif
-}
 
 void FilePath::WriteToPickle(Pickle* pickle) const {
 #if defined(OS_WIN)

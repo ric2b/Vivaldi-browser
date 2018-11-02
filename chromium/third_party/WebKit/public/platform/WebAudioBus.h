@@ -28,10 +28,8 @@
 #include "WebCommon.h"
 
 #if INSIDE_BLINK
-namespace WTF {
 template <typename T>
-class PassRefPtr;
-}
+class scoped_refptr;
 #endif
 
 namespace blink {
@@ -44,7 +42,7 @@ class AudioBus;
 //
 class BLINK_PLATFORM_EXPORT WebAudioBus {
  public:
-  WebAudioBus() : private_(0) {}
+  WebAudioBus() {}
   ~WebAudioBus() { Reset(); }
 
   // Initialize() allocates memory of the given length for the given number of
@@ -68,7 +66,7 @@ class BLINK_PLATFORM_EXPORT WebAudioBus {
   float* ChannelData(unsigned channel_index);
 
 #if INSIDE_BLINK
-  WTF::PassRefPtr<AudioBus> Release();
+  scoped_refptr<AudioBus> Release();
 #endif
 
  private:
@@ -76,7 +74,7 @@ class BLINK_PLATFORM_EXPORT WebAudioBus {
   WebAudioBus(const WebAudioBus&);
   void operator=(const WebAudioBus&);
 
-  AudioBus* private_;
+  AudioBus* private_ = nullptr;
 };
 
 }  // namespace blink

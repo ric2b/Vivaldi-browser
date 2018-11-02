@@ -33,6 +33,9 @@ const uint32_t kAxisMinimumUsageNumber = 0x30;
 const uint32_t kGameControlsUsagePage = 0x05;
 const uint32_t kButtonUsagePage = 0x09;
 
+const uint32_t kVendorOculus = 0x2833;
+const uint32_t kVendorBlue = 0xb58e;
+
 }  // namespace
 
 RawGamepadInfo::RawGamepadInfo() {}
@@ -208,7 +211,10 @@ void RawInputDataFetcher::EnumerateDevices() {
 
         std::string vendor = base::StringPrintf("%04x", gamepad->vendor_id);
         std::string product = base::StringPrintf("%04x", gamepad->product_id);
-        state->mapper = GetGamepadStandardMappingFunction(vendor, product);
+        std::string version =
+            base::StringPrintf("%04x", gamepad->version_number);
+        state->mapper =
+            GetGamepadStandardMappingFunction(vendor, product, version);
         state->axis_mask = 0;
         state->button_mask = 0;
 
@@ -271,9 +277,11 @@ RawGamepadInfo* RawInputDataFetcher::ParseGamepadInfo(HANDLE hDevice) {
     }
   }
 
-  // This is terrible, but the Oculus Rift seems to think it's a gamepad.
-  // Filter out any Oculus devices. (We'll handle Oculus Touch elsewhere.)
-  if (device_info->hid.dwVendorId == 0x2833) {
+  // This is terrible, but the Oculus Rift and some Blue Yeti microphones seem
+  // to think they are gamepads. Filter out any such devices. Oculus Touch is
+  // handled elsewhere.
+  if (device_info->hid.dwVendorId == kVendorOculus ||
+      device_info->hid.dwVendorId == kVendorBlue) {
     valid_type = false;
   }
 
@@ -286,6 +294,7 @@ RawGamepadInfo* RawInputDataFetcher::ParseGamepadInfo(HANDLE hDevice) {
   gamepad_info->report_id = 0;
   gamepad_info->vendor_id = device_info->hid.dwVendorId;
   gamepad_info->product_id = device_info->hid.dwProductId;
+  gamepad_info->version_number = device_info->hid.dwVersionNumber;
   gamepad_info->buttons_length = 0;
   ZeroMemory(gamepad_info->buttons, sizeof(gamepad_info->buttons));
   gamepad_info->axes_length = 0;

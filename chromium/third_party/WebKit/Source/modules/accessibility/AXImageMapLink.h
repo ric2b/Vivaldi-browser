@@ -46,9 +46,9 @@ class AXImageMapLink final : public AXNodeObject {
  public:
   static AXImageMapLink* Create(HTMLAreaElement*, AXObjectCacheImpl&);
   ~AXImageMapLink() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  HTMLAreaElement* AreaElement() const { return toHTMLAreaElement(GetNode()); }
+  HTMLAreaElement* AreaElement() const { return ToHTMLAreaElement(GetNode()); }
 
   HTMLMapElement* MapElement() const;
 
@@ -63,7 +63,8 @@ class AXImageMapLink final : public AXNodeObject {
   AXObject* ComputeParent() const override;
   void GetRelativeBounds(AXObject** out_container,
                          FloatRect& out_bounds_in_container,
-                         SkMatrix44& out_container_transform) const override;
+                         SkMatrix44& out_container_transform,
+                         bool* clips_children = nullptr) const override;
 
  private:
   bool IsImageMapLink() const override { return true; }

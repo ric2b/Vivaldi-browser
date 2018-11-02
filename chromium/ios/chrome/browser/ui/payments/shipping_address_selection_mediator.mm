@@ -12,6 +12,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
+#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/payments/cells/autofill_profile_item.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -34,8 +35,8 @@ using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
 
 @interface ShippingAddressSelectionMediator ()
 
-// The PaymentRequest object owning an instance of web::PaymentRequest as
-// provided by the page invoking the Payment Request API. This is a weak
+// The PaymentRequest object owning an instance of payments::WebPaymentRequest
+// as provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
 @property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
@@ -91,7 +92,7 @@ using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
   PaymentsTextItem* headerItem = [[PaymentsTextItem alloc] init];
   headerItem.text = [self getHeaderText];
   if (self.state == PaymentRequestSelectorStateError)
-    headerItem.image = NativeImage(IDR_IOS_PAYMENTS_WARNING);
+    headerItem.leadingImage = NativeImage(IDR_IOS_PAYMENTS_WARNING);
   return headerItem;
 }
 
@@ -101,8 +102,11 @@ using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
 
 - (CollectionViewItem*)addButtonItem {
   PaymentsTextItem* addButtonItem = [[PaymentsTextItem alloc] init];
-  addButtonItem.text = l10n_util::GetNSString(IDS_PAYMENTS_ADD_ADDRESS);
-  addButtonItem.image = NativeImage(IDR_IOS_PAYMENTS_ADD);
+  addButtonItem.text = base::SysUTF16ToNSString(
+      GetAddShippingAddressButtonLabel(self.paymentRequest->shipping_type()));
+  addButtonItem.trailingImage = TintImage([UIImage imageNamed:@"ic_add"],
+                                          [[MDCPalette greyPalette] tint400]);
+  addButtonItem.cellType = PaymentsTextCellTypeCallToAction;
   return addButtonItem;
 }
 

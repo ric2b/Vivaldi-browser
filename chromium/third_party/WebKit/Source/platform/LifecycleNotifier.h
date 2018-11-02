@@ -34,7 +34,7 @@
 namespace blink {
 
 template <typename T, typename Observer>
-class LifecycleNotifier : public virtual GarbageCollectedMixin {
+class LifecycleNotifier : public GarbageCollectedMixin {
  public:
   virtual ~LifecycleNotifier();
 
@@ -50,7 +50,7 @@ class LifecycleNotifier : public virtual GarbageCollectedMixin {
   // and safe to use while handling the notification.
   virtual void NotifyContextDestroyed();
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(observers_); }
+  virtual void Trace(blink::Visitor* visitor) { visitor->Trace(observers_); }
 
   bool IsIteratingOverObservers() const {
     return iteration_state_ != kNotIterating;

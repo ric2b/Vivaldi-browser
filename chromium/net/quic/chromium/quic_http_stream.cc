@@ -74,24 +74,24 @@ QuicHttpStream::~QuicHttpStream() {
 }
 
 HttpResponseInfo::ConnectionInfo QuicHttpStream::ConnectionInfoFromQuicVersion(
-    QuicVersion quic_version) {
+    QuicTransportVersion quic_version) {
   switch (quic_version) {
     case QUIC_VERSION_UNSUPPORTED:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_UNKNOWN_VERSION;
     case QUIC_VERSION_35:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_35;
-    case QUIC_VERSION_36:
-      return HttpResponseInfo::CONNECTION_INFO_QUIC_36;
     case QUIC_VERSION_37:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_37;
     case QUIC_VERSION_38:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_38;
     case QUIC_VERSION_39:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_39;
-    case QUIC_VERSION_40:
-      return HttpResponseInfo::CONNECTION_INFO_QUIC_40;
     case QUIC_VERSION_41:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_41;
+    case QUIC_VERSION_42:
+      return HttpResponseInfo::CONNECTION_INFO_QUIC_42;
+    case QUIC_VERSION_43:
+      return HttpResponseInfo::CONNECTION_INFO_QUIC_43;
   }
   NOTREACHED();
   return HttpResponseInfo::CONNECTION_INFO_QUIC_UNKNOWN_VERSION;

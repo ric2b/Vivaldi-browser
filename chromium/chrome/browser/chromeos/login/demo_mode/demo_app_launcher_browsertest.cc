@@ -39,7 +39,8 @@ Profile* WaitForProfile() {
   if (!user_manager || !user_manager->IsUserLoggedIn()) {
     content::WindowedNotificationObserver(
         chrome::NOTIFICATION_SESSION_STARTED,
-        content::NotificationService::AllSources()).Wait();
+        content::NotificationService::AllSources())
+        .Wait();
   }
 
   return ProfileManager::GetActiveUserProfile();
@@ -54,16 +55,14 @@ bool VerifyDemoAppLaunch() {
 
 bool VerifyNetworksDisabled() {
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
-  return !handler->FirstNetworkByType(NetworkTypePattern::NonVirtual());
+  return !handler->DefaultNetwork();
 }
 
 }  // namespace
 
 class DemoAppLauncherTest : public ExtensionBrowserTest {
  public:
-  DemoAppLauncherTest() {
-    set_exit_when_last_browser_closes(false);
-  }
+  DemoAppLauncherTest() { set_exit_when_last_browser_closes(false); }
 
   ~DemoAppLauncherTest() override {}
 

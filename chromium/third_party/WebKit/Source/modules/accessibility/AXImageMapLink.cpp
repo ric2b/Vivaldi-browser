@@ -65,7 +65,7 @@ AXObject* AXImageMapLink::ComputeParent() const {
   if (!MapElement())
     return nullptr;
 
-  return AxObjectCache().GetOrCreate(MapElement()->GetLayoutObject());
+  return AXObjectCache().GetOrCreate(MapElement()->GetLayoutObject());
 }
 
 AccessibilityRole AXImageMapLink::RoleValue() const {
@@ -97,10 +97,10 @@ KURL AXImageMapLink::Url() const {
   return AreaElement()->Href();
 }
 
-void AXImageMapLink::GetRelativeBounds(
-    AXObject** out_container,
-    FloatRect& out_bounds_in_container,
-    SkMatrix44& out_container_transform) const {
+void AXImageMapLink::GetRelativeBounds(AXObject** out_container,
+                                       FloatRect& out_bounds_in_container,
+                                       SkMatrix44& out_container_transform,
+                                       bool* clips_children) const {
   *out_container = nullptr;
   out_bounds_in_container = FloatRect();
   out_container_transform.setIdentity();
@@ -120,10 +120,10 @@ void AXImageMapLink::GetRelativeBounds(
     return;
 
   out_bounds_in_container = area->GetPath(layout_object).BoundingRect();
-  *out_container = AxObjectCache().GetOrCreate(layout_object);
+  *out_container = AXObjectCache().GetOrCreate(layout_object);
 }
 
-DEFINE_TRACE(AXImageMapLink) {
+void AXImageMapLink::Trace(blink::Visitor* visitor) {
   AXNodeObject::Trace(visitor);
 }
 

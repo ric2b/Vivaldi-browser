@@ -25,8 +25,8 @@ class RejectedPromises final : public RefCounted<RejectedPromises> {
   USING_FAST_MALLOC(RejectedPromises);
 
  public:
-  static PassRefPtr<RejectedPromises> Create() {
-    return AdoptRef(new RejectedPromises());
+  static scoped_refptr<RejectedPromises> Create() {
+    return base::AdoptRef(new RejectedPromises());
   }
 
   ~RejectedPromises();

@@ -122,6 +122,8 @@ void CookieInfoView::AddLabelRow(int layout_id,
 // CookieInfoView, private:
 
 void CookieInfoView::Init() {
+  constexpr int kLabelValuePadding = 96;
+
   // Ensure we don't run this more than once and leak memory.
   DCHECK(!name_label_);
   name_label_ = new views::Label(
@@ -146,8 +148,7 @@ void CookieInfoView::Init() {
       l10n_util::GetStringUTF16(IDS_COOKIES_COOKIE_EXPIRES_LABEL));
   expires_value_field_ = new views::Textfield;
 
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const gfx::Insets& dialog_insets =
       provider->GetInsetsMetric(views::INSETS_DIALOG);
@@ -159,9 +160,7 @@ void CookieInfoView::Init() {
   column_set->AddColumn(provider->GetControlLabelGridAlignment(),
                         views::GridLayout::CENTER, 0,
                         views::GridLayout::USE_PREF, 0, 0);
-  column_set->AddPaddingColumn(
-      0,
-      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL));
+  column_set->AddPaddingColumn(0, kLabelValuePadding);
   column_set->AddColumn(views::GridLayout::TRAILING, views::GridLayout::CENTER,
                         0, views::GridLayout::USE_PREF, 0, 0);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER,

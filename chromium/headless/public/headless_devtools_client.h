@@ -10,6 +10,10 @@
 #include "base/macros.h"
 #include "headless/public/headless_export.h"
 
+namespace base {
+class DictionaryValue;
+}  // namespace base
+
 namespace headless {
 
 namespace accessibility {
@@ -57,6 +61,9 @@ class Domain;
 namespace emulation {
 class Domain;
 }
+namespace headless_experimental {
+class Domain;
+}
 namespace heap_profiler {
 class Domain;
 }
@@ -85,6 +92,9 @@ namespace network {
 class Domain;
 }
 namespace page {
+class Domain;
+}
+namespace performance {
 class Domain;
 }
 namespace profiler {
@@ -133,6 +143,7 @@ class HEADLESS_EXPORT HeadlessDevToolsClient {
   virtual dom_snapshot::Domain* GetDOMSnapshot() = 0;
   virtual dom_storage::Domain* GetDOMStorage() = 0;
   virtual emulation::Domain* GetEmulation() = 0;
+  virtual headless_experimental::Domain* GetHeadlessExperimental() = 0;
   virtual heap_profiler::Domain* GetHeapProfiler() = 0;
   virtual indexeddb::Domain* GetIndexedDB() = 0;
   virtual input::Domain* GetInput() = 0;
@@ -143,6 +154,7 @@ class HEADLESS_EXPORT HeadlessDevToolsClient {
   virtual memory::Domain* GetMemory() = 0;
   virtual network::Domain* GetNetwork() = 0;
   virtual page::Domain* GetPage() = 0;
+  virtual performance::Domain* GetPerformance() = 0;
   virtual profiler::Domain* GetProfiler() = 0;
   virtual runtime::Domain* GetRuntime() = 0;
   virtual security::Domain* GetSecurity() = 0;

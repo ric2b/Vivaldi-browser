@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace features {
 
-#if defined(OS_WIN)
-// Enables stylus appearing as touch when in contact with digitizer.
-const base::Feature kDirectManipulationStylus = {
-    "DirectManipulationStylus", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  // defined(OS_WIN)
+// Enables the floating virtual keyboard behavior.
+const base::Feature kEnableFloatingVirtualKeyboard = {
+    "enable-floating-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 
@@ -35,10 +32,10 @@ const char kShowMacOverlayBorders[] = "show-mac-overlay-borders";
 
 #if defined(OS_WIN)
 // Disables merging the key event (WM_KEY*) with the char event (WM_CHAR).
-const char kDisableMergeKeyCharEvents[]     = "disable-merge-key-char-events";
+const char kDisableMergeKeyCharEvents[] = "disable-merge-key-char-events";
 
 // Enables merging the key event (WM_KEY*) with the char event (WM_CHAR).
-const char kEnableMergeKeyCharEvents[]     = "enable-merge-key-char-events";
+const char kEnableMergeKeyCharEvents[] = "enable-merge-key-char-events";
 #endif
 
 // Disables layer-edge anti-aliasing in the compositor.
@@ -83,21 +80,16 @@ const char kTopChromeMD[] = "top-chrome-md";
 // Material design mode for the |kTopChromeMD| switch.
 const char kTopChromeMDMaterial[] = "material";
 
+// Auto-switching mode |kTopChromeMD| switch. This mode toggles between
+// material and material-hybrid depending on device.
+const char kTopChromeMDMaterialAuto[] = "material-auto";
+
 // Material design hybrid mode for the |kTopChromeMD| switch. Targeted for
 // mouse/touch hybrid devices.
 const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 
 // Classic, non-material, mode for the |kTopChromeMD| switch.
 const char kTopChromeMDNonMaterial[] = "non-material";
-
-// Disable new window behavior for virtual keyboard (do not change work area in
-// non-sticky mode).
-const char kDisableNewVirtualKeyboardBehavior[] =
-    "disable-new-virtual-keyboard-behavior";
-
-// Applies the material design mode passed via --top-chrome-md to elements
-// throughout Chrome (not just top Chrome).
-const char kExtendMdToSecondaryUi[] = "secondary-ui-md";
 
 // Disable partial swap which is needed for some OpenGL drivers / emulators.
 const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
@@ -114,6 +106,9 @@ const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
 // Red: Overdrawn four or more times.
 const char kShowOverdrawFeedback[] = "show-overdraw-feedback";
 
+// Use draw occlusion to skip draw quads when they are not shown on screen.
+const char kEnableDrawOcclusion[] = "enable-draw-occlusion";
+
 // Use SkiaRenderer instead of GLRenderer for direct rendering.
 const char kUseSkiaRenderer[] = "use-skia-renderer";
 
@@ -122,10 +117,23 @@ const char kUseSkiaRenderer[] = "use-skia-renderer";
 const char kDisallowNonExactResourceReuse[] =
     "disallow-non-exact-resource-reuse";
 
+// Transform localized strings to be longer, with beginning and end markers to
+// make truncation visually apparent.
+const char kMangleLocalizedStrings[] = "mangle-localized-strings";
+
 // Re-draw everything multiple times to simulate a much slower machine.
 // Give a slow down factor to cause renderer to take that many times longer to
 // complete, such as --slow-down-compositing-scale-factor=2.
 const char kSlowDownCompositingScaleFactor[] =
     "slow-down-compositing-scale-factor";
+
+#if defined(USE_AURA)
+// Used to enable the mus service (aka the UI service). This makes mus run in
+// process. It is also used to notify the clients that the UI service is being
+// used. If the value of this flag is set to kMusHostVizValue, then that means
+// the UI service is hosting the viz service.
+const char kMus[] = "mus";
+const char kMusHostVizValue[] = "viz";
+#endif
 
 }  // namespace switches

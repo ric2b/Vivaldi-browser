@@ -5,7 +5,6 @@
 #include <list>
 
 #include "base/run_loop.h"
-#include "chrome/browser/interstitials/chrome_controller_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
@@ -17,10 +16,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/browser/threat_details.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/core/safe_browsing_quiet_error_ui.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/navigation_simulator.h"
@@ -95,6 +96,7 @@ class TestSafeBrowsingBlockingPageFactory
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
         is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
+        true,  // always_show_back_to_safety
         "cpn_safe_browsing" /* help_center_article_link */);
     return new TestSafeBrowsingBlockingPage(manager, web_contents,
                                             main_frame_url, unsafe_resources,
@@ -177,6 +179,7 @@ class TestSafeBrowsingBlockingQuietPageFactory
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
         is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
+        true,  // always_show_back_to_safety
         "cpn_safe_browsing" /* help_center_article_link */);
     return new TestSafeBrowsingBlockingPageQuiet(
         manager, web_contents, main_frame_url, unsafe_resources,
@@ -253,35 +256,6 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
       user_response_ = CANCEL;
   }
 
-  void DidNavigateCrossSite(const char* url,
-                            int nav_entry_id,
-                            bool did_create_new_entry) {
-    content::RenderFrameHost* render_frame_host =
-        content::WebContentsTester::For(web_contents())->GetPendingMainFrame();
-    content::WebContentsTester::For(web_contents())
-        ->TestDidNavigate(render_frame_host, nav_entry_id,
-                          did_create_new_entry, GURL(url),
-                          ui::PAGE_TRANSITION_TYPED);
-  }
-
-  void GoBack(bool is_cross_site) {
-    NavigationEntry* entry =
-        web_contents()->GetController().GetEntryAtOffset(-1);
-    ASSERT_TRUE(entry);
-    web_contents()->GetController().GoBack();
-
-    // The pending RVH should commit for cross-site navigations.
-    content::RenderFrameHost* rfh = is_cross_site ?
-        WebContentsTester::For(web_contents())->GetPendingMainFrame() :
-        web_contents()->GetMainFrame();
-    WebContentsTester::For(web_contents())->TestDidNavigate(
-        rfh,
-        entry->GetUniqueID(),
-        false,
-        entry->GetURL(),
-        ui::PAGE_TRANSITION_TYPED);
-  }
-
   void ShowInterstitial(bool is_subresource, const char* url) {
     security_interstitials::UnsafeResource resource;
     InitResource(&resource, is_subresource, GURL(url));
@@ -320,7 +294,7 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
       SafeBrowsingBlockingPage* sb_interstitial) {
     // CommandReceived(kTakeMeBackCommand) does a back navigation for
     // subresource interstitials.
-    GoBack(true);
+    NavigationSimulator::GoBack(web_contents());
     // DontProceed() posts a task to update the SafeBrowsingService::Client.
     base::RunLoop().RunUntilIdle();
   }
@@ -344,7 +318,7 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
     resource->threat_type = SB_THREAT_TYPE_URL_MALWARE;
     resource->web_contents_getter =
         security_interstitials::UnsafeResource::GetWebContentsGetter(
-            web_contents()->GetRenderProcessHost()->GetID(),
+            web_contents()->GetMainFrame()->GetProcess()->GetID(),
             web_contents()->GetMainFrame()->GetRoutingID());
     resource->threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
   }
@@ -667,7 +641,7 @@ TEST_F(SafeBrowsingBlockingPageTest, NavigatingBackAndForth) {
   // Proceed, then navigate back.
   ProceedThroughInterstitial(sb_interstitial);
   navigation->Commit();
-  GoBack(true);
+  NavigationSimulator::GoBack(web_contents());
 
   // We are back on the good page.
   sb_interstitial = GetSafeBrowsingBlockingPage();
@@ -676,8 +650,9 @@ TEST_F(SafeBrowsingBlockingPageTest, NavigatingBackAndForth) {
   EXPECT_EQ(kGoodURL, controller().GetActiveEntry()->GetURL().spec());
 
   // Navigate forward to the malware URL.
-  web_contents()->GetController().GoForward();
-  int pending_id = controller().GetPendingEntry()->GetUniqueID();
+  auto forward_navigation = NavigationSimulator::CreateHistoryNavigation(
+      1 /* Offset */, web_contents());
+  forward_navigation->Start();
   ShowInterstitial(false, kBadURL);
   sb_interstitial = GetSafeBrowsingBlockingPage();
   ASSERT_TRUE(sb_interstitial);
@@ -685,9 +660,7 @@ TEST_F(SafeBrowsingBlockingPageTest, NavigatingBackAndForth) {
   // Let's proceed and make sure everything is OK (bug 17627).
   ProceedThroughInterstitial(sb_interstitial);
   // Commit the navigation.
-  // TODO(ahemery): Remove this and DidNavigateCrossSite function once we are
-  // able to use NavigationSimulator to do back/forward navigations.
-  DidNavigateCrossSite(kBadURL, pending_id, false);
+  forward_navigation->Commit();
   sb_interstitial = GetSafeBrowsingBlockingPage();
   ASSERT_FALSE(sb_interstitial);
   ASSERT_EQ(2, controller().GetEntryCount());
@@ -964,7 +937,7 @@ class SafeBrowsingBlockingQuietPageTest
     resource->threat_type = type;
     resource->web_contents_getter =
         security_interstitials::UnsafeResource::GetWebContentsGetter(
-            web_contents()->GetRenderProcessHost()->GetID(),
+            web_contents()->GetMainFrame()->GetProcess()->GetID(),
             web_contents()->GetMainFrame()->GetRoutingID());
     resource->threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
   }

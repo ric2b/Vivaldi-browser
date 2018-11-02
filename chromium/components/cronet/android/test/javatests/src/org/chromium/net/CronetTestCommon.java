@@ -4,6 +4,8 @@
 
 package org.chromium.net;
 
+import static org.chromium.net.CronetTestRule.getContext;
+
 import android.content.Context;
 import android.os.StrictMode;
 
@@ -11,12 +13,14 @@ import org.junit.Assert;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.PathUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.net.CronetTestRule.CronetTestFramework;
+import org.chromium.net.impl.CronetEngineBase;
+import org.chromium.net.impl.JavaCronetEngine;
 import org.chromium.net.impl.JavaCronetProvider;
+import org.chromium.net.impl.UserAgent;
 
 import java.io.File;
-import java.net.URLStreamHandlerFactory;
+import java.net.URL;
 
 // TODO(yolandyan): move this class to its test rule once JUnit4 migration is over
 final class CronetTestCommon {
@@ -25,7 +29,6 @@ final class CronetTestCommon {
     private final CronetTestCommonCallback mCallback;
 
     private CronetTestFramework mCronetTestFramework;
-    private URLStreamHandlerFactory mStreamHandlerFactory;
 
     // {@code true} when test is being run against system HttpURLConnection implementation.
     private boolean mTestingSystemHttpURLConnection;
@@ -79,7 +82,6 @@ final class CronetTestCommon {
         return getTestStorageDirectory();
     }
 
-    @SuppressFBWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE")
     private static boolean recursiveDelete(File path) {
         if (path.isDirectory()) {
             for (File c : path.listFiles()) {
@@ -120,7 +122,6 @@ final class CronetTestCommon {
                 .createBuilder();
     }
 
-    @SuppressFBWarnings("DM_GC") // Used to trigger strictmode detecting leaked closeables
     void tearDown() throws Exception {
         try {
             // Run GC and finalizers a few times to pick up leaked closeables
@@ -140,6 +141,13 @@ final class CronetTestCommon {
      */
     CronetTestFramework startCronetTestFramework() {
         mCronetTestFramework = new CronetTestFramework(mCallback.getContextForTestCommon());
+        if (testingJavaImpl()) {
+            ExperimentalCronetEngine.Builder builder = createJavaEngineBuilder();
+            builder.setUserAgent(UserAgent.from(getContext()));
+            mCronetTestFramework.mCronetEngine = (CronetEngineBase) builder.build();
+            // Make sure that the instantiated engine is JavaCronetEngine.
+            assert mCronetTestFramework.mCronetEngine.getClass() == JavaCronetEngine.class;
+        }
         return mCronetTestFramework;
     }
 
@@ -204,11 +212,9 @@ final class CronetTestCommon {
      * during setUp() and is installed by {@link runTest()} as the default when Cronet is tested.
      */
     void setStreamHandlerFactory(CronetEngine cronetEngine) {
-        mStreamHandlerFactory = cronetEngine.createURLStreamHandlerFactory();
-    }
-
-    URLStreamHandlerFactory getSteamHandlerFactory() {
-        return mStreamHandlerFactory;
+        if (!testingSystemHttpURLConnection()) {
+            URL.setURLStreamHandlerFactory(cronetEngine.createURLStreamHandlerFactory());
+        }
     }
 
     /**

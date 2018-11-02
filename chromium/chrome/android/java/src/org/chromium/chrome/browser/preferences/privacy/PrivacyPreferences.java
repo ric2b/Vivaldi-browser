@@ -15,6 +15,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 
 import org.chromium.base.SysUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
@@ -109,11 +110,6 @@ public class PrivacyPreferences extends PreferenceFragment
             preferenceScreen.removePreference(findPreference(PREF_PHYSICAL_WEB));
         }
 
-        if (ClearBrowsingDataTabsFragment.isFeatureEnabled()) {
-            findPreference(PREF_CLEAR_BROWSING_DATA)
-                    .setFragment(ClearBrowsingDataTabsFragment.class.getName());
-        }
-
         updateSummaries();
     }
 
@@ -130,11 +126,17 @@ public class PrivacyPreferences extends PreferenceFragment
                     (boolean) newValue);
         } else if (PREF_NETWORK_PREDICTIONS.equals(key)) {
             PrefServiceBridge.getInstance().setNetworkPredictionEnabled((boolean) newValue);
+            recordNetworkPredictionEnablingUMA((boolean) newValue);
         } else if (PREF_NAVIGATION_ERROR.equals(key)) {
             PrefServiceBridge.getInstance().setResolveNavigationErrorEnabled((boolean) newValue);
         }
 
         return true;
+    }
+
+    private void recordNetworkPredictionEnablingUMA(boolean enabled) {
+        // Report user turning on and off NetworkPrediction.
+        RecordHistogram.recordBooleanHistogram("PrefService.NetworkPredictionEnabled", enabled);
     }
 
     @Override

@@ -101,7 +101,7 @@ void TestURLLoaderClient::OnStartLoadingResponseBody(
 }
 
 void TestURLLoaderClient::OnComplete(
-    const ResourceRequestCompletionStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   EXPECT_FALSE(has_received_completion_);
   has_received_completion_ = true;
   completion_status_ = status;

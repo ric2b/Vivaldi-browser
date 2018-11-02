@@ -39,7 +39,7 @@ class FakeTaskRunner : public base::TaskRunner {
 
  private:
   // base::TaskRunner overrides.
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     std::move(task).Run();
@@ -74,14 +74,16 @@ const user_manager::User* FakeChromeUserManager::AddUser(
 const user_manager::User* FakeChromeUserManager::AddUserWithAffiliation(
     const AccountId& account_id,
     bool is_affiliated) {
-  user_manager::User* user = user_manager::User::CreateRegularUser(account_id);
+  user_manager::User* user = user_manager::User::CreateRegularUser(
+      account_id, user_manager::USER_TYPE_REGULAR);
   user->SetAffiliation(is_affiliated);
   user->set_username_hash(ProfileHelper::GetUserIdHashByUserIdForTesting(
       account_id.GetUserEmail()));
-  user->SetStubImage(base::MakeUnique<user_manager::UserImage>(
-                         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                             IDR_LOGIN_DEFAULT_USER)),
-                     user_manager::User::USER_IMAGE_PROFILE, false);
+  user->SetStubImage(
+      base::MakeUnique<user_manager::UserImage>(
+          *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_LOGIN_DEFAULT_USER)),
+      user_manager::User::USER_IMAGE_PROFILE, false);
   users_.push_back(user);
   chromeos::ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
   return user;
@@ -122,10 +124,11 @@ const user_manager::User* FakeChromeUserManager::AddPublicAccountUser(
       user_manager::User::CreatePublicAccountUser(account_id);
   user->set_username_hash(ProfileHelper::GetUserIdHashByUserIdForTesting(
       account_id.GetUserEmail()));
-  user->SetStubImage(base::MakeUnique<user_manager::UserImage>(
-                         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                             IDR_LOGIN_DEFAULT_USER)),
-                     user_manager::User::USER_IMAGE_PROFILE, false);
+  user->SetStubImage(
+      base::MakeUnique<user_manager::UserImage>(
+          *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_LOGIN_DEFAULT_USER)),
+      user_manager::User::USER_IMAGE_PROFILE, false);
   users_.push_back(user);
   chromeos::ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
   return user;
@@ -136,9 +139,10 @@ bool FakeChromeUserManager::AreEphemeralUsersEnabled() const {
 }
 
 void FakeChromeUserManager::LoginUser(const AccountId& account_id) {
-  UserLoggedIn(account_id, ProfileHelper::GetUserIdHashByUserIdForTesting(
-                               account_id.GetUserEmail()),
-               false /* browser_restart */);
+  UserLoggedIn(
+      account_id,
+      ProfileHelper::GetUserIdHashByUserIdForTesting(account_id.GetUserEmail()),
+      false /* browser_restart */, false /* is_child */);
 
   // NOTE: This does not match production. See function comment.
   for (auto* user : users_) {
@@ -147,10 +151,6 @@ void FakeChromeUserManager::LoginUser(const AccountId& account_id) {
       break;
     }
   }
-}
-
-BootstrapManager* FakeChromeUserManager::GetBootstrapManager() {
-  return bootstrap_manager_;
 }
 
 MultiProfileUserController*
@@ -228,7 +228,7 @@ void FakeChromeUserManager::RemoveUser(
     user_manager::RemoveUserDelegate* delegate) {}
 
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
-  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id);
+  WallpaperManager::Get()->RemoveUserWallpaper(account_id);
   chromeos::ProfileHelper::Get()->RemoveUserFromListForTesting(account_id);
 
   const user_manager::UserList::iterator it =
@@ -345,7 +345,7 @@ bool FakeChromeUserManager::HasBrowserRestarted() const {
 
 const gfx::ImageSkia& FakeChromeUserManager::GetResourceImagekiaNamed(
     int id) const {
-  return *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
+  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
 }
 
 base::string16 FakeChromeUserManager::GetResourceStringUTF16(
@@ -394,7 +394,8 @@ user_manager::UserList FakeChromeUserManager::GetUnlockUsers() const {
 
 void FakeChromeUserManager::UserLoggedIn(const AccountId& account_id,
                                          const std::string& username_hash,
-                                         bool browser_restart) {
+                                         bool browser_restart,
+                                         bool is_child) {
   for (auto* user : users_) {
     if (user->username_hash() == username_hash) {
       user->set_is_logged_in(true);
@@ -485,9 +486,7 @@ std::string FakeChromeUserManager::GetUserDisplayEmail(
   return account_id.GetUserEmail();
 }
 
-void FakeChromeUserManager::SaveUserType(
-    const AccountId& account_id,
-    const user_manager::UserType& user_type) {
+void FakeChromeUserManager::SaveUserType(const user_manager::User* user) {
   NOTREACHED();
 }
 
@@ -561,12 +560,38 @@ bool FakeChromeUserManager::IsUserNonCryptohomeDataEphemeral(
   return false;
 }
 
-void FakeChromeUserManager::ChangeUserChildStatus(user_manager::User* user,
-                                                  bool is_child) {
-  NOTREACHED();
+bool FakeChromeUserManager::AreSupervisedUsersAllowed() const {
+  return true;
 }
 
-bool FakeChromeUserManager::AreSupervisedUsersAllowed() const {
+bool FakeChromeUserManager::IsGuestSessionAllowed() const {
+  bool is_guest_allowed = false;
+  CrosSettings::Get()->GetBoolean(kAccountsPrefAllowGuest, &is_guest_allowed);
+  return is_guest_allowed;
+}
+
+bool FakeChromeUserManager::IsGaiaUserAllowed(
+    const user_manager::User& user) const {
+  DCHECK(user.HasGaiaAccount());
+  return CrosSettings::IsWhitelisted(user.GetAccountId().GetUserEmail(),
+                                     nullptr);
+}
+
+bool FakeChromeUserManager::IsUserAllowed(
+    const user_manager::User& user) const {
+  DCHECK(user.GetType() == user_manager::USER_TYPE_REGULAR ||
+         user.GetType() == user_manager::USER_TYPE_GUEST ||
+         user.GetType() == user_manager::USER_TYPE_SUPERVISED ||
+         user.GetType() == user_manager::USER_TYPE_CHILD);
+
+  if (user.GetType() == user_manager::USER_TYPE_GUEST &&
+      !IsGuestSessionAllowed())
+    return false;
+  if (user.GetType() == user_manager::USER_TYPE_SUPERVISED &&
+      !AreSupervisedUsersAllowed())
+    return false;
+  if (user.HasGaiaAccount() && !IsGaiaUserAllowed(user))
+    return false;
   return true;
 }
 

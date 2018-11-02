@@ -15,7 +15,7 @@ MojoAudioOutputStreamProvider::MojoAudioOutputStreamProvider(
     : binding_(this, std::move(request)),
       create_delegate_callback_(std::move(create_delegate_callback)),
       deleter_callback_(std::move(deleter_callback)) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Unretained is safe since |this| owns |binding_|.
   binding_.set_connection_error_handler(base::Bind(
       &MojoAudioOutputStreamProvider::OnError, base::Unretained(this)));
@@ -24,14 +24,15 @@ MojoAudioOutputStreamProvider::MojoAudioOutputStreamProvider(
 }
 
 MojoAudioOutputStreamProvider::~MojoAudioOutputStreamProvider() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void MojoAudioOutputStreamProvider::Acquire(
     mojom::AudioOutputStreamRequest stream_request,
+    mojom::AudioOutputStreamClientPtr client,
     const AudioParameters& params,
     AcquireCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (audio_output_) {
     LOG(ERROR) << "Output acquired twice.";
     binding_.Unbind();
@@ -41,7 +42,7 @@ void MojoAudioOutputStreamProvider::Acquire(
 
   // Unretained is safe since |this| owns |audio_output_|.
   audio_output_.emplace(
-      std::move(stream_request),
+      std::move(stream_request), std::move(client),
       base::BindOnce(std::move(create_delegate_callback_), params),
       std::move(callback),
       base::BindOnce(&MojoAudioOutputStreamProvider::OnError,
@@ -49,6 +50,7 @@ void MojoAudioOutputStreamProvider::Acquire(
 }
 
 void MojoAudioOutputStreamProvider::OnError() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Deletes |this|:
   std::move(deleter_callback_).Run(this);
 }

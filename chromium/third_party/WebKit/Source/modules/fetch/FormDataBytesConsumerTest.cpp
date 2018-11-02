@@ -4,15 +4,14 @@
 
 #include "modules/fetch/FormDataBytesConsumer.h"
 
-#include "core/dom/Document.h"
-#include "core/html/FormData.h"
+#include "base/memory/scoped_refptr.h"
+#include "core/html/forms/FormData.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/fetch/BytesConsumerTestUtil.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -29,17 +28,15 @@ using ::testing::Return;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
 using MockBytesConsumer = BytesConsumerTestUtil::MockBytesConsumer;
 
-PassRefPtr<EncodedFormData> ComplexFormData() {
-  RefPtr<EncodedFormData> data = EncodedFormData::Create();
+scoped_refptr<EncodedFormData> ComplexFormData() {
+  scoped_refptr<EncodedFormData> data = EncodedFormData::Create();
 
   data->AppendData("foo", 3);
   data->AppendFileRange("/foo/bar/baz", 3, 4, 5);
-  data->AppendFileSystemURLRange(KURL(NullURL(), "file:///foo/bar/baz"), 6, 7,
-                                 8);
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   blob_data->AppendText("hello", false);
   auto size = blob_data->length();
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(std::move(blob_data), size);
   data->AppendBlob(blob_data_handle->Uuid(), blob_data_handle);
   Vector<char> boundary;
@@ -54,6 +51,7 @@ class NoopClient final : public GarbageCollectedFinalized<NoopClient>,
 
  public:
   void OnStateChange() override {}
+  String DebugName() const override { return "NoopClient"; }
 };
 
 class FormDataBytesConsumerTest : public ::testing::Test {
@@ -118,7 +116,7 @@ TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromArrayBufferView) {
 }
 
 TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromSimpleFormData) {
-  RefPtr<EncodedFormData> data = EncodedFormData::Create();
+  scoped_refptr<EncodedFormData> data = EncodedFormData::Create();
   data->AppendData("foo", 3);
   data->AppendData("hoge", 4);
 
@@ -131,7 +129,7 @@ TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromSimpleFormData) {
 }
 
 TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromComplexFormData) {
-  RefPtr<EncodedFormData> data = ComplexFormData();
+  scoped_refptr<EncodedFormData> data = ComplexFormData();
   MockBytesConsumer* underlying = MockBytesConsumer::Create();
   BytesConsumer* consumer =
       FormDataBytesConsumer::CreateForTesting(GetDocument(), data, underlying);
@@ -170,7 +168,8 @@ TEST_F(FormDataBytesConsumerTest, EndReadCanReturnDone) {
 
 TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromString) {
   BytesConsumer* consumer = new FormDataBytesConsumer("hello, world");
-  RefPtr<BlobDataHandle> blob_data_handle = consumer->DrainAsBlobDataHandle();
+  scoped_refptr<BlobDataHandle> blob_data_handle =
+      consumer->DrainAsBlobDataHandle();
   ASSERT_TRUE(blob_data_handle);
 
   EXPECT_EQ(String(), blob_data_handle->GetType());
@@ -185,7 +184,8 @@ TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromString) {
 TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromArrayBuffer) {
   BytesConsumer* consumer =
       new FormDataBytesConsumer(DOMArrayBuffer::Create("foo", 3));
-  RefPtr<BlobDataHandle> blob_data_handle = consumer->DrainAsBlobDataHandle();
+  scoped_refptr<BlobDataHandle> blob_data_handle =
+      consumer->DrainAsBlobDataHandle();
   ASSERT_TRUE(blob_data_handle);
 
   EXPECT_EQ(String(), blob_data_handle->GetType());
@@ -201,11 +201,13 @@ TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromSimpleFormData) {
   FormData* data = FormData::Create(UTF8Encoding());
   data->append("name1", "value1");
   data->append("name2", "value2");
-  RefPtr<EncodedFormData> input_form_data = data->EncodeMultiPartFormData();
+  scoped_refptr<EncodedFormData> input_form_data =
+      data->EncodeMultiPartFormData();
 
   BytesConsumer* consumer =
       new FormDataBytesConsumer(GetDocument(), input_form_data);
-  RefPtr<BlobDataHandle> blob_data_handle = consumer->DrainAsBlobDataHandle();
+  scoped_refptr<BlobDataHandle> blob_data_handle =
+      consumer->DrainAsBlobDataHandle();
   ASSERT_TRUE(blob_data_handle);
 
   EXPECT_EQ(String(), blob_data_handle->GetType());
@@ -219,11 +221,12 @@ TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromSimpleFormData) {
 }
 
 TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromComplexFormData) {
-  RefPtr<EncodedFormData> input_form_data = ComplexFormData();
+  scoped_refptr<EncodedFormData> input_form_data = ComplexFormData();
 
   BytesConsumer* consumer =
       new FormDataBytesConsumer(GetDocument(), input_form_data);
-  RefPtr<BlobDataHandle> blob_data_handle = consumer->DrainAsBlobDataHandle();
+  scoped_refptr<BlobDataHandle> blob_data_handle =
+      consumer->DrainAsBlobDataHandle();
   ASSERT_TRUE(blob_data_handle);
 
   EXPECT_FALSE(consumer->DrainAsFormData());
@@ -235,7 +238,7 @@ TEST_F(FormDataBytesConsumerTest, DrainAsBlobDataHandleFromComplexFormData) {
 
 TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromString) {
   BytesConsumer* consumer = new FormDataBytesConsumer("hello, world");
-  RefPtr<EncodedFormData> form_data = consumer->DrainAsFormData();
+  scoped_refptr<EncodedFormData> form_data = consumer->DrainAsFormData();
   ASSERT_TRUE(form_data);
   EXPECT_EQ("hello, world", form_data->FlattenToString());
 
@@ -249,7 +252,7 @@ TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromString) {
 TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromArrayBuffer) {
   BytesConsumer* consumer =
       new FormDataBytesConsumer(DOMArrayBuffer::Create("foo", 3));
-  RefPtr<EncodedFormData> form_data = consumer->DrainAsFormData();
+  scoped_refptr<EncodedFormData> form_data = consumer->DrainAsFormData();
   ASSERT_TRUE(form_data);
   EXPECT_TRUE(form_data->IsSafeToSendToAnotherThread());
   EXPECT_EQ("foo", form_data->FlattenToString());
@@ -265,7 +268,8 @@ TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromSimpleFormData) {
   FormData* data = FormData::Create(UTF8Encoding());
   data->append("name1", "value1");
   data->append("name2", "value2");
-  RefPtr<EncodedFormData> input_form_data = data->EncodeMultiPartFormData();
+  scoped_refptr<EncodedFormData> input_form_data =
+      data->EncodeMultiPartFormData();
 
   BytesConsumer* consumer =
       new FormDataBytesConsumer(GetDocument(), input_form_data);
@@ -278,7 +282,7 @@ TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromSimpleFormData) {
 }
 
 TEST_F(FormDataBytesConsumerTest, DrainAsFormDataFromComplexFormData) {
-  RefPtr<EncodedFormData> input_form_data = ComplexFormData();
+  scoped_refptr<EncodedFormData> input_form_data = ComplexFormData();
 
   BytesConsumer* consumer =
       new FormDataBytesConsumer(GetDocument(), input_form_data);
@@ -342,7 +346,7 @@ TEST_F(FormDataBytesConsumerTest, BeginReadAffectsDrainingWithComplexFormData) {
 }
 
 TEST_F(FormDataBytesConsumerTest, SetClientWithComplexFormData) {
-  RefPtr<EncodedFormData> input_form_data = ComplexFormData();
+  scoped_refptr<EncodedFormData> input_form_data = ComplexFormData();
 
   MockBytesConsumer* underlying = MockBytesConsumer::Create();
   BytesConsumer* consumer = FormDataBytesConsumer::CreateForTesting(
@@ -364,7 +368,7 @@ TEST_F(FormDataBytesConsumerTest, SetClientWithComplexFormData) {
 }
 
 TEST_F(FormDataBytesConsumerTest, CancelWithComplexFormData) {
-  RefPtr<EncodedFormData> input_form_data = ComplexFormData();
+  scoped_refptr<EncodedFormData> input_form_data = ComplexFormData();
 
   MockBytesConsumer* underlying = MockBytesConsumer::Create();
   BytesConsumer* consumer = FormDataBytesConsumer::CreateForTesting(

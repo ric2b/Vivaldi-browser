@@ -4,15 +4,15 @@
 
 #include "ash/wm/resize_shadow_controller.h"
 
+#include <memory>
 #include <utility>
 
 #include "ash/wm/resize_shadow.h"
-#include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
 
 namespace ash {
 
-ResizeShadowController::ResizeShadowController() {}
+ResizeShadowController::ResizeShadowController() = default;
 
 ResizeShadowController::~ResizeShadowController() {
   for (const auto& shadow : window_shadows_)
@@ -48,7 +48,7 @@ void ResizeShadowController::OnWindowVisibilityChanging(aura::Window* window,
 }
 
 ResizeShadow* ResizeShadowController::CreateShadow(aura::Window* window) {
-  auto shadow = base::MakeUnique<ResizeShadow>(window);
+  auto shadow = std::make_unique<ResizeShadow>(window);
   window->AddObserver(this);
 
   ResizeShadow* raw_shadow = shadow.get();

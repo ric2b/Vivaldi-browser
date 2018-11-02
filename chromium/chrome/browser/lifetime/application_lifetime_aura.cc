@@ -15,8 +15,8 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/views/widget/widget.h"
 
-#if defined(USE_ASH)
-#include "ash/shell.h"
+#if defined(OS_CHROMEOS)
+#include "ash/shell.h"  // mash-ok
 #endif
 
 namespace chrome {
@@ -26,9 +26,11 @@ void HandleAppExitingForPlatform() {
   // and windows created by Ash (launcher, background, etc).
   g_browser_process->notification_ui_manager()->StartShutdown();
 
-#if defined(USE_ASH)
-  // This may be called before |ash::Shell| is initialized when
-  // XIOError is reported.  crbug.com/150633.
+#if defined(OS_CHROMEOS)
+  // This is a no-op in mash, as shutting down the client will dismiss any of
+  // the open menus. This check was originally here to work around an x11-ism,
+  // but has the nice side effect of making this a no-op in mash. When we turn
+  // mash on eventually, this can go away.  crbug.com/723876
   if (ash::Shell::HasInstance()) {
     // Releasing the capture will close any menus that might be open:
     // http://crbug.com/134472

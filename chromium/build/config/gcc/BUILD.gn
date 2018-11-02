@@ -140,8 +140,3 @@ config("executable_ldconfig") {
     ]
   }
 }
-
-config("no_exceptions") {
-  cflags_cc = [ "-fno-exceptions" ]
-  cflags_objcc = cflags_cc
-}

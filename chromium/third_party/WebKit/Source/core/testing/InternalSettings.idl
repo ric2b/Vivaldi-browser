@@ -53,14 +53,12 @@ interface InternalSettings : InternalSettingsGenerated {
     [RaisesException] void setAvailableHoverTypes(DOMString types);
     [RaisesException] void setPrimaryHoverType(DOMString type);
     [RaisesException] void setImageAnimationPolicy(DOMString policy);
-    [RaisesException] void setCompositorWorkerEnabled(boolean enabled);
     [RaisesException] void setPresentationReceiver(boolean enabled);
     [RaisesException] void setAutoplayPolicy(DOMString policy);
 
     // FIXME: The following are RuntimeEnabledFeatures and likely
     // cannot be changed after process start.  These setters should
     // be removed or moved onto internals.runtimeFlags:
-    void setCSSStickyPositionEnabled(boolean enabled);
     void setLangAttributeAwareFormControlUIEnabled(boolean enabled);
     void setOverlayScrollbarsEnabled(boolean enabled);
     void setExperimentalContentSecurityPolicyFeaturesEnabled(boolean enabled);

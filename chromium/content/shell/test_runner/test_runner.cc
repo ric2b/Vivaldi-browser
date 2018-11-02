@@ -25,7 +25,6 @@
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
 #include "content/shell/test_runner/mock_web_document_subresource_filter.h"
 #include "content/shell/test_runner/mock_web_speech_recognizer.h"
-#include "content/shell/test_runner/mock_web_user_media_client.h"
 #include "content/shell/test_runner/pixel_dump.h"
 #include "content/shell/test_runner/spell_check_client.h"
 #include "content/shell/test_runner/test_common.h"
@@ -148,7 +147,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void DumpFrameLoadCallbacks();
   void DumpIconChanges();
   void DumpNavigationPolicy();
-  void DumpPageImportanceSignals();
   void DumpPermissionClientCallbacks();
   void DumpPingLoaderCallbacks();
   void DumpResourceLoadCallbacks();
@@ -241,6 +239,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetPopupBlockingEnabled(bool block_popups);
   void SetPrinting();
   void SetScriptsAllowed(bool allowed);
+  void SetShouldGeneratePixelResults(bool);
   void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
   void SetSpellCheckResolvedCallback(v8::Local<v8::Function> callback);
   void SetStorageAllowed(bool allowed);
@@ -253,10 +252,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetWindowIsKey(bool value);
   void SetXSSAuditorEnabled(bool enabled);
   void ShowWebInspector(gin::Arguments* args);
-  void SimulateWebNotificationClick(const std::string& title, int action_index);
-  void SimulateWebNotificationClickWithReply(const std::string& title,
-                                             int action_index,
-                                             const std::string& reply);
+  void SimulateWebNotificationClick(gin::Arguments* args);
   void SimulateWebNotificationClose(const std::string& title, bool by_user);
   void UseUnfortunateSynchronousResizeMode();
   void WaitForPolicyDelegate();
@@ -323,11 +319,7 @@ void TestRunnerBindings::Install(
   v8::Local<v8::Object> global = context->Global();
   v8::Local<v8::Value> v8_bindings = bindings.ToV8();
 
-  std::vector<std::string> names;
-  names.push_back("testRunner");
-  names.push_back("layoutTestController");
-  for (size_t i = 0; i < names.size(); ++i)
-    global->Set(gin::StringToV8(isolate, names[i].c_str()), v8_bindings);
+  global->Set(gin::StringToV8(isolate, "testRunner"), v8_bindings);
 
   // The web-platform-tests suite require that reference comparison is delayed
   // for any test with a 'reftest-wait' class on the root element, until that
@@ -427,8 +419,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("dumpIconChanges", &TestRunnerBindings::DumpIconChanges)
       .SetMethod("dumpNavigationPolicy",
                  &TestRunnerBindings::DumpNavigationPolicy)
-      .SetMethod("dumpPageImportanceSignals",
-                 &TestRunnerBindings::DumpPageImportanceSignals)
       .SetMethod("dumpPermissionClientCallbacks",
                  &TestRunnerBindings::DumpPermissionClientCallbacks)
       .SetMethod("dumpPingLoaderCallbacks",
@@ -585,6 +575,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("setPrinting", &TestRunnerBindings::SetPrinting)
       .SetMethod("setScriptsAllowed", &TestRunnerBindings::SetScriptsAllowed)
       .SetMethod("setScrollbarPolicy", &TestRunnerBindings::NotImplemented)
+      .SetMethod("setShouldGeneratePixelResults",
+                 &TestRunnerBindings::SetShouldGeneratePixelResults)
       .SetMethod(
           "setShouldStayOnPageAfterHandlingBeforeUnload",
           &TestRunnerBindings::SetShouldStayOnPageAfterHandlingBeforeUnload)
@@ -609,8 +601,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("showWebInspector", &TestRunnerBindings::ShowWebInspector)
       .SetMethod("simulateWebNotificationClick",
                  &TestRunnerBindings::SimulateWebNotificationClick)
-      .SetMethod("simulateWebNotificationClickWithReply",
-                 &TestRunnerBindings::SimulateWebNotificationClickWithReply)
       .SetMethod("simulateWebNotificationClose",
                  &TestRunnerBindings::SimulateWebNotificationClose)
       .SetProperty("tooltipText", &TestRunnerBindings::TooltipText)
@@ -1223,6 +1213,11 @@ void TestRunnerBindings::ClearPrinting() {
     runner_->ClearPrinting();
 }
 
+void TestRunnerBindings::SetShouldGeneratePixelResults(bool value) {
+  if (runner_)
+    runner_->setShouldGeneratePixelResults(value);
+}
+
 void TestRunnerBindings::SetShouldStayOnPageAfterHandlingBeforeUnload(
     bool value) {
   if (runner_)
@@ -1253,11 +1248,6 @@ void TestRunnerBindings::DumpDragImage() {
 void TestRunnerBindings::DumpNavigationPolicy() {
   if (runner_)
     runner_->DumpNavigationPolicy();
-}
-
-void TestRunnerBindings::DumpPageImportanceSignals() {
-  if (view_runner_)
-    view_runner_->DumpPageImportanceSignals();
 }
 
 void TestRunnerBindings::ShowWebInspector(gin::Arguments* args) {
@@ -1377,23 +1367,34 @@ void TestRunnerBindings::SetMIDIAccessorResult(bool result) {
   }
 }
 
-void TestRunnerBindings::SimulateWebNotificationClick(const std::string& title,
-                                                      int action_index) {
+void TestRunnerBindings::SimulateWebNotificationClick(gin::Arguments* args) {
+  DCHECK_GE(args->Length(), 1);
   if (!runner_)
     return;
-  runner_->SimulateWebNotificationClick(title, action_index,
-                                        base::NullableString16());
-}
 
-void TestRunnerBindings::SimulateWebNotificationClickWithReply(
-    const std::string& title,
-    int action_index,
-    const std::string& reply) {
-  if (!runner_)
-    return;
-  runner_->SimulateWebNotificationClick(
-      title, action_index,
-      base::NullableString16(base::UTF8ToUTF16(reply), false /* is_null */));
+  std::string title;
+  base::Optional<int> action_index;
+  base::Optional<base::string16> reply;
+
+  args->GetNext(&title);
+
+  // Optional |action_index| argument.
+  if (args->Length() >= 2) {
+    int action_index_int;
+    args->GetNext(&action_index_int);
+
+    action_index = action_index_int;
+  }
+
+  // Optional |reply| argument.
+  if (args->Length() >= 3) {
+    std::string reply_string;
+    args->GetNext(&reply_string);
+
+    reply = base::UTF8ToUTF16(reply_string);
+  }
+
+  runner_->SimulateWebNotificationClick(title, action_index, reply);
 }
 
 void TestRunnerBindings::SimulateWebNotificationClose(const std::string& title,
@@ -1617,7 +1618,6 @@ TestRunner::TestRunner(TestInterfaces* interfaces)
       main_view_(nullptr),
       mock_content_settings_client_(
           new MockContentSettingsClient(&layout_test_runtime_flags_)),
-      will_navigate_(false),
       credential_manager_client_(new MockCredentialManagerClient),
       mock_screen_orientation_client_(new MockScreenOrientationClient),
       spellcheck_(new SpellCheckClient(this)),
@@ -1653,7 +1653,6 @@ void TestRunner::SetMainView(WebView* web_view) {
 
 void TestRunner::Reset() {
   is_web_platform_tests_mode_ = false;
-  will_navigate_ = false;
   top_loading_frame_ = nullptr;
   layout_test_runtime_flags_.Reset();
   mock_screen_orientation_client_->ResetData();
@@ -1918,13 +1917,7 @@ bool TestRunner::IsFramePartOfMainTestWindow(blink::WebFrame* frame) const {
   return test_is_running_ && frame->Top()->View() == main_view_;
 }
 
-void TestRunner::OnNavigationBegin(WebFrame* frame) {
-  if (IsFramePartOfMainTestWindow(frame))
-    will_navigate_ = true;
-}
-
 bool TestRunner::tryToSetTopLoadingFrame(WebFrame* frame) {
-  will_navigate_ = false;
   if (!IsFramePartOfMainTestWindow(frame))
     return false;
 
@@ -1938,7 +1931,6 @@ bool TestRunner::tryToSetTopLoadingFrame(WebFrame* frame) {
 }
 
 bool TestRunner::tryToClearTopLoadingFrame(WebFrame* frame) {
-  will_navigate_ = false;
   if (!IsFramePartOfMainTestWindow(frame))
     return false;
 
@@ -2314,12 +2306,6 @@ MockScreenOrientationClient* TestRunner::getMockScreenOrientationClient() {
   return mock_screen_orientation_client_.get();
 }
 
-MockWebUserMediaClient* TestRunner::getMockWebUserMediaClient() {
-  if (!user_media_client_.get())
-    user_media_client_.reset(new MockWebUserMediaClient(delegate_));
-  return user_media_client_.get();
-}
-
 MockWebSpeechRecognizer* TestRunner::getMockWebSpeechRecognizer() {
   if (!speech_recognizer_.get()) {
     speech_recognizer_.reset(new MockWebSpeechRecognizer());
@@ -2410,8 +2396,6 @@ void TestRunner::OverridePreference(const std::string& key,
     prefs->plugins_enabled = value->BooleanValue();
   } else if (key == "WebKitTabToLinksPreferenceKey") {
     prefs->tabs_to_links = value->BooleanValue();
-  } else if (key == "WebKitWebGLEnabled") {
-    prefs->experimental_webgl_enabled = value->BooleanValue();
   } else if (key == "WebKitCSSGridLayoutEnabled") {
     prefs->experimental_css_grid_layout_enabled = value->BooleanValue();
   } else if (key == "WebKitHyperlinkAuditingEnabled") {
@@ -2761,8 +2745,8 @@ void TestRunner::SetMIDIAccessorResult(midi::mojom::Result result) {
 
 void TestRunner::SimulateWebNotificationClick(
     const std::string& title,
-    int action_index,
-    const base::NullableString16& reply) {
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply) {
   delegate_->SimulateWebNotificationClick(title, action_index, reply);
 }
 
@@ -2850,7 +2834,7 @@ void TestRunner::CheckResponseMimeType() {
 
 void TestRunner::NotifyDone() {
   if (layout_test_runtime_flags_.wait_until_done() && !topLoadingFrame() &&
-      !will_navigate_ && work_queue_.is_empty())
+      work_queue_.is_empty())
     delegate_->TestFinished();
   layout_test_runtime_flags_.set_wait_until_done(false);
   OnLayoutTestRuntimeFlagsChanged();

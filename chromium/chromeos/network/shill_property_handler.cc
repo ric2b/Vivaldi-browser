@@ -6,12 +6,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <sstream>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -241,11 +241,11 @@ void ShillPropertyHandler::SetNetworkThrottlingStatus(
                  network_handler::ErrorCallback()));
 }
 
-void ShillPropertyHandler::RequestScan() const {
+void ShillPropertyHandler::RequestScanByType(const std::string& type) const {
   shill_manager_->RequestScan(
-      "", base::Bind(&base::DoNothing),
+      type, base::Bind(&base::DoNothing),
       base::Bind(&network_handler::ShillErrorCallbackFunction,
-                 "RequestScan Failed", "", network_handler::ErrorCallback()));
+                 "RequestScan Failed", type, network_handler::ErrorCallback()));
 }
 
 void ShillPropertyHandler::RequestProperties(ManagedState::ManagedType type,
@@ -398,7 +398,7 @@ void ShillPropertyHandler::UpdateObserved(ManagedState::ManagedType type,
       observer = std::move(iter->second);
     } else {
       // Create an observer for future updates.
-      observer = base::MakeUnique<ShillPropertyObserver>(
+      observer = std::make_unique<ShillPropertyObserver>(
           type, path, base::Bind(&ShillPropertyHandler::PropertyChangedCallback,
                                  AsWeakPtr()));
     }

@@ -82,7 +82,8 @@ class DemoWindowDelegate : public aura::WindowDelegate {
       recorder.canvas()->FillRect(r, color_, SkBlendMode::kXor);
     }
   }
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override {}
   void OnWindowTargetVisibilityChanged(bool visible) override {}
@@ -140,7 +141,7 @@ int DemoMain() {
   // The ContextFactory must exist before any Compositors are created.
   viz::HostFrameSinkManager host_frame_sink_manager;
   viz::FrameSinkManagerImpl frame_sink_manager;
-  auto context_factory = base::MakeUnique<ui::InProcessContextFactory>(
+  auto context_factory = std::make_unique<ui::InProcessContextFactory>(
       &host_frame_sink_manager, &frame_sink_manager);
   context_factory->set_use_test_surface(false);
 

@@ -258,7 +258,7 @@ Status ParseProxy(const base::Value& option, Capabilities* capabilities) {
     std::string proxy_servers;
     for (size_t i = 0; i < arraysize(proxy_servers_options); ++i) {
       if (!proxy_dict->Get(proxy_servers_options[i][0], &option_value) ||
-          option_value->IsType(base::Value::Type::NONE)) {
+          option_value->is_none()) {
         continue;
       }
       std::string value;
@@ -277,8 +277,7 @@ Status ParseProxy(const base::Value& option, Capabilities* capabilities) {
     }
 
     std::string proxy_bypass_list;
-    if (proxy_dict->Get("noProxy", &option_value) &&
-        !option_value->IsType(base::Value::Type::NONE)) {
+    if (proxy_dict->Get("noProxy", &option_value) && !option_value->is_none()) {
       if (!option_value->GetAsString(&proxy_bypass_list))
         return Status(kUnknownError, "'noProxy' must be a string");
     }
@@ -383,8 +382,6 @@ Status ParsePerfLoggingPrefs(const base::Value& option,
       &ParseInspectorDomainStatus, &capabilities->perf_logging_prefs.network);
   parser_map["enablePage"] = base::Bind(
       &ParseInspectorDomainStatus, &capabilities->perf_logging_prefs.page);
-  parser_map["enableTimeline"] = base::Bind(
-      &ParseInspectorDomainStatus, &capabilities->perf_logging_prefs.timeline);
   parser_map["traceCategories"] = base::Bind(
       &ParseString, &capabilities->perf_logging_prefs.trace_categories);
 
@@ -620,7 +617,6 @@ std::string Switches::ToString() const {
 PerfLoggingPrefs::PerfLoggingPrefs()
     : network(InspectorDomainStatus::kDefaultEnabled),
       page(InspectorDomainStatus::kDefaultEnabled),
-      timeline(InspectorDomainStatus::kDefaultDisabled),
       trace_categories(),
       buffer_usage_reporting_interval(1000) {}
 

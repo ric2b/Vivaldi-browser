@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 #include <memory>
-#include <queue>
 #include <string>
 
+#include "base/containers/queue.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
@@ -37,8 +37,9 @@ namespace disk_cache {
 
 class BackendCleanupTracker;
 class SimpleBackendImpl;
-class SimpleSynchronousEntry;
 class SimpleEntryStat;
+class SimpleFileTracker;
+class SimpleSynchronousEntry;
 struct SimpleEntryCreationResults;
 
 // SimpleEntryImpl is the IO thread interface to an entry in the very simple
@@ -67,6 +68,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
                   uint64_t entry_hash,
                   OperationsMode operations_mode,
                   SimpleBackendImpl* backend,
+                  SimpleFileTracker* file_tracker,
                   net::NetLog* net_log);
 
   void SetActiveEntryProxy(
@@ -90,6 +92,12 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   // alone. In that case, the SimpleSynchronousEntry will read the key from disk
   // and it will be set.
   void SetKey(const std::string& key);
+
+  // SetCreatePendingDoom() should be called before CreateEntry() if the
+  // creation should suceed optimistically but not do any I/O until
+  // NotifyDoomBeforeCreateComplete() is called.
+  void SetCreatePendingDoom();
+  void NotifyDoomBeforeCreateComplete();
 
   // From Entry:
   void Doom() override;
@@ -195,11 +203,12 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
 
   void CloseInternal();
 
-  void ReadDataInternal(int index,
-                        int offset,
-                        net::IOBuffer* buf,
-                        int buf_len,
-                        const CompletionCallback& callback);
+  int ReadDataInternal(bool sync_possible,
+                       int index,
+                       int offset,
+                       net::IOBuffer* buf,
+                       int buf_len,
+                       const CompletionCallback& callback);
 
   void WriteDataInternal(int index,
                          int offset,
@@ -305,13 +314,13 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   void RecordWriteDependencyType(const SimpleEntryOperation& operation) const;
 
   // Completes a read from the stream data kept in memory, logging metrics
-  // and updating metadata. If |callback| is non-null, it will be posted to the
-  // current task runner with the return code.
-  void ReadFromBufferAndPostReply(net::GrowableIOBuffer* in_buf,
-                                  int offset,
-                                  int buf_len,
-                                  net::IOBuffer* out_buf,
-                                  const CompletionCallback& callback);
+  // and updating metadata. Returns the # of bytes read successfully.
+  // This asumes the caller has already range-checked offset and buf_len
+  // appropriately.
+  int ReadFromBuffer(net::GrowableIOBuffer* in_buf,
+                     int offset,
+                     int buf_len,
+                     net::IOBuffer* out_buf);
 
   // Copies data from |buf| to the internal in-memory buffer for stream 0. If
   // |truncate| is set to true, the target buffer will be truncated at |offset|
@@ -337,6 +346,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   base::ThreadChecker io_thread_checker_;
 
   const base::WeakPtr<SimpleBackendImpl> backend_;
+  SimpleFileTracker* const file_tracker_;
   const net::CacheType cache_type_;
   const scoped_refptr<base::TaskRunner> worker_pool_;
   const base::FilePath path_;
@@ -359,6 +369,12 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   int open_count_;
 
   bool doomed_;
+
+  enum {
+    CREATE_NORMAL,
+    CREATE_OPTIMISTIC_PENDING_DOOM,
+    CREATE_OPTIMISTIC_PENDING_DOOM_FOLLOWED_BY_DOOM,
+  } optimistic_create_pending_doom_state_;
 
   State state_;
 
@@ -389,7 +405,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   // would leak the SimpleSynchronousEntry.
   SimpleSynchronousEntry* synchronous_entry_;
 
-  std::queue<SimpleEntryOperation> pending_operations_;
+  base::queue<SimpleEntryOperation> pending_operations_;
 
   net::NetLogWithSource net_log_;
 

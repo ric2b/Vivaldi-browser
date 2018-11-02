@@ -11,6 +11,14 @@ import("//vivaldi/gn/product_updates.gni")
 
 import("//vivaldi/gn/source_updates.gni")
 
+if(is_mac) {
+  declare_overrides() {
+    is_full_mac_signer = true
+  }
+}
+
+import("//vivaldi/gn/config/signer_features.gni")
+
 declare_args() {
   enable_ipc_fuzzer = true
 }

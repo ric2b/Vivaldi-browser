@@ -71,4 +71,9 @@ void VivaldiInvalidationService::PerformInvalidation(
   invalidator_registrar_.DispatchInvalidationsToHandlers(invalidation_map);
 }
 
+void VivaldiInvalidationService::UpdateInvalidatorState(
+    syncer::InvalidatorState state) {
+  invalidator_registrar_.UpdateInvalidatorState(state);
+}
+
 }  // namespace vivaldi

@@ -61,12 +61,12 @@ INTERFACE_H_INCLUDES = frozenset([
     'platform/heap/Handle.h',
 ])
 INTERFACE_CPP_INCLUDES = frozenset([
+    'base/memory/scoped_refptr.h',
     'bindings/core/v8/ExceptionState.h',
     'bindings/core/v8/V8DOMConfiguration.h',
     'platform/bindings/V8ObjectConstructor.h',
     'core/dom/ExecutionContext.h',
     'platform/wtf/GetPtr.h',
-    'platform/wtf/RefPtr.h',
 ])
 
 
@@ -142,7 +142,7 @@ def origin_trial_features(interface, constants, attributes, methods):
 
     if features:
         includes.add('platform/bindings/ScriptState.h')
-        includes.add('core/origin_trials/OriginTrials.h')
+        includes.add('core/origin_trials/origin_trials.h')
     return features
 
 
@@ -179,7 +179,6 @@ def runtime_call_stats_context(interface):
         'cross_origin_named_getter_counter': counter_prefix + 'CrossOriginNamedGetter',
         'cross_origin_named_setter_counter': counter_prefix + 'CrossOriginNamedSetter',
         'indexed_property_getter_counter': counter_prefix + 'IndexedPropertyGetter',
-        'named_constructor_attribute_getter_counter': counter_prefix + 'NamedConstructorAttributeGetter',
         'named_property_getter_counter': counter_prefix + 'NamedPropertyGetter',
         'named_property_query_counter': counter_prefix + 'NamedPropertyQuery',
         'named_property_setter_counter': counter_prefix + 'NamedPropertySetter',
@@ -244,9 +243,6 @@ def interface_context(interface, interfaces):
         includes.add('bindings/core/v8/BindingSecurity.h')
         includes.add('core/frame/LocalDOMWindow.h')
 
-    # [DependentLifetime]
-    is_dependent_lifetime = 'DependentLifetime' in extended_attributes
-
     # [PrimaryGlobal] and [Global]
     is_global = ('PrimaryGlobal' in extended_attributes or
                  'Global' in extended_attributes)
@@ -257,11 +253,6 @@ def interface_context(interface, interfaces):
     is_immutable_prototype = is_global or 'ImmutablePrototype' in extended_attributes
 
     wrapper_class_id = ('kNodeClassId' if inherits_interface(interface.name, 'Node') else 'kObjectClassId')
-
-    # [ActiveScriptWrappable] must be accompanied with [DependentLifetime].
-    if active_scriptwrappable and not is_dependent_lifetime:
-        raise Exception('[ActiveScriptWrappable] interface must also specify '
-                        '[DependentLifetime]: %s' % interface.name)
 
     # [LegacyUnenumerableNamedProperties]
     # pylint: disable=C0103
@@ -299,7 +290,6 @@ def interface_context(interface, interfaces):
         'is_node': inherits_interface(interface.name, 'Node'),
         'is_partial': interface.is_partial,
         'is_typed_array_type': is_typed_array_type,
-        'lifetime': 'kDependent' if is_dependent_lifetime else 'kIndependent',
         'measure_as': v8_utilities.measure_as(interface, None),  # [MeasureAs]
         'needs_runtime_enabled_installer': needs_runtime_enabled_installer,
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(interface),
@@ -411,19 +401,15 @@ def interface_context(interface, interfaces):
     })
 
     # Conditionally enabled attributes
-    conditional_enabled_attributes = v8_attributes.filter_conditionally_enabled(attributes)
-    has_conditional_attributes_on_prototype = any(  # pylint: disable=invalid-name
-        attribute['on_prototype'] for attribute in conditional_enabled_attributes)
-    has_conditionally_enabled_constructors = any(  # pylint: disable=invalid-name
-        attribute['constructor_type'] for attribute in conditional_enabled_attributes)
-    has_conditionally_enabled_secure_attributes = any(  # pylint: disable=invalid-name
-        v8_attributes.is_secure_context(attribute) for attribute in conditional_enabled_attributes)
+    conditionally_enabled_attributes = v8_attributes.filter_conditionally_enabled(attributes)
+    conditional_attributes = [attr for attr in conditionally_enabled_attributes if not attr['constructor_type']]
+    conditional_interface_objects = [attr for attr in conditionally_enabled_attributes if attr['constructor_type']]
+    has_conditional_secure_attributes = any(  # pylint: disable=invalid-name
+        v8_attributes.is_secure_context(attr) for attr in conditionally_enabled_attributes)
     context.update({
-        'has_conditionally_enabled_constructors':
-            has_conditionally_enabled_constructors,
-        'has_conditionally_enabled_secure_attributes':
-            has_conditionally_enabled_secure_attributes,
-        'conditionally_enabled_attributes': conditional_enabled_attributes,
+        'conditional_attributes': conditional_attributes,
+        'conditional_interface_objects': conditional_interface_objects,
+        'has_conditional_secure_attributes': has_conditional_secure_attributes,
     })
 
     # Methods
@@ -435,13 +421,13 @@ def interface_context(interface, interfaces):
     })
 
     # Conditionally enabled methods
-    conditionally_enabled_methods = v8_methods.filter_conditionally_enabled(methods, interface.is_partial)
-    has_conditionally_enabled_secure_methods = any(  # pylint: disable=invalid-name
-        v8_methods.is_secure_context(method) for method in conditionally_enabled_methods)
+    conditional_methods = v8_methods.filter_conditionally_enabled(methods, interface.is_partial)
+    has_conditional_secure_methods = any(  # pylint: disable=invalid-name
+        v8_methods.is_secure_context(method) for method in conditional_methods)
     context.update({
-        'has_conditionally_enabled_secure_methods':
-            has_conditionally_enabled_secure_methods,
-        'conditionally_enabled_methods': conditionally_enabled_methods,
+        'has_conditional_secure_methods':
+            has_conditional_secure_methods,
+        'conditional_methods': conditional_methods,
     })
 
     # Window.idl in Blink has indexed properties, but the spec says Window
@@ -457,15 +443,13 @@ def interface_context(interface, interfaces):
     })
 
     # Conditionally enabled members
-    prepare_prototype_and_interface_object_func = None  # pylint: disable=invalid-name
-    if (unscopables or has_conditional_attributes_on_prototype or
-            context['conditionally_enabled_methods']):
-        prepare_prototype_and_interface_object_func = '%s::preparePrototypeAndInterfaceObject' % v8_class_name_or_partial  # pylint: disable=invalid-name
-    has_install_conditional_features_on_global_func = has_conditionally_enabled_constructors  # pylint: disable=invalid-name
+    install_conditional_features_func = None  # pylint: disable=invalid-name
+    if unscopables or conditional_interface_objects or conditional_attributes or conditional_methods:
+        install_conditional_features_func = (  # pylint: disable=invalid-name
+            v8_class_name_or_partial + '::InstallConditionalFeatures')
 
     context.update({
-        'prepare_prototype_and_interface_object_func': prepare_prototype_and_interface_object_func,
-        'has_install_conditional_features_on_global_func': has_install_conditional_features_on_global_func,
+        'install_conditional_features_func': install_conditional_features_func,
     })
 
     context.update({
@@ -1384,7 +1368,7 @@ def named_constructor_context(interface):
 
 def number_of_required_arguments(constructor):
     return len([argument for argument in constructor.arguments
-                if not argument.is_optional])
+                if not (argument.is_optional or argument.is_variadic)])
 
 
 def interface_length(constructors):
@@ -1411,9 +1395,7 @@ def property_getter(getter, cpp_arguments):
         return None
 
     def is_null_expression(idl_type):
-        if idl_type.use_output_parameter_for_result:
-            return 'result.isNull()'
-        if idl_type.is_string_type:
+        if idl_type.use_output_parameter_for_result or idl_type.is_string_type:
             return 'result.IsNull()'
         if idl_type.is_interface_type:
             return '!result'

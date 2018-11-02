@@ -5,10 +5,16 @@
 #ifndef CHROME_BROWSER_SIGNIN_ACCOUNT_RECONCILOR_FACTORY_H_
 #define CHROME_BROWSER_SIGNIN_ACCOUNT_RECONCILOR_FACTORY_H_
 
+#include <memory>
+
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "components/signin/core/browser/account_reconcilor.h"
 
+namespace signin {
+class AccountReconcilorDelegate;
+}
+
+class AccountReconcilor;
 class Profile;
 
 // Singleton that owns all AccountReconcilors and associates them with
@@ -25,15 +31,18 @@ class AccountReconcilorFactory : public BrowserContextKeyedServiceFactory {
 
  private:
   friend struct base::DefaultSingletonTraits<AccountReconcilorFactory>;
+  friend class DummyAccountReconcilorWithDelegate;  // For testing.
 
   AccountReconcilorFactory();
   ~AccountReconcilorFactory() override;
 
+  // Creates the AccountReconcilorDelegate.
+  static std::unique_ptr<signin::AccountReconcilorDelegate>
+  CreateAccountReconcilorDelegate(Profile* profile);
+
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
-  void RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable* registry) override;
 };
 
 #endif  // CHROME_BROWSER_SIGNIN_ACCOUNT_RECONCILOR_FACTORY_H_

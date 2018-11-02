@@ -32,6 +32,7 @@
 !Android.mk
 .*.sw?
 .DS_Store
+.cipd
 .classpath
 .cproject
 .gdb_history
@@ -61,7 +62,6 @@ vs-chromium-project.txt
 /android_emulator_sdk
 /ash/ash_unittests_run.xml
 /base/base_unittests_run.xml
-/breakpad/src/
 # See build/.gitignore for entries covering src/build.
 /buildtools
 # The Chrome OS build creates a /c symlink due to http://crbug.com/54866.
@@ -82,6 +82,7 @@ vs-chromium-project.txt
 /chrome/app/theme/default_200_percent/google_chrome
 /chrome/app/theme/google_chrome
 /chrome/browser/autofill/internal
+/chrome/browser/chromeos/arc/voice_interaction/internal
 /chrome/browser/chromeos/login/screenshot_testing/golden_screenshots/*.png
 /chrome/browser/chromeos/login/screenshot_testing/artifacts
 /chrome/browser/extensions/api/ledger/
@@ -102,7 +103,6 @@ vs-chromium-project.txt
 /chrome/chrome_version_resources.xml
 /chrome/common/extensions/api/api.xml
 /chrome/common/extensions/api/ledger/
-/chrome/Hammer
 /chrome/installer/linux/internal
 /chrome/installer/mac/internal
 /chrome/installer/mac/third_party/xz/xz
@@ -116,7 +116,6 @@ vs-chromium-project.txt
 /chrome/interactive_ui_tests_run.xml
 /chrome/setup.xml
 /chrome/setup_unittests.xml
-/chrome/supplement.gypi
 /chrome/sync_integration_tests_run.xml
 /chrome/test/android/telemetry_tests/browser_tests/*.wpr
 /chrome/test/chromeos/autotest/files/client/deps/chrome_test/test_src/
@@ -178,15 +177,16 @@ vs-chromium-project.txt
 /googleurl
 /gpu/gles2_conform_test
 /infra/.recipe_deps
-/internal_gyp
 /ios/third_party/earl_grey/src
 /ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
 /ios/third_party/material_components_ios/src
 /ios/third_party/material_font_disk_loader_ios/src
+/ios/third_party/material_internationalization_ios/src
 /ios/third_party/material_roboto_font_loader_ios/src
 /ios/third_party/material_sprited_animation_view_ios/src
 /ios/third_party/material_text_accessibility_ios/src
+/ios/third_party/motion_interchange_objc/src
 /ios/third_party/ochamcrest/src
 /ios_internal
 /libassistant
@@ -196,45 +196,7 @@ vs-chromium-project.txt
 /media/media_mojo_bindings.xml
 /media/test/data/internal
 /metro_driver
-/mojo/hello_world_service.xml
-/mojo/mojo_application_bindings.xml
-/mojo/mojo_application_manager_unittests.xml
-/mojo/mojo_apps_js_bindings.xml
-/mojo/mojo_apps_js_unittests_run.xml
-/mojo/mojo_clipboard_bindings.xml
-/mojo/mojo_content_handler_bindings.xml
-/mojo/mojo_core_window_manager_bindings.xml
-/mojo/mojo_echo_service_bindings.xml
-/mojo/mojo_example_service_bindings.xml
-/mojo/mojo_external_service_bindings.xml
-/mojo/mojo_geometry_bindings.xml
-/mojo/mojo_gles2_bindings.xml
-/mojo/mojo_gpu_bindings.xml
-/mojo/mojo_input_events_bindings.xml
-/mojo/mojo_js_unittests_run.xml
-/mojo/mojo_keyboard_bindings.xml
-/mojo/mojo_launcher_bindings.xml
-/mojo/mojo_media_viewer_bindings.xml
-/mojo/mojo_native_viewport_bindings.xml
-/mojo/mojo_navigation_bindings.xml
-/mojo/mojo_network_bindings.xml
-/mojo/mojo_public_bindings_unittests.xml
-/mojo/mojo_public_test_interfaces.xml
-/mojo/mojo_public_unittests.xml
-/mojo/mojo_sample_service.xml
-/mojo/mojo_shell_bindings.xml
-/mojo/mojo_shell_lib.xml
-/mojo/mojo_spy.xml
-/mojo/mojo_surface_id_bindings.xml
-/mojo/mojo_surfaces_app_bindings.xml
-/mojo/mojo_surfaces_bindings.xml
-/mojo/mojo_test_service_bindings.xml
-/mojo/mojo_view_manager_bindings.xml
-/mojo/mojo_window_manager_bindings.xml
-/mojo/mojo_wm_flow_embeddee_bindings.xml
-/mojo/mojo_wm_flow_embedder_bindings.xml
-/mojo/mojom_test.xml
-/mojo/sample_service.xml
+/mojo/internal
 /native_client
 /net/Debug
 /net/net_derived_sources.xml
@@ -267,7 +229,6 @@ vs-chromium-project.txt
 /remoting/tools/internal/
 /remoting/webapp/app_remoting/internal/
 /sandbox/linux/seccomp-legacy/
-/sdch/open-vcdiff
 /seccompsandbox
 /signing_keys
 /skia/tools/clusterfuzz-data/
@@ -275,11 +236,9 @@ vs-chromium-project.txt
 /sync/sync.xml
 /sync_testserver.log
 /testserver.log
-/tools/luci-go/linux64/isolate
-/tools/luci-go/mac64/isolate
-/tools/luci-go/win64/isolate.exe
 # See third_party/.gitignore for entries covering src/third_party.
 /tools/.bisect-builds-cache.json
+/tools/cygprofile/*.wprgo
 /tools/distcc
 /tools/gn/bin/linux
 /tools/gn/bin/mac

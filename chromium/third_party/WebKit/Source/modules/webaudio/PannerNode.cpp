@@ -61,12 +61,12 @@ PannerHandler::PannerHandler(AudioNode& node,
       cached_azimuth_(0),
       cached_elevation_(0),
       cached_distance_cone_gain_(1.0f),
-      position_x_(position_x),
-      position_y_(position_y),
-      position_z_(position_z),
-      orientation_x_(orientation_x),
-      orientation_y_(orientation_y),
-      orientation_z_(orientation_z) {
+      position_x_(&position_x),
+      position_y_(&position_y),
+      position_z_(&position_z),
+      orientation_x_(&orientation_x),
+      orientation_y_(&orientation_y),
+      orientation_z_(&orientation_z) {
   AddInput();
   AddOutput(2);
 
@@ -82,7 +82,7 @@ PannerHandler::PannerHandler(AudioNode& node,
   Initialize();
 }
 
-PassRefPtr<PannerHandler> PannerHandler::Create(
+scoped_refptr<PannerHandler> PannerHandler::Create(
     AudioNode& node,
     float sample_rate,
     AudioParamHandler& position_x,
@@ -91,9 +91,9 @@ PassRefPtr<PannerHandler> PannerHandler::Create(
     AudioParamHandler& orientation_x,
     AudioParamHandler& orientation_y,
     AudioParamHandler& orientation_z) {
-  return AdoptRef(new PannerHandler(node, sample_rate, position_x, position_y,
-                                    position_z, orientation_x, orientation_y,
-                                    orientation_z));
+  return base::AdoptRef(new PannerHandler(node, sample_rate, position_x,
+                                          position_y, position_z, orientation_x,
+                                          orientation_y, orientation_z));
 }
 
 PannerHandler::~PannerHandler() {
@@ -573,7 +573,7 @@ void PannerHandler::MarkPannerAsDirty(unsigned dirty) {
 void PannerHandler::SetChannelCount(unsigned long channel_count,
                                     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   // A PannerNode only supports 1 or 2 channels
   if (channel_count > 0 && channel_count <= 2) {
@@ -594,7 +594,7 @@ void PannerHandler::SetChannelCount(unsigned long channel_count,
 void PannerHandler::SetChannelCountMode(const String& mode,
                                         ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   ChannelCountMode old_mode = InternalChannelCountMode();
 
@@ -647,15 +647,30 @@ void PannerHandler::UpdateDirtyState() {
 
 PannerNode::PannerNode(BaseAudioContext& context)
     : AudioNode(context),
-      position_x_(AudioParam::Create(context, kParamTypePannerPositionX, 0.0)),
-      position_y_(AudioParam::Create(context, kParamTypePannerPositionY, 0.0)),
-      position_z_(AudioParam::Create(context, kParamTypePannerPositionZ, 0.0)),
-      orientation_x_(
-          AudioParam::Create(context, kParamTypePannerOrientationX, 1.0)),
-      orientation_y_(
-          AudioParam::Create(context, kParamTypePannerOrientationY, 0.0)),
-      orientation_z_(
-          AudioParam::Create(context, kParamTypePannerOrientationZ, 0.0)) {
+      position_x_(AudioParam::Create(context,
+                                     kParamTypePannerPositionX,
+                                     "Panner.positionX",
+                                     0.0)),
+      position_y_(AudioParam::Create(context,
+                                     kParamTypePannerPositionY,
+                                     "Panner.positionY",
+                                     0.0)),
+      position_z_(AudioParam::Create(context,
+                                     kParamTypePannerPositionZ,
+                                     "Panner.positionZ",
+                                     0.0)),
+      orientation_x_(AudioParam::Create(context,
+                                        kParamTypePannerOrientationX,
+                                        "Panner.orientationX",
+                                        1.0)),
+      orientation_y_(AudioParam::Create(context,
+                                        kParamTypePannerOrientationY,
+                                        "Panner.orientationY",
+                                        0.0)),
+      orientation_z_(AudioParam::Create(context,
+                                        kParamTypePannerOrientationZ,
+                                        "Panner.orientationZ",
+                                        0.0)) {
   SetHandler(PannerHandler::Create(
       *this, context.sampleRate(), position_x_->Handler(),
       position_y_->Handler(), position_z_->Handler(), orientation_x_->Handler(),
@@ -797,7 +812,7 @@ void PannerNode::setConeOuterGain(double gain) {
   GetPannerHandler().SetConeOuterGain(gain);
 }
 
-DEFINE_TRACE(PannerNode) {
+void PannerNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(position_x_);
   visitor->Trace(position_y_);
   visitor->Trace(position_z_);

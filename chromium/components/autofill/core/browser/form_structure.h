@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -21,14 +20,12 @@
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
-enum UploadRequired {
-  UPLOAD_NOT_REQUIRED,
-  UPLOAD_REQUIRED,
-  USE_UPLOAD_RATES
-};
+enum UploadRequired { UPLOAD_NOT_REQUIRED, UPLOAD_REQUIRED, USE_UPLOAD_RATES };
 
 namespace base {
 class TimeTicks;
@@ -106,14 +103,22 @@ class FormStructure {
   // Returns true if this form matches the structural requirements for Autofill.
   bool ShouldBeParsed() const;
 
-  // Returns true if we should query the crowdsourcing server to determine this
-  // form's field types.  If the form includes author-specified types, this will
+  // Returns true if heuristic autofill type detection should be attempted for
+  // this form.
+  bool ShouldRunHeuristics() const;
+
+  // Returns true if we should query the crowd-sourcing server to determine this
+  // form's field types. If the form includes author-specified types, this will
   // return false unless there are password fields in the form. If there are no
   // password fields the assumption is that the author has expressed their
   // intent and crowdsourced data should not be used to override this. Password
   // fields are different because there is no way to specify password generation
   // directly.
-  bool ShouldBeCrowdsourced() const;
+  bool ShouldBeQueried() const;
+
+  // Returns true if we should upload votes for this form to the crowd-sourcing
+  // server.
+  bool ShouldBeUploaded() const;
 
   // Sets the field types to be those set for |cached_form|.
   void UpdateFromCache(const FormStructure& cached_form,
@@ -154,21 +159,6 @@ class FormStructure {
   // specifies a section for at least one field.
   void ParseFieldTypesFromAutocompleteAttributes();
 
-  // Determines whether |type| and |field| match.
-  typedef base::Callback<bool(ServerFieldType type,
-                              const AutofillField& field)>
-      InputFieldComparator;
-
-  // Fills in |fields_| that match |types| (via |matches|) with info from
-  // |get_info|. Uses |address_language_code| to determine line separators when
-  // collapsing street address lines into a single-line input text field.
-  bool FillFields(
-      const std::vector<ServerFieldType>& types,
-      const InputFieldComparator& matches,
-      const base::Callback<base::string16(const AutofillType&)>& get_info,
-      const std::string& address_language_code,
-      const std::string& app_locale);
-
   // Returns the values that can be filled into the form structure for the
   // given type. For example, there's no way to fill in a value of "The Moon"
   // into ADDRESS_HOME_STATE if the form only has a
@@ -181,6 +171,10 @@ class FormStructure {
   // Gets the form's current value for |type|. For example, it may return
   // the contents of a text input or the currently selected <option>.
   base::string16 GetUniqueValue(HtmlFieldType type) const;
+
+  // Rationalize phone number fields in a given section, that is only fill
+  // the fields that are considered composing a first complete phone number.
+  void RationalizePhoneNumbersInSection(std::string section);
 
   const AutofillField* field(size_t index) const;
   AutofillField* field(size_t index);
@@ -206,6 +200,8 @@ class FormStructure {
   const GURL& source_url() const { return source_url_; }
 
   const GURL& target_url() const { return target_url_; }
+
+  const url::Origin& main_frame_origin() const { return main_frame_origin_; }
 
   bool has_author_specified_types() const {
     return has_author_specified_types_;
@@ -243,6 +239,9 @@ class FormStructure {
   // Returns a FormData containing the data this form structure knows about.
   FormData ToFormData() const;
 
+  // Returns the possible form types.
+  std::set<FormType> GetFormTypes() const;
+
   bool operator==(const FormData& form) const;
   bool operator!=(const FormData& form) const;
 
@@ -251,10 +250,15 @@ class FormStructure {
   friend class FormStructureTest;
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadTest, QueryAndUploadTest);
   FRIEND_TEST_ALL_PREFIXES(FormStructureTest, FindLongestCommonPrefix);
+  FRIEND_TEST_ALL_PREFIXES(FormStructureTest,
+                           RationalizePhoneNumber_RunsOncePerSection);
+  // A function to fine tune the credit cards related predictions. For example:
+  // lone credit card fields in an otherwise non-credit-card related form is
+  // unlikely to be correct, the function will override that prediction.
+  void RationalizeCreditCardFieldPredictions();
 
-  // A helper function to avoid suggesting field types in cases where they are
-  // highly unlikely. For example: lone credit card fields in an otherwise
-  // non-credit-card related form.
+  // A helper function to review the predictions and do appropriate adjustments
+  // when it considers neccessary.
   void RationalizeFieldTypePredictions();
 
   // Encodes information about this form and its fields into |query_form|.
@@ -298,6 +302,9 @@ class FormStructure {
 
   // The target URL.
   GURL target_url_;
+
+  // The origin of the main frame of this form.
+  url::Origin main_frame_origin_;
 
   // The number of fields able to be auto-filled.
   size_t autofill_count_;
@@ -352,6 +359,9 @@ class FormStructure {
 
   // When a form is parsed on this page.
   base::TimeTicks form_parsed_timestamp_;
+
+  // If phone number rationalization has been performed for a given section.
+  std::map<std::string, bool> phone_rationalized_;
 
   DISALLOW_COPY_AND_ASSIGN(FormStructure);
 };

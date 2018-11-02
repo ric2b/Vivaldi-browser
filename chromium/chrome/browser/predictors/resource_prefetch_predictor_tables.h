@@ -18,7 +18,7 @@
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.pb.h"
 
-namespace tracked_objects {
+namespace base {
 class Location;
 }
 
@@ -38,8 +38,7 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
  public:
   typedef base::OnceCallback<void(sql::Connection*)> DBTask;
 
-  virtual void ScheduleDBTask(const tracked_objects::Location& from_here,
-                              DBTask task);
+  virtual void ScheduleDBTask(const base::Location& from_here, DBTask task);
 
   virtual void ExecuteDBTaskOnDBSequence(DBTask task);
 
@@ -67,8 +66,10 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   // misses from |data|.
   static void TrimOrigins(OriginData* data, size_t max_consecutive_misses);
 
-  // Sorts the origins by score, decreasing.
-  static void SortOrigins(OriginData* data);
+  // Sorts the origins by score, decreasing. Prioritizes |main_frame_origin|
+  // if found in |data|.
+  static void SortOrigins(OriginData* data,
+                          const std::string& main_frame_origin);
 
   // Computes score of |origin|.
   static float ComputeOriginScore(const OriginStat& origin);

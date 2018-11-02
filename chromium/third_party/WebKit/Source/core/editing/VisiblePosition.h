@@ -34,19 +34,6 @@
 
 namespace blink {
 
-// VisiblePosition default affinity is downstream because
-// the callers do not really care (they just want the
-// deep position without regard to line position), and this
-// is cheaper than UPSTREAM
-#define VP_DEFAULT_AFFINITY TextAffinity::kDownstream
-
-// Callers who do not know where on the line the position is,
-// but would like UPSTREAM if at a line break or DOWNSTREAM
-// otherwise, need a clear way to specify that.  The
-// constructors auto-correct UPSTREAM to DOWNSTREAM if the
-// position is not at a line break.
-#define VP_UPSTREAM_IF_POSSIBLE TextAffinity::kUpstream
-
 // |VisiblePosition| is an immutable object representing "canonical position"
 // with affinity.
 //
@@ -85,6 +72,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisiblePositionTemplate final {
   bool operator!=(const VisiblePositionTemplate&) const = delete;
 
   bool IsValid() const;
+  bool IsValidFor(const Document&) const;
 
   // TODO(editing-dev): We should have |DCHECK(isValid())| in the following
   // functions. However, there are some clients storing a VisiblePosition and
@@ -112,7 +100,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisiblePositionTemplate final {
   static VisiblePositionTemplate<Strategy> InParentBeforeNode(const Node&);
   static VisiblePositionTemplate<Strategy> LastPositionInNode(const Node&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
 #ifndef NDEBUG
   void ShowTreeForThis() const;
@@ -140,11 +128,11 @@ using VisiblePositionInFlatTree =
     VisiblePositionTemplate<EditingInFlatTreeStrategy>;
 
 CORE_EXPORT VisiblePosition
-CreateVisiblePosition(const Position&, TextAffinity = VP_DEFAULT_AFFINITY);
+CreateVisiblePosition(const Position&, TextAffinity = TextAffinity::kDefault);
 CORE_EXPORT VisiblePosition CreateVisiblePosition(const PositionWithAffinity&);
 CORE_EXPORT VisiblePositionInFlatTree
 CreateVisiblePosition(const PositionInFlatTree&,
-                      TextAffinity = VP_DEFAULT_AFFINITY);
+                      TextAffinity = TextAffinity::kDefault);
 CORE_EXPORT VisiblePositionInFlatTree
 CreateVisiblePosition(const PositionInFlatTreeWithAffinity&);
 

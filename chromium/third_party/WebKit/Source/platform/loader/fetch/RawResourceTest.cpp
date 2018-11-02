@@ -36,7 +36,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/scheduler/child/web_scheduler.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
@@ -100,7 +100,9 @@ class DummyClient final : public GarbageCollectedFinalized<DummyClient>,
     return number_of_redirects_received_;
   }
   const Vector<char>& Data() { return data_; }
-  DEFINE_INLINE_TRACE() { RawResourceClient::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    RawResourceClient::Trace(visitor);
+  }
 
  private:
   bool called_;
@@ -136,7 +138,7 @@ class AddingClient final : public GarbageCollectedFinalized<AddingClient>,
 
   void RemoveClient() { resource_->RemoveClient(dummy_client_); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(dummy_client_);
     visitor->Trace(resource_);
     RawResourceClient::Trace(visitor);
@@ -152,9 +154,9 @@ TEST_F(RawResourceTest, AddClientDuringCallback) {
 
   // Create a non-null response.
   ResourceResponse response = raw->GetResponse();
-  response.SetURL(KURL(kParsedURLString, "http://600.613/"));
+  response.SetURL(KURL("http://600.613/"));
   raw->SetResponse(response);
-  raw->Finish();
+  raw->FinishForTest();
   EXPECT_FALSE(raw->GetResponse().IsNull());
 
   Persistent<DummyClient> dummy_client = new DummyClient();
@@ -183,7 +185,7 @@ class RemovingClient : public GarbageCollectedFinalized<RemovingClient>,
     resource->RemoveClient(this);
   }
   String DebugName() const override { return "RemovingClient"; }
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(dummy_client_);
     RawResourceClient::Trace(visitor);
   }
@@ -197,9 +199,9 @@ TEST_F(RawResourceTest, RemoveClientDuringCallback) {
 
   // Create a non-null response.
   ResourceResponse response = raw->GetResponse();
-  response.SetURL(KURL(kParsedURLString, "http://600.613/"));
+  response.SetURL(KURL("http://600.613/"));
   raw->SetResponse(response);
-  raw->Finish();
+  raw->FinishForTest();
   EXPECT_FALSE(raw->GetResponse().IsNull());
 
   Persistent<DummyClient> dummy_client = new DummyClient();

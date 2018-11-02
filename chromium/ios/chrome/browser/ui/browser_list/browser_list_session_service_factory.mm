@@ -16,7 +16,7 @@
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
-#import "ios/chrome/browser/ui/browser_list/browser_list.h"
+#import "ios/chrome/browser/ui/browser_list/browser_list_factory.h"
 #import "ios/chrome/browser/ui/browser_list/browser_list_session_service_impl.h"
 #import "ios/web/public/certificate_policy_cache.h"
 #import "ios/web/public/web_state/session_certificate_policy_cache.h"
@@ -37,9 +37,6 @@ std::unique_ptr<web::WebState> CreateWebState(
           web::WebState::CreateParams(browser_state), session_storage);
   web_state->GetSessionCertificatePolicyCache()->UpdateCertificatePolicyCache(
       web::BrowserState::GetCertificatePolicyCache(browser_state));
-  // TODO(crbug.com/724282): Track whether web usage should be enabled for
-  // the deserialized WebStates.
-  web_state->SetWebUsageEnabled(true);
   return web_state;
 }
 }
@@ -60,7 +57,9 @@ BrowserListSessionServiceFactory::GetInstance() {
 BrowserListSessionServiceFactory::BrowserListSessionServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "BrowserListSessionService",
-          BrowserStateDependencyManager::GetInstance()) {}
+          BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(BrowserListFactory::GetInstance());
+}
 
 BrowserListSessionServiceFactory::~BrowserListSessionServiceFactory() {}
 
@@ -72,7 +71,7 @@ BrowserListSessionServiceFactory::BuildServiceInstanceFor(
   // It is safe to use base::Unretained here as BrowserListSessionServiceImpl
   // will be destroyed before the ChromeBrowserState (as it is a KeyedService).
   return base::MakeUnique<BrowserListSessionServiceImpl>(
-      BrowserList::FromBrowserState(browser_state),
+      BrowserListFactory::GetForBrowserState(browser_state),
       base::SysUTF8ToNSString(browser_state->GetStatePath().AsUTF8Unsafe()),
       [SessionServiceIOS sharedService],
       base::BindRepeating(&CreateWebState, base::Unretained(browser_state)));

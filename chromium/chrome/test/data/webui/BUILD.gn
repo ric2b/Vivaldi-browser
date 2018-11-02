@@ -35,7 +35,7 @@ js2gtest("browser_tests_js_webui") {
   # action so need to be separated out.
   sources = [
     "../../../browser/ui/webui/app_list/start_page_browsertest.js",
-    "../../../browser/ui/webui/chromeos/bluetooth_pairing_ui_browsertest.js",
+    "../../../browser/ui/webui/chromeos/bluetooth_pairing_dialog_browsertest.js",
     "../../../browser/ui/webui/chromeos/certificate_manager_dialog_browsertest.js",
     "../../../browser/ui/webui/chromeos/set_time_ui_browsertest.js",
     "../../../browser/ui/webui/extensions/chromeos/kiosk_apps_browsertest.js",
@@ -44,6 +44,8 @@ js2gtest("browser_tests_js_webui") {
     "../../../browser/ui/webui/sync_internals_browsertest.js",
     "../chromeos/oobe_webui_browsertest.js",
     "//third_party/axe-core/axe.js",
+    "a11y/accessibility_audit_rules.js",
+    "a11y/accessibility_test.js",
     "about_invalidations_browsertest.js",
     "accessibility_audit_browsertest.js",
     "assertions.js",
@@ -51,9 +53,13 @@ js2gtest("browser_tests_js_webui") {
     "bluetooth_internals_browsertest.js",
     "certificate_viewer_dialog_test.js",
     "chrome_send_browsertest.js",
+    "cr_components/cr_components_browsertest.js",
     "cr_elements/cr_elements_browsertest.js",
     "engagement/site_engagement_browsertest.js",
+    "extensions/a11y/extensions_a11y_test.js",
+    "extensions/a11y/extensions_a11y_test_fixture.js",
     "extensions/cr_extensions_browsertest.js",
+    "interventions_internals_browsertest.js",
     "load_time_data_browsertest.js",
     "md_bookmarks/md_bookmarks_browsertest.js",
     "md_downloads/downloads_browsertest.js",
@@ -72,14 +78,11 @@ js2gtest("browser_tests_js_webui") {
     "net_internals/main.js",
     "net_internals/net_internals_test.js",
     "net_internals/prerender_view.js",
-    "net_internals/sdch_view.js",
     "net_internals/timeline_view.js",
     "ntp4.js",
     "polymer_browser_test_base.js",
     "sandboxstatus_browsertest.js",
     "settings/a11y/about_a11y_test.js",
-    "settings/a11y/accessibility_audit_rules.js",
-    "settings/a11y/accessibility_test.js",
     "settings/a11y/basic_a11y_test.js",
     "settings/a11y/edit_dictionary_a11y_test.js",
     "settings/a11y/manage_profile_a11y_test.js",
@@ -104,8 +107,17 @@ js2gtest("browser_tests_js_webui") {
     "webui_resource_async_browsertest.js",
   ]
 
+  extra_js_files = [ "//chrome/browser/resources/md_downloads/constants.js" ]
+
+  if (is_win || is_mac || is_desktop_linux || is_chromeos) {
+    sources += [ "discards/discards_browsertest.js" ]
+  }
+
   if (is_chromeos) {
-    sources += [ "settings/easy_unlock_browsertest_chromeos.js" ]
+    sources += [
+      "settings/easy_unlock_browsertest_chromeos.js",
+      "sys_internals/sys_internals_browsertest.js",
+    ]
   }
 
   if (is_chrome_branded) {
@@ -123,6 +135,7 @@ js2gtest("browser_tests_js_webui") {
   }
   if (enable_print_preview) {
     sources += [
+      "print_preview/new_print_preview_ui_browsertest.js",
       "print_preview/print_preview_destination_search_test.js",
       "print_preview/print_preview_ui_browsertest.js",
     ]
@@ -137,17 +150,16 @@ js2gtest("browser_tests_js_webui") {
 js2gtest("unit_tests_js") {
   test_type = "unit"
   sources = [
-    "../../../browser/resources/md_downloads/action_service_unittest.gtestjs",
-    "../../../browser/resources/print_preview/data/measurement_system_unittest.gtestjs",
+    "../../../browser/resources/md_downloads/search_service_unittest.gtestjs",
     "../../../browser/resources/print_preview/print_preview_utils_unittest.gtestjs",
     "../../../renderer/resources/extensions/notifications_custom_bindings.gtestjs",
     "../unit/framework_unittest.gtestjs",
   ]
   extra_js_files = [
-    "../../../browser/resources/md_downloads/action_service.js",
     "../../../browser/resources/md_downloads/browser_proxy.js",
     "../../../browser/resources/print_preview/data/measurement_system.js",
     "../../../browser/resources/print_preview/print_preview_utils.js",
+    "../../../browser/resources/md_downloads/search_service.js",
     "../../../renderer/resources/extensions/notifications_custom_bindings.js",
     "../../../renderer/resources/extensions/notifications_test_util.js",
     "//ui/webui/resources/js/cr.js",
@@ -155,10 +167,12 @@ js2gtest("unit_tests_js") {
   if (is_chromeos) {
     sources += [
       "../../../browser/resources/chromeos/braille_ime/braille_ime_unittest.gtestjs",
+      "../../../browser/resources/chromeos/select_to_speak/paragraph_utils_unittest.gtestjs",
       "../../../browser/resources/chromeos/select_to_speak/select_to_speak_unittest.gtestjs",
     ]
     extra_js_files += [
       "../../../browser/resources/chromeos/braille_ime/braille_ime.js",
+      "../../../browser/resources/chromeos/select_to_speak/paragraph_utils.js",
       "../../../browser/resources/chromeos/select_to_speak/select_to_speak.js",
       "../../../browser/resources/chromeos/select_to_speak/test_support.js",
     ]

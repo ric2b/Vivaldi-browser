@@ -20,8 +20,8 @@ WebThreadImplForRendererScheduler::WebThreadImplForRendererScheduler(
       idle_task_runner_(scheduler->IdleTaskRunner()),
       scheduler_(scheduler),
       thread_id_(base::PlatformThread::CurrentId()),
-      web_task_runner_(
-          WebTaskRunnerImpl::Create(scheduler->DefaultTaskQueue())) {}
+      web_task_runner_(WebTaskRunnerImpl::Create(scheduler->DefaultTaskQueue(),
+                                                 base::nullopt)) {}
 
 WebThreadImplForRendererScheduler::~WebThreadImplForRendererScheduler() {}
 
@@ -33,9 +33,9 @@ blink::WebScheduler* WebThreadImplForRendererScheduler::Scheduler() const {
   return web_scheduler_.get();
 }
 
-base::SingleThreadTaskRunner* WebThreadImplForRendererScheduler::GetTaskRunner()
-    const {
-  return task_runner_.get();
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadImplForRendererScheduler::GetTaskRunner() const {
+  return task_runner_;
 }
 
 SingleThreadIdleTaskRunner*
@@ -44,7 +44,7 @@ WebThreadImplForRendererScheduler::GetIdleTaskRunner() const {
 }
 
 blink::WebTaskRunner* WebThreadImplForRendererScheduler::GetWebTaskRunner() {
-  return web_task_runner_.Get();
+  return web_task_runner_.get();
 }
 
 void WebThreadImplForRendererScheduler::AddTaskObserverInternal(

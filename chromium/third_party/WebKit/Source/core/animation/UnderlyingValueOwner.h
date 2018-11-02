@@ -6,9 +6,11 @@
 #define UnderlyingValueOwner_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "core/CoreExport.h"
 #include "core/animation/TypedInterpolationValue.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -16,8 +18,7 @@ namespace blink {
 // Ensures we perform copy on write if we are not the owner of an underlying
 // InterpolationValue. This functions similar to a DataRef except on
 // std::unique_ptr'd objects.
-class UnderlyingValueOwner {
-  WTF_MAKE_NONCOPYABLE(UnderlyingValueOwner);
+class CORE_EXPORT UnderlyingValueOwner {
   STACK_ALLOCATED();
 
  public:
@@ -48,6 +49,7 @@ class UnderlyingValueOwner {
   const InterpolationType* type_;
   InterpolationValue value_owner_;
   const InterpolationValue* value_;
+  DISALLOW_COPY_AND_ASSIGN(UnderlyingValueOwner);
 };
 
 }  // namespace blink

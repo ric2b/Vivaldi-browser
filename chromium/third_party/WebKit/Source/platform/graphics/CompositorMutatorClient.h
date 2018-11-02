@@ -13,32 +13,27 @@
 namespace blink {
 
 class CompositorMutator;
-struct CompositorMutations;
-class CompositorMutationsTarget;
 
 class PLATFORM_EXPORT CompositorMutatorClient
     : public WebCompositorMutatorClient {
  public:
-  CompositorMutatorClient(CompositorMutator*, CompositorMutationsTarget*);
+  explicit CompositorMutatorClient(CompositorMutator*);
   virtual ~CompositorMutatorClient();
 
-  void SetNeedsMutate();
+  void SetMutationUpdate(std::unique_ptr<cc::MutatorOutputState>);
 
   // cc::LayerTreeMutator
-  bool Mutate(base::TimeTicks monotonic_time) override;
-  void SetClient(cc::LayerTreeMutatorClient*) override;
-  base::Closure TakeMutations() override;
+  void SetClient(cc::LayerTreeMutatorClient*);
+  void Mutate(std::unique_ptr<cc::MutatorInputState>) override;
+  // TODO(majidvp): Remove this when CC knows about timeline input.
+  bool HasAnimators() override;
 
   CompositorMutator* Mutator() { return mutator_.Get(); }
 
-  void SetMutationsForTesting(std::unique_ptr<CompositorMutations>);
-
  private:
-  cc::LayerTreeMutatorClient* client_;
-  CompositorMutationsTarget* mutations_target_;
   // Accessed by main and compositor threads.
   CrossThreadPersistent<CompositorMutator> mutator_;
-  std::unique_ptr<CompositorMutations> mutations_;
+  cc::LayerTreeMutatorClient* client_;
 };
 
 }  // namespace blink

@@ -32,6 +32,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
@@ -58,8 +59,9 @@ public class CustomNotificationBuilderTest {
     @SmallTest
     @Feature({"Browser", "Notifications"})
     @SuppressLint("NewApi")
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testSetAll() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         PendingIntent contentIntent = createIntent(context, "Content");
         PendingIntent deleteIntent = createIntent(context, "Delete");
@@ -144,8 +146,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testZeroActionButtons() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         Notification notification =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES).build();
         View bigView = notification.bigContentView.apply(context, new LinearLayout(context));
@@ -161,8 +164,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testMaxActionButtons() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         NotificationBuilderBase builder =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES)
                         .addButtonAction(null /* iconBitmap */, "button",
@@ -188,8 +192,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testPaintIcons() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         Bitmap largeIcon = Bitmap.createBitmap(
                 new int[] {Color.RED}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
@@ -230,8 +235,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testCharSequenceLimits() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         int maxLength = CustomNotificationBuilder.MAX_CHARSEQUENCE_LENGTH;
         Notification notification =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES)
@@ -260,6 +266,7 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testCalculateMaxBodyLines() {
         Assert.assertEquals(7, CustomNotificationBuilder.calculateMaxBodyLines(-1000.0f));
         Assert.assertEquals(7, CustomNotificationBuilder.calculateMaxBodyLines(0.5f));
@@ -271,6 +278,7 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testCalculateScaledPadding() {
         DisplayMetrics metrics = new DisplayMetrics();
         metrics.density = 10.0f;
@@ -287,8 +295,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testGeneratesLargeIconFromOriginWhenNoLargeIconProvided() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         NotificationBuilderBase notificationBuilder =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES)
                         .setOrigin("https://www.google.com");
@@ -304,8 +313,9 @@ public class CustomNotificationBuilderTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testGeneratesLargeIconFromOriginWhenLargeIconProvidedIsNull() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         NotificationBuilderBase notificationBuilder =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES)
                         .setOrigin("https://www.chromium.org")
@@ -330,8 +340,9 @@ public class CustomNotificationBuilderTest {
     @TargetApi(Build.VERSION_CODES.KITKAT_WATCH) // RemoteInputs were only added in KITKAT_WATCH.
     @SmallTest
     @Feature({"Browser", "Notifications"})
+    @DisableIf.Build(sdk_is_greater_than = 23, message = "crbug.com/779228")
     public void testAddTextActionSetsRemoteInput() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         NotificationBuilderBase notificationBuilder =
                 new CustomNotificationBuilder(context, ChannelDefinitions.CHANNEL_ID_SITES)
                         .addTextAction(null, "Action Title", null, "Placeholder");

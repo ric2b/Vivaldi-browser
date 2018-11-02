@@ -131,6 +131,8 @@ def _ResolveTombstones(jobs, tombstones, tombstone_symbolizer):
     data = pool.map(
         _ResolveTombstone,
         [[tombstone, tombstone_symbolizer] for tombstone in tombstones])
+    pool.close()
+    pool.join()
   resolved_tombstones = []
   for tombstone in data:
     resolved_tombstones.extend(tombstone)
@@ -199,8 +201,7 @@ def ClearAllTombstones(device):
 
 
 def ResolveTombstones(device, resolve_all_tombstones, include_stack_symbols,
-                      wipe_tombstones, jobs=4,
-                      apk_under_test=None, enable_relocation_packing=None,
+                      wipe_tombstones, jobs=4, apk_under_test=None,
                       tombstone_symbolizer=None):
   """Resolve tombstones in the device.
 
@@ -220,9 +221,7 @@ def ResolveTombstones(device, resolve_all_tombstones, include_stack_symbols,
                                                     include_stack_symbols,
                                                     wipe_tombstones),
                             (tombstone_symbolizer
-                             or stack_symbolizer.Symbolizer(
-                                apk_under_test,
-                                enable_relocation_packing)))
+                             or stack_symbolizer.Symbolizer(apk_under_test)))
 
 
 def main():

@@ -25,14 +25,14 @@ String BufferSourceToString(
   unsigned char* input;
   int length;
   // Convert the input array into a string of bytes.
-  if (application_server_key.isArrayBuffer()) {
+  if (application_server_key.IsArrayBuffer()) {
     input = static_cast<unsigned char*>(
-        application_server_key.getAsArrayBuffer()->Data());
-    length = application_server_key.getAsArrayBuffer()->ByteLength();
-  } else if (application_server_key.isArrayBufferView()) {
+        application_server_key.GetAsArrayBuffer()->Data());
+    length = application_server_key.GetAsArrayBuffer()->ByteLength();
+  } else if (application_server_key.IsArrayBufferView()) {
     input = static_cast<unsigned char*>(
-        application_server_key.getAsArrayBufferView().View()->buffer()->Data());
-    length = application_server_key.getAsArrayBufferView()
+        application_server_key.GetAsArrayBufferView().View()->buffer()->Data());
+    length = application_server_key.GetAsArrayBufferView()
                  .View()
                  ->buffer()
                  ->ByteLength();
@@ -79,8 +79,9 @@ PushSubscriptionOptions::PushSubscriptionOptions(
           DOMArrayBuffer::Create(options.application_server_key.Latin1().data(),
                                  options.application_server_key.length())) {}
 
-DEFINE_TRACE(PushSubscriptionOptions) {
+void PushSubscriptionOptions::Trace(blink::Visitor* visitor) {
   visitor->Trace(application_server_key_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

@@ -15,7 +15,6 @@
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/containers/adapters.h"
-#include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -57,7 +56,7 @@ class ScrollContentsView : public views::View {
       : box_layout_(new views::BoxLayout(views::BoxLayout::kVertical)) {
     SetLayoutManager(box_layout_);
   }
-  ~ScrollContentsView() override {}
+  ~ScrollContentsView() override = default;
 
  protected:
   // views::View:
@@ -256,7 +255,7 @@ TrayDetailsView::TrayDetailsView(SystemTrayItem* owner)
       this, ui::NativeTheme::kColorId_BubbleBackground));
 }
 
-TrayDetailsView::~TrayDetailsView() {}
+TrayDetailsView::~TrayDetailsView() = default;
 
 void TrayDetailsView::OnViewClicked(views::View* sender) {
   HandleViewClicked(sender);

@@ -9,12 +9,20 @@
 #include "modules/media_controls/elements/MediaControlElementType.h"
 #include "platform/wtf/Allocator.h"
 
+namespace WTF {
+class AtomicString;
+}  // namespace WTF
+
 namespace blink {
 
+class ContainerNode;
+class Element;
 class Event;
+class HTMLDivElement;
 class HTMLMediaElement;
 class LayoutObject;
 class Node;
+struct WebSize;
 
 // Helper class for media control elements. It contains methods, constants or
 // concepts shared by more than one element.
@@ -38,6 +46,20 @@ class MediaControlElementsHelper final {
   // Exported to be used by the accessibility module.
   MODULES_EXPORT static const HTMLMediaElement* ToParentMediaElement(
       const Node*);
+
+  // Utility function for quickly creating div elements with a predefined shadow
+  // ID.
+  static HTMLDivElement* CreateDiv(const WTF::AtomicString& id,
+                                   ContainerNode* parent);
+
+  // Utility function for getting the size in pixels of an element. If the
+  // element has not been layed out then returns the supplied default.
+  static WebSize GetSizeOrDefault(const Element&, const WebSize&);
+
+  // Utility function for quickly creating div elements with a predefined
+  // element ID.
+  static HTMLDivElement* CreateDivWithId(const WTF::AtomicString& id,
+                                         ContainerNode* parent);
 };
 
 }  // namespace blink

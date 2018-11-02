@@ -6,13 +6,13 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/DOMException.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBRequest.h"
 #include "modules/indexeddb/IDBRequestLoader.h"
 #include "modules/indexeddb/IDBValue.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 
 namespace blink {
@@ -68,7 +68,7 @@ IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
 }
 
 IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
-                                         RefPtr<IDBValue> value,
+                                         scoped_refptr<IDBValue> value,
                                          bool attach_loader,
                                          WTF::Closure on_result_load_complete)
     : request_(request),
@@ -80,13 +80,14 @@ IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
   request_->queue_item_ = this;
   values_.push_back(std::move(value));
   if (attach_loader)
-    loader_ = WTF::MakeUnique<IDBRequestLoader>(this, &values_);
+    loader_ = std::make_unique<IDBRequestLoader>(this, &values_);
 }
 
-IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
-                                         const Vector<RefPtr<IDBValue>>& values,
-                                         bool attach_loader,
-                                         WTF::Closure on_result_load_complete)
+IDBRequestQueueItem::IDBRequestQueueItem(
+    IDBRequest* request,
+    const Vector<scoped_refptr<IDBValue>>& values,
+    bool attach_loader,
+    WTF::Closure on_result_load_complete)
     : request_(request),
       values_(values),
       on_result_load_complete_(std::move(on_result_load_complete)),
@@ -96,13 +97,13 @@ IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
   DCHECK_EQ(request->queue_item_, nullptr);
   request_->queue_item_ = this;
   if (attach_loader)
-    loader_ = WTF::MakeUnique<IDBRequestLoader>(this, &values_);
+    loader_ = std::make_unique<IDBRequestLoader>(this, &values_);
 }
 
 IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
                                          IDBKey* key,
                                          IDBKey* primary_key,
-                                         RefPtr<IDBValue> value,
+                                         scoped_refptr<IDBValue> value,
                                          bool attach_loader,
                                          WTF::Closure on_result_load_complete)
     : request_(request),
@@ -116,14 +117,14 @@ IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
   request_->queue_item_ = this;
   values_.push_back(std::move(value));
   if (attach_loader)
-    loader_ = WTF::MakeUnique<IDBRequestLoader>(this, &values_);
+    loader_ = std::make_unique<IDBRequestLoader>(this, &values_);
 }
 
 IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
                                          std::unique_ptr<WebIDBCursor> cursor,
                                          IDBKey* key,
                                          IDBKey* primary_key,
-                                         RefPtr<IDBValue> value,
+                                         scoped_refptr<IDBValue> value,
                                          bool attach_loader,
                                          WTF::Closure on_result_load_complete)
     : request_(request),
@@ -138,7 +139,7 @@ IDBRequestQueueItem::IDBRequestQueueItem(IDBRequest* request,
   request_->queue_item_ = this;
   values_.push_back(std::move(value));
   if (attach_loader)
-    loader_ = WTF::MakeUnique<IDBRequestLoader>(this, &values_);
+    loader_ = std::make_unique<IDBRequestLoader>(this, &values_);
 }
 
 IDBRequestQueueItem::~IDBRequestQueueItem() {
@@ -153,7 +154,7 @@ void IDBRequestQueueItem::OnResultLoadComplete() {
   ready_ = true;
 
   DCHECK(on_result_load_complete_);
-  on_result_load_complete_();
+  std::move(on_result_load_complete_).Run();
 }
 
 void IDBRequestQueueItem::OnResultLoadComplete(DOMException* error) {

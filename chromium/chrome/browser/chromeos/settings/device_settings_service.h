@@ -5,22 +5,22 @@
 #ifndef CHROME_BROWSER_CHROMEOS_SETTINGS_DEVICE_SETTINGS_SERVICE_H_
 #define CHROME_BROWSER_CHROMEOS_SETTINGS_DEVICE_SETTINGS_SERVICE_H_
 
-#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/ownership/owner_settings_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/scoped_nss_types.h"
 
@@ -28,6 +28,12 @@ namespace ownership {
 class OwnerKeyUtil;
 class PublicKey;
 }
+
+namespace policy {
+namespace off_hours {
+class DeviceOffHoursController;
+}  // namespace off_hours
+}  // namespace policy
 
 namespace chromeos {
 
@@ -130,6 +136,16 @@ class DeviceSettingsService : public SessionManagerClient::Observer {
   // nullptr.
   Status status() const { return store_status_; }
 
+  // Returns the currently device off hours controller. The returned pointer is
+  // guaranteed to be non-null.
+  policy::off_hours::DeviceOffHoursController* device_off_hours_controller()
+      const {
+    return device_off_hours_controller_.get();
+  }
+
+  void SetDeviceOffHoursControllerForTesting(
+      std::unique_ptr<policy::off_hours::DeviceOffHoursController> controller);
+
   // Triggers an attempt to pull the public half of the owner key from disk and
   // load the device settings.
   void Load();
@@ -217,9 +233,6 @@ class DeviceSettingsService : public SessionManagerClient::Observer {
                                      SessionManagerOperation* operation,
                                      Status status);
 
-  // Updates status and invokes the callback immediately.
-  void HandleError(Status status, const base::Closure& callback);
-
   // Run OwnershipStatusChanged() for observers and push
   // NOTIFICATION_OWNERSHIP_STATUS_CHANGED to NotificationService.
   void NotifyOwnershipStatusChanged() const;
@@ -251,12 +264,15 @@ class DeviceSettingsService : public SessionManagerClient::Observer {
 
   // The queue of pending operations. The first operation on the queue is
   // currently active; it gets removed and destroyed once it completes.
-  std::deque<linked_ptr<SessionManagerOperation>> pending_operations_;
+  base::circular_deque<linked_ptr<SessionManagerOperation>> pending_operations_;
 
   base::ObserverList<Observer> observers_;
 
   // Whether the device will be establishing consumer ownership.
   bool will_establish_consumer_ownership_ = false;
+
+  std::unique_ptr<policy::off_hours::DeviceOffHoursController>
+      device_off_hours_controller_;
 
   base::WeakPtrFactory<DeviceSettingsService> weak_factory_{this};
 

@@ -38,6 +38,7 @@ class GridTrack {
   void SetBaseSize(LayoutUnit);
 
   LayoutUnit GrowthLimit() const;
+  bool GrowthLimitIsInfinite() const { return growth_limit_ == kInfinity; }
   void SetGrowthLimit(LayoutUnit);
 
   bool InfiniteGrowthPotential() const;
@@ -59,7 +60,6 @@ class GridTrack {
   void SetGrowthLimitCap(Optional<LayoutUnit>);
 
  private:
-  bool GrowthLimitIsInfinite() const { return growth_limit_ == kInfinity; }
   bool IsGrowthLimitBiggerThanBaseSize() const;
   void EnsureGrowthLimitIsBiggerThanBaseSize();
 
@@ -84,8 +84,7 @@ class GridTrackSizingAlgorithm final {
   // the algorithm.
   void Setup(GridTrackSizingDirection,
              size_t num_tracks,
-             Optional<LayoutUnit> available_space,
-             Optional<LayoutUnit> free_space);
+             Optional<LayoutUnit> available_space);
   void Run();
   void Reset();
 
@@ -166,6 +165,7 @@ class GridTrackSizingAlgorithm final {
   void InitializeTrackSizes();
   void ResolveIntrinsicTrackSizes();
   void StretchFlexibleTracks(Optional<LayoutUnit> free_space);
+  void StretchAutoTracks();
 
   // State machine.
   void AdvanceNextState();
@@ -173,6 +173,7 @@ class GridTrackSizingAlgorithm final {
 
   // Data.
   bool needs_setup_{true};
+  bool is_in_perform_layout_{true};
   Optional<LayoutUnit> available_space_columns_;
   Optional<LayoutUnit> available_space_rows_;
 
@@ -185,6 +186,7 @@ class GridTrackSizingAlgorithm final {
   Vector<GridTrack> rows_;
   Vector<size_t> content_sized_tracks_index_;
   Vector<size_t> flexible_sized_tracks_index_;
+  Vector<size_t> auto_sized_tracks_for_stretch_index_;
 
   GridTrackSizingDirection direction_;
 
@@ -245,6 +247,7 @@ class GridTrackSizingAlgorithmStrategy {
       double& flex_fraction,
       Vector<LayoutUnit>& increments,
       LayoutUnit& total_growth) const = 0;
+  virtual LayoutUnit FreeSpaceForStretchAutoTracksStep() const = 0;
 
  protected:
   GridTrackSizingAlgorithmStrategy(GridTrackSizingAlgorithm& algorithm)
@@ -253,7 +256,7 @@ class GridTrackSizingAlgorithmStrategy {
   virtual LayoutUnit MinLogicalWidthForChild(
       LayoutBox&,
       Length child_min_size,
-      GridTrackSizingDirection) const = 0;
+      LayoutUnit available_size) const = 0;
   virtual void LayoutGridItemForMinSizeComputation(
       LayoutBox&,
       bool override_size_has_changed) const = 0;
@@ -262,7 +265,8 @@ class GridTrackSizingAlgorithmStrategy {
 
   bool UpdateOverrideContainingBlockContentSizeForChild(
       LayoutBox&,
-      GridTrackSizingDirection) const;
+      GridTrackSizingDirection,
+      Optional<LayoutUnit> = WTF::nullopt) const;
   LayoutUnit ComputeTrackBasedSize() const;
   Optional<LayoutUnit> ExtentForBaselineAlignment(LayoutBox&) const;
 
@@ -275,6 +279,7 @@ class GridTrackSizingAlgorithmStrategy {
   Optional<LayoutUnit> AvailableSpace() const {
     return algorithm_.AvailableSpace();
   }
+  void SetNeedsLayoutForChild(LayoutBox&) const;
 
   // Helper functions
   static bool HasOverrideContainingBlockContentSizeForChild(

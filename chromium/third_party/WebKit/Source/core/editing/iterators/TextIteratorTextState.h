@@ -28,16 +28,19 @@
 
 #include "core/CoreExport.h"
 #include "core/editing/iterators/ForwardsTextBuffer.h"
+#include "core/editing/iterators/TextIteratorBehavior.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
+class BackwardsTextBuffer;
+
 class CORE_EXPORT TextIteratorTextState {
   STACK_ALLOCATED();
 
  public:
-  TextIteratorTextState() = default;
+  explicit TextIteratorTextState(const TextIteratorBehavior&);
 
   // Return properties of the current text.
   unsigned length() const { return text_length_; }
@@ -49,26 +52,29 @@ class CORE_EXPORT TextIteratorTextState {
   void AppendTextTo(ForwardsTextBuffer* output,
                     unsigned position,
                     unsigned length_to_append) const;
+  void PrependTextTo(BackwardsTextBuffer* output,
+                     unsigned position,
+                     unsigned length_to_prepend) const;
 
   void SpliceBuffer(UChar,
-                    Node* text_node,
-                    Node* offset_base_node,
+                    const Node* text_node,
+                    const Node* offset_base_node,
                     unsigned text_start_offset,
                     unsigned text_end_offset);
-  void EmitText(Node*,
+  void EmitText(const Node*,
                 unsigned position_start_offset,
                 unsigned position_end_offset,
                 const String&,
                 unsigned text_start_offset,
                 unsigned text_end_offset);
-  void EmitAltText(Node*);
-  void UpdateForReplacedElement(Node* base_node);
+  void EmitAltText(const Node*);
+  void UpdateForReplacedElement(const Node* base_node);
 
   // Return position of the current text.
   void FlushPositionOffsets() const;
   unsigned PositionStartOffset() const { return position_start_offset_; }
   unsigned PositionEndOffset() const { return position_end_offset_; }
-  Node* PositionNode() const { return position_node_; }
+  const Node* PositionNode() const { return position_node_; }
 
   bool HasEmitted() const { return has_emitted_; }
   UChar LastCharacter() const { return last_character_; }
@@ -78,6 +84,7 @@ class CORE_EXPORT TextIteratorTextState {
   }
 
  private:
+  const TextIteratorBehavior behavior_;
   unsigned text_length_ = 0;
 
   // Used for whitespace characters that aren't in the DOM, so we can point at
@@ -91,8 +98,8 @@ class CORE_EXPORT TextIteratorTextState {
   unsigned text_start_offset_ = 0;
 
   // Position of the current text, in the form to be returned from the iterator.
-  Member<Node> position_node_;
-  mutable Member<Node> position_offset_base_node_;
+  Member<const Node> position_node_;
+  mutable Member<const Node> position_offset_base_node_;
   mutable unsigned position_start_offset_ = 0;
   mutable unsigned position_end_offset_ = 0;
 

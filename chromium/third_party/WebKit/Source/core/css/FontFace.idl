@@ -37,10 +37,9 @@ enum FontFaceLoadStatus {
     "error"
 };
 
-// TODO(foolip): This interface should be [Exposed=Window,Worker].
 [
     ActiveScriptWrappable,
-    DependentLifetime,
+    Exposed(Window StableBlinkFeatures, Worker ExperimentalCanvasFeatures),
     // FIXME: This should be (DOMString or BinaryData), where BinaryData is typedef of (ArrayBuffer or ArrayBufferView)
     Constructor(DOMString family, (DOMString or ArrayBuffer or ArrayBufferView) source, optional FontFaceDescriptors descriptors),
     ConstructorCallWith=ExecutionContext,
@@ -53,7 +52,7 @@ enum FontFaceLoadStatus {
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString unicodeRange;
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString variant;
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString featureSettings;
-    [RaisesException=Setter, SetterCallWith=ExecutionContext, RuntimeEnabled=CSSFontDisplay] attribute DOMString display;
+    [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString display;
 
     readonly attribute FontFaceLoadStatus status;
 

@@ -32,26 +32,11 @@ const char* ScriptModuleStateToString(ScriptModuleState state) {
   return "";
 }
 
-ScriptModule::ScriptModule() {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-}
-
-ScriptModule::ScriptModule(WTF::HashTableDeletedValueType)
-    : module_(WTF::kHashTableDeletedValue) {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-}
+ScriptModule::ScriptModule() {}
 
 ScriptModule::ScriptModule(v8::Isolate* isolate, v8::Local<v8::Module> module)
     : module_(SharedPersistent<v8::Module>::Create(module, isolate)),
       identity_hash_(static_cast<unsigned>(module->GetIdentityHash())) {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-
   DCHECK(!module_->IsEmpty());
 }
 
@@ -60,17 +45,16 @@ ScriptModule::~ScriptModule() {}
 ScriptModule ScriptModule::Compile(v8::Isolate* isolate,
                                    const String& source,
                                    const String& file_name,
+                                   const ScriptFetchOptions& options,
                                    AccessControlStatus access_control_status,
-                                   const TextPosition& start_position,
+                                   const TextPosition& text_position,
                                    ExceptionState& exception_state) {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-
   v8::TryCatch try_catch(isolate);
   v8::Local<v8::Module> module;
-  if (!V8ScriptRunner::CompileModule(isolate, source, file_name,
-                                     access_control_status, start_position)
+
+  if (!V8ScriptRunner::CompileModule(
+           isolate, source, file_name, access_control_status, text_position,
+           ReferrerScriptInfo::FromScriptFetchOptions(options))
            .ToLocal(&module)) {
     DCHECK(try_catch.HasCaught());
     exception_state.RethrowV8Exception(try_catch.Exception());
@@ -100,14 +84,13 @@ ScriptValue ScriptModule::Instantiate(ScriptState* script_state) {
   return ScriptValue();
 }
 
-void ScriptModule::Evaluate(ScriptState* script_state) const {
+ScriptValue ScriptModule::Evaluate(ScriptState* script_state) const {
   v8::Isolate* isolate = script_state->GetIsolate();
 
   // Isolate exceptions that occur when executing the code. These exceptions
   // should not interfere with javascript code we might evaluate from C++ when
   // returning from here.
   v8::TryCatch try_catch(isolate);
-  try_catch.SetVerbose(true);
 
   probe::ExecuteScript probe(ExecutionContext::From(script_state));
   // TODO(kouhei): We currently don't have a code-path which use return value of
@@ -116,15 +99,15 @@ void ScriptModule::Evaluate(ScriptState* script_state) const {
   if (!V8ScriptRunner::EvaluateModule(module_->NewLocal(isolate),
                                       script_state->GetContext(), isolate)
            .ToLocal(&result)) {
-    return;
+    DCHECK(try_catch.HasCaught());
+    return ScriptValue(script_state, try_catch.Exception());
   }
+
+  return ScriptValue();
 }
 
 void ScriptModule::ReportException(ScriptState* script_state,
                                    v8::Local<v8::Value> exception) {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
   V8ScriptRunner::ReportException(script_state->GetIsolate(), exception);
 }
 
@@ -189,10 +172,6 @@ v8::MaybeLocal<v8::Module> ScriptModule::ResolveModuleCallback(
     v8::Local<v8::Context> context,
     v8::Local<v8::String> specifier,
     v8::Local<v8::Module> referrer) {
-  // We ensure module-related code is not executed without the flag.
-  // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-
   v8::Isolate* isolate = context->GetIsolate();
   Modulator* modulator = Modulator::From(ScriptState::From(context));
   DCHECK(modulator);

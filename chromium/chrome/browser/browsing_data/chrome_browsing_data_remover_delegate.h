@@ -10,11 +10,14 @@
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/nacl/common/features.h"
 #include "components/offline_pages/core/offline_page_model.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -25,10 +28,6 @@
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/pepper_flash_settings_manager.h"
-#endif
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/dbus/dbus_method_call_status.h"
 #endif
 
 class BrowsingDataFlashLSOHelper;
@@ -214,8 +213,7 @@ class ChromeBrowsingDataRemoverDelegate
   void OnKeywordsLoaded(base::Callback<bool(const GURL&)> url_filter);
 
 #if defined (OS_CHROMEOS)
-  void OnClearPlatformKeys(chromeos::DBusMethodCallStatus call_status,
-                           bool result);
+  void OnClearPlatformKeys(base::Optional<bool> result);
 #endif
 
   // Callback for when cookies have been deleted. Invokes NotifyIfDone.
@@ -264,13 +262,12 @@ class ChromeBrowsingDataRemoverDelegate
   SubTask clear_form_;
   SubTask clear_history_;
   SubTask clear_keyword_data_;
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   SubTask clear_nacl_cache_;
   SubTask clear_pnacl_cache_;
 #endif
   SubTask clear_hostname_resolution_cache_;
   SubTask clear_network_predictor_;
-  SubTask clear_networking_history_;
   SubTask clear_passwords_;
   SubTask clear_passwords_stats_;
   SubTask clear_http_auth_cache_;
@@ -284,6 +281,7 @@ class ChromeBrowsingDataRemoverDelegate
 #endif
   SubTask clear_auto_sign_in_;
   SubTask clear_reporting_cache_;
+  SubTask clear_video_perf_history_;
   // Counts the number of plugin data tasks. Should be the number of LSO cookies
   // to be deleted, or 1 while we're fetching LSO cookies or deleting in bulk.
   int clear_plugin_data_count_ = 0;

@@ -133,7 +133,7 @@ class ThreadSafeForwarder : public MessageReceiverWithResponder {
     // If the InterfacePtr is bound on another sequence, post the call.
     // TODO(yzshen, watk): We block both this sequence and the InterfacePtr
     // sequence. Ideally only this sequence would block.
-    auto response = make_scoped_refptr(new SyncResponseInfo());
+    auto response = base::MakeRefCounted<SyncResponseInfo>();
     auto response_signaler = std::make_unique<SyncResponseSignaler>(response);
     task_runner_->PostTask(
         FROM_HERE, base::Bind(forward_with_responder_, base::Passed(message),
@@ -217,9 +217,12 @@ class ThreadSafeForwarder : public MessageReceiverWithResponder {
     explicit ForwardToCallingThread(std::unique_ptr<MessageReceiver> responder)
         : responder_(std::move(responder)),
           caller_task_runner_(base::SequencedTaskRunnerHandle::Get()) {}
+    ~ForwardToCallingThread() override {
+      caller_task_runner_->DeleteSoon(FROM_HERE, std::move(responder_));
+    }
 
    private:
-    bool Accept(Message* message) {
+    bool Accept(Message* message) override {
       // The current instance will be deleted when this method returns, so we
       // have to relinquish the responder's ownership so it does not get
       // deleted.

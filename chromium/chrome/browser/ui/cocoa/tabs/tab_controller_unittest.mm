@@ -20,6 +20,8 @@
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 #include "ui/base/resource/resource_bundle.h"
+#import "ui/base/test/menu_test_observer.h"
+#import "ui/events/test/cocoa_test_event_utils.h"
 #include "ui/resources/grit/ui_resources.h"
 
 // Implements the target interface for the tab, which gets sent messages when
@@ -520,6 +522,34 @@ TEST_F(TabControllerTest, Menu) {
   EXPECT_EQ(3, [menu numberOfItems]);
 }
 
+// Regression test for https://crbug.com/778776. An accessibility message can
+// cause -[TabController menu] to be called while the existing menu is open.
+// Test that this does not cause the running menu to be deleted.
+TEST_F(TabControllerTest, RecursiveMenu) {
+  base::scoped_nsobject<TabController> controller([[TabController alloc] init]);
+  base::scoped_nsobject<TabControllerTestTarget> target(
+      [[TabControllerTestTarget alloc] init]);
+  [controller setTarget:target];
+
+  NSMenu* menu = [controller menu];
+
+  base::scoped_nsobject<MenuTestObserver> menu_observer(
+      [[MenuTestObserver alloc] initWithMenu:menu]);
+  [menu_observer setCloseAfterOpening:YES];
+  [menu_observer setOpenCallback:^(MenuTestObserver*) {
+    NSMenu* open_menu = [controller menu];
+    EXPECT_TRUE(open_menu);
+    EXPECT_EQ(menu, open_menu);
+  }];
+
+  [NSMenu
+      popUpContextMenu:menu
+             withEvent:cocoa_test_event_utils::LeftMouseDownAtPoint(NSZeroPoint)
+               forView:[controller view]];
+
+  EXPECT_NE(menu, [controller menu]);
+}
+
 // Tests that the title field is correctly positioned and sized when the
 // view is resized.
 TEST_F(TabControllerTest, TitleViewLayout) {
@@ -587,7 +617,7 @@ TEST_F(TabControllerTest, LayoutAndVisibilityOfSubviewsRTL) {
   CheckLayoutAndVisibilityOfSubviewsForAllStates(true);
 }
 
-TEST_F(TabControllerTest, DeadKeyPressed) {
+TEST_F(TabControllerTest, TabSelection) {
   NSWindow* window = test_window();
   base::scoped_nsobject<TabController> controller([[TabController alloc] init]);
   [[window contentView] addSubview:[controller view]];
@@ -598,30 +628,7 @@ TEST_F(TabControllerTest, DeadKeyPressed) {
   [controller setAction:@selector(selectTab:)];
 
   EXPECT_FALSE([target selected]);
-  NSEvent* deadKeyEvent = [NSEvent keyEventWithType:NSKeyUp
-                                           location:NSZeroPoint
-                                      modifierFlags:0
-                                          timestamp:0
-                                       windowNumber:[window windowNumber]
-                                            context:nil
-                                         characters:@""
-                        charactersIgnoringModifiers:@""
-                                          isARepeat:NO
-                                            keyCode:30];
-  [controller keyUp:deadKeyEvent];
-  EXPECT_FALSE([target selected]);
-
-  NSEvent* enterEvent = [NSEvent keyEventWithType:NSKeyUp
-                                         location:NSZeroPoint
-                                    modifierFlags:0
-                                        timestamp:0
-                                     windowNumber:[window windowNumber]
-                                          context:nil
-                                       characters:@"\n"
-                      charactersIgnoringModifiers:@"\n"
-                                        isARepeat:NO
-                                          keyCode:30];
-  [controller keyUp:enterEvent];
+  [controller performClick:controller];
   EXPECT_TRUE([target selected]);
 }
 

@@ -6,13 +6,13 @@
 
 #include <string.h>
 #include <algorithm>
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/blob/BlobData.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/RefPtr.h"
+#include "public/platform/TaskType.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -25,6 +25,7 @@ class NoopClient final : public GarbageCollectedFinalized<NoopClient>,
 
  public:
   void OnStateChange() override {}
+  String DebugName() const override { return "NoopClient"; }
 };
 
 class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
@@ -85,6 +86,7 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
       }
     }
   }
+  String DebugName() const override { return "TeeHelper"; }
 
   BytesConsumer::PublicState GetPublicState() const {
     return src_->GetPublicState();
@@ -101,7 +103,7 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
   BytesConsumer* Destination1() const { return destination1_; }
   BytesConsumer* Destination2() const { return destination2_; }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(src_);
     visitor->Trace(destination1_);
     visitor->Trace(destination2_);
@@ -126,7 +128,7 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
     const char* data() const { return buffer_.data(); }
     size_t size() const { return buffer_.size(); }
 
-    DEFINE_INLINE_TRACE() {}
+    void Trace(blink::Visitor* visitor) {}
 
    private:
     Vector<char> buffer_;
@@ -184,7 +186,7 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
       }
       if (chunks_.IsEmpty() && tee_->GetPublicState() == PublicState::kClosed) {
         // All data has been consumed.
-        TaskRunnerHelper::Get(TaskType::kNetworking, execution_context_)
+        execution_context_->GetTaskRunner(TaskType::kNetworking)
             ->PostTask(BLINK_FROM_HERE,
                        WTF::Bind(&Destination::Close, WrapPersistent(this)));
       }
@@ -200,7 +202,9 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
       client_ = client;
     }
 
-    void ClearClient() override { client_ = nullptr; }
+    void ClearClient() override {
+      client_ = nullptr;
+    }
 
     void Cancel() override {
       DCHECK(!chunk_in_use_);
@@ -256,7 +260,7 @@ class TeeHelper final : public GarbageCollectedFinalized<TeeHelper>,
 
     bool IsCancelled() const { return is_cancelled_; }
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) override {
       visitor->Trace(execution_context_);
       visitor->Trace(tee_);
       visitor->Trace(client_);
@@ -358,7 +362,7 @@ void BytesConsumer::Tee(ExecutionContext* execution_context,
                         BytesConsumer* src,
                         BytesConsumer** dest1,
                         BytesConsumer** dest2) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       src->DrainAsBlobDataHandle(BlobSizePolicy::kAllowBlobWithInvalidSize);
   if (blob_data_handle) {
     // Register a client in order to be consistent.

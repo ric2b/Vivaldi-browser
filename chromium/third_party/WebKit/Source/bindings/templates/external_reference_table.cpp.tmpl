@@ -2,7 +2,7 @@
 
 {% include 'copyright_block.txt' %}
 
-#include "bindings/modules/v8/{{class}}.h"
+#include "bindings/modules/v8/{{this_include_header_name}}"
 
 #include <cstdint>
 
@@ -12,32 +12,28 @@
 
 namespace blink {
 
-intptr_t* {{class}}::GetTable() {
-  static intptr_t reference_table[] = {
-#if !defined(OS_ANDROID)
+const intptr_t* {{class}}::GetTable() {
+  static const intptr_t reference_table[] = {
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
     // Android is sensitive on its APK size, and this table improves it.
     // So we drop the table entries until the V8 context snapshot feature
     // is released on Android.
     {% for interface in interfaces %}
     {% if not interface.is_array_buffer_or_view %}
     {%   set v8_class = interface.v8_name %}
-
     {# Attributes #}
     {%-  for attribute in interface.attributes %}
     {%-    for world_suffix in attribute.world_suffixes %}
     {%      if not attribute.constructor_type %}
     reinterpret_cast<intptr_t>({{v8_class}}::{{attribute.name}}AttributeGetterCallback{{world_suffix}}),
-    {%      elif attribute.needs_constructor_getter_callback %}
+    {%      else %}
     reinterpret_cast<intptr_t>({{v8_class}}::{{attribute.name}}ConstructorGetterCallback{{world_suffix}}),
-    {%      elif attribute.is_named_constructor %}
-    reinterpret_cast<intptr_t>(V8{{attribute.constructor_type}}::NamedConstructorAttributeGetter{{world_suffix}}),
     {%      endif %}
     {%      if attribute.has_setter %}
     reinterpret_cast<intptr_t>({{v8_class}}::{{attribute.name}}AttributeSetterCallback{{world_suffix}}),
     {%      endif %}
     {%-    endfor %}{# world_suffix #}
     {%-  endfor %}{# attributes #}
-
     {# Methods / Operations #}
     {%  for method in interface.methods %}
     {%-   for world_suffix in method.world_suffixes %}
@@ -46,9 +42,9 @@ intptr_t* {{class}}::GetTable() {
                   (not method.overloads.has_partial_overloads or not interface.is_partial)) or
                  (not method.overloads and method.visible) %}
     {# TODO(bashi): Remove this 'if' condition when crbug.com/630986 is fixed. #}
-    {% if not interface.is_callback %}
+    {%          if not interface.is_callback %}
     reinterpret_cast<intptr_t>({{v8_class}}::{{method.name}}MethodCallback{{world_suffix}}),
-    {% endif %}
+    {%          endif %}
     {%        endif %}
     {%      endif %}{# overload(_index) #}
     {%         if method.is_cross_origin and method.visible %}
@@ -73,8 +69,8 @@ intptr_t* {{class}}::GetTable() {
     {%  endif %}
     {%  if interface.has_security_check %}
     reinterpret_cast<intptr_t>({{v8_class}}::securityCheck),
+    reinterpret_cast<intptr_t>(&{{v8_class}}::wrapperTypeInfo),
     {%  endif %}
-
     {# Other properties #}
     {%  if interface.has_constructor_callback %}
     reinterpret_cast<intptr_t>({{v8_class}}::constructorCallback),
@@ -107,18 +103,9 @@ intptr_t* {{class}}::GetTable() {
     reinterpret_cast<intptr_t>({{v8_class}}::securityCheck),
     {%-  endif %}
     {% endif %}{# not is_array_buffer_or_view #}
-
-    {% if not interface.is_partial or is_snapshotted %}
-    reinterpret_cast<intptr_t>(&{{interface.v8_name}}::wrapperTypeInfo),
-    {% endif %}
-    {% if interface.named_constructor %}
-    reinterpret_cast<intptr_t>(&{{interface.v8_name}}Constructor::wrapperTypeInfo),
-    {% endif %}
     {% endfor %}{# interfaces #}
-
     reinterpret_cast<intptr_t>(V8ObjectConstructor::IsValidConstructorMode),
-    reinterpret_cast<intptr_t>(V8ConstructorAttributeGetter),
-#endif  // OS_ANDROID
+#endif  // USE_V8_CONTEXT_SNAPSHOT
     0  // terminate with a null
   };
 

@@ -4,6 +4,7 @@
 
 #include "ui/aura/test/mus/window_tree_client_private.h"
 
+#include "ui/aura/mus/in_flight_change.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
@@ -37,7 +38,9 @@ WindowTreeHostMus* WindowTreeClientPrivate::CallWmNewDisplayAdded(
     const display::Display& display) {
   ui::mojom::WindowDataPtr root_data(ui::mojom::WindowData::New());
   root_data->parent_id = 0;
-  root_data->window_id = next_window_id_++;
+  // Windows representing displays are owned by mus, which is identified by
+  // non-zero high word.
+  root_data->window_id = next_window_id_++ | 0x00010000;
   root_data->visible = true;
   root_data->bounds = gfx::Rect(display.bounds().size());
   const bool parent_drawn = true;
@@ -58,9 +61,13 @@ void WindowTreeClientPrivate::CallOnWindowInputEvent(
   const uint32_t event_id = 0u;
   const uint32_t observer_id = 0u;
   const int64_t display_id = 0;
+  gfx::PointF event_location_in_screen_pixel_layout;
+  if (event->IsLocatedEvent())
+    event_location_in_screen_pixel_layout =
+        event->AsLocatedEvent()->root_location_f();
   tree_client_impl_->OnWindowInputEvent(
       event_id, WindowPortMus::Get(window)->server_id(), display_id,
-      std::move(event), observer_id);
+      event_location_in_screen_pixel_layout, std::move(event), observer_id);
 }
 
 void WindowTreeClientPrivate::CallOnPointerEventObserved(
@@ -105,6 +112,24 @@ bool WindowTreeClientPrivate::HasPointerWatcher() {
 Window* WindowTreeClientPrivate::GetWindowByServerId(Id id) {
   WindowMus* window = tree_client_impl_->GetWindowByServerId(id);
   return window ? window->GetWindow() : nullptr;
+}
+
+WindowMus* WindowTreeClientPrivate::NewWindowFromWindowData(
+    WindowMus* parent,
+    const ui::mojom::WindowData& window_data) {
+  return tree_client_impl_->NewWindowFromWindowData(parent, window_data);
+}
+
+bool WindowTreeClientPrivate::HasInFlightChanges() {
+  return !tree_client_impl_->in_flight_map_.empty();
+}
+
+bool WindowTreeClientPrivate::HasChangeInFlightOfType(ChangeType type) {
+  for (auto& pair : tree_client_impl_->in_flight_map_) {
+    if (pair.second->change_type() == type)
+      return true;
+  }
+  return false;
 }
 
 }  // namespace aura

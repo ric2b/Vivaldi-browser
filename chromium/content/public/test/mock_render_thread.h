@@ -82,8 +82,6 @@ class MockRenderThread : public RenderThread {
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;
   int32_t GetClientId() override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetTimerTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetLoadingTaskRunner() override;
   void SetRendererProcessType(
       blink::scheduler::RendererProcessType type) override;
 #if defined(OS_WIN)
@@ -137,7 +135,9 @@ class MockRenderThread : public RenderThread {
 
   // The Frame expects to be returned a valid route_id different from its own.
   void OnCreateChildFrame(const FrameHostMsg_CreateChildFrame_Params& params,
-                          int* new_render_frame_id);
+                          int* new_render_frame_id,
+                          mojo::MessagePipeHandle* new_interface_provider,
+                          base::UnguessableToken* devtools_frame_token);
 
 #if defined(OS_WIN)
   void OnDuplicateSection(base::SharedMemoryHandle renderer_handle,

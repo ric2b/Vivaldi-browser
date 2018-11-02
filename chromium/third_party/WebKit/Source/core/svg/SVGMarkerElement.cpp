@@ -22,9 +22,9 @@
 
 #include "core/svg/SVGMarkerElement.h"
 
-#include "core/SVGNames.h"
 #include "core/layout/svg/LayoutSVGResourceMarker.h"
 #include "core/svg/SVGAngleTearOff.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -78,7 +78,7 @@ inline SVGMarkerElement::SVGMarkerElement(Document& document)
   AddToPropertyMap(marker_units_);
 }
 
-DEFINE_TRACE(SVGMarkerElement) {
+void SVGMarkerElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(ref_x_);
   visitor->Trace(ref_y_);
   visitor->Trace(marker_width_);

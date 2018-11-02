@@ -8,11 +8,12 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/app_list/test/test_search_result.h"
 #include "ui/app_list/views/app_list_main_view.h"
@@ -24,11 +25,22 @@
 #include "ui/aura/window.h"
 #include "ui/views/test/views_test_base.h"
 
+namespace {
+
+enum class AnswerCardState {
+  ANSWER_CARD_OFF,
+  ANSWER_CARD_ON_WITH_RESULT,
+  ANSWER_CARD_ON_WITHOUT_RESULT,
+};
+
+}  // namespace
+
 namespace app_list {
 namespace test {
 
-class SearchResultPageViewTest : public views::ViewsTestBase,
-                                 public testing::WithParamInterface<bool> {
+class SearchResultPageViewTest
+    : public views::ViewsTestBase,
+      public testing::WithParamInterface<AnswerCardState> {
  public:
   SearchResultPageViewTest() = default;
   ~SearchResultPageViewTest() override = default;
@@ -37,21 +49,30 @@ class SearchResultPageViewTest : public views::ViewsTestBase,
   void SetUp() override {
     views::ViewsTestBase::SetUp();
 
-    if (testing::UnitTest::GetInstance()->current_test_info()->value_param())
-      test_with_fullscreen_ = GetParam();
-    if (!test_with_fullscreen_) {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kEnableFullscreenAppList);
+    // Reading test parameters.
+    bool test_with_answer_card = true;
+    if (testing::UnitTest::GetInstance()->current_test_info()->value_param()) {
+      const AnswerCardState answer_card_state = GetParam();
+      test_with_answer_card =
+          answer_card_state != AnswerCardState::ANSWER_CARD_OFF;
+      test_with_answer_card_result_ =
+          answer_card_state == AnswerCardState::ANSWER_CARD_ON_WITH_RESULT;
     }
 
+    // Setting up the feature set.
+    if (test_with_answer_card)
+      scoped_feature_list_.InitAndEnableFeature(features::kEnableAnswerCard);
+    else
+      scoped_feature_list_.InitAndDisableFeature(features::kEnableAnswerCard);
+
+    ASSERT_EQ(test_with_answer_card, features::IsAnswerCardEnabled());
+
+    // Setting up views.
     delegate_.reset(new AppListTestViewDelegate);
     app_list_view_ = new AppListView(delegate_.get());
-    gfx::NativeView parent = GetContext();
-    app_list_view_->Initialize(parent, 0, false, false);
-    // TODO(warx): remove MaybeSetAnchorPoint setup when bubble launcher is
-    // removed from code base.
-    app_list_view_->MaybeSetAnchorPoint(
-        parent->GetBoundsInRootWindow().CenterPoint());
+    AppListView::InitParams params;
+    params.parent = GetContext();
+    app_list_view_->Initialize(params);
     app_list_view_->GetWidget()->Show();
 
     ContentsView* contents_view =
@@ -90,7 +111,7 @@ class SearchResultPageViewTest : public views::ViewsTestBase,
       relevance -= 1.0;
       for (int i = 0; i < data.second; ++i) {
         std::unique_ptr<TestSearchResult> result =
-            base::MakeUnique<TestSearchResult>();
+            std::make_unique<TestSearchResult>();
         result->set_display_type(data.first);
         result->set_relevance(relevance);
         results->Add(std::move(result));
@@ -129,7 +150,9 @@ class SearchResultPageViewTest : public views::ViewsTestBase,
     return view_->OnKeyPressed(event);
   }
 
-  bool test_with_fullscreen() const { return test_with_fullscreen_; }
+  bool test_with_answer_card_result() const {
+    return test_with_answer_card_result_;
+  }
 
  private:
   AppListView* app_list_view_ = nullptr;  // Owned by native widget.
@@ -138,64 +161,23 @@ class SearchResultPageViewTest : public views::ViewsTestBase,
       nullptr;                                 // Owned by views hierarchy.
   SearchResultListView* list_view_ = nullptr;  // Owned by views hierarchy.
   std::unique_ptr<AppListTestViewDelegate> delegate_;
-  bool test_with_fullscreen_ = true;
+  bool test_with_answer_card_result_ = true;
   base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageViewTest);
 };
 
-// Instantiate the Boolean which is used to toggle the Fullscreen app list in
+// Instantiate the Boolean which is used to toggle answer cards in
 // the parameterized tests.
-INSTANTIATE_TEST_CASE_P(, SearchResultPageViewTest, testing::Bool());
+INSTANTIATE_TEST_CASE_P(
+    ,
+    SearchResultPageViewTest,
+    ::testing::Values(AnswerCardState::ANSWER_CARD_OFF,
+                      AnswerCardState::ANSWER_CARD_ON_WITHOUT_RESULT,
+                      AnswerCardState::ANSWER_CARD_ON_WITH_RESULT));
 
-// TODO(warx): This test applies to bubble launcher only. Remove this test once
-// bubble launcher is removed from code base.
-TEST_P(SearchResultPageViewTest, DirectionalMovement) {
-  if (test_with_fullscreen())
-    return;
-
-  SetUpFocusTestEnv();
-  EXPECT_EQ(0, GetSelectedIndex());
-  EXPECT_EQ(0, tile_list_view()->selected_index());
-
-  // Navigate to the second tile in the tile group.
-  EXPECT_TRUE(KeyPress(ui::VKEY_RIGHT));
-  EXPECT_EQ(0, GetSelectedIndex());
-  EXPECT_EQ(1, tile_list_view()->selected_index());
-  EXPECT_EQ(-1, list_view()->selected_index());
-
-  // Navigate to the list group.
-  EXPECT_TRUE(KeyPress(ui::VKEY_DOWN));
-  EXPECT_EQ(1, GetSelectedIndex());
-  EXPECT_EQ(-1, tile_list_view()->selected_index());
-  EXPECT_EQ(0, list_view()->selected_index());
-
-  // Navigate to the second result in the list view.
-  EXPECT_TRUE(KeyPress(ui::VKEY_DOWN));
-  EXPECT_EQ(1, GetSelectedIndex());
-  EXPECT_EQ(1, list_view()->selected_index());
-
-  // Attempt to navigate off bottom of list items.
-  EXPECT_FALSE(KeyPress(ui::VKEY_DOWN));
-  EXPECT_EQ(1, GetSelectedIndex());
-  EXPECT_EQ(1, list_view()->selected_index());
-
-  // Navigate back to the tile group (should select the first tile result).
-  EXPECT_TRUE(KeyPress(ui::VKEY_UP));
-  EXPECT_EQ(1, GetSelectedIndex());
-  EXPECT_EQ(0, list_view()->selected_index());
-  EXPECT_TRUE(KeyPress(ui::VKEY_UP));
-  EXPECT_EQ(0, GetSelectedIndex());
-  EXPECT_EQ(0, tile_list_view()->selected_index());
-  EXPECT_EQ(-1, list_view()->selected_index());
-
-  // Navigate off top of list.
-  EXPECT_FALSE(KeyPress(ui::VKEY_UP));
-  EXPECT_EQ(0, GetSelectedIndex());
-  EXPECT_EQ(0, tile_list_view()->selected_index());
-}
-
-TEST_P(SearchResultPageViewTest, TabMovement) {
+// TODO(crbug.com/766807): Remove the test once new focus model is stable.
+TEST_P(SearchResultPageViewTest, DISABLED_TabMovement) {
   SetUpFocusTestEnv();
   EXPECT_EQ(0, GetSelectedIndex());
   EXPECT_EQ(0, tile_list_view()->selected_index());
@@ -235,22 +217,12 @@ TEST_P(SearchResultPageViewTest, TabMovement) {
   EXPECT_EQ(-1, list_view()->selected_index());
 
   // Navigate off top of list.
-  if (test_with_fullscreen()) {
-    EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_FALSE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_EQ(-1, GetSelectedIndex());
-    EXPECT_EQ(-1, tile_list_view()->selected_index());
-    EXPECT_EQ(-1, list_view()->selected_index());
-  } else {
-    EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_EQ(1, tile_list_view()->selected_index());
-    EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_EQ(0, tile_list_view()->selected_index());
-    EXPECT_FALSE(KeyPress(ui::VKEY_TAB, true));
-    EXPECT_EQ(0, GetSelectedIndex());
-    EXPECT_EQ(0, tile_list_view()->selected_index());
-  }
+  EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
+  EXPECT_TRUE(KeyPress(ui::VKEY_TAB, true));
+  EXPECT_FALSE(KeyPress(ui::VKEY_TAB, true));
+  EXPECT_EQ(-1, GetSelectedIndex());
+  EXPECT_EQ(-1, tile_list_view()->selected_index());
+  EXPECT_EQ(-1, list_view()->selected_index());
 }
 
 TEST_P(SearchResultPageViewTest, ResultsSorted) {
@@ -294,11 +266,15 @@ TEST_P(SearchResultPageViewTest, ResultsSorted) {
   EXPECT_EQ(tile_list_view(), view()->result_container_views()[1]);
 }
 
-TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
+// TODO(crbug.com/766807): Remove the test once the new focus model is stable.
+TEST_P(SearchResultPageViewTest, DISABLED_UpdateWithSelection) {
+  const int kCardResultNum = test_with_answer_card_result() ? 1 : 0;
   {
     std::vector<std::pair<SearchResult::DisplayType, int>> result_types;
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_TILE, 3));
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_LIST, 2));
+    result_types.push_back(
+        std::make_pair(SearchResult::DISPLAY_CARD, kCardResultNum));
 
     SetUpSearchResults(result_types);
   }
@@ -322,6 +298,8 @@ TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
     std::vector<std::pair<SearchResult::DisplayType, int>> result_types;
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_TILE, 3));
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_LIST, 3));
+    result_types.push_back(
+        std::make_pair(SearchResult::DISPLAY_CARD, kCardResultNum));
 
     SetUpSearchResults(result_types);
   }
@@ -335,6 +313,8 @@ TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
     std::vector<std::pair<SearchResult::DisplayType, int>> result_types;
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_TILE, 3));
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_LIST, 1));
+    result_types.push_back(
+        std::make_pair(SearchResult::DISPLAY_CARD, kCardResultNum));
 
     SetUpSearchResults(result_types);
   }
@@ -349,6 +329,8 @@ TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
     std::vector<std::pair<SearchResult::DisplayType, int>> result_types;
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_LIST, 1));
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_TILE, 3));
+    result_types.push_back(
+        std::make_pair(SearchResult::DISPLAY_CARD, kCardResultNum));
 
     SetUpSearchResults(result_types);
   }
@@ -362,6 +344,8 @@ TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
   {
     std::vector<std::pair<SearchResult::DisplayType, int>> result_types;
     result_types.push_back(std::make_pair(SearchResult::DISPLAY_LIST, 3));
+    result_types.push_back(
+        std::make_pair(SearchResult::DISPLAY_CARD, kCardResultNum));
 
     SetUpSearchResults(result_types);
   }
@@ -374,7 +358,8 @@ TEST_P(SearchResultPageViewTest, UpdateWithSelection) {
 
 using SearchResultPageViewFullscreenTest = SearchResultPageViewTest;
 
-TEST_F(SearchResultPageViewFullscreenTest, LeftRightMovement) {
+// TODO(crbug.com/766807): Remove the test once the new focus model is stable.
+TEST_F(SearchResultPageViewFullscreenTest, DISABLED_LeftRightMovement) {
   SetUpFocusTestEnv();
   EXPECT_EQ(0, GetSelectedIndex());
   EXPECT_EQ(0, tile_list_view()->selected_index());
@@ -421,7 +406,8 @@ TEST_F(SearchResultPageViewFullscreenTest, LeftRightMovement) {
   EXPECT_EQ(-1, list_view()->selected_index());
 }
 
-TEST_F(SearchResultPageViewFullscreenTest, UpDownMovement) {
+// TODO(crbug.com/766807): Remove the test once the new focus model is stable.
+TEST_F(SearchResultPageViewFullscreenTest, DISABLED_UpDownMovement) {
   SetUpFocusTestEnv();
   EXPECT_EQ(0, GetSelectedIndex());
   EXPECT_EQ(0, tile_list_view()->selected_index());

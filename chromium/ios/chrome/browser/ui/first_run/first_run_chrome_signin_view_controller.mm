@@ -4,12 +4,14 @@
 
 #import "ios/chrome/browser/ui/first_run/first_run_chrome_signin_view_controller.h"
 
+#import "base/ios/block_types.h"
 #include "base/metrics/user_metrics.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/first_run/first_run_configuration.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/promos/signin_promo_view_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -37,19 +39,22 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
   BOOL _hasRecordedSigninStarted;
 }
 
+// Presenter for showing sync-related UI.
+@property(nonatomic, readonly, weak) id<SyncPresenter> presenter;
+
 @end
 
 @implementation FirstRunChromeSigninViewController
+@synthesize presenter = _presenter;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             tabModel:(TabModel*)tabModel
                       firstRunConfig:(FirstRunConfiguration*)firstRunConfig
                       signInIdentity:(ChromeIdentity*)identity
-                          dispatcher:
-                              (id<ApplicationSettingsCommands>)dispatcher {
+                           presenter:(id<SyncPresenter>)presenter
+                          dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super
        initWithBrowserState:browserState
-      isPresentedOnSettings:NO
                 accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE
                 promoAction:signin_metrics::PromoAction::
                                 PROMO_ACTION_NO_SIGNIN_PROMO
@@ -59,6 +64,7 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
     _tabModel = tabModel;
     _firstRunConfig = firstRunConfig;
     _identity = identity;
+    _presenter = presenter;
     self.delegate = self;
   }
   return self;
@@ -97,12 +103,15 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
   return IsIPadIdiom() ? [super shouldAutorotate] : NO;
 }
 
-- (void)finishFirstRunAndDismiss {
+- (void)finishFirstRunAndDismissWithCompletion:(ProceduralBlock)completion {
   DCHECK(self.presentingViewController);
-  FinishFirstRun(self.browserState, [_tabModel currentTab], _firstRunConfig);
+  FinishFirstRun(self.browserState, [_tabModel currentTab], _firstRunConfig,
+                 self.presenter);
   [self.presentingViewController dismissViewControllerAnimated:YES
                                                     completion:^{
                                                       FirstRunDismissed();
+                                                      if (completion)
+                                                        completion();
                                                     }];
 }
 
@@ -122,7 +131,7 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
 - (void)didSkipSignIn:(ChromeSigninViewController*)controller {
   DCHECK_EQ(self, controller);
   // User is done with First Run after explicit skip.
-  [self finishFirstRunAndDismiss];
+  [self finishFirstRunAndDismissWithCompletion:nil];
 }
 
 - (void)didFailSignIn:(ChromeSigninViewController*)controller {
@@ -158,10 +167,16 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
   DCHECK_EQ(self, controller);
 
   // User is done with First Run after explicit sign-in accept.
-  [self finishFirstRunAndDismiss];
-  if (showAccountsSettings) {
-    [self.dispatcher showAccountsSettings];
-  }
+  // Save a reference to the presentingViewController since this view controller
+  // will be dismissed.
+  __weak UIViewController* baseViewController = self.presentingViewController;
+  __weak id<ApplicationCommands> weakDispatcher = self.dispatcher;
+  [self finishFirstRunAndDismissWithCompletion:^{
+    if (showAccountsSettings) {
+      [weakDispatcher
+          showAccountsSettingsFromViewController:baseViewController];
+    }
+  }];
 }
 
 #pragma mark ChromeSigninViewController

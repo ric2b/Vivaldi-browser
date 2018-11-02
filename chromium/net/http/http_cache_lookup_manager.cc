@@ -4,7 +4,8 @@
 
 #include "net/http/http_cache_lookup_manager.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/values.h"
 #include "net/base/load_flags.h"
 
@@ -32,7 +33,7 @@ HttpCacheLookupManager::LookupTransaction::LookupTransaction(
           net_log,
           NetLogSourceType::SERVER_PUSH_LOOKUP_TRANSACTION)) {}
 
-HttpCacheLookupManager::LookupTransaction::~LookupTransaction() {}
+HttpCacheLookupManager::LookupTransaction::~LookupTransaction() = default;
 
 int HttpCacheLookupManager::LookupTransaction::StartLookup(
     HttpCache* cache,
@@ -61,7 +62,7 @@ void HttpCacheLookupManager::LookupTransaction::OnLookupComplete(int result) {
 HttpCacheLookupManager::HttpCacheLookupManager(HttpCache* http_cache)
     : http_cache_(http_cache), weak_factory_(this) {}
 
-HttpCacheLookupManager::~HttpCacheLookupManager() {}
+HttpCacheLookupManager::~HttpCacheLookupManager() = default;
 
 void HttpCacheLookupManager::OnPush(
     std::unique_ptr<ServerPushHelper> push_helper,

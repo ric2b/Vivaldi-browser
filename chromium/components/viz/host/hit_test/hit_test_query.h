@@ -24,6 +24,11 @@ struct Target {
   uint32_t flags = 0;
 };
 
+enum class EventSource {
+  MOUSE,
+  TOUCH,
+};
+
 // Finds the target for a given location based on the AggregatedHitTestRegion
 // list aggregated by HitTestAggregator.
 // TODO(riajiang): Handle 3d space cases correctly.
@@ -71,15 +76,37 @@ class VIZ_HOST_EXPORT HitTestQuery {
   // then we get 2 in the coordinate system of a; apply the
   // transfrom-from-e-to-c and transform-from-c-to-b then we get 3 in the
   // coordinate system of b.
-  Target FindTargetForLocation(const gfx::Point& location_in_root) const;
+  Target FindTargetForLocation(EventSource event_source,
+                               const gfx::Point& location_in_root) const;
+
+  // When a target window is already known, e.g. capture/latched window, convert
+  // |location_in_root| to be in the coordinate space of the target.
+  // |target_ancestors| contains the FrameSinkId from target to root.
+  // |target_ancestors.front()| is the target, and |target_ancestors.back()|
+  // is the root.
+  gfx::Point TransformLocationForTarget(
+      EventSource event_source,
+      const std::vector<FrameSinkId>& target_ancestors,
+      const gfx::Point& location_in_root) const;
 
  private:
   // Helper function to find |target| for |location_in_parent| in the |region|,
   // returns true if a target is found and false otherwise. |location_in_parent|
   // is in the coordinate space of |region|'s parent.
-  bool FindTargetInRegionForLocation(const gfx::Point& location_in_parent,
+  bool FindTargetInRegionForLocation(EventSource event_source,
+                                     const gfx::Point& location_in_parent,
                                      AggregatedHitTestRegion* region,
                                      Target* target) const;
+
+  // Transform |location_in_target| to be in |region|'s coordinate space.
+  // |location_in_target| is in the coordinate space of |region|'s parent at the
+  // beginning.
+  bool TransformLocationForTargetRecursively(
+      EventSource event_source,
+      const std::vector<FrameSinkId>& target_ancestors,
+      size_t target_ancestor,
+      AggregatedHitTestRegion* region,
+      gfx::Point* location_in_target) const;
 
   uint32_t handle_buffer_sizes_[2];
   mojo::ScopedSharedBufferMapping handle_buffers_[2];

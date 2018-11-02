@@ -100,8 +100,7 @@ bool BluetoothDeviceWin::IsConnected() const {
 }
 
 bool BluetoothDeviceWin::IsGattConnected() const {
-  NOTIMPLEMENTED();
-  return false;
+  return gatt_connected_;
 }
 
 bool BluetoothDeviceWin::IsConnectable() const {
@@ -211,13 +210,6 @@ void BluetoothDeviceWin::ConnectToServiceInsecurely(
   error_callback.Run(kApiUnavailable);
 }
 
-void BluetoothDeviceWin::CreateGattConnection(
-      const GattConnectionCallback& callback,
-      const ConnectErrorCallback& error_callback) {
-  // TODO(armansito): Implement.
-  error_callback.Run(ERROR_UNSUPPORTED_DEVICE);
-}
-
 const BluetoothServiceRecordWin* BluetoothDeviceWin::GetServiceRecord(
     const device::BluetoothUUID& uuid) const {
   for (const auto& record : service_record_list_)
@@ -233,6 +225,7 @@ bool BluetoothDeviceWin::IsEqual(
       bluetooth_class_ != device_state.bluetooth_class ||
       visible_ != device_state.visible ||
       connected_ != device_state.connected ||
+      gatt_connected_ == device_state.is_bluetooth_classic() ||
       paired_ != device_state.authenticated) {
     return false;
   }
@@ -273,20 +266,35 @@ void BluetoothDeviceWin::Update(
   bluetooth_class_ = device_state.bluetooth_class;
   visible_ = device_state.visible;
   connected_ = device_state.connected;
+  // If a BLE device is not GATT connected, Windows will automatically
+  // reconnect.
+  gatt_connected_ = !device_state.is_bluetooth_classic();
   paired_ = device_state.authenticated;
   UpdateServices(device_state);
 }
 
+void BluetoothDeviceWin::GattServiceDiscoveryComplete(
+    BluetoothRemoteGattServiceWin* service) {
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(BluetoothDeviceWin::IsGattServiceDiscovered(
+      service->GetUUID(), service->GetAttributeHandle()));
+
+  discovery_completed_included_services_.insert(
+      {service->GetUUID(), service->GetAttributeHandle()});
+  if (discovery_completed_included_services_.size() != gatt_services_.size())
+    return;
+
+  SetGattServicesDiscoveryComplete(true);
+  adapter_->NotifyGattServicesDiscovered(this);
+}
+
 void BluetoothDeviceWin::CreateGattConnectionImpl() {
-  // Windows implementation does not use the default CreateGattConnection
-  // implementation.
-  NOTIMPLEMENTED();
+  // Windows will create the Gatt connection as needed.  See:
+  // https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client#connecting-to-the-device
 }
 
 void BluetoothDeviceWin::DisconnectGatt() {
-  // Windows implementation does not use the default CreateGattConnection
-  // implementation.
-  NOTIMPLEMENTED();
+  // On Windows, the adapter cannot force a disconnection.
 }
 
 void BluetoothDeviceWin::SetVisible(bool visible) {
@@ -310,7 +318,7 @@ void BluetoothDeviceWin::UpdateServices(
     UpdateGattServices(device_state.service_record_states);
 }
 
-bool BluetoothDeviceWin::IsGattServiceDiscovered(BluetoothUUID& uuid,
+bool BluetoothDeviceWin::IsGattServiceDiscovered(const BluetoothUUID& uuid,
                                                  uint16_t attribute_handle) {
   for (const auto& gatt_service : gatt_services_) {
     uint16_t it_att_handle =
@@ -345,7 +353,7 @@ void BluetoothDeviceWin::UpdateGattServices(
     const std::vector<
         std::unique_ptr<BluetoothTaskManagerWin::ServiceRecordState>>&
         service_state) {
-  // First, remove no longer exist GATT service.
+  // First, remove no longer existent GATT service.
   {
     std::vector<std::string> to_be_removed_services;
     for (const auto& gatt_service : gatt_services_) {
@@ -382,8 +390,6 @@ void BluetoothDeviceWin::UpdateGattServices(
       adapter_->NotifyGattServiceAdded(primary_service);
     }
   }
-
-  adapter_->NotifyGattServicesDiscovered(this);
 }
 
 }  // namespace device

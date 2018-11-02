@@ -42,8 +42,16 @@ class ProfileUpdateObserver;
 // The avatar button view.
 @property(readonly, nonatomic) NSButton* buttonView;
 
+// The menu controller, if the menu is open.
+@property(nonatomic, readonly, getter=isMenuOpened) BOOL menuOpened;
+
 // Designated initializer.
 - (id)initWithBrowser:(Browser*)browser;
+
+// Returns YES if the avatar button should be a generic one. If there is a
+// single local profile, then use the generic avatar button instead of the
+// profile name. Never use the generic button if the active profile is Guest.
+- (BOOL)shouldUseGenericButton;
 
 // Shows the avatar bubble in the given mode.
 - (void)showAvatarBubbleAnchoredAt:(NSView*)anchor
@@ -51,8 +59,8 @@ class ProfileUpdateObserver;
                    withServiceType:(signin::GAIAServiceType)serviceType
                    fromAccessPoint:(signin_metrics::AccessPoint)accessPoint;
 
-// Called when the avatar bubble will close.
-- (void)bubbleWillClose:(NSNotification*)notif;
+// Called when the avatar bubble is closing.
+- (void)bubbleWillClose;
 
 @end
 

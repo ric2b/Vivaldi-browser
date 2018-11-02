@@ -5,11 +5,10 @@
 #ifndef ConstantSourceNode_h
 #define ConstantSourceNode_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioParam.h"
 #include "modules/webaudio/AudioScheduledSourceNode.h"
 #include "platform/audio/AudioBus.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Threading.h"
 
 namespace blink {
@@ -22,9 +21,9 @@ class ExceptionState;
 
 class ConstantSourceHandler final : public AudioScheduledSourceHandler {
  public:
-  static PassRefPtr<ConstantSourceHandler> Create(AudioNode&,
-                                                  float sample_rate,
-                                                  AudioParamHandler& offset);
+  static scoped_refptr<ConstantSourceHandler> Create(AudioNode&,
+                                                     float sample_rate,
+                                                     AudioParamHandler& offset);
   ~ConstantSourceHandler() override;
 
   // AudioHandler
@@ -38,7 +37,7 @@ class ConstantSourceHandler final : public AudioScheduledSourceHandler {
   // If we are no longer playing, propogate silence ahead to downstream nodes.
   bool PropagatesSilence() const override;
 
-  RefPtr<AudioParamHandler> offset_;
+  scoped_refptr<AudioParamHandler> offset_;
   AudioFloatArray sample_accurate_values_;
 };
 
@@ -50,7 +49,7 @@ class ConstantSourceNode final : public AudioScheduledSourceNode {
   static ConstantSourceNode* Create(BaseAudioContext*,
                                     const ConstantSourceOptions&,
                                     ExceptionState&);
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   AudioParam* offset();
 

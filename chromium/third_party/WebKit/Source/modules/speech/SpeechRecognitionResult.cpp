@@ -45,8 +45,9 @@ SpeechRecognitionResult::SpeechRecognitionResult(
     bool final)
     : final_(final), alternatives_(alternatives) {}
 
-DEFINE_TRACE(SpeechRecognitionResult) {
+void SpeechRecognitionResult::Trace(blink::Visitor* visitor) {
   visitor->Trace(alternatives_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

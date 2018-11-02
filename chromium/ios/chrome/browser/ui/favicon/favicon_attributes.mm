@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/favicon/favicon_attributes.h"
 
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/favicon/favicon_attributes+private.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -17,8 +18,6 @@
 @synthesize backgroundColor = _backgroundColor;
 @synthesize defaultBackgroundColor = _defaultBackgroundColor;
 
-// Designated initializer. Either |image| or all of |textColor|,
-// |backgroundColor| and |monogram| must be not nil.
 - (instancetype)initWithImage:(UIImage*)image
                      monogram:(NSString*)monogram
                     textColor:(UIColor*)textColor

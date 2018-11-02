@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -150,9 +151,13 @@ void ReportPipelineStreamError(const DemuxerStream* stream,
     case DemuxerStream::VIDEO: {
       LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
                  << ": PIPELINE_VIDEO_DECODE_ERROR";
+#if defined(PLATFORM_MEDIA_HWA)
       Enqueue(decoding_mode == PlatformMediaDecodingMode::HARDWARE
                   ? PIPELINE_VIDEO_DECODE_ERROR_HW
                   : PIPELINE_VIDEO_DECODE_ERROR);
+#else
+      Enqueue(PIPELINE_VIDEO_DECODE_ERROR);
+#endif
       break;
     }
 
@@ -180,17 +185,25 @@ void ReportStartResult(
     bool success,
     PlatformMediaDecodingMode attempted_video_decoding_mode) {
   if (success) {
+#if defined(PLATFORM_MEDIA_HWA)
     Enqueue(attempted_video_decoding_mode == PlatformMediaDecodingMode::HARDWARE
                 ? PIPELINE_INITIALIZED_HW
                 : PIPELINE_INITIALIZED);
+#else
+      Enqueue(PIPELINE_INITIALIZED);
+#endif
     return;
   }
 
   LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
              << ": PIPELINE_INITIALIZE_ERROR";
+#if defined(PLATFORM_MEDIA_HWA)
   Enqueue(attempted_video_decoding_mode == PlatformMediaDecodingMode::HARDWARE
               ? PIPELINE_INITIALIZE_ERROR_HW
               : PIPELINE_INITIALIZE_ERROR);
+#else
+  Enqueue(PIPELINE_INITIALIZE_ERROR);
+#endif
 }
 
 void ReportAudioDecoderInitResult(bool success) {

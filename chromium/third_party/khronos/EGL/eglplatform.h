@@ -77,7 +77,8 @@ typedef HDC     EGLNativeDisplayType;
 typedef HBITMAP EGLNativePixmapType;
 typedef HWND    EGLNativeWindowType;
 
-#elif defined(__WINSCW__) || defined(__SYMBIAN32__)
+#elif defined(__APPLE__) || defined(__WINSCW__) || \
+    defined(__SYMBIAN32__) /* Symbian */
 
 typedef int   EGLNativeDisplayType;
 typedef void *EGLNativeWindowType;
@@ -85,8 +86,7 @@ typedef void *EGLNativePixmapType;
 
 #elif defined(__ANDROID__) || defined(ANDROID)
 
-#include <android/native_window.h>
-
+struct ANativeWindow;
 struct egl_native_pixmap_t;
 
 typedef struct ANativeWindow*           EGLNativeWindowType;
@@ -95,7 +95,6 @@ typedef void*                           EGLNativeDisplayType;
 
 #elif defined(USE_OZONE)
 
-/* Chromium-specific */
 typedef intptr_t EGLNativeDisplayType;
 typedef intptr_t EGLNativeWindowType;
 typedef intptr_t EGLNativePixmapType;
@@ -109,19 +108,6 @@ typedef intptr_t EGLNativePixmapType;
 typedef Display *EGLNativeDisplayType;
 typedef Pixmap   EGLNativePixmapType;
 typedef Window   EGLNativeWindowType;
-
-#elif defined(__APPLE__)
-
-/* Chromium-specific __APPLE__ EGLNative* definition */
-typedef void          *EGLNativeDisplayType;
-typedef int            EGLNativePixmapType;
-#ifdef __OBJC__
-@class NSView;
-typedef NSView *EGLNativeWindowType;
-#else
-struct NSView;
-typedef struct NSView *EGLNativeWindowType;
-#endif  // __OBJC__
 
 #else
 #error "Platform not recognized"

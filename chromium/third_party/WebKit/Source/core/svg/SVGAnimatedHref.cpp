@@ -4,10 +4,10 @@
 
 #include "core/svg/SVGAnimatedHref.h"
 
-#include "core/SVGNames.h"
-#include "core/XLinkNames.h"
 #include "core/frame/UseCounter.h"
 #include "core/svg/SVGElement.h"
+#include "core/svg_names.h"
+#include "core/xlink_names.h"
 
 namespace blink {
 
@@ -15,7 +15,7 @@ SVGAnimatedHref* SVGAnimatedHref::Create(SVGElement* context_element) {
   return new SVGAnimatedHref(context_element);
 }
 
-DEFINE_TRACE(SVGAnimatedHref) {
+void SVGAnimatedHref::Trace(blink::Visitor* visitor) {
   visitor->Trace(xlink_href_);
   SVGAnimatedString::Trace(visitor);
 }

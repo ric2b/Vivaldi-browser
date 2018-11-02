@@ -44,14 +44,14 @@ ApplicationCache::ApplicationCache(LocalFrame* frame) : DOMWindowClient(frame) {
     cache_host->SetApplicationCache(this);
 }
 
-DEFINE_TRACE(ApplicationCache) {
+void ApplicationCache::Trace(blink::Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
   DOMWindowClient::Trace(visitor);
 }
 
 ApplicationCacheHost* ApplicationCache::GetApplicationCacheHost() const {
   if (!GetFrame() || !GetFrame()->Loader().GetDocumentLoader())
-    return 0;
+    return nullptr;
   return GetFrame()->Loader().GetDocumentLoader()->GetApplicationCacheHost();
 }
 

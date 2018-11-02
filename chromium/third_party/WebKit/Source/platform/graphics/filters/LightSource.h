@@ -24,10 +24,10 @@
 #ifndef LightSource_h
 #define LightSource_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 
 namespace blink {

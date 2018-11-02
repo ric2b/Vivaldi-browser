@@ -63,6 +63,7 @@ void OverlayPanelContent::OnPhysicalBackingSizeChanged(
       content::WebContents::FromJavaWebContents(jweb_contents);
   gfx::Size size(width, height);
   web_contents->GetNativeView()->OnPhysicalBackingSizeChanged(size);
+  web_contents->GetNativeView()->OnSizeChanged(width, height);
 }
 
 void OverlayPanelContent::RemoveLastHistoryEntry(
@@ -147,7 +148,8 @@ void OverlayPanelContent::SetInterceptNavigationDelegate(
           env, delegate));
 }
 
-jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+jlong JNI_OverlayPanelContent_Init(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
   OverlayPanelContent* content = new OverlayPanelContent(env, obj);
   return reinterpret_cast<intptr_t>(content);
 }

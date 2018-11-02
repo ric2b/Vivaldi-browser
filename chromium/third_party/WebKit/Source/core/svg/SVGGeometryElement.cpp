@@ -30,12 +30,12 @@
 
 #include "core/svg/SVGGeometryElement.h"
 
-#include "core/SVGNames.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/PointerEventsHitRules.h"
 #include "core/layout/svg/LayoutSVGPath.h"
 #include "core/layout/svg/LayoutSVGShape.h"
 #include "core/svg/SVGPointTearOff.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -68,7 +68,7 @@ SVGGeometryElement::SVGGeometryElement(const QualifiedName& tag_name,
   AddToPropertyMap(path_length_);
 }
 
-DEFINE_TRACE(SVGGeometryElement) {
+void SVGGeometryElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(path_length_);
   SVGGraphicsElement::Trace(visitor);
 }

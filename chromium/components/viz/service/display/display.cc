@@ -10,24 +10,30 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/math_util.h"
+#include "cc/base/simple_enclosed_region.h"
 #include "cc/benchmarks/benchmark_instrumentation.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/direct_renderer.h"
-#include "cc/output/output_surface.h"
-#include "cc/output/software_renderer.h"
-#include "cc/output/texture_mailbox_deleter.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/draw_quad.h"
+#include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/gl_renderer.h"
+#include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/skia_renderer.h"
+#include "components/viz/service/display/software_renderer.h"
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/vulkan/features.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/buffer_types.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/presentation_feedback.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "cc/output/vulkan_renderer.h"
@@ -40,16 +46,16 @@ Display::Display(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const RendererSettings& settings,
     const FrameSinkId& frame_sink_id,
-    std::unique_ptr<cc::OutputSurface> output_surface,
+    std::unique_ptr<OutputSurface> output_surface,
     std::unique_ptr<DisplayScheduler> scheduler,
-    std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter)
+    scoped_refptr<base::SingleThreadTaskRunner> current_task_runner)
     : bitmap_manager_(bitmap_manager),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       settings_(settings),
       frame_sink_id_(frame_sink_id),
       output_surface_(std::move(output_surface)),
       scheduler_(std::move(scheduler)),
-      texture_mailbox_deleter_(std::move(texture_mailbox_deleter)) {
+      current_task_runner_(std::move(current_task_runner)) {
   DCHECK(output_surface_);
   DCHECK(frame_sink_id_.is_valid());
   if (scheduler_)
@@ -57,10 +63,21 @@ Display::Display(
 }
 
 Display::~Display() {
+  for (auto& callbacks : previous_presented_callbacks_) {
+    for (auto& callback : callbacks)
+      std::move(callback).Run(base::TimeTicks(), base::TimeDelta(), 0);
+  }
+
+  for (auto& callback : active_presented_callbacks_)
+    std::move(callback).Run(base::TimeTicks(), base::TimeDelta(), 0);
+
+  for (auto& callback : presented_callbacks_)
+    std::move(callback).Run(base::TimeTicks(), base::TimeDelta(), 0);
+
   // Only do this if Initialize() happened.
   if (client_) {
     if (auto* context = output_surface_->context_provider())
-      context->SetLostContextCallback(base::Closure());
+      context->RemoveObserver(this);
     if (scheduler_)
       surface_manager_->RemoveObserver(scheduler_.get());
   }
@@ -85,16 +102,11 @@ void Display::Initialize(DisplayClient* client,
   output_surface_->BindToClient(this);
   InitializeRenderer();
 
-  if (auto* context = output_surface_->context_provider()) {
-    // This depends on assumptions that Display::Initialize will happen
-    // on the same callstack as the ContextProvider being created/initialized
-    // or else it could miss a callback before setting this.
-    context->SetLostContextCallback(base::Bind(
-        &Display::DidLoseContextProvider,
-        // Unretained is safe since the callback is unset in this class'
-        // destructor and is never posted.
-        base::Unretained(this)));
-  }
+  // This depends on assumptions that Display::Initialize will happen on the
+  // same callstack as the ContextProvider being created/initialized or else it
+  // could miss a callback before setting this.
+  if (auto* context = output_surface_->context_provider())
+    context->AddObserver(this);
 }
 
 void Display::AddObserver(DisplayObserver* observer) {
@@ -181,34 +193,28 @@ void Display::SetOutputIsSecure(bool secure) {
 }
 
 void Display::InitializeRenderer() {
-  // Not relevant for display compositor since it's not delegated.
-  constexpr bool delegated_sync_points_required = false;
   resource_provider_ = base::MakeUnique<cc::DisplayResourceProvider>(
       output_surface_->context_provider(), bitmap_manager_,
-      gpu_memory_buffer_manager_, nullptr, delegated_sync_points_required,
-      settings_.enable_color_correct_rendering, settings_.resource_settings);
+      gpu_memory_buffer_manager_, settings_.resource_settings);
 
   if (output_surface_->context_provider()) {
-    DCHECK(texture_mailbox_deleter_);
     if (!settings_.use_skia_renderer) {
       renderer_ = base::MakeUnique<GLRenderer>(
           &settings_, output_surface_.get(), resource_provider_.get(),
-          texture_mailbox_deleter_.get());
+          current_task_runner_);
     } else {
       renderer_ = base::MakeUnique<SkiaRenderer>(
           &settings_, output_surface_.get(), resource_provider_.get());
     }
   } else if (output_surface_->vulkan_context_provider()) {
 #if defined(ENABLE_VULKAN)
-    DCHECK(texture_mailbox_deleter_);
-    renderer_ = base::MakeUnique<cc::VulkanRenderer>(
-        &settings_, output_surface_.get(), resource_provider_.get(),
-        texture_mailbox_deleter_.get(), settings_.highp_threshold_min);
+    renderer_ = base::MakeUnique<VulkanRenderer>(
+        &settings_, output_surface_.get(), resource_provider_.get());
 #else
     NOTREACHED();
 #endif
   } else {
-    auto renderer = base::MakeUnique<cc::SoftwareRenderer>(
+    auto renderer = base::MakeUnique<SoftwareRenderer>(
         &settings_, output_surface_.get(), resource_provider_.get());
     software_renderer_ = renderer.get();
     renderer_ = std::move(renderer);
@@ -234,7 +240,7 @@ void Display::UpdateRootSurfaceResourcesLocked() {
     scheduler_->SetRootSurfaceResourcesLocked(root_surface_resources_locked);
 }
 
-void Display::DidLoseContextProvider() {
+void Display::OnContextLost() {
   if (scheduler_)
     scheduler_->OutputSurfaceLost();
   // WARNING: The client may delete the Display in this method call. Do not
@@ -256,7 +262,7 @@ bool Display::DrawAndSwap() {
   }
 
   base::ElapsedTimer aggregate_timer;
-  cc::CompositorFrame frame = aggregator_->Aggregate(current_surface_id_);
+  CompositorFrame frame = aggregator_->Aggregate(current_surface_id_);
   UMA_HISTOGRAM_COUNTS_1M("Compositing.SurfaceAggregator.AggregateUs",
                           aggregate_timer.Elapsed().InMicroseconds());
 
@@ -266,7 +272,7 @@ bool Display::DrawAndSwap() {
     return false;
   }
 
-  // Run callbacks early to allow pipelining.
+  // Run callbacks early to allow pipelining and collect presented callbacks.
   for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
     Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
     if (surface)
@@ -313,6 +319,14 @@ bool Display::DrawAndSwap() {
   client_->DisplayWillDrawAndSwap(should_draw, frame.render_pass_list);
 
   if (should_draw) {
+    if (settings_.enable_draw_occlusion) {
+      base::ElapsedTimer draw_occlusion_timer;
+      RemoveOverdrawQuads(&frame);
+      UMA_HISTOGRAM_COUNTS_1000(
+          "Compositing.Display.Draw.Occlusion.Calculation.Time",
+          draw_occlusion_timer.Elapsed().InMicroseconds());
+    }
+
     bool disable_image_filtering =
         frame.metadata.is_resourceless_software_draw_with_scroll_or_animation;
     if (software_renderer_) {
@@ -341,6 +355,16 @@ bool Display::DrawAndSwap() {
   bool should_swap = should_draw && size_matches;
   if (should_swap) {
     swapped_since_resize_ = true;
+
+    DLOG_IF(WARNING, !presented_callbacks_.empty())
+        << "DidReceiveSwapBuffersAck() is not called for the last SwapBuffers!";
+    for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
+      Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
+      Surface::PresentedCallback callback;
+      if (surface && surface->TakePresentedCallback(&callback))
+        presented_callbacks_.push_back(std::move(callback));
+    }
+
     for (auto& latency : frame.metadata.latency_info) {
       TRACE_EVENT_WITH_FLOW1(
           "input,benchmark", "LatencyInfo.Flow",
@@ -372,10 +396,26 @@ bool Display::DrawAndSwap() {
   }
 
   client_->DisplayDidDrawAndSwap();
+
+  // Garbage collection can lead to sync IPCs to the GPU service to verify sync
+  // tokens. We defer garbage collection until the end of DrawAndSwap to avoid
+  // stalling the critical path for compositing.
+  surface_manager_->GarbageCollectSurfaces();
+
   return true;
 }
 
-void Display::DidReceiveSwapBuffersAck() {
+void Display::DidReceiveSwapBuffersAck(uint64_t swap_id) {
+  // TODO(penghuang): Remove it when we can get accurate presentation time from
+  // GPU for every SwapBuffers. https://crbug.com/776877
+  if (!active_presented_callbacks_.empty() ||
+      !previous_presented_callbacks_.empty()) {
+    DLOG(WARNING) << "VSync for last SwapBuffers is not received!";
+    previous_presented_callbacks_.push_back(
+        std::move(active_presented_callbacks_));
+  }
+  active_presented_callbacks_ = std::move(presented_callbacks_);
+
   if (scheduler_)
     scheduler_->DidReceiveSwapBuffersAck();
   if (renderer_)
@@ -386,6 +426,28 @@ void Display::DidReceiveTextureInUseResponses(
     const gpu::TextureInUseResponses& responses) {
   if (renderer_)
     renderer_->DidReceiveTextureInUseResponses(responses);
+}
+
+void Display::DidReceivePresentationFeedback(
+    uint64_t swap_id,
+    const gfx::PresentationFeedback& feedback) {
+  // TODO(penghuang): Remove it when we can get accurate presentation time from
+  // GPU for every SwapBuffers. https://crbug.com/776877
+  base::TimeTicks previous_timebase =
+      feedback.timestamp -
+      feedback.interval * previous_presented_callbacks_.size();
+  for (auto& callbacks : previous_presented_callbacks_) {
+    for (auto& callback : callbacks)
+      std::move(callback).Run(previous_timebase, feedback.interval, 0);
+    previous_timebase += feedback.interval;
+  }
+  previous_presented_callbacks_.clear();
+
+  for (auto& callback : active_presented_callbacks_) {
+    std::move(callback).Run(feedback.timestamp, feedback.interval,
+                            feedback.flags);
+  }
+  active_presented_callbacks_.clear();
 }
 
 void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
@@ -422,6 +484,7 @@ bool Display::SurfaceDamaged(const SurfaceId& surface_id,
 }
 
 void Display::SurfaceDiscarded(const SurfaceId& surface_id) {
+  TRACE_EVENT0("viz", "Display::SurfaceDiscarded");
   if (aggregator_)
     aggregator_->ReleaseResources(surface_id);
 }
@@ -449,6 +512,83 @@ const SurfaceId& Display::CurrentSurfaceId() {
 void Display::ForceImmediateDrawAndSwapIfPossible() {
   if (scheduler_)
     scheduler_->ForceImmediateSwapIfPossible();
+}
+
+void Display::SetNeedsOneBeginFrame() {
+  if (scheduler_)
+    scheduler_->SetNeedsOneBeginFrame();
+}
+
+void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
+  if (frame->render_pass_list.empty())
+    return;
+
+  const SharedQuadState* last_sqs = nullptr;
+  cc::SimpleEnclosedRegion occlusion_region;
+  bool current_sqs_intersects_occlusion = false;
+  for (const auto& pass : frame->render_pass_list) {
+    // TODO(yiyix): Add filter effects to draw occlusion calculation and perform
+    // draw occlusion on render pass.
+    if (!pass->filters.IsEmpty() || !pass->background_filters.IsEmpty())
+      continue;
+
+    // TODO(yiyix): Perform draw occlusion inside the render pass with
+    // transparent background.
+    if (pass != frame->render_pass_list.back())
+      continue;
+
+    auto last_quad = pass->quad_list.end();
+    for (auto quad = pass->quad_list.begin(); quad != last_quad;) {
+      // RenderPassDrawQuad is a special type of DrawQuad where the visible_rect
+      // of shared quad state is not entirely covered by draw quads in it.
+      if (quad->material == ContentDrawQuadBase::Material::RENDER_PASS) {
+        ++quad;
+        continue;
+      }
+
+      if (!last_sqs)
+        last_sqs = quad->shared_quad_state;
+
+      gfx::Transform transform =
+          quad->shared_quad_state->quad_to_target_transform;
+
+      // TODO(yiyix): Find a rect interior to each transformed quad.
+      if (last_sqs != quad->shared_quad_state) {
+        if (last_sqs->opacity == 1 && last_sqs->are_contents_opaque &&
+            last_sqs->quad_to_target_transform.Preserves2dAxisAlignment()) {
+          gfx::Rect sqs_rect_in_target =
+              cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+                  last_sqs->quad_to_target_transform,
+                  last_sqs->visible_quad_layer_rect);
+
+          if (last_sqs->is_clipped)
+            sqs_rect_in_target.Intersect(last_sqs->clip_rect);
+
+          occlusion_region.Union(sqs_rect_in_target);
+        }
+        // If the visible_rect of the current shared quad state does not
+        // intersect with the occlusion rect, we can skip draw occlusion checks
+        // for quads in the current SharedQuadState.
+        last_sqs = quad->shared_quad_state;
+        current_sqs_intersects_occlusion =
+            occlusion_region.Intersects(cc::MathUtil::MapEnclosingClippedRect(
+                transform, last_sqs->visible_quad_layer_rect));
+      }
+
+      if (!current_sqs_intersects_occlusion) {
+        ++quad;
+        continue;
+      }
+
+      // TODO(yiyix): Using profile tools to analyze bottleneck of this
+      // algorithm.
+      if (occlusion_region.Contains(cc::MathUtil::MapEnclosingClippedRect(
+              transform, quad->visible_rect)))
+        quad = pass->quad_list.EraseAndInvalidateAllPointers(quad);
+      else
+        ++quad;
+    }
+  }
 }
 
 }  // namespace viz

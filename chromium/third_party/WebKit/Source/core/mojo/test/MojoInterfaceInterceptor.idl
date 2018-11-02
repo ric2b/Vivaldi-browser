@@ -4,10 +4,10 @@
 
 [
     ActiveScriptWrappable,
-    Constructor(DOMString interfaceName),
-    ConstructorCallWith=ScriptState,
-    DependentLifetime,
+    Constructor(DOMString interfaceName, optional MojoScope scope = "context"),
+    ConstructorCallWith=ExecutionContext,
     Exposed=(Window,Worker),
+    RaisesException=Constructor,
     RuntimeEnabled=MojoJSTest
 ] interface MojoInterfaceInterceptor : EventTarget {
     [RaisesException] void start();

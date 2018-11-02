@@ -35,11 +35,11 @@
 namespace blink {
 
 SharedBufferChunkReader::SharedBufferChunkReader(
-    PassRefPtr<const SharedBuffer> buffer,
+    scoped_refptr<const SharedBuffer> buffer,
     const Vector<char>& separator)
     : buffer_(std::move(buffer)),
       buffer_position_(0),
-      segment_(0),
+      segment_(nullptr),
       segment_length_(0),
       segment_index_(0),
       reached_end_of_file_(false),
@@ -47,11 +47,11 @@ SharedBufferChunkReader::SharedBufferChunkReader(
       separator_index_(0) {}
 
 SharedBufferChunkReader::SharedBufferChunkReader(
-    PassRefPtr<const SharedBuffer> buffer,
+    scoped_refptr<const SharedBuffer> buffer,
     const char* separator)
     : buffer_(std::move(buffer)),
       buffer_position_(0),
-      segment_(0),
+      segment_(nullptr),
       segment_length_(0),
       segment_index_(0),
       reached_end_of_file_(false),
@@ -133,7 +133,7 @@ size_t SharedBufferChunkReader::Peek(Vector<char>& data,
   data.Append(segment_ + segment_index_, read_bytes_count);
 
   size_t buffer_position = buffer_position_ + segment_length_;
-  const char* segment = 0;
+  const char* segment = nullptr;
   while (size_t segment_length =
              buffer_->GetSomeData(segment, buffer_position)) {
     if (requested_size <= read_bytes_count + segment_length) {

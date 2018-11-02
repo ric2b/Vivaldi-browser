@@ -9,14 +9,14 @@ namespace blink {
 }
 
 #include "core/css/parser/CSSParserIdioms.h"
-#include "core/css/parser/CSSParserObserverWrapper.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "platform/wtf/text/CharacterNames.h"
 
 namespace blink {
 
-CSSTokenizer::CSSTokenizer(const String& string) : input_(string) {
+CSSTokenizer::CSSTokenizer(const String& string, size_t offset)
+    : input_(string) {
   // According to the spec, we should perform preprocessing here.
   // See: http://dev.w3.org/csswg/css-syntax/#input-preprocessing
   //
@@ -25,69 +25,46 @@ CSSTokenizer::CSSTokenizer(const String& string) : input_(string) {
   // * Do not count white spaces
   // * CSSTokenizerInputStream::NextInputChar() replaces NULLs for replacement
   //   characters
-
-  if (string.IsEmpty())
-    return;
-
-  // To avoid resizing we err on the side of reserving too much space.
-  // Most strings we tokenize have about 3.5 to 5 characters per token.
-  tokens_.ReserveInitialCapacity(string.length() / 3);
+  input_.Advance(offset);
 }
 
-CSSTokenizer::CSSTokenizer(const String& string,
-                           CSSParserObserverWrapper& wrapper)
-    : input_(string) {
-  if (string.IsEmpty())
-    return;
+Vector<CSSParserToken, 32> CSSTokenizer::TokenizeToEOF() {
+  // To avoid resizing we err on the side of reserving too much space.
+  // Most strings we tokenize have about 3.5 to 5 characters per token.
+  Vector<CSSParserToken, 32> tokens;
+  tokens.ReserveInitialCapacity((input_.length() - Offset()) / 3);
 
-  // TODO(shend): Do not tokenize all in one go. We should be tokenizing on the
-  // fly.
-  unsigned offset = 0;
   while (true) {
-    CSSParserToken token = NextToken();
-    if (token.GetType() == kEOFToken)
-      break;
-    if (token.GetType() == kCommentToken) {
-      wrapper.AddComment(offset, input_.Offset(), tokens_.size());
-    } else {
-      tokens_.push_back(token);
-      wrapper.AddToken(offset);
+    const CSSParserToken token = NextToken();
+    switch (token.GetType()) {
+      case kCommentToken:
+        continue;
+      case kEOFToken:
+        return tokens;
+      default:
+        tokens.push_back(token);
+        break;
     }
-    offset = input_.Offset();
   }
-
-  wrapper.AddToken(offset);
-  wrapper.FinalizeConstruction(tokens_.begin());
 }
 
 CSSParserToken CSSTokenizer::TokenizeSingle() {
   while (true) {
+    prev_offset_ = input_.Offset();
     const CSSParserToken token = NextToken();
     if (token.GetType() == kCommentToken)
       continue;
-    if (!token.IsEOF())
-      tokens_.push_back(token);
     return token;
   }
 }
 
-void CSSTokenizer::EnsureTokenizedToEOF() {
-  while (!TokenizeSingle().IsEOF()) {
-  }
-}
-
-CSSParserTokenRange CSSTokenizer::TokenRange() {
-  EnsureTokenizedToEOF();
-  return tokens_;
-}
-
-unsigned CSSTokenizer::CurrentSize() const {
-  return tokens_.size();
+CSSParserToken CSSTokenizer::TokenizeSingleWithComments() {
+  prev_offset_ = input_.Offset();
+  return NextToken();
 }
 
 unsigned CSSTokenizer::TokenCount() {
-  EnsureTokenizedToEOF();
-  return tokens_.size();
+  return token_count_;
 }
 
 static bool IsNewLine(UChar cc) {
@@ -320,7 +297,7 @@ CSSParserToken CSSTokenizer::NextToken() {
   // incremental tokenization of partial sources.
   // However, for now we follow the spec exactly.
   UChar cc = Consume();
-  CodePoint code_point_func = 0;
+  CodePoint code_point_func = nullptr;
 
   if (IsASCII(cc)) {
     SECURITY_DCHECK(cc < codePointsNumber);
@@ -329,6 +306,7 @@ CSSParserToken CSSTokenizer::NextToken() {
     code_point_func = &CSSTokenizer::NameStart;
   }
 
+  ++token_count_;
   if (code_point_func)
     return ((this)->*(code_point_func))(cc);
   return CSSParserToken(kDelimiterToken, cc);

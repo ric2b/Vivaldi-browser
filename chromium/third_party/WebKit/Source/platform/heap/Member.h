@@ -5,6 +5,7 @@
 #ifndef Member_h
 #define Member_h
 
+#include "platform/heap/Heap.h"
 #include "platform/heap/HeapPage.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashFunctions.h"
@@ -195,43 +196,81 @@ class Member : public MemberBase<T, TracenessMemberConfiguration::kTraced> {
  public:
   Member() : Parent() {}
   Member(std::nullptr_t) : Parent(nullptr) {}
-  Member(T* raw) : Parent(raw) {}
-  Member(T& raw) : Parent(raw) {}
+  Member(T* raw) : Parent(raw) { WriteBarrier(this->raw_); }
+  Member(T& raw) : Parent(raw) { WriteBarrier(this->raw_); }
   Member(WTF::HashTableDeletedValueType x) : Parent(x) {}
 
-  Member(const Member& other) : Parent(other) {}
+  Member(const Member& other) : Parent(other) { WriteBarrier(this->raw_); }
   template <typename U>
-  Member(const Member<U>& other) : Parent(other) {}
+  Member(const Member<U>& other) : Parent(other) {
+    WriteBarrier(this->raw_);
+  }
   template <typename U>
-  Member(const Persistent<U>& other) : Parent(other) {}
+  Member(const Persistent<U>& other) : Parent(other) {
+    WriteBarrier(this->raw_);
+  }
 
   template <typename U>
   Member& operator=(const Persistent<U>& other) {
     Parent::operator=(other);
+    WriteBarrier(this->raw_);
     return *this;
   }
 
   template <typename U>
   Member& operator=(const Member<U>& other) {
     Parent::operator=(other);
+    WriteBarrier(this->raw_);
     return *this;
   }
 
   template <typename U>
   Member& operator=(const WeakMember<U>& other) {
     Parent::operator=(other);
+    WriteBarrier(this->raw_);
     return *this;
   }
 
   template <typename U>
   Member& operator=(U* other) {
     Parent::operator=(other);
+    WriteBarrier(this->raw_);
     return *this;
   }
 
   Member& operator=(std::nullptr_t) {
     Parent::operator=(nullptr);
     return *this;
+  }
+
+ protected:
+  ALWAYS_INLINE void WriteBarrier(const T* value) const {
+// TODO(mlippautz): Replace with proper build flag.
+#if 0
+    if (value) {
+      // The following method for retrieving a page works as allocation of
+      // mixins on large object pages is prohibited.
+      BasePage* const page = PageFromObject(value);
+      if (page->IsIncrementalMarking()) {
+        DCHECK(ThreadState::Current()->IsIncrementalMarking());
+        HeapObjectHeader* const header =
+            page->IsLargeObjectPage()
+                ? static_cast<LargeObjectPage*>(page)->GetHeapObjectHeader()
+                : static_cast<NormalPage*>(page)->FindHeaderFromAddress(
+                      reinterpret_cast<Address>(
+                          const_cast<typename std::remove_const<T>::type*>(
+                              value)));
+        if (header->IsMarked())
+          return;
+
+        // Mark and push trace callback.
+        header->Mark();
+        ThreadState::Current()->Heap().PushTraceCallback(
+            header->Payload(),
+            ThreadHeap::GcInfo(header->GcInfoIndex())->trace_);
+      }
+    }
+#endif
   }
 };
 

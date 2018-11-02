@@ -401,13 +401,6 @@ void WebContentsAccessibilityAndroid::UpdateEnabledState(bool enabled) {
     // about to be destroyed).
     if (manager)
       manager->set_web_contents_accessibility(nullptr);
-    // Note that disabling part is not useful at this moment since the mode will
-    // be enabled again almost immediately for the renderer process that just
-    // got swapped in. This boolean enable/disable logic will be expanded
-    // to allow for more granular accessibility. See https://crbug.com/428494.
-    accessibility_state->ResetAccessibilityMode();
-    web_contents_->SetAccessibilityMode(
-        accessibility_state->accessibility_mode());
   }
 }
 
@@ -709,6 +702,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
 
   Java_WebContentsAccessibility_setAccessibilityNodeInfoKitKatAttributes(
       env, obj, info, is_root, node->IsEditableText(),
+      base::android::ConvertUTF8ToJavaString(env, node->GetRoleString()),
       base::android::ConvertUTF16ToJavaString(env, node->GetRoleDescription()),
       base::android::ConvertUTF16ToJavaString(env, node->GetHint()),
       node->GetIntAttribute(ui::AX_ATTR_TEXT_SEL_START),
@@ -865,7 +859,8 @@ void WebContentsAccessibilityAndroid::SetSelection(
     jint unique_id,
     jint start,
     jint end) {
-  using AXPlatformPositionInstance = AXPlatformPosition::AXPositionInstance;
+  using AXPlatformPositionInstance =
+      BrowserAccessibilityPosition::AXPositionInstance;
   using AXPlatformRange = ui::AXRange<AXPlatformPositionInstance::element_type>;
 
   BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
@@ -897,14 +892,15 @@ jboolean WebContentsAccessibilityAndroid::AdjustSlider(
     return false;
 
   // To behave similarly to an Android SeekBar, move by an increment of
-  // approximately 20%.
+  // approximately 5%.
   float original_value = value;
-  float delta = (max - min) / 5.0f;
+  float delta = (max - min) / 20.0f;
+  // Slider does not move if the delta value is less than 1.
+  delta = ((delta < 1) ? 1 : delta);
   value += (increment ? delta : -delta);
   value = std::max(std::min(value, max), min);
   if (value != original_value) {
-    node->manager()->SetValue(*node,
-                              base::UTF8ToUTF16(base::DoubleToString(value)));
+    node->manager()->SetValue(*node, base::NumberToString16(value));
     return true;
   }
   return false;
@@ -946,6 +942,9 @@ jint WebContentsAccessibilityAndroid::FindElementType(
                                : OneShotAccessibilityTreeSearch::BACKWARDS);
   tree_search.SetResultLimit(1);
   tree_search.SetImmediateDescendantsOnly(false);
+  // SetCanWrapToLastElement needs to be set as true after talkback pushes its
+  // corresponding change for b/29103330.
+  tree_search.SetCanWrapToLastElement(false);
   tree_search.SetVisibleOnly(false);
   tree_search.AddPredicate(predicate);
 
@@ -997,6 +996,17 @@ jboolean WebContentsAccessibilityAndroid::NextAtGranularity(
     return true;
   }
   return false;
+}
+
+jint WebContentsAccessibilityAndroid::GetTextLength(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint unique_id) {
+  BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (!node)
+    return -1;
+  base::string16 text = node->GetText();
+  return text.size();
 }
 
 jboolean WebContentsAccessibilityAndroid::PreviousAtGranularity(
@@ -1260,9 +1270,10 @@ void WebContentsAccessibilityAndroid::CollectStats() {
   CAPABILITY_TYPE_HISTOGRAM(capabilities_mask, CAN_PERFORM_GESTURES);
 }
 
-jlong Init(JNIEnv* env,
-           const JavaParamRef<jobject>& obj,
-           const JavaParamRef<jobject>& jweb_contents) {
+jlong JNI_WebContentsAccessibility_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jweb_contents) {
   WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
   DCHECK(web_contents);
 

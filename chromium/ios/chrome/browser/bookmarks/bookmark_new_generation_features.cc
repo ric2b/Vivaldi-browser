@@ -4,11 +4,10 @@
 
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 
-namespace bookmark_new_generation {
-namespace features {
-
+// Feature flag for the new bookmark UI.
 const base::Feature kBookmarkNewGeneration{"BookmarkNewGeneration",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-}  // namespace features
-}  // namespace bookmark_new_generation
+// Feature flag for the new edit page and folder picker of the new bookmark UI.
+const base::Feature kBookmarkNewEditPage{"BookmarkNewEditPage",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};

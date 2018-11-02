@@ -14,15 +14,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/interstitials/chrome_controller_client.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
+#include "chrome/browser/ssl/ssl_error_controller_client.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -131,23 +129,7 @@ SSLBlockingPage* SSLBlockingPage::Create(
     bool is_superfish,
     const base::Callback<void(content::CertificateRequestResultType)>&
         callback) {
-  // Override prefs for the SSLErrorUI.
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (profile &&
-      !profile->GetPrefs()->GetBoolean(prefs::kSSLErrorOverrideAllowed)) {
-    options_mask |= SSLErrorUI::HARD_OVERRIDE_DISABLED;
-  }
-  const bool overridable =
-      is_superfish
-          ? false
-          : IsOverridable(options_mask, Profile::FromBrowserContext(
-                                            web_contents->GetBrowserContext()));
-  if (overridable)
-    options_mask |= SSLErrorUI::SOFT_OVERRIDE_ENABLED;
-  else
-    options_mask &= ~SSLErrorUI::SOFT_OVERRIDE_ENABLED;
-
+  bool overridable = IsOverridable(options_mask);
   std::unique_ptr<ChromeMetricsHelper> metrics_helper(CreateMetricsHelper(
       web_contents, cert_error, request_url, overridable, is_superfish));
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(overridable);
@@ -196,11 +178,13 @@ SSLBlockingPage::SSLBlockingPage(
     std::unique_ptr<ChromeMetricsHelper> metrics_helper,
     bool is_superfish,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(
-          web_contents,
-          request_url,
-          base::MakeUnique<ChromeControllerClient>(web_contents,
-                                                   std::move(metrics_helper))),
+    : SecurityInterstitialPage(web_contents,
+                               request_url,
+                               base::MakeUnique<SSLErrorControllerClient>(
+                                   web_contents,
+                                   ssl_info,
+                                   request_url,
+                                   std::move(metrics_helper))),
       callback_(callback),
       ssl_info_(ssl_info),
       overridable_(overridable),
@@ -258,7 +242,7 @@ void SSLBlockingPage::CommandReceived(const std::string& command) {
   bool retval = base::StringToInt(command, &cmd);
   DCHECK(retval);
   ssl_error_ui_->HandleCommand(
-      static_cast<security_interstitials::SecurityInterstitialCommands>(cmd));
+      static_cast<security_interstitials::SecurityInterstitialCommand>(cmd));
 
   // Special handling for the reporting preference being changed.
   switch (cmd) {
@@ -325,11 +309,10 @@ void SSLBlockingPage::NotifyDenyCertificate() {
 }
 
 // static
-bool SSLBlockingPage::IsOverridable(int options_mask,
-                                    const Profile* const profile) {
+bool SSLBlockingPage::IsOverridable(int options_mask) {
   const bool is_overridable =
       (options_mask & SSLErrorUI::SOFT_OVERRIDE_ENABLED) &&
       !(options_mask & SSLErrorUI::STRICT_ENFORCEMENT) &&
-      profile->GetPrefs()->GetBoolean(prefs::kSSLErrorOverrideAllowed);
+      !(options_mask & SSLErrorUI::HARD_OVERRIDE_DISABLED);
   return is_overridable;
 }

@@ -5,13 +5,13 @@
 #ifndef MEDIA_FILTERS_DECODER_STREAM_H_
 #define MEDIA_FILTERS_DECODER_STREAM_H_
 
-#include <deque>
 #include <list>
 #include <memory>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/audio_decoder.h"
@@ -107,6 +107,12 @@ class MEDIA_EXPORT DecoderStream {
   bool CanDecodeMore() const;
 
   base::TimeDelta AverageDuration() const;
+
+  // Tells decoders that we won't need frames before |start_timestamp| so they
+  // can be dropped post-decode. Causes outgoing DecoderBuffer packets to be
+  // marked for discard so that decoders may apply further optimizations such as
+  // reduced resolution decoding or filter skipping.
+  void DropFramesBefore(base::TimeDelta start_timestamp);
 
   // Allows callers to register for notification of config changes; this is
   // called immediately after receiving the 'kConfigChanged' status from the
@@ -248,12 +254,12 @@ class MEDIA_EXPORT DecoderStream {
 
   // Stores buffers that might be reused if the decoder fails right after
   // Initialize().
-  std::deque<scoped_refptr<DecoderBuffer>> pending_buffers_;
+  base::circular_deque<scoped_refptr<DecoderBuffer>> pending_buffers_;
 
   // Stores buffers that are guaranteed to be fed to the decoder before fetching
   // more from the demuxer stream. All buffers in this queue first were in
   // |pending_buffers_|.
-  std::deque<scoped_refptr<DecoderBuffer>> fallback_buffers_;
+  base::circular_deque<scoped_refptr<DecoderBuffer>> fallback_buffers_;
 
   // TODO(tguilbert): support config changes during decoder fallback, see
   // crbug.com/603713
@@ -262,6 +268,8 @@ class MEDIA_EXPORT DecoderStream {
   // Used to track read requests; not rolled into |state_| since that is
   // overwritten in many cases.
   bool pending_demuxer_read_;
+
+  base::TimeDelta start_timestamp_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<DecoderStream<StreamType>> weak_factory_;

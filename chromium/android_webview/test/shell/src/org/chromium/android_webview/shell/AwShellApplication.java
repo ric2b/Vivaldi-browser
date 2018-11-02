@@ -5,18 +5,13 @@
 package org.chromium.android_webview.shell;
 
 import org.chromium.base.CommandLine;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.content.app.ContentApplication;
 
 /**
  * The android_webview shell Application subclass.
  */
 public class AwShellApplication extends ContentApplication {
-    public AwShellApplication() {
-        super(false /* mShouldInitializeApplicationStatusTracking */);
-    }
 
-    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     @Override
     public void initCommandLine() {
         if (!CommandLine.isInitialized()) {

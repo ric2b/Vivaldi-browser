@@ -21,14 +21,14 @@
 
 #include "core/html/forms/RadioInputType.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
-#include "core/html/HTMLFormElement.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "core/page/SpatialNavigation.h"
 #include "platform/text/PlatformLocale.h"
 
@@ -162,12 +162,10 @@ bool RadioInputType::IsKeyboardFocusable() const {
   // skip any other elements in the group.
   Element* current_focused_element =
       GetElement().GetDocument().FocusedElement();
-  if (isHTMLInputElement(current_focused_element)) {
-    HTMLInputElement& focused_input =
-        toHTMLInputElement(*current_focused_element);
-    if (focused_input.type() == InputTypeNames::radio &&
-        focused_input.Form() == GetElement().Form() &&
-        focused_input.GetName() == GetElement().GetName())
+  if (auto* focused_input = ToHTMLInputElementOrNull(current_focused_element)) {
+    if (focused_input->type() == InputTypeNames::radio &&
+        focused_input->Form() == GetElement().Form() &&
+        focused_input->GetName() == GetElement().GetName())
       return false;
   }
 

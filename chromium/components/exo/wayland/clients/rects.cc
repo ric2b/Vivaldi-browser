@@ -23,6 +23,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
+#include "base/message_loop/message_loop.h"
 #include "base/scoped_generic.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -281,18 +282,13 @@ int RectsClient::Run(const ClientBase::InitParams& params,
                              ? pending_frames.size() < max_frames_pending
                              : pending_frames.empty();
     if (enqueue_frame) {
-      auto buffer_it =
-          std::find_if(buffers_.begin(), buffers_.end(),
-                       [](const std::unique_ptr<ClientBase::Buffer>& buffer) {
-                         return !buffer->busy;
-                       });
-      if (buffer_it == buffers_.end()) {
+      Buffer* buffer = DequeueBuffer();
+      if (!buffer) {
         LOG(ERROR) << "Can't find free buffer";
         return 1;
       }
-      auto* buffer = buffer_it->get();
 
-      auto frame = base::MakeUnique<Frame>();
+      auto frame = std::make_unique<Frame>();
       frame->buffer = buffer;
 
       base::TimeTicks wall_time_start;
@@ -390,7 +386,7 @@ int RectsClient::Run(const ClientBase::InitParams& params,
       if (gr_context) {
         gr_context->flush();
 
-#if defined(OZONE_PLATFORM_GBM)
+#if defined(USE_GBM)
         if (egl_sync_type_) {
           buffer->egl_sync.reset(new ScopedEglSync(eglCreateSyncKHR(
               eglGetCurrentDisplay(), egl_sync_type_, nullptr)));
@@ -400,8 +396,6 @@ int RectsClient::Run(const ClientBase::InitParams& params,
 
         glFlush();
       }
-
-      buffer->busy = true;
 
       if (num_benchmark_runs) {
         frame->wall_time = base::TimeTicks::Now() - wall_time_start;
@@ -423,7 +417,7 @@ int RectsClient::Run(const ClientBase::InitParams& params,
                         surface_size_.height());
       wl_surface_attach(surface, frame->buffer->buffer.get(), 0, 0);
 
-#if defined(OZONE_PLATFORM_GBM)
+#if defined(USE_GBM)
       if (frame->buffer->egl_sync) {
         eglClientWaitSyncKHR(eglGetCurrentDisplay(),
                              frame->buffer->egl_sync->get(),
@@ -485,6 +479,7 @@ int main(int argc, char* argv[]) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
   exo::wayland::clients::ClientBase::InitParams params;
+  params.num_buffers = 8;  // Allow up to 8 buffers by default.
   if (!params.FromCommandLine(*command_line))
     return 1;
 
@@ -523,6 +518,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  base::MessageLoopForUI message_loop;
   exo::wayland::clients::RectsClient client;
   return client.Run(params, max_frames_pending, num_rects, num_benchmark_runs,
                     base::TimeDelta::FromMilliseconds(benchmark_interval_ms),

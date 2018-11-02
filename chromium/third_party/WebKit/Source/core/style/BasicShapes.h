@@ -30,6 +30,7 @@
 #ifndef BasicShapes_h
 #define BasicShapes_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Length.h"
@@ -37,7 +38,6 @@
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -66,7 +66,7 @@ class CORE_EXPORT BasicShape : public RefCounted<BasicShape> {
 
   virtual void GetPath(Path&, const FloatRect&) = 0;
   virtual WindRule GetWindRule() const { return RULE_NONZERO; }
-  virtual RefPtr<BasicShape> Blend(const BasicShape*, double) const = 0;
+  virtual scoped_refptr<BasicShape> Blend(const BasicShape*, double) const = 0;
   virtual bool operator==(const BasicShape&) const = 0;
 
   virtual ShapeType GetType() const = 0;
@@ -158,8 +158,8 @@ class BasicShapeRadius {
 
 class CORE_EXPORT BasicShapeCircle final : public BasicShape {
  public:
-  static RefPtr<BasicShapeCircle> Create() {
-    return AdoptRef(new BasicShapeCircle);
+  static scoped_refptr<BasicShapeCircle> Create() {
+    return base::AdoptRef(new BasicShapeCircle);
   }
 
   const BasicShapeCenterCoordinate& CenterX() const { return center_x_; }
@@ -172,7 +172,7 @@ class CORE_EXPORT BasicShapeCircle final : public BasicShape {
   void SetRadius(BasicShapeRadius radius) { radius_ = radius; }
 
   void GetPath(Path&, const FloatRect&) override;
-  RefPtr<BasicShape> Blend(const BasicShape*, double) const override;
+  scoped_refptr<BasicShape> Blend(const BasicShape*, double) const override;
   bool operator==(const BasicShape&) const override;
 
   ShapeType GetType() const override { return kBasicShapeCircleType; }
@@ -189,8 +189,8 @@ DEFINE_BASICSHAPE_TYPE_CASTS(BasicShapeCircle);
 
 class BasicShapeEllipse final : public BasicShape {
  public:
-  static RefPtr<BasicShapeEllipse> Create() {
-    return AdoptRef(new BasicShapeEllipse);
+  static scoped_refptr<BasicShapeEllipse> Create() {
+    return base::AdoptRef(new BasicShapeEllipse);
   }
 
   const BasicShapeCenterCoordinate& CenterX() const { return center_x_; }
@@ -207,7 +207,7 @@ class BasicShapeEllipse final : public BasicShape {
   void SetRadiusY(BasicShapeRadius radius_y) { radius_y_ = radius_y; }
 
   void GetPath(Path&, const FloatRect&) override;
-  RefPtr<BasicShape> Blend(const BasicShape*, double) const override;
+  scoped_refptr<BasicShape> Blend(const BasicShape*, double) const override;
   bool operator==(const BasicShape&) const override;
 
   ShapeType GetType() const override { return kBasicShapeEllipseType; }
@@ -225,8 +225,8 @@ DEFINE_BASICSHAPE_TYPE_CASTS(BasicShapeEllipse);
 
 class BasicShapePolygon final : public BasicShape {
  public:
-  static RefPtr<BasicShapePolygon> Create() {
-    return AdoptRef(new BasicShapePolygon);
+  static scoped_refptr<BasicShapePolygon> Create() {
+    return base::AdoptRef(new BasicShapePolygon);
   }
 
   const Vector<Length>& Values() const { return values_; }
@@ -240,7 +240,7 @@ class BasicShapePolygon final : public BasicShape {
   }
 
   void GetPath(Path&, const FloatRect&) override;
-  RefPtr<BasicShape> Blend(const BasicShape*, double) const override;
+  scoped_refptr<BasicShape> Blend(const BasicShape*, double) const override;
   bool operator==(const BasicShape&) const override;
 
   WindRule GetWindRule() const override { return wind_rule_; }
@@ -258,8 +258,8 @@ DEFINE_BASICSHAPE_TYPE_CASTS(BasicShapePolygon);
 
 class BasicShapeInset : public BasicShape {
  public:
-  static RefPtr<BasicShapeInset> Create() {
-    return AdoptRef(new BasicShapeInset);
+  static scoped_refptr<BasicShapeInset> Create() {
+    return base::AdoptRef(new BasicShapeInset);
   }
 
   const Length& Top() const { return top_; }
@@ -289,7 +289,7 @@ class BasicShapeInset : public BasicShape {
   }
 
   void GetPath(Path&, const FloatRect&) override;
-  RefPtr<BasicShape> Blend(const BasicShape*, double) const override;
+  scoped_refptr<BasicShape> Blend(const BasicShape*, double) const override;
   bool operator==(const BasicShape&) const override;
 
   ShapeType GetType() const override { return kBasicShapeInsetType; }

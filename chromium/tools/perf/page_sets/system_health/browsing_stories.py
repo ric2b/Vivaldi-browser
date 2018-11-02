@@ -2,7 +2,6 @@
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
 from page_sets.system_health import platforms
 from page_sets.system_health import story_tags
 from page_sets.system_health import system_health_story
@@ -32,8 +31,9 @@ class _BrowsingStory(system_health_story.SystemHealthStory):
       action_runner.WaitForNavigate()
 
   def _NavigateToItem(self, action_runner, index):
-    item_selector = 'document.querySelectorAll("%s")[%d]' % (
-        self.ITEM_SELECTOR, index)
+    item_selector = js_template.Render(
+        'document.querySelectorAll({{ selector }})[{{ index }}]',
+        selector=self.ITEM_SELECTOR, index=index)
     # Only scrolls if element is not currently in viewport.
     action_runner.WaitForElement(element_function=item_selector)
     action_runner.ScrollPageToElement(
@@ -138,7 +138,7 @@ class FacebookDesktopStory(_ArticleBrowsingStory):
 class InstagramMobileStory(_ArticleBrowsingStory):
   NAME = 'browse:social:instagram'
   URL = 'https://www.instagram.com/badgalriri/'
-  ITEM_SELECTOR = '[class=\\"_8mlbc _vbtk2 _t5r8b\\"]'
+  ITEM_SELECTOR = '[class="_8mlbc _vbtk2 _t5r8b"]'
   ITEMS_TO_VISIT = 8
 
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
@@ -261,7 +261,7 @@ class GoogleDesktopStory(_ArticleBrowsingStory):
   NAME = 'browse:search:google'
   URL = 'https://www.google.com/search?q=flower'
   _SEARCH_BOX_SELECTOR = 'input[aria-label="Search"]'
-  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label=\'Page 2\']'
+  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label="Page 2"]'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
   def _DidLoadDocument(self, action_runner):
@@ -311,7 +311,7 @@ class GoogleIndiaDesktopStory(_ArticleBrowsingStory):
   URL = 'https://www.google.co.in/search?q=%E0%A4%AB%E0%A5%82%E0%A4%B2'
   _SEARCH_BOX_SELECTOR = 'input[aria-label="Search"]'
   _SEARCH_BUTTON_SELECTOR = 'button[aria-label="Google Search"]'
-  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label=\'Page 2\']'
+  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label="Page 2"]'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
   TAGS = [story_tags.INTERNATIONAL]
 
@@ -326,9 +326,8 @@ class GoogleIndiaDesktopStory(_ArticleBrowsingStory):
     # TODO(nednguyen): replace this with input text gesture to make it more
     # realistic.
     action_runner.ExecuteJavaScript(
-        js_template.Render(
-            'document.querySelector({{ selector }}).value += "वितरण";',
-            selector=self._SEARCH_BOX_SELECTOR))
+        'document.querySelector({{ selector }}).value += "वितरण";',
+        selector=self._SEARCH_BOX_SELECTOR)
     action_runner.Wait(2)
     action_runner.ClickElement(selector=self._SEARCH_BUTTON_SELECTOR)
 
@@ -515,7 +514,7 @@ class BrowseFlipKartMobileStory(_ArticleBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.EMERGING_MARKET]
 
-  ITEM_SELECTOR = '[style=\\"background-image: none;\\"]'
+  ITEM_SELECTOR = '[style="background-image: none;"]'
   BACK_SELECTOR = '._3NH1qf'
   ITEMS_TO_VISIT = 4
   IS_SINGLE_PAGE_APP = True
@@ -663,38 +662,61 @@ class GoogleMapsStory(_BrowsingStory):
   URL = 'https://www.maps.google.com/maps'
   _MAPS_SEARCH_BOX_SELECTOR = 'input[aria-label="Search Google Maps"]'
   _MAPS_ZOOM_IN_SELECTOR = '[aria-label="Zoom in"]'
-  _RESTAURANTS_LOADING = ('[class="searchbox searchbox-shadow noprint '
-                          'clear-button-shown loading"]')
   _RESTAURANTS_LOADED = ('[class="searchbox searchbox-shadow noprint '
                          'clear-button-shown"]')
   _RESTAURANTS_LINK = '[data-result-index="1"]'
   _DIRECTIONS_LINK = '[class="section-hero-header-directions-icon"]'
   _DIRECTIONS_FROM_BOX = '[class="tactile-searchbox-input"]'
   _DIRECTIONS_LOADED = '[class="section-directions-trip clearfix selected"]'
+  # Get the current server response hash and store it for use
+  # in _CHECK_RESTAURANTS_UPDATED.
+  _GET_RESTAURANT_RESPONSE_HASH = '''
+    document.querySelectorAll('[data-result-index="1"]')[0]
+        .getAttribute('jstrack')
+  '''
+  # Check if the current restaurant serever response hash is different from
+  # the old one to checks that restaurants started to update. Also wait for
+  # the completion of the loading by waiting for the button to change to loaded.
+  # The response hash gets updated when we scroll or zoom since server provides
+  # a new response for the updated locations with a new hash value.
+  _CHECK_RESTAURANTS_UPDATED = '''
+    (document.querySelectorAll('[data-result-index="1"]')[0]
+        .getAttribute('jstrack') != {{ old_restaurant }})
+    && (document.querySelectorAll(
+          '[class="searchbox searchbox-shadow noprint clear-button-shown"]')[0]
+          != null)
+    '''
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.JAVASCRIPT_HEAVY]
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.WEBGL]
 
   def _DidLoadDocument(self, action_runner):
     # Click on the search box.
     action_runner.WaitForElement(selector=self._MAPS_SEARCH_BOX_SELECTOR)
+    action_runner.WaitForElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
     action_runner.ClickElement(selector=self._MAPS_SEARCH_BOX_SELECTOR)
 
     # Submit search query.
     action_runner.EnterText('restaurants near me')
     action_runner.PressKey('Return')
     action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
-    action_runner.WaitForElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
     action_runner.Wait(1)
 
     # ZoomIn two times.
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
+
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
 
@@ -702,17 +724,24 @@ class GoogleMapsStory(_BrowsingStory):
     # recording the wpr. If we scroll too fast, the data will not be recorded
     # well. After recording reset it back to the original value to have a more
     # realistic scroll.
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.RepeatableBrowserDrivenScroll(
         x_scroll_distance_ratio = 0.0, y_scroll_distance_ratio = 0.5,
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
+
+    prev_restaurant_hash = action_runner.EvaluateJavaScript(
+        self._GET_RESTAURANT_RESPONSE_HASH)
     action_runner.RepeatableBrowserDrivenScroll(
         x_scroll_distance_ratio = 0.5, y_scroll_distance_ratio = 0,
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
+    action_runner.WaitForJavaScriptCondition(
+        self._CHECK_RESTAURANTS_UPDATED,
+        old_restaurant=prev_restaurant_hash)
 
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADING)
-    action_runner.WaitForElement(selector=self._RESTAURANTS_LOADED)
     # To make the recording more realistic.
     action_runner.Wait(1)
     action_runner.ClickElement(selector=self._RESTAURANTS_LINK)
@@ -745,9 +774,8 @@ class GoogleEarthStory(_BrowsingStory):
   URL = 'https://www.google.co.uk/maps/@51.4655936,-0.0985949,3329a,35y,40.58t/data=!3m1!1e3'
   _EARTH_BUTTON_SELECTOR = '[aria-labelledby="widget-minimap-caption"]'
   _EARTH_ZOOM_IN_SELECTOR = '[aria-label="Zoom in"]'
-  _MAPS_SEARCH_BOX_SELECTOR = 'input[aria-label="Search Google Maps"]'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.JAVASCRIPT_HEAVY]
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.WEBGL]
 
   def _DidLoadDocument(self, action_runner):
     # Zommin three times.

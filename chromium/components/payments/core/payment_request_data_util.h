@@ -51,12 +51,13 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
 // expected to only contain basic-card card network names (the list is at
 // https://www.w3.org/Payments/card-network-ids).
 // |out_url_payment_method_identifiers| is filled with a list of all the
-// payment method identifiers specicied by the merchant that are URL-based.
+// payment method identifiers specified by the merchant that are URL-based.
 void ParseSupportedMethods(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
     std::set<std::string>* out_basic_card_supported_networks,
-    std::vector<GURL>* out_url_payment_method_identifiers);
+    std::vector<GURL>* out_url_payment_method_identifiers,
+    std::set<std::string>* out_payment_method_identifiers);
 
 // Parses the supported card types (e.g., credit, debit, prepaid) from
 // supportedTypes. |out_supported_card_types_set| is expected to be empty. It
@@ -66,35 +67,10 @@ void ParseSupportedCardTypes(
     const std::vector<PaymentMethodData>& method_data,
     std::set<autofill::CreditCard::CardType>* out_supported_card_types_set);
 
-// Returns the phone number from the given |profile| formatted for display.
-base::string16 GetFormattedPhoneNumberForDisplay(
-    const autofill::AutofillProfile& profile,
-    const std::string& locale);
-
-// Formats the given number |phone_number| to
-// i18n::phonenumbers::PhoneNumberUtil::PhoneNumberFormat::INTERNATIONAL format
-// by using i18n::phonenumbers::PhoneNumberUtil::Format.
-std::string FormatPhoneForDisplay(const std::string& phone_number,
-                                  const std::string& country_code);
-
-// Formats the given number |phone_number| to
-// i18n::phonenumbers::PhoneNumberUtil::PhoneNumberFormat::E164 format by using
-// i18n::phonenumbers::PhoneNumberUtil::Format, as defined in the Payment
-// Request spec
-// (https://w3c.github.io/browser-payment-api/#paymentrequest-updated-algorithm)
-std::string FormatPhoneForResponse(const std::string& phone_number,
-                                   const std::string& country_code);
-
 // Formats |card_number| for display. For example, "4111111111111111" is
 // formatted into "4111 1111 1111 1111". This method does not format masked card
 // numbers, which start with a letter.
 base::string16 FormatCardNumberForDisplay(const base::string16& card_number);
-
-// Returns a country code to be used when validating this profile. If the
-// profile has a valid country code set, it is returned. If not, a country code
-// associated with |app_locale| is used as a fallback.
-std::string GetCountryCodeWithFallback(const autofill::AutofillProfile* profile,
-                                       const std::string& app_locale);
 
 }  // namespace data_util
 }  // namespace payments

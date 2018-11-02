@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "sandbox/win/src/crosscall_client.h"
+#include "sandbox/win/src/filesystem_policy.h"
 #include "sandbox/win/src/ipc_tags.h"
 #include "sandbox/win/src/policy_params.h"
 #include "sandbox/win/src/policy_target.h"
@@ -18,18 +19,21 @@
 namespace sandbox {
 
 NTSTATUS WINAPI TargetNtCreateFile(NtCreateFileFunction orig_CreateFile,
-                                   PHANDLE file, ACCESS_MASK desired_access,
+                                   PHANDLE file,
+                                   ACCESS_MASK desired_access,
                                    POBJECT_ATTRIBUTES object_attributes,
                                    PIO_STATUS_BLOCK io_status,
                                    PLARGE_INTEGER allocation_size,
-                                   ULONG file_attributes, ULONG sharing,
-                                   ULONG disposition, ULONG options,
-                                   PVOID ea_buffer, ULONG ea_length) {
+                                   ULONG file_attributes,
+                                   ULONG sharing,
+                                   ULONG disposition,
+                                   ULONG options,
+                                   PVOID ea_buffer,
+                                   ULONG ea_length) {
   // Check if the process can open it first.
-  NTSTATUS status = orig_CreateFile(file, desired_access, object_attributes,
-                                    io_status, allocation_size,
-                                    file_attributes, sharing, disposition,
-                                    options, ea_buffer, ea_length);
+  NTSTATUS status = orig_CreateFile(
+      file, desired_access, object_attributes, io_status, allocation_size,
+      file_attributes, sharing, disposition, options, ea_buffer, ea_length);
   if (STATUS_ACCESS_DENIED != status)
     return status;
 
@@ -37,7 +41,7 @@ NTSTATUS WINAPI TargetNtCreateFile(NtCreateFileFunction orig_CreateFile,
   if (!SandboxFactory::GetTargetServices()->GetState()->InitCalled())
     return status;
 
-  wchar_t* name = NULL;
+  wchar_t* name = nullptr;
   do {
     if (!ValidParameter(file, sizeof(HANDLE), WRITE))
       break;
@@ -45,19 +49,19 @@ NTSTATUS WINAPI TargetNtCreateFile(NtCreateFileFunction orig_CreateFile,
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     uint32_t attributes = 0;
-    NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
-                                    NULL);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    NTSTATUS ret =
+        AllocAndCopyName(object_attributes, &name, &attributes, nullptr);
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     uint32_t desired_access_uint32 = desired_access;
     uint32_t options_uint32 = options;
     uint32_t disposition_uint32 = disposition;
-    uint32_t broker = FALSE;
+    uint32_t broker = BROKER_FALSE;
     CountedParameterSet<OpenFile> params;
     params[OpenFile::NAME] = ParamPickerMake(name);
     params[OpenFile::ACCESS] = ParamPickerMake(desired_access_uint32);
@@ -87,7 +91,7 @@ NTSTATUS WINAPI TargetNtCreateFile(NtCreateFileFunction orig_CreateFile,
       *file = answer.handle;
       io_status->Status = answer.nt_status;
       io_status->Information = answer.extended[0].ulong_ptr;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
   } while (false);
@@ -98,10 +102,12 @@ NTSTATUS WINAPI TargetNtCreateFile(NtCreateFileFunction orig_CreateFile,
   return status;
 }
 
-NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
+NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile,
+                                 PHANDLE file,
                                  ACCESS_MASK desired_access,
                                  POBJECT_ATTRIBUTES object_attributes,
-                                 PIO_STATUS_BLOCK io_status, ULONG sharing,
+                                 PIO_STATUS_BLOCK io_status,
+                                 ULONG sharing,
                                  ULONG options) {
   // Check if the process can open it first.
   NTSTATUS status = orig_OpenFile(file, desired_access, object_attributes,
@@ -113,7 +119,7 @@ NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
   if (!SandboxFactory::GetTargetServices()->GetState()->InitCalled())
     return status;
 
-  wchar_t* name = NULL;
+  wchar_t* name = nullptr;
   do {
     if (!ValidParameter(file, sizeof(HANDLE), WRITE))
       break;
@@ -121,19 +127,19 @@ NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     uint32_t attributes;
-    NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
-                                    NULL);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    NTSTATUS ret =
+        AllocAndCopyName(object_attributes, &name, &attributes, nullptr);
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     uint32_t desired_access_uint32 = desired_access;
     uint32_t options_uint32 = options;
     uint32_t disposition_uint32 = FILE_OPEN;
-    uint32_t broker = FALSE;
+    uint32_t broker = BROKER_FALSE;
     CountedParameterSet<OpenFile> params;
     params[OpenFile::NAME] = ParamPickerMake(name);
     params[OpenFile::ACCESS] = ParamPickerMake(desired_access_uint32);
@@ -146,9 +152,9 @@ NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
 
     SharedMemIPCClient ipc(memory);
     CrossCallReturn answer = {0};
-    ResultCode code = CrossCall(ipc, IPC_NTOPENFILE_TAG, name, attributes,
-                                desired_access_uint32, sharing, options_uint32,
-                                &answer);
+    ResultCode code =
+        CrossCall(ipc, IPC_NTOPENFILE_TAG, name, attributes,
+                  desired_access_uint32, sharing, options_uint32, &answer);
     if (SBOX_ALL_OK != code)
       break;
 
@@ -161,7 +167,7 @@ NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
       *file = answer.handle;
       io_status->Status = answer.nt_status;
       io_status->Information = answer.extended[0].ulong_ptr;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
   } while (false);
@@ -172,10 +178,10 @@ NTSTATUS WINAPI TargetNtOpenFile(NtOpenFileFunction orig_OpenFile, PHANDLE file,
   return status;
 }
 
-NTSTATUS WINAPI TargetNtQueryAttributesFile(
-    NtQueryAttributesFileFunction orig_QueryAttributes,
-    POBJECT_ATTRIBUTES object_attributes,
-    PFILE_BASIC_INFORMATION file_attributes) {
+NTSTATUS WINAPI
+TargetNtQueryAttributesFile(NtQueryAttributesFileFunction orig_QueryAttributes,
+                            POBJECT_ATTRIBUTES object_attributes,
+                            PFILE_BASIC_INFORMATION file_attributes) {
   // Check if the process can query it first.
   NTSTATUS status = orig_QueryAttributes(object_attributes, file_attributes);
   if (STATUS_ACCESS_DENIED != status)
@@ -185,25 +191,25 @@ NTSTATUS WINAPI TargetNtQueryAttributesFile(
   if (!SandboxFactory::GetTargetServices()->GetState()->InitCalled())
     return status;
 
-  wchar_t* name = NULL;
+  wchar_t* name = nullptr;
   do {
     if (!ValidParameter(file_attributes, sizeof(FILE_BASIC_INFORMATION), WRITE))
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     uint32_t attributes = 0;
-    NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
-                                    NULL);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    NTSTATUS ret =
+        AllocAndCopyName(object_attributes, &name, &attributes, nullptr);
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     InOutCountedBuffer file_info(file_attributes,
                                  sizeof(FILE_BASIC_INFORMATION));
 
-    uint32_t broker = FALSE;
+    uint32_t broker = BROKER_FALSE;
     CountedParameterSet<FileName> params;
     params[FileName::NAME] = ParamPickerMake(name);
     params[FileName::BROKER] = ParamPickerMake(broker);
@@ -234,8 +240,8 @@ NTSTATUS WINAPI TargetNtQueryFullAttributesFile(
     POBJECT_ATTRIBUTES object_attributes,
     PFILE_NETWORK_OPEN_INFORMATION file_attributes) {
   // Check if the process can query it first.
-  NTSTATUS status = orig_QueryFullAttributes(object_attributes,
-                                             file_attributes);
+  NTSTATUS status =
+      orig_QueryFullAttributes(object_attributes, file_attributes);
   if (STATUS_ACCESS_DENIED != status)
     return status;
 
@@ -243,26 +249,26 @@ NTSTATUS WINAPI TargetNtQueryFullAttributesFile(
   if (!SandboxFactory::GetTargetServices()->GetState()->InitCalled())
     return status;
 
-  wchar_t* name = NULL;
+  wchar_t* name = nullptr;
   do {
     if (!ValidParameter(file_attributes, sizeof(FILE_NETWORK_OPEN_INFORMATION),
                         WRITE))
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     uint32_t attributes = 0;
-    NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
-                                    NULL);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    NTSTATUS ret =
+        AllocAndCopyName(object_attributes, &name, &attributes, nullptr);
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     InOutCountedBuffer file_info(file_attributes,
                                  sizeof(FILE_NETWORK_OPEN_INFORMATION));
 
-    uint32_t broker = FALSE;
+    uint32_t broker = BROKER_FALSE;
     CountedParameterSet<FileName> params;
     params[FileName::NAME] = ParamPickerMake(name);
     params[FileName::BROKER] = ParamPickerMake(broker);
@@ -287,10 +293,13 @@ NTSTATUS WINAPI TargetNtQueryFullAttributesFile(
   return status;
 }
 
-NTSTATUS WINAPI TargetNtSetInformationFile(
-    NtSetInformationFileFunction orig_SetInformationFile, HANDLE file,
-    PIO_STATUS_BLOCK io_status, PVOID file_info, ULONG length,
-    FILE_INFORMATION_CLASS file_info_class) {
+NTSTATUS WINAPI
+TargetNtSetInformationFile(NtSetInformationFileFunction orig_SetInformationFile,
+                           HANDLE file,
+                           PIO_STATUS_BLOCK io_status,
+                           PVOID file_info,
+                           ULONG length,
+                           FILE_INFORMATION_CLASS file_info_class) {
   // Check if the process can open it first.
   NTSTATUS status = orig_SetInformationFile(file, io_status, file_info, length,
                                             file_info_class);
@@ -301,10 +310,10 @@ NTSTATUS WINAPI TargetNtSetInformationFile(
   if (!SandboxFactory::GetTargetServices()->GetState()->InitCalled())
     return status;
 
-  wchar_t* name = NULL;
+  wchar_t* name = nullptr;
   do {
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     if (!ValidParameter(io_status, sizeof(IO_STATUS_BLOCK), WRITE))
@@ -317,7 +326,8 @@ NTSTATUS WINAPI TargetNtSetInformationFile(
         reinterpret_cast<FILE_RENAME_INFORMATION*>(file_info);
     OBJECT_ATTRIBUTES object_attributes;
     UNICODE_STRING object_name;
-    InitializeObjectAttributes(&object_attributes, &object_name, 0, NULL, NULL);
+    InitializeObjectAttributes(&object_attributes, &object_name, 0, nullptr,
+                               nullptr);
 
     __try {
       if (!IsSupportedRenameCall(file_rename_info, length, file_info_class))
@@ -327,15 +337,16 @@ NTSTATUS WINAPI TargetNtSetInformationFile(
       object_name.Buffer = file_rename_info->FileName;
       object_name.Length = object_name.MaximumLength =
           static_cast<USHORT>(file_rename_info->FileNameLength);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
 
-    NTSTATUS ret = AllocAndCopyName(&object_attributes, &name, NULL, NULL);
+    NTSTATUS ret =
+        AllocAndCopyName(&object_attributes, &name, nullptr, nullptr);
     if (!NT_SUCCESS(ret) || !name)
       break;
 
-    uint32_t broker = FALSE;
+    uint32_t broker = BROKER_FALSE;
     CountedParameterSet<FileName> params;
     params[FileName::NAME] = ParamPickerMake(name);
     params[FileName::BROKER] = ParamPickerMake(broker);
@@ -350,9 +361,9 @@ NTSTATUS WINAPI TargetNtSetInformationFile(
 
     SharedMemIPCClient ipc(memory);
     CrossCallReturn answer = {0};
-    ResultCode code = CrossCall(ipc, IPC_NTSETINFO_RENAME_TAG, file,
-                                io_status_buffer, file_info_buffer, length,
-                                file_info_class, &answer);
+    ResultCode code =
+        CrossCall(ipc, IPC_NTSETINFO_RENAME_TAG, file, io_status_buffer,
+                  file_info_buffer, length, file_info_class, &answer);
 
     if (SBOX_ALL_OK != code)
       break;

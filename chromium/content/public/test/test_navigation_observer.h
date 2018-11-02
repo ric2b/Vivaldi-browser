@@ -15,12 +15,18 @@
 #include "url/gurl.h"
 
 namespace content {
+class NavigationHandle;
 class WebContents;
 
 // For browser_tests, which run on the UI thread, run a second
 // MessageLoop and quit when the navigation completes loading.
 class TestNavigationObserver {
  public:
+  enum class WaitEvent {
+    kLoadStopped,
+    kNavigationFinished,
+  };
+
   // Create and register a new TestNavigationObserver against the
   // |web_contents|.
   TestNavigationObserver(WebContents* web_contents,
@@ -31,16 +37,30 @@ class TestNavigationObserver {
   explicit TestNavigationObserver(WebContents* web_contents,
                                   MessageLoopRunner::QuitMode quit_mode =
                                       MessageLoopRunner::QuitMode::IMMEDIATE);
+  // Create and register a new TestNavigationObserver that will wait for
+  // |target_url| to complete loading or for a committed navigation to
+  // |target_url|.
+  explicit TestNavigationObserver(const GURL& target_url,
+                                  MessageLoopRunner::QuitMode quit_mode =
+                                      MessageLoopRunner::QuitMode::IMMEDIATE);
 
   virtual ~TestNavigationObserver();
 
-  // Runs a nested run loop and blocks until the expected number of
-  // navigations are complete.
+  // Runs a nested run loop and blocks until the expected number of navigations
+  // stop loading or |target_url| has loaded.
   void Wait();
+
+  // Runs a nested run loop and blocks until the expected number of navigations
+  // finished or a navigation to |target_url| has finished.
+  void WaitForNavigationFinished();
 
   // Start/stop watching newly created WebContents.
   void StartWatchingNewWebContents();
   void StopWatchingNewWebContents();
+
+  // Makes this TestNavigationObserver an observer of all previously created
+  // WebContents.
+  void WatchExistingWebContents();
 
   const GURL& last_navigation_url() const { return last_navigation_url_; }
 
@@ -52,8 +72,18 @@ class TestNavigationObserver {
   // Register this TestNavigationObserver as an observer of the |web_contents|.
   void RegisterAsObserver(WebContents* web_contents);
 
+  // Protected so that subclasses can retrieve extra information from the
+  // |navigation_handle|.
+  virtual void OnDidFinishNavigation(NavigationHandle* navigation_handle);
+
  private:
   class TestWebContentsObserver;
+
+  TestNavigationObserver(WebContents* web_contents,
+                         int number_of_navigations,
+                         const GURL& target_url,
+                         MessageLoopRunner::QuitMode quit_mode =
+                             MessageLoopRunner::QuitMode::IMMEDIATE);
 
   // Callbacks for WebContents-related events.
   void OnWebContentsCreated(WebContents* web_contents);
@@ -67,9 +97,10 @@ class TestNavigationObserver {
   void OnDidStartLoading(WebContents* web_contents);
   void OnDidStopLoading(WebContents* web_contents);
   void OnDidStartNavigation();
-  void OnDidFinishNavigation(bool is_error_page,
-                             const GURL& url,
-                             net::Error error_code);
+  void EventTriggered();
+
+  // The event that once triggered will quit the run loop.
+  WaitEvent wait_event_;
 
   // If true the navigation has started.
   bool navigation_started_;
@@ -79,6 +110,9 @@ class TestNavigationObserver {
 
   // The number of navigations to wait for.
   int number_of_navigations_;
+
+  // The URL to wait for.
+  const GURL target_url_;
 
   // The url of the navigation that last committed.
   GURL last_navigation_url_;

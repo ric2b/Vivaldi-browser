@@ -32,6 +32,7 @@
 #include "content/public/common/resource_type.h"
 #include "extensions/browser/api/activity_log/web_request_constants.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
 #include "extensions/browser/api/declarative_webrequest/request_stage.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_constants.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_rules_registry.h"
@@ -43,6 +44,7 @@
 #include "extensions/browser/api/web_request/web_request_resource_type.h"
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
+#include "extensions/browser/device_local_account_util.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/extension_prefs.h"
@@ -631,6 +633,28 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
   request_time_tracker_->LogRequestStartTime(request->identifier(),
                                              base::Time::Now());
 
+  const bool is_incognito_context = IsIncognitoBrowserContext(browser_context);
+
+  // Handle Declarative Net Request API rules. This gets preference over the Web
+  // Request and Declarative Web Request APIs. Only checking the rules in the
+  // OnBeforeRequest stage works, since the rules currently only depend on the
+  // request url, initiator and resource type, which should stay the same during
+  // the diffierent network request stages. A redirect should cause another
+  // OnBeforeRequest call.
+  // |extension_info_map| is null for system level requests.
+  if (extension_info_map) {
+    // Give priority to blocking rules over redirect rules.
+    if (extension_info_map->GetRulesetManager()->ShouldBlockRequest(
+            *request, is_incognito_context)) {
+      return net::ERR_BLOCKED_BY_CLIENT;
+    }
+
+    if (extension_info_map->GetRulesetManager()->ShouldRedirectRequest(
+            *request, is_incognito_context, new_url)) {
+      return net::OK;
+    }
+  }
+
   // Whether to initialized |blocked_requests_|.
   bool initialize_blocked_requests = false;
 
@@ -650,8 +674,8 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
     event_details->SetRequestBody(request);
 
     initialize_blocked_requests |=
-        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                      std::move(event_details));
+        DispatchEvent(browser_context, extension_info_map, request, listeners,
+                      navigation_ui_data, std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -659,7 +683,7 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
 
   BlockedRequest& blocked_request = blocked_requests_[request->identifier()];
   blocked_request.event = kOnBeforeRequest;
-  blocked_request.is_incognito |= IsIncognitoBrowserContext(browser_context);
+  blocked_request.is_incognito |= is_incognito_context;
   blocked_request.request = request;
   blocked_request.callback = callback;
   blocked_request.new_url = new_url;
@@ -704,8 +728,8 @@ int ExtensionWebRequestEventRouter::OnBeforeSendHeaders(
     event_details->SetRequestHeaders(*headers);
 
     initialize_blocked_requests |=
-        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                      std::move(event_details));
+        DispatchEvent(browser_context, extension_info_map, request, listeners,
+                      navigation_ui_data, std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -755,8 +779,8 @@ void ExtensionWebRequestEventRouter::OnSendHeaders(
       CreateEventDetails(request, extra_info_spec));
   event_details->SetRequestHeaders(headers);
 
-  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                std::move(event_details));
+  DispatchEvent(browser_context, extension_info_map, request, listeners,
+                navigation_ui_data, std::move(event_details));
 }
 
 int ExtensionWebRequestEventRouter::OnHeadersReceived(
@@ -793,8 +817,8 @@ int ExtensionWebRequestEventRouter::OnHeadersReceived(
     event_details->SetResponseHeaders(request, original_response_headers);
 
     initialize_blocked_requests |=
-        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                      std::move(event_details));
+        DispatchEvent(browser_context, extension_info_map, request, listeners,
+                      navigation_ui_data, std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -849,8 +873,8 @@ ExtensionWebRequestEventRouter::OnAuthRequired(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetAuthInfo(auth_info);
 
-  if (DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                    std::move(event_details))) {
+  if (DispatchEvent(browser_context, extension_info_map, request, listeners,
+                    navigation_ui_data, std::move(event_details))) {
     BlockedRequest& blocked_request = blocked_requests_[request->identifier()];
     blocked_request.event = kOnAuthRequired;
     blocked_request.is_incognito |= IsIncognitoBrowserContext(browser_context);
@@ -896,8 +920,8 @@ void ExtensionWebRequestEventRouter::OnBeforeRedirect(
   event_details->SetResponseSource(request);
   event_details->SetString(keys::kRedirectUrlKey, new_location.spec());
 
-  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                std::move(event_details));
+  DispatchEvent(browser_context, extension_info_map, request, listeners,
+                navigation_ui_data, std::move(event_details));
 }
 
 void ExtensionWebRequestEventRouter::OnResponseStarted(
@@ -930,8 +954,8 @@ void ExtensionWebRequestEventRouter::OnResponseStarted(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetResponseSource(request);
 
-  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                std::move(event_details));
+  DispatchEvent(browser_context, extension_info_map, request, listeners,
+                navigation_ui_data, std::move(event_details));
 }
 
 // Deprecated.
@@ -984,8 +1008,8 @@ void ExtensionWebRequestEventRouter::OnCompleted(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetResponseSource(request);
 
-  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                std::move(event_details));
+  DispatchEvent(browser_context, extension_info_map, request, listeners,
+                navigation_ui_data, std::move(event_details));
 }
 
 // Deprecated.
@@ -1055,8 +1079,8 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
     event_details->SetBoolean(keys::kFromCache, request->was_cached());
   event_details->SetString(keys::kErrorKey, net::ErrorToString(net_error));
 
-  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
-                std::move(event_details));
+  DispatchEvent(browser_context, extension_info_map, request, listeners,
+                navigation_ui_data, std::move(event_details));
 }
 
 void ExtensionWebRequestEventRouter::OnErrorOccurred(
@@ -1086,6 +1110,7 @@ void ExtensionWebRequestEventRouter::ClearPendingCallbacks(
 
 bool ExtensionWebRequestEventRouter::DispatchEvent(
     void* browser_context,
+    const InfoMap* extension_info_map,
     net::URLRequest* request,
     const RawListeners& listeners,
     ExtensionNavigationUIData* navigation_ui_data,
@@ -1130,7 +1155,8 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
       IsResourceTypeFrame(info->GetResourceType())) {
     DCHECK(navigation_ui_data);
     event_details->SetFrameData(navigation_ui_data->frame_data());
-    DispatchEventToListeners(browser_context, std::move(listeners_to_dispatch),
+    DispatchEventToListeners(browser_context, extension_info_map,
+                             std::move(listeners_to_dispatch),
                              std::move(event_details));
   } else {
     // This Unretained is safe because the ExtensionWebRequestEventRouter
@@ -1138,6 +1164,7 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
     event_details.release()->DetermineFrameDataOnIO(
         base::Bind(&ExtensionWebRequestEventRouter::DispatchEventToListeners,
                    base::Unretained(this), browser_context,
+                   base::RetainedRef(extension_info_map),
                    base::Passed(&listeners_to_dispatch)));
   }
 
@@ -1155,6 +1182,7 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
 
 void ExtensionWebRequestEventRouter::DispatchEventToListeners(
     void* browser_context,
+    const InfoMap* extension_info_map,
     std::unique_ptr<ListenerIDs> listener_ids,
     std::unique_ptr<WebRequestEventDetails> event_details) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -1171,12 +1199,7 @@ void ExtensionWebRequestEventRouter::DispatchEventToListeners(
       cross_browser_context ? &listeners_[cross_browser_context][event_name]
                             : nullptr;
 
-  // In Public Sessions we want to restrict access to security or privacy
-  // sensitive data. Data is filtered for *all* listeners, not only extensions
-  // which are force-installed by policy.
-  if (IsPublicSession()) {
-    event_details->FilterForPublicSession();
-  }
+  std::unique_ptr<WebRequestEventDetails> event_details_filtered_copy;
 
   for (const EventListener::ID& id : *listener_ids) {
     // It's possible that the listener is no longer present. Check to make sure
@@ -1194,8 +1217,24 @@ void ExtensionWebRequestEventRouter::DispatchEventToListeners(
 
     // Filter out the optional keys that this listener didn't request.
     std::unique_ptr<base::ListValue> args_filtered(new base::ListValue);
-    args_filtered->Append(
-        event_details->GetFilteredDict(listener->extra_info_spec));
+    void* cross_browser_context = GetCrossBrowserContext(browser_context);
+
+    // In Public Sessions we want to restrict access to security or privacy
+    // sensitive data. Data is filtered for *all* listeners, not only extensions
+    // which are force-installed by policy. Whitelisted extensions are exempt
+    // from this filtering.
+    WebRequestEventDetails* custom_event_details = event_details.get();
+    if (IsPublicSession() &&
+        !extensions::IsWhitelistedForPublicSession(listener->id.extension_id)) {
+      if (!event_details_filtered_copy) {
+        event_details_filtered_copy =
+            event_details->CreatePublicSessionCopy();
+      }
+      custom_event_details = event_details_filtered_copy.get();
+    }
+    args_filtered->Append(custom_event_details->GetFilteredDict(
+        listener->extra_info_spec, extension_info_map,
+        listener->id.extension_id, (cross_browser_context != 0)));
 
     EventRouter::DispatchEventToSender(
         listener->ipc_sender.get(), browser_context, listener->id.extension_id,
@@ -1941,6 +1980,7 @@ bool ExtensionWebRequestEventRouter::ProcessDeclarativeRules(
   bool is_web_view_guest =
       GetWebViewInfo(request, navigation_ui_data, &web_view_instance_id,
                      &web_view_rules_registry_id);
+
   int rules_registry_id = is_web_view_guest
                               ? web_view_rules_registry_id
                               : RulesRegistryService::kDefaultRulesRegistryID;
@@ -2270,8 +2310,10 @@ WebRequestInternalEventHandledFunction::Run() {
           extension_id_safe(), install_time));
     }
 
-    // In Public Session we only want to allow "cancel".
+    // In Public Session we only want to allow "cancel" (except for whitelisted
+    // extensions which have no such restrictions).
     if (IsPublicSession() &&
+        !extensions::IsWhitelistedForPublicSession(extension_id_safe()) &&
         (value->HasKey("redirectUrl") ||
          value->HasKey(keys::kAuthCredentialsKey) ||
          value->HasKey("requestHeaders") ||

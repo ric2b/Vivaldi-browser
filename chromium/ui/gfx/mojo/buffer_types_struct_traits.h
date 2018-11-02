@@ -40,6 +40,8 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return gfx::mojom::BufferFormat::RGBA_8888;
       case gfx::BufferFormat::BGRX_8888:
         return gfx::mojom::BufferFormat::BGRX_8888;
+      case gfx::BufferFormat::BGRX_1010102:
+        return gfx::mojom::BufferFormat::BGRX_1010102;
       case gfx::BufferFormat::BGRA_8888:
         return gfx::mojom::BufferFormat::BGRA_8888;
       case gfx::BufferFormat::RGBA_F16:
@@ -90,6 +92,9 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return true;
       case gfx::mojom::BufferFormat::RGBX_8888:
         *out = gfx::BufferFormat::RGBX_8888;
+        return true;
+      case gfx::mojom::BufferFormat::BGRX_1010102:
+        *out = gfx::BufferFormat::BGRX_1010102;
         return true;
       case gfx::mojom::BufferFormat::RGBA_8888:
         *out = gfx::BufferFormat::RGBA_8888;
@@ -183,9 +188,13 @@ struct EnumTraits<gfx::mojom::GpuMemoryBufferType, gfx::GpuMemoryBufferType> {
         return gfx::mojom::GpuMemoryBufferType::IO_SURFACE_BUFFER;
       case gfx::GpuMemoryBufferType::NATIVE_PIXMAP:
         return gfx::mojom::GpuMemoryBufferType::NATIVE_PIXMAP;
+      case gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE:
+        return gfx::mojom::GpuMemoryBufferType::DXGI_SHARED_HANDLE;
+      case gfx::GpuMemoryBufferType::ANDROID_HARDWARE_BUFFER:
+        return gfx::mojom::GpuMemoryBufferType::ANDROID_HARDWARE_BUFFER;
     }
     NOTREACHED();
-    return gfx::mojom::GpuMemoryBufferType::LAST;
+    return gfx::mojom::GpuMemoryBufferType::EMPTY_BUFFER;
   }
 
   static bool FromMojom(gfx::mojom::GpuMemoryBufferType input,
@@ -202,6 +211,12 @@ struct EnumTraits<gfx::mojom::GpuMemoryBufferType, gfx::GpuMemoryBufferType> {
         return true;
       case gfx::mojom::GpuMemoryBufferType::NATIVE_PIXMAP:
         *out = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
+        return true;
+      case gfx::mojom::GpuMemoryBufferType::DXGI_SHARED_HANDLE:
+        *out = gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE;
+        return true;
+      case gfx::mojom::GpuMemoryBufferType::ANDROID_HARDWARE_BUFFER:
+        *out = gfx::GpuMemoryBufferType::ANDROID_HARDWARE_BUFFER;
         return true;
     }
     return false;

@@ -18,21 +18,22 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#import "chrome/browser/ui/cocoa/image_button_cell.h"
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_controller.h"
+#import "chrome/browser/ui/cocoa/image_button_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/translate_decoration.h"
 #include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #include "chrome/browser/ui/cocoa/test/scoped_force_rtl_mac.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_view_cocoa.h"
+#import "chrome/browser/ui/cocoa/view_resizer_pong.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#import "chrome/browser/ui/cocoa/view_resizer_pong.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -105,11 +106,13 @@ class ToolbarControllerTest : public CocoaProfileTest {
     extension_system->CreateExtensionService(
         base::CommandLine::ForCurrentProcess(), base::FilePath(), false);
     scoped_refptr<const extensions::Extension> extension =
-        extensions::extension_action_test_util::CreateActionExtension(
-            "ABC", extensions::extension_action_test_util::BROWSER_ACTION);
+        extensions::ExtensionBuilder("ABC")
+            .SetAction(extensions::ExtensionBuilder::ActionType::BROWSER_ACTION)
+            .Build();
     extensions::ExtensionSystem::Get(profile())
         ->extension_service()
         ->AddExtension(extension.get());
+    ExtensionErrorReporter::Init(true);
     ToolbarActionsModel* model =
         extensions::extension_action_test_util::CreateToolbarModelForProfile(
             profile());
@@ -117,14 +120,13 @@ class ToolbarControllerTest : public CocoaProfileTest {
 
     resizeDelegate_.reset([[ViewResizerPong alloc] init]);
 
-    CommandUpdater* updater =
-        browser()->command_controller()->command_updater();
+    CommandUpdater* updater = browser()->command_controller();
     // The default state for the commands is true, set a couple to false to
     // ensure they get picked up correct on initialization
     updater->UpdateCommandEnabled(IDC_BACK, false);
     updater->UpdateCommandEnabled(IDC_FORWARD, false);
     bar_.reset([[TestToolbarController alloc]
-        initWithCommands:browser()->command_controller()->command_updater()
+        initWithCommands:browser()->command_controller()
                  profile:profile()
                  browser:browser()]);
     [[bar_ toolbarView] setResizeDelegate:resizeDelegate_.get()];
@@ -176,7 +178,7 @@ TEST_VIEW(ToolbarControllerTest, [bar_ view])
 
 // Test the initial state that everything is sync'd up
 TEST_F(ToolbarControllerTest, InitialState) {
-  CommandUpdater* updater = browser()->command_controller()->command_updater();
+  CommandUpdater* updater = browser()->command_controller();
   CompareState(updater, [bar_ toolbarViews]);
 }
 
@@ -309,7 +311,7 @@ TEST_F(ToolbarControllerTest, UpdateEnabledState) {
   EXPECT_FALSE(chrome::IsCommandEnabled(browser(), IDC_FORWARD));
   chrome::UpdateCommandEnabled(browser(), IDC_BACK, true);
   chrome::UpdateCommandEnabled(browser(), IDC_FORWARD, true);
-  CommandUpdater* updater = browser()->command_controller()->command_updater();
+  CommandUpdater* updater = browser()->command_controller();
   CompareState(updater, [bar_ toolbarViews]);
 
   // Change an unwatched command and ensure the last state does not change.

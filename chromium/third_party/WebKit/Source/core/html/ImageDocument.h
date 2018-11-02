@@ -25,10 +25,10 @@
 #ifndef ImageDocument_h
 #define ImageDocument_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLImageElement.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -46,6 +46,7 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   ImageResource* CachedImageResourceDeprecated();
 
   HTMLImageElement* ImageElement() const { return image_element_.Get(); }
+  IntSize ImageSize() const;
 
   void WindowSizeChanged();
   void ImageUpdated();
@@ -54,7 +55,7 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   void UpdateImageStyle();
   bool ShouldShrinkToFit() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit ImageDocument(const DocumentInit&);

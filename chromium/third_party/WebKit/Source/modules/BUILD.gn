@@ -35,11 +35,8 @@ config("modules_implementation") {
 }
 
 make_names("module_names") {
-  in_files = [ "indexeddb/IndexedDBNames.json5" ]
-  outputs = [
-    "$blink_modules_output_dir/IndexedDBNames.cpp",
-    "$blink_modules_output_dir/IndexedDBNames.h",
-  ]
+  in_files = [ "indexeddb/indexed_db_names.json5" ]
+  output_dir = blink_modules_output_dir
   deps = []  # Don't use default deps (otherwise it will be circular).
 }
 
@@ -80,6 +77,7 @@ target("jumbo_" + modules_target_type, "modules") {
     "//third_party/WebKit/Source:non_test_config",
     "//third_party/WebKit/Source:inside_blink",
     "//third_party/WebKit/Source/core:blink_core_pch",
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
   ]
 
   deps = [
@@ -87,10 +85,11 @@ target("jumbo_" + modules_target_type, "modules") {
     ":module_names",
     "//device/geolocation/public/interfaces:interfaces_blink",
     "//third_party/WebKit/Source/bindings/modules:generated",
-    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_conditional_features",
     "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_impl",
+    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_origin_trial_features",
     "//third_party/WebKit/Source/core",
     "//third_party/WebKit/Source/modules/accessibility",
+    "//third_party/WebKit/Source/modules/animationworklet",
     "//third_party/WebKit/Source/modules/app_banner",
     "//third_party/WebKit/Source/modules/audio_output_devices",
     "//third_party/WebKit/Source/modules/background_fetch",
@@ -102,8 +101,8 @@ target("jumbo_" + modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/budget",
     "//third_party/WebKit/Source/modules/cachestorage",
     "//third_party/WebKit/Source/modules/canvas",
-    "//third_party/WebKit/Source/modules/canvas2d",
-    "//third_party/WebKit/Source/modules/compositorworker",
+    "//third_party/WebKit/Source/modules/clipboard",
+    "//third_party/WebKit/Source/modules/cookie_store",
     "//third_party/WebKit/Source/modules/credentialmanager",
     "//third_party/WebKit/Source/modules/crypto",
     "//third_party/WebKit/Source/modules/csspaint",
@@ -118,7 +117,6 @@ target("jumbo_" + modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/filesystem",
     "//third_party/WebKit/Source/modules/gamepad",
     "//third_party/WebKit/Source/modules/geolocation",
-    "//third_party/WebKit/Source/modules/imagebitmap",
     "//third_party/WebKit/Source/modules/imagecapture",
     "//third_party/WebKit/Source/modules/indexeddb",
     "//third_party/WebKit/Source/modules/installation",
@@ -135,8 +133,6 @@ target("jumbo_" + modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/netinfo",
     "//third_party/WebKit/Source/modules/nfc",
     "//third_party/WebKit/Source/modules/notifications",
-    "//third_party/WebKit/Source/modules/offscreencanvas",
-    "//third_party/WebKit/Source/modules/offscreencanvas2d",
     "//third_party/WebKit/Source/modules/payments",
     "//third_party/WebKit/Source/modules/peerconnection",
     "//third_party/WebKit/Source/modules/permissions",
@@ -178,12 +174,8 @@ target("jumbo_" + modules_target_type, "modules") {
   }
 }
 
-source_set("modules_testing") {
+jumbo_source_set("modules_testing") {
   sources = [
-    "$bindings_modules_v8_output_dir/V8InternalsPartial.cpp",
-    "$bindings_modules_v8_output_dir/V8InternalsPartial.h",
-    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.cpp",
-    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.h",
     "accessibility/testing/InternalsAccessibility.cpp",
     "accessibility/testing/InternalsAccessibility.h",
     "fetch/testing/InternalsFetch.cpp",
@@ -209,6 +201,21 @@ source_set("modules_testing") {
     "webaudio/testing/InternalsWebAudio.cpp",
     "webaudio/testing/InternalsWebAudio.h",
   ]
+  if (snake_case_source_files) {
+    sources += [
+      "$bindings_modules_v8_output_dir/v8_internals_partial.cc",
+      "$bindings_modules_v8_output_dir/v8_internals_partial.h",
+      "$bindings_modules_v8_output_dir/v8_worker_internals_partial.cc",
+      "$bindings_modules_v8_output_dir/v8_worker_internals_partial.h",
+    ]
+  } else {
+    sources += [
+      "$bindings_modules_v8_output_dir/V8InternalsPartial.cpp",
+      "$bindings_modules_v8_output_dir/V8InternalsPartial.h",
+      "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.cpp",
+      "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.h",
+    ]
+  }
 
   configs += [
     "//third_party/WebKit/Source:config",
@@ -230,20 +237,22 @@ group("make_modules_generated") {
   ]
 }
 
-source_set("unit_tests") {
+jumbo_source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "accessibility/AXObjectTest.cpp",
+    "accessibility/AXObjectCacheTest.cpp",
     "accessibility/AccessibilityObjectModelTest.cpp",
+    "accessibility/testing/AccessibilityTest.cpp",
+    "accessibility/testing/AccessibilityTest.h",
+    "animationworklet/AnimationWorkletGlobalScopeTest.cpp",
+    "animationworklet/AnimationWorkletThreadTest.cpp",
     "background_fetch/BackgroundFetchManagerTest.cpp",
     "cachestorage/CacheTest.cpp",
-    "canvas/HTMLCanvasElementModuleTest.cpp",
-    "canvas2d/CanvasRenderingContext2DAPITest.cpp",
-    "canvas2d/CanvasRenderingContext2DTest.cpp",
-    "compositorworker/AnimationWorkletGlobalScopeTest.cpp",
-    "compositorworker/AnimationWorkletThreadTest.cpp",
-    "compositorworker/CompositorWorkerThreadTest.cpp",
+    "canvas/canvas2d/CanvasRenderingContext2DAPITest.cpp",
+    "canvas/canvas2d/CanvasRenderingContext2DTest.cpp",
+    "canvas/htmlcanvas/HTMLCanvasElementModuleTest.cpp",
+    "canvas/offscreencanvas/OffscreenCanvasTest.cpp",
     "credentialmanager/CredentialsContainerTest.cpp",
     "credentialmanager/PasswordCredentialTest.cpp",
     "csspaint/PaintRenderingContext2DTest.cpp",
@@ -278,11 +287,13 @@ source_set("unit_tests") {
     "media_controls/MediaControlsOrientationLockDelegateTest.cpp",
     "media_controls/MediaControlsRotateToFullscreenDelegateTest.cpp",
     "media_controls/elements/MediaControlInputElementTest.cpp",
+    "media_controls/elements/MediaControlLoadingPanelElementTest.cpp",
+    "media_controls/elements/MediaControlTimelineElementTest.cpp",
     "mediastream/MediaConstraintsTest.cpp",
+    "mediastream/MediaDevicesTest.cpp",
     "notifications/NotificationDataTest.cpp",
     "notifications/NotificationImageLoaderTest.cpp",
     "notifications/NotificationResourcesLoaderTest.cpp",
-    "offscreencanvas/OffscreenCanvasTest.cpp",
     "payments/AbortTest.cpp",
     "payments/CanMakePaymentTest.cpp",
     "payments/CompleteTest.cpp",
@@ -331,11 +342,11 @@ source_set("unit_tests") {
   deps = [
     ":modules",
     ":modules_testing",
-    "//services/network/public/interfaces:interfaces_blink",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/platform/wtf",
     "//v8",
   ]

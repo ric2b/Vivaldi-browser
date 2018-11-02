@@ -42,7 +42,7 @@ DataConsumerHandleTestUtil::Thread::Thread(
     InitializationPolicy initialization_policy)
     : thread_(WebThreadSupportingGC::Create(name)),
       initialization_policy_(initialization_policy),
-      waitable_event_(WTF::MakeUnique<WaitableEvent>()) {
+      waitable_event_(std::make_unique<WaitableEvent>()) {
   thread_->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&Thread::Initialize, CrossThreadUnretained(this)));
@@ -59,12 +59,8 @@ DataConsumerHandleTestUtil::Thread::~Thread() {
 void DataConsumerHandleTestUtil::Thread::Initialize() {
   DCHECK(thread_->IsCurrentThread());
   if (initialization_policy_ >= kScriptExecution) {
-    isolate_holder_ =
-        WTF::MakeUnique<gin::IsolateHolder>(Platform::Current()
-                                                ->CurrentThread()
-                                                ->Scheduler()
-                                                ->LoadingTaskRunner()
-                                                ->ToSingleThreadTaskRunner());
+    isolate_holder_ = std::make_unique<gin::IsolateHolder>(
+        Platform::Current()->CurrentThread()->Scheduler()->LoadingTaskRunner());
     GetIsolate()->Enter();
   }
   thread_->InitializeOnThread();
@@ -101,11 +97,11 @@ void DataConsumerHandleTestUtil::Thread::Shutdown() {
 class DataConsumerHandleTestUtil::ReplayingHandle::ReaderImpl final
     : public Reader {
  public:
-  ReaderImpl(PassRefPtr<Context> context, Client* client)
+  ReaderImpl(scoped_refptr<Context> context, Client* client)
       : context_(std::move(context)) {
     context_->AttachReader(client);
   }
-  ~ReaderImpl() { context_->DetachReader(); }
+  ~ReaderImpl() override { context_->DetachReader(); }
 
   WebDataConsumerHandle::Result BeginRead(const void** buffer,
                                           Flags flags,
@@ -117,7 +113,7 @@ class DataConsumerHandleTestUtil::ReplayingHandle::ReaderImpl final
   }
 
  private:
-  RefPtr<Context> context_;
+  scoped_refptr<Context> context_;
 };
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Context::Add(
@@ -206,7 +202,7 @@ DataConsumerHandleTestUtil::ReplayingHandle::Context::Context()
       client_(nullptr),
       result_(kShouldWait),
       is_handle_attached_(true),
-      detached_(WTF::MakeUnique<WaitableEvent>()) {}
+      detached_(std::make_unique<WaitableEvent>()) {}
 
 const DataConsumerHandleTestUtil::Command&
 DataConsumerHandleTestUtil::ReplayingHandle::Context::Top() {
@@ -233,7 +229,7 @@ void DataConsumerHandleTestUtil::ReplayingHandle::Context::Notify() {
   DCHECK(reader_thread_);
   reader_thread_->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
-      CrossThreadBind(&Context::NotifyInternal, WrapPassRefPtr(this)));
+      CrossThreadBind(&Context::NotifyInternal, WrapRefCounted(this)));
 }
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Context::NotifyInternal() {
@@ -257,7 +253,7 @@ DataConsumerHandleTestUtil::ReplayingHandle::~ReplayingHandle() {
 
 std::unique_ptr<WebDataConsumerHandle::Reader>
 DataConsumerHandleTestUtil::ReplayingHandle::ObtainReader(Client* client) {
-  return WTF::MakeUnique<ReaderImpl>(context_, client);
+  return std::make_unique<ReaderImpl>(context_, client);
 }
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Add(const Command& command) {

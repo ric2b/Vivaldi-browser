@@ -5,7 +5,7 @@
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
 
-source_set("cdm") {
+cast_source_set("cdm") {
   sources = [
     "chromecast_init_data.cc",
     "chromecast_init_data.h",
@@ -13,6 +13,7 @@ source_set("cdm") {
 
   deps = [
     "//base",
+    "//chromecast/base/metrics",
     "//media",
   ]
 
@@ -28,6 +29,7 @@ source_set("cdm") {
 
     deps += [
       "//chromecast/media/base",
+      "//chromecast/media/base:media_resource_tracker",
       "//url:url",
     ]
   }

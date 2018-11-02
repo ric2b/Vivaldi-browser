@@ -228,7 +228,7 @@ class TestHistoryBackend : public HistoryBackend {
 
 class TypedURLSyncBridgeTest : public testing::Test {
  public:
-  TypedURLSyncBridgeTest() : typed_url_sync_bridge_(NULL) {}
+  TypedURLSyncBridgeTest() : typed_url_sync_bridge_(nullptr) {}
   ~TypedURLSyncBridgeTest() override {}
 
   void SetUp() override {
@@ -455,7 +455,7 @@ class TypedURLSyncBridgeTest : public testing::Test {
     return bridge()->sync_metadata_database_;
   }
 
-  const RecordingModelTypeChangeProcessor& processor() { return *processor_; }
+  RecordingModelTypeChangeProcessor& processor() { return *processor_; }
 
  protected:
   base::MessageLoop message_loop_;
@@ -470,18 +470,21 @@ class TypedURLSyncBridgeTest : public testing::Test {
 // Add two typed urls locally and verify bridge can get them from GetAllData.
 TEST_F(TypedURLSyncBridgeTest, GetAllData) {
   // Add two urls to backend.
-  VisitVector visits1, visits2;
+  VisitVector visits1, visits2, visits3;
   URLRow row1 = MakeTypedUrlRow(kURL, kTitle, 1, 3, false, &visits1);
   URLRow row2 = MakeTypedUrlRow(kURL2, kTitle2, 2, 4, false, &visits2);
+  URLRow expired_row = MakeTypedUrlRow("http://expired.com/", kTitle, 1,
+                                       kExpiredVisit, false, &visits3);
   fake_history_backend_->SetVisitsForUrl(row1, visits1);
   fake_history_backend_->SetVisitsForUrl(row2, visits2);
+  fake_history_backend_->SetVisitsForUrl(expired_row, visits3);
 
   // Create the same data in sync.
   TypedUrlSpecifics typed_url1, typed_url2;
   WriteToTypedUrlSpecifics(row1, visits1, &typed_url1);
   WriteToTypedUrlSpecifics(row2, visits2, &typed_url2);
 
-  // Check that the local cache is still correct.
+  // Check that the local cache is still correct, expired row is filtered out.
   VerifyAllLocalHistoryData({typed_url1, typed_url2});
 }
 
@@ -1561,6 +1564,12 @@ TEST_F(TypedURLSyncBridgeTest, LocalExpiredTypedUrlDoNotSync) {
   EXPECT_EQ(visits[1].visit_time.ToInternalValue(), url_specifics.visits(0));
   EXPECT_EQ(static_cast<const int>(visits[1].transition),
             url_specifics.visit_transitions(0));
+}
+
+// Tests that database error gets reported to processor as model type error.
+TEST_F(TypedURLSyncBridgeTest, DatabaseError) {
+  processor().ExpectError();
+  bridge()->OnDatabaseError();
 }
 
 }  // namespace history

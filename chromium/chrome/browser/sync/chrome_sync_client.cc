@@ -124,6 +124,9 @@
 
 #include "notes/notes_factory.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/common/constants.h"
+
 using content::BrowserThread;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 using browser_sync::ExtensionDataTypeController;
@@ -180,7 +183,9 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
       return true;
     }
     return url.is_valid() && !url.SchemeIs(content::kChromeUIScheme) &&
-           !url.SchemeIs(chrome::kChromeNativeScheme) && !url.SchemeIsFile();
+           !url.SchemeIs(chrome::kChromeNativeScheme) && !url.SchemeIsFile() &&
+           !(url.SchemeIs(extensions::kExtensionScheme) &&
+             vivaldi::IsVivaldiApp(url.host()));
   }
 
   sync_sessions::SyncedWindowDelegatesGetter* GetSyncedWindowDelegatesGetter()
@@ -364,10 +369,6 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
      return base::WeakPtr<syncer::SyncableService>();
   }
   switch (type) {
-    case syncer::DEVICE_INFO:
-      return ProfileSyncServiceFactory::GetForProfile(profile_)
-          ->GetDeviceInfoSyncableService()
-          ->AsWeakPtr();
     case syncer::PREFERENCES:
       return PrefServiceSyncableFromProfile(profile_)
           ->GetSyncableService(syncer::PREFERENCES)
@@ -522,10 +523,17 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
           ->GetSyncBridge()
           ->AsWeakPtr();
 #endif  // defined(OS_CHROMEOS)
-    case syncer::TYPED_URLS:
-      // TODO(gangwu): Implement TypedURLSyncBridge and return real
-      // TypedURLSyncBridge here.
-      return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+    case syncer::TYPED_URLS: {
+      // We request history service with explicit access here because this
+      // codepath is executed on backend thread while HistoryServiceFactory
+      // checks preference value in implicit mode and PrefService expectes calls
+      // only from UI thread.
+      history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+          profile_, ServiceAccessType::EXPLICIT_ACCESS);
+      if (!history)
+        return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+      return history->GetTypedURLSyncBridge()->AsWeakPtr();
+    }
     case syncer::USER_EVENTS:
       return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
           ->GetSyncBridge()
@@ -668,12 +676,10 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_APP_LIST)
-  if (app_list::switches::IsAppListSyncEnabled()) {
-    sync_service->RegisterDataTypeController(
-        std::make_unique<AsyncDirectoryTypeController>(
-            syncer::APP_LIST, error_callback, this, syncer::GROUP_UI,
-            BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
-  }
+  sync_service->RegisterDataTypeController(
+      std::make_unique<AsyncDirectoryTypeController>(
+          syncer::APP_LIST, error_callback, this, syncer::GROUP_UI,
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
 #endif  // BUILDFLAG(ENABLE_APP_LIST)
 
 #if defined(OS_LINUX) || defined(OS_WIN)

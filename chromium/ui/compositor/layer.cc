@@ -14,15 +14,15 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/base/filter_operation.h"
-#include "cc/base/filter_operations.h"
 #include "cc/layers/nine_patch_layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer.h"
+#include "cc/paint/filter_operation.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/trees/layer_tree_settings.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/dip_util.h"
@@ -73,8 +73,8 @@ class Layer::LayerMirror : public LayerDelegate, LayerObserver {
     if (auto* delegate = source_->delegate())
       delegate->OnPaintLayer(context);
   }
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
 
   // LayerObserver:
   void LayerDestroyed(Layer* layer) override {
@@ -91,8 +91,8 @@ class Layer::LayerMirror : public LayerDelegate, LayerObserver {
 
 Layer::Layer()
     : type_(LAYER_TEXTURED),
-      compositor_(NULL),
-      parent_(NULL),
+      compositor_(nullptr),
+      parent_(nullptr),
       visible_(true),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
@@ -105,22 +105,24 @@ Layer::Layer()
       layer_temperature_(0.0f),
       layer_blue_scale_(1.0f),
       layer_green_scale_(1.0f),
-      layer_mask_(NULL),
-      layer_mask_back_link_(NULL),
+      layer_mask_(nullptr),
+      layer_mask_back_link_(nullptr),
       zoom_(1),
       zoom_inset_(0),
-      delegate_(NULL),
-      owner_(NULL),
-      cc_layer_(NULL),
+      delegate_(nullptr),
+      owner_(nullptr),
+      cc_layer_(nullptr),
       device_scale_factor_(1.0f),
-      cache_render_surface_requests_(0) {
+      cache_render_surface_requests_(0),
+      deferred_paint_requests_(0),
+      trilinear_filtering_request_(0) {
   CreateCcLayer();
 }
 
 Layer::Layer(LayerType type)
     : type_(type),
-      compositor_(NULL),
-      parent_(NULL),
+      compositor_(nullptr),
+      parent_(nullptr),
       visible_(true),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
@@ -133,15 +135,17 @@ Layer::Layer(LayerType type)
       layer_temperature_(0.0f),
       layer_blue_scale_(1.0f),
       layer_green_scale_(1.0f),
-      layer_mask_(NULL),
-      layer_mask_back_link_(NULL),
+      layer_mask_(nullptr),
+      layer_mask_back_link_(nullptr),
       zoom_(1),
       zoom_inset_(0),
-      delegate_(NULL),
-      owner_(NULL),
-      cc_layer_(NULL),
+      delegate_(nullptr),
+      owner_(nullptr),
+      cc_layer_(nullptr),
       device_scale_factor_(1.0f),
-      cache_render_surface_requests_(0) {
+      cache_render_surface_requests_(0),
+      deferred_paint_requests_(0),
+      trilinear_filtering_request_(0) {
   CreateCcLayer();
 }
 
@@ -154,23 +158,23 @@ Layer::~Layer() {
   // is still around.
   SetAnimator(nullptr);
   if (compositor_)
-    compositor_->SetRootLayer(NULL);
+    compositor_->SetRootLayer(nullptr);
   if (parent_)
     parent_->Remove(this);
   if (layer_mask_)
-    SetMaskLayer(NULL);
+    SetMaskLayer(nullptr);
   if (layer_mask_back_link_)
-    layer_mask_back_link_->SetMaskLayer(NULL);
-  for (size_t i = 0; i < children_.size(); ++i)
-    children_[i]->parent_ = NULL;
+    layer_mask_back_link_->SetMaskLayer(nullptr);
+  for (auto* child : children_)
+    child->parent_ = nullptr;
 
   cc_layer_->RemoveFromParent();
-  if (mailbox_release_callback_)
-    mailbox_release_callback_->Run(gpu::SyncToken(), false);
+  if (transfer_release_callback_)
+    transfer_release_callback_->Run(gpu::SyncToken(), false);
 }
 
 std::unique_ptr<Layer> Layer::Clone() const {
-  auto clone = base::MakeUnique<Layer>(type_);
+  auto clone = std::make_unique<Layer>(type_);
 
   // Background filters.
   clone->SetBackgroundBlur(background_blur_sigma_);
@@ -184,16 +188,17 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetLayerInverted(layer_inverted_);
   clone->SetLayerBlur(layer_blur_sigma_);
   if (alpha_shape_)
-    clone->SetAlphaShape(base::MakeUnique<ShapeRects>(*alpha_shape_));
+    clone->SetAlphaShape(std::make_unique<ShapeRects>(*alpha_shape_));
 
   // cc::Layer state.
   if (surface_layer_) {
-    if (surface_layer_->primary_surface_info().is_valid()) {
-      clone->SetShowPrimarySurface(surface_layer_->primary_surface_info(),
+    if (surface_layer_->primary_surface_id().is_valid()) {
+      clone->SetShowPrimarySurface(surface_layer_->primary_surface_id(),
+                                   frame_size_in_dip_,
                                    surface_layer_->surface_reference_factory());
     }
-    if (surface_layer_->fallback_surface_info().is_valid())
-      clone->SetFallbackSurface(surface_layer_->fallback_surface_info());
+    if (surface_layer_->fallback_surface_id().is_valid())
+      clone->SetFallbackSurfaceId(surface_layer_->fallback_surface_id());
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
@@ -213,7 +218,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
 
 std::unique_ptr<Layer> Layer::Mirror() {
   auto mirror = Clone();
-  mirrors_.emplace_back(base::MakeUnique<LayerMirror>(this, mirror.get()));
+  mirrors_.emplace_back(std::make_unique<LayerMirror>(this, mirror.get()));
   return mirror;
 }
 
@@ -285,7 +290,7 @@ void Layer::Remove(Layer* child) {
       std::find(children_.begin(), children_.end(), child);
   DCHECK(i != children_.end());
   children_.erase(i);
-  child->parent_ = NULL;
+  child->parent_ = nullptr;
   child->cc_layer_->RemoveFromParent();
 }
 
@@ -461,9 +466,9 @@ void Layer::SetMaskLayer(Layer* layer_mask) {
   // We need to de-reference the currently linked object so that no problem
   // arises if the mask layer gets deleted before this object.
   if (layer_mask_)
-    layer_mask_->layer_mask_back_link_ = NULL;
+    layer_mask_->layer_mask_back_link_ = nullptr;
   layer_mask_ = layer_mask;
-  cc_layer_->SetMaskLayer(layer_mask ? layer_mask->cc_layer_ : NULL);
+  cc_layer_->SetMaskLayer(layer_mask ? layer_mask->cc_layer_ : nullptr);
   // We need to reference the linked object so that it can properly break the
   // link to us when it gets deleted.
   if (layer_mask) {
@@ -560,7 +565,7 @@ bool Layer::IsDrawn() const {
   const Layer* layer = this;
   while (layer && layer->visible_)
     layer = layer->parent_;
-  return layer == NULL;
+  return layer == nullptr;
 }
 
 bool Layer::ShouldDraw() const {
@@ -570,7 +575,7 @@ bool Layer::ShouldDraw() const {
 // static
 void Layer::ConvertPointToLayer(const Layer* source,
                                 const Layer* target,
-                                gfx::Point* point) {
+                                gfx::PointF* point) {
   if (source == target)
     return;
 
@@ -627,22 +632,23 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   if (cc_layer_->parent()) {
     cc_layer_->parent()->ReplaceChild(cc_layer_, new_layer);
   }
-  cc_layer_->SetLayerClient(NULL);
+  cc_layer_->SetLayerClient(nullptr);
   new_layer->SetOpacity(cc_layer_->opacity());
   new_layer->SetTransform(cc_layer_->transform());
   new_layer->SetPosition(cc_layer_->position());
   new_layer->SetBackgroundColor(cc_layer_->background_color());
   new_layer->SetCacheRenderSurface(cc_layer_->cache_render_surface());
+  new_layer->SetTrilinearFiltering(cc_layer_->trilinear_filtering());
 
   cc_layer_ = new_layer.get();
-  content_layer_ = NULL;
-  solid_color_layer_ = NULL;
-  texture_layer_ = NULL;
-  surface_layer_ = NULL;
+  content_layer_ = nullptr;
+  solid_color_layer_ = nullptr;
+  texture_layer_ = nullptr;
+  surface_layer_ = nullptr;
 
-  for (size_t i = 0; i < children_.size(); ++i) {
-    DCHECK(children_[i]->cc_layer_);
-    cc_layer_->AddChild(children_[i]->cc_layer_);
+  for (auto* child : children_) {
+    DCHECK(child->cc_layer_);
+    cc_layer_->AddChild(child->cc_layer_);
   }
   cc_layer_->SetLayerClient(this);
   cc_layer_->SetTransformOrigin(gfx::Point3F());
@@ -684,12 +690,51 @@ void Layer::RemoveCacheRenderSurfaceRequest() {
     cc_layer_->SetCacheRenderSurface(false);
 }
 
-void Layer::SetTextureMailbox(
-    const viz::TextureMailbox& mailbox,
+void Layer::AddDeferredPaintRequest() {
+  ++deferred_paint_requests_;
+  TRACE_COUNTER_ID1("ui", "DeferredPaintRequests", this,
+                    deferred_paint_requests_);
+}
+
+void Layer::RemoveDeferredPaintRequest() {
+  DCHECK_GT(deferred_paint_requests_, 0u);
+
+  --deferred_paint_requests_;
+  TRACE_COUNTER_ID1("ui", "DeferredPaintRequests", this,
+                    deferred_paint_requests_);
+  if (!deferred_paint_requests_ && !damaged_region_.IsEmpty())
+    ScheduleDraw();
+}
+
+// Note: The code that sets this flag would be responsible to unset it on that
+// ui::Layer. We do not want to clone this flag to a cloned layer by accident,
+// which could be a supprise. But we want to preserve it after switching to a
+// new cc::Layer. There could be a whole subtree and the root changed, but does
+// not mean we want to treat the trilinear filtering all different.
+void Layer::AddTrilinearFilteringRequest() {
+  ++trilinear_filtering_request_;
+  TRACE_COUNTER_ID1("ui", "TrilinearFilteringRequests", this,
+                    trilinear_filtering_request_);
+  if (trilinear_filtering_request_ == 1)
+    cc_layer_->SetTrilinearFiltering(true);
+}
+
+void Layer::RemoveTrilinearFilteringRequest() {
+  DCHECK_GT(trilinear_filtering_request_, 0u);
+
+  --trilinear_filtering_request_;
+  TRACE_COUNTER_ID1("ui", "TrilinearFilteringRequests", this,
+                    trilinear_filtering_request_);
+  if (trilinear_filtering_request_ == 0)
+    cc_layer_->SetTrilinearFiltering(false);
+}
+
+void Layer::SetTransferableResource(
+    const viz::TransferableResource& resource,
     std::unique_ptr<viz::SingleReleaseCallback> release_callback,
     gfx::Size texture_size_in_dip) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
-  DCHECK(mailbox.IsValid());
+  DCHECK(!resource.mailbox_holder.mailbox.IsZero());
   DCHECK(release_callback);
   if (!texture_layer_.get()) {
     scoped_refptr<cc::TextureLayer> new_layer =
@@ -701,10 +746,10 @@ void Layer::SetTextureMailbox(
     // the frame_size_in_dip_ was for a previous (different) |texture_layer_|.
     frame_size_in_dip_ = gfx::Size();
   }
-  if (mailbox_release_callback_)
-    mailbox_release_callback_->Run(gpu::SyncToken(), false);
-  mailbox_release_callback_ = std::move(release_callback);
-  mailbox_ = mailbox;
+  if (transfer_release_callback_)
+    transfer_release_callback_->Run(gpu::SyncToken(), false);
+  transfer_release_callback_ = std::move(release_callback);
+  transfer_resource_ = resource;
   SetTextureSize(texture_size_in_dip);
 }
 
@@ -728,7 +773,8 @@ bool Layer::TextureFlipped() const {
 }
 
 void Layer::SetShowPrimarySurface(
-    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& frame_size_in_dip,
     scoped_refptr<viz::SurfaceReferenceFactory> ref_factory) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
 
@@ -739,36 +785,35 @@ void Layer::SetShowPrimarySurface(
     surface_layer_ = new_layer;
   }
 
-  surface_layer_->SetPrimarySurfaceInfo(surface_info);
+  surface_layer_->SetPrimarySurfaceId(surface_id);
 
-  frame_size_in_dip_ = gfx::ConvertSizeToDIP(surface_info.device_scale_factor(),
-                                             surface_info.size_in_pixels());
+  frame_size_in_dip_ = frame_size_in_dip;
   RecomputeDrawsContentAndUVRect();
 
   for (const auto& mirror : mirrors_)
-    mirror->dest()->SetShowPrimarySurface(surface_info, ref_factory);
+    mirror->dest()->SetShowPrimarySurface(surface_id, frame_size_in_dip,
+                                          ref_factory);
 }
 
-void Layer::SetFallbackSurface(const viz::SurfaceInfo& surface_info) {
+void Layer::SetFallbackSurfaceId(const viz::SurfaceId& surface_id) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
   DCHECK(surface_layer_);
 
-  // TODO(fsamuel): We should compute the gutter in the display compositor.
-  surface_layer_->SetFallbackSurfaceInfo(surface_info);
+  surface_layer_->SetFallbackSurfaceId(surface_id);
 
   for (const auto& mirror : mirrors_)
-    mirror->dest()->SetFallbackSurface(surface_info);
+    mirror->dest()->SetFallbackSurfaceId(surface_id);
 }
 
-const viz::SurfaceInfo* Layer::GetPrimarySurfaceInfo() const {
+const viz::SurfaceId* Layer::GetPrimarySurfaceId() const {
   if (surface_layer_)
-    return &surface_layer_->primary_surface_info();
+    return &surface_layer_->primary_surface_id();
   return nullptr;
 }
 
-const viz::SurfaceInfo* Layer::GetFallbackSurfaceInfo() const {
+const viz::SurfaceId* Layer::GetFallbackSurfaceId() const {
   if (surface_layer_)
-    return &surface_layer_->fallback_surface_info();
+    return &surface_layer_->fallback_surface_id();
   return nullptr;
 }
 
@@ -782,10 +827,10 @@ void Layer::SetShowSolidColorContent() {
   SwitchToLayer(new_layer);
   solid_color_layer_ = new_layer;
 
-  mailbox_ = viz::TextureMailbox();
-  if (mailbox_release_callback_) {
-    mailbox_release_callback_->Run(gpu::SyncToken(), false);
-    mailbox_release_callback_.reset();
+  transfer_resource_ = viz::TransferableResource();
+  if (transfer_release_callback_) {
+    transfer_release_callback_->Run(gpu::SyncToken(), false);
+    transfer_release_callback_.reset();
   }
   RecomputeDrawsContentAndUVRect();
 }
@@ -837,17 +882,19 @@ SkColor Layer::background_color() const {
 }
 
 bool Layer::SchedulePaint(const gfx::Rect& invalid_rect) {
-  if ((type_ == LAYER_SOLID_COLOR && !texture_layer_.get()) ||
-      type_ == LAYER_NINE_PATCH || (!delegate_ && !mailbox_.IsValid()))
+  if (type_ == LAYER_SOLID_COLOR && !texture_layer_)
+    return false;
+  if (type_ == LAYER_NINE_PATCH)
+    return false;
+  if (!delegate_ && transfer_resource_.mailbox_holder.mailbox.IsZero())
     return false;
 
   damaged_region_.Union(invalid_rect);
-  ScheduleDraw();
-
-  if (layer_mask_) {
+  if (layer_mask_)
     layer_mask_->damaged_region_.Union(invalid_rect);
-    layer_mask_->ScheduleDraw();
-  }
+
+  if (!content_layer_ || !deferred_paint_requests_)
+    ScheduleDraw();
   return true;
 }
 
@@ -860,7 +907,9 @@ void Layer::ScheduleDraw() {
 void Layer::SendDamagedRects() {
   if (damaged_region_.IsEmpty())
     return;
-  if (!delegate_ && !mailbox_.IsValid())
+  if (!delegate_ && transfer_resource_.mailbox_holder.mailbox.IsZero())
+    return;
+  if (content_layer_ && deferred_paint_requests_)
     return;
 
   for (cc::Region::Iterator iter(damaged_region_); iter.has_rect(); iter.next())
@@ -887,9 +936,9 @@ void Layer::CompleteAllAnimations() {
 void Layer::SuppressPaint() {
   if (!delegate_)
     return;
-  delegate_ = NULL;
-  for (size_t i = 0; i < children_.size(); ++i)
-    children_[i]->SuppressPaint();
+  delegate_ = nullptr;
+  for (auto* child : children_)
+    child->SuppressPaint();
 }
 
 void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
@@ -897,6 +946,7 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
     return;
   if (animator_)
     animator_->StopAnimatingProperty(LayerAnimationElement::TRANSFORM);
+  const float old_device_scale_factor = device_scale_factor_;
   device_scale_factor_ = device_scale_factor;
   RecomputeDrawsContentAndUVRect();
   RecomputePosition();
@@ -906,18 +956,14 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
     UpdateNinePatchLayerAperture(nine_patch_layer_aperture_);
   }
   SchedulePaint(gfx::Rect(bounds_.size()));
-  if (delegate_)
-    delegate_->OnDeviceScaleFactorChanged(device_scale_factor);
-  for (size_t i = 0; i < children_.size(); ++i)
-    children_[i]->OnDeviceScaleFactorChanged(device_scale_factor);
+  if (delegate_) {
+    delegate_->OnDeviceScaleFactorChanged(old_device_scale_factor,
+                                          device_scale_factor);
+  }
+  for (auto* child : children_)
+    child->OnDeviceScaleFactorChanged(device_scale_factor);
   if (layer_mask_)
     layer_mask_->OnDeviceScaleFactorChanged(device_scale_factor);
-}
-
-void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
-  DCHECK(surface_layer_.get());
-  if (delegate_)
-    delegate_->OnDelegatedFrameDamage(damage_rect_in_dip);
 }
 
 void Layer::SetDidScrollCallback(
@@ -968,7 +1014,7 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
   gfx::Rect invalidation(
       gfx::IntersectRects(paint_region_.bounds(), local_bounds));
   paint_region_.Clear();
-  auto display_list = make_scoped_refptr(new cc::DisplayItemList);
+  auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
   if (delegate_) {
     delegate_->OnPaintLayer(PaintContext(display_list.get(),
                                          device_scale_factor_, invalidation,
@@ -989,13 +1035,13 @@ size_t Layer::GetApproximateUnsharedMemoryUsage() const {
   return 0;
 }
 
-bool Layer::PrepareTextureMailbox(
-    viz::TextureMailbox* mailbox,
+bool Layer::PrepareTransferableResource(
+    viz::TransferableResource* resource,
     std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
-  if (!mailbox_release_callback_)
+  if (!transfer_release_callback_)
     return false;
-  *mailbox = mailbox_;
-  *release_callback = std::move(mailbox_release_callback_);
+  *resource = transfer_resource_;
+  *release_callback = std::move(transfer_release_callback_);
   return true;
 }
 
@@ -1056,30 +1102,30 @@ void Layer::StackRelativeTo(Layer* child, Layer* other, bool above) {
 }
 
 bool Layer::ConvertPointForAncestor(const Layer* ancestor,
-                                    gfx::Point* point) const {
+                                    gfx::PointF* point) const {
   gfx::Transform transform;
   bool result = GetTargetTransformRelativeTo(ancestor, &transform);
-  auto p = gfx::Point3F(gfx::PointF(*point));
+  auto p = gfx::Point3F(*point);
   transform.TransformPoint(&p);
-  *point = gfx::ToFlooredPoint(p.AsPointF());
+  *point = p.AsPointF();
   return result;
 }
 
 bool Layer::ConvertPointFromAncestor(const Layer* ancestor,
-                                     gfx::Point* point) const {
+                                     gfx::PointF* point) const {
   gfx::Transform transform;
   bool result = GetTargetTransformRelativeTo(ancestor, &transform);
-  auto p = gfx::Point3F(gfx::PointF(*point));
+  auto p = gfx::Point3F(*point);
   transform.TransformPointReverse(&p);
-  *point = gfx::ToFlooredPoint(p.AsPointF());
+  *point = p.AsPointF();
   return result;
 }
 
-void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds) {
+void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds,
+                                   PropertyChangeReason reason) {
   if (bounds == bounds_)
     return;
 
-  base::Closure closure;
   const gfx::Rect old_bounds = bounds_;
   bounds_ = bounds;
 
@@ -1087,7 +1133,7 @@ void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds) {
   RecomputePosition();
 
   if (delegate_)
-    delegate_->OnLayerBoundsChanged(old_bounds);
+    delegate_->OnLayerBoundsChanged(old_bounds, reason);
 
   if (bounds.size() == old_bounds.size()) {
     // Don't schedule a draw if we're invisible. We'll schedule one
@@ -1105,16 +1151,23 @@ void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds) {
   }
 }
 
-void Layer::SetTransformFromAnimation(const gfx::Transform& transform) {
+void Layer::SetTransformFromAnimation(const gfx::Transform& transform,
+                                      PropertyChangeReason reason) {
   cc_layer_->SetTransform(transform);
+  if (delegate_)
+    delegate_->OnLayerTransformed(reason);
 }
 
-void Layer::SetOpacityFromAnimation(float opacity) {
+void Layer::SetOpacityFromAnimation(float opacity,
+                                    PropertyChangeReason reason) {
   cc_layer_->SetOpacity(opacity);
+  if (delegate_)
+    delegate_->OnLayerOpacityChanged(reason);
   ScheduleDraw();
 }
 
-void Layer::SetVisibilityFromAnimation(bool visible) {
+void Layer::SetVisibilityFromAnimation(bool visible,
+                                       PropertyChangeReason reason) {
   if (visible_ == visible)
     return;
 
@@ -1122,23 +1175,26 @@ void Layer::SetVisibilityFromAnimation(bool visible) {
   cc_layer_->SetHideLayerAndSubtree(!visible_);
 }
 
-void Layer::SetBrightnessFromAnimation(float brightness) {
+void Layer::SetBrightnessFromAnimation(float brightness,
+                                       PropertyChangeReason reason) {
   layer_brightness_ = brightness;
   SetLayerFilters();
 }
 
-void Layer::SetGrayscaleFromAnimation(float grayscale) {
+void Layer::SetGrayscaleFromAnimation(float grayscale,
+                                      PropertyChangeReason reason) {
   layer_grayscale_ = grayscale;
   SetLayerFilters();
 }
 
-void Layer::SetColorFromAnimation(SkColor color) {
+void Layer::SetColorFromAnimation(SkColor color, PropertyChangeReason reason) {
   DCHECK_EQ(type_, LAYER_SOLID_COLOR);
   cc_layer_->SetBackgroundColor(color);
   SetFillsBoundsOpaquely(SkColorGetA(color) == 0xFF);
 }
 
-void Layer::SetTemperatureFromAnimation(float temperature) {
+void Layer::SetTemperatureFromAnimation(float temperature,
+                                        PropertyChangeReason reason) {
   layer_temperature_ = temperature;
 
   // If we only tone down the blue scale, the screen will look very green so we
@@ -1195,7 +1251,7 @@ float Layer::GetDeviceScaleFactor() const {
 
 LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
   Compositor* compositor = GetCompositor();
-  return compositor ? compositor->layer_animator_collection() : NULL;
+  return compositor ? compositor->layer_animator_collection() : nullptr;
 }
 
 int Layer::GetFrameNumber() const {
@@ -1238,10 +1294,6 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetLayerClient(this);
   cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
   RecomputePosition();
-}
-
-gfx::Transform Layer::transform() const {
-  return cc_layer_->transform();
 }
 
 void Layer::RecomputeDrawsContentAndUVRect() {

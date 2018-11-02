@@ -9,7 +9,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_permission_request.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
@@ -28,9 +27,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "url/gurl.h"
 
-#if defined(OS_ANDROID)
-#include "chrome/browser/download/download_request_infobar_delegate_android.h"
-#endif
 
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 
@@ -40,7 +36,7 @@ using content::NavigationEntry;
 
 namespace {
 
-ContentSetting GetSettingFromStatus(
+ContentSetting GetSettingFromDownloadStatus(
     DownloadRequestLimiter::DownloadStatus status) {
   switch (status) {
     case DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD:
@@ -55,7 +51,7 @@ ContentSetting GetSettingFromStatus(
   return CONTENT_SETTING_DEFAULT;
 }
 
-DownloadRequestLimiter::DownloadStatus GetStatusFromSetting(
+DownloadRequestLimiter::DownloadStatus GetDownloadStatusFromSetting(
     ContentSetting setting) {
   switch (setting) {
     case CONTENT_SETTING_ALLOW:
@@ -75,6 +71,25 @@ DownloadRequestLimiter::DownloadStatus GetStatusFromSetting(
   return DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD;
 }
 
+DownloadRequestLimiter::DownloadUiStatus GetUiStatusFromDownloadStatus(
+    DownloadRequestLimiter::DownloadStatus status,
+    bool download_seen) {
+  if (!download_seen)
+    return DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT;
+
+  switch (status) {
+    case DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS:
+      return DownloadRequestLimiter::DOWNLOAD_UI_ALLOWED;
+    case DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED:
+      return DownloadRequestLimiter::DOWNLOAD_UI_BLOCKED;
+    case DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD:
+    case DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD:
+      return DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT;
+  }
+  NOTREACHED();
+  return DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT;
+}
+
 }  // namespace
 
 // TabDownloadState ------------------------------------------------------------
@@ -87,7 +102,9 @@ DownloadRequestLimiter::TabDownloadState::TabDownloadState(
       web_contents_(contents),
       host_(host),
       status_(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD),
+      ui_status_(DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT),
       download_count_(0),
+      download_seen_(false),
       observer_(this),
       factory_(this) {
   observer_.Add(GetContentSettings(contents));
@@ -109,13 +126,16 @@ DownloadRequestLimiter::TabDownloadState::~TabDownloadState() {
 
 void DownloadRequestLimiter::TabDownloadState::SetDownloadStatusAndNotify(
     DownloadStatus status) {
-  SetDownloadStatusAndNotifyImpl(status, GetSettingFromStatus(status));
+  SetDownloadStatusAndNotifyImpl(status, GetSettingFromDownloadStatus(status));
 }
 
 void DownloadRequestLimiter::TabDownloadState::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame())
     return;
+
+  download_seen_ = false;
+  ui_status_ = DOWNLOAD_UI_DEFAULT;
 
   // If the navigation is renderer-initiated (but not user-initiated), ensure
   // that a prompting or blocking limiter state is not reset, so
@@ -176,15 +196,10 @@ void DownloadRequestLimiter::TabDownloadState::DidGetUserInteraction(
     return;
   }
 
-  bool promptable;
-  if (PermissionRequestManager::IsEnabled()) {
-    promptable =
-        PermissionRequestManager::FromWebContents(web_contents()) != nullptr;
-  } else {
-    promptable = InfoBarService::FromWebContents(web_contents()) != nullptr;
-  }
+  bool promptable =
+      PermissionRequestManager::FromWebContents(web_contents()) != nullptr;
 
-  // See PromptUserForDownload(): if there's no InfoBarService, then
+  // See PromptUserForDownload(): if there's no PermissionRequestManager, then
   // DOWNLOADS_NOT_ALLOWED is functionally equivalent to PROMPT_BEFORE_DOWNLOAD.
   if ((status_ != DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS) &&
       (!promptable ||
@@ -221,20 +236,13 @@ void DownloadRequestLimiter::TabDownloadState::PromptUserForDownload(
     return;
   }
 
-  if (PermissionRequestManager::IsEnabled()) {
-    PermissionRequestManager* permission_request_manager =
-        PermissionRequestManager::FromWebContents(web_contents_);
-    if (permission_request_manager) {
-      permission_request_manager->AddRequest(
-          new DownloadPermissionRequest(factory_.GetWeakPtr()));
-    } else {
-      Cancel();
-    }
+  PermissionRequestManager* permission_request_manager =
+      PermissionRequestManager::FromWebContents(web_contents_);
+  if (permission_request_manager) {
+    permission_request_manager->AddRequest(
+        new DownloadPermissionRequest(factory_.GetWeakPtr()));
   } else {
-#if defined(OS_ANDROID)
-    DownloadRequestInfoBarDelegateAndroid::Create(
-        InfoBarService::FromWebContents(web_contents_), factory_.GetWeakPtr());
-#endif
+    Cancel();
   }
 }
 
@@ -272,10 +280,12 @@ void DownloadRequestLimiter::TabDownloadState::Accept() {
 }
 
 DownloadRequestLimiter::TabDownloadState::TabDownloadState()
-    : web_contents_(NULL),
-      host_(NULL),
+    : web_contents_(nullptr),
+      host_(nullptr),
       status_(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD),
+      ui_status_(DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT),
       download_count_(0),
+      download_seen_(false),
       observer_(this),
       factory_(this) {}
 
@@ -325,7 +335,8 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
       CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, std::string());
 
   // Update the internal state to match if necessary.
-  SetDownloadStatusAndNotifyImpl(GetStatusFromSetting(setting), setting);
+  SetDownloadStatusAndNotifyImpl(GetDownloadStatusFromSetting(setting),
+                                 setting);
 }
 
 bool DownloadRequestLimiter::TabDownloadState::NotifyCallbacks(bool allow) {
@@ -362,17 +373,27 @@ bool DownloadRequestLimiter::TabDownloadState::NotifyCallbacks(bool allow) {
 void DownloadRequestLimiter::TabDownloadState::SetDownloadStatusAndNotifyImpl(
     DownloadStatus status,
     ContentSetting setting) {
-  DCHECK((GetSettingFromStatus(status) == setting) ||
-         (GetStatusFromSetting(setting) == status))
+  DCHECK((GetSettingFromDownloadStatus(status) == setting) ||
+         (GetDownloadStatusFromSetting(setting) == status))
       << "status " << status << " and setting " << setting
       << " do not correspond to each other";
 
-  ContentSetting last_setting = GetSettingFromStatus(status_);
+  ContentSetting last_setting = GetSettingFromDownloadStatus(status_);
+  DownloadUiStatus last_ui_status = ui_status_;
+
   status_ = status;
+  ui_status_ = GetUiStatusFromDownloadStatus(status_, download_seen_);
+
   if (!web_contents())
     return;
-  if (last_setting == setting)
+
+  // We want to send a notification if the UI status has changed to ensure that
+  // the omnibox decoration updates appropriately. This is effectively the same
+  // as other permissions which might be in an allow state, but do not show UI
+  // until they are actively used.
+  if (last_setting == setting && last_ui_status == ui_status_)
     return;
+
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
       content::Source<content::WebContents>(web_contents()),
@@ -391,8 +412,15 @@ DownloadRequestLimiter::~DownloadRequestLimiter() {
 
 DownloadRequestLimiter::DownloadStatus
 DownloadRequestLimiter::GetDownloadStatus(content::WebContents* web_contents) {
-  TabDownloadState* state = GetDownloadState(web_contents, NULL, false);
+  TabDownloadState* state = GetDownloadState(web_contents, nullptr, false);
   return state ? state->download_status() : ALLOW_ONE_DOWNLOAD;
+}
+
+DownloadRequestLimiter::DownloadUiStatus
+DownloadRequestLimiter::GetDownloadUiStatus(
+    content::WebContents* web_contents) {
+  TabDownloadState* state = GetDownloadState(web_contents, nullptr, false);
+  return state ? state->download_ui_status() : DOWNLOAD_UI_DEFAULT;
 }
 
 DownloadRequestLimiter::TabDownloadState*
@@ -406,7 +434,7 @@ DownloadRequestLimiter::GetDownloadState(
     return i->second;
 
   if (!create)
-    return NULL;
+    return nullptr;
 
   TabDownloadState* state =
       new TabDownloadState(this, web_contents, originating_web_contents);
@@ -480,12 +508,22 @@ void DownloadRequestLimiter::CanDownloadImpl(
 
   TabDownloadState* state =
       GetDownloadState(originating_contents, originating_contents, true);
+  state->set_download_seen();
+
+  // Always call SetDownloadStatusAndNotify since we may need to change the
+  // omnibox UI even if the internal state stays the same. For instance, we want
+  // to hide the indicator until a download is triggered, even if we know
+  // downloads are blocked. This mirrors the behaviour of other omnibox
+  // decorations like geolocation.
   switch (state->download_status()) {
     case ALLOW_ALL_DOWNLOADS:
       if (state->download_count() &&
           !(state->download_count() %
-            DownloadRequestLimiter::kMaxDownloadsAtOnce))
+            DownloadRequestLimiter::kMaxDownloadsAtOnce)) {
         state->SetDownloadStatusAndNotify(PROMPT_BEFORE_DOWNLOAD);
+      } else {
+        state->SetDownloadStatusAndNotify(ALLOW_ALL_DOWNLOADS);
+      }
       callback.Run(content::DownloadItemAction(true, open, ask));
       state->increment_download_count();
       break;
@@ -497,6 +535,7 @@ void DownloadRequestLimiter::CanDownloadImpl(
       break;
 
     case DOWNLOADS_NOT_ALLOWED:
+      state->SetDownloadStatusAndNotify(DOWNLOADS_NOT_ALLOWED);
       callback.Run(content::DownloadItemAction(false, open, ask));
       break;
 

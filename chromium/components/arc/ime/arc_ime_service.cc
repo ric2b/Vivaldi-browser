@@ -8,11 +8,13 @@
 
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
+#include "components/exo/wm_helper.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -463,6 +465,12 @@ bool ArcImeService::ChangeTextDirectionAndLayoutAlignment(
 bool ArcImeService::IsTextEditCommandEnabled(
     ui::TextEditCommand command) const {
   return false;
+}
+
+const std::string& ArcImeService::GetClientSourceInfo() const {
+  // TODO(yhanada): Implement this method. crbug.com/752657
+  NOTIMPLEMENTED_LOG_ONCE();
+  return base::EmptyString();
 }
 
 void ArcImeService::InvalidateSurroundingTextAndSelectionRange() {

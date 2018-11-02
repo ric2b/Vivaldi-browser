@@ -239,6 +239,12 @@ SyncTest::SyncTest(TestType test_type)
 SyncTest::~SyncTest() {}
 
 void SyncTest::SetUp() {
+  // TODO(crbug.com/781368) remove once feature enabled.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {switches::kSyncUSSTypedURL},
+      {});
+
   // Sets |server_type_| if it wasn't specified by the test.
   DecideServerType();
 
@@ -333,28 +339,35 @@ bool SyncTest::CreateGaiaAccount(const std::string& username,
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::NavigationEntry* entry = contents->GetController().GetVisibleEntry();
-  CHECK(entry) << "Could not get a hold on NavigationEntry post URL navigate.";
+  EXPECT_TRUE(entry)
+      << "Could not get a hold on NavigationEntry post URL navigate.";
   DVLOG(1) << "Create Gaia account request return code = "
       << entry->GetHttpStatusCode();
   return entry->GetHttpStatusCode() == 200;
 }
 
-void SyncTest::CreateProfile(int index) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+bool SyncTest::CreateProfile(int index) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
   tmp_profile_paths_[index] = new base::ScopedTempDir();
   if (UsingExternalServers() && num_clients_ > 1) {
     // For multi profile UI signin, profile paths should be outside user data
     // dir to allow signing-in multiple profiles to same account. Otherwise, we
     // get an error that the profile has already signed in on this device.
-    CHECK(tmp_profile_paths_[index]->CreateUniqueTempDir());
+    if (!tmp_profile_paths_[index]->CreateUniqueTempDir()) {
+      ADD_FAILURE();
+      return false;
+    }
   } else {
     // Create new profiles in user data dir so that other profiles can know
     // about it. This is needed in tests such as supervised user cases which
     // assume browser->profile() as the custodian profile.
     base::FilePath user_data_dir;
     PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-    CHECK(
-      tmp_profile_paths_[index]->CreateUniqueTempDirUnderPath(user_data_dir));
+    if (!tmp_profile_paths_[index]->CreateUniqueTempDirUnderPath(
+            user_data_dir)) {
+      ADD_FAILURE();
+      return false;
+    }
   }
   base::FilePath profile_path = tmp_profile_paths_[index]->GetPath();
   if (UsingExternalServers()) {
@@ -373,6 +386,7 @@ void SyncTest::CreateProfile(int index) {
 
   // Once profile initialization has kicked off, wait for it to finish.
   WaitForDataModels(GetProfile(index));
+  return true;
 }
 
 // Called when the ProfileManager has created a profile.
@@ -507,7 +521,7 @@ void SyncTest::DisableVerifier() {
 }
 
 bool SyncTest::SetupClients() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (num_clients_ <= 0)
     LOG(FATAL) << "num_clients_ incorrectly initialized.";
   if (!profiles_.empty() || !browsers_.empty() || !clients_.empty())
@@ -523,8 +537,11 @@ bool SyncTest::SetupClients() {
   fake_server_invalidation_services_.resize(num_clients_);
 
   if (create_gaia_account_at_runtime_) {
-    CHECK(UsingExternalServers()) <<
-        "Cannot create Gaia accounts without external authentication servers";
+    if (!UsingExternalServers()) {
+      ADD_FAILURE() << "Cannot create Gaia accounts without external "
+                       "authentication servers.";
+      return false;
+    }
     if (!CreateGaiaAccount(username_, password_))
       LOG(FATAL) << "Could not create Gaia account.";
   }
@@ -540,7 +557,9 @@ bool SyncTest::SetupClients() {
 #endif
 
   for (int i = 0; i < num_clients_; ++i) {
-    CreateProfile(i);
+    if (!CreateProfile(i)) {
+      return false;
+    }
   }
 
   // Verifier account is not useful when running against external servers.
@@ -567,9 +586,6 @@ bool SyncTest::SetupClients() {
   }
 #endif
 
-  // Error cases are all handled by LOG(FATAL) messages. So there is not really
-  // a case that returns false.  In case we failed to create a verifier profile,
-  // any call to the verifier() would fail.
   return true;
 }
 
@@ -611,7 +627,6 @@ void SyncTest::InitializeInvalidations(int index) {
     // invalidations in sync'ed data. In this case, to notify other profiles of
     // invalidations, we use sync refresh notifications instead.
   } else if (server_type_ == IN_PROCESS_FAKE_SERVER) {
-    CHECK(fake_server_.get());
     fake_server::FakeServerInvalidationService* invalidation_service =
         static_cast<fake_server::FakeServerInvalidationService*>(
             static_cast<invalidation::ProfileInvalidationProvider*>(
@@ -648,7 +663,7 @@ void SyncTest::InitializeInvalidations(int index) {
 }
 
 bool SyncTest::SetupSync() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   // Create sync profiles and clients if they haven't already been created.
   if (profiles_.empty()) {
     if (!SetupClients()) {
@@ -748,8 +763,8 @@ void SyncTest::TearDownOnMainThread() {
   for (size_t i = 0; i < browsers_.size(); ++i) {
     CloseBrowserSynchronously(browsers_[i]);
   }
-  CHECK_EQ(chrome::GetTotalBrowserCount(),
-           init_browser_count - browsers_.size());
+  ASSERT_EQ(chrome::GetTotalBrowserCount(),
+            init_browser_count - browsers_.size());
 
   if (fake_server_.get()) {
     std::vector<fake_server::FakeServerInvalidationService*>::const_iterator it;
@@ -826,10 +841,8 @@ void SyncTest::SetupMockGaiaResponses() {
       net::HTTP_OK,
       net::URLRequestStatus::SUCCESS);
   fake_factory_->SetFakeResponse(
-      GaiaUrls::GetInstance()->client_login_to_oauth2_url(),
-      "some_response",
-      net::HTTP_OK,
-      net::URLRequestStatus::SUCCESS);
+      GaiaUrls::GetInstance()->deprecated_client_login_to_oauth2_url(),
+      "some_response", net::HTTP_OK, net::URLRequestStatus::SUCCESS);
   fake_factory_->SetFakeResponse(
       GaiaUrls::GetInstance()->oauth2_token_url(),
       "{"

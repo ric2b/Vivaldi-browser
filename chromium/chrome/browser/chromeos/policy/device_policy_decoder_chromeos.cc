@@ -16,8 +16,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
-#include "chrome/browser/chromeos/policy/device_off_hours_controller.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
+#include "chrome/browser/chromeos/policy/off_hours/off_hours_proto_parser.h"
 #include "chrome/browser/chromeos/tpm_firmware_update.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
@@ -28,6 +27,7 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 using google::protobuf::RepeatedField;
@@ -879,7 +879,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
 
   if (policy.has_device_off_hours()) {
     auto off_hours_policy =
-        off_hours::ConvertPolicyProtoToValue(policy.device_off_hours());
+        off_hours::ConvertOffHoursProtoToValue(policy.device_off_hours());
     if (off_hours_policy)
       policies->Set(key::kDeviceOffHours, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
@@ -894,12 +894,82 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                     base::MakeUnique<base::Value>(container.name()), nullptr);
   }
 
+  if (policy.has_native_device_printers()) {
+    const em::DeviceNativePrintersProto& container(
+        policy.native_device_printers());
+    if (container.has_external_policy()) {
+      std::unique_ptr<base::DictionaryValue> dict_val =
+          base::DictionaryValue::From(
+              base::JSONReader::Read(container.external_policy()));
+      policies->Set(key::kDeviceNativePrinters, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                    std::move(dict_val), nullptr);
+    }
+  }
+
+  if (policy.has_native_device_printers_access_mode()) {
+    const em::DeviceNativePrintersAccessModeProto& container(
+        policy.native_device_printers_access_mode());
+    if (container.has_access_mode()) {
+      policies->Set(key::kDeviceNativePrintersAccessMode,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD,
+                    DecodeIntegerValue(container.access_mode()), nullptr);
+    }
+  }
+
+  if (policy.has_native_device_printers_blacklist()) {
+    const em::DeviceNativePrintersBlacklistProto& container(
+        policy.native_device_printers_blacklist());
+    std::unique_ptr<base::ListValue> blacklist =
+        base::MakeUnique<base::ListValue>();
+    for (const auto& entry : container.blacklist())
+      blacklist->AppendString(entry);
+
+    policies->Set(key::kDeviceNativePrintersBlacklist, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  std::move(blacklist), nullptr);
+  }
+
+  if (policy.has_native_device_printers_whitelist()) {
+    const em::DeviceNativePrintersWhitelistProto& container(
+        policy.native_device_printers_whitelist());
+    std::unique_ptr<base::ListValue> whitelist =
+        base::MakeUnique<base::ListValue>();
+    for (const auto& entry : container.whitelist())
+      whitelist->AppendString(entry);
+
+    policies->Set(key::kDeviceNativePrintersWhitelist, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  std::move(whitelist), nullptr);
+  }
+
   if (policy.has_tpm_firmware_update_settings()) {
     policies->Set(key::kTPMFirmwareUpdateSettings, POLICY_LEVEL_MANDATORY,
                   POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                   chromeos::tpm_firmware_update::DecodeSettingsProto(
                       policy.tpm_firmware_update_settings()),
                   nullptr);
+  }
+
+  if (policy.has_minimum_required_version()) {
+    const em::MinimumRequiredVersionProto& container(
+        policy.minimum_required_version());
+    if (container.has_chrome_version())
+      policies->Set(key::kMinimumRequiredChromeVersion, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                    base::MakeUnique<base::Value>(container.chrome_version()),
+                    nullptr);
+  }
+
+  if (policy.has_unaffiliated_arc_allowed()) {
+    const em::UnaffiliatedArcAllowedProto& container(
+        policy.unaffiliated_arc_allowed());
+    policies->Set(
+        key::kUnaffiliatedArcAllowed, POLICY_LEVEL_MANDATORY,
+        POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+        base::MakeUnique<base::Value>(container.unaffiliated_arc_allowed()),
+        nullptr);
   }
 }
 }  // namespace

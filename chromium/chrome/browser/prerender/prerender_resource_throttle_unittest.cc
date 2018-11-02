@@ -176,7 +176,7 @@ class PrerenderResourceThrottleTest : public testing::Test {
     chrome_browser_net::SetUrlRequestMocksEnabled(false);
 
     // Cleanup work so the file IO tasks from URLRequestMockHTTPJob are gone.
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   }
 
   TestPrerenderManager* prerender_manager() {
@@ -212,9 +212,8 @@ TEST_F(PrerenderResourceThrottleTest, RedirectResume) {
       request.get(), content::RESOURCE_TYPE_IMAGE, NULL, kDefaultChildId,
       kDefaultRouteId, MSG_ROUTING_NONE,
       /*is_main_frame=*/false,
-      /*parent_is_main_frame=*/false,
       /*allow_download=*/true,
-      /*is_async=*/true, content::PREVIEWS_OFF);
+      /*is_async=*/true, content::PREVIEWS_OFF, nullptr);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());
@@ -250,9 +249,8 @@ TEST_F(PrerenderResourceThrottleTest, RedirectMainFrame) {
       request.get(), content::RESOURCE_TYPE_MAIN_FRAME, NULL, kDefaultChildId,
       kDefaultRouteId, MSG_ROUTING_NONE,
       /*is_main_frame=*/true,
-      /*parent_is_main_frame=*/false,
       /*allow_download=*/true,
-      /*is_async=*/true, content::PREVIEWS_OFF);
+      /*is_async=*/true, content::PREVIEWS_OFF, nullptr);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());
@@ -286,9 +284,8 @@ TEST_F(PrerenderResourceThrottleTest, RedirectSyncXHR) {
       request.get(), content::RESOURCE_TYPE_XHR, NULL, kDefaultChildId,
       kDefaultRouteId, MSG_ROUTING_NONE,
       /*is_main_frame=*/false,
-      /*parent_is_main_frame=*/false,
       /*allow_download=*/true,
-      /*is_async=*/false, content::PREVIEWS_OFF);
+      /*is_async=*/false, content::PREVIEWS_OFF, nullptr);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());

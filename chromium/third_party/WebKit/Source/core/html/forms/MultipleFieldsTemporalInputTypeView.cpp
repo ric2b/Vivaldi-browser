@@ -31,23 +31,22 @@
 #include "core/html/forms/MultipleFieldsTemporalInputTypeView.h"
 
 #include "core/CSSValueKeywords.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/events/KeyboardEvent.h"
-#include "core/html/HTMLDataListElement.h"
-#include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/BaseTemporalInputType.h"
 #include "core/html/forms/DateTimeFieldsState.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/HTMLDataListElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/DateComponents.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/DateTimeFormat.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/DateMath.h"
@@ -321,7 +320,7 @@ MultipleFieldsTemporalInputTypeView::Create(HTMLInputElement& element,
 
 MultipleFieldsTemporalInputTypeView::~MultipleFieldsTemporalInputTypeView() {}
 
-DEFINE_TRACE(MultipleFieldsTemporalInputTypeView) {
+void MultipleFieldsTemporalInputTypeView::Trace(blink::Visitor* visitor) {
   visitor->Trace(input_type_);
   InputTypeView::Trace(visitor);
 }
@@ -331,9 +330,9 @@ void MultipleFieldsTemporalInputTypeView::Blur() {
     edit->BlurByOwner();
 }
 
-RefPtr<ComputedStyle>
+scoped_refptr<ComputedStyle>
 MultipleFieldsTemporalInputTypeView::CustomStyleForLayoutObject(
-    RefPtr<ComputedStyle> original_style) {
+    scoped_refptr<ComputedStyle> original_style) {
   EDisplay original_display = original_style->Display();
   EDisplay new_display = original_display;
   if (original_display == EDisplay::kInline ||
@@ -346,7 +345,7 @@ MultipleFieldsTemporalInputTypeView::CustomStyleForLayoutObject(
       original_display == new_display)
     return original_style;
 
-  RefPtr<ComputedStyle> style = ComputedStyle::Clone(*original_style);
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Clone(*original_style);
   style->SetDirection(content_direction);
   style->SetDisplay(new_display);
   style->SetUnique();

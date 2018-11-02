@@ -27,14 +27,14 @@ void TranslateDownloadManager::Shutdown() {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   language_list_.reset();
   script_.reset();
-  request_context_ = NULL;
+  request_context_ = nullptr;
 }
 
 // static
 void TranslateDownloadManager::RequestLanguageList(PrefService* prefs) {
   // We don't want to do this when translate is disabled.
-  DCHECK(prefs != NULL);
-  if (!prefs->GetBoolean(prefs::kEnableTranslate))
+  DCHECK(prefs != nullptr);
+  if (!prefs->GetBoolean(prefs::kOfferTranslateEnabled))
     return;
 
   TranslateLanguageList* language_list = GetInstance()->language_list();
@@ -47,6 +47,7 @@ void TranslateDownloadManager::RequestLanguageList(PrefService* prefs) {
 
 // static
 void TranslateDownloadManager::GetSupportedLanguages(
+    bool translate_allowed,
     std::vector<std::string>* languages) {
   TranslateLanguageList* language_list = GetInstance()->language_list();
   if (!language_list) {
@@ -54,7 +55,7 @@ void TranslateDownloadManager::GetSupportedLanguages(
     return;
   }
 
-  language_list->GetSupportedLanguages(languages);
+  language_list->GetSupportedLanguages(translate_allowed, languages);
 }
 
 // static
@@ -92,7 +93,7 @@ bool TranslateDownloadManager::IsSupportedLanguage(
 }
 
 void TranslateDownloadManager::ClearTranslateScriptForTesting() {
-  if (script_.get() == NULL) {
+  if (script_.get() == nullptr) {
     NOTREACHED();
     return;
   }
@@ -107,7 +108,7 @@ void TranslateDownloadManager::ResetForTesting() {
 
 void TranslateDownloadManager::SetTranslateScriptExpirationDelay(int delay_ms) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
-  if (script_.get() == NULL) {
+  if (script_.get() == nullptr) {
     NOTREACHED();
     return;
   }

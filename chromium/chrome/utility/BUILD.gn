@@ -5,6 +5,7 @@
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/sysroot.gni")
+import("//chrome/common/features.gni")
 import("//extensions/features/features.gni")
 import("//printing/features/features.gni")
 import("//services/service_manager/public/service_manifest.gni")
@@ -17,10 +18,6 @@ static_library("utility") {
     "cloud_print/bitmap_image.h",
     "cloud_print/pwg_encoder.cc",
     "cloud_print/pwg_encoder.h",
-    "printing_handler.cc",
-    "printing_handler.h",
-    "shell_handler_impl_win.cc",
-    "shell_handler_impl_win.h",
     "utility_message_handler.h",
   ]
 
@@ -37,17 +34,17 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
+    "//chrome/common/printing:interfaces",
     "//chrome/common/profiling",
     "//chrome/profiling",
-    "//components/payments/content/utility",
-    "//components/safe_json/utility",
+    "//components/patch_service:lib",
     "//components/search_engines",
     "//components/strings",
     "//components/url_formatter",
     "//content/public/child",
     "//content/public/common",
+    "//content/public/network",
     "//content/public/utility",
-    "//courgette:courgette_lib",
     "//extensions/features",
     "//ipc",
     "//media",
@@ -58,6 +55,7 @@ static_library("utility") {
     "//sql",
     "//third_party/libxml",
     "//third_party/zlib/google:zip",
+    "//ui/base:ui_features",
   ]
 
   if (!is_android) {
@@ -98,8 +96,8 @@ static_library("utility") {
     deps += [
       "//chrome/common:mojo_bindings",
       "//chrome/common/importer:interfaces",
-      "//net:net_utility_services",
       "//services/data_decoder:lib",
+      "//services/proxy_resolver:lib",
     ]
   }
 
@@ -117,15 +115,10 @@ static_library("utility") {
       "image_writer/image_writer_handler.h",
       "image_writer/image_writer_mac.cc",
       "image_writer/image_writer_win.cc",
-      "media_galleries/ipc_data_source.cc",
-      "media_galleries/ipc_data_source.h",
-      "media_galleries/itunes_pref_parser_win.cc",
-      "media_galleries/itunes_pref_parser_win.h",
-      "media_galleries/media_metadata_parser.cc",
-      "media_galleries/media_metadata_parser.h",
     ]
     deps += [
       "//chrome/common/extensions/api",
+      "//chrome/services/media_gallery_util:lib",
       "//extensions/utility",
     ]
 
@@ -138,25 +131,47 @@ static_library("utility") {
       # Add ESE library for Edge Import support.
       libs = [ "esent.lib" ]
       ldflags += [ "/DELAYLOAD:esent.dll" ]
+
+      deps += [
+        "//chrome/services/util_win:lib",
+        "//chrome/services/wifi_util_win:lib",
+      ]
     }
 
     if (is_win || is_mac) {
-      sources += [
-        "media_galleries/iapps_xml_utils.cc",
-        "media_galleries/iapps_xml_utils.h",
-        "media_galleries/itunes_library_parser.cc",
-        "media_galleries/itunes_library_parser.h",
-        "media_galleries/picasa_album_table_reader.cc",
-        "media_galleries/picasa_album_table_reader.h",
-        "media_galleries/picasa_albums_indexer.cc",
-        "media_galleries/picasa_albums_indexer.h",
-        "media_galleries/pmp_column_reader.cc",
-        "media_galleries/pmp_column_reader.h",
-      ]
       deps += [ "//components/wifi" ]
     } else {
       sources += [ "image_writer/image_writer_stub.cc" ]
     }
+  }
+
+  if (enable_mus) {
+    sources += [
+      "mash_service_factory.cc",
+      "mash_service_factory.h",
+    ]
+    deps += [
+      "//mash/quick_launch:lib",
+      "//mash/quick_launch/public/interfaces",
+      "//services/ui:lib",
+      "//services/ui/public/interfaces",
+    ]
+
+    if (is_linux) {
+      deps += [
+        "//components/font_service:lib",
+        "//components/font_service/public/interfaces",
+      ]
+    }
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//ash",
+      "//ash/autoclick/mus:lib",
+      "//ash/touch_hud/mus:lib",
+      "//chrome/services/file_util:lib",
+    ]
   }
 
   if (use_nss_certs) {
@@ -170,13 +185,21 @@ static_library("utility") {
     ]
   }
 
+  if (enable_print_preview) {
+    sources += [
+      "printing/pdf_to_pwg_raster_converter_impl.cc",
+      "printing/pdf_to_pwg_raster_converter_impl.h",
+      "printing/pdf_to_pwg_raster_converter_service.cc",
+      "printing/pdf_to_pwg_raster_converter_service.h",
+    ]
+  }
+
   if (enable_print_preview || (enable_basic_printing && is_win)) {
-    deps += [ "//pdf" ]
-  } else {
-    sources -= [
+    sources += [
       "printing_handler.cc",
       "printing_handler.h",
     ]
+    deps += [ "//pdf" ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
@@ -186,15 +209,11 @@ static_library("utility") {
     ]
   }
 
-  if (is_mac && safe_browsing_mode == 1) {
-    deps += [ "//chrome/utility/safe_browsing/mac" ]
-  }
-
-  if (!is_android) {
-    sources += [
-      "media_router/dial_device_description_parser_impl.cc",
-      "media_router/dial_device_description_parser_impl.h",
-    ]
+  if (safe_browsing_mode == 1) {
+    deps += [ "//chrome/services/file_util:lib" ]
+    if (is_mac) {
+      deps += [ "//chrome/utility/safe_browsing/mac" ]
+    }
   }
 }
 
@@ -202,5 +221,12 @@ if (!is_android) {
   service_manifest("profile_import_manifest") {
     name = "profile_import"
     source = "importer/profile_import_manifest.json"
+  }
+}
+
+if (enable_print_preview) {
+  service_manifest("pdf_to_pwg_raster_converter_manifest") {
+    name = "pdf_to_pwg_raster_converter"
+    source = "printing/pdf_to_pwg_raster_converter_manifest.json"
   }
 }

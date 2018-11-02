@@ -9,7 +9,7 @@
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/transform_operations.h"
-#include "cc/base/filter_operations.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/trees/element_id.h"
 
@@ -110,17 +110,17 @@ int AddOpacityStepsToPlayer(AnimationPlayer* player,
 void AddAnimationToElementWithPlayer(ElementId element_id,
                                      scoped_refptr<AnimationTimeline> timeline,
                                      std::unique_ptr<Animation> animation);
-void AddAnimationToElementWithExistingPlayer(
+void AddAnimationToElementWithExistingTicker(
     ElementId element_id,
     scoped_refptr<AnimationTimeline> timeline,
     std::unique_ptr<Animation> animation);
 
-void RemoveAnimationFromElementWithExistingPlayer(
+void RemoveAnimationFromElementWithExistingTicker(
     ElementId element_id,
     scoped_refptr<AnimationTimeline> timeline,
     int animation_id);
 
-Animation* GetAnimationFromElementWithExistingPlayer(
+Animation* GetAnimationFromElementWithExistingTicker(
     ElementId element_id,
     scoped_refptr<AnimationTimeline> timeline,
     int animation_id);

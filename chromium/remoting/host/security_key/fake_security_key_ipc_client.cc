@@ -27,7 +27,7 @@ FakeSecurityKeyIpcClient::FakeSecurityKeyIpcClient(
   DCHECK(!channel_event_callback_.is_null());
 }
 
-FakeSecurityKeyIpcClient::~FakeSecurityKeyIpcClient() {}
+FakeSecurityKeyIpcClient::~FakeSecurityKeyIpcClient() = default;
 
 base::WeakPtr<FakeSecurityKeyIpcClient> FakeSecurityKeyIpcClient::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
@@ -78,7 +78,7 @@ bool FakeSecurityKeyIpcClient::ConnectViaIpc(
           ->Connect(mojo::edk::ConnectionParams(
               mojo::edk::TransportProtocol::kLegacy, std::move(handle)))
           .release(),
-      this);
+      this, base::ThreadTaskRunnerHandle::Get());
   return client_channel_->Connect();
 }
 

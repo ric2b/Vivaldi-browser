@@ -4,7 +4,6 @@
 
 package org.chromium.components.gcm_driver.instance_id;
 
-import android.content.Context;
 import android.os.Bundle;
 import android.os.Looper;
 import android.util.Pair;
@@ -15,7 +14,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
 import java.io.IOException;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -26,6 +24,7 @@ import java.util.Random;
  */
 @JNINamespace("instance_id")
 public class FakeInstanceIDWithSubtype extends InstanceIDWithSubtype {
+    private String mSubtype;
     private String mId;
     private long mCreationTime;
 
@@ -38,14 +37,14 @@ public class FakeInstanceIDWithSubtype extends InstanceIDWithSubtype {
      */
     @CalledByNative
     public static boolean clearDataAndSetEnabled(boolean enable) {
-        synchronized (InstanceID.class) {
+        synchronized (sSubtypeInstancesLock) {
             sSubtypeInstances.clear();
             boolean wasEnabled = sFakeFactoryForTesting != null;
             if (enable) {
                 sFakeFactoryForTesting = new FakeFactory() {
                     @Override
-                    public InstanceIDWithSubtype create(Context context, String subtype) {
-                        return new FakeInstanceIDWithSubtype(context, subtype);
+                    public InstanceIDWithSubtype create(String subtype) {
+                        return new FakeInstanceIDWithSubtype(subtype);
                     }
                 };
             } else {
@@ -63,24 +62,25 @@ public class FakeInstanceIDWithSubtype extends InstanceIDWithSubtype {
      * token). If a test fails with too many InstanceIDs/tokens, the test subscribed too many times.
      */
     public static Pair<String, String> getSubtypeAndAuthorizedEntityOfOnlyToken() {
-        if (InstanceIDWithSubtype.sSubtypeInstances.size() != 1) {
-            throw new IllegalStateException("Expected exactly one InstanceID, but there are "
-                    + InstanceIDWithSubtype.sSubtypeInstances.size());
+        synchronized (sSubtypeInstancesLock) {
+            if (sSubtypeInstances.size() != 1) {
+                throw new IllegalStateException("Expected exactly one InstanceID, but there are "
+                        + sSubtypeInstances.size());
+            }
+            FakeInstanceIDWithSubtype iid =
+                    (FakeInstanceIDWithSubtype) sSubtypeInstances.values().iterator().next();
+            if (iid.mTokens.size() != 1) {
+                throw new IllegalStateException(
+                        "Expected exactly one token, but there are " + iid.mTokens.size());
+            }
+            String authorizedEntity = iid.mTokens.keySet().iterator().next().split(",", 3)[1];
+            return Pair.create(iid.getSubtype(), authorizedEntity);
         }
-        FakeInstanceIDWithSubtype iid =
-                (FakeInstanceIDWithSubtype) InstanceIDWithSubtype.sSubtypeInstances.values()
-                        .iterator()
-                        .next();
-        if (iid.mTokens.size() != 1) {
-            throw new IllegalStateException(
-                    "Expected exactly one token, but there are " + iid.mTokens.size());
-        }
-        String authorizedEntity = iid.mTokens.keySet().iterator().next().split(",", 3)[1];
-        return Pair.create(iid.getSubtype(), authorizedEntity);
     }
 
-    private FakeInstanceIDWithSubtype(Context context, String subtype) {
-        super(context, subtype);
+    private FakeInstanceIDWithSubtype(String subtype) {
+        super(null);
+        mSubtype = subtype;
 
         // The first call to InstanceIDWithSubtype.getInstance calls InstanceID.getInstance which
         // triggers a strict mode violation if it's called on the main thread, by reading from
@@ -88,6 +88,11 @@ public class FakeInstanceIDWithSubtype extends InstanceIDWithSubtype {
         // mode violation in tests, check the thread here (which is only called from getInstance).
         if (Looper.getMainLooper() == Looper.myLooper())
             throw new AssertionError(InstanceID.ERROR_MAIN_THREAD);
+    }
+
+    @Override
+    public String getSubtype() {
+        return mSubtype;
     }
 
     @Override
@@ -152,7 +157,7 @@ public class FakeInstanceIDWithSubtype extends InstanceIDWithSubtype {
 
     @Override
     public void deleteInstanceID() throws IOException {
-        synchronized (InstanceID.class) {
+        synchronized (sSubtypeInstancesLock) {
             sSubtypeInstances.remove(getSubtype());
 
             // InstanceID.deleteInstanceID calls InstanceID.deleteToken which enforces this.

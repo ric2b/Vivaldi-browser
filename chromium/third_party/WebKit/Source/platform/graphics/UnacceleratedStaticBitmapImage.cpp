@@ -4,29 +4,31 @@
 
 #include "platform/graphics/UnacceleratedStaticBitmapImage.h"
 
+#include "components/viz/common/gpu/context_provider.h"
+#include "platform/graphics/AcceleratedStaticBitmapImage.h"
+#include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/skia/include/core/SkImage.h"
 
 namespace blink {
 
-PassRefPtr<UnacceleratedStaticBitmapImage>
+scoped_refptr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(sk_sp<SkImage> image) {
   DCHECK(!image->isTextureBacked());
-  return AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
+  return base::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
     sk_sp<SkImage> image) {
   DCHECK(!image->isLazyGenerated());
 
-  PaintImageBuilder builder;
-  InitPaintImageBuilder(builder);
-  builder.set_image(std::move(image));
-  paint_image_ = builder.TakePaintImage();
+  paint_image_ =
+      CreatePaintImageBuilder().set_image(std::move(image)).TakePaintImage();
 }
 
-PassRefPtr<UnacceleratedStaticBitmapImage>
+scoped_refptr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(PaintImage image) {
-  return AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
+  return base::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(PaintImage image)
@@ -45,6 +47,27 @@ bool UnacceleratedStaticBitmapImage::IsPremultiplied() const {
          SkAlphaType::kPremul_SkAlphaType;
 }
 
+scoped_refptr<StaticBitmapImage>
+UnacceleratedStaticBitmapImage::MakeAccelerated(
+    WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) {
+  if (!context_wrapper)
+    return nullptr;  // Can happen if the context is lost.
+
+  GrContext* grcontext = context_wrapper->ContextProvider()->GetGrContext();
+  if (!grcontext)
+    return nullptr;  // Can happen if the context is lost.
+
+  // TODO(crbug.com/782383): This can return a SkColorSpace, which should be
+  // passed along.
+  sk_sp<SkImage> gpu_skimage =
+      paint_image_.GetSkImage()->makeTextureImage(grcontext, nullptr);
+  if (!gpu_skimage)
+    return nullptr;
+
+  return AcceleratedStaticBitmapImage::CreateFromSkImage(
+      std::move(gpu_skimage), std::move(context_wrapper));
+}
+
 bool UnacceleratedStaticBitmapImage::CurrentFrameKnownToBeOpaque(MetadataMode) {
   return paint_image_.GetSkImage()->isOpaque();
 }
@@ -54,7 +77,8 @@ void UnacceleratedStaticBitmapImage::Draw(PaintCanvas* canvas,
                                           const FloatRect& dst_rect,
                                           const FloatRect& src_rect,
                                           RespectImageOrientationEnum,
-                                          ImageClampingMode clamp_mode) {
+                                          ImageClampingMode clamp_mode,
+                                          ImageDecodingMode) {
   StaticBitmapImage::DrawHelper(canvas, flags, dst_rect, src_rect, clamp_mode,
                                 PaintImageForCurrentFrame());
 }

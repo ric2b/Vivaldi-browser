@@ -177,6 +177,23 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
       base::Bind(callback, create_results));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvents(
+    std::vector<calendar::EventRow> events,
+    const CreateEventsCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<CreateEventsResult> create_results =
+      std::shared_ptr<CreateEventsResult>(new CreateEventsResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::CreateCalendarEvents, calendar_backend_,
+                 events, create_results),
+      base::Bind(callback, create_results));
+}
+
 base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
     EventID event_id,
     CalendarEvent event,

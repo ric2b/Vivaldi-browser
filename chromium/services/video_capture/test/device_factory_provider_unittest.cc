@@ -8,6 +8,7 @@
 #include "services/video_capture/public/interfaces/constants.mojom.h"
 #include "services/video_capture/public/interfaces/device_factory.mojom.h"
 #include "services/video_capture/test/device_factory_provider_test.h"
+#include "services/video_capture/test/mock_producer.h"
 
 using testing::Exactly;
 using testing::_;
@@ -51,6 +52,38 @@ TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
   ASSERT_EQ(1u, num_devices_enumerated);
 }
 
+// Tests that an added virtual device will be returned in the callback
+// when calling GetDeviceInfos.
+TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
+       VirtualDeviceEnumeratedAfterAdd) {
+  base::RunLoop wait_loop;
+  const std::string virtual_device_id = "/virtual/device";
+  media::VideoCaptureDeviceInfo info;
+  info.descriptor.device_id = virtual_device_id;
+  mojom::VirtualDevicePtr virtual_device_proxy;
+  mojom::ProducerPtr producer_proxy;
+  MockProducer producer(mojo::MakeRequest(&producer_proxy));
+  EXPECT_CALL(device_info_receiver_, Run(_))
+      .Times(Exactly(1))
+      .WillOnce(
+          Invoke([&wait_loop, virtual_device_id](
+                     const std::vector<media::VideoCaptureDeviceInfo>& infos) {
+            bool virtual_device_enumerated = false;
+            for (const auto& info : infos) {
+              if (info.descriptor.device_id == virtual_device_id) {
+                virtual_device_enumerated = true;
+                break;
+              }
+            }
+            EXPECT_TRUE(virtual_device_enumerated);
+            wait_loop.Quit();
+          }));
+  factory_->AddVirtualDevice(info, std::move(producer_proxy),
+                             mojo::MakeRequest(&virtual_device_proxy));
+  factory_->GetDeviceInfos(device_info_receiver_.Get());
+  wait_loop.Run();
+}
+
 // Tests that VideoCaptureDeviceFactory::CreateDeviceProxy() returns an error
 // code when trying to create a device for an invalid descriptor.
 TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
@@ -71,11 +104,36 @@ TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
   wait_loop.Run();
 }
 
-// Tests that the service requests to be closed when the last client disconnects
+// Test that CreateDevice will succeed when trying to create a device
+// for an added virtual device.
+TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
+       CreateDeviceSuccessForVirtualDevice) {
+  base::RunLoop wait_loop;
+  const std::string virtual_device_id = "/virtual/device";
+  media::VideoCaptureDeviceInfo info;
+  info.descriptor.device_id = virtual_device_id;
+  mojom::DevicePtr device_proxy;
+  mojom::VirtualDevicePtr virtual_device_proxy;
+  mojom::ProducerPtr producer_proxy;
+  MockProducer producer(mojo::MakeRequest(&producer_proxy));
+  base::MockCallback<mojom::DeviceFactory::CreateDeviceCallback>
+      create_device_proxy_callback;
+  EXPECT_CALL(create_device_proxy_callback,
+              Run(mojom::DeviceAccessResultCode::SUCCESS))
+      .Times(1)
+      .WillOnce(InvokeWithoutArgs([&wait_loop]() { wait_loop.Quit(); }));
+  factory_->AddVirtualDevice(info, std::move(producer_proxy),
+                             mojo::MakeRequest(&virtual_device_proxy));
+  factory_->CreateDevice(virtual_device_id, mojo::MakeRequest(&device_proxy),
+                         create_device_proxy_callback.Get());
+  wait_loop.Run();
+}
+
+// Tests that the service requests to be closed when the only client disconnects
 // after not having done anything other than obtaining a connection to the
 // fake device factory.
 TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
-       ServiceQuitsWhenNoClientConnected) {
+       ServiceQuitsWhenSingleClientDisconnected) {
   base::RunLoop wait_loop;
   EXPECT_CALL(*service_state_observer_, OnServiceStopped(_))
       .WillOnce(Invoke([&wait_loop](const service_manager::Identity& identity) {
@@ -86,6 +144,30 @@ TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
   // Exercise: Disconnect from service by discarding our references to it.
   factory_.reset();
   factory_provider_.reset();
+
+  wait_loop.Run();
+}
+
+// Tests that the service requests to be closed when the all clients disconnect
+// after not having done anything other than obtaining a connection to the
+// fake device factory.
+TEST_F(VideoCaptureServiceDeviceFactoryProviderTest,
+       ServiceQuitsWhenAllClientsDisconnected) {
+  // Bind another client to the DeviceFactoryProvider interface.
+  mojom::DeviceFactoryProviderPtr unused_provider;
+  connector()->BindInterface(mojom::kServiceName, &unused_provider);
+
+  base::RunLoop wait_loop;
+  EXPECT_CALL(*service_state_observer_, OnServiceStopped(_))
+      .WillOnce(Invoke([&wait_loop](const service_manager::Identity& identity) {
+        if (identity.name() == mojom::kServiceName)
+          wait_loop.Quit();
+      }));
+
+  // Exercise: Disconnect from service by discarding our references to it.
+  factory_.reset();
+  factory_provider_.reset();
+  unused_provider.reset();
 
   wait_loop.Run();
 }

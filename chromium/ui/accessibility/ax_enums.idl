@@ -97,7 +97,8 @@
     color_well,
     column_header,
     column,
-    combo_box,
+    combo_box_grouping,
+    combo_box_menu_button,
     complementary,
     content_info,
     date,
@@ -187,6 +188,7 @@
     table,
     term,
     text_field,
+    text_field_with_combo_box,
     time,
     timer,
     title_bar,
@@ -217,7 +219,6 @@
     linked,
     multiline,
     multiselectable,
-    offscreen,
     protected,
     required,
     richly_editable,
@@ -311,6 +312,13 @@
     activate,
     check,
     click,
+
+    // A click will be performed on one of the node's ancestors.
+    // This happens when the node itself is not clickable, but one of its
+    // ancestors has click handlers attached which are able to capture the click
+    // as it bubbles up.
+    click_ancestor,
+
     jump,
     open,
     press,
@@ -458,6 +466,7 @@
     value_for_range,
     min_value_for_range,
     max_value_for_range,
+    step_value_for_range,
 
     // Text attributes.
     // Font size is in pixels.
@@ -487,7 +496,14 @@
     canvas_has_fallback,
 
     // Indicates this node is scrollable (Android only).
-    scrollable
+    scrollable,
+
+    // A hint to clients that the node is clickable.
+    clickable,
+
+    // Indicates that this node clips its children, i.e. may have
+    // overflow: hidden or clip children by default.
+    clips_children
   };
 
   [cpp_enum_prefix_override="ax_attr"] enum AXIntListAttribute {
@@ -631,6 +647,7 @@
     page,
     step,
     location,
+    unclipped_location,
     date,
     time
   };
@@ -707,7 +724,8 @@
     swipe_left_4,
     swipe_up_4,
     swipe_right_4,
-    swipe_down_4
+    swipe_down_4,
+    tap_2
   };
 
   enum AXTextAffinity {

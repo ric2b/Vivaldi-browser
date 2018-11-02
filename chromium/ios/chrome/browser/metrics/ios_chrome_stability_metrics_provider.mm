@@ -4,7 +4,22 @@
 
 #include "ios/chrome/browser/metrics/ios_chrome_stability_metrics_provider.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/web_state.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+// Name of the UMA enum histogram that counts DidStartNavigation events by type.
+const char IOSChromeStabilityMetricsProvider::kPageLoadCountMetric[] =
+    "IOS.PageLoadCount.Counts";
+// Name of the UMA enum history that counts DidStartLoading events.
+const char
+    IOSChromeStabilityMetricsProvider::kPageLoadCountLoadingStartedMetric[] =
+        "IOS.PageLoadCount.LoadingStarted";
 
 IOSChromeStabilityMetricsProvider::IOSChromeStabilityMetricsProvider(
     PrefService* local_state)
@@ -47,7 +62,27 @@ void IOSChromeStabilityMetricsProvider::WebStateDidStartLoading(
   if (!recording_enabled_)
     return;
 
+  UMA_HISTOGRAM_BOOLEAN(kPageLoadCountLoadingStartedMetric, true);
   helper_.LogLoadStarted();
+}
+
+void IOSChromeStabilityMetricsProvider::WebStateDidStartNavigation(
+    web::WebState* web_state,
+    web::NavigationContext* navigation_context) {
+  if (!recording_enabled_)
+    return;
+
+  PageLoadCountNavigationType type =
+      PageLoadCountNavigationType::PAGE_LOAD_NAVIGATION;
+  if (navigation_context->GetUrl().SchemeIs(kChromeUIScheme)) {
+    type = PageLoadCountNavigationType::CHROME_URL_NAVIGATION;
+  } else if (navigation_context->IsSameDocument()) {
+    type = PageLoadCountNavigationType::SAME_DOCUMENT_WEB_NAVIGATION;
+  } else {
+    // TODO(crbug.com/786547): Move helper_.LogLoadStarted() here.
+  }
+  UMA_HISTOGRAM_ENUMERATION(kPageLoadCountMetric, type,
+                            PageLoadCountNavigationType::COUNT);
 }
 
 void IOSChromeStabilityMetricsProvider::RenderProcessGone(

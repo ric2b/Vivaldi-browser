@@ -81,9 +81,4 @@ SVGPreserveAspectRatioTearOff::SVGPreserveAspectRatioTearOff(
                                                  property_is_anim_val,
                                                  attribute_name) {}
 
-DEFINE_TRACE_WRAPPERS(SVGPreserveAspectRatioTearOff) {
-  SVGPropertyTearOff<SVGPreserveAspectRatio>::TraceWrappers(visitor);
-  ScriptWrappable::TraceWrappers(visitor);
-}
-
 }  // namespace blink

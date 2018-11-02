@@ -78,7 +78,7 @@ class MODULES_EXPORT WebSocketChannel
   virtual void Send(const DOMArrayBuffer&,
                     unsigned byte_offset,
                     unsigned byte_length) = 0;
-  virtual void Send(PassRefPtr<BlobDataHandle>) = 0;
+  virtual void Send(scoped_refptr<BlobDataHandle>) = 0;
 
   // For WorkerWebSocketChannel.
   virtual void SendTextAsCharVector(std::unique_ptr<Vector<char>>) = 0;
@@ -104,7 +104,7 @@ class MODULES_EXPORT WebSocketChannel
 
   virtual ~WebSocketChannel() {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 }  // namespace blink

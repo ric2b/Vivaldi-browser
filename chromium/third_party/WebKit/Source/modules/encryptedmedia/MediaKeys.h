@@ -27,11 +27,11 @@
 #define MediaKeys_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/typed_arrays/DOMArrayPiece.h"
 #include "platform/Timer.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/text/WTFString.h"
@@ -52,10 +52,9 @@ class WebContentDecryptionModule;
 
 // References are held by JS and HTMLMediaElement.
 // The WebContentDecryptionModule has the same lifetime as this object.
-class MediaKeys : public GarbageCollectedFinalized<MediaKeys>,
+class MediaKeys : public ScriptWrappable,
                   public ActiveScriptWrappable<MediaKeys>,
-                  public ContextLifecycleObserver,
-                  public ScriptWrappable {
+                  public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(MediaKeys);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -93,7 +92,7 @@ class MediaKeys : public GarbageCollectedFinalized<MediaKeys>,
 
   WebContentDecryptionModule* ContentDecryptionModule();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // ContextLifecycleObserver implementation.
   // FIXME: This class could derive from ContextLifecycleObserver

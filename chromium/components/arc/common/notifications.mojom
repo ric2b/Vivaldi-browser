@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 11
+// Next MinVersion: 15
 
 module arc.mojom;
 
 import "bitmap.mojom";
+import "gfx.mojom";
 
 // These values must be matched with the NOTIFICATION_EVENT_* constants in
 // com.android.server.ArcNotificationListenerService.
@@ -53,6 +54,12 @@ enum ArcNotificationExpandState {
   FIXED_SIZE = 0,
   COLLAPSED = 1,
   EXPANDED = 2,
+};
+
+[Extensible, MinVersion=12]
+enum ArcNotificationRemoteInputState {
+  CLOSED = 0,
+  OPENED = 1,
 };
 
 // These values represent what shows in an ARC custom notification.
@@ -120,6 +127,14 @@ struct ArcNotificationData {
   // Flag for what shows in a notification.
   [MinVersion=11]
   ArcNotificationShownContents shown_contents;
+  [MinVersion=12]
+  ArcNotificationRemoteInputState remote_input_state;
+  // Indicates a rect for which Android wants to handle swipe events for by
+  // itself. The coordinates in this Rect are in Android pixels and represent
+  // a sub-rectangle of the notification, with the origin being the top left
+  // of the notification.
+  [MinVersion=14]
+  Rect? swipe_input_rect;
 };
 
 [MinVersion=2]
@@ -137,9 +152,11 @@ struct ArcToastData {
   string? dismiss_text;
 };
 
+// Next Method ID: 6
 interface NotificationsHost {
   // Tells the Chrome that a notification is posted (created or updated) on
-  // Android.
+  // Android. If you know that the notification exists, please consider to use
+  // OnNotificationUpdate instead.
   // |notification_data| is the data of notification (id, texts, icon and ...).
   OnNotificationPosted@0(ArcNotificationData notification_data);
 
@@ -154,12 +171,20 @@ interface NotificationsHost {
   [MinVersion=2]
   // Hides the visible toast immediately, or cancels the scheduled one.
   OnToastCancelled@3(ArcToastData data);
+
+  [MinVersion=13]
+  // Notifies that an existing notiication is updated on Android.
+  OnNotificationUpdated@5(ArcNotificationData notification_data);
 };
 
+// Next Method ID: 6
 // TODO(lhchavez): Migrate all request/response messages to Mojo.
 interface NotificationsInstance {
+  // DEPRECATED: Please use Init@5 instead.
+  InitDeprecated@0(NotificationsHost host_ptr);
+
   // Establishes full-duplex communication with the host.
-  Init@0(NotificationsHost host_ptr);
+  [MinVersion=14] Init@5(NotificationsHost host_ptr) => ();
 
   // Sends an event from Chrome notification UI to Android.
   // |event| is a type of occured event.

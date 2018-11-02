@@ -9,6 +9,7 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/message_loop/message_loop.h"
 #include "components/exo/wayland/clients/client_base.h"
 #include "components/exo/wayland/clients/client_helper.h"
 
@@ -89,17 +90,11 @@ void YuvClient::Run(const ClientBase::InitParams& params) {
       continue;
     frame_number++;
 
-    auto buffer_it =
-        std::find_if(buffers_.begin(), buffers_.end(),
-                     [](const std::unique_ptr<ClientBase::Buffer>& buffer) {
-                       return !buffer->busy;
-                     });
-    if (buffer_it == buffers_.end()) {
+    Buffer* buffer = DequeueBuffer();
+    if (!buffer) {
       LOG(ERROR) << "Can't find free buffer";
       return;
     }
-    auto* buffer = buffer_it->get();
-    buffer->busy = true;
     const SkColor kColors[] = {SK_ColorBLUE,   SK_ColorGREEN, SK_ColorRED,
                                SK_ColorYELLOW, SK_ColorCYAN,  SK_ColorMAGENTA};
     if (!WriteSolidColor(buffer->bo.get(),
@@ -132,6 +127,7 @@ int main(int argc, char* argv[]) {
 
   exo::wayland::clients::ClientBase::InitParams params;
   params.use_drm = true;
+  params.num_buffers = 8;  // Allow up to 8 buffers by default.
   if (!params.FromCommandLine(*command_line))
     return 1;
 
@@ -140,6 +136,7 @@ int main(int argc, char* argv[]) {
   params.bo_usage =
       GBM_BO_USE_SCANOUT | GBM_BO_USE_LINEAR | GBM_BO_USE_TEXTURING;
 
+  base::MessageLoopForUI message_loop;
   exo::wayland::clients::YuvClient client;
   client.Run(params);
   return 1;

@@ -21,12 +21,13 @@
 
 #include "core/css/CSSPageRule.h"
 
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -34,7 +35,7 @@ namespace blink {
 CSSPageRule::CSSPageRule(StyleRulePage* page_rule, CSSStyleSheet* parent)
     : CSSRule(parent), page_rule_(page_rule) {}
 
-CSSPageRule::~CSSPageRule() {}
+CSSPageRule::~CSSPageRule() = default;
 
 CSSStyleDeclaration* CSSPageRule::style() const {
   if (!properties_cssom_wrapper_)
@@ -54,9 +55,10 @@ String CSSPageRule::selectorText() const {
   return text.ToString();
 }
 
-void CSSPageRule::setSelectorText(const String& selector_text) {
-  CSSParserContext* context =
-      CSSParserContext::Create(ParserContext(), nullptr);
+void CSSPageRule::setSelectorText(const ExecutionContext* execution_context,
+                                  const String& selector_text) {
+  CSSParserContext* context = CSSParserContext::Create(
+      ParserContext(execution_context->GetSecureContextMode()), nullptr);
   DCHECK(context);
   CSSSelectorList selector_list = CSSParser::ParsePageSelector(
       *context, parentStyleSheet() ? parentStyleSheet()->Contents() : nullptr,
@@ -92,7 +94,7 @@ void CSSPageRule::Reattach(StyleRuleBase* rule) {
     properties_cssom_wrapper_->Reattach(page_rule_->MutableProperties());
 }
 
-DEFINE_TRACE(CSSPageRule) {
+void CSSPageRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_rule_);
   visitor->Trace(properties_cssom_wrapper_);
   CSSRule::Trace(visitor);

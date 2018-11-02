@@ -18,18 +18,22 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 
 extern const base::Feature kAffiliationBasedMatching;
-extern const base::Feature kDropSyncCredential;
+extern const base::Feature kEnableHtmlBasedUsernameDetector;
 extern const base::Feature kEnableManualFallbacksFilling;
+extern const base::Feature kEnableManualFallbacksFillingStandalone;
+extern const base::Feature kEnableManualFallbacksGeneration;
 extern const base::Feature kEnableManualPasswordGeneration;
 extern const base::Feature kEnableManualSaving;
 extern const base::Feature kEnablePasswordForceSaving;
 extern const base::Feature kEnablePasswordSelection;
+extern const base::Feature kEnableShowAllSavedPasswordsContextMenu;
 extern const base::Feature kEnableUsernameCorrection;
+extern const base::Feature kFillOnAccountSelect;
+extern const base::Feature kPasswordExport;
+extern const base::Feature kPasswordImport;
 extern const base::Feature kProtectSyncCredential;
 extern const base::Feature kProtectSyncCredentialOnReauth;
-extern const base::Feature kPasswordImportExport;
 extern const base::Feature kViewPasswords;
-extern const base::Feature kFillOnAccountSelect;
 
 }  // namespace features
 

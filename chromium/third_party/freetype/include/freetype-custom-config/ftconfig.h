@@ -73,11 +73,11 @@ FT_BEGIN_HEADER
 
   /* The size of an `int' type.  */
 #if                                 FT_UINT_MAX == 0xFFFFUL
-#define FT_SIZEOF_INT  (16 / FT_CHAR_BIT)
+#define FT_SIZEOF_INT  ( 16 / FT_CHAR_BIT )
 #elif                               FT_UINT_MAX == 0xFFFFFFFFUL
-#define FT_SIZEOF_INT  (32 / FT_CHAR_BIT)
+#define FT_SIZEOF_INT  ( 32 / FT_CHAR_BIT )
 #elif FT_UINT_MAX > 0xFFFFFFFFUL && FT_UINT_MAX == 0xFFFFFFFFFFFFFFFFUL
-#define FT_SIZEOF_INT  (64 / FT_CHAR_BIT)
+#define FT_SIZEOF_INT  ( 64 / FT_CHAR_BIT )
 #else
 #error "Unsupported size of `int' type!"
 #endif
@@ -85,11 +85,11 @@ FT_BEGIN_HEADER
   /* The size of a `long' type.  A five-byte `long' (as used e.g. on the */
   /* DM642) is recognized but avoided.                                   */
 #if                                  FT_ULONG_MAX == 0xFFFFFFFFUL
-#define FT_SIZEOF_LONG  (32 / FT_CHAR_BIT)
+#define FT_SIZEOF_LONG  ( 32 / FT_CHAR_BIT )
 #elif FT_ULONG_MAX > 0xFFFFFFFFUL && FT_ULONG_MAX == 0xFFFFFFFFFFUL
-#define FT_SIZEOF_LONG  (32 / FT_CHAR_BIT)
+#define FT_SIZEOF_LONG  ( 32 / FT_CHAR_BIT )
 #elif FT_ULONG_MAX > 0xFFFFFFFFUL && FT_ULONG_MAX == 0xFFFFFFFFFFFFFFFFUL
-#define FT_SIZEOF_LONG  (64 / FT_CHAR_BIT)
+#define FT_SIZEOF_LONG  ( 64 / FT_CHAR_BIT )
 #else
 #error "Unsupported size of `long' type!"
 #endif
@@ -236,12 +236,12 @@ FT_BEGIN_HEADER
 
 #endif
 
-#if FT_SIZEOF_INT == (32 / FT_CHAR_BIT)
+#if FT_SIZEOF_INT == ( 32 / FT_CHAR_BIT )
 
   typedef signed int      FT_Int32;
   typedef unsigned int    FT_UInt32;
 
-#elif FT_SIZEOF_LONG == (32 / FT_CHAR_BIT)
+#elif FT_SIZEOF_LONG == ( 32 / FT_CHAR_BIT )
 
   typedef signed long     FT_Int32;
   typedef unsigned long   FT_UInt32;
@@ -252,12 +252,12 @@ FT_BEGIN_HEADER
 
 
   /* look up an integer type that is at least 32 bits */
-#if FT_SIZEOF_INT >= (32 / FT_CHAR_BIT)
+#if FT_SIZEOF_INT >= ( 32 / FT_CHAR_BIT )
 
   typedef int            FT_Fast;
   typedef unsigned int   FT_UFast;
 
-#elif FT_SIZEOF_LONG >= (32 / FT_CHAR_BIT)
+#elif FT_SIZEOF_LONG >= ( 32 / FT_CHAR_BIT )
 
   typedef long           FT_Fast;
   typedef unsigned long  FT_UFast;
@@ -267,7 +267,7 @@ FT_BEGIN_HEADER
 
   /* determine whether we have a 64-bit int type for platforms without */
   /* Autoconf                                                          */
-#if FT_SIZEOF_LONG == (64 / FT_CHAR_BIT)
+#if FT_SIZEOF_LONG == ( 64 / FT_CHAR_BIT )
 
   /* FT_LONG64 must be defined if a 64-bit type is available */
 #define FT_LONG64
@@ -408,9 +408,62 @@ FT_BEGIN_HEADER
 #endif /* !FT_BASE_DEF */
 
 
+  /*   When compiling FreeType as a DLL, some systems/compilers need a     */
+  /*   special attribute in front OR after the return type of function     */
+  /*   declarations.                                                       */
+  /*                                                                       */
+  /*   Two macros are used within the FreeType source code to define       */
+  /*   exported library functions: FT_EXPORT and FT_EXPORT_DEF.            */
+  /*                                                                       */
+  /*     FT_EXPORT( return_type )                                          */
+  /*                                                                       */
+  /*       is used in a function declaration, as in                        */
+  /*                                                                       */
+  /*         FT_EXPORT( FT_Error )                                         */
+  /*         FT_Init_FreeType( FT_Library*  alibrary );                    */
+  /*                                                                       */
+  /*                                                                       */
+  /*     FT_EXPORT_DEF( return_type )                                      */
+  /*                                                                       */
+  /*       is used in a function definition, as in                         */
+  /*                                                                       */
+  /*         FT_EXPORT_DEF( FT_Error )                                     */
+  /*         FT_Init_FreeType( FT_Library*  alibrary )                     */
+  /*         {                                                             */
+  /*           ... some code ...                                           */
+  /*           return FT_Err_Ok;                                           */
+  /*         }                                                             */
+  /*                                                                       */
+  /*   You can provide your own implementation of FT_EXPORT and            */
+  /*   FT_EXPORT_DEF here if you want.                                     */
+  /*                                                                       */
+#if defined(_WIN32)
+
+#if defined(FT2_BUILD_DLL)
+#if defined(FT2_BUILD_LIBRARY)
+#define FT_EXPORT(x)     __declspec(dllexport) x
+#define FT_EXPORT_DEF(x) __declspec(dllexport) x
+#else
+#define FT_EXPORT(x)     __declspec(dllimport) x
+#define FT_EXPORT_DEF(x) __declspec(dllimport) x
+#endif
+#endif
+
+#else
+#if !defined(CHROMIUM_RESTRICT_VISIBILITY)
+#define FT_EXPORT(x)     __attribute__((visibility ("default"))) x
+#define FT_EXPORT_DEF(x) __attribute__((visibility ("default"))) x
+#else
+#define FT_EXPORT(x)     x
+#define FT_EXPORT_DEF(x) x
+#endif
+#endif
+
 #ifndef FT_EXPORT
 
-#ifdef __cplusplus
+#if defined( _DLL )
+#define FT_EXPORT( x )  __declspec( dllexport )  x
+#elif defined( __cplusplus )
 #define FT_EXPORT( x )  extern "C"  x
 #else
 #define FT_EXPORT( x )  extern  x
@@ -421,7 +474,9 @@ FT_BEGIN_HEADER
 
 #ifndef FT_EXPORT_DEF
 
-#ifdef __cplusplus
+#if defined( _DLL )
+#define FT_EXPORT_DEF( x )  __declspec( dllexport )  x
+#elif defined( __cplusplus )
 #define FT_EXPORT_DEF( x )  extern "C"  x
 #else
 #define FT_EXPORT_DEF( x )  extern  x

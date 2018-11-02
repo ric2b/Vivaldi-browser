@@ -62,7 +62,10 @@ size_t DefaultWinHeapGetSizeEstimateImpl(const AllocatorDispatch*,
 
 }  // namespace
 
-const AllocatorDispatch AllocatorDispatch::default_dispatch = {
+// Guarantee that default_dispatch is compile-time initialized to avoid using
+// it before initialization (allocations before main in release builds with
+// optimizations disabled).
+constexpr AllocatorDispatch AllocatorDispatch::default_dispatch = {
     &DefaultWinHeapMallocImpl,
     &DefaultWinHeapCallocImpl,
     &DefaultWinHeapMemalignImpl,

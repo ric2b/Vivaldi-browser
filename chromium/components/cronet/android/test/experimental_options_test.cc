@@ -39,7 +39,8 @@ void WriteToHostCacheOnNetworkThread(jlong jcontext_adapter,
   CHECK(address.AssignFromIPLiteral(address_string));
   net::AddressList address_list =
       net::AddressList::CreateFromIPAddress(address, 0);
-  net::HostCache::Entry entry(net::OK, address_list);
+  net::HostCache::Entry entry(net::OK, address_list,
+                              net::HostCache::Entry::SOURCE_UNKNOWN);
   cache->Set(key1, entry, base::TimeTicks::Now(),
              base::TimeDelta::FromSeconds(1));
   cache->Set(key2, entry, base::TimeTicks::Now(),
@@ -47,10 +48,11 @@ void WriteToHostCacheOnNetworkThread(jlong jcontext_adapter,
 }
 }  // namespace
 
-static void WriteToHostCache(JNIEnv* env,
-                             const JavaParamRef<jclass>& jcaller,
-                             jlong jcontext_adapter,
-                             const JavaParamRef<jstring>& jaddress) {
+static void JNI_ExperimentalOptionsTest_WriteToHostCache(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    jlong jcontext_adapter,
+    const JavaParamRef<jstring>& jaddress) {
   TestUtil::RunAfterContextInit(
       jcontext_adapter,
       base::Bind(&WriteToHostCacheOnNetworkThread, jcontext_adapter,

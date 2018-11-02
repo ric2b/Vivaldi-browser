@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/null_task_runner.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_api.pb.h"
 #include "net/url_request/test_url_fetcher_factory.h"
@@ -57,7 +56,7 @@ class AffiliationFetcherTest : public testing::Test {
  public:
   AffiliationFetcherTest()
       : request_context_getter_(new net::TestURLRequestContextGetter(
-            make_scoped_refptr(new base::NullTaskRunner))) {}
+            base::MakeRefCounted<base::NullTaskRunner>())) {}
 
   ~AffiliationFetcherTest() override {}
 
@@ -169,7 +168,7 @@ TEST_F(AffiliationFetcherTest, AndroidBrandingInfoIsReturnedIfPresent) {
   affiliation_pb::Affiliation* eq_class = test_response.add_affiliation();
   eq_class->add_facet()->set_id(kExampleWebFacet1URI);
   eq_class->add_facet()->set_id(kExampleWebFacet2URI);
-  auto android_branding_info = base::MakeUnique<affiliation_pb::BrandingInfo>();
+  auto android_branding_info = std::make_unique<affiliation_pb::BrandingInfo>();
   android_branding_info->set_name(kExampleAndroidPlayName);
   android_branding_info->set_icon_url(kExampleAndroidIconURL);
   affiliation_pb::Facet* android_facet = eq_class->add_facet();

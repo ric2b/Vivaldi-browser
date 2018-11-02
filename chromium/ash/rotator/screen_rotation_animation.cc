@@ -4,7 +4,8 @@
 
 #include "ash/rotator/screen_rotation_animation.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/time/time.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_delegate.h"
@@ -30,8 +31,8 @@ ScreenRotationAnimation::ScreenRotationAnimation(ui::Layer* layer,
       initial_opacity_(initial_opacity),
       target_opacity_(target_opacity) {
   std::unique_ptr<ui::InterpolatedTransform> rotation =
-      base::MakeUnique<ui::InterpolatedTransformAboutPivot>(
-          pivot, base::MakeUnique<ui::InterpolatedRotation>(start_degrees,
+      std::make_unique<ui::InterpolatedTransformAboutPivot>(
+          pivot, std::make_unique<ui::InterpolatedRotation>(start_degrees,
                                                             end_degrees));
 
   // Use the target transform/bounds in case the layer is already animating.
@@ -41,7 +42,7 @@ ScreenRotationAnimation::ScreenRotationAnimation(ui::Layer* layer,
   interpolated_transform_->SetChild(std::move(rotation));
 }
 
-ScreenRotationAnimation::~ScreenRotationAnimation() {}
+ScreenRotationAnimation::~ScreenRotationAnimation() = default;
 
 void ScreenRotationAnimation::OnStart(ui::LayerAnimationDelegate* delegate) {}
 
@@ -49,9 +50,11 @@ bool ScreenRotationAnimation::OnProgress(double current,
                                          ui::LayerAnimationDelegate* delegate) {
   const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
   delegate->SetTransformFromAnimation(
-      interpolated_transform_->Interpolate(tweened));
-  delegate->SetOpacityFromAnimation(gfx::Tween::FloatValueBetween(
-      tweened, initial_opacity_, target_opacity_));
+      interpolated_transform_->Interpolate(tweened),
+      ui::PropertyChangeReason::FROM_ANIMATION);
+  delegate->SetOpacityFromAnimation(
+      gfx::Tween::FloatValueBetween(tweened, initial_opacity_, target_opacity_),
+      ui::PropertyChangeReason::FROM_ANIMATION);
   return true;
 }
 
@@ -67,7 +70,8 @@ void ScreenRotationAnimation::OnAbort(ui::LayerAnimationDelegate* delegate) {
 
   TargetValue target_value;
   OnGetTarget(&target_value);
-  delegate->SetTransformFromAnimation(target_value.transform);
+  delegate->SetTransformFromAnimation(target_value.transform,
+                                      ui::PropertyChangeReason::FROM_ANIMATION);
 }
 
 }  // namespace ash

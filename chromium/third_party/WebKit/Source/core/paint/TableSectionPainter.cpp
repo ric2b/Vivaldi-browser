@@ -8,15 +8,16 @@
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutTableCol.h"
 #include "core/layout/LayoutTableRow.h"
+#include "core/paint/AdjustPaintOffsetScope.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/BoxPainterBase.h"
 #include "core/paint/CollapsedBorderPainter.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/TableCellPainter.h"
 #include "core/paint/TableRowPainter.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 
 namespace blink {
 
@@ -155,8 +156,6 @@ void TableSectionPainter::PaintRepeatingFooterGroup(
 
 void TableSectionPainter::Paint(const PaintInfo& paint_info,
                                 const LayoutPoint& paint_offset) {
-  ObjectPainter(layout_table_section_)
-      .CheckPaintOffset(paint_info, paint_offset);
   PaintSection(paint_info, paint_offset);
   LayoutTable* table = layout_table_section_.Table();
   if (table->Header() == layout_table_section_) {
@@ -179,20 +178,24 @@ void TableSectionPainter::PaintSection(const PaintInfo& paint_info,
   if (!total_rows || !total_cols)
     return;
 
-  LayoutPoint adjusted_paint_offset =
-      paint_offset + layout_table_section_.Location();
+  AdjustPaintOffsetScope adjustment(layout_table_section_, paint_info,
+                                    paint_offset);
+  const auto& local_paint_info = adjustment.GetPaintInfo();
+  auto adjusted_paint_offset = adjustment.AdjustedPaintOffset();
 
-  if (paint_info.phase != kPaintPhaseSelfOutlineOnly) {
+  if (local_paint_info.phase != PaintPhase::kSelfOutlineOnly) {
     Optional<BoxClipper> box_clipper;
-    if (paint_info.phase != kPaintPhaseSelfBlockBackgroundOnly)
-      box_clipper.emplace(layout_table_section_, paint_info,
+    if (local_paint_info.phase != PaintPhase::kSelfBlockBackgroundOnly) {
+      box_clipper.emplace(layout_table_section_, local_paint_info,
                           adjusted_paint_offset, kForceContentsClip);
-    PaintObject(paint_info, adjusted_paint_offset);
+    }
+    PaintObject(local_paint_info, adjusted_paint_offset);
   }
 
-  if (ShouldPaintSelfOutline(paint_info.phase))
+  if (ShouldPaintSelfOutline(local_paint_info.phase)) {
     ObjectPainter(layout_table_section_)
-        .PaintOutline(paint_info, adjusted_paint_offset);
+        .PaintOutline(local_paint_info, adjusted_paint_offset);
+  }
 }
 
 void TableSectionPainter::PaintCollapsedBorders(
@@ -214,12 +217,15 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
       !layout_table_section_.Table()->EffectiveColumns().size())
     return;
 
-  LayoutPoint adjusted_paint_offset =
-      paint_offset + layout_table_section_.Location();
-  BoxClipper box_clipper(layout_table_section_, paint_info,
+  AdjustPaintOffsetScope adjustment(layout_table_section_, paint_info,
+                                    paint_offset);
+  const auto& local_paint_info = adjustment.GetPaintInfo();
+  auto adjusted_paint_offset = adjustment.AdjustedPaintOffset();
+  BoxClipper box_clipper(layout_table_section_, local_paint_info,
                          adjusted_paint_offset, kForceContentsClip);
 
-  LayoutRect local_visual_rect = LayoutRect(paint_info.GetCullRect().rect_);
+  LayoutRect local_visual_rect =
+      LayoutRect(local_paint_info.GetCullRect().rect_);
   local_visual_rect.MoveBy(-adjusted_paint_offset);
 
   LayoutRect table_aligned_rect =
@@ -246,7 +252,7 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
   for (unsigned r = dirtied_rows.End(); r > dirtied_rows.Start(); r--) {
     if (const auto* row = layout_table_section_.RowLayoutObjectAt(r - 1)) {
       TableRowPainter(*row).PaintCollapsedBorders(
-          paint_info, adjusted_paint_offset, dirtied_columns);
+          local_paint_info, adjusted_paint_offset, dirtied_columns);
     }
   }
 }
@@ -272,7 +278,7 @@ void TableSectionPainter::PaintObject(const PaintInfo& paint_info,
                                  dirtied_columns);
   }
 
-  if (paint_info.phase == kPaintPhaseSelfBlockBackgroundOnly)
+  if (paint_info.phase == PaintPhase::kSelfBlockBackgroundOnly)
     return;
 
   if (ShouldPaintDescendantBlockBackgrounds(paint_info.phase)) {
@@ -376,16 +382,13 @@ void TableSectionPainter::PaintBoxDecorationBackground(
   layout_table_section_.GetMutableForPainting().UpdatePaintResult(
       paint_result, paint_info.GetCullRect());
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_table_section_,
           DisplayItem::kBoxDecorationBackground))
     return;
 
-  LayoutRect bounds = BoxPainter(layout_table_section_)
-                          .BoundsForDrawingRecorder(paint_info, paint_offset);
-  LayoutObjectDrawingRecorder recorder(
-      paint_info.context, layout_table_section_,
-      DisplayItem::kBoxDecorationBackground, bounds);
+  DrawingRecorder recorder(paint_info.context, layout_table_section_,
+                           DisplayItem::kBoxDecorationBackground);
   LayoutRect paint_rect(paint_offset, layout_table_section_.Size());
 
   if (has_box_shadow) {

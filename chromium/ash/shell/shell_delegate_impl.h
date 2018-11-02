@@ -25,28 +25,19 @@ class ShellDelegateImpl : public ShellDelegate {
 
   // ShellDelegate:
   ::service_manager::Connector* GetShellConnector() const override;
-  bool IsIncognitoAllowed() const override;
-  bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
   bool CanShowWindowForUser(aura::Window* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
-  void Exit() override;
   std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
-  void ShelfInit() override;
-  void ShelfShutdown() override;
   NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
+  std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
-  GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
-  bool GetTouchscreenEnabled(TouchscreenEnabledSource source) const override;
-  void SetTouchscreenEnabled(bool enabled,
-                             TouchscreenEnabledSource source) override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
  private:

@@ -34,9 +34,7 @@ namespace blink {
 
 class ExceptionState;
 
-class NodeIterator final : public GarbageCollected<NodeIterator>,
-                           public ScriptWrappable,
-                           public NodeIteratorBase {
+class NodeIterator final : public ScriptWrappable, public NodeIteratorBase {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(NodeIterator);
 
@@ -59,9 +57,9 @@ class NodeIterator final : public GarbageCollected<NodeIterator>,
   // This function is called before any node is removed from the document tree.
   void NodeWillBeRemoved(Node&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   NodeIterator(Node*, unsigned what_to_show, V8NodeFilterCondition*);
@@ -80,7 +78,7 @@ class NodeIterator final : public GarbageCollected<NodeIterator>,
     Member<Node> node;
     bool is_pointer_before_node;
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(node); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(node); }
   };
 
   void UpdateForNodeRemoval(Node& node_to_be_removed, NodePointer&) const;

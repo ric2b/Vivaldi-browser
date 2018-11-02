@@ -14,8 +14,6 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -29,6 +27,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/prefs/pref_service.h"
@@ -200,17 +200,21 @@ class PasswordStoreConsumerVerifier
   std::vector<std::unique_ptr<autofill::PasswordForm>> password_entries_;
 };
 
-static base::FilePath GetFirstNonSigninProfile(
-    ProfileAttributesStorage& storage) {
+base::FilePath GetFirstNonSigninNonLockScreenAppProfile(
+    ProfileAttributesStorage* storage) {
   std::vector<ProfileAttributesEntry*> entries =
-      storage.GetAllProfilesAttributesSortedByName();
+      storage->GetAllProfilesAttributesSortedByName();
 #if defined(OS_CHROMEOS)
   const base::FilePath signin_path =
       chromeos::ProfileHelper::GetSigninProfileDir();
+  const base::FilePath lock_screen_apps_path =
+      chromeos::ProfileHelper::GetLockScreenAppProfilePath();
+
   for (ProfileAttributesEntry* entry : entries) {
     base::FilePath profile_path = entry->GetPath();
-    if (profile_path != signin_path)
+    if (profile_path != signin_path && profile_path != lock_screen_apps_path) {
       return profile_path;
+    }
   }
   return base::FilePath();
 #else
@@ -235,9 +239,8 @@ class ProfileManagerBrowserTest : public InProcessBrowserTest {
   }
 };
 
-// Android does not support multi-profiles, and CrOS multi-profiles
-// implementation is too different for these tests.
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+// CrOS multi-profiles implementation is too different for these tests.
+#if !defined(OS_CHROMEOS)
 
 // Delete single profile and make sure a new one is created.
 IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteSingletonProfile) {
@@ -389,7 +392,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteAllProfiles) {
   Profile* last_used = ProfileManager::GetLastUsedProfile();
   EXPECT_EQ(new_profile_path, last_used->GetPath());
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
 
@@ -446,8 +449,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   }
 }
 
-// Flakes on ChromiumOS: http://crbug.com/758930
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_SwitchToProfile) {
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, SwitchToProfile) {
   // If multiprofile mode is not enabled, you can't switch between profiles.
   if (!profiles::IsMultipleProfilesEnabled())
     return;
@@ -456,7 +458,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_SwitchToProfile) {
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
   size_t initial_profile_count = profile_manager->GetNumberOfProfiles();
-  base::FilePath path_profile1 = GetFirstNonSigninProfile(storage);
+  base::FilePath path_profile1 =
+      GetFirstNonSigninNonLockScreenAppProfile(&storage);
 
   ASSERT_NE(0U, initial_profile_count);
   EXPECT_EQ(1U, chrome::GetTotalBrowserCount());
@@ -502,8 +505,12 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_SwitchToProfile) {
 }
 
 // Flakes on Windows: http://crbug.com/314905
-// Flakes on ChromiumOS: http://crbug.com/758930
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_EphemeralProfile) {
+#if defined(OS_WIN)
+#define MAYBE_EphemeralProfile DISABLED_EphemeralProfile
+#else
+#define MAYBE_EphemeralProfile EphemeralProfile
+#endif
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
   // If multiprofile mode is not enabled, you can't switch between profiles.
   if (!profiles::IsMultipleProfilesEnabled())
     return;
@@ -512,7 +519,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_EphemeralProfile) {
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
   size_t initial_profile_count = profile_manager->GetNumberOfProfiles();
-  base::FilePath path_profile1 = GetFirstNonSigninProfile(storage);
+  base::FilePath path_profile1 =
+      GetFirstNonSigninNonLockScreenAppProfile(&storage);
 
   ASSERT_NE(0U, initial_profile_count);
   EXPECT_EQ(1U, chrome::GetTotalBrowserCount());
@@ -561,7 +569,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_EphemeralProfile) {
 }
 
 // The test makes sense on those platforms where the keychain exists.
-#if !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_WIN) && !defined(OS_CHROMEOS)
 
 // Suddenly started failing on Linux, see http://crbug.com/660488.
 #if defined(OS_LINUX)
@@ -605,7 +613,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeletePasswords) {
   verify_delete.Wait();
   EXPECT_EQ(0u, verify_delete.GetPasswords().size());
 }
-#endif  // !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#endif  // !defined(OS_WIN) && !defined(OS_CHROMEOS)
 
 // Tests Profile::HasOffTheRecordProfile, Profile::IsValidProfile and the
 // profile counts in ProfileManager with respect to the creation and destruction

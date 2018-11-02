@@ -4,9 +4,10 @@
 
 #include "ash/system/system_notifier.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
-#include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 
 namespace ash {
 namespace system_notifier {
@@ -65,7 +66,6 @@ const char kNotifierDisplayError[] = "ash.display.error";
 const char kNotifierDisplayResolutionChange[] = "ash.display.resolution-change";
 const char kNotifierDualRole[] = "ash.dual-role";
 const char kNotifierFingerprintUnlock[] = "ash.fingerprintunlock";
-const char kNotifierHats[] = "ash.hats";
 const char kNotifierLocale[] = "ash.locale";
 const char kNotifierMultiProfileFirstRun[] = "ash.multi-profile.first-run";
 const char kNotifierNetwork[] = "ash.network";
@@ -106,12 +106,12 @@ std::unique_ptr<message_center::Notification> CreateSystemNotification(
     scoped_refptr<message_center::NotificationDelegate> delegate,
     const gfx::VectorIcon& small_image,
     message_center::SystemNotificationWarningLevel color_type) {
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     return message_center::Notification::CreateSystemNotification(
         type, id, title, message, gfx::Image(), display_source, origin_url,
         notifier_id, optional_fields, delegate, small_image, color_type);
   }
-  return base::MakeUnique<message_center::Notification>(
+  return std::make_unique<message_center::Notification>(
       type, id, title, message, icon, display_source, origin_url, notifier_id,
       optional_fields, delegate);
 }

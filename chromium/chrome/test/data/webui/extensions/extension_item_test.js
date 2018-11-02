@@ -23,7 +23,7 @@ cr.define('extension_item_tests', function() {
   // mode *and* showing details.
   var devElements = [
     {selector: '#version', text: extensionData.version},
-    {selector: '#extension-id', text: 'ID:' + extensionData.id},
+    {selector: '#extension-id', text: `ID: ${extensionData.id}`},
     {selector: '#inspect-views'},
     {selector: '#inspect-views a[is="action-link"]', text: 'foo.html,'},
     {selector: '#inspect-views a[is="action-link"]:nth-of-type(2)',
@@ -69,13 +69,16 @@ cr.define('extension_item_tests', function() {
     ElementVisibilityDeveloperState:
         'element visibility: after enabling developer mode',
     ClickableItems: 'clickable items',
+    FailedReloadFiresLoadError: 'failed reload fires load error',
     Warnings: 'warnings',
     SourceIndicator: 'source indicator',
     EnableToggle: 'toggle is disabled when necessary',
     RemoveButton: 'remove button hidden when necessary',
   };
 
-  suite('ExtensionItemTest', function() {
+  var suiteName = 'ExtensionItemTest';
+
+  suite(suiteName, function() {
     /**
      * Extension item created before each test.
      * @type {extensions.Item}
@@ -110,10 +113,21 @@ cr.define('extension_item_tests', function() {
       testNormalElementsAreVisible(item);
       testDeveloperElementsAreVisible(item);
 
+      // Developer reload button should be visible only for enabled unpacked
+      // extensions.
       extension_test_util.testVisible(item, '#dev-reload-button', false);
+
       item.set('data.location', chrome.developerPrivate.Location.UNPACKED);
       Polymer.dom.flush();
       extension_test_util.testVisible(item, '#dev-reload-button', true);
+
+      item.set('data.state', chrome.developerPrivate.ExtensionState.DISABLED);
+      Polymer.dom.flush();
+      extension_test_util.testVisible(item, '#dev-reload-button', false);
+
+      item.set('data.state', chrome.developerPrivate.ExtensionState.TERMINATED);
+      Polymer.dom.flush();
+      extension_test_util.testVisible(item, '#dev-reload-button', false);
     });
 
     /** Tests that the delegate methods are correctly called. */
@@ -130,7 +144,7 @@ cr.define('extension_item_tests', function() {
 
       // Setup for testing navigation buttons.
       var currentPage = null;
-      extensions.navigation.onRouteChanged(newPage => {
+      extensions.navigation.addListener(newPage => {
         currentPage = newPage;
       });
 
@@ -151,15 +165,58 @@ cr.define('extension_item_tests', function() {
       mockDelegate.testClickingCalls(
           item.$$('#repair-button'), 'repairItem', [item.data.id]);
 
-      item.set('data.disableReasons.corruptInstall', false);
+      item.set('data.state', chrome.developerPrivate.ExtensionState.TERMINATED);
       Polymer.dom.flush();
       mockDelegate.testClickingCalls(
-          item.$$('#terminated-reload-button'), 'reloadItem', [item.data.id]);
+          item.$$('#terminated-reload-button'), 'reloadItem', [item.data.id],
+          Promise.resolve());
 
       item.set('data.location', chrome.developerPrivate.Location.UNPACKED);
+      item.set('data.state', chrome.developerPrivate.ExtensionState.ENABLED);
       Polymer.dom.flush();
-      mockDelegate.testClickingCalls(
-          item.$$('#dev-reload-button'), 'reloadItem', [item.data.id]);
+    });
+
+    /** Tests that the reload button properly fires the load-error event. */
+    test(assert(TestNames.FailedReloadFiresLoadError), function() {
+      item.set('inDevMode', true);
+      item.set('data.location', chrome.developerPrivate.Location.UNPACKED);
+      Polymer.dom.flush();
+      extension_test_util.testVisible(item, '#dev-reload-button', true);
+
+      // Check clicking the reload button. The reload button should fire a
+      // load-error event if and only if the reload fails (indicated by a
+      // rejected promise).
+      // This is a bit of a pain to verify because the promises finish
+      // asynchronously, so we have to use setTimeout()s.
+      var firedLoadError = false;
+      item.addEventListener('load-error', () => { firedLoadError = true; });
+
+      // This is easier to test with a TestBrowserProxy-style delegate.
+      var proxyDelegate = new extensions.TestService();
+      item.delegate = proxyDelegate;
+
+      var verifyEventPromise = function(expectCalled) {
+        return new Promise((resolve, reject) => {
+          setTimeout(() => {
+            expectEquals(expectCalled, firedLoadError);
+            resolve();
+          });
+        });
+      };
+
+      MockInteractions.tap(item.$$('#dev-reload-button'));
+      return proxyDelegate.whenCalled('reloadItem').then(function(id) {
+        expectEquals(item.data.id, id);
+        return verifyEventPromise(false);
+      }).then(function() {
+        proxyDelegate.resetResolver('reloadItem');
+        proxyDelegate.setForceReloadItemError(true);
+        MockInteractions.tap(item.$$('#dev-reload-button'));
+        return proxyDelegate.whenCalled('reloadItem');
+      }).then(function(id) {
+        expectEquals(item.data.id, id);
+        return verifyEventPromise(true);
+      });
     });
 
     test(assert(TestNames.Warnings), function() {
@@ -217,20 +274,26 @@ cr.define('extension_item_tests', function() {
       var icon = item.$$('#source-indicator iron-icon');
       assertTrue(!!icon);
       expectEquals('extensions-icons:unpacked', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       item.set('data.location', 'THIRD_PARTY');
       Polymer.dom.flush();
       expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
       expectEquals('input', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
+
+      item.set('data.location', 'UNKNOWN');
+      Polymer.dom.flush();
+      expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
+      expectEquals('input', icon.icon);
+      extension_test_util.testIcons(item);
 
       item.set('data.location', 'FROM_STORE');
       item.set('data.controlledInfo', {type: 'POLICY', text: 'policy'});
       Polymer.dom.flush();
       expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
       expectEquals('communication:business', icon.icon);
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       item.set('data.controlledInfo', null);
       Polymer.dom.flush();
@@ -253,6 +316,7 @@ cr.define('extension_item_tests', function() {
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

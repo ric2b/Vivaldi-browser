@@ -7,6 +7,7 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -30,7 +31,9 @@ namespace {
 
 class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
  public:
-  CredentialManagerBrowserTest() = default;
+  CredentialManagerBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(features::kWebAuth);
+  }
 
   void SetUpOnMainThread() override {
     PasswordManagerBrowserTestBase::SetUpOnMainThread();
@@ -47,8 +50,6 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     // To permit using webauthentication features.
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
-    command_line->AppendSwitchASCII(switches::kEnableFeatures,
-                                    features::kWebAuth.name);
   }
 
   // Similarly to PasswordManagerBrowserTestBase::NavigateToFile this is a
@@ -79,30 +80,6 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ASSERT_EQ(expect_has_results, result);
   }
 
-  // Triggers a call to `navigator.credentials.create` to generate a
-  // publicKeyCredential, waits for rejection, and ASSERTs that
-  // |expect_has_results| is satisfied.
-  void CreatePublicKeyCredentialAndExpectNotImplemented(
-      content::WebContents* web_contents) {
-    std::string result;
-    std::string script =
-        "navigator.credentials.create({ publicKey: {"
-        "  challenge: new TextEncoder().encode('climb a mountain'),"
-        "  rp: { id: '1098237235409872', name: 'Acme' },"
-        "  user: { "
-        "    id: '1098237235409872',"
-        "    name: 'avery.a.jones@example.com',"
-        "    displayName: 'Avery A. Jones', "
-        "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
-        "  parameters: [{ type: 'public-key', algorithm: '-7'}],"
-        "  timeout: 60000,"
-        "  excludeList: [] }"
-        "}).catch(c => window.domAutomationController.send(c.toString()));";
-    ASSERT_TRUE(
-        content::ExecuteScriptAndExtractString(web_contents, script, &result));
-    ASSERT_EQ("NotAllowedError: The operation is not implemented.", result);
-  }
-
   // Attempt to create a publicKeyCredential with an unsupported algorithm type.
   void CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectNotSupported(
       content::WebContents* web_contents) {
@@ -112,11 +89,11 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
         "  challenge: new TextEncoder().encode('climb a mountain'),"
         "  rp: { id: '1098237235409872', name: 'Acme' },"
         "  user: { "
-        "    id: '1098237235409872',"
+        "    id: new TextEncoder().encode('1098237235409872'),"
         "    name: 'avery.a.jones@example.com',"
         "    displayName: 'Avery A. Jones', "
         "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
-        "  parameters: [{ type: 'public-key', algorithm: '123'}],"
+        "  pubKeyCredParams: [{ type: 'public-key', alg: '123'}],"
         "  timeout: 60000,"
         "  excludeList: [] }"
         "}).catch(c => window.domAutomationController.send(c.toString()));";
@@ -189,7 +166,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     //  1.) FrameHostMsg_DidStartProvisionalLoad
     //  2.) FrameLoader::PrepareForCommit
     //  2.1) Document::Shutdown (old Document)
-    //  3.) FrameHostMsg_DidCommitProvisionalLoad (new load)
+    //  3.) mojom::FrameHost::DidCommitProvisionalLoad (new load)
     //  ... loading ...
     //  4.) FrameHostMsg_DidStopLoading
     //  5.) content::WaitForLoadStop inside NavigateToURL returns
@@ -200,7 +177,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     // associated interface to the ContentCredentialManager is retrieved, is
     // itself Channel-associated, any InterfaceRequest messages that may have
     // been issued before or during Step 2.1, will be guaranteed to arrive to
-    // the browser side before FrameHostMsg_DidCommitProvisionalLoad in Step 3.
+    // the browser side before DidCommitProvisionalLoad in Step 3.
     //
     // Hence it is sufficient to check that the Mojo connection is closed now.
     EXPECT_FALSE(client->has_binding_for_credential_manager());
@@ -212,7 +189,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     // ordering with legacy IPC messages is preserved. Therefore, servicing the
     // store() called from the `unload` handler, triggered from
     // FrameLoader::PrepareForCommit, will be serviced before
-    // FrameHostMsg_DidCommitProvisionalLoad, thus before DidFinishNavigation,
+    // DidCommitProvisionalLoad, thus before DidFinishNavigation,
     ASSERT_TRUE(client->was_store_ever_called());
 
     BubbleObserver prompt_observer(WebContents());
@@ -286,6 +263,8 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(CredentialManagerBrowserTest);
 };
 
@@ -345,6 +324,274 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       StoreExistingCredentialIsNoOp) {
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+
+  GURL origin = embedded_test_server()->base_url();
+
+  autofill::PasswordForm form_1;
+  form_1.signon_realm = origin.spec();
+  form_1.username_value = base::ASCIIToUTF16("user1");
+  form_1.password_value = base::ASCIIToUTF16("abcdef");
+  form_1.preferred = true;
+
+  autofill::PasswordForm form_2;
+  form_2.signon_realm = origin.spec();
+  form_2.username_value = base::ASCIIToUTF16("user2");
+  form_2.password_value = base::ASCIIToUTF16("123456");
+
+  password_store->AddLogin(form_1);
+  password_store->AddLogin(form_2);
+  WaitForPasswordStore();
+
+  // Check that the password store contains the values we expect.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("abcdef"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("123456"), passwords[1].password_value);
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user1' with the old password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user1', password: 'abcdef' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user2' with the old password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user2', password: '123456' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+  // Wait for the password store to process the store request.
+  WaitForPasswordStore();
+
+  // Check that the password still store contains the values we expect.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("abcdef"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("123456"), passwords[1].password_value);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       StoreUpdatesPasswordOfExistingCredential) {
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+
+  GURL origin = embedded_test_server()->base_url();
+
+  autofill::PasswordForm form_1;
+  form_1.signon_realm = origin.spec();
+  form_1.username_value = base::ASCIIToUTF16("user1");
+  form_1.password_value = base::ASCIIToUTF16("abcdef");
+  form_1.preferred = true;
+
+  autofill::PasswordForm form_2;
+  form_2.signon_realm = origin.spec();
+  form_2.username_value = base::ASCIIToUTF16("user2");
+  form_2.password_value = base::ASCIIToUTF16("123456");
+
+  password_store->AddLogin(form_1);
+  password_store->AddLogin(form_2);
+  WaitForPasswordStore();
+
+  // Check that the password store contains the values we expect.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("abcdef"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("123456"), passwords[1].password_value);
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user1' with a new password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user1', password: 'ABCDEF' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user2' with a new password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user2', password: 'UVWXYZ' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+
+  // Wait for the password store to process the store request.
+  WaitForPasswordStore();
+
+  // Check that the password store contains the values we expect.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("ABCDEF"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("UVWXYZ"), passwords[1].password_value);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       StoreUpdatesPasswordOfExistingCredentialWithAttributes) {
+  // This test is the same as the previous one, except that the already existing
+  // credentials contain metadata.
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+
+  GURL origin = embedded_test_server()->base_url();
+
+  autofill::PasswordForm form_1;
+  form_1.signon_realm = origin.spec();
+  form_1.username_value = base::ASCIIToUTF16("user1");
+  form_1.password_value = base::ASCIIToUTF16("abcdef");
+  form_1.username_element = base::ASCIIToUTF16("user");
+  form_1.password_element = base::ASCIIToUTF16("pass");
+  form_1.origin = GURL(origin.spec() + "/my/custom/path/");
+  form_1.preferred = true;
+
+  autofill::PasswordForm form_2;
+  form_2.signon_realm = origin.spec();
+  form_2.username_value = base::ASCIIToUTF16("user2");
+  form_2.password_value = base::ASCIIToUTF16("123456");
+  form_2.username_element = base::ASCIIToUTF16("username");
+  form_2.password_element = base::ASCIIToUTF16("password");
+  form_2.origin = GURL(origin.spec() + "/my/other/path/");
+
+  password_store->AddLogin(form_1);
+  password_store->AddLogin(form_2);
+  WaitForPasswordStore();
+
+  // Check that the password store contains the values we expect.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("abcdef"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user"), passwords[0].username_element);
+    EXPECT_EQ(base::ASCIIToUTF16("pass"), passwords[0].password_element);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("123456"), passwords[1].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("username"), passwords[1].username_element);
+    EXPECT_EQ(base::ASCIIToUTF16("password"), passwords[1].password_element);
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user1' with a new password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user1', password: 'ABCDEF' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+
+  {
+    NavigateToFile("/password/simple_password.html");
+
+    // Call the API to store 'user2' with a new password.
+    ASSERT_TRUE(content::ExecuteScript(
+        RenderViewHost(),
+        "navigator.credentials.store("
+        "  new PasswordCredential({ id: 'user2', password: 'UVWXYZ' }))"
+        ".then(cred => window.location = '/password/done.html');"));
+
+    NavigationObserver observer(WebContents());
+    observer.SetPathToWaitFor("/password/done.html");
+    observer.Wait();
+  }
+
+  // Wait for the password store to process the store request.
+  WaitForPasswordStore();
+
+  // Check that the password store contains the values we expect.
+  // Note that we don't check for username and password elements, as they don't
+  // exist for credentials saved by the API.
+  {
+    auto found = password_store->stored_passwords().find(origin.spec());
+    ASSERT_NE(password_store->stored_passwords().end(), found);
+    const std::vector<autofill::PasswordForm>& passwords = found->second;
+
+    ASSERT_EQ(2U, passwords.size());
+    EXPECT_EQ(base::ASCIIToUTF16("user1"), passwords[0].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("ABCDEF"), passwords[0].password_value);
+    EXPECT_EQ(base::ASCIIToUTF16("user2"), passwords[1].username_value);
+    EXPECT_EQ(base::ASCIIToUTF16("UVWXYZ"), passwords[1].password_value);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
                        StoreSavesPSLMatchedCredential) {
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
@@ -399,6 +646,61 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   EXPECT_EQ(2U, passwords.size());
   EXPECT_TRUE(base::ContainsKey(passwords, psl_url.spec()));
   EXPECT_TRUE(base::ContainsKey(passwords, www_url.spec()));
+}
+
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       UpdatingPSLMatchedCredentialCreatesSecondEntry) {
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+
+  // The call to |GetURL| is needed to get the correct port.
+  GURL psl_url = https_test_server().GetURL("psl.example.com", "/");
+
+  autofill::PasswordForm signin_form;
+  signin_form.signon_realm = psl_url.spec();
+  signin_form.password_value = base::ASCIIToUTF16("password");
+  signin_form.username_value = base::ASCIIToUTF16("user");
+  signin_form.origin = psl_url;
+  password_store->AddLogin(signin_form);
+
+  NavigateToURL(https_test_server(), "www.example.com",
+                "/password/password_form.html");
+
+  // Call the API to trigger |get| and |store| and redirect.
+  ASSERT_TRUE(content::ExecuteScript(
+      RenderViewHost(),
+      "navigator.credentials.store("
+      "  new PasswordCredential({ id: 'user', password: 'P4SSW0RD' }))"
+      ".then(cred => window.location = '/password/done.html');"));
+
+  NavigationObserver observer(WebContents());
+  observer.SetPathToWaitFor("/password/done.html");
+  observer.Wait();
+
+  BubbleObserver prompt_observer(WebContents());
+  prompt_observer.WaitForAutomaticSavePrompt();
+  ASSERT_TRUE(prompt_observer.IsSavePromptShownAutomatically());
+  prompt_observer.AcceptSavePrompt();
+  WaitForPasswordStore();
+
+  // There should be an entry for both psl.example.com and www.example.com.
+  password_manager::TestPasswordStore::PasswordMap passwords =
+      password_store->stored_passwords();
+  GURL www_url = https_test_server().GetURL("www.example.com", "/");
+  EXPECT_EQ(2U, passwords.size());
+  EXPECT_TRUE(base::ContainsKey(passwords, psl_url.spec()));
+  EXPECT_TRUE(base::ContainsKey(passwords, www_url.spec()));
+  EXPECT_EQ(base::ASCIIToUTF16("user"),
+            passwords[psl_url.spec()].front().username_value);
+  EXPECT_EQ(base::ASCIIToUTF16("password"),
+            passwords[psl_url.spec()].front().password_value);
+  EXPECT_EQ(base::ASCIIToUTF16("user"),
+            passwords[www_url.spec()].front().username_value);
+  EXPECT_EQ(base::ASCIIToUTF16("P4SSW0RD"),
+            passwords[www_url.spec()].front().password_value);
 }
 
 IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
@@ -692,19 +994,6 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, CredentialsAutofilled) {
   content::SimulateMouseClickAt(
       WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
   WaitForElementValue("password_field", "12345");
-}
-
-// Tests that when navigator.credentials.create() for a public key is called,
-// we get a NotAllowedError as the implementation is still unfinished.
-IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
-                       CreatePublicKeyCredentialNotImplemented) {
-  const GURL a_url1 = https_test_server().GetURL("a.com", "/title1.html");
-
-  // Navigate to a mostly empty page.
-  ui_test_utils::NavigateToURL(browser(), a_url1);
-
-  ASSERT_NO_FATAL_FAILURE(
-      CreatePublicKeyCredentialAndExpectNotImplemented(WebContents()));
 }
 
 // Tests that when navigator.credentials.create() is called with an unsupported

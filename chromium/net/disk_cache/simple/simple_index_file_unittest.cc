@@ -155,7 +155,7 @@ class WrappedSimpleIndexFile : public SimpleIndexFile {
                         base::ThreadTaskRunnerHandle::Get(),
                         net::DISK_CACHE,
                         index_file_directory) {}
-  ~WrappedSimpleIndexFile() override {}
+  ~WrappedSimpleIndexFile() override = default;
 
   const base::FilePath& GetIndexFilePath() const {
     return index_file_;
@@ -202,7 +202,7 @@ TEST_F(SimpleIndexFileTest, Serialize) {
       WrappedSimpleIndexFile::Serialize(index_metadata, entries);
   EXPECT_TRUE(pickle.get() != NULL);
   base::Time now = base::Time::Now();
-  EXPECT_TRUE(WrappedSimpleIndexFile::SerializeFinalData(now, pickle.get()));
+  WrappedSimpleIndexFile::SerializeFinalData(now, pickle.get());
   base::Time when_index_last_saw_cache;
   SimpleIndexLoadResult deserialize_result;
   WrappedSimpleIndexFile::Deserialize(static_cast<const char*>(pickle->data()),
@@ -244,7 +244,7 @@ TEST_F(SimpleIndexFileTest, ReadV7Format) {
       WrappedSimpleIndexFile::Serialize(v7_metadata, entries);
   ASSERT_TRUE(pickle.get() != NULL);
   base::Time now = base::Time::Now();
-  ASSERT_TRUE(WrappedSimpleIndexFile::SerializeFinalData(now, pickle.get()));
+  WrappedSimpleIndexFile::SerializeFinalData(now, pickle.get());
 
   // Now read it back. We should get the sizes rounded, and 0 for mem entries.
   base::Time when_index_last_saw_cache;
@@ -402,7 +402,8 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
   disk_cache::SimpleBackendImpl* simple_cache =
       new disk_cache::SimpleBackendImpl(
-          cache_path, /* cleanup_tracker = */ nullptr, 0, net::DISK_CACHE,
+          cache_path, /* cleanup_tracker = */ nullptr,
+          /* file_tracker = */ nullptr, 0, net::DISK_CACHE,
           cache_thread.task_runner(), /* net_log = */ nullptr);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());

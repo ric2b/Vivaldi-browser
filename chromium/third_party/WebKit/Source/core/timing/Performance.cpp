@@ -35,16 +35,16 @@
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/Document.h"
 #include "core/dom/QualifiedName.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/origin_trials/OriginTrials.h"
+#include "core/origin_trials/origin_trials.h"
 #include "core/timing/PerformanceTiming.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
+#include "public/platform/TaskType.h"
 
 static const double kLongTaskObserverThreshold = 0.05;
 
@@ -94,11 +94,8 @@ bool IsSameOrigin(String key) {
 
 }  // namespace
 
-static double ToTimeOrigin(LocalFrame* frame) {
-  if (!frame)
-    return 0.0;
-
-  Document* document = frame->GetDocument();
+static double ToTimeOrigin(LocalDOMWindow* window) {
+  Document* document = window->document();
   if (!document)
     return 0.0;
 
@@ -109,11 +106,11 @@ static double ToTimeOrigin(LocalFrame* frame) {
   return loader->GetTiming().ReferenceMonotonicTime();
 }
 
-Performance::Performance(LocalFrame* frame)
+Performance::Performance(LocalDOMWindow* window)
     : PerformanceBase(
-          ToTimeOrigin(frame),
-          TaskRunnerHelper::Get(TaskType::kPerformanceTimeline, frame)),
-      DOMWindowClient(frame) {}
+          ToTimeOrigin(window),
+          window->document()->GetTaskRunner(TaskType::kPerformanceTimeline)),
+      DOMWindowClient(window) {}
 
 Performance::~Performance() {
 }
@@ -156,6 +153,9 @@ PerformanceNavigationTiming* Performance::CreateNavigationTimingInstance() {
   PerformanceServerTimingVector serverTiming =
       PerformanceServerTiming::ParseServerTiming(
           *info, PerformanceServerTiming::ShouldAllowTimingDetails::Yes);
+  if (serverTiming.size()) {
+    UseCounter::Count(GetFrame(), WebFeature::kPerformanceServerTiming);
+  }
   return new PerformanceNavigationTiming(GetFrame(), info, GetTimeOrigin(),
                                          serverTiming);
 }
@@ -182,7 +182,7 @@ ScriptValue Performance::toJSONForBinding(ScriptState* script_state) const {
   return result.GetScriptValue();
 }
 
-DEFINE_TRACE(Performance) {
+void Performance::Trace(blink::Visitor* visitor) {
   visitor->Trace(navigation_);
   visitor->Trace(timing_);
   PerformanceBase::Trace(visitor);

@@ -224,8 +224,10 @@ void ScriptInjectionManager::RFOHelper::OnStop() {
   // for 204/205/downloads since these don't notify the renderer. However the
   // browser does fire the OnStop IPC. So use that signal instead to avoid
   // keeping the frame in a START state indefinitely which leads to deadlocks.
-  if (content::IsBrowserSideNavigationEnabled())
-    DidFailProvisionalLoad(blink::WebURLError());
+  if (content::IsBrowserSideNavigationEnabled()) {
+    DidFailProvisionalLoad(
+        blink::WebURLError(net::ERR_FAILED, blink::WebURL()));
+  }
 }
 
 void ScriptInjectionManager::RFOHelper::OnExecuteCode(
@@ -477,8 +479,7 @@ void ScriptInjectionManager::HandleExecuteCode(
 
   std::unique_ptr<ScriptInjection> injection(new ScriptInjection(
       std::unique_ptr<ScriptInjector>(new ProgrammaticScriptInjector(params)),
-      render_frame, std::move(injection_host),
-      static_cast<UserScript::RunLocation>(params.run_at),
+      render_frame, std::move(injection_host), params.run_at,
       activity_logging_enabled_));
 
   FrameStatusMap::const_iterator iter = frame_statuses_.find(render_frame);

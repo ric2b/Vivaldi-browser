@@ -18,12 +18,12 @@ ExternalLoader::ExternalLoader()
 }
 
 void ExternalLoader::Init(ExternalProviderImpl* owner) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   owner_ = owner;
 }
 
 const base::FilePath ExternalLoader::GetBaseCrxFilePath() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // By default, relative paths are not supported.
   // Subclasses that wish to support them should override this method.
@@ -31,22 +31,23 @@ const base::FilePath ExternalLoader::GetBaseCrxFilePath() {
 }
 
 void ExternalLoader::OwnerShutdown() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   owner_ = NULL;
 }
 
 ExternalLoader::~ExternalLoader() {}
 
-void ExternalLoader::LoadFinished() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+void ExternalLoader::LoadFinished(
+    std::unique_ptr<base::DictionaryValue> prefs) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (owner_) {
-    owner_->SetPrefs(std::move(prefs_));
+    owner_->SetPrefs(std::move(prefs));
   }
 }
 
 void ExternalLoader::OnUpdated(
     std::unique_ptr<base::DictionaryValue> updated_prefs) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (owner_)
     owner_->UpdatePrefs(std::move(updated_prefs));
 }

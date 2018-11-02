@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_int_wrapper.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/logging.h"
 #include "build/build_config.h"
@@ -47,23 +48,6 @@ inline void HandleRegistrationError(JNIEnv* env,
 
 inline void CheckException(JNIEnv* env) {
   base::android::CheckException(env);
-}
-
-// TODO(estevenson): Remove this function since all natives are registered
-// together. Currently gvr-android-sdk stil calls it.
-// https://crbug.com/664306.
-inline bool ShouldSkipJniRegistration(bool is_maindex_class) {
-  switch (base::android::GetJniRegistrationType()) {
-    case base::android::ALL_JNI_REGISTRATION:
-      return false;
-    case base::android::NO_JNI_REGISTRATION:
-      return true;
-    case base::android::SELECTIVE_JNI_REGISTRATION:
-      return !is_maindex_class;
-    default:
-      NOTREACHED();
-      return false;
-  }
 }
 
 }  // namespace jni_generator

@@ -4,16 +4,17 @@
 
 #include "platform/scheduler/child/worker_scheduler_impl.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "platform/Histogram.h"
 #include "platform/scheduler/base/task_queue.h"
-#include "platform/scheduler/base/time_converter.h"
-#include "platform/scheduler/child/scheduler_tqm_delegate.h"
+#include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/child/worker_scheduler_helper.h"
-#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 namespace scheduler {
@@ -32,11 +33,21 @@ void ReportWorkerTaskLoad(base::TimeTicks time, double load) {
   UMA_HISTOGRAM_PERCENTAGE("WorkerScheduler.WorkerThreadLoad", load_percentage);
 }
 
+// TODO(scheduler-dev): Remove conversions when Blink starts using
+// base::TimeTicks instead of doubles for time.
+base::TimeTicks MonotonicTimeInSecondsToTimeTicks(
+    double monotonic_time_in_seconds) {
+  return base::TimeTicks() +
+         base::TimeDelta::FromSecondsD(monotonic_time_in_seconds);
+}
+
 }  // namespace
 
 WorkerSchedulerImpl::WorkerSchedulerImpl(
-    scoped_refptr<SchedulerTqmDelegate> main_task_runner)
-    : WorkerScheduler(WTF::MakeUnique<WorkerSchedulerHelper>(main_task_runner)),
+    std::unique_ptr<TaskQueueManager> task_queue_manager)
+    : WorkerScheduler(
+          std::make_unique<WorkerSchedulerHelper>(std::move(task_queue_manager),
+                                                  this)),
       idle_helper_(helper_.get(),
                    this,
                    "WorkerSchedulerIdlePeriod",
@@ -44,11 +55,13 @@ WorkerSchedulerImpl::WorkerSchedulerImpl(
                    helper_->NewTaskQueue(TaskQueue::Spec("worker_idle_tq"))),
       idle_canceled_delayed_task_sweeper_(helper_.get(),
                                           idle_helper_.IdleTaskRunner()),
-      load_tracker_(helper_->scheduler_tqm_delegate()->NowTicks(),
+      load_tracker_(helper_->NowTicks(),
                     base::Bind(&ReportWorkerTaskLoad),
-                    kWorkerThreadLoadTrackerReportingInterval) {
+                    kWorkerThreadLoadTrackerReportingInterval),
+      worker_thread_task_duration_reporter_(
+          "RendererScheduler.TaskDurationPerThreadType") {
   initialized_ = false;
-  thread_start_time_ = helper_->scheduler_tqm_delegate()->NowTicks();
+  thread_start_time_ = helper_->NowTicks();
   load_tracker_.Resume(thread_start_time_);
   helper_->AddTaskTimeObserver(this);
   TRACE_EVENT_OBJECT_CREATED_WITH_ID(
@@ -61,18 +74,8 @@ WorkerSchedulerImpl::~WorkerSchedulerImpl() {
   helper_->RemoveTaskTimeObserver(this);
 }
 
-void WorkerSchedulerImpl::Init() {
-  initialized_ = true;
-  idle_helper_.EnableLongIdlePeriod();
-}
-
 scoped_refptr<base::SingleThreadTaskRunner>
 WorkerSchedulerImpl::DefaultTaskRunner() {
-  DCHECK(initialized_);
-  return helper_->DefaultWorkerTaskQueue();
-}
-
-scoped_refptr<WorkerTaskQueue> WorkerSchedulerImpl::DefaultTaskQueue() {
   DCHECK(initialized_);
   return helper_->DefaultWorkerTaskQueue();
 }
@@ -81,6 +84,11 @@ scoped_refptr<SingleThreadIdleTaskRunner>
 WorkerSchedulerImpl::IdleTaskRunner() {
   DCHECK(initialized_);
   return idle_helper_.IdleTaskRunner();
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+WorkerSchedulerImpl::IPCTaskRunner() {
+  return base::ThreadTaskRunnerHandle::Get();
 }
 
 bool WorkerSchedulerImpl::CanExceedIdleDeadlineIfRequired() const {
@@ -107,8 +115,8 @@ void WorkerSchedulerImpl::RemoveTaskObserver(
 
 void WorkerSchedulerImpl::Shutdown() {
   DCHECK(initialized_);
-  load_tracker_.RecordIdle(helper_->scheduler_tqm_delegate()->NowTicks());
-  base::TimeTicks end_time = helper_->scheduler_tqm_delegate()->NowTicks();
+  load_tracker_.RecordIdle(helper_->NowTicks());
+  base::TimeTicks end_time = helper_->NowTicks();
   base::TimeDelta delta = end_time - thread_start_time_;
 
   // The lifetime could be radically different for different workers,
@@ -118,6 +126,24 @@ void WorkerSchedulerImpl::Shutdown() {
       "WorkerThread.Runtime", delta, base::TimeDelta::FromSeconds(1),
       base::TimeDelta::FromDays(1), 50 /* bucket count */);
   helper_->Shutdown();
+}
+
+scoped_refptr<WorkerTaskQueue> WorkerSchedulerImpl::DefaultTaskQueue() {
+  DCHECK(initialized_);
+  return helper_->DefaultWorkerTaskQueue();
+}
+
+void WorkerSchedulerImpl::Init() {
+  initialized_ = true;
+  idle_helper_.EnableLongIdlePeriod();
+}
+
+void WorkerSchedulerImpl::OnTaskCompleted(WorkerTaskQueue* worker_task_queue,
+                                          const TaskQueue::Task& task,
+                                          base::TimeTicks start,
+                                          base::TimeTicks end) {
+  worker_thread_task_duration_reporter_.RecordTask(ThreadType::kWorkerThread,
+                                                   end - start);
 }
 
 SchedulerHelper* WorkerSchedulerImpl::GetSchedulerHelperForTesting() {

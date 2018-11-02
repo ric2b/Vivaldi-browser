@@ -39,15 +39,17 @@ cr.define('settings_people_page', function() {
         var bg = peoplePage.$$('#profile-icon').style.backgroundImage;
         assertTrue(bg.includes(browserProxy.fakeProfileInfo.iconUrl));
 
+        var iconDataUrl = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEA' +
+            'LAAAAAABAAEAAAICTAEAOw==';
         cr.webUIListenerCallback(
           'profile-info-changed',
-          {name: 'pushedName', iconUrl: 'http://pushed-url/'});
+          {name: 'pushedName', iconUrl: iconDataUrl});
 
         Polymer.dom.flush();
         assertEquals('pushedName',
                      peoplePage.$$('#profile-name').textContent.trim());
         var newBg = peoplePage.$$('#profile-icon').style.backgroundImage;
-        assertTrue(newBg.includes('http://pushed-url/'));
+        assertTrue(newBg.includes(iconDataUrl));
       });
     });
 
@@ -166,8 +168,7 @@ cr.define('settings_people_page', function() {
       });
 
       test('getProfileStatsCount', function() {
-        return profileInfoBrowserProxy.whenCalled('getProfileStatsCount')
-            .then(function() {
+        return browserProxy.whenCalled('getSyncStatus').then(function() {
           Polymer.dom.flush();
 
           // Open the disconnect dialog.
@@ -175,8 +176,9 @@ cr.define('settings_people_page', function() {
           assertTrue(!!disconnectButton);
           MockInteractions.tap(disconnectButton);
 
-          return new Promise(function(resolve) { peoplePage.async(resolve); });
+          return profileInfoBrowserProxy.whenCalled('getProfileStatsCount');
         }).then(function() {
+          Polymer.dom.flush();
           assertTrue(peoplePage.$$('#disconnectDialog').open);
 
           // Assert the warning message is as expected.

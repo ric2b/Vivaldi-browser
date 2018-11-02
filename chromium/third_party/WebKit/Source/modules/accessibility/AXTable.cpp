@@ -114,12 +114,12 @@ bool AXTable::IsDataTable() const {
 
   LayoutTable* table = ToLayoutTable(layout_object_);
   Node* table_node = table->GetNode();
-  if (!isHTMLTableElement(table_node))
+  if (!IsHTMLTableElement(table_node))
     return false;
 
   // Do not consider it a data table if any of its descendants have an ARIA
   // role.
-  HTMLTableElement* table_element = toHTMLTableElement(table_node);
+  HTMLTableElement* table_element = ToHTMLTableElement(table_node);
   if (ElementHasAriaRole(table_element->tHead()))
     return false;
   if (ElementHasAriaRole(table_element->tFoot()))
@@ -379,15 +379,15 @@ void AXTable::AddChildren() {
     return;
 
   LayoutTable* table = ToLayoutTable(layout_object_);
-  AXObjectCacheImpl& ax_cache = AxObjectCache();
+  AXObjectCacheImpl& ax_cache = AXObjectCache();
 
   Node* table_node = table->GetNode();
-  if (!isHTMLTableElement(table_node))
+  if (!IsHTMLTableElement(table_node))
     return;
 
   // Add caption
   if (HTMLTableCaptionElement* caption =
-          toHTMLTableElement(table_node)->caption()) {
+          ToHTMLTableElement(table_node)->caption()) {
     AXObject* caption_object = ax_cache.GetOrCreate(caption);
     if (caption_object && !caption_object->AccessibilityIsIgnored())
       children_.push_back(caption_object);
@@ -451,7 +451,7 @@ AXObject* AXTable::HeaderContainer() {
     return header_container_.Get();
 
   AXMockObject* table_header =
-      ToAXMockObject(AxObjectCache().GetOrCreate(kTableHeaderContainerRole));
+      ToAXMockObject(AXObjectCache().GetOrCreate(kTableHeaderContainerRole));
   table_header->SetParent(this);
 
   header_container_ = table_header;
@@ -548,7 +548,7 @@ unsigned AXTable::RowCount() {
 AXTableCell* AXTable::CellForColumnAndRow(unsigned column, unsigned row) {
   UpdateChildrenIfNecessary();
   if (column >= ColumnCount() || row >= RowCount())
-    return 0;
+    return nullptr;
 
   // Iterate backwards through the rows in case the desired cell has a rowspan
   // and exists in a previous row.
@@ -581,7 +581,7 @@ AXTableCell* AXTable::CellForColumnAndRow(unsigned column, unsigned row) {
     }
   }
 
-  return 0;
+  return nullptr;
 }
 
 AccessibilityRole AXTable::RoleValue() const {
@@ -605,7 +605,7 @@ bool AXTable::ComputeAccessibilityIsIgnored(
   return false;
 }
 
-DEFINE_TRACE(AXTable) {
+void AXTable::Trace(blink::Visitor* visitor) {
   visitor->Trace(rows_);
   visitor->Trace(columns_);
   visitor->Trace(header_container_);

@@ -30,9 +30,9 @@
 
 #include "core/html/forms/DateTimeChooserImpl.h"
 
-#include "core/InputTypeNames.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/forms/DateTimeChooserClient.h"
+#include "core/input_type_names.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/PagePopup.h"
@@ -49,7 +49,7 @@ DateTimeChooserImpl::DateTimeChooserImpl(
     const DateTimeChooserParameters& parameters)
     : chrome_client_(chrome_client),
       client_(client),
-      popup_(0),
+      popup_(nullptr),
       parameters_(parameters),
       locale_(Locale::Create(parameters.locale)) {
   DCHECK(RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled());
@@ -67,7 +67,7 @@ DateTimeChooserImpl* DateTimeChooserImpl::Create(
 
 DateTimeChooserImpl::~DateTimeChooserImpl() {}
 
-DEFINE_TRACE(DateTimeChooserImpl) {
+void DateTimeChooserImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(chrome_client_);
   visitor->Trace(client_);
   DateTimeChooser::Trace(visitor);
@@ -80,7 +80,7 @@ void DateTimeChooserImpl::EndChooser() {
 }
 
 AXObject* DateTimeChooserImpl::RootAXObject() {
-  return popup_ ? popup_->RootAXObject() : 0;
+  return popup_ ? popup_->RootAXObject() : nullptr;
 }
 
 static String ValueToDateTimeString(double value, AtomicString type) {

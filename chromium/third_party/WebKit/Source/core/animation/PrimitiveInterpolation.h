@@ -7,11 +7,12 @@
 
 #include <cmath>
 #include <memory>
+
+#include "base/macros.h"
 #include "core/animation/TypedInterpolationValue.h"
 #include "platform/animation/AnimationUtilities.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -20,7 +21,6 @@ namespace blink {
 // format with respect to the animation environment and underlying values.
 class PrimitiveInterpolation {
   USING_FAST_MALLOC(PrimitiveInterpolation);
-  WTF_MAKE_NONCOPYABLE(PrimitiveInterpolation);
 
  public:
   virtual ~PrimitiveInterpolation() {}
@@ -35,6 +35,7 @@ class PrimitiveInterpolation {
 
  protected:
   PrimitiveInterpolation() {}
+  DISALLOW_COPY_AND_ASSIGN(PrimitiveInterpolation);
 };
 
 // Represents a pair of keyframes that are compatible for "smooth" interpolation
@@ -47,7 +48,7 @@ class PairwisePrimitiveInterpolation : public PrimitiveInterpolation {
       const InterpolationType& type,
       std::unique_ptr<InterpolableValue> start,
       std::unique_ptr<InterpolableValue> end,
-      RefPtr<NonInterpolableValue> non_interpolable_value) {
+      scoped_refptr<NonInterpolableValue> non_interpolable_value) {
     return WTF::WrapUnique(new PairwisePrimitiveInterpolation(
         type, std::move(start), std::move(end),
         std::move(non_interpolable_value)));
@@ -65,7 +66,7 @@ class PairwisePrimitiveInterpolation : public PrimitiveInterpolation {
       const InterpolationType& type,
       std::unique_ptr<InterpolableValue> start,
       std::unique_ptr<InterpolableValue> end,
-      RefPtr<NonInterpolableValue> non_interpolable_value)
+      scoped_refptr<NonInterpolableValue> non_interpolable_value)
       : type_(type),
         start_(std::move(start)),
         end_(std::move(end)),
@@ -79,7 +80,7 @@ class PairwisePrimitiveInterpolation : public PrimitiveInterpolation {
       std::unique_ptr<TypedInterpolationValue>& result) const final {
     DCHECK(result);
     DCHECK_EQ(&result->GetType(), &type_);
-    DCHECK_EQ(result->GetNonInterpolableValue(), non_interpolable_value_.Get());
+    DCHECK_EQ(result->GetNonInterpolableValue(), non_interpolable_value_.get());
     start_->Interpolate(*end_, fraction,
                         *result->MutableValue().interpolable_value);
   }
@@ -93,7 +94,7 @@ class PairwisePrimitiveInterpolation : public PrimitiveInterpolation {
   const InterpolationType& type_;
   std::unique_ptr<InterpolableValue> start_;
   std::unique_ptr<InterpolableValue> end_;
-  RefPtr<NonInterpolableValue> non_interpolable_value_;
+  scoped_refptr<NonInterpolableValue> non_interpolable_value_;
 };
 
 // Represents a pair of incompatible keyframes that fall back to 50% flip

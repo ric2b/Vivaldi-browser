@@ -4,10 +4,10 @@
 
 #include "modules/media_controls/elements/MediaControlToggleClosedCaptionsButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/TextTrackList.h"
+#include "core/input_type_names.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 
 namespace blink {
@@ -16,7 +16,6 @@ MediaControlToggleClosedCaptionsButtonElement::
     MediaControlToggleClosedCaptionsButtonElement(
         MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaShowClosedCaptionsButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(
       AtomicString("-webkit-media-controls-toggle-closed-captions-button"));
@@ -31,6 +30,9 @@ void MediaControlToggleClosedCaptionsButtonElement::UpdateDisplayType() {
   bool captions_visible = MediaElement().TextTracksVisible();
   SetDisplayType(captions_visible ? kMediaHideClosedCaptionsButton
                                   : kMediaShowClosedCaptionsButton);
+  SetClass("visible", captions_visible);
+
+  MediaControlInputElement::UpdateDisplayType();
 }
 
 WebLocalizedString::Name
@@ -45,7 +47,7 @@ bool MediaControlToggleClosedCaptionsButtonElement::HasOverflowButton() const {
 const char*
 MediaControlToggleClosedCaptionsButtonElement::GetNameForHistograms() const {
   return IsOverflowElement() ? "ClosedCaptionOverflowButton"
-                             : "ClosedCaptionsButton";
+                             : "ClosedCaptionButton";
 }
 
 void MediaControlToggleClosedCaptionsButtonElement::DefaultEventHandler(

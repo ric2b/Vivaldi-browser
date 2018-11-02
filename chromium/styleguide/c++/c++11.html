@@ -177,7 +177,7 @@ enum class <i>classname</i> : <i>base-type</i><br />
 enum <i>enumname</i> : <i>base-type</i></code></td>
 <td>Provide enums as full classes, with no implicit conversion to booleans or integers. Provide an explicit underlying type for enum classes and regular enums.</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/enum">enumeration declaration</a></td>
-<td>Enum classes are still enums and follow enum naming rules (which means SHOUTY_CASE in the <a href="http://www.chromium.org/developers/coding-style#Naming">Chromium Style Guide</a>). <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/Q5WmkAImanc">Discussion thread</a></td>
+<td>Enum classes are still enums and follow enum naming rules. <a href="https://google.github.io/styleguide/cppguide.html#Enumerator_Names">Google Style Guide</a>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/Q5WmkAImanc">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -278,6 +278,14 @@ enum <i>enumname</i> : <i>base-type</i></code></td>
 </tr>
 
 <tr>
+<td>Raw String Literals</td>
+<td><code>string <i>var</i>=R&quot;(<i>raw_string</i>)&quot;;</code></td>
+<td>Allows a string to be encoded without any escape sequences, easing parsing in regex expressions, for example</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/string_literal">string literal</a></td>
+<td>Beware of passing these as macro arguments, which can trigger a <a href="https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57824">lexer bug</a> on older GCC versions. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/2kWQHbbuMHI">Discussion thread</a></td>
+</tr>
+
+<tr>
 <td>Rvalue References</td>
 <td><code>T(T&amp;&amp; t)</code> and <code>T&amp; operator=(T&amp;&amp; t)<br/><br/>
 template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
@@ -355,10 +363,8 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 
 <h2 id="whitelist"><a name="core-whitelist-14"></a>C++14 Allowed Features</h2>
 
-<p>Nothing yet. Suggest something!</p>
-<!--<p>The following features are currently allowed.</p>-->
+<p>The following features are currently allowed.</p>
 
-<!--
 <table id="whitelist_lang_list_14" class="unlined striped">
 <tbody>
 
@@ -370,9 +376,16 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <th style='width:240px;'>Notes and Discussion Thread</th>
 </tr>
 
+<tr>
+<td>Relaxed constant expressions</td>
+<td><code>constexpr int Factorial(int n) {<br>&nbsp;&nbsp;int result = 1;<br>&nbsp;&nbsp;while (n > 0)<br>&nbsp;&nbsp;&nbsp;&nbsp;result *= n--;<br>&nbsp;&nbsp;return result;<br>}</code></td>
+<td>Allows use of more declarations, conditional statements and loops inside <code>constexpr</code> functions.</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/constexpr">constexpr specifier</a></td>
+<td>Prefer to <code>const</code> for variables where possible. Use cautiously on functions. Don't go out of the way to convert existing code. <a href="https://google.github.io/styleguide/cppguide.html#Use_of_constexpr">Google Style Guide</a>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/Psuq_EKJBAo">Discussion thread</a></td>
+</tr>
+
 </tbody>
 </table>
--->
 
 <h2 id="whitelist"><a name="library-whitelist"></a>C++11 Allowed Library Features</h2>
 
@@ -533,14 +546,6 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 </tr>
 
 <tr>
-<td>Raw String Literals</td>
-<td><code>string <i>var</i>=R&quot;(<i>raw_string</i>)&quot;;</code></td>
-<td>Allows a string to be encoded without any escape sequences, easing parsing in regex expressions, for example</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/string_literal">string literal</a></td>
-<td>Beware of passing these as macro arguments, which can trigger a <a href="https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57824">lexer bug</a> on older GCC versions. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/2kWQHbbuMHI">Discussion thread</a></td>
-</tr>
-
-<tr>
 <td>String Direct Reference Functions</td>
 <td><code>std::string::front()</code>, <code>std::string::back()</code></td>
 <td>Returns a reference to the front or back of a string</td>
@@ -601,6 +606,14 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <th style='width:240px;'>Description</th>
 <th style='width:240px;'>Documentation Link</th>
 <th style='width:240px;'>Notes and Discussion Thread</th>
+</tr>
+
+<tr>
+<td>Heterogeneous lookup in associative containers</td>
+<td><code><i>// Does not construct an std::string to use as the lookup key.</i><br>std::map&lt;std::string, int, std::less&lt;&gt;&gt; map;<br>auto it = map.find("answer");</code></td>
+<td>Allows searching associative containers without converting the key to exactly match the stored key type, assuming a suitable comparator exists.</td>
+<td><a href="http://en.cppreference.com/w/cpp/utility/functional/less">std::less</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/d/msg/cxx/ow7hmdDm4yw/EDEvBRi_BQAJ">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -975,14 +988,6 @@ than binary literals.</td>
 </tr>
 
 <tr>
-<td>Relaxed constant expressions</td>
-<td><code>constexpr int Factorial(int n) {<br>&nbsp;&nbsp;int result = 1;<br>&nbsp;&nbsp;while (n > 0)<br>&nbsp;&nbsp;&nbsp;&nbsp;result *= n--;<br>&nbsp;&nbsp;return result;<br>}</code></td>
-<td>Allows use of more declarations, conditional statements and loops inside <code>constexpr</code> functions.</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/constexpr">constexpr specifier</a></td>
-<td>Likely to get used even without approval, since the C++11 rules were not trivial to remember.</td>
-</tr>
-
-<tr>
 <td>Variable templates</td>
 <td><code>template &lt;typename T&gt;<br>constexpr T tau = T(6.283185307179586476925286766559);</code></td>
 <td>Allows templates that declare variables, rather than functions or classes.</td>
@@ -1192,14 +1197,6 @@ than binary literals.</td>
 <td><code>std::cbegin(<i>container</i>)<br>std::cend(<i>container</i>)<br>std::crbegin(<i>container</i>)<br>std::crend(<i>container</i>)</br></code></td>
 <td>Constant counterparts to <code>std::begin</code> etc.</td>
 <td><a href="http://en.cppreference.com/w/cpp/iterator/begin">std::cbegin</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Heterogeneous lookup in associative containers</td>
-<td><code><i>// Does not construct an std::string to use as the lookup key.</i><br>std::map&lt;std::string, int, std::less&lt;&gt;&gt; map;<br>auto it = map.find("answer");</code></td>
-<td>Allows searching associative containers without converting the key to exactly match the stored key type, assuming a suitable comparator exists.</td>
-<td><a href="http://en.cppreference.com/w/cpp/utility/functional/less">std::less</a></td>
 <td></td>
 </tr>
 

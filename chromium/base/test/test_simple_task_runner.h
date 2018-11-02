@@ -5,10 +5,9 @@
 #ifndef BASE_TEST_TEST_SIMPLE_TASK_RUNNER_H_
 #define BASE_TEST_TEST_SIMPLE_TASK_RUNNER_H_
 
-#include <deque>
-
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -43,16 +42,16 @@ class TestSimpleTaskRunner : public SingleThreadTaskRunner {
   TestSimpleTaskRunner();
 
   // SingleThreadTaskRunner implementation.
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
                        TimeDelta delay) override;
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   TimeDelta delay) override;
 
   bool RunsTasksInCurrentSequence() const override;
 
-  std::deque<TestPendingTask> TakePendingTasks();
+  base::circular_deque<TestPendingTask> TakePendingTasks();
   size_t NumPendingTasks() const;
   bool HasPendingTask() const;
   base::TimeDelta NextPendingTaskDelay() const;
@@ -80,7 +79,7 @@ class TestSimpleTaskRunner : public SingleThreadTaskRunner {
   // Synchronizes access to |pending_tasks_|.
   mutable Lock lock_;
 
-  std::deque<TestPendingTask> pending_tasks_;
+  base::circular_deque<TestPendingTask> pending_tasks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSimpleTaskRunner);
 };

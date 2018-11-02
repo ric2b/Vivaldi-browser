@@ -45,8 +45,6 @@ blink_core_sources("xml") {
     "XPathValue.h",
     "XPathVariableReference.cpp",
     "XPathVariableReference.h",
-    "XSLImportRule.cpp",
-    "XSLImportRule.h",
     "XSLStyleSheet.h",
     "XSLStyleSheetLibxslt.cpp",
     "XSLTExtensions.cpp",
@@ -65,6 +63,9 @@ blink_core_sources("xml") {
     "parser/XMLErrors.cpp",
     "parser/XMLErrors.h",
     "parser/XMLParserInput.h",
+    "parser/XMLParserScriptRunner.cpp",
+    "parser/XMLParserScriptRunner.h",
+    "parser/XMLParserScriptRunnerHost.h",
   ]
 
   configs += [

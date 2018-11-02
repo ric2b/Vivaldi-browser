@@ -7,6 +7,7 @@ cr.define('chrome.SnippetsInternals', function() {
 
   // Stores the list of suggestions we received in receiveContentSuggestions.
   var lastSuggestions = [];
+  var lastDebugLog = '';
 
   function initialize() {
     $('submit-download').addEventListener('click', function(event) {
@@ -16,6 +17,11 @@ cr.define('chrome.SnippetsInternals', function() {
 
     $('submit-dump').addEventListener('click', function(event) {
       downloadJson(JSON.stringify(lastSuggestions, null, 2));
+      event.preventDefault();
+    });
+
+    $('debug-log-dump').addEventListener('click', function(event) {
+      downloadDebugLog(lastDebugLog);
       event.preventDefault();
     });
 
@@ -66,6 +72,7 @@ cr.define('chrome.SnippetsInternals', function() {
     window.addEventListener('focus', refreshContent);
     window.setInterval(refreshContent, 1000);
 
+    chrome.send('initializationCompleted');
     refreshContent();
   }
 
@@ -104,8 +111,7 @@ cr.define('chrome.SnippetsInternals', function() {
 
   function onClearCachedButtonClicked(event) {
     event.preventDefault();
-    var id = parseInt(event.currentTarget.getAttribute('category-id'), 10);
-    chrome.send('clearCachedSuggestions', [id]);
+    chrome.send('clearCachedSuggestions');
   }
 
   function onClearDismissedButtonClicked(event) {
@@ -136,6 +142,14 @@ cr.define('chrome.SnippetsInternals', function() {
     }
   }
 
+  function receiveDebugLog(debugLog) {
+    if (!debugLog) {
+      lastDebugLog = 'empty';
+    } else {
+      lastDebugLog = debugLog;
+    }
+  }
+
   function receiveClassification(
       userClass, timeToOpenNTP, timeToShow, timeToUse) {
     receiveProperty('user-class', userClass);
@@ -155,6 +169,10 @@ cr.define('chrome.SnippetsInternals', function() {
         lastRemoteSuggestionsBackgroundFetchTime);
   }
 
+  function receiveWhetherSuggestionPushingPossible(possible) {
+    $('push-dummy-suggestion-10-seconds-button').disabled = !possible;
+  }
+
   function downloadJson(json) {
     // Redirect the browser to download data in |json| as a file "snippets.json"
     // (Setting Content-Disposition: attachment via a data: URL is not possible;
@@ -162,6 +180,17 @@ cr.define('chrome.SnippetsInternals', function() {
     var link = document.createElement('a');
     link.download = 'snippets.json';
     link.href = 'data:application/json,' + encodeURI(json);
+    link.click();
+  }
+
+  function downloadDebugLog(debugLog) {
+    // Redirect the browser to download data in |debugLog| as a file
+    // "debug_log.txt" (Setting Content-Disposition: attachment via a data: URL
+    // is not possible; create a link with download attribute and simulate a
+    // click, instead.)
+    var link = document.createElement('a');
+    link.download = 'debug_log.txt';
+    link.href = 'data:text/plain,' + encodeURI(debugLog);
     link.click();
   }
 
@@ -205,10 +234,13 @@ cr.define('chrome.SnippetsInternals', function() {
     receiveProperty: receiveProperty,
     receiveContentSuggestions: receiveContentSuggestions,
     receiveJson: receiveJson,
+    receiveDebugLog: receiveDebugLog,
     receiveClassification: receiveClassification,
     receiveRankerDebugData: receiveRankerDebugData,
     receiveLastRemoteSuggestionsBackgroundFetchTime:
         receiveLastRemoteSuggestionsBackgroundFetchTime,
+    receiveWhetherSuggestionPushingPossible:
+        receiveWhetherSuggestionPushingPossible,
     receiveContextualSuggestions: receiveContextualSuggestions,
   };
 });

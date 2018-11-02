@@ -7,7 +7,6 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/message_box_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 
@@ -21,11 +20,10 @@ base::WeakPtr<JavaScriptDialogViews> JavaScriptDialogViews::Create(
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    const content::JavaScriptDialogManager::DialogClosedCallback&
-        dialog_callback) {
-  return (new JavaScriptDialogViews(parent_web_contents, alerting_web_contents,
-                                    title, dialog_type, message_text,
-                                    default_prompt_text, dialog_callback))
+    content::JavaScriptDialogManager::DialogClosedCallback dialog_callback) {
+  return (new JavaScriptDialogViews(
+              parent_web_contents, alerting_web_contents, title, dialog_type,
+              message_text, default_prompt_text, std::move(dialog_callback)))
       ->weak_factory_.GetWeakPtr();
 }
 
@@ -53,24 +51,28 @@ base::string16 JavaScriptDialogViews::GetWindowTitle() const {
 
 bool JavaScriptDialogViews::Cancel() {
   if (dialog_callback_)
-    dialog_callback_.Run(false, base::string16());
+    std::move(dialog_callback_).Run(false, base::string16());
   return true;
 }
 
 bool JavaScriptDialogViews::Accept() {
   if (dialog_callback_)
-    dialog_callback_.Run(true, message_box_view_->GetInputText());
+    std::move(dialog_callback_).Run(true, message_box_view_->GetInputText());
   return true;
 }
 
 bool JavaScriptDialogViews::Close() {
   if (dialog_callback_)
-    dialog_callback_.Run(false, base::string16());
+    std::move(dialog_callback_).Run(false, base::string16());
   return true;
 }
 
 void JavaScriptDialogViews::DeleteDelegate() {
   delete this;
+}
+
+bool JavaScriptDialogViews::ShouldShowCloseButton() const {
+  return false;
 }
 
 views::View* JavaScriptDialogViews::GetContentsView() {
@@ -101,14 +103,13 @@ JavaScriptDialogViews::JavaScriptDialogViews(
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    const content::JavaScriptDialogManager::DialogClosedCallback&
-        dialog_callback)
+    content::JavaScriptDialogManager::DialogClosedCallback dialog_callback)
     : JavaScriptDialog(parent_web_contents),
       title_(title),
       dialog_type_(dialog_type),
       message_text_(message_text),
       default_prompt_text_(default_prompt_text),
-      dialog_callback_(dialog_callback),
+      dialog_callback_(std::move(dialog_callback)),
       weak_factory_(this) {
   int options = views::MessageBoxView::DETECT_DIRECTIONALITY;
   if (dialog_type == content::JAVASCRIPT_DIALOG_TYPE_PROMPT)

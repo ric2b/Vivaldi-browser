@@ -25,13 +25,13 @@
 #include "core/html/HTMLIFrameElement.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLDocument.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutIFrame.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -39,14 +39,13 @@ using namespace HTMLNames;
 
 inline HTMLIFrameElement::HTMLIFrameElement(Document& document)
     : HTMLFrameElementBase(iframeTag, document),
-      did_load_non_empty_document_(false),
       collapsed_by_client_(false),
       sandbox_(HTMLIFrameElementSandbox::Create(this)),
       referrer_policy_(kReferrerPolicyDefault) {}
 
 DEFINE_NODE_FACTORY(HTMLIFrameElement)
 
-DEFINE_TRACE(HTMLIFrameElement) {
+void HTMLIFrameElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(sandbox_);
   HTMLFrameElementBase::Trace(visitor);
   Supplementable<HTMLIFrameElement>::Trace(visitor);
@@ -81,7 +80,7 @@ bool HTMLIFrameElement::IsPresentationAttribute(
 void HTMLIFrameElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == widthAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyWidth, value);
   } else if (name == heightAttr) {
@@ -186,14 +185,15 @@ void HTMLIFrameElement::ParseAttribute(
               kOtherMessageSource, kWarningMessageLevel, message));
         }
       }
-
-      if (old_syntax) {
-        UseCounter::Count(
-            GetDocument(),
-            WebFeature::kFeaturePolicyAllowAttributeDeprecatedSyntax);
-      } else {
-        UseCounter::Count(GetDocument(),
-                          WebFeature::kFeaturePolicyAllowAttribute);
+      if (!value.IsEmpty()) {
+        if (old_syntax) {
+          UseCounter::Count(
+              GetDocument(),
+              WebFeature::kFeaturePolicyAllowAttributeDeprecatedSyntax);
+        } else {
+          UseCounter::Count(GetDocument(),
+                            WebFeature::kFeaturePolicyAllowAttribute);
+        }
       }
     }
   } else {
@@ -203,21 +203,20 @@ void HTMLIFrameElement::ParseAttribute(
   }
 }
 
-Vector<WebParsedFeaturePolicyDeclaration>
-HTMLIFrameElement::ConstructContainerPolicy(Vector<String>* messages,
-                                            bool* old_syntax) const {
-  RefPtr<SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
-  RefPtr<SecurityOrigin> self_origin = GetDocument().GetSecurityOrigin();
-  Vector<WebParsedFeaturePolicyDeclaration> container_policy =
-      ParseFeaturePolicyAttribute(allow_, self_origin, src_origin, messages,
-                                  old_syntax);
+ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
+    Vector<String>* messages,
+    bool* old_syntax) const {
+  scoped_refptr<SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
+  scoped_refptr<SecurityOrigin> self_origin = GetDocument().GetSecurityOrigin();
+  ParsedFeaturePolicy container_policy = ParseFeaturePolicyAttribute(
+      allow_, self_origin, src_origin, messages, old_syntax);
 
   // If allowfullscreen attribute is present and no fullscreen policy is set,
   // enable the feature for all origins.
   if (AllowFullscreen()) {
     bool has_fullscreen_policy = false;
     for (const auto& declaration : container_policy) {
-      if (declaration.feature == WebFeaturePolicyFeature::kFullscreen) {
+      if (declaration.feature == FeaturePolicyFeature::kFullscreen) {
         has_fullscreen_policy = true;
         if (messages) {
           messages->push_back(
@@ -227,10 +226,9 @@ HTMLIFrameElement::ConstructContainerPolicy(Vector<String>* messages,
       }
     }
     if (!has_fullscreen_policy) {
-      WebParsedFeaturePolicyDeclaration whitelist;
-      whitelist.feature = WebFeaturePolicyFeature::kFullscreen;
+      ParsedFeaturePolicyDeclaration whitelist;
+      whitelist.feature = FeaturePolicyFeature::kFullscreen;
       whitelist.matches_all_origins = true;
-      whitelist.origins = Vector<WebSecurityOrigin>(0UL);
       container_policy.push_back(whitelist);
     }
   }
@@ -239,7 +237,7 @@ HTMLIFrameElement::ConstructContainerPolicy(Vector<String>* messages,
   if (AllowPaymentRequest()) {
     bool has_payment_policy = false;
     for (const auto& declaration : container_policy) {
-      if (declaration.feature == WebFeaturePolicyFeature::kPayment) {
+      if (declaration.feature == FeaturePolicyFeature::kPayment) {
         has_payment_policy = true;
         if (messages) {
           messages->push_back(
@@ -249,10 +247,10 @@ HTMLIFrameElement::ConstructContainerPolicy(Vector<String>* messages,
       }
     }
     if (!has_payment_policy) {
-      WebParsedFeaturePolicyDeclaration whitelist;
-      whitelist.feature = WebFeaturePolicyFeature::kPayment;
+      ParsedFeaturePolicyDeclaration whitelist;
+      whitelist.feature = FeaturePolicyFeature::kPayment;
       whitelist.matches_all_origins = true;
-      whitelist.origins = Vector<WebSecurityOrigin>(0UL);
+      whitelist.origins = std::vector<url::Origin>(0UL);
       container_policy.push_back(whitelist);
     }
   }

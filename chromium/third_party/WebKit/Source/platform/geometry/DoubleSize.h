@@ -5,11 +5,11 @@
 #ifndef DoubleSize_h
 #define DoubleSize_h
 
+#include <iosfwd>
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/MathExtras.h"
 
 namespace blink {
 
@@ -99,6 +99,8 @@ inline IntSize ExpandedIntSize(const DoubleSize& p) {
 inline FloatSize ToFloatSize(const DoubleSize& p) {
   return FloatSize(p.Width(), p.Height());
 }
+
+PLATFORM_EXPORT std::ostream& operator<<(std::ostream&, const DoubleSize&);
 
 // Redeclared here to avoid ODR issues.
 // See platform/testing/GeometryPrinters.h.

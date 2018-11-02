@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "ash/palette_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "ash/wm/power_button_controller.h"
+#include "ash/system/power/backlights_forced_off_setter.h"
+#include "ash/system/power/power_button_controller.h"
 #include "components/prefs/testing_pref_service.h"
 
 namespace ash {
@@ -17,6 +17,10 @@ namespace ash {
 ShellTestApi::ShellTestApi() : ShellTestApi(Shell::Get()) {}
 
 ShellTestApi::ShellTestApi(Shell* shell) : shell_(shell) {}
+
+MessageCenterController* ShellTestApi::message_center_controller() {
+  return shell_->message_center_controller_.get();
+}
 
 SystemGestureEventFilter* ShellTestApi::system_gesture_event_filter() {
   return shell_->system_gesture_filter_.get();
@@ -38,19 +42,15 @@ DragDropController* ShellTestApi::drag_drop_controller() {
   return shell_->drag_drop_controller_.get();
 }
 
-void ShellTestApi::SetPaletteDelegate(
-    std::unique_ptr<PaletteDelegate> palette_delegate) {
-  shell_->palette_delegate_ = std::move(palette_delegate);
-}
-
 void ShellTestApi::OnLocalStatePrefServiceInitialized(
     std::unique_ptr<PrefService> pref_service) {
   shell_->OnLocalStatePrefServiceInitialized(std::move(pref_service));
 }
 
 void ShellTestApi::ResetPowerButtonControllerForTest() {
-  shell_->power_button_controller_ =
-      std::make_unique<PowerButtonController>(shell_->lock_state_controller());
+  shell_->backlights_forced_off_setter_->ResetForTest();
+  shell_->power_button_controller_ = std::make_unique<PowerButtonController>(
+      shell_->backlights_forced_off_setter_.get());
 }
 
 }  // namespace ash

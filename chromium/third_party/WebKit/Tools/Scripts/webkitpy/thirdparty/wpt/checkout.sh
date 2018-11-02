@@ -9,12 +9,9 @@ cd $DIR
 
 TARGET_DIR=$DIR/wpt
 REMOTE_REPO="https://chromium.googlesource.com/external/w3c/web-platform-tests.git"
-WPT_HEAD=32aa301b33136f71b1e15594f07ea5345a6305db
+WPT_HEAD=6439a72ba71f99e2f01abb9f69edc779698ba9bc
 
 function clone {
-  # First line is the main repo HEAD.
-  WPT_HEAD=$(head -n 1 $DIR/WPTHeads)
-
   # Remove existing repo if already exists.
   [ -d "$TARGET_DIR" ] && rm -rf $TARGET_DIR
 
@@ -22,6 +19,11 @@ function clone {
   git clone $REMOTE_REPO $TARGET_DIR
   cd $TARGET_DIR && git checkout $WPT_HEAD
   echo "WPTHead: " `git rev-parse HEAD`
+
+  # Apply local changes.
+  cd $DIR && git apply chromium.patch
+  # Chromium presubmit requires scripts with shebang to be executable.
+  chmod 755 $TARGET_DIR/tools/manifest/update.py
 }
 
 function reduce {
@@ -41,7 +43,5 @@ for action in $actions; do
   type -t $action >/dev/null || (echo "Unknown action: $action" 1>&2 && exit 1)
   $action
 done
-
-chmod 755 $TARGET_DIR/tools/manifest/update.py
 
 # TODO(burnik): Handle the SSL certs and other configuration.

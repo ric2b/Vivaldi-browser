@@ -37,7 +37,7 @@ class DISPLAY_EXPORT Display final {
  public:
   // Screen Rotation in clock-wise degrees.
   // This enum corresponds to DisplayRotationDefaultProto::Rotation in
-  // chrome/browser/chromeos/policy/proto/chrome_device_policy.proto.
+  // components/policy/proto/chrome_device_policy.proto.
   enum Rotation {
     ROTATE_0 = 0,
     ROTATE_90,
@@ -95,6 +95,10 @@ class DISPLAY_EXPORT Display final {
   // Indicates if a display color profile is being explicitly enforced from the
   // command line via "--force-color-profile".
   static bool HasForceColorProfile();
+
+  // Indicates if the display color profile being forced should be ensured to
+  // be in use by the operating system as well.
+  static bool HasEnsureForcedColorProfile();
 
   // Resets the caches used to determine if a device scale factor is being
   // forced from the command line via "--force-device-scale-factor", and thus

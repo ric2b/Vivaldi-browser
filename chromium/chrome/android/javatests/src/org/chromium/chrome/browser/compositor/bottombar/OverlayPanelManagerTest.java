@@ -90,6 +90,11 @@ public class OverlayPanelManagerTest {
         }
 
         @Override
+        protected void animatePanelTo(float height, long duration) {
+            // Do not create animations for tests.
+        }
+
+        @Override
         public void closePanel(StateChangeReason reason, boolean animate) {
             // Immediately call onClosed rather than wait for animation to finish.
             onClosed(reason);
@@ -100,7 +105,7 @@ public class OverlayPanelManagerTest {
          */
         private static class MockOverlayPanelContent extends OverlayPanelContent {
             public MockOverlayPanelContent() {
-                super(null, null, null);
+                super(null, null, null, 0);
             }
 
             @Override
@@ -117,7 +122,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testPanelRequestingShow() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel panel =
@@ -133,7 +138,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testPanelClosed() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel panel =
@@ -150,7 +155,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testHighPrioritySuppressingLowPriority() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -169,7 +174,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testSuppressedPanelRestored() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -189,7 +194,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testUnsuppressiblePanelNotRestored() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -209,7 +214,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testSuppressedPanelClosedBeforeRestore() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -231,7 +236,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testSuppressedPanelPriority() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -274,7 +279,7 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testSuppressedPanelOrder() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         OverlayPanel lowPriorityPanel =
@@ -312,15 +317,14 @@ public class OverlayPanelManagerTest {
     @Feature({"OverlayPanel"})
     @UiThreadTest
     public void testLatePanelGetsNecessaryVars() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         OverlayPanelManager panelManager = new OverlayPanelManager();
         MockOverlayPanel earlyPanel =
                 new MockOverlayPanel(context, null, panelManager, PanelPriority.MEDIUM, true);
 
         // Set necessary vars before any other panels are registered in the manager.
-        panelManager.setContainerView(
-                new LinearLayout(InstrumentationRegistry.getInstrumentation().getTargetContext()));
+        panelManager.setContainerView(new LinearLayout(InstrumentationRegistry.getTargetContext()));
         panelManager.setDynamicResourceLoader(new DynamicResourceLoader(0, null));
 
         MockOverlayPanel latePanel =

@@ -146,7 +146,11 @@ public class AwVariationsConfigurationService extends Service {
         Context context = ContextUtils.getApplicationContext();
         JobScheduler scheduler =
                 (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        return scheduler.getPendingJob(TaskIds.WEBVIEW_VARIATIONS_SEED_FETCH_JOB_ID) != null;
+        List<JobInfo> pendingJobs = scheduler.getAllPendingJobs();
+        for (JobInfo job : pendingJobs) {
+            if (job.getId() == TaskIds.WEBVIEW_VARIATIONS_SEED_FETCH_JOB_ID) return true;
+        }
+        return false;
     }
 
     private static void scheduleSeedFetchJob() {

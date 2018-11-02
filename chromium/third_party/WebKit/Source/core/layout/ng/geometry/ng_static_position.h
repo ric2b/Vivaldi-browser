@@ -7,9 +7,9 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ng/geometry/ng_physical_offset.h"
-#include "core/layout/ng/ng_writing_mode.h"
 #include "platform/LayoutUnit.h"
 #include "platform/text/TextDirection.h"
+#include "platform/text/WritingMode.h"
 
 namespace blink {
 
@@ -21,51 +21,33 @@ struct CORE_EXPORT NGStaticPosition {
   NGPhysicalOffset offset;
 
   // Creates a position with proper type wrt writing mode and direction.
-  static NGStaticPosition Create(NGWritingMode,
-                                 TextDirection,
-                                 NGPhysicalOffset);
-  // Left/Right/TopPosition functions map static position to
+  // It expects physical offset of inline_start/block_start vertex.
+  static NGStaticPosition Create(WritingMode, TextDirection, NGPhysicalOffset);
+
+  // Left/Right/TopPosition functions map static position to inset of
   // left/right/top edge wrt container space.
   // The function arguments are required to solve the equation:
   // contaner_size = left + margin_left + width + margin_right + right
-  LayoutUnit LeftPosition(LayoutUnit container_size,
-                          LayoutUnit width,
-                          LayoutUnit margin_left,
-                          LayoutUnit margin_right) const {
-    return GenericPosition(HasLeft(), offset.left, container_size, width,
-                           margin_left, margin_right);
-  }
-  LayoutUnit RightPosition(LayoutUnit container_size,
-                           LayoutUnit width,
-                           LayoutUnit margin_left,
-                           LayoutUnit margin_right) const {
-    return GenericPosition(!HasLeft(), offset.left, container_size, width,
-                           margin_left, margin_right);
-  }
-  LayoutUnit TopPosition(LayoutUnit container_size,
+  LayoutUnit LeftInset(LayoutUnit container_size,
+                       LayoutUnit width,
+                       LayoutUnit margin_left,
+                       LayoutUnit margin_right) const;
+  LayoutUnit RightInset(LayoutUnit container_size,
+                        LayoutUnit width,
+                        LayoutUnit margin_left,
+                        LayoutUnit margin_right) const;
+  LayoutUnit TopInset(LayoutUnit container_size,
+                      LayoutUnit height,
+                      LayoutUnit margin_top,
+                      LayoutUnit margin_bottom) const;
+  LayoutUnit BottomInset(LayoutUnit container_size,
                          LayoutUnit height,
                          LayoutUnit margin_top,
-                         LayoutUnit margin_bottom) const {
-    return GenericPosition(HasTop(), offset.top, container_size, height,
-                           margin_top, margin_bottom);
-  }
+                         LayoutUnit margin_bottom) const;
 
  private:
   bool HasTop() const { return type == kTopLeft || type == kTopRight; }
   bool HasLeft() const { return type == kTopLeft || type == kBottomLeft; }
-  LayoutUnit GenericPosition(bool position_matches,
-                             LayoutUnit position,
-                             LayoutUnit container_size,
-                             LayoutUnit length,
-                             LayoutUnit margin_start,
-                             LayoutUnit margin_end) const {
-    DCHECK_GE(container_size, LayoutUnit());
-    DCHECK_GE(length, LayoutUnit());
-    if (position_matches)
-      return position;
-    else
-      return container_size - position - length - margin_start - margin_end;
-  }
 };
 
 }  // namespace blink

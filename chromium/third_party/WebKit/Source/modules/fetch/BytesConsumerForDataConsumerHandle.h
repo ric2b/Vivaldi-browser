@@ -5,10 +5,10 @@
 #ifndef BytesConsumerForDataConsumerHandle_h
 #define BytesConsumerForDataConsumerHandle_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/ModulesExport.h"
 #include "modules/fetch/BytesConsumer.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebDataConsumerHandle.h"
 
@@ -47,7 +47,7 @@ class MODULES_EXPORT BytesConsumerForDataConsumerHandle final
   // WebDataConsumerHandle::Client
   void DidGetReadable() override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   void Close();

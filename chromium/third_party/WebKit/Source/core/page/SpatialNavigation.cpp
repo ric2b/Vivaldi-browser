@@ -28,7 +28,6 @@
 
 #include "core/page/SpatialNavigation.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -36,6 +35,7 @@
 #include "core/html/HTMLAreaElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutView.h"
 #include "core/page/FrameTree.h"
@@ -61,14 +61,13 @@ FocusCandidate::FocusCandidate(Node* node, WebFocusType type)
   DCHECK(node);
   DCHECK(node->IsElementNode());
 
-  if (isHTMLAreaElement(*node)) {
-    HTMLAreaElement& area = toHTMLAreaElement(*node);
-    HTMLImageElement* image = area.ImageElement();
+  if (auto* area = ToHTMLAreaElementOrNull(*node)) {
+    HTMLImageElement* image = area->ImageElement();
     if (!image || !image->GetLayoutObject())
       return;
 
     visible_node = image;
-    rect = VirtualRectForAreaElementAndDirection(area, type);
+    rect = VirtualRectForAreaElementAndDirection(*area, type);
   } else {
     if (!node->GetLayoutObject())
       return;
@@ -316,10 +315,19 @@ Node* ScrollableEnclosingBoxOrParentFrameForNodeInDirection(WebFocusType type,
       parent = ToDocument(parent)->GetFrame()->DeprecatedLocalOwner();
     else
       parent = parent->ParentOrShadowHostNode();
-  } while (parent && !CanScrollInDirection(parent, type) &&
-           !parent->IsDocumentNode());
+  } while (parent && !IsNavigableContainer(parent, type));
 
   return parent;
+}
+
+bool IsNavigableContainer(const Node* node, WebFocusType type) {
+  if (!node)
+    return false;
+
+  return node->IsDocumentNode() ||
+         (node->IsFrameOwnerElement() &&
+          ToHTMLFrameOwnerElement(node)->ContentFrame()) ||
+         CanScrollInDirection(node, type);
 }
 
 bool CanScrollInDirection(const Node* container, WebFocusType type) {
@@ -539,8 +547,8 @@ bool AreElementsOnSameLine(const FocusCandidate& first_candidate,
   if (!first_candidate.rect.Intersects(second_candidate.rect))
     return false;
 
-  if (isHTMLAreaElement(*first_candidate.focusable_node) ||
-      isHTMLAreaElement(*second_candidate.focusable_node))
+  if (IsHTMLAreaElement(*first_candidate.focusable_node) ||
+      IsHTMLAreaElement(*second_candidate.focusable_node))
     return false;
 
   if (!first_candidate.visible_node->GetLayoutObject()->IsLayoutInline() ||

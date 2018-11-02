@@ -3,6 +3,9 @@
 <translationbundle lang="lv">
 <translation id="1002108253973310084">Tika konstatēta nesaderīga protokola versija. Lūdzu, pārbaudiet, vai abos datoros ir instalēta programmatūras jaunākā versija, un mēģiniet vēlreiz.</translation>
 <translation id="1050693411695664090">vājš</translation>
+<translation id="1059802506829356230">• Jauns izskats un darbība.
+• Uzlabota veiktspēja, reaģētspēja un uzticamība.
+• Audio atskaņošanas atbalsts no Windows un Linux datoriem.</translation>
 <translation id="1152528166145813711">Atlasīt...</translation>
 <translation id="1199593201721843963">Atspējot attālos savienojumus</translation>
 <translation id="1291443878853470558">Ja vēlaties piekļūt šim datoram, izmantojot Chrome saiti, ir jāiespējo attālie savienojumi.</translation>
@@ -71,6 +74,7 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="2509394361235492552">Izveidots savienojums ar “<ph name="HOSTNAME" />”</translation>
 <translation id="2512228156274966424">PIEZĪME. Lai būtu pieejami visi īsinājumtaustiņi, Chrome attālo darbvirsmu varat konfigurēt šādi: “Atvērt kā logu”.</translation>
 <translation id="2540992418118313681">Vai vēlaties koplietot šo datoru ar citu lietotāju, lai viņš varētu skatīt un pārvaldīt tajā esošo saturu?</translation>
+<translation id="2579271889603567289">Saimniekdators avarēja, vai neizdevās to palaist.</translation>
 <translation id="2599300881200251572">Izmantojot šo pakalpojumu, tiek iespējota ienākošo savienojumu izveide no Chrome attālās darbvirsmas klientiem.</translation>
 <translation id="2647232381348739934">Chrome saites pakalpojums</translation>
 <translation id="2676780859508944670">Notiek apstrāde...</translation>
@@ -81,6 +85,11 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="2841013758207633010">Laiks</translation>
 <translation id="2851754573186462851">Chromium lietotnes straumēšana</translation>
 <translation id="2888969873284818612">Radās tīkla kļūda. Kad ierīce atkal darbosies tiešsaistē, lietotne tiks restartēta.</translation>
+<translation id="289405675947420287">Droši piekļūstiet savam datoram no iOS ierīces. Tas ir ātri, ērti un bez maksas.
+
+• Datorā, kuram vēlaties attāli piekļūt, Chrome interneta veikalā lejupielādējiet lietotni “Chrome attālā darbvirsma”.
+• Instalējiet programmatūru “Chrome attālā darbvirsma” un izpildiet norādījumus, lai pabeigtu iestatīšanu.
+• Savā iOS ierīcē atveriet lietotni un pieskarieties jebkura tiešsaistē esoša datora nosaukumam, lai izveidotu savienojumu.</translation>
 <translation id="2894654864775534701">Šis dators šobrīd tiek koplietots, izmantojot citu kontu.</translation>
 <translation id="2919669478609886916">Šobrīd jūs koplietojat šo ierīci ar citu lietotāju. Vai vēlaties turpināt koplietošanu?</translation>
 <translation id="2921543551052660690">Iepriekš bijāt pierakstījies kā <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). Lai piekļūtu datoriem šajā kontā, <ph name="LINK_BEGIN" />pierakstieties pārlūkā Chromium<ph name="LINK_END" />, izmantojot šo kontu, un atkārtoti instalējiet Chrome saiti.</translation>
@@ -95,10 +104,6 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="3150823315463303127">Saimniekdatoram neizdevās nolasīt politiku.</translation>
 <translation id="3194245623920924351">Chrome attālā darbvirsma</translation>
 <translation id="3197730452537982411">Attālā darbvirsma</translation>
-<translation id="321944585103975186">• Pārveidota lietotāja saskarne.
-• Uzlabota veiktspēja, reaģētspēja un uzticamība.
-• Audio atskaņošanas atbalsts no Windows un Linux datoriem.
-• Papildināts tastatūras atbalsts.</translation>
 <translation id="324272851072175193">Sūtīt šos norādījumus pa e-pastu</translation>
 <translation id="3258789396564295715">Varat izveidot drošu savienojumu ar šo datoru, izmantojot Chrome attālo darbvirsmu.</translation>
 <translation id="3286521253923406898">Chrome saites saimniekdatora kontrolleris</translation>
@@ -112,12 +117,6 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="3385242214819933234">Saimniekdatora īpašnieka vārds nav derīgs.</translation>
 <translation id="3403830762023901068">Saskaņā ar politikas iestatījumiem šo datoru nevar koplietot kā Chrome saites saimniekdatoru. Lai saņemtu palīdzību, sazinieties ar sistēmas administratoru.</translation>
 <translation id="3423542133075182604">Drošības atslēgas tālvadības process</translation>
-<translation id="3426467947138417795">Chrome attālā darbvirsma
-Attālā darbvirsma
-Attāls PC
-Attāls dators
-Attālā piekļuve
-Attāls atbalsts</translation>
 <translation id="3581045510967524389">Nevarēja izveidot savienojumu ar tīklu. Lūdzu, pārbaudiet, vai ierīce darbojas tiešsaistes režīmā.</translation>
 <translation id="3596628256176442606">Izmantojot šo pakalpojumu, tiek iespējoti ienākošie savienojumi no Chrome saites klientiem.</translation>
 <translation id="3606997049964069799">Jūs neesat pierakstījies pārlūkā Chromium. Lūdzu, pierakstieties un mēģiniet vēlreiz.</translation>
@@ -125,14 +124,8 @@ Attāls atbalsts</translation>
 <translation id="369442766917958684">Bezsaistē.</translation>
 <translation id="3695446226812920698">Uzzināt vairāk</translation>
 <translation id="3718805989288361841">Radās kļūda Chrome attālās darbvirsmas politikas iestatījumos. Sazinieties ar sistēmas administratoru, lai saņemtu palīdzību.</translation>
+<translation id="3759645055923345178">Pēc iestatīšanas varēsiet piekļūt datoram no šīs lapas, ievadot PIN vai piekļuves kodu.</translation>
 <translation id="3776024066357219166">Jūsu Chrome attālās darbvirsmas sesija ir pārtraukta.</translation>
-<translation id="3788372335219293587">Droši piekļūstiet savam datoram no iOS ierīces. Tas ir ātri, ērti un bez maksas.
-
-• Datorā, kuram vēlaties attāli piekļūt, Chrome interneta veikalā atrodiet lietotni Chrome attālā darbvirsma: https://chrome.google.com/remotedesktop.
-• Instalējiet programmatūru Chrome attālā darbvirsma un izpildiet norādījumus, lai pabeigtu iestatīšanu.
-• Savā iOS ierīcē atveriet lietotni un pieskarieties jebkura tiešsaistē esoša datora nosaukumam, lai izveidotu savienojumu.
-
-Informāciju par konfidencialitāti skatiet Google konfidencialitātes politikā (http://goo.gl/SyrVzj).</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Lai atļautu piekļuvi, izmantojot Chrome attālo darbvirsmu, lūdzu, apstipriniet kontu un PIN kodu.</translation>
 <translation id="3897092660631435901">Izvēlne</translation>
@@ -172,9 +165,17 @@ Informāciju par konfidencialitāti skatiet Google konfidencialitātes politikā
 <translation id="4660011489602794167">Rādīt tastatūru</translation>
 <translation id="4703302905453407178">Tika pārtraukta obligātā komponenta darbība. Lūdzu, ziņojiet par šo problēmu izstrādātājiem.</translation>
 <translation id="4703799847237267011">Jūsu Chrome saites sesija ir pārtraukta.</translation>
+<translation id="4706355010316049867">Chrome
+attālā
+darbvirsma
+piekļūt
+piekļuve
+atbalsts
+dators</translation>
 <translation id="4736223761657662401">Savienojumu vēsture</translation>
 <translation id="4741792197137897469">Autentificēšana neizdevās. Lūdzu, vēlreiz pierakstieties pārlūkā Chrome.</translation>
 <translation id="477305884757156764">Lietojumprogramma ir pārāk lēna.</translation>
+<translation id="4784508858340177375">Serveris X avarēja, vai neizdevās to palaist.</translation>
 <translation id="4795786176190567663">Jums nav atļauju, lai veiktu šo darbību.</translation>
 <translation id="4798680868612952294">Peles opcijas</translation>
 <translation id="4804818685124855865">Atvienot</translation>
@@ -215,6 +216,7 @@ Informāciju par konfidencialitāti skatiet Google konfidencialitātes politikā
 <translation id="5773590752998175013">Datums, kad savienots pārī</translation>
 <translation id="579702532610384533">Atkārtoti savienot</translation>
 <translation id="5810269635982033450">Ekrāns darbojas kā skārienpaliktnis</translation>
+<translation id="5823658491130719298">Datorā, kuram vēlaties piekļūt attāli, atveriet pārlūku Chrome un apmeklējiet vietni <ph name="INSTALLATION_LINK" />.</translation>
 <translation id="5841343754884244200">Attēlojuma opcijas</translation>
 <translation id="5843054235973879827">Kāpēc tas ir droši?</translation>
 <translation id="5859141382851488196">Jauns logs...</translation>
@@ -248,6 +250,7 @@ Informāciju par konfidencialitāti skatiet Google konfidencialitātes politikā
 <translation id="6572345186230665992">Operētājsistēmai Mac (OS X Mavericks 10.9 un jaunākas versijas)</translation>
 <translation id="6583902294974160967">Atbalsts</translation>
 <translation id="6612717000975622067">Sūtīt Ctrl-Alt-Del</translation>
+<translation id="6654753848497929428">Koplietot</translation>
 <translation id="6668065415969892472">Jūsu PIN ir atjaunināts.</translation>
 <translation id="6681800064886881394">Autortiesības © 2013 Google Inc. Visas tiesības paturētas.</translation>
 <translation id="6705482892455291412">Tiklīdz tiks ievadīts kods, jūs tiksiet aicināts apstiprināt savienojumu un sākt kopīgot sesiju.</translation>
@@ -271,9 +274,6 @@ Informāciju par konfidencialitāti skatiet Google konfidencialitātes politikā
 <translation id="7144878232160441200">Mēģināt vēlreiz</translation>
 <translation id="7149517134817561223">Lietojumprogramma, kas paredzēta komandu sniegšanai Chrome attālās darbvirsmas saimniekdatoram.</translation>
 <translation id="7215059001581613786">Lūdzu, ievadiet PIN, kura garums ir vismaz seši cipari.</translation>
-<translation id="7237767047212540055">Datorā, kuram vēlaties piekļūt attāli, atveriet pārlūku Chrome un apmeklējiet vietni <ph name="INSTALLATION_LINK" />.
-Instalējiet programmatūru Chrome attālā darbvirsma un izpildiet norādījumus, lai pabeigtu iestatīšanu.
-Pēc iestatīšanas pabeigšanas varēsiet piekļūt datoram no šīs lapas, ievadot PIN vai piekļuves kodu.</translation>
 <translation id="7312846573060934304">Saimniekdators darbojas bezsaistes režīmā.</translation>
 <translation id="7319983568955948908">Pārtraukt koplietošanu</translation>
 <translation id="7401733114166276557">Chrome attālā darbvirsma</translation>
@@ -292,6 +292,7 @@ Pēc iestatīšanas pabeigšanas varēsiet piekļūt datoram no šīs lapas, iev
 <translation id="7782471917492991422">Lūdzu, pārbaudiet datora barošanas pārvaldības iestatījumus: datoram ir jābūt konfigurētam tā, lai netiktu aktivizēts miega režīms, kad dators netiek lietots.</translation>
 <translation id="7810127880729796595">Rādīt statistiku (savienojums: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Trūkst dažu nepieciešamo komponentu. Pārbaudiet, vai izmantojat jaunāko Chrome versiju un mēģiniet vēlreiz.</translation>
+<translation id="7850909060902317210">Instalējiet programmatūru “Chrome attālā darbvirsma” un ievērojiet norādījumus, lai pabeigtu iestatīšanu</translation>
 <translation id="7868137160098754906">Lūdzu, ievadiet attālā datora PIN.</translation>
 <translation id="7869445566579231750">Jums nav atļauju, lai palaistu šo lietojumprogrammu.</translation>
 <translation id="7895403300744144251">Drošības politiku dēļ attālajā datorā nav atļauti savienojumi no jūsu konta.</translation>
@@ -327,6 +328,7 @@ Pēc iestatīšanas pabeigšanas varēsiet piekļūt datoram no šīs lapas, iev
 <translation id="8642984861538780905">viduvējs</translation>
 <translation id="8712909229180978490">Google diskā neredzu savus tiešsaistē saglabātos failus.</translation>
 <translation id="8743328882720071828">Vai atļausiet lietotājam <ph name="CLIENT_USERNAME" /> skatīt un pārvaldīt jūsu datoru?</translation>
+<translation id="8747048596626351634">Sesija avarēja, vai neizdevās to sākt. Ja attālajā datorā pastāv sesija ~/.chrome-remote-desktop-session, tai ir jāsāk ilgstošs priekšplāna process, piemēram, darbvirsmas vide vai logu pārvaldnieks.</translation>
 <translation id="8759753423332885148">Uzziniet vairāk.</translation>
 <translation id="8791202241915690908">Chrome saites saimniekdatora instalēšanas programmas lejupielāde</translation>
 <translation id="894763922177556086">labs</translation>
@@ -335,6 +337,7 @@ Pēc iestatīšanas pabeigšanas varēsiet piekļūt datoram no šīs lapas, iev
 <translation id="8998327464021325874">Chrome attālās darbvirsmas saimniekdatora kontrolleris</translation>
 <translation id="9016232822027372900">Izveidot savienojumu jebkurā gadījumā</translation>
 <translation id="906458777597946297">Maksimizēt logu</translation>
+<translation id="9111855907838866522">Ir izveidots savienojums ar jūsu attālo ierīci. Lai atvērtu izvēlni, pieskarieties pie ekrāna ar četriem pirkstiem.</translation>
 <translation id="9126115402994542723">Nepieprasīt PIN kodu vēlreiz, kad no šīs ierīces izveidoju savienojumu ar šo saimniekdatoru.</translation>
 <translation id="9149580767411232853">Rādīt visu attālo darbvirsmu</translation>
 <translation id="9149992051684092333">Lai koplietotu savu darbvirsmu, paziņojiet tālāk redzamo piekļuves kodu lietotājam, kurš jums palīdzēs.</translation>

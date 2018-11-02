@@ -17,6 +17,12 @@ namespace safe_browsing {
 // them to the ExperimentalFeaturesList below to start displaying their status
 // on the chrome://safe-browsing page.
 
+// Allows an ad sample report to be created but not sent. Used to measure
+// performance impact of report generation.
+const base::Feature kAdSamplerCollectButDontSendFeature{
+    "SafeBrowsingAdSamplerCollectButDontSend",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls various parameters related to occasionally collecting ad samples,
 // for example to control how often collection should occur.
 const base::Feature kAdSamplerTriggerFeature{"SafeBrowsingAdSamplerTrigger",
@@ -29,10 +35,6 @@ const base::Feature kGoogleBrandedPhishingWarning{
     "PasswordProtectionGoogleBrandedPhishingWarning",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kLocalDatabaseManagerEnabled{
-    "SafeBrowsingV4LocalDatabaseManagerEnabled",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // If enabled, SafeBrowsing URL checks don't defer starting requests or
 // following redirects, no matter on desktop or mobile. Instead they only defer
 // response processing.
@@ -42,15 +44,6 @@ const base::Feature kLocalDatabaseManagerEnabled{
 const base::Feature kParallelUrlCheck{"S13nSafeBrowsingParallelUrlCheck",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kPasswordFieldOnFocusPinging{
-    "PasswordFieldOnFocusPinging", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kPasswordProtectionInterstitial{
-    "PasswordProtectionInterstitial", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kProtectedPasswordEntryPinging{
-    "ProtectedPasswordEntryPinging", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kThreatDomDetailsTagAndAttributeFeature{
     "ThreatDomDetailsTagAttributes", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -58,8 +51,8 @@ const base::Feature kTriggerThrottlerDailyQuotaFeature{
     "SafeBrowsingTriggerThrottlerDailyQuota",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kV4OnlyEnabled{"SafeBrowsingV4OnlyEnabled",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kDispatchSafetyNetCheckOffThread{
+    "DispatchSafetyNetCheckOffThread", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
 // List of experimental features. Boolean value for each list member should be
@@ -70,17 +63,14 @@ constexpr struct {
   // True if the feature is running at a probability other than 1 or 0.
   bool probabilistically_enabled;
 } kExperimentalFeatures[]{
+    {&kAdSamplerCollectButDontSendFeature, false},
     {&kAdSamplerTriggerFeature, false},
     {&kGaiaPasswordReuseReporting, true},
-    {&kGoogleBrandedPhishingWarning, false},
-    {&kLocalDatabaseManagerEnabled, true},
+    {&kGoogleBrandedPhishingWarning, true},
     {&kParallelUrlCheck, true},
-    {&kPasswordFieldOnFocusPinging, true},
-    {&kPasswordProtectionInterstitial, false},
-    {&kProtectedPasswordEntryPinging, true},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
     {&kTriggerThrottlerDailyQuotaFeature, false},
-    {&kV4OnlyEnabled, true},
+    {&kDispatchSafetyNetCheckOffThread, false},
 };
 
 // Adds the name and the enabled/disabled status of a given feature.

@@ -23,12 +23,12 @@
 #include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/gpu/accelerated_video_decoder.h"
+#include "media/gpu/format_utils.h"
 #include "media/gpu/h264_decoder.h"
-#include "media/gpu/vaapi_picture.h"
+#include "media/gpu/vaapi/vaapi_picture.h"
 #include "media/gpu/vp8_decoder.h"
 #include "media/gpu/vp9_decoder.h"
 #include "media/video/picture.h"
-#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_image.h"
 
 #define DVLOGF(level) DVLOG(level) << __func__ << "(): "
@@ -42,12 +42,28 @@ enum VAVDADecoderFailure {
   VAAPI_ERROR = 0,
   VAVDA_DECODER_FAILURES_MAX,
 };
+// from ITU-T REC H.264 spec
+// section 8.5.6
+// "Inverse scanning process for 4x4 transform coefficients and scaling lists"
+static const int kZigzagScan4x4[16] = {0, 1,  4,  8,  5, 2,  3,  6,
+                                       9, 12, 13, 10, 7, 11, 14, 15};
 
-// Buffer format to use for output buffers backing PictureBuffers. This is the
-// format decoded frames in VASurfaces are converted into.
-const gfx::BufferFormat kAllocatePictureFormat = gfx::BufferFormat::BGRX_8888;
-const gfx::BufferFormat kImportPictureFormat = gfx::BufferFormat::YVU_420;
+// section 8.5.7
+// "Inverse scanning process for 8x8 transform coefficients and scaling lists"
+static const uint8_t kZigzagScan8x8[64] = {
+    0,  1,  8,  16, 9,  2,  3,  10, 17, 24, 32, 25, 18, 11, 4,  5,
+    12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6,  7,  14, 21, 28,
+    35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
+    58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63};
+
+// Returns the preferred VA_RT_FORMAT for the given |profile|.
+unsigned int GetVaFormatForVideoCodecProfile(VideoCodecProfile profile) {
+  if (profile == VP9PROFILE_PROFILE2 || profile == VP9PROFILE_PROFILE3)
+    return VA_RT_FORMAT_YUV420_10BPP;
+  return VA_RT_FORMAT_YUV420;
 }
+
+}  // namespace
 
 static void ReportToUMA(VAVDADecoderFailure failure) {
   UMA_HISTOGRAM_ENUMERATION("Media.VAVDA.DecoderFailure", failure,
@@ -81,8 +97,8 @@ class VaapiVideoDecodeAccelerator::VaapiDecodeSurface
   friend class base::RefCountedThreadSafe<VaapiDecodeSurface>;
   ~VaapiDecodeSurface();
 
-  int32_t bitstream_id_;
-  scoped_refptr<VASurface> va_surface_;
+  const int32_t bitstream_id_;
+  const scoped_refptr<VASurface> va_surface_;
   gfx::Rect visible_rect_;
 };
 
@@ -95,9 +111,9 @@ VaapiVideoDecodeAccelerator::VaapiDecodeSurface::~VaapiDecodeSurface() {}
 
 class VaapiH264Picture : public H264Picture {
  public:
-  VaapiH264Picture(
-      const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-          dec_surface);
+  explicit VaapiH264Picture(
+      scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> surface)
+      : dec_surface_(surface) {}
 
   VaapiH264Picture* AsVaapiH264Picture() override { return this; }
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface() {
@@ -105,19 +121,12 @@ class VaapiH264Picture : public H264Picture {
   }
 
  private:
-  ~VaapiH264Picture() override;
+  ~VaapiH264Picture() override {}
 
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiH264Picture);
 };
-
-VaapiH264Picture::VaapiH264Picture(
-    const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-        dec_surface)
-    : dec_surface_(dec_surface) {}
-
-VaapiH264Picture::~VaapiH264Picture() {}
 
 class VaapiVideoDecodeAccelerator::VaapiH264Accelerator
     : public H264Decoder::H264Accelerator {
@@ -167,9 +176,9 @@ class VaapiVideoDecodeAccelerator::VaapiH264Accelerator
 
 class VaapiVP8Picture : public VP8Picture {
  public:
-  VaapiVP8Picture(
-      const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-          dec_surface);
+  explicit VaapiVP8Picture(
+      scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> surface)
+      : dec_surface_(surface) {}
 
   VaapiVP8Picture* AsVaapiVP8Picture() override { return this; }
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface() {
@@ -177,19 +186,12 @@ class VaapiVP8Picture : public VP8Picture {
   }
 
  private:
-  ~VaapiVP8Picture() override;
+  ~VaapiVP8Picture() override {}
 
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiVP8Picture);
 };
-
-VaapiVP8Picture::VaapiVP8Picture(
-    const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-        dec_surface)
-    : dec_surface_(dec_surface) {}
-
-VaapiVP8Picture::~VaapiVP8Picture() {}
 
 class VaapiVideoDecodeAccelerator::VaapiVP8Accelerator
     : public VP8Decoder::VP8Accelerator {
@@ -221,9 +223,9 @@ class VaapiVideoDecodeAccelerator::VaapiVP8Accelerator
 
 class VaapiVP9Picture : public VP9Picture {
  public:
-  VaapiVP9Picture(
-      const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-          dec_surface);
+  explicit VaapiVP9Picture(
+      scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> surface)
+      : dec_surface_(surface) {}
 
   VaapiVP9Picture* AsVaapiVP9Picture() override { return this; }
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface() {
@@ -231,19 +233,12 @@ class VaapiVP9Picture : public VP9Picture {
   }
 
  private:
-  ~VaapiVP9Picture() override;
+  ~VaapiVP9Picture() override {}
 
   scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface> dec_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiVP9Picture);
 };
-
-VaapiVP9Picture::VaapiVP9Picture(
-    const scoped_refptr<VaapiVideoDecodeAccelerator::VaapiDecodeSurface>&
-        dec_surface)
-    : dec_surface_(dec_surface) {}
-
-VaapiVP9Picture::~VaapiVP9Picture() {}
 
 class VaapiVideoDecodeAccelerator::VaapiVP9Accelerator
     : public VP9Decoder::VP9Accelerator {
@@ -278,8 +273,31 @@ class VaapiVideoDecodeAccelerator::VaapiVP9Accelerator
   DISALLOW_COPY_AND_ASSIGN(VaapiVP9Accelerator);
 };
 
-VaapiVideoDecodeAccelerator::InputBuffer::InputBuffer() = default;
-VaapiVideoDecodeAccelerator::InputBuffer::~InputBuffer() = default;
+class VaapiVideoDecodeAccelerator::InputBuffer {
+ public:
+  InputBuffer() = default;
+  InputBuffer(uint32_t id,
+              std::unique_ptr<SharedMemoryRegion> shm,
+              base::OnceCallback<void(int32_t id)> release_cb)
+      : id_(id), shm_(std::move(shm)), release_cb_(std::move(release_cb)) {}
+  ~InputBuffer() {
+    VLOGF(4) << "id = " << id_;
+    if (release_cb_)
+      std::move(release_cb_).Run(id_);
+  }
+
+  // Indicates this is a dummy buffer for flush request.
+  bool IsFlushRequest() const { return shm_ == nullptr; }
+  int32_t id() const { return id_; }
+  SharedMemoryRegion* shm() const { return shm_.get(); }
+
+ private:
+  const int32_t id_ = -1;
+  const std::unique_ptr<SharedMemoryRegion> shm_;
+  base::OnceCallback<void(int32_t id)> release_cb_;
+
+  DISALLOW_COPY_AND_ASSIGN(InputBuffer);
+};
 
 void VaapiVideoDecodeAccelerator::NotifyError(Error error) {
   if (!task_runner_->BelongsToCurrentThread()) {
@@ -317,15 +335,16 @@ VaapiVideoDecodeAccelerator::VaapiVideoDecodeAccelerator(
     const BindGLImageCallback& bind_image_cb)
     : state_(kUninitialized),
       input_ready_(&lock_),
+      vaapi_picture_factory_(new VaapiPictureFactory()),
       surfaces_available_(&lock_),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       decoder_thread_("VaapiDecoderThread"),
       num_frames_at_client_(0),
-      num_stream_bufs_at_decoder_(0),
       finish_flush_pending_(false),
       awaiting_va_surfaces_recycle_(false),
       requested_num_pics_(0),
-      output_format_(kAllocatePictureFormat),
+      output_format_(gfx::BufferFormat::BGRX_8888),
+      profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
       make_context_current_cb_(make_context_current_cb),
       bind_image_cb_(bind_image_cb),
       weak_this_factory_(this) {
@@ -349,11 +368,11 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
 
   switch (config.output_mode) {
     case Config::OutputMode::ALLOCATE:
-      output_format_ = kAllocatePictureFormat;
+      output_format_ = vaapi_picture_factory_->GetBufferFormatForAllocateMode();
       break;
 
     case Config::OutputMode::IMPORT:
-      output_format_ = kImportPictureFormat;
+      output_format_ = vaapi_picture_factory_->GetBufferFormatForImportMode();
       break;
 
     default:
@@ -369,20 +388,6 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
   base::AutoLock auto_lock(lock_);
   DCHECK_EQ(state_, kUninitialized);
   VLOGF(2) << "Initializing VAVDA, profile: " << GetProfileName(profile);
-
-#if defined(USE_X11)
-  if (gl::GetGLImplementation() != gl::kGLImplementationDesktopGL) {
-    VLOGF(1) << "HW video decode acceleration not available without "
-                "DesktopGL (GLX).";
-    return false;
-  }
-#elif defined(USE_OZONE)
-  if (gl::GetGLImplementation() != gl::kGLImplementationEGLGLES2) {
-    VLOGF(1) << "HW video decode acceleration not available without "
-             << "EGLGLES2.";
-    return false;
-  }
-#endif  // USE_X11
 
   vaapi_wrapper_ = VaapiWrapper::CreateForVideoCodec(
       VaapiWrapper::kDecode, profile, base::Bind(&ReportToUMA, VAAPI_ERROR));
@@ -407,6 +412,7 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
     VLOGF(1) << "Unsupported profile " << GetProfileName(profile);
     return false;
   }
+  profile_ = profile;
 
   CHECK(decoder_thread_.Start());
   decoder_thread_task_runner_ = decoder_thread_.task_runner();
@@ -425,26 +431,26 @@ void VaapiVideoDecodeAccelerator::OutputPicture(
 
   int32_t output_id = picture->picture_buffer_id();
 
-  TRACE_EVENT2("Video Decoder", "VAVDA::OutputSurface", "input_id", input_id,
-               "output_id", output_id);
-
   VLOGF(4) << "Outputting VASurface " << va_surface->id()
            << " into pixmap bound to picture buffer id " << output_id;
-
-  RETURN_AND_NOTIFY_ON_FAILURE(picture->DownloadFromSurface(va_surface),
-                               "Failed putting surface into pixmap",
-                               PLATFORM_FAILURE, );
-
+  {
+    TRACE_EVENT2("Video Decoder", "VAVDA::DownloadFromSurface", "input_id",
+                 input_id, "output_id", output_id);
+    RETURN_AND_NOTIFY_ON_FAILURE(picture->DownloadFromSurface(va_surface),
+                                 "Failed putting surface into pixmap",
+                                 PLATFORM_FAILURE, );
+  }
   // Notify the client a picture is ready to be displayed.
   ++num_frames_at_client_;
   TRACE_COUNTER1("Video Decoder", "Textures at client", num_frames_at_client_);
   VLOGF(4) << "Notifying output picture id " << output_id << " for input "
            << input_id
            << " is ready. visible rect: " << visible_rect.ToString();
-  // TODO(hubbe): Use the correct color space.  http://crbug.com/647725
-  if (client_)
+  if (client_) {
+    // TODO(hubbe): Use the correct color space.  http://crbug.com/647725
     client_->PictureReady(Picture(output_id, input_id, visible_rect,
                                   gfx::ColorSpace(), picture->AllowOverlay()));
+  }
 }
 
 void VaapiVideoDecodeAccelerator::TryOutputSurface() {
@@ -472,32 +478,32 @@ void VaapiVideoDecodeAccelerator::TryOutputSurface() {
 
 void VaapiVideoDecodeAccelerator::QueueInputBuffer(
     const BitstreamBuffer& bitstream_buffer) {
+  VLOGF(4) << "Queueing new input buffer id: " << bitstream_buffer.id()
+           << " size: " << (int)bitstream_buffer.size();
   DCHECK(task_runner_->BelongsToCurrentThread());
   TRACE_EVENT1("Video Decoder", "QueueInputBuffer", "input_id",
                bitstream_buffer.id());
 
-  VLOGF(4) << "Queueing new input buffer id: " << bitstream_buffer.id()
-           << " size: " << (int)bitstream_buffer.size();
-
   base::AutoLock auto_lock(lock_);
   if (bitstream_buffer.size() == 0) {
-    // Dummy buffer for flush.
     DCHECK(!base::SharedMemory::IsHandleValid(bitstream_buffer.handle()));
-    input_buffers_.push(make_linked_ptr(new InputBuffer()));
+    // Dummy buffer for flush.
+    auto flush_buffer = base::MakeUnique<InputBuffer>();
+    DCHECK(flush_buffer->IsFlushRequest());
+    input_buffers_.push(std::move(flush_buffer));
   } else {
     std::unique_ptr<SharedMemoryRegion> shm(
         new SharedMemoryRegion(bitstream_buffer, true));
-
     RETURN_AND_NOTIFY_ON_FAILURE(shm->Map(), "Failed to map input buffer",
                                  UNREADABLE_INPUT, );
 
-    linked_ptr<InputBuffer> input_buffer(new InputBuffer());
-    input_buffer->shm = std::move(shm);
-    input_buffer->id = bitstream_buffer.id();
-    input_buffers_.push(input_buffer);
-    ++num_stream_bufs_at_decoder_;
-    TRACE_COUNTER1("Video Decoder", "Stream buffers at decoder",
-                   num_stream_bufs_at_decoder_);
+    auto input_buffer = base::MakeUnique<InputBuffer>(
+        bitstream_buffer.id(), std::move(shm),
+        BindToCurrentLoop(
+            base::Bind(&Client::NotifyEndOfBitstreamBuffer, client_)));
+    input_buffers_.push(std::move(input_buffer));
+
+    TRACE_COUNTER1("Video Decoder", "Input buffers", input_buffers_.size());
   }
 
   input_ready_.Signal();
@@ -542,71 +548,53 @@ bool VaapiVideoDecodeAccelerator::GetInputBuffer_Locked() {
   }
 
   // We could have got woken up in a different state or never got to sleep
-  // due to current state; check for that.
-  switch (state_) {
-    case kDecoding:
-    case kIdle:
-      DCHECK(!input_buffers_.empty());
+  // due to current state.
+  if (state_ != kDecoding && state_ != kIdle)
+    return false;
 
-      curr_input_buffer_ = input_buffers_.front();
-      input_buffers_.pop();
+  DCHECK(!input_buffers_.empty());
+  curr_input_buffer_ = std::move(input_buffers_.front());
+  input_buffers_.pop();
 
-      if (curr_input_buffer_->is_flush()) {
-        VLOGF(4) << "New flush buffer";
-      } else {
-        VLOGF(4) << "New current bitstream buffer, id: "
-                 << curr_input_buffer_->id
-                 << " size: " << curr_input_buffer_->shm->size();
-
-        decoder_->SetStream(
-            static_cast<uint8_t*>(curr_input_buffer_->shm->memory()),
-            curr_input_buffer_->shm->size());
-      }
-      return true;
-
-    default:
-      // We got woken up due to being destroyed/reset, ignore any already
-      // queued inputs.
-      return false;
+  if (curr_input_buffer_->IsFlushRequest()) {
+    VLOGF(4) << "New flush buffer";
+    return true;
   }
+
+  VLOGF(4) << "New current input buffer, id: " << curr_input_buffer_->id()
+           << " size: " << curr_input_buffer_->shm()->size() << "B";
+  decoder_->SetStream(
+      static_cast<uint8_t*>(curr_input_buffer_->shm()->memory()),
+      curr_input_buffer_->shm()->size());
+
+  return true;
 }
 
 void VaapiVideoDecodeAccelerator::ReturnCurrInputBuffer_Locked() {
-  lock_.AssertAcquired();
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
+  lock_.AssertAcquired();
   DCHECK(curr_input_buffer_.get());
-
-  int32_t id = curr_input_buffer_->id;
   curr_input_buffer_.reset();
-  VLOGF(4) << "End of input buffer " << id;
-  task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Client::NotifyEndOfBitstreamBuffer, client_, id));
 
-  --num_stream_bufs_at_decoder_;
-  TRACE_COUNTER1("Video Decoder", "Stream buffers at decoder",
-                 num_stream_bufs_at_decoder_);
+  TRACE_COUNTER1("Video Decoder", "Input buffers", input_buffers_.size());
 }
 
 // TODO(posciak): refactor the whole class to remove sleeping in wait for
 // surfaces, and reschedule DecodeTask instead.
 bool VaapiVideoDecodeAccelerator::WaitForSurfaces_Locked() {
-  lock_.AssertAcquired();
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
+  lock_.AssertAcquired();
 
   while (available_va_surfaces_.empty() &&
          (state_ == kDecoding || state_ == kIdle)) {
     surfaces_available_.Wait();
   }
 
-  if (state_ != kDecoding && state_ != kIdle)
-    return false;
-
-  return true;
+  return state_ == kDecoding || state_ == kIdle;
 }
 
 void VaapiVideoDecodeAccelerator::DecodeTask() {
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "VAVDA::DecodeTask");
   base::AutoLock auto_lock(lock_);
 
   if (state_ != kDecoding)
@@ -620,7 +608,7 @@ void VaapiVideoDecodeAccelerator::DecodeTask() {
   while (GetInputBuffer_Locked()) {
     DCHECK(curr_input_buffer_.get());
 
-    if (curr_input_buffer_->is_flush()) {
+    if (curr_input_buffer_->IsFlushRequest()) {
       FlushTask();
       break;
     }
@@ -633,6 +621,7 @@ void VaapiVideoDecodeAccelerator::DecodeTask() {
       // the lock for its duration would be fine, it would defeat the purpose
       // of having a separate decoder thread.
       base::AutoUnlock auto_unlock(lock_);
+      TRACE_EVENT0("Video Decoder", "VAVDA::Decode");
       res = decoder_->Decode();
     }
 
@@ -693,24 +682,6 @@ void VaapiVideoDecodeAccelerator::InitiateSurfaceSetChange(size_t num_pics,
   TryFinishSurfaceSetChange();
 }
 
-static VideoPixelFormat BufferFormatToVideoPixelFormat(
-    gfx::BufferFormat format) {
-  switch (format) {
-    case gfx::BufferFormat::BGRX_8888:
-      return PIXEL_FORMAT_XRGB;
-
-    case gfx::BufferFormat::BGRA_8888:
-      return PIXEL_FORMAT_ARGB;
-
-    case gfx::BufferFormat::YVU_420:
-      return PIXEL_FORMAT_YV12;
-
-    default:
-      LOG(FATAL) << "Add more cases as needed";
-      return PIXEL_FORMAT_UNKNOWN;
-  }
-}
-
 void VaapiVideoDecodeAccelerator::TryFinishSurfaceSetChange() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -750,17 +721,16 @@ void VaapiVideoDecodeAccelerator::TryFinishSurfaceSetChange() {
   VLOGF(2) << "Requesting " << requested_num_pics_
            << " pictures of size: " << requested_pic_size_.ToString();
 
-  VideoPixelFormat format = BufferFormatToVideoPixelFormat(output_format_);
+  VideoPixelFormat format = GfxBufferFormatToVideoPixelFormat(output_format_);
   task_runner_->PostTask(
       FROM_HERE, base::Bind(&Client::ProvidePictureBuffers, client_,
                             requested_num_pics_, format, 1, requested_pic_size_,
-                            VaapiPicture::GetGLTextureTarget()));
+                            vaapi_picture_factory_->GetGLTextureTarget()));
 }
 
 void VaapiVideoDecodeAccelerator::Decode(
     const BitstreamBuffer& bitstream_buffer) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
   TRACE_EVENT1("Video Decoder", "VAVDA::Decode", "Buffer id",
                bitstream_buffer.id());
 
@@ -797,7 +767,6 @@ void VaapiVideoDecodeAccelerator::RecycleVASurfaceID(
 void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
     const std::vector<PictureBuffer>& buffers) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
   base::AutoLock auto_lock(lock_);
   DCHECK(pictures_.empty());
 
@@ -810,9 +779,10 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
       << ", requested " << requested_num_pics_ << ")", INVALID_ARGUMENT, );
   DCHECK(requested_pic_size_ == buffers[0].size());
 
+  const unsigned int va_format = GetVaFormatForVideoCodecProfile(profile_);
   std::vector<VASurfaceID> va_surface_ids;
   RETURN_AND_NOTIFY_ON_FAILURE(
-      vaapi_wrapper_->CreateSurfaces(VA_RT_FORMAT_YUV420, requested_pic_size_,
+      vaapi_wrapper_->CreateSurfaces(va_format, requested_pic_size_,
                                      buffers.size(), &va_surface_ids),
       "Failed creating VA Surfaces", PLATFORM_FAILURE, );
   DCHECK_EQ(va_surface_ids.size(), buffers.size());
@@ -825,15 +795,11 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
                               ? buffers[i].service_texture_ids()[0]
                               : 0;
 
-    linked_ptr<VaapiPicture> picture(VaapiPicture::CreatePicture(
+    std::unique_ptr<VaapiPicture> picture(vaapi_picture_factory_->Create(
         vaapi_wrapper_, make_context_current_cb_, bind_image_cb_,
         buffers[i].id(), requested_pic_size_, service_id, client_id));
     RETURN_AND_NOTIFY_ON_FAILURE(
         picture.get(), "Failed creating a VaapiPicture", PLATFORM_FAILURE, );
-
-    bool inserted =
-        pictures_.insert(std::make_pair(buffers[i].id(), picture)).second;
-    DCHECK(inserted);
 
     if (output_mode_ == Config::OutputMode::ALLOCATE) {
       RETURN_AND_NOTIFY_ON_FAILURE(
@@ -841,6 +807,10 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
           "Failed to allocate memory for a VaapiPicture", PLATFORM_FAILURE, );
       output_buffers_.push(buffers[i].id());
     }
+    bool inserted =
+        pictures_.insert(std::make_pair(buffers[i].id(), std::move(picture)))
+            .second;
+    DCHECK(inserted);
 
     available_va_surfaces_.push_back(va_surface_ids[i]);
     surfaces_available_.Signal();
@@ -867,8 +837,8 @@ static void CloseGpuMemoryBufferHandle(
 void VaapiVideoDecodeAccelerator::ImportBufferForPicture(
     int32_t picture_buffer_id,
     const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
   VLOGF(2) << "Importing picture id: " << picture_buffer_id;
+  DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (output_mode_ != Config::OutputMode::IMPORT) {
     CloseGpuMemoryBufferHandle(gpu_memory_buffer_handle);
@@ -905,10 +875,10 @@ void VaapiVideoDecodeAccelerator::ImportBufferForPicture(
 
 void VaapiVideoDecodeAccelerator::ReusePictureBuffer(
     int32_t picture_buffer_id) {
+  VLOGF(4) << "picture id=" << picture_buffer_id;
   DCHECK(task_runner_->BelongsToCurrentThread());
   TRACE_EVENT1("Video Decoder", "VAVDA::ReusePictureBuffer", "Picture id",
                picture_buffer_id);
-  VLOGF(4) << "picture id=" << picture_buffer_id;
 
   if (!PictureById(picture_buffer_id)) {
     // It's possible that we've already posted a DismissPictureBuffer for this
@@ -928,10 +898,9 @@ void VaapiVideoDecodeAccelerator::ReusePictureBuffer(
 }
 
 void VaapiVideoDecodeAccelerator::FlushTask() {
+  VLOGF(2);
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-  DCHECK(curr_input_buffer_.get() && curr_input_buffer_->is_flush());
-
-  VLOGF(2) << "Flush task";
+  DCHECK(curr_input_buffer_.get() && curr_input_buffer_->IsFlushRequest());
 
   curr_input_buffer_.reset();
 
@@ -950,14 +919,15 @@ void VaapiVideoDecodeAccelerator::FlushTask() {
 }
 
 void VaapiVideoDecodeAccelerator::Flush() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
   VLOGF(2) << "Got flush request";
+  DCHECK(task_runner_->BelongsToCurrentThread());
 
   // Queue a dummy buffer, which means flush.
   QueueInputBuffer(media::BitstreamBuffer());
 }
 
 void VaapiVideoDecodeAccelerator::FinishFlush() {
+  VLOGF(2);
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   finish_flush_pending_ = false;
@@ -986,13 +956,11 @@ void VaapiVideoDecodeAccelerator::FinishFlush() {
 
   task_runner_->PostTask(FROM_HERE,
                          base::Bind(&Client::NotifyFlushDone, client_));
-
-  VLOGF(2) << "Flush finished";
 }
 
 void VaapiVideoDecodeAccelerator::ResetTask() {
+  VLOGF(2);
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-  VLOGF(2) << "ResetTask";
 
   // All the decoding tasks from before the reset request from client are done
   // by now, as this task was scheduled after them and client is expected not
@@ -1012,8 +980,8 @@ void VaapiVideoDecodeAccelerator::ResetTask() {
 }
 
 void VaapiVideoDecodeAccelerator::Reset() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
   VLOGF(2) << "Got reset request";
+  DCHECK(task_runner_->BelongsToCurrentThread());
 
   // This will make any new decode tasks exit early.
   base::AutoLock auto_lock(lock_);
@@ -1021,18 +989,9 @@ void VaapiVideoDecodeAccelerator::Reset() {
   finish_flush_pending_ = false;
 
   // Drop all remaining input buffers, if present.
-  while (!input_buffers_.empty()) {
-    const auto& input_buffer = input_buffers_.front();
-    if (!input_buffer->is_flush()) {
-      task_runner_->PostTask(
-          FROM_HERE, base::Bind(&Client::NotifyEndOfBitstreamBuffer, client_,
-                                input_buffer->id));
-      --num_stream_bufs_at_decoder_;
-    }
+  while (!input_buffers_.empty())
     input_buffers_.pop();
-  }
-  TRACE_COUNTER1("Video Decoder", "Stream buffers at decoder",
-                 num_stream_bufs_at_decoder_);
+  TRACE_COUNTER1("Video Decoder", "Input buffers", input_buffers_.size());
 
   decoder_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&VaapiVideoDecodeAccelerator::ResetTask,
@@ -1043,8 +1002,8 @@ void VaapiVideoDecodeAccelerator::Reset() {
 }
 
 void VaapiVideoDecodeAccelerator::FinishReset() {
+  VLOGF(2);
   DCHECK(task_runner_->BelongsToCurrentThread());
-  VLOGF(2) << "FinishReset";
   base::AutoLock auto_lock(lock_);
 
   if (state_ != kResetting) {
@@ -1083,8 +1042,6 @@ void VaapiVideoDecodeAccelerator::FinishReset() {
         FROM_HERE, base::Bind(&VaapiVideoDecodeAccelerator::DecodeTask,
                               base::Unretained(this)));
   }
-
-  VLOGF(2) << "Reset finished";
 }
 
 void VaapiVideoDecodeAccelerator::Cleanup() {
@@ -1127,13 +1084,11 @@ bool VaapiVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
 
 bool VaapiVideoDecodeAccelerator::DecodeSurface(
     const scoped_refptr<VaapiDecodeSurface>& dec_surface) {
-  if (!vaapi_wrapper_->ExecuteAndDestroyPendingBuffers(
-          dec_surface->va_surface()->id())) {
+  const bool result = vaapi_wrapper_->ExecuteAndDestroyPendingBuffers(
+      dec_surface->va_surface()->id());
+  if (!result)
     VLOGF(1) << "Failed decoding picture";
-    return false;
-  }
-
-  return true;
+  return result;
 }
 
 void VaapiVideoDecodeAccelerator::SurfaceReady(
@@ -1176,10 +1131,7 @@ VaapiVideoDecodeAccelerator::CreateSurface() {
       vaapi_wrapper_->va_surface_format(), va_surface_release_cb_));
   available_va_surfaces_.pop_front();
 
-  scoped_refptr<VaapiDecodeSurface> dec_surface =
-      new VaapiDecodeSurface(curr_input_buffer_->id, va_surface);
-
-  return dec_surface;
+  return new VaapiDecodeSurface(curr_input_buffer_->id(), va_surface);
 }
 
 VaapiVideoDecodeAccelerator::VaapiH264Accelerator::VaapiH264Accelerator(
@@ -1198,7 +1150,7 @@ VaapiVideoDecodeAccelerator::VaapiH264Accelerator::CreateH264Picture() {
   if (!va_surface)
     return nullptr;
 
-  return new VaapiH264Picture(va_surface);
+  return new VaapiH264Picture(std::move(va_surface));
 }
 
 // Fill |va_pic| with default/neutral values.
@@ -1247,9 +1199,6 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
 #undef FROM_SPS_TO_PP_SF2
 
 #define FROM_PPS_TO_PP(a) pic_param.a = pps->a
-  FROM_PPS_TO_PP(num_slice_groups_minus1);
-  pic_param.slice_group_map_type = 0;
-  pic_param.slice_group_change_rate_minus1 = 0;
   FROM_PPS_TO_PP(pic_init_qp_minus26);
   FROM_PPS_TO_PP(pic_init_qs_minus26);
   FROM_PPS_TO_PP(chroma_qp_index_offset);
@@ -1298,22 +1247,26 @@ bool VaapiVideoDecodeAccelerator::VaapiH264Accelerator::SubmitFrameMetadata(
   if (pps->pic_scaling_matrix_present_flag) {
     for (int i = 0; i < 6; ++i) {
       for (int j = 0; j < 16; ++j)
-        iq_matrix_buf.ScalingList4x4[i][j] = pps->scaling_list4x4[i][j];
+        iq_matrix_buf.ScalingList4x4[i][kZigzagScan4x4[j]] =
+            pps->scaling_list4x4[i][j];
     }
 
     for (int i = 0; i < 2; ++i) {
       for (int j = 0; j < 64; ++j)
-        iq_matrix_buf.ScalingList8x8[i][j] = pps->scaling_list8x8[i][j];
+        iq_matrix_buf.ScalingList8x8[i][kZigzagScan8x8[j]] =
+            pps->scaling_list8x8[i][j];
     }
   } else {
     for (int i = 0; i < 6; ++i) {
       for (int j = 0; j < 16; ++j)
-        iq_matrix_buf.ScalingList4x4[i][j] = sps->scaling_list4x4[i][j];
+        iq_matrix_buf.ScalingList4x4[i][kZigzagScan4x4[j]] =
+            sps->scaling_list4x4[i][j];
     }
 
     for (int i = 0; i < 2; ++i) {
       for (int j = 0; j < 64; ++j)
-        iq_matrix_buf.ScalingList8x8[i][j] = sps->scaling_list8x8[i][j];
+        iq_matrix_buf.ScalingList8x8[i][kZigzagScan8x8[j]] =
+            sps->scaling_list8x8[i][j];
     }
   }
 
@@ -1527,7 +1480,7 @@ VaapiVideoDecodeAccelerator::VaapiVP8Accelerator::CreateVP8Picture() {
   if (!va_surface)
     return nullptr;
 
-  return new VaapiVP8Picture(va_surface);
+  return new VaapiVP8Picture(std::move(va_surface));
 }
 
 #define ARRAY_MEMCPY_CHECKED(to, from)                               \
@@ -1756,7 +1709,7 @@ VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::CreateVP9Picture() {
   if (!va_surface)
     return nullptr;
 
-  return new VaapiVP9Picture(va_surface);
+  return new VaapiVP9Picture(std::move(va_surface));
 }
 
 bool VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::SubmitDecode(
@@ -1773,11 +1726,6 @@ bool VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::SubmitDecode(
 
   const Vp9FrameHeader* frame_hdr = pic->frame_hdr.get();
   DCHECK(frame_hdr);
-
-  if (frame_hdr->profile != 0) {
-    VLOGF(1) << "Unsupported profile" << frame_hdr->profile;
-    return false;
-  }
 
   pic_param.frame_width = base::checked_cast<uint16_t>(frame_hdr->frame_width);
   pic_param.frame_height =
@@ -1838,6 +1786,9 @@ bool VaapiVideoDecodeAccelerator::VaapiVP9Accelerator::SubmitDecode(
   ARRAY_MEMCPY_CHECKED(pic_param.segment_pred_probs, seg.pred_probs);
 
   pic_param.profile = frame_hdr->profile;
+  pic_param.bit_depth = frame_hdr->bit_depth;
+  DCHECK((pic_param.profile == 0 && pic_param.bit_depth == 8) ||
+         (pic_param.profile == 2 && pic_param.bit_depth == 10));
 
   if (!vaapi_wrapper_->SubmitBuffer(VAPictureParameterBufferType,
                                     sizeof(pic_param), &pic_param))

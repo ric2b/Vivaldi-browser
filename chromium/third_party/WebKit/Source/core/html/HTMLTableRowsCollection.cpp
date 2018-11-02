@@ -28,10 +28,10 @@
 
 #include "core/html/HTMLTableRowsCollection.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTableRowElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -58,7 +58,7 @@ HTMLTableRowElement* HTMLTableRowsCollection::RowAfter(
 
   // If still looking at head sections, find the first row in the next head
   // section.
-  HTMLElement* child = 0;
+  HTMLElement* child = nullptr;
   if (!previous)
     child = Traversal<HTMLElement>::FirstChild(table);
   else if (IsInSection(*previous, theadTag))
@@ -80,8 +80,8 @@ HTMLTableRowElement* HTMLTableRowsCollection::RowAfter(
   else if (IsInSection(*previous, tbodyTag))
     child = Traversal<HTMLElement>::NextSibling(*previous->parentNode());
   for (; child; child = Traversal<HTMLElement>::NextSibling(*child)) {
-    if (isHTMLTableRowElement(child))
-      return toHTMLTableRowElement(child);
+    if (auto* row = ToHTMLTableRowElementOrNull(child))
+      return row;
     if (child->HasTagName(tbodyTag)) {
       if (HTMLTableRowElement* row =
               Traversal<HTMLTableRowElement>::FirstChild(*child))
@@ -117,8 +117,8 @@ HTMLTableRowElement* HTMLTableRowsCollection::LastRow(HTMLTableElement& table) {
 
   for (HTMLElement* child = Traversal<HTMLElement>::LastChild(table); child;
        child = Traversal<HTMLElement>::PreviousSibling(*child)) {
-    if (isHTMLTableRowElement(child))
-      return toHTMLTableRowElement(child);
+    if (auto* row = ToHTMLTableRowElementOrNull(child))
+      return row;
     if (child->HasTagName(tbodyTag)) {
       if (HTMLTableRowElement* last_row =
               Traversal<HTMLTableRowElement>::LastChild(*child))
@@ -143,7 +143,7 @@ HTMLTableRowElement* HTMLTableRowsCollection::LastRow(HTMLTableElement& table) {
 // evaluation is undefined and can differ between compilers.
 HTMLTableRowsCollection::HTMLTableRowsCollection(ContainerNode& table)
     : HTMLCollection(table, kTableRows, kOverridesItemAfter) {
-  DCHECK(isHTMLTableElement(table));
+  DCHECK(IsHTMLTableElement(table));
 }
 
 HTMLTableRowsCollection* HTMLTableRowsCollection::Create(ContainerNode& table,
@@ -153,8 +153,8 @@ HTMLTableRowsCollection* HTMLTableRowsCollection::Create(ContainerNode& table,
 }
 
 Element* HTMLTableRowsCollection::VirtualItemAfter(Element* previous) const {
-  return RowAfter(toHTMLTableElement(ownerNode()),
-                  toHTMLTableRowElement(previous));
+  return RowAfter(ToHTMLTableElement(ownerNode()),
+                  ToHTMLTableRowElement(previous));
 }
 
 }  // namespace blink

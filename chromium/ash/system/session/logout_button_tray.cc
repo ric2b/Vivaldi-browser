@@ -4,6 +4,8 @@
 
 #include "ash/system/session/logout_button_tray.h"
 
+#include <memory>
+
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -12,7 +14,6 @@
 #include "ash/shell.h"
 #include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/user/login_status.h"
@@ -72,7 +73,7 @@ void LogoutButtonTray::ButtonPressed(views::Button* sender,
 
   if (dialog_duration_ <= base::TimeDelta()) {
     // Sign out immediately if |dialog_duration_| is non-positive.
-    Shell::Get()->system_tray_controller()->SignOut();
+    Shell::Get()->session_controller()->RequestSignOut();
   } else if (Shell::Get()->logout_confirmation_controller()) {
     Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
         base::TimeTicks::Now() + dialog_duration_);
@@ -81,7 +82,7 @@ void LogoutButtonTray::ButtonPressed(views::Button* sender,
 
 void LogoutButtonTray::OnActiveUserPrefServiceChanged(PrefService* prefs) {
   pref_change_registrar_.reset();
-  pref_change_registrar_ = base::MakeUnique<PrefChangeRegistrar>();
+  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs);
   pref_change_registrar_->Add(
       prefs::kShowLogoutButtonInTray,

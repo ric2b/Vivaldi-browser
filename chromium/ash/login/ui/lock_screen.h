@@ -8,9 +8,10 @@
 #include <unordered_map>
 
 #include "ash/ash_export.h"
+#include "ash/session/session_observer.h"
+#include "ash/tray_action/tray_action_observer.h"
 #include "base/macros.h"
-
-class AccountId;
+#include "base/scoped_observer.h"
 
 namespace ui {
 class Layer;
@@ -19,8 +20,10 @@ class Layer;
 namespace ash {
 
 class LockWindow;
+class LoginDataDispatcher;
+class TrayAction;
 
-class LockScreen {
+class LockScreen : public TrayActionObserver, public SessionObserver {
  public:
   // Fetch the global lock screen instance. |Show()| must have been called
   // before this.
@@ -30,24 +33,36 @@ class LockScreen {
   // backend C++ via a mojo API.
   static void Show();
 
+  // Check if the lock screen is currently shown.
+  static bool IsShown();
+
   // Destroys an existing lock screen instance.
   void Destroy();
 
   // Enables/disables background blur. Used for debugging purpose.
   void ToggleBlurForDebug();
 
-  // Enable or disable PIN for the given user.
-  void SetPinEnabledForUser(const AccountId& account_id, bool is_enabled);
+  // Returns the active data dispatcher.
+  LoginDataDispatcher* data_dispatcher();
+
+  // TrayActionObserver:
+  void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
+
+  // SessionObserver:
+  void OnLockStateChanged(bool locked) override;
 
  private:
   LockScreen();
-  ~LockScreen();
+  ~LockScreen() override;
 
   // Unowned pointer to the window which hosts the lock screen.
   LockWindow* window_ = nullptr;
 
   // The wallpaper bluriness before entering lock_screen.
   std::unordered_map<ui::Layer*, float> initial_blur_;
+
+  ScopedObserver<TrayAction, TrayActionObserver> tray_action_observer_;
+  ScopedSessionObserver session_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(LockScreen);
 };

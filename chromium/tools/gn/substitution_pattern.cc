@@ -22,8 +22,7 @@ SubstitutionPattern::Subrange::Subrange(SubstitutionType t,
       literal(l) {
 }
 
-SubstitutionPattern::Subrange::~Subrange() {
-}
+SubstitutionPattern::Subrange::~Subrange() = default;
 
 SubstitutionPattern::SubstitutionPattern() : origin_(nullptr) {
 }
@@ -31,8 +30,7 @@ SubstitutionPattern::SubstitutionPattern() : origin_(nullptr) {
 SubstitutionPattern::SubstitutionPattern(const SubstitutionPattern& other) =
     default;
 
-SubstitutionPattern::~SubstitutionPattern() {
-}
+SubstitutionPattern::~SubstitutionPattern() = default;
 
 bool SubstitutionPattern::Parse(const Value& value, Err* err) {
   if (!value.VerifyTypeIs(Value::STRING, err))
@@ -79,9 +77,8 @@ bool SubstitutionPattern::Parse(const std::string& str,
       // most people will not be writing substitution patterns and the code
       // to exactly indicate the error location is tricky.
       *err = Err(origin, "Unknown substitution pattern",
-          "Found a {{ at offset " +
-          base::SizeTToString(next) +
-          " and did not find a known substitution following it.");
+                 "Found a {{ at offset " + base::NumberToString(next) +
+                     " and did not find a known substitution following it.");
       ranges_.clear();
       return false;
     }

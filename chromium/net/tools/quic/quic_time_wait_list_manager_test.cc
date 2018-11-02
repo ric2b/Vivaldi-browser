@@ -44,8 +44,8 @@ namespace test {
 
 class FramerVisitorCapturingPublicReset : public NoOpFramerVisitor {
  public:
-  FramerVisitorCapturingPublicReset() {}
-  ~FramerVisitorCapturingPublicReset() override {}
+  FramerVisitorCapturingPublicReset() = default;
+  ~FramerVisitorCapturingPublicReset() override = default;
 
   void OnPublicResetPacket(const QuicPublicResetPacket& public_reset) override {
     public_reset_packet_ = public_reset;
@@ -77,7 +77,7 @@ class QuicTimeWaitListManagerTest : public QuicTest {
         client_address_(net::test::TestPeerIPAddress(), kTestPort),
         writer_is_blocked_(false) {}
 
-  ~QuicTimeWaitListManagerTest() override {}
+  ~QuicTimeWaitListManagerTest() override = default;
 
   void SetUp() override {
     EXPECT_CALL(writer_, IsWriteBlocked())
@@ -102,7 +102,7 @@ class QuicTimeWaitListManagerTest : public QuicTest {
 
   void AddConnectionId(
       QuicConnectionId connection_id,
-      QuicVersion version,
+      QuicTransportVersion version,
       bool connection_rejected_statelessly,
       std::vector<std::unique_ptr<QuicEncryptedPacket>>* packets) {
     time_wait_list_manager_.AddConnectionIdToTimeWait(
@@ -147,16 +147,14 @@ class ValidatePublicResetPacketPredicate
       const std::tr1::tuple<const char*, int> packet_buffer,
       testing::MatchResultListener* /* listener */) const override {
     FramerVisitorCapturingPublicReset visitor;
-    QuicFramer framer(AllSupportedVersions(), QuicTime::Zero(),
+    QuicFramer framer(AllSupportedTransportVersions(), QuicTime::Zero(),
                       Perspective::IS_CLIENT);
     framer.set_visitor(&visitor);
     QuicEncryptedPacket encrypted(std::tr1::get<0>(packet_buffer),
                                   std::tr1::get<1>(packet_buffer));
     framer.ProcessPacket(encrypted);
     QuicPublicResetPacket packet = visitor.public_reset_packet();
-    return connection_id_ == packet.public_header.connection_id &&
-           packet.public_header.reset_flag &&
-           !packet.public_header.version_flag &&
+    return connection_id_ == packet.connection_id &&
            net::test::TestPeerIPAddress() == packet.client_address.host() &&
            kTestPort == packet.client_address.port();
   }
@@ -192,14 +190,15 @@ TEST_F(QuicTimeWaitListManagerTest, CheckStatelessConnectionIdInTimeWait) {
 
 TEST_F(QuicTimeWaitListManagerTest, SendVersionNegotiationPacket) {
   std::unique_ptr<QuicEncryptedPacket> packet(
-      QuicFramer::BuildVersionNegotiationPacket(connection_id_,
-                                                AllSupportedVersions()));
+      QuicFramer::BuildVersionNegotiationPacket(
+          connection_id_, AllSupportedTransportVersions()));
   EXPECT_CALL(writer_, WritePacket(_, packet->length(), server_address_.host(),
                                    client_address_, _))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 1)));
 
   time_wait_list_manager_.SendVersionNegotiationPacket(
-      connection_id_, AllSupportedVersions(), server_address_, client_address_);
+      connection_id_, AllSupportedTransportVersions(), server_address_,
+      client_address_);
   EXPECT_EQ(0u, time_wait_list_manager_.num_connections());
 }
 
@@ -378,7 +377,7 @@ TEST_F(QuicTimeWaitListManagerTest, SendQueuedPackets) {
               WritePacket(_, _, server_address_.host(), client_address_, _))
       .With(Args<0, 1>(PublicResetPacketEq(other_connection_id)))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, other_packet->length())));
-  time_wait_list_manager_.OnCanWrite();
+  time_wait_list_manager_.OnBlockedWriterCanWrite();
 }
 
 TEST_F(QuicTimeWaitListManagerTest, GetQuicVersionFromMap) {

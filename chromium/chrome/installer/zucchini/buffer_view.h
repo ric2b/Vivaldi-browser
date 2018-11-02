@@ -11,22 +11,38 @@
 #include <type_traits>
 
 #include "base/logging.h"
+#include "chrome/installer/zucchini/algorithm.h"
 
 namespace zucchini {
 
 // Describes a region within a buffer, with starting offset and size.
 struct BufferRegion {
-  // size_t is used to match BufferViewBase::size_type, which is used when
-  // indexing in a buffer view.
-  size_t offset;
-  size_t size;
+  // The region data are stored as |offset| and |size|, but often it is useful
+  // to represent it as an interval [lo(), hi()) = [offset, offset + size).
+  size_t lo() const { return offset; }
+  size_t hi() const { return offset + size; }
 
+  // Returns whether the Region fits in |[0, container_size)|. Special case:
+  // a size-0 region starting at |container_size| does not fit.
+  bool FitsIn(size_t container_size) const {
+    return offset < container_size && container_size - offset >= size;
+  }
+
+  // Returns |v| clipped to the inclusive range |[lo(), hi()]|.
+  size_t InclusiveClamp(size_t v) const {
+    return zucchini::InclusiveClamp(v, lo(), hi());
+  }
   friend bool operator==(const BufferRegion& a, const BufferRegion& b) {
     return a.offset == b.offset && a.size == b.size;
   }
   friend bool operator!=(const BufferRegion& a, const BufferRegion& b) {
     return !(a == b);
   }
+
+  // Region data use size_t to match BufferViewBase::size_type, to make it
+  // convenient to index into buffer view.
+  size_t offset;
+  size_t size;
 };
 
 namespace internal {
@@ -58,8 +74,13 @@ class BufferViewBase {
       : first_(first), last_(first_ + size) {
     DCHECK_GE(last_, first_);
   }
+
   template <class U>
-  explicit BufferViewBase(const BufferViewBase<U>& that)
+  BufferViewBase(const BufferViewBase<U>& that)
+      : first_(that.begin()), last_(that.end()) {}
+
+  template <class U>
+  BufferViewBase(BufferViewBase<U>&& that)
       : first_(that.begin()), last_(that.end()) {}
 
   BufferViewBase(const BufferViewBase&) = default;
@@ -71,6 +92,16 @@ class BufferViewBase {
   iterator end() const { return last_; }
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
+
+  // Capacity
+
+  bool empty() const { return first_ == last_; }
+  size_type size() const { return last_ - first_; }
+
+  // Returns whether the buffer is large enough to cover |region|.
+  bool covers(const BufferRegion& region) const {
+    return region.FitsIn(size());
+  }
 
   // Element access
 
@@ -100,18 +131,13 @@ class BufferViewBase {
     *reinterpret_cast<U*>(begin() + pos) = value;
   }
 
-  // Capacity
-
-  bool empty() const { return first_ == last_; }
-  size_type size() const { return last_ - first_; }
+  template <class U>
+  bool can_access(size_type pos) const {
+    return pos < size() && size() - pos >= sizeof(U);
+  }
 
   // Returns a BufferRegion describing the full view.
   BufferRegion region() const { return BufferRegion{0, size()}; }
-
-  // Returns true iff the object is large enough to entirely cover |region|.
-  bool covers(const BufferRegion& region) const {
-    return region.offset < size() && size() - region.offset >= region.size;
-  }
 
   // Modifiers
 

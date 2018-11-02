@@ -14,8 +14,22 @@
 
 namespace blink {
 
+// static
+Image::ImageDecodingMode ImageElementBase::ParseImageDecodingMode(
+    const AtomicString& async_attr_value) {
+  if (async_attr_value.IsNull())
+    return Image::kUnspecifiedDecode;
+
+  const auto& value = async_attr_value.LowerASCII();
+  if (value == "async")
+    return Image::kAsyncDecode;
+  if (value == "sync")
+    return Image::kSyncDecode;
+  return Image::kUnspecifiedDecode;
+}
+
 ImageResourceContent* ImageElementBase::CachedImage() const {
-  return GetImageLoader().GetImage();
+  return GetImageLoader().GetContent();
 }
 
 const Element& ImageElementBase::GetElement() const {
@@ -26,32 +40,31 @@ bool ImageElementBase::IsSVGSource() const {
   return CachedImage() && CachedImage()->GetImage()->IsSVGImage();
 }
 
-RefPtr<Image> ImageElementBase::GetSourceImageForCanvas(
+scoped_refptr<Image> ImageElementBase::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
     SnapshotReason,
     const FloatSize& default_object_size) {
-  if (!GetImageLoader().ImageComplete() || !CachedImage()) {
+  ImageResourceContent* image_content = CachedImage();
+  if (!GetImageLoader().ImageComplete() || !image_content) {
     *status = kIncompleteSourceImageStatus;
     return nullptr;
   }
 
-  if (CachedImage()->ErrorOccurred()) {
+  if (image_content->ErrorOccurred()) {
     *status = kUndecodableSourceImageStatus;
     return nullptr;
   }
 
-  RefPtr<Image> source_image;
-  if (CachedImage()->GetImage()->IsSVGImage()) {
+  scoped_refptr<Image> source_image = image_content->GetImage();
+  if (source_image->IsSVGImage()) {
     UseCounter::Count(GetElement().GetDocument(), WebFeature::kSVGInCanvas2D);
-    SVGImage* svg_image = ToSVGImage(CachedImage()->GetImage());
+    SVGImage* svg_image = ToSVGImage(source_image.get());
     IntSize image_size =
         RoundedIntSize(svg_image->ConcreteObjectSize(default_object_size));
     source_image = SVGImageForContainer::Create(
         svg_image, image_size, 1,
         GetElement().GetDocument().CompleteURL(GetElement().ImageSourceURL()));
-  } else {
-    source_image = CachedImage()->GetImage();
   }
 
   *status = kNormalSourceImageStatus;
@@ -66,36 +79,32 @@ bool ImageElementBase::WouldTaintOrigin(
 
 FloatSize ImageElementBase::ElementSize(
     const FloatSize& default_object_size) const {
-  ImageResourceContent* image = CachedImage();
-  if (!image)
+  ImageResourceContent* image_content = CachedImage();
+  if (!image_content)
     return FloatSize();
 
-  if (image->GetImage() && image->GetImage()->IsSVGImage()) {
-    return ToSVGImage(CachedImage()->GetImage())
-        ->ConcreteObjectSize(default_object_size);
-  }
+  Image* image = image_content->GetImage();
+  if (image->IsSVGImage())
+    return ToSVGImage(image)->ConcreteObjectSize(default_object_size);
 
-  return FloatSize(image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                                        GetElement().GetLayoutObject()),
-                                    1.0f));
+  return FloatSize(
+      image_content->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+          GetElement().GetLayoutObject())));
 }
 
 FloatSize ImageElementBase::DefaultDestinationSize(
     const FloatSize& default_object_size) const {
-  ImageResourceContent* image = CachedImage();
-  if (!image)
+  ImageResourceContent* image_content = CachedImage();
+  if (!image_content)
     return FloatSize();
 
-  if (image->GetImage() && image->GetImage()->IsSVGImage()) {
-    return ToSVGImage(CachedImage()->GetImage())
-        ->ConcreteObjectSize(default_object_size);
-  }
+  Image* image = image_content->GetImage();
+  if (image->IsSVGImage())
+    return ToSVGImage(image)->ConcreteObjectSize(default_object_size);
 
-  LayoutSize size;
-  size = image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                              GetElement().GetLayoutObject()),
-                          1.0f);
-  return FloatSize(size);
+  return FloatSize(
+      image_content->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+          GetElement().GetLayoutObject())));
 }
 
 bool ImageElementBase::IsAccelerated() const {
@@ -106,37 +115,20 @@ const KURL& ImageElementBase::SourceURL() const {
   return CachedImage()->GetResponse().Url();
 }
 
-int ImageElementBase::SourceWidth() {
-  SourceImageStatus status;
-  RefPtr<Image> image = GetSourceImageForCanvas(&status, kPreferNoAcceleration,
-                                                kSnapshotReasonUnknown,
-                                                SourceDefaultObjectSize());
-  return image->width();
-}
-
-int ImageElementBase::SourceHeight() {
-  SourceImageStatus status;
-  RefPtr<Image> image = GetSourceImageForCanvas(&status, kPreferNoAcceleration,
-                                                kSnapshotReasonUnknown,
-                                                SourceDefaultObjectSize());
-  return image->height();
-}
-
 bool ImageElementBase::IsOpaque() const {
-  Image* image = const_cast<Element&>(GetElement()).ImageContents();
-  return image && image->CurrentFrameKnownToBeOpaque();
+  ImageResourceContent* image_content = CachedImage();
+  if (!GetImageLoader().ImageComplete() || !image_content)
+    return false;
+  Image* image = image_content->GetImage();
+  return image->CurrentFrameKnownToBeOpaque();
 }
 
 IntSize ImageElementBase::BitmapSourceSize() const {
   ImageResourceContent* image = CachedImage();
   if (!image)
     return IntSize();
-  LayoutSize lSize =
-      image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                           GetElement().GetLayoutObject()),
-                       1.0f);
-  DCHECK(lSize.Fraction().IsZero());
-  return IntSize(lSize.Width().ToInt(), lSize.Height().ToInt());
+  return image->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+      GetElement().GetLayoutObject()));
 }
 
 ScriptPromise ImageElementBase::CreateImageBitmap(
@@ -146,16 +138,17 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
     const ImageBitmapOptions& options) {
   DCHECK(event_target.ToLocalDOMWindow());
 
-  if (!CachedImage()) {
+  ImageResourceContent* image_content = CachedImage();
+  if (!image_content) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(
             kInvalidStateError,
             "No image can be retrieved from the provided element."));
   }
-  if (CachedImage()->GetImage()->IsSVGImage()) {
-    SVGImage* image = ToSVGImage(CachedImage()->GetImage());
-    if (!image->HasIntrinsicDimensions() &&
+  Image* image = image_content->GetImage();
+  if (image->IsSVGImage()) {
+    if (!ToSVGImage(image)->HasIntrinsicDimensions() &&
         (!crop_rect &&
          (!options.hasResizeWidth() || !options.hasResizeHeight()))) {
       return ScriptPromise::RejectWithDOMException(
@@ -177,6 +170,24 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
       script_state, ImageBitmap::Create(
                         this, crop_rect,
                         event_target.ToLocalDOMWindow()->document(), options));
+}
+
+Image::ImageDecodingMode ImageElementBase::GetDecodingModeForPainting(
+    PaintImage::Id new_id) {
+  const bool content_transitioned =
+      last_painted_image_id_ != PaintImage::kInvalidId &&
+      new_id != PaintImage::kInvalidId && last_painted_image_id_ != new_id;
+  last_painted_image_id_ = new_id;
+
+  // If the image for the element was transitioned, and no preference has been
+  // specified by the author, prefer sync decoding to avoid flickering the
+  // element. Async decoding of this image would cause us to display
+  // intermediate frames with no image while the decode is in progress which
+  // creates a visual flicker in the transition.
+  if (content_transitioned &&
+      decoding_mode_ == Image::ImageDecodingMode::kUnspecifiedDecode)
+    return Image::ImageDecodingMode::kSyncDecode;
+  return decoding_mode_;
 }
 
 }  // namespace blink

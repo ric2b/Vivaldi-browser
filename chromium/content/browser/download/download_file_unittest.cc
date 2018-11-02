@@ -30,7 +30,6 @@
 #include "net/base/file_stream.h"
 #include "net/base/mock_file_stream.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log_with_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -118,16 +117,15 @@ enum DownloadFileRenameMethodType { RENAME_AND_UNIQUIFY, RENAME_AND_ANNOTATE };
 // retries renames failed due to ACCESS_DENIED.
 class TestDownloadFileImpl : public DownloadFileImpl {
  public:
-  TestDownloadFileImpl(
-      std::unique_ptr<DownloadSaveInfo> save_info,
-      const base::FilePath& default_downloads_directory,
-      std::unique_ptr<ByteStreamReader> stream,
-      const net::NetLogWithSource& net_log,
-      base::WeakPtr<DownloadDestinationObserver> observer)
+  TestDownloadFileImpl(std::unique_ptr<DownloadSaveInfo> save_info,
+                       const base::FilePath& default_downloads_directory,
+                       std::unique_ptr<DownloadManager::InputStream> stream,
+                       uint32_t download_id,
+                       base::WeakPtr<DownloadDestinationObserver> observer)
       : DownloadFileImpl(std::move(save_info),
                          default_downloads_directory,
                          std::move(stream),
-                         net_log,
+                         download_id,
                          observer) {}
 
  protected:
@@ -166,7 +164,7 @@ class DownloadFileTest : public testing::Test {
   DownloadFileTest()
       : observer_(new StrictMock<MockDownloadDestinationObserver>),
         observer_factory_(observer_.get()),
-        input_stream_(NULL),
+        input_stream_(nullptr),
         additional_streams_(
             std::vector<StrictMock<MockByteStreamReader>*>{nullptr, nullptr}),
         bytes_(-1),
@@ -229,8 +227,9 @@ class DownloadFileTest : public testing::Test {
 
     download_file_.reset(new TestDownloadFileImpl(
         std::move(save_info), base::FilePath(),
-        std::unique_ptr<ByteStreamReader>(input_stream_),
-        net::NetLogWithSource(), observer_factory_.GetWeakPtr()));
+        std::make_unique<DownloadManager::InputStream>(
+            std::unique_ptr<ByteStreamReader>(input_stream_)),
+        DownloadItem::kInvalidId, observer_factory_.GetWeakPtr()));
 
     EXPECT_CALL(*input_stream_, Read(_, _))
         .WillOnce(Return(ByteStreamReader::STREAM_EMPTY))
@@ -653,7 +652,7 @@ TEST_F(DownloadFileTest, RenameUniquifies) {
             base::WriteFile(path_1, file_data, sizeof(file_data)));
   ASSERT_TRUE(base::PathExists(path_1));
 
-  EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NONE, RenameAndUniquify(path_1, NULL));
+  EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NONE, RenameAndUniquify(path_1, nullptr));
   EXPECT_TRUE(base::PathExists(path_1_suffixed));
 
   FinishStream(DOWNLOAD_INTERRUPT_REASON_NONE, true, kEmptyHash);
@@ -704,7 +703,7 @@ TEST_P(DownloadFileTestWithRename, RenameError) {
 
     // Expect nulling out of further processing.
     EXPECT_CALL(*input_stream_, RegisterCallback(IsNullCallback()));
-    ExpectPermissionError(InvokeSelectedRenameMethod(target_path, NULL));
+    ExpectPermissionError(InvokeSelectedRenameMethod(target_path, nullptr));
     EXPECT_FALSE(base::PathExists(target_path_suffixed));
   }
 
@@ -814,7 +813,7 @@ TEST_F(DownloadFileTest, StreamEmptySuccess) {
 
   // Test that calling the sink_callback_ on an empty stream shouldn't
   // do anything.
-  AppendDataToFile(NULL, 0);
+  AppendDataToFile(nullptr, 0);
 
   // Finish the download this way and make sure we see it on the observer.
   FinishStream(DOWNLOAD_INTERRUPT_REASON_NONE, true, kEmptyHash);
@@ -918,8 +917,9 @@ TEST_F(DownloadFileTest, MutipleStreamsWrite) {
   EXPECT_CALL(*(observer_.get()), MockDestinationCompleted(_, _));
 
   // Activate the streams.
-  download_file_->AddByteStream(
-      std::unique_ptr<MockByteStreamReader>(additional_streams_[0]),
+  download_file_->AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(
+          std::unique_ptr<ByteStreamReader>(additional_streams_[0])),
       stream_0_length, DownloadSaveInfo::kLengthFullContent);
   sink_callback_.Run();
   base::RunLoop().RunUntilIdle();
@@ -964,11 +964,13 @@ TEST_F(DownloadFileTest, MutipleStreamsLimitedLength) {
   EXPECT_CALL(*(observer_.get()), MockDestinationCompleted(_, _));
 
   // Activate all the streams.
-  download_file_->AddByteStream(
-      std::unique_ptr<MockByteStreamReader>(additional_streams_[0]),
+  download_file_->AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(
+          std::unique_ptr<ByteStreamReader>(additional_streams_[0])),
       stream_0_length, stream_1_length);
-  download_file_->AddByteStream(
-      std::unique_ptr<MockByteStreamReader>(additional_streams_[1]),
+  download_file_->AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(
+          std::unique_ptr<ByteStreamReader>(additional_streams_[1])),
       stream_0_length + stream_1_length, DownloadSaveInfo::kLengthFullContent);
   sink_callback_.Run();
   base::RunLoop().RunUntilIdle();
@@ -1008,8 +1010,9 @@ TEST_F(DownloadFileTest, MutipleStreamsFirstStreamWriteAllData) {
   EXPECT_FALSE(download_file_->InProgress());
 
   additional_streams_[0] = new StrictMock<MockByteStreamReader>();
-  download_file_->AddByteStream(
-      std::unique_ptr<MockByteStreamReader>(additional_streams_[0]),
+  download_file_->AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(
+          std::unique_ptr<ByteStreamReader>(additional_streams_[0])),
       stream_0_length - 1, DownloadSaveInfo::kLengthFullContent);
   base::RunLoop().RunUntilIdle();
 
@@ -1048,9 +1051,10 @@ TEST_F(DownloadFileTest, SecondStreamStartingOffsetAlreadyWritten) {
       .WillOnce(Return(ByteStreamReader::STREAM_EMPTY))
       .RetiresOnSaturation();
 
-  download_file_->AddByteStream(
-      std::unique_ptr<MockByteStreamReader>(additional_streams_[0]), 0,
-      DownloadSaveInfo::kLengthFullContent);
+  download_file_->AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(
+          std::unique_ptr<ByteStreamReader>(additional_streams_[0])),
+      0, DownloadSaveInfo::kLengthFullContent);
 
   // The stream should get terminated and reset the callback.
   EXPECT_TRUE(sink_callback_.is_null());

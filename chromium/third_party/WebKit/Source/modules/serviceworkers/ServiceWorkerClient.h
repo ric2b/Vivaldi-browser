@@ -19,9 +19,7 @@ namespace blink {
 class ScriptPromiseResolver;
 class ScriptState;
 
-class MODULES_EXPORT ServiceWorkerClient
-    : public GarbageCollectedFinalized<ServiceWorkerClient>,
-      public ScriptWrappable {
+class MODULES_EXPORT ServiceWorkerClient : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -40,13 +38,11 @@ class MODULES_EXPORT ServiceWorkerClient
   String frameType(ScriptState*) const;
   String id() const { return uuid_; }
   void postMessage(ScriptState*,
-                   PassRefPtr<SerializedScriptValue> message,
+                   scoped_refptr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
 
   static bool CanTransferArrayBuffersAndImageBitmaps() { return false; }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  protected:
   explicit ServiceWorkerClient(const WebServiceWorkerClientInfo&);
@@ -56,7 +52,7 @@ class MODULES_EXPORT ServiceWorkerClient
  private:
   String uuid_;
   String url_;
-  WebServiceWorkerClientType type_;
+  mojom::ServiceWorkerClientType type_;
   WebURLRequest::FrameType frame_type_;
 };
 

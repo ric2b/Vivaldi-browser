@@ -1,33 +1,57 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
-<link rel="import" href="chrome://resources/cr_elements/paper_toggle_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="chrome://resources/html/load_time_data.html">
-<link rel="import" href="chrome://extensions/icons.html">
-<link rel="import" href="chrome://extensions/item_util.html">
-<link rel="import" href="chrome://extensions/strings.html">
+<link rel="import" href="item_behavior.html">
+<link rel="import" href="icons.html">
+<link rel="import" href="item_util.html">
+<link rel="import" href="strings.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/communication-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
-<link rel="import" href="chrome://extensions/navigation_helper.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-tooltip/paper-tooltip.html">
+<link rel="import" href="navigation_helper.html">
 
 <dom-module id="extensions-item">
   <template>
-    <style include="iron-flex cr-hidden-style cr-icons action-link paper-button-style paper-toggle-style">
+    <style include=
+        "iron-flex cr-hidden-style cr-icons action-link paper-button-style">
+      .bounded-text,
+      .multiline-clippable-text,
+      .clippable-flex-text {
+        /** Ensure that the text does not overflow its container. */
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bounded-text,
+      .clippable-flex-text {
+        white-space: nowrap;
+      }
+
+      .clipppable-flex-text {
+        /**
+         * These labels can be arbitrarily long. We want to ensure that these
+         * shrink, rather than the neighboring content.
+         */
+        flex-shrink: 1;
+      }
+
       #icon-wrapper {
         align-self: flex-start;
         display: flex;
         padding: 6px;
+        position: relative;
       }
 
       #icon {
@@ -38,31 +62,29 @@
       #card {
         @apply(--shadow-elevation-2dp);
         background: white;
+        border-radius: 2px;
         display: flex;
         flex-direction: column;
         height: 160px;
-        width: 400px;
+        width: var(--extensions-card-width, 400px);
       }
 
       #card.dev-mode {
         height: 208px;
       }
 
-      #card.disabled {
-        opacity: 0.6;
-      }
-
       #main {
         display: flex;
-        flex-grow: 1;
+        flex: 1;
         padding: 16px 20px 17px;
       }
 
       #content {
         -webkit-margin-start: 24px;
         display: flex;
+        flex: 1;
         flex-direction: column;
-        width: 100%;
+        overflow: hidden;
       }
 
       #name-and-version {
@@ -74,9 +96,13 @@
         -webkit-margin-end: 8px;
       }
 
-      #description,
+      #description {
+        flex: 1;
+      }
+
       #warnings {
-        flex-grow: 1;
+        color: var(--google-red-700);
+        flex: 1;
         margin-bottom: 8px;
       }
 
@@ -90,23 +116,42 @@
         font-weight: 400;
       }
 
+      #extension-id {
+        flex-shrink: 0;
+      }
+
+      #inspect-views {
+        display: flex;
+        white-space: nowrap;
+      }
+
+      #inspect-views > span {
+        -webkit-margin-end: 4px;
+      }
+
       #button-strip {
-        -webkit-padding-end: 4px;
-        -webkit-padding-start: var(--cr-section-padding);
+        /* Avoid ripple from overlapping container. */
+        -webkit-margin-end: 20px;
         border-top: var(--cr-separator-line);
         box-sizing: border-box;
+        flex-shrink: 0;
         height: var(--cr-section-min-height);
         padding-bottom: 8px;
         padding-top: 8px;
       }
 
       #button-strip paper-button {
-        margin: 0 4px;
+        -webkit-margin-start: 8px;
+      }
+
+      #learn-more-link {
+        color: var(--google-blue-700);
+        text-decoration: none;
       }
 
       #source-indicator {
-        -webkit-margin-start: 30px;
-        margin-top: 30px;
+        -webkit-margin-start: 24px;
+        margin-top: 24px;
         position: absolute;
       }
 
@@ -128,39 +173,23 @@
         width: 16px;
       }
 
-      #source-indicator-text {
-        -webkit-margin-start: 11px;  /* To align with the center of the icon. */
-        background: black;
-        border-radius: 2px;
-        color: white;
-        display: none;
-        margin-top: 8px;
-        opacity: 0.6;
-        padding: 8px 12px;
-        position: absolute;
-        transform: translateX(-50%);  /* Move back 50% of width so that the
-                                         text and icon share an x-center. */
-      }
-
-      #source-indicator:hover #source-indicator-text {
-        display: block;
-      }
-
-      paper-toggle-button {
-        -webkit-margin-end: 8px;  /* Avoid ripple from overlapping container. */
-        cursor: pointer;
+      paper-tooltip {
+        --paper-tooltip: {
+          @apply(--cr-tooltip);
+          min-width: 0;
+        };
       }
 
       .action-button {
         color: var(--google-blue-500);
       }
 
-      #dev-reload-button {
-        -webkit-margin-end: 12px;
+      #errors-button {
+        color: var(--google-red-700);
       }
 
-      #warnings {
-        color: var(--google-red-700);
+      #dev-reload-button {
+        -webkit-margin-end: 12px;
       }
 
       #blacklisted-warning:empty {
@@ -169,58 +198,86 @@
     </style>
     <div id="card" class$="[[computeClasses_(data.state, inDevMode)]]">
       <div id="main">
+        <div id="icon-wrapper">
+          <img id="icon" src="[[data.iconUrl]]"
+              alt$="[[appOrExtension(
+                  data.type,
+                  '$i18nPolymer{appIcon}',
+                  '$i18nPolymer{extensionIcon}')]]">
+          <template is="dom-if"
+              if="[[computeSourceIndicatorIcon_(data.*)]]">
+            <div id="source-indicator">
+              <div class="source-icon-wrapper" role="img"
+                  aria-label$="[[computeSourceIndicatorText_(data.*)]]">
+                <iron-icon icon="[[computeSourceIndicatorIcon_(data.*)]]">
+                </iron-icon>
+              </div>
+            </div>
+          </template>
+        </div>
+        <!-- This needs to be separate from the source-indicator since it can't
+             be contained inside of a position:relative parent element. -->
         <template is="dom-if"
             if="[[computeSourceIndicatorIcon_(data.*)]]">
-          <div id="source-indicator">
-            <div class="source-icon-wrapper">
-              <iron-icon icon="[[computeSourceIndicatorIcon_(data.*)]]">
-              </iron-icon>
-            </div>
-            <div id="source-indicator-text">
-              [[computeSourceIndicatorText_(data.*)]]
-            </div>
-          </div>
+          <paper-tooltip id="source-indicator-text" for="source-indicator"
+              position="top" fit-to-visible-bounds>
+            [[computeSourceIndicatorText_(data.*)]]
+          </paper-tooltip>
         </template>
-        <div id="icon-wrapper">
-          <img alt="" id="icon" src="[[data.iconUrl]]">
-        </div>
         <div id="content">
-          <div id="name-and-version" class="layout horizontal center">
-            <div id="name">[[data.name]]</div>
-            <template is="dom-if" if="[[inDevMode]]">
-              <span id="version">[[data.version]]</span>
-            </template>
+          <!--Note: We wrap inspect-views in a div so that the outer div
+              doesn't shrink (because it's not display: flex).-->
+          <div>
+            <div id="name-and-version" class="layout horizontal center">
+              <div id="name" class="clippable-flex-text">[[data.name]]</div>
+              <span id="version" hidden$="[[!inDevMode]]">
+                [[data.version]]
+              </span>
+            </div>
           </div>
-          <div id="description" hidden$="[[hasWarnings_(data.*)]]">
+          <div id="description" class="multiline-clippable-text"
+              hidden$="[[hasWarnings_(data.*)]]">
             [[data.description]]
           </div>
-          <div id="warnings" hidden$="[[!hasWarnings_(data.*)]]">
-            <div id="suspicious-warning"
-                 hidden$="[[!data.disableReasons.suspiciousInstall]]">
-              $i18n{itemSuspiciousInstall}
+          <template is="dom-if" if="[[hasWarnings_(data.*)]]">
+            <div id="warnings" >
+              <div id="suspicious-warning"
+                   hidden$="[[!data.disableReasons.suspiciousInstall]]">
+                $i18n{itemSuspiciousInstall}
+                <a target="_blank" id="learn-more-link"
+                    href="$i18n{suspiciousInstallHelpUrl}">
+                  $i18n{learnMore}
+                </a>
+              </div>
+              <div id="corrupted-warning"
+                  hidden$="[[!data.disableReasons.corruptInstall]]">
+                $i18n{itemCorruptInstall}
+              </div>
+              <div id="blacklisted-warning"><!-- No whitespace
+                -->[[data.blacklistText]]<!-- so we can use :empty in css.
+             --></div>
             </div>
-            <div id="corrupted-warning"
-                hidden$="[[!data.disableReasons.corruptInstall]]">
-              $i18n{itemCorruptInstall}
-            </div>
-            <div id="blacklisted-warning"><!-- No whitespace
-              -->[[data.blacklistText]]<!-- so we can use :empty in css.
-           --></div>
-          </div>
+          </template>
           <template is="dom-if" if="[[inDevMode]]">
-            <div id="extension-id">[[data.id]]</div>
+            <div id="extension-id" class="bounded-text">[[data.id]]</div>
             <template is="dom-if"
                 if="[[!computeInspectViewsHidden_(data.views)]]">
-              <div id="inspect-views">
-                <span>$i18n{itemInspectViews}</span>
-                <a is="action-link" on-tap="onInspectTap_">
-                  [[computeFirstInspectLabel_(data.views)]]
-                </a>
-                <a is="action-link"
-                    hidden$="[[computeExtraViewsHidden_(data.views)]]"
-                    on-tap="onExtraInspectTap_">
-                  [[computeExtraInspectLabel_(data.views)]]
-                </a>
+              <!--Note: We wrap inspect-views in a div so that the outer div
+                  doesn't shrink (because it's not display: flex).-->
+              <div>
+                <div id="inspect-views">
+                  <span>$i18n{itemInspectViews}</span>
+                  <a class="clippable-flex-text" is="action-link"
+                      title="[[computeFirstInspectTitle_(data.views)]]"
+                      on-tap="onInspectTap_">
+                    [[computeFirstInspectLabel_(data.views)]]
+                  </a>
+                  <a is="action-link"
+                      hidden$="[[computeExtraViewsHidden_(data.views)]]"
+                      on-tap="onExtraInspectTap_">
+                    [[computeExtraInspectLabel_(data.views)]]
+                  </a>
+                </div>
               </div>
             </template>
           </template>
@@ -235,33 +292,42 @@
               hidden="[[isControlled_(data.controlledInfo)]]">
             $i18n{itemRemove}
           </paper-button>
-          <paper-button id="errors-button" on-tap="onErrorsTap_"
-              hidden$="[[computeErrorsHidden_(data.*)]]">
-            $i18n{itemErrors}
-          </paper-button>
+          <template is="dom-if" if="[[shouldShowErrorsButton_(data.*)]]">
+            <paper-button id="errors-button" on-tap="onErrorsTap_">
+              $i18n{itemErrors}
+            </paper-button>
+          </template>
         </div>
         <template is="dom-if" if="[[!computeDevReloadButtonHidden_(data.*)]]">
           <button id="dev-reload-button" is="paper-icon-button-light"
+              aria-label="$i18n{itemReload}"
               class="icon-refresh no-overlap" on-tap="onReloadTap_">
           </button>
         </template>
-        <paper-button id="repair-button" class="action-button"
-            on-tap="onRepairTap_"
-            hidden$="[[!data.disableReasons.corruptInstall]]">
-          $i18n{itemRepair}
-        </paper-button>
-        <paper-button id="terminated-reload-button" on-tap="onReloadTap_"
-            class="action-button"
-            hidden$="[[!isTerminated_(data.state)]]">
-          $i18n{itemReload}
-        </paper-button>
-        <paper-toggle-button id="enable-toggle" class="action-button"
+        <template is="dom-if" if="[[data.disableReasons.corruptInstall]]">
+          <paper-button id="repair-button" class="action-button"
+              on-tap="onRepairTap_">
+            $i18n{itemRepair}
+          </paper-button>
+        </template>
+        <template is="dom-if" if="[[isTerminated_(data.state)]]">
+          <paper-button id="terminated-reload-button" on-tap="onReloadTap_"
+              class="action-button">
+            $i18n{itemReload}
+          </paper-button>
+        </template>
+        <cr-toggle id="enable-toggle" class="action-button"
+            aria-label$="[[appOrExtension(
+                data.type,
+                '$i18nPolymer{appEnabled}',
+                '$i18nPolymer{extensionEnabled}')]]"
+            aria-describedby="name"
             checked="[[isEnabled_(data.state)]]" on-change="onEnableChange_"
             disabled="[[!isEnableToggleEnabled_(data.*)]]"
             hidden$="[[!showEnableToggle_(data.*)]]">
-        </paper-toggle-button>
+        </cr-toggle>
       </div>
     </div>
   </template>
-  <script src="chrome://extensions/item.js"></script>
+  <script src="item.js"></script>
 </dom-module>

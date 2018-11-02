@@ -102,7 +102,8 @@ class TaskSchedulerWorkerPoolTest
 
   void TearDown() override {
     service_thread_.Stop();
-    worker_pool_->JoinForTesting();
+    if (worker_pool_)
+      worker_pool_->JoinForTesting();
   }
 
   void CreateWorkerPool() {
@@ -129,8 +130,11 @@ class TaskSchedulerWorkerPoolTest
       case PoolType::GENERIC: {
         SchedulerWorkerPoolImpl* scheduler_worker_pool_impl =
             static_cast<SchedulerWorkerPoolImpl*>(worker_pool_.get());
-        scheduler_worker_pool_impl->Start(SchedulerWorkerPoolParams(
-            kNumWorkersInWorkerPool, TimeDelta::Max()));
+        scheduler_worker_pool_impl->Start(
+            SchedulerWorkerPoolParams(kNumWorkersInWorkerPool,
+                                      TimeDelta::Max()),
+            service_thread_.task_runner(),
+            SchedulerWorkerPoolImpl::WorkerEnvironment::NONE);
         break;
       }
 #if defined(OS_WIN)
@@ -212,6 +216,19 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostTaskAfterShutdown) {
   EXPECT_FALSE(task_runner->PostTask(FROM_HERE, BindOnce(&ShouldNotRun)));
 }
 
+// Verify that posting tasks after the pool was destroyed fails but doesn't
+// crash.
+TEST_P(TaskSchedulerWorkerPoolTest, PostAfterDestroy) {
+  StartWorkerPool();
+  auto task_runner = test::CreateTaskRunnerWithExecutionMode(
+      worker_pool_.get(), GetParam().execution_mode);
+  EXPECT_TRUE(task_runner->PostTask(FROM_HERE, BindOnce(&DoNothing)));
+  task_tracker_.Shutdown();
+  worker_pool_->JoinForTesting();
+  worker_pool_.reset();
+  EXPECT_FALSE(task_runner->PostTask(FROM_HERE, BindOnce(&ShouldNotRun)));
+}
+
 // Verify that a Task runs shortly after its delay expires.
 TEST_P(TaskSchedulerWorkerPoolTest, PostDelayedTask) {
   StartWorkerPool();
@@ -264,32 +281,32 @@ TEST_P(TaskSchedulerWorkerPoolTest, SequencedRunsTasksInCurrentSequence) {
   task_ran.Wait();
 }
 
-// Verify that after tasks posted before Start run after Start.
+// Verify that tasks posted before Start run after Start.
 TEST_P(TaskSchedulerWorkerPoolTest, PostBeforeStart) {
-  WaitableEvent task_1_scheduled(WaitableEvent::ResetPolicy::MANUAL,
-                                 WaitableEvent::InitialState::NOT_SIGNALED);
-  WaitableEvent task_2_scheduled(WaitableEvent::ResetPolicy::MANUAL,
-                                 WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_1_running(WaitableEvent::ResetPolicy::MANUAL,
+                               WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_2_running(WaitableEvent::ResetPolicy::MANUAL,
+                               WaitableEvent::InitialState::NOT_SIGNALED);
 
   scoped_refptr<TaskRunner> task_runner =
       worker_pool_->CreateTaskRunnerWithTraits({WithBaseSyncPrimitives()});
 
-  task_runner->PostTask(FROM_HERE, BindOnce(&WaitableEvent::Signal,
-                                            Unretained(&task_1_scheduled)));
-  task_runner->PostTask(FROM_HERE, BindOnce(&WaitableEvent::Signal,
-                                            Unretained(&task_2_scheduled)));
+  task_runner->PostTask(
+      FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_1_running)));
+  task_runner->PostTask(
+      FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_2_running)));
 
   // Workers should not be created and tasks should not run before the pool is
   // started. The sleep is to give time for the tasks to potentially run.
   PlatformThread::Sleep(TestTimeouts::tiny_timeout());
-  EXPECT_FALSE(task_1_scheduled.IsSignaled());
-  EXPECT_FALSE(task_2_scheduled.IsSignaled());
+  EXPECT_FALSE(task_1_running.IsSignaled());
+  EXPECT_FALSE(task_2_running.IsSignaled());
 
   StartWorkerPool();
 
-  // Tasks should be scheduled shortly after the pool is started.
-  task_1_scheduled.Wait();
-  task_2_scheduled.Wait();
+  // Tasks should run shortly after the pool is started.
+  task_1_running.Wait();
+  task_2_running.Wait();
 
   task_tracker_.Flush();
 }

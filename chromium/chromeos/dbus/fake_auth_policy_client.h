@@ -6,11 +6,14 @@
 #define CHROMEOS_DBUS_FAKE_AUTH_POLICY_CLIENT_H_
 
 #include <string>
+#include <utility>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 
 #include "chromeos/dbus/auth_policy_client.h"
+#include "chromeos/dbus/session_manager_client.h"
 
 class AccountId;
 
@@ -25,17 +28,15 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
   void Init(dbus::Bus* bus) override;
   // AuthPolicyClient overrides.
 
-  // Performs basic checks on |machine_name| and |user_principal|. Could fail
-  // with ERROR_MACHINE_NAME_TOO_LONG, ERROR_INVALID_MACHINE_NAME or
-  // ERROR_PARSE_UPN_FAILED. Otherwise succeeds.
-  void JoinAdDomain(const std::string& machine_name,
-                    const std::string& user_principal_name,
+  // Performs basic checks on |request.machine_name| and
+  // |request.user_principal_name|. Could fail with ERROR_MACHINE_NAME_TOO_LONG,
+  // ERROR_INVALID_MACHINE_NAME or ERROR_PARSE_UPN_FAILED. Otherwise succeeds.
+  void JoinAdDomain(const authpolicy::JoinDomainRequest& request,
                     int password_fd,
                     JoinCallback callback) override;
 
   // Runs |callback| with |auth_error_|.
-  void AuthenticateUser(const std::string& user_principal_name,
-                        const std::string& object_guid,
+  void AuthenticateUser(const authpolicy::AuthenticateUserRequest& request,
                         int password_fd,
                         AuthCallback callback) override;
 
@@ -100,13 +101,20 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
         base::TimeDelta::FromSeconds(0);
   }
 
+ protected:
+  authpolicy::ErrorType auth_error_ = authpolicy::ERROR_NONE;
+
  private:
+  void OnDevicePolicyRetrieved(
+      RefreshPolicyCallback callback,
+      SessionManagerClient::RetrievePolicyResponseType response_type,
+      const std::string& protobuf);
   bool started_ = false;
   // If valid called after GetUserStatusCallback is called.
   base::OnceClosure on_get_status_closure_;
-  authpolicy::ErrorType auth_error_ = authpolicy::ERROR_NONE;
   std::string display_name_;
   std::string given_name_;
+  std::string machine_name_;
   authpolicy::ActiveDirectoryUserStatus::PasswordStatus password_status_ =
       authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID;
   authpolicy::ActiveDirectoryUserStatus::TgtStatus tgt_status_ =
@@ -115,6 +123,9 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
   base::TimeDelta dbus_operation_delay_ = base::TimeDelta::FromSeconds(3);
   base::TimeDelta disk_operation_delay_ =
       base::TimeDelta::FromMilliseconds(100);
+
+  base::WeakPtrFactory<FakeAuthPolicyClient> weak_factory_{this};
+
   DISALLOW_COPY_AND_ASSIGN(FakeAuthPolicyClient);
 };
 

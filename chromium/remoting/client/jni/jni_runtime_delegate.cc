@@ -18,7 +18,9 @@
 #include "jni/JniInterface_jni.h"
 #include "remoting/base/chromium_url_request.h"
 #include "remoting/base/url_request_context_getter.h"
+#include "remoting/client/jni/jni_oauth_token_getter.h"
 #include "remoting/client/jni/jni_touch_event_data.h"
+#include "remoting/client/oauth_token_getter_proxy.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -30,7 +32,8 @@ namespace remoting {
 // Implementation of stubs defined in JniInterface_jni.h. These are the entry
 // points for JNI calls from Java into C++.
 
-static void LoadNative(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
+static void JNI_JniInterface_LoadNative(JNIEnv* env,
+                                        const JavaParamRef<jclass>& clazz) {
   base::CommandLine::Init(0, nullptr);
 
   // Create the singleton now so that the Chromoting threads will be set up.
@@ -47,9 +50,10 @@ static void HandleAuthTokenOnNetworkThread(const std::string& token) {
   runtime->log_writer()->SetAuthToken(token);
 }
 
-static void OnAuthTokenFetched(JNIEnv* env,
-                               const JavaParamRef<jclass>& clazz,
-                               const JavaParamRef<jstring>& token) {
+static void JNI_JniInterface_OnAuthTokenFetched(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& token) {
   ChromotingClientRuntime* runtime =
       remoting::ChromotingClientRuntime::GetInstance();
   runtime->network_task_runner()->PostTask(
@@ -66,6 +70,8 @@ JniRuntimeDelegate* JniRuntimeDelegate::GetInstance() {
 
 JniRuntimeDelegate::JniRuntimeDelegate() {
   runtime_ = ChromotingClientRuntime::GetInstance();
+  token_getter_ = std::make_unique<OAuthTokenGetterProxy>(
+      std::make_unique<JniOAuthTokenGetter>(), runtime_->ui_task_runner());
 }
 
 JniRuntimeDelegate::~JniRuntimeDelegate() {
@@ -104,6 +110,10 @@ void JniRuntimeDelegate::RequestAuthTokenForLogger() {
 
   // TODO(nicholss): I do not like this method name, change it soon.
   Java_JniInterface_fetchAuthToken(env);
+}
+
+OAuthTokenGetter* JniRuntimeDelegate::token_getter() {
+  return token_getter_.get();
 }
 
 void JniRuntimeDelegate::DetachFromVmAndSignal(base::WaitableEvent* waiter) {

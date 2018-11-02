@@ -119,7 +119,7 @@ void CSSRotation::setAngle(CSSNumericValue* angle,
     exception_state.ThrowTypeError("Must pass an angle to CSSRotation");
     return;
   }
-  if (angle->IsCalculated()) {
+  if (!angle->IsUnitValue()) {
     exception_state.ThrowTypeError("Calculated angles are not supported yet");
     return;
   }
@@ -137,7 +137,7 @@ const DOMMatrix* CSSRotation::AsMatrix(ExceptionState&) const {
   return matrix;
 }
 
-const CSSFunctionValue* CSSRotation::ToCSSValue() const {
+const CSSFunctionValue* CSSRotation::ToCSSValue(SecureContextMode) const {
   // TODO(meade): Handle calc angles.
   CSSUnitValue* angle = ToCSSUnitValue(angle_);
   CSSFunctionValue* result =

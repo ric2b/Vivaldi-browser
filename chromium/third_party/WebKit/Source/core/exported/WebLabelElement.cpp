@@ -30,10 +30,9 @@
 
 #include "public/web/WebLabelElement.h"
 
-#include "core/HTMLNames.h"
-#include "core/html/HTMLLabelElement.h"
-#include "core/html/LabelableElement.h"
-#include "platform/wtf/RefPtr.h"
+#include "core/html/forms/HTMLLabelElement.h"
+#include "core/html/forms/LabelableElement.h"
+#include "core/html_names.h"
 #include "public/platform/WebString.h"
 
 namespace blink {
@@ -45,7 +44,7 @@ WebElement WebLabelElement::CorrespondingControl() {
 WebLabelElement::WebLabelElement(HTMLLabelElement* elem) : WebElement(elem) {}
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebLabelElement,
-                           isHTMLLabelElement(ConstUnwrap<Node>()));
+                           IsHTMLLabelElement(ConstUnwrap<Node>()));
 
 WebLabelElement& WebLabelElement::operator=(HTMLLabelElement* elem) {
   private_ = elem;
@@ -53,7 +52,7 @@ WebLabelElement& WebLabelElement::operator=(HTMLLabelElement* elem) {
 }
 
 WebLabelElement::operator HTMLLabelElement*() const {
-  return toHTMLLabelElement(private_.Get());
+  return ToHTMLLabelElement(private_.Get());
 }
 
 }  // namespace blink

@@ -74,7 +74,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
   QuicPacketGenerator(QuicConnectionId connection_id,
                       QuicFramer* framer,
                       QuicRandom* random_generator,
-                      QuicBufferAllocator* buffer_allocator,
                       DelegateInterface* delegate);
 
   ~QuicPacketGenerator();
@@ -91,44 +90,34 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
   // Given some data, may consume part or all of it and pass it to the
   // packet creator to be serialized into packets. If not in batch
   // mode, these packets will also be sent during this call.
-  // |delegate| (if not nullptr) will be informed once all packets sent as a
-  // result of this call are ACKed by the peer.
   // When |state| is FIN_AND_PADDING, random padding of size [1, 256] will be
   // added after stream frames. If current constructed packet cannot
   // accommodate, the padding will overflow to the next packet(s).
-  QuicConsumedData ConsumeData(
-      QuicStreamId id,
-      QuicIOVector iov,
-      QuicStreamOffset offset,
-      StreamSendingState state,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener,
-      bool flag_run_fast_path);
+  QuicConsumedData ConsumeData(QuicStreamId id,
+                               size_t write_length,
+                               QuicStreamOffset offset,
+                               StreamSendingState state);
 
   // Sends as many data only packets as allowed by the send algorithm and the
   // available iov.
   // This path does not support padding, or bundling pending frames.
   // In case we access this method from ConsumeData, total_bytes_consumed
   // keeps track of how many bytes have already been consumed.
-  QuicConsumedData ConsumeDataFastPath(
-      QuicStreamId id,
-      const QuicIOVector& iov,
-      QuicStreamOffset offset,
-      bool fin,
-      size_t total_bytes_consumed,
-      const QuicReferenceCountedPointer<QuicAckListenerInterface>&
-          ack_listener);
+  QuicConsumedData ConsumeDataFastPath(QuicStreamId id,
+                                       size_t write_length,
+                                       QuicStreamOffset offset,
+                                       bool fin,
+                                       size_t total_bytes_consumed);
 
   // Generates an MTU discovery packet of specified size.
-  void GenerateMtuDiscoveryPacket(
-      QuicByteCount target_mtu,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+  void GenerateMtuDiscoveryPacket(QuicByteCount target_mtu);
 
-  // Indicates whether batch mode is currently enabled.
-  bool InBatchMode();
-  // Disables flushing.
-  void StartBatchOperations();
-  // Enables flushing and flushes queued data which can be sent.
-  void FinishBatchOperations();
+  // Indicates whether packet flusher is currently attached.
+  bool PacketFlusherAttached() const;
+  // Attaches packet flusher.
+  void AttachPacketFlusher();
+  // Flushes everything, including all queued frames and pending padding.
+  void Flush();
 
   // Flushes all queued frames, even frames which are not sendable.
   void FlushAllQueuedFrames();
@@ -148,7 +137,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
 
   // Creates a version negotiation packet which supports |supported_versions|.
   std::unique_ptr<QuicEncryptedPacket> SerializeVersionNegotiationPacket(
-      const QuicVersionVector& supported_versions);
+      const QuicTransportVersionVector& supported_versions);
+
+  // Creates a connectivity probing packet.
+  std::unique_ptr<QuicEncryptedPacket> SerializeConnectivityProbingPacket();
 
   // Re-serializes frames with the original packet's packet number length.
   // Used for retransmitting packets to ensure they aren't too long.
@@ -158,8 +150,8 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
 
   // Update the packet number length to use in future packets as soon as it
   // can be safely changed.
-  void UpdateSequenceNumberLength(QuicPacketNumber least_packet_awaited_by_peer,
-                                  QuicPacketCount max_packets_in_flight);
+  void UpdatePacketNumberLength(QuicPacketNumber least_packet_awaited_by_peer,
+                                QuicPacketCount max_packets_in_flight);
 
   // Set the minimum number of bytes for the connection id length;
   void SetConnectionIdLength(uint32_t length);
@@ -170,6 +162,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
   // Returns true if there are control frames or current constructed packet has
   // pending retransmittable frames.
   bool HasRetransmittableFrames() const;
+
+  // Returns true if current constructed packet has pending stream frames for
+  // stream |id|.
+  bool HasPendingStreamFramesOfStream(QuicStreamId id) const;
 
   // Sets the encryption level that will be applied to new packets.
   void set_encryption_level(EncryptionLevel level);
@@ -187,10 +183,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
 
   void set_debug_delegate(QuicPacketCreator::DebugDelegate* debug_delegate) {
     packet_creator_.set_debug_delegate(debug_delegate);
-  }
-
-  bool latched_flag_no_stop_waiting_frames() const {
-    return packet_creator_.latched_flag_no_stop_waiting_frames();
   }
 
  private:
@@ -221,8 +213,8 @@ class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
   QuicPacketCreator packet_creator_;
   QuicFrames queued_control_frames_;
 
-  // True if batch mode is currently enabled.
-  bool batch_mode_;
+  // True if packet flusher is currently attached.
+  bool flusher_attached_;
 
   // Flags to indicate the need for just-in-time construction of a frame.
   bool should_send_ack_;

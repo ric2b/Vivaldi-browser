@@ -24,8 +24,8 @@ class TestPermissionBubbleViewDelegate : public PermissionPrompt::Delegate {
   ~TestPermissionBubbleViewDelegate() override;
 
   const std::vector<PermissionRequest*>& Requests() override;
+  PermissionPrompt::DisplayNameOrOrigin GetDisplayNameOrOrigin() override;
 
-  void TogglePersist(bool) override {}
   void Accept() override {}
   void Deny() override {}
   void Closing() override {}

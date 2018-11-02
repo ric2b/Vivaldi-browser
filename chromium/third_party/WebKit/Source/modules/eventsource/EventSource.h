@@ -33,6 +33,7 @@
 #define EventSource_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/loader/ThreadableLoader.h"
@@ -40,7 +41,6 @@
 #include "modules/ModulesExport.h"
 #include "modules/eventsource/EventSourceParser.h"
 #include "platform/Timer.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Forward.h"
@@ -88,7 +88,7 @@ class MODULES_EXPORT EventSource final
 
   // ContextLifecycleObserver
   //
-  // Note: We don't need to inherit from SuspendableObject since
+  // Note: We don't need to inherit from PausableObject since
   // ScopedPageLoadDeferrer calls Page::setDefersLoading() and
   // it defers delivery of events from the loader, and therefore
   // the methods of this class for receiving asynchronous events
@@ -98,7 +98,7 @@ class MODULES_EXPORT EventSource final
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   EventSource(ExecutionContext*, const KURL&, const EventSourceInit&);

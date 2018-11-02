@@ -20,15 +20,15 @@
 
 #include "core/svg/SVGSymbolElement.h"
 
-#include "core/SVGNames.h"
 #include "core/layout/svg/LayoutSVGHiddenContainer.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
 inline SVGSymbolElement::SVGSymbolElement(Document& document)
     : SVGElement(SVGNames::symbolTag, document), SVGFitToViewBox(this) {}
 
-DEFINE_TRACE(SVGSymbolElement) {
+void SVGSymbolElement::Trace(blink::Visitor* visitor) {
   SVGElement::Trace(visitor);
   SVGFitToViewBox::Trace(visitor);
 }

@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_piece.h"
 #include "base/test/test_message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -47,13 +48,13 @@ static const float kBufferNonZeroData = 1.0f;
 class MockAudioOutputControllerEventHandler
     : public AudioOutputController::EventHandler {
  public:
-  MockAudioOutputControllerEventHandler() {}
+  MockAudioOutputControllerEventHandler() = default;
 
   MOCK_METHOD0(OnControllerCreated, void());
   MOCK_METHOD0(OnControllerPlaying, void());
   MOCK_METHOD0(OnControllerPaused, void());
   MOCK_METHOD0(OnControllerError, void());
-  MOCK_METHOD1(OnLog, void(const std::string&));
+  MOCK_METHOD1(OnLog, void(base::StringPiece));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockAudioOutputControllerEventHandler);
@@ -62,7 +63,7 @@ class MockAudioOutputControllerEventHandler
 class MockAudioOutputControllerSyncReader
     : public AudioOutputController::SyncReader {
  public:
-  MockAudioOutputControllerSyncReader() {}
+  MockAudioOutputControllerSyncReader() = default;
 
   MOCK_METHOD3(RequestMoreData,
                void(base::TimeDelta delay,

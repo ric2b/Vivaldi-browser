@@ -6,6 +6,7 @@
 #define ConsoleMessage_h
 
 #include "core/CoreExport.h"
+#include "core/dom/DOMNodeIds.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -13,6 +14,7 @@
 
 namespace blink {
 
+class LocalFrame;
 class SourceLocation;
 
 class CORE_EXPORT ConsoleMessage final
@@ -51,8 +53,11 @@ class CORE_EXPORT ConsoleMessage final
   MessageLevel Level() const;
   const String& Message() const;
   const String& WorkerId() const;
+  LocalFrame* Frame() const;
+  Vector<DOMNodeId>& Nodes();
+  void SetNodes(LocalFrame*, Vector<DOMNodeId> nodes);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   ConsoleMessage(MessageSource,
@@ -67,6 +72,8 @@ class CORE_EXPORT ConsoleMessage final
   unsigned long request_identifier_;
   double timestamp_;
   String worker_id_;
+  WeakMember<LocalFrame> frame_;
+  Vector<DOMNodeId> nodes_;
 };
 
 }  // namespace blink

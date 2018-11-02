@@ -22,7 +22,7 @@
 #define LayoutButton_h
 
 #include "core/editing/EditingUtilities.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutFlexibleBox.h"
 
 namespace blink {
@@ -40,10 +40,6 @@ class LayoutButton final : public LayoutFlexibleBox {
   bool IsOfType(LayoutObjectType type) const override {
     return type == kLayoutObjectLayoutButton ||
            LayoutFlexibleBox::IsOfType(type);
-  }
-
-  bool CanBeSelectionLeaf() const override {
-    return GetNode() && HasEditableStyle(*GetNode());
   }
 
   void AddChild(LayoutObject* new_child,
@@ -64,7 +60,7 @@ class LayoutButton final : public LayoutFlexibleBox {
   void UpdateAnonymousChildStyle(const LayoutObject& child,
                                  ComputedStyle& child_style) const override;
 
-  bool HasLineIfEmpty() const override { return isHTMLInputElement(GetNode()); }
+  bool HasLineIfEmpty() const override { return IsHTMLInputElement(GetNode()); }
 
   LayoutBlock* inner_;
 };

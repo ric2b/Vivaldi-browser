@@ -157,8 +157,8 @@ bool FakeSyncService::QueryDetailedSyncStatus(SyncStatus* result) {
   return false;
 }
 
-base::string16 FakeSyncService::GetLastSyncedTimeString() const {
-  return base::string16();
+base::Time FakeSyncService::GetLastSyncedTime() const {
+  return base::Time();
 }
 
 std::string FakeSyncService::GetEngineInitializationStateString() const {
@@ -181,9 +181,8 @@ std::string FakeSyncService::unrecoverable_error_message() const {
   return unrecoverable_error_message_;
 }
 
-tracked_objects::Location FakeSyncService::unrecoverable_error_location()
-    const {
-  return tracked_objects::Location();
+base::Location FakeSyncService::unrecoverable_error_location() const {
+  return base::Location();
 }
 
 void FakeSyncService::AddProtocolEventObserver(

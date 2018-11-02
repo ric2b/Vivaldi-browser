@@ -12,12 +12,11 @@
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringHash.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebTrialTokenValidator.h"
 
 namespace blink {
 
 class ExecutionContext;
-enum class WebOriginTrialTokenStatus;
-class WebTrialTokenValidator;
 
 // The Origin Trials Framework provides limited access to experimental features,
 // on a per-origin basis (origin trials). This class provides the implementation
@@ -25,7 +24,7 @@ class WebTrialTokenValidator;
 // context.  This class is not for direct use by feature implementers.
 // Instead, the OriginTrials generated namespace provides a method for each
 // trial to check if it is enabled. Experimental features must be defined in
-// RuntimeEnabledFeatures.json5, which is used to generate OriginTrials.h/cpp.
+// runtime_enabled_features.json5, which is used to generate origin_trials.h/cc.
 //
 // Origin trials are defined by string names, provided by the implementers. The
 // framework does not maintain an enum or constant list for trial names.
@@ -38,17 +37,18 @@ class CORE_EXPORT OriginTrialContext final
       public Supplement<ExecutionContext> {
   USING_GARBAGE_COLLECTED_MIXIN(OriginTrialContext)
  public:
-  enum CreateMode { kCreateIfNotExists, kDontCreateIfNotExists };
-
-  OriginTrialContext(ExecutionContext&, WebTrialTokenValidator*);
+  OriginTrialContext(ExecutionContext&,
+                     std::unique_ptr<WebTrialTokenValidator>);
 
   static const char* SupplementName();
 
-  // Returns the OriginTrialContext for a specific ExecutionContext. If
-  // |create| is false, this returns null if no OriginTrialContext exists
-  // yet for the ExecutionContext.
-  static OriginTrialContext* From(ExecutionContext*,
-                                  CreateMode = kCreateIfNotExists);
+  // Returns the OriginTrialContext for a specific ExecutionContext, if one
+  // exists.
+  static const OriginTrialContext* From(const ExecutionContext*);
+
+  // Returns the OriginTrialContext for a specific ExecutionContext, creating
+  // one if one does not already exist.
+  static OriginTrialContext* FromOrCreate(ExecutionContext*);
 
   // Parses an Origin-Trial header as specified in
   // https://jpchase.github.io/OriginTrials/#header into individual tokens.
@@ -74,7 +74,7 @@ class CORE_EXPORT OriginTrialContext final
 
   // Returns true if the trial (and therefore the feature or features it
   // controls) should be considered enabled for the current execution context.
-  bool IsTrialEnabled(const String& trial_name);
+  bool IsTrialEnabled(const String& trial_name) const;
 
   // Installs JavaScript bindings on the relevant objects for any features which
   // should be enabled by the current set of trial tokens. This method is called
@@ -87,7 +87,7 @@ class CORE_EXPORT OriginTrialContext final
   // enabled.
   void InitializePendingFeatures();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   // Validate the trial token. If valid, the trial named in the token is
@@ -98,7 +98,7 @@ class CORE_EXPORT OriginTrialContext final
   Vector<String> tokens_;
   HashSet<String> enabled_trials_;
   HashSet<String> installed_trials_;
-  WebTrialTokenValidator* trial_token_validator_;
+  std::unique_ptr<WebTrialTokenValidator> trial_token_validator_;
 };
 
 }  // namespace blink

@@ -119,8 +119,7 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
                           const media::AudioParameters& output_params,
                           const std::string& matched_device_id) override;
   void OnStreamCreated(base::SharedMemoryHandle handle,
-                       base::SyncSocket::Handle socket_handle,
-                       int length) override;
+                       base::SyncSocket::Handle socket_handle) override;
   void OnIPCClosed() override;
 
  protected:
@@ -146,7 +145,9 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
   // be executed on that thread.  They use AudioOutputIPC to send IPC messages
   // upon state changes.
   void RequestDeviceAuthorizationOnIOThread();
-  void CreateStreamOnIOThread(const AudioParameters& params);
+  void InitializeOnIOThread(const AudioParameters& params,
+                            RenderCallback* callback);
+  void CreateStreamOnIOThread();
   void PlayOnIOThread();
   void PauseOnIOThread();
   void ShutDownOnIOThread();

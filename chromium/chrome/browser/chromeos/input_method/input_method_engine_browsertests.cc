@@ -33,6 +33,7 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/keyboard/keyboard_util.h"
 
 namespace chromeos {
 namespace input_method {
@@ -1074,13 +1075,12 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
 
-  extensions::VirtualKeyboardAPI* virtual_keyboard_api =
-      extensions::BrowserContextKeyedAPIFactory<
-          extensions::VirtualKeyboardAPI>::Get(profile());
-  ASSERT_TRUE(virtual_keyboard_api);
-  ASSERT_TRUE(virtual_keyboard_api->delegate());
-  virtual_keyboard_api->delegate()->SetKeyboardRestricted(true);
-
+  keyboard::KeyboardConfig keyboard_config = keyboard::GetKeyboardConfig();
+  // Turn off these features, which are on by default.
+  keyboard_config.auto_correct = false;
+  keyboard_config.auto_complete = false;
+  keyboard_config.spell_check = false;
+  keyboard::UpdateKeyboardConfig(keyboard_config);
   extensions::ExtensionHost* host =
       extensions::ProcessManager::Get(profile())->GetBackgroundHostForExtension(
           extension_->id());
@@ -1092,7 +1092,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
     SCOPED_TRACE("Text");
 
     ExtensionTestMessageListener focus_listener(
-        "onFocus:password:false:false:false", false);
+        "onFocus:text:false:false:false", false);
     ui::IMEEngineHandlerInterface::InputContext context(
         ui::TEXT_INPUT_TYPE_TEXT, ui::TEXT_INPUT_MODE_DEFAULT,
         ui::TEXT_INPUT_FLAG_NONE);
@@ -1115,8 +1115,8 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
   {
     SCOPED_TRACE("URL");
 
-    ExtensionTestMessageListener focus_listener(
-        "onFocus:password:false:false:false", false);
+    ExtensionTestMessageListener focus_listener("onFocus:url:false:false:false",
+                                                false);
     ui::IMEEngineHandlerInterface::InputContext context(
         ui::TEXT_INPUT_TYPE_URL, ui::TEXT_INPUT_MODE_DEFAULT,
         ui::TEXT_INPUT_FLAG_NONE);
@@ -1128,7 +1128,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
     SCOPED_TRACE("Search");
 
     ExtensionTestMessageListener focus_listener(
-        "onFocus:password:false:false:false", false);
+        "onFocus:search:false:false:false", false);
     ui::IMEEngineHandlerInterface::InputContext context(
         ui::TEXT_INPUT_TYPE_SEARCH, ui::TEXT_INPUT_MODE_DEFAULT,
         ui::TEXT_INPUT_FLAG_NONE);
@@ -1140,7 +1140,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
     SCOPED_TRACE("Email");
 
     ExtensionTestMessageListener focus_listener(
-        "onFocus:password:false:false:false", false);
+        "onFocus:email:false:false:false", false);
     ui::IMEEngineHandlerInterface::InputContext context(
         ui::TEXT_INPUT_TYPE_EMAIL, ui::TEXT_INPUT_MODE_DEFAULT,
         ui::TEXT_INPUT_FLAG_NONE);

@@ -7,16 +7,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <iterator>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/mock_callback.h"
 #include "net/base/completion_callback.h"
@@ -216,11 +214,11 @@ class WebSocketDeflatePredictorMock : public WebSocketDeflatePredictor {
   // Data frames which will be recorded by |RecordInputFrames|.
   // Pushed by |AddFrameToBeInput| and popped and verified by
   // |RecordInputFrames|.
-  std::deque<const WebSocketFrame*> frames_to_be_input_;
+  base::circular_deque<const WebSocketFrame*> frames_to_be_input_;
   // Data frames recorded by |RecordWrittenFrames|.
   // Pushed by |RecordWrittenFrames| and popped and verified by
   // |VerifySentFrame|.
-  std::deque<const WebSocketFrame*> frames_written_;
+  base::circular_deque<const WebSocketFrame*> frames_written_;
 
   DISALLOW_COPY_AND_ASSIGN(WebSocketDeflatePredictorMock);
 };
@@ -230,7 +228,7 @@ class WebSocketDeflateStreamTest : public ::testing::Test {
   WebSocketDeflateStreamTest()
       : mock_stream_(NULL),
         predictor_(NULL) {}
-  ~WebSocketDeflateStreamTest() override {}
+  ~WebSocketDeflateStreamTest() override = default;
 
   void SetUp() override {
     Initialize(WebSocketDeflater::TAKE_OVER_CONTEXT, kWindowBits);
@@ -265,8 +263,8 @@ class WebSocketDeflateStreamTest : public ::testing::Test {
 class WebSocketDeflateStreamWithDoNotTakeOverContextTest
     : public WebSocketDeflateStreamTest {
  public:
-  WebSocketDeflateStreamWithDoNotTakeOverContextTest() {}
-  ~WebSocketDeflateStreamWithDoNotTakeOverContextTest() override {}
+  WebSocketDeflateStreamWithDoNotTakeOverContextTest() = default;
+  ~WebSocketDeflateStreamWithDoNotTakeOverContextTest() override = default;
 
   void SetUp() override {
     Initialize(WebSocketDeflater::DO_NOT_TAKE_OVER_CONTEXT, kWindowBits);
@@ -276,8 +274,8 @@ class WebSocketDeflateStreamWithDoNotTakeOverContextTest
 class WebSocketDeflateStreamWithClientWindowBitsTest
     : public WebSocketDeflateStreamTest {
  public:
-  WebSocketDeflateStreamWithClientWindowBitsTest() {}
-  ~WebSocketDeflateStreamWithClientWindowBitsTest() override {}
+  WebSocketDeflateStreamWithClientWindowBitsTest() = default;
+  ~WebSocketDeflateStreamWithClientWindowBitsTest() override = default;
 
   // Overridden to postpone the call to Initialize().
   void SetUp() override {}
@@ -982,8 +980,8 @@ TEST_F(WebSocketDeflateStreamTest,
 // This is a regression test for crbug.com/343506.
 TEST_F(WebSocketDeflateStreamTest, ReadEmptyAsyncFrame) {
   std::vector<std::unique_ptr<ReadFramesStub>> stub_vector;
-  stub_vector.push_back(base::WrapUnique(new ReadFramesStub(ERR_IO_PENDING)));
-  stub_vector.push_back(base::WrapUnique(new ReadFramesStub(ERR_IO_PENDING)));
+  stub_vector.push_back(std::make_unique<ReadFramesStub>(ERR_IO_PENDING));
+  stub_vector.push_back(std::make_unique<ReadFramesStub>(ERR_IO_PENDING));
   base::MockCallback<CompletionCallback> mock_callback;
   std::vector<std::unique_ptr<WebSocketFrame>> frames;
 

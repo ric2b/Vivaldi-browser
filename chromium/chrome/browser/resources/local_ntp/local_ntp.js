@@ -9,6 +9,15 @@
 
 
 /**
+ * Whether the most visited tiles have finished loading, i.e. we've received the
+ * 'loaded' postMessage from the iframe. Used by tests to detect that loading
+ * has completed.
+ * @type {boolean}
+ */
+var tilesAreLoaded = false;
+
+
+/**
  * Controls rendering the new tab page for InstantExtended.
  * @return {Object} A limited interface for testing the local NTP.
  */
@@ -54,11 +63,12 @@ var NTP_DESIGN = {
  * @const
  */
 var CLASSES = {
-  ALTERNATE_LOGO: 'alternate-logo', // Shows white logo if required by theme
+  ALTERNATE_LOGO: 'alternate-logo',  // Shows white logo if required by theme
   DARK: 'dark',
   DEFAULT_THEME: 'default-theme',
   DELAYED_HIDE_NOTIFICATION: 'mv-notice-delayed-hide',
-  FAKEBOX_FOCUS: 'fakebox-focused', // Applies focus styles to the fakebox
+  FADE: 'fade',  // Enables opacity transition on logo and doodle.
+  FAKEBOX_FOCUS: 'fakebox-focused',  // Applies focus styles to the fakebox
   // Applies drag focus style to the fakebox
   FAKEBOX_DRAG_FOCUS: 'fakebox-drag-focused',
   HIDE_FAKEBOX_AND_LOGO: 'hide-fakebox-logo',
@@ -66,7 +76,9 @@ var CLASSES = {
   LEFT_ALIGN_ATTRIBUTION: 'left-align-attribution',
   // Vertically centers the most visited section for a non-Google provided page.
   NON_GOOGLE_PAGE: 'non-google-page',
-  RTL: 'rtl'  // Right-to-left language text.
+  NON_WHITE_BG: 'non-white-bg',
+  RTL: 'rtl',              // Right-to-left language text.
+  SHOW_LOGO: 'show-logo',  // Marks logo/doodle that should be shown.
 };
 
 
@@ -82,8 +94,14 @@ var IDS = {
   FAKEBOX: 'fakebox',
   FAKEBOX_INPUT: 'fakebox-input',
   FAKEBOX_TEXT: 'fakebox-text',
-  FAKEBOX_SPEECH: 'fakebox-speech',
+  FAKEBOX_MICROPHONE: 'fakebox-microphone',
   LOGO: 'logo',
+  LOGO_DEFAULT: 'logo-default',
+  LOGO_DOODLE: 'logo-doodle',
+  LOGO_DOODLE_IMAGE: 'logo-doodle-image',
+  LOGO_DOODLE_IFRAME: 'logo-doodle-iframe',
+  LOGO_DOODLE_BUTTON: 'logo-doodle-button',
+  LOGO_DOODLE_NOTIFIER: 'logo-doodle-notifier',
   NOTIFICATION: 'mv-notice',
   NOTIFICATION_CLOSE_BUTTON: 'mv-notice-x',
   NOTIFICATION_MESSAGE: 'mv-msg',
@@ -93,6 +111,57 @@ var IDS = {
   TILES_IFRAME: 'mv-single',
   UNDO_LINK: 'mv-undo'
 };
+
+
+/**
+ * Counterpart of search_provider_logos::LogoType.
+ * @enum {string}
+ * @const
+ */
+var LOGO_TYPE = {
+  SIMPLE: 'SIMPLE',
+  ANIMATED: 'ANIMATED',
+  INTERACTIVE: 'INTERACTIVE',
+};
+
+
+/**
+ * The different types of events that are logged from the NTP. This enum is
+ * used to transfer information from the NTP JavaScript to the renderer and is
+ * not used as a UMA enum histogram's logged value.
+ * Note: Keep in sync with common/ntp_logging_events.h
+ * @enum {number}
+ * @const
+ */
+var LOG_TYPE = {
+  // A static Doodle was shown, coming from cache.
+  NTP_STATIC_LOGO_SHOWN_FROM_CACHE: 30,
+  // A static Doodle was shown, coming from the network.
+  NTP_STATIC_LOGO_SHOWN_FRESH: 31,
+  // A call-to-action Doodle image was shown, coming from cache.
+  NTP_CTA_LOGO_SHOWN_FROM_CACHE: 32,
+  // A call-to-action Doodle image was shown, coming from the network.
+  NTP_CTA_LOGO_SHOWN_FRESH: 33,
+
+  // A static Doodle was clicked.
+  NTP_STATIC_LOGO_CLICKED: 34,
+  // A call-to-action Doodle was clicked.
+  NTP_CTA_LOGO_CLICKED: 35,
+  // An animated Doodle was clicked.
+  NTP_ANIMATED_LOGO_CLICKED: 36,
+
+  // The One Google Bar was shown.
+  NTP_ONE_GOOGLE_BAR_SHOWN: 37,
+};
+
+
+/**
+ * Background colors considered "white". Used to determine if it is possible
+ * to display a Google Doodle, or if the notifier should be used instead.
+ * @type {Array<string>}
+ * @const
+ */
+var WHITE_BACKGROUND_COLORS = ['rgba(255,255,255,1)', 'rgba(0,0,0,0)'];
 
 
 /**
@@ -125,13 +194,36 @@ var MAX_NUM_TILES_TO_SHOW = 8;
 
 
 /**
+ * Returns theme background info, first checking for history.state.notheme. If
+ * the page has notheme set, returns a fallback light-colored theme.
+ */
+function getThemeBackgroundInfo() {
+  if (history.state && history.state.notheme) {
+    return {
+      alternateLogo: false,
+      backgroundColorRgba: [255, 255, 255, 255],
+      colorRgba: [255, 255, 255, 255],
+      headerColorRgba: [150, 150, 150, 255],
+      linkColorRgba: [6, 55, 116, 255],
+      sectionBorderColorRgba: [150, 150, 150, 255],
+      textColorLightRgba: [102, 102, 102, 255],
+      textColorRgba: [0, 0, 0, 255],
+      usingDefaultTheme: true,
+    };
+  }
+  return ntpApiHandle.themeBackgroundInfo;
+}
+
+
+/**
  * Heuristic to determine whether a theme should be considered to be dark, so
  * the colors of various UI elements can be adjusted.
  * @param {ThemeBackgroundInfo|undefined} info Theme background information.
  * @return {boolean} Whether the theme is dark.
  * @private
  */
-function getIsThemeDark(info) {
+function getIsThemeDark() {
+  var info = getThemeBackgroundInfo();
   if (!info)
     return false;
   // Heuristic: light text implies dark theme.
@@ -146,8 +238,8 @@ function getIsThemeDark(info) {
  * @private
  */
 function renderTheme() {
-  var info = ntpApiHandle.themeBackgroundInfo;
-  var isThemeDark = getIsThemeDark(info);
+  var info = getThemeBackgroundInfo();
+  var isThemeDark = getIsThemeDark();
   $(IDS.NTP_CONTENTS).classList.toggle(CLASSES.DARK, isThemeDark);
   if (!info) {
     return;
@@ -161,6 +253,8 @@ function renderTheme() {
 
   document.body.style.background = background;
   document.body.classList.toggle(CLASSES.ALTERNATE_LOGO, info.alternateLogo);
+  var isNonWhiteBackground = !WHITE_BACKGROUND_COLORS.includes(background);
+  document.body.classList.toggle(CLASSES.NON_WHITE_BG, isNonWhiteBackground);
   updateThemeAttribution(info.attributionUrl, info.imageHorizontalAlignment);
   setCustomThemeStyle(info);
 
@@ -194,7 +288,7 @@ function renderOneGoogleBarTheme() {
     var oneGoogleBarApi = window.gbar.a;
     var oneGoogleBarPromise = oneGoogleBarApi.bf();
     oneGoogleBarPromise.then(function(oneGoogleBar) {
-      var isThemeDark = getIsThemeDark(ntpApiHandle.themeBackgroundInfo);
+      var isThemeDark = getIsThemeDark();
       var setForegroundStyle = oneGoogleBar.pc.bind(oneGoogleBar);
       setForegroundStyle(isThemeDark ? 1 : 0);
     });
@@ -428,7 +522,7 @@ function isFakeboxFocused() {
  */
 function isFakeboxClick(event) {
   return $(IDS.FAKEBOX).contains(event.target) &&
-      !$(IDS.FAKEBOX_SPEECH).contains(event.target);
+      !$(IDS.FAKEBOX_MICROPHONE).contains(event.target);
 }
 
 
@@ -454,21 +548,33 @@ function registerKeyHandler(element, keycode, handler) {
 
 
 /**
- * Event handler for the focus changed and blacklist messages on link elements.
- * Used to toggle visual treatment on the tiles (depending on the message).
+ * Event handler for messages from the most visited iframe.
  * @param {Event} event Event received.
  */
 function handlePostMessage(event) {
   var cmd = event.data.cmd;
   var args = event.data;
-  if (cmd == 'tileBlacklisted') {
+  if (cmd == 'loaded') {
+    tilesAreLoaded = true;
+    if (configData.isGooglePage && !$('one-google-loader')) {
+      // Load the OneGoogleBar script. It'll create a global variable name "og"
+      // which is a dict corresponding to the native OneGoogleBarData type.
+      // We do this only after all the tiles have loaded, to avoid slowing down
+      // the main page load.
+      var ogScript = document.createElement('script');
+      ogScript.id = 'one-google-loader';
+      ogScript.src = 'chrome-search://local-ntp/one-google.js';
+      document.body.appendChild(ogScript);
+      ogScript.onload = function() {
+        injectOneGoogleBar(og);
+      };
+    }
+  } else if (cmd == 'tileBlacklisted') {
     showNotification();
     lastBlacklistedTile = args.tid;
 
     ntpApiHandle.deleteMostVisitedItem(args.tid);
   }
-  // TODO(treib): Should we also handle the 'loaded' message from the iframe
-  // here? We could hide the page until it arrives, to avoid flicker.
 }
 
 
@@ -522,7 +628,7 @@ function init() {
     if (configData.isVoiceSearchEnabled) {
       speech.init(
           configData.googleBaseUrl, configData.translatedStrings,
-          $(IDS.FAKEBOX_SPEECH), searchboxApiHandle);
+          $(IDS.FAKEBOX_MICROPHONE), searchboxApiHandle);
     }
 
     // Listener for updating the key capture state.
@@ -561,14 +667,45 @@ function init() {
     // Update the fakebox style to match the current key capturing state.
     setFakeboxFocus(searchboxApiHandle.isKeyCaptureEnabled);
 
-    // Load the OneGoogleBar script. It'll create a global variable name "og"
-    // which is a dict corresponding to the native OneGoogleBarData type.
-    var ogScript = document.createElement('script');
-    ogScript.src = 'chrome-search://local-ntp/one-google.js';
-    document.body.appendChild(ogScript);
-    ogScript.onload = function() {
-      injectOneGoogleBar(og);
-    };
+    // Load the Doodle. After the first request completes (getting cached
+    // data), issue a second request for fresh Doodle data.
+    loadDoodle(/*v=*/null, function(ddl) {
+      if (ddl === null) {
+        // Got no ddl object at all, the feature is probably disabled. Just show
+        // the logo.
+        showLogoOrDoodle(null, null, /*fromCache=*/true);
+        return;
+      }
+
+      // Got a (possibly empty) ddl object. Show logo or doodle.
+      showLogoOrDoodle(
+          ddl.image || null, ddl.metadata || null, /*fromCache=*/true);
+      // Never hide an interactive doodle if it was already shown.
+      if (ddl.metadata && (ddl.metadata.type === LOGO_TYPE.INTERACTIVE))
+        return;
+      // If we got a valid ddl object (from cache), load a fresh one.
+      if (ddl.v !== null) {
+        loadDoodle(ddl.v, function(ddl) {
+          if (ddl.usable) {
+            fadeToLogoOrDoodle(ddl.image, ddl.metadata);
+          }
+        });
+      }
+    });
+
+    // Set up doodle notifier (but it may be invisible).
+    var doodleNotifier = $(IDS.LOGO_DOODLE_NOTIFIER);
+    doodleNotifier.title = configData.translatedStrings.clickToViewDoodle;
+    doodleNotifier.addEventListener('click', function(e) {
+      e.preventDefault();
+      var state = window.history.state || {};
+      state.notheme = true;
+      window.history.replaceState(state, document.title);
+      onThemeChange();
+      if (e.detail === 0) {  // Activated by keyboard.
+        $(IDS.LOGO_DOODLE_BUTTON).focus();
+      }
+    });
   } else {
     document.body.classList.add(CLASSES.NON_GOOGLE_PAGE);
   }
@@ -595,7 +732,8 @@ function init() {
   // Create the most visited iframe.
   var iframe = document.createElement('iframe');
   iframe.id = IDS.TILES_IFRAME;
-  iframe.tabIndex = 1;
+  iframe.name = IDS.TILES_IFRAME;
+  iframe.title = configData.translatedStrings.mostVisitedTitle;
   iframe.src = 'chrome-search://most-visited/single.html?' + args.join('&');
   $(IDS.TILES).appendChild(iframe);
 
@@ -648,7 +786,197 @@ function injectOneGoogleBar(ogb) {
   endOfBodyScript.type = 'text/javascript';
   endOfBodyScript.appendChild(document.createTextNode(ogb.endOfBodyScript));
   document.body.appendChild(endOfBodyScript);
+
+  ntpApiHandle.logEvent(LOG_TYPE.NTP_ONE_GOOGLE_BAR_SHOWN);
 }
+
+
+/** Loads the Doodle. On success, the loaded script declares a global variable
+ * ddl, which onload() receives as its single argument. On failure, onload() is
+ * called with null as the argument. If v is null, then the call requests a
+ * cached logo. If non-null, it must be the ddl.v of a previous request for a
+ * cached logo, and the corresponding fresh logo is returned.
+ * @param {?number} v
+ * @param {function(?{v, usable, image, metadata})} onload
+ */
+var loadDoodle = function(v, onload) {
+  var ddlScript = document.createElement('script');
+  ddlScript.src = 'chrome-search://local-ntp/doodle.js';
+  if (v !== null)
+    ddlScript.src += '?v=' + v;
+  ddlScript.onload = function() {
+    onload(ddl);
+  };
+  ddlScript.onerror = function() {
+    onload(null);
+  };
+  // TODO(treib,sfiera): Add a timeout in case something goes wrong?
+  document.body.appendChild(ddlScript);
+};
+
+
+/** Returns true if the doodle given by |image| and |metadata| is currently
+ * visible. If |image| is null, returns true when the default logo is visible;
+ * if non-null, checks that it matches the doodle that is currently visible.
+ * Here, "visible" means fully-visible or fading in.
+ *
+ * @param {?Object} image
+ * @param {?Object} metadata
+ * @returns {boolean}
+ */
+var isDoodleCurrentlyVisible = function(image, metadata) {
+  var haveDoodle = ($(IDS.LOGO_DOODLE).classList.contains(CLASSES.SHOW_LOGO));
+  var wantDoodle = (image !== null) && (metadata !== null);
+  if (!haveDoodle || !wantDoodle)
+    return haveDoodle === wantDoodle;
+
+  // Have a visible doodle and a query doodle. Test that they match.
+  if (metadata.type === LOGO_TYPE.INTERACTIVE) {
+    var logoDoodleIframe = $(IDS.LOGO_DOODLE_IFRAME);
+    return logoDoodleIframe.classList.contains(CLASSES.SHOW_LOGO) &&
+        (logoDoodleIframe.src === metadata.fullPageUrl);
+  } else {
+    var logoDoodleImage = $(IDS.LOGO_DOODLE_IMAGE);
+    var logoDoodleButton = $(IDS.LOGO_DOODLE_BUTTON);
+    return logoDoodleButton.classList.contains(CLASSES.SHOW_LOGO) &&
+        ((logoDoodleImage.src === image) ||
+         (logoDoodleImage.src === metadata.animatedUrl));
+  }
+};
+
+
+var showLogoOrDoodle = function(image, metadata, fromCache) {
+  if (metadata !== null) {
+    applyDoodleMetadata(metadata);
+    if (metadata.type === LOGO_TYPE.INTERACTIVE) {
+      $(IDS.LOGO_DOODLE_BUTTON).classList.remove(CLASSES.SHOW_LOGO);
+      $(IDS.LOGO_DOODLE_IFRAME).classList.add(CLASSES.SHOW_LOGO);
+    } else {
+      $(IDS.LOGO_DOODLE_IMAGE).src = image;
+      $(IDS.LOGO_DOODLE_BUTTON).classList.add(CLASSES.SHOW_LOGO);
+      $(IDS.LOGO_DOODLE_IFRAME).classList.remove(CLASSES.SHOW_LOGO);
+
+      var isCta = !!metadata.animatedUrl;
+      var eventType = isCta ?
+          (fromCache ? LOG_TYPE.NTP_CTA_LOGO_SHOWN_FROM_CACHE :
+                       LOG_TYPE.NTP_CTA_LOGO_SHOWN_FRESH) :
+          (fromCache ? LOG_TYPE.NTP_STATIC_LOGO_SHOWN_FROM_CACHE :
+                       LOG_TYPE.NTP_STATIC_LOGO_SHOWN_FRESH);
+      ntpApiHandle.logEvent(eventType);
+    }
+    $(IDS.LOGO_DOODLE).classList.add(CLASSES.SHOW_LOGO);
+  } else {
+    $(IDS.LOGO_DEFAULT).classList.add(CLASSES.SHOW_LOGO);
+  }
+};
+
+
+/** The image and metadata that should be shown, according to the latest fetch.
+ * After a logo fades out, onDoodleFadeOutComplete fades in a logo according to
+ * targetDoodle.
+ */
+var targetDoodle = {
+  image: null,
+  metadata: null,
+};
+
+
+/**
+ * Starts fading out the given element, which should be either the default logo
+ * or the doodle.
+ *
+ * @param {HTMLElement} element
+ */
+var startFadeOut = function(element) {
+  if (!element.classList.contains(CLASSES.SHOW_LOGO)) {
+    return;
+  }
+
+  // Compute style now, to ensure that the transition from 1 -> 0 is properly
+  // recognized. Otherwise, if a 0 -> 1 -> 0 transition is too fast, the
+  // element might stay invisible instead of appearing then fading out.
+  window.getComputedStyle(element).opacity;
+
+  element.classList.add(CLASSES.FADE);
+  element.classList.remove(CLASSES.SHOW_LOGO);
+  element.addEventListener('transitionend', onDoodleFadeOutComplete);
+};
+
+
+/**
+ * Integrates a fresh doodle into the page as appropriate. If the correct logo
+ * or doodle is already shown, just updates the metadata. Otherwise, initiates
+ * a fade from the currently-shown logo/doodle to the new one.
+ *
+ * @param {?Object} image
+ * @param {?Object} metadata
+ */
+var fadeToLogoOrDoodle = function(image, metadata) {
+  // If the image is already visible, there's no need to start a fade-out.
+  // However, metadata may have changed, so update the doodle's alt text and
+  // href, if applicable.
+  if (isDoodleCurrentlyVisible(image, metadata)) {
+    if (metadata !== null) {
+      applyDoodleMetadata(metadata);
+    }
+    return;
+  }
+
+  // Set the target to use once the current logo/doodle has finished fading out.
+  targetDoodle.image = image;
+  targetDoodle.metadata = metadata;
+
+  // Start fading out the current logo or doodle. onDoodleFadeOutComplete will
+  // apply the change when the fade-out finishes.
+  startFadeOut($(IDS.LOGO_DEFAULT));
+  startFadeOut($(IDS.LOGO_DOODLE));
+};
+
+
+var onDoodleFadeOutComplete = function(e) {
+  // Fade-out finished. Start fading in the appropriate logo.
+  $(IDS.LOGO_DOODLE).classList.add(CLASSES.FADE);
+  $(IDS.LOGO_DEFAULT).classList.add(CLASSES.FADE);
+  showLogoOrDoodle(
+      targetDoodle.image, targetDoodle.metadata, /*fromCache=*/false);
+
+  this.removeEventListener('transitionend', onDoodleFadeOutComplete);
+};
+
+
+var applyDoodleMetadata = function(metadata) {
+  var logoDoodleButton = $(IDS.LOGO_DOODLE_BUTTON);
+  var logoDoodleImage = $(IDS.LOGO_DOODLE_IMAGE);
+  var logoDoodleIframe = $(IDS.LOGO_DOODLE_IFRAME);
+
+  switch (metadata.type) {
+    case LOGO_TYPE.SIMPLE:
+      logoDoodleImage.title = metadata.altText;
+      logoDoodleButton.onclick = function() {
+        ntpApiHandle.logEvent(LOG_TYPE.NTP_STATIC_LOGO_CLICKED);
+        window.location = metadata.onClickUrl;
+      };
+      break;
+
+    case LOGO_TYPE.ANIMATED:
+      logoDoodleImage.title = metadata.altText;
+      logoDoodleButton.onclick = function(e) {
+        ntpApiHandle.logEvent(LOG_TYPE.NTP_CTA_LOGO_CLICKED);
+        e.preventDefault();
+        logoDoodleImage.src = metadata.animatedUrl;
+        logoDoodleButton.onclick = function() {
+          ntpApiHandle.logEvent(LOG_TYPE.NTP_ANIMATED_LOGO_CLICKED);
+          window.location = metadata.onClickUrl;
+        };
+      };
+      break;
+
+    case LOGO_TYPE.INTERACTIVE:
+      logoDoodleIframe.title = metadata.altText;
+      logoDoodleIframe.src = metadata.fullPageUrl;
+      break;
+  }
+};
 
 
 return {

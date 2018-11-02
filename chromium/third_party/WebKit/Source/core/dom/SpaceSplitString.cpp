@@ -23,6 +23,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/AtomicStringHash.h"
+#include "platform/wtf/text/StringHash.h"
 
 namespace blink {
 
@@ -107,7 +108,7 @@ void SpaceSplitString::Data::Add(const AtomicString& string) {
 
 void SpaceSplitString::Data::Remove(unsigned index) {
   DCHECK(HasOneRef());
-  vector_.erase(index);
+  vector_.EraseAt(index);
 }
 
 void SpaceSplitString::Add(const AtomicString& string) {
@@ -168,19 +169,19 @@ SpaceSplitString::Data::~Data() {
     SharedDataMap().erase(key_string_);
 }
 
-RefPtr<SpaceSplitString::Data> SpaceSplitString::Data::Create(
+scoped_refptr<SpaceSplitString::Data> SpaceSplitString::Data::Create(
     const AtomicString& string) {
   Data*& data = SharedDataMap().insert(string, nullptr).stored_value->value;
   if (!data) {
     data = new Data(string);
-    return AdoptRef(data);
+    return base::AdoptRef(data);
   }
   return data;
 }
 
-RefPtr<SpaceSplitString::Data> SpaceSplitString::Data::CreateUnique(
+scoped_refptr<SpaceSplitString::Data> SpaceSplitString::Data::CreateUnique(
     const Data& other) {
-  return AdoptRef(new SpaceSplitString::Data(other));
+  return base::AdoptRef(new SpaceSplitString::Data(other));
 }
 
 SpaceSplitString::Data::Data(const AtomicString& string) : key_string_(string) {

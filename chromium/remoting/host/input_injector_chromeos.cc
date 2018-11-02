@@ -19,8 +19,7 @@
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/ozone/public/ozone_platform.h"
-#include "ui/ozone/public/system_input_injector.h"
+#include "ui/events/system_input_injector.h"
 
 namespace remoting {
 
@@ -46,9 +45,8 @@ ui::EventFlags MouseButtonToUIFlags(MouseEvent::MouseButton button) {
   }
 }
 
-bool shouldSetLockStates(ui::DomCode dom_code, bool key_pressed) {
-  if (!key_pressed)
-    return false;
+// Check if the given key could be mapped to caps lock
+bool IsLockKey(ui::DomCode dom_code) {
   switch (dom_code) {
     // Ignores all the keys that could possibly be mapped to Caps Lock in event
     // rewriter. Please refer to ui::EventRewriterChromeOS::RewriteModifierKeys.
@@ -62,10 +60,17 @@ bool shouldSetLockStates(ui::DomCode dom_code, bool key_pressed) {
     case ui::DomCode::ALT_RIGHT:
     case ui::DomCode::ESCAPE:
     case ui::DomCode::BACKSPACE:
-      return false;
-    default:
       return true;
+    default:
+      return false;
   }
+}
+
+// If caps_lock is specified, sets local keyboard state to match.
+void SetCapsLockState(bool caps_lock) {
+  chromeos::input_method::InputMethodManager* ime =
+      chromeos::input_method::InputMethodManager::Get();
+  ime->GetImeKeyboard()->SetCapsLockEnabled(caps_lock);
 }
 
 }  // namespace
@@ -73,7 +78,7 @@ bool shouldSetLockStates(ui::DomCode dom_code, bool key_pressed) {
 // This class is run exclusively on the UI thread of the browser process.
 class InputInjectorChromeos::Core {
  public:
-  Core();
+  Core(ui::SystemInputInjectorFactory* system_input_injector_factory);
 
   // Mirrors the public InputInjectorChromeos interface.
   void InjectClipboardEvent(const ClipboardEvent& event);
@@ -83,7 +88,6 @@ class InputInjectorChromeos::Core {
   void Start(std::unique_ptr<protocol::ClipboardStub> client_clipboard);
 
  private:
-  // Sets the caps lock state to match states
   void SetLockStates(uint32_t states);
 
   std::unique_ptr<ui::SystemInputInjector> delegate_;
@@ -93,11 +97,16 @@ class InputInjectorChromeos::Core {
   // display rotation settings.
   std::unique_ptr<PointTransformer> point_transformer_;
 
+  // Creates |delegate_|. We store this since Core is created on one thread,
+  // but then Start() is run on a different one.
+  ui::SystemInputInjectorFactory* system_input_injector_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
 
-InputInjectorChromeos::Core::Core() {
-}
+InputInjectorChromeos::Core::Core(
+    ui::SystemInputInjectorFactory* system_input_injector_factory)
+    : system_input_injector_factory_(system_input_injector_factory) {}
 
 void InputInjectorChromeos::Core::InjectClipboardEvent(
     const ClipboardEvent& event) {
@@ -111,9 +120,13 @@ void InputInjectorChromeos::Core::InjectKeyEvent(const KeyEvent& event) {
   ui::DomCode dom_code =
       ui::KeycodeConverter::UsbKeycodeToDomCode(event.usb_keycode());
 
-  if (event.has_lock_states() &&
-      shouldSetLockStates(dom_code, event.pressed())) {
-    SetLockStates(event.lock_states());
+  if (event.pressed() && !IsLockKey(dom_code)) {
+    if (event.has_caps_lock_state()) {
+      SetCapsLockState(event.caps_lock_state());
+    } else if (event.has_lock_states()) {
+      SetCapsLockState((event.lock_states() &
+                        protocol::KeyEvent::LOCK_STATES_CAPSLOCK) != 0);
+    }
   }
 
   // Ignore events which can't be mapped.
@@ -144,8 +157,8 @@ void InputInjectorChromeos::Core::InjectMouseEvent(const MouseEvent& event) {
 
 void InputInjectorChromeos::Core::Start(
     std::unique_ptr<protocol::ClipboardStub> client_clipboard) {
-  ui::OzonePlatform* ozone_platform = ui::OzonePlatform::GetInstance();
-  delegate_ = ozone_platform->CreateSystemInputInjector();
+  // OK, so we now need to plumb from ChromotingHostContext to here.
+  delegate_ = system_input_injector_factory_->CreateSystemInputInjector();
   DCHECK(delegate_);
 
   // Implemented by remoting::ClipboardAura.
@@ -154,17 +167,11 @@ void InputInjectorChromeos::Core::Start(
   point_transformer_.reset(new PointTransformer());
 }
 
-void InputInjectorChromeos::Core::SetLockStates(uint32_t states) {
-  chromeos::input_method::InputMethodManager* ime =
-      chromeos::input_method::InputMethodManager::Get();
-  ime->GetImeKeyboard()->SetCapsLockEnabled(
-      states & protocol::KeyEvent::LOCK_STATES_CAPSLOCK);
-}
-
 InputInjectorChromeos::InputInjectorChromeos(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    ui::SystemInputInjectorFactory* system_input_injector_factory)
     : input_task_runner_(task_runner) {
-  core_.reset(new Core());
+  core_.reset(new Core(system_input_injector_factory));
 }
 
 InputInjectorChromeos::~InputInjectorChromeos() {
@@ -209,10 +216,12 @@ void InputInjectorChromeos::Start(
 // static
 std::unique_ptr<InputInjector> InputInjector::Create(
     scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
+    ui::SystemInputInjectorFactory* system_input_injector_factory) {
   // The Ozone input injector must be called on the UI task runner of the
   // browser process.
-  return base::WrapUnique(new InputInjectorChromeos(ui_task_runner));
+  return base::WrapUnique(
+      new InputInjectorChromeos(ui_task_runner, system_input_injector_factory));
 }
 
 // static

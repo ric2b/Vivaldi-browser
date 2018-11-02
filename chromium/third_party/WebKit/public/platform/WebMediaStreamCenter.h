@@ -31,21 +31,16 @@
 #ifndef WebMediaStreamCenter_h
 #define WebMediaStreamCenter_h
 
-#include "WebVector.h"
 
 namespace blink {
 
 class WebAudioSourceProvider;
-class WebMediaStream;
 class WebMediaStreamTrack;
 class WebMediaStreamSource;
 
 class WebMediaStreamCenter {
  public:
   virtual ~WebMediaStreamCenter() {}
-
-  // Stream functionality.
-  virtual void DidStopLocalMediaStream(const WebMediaStream&) = 0;
 
   // Track functionality.
   virtual void DidCreateMediaStreamTrack(const WebMediaStreamTrack&) {}
@@ -54,9 +49,6 @@ class WebMediaStreamCenter {
   virtual void DidSetContentHint(const WebMediaStreamTrack&) {}
   virtual void DidEnableMediaStreamTrack(const WebMediaStreamTrack&) {}
   virtual void DidDisableMediaStreamTrack(const WebMediaStreamTrack&) {}
-  virtual bool DidStopMediaStreamTrack(const WebMediaStreamTrack&) {
-    return false;
-  }
 
   // Source functionality.
   virtual void DidStopMediaStreamSource(const WebMediaStreamSource&) {}

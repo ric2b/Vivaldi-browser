@@ -16,7 +16,6 @@ class Modulator;
 class ModuleScriptFetchRequest;
 class ModuleScriptLoader;
 class ModuleScriptLoaderClient;
-class ResourceFetcher;
 enum class ModuleGraphLevel;
 
 // ModuleScriptLoaderRegistry keeps active ModuleLoaders alive.
@@ -26,12 +25,11 @@ class CORE_EXPORT ModuleScriptLoaderRegistry final
   static ModuleScriptLoaderRegistry* Create() {
     return new ModuleScriptLoaderRegistry;
   }
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   ModuleScriptLoader* Fetch(const ModuleScriptFetchRequest&,
                             ModuleGraphLevel,
                             Modulator*,
-                            ResourceFetcher*,
                             ModuleScriptLoaderClient*);
 
  private:

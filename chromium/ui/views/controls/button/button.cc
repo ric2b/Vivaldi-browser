@@ -42,15 +42,6 @@ DEFINE_LOCAL_UI_CLASS_PROPERTY_KEY(bool, kIsButtonProperty, false);
 // How long the hover animation takes if uninterrupted.
 const int kHoverFadeDurationMs = 150;
 
-Button::KeyClickAction GetKeyClickActionForEvent(const ui::KeyEvent& event) {
-  if (event.key_code() == ui::VKEY_SPACE)
-    return PlatformStyle::kKeyClickActionOnSpace;
-  if (event.key_code() == ui::VKEY_RETURN &&
-      PlatformStyle::kReturnClicksFocusedControl)
-    return Button::CLICK_ON_KEY_PRESS;
-  return Button::CLICK_NONE;
-}
-
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -107,6 +98,7 @@ void Button::SetTooltipText(const base::string16& tooltip_text) {
 void Button::SetAccessibleName(const base::string16& name) {
   accessible_name_ = name;
 }
+
 void Button::SetState(ButtonState state) {
   if (state == state_)
     return;
@@ -482,6 +474,16 @@ Button::Button(ButtonListener* listener)
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   SetProperty(kIsButtonProperty, true);
   hover_animation_.SetSlideDuration(kHoverFadeDurationMs);
+}
+
+Button::KeyClickAction Button::GetKeyClickActionForEvent(
+    const ui::KeyEvent& event) {
+  if (event.key_code() == ui::VKEY_SPACE)
+    return PlatformStyle::kKeyClickActionOnSpace;
+  if (event.key_code() == ui::VKEY_RETURN &&
+      PlatformStyle::kReturnClicksFocusedControl)
+    return CLICK_ON_KEY_PRESS;
+  return CLICK_NONE;
 }
 
 void Button::NotifyClick(const ui::Event& event) {

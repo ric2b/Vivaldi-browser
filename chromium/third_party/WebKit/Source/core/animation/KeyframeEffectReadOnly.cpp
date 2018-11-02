@@ -6,7 +6,9 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/UnrestrictedDoubleOrKeyframeEffectOptions.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8ObjectBuilder.h"
+#include "bindings/core/v8/unrestricted_double_or_keyframe_effect_options.h"
 #include "core/animation/Animation.h"
 #include "core/animation/EffectInput.h"
 #include "core/animation/ElementAnimations.h"
@@ -21,12 +23,13 @@
 #include "core/frame/UseCounter.h"
 #include "core/paint/PaintLayer.h"
 #include "core/svg/SVGElement.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
 KeyframeEffectReadOnly* KeyframeEffectReadOnly::Create(
     Element* target,
-    EffectModel* model,
+    KeyframeEffectModelBase* model,
     const Timing& timing,
     Priority priority,
     EventDelegate* event_delegate) {
@@ -50,9 +53,18 @@ KeyframeEffectReadOnly* KeyframeEffectReadOnly::Create(
   Document* document = element ? &element->GetDocument() : nullptr;
   if (!TimingInput::Convert(options, timing, document, exception_state))
     return nullptr;
+
+  EffectModel::CompositeOperation composite = EffectModel::kCompositeReplace;
+  if (options.IsKeyframeEffectOptions() &&
+      !EffectModel::StringToCompositeOperation(
+          options.GetAsKeyframeEffectOptions().composite(), composite,
+          &exception_state)) {
+    return nullptr;
+  }
+
   return Create(element,
-                EffectInput::Convert(element, effect_input, execution_context,
-                                     exception_state),
+                EffectInput::Convert(element, effect_input, composite,
+                                     execution_context, exception_state),
                 timing);
 }
 
@@ -68,13 +80,14 @@ KeyframeEffectReadOnly* KeyframeEffectReadOnly::Create(
         WebFeature::kAnimationConstructorKeyframeListEffectNoTiming);
   }
   return Create(element,
-                EffectInput::Convert(element, effect_input, execution_context,
-                                     exception_state),
+                EffectInput::Convert(element, effect_input,
+                                     EffectModel::kCompositeReplace,
+                                     execution_context, exception_state),
                 Timing());
 }
 
 KeyframeEffectReadOnly::KeyframeEffectReadOnly(Element* target,
-                                               EffectModel* model,
+                                               KeyframeEffectModelBase* model,
                                                const Timing& timing,
                                                Priority priority,
                                                EventDelegate* event_delegate)
@@ -82,7 +95,9 @@ KeyframeEffectReadOnly::KeyframeEffectReadOnly(Element* target,
       target_(target),
       model_(model),
       sampled_effect_(nullptr),
-      priority_(priority) {}
+      priority_(priority) {
+  DCHECK(model_);
+}
 
 void KeyframeEffectReadOnly::Attach(Animation* animation) {
   if (target_) {
@@ -139,10 +154,10 @@ bool KeyframeEffectReadOnly::HasIncompatibleStyle() {
     return false;
 
   bool affects_transform =
-      GetAnimation()->Affects(*target_, CSSPropertyTransform) ||
-      GetAnimation()->Affects(*target_, CSSPropertyScale) ||
-      GetAnimation()->Affects(*target_, CSSPropertyRotate) ||
-      GetAnimation()->Affects(*target_, CSSPropertyTranslate);
+      GetAnimation()->Affects(*target_, GetCSSPropertyTransform()) ||
+      GetAnimation()->Affects(*target_, GetCSSPropertyScale()) ||
+      GetAnimation()->Affects(*target_, GetCSSPropertyRotate()) ||
+      GetAnimation()->Affects(*target_, GetCSSPropertyTranslate());
 
   if (GetAnimation()->HasActiveAnimationsOnCompositor()) {
     if (target_->GetComputedStyle()->HasOffset() && affects_transform)
@@ -156,7 +171,7 @@ bool KeyframeEffectReadOnly::HasIncompatibleStyle() {
 void KeyframeEffectReadOnly::ApplyEffects() {
   DCHECK(IsInEffect());
   DCHECK(GetAnimation());
-  if (!target_ || !model_)
+  if (!target_ || !model_->HasFrames())
     return;
 
   if (HasIncompatibleStyle())
@@ -170,7 +185,7 @@ void KeyframeEffectReadOnly::ApplyEffects() {
                              IterationDuration(),
                              sampled_effect_->MutableInterpolations());
   } else {
-    Vector<RefPtr<Interpolation>> interpolations;
+    Vector<scoped_refptr<Interpolation>> interpolations;
     model_->Sample(clampTo<int>(iteration, 0), Progress(), IterationDuration(),
                    interpolations);
     if (!interpolations.IsEmpty()) {
@@ -207,7 +222,7 @@ void KeyframeEffectReadOnly::ClearEffects() {
 }
 
 void KeyframeEffectReadOnly::UpdateChildrenAndEffects() const {
-  if (!model_)
+  if (!model_->HasFrames())
     return;
   DCHECK(GetAnimation());
   if (IsInEffect() && !GetAnimation()->EffectSuppressed())
@@ -263,7 +278,7 @@ void KeyframeEffectReadOnly::NotifySampledEffectRemovedFromEffectStack() {
 CompositorAnimations::FailureCode
 KeyframeEffectReadOnly::CheckCanStartAnimationOnCompositor(
     double animation_playback_rate) const {
-  if (!Model()) {
+  if (!model_->HasFrames()) {
     return CompositorAnimations::FailureCode::Actionable(
         "Animation effect has no keyframes");
   }
@@ -295,15 +310,50 @@ void KeyframeEffectReadOnly::StartAnimationOnCompositor(
     int group,
     double start_time,
     double current_time,
-    double animation_playback_rate) {
+    double animation_playback_rate,
+    CompositorAnimationPlayer* compositor_player) {
   DCHECK(!HasActiveAnimationsOnCompositor());
   DCHECK(CheckCanStartAnimationOnCompositor(animation_playback_rate).Ok());
 
+  if (!compositor_player)
+    compositor_player = GetAnimation()->CompositorPlayer();
+  DCHECK(compositor_player);
+
   CompositorAnimations::StartAnimationOnCompositor(
       *target_, group, start_time, current_time, SpecifiedTiming(),
-      *GetAnimation(), *Model(), compositor_animation_ids_,
+      GetAnimation(), *compositor_player, *Model(), compositor_animation_ids_,
       animation_playback_rate);
   DCHECK(!compositor_animation_ids_.IsEmpty());
+}
+
+String KeyframeEffectReadOnly::composite() const {
+  return EffectModel::CompositeOperationToString(compositeInternal());
+}
+
+Vector<ScriptValue> KeyframeEffectReadOnly::getKeyframes(
+    ScriptState* script_state) {
+  Vector<ScriptValue> computed_keyframes;
+  if (!model_->HasFrames())
+    return computed_keyframes;
+
+  // getKeyframes() returns a list of 'ComputedKeyframes'. A ComputedKeyframe
+  // consists of the normal keyframe data combined with the computed offset for
+  // the given keyframe.
+  //
+  // https://w3c.github.io/web-animations/#dom-keyframeeffectreadonly-getkeyframes
+  const KeyframeVector& keyframes = model_->GetFrames();
+  Vector<double> computed_offsets =
+      KeyframeEffectModelBase::GetComputedOffsets(keyframes);
+  computed_keyframes.ReserveInitialCapacity(keyframes.size());
+  ScriptState::Scope scope(script_state);
+  for (size_t i = 0; i < keyframes.size(); i++) {
+    V8ObjectBuilder object_builder(script_state);
+    keyframes[i]->AddKeyframePropertiesToV8Object(object_builder);
+    object_builder.Add("computedOffset", computed_offsets[i]);
+    computed_keyframes.push_back(object_builder.GetScriptValue());
+  }
+
+  return computed_keyframes;
 }
 
 bool KeyframeEffectReadOnly::HasActiveAnimationsOnCompositor() const {
@@ -316,7 +366,7 @@ bool KeyframeEffectReadOnly::HasActiveAnimationsOnCompositor(
 }
 
 bool KeyframeEffectReadOnly::Affects(const PropertyHandle& property) const {
-  return model_ && model_->Affects(property);
+  return model_->Affects(property);
 }
 
 bool KeyframeEffectReadOnly::CancelAnimationOnCompositor() {
@@ -343,7 +393,7 @@ void KeyframeEffectReadOnly::RestartAnimationOnCompositor() {
 }
 
 void KeyframeEffectReadOnly::CancelIncompatibleAnimationsOnCompositor() {
-  if (target_ && GetAnimation() && Model()) {
+  if (target_ && GetAnimation() && model_->HasFrames()) {
     CompositorAnimations::CancelIncompatibleAnimationsOnCompositor(
         *target_, *GetAnimation(), *Model());
   }
@@ -364,10 +414,11 @@ void KeyframeEffectReadOnly::PauseAnimationForTestingOnCompositor(
 void KeyframeEffectReadOnly::AttachCompositedLayers() {
   DCHECK(target_);
   DCHECK(GetAnimation());
-  CompositorAnimations::AttachCompositedLayers(*target_, *GetAnimation());
+  CompositorAnimations::AttachCompositedLayers(
+      *target_, GetAnimation()->CompositorPlayer());
 }
 
-DEFINE_TRACE(KeyframeEffectReadOnly) {
+void KeyframeEffectReadOnly::Trace(blink::Visitor* visitor) {
   visitor->Trace(target_);
   visitor->Trace(model_);
   visitor->Trace(sampled_effect_);

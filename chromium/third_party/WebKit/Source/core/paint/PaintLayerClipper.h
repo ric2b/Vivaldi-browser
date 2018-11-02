@@ -54,6 +54,7 @@
 
 namespace blink {
 
+class FragmentData;
 class PaintLayer;
 class PropertyTreeState;
 
@@ -80,7 +81,8 @@ class ClipRectsContext {
                                   ? kIgnoreOverflowClip
                                   : kRespectOverflowClip),
         respect_overflow_clip_for_viewport(
-            slot == kRootRelativeClipRectsIgnoringViewportClip
+            (slot == kRootRelativeClipRectsIgnoringViewportClip ||
+             slot == kAbsoluteClipRectsIgnoringViewportClip)
                 ? kIgnoreOverflowClip
                 : kRespectOverflowClip) {}
 
@@ -198,12 +200,14 @@ class CORE_EXPORT PaintLayerClipper {
   // If provided, |offset_from_root| is not changed and assumed to already
   // include subpixel accumualation. Otherwise it is set to the offset from
   // |layer_| to |root_layer|, plus |context.sub_pixel_accumuation|.
+  // |fragment_data| is only used in kUseGeometryMapper mode.
   void CalculateRects(const ClipRectsContext&,
+                      const FragmentData*,
                       const LayoutRect& paint_dirty_rect,
                       LayoutRect& layer_bounds,
                       ClipRect& background_rect,
                       ClipRect& foreground_rect,
-                      const LayoutPoint* offset_from_root = 0) const;
+                      const LayoutPoint* offset_from_root = nullptr) const;
 
  private:
   void ClearCache(ClipRectsCacheSlot);
@@ -222,25 +226,28 @@ class CORE_EXPORT PaintLayerClipper {
   // Returned clip rect in |output| is in the space of the context's rootLayer.
   ALWAYS_INLINE void CalculateBackgroundClipRectWithGeometryMapper(
       const ClipRectsContext&,
+      const FragmentData&,
       ClipRect& output) const;
 
   ALWAYS_INLINE void InitializeCommonClipRectState(
       const ClipRectsContext&,
+      const FragmentData&,
       PropertyTreeState& descendant_property_tree_state,
       PropertyTreeState& ancestor_property_tree_state) const;
 
   // Same as calculateRects, but using GeometryMapper.
   ALWAYS_INLINE void CalculateRectsWithGeometryMapper(
       const ClipRectsContext&,
+      const FragmentData&,
       const LayoutRect& paint_dirty_rect,
       LayoutRect& layer_bounds,
       ClipRect& background_rect,
       ClipRect& foreground_rect,
-      const LayoutPoint* offset_from_root = 0) const;
+      const LayoutPoint* offset_from_root = nullptr) const;
 
-  // Returns the visual rect of m_layer in local space. This includes
-  // filter effects.
-  ALWAYS_INLINE LayoutRect LocalVisualRect() const;
+  // Returns the visual rect of |layer_| in local space. This includes
+  // filter effects if needed.
+  ALWAYS_INLINE LayoutRect LocalVisualRect(const ClipRectsContext&) const;
 
   const PaintLayer& layer_;
   bool use_geometry_mapper_;

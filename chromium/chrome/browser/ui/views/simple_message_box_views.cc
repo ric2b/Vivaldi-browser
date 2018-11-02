@@ -32,9 +32,6 @@
 #include "ui/views/win/hwnd_util.h"
 #endif
 
-// The currently showing message box, if there is one. Used for tests.
-SimpleMessageBoxViews* g_current_message_box = nullptr;
-
 namespace {
 #if defined(OS_WIN)
 UINT GetMessageBoxFlagsFromType(chrome::MessageBoxType type) {
@@ -110,7 +107,7 @@ chrome::MessageBoxResult SimpleMessageBoxViews::Show(
 #if defined(OS_WIN)
   if (!base::MessageLoopForUI::IsCurrent() ||
       !base::RunLoop::IsRunningOnCurrentThread() ||
-      !ResourceBundle::HasSharedInstance()) {
+      !ui::ResourceBundle::HasSharedInstance()) {
     LOG_IF(ERROR, !checkbox_text.empty()) << "Dialog checkbox won't be shown";
     int result = ui::MessageBox(views::HWNDForNativeWindow(parent), message,
                                 title, GetMessageBoxFlagsFromType(type));
@@ -121,7 +118,7 @@ chrome::MessageBoxResult SimpleMessageBoxViews::Show(
   }
 #else
   if (!base::MessageLoopForUI::IsCurrent() ||
-      !ResourceBundle::HasSharedInstance()) {
+      !ui::ResourceBundle::HasSharedInstance()) {
     LOG(ERROR) << "Unable to show a dialog outside the UI thread message loop: "
                << title << " - " << message;
     std::move(callback).Run(chrome::MESSAGE_BOX_RESULT_NO);
@@ -248,30 +245,17 @@ SimpleMessageBoxViews::SimpleMessageBoxViews(
 SimpleMessageBoxViews::~SimpleMessageBoxViews() {}
 
 void SimpleMessageBoxViews::Run(MessageBoxResultCallback result_callback) {
-  g_current_message_box = this;
   result_callback_ = std::move(result_callback);
 }
 
 void SimpleMessageBoxViews::Done() {
   CHECK(!result_callback_.is_null());
   std::move(result_callback_).Run(result_);
-  g_current_message_box = nullptr;
 }
 
 namespace chrome {
 
 #if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-bool CloseMessageBoxForTest(bool accept) {
-  if (!g_current_message_box)
-    return false;
-
-  if (accept)
-    g_current_message_box->Accept();
-  else
-    g_current_message_box->Cancel();
-  return true;
-}
-
 void ShowWarningMessageBox(gfx::NativeWindow parent,
                            const base::string16& title,
                            const base::string16& message) {

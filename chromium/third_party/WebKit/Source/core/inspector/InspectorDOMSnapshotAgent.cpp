@@ -4,7 +4,6 @@
 
 #include "core/inspector/InspectorDOMSnapshotAgent.h"
 
-#include "core/InputTypeNames.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/AttributeCollection.h"
@@ -17,11 +16,12 @@
 #include "core/dom/QualifiedName.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
-#include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLTemplateElement.h"
-#include "core/html/HTMLTextAreaElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
+#include "core/input_type_names.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorDOMAgent.h"
@@ -70,12 +70,11 @@ struct InspectorDOMSnapshotAgent::VectorStringHashTraits
   }
 
   static void ConstructDeletedValue(Vector<String>& vec, bool) {
-    vec.clear();
-    vec.push_back(String(WTF::kHashTableDeletedValue));
+    new (NotNull, &vec) Vector<String>(WTF::kHashTableDeletedValue);
   }
 
   static bool IsDeletedValue(const Vector<String>& vec) {
-    return !vec.IsEmpty() && vec[0].IsHashTableDeletedValue();
+    return vec.IsHashTableDeletedValue();
   }
 
   static bool IsEmptyValue(const Vector<String>& vec) { return vec.IsEmpty(); }
@@ -110,8 +109,8 @@ Response InspectorDOMSnapshotAgent::getSnapshot(
       protocol::Array<protocol::DOMSnapshot::LayoutTreeNode>::create();
   computed_styles_ =
       protocol::Array<protocol::DOMSnapshot::ComputedStyle>::create();
-  computed_styles_map_ = WTF::MakeUnique<ComputedStylesMap>();
-  css_property_whitelist_ = WTF::MakeUnique<CSSPropertyWhitelist>();
+  computed_styles_map_ = std::make_unique<ComputedStylesMap>();
+  css_property_whitelist_ = std::make_unique<CSSPropertyWhitelist>();
 
   // Look up the CSSPropertyIDs for each entry in |style_whitelist|.
   for (size_t i = 0; i < style_whitelist->length(); i++) {
@@ -197,39 +196,30 @@ int InspectorDOMSnapshotAgent::VisitNode(Node* node) {
         value->setFrameId(IdentifiersFactory::FrameId(frame));
     }
 
-    if (isHTMLLinkElement(*element)) {
-      const HTMLLinkElement& link_element = toHTMLLinkElement(*element);
-      if (link_element.IsImport() && link_element.import() &&
-          InspectorDOMAgent::InnerParentNode(link_element.import()) ==
+    if (auto* link_element = ToHTMLLinkElementOrNull(*element)) {
+      if (link_element->IsImport() && link_element->import() &&
+          InspectorDOMAgent::InnerParentNode(link_element->import()) ==
               link_element) {
-        value->setImportedDocumentIndex(VisitNode(link_element.import()));
+        value->setImportedDocumentIndex(VisitNode(link_element->import()));
       }
     }
 
-    if (isHTMLTemplateElement(*element)) {
-      value->setTemplateContentIndex(
-          VisitNode(toHTMLTemplateElement(*element).content()));
-    }
+    if (auto* template_element = ToHTMLTemplateElementOrNull(*element))
+      value->setTemplateContentIndex(VisitNode(template_element->content()));
 
-    if (isHTMLTextAreaElement(*element)) {
-      const HTMLTextAreaElement& text_area_element =
-          toHTMLTextAreaElement(*element);
-      value->setTextValue(text_area_element.value());
-    }
+    if (auto* textarea_element = ToHTMLTextAreaElementOrNull(*element))
+      value->setTextValue(textarea_element->value());
 
-    if (isHTMLInputElement(*element)) {
-      const HTMLInputElement& input_element = toHTMLInputElement(*element);
-      value->setInputValue(input_element.value());
-      if ((input_element.type() == InputTypeNames::radio) ||
-          (input_element.type() == InputTypeNames::checkbox)) {
-        value->setInputChecked(input_element.checked());
+    if (auto* input_element = ToHTMLInputElementOrNull(*element)) {
+      value->setInputValue(input_element->value());
+      if ((input_element->type() == InputTypeNames::radio) ||
+          (input_element->type() == InputTypeNames::checkbox)) {
+        value->setInputChecked(input_element->checked());
       }
     }
 
-    if (isHTMLOptionElement(*element)) {
-      const HTMLOptionElement& option_element = toHTMLOptionElement(*element);
-      value->setOptionSelected(option_element.Selected());
-    }
+    if (auto* option_element = ToHTMLOptionElementOrNull(*element))
+      value->setOptionSelected(option_element->Selected());
 
     if (element->GetPseudoId()) {
       protocol::DOM::PseudoType pseudo_type;
@@ -319,14 +309,11 @@ int InspectorDOMSnapshotAgent::VisitLayoutTreeNode(Node* node, int node_index) {
   if (!layout_object)
     return -1;
 
-  auto layout_tree_node =
-      protocol::DOMSnapshot::LayoutTreeNode::create()
-          .setDomNodeIndex(node_index)
-          .setBoundingBox(BuildRectForFloatRect(
-              node->IsElementNode()
-                  ? FloatRect(ToElement(node)->BoundsInViewport())
-                  : layout_object->AbsoluteBoundingBoxRect()))
-          .build();
+  auto layout_tree_node = protocol::DOMSnapshot::LayoutTreeNode::create()
+                              .setDomNodeIndex(node_index)
+                              .setBoundingBox(BuildRectForFloatRect(
+                                  layout_object->AbsoluteBoundingBoxRect()))
+                              .build();
 
   int style_index = GetStyleIndexForNode(node);
   if (style_index != -1)
@@ -336,9 +323,9 @@ int InspectorDOMSnapshotAgent::VisitLayoutTreeNode(Node* node, int node_index) {
     LayoutText* layout_text = ToLayoutText(layout_object);
     layout_tree_node->setLayoutText(layout_text->GetText());
     if (layout_text->HasTextBoxes()) {
-      std::unique_ptr<protocol::Array<protocol::CSS::InlineTextBox>>
+      std::unique_ptr<protocol::Array<protocol::DOMSnapshot::InlineTextBox>>
           inline_text_nodes =
-              protocol::Array<protocol::CSS::InlineTextBox>::create();
+              protocol::Array<protocol::DOMSnapshot::InlineTextBox>::create();
       for (const InlineTextBox* text_box = layout_text->FirstTextBox();
            text_box; text_box = text_box->NextTextBox()) {
         FloatRect local_coords_text_box_rect(text_box->FrameRect());
@@ -346,7 +333,7 @@ int InspectorDOMSnapshotAgent::VisitLayoutTreeNode(Node* node, int node_index) {
             layout_object->LocalToAbsoluteQuad(local_coords_text_box_rect)
                 .BoundingBox();
         inline_text_nodes->addItem(
-            protocol::CSS::InlineTextBox::create()
+            protocol::DOMSnapshot::InlineTextBox::create()
                 .setStartCharacterIndex(text_box->Start())
                 .setNumCharacters(text_box->Len())
                 .setBoundingBox(
@@ -404,7 +391,7 @@ int InspectorDOMSnapshotAgent::GetStyleIndexForNode(Node* node) {
   return index;
 }
 
-DEFINE_TRACE(InspectorDOMSnapshotAgent) {
+void InspectorDOMSnapshotAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frames_);
   InspectorBaseAgent::Trace(visitor);
 }

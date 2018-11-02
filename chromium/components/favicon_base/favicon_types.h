@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/containers/flat_set.h"
 #include "base/memory/ref_counted_memory.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -20,17 +21,27 @@ struct FallbackIconStyle;
 
 typedef int64_t FaviconID;
 
-// Defines the icon types. They are also stored in icon_type field of favicons
-// table.
+// Defines the icon types.
+//
+// IMPORTANT: these values must stay in sync with the FaviconType enum in
+// tools/metrics/histograms/enum.xml.
+//
 // The values of the IconTypes are used to select the priority in which favicon
 // data is returned in HistoryBackend and ThumbnailDatabase.
-enum IconType {
-  INVALID_ICON = 0x0,
-  FAVICON = 1 << 0,
-  TOUCH_ICON = 1 << 1,
-  TOUCH_PRECOMPOSED_ICON = 1 << 2,
-  WEB_MANIFEST_ICON = 1 << 3,
+//
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.favicon
+enum class IconType {
+  kInvalid = 0,
+  kFavicon,
+  kTouchIcon,
+  kTouchPrecomposedIcon,
+  kWebManifestIcon,
+  kMax = kWebManifestIcon,
+  kCount
 };
+
+using IconTypeSet = base::flat_set<IconType>;
 
 // Defines a gfx::Image of size desired_size_in_dip composed of image
 // representations for each of the desired scale factors.
@@ -73,6 +84,11 @@ struct FaviconRawBitmapResult {
 
   // The icon type of the containing favicon.
   IconType icon_type;
+
+  // Indicates whether the bitmap was fetched upon visiting a page. Value
+  // false means that it was fetched on-demand by the UI of chrome, without
+  // visiting the page.
+  bool fetched_because_of_page_visit;
 };
 
 // Define type with same structure as FaviconRawBitmapResult for passing data to
@@ -140,7 +156,14 @@ enum class GoogleFaviconServerRequestStatus {
   // Request sent out and favicon fetched but writing to database failed.
   FAILURE_ON_WRITE = 4,
   // Request not sent out (the request or the fetcher was invalid).
-  FAILURE_INVALID = 5,
+  DEPRECATED_FAILURE_INVALID = 5,
+  // Request not sent out (the target URL was an IP address or its scheme was
+  // not http(s)).
+  FAILURE_TARGET_URL_SKIPPED = 6,
+  // Request not sent out (the target URL was not valid).
+  FAILURE_TARGET_URL_INVALID = 7,
+  // Request not sent out (the server URL was not valid).
+  FAILURE_SERVER_URL_INVALID = 8,
   // Insert new values here.
   COUNT
 };

@@ -87,9 +87,8 @@ class WebContentsModalDialogManagerViewsMacTest : public InProcessBrowserTest,
 
 // Basic test for showing and dismissing the dialog in a single tab.
 IN_PROC_BROWSER_TEST_F(WebContentsModalDialogManagerViewsMacTest, Basic) {
-  // Cocoa browsers start with one child window (a StatusBubbleWindow).
   NSArray* children = [browser()->window()->GetNativeWindow() childWindows];
-  EXPECT_EQ(1u, [children count]);
+  EXPECT_EQ(0u, [children count]);
 
   Widget* dialog = ShowViewsDialogOn(0, true);
   EXPECT_TRUE(dialog->IsVisible());
@@ -97,8 +96,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsModalDialogManagerViewsMacTest, Basic) {
   // The browser window will get two child windows: a transparent overlay, and
   // the views::Widget dialog. Ensure the dialog is on top.
   children = [browser()->window()->GetNativeWindow() childWindows];
-  EXPECT_EQ(3u, [children count]);
-  EXPECT_EQ(dialog->GetNativeWindow(), [children objectAtIndex:2]);
+  EXPECT_EQ(2u, [children count]);
+  EXPECT_EQ(dialog->GetNativeWindow(), [children objectAtIndex:1]);
 
   // Toolkit-views dialogs use GetWidget()->Close() to dismiss themselves.
   dialog->Close();
@@ -116,19 +115,21 @@ IN_PROC_BROWSER_TEST_F(WebContentsModalDialogManagerViewsMacTest,
   AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_LINK);
   Widget* dialog1 = ShowViewsDialogOn(1, true);
   Widget* dialog0 = ShowViewsDialogOn(0, true);
-  // On Mac, both dialogs report themselves as visible to avoid Spaces
-  // transitions when switching tabs.
-  EXPECT_TRUE(dialog0->IsVisible());
-  EXPECT_TRUE(dialog1->IsVisible());
 
-  // But the inactive, second dialog will be fully transparent.
+  // Tab 0 is active, so only |dialog0| should become visible.
+  EXPECT_TRUE(dialog0->IsVisible());
+  EXPECT_FALSE(dialog1->IsVisible());
+
+  // The inactive, second dialog will also be fully transparent.
   EXPECT_EQ(0.0, [dialog1->GetNativeWindow() alphaValue]);
   EXPECT_EQ(1.0, [dialog0->GetNativeWindow() alphaValue]);
 
-  // Activate the second tab.
+  // Activate the second tab, visibility should switch.
   browser()->tab_strip_model()->ActivateTabAt(1, true);
   EXPECT_EQ(1.0, [dialog1->GetNativeWindow() alphaValue]);
   EXPECT_EQ(0.0, [dialog0->GetNativeWindow() alphaValue]);
+  EXPECT_FALSE(dialog0->IsVisible());
+  EXPECT_TRUE(dialog1->IsVisible());
 
   // Close the background tab.
   browser()->tab_strip_model()->CloseWebContentsAt(

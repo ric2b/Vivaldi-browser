@@ -32,20 +32,23 @@
 
 #include <memory>
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "build/build_config.h"
+#include "core/dom/DocumentFragment.h"
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLHeadElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/page/Page.h"
 #include "core/page/ValidationMessageClient.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/heap/Handle.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -55,27 +58,16 @@
 
 namespace blink {
 
-class DocumentTest : public ::testing::Test {
+class DocumentTest : public PageTestBase {
  protected:
-  void SetUp() override;
-
   void TearDown() override { ThreadState::Current()->CollectAllGarbage(); }
 
-  Document& GetDocument() const { return dummy_page_holder_->GetDocument(); }
-  Page& GetPage() const { return dummy_page_holder_->GetPage(); }
-
   void SetHtmlInnerHTML(const char*);
-
- private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
 };
 
-void DocumentTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-}
-
 void DocumentTest::SetHtmlInnerHTML(const char* html_content) {
-  GetDocument().documentElement()->setInnerHTML(String::FromUTF8(html_content));
+  GetDocument().documentElement()->SetInnerHTMLFromString(
+      String::FromUTF8(html_content));
   GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
@@ -99,7 +91,7 @@ class TestSynchronousMutationObserver
           node_to_be_removed_(node_with_index.GetNode()),
           offset_(offset) {}
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) {
       visitor->Trace(node_);
       visitor->Trace(node_to_be_removed_);
     }
@@ -121,7 +113,7 @@ class TestSynchronousMutationObserver
           old_length_(old_length),
           new_length_(new_length) {}
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(node_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(node_); }
   };
 
   TestSynchronousMutationObserver(Document&);
@@ -161,7 +153,7 @@ class TestSynchronousMutationObserver
     return updated_character_data_records_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // Implement |SynchronousMutationObserver| member functions.
@@ -238,7 +230,7 @@ void TestSynchronousMutationObserver::NodeWillBeRemoved(Node& node) {
   removed_nodes_.push_back(&node);
 }
 
-DEFINE_TRACE(TestSynchronousMutationObserver) {
+void TestSynchronousMutationObserver::Trace(blink::Visitor* visitor) {
   visitor->Trace(children_changed_nodes_);
   visitor->Trace(merge_text_nodes_records_);
   visitor->Trace(move_tree_to_new_document_nodes_);
@@ -262,7 +254,7 @@ class TestDocumentShutdownObserver
     return context_destroyed_called_counter_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // Implement |DocumentShutdownObserver| member functions.
@@ -281,7 +273,7 @@ void TestDocumentShutdownObserver::ContextDestroyed(Document*) {
   ++context_destroyed_called_counter_;
 }
 
-DEFINE_TRACE(TestDocumentShutdownObserver) {
+void TestDocumentShutdownObserver::Trace(blink::Visitor* visitor) {
   DocumentShutdownObserver::Trace(visitor);
 }
 
@@ -316,7 +308,8 @@ class MockDocumentValidationMessageClient
   }
   void WillBeDestroyed() override {}
 
-  // DEFINE_INLINE_VIRTUAL_TRACE() { ValidationMessageClient::trace(visitor); }
+  // virtual void Trace(blink::Visitor* visitor) {
+  // ValidationMessageClient::trace(visitor); }
 };
 
 class MockWebApplicationCacheHost : public blink::WebApplicationCacheHost {
@@ -367,24 +360,25 @@ TEST_F(DocumentTest, DomTreeVersionForRemoval) {
 // This tests that we properly resize and re-layout pages for printing in the
 // presence of media queries effecting elements in a subtree layout boundary
 TEST_F(DocumentTest, PrintRelayout) {
-  SetHtmlInnerHTML(
-      "<style>"
-      "    div {"
-      "        width: 100px;"
-      "        height: 100px;"
-      "        overflow: hidden;"
-      "    }"
-      "    span {"
-      "        width: 50px;"
-      "        height: 50px;"
-      "    }"
-      "    @media screen {"
-      "        span {"
-      "            width: 20px;"
-      "        }"
-      "    }"
-      "</style>"
-      "<p><div><span></span></div></p>");
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+        div {
+            width: 100px;
+            height: 100px;
+            overflow: hidden;
+        }
+        span {
+            width: 50px;
+            height: 50px;
+        }
+        @media screen {
+            span {
+                width: 20px;
+            }
+        }
+    </style>
+    <p><div><span></span></div></p>
+  )HTML");
   FloatSize page_size(400, 400);
   float maximum_shrink_ratio = 1.6;
 
@@ -399,7 +393,7 @@ TEST_F(DocumentTest, PrintRelayout) {
 // specification.
 TEST_F(DocumentTest, LinkManifest) {
   // Test the default result.
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
 
   // Check that we use the first manifest with <link rel=manifest>
   HTMLLinkElement* link = HTMLLinkElement::Create(GetDocument(), false);
@@ -451,9 +445,9 @@ TEST_F(DocumentTest, LinkManifest) {
   // Check that link outside of the <head> are ignored.
   GetDocument().head()->RemoveChild(link);
   GetDocument().head()->RemoveChild(link2);
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
   GetDocument().body()->AppendChild(link);
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
   GetDocument().head()->AppendChild(link);
   GetDocument().head()->AppendChild(link2);
 
@@ -534,12 +528,13 @@ TEST_F(DocumentTest, OutgoingReferrerWithUniqueOrigin) {
 }
 
 TEST_F(DocumentTest, StyleVersion) {
-  SetHtmlInnerHTML(
-      "<style>"
-      "    .a * { color: green }"
-      "    .b .c { color: green }"
-      "</style>"
-      "<div id='x'><span class='c'></span></div>");
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+        .a * { color: green }
+        .b .c { color: green }
+    </style>
+    <div id='x'><span class='c'></span></div>
+  )HTML");
 
   Element* element = GetDocument().getElementById("x");
   EXPECT_TRUE(element);
@@ -562,7 +557,7 @@ TEST_F(DocumentTest, StyleVersion) {
 }
 
 TEST_F(DocumentTest, EnforceSandboxFlags) {
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("http://example.test");
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxNavigation;
@@ -813,8 +808,8 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
       "document.querySelector('input').reportValidity(); };");
   GetDocument().body()->AppendChild(script);
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().body()->firstChild());
-  DVLOG(0) << GetDocument().body()->outerHTML();
+      ToHTMLInputElement(GetDocument().body()->firstChild());
+  DVLOG(0) << GetDocument().body()->OuterHTMLAsString();
 
   // Sanity check.
   input->reportValidity();
@@ -831,7 +826,7 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
 }
 
 TEST_F(DocumentTest, SandboxDisablesAppCache) {
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxOrigin;
@@ -840,7 +835,7 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
-  appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
+  appcache_host->host_ = std::make_unique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
       KURL(NullURL(), "https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
@@ -850,8 +845,8 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
 }
 
 TEST_F(DocumentTest, SuboriginDisablesAppCache) {
-  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
-  RefPtr<SecurityOrigin> origin =
+  ScopedSuboriginsForTest suborigins(true);
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   Suborigin suborigin;
   suborigin.SetName("foobar");
@@ -861,7 +856,7 @@ TEST_F(DocumentTest, SuboriginDisablesAppCache) {
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
-  appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
+  appcache_host->host_ = std::make_unique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
       KURL(NullURL(), "https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
@@ -875,13 +870,14 @@ TEST_F(DocumentTest, SuboriginDisablesAppCache) {
 // as it is more expensive than just doing layout.
 TEST_F(DocumentTest,
        EnsurePaintLocationDataValidForNodeCompositingInputsOnlyWhenNecessary) {
-  GetDocument().body()->setInnerHTML(
-      "<div id='ancestor'>"
-      "  <div id='sticky' style='position:sticky;'>"
-      "    <div id='stickyChild'></div>"
-      "  </div>"
-      "  <div id='nonSticky'></div>"
-      "</div>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id='ancestor'>
+      <div id='sticky' style='position:sticky;'>
+        <div id='stickyChild'></div>
+      </div>
+      <div id='nonSticky'></div>
+    </div>
+  )HTML");
   EXPECT_EQ(DocumentLifecycle::kStyleClean,
             GetDocument().Lifecycle().GetState());
 
@@ -919,10 +915,11 @@ TEST_F(DocumentTest,
 // elements does not trigger a style recalc for viewport style propagation when
 // the computed style for another element in the document is recalculated.
 TEST_F(DocumentTest, ViewportPropagationNoRecalc) {
-  SetHtmlInnerHTML(
-      "<body style='direction:rtl'>"
-      "  <div id=recalc></div>"
-      "</body>");
+  SetHtmlInnerHTML(R"HTML(
+    <body style='direction:rtl'>
+      <div id=recalc></div>
+    </body>
+  )HTML");
 
   int old_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
 
@@ -933,6 +930,72 @@ TEST_F(DocumentTest, ViewportPropagationNoRecalc) {
   int new_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
 
   EXPECT_EQ(1, new_element_count - old_element_count);
+}
+
+typedef bool TestParamRootLayerScrolling;
+class ParameterizedDocumentTest
+    : public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
+      private ScopedRootLayerScrollingForTest,
+      public DocumentTest {
+ public:
+  ParameterizedDocumentTest() : ScopedRootLayerScrollingForTest(GetParam()) {}
+};
+
+INSTANTIATE_TEST_CASE_P(All, ParameterizedDocumentTest, ::testing::Bool());
+
+// Android does not support non-overlay top-level scrollbars.
+#if !defined(OS_ANDROID)
+TEST_P(ParameterizedDocumentTest, ElementFromPointOnScrollbar) {
+  // This test requires that scrollbars take up space.
+  ScopedOverlayScrollbarsForTest no_overlay_scrollbars(false);
+
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      body { margin: 0; }
+    </style>
+    <div id='content'>content</div>
+  )HTML");
+
+  // A hit test close to the bottom of the page without scrollbars should hit
+  // the body element.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 590), GetDocument().body());
+
+  // Add width which will cause a horizontal scrollbar.
+  auto* content = GetDocument().getElementById("content");
+  content->setAttribute("style", "width: 101%;");
+
+  // A hit test on the horizontal scrollbar should not return an element because
+  // it is outside the viewport.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 590), nullptr);
+  // A hit test above the horizontal scrollbar should hit the body element.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 580), GetDocument().body());
+}
+#endif  // defined(OS_ANDROID)
+
+TEST_P(ParameterizedDocumentTest, ElementFromPointWithPageZoom) {
+  // This test requires that scrollbars take up space.
+  ScopedOverlayScrollbarsForTest no_overlay_scrollbars(false);
+
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      body { margin: 0; }
+    </style>
+    <div id='content' style='height: 10px;'>content</div>
+  )HTML");
+
+  // A hit test on the content div should hit it.
+  auto* content = GetDocument().getElementById("content");
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 8), content);
+  // A hit test below the content div should not hit it.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 12), GetDocument().body());
+
+  // Zoom the page by 2x,
+  GetDocument().GetFrame()->SetPageZoomFactor(2);
+
+  // A hit test on the content div should hit it.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 8), content);
+  // A hit test below the content div should not hit it.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 12), GetDocument().body());
 }
 
 }  // namespace blink

@@ -46,7 +46,7 @@ class PasswordsListViewControllerTest : public ManagePasswordsControllerTest {
   }
 
   void SetUpPendingState(const autofill::PasswordForm* form) {
-    ManagePasswordsControllerTest::SetUpSavePendingState(false);
+    ManagePasswordsControllerTest::SetUpSavePendingState();
     controller_.reset([[PasswordsListViewController alloc]
         initWithModelAndForm:GetModelAndCreateIfNull()
                         form:form]);
@@ -68,7 +68,7 @@ class PasswordsListViewControllerTest : public ManagePasswordsControllerTest {
     autofill::PasswordForm form;
     form.username_value = base::SysNSStringToUTF16(kItemTestUsername);
     form.federation_origin =
-        url::Origin(GURL(base::SysNSStringToUTF16(kFederation)));
+        url::Origin::Create(GURL(base::SysNSStringToUTF16(kFederation)));
     return form;
   }
 

@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_PIPELINE_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_PIPELINE_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_PIPELINE_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_PIPELINE_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <string>
 
@@ -14,7 +17,7 @@
 #include "media/base/data_source.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
-namespace content {
+namespace media {
 
 class AVFDataBufferQueue;
 class AVFMediaDecoder;
@@ -43,9 +46,9 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   void DataBufferCapacityDepleted();
 
   void AudioBufferReady(const ReadDataCB& read_audio_data_cb,
-                        const scoped_refptr<media::DataBuffer>& buffer);
+                        const scoped_refptr<DataBuffer>& buffer);
   void VideoBufferReady(const ReadDataCB& read_video_data_cb,
-                        const scoped_refptr<media::DataBuffer>& buffer);
+                        const scoped_refptr<DataBuffer>& buffer);
 
   void SeekDone(const SeekCB& seek_cb, bool success);
 
@@ -55,13 +58,13 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   std::unique_ptr<AVFDataBufferQueue> audio_queue_;
   std::unique_ptr<AVFDataBufferQueue> video_queue_;
 
-  media::DataSource* data_source_;
+  DataSource* data_source_;
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AVFMediaPipeline> weak_ptr_factory_;
 };
 
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_PIPELINE_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_PIPELINE_H_

@@ -31,6 +31,7 @@ static const char kMaxTouchPoints[] = "maxTouchPoints";
 static const char kEmulatedMedia[] = "emulatedMedia";
 static const char kDefaultBackgroundColorOverrideRGBA[] =
     "defaultBackgroundColorOverrideRGBA";
+static const char kNavigatorPlatform[] = "navigatorPlatform";
 }
 
 InspectorEmulationAgent* InspectorEmulationAgent::Create(
@@ -62,7 +63,7 @@ void InspectorEmulationAgent::Restore() {
   String emulated_media;
   state_->getString(EmulationAgentState::kEmulatedMedia, &emulated_media);
   setEmulatedMedia(emulated_media);
-  auto rgba_value =
+  auto* rgba_value =
       state_->get(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
   if (rgba_value) {
     blink::protocol::ErrorSupport errors;
@@ -72,6 +73,10 @@ void InspectorEmulationAgent::Restore() {
           Maybe<protocol::DOM::RGBA>(std::move(rgba)));
     }
   }
+  String navigator_platform;
+  state_->getString(EmulationAgentState::kNavigatorPlatform,
+                    &navigator_platform);
+  setNavigatorOverrides(navigator_platform);
 }
 
 Response InspectorEmulationAgent::disable() {
@@ -84,6 +89,7 @@ Response InspectorEmulationAgent::disable() {
     web_local_frame_->View()->Scheduler()->RemoveVirtualTimeObserver(this);
     virtual_time_observer_registered_ = false;
   }
+  setNavigatorOverrides(String());
   return Response::OK();
 }
 
@@ -130,20 +136,27 @@ Response InspectorEmulationAgent::setCPUThrottlingRate(double throttling_rate) {
   return Response::OK();
 }
 
-Response InspectorEmulationAgent::setVirtualTimePolicy(const String& policy,
-                                                       Maybe<int> budget) {
+Response InspectorEmulationAgent::setVirtualTimePolicy(
+    const String& policy,
+    Maybe<double> budget,
+    protocol::Maybe<int> max_virtual_time_task_starvation_count,
+    double* virtual_time_base_ms) {
   if (protocol::Emulation::VirtualTimePolicyEnum::Advance == policy) {
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
-        WebViewScheduler::VirtualTimePolicy::ADVANCE);
+        WebViewScheduler::VirtualTimePolicy::kAdvance);
   } else if (protocol::Emulation::VirtualTimePolicyEnum::Pause == policy) {
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
-        WebViewScheduler::VirtualTimePolicy::PAUSE);
+        WebViewScheduler::VirtualTimePolicy::kPause);
   } else if (protocol::Emulation::VirtualTimePolicyEnum::
                  PauseIfNetworkFetchesPending == policy) {
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
-        WebViewScheduler::VirtualTimePolicy::DETERMINISTIC_LOADING);
+        WebViewScheduler::VirtualTimePolicy::kDeterministicLoading);
   }
-  web_local_frame_->View()->Scheduler()->EnableVirtualTime();
+  WTF::TimeTicks virtual_time_base_ticks(
+      web_local_frame_->View()->Scheduler()->EnableVirtualTime());
+  WTF::TimeDelta virtual_time_base_delta =
+      virtual_time_base_ticks - WTF::TimeTicks::UnixEpoch();
+  *virtual_time_base_ms = virtual_time_base_delta.InMillisecondsF();
   if (!virtual_time_observer_registered_) {
     web_local_frame_->View()->Scheduler()->AddVirtualTimeObserver(this);
     virtual_time_observer_registered_ = true;
@@ -151,24 +164,41 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(const String& policy,
 
   if (budget.isJust()) {
     WTF::TimeDelta budget_amount =
-        WTF::TimeDelta::FromMilliseconds(budget.fromJust());
+        WTF::TimeDelta::FromMillisecondsD(budget.fromJust());
     web_local_frame_->View()->Scheduler()->GrantVirtualTimeBudget(
         budget_amount,
         WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,
                   WrapWeakPersistent(this)));
   }
+  if (max_virtual_time_task_starvation_count.isJust()) {
+    web_local_frame_->View()->Scheduler()->SetMaxVirtualTimeTaskStarvationCount(
+        max_virtual_time_task_starvation_count.fromJust());
+  }
+  return Response::OK();
+}
+
+Response InspectorEmulationAgent::setNavigatorOverrides(
+    const String& platform) {
+  state_->setString(EmulationAgentState::kNavigatorPlatform, platform);
+  GetWebViewImpl()->GetPage()->GetSettings().SetNavigatorPlatformOverride(
+      platform);
   return Response::OK();
 }
 
 void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
   web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
-      WebViewScheduler::VirtualTimePolicy::PAUSE);
+      WebViewScheduler::VirtualTimePolicy::kPause);
   GetFrontend()->virtualTimeBudgetExpired();
+}
+
+void InspectorEmulationAgent::OnVirtualTimeAdvanced(
+    WTF::TimeDelta virtual_time_offset) {
+  GetFrontend()->virtualTimeAdvanced(virtual_time_offset.InMillisecondsF());
 }
 
 void InspectorEmulationAgent::OnVirtualTimePaused(
     WTF::TimeDelta virtual_time_offset) {
-  GetFrontend()->virtualTimePaused(virtual_time_offset.InMilliseconds());
+  GetFrontend()->virtualTimePaused(virtual_time_offset.InMillisecondsF());
 }
 
 Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
@@ -190,7 +220,33 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
   return Response::OK();
 }
 
-DEFINE_TRACE(InspectorEmulationAgent) {
+Response InspectorEmulationAgent::setDeviceMetricsOverride(
+    int width,
+    int height,
+    double device_scale_factor,
+    bool mobile,
+    Maybe<double> scale,
+    Maybe<int> screen_width,
+    Maybe<int> screen_height,
+    Maybe<int> position_x,
+    Maybe<int> position_y,
+    Maybe<bool> dont_set_visible_size,
+    Maybe<protocol::Emulation::ScreenOrientation>,
+    Maybe<protocol::Page::Viewport>) {
+  // We don't have to do anything other than reply to the client, as the
+  // emulation parameters should have already been updated by the handling of
+  // ViewMsg_EnableDeviceEmulation.
+  return Response::OK();
+}
+
+Response InspectorEmulationAgent::clearDeviceMetricsOverride() {
+  // We don't have to do anything other than reply to the client, as the
+  // emulation parameters should have already been cleared by the handling of
+  // ViewMsg_DisableDeviceEmulation.
+  return Response::OK();
+}
+
+void InspectorEmulationAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_local_frame_);
   InspectorBaseAgent::Trace(visitor);
 }

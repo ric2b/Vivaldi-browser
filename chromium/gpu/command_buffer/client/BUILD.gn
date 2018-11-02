@@ -44,6 +44,10 @@ source_set("client_sources") {
   sources = [
     "client_discardable_manager.cc",
     "client_discardable_manager.h",
+    "client_discardable_texture_manager.cc",
+    "client_discardable_texture_manager.h",
+    "client_transfer_cache.cc",
+    "client_transfer_cache.h",
     "cmd_buffer_helper.cc",
     "cmd_buffer_helper.h",
     "fenced_allocator.cc",
@@ -59,11 +63,7 @@ source_set("client_sources") {
     "transfer_buffer.h",
   ]
 
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-    "//gpu:gpu_implementation",
-  ]
+  configs += [ "//gpu:gpu_implementation" ]
 
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
 
@@ -72,11 +72,16 @@ source_set("client_sources") {
     "//gpu/command_buffer/common:gles2_utils",
   ]
   deps = [
+    ":gles2_interface",
     "//gpu/command_buffer/common:common_sources",
     "//gpu/ipc/common:surface_handle_type",
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
   ]
+
+  if (!is_nacl) {
+    deps += [ "//cc/paint" ]
+  }
 }
 
 source_set("gles2_cmd_helper_sources") {
@@ -87,11 +92,7 @@ source_set("gles2_cmd_helper_sources") {
     "gles2_cmd_helper_autogen.h",
   ]
 
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-    "//gpu:gpu_implementation",
-  ]
+  configs += [ "//gpu:gpu_implementation" ]
 
   deps = [
     ":client_sources",
@@ -153,9 +154,6 @@ source_set("gles2_interface") {
 component("gles2_implementation") {
   sources = gles2_implementation_source_files
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-
   defines = [ "GLES2_IMPL_IMPLEMENTATION" ]
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
 
@@ -171,6 +169,7 @@ component("gles2_implementation") {
 
   if (!is_nacl) {
     deps += [
+      "//cc/paint",
       "//ui/gfx:color_space",
       "//ui/gfx/ipc/color",
     ]
@@ -180,9 +179,6 @@ component("gles2_implementation") {
 # Library emulates GLES2 using command_buffers.
 component("gles2_implementation_no_check") {
   sources = gles2_implementation_source_files
-
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   defines = [
     "GLES2_IMPL_IMPLEMENTATION",
@@ -202,6 +198,7 @@ component("gles2_implementation_no_check") {
 
   if (!is_nacl) {
     deps += [
+      "//cc/paint",
       "//ui/gfx:color_space",
       "//ui/gfx/ipc/color",
     ]
@@ -211,9 +208,6 @@ component("gles2_implementation_no_check") {
 component("gles2_c_lib") {
   sources = gles2_c_lib_source_files
   defines = [ "GLES2_C_LIB_IMPLEMENTATION" ]
-
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
     ":client",

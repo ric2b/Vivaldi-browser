@@ -20,6 +20,7 @@ media_subcomponent_deps = [
 
   # TODO(crbug.com/583067): These files should not be in //media/base.
   "//media/base/android",
+  "//media/capabilities",
   "//media/cdm",
   "//media/device_monitors",
   "//media/filters",
@@ -62,7 +63,7 @@ declare_args() {
   enable_ac3_eac3_audio_demuxing = proprietary_codecs && is_chromecast
 
   enable_mse_mpeg2ts_stream_parser =
-      (proprietary_codecs && is_chromecast) || use_libfuzzer || use_afl
+      (proprietary_codecs && is_chromecast) || use_fuzzing_engine
 
   # Enable support for the 'cbcs' encryption scheme added by MPEG Common
   # Encryption 3rd Edition (ISO/IEC 23001-7), published 02/15/2016.
@@ -90,6 +91,9 @@ declare_args() {
   # A temporary arg for enabling MCVD while it's being implemented.
   # See http://crbug.com/660942
   enable_media_codec_video_decoder = false
+
+  # A temporary arg for enabling D3D11VideoDecoder
+  enable_d3d11_video_decoder = false
 }
 
 # enable_hls_sample_aes can only be true if enable_mse_mpeg2ts_stream_parser is.
@@ -135,15 +139,13 @@ declare_args() {
 # TODO(xhwang): Remove |enable_plugins| once pepper CDM support is removed.
 enable_library_cdms = enable_plugins && (is_linux || is_mac || is_win)
 
-# Enables host verification for CDMs.
-enable_cdm_host_verification = false
-
 declare_args() {
   # Experiment to enable mojo media services (e.g. "renderer", "cdm", see
   # |mojo_media_services|). When enabled, selected mojo paths will be enabled in
   # the media pipeline and corresponding services will hosted in the selected
   # remote process (e.g. "utility" process, see |mojo_media_host|).
-  enable_mojo_media = is_android || is_chromecast || enable_library_cdms
+  enable_mojo_media = is_android || is_chromecast || enable_library_cdms ||
+                      enable_d3d11_video_decoder
 
   # Enable the TestMojoMediaClient to be used in mojo MediaService. This is for
   # testing only and will override the default platform MojoMediaClient, if any.
@@ -156,6 +158,16 @@ declare_args() {
   # will be linked if this feature is enabled, increasing the binary size. This
   # feature does not make sense if the mojo renderer is not enabled.
   enable_runtime_media_renderer_selection = is_cast_desktop_build
+
+  # Enables host verification for CDMs.
+  # Windows and Mac.
+  enable_cdm_host_verification =
+      enable_library_cdms && (is_mac || is_win) && is_chrome_branded
+
+  # Enable Storage ID which is used by CDMs. This is only available with chrome
+  # branding, but may be overridden by other embedders.
+  enable_cdm_storage_id = enable_library_cdms && is_chrome_branded &&
+                          (is_win || is_mac || is_chromeos)
 }
 
 # This feature can only be enabled when using Mojo media. Furthermore, the
@@ -164,6 +176,9 @@ declare_args() {
 assert(
     !enable_runtime_media_renderer_selection || enable_mojo_media,
     "Runtime media renderer selection only applies when mojo media is enabled.")
+
+assert(!enable_cdm_host_verification || is_mac || is_win,
+       "CDM host verification is only supported on Mac and Windows.")
 
 # Use another declare_args() to pick up possible overrides of enable_mojo_media
 # from --args command line flags. See "gn help declare_args".
@@ -189,7 +204,8 @@ declare_args() {
 
   # Force to host the CDM service in standalone "cdm" service instead of the
   # "media" service hosted in the process specified by "mojo_media_host". Other
-  # mojo media services will not be affected.
+  # mojo media services will not be affected. If true, the "cdm" service must
+  # also be included in "mojo_media_services".
   enable_standalone_cdm_service = false
 
   # Default mojo_media_services and mojo_media_host on various platforms.
@@ -215,6 +231,18 @@ declare_args() {
     } else if (enable_library_cdms) {
       mojo_media_services = [ "cdm" ]
       enable_standalone_cdm_service = true
+    }
+
+    if (is_win) {
+      if (enable_d3d11_video_decoder) {
+        mojo_media_services += [
+          "cdm",
+          "video_decoder",
+        ]
+
+        # TODO(liberato): This is temporary.
+        mojo_media_host = "gpu"
+      }
     }
   }
 }

@@ -27,10 +27,11 @@
 #ifndef EventPath_h
 #define EventPath_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
+#include "core/dom/events/NodeEventContext.h"
 #include "core/dom/events/TreeScopeEventContext.h"
 #include "core/dom/events/WindowEventContext.h"
-#include "core/events/NodeEventContext.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Vector.h"
@@ -44,9 +45,8 @@ class TouchEvent;
 class TouchList;
 class TreeScope;
 
-class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
-  WTF_MAKE_NONCOPYABLE(EventPath);
-
+class CORE_EXPORT EventPath final
+    : public GarbageCollectedFinalized<EventPath> {
  public:
   explicit EventPath(Node&, Event* = nullptr);
 
@@ -77,7 +77,7 @@ class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
   size_t size() const { return node_event_contexts_.size(); }
 
   void AdjustForRelatedTarget(Node&, EventTarget* related_target);
-  void AdjustForTouchEvent(TouchEvent&);
+  void AdjustForTouchEvent(const TouchEvent&);
 
   bool DisabledFormControlExistsInPath() const;
 
@@ -85,7 +85,7 @@ class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
 
   static EventTarget* EventTargetRespectingTargetRules(Node&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void Clear() {
     node_event_contexts_.clear();
     tree_scope_event_contexts_.clear();
@@ -116,11 +116,9 @@ class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
                        HeapVector<Member<TouchList>> adjusted_touch_list,
                        const HeapVector<Member<TreeScope>>& tree_scopes);
 
-  using TreeScopeEventContextMap =
-      HeapHashMap<Member<TreeScope>, Member<TreeScopeEventContext>>;
+  TreeScopeEventContext* GetTreeScopeEventContext(TreeScope*);
   TreeScopeEventContext* EnsureTreeScopeEventContext(Node* current_target,
-                                                     TreeScope*,
-                                                     TreeScopeEventContextMap&);
+                                                     TreeScope*);
 
   using RelatedTargetMap = HeapHashMap<Member<TreeScope>, Member<EventTarget>>;
 
@@ -134,8 +132,9 @@ class CORE_EXPORT EventPath final : public GarbageCollected<EventPath> {
   HeapVector<NodeEventContext> node_event_contexts_;
   Member<Node> node_;
   Member<Event> event_;
-  HeapVector<Member<TreeScopeEventContext>> tree_scope_event_contexts_;
+  HeapVector<Member<TreeScopeEventContext>, 8> tree_scope_event_contexts_;
   Member<WindowEventContext> window_event_context_;
+  DISALLOW_COPY_AND_ASSIGN(EventPath);
 };
 
 }  // namespace blink

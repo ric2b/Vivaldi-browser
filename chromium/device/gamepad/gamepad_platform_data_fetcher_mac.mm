@@ -66,6 +66,9 @@ const uint32_t kGameUsageNumber = 0x05;
 const uint32_t kMultiAxisUsageNumber = 0x08;
 const uint32_t kAxisMinimumUsageNumber = 0x30;
 
+const int kVendorSteelSeries = 0x1038;
+const int kProductNimbus = 0x1420;
+
 }  // namespace
 
 GamepadPlatformDataFetcherMac::GamepadPlatformDataFetcherMac()
@@ -300,6 +303,24 @@ void GamepadPlatformDataFetcherMac::DeviceAdd(IOHIDDeviceRef device) {
   if (slot == Gamepads::kItemsLengthCap)
     return;
 
+  NSNumber* vendor_id = CFToNSCast(CFCastStrict<CFNumberRef>(
+      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey))));
+  NSNumber* product_id = CFToNSCast(CFCastStrict<CFNumberRef>(
+      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey))));
+  NSNumber* version_number = CFToNSCast(CFCastStrict<CFNumberRef>(
+      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVersionNumberKey))));
+  NSString* product = CFToNSCast(CFCastStrict<CFStringRef>(
+      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey))));
+  int vendor_int = [vendor_id intValue];
+  int product_int = [product_id intValue];
+  int version_int = [version_number intValue];
+
+  // The SteelSeries Nimbus and other Made for iOS gamepads should be handled
+  // through the GameController interface. Blacklist it here so it doesn't
+  // take up an additional gamepad slot.
+  if (vendor_int == kVendorSteelSeries && product_int == kProductNimbus)
+    return;
+
   // Clear some state that may have been left behind by previous gamepads
   memset(&associated_[slot], 0, sizeof(AssociatedData));
 
@@ -307,20 +328,12 @@ void GamepadPlatformDataFetcherMac::DeviceAdd(IOHIDDeviceRef device) {
   if (!state)
     return;  // No available slot for this device
 
-  NSNumber* vendor_id = CFToNSCast(CFCastStrict<CFNumberRef>(
-      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey))));
-  NSNumber* product_id = CFToNSCast(CFCastStrict<CFNumberRef>(
-      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey))));
-  NSString* product = CFToNSCast(CFCastStrict<CFStringRef>(
-      IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey))));
-  int vendor_int = [vendor_id intValue];
-  int product_int = [product_id intValue];
-
-  char vendor_as_str[5], product_as_str[5];
+  char vendor_as_str[5], product_as_str[5], version_as_str[5];
   snprintf(vendor_as_str, sizeof(vendor_as_str), "%04x", vendor_int);
   snprintf(product_as_str, sizeof(product_as_str), "%04x", product_int);
-  state->mapper =
-      GetGamepadStandardMappingFunction(vendor_as_str, product_as_str);
+  snprintf(version_as_str, sizeof(version_as_str), "%04x", version_int);
+  state->mapper = GetGamepadStandardMappingFunction(
+      vendor_as_str, product_as_str, version_as_str);
 
   NSString* ident =
       [NSString stringWithFormat:@"%@ (%sVendor: %04x Product: %04x)", product,
@@ -357,11 +370,10 @@ void GamepadPlatformDataFetcherMac::DeviceRemove(IOHIDDeviceRef device) {
     if (associated_[slot].device_ref == device)
       break;
   }
-  DCHECK(slot < Gamepads::kItemsLengthCap);
-  // Leave associated device_ref so that it will be reconnected in the same
-  // location. Simply mark it as disconnected.
-  associated_[slot].location_id = 0;
-  associated_[slot].device_ref = nullptr;
+  if (slot < Gamepads::kItemsLengthCap) {
+    associated_[slot].location_id = 0;
+    associated_[slot].device_ref = nullptr;
+  }
 }
 
 void GamepadPlatformDataFetcherMac::ValueChanged(IOHIDValueRef value) {

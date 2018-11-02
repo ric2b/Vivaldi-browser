@@ -4,8 +4,8 @@
 
 #include "core/css/MediaValuesDynamic.h"
 
-#include "core/css/CSSHelper.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSResolutionUnits.h"
 #include "core/css/CSSToLengthConversionData.h"
 #include "core/css/MediaValuesCached.h"
 #include "core/dom/Document.h"
@@ -146,7 +146,7 @@ bool MediaValuesDynamic::HasValues() const {
   return frame_;
 }
 
-DEFINE_TRACE(MediaValuesDynamic) {
+void MediaValuesDynamic::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   MediaValues::Trace(visitor);
 }

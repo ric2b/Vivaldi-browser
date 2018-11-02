@@ -11,6 +11,7 @@
 #include <set>
 #include <vector>
 
+#include "base/containers/stack.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
@@ -21,6 +22,7 @@
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/common/frame_messages.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -68,7 +70,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
   // Traversal 1: Assign names to current frames. This ensures that the first
   // call to the pretty-printer will result in a naming of the site instances
   // that feels natural and stable.
-  std::stack<FrameTreeNode*> to_explore;
+  base::stack<FrameTreeNode*> to_explore;
   for (to_explore.push(root); !to_explore.empty();) {
     FrameTreeNode* node = to_explore.top();
     to_explore.pop();
@@ -295,7 +297,7 @@ void NavigationStallDelegate::RequestBeginning(
     std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (request->url() == url_)
-    throttles->push_back(base::MakeUnique<HttpRequestStallThrottle>());
+    throttles->push_back(std::make_unique<HttpRequestStallThrottle>());
 }
 
 FileChooserDelegate::FileChooserDelegate(const base::FilePath& file)
@@ -350,6 +352,85 @@ void UrlCommitObserver::DidFinishNavigation(
       navigation_handle->GetFrameTreeNodeId() == frame_tree_node_id_) {
     run_loop_.Quit();
   }
+}
+
+UpdateResizeParamsMessageFilter::UpdateResizeParamsMessageFilter()
+    : content::BrowserMessageFilter(FrameMsgStart),
+      frame_rect_run_loop_(base::MakeUnique<base::RunLoop>()),
+      frame_rect_received_(false) {}
+
+void UpdateResizeParamsMessageFilter::WaitForRect() {
+  frame_rect_run_loop_->Run();
+}
+
+void UpdateResizeParamsMessageFilter::ResetRectRunLoop() {
+  last_rect_ = gfx::Rect();
+  frame_rect_run_loop_.reset(new base::RunLoop);
+  frame_rect_received_ = false;
+}
+
+viz::FrameSinkId UpdateResizeParamsMessageFilter::GetOrWaitForId() {
+  // No-opt if already quit.
+  frame_sink_id_run_loop_.Run();
+  return frame_sink_id_;
+}
+
+UpdateResizeParamsMessageFilter::~UpdateResizeParamsMessageFilter() {}
+
+void UpdateResizeParamsMessageFilter::OnUpdateResizeParams(
+    const gfx::Rect& rect,
+    const ScreenInfo& screen_info,
+    uint64_t sequence_number,
+    const viz::SurfaceId& surface_id) {
+  // Track each rect updates.
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&UpdateResizeParamsMessageFilter::OnUpdatedFrameRectOnUI,
+                     this, rect));
+
+  // Record the received value. We cannot check the current state of the child
+  // frame, as it can only be processed on the UI thread, and we cannot block
+  // here.
+  frame_sink_id_ = surface_id.frame_sink_id();
+
+  // There can be several updates before a valid viz::FrameSinkId is ready. Do
+  // not quit |run_loop_| until after we receive a valid one.
+  if (!frame_sink_id_.is_valid())
+    return;
+
+  // We can't nest on the IO thread. So tests will wait on the UI thread, so
+  // post there to exit the nesting.
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(
+                     &UpdateResizeParamsMessageFilter::OnUpdatedFrameSinkIdOnUI,
+                     this));
+}
+
+void UpdateResizeParamsMessageFilter::OnUpdatedFrameRectOnUI(
+    const gfx::Rect& rect) {
+  last_rect_ = rect;
+  if (!frame_rect_received_) {
+    frame_rect_received_ = true;
+    // Tests looking at the rect currently expect all received input to finish
+    // processing before the test continutes.
+    frame_rect_run_loop_->QuitWhenIdle();
+  }
+}
+
+void UpdateResizeParamsMessageFilter::OnUpdatedFrameSinkIdOnUI() {
+  frame_sink_id_run_loop_.Quit();
+}
+
+bool UpdateResizeParamsMessageFilter::OnMessageReceived(
+    const IPC::Message& message) {
+  IPC_BEGIN_MESSAGE_MAP(UpdateResizeParamsMessageFilter, message)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateResizeParams, OnUpdateResizeParams)
+  IPC_END_MESSAGE_MAP()
+
+  // We do not consume the message, so that we can verify the effects of it
+  // being processed.
+  return false;
 }
 
 }  // namespace content

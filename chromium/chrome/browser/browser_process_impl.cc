@@ -28,6 +28,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -53,12 +54,12 @@
 #include "chrome/browser/intranet_redirect_detector.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/switch_utils.h"
 #include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
 #include "chrome/browser/metrics/thread_watcher.h"
 #include "chrome/browser/net/chrome_net_log_helper.h"
-#include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -86,7 +87,6 @@
 #include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/switch_utils.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
@@ -96,16 +96,17 @@
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/optimization_guide/optimization_guide_service.h"
 #include "components/physical_web/data_source/physical_web_data_source.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/previews/core/previews_features.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
-#include "components/safe_json/safe_json_parser.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
@@ -116,13 +117,16 @@
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/network_connection_tracker.h"
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
@@ -143,10 +147,10 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/gcm/gcm_product_util.h"
-#include "chrome/browser/lifetime/keep_alive_registry.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -160,10 +164,6 @@
 #include "chrome/browser/ui/apps/chrome_app_window_client.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "extensions/common/extension_l10n_util.h"
-#endif
-
-#if !defined(DISABLE_NACL)
-#include "chrome/browser/component_updater/pnacl_component_installer.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -215,8 +215,7 @@ rappor::RapporService* GetBrowserRapporService() {
 }
 
 BrowserProcessImpl::BrowserProcessImpl(
-    base::SequencedTaskRunner* local_state_task_runner,
-    const base::CommandLine& command_line)
+    base::SequencedTaskRunner* local_state_task_runner)
     : created_watchdog_thread_(false),
       created_browser_policy_connector_(false),
       created_profile_manager_(false),
@@ -225,6 +224,7 @@ BrowserProcessImpl::BrowserProcessImpl(
       created_notification_bridge_(false),
       created_safe_browsing_service_(false),
       created_subresource_filter_ruleset_service_(false),
+      created_optimization_guide_service_(false),
       shutting_down_(false),
       tearing_down_(false),
       download_status_updater_(base::MakeUnique<DownloadStatusUpdater>()),
@@ -242,13 +242,6 @@ BrowserProcessImpl::BrowserProcessImpl(
 #endif
 
   net_log_ = base::MakeUnique<net_log::ChromeNetLog>();
-
-  if (command_line.HasSwitch(switches::kLogNetLog)) {
-    net_log_->StartWritingToFile(
-        command_line.GetSwitchValuePath(switches::kLogNetLog),
-        GetNetCaptureModeFromCommandLine(command_line),
-        command_line.GetCommandLineString(), chrome::GetChannelString());
-  }
 
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
@@ -279,6 +272,7 @@ BrowserProcessImpl::BrowserProcessImpl(
       ChromeUpdateQueryParamsDelegate::GetInstance());
 
 #if !defined(OS_ANDROID)
+  KeepAliveRegistry::GetInstance()->SetIsShuttingDown(false);
   KeepAliveRegistry::GetInstance()->AddObserver(this);
 #endif  // !defined(OS_ANDROID)
 }
@@ -294,8 +288,6 @@ BrowserProcessImpl::~BrowserProcessImpl() {
   KeepAliveRegistry::GetInstance()->RemoveObserver(this);
 #endif  // !defined(OS_ANDROID)
 
-  tracked_objects::ThreadData::EnsureCleanupWasCalled(4);
-
   g_browser_process = NULL;
 }
 
@@ -306,6 +298,11 @@ void BrowserProcessImpl::StartTearDown() {
   // |tearing_down_| necessary in IsShuttingDown().
   tearing_down_ = true;
   DCHECK(IsShuttingDown());
+
+#if !defined(OS_ANDROID)
+  KeepAliveRegistry::GetInstance()->SetIsShuttingDown();
+#endif  // !defined(OS_ANDROID)
+
   // We need to destroy the MetricsServicesManager, IntranetRedirectDetector,
   // NetworkTimeTracker, and SafeBrowsing ClientSideDetectionService
   // (owned by the SafeBrowsingService) before the io_thread_ gets destroyed,
@@ -564,11 +561,6 @@ rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
   return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
-ukm::UkmRecorder* BrowserProcessImpl::ukm_recorder() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return GetMetricsServicesManager()->GetUkmService();
-}
-
 IOThread* BrowserProcessImpl::io_thread() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(io_thread_.get());
@@ -580,6 +572,19 @@ BrowserProcessImpl::system_network_context_manager() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(system_network_context_manager_.get());
   return system_network_context_manager_.get();
+}
+
+content::NetworkConnectionTracker*
+BrowserProcessImpl::network_connection_tracker() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(io_thread_);
+  if (!network_connection_tracker_) {
+    network_connection_tracker_ =
+        std::make_unique<content::NetworkConnectionTracker>();
+    network_connection_tracker_->Initialize(
+        io_thread_->GetNetworkServiceOnUIThread());
+  }
+  return network_connection_tracker_.get();
 }
 
 WatchDogThread* BrowserProcessImpl::watchdog_thread() {
@@ -943,6 +948,14 @@ BrowserProcessImpl::subresource_filter_ruleset_service() {
   return subresource_filter_ruleset_service_.get();
 }
 
+optimization_guide::OptimizationGuideService*
+BrowserProcessImpl::optimization_guide_service() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!created_optimization_guide_service_)
+    CreateOptimizationGuideService();
+  return optimization_guide_service_.get();
+}
+
 #if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
 void BrowserProcessImpl::StartAutoupdateTimer() {
   autoupdate_timer_.Start(FROM_HERE,
@@ -971,25 +984,6 @@ BrowserProcessImpl::component_updater() {
           g_browser_process->local_state()));
 
   return component_updater_.get();
-}
-
-CRLSetFetcher* BrowserProcessImpl::crl_set_fetcher() {
-  if (!crl_set_fetcher_)
-    crl_set_fetcher_ = base::MakeRefCounted<CRLSetFetcher>();
-  return crl_set_fetcher_.get();
-}
-
-component_updater::PnaclComponentInstaller*
-BrowserProcessImpl::pnacl_component_installer() {
-#if !defined(DISABLE_NACL)
-  if (!pnacl_component_installer_) {
-    pnacl_component_installer_ =
-        base::MakeRefCounted<component_updater::PnaclComponentInstaller>();
-  }
-  return pnacl_component_installer_.get();
-#else
-  return nullptr;
-#endif
 }
 
 component_updater::SupervisedUserWhitelistInstaller*
@@ -1055,7 +1049,7 @@ void BrowserProcessImpl::CreateLocalState() {
   auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
 
   // Register local state preferences.
-  chrome::RegisterLocalState(pref_registry.get());
+  RegisterLocalState(pref_registry.get());
   vivaldi::RegisterLocalState(pref_registry.get());
 
   auto delegate = pref_service_factory_->CreateDelegate();
@@ -1090,13 +1084,29 @@ void BrowserProcessImpl::CreateLocalState() {
                    net::HttpNetworkSession::NORMAL_SOCKET_POOL)));
 }
 
-void BrowserProcessImpl::PreCreateThreads() {
+void BrowserProcessImpl::PreCreateThreads(
+    const base::CommandLine& command_line) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // chrome-extension:// URLs are safe to request anywhere, but may only
   // commit (including in iframes) in extension processes.
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
       extensions::kExtensionScheme, true);
 #endif
+
+  if (command_line.HasSwitch(switches::kLogNetLog)) {
+    base::FilePath log_file =
+        command_line.GetSwitchValuePath(switches::kLogNetLog);
+    if (log_file.empty()) {
+      base::FilePath user_data_dir;
+      bool success =
+          base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+      DCHECK(success);
+      log_file = user_data_dir.AppendASCII("netlog.json");
+    }
+    net_log_->StartWritingToFile(
+        log_file, GetNetCaptureModeFromCommandLine(command_line),
+        command_line.GetCommandLineString(), chrome::GetChannelString());
+  }
 
   // Must be created before the IOThread.
   // TODO(mmenke): Once IOThread class is no longer needed (not the thread
@@ -1261,6 +1271,20 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
           subresource_filter_ruleset_service_.get(), indexed_ruleset_base_dir));
 }
 
+void BrowserProcessImpl::CreateOptimizationGuideService() {
+  DCHECK(!created_optimization_guide_service_);
+  DCHECK(!optimization_guide_service_);
+  created_optimization_guide_service_ = true;
+
+  if (!base::FeatureList::IsEnabled(previews::features::kOptimizationHints))
+    return;
+
+  optimization_guide_service_ =
+      base::MakeUnique<optimization_guide::OptimizationGuideService>(
+          content::BrowserThread::GetTaskRunnerForThread(
+              content::BrowserThread::IO));
+}
+
 void BrowserProcessImpl::CreateGCMDriver() {
   DCHECK(!gcm_driver_);
 
@@ -1387,42 +1411,38 @@ void BrowserProcessImpl::Unpin() {
 // Mac is currently not supported.
 #if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
 
-bool BrowserProcessImpl::CanAutorestartForUpdate() const {
-  // Check if browser is in the background and if it needs to be restarted to
-  // apply a pending update.
+bool BrowserProcessImpl::IsRunningInBackground() const {
+  // Check if browser is in the background.
   return chrome::GetTotalBrowserCount() == 0 &&
-         KeepAliveRegistry::GetInstance()->IsKeepingAlive() &&
-         upgrade_util::IsUpdatePendingRestart();
+         KeepAliveRegistry::GetInstance()->IsKeepingAlive();
 }
-
-// Switches to add when auto-restarting Chrome.
-const char* const kSwitchesToAddOnAutorestart[] = {
-  switches::kNoStartupWindow
-};
 
 void BrowserProcessImpl::RestartBackgroundInstance() {
   base::CommandLine* old_cl = base::CommandLine::ForCurrentProcess();
-  auto new_cl = base::MakeUnique<base::CommandLine>(old_cl->GetProgram());
+  auto new_cl = std::make_unique<base::CommandLine>(old_cl->GetProgram());
 
-  std::map<std::string, base::CommandLine::StringType> switches =
-      old_cl->GetSwitches();
-
+  base::CommandLine::SwitchMap switches = old_cl->GetSwitches();
   switches::RemoveSwitchesForAutostart(&switches);
 
   // Append the rest of the switches (along with their values, if any)
   // to the new command line
   for (const auto& it : switches) {
-    base::CommandLine::StringType switch_value = it.second;
-    if (switch_value.length() > 0)
-      new_cl->AppendSwitchNative(it.first, it.second);
+    const auto& switch_name = it.first;
+    const auto& switch_value = it.second;
+    if (switch_value.empty())
+      new_cl->AppendSwitch(switch_name);
     else
-      new_cl->AppendSwitch(it.first);
+      new_cl->AppendSwitchNative(switch_name, switch_value);
   }
 
+  // Switches to add when auto-restarting Chrome.
+  static constexpr const char* kSwitchesToAddOnAutorestart[] = {
+      switches::kNoStartupWindow};
+
   // Ensure that our desired switches are set on the new process.
-  for (size_t i = 0; i < arraysize(kSwitchesToAddOnAutorestart); ++i) {
-    if (!new_cl->HasSwitch(kSwitchesToAddOnAutorestart[i]))
-      new_cl->AppendSwitch(kSwitchesToAddOnAutorestart[i]);
+  for (const char* switch_to_add : kSwitchesToAddOnAutorestart) {
+    if (!new_cl->HasSwitch(switch_to_add))
+      new_cl->AppendSwitch(switch_to_add);
   }
 
 #if defined(OS_WIN)
@@ -1432,12 +1452,28 @@ void BrowserProcessImpl::RestartBackgroundInstance() {
   DLOG(WARNING) << "Shutting down current instance of the browser.";
   chrome::AttemptExit();
 
-  // Transfer ownership to Upgrade.
   upgrade_util::SetNewCommandLine(new_cl.release());
 }
 
 void BrowserProcessImpl::OnAutoupdateTimer() {
-  if (CanAutorestartForUpdate()) {
+  if (IsRunningInBackground()) {
+    // upgrade_util::IsUpdatePendingRestart touches the disk, so do it on a
+    // suitable thread.
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::BACKGROUND,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock()},
+        base::BindOnce(&upgrade_util::IsUpdatePendingRestart),
+        base::BindOnce(&BrowserProcessImpl::OnPendingRestartResult,
+                       base::Unretained(this)));
+  }
+}
+
+void BrowserProcessImpl::OnPendingRestartResult(
+    bool is_update_pending_restart) {
+  // Make sure that the browser is still in the background after returning from
+  // the check.
+  if (is_update_pending_restart && IsRunningInBackground()) {
     DLOG(WARNING) << "Detected update.  Restarting browser.";
     RestartBackgroundInstance();
   }

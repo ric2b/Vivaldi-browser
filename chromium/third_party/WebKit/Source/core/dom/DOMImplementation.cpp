@@ -26,8 +26,6 @@
 #include "core/dom/DOMImplementation.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/MediaList.h"
 #include "core/css/StyleSheetContents.h"
@@ -41,16 +39,18 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLHeadElement.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLTitleElement.h"
 #include "core/html/HTMLViewSourceDocument.h"
 #include "core/html/ImageDocument.h"
 #include "core/html/PluginDocument.h"
 #include "core/html/TextDocument.h"
 #include "core/html/custom/V0CustomElementRegistrationContext.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/media/MediaDocument.h"
+#include "core/html_names.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
+#include "core/svg_names.h"
 #include "platform/graphics/Image.h"
 #include "platform/network/mime/ContentType.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
@@ -201,7 +201,7 @@ bool DOMImplementation::IsTextMIMEType(const String& mime_type) {
          IsJSONMIMEType(mime_type) || IsTextPlainType(mime_type);
 }
 
-HTMLDocument* DOMImplementation::createHTMLDocument(const String& title) {
+Document* DOMImplementation::createHTMLDocument(const String& title) {
   DocumentInit init =
       DocumentInit::Create()
           .WithContextDocument(document_->ContextDocument())
@@ -241,8 +241,8 @@ Document* DOMImplementation::createDocument(const String& type,
     // init.frame()->tree().top()->securityContext() returns nullptr.
     // For that reason, the origin must be retrieved directly from init.url().
     if (init.GetFrame()->IsMainFrame()) {
-      RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(init.Url());
-      plugin_data = init.GetFrame()->GetPage()->GetPluginData(origin.Get());
+      scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(init.Url());
+      plugin_data = init.GetFrame()->GetPage()->GetPluginData(origin.get());
     } else {
       plugin_data =
           init.GetFrame()->GetPage()->GetPluginData(init.GetFrame()
@@ -285,8 +285,9 @@ Document* DOMImplementation::createDocument(const String& type,
   return HTMLDocument::Create(init);
 }
 
-DEFINE_TRACE(DOMImplementation) {
+void DOMImplementation::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

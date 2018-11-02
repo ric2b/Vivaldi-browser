@@ -24,12 +24,13 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/CSSValuePool.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/dom/Document.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "platform/wtf/text/ParsingUtilities.h"
 #include "platform/wtf/text/StringToNumber.h"
 
@@ -119,12 +120,14 @@ static bool ParseFontSize(const String& input, int& size) {
 }
 
 static const CSSValueList* CreateFontFaceValueWithPool(
-    const AtomicString& string) {
+    const AtomicString& string,
+    SecureContextMode secure_context_mode) {
   CSSValuePool::FontFaceValueCache::AddResult entry =
       CssValuePool().GetFontFaceCacheEntry(string);
   if (!entry.stored_value->value) {
-    const CSSValue* parsed_value =
-        CSSParser::ParseSingleValue(CSSPropertyFontFamily, string);
+    const CSSValue* parsed_value = CSSParser::ParseSingleValue(
+        CSSPropertyFontFamily, string,
+        StrictCSSParserContext(secure_context_mode));
     if (parsed_value && parsed_value->IsValueList())
       entry.stored_value->value = ToCSSValueList(parsed_value);
   }
@@ -175,7 +178,7 @@ bool HTMLFontElement::IsPresentationAttribute(const QualifiedName& name) const {
 void HTMLFontElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == sizeAttr) {
     CSSValueID size = CSSValueInvalid;
     if (CssValueFromFontSizeNumber(value, size))
@@ -183,9 +186,11 @@ void HTMLFontElement::CollectStyleForPresentationAttribute(
   } else if (name == colorAttr) {
     AddHTMLColorToStyle(style, CSSPropertyColor, value);
   } else if (name == faceAttr && !value.IsEmpty()) {
-    if (const CSSValueList* font_face_value =
-            CreateFontFaceValueWithPool(value))
-      style->SetProperty(CSSProperty(CSSPropertyFontFamily, *font_face_value));
+    if (const CSSValueList* font_face_value = CreateFontFaceValueWithPool(
+            value, GetDocument().GetSecureContextMode())) {
+      style->SetProperty(
+          CSSPropertyValue(GetCSSPropertyFontFamily(), *font_face_value));
+    }
   } else {
     HTMLElement::CollectStyleForPresentationAttribute(name, value, style);
   }

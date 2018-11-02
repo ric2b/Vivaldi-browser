@@ -36,7 +36,7 @@ DelayProcessor::DelayProcessor(float sample_rate,
                                AudioParamHandler& delay_time,
                                double max_delay_time)
     : AudioDSPKernelProcessor(sample_rate, number_of_channels),
-      delay_time_(delay_time),
+      delay_time_(&delay_time),
       max_delay_time_(max_delay_time) {}
 
 DelayProcessor::~DelayProcessor() {
@@ -45,7 +45,7 @@ DelayProcessor::~DelayProcessor() {
 }
 
 std::unique_ptr<AudioDSPKernel> DelayProcessor::CreateKernel() {
-  return WTF::MakeUnique<DelayDSPKernel>(this);
+  return std::make_unique<DelayDSPKernel>(this);
 }
 
 void DelayProcessor::ProcessOnlyAudioParams(size_t frames_to_process) {

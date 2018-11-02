@@ -54,6 +54,7 @@ public class ViewHighlighter {
                                                      : new Drawable[] {background, pulseDrawable});
         view.setBackground(drawable);
         view.setTag(R.id.highlight_state, true);
+
         pulseDrawable.start();
     }
 

@@ -12,7 +12,7 @@ namespace blink {
 
 DeviceSingleWindowEventController::DeviceSingleWindowEventController(
     Document& document)
-    : PlatformEventController(document.GetFrame()),
+    : PlatformEventController(&document),
       needs_checking_null_events_(true),
       document_(document) {
   document.domWindow()->RegisterEventListenerObserver(this);
@@ -25,7 +25,7 @@ void DeviceSingleWindowEventController::DidUpdateData() {
 }
 
 void DeviceSingleWindowEventController::DispatchDeviceEvent(Event* event) {
-  if (!GetDocument().domWindow() || GetDocument().IsContextSuspended() ||
+  if (!GetDocument().domWindow() || GetDocument().IsContextPaused() ||
       GetDocument().IsContextDestroyed())
     return;
 
@@ -89,7 +89,7 @@ bool DeviceSingleWindowEventController::IsSameSecurityOriginAsMainFrame()
   return false;
 }
 
-DEFINE_TRACE(DeviceSingleWindowEventController) {
+void DeviceSingleWindowEventController::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   PlatformEventController::Trace(visitor);
 }

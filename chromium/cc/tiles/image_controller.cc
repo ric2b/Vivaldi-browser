@@ -22,7 +22,9 @@ ImageController::ImageController(
     scoped_refptr<base::SequencedTaskRunner> worker_task_runner)
     : worker_task_runner_(std::move(worker_task_runner)),
       origin_task_runner_(origin_task_runner),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
+}
 
 ImageController::~ImageController() {
   StopWorkerTasks();
@@ -63,6 +65,7 @@ void ImageController::StopWorkerTasks() {
   // nothing can start running between wait and this invalidate, since it would
   // only run on the current (compositor) thread.
   weak_ptr_factory_.InvalidateWeakPtrs();
+  weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
 
   // Now, begin cleanup.
 
@@ -141,23 +144,24 @@ void ImageController::SetImageDecodeCache(ImageDecodeCache* cache) {
     GenerateTasksForOrphanedRequests();
   }
 }
-
 void ImageController::GetTasksForImagesAndRef(
-    std::vector<DrawImage>* images,
+    std::vector<DrawImage>* sync_decoded_images,
+    std::vector<DrawImage>* at_raster_images,
     std::vector<scoped_refptr<TileTask>>* tasks,
     const ImageDecodeCache::TracingInfo& tracing_info) {
   DCHECK(cache_);
-  for (auto it = images->begin(); it != images->end();) {
-    scoped_refptr<TileTask> task;
-    bool need_to_unref_when_finished =
-        cache_->GetTaskForImageAndRef(*it, tracing_info, &task);
-    if (task)
-      tasks->push_back(std::move(task));
-
-    if (need_to_unref_when_finished)
+  for (auto it = sync_decoded_images->begin();
+       it != sync_decoded_images->end();) {
+    ImageDecodeCache::TaskResult result =
+        cache_->GetTaskForImageAndRef(*it, tracing_info);
+    if (result.task)
+      tasks->push_back(std::move(result.task));
+    if (at_raster_images && result.IsAtRaster())
+      at_raster_images->push_back(*it);
+    if (result.need_unref)
       ++it;
     else
-      it = images->erase(it);
+      it = sync_decoded_images->erase(it);
   }
 }
 
@@ -175,7 +179,7 @@ std::vector<scoped_refptr<TileTask>> ImageController::SetPredecodeImages(
     std::vector<DrawImage> images,
     const ImageDecodeCache::TracingInfo& tracing_info) {
   std::vector<scoped_refptr<TileTask>> new_tasks;
-  GetTasksForImagesAndRef(&images, &new_tasks, tracing_info);
+  GetTasksForImagesAndRef(&images, nullptr, &new_tasks, tracing_info);
   UnrefImages(predecode_locked_images_);
   predecode_locked_images_ = std::move(images);
   return new_tasks;
@@ -194,19 +198,16 @@ ImageController::ImageDecodeRequestId ImageController::QueueImageDecode(
   bool is_image_lazy = draw_image.paint_image().IsLazyGenerated();
 
   // Get the tasks for this decode.
-  scoped_refptr<TileTask> task;
-  bool need_unref = false;
-  if (is_image_lazy) {
-    need_unref =
-        cache_->GetOutOfRasterDecodeTaskForImageAndRef(draw_image, &task);
-  }
+  ImageDecodeCache::TaskResult result(false);
+  if (is_image_lazy)
+    result = cache_->GetOutOfRasterDecodeTaskForImageAndRef(draw_image);
   // If we don't need to unref this, we don't actually have a task.
-  DCHECK(need_unref || !task);
+  DCHECK(result.need_unref || !result.task);
 
   // Schedule the task and signal that there is more work.
   base::AutoLock hold(lock_);
-  image_decode_queue_[id] =
-      ImageDecodeRequest(id, draw_image, callback, std::move(task), need_unref);
+  image_decode_queue_[id] = ImageDecodeRequest(
+      id, draw_image, callback, std::move(result.task), result.need_unref);
 
   // If this is the only image decode request, schedule a task to run.
   // Otherwise, the task will be scheduled in the previou task's completion.
@@ -271,7 +272,7 @@ void ImageController::ProcessNextImageDecodeOnWorkerThread() {
   }
   origin_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&ImageController::ImageDecodeCompleted,
-                                weak_ptr_factory_.GetWeakPtr(), decode.id));
+                                weak_ptr_, decode.id));
 }
 
 void ImageController::ImageDecodeCompleted(ImageDecodeRequestId id) {
@@ -336,8 +337,10 @@ void ImageController::GenerateTasksForOrphanedRequests() {
     DCHECK(!request.need_unref);
     if (request.draw_image.paint_image().IsLazyGenerated()) {
       // Get the task for this decode.
-      request.need_unref = cache_->GetOutOfRasterDecodeTaskForImageAndRef(
-          request.draw_image, &request.task);
+      ImageDecodeCache::TaskResult result =
+          cache_->GetOutOfRasterDecodeTaskForImageAndRef(request.draw_image);
+      request.need_unref = result.need_unref;
+      request.task = result.task;
     }
     image_decode_queue_[request.id] = std::move(request);
   }

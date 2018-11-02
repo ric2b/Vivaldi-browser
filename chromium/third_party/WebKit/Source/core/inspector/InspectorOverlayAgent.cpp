@@ -39,7 +39,6 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Node.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
@@ -60,12 +59,13 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/PageOverlay.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/wtf/AutoReset.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebData.h"
 #include "v8/include/v8.h"
 
@@ -166,8 +166,9 @@ class InspectorOverlayAgent::InspectorPageOverlayDelegate final
 
     LocalFrameView* view = overlay_->OverlayMainFrame()->View();
     DCHECK(!view->NeedsLayout());
-    view->Paint(graphics_context,
-                CullRect(IntRect(0, 0, view->Width(), view->Height())));
+    view->PaintWithLifecycleUpdate(
+        graphics_context, kGlobalPaintNormalPhase,
+        CullRect(IntRect(0, 0, view->Width(), view->Height())));
   }
 
  private:
@@ -182,7 +183,7 @@ class InspectorOverlayAgent::InspectorOverlayChromeClient final
     return new InspectorOverlayChromeClient(client, overlay);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(client_);
     visitor->Trace(overlay_);
     EmptyChromeClient::Trace(visitor);
@@ -230,8 +231,7 @@ InspectorOverlayAgent::InspectorOverlayAgent(
       draw_view_size_(false),
       resize_timer_active_(false),
       omit_tooltip_(false),
-      timer_(TaskRunnerHelper::Get(TaskType::kUnspecedTimer,
-                                   frame_impl->GetFrame()),
+      timer_(frame_impl->GetFrame()->GetTaskRunner(TaskType::kUnspecedTimer),
              this,
              &InspectorOverlayAgent::OnTimer),
       suspended_(false),
@@ -249,7 +249,7 @@ InspectorOverlayAgent::~InspectorOverlayAgent() {
   DCHECK(!overlay_page_);
 }
 
-DEFINE_TRACE(InspectorOverlayAgent) {
+void InspectorOverlayAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_impl_);
   visitor->Trace(inspected_frames_);
   visitor->Trace(highlight_node_);
@@ -425,7 +425,7 @@ Response InspectorOverlayAgent::highlightQuad(
     std::unique_ptr<protocol::Array<double>> quad_array,
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outline_color) {
-  std::unique_ptr<FloatQuad> quad = WTF::MakeUnique<FloatQuad>();
+  std::unique_ptr<FloatQuad> quad = std::make_unique<FloatQuad>();
   if (!ParseQuad(std::move(quad_array), quad.get()))
     return Response::Error("Invalid Quad format");
   InnerHighlightQuad(std::move(quad), std::move(color),
@@ -464,7 +464,7 @@ Response InspectorOverlayAgent::highlightFrame(
   // FIXME: Inspector doesn't currently work cross process.
   if (frame && frame->DeprecatedLocalOwner()) {
     std::unique_ptr<InspectorHighlightConfig> highlight_config =
-        WTF::MakeUnique<InspectorHighlightConfig>();
+        std::make_unique<InspectorHighlightConfig>();
     highlight_config->show_info = true;  // Always show tooltips for frames.
     highlight_config->content =
         InspectorDOMAgent::ParseColor(color.fromMaybe(nullptr));
@@ -846,18 +846,16 @@ Page* InspectorOverlayAgent::OverlayPage() {
   overlay_settings.SetAcceleratedCompositingEnabled(false);
 
   LocalFrame* frame =
-      LocalFrame::Create(&dummy_local_frame_client, *overlay_page_, 0);
+      LocalFrame::Create(&dummy_local_frame_client, *overlay_page_, nullptr);
   frame->SetView(LocalFrameView::Create(*frame));
   frame->Init();
-  FrameLoader& loader = frame->Loader();
   frame->View()->SetCanHaveScrollbars(false);
   frame->View()->SetBaseBackgroundColor(Color::kTransparent);
 
   const WebData& overlay_page_html_resource =
       Platform::Current()->GetDataResource("InspectorOverlayPage.html");
-  loader.Load(FrameLoadRequest(
-      0, ResourceRequest(BlankURL()),
-      SubstituteData(overlay_page_html_resource, kForceSynchronousLoad)));
+  frame->ForceSynchronousDocumentInstall("text/html",
+                                         overlay_page_html_resource);
   v8::Isolate* isolate = ToIsolate(frame);
   ScriptState* script_state = ToScriptStateForMainWorld(frame);
   DCHECK(script_state);
@@ -924,6 +922,7 @@ void InspectorOverlayAgent::EvaluateInOverlay(const String& method,
       ->GetScriptController()
       .ExecuteScriptInMainWorld(
           "dispatch(" + command->serialize() + ")",
+          ScriptSourceLocationType::kInspector,
           ScriptController::kExecuteScriptWhenScriptsDisabled);
 }
 
@@ -938,6 +937,7 @@ void InspectorOverlayAgent::EvaluateInOverlay(
       ->GetScriptController()
       .ExecuteScriptInMainWorld(
           "dispatch(" + command->serialize() + ")",
+          ScriptSourceLocationType::kInspector,
           ScriptController::kExecuteScriptWhenScriptsDisabled);
 }
 
@@ -948,7 +948,8 @@ String InspectorOverlayAgent::EvaluateInOverlayForTest(const String& script) {
       ToLocalFrame(OverlayPage()->MainFrame())
           ->GetScriptController()
           .ExecuteScriptInMainWorldAndReturnValue(
-              ScriptSourceCode(script),
+              ScriptSourceCode(script, ScriptSourceLocationType::kInspector),
+              ScriptFetchOptions(),
               ScriptController::kExecuteScriptWhenScriptsDisabled);
   return ToCoreStringWithUndefinedOrNullCheck(string);
 }
@@ -988,7 +989,7 @@ void InspectorOverlayAgent::OverlaySteppedOver() {
 void InspectorOverlayAgent::PageLayoutInvalidated(bool resized) {
   if (resized && draw_view_size_) {
     resize_timer_active_ = true;
-    timer_.StartOneShot(1, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta::FromSeconds(1), BLINK_FROM_HERE);
   }
   ScheduleUpdate();
 }
@@ -1224,7 +1225,7 @@ Response InspectorOverlayAgent::HighlightConfigFromInspectorObject(
   protocol::Overlay::HighlightConfig* config =
       highlight_inspector_object.fromJust();
   std::unique_ptr<InspectorHighlightConfig> highlight_config =
-      WTF::MakeUnique<InspectorHighlightConfig>();
+      std::make_unique<InspectorHighlightConfig>();
   highlight_config->show_info = config->getShowInfo(false);
   highlight_config->show_rulers = config->getShowRulers(false);
   highlight_config->show_extension_lines = config->getShowExtensionLines(false);

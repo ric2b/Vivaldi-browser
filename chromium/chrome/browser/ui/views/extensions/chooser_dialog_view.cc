@@ -22,7 +22,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/window/dialog_client_view.h"
 
 ChooserDialogView::ChooserDialogView(
     std::unique_ptr<ChooserController> chooser_controller) {
@@ -44,9 +43,9 @@ ChooserDialogView::ChooserDialogView(
   DCHECK(chooser_controller);
   device_chooser_content_view_ =
       new DeviceChooserContentView(this, std::move(chooser_controller));
-  device_chooser_content_view_->SetBorder(
-      views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
-          views::INSETS_DIALOG_CONTENTS)));
+  device_chooser_content_view_->SetBorder(views::CreateEmptyBorder(
+      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+          views::CONTROL, views::CONTROL)));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::CHOOSER);
 }
 
@@ -78,7 +77,7 @@ views::View* ChooserDialogView::CreateFootnoteView() {
   if (footnote_link) {
     footnote_link->SetBorder(
         views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
-            views::INSETS_DIALOG_CONTENTS)));
+            views::INSETS_DIALOG_SUBSECTION)));
   }
   return footnote_link;
 }
@@ -111,7 +110,7 @@ const views::Widget* ChooserDialogView::GetWidget() const {
 }
 
 void ChooserDialogView::OnSelectionChanged() {
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 DeviceChooserContentView*

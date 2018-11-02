@@ -202,25 +202,18 @@ DictValue* GetSessionsDictFromStorageDict(DictValue* storage_dict,
 
 // Create origin dict with empty sessions dict. It returns the sessions dict for
 // caller to write session information.
-base::DictionaryValue* CreateOriginDictAndReturnSessionsDict(
-    base::DictionaryValue* storage_dict,
+base::Value* CreateOriginDictAndReturnSessionsDict(
+    base::Value* storage_dict,
     const std::string& origin,
     const base::UnguessableToken& origin_id) {
   DCHECK(storage_dict);
 
   // TODO(yucliu): Change to base::Value::SetKey.
   return storage_dict
-      ->SetDictionaryWithoutPathExpansion(origin,
-                                          OriginData(origin_id).ToDictValue())
-      ->SetDictionary(kSessions, base::MakeUnique<base::DictionaryValue>());
+      ->SetKey(origin, base::Value::FromUniquePtrValue(
+                           OriginData(origin_id).ToDictValue()))
+      ->SetKey(kSessions, base::Value(base::Value::Type::DICTIONARY));
 }
-
-#if DCHECK_IS_ON()
-// Returns whether |dict| has a value assocaited with the |key|.
-bool HasEntry(const base::DictionaryValue& dict, const std::string& key) {
-  return dict.GetDictionaryWithoutPathExpansion(key, nullptr);
-}
-#endif
 
 // Clear sessions whose creation time falls in [start, end] from
 // |sessions_dict|. This function also cleans corruption data and should never
@@ -363,33 +356,28 @@ std::vector<base::UnguessableToken> MediaDrmStorageImpl::ClearMatchingLicenses(
   return ClearMatchingLicenseData(update.Get(), start, end, filter);
 }
 
+// MediaDrmStorageImpl
+
 MediaDrmStorageImpl::MediaDrmStorageImpl(
     content::RenderFrameHost* render_frame_host,
     PrefService* pref_service,
-    const url::Origin& origin,
     media::mojom::MediaDrmStorageRequest request)
-    : render_frame_host_(render_frame_host),
-      pref_service_(pref_service),
-      origin_string_(origin.Serialize()),
-      binding_(this, std::move(request)) {
-  DVLOG(1) << __func__ << ": origin = " << origin;
-  DCHECK(thread_checker_.CalledOnValidThread());
+    : FrameServiceBase(render_frame_host, std::move(request)),
+      pref_service_(pref_service) {
+  DVLOG(1) << __func__ << ": origin = " << origin();
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(pref_service_);
-  DCHECK(!origin_string_.empty());
-
-  // |this| owns |binding_|, so unretained is safe.
-  binding_.set_connection_error_handler(
-      base::Bind(&MediaDrmStorageImpl::Close, base::Unretained(this)));
+  DCHECK(!origin().unique());
 }
 
 MediaDrmStorageImpl::~MediaDrmStorageImpl() {
   DVLOG(1) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
 void MediaDrmStorageImpl::Initialize(InitializeCallback callback) {
-  DVLOG(1) << __func__ << ": origin = " << origin_string_;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DVLOG(1) << __func__ << ": origin = " << origin();
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!origin_id_);
 
   const base::DictionaryValue* storage_dict =
@@ -398,7 +386,7 @@ void MediaDrmStorageImpl::Initialize(InitializeCallback callback) {
   const base::DictionaryValue* origin_dict = nullptr;
   // The origin string may contain dots. Do not use path expansion.
   bool exist = storage_dict && storage_dict->GetDictionaryWithoutPathExpansion(
-                                   origin_string_, &origin_dict);
+                                   origin().Serialize(), &origin_dict);
 
   base::UnguessableToken origin_id;
   if (exist) {
@@ -423,7 +411,7 @@ void MediaDrmStorageImpl::Initialize(InitializeCallback callback) {
 
 void MediaDrmStorageImpl::OnProvisioned(OnProvisionedCallback callback) {
   DVLOG(1) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!IsInitialized()) {
     DVLOG(1) << __func__ << ": Not initialized.";
@@ -436,11 +424,11 @@ void MediaDrmStorageImpl::OnProvisioned(OnProvisionedCallback callback) {
   DCHECK(storage_dict);
 
   // The origin string may contain dots. Do not use path expansion.
-  DVLOG_IF(1, HasEntry(*storage_dict, origin_string_))
-      << __func__ << ": Entry for origin " << origin_string_
+  DVLOG_IF(1, storage_dict->FindKey(origin().Serialize()))
+      << __func__ << ": Entry for origin " << origin()
       << " already exists and will be cleared";
 
-  CreateOriginDictAndReturnSessionsDict(storage_dict, origin_string_,
+  CreateOriginDictAndReturnSessionsDict(storage_dict, origin().Serialize(),
                                         origin_id_);
   std::move(callback).Run(true);
 }
@@ -450,7 +438,7 @@ void MediaDrmStorageImpl::SavePersistentSession(
     media::mojom::SessionDataPtr session_data,
     SavePersistentSessionCallback callback) {
   DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!IsInitialized()) {
     DVLOG(1) << __func__ << ": Not initialized.";
@@ -462,27 +450,28 @@ void MediaDrmStorageImpl::SavePersistentSession(
   base::DictionaryValue* storage_dict = update.Get();
   DCHECK(storage_dict);
 
-  base::DictionaryValue* sessions_dict =
-      GetSessionsDictFromStorageDict<base::DictionaryValue>(storage_dict,
-                                                            origin_string_);
+  base::Value* sessions_dict =
+      GetSessionsDictFromStorageDict<base::DictionaryValue>(
+          storage_dict, origin().Serialize());
 
   // This could happen if the profile is removed, but the device is still
   // provisioned for the origin. In this case, just create a new entry.
   // Since we're using random origin ID in MediaDrm, it's rare to enter the if
   // branch. Deleting the profile causes reprovisioning of the origin.
   if (!sessions_dict) {
-    DVLOG(1) << __func__ << ": No entry for origin " << origin_string_;
+    DVLOG(1) << __func__ << ": No entry for origin " << origin();
     sessions_dict = CreateOriginDictAndReturnSessionsDict(
-        storage_dict, origin_string_, origin_id_);
+        storage_dict, origin().Serialize(), origin_id_);
     DCHECK(sessions_dict);
   }
 
-  DVLOG_IF(1, HasEntry(*sessions_dict, session_id))
+  DVLOG_IF(1, sessions_dict->FindKey(session_id))
       << __func__ << ": Session ID already exists and will be replaced.";
 
-  sessions_dict->SetWithoutPathExpansion(
-      session_id, SessionData(session_data->key_set_id, session_data->mime_type)
-                      .ToDictValue());
+  sessions_dict->SetKey(session_id, base::Value::FromUniquePtrValue(
+                                        SessionData(session_data->key_set_id,
+                                                    session_data->mime_type)
+                                            .ToDictValue()));
 
   std::move(callback).Run(true);
 }
@@ -491,7 +480,7 @@ void MediaDrmStorageImpl::LoadPersistentSession(
     const std::string& session_id,
     LoadPersistentSessionCallback callback) {
   DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!IsInitialized()) {
     DVLOG(1) << __func__ << ": Not initialized.";
@@ -501,7 +490,7 @@ void MediaDrmStorageImpl::LoadPersistentSession(
 
   const base::DictionaryValue* sessions_dict =
       GetSessionsDictFromStorageDict<const base::DictionaryValue>(
-          pref_service_->GetDictionary(kMediaDrmStorage), origin_string_);
+          pref_service_->GetDictionary(kMediaDrmStorage), origin().Serialize());
   if (!sessions_dict) {
     std::move(callback).Run(nullptr);
     return;
@@ -511,7 +500,7 @@ void MediaDrmStorageImpl::LoadPersistentSession(
   if (!sessions_dict->GetDictionaryWithoutPathExpansion(session_id,
                                                         &session_dict)) {
     DVLOG(1) << __func__ << ": No session " << session_id << " for origin "
-             << origin_string_;
+             << origin();
     std::move(callback).Run(nullptr);
     return;
   }
@@ -531,7 +520,7 @@ void MediaDrmStorageImpl::RemovePersistentSession(
     const std::string& session_id,
     RemovePersistentSessionCallback callback) {
   DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!IsInitialized()) {
     DVLOG(1) << __func__ << ": Not initialized.";
@@ -542,8 +531,8 @@ void MediaDrmStorageImpl::RemovePersistentSession(
   DictionaryPrefUpdate update(pref_service_, kMediaDrmStorage);
 
   base::DictionaryValue* sessions_dict =
-      GetSessionsDictFromStorageDict<base::DictionaryValue>(update.Get(),
-                                                            origin_string_);
+      GetSessionsDictFromStorageDict<base::DictionaryValue>(
+          update.Get(), origin().Serialize());
 
   if (!sessions_dict) {
     std::move(callback).Run(true);
@@ -552,33 +541,6 @@ void MediaDrmStorageImpl::RemovePersistentSession(
 
   sessions_dict->RemoveWithoutPathExpansion(session_id, nullptr);
   std::move(callback).Run(true);
-}
-
-void MediaDrmStorageImpl::RenderFrameDeleted(
-    content::RenderFrameHost* render_frame_host) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (render_frame_host == render_frame_host_) {
-    DVLOG(1) << __func__ << ": RenderFrame destroyed.";
-    Close();
-  }
-}
-
-void MediaDrmStorageImpl::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (navigation_handle->GetRenderFrameHost() == render_frame_host_) {
-    DVLOG(1) << __func__ << ": Close connection on navigation.";
-    Close();
-  }
-}
-
-void MediaDrmStorageImpl::Close() {
-  DVLOG(1) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  delete this;
 }
 
 }  // namespace cdm

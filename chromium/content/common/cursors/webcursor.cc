@@ -4,6 +4,8 @@
 
 #include "content/common/cursors/webcursor.h"
 
+#include <algorithm>
+
 #include "base/logging.h"
 #include "base/pickle.h"
 #include "build/build_config.h"
@@ -89,9 +91,8 @@ bool WebCursor::Deserialize(base::PickleIterator* iter) {
       // The * 4 is because the expected format is an array of RGBA pixel
       // values.
       if (size_x * size_y * 4 != data_len) {
-        LOG(WARNING) << "WebCursor's data length and image size mismatch: "
-                     << size_x << "x" << size_y << "x4 != "
-                     << data_len;
+        DLOG(WARNING) << "WebCursor's data length and image size mismatch: "
+                      << size_x << "x" << size_y << "x4 != " << data_len;
         return false;
       }
 
@@ -109,25 +110,21 @@ bool WebCursor::Deserialize(base::PickleIterator* iter) {
       }
     }
   }
-  return DeserializePlatformData(iter);
+  return true;
 }
 
-bool WebCursor::Serialize(base::Pickle* pickle) const {
-  if (!pickle->WriteInt(type_) ||
-      !pickle->WriteInt(hotspot_.x()) ||
-      !pickle->WriteInt(hotspot_.y()) ||
-      !pickle->WriteInt(custom_size_.width()) ||
-      !pickle->WriteInt(custom_size_.height()) ||
-      !pickle->WriteFloat(custom_scale_))
-    return false;
+void WebCursor::Serialize(base::Pickle* pickle) const {
+  pickle->WriteInt(type_);
+  pickle->WriteInt(hotspot_.x());
+  pickle->WriteInt(hotspot_.y());
+  pickle->WriteInt(custom_size_.width());
+  pickle->WriteInt(custom_size_.height());
+  pickle->WriteFloat(custom_scale_);
 
-  const char* data = NULL;
+  const char* data = nullptr;
   if (!custom_data_.empty())
     data = &custom_data_[0];
-  if (!pickle->WriteData(data, custom_data_.size()))
-    return false;
-
-  return SerializePlatformData(pickle);
+  pickle->WriteData(data, custom_data_.size());
 }
 
 bool WebCursor::IsCustom() const {
@@ -178,7 +175,7 @@ void WebCursor::CreateCustomData(const SkBitmap& bitmap,
     return;
 
   // Fill custom_data directly with the NativeImage pixels.
-  custom_data->resize(bitmap.getSize());
+  custom_data->resize(bitmap.computeByteSize());
   if (!custom_data->empty()) {
     //This will divide color values by alpha (un-premultiply) if necessary
     SkImageInfo dstInfo = bitmap.info().makeAlphaType(kUnpremul_SkAlphaType);

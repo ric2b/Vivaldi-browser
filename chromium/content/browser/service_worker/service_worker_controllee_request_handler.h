@@ -21,6 +21,7 @@
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -46,10 +47,11 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
       base::WeakPtr<ServiceWorkerContextCore> context,
       base::WeakPtr<ServiceWorkerProviderHost> provider_host,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
-      FetchRequestMode request_mode,
-      FetchCredentialsMode credentials_mode,
+      network::mojom::FetchRequestMode request_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
       const std::string& integrity,
+      bool keepalive,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -65,9 +67,9 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
       net::NetworkDelegate* network_delegate,
       ResourceContext* resource_context) override;
 
-  // Used only for IsServicificationEnabled (PlzNavigate and
-  // --enable-network-service) cases.
-  // This will replace MaybeCreateJob() once NetworkService is enabled.
+  // S13nServiceWorker:
+  // MaybeCreateLoader replaces MaybeCreateJob() when S13nServiceWorker is
+  // enabled.
   // This could get called multiple times during the lifetime in redirect
   // cases. (In fallback-to-network cases we basically forward the request
   // to the request to the next request handler)
@@ -123,10 +125,11 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   const bool is_main_resource_load_;
   const bool is_main_frame_load_;
   std::unique_ptr<ServiceWorkerURLJobWrapper> url_job_;
-  FetchRequestMode request_mode_;
-  FetchCredentialsMode credentials_mode_;
+  network::mojom::FetchRequestMode request_mode_;
+  network::mojom::FetchCredentialsMode credentials_mode_;
   FetchRedirectMode redirect_mode_;
   std::string integrity_;
+  const bool keepalive_;
   RequestContextType request_context_type_;
   RequestContextFrameType frame_type_;
   scoped_refptr<ResourceRequestBody> body_;

@@ -17,7 +17,7 @@ scoped_refptr<TaskQueueManagerDelegateForTest>
 TaskQueueManagerDelegateForTest::Create(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     std::unique_ptr<base::TickClock> time_source) {
-  return make_scoped_refptr(
+  return base::WrapRefCounted(
       new TaskQueueManagerDelegateForTest(task_runner, std::move(time_source)));
 }
 
@@ -29,14 +29,14 @@ TaskQueueManagerDelegateForTest::TaskQueueManagerDelegateForTest(
 TaskQueueManagerDelegateForTest::~TaskQueueManagerDelegateForTest() {}
 
 bool TaskQueueManagerDelegateForTest::PostDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   return task_runner_->PostDelayedTask(from_here, std::move(task), delay);
 }
 
 bool TaskQueueManagerDelegateForTest::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   return task_runner_->PostNonNestableDelayedTask(from_here, std::move(task),

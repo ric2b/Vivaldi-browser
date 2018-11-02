@@ -27,20 +27,18 @@
 #ifndef ElementShadowV0_h
 #define ElementShadowV0_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
-#include "core/dom/SelectRuleFeatureSet.h"
+#include "core/css/SelectRuleFeatureSet.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
 class CORE_EXPORT ElementShadowV0 final
     : public GarbageCollectedFinalized<ElementShadowV0>,
       public TraceWrapperBase {
-  WTF_MAKE_NONCOPYABLE(ElementShadowV0);
-
  public:
   static ElementShadowV0* Create(ElementShadow&);
   ~ElementShadowV0();
@@ -56,8 +54,8 @@ class CORE_EXPORT ElementShadowV0 final
   void DidDistributeNode(const Node*, V0InsertionPoint*);
   void ClearDistribution();
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit ElementShadowV0(ElementShadow&);
@@ -77,6 +75,7 @@ class CORE_EXPORT ElementShadowV0 final
   NodeToDestinationInsertionPoints node_to_insertion_points_;
   SelectRuleFeatureSet select_features_;
   bool needs_select_feature_set_;
+  DISALLOW_COPY_AND_ASSIGN(ElementShadowV0);
 };
 
 }  // namespace blink

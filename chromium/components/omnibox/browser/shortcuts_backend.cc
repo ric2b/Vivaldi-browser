@@ -5,7 +5,9 @@
 #include "components/omnibox/browser/shortcuts_backend.h"
 
 #include <stddef.h>
+
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -119,6 +121,9 @@ void ShortcutsBackend::RemoveObserver(ShortcutsBackendObserver* obs) {
 
 void ShortcutsBackend::AddOrUpdateShortcut(const base::string16& text,
                                            const AutocompleteMatch& match) {
+  // TODO(crbug.com/46623): Let's think twice about saving these.
+  if (match.type == AutocompleteMatchType::TAB_SEARCH)
+    return;
   const base::string16 text_lowercase(base::i18n::ToLower(text));
   const base::Time now(base::Time::Now());
   for (ShortcutMap::const_iterator it(
@@ -225,8 +230,8 @@ void ShortcutsBackend::InitInternal() {
 void ShortcutsBackend::InitCompleted() {
   temp_guid_map_->swap(guid_map_);
   temp_shortcuts_map_->swap(shortcuts_map_);
-  temp_shortcuts_map_.reset(NULL);
-  temp_guid_map_.reset(NULL);
+  temp_shortcuts_map_.reset(nullptr);
+  temp_guid_map_.reset(nullptr);
   UMA_HISTOGRAM_COUNTS_10000("ShortcutsProvider.DatabaseSize",
                              shortcuts_map_.size());
   current_state_ = INITIALIZED;

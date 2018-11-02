@@ -7,7 +7,7 @@
 // and failures are detected.
 
 var availableTests = [
-  function removeSavedPassword() {
+  function removeAndUndoRemoveSavedPassword() {
     var numCalls = 0;
     var numSavedPasswords;
     var callback = function(savedPasswordsList) {
@@ -15,17 +15,14 @@ var availableTests = [
 
       if (numCalls == 1) {
         numSavedPasswords = savedPasswordsList.length;
-        chrome.passwordsPrivate.removeSavedPassword({
-          urls: {
-            origin: savedPasswordsList[0].loginPair.urls.origin,
-            shown: savedPasswordsList[0].loginPair.urls.shown,
-            link: savedPasswordsList[0].loginPair.urls.link,
-          },
-          username: savedPasswordsList[0].loginPair.username
-        });
+        chrome.passwordsPrivate.removeSavedPassword(
+            savedPasswordsList[0].index);
       } else if (numCalls == 2) {
         chrome.test.assertEq(
             savedPasswordsList.length, numSavedPasswords - 1);
+        chrome.passwordsPrivate.undoRemoveSavedPasswordOrException();
+      } else if (numCalls == 3) {
+        chrome.test.assertEq(savedPasswordsList.length, numSavedPasswords);
         chrome.test.succeed();
       } else {
         chrome.test.fail();
@@ -36,7 +33,7 @@ var availableTests = [
     chrome.passwordsPrivate.getSavedPasswordList(callback);
   },
 
-  function removePasswordException() {
+  function removeAndUndoRemovePasswordException() {
     var numCalls = 0;
     var numPasswordExceptions;
     var callback = function(passwordExceptionsList) {
@@ -45,10 +42,14 @@ var availableTests = [
       if (numCalls == 1) {
         numPasswordExceptions = passwordExceptionsList.length;
         chrome.passwordsPrivate.removePasswordException(
-            passwordExceptionsList[0].urls.origin);
+            passwordExceptionsList[0].index);
       } else if (numCalls == 2) {
         chrome.test.assertEq(
             passwordExceptionsList.length, numPasswordExceptions - 1);
+        chrome.passwordsPrivate.undoRemoveSavedPasswordOrException();
+      } else if (numCalls == 3) {
+        chrome.test.assertEq(
+            passwordExceptionsList.length, numPasswordExceptions);
         chrome.test.succeed();
       } else {
         chrome.test.fail();
@@ -67,14 +68,7 @@ var availableTests = [
     };
 
     chrome.passwordsPrivate.onPlaintextPasswordRetrieved.addListener(callback);
-    chrome.passwordsPrivate.requestPlaintextPassword({
-      urls: {
-        origin: 'http://www.test.com',
-        shown: 'www.test.com',
-        link: 'http://www.test.com',
-      },
-      username: 'test@test.com'
-    });
+    chrome.passwordsPrivate.requestPlaintextPassword(0);
   },
 
   function getSavedPasswordList() {
@@ -88,6 +82,7 @@ var availableTests = [
         chrome.test.assertTrue(!!entry.loginPair.urls.origin);
         chrome.test.assertTrue(!!entry.loginPair.urls.shown);
         chrome.test.assertTrue(!!entry.loginPair.urls.link);
+        chrome.test.assertEq(entry.index, i);
       }
 
       // Ensure that the callback is invoked.
@@ -107,6 +102,7 @@ var availableTests = [
         chrome.test.assertTrue(!!exception.urls.origin);
         chrome.test.assertTrue(!!exception.urls.shown);
         chrome.test.assertTrue(!!exception.urls.link);
+        chrome.test.assertEq(exception.index, i);
       }
 
       // Ensure that the callback is invoked.
@@ -114,6 +110,16 @@ var availableTests = [
     };
 
     chrome.passwordsPrivate.getPasswordExceptionList(callback);
+  },
+
+  function importPasswords() {
+    chrome.passwordsPrivate.importPasswords();
+    chrome.test.succeed();
+  },
+
+  function exportPasswords() {
+    chrome.passwordsPrivate.exportPasswords();
+    chrome.test.succeed();
   },
 ];
 

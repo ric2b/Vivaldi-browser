@@ -125,7 +125,7 @@ class RTCVideoEncoderTest
         ADD_FAILURE() << "Unexpected codec type: " << codec_type;
         media_profile = media::VIDEO_CODEC_PROFILE_UNKNOWN;
     }
-    rtc_encoder_ = base::MakeUnique<RTCVideoEncoder>(media_profile,
+    rtc_encoder_ = std::make_unique<RTCVideoEncoder>(media_profile,
                                                      mock_gpu_factories_.get());
   }
 
@@ -241,9 +241,10 @@ TEST_F(RTCVideoEncoderTest, SoftwareFallbackAfterError) {
       .WillOnce(Invoke([this](const scoped_refptr<media::VideoFrame>&, bool) {
         encoder_thread_.task_runner()->PostTask(
             FROM_HERE,
-            base::Bind(&media::VideoEncodeAccelerator::Client::NotifyError,
-                       base::Unretained(client_),
-                       media::VideoEncodeAccelerator::kPlatformFailureError));
+            base::BindOnce(
+                &media::VideoEncodeAccelerator::Client::NotifyError,
+                base::Unretained(client_),
+                media::VideoEncodeAccelerator::kPlatformFailureError));
       }));
 
   const rtc::scoped_refptr<webrtc::I420Buffer> buffer =
@@ -291,15 +292,7 @@ TEST_F(RTCVideoEncoderTest, EncodeScaledFrame) {
             rtc_encoder_->Encode(rtc_frame, nullptr, &frame_types));
 }
 
-// We cannot run this test on Android because AndroidVideoEncodeAccelerator does
-// not preserve timestamps.
-#if defined(OS_ANDROID)
-#define MAYBE_PreserveTimestamps DISABLED_PreserveTimestamps
-#else
-#define MAYBE_PreserveTimestamps PreserveTimestamps
-#endif  // defined(OS_ANDROID)
-
-TEST_F(RTCVideoEncoderTest, MAYBE_PreserveTimestamps) {
+TEST_F(RTCVideoEncoderTest, PreserveTimestamps) {
   const webrtc::VideoCodecType codec_type = webrtc::kVideoCodecVP8;
   CreateEncoder(codec_type);
   webrtc::VideoCodec codec = GetDefaultCodec();

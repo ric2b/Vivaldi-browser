@@ -98,7 +98,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // ResourceDispatcherHostImpl.
   ResourceDispatcherHostImpl(
       CreateDownloadHandlerIntercept download_handler_intercept,
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_runner,
+      bool enable_resource_scheduler);
   ResourceDispatcherHostImpl();
   ~ResourceDispatcherHostImpl() override;
 
@@ -638,6 +639,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       net::URLRequest* request,
       ResourceType resource_type,
       ResourceContext* resource_context,
+      network::mojom::FetchRequestMode fetch_request_mode,
       RequestContextType fetch_request_context_type,
       blink::WebMixedContentContextType fetch_mixed_content_context_type,
       AppCacheService* appcache_service,
@@ -694,9 +696,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void UnregisterResourceMessageDelegate(const GlobalRequestID& id,
                                          ResourceMessageDelegate* delegate);
 
-  int BuildLoadFlagsForRequest(const ResourceRequest& request_data,
-                               bool is_sync_load);
-
   // Consults the RendererSecurity policy to determine whether the
   // ResourceDispatcherHostImpl should service this request.  A request might
   // be disallowed if the renderer is not authorized to retrieve the request
@@ -722,6 +721,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Returns true if there are two or more tabs that are not network 2-quiet
   // (i.e. have at least three outstanding requests).
   bool HasRequestsFromMultipleActiveTabs();
+
+  static net::NetworkTrafficAnnotationTag GetTrafficAnnotation();
 
   LoaderMap pending_loaders_;
 
@@ -753,6 +754,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // True if the resource dispatcher host has been shut down.
   bool is_shutdown_;
+
+  const bool enable_resource_scheduler_;
 
   using BlockedLoadersList = std::vector<std::unique_ptr<ResourceLoader>>;
   using BlockedLoadersMap =

@@ -5,7 +5,7 @@
 #include "core/loader/ThreadableLoader.h"
 
 #include <memory>
-#include "core/dom/TaskRunnerHelper.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/loader/ThreadableLoadingContext.h"
@@ -28,8 +28,9 @@
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLLoadTiming.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLRequest.h"
@@ -172,7 +173,7 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
 
   void CreateLoader(ThreadableLoaderClient* client) override {
     std::unique_ptr<WaitableEvent> completion_event =
-        WTF::MakeUnique<WaitableEvent>();
+        std::make_unique<WaitableEvent>();
     worker_loading_task_runner_->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&WorkerThreadableLoaderTestHelper::WorkerCreateLoader,
@@ -184,7 +185,7 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
 
   void StartLoader(const ResourceRequest& request) override {
     std::unique_ptr<WaitableEvent> completion_event =
-        WTF::MakeUnique<WaitableEvent>();
+        std::make_unique<WaitableEvent>();
     worker_loading_task_runner_->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&WorkerThreadableLoaderTestHelper::WorkerStartLoader,
@@ -221,7 +222,7 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
     testing::RunPendingTasks();
 
     std::unique_ptr<WaitableEvent> completion_event =
-        WTF::MakeUnique<WaitableEvent>();
+        std::make_unique<WaitableEvent>();
     worker_loading_task_runner_->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&WorkerThreadableLoaderTestHelper::WorkerCallCheckpoint,
@@ -231,19 +232,19 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
   }
 
   void OnSetUp() override {
-    reporting_proxy_ = WTF::MakeUnique<WorkerReportingProxy>();
+    reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
     security_origin_ = GetDocument().GetSecurityOrigin();
     parent_frame_task_runners_ =
         ParentFrameTaskRunners::Create(dummy_page_holder_->GetFrame());
-    worker_thread_ = WTF::MakeUnique<WorkerThreadForTest>(
+    worker_thread_ = std::make_unique<WorkerThreadForTest>(
         ThreadableLoadingContext::Create(GetDocument()), *reporting_proxy_);
 
-    worker_thread_->StartWithSourceCode(security_origin_.Get(),
+    worker_thread_->StartWithSourceCode(security_origin_.get(),
                                         "//fake source code",
                                         parent_frame_task_runners_.Get());
     worker_thread_->WaitForInit();
     worker_loading_task_runner_ =
-        TaskRunnerHelper::Get(TaskType::kUnspecedLoading, worker_thread_.get());
+        worker_thread_->GetTaskRunner(TaskType::kUnspecedLoading);
   }
 
   void OnServeRequests() override { testing::RunPendingTasks(); }
@@ -296,7 +297,8 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
     DCHECK(worker_thread_->IsCurrentThread());
 
     ResourceRequest request(request_data.get());
-    request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+    request.SetFetchCredentialsMode(
+        network::mojom::FetchCredentialsMode::kOmit);
     loader_->Start(request);
     event->Signal();
   }
@@ -308,14 +310,14 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
     event->Signal();
   }
 
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<SecurityOrigin> security_origin_;
   std::unique_ptr<WorkerReportingProxy> reporting_proxy_;
   std::unique_ptr<WorkerThreadForTest> worker_thread_;
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   // Accessed cross-thread when worker thread posts tasks to the parent.
   CrossThreadPersistent<ParentFrameTaskRunners> parent_frame_task_runners_;
-  RefPtr<WebTaskRunner> worker_loading_task_runner_;
+  scoped_refptr<WebTaskRunner> worker_loading_task_runner_;
   Checkpoint checkpoint_;
   // |m_loader| must be touched only from the worker thread only.
   CrossThreadPersistent<ThreadableLoader> loader_;
@@ -336,12 +338,13 @@ class ThreadableLoaderTest
   }
 
   void StartLoader(const KURL& url,
-                   WebURLRequest::FetchRequestMode fetch_request_mode =
-                       WebURLRequest::kFetchRequestModeNoCORS) {
+                   network::mojom::FetchRequestMode fetch_request_mode =
+                       network::mojom::FetchRequestMode::kNoCORS) {
     ResourceRequest request(url);
     request.SetRequestContext(WebURLRequest::kRequestContextObject);
     request.SetFetchRequestMode(fetch_request_mode);
-    request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+    request.SetFetchCredentialsMode(
+        network::mojom::FetchCredentialsMode::kOmit);
     helper_->StartLoader(request);
   }
 
@@ -648,12 +651,16 @@ TEST_P(ThreadableLoaderTest, DidFailInStart) {
   CreateLoader();
   CallCheckpoint(1);
 
+  String error_message = String::Format(
+      "Failed to load '%s': Cross origin requests are not allowed by request "
+      "mode.",
+      ErrorURL().GetString().Utf8().data());
   EXPECT_CALL(*Client(), DidFail(ResourceError::CancelledDueToAccessCheckError(
                              ErrorURL(), ResourceRequestBlockedReason::kOther,
-                             "Cross origin requests are not supported.")));
+                             error_message)));
   EXPECT_CALL(GetCheckpoint(), Call(2));
 
-  StartLoader(ErrorURL(), WebURLRequest::kFetchRequestModeSameOrigin);
+  StartLoader(ErrorURL(), network::mojom::FetchRequestMode::kSameOrigin);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -668,7 +675,7 @@ TEST_P(ThreadableLoaderTest, CancelInDidFailInStart) {
       .WillOnce(InvokeWithoutArgs(this, &ThreadableLoaderTest::CancelLoader));
   EXPECT_CALL(GetCheckpoint(), Call(2));
 
-  StartLoader(ErrorURL(), WebURLRequest::kFetchRequestModeSameOrigin);
+  StartLoader(ErrorURL(), network::mojom::FetchRequestMode::kSameOrigin);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -683,7 +690,7 @@ TEST_P(ThreadableLoaderTest, ClearInDidFailInStart) {
       .WillOnce(InvokeWithoutArgs(this, &ThreadableLoaderTest::ClearLoader));
   EXPECT_CALL(GetCheckpoint(), Call(2));
 
-  StartLoader(ErrorURL(), WebURLRequest::kFetchRequestModeSameOrigin);
+  StartLoader(ErrorURL(), network::mojom::FetchRequestMode::kSameOrigin);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -702,7 +709,7 @@ TEST_P(ThreadableLoaderTest, DidFailAccessControlCheck) {
           "No 'Access-Control-Allow-Origin' header is present on the requested "
           "resource. Origin 'null' is therefore not allowed access.")));
 
-  StartLoader(SuccessURL(), WebURLRequest::kFetchRequestModeCORS);
+  StartLoader(SuccessURL(), network::mojom::FetchRequestMode::kCORS);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -769,7 +776,7 @@ TEST_P(ThreadableLoaderTest, DidFailRedirectCheck) {
   EXPECT_CALL(GetCheckpoint(), Call(2));
   EXPECT_CALL(*Client(), DidFailRedirectCheck());
 
-  StartLoader(RedirectLoopURL(), WebURLRequest::kFetchRequestModeCORS);
+  StartLoader(RedirectLoopURL(), network::mojom::FetchRequestMode::kCORS);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -784,7 +791,7 @@ TEST_P(ThreadableLoaderTest, CancelInDidFailRedirectCheck) {
   EXPECT_CALL(*Client(), DidFailRedirectCheck())
       .WillOnce(InvokeWithoutArgs(this, &ThreadableLoaderTest::CancelLoader));
 
-  StartLoader(RedirectLoopURL(), WebURLRequest::kFetchRequestModeCORS);
+  StartLoader(RedirectLoopURL(), network::mojom::FetchRequestMode::kCORS);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -799,7 +806,7 @@ TEST_P(ThreadableLoaderTest, ClearInDidFailRedirectCheck) {
   EXPECT_CALL(*Client(), DidFailRedirectCheck())
       .WillOnce(InvokeWithoutArgs(this, &ThreadableLoaderTest::ClearLoader));
 
-  StartLoader(RedirectLoopURL(), WebURLRequest::kFetchRequestModeCORS);
+  StartLoader(RedirectLoopURL(), network::mojom::FetchRequestMode::kCORS);
   CallCheckpoint(2);
   ServeRequests();
 }
@@ -820,7 +827,7 @@ TEST_P(ThreadableLoaderTest, GetResponseSynchronously) {
   // synchronously, but is saying that even when a response is served
   // synchronously it should not lead to a crash.
   StartLoader(KURL(NullURL(), "about:blank"),
-              WebURLRequest::kFetchRequestModeCORS);
+              network::mojom::FetchRequestMode::kCORS);
   CallCheckpoint(2);
 }
 

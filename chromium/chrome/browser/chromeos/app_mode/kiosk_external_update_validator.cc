@@ -55,7 +55,8 @@ void KioskExternalUpdateValidator::OnUnpackSuccess(
     const base::FilePath& extension_dir,
     std::unique_ptr<base::DictionaryValue> original_manifest,
     const extensions::Extension* extension,
-    const SkBitmap& install_icon) {
+    const SkBitmap& install_icon,
+    const base::Optional<int>& dnr_ruleset_checksum) {
   DCHECK(crx_file_.extension_id == extension->id());
 
   std::string minimum_browser_version;
@@ -70,7 +71,7 @@ void KioskExternalUpdateValidator::OnUnpackSuccess(
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
       base::BindOnce(
-          &KioskExternalUpdateValidatorDelegate::OnExtenalUpdateUnpackSuccess,
+          &KioskExternalUpdateValidatorDelegate::OnExternalUpdateUnpackSuccess,
           delegate_, crx_file_.extension_id, extension->VersionString(),
           minimum_browser_version, temp_dir));
 }

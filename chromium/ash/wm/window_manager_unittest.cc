@@ -41,7 +41,7 @@ class CustomEventHandler : public ui::test::TestEventHandler {
   CustomEventHandler()
       : key_result_(ui::ER_UNHANDLED), mouse_result_(ui::ER_UNHANDLED) {}
 
-  ~CustomEventHandler() override {}
+  ~CustomEventHandler() override = default;
 
   void set_key_event_handling_result(ui::EventResult result) {
     key_result_ = result;
@@ -83,7 +83,7 @@ using WindowManagerTest = AshTestBase;
 
 class NonFocusableDelegate : public aura::test::TestWindowDelegate {
  public:
-  NonFocusableDelegate() {}
+  NonFocusableDelegate() = default;
 
  private:
   bool CanFocus() override { return false; }
@@ -94,7 +94,7 @@ class NonFocusableDelegate : public aura::test::TestWindowDelegate {
 class HitTestWindowDelegate : public aura::test::TestWindowDelegate {
  public:
   HitTestWindowDelegate() : hittest_code_(HTNOWHERE) {}
-  ~HitTestWindowDelegate() override {}
+  ~HitTestWindowDelegate() override = default;
   void set_hittest_code(int hittest_code) { hittest_code_ = hittest_code; }
 
  private:
@@ -772,7 +772,7 @@ TEST_F(WindowManagerTest, UpdateCursorVisibility) {
   EXPECT_TRUE(cursor_manager->IsMouseEventsEnabled());
 }
 
-// Cursor is hidden on keypress.
+// Tests cursor visibility on key pressed event.
 TEST_F(WindowManagerTest, UpdateCursorVisibilityOnKeyEvent) {
   // TODO: mash doesn't support CursorManager. http://crbug.com/631103.
   if (Shell::GetAshConfig() == Config::MASH)
@@ -792,6 +792,14 @@ TEST_F(WindowManagerTest, UpdateCursorVisibilityOnKeyEvent) {
   // Releasing a key does does not hide the cursor and does not disable mouse
   // events.
   generator.ReleaseKey(ui::VKEY_A, ui::EF_NONE);
+  EXPECT_TRUE(cursor_manager->IsCursorVisible());
+  EXPECT_TRUE(cursor_manager->IsMouseEventsEnabled());
+  // Pressing a key with mouse button pressed does not hide the cursor and does
+  // not disable mouse events.
+  generator.PressLeftButton();
+  generator.PressKey(ui::VKEY_A, ui::EF_NONE);
+  generator.ReleaseKey(ui::VKEY_A, ui::EF_NONE);
+  generator.ReleaseLeftButton();
   EXPECT_TRUE(cursor_manager->IsCursorVisible());
   EXPECT_TRUE(cursor_manager->IsMouseEventsEnabled());
 }

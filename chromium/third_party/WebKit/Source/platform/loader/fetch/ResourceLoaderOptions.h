@@ -31,12 +31,12 @@
 #ifndef ResourceLoaderOptions_h
 #define ResourceLoaderOptions_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/CrossThreadCopier.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -99,15 +99,15 @@ struct ResourceLoaderOptions {
   RequestInitiatorContext request_initiator_context;
   SynchronousPolicy synchronous_policy;
 
-  // When set to true, the ResourceFetcher suppresses part of its CORS handling
-  // logic. Used by DocumentThreadableLoader which does CORS handling by
-  // itself.
+  // When set to kDisableCORSHandlingByResourceFetcher, the ResourceFetcher
+  // suppresses part of its CORS handling logic.
+  // Used by DocumentThreadableLoader which does CORS handling by itself.
   CORSHandlingByResourceFetcher cors_handling_by_resource_fetcher;
 
   // Corresponds to the CORS flag in the Fetch spec.
   bool cors_flag;
 
-  RefPtr<SecurityOrigin> security_origin;
+  scoped_refptr<SecurityOrigin> security_origin;
   String content_security_policy_nonce;
   IntegrityMetadataSet integrity_metadata;
   ParserDisposition parser_disposition;
@@ -162,7 +162,7 @@ struct CrossThreadResourceLoaderOptionsData {
 
   CORSHandlingByResourceFetcher cors_handling_by_resource_fetcher;
   bool cors_flag;
-  RefPtr<SecurityOrigin> security_origin;
+  scoped_refptr<SecurityOrigin> security_origin;
 
   String content_security_policy_nonce;
   IntegrityMetadataSet integrity_metadata;

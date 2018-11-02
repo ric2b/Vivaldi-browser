@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -22,6 +22,7 @@
 #include "content/browser/appcache/appcache_disk_cache.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "content/common/content_export.h"
+#include "storage/browser/quota/special_storage_policy.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -96,11 +97,11 @@ class AppCacheStorageImpl : public AppCacheStorage {
   class CommitLastAccessTimesTask;
   class UpdateEvictionTimesTask;
 
-  typedef std::deque<DatabaseTask*> DatabaseTaskQueue;
-  typedef std::map<int64_t, CacheLoadTask*> PendingCacheLoads;
-  typedef std::map<GURL, GroupLoadTask*> PendingGroupLoads;
-  typedef std::deque<std::pair<GURL, int64_t>> PendingForeignMarkings;
-  typedef std::set<StoreGroupAndCacheTask*> PendingQuotaQueries;
+  using DatabaseTaskQueue = base::circular_deque<DatabaseTask*>;
+  using PendingCacheLoads = std::map<int64_t, CacheLoadTask*>;
+  using PendingGroupLoads = std::map<GURL, GroupLoadTask*>;
+  using PendingForeignMarkings = base::circular_deque<std::pair<GURL, int64_t>>;
+  using PendingQuotaQueries = std::set<StoreGroupAndCacheTask*>;
 
   bool IsInitTaskComplete() {
     return last_cache_id_ != AppCacheStorage::kUnitializedId;
@@ -126,6 +127,11 @@ class AppCacheStorageImpl : public AppCacheStorage {
   void CallScheduleReinitialize();
   void LazilyCommitLastAccessTimes();
   void OnLazyCommitTimer();
+
+  static void ClearSessionOnlyOrigins(
+      AppCacheDatabase* database,
+      scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy,
+      bool force_keep_session_state);
 
   // Sometimes we can respond without having to query the database.
   bool FindResponseForMainRequestInGroup(
@@ -165,7 +171,7 @@ class AppCacheStorageImpl : public AppCacheStorage {
   PendingQuotaQueries pending_quota_queries_;
 
   // Structures to keep track of lazy response deletion.
-  std::deque<int64_t> deletable_response_ids_;
+  base::circular_deque<int64_t> deletable_response_ids_;
   std::vector<int64_t> deleted_response_ids_;
   bool is_response_deletion_scheduled_;
   bool did_start_deleting_responses_;
@@ -191,7 +197,7 @@ class AppCacheStorageImpl : public AppCacheStorage {
 
   // Used to short-circuit certain operations without having to schedule
   // any tasks on the background database thread.
-  std::deque<base::OnceClosure> pending_simple_tasks_;
+  base::circular_deque<base::OnceClosure> pending_simple_tasks_;
   base::WeakPtrFactory<AppCacheStorageImpl> weak_factory_;
 
   friend class content::AppCacheStorageImplTest;

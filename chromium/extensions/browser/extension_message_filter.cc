@@ -177,8 +177,7 @@ void ExtensionMessageFilter::OnExtensionAddListener(
 
   EventRouter* event_router = GetEventRouter();
   if (crx_file::id_util::IdIsValid(extension_id)) {
-    const bool is_service_worker_context =
-        worker_thread_id != kNonWorkerThreadId;
+    const bool is_service_worker_context = worker_thread_id != kMainThreadId;
     if (is_service_worker_context) {
       DCHECK(listener_or_worker_scope_url.is_valid());
       event_router->AddServiceWorkerEventListener(
@@ -210,8 +209,7 @@ void ExtensionMessageFilter::OnExtensionRemoveListener(
     return;
 
   if (crx_file::id_util::IdIsValid(extension_id)) {
-    const bool is_service_worker_context =
-        worker_thread_id != kNonWorkerThreadId;
+    const bool is_service_worker_context = worker_thread_id != kMainThreadId;
     if (is_service_worker_context) {
       DCHECK(listener_or_worker_scope_url.is_valid());
       GetEventRouter()->RemoveServiceWorkerEventListener(
@@ -275,6 +273,7 @@ void ExtensionMessageFilter::OnExtensionRemoveLazyServiceWorkerListener(
 void ExtensionMessageFilter::OnExtensionAddFilteredListener(
     const std::string& extension_id,
     const std::string& event_name,
+    base::Optional<ServiceWorkerIdentifier> sw_identifier,
     const base::DictionaryValue& filter,
     bool lazy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -286,12 +285,13 @@ void ExtensionMessageFilter::OnExtensionAddFilteredListener(
     return;
 
   GetEventRouter()->AddFilteredEventListener(event_name, process, extension_id,
-                                             filter, lazy);
+                                             sw_identifier, filter, lazy);
 }
 
 void ExtensionMessageFilter::OnExtensionRemoveFilteredListener(
     const std::string& extension_id,
     const std::string& event_name,
+    base::Optional<ServiceWorkerIdentifier> sw_identifier,
     const base::DictionaryValue& filter,
     bool lazy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -302,8 +302,8 @@ void ExtensionMessageFilter::OnExtensionRemoveFilteredListener(
   if (!process)
     return;
 
-  GetEventRouter()->RemoveFilteredEventListener(event_name, process,
-                                                extension_id, filter, lazy);
+  GetEventRouter()->RemoveFilteredEventListener(
+      event_name, process, extension_id, sw_identifier, filter, lazy);
 }
 
 void ExtensionMessageFilter::OnExtensionShouldSuspendAck(

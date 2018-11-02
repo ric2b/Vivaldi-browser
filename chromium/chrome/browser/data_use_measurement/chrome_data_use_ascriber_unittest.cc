@@ -22,8 +22,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#ifndef OS_MACOSX
-
 namespace {
 
 int kRenderProcessId = 1;
@@ -83,9 +81,9 @@ class ChromeDataUseAscriberTest : public testing::Test {
                       : content::RESOURCE_TYPE_SCRIPT,
         resource_context(), render_process_id,
         /*render_view_id=*/-1, render_frame_id, is_main_frame,
-        /*parent_is_main_frame=*/false,
         /*allow_download=*/false,
-        /*is_async=*/true, content::PREVIEWS_OFF);
+        /*is_async=*/true, content::PREVIEWS_OFF,
+        /*navigation_ui_data*/ nullptr);
     return request;
   }
 
@@ -112,10 +110,18 @@ TEST_F(ChromeDataUseAscriberTest, NoRecorderWithoutFrame) {
   ascriber()->OnBeforeUrlRequest(request.get());
   EXPECT_EQ(2u, recorders().size());
 
-  ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
   ascriber()->OnUrlRequestDestroyed(request.get());
 
+  ascriber()->ReadyToCommitMainFrameNavigation(
+      content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
+      kRenderFrameId);
+  ascriber()->DidFinishMainFrameNavigation(
+      kRenderProcessId, kRenderFrameId, GURL("http://test.com"), false,
+      kPageTransition, base::TimeTicks::Now());
   EXPECT_EQ(1u, recorders().size());
+
+  ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
+  EXPECT_EQ(0u, recorders().size());
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameShownAndHidden) {
@@ -139,6 +145,9 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameShownAndHidden) {
   EXPECT_FALSE(ascriber()->GetDataUseRecorder(*request)->is_visible());
 
   ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
+
+  ascriber()->OnUrlRequestDestroyed(request.get());
+  EXPECT_EQ(0u, recorders().size());
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameHiddenAndShown) {
@@ -162,6 +171,9 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameHiddenAndShown) {
   EXPECT_TRUE(ascriber()->GetDataUseRecorder(*request)->is_visible());
 
   ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
+
+  ascriber()->OnUrlRequestDestroyed(request.get());
+  EXPECT_EQ(0u, recorders().size());
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameHostChanged) {
@@ -189,6 +201,9 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameHostChanged) {
   ascriber()->WasShownOrHidden(kRenderProcessId + 1, kRenderFrameId + 1, true);
   ascriber()->RenderFrameDeleted(kRenderProcessId + 1, kRenderFrameId + 1, -1,
                                  -1);
+
+  ascriber()->OnUrlRequestDestroyed(request.get());
+  EXPECT_EQ(0u, recorders().size());
 }
 
 TEST_F(ChromeDataUseAscriberTest, MainFrameNavigation) {
@@ -379,9 +394,39 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
   EXPECT_EQ(100, page_load_a_recorder.data_use().total_bytes_received());
   EXPECT_EQ(200, page_load_b_recorder.data_use().total_bytes_received());
 
+  std::unique_ptr<net::URLRequest> page_load_c_mainresource =
+      CreateNewRequest("http://test_c.com", true, kRequestId + 2,
+                       kRenderProcessId, kRenderFrameId);
+  std::unique_ptr<net::URLRequest> page_load_c_subresource =
+      CreateNewRequest("http://test_c.com/subresource", false, kRequestId + 3,
+                       kRenderProcessId, kRenderFrameId);
+
+  // Third page load 'c' on the same main render frame with
+  // same_document_navigation set.
+  ascriber()->OnBeforeUrlRequest(page_load_c_mainresource.get());
+  ascriber()->DidStartMainFrameNavigation(GURL("http://test_c.com"),
+                                          kRenderProcessId, kRenderFrameId,
+                                          kNavigationHandle);
+  ascriber()->ReadyToCommitMainFrameNavigation(
+      content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
+      kRenderFrameId);
+  ascriber()->DidFinishMainFrameNavigation(
+      kRenderProcessId, kRenderFrameId, GURL("http://mobile.test_c.com"), true,
+      kPageTransition, base::TimeTicks::Now());
+
+  ascriber()->OnBeforeUrlRequest(page_load_c_subresource.get());
+  ascriber()->OnNetworkBytesReceived(page_load_c_subresource.get(), 2000);
+  ascriber()->OnNetworkBytesReceived(page_load_b_subresource.get(), 1000);
+
+  // Data usage of page load 'c' should get merged to page load 'b'.
+  EXPECT_EQ(100, page_load_a_recorder.data_use().total_bytes_received());
+  EXPECT_EQ(3200, page_load_b_recorder.data_use().total_bytes_received());
+
   ascriber()->OnUrlRequestDestroyed(page_load_a_subresource.get());
   ascriber()->OnUrlRequestDestroyed(page_load_b_subresource.get());
   ascriber()->OnUrlRequestDestroyed(page_load_b_mainresource.get());
+  ascriber()->OnUrlRequestDestroyed(page_load_c_subresource.get());
+  ascriber()->OnUrlRequestDestroyed(page_load_c_mainresource.get());
   ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
   EXPECT_EQ(0u, recorders().size());
 }
@@ -460,5 +505,3 @@ TEST_F(ChromeDataUseAscriberTest, PageLoadObserverNotified) {
 }
 
 }  // namespace data_use_measurement
-
-#endif  // OS_MACOSX

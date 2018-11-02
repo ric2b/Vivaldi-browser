@@ -95,6 +95,13 @@
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/ui_base_types.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
+#include "chrome/browser/ui/browser_command_controller.h"
+#include "ui/aura/window.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
@@ -216,6 +223,7 @@ ui::WindowShowState ConvertToWindowShowState(windows::WindowState state) {
     case windows::WINDOW_STATE_MAXIMIZED:
       return ui::SHOW_STATE_MAXIMIZED;
     case windows::WINDOW_STATE_FULLSCREEN:
+    case windows::WINDOW_STATE_LOCKED_FULLSCREEN:
       return ui::SHOW_STATE_FULLSCREEN;
     case windows::WINDOW_STATE_NONE:
       return ui::SHOW_STATE_DEFAULT;
@@ -240,6 +248,7 @@ bool IsValidStateForWindowsCreateFunction(
              !is_panel;
     case windows::WINDOW_STATE_MAXIMIZED:
     case windows::WINDOW_STATE_FULLSCREEN:
+    case windows::WINDOW_STATE_LOCKED_FULLSCREEN:
       // If maximised/fullscreen, default focused state should be focused.
       return !(create_data->focused && !*create_data->focused) && !has_bound &&
              !is_panel;
@@ -251,6 +260,28 @@ bool IsValidStateForWindowsCreateFunction(
   NOTREACHED();
   return true;
 }
+
+#if defined(OS_CHROMEOS)
+bool IsWindowTrustedPinned(ui::BaseWindow* base_window) {
+  aura::Window* window = base_window->GetNativeWindow();
+  ash::mojom::WindowPinType type = window->GetProperty(ash::kWindowPinTypeKey);
+  return type == ash::mojom::WindowPinType::TRUSTED_PINNED;
+}
+
+void SetWindowTrustedPinned(ui::BaseWindow* base_window, bool trusted_pinned) {
+  aura::Window* window = base_window->GetNativeWindow();
+  // TRUSTED_PINNED is used here because that one locks the window fullscreen
+  // without allowing the user to exit (as opposed to regular PINNED).
+  window->SetProperty(ash::kWindowPinTypeKey,
+                      trusted_pinned ? ash::mojom::WindowPinType::TRUSTED_PINNED
+                                     : ash::mojom::WindowPinType::NONE);
+}
+
+bool ExtensionHasLockedFullscreenPermission(const Extension* extension) {
+  return extension->permissions_data()->HasAPIPermission(
+      APIPermission::kLockWindowFullscreenPrivate);
+}
+#endif  // defined(OS_CHROMEOS)
 
 ui::PageTransition HistoryExtensionTransitionToUiTransition(
     extensions::api::history::TransitionType transition) {
@@ -607,6 +638,13 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   }
   create_params.initial_show_state = ui::SHOW_STATE_NORMAL;
   if (create_data && create_data->state) {
+#if defined(OS_CHROMEOS)
+    if (create_data->state == windows::WINDOW_STATE_LOCKED_FULLSCREEN &&
+        !ExtensionHasLockedFullscreenPermission(extension())) {
+      return RespondNow(
+          Error(keys::kMissingLockWindowFullscreenPrivatePermission));
+    }
+#endif
     create_params.initial_show_state =
         ConvertToWindowShowState(create_data->state);
   }
@@ -630,13 +668,12 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
                                            transition);
     navigate_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 
-    // The next 2 statements put the new contents in the same BrowsingInstance
-    // as their opener.  Note that |force_new_process_for_new_contents = false|
-    // means that new contents might still end up in a new renderer
-    // (if they open a web URL and are transferred out of an extension
-    // renderer), but even in this case the flags below ensure findability via
-    // window.open.
-    navigate_params.force_new_process_for_new_contents = false;
+    // Depending on the |setSelfAsOpener| option, we need to put the new
+    // contents in the same BrowsingInstance as their opener.  See also
+    // https://crbug.com/713888.
+    bool set_self_as_opener = create_data->set_self_as_opener &&  // present?
+                              *create_data->set_self_as_opener;  // set to true?
+    navigate_params.opener = set_self_as_opener ? render_frame_host() : nullptr;
     // NOTE(andre@vivaldi.com) : We cannot inherit the siteinstance here in
     // Vivaldi. We might end up with the same siteintance in subframes.
     if (!vivaldi::IsVivaldiRunning())
@@ -666,6 +703,16 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     chrome::NewTab(new_window);
   }
   chrome::SelectNumberedTab(new_window, 0);
+
+#if defined(OS_CHROMEOS)
+  // Lock the window fullscreen only after the new tab has been created
+  // (otherwise the tabstrip is empty).
+  if (create_data &&
+      create_data->state == windows::WINDOW_STATE_LOCKED_FULLSCREEN) {
+    SetWindowTrustedPinned(new_window->window(), true);
+    new_window->command_controller()->LockedFullscreenStateChanged();
+  }
+#endif
 
   if (focused)
     new_window->window()->Show();
@@ -703,6 +750,35 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
   // Report UMA stats to decide when to remove the deprecated "docked" windows
   // state (crbug.com/703733).
   ReportRequestedWindowState(params->update_info.state);
+
+#if defined(OS_CHROMEOS)
+  const bool is_window_trusted_pinned =
+      IsWindowTrustedPinned(controller->window());
+  // Don't allow locked fullscreen operations on a window without the proper
+  // permission (also don't allow any operations on a locked window if the
+  // extension doesn't have the permission).
+  if ((is_window_trusted_pinned ||
+       params->update_info.state == windows::WINDOW_STATE_LOCKED_FULLSCREEN) &&
+      !ExtensionHasLockedFullscreenPermission(extension())) {
+    return RespondNow(
+        Error(keys::kMissingLockWindowFullscreenPrivatePermission));
+  }
+  // state will be WINDOW_STATE_NONE if the state parameter wasn't passed from
+  // the JS side, and in that case we don't want to change the locked state.
+  if (is_window_trusted_pinned &&
+      params->update_info.state != windows::WINDOW_STATE_LOCKED_FULLSCREEN &&
+      params->update_info.state != windows::WINDOW_STATE_NONE) {
+    SetWindowTrustedPinned(controller->window(), false);
+    controller->GetBrowser()->command_controller()->
+        LockedFullscreenStateChanged();
+  } else if (!is_window_trusted_pinned &&
+             params->update_info.state ==
+                 windows::WINDOW_STATE_LOCKED_FULLSCREEN) {
+    SetWindowTrustedPinned(controller->window(), true);
+    controller->GetBrowser()->command_controller()->
+        LockedFullscreenStateChanged();
+  }
+#endif
 
   ui::WindowShowState show_state =
       ConvertToWindowShowState(params->update_info.state);
@@ -808,6 +884,14 @@ ExtensionFunction::ResponseAction WindowsRemoveFunction::Run() {
                                            &controller, &error)) {
     return RespondNow(Error(error));
   }
+
+#if defined(OS_CHROMEOS)
+  if (IsWindowTrustedPinned(controller->window()) &&
+      !ExtensionHasLockedFullscreenPermission(extension())) {
+    return RespondNow(
+        Error(keys::kMissingLockWindowFullscreenPrivatePermission));
+  }
+#endif
 
   WindowController::Reason reason;
   if (!controller->CanClose(&reason)) {
@@ -1178,7 +1262,7 @@ ExtensionFunction::ResponseAction TabsHighlightFunction::Run() {
     return RespondNow(Error(keys::kNoHighlightedTabError));
 
   selection.set_active(active_index);
-  browser->tab_strip_model()->SetSelectionFromModel(selection);
+  browser->tab_strip_model()->SetSelectionFromModel(std::move(selection));
   return RespondNow(OneArgument(
       browser->extension_window_controller()->CreateWindowValueWithTabs(
           extension())));

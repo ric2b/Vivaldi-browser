@@ -27,6 +27,19 @@ class BookmarkNode;
 @class BookmarkPromoController;
 @class BookmarkTableView;
 
+typedef NS_ENUM(NSInteger, BookmarksContextBarState) {
+  BookmarksContextBarNone,            // No state.
+  BookmarksContextBarDefault,         // No selection is possible in this state.
+  BookmarksContextBarBeginSelection,  // This is the clean start state,
+                                      // selection is possible, but nothing is
+                                      // selected yet.
+  BookmarksContextBarSingleURLSelection,       // Single URL selected state.
+  BookmarksContextBarMultipleURLSelection,     // Multiple URLs selected state.
+  BookmarksContextBarSingleFolderSelection,    // Single folder selected.
+  BookmarksContextBarMultipleFolderSelection,  // Multiple folders selected.
+  BookmarksContextBarMixedSelection,  // Multiple URL / Folders selected.
+};
+
 // BookmarkHomeViewController class extension for protected read/write
 // properties and methods for subclasses.
 @interface BookmarkHomeViewController ()
@@ -40,8 +53,8 @@ class BookmarkNode;
 // The main view showing all the bookmarks.
 @property(nonatomic, strong) BookmarkCollectionView* folderView;
 
-// The main view showing all the bookmarks. (Used only when
-// features::kBookmarkNewGeneration is enabled)
+// The main view showing all the bookmarks. (Used only when the flag
+// kBookmarkNewGeneration is enabled)
 @property(nonatomic, strong) BookmarkTableView* bookmarksTableView;
 
 // The view controller used to pick a folder in which to move the selected
@@ -57,8 +70,8 @@ class BookmarkNode;
 // The navigation bar sits on top of the main content.
 @property(nonatomic, strong) BookmarkNavigationBar* navigationBar;
 
-// The context bar at the bottom of the bookmarks. (Used only when
-// features::kBookmarkNewGeneration is enabled)
+// The context bar at the bottom of the bookmarks. (Used only when the flag
+// kBookmarkNewGeneration is enabled)
 @property(nonatomic, strong) BookmarkContextBar* contextBar;
 
 // At any point in time, there is exactly one collection view whose view is part
@@ -101,6 +114,16 @@ class BookmarkNode;
 
 // The action sheet coordinator used when trying to edit a single bookmark.
 @property(nonatomic, strong) ActionSheetCoordinator* actionSheetCoordinator;
+
+// The current state of the context bar UI.
+@property(nonatomic, assign) BookmarksContextBarState contextBarState;
+
+// When the view is first shown on the screen, this property represents the
+// cached value of the y of the content offset of the folder view. This
+// property is set to nil after it is used.
+// In the new UI, this value represents the visible row position of the cached
+// UI stack.
+@property(nonatomic, strong) NSNumber* cachedContentPosition;
 
 // This method should be called at most once in the life-cycle of the class.
 // It should be called at the soonest possible time after the view has been

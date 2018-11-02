@@ -23,7 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "CSSFontStyleRangeValue.h"
+#include "core/css/CSSFontStyleRangeValue.h"
 
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -47,7 +47,7 @@ bool CSSFontStyleRangeValue::Equals(const CSSFontStyleRangeValue& other) const {
          *oblique_values_ == *other.oblique_values_;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSFontStyleRangeValue) {
+void CSSFontStyleRangeValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(font_style_value_);
   visitor->Trace(oblique_values_);
   CSSValue::TraceAfterDispatch(visitor);

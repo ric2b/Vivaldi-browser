@@ -99,13 +99,6 @@ cr.define('settings', function() {
     setDefaultValueForContentType(contentType, defaultValue) {}
 
     /**
-     * Gets the cookie details for a particular site.
-     * @param {string} site The name of the site.
-     * @return {!Promise<!CookieList>}
-     */
-    getCookieDetails(site) {}
-
-    /**
      * Gets the default value for a site settings category.
      * @param {string} contentType The name of the category to query.
      * @return {!Promise<!DefaultContentSetting>}
@@ -201,34 +194,6 @@ cr.define('settings', function() {
     setDefaultCaptureDevice(type, defaultValue) {}
 
     /**
-     * Reloads all cookies.
-     * @return {!Promise<!CookieList>} Returns the full cookie
-     *     list.
-     */
-    reloadCookies() {}
-
-    /**
-     * Fetches all children of a given cookie.
-     * @param {string} path The path to the parent cookie.
-     * @return {!Promise<!Array<!CookieDataSummaryItem>>} Returns a cookie list
-     *     for the given path.
-     */
-    loadCookieChildren(path) {}
-
-    /**
-     * Removes a given cookie.
-     * @param {string} path The path to the parent cookie.
-     */
-    removeCookie(path) {}
-
-    /**
-     * Removes all cookies.
-     * @return {!Promise<!CookieList>} Returns the up to date
-     *     cookie list once deletion is complete (empty list).
-     */
-    removeAllCookies() {}
-
-    /**
      * observes _all_ of the the protocol handler state, which includes a list
      * that is returned through JS calls to 'setProtocolHandlers' along with
      * other state sent with the messages 'setIgnoredProtocolHandler' and
@@ -285,7 +250,7 @@ cr.define('settings', function() {
     removeUsbDevice(origin, embeddingOrigin, usbDevice) {}
 
     /**
-     * Fetches the incognito status of the current profile (whether an icognito
+     * Fetches the incognito status of the current profile (whether an incognito
      * profile exists). Returns the results via onIncognitoStatusChanged.
      */
     updateIncognitoStatus() {}
@@ -301,6 +266,14 @@ cr.define('settings', function() {
      * @param {string} host The host to remove zoom levels for.
      */
     removeZoomLevel(host) {}
+
+    // <if expr="chromeos">
+    /**
+     * Links to com.android.settings.Settings$ManageDomainUrlsActivity on ARC
+     * side, this is to manage app preferences.
+     */
+    showAndroidManageAppLinks() {}
+    // </if>
   }
 
   /**
@@ -310,11 +283,6 @@ cr.define('settings', function() {
     /** @override */
     setDefaultValueForContentType(contentType, defaultValue) {
       chrome.send('setDefaultValueForContentType', [contentType, defaultValue]);
-    }
-
-    /** @override */
-    getCookieDetails(site) {
-      return cr.sendWithPromise('getCookieDetails', site);
     }
 
     /** @override */
@@ -378,26 +346,6 @@ cr.define('settings', function() {
     }
 
     /** @override */
-    reloadCookies() {
-      return cr.sendWithPromise('reloadCookies');
-    }
-
-    /** @override */
-    loadCookieChildren(path) {
-      return cr.sendWithPromise('loadCookie', path);
-    }
-
-    /** @override */
-    removeCookie(path) {
-      chrome.send('removeCookie', [path]);
-    }
-
-    /** @override */
-    removeAllCookies() {
-      return cr.sendWithPromise('removeAllCookies');
-    }
-
-    /** @override */
     observeProtocolHandlers() {
       chrome.send('observeProtocolHandlers');
     }
@@ -446,6 +394,13 @@ cr.define('settings', function() {
     removeZoomLevel(host) {
       chrome.send('removeZoomLevel', [host]);
     }
+
+    // <if expr="chromeos">
+    /** @override */
+    showAndroidManageAppLinks() {
+      chrome.send('showAndroidManageAppLinks');
+    }
+    // </if>
   }
 
   // The singleton instance_ is replaced with a test version of this wrapper

@@ -69,7 +69,7 @@ class CORE_EXPORT ApplyStyleCommand final : public CompositeEditCommand {
         document, style, is_inline_element_to_remove_function, input_type);
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   ApplyStyleCommand(Document&,
@@ -127,7 +127,7 @@ class CORE_EXPORT ApplyStyleCommand final : public CompositeEditCommand {
                          const Position& start,
                          const Position& end,
                          EditingState*);
-  bool ElementFullySelected(HTMLElement&,
+  bool ElementFullySelected(const HTMLElement&,
                             const Position& start,
                             const Position& end) const;
 

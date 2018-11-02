@@ -43,8 +43,6 @@ class ApplicationContextImpl : public ApplicationContext {
   void OnAppEnterForeground() override;
   void OnAppEnterBackground() override;
   bool WasLastShutdownClean() override;
-  void SetIsShuttingDown() override;
-  bool IsShuttingDown() override;
   PrefService* GetLocalState() override;
   net::URLRequestContextGetter* GetSystemURLRequestContext() override;
   const std::string& GetApplicationLocale() override;
@@ -61,7 +59,6 @@ class ApplicationContextImpl : public ApplicationContext {
   gcm::GCMDriver* GetGCMDriver() override;
   component_updater::ComponentUpdateService* GetComponentUpdateService()
       override;
-  CRLSetFetcher* GetCRLSetFetcher() override;
   physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
 
  private:
@@ -83,7 +80,6 @@ class ApplicationContextImpl : public ApplicationContext {
       metrics_services_manager_;
   std::unique_ptr<gcm::GCMDriver> gcm_driver_;
   std::unique_ptr<component_updater::ComponentUpdateService> component_updater_;
-  scoped_refptr<CRLSetFetcher> crl_set_fetcher_;
   std::unique_ptr<ios::ChromeBrowserStateManager> chrome_browser_state_manager_;
   std::string application_locale_;
   std::unique_ptr<physical_web::PhysicalWebDataSource>
@@ -93,7 +89,6 @@ class ApplicationContextImpl : public ApplicationContext {
   const scoped_refptr<base::SequencedTaskRunner> local_state_task_runner_;
 
   bool was_last_shutdown_clean_;
-  bool is_shutting_down_;
 
   DISALLOW_COPY_AND_ASSIGN(ApplicationContextImpl);
 };

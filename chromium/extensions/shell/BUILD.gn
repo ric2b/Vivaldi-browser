@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/util/process_version.gni")
+import("//components/nacl/features.gni")
 import("//extensions/features/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -38,6 +39,7 @@ source_set("app_shell_lib") {
     "//components/guest_view/browser",
     "//components/guest_view/common",
     "//components/guest_view/renderer",
+    "//components/nacl/common:features",
     "//components/network_session_configurator/common",
     "//components/pref_registry",
     "//components/prefs",
@@ -48,7 +50,6 @@ source_set("app_shell_lib") {
     "//content/shell:content_shell_lib",
     "//device/base",
     "//device/bluetooth",
-    "//device/hid",
     "//extensions:extensions_resources",
     "//extensions:shell_and_test_pak",
     "//extensions/browser",
@@ -64,7 +65,7 @@ source_set("app_shell_lib") {
     "//extensions/utility",
     "//skia",
     "//third_party/WebKit/public:blink",
-    "//third_party/cld",
+    "//third_party/cld_3/src/src:cld_3",
     "//ui/base",
     "//ui/base/ime",
     "//v8",
@@ -432,7 +433,7 @@ if (is_mac) {
       "$root_out_dir/App Shell Helper.app",
     ]
     outputs = [
-      "{{bundle_root_dir}}/Frameworks/{{source_file_part}}",
+      "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}",
     ]
     public_deps = [
       ":app_shell_framework+link",

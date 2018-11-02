@@ -10,13 +10,13 @@ for more details about the presubmit API built into depot_tools.
 
 
 _EXCLUDED_PATHS = (
-    r"^breakpad[\\\/].*",
     r"^native_client_sdk[\\\/]src[\\\/]build_tools[\\\/]make_rules.py",
     r"^native_client_sdk[\\\/]src[\\\/]build_tools[\\\/]make_simple.py",
     r"^native_client_sdk[\\\/]src[\\\/]tools[\\\/].*.mk",
     r"^net[\\\/]tools[\\\/]spdyshark[\\\/].*",
     r"^skia[\\\/].*",
     r"^third_party[\\\/](WebKit|blink)[\\\/].*",
+    r"^third_party[\\\/]breakpad[\\\/].*",
     r"^v8[\\\/].*",
     r".*MakeFile$",
     r".+_autogen\.h$",
@@ -64,6 +64,25 @@ _INCLUDE_ORDER_WARNING = (
     'collation (LC_COLLATE=C) and check\nhttps://google.github.io/styleguide/'
     'cppguide.html#Names_and_Order_of_Includes')
 
+
+_BANNED_JAVA_FUNCTIONS = (
+    (
+      'StrictMode.allowThreadDiskReads()',
+      (
+       'Prefer using StrictModeContext.allowDiskReads() to using StrictMode '
+       'directly.',
+      ),
+      False,
+    ),
+    (
+      'StrictMode.allowThreadDiskWrites()',
+      (
+       'Prefer using StrictModeContext.allowDiskWrites() to using StrictMode '
+       'directly.',
+      ),
+      False,
+    ),
+)
 
 _BANNED_OBJC_FUNCTIONS = (
     (
@@ -147,6 +166,15 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
+    (
+      r'__unsafe_unretained',
+      (
+        'The use of __unsafe_unretained is almost certainly wrong, unless',
+        'when interacting with NSFastEnumeration or NSInvocation.',
+        'Please use __weak in files build with ARC, nothing otherwise.',
+      ),
+      False,
+    ),
 )
 
 
@@ -196,52 +224,6 @@ _BANNED_CPP_FUNCTIONS = (
         r"^gpu[\\\/]ipc[\\\/]service[\\\/]gpu_watchdog_thread\.cc$",
         r"^remoting[\\\/]host[\\\/]linux[\\\/]x_server_clipboard\.cc$",
         r"^ui[\\\/]gfx[\\\/]x[\\\/]x11_atom_cache\.cc$",
-      ),
-    ),
-    (
-      'ScopedAllowIO',
-      (
-       'New production code should not use ScopedAllowIO (using it in',
-       'tests is fine). Post a task to a MayBlock task runner instead.',
-      ),
-      True,
-      (
-        r"^.*(browser|unit)(|_)test[a-z_]*\.cc$",
-        r"^base[\\\/]memory[\\\/]shared_memory_posix\.cc$",
-        r"^base[\\\/]process[\\\/]internal_aix\.cc$",
-        r"^base[\\\/]process[\\\/]process_linux\.cc$",
-        r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
-        r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
-        r"^chrome[\\\/]browser[\\\/]extensions[\\\/]" +
-            r"chrome_test_extension_loader.cc$",
-        r"^chrome[\\\/]browser[\\\/]lifetime[\\\/]application_lifetime\.cc$",
-        r"^components[\\\/]crash[\\\/]app[\\\/]breakpad_mac\.mm$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]layout_test[\\\/]" +
-            r"test_info_extractor\.cc$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]shell_browser_main\.cc$",
-        r"^content[\\\/]shell[\\\/]browser[\\\/]shell_message_filter\.cc$",
-        r"^content[\\\/]test[\\\/]ppapi[\\\/]ppapi_test\.cc$",
-        r"^media[\\\/]cast[\\\/]test[\\\/]utility[\\\/]" +
-            r"standalone_cast_environment\.cc$",
-        r"^mojo[\\\/]edk[\\\/]embedder[\\\/]" +
-            r"simple_platform_shared_buffer_posix\.cc$",
-        r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
-        r"^net[\\\/]cert[\\\/]test_root_certs\.cc$",
-        r"^net[\\\/]test[\\\/]embedded_test_server[\\\/]" +
-            r"embedded_test_server\.cc$",
-        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]local_test_server\.cc$",
-        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]" +
-            r"remote_test_server_config\.cc$",
-        r"^net[\\\/]test[\\\/]test_data_directory\.cc$",
-        r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
-        r"^remoting[\\\/]protocol[\\\/]webrtc_transport\.cc$",
-        r"^ui[\\\/]base[\\\/]material_design[\\\/]"
-            "material_design_controller\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_mac\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_win\.cc$",
-        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_x11\.cc$",
-        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager\.cc$",
       ),
     ),
     (
@@ -334,16 +316,6 @@ _BANNED_CPP_FUNCTIONS = (
       (),
     ),
     (
-      r'/(WebThread|BrowserThread)::GetBlockingPool',
-      (
-        'Use base/task_scheduler/post_task.h instead of the blocking pool. See',
-        'mapping between both APIs in content/public/browser/browser_thread.h.',
-        'For questions, contact base/task_scheduler/OWNERS.',
-      ),
-      True,
-      (),
-    ),
-    (
       r'/(WebThread|BrowserThread)::(FILE|FILE_USER_BLOCKING|DB|CACHE)',
       (
         'The non-UI/IO BrowserThreads are deprecated, please migrate this',
@@ -411,6 +383,17 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
+      'leveldb::NewMemEnv',
+      (
+        'Instead of leveldb::NewMemEnv() use leveldb_chrome::NewMemEnv() from',
+        'third_party/leveldatabase/leveldb_chrome.h.',
+      ),
+      True,
+      (
+        r'^third_party/leveldatabase/.*\.(cc|h)$',
+      ),
+    ),
+    (
       'MessageLoop::QuitWhenIdleClosure',
       (
         'MessageLoop::QuitWhenIdleClosure is deprecated. Please migrate to',
@@ -444,7 +427,43 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       True,
       (),
-    )
+    ),
+    (
+      (r'/base::ThreadRestrictions::(ScopedAllowIO|AssertIOAllowed|'
+       r'DisallowWaiting|AssertWaitAllowed|SetWaitAllowed|ScopedAllowWait)'),
+      (
+        'Use the new API in base/threading/thread_restrictions.h.',
+      ),
+      True,
+      (),
+    ),
+    (
+      r'/\bbase::Bind\(',
+      (
+          'Please consider using base::Bind{Once,Repeating} instead '
+          'of base::Bind. (crbug/714018)',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'/\bbase::Callback<',
+      (
+          'Please consider using base::{Once,Repeating}Callback instead '
+          'of base::Callback. (crbug/714018)',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'/\bbase::Closure\b',
+      (
+          'Please consider using base::{Once,Repeating}Closure instead '
+          'of base::Closure. (crbug/714018)',
+      ),
+      False,
+      (),
+    ),
 )
 
 
@@ -452,12 +471,17 @@ _IPC_ENUM_TRAITS_DEPRECATED = (
     'You are using IPC_ENUM_TRAITS() in your code. It has been deprecated.\n'
     'See http://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc')
 
+_JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS = [
+    r".*[\\\/]BuildHooksAndroidImpl\.java",
+    r".*[\\\/]LicenseContentProvider\.java",
+]
 
 # These paths contain test data and other known invalid JSON files.
 _KNOWN_INVALID_JSON_FILE_PATTERNS = [
     r'test[\\\/]data[\\\/]',
     r'^components[\\\/]policy[\\\/]resources[\\\/]policy_templates\.json$',
     r'^third_party[\\\/]protobuf[\\\/]',
+    r'^third_party[\\\/]WebKit[\\\/]LayoutTests[\\\/]external[\\\/]wpt[\\\/]',
 ]
 
 
@@ -765,6 +789,12 @@ def _CheckNoBannedFunctions(input_api, output_api):
       for message_line in message:
         problems.append('      %s' % message_line)
 
+  file_filter = lambda f: f.LocalPath().endswith(('.java'))
+  for f in input_api.AffectedFiles(file_filter=file_filter):
+    for line_num, line in f.ChangedContents():
+      for func_name, message, error in _BANNED_JAVA_FUNCTIONS:
+        CheckForMatch(f, line_num, line, func_name, message, error)
+
   file_filter = lambda f: f.LocalPath().endswith(('.mm', '.m', '.h'))
   for f in input_api.AffectedFiles(file_filter=file_filter):
     for line_num, line in f.ChangedContents():
@@ -843,6 +873,7 @@ def _CheckUnwantedDependencies(input_api, output_api):
         input_api.PresubmitLocalPath(), 'buildtools', 'checkdeps')]
     import checkdeps
     from cpp_checker import CppChecker
+    from java_checker import JavaChecker
     from proto_checker import ProtoChecker
     from rules import Rule
   finally:
@@ -851,13 +882,17 @@ def _CheckUnwantedDependencies(input_api, output_api):
 
   added_includes = []
   added_imports = []
+  added_java_imports = []
   for f in input_api.AffectedFiles():
     if CppChecker.IsCppFile(f.LocalPath()):
       changed_lines = [line for line_num, line in f.ChangedContents()]
-      added_includes.append([f.LocalPath(), changed_lines])
+      added_includes.append([f.AbsoluteLocalPath(), changed_lines])
     elif ProtoChecker.IsProtoFile(f.LocalPath()):
       changed_lines = [line for line_num, line in f.ChangedContents()]
-      added_imports.append([f.LocalPath(), changed_lines])
+      added_imports.append([f.AbsoluteLocalPath(), changed_lines])
+    elif JavaChecker.IsJavaFile(f.LocalPath()):
+      changed_lines = [line for line_num, line in f.ChangedContents()]
+      added_java_imports.append([f.AbsoluteLocalPath(), changed_lines])
 
   deps_checker = checkdeps.DepsChecker(input_api.PresubmitLocalPath())
 
@@ -867,6 +902,7 @@ def _CheckUnwantedDependencies(input_api, output_api):
   warning_subjects = set()
   for path, rule_type, rule_description in deps_checker.CheckAddedCppIncludes(
       added_includes):
+    path = input_api.os_path.relpath(path, input_api.PresubmitLocalPath())
     description_with_path = '%s\n    %s' % (path, rule_description)
     if rule_type == Rule.DISALLOW:
       error_descriptions.append(description_with_path)
@@ -877,6 +913,18 @@ def _CheckUnwantedDependencies(input_api, output_api):
 
   for path, rule_type, rule_description in deps_checker.CheckAddedProtoImports(
       added_imports):
+    path = input_api.os_path.relpath(path, input_api.PresubmitLocalPath())
+    description_with_path = '%s\n    %s' % (path, rule_description)
+    if rule_type == Rule.DISALLOW:
+      error_descriptions.append(description_with_path)
+      error_subjects.add("imports")
+    else:
+      warning_descriptions.append(description_with_path)
+      warning_subjects.add("imports")
+
+  for path, rule_type, rule_description in deps_checker.CheckAddedJavaImports(
+      added_java_imports, _JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS):
+    path = input_api.os_path.relpath(path, input_api.PresubmitLocalPath())
     description_with_path = '%s\n    %s' % (path, rule_description)
     if rule_type == Rule.DISALLOW:
       error_descriptions.append(description_with_path)
@@ -910,15 +958,20 @@ def _CheckFilePermissions(input_api, output_api):
       'tools', 'checkperms', 'checkperms.py')
   args = [input_api.python_executable, checkperms_tool,
           '--root', input_api.change.RepositoryRoot()]
-  for f in input_api.AffectedFiles():
-    args += ['--file', f.LocalPath()]
-  try:
-    input_api.subprocess.check_output(args)
-    return []
-  except input_api.subprocess.CalledProcessError as error:
-    return [output_api.PresubmitError(
-        'checkperms.py failed:',
-        long_text=error.output)]
+  with input_api.CreateTemporaryFile() as file_list:
+    for f in input_api.AffectedFiles():
+      # checkperms.py file/directory arguments must be relative to the
+      # repository.
+      file_list.write(f.LocalPath() + '\n')
+    file_list.close()
+    args += ['--file-list', file_list.name]
+    try:
+      input_api.subprocess.check_output(args)
+      return []
+    except input_api.subprocess.CalledProcessError as error:
+      return [output_api.PresubmitError(
+          'checkperms.py failed:',
+          long_text=error.output)]
 
 
 def _CheckTeamTags(input_api, output_api):
@@ -1161,7 +1214,7 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
     if not input_api.change.issue:
       return [output_api.PresubmitError(
           "DEPS approval by OWNERS check failed: this change has "
-          "no Rietveld issue number, so we can't check it for approvals.")]
+          "no change number, so we can't check it for approvals.")]
     output = output_api.PresubmitError
   else:
     output = output_api.PresubmitNotifyResult
@@ -1482,11 +1535,15 @@ def _MatchesFile(input_api, patterns, path):
   return False
 
 
-def _CheckIpcOwners(input_api, output_api):
-  """Checks that affected files involving IPC have an IPC OWNERS rule.
+def _GetOwnersFilesToCheckForIpcOwners(input_api):
+  """Gets a list of OWNERS files to check for correct security owners.
 
-  Whether or not a file affects IPC is determined by a simple whitelist of
-  filename patterns."""
+  Returns:
+    A dictionary mapping an OWNER file to the list of OWNERS rules it must
+    contain to cover IPC-related files with noparent reviewer rules.
+  """
+  # Whether or not a file affects IPC is (mostly) determined by a simple list
+  # of filename patterns.
   file_patterns = [
       # Legacy IPC:
       '*_messages.cc',
@@ -1584,8 +1641,20 @@ def _CheckIpcOwners(input_api, output_api):
         AddPatternToCheck(f, pattern)
         break
 
-  # Now go through the OWNERS files we collected, filtering out rules that are
-  # already present in that OWNERS file.
+  return to_check
+
+
+def _CheckIpcOwners(input_api, output_api):
+  """Checks that affected files involving IPC have an IPC OWNERS rule."""
+  to_check = _GetOwnersFilesToCheckForIpcOwners(input_api)
+
+  if to_check:
+    # If there are any OWNERS files to check, there are IPC-related changes in
+    # this CL. Auto-CC the review list.
+    output_api.AppendCC('ipc-security-reviews@chromium.org')
+
+  # Go through the OWNERS files to check, filtering out rules that are already
+  # present in that OWNERS file.
   for owners_file, patterns in to_check.iteritems():
     try:
       with file(owners_file) as f:
@@ -1911,6 +1980,41 @@ def _CheckAndroidNewMdpiAssetLocation(input_api, output_api):
   return results
 
 
+def _CheckAndroidWebkitImports(input_api, output_api):
+  """Checks that code uses org.chromium.base.Callback instead of
+     android.widget.ValueCallback except in the WebView glue layer.
+  """
+  valuecallback_import_pattern = input_api.re.compile(
+      r'^import android\.webkit\.ValueCallback;$')
+
+  errors = []
+
+  sources = lambda affected_file: input_api.FilterSourceFile(
+      affected_file,
+      black_list=(_EXCLUDED_PATHS +
+                  _TEST_CODE_EXCLUDED_PATHS +
+                  input_api.DEFAULT_BLACK_LIST +
+                  (r'^android_webview[\\\/]glue[\\\/].*',)),
+      white_list=(r'.*\.java$',))
+
+  for f in input_api.AffectedSourceFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if valuecallback_import_pattern.search(line):
+        errors.append("%s:%d" % (f.LocalPath(), line_num))
+
+  results = []
+
+  if errors:
+    results.append(output_api.PresubmitError(
+        'android.webkit.ValueCallback usage is detected outside of the glue'
+        ' layer. To stay compatible with the support library, android.webkit.*'
+        ' classes should only be used inside the glue layer and'
+        ' org.chromium.base.Callback should be used instead.',
+        errors))
+
+  return results
+
+
 class PydepsChecker(object):
   def __init__(self, input_api, pydeps_files):
     self._file_cache = {}
@@ -1962,8 +2066,11 @@ class PydepsChecker(object):
     import difflib
     old_pydeps_data = self._LoadFile(pydeps_path).splitlines()
     cmd = old_pydeps_data[1][1:].strip()
+    env = {
+      'PYTHONDONTWRITEBYTECODE': '1'
+    }
     new_pydeps_data = self._input_api.subprocess.check_output(
-        cmd  + ' --output ""', shell=True)
+        cmd  + ' --output ""', shell=True, env=env)
     old_contents = old_pydeps_data[2:]
     new_contents = new_pydeps_data.splitlines()[2:]
     if old_pydeps_data[2:] != new_pydeps_data.splitlines()[2:]:
@@ -2361,6 +2468,7 @@ def _AndroidSpecificOnUploadChecks(input_api, output_api):
   results.extend(_CheckAndroidTestJUnitInheritance(input_api, output_api))
   results.extend(_CheckAndroidTestJUnitFrameworkImport(input_api, output_api))
   results.extend(_CheckAndroidTestAnnotationUsage(input_api, output_api))
+  results.extend(_CheckAndroidWebkitImports(input_api, output_api))
   return results
 
 
@@ -2416,6 +2524,8 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForRiskyJsFeatures(input_api, output_api))
   results.extend(_CheckForRelativeIncludes(input_api, output_api))
   results.extend(_CheckWATCHLISTS(input_api, output_api))
+  results.extend(input_api.RunTests(
+    input_api.canned_checks.CheckVPythonSpec(input_api, output_api)))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -2617,20 +2727,13 @@ def _CheckForWindowsLineEndings(input_api, output_api):
     r'.+%s' % _IMPLEMENTATION_EXTENSIONS
   )
 
-  filter = lambda f: input_api.FilterSourceFile(
-    f, white_list=file_inclusion_pattern, black_list=None)
-  files = [f.LocalPath() for f in
-           input_api.AffectedSourceFiles(filter)]
-
   problems = []
-
-  for file in files:
-    fp = open(file, 'r')
-    for line in fp:
+  source_file_filter = lambda f: input_api.FilterSourceFile(
+      f, white_list=file_inclusion_pattern, black_list=None)
+  for f in input_api.AffectedSourceFiles(source_file_filter):
+    for line_number, line in f.ChangedContents():
       if line.endswith('\r\n'):
-        problems.append(file)
-        break
-    fp.close()
+        problems.append(f.LocalPath())
 
   if problems:
     return [output_api.PresubmitPromptWarning('Are you sure that you want '

@@ -11,7 +11,8 @@
 
 namespace blink {
 
-class CSSFontSelector;
+class CSSFontFace;
+class FontSelector;
 class FontCustomPlatformData;
 
 enum FontDisplay {
@@ -31,14 +32,13 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
  public:
   enum DisplayPeriod { kBlockPeriod, kSwapPeriod, kFailurePeriod };
 
-  explicit RemoteFontFaceSource(FontResource*, CSSFontSelector*, FontDisplay);
+  RemoteFontFaceSource(CSSFontFace*, FontResource*, FontSelector*, FontDisplay);
   ~RemoteFontFaceSource() override;
   void Dispose();
 
   bool IsLoading() const override;
   bool IsLoaded() const override;
   bool IsValid() const override;
-  DisplayPeriod GetDisplayPeriod() const { return period_; }
 
   void BeginLoadIfNeeded() override;
 
@@ -47,20 +47,21 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
   void FontLoadLongLimitExceeded(FontResource*) override;
   String DebugName() const override { return "RemoteFontFaceSource"; }
 
-  bool IsBlank() override { return period_ == kBlockPeriod; }
+  bool IsInBlockPeriod() const override { return period_ == kBlockPeriod; }
+  bool IsInFailurePeriod() const override { return period_ == kFailurePeriod; }
 
   // For UMA reporting
   bool HadBlankText() override { return histograms_.HadBlankText(); }
   void PaintRequested() { histograms_.FallbackFontPainted(period_); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
-  RefPtr<SimpleFontData> CreateFontData(
+  scoped_refptr<SimpleFontData> CreateFontData(
       const FontDescription&,
       const FontSelectionCapabilities&) override;
-  RefPtr<SimpleFontData> CreateLoadingFallbackFontData(const FontDescription&);
-  void PruneTable();
+  scoped_refptr<SimpleFontData> CreateLoadingFallbackFontData(
+      const FontDescription&);
 
  private:
   class FontLoadHistograms {
@@ -84,35 +85,27 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
       kFromNetwork
     };
 
-    FontLoadHistograms(DataSource data_source, FontDisplay font_display)
+    FontLoadHistograms(DataSource data_source)
         : load_start_time_(0),
           blank_paint_time_(0),
           is_long_limit_exceeded_(false),
-          data_source_(data_source),
-          font_display_(font_display) {}
+          data_source_(data_source) {}
     void LoadStarted();
     void FallbackFontPainted(DisplayPeriod);
-    void FontLoaded(bool is_cors_failed,
-                    bool load_error,
-                    bool is_intervention_triggered);
-    void LongLimitExceeded(bool is_intervention_triggered);
+    void LongLimitExceeded();
     void RecordFallbackTime();
-    void RecordRemoteFont(const FontResource*, bool is_intervention_triggered);
+    void RecordRemoteFont(const FontResource*);
     bool HadBlankText() { return blank_paint_time_; }
     DataSource GetDataSource() { return data_source_; }
     void MaySetDataSource(DataSource);
 
    private:
-    void RecordLoadTimeHistogram(const FontResource*,
-                                 int duration,
-                                 bool is_intervention_triggered);
-    void RecordInterventionResult(bool is_triggered);
+    void RecordLoadTimeHistogram(const FontResource*, int duration);
     CacheHitMetrics DataSourceMetricsValue();
     double load_start_time_;
     double blank_paint_time_;
     bool is_long_limit_exceeded_;
     DataSource data_source_;
-    FontDisplay font_display_;
   };
 
   void SwitchToSwapPeriod();
@@ -120,13 +113,14 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
   bool ShouldTriggerWebFontsIntervention();
   bool IsLowPriorityLoadingAllowedForRemoteFont() const override;
 
+  // Our owning font face.
+  Member<CSSFontFace> face_;
   // Cleared once load is finished.
   Member<FontResource> font_;
-
-  Member<CSSFontSelector> font_selector_;
+  Member<FontSelector> font_selector_;
 
   // |nullptr| if font is not loaded or failed to decode.
-  RefPtr<FontCustomPlatformData> custom_font_data_;
+  scoped_refptr<FontCustomPlatformData> custom_font_data_;
 
   const FontDisplay display_;
   DisplayPeriod period_;

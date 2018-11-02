@@ -34,7 +34,7 @@ TestOrderablePendingTask::TestOrderablePendingTask()
       task_id_(TestOrderablePendingTask::task_id_counter++) {}
 
 TestOrderablePendingTask::TestOrderablePendingTask(
-    const tracked_objects::Location& location,
+    const base::Location& location,
     base::OnceClosure task,
     base::TimeTicks post_time,
     base::TimeDelta delay,
@@ -98,10 +98,9 @@ OrderedSimpleTaskRunner::OrderedSimpleTaskRunner(
 OrderedSimpleTaskRunner::~OrderedSimpleTaskRunner() {}
 
 // base::TestSimpleTaskRunner implementation
-bool OrderedSimpleTaskRunner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
-    base::OnceClosure task,
-    base::TimeDelta delay) {
+bool OrderedSimpleTaskRunner::PostDelayedTask(const base::Location& from_here,
+                                              base::OnceClosure task,
+                                              base::TimeDelta delay) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TestOrderablePendingTask pt(from_here, std::move(task), now_src_->NowTicks(),
                               delay, base::TestPendingTask::NESTABLE);
@@ -112,7 +111,7 @@ bool OrderedSimpleTaskRunner::PostDelayedTask(
 }
 
 bool OrderedSimpleTaskRunner::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -173,7 +172,7 @@ bool OrderedSimpleTaskRunner::RunTasksWhile(
 
 bool OrderedSimpleTaskRunner::RunTasksWhile(
     const std::vector<base::Callback<bool(void)>>& conditions) {
-  TRACE_EVENT2("cc", "OrderedSimpleTaskRunner::RunPendingTasks", "this",
+  TRACE_EVENT2("viz", "OrderedSimpleTaskRunner::RunPendingTasks", "this",
                AsValue(), "nested", inside_run_tasks_until_);
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -222,7 +221,7 @@ bool OrderedSimpleTaskRunner::RunTasksWhile(
     std::set<TestOrderablePendingTask>::iterator task_to_run =
         pending_tasks_.begin();
     {
-      TRACE_EVENT1("cc", "OrderedSimpleTaskRunner::RunPendingTasks running",
+      TRACE_EVENT1("viz", "OrderedSimpleTaskRunner::RunPendingTasks running",
                    "task", task_to_run->AsValue());
       // It's safe to remove const and consume |task| here, since |task| is not
       // used for ordering the item.
@@ -299,7 +298,7 @@ void OrderedSimpleTaskRunner::AsValueInto(
 
   state->SetBoolean("advance_now", advance_now_);
   state->SetBoolean("inside_run_tasks_until", inside_run_tasks_until_);
-  state->SetString("max_tasks", base::SizeTToString(max_tasks_));
+  state->SetString("max_tasks", base::NumberToString(max_tasks_));
 }
 
 base::Callback<bool(void)> OrderedSimpleTaskRunner::TaskRunCountBelow(

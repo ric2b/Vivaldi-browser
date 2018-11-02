@@ -31,12 +31,12 @@
 
 #include "core/html/forms/BaseButtonInputType.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/Text.h"
-#include "core/html/HTMLFormElement.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutButton.h"
 
 namespace blink {
@@ -46,7 +46,7 @@ using namespace HTMLNames;
 BaseButtonInputType::BaseButtonInputType(HTMLInputElement& element)
     : InputType(element), KeyboardClickableInputTypeView(element) {}
 
-DEFINE_TRACE(BaseButtonInputType) {
+void BaseButtonInputType::Trace(blink::Visitor* visitor) {
   KeyboardClickableInputTypeView::Trace(visitor);
   InputType::Trace(visitor);
 }

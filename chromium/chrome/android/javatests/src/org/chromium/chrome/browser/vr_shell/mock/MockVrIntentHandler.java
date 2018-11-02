@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.vr_shell.mock;
 
+import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
@@ -26,6 +27,16 @@ public class MockVrIntentHandler implements VrIntentUtils.VrIntentHandler {
             return mTreatIntentsAsTrusted;
         }
         return false;
+    }
+
+    @Override
+    public boolean isTrustedAutopresentIntent(Intent intent) {
+        return false;
+    }
+
+    @Override
+    public boolean canHandleVrIntent(Context context) {
+        return true;
     }
 
     public void setUseMockImplementation(boolean enabled) {

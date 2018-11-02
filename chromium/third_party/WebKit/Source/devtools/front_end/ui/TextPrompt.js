@@ -116,6 +116,7 @@ UI.TextPrompt = class extends Common.Object {
     element.parentElement.insertBefore(this._proxyElement, element);
     this._proxyElement.appendChild(element);
     this._element.classList.add('text-prompt');
+    UI.ARIAUtils.markAsTextBox(this._element);
     this._element.setAttribute('contenteditable', 'plaintext-only');
     this._element.addEventListener('keydown', this._boundOnKeyDown, false);
     this._element.addEventListener('input', this._boundOnInput, false);
@@ -139,6 +140,7 @@ UI.TextPrompt = class extends Common.Object {
     delete this._proxyElement;
     this._element.classList.remove('text-prompt');
     this._element.removeAttribute('contenteditable');
+    this._element.removeAttribute('role');
   }
 
   /**
@@ -202,6 +204,17 @@ UI.TextPrompt = class extends Common.Object {
       this._element.removeAttribute('data-placeholder');
   }
 
+  /**
+   * @param {boolean} enabled
+   */
+  setEnabled(enabled) {
+    if (enabled)
+      this._element.setAttribute('contenteditable', 'plaintext-only');
+    else
+      this._element.removeAttribute('contenteditable');
+    this._element.classList.toggle('disabled', !enabled);
+  }
+
   _removeFromElement() {
     this.clearAutocomplete();
     this._element.removeEventListener('keydown', this._boundOnKeyDown, false);
@@ -252,16 +265,24 @@ UI.TextPrompt = class extends Common.Object {
    */
   onKeyDown(event) {
     var handled = false;
+    if (this._isSuggestBoxVisible() && this._suggestBox.keyPressed(event)) {
+      event.consume(true);
+      return;
+    }
 
     switch (event.key) {
       case 'Tab':
         handled = this.tabKeyPressed(event);
         break;
       case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
       case 'Home':
         this.clearAutocomplete();
         break;
+      case 'PageDown':
       case 'ArrowRight':
+      case 'ArrowDown':
       case 'End':
         if (this._isCaretAtEndOfPrompt())
           handled = this.acceptAutoComplete();
@@ -280,15 +301,9 @@ UI.TextPrompt = class extends Common.Object {
           handled = true;
         }
         break;
-      case 'Alt':
-      case 'Meta':
-      case 'Shift':
-      case 'Control':
-        break;
     }
-
-    if (!handled && this._isSuggestBoxVisible())
-      handled = this._suggestBox.keyPressed(event);
+    if (isEnterKey(event))
+      event.preventDefault();
 
     if (handled)
       event.consume(true);

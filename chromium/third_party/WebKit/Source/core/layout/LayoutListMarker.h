@@ -24,6 +24,7 @@
 #ifndef LayoutListMarker_h
 #define LayoutListMarker_h
 
+#include "core/CoreExport.h"
 #include "core/layout/LayoutBox.h"
 
 namespace blink {
@@ -37,7 +38,11 @@ class LayoutListMarker final : public LayoutBox {
   static LayoutListMarker* CreateAnonymous(LayoutListItem*);
   ~LayoutListMarker() override;
 
+  // Marker text without suffix, e.g. "1".
   const String& GetText() const { return text_; }
+
+  // Marker text with suffix, e.g. "1. ", for use in accessibility.
+  CORE_EXPORT String TextAlternative() const;
 
   // A reduced set of list style categories allowing for more concise expression
   // of list style specific logic.
@@ -46,10 +51,20 @@ class LayoutListMarker final : public LayoutBox {
   // Returns the list's style as one of a reduced high level categorical set of
   // styles.
   ListStyleCategory GetListStyleCategory() const;
+  static ListStyleCategory GetListStyleCategory(EListStyleType);
 
   bool IsInside() const;
 
   void UpdateMarginsAndContent();
+
+  // Compute inline margins for 'list-style-position: inside' and 'outside'.
+  static std::pair<LayoutUnit, LayoutUnit> InlineMarginsForInside(
+      const ComputedStyle&,
+      bool is_image);
+  static std::pair<LayoutUnit, LayoutUnit> InlineMarginsForOutside(
+      const ComputedStyle&,
+      bool is_image,
+      LayoutUnit marker_inline_size);
 
   IntRect GetRelativeMarkerRect() const;
   LayoutRect LocalSelectionRect() const final;
@@ -80,7 +95,9 @@ class LayoutListMarker final : public LayoutBox {
 
   void UpdateLayout() override;
 
-  void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) override;
+  void ImageChanged(WrappedImagePtr,
+                    CanDeferInvalidation,
+                    const IntRect* = nullptr) override;
 
   InlineBox* CreateInlineBox() override;
 
@@ -95,8 +112,6 @@ class LayoutListMarker final : public LayoutBox {
       LinePositionMode = kPositionOnContainingLine) const override;
 
   bool IsText() const { return !IsImage(); }
-
-  bool CanBeSelectionLeaf() const override { return true; }
 
   LayoutUnit GetWidthOfTextWithSuffix() const;
   void UpdateMargins();

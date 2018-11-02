@@ -32,7 +32,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
-#include "net/log/net_log_source_type.h"
+#include "net/log/net_log_source.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -124,11 +124,14 @@ void InsertBestBindAddressChromeOS(const chromeos::NetworkTypePattern& type,
   const chromeos::NetworkState* state = chromeos::NetworkHandler::Get()
                                             ->network_state_handler()
                                             ->ConnectedNetworkByType(type);
+  if (!state)
+    return;
+  std::string state_ip_address = state->GetIpAddress();
   IPAddress bind_ip_address;
-  if (state && bind_ip_address.AssignFromIPLiteral(state->ip_address()) &&
+  if (bind_ip_address.AssignFromIPLiteral(state_ip_address) &&
       bind_ip_address.IsIPv4()) {
     VLOG(2) << "Found " << state->type() << ", " << state->name() << ": "
-            << state->ip_address();
+            << state_ip_address;
     bind_address_list->push_back(bind_ip_address);
   }
 }
@@ -175,15 +178,14 @@ DialServiceImpl::DialSocket::~DialSocket() {
 
 bool DialServiceImpl::DialSocket::CreateAndBindSocket(
     const IPAddress& bind_ip_address,
-    net::NetLog* net_log,
-    net::NetLogSource net_log_source) {
+    net::NetLog* net_log) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!socket_);
   DCHECK(bind_ip_address.IsIPv4());
 
   net::RandIntCallback rand_cb = base::Bind(&base::RandInt);
   socket_ = base::MakeUnique<UDPSocket>(net::DatagramSocket::RANDOM_BIND,
-                                        rand_cb, net_log, net_log_source);
+                                        rand_cb, net_log, net::NetLogSource());
 
   // 0 means bind a random port
   net::IPEndPoint address(bind_ip_address, 0);
@@ -398,8 +400,6 @@ DialServiceImpl::DialServiceImpl(net::NetLog* net_log)
   DCHECK(success);
   send_address_ = net::IPEndPoint(address, kDialRequestPort);
   send_buffer_ = new StringIOBuffer(BuildRequest());
-  net_log_source_.type = net::NetLogSourceType::UDP_SOCKET;
-  net_log_source_.id = net_log_->NextID();
 }
 
 DialServiceImpl::~DialServiceImpl() {
@@ -524,8 +524,7 @@ void DialServiceImpl::DiscoverOnAddresses(
 
 void DialServiceImpl::BindAndAddSocket(const IPAddress& bind_ip_address) {
   std::unique_ptr<DialServiceImpl::DialSocket> dial_socket(CreateDialSocket());
-  if (dial_socket->CreateAndBindSocket(bind_ip_address, net_log_,
-                                       net_log_source_))
+  if (dial_socket->CreateAndBindSocket(bind_ip_address, net_log_))
     dial_sockets_.push_back(std::move(dial_socket));
 }
 

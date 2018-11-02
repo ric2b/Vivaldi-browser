@@ -525,76 +525,6 @@ CORE_EXPORT void ToFlexibleArrayBufferView(v8::Isolate*,
                                            FlexibleArrayBufferView&,
                                            void* storage = nullptr);
 
-// Converts a V8 value to an array (an IDL sequence) as per the WebIDL
-// specification: http://heycam.github.io/webidl/#es-sequence
-template <typename VectorType>
-VectorType ToImplSequence(v8::Isolate* isolate,
-                          v8::Local<v8::Value> value,
-                          ExceptionState& exception_state) {
-  using ValueType = typename VectorType::ValueType;
-
-  if (!value->IsObject() || value->IsRegExp()) {
-    exception_state.ThrowTypeError(
-        "The provided value cannot be converted to a sequence.");
-    return VectorType();
-  }
-
-  v8::TryCatch block(isolate);
-  v8::Local<v8::Object> iterator =
-      GetEsIterator(isolate, value.As<v8::Object>(), exception_state);
-  if (exception_state.HadException())
-    return VectorType();
-
-  v8::Local<v8::String> next_key = V8String(isolate, "next");
-  v8::Local<v8::String> value_key = V8String(isolate, "value");
-  v8::Local<v8::String> done_key = V8String(isolate, "done");
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
-  VectorType result;
-  while (true) {
-    v8::Local<v8::Value> next;
-    if (!iterator->Get(context, next_key).ToLocal(&next)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return VectorType();
-    }
-    // TODO(bashi): Support callable objects.
-    if (!next->IsObject() || !next.As<v8::Object>()->IsFunction()) {
-      exception_state.ThrowTypeError("Iterator.next should be callable.");
-      return VectorType();
-    }
-    v8::Local<v8::Value> next_result;
-    if (!V8ScriptRunner::CallFunction(next.As<v8::Function>(),
-                                      ToExecutionContext(context), iterator, 0,
-                                      nullptr, isolate)
-             .ToLocal(&next_result)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return VectorType();
-    }
-    if (!next_result->IsObject()) {
-      exception_state.ThrowTypeError(
-          "Iterator.next() did not return an object.");
-      return VectorType();
-    }
-    v8::Local<v8::Object> result_object = next_result.As<v8::Object>();
-    v8::Local<v8::Value> element;
-    v8::Local<v8::Value> done;
-    if (!result_object->Get(context, value_key).ToLocal(&element) ||
-        !result_object->Get(context, done_key).ToLocal(&done)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return VectorType();
-    }
-    v8::Local<v8::Boolean> done_boolean;
-    if (!done->ToBoolean(context).ToLocal(&done_boolean)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return VectorType();
-    }
-    if (done_boolean->Value())
-      break;
-    result.push_back(NativeValueTraits<ValueType>::NativeValue(
-        isolate, element, exception_state));
-  }
-  return result;
-}
-
 CORE_EXPORT bool IsValidEnum(const String& value,
                              const char** valid_values,
                              size_t length,
@@ -623,7 +553,7 @@ NotSharedType ToNotShared(v8::Isolate* isolate,
                           ExceptionState& exception_state) {
   using DOMTypedArray = typename NotSharedType::TypedArrayType;
   DOMTypedArray* dom_typed_array =
-      V8TypeOf<DOMTypedArray>::Type::toImplWithTypeCheck(isolate, value);
+      V8TypeOf<DOMTypedArray>::Type::ToImplWithTypeCheck(isolate, value);
   if (dom_typed_array && dom_typed_array->IsShared()) {
     exception_state.ThrowTypeError(
         "The provided ArrayBufferView value must not be shared.");
@@ -640,7 +570,7 @@ MaybeSharedType ToMaybeShared(v8::Isolate* isolate,
                               ExceptionState& exception_state) {
   using DOMTypedArray = typename MaybeSharedType::TypedArrayType;
   DOMTypedArray* dom_typed_array =
-      V8TypeOf<DOMTypedArray>::Type::toImplWithTypeCheck(isolate, value);
+      V8TypeOf<DOMTypedArray>::Type::ToImplWithTypeCheck(isolate, value);
   return MaybeSharedType(dom_typed_array);
 }
 

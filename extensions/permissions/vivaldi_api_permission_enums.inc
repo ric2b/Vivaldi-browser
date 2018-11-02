@@ -12,6 +12,7 @@
     kAutoUpdate,
     kBookmarksPrivate,
     kCalendar,
+    kContacts,
     kDevtoolsPrivate,
     kExtensionActionUtils,
     kHistoryPrivate,

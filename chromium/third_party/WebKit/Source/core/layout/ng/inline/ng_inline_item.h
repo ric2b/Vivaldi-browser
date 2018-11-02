@@ -35,6 +35,7 @@ class CORE_EXPORT NGInlineItem {
     kCloseTag,
     kFloating,
     kOutOfFlowPositioned,
+    kListMarker,
     kBidiControl
     // When adding new values, make sure the bit size of |type_| is large
     // enough to store.
@@ -59,25 +60,31 @@ class CORE_EXPORT NGInlineItem {
   NGInlineItemType Type() const { return static_cast<NGInlineItemType>(type_); }
   const char* NGInlineItemTypeToString(int val) const;
 
-  const ShapeResult* TextShapeResult() const { return shape_result_.Get(); }
+  const ShapeResult* TextShapeResult() const { return shape_result_.get(); }
   NGLayoutInlineShapeOptions ShapeOptions() const {
     return static_cast<NGLayoutInlineShapeOptions>(shape_options_);
   }
 
+  // If this item is "empty" for the purpose of empty block calculation.
+  bool IsEmptyItem() const { return is_empty_item_; }
+
   unsigned StartOffset() const { return start_offset_; }
   unsigned EndOffset() const { return end_offset_; }
   unsigned Length() const { return end_offset_ - start_offset_; }
+
   TextDirection Direction() const { return DirectionFromLevel(BidiLevel()); }
   UBiDiLevel BidiLevel() const { return static_cast<UBiDiLevel>(bidi_level_); }
+  // Resolved bidi level for the reordering algorithm. Certain items have
+  // artificial bidi level for the reordering algorithm without affecting its
+  // direction.
+  UBiDiLevel BidiLevelForReorder() const;
+
   UScriptCode GetScript() const { return script_; }
-  const ComputedStyle* Style() const { return style_.Get(); }
+  const ComputedStyle* Style() const { return style_.get(); }
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
   void SetOffset(unsigned start, unsigned end);
   void SetEndOffset(unsigned);
-
-  LayoutUnit InlineSize() const;
-  LayoutUnit InlineSize(unsigned start, unsigned end) const;
 
   bool HasStartEdge() const;
   bool HasEndEdge() const;
@@ -97,18 +104,14 @@ class CORE_EXPORT NGInlineItem {
   unsigned start_offset_;
   unsigned end_offset_;
   UScriptCode script_;
-  RefPtr<const ShapeResult> shape_result_;
-  RefPtr<const ComputedStyle> style_;
+  scoped_refptr<const ShapeResult> shape_result_;
+  scoped_refptr<const ComputedStyle> style_;
   LayoutObject* layout_object_;
 
-  unsigned type_ : 3;
+  unsigned type_ : 4;
   unsigned bidi_level_ : 8;  // UBiDiLevel is defined as uint8_t.
   unsigned shape_options_ : 2;
-  unsigned rotate_sideways_ : 1;
-
-  // TODO(layout-ng): Do we need fallback_priority_ here? If so we should pack
-  // it with the bit field above.
-  FontFallbackPriority fallback_priority_;
+  unsigned is_empty_item_ : 1;
 
   friend class NGInlineNode;
 };

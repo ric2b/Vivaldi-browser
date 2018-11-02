@@ -15,7 +15,7 @@
 
 namespace {
 
-std::map<std::string, std::string>* key_values_ = NULL;
+std::map<std::string, std::string>* key_values_ = nullptr;
 
 }  // namespace
 
@@ -32,7 +32,7 @@ class CrashLoggingTest : public testing::Test {
     base::debug::ResetCrashLoggingForTesting();
 
     delete key_values_;
-    key_values_ = NULL;
+    key_values_ = nullptr;
   }
 
  private:
@@ -182,4 +182,14 @@ TEST_F(CrashLoggingTest, ChunkRounding) {
   // not 2.
   base::debug::CrashKey key = { "round", 12 };
   EXPECT_EQ(3u, base::debug::InitCrashKeys(&key, 1, 5));
+}
+
+TEST_F(CrashLoggingTest, UninitializedCrashKeyStringSupport) {
+  auto* crash_key = base::debug::AllocateCrashKeyString(
+      "test", base::debug::CrashKeySize::Size32);
+  EXPECT_FALSE(crash_key);
+
+  base::debug::SetCrashKeyString(crash_key, "value");
+
+  base::debug::ClearCrashKeyString(crash_key);
 }

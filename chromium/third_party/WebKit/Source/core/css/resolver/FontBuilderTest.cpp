@@ -4,14 +4,14 @@
 
 #include "core/css/resolver/FontBuilder.h"
 
+#include <memory>
 #include "core/css/CSSFontSelector.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleEngine.h"
 #include "core/frame/Settings.h"
 #include "core/style/ComputedStyle.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -45,7 +45,7 @@ class FontBuilderAdditiveTest : public FontBuilderTest,
 };
 
 TEST_F(FontBuilderInitTest, InitialFontSizeNotScaled) {
-  RefPtr<ComputedStyle> initial = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> initial = ComputedStyle::Create();
 
   FontBuilder builder(&GetDocument());
   builder.SetInitial(1.0f);  // FIXME: Remove unused param.
@@ -69,7 +69,7 @@ TEST_P(FontBuilderAdditiveTest, OnlySetValueIsModified) {
   FontDescription parent_description;
   funcs.set_base_value(parent_description);
 
-  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->SetFontDescription(parent_description);
 
   FontBuilder font_builder(&GetDocument());

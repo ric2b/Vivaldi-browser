@@ -5,6 +5,7 @@
 #include "core/html/parser/HTMLDocumentParser.h"
 
 #include "core/dom/Document.h"
+#include "core/html_names.h"
 #include "core/testing/sim/SimRequest.h"
 #include "core/testing/sim/SimTest.h"
 #include "platform/testing/HistogramTester.h"
@@ -46,13 +47,14 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"bodyDiv\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="bodyDiv"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("bodyDiv"));
@@ -68,15 +70,16 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<style>"
-      "@import 'testHead.css'"
-      "</style>"
-      "</head><body>"
-      "<div id=\"bodyDiv\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <style>
+    @import 'testHead.css'
+    </style>
+    </head><body>
+    <div id="bodyDiv"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("bodyDiv"));
@@ -93,15 +96,16 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<link rel=stylesheet href=testBody.css>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <link rel=stylesheet href=testBody.css>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -135,14 +139,15 @@ TEST_P(HTMLDocumentParserLoadingTest,
   LoadURL("https://example.com/test.html");
 
   main_resource.Start();
-  main_resource.Write(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<link rel=stylesheet href=testBody1.css>"
-      "<div id=\"after1\"></div>");
+  main_resource.Write(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <link rel=stylesheet href=testBody1.css>
+    <div id="after1"></div>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -160,10 +165,11 @@ TEST_P(HTMLDocumentParserLoadingTest,
   EXPECT_FALSE(GetDocument().getElementById("after2"));
   EXPECT_FALSE(GetDocument().getElementById("after3"));
 
-  main_resource.Complete(
-      "<link rel=stylesheet href=testBody3.css>"
-      "<div id=\"after3\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <link rel=stylesheet href=testBody3.css>
+    <div id="after3"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -213,15 +219,16 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<link rel=stylesheet href=testBody.css type='print'>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <link rel=stylesheet href=testBody.css type='print'>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -239,17 +246,18 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<style>"
-      "@import 'testBody.css'"
-      "</style>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <style>
+    @import 'testBody.css'
+    </style>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -277,17 +285,18 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<script>"
-      "document.write('<link rel=stylesheet href=testBody.css>');"
-      "</script>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <script>
+    document.write('<link rel=stylesheet href=testBody.css>');
+    </script>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -314,16 +323,17 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<style>"
-      "</style>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <style>
+    </style>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -339,15 +349,16 @@ TEST_P(HTMLDocumentParserLoadingTest,
   LoadURL("https://example.com/test.html");
 
   // The marquee tag has a shadow DOM that synchronously applies a stylesheet.
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<link rel=stylesheet href=testHead.css>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<marquee>Marquee</marquee>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    <link rel=stylesheet href=testHead.css>
+    </head><body>
+    <div id="before"></div>
+    <marquee>Marquee</marquee>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -363,22 +374,23 @@ TEST_P(HTMLDocumentParserLoadingTest,
 
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "</head><body>"
-      "<div id=\"before\"></div>"
-      "<script>"
-      "var attach  = document.getElementsByTagName('script')[0];"
-      "var link  = document.createElement('link');"
-      "link.rel  = 'stylesheet';"
-      "link.type = 'text/css';"
-      "link.href = 'testAsync.css';"
-      "link.media = 'all';"
-      "attach.appendChild(link);"
-      "</script>"
-      "<div id=\"after\"></div>"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><head>
+    </head><body>
+    <div id="before"></div>
+    <script>
+    var attach  = document.getElementsByTagName('script')[0];
+    var link  = document.createElement('link');
+    link.rel  = 'stylesheet';
+    link.type = 'text/css';
+    link.href = 'testAsync.css';
+    link.media = 'all';
+    attach.appendChild(link);
+    </script>
+    <div id="after"></div>
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   EXPECT_TRUE(GetDocument().getElementById("before"));
@@ -391,10 +403,11 @@ TEST_F(HTMLDocumentParserSimTest, NoRewindNoDocWrite) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html><body>no doc write"
-      "</body></html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html><body>no doc write
+    </body></html>
+  )HTML");
 
   testing::RunPendingTasks();
   histogram_.ExpectTotalCount("Parser.DiscardedTokenCount", 0);
@@ -404,11 +417,12 @@ TEST_F(HTMLDocumentParserSimTest, RewindBrokenToken) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<script>"
-      "document.write('<a');"
-      "</script>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <script>
+    document.write('<a');
+    </script>
+  )HTML");
 
   testing::RunPendingTasks();
   histogram_.ExpectTotalCount("Parser.DiscardedTokenCount", 1);
@@ -418,11 +432,12 @@ TEST_F(HTMLDocumentParserSimTest, RewindDifferentNamespace) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<script>"
-      "document.write('<svg>');"
-      "</script>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <script>
+    document.write('<svg>');
+    </script>
+  )HTML");
 
   testing::RunPendingTasks();
   histogram_.ExpectTotalCount("Parser.DiscardedTokenCount", 1);
@@ -446,11 +461,12 @@ TEST_F(HTMLDocumentParserSimTest, NoRewindSaneDocWrite2) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<script>"
-      "document.write('<p>hello world<\\/p><a>yo');"
-      "</script>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <script>
+    document.write('<p>hello world<\\/p><a>yo');
+    </script>
+  )HTML");
 
   testing::RunPendingTasks();
   histogram_.ExpectTotalCount("Parser.DiscardedTokenCount", 0);
@@ -460,16 +476,17 @@ TEST_F(HTMLDocumentParserSimTest, NoRewindSaneDocWriteWithTitle) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<html>"
-      "<head>"
-      "<title></title>"
-      "<script>document.write('<p>testing');</script>"
-      "</head>"
-      "<body>"
-      "</body>"
-      "</html>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title></title>
+    <script>document.write('<p>testing');</script>
+    </head>
+    <body>
+    </body>
+    </html>
+  )HTML");
 
   testing::RunPendingTasks();
   histogram_.ExpectTotalCount("Parser.DiscardedTokenCount", 0);

@@ -5,12 +5,12 @@
 #ifndef UnpackedSerializedScriptValue_h
 #define UnpackedSerializedScriptValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/CoreExport.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/HeapAllocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -40,10 +40,10 @@ class CORE_EXPORT UnpackedSerializedScriptValue
  public:
   ~UnpackedSerializedScriptValue();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
-  SerializedScriptValue* Value() { return value_.Get(); }
-  const SerializedScriptValue* Value() const { return value_.Get(); }
+  SerializedScriptValue* Value() { return value_.get(); }
+  const SerializedScriptValue* Value() const { return value_.get(); }
 
   const HeapVector<Member<DOMArrayBufferBase>>& ArrayBuffers() const {
     return array_buffers_;
@@ -59,10 +59,10 @@ class CORE_EXPORT UnpackedSerializedScriptValue
 
  private:
   // Private so that callers use SerializedScriptValue::Unpack.
-  explicit UnpackedSerializedScriptValue(RefPtr<SerializedScriptValue>);
+  explicit UnpackedSerializedScriptValue(scoped_refptr<SerializedScriptValue>);
 
   // The underlying serialized data.
-  RefPtr<SerializedScriptValue> value_;
+  scoped_refptr<SerializedScriptValue> value_;
 
   // These replace their corresponding members in SerializedScriptValue, once
   // set. Once the value is being deserialized, objects will be materialized

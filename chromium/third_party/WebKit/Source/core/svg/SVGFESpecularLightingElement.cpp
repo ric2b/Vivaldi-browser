@@ -55,7 +55,7 @@ inline SVGFESpecularLightingElement::SVGFESpecularLightingElement(
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFESpecularLightingElement) {
+void SVGFESpecularLightingElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(specular_constant_);
   visitor->Trace(specular_exponent_);
   visitor->Trace(surface_scale_);
@@ -168,7 +168,7 @@ FilterEffect* SVGFESpecularLightingElement::Build(
 
   const SVGFELightElement* light_node =
       SVGFELightElement::FindLightElement(*this);
-  RefPtr<LightSource> light_source =
+  scoped_refptr<LightSource> light_source =
       light_node ? light_node->GetLightSource(filter) : nullptr;
 
   FilterEffect* effect = FESpecularLighting::Create(

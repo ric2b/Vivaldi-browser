@@ -26,11 +26,11 @@
 #ifndef MediaElementEventQueue_h
 #define MediaElementEventQueue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/events/EventQueue.h"
 #include "core/dom/events/EventTarget.h"
 #include "platform/Timer.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebTraceLocation.h"
 
@@ -40,11 +40,11 @@ namespace blink {
 // "media element event" task type according to the spec.
 class CORE_EXPORT MediaElementEventQueue final : public EventQueue {
  public:
-  static MediaElementEventQueue* Create(EventTarget*);
+  static MediaElementEventQueue* Create(EventTarget*, ExecutionContext*);
   ~MediaElementEventQueue() override;
 
   // EventQueue
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
   bool EnqueueEvent(const WebTraceLocation&, Event*) override;
   bool CancelEvent(Event*) override;
   void Close() override;
@@ -53,7 +53,7 @@ class CORE_EXPORT MediaElementEventQueue final : public EventQueue {
   bool HasPendingEvents() const;
 
  private:
-  explicit MediaElementEventQueue(EventTarget*);
+  MediaElementEventQueue(EventTarget*, ExecutionContext*);
   void TimerFired(TimerBase*);
 
   Member<EventTarget> owner_;

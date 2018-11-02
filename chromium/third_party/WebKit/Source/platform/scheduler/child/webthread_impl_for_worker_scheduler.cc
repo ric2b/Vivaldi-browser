@@ -4,14 +4,13 @@
 
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 
+#include <memory>
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/default_tick_clock.h"
 #include "platform/scheduler/base/task_queue.h"
-#include "platform/scheduler/child/scheduler_tqm_delegate_impl.h"
 #include "platform/scheduler/child/web_scheduler_impl.h"
 #include "platform/scheduler/child/web_task_runner_impl.h"
 #include "platform/scheduler/child/worker_scheduler_impl.h"
@@ -44,14 +43,15 @@ void WebThreadImplForWorkerScheduler::Init() {
 }
 
 WebThreadImplForWorkerScheduler::~WebThreadImplForWorkerScheduler() {
-  if (task_runner_delegate_) {
+  // We want to avoid blocking main thread when the thread was already
+  // shut down, but calling ShutdownOnThread twice does not cause any problems.
+  if (!was_shutdown_on_thread_.IsSet()) {
     base::WaitableEvent completion(
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
-    // Restore the original task runner so that the thread can tear itself down.
     thread_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&WebThreadImplForWorkerScheduler::RestoreTaskRunnerOnThread,
+        base::Bind(&WebThreadImplForWorkerScheduler::ShutdownOnThread,
                    base::Unretained(this), &completion));
     completion.Wait();
   }
@@ -62,8 +62,6 @@ void WebThreadImplForWorkerScheduler::InitOnThread(
     base::WaitableEvent* completion) {
   // TODO(alexclarke): Do we need to unify virtual time for workers and the
   // main thread?
-  task_runner_delegate_ = SchedulerTqmDelegateImpl::Create(
-      thread_->message_loop(), base::MakeUnique<base::DefaultTickClock>());
   worker_scheduler_ = CreateWorkerScheduler();
   worker_scheduler_->Init();
   task_queue_ = worker_scheduler_->DefaultTaskQueue();
@@ -71,29 +69,34 @@ void WebThreadImplForWorkerScheduler::InitOnThread(
   web_scheduler_.reset(new WebSchedulerImpl(
       worker_scheduler_.get(), worker_scheduler_->IdleTaskRunner(),
       worker_scheduler_->DefaultTaskQueue(),
+      worker_scheduler_->DefaultTaskQueue(),
       worker_scheduler_->DefaultTaskQueue()));
   base::MessageLoop::current()->AddDestructionObserver(this);
-  web_task_runner_ = WebTaskRunnerImpl::Create(task_queue_);
+  web_task_runner_ = WebTaskRunnerImpl::Create(task_queue_, base::nullopt);
   completion->Signal();
 }
 
-void WebThreadImplForWorkerScheduler::RestoreTaskRunnerOnThread(
+void WebThreadImplForWorkerScheduler::ShutdownOnThread(
     base::WaitableEvent* completion) {
-  task_runner_delegate_->RestoreDefaultTaskRunner();
-  completion->Signal();
+  was_shutdown_on_thread_.Set();
+
+  task_queue_ = nullptr;
+  idle_task_runner_ = nullptr;
+  web_scheduler_ = nullptr;
+  worker_scheduler_ = nullptr;
+  web_task_runner_ = nullptr;
+
+  if (completion)
+    completion->Signal();
+}
+
+std::unique_ptr<WorkerScheduler>
+WebThreadImplForWorkerScheduler::CreateWorkerScheduler() {
+  return WorkerScheduler::Create();
 }
 
 void WebThreadImplForWorkerScheduler::WillDestroyCurrentMessageLoop() {
-  task_queue_ = nullptr;
-  idle_task_runner_ = nullptr;
-  web_scheduler_.reset();
-  worker_scheduler_.reset();
-  web_task_runner_.Reset();
-}
-
-std::unique_ptr<scheduler::WorkerScheduler>
-WebThreadImplForWorkerScheduler::CreateWorkerScheduler() {
-  return WorkerScheduler::Create(task_runner_delegate_);
+  ShutdownOnThread(nullptr);
 }
 
 blink::PlatformThreadId WebThreadImplForWorkerScheduler::ThreadId() const {
@@ -104,9 +107,9 @@ blink::WebScheduler* WebThreadImplForWorkerScheduler::Scheduler() const {
   return web_scheduler_.get();
 }
 
-base::SingleThreadTaskRunner* WebThreadImplForWorkerScheduler::GetTaskRunner()
-    const {
-  return task_queue_.get();
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadImplForWorkerScheduler::GetTaskRunner() const {
+  return task_queue_;
 }
 
 SingleThreadIdleTaskRunner* WebThreadImplForWorkerScheduler::GetIdleTaskRunner()

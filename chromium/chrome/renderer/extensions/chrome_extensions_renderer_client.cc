@@ -29,7 +29,6 @@
 #include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/extension_frame_helper.h"
-#include "extensions/renderer/extension_helper.h"
 #include "extensions/renderer/extensions_render_frame_observer.h"
 #include "extensions/renderer/guest_view/extensions_guest_view_container.h"
 #include "extensions/renderer/guest_view/extensions_guest_view_container_dispatcher.h"
@@ -129,7 +128,7 @@ bool ChromeExtensionsRendererClient::IsIncognitoProcess() const {
 }
 
 int ChromeExtensionsRendererClient::GetLowestIsolatedWorldId() const {
-  return chrome::ISOLATED_WORLD_ID_EXTENSIONS;
+  return ISOLATED_WORLD_ID_EXTENSIONS;
 }
 
 extensions::Dispatcher* ChromeExtensionsRendererClient::GetDispatcher() {
@@ -148,13 +147,11 @@ void ChromeExtensionsRendererClient::OnExtensionUnloaded(
 
 void ChromeExtensionsRendererClient::RenderThreadStarted() {
   content::RenderThread* thread = content::RenderThread::Get();
-  extension_dispatcher_delegate_.reset(
-      new ChromeExtensionsDispatcherDelegate());
   // ChromeRenderViewTest::SetUp() creates its own ExtensionDispatcher and
   // injects it using SetExtensionDispatcher(). Don't overwrite it.
   if (!extension_dispatcher_) {
-    extension_dispatcher_.reset(
-        new extensions::Dispatcher(extension_dispatcher_delegate_.get()));
+    extension_dispatcher_ = std::make_unique<extensions::Dispatcher>(
+        std::make_unique<ChromeExtensionsDispatcherDelegate>());
   }
   permissions_policy_delegate_.reset(
       new extensions::RendererPermissionsPolicyDelegate(
@@ -176,11 +173,6 @@ void ChromeExtensionsRendererClient::RenderFrameCreated(
   new extensions::ExtensionFrameHelper(render_frame,
                                        extension_dispatcher_.get());
   extension_dispatcher_->OnRenderFrameCreated(render_frame);
-}
-
-void ChromeExtensionsRendererClient::RenderViewCreated(
-    content::RenderView* render_view) {
-  new extensions::ExtensionHelper(render_view, extension_dispatcher_.get());
 }
 
 bool ChromeExtensionsRendererClient::OverrideCreatePlugin(

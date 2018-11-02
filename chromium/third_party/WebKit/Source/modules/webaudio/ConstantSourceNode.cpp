@@ -20,7 +20,7 @@ ConstantSourceHandler::ConstantSourceHandler(AudioNode& node,
                                              float sample_rate,
                                              AudioParamHandler& offset)
     : AudioScheduledSourceHandler(kNodeTypeConstantSource, node, sample_rate),
-      offset_(offset),
+      offset_(&offset),
       sample_accurate_values_(AudioUtilities::kRenderQuantumFrames) {
   // A ConstantSource is always mono.
   AddOutput(1);
@@ -28,11 +28,11 @@ ConstantSourceHandler::ConstantSourceHandler(AudioNode& node,
   Initialize();
 }
 
-PassRefPtr<ConstantSourceHandler> ConstantSourceHandler::Create(
+scoped_refptr<ConstantSourceHandler> ConstantSourceHandler::Create(
     AudioNode& node,
     float sample_rate,
     AudioParamHandler& offset) {
-  return AdoptRef(new ConstantSourceHandler(node, sample_rate, offset));
+  return base::AdoptRef(new ConstantSourceHandler(node, sample_rate, offset));
 }
 
 ConstantSourceHandler::~ConstantSourceHandler() {
@@ -107,7 +107,10 @@ bool ConstantSourceHandler::PropagatesSilence() const {
 // ----------------------------------------------------------------
 ConstantSourceNode::ConstantSourceNode(BaseAudioContext& context)
     : AudioScheduledSourceNode(context),
-      offset_(AudioParam::Create(context, kParamTypeConstantSourceValue, 1)) {
+      offset_(AudioParam::Create(context,
+                                 kParamTypeConstantSourceOffset,
+                                 "ConstantSource.offset",
+                                 1)) {
   SetHandler(ConstantSourceHandler::Create(*this, context.sampleRate(),
                                            offset_->Handler()));
 }
@@ -141,7 +144,7 @@ ConstantSourceNode* ConstantSourceNode::Create(
   return node;
 }
 
-DEFINE_TRACE(ConstantSourceNode) {
+void ConstantSourceNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(offset_);
   AudioScheduledSourceNode::Trace(visitor);
 }

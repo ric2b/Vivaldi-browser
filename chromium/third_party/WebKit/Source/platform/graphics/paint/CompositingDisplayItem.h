@@ -9,9 +9,6 @@
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "public/platform/WebBlendMode.h"
-#ifndef NDEBUG
-#include "platform/wtf/text/WTFString.h"
-#endif
 
 namespace blink {
 
@@ -37,8 +34,8 @@ class PLATFORM_EXPORT BeginCompositingDisplayItem final
                                   WebDisplayItemList*) const override;
 
  private:
-#ifndef NDEBUG
-  void DumpPropertiesAsDebugString(WTF::StringBuilder&) const override;
+#if DCHECK_IS_ON()
+  void PropertiesAsJSON(JSONObject&) const override;
 #endif
   bool Equals(const DisplayItem& other) const final {
     return DisplayItem::Equals(other) &&

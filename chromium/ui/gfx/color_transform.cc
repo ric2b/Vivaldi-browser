@@ -836,10 +836,10 @@ void ColorTransformInternal::AppendColorSpaceToColorSpaceTransform(
   }
 
   steps_.push_back(
-      base::MakeUnique<ColorTransformMatrix>(GetRangeAdjustMatrix(src)));
+      std::make_unique<ColorTransformMatrix>(GetRangeAdjustMatrix(src)));
 
   steps_.push_back(
-      base::MakeUnique<ColorTransformMatrix>(Invert(GetTransferMatrix(src))));
+      std::make_unique<ColorTransformMatrix>(Invert(GetTransferMatrix(src))));
 
   // If the target color space is not defined, just apply the adjust and
   // tranfer matrices. This path is used by YUV to RGB color conversion
@@ -849,41 +849,41 @@ void ColorTransformInternal::AppendColorSpaceToColorSpaceTransform(
 
   SkColorSpaceTransferFn src_to_linear_fn;
   if (src.GetTransferFunction(&src_to_linear_fn)) {
-    steps_.push_back(base::MakeUnique<ColorTransformSkTransferFn>(
+    steps_.push_back(std::make_unique<ColorTransformSkTransferFn>(
         src_to_linear_fn, src.HasExtendedSkTransferFn()));
   } else if (src.transfer_ == ColorSpace::TransferID::SMPTEST2084_NON_HDR) {
     steps_.push_back(
-        base::MakeUnique<ColorTransformSMPTEST2048NonHdrToLinear>());
+        std::make_unique<ColorTransformSMPTEST2048NonHdrToLinear>());
   } else {
-    steps_.push_back(base::MakeUnique<ColorTransformToLinear>(src.transfer_));
+    steps_.push_back(std::make_unique<ColorTransformToLinear>(src.transfer_));
   }
 
   if (src.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
     // BT2020 CL is a special case.
-    steps_.push_back(base::MakeUnique<ColorTransformFromBT2020CL>());
+    steps_.push_back(std::make_unique<ColorTransformFromBT2020CL>());
   }
   steps_.push_back(
-      base::MakeUnique<ColorTransformMatrix>(GetPrimaryTransform(src)));
+      std::make_unique<ColorTransformMatrix>(GetPrimaryTransform(src)));
 
   steps_.push_back(
-      base::MakeUnique<ColorTransformMatrix>(Invert(GetPrimaryTransform(dst))));
+      std::make_unique<ColorTransformMatrix>(Invert(GetPrimaryTransform(dst))));
   if (dst.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
     // BT2020 CL is a special case.
-    steps_.push_back(base::MakeUnique<ColorTransformToBT2020CL>());
+    steps_.push_back(std::make_unique<ColorTransformToBT2020CL>());
   }
 
   SkColorSpaceTransferFn dst_from_linear_fn;
   if (dst.GetInverseTransferFunction(&dst_from_linear_fn)) {
-    steps_.push_back(base::MakeUnique<ColorTransformSkTransferFn>(
+    steps_.push_back(std::make_unique<ColorTransformSkTransferFn>(
         dst_from_linear_fn, dst.HasExtendedSkTransferFn()));
   } else {
-    steps_.push_back(base::MakeUnique<ColorTransformFromLinear>(dst.transfer_));
+    steps_.push_back(std::make_unique<ColorTransformFromLinear>(dst.transfer_));
   }
 
   steps_.push_back(
-      base::MakeUnique<ColorTransformMatrix>(GetTransferMatrix(dst)));
+      std::make_unique<ColorTransformMatrix>(GetTransferMatrix(dst)));
 
-  steps_.push_back(base::MakeUnique<ColorTransformMatrix>(
+  steps_.push_back(std::make_unique<ColorTransformMatrix>(
       Invert(GetRangeAdjustMatrix(dst))));
 }
 
@@ -955,13 +955,11 @@ class SkiaColorTransform : public ColorTransformStep {
 
 sk_sp<SkColorSpace> ColorTransformInternal::GetSkColorSpaceIfNecessary(
     const ColorSpace& color_space) {
-  if (color_space.primaries_ != ColorSpace::PrimaryID::ICC_BASED &&
-      color_space.transfer_ != ColorSpace::TransferID::ICC_BASED) {
+  if (!color_space.icc_profile_id_)
     return nullptr;
-  }
-  DCHECK(color_space.icc_profile_sk_color_space_);
-  return color_space.icc_profile_sk_color_space_;
+  return ICCProfile::GetSkColorSpaceFromId(color_space.icc_profile_id_);
 }
+
 ColorTransformInternal::ColorTransformInternal(const ColorSpace& src,
                                                const ColorSpace& dst,
                                                Intent intent)
@@ -987,7 +985,7 @@ ColorTransformInternal::ColorTransformInternal(const ColorSpace& src,
   has_dst_profile = !!dst_sk_color_space;
 
   if (has_src_profile) {
-    steps_.push_back(base::MakeUnique<SkiaColorTransform>(
+    steps_.push_back(std::make_unique<SkiaColorTransform>(
         std::move(src_sk_color_space),
         ColorSpace::CreateXYZD50().ToSkColorSpace()));
   }
@@ -995,7 +993,7 @@ ColorTransformInternal::ColorTransformInternal(const ColorSpace& src,
       has_src_profile ? ColorSpace::CreateXYZD50() : src_,
       has_dst_profile ? ColorSpace::CreateXYZD50() : dst_, intent);
   if (has_dst_profile) {
-    steps_.push_back(base::MakeUnique<SkiaColorTransform>(
+    steps_.push_back(std::make_unique<SkiaColorTransform>(
         ColorSpace::CreateXYZD50().ToSkColorSpace(),
         std::move(dst_sk_color_space)));
   }

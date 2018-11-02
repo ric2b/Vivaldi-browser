@@ -69,10 +69,17 @@ void ShortcutInfo::UpdateFromManifest(const content::Manifest& manifest) {
   if (manifest.background_color != content::Manifest::kInvalidOrMissingColor)
     background_color = manifest.background_color;
 
+  // Sets the URL of the HTML splash screen, if any.
+  if (manifest.splash_screen_url.is_valid())
+    splash_screen_url = manifest.splash_screen_url;
+
   // Set the icon urls based on the icons in the manifest, if any.
   icon_urls.clear();
   for (const content::Manifest::Icon& icon : manifest.icons)
     icon_urls.push_back(icon.src.spec());
+
+  if (manifest.share_target)
+    share_target_url_template = manifest.share_target->url_template.string();
 }
 
 void ShortcutInfo::UpdateSource(const Source new_source) {

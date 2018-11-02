@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.preferences.website;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
@@ -15,7 +16,6 @@ import android.text.format.Formatter;
 import android.view.View;
 import android.widget.TextView;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
@@ -26,7 +26,6 @@ import org.chromium.chrome.browser.widget.RoundedIconGenerator;
  * A preference that displays a website's favicon and URL and, optionally, the amount of local
  * storage used by the site.
  */
-@SuppressFBWarnings("EQ_COMPARETO_USE_OBJECT_EQUALS")
 class WebsitePreference extends Preference implements FaviconImageCallback {
     private final Website mSite;
     private final SiteSettingsCategory mCategory;
@@ -68,6 +67,10 @@ class WebsitePreference extends Preference implements FaviconImageCallback {
         getExtras().putSerializable(key, mSite);
     }
 
+    public void putSiteAddressIntoExtras(String key) {
+        getExtras().putSerializable(key, mSite.getAddress());
+    }
+
     /**
      * Return the Website this object is representing.
      */
@@ -79,18 +82,18 @@ class WebsitePreference extends Preference implements FaviconImageCallback {
     public void onFaviconAvailable(Bitmap image, String iconUrl) {
         mFaviconHelper.destroy();
         mFaviconHelper = null;
+        Resources resources = getContext().getResources();
         if (image == null) {
             // Invalid favicon, produce a generic one.
-            float density = getContext().getResources().getDisplayMetrics().density;
+            float density = resources.getDisplayMetrics().density;
             int faviconSizeDp = Math.round(mFaviconSizePx / density);
-            RoundedIconGenerator faviconGenerator = new RoundedIconGenerator(
-                    getContext(), faviconSizeDp, faviconSizeDp,
-                    FAVICON_CORNER_RADIUS_DP, FAVICON_BACKGROUND_COLOR,
-                    FAVICON_TEXT_SIZE_DP);
+            RoundedIconGenerator faviconGenerator = new RoundedIconGenerator(resources,
+                    faviconSizeDp, faviconSizeDp, FAVICON_CORNER_RADIUS_DP,
+                    FAVICON_BACKGROUND_COLOR, FAVICON_TEXT_SIZE_DP);
             image = faviconGenerator.generateIconForUrl(faviconUrl());
         }
 
-        setIcon(new BitmapDrawable(getContext().getResources(), image));
+        setIcon(new BitmapDrawable(resources, image));
     }
 
     /**

@@ -316,7 +316,7 @@ error::Error DoGetShaderPrecisionFormat(GLenum shadertype,
                                         GLint* precision,
                                         int32_t* success);
 error::Error DoGetShaderSource(GLuint shader, std::string* source);
-error::Error DoGetString(GLenum name, const char** result);
+error::Error DoGetString(GLenum name, uint32_t bucket_id);
 error::Error DoGetSynciv(GLuint sync,
                          GLenum pname,
                          GLsizei bufsize,
@@ -428,6 +428,20 @@ error::Error DoReadPixels(GLint x,
                           GLsizei* rows,
                           void* pixels,
                           int32_t* success);
+error::Error DoReadPixelsAsync(GLint x,
+                               GLint y,
+                               GLsizei width,
+                               GLsizei height,
+                               GLenum format,
+                               GLenum type,
+                               GLsizei bufsize,
+                               GLsizei* length,
+                               GLsizei* columns,
+                               GLsizei* rows,
+                               uint32_t pixels_shm_id,
+                               uint32_t pixels_shm_offset,
+                               uint32_t result_shm_id,
+                               uint32_t result_shm_offset);
 error::Error DoReleaseShaderCompiler();
 error::Error DoRenderbufferStorage(GLenum target,
                                    GLenum internalformat,
@@ -475,6 +489,11 @@ error::Error DoTexImage2D(GLenum target,
                           GLenum type,
                           GLsizei image_size,
                           const void* pixels);
+error::Error DoTexStorage2DImageCHROMIUM(GLenum target,
+                                         GLenum internalformat,
+                                         GLenum bufferusage,
+                                         GLsizei width,
+                                         GLsizei height);
 error::Error DoTexImage3D(GLenum target,
                           GLint level,
                           GLint internalformat,
@@ -788,8 +807,6 @@ error::Error DoProduceTextureCHROMIUM(GLenum target,
 error::Error DoProduceTextureDirectCHROMIUM(GLuint texture_client_id,
                                             GLenum target,
                                             const volatile GLbyte* mailbox);
-error::Error DoConsumeTextureCHROMIUM(GLenum target,
-                                      const volatile GLbyte* mailbox);
 error::Error DoCreateAndConsumeTextureINTERNAL(GLenum target,
                                                GLuint texture_client_id,
                                                const volatile GLbyte* mailbox);
@@ -995,3 +1012,8 @@ error::Error DoBeginRasterCHROMIUM(GLuint texture_id,
                                    GLboolean use_distance_field_text,
                                    GLint pixel_config);
 error::Error DoEndRasterCHROMIUM();
+error::Error DoUnlockTransferCacheEntryCHROMIUM(GLuint64 id);
+error::Error DoDeleteTransferCacheEntryCHROMIUM(GLuint64 id);
+error::Error DoWindowRectanglesEXT(GLenum mode,
+                                   GLsizei n,
+                                   const volatile GLint* box);

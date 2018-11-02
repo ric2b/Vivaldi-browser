@@ -148,6 +148,9 @@ component("gl") {
 
   deps = [
     "//base/third_party/dynamic_annotations",
+
+    # ANGLE includes are used cross-platform.
+    "//third_party/angle:includes",
   ]
   public_deps = [
     "//base",
@@ -185,6 +188,13 @@ component("gl") {
       sources += [
         "gl_image_native_pixmap.cc",
         "gl_image_native_pixmap.h",
+      ]
+    }
+
+    if (is_android) {
+      sources += [
+        "gl_image_ahardwarebuffer.cc",
+        "gl_image_ahardwarebuffer.h",
       ]
     }
   }
@@ -264,8 +274,6 @@ component("gl") {
       "//third_party/mesa:osmesa",
       "//third_party/swiftshader",
     ]
-
-    deps += [ "//third_party/angle:includes" ]
   }
   if (is_mac) {
     sources += [
@@ -415,7 +423,14 @@ test("gl_unittests") {
   }
 
   if (is_win) {
-    sources += [ "wgl_api_unittest.cc" ]
+    sources += [
+      "gl_image_dxgi_unittest.cc",
+      "wgl_api_unittest.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [ "gl_image_ahardwarebuffer_unittest.cc" ]
   }
 
   include_dirs = [ "//third_party/khronos" ]
@@ -439,6 +454,12 @@ test("gl_unittests") {
   data_deps = [
     "//third_party/mesa:osmesa",
   ]
+
+  if (use_x11) {
+    sources += [ "gl_context_glx_unittest.cc" ]
+    deps += [ "//ui/gfx/x" ]
+    configs += [ "//build/config/linux:x11" ]
+  }
 }
 
 # We can't run this test on real Chrome OS hardware for Ozone, so new target.

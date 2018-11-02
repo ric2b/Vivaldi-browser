@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/ui/dialogs/dialog_presenter.h"
 
-#include <deque>
 #include <map>
 
+#include "base/containers/circular_deque.h"
 #import "base/ios/block_types.h"
 #include "base/logging.h"
 #import "base/mac/scoped_nsobject.h"
@@ -16,9 +16,9 @@
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/input_alert_coordinator.h"
 #import "ios/chrome/browser/ui/dialogs/java_script_dialog_blocking_state.h"
+#import "ios/chrome/browser/ui/dialogs/nsurl_protection_space_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/shared/chrome/browser/ui/dialogs/nsurl_protection_space_util.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -34,7 +34,7 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
 @interface DialogPresenter () {
   // Queue of WebStates which correspond to the keys in
   // |_dialogCoordinatorsForWebStates|.
-  std::deque<web::WebState*> _queuedWebStates;
+  base::circular_deque<web::WebState*> _queuedWebStates;
   // A map associating queued webStates with their coordinators.
   std::map<web::WebState*, base::scoped_nsobject<AlertCoordinator>>
       _dialogCoordinatorsForWebStates;

@@ -6,9 +6,13 @@
       "provides": {
         "browser": [
           "content::mojom::Child",
+          "content::mojom::ChildControl",
+          "content::mojom::ChildHistogramFetcher",
+          "content::mojom::ChildHistogramFetcherFactory",
           "IPC::mojom::ChannelBootstrap",
           "service_manager::mojom::ServiceFactory",
-          "ui::mojom::GpuMain"
+          "viz::mojom::CompositingModeReporter",
+          "viz::mojom::VizMain"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
@@ -17,7 +21,8 @@
       "requires": {
         "*": [ "app" ],
         "content_browser": [ "gpu" ],
-        "device": [ "device:power_monitor" ]
+        "device": [ "device:power_monitor" ],
+        "metrics": [ "url_keyed_metrics" ]
       }
     }
   }

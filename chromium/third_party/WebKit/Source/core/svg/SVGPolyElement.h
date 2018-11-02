@@ -21,9 +21,9 @@
 #ifndef SVGPolyElement_h
 #define SVGPolyElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedPointList.h"
 #include "core/svg/SVGGeometryElement.h"
+#include "core/svg_names.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -35,7 +35,7 @@ class SVGPolyElement : public SVGGeometryElement {
   SVGPointListTearOff* pointsFromJavascript() { return points_->baseVal(); }
   SVGPointListTearOff* animatedPoints() { return points_->animVal(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   SVGPolyElement(const QualifiedName&, Document&);

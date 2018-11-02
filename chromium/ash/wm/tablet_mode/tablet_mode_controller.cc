@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard.h"
@@ -107,7 +107,7 @@ TabletModeController::UiMode GetTabletMode() {
 
 std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
 CreateScopedDisableInternalMouseAndKeyboard() {
-  return base::MakeUnique<ScopedDisableInternalMouseAndKeyboardOzone>();
+  return std::make_unique<ScopedDisableInternalMouseAndKeyboardOzone>();
 }
 
 }  // namespace
@@ -121,6 +121,7 @@ TabletModeController::TabletModeController()
       lid_is_closed_(false),
       auto_hide_title_bars_(!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAshDisableTabletAutohideTitlebars)),
+      binding_(this),
       scoped_session_observer_(this),
       weak_factory_(this) {
   Shell::Get()->AddShellObserver(this);
@@ -137,7 +138,7 @@ TabletModeController::TabletModeController()
   chromeos::PowerManagerClient* power_manager_client =
       chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
   power_manager_client->AddObserver(this);
-  power_manager_client->GetSwitchStates(base::Bind(
+  power_manager_client->GetSwitchStates(base::BindOnce(
       &TabletModeController::OnGetSwitchStates, weak_factory_.GetWeakPtr()));
 }
 
@@ -173,10 +174,8 @@ void TabletModeController::EnableTabletModeWindowManager(bool should_enable) {
     for (auto& observer : tablet_mode_observers_)
       observer.OnTabletModeStarted();
 
-    observers_.ForAllPtrs([](mojom::TabletModeObserver* observer) {
-      observer->OnTabletModeToggled(true);
-    });
-
+    if (client_)  // Null at startup and in tests.
+      client_->OnTabletModeToggled(true);
   } else {
     tablet_mode_window_manager_->SetIgnoreWmEventsForExit();
     for (auto& observer : tablet_mode_observers_)
@@ -187,9 +186,8 @@ void TabletModeController::EnableTabletModeWindowManager(bool should_enable) {
     for (auto& observer : tablet_mode_observers_)
       observer.OnTabletModeEnded();
 
-    observers_.ForAllPtrs([](mojom::TabletModeObserver* observer) {
-      observer->OnTabletModeToggled(false);
-    });
+    if (client_)  // Null at startup and in tests.
+      client_->OnTabletModeToggled(false);
   }
 }
 
@@ -203,8 +201,8 @@ void TabletModeController::AddWindow(aura::Window* window) {
 }
 
 void TabletModeController::BindRequest(
-    mojom::TabletModeManagerRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+    mojom::TabletModeControllerRequest request) {
+  binding_.Bind(std::move(request));
 }
 
 void TabletModeController::AddObserver(TabletModeObserver* observer) {
@@ -293,7 +291,8 @@ void TabletModeController::TabletModeEventReceived(
   }
 }
 
-void TabletModeController::SuspendImminent() {
+void TabletModeController::SuspendImminent(
+    power_manager::SuspendImminent::Reason reason) {
   // The system is about to suspend, so record TabletMode usage interval metrics
   // based on whether TabletMode mode is currently active.
   RecordTabletModeUsageInterval(CurrentTabletModeIntervalType());
@@ -390,6 +389,10 @@ void TabletModeController::LeaveTabletMode() {
   EnableTabletModeWindowManager(false);
 }
 
+void TabletModeController::FlushForTesting() {
+  binding_.FlushForTesting();
+}
+
 void TabletModeController::OnShellInitialized() {
   force_ui_mode_ = GetTabletMode();
   if (force_ui_mode_ == UiMode::TABLETMODE)
@@ -439,9 +442,9 @@ TabletModeController::CurrentTabletModeIntervalType() {
   return TABLET_MODE_INTERVAL_INACTIVE;
 }
 
-void TabletModeController::AddObserver(mojom::TabletModeObserverPtr observer) {
-  observer->OnTabletModeToggled(IsTabletModeWindowManagerEnabled());
-  observers_.AddPtr(std::move(observer));
+void TabletModeController::SetClient(mojom::TabletModeClientPtr client) {
+  client_ = std::move(client);
+  client_->OnTabletModeToggled(IsTabletModeWindowManagerEnabled());
 }
 
 bool TabletModeController::AllowEnterExitTabletMode() const {
@@ -471,10 +474,11 @@ void TabletModeController::OnChromeTerminating() {
 }
 
 void TabletModeController::OnGetSwitchStates(
-    chromeos::PowerManagerClient::LidState lid_state,
-    chromeos::PowerManagerClient::TabletMode tablet_mode) {
-  LidEventReceived(lid_state, base::TimeTicks::Now());
-  TabletModeEventReceived(tablet_mode, base::TimeTicks::Now());
+    base::Optional<chromeos::PowerManagerClient::SwitchStates> result) {
+  if (!result.has_value())
+    return;
+  LidEventReceived(result->lid_state, base::TimeTicks::Now());
+  TabletModeEventReceived(result->tablet_mode, base::TimeTicks::Now());
 }
 
 bool TabletModeController::WasLidOpenedRecently() const {

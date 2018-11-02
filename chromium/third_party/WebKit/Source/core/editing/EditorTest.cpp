@@ -5,12 +5,12 @@
 #include "core/editing/Editor.h"
 
 #include "core/dom/Document.h"
-#include "core/editing/EditingTestBase.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLHtmlElement.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 
 namespace blink {
 
@@ -31,7 +31,7 @@ TEST_F(EditorTest, tidyUpHTMLStructureFromBody) {
   GetDocument().AppendChild(body);
   Editor::TidyUpHTMLStructure(GetDocument());
 
-  EXPECT_TRUE(isHTMLHtmlElement(GetDocument().documentElement()));
+  EXPECT_TRUE(IsHTMLHtmlElement(GetDocument().documentElement()));
   EXPECT_EQ(body, GetDocument().body());
   EXPECT_EQ(GetDocument().documentElement(), body->parentNode());
 }
@@ -43,8 +43,8 @@ TEST_F(EditorTest, tidyUpHTMLStructureFromDiv) {
   GetDocument().AppendChild(div);
   Editor::TidyUpHTMLStructure(GetDocument());
 
-  EXPECT_TRUE(isHTMLHtmlElement(GetDocument().documentElement()));
-  EXPECT_TRUE(isHTMLBodyElement(GetDocument().body()));
+  EXPECT_TRUE(IsHTMLHtmlElement(GetDocument().documentElement()));
+  EXPECT_TRUE(IsHTMLBodyElement(GetDocument().body()));
   EXPECT_EQ(GetDocument().body(), div->parentNode());
 }
 
@@ -55,8 +55,8 @@ TEST_F(EditorTest, tidyUpHTMLStructureFromHead) {
   GetDocument().AppendChild(head);
   Editor::TidyUpHTMLStructure(GetDocument());
 
-  EXPECT_TRUE(isHTMLHtmlElement(GetDocument().documentElement()));
-  EXPECT_TRUE(isHTMLBodyElement(GetDocument().body()));
+  EXPECT_TRUE(IsHTMLHtmlElement(GetDocument().documentElement()));
+  EXPECT_TRUE(IsHTMLBodyElement(GetDocument().body()));
   EXPECT_EQ(GetDocument().documentElement(), head->parentNode());
 }
 
@@ -68,7 +68,7 @@ TEST_F(EditorTest, copyGeneratedPassword) {
   SetBodyContent(body_content);
 
   HTMLInputElement& element =
-      toHTMLInputElement(*GetDocument().getElementById("password"));
+      ToHTMLInputElement(*GetDocument().getElementById("password"));
 
   const String kPasswordValue = "secret";
   element.focus();

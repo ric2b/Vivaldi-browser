@@ -268,6 +268,7 @@ void ProcessManager::RegisterRenderFrameHost(
     content::WebContents* web_contents,
     content::RenderFrameHost* render_frame_host,
     const Extension* extension) {
+  DCHECK(render_frame_host->IsRenderFrameLive());
   ExtensionRenderFrameData* data = &all_extension_frames_[render_frame_host];
   data->view_type = GetViewType(web_contents);
 
@@ -426,8 +427,9 @@ bool ProcessManager::WakeEventPage(const std::string& extension_id,
   }
   LazyBackgroundTaskQueue* queue =
       LazyBackgroundTaskQueue::Get(browser_context_);
-  queue->AddPendingTask(browser_context_, extension_id,
-                        base::Bind(&PropagateExtensionWakeResult, callback));
+  queue->AddPendingTask(
+      browser_context_, extension_id,
+      base::BindOnce(&PropagateExtensionWakeResult, callback));
   return true;
 }
 
@@ -611,8 +613,9 @@ void ProcessManager::Observe(int type,
     case extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED: {
       ExtensionHost* host = content::Details<ExtensionHost>(details).ptr();
       if (background_hosts_.erase(host)) {
-        ClearBackgroundPageData(host->extension()->id());
-        background_page_data_[host->extension()->id()].since_suspended.reset(
+        // Note: |host->extension()| may be null at this point.
+        ClearBackgroundPageData(host->extension_id());
+        background_page_data_[host->extension_id()].since_suspended.reset(
             new base::ElapsedTimer());
       }
       break;
@@ -793,8 +796,8 @@ void ProcessManager::CloseLazyBackgroundPageNow(const std::string& extension_id,
     for (content::RenderFrameHost* frame : frames_to_close) {
       content::WebContents::FromRenderFrameHost(frame)->ClosePage();
       // WebContents::ClosePage() may result in calling
-      // UnregisterRenderViewHost() asynchronously and may cause race conditions
-      // when the background page is reloaded.
+      // UnregisterRenderFrameHost() asynchronously and may cause race
+      // conditions when the background page is reloaded.
       // To avoid this, unregister the view now.
       UnregisterRenderFrameHost(frame);
     }
@@ -855,7 +858,7 @@ void ProcessManager::UnregisterExtension(const std::string& extension_id) {
 void ProcessManager::ClearBackgroundPageData(const std::string& extension_id) {
   background_page_data_.erase(extension_id);
 
-  // Re-register all RenderViews for this extension. We do this to restore
+  // Re-register all RenderFrames for this extension. We do this to restore
   // the lazy_keepalive_count (if any) to properly reflect the number of open
   // views.
   for (const auto& key_value : all_extension_frames_) {

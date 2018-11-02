@@ -31,10 +31,10 @@
 #ifndef SharedBufferReader_h
 #define SharedBufferReader_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -46,7 +46,7 @@ class CORE_EXPORT SharedBufferReader {
   USING_FAST_MALLOC(SharedBufferReader);
 
  public:
-  SharedBufferReader(RefPtr<const SharedBuffer>);
+  SharedBufferReader(scoped_refptr<const SharedBuffer>);
 
   ~SharedBufferReader();
 
@@ -57,7 +57,7 @@ class CORE_EXPORT SharedBufferReader {
   int ReadData(char* output_buffer, int asked_to_read);
 
  private:
-  RefPtr<const SharedBuffer> buffer_;
+  scoped_refptr<const SharedBuffer> buffer_;
   size_t current_offset_;
 };
 

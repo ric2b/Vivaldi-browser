@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "cc/cc_export.h"
-#include "cc/quads/render_pass.h"
+#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect.h"
@@ -22,30 +22,31 @@ namespace gfx {
 class Rect;
 }
 
-namespace cc {
-
-class DisplayResourceProvider;
-class DrawQuad;
+namespace viz {
 class StreamVideoDrawQuad;
 class TextureDrawQuad;
 class TileDrawQuad;
+}  // namespace viz
+
+namespace cc {
+class DisplayResourceProvider;
 
 class CC_EXPORT OverlayCandidate {
  public:
   // Returns true and fills in |candidate| if |draw_quad| is of a known quad
   // type and contains an overlayable resource.
   static bool FromDrawQuad(DisplayResourceProvider* resource_provider,
-                           const DrawQuad* quad,
+                           const viz::DrawQuad* quad,
                            OverlayCandidate* candidate);
   // Returns true if |quad| will not block quads underneath from becoming
   // an overlay.
-  static bool IsInvisibleQuad(const DrawQuad* quad);
+  static bool IsInvisibleQuad(const viz::DrawQuad* quad);
 
   // Returns true if any any of the quads in the list given by |quad_list_begin|
   // and |quad_list_end| are visible and on top of |candidate|.
   static bool IsOccluded(const OverlayCandidate& candidate,
-                         QuadList::ConstIterator quad_list_begin,
-                         QuadList::ConstIterator quad_list_end);
+                         viz::QuadList::ConstIterator quad_list_begin,
+                         viz::QuadList::ConstIterator quad_list_end);
 
   OverlayCandidate();
   OverlayCandidate(const OverlayCandidate& other);
@@ -99,18 +100,18 @@ class CC_EXPORT OverlayCandidate {
 
  private:
   static bool FromDrawQuadResource(DisplayResourceProvider* resource_provider,
-                                   const DrawQuad* quad,
+                                   const viz::DrawQuad* quad,
                                    viz::ResourceId resource_id,
                                    bool y_flipped,
                                    OverlayCandidate* candidate);
   static bool FromTextureQuad(DisplayResourceProvider* resource_provider,
-                              const TextureDrawQuad* quad,
+                              const viz::TextureDrawQuad* quad,
                               OverlayCandidate* candidate);
   static bool FromTileQuad(DisplayResourceProvider* resource_provider,
-                           const TileDrawQuad* quad,
+                           const viz::TileDrawQuad* quad,
                            OverlayCandidate* candidate);
   static bool FromStreamVideoQuad(DisplayResourceProvider* resource_provider,
-                                  const StreamVideoDrawQuad* quad,
+                                  const viz::StreamVideoDrawQuad* quad,
                                   OverlayCandidate* candidate);
 };
 

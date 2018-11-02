@@ -6,30 +6,27 @@
 #define GPU_COMMAND_BUFFER_CLIENT_CLIENT_DISCARDABLE_MANAGER_H_
 
 #include <map>
-#include <queue>
 #include <set>
 
+#include "base/containers/queue.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/gpu_export.h"
 
 namespace gpu {
 
-// ClientDiscardableManager is a helper class used by the client GLES2
-// implementation. Currently, this class only supports textures, but it could
-// be extended to other types in the future.
-//
-// When the GLES2 impl is done with a texture (the texture is being deleted),
-// it should call FreeTexture to allow helper memory to be reclaimed.
+// ClientDiscardableManager is a helper class used by the
+// ClientDiscardableTextureManager. It allows for the creation and management
+// of ClientDiscardableHandles.
 class GPU_EXPORT ClientDiscardableManager {
  public:
   ClientDiscardableManager();
   ~ClientDiscardableManager();
-  ClientDiscardableHandle InitializeTexture(CommandBuffer* command_buffer,
-                                            uint32_t texture_id);
-  bool LockTexture(uint32_t texture_id);
-  void FreeTexture(uint32_t texture_id);
-  bool TextureIsValid(uint32_t texture_id) const;
+  ClientDiscardableHandle::Id CreateHandle(CommandBuffer* command_buffer);
+  bool LockHandle(ClientDiscardableHandle::Id handle_id);
+  void FreeHandle(ClientDiscardableHandle::Id handle_id);
+  bool HandleIsValid(ClientDiscardableHandle::Id handle_id) const;
+  ClientDiscardableHandle GetHandle(ClientDiscardableHandle::Id handle_id);
 
   // Test only functions.
   void CheckPendingForTesting(CommandBuffer* command_buffer) {
@@ -39,10 +36,9 @@ class GPU_EXPORT ClientDiscardableManager {
     elements_per_allocation_ = count;
     allocation_size_ = count * element_size_;
   }
-  ClientDiscardableHandle GetHandleForTesting(uint32_t texture_id);
 
  private:
-  void FindAllocation(CommandBuffer* command_buffer,
+  bool FindAllocation(CommandBuffer* command_buffer,
                       scoped_refptr<Buffer>* buffer,
                       int32_t* shm_id,
                       uint32_t* offset);
@@ -58,11 +54,11 @@ class GPU_EXPORT ClientDiscardableManager {
 
   struct Allocation;
   std::vector<std::unique_ptr<Allocation>> allocations_;
-  std::map<uint32_t, ClientDiscardableHandle> texture_handles_;
+  std::map<ClientDiscardableHandle::Id, ClientDiscardableHandle> handles_;
 
   // Handles that are pending service deletion, and can be re-used once
   // ClientDiscardableHandle::CanBeReUsed returns true.
-  std::queue<ClientDiscardableHandle> pending_handles_;
+  base::queue<ClientDiscardableHandle> pending_handles_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientDiscardableManager);
 };

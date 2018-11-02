@@ -8,10 +8,10 @@
 
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_device_client.h"
@@ -34,7 +34,6 @@ namespace {
 const char kTestIPv4Address[] = "1.2.3.4";
 const char kTestIPv6Address[] = "1:2:3:4:5:6:7:8";
 
-void DoNothingWithCallStatus(DBusMethodCallStatus call_status) {}
 void ErrorCallbackFunction(const std::string& error_name,
                            const std::string& error_message) {
   LOG(ERROR) << "Shill Error: " << error_name << " : " << error_message;
@@ -45,9 +44,11 @@ void ResolveCompletionCallback(int result) {}
 
 class HostResolverImplChromeOSTest : public testing::Test {
  public:
-  HostResolverImplChromeOSTest() {}
+  HostResolverImplChromeOSTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
 
-  ~HostResolverImplChromeOSTest() override {}
+  ~HostResolverImplChromeOSTest() override = default;
 
   void SetUp() override {
     DBusThreadManager::Initialize();
@@ -63,8 +64,8 @@ class HostResolverImplChromeOSTest : public testing::Test {
     ASSERT_TRUE(default_device);
     SetDefaultIPConfigs(default_device->path());
 
-    // Create the host resolver from the IO message loop.
-    io_message_loop_.task_runner()->PostTask(
+    // Create the host resolver from the main thread loop.
+    scoped_task_environment_.GetMainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::Bind(&HostResolverImplChromeOSTest::InitializeHostResolver,
                    base::Unretained(this)));
@@ -78,9 +79,8 @@ class HostResolverImplChromeOSTest : public testing::Test {
   }
 
  protected:
-  // Run from main (UI) message loop, calls Resolve on IO message loop.
   int CallResolve(net::HostResolver::RequestInfo& info) {
-    io_message_loop_.task_runner()->PostTask(
+    scoped_task_environment_.GetMainThreadTaskRunner()->PostTask(
         FROM_HERE, base::Bind(&HostResolverImplChromeOSTest::Resolve,
                               base::Unretained(this), info));
     base::RunLoop().RunUntilIdle();
@@ -91,14 +91,14 @@ class HostResolverImplChromeOSTest : public testing::Test {
   int result_;
 
  private:
-  // Run from IO message loop.
+  // Run from the main thread loop.
   void InitializeHostResolver() {
     net::HostResolver::Options options;
     host_resolver_ = HostResolverImplChromeOS::CreateHostResolverForTest(
         base::ThreadTaskRunnerHandle::Get(), network_state_handler_.get());
   }
 
-  // Run from IO message loop.
+  // Run from the main thread loop.
   void Resolve(net::HostResolver::RequestInfo info) {
     result_ = host_resolver_->Resolve(info, net::DEFAULT_PRIORITY, &addresses_,
                                       base::Bind(&ResolveCompletionCallback),
@@ -129,15 +129,15 @@ class HostResolverImplChromeOSTest : public testing::Test {
                    const std::string& address) {
     DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
         dbus::ObjectPath(path), shill::kAddressProperty, base::Value(address),
-        base::Bind(&DoNothingWithCallStatus));
+        EmptyVoidDBusMethodCallback());
     DBusThreadManager::Get()->GetShillIPConfigClient()->SetProperty(
         dbus::ObjectPath(path), shill::kMethodProperty, base::Value(method),
-        base::Bind(&DoNothingWithCallStatus));
+        EmptyVoidDBusMethodCallback());
   }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<NetworkStateHandler> network_state_handler_;
   std::unique_ptr<net::HostResolver> host_resolver_;
-  base::MessageLoop io_message_loop_;
   net::NetLogWithSource net_log_;
   std::unique_ptr<net::HostResolver::Request> request_;
 

@@ -37,14 +37,14 @@
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/schema/thumbnails.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
-#include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::BrowserThread;
 using content::RenderWidgetHost;
@@ -151,7 +151,7 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
       bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
 
     view->CopyFromSurface(capture_area, bitmap_size, callback,
-                               kN32_SkColorType);
+                          kN32_SkColorType);
   }
   return true;
 }
@@ -178,7 +178,7 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
     }
     const PrefService* user_prefs = GetProfile()->GetPrefs();
     save_folder_ =
-        user_prefs->GetString(vivaldiprefs::kVivaldiCaptureDirectory);
+        user_prefs->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
   if (params->params.encode_to_data_url.get()) {
     encode_to_data_url_ = *params->params.encode_to_data_url;
@@ -192,8 +192,7 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
       gfx::Rect rect(params->params.pos_x, params->params.pos_y,
                      params->params.width, params->params.height);
       content::WebContents* contents =
-          static_cast<VivaldiBrowserWindow*>(browser->window())
-              ->web_contents();
+          static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
       return CaptureAsync(
           contents, rect,
           base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
@@ -295,7 +294,11 @@ ThumbnailsCaptureUIFunction::~ThumbnailsCaptureUIFunction() {}
 
 ThumbnailsCaptureTabFunction::ThumbnailsCaptureTabFunction() {}
 
-ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() {}
+ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() {
+  if (!did_respond()) {
+    SendResponse(false);
+  }
+}
 
 bool ThumbnailsCaptureTabFunction::RunAsync() {
   std::unique_ptr<vivaldi::thumbnails::CaptureTab::Params> params(
@@ -333,7 +336,7 @@ bool ThumbnailsCaptureTabFunction::RunAsync() {
     }
     const PrefService* user_prefs = GetProfile()->GetPrefs();
     save_folder_ =
-        user_prefs->GetString(vivaldiprefs::kVivaldiCaptureDirectory);
+        user_prefs->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
   if (params->params.copy_to_clipboard.get()) {
     copy_to_clipboard_ = *params->params.copy_to_clipboard;
@@ -396,8 +399,7 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   }
   // Make sure the size is representable as a signed 32-bit int, so
   // SkBitmap::getSize() won't be truncated.
-  if (!sk_64_isS32(bitmap.computeSize64()) ||
-      !bitmap_buffer->Map(bitmap.getSize())) {
+  if (!bitmap_buffer->Map(bitmap.computeByteSize())) {
     DispatchError("Failed to capture tab: size mismatch");
     return;
   }

@@ -19,10 +19,6 @@
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_NSS_CERTS)
-#include "net/cert/x509_util_nss.h"
-#endif
-
 namespace net {
 
 namespace {
@@ -149,13 +145,8 @@ TYPED_TEST_P(ClientCertStoreTest, PrintableStringContainingUTF8) {
   std::string cert_der(pem_tokenizer.data());
   ASSERT_FALSE(pem_tokenizer.GetNext());
 
-#if defined(USE_NSS_CERTS)
-  ScopedCERTCertificate cert_handle = x509_util::CreateCERTCertificateFromBytes(
-      reinterpret_cast<const uint8_t*>(cert_der.data()), cert_der.size());
-#else
   bssl::UniquePtr<CRYPTO_BUFFER> cert_handle =
       x509_util::CreateCryptoBuffer(cert_der);
-#endif
   ASSERT_TRUE(cert_handle);
 
   X509Certificate::UnsafeCreateOptions options;

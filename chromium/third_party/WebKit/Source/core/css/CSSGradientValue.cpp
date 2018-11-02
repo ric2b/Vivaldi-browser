@@ -99,15 +99,16 @@ bool CSSGradientColorStop::IsCacheable() const {
   return !offset_ || !offset_->IsFontRelativeLength();
 }
 
-DEFINE_TRACE(CSSGradientColorStop) {
+void CSSGradientColorStop::Trace(blink::Visitor* visitor) {
   visitor->Trace(offset_);
   visitor->Trace(color_);
 }
 
-RefPtr<Image> CSSGradientValue::GetImage(const ImageResourceObserver& client,
-                                         const Document& document,
-                                         const ComputedStyle& style,
-                                         const IntSize& size) {
+scoped_refptr<Image> CSSGradientValue::GetImage(
+    const ImageResourceObserver& client,
+    const Document& document,
+    const ComputedStyle& style,
+    const IntSize& size) {
   if (size.IsEmpty())
     return nullptr;
 
@@ -124,7 +125,7 @@ RefPtr<Image> CSSGradientValue::GetImage(const ImageResourceObserver& client,
   }
 
   // We need to create an image.
-  RefPtr<Gradient> gradient;
+  scoped_refptr<Gradient> gradient;
 
   const ComputedStyle* root_style =
       document.documentElement()->GetComputedStyle();
@@ -151,7 +152,8 @@ RefPtr<Image> CSSGradientValue::GetImage(const ImageResourceObserver& client,
       NOTREACHED();
   }
 
-  RefPtr<Image> new_image = GradientGeneratedImage::Create(gradient, size);
+  scoped_refptr<Image> new_image =
+      GradientGeneratedImage::Create(gradient, size);
   if (is_cacheable_)
     PutImage(size, new_image);
 
@@ -243,7 +245,7 @@ static void ReplaceColorHintsWithColorStops(
     DCHECK_LE(offset, offset_right);
 
     if (WebCoreFloatNearlyEqual(left_dist, right_dist)) {
-      stops.erase(x);
+      stops.EraseAt(x);
       --index_offset;
       continue;
     }
@@ -285,7 +287,7 @@ static void ReplaceColorHintsWithColorStops(
     }
 
     // Replace the color hint with the new color stops.
-    stops.erase(x);
+    stops.EraseAt(x);
     stops.insert(x, new_stops, 9);
     index_offset += 8;
   }
@@ -730,7 +732,7 @@ void CSSGradientValue::GetStopColors(Vector<Color>& stop_colors,
   }
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSGradientValue) {
+void CSSGradientValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(stops_);
   CSSImageGeneratorValue::TraceAfterDispatch(visitor);
 }
@@ -878,7 +880,7 @@ static void EndPointsFromAngle(float angle_deg,
   first_point.Set(half_width - end_x, half_height + end_y);
 }
 
-RefPtr<Gradient> CSSLinearGradientValue::CreateGradient(
+scoped_refptr<Gradient> CSSLinearGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
     const IntSize& size,
     const LayoutObject& object) {
@@ -948,7 +950,7 @@ RefPtr<Gradient> CSSLinearGradientValue::CreateGradient(
                     repeating_ ? kSpreadMethodRepeat : kSpreadMethodPad);
   AddStops(desc, conversion_data, object);
 
-  RefPtr<Gradient> gradient =
+  scoped_refptr<Gradient> gradient =
       Gradient::CreateLinear(desc.p0, desc.p1, desc.spread_method,
                              Gradient::ColorInterpolation::kPremultiplied);
 
@@ -990,7 +992,7 @@ bool CSSLinearGradientValue::Equals(const CSSLinearGradientValue& other) const {
   return equal_xand_y && stops_ == other.stops_;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSLinearGradientValue) {
+void CSSLinearGradientValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(first_x_);
   visitor->Trace(first_y_);
   visitor->Trace(second_x_);
@@ -1244,7 +1246,7 @@ FloatSize RadiusToCorner(const FloatPoint& point,
 
 }  // anonymous namespace
 
-RefPtr<Gradient> CSSRadialGradientValue::CreateGradient(
+scoped_refptr<Gradient> CSSRadialGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
     const IntSize& size,
     const LayoutObject& object) {
@@ -1321,7 +1323,7 @@ RefPtr<Gradient> CSSRadialGradientValue::CreateGradient(
                     repeating_ ? kSpreadMethodRepeat : kSpreadMethodPad);
   AddStops(desc, conversion_data, object);
 
-  RefPtr<Gradient> gradient = Gradient::CreateRadial(
+  scoped_refptr<Gradient> gradient = Gradient::CreateRadial(
       desc.p0, desc.r0, desc.p1, desc.r1,
       is_degenerate ? 1 : second_radius.AspectRatio(), desc.spread_method,
       Gradient::ColorInterpolation::kPremultiplied);
@@ -1331,6 +1333,18 @@ RefPtr<Gradient> CSSRadialGradientValue::CreateGradient(
 
   return gradient;
 }
+
+namespace {
+
+bool EqualIdentifiersWithDefault(const CSSIdentifierValue* id_a,
+                                 const CSSIdentifierValue* id_b,
+                                 CSSValueID default_id) {
+  CSSValueID value_a = id_a ? id_a->GetValueID() : default_id;
+  CSSValueID value_b = id_b ? id_b->GetValueID() : default_id;
+  return value_a == value_b;
+}
+
+}  // namespace
 
 bool CSSRadialGradientValue::Equals(const CSSRadialGradientValue& other) const {
   if (gradient_type_ == kCSSDeprecatedRadialGradient)
@@ -1346,45 +1360,32 @@ bool CSSRadialGradientValue::Equals(const CSSRadialGradientValue& other) const {
   if (repeating_ != other.repeating_)
     return false;
 
-  bool equal_xand_y = false;
-  if (first_x_ && first_y_) {
-    equal_xand_y = DataEquivalent(first_x_, other.first_x_) &&
-                   DataEquivalent(first_y_, other.first_y_);
-  } else if (first_x_) {
-    equal_xand_y = DataEquivalent(first_x_, other.first_x_) && !other.first_y_;
-  } else if (first_y_) {
-    equal_xand_y = DataEquivalent(first_y_, other.first_y_) && !other.first_x_;
-  } else {
-    equal_xand_y = !other.first_x_ && !other.first_y_;
-  }
-
-  if (!equal_xand_y)
+  if (!DataEquivalent(first_x_, other.first_x_) ||
+      !DataEquivalent(first_y_, other.first_y_))
     return false;
 
-  bool equal_shape = true;
-  bool equal_sizing_behavior = true;
-  bool equal_horizontal_and_vertical_size = true;
-
-  if (shape_) {
-    equal_shape = DataEquivalent(shape_, other.shape_);
-  } else if (sizing_behavior_) {
-    equal_sizing_behavior =
-        DataEquivalent(sizing_behavior_, other.sizing_behavior_);
-  } else if (end_horizontal_size_ && end_vertical_size_) {
-    equal_horizontal_and_vertical_size =
-        DataEquivalent(end_horizontal_size_, other.end_horizontal_size_) &&
-        DataEquivalent(end_vertical_size_, other.end_vertical_size_);
+  // There's either a size keyword or an explicit size specification.
+  if (end_horizontal_size_) {
+    // Explicit size specification. One <length> or two <length-percentage>.
+    if (!DataEquivalent(end_horizontal_size_, other.end_horizontal_size_))
+      return false;
+    if (!DataEquivalent(end_vertical_size_, other.end_vertical_size_))
+      return false;
   } else {
-    equal_shape = !other.shape_;
-    equal_sizing_behavior = !other.sizing_behavior_;
-    equal_horizontal_and_vertical_size =
-        !other.end_horizontal_size_ && !other.end_vertical_size_;
+    if (other.end_horizontal_size_)
+      return false;
+    // There's a size keyword.
+    if (!EqualIdentifiersWithDefault(sizing_behavior_, other.sizing_behavior_,
+                                     CSSValueFarthestCorner))
+      return false;
+    // Here the shape is 'ellipse' unless explicitly set to 'circle'.
+    if (!EqualIdentifiersWithDefault(shape_, other.shape_, CSSValueEllipse))
+      return false;
   }
-  return equal_shape && equal_sizing_behavior &&
-         equal_horizontal_and_vertical_size && stops_ == other.stops_;
+  return stops_ == other.stops_;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSRadialGradientValue) {
+void CSSRadialGradientValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(first_x_);
   visitor->Trace(first_y_);
   visitor->Trace(second_x_);
@@ -1421,7 +1422,7 @@ String CSSConicGradientValue::CustomCSSText() const {
   return result.ToString();
 }
 
-RefPtr<Gradient> CSSConicGradientValue::CreateGradient(
+scoped_refptr<Gradient> CSSConicGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
     const IntSize& size,
     const LayoutObject& object) {
@@ -1439,7 +1440,7 @@ RefPtr<Gradient> CSSConicGradientValue::CreateGradient(
                     repeating_ ? kSpreadMethodRepeat : kSpreadMethodPad);
   AddStops(desc, conversion_data, object);
 
-  RefPtr<Gradient> gradient = Gradient::CreateConic(
+  scoped_refptr<Gradient> gradient = Gradient::CreateConic(
       position, angle, desc.start_angle, desc.end_angle, desc.spread_method,
       Gradient::ColorInterpolation::kPremultiplied);
   gradient->AddColorStops(desc.stops);
@@ -1454,7 +1455,7 @@ bool CSSConicGradientValue::Equals(const CSSConicGradientValue& other) const {
          stops_ == other.stops_;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSConicGradientValue) {
+void CSSConicGradientValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(from_angle_);

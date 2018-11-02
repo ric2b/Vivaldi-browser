@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -15,7 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
@@ -118,13 +118,12 @@ BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
     : client_(std::move(client)),
       loaded_(false),
       root_(GURL()),
-      bookmark_bar_node_(NULL),
-      other_node_(NULL),
-      mobile_node_(NULL),
-      trash_node_(NULL),
+      bookmark_bar_node_(nullptr),
+      other_node_(nullptr),
+      mobile_node_(nullptr),
+      trash_node_(nullptr),
       next_node_id_(1),
-      observers_(
-          base::ObserverList<BookmarkModelObserver>::NOTIFY_EXISTING_ONLY),
+      observers_(base::ObserverListPolicy::EXISTING_ONLY),
       loaded_signal_(base::WaitableEvent::ResetPolicy::MANUAL,
                      base::WaitableEvent::InitialState::NOT_SIGNALED),
       extensive_changes_(0),
@@ -333,9 +332,9 @@ const gfx::Image& BookmarkModel::GetFavicon(const BookmarkNode* node) {
   DCHECK(node);
   if (node->favicon_state() == BookmarkNode::INVALID_FAVICON) {
     BookmarkNode* mutable_node = AsMutable(node);
-    LoadFavicon(mutable_node,
-                client_->PreferTouchIcon() ? favicon_base::TOUCH_ICON
-                                           : favicon_base::FAVICON);
+    LoadFavicon(mutable_node, client_->PreferTouchIcon()
+                                  ? favicon_base::IconType::kTouchIcon
+                                  : favicon_base::IconType::kFavicon);
   }
   return node->favicon();
 }
@@ -361,10 +360,13 @@ void BookmarkModel::SetTitle(const BookmarkNode* node,
     observer.OnWillChangeBookmarkNode(this, node);
 
   // The title index doesn't support changing the title, instead we remove then
-  // add it back.
-  index_->Remove(node);
+  // add it back. Only do this for URL nodes. A directory node can have its
+  // title changed but should be excluded from the index.
+  if (node->is_url())
+    index_->Remove(node);
   AsMutable(node)->SetTitle(title);
-  index_->Add(node);
+  if (node->is_url())
+    index_->Add(node);
 
   if (store_.get())
     store_->ScheduleSave();
@@ -545,12 +547,17 @@ const BookmarkNode* BookmarkModel::GetMostRecentlyAddedUserNodeForURL(
       return nodes[i];
   }
 
-  return NULL;
+  return nullptr;
 }
 
 bool BookmarkModel::HasBookmarks() {
   base::AutoLock url_lock(url_lock_);
   return !nodes_ordered_by_url_set_.empty();
+}
+
+bool BookmarkModel::HasNoUserCreatedBookmarksOrFolders() {
+  return bookmark_bar_node_->empty() && other_node_->empty() &&
+         mobile_node_->empty();
 }
 
 bool BookmarkModel::IsBookmarked(const GURL& url) {
@@ -561,7 +568,7 @@ bool BookmarkModel::IsBookmarked(const GURL& url) {
 void BookmarkModel::GetBookmarks(
     std::vector<BookmarkModel::URLAndTitle>* bookmarks) {
   base::AutoLock url_lock(url_lock_);
-  const GURL* last_url = NULL;
+  const GURL* last_url = nullptr;
   for (NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.begin();
        i != nodes_ordered_by_url_set_.end(); ++i) {
     const GURL* url = &((*i)->url());
@@ -595,7 +602,7 @@ const BookmarkNode* BookmarkModel::AddFolder(const BookmarkNode* parent,
                                              const base::string16& nickname,
                                              const base::string16& description,
                                              bool speeddial) {
-  return AddFolderWithMetaInfo(parent, index, title, NULL, nickname, description, speeddial);
+  return AddFolderWithMetaInfo(parent, index, title, nullptr, nickname, description, speeddial);
 }
 
 const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
@@ -609,7 +616,7 @@ const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
   if (!loaded_ || is_root_node(parent) || !IsValidIndex(parent, index, true)) {
     // Can't add to the root.
     NOTREACHED();
-    return NULL;
+    return nullptr;
   }
 
   std::unique_ptr<BookmarkNode> new_node =
@@ -669,7 +676,7 @@ const BookmarkNode* BookmarkModel::vivAddURL(const BookmarkNode* parent,
   return AddURLWithCreationTimeAndMetaInfo(parent, index,
                                 title,
                                 url, Time::Now(),
-                                NULL,
+                                nullptr,
                                 nickname,
                                 description,
                                 thumbnail,
@@ -692,7 +699,7 @@ const BookmarkNode* BookmarkModel::AddURLWithCreationTimeAndMetaInfo(
   if (!loaded_ || !url.is_valid() || is_root_node(parent) ||
       !IsValidIndex(parent, index, true)) {
     NOTREACHED();
-    return NULL;
+    return nullptr;
   }
 
   // Syncing may result in dates newer than the last modified date.
@@ -734,7 +741,7 @@ void BookmarkModel::SortChildren(const BookmarkNode* parent) {
   UErrorCode error = U_ZERO_ERROR;
   std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
   if (U_FAILURE(error))
-    collator.reset(NULL);
+    collator.reset(nullptr);
   BookmarkNode* mutable_parent = AsMutable(parent);
   std::sort(mutable_parent->children().begin(),
             mutable_parent->children().end(),
@@ -837,7 +844,7 @@ const BookmarkPermanentNode* BookmarkModel::PermanentNode(
       return trash_node_;
     default:
       NOTREACHED();
-      return NULL;
+      return nullptr;
   }
 }
 
@@ -894,19 +901,9 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
     return;
   }
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading1"));
-
   next_node_id_ = details->max_id();
   if (details->computed_checksum() != details->stored_checksum() ||
       details->ids_reassigned()) {
-    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile2(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading2"));
-
     // If bookmarks file changed externally, the IDs may have changed
     // externally. In that case, the decoder may have reassigned IDs to make
     // them unique. So when the file has changed externally, we should save the
@@ -933,11 +930,6 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   std::vector<std::unique_ptr<BookmarkPermanentNode>> extra_nodes =
       details->owned_extra_nodes();
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile3(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading3"));
-
   // WARNING: order is important here, various places assume the order is
   // constant (but can vary between embedders with the initial visibility
   // of permanent nodes).
@@ -950,11 +942,6 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   std::move(extra_nodes.begin(), extra_nodes.end(),
             std::back_inserter(root_children));
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile4(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading4"));
-
   std::stable_sort(root_children.begin(),
                    root_children.end(),
                    VisibilityComparator(client_.get()));
@@ -963,11 +950,6 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
 
   root_.SetMetaInfoMap(details->model_meta_info_map());
   root_.set_sync_transaction_version(details->model_sync_transaction_version());
-
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile5(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading5"));
 
   {
     base::AutoLock url_lock(url_lock_);
@@ -978,11 +960,6 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   loaded_ = true;
 
   loaded_signal_.Signal();
-
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467179
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile6(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading6"));
 
   // Notify our direct observers.
   for (BookmarkModelObserver& observer : observers_)
@@ -1142,10 +1119,13 @@ void BookmarkModel::OnFaviconDataAvailable(
     node->set_favicon(image_result.image);
     node->set_icon_url(image_result.icon_url);
     FaviconLoaded(node);
-  } else if (icon_type == favicon_base::TOUCH_ICON) {
+  } else if (icon_type == favicon_base::IconType::kTouchIcon) {
     // Couldn't load the touch icon, fallback to the regular favicon.
     DCHECK(client_->PreferTouchIcon());
-    LoadFavicon(node, favicon_base::FAVICON);
+    LoadFavicon(node, favicon_base::IconType::kFavicon);
+  } else {
+    // No favicon available, but we still notify observers.
+    FaviconLoaded(node);
   }
 }
 

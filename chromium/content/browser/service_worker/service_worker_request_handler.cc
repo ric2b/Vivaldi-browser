@@ -36,8 +36,6 @@ namespace content {
 
 namespace {
 
-int kUserDataKey;  // Key value is not important.
-
 class ServiceWorkerRequestInterceptor
     : public net::URLRequestInterceptor {
  public:
@@ -50,7 +48,7 @@ class ServiceWorkerRequestInterceptor
     ServiceWorkerRequestHandler* handler =
         ServiceWorkerRequestHandler::GetHandler(request);
     if (!handler)
-      return NULL;
+      return nullptr;
     return handler->MaybeCreateJob(
         request, network_delegate, resource_context_);
   }
@@ -62,7 +60,11 @@ class ServiceWorkerRequestInterceptor
 
 }  // namespace
 
-// PlzNavigate
+// static
+int ServiceWorkerRequestHandler::user_data_key_;
+
+// PlzNavigate:
+// static
 void ServiceWorkerRequestHandler::InitializeForNavigation(
     net::URLRequest* request,
     ServiceWorkerNavigationHandleCore* navigation_handle_core,
@@ -101,12 +103,14 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
 
   std::unique_ptr<ServiceWorkerRequestHandler> handler(
       provider_host->CreateRequestHandler(
-          FETCH_REQUEST_MODE_NAVIGATE, FETCH_CREDENTIALS_MODE_INCLUDE,
+          network::mojom::FetchRequestMode::kNavigate,
+          network::mojom::FetchCredentialsMode::kInclude,
           FetchRedirectMode::MANUAL_MODE, std::string() /* integrity */,
-          resource_type, request_context_type, frame_type,
-          blob_storage_context->AsWeakPtr(), body, skip_service_worker));
+          false /* keepalive */, resource_type, request_context_type,
+          frame_type, blob_storage_context->AsWeakPtr(), body,
+          skip_service_worker));
   if (handler)
-    request->SetUserData(&kUserDataKey, std::move(handler));
+    request->SetUserData(&user_data_key_, std::move(handler));
 
   // Transfer ownership to the ServiceWorkerNavigationHandleCore.
   // In the case of a successful navigation, the SWProviderHost will be
@@ -116,7 +120,7 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
   navigation_handle_core->DidPreCreateProviderHost(std::move(provider_host));
 }
 
-// PlzNavigate and --enable-network-service.
+// S13nServiceWorker:
 // static
 std::unique_ptr<URLLoaderRequestHandler>
 ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
@@ -131,8 +135,7 @@ ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
     bool is_parent_frame_secure,
     scoped_refptr<ResourceRequestBody> body,
     const base::Callback<WebContents*(void)>& web_contents_getter) {
-  DCHECK(IsBrowserSideNavigationEnabled() &&
-         base::FeatureList::IsEnabled(features::kNetworkService));
+  DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
   DCHECK(navigation_handle_core);
 
   // Create the handler even for insecure HTTP since it's used in the
@@ -155,10 +158,12 @@ ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
 
   std::unique_ptr<ServiceWorkerRequestHandler> handler(
       provider_host->CreateRequestHandler(
-          FETCH_REQUEST_MODE_NAVIGATE, FETCH_CREDENTIALS_MODE_INCLUDE,
+          network::mojom::FetchRequestMode::kNavigate,
+          network::mojom::FetchCredentialsMode::kInclude,
           FetchRedirectMode::MANUAL_MODE, std::string() /* integrity */,
-          resource_type, request_context_type, frame_type,
-          blob_storage_context->AsWeakPtr(), body, skip_service_worker));
+          false /* keepalive */, resource_type, request_context_type,
+          frame_type, blob_storage_context->AsWeakPtr(), body,
+          skip_service_worker));
 
   // Transfer ownership to the ServiceWorkerNavigationHandleCore.
   // In the case of a successful navigation, the SWProviderHost will be
@@ -170,6 +175,7 @@ ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
   return base::WrapUnique<URLLoaderRequestHandler>(handler.release());
 }
 
+// static
 void ServiceWorkerRequestHandler::InitializeHandler(
     net::URLRequest* request,
     ServiceWorkerContextWrapper* context_wrapper,
@@ -177,10 +183,11 @@ void ServiceWorkerRequestHandler::InitializeHandler(
     int process_id,
     int provider_id,
     bool skip_service_worker,
-    FetchRequestMode request_mode,
-    FetchCredentialsMode credentials_mode,
+    network::mojom::FetchRequestMode request_mode,
+    network::mojom::FetchCredentialsMode credentials_mode,
     FetchRedirectMode redirect_mode,
     const std::string& integrity,
+    bool keepalive,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
@@ -204,19 +211,21 @@ void ServiceWorkerRequestHandler::InitializeHandler(
 
   std::unique_ptr<ServiceWorkerRequestHandler> handler(
       provider_host->CreateRequestHandler(
-          request_mode, credentials_mode, redirect_mode, integrity,
+          request_mode, credentials_mode, redirect_mode, integrity, keepalive,
           resource_type, request_context_type, frame_type,
           blob_storage_context->AsWeakPtr(), body, skip_service_worker));
   if (handler)
-    request->SetUserData(&kUserDataKey, std::move(handler));
+    request->SetUserData(&user_data_key_, std::move(handler));
 }
 
+// static
 ServiceWorkerRequestHandler* ServiceWorkerRequestHandler::GetHandler(
     const net::URLRequest* request) {
   return static_cast<ServiceWorkerRequestHandler*>(
-      request->GetUserData(&kUserDataKey));
+      request->GetUserData(&user_data_key_));
 }
 
+// static
 std::unique_ptr<net::URLRequestInterceptor>
 ServiceWorkerRequestHandler::CreateInterceptor(
     ResourceContext* resource_context) {
@@ -224,6 +233,7 @@ ServiceWorkerRequestHandler::CreateInterceptor(
       new ServiceWorkerRequestInterceptor(resource_context));
 }
 
+// static
 bool ServiceWorkerRequestHandler::IsControlledByServiceWorker(
     const net::URLRequest* request) {
   ServiceWorkerRequestHandler* handler = GetHandler(request);
@@ -233,6 +243,7 @@ bool ServiceWorkerRequestHandler::IsControlledByServiceWorker(
          handler->provider_host_->running_hosted_version();
 }
 
+// static
 ServiceWorkerProviderHost* ServiceWorkerRequestHandler::GetProviderHost(
     const net::URLRequest* request) {
   ServiceWorkerRequestHandler* handler = GetHandler(request);

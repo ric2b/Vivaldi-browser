@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -62,20 +63,20 @@ scoped_refptr<Extension> LoadExtensionManifest(
   std::unique_ptr<base::Value> result = deserializer.Deserialize(NULL, error);
   if (!result.get())
     return NULL;
-  CHECK_EQ(base::Value::Type::DICTIONARY, result->GetType());
+  CHECK_EQ(base::Value::Type::DICTIONARY, result->type());
   return LoadExtensionManifest(*base::DictionaryValue::From(std::move(result)),
                                manifest_dir, location, extra_flags, error);
 }
 
-void RunDirectoryTest(std::vector<std::string> extra_directories,
-                      base::Optional<std::string> expected_warning) {
+void RunUnderscoreDirectoriesTest(
+    const std::vector<std::string>& underscore_directories) {
   base::ScopedTempDir temp;
   ASSERT_TRUE(temp.CreateUniqueTempDir());
 
   base::FilePath ext_path = temp.GetPath();
   ASSERT_TRUE(base::CreateDirectory(ext_path));
 
-  for (const auto& dir : extra_directories)
+  for (const auto& dir : underscore_directories)
     ASSERT_TRUE(base::CreateDirectory(ext_path.AppendASCII(dir)));
 
   ASSERT_EQ(static_cast<int>(strlen(manifest_content)),
@@ -86,15 +87,25 @@ void RunDirectoryTest(std::vector<std::string> extra_directories,
   scoped_refptr<Extension> extension = file_util::LoadExtension(
       ext_path, Manifest::UNPACKED, Extension::NO_FLAGS, &error);
   ASSERT_TRUE(extension) << error;
+  EXPECT_TRUE(error.empty());
 
   const std::vector<InstallWarning>& warnings = extension->install_warnings();
-  if (expected_warning) {
-    EXPECT_EQ(1u, warnings.size());
-    EXPECT_EQ(*expected_warning, warnings[0].message);
-  } else {
-    EXPECT_TRUE(warnings.empty());
+  ASSERT_EQ(1u, warnings.size());
+
+  // The warning should report any one of the illegal underscore directories.
+  bool warning_matched = false;
+  for (const auto& dir : underscore_directories) {
+    std::string expected_warning = base::StringPrintf(
+        "Cannot load extension with file or directory name %s. Filenames "
+        "starting with \"_\" are reserved for use by the system.",
+        dir.c_str());
+    if (expected_warning == warnings[0].message)
+      warning_matched = true;
   }
-  EXPECT_TRUE(error.empty());
+
+  EXPECT_TRUE(warning_matched)
+      << "Correct warning not generated for an unpacked extension with "
+      << base::JoinString(underscore_directories, ",") << " directories.";
 }
 
 }  // namespace
@@ -161,28 +172,15 @@ TEST_F(FileUtilTest, InstallUninstallGarbageCollect) {
 }
 
 TEST_F(FileUtilTest, LoadExtensionWithMetadataFolder) {
-  RunDirectoryTest(
-      {"_metadata"},
-      std::string("_metadata is a reserved directory that will "
-                  "not be allowed at the time of Chrome Web Store upload."));
+  RunUnderscoreDirectoriesTest({"_metadata"});
 }
 
 TEST_F(FileUtilTest, LoadExtensionWithUnderscoreFolder) {
-  RunDirectoryTest(
-      {"_badfolder"},
-      std::string(
-          "Cannot load extension with file or directory"
-          " name _badfolder. Filenames starting with \"_\" are reserved for "
-          "use by the system."));
+  RunUnderscoreDirectoriesTest({"_badfolder"});
 }
 
-TEST_F(FileUtilTest, LoadExtensionWithMetadataAndUnderscoreFolders) {
-  RunDirectoryTest(
-      {"_metadata", "_badfolder"},
-      std::string(
-          "Cannot load extension with file or directory"
-          " name _badfolder. Filenames starting with \"_\" are reserved for "
-          "use by the system."));
+TEST_F(FileUtilTest, LoadExtensionWithUnderscoreAndMetadataFolder) {
+  RunUnderscoreDirectoriesTest({"_metadata", "_badfolder"});
 }
 
 TEST_F(FileUtilTest, LoadExtensionWithValidLocales) {
@@ -228,8 +226,8 @@ TEST_F(FileUtilTest, CheckIllegalFilenamesOnlyReserved) {
   base::ScopedTempDir temp;
   ASSERT_TRUE(temp.CreateUniqueTempDir());
 
-  const base::FilePath::CharType* folders[] = {
-      extensions::kLocaleFolder, extensions::kPlatformSpecificFolder};
+  static const base::FilePath::CharType* const folders[] = {
+      kLocaleFolder, kPlatformSpecificFolder};
 
   for (size_t i = 0; i < arraysize(folders); i++) {
     base::FilePath src_path = temp.GetPath().Append(folders[i]);
@@ -244,7 +242,7 @@ TEST_F(FileUtilTest, CheckIllegalFilenamesReservedAndIllegal) {
   base::ScopedTempDir temp;
   ASSERT_TRUE(temp.CreateUniqueTempDir());
 
-  base::FilePath src_path = temp.GetPath().Append(extensions::kLocaleFolder);
+  base::FilePath src_path = temp.GetPath().Append(kLocaleFolder);
   ASSERT_TRUE(base::CreateDirectory(src_path));
 
   src_path = temp.GetPath().AppendASCII("_some_dir");
@@ -340,7 +338,7 @@ TEST_F(FileUtilTest, ValidateThemeUTF8) {
       kManifest, temp.GetPath(), Manifest::UNPACKED, 0, &error);
   ASSERT_TRUE(extension.get()) << error;
 
-  std::vector<extensions::InstallWarning> warnings;
+  std::vector<InstallWarning> warnings;
   EXPECT_TRUE(file_util::ValidateExtension(extension.get(), &error, &warnings))
       << error;
   EXPECT_EQ(0U, warnings.size());
@@ -360,7 +358,7 @@ TEST_F(FileUtilTest, BackgroundScriptsMustExist) {
   scripts->AppendString("foo.js");
 
   std::string error;
-  std::vector<extensions::InstallWarning> warnings;
+  std::vector<InstallWarning> warnings;
   scoped_refptr<Extension> extension = LoadExtensionManifest(
       *value, temp.GetPath(), Manifest::UNPACKED, 0, &error);
   ASSERT_TRUE(extension.get()) << error;
@@ -472,7 +470,7 @@ TEST_F(FileUtilTest, WarnOnPrivateKey) {
   ASSERT_EQ(1u, extension->install_warnings().size());
   EXPECT_THAT(extension->install_warnings(),
               testing::ElementsAre(testing::Field(
-                  &extensions::InstallWarning::message,
+                  &InstallWarning::message,
                   testing::ContainsRegex(
                       "extension includes the key file.*ext_root.a_key.pem"))));
 
@@ -544,8 +542,7 @@ TEST_F(FileUtilTest, ExtensionURLToRelativeFilePath) {
     GURL url(test_cases[i].url);
     base::FilePath expected_path =
         base::FilePath::FromUTF8Unsafe(test_cases[i].expected_relative_path);
-    base::FilePath actual_path =
-        extensions::file_util::ExtensionURLToRelativeFilePath(url);
+    base::FilePath actual_path = file_util::ExtensionURLToRelativeFilePath(url);
     EXPECT_FALSE(actual_path.IsAbsolute()) <<
       " For the path " << actual_path.value();
     EXPECT_EQ(expected_path.value(), actual_path.value()) <<

@@ -6,11 +6,11 @@
       <include name="IDR_NET_ERROR_HTML" file="neterror/neterror.html"
                flattenhtml="true" type="BINDATA" />
       <include name="IDR_VERSION_UI_CSS" file="version_ui/about_version.css"
-               type="BINDATA" />
+               type="BINDATA" compress="gzip" />
       <include name="IDR_VERSION_UI_HTML" file="version_ui/about_version.html"
-               flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+               flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_VIVALDI_VERSION_UI_JS"
-               file="version_ui/vivaldi_about_version.js" type="BINDATA" />
+               file="version_ui/vivaldi_about_version.js" type="BINDATA" compress="gzip" />
     </includes>
   </release>
 </grit>

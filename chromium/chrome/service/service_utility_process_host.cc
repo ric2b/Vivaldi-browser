@@ -6,11 +6,11 @@
 
 #include <stdint.h>
 
-#include <queue>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -41,6 +41,7 @@
 #include "printing/emf_win.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/sandbox_types.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace {
@@ -82,8 +83,8 @@ class ServiceSandboxedProcessLauncherDelegate
     return true;
   }
 
-  content::SandboxType GetSandboxType() override {
-    return content::SANDBOX_TYPE_UTILITY;
+  service_manager::SandboxType GetSandboxType() override {
+    return service_manager::SANDBOX_TYPE_UTILITY;
   }
 
  private:
@@ -162,7 +163,7 @@ class ServiceUtilityProcessHost::PdfToEmfState {
 
   base::ScopedTempDir temp_dir_;
   ServiceUtilityProcessHost* host_;
-  std::queue<base::File> emf_files_;
+  base::queue<base::File> emf_files_;
   int page_count_;
   int current_page_;
   int pages_in_progress_;

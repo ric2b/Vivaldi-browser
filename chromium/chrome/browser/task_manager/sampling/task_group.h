@@ -18,8 +18,10 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/task_manager/providers/task.h"
+#include "chrome/browser/task_manager/sampling/shared_sampler.h"
 #include "chrome/browser/task_manager/sampling/task_group_sampler.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
+#include "components/nacl/common/features.h"
 
 namespace gpu {
 struct VideoMemoryUsageStats;
@@ -68,9 +70,13 @@ class TaskGroup {
   size_t num_tasks() const { return tasks().size(); }
   bool empty() const { return tasks().empty(); }
 
-  double cpu_usage() const { return cpu_usage_; }
+  double platform_independent_cpu_usage() const {
+    return platform_independent_cpu_usage_;
+  }
   base::Time start_time() const { return start_time_; }
   base::TimeDelta cpu_time() const { return cpu_time_; }
+  void set_footprint_bytes(int64_t footprint) { memory_footprint_ = footprint; }
+  int64_t footprint_bytes() const { return memory_footprint_; }
   int64_t private_bytes() const { return memory_usage_.private_bytes; }
   int64_t shared_bytes() const { return memory_usage_.shared_bytes; }
   int64_t physical_bytes() const { return memory_usage_.physical_bytes; }
@@ -93,11 +99,12 @@ class TaskGroup {
   int64_t gdi_peak_handles() const { return gdi_peak_handles_; }
   int64_t user_current_handles() const { return user_current_handles_; }
   int64_t user_peak_handles() const { return user_peak_handles_; }
+  int64_t hard_faults_per_second() const { return hard_faults_per_second_; }
 #endif  // defined(OS_WIN)
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   int nacl_debug_stub_port() const { return nacl_debug_stub_port_; }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 #if defined(OS_LINUX)
   int open_fd_count() const { return open_fd_count_; }
@@ -110,28 +117,22 @@ class TaskGroup {
 
   void RefreshWindowsHandles();
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   // |child_process_unique_id| see Task::GetChildProcessUniqueID().
   void RefreshNaClDebugStubPort(int child_process_unique_id);
   void OnRefreshNaClDebugStubPortDone(int port);
 #endif
-
-  void OnCpuRefreshDone(double cpu_usage);
-
-  void OnStartTimeRefreshDone(base::Time start_time);
-
-  void OnCpuTimeRefreshDone(base::TimeDelta cpu_time);
-
-  void OnPhysicalMemoryUsageRefreshDone(int64_t physical_bytes);
-  void OnMemoryUsageRefreshDone(MemoryUsageStats memory_usage);
-
-  void OnIdleWakeupsRefreshDone(int idle_wakeups_per_second);
-
 #if defined(OS_LINUX)
   void OnOpenFdCountRefreshDone(int open_fd_count);
 #endif  // defined(OS_LINUX)
 
+  void OnCpuRefreshDone(double cpu_usage);
+  void OnMemoryUsageRefreshDone(MemoryUsageStats memory_usage);
   void OnProcessPriorityDone(bool is_backgrounded);
+  void OnIdleWakeupsRefreshDone(int idle_wakeups_per_second);
+
+  void OnSamplerRefreshDone(
+      base::Optional<SharedSampler::SamplingResult> results);
 
   void OnBackgroundRefreshTypeFinished(int64_t finished_refresh_type);
 
@@ -157,10 +158,11 @@ class TaskGroup {
   int64_t current_on_bg_done_flags_;
 
   // The per process resources usages.
-  double cpu_usage_;
+  double platform_independent_cpu_usage_;
   base::Time start_time_;     // Only calculated On Windows now.
   base::TimeDelta cpu_time_;  // Only calculated On Windows now.
   MemoryUsageStats memory_usage_;
+  int64_t memory_footprint_;
   int64_t gpu_memory_;
   base::MemoryState memory_state_;
   // The network usage in bytes per second as the sum of all network usages of
@@ -177,15 +179,16 @@ class TaskGroup {
   int64_t gdi_peak_handles_;
   int64_t user_current_handles_;
   int64_t user_peak_handles_;
+  int64_t hard_faults_per_second_;
 #endif  // defined(OS_WIN)
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   int nacl_debug_stub_port_;
-#endif  // !defined(DISABLE_NACL)
-  int idle_wakeups_per_second_;
+#endif  // BUILDFLAG(ENABLE_NACL)
 #if defined(OS_LINUX)
   // The number of file descriptors currently open by the process.
   int open_fd_count_;
 #endif  // defined(OS_LINUX)
+  int idle_wakeups_per_second_;
   bool gpu_memory_has_duplicates_;
   bool is_backgrounded_;
 

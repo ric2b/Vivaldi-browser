@@ -15,6 +15,7 @@
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_record.h"
+#include "cc/paint/paint_text_blob.h"
 #include "third_party/skia/include/utils/SkNoDrawCanvas.h"
 
 namespace cc {
@@ -50,8 +51,6 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
   void clipRect(const SkRect& rect, SkClipOp op, bool antialias) override;
   void clipRRect(const SkRRect& rrect, SkClipOp op, bool antialias) override;
   void clipPath(const SkPath& path, SkClipOp op, bool antialias) override;
-  bool quickReject(const SkRect& rect) const override;
-  bool quickReject(const SkPath& path) const override;
   SkRect getLocalClipBounds() const override;
   bool getLocalClipBounds(SkRect* bounds) const override;
   SkIRect getDeviceClipBounds() const override;
@@ -90,7 +89,7 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
                   SkScalar top,
                   const PaintFlags* flags) override;
 
-  void drawTextBlob(sk_sp<SkTextBlob> blob,
+  void drawTextBlob(scoped_refptr<PaintTextBlob> blob,
                     SkScalar x,
                     SkScalar y,
                     const PaintFlags& flags) override;
@@ -117,6 +116,8 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
  private:
   const SkNoDrawCanvas* GetCanvas() const;
   SkNoDrawCanvas* GetCanvas();
+
+  bool InitializedWithRecordingBounds() const;
 
   DisplayItemList* list_;
 

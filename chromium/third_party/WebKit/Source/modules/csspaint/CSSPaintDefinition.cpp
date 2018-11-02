@@ -23,12 +23,13 @@ namespace blink {
 
 namespace {
 
-IntSize GetSpecifiedSize(const IntSize& size, float zoom) {
+FloatSize GetSpecifiedSize(const IntSize& size, float zoom) {
   float un_zoom_factor = 1 / zoom;
-  auto un_zoom_fn = [un_zoom_factor](int a) -> int {
-    return round(a * un_zoom_factor);
+  auto un_zoom_fn = [un_zoom_factor](float a) -> float {
+    return a * un_zoom_factor;
   };
-  return IntSize(un_zoom_fn(size.Width()), un_zoom_fn(size.Height()));
+  return FloatSize(un_zoom_fn(static_cast<float>(size.Width())),
+                   un_zoom_fn(static_cast<float>(size.Height())));
 }
 
 }  // namespace
@@ -40,10 +41,10 @@ CSSPaintDefinition* CSSPaintDefinition::Create(
     const Vector<CSSPropertyID>& native_invalidation_properties,
     const Vector<AtomicString>& custom_invalidation_properties,
     const Vector<CSSSyntaxDescriptor>& input_argument_types,
-    bool has_alpha) {
+    const PaintRenderingContext2DSettings& context_settings) {
   return new CSSPaintDefinition(
       script_state, constructor, paint, native_invalidation_properties,
-      custom_invalidation_properties, input_argument_types, has_alpha);
+      custom_invalidation_properties, input_argument_types, context_settings);
 }
 
 CSSPaintDefinition::CSSPaintDefinition(
@@ -53,13 +54,13 @@ CSSPaintDefinition::CSSPaintDefinition(
     const Vector<CSSPropertyID>& native_invalidation_properties,
     const Vector<AtomicString>& custom_invalidation_properties,
     const Vector<CSSSyntaxDescriptor>& input_argument_types,
-    bool has_alpha)
+    const PaintRenderingContext2DSettings& context_settings)
     : script_state_(script_state),
       constructor_(script_state->GetIsolate(), this, constructor),
       paint_(script_state->GetIsolate(), this, paint),
       instance_(this),
       did_call_constructor_(false),
-      has_alpha_(has_alpha) {
+      context_settings_(context_settings) {
   native_invalidation_properties_ = native_invalidation_properties;
   custom_invalidation_properties_ = custom_invalidation_properties;
   input_argument_types_ = input_argument_types;
@@ -67,9 +68,9 @@ CSSPaintDefinition::CSSPaintDefinition(
 
 CSSPaintDefinition::~CSSPaintDefinition() {}
 
-PassRefPtr<Image> CSSPaintDefinition::Paint(
+scoped_refptr<Image> CSSPaintDefinition::Paint(
     const ImageResourceObserver& client,
-    const IntSize& size,
+    const IntSize& container_size,
     const CSSStyleValueVector* paint_arguments) {
   DCHECK(paint_arguments);
 
@@ -77,9 +78,9 @@ PassRefPtr<Image> CSSPaintDefinition::Paint(
   const LayoutObject& layout_object = static_cast<const LayoutObject&>(client);
 
   float zoom = layout_object.StyleRef().EffectiveZoom();
-  const IntSize specified_size = GetSpecifiedSize(size, zoom);
+  const FloatSize specified_size = GetSpecifiedSize(container_size, zoom);
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
 
   MaybeCreatePaintInstance();
 
@@ -92,12 +93,16 @@ PassRefPtr<Image> CSSPaintDefinition::Paint(
     return nullptr;
 
   DCHECK(layout_object.GetNode());
+  CanvasColorParams color_params;
+  if (!context_settings_.alpha()) {
+    color_params.SetOpacityMode(kOpaque);
+  }
 
   PaintRenderingContext2D* rendering_context = PaintRenderingContext2D::Create(
       ImageBuffer::Create(WTF::WrapUnique(new RecordingImageBufferSurface(
-          size, RecordingImageBufferSurface::kDisallowFallback,
-          has_alpha_ ? kNonOpaque : kOpaque))),
-      has_alpha_, zoom);
+          container_size, RecordingImageBufferSurface::kDisallowFallback,
+          color_params))),
+      context_settings_, zoom);
   PaintSize* paint_size = PaintSize::Create(specified_size);
   StylePropertyMapReadonly* style_map =
       FilteredComputedStylePropertyMap::Create(
@@ -117,7 +122,7 @@ PassRefPtr<Image> CSSPaintDefinition::Paint(
   block.SetVerbose(true);
 
   V8ScriptRunner::CallFunction(paint,
-                               ExecutionContext::From(script_state_.Get()),
+                               ExecutionContext::From(script_state_.get()),
                                instance, WTF_ARRAY_LENGTH(argv), argv, isolate);
 
   // The paint function may have produced an error, in which case produce an
@@ -127,7 +132,7 @@ PassRefPtr<Image> CSSPaintDefinition::Paint(
   }
 
   return PaintGeneratedImage::Create(
-      rendering_context->GetImageBuffer()->GetRecord(), specified_size);
+      rendering_context->GetImageBuffer()->GetRecord(), container_size);
 }
 
 void CSSPaintDefinition::MaybeCreatePaintInstance() {
@@ -149,7 +154,8 @@ void CSSPaintDefinition::MaybeCreatePaintInstance() {
   did_call_constructor_ = true;
 }
 
-DEFINE_TRACE_WRAPPERS(CSSPaintDefinition) {
+void CSSPaintDefinition::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(constructor_.Cast<v8::Value>());
   visitor->TraceWrappers(paint_.Cast<v8::Value>());
   visitor->TraceWrappers(instance_.Cast<v8::Value>());

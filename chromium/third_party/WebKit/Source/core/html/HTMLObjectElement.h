@@ -24,9 +24,9 @@
 #define HTMLObjectElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/FormAssociated.h"
 #include "core/html/HTMLPlugInElement.h"
-#include "core/html/ListedElement.h"
+#include "core/html/forms/FormAssociated.h"
+#include "core/html/forms/ListedElement.h"
 
 namespace blink {
 
@@ -45,7 +45,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
  public:
   static HTMLObjectElement* Create(Document&, bool created_by_parser);
   ~HTMLObjectElement() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   const String& ClassId() const { return class_id_; }
 
@@ -85,9 +85,10 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
 
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
 
   InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void RemovedFrom(ContainerNode*) override;
@@ -125,7 +126,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
   bool use_fallback_content_ : 1;
 };
 
-// Like toHTMLObjectElement() but accepts a ListedElement as input
+// Like ToHTMLObjectElement() but accepts a ListedElement as input
 // instead of a Node.
 const HTMLObjectElement* ToHTMLObjectElementFromListedElement(
     const ListedElement*);

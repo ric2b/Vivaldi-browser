@@ -28,11 +28,21 @@ class NetLogWithSource;
 struct HttpRequestInfo;
 class SSLInfo;
 
+// HttpAuthController is interface between other classes and HttpAuthHandlers.
+// It handles all challenges when attempting to make a single request to a
+// server, both in the case of trying multiple sets of credentials (Possibly on
+// different sockets), and when going through multiple rounds of auth with
+// connection-based auth, creating new HttpAuthHandlers as necessary.
+//
+// It is unaware of when a round of auth uses a new socket, which can lead to
+// problems for connection-based auth.
 class NET_EXPORT_PRIVATE HttpAuthController
     : public base::RefCounted<HttpAuthController> {
  public:
   // The arguments are self explanatory except possibly for |auth_url|, which
   // should be both the auth target and auth path in a single url argument.
+  // |target| indicates whether this is for authenticating with a proxy or
+  // destination server.
   HttpAuthController(HttpAuth::Target target,
                      const GURL& auth_url,
                      HttpAuthCache* http_auth_cache,
@@ -65,6 +75,10 @@ class NET_EXPORT_PRIVATE HttpAuthController
   bool HaveAuthHandler() const;
 
   bool HaveAuth() const;
+
+  // Return whether the authentication scheme is incompatible with HTTP/2
+  // and thus the server would presumably reject a request on HTTP/2 anyway.
+  bool NeedsHTTP11() const;
 
   scoped_refptr<AuthChallengeInfo> auth_info();
 

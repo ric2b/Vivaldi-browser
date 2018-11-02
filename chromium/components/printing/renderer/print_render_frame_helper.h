@@ -110,15 +110,6 @@ class PrintRenderFrameHelper
     // Returns true if printing is overridden and the default behavior should be
     // skipped for |frame|.
     virtual bool OverridePrint(blink::WebLocalFrame* frame) = 0;
-
-#if defined(OS_MACOSX)
-    // If true, all the printed pages are returned in the first
-    // PrintHostMsg_DidPrintPage metafile, like on Linux and Windows.
-    // NOTE: PrintHostMsg_DidPrintPage messages for all pages contain the same
-    // page and content area, which may lead to bug when these two parameters
-    // are different per page.
-    virtual bool UseSingleMetafile();
-#endif
   };
 
   PrintRenderFrameHelper(content::RenderFrame* render_frame,
@@ -199,6 +190,7 @@ class PrintRenderFrameHelper
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnInitiatePrintPreview(bool has_selection);
   void OnPrintPreview(const base::DictionaryValue& settings);
+  void OnClosePrintPreviewDialog();
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnPrintingDone(bool success);
 
@@ -283,6 +275,7 @@ class PrintRenderFrameHelper
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Page Printing / Rendering ------------------------------------------------
+
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnFramePreparedForPrintPages();
   void PrintPages();
@@ -293,34 +286,14 @@ class PrintRenderFrameHelper
                            const blink::WebNode& node);
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
-  // Prints the page listed in |params|.
-#if defined(OS_MACOSX)
-  void PrintPagesInternal(const PrintMsg_Print_Params& params,
-                          const std::vector<int>& printed_pages,
-                          int page_count,
-                          blink::WebLocalFrame* frame);
-#else
+  // Platform-specific helper function for rendering page(s) to |metafile|.
   void PrintPageInternal(const PrintMsg_Print_Params& params,
                          int page_number,
                          int page_count,
                          blink::WebLocalFrame* frame,
                          PdfMetafileSkia* metafile,
                          gfx::Size* page_size_in_dpi,
-                         gfx::Rect* content_area_in_dpi,
-                         gfx::Rect* printable_area_in_dpi);
-#endif  // defined(OS_MACOSX)
-
-  // Platform specific helper function for rendering page(s) to |metafile|.
-#if defined(OS_MACOSX)
-  void RenderPage(const PrintMsg_Print_Params& params,
-                  int page_number,
-                  int page_count,
-                  blink::WebLocalFrame* frame,
-                  bool is_preview,
-                  PdfMetafileSkia* metafile,
-                  gfx::Size* page_size,
-                  gfx::Rect* content_rect);
-#endif  // defined(OS_MACOSX)
+                         gfx::Rect* content_area_in_dpi);
 
   // Renders page contents from |frame| to |content_area| of |canvas|.
   // |page_number| is zero-based.

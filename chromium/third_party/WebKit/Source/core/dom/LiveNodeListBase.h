@@ -26,10 +26,10 @@
 #define LiveNodeListBase_h
 
 #include "core/CoreExport.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/CollectionType.h"
+#include "core/html_names.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -70,7 +70,7 @@ class CORE_EXPORT LiveNodeListBase : public GarbageCollectedMixin {
   }
   ContainerNode& ownerNode() const { return *owner_node_; }
 
-  virtual void InvalidateCache(Document* old_document = 0) const = 0;
+  virtual void InvalidateCache(Document* old_document = nullptr) const = 0;
   void InvalidateCacheForAttribute(const QualifiedName*) const;
 
   static bool ShouldInvalidateTypeOnAttributeChange(NodeListInvalidationType,
@@ -98,7 +98,7 @@ class CORE_EXPORT LiveNodeListBase : public GarbageCollectedMixin {
       unsigned& current_offset,
       MatchFunc);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(owner_node_); }
+  virtual void Trace(blink::Visitor* visitor) { visitor->Trace(owner_node_); }
 
  private:
   Member<ContainerNode> owner_node_;  // Cannot be null.

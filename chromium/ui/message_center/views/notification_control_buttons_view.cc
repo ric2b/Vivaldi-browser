@@ -4,12 +4,16 @@
 
 #include "ui/message_center/views/notification_control_buttons_view.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/animation/linear_animation.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/vector_icons.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/padded_button.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -53,10 +57,11 @@ NotificationControlButtonsView::~NotificationControlButtonsView() = default;
 
 void NotificationControlButtonsView::ShowCloseButton(bool show) {
   if (show && !close_button_) {
-    close_button_ = base::MakeUnique<message_center::PaddedButton>(this);
+    close_button_ = std::make_unique<message_center::PaddedButton>(this);
     close_button_->set_owned_by_client();
     close_button_->SetImage(views::Button::STATE_NORMAL,
-                            message_center::GetCloseIcon());
+                            gfx::CreateVectorIcon(kNotificationCloseButtonIcon,
+                                                  gfx::kChromeIconGrey));
     close_button_->SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_MESSAGE_CENTER_CLOSE_NOTIFICATION_BUTTON_ACCESSIBLE_NAME));
     close_button_->SetTooltipText(l10n_util::GetStringUTF16(
@@ -75,10 +80,12 @@ void NotificationControlButtonsView::ShowCloseButton(bool show) {
 
 void NotificationControlButtonsView::ShowSettingsButton(bool show) {
   if (show && !settings_button_) {
-    settings_button_ = base::MakeUnique<message_center::PaddedButton>(this);
+    settings_button_ = std::make_unique<message_center::PaddedButton>(this);
     settings_button_->set_owned_by_client();
-    settings_button_->SetImage(views::Button::STATE_NORMAL,
-                               message_center::GetSettingsIcon());
+    settings_button_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kNotificationSettingsButtonIcon,
+                              gfx::kChromeIconGrey));
     settings_button_->SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
     settings_button_->SetTooltipText(l10n_util::GetStringUTF16(

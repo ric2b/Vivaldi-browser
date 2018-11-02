@@ -39,6 +39,7 @@
 
 namespace blink {
 
+class ExceptionState;
 class Interpolation;
 
 // Time independent representation of an Animation's content.
@@ -50,19 +51,23 @@ class CORE_EXPORT EffectModel : public GarbageCollectedFinalized<EffectModel> {
     kCompositeReplace,
     kCompositeAdd,
   };
+  static bool StringToCompositeOperation(String,
+                                         CompositeOperation&,
+                                         ExceptionState* = nullptr);
+  static String CompositeOperationToString(CompositeOperation);
 
   EffectModel() {}
   virtual ~EffectModel() {}
   virtual bool Sample(int iteration,
                       double fraction,
                       double iteration_duration,
-                      Vector<RefPtr<Interpolation>>&) const = 0;
+                      Vector<scoped_refptr<Interpolation>>&) const = 0;
 
   virtual bool Affects(const PropertyHandle&) const { return false; }
   virtual bool IsTransformRelatedEffect() const { return false; }
   virtual bool IsKeyframeEffectModel() const { return false; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 }  // namespace blink

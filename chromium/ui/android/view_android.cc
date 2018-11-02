@@ -5,6 +5,7 @@
 #include "ui/android/view_android.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
@@ -18,6 +19,7 @@
 #include "ui/android/window_android.h"
 #include "ui/base/layout.h"
 #include "ui/events/android/drag_event_android.h"
+#include "ui/events/android/gesture_event_android.h"
 #include "ui/events/android/motion_event_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "url/gurl.h"
@@ -79,12 +81,10 @@ ViewAndroid::ScopedAnchorView::view() const {
   return view_.get(env);
 }
 
-ViewAndroid::ViewAndroid(ViewClient* view_client)
-    : parent_(nullptr),
-      client_(view_client),
-      layout_params_(LayoutParams::MatchParent()) {}
+ViewAndroid::ViewAndroid(ViewClient* view_client, LayoutType layout_type)
+    : parent_(nullptr), client_(view_client), layout_type_(layout_type) {}
 
-ViewAndroid::ViewAndroid() : ViewAndroid(nullptr) {}
+ViewAndroid::ViewAndroid() : ViewAndroid(nullptr, LayoutType::NORMAL) {}
 
 ViewAndroid::~ViewAndroid() {
   observer_list_.Clear();
@@ -140,6 +140,14 @@ void ViewAndroid::AddChild(ViewAndroid* child) {
   // accidentally overwrite the valid ones in the children.
   if (!physical_size_.IsEmpty())
     child->OnPhysicalBackingSizeChanged(physical_size_);
+
+  // Empty view size also need not propagating down in order to prevent
+  // spurious events with empty size from being sent down.
+  if (child->match_parent() && !view_rect_.IsEmpty()) {
+    child->OnSizeChangedInternal(view_rect_.size());
+    DispatchOnSizeChanged();
+  }
+
   if (GetWindowAndroid())
     child->OnAttachedToWindow();
 }
@@ -193,18 +201,23 @@ ViewAndroid::ScopedAnchorView ViewAndroid::AcquireAnchorView() {
 }
 
 void ViewAndroid::SetAnchorRect(const JavaRef<jobject>& anchor,
-                                const gfx::RectF& bounds) {
+                                const gfx::RectF& bounds_dip) {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
     return;
 
   float dip_scale = GetDipScale();
-  int left_margin = std::round(bounds.x() * dip_scale);
-  int top_margin = std::round((content_offset() + bounds.y()) * dip_scale);
+  int left_margin = std::round(bounds_dip.x() * dip_scale);
+  // Note that content_offset() is in CSS scale and bounds_dip is in DIP scale
+  // (i.e., CSS pixels * page scale factor), but the height of browser control
+  // is not affected by page scale factor. Thus, content_offset() in CSS scale
+  // is also in DIP scale.
+  int top_margin = std::round((content_offset() + bounds_dip.y()) * dip_scale);
+  const gfx::RectF bounds_px = gfx::ScaleRect(bounds_dip, dip_scale);
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_setViewPosition(
-      env, delegate, anchor, bounds.x(), bounds.y(), bounds.width(),
-      bounds.height(), dip_scale, left_margin, top_margin);
+      env, delegate, anchor, bounds_px.x(), bounds_px.y(), bounds_px.width(),
+      bounds_px.height(), left_margin, top_margin);
 }
 
 ScopedJavaLocalRef<jobject> ViewAndroid::GetContainerView() {
@@ -229,6 +242,17 @@ gfx::Point ViewAndroid::GetLocationOfContainerViewInWindow() {
                                                                    delegate));
 
   return result;
+}
+
+gfx::PointF ViewAndroid::GetLocationOnScreen(float x, float y) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return gfx::PointF();
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  float loc_x = Java_ViewAndroidDelegate_getXLocationOnScreen(env, delegate);
+  float loc_y = Java_ViewAndroidDelegate_getYLocationOnScreen(env, delegate);
+  return gfx::PointF(x + loc_x, y + loc_y);
 }
 
 void ViewAndroid::RemoveChild(ViewAndroid* child) {
@@ -304,10 +328,6 @@ void ViewAndroid::SetLayer(scoped_refptr<cc::Layer> layer) {
   layer_ = layer;
 }
 
-void ViewAndroid::SetLayout(ViewAndroid::LayoutParams params) {
-  layout_params_ = params;
-}
-
 bool ViewAndroid::StartDragAndDrop(const JavaRef<jstring>& jtext,
                                    const JavaRef<jobject>& jimage) {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
@@ -376,6 +396,37 @@ int ViewAndroid::GetSystemWindowInsetBottom() {
   return Java_ViewAndroidDelegate_getSystemWindowInsetBottom(env, delegate);
 }
 
+void ViewAndroid::OnSizeChanged(int width, int height) {
+  // Match-parent view must not receive size events.
+  DCHECK(!match_parent());
+
+  float scale = GetDipScale();
+  OnSizeChangedInternal(
+      gfx::Size(std::ceil(width / scale), std::ceil(height / scale)));
+
+  // Signal resize event after all the views in the tree get the updated size.
+  DispatchOnSizeChanged();
+}
+
+void ViewAndroid::OnSizeChangedInternal(const gfx::Size& size) {
+  if (view_rect_.size() == size)
+    return;
+
+  view_rect_.set_size(size);
+  for (auto* child : children_) {
+    if (child->match_parent())
+      child->OnSizeChangedInternal(size);
+  }
+}
+
+void ViewAndroid::DispatchOnSizeChanged() {
+  client_->OnSizeChanged();
+  for (auto* child : children_) {
+    if (child->match_parent())
+      child->DispatchOnSizeChanged();
+  }
+}
+
 void ViewAndroid::OnPhysicalBackingSizeChanged(const gfx::Size& size) {
   if (physical_size_ == size)
     return;
@@ -386,8 +437,12 @@ void ViewAndroid::OnPhysicalBackingSizeChanged(const gfx::Size& size) {
     child->OnPhysicalBackingSizeChanged(size);
 }
 
-gfx::Size ViewAndroid::GetPhysicalBackingSize() {
+gfx::Size ViewAndroid::GetPhysicalBackingSize() const {
   return physical_size_;
+}
+
+gfx::Size ViewAndroid::GetSize() const {
+  return view_rect_.size();
 }
 
 bool ViewAndroid::OnDragEvent(const DragEventAndroid& event) {
@@ -397,10 +452,8 @@ bool ViewAndroid::OnDragEvent(const DragEventAndroid& event) {
 
 // static
 bool ViewAndroid::SendDragEventToClient(ViewClient* client,
-                                        const DragEventAndroid& event,
-                                        const gfx::PointF& point) {
-  std::unique_ptr<DragEventAndroid> e = event.CreateFor(point);
-  return client->OnDragEvent(*e);
+                                        const DragEventAndroid& event) {
+  return client->OnDragEvent(event);
 }
 
 bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event) {
@@ -410,10 +463,8 @@ bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event) {
 
 // static
 bool ViewAndroid::SendTouchEventToClient(ViewClient* client,
-                                         const MotionEventAndroid& event,
-                                         const gfx::PointF& point) {
-  std::unique_ptr<MotionEventAndroid> e(event.CreateFor(point));
-  return client->OnTouchEvent(*e);
+                                         const MotionEventAndroid& event) {
+  return client->OnTouchEvent(event);
 }
 
 bool ViewAndroid::OnMouseEvent(const MotionEventAndroid& event) {
@@ -423,10 +474,8 @@ bool ViewAndroid::OnMouseEvent(const MotionEventAndroid& event) {
 
 // static
 bool ViewAndroid::SendMouseEventToClient(ViewClient* client,
-                                         const MotionEventAndroid& event,
-                                         const gfx::PointF& point) {
-  std::unique_ptr<MotionEventAndroid> e(event.CreateFor(point));
-  return client->OnMouseEvent(*e);
+                                         const MotionEventAndroid& event) {
+  return client->OnMouseEvent(event);
 }
 
 bool ViewAndroid::OnMouseWheelEvent(const MotionEventAndroid& event) {
@@ -436,38 +485,55 @@ bool ViewAndroid::OnMouseWheelEvent(const MotionEventAndroid& event) {
 
 // static
 bool ViewAndroid::SendMouseWheelEventToClient(ViewClient* client,
-                                              const MotionEventAndroid& event,
-                                              const gfx::PointF& point) {
-  std::unique_ptr<MotionEventAndroid> e(event.CreateFor(point));
-  return client->OnMouseWheelEvent(*e);
+                                              const MotionEventAndroid& event) {
+  return client->OnMouseWheelEvent(event);
+}
+
+bool ViewAndroid::OnGestureEvent(const GestureEventAndroid& event) {
+  return HitTest(base::Bind(&ViewAndroid::SendGestureEventToClient), event,
+                 event.location());
+}
+
+// static
+bool ViewAndroid::SendGestureEventToClient(ViewClient* client,
+                                           const GestureEventAndroid& event) {
+  return client->OnGestureEvent(event);
 }
 
 template <typename E>
 bool ViewAndroid::HitTest(ViewClientCallback<E> send_to_client,
                           const E& event,
                           const gfx::PointF& point) {
-  if (client_ && send_to_client.Run(client_, event, point))
-    return true;
+  if (client_) {
+    if (view_rect_.origin().IsOrigin()) {  // (x, y) == (0, 0)
+      if (send_to_client.Run(client_, event))
+        return true;
+    } else {
+      std::unique_ptr<E> e(event.CreateFor(point));
+      if (send_to_client.Run(client_, *e))
+        return true;
+    }
+  }
 
   if (!children_.empty()) {
     gfx::PointF offset_point(point);
-    offset_point.Offset(-layout_params_.x, -layout_params_.y);
+    offset_point.Offset(-view_rect_.x(), -view_rect_.y());
     gfx::Point int_point = gfx::ToFlooredPoint(offset_point);
 
     // Match from back to front for hit testing.
     for (auto* child : base::Reversed(children_)) {
-      bool matched = child->layout_params_.match_parent;
-      if (!matched) {
-        gfx::Rect bound(child->layout_params_.x, child->layout_params_.y,
-                        child->layout_params_.width,
-                        child->layout_params_.height);
-        matched = bound.Contains(int_point);
-      }
+      bool matched = child->match_parent();
+      if (!matched)
+        matched = child->view_rect_.Contains(int_point);
       if (matched && child->HitTest(send_to_client, event, offset_point))
         return true;
     }
   }
   return false;
+}
+
+void ViewAndroid::SetLayoutForTesting(int x, int y, int width, int height) {
+  view_rect_.SetRect(x, y, width, height);
 }
 
 }  // namespace ui

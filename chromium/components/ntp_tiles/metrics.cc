@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
@@ -19,6 +19,8 @@ namespace {
 
 // Maximum number of tiles to record in histograms.
 const int kMaxNumTiles = 12;
+
+const int kLastTitleSource = static_cast<int>(TileTitleSource::LAST);
 
 // Identifiers for the various tile sources.
 const char kHistogramClientName[] = "client";
@@ -35,17 +37,10 @@ const char kTileTypeSuffixIconReal[] = "IconsReal";
 const char kTileTypeSuffixThumbnail[] = "Thumbnail";
 const char kTileTypeSuffixThumbnailFailed[] = "ThumbnailFailed";
 
-// Log an event for a given |histogram| at a given element |position|. This
-// routine exists because regular histogram macros are cached thus can't be used
-// if the name of the histogram will change at a given call site.
-void LogHistogramEvent(const std::string& histogram,
-                       int position,
-                       int num_sites) {
-  base::HistogramBase* counter = base::LinearHistogram::FactoryGet(
-      histogram, 1, num_sites, num_sites + 1,
-      base::Histogram::kUmaTargetedHistogramFlag);
-  if (counter)
-    counter->Add(position);
+void LogUmaHistogramAge(const std::string& name, const base::TimeDelta& value) {
+  // Log the value in number of seconds.
+  base::UmaHistogramCustomCounts(name, value.InSeconds(), 5,
+                                 base::TimeDelta::FromDays(14).InSeconds(), 20);
 }
 
 std::string GetSourceHistogramName(TileSource source) {
@@ -92,66 +87,130 @@ void RecordPageImpression(int number_of_tiles) {
   UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.NumberOfTiles", number_of_tiles);
 }
 
-void RecordTileImpression(int index,
-                          TileSource source,
-                          TileVisualType type,
-                          const GURL& url,
+void RecordTileImpression(const NTPTileImpression& impression,
                           rappor::RapporService* rappor_service) {
-  UMA_HISTOGRAM_ENUMERATION("NewTabPage.SuggestionsImpression", index,
-                            kMaxNumTiles);
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.SuggestionsImpression",
+                            impression.index, kMaxNumTiles);
 
-  std::string source_name = GetSourceHistogramName(source);
-  std::string impression_histogram = base::StringPrintf(
-      "NewTabPage.SuggestionsImpression.%s", source_name.c_str());
-  LogHistogramEvent(impression_histogram, index, kMaxNumTiles);
+  std::string source_name = GetSourceHistogramName(impression.source);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("NewTabPage.SuggestionsImpression.%s",
+                         source_name.c_str()),
+      impression.index, kMaxNumTiles);
 
-  if (type > LAST_RECORDED_TILE_TYPE) {
+  if (!impression.data_generation_time.is_null()) {
+    const base::TimeDelta age =
+        base::Time::Now() - impression.data_generation_time;
+    LogUmaHistogramAge("NewTabPage.SuggestionsImpressionAge", age);
+    LogUmaHistogramAge(
+        base::StringPrintf("NewTabPage.SuggestionsImpressionAge.%s",
+                           source_name.c_str()),
+        age);
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileTitle",
+                            static_cast<int>(impression.title_source),
+                            kLastTitleSource + 1);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("NewTabPage.TileTitle.%s",
+                         GetSourceHistogramName(impression.source).c_str()),
+      static_cast<int>(impression.title_source), kLastTitleSource + 1);
+
+  if (impression.visual_type > LAST_RECORDED_TILE_TYPE) {
     return;
   }
 
-  UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileType", type,
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileType", impression.visual_type,
                             LAST_RECORDED_TILE_TYPE + 1);
 
-  std::string tile_type_histogram =
-      base::StringPrintf("NewTabPage.TileType.%s", source_name.c_str());
-  LogHistogramEvent(tile_type_histogram, type, LAST_RECORDED_TILE_TYPE + 1);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("NewTabPage.TileType.%s", source_name.c_str()),
+      impression.visual_type, LAST_RECORDED_TILE_TYPE + 1);
 
-  const char* tile_type_suffix = GetTileTypeSuffix(type);
+  const char* tile_type_suffix = GetTileTypeSuffix(impression.visual_type);
   if (tile_type_suffix) {
-    // Note: This handles a null |rappor_service|.
-    rappor::SampleDomainAndRegistryFromGURL(
-        rappor_service,
-        base::StringPrintf("NTP.SuggestionsImpressions.%s", tile_type_suffix),
-        url);
+    if (!impression.url_for_rappor.is_empty()) {
+      // Note: This handles a null |rappor_service|.
+      rappor::SampleDomainAndRegistryFromGURL(
+          rappor_service,
+          base::StringPrintf("NTP.SuggestionsImpressions.%s", tile_type_suffix),
+          impression.url_for_rappor);
+    }
 
-    std::string icon_impression_histogram = base::StringPrintf(
-        "NewTabPage.SuggestionsImpression.%s", tile_type_suffix);
-    LogHistogramEvent(icon_impression_histogram, index, kMaxNumTiles);
+    base::UmaHistogramExactLinear(
+        base::StringPrintf("NewTabPage.SuggestionsImpression.%s",
+                           tile_type_suffix),
+        impression.index, kMaxNumTiles);
+
+    if (impression.icon_type != favicon_base::IconType::kInvalid) {
+      base::UmaHistogramEnumeration(
+          base::StringPrintf("NewTabPage.TileFaviconType.%s", tile_type_suffix),
+          impression.icon_type, favicon_base::IconType::kCount);
+    }
+  }
+
+  if (impression.icon_type != favicon_base::IconType::kInvalid) {
+    base::UmaHistogramEnumeration("NewTabPage.TileFaviconType",
+                                  impression.icon_type,
+                                  favicon_base::IconType::kCount);
   }
 }
 
-void RecordTileClick(int index, TileSource source, TileVisualType tile_type) {
-  UMA_HISTOGRAM_ENUMERATION("NewTabPage.MostVisited", index, kMaxNumTiles);
+void RecordTileClick(const NTPTileImpression& impression) {
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.MostVisited", impression.index,
+                            kMaxNumTiles);
 
-  std::string histogram = base::StringPrintf(
-      "NewTabPage.MostVisited.%s", GetSourceHistogramName(source).c_str());
-  LogHistogramEvent(histogram, index, kMaxNumTiles);
+  std::string source_name = GetSourceHistogramName(impression.source);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("NewTabPage.MostVisited.%s", source_name.c_str()),
+      impression.index, kMaxNumTiles);
 
-  const char* tile_type_suffix = GetTileTypeSuffix(tile_type);
-  if (tile_type_suffix) {
-    std::string tile_type_histogram =
-        base::StringPrintf("NewTabPage.MostVisited.%s", tile_type_suffix);
-    LogHistogramEvent(tile_type_histogram, index, kMaxNumTiles);
+  if (!impression.data_generation_time.is_null()) {
+    const base::TimeDelta age =
+        base::Time::Now() - impression.data_generation_time;
+    LogUmaHistogramAge("NewTabPage.MostVisitedAge", age);
+    LogUmaHistogramAge(
+        base::StringPrintf("NewTabPage.MostVisitedAge.%s", source_name.c_str()),
+        age);
   }
 
-  if (tile_type <= LAST_RECORDED_TILE_TYPE) {
-    UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileTypeClicked", tile_type,
+  const char* tile_type_suffix = GetTileTypeSuffix(impression.visual_type);
+  if (tile_type_suffix) {
+    base::UmaHistogramExactLinear(
+        base::StringPrintf("NewTabPage.MostVisited.%s", tile_type_suffix),
+        impression.index, kMaxNumTiles);
+
+    if (impression.icon_type != favicon_base::IconType::kInvalid) {
+      base::UmaHistogramEnumeration(
+          base::StringPrintf("NewTabPage.TileFaviconTypeClicked.%s",
+                             tile_type_suffix),
+          impression.icon_type, favicon_base::IconType::kCount);
+    }
+  }
+
+  if (impression.icon_type != favicon_base::IconType::kInvalid) {
+    base::UmaHistogramEnumeration("NewTabPage.TileFaviconTypeClicked",
+                                  impression.icon_type,
+                                  favicon_base::IconType::kCount);
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileTitleClicked",
+                            static_cast<int>(impression.title_source),
+                            kLastTitleSource + 1);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("NewTabPage.TileTitleClicked.%s",
+                         GetSourceHistogramName(impression.source).c_str()),
+      static_cast<int>(impression.title_source), kLastTitleSource + 1);
+
+  if (impression.visual_type <= LAST_RECORDED_TILE_TYPE) {
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileTypeClicked",
+                              impression.visual_type,
                               LAST_RECORDED_TILE_TYPE + 1);
 
-    std::string histogram =
+    base::UmaHistogramExactLinear(
         base::StringPrintf("NewTabPage.TileTypeClicked.%s",
-                           GetSourceHistogramName(source).c_str());
-    LogHistogramEvent(histogram, tile_type, LAST_RECORDED_TILE_TYPE + 1);
+                           GetSourceHistogramName(impression.source).c_str()),
+        impression.visual_type, LAST_RECORDED_TILE_TYPE + 1);
   }
 }
 

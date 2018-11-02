@@ -68,7 +68,7 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
   void DisableSync() override;
   bool IsTrackingMetadata() override;
   void ReportError(const ModelError& error) override;
-  void ReportError(const tracked_objects::Location& location,
+  void ReportError(const base::Location& location,
                    const std::string& message) override;
 
   // ModelTypeProcessor implementation.
@@ -122,8 +122,8 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
   // Caches EntityData from the |data_batch| in the entity trackers.
   void ConsumeDataBatch(std::unique_ptr<DataBatch> data_batch);
 
-  // Sends all commit requests that are due to be sent to the sync thread.
-  void FlushPendingCommitRequests();
+  // Nudges worker if there are any local entities to be committed.
+  void NudgeForCommitIfNeeded();
 
   // Computes the client tag hash for the given client |tag|.
   std::string GetHashForTag(const std::string& tag);
@@ -162,15 +162,25 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
       const std::vector<std::string>& storage_key_to_be_deleted,
       MetadataChangeList* metadata_changes);
 
-  // Tombstones all entries of |type| whose versions are older than
+  // Tombstones all entries whose versions are older than
   // |version_watermark| unless they are unsynced.
   void ExpireEntriesByVersion(int64_t version_watermark,
                               MetadataChangeList* metadata_changes);
 
-  // Tombstones all entries of |type| whose ages are older than
+  // Tombstones all entries whose ages are older than
   // |age_watermark_in_days| unless they are unsynced.
   void ExpireEntriesByAge(int32_t age_watermark_in_days,
                           MetadataChangeList* metadata_changes);
+
+  // If the number of |entities_| exceeds |max_number_of_items|, the
+  // processor will tombstone the extra sync entities based on the LRU rule.
+  void ExpireEntriesByItemLimit(int32_t max_number_of_items,
+                                MetadataChangeList* metadata_changes);
+
+  // Removes entity tracker and clears metadata for entity from
+  // MetadataChangeList.
+  void RemoveEntity(ProcessorEntityTracker* entity,
+                    MetadataChangeList* metadata_change_list);
 
   /////////////////////
   // Processor state //

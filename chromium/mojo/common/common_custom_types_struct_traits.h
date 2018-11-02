@@ -19,7 +19,7 @@
 #include "mojo/common/process_id.mojom-shared.h"
 #include "mojo/common/string16.mojom-shared.h"
 #include "mojo/common/text_direction.mojom-shared.h"
-#include "mojo/common/time.mojom-shared.h"
+#include "mojo/common/thread_priority.mojom-shared.h"
 #include "mojo/common/unguessable_token.mojom-shared.h"
 #include "mojo/common/version.mojom-shared.h"
 
@@ -89,19 +89,6 @@ struct StructTraits<common::mojom::ProcessIdDataView, base::ProcessId> {
 };
 
 template <>
-struct StructTraits<common::mojom::TimeDeltaDataView, base::TimeDelta> {
-  static int64_t microseconds(const base::TimeDelta& delta) {
-    return delta.InMicroseconds();
-  }
-
-  static bool Read(common::mojom::TimeDeltaDataView data,
-                   base::TimeDelta* delta) {
-    *delta = base::TimeDelta::FromMicroseconds(data.microseconds());
-    return true;
-  }
-};
-
-template <>
 struct StructTraits<common::mojom::FileDataView, base::File> {
   static bool IsNull(const base::File& file) { return !file.IsValid(); }
 
@@ -117,6 +104,14 @@ struct EnumTraits<common::mojom::TextDirection, base::i18n::TextDirection> {
       base::i18n::TextDirection text_direction);
   static bool FromMojom(common::mojom::TextDirection input,
                         base::i18n::TextDirection* out);
+};
+
+template <>
+struct EnumTraits<common::mojom::ThreadPriority, base::ThreadPriority> {
+  static common::mojom::ThreadPriority ToMojom(
+      base::ThreadPriority thread_priority);
+  static bool FromMojom(common::mojom::ThreadPriority input,
+                        base::ThreadPriority* out);
 };
 
 template <>

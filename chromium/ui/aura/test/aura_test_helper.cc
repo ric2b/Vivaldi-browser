@@ -18,7 +18,9 @@
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/test/env_test_helper.h"
 #include "ui/aura/test/event_generator_delegate_aura.h"
+#include "ui/aura/test/mus/test_window_manager_delegate.h"
 #include "ui/aura/test/mus/test_window_tree.h"
+#include "ui/aura/test/mus/test_window_tree_client_delegate.h"
 #include "ui/aura/test/mus/test_window_tree_client_setup.h"
 #include "ui/aura/test/test_focus_client.h"
 #include "ui/aura/test/test_screen.h"
@@ -29,6 +31,7 @@
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/platform_window_defaults.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -93,30 +96,56 @@ void AuraTestHelper::DeleteWindowTreeClient() {
 
 void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
                            ui::ContextFactoryPrivate* context_factory_private) {
+  // |mode_| defaults to LOCAL, but test suites may enable MUS. If this happens
+  // enable mus.
+  if (Env::GetInstanceDontCreate() &&
+      Env::GetInstanceDontCreate()->mode() == Env::Mode::MUS &&
+      mode_ == Mode::LOCAL) {
+    test_window_tree_client_delegate_ =
+        std::make_unique<TestWindowTreeClientDelegate>();
+    test_window_manager_delegate_ =
+        std::make_unique<TestWindowManagerDelegate>();
+    EnableMusWithTestWindowTree(test_window_tree_client_delegate_.get(),
+                                test_window_manager_delegate_.get());
+  }
+
   setup_called_ = true;
 
   if (mode_ != Mode::MUS) {
     // Assume if an explicit WindowTreeClient was created then a WmState was
     // already created.
-    wm_state_ = base::MakeUnique<wm::WMState>();
+    wm_state_ = std::make_unique<wm::WMState>();
   }
   // Needs to be before creating WindowTreeClient.
-  focus_client_ = base::MakeUnique<TestFocusClient>();
-  capture_client_ = base::MakeUnique<client::DefaultCaptureClient>();
+  focus_client_ = std::make_unique<TestFocusClient>();
+  capture_client_ = std::make_unique<client::DefaultCaptureClient>();
   const Env::Mode env_mode =
       (mode_ == Mode::LOCAL) ? Env::Mode::LOCAL : Env::Mode::MUS;
+  if (env_mode == Env::Mode::MUS) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kMus, switches::kMusHostVizValue);
+  }
+
   if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT)
     InitWindowTreeClient();
   if (!Env::GetInstanceDontCreate())
     env_ = Env::CreateInstance(env_mode);
+  else
+    env_mode_to_restore_ = Env::GetInstance()->mode();
   EnvTestHelper env_helper;
   // Always reset the mode. This really only matters for if Env was created
   // above.
   env_helper.SetMode(env_mode);
-  env_helper.SetWindowTreeClient(window_tree_client_);
+  if (env_mode == Env::Mode::MUS) {
+    env_window_tree_client_setter_ =
+        std::make_unique<EnvWindowTreeClientSetter>(window_tree_client_);
+  }
   // Tests assume they can set the mouse location on Env() and have it reflected
   // in tests.
   env_helper.SetAlwaysUseLastMouseLocation(true);
+  context_factory_to_restore_ = Env::GetInstance()->context_factory();
+  context_factory_private_to_restore_ =
+      Env::GetInstance()->context_factory_private();
   Env::GetInstance()->set_context_factory(context_factory);
   Env::GetInstance()->set_context_factory_private(context_factory_private);
   // Unit tests generally don't want to query the system, rather use the state
@@ -133,20 +162,22 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
     // This must be reset before creating TestScreen, which sets up the display
     // scale factor for this test iteration.
     display::Display::ResetForceDeviceScaleFactorForTesting();
-    test_screen_.reset(TestScreen::Create(host_size));
+    test_screen_.reset(TestScreen::Create(host_size, window_tree_client_));
     if (!screen)
       display::Screen::SetScreenInstance(test_screen_.get());
-    host_.reset(test_screen_->CreateHostForPrimaryDisplay());
-    host_->window()->SetEventTargeter(
-        std::unique_ptr<ui::EventTargeter>(new WindowTargeter()));
+    if (env_mode == Env::Mode::LOCAL || window_manager_delegate_) {
+      host_.reset(test_screen_->CreateHostForPrimaryDisplay());
+      host_->window()->SetEventTargeter(
+          std::unique_ptr<ui::EventTargeter>(new WindowTargeter()));
 
-    client::SetFocusClient(root_window(), focus_client_.get());
-    client::SetCaptureClient(root_window(), capture_client());
-    parenting_client_.reset(new TestWindowParentingClient(root_window()));
+      client::SetFocusClient(root_window(), focus_client_.get());
+      client::SetCaptureClient(root_window(), capture_client());
+      parenting_client_.reset(new TestWindowParentingClient(root_window()));
 
-    root_window()->Show();
-    // Ensure width != height so tests won't confuse them.
-    host()->SetBoundsInPixels(gfx::Rect(host_size));
+      root_window()->Show();
+      // Ensure width != height so tests won't confuse them.
+      host()->SetBoundsInPixels(gfx::Rect(host_size));
+    }
   }
 
   if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT) {
@@ -162,7 +193,8 @@ void AuraTestHelper::TearDown() {
   g_instance = nullptr;
   teardown_called_ = true;
   parenting_client_.reset();
-  if (mode_ != Mode::MUS) {
+  env_window_tree_client_setter_.reset();
+  if (mode_ != Mode::MUS && root_window()) {
     client::SetFocusClient(root_window(), nullptr);
     client::SetCaptureClient(root_window(), nullptr);
     host_.reset();
@@ -174,12 +206,23 @@ void AuraTestHelper::TearDown() {
     window_tree_client_setup_.reset();
     focus_client_.reset();
     capture_client_.reset();
+  } else {
+    if (display::Screen::GetScreen() == test_screen_.get())
+      display::Screen::SetScreenInstance(nullptr);
+    test_screen_.reset();
+    window_tree_client_setup_.reset();
   }
   ui::GestureRecognizer::Reset();
   ui::ShutdownInputMethodForTesting();
 
-  if (env_)
+  if (env_) {
     env_.reset();
+  } else {
+    Env::GetInstance()->set_context_factory(context_factory_to_restore_);
+    Env::GetInstance()->set_context_factory_private(
+        context_factory_private_to_restore_);
+    EnvTestHelper().SetMode(env_mode_to_restore_);
+  }
   wm_state_.reset();
 }
 
@@ -203,7 +246,7 @@ client::CaptureClient* AuraTestHelper::capture_client() {
 }
 
 void AuraTestHelper::InitWindowTreeClient() {
-  window_tree_client_setup_ = base::MakeUnique<TestWindowTreeClientSetup>();
+  window_tree_client_setup_ = std::make_unique<TestWindowTreeClientSetup>();
   window_tree_client_setup_->InitForWindowManager(window_tree_delegate_,
                                                   window_manager_delegate_);
   window_tree_client_ = window_tree_client_setup_->window_tree_client();

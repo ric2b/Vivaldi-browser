@@ -69,6 +69,9 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   // state that depends on |details|.
   void UpdateWith(mojom::PaymentDetailsPtr details);
 
+  // Recomputes spec based on details.
+  void RecomputeSpecForDetails();
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -95,6 +98,9 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   }
   const std::vector<GURL>& url_payment_method_identifiers() const {
     return url_payment_method_identifiers_;
+  }
+  const std::set<std::string>& payment_method_identifiers_set() const {
+    return payment_method_identifiers_set_;
   }
   // Returns whether the |method_name| was specified as supported through the
   // "basic-card" payment method. If false, it means either the |method_name| is
@@ -138,13 +144,20 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   const std::vector<mojom::PaymentShippingOptionPtr>& GetShippingOptions()
       const;
 
+  const mojom::PaymentDetails& details() const { return *details_.get(); }
+  const std::vector<mojom::PaymentMethodDataPtr>& method_data() const {
+    return method_data_;
+  }
+
+  // Returns whether any of the payment method names are "basic-card" or one of
+  // the networks ("visa", "amex", "mastercard", etc).
+  bool HasBasicCardMethodName() const;
+
  private:
   // Returns the first applicable modifier in the Payment Request for the
   // |selected_instrument|.
   const mojom::PaymentDetailsModifierPtr* GetApplicableModifier(
       PaymentInstrument* selected_instrument) const;
-
-  const mojom::PaymentDetails& details() const { return *details_.get(); }
 
   // Updates the |selected_shipping_option| based on the data passed to this
   // payment request by the website. This will set selected_shipping_option_ to
@@ -168,6 +181,7 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
 
   mojom::PaymentOptionsPtr options_;
   mojom::PaymentDetailsPtr details_;
+  std::vector<mojom::PaymentMethodDataPtr> method_data_;
   const std::string app_locale_;
   // The currently shipping option as specified by the merchant.
   mojom::PaymentShippingOption* selected_shipping_option_;
@@ -193,6 +207,9 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   // identifers, the other being standardized payment method identifiers i.e.,
   // basic-card.
   std::vector<GURL> url_payment_method_identifiers_;
+
+  // The set of all payment method identifiers.
+  std::set<std::string> payment_method_identifiers_set_;
 
   // A mapping of the payment method names to the corresponding JSON-stringified
   // payment method specific data.

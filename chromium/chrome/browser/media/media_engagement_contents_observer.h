@@ -7,12 +7,17 @@
 
 #include "content/public/browser/web_contents_observer.h"
 
+namespace base {
+class Clock;
+}  // namespace base
+
 namespace gfx {
 class Size;
 }  // namespace gfx
 
 class MediaEngagementContentsObserverTest;
 class MediaEngagementService;
+class MediaEngagementSession;
 
 class MediaEngagementContentsObserver : public content::WebContentsObserver {
  public:
@@ -24,12 +29,12 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
       content::NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void WasShown() override;
-  void WasHidden() override;
   void MediaStartedPlaying(const MediaPlayerInfo& media_player_info,
                            const MediaPlayerId& media_player_id) override;
-  void MediaStoppedPlaying(const MediaPlayerInfo& media_player_info,
-                           const MediaPlayerId& media_player_id) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& media_player_info,
+      const MediaPlayerId& media_player_id,
+      WebContentsObserver::MediaStoppedReason reason) override;
   void DidUpdateAudioMutingState(bool muted) override;
   void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) override;
   void MediaResized(const gfx::Size& size, const MediaPlayerId& id) override;
@@ -49,6 +54,9 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
 
   MediaEngagementContentsObserver(content::WebContents* web_contents,
                                   MediaEngagementService* service);
+
+  // This is the maximum playback time for media to be considered 'short'.
+  static const base::TimeDelta kMaxShortPlaybackTime;
 
   // This enum is used to record a histogram and should not be renumbered.
   enum class InsignificantPlaybackReason {
@@ -85,11 +93,13 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
     kPlayerRemoved,
   };
 
-  void OnSignificantMediaPlaybackTime();
+  void OnSignificantMediaPlaybackTimeForPlayer(const MediaPlayerId& id);
+  void OnSignificantMediaPlaybackTimeForPage();
+  void UpdatePlayerTimer(const MediaPlayerId&);
+  void UpdatePageTimer();
   bool AreConditionsMet() const;
-  void UpdateTimer();
 
-  void SetTimerForTest(std::unique_ptr<base::Timer> timer);
+  void SetTaskRunnerForTest(scoped_refptr<base::SequencedTaskRunner>);
 
   // |this| is owned by |service_|.
   MediaEngagementService* service_;
@@ -103,13 +113,39 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   // significant playback.
   std::set<MediaPlayerId> significant_players_;
 
+  // Measures playback time for a player.
+  class PlaybackTimer {
+   public:
+    explicit PlaybackTimer(base::Clock*);
+
+    void Start();
+    void Stop();
+    bool IsRunning() const;
+    base::TimeDelta Elapsed() const;
+    void Reset();
+
+    DISALLOW_COPY_AND_ASSIGN(PlaybackTimer);
+
+   private:
+    // The clock is owned by |service_| which already owns |this|.
+    base::Clock* clock_;
+
+    base::Optional<base::Time> start_time_;
+    base::TimeDelta recorded_time_;
+  };
+
   // A structure containing all the information we have about a player's state.
   struct PlayerState {
+    explicit PlayerState(base::Clock*);
+    ~PlayerState();
+    PlayerState(PlayerState&&);
+
     base::Optional<bool> muted;
     base::Optional<bool> playing;           // Currently playing.
     base::Optional<bool> significant_size;  // The video track has at least
                                             // a certain frame size.
     base::Optional<bool> has_audio;         // The media has an audio track.
+    base::Optional<bool> has_video;         // The media has a video track.
 
     // The engagement score of the origin at playback has been recorded
     // to a histogram.
@@ -119,8 +155,10 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
     // to a histogram.
     bool reasons_recorded = false;
 
-    PlayerState();
-    PlayerState& operator=(const PlayerState&);
+    bool reached_end_of_stream = false;
+    std::unique_ptr<PlaybackTimer> playback_timer;
+
+    DISALLOW_COPY_AND_ASSIGN(PlayerState);
   };
   std::map<MediaPlayerId, PlayerState> player_states_;
   PlayerState& GetPlayerState(const MediaPlayerId& id);
@@ -156,19 +194,37 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   static const char* const kHistogramSignificantRemovedName;
   static const int kMaxInsignificantPlaybackReason;
 
-  // Record the score and change in score to UKM.
-  void RecordUkmMetrics();
-
-  bool is_visible_ = false;
-  bool significant_playback_recorded_ = false;
+  static const base::TimeDelta kSignificantMediaPlaybackTime;
 
   // Records the engagement score for the current origin to a histogram so we
   // can identify whether the playback would have been blocked.
   void RecordEngagementScoreToHistogramAtPlayback(const MediaPlayerId& id);
 
-  url::Origin committed_origin_;
+  // Clears out players that are ignored because they are too short and register
+  // the result as significant/audible players with the `session_`.
+  void RegisterAudiblePlayersWithSession();
 
-  static const base::TimeDelta kSignificantMediaPlaybackTime;
+  // Returns the opener of the current WebContents. Null if there is none.
+  content::WebContents* GetOpener() const;
+
+  // Find the appropriate media engagement session if any or create a new one to
+  // be used. Will return nullptr if no session should be used.
+  scoped_refptr<MediaEngagementSession> GetOrCreateSession(
+      const url::Origin& origin,
+      content::WebContents* opener) const;
+
+  // Stores the ids of the players that were audible. The boolean will be true
+  // if the player was significant.
+  using AudiblePlayerRow = std::pair<bool, std::unique_ptr<base::Timer>>;
+  std::map<MediaPlayerId, AudiblePlayerRow> audible_players_;
+
+  // The task runner to use when creating timers. It is used only for testing.
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // The MediaEngagementSession used by this MediaEngagementContentsObserver. It
+  // may be shared by other instances if they are part of the same session. It
+  // willl be null if it is not part of a session.
+  scoped_refptr<MediaEngagementSession> session_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaEngagementContentsObserver);
 };

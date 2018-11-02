@@ -4,11 +4,9 @@
 
 #include "net/dns/mojo_host_resolver_impl.h"
 
-#include <memory>
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -90,8 +88,8 @@ void TestRequestClient::OnConnectionError() {
 
 class CallbackMockHostResolver : public MockHostResolver {
  public:
-  CallbackMockHostResolver() {}
-  ~CallbackMockHostResolver() override {}
+  CallbackMockHostResolver() = default;
+  ~CallbackMockHostResolver() override = default;
 
   // Set a callback to run whenever Resolve is called. Callback is cleared after
   // every run.

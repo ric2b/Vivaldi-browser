@@ -21,6 +21,7 @@ import android.provider.Browser;
 import android.provider.Telephony;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
+import android.view.WindowManager.BadTokenException;
 import android.webkit.MimeTypeMap;
 
 import org.chromium.base.ApplicationState;
@@ -35,6 +36,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
@@ -378,7 +380,19 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     @Override
-    public void startIncognitoIntent(final Intent intent, final String referrerUrl,
+    public boolean startIncognitoIntent(final Intent intent, final String referrerUrl,
+            final String fallbackUrl, final Tab tab, final boolean needsToCloseTab,
+            final boolean proxy) {
+        try {
+            startIncognitoIntentInternal(
+                    intent, referrerUrl, fallbackUrl, tab, needsToCloseTab, proxy);
+        } catch (BadTokenException e) {
+            return false;
+        }
+        return true;
+    }
+
+    private void startIncognitoIntentInternal(final Intent intent, final String referrerUrl,
             final String fallbackUrl, final Tab tab, final boolean needsToCloseTab,
             final boolean proxy) {
         Context context = tab.getWindowAndroid().getContext().get();
@@ -488,7 +502,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         LoadUrlParams loadUrlParams = new LoadUrlParams(url, PageTransition.AUTO_TOPLEVEL);
         if (!TextUtils.isEmpty(referrerUrl)) {
             Referrer referrer =
-                    new Referrer(referrerUrl, WebReferrerPolicy.WEB_REFERRER_POLICY_ALWAYS);
+                    new Referrer(referrerUrl, WebReferrerPolicy.ALWAYS);
             loadUrlParams.setReferrer(referrer);
         }
         tab.loadUrl(loadUrlParams);
@@ -501,7 +515,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         final LoadUrlParams loadUrlParams = new LoadUrlParams(url, transitionType);
         if (!TextUtils.isEmpty(referrerUrl)) {
             Referrer referrer =
-                    new Referrer(referrerUrl, WebReferrerPolicy.WEB_REFERRER_POLICY_ALWAYS);
+                    new Referrer(referrerUrl, WebReferrerPolicy.ALWAYS);
             loadUrlParams.setReferrer(referrer);
         }
         if (tab != null) {
@@ -599,7 +613,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
             Intent resolvedIntent = new Intent(intent);
             resolvedIntent.setData(Uri.parse(url));
             return handler.handleIncomingIntent(getAvailableContext(), resolvedIntent,
-                    ChromeLauncherActivity.isCustomTabIntent(resolvedIntent), true);
+                    LaunchIntentDispatcher.isCustomTabIntent(resolvedIntent), true);
         } else if (!isIncomingRedirect) {
             // Check if the navigation is coming from SERP and skip instant app handling.
             if (isSerpReferrer(tab)) return false;

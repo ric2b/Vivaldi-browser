@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
 #include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
 #include "chrome/browser/chromeos/arc/cast_receiver/arc_cast_receiver_service.h"
 #include "chrome/browser/chromeos/arc/downloads_watcher/arc_downloads_watcher_service.h"
+#include "chrome/browser/chromeos/arc/enterprise/arc_cert_store_bridge.h"
 #include "chrome/browser/chromeos/arc/enterprise/arc_enterprise_reporting_service.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_bridge.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_mounter.h"
@@ -49,9 +49,11 @@
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/lock_screen/arc_lock_screen_bridge.h"
 #include "components/arc/metrics/arc_metrics_service.h"
+#include "components/arc/midis/arc_midis_bridge.h"
 #include "components/arc/net/arc_net_host_impl.h"
 #include "components/arc/obb_mounter/arc_obb_mounter_bridge.h"
 #include "components/arc/power/arc_power_bridge.h"
+#include "components/arc/rotation_lock/arc_rotation_lock_bridge.h"
 #include "components/arc/storage_manager/arc_storage_manager.h"
 #include "components/arc/volume_mounter/arc_volume_mounter_bridge.h"
 #include "components/prefs/pref_member.h"
@@ -66,9 +68,9 @@ ArcServiceLauncher* g_arc_service_launcher = nullptr;
 }  // namespace
 
 ArcServiceLauncher::ArcServiceLauncher()
-    : arc_service_manager_(base::MakeUnique<ArcServiceManager>()),
-      arc_session_manager_(base::MakeUnique<ArcSessionManager>(
-          base::MakeUnique<ArcSessionRunner>(
+    : arc_service_manager_(std::make_unique<ArcServiceManager>()),
+      arc_session_manager_(std::make_unique<ArcSessionManager>(
+          std::make_unique<ArcSessionRunner>(
               base::Bind(ArcSession::Create,
                          arc_service_manager_->arc_bridge_service())))) {
   DCHECK(g_arc_service_launcher == nullptr);
@@ -135,6 +137,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcBootErrorNotification::GetForBrowserContext(profile);
   ArcBootPhaseMonitorBridge::GetForBrowserContext(profile);
   ArcCastReceiverService::GetForBrowserContext(profile);
+  ArcCertStoreBridge::GetForBrowserContext(profile);
   ArcClipboardBridge::GetForBrowserContext(profile);
   ArcCrashCollectorBridge::GetForBrowserContext(profile);
   ArcDownloadsWatcherService::GetForBrowserContext(profile);
@@ -146,6 +149,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcKioskBridge::GetForBrowserContext(profile);
   ArcLockScreenBridge::GetForBrowserContext(profile);
   ArcMetricsService::GetForBrowserContext(profile);
+  ArcMidisBridge::GetForBrowserContext(profile);
   ArcNetHostImpl::GetForBrowserContext(profile);
   ArcNotificationManager::GetForBrowserContext(profile);
   ArcObbMounterBridge::GetForBrowserContext(profile);
@@ -155,6 +159,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcPrintService::GetForBrowserContext(profile);
   ArcProcessService::GetForBrowserContext(profile);
   ArcProvisionNotificationService::GetForBrowserContext(profile);
+  ArcRotationLockBridge::GetForBrowserContext(profile);
   ArcSettingsService::GetForBrowserContext(profile);
   ArcTracingBridge::GetForBrowserContext(profile);
   ArcTtsService::GetForBrowserContext(profile);
@@ -167,7 +172,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
 
   arc_session_manager_->Initialize();
   arc_play_store_enabled_preference_handler_ =
-      base::MakeUnique<ArcPlayStoreEnabledPreferenceHandler>(
+      std::make_unique<ArcPlayStoreEnabledPreferenceHandler>(
           profile, arc_session_manager_.get());
   arc_play_store_enabled_preference_handler_->Start();
 }
@@ -186,8 +191,8 @@ void ArcServiceLauncher::ResetForTesting() {
   // No recreation of arc_service_manager. Pointers to its ArcBridgeService
   // may be referred from existing KeyedService, so destoying it would cause
   // unexpected behavior, specifically on test teardown.
-  arc_session_manager_ = base::MakeUnique<ArcSessionManager>(
-      base::MakeUnique<ArcSessionRunner>(base::Bind(
+  arc_session_manager_ = std::make_unique<ArcSessionManager>(
+      std::make_unique<ArcSessionRunner>(base::Bind(
           ArcSession::Create, arc_service_manager_->arc_bridge_service())));
 }
 

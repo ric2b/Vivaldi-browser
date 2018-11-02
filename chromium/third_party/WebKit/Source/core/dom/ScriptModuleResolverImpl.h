@@ -31,7 +31,7 @@ class CORE_EXPORT ScriptModuleResolverImpl final
     return new ScriptModuleResolverImpl(modulator, execution_context);
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
   USING_GARBAGE_COLLECTED_MIXIN(ScriptModuleResolverImpl);
 
  private:
@@ -43,6 +43,7 @@ class CORE_EXPORT ScriptModuleResolverImpl final
 
   void RegisterModuleScript(ModuleScript*) final;
   void UnregisterModuleScript(ModuleScript*) final;
+  ModuleScript* GetHostDefined(const ScriptModule&) const final;
 
   // Implements "Runtime Semantics: HostResolveImportedModule" per HTML spec.
   // https://html.spec.whatwg.org/#hostresolveimportedmodule(referencingmodule,-specifier)

@@ -4,6 +4,14 @@
 
 #include "ash/login/ui/login_test_base.h"
 
+#include <string>
+
+#include "ash/public/cpp/config.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/interfaces/tray_action.mojom.h"
+#include "ash/shell.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -12,10 +20,11 @@ namespace ash {
 // A WidgetDelegate which ensures that |initially_focused| gets focus.
 class LoginTestBase::WidgetDelegate : public views::WidgetDelegate {
  public:
-  WidgetDelegate(views::View* content) : content_(content) {}
+  explicit WidgetDelegate(views::View* content) : content_(content) {}
   ~WidgetDelegate() override = default;
 
   // views::WidgetDelegate:
+  void DeleteDelegate() override { delete this; }
   views::View* GetInitiallyFocusedView() override { return content_; }
   views::Widget* GetWidget() override { return content_->GetWidget(); }
   const views::Widget* GetWidget() const override {
@@ -28,31 +37,46 @@ class LoginTestBase::WidgetDelegate : public views::WidgetDelegate {
   DISALLOW_COPY_AND_ASSIGN(WidgetDelegate);
 };
 
-LoginTestBase::LoginTestBase() {}
+LoginTestBase::LoginTestBase() = default;
 
-LoginTestBase::~LoginTestBase() {}
+LoginTestBase::~LoginTestBase() = default;
 
-void LoginTestBase::ShowWidgetWithContent(views::View* content) {
-  EXPECT_FALSE(widget_) << "CreateWidget can only be called once.";
-
-  delegate_ = base::MakeUnique<WidgetDelegate>(content);
-
-  views::Widget::InitParams params(
-      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.context = CurrentContext();
-  params.bounds = gfx::Rect(0, 0, 800, 800);
-  params.delegate = delegate_.get();
-  widget_ = new views::Widget();
-  widget_->Init(params);
-  widget_->SetContentsView(content);
-  widget_->Show();
+void LoginTestBase::SetWidget(std::unique_ptr<views::Widget> widget) {
+  EXPECT_FALSE(widget_) << "SetWidget can only be called once.";
+  widget_ = std::move(widget);
 }
 
-mojom::UserInfoPtr LoginTestBase::CreateUser(const std::string& name) const {
-  auto user = mojom::UserInfo::New();
-  user->account_id = AccountId::FromUserEmail(name + "@foo.com");
-  user->display_name = "User " + name;
-  user->display_email = user->account_id.GetUserEmail();
+std::unique_ptr<views::Widget> LoginTestBase::CreateWidgetWithContent(
+    views::View* content) {
+  views::Widget::InitParams params(
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.context = CurrentContext();
+  params.bounds = gfx::Rect(0, 0, 800, 800);
+  params.delegate = new WidgetDelegate(content);
+
+  // Set the widget to the lock screen container, since a test may change the
+  // session state to locked, which will hide all widgets not associated with
+  // the lock screen.
+  params.parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
+                                      kShellWindowId_LockScreenContainer);
+
+  auto new_widget = std::make_unique<views::Widget>();
+  new_widget->Init(params);
+  new_widget->SetContentsView(content);
+  new_widget->Show();
+  return new_widget;
+}
+
+mojom::LoginUserInfoPtr LoginTestBase::CreateUser(
+    const std::string& name) const {
+  auto user = mojom::LoginUserInfo::New();
+  user->basic_user_info = mojom::UserInfo::New();
+  user->basic_user_info->account_id =
+      AccountId::FromUserEmail(name + "@foo.com");
+  user->basic_user_info->display_name = "User " + name;
+  user->basic_user_info->display_email =
+      user->basic_user_info->account_id.GetUserEmail();
   return user;
 }
 
@@ -67,10 +91,7 @@ void LoginTestBase::SetUserCount(size_t count) {
 }
 
 void LoginTestBase::TearDown() {
-  if (widget_) {
-    widget_->Close();
-    widget_ = nullptr;
-  }
+  widget_.reset();
 
   AshTestBase::TearDown();
 }

@@ -26,11 +26,6 @@
 
 namespace {
 
-const int kTopInset = 1;
-const int kLeftInset = 2;
-const int kBottomInset = 7;
-const int kRightInset = 2;
-
 FirstRunBubble* ShowBubbleImpl(Browser* browser,
                                views::View* anchor_view,
                                gfx::NativeWindow parent_window) {
@@ -54,6 +49,13 @@ void FirstRunBubble::Init() {
                 TemplateURLServiceFactory::GetForProfile(browser_->profile()))
           : base::string16();
 
+  // Additional padding to make the content appear centered in the bubble.
+  constexpr int kTopInset = 1;
+  constexpr int kHorizontalInset = 2;
+  constexpr int kBottomInset = 7;
+  SetBorder(views::CreateEmptyBorder(kTopInset, kHorizontalInset, kBottomInset,
+                                     kHorizontalInset));
+
   // TODO(tapted): Update these when there are mocks. http://crbug.com/699338.
   views::Label* title = new views::Label(
       l10n_util::GetStringFUTF16(IDS_FR_BUBBLE_TITLE, search_engine_name),
@@ -68,9 +70,7 @@ void FirstRunBubble::Init() {
   views::Label* subtext = new views::Label(
       l10n_util::GetStringUTF16(IDS_FR_BUBBLE_SUBTEXT), {original_font_list});
 
-  views::GridLayout* layout = views::GridLayout::CreatePanel(this);
-  SetBorder(views::CreateEmptyBorder(kTopInset, kLeftInset, kBottomInset,
-                                     kRightInset));
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
@@ -98,6 +98,8 @@ FirstRunBubble::FirstRunBubble(Browser* browser,
     : views::BubbleDialogDelegateView(nullptr, views::BubbleBorder::TOP_LEFT),
       browser_(browser),
       bubble_closer_(this, parent_window) {
+  set_margins(
+      ChromeLayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG));
   if (anchor_view) {
     // Compensate for built-in vertical padding in the anchor view's image.
     set_anchor_view_insets(gfx::Insets(

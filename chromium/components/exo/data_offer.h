@@ -21,6 +21,7 @@ class RefCountedMemory;
 }
 
 namespace ui {
+class Clipboard;
 class OSExchangeData;
 }
 
@@ -32,7 +33,7 @@ class FileHelper;
 enum class DndAction;
 
 // Object representing transferred data offered to a client.
-class DataOffer : public ui::PropertyHandler {
+class DataOffer final : public ui::PropertyHandler {
  public:
   explicit DataOffer(DataOfferDelegate* delegate);
   ~DataOffer();
@@ -40,24 +41,32 @@ class DataOffer : public ui::PropertyHandler {
   void AddObserver(DataOfferObserver* observer);
   void RemoveObserver(DataOfferObserver* observer);
 
-  // Accepts one of the offered mime types.
+  // Notifies to the DataOffer that the client can accept |mime type|.
   void Accept(const std::string& mime_type);
 
-  // Requests that the data is transferred. |fd| is a file descriptor for data
-  // transfer.
+  // Notifies to the DataOffer that the client start receiving data of
+  // |mime_type|. DataOffer writes the request data to |fd|.
   void Receive(const std::string& mime_type, base::ScopedFD fd);
 
-  // Called when the client is no longer using the data offer object.
+  // Notifies to the DataOffer that the client no longer uses the DataOffer
+  // object.
   void Finish();
 
-  // Sets the available/preferred drag-and-drop actions.
+  // Notifies to the DataOffer that possible and preferred drag and drop
+  // operations selected by the client.
   void SetActions(const base::flat_set<DndAction>& dnd_actions,
                   DndAction preferred_action);
 
-  // Sets drop data.
+  // Sets the dropped data from |data| to the DataOffer object. |file_helper|
+  // will be used to convert paths to handle mount points which is mounted in
+  // the mount point namespace of clinet process.
   void SetDropData(FileHelper* file_helper, const ui::OSExchangeData& data);
 
-  // Sets source actions.
+  // Sets the clipboard data from |data| to the DataOffer object.
+  void SetClipboardData(FileHelper* file_helper, const ui::Clipboard& data);
+
+  // Sets the drag and drop actions which is offered by data source to the
+  // DataOffer object.
   void SetSourceActions(const base::flat_set<DndAction>& source_actions);
 
   DndAction dnd_action() { return dnd_action_; }
@@ -66,7 +75,7 @@ class DataOffer : public ui::PropertyHandler {
   DataOfferDelegate* const delegate_;
 
   // Map between mime type and drop data bytes.
-  base::flat_map<std::string, scoped_refptr<base::RefCountedMemory>> drop_data_;
+  base::flat_map<std::string, scoped_refptr<base::RefCountedMemory>> data_;
   base::flat_set<DndAction> source_actions_;
   DndAction dnd_action_;
   base::ObserverList<DataOfferObserver> observers_;

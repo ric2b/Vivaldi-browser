@@ -12,10 +12,10 @@
 #include "base/values.h"
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_blocker.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 
 namespace message_center {
 
@@ -168,17 +168,17 @@ bool NotificationList::HasPopupNotifications(
   for (const auto& notification : notifications_) {
     if (notification->priority() < DEFAULT_PRIORITY)
       break;
-    if (!ShouldShowNotificationAsPopup(*notification.get(), blockers))
-      continue;
-    if (!notification->shown_as_popup())
+    if (!notification->shown_as_popup() &&
+        ShouldShowNotificationAsPopup(*notification.get(), blockers)) {
       return true;
+    }
   }
   return false;
 }
 
 NotificationList::PopupNotifications NotificationList::GetPopupNotifications(
     const NotificationBlockers& blockers,
-    std::list<std::string>* blocked_ids) {
+    std::list<const Notification*>* blocked) {
   PopupNotifications result;
   size_t default_priority_popup_count = 0;
 
@@ -194,8 +194,8 @@ NotificationList::PopupNotifications NotificationList::GetPopupNotifications(
       continue;
 
     if (!ShouldShowNotificationAsPopup(*notification, blockers)) {
-      if (blocked_ids)
-        blocked_ids->push_back(notification->id());
+      if (blocked)
+        blocked->push_back(notification);
       continue;
     }
 
@@ -286,18 +286,6 @@ NotificationList::Notifications NotificationList::GetVisibleNotifications(
 size_t NotificationList::NotificationCount(
     const NotificationBlockers& blockers) const {
   return GetVisibleNotifications(blockers).size();
-}
-
-size_t NotificationList::UnreadCount(
-    const NotificationBlockers& blockers) const {
-  Notifications notifications = GetVisibleNotifications(blockers);
-  size_t unread_count = 0;
-  for (Notifications::const_iterator iter = notifications.begin();
-       iter != notifications.end(); ++iter) {
-    if (!(*iter)->IsRead())
-      ++unread_count;
-  }
-  return unread_count;
 }
 
 NotificationList::OwnedNotifications::iterator

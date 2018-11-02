@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "base/message_loop/message_loop.h"
+#include "mojo/common/time_struct_traits.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
@@ -21,6 +22,7 @@ namespace {
 class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
  public:
   StructTraitsTest() {}
+  ~StructTraitsTest() override = default;
 
  protected:
   mojom::TraitsTestServicePtr GetTraitsTestProxy() {
@@ -109,7 +111,7 @@ TEST_F(StructTraitsTest, PointerEvent) {
       // Touch pointer events:
       {ET_POINTER_DOWN, gfx::Point(10, 10), gfx::Point(20, 30), EF_NONE, 0,
        PointerDetails(EventPointerType::POINTER_TYPE_TOUCH,
-                      /* pointer_id*/ 1,
+                      /* pointer_id */ 1,
                       /* radius_x */ 1.0f,
                       /* radius_y */ 2.0f,
                       /* force */ 3.0f,
@@ -118,13 +120,37 @@ TEST_F(StructTraitsTest, PointerEvent) {
        base::TimeTicks() + base::TimeDelta::FromMicroseconds(205)},
       {ET_POINTER_CANCELLED, gfx::Point(120, 120), gfx::Point(2, 3), EF_NONE, 0,
        PointerDetails(EventPointerType::POINTER_TYPE_TOUCH,
-                      /* pointer_id*/ 2,
+                      /* pointer_id */ 2,
                       /* radius_x */ 5.5f,
                       /* radius_y */ 4.5f,
                       /* force */ 3.5f,
                       /* tilt_x */ 2.5f,
                       /* tilt_y */ 0.5f),
        base::TimeTicks() + base::TimeDelta::FromMicroseconds(206)},
+
+      // Pen pointer events:
+      {ET_POINTER_DOWN, gfx::Point(1, 2), gfx::Point(3, 4), EF_NONE, 0,
+       PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+                      /* pointer_id */ 3,
+                      /* radius_x */ 1.0f,
+                      /* radius_y */ 2.0f,
+                      /* force */ 3.0f,
+                      /* tilt_x */ 4.0f,
+                      /* tilt_y */ 5.0f,
+                      /* tangential_pressure */ -1.f,
+                      /* twist */ 90),
+       base::TimeTicks() + base::TimeDelta::FromMicroseconds(207)},
+      {ET_POINTER_UP, gfx::Point(5, 6), gfx::Point(7, 8), EF_NONE, 0,
+       PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+                      /* pointer_id */ 3,
+                      /* radius_x */ 1.0f,
+                      /* radius_y */ 2.0f,
+                      /* force */ 3.0f,
+                      /* tilt_x */ 4.0f,
+                      /* tilt_y */ 5.0f,
+                      /* tangential_pressure */ 1.f,
+                      /* twist */ 180),
+       base::TimeTicks() + base::TimeDelta::FromMicroseconds(208)},
   };
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -195,6 +221,31 @@ TEST_F(StructTraitsTest, KeyEventPropertiesSerialized) {
   ASSERT_TRUE(deserialized->IsKeyEvent());
   ASSERT_TRUE(deserialized->AsKeyEvent()->properties());
   EXPECT_EQ(properties, *(deserialized->AsKeyEvent()->properties()));
+}
+
+TEST_F(StructTraitsTest, GestureEvent) {
+  GestureEvent kTestData[] = {
+      {10, 20, EF_NONE,
+       base::TimeTicks() + base::TimeDelta::FromMicroseconds(401),
+       GestureEventDetails(ET_GESTURE_TAP)},
+  };
+
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  for (size_t i = 0; i < arraysize(kTestData); i++) {
+    std::unique_ptr<Event> output;
+    proxy->EchoEvent(Event::Clone(kTestData[i]), &output);
+    EXPECT_TRUE(output->IsGestureEvent());
+
+    const GestureEvent* output_ptr_event = output->AsGestureEvent();
+    EXPECT_EQ(kTestData[i].type(), output_ptr_event->type());
+    EXPECT_EQ(kTestData[i].flags(), output_ptr_event->flags());
+    EXPECT_EQ(kTestData[i].location(), output_ptr_event->location());
+    EXPECT_EQ(kTestData[i].root_location(), output_ptr_event->root_location());
+    EXPECT_EQ(kTestData[i].details(), output_ptr_event->details());
+    EXPECT_EQ(kTestData[i].unique_touch_event_id(),
+              output_ptr_event->unique_touch_event_id());
+    EXPECT_EQ(kTestData[i].time_stamp(), output_ptr_event->time_stamp());
+  }
 }
 
 }  // namespace ui

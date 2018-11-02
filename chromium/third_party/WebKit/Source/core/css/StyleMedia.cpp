@@ -53,7 +53,7 @@ bool StyleMedia::matchMedium(const String& query) const {
   if (!document_element)
     return false;
 
-  RefPtr<MediaQuerySet> media = MediaQuerySet::Create();
+  scoped_refptr<MediaQuerySet> media = MediaQuerySet::Create();
   if (!media->Set(query))
     return false;
 
@@ -61,7 +61,8 @@ bool StyleMedia::matchMedium(const String& query) const {
   return screen_eval.Eval(*media);
 }
 
-DEFINE_TRACE(StyleMedia) {
+void StyleMedia::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 

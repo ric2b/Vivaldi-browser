@@ -4,8 +4,10 @@
 
 #include "core/editing/markers/UnsortedDocumentMarkerListEditor.h"
 
+#include "core/editing/markers/MarkerTestUtilities.h"
 #include "core/editing/markers/SuggestionMarker.h"
 #include "core/editing/markers/SuggestionMarkerListImpl.h"
+#include "core/editing/markers/SuggestionMarkerProperties.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -13,26 +15,12 @@ namespace blink {
 class UnsortedDocumentMarkerListEditorTest : public ::testing::Test {
  protected:
   DocumentMarker* CreateMarker(unsigned start_offset, unsigned end_offset) {
-    return new SuggestionMarker(start_offset, end_offset, Vector<String>(),
-                                Color::kTransparent, Color::kTransparent,
-                                StyleableMarker::Thickness::kThin,
-                                Color::kTransparent);
+    return new SuggestionMarker(start_offset, end_offset,
+                                SuggestionMarkerProperties());
   }
 
   PersistentHeapVector<Member<DocumentMarker>> marker_list_;
 };
-
-namespace {
-
-bool compare_markers(const Member<DocumentMarker>& marker1,
-                     const Member<DocumentMarker>& marker2) {
-  if (marker1->StartOffset() != marker2->StartOffset())
-    return marker1->StartOffset() < marker2->StartOffset();
-
-  return marker1->EndOffset() < marker2->EndOffset();
-}
-
-}  // namespace
 
 TEST_F(UnsortedDocumentMarkerListEditorTest, MoveMarkers) {
   marker_list_.push_back(CreateMarker(30, 40));

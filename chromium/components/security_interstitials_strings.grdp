@@ -61,7 +61,7 @@
     &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; isn’t configured correctly. Uninstalling &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; usually fixes the problem. <ph name="FURTHER_EXPLANATION">$2<ex>Further explanation goes here.</ex></ph>
   </message>
   <message name="IDS_MITM_SOFTWARE_EXPLANATION" desc="Part of an extended description hidden behind an 'Advanced' button on an error page. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. Page title and additional description of the error are shown above. 'Antivirus software' is software that finds and deletes viruses on a user's computer. 'Firewall software' is software typically used on a company network that keeps unwanted people from accessing the network. 'Proxy software' is software on a network that blocks the user from viewing certain websites. Proxies may be used to keep school children from viewing inappropriate websites for example. 'Web-filtering software' is a synonym for proxy software, so it can be excluded in translation.">
-    Applications that can cause this error includes antivirus, firewall, and web-filtering or proxy software.
+    Applications that can cause this error include antivirus, firewall, and web-filtering or proxy software.
   </message>
 
   <!-- Clock errors -->
@@ -79,19 +79,19 @@
   </message>
   <if expr="not is_android and not is_ios">
     <message name="IDS_CLOCK_ERROR_PRIMARY_PARAGRAPH" desc="Main paragraph of an error message. Context: error shown when the browser can't load a page because the computer's clock is wrong.">
-      A private connection to <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>paypal.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> can't be established because your computer's date and time (<ph name="DATE_AND_TIME">$2<ex>Monday, January 1, 1970 2:44:30 PM</ex></ph>) are incorrect. <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
+      A private connection to <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>paypal.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> can't be established because your computer's date and time (<ph name="DATE_AND_TIME">$2<ex>Monday, January 1, 1970 2:44:30 PM</ex></ph>) are incorrect.
     </message>
   </if>
   <if expr="is_android">
     <message name="IDS_CLOCK_ERROR_PRIMARY_PARAGRAPH" desc="Main paragraph of an error message. Context: error shown when the browser can't load a page because the Android device's clock is wrong.">
-      A private connection to <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>paypal.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> can't be established because your device's date and time (<ph name="DATE_AND_TIME">$2<ex>Monday, January 1, 1970 2:44:30 PM</ex></ph>) are incorrect. <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
+      A private connection to <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>paypal.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> can't be established because your device's date and time (<ph name="DATE_AND_TIME">$2<ex>Monday, January 1, 1970 2:44:30 PM</ex></ph>) are incorrect.
     </message>
   </if>
   <if expr="is_ios">
     <message name="IDS_CLOCK_ERROR_PRIMARY_PARAGRAPH" desc="Main paragraph of an error message. Context: error shown when the browser can't load a page because the device's clock is wrong. This paragraph explains the situation and gives instructions to fix it on iOS.">
       &lt;p&gt;A private connection to <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>paypal.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> can't be established because your device's date and time (<ph name="DATE_AND_TIME">$2<ex>Monday, January 1, 1970 2:44:30 PM</ex></ph>) are incorrect.&lt;/p&gt;
 
-      &lt;p&gt;Please adjust the date and time from the &lt;strong&gt;General&lt;/strong&gt; section of the &lt;strong&gt;Settings&lt;/strong&gt; app.&lt;/p&gt; <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
+      &lt;p&gt;Please adjust the date and time from the &lt;strong&gt;General&lt;/strong&gt; section of the &lt;strong&gt;Settings&lt;/strong&gt; app.&lt;/p&gt;
     </message>
   </if>
   <if expr="_google_chrome">
@@ -283,13 +283,13 @@
     Attackers on <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards). <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_PHISHING_V4_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page.">
-  Google Safe Browsing recently detected phishing on <ph name="SITE">$1<ex>example.com</ex></ph>. Phishing sites pretend to be other websites to trick you.
+  Google Safe Browsing recently <ph name="BEGIN_LINK">&lt;a href="#" id="diagnostic-link"&gt;</ph>detected phishing<ph name="END_LINK">&lt;/a&gt;</ph> on <ph name="SITE">$1<ex>example.com</ex></ph>. Phishing sites pretend to be other websites to trick you.
   </message>
   <message name="IDS_PHISHING_V4_PROCEED_AND_REPORT_PARAGRAPH" desc="The paragraph that lets the user skip the warning.">
     You can <ph name="BEGIN_ERROR_LINK">&lt;a href="#" id="report-error-link"&gt;</ph>report a detection problem<ph name="END_ERROR_LINK">&lt;/a&gt;</ph> or, if you understand the risks to your security, <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this unsafe site<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
 
-  <!-- WebView Safe Browsing quiet interstitals medium sized -->
+  <!-- WebView Safe Browsing quiet interstitials medium sized -->
   <message name="IDS_MALWARE_WEBVIEW_HEADING" desc="The heading of the malware interstitial on medium sized Webview.">
     Dangerous content blocked.
   </message>

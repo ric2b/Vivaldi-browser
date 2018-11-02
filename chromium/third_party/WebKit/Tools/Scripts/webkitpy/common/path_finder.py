@@ -67,8 +67,17 @@ def get_scripts_dir():
         os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 
+@memoized
 def get_source_dir():
+    post_move_path = os.path.join(get_chromium_src_dir(), 'third_party', 'blink', 'renderer')
+    if os.path.exists(post_move_path):
+        return post_move_path
     return os.path.join(get_blink_dir(), 'Source')
+
+
+# TODO(tkent): Remove this function after the source move. crbug.com/622551
+def is_source_in_blink():
+    return '/blink/renderer' in get_source_dir().replace(os.path.sep, '/')
 
 
 def get_typ_dir():
@@ -77,6 +86,16 @@ def get_typ_dir():
 
 def get_webkitpy_thirdparty_dir():
     return os.path.join(get_scripts_dir(), 'webkitpy', 'thirdparty')
+
+
+def get_blink_tools_dir():
+    return os.path.join(get_chromium_src_dir(), 'third_party', 'blink', 'tools')
+
+
+def add_blink_tools_dir_to_sys_path():
+    path = get_blink_tools_dir()
+    if path not in sys.path:
+        sys.path.append(path)
 
 
 class PathFinder(object):
@@ -113,8 +132,16 @@ class PathFinder(object):
     def path_from_chromium_base(self, *comps):
         return self._filesystem.join(self.chromium_base(), *comps)
 
+    @memoized
+    def _blink_source_dir(self):
+        post_move_path = self._filesystem.join(
+            self.chromium_base(), 'third_party', 'blink', 'renderer')
+        if self._filesystem.exists(post_move_path):
+            return post_move_path
+        return self._filesystem.join(self._webkit_base(), 'Source')
+
     def path_from_blink_source(self, *comps):
-        return self._filesystem.join(self._filesystem.join(self._webkit_base(), 'Source'), *comps)
+        return self._filesystem.join(self._blink_source_dir(), *comps)
 
     def path_from_tools_scripts(self, *comps):
         return self._filesystem.join(self._filesystem.join(self._webkit_base(), 'Tools', 'Scripts'), *comps)

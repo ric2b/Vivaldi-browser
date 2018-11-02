@@ -26,16 +26,16 @@
 #ifndef CSSFontFaceSrcValue_h
 #define CSSFontFaceSrcValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/css/CSSValue.h"
 #include "core/loader/resource/FontResource.h"
 #include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/weborigin/Referrer.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-class Document;
+class ExecutionContext;
 
 class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
  public:
@@ -68,11 +68,11 @@ class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
 
   bool HasFailedOrCanceledSubresources() const;
 
-  FontResource* Fetch(Document*) const;
+  FontResource* Fetch(ExecutionContext*) const;
 
   bool Equals(const CSSFontFaceSrcValue&) const;
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     visitor->Trace(fetched_);
     CSSValue::TraceAfterDispatch(visitor);
   }
@@ -92,7 +92,7 @@ class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
         should_check_content_security_policy_(
             should_check_content_security_policy) {}
 
-  void RestoreCachedResourceIfNeeded(Document*) const;
+  void RestoreCachedResourceIfNeeded(ExecutionContext*) const;
 
   String absolute_resource_;
   String specified_resource_;
@@ -111,7 +111,7 @@ class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
       return new FontResourceHelper(resource);
     }
 
-    DEFINE_INLINE_VIRTUAL_TRACE() {
+    virtual void Trace(blink::Visitor* visitor) {
       ResourceOwner<FontResource>::Trace(visitor);
     }
 

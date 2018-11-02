@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_snapshot_manager.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_histogram_allocator.h"
+#include "base/metrics/record_histogram_checker.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -45,6 +46,7 @@ StatisticsRecorder::~StatisticsRecorder() {
   callbacks_ = existing_callbacks_.release();
   ranges_ = existing_ranges_.release();
   providers_ = existing_providers_.release();
+  record_checker_ = existing_record_checker_.release();
 }
 
 // static
@@ -93,12 +95,13 @@ HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
       // twice |if (!histograms_)|.
       ANNOTATE_LEAKING_OBJECT_PTR(histogram);  // see crbug.com/79322
     } else {
-      const std::string& name = histogram->histogram_name();
-      HistogramMap::iterator it = histograms_->find(name);
+      const char* name = histogram->histogram_name();
+      StringPiece name_piece(name);
+      HistogramMap::iterator it = histograms_->find(name_piece);
       if (histograms_->end() == it) {
-        // The StringKey references the name within |histogram| rather than
-        // making a copy.
-        (*histograms_)[name] = histogram;
+        // |name_piece| is guaranteed to never change or be deallocated so long
+        // as the histogram is alive (which is forever).
+        (*histograms_)[name_piece] = histogram;
         ANNOTATE_LEAKING_OBJECT_PTR(histogram);  // see crbug.com/79322
         // If there are callbacks for this histogram, we set the kCallbackExists
         // flag.
@@ -115,8 +118,9 @@ HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
         histogram_to_return = histogram;
       } else {
         // We already have one histogram with this name.
-        DCHECK_EQ(histogram->histogram_name(),
-                  it->second->histogram_name()) << "hash collision";
+        DCHECK_EQ(StringPiece(histogram->histogram_name()),
+                  StringPiece(it->second->histogram_name()))
+            << "hash collision";
         histogram_to_return = it->second;
         histogram_to_delete = histogram;
       }
@@ -200,19 +204,13 @@ void StatisticsRecorder::WriteGraph(const std::string& query,
 }
 
 // static
-std::string StatisticsRecorder::ToJSON(const std::string& query) {
+std::string StatisticsRecorder::ToJSON(JSONVerbosityLevel verbosity_level) {
   if (!IsActive())
     return std::string();
 
   std::string output("{");
-  if (!query.empty()) {
-    output += "\"query\":";
-    EscapeJSONString(query, true, &output);
-    output += ",";
-  }
-
   Histograms snapshot;
-  GetSnapshot(query, &snapshot);
+  GetSnapshot(std::string(), &snapshot);
   output += "\"histograms\":[";
   bool first_histogram = true;
   for (const HistogramBase* histogram : snapshot) {
@@ -221,7 +219,7 @@ std::string StatisticsRecorder::ToJSON(const std::string& query) {
     else
       output += ",";
     std::string json;
-    histogram->WriteJSON(&json);
+    histogram->WriteJSON(&json, verbosity_level);
     output += json;
   }
   output += "]}";
@@ -299,16 +297,6 @@ void StatisticsRecorder::PrepareDeltas(
 }
 
 // static
-void StatisticsRecorder::ValidateAllHistograms(int identifier) {
-  ImportGlobalPersistentHistograms();
-
-  auto known = GetKnownHistograms(/*include_persistent=*/true);
-
-  for (HistogramBase* h : known)
-    h->ValidateHistogramContents(true, identifier);
-}
-
-// static
 void StatisticsRecorder::InitLogOnShutdown() {
   if (!histograms_)
     return;
@@ -329,8 +317,11 @@ void StatisticsRecorder::GetSnapshot(const std::string& query,
   if (!histograms_)
     return;
 
+  // Need a c-string query for comparisons against c-string histogram name.
+  const char* query_string = query.c_str();
+
   for (const auto& entry : *histograms_) {
-    if (entry.second->histogram_name().find(query) != std::string::npos)
+    if (strstr(entry.second->histogram_name(), query_string) != nullptr)
       snapshot->push_back(entry.second);
   }
 }
@@ -435,6 +426,17 @@ void StatisticsRecorder::UninitializeForTesting() {
 }
 
 // static
+void StatisticsRecorder::SetRecordChecker(
+    std::unique_ptr<RecordHistogramChecker> record_checker) {
+  record_checker_ = record_checker.release();
+}
+
+// static
+bool StatisticsRecorder::ShouldRecordHistogram(uint64_t histogram_hash) {
+  return !record_checker_ || record_checker_->ShouldRecord(histogram_hash);
+}
+
+// static
 std::vector<HistogramBase*> StatisticsRecorder::GetKnownHistograms(
     bool include_persistent) {
   std::vector<HistogramBase*> known;
@@ -478,11 +480,13 @@ StatisticsRecorder::StatisticsRecorder() {
   existing_callbacks_.reset(callbacks_);
   existing_ranges_.reset(ranges_);
   existing_providers_.reset(providers_);
+  existing_record_checker_.reset(record_checker_);
 
   histograms_ = new HistogramMap;
   callbacks_ = new CallbackMap;
   ranges_ = new RangesMap;
   providers_ = new HistogramProviders;
+  record_checker_ = nullptr;
 
   InitLogOnShutdownWithoutLock();
 }
@@ -496,21 +500,23 @@ void StatisticsRecorder::InitLogOnShutdownWithoutLock() {
 
 // static
 void StatisticsRecorder::Reset() {
-
   std::unique_ptr<HistogramMap> histograms_deleter;
   std::unique_ptr<CallbackMap> callbacks_deleter;
   std::unique_ptr<RangesMap> ranges_deleter;
   std::unique_ptr<HistogramProviders> providers_deleter;
+  std::unique_ptr<RecordHistogramChecker> record_checker_deleter;
   {
     base::AutoLock auto_lock(lock_.Get());
     histograms_deleter.reset(histograms_);
     callbacks_deleter.reset(callbacks_);
     ranges_deleter.reset(ranges_);
     providers_deleter.reset(providers_);
+    record_checker_deleter.reset(record_checker_);
     histograms_ = nullptr;
     callbacks_ = nullptr;
     ranges_ = nullptr;
     providers_ = nullptr;
+    record_checker_ = nullptr;
   }
   // We are going to leak the histograms and the ranges.
 }
@@ -531,6 +537,8 @@ StatisticsRecorder::CallbackMap* StatisticsRecorder::callbacks_ = nullptr;
 StatisticsRecorder::RangesMap* StatisticsRecorder::ranges_ = nullptr;
 // static
 StatisticsRecorder::HistogramProviders* StatisticsRecorder::providers_;
+// static
+RecordHistogramChecker* StatisticsRecorder::record_checker_ = nullptr;
 // static
 base::LazyInstance<base::Lock>::Leaky StatisticsRecorder::lock_ =
     LAZY_INSTANCE_INITIALIZER;

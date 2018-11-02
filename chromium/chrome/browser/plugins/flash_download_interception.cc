@@ -24,6 +24,9 @@
 #include "url/origin.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/public/browser/plugin_service.h"
+#include "content/public/common/content_constants.h"
+#include "content/public/common/webplugininfo.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
 using content::BrowserThread;
@@ -47,7 +50,13 @@ const char kGetFlashURLSecondaryDownloadQuery[] =
 
 void DoNothing(ContentSetting result) {}
 
-void DoThings(bool /* allow */, const std::string& /* user_input */) {}
+void PluginLoadResponse(content::WebContents* web_contents,
+                        bool allow,
+                        const std::string& /* user_input */) {
+  if (allow) {
+    web_contents->GetController().Reload(content::ReloadType::NORMAL, true);
+  }
+}
 
 bool InterceptNavigation(
     const GURL& source_url,
@@ -71,7 +80,8 @@ void FlashDownloadInterception::InterceptFlashDownloadNavigation(
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile);
   ContentSetting flash_setting = PluginUtils::GetFlashPluginContentSetting(
-      host_content_settings_map, url::Origin(source_url), source_url, nullptr);
+      host_content_settings_map, url::Origin::Create(source_url), source_url,
+      nullptr);
   flash_setting = PluginsFieldTrial::EffectiveContentSetting(
       host_content_settings_map, CONTENT_SETTINGS_TYPE_PLUGINS, flash_setting);
 
@@ -84,10 +94,10 @@ void FlashDownloadInterception::InterceptFlashDownloadNavigation(
       if (permissionhelper) {
         base::DictionaryValue request_info;
         request_info.SetString(guest_view::kUrl,
-                               url::Origin(source_url).host());
+                               url::Origin::Create(source_url).host());
         permissionhelper->RequestPermission(
             WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN, request_info,
-            base::Bind(&DoThings), false /* allowed_by_default */);
+            base::Bind(&PluginLoadResponse, web_contents), false);
       }
     } else {
     PermissionManager* manager = PermissionManager::Get(profile);
@@ -136,7 +146,7 @@ bool FlashDownloadInterception::ShouldStopFlashDownloadAction(
       (RE2::FullMatch(target_url_str, kGetFlashURLSecondaryDownloadRegex) &&
        target_url.query() == kGetFlashURLSecondaryDownloadQuery)) {
     ContentSetting flash_setting = PluginUtils::GetFlashPluginContentSetting(
-        host_content_settings_map, url::Origin(source_url), source_url,
+        host_content_settings_map, url::Origin::Create(source_url), source_url,
         nullptr);
     flash_setting = PluginsFieldTrial::EffectiveContentSetting(
         host_content_settings_map, CONTENT_SETTINGS_TYPE_PLUGINS,
@@ -149,10 +159,33 @@ bool FlashDownloadInterception::ShouldStopFlashDownloadAction(
   return false;
 }
 
+bool CheckIfPluginForMimeIsAvailable(const std::string& mime_type) {
+  std::vector<content::WebPluginInfo> plugins;
+  content::PluginService::GetInstance()->GetInternalPlugins(&plugins);
+
+  for (size_t i = 0; i < plugins.size(); ++i) {
+    const content::WebPluginInfo& plugin = plugins[i];
+    const std::vector<content::WebPluginMimeType>& mime_types =
+      plugin.mime_types;
+    for (size_t j = 0; j < mime_types.size(); ++j) {
+      if (mime_types[j].mime_type == mime_type) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // static
 std::unique_ptr<NavigationThrottle>
 FlashDownloadInterception::MaybeCreateThrottleFor(NavigationHandle* handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Vivaldi could be on systems without Flash installed.
+  if (vivaldi::IsVivaldiRunning() &&
+      !CheckIfPluginForMimeIsAvailable(content::kFlashPluginSwfMimeType)) {
+    return nullptr;
+  }
 
   // Browser initiated navigations like the Back button or the context menu
   // should never be intercepted.

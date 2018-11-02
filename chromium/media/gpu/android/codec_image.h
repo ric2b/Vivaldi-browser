@@ -13,8 +13,9 @@
 #include "base/macros.h"
 #include "gpu/command_buffer/service/gl_stream_texture_image.h"
 #include "media/gpu/android/codec_wrapper.h"
+#include "media/gpu/android/promotion_hint_aggregator.h"
+#include "media/gpu/android/surface_texture_gl_owner.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/gpu/surface_texture_gl_owner.h"
 
 namespace media {
 
@@ -22,12 +23,15 @@ namespace media {
 // as needed in order to draw them.
 class MEDIA_GPU_EXPORT CodecImage : public gpu::gles2::GLStreamTextureImage {
  public:
-  // A callback for observing CodecImage destruction.
-  using DestructionCb = base::Callback<void(CodecImage*)>;
+  // A callback for observing CodecImage destruction.  This is a repeating cb
+  // since CodecImageGroup calls the same cb for multiple images.
+  using DestructionCb = base::RepeatingCallback<void(CodecImage*)>;
 
   CodecImage(std::unique_ptr<CodecOutputBuffer> output_buffer,
              scoped_refptr<SurfaceTextureGLOwner> surface_texture,
-             DestructionCb destruction_cb);
+             PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb);
+
+  void SetDestructionCb(DestructionCb destruction_cb);
 
   // gl::GLImage implementation
   gfx::Size GetSize() override;
@@ -43,12 +47,18 @@ class MEDIA_GPU_EXPORT CodecImage : public gpu::gles2::GLStreamTextureImage {
                             gfx::OverlayTransform transform,
                             const gfx::Rect& bounds_rect,
                             const gfx::RectF& crop_rect) override;
+  void SetColorSpace(const gfx::ColorSpace& color_space) override {}
   void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
                     const std::string& dump_name) override;
   // gpu::gles2::GLStreamTextureMatrix implementation
   void GetTextureMatrix(float xform[16]) override;
+  void NotifyPromotionHint(bool promotion_hint,
+                           int display_x,
+                           int display_y,
+                           int display_width,
+                           int display_height) override;
 
   // Whether the codec buffer has been rendered to the front buffer.
   bool was_rendered_to_front_buffer() const {
@@ -73,13 +83,18 @@ class MEDIA_GPU_EXPORT CodecImage : public gpu::gles2::GLStreamTextureImage {
   // buffer. Returns false if the buffer was invalidated.
   bool RenderToSurfaceTextureBackBuffer();
 
+  // Called when we're no longer renderable because our surface is gone.  We'll
+  // discard any codec buffer, and generally do nothing.
+  virtual void SurfaceDestroyed();
+
+ protected:
+  ~CodecImage() override;
+
  private:
   // The lifecycle phases of an image.
   // The only possible transitions are from left to right. Both
   // kInFrontBuffer and kInvalidated are terminal.
   enum class Phase { kInCodec, kInBackBuffer, kInFrontBuffer, kInvalidated };
-
-  ~CodecImage() override;
 
   // Renders this image to the surface texture front buffer by first rendering
   // it to the back buffer if it's not already there, and then waiting for the
@@ -108,6 +123,9 @@ class MEDIA_GPU_EXPORT CodecImage : public gpu::gles2::GLStreamTextureImage {
 
   // The bounds last sent to the overlay.
   gfx::Rect most_recent_bounds_;
+
+  // Callback to notify about promotion hints and overlay position.
+  PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb_;
 
   DestructionCb destruction_cb_;
 

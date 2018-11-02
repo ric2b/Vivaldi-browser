@@ -4,14 +4,14 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/base/lap_timer.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/quads/surface_draw_quad.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/display_resource_provider.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/surface_draw_quad.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -37,7 +37,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     shared_bitmap_manager_ = base::MakeUnique<cc::TestSharedBitmapManager>();
 
     resource_provider_ =
-        cc::FakeResourceProvider::Create<cc::DisplayResourceProvider>(
+        cc::FakeResourceProvider::CreateDisplayResourceProvider(
             context_provider_.get(), shared_bitmap_manager_.get());
   }
 
@@ -59,10 +59,10 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     for (int i = 0; i < num_surfaces; i++) {
       LocalSurfaceId local_surface_id(i + 1, kArbitraryToken);
 
-      auto pass = cc::RenderPass::Create();
+      auto pass = RenderPass::Create();
       pass->output_rect = gfx::Rect(0, 0, 1, 2);
 
-      cc::CompositorFrame frame = test::MakeEmptyCompositorFrame();
+      CompositorFrame frame = test::MakeEmptyCompositorFrame();
 
       auto* sqs = pass->CreateAndAppendSharedQuadState();
       for (int j = 0; j < num_textures; j++) {
@@ -71,7 +71,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
         resource.is_software = true;
         frame.resource_list.push_back(resource);
 
-        auto* quad = pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
+        auto* quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
         const gfx::Rect rect(0, 0, 1, 2);
         // Half of rects should be visible with partial damage.
         gfx::Rect visible_rect =
@@ -92,12 +92,11 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       sqs = pass->CreateAndAppendSharedQuadState();
       sqs->opacity = opacity;
       if (i >= 1) {
-        auto* surface_quad =
-            pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+        auto* surface_quad = pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
         surface_quad->SetNew(
             sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
             SurfaceId(FrameSinkId(1, i), LocalSurfaceId(i, kArbitraryToken)),
-            cc::SurfaceDrawQuadType::PRIMARY, nullptr);
+            base::nullopt, SK_ColorWHITE, false);
       }
 
       frame.render_pass_list.push_back(std::move(pass));
@@ -110,16 +109,16 @@ class SurfaceAggregatorPerfTest : public testing::Test {
         kNeedsSyncPoints);
     timer_.Reset();
     do {
-      auto pass = cc::RenderPass::Create();
-      cc::CompositorFrame frame = test::MakeEmptyCompositorFrame();
+      auto pass = RenderPass::Create();
+      CompositorFrame frame = test::MakeEmptyCompositorFrame();
 
       auto* sqs = pass->CreateAndAppendSharedQuadState();
-      auto* surface_quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+      auto* surface_quad = pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
       surface_quad->SetNew(
           sqs, gfx::Rect(0, 0, 100, 100), gfx::Rect(0, 0, 100, 100),
           SurfaceId(FrameSinkId(1, num_surfaces),
                     LocalSurfaceId(num_surfaces, kArbitraryToken)),
-          cc::SurfaceDrawQuadType::PRIMARY, nullptr);
+          base::nullopt, SK_ColorWHITE, false);
 
       pass->output_rect = gfx::Rect(0, 0, 100, 100);
 
@@ -133,7 +132,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       root_support->SubmitCompositorFrame(
           LocalSurfaceId(num_surfaces + 1, kArbitraryToken), std::move(frame));
 
-      cc::CompositorFrame aggregated = aggregator_->Aggregate(
+      CompositorFrame aggregated = aggregator_->Aggregate(
           SurfaceId(FrameSinkId(1, num_surfaces + 1),
                     LocalSurfaceId(num_surfaces + 1, kArbitraryToken)));
       timer_.NextLap();

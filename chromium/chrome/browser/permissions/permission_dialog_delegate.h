@@ -21,19 +21,11 @@ using base::android::JavaParamRef;
 namespace content {
 class WebContents;
 }
-class GURL;
-class PermissionInfoBarDelegate;
-class Profile;
 class TabAndroid;
 
 // Delegate class for displaying a permission prompt as a modal dialog. Used as
 // the native to Java interface to allow Java to communicate the user's
 // decision.
-//
-// This class owns a PermissionInfoBarDelegate if the PermissionRequestManager
-// is disabled and points to a PermissionPromptAndroid if it's enabled. When the
-// PermissionRequestManager is enabled by default, we can remove the code path
-// for using a PermissionInfoBarDelegate. This is tracked in crbug.com/606138.
 class PermissionDialogDelegate : public content::WebContentsObserver {
  public:
   using PermissionSetCallback = base::Callback<void(bool, PermissionAction)>;
@@ -43,45 +35,26 @@ class PermissionDialogDelegate : public content::WebContentsObserver {
   static void Create(content::WebContents* web_contents,
                      PermissionPromptAndroid* permission_prompt);
 
-  // The interface for creating a modal dialog when the PermissionRequestManager
-  // is disabled, i.e. we're using the PermissionQueueController.
-  static void Create(content::WebContents* web_contents,
-                     ContentSettingsType type,
-                     const GURL& requesting_frame,
-                     bool user_gesture,
-                     Profile* profile,
-                     const PermissionSetCallback& callback);
-
-  // Creates a modal dialog for a media stream permission request.
-  // TODO(dominickn): remove this when media stream requests are eventually
-  // folded in with other permission requests.
-  static void CreateMediaStreamDialog(
-      content::WebContents* web_contents,
-      bool user_gesture,
-      std::unique_ptr<MediaStreamDevicesController::Request> request);
-
   // Returns true if we should show the user a modal permission prompt rather
   // than an infobar.
   static bool ShouldShowDialog();
 
   // JNI methods.
-  void Accept(JNIEnv* env, const JavaParamRef<jobject>& obj, jboolean persist);
-  void Cancel(JNIEnv* env, const JavaParamRef<jobject>& obj, jboolean persist);
+  void Accept(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  void Cancel(JNIEnv* env, const JavaParamRef<jobject>& obj);
   void Dismissed(JNIEnv* env, const JavaParamRef<jobject>& obj);
-  void LinkClicked(JNIEnv* env, const JavaParamRef<jobject>& obj);
 
-  // Frees this object and the wrapped PermissionInfoBarDelegate. Called from
-  // Java once the permission dialog has been responded to.
+  // Frees this object. Called from Java once the permission dialog has been
+  // responded to.
   void Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj);
 
  private:
   PermissionDialogDelegate(
       TabAndroid* tab,
-      std::unique_ptr<PermissionInfoBarDelegate> infobar_delegate,
       PermissionPromptAndroid* permission_prompt);
   ~PermissionDialogDelegate() override;
 
-  void CreateJavaDelegate(JNIEnv* env);
+  void CreateJavaDelegate(JNIEnv* env, TabAndroid* tab);
 
   // On navigation or page destruction, hide the dialog.
   void DismissDialog();
@@ -92,12 +65,6 @@ class PermissionDialogDelegate : public content::WebContentsObserver {
   void WebContentsDestroyed() override;
 
   base::android::ScopedJavaGlobalRef<jobject> j_delegate_;
-
-  TabAndroid* tab_;
-
-  // TODO(timloh): Remove this when the refactoring is finished and we can
-  // delete the PermissionQueueController.
-  std::unique_ptr<PermissionInfoBarDelegate> infobar_delegate_;
 
   // The PermissionPromptAndroid is deleted when either the dialog is resolved
   // or the tab is navigated/closed. We close the prompt on DidFinishNavigation

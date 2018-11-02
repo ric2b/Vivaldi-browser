@@ -11,11 +11,13 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_params.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/previews_state.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -31,6 +33,7 @@ class NavigationData;
 class ResourceRequestBody;
 class SiteInstanceImpl;
 class StreamHandle;
+struct SubresourceLoaderParams;
 
 // PlzNavigate
 // A UI thread object that owns a navigation request until it commits. It
@@ -104,6 +107,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   ~NavigationRequest() override;
 
   // Called on the UI thread by the Navigator to start the navigation.
+  // The NavigationRequest can be deleted while BeginNavigation() is called.
   void BeginNavigation();
 
   const CommonNavigationParams& common_params() const { return common_params_; }
@@ -154,6 +158,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     return navigation_handle_.get();
   }
 
+  int net_error() { return net_error_; }
+
   void SetWaitingForRendererResponse();
 
   // Creates a NavigationHandle. This should be called after any previous
@@ -174,6 +180,20 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   }
 
   int nav_entry_id() const { return nav_entry_id_; }
+
+  // For automation driver-initiated navigations over the devtools protocol,
+  // |devtools_navigation_token_| is used to tag the navigation. This navigation
+  // token is then sent into the renderer and lands on the DocumentLoader. That
+  // way subsequent Blink-level frame lifecycle events can be associated with
+  // the concrete navigation.
+  // - The value should not be sent back to the browser.
+  // - The value on DocumentLoader may be generated in the renderer in some
+  // cases, and thus shouldn't be trusted.
+  // TODO(crbug.com/783506): Replace devtools navigation token with the generic
+  // navigation token that can be passed from renderer to the browser.
+  const base::UnguessableToken& devtools_navigation_token() const {
+    return devtools_navigation_token_;
+  }
 
  private:
   // This enum describes the result of a Content Security Policy (CSP) check for
@@ -202,25 +222,41 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   void OnResponseStarted(const scoped_refptr<ResourceResponse>& response,
                          std::unique_ptr<StreamHandle> body,
                          mojo::ScopedDataPipeConsumerHandle consumer_handle,
-                         const SSLStatus& ssl_status,
+                         const net::SSLInfo& ssl_info,
                          std::unique_ptr<NavigationData> navigation_data,
                          const GlobalRequestID& request_id,
                          bool is_download,
                          bool is_stream,
-                         mojom::URLLoaderFactoryPtrInfo
-                             subresource_url_loader_factory_info) override;
+                         base::Optional<SubresourceLoaderParams>
+                             subresource_loader_params) override;
   void OnRequestFailed(bool has_stale_copy_in_cache,
                        int net_error,
                        const base::Optional<net::SSLInfo>& ssl_info,
                        bool should_ssl_errors_be_fatal) override;
   void OnRequestStarted(base::TimeTicks timestamp) override;
 
+  // A version of OnRequestFailed() that allows skipping throttles, to be used
+  // when a request failed due to a throttle result itself.
+  void OnRequestFailedInternal(bool has_stale_copy_in_cache,
+                               int net_error,
+                               const base::Optional<net::SSLInfo>& ssl_info,
+                               bool should_ssl_errors_be_fatal,
+                               bool skip_throttles);
+
   // Called when the NavigationThrottles have been checked by the
   // NavigationHandle.
   void OnStartChecksComplete(NavigationThrottle::ThrottleCheckResult result);
   void OnRedirectChecksComplete(NavigationThrottle::ThrottleCheckResult result);
+  void OnFailureChecksComplete(RenderFrameHostImpl* render_frame_host,
+                               NavigationThrottle::ThrottleCheckResult result);
   void OnWillProcessResponseChecksComplete(
       NavigationThrottle::ThrottleCheckResult result);
+
+  // Called either by OnFailureChecksComplete() or OnRequestFailed() directly.
+  // |error_page_content| contains the content of the error page (i.e. flattened
+  // HTML, JS, CSS).
+  void CommitErrorPage(RenderFrameHostImpl* render_frame_host,
+                       const base::Optional<std::string>& error_page_content);
 
   // Have a RenderFrameHost commit the navigation. The NavigationRequest will
   // be destroyed after this call.
@@ -316,12 +352,22 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   scoped_refptr<ResourceResponse> response_;
   std::unique_ptr<StreamHandle> body_;
   mojo::ScopedDataPipeConsumerHandle handle_;
+  net::SSLInfo ssl_info_;
+  bool is_download_;
+
+  // Holds information for the navigation while the WillFailRequest
+  // checks are performed by the NavigationHandle.
+  bool has_stale_copy_in_cache_;
+  int net_error_;
 
   base::Closure on_start_checks_complete_closure_;
 
-  // Used in the network service world to pass the subressource loader factory
-  // to the renderer. Currently only used by AppCache.
-  mojom::URLLoaderFactoryPtrInfo subresource_loader_factory_info_;
+  // Used in the network service world to pass the subressource loader params
+  // to the renderer. Used by AppCache and ServiceWorker.
+  base::Optional<SubresourceLoaderParams> subresource_loader_params_;
+
+  // See comment on accessor.
+  base::UnguessableToken devtools_navigation_token_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_;
 

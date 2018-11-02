@@ -4,53 +4,64 @@
 
 #include "chrome/browser/ui/webui/settings/change_password_handler.h"
 
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/password_protection/password_protection_service.h"
-#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 
-
 namespace settings {
 
-ChangePasswordHandler::ChangePasswordHandler(Profile* profile)
-    : profile_(profile), service_(nullptr) {
-  if (g_browser_process && g_browser_process->safe_browsing_service()) {
-    service_ = g_browser_process->safe_browsing_service()
-                   ->GetPasswordProtectionService(profile_);
-  }
+using safe_browsing::ChromePasswordProtectionService;
+
+ChangePasswordHandler::ChangePasswordHandler(
+    Profile* profile,
+    safe_browsing::ChromePasswordProtectionService* service)
+    : profile_(profile), service_(service) {
+  DCHECK(service_);
 }
 
 ChangePasswordHandler::~ChangePasswordHandler() {}
 
 void ChangePasswordHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "onChangePasswordPageShown",
-      base::Bind(&ChangePasswordHandler::HandleChangePasswordPageShown,
+      "initializeChangePasswordHandler",
+      base::Bind(&ChangePasswordHandler::HandleInitialize,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "changePassword", base::Bind(&ChangePasswordHandler::HandleChangePassword,
                                    base::Unretained(this)));
 }
 
-void ChangePasswordHandler::HandleChangePasswordPageShown(
-    const base::ListValue* args) {
-  if (service_) {
-    service_->OnWarningShown(
-        web_ui()->GetWebContents(),
-        safe_browsing::PasswordProtectionService::CHROME_SETTINGS);
-  }
+void ChangePasswordHandler::OnJavascriptAllowed() {
+  pref_registrar_.Init(profile_->GetPrefs());
+  pref_registrar_.Add(
+      prefs::kSafeBrowsingUnhandledSyncPasswordReuses,
+      base::Bind(&ChangePasswordHandler::UpdateChangePasswordCardVisibility,
+                 base::Unretained(this)));
+}
+
+void ChangePasswordHandler::OnJavascriptDisallowed() {
+  pref_registrar_.RemoveAll();
+}
+
+void ChangePasswordHandler::HandleInitialize(const base::ListValue* args) {
+    AllowJavascript();
+    UpdateChangePasswordCardVisibility();
 }
 
 void ChangePasswordHandler::HandleChangePassword(const base::ListValue* args) {
-  if (service_) {
-    service_->OnWarningDone(
-        web_ui()->GetWebContents(),
-        safe_browsing::PasswordProtectionService::CHROME_SETTINGS,
-        safe_browsing::PasswordProtectionService::CHANGE_PASSWORD);
-  }
+  service_->OnUserAction(
+      web_ui()->GetWebContents(),
+      safe_browsing::PasswordProtectionService::CHROME_SETTINGS,
+      safe_browsing::PasswordProtectionService::CHANGE_PASSWORD);
+}
+
+void ChangePasswordHandler::UpdateChangePasswordCardVisibility() {
+  FireWebUIListener(
+      "change-password-visibility",
+      base::Value(safe_browsing::ChromePasswordProtectionService::
+                      ShouldShowChangePasswordSettingUI(profile_)));
 }
 
 }  // namespace settings

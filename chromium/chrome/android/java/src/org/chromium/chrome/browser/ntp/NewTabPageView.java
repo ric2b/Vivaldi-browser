@@ -18,6 +18,7 @@ import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.text.method.LinkMovementMethod;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -31,10 +32,8 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.ntp.ContextMenuManager.TouchEnabledDelegate;
 import org.chromium.chrome.browser.ntp.LogoBridge.Logo;
 import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
@@ -47,6 +46,7 @@ import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SiteSection;
 import org.chromium.chrome.browser.suggestions.SiteSectionViewHolder;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
+import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.suggestions.Tile;
 import org.chromium.chrome.browser.suggestions.TileGroup;
@@ -56,8 +56,11 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.browser.widget.bottomsheet.ChromeHomePromoDialog;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.text.NoUnderlineClickableSpan;
+import org.chromium.ui.text.SpanApplier;
 
 /**
  * The native new tab page, represented by some basic data such as title and url, and an Android
@@ -88,6 +91,11 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
      */
     private static final String PARAM_CONDENSED_LAYOUT_LOGO_HEIGHT = "condensed_layout_logo_height";
 
+    /**
+     * Default experiment parameter value for the logo height in dp in the condensed layout.
+     */
+    private static final int PARAM_DEFAULT_VALUE_CONDENSED_LAYOUT_LOGO_HEIGHT_DP = 100;
+
     private NewTabPageRecyclerView mRecyclerView;
 
     private NewTabPageLayout mNewTabPageLayout;
@@ -100,8 +108,8 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
 
     private OnSearchBoxScrollListener mSearchBoxScrollListener;
 
-    private ChromeActivity mActivity;
     private NewTabPageManager mManager;
+    private Tab mTab;
     private LogoDelegateImpl mLogoDelegate;
     private TileGroup mTileGroup;
     private UiConfig mUiConfig;
@@ -191,7 +199,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
     public void initialize(NewTabPageManager manager, Tab tab, TileGroup.Delegate tileGroupDelegate,
             boolean searchProviderHasLogo, boolean searchProviderIsGoogle, int scrollPosition) {
         TraceEvent.begin(TAG + ".initialize()");
-        mActivity = tab.getActivity();
+        mTab = tab;
         mManager = manager;
         mUiConfig = new UiConfig(this);
 
@@ -237,37 +245,38 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
             }
         });
 
-        TouchEnabledDelegate touchEnabledDelegate = new TouchEnabledDelegate() {
-            @Override
-            public void setTouchEnabled(boolean enabled) {
-                mRecyclerView.setTouchEnabled(enabled);
-            }
+        // Don't store a direct reference to the activity, because it might change later if the tab
+        // is reparented.
+        Runnable closeContextMenuCallback = () -> {
+            mTab.getActivity().closeContextMenu();
         };
-        mContextMenuManager = new ContextMenuManager(
-                mActivity, mManager.getNavigationDelegate(), touchEnabledDelegate);
-        mActivity.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
+        mContextMenuManager = new ContextMenuManager(mManager.getNavigationDelegate(),
+                mRecyclerView::setTouchEnabled, closeContextMenuCallback);
+        mTab.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
         manager.addDestructionObserver(new DestructionObserver() {
             @Override
             public void onDestroy() {
-                mActivity.getWindowAndroid().removeContextMenuCloseListener(mContextMenuManager);
+                mTab.getWindowAndroid().removeContextMenuCloseListener(mContextMenuManager);
             }
         });
 
         Profile profile = Profile.getLastUsedProfile();
-        OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(profile);
+        OfflinePageBridge offlinePageBridge =
+                SuggestionsDependencyFactory.getInstance().getOfflinePageBridge(profile);
         TileRenderer tileRenderer =
-                new TileRenderer(mActivity, SuggestionsConfig.getTileStyle(mUiConfig),
+                new TileRenderer(mTab.getActivity(), SuggestionsConfig.getTileStyle(mUiConfig),
                         getTileTitleLines(), mManager.getImageFetcher());
         mTileGroup = new TileGroup(tileRenderer, mManager, mContextMenuManager, tileGroupDelegate,
                 /* observer = */ this, offlinePageBridge);
 
         mSiteSectionViewHolder =
-                SiteSection.createViewHolder(mNewTabPageLayout.getSiteSectionView());
+                SiteSection.createViewHolder(mNewTabPageLayout.getSiteSectionView(), mUiConfig);
         mSiteSectionViewHolder.bindDataSource(mTileGroup, tileRenderer);
 
         mSearchProviderLogoView = mNewTabPageLayout.findViewById(R.id.search_provider_logo);
         int experimentalLogoHeightDp = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                ChromeFeatureList.NTP_CONDENSED_LAYOUT, PARAM_CONDENSED_LAYOUT_LOGO_HEIGHT, 0);
+                ChromeFeatureList.NTP_CONDENSED_LAYOUT, PARAM_CONDENSED_LAYOUT_LOGO_HEIGHT,
+                PARAM_DEFAULT_VALUE_CONDENSED_LAYOUT_LOGO_HEIGHT_DP);
         if (experimentalLogoHeightDp > 0) {
             ViewGroup.LayoutParams logoParams = mSearchProviderLogoView.getLayoutParams();
             logoParams.height = dpToPx(getContext(), experimentalLogoHeightDp);
@@ -277,6 +286,9 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
                 mManager.getNavigationDelegate(), mSearchProviderLogoView, profile);
 
         mSearchBoxView = mNewTabPageLayout.findViewById(R.id.search_box);
+        if (SuggestionsConfig.useModernLayout()) {
+            ViewUtils.setNinePatchBackgroundResource(mSearchBoxView, R.drawable.card_modern);
+        }
         mNoSearchLogoSpacer = mNewTabPageLayout.findViewById(R.id.no_search_logo_spacer);
 
         mSnapScrollRunnable = new SnapScrollRunnable();
@@ -284,6 +296,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
 
         initializeSearchBoxTextView();
         initializeVoiceSearchButton();
+        initializeChromeHomePromo();
         initializeLayoutChangeListeners();
         setSearchProviderInfo(searchProviderHasLogo, searchProviderIsGoogle);
         mSearchProviderLogoView.showSearchProviderInitialView();
@@ -293,9 +306,10 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         mRecyclerView.init(mUiConfig, mContextMenuManager);
 
         // Set up snippets
-        NewTabPageAdapter newTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout,
-                mUiConfig, offlinePageBridge, mContextMenuManager, /* tileGroupDelegate = */ null,
-                /* suggestionsCarousel = */ null);
+        NewTabPageAdapter newTabPageAdapter =
+                new NewTabPageAdapter(mManager, mNewTabPageLayout, /* logoView = */ null, mUiConfig,
+                        offlinePageBridge, mContextMenuManager, /* tileGroupDelegate = */ null,
+                        /* suggestionsCarousel = */ null);
         newTabPageAdapter.refreshSuggestions();
         mRecyclerView.setAdapter(newTabPageAdapter);
         mRecyclerView.getLinearLayoutManager().scrollToPosition(scrollPosition);
@@ -380,7 +394,9 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
      */
     private void updateSearchBoxLogo() {
         TextView searchBoxTextView = (TextView) mSearchBoxView.findViewById(R.id.search_box_text);
-        if (mSearchProviderIsGoogle && !LocaleManager.getInstance().hasShownSearchEnginePromo()
+        LocaleManager localeManager = LocaleManager.getInstance();
+        if (mSearchProviderIsGoogle && !localeManager.hasCompletedSearchEnginePromo()
+                && !localeManager.hasShownSearchEnginePromoThisSession()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SHOW_GOOGLE_G_IN_OMNIBOX)) {
             searchBoxTextView.setCompoundDrawablePadding(
                     getResources().getDimensionPixelOffset(R.dimen.ntp_search_box_logo_padding));
@@ -405,6 +421,29 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
             }
         });
         TraceEvent.end(TAG + ".initializeVoiceSearchButton()");
+    }
+
+    private void initializeChromeHomePromo() {
+        if (DeviceFormFactor.isTablet()
+                || !ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO)) {
+            return;
+        }
+
+        NoUnderlineClickableSpan link = new NoUnderlineClickableSpan() {
+            @Override
+            public void onClick(View view) {
+                new ChromeHomePromoDialog(mTab.getActivity(), ChromeHomePromoDialog.ShowReason.NTP)
+                        .show();
+            }
+        };
+
+        TextView textView = mNewTabPageLayout.findViewById(R.id.chrome_home_promo_text);
+        textView.setText(
+                SpanApplier.applySpans(getResources().getString(R.string.ntp_chrome_home_promo),
+                        new SpanApplier.SpanInfo("<link>", "</link>", link)));
+        textView.setMovementMethod(LinkMovementMethod.getInstance());
+        mNewTabPageLayout.findViewById(R.id.chrome_home_promo_container)
+                .setVisibility(View.VISIBLE);
     }
 
     private void initializeLayoutChangeListeners() {
@@ -625,12 +664,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         mSearchProviderHasLogo = hasLogo;
         mSearchProviderIsGoogle = isGoogle;
 
-        // Set a bit more top padding on the tile grid if there is no logo.
-        int paddingTop = getResources().getDimensionPixelSize(shouldShowLogo()
-                        ? R.dimen.tile_grid_layout_padding_top
-                        : R.dimen.tile_grid_layout_no_logo_padding_top);
-        mSiteSectionViewHolder.itemView.setPadding(
-                0, paddingTop, 0, mSiteSectionViewHolder.itemView.getPaddingBottom());
+        updateTileGridPadding();
 
         // Hide or show the views above the tile grid as needed, including logo, search box, and
         // spacers.
@@ -640,8 +674,13 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         for (int i = 0; i < childCount; i++) {
             View child = mNewTabPageLayout.getChildAt(i);
             if (child == mSiteSectionViewHolder.itemView) break;
+
             // Don't change the visibility of a ViewStub as that will automagically inflate it.
             if (child instanceof ViewStub) continue;
+
+            // Skip the Chrome Home promo.
+            if (child.getId() == R.id.chrome_home_promo_container) continue;
+
             if (child == mSearchProviderLogoView) {
                 child.setVisibility(logoVisibility);
             } else {
@@ -659,6 +698,24 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         updateSearchBoxLogo();
 
         mSnapshotTileGridChanged = true;
+    }
+
+    /**
+     * Updates the padding for the tile grid based on what is shown above it.
+     */
+    private void updateTileGridPadding() {
+        final int paddingTop;
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO)) {
+            // The Chrome Home promo has enough whitespace.
+            paddingTop = 0;
+        } else {
+            // Set a bit more top padding on the tile grid if there is no logo.
+            paddingTop = getResources().getDimensionPixelSize(shouldShowLogo()
+                            ? R.dimen.tile_grid_layout_padding_top
+                            : R.dimen.tile_grid_layout_no_logo_padding_top);
+        }
+        mSiteSectionViewHolder.itemView.setPadding(
+                0, paddingTop, 0, mSiteSectionViewHolder.itemView.getPaddingBottom());
     }
 
     /**
@@ -787,7 +844,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         if (!mHasShownView) {
             mHasShownView = true;
             onInitialisationProgressChanged();
-            NewTabPageUma.recordSearchAvailableLoadTime(mActivity);
+            NewTabPageUma.recordSearchAvailableLoadTime(mTab.getActivity());
             TraceEvent.instant("NewTabPageSearchAvailable)");
         } else {
             // Trigger a scroll update when reattaching the window to signal the toolbar that
@@ -906,7 +963,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         boolean condensedLayoutEnabled =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_CONDENSED_LAYOUT);
         boolean showLogoInCondensedLayout = ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                ChromeFeatureList.NTP_CONDENSED_LAYOUT, PARAM_CONDENSED_LAYOUT_SHOW_LOGO, false);
+                ChromeFeatureList.NTP_CONDENSED_LAYOUT, PARAM_CONDENSED_LAYOUT_SHOW_LOGO, true);
         return mSearchProviderHasLogo && (!condensedLayoutEnabled || showLogoInCondensedLayout);
     }
 

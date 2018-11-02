@@ -71,15 +71,13 @@ class SQLErrorData {
   String message_;
 };
 
-class SQLError final : public GarbageCollectedFinalized<SQLError>,
-                       public ScriptWrappable {
+class SQLError final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static SQLError* Create(const SQLErrorData& data) {
     return new SQLError(data);
   }
-  DEFINE_INLINE_TRACE() {}
 
   unsigned code() const { return data_.Code(); }
   String message() const { return data_.Message(); }

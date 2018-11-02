@@ -19,7 +19,7 @@
 #include "cc/trees/property_tree.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace cc {
@@ -812,6 +812,15 @@ void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
           .is_showing_backface;
 }
 
+void EffectTree::UpdateHasMaskingChild(EffectNode* node,
+                                       EffectNode* parent_node) {
+  // Reset to false when a node is first met. We'll set the bit later
+  // when we actually encounter a masking child.
+  node->has_masking_child = false;
+  if (node->blend_mode == SkBlendMode::kDstIn)
+    parent_node->has_masking_child = true;
+}
+
 void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
   if (!effect_node->has_render_surface) {
     effect_node->surface_contents_scale = gfx::Vector2dF(1.0f, 1.0f);
@@ -886,6 +895,7 @@ void EffectTree::UpdateEffects(int id) {
   UpdateIsDrawn(node, parent_node);
   UpdateEffectChanged(node, parent_node);
   UpdateBackfaceVisibility(node, parent_node);
+  UpdateHasMaskingChild(node, parent_node);
   UpdateSurfaceContentsScale(node);
 }
 
@@ -1183,7 +1193,7 @@ void ScrollTree::CopyCompleteTreeState(const ScrollTree& other) {
 }
 #endif
 
-ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) {
+const ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) const {
   auto iterator = property_trees()->element_id_to_scroll_node_index.find(id);
   if (iterator == property_trees()->element_id_to_scroll_node_index.end())
     return nullptr;
@@ -1534,11 +1544,9 @@ void ScrollTree::DistributeScroll(ScrollNode* scroll_node,
     return;
   scroll_state->DistributeToScrollChainDescendant();
 
-  // If the scroll doesn't propagate, and we're currently scrolling
-  // a node other than this one, prevent the scroll from
-  // propagating to this node.
-  if (!scroll_state->should_propagate() &&
-      scroll_state->delta_consumed_for_scroll_sequence() &&
+  // If we're currently scrolling a node other than this one, prevent the scroll
+  // from propagating to this node.
+  if (scroll_state->delta_consumed_for_scroll_sequence() &&
       scroll_state->current_native_scrolling_node()->id != scroll_node->id) {
     return;
   }

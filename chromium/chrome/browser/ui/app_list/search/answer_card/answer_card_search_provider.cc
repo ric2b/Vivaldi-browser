@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -18,8 +19,6 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/search_engines/template_url_service.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
-#include "ui/app_list/search_box_model.h"
 
 namespace app_list {
 
@@ -131,15 +130,11 @@ void AnswerCardSearchProvider::DidFinishNavigation(
   DCHECK_EQ(source, context_for_loading.contents.get());
 
   if (url != current_request_url_) {
-    // TODO(vadimt): Remove this and similar logging once testing is complete if
-    // we think this is not useful after release or happens too frequently.
-    VLOG(1) << "DidFinishNavigation: Another request started";
     RecordRequestResult(
         SearchAnswerRequestResult::REQUEST_RESULT_ANOTHER_REQUEST_STARTED);
     return;
   }
 
-  VLOG(1) << "DidFinishNavigation: Latest request completed";
   if (has_error) {
     RecordRequestResult(
         SearchAnswerRequestResult::REQUEST_RESULT_REQUEST_FAILED);
@@ -148,29 +143,20 @@ void AnswerCardSearchProvider::DidFinishNavigation(
     return;
   }
 
-  if (!features::IsAnswerCardDarkRunEnabled()) {
-    if (!has_answer_card) {
-      RecordRequestResult(SearchAnswerRequestResult::REQUEST_RESULT_NO_ANSWER);
-      // No answer card in the server response. This invalidates the currently
-      // shown result.
-      DeleteCurrentResult();
-      return;
-    }
-    DCHECK(!result_title.empty());
-    DCHECK(!issued_query.empty());
-    context_for_loading.result_title = result_title;
-    context_for_loading.result_url =
-        GetResultUrl(base::UTF8ToUTF16(issued_query));
-    RecordRequestResult(
-        SearchAnswerRequestResult::REQUEST_RESULT_RECEIVED_ANSWER);
-  } else {
-    // In the dark run mode, every other "server response" contains a card.
-    dark_run_received_answer_ = !dark_run_received_answer_;
-    if (!dark_run_received_answer_)
-      return;
-    // SearchResult requires a non-empty id. This "url" will never be opened.
-    context_for_loading.result_url = "https://www.google.com/?q=something";
+  if (!has_answer_card) {
+    RecordRequestResult(SearchAnswerRequestResult::REQUEST_RESULT_NO_ANSWER);
+    // No answer card in the server response. This invalidates the currently
+    // shown result.
+    DeleteCurrentResult();
+    return;
   }
+  DCHECK(!result_title.empty());
+  DCHECK(!issued_query.empty());
+  context_for_loading.result_title = result_title;
+  context_for_loading.result_url =
+      GetResultUrl(base::UTF8ToUTF16(issued_query));
+  RecordRequestResult(
+      SearchAnswerRequestResult::REQUEST_RESULT_RECEIVED_ANSWER);
 
   context_for_loading.state = RequestState::HAVE_RESULT_LOADING;
   UMA_HISTOGRAM_TIMES("SearchAnswer.NavigationTime",

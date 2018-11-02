@@ -113,11 +113,14 @@ SDK.CPUProfilerModel = class extends SDK.SDKModel {
     return this._isRecording;
   }
 
+  /**
+   * @return {!Promise}
+   */
   startRecording() {
     this._isRecording = true;
     var intervalUs = Common.moduleSetting('highResolutionCpuProfiling').get() ? 100 : 1000;
     this._profilerAgent.setSamplingInterval(intervalUs);
-    this._profilerAgent.start();
+    return this._profilerAgent.start();
   }
 
   /**
@@ -132,7 +135,9 @@ SDK.CPUProfilerModel = class extends SDK.SDKModel {
    * @return {!Promise}
    */
   startPreciseCoverage() {
-    return this._profilerAgent.startPreciseCoverage();
+    var callCount = false;
+    var detailed = true;
+    return this._profilerAgent.startPreciseCoverage(callCount, detailed);
   }
 
   /**
@@ -147,6 +152,13 @@ SDK.CPUProfilerModel = class extends SDK.SDKModel {
    */
   stopPreciseCoverage() {
     return this._profilerAgent.stopPreciseCoverage();
+  }
+
+  /**
+   * @return {!Promise<!Array<!Protocol.Profiler.ScriptCoverage>>}
+   */
+  bestEffortCoverage() {
+    return this._profilerAgent.getBestEffortCoverage().then(result => result || []);
   }
 };
 

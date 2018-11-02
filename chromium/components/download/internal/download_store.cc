@@ -12,8 +12,6 @@
 #include "components/download/internal/proto_conversions.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 
-using leveldb_env::SharedReadCache;
-
 namespace download {
 
 namespace {
@@ -41,11 +39,10 @@ bool DownloadStore::IsInitialized() {
 
 void DownloadStore::Initialize(InitCallback callback) {
   DCHECK(!IsInitialized());
-  db_->InitWithOptions(
-      kDatabaseClientName,
-      leveldb_proto::Options(database_dir_, SharedReadCache::Default),
-      base::BindOnce(&DownloadStore::OnDatabaseInited,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+  db_->Init(kDatabaseClientName, database_dir_,
+            leveldb_proto::CreateSimpleOptions(),
+            base::BindOnce(&DownloadStore::OnDatabaseInited,
+                           weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void DownloadStore::HardRecover(StoreCallback callback) {
@@ -84,11 +81,10 @@ void DownloadStore::OnDatabaseDestroyed(StoreCallback callback, bool success) {
     return;
   }
 
-  db_->InitWithOptions(
-      kDatabaseClientName,
-      leveldb_proto::Options(database_dir_, SharedReadCache::Default),
-      base::BindOnce(&DownloadStore::OnDatabaseInitedAfterDestroy,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+  db_->Init(kDatabaseClientName, database_dir_,
+            leveldb_proto::CreateSimpleOptions(),
+            base::BindOnce(&DownloadStore::OnDatabaseInitedAfterDestroy,
+                           weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void DownloadStore::OnDatabaseInitedAfterDestroy(StoreCallback callback,

@@ -10,11 +10,11 @@
 #include "tools/gn/settings.h"
 #include "tools/gn/source_file.h"
 
-namespace {
+namespace gn_analyzer_unittest {
 
 class MockLoader : public Loader {
  public:
-  MockLoader() {}
+  MockLoader() = default;
 
   void Load(const SourceFile& file,
             const LocationRange& origin,
@@ -28,7 +28,7 @@ class MockLoader : public Loader {
   }
 
  private:
-  ~MockLoader() override {}
+  ~MockLoader() override = default;
 };
 
 class AnalyzerTest : public testing::Test {
@@ -111,92 +111,88 @@ class AnalyzerTest : public testing::Test {
   std::string tc_name_;
 };
 
-}  // namespace
-
-// TODO: clean this up when raw string literals are allowed.
-
 TEST_F(AnalyzerTest, AllWasPruned) {
   RunBasicTest(
+      R"({
+        "files": [ "//d/b.cc" ],
+        "additional_compile_targets": [ "all" ],
+        "test_targets": [ ]
+      })",
       "{"
-      "  \"files\": [ \"//d/b.cc\" ],"
-      "  \"additional_compile_targets\": [ \"all\" ],"
-      "  \"test_targets\": [ ]"
-      "}",
-      "{"
-      "\"compile_targets\":[\"//d:b_unittests\",\"//d:c\"],"
-      "\"status\":\"Found dependency\","
-      "\"test_targets\":[]"
+      R"("compile_targets":["//d:b_unittests","//d:c"],)"
+      R"("status":"Found dependency",)"
+      R"("test_targets":[])"
       "}");
 }
 
 TEST_F(AnalyzerTest, NoDependency) {
   RunBasicTest(
+      R"({
+        "files":[ "//missing.cc" ],
+        "additional_compile_targets": [ "all" ],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\":[ \"//missing.cc\" ],"
-      "  \"additional_compile_targets\": [ \"all\" ],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"compile_targets\":[],"
-      "\"status\":\"No dependency\","
-      "\"test_targets\":[]"
+      R"("compile_targets":[],)"
+      R"("status":"No dependency",)"
+      R"("test_targets":[])"
       "}");
 }
 
 TEST_F(AnalyzerTest, NoFilesNoTargets) {
   RunBasicTest(
+      R"({
+        "files": [],
+        "additional_compile_targets": [],
+        "test_targets": []
+      })",
       "{"
-      "  \"files\": [],"
-      "  \"additional_compile_targets\": [],"
-      "  \"test_targets\": []"
-      "}",
-      "{"
-      "\"compile_targets\":[],"
-      "\"status\":\"No dependency\","
-      "\"test_targets\":[]"
+      R"("compile_targets":[],)"
+      R"("status":"No dependency",)"
+      R"("test_targets":[])"
       "}");
 }
 
 TEST_F(AnalyzerTest, OneTestTargetModified) {
   RunBasicTest(
+      R"({
+        "files": [ "//a.cc" ],
+        "additional_compile_targets": [],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\": [ \"//a.cc\" ],"
-      "  \"additional_compile_targets\": [],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"compile_targets\":[],"
-      "\"status\":\"Found dependency\","
-      "\"test_targets\":[\"//:a\"]"
+      R"("compile_targets":[],)"
+      R"("status":"Found dependency",)"
+      R"("test_targets":["//:a"])"
       "}");
 }
 
 TEST_F(AnalyzerTest, FilesArentSourceAbsolute) {
   RunBasicTest(
+      R"({
+        "files": [ "a.cc" ],
+        "additional_compile_targets": [],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\": [ \"a.cc\" ],"
-      "  \"additional_compile_targets\": [],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"error\":"
-      "\"\\\"a.cc\\\" is not a source-absolute or absolute path.\","
-      "\"invalid_targets\":[]"
+      R"("error":)"
+      R"("\"a.cc\" is not a source-absolute or absolute path.",)"
+      R"("invalid_targets":[])"
       "}");
 }
 
 TEST_F(AnalyzerTest, WrongInputFields) {
   RunBasicTest(
+      R"({
+        "files": [ "//a.cc" ],
+        "compile_targets": [],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\": [ \"//a.cc\" ],"
-      "  \"compile_targets\": [],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"error\":"
-      "\"Input does not have a key named "
-      "\\\"additional_compile_targets\\\" with a list value.\","
-      "\"invalid_targets\":[]"
+      R"("error":)"
+      R"("Input does not have a key named )"
+      R"(\"additional_compile_targets\" with a list value.",)"
+      R"("invalid_targets":[])"
       "}");
 }
 
@@ -205,15 +201,15 @@ TEST_F(AnalyzerTest, BuildFilesWereModified) {
   // "Found dependency (all)" error since we can't handle changes to
   // build files yet (crbug.com/555273).
   RunBasicTest(
+      R"({
+        "files": [ "//a.cc", "//BUILD.gn" ],
+        "additional_compile_targets": [],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\": [ \"//a.cc\", \"//BUILD.gn\" ],"
-      "  \"additional_compile_targets\": [],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"compile_targets\":[\"//:a\"],"
-      "\"status\":\"Found dependency (all)\","
-      "\"test_targets\":[\"//:a\"]"
+      R"("compile_targets":["//:a"],)"
+      R"/("status":"Found dependency (all)",)/"
+      R"("test_targets":["//:a"])"
       "}");
 }
 
@@ -222,14 +218,16 @@ TEST_F(AnalyzerTest, BuildFilesWereModifiedAndCompilingAll) {
   // "Found dependency (all)" error since we can't handle changes to
   // build files yet (crbug.com/555273).
   RunBasicTest(
+      R"({
+        "files": [ "//a.cc", "//BUILD.gn" ],
+        "additional_compile_targets": [ "all" ],
+        "test_targets": [ "//:a" ]
+      })",
       "{"
-      "  \"files\": [ \"//a.cc\", \"//BUILD.gn\" ],"
-      "  \"additional_compile_targets\": [ \"all\" ],"
-      "  \"test_targets\": [ \"//:a\" ]"
-      "}",
-      "{"
-      "\"compile_targets\":[\"all\"],"
-      "\"status\":\"Found dependency (all)\","
-      "\"test_targets\":[\"//:a\"]"
+      R"("compile_targets":["all"],)"
+      R"/("status":"Found dependency (all)",)/"
+      R"("test_targets":["//:a"])"
       "}");
 }
+
+}  // namespace gn_analyzer_unittest

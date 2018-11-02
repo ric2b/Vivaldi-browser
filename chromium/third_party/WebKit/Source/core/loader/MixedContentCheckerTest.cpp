@@ -6,13 +6,13 @@
 
 #include <base/macros.h>
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/frame/Settings.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebMixedContent.h"
 #include "public/platform/WebMixedContentContextType.h"
 #include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
@@ -45,13 +45,14 @@ TEST(MixedContentCheckerTest, IsMixedContent) {
       {"https://example.com/foo", "blob:null/foo", false},
       {"https://example.com/foo", "filesystem:https://example.com/foo", false},
       {"https://example.com/foo", "filesystem:http://example.com/foo", false},
+      {"https://example.com/foo", "http://localhost/", false},
+      {"https://example.com/foo", "http://a.localhost/", false},
 
       {"https://example.com/foo", "http://example.com/foo", true},
       {"https://example.com/foo", "http://google.com/foo", true},
       {"https://example.com/foo", "ws://example.com/foo", true},
       {"https://example.com/foo", "ws://google.com/foo", true},
       {"https://example.com/foo", "http://192.168.1.1/", true},
-      {"https://example.com/foo", "http://localhost/", true},
   };
 
   for (const auto& test : cases) {
@@ -59,10 +60,11 @@ TEST(MixedContentCheckerTest, IsMixedContent) {
                                       << ", Target: " << test.target
                                       << ", Expectation: " << test.expectation);
     KURL origin_url(NullURL(), test.origin);
-    RefPtr<SecurityOrigin> security_origin(SecurityOrigin::Create(origin_url));
+    scoped_refptr<SecurityOrigin> security_origin(
+        SecurityOrigin::Create(origin_url));
     KURL target_url(NullURL(), test.target);
     EXPECT_EQ(test.expectation, MixedContentChecker::IsMixedContent(
-                                    security_origin.Get(), target_url));
+                                    security_origin.get(), target_url));
   }
 }
 

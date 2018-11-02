@@ -18,16 +18,16 @@ namespace device {
 
 namespace {
 
-// Converts a PowerSaveBlocker::Reason to a
+// Converts a mojom::WakeLockReason to a
 // chromeos::PowerPolicyController::WakeLockReason.
 chromeos::PowerPolicyController::WakeLockReason GetWakeLockReason(
-    PowerSaveBlocker::Reason reason) {
+    mojom::WakeLockReason reason) {
   switch (reason) {
-    case PowerSaveBlocker::kReasonAudioPlayback:
+    case mojom::WakeLockReason::kAudioPlayback:
       return chromeos::PowerPolicyController::REASON_AUDIO_PLAYBACK;
-    case PowerSaveBlocker::kReasonVideoPlayback:
+    case mojom::WakeLockReason::kVideoPlayback:
       return chromeos::PowerPolicyController::REASON_VIDEO_PLAYBACK;
-    case PowerSaveBlocker::kReasonOther:
+    case mojom::WakeLockReason::kOther:
       return chromeos::PowerPolicyController::REASON_OTHER;
   }
   return chromeos::PowerPolicyController::REASON_OTHER;
@@ -38,8 +38,8 @@ chromeos::PowerPolicyController::WakeLockReason GetWakeLockReason(
 class PowerSaveBlocker::Delegate
     : public base::RefCountedThreadSafe<PowerSaveBlocker::Delegate> {
  public:
-  Delegate(PowerSaveBlockerType type,
-           Reason reason,
+  Delegate(mojom::WakeLockType type,
+           mojom::WakeLockReason reason,
            const std::string& description,
            scoped_refptr<base::SequencedTaskRunner> ui_task_runner)
       : type_(type),
@@ -55,13 +55,17 @@ class PowerSaveBlocker::Delegate
 
     auto* controller = chromeos::PowerPolicyController::Get();
     switch (type_) {
-      case kPowerSaveBlockPreventAppSuspension:
+      case mojom::WakeLockType::kPreventAppSuspension:
         block_id_ = controller->AddSystemWakeLock(GetWakeLockReason(reason_),
                                                   description_);
         break;
-      case kPowerSaveBlockPreventDisplaySleep:
+      case mojom::WakeLockType::kPreventDisplaySleep:
         block_id_ = controller->AddScreenWakeLock(GetWakeLockReason(reason_),
                                                   description_);
+        break;
+      case mojom::WakeLockType::kPreventDisplaySleepAllowDimming:
+        block_id_ = controller->AddDimWakeLock(GetWakeLockReason(reason_),
+                                               description_);
         break;
       default:
         NOTREACHED() << "Unhandled block type " << type_;
@@ -80,8 +84,8 @@ class PowerSaveBlocker::Delegate
   friend class base::RefCountedThreadSafe<Delegate>;
   virtual ~Delegate() {}
 
-  PowerSaveBlockerType type_;
-  Reason reason_;
+  mojom::WakeLockType type_;
+  mojom::WakeLockReason reason_;
   std::string description_;
 
   // ID corresponding to the block request in PowerPolicyController.
@@ -93,8 +97,8 @@ class PowerSaveBlocker::Delegate
 };
 
 PowerSaveBlocker::PowerSaveBlocker(
-    PowerSaveBlockerType type,
-    Reason reason,
+    mojom::WakeLockType type,
+    mojom::WakeLockReason reason,
     const std::string& description,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> blocking_task_runner)

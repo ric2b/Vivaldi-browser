@@ -31,13 +31,13 @@
 #ifndef WorkerInspectorController_h
 #define WorkerInspectorController_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/inspector/InspectorSession.h"
 #include "core/inspector/InspectorTaskRunner.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
@@ -55,11 +55,12 @@ class WorkerInspectorController final
  public:
   static WorkerInspectorController* Create(WorkerThread*);
   ~WorkerInspectorController() override;
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   CoreProbeSink* GetProbeSink() const { return probe_sink_.Get(); }
 
-  void ConnectFrontend(int session_id);
+  void ConnectFrontend(int session_id,
+                       const String& parent_instrumentation_token);
   void DisconnectFrontend(int session_id);
   void DispatchMessageFromFrontend(int session_id, const String& message);
   void Dispose();

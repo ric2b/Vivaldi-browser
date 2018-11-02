@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <set>
 
+#include "base/containers/circular_deque.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -21,12 +21,12 @@
 #include "chrome/browser/sync_file_system/sync_status_code.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/test/mock_blob_url_request_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 
 using content::MockBlobURLRequestContext;
 using content::ScopedTextBlob;
@@ -40,7 +40,7 @@ class LocalFileChangeTrackerTest : public testing::Test {
  public:
   LocalFileChangeTrackerTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
-        in_memory_env_(leveldb::NewMemEnv(leveldb::Env::Default())),
+        in_memory_env_(leveldb_chrome::NewMemEnv(leveldb::Env::Default())),
         file_system_(GURL("http://example.com"),
                      in_memory_env_.get(),
                      base::ThreadTaskRunnerHandle::Get().get(),
@@ -63,7 +63,7 @@ class LocalFileChangeTrackerTest : public testing::Test {
     sync_context_->ShutdownOnUIThread();
     sync_context_ = nullptr;
 
-    base::RunLoop().RunUntilIdle();
+    content::RunAllTasksUntilIdle();
     file_system_.TearDown();
     // Make sure we don't leave the external filesystem.
     // (CannedSyncableFileSystem::TearDown does not do this as there may be
@@ -187,7 +187,7 @@ TEST_F(LocalFileChangeTrackerTest, GetChanges) {
   EXPECT_FALSE(base::ContainsKey(urls, URL(kPath0)));
 
   // GetNextChangedURLs only returns up to max_urls (i.e. 3) urls.
-  std::deque<FileSystemURL> urls_to_process;
+  base::circular_deque<FileSystemURL> urls_to_process;
   change_tracker()->GetNextChangedURLs(&urls_to_process, 3);
   ASSERT_EQ(3U, urls_to_process.size());
 
@@ -280,7 +280,7 @@ TEST_F(LocalFileChangeTrackerTest, RestoreCreateAndModifyChanges) {
   ASSERT_EQ(0U, urls.size());
 
   const std::string kData("Lorem ipsum.");
-  MockBlobURLRequestContext url_request_context(file_system_context());
+  MockBlobURLRequestContext url_request_context;
   ScopedTextBlob blob(url_request_context, "blob_id:test", kData);
 
   // Create files and nested directories.
@@ -431,7 +431,7 @@ TEST_F(LocalFileChangeTrackerTest, RestoreCopyChanges) {
   ASSERT_EQ(0U, urls.size());
 
   const std::string kData("Lorem ipsum.");
-  MockBlobURLRequestContext url_request_context(file_system_context());
+  MockBlobURLRequestContext url_request_context;
   ScopedTextBlob blob(url_request_context, "blob_id:test", kData);
 
   // Create files and nested directories.
@@ -618,7 +618,7 @@ TEST_F(LocalFileChangeTrackerTest, NextChangedURLsWithRecursiveCopy) {
   EXPECT_EQ(base::File::FILE_OK,
             file_system_.Copy(URL(kPath0), URL(kPath0Copy)));
 
-  std::deque<FileSystemURL> urls_to_process;
+  base::circular_deque<FileSystemURL> urls_to_process;
   change_tracker()->GetNextChangedURLs(&urls_to_process, 0);
   ASSERT_EQ(6U, urls_to_process.size());
 

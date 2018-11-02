@@ -5,25 +5,7 @@
 #include "services/video_capture/receiver_mojo_to_media_adapter.h"
 
 #include "mojo/public/cpp/bindings/strong_binding.h"
-
-namespace {
-
-class ScopedAccessPermissionMediaToMojoAdapter
-    : public video_capture::mojom::ScopedAccessPermission {
- public:
-  ScopedAccessPermissionMediaToMojoAdapter(
-      std::unique_ptr<
-          media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-          access_permission)
-      : access_permission_(std::move(access_permission)) {}
-
- private:
-  std::unique_ptr<
-      media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-      access_permission_;
-};
-
-}  // anonymous namespace
+#include "services/video_capture/scoped_access_permission_media_to_mojo_adapter.h"
 
 namespace video_capture {
 
@@ -107,7 +89,8 @@ void ReceiverMojoToMediaAdapter::OnNewBufferHandle(
     std::unique_ptr<media::VideoCaptureDevice::Client::Buffer::HandleProvider>
         handle_provider) {
   receiver_->OnNewBufferHandle(
-      buffer_id, handle_provider->GetHandleForInterProcessTransit());
+      buffer_id,
+      handle_provider->GetHandleForInterProcessTransit(true /* read-only */));
 }
 
 void ReceiverMojoToMediaAdapter::OnFrameReadyInBuffer(
@@ -119,7 +102,7 @@ void ReceiverMojoToMediaAdapter::OnFrameReadyInBuffer(
     media::mojom::VideoFrameInfoPtr frame_info) {
   mojom::ScopedAccessPermissionPtr access_permission_proxy;
   mojo::MakeStrongBinding<mojom::ScopedAccessPermission>(
-      base::MakeUnique<ScopedAccessPermissionMediaToMojoAdapter>(
+      std::make_unique<ScopedAccessPermissionMediaToMojoAdapter>(
           std::move(access_permission)),
       mojo::MakeRequest(&access_permission_proxy));
   receiver_->OnFrameReadyInBuffer(buffer_id, frame_feedback_id,

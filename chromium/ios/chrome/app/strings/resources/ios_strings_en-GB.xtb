@@ -20,7 +20,6 @@
 <translation id="1254117744268754948">Choose Folder</translation>
 <translation id="1265739287306757398">Learn How</translation>
 <translation id="1272079795634619415">Stop</translation>
-<translation id="129553762522093515">Recently closed</translation>
 <translation id="1323735185997015385">Delete</translation>
 <translation id="132683371494960526">Double tap to change the parent folder.</translation>
 <translation id="1340643665687018190">Close menu</translation>
@@ -48,7 +47,6 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="1690731385917361335">No items</translation>
 <translation id="1700629756560807968"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> selected</translation>
 <translation id="1740468249224277719">Double tap to install.</translation>
-<translation id="1749561566933687563">Sync your bookmarks</translation>
 <translation id="1752547299766512813">Save Passwords</translation>
 <translation id="1753905327828125965">Most Visited</translation>
 <translation id="1809939268435598390">Delete Folder</translation>
@@ -80,6 +78,8 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="2381405137052800939">Basics</translation>
 <translation id="2386793615875593361">1 selected</translation>
 <translation id="2435457462613246316">Show password</translation>
+<translation id="2523363575747517183">This website is repeatedly trying to open another application.</translation>
+<translation id="2529021024822217800">Open All</translation>
 <translation id="2572712655377361602">A device policy blocked access to your photos</translation>
 <translation id="2584132361465095047">Add Account…</translation>
 <translation id="2593774076813182497">This page cannot be printed.</translation>
@@ -129,9 +129,7 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="3324193307694657476">Address 2</translation>
 <translation id="3329904751041170572">Could not connect to the server.</translation>
 <translation id="3335947283844343239">Re-open Closed Tab</translation>
-<translation id="3387752218061326363">Showing history from your signed-in devices. <ph name="BEGIN_LINK" />Find out more<ph name="END_LINK" />.</translation>
 <translation id="3393920035788932672">Pop-ups Allowed</translation>
-<translation id="3414292259312108062">Chrome will store this in your <ph name="BEGIN_LINK" />Google saved passwords<ph name="END_LINK" /> and autofill it for you so that you don't have to remember it yourself.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min</translation>
 <translation id="3448016392200048164">Split View</translation>
 <translation id="3474624961160222204">Continue as <ph name="NAME" /></translation>
@@ -146,19 +144,14 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="3567664240939803299">Do you want Google Smart Lock to save your password for this site?</translation>
 <translation id="3588820906588687999">Open Image in New Tab</translation>
 <translation id="3603009562372709545">Copy Link URL</translation>
-<translation id="360480449234699036">Learn about topics on websites without leaving the page. Touch to Search sends a word and its surrounding context to Google Search, returning definitions, pictures, search results and other details.
-
-To adjust your search term, long press to select. To refine your search, slide the panel all the way up and touch the search box.</translation>
 <translation id="3607167657931203000">Autofill Data</translation>
 <translation id="3628119975092896051">Your reading list is available offline. To add a page to your reading list, tap <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Pre-load Web Pages</translation>
 <translation id="3691593122358196899">Bookmarked to <ph name="FOLDER_TITLE" /></translation>
-<translation id="3738139272394829648">Touch to Search</translation>
 <translation id="3771033907050503522">Incognito Tabs</translation>
 <translation id="3779810277399252432">No Internet connection.</translation>
 <translation id="3783017676699494206">Save Image</translation>
 <translation id="385051799172605136">Back</translation>
-<translation id="3857761338463387655">Create email with:</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3928666092801078803">Combine my data</translation>
 <translation id="3950820424414687140">Sign in</translation>
@@ -181,6 +174,7 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4342284590510997375">New</translation>
 <translation id="434816576838749873">Choose Email App</translation>
 <translation id="4359125752503270327">This page will open in another application.</translation>
+<translation id="4370827530403103842">Sync isn't working. Tap to fix.</translation>
 <translation id="4375040482473363939">QR code Search</translation>
 <translation id="4378154925671717803">Phone</translation>
 <translation id="441868831736628555">Privacy Notice</translation>
@@ -188,6 +182,7 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4508750114462689118">Close sign-in promo</translation>
 <translation id="4526249700380860531">View and manage saved passwords at <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Try signing in again.</translation>
+<translation id="457386861538956877">More...</translation>
 <translation id="461440297010471931">Searching with Google</translation>
 <translation id="4620246317052452550">Pages That You've Read</translation>
 <translation id="4636930964841734540">Info</translation>
@@ -243,6 +238,7 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="5771816112378578655">Setup in progress...</translation>
 <translation id="5816228676161003208">This lets you search faster using your voice.</translation>
 <translation id="5846482154967366008">Search Engine</translation>
+<translation id="5854790677617711513">Older than 30 days</translation>
 <translation id="5857090052475505287">New Folder</translation>
 <translation id="5857770089550859117">Passphrase required to start sync.</translation>
 <translation id="5860033963881614850">Off</translation>
@@ -267,7 +263,6 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="6122191549521593678">Online</translation>
 <translation id="6127379762771434464">Item removed</translation>
 <translation id="6136914049981179737">Seconds ago</translation>
-<translation id="6149061208933997199">Use Password</translation>
 <translation id="6158823227857319455">New Tab</translation>
 <translation id="616831107264507309">Read Later</translation>
 <translation id="6184086493125982861">Show Tabs</translation>
@@ -277,7 +272,6 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="6254066287920239840">Open links in the app instead of the browser.</translation>
 <translation id="6255097610484507482">Edit Credit Card</translation>
 <translation id="6308436439357671616">This lets you take and upload photos.</translation>
-<translation id="6314335155547195432">Generate Password</translation>
 <translation id="6324528485781869530">Switch Sync Account</translation>
 <translation id="6324669097367352121">Sign in settings</translation>
 <translation id="6337234675334993532">Encryption</translation>
@@ -295,7 +289,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="6418346271604475326">Preparing PDF</translation>
 <translation id="6445051938772793705">Country</translation>
 <translation id="6445981559479772097">Message sent.</translation>
-<translation id="6456425917241817154">Password Generated by Chrome</translation>
 <translation id="6464071786529933911">Open in New Incognito Tab</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> items deleted</translation>
 <translation id="6541915733953096570">Past Hour</translation>
@@ -309,6 +302,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="6785453220513215166">Sending crash report...</translation>
 <translation id="679325081238418596">Get your bookmarks, history, passwords and other settings on all your devices</translation>
 <translation id="6797885426782475225">Voice Search</translation>
+<translation id="6807889908376551050">Show All...</translation>
 <translation id="681368974849482173">Item created</translation>
 <translation id="6896758677409633944">Copy</translation>
 <translation id="6903907808598579934">Turn on sync</translation>
@@ -317,9 +311,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="7004499039102548441">Recent tabs</translation>
 <translation id="7006788746334555276">Content Settings</translation>
 <translation id="7031882061095297553">Sync to</translation>
+<translation id="7053983685419859001">Block</translation>
 <translation id="7062545763355031412">Accept and switch accounts</translation>
 <translation id="7108338896283013870">Hide</translation>
-<translation id="7131892264600713844">Showing history from this device. <ph name="BEGIN_LINK" />Find out more.<ph name="END_LINK" /></translation>
 <translation id="7133798577887235672">Full Name</translation>
 <translation id="7136892417564438900">Camera is unavailable</translation>
 <translation id="7159472599653637159">Request Mobile Site</translation>
@@ -338,7 +332,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="7456847797759667638">Open Location...</translation>
 <translation id="7464701184726199289">This clears synced data from all devices. Saved site settings will not be deleted and may reflect your browsing habits. <ph name="BEGIN_LINK" />Find out more<ph name="END_LINK" /></translation>
 <translation id="7472734401283673885">Company Name</translation>
-<translation id="7473891865547856676">No Thanks</translation>
 <translation id="7481312909269577407">Forward</translation>
 <translation id="750493650310597496">0 selected</translation>
 <translation id="7514365320538308">Download</translation>
@@ -351,12 +344,10 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="7649070708921625228">Help</translation>
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7671141431838911305">INSTALL</translation>
-<translation id="7677825787905683892">Choose default email app</translation>
 <translation id="7765158879357617694">Move</translation>
 <translation id="7769602470925380267">Accept and sign out</translation>
 <translation id="7772032839648071052">Confirm passphrase</translation>
 <translation id="780301667611848630">No, thank you</translation>
-<translation id="7851858861565204677">Other Devices</translation>
 <translation id="7859704718976024901">Browsing history</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7947953824732555851">Accept and sign in</translation>
@@ -369,7 +360,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="806745655614357130">Keep my data separate</translation>
 <translation id="8076014560081431679">Saved site settings will not be deleted and may reflect your browsing habits. <ph name="BEGIN_LINK" />Find out more<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Close All Tabs</translation>
-<translation id="8137558756159375272">Touch to Search sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK" />Settings<ph name="END_LINK" />.</translation>
 <translation id="8205564605687841303">Cancel</translation>
 <translation id="8225985093977202398">Cached Images and Files</translation>
 <translation id="8261506727792406068">Delete</translation>
@@ -382,6 +372,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="8458397775385147834">1 item deleted</translation>
 <translation id="8487700953926739672">Available offline</translation>
 <translation id="8503813439785031346">Username</translation>
+<translation id="850600235656508448">Open in Incognito</translation>
 <translation id="8517375800490286174">Open-Source Licences</translation>
 <translation id="8524799873541103884"><ph name="INCOGNITO" /> Tabs <ph name="FIRST_VISIBLE_TAB" /> through <ph name="LAST_VISIBLE_TAB" /> of <ph name="NUMBER_OF_OPEN_TABS" /></translation>
 <translation id="8532105204136943229">Year of Expiry</translation>
@@ -400,6 +391,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="8775144690796719618">Invalid URL</translation>
 <translation id="8820817407110198400">Bookmarks</translation>
 <translation id="8840513115188359703">You won't be signed out of your Google Account.</translation>
+<translation id="8870413625673593573">Recently Closed</translation>
 <translation id="8881801611828450202">Search <ph name="SEARCH_ENGINE" /> for This Image</translation>
 <translation id="8904976895050290827">Chrome Sync</translation>
 <translation id="895541991026785598">Report an Issue</translation>
@@ -415,7 +407,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="9083392325882095631">1 item</translation>
 <translation id="9100610230175265781">Passphrase required</translation>
 <translation id="9148126808321036104">Sign in again</translation>
-<translation id="914898748153555155">You can change this preference at any time in Chrome settings</translation>
 <translation id="91549621916703028">Create multiple tabs for all your tasks</translation>
 <translation id="9157836665414082580">Suppress Dialogues</translation>
 <translation id="9188680907066685419">Sign out of managed account</translation>
@@ -427,4 +418,5 @@ Your data was encrypted with your sync passphrase on <ph name="TIME" />. Enter i
 <translation id="976982866697960176">Manage Synced Data…</translation>
 <translation id="988141524645182168">Other Devices</translation>
 <translation id="989988560359834682">Edit Address</translation>
+<translation id="994757059139821576">Article Suggestions</translation>
 </translationbundle>

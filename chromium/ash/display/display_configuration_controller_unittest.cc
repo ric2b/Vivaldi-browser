@@ -4,8 +4,8 @@
 
 #include "ash/display/display_configuration_controller.h"
 
-#include "ash/ash_switches.h"
 #include "ash/display/display_configuration_controller_test_api.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
@@ -26,8 +26,8 @@ display::Display::Rotation GetDisplayRotation(int64_t display_id) {
 
 class DisplayConfigurationControllerSmoothRotationTest : public AshTestBase {
  public:
-  DisplayConfigurationControllerSmoothRotationTest() {}
-  ~DisplayConfigurationControllerSmoothRotationTest() override {}
+  DisplayConfigurationControllerSmoothRotationTest() = default;
+  ~DisplayConfigurationControllerSmoothRotationTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(

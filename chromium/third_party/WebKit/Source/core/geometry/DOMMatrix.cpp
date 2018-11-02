@@ -5,6 +5,7 @@
 #include "core/geometry/DOMMatrix.h"
 
 #include "core/dom/ExecutionContext.h"
+#include "platform/transforms/AffineTransform.h"
 
 namespace blink {
 
@@ -20,7 +21,7 @@ DOMMatrix* DOMMatrix::Create(ExecutionContext* execution_context,
 DOMMatrix* DOMMatrix::Create(ExecutionContext* execution_context,
                              StringOrUnrestrictedDoubleSequence& init,
                              ExceptionState& exception_state) {
-  if (init.isString()) {
+  if (init.IsString()) {
     if (!execution_context->IsDocument()) {
       exception_state.ThrowTypeError(
           "DOMMatrix can't be constructed with strings on workers.");
@@ -28,12 +29,13 @@ DOMMatrix* DOMMatrix::Create(ExecutionContext* execution_context,
     }
 
     DOMMatrix* matrix = new DOMMatrix(TransformationMatrix());
-    matrix->SetMatrixValueFromString(init.getAsString(), exception_state);
+    matrix->SetMatrixValueFromString(execution_context, init.GetAsString(),
+                                     exception_state);
     return matrix;
   }
 
-  if (init.isUnrestrictedDoubleSequence()) {
-    const Vector<double>& sequence = init.getAsUnrestrictedDoubleSequence();
+  if (init.IsUnrestrictedDoubleSequence()) {
+    const Vector<double>& sequence = init.GetAsUnrestrictedDoubleSequence();
     if (sequence.size() != 6 && sequence.size() != 16) {
       exception_state.ThrowTypeError(
           "The sequence must contain 6 elements for a 2D matrix or 16 elements "
@@ -94,6 +96,17 @@ DOMMatrix::DOMMatrix(T sequence, int size)
 
 DOMMatrix::DOMMatrix(const TransformationMatrix& matrix, bool is2d)
     : DOMMatrixReadOnly(matrix, is2d) {}
+
+DOMMatrix* DOMMatrix::fromMatrix2D(DOMMatrix2DInit& other,
+                                   ExceptionState& exception_state) {
+  if (!ValidateAndFixup2D(other, exception_state)) {
+    DCHECK(exception_state.HadException());
+    return nullptr;
+  }
+  return new DOMMatrix({other.m11(), other.m12(), other.m21(), other.m22(),
+                        other.m41(), other.m42()},
+                       true);
+}
 
 DOMMatrix* DOMMatrix::fromMatrix(DOMMatrixInit& other,
                                  ExceptionState& exception_state) {
@@ -285,18 +298,27 @@ DOMMatrix* DOMMatrix::perspectiveSelf(double p) {
 }
 
 DOMMatrix* DOMMatrix::invertSelf() {
-  if (matrix_->IsInvertible()) {
-    matrix_ = TransformationMatrix::Create(matrix_->Inverse());
+  if (is2d_) {
+    AffineTransform affine_transform = matrix_->ToAffineTransform();
+    if (affine_transform.IsInvertible()) {
+      *matrix_ = affine_transform.Inverse();
+      return this;
+    }
   } else {
-    SetNAN();
-    SetIs2D(false);
+    if (matrix_->IsInvertible()) {
+      *matrix_ = matrix_->Inverse();
+      return this;
+    }
   }
+  SetNAN();
+  SetIs2D(false);
   return this;
 }
 
-DOMMatrix* DOMMatrix::setMatrixValue(const String& input_string,
+DOMMatrix* DOMMatrix::setMatrixValue(const ExecutionContext* execution_context,
+                                     const String& input_string,
                                      ExceptionState& exception_state) {
-  SetMatrixValueFromString(input_string, exception_state);
+  SetMatrixValueFromString(execution_context, input_string, exception_state);
   return this;
 }
 

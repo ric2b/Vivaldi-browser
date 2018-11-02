@@ -25,10 +25,12 @@ IN_PROC_BROWSER_TEST_F(ContentSettingImageModelBrowserTest, CreateBubbleModel) {
   content_settings->BlockAllContentForTesting();
 
   // Automatic downloads are handled by DownloadRequestLimiter.
-  g_browser_process->download_request_limiter()
-      ->GetDownloadState(web_contents, web_contents, true)
-      ->SetDownloadStatusAndNotify(
-          DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED);
+  DownloadRequestLimiter::TabDownloadState* tab_download_state =
+      g_browser_process->download_request_limiter()->GetDownloadState(
+          web_contents, web_contents, true);
+  tab_download_state->set_download_seen();
+  tab_download_state->SetDownloadStatusAndNotify(
+      DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED);
 
   // Test that image models tied to a single content setting create bubbles tied
   // to the same setting.
@@ -89,7 +91,6 @@ IN_PROC_BROWSER_TEST_F(ContentSettingImageModelBrowserTest,
   Profile* profile = browser()->profile();
   WebContents::CreateParams create_params(profile);
   WebContents* other_web_contents = WebContents::Create(create_params);
-  browser()->tab_strip_model()->TabStripModel::AppendWebContents(
-      other_web_contents, true);
+  browser()->tab_strip_model()->AppendWebContents(other_web_contents, true);
   EXPECT_TRUE(model->ShouldRunAnimation(other_web_contents));
 }

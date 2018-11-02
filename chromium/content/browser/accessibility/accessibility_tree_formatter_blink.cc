@@ -21,14 +21,16 @@
 namespace content {
 
 AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
-    : AccessibilityTreeFormatter() {
-}
+    : AccessibilityTreeFormatterBrowser() {}
 
 AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {
 }
 
 const char* const TREE_DATA_ATTRIBUTES[] = {"TreeData.textSelStartOffset",
                                             "TreeData.textSelEndOffset"};
+
+const char* STATE_FOCUSED = "focused";
+const char* STATE_OFFSCREEN = "offscreen";
 
 uint32_t AccessibilityTreeFormatterBlink::ChildCount(
     const BrowserAccessibility& node) const {
@@ -138,7 +140,8 @@ void AccessibilityTreeFormatterBlink::AddProperties(
   dict->SetInteger("boundsWidth", bounds.width());
   dict->SetInteger("boundsHeight", bounds.height());
 
-  gfx::Rect page_bounds = node.GetPageBoundsRect();
+  bool offscreen = false;
+  gfx::Rect page_bounds = node.GetPageBoundsRect(&offscreen);
   dict->SetInteger("pageBoundsX", page_bounds.x());
   dict->SetInteger("pageBoundsY", page_bounds.y());
   dict->SetInteger("pageBoundsWidth", page_bounds.width());
@@ -148,6 +151,12 @@ void AccessibilityTreeFormatterBlink::AddProperties(
                    node.GetData().transform &&
                    !node.GetData().transform->IsIdentity());
 
+  gfx::Rect unclipped_bounds = node.GetPageBoundsRect(&offscreen, false);
+  dict->SetInteger("unclippedBoundsX", unclipped_bounds.x());
+  dict->SetInteger("unclippedBoundsY", unclipped_bounds.y());
+  dict->SetInteger("unclippedBoundsWidth", unclipped_bounds.width());
+  dict->SetInteger("unclippedBoundsHeight", unclipped_bounds.height());
+
   for (int state_index = ui::AX_STATE_NONE;
        state_index <= ui::AX_STATE_LAST;
        ++state_index) {
@@ -155,6 +164,9 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     if (node.HasState(state))
       dict->SetBoolean(ui::ToString(state), true);
   }
+
+  if (offscreen)
+    dict->SetBoolean(STATE_OFFSCREEN, true);
 
   for (int attr_index = ui::AX_STRING_ATTRIBUTE_NONE;
        attr_index <= ui::AX_STRING_ATTRIBUTE_LAST;
@@ -197,7 +209,7 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     if (node.HasIntListAttribute(attr)) {
       std::vector<int32_t> values;
       node.GetIntListAttribute(attr, &values);
-      auto value_list = base::MakeUnique<base::ListValue>();
+      auto value_list = std::make_unique<base::ListValue>();
       for (size_t i = 0; i < values.size(); ++i) {
         if (ui::IsNodeIdIntListAttribute(attr)) {
           BrowserAccessibility* target = node.manager()->GetFromID(values[i]);
@@ -236,8 +248,13 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     dict->SetString("actions", base::JoinString(actions_strings, ","));
 }
 
-base::string16 AccessibilityTreeFormatterBlink::ToString(
-    const base::DictionaryValue& dict) {
+base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
+    const base::DictionaryValue& dict,
+    base::DictionaryValue* filtered_dict_result) {
+  base::string16 error_value;
+  if (dict.GetString("error", &error_value))
+    return error_value;
+
   base::string16 line;
 
   if (show_ids()) {
@@ -261,6 +278,15 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     WriteAttribute(false, ui::ToString(state), &line);
   }
 
+  // Offscreen and Focused states are not in the state list.
+  bool value = false;
+  dict.GetBoolean(STATE_OFFSCREEN, &value);
+  if (value)
+    WriteAttribute(false, STATE_OFFSCREEN, &line);
+  dict.GetBoolean(STATE_FOCUSED, &value);
+  if (value)
+    WriteAttribute(false, STATE_FOCUSED, &line);
+
   WriteAttribute(false,
                  FormatCoordinates("location", "boundsX", "boundsY", dict),
                  &line);
@@ -276,6 +302,14 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
                  FormatCoordinates("pageSize",
                                    "pageBoundsWidth", "pageBoundsHeight", dict),
                  &line);
+  WriteAttribute(false,
+                 FormatCoordinates("unclippedLocation", "unclippedBoundsX",
+                                   "unclippedBoundsY", dict),
+                 &line);
+  WriteAttribute(false,
+                 FormatCoordinates("unclippedSize", "unclippedBoundsWidth",
+                                   "unclippedBoundsHeight", dict),
+                 &line);
 
   bool transform;
   if (dict.GetBoolean("transform", &transform) && transform)
@@ -288,12 +322,10 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     std::string string_value;
     if (!dict.GetString(ui::ToString(attr), &string_value))
       continue;
-    WriteAttribute(false,
-                   base::StringPrintf(
-                       "%s='%s'",
-                       ui::ToString(attr).c_str(),
-                       string_value.c_str()),
-                   &line);
+    WriteAttribute(
+        false,
+        base::StringPrintf("%s='%s'", ui::ToString(attr), string_value.c_str()),
+        &line);
   }
 
   for (int attr_index = ui::AX_INT_ATTRIBUTE_NONE;
@@ -303,10 +335,10 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     std::string string_value;
     if (!dict.GetString(ui::ToString(attr), &string_value))
       continue;
-    WriteAttribute(false,
-                   base::StringPrintf("%s=%s", ui::ToString(attr).c_str(),
-                                      string_value.c_str()),
-                   &line);
+    WriteAttribute(
+        false,
+        base::StringPrintf("%s=%s", ui::ToString(attr), string_value.c_str()),
+        &line);
   }
 
   for (int attr_index = ui::AX_BOOL_ATTRIBUTE_NONE;
@@ -317,10 +349,8 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     if (!dict.GetBoolean(ui::ToString(attr), &bool_value))
       continue;
     WriteAttribute(false,
-                   base::StringPrintf(
-                       "%s=%s",
-                       ui::ToString(attr).c_str(),
-                       bool_value ? "true" : "false"),
+                   base::StringPrintf("%s=%s", ui::ToString(attr),
+                                      bool_value ? "true" : "false"),
                    &line);
   }
 
@@ -331,8 +361,7 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     if (!dict.GetDouble(ui::ToString(attr), &float_value))
       continue;
     WriteAttribute(
-        false,
-        base::StringPrintf("%s=%.2f", ui::ToString(attr).c_str(), float_value),
+        false, base::StringPrintf("%s=%.2f", ui::ToString(attr), float_value),
         &line);
   }
 
@@ -343,7 +372,8 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     const base::ListValue* value;
     if (!dict.GetList(ui::ToString(attr), &value))
       continue;
-    std::string attr_string = ui::ToString(attr) + "=";
+    std::string attr_string(ui::ToString(attr));
+    attr_string.push_back('=');
     for (size_t i = 0; i < value->GetSize(); ++i) {
       if (i > 0)
         attr_string += ",";
@@ -372,7 +402,7 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
     if (!dict.Get(attribute_name, &value))
       continue;
 
-    switch (value->GetType()) {
+    switch (value->type()) {
       case base::Value::Type::STRING: {
         std::string string_value;
         value->GetAsString(&string_value);

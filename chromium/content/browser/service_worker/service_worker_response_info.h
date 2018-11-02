@@ -36,7 +36,6 @@ class CONTENT_EXPORT ServiceWorkerResponseInfo
                           bool did_navigation_preload);
   void OnStartCompleted(
       bool was_fetched_via_service_worker,
-      bool was_fetched_via_foreign_fetch,
       bool was_fallback_required,
       const std::vector<GURL>& url_list_via_service_worker,
       network::mojom::FetchResponseType response_type_via_service_worker,
@@ -97,7 +96,6 @@ class CONTENT_EXPORT ServiceWorkerResponseInfo
   ServiceWorkerResponseInfo();
 
   bool was_fetched_via_service_worker_ = false;
-  bool was_fetched_via_foreign_fetch_ = false;
   bool was_fallback_required_ = false;
   std::vector<GURL> url_list_via_service_worker_;
   network::mojom::FetchResponseType response_type_via_service_worker_ =
@@ -108,6 +106,8 @@ class CONTENT_EXPORT ServiceWorkerResponseInfo
   std::string response_cache_storage_cache_name_;
   ServiceWorkerHeaderList cors_exposed_header_names_;
   bool did_navigation_preload_ = false;
+
+  static int user_data_key_;  // Only address is used.
 };
 
 }  // namespace content

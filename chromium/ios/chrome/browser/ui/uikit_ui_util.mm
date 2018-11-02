@@ -15,6 +15,7 @@
 #include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/numerics/math_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -173,7 +174,7 @@ void AddRoundedBorderShadow(UIView* view, CGFloat radius, UIColor* color) {
 UIImage* CaptureViewWithOption(UIView* view,
                                CGFloat scale,
                                CaptureViewOption option) {
-  UIGraphicsBeginImageContextWithOptions(view.bounds.size, YES /* opaque */,
+  UIGraphicsBeginImageContextWithOptions(view.bounds.size, NO /* not opaque */,
                                          scale);
   if (option != kClientSideRendering) {
     [view drawViewHierarchyInRect:view.bounds
@@ -229,7 +230,7 @@ BOOL ImageHasAlphaChannel(UIImage* image) {
 
 UIImage* NativeReversableImage(int imageID, BOOL reversable) {
   DCHECK(imageID);
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   UIImage* image = rb.GetNativeImageNamed(imageID).ToUIImage();
   return (reversable && UseRTLLayout())
              ? [image imageFlippedForRightToLeftLayoutDirection]
@@ -338,7 +339,8 @@ UIImage* BlurImage(UIImage* image,
       // output pixel.
       //
       CGFloat inputRadius = blurRadius * [[UIScreen mainScreen] scale];
-      NSUInteger radius = floor(inputRadius * 3. * sqrt(2 * M_PI) / 4 + 0.5);
+      NSUInteger radius =
+          floor(inputRadius * 3. * sqrt(2 * base::kPiDouble) / 4 + 0.5);
       if (radius % 2 != 1) {
         // force radius to be odd so that the three box-blur methodology works.
         radius += 1;
@@ -560,7 +562,7 @@ UIResponder* GetFirstResponder() {
 // On iOS10 and above, trigger a haptic vibration for the user selecting an
 // action. This is a no-op for devices that do not support it.
 void TriggerHapticFeedbackForAction() {
-  if (base::ios::IsRunningOnIOS10OrLater()) {
+  if (@available(iOS 10, *)) {
     UIImpactFeedbackGenerator* generator =
         [[UIImpactFeedbackGenerator alloc] init];
     [generator impactOccurred];
@@ -570,7 +572,7 @@ void TriggerHapticFeedbackForAction() {
 // On iOS10 and above, trigger a haptic vibration for the change in selection.
 // This is a no-op for devices that do not support it.
 void TriggerHapticFeedbackForSelectionChange() {
-  if (base::ios::IsRunningOnIOS10OrLater()) {
+  if (@available(iOS 10, *)) {
     UISelectionFeedbackGenerator* generator =
         [[UISelectionFeedbackGenerator alloc] init];
     [generator selectionChanged];
@@ -580,9 +582,17 @@ void TriggerHapticFeedbackForSelectionChange() {
 // On iOS10 and above, trigger a haptic vibration for a notification.
 // This is a no-op for devices that do not support it.
 void TriggerHapticFeedbackForNotification(UINotificationFeedbackType type) {
-  if (base::ios::IsRunningOnIOS10OrLater()) {
+  if (@available(iOS 10, *)) {
     UINotificationFeedbackGenerator* generator =
         [[UINotificationFeedbackGenerator alloc] init];
     [generator notificationOccurred:type];
+  }
+}
+
+UIEdgeInsets SafeAreaInsetsForView(UIView* view) {
+  if (@available(iOS 11, *)) {
+    return view.safeAreaInsets;
+  } else {
+    return UIEdgeInsetsZero;
   }
 }

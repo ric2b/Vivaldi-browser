@@ -5,10 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_API_DECLARATIVE_NET_REQUEST_CONSTANTS_H_
 #define EXTENSIONS_BROWSER_API_DECLARATIVE_NET_REQUEST_CONSTANTS_H_
 
+#include "extensions/common/api/declarative_net_request/constants.h"
+
 namespace extensions {
 namespace declarative_net_request {
 
-// The result of parsing a JSON rule provided by an extension.
+// The result of parsing JSON rules provided by an extension. Can correspond to
+// a single or multiple rules.
 enum class ParseResult {
   SUCCESS,
   ERROR_RESOURCE_TYPE_DUPLICATED,
@@ -21,17 +24,30 @@ enum class ParseResult {
   ERROR_EMPTY_RESOURCE_TYPES_LIST,
   ERROR_EMPTY_URL_FILTER,
   ERROR_INVALID_REDIRECT_URL,
+  ERROR_DUPLICATE_IDS,
+  ERROR_PERSISTING_RULESET,
 };
 
-// Minimum valid value of a declarative rule ID.
-constexpr int kMinValidID = 1;
+// Rule parsing errors.
+extern const char kErrorResourceTypeDuplicated[];
+extern const char kErrorEmptyRedirectRuleKey[];
+extern const char kErrorInvalidRuleKey[];
+extern const char kErrorNoApplicableResourceTypes[];
+extern const char kErrorEmptyList[];
+extern const char kErrorEmptyUrlFilter[];
+extern const char kErrorInvalidRedirectUrl[];
+extern const char kErrorListNotPassed[];
+extern const char kErrorDuplicateIDs[];
+extern const char kErrorPersisting[];
 
-// Minimum valid value of a declarative rule priority.
-constexpr int kMinValidPriority = 1;
+// Rule parsing install warnings.
+extern const char kRulesNotParsedWarning[];
 
-// Default priority used for rules when the priority is not explicity provided
-// by an extension.
-constexpr int kDefaultPriority = 1;
+// Histogram names.
+extern const char kIndexAndPersistRulesTimeHistogram[];
+extern const char kIndexRulesTimeHistogram[];
+extern const char kManifestRulesCountHistogram[];
+
 }  // namespace declarative_net_request
 }  // namespace extensions
 

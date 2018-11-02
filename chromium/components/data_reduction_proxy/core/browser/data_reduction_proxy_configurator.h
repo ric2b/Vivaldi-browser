@@ -35,23 +35,25 @@ class DataReductionProxyConfigurator {
 
   // Enables data reduction using the proxy servers in |proxies_for_http|.
   // |secure_transport_restricted| indicates that proxies going over secure
-  // transports can not be used.
+  // transports can not be used. |insecure_proxies_restricted| indicates that
+  // insecure proxies can not be used.
   // TODO: crbug.com/675764: Pass a vector of DataReductionProxyServer
   // instead of net::ProxyServer.
   virtual void Enable(
       bool secure_transport_restricted,
+      bool insecure_proxies_restricted,
       const std::vector<DataReductionProxyServer>& proxies_for_http);
 
   // Constructs a proxy configuration suitable for disabling the Data Reduction
   // proxy.
   virtual void Disable();
 
-  // Adds a host pattern to bypass. This should follow the same syntax used
-  // in net::ProxyBypassRules; that is, a hostname pattern, a hostname suffix
-  // pattern, an IP literal, a CIDR block, or the magic string '<local>'.
+  // Sets the host patterns to bypass.
+  //
+  // See net::ProxyBypassRules::ParseFromString for the appropriate syntax.
   // Bypass settings persist for the life of this object and are applied
   // each time the proxy is enabled, but are not updated while it is enabled.
-  virtual void AddHostPatternToBypass(const std::string& pattern);
+  void SetBypassRules(const std::string& patterns);
 
   // Returns the current data reduction proxy config, even if it is not the
   // effective configuration used by the proxy service.
@@ -59,16 +61,18 @@ class DataReductionProxyConfigurator {
 
   // Constructs a proxy configuration suitable for enabling the Data Reduction
   // proxy. If true, |secure_transport_restricted| indicates that proxies going
-  // over secure transports (HTTPS) should/can not be used.
+  // over secure transports (HTTPS, QUIC) should/can not be used. If true,
+  // |insecure_proxies_restricted| indicates that HTTP proxies cannot be used.
   net::ProxyConfig CreateProxyConfig(
       bool secure_transport_restricted,
+      bool insecure_proxies_restricted,
       const std::vector<DataReductionProxyServer>& proxies_for_http) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfiguratorTest, TestBypassList);
 
   // Rules for bypassing the Data Reduction Proxy.
-  std::vector<std::string> bypass_rules_;
+  net::ProxyBypassRules bypass_rules_;
 
   // The Data Reduction Proxy's configuration. This contains the list of
   // acceptable data reduction proxies and bypass rules. It should be accessed

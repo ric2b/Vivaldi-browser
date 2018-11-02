@@ -4,6 +4,7 @@
 
 #include "chrome/browser/notifications/notification_platform_bridge_mac.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,11 +17,11 @@
 #include "base/mac/scoped_mach_port.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -39,6 +40,7 @@
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h"
 #include "third_party/crashpad/crashpad/client/crashpad_client.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -51,7 +53,7 @@
 // notification#title in NSUserNotification.title
 // notification#message in NSUserNotification.informativeText
 // notification#context_message in NSUserNotification.subtitle
-// notification#tag in NSUserNotification.identifier (10.9)
+// notification#id in NSUserNotification.identifier (10.9)
 // notification#icon in NSUserNotification.contentImage (10.9)
 // Site settings button is implemented as NSUserNotification's action button
 // Not easy to implement:
@@ -66,10 +68,12 @@ namespace {
 // Callback to run once the profile has been loaded in order to perform a
 // given |operation| in a notification.
 void ProfileLoadedCallback(NotificationCommon::Operation operation,
-                           NotificationCommon::Type notification_type,
-                           const std::string& origin,
+                           NotificationHandler::Type notification_type,
+                           const GURL& origin,
                            const std::string& notification_id,
-                           int action_index,
+                           const base::Optional<int>& action_index,
+                           const base::Optional<base::string16>& reply,
+                           const base::Optional<bool>& by_user,
                            Profile* profile) {
   if (!profile) {
     // TODO(miguelg): Add UMA for this condition.
@@ -81,27 +85,30 @@ void ProfileLoadedCallback(NotificationCommon::Operation operation,
   auto* display_service =
       NotificationDisplayServiceFactory::GetForProfile(profile);
 
-  display_service->ProcessNotificationOperation(
-      operation, notification_type, origin, notification_id, action_index,
-      base::NullableString16() /* reply */);
+  display_service->ProcessNotificationOperation(operation, notification_type,
+                                                origin, notification_id,
+                                                action_index, reply, by_user);
 }
 
 // Loads the profile and process the Notification response
 void DoProcessNotificationResponse(NotificationCommon::Operation operation,
-                                   NotificationCommon::Type type,
+                                   NotificationHandler::Type type,
                                    const std::string& profile_id,
                                    bool incognito,
-                                   const std::string& origin,
+                                   const GURL& origin,
                                    const std::string& notification_id,
-                                   int32_t button_index) {
+                                   const base::Optional<int>& action_index,
+                                   const base::Optional<base::string16>& reply,
+                                   const base::Optional<bool>& by_user) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   ProfileManager* profileManager = g_browser_process->profile_manager();
   DCHECK(profileManager);
 
   profileManager->LoadProfile(
-      profile_id, incognito, base::Bind(&ProfileLoadedCallback, operation, type,
-                                        origin, notification_id, button_index));
+      profile_id, incognito,
+      base::Bind(&ProfileLoadedCallback, operation, type, origin,
+                 notification_id, action_index, reply, by_user));
 }
 
 // This enum backs an UMA histogram, so it should be treated as append-only.
@@ -116,7 +123,8 @@ void RecordXPCEvent(XPCConnectionEvent event) {
                             XPC_CONNECTION_EVENT_COUNT);
 }
 
-base::string16 CreateNotificationTitle(const Notification& notification) {
+base::string16 CreateNotificationTitle(
+    const message_center::Notification& notification) {
   base::string16 title;
   if (notification.type() == message_center::NOTIFICATION_TYPE_PROGRESS) {
     title += base::FormatPercent(notification.progress());
@@ -126,13 +134,15 @@ base::string16 CreateNotificationTitle(const Notification& notification) {
   return title;
 }
 
-bool IsPersistentNotification(const Notification& notification) {
+bool IsPersistentNotification(
+    const message_center::Notification& notification) {
   return notification.never_timeout() ||
          notification.type() == message_center::NOTIFICATION_TYPE_PROGRESS;
 }
 
-base::string16 CreateNotificationContext(const Notification& notification,
-                                         bool requires_attribution) {
+base::string16 CreateNotificationContext(
+    const message_center::Notification& notification,
+    bool requires_attribution) {
   if (!requires_attribution)
     return notification.context_message();
 
@@ -145,15 +155,15 @@ base::string16 CreateNotificationContext(const Notification& notification,
   // These numbers have been obtained through experimentation on various
   // Mac OS platforms.
 
-  constexpr size_t kMaxDomainLenghtAlert = 19;
-  constexpr size_t kMaxDomainLenghtBanner = 28;
+  constexpr size_t kMaxDomainLengthAlert = 19;
+  constexpr size_t kMaxDomainLengthBanner = 28;
 
   size_t max_characters = IsPersistentNotification(notification)
-                              ? kMaxDomainLenghtAlert
-                              : kMaxDomainLenghtBanner;
+                              ? kMaxDomainLengthAlert
+                              : kMaxDomainLengthBanner;
 
   base::string16 origin = url_formatter::FormatOriginForSecurityDisplay(
-      url::Origin(notification.origin_url()),
+      url::Origin::Create(notification.origin_url()),
       url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
 
   if (origin.size() <= max_characters)
@@ -212,12 +222,18 @@ NotificationPlatformBridge* NotificationPlatformBridge::Create() {
       alert_dispatcher.get());
 }
 
+// static
+bool NotificationPlatformBridge::CanHandleType(
+    NotificationHandler::Type notification_type) {
+  return notification_type != NotificationHandler::Type::TRANSIENT;
+}
+
 void NotificationPlatformBridgeMac::Display(
-    NotificationCommon::Type notification_type,
-    const std::string& notification_id,
+    NotificationHandler::Type notification_type,
     const std::string& profile_id,
     bool incognito,
-    const Notification& notification) {
+    const message_center::Notification& notification,
+    std::unique_ptr<NotificationCommon::Metadata> metadata) {
   base::scoped_nsobject<NotificationBuilder> builder(
       [[NotificationBuilder alloc]
       initWithCloseLabel:l10n_util::GetNSString(IDS_NOTIFICATION_BUTTON_CLOSE)
@@ -238,7 +254,7 @@ void NotificationPlatformBridgeMac::Display(
 
   bool requires_attribution =
       notification.context_message().empty() &&
-      notification_type != NotificationCommon::EXTENSION;
+      notification_type != NotificationHandler::Type::EXTENSION;
   [builder setSubTitle:base::SysUTF16ToNSString(CreateNotificationContext(
                            notification, requires_attribution))];
 
@@ -247,7 +263,7 @@ void NotificationPlatformBridgeMac::Display(
   }
 
   [builder setShowSettingsButton:(notification_type !=
-                                  NotificationCommon::EXTENSION)];
+                                  NotificationHandler::Type::EXTENSION)];
   std::vector<message_center::ButtonInfo> buttons = notification.buttons();
   if (!buttons.empty()) {
     DCHECK_LE(buttons.size(), blink::kWebNotificationMaxActions);
@@ -258,36 +274,32 @@ void NotificationPlatformBridgeMac::Display(
     [builder setButtons:buttonOne secondaryButton:buttonTwo];
   }
 
-  // Tag
-  if (!notification.tag().empty()) {
-    [builder setTag:base::SysUTF8ToNSString(notification.tag())];
-
-    // If renotify is needed, delete the notification with the same tag
-    // from the notification center before displaying this one.
-    // TODO(miguelg): This will need to work for alerts as well via XPC
-    // once supported.
-    if (notification.renotify()) {
-      NSUserNotificationCenter* notification_center =
-          [NSUserNotificationCenter defaultUserNotificationCenter];
-      for (NSUserNotification* existing_notification in
-           [notification_center deliveredNotifications]) {
-        NSString* identifier =
-            [existing_notification valueForKey:@"identifier"];
-        if ([identifier
-                isEqualToString:base::SysUTF8ToNSString(notification.tag())]) {
-          [notification_center
-              removeDeliveredNotification:existing_notification];
-          break;
-        }
+  [builder setTag:base::SysUTF8ToNSString(notification.id())];
+  // If renotify is needed, delete the notification with the same id
+  // from the notification center before displaying this one.
+  // TODO(miguelg): This will need to work for alerts as well via XPC
+  // once supported.
+  if (notification.renotify()) {
+    NSUserNotificationCenter* notification_center =
+        [NSUserNotificationCenter defaultUserNotificationCenter];
+    for (NSUserNotification* existing_notification in
+         [notification_center deliveredNotifications]) {
+      NSString* identifier = [existing_notification valueForKey:@"identifier"];
+      if ([identifier
+              isEqualToString:base::SysUTF8ToNSString(notification.id())]) {
+        [notification_center removeDeliveredNotification:existing_notification];
+        break;
       }
     }
   }
 
   [builder setOrigin:base::SysUTF8ToNSString(notification.origin_url().spec())];
-  [builder setNotificationId:base::SysUTF8ToNSString(notification_id)];
+  [builder setNotificationId:base::SysUTF8ToNSString(notification.id())];
   [builder setProfileId:base::SysUTF8ToNSString(profile_id)];
   [builder setIncognito:incognito];
-  [builder setNotificationType:[NSNumber numberWithInteger:notification_type]];
+  [builder
+      setNotificationType:[NSNumber numberWithInteger:static_cast<NSInteger>(
+                                                          notification_type)]];
 
   // Send persistent notifications to the XPC service so they
   // can be displayed as alerts. Chrome itself can only display
@@ -369,15 +381,22 @@ void NotificationPlatformBridgeMac::ProcessNotificationResponse(
   NSNumber* notification_type =
       [response objectForKey:notification_constants::kNotificationType];
 
+  base::Optional<int> action_index;
+  if (button_index.intValue !=
+      notification_constants::kNotificationInvalidButtonIndex) {
+    action_index = button_index.intValue;
+  }
+
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
       base::Bind(DoProcessNotificationResponse,
                  static_cast<NotificationCommon::Operation>(
                      operation.unsignedIntValue),
-                 static_cast<NotificationCommon::Type>(
+                 static_cast<NotificationHandler::Type>(
                      notification_type.unsignedIntValue),
-                 profile_id, [is_incognito boolValue], notification_origin,
-                 notification_id, button_index.intValue));
+                 profile_id, [is_incognito boolValue],
+                 GURL(notification_origin), notification_id, action_index,
+                 base::nullopt /* reply */, true /* by_user */));
 }
 
 // static
@@ -405,7 +424,8 @@ bool NotificationPlatformBridgeMac::VerifyNotificationData(
   NSNumber* notification_type =
       [response objectForKey:notification_constants::kNotificationType];
 
-  if (button_index.intValue < -1 ||
+  if (button_index.intValue <
+          notification_constants::kNotificationInvalidButtonIndex ||
       button_index.intValue >=
           static_cast<int>(blink::kWebNotificationMaxActions)) {
     LOG(ERROR) << "Invalid number of buttons supplied "
@@ -429,7 +449,8 @@ bool NotificationPlatformBridgeMac::VerifyNotificationData(
     return false;
   }
 
-  if (notification_type.unsignedIntValue > NotificationCommon::TYPE_MAX) {
+  if (notification_type.unsignedIntValue >
+      static_cast<unsigned int>(NotificationHandler::Type::MAX)) {
     LOG(ERROR) << notification_type.unsignedIntValue
                << " Does not correspond to a valid operation.";
     return false;
@@ -547,7 +568,7 @@ getDisplayedAlertsForProfileId:(NSString*)profileId
                       callback:(GetDisplayedNotificationsCallback)callback {
   auto reply = ^(NSArray* alerts) {
     std::unique_ptr<std::set<std::string>> displayedNotifications =
-        base::MakeUnique<std::set<std::string>>();
+        std::make_unique<std::set<std::string>>();
 
     for (NSUserNotification* toast in
          [notificationCenter deliveredNotifications]) {

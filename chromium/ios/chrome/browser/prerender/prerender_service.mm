@@ -28,10 +28,6 @@ void PrerenderService::SetDelegate(id<PreloadControllerDelegate> delegate) {
   controller_.delegate = delegate;
 }
 
-id<PreloadProvider> PrerenderService::GetPreloadProvider() const {
-  return controller_;
-}
-
 void PrerenderService::StartPrerender(const GURL& url,
                                       const web::Referrer& referrer,
                                       ui::PageTransition transition,
@@ -51,8 +47,7 @@ bool PrerenderService::HasPrerenderForUrl(const GURL& url) {
 }
 
 bool PrerenderService::IsWebStatePrerendered(web::WebState* web_state) {
-  Tab* tab = LegacyTabHelper::GetTabForWebState(web_state);
-  return tab.isPrerenderTab;
+  return [controller_ isWebStatePrerendered:web_state];
 }
 
 std::unique_ptr<web::WebState> PrerenderService::ReleasePrerenderContents() {

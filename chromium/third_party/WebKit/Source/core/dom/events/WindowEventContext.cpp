@@ -29,7 +29,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/events/Event.h"
-#include "core/events/NodeEventContext.h"
+#include "core/dom/events/NodeEventContext.h"
 #include "core/frame/LocalDOMWindow.h"
 
 namespace blink {
@@ -57,7 +57,7 @@ bool WindowEventContext::HandleLocalEvents(Event& event) {
   return true;
 }
 
-DEFINE_TRACE(WindowEventContext) {
+void WindowEventContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(window_);
   visitor->Trace(target_);
 }

@@ -74,6 +74,11 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
   [self delayedNotifyDelegateOfSelection:row.value];
 }
 
+- (void)paymentRequestPickerViewControllerDidFinish:
+    (PaymentRequestPickerViewController*)controller {
+  [self.delegate countrySelectionCoordinatorDidReturn:self];
+}
+
 #pragma mark - Helper methods
 
 - (void)delayedNotifyDelegateOfSelection:(NSString*)countryCode {

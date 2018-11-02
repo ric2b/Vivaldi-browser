@@ -36,14 +36,14 @@ int64_t vp9_block_error_c(const tran_low_t* coeff,
                           int64_t* ssz);
 #define vp9_block_error vp9_block_error_c
 
-int64_t vp9_block_error_fp_c(const int16_t* coeff,
-                             const int16_t* dqcoeff,
+int64_t vp9_block_error_fp_c(const tran_low_t* coeff,
+                             const tran_low_t* dqcoeff,
                              int block_size);
-int64_t vp9_block_error_fp_neon(const int16_t* coeff,
-                                const int16_t* dqcoeff,
+int64_t vp9_block_error_fp_neon(const tran_low_t* coeff,
+                                const tran_low_t* dqcoeff,
                                 int block_size);
-RTCD_EXTERN int64_t (*vp9_block_error_fp)(const int16_t* coeff,
-                                          const int16_t* dqcoeff,
+RTCD_EXTERN int64_t (*vp9_block_error_fp)(const tran_low_t* coeff,
+                                          const tran_low_t* dqcoeff,
                                           int block_size);
 
 int vp9_denoiser_filter_c(const uint8_t* sig,
@@ -264,7 +264,15 @@ void vp9_scale_and_extend_frame_c(const struct yv12_buffer_config* src,
                                   struct yv12_buffer_config* dst,
                                   INTERP_FILTER filter_type,
                                   int phase_scaler);
-#define vp9_scale_and_extend_frame vp9_scale_and_extend_frame_c
+void vp9_scale_and_extend_frame_neon(const struct yv12_buffer_config* src,
+                                     struct yv12_buffer_config* dst,
+                                     INTERP_FILTER filter_type,
+                                     int phase_scaler);
+RTCD_EXTERN void (*vp9_scale_and_extend_frame)(
+    const struct yv12_buffer_config* src,
+    struct yv12_buffer_config* dst,
+    INTERP_FILTER filter_type,
+    int phase_scaler);
 
 void vp9_rtcd(void);
 
@@ -298,6 +306,9 @@ static void setup_rtcd_internal(void) {
   vp9_quantize_fp_32x32 = vp9_quantize_fp_32x32_c;
   if (flags & HAS_NEON)
     vp9_quantize_fp_32x32 = vp9_quantize_fp_32x32_neon;
+  vp9_scale_and_extend_frame = vp9_scale_and_extend_frame_c;
+  if (flags & HAS_NEON)
+    vp9_scale_and_extend_frame = vp9_scale_and_extend_frame_neon;
 }
 #endif
 

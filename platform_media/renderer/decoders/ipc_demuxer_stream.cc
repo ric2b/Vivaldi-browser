@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -22,10 +23,10 @@ PlatformMediaDataType DemuxerTypeToPlatformMediaDataType(
     DemuxerStream::Type type) {
   switch (type) {
     case DemuxerStream::AUDIO:
-      return PLATFORM_MEDIA_AUDIO;
+      return PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
 
     case DemuxerStream::VIDEO:
-      return PLATFORM_MEDIA_VIDEO;
+      return PlatformMediaDataType::PLATFORM_MEDIA_VIDEO;
 
     default:
       NOTREACHED();
@@ -114,7 +115,7 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
   // information, which is normally read from the data stream.
   AudioDecoderConfig audio_config;
   audio_config.Initialize(
-      kCodecPCM, platform_audio_config.format,
+      AudioCodec::kCodecPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
       platform_audio_config.samples_per_second, EmptyExtraData(), Unencrypted(),
       base::TimeDelta(), 0);
@@ -135,15 +136,19 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   DCHECK(platform_video_config.is_valid());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " Creating VideoDecoderConfig : kCodecH264 with HARDCODED values";
+          << " Creating VideoDecoderConfig : VideoCodec::kCodecH264 with HARDCODED values";
   // This demuxer stream is different from "normal" demuxers in that it outputs
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
   VideoDecoderConfig video_config;
-  video_config.Initialize(
-      kCodecH264, H264PROFILE_MAIN, PIXEL_FORMAT_YV12, COLOR_SPACE_UNSPECIFIED,
-      platform_video_config.coded_size, platform_video_config.visible_rect,
-      platform_video_config.natural_size,
+  video_config.Initialize(VideoCodec::kCodecH264,
+                          VideoCodecProfile::H264PROFILE_MAIN,
+                          VideoPixelFormat::PIXEL_FORMAT_YV12,
+                          ColorSpace::COLOR_SPACE_UNSPECIFIED,
+                          platform_video_config.rotation,
+                          platform_video_config.coded_size,
+                          platform_video_config.visible_rect,
+                          platform_video_config.natural_size,
       std::vector<uint8_t>(
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes)
@@ -156,12 +161,6 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
           << " ColorSpace : " << video_config.color_space();
 
   return video_config;
-}
-
-VideoRotation IPCDemuxerStream::video_rotation() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK_EQ(type_, VIDEO);
-  return ipc_media_pipeline_host_->video_config().rotation;
 }
 
 DemuxerStream::Type IPCDemuxerStream::type() const {

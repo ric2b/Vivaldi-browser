@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "modules/mediastream/MediaStream.h"
 #include "modules/mediastream/MediaStreamTrack.h"
 #include "modules/peerconnection/RTCRtpContributingSource.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -18,26 +19,33 @@
 namespace blink {
 
 // https://w3c.github.io/webrtc-pc/#rtcrtpreceiver-interface
-class RTCRtpReceiver final : public GarbageCollectedFinalized<RTCRtpReceiver>,
-                             public ScriptWrappable {
+class RTCRtpReceiver final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   // Takes ownership of the receiver.
-  RTCRtpReceiver(std::unique_ptr<WebRTCRtpReceiver>, MediaStreamTrack*);
+  RTCRtpReceiver(std::unique_ptr<WebRTCRtpReceiver>,
+                 MediaStreamTrack*,
+                 MediaStreamVector);
 
   MediaStreamTrack* track() const;
   const HeapVector<Member<RTCRtpContributingSource>>& getContributingSources();
 
+  const WebRTCRtpReceiver& web_receiver() const;
+  MediaStreamVector streams() const;
   void UpdateSourcesIfNeeded();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
+#if DCHECK_IS_ON()
+  bool StateMatchesWebReceiver() const;
+#endif  // DCHECK_IS_ON()
   void SetContributingSourcesNeedsUpdating();
 
   std::unique_ptr<WebRTCRtpReceiver> receiver_;
   Member<MediaStreamTrack> track_;
+  MediaStreamVector streams_;
 
   // All contributing sources that have ever been returned by
   // |getContributingSources| that are still alive. If |UpdateSourcesIfNeeded|

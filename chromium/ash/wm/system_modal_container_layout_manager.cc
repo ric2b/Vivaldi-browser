@@ -5,15 +5,16 @@
 #include "ash/wm/system_modal_container_layout_manager.h"
 
 #include <cmath>
+#include <memory>
 
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/wm/window_dimmer.h"
 #include "ash/wm/window_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -67,7 +68,7 @@ void SystemModalContainerLayoutManager::OnChildWindowVisibilityChanged(
     AddModalWindow(window);
   } else {
     if (RemoveModalWindow(window))
-      ShellPort::Get()->OnModalWindowRemoved(window);
+      OnModalWindowRemoved(window);
   }
 }
 
@@ -126,7 +127,7 @@ void SystemModalContainerLayoutManager::OnWindowPropertyChanged(
     AddModalWindow(window);
   } else {
     if (RemoveModalWindow(window))
-      ShellPort::Get()->OnModalWindowRemoved(window);
+      OnModalWindowRemoved(window);
   }
 }
 
@@ -134,8 +135,8 @@ void SystemModalContainerLayoutManager::OnWindowPropertyChanged(
 // SystemModalContainerLayoutManager, Keyboard::KeybaordControllerObserver
 // implementation:
 
-void SystemModalContainerLayoutManager::OnKeyboardBoundsChanging(
-    const gfx::Rect& new_bounds) {
+void SystemModalContainerLayoutManager::
+    OnKeyboardWorkspaceOccludedBoundsChanging(const gfx::Rect& new_bounds) {
   PositionDialogsAfterWorkAreaResize();
 }
 
@@ -158,7 +159,7 @@ bool SystemModalContainerLayoutManager::ActivateNextModalWindow() {
 
 void SystemModalContainerLayoutManager::CreateModalBackground() {
   if (!window_dimmer_) {
-    window_dimmer_ = base::MakeUnique<WindowDimmer>(container_);
+    window_dimmer_ = std::make_unique<WindowDimmer>(container_);
     window_dimmer_->window()->SetName(
         "SystemModalContainerLayoutManager.ModalBackground");
     // There isn't always a keyboard controller.
@@ -204,7 +205,12 @@ void SystemModalContainerLayoutManager::AddModalWindow(aura::Window* window) {
   DCHECK(!base::ContainsValue(modal_windows_, window));
 
   modal_windows_.push_back(window);
-  ShellPort::Get()->CreateModalBackground(window);
+  // Create the modal background on all displays for |window|.
+  for (aura::Window* root_window : Shell::GetAllRootWindows()) {
+    RootWindowController::ForWindow(root_window)
+        ->GetSystemModalLayoutManager(window)
+        ->CreateModalBackground();
+  }
   window->parent()->StackChildAtTop(window);
 
   gfx::Rect target_bounds = window->bounds();
@@ -219,6 +225,23 @@ bool SystemModalContainerLayoutManager::RemoveModalWindow(
     return false;
   modal_windows_.erase(it);
   return true;
+}
+
+void SystemModalContainerLayoutManager::OnModalWindowRemoved(
+    aura::Window* removed) {
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  for (aura::Window* root_window : root_windows) {
+    if (RootWindowController::ForWindow(root_window)
+            ->GetSystemModalLayoutManager(removed)
+            ->ActivateNextModalWindow()) {
+      return;
+    }
+  }
+  for (aura::Window* root_window : root_windows) {
+    RootWindowController::ForWindow(root_window)
+        ->GetSystemModalLayoutManager(removed)
+        ->DestroyModalBackground();
+  }
 }
 
 void SystemModalContainerLayoutManager::PositionDialogsAfterWorkAreaResize() {
@@ -237,11 +260,9 @@ gfx::Rect SystemModalContainerLayoutManager::GetUsableDialogArea() const {
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller) {
-    gfx::Rect bounds = keyboard_controller->current_keyboard_bounds();
-    if (!bounds.IsEmpty()) {
-      valid_bounds.set_height(
-          std::max(0, valid_bounds.height() - bounds.height()));
-    }
+    gfx::Rect bounds = keyboard_controller->GetWorkspaceObscuringBounds();
+    valid_bounds.set_height(
+        std::max(0, valid_bounds.height() - bounds.height()));
   }
   return valid_bounds;
 }

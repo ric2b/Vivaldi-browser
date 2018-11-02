@@ -13,6 +13,7 @@
 #include "base/debug/alias.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/ipc/common/gpu_messages.h"
@@ -24,6 +25,14 @@ namespace gpu {
 namespace {
 // Default v-sync interval used when there is no history of v-sync timestamps.
 const int kDefaultInterval = 16666;
+
+// Occasionally DWM stops advancing qpcVBlank timestamp. The existing
+// implementation can cope with that by adjusting the qpcVBlank value forward
+// by a number of v-sync intervals, although the accuracy of adjustment depends
+// on accuracy of the calculated v-sync interval. To avoid accumulating the
+// error, any DWM values that are more than the threshold number of intervals
+// in the past are ignored.
+const int kMissingDwmTimestampsThreshold = 7;
 
 // from <D3dkmthk.h>
 typedef LONG NTSTATUS;
@@ -75,6 +84,10 @@ class GpuVSyncWorker : public base::Thread,
   friend class base::RefCountedThreadSafe<GpuVSyncWorker>;
   ~GpuVSyncWorker() override;
 
+  // base::Thread overrides
+  void Init() override;
+  void CleanUp() override;
+
   // These error codes are specified for diagnostic purposes when falling back
   // to delay based v-sync.
   enum class WaitForVBlankErrorCode {
@@ -93,7 +106,7 @@ class GpuVSyncWorker : public base::Thread,
   void AddTimestamp(base::TimeTicks timestamp);
   void AddInterval(base::TimeDelta interval);
   base::TimeDelta GetAverageInterval() const;
-  void ClearIntervalHistory();
+  void ClearHistory();
 
   bool GetDisplayFrequency(const wchar_t* device_name, DWORD* frequency);
   void UpdateCurrentDisplayFrequency();
@@ -106,13 +119,21 @@ class GpuVSyncWorker : public base::Thread,
   void UseDelayBasedVSyncOnError(WaitForVBlankErrorCode error_code);
   void ReportErrorCode(WaitForVBlankErrorCode error_code);
 
-  // Specifies whether background tasks are running.
-  // This can be set on background thread only.
+  // Specifies whether worker tasks are running.
+  // This can be set on the worker thread only.
   bool running_ = false;
 
-  // Specified whether the worker is enabled.  This is accessed from both
-  // threads but can be changed on the main thread only.
+  // Specified whether the worker is enabled.  This is accessed from I/O
+  // and v-sync threads and can be changed on main and I/O threads.
   base::subtle::AtomicWord enabled_ = false;
+
+  // This is used to prevent a race condition when SetNeedsVsync
+  // is called at or after v-sync thread shutdown.
+  base::Lock shutdown_lock_;
+
+  // Task runner for the worker thread, initialized in Init() and cleared in
+  // CleanUp(). Can be used from any thread.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   const gfx::VSyncProvider::UpdateVSyncCallback callback_;
   const SurfaceHandle surface_handle_;
@@ -139,15 +160,59 @@ class GpuVSyncWorker : public base::Thread,
   base::TimeDelta min_accepted_interval_;
   base::TimeDelta max_accepted_interval_;
 
-  // History of recent deltas between timestamps which is used to calculate the
-  // average v-sync interval and organized as a circular buffer.
-  static const size_t kIntervalHistorySize = 60;
-  base::TimeDelta interval_history_[kIntervalHistorySize];
-  size_t history_index_ = 0;
-  size_t history_size_ = 0;
+  // A simple circular buffer for storing a number of recent v-sync intervals
+  // or DWM adjustment deltas and finding an average of them.
+  class TimeDeltaRingBuffer {
+   public:
+    TimeDeltaRingBuffer() = default;
+    ~TimeDeltaRingBuffer() = default;
 
-  // Rolling sum of intervals in the circular buffer above.
-  base::TimeDelta rolling_interval_sum_;
+    void Add(base::TimeDelta value) {
+      if (size_ == kMaxSize) {
+        rolling_sum_ -= values_[next_index_];
+      } else {
+        size_++;
+      }
+
+      values_[next_index_] = value;
+      rolling_sum_ += value;
+      next_index_ = (next_index_ + 1) % kMaxSize;
+    }
+
+    void Clear() {
+      rolling_sum_ = base::TimeDelta();
+      next_index_ = 0;
+      size_ = 0;
+    }
+
+    base::TimeDelta GetAverage() const {
+      if (size_ == 0)
+        return base::TimeDelta();
+
+      return rolling_sum_ / size_;
+    }
+
+   private:
+    enum { kMaxSize = 60 };
+
+    base::TimeDelta values_[kMaxSize];
+    size_t next_index_ = 0;
+    size_t size_ = 0;
+
+    // Rolling sum of TimeDelta values in the circular buffer above.
+    base::TimeDelta rolling_sum_;
+
+    DISALLOW_COPY_AND_ASSIGN(TimeDeltaRingBuffer);
+  };
+
+  // History of recent deltas between timestamps used to calculate the average
+  // v-sync interval.
+  TimeDeltaRingBuffer recent_intervals_;
+
+  // History of recent DWM adjustments used to calculate the average adjustment.
+  TimeDeltaRingBuffer recent_adjustments_;
+
+  DISALLOW_COPY_AND_ASSIGN(GpuVSyncWorker);
 };
 
 GpuVSyncWorker::GpuVSyncWorker(
@@ -187,12 +252,23 @@ GpuVSyncWorker::GpuVSyncWorker(
 
 GpuVSyncWorker::~GpuVSyncWorker() = default;
 
+void GpuVSyncWorker::Init() {
+  task_runner_ = task_runner();
+}
+
+void GpuVSyncWorker::CleanUp() {
+  task_runner_ = nullptr;
+}
+
 void GpuVSyncWorker::CleanupAndStop() {
-  Enable(false);
+  base::AutoLock lock(shutdown_lock_);
+
+  base::subtle::NoBarrier_Store(&enabled_, false);
+
   // Thread::Close() call below will block until this task has finished running
   // so it is safe to post it here and pass unretained pointer.
-  task_runner()->PostTask(FROM_HERE, base::Bind(&GpuVSyncWorker::CloseAdapter,
-                                                base::Unretained(this)));
+  task_runner_->PostTask(FROM_HERE, base::Bind(&GpuVSyncWorker::CloseAdapter,
+                                               base::Unretained(this)));
   Stop();
 
   DCHECK_EQ(0u, current_adapter_handle_);
@@ -200,10 +276,14 @@ void GpuVSyncWorker::CleanupAndStop() {
 }
 
 void GpuVSyncWorker::Enable(bool enabled) {
+  base::AutoLock lock(shutdown_lock_);
+  if (!task_runner_)
+    return;
+
   auto was_enabled = base::subtle::NoBarrier_AtomicExchange(&enabled_, enabled);
 
   if (enabled && !was_enabled)
-    task_runner()->PostTask(
+    task_runner_->PostTask(
         FROM_HERE, base::Bind(&GpuVSyncWorker::StartRunningVSyncOnThread,
                               base::Unretained(this)));
 }
@@ -257,7 +337,8 @@ void GpuVSyncWorker::WaitForVSyncOnThread() {
 
   NTSTATUS wait_result = WaitForVBlankEvent();
   if (wait_result != STATUS_SUCCESS) {
-    if (wait_result == STATUS_GRAPHICS_PRESENT_OCCLUDED) {
+    if (wait_result == STATUS_GRAPHICS_PRESENT_OCCLUDED ||
+        wait_result == WAIT_TIMEOUT) {
       // This may be triggered by the monitor going into sleep.
       UseDelayBasedVSyncOnError(WaitForVBlankErrorCode::kWaitForVBlankEvent);
       return;
@@ -288,27 +369,19 @@ void GpuVSyncWorker::AddInterval(base::TimeDelta interval) {
   if (interval < min_accepted_interval_ || interval > max_accepted_interval_)
     return;
 
-  if (history_size_ == kIntervalHistorySize) {
-    rolling_interval_sum_ -= interval_history_[history_index_];
-  } else {
-    history_size_++;
-  }
-
-  interval_history_[history_index_] = interval;
-  rolling_interval_sum_ += interval;
-  history_index_ = (history_index_ + 1) % kIntervalHistorySize;
+  recent_intervals_.Add(interval);
 }
 
-void GpuVSyncWorker::ClearIntervalHistory() {
+void GpuVSyncWorker::ClearHistory() {
   last_timestamp_ = base::TimeTicks();
-  rolling_interval_sum_ = base::TimeDelta();
-  history_index_ = 0;
-  history_size_ = 0;
+  recent_intervals_.Clear();
+  recent_adjustments_.Clear();
 }
 
 base::TimeDelta GpuVSyncWorker::GetAverageInterval() const {
-  return !rolling_interval_sum_.is_zero()
-             ? rolling_interval_sum_ / history_size_
+  base::TimeDelta average_interval = recent_intervals_.GetAverage();
+  return !average_interval.is_zero()
+             ? average_interval
              : base::TimeDelta::FromMicroseconds(kDefaultInterval);
 }
 
@@ -340,11 +413,10 @@ void GpuVSyncWorker::UpdateCurrentDisplayFrequency() {
     current_display_frequency_ = frequency;
     base::TimeDelta interval = base::TimeDelta::FromMicroseconds(
         base::Time::kMicrosecondsPerSecond / static_cast<double>(frequency));
-    ClearIntervalHistory();
+    ClearHistory();
 
     min_accepted_interval_ = interval * 0.8;
     max_accepted_interval_ = interval * 1.2;
-    AddInterval(interval);
   }
 }
 
@@ -365,14 +437,22 @@ void GpuVSyncWorker::SendGpuVSyncUpdate(base::TimeTicks now, bool use_dwm) {
   base::TimeDelta adjustment;
 
   if (use_dwm && GetDwmVBlankTimestamp(&timestamp)) {
-    // Timestamp comes from DwmGetCompositionTimingInfo and apparently it might
-    // be up to 2-3 vsync cycles in the past or in the future.
-    // The adjustment formula was suggested here:
-    // http://www.vsynctester.com/firefoxisbroken.html
     base::TimeDelta interval = GetAverageInterval();
-    adjustment =
-        ((now - timestamp + interval / 8) % interval + interval) % interval -
-        interval / 8;
+    if (now - timestamp > interval * kMissingDwmTimestampsThreshold) {
+      // DWM timestamp is too far in the past. Ignore it and use average
+      // historical adjustment to be applied to |now| time to estimate
+      // the v-sync timestamp.
+      adjustment = recent_adjustments_.GetAverage();
+    } else {
+      // Timestamp comes from DwmGetCompositionTimingInfo and apparently it
+      // might be a few v-sync cycles in the past or in the future.
+      // The adjustment formula was suggested here:
+      // http://www.vsynctester.com/firefoxisbroken.html
+      adjustment =
+          ((now - timestamp + interval / 8) % interval + interval) % interval -
+          interval / 8;
+      recent_adjustments_.Add(adjustment);
+    }
     timestamp = now - adjustment;
   } else {
     // Not using DWM.
@@ -381,11 +461,13 @@ void GpuVSyncWorker::SendGpuVSyncUpdate(base::TimeTicks now, bool use_dwm) {
 
   AddTimestamp(timestamp);
 
-  TRACE_EVENT1("gpu", "GpuVSyncWorker::SendGpuVSyncUpdate", "adjustment",
-               adjustment.ToInternalValue());
+  base::TimeDelta average_interval = GetAverageInterval();
+  TRACE_EVENT2("gpu", "GpuVSyncWorker::SendGpuVSyncUpdate", "adjustment",
+               adjustment.InMicroseconds(), "interval",
+               average_interval.InMicroseconds());
 
-  DCHECK_GT(GetAverageInterval().InMillisecondsF(), 0);
-  InvokeCallbackAndReschedule(timestamp, GetAverageInterval());
+  DCHECK_GT(average_interval.InMillisecondsF(), 0);
+  InvokeCallbackAndReschedule(timestamp, average_interval);
 }
 
 void GpuVSyncWorker::InvokeCallbackAndReschedule(base::TimeTicks timestamp,
@@ -393,9 +475,9 @@ void GpuVSyncWorker::InvokeCallbackAndReschedule(base::TimeTicks timestamp,
   // Send update and restart the task if still enabled.
   if (base::subtle::NoBarrier_Load(&enabled_)) {
     callback_.Run(timestamp, interval);
-    task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&GpuVSyncWorker::WaitForVSyncOnThread,
-                                       base::Unretained(this)));
+    task_runner_->PostTask(FROM_HERE,
+                           base::Bind(&GpuVSyncWorker::WaitForVSyncOnThread,
+                                      base::Unretained(this)));
   } else {
     running_ = false;
     // Clear last_timestamp_ to avoid a long interval when the worker restarts.
@@ -416,7 +498,7 @@ void GpuVSyncWorker::UseDelayBasedVSyncOnError(
   base::TimeTicks now = base::TimeTicks::Now();
   base::TimeTicks next_vsync = now.SnappedToNextTick(timebase, interval);
 
-  task_runner()->PostDelayedTask(
+  task_runner_->PostDelayedTask(
       FROM_HERE,
       base::Bind(&GpuVSyncWorker::InvokeCallbackAndReschedule,
                  base::Unretained(this), next_vsync, interval),
@@ -460,7 +542,7 @@ void GpuVSyncWorker::CloseAdapter() {
     current_adapter_handle_ = 0;
     current_device_name_.clear();
 
-    ClearIntervalHistory();
+    ClearHistory();
   }
 }
 
@@ -552,9 +634,6 @@ GpuVSyncProviderWin::GpuVSyncProviderWin(
   vsync_worker_ = new GpuVSyncWorker(
       base::Bind(&GpuVSyncProviderWin::OnVSync, base::Unretained(this)),
       surface_handle);
-  message_filter_ =
-      new GpuVSyncMessageFilter(vsync_worker_, delegate->GetRouteID());
-  delegate->AddFilter(message_filter_.get());
 
   // Start the thread.
   base::Thread::Options options;
@@ -565,6 +644,11 @@ GpuVSyncProviderWin::GpuVSyncProviderWin(
   // possible latency.
   options.priority = base::ThreadPriority::REALTIME_AUDIO;
   vsync_worker_->StartWithOptions(options);
+
+  // Add IPC message filter.
+  message_filter_ =
+      new GpuVSyncMessageFilter(vsync_worker_, delegate->GetRouteID());
+  delegate->AddFilter(message_filter_.get());
 }
 
 GpuVSyncProviderWin::~GpuVSyncProviderWin() {
@@ -584,7 +668,7 @@ void GpuVSyncProviderWin::OnVSync(base::TimeTicks timestamp,
   DCHECK(vsync_worker_->BelongsToWorkerThread());
 
   message_filter_->Send(
-      base::MakeUnique<GpuCommandBufferMsg_UpdateVSyncParameters>(
+      std::make_unique<GpuCommandBufferMsg_UpdateVSyncParameters>(
           message_filter_->route_id(), timestamp, interval));
 }
 

@@ -32,17 +32,17 @@ namespace blink {
 class PLATFORM_EXPORT ScaleTransformOperation final
     : public TransformOperation {
  public:
-  static PassRefPtr<ScaleTransformOperation> Create(double sx,
-                                                    double sy,
-                                                    OperationType type) {
-    return AdoptRef(new ScaleTransformOperation(sx, sy, 1, type));
+  static scoped_refptr<ScaleTransformOperation> Create(double sx,
+                                                       double sy,
+                                                       OperationType type) {
+    return base::AdoptRef(new ScaleTransformOperation(sx, sy, 1, type));
   }
 
-  static PassRefPtr<ScaleTransformOperation> Create(double sx,
-                                                    double sy,
-                                                    double sz,
-                                                    OperationType type) {
-    return AdoptRef(new ScaleTransformOperation(sx, sy, sz, type));
+  static scoped_refptr<ScaleTransformOperation> Create(double sx,
+                                                       double sy,
+                                                       double sz,
+                                                       OperationType type) {
+    return base::AdoptRef(new ScaleTransformOperation(sx, sy, sz, type));
   }
 
   bool operator==(const ScaleTransformOperation& other) const {
@@ -58,9 +58,10 @@ class PLATFORM_EXPORT ScaleTransformOperation final
   void Apply(TransformationMatrix& transform, const FloatSize&) const override {
     transform.Scale3d(x_, y_, z_);
   }
-  PassRefPtr<TransformOperation> Blend(const TransformOperation* from,
-                                       double progress,
-                                       bool blend_to_identity = false) override;
+  scoped_refptr<TransformOperation> Blend(
+      const TransformOperation* from,
+      double progress,
+      bool blend_to_identity = false) override;
 
   static bool IsMatchingOperationType(OperationType type) {
     return type == kScale || type == kScaleX || type == kScaleY ||
@@ -79,7 +80,7 @@ class PLATFORM_EXPORT ScaleTransformOperation final
     return x_ == s->x_ && y_ == s->y_ && z_ == s->z_;
   }
 
-  PassRefPtr<TransformOperation> Zoom(double factor) final { return this; }
+  scoped_refptr<TransformOperation> Zoom(double factor) final { return this; }
 
   ScaleTransformOperation(double sx, double sy, double sz, OperationType type)
       : x_(sx), y_(sy), z_(sz), type_(type) {

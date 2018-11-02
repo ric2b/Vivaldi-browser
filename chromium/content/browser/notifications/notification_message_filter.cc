@@ -98,16 +98,10 @@ NotificationMessageFilter::NotificationMessageFilter(
 
 NotificationMessageFilter::~NotificationMessageFilter() = default;
 
-void NotificationMessageFilter::DidCloseNotification(
-    const std::string& notification_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  close_closures_.erase(notification_id);
-}
-
 void NotificationMessageFilter::OnDestruct() const {
   if (non_persistent__notification_shown_) {
     NotificationEventDispatcherImpl* event_dispatcher =
-        content::NotificationEventDispatcherImpl::GetInstance();
+        NotificationEventDispatcherImpl::GetInstance();
     DCHECK(event_dispatcher);
     event_dispatcher->RendererGone(process_id_);
   }
@@ -135,7 +129,7 @@ bool NotificationMessageFilter::OnMessageReceived(const IPC::Message& message) {
 
 void NotificationMessageFilter::OverrideThreadForMessage(
     const IPC::Message& message,
-    content::BrowserThread::ID* thread) {
+    BrowserThread::ID* thread) {
   if (message.type() == PlatformNotificationHostMsg_Show::ID ||
       message.type() == PlatformNotificationHostMsg_Close::ID)
     *thread = BrowserThread::UI;
@@ -167,18 +161,14 @@ void NotificationMessageFilter::OnShowPlatformNotification(
           origin, notification_data.tag, non_persistent_notification_id,
           process_id_);
   NotificationEventDispatcherImpl* event_dispatcher =
-      content::NotificationEventDispatcherImpl::GetInstance();
+      NotificationEventDispatcherImpl::GetInstance();
   non_persistent__notification_shown_ = true;
   event_dispatcher->RegisterNonPersistentNotification(
       notification_id, process_id_, non_persistent_notification_id);
 
-  base::Closure close_closure;
   service->DisplayNotification(browser_context_, notification_id, origin,
                                SanitizeNotificationData(notification_data),
-                               notification_resources, &close_closure);
-
-  if (!close_closure.is_null())
-    close_closures_[notification_id] = close_closure;
+                               notification_resources);
 }
 
 void NotificationMessageFilter::OnShowPersistentNotification(
@@ -264,10 +254,11 @@ void NotificationMessageFilter::DidFindServiceWorkerRegistration(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&PlatformNotificationService::DisplayPersistentNotification,
-                 base::Unretained(service),  // The service is a singleton.
-                 browser_context_, notification_id, registration->pattern(),
-                 origin, notification_data, notification_resources));
+      base::BindOnce(
+          &PlatformNotificationService::DisplayPersistentNotification,
+          base::Unretained(service),  // The service is a singleton.
+          browser_context_, notification_id, registration->pattern(), origin,
+          notification_data, notification_resources));
 
   Send(new PlatformNotificationMsg_DidShowPersistent(request_id, true));
 }
@@ -327,11 +318,14 @@ void NotificationMessageFilter::OnClosePlatformNotification(
       GetNotificationIdGenerator()->GenerateForNonPersistentNotification(
           origin, tag, non_persistent_notification_id, process_id_);
 
-  if (!close_closures_.count(notification_id))
-    return;
+  PlatformNotificationService* service =
+      GetContentClient()->browser()->GetPlatformNotificationService();
+  DCHECK(service);
 
-  close_closures_[notification_id].Run();
-  close_closures_.erase(notification_id);
+  service->CloseNotification(browser_context_, notification_id);
+
+  NotificationEventDispatcherImpl::GetInstance()
+      ->DispatchNonPersistentCloseEvent(notification_id);
 }
 
 void NotificationMessageFilter::OnClosePersistentNotification(
@@ -352,9 +346,9 @@ void NotificationMessageFilter::OnClosePersistentNotification(
   // closing the notification presented to the user. Post that task immediately.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&PlatformNotificationService::ClosePersistentNotification,
-                 base::Unretained(service),  // The service is a singleton.
-                 browser_context_, notification_id));
+      base::BindOnce(&PlatformNotificationService::ClosePersistentNotification,
+                     base::Unretained(service),  // The service is a singleton.
+                     browser_context_, notification_id));
 
   notification_context_->DeleteNotificationData(
       notification_id, origin,

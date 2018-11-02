@@ -132,22 +132,24 @@ const IDNTestCase idn_cases[] = {
     {"xn---123-kbjl2j0bl2k.in", L"\x0939\x093f\x0928\x094d\x0926\x0940-123.in",
      true},
 
-    // 5 Aspirational scripts
+    // What used to be 5 Aspirational scripts in the earlier versions of UAX 31.
+    // UAX 31 does not define aspirational scripts any more.
+    // See http://www.unicode.org/reports/tr31/#Aspirational_Use_Scripts .
     // Unifieid Canadian Syllabary
-    {"xn--dfe0tte.ca", L"\x1456\x14c2\x14ef.ca", true},
+    {"xn--dfe0tte.ca", L"\x1456\x14c2\x14ef.ca", false},
     // Tifinagh
     {"xn--4ljxa2bb4a6bxb.ma", L"\x2d5c\x2d49\x2d3c\x2d49\x2d4f\x2d30\x2d56.ma",
-     true},
+     false},
     // Tifinagh with a disallowed character(U+2D6F)
     {"xn--hmjzaby5d5f.ma", L"\x2d5c\x2d49\x2d3c\x2d6f\x2d49\x2d4f.ma", false},
     // Yi
-    {"xn--4o7a6e1x64c.cn", L"\xa188\xa320\xa071\xa0b7.cn", true},
+    {"xn--4o7a6e1x64c.cn", L"\xa188\xa320\xa071\xa0b7.cn", false},
     // Mongolian - 'ordu' (place, camp)
-    {"xn--56ec8bp.cn", L"\x1823\x1837\x1833\x1824.cn", true},
+    {"xn--56ec8bp.cn", L"\x1823\x1837\x1833\x1824.cn", false},
     // Mongolian with a disallowed character
     {"xn--95e5de3ds.cn", L"\x1823\x1837\x1804\x1833\x1824.cn", false},
     // Miao/Pollad
-    {"xn--2u0fpf0a.cn", L"\U00016f04\U00016f62\U00016f59.cn", true},
+    {"xn--2u0fpf0a.cn", L"\U00016f04\U00016f62\U00016f59.cn", false},
 
     // Script mixing tests
     // The following script combinations are allowed.
@@ -205,10 +207,18 @@ const IDNTestCase idn_cases[] = {
      false},
     // Devanagari + Latin
     {"xn--ab-3ofh8fqbj6h.in", L"ab\x0939\x093f\x0928\x094d\x0926\x0940.in",
-     true},
+     false},
     // Thai + Latin
     {"xn--ab-jsi9al4bxdb6n.th",
-     L"ab\x0e20\x0e32\x0e29\x0e32\x0e44\x0e17\x0e22.th", true},
+     L"ab\x0e20\x0e32\x0e29\x0e32\x0e44\x0e17\x0e22.th", false},
+    // Armenian + Latin
+    {"xn--bs-red.com", L"b\x057ds.com", false},
+    // Tibetan + Latin
+    {"xn--foo-vkm.com", L"foo\x0f37.com", false},
+    // Oriya + Latin
+    {"xn--fo-h3g.com", L"fo\x0b66.com", false},
+    // Gujarati + Latin
+    {"xn--fo-isg.com", L"fo\x0ae6.com", false},
     // <vitamin in Katakana>b1.com
     {"xn--b1-xi4a7cvc9f.com",
      L"\x30d3\x30bf\x30df\x30f3"
@@ -259,6 +269,10 @@ const IDNTestCase idn_cases[] = {
     {"xn--jack-qwc.com", L"j\x0307" L"ack.com", false},
     // l followed by U+0307
     {"xn--lace-qwc.com", L"l\x0307" L"ace.com", false},
+
+    // Do not allow a combining mark after dotless i/j.
+    {"xn--pxel-lza29y.com", L"p\x0131\x0300xel.com", false},
+    {"xn--ack-gpb42h.com", L"\x0237\x0301" L"ack.com", false},
 
     // Mixed script confusable
     // google with Armenian Small Letter Oh(U+0585)
@@ -393,6 +407,19 @@ const IDNTestCase idn_cases[] = {
      L"\x0456\x0455\x04cf\x043a\x0440\x0445"
      L"123.com",
      false},
+
+    // wmhtb.com
+    {"xn--l1acpvx.com", L"\x0448\x043c\x043d\x0442\x044c.com", false},
+    // щмнть.com
+    {"xn--l1acpzs.com", L"\x0449\x043c\x043d\x0442\x044c.com", false},
+    // шмнтв.com
+    {"xn--b1atdu1a.com", L"\x0448\x043c\x043d\x0442\x0432.com", false},
+    // ഠട345.com
+    {"xn--345-jtke.com", L"\x0d20\x0d1f" L"345.com", false},
+
+    // At one point the skeleton of 'w' was 'vv', ensure that
+    // that it's treated as 'w'.
+    {"xn--wder-qqa.com", L"w\x00f3" L"der.com", false},
 
     // Mixed digits: the first two will also fail mixed script test
     // Latin + ASCII digit + Deva digit
@@ -606,7 +633,7 @@ const IDNTestCase idn_cases[] = {
      L"a\x144a"
      L"b.com",
      false},
-    {"xn--xcec9s.com", L"\x1401\x144a\x1402.com", true},
+    {"xn--xcec9s.com", L"\x1401\x144a\x1402.com", false},
 
     // Custom dangerous patterns
     // Two Katakana-Hiragana combining mark in a row
@@ -754,7 +781,7 @@ TEST(UrlFormatterTest, FormatUrl) {
 
       {"With a port number and a reference",
        "http://www.google.com:8080/#\xE3\x82\xB0", default_format_type,
-       net::UnescapeRule::NORMAL, L"http://www.google.com:8080/#\x30B0", 7},
+       net::UnescapeRule::NORMAL, L"http://www.google.com:8080/#%E3%82%B0", 7},
 
       // -------- IDN tests --------
       {"Japanese IDN with ja", "http://xn--l8jvb1ey91xtjb.jp",
@@ -1019,9 +1046,10 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
                      "%E3%82%B0/?q=%E3%82%B0#\xE3\x82\xB0"),
                 kFormatUrlOmitNothing, net::UnescapeRule::NONE,
                 &parsed, nullptr, nullptr);
-  EXPECT_EQ(WideToUTF16(
-      L"http://%E3%82%B0:%E3%83%BC@\x30B0\x30FC\x30B0\x30EB.jp:8080"
-      L"/%E3%82%B0/?q=%E3%82%B0#\x30B0"), formatted);
+  EXPECT_EQ(
+      WideToUTF16(L"http://%E3%82%B0:%E3%83%BC@\x30B0\x30FC\x30B0\x30EB.jp:8080"
+                  L"/%E3%82%B0/?q=%E3%82%B0#%E3%82%B0"),
+      formatted);
   EXPECT_EQ(WideToUTF16(L"%E3%82%B0"),
       formatted.substr(parsed.username.begin, parsed.username.len));
   EXPECT_EQ(WideToUTF16(L"%E3%83%BC"),
@@ -1034,8 +1062,8 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
       formatted.substr(parsed.path.begin, parsed.path.len));
   EXPECT_EQ(WideToUTF16(L"q=%E3%82%B0"),
       formatted.substr(parsed.query.begin, parsed.query.len));
-  EXPECT_EQ(WideToUTF16(L"\x30B0"),
-      formatted.substr(parsed.ref.begin, parsed.ref.len));
+  EXPECT_EQ(WideToUTF16(L"%E3%82%B0"),
+            formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // Unescape case.
   formatted =
@@ -1044,7 +1072,8 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
                 kFormatUrlOmitNothing, net::UnescapeRule::NORMAL, &parsed,
                 nullptr, nullptr);
   EXPECT_EQ(WideToUTF16(L"http://\x30B0:\x30FC@\x30B0\x30FC\x30B0\x30EB.jp:8080"
-      L"/\x30B0/?q=\x30B0#\x30B0"), formatted);
+                        L"/\x30B0/?q=\x30B0#%E3%82%B0"),
+            formatted);
   EXPECT_EQ(WideToUTF16(L"\x30B0"),
       formatted.substr(parsed.username.begin, parsed.username.len));
   EXPECT_EQ(WideToUTF16(L"\x30FC"),
@@ -1057,8 +1086,8 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
       formatted.substr(parsed.path.begin, parsed.path.len));
   EXPECT_EQ(WideToUTF16(L"q=\x30B0"),
       formatted.substr(parsed.query.begin, parsed.query.len));
-  EXPECT_EQ(WideToUTF16(L"\x30B0"),
-      formatted.substr(parsed.ref.begin, parsed.ref.len));
+  EXPECT_EQ(WideToUTF16(L"%E3%82%B0"),
+            formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // Omit_username_password + unescape case.
   formatted =
@@ -1067,7 +1096,8 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
                 kFormatUrlOmitUsernamePassword, net::UnescapeRule::NORMAL,
                 &parsed, nullptr, nullptr);
   EXPECT_EQ(WideToUTF16(L"http://\x30B0\x30FC\x30B0\x30EB.jp:8080"
-      L"/\x30B0/?q=\x30B0#\x30B0"), formatted);
+                        L"/\x30B0/?q=\x30B0#%E3%82%B0"),
+            formatted);
   EXPECT_FALSE(parsed.username.is_valid());
   EXPECT_FALSE(parsed.password.is_valid());
   EXPECT_EQ(WideToUTF16(L"\x30B0\x30FC\x30B0\x30EB.jp"),
@@ -1078,8 +1108,8 @@ TEST(UrlFormatterTest, FormatUrlParsed) {
       formatted.substr(parsed.path.begin, parsed.path.len));
   EXPECT_EQ(WideToUTF16(L"q=\x30B0"),
       formatted.substr(parsed.query.begin, parsed.query.len));
-  EXPECT_EQ(WideToUTF16(L"\x30B0"),
-      formatted.substr(parsed.ref.begin, parsed.ref.len));
+  EXPECT_EQ(WideToUTF16(L"%E3%82%B0"),
+            formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // View-source case.
   formatted =
@@ -1312,14 +1342,13 @@ TEST(UrlFormatterTest, FormatUrlWithOffsets) {
       kFormatUrlOmitNothing, net::UnescapeRule::SPACES, unescape_offsets);
 
   const size_t ref_offsets[] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, kNpos, kNpos, 32, kNpos, kNpos,
-    33
-  };
+      0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
+      17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+      34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49};
   // Unescape to "http://www.google.com/foo.html#\x30B0\x30B0z".
-  CheckAdjustedOffsets(
-      "http://www.google.com/foo.html#\xE3\x82\xB0\xE3\x82\xB0z",
-      kFormatUrlOmitNothing, net::UnescapeRule::NORMAL, ref_offsets);
+  CheckAdjustedOffsets("http://www.google.com/foo.html#%E3%82%B0%E3%82%B0z",
+                       kFormatUrlOmitNothing, net::UnescapeRule::NORMAL,
+                       ref_offsets);
 
   const size_t omit_http_offsets[] = {
     0, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,

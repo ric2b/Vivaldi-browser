@@ -5,11 +5,11 @@
 #include "ash/wm/drag_window_controller.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
-#include "base/memory/ptr_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
@@ -145,7 +145,8 @@ class DragWindowController::DragWindowDetails : public aura::WindowDelegate {
   bool CanFocus() override { return false; }
   void OnCaptureLost() override {}
   void OnPaint(const ui::PaintContext& context) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
   void OnWindowDestroyed(aura::Window* window) override {}
   void OnWindowTargetVisibilityChanged(bool visible) override {}
   bool HasHitTestMask() const override { return false; }
@@ -188,11 +189,11 @@ DragWindowController::DragWindowController(aura::Window* window)
     if (current.id() == display.id())
       continue;
     drag_windows_.push_back(
-        base::MakeUnique<DragWindowDetails>(display, window_));
+        std::make_unique<DragWindowDetails>(display, window_));
   }
 }
 
-DragWindowController::~DragWindowController() {}
+DragWindowController::~DragWindowController() = default;
 
 void DragWindowController::Update(const gfx::Rect& bounds_in_screen,
                                   const gfx::Point& drag_location_in_screen) {

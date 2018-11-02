@@ -24,7 +24,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -256,7 +255,7 @@ bool ProcessMetrics::GetWorkingSetKBytes(WorkingSetKBytes* ws_usage) const {
   return GetWorkingSetKBytesStatm(ws_usage);
 }
 
-double ProcessMetrics::GetCPUUsage() {
+double ProcessMetrics::GetPlatformIndependentCPUUsage() {
   TimeTicks time = TimeTicks::Now();
 
   if (last_cpu_ == 0) {
@@ -405,7 +404,6 @@ ProcessMetrics::ProcessMetrics(ProcessHandle process)
       last_absolute_idle_wakeups_(0),
 #endif
       last_cpu_(0) {
-  processor_count_ = SysInfo::NumberOfProcessors();
 }
 
 #if defined(OS_CHROMEOS)
@@ -618,7 +616,7 @@ const size_t kDiskWeightedIOTime = 13;
 
 }  // namespace
 
-std::unique_ptr<Value> SystemMemoryInfoKB::ToValue() const {
+std::unique_ptr<DictionaryValue> SystemMemoryInfoKB::ToValue() const {
   auto res = std::make_unique<DictionaryValue>();
   res->SetInteger("total", total);
   res->SetInteger("free", free);
@@ -634,9 +632,6 @@ std::unique_ptr<Value> SystemMemoryInfoKB::ToValue() const {
   res->SetInteger("swap_used", swap_total - swap_free);
   res->SetInteger("dirty", dirty);
   res->SetInteger("reclaimable", reclaimable);
-  res->SetInteger("pswpin", pswpin);
-  res->SetInteger("pswpout", pswpout);
-  res->SetInteger("pgmajfault", pgmajfault);
 #ifdef OS_CHROMEOS
   res->SetInteger("shmem", shmem);
   res->SetInteger("slab", slab);
@@ -644,7 +639,7 @@ std::unique_ptr<Value> SystemMemoryInfoKB::ToValue() const {
   res->SetInteger("gem_size", gem_size);
 #endif
 
-  return std::move(res);
+  return res;
 }
 
 bool ParseProcMeminfo(StringPiece meminfo_data, SystemMemoryInfoKB* meminfo) {
@@ -717,7 +712,7 @@ bool ParseProcMeminfo(StringPiece meminfo_data, SystemMemoryInfoKB* meminfo) {
   return meminfo->total > 0;
 }
 
-bool ParseProcVmstat(StringPiece vmstat_data, SystemMemoryInfoKB* meminfo) {
+bool ParseProcVmstat(StringPiece vmstat_data, VmStatInfo* vmstat) {
   // The format of /proc/vmstat is:
   //
   // nr_free_pages 299878
@@ -743,15 +738,15 @@ bool ParseProcVmstat(StringPiece vmstat_data, SystemMemoryInfoKB* meminfo) {
       continue;
 
     if (tokens[0] == "pswpin") {
-      meminfo->pswpin = val;
+      vmstat->pswpin = val;
       DCHECK(!has_pswpin);
       has_pswpin = true;
     } else if (tokens[0] == "pswpout") {
-      meminfo->pswpout = val;
+      vmstat->pswpout = val;
       DCHECK(!has_pswpout);
       has_pswpout = true;
     } else if (tokens[0] == "pgmajfault") {
-      meminfo->pgmajfault = val;
+      vmstat->pgmajfault = val;
       DCHECK(!has_pgmajfault);
       has_pgmajfault = true;
     }
@@ -783,17 +778,31 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   ReadChromeOSGraphicsMemory(meminfo);
 #endif
 
+  return true;
+}
+
+std::unique_ptr<DictionaryValue> VmStatInfo::ToValue() const {
+  auto res = std::make_unique<DictionaryValue>();
+  res->SetInteger("pswpin", pswpin);
+  res->SetInteger("pswpout", pswpout);
+  res->SetInteger("pgmajfault", pgmajfault);
+  return res;
+}
+
+bool GetVmStatInfo(VmStatInfo* vmstat) {
+  // Synchronously reading files in /proc and /sys are safe.
+  ThreadRestrictions::ScopedAllowIO allow_io;
+
   FilePath vmstat_file("/proc/vmstat");
   std::string vmstat_data;
   if (!ReadFileToString(vmstat_file, &vmstat_data)) {
     DLOG(WARNING) << "Failed to open " << vmstat_file.value();
     return false;
   }
-  if (!ParseProcVmstat(vmstat_data, meminfo)) {
+  if (!ParseProcVmstat(vmstat_data, vmstat)) {
     DLOG(WARNING) << "Failed to parse " << vmstat_file.value();
     return false;
   }
-
   return true;
 }
 

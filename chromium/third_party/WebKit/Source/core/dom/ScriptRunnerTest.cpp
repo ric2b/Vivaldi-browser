@@ -9,7 +9,7 @@
 #include "platform/bindings/RuntimeCallStats.h"
 #include "platform/heap/Handle.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "public/platform/Platform.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,7 +34,7 @@ class MockPendingScript : public PendingScript {
   MOCK_CONST_METHOD0(IsExternal, bool());
   MOCK_CONST_METHOD0(ErrorOccurred, bool());
   MOCK_CONST_METHOD0(WasCanceled, bool());
-  MOCK_CONST_METHOD0(UrlForClassicScript, KURL());
+  MOCK_CONST_METHOD0(UrlForTracing, KURL());
   MOCK_METHOD0(RemoveFromMemoryCache, void());
 
   MOCK_CONST_METHOD0(IsCurrentlyStreaming, bool());
@@ -74,7 +74,7 @@ class MockScriptLoader final : public ScriptLoader {
   MockScriptLoader* SetupForStreaming(WTF::Closure& finished_callback);
   MockScriptLoader* SetupForNonStreaming();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit MockScriptLoader()
@@ -538,11 +538,8 @@ TEST_F(ScriptRunnerTest, DontExecuteWhileStreaming) {
   // so the mock will fail if it's called anyway.
   platform_->RunUntilIdle();
 
-  // Finish streaming. Note that 'callback' must be empty when the callback
-  // is called, since out mock uses it to determine whether we're still
-  // streaming.
-  WTF::Closure tmp_callback = std::move(callback);
-  tmp_callback();
+  // Finish streaming.
+  std::move(callback).Run();
 
   // Now that streaming is finished, expect Execute() to be called.
   EXPECT_CALL(*script_loader1, Execute()).Times(1);

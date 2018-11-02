@@ -73,7 +73,7 @@ ScriptPromise PushSubscription::unsubscribe(ScriptState* script_state) {
 
   web_push_provider->Unsubscribe(
       service_worker_registration_->WebRegistration(),
-      WTF::MakeUnique<CallbackPromiseAdapter<bool, PushError>>(resolver));
+      std::make_unique<CallbackPromiseAdapter<bool, PushError>>(resolver));
   return promise;
 }
 
@@ -95,11 +95,12 @@ ScriptValue PushSubscription::toJSONForBinding(ScriptState* script_state) {
   return result.GetScriptValue();
 }
 
-DEFINE_TRACE(PushSubscription) {
+void PushSubscription::Trace(blink::Visitor* visitor) {
   visitor->Trace(options_);
   visitor->Trace(p256dh_);
   visitor->Trace(auth_);
   visitor->Trace(service_worker_registration_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

@@ -18,9 +18,10 @@
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
+class Browser;
+
 namespace content {
 class NavigationHandle;
-class WebContents;
 }  // namespace content
 
 namespace arc {
@@ -34,10 +35,24 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   // treated as append-only.
   enum class CloseReason : int {
     ERROR = 0,
+    // DIALOG_DEACTIVATED keeps track of the user dismissing the UI via clicking
+    // the close button or clicking outside of the IntentPickerBubbleView
+    // surface. As with CHROME_PRESSED, the user stays in Chrome, however we
+    // keep both options since CHROME_PRESSED is tied to an explicit intent of
+    // staying in Chrome, not only just getting rid of the
+    // IntentPickerBubbleView UI.
     DIALOG_DEACTIVATED = 1,
-    ALWAYS_PRESSED = 2,
-    JUST_ONCE_PRESSED = 3,
+    OBSOLETE_ALWAYS_PRESSED = 2,
+    OBSOLETE_JUST_ONCE_PRESSED = 3,
     PREFERRED_ACTIVITY_FOUND = 4,
+    // The prefix "CHROME"/"ARC_APP" determines whether the user pressed [Stay
+    // in Chrome] or [Use app] at IntentPickerBubbleView respectively.
+    // "PREFERRED" denotes when the user decides to save this selection, whether
+    // an app or Chrome was selected.
+    CHROME_PRESSED = 5,
+    CHROME_PREFERRED_PRESSED = 6,
+    ARC_APP_PRESSED = 7,
+    ARC_APP_PREFERRED_PRESSED = 8,
     SIZE,
     INVALID = SIZE,
   };
@@ -63,12 +78,11 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
     std::string activity_name;
   };
 
-  using ShowIntentPickerCallback = base::Callback<void(
-      content::WebContents* web_contents,
+  using QueryAndDisplayArcAppsCallback = base::Callback<void(
+      const Browser* browser,
       const std::vector<AppInfo>& app_info,
       const base::Callback<void(const std::string&, CloseReason)>& cb)>;
-  ArcNavigationThrottle(content::NavigationHandle* navigation_handle,
-                        const ShowIntentPickerCallback& show_intent_picker_cb);
+  explicit ArcNavigationThrottle(content::NavigationHandle* navigation_handle);
   ~ArcNavigationThrottle() override;
 
   static bool ShouldOverrideUrlLoadingForTesting(const GURL& previous_url,
@@ -89,20 +103,20 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   // Records intent picker usage statistics as well as whether navigations are
   // continued or redirected to Chrome or ARC respectively, via UMA histograms.
   static void RecordUma(CloseReason close_reason, Platform platform);
-
-  // Swaps Chrome app with any app in row |kMaxAppResults-1| iff its index is
-  // bigger, thus ensuring the user can always see Chrome without scrolling.
-  // When swap is needed, fills |out_indices| and returns true. If |handlers|
-  // do not have Chrome, returns false.
-  static bool IsSwapElementsNeeded(
-      const std::vector<mojom::IntentHandlerInfoPtr>& handlers,
-      std::pair<size_t, size_t>* out_indices);
+  // TODO(djacobo): Remove this function and instead stop ARC from returning
+  // Chrome as a valid app candidate.
+  // Records true if |handlers| contain one or more apps. When this function is
+  // called from OnAppCandidatesReceived, |handlers| always contain Chrome (aka
+  // intent helper), but the same function doesn't treat this as an app.
+  static bool IsAppAvailable(
+      const std::vector<mojom::IntentHandlerInfoPtr>& handlers);
 
   static bool IsAppAvailableForTesting(
       const std::vector<mojom::IntentHandlerInfoPtr>& handlers);
   static size_t FindPreferredAppForTesting(
       const std::vector<mojom::IntentHandlerInfoPtr>& handlers);
-
+  static void AsyncShowIntentPickerBubble(const Browser* browser,
+                                          const GURL& url);
   // content::Navigation implementation:
   const char* GetNameForLogging() override;
 
@@ -112,28 +126,44 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   NavigationThrottle::ThrottleCheckResult WillRedirectRequest() override;
 
   NavigationThrottle::ThrottleCheckResult HandleRequest();
+  // Resume/Cancel the current navigation which was put in DEFER. Close the
+  // current tab only if we continue the navigation on ARC and the current tab
+  // was explicitly generated for this navigation.
   void OnAppCandidatesReceived(
+      std::vector<mojom::IntentHandlerInfoPtr> handlers);
+  // Receives the array of app candidates to handle this URL and decides whether
+  // a preferred app should be triggered right away or ask the browser to
+  // display the intent picker.
+  bool FoundPreferredOrVerifiedArcApp(
       std::vector<mojom::IntentHandlerInfoPtr> handlers);
   void OnAppIconsReceived(
       std::vector<mojom::IntentHandlerInfoPtr> handlers,
       std::unique_ptr<ArcIntentHelperBridge::ActivityToIconsMap> icons);
-  void OnIntentPickerClosed(std::vector<mojom::IntentHandlerInfoPtr> handlers,
-                            const std::string& selected_app_package,
-                            CloseReason close_reason);
+  void DisplayArcApps() const;
   GURL GetStartingGURL() const;
-  // A callback object that allow us to display an IntentPicker when Run() is
-  // executed, it also allow us to report the user's selection back to
-  // OnIntentPickerClosed().
-  ShowIntentPickerCallback show_intent_picker_callback_;
-
-  // A cache of the action the user took the last time this navigation throttle
-  // popped up the intent picker dialog.  If the dialog has never been popped up
-  // before, this will have a value of CloseReason::INVALID.  Used to avoid
-  // popping up the dialog multiple times on chains of multiple redirects.
-  CloseReason previous_user_action_;
+  static void AsyncOnAppCandidatesReceived(
+      const Browser* browser,
+      const GURL& url,
+      std::vector<arc::mojom::IntentHandlerInfoPtr> handlers);
+  static void AsyncOnAppIconsReceived(
+      const Browser* browser,
+      std::vector<arc::mojom::IntentHandlerInfoPtr> handlers,
+      const GURL& url,
+      std::unique_ptr<arc::ArcIntentHelperBridge::ActivityToIconsMap> icons);
+  static void AsyncOnIntentPickerClosed(
+      const GURL& url,
+      const std::string& package_name,
+      arc::ArcNavigationThrottle::CloseReason close_reason);
 
   // Keeps a referrence to the starting GURL.
   GURL starting_gurl_;
+
+  // Keeps track of whether we already shown the UI or preferred app. Since
+  // ArcNavigationThrottle cannot wait for the user (due to the non-blocking
+  // nature of the feature) the best we can do is check if we launched a
+  // preferred app or asked the UI to be shown, this flag ensures we never
+  // trigger the UI twice for the same throttle.
+  bool ui_displayed_;
 
   // This has to be the last member of the class.
   base::WeakPtrFactory<ArcNavigationThrottle> weak_ptr_factory_;

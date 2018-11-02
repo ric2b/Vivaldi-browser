@@ -16,9 +16,6 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/manifest_handlers/permissions_parser.h"
-#include "extensions/common/permissions/api_permission.h"
-#include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -28,12 +25,27 @@ namespace keys = manifest_keys;
 
 namespace {
 
+// An NPAPI plugin included in the extension.
+struct PluginInfo {
+  typedef std::vector<PluginInfo> PluginVector;
+
+  PluginInfo(const base::FilePath& plugin_path, bool plugin_is_public);
+  ~PluginInfo();
+
+  base::FilePath path;  // Path to the plugin.
+  bool is_public;       // False if only this extension can load this plugin.
+
+  // Return the plugins for a given |extensions|, or NULL if none exist.
+  static const PluginVector* GetPlugins(const Extension* extension);
+
+  // Return true if the given |extension| has plugins, and false otherwise.
+  static bool HasPlugins(const Extension* extension);
+};
+
 struct PluginManifestData : Extension::ManifestData {
   // Optional list of NPAPI plugins and associated properties for an extension.
   PluginInfo::PluginVector plugins;
 };
-
-}  // namespace
 
 PluginInfo::PluginInfo(const base::FilePath& plugin_path, bool plugin_is_public)
     : path(plugin_path), is_public(plugin_is_public) {}
@@ -54,6 +66,8 @@ bool PluginInfo::HasPlugins(const Extension* extension) {
       extension->GetManifestData(keys::kPlugins));
   return data && !data->plugins.empty() ? true : false;
 }
+
+}  // namespace
 
 PluginsHandler::PluginsHandler() {}
 
@@ -82,7 +96,7 @@ bool PluginsHandler::Parse(Extension* extension, base::string16* error) {
     std::string path_str;
     if (!plugin_value->GetString(keys::kPluginsPath, &path_str)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          manifest_errors::kInvalidPluginsPath, base::SizeTToString(i));
+          manifest_errors::kInvalidPluginsPath, base::NumberToString(i));
       return false;
     }
 
@@ -91,7 +105,7 @@ bool PluginsHandler::Parse(Extension* extension, base::string16* error) {
     if (plugin_value->HasKey(keys::kPluginsPublic)) {
       if (!plugin_value->GetBoolean(keys::kPluginsPublic, &is_public)) {
         *error = ErrorUtils::FormatErrorMessageUTF16(
-            manifest_errors::kInvalidPluginsPublic, base::SizeTToString(i));
+            manifest_errors::kInvalidPluginsPublic, base::NumberToString(i));
         return false;
       }
     }
@@ -108,10 +122,8 @@ bool PluginsHandler::Parse(Extension* extension, base::string16* error) {
         is_public));
   }
 
-  if (!plugins_data->plugins.empty()) {
+  if (!plugins_data->plugins.empty())
     extension->SetManifestData(keys::kPlugins, std::move(plugins_data));
-    PermissionsParser::AddAPIPermission(extension, APIPermission::kPlugin);
-  }
 
   return true;
 }
@@ -120,11 +132,11 @@ bool PluginsHandler::Validate(const Extension* extension,
                               std::string* error,
                               std::vector<InstallWarning>* warnings) const {
   // Validate claimed plugin paths.
-  if (extensions::PluginInfo::HasPlugins(extension)) {
-    const extensions::PluginInfo::PluginVector* plugins =
-        extensions::PluginInfo::GetPlugins(extension);
+  if (PluginInfo::HasPlugins(extension)) {
+    const PluginInfo::PluginVector* plugins =
+        PluginInfo::GetPlugins(extension);
     CHECK(plugins);
-    for (std::vector<extensions::PluginInfo>::const_iterator plugin =
+    for (std::vector<PluginInfo>::const_iterator plugin =
              plugins->begin();
          plugin != plugins->end(); ++plugin) {
       if (!base::PathExists(plugin->path)) {

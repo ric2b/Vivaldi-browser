@@ -1,9 +1,11 @@
 include_rules = [
   "-content",
   "+content/public",
+  "+components/viz/common",
   "+components/viz/service",
   "+device/geolocation/android/geolocation_jni_registrar.h",
   "+mojo/android/system/mojo_jni_registrar.h",
+  "+services/network/public/cpp",
   "+services/resource_coordinator",
   "+services/service_manager",
   "+v8/include/v8.h",
@@ -12,10 +14,6 @@ include_rules = [
 # Ensure we don't leak internal content headers through public headers.
 specific_include_rules = {
   ".*\.(cc|mm)": [
-    # Allow inclusion of specific components that we depend on.
-    # See comment in content/DEPS for which components are allowed.
-    "+components/scheduler/renderer",
-
     # Testing utilities can access anything in content/
     "+content",
     "+gin/v8_initializer.h",

@@ -22,7 +22,7 @@ class PrivetHTTPClient;
 class PrivetHTTPResolution {
  public:
   using ResultCallback =
-      base::Callback<void(std::unique_ptr<PrivetHTTPClient>)>;
+      base::RepeatingCallback<void(std::unique_ptr<PrivetHTTPClient>)>;
 
   virtual ~PrivetHTTPResolution() {}
 

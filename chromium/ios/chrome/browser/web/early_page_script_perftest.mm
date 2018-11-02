@@ -2,16 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/mac/bundle_locations.h"
-#include "base/timer/elapsed_timer.h"
-#include "ios/chrome/test/base/perf_test_ios.h"
-#include "ios/web/public/test/fakes/test_browser_state.h"
-#import "ios/web/public/test/js_test_util.h"
-#import "ios/web/public/web_view_creation_util.h"
-#import "ios/web/web_state/js/page_script_util.h"
-
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
+
+#include "base/timer/elapsed_timer.h"
+#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/test/base/perf_test_ios.h"
+#import "ios/web/public/test/js_test_util.h"
+#import "ios/web/public/web_view_creation_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -24,30 +22,24 @@ namespace {
 class EarlyPageScriptPerfTest : public PerfTest {
  protected:
   EarlyPageScriptPerfTest() : PerfTest("Early Page Script for WKWebView") {
-    web_view_ = web::BuildWKWebView(CGRectZero, &browser_state_);
+    std::unique_ptr<ios::ChromeBrowserState> browser_state =
+        TestChromeBrowserState::Builder().Build();
+    // |web_view| already has the script injected. |web_view_| is a bare
+    // WKWebView, which will be used for script execution testing performance.
+    web_view_ = [[WKWebView alloc] init];
+    WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state.get());
+    NSArray* scripts = web_view.configuration.userContentController.userScripts;
+    EXPECT_EQ(1U, scripts.count);
+    script_ = [scripts.firstObject source];
   }
 
   // Injects early script into WKWebView.
-  void InjectEarlyScript() {
-    web::ExecuteJavaScript(web_view_, web::GetEarlyPageScript(&browser_state_));
-  }
+  void InjectEarlyScript() { web::ExecuteJavaScript(web_view_, script_); }
 
-  // BrowserState required for web view creation.
-  web::TestBrowserState browser_state_;
   // WKWebView to test scripts injections.
   WKWebView* web_view_;
+  NSString* script_;
 };
-
-// Tests script loading time.
-TEST_F(EarlyPageScriptPerfTest, ScriptLoading) {
-  RepeatTimedRuns("Loading",
-                  ^base::TimeDelta(int) {
-                    base::ElapsedTimer timer;
-                    web::GetEarlyPageScript(&browser_state_);
-                    return timer.Elapsed();
-                  },
-                  nil);
-}
 
 // Tests injection time into a bare web view.
 TEST_F(EarlyPageScriptPerfTest, BareWebViewInjection) {

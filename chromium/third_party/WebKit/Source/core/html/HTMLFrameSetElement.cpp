@@ -25,15 +25,16 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/events/Event.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLFrameElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutFrameSet.h"
 
 namespace blink {
@@ -63,7 +64,7 @@ bool HTMLFrameSetElement::IsPresentationAttribute(
 void HTMLFrameSetElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == bordercolorAttr)
     AddHTMLColorToStyle(style, CSSPropertyBorderColor, value);
   else
@@ -111,6 +112,16 @@ void HTMLFrameSetElement::ParseAttribute(
     }
   } else if (name == bordercolorAttr) {
     border_color_set_ = !value.IsEmpty();
+  } else if (name == onafterprintAttr) {
+    GetDocument().SetWindowAttributeEventListener(
+        EventTypeNames::afterprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
+                                     EventParameterName()));
+  } else if (name == onbeforeprintAttr) {
+    GetDocument().SetWindowAttributeEventListener(
+        EventTypeNames::beforeprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
+                                     EventParameterName()));
   } else if (name == onloadAttr) {
     GetDocument().SetWindowAttributeEventListener(
         EventTypeNames::load,
@@ -282,12 +293,18 @@ void HTMLFrameSetElement::WillRecalcStyle(StyleRecalcChange) {
 LocalDOMWindow* HTMLFrameSetElement::AnonymousNamedGetter(
     const AtomicString& name) {
   Element* frame_element = Children()->namedItem(name);
-  if (!isHTMLFrameElement(frame_element))
+  if (!IsHTMLFrameElement(frame_element))
     return nullptr;
-  Document* document = toHTMLFrameElement(frame_element)->contentDocument();
+  Document* document = ToHTMLFrameElement(frame_element)->contentDocument();
   if (!document || !document->GetFrame())
     return nullptr;
-  return document->domWindow();
+
+  LocalDOMWindow* window = document->domWindow();
+  if (window) {
+    UseCounter::Count(
+        *document, WebFeature::kHTMLFrameSetElementNonNullAnonymousNamedGetter);
+  }
+  return window;
 }
 
 }  // namespace blink

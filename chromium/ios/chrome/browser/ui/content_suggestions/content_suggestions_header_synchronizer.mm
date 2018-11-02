@@ -10,7 +10,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -65,6 +64,9 @@ initWithCollectionController:
     _headerController = headerController;
     _collectionController = collectionController;
 
+    _headerController.collectionSynchronizer = self;
+    _collectionController.headerSynchronizer = self;
+
     _collectionShiftingOffset = 0;
   }
   return self;
@@ -102,8 +104,7 @@ initWithCollectionController:
   // Add gesture recognizer to collection view when the omnibox is focused.
   [self.collectionView addGestureRecognizer:self.tapGestureRecognizer];
 
-  CGFloat pinnedOffsetY =
-      [self.collectionController.suggestionsDelegate pinnedOffsetY];
+  CGFloat pinnedOffsetY = [self.headerController pinnedOffsetY];
   self.collectionShiftingOffset =
       MAX(0, pinnedOffsetY - self.collectionView.contentOffset.y);
 
@@ -147,8 +148,10 @@ initWithCollectionController:
 #pragma mark - ContentSuggestionsHeaderSynchronizing
 
 - (void)updateFakeOmniboxOnCollectionScroll {
-  // Unfocus the omnibox when the scroll view is scrolled.
-  if ([self.headerController isOmniboxFocused] && !self.shouldAnimateHeader) {
+  // Unfocus the omnibox when the scroll view is scrolled by the user (but not
+  // when a scroll is triggered by layout/UIKit).
+  if ([self.headerController isOmniboxFocused] && !self.shouldAnimateHeader &&
+      self.collectionView.dragging) {
     [self.headerController unfocusOmnibox];
   }
 
@@ -159,7 +162,8 @@ initWithCollectionController:
   if (self.shouldAnimateHeader) {
     [self.headerController
         updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
-                             width:0];
+                       screenWidth:self.collectionView.frame.size.width
+                    safeAreaInsets:SafeAreaInsetsForView(self.collectionView)];
   }
 }
 
@@ -167,7 +171,8 @@ initWithCollectionController:
   if (self.shouldAnimateHeader && !IsIPadIdiom()) {
     [self.headerController
         updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
-                             width:width];
+                       screenWidth:width
+                    safeAreaInsets:SafeAreaInsetsForView(self.collectionView)];
   } else {
     [self.headerController updateFakeOmniboxForWidth:width];
   }
@@ -175,6 +180,14 @@ initWithCollectionController:
 
 - (void)unfocusOmnibox {
   [self.headerController unfocusOmnibox];
+}
+
+- (CGFloat)pinnedOffsetY {
+  return [self.headerController pinnedOffsetY];
+}
+
+- (CGFloat)headerHeight {
+  return [self.headerController headerHeight];
 }
 
 #pragma mark - Private
@@ -202,11 +215,9 @@ initWithCollectionController:
 
   // Find how much the collection view should be scrolled up in the next frame.
   CGFloat yOffset =
-      (1.0 - percentComplete) *
-          [self.collectionController.suggestionsDelegate pinnedOffsetY] +
-      percentComplete *
-          ([self.collectionController.suggestionsDelegate pinnedOffsetY] -
-           self.collectionShiftingOffset);
+      (1.0 - percentComplete) * [self.headerController pinnedOffsetY] +
+      percentComplete * ([self.headerController pinnedOffsetY] -
+                         self.collectionShiftingOffset);
   self.collectionView.contentOffset = CGPointMake(0, yOffset);
 
   if (percentComplete == 1.0) {

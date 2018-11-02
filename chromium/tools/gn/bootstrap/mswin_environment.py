@@ -4,7 +4,7 @@ import re
 import sys
 import subprocess
 
-vs_version = "14.0" # VS2015
+vs_version = "2017" # VS2017
 
 def _RegistryQueryBase(sysdir, key, value):
   """Use reg.exe to read a particular key.
@@ -122,6 +122,18 @@ def _ConvertToCygpath(path):
   return path
 
 def GetVSPath(version):
+  if version == '2017':
+    # The VC++ 2017 install location needs to be located using COM instead of
+    # the registry. For details see:
+    # https://blogs.msdn.microsoft.com/heaths/2016/09/15/changes-to-visual-studio-15-setup/
+    # For now we use a hardcoded default with an environment variable override.
+    for path in (
+        os.environ.get('vs2017_install'),
+        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise',
+        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional',
+        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Community'):
+      if path and os.path.exists(path):
+        return path
   # Old method of searching for which VS version is installed
   # We don't use the 2010-encouraged-way because we also want to get the
   # path to the binaries, which it doesn't offer.
@@ -153,7 +165,7 @@ def _SetupScriptInternal(target_arch):
   if sdk_dir:
     setup_path = os.path.normpath(os.path.join(sdk_dir, 'Bin/SetEnv.Cmd'))
 
-  shortname = "2015"
+  shortname = "2017"
   vs_path = GetVSPath(vs_version)
   # We don't use VC/vcvarsall.bat for x86 because vcvarsall calls
   # vcvars32, which it can only find if VS??COMNTOOLS is set, which it
@@ -164,7 +176,7 @@ def _SetupScriptInternal(target_arch):
       # VS2013 and later, non-Express have a x64-x86 cross that we want
       # to prefer.
       return [os.path.normpath(
-         os.path.join(vs_path, 'VC/vcvarsall.bat')), 'amd64_x86']
+         os.path.join(vs_path, 'VC/Auxiliary/Build/vcvarsall.bat')), 'amd64_x86']
     # Otherwise, the standard x86 compiler.
     return [os.path.normpath(
       os.path.join(vs_path, 'Common7/Tools/vsvars32.bat'))]
@@ -177,7 +189,7 @@ def _SetupScriptInternal(target_arch):
         os.environ.get('PROCESSOR_ARCHITEW6432') == 'AMD64'):
       arg = 'amd64'
     return [os.path.normpath(
-        os.path.join(vs_path, 'VC/vcvarsall.bat')), arg]
+        os.path.join(vs_path, 'VC/Auxiliary/Build/vcvarsall.bat')), arg]
 
 def SetupScript(target_arch):
   script_data = _SetupScriptInternal(target_arch)

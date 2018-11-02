@@ -20,7 +20,7 @@ namespace headless {
 MockGenericURLRequestJobDelegate::MockGenericURLRequestJobDelegate()
     : main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
-MockGenericURLRequestJobDelegate::~MockGenericURLRequestJobDelegate() {}
+MockGenericURLRequestJobDelegate::~MockGenericURLRequestJobDelegate() = default;
 
 void MockGenericURLRequestJobDelegate::OnResourceLoadFailed(
     const Request* request,
@@ -34,30 +34,14 @@ void MockGenericURLRequestJobDelegate::OnResourceLoadComplete(
     size_t body_size) {}
 
 // MockCookieStore
-MockCookieStore::MockCookieStore() {}
-MockCookieStore::~MockCookieStore() {}
+MockCookieStore::MockCookieStore() = default;
+MockCookieStore::~MockCookieStore() = default;
 
 void MockCookieStore::SetCookieWithOptionsAsync(
     const GURL& url,
     const std::string& cookie_line,
     const net::CookieOptions& options,
     SetCookiesCallback callback) {
-  CHECK(false);
-}
-
-void MockCookieStore::SetCookieWithDetailsAsync(const GURL& url,
-                                                const std::string& name,
-                                                const std::string& value,
-                                                const std::string& domain,
-                                                const std::string& path,
-                                                base::Time creation_time,
-                                                base::Time expiration_time,
-                                                base::Time last_access_time,
-                                                bool secure,
-                                                bool http_only,
-                                                net::CookieSameSite same_site,
-                                                net::CookiePriority priority,
-                                                SetCookiesCallback callback) {
   CHECK(false);
 }
 
@@ -161,10 +145,11 @@ void MockCookieStore::SendCookies(const GURL& url,
 }
 
 // MockURLRequestDelegate
-MockURLRequestDelegate::MockURLRequestDelegate() {}
-MockURLRequestDelegate::~MockURLRequestDelegate() {}
+MockURLRequestDelegate::MockURLRequestDelegate() = default;
+MockURLRequestDelegate::~MockURLRequestDelegate() = default;
 
-void MockURLRequestDelegate::OnResponseStarted(net::URLRequest* request) {}
+void MockURLRequestDelegate::OnResponseStarted(net::URLRequest* request,
+                                               int net_error) {}
 void MockURLRequestDelegate::OnReadCompleted(net::URLRequest* request,
                                              int bytes_read) {}
 const std::string& MockURLRequestDelegate::response_data() const {

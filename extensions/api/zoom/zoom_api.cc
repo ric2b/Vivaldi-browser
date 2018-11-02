@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"

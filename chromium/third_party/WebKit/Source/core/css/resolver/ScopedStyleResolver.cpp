@@ -28,22 +28,22 @@
 
 #include "core/css/resolver/ScopedStyleResolver.h"
 
-#include "core/HTMLNames.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/FontFace.h"
 #include "core/css/PageRuleCollector.h"
-#include "core/css/RuleFeature.h"
+#include "core/css/RuleFeatureSet.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/MatchRequest.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/StyleEngine.h"
 #include "core/html/HTMLStyleElement.h"
+#include "core/html_names.h"
 #include "core/svg/SVGStyleElement.h"
 
 namespace blink {
@@ -272,7 +272,7 @@ void ScopedStyleResolver::MatchPageRules(PageRuleCollector& collector) {
         &author_style_sheets_[i]->Contents()->GetRuleSet());
 }
 
-DEFINE_TRACE(ScopedStyleResolver) {
+void ScopedStyleResolver::Trace(blink::Visitor* visitor) {
   visitor->Trace(scope_);
   visitor->Trace(author_style_sheets_);
   visitor->Trace(keyframes_rule_map_);
@@ -318,6 +318,20 @@ void ScopedStyleResolver::AddTreeBoundaryCrossingRules(
       RuleSubSet::Create(parent_style_sheet, sheet_index, rule_set_for_scope));
 }
 
+void ScopedStyleResolver::V0ShadowAddedOnV1Document() {
+  // See the comment in AddSlottedRules().
+  if (!slotted_rule_set_)
+    return;
+
+  if (!tree_boundary_crossing_rule_set_) {
+    tree_boundary_crossing_rule_set_ = new CSSStyleSheetRuleSubSet();
+    GetTreeScope().GetDocument().GetStyleEngine().AddTreeBoundaryCrossingScope(
+        GetTreeScope());
+  }
+  tree_boundary_crossing_rule_set_->AppendVector(*slotted_rule_set_);
+  slotted_rule_set_ = nullptr;
+}
+
 void ScopedStyleResolver::AddSlottedRules(const RuleSet& author_rules,
                                           CSSStyleSheet* parent_style_sheet,
                                           unsigned sheet_index) {
@@ -333,6 +347,9 @@ void ScopedStyleResolver::AddSlottedRules(const RuleSet& author_rules,
   // StyleResolver misses them.
   // Adding this tree scope to tree boundary crossing scopes may end up in
   // O(N^2) where N is number of scopes which has ::slotted() rules.
+  // Once the document-wide cascade order flag downgrades from V1 to V0,
+  // these slotted rules have to be moved back to tree boundary crossing
+  // rule sets. See V0ShadowAddedOnV1Document().
   if (GetTreeScope().GetDocument().MayContainV0Shadow()) {
     if (!tree_boundary_crossing_rule_set_) {
       tree_boundary_crossing_rule_set_ = new CSSStyleSheetRuleSubSet();
@@ -345,7 +362,6 @@ void ScopedStyleResolver::AddSlottedRules(const RuleSet& author_rules,
         RuleSubSet::Create(parent_style_sheet, sheet_index, slotted_rule_set));
     return;
   }
-
   if (!slotted_rule_set_)
     slotted_rule_set_ = new CSSStyleSheetRuleSubSet();
   slotted_rule_set_->push_back(
@@ -374,7 +390,7 @@ bool ScopedStyleResolver::HaveSameStyles(const ScopedStyleResolver* first,
   return true;
 }
 
-DEFINE_TRACE(ScopedStyleResolver::RuleSubSet) {
+void ScopedStyleResolver::RuleSubSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_style_sheet_);
   visitor->Trace(rule_set_);
 }

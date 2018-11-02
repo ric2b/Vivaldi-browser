@@ -2,11 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
 
-source_set("backend") {
+declare_args() {
+  # Set true to use raw timestamps on non-desktop cast build.
+  # ALSA version equal or later than 1.0.29 support this function.
+  use_alsa_monotonic_raw_tstamps = use_alsa && !is_cast_desktop_build
+
+  system_owns_volume =
+      use_alsa && !enable_assistant && chromecast_branding != "google"
+}
+
+cast_source_set("backend") {
   sources = [
     "audio_decoder_wrapper.cc",
     "audio_decoder_wrapper.h",
@@ -27,20 +37,12 @@ source_set("backend") {
   deps = [
     "//base",
     "//chromecast:chromecast_features",
+    "//chromecast/media:libcast_media",
+    "//chromecast/media/cma/base",
   ]
-
-  if (is_android) {
-    if (is_cast_using_cma_backend) {
-      deps += [ "//chromecast/media/cma/backend/android:cast_media_android" ]
-    } else {
-      deps += [ ":cast_media_android_dummy" ]
-    }
-  } else {
-    deps += [ ":libcast_media_1.0" ]
-  }
 }
 
-source_set("cast_media_android_dummy") {
+cast_source_set("cast_media_android_dummy") {
   sources = [
     "cast_media_android_dummy.cc",
   ]
@@ -58,7 +60,7 @@ source_set("cast_media_android_dummy") {
 cast_shared_library("libcast_media_1.0") {
   if (is_cast_desktop_build) {
     deps = [
-      ":default",
+      "//chromecast/media/cma/backend/desktop",
     ]
   } else {
     deps = [
@@ -67,31 +69,9 @@ cast_shared_library("libcast_media_1.0") {
   }
 }
 
-# Default implementation of media backend used on desktop.
-source_set("default") {
-  sources = [
-    "audio_decoder_default.cc",
-    "audio_decoder_default.h",
-    "cast_media_default.cc",
-    "media_pipeline_backend_default.cc",
-    "media_pipeline_backend_default.h",
-    "media_sink_default.cc",
-    "media_sink_default.h",
-    "video_decoder_default.cc",
-    "video_decoder_default.h",
-  ]
-
-  deps = [
-    "//base",
-    "//chromecast/base",
-    "//chromecast/public/media",
-    "//media",
-  ]
-}
-
 # Dummy implementation of media backend used on chromecast devices.
 # Must not depend on anything outside //chromecast/public.
-source_set("dummy") {
+cast_source_set("dummy") {
   sources = [
     "cast_media_dummy.cc",
   ]
@@ -101,9 +81,18 @@ source_set("dummy") {
   ]
 }
 
+buildflag_header("audio_features") {
+  header = "audio_features.h"
+
+  flags = [
+    "ALSA_MONOTONIC_RAW_TSTAMPS=$use_alsa_monotonic_raw_tstamps",
+    "SYSTEM_OWNS_VOLUME=$system_owns_volume",
+  ]
+}
+
 # Implementation of video decoder that discards decoder buffers.
 # Used on audio platforms for media streams containing video.
-source_set("null") {
+cast_source_set("null") {
   sources = [
     "video_decoder_null.cc",
     "video_decoder_null.h",
@@ -113,4 +102,136 @@ source_set("null") {
     "//base",
     "//chromecast/public/media",
   ]
+}
+
+cast_source_set("audio") {
+  sources = [
+    "audio_decoder_for_mixer.cc",
+    "audio_decoder_for_mixer.h",
+    "cast_audio_json.cc",
+    "cast_audio_json.h",
+    "filter_group.cc",
+    "filter_group.h",
+    "media_codec_support_cast_audio.cc",
+    "media_pipeline_backend_audio.cc",
+    "media_pipeline_backend_audio.h",
+    "post_processing_pipeline.h",
+    "post_processing_pipeline_impl.cc",
+    "post_processing_pipeline_impl.h",
+    "post_processing_pipeline_parser.cc",
+    "post_processing_pipeline_parser.h",
+    "post_processor_factory.cc",
+    "post_processor_factory.h",
+    "stream_mixer.cc",
+    "stream_mixer.h",
+    "stream_mixer_input.cc",
+    "stream_mixer_input.h",
+    "stream_mixer_input_impl.cc",
+    "stream_mixer_input_impl.h",
+    "system_volume_control.h",
+    "volume_control.cc",
+    "volume_map.cc",
+    "volume_map.h",
+  ]
+
+  deps = [
+    ":audio_features",
+    ":null",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+  ]
+}
+
+test("cast_audio_backend_unittests") {
+  testonly = true
+  sources = [
+    "filter_group_unittest.cc",
+    "post_processors/governor_unittest.cc",
+    "post_processors/saturated_gain_unittest.cc",
+  ]
+
+  deps = [
+    ":audio",
+    ":governor",
+    ":libcast_governor_1.0",
+    ":libcast_saturated_gain_1.0",
+    ":saturated_gain",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//chromecast/media/cma/backend/post_processors:test_support",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media:shared_memory_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (use_alsa) {
+    deps += [ "alsa:unit_tests" ]
+  }
+  if (is_fuchsia) {
+    deps += [ "fuchsia:unit_tests" ]
+  }
+}
+
+# This is separate from ":governor" because the associated unittest needs
+# to create a Governor directly (to use test functions).
+cast_shared_library("libcast_governor_1.0") {
+  sources = [
+    "post_processors/governor_create.cc",
+  ]
+  deps = [
+    ":governor",
+    "//chromecast/public/media",
+  ]
+  if (is_fuchsia) {
+    ldflags = [ "-Wl,-Bsymbolic" ]
+  }
+}
+
+cast_source_set("governor") {
+  sources = [
+    "post_processors/governor.cc",
+    "post_processors/governor.h",
+  ]
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/public/media",
+  ]
+  public_configs = [ "//chromecast/public:public_config" ]
+}
+
+cast_shared_library("libcast_saturated_gain_1.0") {
+  sources = [
+    "post_processors/saturated_gain_create.cc",
+  ]
+  deps = [
+    ":saturated_gain",
+    "//chromecast/public/media",
+  ]
+  if (is_fuchsia) {
+    ldflags = [ "-Wl,-Bsymbolic" ]
+  }
+}
+
+cast_source_set("saturated_gain") {
+  sources = [
+    "post_processors/saturated_gain.cc",
+    "post_processors/saturated_gain.h",
+  ]
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/public/media",
+  ]
+  public_configs = [ "//chromecast/public:public_config" ]
 }

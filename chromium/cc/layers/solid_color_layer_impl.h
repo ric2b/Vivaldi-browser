@@ -21,18 +21,19 @@ class CC_EXPORT SolidColorLayerImpl : public LayerImpl {
     return base::WrapUnique(new SolidColorLayerImpl(tree_impl, id));
   }
 
-  static void AppendSolidQuads(RenderPass* render_pass,
+  static void AppendSolidQuads(viz::RenderPass* render_pass,
                                const Occlusion& occlusion_in_layer_space,
                                viz::SharedQuadState* shared_quad_state,
                                const gfx::Rect& visible_layer_rect,
                                SkColor color,
+                               bool force_anti_aliasing_off,
                                AppendQuadsData* append_quads_data);
 
   ~SolidColorLayerImpl() override;
 
   // LayerImpl overrides.
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
-  void AppendQuads(RenderPass* render_pass,
+  void AppendQuads(viz::RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
 
  protected:

@@ -7,11 +7,11 @@
 {% endfor %}
 class {{group.type_name}} : public RefCounted<{{group.type_name}}> {
  public:
-  static PassRefPtr<{{group.type_name}}> Create() {
-    return AdoptRef(new {{group.type_name}});
+  static scoped_refptr<{{group.type_name}}> Create() {
+    return base::AdoptRef(new {{group.type_name}});
   }
-  PassRefPtr<{{group.type_name}}> Copy() const {
-    return AdoptRef(new {{group.type_name}}(*this));
+  scoped_refptr<{{group.type_name}}> Copy() const {
+    return base::AdoptRef(new {{group.type_name}}(*this));
   }
 
   bool operator==(const {{group.type_name}}& other) const {

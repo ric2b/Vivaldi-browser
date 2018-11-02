@@ -49,13 +49,12 @@ bool ForeignLayerDisplayItem::Equals(const DisplayItem& other) const {
          layer_ == static_cast<const ForeignLayerDisplayItem&>(other).layer_;
 }
 
-#ifndef NDEBUG
-void ForeignLayerDisplayItem::DumpPropertiesAsDebugString(
-    StringBuilder& string_builder) const {
-  DisplayItem::DumpPropertiesAsDebugString(string_builder);
-  string_builder.Append(String::Format(", layer: %d", layer_->id()));
+#if DCHECK_IS_ON()
+void ForeignLayerDisplayItem::PropertiesAsJSON(JSONObject& json) const {
+  DisplayItem::PropertiesAsJSON(json);
+  json.SetInteger("layer", layer_->id());
 }
-#endif  // NDEBUG
+#endif
 
 void RecordForeignLayer(GraphicsContext& context,
                         const DisplayItemClient& client,

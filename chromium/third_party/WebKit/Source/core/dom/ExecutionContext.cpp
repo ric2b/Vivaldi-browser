@@ -29,8 +29,7 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/dom/SuspendableObject.h"
-#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/PausableObject.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/events/ErrorEvent.h"
 #include "core/frame/UseCounter.h"
@@ -42,13 +41,14 @@
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
 ExecutionContext::ExecutionContext()
     : circular_sequential_id_(0),
       in_dispatch_error_event_(false),
-      is_context_suspended_(false),
+      is_context_paused_(false),
       is_context_destroyed_(false),
       window_interaction_tokens_(0),
       referrer_policy_(kReferrerPolicyDefault) {}
@@ -73,16 +73,16 @@ ExecutionContext* ExecutionContext::ForRelevantRealm(
   return ToExecutionContext(info.Holder()->CreationContext());
 }
 
-void ExecutionContext::SuspendSuspendableObjects() {
-  DCHECK(!is_context_suspended_);
-  NotifySuspendingSuspendableObjects();
-  is_context_suspended_ = true;
+void ExecutionContext::PausePausableObjects() {
+  DCHECK(!is_context_paused_);
+  NotifySuspendingPausableObjects();
+  is_context_paused_ = true;
 }
 
-void ExecutionContext::ResumeSuspendableObjects() {
-  DCHECK(is_context_suspended_);
-  is_context_suspended_ = false;
-  NotifyResumingSuspendableObjects();
+void ExecutionContext::UnpausePausableObjects() {
+  DCHECK(is_context_paused_);
+  is_context_paused_ = false;
+  NotifyResumingPausableObjects();
 }
 
 void ExecutionContext::NotifyContextDestroyed() {
@@ -90,24 +90,23 @@ void ExecutionContext::NotifyContextDestroyed() {
   ContextLifecycleNotifier::NotifyContextDestroyed();
 }
 
-void ExecutionContext::SuspendScheduledTasks() {
-  SuspendSuspendableObjects();
-  TasksWereSuspended();
+void ExecutionContext::PauseScheduledTasks() {
+  PausePausableObjects();
+  TasksWerePaused();
 }
 
-void ExecutionContext::ResumeScheduledTasks() {
-  ResumeSuspendableObjects();
-  TasksWereResumed();
+void ExecutionContext::UnpauseScheduledTasks() {
+  UnpausePausableObjects();
+  TasksWereUnpaused();
 }
 
-void ExecutionContext::SuspendSuspendableObjectIfNeeded(
-    SuspendableObject* object) {
+void ExecutionContext::PausePausableObjectIfNeeded(PausableObject* object) {
 #if DCHECK_IS_ON()
   DCHECK(Contains(object));
 #endif
-  // Ensure all SuspendableObjects are suspended also newly created ones.
-  if (is_context_suspended_)
-    object->Suspend();
+  // Ensure all PausableObjects are paused also newly created ones.
+  if (is_context_paused_)
+    object->Pause();
 }
 
 bool ExecutionContext::ShouldSanitizeScriptError(
@@ -175,16 +174,12 @@ SecurityOrigin* ExecutionContext::GetSecurityOrigin() {
   return GetSecurityContext().GetSecurityOrigin();
 }
 
+SecurityOrigin* ExecutionContext::GetMutableSecurityOrigin() {
+  return GetSecurityContext().GetMutableSecurityOrigin();
+}
+
 ContentSecurityPolicy* ExecutionContext::GetContentSecurityPolicy() {
   return GetSecurityContext().GetContentSecurityPolicy();
-}
-
-const KURL& ExecutionContext::Url() const {
-  return VirtualURL();
-}
-
-KURL ExecutionContext::CompleteURL(const String& url) const {
-  return VirtualCompleteURL(url);
 }
 
 void ExecutionContext::AllowWindowInteraction() {
@@ -251,7 +246,7 @@ void ExecutionContext::RemoveURLFromMemoryCache(const KURL& url) {
   GetMemoryCache()->RemoveURLFromCache(url);
 }
 
-DEFINE_TRACE(ExecutionContext) {
+void ExecutionContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(public_url_manager_);
   visitor->Trace(pending_exceptions_);
   ContextLifecycleNotifier::Trace(visitor);

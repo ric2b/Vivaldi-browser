@@ -53,6 +53,8 @@ class NET_EXPORT HttpResponseInfo {
     CONNECTION_INFO_QUIC_39 = 17,
     CONNECTION_INFO_QUIC_40 = 18,
     CONNECTION_INFO_QUIC_41 = 19,
+    CONNECTION_INFO_QUIC_42 = 20,
+    CONNECTION_INFO_QUIC_43 = 21,
     NUM_OF_CONNECTION_INFOS,
   };
 
@@ -190,7 +192,7 @@ class NET_EXPORT HttpResponseInfo {
   // The "Vary" header data for this response.
   HttpVaryData vary_data;
 
-  // Any metadata asociated with this resource's cached data.
+  // Any metadata associated with this resource's cached data.
   scoped_refptr<IOBufferWithSize> metadata;
 
   static std::string ConnectionInfoToString(ConnectionInfo connection_info);

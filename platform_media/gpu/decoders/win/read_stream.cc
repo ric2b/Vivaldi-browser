@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2013 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -11,7 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "media/base/bind_to_current_loop.h"
 
-namespace content {
+namespace media {
 
 namespace {
 
@@ -24,17 +25,19 @@ void BlockingReadDone(int* bytes_read_out,
 
 }
 
-ReadStream::ReadStream(media::DataSource* data_source)
+ReadStream::ReadStream(DataSource* data_source)
   : data_source_(data_source),
     listener_(nullptr) {
   DCHECK(data_source_);
 }
 
+ReadStream::~ReadStream() {}
+
 void ReadStream::Initialize(ReadStreamListener * listener) {
   DCHECK(listener);
   listener_ = listener;
   read_cb_ =
-      media::BindToCurrentLoop(
+      BindToCurrentLoop(
         base::Bind(&ReadStream::OnReadData, base::Unretained(this)));
 }
 
@@ -97,8 +100,8 @@ int ReadStream::SyncRead(uint8_t* buff, size_t len) {
   data_source_->Read(stream_.CurrentPosition(), len, buff,
                      base::Bind(&BlockingReadDone, &bytes_read, &read_done));
   read_done.Wait();
-  if (bytes_read == media::DataSource::kReadError)
-    return media::DataSource::kReadError;
+  if (bytes_read == DataSource::kReadError)
+    return DataSource::kReadError;
 
   stream_.ReceivedBytes(bytes_read);
   return bytes_read;

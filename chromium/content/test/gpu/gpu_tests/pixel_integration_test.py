@@ -54,7 +54,9 @@ class PixelIntegrationTest(
 
   @classmethod
   def SetUpProcess(cls):
-    color_profile_manager.ForceUntilExitSRGB()
+    options = cls.GetParsedCommandLineOptions()
+    color_profile_manager.ForceUntilExitSRGB(
+      options.dont_restore_color_profile_after_test)
     super(PixelIntegrationTest, cls).SetUpProcess()
     cls.CustomizeBrowserArgs(cls._AddDefaultArgs([]))
     cls.StartBrowser()
@@ -67,7 +69,7 @@ class PixelIntegrationTest(
     # All tests receive the following options.
     return [
       '--force-color-profile=srgb',
-      '--enable-features=ColorCorrectRendering',
+      '--ensure-forced-color-profile',
       '--enable-gpu-benchmarking',
       '--test-type=gpu'] + browser_args
 
@@ -96,6 +98,10 @@ class PixelIntegrationTest(
     pages = pixel_test_pages.DefaultPages(name)
     pages += pixel_test_pages.GpuRasterizationPages(name)
     pages += pixel_test_pages.ExperimentalCanvasFeaturesPages(name)
+    pages += pixel_test_pages.NoGpuProcessPages(name)
+    # The following pages should run only on platforms where SwiftShader is
+    # enabled. They are skipped on other platforms through test expectations.
+    pages += pixel_test_pages.SwiftShaderPages(name)
     if sys.platform.startswith('darwin'):
       pages += pixel_test_pages.MacSpecificPages(name)
     if sys.platform.startswith('win'):

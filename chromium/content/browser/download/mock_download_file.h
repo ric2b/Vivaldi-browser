@@ -33,18 +33,12 @@ class MockDownloadFile : public DownloadFile {
                     const CancelRequestCallback&,
                     const DownloadItem::ReceivedSlices& received_slices,
                     bool is_parallelizable));
-  void AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
-                     int64_t offset,
-                     int64_t length) override;
-  void AddDataPipeConsumerHandle(mojo::ScopedDataPipeConsumerHandle handle,
-                                 int64_t offset,
-                                 int64_t length) override;
-  MOCK_METHOD3(DoAddDataPipeConsumerHandle,
-               void(const mojo::DataPipeConsumerHandle& handle,
-                    int64_t offset,
-                    int64_t length));
-  MOCK_METHOD3(DoAddByteStream,
-               void(ByteStreamReader* stream_reader,
+  void AddInputStream(
+      std::unique_ptr<DownloadManager::InputStream> input_stream,
+      int64_t offset,
+      int64_t length) override;
+  MOCK_METHOD3(DoAddInputStream,
+               void(DownloadManager::InputStream* input_stream,
                     int64_t offset,
                     int64_t length));
   MOCK_METHOD2(OnResponseCompleted, void(int64_t offset,
@@ -68,7 +62,6 @@ class MockDownloadFile : public DownloadFile {
   MOCK_METHOD0(Finish, void());
   MOCK_CONST_METHOD0(FullPath, const base::FilePath&());
   MOCK_CONST_METHOD0(InProgress, bool());
-  MOCK_METHOD0(WasPaused, void());
   MOCK_CONST_METHOD0(BytesSoFar, int64_t());
   MOCK_CONST_METHOD0(CurrentSpeed, int64_t());
   MOCK_METHOD1(GetHash, bool(std::string* hash));
@@ -76,6 +69,8 @@ class MockDownloadFile : public DownloadFile {
   MOCK_CONST_METHOD0(Id, int());
   MOCK_METHOD0(GetDownloadManager, DownloadManager*());
   MOCK_CONST_METHOD0(DebugString, std::string());
+  MOCK_METHOD0(Pause, void());
+  MOCK_METHOD0(Resume, void());
 };
 
 }  // namespace content

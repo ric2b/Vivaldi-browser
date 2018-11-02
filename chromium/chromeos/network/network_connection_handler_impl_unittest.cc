@@ -44,8 +44,8 @@ const char kTetherGuid[] = "tether-guid";
 
 class TestNetworkConnectionObserver : public NetworkConnectionObserver {
  public:
-  TestNetworkConnectionObserver() {}
-  ~TestNetworkConnectionObserver() override {}
+  TestNetworkConnectionObserver() = default;
+  ~TestNetworkConnectionObserver() override = default;
 
   // NetworkConnectionObserver
   void ConnectToNetworkRequested(const std::string& service_path) override {
@@ -87,7 +87,7 @@ class FakeTetherDelegate : public NetworkConnectionHandler::TetherDelegate {
  public:
   FakeTetherDelegate()
       : last_delegate_function_type_(DelegateFunctionType::NONE) {}
-  ~FakeTetherDelegate() override {}
+  ~FakeTetherDelegate() override = default;
 
   enum class DelegateFunctionType { NONE, CONNECT, DISCONNECT };
 
@@ -138,7 +138,7 @@ class NetworkConnectionHandlerImplTest : public NetworkStateTest {
       : scoped_task_environment_(
             base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
 
-  ~NetworkConnectionHandlerImplTest() override {}
+  ~NetworkConnectionHandlerImplTest() override = default;
 
   void SetUp() override {
     ASSERT_TRUE(test_nssdb_.is_open());
@@ -147,8 +147,6 @@ class NetworkConnectionHandlerImplTest : public NetworkStateTest {
     test_nsscertdb_.reset(new net::NSSCertDatabaseChromeOS(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())),
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot()))));
-    test_nsscertdb_->SetSlowTaskRunnerForTest(
-        scoped_task_environment_.GetMainThreadTaskRunner());
 
     CertLoader::Initialize();
     CertLoader::ForceHardwareBackedForTesting();
@@ -254,9 +252,10 @@ class NetworkConnectionHandlerImplTest : public NetworkStateTest {
   }
 
   scoped_refptr<net::X509Certificate> ImportTestClientCert() {
-    net::CertificateList ca_cert_list(net::CreateCertificateListFromFile(
-        net::GetTestCertsDirectory(), "client_1_ca.pem",
-        net::X509Certificate::FORMAT_AUTO));
+    net::ScopedCERTCertificateList ca_cert_list =
+        net::CreateCERTCertificateListFromFile(
+            net::GetTestCertsDirectory(), "client_1_ca.pem",
+            net::X509Certificate::FORMAT_AUTO);
     if (ca_cert_list.empty()) {
       LOG(ERROR) << "No CA cert loaded.";
       return nullptr;

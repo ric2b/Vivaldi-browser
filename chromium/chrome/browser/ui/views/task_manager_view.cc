@@ -34,17 +34,17 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
 
-#if defined(USE_ASH)
-// Note: gn check complains here, despite the correct conditional //ash dep.
-#include "ash/public/cpp/shelf_item.h"            // nogncheck
-#include "ash/public/cpp/window_properties.h"     // nogncheck
-#include "ash/resources/grit/ash_resources.h"     // nogncheck
-#include "ash/wm/window_util.h"                   // nogncheck
-#include "chrome/browser/ui/ash/ash_util.h"       // nogncheck
+#if defined(OS_CHROMEOS)
+// gn check complains on Linux Ozone.
+#include "ash/public/cpp/shelf_item.h"         // nogncheck
+#include "ash/public/cpp/window_properties.h"  // nogncheck
+#include "ash/resources/grit/ash_resources.h"
+#include "ash/wm/window_util.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
-#endif  // defined(USE_ASH)
+#endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 #include "chrome/browser/shell_integration_win.h"
@@ -78,7 +78,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
 
   gfx::NativeWindow context =
       browser ? browser->window()->GetNativeWindow() : nullptr;
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   if (!ash_util::IsRunningInMash() && !context)
     context = ash::wm::GetActiveWindow();
 #endif
@@ -101,7 +101,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   g_task_manager_view->SelectTaskOfActiveTab(browser);
   g_task_manager_view->GetWidget()->Show();
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   aura::Window* window = g_task_manager_view->GetWidget()->GetNativeWindow();
   // An app id for task manager windows, also used to identify the shelf item.
   // Generated as crx_file::id_util::GenerateId("org.chromium.taskmanager")
@@ -251,7 +251,7 @@ void TaskManagerView::GetGroupRange(int model_index, views::GroupRange* range) {
 }
 
 void TaskManagerView::OnSelectionChanged() {
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void TaskManagerView::OnDoubleClick() {
@@ -324,9 +324,7 @@ void TaskManagerView::Init() {
   // Create the table view.
   tab_table_ =
       new views::TableView(nullptr, columns_, views::ICON_AND_TEXT, false);
-  table_model_.reset(new TaskManagerTableModel(
-      REFRESH_TYPE_CPU | REFRESH_TYPE_MEMORY | REFRESH_TYPE_NETWORK_USAGE,
-      this));
+  table_model_.reset(new TaskManagerTableModel(this));
   tab_table_->SetModel(table_model_.get());
   tab_table_->SetGrouper(this);
   tab_table_->set_observer(this);
@@ -337,9 +335,18 @@ void TaskManagerView::Init() {
   AddChildView(tab_table_parent_);
 
   SetLayoutManager(new views::FillLayout());
-  SetBorder(
-      views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
-          views::INSETS_DIALOG_CONTENTS)));
+
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  const gfx::Insets dialog_insets =
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
+  // We don't use ChromeLayoutProvider::GetDialogInsetsForContentType because we
+  // don't have a title.
+  const gfx::Insets content_insets(
+      dialog_insets.top(), dialog_insets.left(),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL),
+      dialog_insets.right());
+  SetBorder(views::CreateEmptyBorder(content_insets));
 
   table_model_->RetrieveSavedColumnsSettingsAndUpdateTable();
 
@@ -377,3 +384,19 @@ void TaskManagerView::RetrieveSavedAlwaysOnTopState() {
 }
 
 }  // namespace task_manager
+
+namespace chrome {
+
+#if defined(OS_MACOSX)
+// These are used by the Mac versions of |ShowTaskManager| and |HideTaskManager|
+// if they decide to show the Views task manager instead of the Cocoa one.
+task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser) {
+  return task_manager::TaskManagerView::Show(browser);
+}
+
+void HideTaskManagerViews() {
+  task_manager::TaskManagerView::Hide();
+}
+#endif
+
+}  // namespace chrome

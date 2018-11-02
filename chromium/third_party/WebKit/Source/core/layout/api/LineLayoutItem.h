@@ -5,6 +5,7 @@
 #ifndef LineLayoutItem_h
 #define LineLayoutItem_h
 
+#include "core/editing/PositionWithAffinity.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/LayoutText.h"
@@ -38,9 +39,9 @@ class LineLayoutItem {
   explicit LineLayoutItem(WTF::HashTableDeletedValueType)
       : layout_object_(kHashTableDeletedValue) {}
 
-  LineLayoutItem(std::nullptr_t) : layout_object_(0) {}
+  LineLayoutItem(std::nullptr_t) : layout_object_(nullptr) {}
 
-  LineLayoutItem() : layout_object_(0) {}
+  LineLayoutItem() : layout_object_(nullptr) {}
 
   explicit operator bool() const { return layout_object_; }
 
@@ -214,8 +215,11 @@ class LineLayoutItem {
 
   bool SelfNeedsLayout() const { return layout_object_->SelfNeedsLayout(); }
 
-  // TODO(dgrogan/eae): Why does layoutObject need to know if its ancestor
-  // line box is dirty at all?
+  // |SetAncestorLineBoxDirty()| invalidates |layout_object|, should be
+  // |LayoutInline|, with |kLineBoxesChanged|.
+  // Note: |AncestorLineBoxDirty| flag itself is used for preventing
+  // invalidation on |layout_object_| more than once and used only in
+  // |LineBoxList::DirtyLinesFromChangedChild()|.
   void SetAncestorLineBoxDirty() const {
     layout_object_->SetAncestorLineBoxDirty();
   }
@@ -244,13 +248,9 @@ class LineLayoutItem {
     return layout_object_->GetSelectionState();
   }
 
-  // TODO(dgrogan/eae): Can we move this to style?
-  Color SelectionBackgroundColor() const {
-    return layout_object_->SelectionBackgroundColor();
-  }
-
   // TODO(dgrogan/eae): Needed for Color::current. Can we move this somewhere?
-  Color ResolveColor(const ComputedStyle& style_to_use, int color_property) {
+  Color ResolveColor(const ComputedStyle& style_to_use,
+                     CSSPropertyID color_property) {
     return layout_object_->ResolveColor(style_to_use, color_property);
   }
 
@@ -310,6 +310,8 @@ class LineLayoutItem {
   void SetIsTruncated(bool set_truncation) {
     layout_object_->SetIsTruncated(set_truncation);
   }
+
+  bool IsTruncated() { return layout_object_->IsTruncated(); }
 
   struct LineLayoutItemHash {
     STATIC_ONLY(LineLayoutItemHash);

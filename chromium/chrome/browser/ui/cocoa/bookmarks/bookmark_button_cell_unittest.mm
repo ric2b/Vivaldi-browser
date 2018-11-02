@@ -7,7 +7,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/ui/cocoa/l10n_util.h"
 #include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "chrome/test/base/testing_profile.h"
@@ -71,7 +70,7 @@ TEST_F(BookmarkButtonCellTest, IconOnlySqueeze) {
   [view setCell:cell.get()];
   [[test_window() contentView] addSubview:view];
 
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   base::scoped_nsobject<NSImage> image(
       rb.GetNativeImageNamed(IDR_DEFAULT_FAVICON).CopyNSImage());
   EXPECT_TRUE(image.get());
@@ -230,7 +229,7 @@ TEST_F(BookmarkButtonCellTest, CellWidthForNode) {
       model->AddURL(bar, bar->child_count(),
                     base::ASCIIToUTF16("This cell has a longer title "),
                     GURL("http://www.google.com/a"));
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   base::scoped_nsobject<NSImage> image(
       rb.GetNativeImageNamed(IDR_DEFAULT_FAVICON).CopyNSImage());
   CGFloat width_for_node_a =

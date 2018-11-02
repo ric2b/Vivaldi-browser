@@ -31,7 +31,6 @@
 #include "chrome/common/url_constants.h"
 
 using content::BrowserThread;
-using content::RenderViewHost;
 using content::WebContents;
 using extensions::ErrorUtils;
 using extensions::ExtensionAPI;

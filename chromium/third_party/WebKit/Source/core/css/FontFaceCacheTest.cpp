@@ -6,23 +6,23 @@
 #include "core/css/CSSFontFamilyValue.h"
 #include "core/css/CSSFontStyleRangeValue.h"
 #include "core/css/CSSIdentifierValue.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/FontFace.h"
 #include "core/css/FontFaceCache.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class FontFaceCacheTest : public ::testing::Test {
+class FontFaceCacheTest : public PageTestBase {
   USING_FAST_MALLOC(FontFaceCacheTest);
 
  protected:
-  FontFaceCacheTest(){};
-  ~FontFaceCacheTest() override{};
+  FontFaceCacheTest() = default;
+  ~FontFaceCacheTest() override = default;
 
   void SetUp() override;
 
@@ -30,21 +30,24 @@ class FontFaceCacheTest : public ::testing::Test {
   void AppendTestFaceForCapabilities(const CSSValue& stretch,
                                      const CSSValue& style,
                                      const CSSValue& weight);
+  void AppendTestFaceForCapabilities(const CSSValue& stretch,
+                                     const CSSValue& style,
+                                     const CSSPrimitiveValue& start_weight,
+                                     const CSSPrimitiveValue& end_weight);
   FontDescription FontDescriptionForRequest(FontSelectionValue stretch,
                                             FontSelectionValue style,
                                             FontSelectionValue weight);
 
   FontFaceCache cache_;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   const AtomicString kFontNameForTesting{"Arial"};
 };
 
 void FontFaceCacheTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
+  PageTestBase::SetUp();
   ClearCache();
 }
 
@@ -61,10 +64,11 @@ void FontFaceCacheTest::AppendTestFaceForCapabilities(const CSSValue& stretch,
       kFontNameForTesting, kDoNotCheckContentSecurityPolicy);
   CSSValueList* src_value_list = CSSValueList::CreateCommaSeparated();
   src_value_list->Append(*src);
-  CSSProperty properties[] = {CSSProperty(CSSPropertyFontFamily, *family_name),
-                              CSSProperty(CSSPropertySrc, *src_value_list)};
-  MutableStylePropertySet* font_face_descriptor =
-      MutableStylePropertySet::Create(properties, arraysize(properties));
+  CSSPropertyValue properties[] = {
+      CSSPropertyValue(GetCSSPropertyFontFamily(), *family_name),
+      CSSPropertyValue(GetCSSPropertySrc(), *src_value_list)};
+  MutableCSSPropertyValueSet* font_face_descriptor =
+      MutableCSSPropertyValueSet::Create(properties, arraysize(properties));
 
   font_face_descriptor->SetProperty(CSSPropertyFontStretch, stretch);
   font_face_descriptor->SetProperty(CSSPropertyFontStyle, style);
@@ -72,10 +76,20 @@ void FontFaceCacheTest::AppendTestFaceForCapabilities(const CSSValue& stretch,
 
   StyleRuleFontFace* style_rule_font_face =
       StyleRuleFontFace::Create(font_face_descriptor);
-  FontFace* font_face = FontFace::Create(&dummy_page_holder_->GetDocument(),
-                                         style_rule_font_face);
+  FontFace* font_face = FontFace::Create(&GetDocument(), style_rule_font_face);
   CHECK(font_face);
   cache_.Add(style_rule_font_face, font_face);
+}
+
+void FontFaceCacheTest::AppendTestFaceForCapabilities(
+    const CSSValue& stretch,
+    const CSSValue& style,
+    const CSSPrimitiveValue& start_weight,
+    const CSSPrimitiveValue& end_weight) {
+  CSSValueList* weight_list = CSSValueList::CreateSpaceSeparated();
+  weight_list->Append(start_weight);
+  weight_list->Append(end_weight);
+  AppendTestFaceForCapabilities(stretch, style, *weight_list);
 }
 
 FontDescription FontFaceCacheTest::FontDescriptionForRequest(
@@ -308,6 +322,70 @@ TEST_F(FontFaceCacheTest, WidthRangeMatching) {
             FontSelectionRange({NormalSlopeValue(), NormalSlopeValue()}));
 }
 
+TEST_F(FontFaceCacheTest, WidthRangeMatchingBetween400500) {
+  // Two font faces equally far away from a requested font weight of 450.
+
+  CSSIdentifierValue* stretch_value =
+      CSSIdentifierValue::Create(CSSValueNormal);
+  CSSIdentifierValue* style_value = CSSIdentifierValue::Create(CSSValueNormal);
+
+  CSSPrimitiveValue* weight_values_lower[] = {
+      CSSPrimitiveValue::Create(600, CSSPrimitiveValue::UnitType::kNumber),
+      CSSPrimitiveValue::Create(415, CSSPrimitiveValue::UnitType::kNumber),
+      CSSPrimitiveValue::Create(475, CSSPrimitiveValue::UnitType::kNumber),
+  };
+
+  CSSPrimitiveValue* weight_values_upper[] = {
+      CSSPrimitiveValue::Create(610, CSSPrimitiveValue::UnitType::kNumber),
+      CSSPrimitiveValue::Create(425, CSSPrimitiveValue::UnitType::kNumber),
+      CSSPrimitiveValue::Create(485, CSSPrimitiveValue::UnitType::kNumber),
+  };
+
+  // From https://drafts.csswg.org/css-fonts-4/#font-style-matching: "If the
+  // desired weight is inclusively between 400 and 500, weights greater than or
+  // equal to the target weight are checked in ascending order until 500 is hit
+  // and checked, followed by weights less than the target weight in descending
+  // order, followed by weights greater than 500, until a match is found."
+
+  // So, the heavy font should be matched last, after the thin font, and after
+  // the font that is slightly bolder than 450.
+  AppendTestFaceForCapabilities(*stretch_value, *style_value,
+                                *(weight_values_lower[0]),
+                                *(weight_values_upper[0]));
+
+  ASSERT_EQ(cache_.GetNumSegmentedFacesForTesting(), 1ul);
+
+  FontSelectionValue test_weight(450);
+
+  const FontDescription& description_expanded = FontDescriptionForRequest(
+      NormalWidthValue(), NormalSlopeValue(), test_weight);
+  CSSSegmentedFontFace* result =
+      cache_.Get(description_expanded, kFontNameForTesting);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(result->GetFontSelectionCapabilities().weight.minimum,
+            FontSelectionValue(600));
+
+  AppendTestFaceForCapabilities(*stretch_value, *style_value,
+                                *(weight_values_lower[1]),
+                                *(weight_values_upper[1]));
+  ASSERT_EQ(cache_.GetNumSegmentedFacesForTesting(), 2ul);
+
+  result = cache_.Get(description_expanded, kFontNameForTesting);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(result->GetFontSelectionCapabilities().weight.minimum,
+            FontSelectionValue(415));
+
+  AppendTestFaceForCapabilities(*stretch_value, *style_value,
+                                *(weight_values_lower[2]),
+                                *(weight_values_upper[2]));
+  ASSERT_EQ(cache_.GetNumSegmentedFacesForTesting(), 3ul);
+
+  result = cache_.Get(description_expanded, kFontNameForTesting);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(result->GetFontSelectionCapabilities().weight.minimum,
+            FontSelectionValue(475));
+}
+
 TEST_F(FontFaceCacheTest, StretchRangeMatching) {
   CSSPrimitiveValue* stretch_value_from =
       CSSPrimitiveValue::Create(65, CSSPrimitiveValue::UnitType::kPercentage);
@@ -403,7 +481,7 @@ TEST_F(FontFaceCacheTest, ObliqueRangeMatching) {
       FontSelectionRange({FontSelectionValue(30), FontSelectionValue(35)}));
 }
 
-DEFINE_TRACE(FontFaceCacheTest) {
+void FontFaceCacheTest::Trace(blink::Visitor* visitor) {
   visitor->Trace(cache_);
 }
 

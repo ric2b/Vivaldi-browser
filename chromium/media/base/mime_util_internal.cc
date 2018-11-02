@@ -15,6 +15,7 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "media/media_features.h"
+#include "third_party/libaom/av1_features.h"
 
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_glue.h"
@@ -76,6 +77,11 @@ const base::flat_map<std::string, MimeUtil::Codec>& GetStringToCodecMap() {
         {"vorbis", MimeUtil::VORBIS}, {"opus", MimeUtil::OPUS},
         {"flac", MimeUtil::FLAC}, {"vp8", MimeUtil::VP8},
         {"vp8.0", MimeUtil::VP8}, {"theora", MimeUtil::THEORA},
+// TODO(dalecurtis): This is not the correct final string. Fix before enabling
+// by default. http://crbug.com/784607
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+        {"av1", MimeUtil::AV1},
+#endif
       },
       base::KEEP_FIRST_OF_DUPES);
 
@@ -129,7 +135,7 @@ MimeUtil::MimeUtil() : allow_proprietary_codecs_(false) {
   InitializeMimeTypeMaps();
 }
 
-MimeUtil::~MimeUtil() {}
+MimeUtil::~MimeUtil() = default;
 
 AudioCodec MimeUtilToAudioCodec(MimeUtil::Codec codec) {
   switch (codec) {
@@ -158,6 +164,8 @@ AudioCodec MimeUtilToAudioCodec(MimeUtil::Codec codec) {
 
 VideoCodec MimeUtilToVideoCodec(MimeUtil::Codec codec) {
   switch (codec) {
+    case MimeUtil::AV1:
+      return kCodecAV1;
     case MimeUtil::H264:
       return kCodecH264;
     case MimeUtil::HEVC:
@@ -272,7 +280,12 @@ void MimeUtil::AddSupportedMediaFormats() {
   ogg_codecs.insert(ogg_video_codecs.begin(), ogg_video_codecs.end());
 
   const CodecSet webm_audio_codecs{OPUS, VORBIS};
-  const CodecSet webm_video_codecs{VP8, VP9};
+  CodecSet webm_video_codecs{VP8, VP9};
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  if (base::FeatureList::IsEnabled(kAv1Decoder))
+    webm_video_codecs.emplace(AV1);
+#endif
+
   CodecSet webm_codecs(webm_audio_codecs);
   webm_codecs.insert(webm_video_codecs.begin(), webm_video_codecs.end());
 
@@ -302,6 +315,11 @@ void MimeUtil::AddSupportedMediaFormats() {
 #if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
   mp4_video_codecs.emplace(DOLBY_VISION);
 #endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  if (base::FeatureList::IsEnabled(kAv1Decoder))
+    mp4_video_codecs.emplace(AV1);
+#endif
+
   CodecSet mp4_codecs(mp4_audio_codecs);
   mp4_codecs.insert(mp4_video_codecs.begin(), mp4_video_codecs.end());
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -536,6 +554,10 @@ bool MimeUtil::IsCodecSupportedOnAndroid(
     case THEORA:
       return false;
 
+    // AV1 is not supported on Android yet.
+    case AV1:
+      return false;
+
     // ----------------------------------------------------------------------
     // The remaining codecs may be supported depending on platform abilities.
     // ----------------------------------------------------------------------
@@ -748,6 +770,31 @@ bool MimeUtil::ParseCodecHelper(const std::string& mime_type_lower_case,
       GetStringToCodecMap().find(codec_id);
   if (itr != GetStringToCodecMap().end()) {
     out_result->codec = itr->second;
+
+    // Even "simple" video codecs should have an associated profile.
+    if (MimeUtilToVideoCodec(out_result->codec) != kUnknownVideoCodec) {
+      switch (out_result->codec) {
+        case Codec::VP8:
+          out_result->video_profile = VP8PROFILE_ANY;
+          break;
+        case Codec::THEORA:
+          out_result->video_profile = THEORAPROFILE_ANY;
+          break;
+        case Codec::AV1: {
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+          if (base::FeatureList::IsEnabled(kAv1Decoder)) {
+            out_result->video_profile = AV1PROFILE_PROFILE0;
+            break;
+          }
+#endif
+          return false;
+        }
+
+        default:
+          NOTREACHED();
+      }
+    }
+
     return true;
   }
 
@@ -841,7 +888,10 @@ SupportsType MimeUtil::IsCodecSupported(const std::string& mime_type_lower_case,
   VideoCodec video_codec = MimeUtilToVideoCodec(codec);
   if (video_codec != kUnknownVideoCodec &&
       // Theora and VP8 do not have profiles/levels.
-      video_codec != kCodecTheora && video_codec != kCodecVP8) {
+      video_codec != kCodecTheora && video_codec != kCodecVP8 &&
+      // TODO(dalecurtis): AV1 has levels, but they aren't supported yet;
+      // http://crbug.com/784993
+      video_codec != kCodecAV1) {
     DCHECK_NE(video_profile, VIDEO_CODEC_PROFILE_UNKNOWN);
     DCHECK_GT(video_level, 0);
   }
@@ -945,6 +995,7 @@ bool MimeUtil::IsCodecProprietary(Codec codec) const {
     case VP8:
     case VP9:
     case THEORA:
+    case AV1:
       return false;
   }
 

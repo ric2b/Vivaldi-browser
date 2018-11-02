@@ -122,16 +122,15 @@ class AudioInputSyncWriterTest : public testing::Test {
     const AudioParameters audio_params(
         AudioParameters::AUDIO_FAKE, media::CHANNEL_LAYOUT_MONO,
         sampling_frequency_hz, bits_per_sample, frames);
-    const uint32_t segment_size = sizeof(media::AudioInputBufferParameters) +
-                                  AudioBus::CalculateMemorySize(audio_params);
-    const size_t data_size = kSegments * segment_size;
+    const uint32_t data_size =
+        media::ComputeAudioInputBufferSize(audio_params, kSegments);
 
-    auto shared_memory = base::MakeUnique<base::SharedMemory>();
+    auto shared_memory = std::make_unique<base::SharedMemory>();
     EXPECT_TRUE(shared_memory->CreateAndMapAnonymous(data_size));
 
-    auto socket = base::MakeUnique<MockCancelableSyncSocket>(kSegments);
+    auto socket = std::make_unique<MockCancelableSyncSocket>(kSegments);
     socket_ = socket.get();
-    writer_ = base::MakeUnique<AudioInputSyncWriterUnderTest>(
+    writer_ = std::make_unique<AudioInputSyncWriterUnderTest>(
         std::move(shared_memory), std::move(socket), kSegments, audio_params);
     audio_bus_ = AudioBus::Create(audio_params);
   }
@@ -156,11 +155,11 @@ class AudioInputSyncWriterTest : public testing::Test {
                                      size_t number_of_buffers_in_fifo) {
     EXPECT_EQ(number_of_buffers_in_socket, socket_->NumberOfBuffersFilled());
     EXPECT_EQ(number_of_verifications_in_socket, socket_->Peek());
-    EXPECT_EQ(number_of_buffers_in_fifo, writer_->overflow_buses_.size());
+    EXPECT_EQ(number_of_buffers_in_fifo, writer_->overflow_data_.size());
 
     return number_of_buffers_in_socket == socket_->NumberOfBuffersFilled() &&
            number_of_verifications_in_socket == socket_->Peek() &&
-           number_of_buffers_in_fifo == writer_->overflow_buses_.size();
+           number_of_buffers_in_fifo == writer_->overflow_data_.size();
   }
 
  protected:

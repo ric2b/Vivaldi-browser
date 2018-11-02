@@ -14,9 +14,7 @@ namespace blink {
 
 class UnrestrictedDoubleOrString;
 
-class CORE_EXPORT AnimationEffectTimingReadOnly
-    : public GarbageCollected<AnimationEffectTimingReadOnly>,
-      public ScriptWrappable {
+class CORE_EXPORT AnimationEffectTimingReadOnly : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -33,7 +31,7 @@ class CORE_EXPORT AnimationEffectTimingReadOnly
 
   virtual bool IsAnimationEffectTiming() const { return false; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   Member<AnimationEffectReadOnly> parent_;

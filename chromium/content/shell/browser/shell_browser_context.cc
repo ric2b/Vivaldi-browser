@@ -35,8 +35,7 @@
 namespace content {
 
 ShellBrowserContext::ShellResourceContext::ShellResourceContext()
-    : getter_(NULL) {
-}
+    : getter_(nullptr) {}
 
 ShellBrowserContext::ShellResourceContext::~ShellResourceContext() {
 }
@@ -59,7 +58,7 @@ ShellBrowserContext::ShellBrowserContext(bool off_the_record,
       ignore_certificate_errors_(false),
       off_the_record_(off_the_record),
       net_log_(net_log),
-      guest_manager_(NULL) {
+      guest_manager_(nullptr) {
   InitWhileIOAllowed();
   BrowserContextDependencyManager::GetInstance()->
       CreateBrowserContextServices(this);
@@ -206,21 +205,25 @@ BrowserPluginGuestManager* ShellBrowserContext::GetGuestManager() {
 }
 
 storage::SpecialStoragePolicy* ShellBrowserContext::GetSpecialStoragePolicy() {
-  return NULL;
+  return nullptr;
 }
 
 PushMessagingService* ShellBrowserContext::GetPushMessagingService() {
-  return NULL;
+  return nullptr;
 }
 
 SSLHostStateDelegate* ShellBrowserContext::GetSSLHostStateDelegate() {
-  return NULL;
+  return nullptr;
 }
 
 PermissionManager* ShellBrowserContext::GetPermissionManager() {
   if (!permission_manager_.get())
     permission_manager_.reset(new ShellPermissionManager());
   return permission_manager_.get();
+}
+
+BackgroundFetchDelegate* ShellBrowserContext::GetBackgroundFetchDelegate() {
+  return nullptr;
 }
 
 BackgroundSyncController* ShellBrowserContext::GetBackgroundSyncController() {

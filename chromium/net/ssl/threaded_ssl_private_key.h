@@ -11,10 +11,10 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_piece.h"
 #include "net/ssl/ssl_private_key.h"
 
 namespace base {
@@ -34,17 +34,20 @@ class ThreadedSSLPrivateKey : public SSLPrivateKey {
     Delegate() {}
     virtual ~Delegate() {}
 
-    // Returns the digests that are supported by the key in decreasing
-    // preference. This method must be callable on any thread.
-    virtual std::vector<SSLPrivateKey::Hash> GetDigestPreferences() = 0;
+    // Returns the algorithms that are supported by the key in decreasing
+    // preference for TLS 1.2 and later. Note that
+    // |SSL_SIGN_RSA_PKCS1_MD5_SHA1| is only used by TLS 1.1 and earlier and
+    // should not be in this list.
+    virtual std::vector<uint16_t> GetAlgorithmPreferences() = 0;
 
-    // Signs |input| as a digest of type |hash|. On success it returns OK and
-    // sets |signature| to the resulting signature. Otherwise it returns a net
-    // error code. It will only be called on the task runner passed to the
-    // owning ThreadedSSLPrivateKey.
-    virtual Error SignDigest(Hash hash,
-                             const base::StringPiece& input,
-                             std::vector<uint8_t>* signature) = 0;
+    // Signs an |input| with the specified TLS signing algorithm. |input| is
+    // the unhashed message to be signed. On success it returns OK and sets
+    // |signature| to the resulting signature. Otherwise it returns a net error
+    // code. It will only be called on the task runner passed to the owning
+    // ThreadedSSLPrivateKey.
+    virtual Error Sign(uint16_t algorithm,
+                       base::span<const uint8_t> input,
+                       std::vector<uint8_t>* signature) = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Delegate);
@@ -55,10 +58,10 @@ class ThreadedSSLPrivateKey : public SSLPrivateKey {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // SSLPrivateKey implementation.
-  std::vector<SSLPrivateKey::Hash> GetDigestPreferences() override;
-  void SignDigest(Hash hash,
-                  const base::StringPiece& input,
-                  const SignCallback& callback) override;
+  std::vector<uint16_t> GetAlgorithmPreferences() override;
+  void Sign(uint16_t algorithm,
+            base::span<const uint8_t> input,
+            const SignCallback& callback) override;
 
  private:
   ~ThreadedSSLPrivateKey() override;

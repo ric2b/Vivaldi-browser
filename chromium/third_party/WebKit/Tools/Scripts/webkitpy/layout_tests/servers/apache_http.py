@@ -58,8 +58,8 @@ class ApacheHTTP(server_base.ServerBase):
         test_dir = self._port_obj.layout_tests_dir()
         document_root = self._filesystem.join(test_dir, 'http', 'tests')
         forms_test_resources_dir = self._filesystem.join(test_dir, 'fast', 'forms', 'resources')
-        imported_resources_dir = self._filesystem.join(test_dir, 'external', 'wpt', 'resources')
         media_resources_dir = self._filesystem.join(test_dir, 'media')
+        webaudio_resources_dir = self._filesystem.join(test_dir, 'webaudio', 'resources')
         mime_types_path = self._filesystem.join(self._port_obj.apache_config_directory(), 'mime.types')
         cert_file = self._filesystem.join(self._port_obj.apache_config_directory(), 'webkit-httpd.pem')
         inspector_sources_dir = self._port_obj.inspector_build_directory()
@@ -79,10 +79,10 @@ class ApacheHTTP(server_base.ServerBase):
             '-c', 'Alias /geolocation-api/js-test-resources "%s/geolocation-api/resources"' % test_dir,
             '-c', 'Alias /resources/testharness.js "%s/resources/testharness.js"' % test_dir,
             '-c', 'Alias /resources/testharnessreport.js "%s/resources/testharnessreport.js"' % test_dir,
-            '-c', 'Alias /w3c/resources/WebIDLParser.js "%s/webidl2/lib/webidl2.js"' % imported_resources_dir,
             '-c', 'Alias /w3c/resources "%s/resources"' % test_dir,
             '-c', 'Alias /forms-test-resources "%s"' % forms_test_resources_dir,
             '-c', 'Alias /media-resources "%s"' % media_resources_dir,
+            '-c', 'Alias /webaudio-resources "%s"' % webaudio_resources_dir,
             '-c', 'Alias /inspector-sources "%s"' % inspector_sources_dir,
             '-c', 'Alias /gen "%s"' % generated_sources_dir,
             '-c', 'TypesConfig "%s"' % mime_types_path,

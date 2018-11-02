@@ -55,10 +55,8 @@ float ScrollableArea::MinFractionToStepWhenPaging() {
   return kMinFractionToStepWhenPaging;
 }
 
-int ScrollableArea::MaxOverlapBetweenPages() {
-  static int max_overlap_between_pages =
-      ScrollbarTheme::GetTheme().MaxOverlapBetweenPages();
-  return max_overlap_between_pages;
+int ScrollableArea::MaxOverlapBetweenPages() const {
+  return GetPageScrollbarTheme().MaxOverlapBetweenPages();
 }
 
 ScrollableArea::ScrollableArea()
@@ -110,7 +108,7 @@ void ScrollableArea::SetScrollOrigin(const IntPoint& origin) {
 }
 
 GraphicsLayer* ScrollableArea::LayerForContainer() const {
-  return LayerForScrolling() ? LayerForScrolling()->Parent() : 0;
+  return LayerForScrolling() ? LayerForScrolling()->Parent() : nullptr;
 }
 
 ScrollbarOrientation ScrollableArea::ScrollbarOrientationFromDirection(
@@ -436,12 +434,12 @@ void ScrollableArea::SetScrollbarOverlayColorTheme(
   scrollbar_overlay_color_theme_ = overlay_theme;
 
   if (Scrollbar* scrollbar = HorizontalScrollbar()) {
-    ScrollbarTheme::GetTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
+    GetPageScrollbarTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
     scrollbar->SetNeedsPaintInvalidation(kAllParts);
   }
 
   if (Scrollbar* scrollbar = VerticalScrollbar()) {
-    ScrollbarTheme::GetTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
+    GetPageScrollbarTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
     scrollbar->SetNeedsPaintInvalidation(kAllParts);
   }
 }
@@ -583,20 +581,23 @@ void ScrollableArea::FadeOverlayScrollbarsTimerFired(TimerBase*) {
 }
 
 void ScrollableArea::ShowOverlayScrollbars() {
-  if (!ScrollbarTheme::GetTheme().UsesOverlayScrollbars())
+  if (!GetPageScrollbarTheme().UsesOverlayScrollbars())
     return;
 
   SetScrollbarsHidden(false);
   needs_show_scrollbar_layers_ = true;
 
   const double time_until_disable =
-      ScrollbarTheme::GetTheme().OverlayScrollbarFadeOutDelaySeconds() +
-      ScrollbarTheme::GetTheme().OverlayScrollbarFadeOutDurationSeconds();
+      GetPageScrollbarTheme().OverlayScrollbarFadeOutDelaySeconds() +
+      GetPageScrollbarTheme().OverlayScrollbarFadeOutDurationSeconds();
 
   // If the overlay scrollbars don't fade out, don't do anything. This is the
   // case for the mock overlays used in tests and on Mac, where the fade-out is
   // animated in ScrollAnimatorMac.
-  if (!time_until_disable)
+  // We also don't fade out overlay scrollbar for popup since we don't create
+  // compositor for popup and thus they don't appear on hover so users without
+  // a wheel can't scroll if they fade out.
+  if (!time_until_disable || GetChromeClient()->IsPopup())
     return;
 
   if (!fade_overlay_scrollbars_timer_) {
@@ -679,7 +680,7 @@ void ScrollableArea::DidScroll(const gfx::ScrollOffset& offset) {
   SetScrollOffset(new_offset, kCompositorScroll);
 }
 
-DEFINE_TRACE(ScrollableArea) {
+void ScrollableArea::Trace(blink::Visitor* visitor) {
   visitor->Trace(scroll_animator_);
   visitor->Trace(programmatic_scroll_animator_);
 }

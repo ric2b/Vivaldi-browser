@@ -10,8 +10,8 @@
 #include "core/frame/LocalFrame.h"
 #include "core/geometry/DOMRect.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "platform/graphics/Image.h"
@@ -50,20 +50,20 @@ ScriptPromise ShapeDetector::detect(
   ScriptPromise promise = resolver->Promise();
 
   // ImageDatas cannot be tainted by definition.
-  if (image_source.isImageData())
-    return DetectShapesOnImageData(resolver, image_source.getAsImageData());
+  if (image_source.IsImageData())
+    return DetectShapesOnImageData(resolver, image_source.GetAsImageData());
 
   CanvasImageSource* canvas_image_source;
-  if (image_source.isHTMLImageElement()) {
-    canvas_image_source = image_source.getAsHTMLImageElement();
-  } else if (image_source.isImageBitmap()) {
-    canvas_image_source = image_source.getAsImageBitmap();
-  } else if (image_source.isHTMLVideoElement()) {
-    canvas_image_source = image_source.getAsHTMLVideoElement();
-  } else if (image_source.isHTMLCanvasElement()) {
-    canvas_image_source = image_source.getAsHTMLCanvasElement();
-  } else if (image_source.isOffscreenCanvas()) {
-    canvas_image_source = image_source.getAsOffscreenCanvas();
+  if (image_source.IsHTMLImageElement()) {
+    canvas_image_source = image_source.GetAsHTMLImageElement();
+  } else if (image_source.IsImageBitmap()) {
+    canvas_image_source = image_source.GetAsImageBitmap();
+  } else if (image_source.IsHTMLVideoElement()) {
+    canvas_image_source = image_source.GetAsHTMLVideoElement();
+  } else if (image_source.IsHTMLCanvasElement()) {
+    canvas_image_source = image_source.GetAsHTMLCanvasElement();
+  } else if (image_source.IsOffscreenCanvas()) {
+    canvas_image_source = image_source.GetAsOffscreenCanvas();
   } else {
     NOTREACHED() << "Unsupported CanvasImageSource";
     resolver->Reject(
@@ -78,9 +78,9 @@ ScriptPromise ShapeDetector::detect(
     return promise;
   }
 
-  if (image_source.isHTMLImageElement()) {
+  if (image_source.IsHTMLImageElement()) {
     return DetectShapesOnImageElement(resolver,
-                                      image_source.getAsHTMLImageElement());
+                                      image_source.GetAsHTMLImageElement());
   }
 
   // TODO(mcasas): Check if |video| is actually playing a MediaStream by using
@@ -88,11 +88,10 @@ ScriptPromise ShapeDetector::detect(
   // there is a local WebCam associated, there might be sophisticated ways to
   // detect faces on it. Until then, treat as a normal <video> element.
 
-  const FloatSize size(canvas_image_source->SourceWidth(),
-                       canvas_image_source->SourceHeight());
+  const FloatSize size(canvas_image_source->ElementSize(FloatSize()));
 
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
-  RefPtr<Image> image = canvas_image_source->GetSourceImageForCanvas(
+  scoped_refptr<Image> image = canvas_image_source->GetSourceImageForCanvas(
       &source_image_status, kPreferNoAcceleration, kSnapshotReasonDrawImage,
       size);
   if (!image || source_image_status != kNormalSourceImageStatus) {
@@ -106,7 +105,7 @@ ScriptPromise ShapeDetector::detect(
   }
 
   SkPixmap pixmap;
-  RefPtr<Uint8Array> pixel_data;
+  scoped_refptr<Uint8Array> pixel_data;
   uint8_t* pixel_data_ptr = nullptr;
   WTF::CheckedNumeric<int> allocation_size = 0;
 
@@ -117,7 +116,7 @@ ScriptPromise ShapeDetector::detect(
       image->PaintImageForCurrentFrame().GetSkImage()->makeNonTextureImage();
   if (sk_image && sk_image->peekPixels(&pixmap)) {
     pixel_data_ptr = static_cast<uint8_t*>(pixmap.writable_addr());
-    allocation_size = pixmap.getSafeSize();
+    allocation_size = pixmap.computeByteSize();
   } else {
     // TODO(mcasas): retrieve the pixels from elsewhere.
     NOTREACHED();
@@ -195,7 +194,7 @@ ScriptPromise ShapeDetector::DetectShapesOnImageElement(
       SkImageInfo::MakeN32(image->width(), image->height(), image->alphaType());
   size_t rowBytes = skia_info.minRowBytes();
 
-  Vector<uint8_t> bitmap_data(skia_info.getSafeSize(rowBytes));
+  Vector<uint8_t> bitmap_data(skia_info.computeByteSize(rowBytes));
   const SkPixmap pixmap(skia_info, bitmap_data.data(), rowBytes);
 
   if (!image->readPixels(pixmap, 0, 0)) {

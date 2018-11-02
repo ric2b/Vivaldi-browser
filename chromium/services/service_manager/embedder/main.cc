@@ -194,7 +194,10 @@ void NonEmbedderProcessInit() {
   // names in all loaded libraries will be cached.
   // NOTE: On Chrome OS, crash reporting for the root process and non-browser
   // service processes is handled by the OS-level crash_reporter.
-  base::debug::EnableInProcessStackDumping();
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableInProcessStackTraces)) {
+    base::debug::EnableInProcessStackDumping();
+  }
 #endif
 
   base::TaskScheduler::CreateAndStartWithDefaultParams("ServiceManagerProcess");
@@ -219,18 +222,6 @@ void WaitForDebuggerIfNecessary() {
   base::debug::WaitForDebugger(120, true);
 }
 
-// Quits |run_loop| if the |identity| of the quitting service is critical to the
-// system (e.g. the window manager). Used in the main process.
-void OnInstanceQuit(MainDelegate* delegate,
-                    base::RunLoop* run_loop,
-                    int* exit_code,
-                    const service_manager::Identity& identity) {
-  if (delegate->ShouldTerminateServiceManagerOnInstanceQuit(identity,
-                                                            exit_code)) {
-    run_loop->Quit();
-  }
-}
-
 int RunServiceManager(MainDelegate* delegate) {
   NonEmbedderProcessInit();
 
@@ -251,10 +242,6 @@ int RunServiceManager(MainDelegate* delegate) {
       &service_process_launcher_delegate, delegate->CreateServiceCatalog());
 
   base::RunLoop run_loop;
-  int exit_code = 0;
-  background_service_manager.SetInstanceQuitCallback(
-      base::Bind(&OnInstanceQuit, delegate, &run_loop, &exit_code));
-
   delegate->OnServiceManagerInitialized(run_loop.QuitClosure(),
                                         &background_service_manager);
   run_loop.Run();
@@ -262,7 +249,7 @@ int RunServiceManager(MainDelegate* delegate) {
   ipc_thread.Stop();
   base::TaskScheduler::GetInstance()->Shutdown();
 
-  return exit_code;
+  return 0;
 }
 
 void InitializeResources() {
@@ -396,7 +383,7 @@ int Main(const MainParams& params) {
   // Each "main" needs to flush this pool right before it goes into its main
   // event loop to get rid of the cruft.
   std::unique_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool =
-      base::MakeUnique<base::mac::ScopedNSAutoreleasePool>();
+      std::make_unique<base::mac::ScopedNSAutoreleasePool>();
   init_params.autorelease_pool = autorelease_pool.get();
   InitializeMac();
 #endif

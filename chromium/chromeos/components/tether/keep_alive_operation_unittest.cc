@@ -25,11 +25,11 @@ namespace {
 constexpr base::TimeDelta kKeepAliveTickleResponseTime =
     base::TimeDelta::FromSeconds(3);
 
-class TestObserver : public KeepAliveOperation::Observer {
+class TestObserver final : public KeepAliveOperation::Observer {
  public:
   TestObserver() : has_run_callback_(false) {}
 
-  virtual ~TestObserver() {}
+  virtual ~TestObserver() = default;
 
   bool has_run_callback() { return has_run_callback_; }
 

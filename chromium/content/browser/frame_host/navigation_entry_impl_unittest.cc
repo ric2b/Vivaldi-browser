@@ -32,7 +32,7 @@ class TestSSLStatusData : public SSLStatus::UserData {
   // SSLStatus implementation:
   std::unique_ptr<SSLStatus::UserData> Clone() override {
     std::unique_ptr<TestSSLStatusData> cloned =
-        base::MakeUnique<TestSSLStatusData>();
+        std::make_unique<TestSSLStatusData>();
     cloned->set_user_data_flag(user_data_flag_);
     return std::move(cloned);
   }
@@ -46,13 +46,12 @@ class TestSSLStatusData : public SSLStatus::UserData {
 
 class NavigationEntryTest : public testing::Test {
  public:
-  NavigationEntryTest() : instance_(NULL) {
-  }
+  NavigationEntryTest() : instance_(nullptr) {}
 
   void SetUp() override {
     entry1_.reset(new NavigationEntryImpl);
 
-    instance_ = SiteInstanceImpl::Create(NULL);
+    instance_ = SiteInstanceImpl::Create(nullptr);
     entry2_.reset(new NavigationEntryImpl(
         instance_, GURL("test:url"),
         Referrer(GURL("from"), blink::kWebReferrerPolicyDefault),
@@ -176,7 +175,7 @@ TEST_F(NavigationEntryTest, NavigationEntrySSLStatus) {
 TEST_F(NavigationEntryTest, SSLStatusUserData) {
   // Set up an SSLStatus with some user data on it.
   SSLStatus ssl;
-  ssl.user_data = base::MakeUnique<TestSSLStatusData>();
+  ssl.user_data = std::make_unique<TestSSLStatusData>();
   TestSSLStatusData* ssl_data =
       static_cast<TestSSLStatusData*>(ssl.user_data.get());
   ASSERT_TRUE(ssl_data);
@@ -194,7 +193,7 @@ TEST_F(NavigationEntryTest, SSLStatusUserData) {
 // Test other basic accessors
 TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   // SiteInstance
-  EXPECT_TRUE(entry1_->site_instance() == NULL);
+  EXPECT_TRUE(entry1_->site_instance() == nullptr);
   EXPECT_EQ(instance_, entry2_->site_instance());
   entry1_->set_site_instance(instance_);
   EXPECT_EQ(instance_, entry1_->site_instance());

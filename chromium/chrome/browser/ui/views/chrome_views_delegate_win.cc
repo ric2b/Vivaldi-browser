@@ -7,12 +7,11 @@
 #include <dwmapi.h>
 #include <shellapi.h>
 
-#include "base/profiler/scoped_tracker.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/win/windows_version.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/ui/views/native_widget_factory.h"
 #include "chrome/browser/win/app_icon.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "ui/base/win/shell.h"
 
 namespace {
@@ -20,11 +19,6 @@ namespace {
 bool MonitorHasAutohideTaskbarForEdge(UINT edge, HMONITOR monitor) {
   APPBARDATA taskbar_data = {sizeof(APPBARDATA), NULL, 0, edge};
   taskbar_data.hWnd = ::GetForegroundWindow();
-
-  // TODO(robliao): Remove ScopedTracker below once crbug.com/462368 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "462368 MonitorHasAutohideTaskbarForEdge"));
 
   // MSDN documents an ABM_GETAUTOHIDEBAREX, which supposedly takes a monitor
   // rect and returns autohide bars on that monitor.  This sounds like a good

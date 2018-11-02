@@ -57,6 +57,7 @@ mojom("test_interfaces") {
     "test_bad_messages.mojom",
     "test_constants.mojom",
     "test_data_view.mojom",
+    "test_name_generator.mojom",
     "test_native_types.mojom",
     "test_structs.mojom",
     "test_sync_methods.mojom",
@@ -73,6 +74,10 @@ mojom("test_interfaces") {
   use_once_callback = false
 
   support_lazy_serialization = true
+
+  # Validation tests require precise message content matching, so we avoid
+  # scrambling message IDs for test interfaces.
+  scramble_message_ids = false
 }
 
 component("test_export_component") {
@@ -212,6 +217,10 @@ mojom("test_associated_interfaces") {
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
+
+  # Validation tests require precise message content matching, so we avoid
+  # scrambling message IDs for test interfaces.
+  scramble_message_ids = false
 }
 
 mojom("versioning_test_service_interfaces") {

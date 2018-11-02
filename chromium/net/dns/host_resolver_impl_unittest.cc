@@ -4,7 +4,6 @@
 
 #include "net/dns/host_resolver_impl.h"
 
-#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -13,7 +12,6 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -24,6 +22,7 @@
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/address_list.h"
@@ -43,6 +42,7 @@
 
 using net::test::IsError;
 using net::test::IsOk;
+using ::testing::NotNull;
 
 namespace net {
 
@@ -151,8 +151,12 @@ class MockHostResolverProc : public HostResolverProc {
     capture_list_.push_back(ResolveKey(hostname, address_family));
     ++num_requests_waiting_;
     requests_waiting_.Broadcast();
-    while (!num_slots_available_)
-      slots_available_.Wait();
+    {
+      base::ScopedAllowBaseSyncPrimitivesForTesting
+          scoped_allow_base_sync_primitives;
+      while (!num_slots_available_)
+        slots_available_.Wait();
+    }
     DCHECK_GT(num_requests_waiting_, 0u);
     --num_slots_available_;
     --num_requests_waiting_;
@@ -183,7 +187,7 @@ class MockHostResolverProc : public HostResolverProc {
   }
 
  protected:
-  ~MockHostResolverProc() override {}
+  ~MockHostResolverProc() override = default;
 
  private:
   mutable base::Lock lock_;
@@ -211,7 +215,7 @@ class Request {
  public:
   // Base class of handlers to be executed on completion of requests.
   struct Handler {
-    virtual ~Handler() {}
+    virtual ~Handler() = default;
     virtual void Handle(Request* request) = 0;
   };
 
@@ -375,6 +379,8 @@ class LookupAttemptHostResolverProc : public HostResolverProc {
     base::TimeTicks end_time = base::TimeTicks::Now() + wait_time;
     {
       base::AutoLock auto_lock(lock_);
+      base::ScopedAllowBaseSyncPrimitivesForTesting
+          scoped_allow_base_sync_primitives;
       while (resolved_attempt_number_ == 0 && base::TimeTicks::Now() < end_time)
         all_done_.TimedWait(end_time - base::TimeTicks::Now());
     }
@@ -428,7 +434,7 @@ class LookupAttemptHostResolverProc : public HostResolverProc {
   }
 
  protected:
-  ~LookupAttemptHostResolverProc() override {}
+  ~LookupAttemptHostResolverProc() override = default;
 
  private:
   int attempt_number_to_resolve_;
@@ -456,7 +462,7 @@ class TestHostResolverImpl : public HostResolverImpl {
                        bool ipv6_reachable)
       : HostResolverImpl(options, net_log), ipv6_reachable_(ipv6_reachable) {}
 
-  ~TestHostResolverImpl() override {}
+  ~TestHostResolverImpl() override = default;
 
  private:
   const bool ipv6_reachable_;
@@ -521,7 +527,7 @@ class HostResolverImplTest : public testing::Test {
  protected:
   // A Request::Handler which is a proxy to the HostResolverImplTest fixture.
   struct Handler : public Request::Handler {
-    ~Handler() override {}
+    ~Handler() override = default;
 
     // Proxy functions so that classes derived from Handler can access them.
     Request* CreateRequest(const HostResolver::RequestInfo& info,
@@ -615,6 +621,14 @@ class HostResolverImplTest : public testing::Test {
 
   bool IsIPv6Reachable(const NetLogWithSource& net_log) {
     return resolver_->IsIPv6Reachable(net_log);
+  }
+
+  const HostCache::Entry* GetCacheEntry(const Request& req) {
+    DCHECK(resolver_.get() && resolver_->GetHostCache());
+    const HostCache::Key key(req.info().hostname(), req.info().address_family(),
+                             req.info().host_resolver_flags());
+    return resolver_->GetHostCache()->LookupStale(key, base::TimeTicks(),
+                                                  nullptr);
   }
 
   void MakeCacheStale() {
@@ -1449,6 +1463,54 @@ TEST_F(HostResolverImplTest, ResolveStaleFromCache) {
   EXPECT_TRUE(requests_[5]->staleness().is_stale());
 }
 
+TEST_F(HostResolverImplTest, ResolveStaleFromCacheError) {
+  proc_->AddRuleForAllFamilies("just.testing", "192.168.1.42");
+  proc_->SignalMultiple(1u);  // Need only one.
+
+  HostResolver::RequestInfo info(HostPortPair("just.testing", 80));
+
+  // First query will miss the cache.
+  EXPECT_EQ(ERR_DNS_CACHE_MISS,
+            CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache());
+
+  // This time, we fetch normally.
+  EXPECT_THAT(CreateRequest(info, DEFAULT_PRIORITY)->Resolve(),
+              IsError(ERR_IO_PENDING));
+  EXPECT_THAT(requests_[1]->WaitForResult(), IsOk());
+
+  // Now we should be able to fetch from the cache.
+  EXPECT_THAT(CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache(),
+              IsOk());
+  EXPECT_TRUE(requests_[2]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_THAT(CreateRequest(info, DEFAULT_PRIORITY)->ResolveStaleFromCache(),
+              IsOk());
+  EXPECT_TRUE(requests_[3]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_FALSE(requests_[3]->staleness().is_stale());
+
+  MakeCacheStale();
+
+  proc_->AddRuleForAllFamilies("just.testing", "");
+  proc_->SignalMultiple(1u);
+
+  // Now make another query, and return an error this time.
+  EXPECT_THAT(CreateRequest(info, DEFAULT_PRIORITY)->Resolve(),
+              IsError(ERR_IO_PENDING));
+  EXPECT_THAT(requests_[4]->WaitForResult(), IsError(ERR_NAME_NOT_RESOLVED));
+
+  // Now we should be able to fetch from the cache only if we use
+  // ResolveStaleFromCache, and the result should be the older good result, not
+  // the error.
+  EXPECT_EQ(ERR_DNS_CACHE_MISS,
+            CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache());
+  EXPECT_THAT(CreateRequest(info, DEFAULT_PRIORITY)->ResolveStaleFromCache(),
+              IsOk());
+  EXPECT_TRUE(requests_[6]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_TRUE(requests_[6]->staleness().is_stale());
+}
+
+// TODO(mgersh): add a test case for errors with positive TTL after
+// https://crbug.com/115051 is fixed.
+
 // Test the retry attempts simulating host resolver proc that takes too long.
 TEST_F(HostResolverImplTest, MultipleAttempts) {
   // Total number of attempts would be 3 and we want the 3rd attempt to resolve
@@ -1685,6 +1747,12 @@ class HostResolverImplDnsTest : public HostResolverImplTest {
     base::RunLoop().RunUntilIdle();
   }
 
+  void SetInitialDnsConfig(const DnsConfig& config) {
+    NetworkChangeNotifier::SetInitialDnsConfig(config);
+    // Notification is delivered asynchronously.
+    base::RunLoop().RunUntilIdle();
+  }
+
   MockDnsClientRuleList dns_rules_;
   // Owned by |resolver_|.
   MockDnsClient* dns_client_;
@@ -1772,10 +1840,24 @@ TEST_F(HostResolverImplDnsTest, DnsTask) {
   EXPECT_THAT(requests_[1]->result(), IsOk());
   // Resolved by MockDnsClient.
   EXPECT_TRUE(requests_[1]->HasOneAddress("127.0.0.1", 80));
+
+  // Resolutions done by DnsClient are known to have performed a DNS lookup,
+  // so they should result in a cache entry with SOURCE_DNS.
+  const HostCache::Entry* cache_entry = GetCacheEntry(*requests_[1]);
+  ASSERT_NE(nullptr, cache_entry);
+  EXPECT_EQ(HostCache::Entry::SOURCE_DNS, cache_entry->source());
+
   // Fallback to ProcTask.
   EXPECT_THAT(requests_[2]->result(), IsError(ERR_NAME_NOT_RESOLVED));
   EXPECT_THAT(requests_[3]->result(), IsOk());
   EXPECT_TRUE(requests_[3]->HasOneAddress("192.168.1.102", 80));
+
+  // Resolutions done by ProcTask could have performed a DNS lookup, or
+  // consulted a HOSTS file, or anything else, so they should result in a cache
+  // entry with SOURCE_UNKNOWN.
+  cache_entry = GetCacheEntry(*requests_[3]);
+  ASSERT_NE(nullptr, cache_entry);
+  EXPECT_EQ(HostCache::Entry::SOURCE_UNKNOWN, cache_entry->source());
 }
 
 // Test successful and failing resolutions in HostResolverImpl::DnsTask when
@@ -1963,6 +2045,42 @@ TEST_F(HostResolverImplDnsTest, ServeFromHosts) {
   Request* req6 = CreateRequest("nx_IPV4", 80);
   EXPECT_THAT(req6->Resolve(), IsOk());
   EXPECT_TRUE(req6->HasOneAddress("127.0.0.1", 80));
+}
+
+TEST_F(HostResolverImplDnsTest, CacheHostsLookupOnConfigChange) {
+  // Only allow 1 resolution at a time, so that the second lookup is queued and
+  // occurs when the DNS config changes.
+  CreateResolverWithLimitsAndParams(1u, DefaultParams(proc_.get()));
+  DnsConfig config = CreateValidDnsConfig();
+  ChangeDnsConfig(config);
+
+  proc_->AddRuleForAllFamilies(std::string(),
+                               std::string());  // Default to failures.
+  proc_->SignalMultiple(1u);  // For the first request which fails.
+
+  Request* req1 = CreateRequest("nx_ipv4", 80);
+  EXPECT_THAT(req1->Resolve(), IsError(ERR_IO_PENDING));
+  Request* req2 = CreateRequest("nx_ipv6", 80);
+  EXPECT_THAT(req2->Resolve(), IsError(ERR_IO_PENDING));
+
+  DnsHosts hosts;
+  hosts[DnsHostsKey("nx_ipv4", ADDRESS_FAMILY_IPV4)] =
+      IPAddress::IPv4Localhost();
+  hosts[DnsHostsKey("nx_ipv6", ADDRESS_FAMILY_IPV6)] =
+      IPAddress::IPv6Localhost();
+
+  config.hosts = hosts;
+  ChangeDnsConfig(config);
+
+  EXPECT_THAT(req1->WaitForResult(), IsError(ERR_NETWORK_CHANGED));
+  EXPECT_THAT(req2->WaitForResult(), IsOk());
+  EXPECT_TRUE(req2->HasOneAddress("::1", 80));
+
+  // Resolutions done by consulting the HOSTS file when the DNS config changes
+  // should result in a cache entry with SOURCE_HOSTS.
+  const HostCache::Entry* cache_entry = GetCacheEntry(*req2);
+  ASSERT_THAT(cache_entry, NotNull());
+  EXPECT_EQ(HostCache::Entry::SOURCE_HOSTS, cache_entry->source());
 }
 
 TEST_F(HostResolverImplDnsTest, BypassDnsTask) {
@@ -2376,6 +2494,22 @@ TEST_F(HostResolverImplDnsTest, InvalidDnsConfigWithPendingRequests) {
   proc_->SignalMultiple(1u);
   EXPECT_THAT(requests_[2]->WaitForResult(), IsOk());
   EXPECT_TRUE(requests_[2]->HasOneAddress("192.168.0.3", 80));
+}
+
+// Test that initial DNS config read signals do not abort pending requests when
+// using DnsClient.
+TEST_F(HostResolverImplDnsTest, DontAbortOnInitialDNSConfigRead) {
+  // DnsClient is enabled, but there's no DnsConfig, so the request should start
+  // using ProcTask.
+  Request* req = CreateRequest("host1", 70);
+  EXPECT_THAT(req->Resolve(), IsError(ERR_IO_PENDING));
+
+  EXPECT_TRUE(proc_->WaitFor(1u));
+  // Send the initial config read signal, with a valid config.
+  SetInitialDnsConfig(CreateValidDnsConfig());
+  proc_->SignalAll();
+
+  EXPECT_THAT(req->WaitForResult(), IsOk());
 }
 
 // Tests the case that DnsClient is automatically disabled due to failures

@@ -13,6 +13,8 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/printing/common/print_messages.h"
 #include "components/printing/test/mock_printer.h"
@@ -245,6 +247,14 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
     GetPrintRenderFrameHelper()->OnPrintPages();
     base::RunLoop().RunUntilIdle();
   }
+
+  void OnPrintPagesInFrame(base::StringPiece frame_name) {
+    PrintRenderFrameHelper* helper =
+        GetPrintRenderFrameHelperForFrame(frame_name);
+    ASSERT_TRUE(helper);
+    helper->OnPrintPages();
+    base::RunLoop().RunUntilIdle();
+  }
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -279,6 +289,16 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   PrintRenderFrameHelper* GetPrintRenderFrameHelper() {
     return PrintRenderFrameHelper::Get(
         content::RenderFrame::FromWebFrame(GetMainFrame()));
+  }
+
+  PrintRenderFrameHelper* GetPrintRenderFrameHelperForFrame(
+      base::StringPiece frame_name) {
+    blink::WebFrame* frame = GetMainFrame()->FindFrameByName(
+        blink::WebString::FromUTF8(frame_name.data(), frame_name.size()));
+    if (!frame)
+      return nullptr;
+    return PrintRenderFrameHelper::Get(
+        content::RenderFrame::FromWebFrame(frame->ToWebLocalFrame()));
   }
 
   // Naked pointer as ownership is with content::RenderViewTest::render_thread_.
@@ -392,6 +412,57 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, OnPrintPages) {
   VerifyPageCount(1);
   VerifyPagesPrinted(true);
 }
+
+TEST_F(MAYBE_PrintRenderFrameHelperTest, BasicBeforePrintAfterPrint) {
+  const char kHtml[] =
+      "<body>Hello"
+      "<script>"
+      "var beforePrintCount = 0;"
+      "var afterPrintCount = 0;"
+      "window.onbeforeprint = () => { ++beforePrintCount; };"
+      "window.onafterprint = () => { ++afterPrintCount; };"
+      "</script>"
+      "</body>";
+
+  LoadHTML(kHtml);
+  OnPrintPages();
+
+  VerifyPagesPrinted(true);
+  int result;
+  ASSERT_TRUE(ExecuteJavaScriptAndReturnIntValue(
+      base::ASCIIToUTF16("beforePrintCount"), &result));
+  EXPECT_EQ(1, result) << "beforeprint event should be dispatched once.";
+  ASSERT_TRUE(ExecuteJavaScriptAndReturnIntValue(
+      base::ASCIIToUTF16("afterPrintCount"), &result));
+  EXPECT_EQ(1, result) << "afterprint event should be dispatched once.";
+}
+
+TEST_F(MAYBE_PrintRenderFrameHelperTest, BasicBeforePrintAfterPrintSubFrame) {
+  const char kCloseOnBeforeHtml[] =
+      "<body>Hello"
+      "<iframe name=sub srcdoc='<script>"
+      "window.onbeforeprint = () => { window.frameElement.remove(); };"
+      "</script>'></iframe>"
+      "</body>";
+
+  LoadHTML(kCloseOnBeforeHtml);
+  OnPrintPagesInFrame("sub");
+  EXPECT_EQ(nullptr, GetMainFrame()->FindFrameByName("sub"));
+  VerifyPagesPrinted(false);
+
+  const char kCloseOnAfterHtml[] =
+      "<body>Hello"
+      "<iframe name=sub srcdoc='<script>"
+      "window.onafterprint = () => { window.frameElement.remove(); };"
+      "</script>'></iframe>"
+      "</body>";
+
+  LoadHTML(kCloseOnAfterHtml);
+  OnPrintPagesInFrame("sub");
+  EXPECT_EQ(nullptr, GetMainFrame()->FindFrameByName("sub"));
+  VerifyPagesPrinted(true);
+}
+
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 #if defined(OS_MACOSX) && BUILDFLAG(ENABLE_BASIC_PRINTING)
@@ -784,6 +855,128 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   VerifyPagesPrinted(false);
 }
 
+TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
+       PreviewLayoutTriggeredByResize) {
+  // A simple web page with print margins css.
+  const char kHTMLWithPageCss[] =
+      "<!DOCTYPE html>"
+      "<style>"
+      "@media (min-width: 540px) {"
+      "  #container {"
+      "    width: 540px;"
+      "  }"
+      "}"
+      ".testlist {"
+      "  list-style-type: none;"
+      "}"
+      "</style>"
+      "<div id='container'>"
+      "  <ul class='testlist'>"
+      "    <li>"
+      "      <p>"
+      "      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "      ccccccccccccccccccccccccccccccccccccccc"
+      "      ddddddddddddddddddddddddddddddddddddddd"
+      "      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      "      fffffffffffffffffffffffffffffffffffffff"
+      "      ggggggggggggggggggggggggggggggggggggggg"
+      "      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+      "      iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      "      jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      "      kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      "      lllllllllllllllllllllllllllllllllllllll"
+      "      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm':"
+      "      </p>"
+      "    </li>"
+      "    <li>"
+      "      <p>"
+      "      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "      ccccccccccccccccccccccccccccccccccccccc"
+      "      ddddddddddddddddddddddddddddddddddddddd"
+      "      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      "      fffffffffffffffffffffffffffffffffffffff"
+      "      ggggggggggggggggggggggggggggggggggggggg"
+      "      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+      "      iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      "      jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      "      kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      "      lllllllllllllllllllllllllllllllllllllll"
+      "      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'"
+      "      </p>"
+      "    </li>"
+      "    <li>"
+      "      <p>"
+      "      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "      ccccccccccccccccccccccccccccccccccccccc"
+      "      ddddddddddddddddddddddddddddddddddddddd"
+      "      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      "      fffffffffffffffffffffffffffffffffffffff"
+      "      ggggggggggggggggggggggggggggggggggggggg"
+      "      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+      "      iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      "      jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      "      kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      "      lllllllllllllllllllllllllllllllllllllll"
+      "      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'"
+      "      </p>"
+      "    </li>"
+      "    <li>"
+      "      <p>"
+      "      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "      ccccccccccccccccccccccccccccccccccccccc"
+      "      ddddddddddddddddddddddddddddddddddddddd"
+      "      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      "      fffffffffffffffffffffffffffffffffffffff"
+      "      ggggggggggggggggggggggggggggggggggggggg"
+      "      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+      "      iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      "      jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      "      kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      "      lllllllllllllllllllllllllllllllllllllll"
+      "      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'"
+      "      </p>"
+      "    </li>"
+      "    <li>"
+      "      <p>"
+      "      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "      ccccccccccccccccccccccccccccccccccccccc"
+      "      ddddddddddddddddddddddddddddddddddddddd"
+      "      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      "      fffffffffffffffffffffffffffffffffffffff"
+      "      ggggggggggggggggggggggggggggggggggggggg"
+      "      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+      "      iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      "      jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      "      kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      "      lllllllllllllllllllllllllllllllllllllll"
+      "      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'"
+      "      </p>"
+      "    </li>"
+      "  </ul>"
+      "</div>";
+  LoadHTML(kHTMLWithPageCss);
+
+  // Fill in some dummy values.
+  base::DictionaryValue dict;
+  CreatePrintSettingsDictionary(&dict);
+  dict.SetBoolean(kSettingPrintToPDF, false);
+  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
+  OnPrintPreview(dict);
+
+  EXPECT_EQ(0, print_render_thread_->print_preview_pages_remaining());
+  VerifyDidPreviewPage(true, 0);
+  VerifyPreviewPageCount(2);
+  VerifyPrintPreviewCancelled(false);
+  VerifyPrintPreviewFailed(false);
+  VerifyPrintPreviewGenerated(true);
+  VerifyPagesPrinted(false);
+}
+
 // Test to verify that print preview honor print margin css when PRINT_TO_PDF
 // is selected and doesn't fit to printer default paper size.
 TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
@@ -970,7 +1163,9 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
 // Test to verify that preview generated only for one page.
 TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest, PrintPreviewForSelectedText) {
   LoadHTML(kMultipageHTML);
-  GetMainFrame()->SelectRange(blink::WebRange(1, 3));
+  GetMainFrame()->SelectRange(blink::WebRange(1, 3),
+                              blink::WebLocalFrame::kHideSelectionHandle,
+                              blink::mojom::SelectionMenuBehavior::kHide);
 
   // Fill in some dummy values.
   base::DictionaryValue dict;

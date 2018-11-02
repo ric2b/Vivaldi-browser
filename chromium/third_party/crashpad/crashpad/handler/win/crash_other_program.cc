@@ -52,9 +52,8 @@ bool CrashAndDumpTarget(const CrashpadClient& client, HANDLE process) {
   do {
     if (te32.th32OwnerProcessID == target_pid) {
       // We set the thread priority of "Thread1" to a non-default value before
-      // going to sleep. Dump and blame this thread. For an explanation of
-      // "9", see
-      // https://msdn.microsoft.com/en-us/library/windows/desktop/ms685100.aspx.
+      // going to sleep. Dump and blame this thread. For an explanation of "9",
+      // see https://msdn.microsoft.com/library/ms685100.aspx.
       if (te32.tpBasePri == 9) {
         ScopedKernelHANDLE thread(
             OpenThread(kXPThreadAllAccess, false, te32.th32ThreadID));
@@ -90,8 +89,8 @@ int CrashOtherProgram(int argc, wchar_t* argv[]) {
 
   // Launch another process that hangs.
   base::FilePath test_executable = TestPaths::Executable();
-  std::wstring child_test_executable =
-      test_executable.DirName().Append(L"hanging_program.exe").value();
+  base::FilePath child_test_executable =
+      test_executable.DirName().Append(L"hanging_program.exe");
   ChildLauncher child(child_test_executable, argv[1]);
   child.Start();
   if (testing::Test::HasFatalFailure()) {

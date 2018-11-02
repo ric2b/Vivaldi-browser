@@ -20,7 +20,7 @@ namespace base {
 // version of the constructor, and if we are building a dynamic library we may
 // end up with multiple AtExitManagers on the same process.  We don't protect
 // this for thread-safe access, since it will only be modified in testing.
-static AtExitManager* g_top_manager = NULL;
+static AtExitManager* g_top_manager = nullptr;
 
 static bool g_disable_managers = false;
 
@@ -74,7 +74,7 @@ void AtExitManager::ProcessCallbacksNow() {
   // Callbacks may try to add new callbacks, so run them without holding
   // |lock_|. This is an error and caught by the DCHECK in RegisterTask(), but
   // handle it gracefully in release builds so we don't deadlock.
-  std::stack<base::Closure> tasks;
+  base::stack<base::Closure> tasks;
   {
     AutoLock lock(g_top_manager->lock_);
     tasks.swap(g_top_manager->stack_);

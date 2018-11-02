@@ -4,7 +4,7 @@
 
 #include "ash/system/display_scale/tray_scale.h"
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/system/display_scale/scale_detailed_view.h"
@@ -27,7 +27,7 @@ bool IsDisplayScaleTrayEnabled() {
 TrayScale::TrayScale(SystemTray* system_tray)
     : SystemTrayItem(system_tray, UMA_NOT_RECORDED) {}
 
-TrayScale::~TrayScale() {}
+TrayScale::~TrayScale() = default;
 
 views::View* TrayScale::CreateDefaultView(LoginStatus status) {
   if (!IsDisplayScaleTrayEnabled())

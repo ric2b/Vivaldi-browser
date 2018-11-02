@@ -7,9 +7,11 @@
 #include <memory>
 #include <utility>
 
-#import "base/ios/weak_nsobject.h"
+#include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
+#import "components/autofill/ios/browser/autofill_agent.h"
+#import "components/autofill/ios/browser/js_autofill_manager.h"
 #include "google_apis/google_api_keys.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
@@ -23,6 +25,7 @@
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
+#import "ios/web_view/internal/autofill/cwv_autofill_controller_internal.h"
 #import "ios/web_view/internal/cwv_html_element_internal.h"
 #import "ios/web_view/internal/cwv_navigation_action_internal.h"
 #import "ios/web_view/internal/cwv_scroll_view_internal.h"
@@ -34,11 +37,16 @@
 #import "ios/web_view/internal/web_view_java_script_dialog_presenter.h"
 #import "ios/web_view/internal/web_view_web_state_policy_decider.h"
 #import "ios/web_view/public/cwv_navigation_delegate.h"
+#import "ios/web_view/public/cwv_preview_element_info.h"
 #import "ios/web_view/public/cwv_ui_delegate.h"
 #import "ios/web_view/public/cwv_web_view_configuration.h"
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 // A key used in NSCoder to store the session storage object.
@@ -91,6 +99,8 @@ NSString* const kSessionStorageKey = @"sessionStorage";
 - (void)updateCurrentURLs;
 // Updates |title| property.
 - (void)updateTitle;
+// Returns a new CWVAutofillController created from |webState_|.
+- (CWVAutofillController*)newAutofillController;
 
 @end
 
@@ -98,6 +108,7 @@ static NSString* gUserAgentProduct = nil;
 
 @implementation CWVWebView
 
+@synthesize autofillController = _autofillController;
 @synthesize canGoBack = _canGoBack;
 @synthesize canGoForward = _canGoForward;
 @synthesize configuration = _configuration;
@@ -151,6 +162,13 @@ static NSString* gUserAgentProduct = nil;
     [self resetWebStateWithSessionStorage:nil];
   }
   return self;
+}
+
+- (void)dealloc {
+  if (_webState && _webStateObserver) {
+    _webState->RemoveObserver(_webStateObserver.get());
+    _webStateObserver.reset();
+  }
 }
 
 - (void)goBack {
@@ -306,14 +324,15 @@ static NSString* gUserAgentProduct = nil;
   CWVNavigationAction* navigationAction =
       [[CWVNavigationAction alloc] initWithRequest:request
                                      userInitiated:initiatedByUser];
-  // TODO(crbug.com/702298): Window created by CWVUIDelegate should be closable.
   CWVWebView* webView = [_UIDelegate webView:self
               createWebViewWithConfiguration:_configuration
                          forNavigationAction:navigationAction];
   if (!webView) {
     return nullptr;
   }
-  return webView->_webState.get();
+  web::WebState* webViewWebState = webView->_webState.get();
+  webViewWebState->SetHasOpener(true);
+  return webViewWebState;
 }
 
 - (void)closeWebState:(web::WebState*)webState {
@@ -328,6 +347,38 @@ static NSString* gUserAgentProduct = nil;
   return _javaScriptDialogPresenter.get();
 }
 
+- (BOOL)webState:(web::WebState*)webState
+    shouldPreviewLinkWithURL:(const GURL&)linkURL {
+  SEL selector = @selector(webView:shouldPreviewElement:);
+  if ([_UIDelegate respondsToSelector:selector]) {
+    CWVPreviewElementInfo* elementInfo = [[CWVPreviewElementInfo alloc]
+        initWithLinkURL:net::NSURLWithGURL(linkURL)];
+    return [_UIDelegate webView:self shouldPreviewElement:elementInfo];
+  }
+  return NO;
+}
+
+- (UIViewController*)webState:(web::WebState*)webState
+    previewingViewControllerForLinkWithURL:(const GURL&)linkURL {
+  SEL selector = @selector(webView:previewingViewControllerForElement:);
+  if ([_UIDelegate respondsToSelector:selector]) {
+    CWVPreviewElementInfo* elementInfo = [[CWVPreviewElementInfo alloc]
+        initWithLinkURL:net::NSURLWithGURL(linkURL)];
+    return [_UIDelegate webView:self
+        previewingViewControllerForElement:elementInfo];
+  }
+  return nil;
+}
+
+- (void)webState:(web::WebState*)webState
+    commitPreviewingViewController:(UIViewController*)previewingViewController {
+  SEL selector = @selector(webView:commitPreviewingViewController:);
+  if ([_UIDelegate respondsToSelector:selector]) {
+    [_UIDelegate webView:self
+        commitPreviewingViewController:previewingViewController];
+  }
+}
+
 #pragma mark - Translation
 
 - (CWVTranslationController*)translationController {
@@ -336,6 +387,28 @@ static NSString* gUserAgentProduct = nil;
     _translationController.webState = _webState.get();
   }
   return _translationController;
+}
+
+#pragma mark - Autofill
+
+- (CWVAutofillController*)autofillController {
+  if (!_autofillController) {
+    _autofillController = [self newAutofillController];
+  }
+  return _autofillController;
+}
+
+- (CWVAutofillController*)newAutofillController {
+  AutofillAgent* autofillAgent = [[AutofillAgent alloc]
+      initWithPrefService:_configuration.browserState->GetPrefs()
+                 webState:_webState.get()];
+  JsAutofillManager* JSAutofillManager =
+      base::mac::ObjCCastStrict<JsAutofillManager>(
+          [_webState->GetJSInjectionReceiver()
+              instanceOfClass:[JsAutofillManager class]]);
+  return [[CWVAutofillController alloc] initWithWebState:_webState.get()
+                                           autofillAgent:autofillAgent
+                                       JSAutofillManager:JSAutofillManager];
 }
 
 #pragma mark - Preserving and Restoring State
@@ -361,6 +434,10 @@ static NSString* gUserAgentProduct = nil;
 - (void)resetWebStateWithSessionStorage:
     (nullable CRWSessionStorage*)sessionStorage {
   if (_webState && _webState->GetView().superview == self) {
+    if (_webStateObserver) {
+      _webState->RemoveObserver(_webStateObserver.get());
+    }
+
     // The web view provided by the old |_webState| has been added as a subview.
     // It must be removed and replaced with a new |_webState|'s web view, which
     // is added later.
@@ -374,10 +451,12 @@ static NSString* gUserAgentProduct = nil;
   } else {
     _webState = web::WebState::Create(webStateCreateParams);
   }
-  _webState->SetWebUsageEnabled(true);
 
-  _webStateObserver =
-      base::MakeUnique<web::WebStateObserverBridge>(_webState.get(), self);
+  if (!_webStateObserver) {
+    _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
+  }
+  _webState->AddObserver(_webStateObserver.get());
+
   _webStateDelegate = base::MakeUnique<web::WebStateDelegateBridge>(self);
   _webState->SetDelegate(_webStateDelegate.get());
 
@@ -392,6 +471,13 @@ static NSString* gUserAgentProduct = nil;
   _scrollView.proxy = _webState.get()->GetWebViewProxy().scrollViewProxy;
 
   _translationController.webState = _webState.get();
+
+  // Recreate and restore the delegate only if previously lazily loaded.
+  if (_autofillController) {
+    id<CWVAutofillControllerDelegate> delegate = _autofillController.delegate;
+    _autofillController = [self newAutofillController];
+    _autofillController.delegate = delegate;
+  }
 
   [self addInternalWebViewAsSubview];
 

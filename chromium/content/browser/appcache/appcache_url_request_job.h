@@ -11,7 +11,6 @@
 
 #include "base/callback.h"
 #include "content/browser/appcache/appcache_entry.h"
-#include "content/browser/appcache/appcache_executable_handler.h"
 #include "content/browser/appcache/appcache_job.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "content/common/content_export.h"
@@ -28,19 +27,13 @@ class AppCacheURLRequestJobTest;
 
 // A net::URLRequestJob derivative that knows how to return a response stored
 // in the appcache.
-class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
+class CONTENT_EXPORT AppCacheURLRequestJob : public AppCacheJob,
                                              public AppCacheStorage::Delegate,
-                                             public AppCacheJob {
+                                             public net::URLRequestJob {
  public:
-  // Callback that will be invoked before the request is restarted. The caller
-  // can use this opportunity to grab state from the AppCacheURLRequestJob to
-  // determine how it should behave when the request is restarted.
-  using OnPrepareToRestartCallback = base::OnceClosure;
-
   ~AppCacheURLRequestJob() override;
 
   // AppCacheJob overrides.
-  void Kill() override;
   bool IsStarted() const override;
   void DeliverAppCachedResponse(const GURL& manifest_url,
                                 int64_t cache_id,
@@ -48,8 +41,9 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
                                 bool is_fallback) override;
   void DeliverNetworkResponse() override;
   void DeliverErrorResponse() override;
-  const GURL& GetURL() const override;
-  net::URLRequestJob* AsURLRequestJob() override;
+  AppCacheURLRequestJob* AsURLRequestJob() override;
+  base::WeakPtr<AppCacheJob> GetWeakPtr() override;
+  base::WeakPtr<AppCacheURLRequestJob> GetDerivedWeakPtr();
 
   // Accessors for the info about the appcached response, if any,
   // that this job has been instructed to deliver. These are only
@@ -66,8 +60,13 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
  private:
   friend class AppCacheRequestHandlerTest;
   friend class AppCacheURLRequestJobTest;
-  // AppCacheJob::Create() creates this instance.
-  friend class AppCacheJob;
+  // AppCacheRequestHandler::CreateJob() creates this instance.
+  friend class AppCacheRequestHandler;
+
+  // Callback that will be invoked before the request is restarted. The caller
+  // can use this opportunity to grab state from the AppCacheURLRequestJob to
+  // determine how it should behave when the request is restarted.
+  using OnPrepareToRestartCallback = base::OnceClosure;
 
   AppCacheURLRequestJob(net::URLRequest* request,
                         net::NetworkDelegate* network_delegate,
@@ -81,19 +80,11 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
 
   void MaybeBeginDelivery();
   void BeginDelivery();
-
-  // For executable response handling.
-  void BeginExecutableHandlerDelivery();
-  void OnExecutableSourceLoaded(int result);
-  void InvokeExecutableHandler(AppCacheExecutableHandler* handler);
-  void OnExecutableResponseCallback(
-      const AppCacheExecutableHandler::Response& response);
   void BeginErrorDelivery(const char* message);
 
   // AppCacheStorage::Delegate methods
   void OnResponseInfoLoaded(AppCacheResponseInfo* response_info,
                             int64_t response_id) override;
-  void OnCacheLoaded(AppCache* cache, int64_t cache_id) override;
 
   const net::HttpResponseInfo* http_info() const;
 
@@ -102,6 +93,7 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
 
   // net::URLRequestJob methods, see url_request_job.h for doc comments
   void Start() override;
+  void Kill() override;
   net::LoadState GetLoadState() const override;
   bool GetCharset(std::string* charset) override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
@@ -134,6 +126,8 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
   scoped_refptr<AppCache> cache_;
   scoped_refptr<AppCacheGroup> group_;
   OnPrepareToRestartCallback on_prepare_to_restart_callback_;
+  base::WeakPtrFactory<AppCacheURLRequestJob> weak_factory_;
+  DISALLOW_COPY_AND_ASSIGN(AppCacheURLRequestJob);
 };
 
 }  // namespace content

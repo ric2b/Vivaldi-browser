@@ -5,10 +5,10 @@
 #include "extensions/renderer/app_window_custom_bindings.h"
 
 #include "base/command_line.h"
-#include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/switches.h"
 #include "extensions/grit/extensions_renderer_resources.h"
@@ -48,8 +48,8 @@ void AppWindowCustomBindings::GetFrame(
     return;
 
   if (notify_browser) {
-    content::RenderThread::Get()->Send(new ExtensionHostMsg_AppWindowReady(
-        app_frame->GetRenderView()->GetRoutingID()));
+    app_frame->Send(
+        new ExtensionHostMsg_AppWindowReady(app_frame->GetRoutingID()));
   }
 
   v8::Local<v8::Value> window =

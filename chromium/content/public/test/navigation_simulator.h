@@ -11,9 +11,9 @@
 #include "base/optional.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
-#include "content/public/test/navigation_simulator.h"
 #include "net/base/host_port_pair.h"
 #include "ui/base/page_transition_types.h"
 
@@ -31,7 +31,6 @@ struct Referrer;
 // An interface for simulating a navigation in unit tests. Currently this only
 // supports renderer-initiated navigations.
 // Note: this should not be used in browser tests.
-// TODO(clamy): support browser-initiated navigations.
 class NavigationSimulator : public WebContentsObserver {
  public:
   // Simulates a browser-initiated navigation to |url| started in
@@ -40,6 +39,22 @@ class NavigationSimulator : public WebContentsObserver {
   static RenderFrameHost* NavigateAndCommitFromBrowser(
       WebContents* web_contents,
       const GURL& url);
+
+  // Simulates the page reloading. Returns the RenderFrameHost that committed
+  // the navigation.
+  static RenderFrameHost* Reload(WebContents* web_contents);
+
+  // Simulates a back navigation from start to commit. Returns the
+  // RenderFrameHost that committed the navigation.
+  static RenderFrameHost* GoBack(WebContents* web_contents);
+
+  // Simulates a forward navigation from start to commit. Returns the
+  // RenderFrameHost that committed the navigation.
+  static RenderFrameHost* GoForward(WebContents* web_contents);
+
+  // Simulates a navigation to the given offset of the web_contents navigation
+  // controller, from start to finish.
+  static RenderFrameHost* GoToOffset(WebContents* web_contents, int offset);
 
   // Simulates a renderer-initiated navigation to |url| started in
   // |render_frame_host| from start to commit. Returns the RenderFramehost that
@@ -55,6 +70,27 @@ class NavigationSimulator : public WebContentsObserver {
   static RenderFrameHost* NavigateAndFailFromBrowser(WebContents* web_contents,
                                                      const GURL& url,
                                                      int net_error_code);
+
+  // Simulates the page reloading and failing. Returns the RenderFrameHost that
+  // committed the error page for the navigation, or nullptr if the navigation
+  // error did not result in an error page.
+  static RenderFrameHost* ReloadAndFail(WebContents* web_contents,
+                                        int net_error_code);
+
+  // Simulates a failed back navigation. Returns the RenderFrameHost that
+  // committed the error page for the navigation, or nullptr if the navigation
+  // error did not result in an error page.
+  static RenderFrameHost* GoBackAndFail(WebContents* web_contents,
+                                        int net_error_code);
+
+  // TODO(clamy, ahemery): Add GoForwardAndFail() if it becomes needed.
+
+  // Simulates a failed offset navigation. Returns the RenderFrameHost that
+  // committed the error page for the navigation, or nullptr if the navigation
+  // error did not result in an error page.
+  static RenderFrameHost* GoToOffsetAndFail(WebContents* web_contents,
+                                            int offset,
+                                            int net_error_code);
 
   // Simulates a failed renderer-initiated navigation to |url| started in
   // |render_frame_host| from start to commit. Returns the RenderFramehost that
@@ -75,6 +111,13 @@ class NavigationSimulator : public WebContentsObserver {
   static std::unique_ptr<NavigationSimulator> CreateBrowserInitiated(
       const GURL& original_url,
       WebContents* contents);
+
+  // Creates a NavigationSimulator that will be used to simulate a history
+  // navigation to one of the |web_contents|'s navigation controller |offset|.
+  // E.g. offset -1 for back navigations and 1 for forward navigations.
+  static std::unique_ptr<NavigationSimulator> CreateHistoryNavigation(
+      int offset,
+      WebContents* web_contents);
 
   // Creates a NavigationSimulator that will be used to simulate a
   // renderer-initiated navigation to |original_url| started by
@@ -165,6 +208,9 @@ class NavigationSimulator : public WebContentsObserver {
   // specified before calling |Start|.
   virtual void SetTransition(ui::PageTransition transition);
   virtual void SetHasUserGesture(bool has_user_gesture);
+  // Note: ReloadType should only be specified for browser-initiated
+  // navigations.
+  void SetReloadType(ReloadType reload_type);
 
   // The following parameters can change during redirects. They should be
   // specified before calling |Start| if they need to apply to the navigation to
@@ -224,6 +270,7 @@ class NavigationSimulator : public WebContentsObserver {
 
   void OnWillStartRequest();
   void OnWillRedirectRequest();
+  void OnWillFailRequest();
   void OnWillProcessResponse();
 
   // Simulates a browser-initiated navigation starting. Returns false if the
@@ -254,6 +301,14 @@ class NavigationSimulator : public WebContentsObserver {
   // PlzNavigate: only use on renderer-initiated navigations.
   bool CheckIfSameDocument();
 
+  // Infers from internal parameters whether the navigation created a new
+  // entry.
+  bool DidCreateNewEntry();
+
+  // Set the navigation to be done towards the specified navigation controller
+  // offset. Typically -1 for back navigations or 1 for forward navigations.
+  void SetSessionHistoryOffset(int offset);
+
   enum State {
     INITIALIZATION,
     STARTED,
@@ -282,6 +337,8 @@ class NavigationSimulator : public WebContentsObserver {
   bool same_document_ = false;
   Referrer referrer_;
   ui::PageTransition transition_;
+  ReloadType reload_type_ = ReloadType::NONE;
+  int session_history_offset_ = 0;
   bool has_user_gesture_ = true;
 
   // These are used to sanity check the content/public/ API calls emitted as
@@ -289,6 +346,7 @@ class NavigationSimulator : public WebContentsObserver {
   int num_did_start_navigation_called_ = 0;
   int num_will_start_request_called_ = 0;
   int num_will_redirect_request_called_ = 0;
+  int num_will_fail_request_called_ = 0;
   int num_did_redirect_navigation_called_ = 0;
   int num_will_process_response_called_ = 0;
   int num_ready_to_commit_called_ = 0;

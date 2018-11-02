@@ -2,6 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle Rechte vorbehalten.</translation>
+<translation id="3850557856045828465">Warnung: Vivaldi kann nicht verhindern, dass Erweiterungen Ihren Browserverlauf aufzeichnen. Deaktivieren Sie diese Option, um diese Erweiterung im Privatmodus auszuschalten.</translation>
 <translation id="5743878272102782872">Taskmanager - Vivaldi</translation>
-<translation id="6119720677647982841"><ph name="BEGIN_BOLD" />Achtung:<ph name="END_BOLD" /> Vivaldi kann nicht verhindern, dass Ihr Browserverlauf von Erweiterungen protokolliert wird. Deaktivieren Sie diese Erweiterung für den Inkognitomodus, indem Sie das entsprechende Kästchen deaktivieren.</translation>
 </translationbundle>

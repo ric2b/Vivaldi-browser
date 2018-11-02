@@ -55,33 +55,33 @@ class XHRReplayData final : public GarbageCollectedFinalized<XHRReplayData> {
                                const AtomicString& method,
                                const KURL&,
                                bool async,
-                               RefPtr<EncodedFormData>,
+                               scoped_refptr<EncodedFormData>,
                                bool include_credentials);
 
   void AddHeader(const AtomicString& key, const AtomicString& value);
   const AtomicString& Method() const { return method_; }
   const KURL& Url() const { return url_; }
   bool Async() const { return async_; }
-  RefPtr<EncodedFormData> FormData() const { return form_data_; }
+  scoped_refptr<EncodedFormData> FormData() const { return form_data_; }
   const HTTPHeaderMap& Headers() const { return headers_; }
   bool IncludeCredentials() const { return include_credentials_; }
   ExecutionContext* GetExecutionContext() const { return execution_context_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   XHRReplayData(ExecutionContext*,
                 const AtomicString& method,
                 const KURL&,
                 bool async,
-                RefPtr<EncodedFormData>,
+                scoped_refptr<EncodedFormData>,
                 bool include_credentials);
 
   Member<ExecutionContext> execution_context_;
   AtomicString method_;
   KURL url_;
   bool async_;
-  RefPtr<EncodedFormData> form_data_;
+  scoped_refptr<EncodedFormData> form_data_;
   HTTPHeaderMap headers_;
   bool include_credentials_;
 };
@@ -132,8 +132,10 @@ class NetworkResourcesData final
       text_encoding_name_ = text_encoding_name;
     }
 
-    RefPtr<SharedBuffer> Buffer() const { return buffer_; }
-    void SetBuffer(RefPtr<SharedBuffer> buffer) { buffer_ = std::move(buffer); }
+    scoped_refptr<SharedBuffer> Buffer() const { return buffer_; }
+    void SetBuffer(scoped_refptr<SharedBuffer> buffer) {
+      buffer_ = std::move(buffer);
+    }
 
     Resource* CachedResource() const { return cached_resource_.Get(); }
     void SetResource(Resource*);
@@ -144,9 +146,9 @@ class NetworkResourcesData final
     }
 
     BlobDataHandle* DownloadedFileBlob() const {
-      return downloaded_file_blob_.Get();
+      return downloaded_file_blob_.get();
     }
-    void SetDownloadedFileBlob(RefPtr<BlobDataHandle> blob) {
+    void SetDownloadedFileBlob(scoped_refptr<BlobDataHandle> blob) {
       downloaded_file_blob_ = std::move(blob);
     }
 
@@ -165,10 +167,10 @@ class NetworkResourcesData final
       pending_encoded_data_length_ += encoded_data_length;
     }
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
    private:
-    bool HasData() const { return data_buffer_.Get(); }
+    bool HasData() const { return data_buffer_.get(); }
     size_t DataLength() const;
     void AppendData(const char* data, size_t data_length);
     size_t DecodeDataToContent();
@@ -182,7 +184,7 @@ class NetworkResourcesData final
     String content_;
     Member<XHRReplayData> xhr_replay_data_;
     bool base64_encoded_;
-    RefPtr<SharedBuffer> data_buffer_;
+    scoped_refptr<SharedBuffer> data_buffer_;
     bool is_content_evicted_;
     InspectorPageAgent::ResourceType type_;
     int http_status_code_;
@@ -192,9 +194,9 @@ class NetworkResourcesData final
     int raw_header_size_;
     int pending_encoded_data_length_;
 
-    RefPtr<SharedBuffer> buffer_;
+    scoped_refptr<SharedBuffer> buffer_;
     WeakMember<Resource> cached_resource_;
-    RefPtr<BlobDataHandle> downloaded_file_blob_;
+    scoped_refptr<BlobDataHandle> downloaded_file_blob_;
     Vector<AtomicString> certificate_;
   };
 
@@ -236,7 +238,7 @@ class NetworkResourcesData final
   void AddPendingEncodedDataLength(const String& request_id,
                                    int encoded_data_length);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   NetworkResourcesData(size_t total_buffer_size, size_t resource_buffer_size);
@@ -247,7 +249,7 @@ class NetworkResourcesData final
   ResourceData* PrepareToAddResourceData(const String& request_id,
                                          size_t data_length);
   void MaybeAddResourceData(const String& request_id,
-                            RefPtr<const SharedBuffer>);
+                            scoped_refptr<const SharedBuffer>);
 
   Deque<String> request_ids_deque_;
 

@@ -24,7 +24,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -38,7 +38,7 @@ DEFINE_NODE_FACTORY(HTMLDivElement)
 void HTMLDivElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == alignAttr) {
     if (DeprecatedEqualIgnoringCase(value, "middle") ||
         DeprecatedEqualIgnoringCase(value, "center"))

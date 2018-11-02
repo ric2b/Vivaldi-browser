@@ -1,10 +1,10 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_container_shadow_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_drawer/cr_drawer.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="../direction_delegate.html">
 <link rel="import" href="../global_scroll_target_behavior.html">
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="../icons.html">
@@ -33,19 +33,12 @@
         user-select: text;
       }
 
-      .last {
-        display: flex;
-        justify-content: flex-end;
-        width: 100%;
-      }
-
       dialog[is='cr-drawer'] {
         z-index: 2;
       }
 
       cr-toolbar {
         @apply(--layout-center);
-        --cr-toolbar-field-width: var(--settings-card-max-width);
         --iron-icon-fill-color: white;
         background-color: var(--google-blue-700);
         color: white;
@@ -58,25 +51,6 @@
         overflow: overlay;
         position: relative;
       }
-
-      #dropShadow {
-        /* TODO(dpapad): This box-shadow is repeated in Settings, History and
-           Downloads. Define a CSS variable instead and re-use. */
-        box-shadow: inset 0 5px 6px -3px rgba(0, 0, 0, 0.4);
-        height: 6px;
-        left: 0;
-        opacity: 0;
-        pointer-events: none;
-        position: absolute;
-        right: 0;
-        top: 56px;
-        transition: opacity 500ms;
-        z-index: 1;
-      }
-
-      #dropShadow.has-shadow {
-        opacity: 1;
-      }
     </style>
     <settings-prefs id="prefs" prefs="{{prefs}}"></settings-prefs>
     <cr-toolbar page-name="$i18n{settings}"
@@ -86,11 +60,11 @@
         spinner-active="[[toolbarSpinnerActive_]]"
         menu-label="$i18n{menuButtonLabel}"
         on-search-changed="onSearchChanged_"
-        role="none"
+        role="banner"
         show-menu>
     </cr-toolbar>
     <dialog id="drawer" is="cr-drawer" on-close="onMenuClosed_"
-        heading="$i18n{settings}">
+        heading="$i18n{settings}" align="$i18n{textdirection}">
       <div class="drawer-content">
         <template is="dom-if" id="drawerTemplate">
           <settings-menu page-visibility="[[pageVisibility_]]"
@@ -103,10 +77,7 @@
         </template>
       </div>
     </dialog>
-    <div id="dropShadow"></div>
     <div id="container" class="no-outline">
-      <!-- Used by IntersectionObserver, has a 0px height intentionally -->
-      <div id="intersectionProbe"></div>
       <settings-main id="main" prefs="{{prefs}}"
           toolbar-spinner-active="{{toolbarSpinnerActive_}}"
           page-visibility="[[pageVisibility_]]"

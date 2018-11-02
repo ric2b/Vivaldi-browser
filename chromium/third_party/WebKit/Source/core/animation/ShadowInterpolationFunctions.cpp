@@ -30,8 +30,9 @@ class ShadowNonInterpolableValue : public NonInterpolableValue {
  public:
   ~ShadowNonInterpolableValue() final {}
 
-  static RefPtr<ShadowNonInterpolableValue> Create(ShadowStyle shadow_style) {
-    return AdoptRef(new ShadowNonInterpolableValue(shadow_style));
+  static scoped_refptr<ShadowNonInterpolableValue> Create(
+      ShadowStyle shadow_style) {
+    return base::AdoptRef(new ShadowNonInterpolableValue(shadow_style));
   }
 
   ShadowStyle Style() const { return style_; }
@@ -57,8 +58,8 @@ bool ShadowInterpolationFunctions::NonInterpolableValuesAreCompatible(
 PairwiseInterpolationValue ShadowInterpolationFunctions::MaybeMergeSingles(
     InterpolationValue&& start,
     InterpolationValue&& end) {
-  if (!NonInterpolableValuesAreCompatible(start.non_interpolable_value.Get(),
-                                          end.non_interpolable_value.Get()))
+  if (!NonInterpolableValuesAreCompatible(start.non_interpolable_value.get(),
+                                          end.non_interpolable_value.get()))
     return nullptr;
   return PairwiseInterpolationValue(std::move(start.interpolable_value),
                                     std::move(end.interpolable_value),
@@ -150,12 +151,12 @@ ShadowInterpolationFunctions::CreateNeutralInterpolableValue() {
 
 void ShadowInterpolationFunctions::Composite(
     std::unique_ptr<InterpolableValue>& underlying_interpolable_value,
-    RefPtr<NonInterpolableValue>& underlying_non_interpolable_value,
+    scoped_refptr<NonInterpolableValue>& underlying_non_interpolable_value,
     double underlying_fraction,
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value) {
   DCHECK(NonInterpolableValuesAreCompatible(
-      underlying_non_interpolable_value.Get(), non_interpolable_value));
+      underlying_non_interpolable_value.get(), non_interpolable_value));
   InterpolableList& underlying_interpolable_list =
       ToInterpolableList(*underlying_interpolable_value);
   const InterpolableList& interpolable_list =

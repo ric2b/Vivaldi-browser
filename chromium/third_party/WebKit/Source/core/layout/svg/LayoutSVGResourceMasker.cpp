@@ -56,7 +56,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceMasker::CreatePaintRecord(
     AffineTransform& content_transformation,
     const FloatRect& target_bounding_box,
     GraphicsContext& context) {
-  SVGUnitTypes::SVGUnitType content_units = toSVGMaskElement(GetElement())
+  SVGUnitTypes::SVGUnitType content_units = ToSVGMaskElement(GetElement())
                                                 ->maskContentUnits()
                                                 ->CurrentValue()
                                                 ->EnumValue();
@@ -71,14 +71,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceMasker::CreatePaintRecord(
     return cached_paint_record_;
 
   SubtreeContentTransformScope content_transform_scope(content_transformation);
-
-  // Using strokeBoundingBox instead of visualRectInLocalCoordinates
-  // to avoid the intersection with local clips/mask, which may yield incorrect
-  // results when mixing objectBoundingBox and userSpaceOnUse units.
-  // http://crbug.com/294900
-  FloatRect bounds = StrokeBoundingBox();
-
-  PaintRecordBuilder builder(bounds, nullptr, &context);
+  PaintRecordBuilder builder(nullptr, &context);
 
   ColorFilter mask_content_filter =
       Style()->SvgStyle().ColorInterpolation() == CI_LINEARRGB
@@ -114,7 +107,7 @@ void LayoutSVGResourceMasker::CalculateMaskContentVisualRect() {
 
 FloatRect LayoutSVGResourceMasker::ResourceBoundingBox(
     const LayoutObject* object) {
-  SVGMaskElement* mask_element = toSVGMaskElement(GetElement());
+  SVGMaskElement* mask_element = ToSVGMaskElement(GetElement());
   DCHECK(mask_element);
 
   FloatRect object_bounding_box = object->ObjectBoundingBox();

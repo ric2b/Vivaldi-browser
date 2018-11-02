@@ -5,94 +5,56 @@
 #ifndef CHROME_BROWSER_VR_UI_RENDERER_H_
 #define CHROME_BROWSER_VR_UI_RENDERER_H_
 
+#include "chrome/browser/vr/model/camera_model.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
 
 namespace vr {
 
+class UiElement;
 class UiScene;
 class UiElement;
-class VrShellRenderer;
-
-// Provides information needed to render the controller.
-struct ControllerInfo {
-  gfx::Point3F target_point;
-  gfx::Point3F laser_origin;
-  UiInputManager::ButtonState touchpad_button_state;
-  UiInputManager::ButtonState app_button_state;
-  UiInputManager::ButtonState home_button_state;
-  gfx::Transform transform;
-  float opacity;
-  UiElement* reticle_render_target;
-};
+class UiElementRenderer;
 
 // Provides information for rendering such as the viewport and view/projection
 // matrix.
 struct RenderInfo {
-  struct EyeInfo {
-    gfx::Rect viewport;
-    gfx::Transform view_matrix;
-    gfx::Transform proj_matrix;
-    gfx::Transform view_proj_matrix;
-  };
-
   gfx::Transform head_pose;
-  EyeInfo left_eye_info;
-  EyeInfo right_eye_info;
-
   gfx::Size surface_texture_size;
+  CameraModel left_eye_model;
+  CameraModel right_eye_model;
 };
 
 // Renders a UI scene.
 class UiRenderer {
  public:
-  UiRenderer(UiScene* scene,
-             VrShellRenderer* vr_shell_renderer);
+  UiRenderer(UiScene* scene, UiElementRenderer* ui_element_renderer);
   ~UiRenderer();
 
-  void Draw(const RenderInfo& render_info,
-            const ControllerInfo& controller_info,
-            bool web_vr_mode);
-  // This is used to draw visible viewport aware elements in the scene, i.e.
-  // the security warning elements on top of WebVR or the exit warning element
-  // in ChromeVR.
-  void DrawViewportAware(const RenderInfo& render_info,
-                         const ControllerInfo& controller_info,
-                         bool web_vr_mode);
+  void Draw(const RenderInfo& render_info);
+
+  // This is exposed separately because we do a separate pass to render this
+  // content into an optimized viewport.
+  void DrawWebVrOverlayForeground(const RenderInfo& render_info);
+
+  static std::vector<const UiElement*> GetElementsInDrawOrder(
+      const std::vector<const UiElement*>& elements);
 
  private:
-  void DrawWorldElements(const RenderInfo& render_info,
-                         const ControllerInfo& controller_info,
-                         bool web_vr_mode);
-  void DrawOverlayElements(const RenderInfo& render_info,
-                           const ControllerInfo& controller_info);
+  void Draw2dBrowsing(const RenderInfo& render_info);
+  void DrawSplashScreen(const RenderInfo& render_info);
+  void DrawController(const RenderInfo& render_info);
+
   void DrawUiView(const RenderInfo& render_info,
-                  const ControllerInfo& controller_info,
-                  const std::vector<const UiElement*>& elements,
-                  bool draw_reticle);
-  void DrawElements(const gfx::Transform& view_proj_matrix,
+                  const std::vector<const UiElement*>& elements);
+  void DrawElements(const CameraModel& camera_model,
                     const std::vector<const UiElement*>& elements,
-                    const RenderInfo& render_info,
-                    const ControllerInfo& controller_info,
-                    bool draw_reticle);
-  void DrawElement(const gfx::Transform& view_proj_matrix,
-                   const UiElement& element);
-  std::vector<const UiElement*> GetElementsInDrawOrder(
-      const gfx::Transform& view_matrix,
-      const std::vector<const UiElement*>& elements);
-  void DrawReticle(const gfx::Transform& render_matrix,
-                   const RenderInfo& render_info,
-                   const ControllerInfo& controller_info);
-  void DrawLaser(const gfx::Transform& render_matrix,
-                 const RenderInfo& render_info,
-                 const ControllerInfo& controller_info);
-  void DrawController(const gfx::Transform& view_proj_matrix,
-                      const RenderInfo& render_info,
-                      const ControllerInfo& controller_info);
+                    const RenderInfo& render_info);
+  void DrawElement(const CameraModel& camera_model, const UiElement& element);
 
   UiScene* scene_ = nullptr;
-  VrShellRenderer* vr_shell_renderer_ = nullptr;
+  UiElementRenderer* ui_element_renderer_ = nullptr;
 };
 
 }  // namespace vr

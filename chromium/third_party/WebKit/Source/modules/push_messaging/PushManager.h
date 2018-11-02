@@ -17,8 +17,7 @@ class ScriptPromise;
 class ScriptState;
 class ServiceWorkerRegistration;
 
-class MODULES_EXPORT PushManager final : public GarbageCollected<PushManager>,
-                                         public ScriptWrappable {
+class MODULES_EXPORT PushManager final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -38,7 +37,7 @@ class MODULES_EXPORT PushManager final : public GarbageCollected<PushManager>,
                                 const PushSubscriptionOptionsInit&,
                                 ExceptionState&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit PushManager(ServiceWorkerRegistration*);

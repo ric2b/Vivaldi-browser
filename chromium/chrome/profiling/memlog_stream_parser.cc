@@ -23,7 +23,9 @@ using AddressVector = base::StackVector<Address, kMaxStackEntries>;
 MemlogStreamParser::Block::Block(std::unique_ptr<char[]> d, size_t s)
     : data(std::move(d)), size(s) {}
 
-MemlogStreamParser::Block::~Block() {}
+MemlogStreamParser::Block::Block(Block&& other) noexcept = default;
+
+MemlogStreamParser::Block::~Block() = default;
 
 MemlogStreamParser::MemlogStreamParser(MemlogReceiver* receiver)
     : receiver_(receiver) {}
@@ -65,6 +67,9 @@ bool MemlogStreamParser::OnStreamData(std::unique_ptr<char[]> data, size_t sz) {
         break;
       case kFreePacketType:
         status = ParseFree();
+        break;
+      case kBarrierPacketType:
+        status = ParseBarrier();
         break;
       default:
         // Invalid message type.
@@ -145,8 +150,9 @@ MemlogStreamParser::ReadStatus MemlogStreamParser::ParseHeader() {
   if (!ReadBytes(sizeof(StreamHeader), &header))
     return READ_NO_DATA;
 
-  if (header.signature != kStreamSignature)
+  if (header.signature != kStreamSignature) {
     return READ_ERROR;
+  }
 
   receiver_->OnHeader(header);
   return READ_OK;
@@ -159,21 +165,35 @@ MemlogStreamParser::ReadStatus MemlogStreamParser::ParseAlloc() {
   if (!PeekBytes(sizeof(AllocPacket), &alloc_packet))
     return READ_NO_DATA;
 
+  // Validate data.
+  if (alloc_packet.stack_len > kMaxStackEntries ||
+      alloc_packet.context_byte_len > kMaxContextLen ||
+      alloc_packet.allocator >= AllocatorType::kCount) {
+    return READ_ERROR;
+  }
+
   std::vector<Address> stack;
-  if (alloc_packet.stack_len > kMaxStackEntries)
-    return READ_ERROR;  // Prevent overflow on corrupted or malicious data.
   stack.resize(alloc_packet.stack_len);
   size_t stack_byte_size = sizeof(Address) * alloc_packet.stack_len;
 
-  if (!AreBytesAvailable(sizeof(AllocPacket) + stack_byte_size))
+  if (!AreBytesAvailable(sizeof(AllocPacket) + stack_byte_size +
+                         alloc_packet.context_byte_len))
     return READ_NO_DATA;
 
-  // Everything will fit, mark packet consumed, read stack.
+  // Everything will fit, mark header consumed.
   ConsumeBytes(sizeof(AllocPacket));
+
+  // Read stack.
   if (!stack.empty())
     ReadBytes(stack_byte_size, stack.data());
 
-  receiver_->OnAlloc(alloc_packet, std::move(stack));
+  // Read context.
+  std::string context;
+  context.resize(alloc_packet.context_byte_len);
+  if (alloc_packet.context_byte_len)
+    ReadBytes(alloc_packet.context_byte_len, &context[0]);
+
+  receiver_->OnAlloc(alloc_packet, std::move(stack), std::move(context));
   return READ_OK;
 }
 
@@ -183,6 +203,15 @@ MemlogStreamParser::ReadStatus MemlogStreamParser::ParseFree() {
     return READ_NO_DATA;
 
   receiver_->OnFree(free_packet);
+  return READ_OK;
+}
+
+MemlogStreamParser::ReadStatus MemlogStreamParser::ParseBarrier() {
+  BarrierPacket barrier_packet;
+  if (!ReadBytes(sizeof(BarrierPacket), &barrier_packet))
+    return READ_NO_DATA;
+
+  receiver_->OnBarrier(barrier_packet);
   return READ_OK;
 }
 

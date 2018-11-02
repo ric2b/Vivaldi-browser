@@ -20,7 +20,6 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
-#include "chrome/browser/devtools/devtools_network_controller_handle.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
@@ -192,9 +191,7 @@ class ProfileIOData {
     return &network_prediction_options_;
   }
 
-  DevToolsNetworkControllerHandle* network_controller_handle() const {
-    return &network_controller_handle_;
-  }
+  BooleanPrefMember* dice_enabled() const { return dice_enabled_.get(); }
 
 #if defined(OS_CHROMEOS)
   std::string username_hash() const {
@@ -211,6 +208,12 @@ class ProfileIOData {
   IntegerPrefMember* incognito_availibility() const {
     return &incognito_availibility_pref_;
   }
+
+#if defined(OS_CHROMEOS)
+  BooleanPrefMember* account_consistency_mirror_required() const {
+    return &account_consistency_mirror_required_pref_;
+  }
+#endif
 
   chrome_browser_net::LoadingPredictorObserver* loading_predictor_observer()
       const {
@@ -344,6 +347,7 @@ class ProfileIOData {
     std::unique_ptr<net::ProxyConfigService> proxy_config_service;
 
 #if defined(OS_CHROMEOS)
+    std::unique_ptr<policy::PolicyCertVerifier> policy_cert_verifier;
     std::string username_hash;
     bool use_system_key_slot;
     std::unique_ptr<chromeos::CertificateProvider> certificate_provider;
@@ -551,6 +555,7 @@ class ProfileIOData {
   mutable BooleanPrefMember sync_has_auth_error_;
   mutable BooleanPrefMember sync_suppress_start_;
   mutable BooleanPrefMember sync_first_setup_complete_;
+  mutable std::unique_ptr<BooleanPrefMember> dice_enabled_;
 
   // Member variables which are pointed to by the various context objects.
   mutable BooleanPrefMember enable_referrers_;
@@ -561,6 +566,9 @@ class ProfileIOData {
   mutable StringPrefMember allowed_domains_for_apps_;
   mutable IntegerPrefMember network_prediction_options_;
   mutable IntegerPrefMember incognito_availibility_pref_;
+#if defined(OS_CHROMEOS)
+  mutable BooleanPrefMember account_consistency_mirror_required_pref_;
+#endif
 
   BooleanPrefMember enable_metrics_;
 
@@ -580,10 +588,6 @@ class ProfileIOData {
 
   mutable std::unique_ptr<ChromeExpectCTReporter> expect_ct_reporter_;
 #if defined(OS_CHROMEOS)
-  // Set to |cert_verifier_| if it references a PolicyCertVerifier. In that
-  // case, the verifier is owned by  |cert_verifier_|. Otherwise, set to NULL.
-  mutable std::unique_ptr<net::CertVerifier> cert_verifier_;
-  mutable policy::PolicyCertVerifier* policy_cert_verifier_;
   mutable std::string username_hash_;
   mutable bool use_system_key_slot_;
   mutable std::unique_ptr<chromeos::CertificateProvider> certificate_provider_;
@@ -624,8 +628,6 @@ class ProfileIOData {
       extension_throttle_manager_;
   mutable std::unique_ptr<ExtensionCookieNotifier> extension_cookie_notifier_;
 #endif
-
-  mutable DevToolsNetworkControllerHandle network_controller_handle_;
 
   mutable std::unique_ptr<certificate_transparency::TreeStateTracker>
       ct_tree_tracker_;

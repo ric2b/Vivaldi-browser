@@ -51,10 +51,26 @@ Polymer({
     },
 
     /** @private */
+    enableSafeBrowsingSubresourceFilter_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
+      },
+    },
+
+    /** @private */
     enableSoundContentSetting_: {
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean('enableSoundContentSetting');
+      },
+    },
+
+    /** @private */
+    enableClipboardContentSetting_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableClipboardContentSetting');
       },
     },
 
@@ -74,6 +90,11 @@ Polymer({
     this.addWebUIListener(
         'contentSettingSitePermissionChanged',
         this.onPermissionChanged_.bind(this));
+
+    // <if expr="chromeos">
+    this.addWebUIListener(
+        'prefEnableDrmChanged', this.prefEnableDrmChanged_.bind(this));
+    // </if>
   },
 
   /** @override */
@@ -108,7 +129,6 @@ Polymer({
         this.updatePermissions_(this.getCategoryList_());
       }
     });
-
   },
 
   /**
@@ -121,8 +141,9 @@ Polymer({
    */
   onPermissionChanged_: function(category, origin, embeddingOrigin) {
     if (this.origin === undefined || this.origin == '' ||
-        origin === undefined || origin == '')
+        origin === undefined || origin == '') {
       return;
+    }
     if (!this.getCategoryList_().includes(category))
       return;
 
@@ -131,6 +152,12 @@ Polymer({
     if (this.toUrl(origin).origin == this.toUrl(this.origin).origin)
       this.updatePermissions_([category]);
   },
+
+  // <if expr="chromeos">
+  prefEnableDrmChanged_: function() {
+    this.updatePermissions_([settings.ContentSettingsTypes.PROTECTED_CONTENT]);
+  },
+  // </if>
 
   /**
    * Retrieves the permissions listed in |categoryList| from the backend for
@@ -222,10 +249,12 @@ Polymer({
    * @private
    */
   getCategoryList_: function() {
-    return Array.prototype.map.call(
-        this.root.querySelectorAll('site-details-permission'), (element) => {
-          return element.category;
-        });
+    var categoryList = [];
+    this.root.querySelectorAll('site-details-permission').forEach((element) => {
+      if (!element.hidden)
+        categoryList.push(element.category);
+    });
+    return categoryList;
   },
 
   /**

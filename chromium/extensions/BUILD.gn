@@ -33,10 +33,6 @@ grit("extensions_browser_resources") {
     "extensions_browser_resources_100_percent.pak",
     "extensions_browser_resources_200_percent.pak",
   ]
-  grit_flags = [
-    "-E",
-    "mojom_root=" + rebase_path(root_gen_dir, root_build_dir),
-  ]
 }
 
 grit("extensions_renderer_resources") {
@@ -50,9 +46,13 @@ grit("extensions_renderer_resources") {
     "mojom_root=" + rebase_path(root_gen_dir, root_build_dir),
   ]
 
+  # Files included from ${mojom_root} are generated.
+  source_is_generated = true
+
   deps = [
     "//extensions/common:mojo_js",
     "//extensions/common/api:mojom_js",
+    "//mojo/public/js:bindings",
     "//services/device/public/interfaces:interfaces_js",
   ]
 }
@@ -84,6 +84,8 @@ static_library("test_support") {
     "browser/mock_external_provider.h",
     "browser/scoped_ignore_content_verifier_for_test.cc",
     "browser/scoped_ignore_content_verifier_for_test.h",
+    "browser/test_event_router.cc",
+    "browser/test_event_router.h",
     "browser/test_extension_registry_observer.cc",
     "browser/test_extension_registry_observer.h",
     "browser/test_extensions_browser_client.cc",
@@ -136,6 +138,7 @@ static_library("test_support") {
     "//content/public/common",
     "//content/test:test_support",
     "//extensions/browser",
+    "//extensions/browser:test_support",
     "//extensions/browser/api:api_registration",
     "//extensions/common",
     "//extensions/common/api",
@@ -143,7 +146,7 @@ static_library("test_support") {
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/cld",
+    "//third_party/cld_3/src/src:cld_3",
   ]
 
   public_deps = [
@@ -164,6 +167,7 @@ repack("shell_and_test_pak") {
     "$root_gen_dir/extensions/extensions_resources.pak",
     "$root_gen_dir/extensions/shell/app_shell_resources.pak",
     "$root_gen_dir/extensions/strings/extensions_strings_en-US.pak",
+    "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
     "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
@@ -179,6 +183,7 @@ repack("shell_and_test_pak") {
     "//content/shell:resources",
     "//extensions/shell:resources",
     "//extensions/strings",
+    "//mojo/public/js:resources",
     "//third_party/WebKit/public:resources",
     "//third_party/WebKit/public:scaled_resources_100_percent",
     "//ui/resources",
@@ -212,6 +217,8 @@ test("extensions_unittests") {
     "//extensions/renderer:unit_tests",
     "//extensions/shell:unit_tests",
     "//extensions/utility:unit_tests",
+    "//services/data_decoder:lib",
+    "//services/service_manager/public/cpp/test:test_support",
     "//ui/gl:test_support",
   ]
 
@@ -258,7 +265,6 @@ source_set("chrome_extensions_browsertests") {
     "browser/app_window/app_window_browsertest.cc",
     "browser/guest_view/extension_options/extension_options_apitest.cc",
     "browser/guest_view/mime_handler_view/mime_handler_view_browsertest.cc",
-    "renderer/console_apitest.cc",
     "renderer/script_context_browsertest.cc",
   ]
 
@@ -287,14 +293,12 @@ source_set("chrome_extensions_browsertests") {
     "//crypto:platform",
     "//crypto:test_support",
     "//device/bluetooth:mocks",
-    "//device/serial:test_support",
     "//extensions/common/api",
     "//google_apis:test_support",
     "//media:test_support",
     "//media/cast:test_support",
     "//net",
     "//net:test_support",
-    "//sdch",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

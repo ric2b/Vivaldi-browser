@@ -15,6 +15,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "net/url_request/url_request.h"
 
 namespace content {
 
@@ -474,12 +475,13 @@ void ServiceWorkerMetrics::CountControlledPageLoad(
         "ServiceWorker.MainFramePageLoad.CoreTransition",
         static_cast<int>(ui::PageTransitionStripQualifier(page_transition)),
         static_cast<int>(ui::PAGE_TRANSITION_LAST_CORE) + 1);
-    // Currently the max number of HTTP redirects is 20 which is defined as
-    // kMaxRedirects in net/url_request/url_request.cc. So the max number of the
-    // chain length is 21.
+    // Currently the max number of HTTP redirects is 20 as defined in
+    // net::URLRequest::kMaxRedirects in
+    // net/url_request/url_request.h. So the max number of the chain
+    // length is 21.
     UMA_HISTOGRAM_EXACT_LINEAR(
         "ServiceWorker.MainFramePageLoad.RedirectChainLength",
-        redirect_chain_length, 21);
+        redirect_chain_length, net::URLRequest::kMaxRedirects + 1);
   }
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
@@ -780,21 +782,23 @@ void ServiceWorkerMetrics::RecordURLRequestJobResult(
 
 void ServiceWorkerMetrics::RecordStatusZeroResponseError(
     bool is_main_resource,
-    blink::WebServiceWorkerResponseError error) {
+    blink::mojom::ServiceWorkerResponseError error) {
   if (is_main_resource) {
     UMA_HISTOGRAM_ENUMERATION(
         "ServiceWorker.URLRequestJob.MainResource.StatusZeroError", error,
-        blink::kWebServiceWorkerResponseErrorLast + 1);
+        static_cast<int>(blink::mojom::ServiceWorkerResponseError::kLast) + 1);
   } else {
     UMA_HISTOGRAM_ENUMERATION(
         "ServiceWorker.URLRequestJob.Subresource.StatusZeroError", error,
-        blink::kWebServiceWorkerResponseErrorLast + 1);
+        static_cast<int>(blink::mojom::ServiceWorkerResponseError::kLast) + 1);
   }
 }
 
-void ServiceWorkerMetrics::RecordFallbackedRequestMode(FetchRequestMode mode) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.URLRequestJob.FallbackedRequestMode",
-                            mode, FETCH_REQUEST_MODE_LAST + 1);
+void ServiceWorkerMetrics::RecordFallbackedRequestMode(
+    network::mojom::FetchRequestMode mode) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "ServiceWorker.URLRequestJob.FallbackedRequestMode", mode,
+      static_cast<int>(network::mojom::FetchRequestMode::kLast) + 1);
 }
 
 void ServiceWorkerMetrics::RecordProcessCreated(bool is_new_process) {
@@ -1079,6 +1083,10 @@ void ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(
   UMA_HISTOGRAM_ENUMERATION(
       "ServiceWorker.StartForNavigationHint.Result", result,
       StartServiceWorkerForNavigationHintResult::NUM_TYPES);
+}
+
+void ServiceWorkerMetrics::RecordRegisteredOriginCount(size_t origin_count) {
+  UMA_HISTOGRAM_COUNTS_1M("ServiceWorker.RegisteredOriginCount", origin_count);
 }
 
 }  // namespace content

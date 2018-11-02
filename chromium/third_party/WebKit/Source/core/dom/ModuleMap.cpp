@@ -23,8 +23,8 @@ class ModuleMap::Entry final : public GarbageCollectedFinalized<Entry>,
   static Entry* Create(ModuleMap* map) { return new Entry(map); }
   ~Entry() override {}
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // Notify fetched |m_moduleScript| to the client asynchronously.
   void AddClient(SingleModuleClient*);
@@ -53,13 +53,14 @@ ModuleMap::Entry::Entry(ModuleMap* map) : map_(map) {
   DCHECK(map_);
 }
 
-DEFINE_TRACE(ModuleMap::Entry) {
+void ModuleMap::Entry::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_script_);
   visitor->Trace(map_);
   visitor->Trace(clients_);
 }
 
-DEFINE_TRACE_WRAPPERS(ModuleMap::Entry) {
+void ModuleMap::Entry::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(module_script_);
 }
 
@@ -102,12 +103,12 @@ ModuleMap::ModuleMap(Modulator* modulator) : modulator_(modulator) {
   DCHECK(modulator);
 }
 
-DEFINE_TRACE(ModuleMap) {
+void ModuleMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(map_);
   visitor->Trace(modulator_);
 }
 
-DEFINE_TRACE_WRAPPERS(ModuleMap) {
+void ModuleMap::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& it : map_)
     visitor->TraceWrappers(it.value);
 }
@@ -117,12 +118,13 @@ void ModuleMap::FetchSingleModuleScript(const ModuleScriptFetchRequest& request,
                                         SingleModuleClient* client) {
   // https://html.spec.whatwg.org/#fetch-a-single-module-script
 
-  // Step 1. Let moduleMap be module map settings object's module map.
-  // Note: This is the ModuleMap.
+  // Step 1. "Let moduleMap be module map settings object's module map."
+  // [spec text]
+  // Note: |this| is the ModuleMap.
 
-  // Step 2. If moduleMap[url] is "fetching", wait in parallel until that
+  // Step 2. "If moduleMap[url] is "fetching", wait in parallel until that
   // entry's value changes, then queue a task on the networking task source to
-  // proceed with running the following steps.
+  // proceed with running the following steps." [spec text]
   MapImpl::AddResult result = map_.insert(request.Url(), nullptr);
   TraceWrapperMember<Entry>& entry = result.stored_value->value;
   if (result.is_new_entry) {
@@ -134,11 +136,12 @@ void ModuleMap::FetchSingleModuleScript(const ModuleScriptFetchRequest& request,
   }
   DCHECK(entry);
 
-  // Step 3. If moduleMap[url] exists, asynchronously complete this algorithm
-  // with moduleMap[url], and abort these steps.
-  // Step 10. Set moduleMap[url] to module script, and asynchronously complete
-  // this algorithm with module script.
-  entry->AddClient(client);
+  // Step 3. "If moduleMap[url] exists, asynchronously complete this algorithm
+  // with moduleMap[url], and abort these steps." [spec text]
+  // Step 11. "Set moduleMap[url] to module script, and asynchronously complete
+  // this algorithm with module script." [spec text]
+  if (client)
+    entry->AddClient(client);
 }
 
 ModuleScript* ModuleMap::GetFetchedModuleScript(const KURL& url) const {

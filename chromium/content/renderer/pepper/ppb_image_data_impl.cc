@@ -171,7 +171,7 @@ void* ImageDataPlatformBackend::Map() {
     const bool is_opaque = false;
     mapped_canvas_ = dib_->GetPlatformCanvas(width_, height_, is_opaque);
     if (!mapped_canvas_)
-      return NULL;
+      return nullptr;
   }
   SkPixmap pixmap;
   skia::GetWritablePixels(mapped_canvas_.get(), &pixmap);
@@ -227,23 +227,25 @@ bool ImageDataSimpleBackend::Init(PPB_ImageData_Impl* impl,
       SkImageInfo::MakeN32Premul(impl->width(), impl->height()));
   shared_memory_.reset(
       RenderThread::Get()
-          ->HostAllocateSharedMemoryBuffer(skia_bitmap_.getSize())
+          ->HostAllocateSharedMemoryBuffer(skia_bitmap_.computeByteSize())
           .release());
   return !!shared_memory_.get();
 }
 
 bool ImageDataSimpleBackend::IsMapped() const { return map_count_ > 0; }
 
-TransportDIB* ImageDataSimpleBackend::GetTransportDIB() const { return NULL; }
+TransportDIB* ImageDataSimpleBackend::GetTransportDIB() const {
+  return nullptr;
+}
 
 void* ImageDataSimpleBackend::Map() {
   DCHECK(shared_memory_.get());
   if (map_count_++ == 0) {
-    shared_memory_->Map(skia_bitmap_.getSize());
+    shared_memory_->Map(skia_bitmap_.computeByteSize());
     skia_bitmap_.setPixels(shared_memory_->memory());
     // Our platform bitmaps are set to opaque by default, which we don't want.
     skia_bitmap_.setAlphaType(kPremul_SkAlphaType);
-    skia_canvas_ = base::MakeUnique<SkCanvas>(skia_bitmap_);
+    skia_canvas_ = std::make_unique<SkCanvas>(skia_bitmap_);
     return skia_bitmap_.getAddr32(0, 0);
   }
   return shared_memory_->memory();
@@ -256,14 +258,14 @@ void ImageDataSimpleBackend::Unmap() {
 
 int32_t ImageDataSimpleBackend::GetSharedMemory(base::SharedMemory** shm,
                                                 uint32_t* byte_count) {
-  *byte_count = skia_bitmap_.getSize();
+  *byte_count = skia_bitmap_.computeByteSize();
   *shm = shared_memory_.get();
   return PP_OK;
 }
 
 SkCanvas* ImageDataSimpleBackend::GetCanvas() {
   if (!IsMapped())
-    return NULL;
+    return nullptr;
   return skia_canvas_.get();
 }
 

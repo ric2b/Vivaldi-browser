@@ -8,11 +8,11 @@
 
 #include "base/bind.h"
 #include "base/strings/nullable_string16.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/fetchers/manifest_fetcher.h"
 #include "content/renderer/manifest/manifest_parser.h"
 #include "content/renderer/manifest/manifest_uma_util.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -37,26 +37,37 @@ ManifestManager::~ManifestManager() {
 }
 
 void ManifestManager::RequestManifest(RequestManifestCallback callback) {
-  GetManifest(base::BindOnce(&ManifestManager::OnRequestManifestComplete,
-                             base::Unretained(this), std::move(callback)));
+  RequestManifestImpl(base::BindOnce(
+      [](RequestManifestCallback callback, const GURL& manifest_url,
+         const Manifest& manifest,
+         const blink::mojom::ManifestDebugInfo* debug_info) {
+        std::move(callback).Run(manifest_url, manifest);
+      },
+      std::move(callback)));
 }
 
-void ManifestManager::OnRequestManifestComplete(
-    RequestManifestCallback callback,
-    const GURL& url,
-    const Manifest& manifest,
-    const ManifestDebugInfo& debug_info) {
-  std::move(callback).Run(url, manifest);
+void ManifestManager::RequestManifestDebugInfo(
+    RequestManifestDebugInfoCallback callback) {
+  RequestManifestImpl(base::BindOnce(
+      [](RequestManifestDebugInfoCallback callback, const GURL& manifest_url,
+         const Manifest& manifest,
+         const blink::mojom::ManifestDebugInfo* debug_info) {
+        std::move(callback).Run(manifest_url,
+                                debug_info ? debug_info->Clone() : nullptr);
+      },
+      std::move(callback)));
 }
 
-void ManifestManager::GetManifest(GetManifestCallback callback) {
+void ManifestManager::RequestManifestImpl(
+    InternalRequestManifestCallback callback) {
   if (!may_have_manifest_) {
-    std::move(callback).Run(GURL(), Manifest(), ManifestDebugInfo());
+    std::move(callback).Run(GURL(), Manifest(), nullptr);
     return;
   }
 
   if (!manifest_dirty_) {
-    std::move(callback).Run(manifest_url_, manifest_, manifest_debug_info_);
+    std::move(callback).Run(manifest_url_, manifest_,
+                            manifest_debug_info_.get());
     return;
   }
 
@@ -73,6 +84,7 @@ void ManifestManager::DidChangeManifest() {
   may_have_manifest_ = true;
   manifest_dirty_ = true;
   manifest_url_ = GURL();
+  manifest_debug_info_ = nullptr;
 
   if (!render_frame()->IsMainFrame())
     return;
@@ -89,9 +101,11 @@ void ManifestManager::DidChangeManifest() {
   // During document load, coalescing is disabled to maintain relative ordering
   // of this notification and the favicon URL reporting.
   if (!render_frame()->GetWebFrame()->IsLoading()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ManifestManager::ReportManifestChange,
-                              weak_factory_.GetWeakPtr()));
+    render_frame()
+        ->GetTaskRunner(blink::TaskType::kUnspecedLoading)
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(&ManifestManager::ReportManifestChange,
+                                  weak_factory_.GetWeakPtr()));
     return;
   }
   ReportManifestChange();
@@ -136,6 +150,7 @@ void ManifestManager::OnManifestFetchComplete(
     const blink::WebURLResponse& response,
     const std::string& data) {
   if (response.IsNull() && data.empty()) {
+    manifest_debug_info_ = nullptr;
     ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_UNSPECIFIED_REASON);
     ResolveCallbacks(ResolveStateFailure);
     return;
@@ -148,19 +163,20 @@ void ManifestManager::OnManifestFetchComplete(
   parser.Parse();
 
   fetcher_.reset();
-  manifest_debug_info_.raw_data = data;
-  parser.TakeErrors(&manifest_debug_info_.errors);
+  manifest_debug_info_ = blink::mojom::ManifestDebugInfo::New();
+  manifest_debug_info_->raw_manifest = data;
+  parser.TakeErrors(&manifest_debug_info_->errors);
 
-  for (const auto& error : manifest_debug_info_.errors) {
+  for (const auto& error : manifest_debug_info_->errors) {
     blink::WebConsoleMessage message;
-    message.level = error.critical ? blink::WebConsoleMessage::kLevelError
-                                   : blink::WebConsoleMessage::kLevelWarning;
+    message.level = error->critical ? blink::WebConsoleMessage::kLevelError
+                                    : blink::WebConsoleMessage::kLevelWarning;
     message.text =
-        blink::WebString::FromUTF8(GetMessagePrefix() + error.message);
+        blink::WebString::FromUTF8(GetMessagePrefix() + error->message);
     message.url =
         render_frame()->GetWebFrame()->GetDocument().ManifestURL().GetString();
-    message.line_number = error.line;
-    message.column_number = error.column;
+    message.line_number = error->line;
+    message.column_number = error->column;
     render_frame()->GetWebFrame()->AddMessageToConsole(message);
   }
 
@@ -188,21 +204,21 @@ void ManifestManager::ResolveCallbacks(ResolveState state) {
 
   manifest_dirty_ = state != ResolveStateSuccess;
 
-  std::vector<GetManifestCallback> callbacks;
+  std::vector<InternalRequestManifestCallback> callbacks;
   swap(callbacks, pending_callbacks_);
 
-  for (auto& callback : callbacks)
-    std::move(callback).Run(manifest_url_, manifest_, manifest_debug_info_);
+  for (auto& callback : callbacks) {
+    std::move(callback).Run(manifest_url_, manifest_,
+                            manifest_debug_info_.get());
+  }
 }
 
 void ManifestManager::BindToRequest(
-    blink::mojom::ManifestManagerAssociatedRequest request) {
+    blink::mojom::ManifestManagerRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 
-void ManifestManager::OnDestruct() {
-  delete this;
-}
+void ManifestManager::OnDestruct() {}
 
 void ManifestManager::ReportManifestChange() {
   auto manifest_url =

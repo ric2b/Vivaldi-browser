@@ -13,7 +13,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/web_contents.h"
 
 using content::WebContents;
@@ -28,14 +27,6 @@ PrerenderTabHelper::PrerenderTabHelper(content::WebContents* web_contents)
       weak_factory_(this) {}
 
 PrerenderTabHelper::~PrerenderTabHelper() {
-}
-
-void PrerenderTabHelper::DidGetRedirectForResourceRequest(
-    const content::ResourceRedirectDetails& details) {
-  if (details.resource_type != content::RESOURCE_TYPE_MAIN_FRAME)
-    return;
-
-  MainFrameUrlDidChange(details.new_url);
 }
 
 void PrerenderTabHelper::DidFinishNavigation(
@@ -68,6 +59,13 @@ void PrerenderTabHelper::DidStartNavigation(
   if (!navigation_handle->IsInMainFrame())
     return;
 
+  MainFrameUrlDidChange(navigation_handle->GetURL());
+}
+
+void PrerenderTabHelper::DidRedirectNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame())
+    return;
   MainFrameUrlDidChange(navigation_handle->GetURL());
 }
 

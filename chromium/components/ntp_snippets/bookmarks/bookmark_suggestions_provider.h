@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/ntp_snippets/category.h"
@@ -39,7 +40,7 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
       base::Time begin,
       base::Time end,
       const base::Callback<bool(const GURL& url)>& filter) override;
-  void ClearCachedSuggestions(Category category) override;
+  void ClearCachedSuggestions() override;
   void GetDismissedSuggestionsForDebugging(
       Category category,
       DismissedSuggestionsCallback callback) override;
@@ -98,6 +99,7 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
   const Category provided_category_;
   bookmarks::BookmarkModel* bookmark_model_;
   bool fetch_requested_;
+  bool fetch_in_progress_;
 
   base::Time node_to_change_last_visit_date_;
   base::Time end_of_list_last_visit_date_;
@@ -106,6 +108,8 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
   // deciding which bookmarks to suggest. Should we also consider visits on
   // desktop platforms?
   bool consider_bookmark_visits_from_desktop_;
+
+  base::WeakPtrFactory<BookmarkSuggestionsProvider> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkSuggestionsProvider);
 };

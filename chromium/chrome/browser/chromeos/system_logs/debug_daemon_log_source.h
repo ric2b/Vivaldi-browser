@@ -6,12 +6,14 @@
 #define CHROME_BROWSER_CHROMEOS_SYSTEM_LOGS_DEBUG_DAEMON_LOG_SOURCE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/feedback/system_logs/system_logs_source.h"
 
 namespace system_logs {
@@ -32,10 +34,10 @@ class DebugDaemonLogSource : public SystemLogsSource {
   typedef std::map<std::string, std::string> KeyValueMap;
 
   // Callbacks for the 5 different dbus calls to debugd.
-  void OnGetRoutes(bool succeeded, const std::vector<std::string>& routes);
-  void OnGetNetworkStatus(bool succeeded, const std::string& status);
-  void OnGetModemStatus(bool succeeded, const std::string& status);
-  void OnGetWiMaxStatus(bool succeeded, const std::string& status);
+  void OnGetRoutes(base::Optional<std::vector<std::string>> routes);
+  void OnGetNetworkStatus(base::Optional<std::string> status);
+  void OnGetModemStatus(base::Optional<std::string> status);
+  void OnGetWiMaxStatus(base::Optional<std::string> status);
   void OnGetLogs(bool succeeded,
                  const KeyValueMap& logs);
   void OnGetUserLogFiles(bool succeeded,
@@ -49,10 +51,13 @@ class DebugDaemonLogSource : public SystemLogsSource {
       SystemLogsResponse* response);
 
   // Merge the responses from ReadUserLogFiles into the main response dict and
-  // call RequestComplete to indicate that the user log files read is complete.
-  void MergeResponse(SystemLogsResponse* response);
+  // invoke the callback_.Run method with the assumption that all other logs
+  // have already been collected.
+  void MergeUserLogFilesResponse(std::unique_ptr<SystemLogsResponse> response);
 
-  // Sends the data to the callback_ when all the requests are completed
+  // When all the requests are completed, send one last request to collect the
+  // user logs and complete the collection by invoking the callback's Run
+  // method.
   void RequestCompleted();
 
   std::unique_ptr<SystemLogsResponse> response_;

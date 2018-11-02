@@ -30,8 +30,8 @@
 
 #include "core/html/shadow/ProgressShadowElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/html/HTMLProgressElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
@@ -44,7 +44,7 @@ ProgressShadowElement::ProgressShadowElement(Document& document)
 DEFINE_NODE_FACTORY(ProgressShadowElement)
 
 HTMLProgressElement* ProgressShadowElement::ProgressElement() const {
-  return toHTMLProgressElement(OwnerShadowHost());
+  return ToHTMLProgressElement(OwnerShadowHost());
 }
 
 bool ProgressShadowElement::LayoutObjectIsNeeded(const ComputedStyle& style) {

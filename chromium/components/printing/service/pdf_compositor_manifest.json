@@ -1,10 +1,11 @@
 {
   "name": "pdf_compositor",
   "display_name": "PDF Compositor Service",
+  "sandbox_type": "pdf_compositor",
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
-        "composite": [ "printing::mojom::PdfCompositor" ]
+        "compositor": [ "printing::mojom::PdfCompositor" ]
        },
        "requires": {
          "*": [ "app" ],

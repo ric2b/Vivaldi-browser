@@ -21,11 +21,15 @@ DOM classes to the Web Agents layer.
 
 import os
 import posixpath
+import sys
 
 from code_generator import CodeGeneratorBase, render_template
 # TODO(dglazkov): Move TypedefResolver to code_generator.py
 from code_generator_v8 import TypedefResolver
-from name_style_converter import NameStyleConverter
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..',
+                             'third_party', 'blink', 'tools'))
+from blinkpy.common.name_style_converter import NameStyleConverter
 
 MODULE_PYNAME = os.path.splitext(os.path.basename(__file__))[0] + '.py'
 
@@ -235,9 +239,9 @@ class InterfaceContextBuilder(object):
 
 
 class CodeGeneratorWebAgentAPI(CodeGeneratorBase):
-    def __init__(self, info_provider, cache_dir, output_dir):
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case):
         CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider,
-                                   cache_dir, output_dir)
+                                   cache_dir, output_dir, snake_case)
         self.type_resolver = TypeResolver(info_provider.interfaces_info)
         self.typedef_resolver = TypedefResolver(info_provider)
 

@@ -15,13 +15,14 @@
 #include "base/values.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/payments/core/payment_instrument.h"
+#include "components/payments/core/web_payment_request.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #include "ios/chrome/browser/payments/test_payment_request.h"
-#include "ios/web/public/payments/payment_request.h"
 #include "ios/web/public/test/fakes/test_navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -71,9 +72,9 @@ class FakePaymentInstrumentDelegate : public PaymentInstrument::Delegate {
 
 }  // namespace
 
-class IOSPaymentInstrumentLauncherTest : public testing::Test {
+class PaymentRequestIOSPaymentInstrumentLauncherTest : public PlatformTest {
  protected:
-  IOSPaymentInstrumentLauncherTest()
+  PaymentRequestIOSPaymentInstrumentLauncherTest()
       : chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {}
 
   std::unique_ptr<base::DictionaryValue> SerializeMethodDataWrapper(
@@ -95,8 +96,9 @@ class IOSPaymentInstrumentLauncherTest : public testing::Test {
 
 // Tests that serializing empty stringified method data yields the expected
 // result.
-TEST_F(IOSPaymentInstrumentLauncherTest, EmptyStringifiedMethodDataDictionary) {
-  web::PaymentRequest web_payment_request;
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
+       EmptyStringifiedMethodDataDictionary) {
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
   TestPaymentRequest payment_request(web_payment_request,
                                      chrome_browser_state_.get(), &web_state_,
@@ -111,9 +113,9 @@ TEST_F(IOSPaymentInstrumentLauncherTest, EmptyStringifiedMethodDataDictionary) {
 
 // Tests that serializing populated stringified method data yields the expected
 // result.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        PopulatedStringifiedMethodDataDictionary) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   PaymentMethodData method_datum1;
   method_datum1.supported_methods.push_back("https://jefpay.com");
   method_datum1.supported_methods.push_back("https://bobpay.com");
@@ -165,14 +167,14 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 
 // Tests that attempting to open an invalid universal link calls the
 // OnInstrumentDetailsError() function of the delegate.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        LaunchIOSPaymentInstrument_MalformedUniversalLink) {
   if (base::ios::IsRunningOnIOS10OrLater()) {
     std::unique_ptr<web::TestNavigationManager> navigation_manager =
         base::MakeUnique<web::TestNavigationManager>();
     web_state_.SetNavigationManager(std::move(navigation_manager));
 
-    web::PaymentRequest web_payment_request =
+    WebPaymentRequest web_payment_request =
         payment_request_test_util::CreateTestWebPaymentRequest();
     autofill::TestPersonalDataManager personal_data_manager;
     TestPaymentRequest payment_request(web_payment_request,
@@ -198,7 +200,7 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 // Tests that if the response from the payment app is not a valid JSON
 // dictionary then the OnInstrumentDetailsError() function of the delegate
 // is called.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        ReceiveResponseFromIOSPaymentInstrument_ResponseNotDictionary) {
   FakePaymentInstrumentDelegate instrument_delegate;
   IOSPaymentInstrumentLauncher launcher;
@@ -220,7 +222,7 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 // Tests that if a payment app claims to have not been successful in
 // fulfilling its side of the transaction then OnInstrumentDetailsError()
 // is called.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        ReceiveResponseFromIOSPaymentInstrument_PaymentAppFailed) {
   FakePaymentInstrumentDelegate instrument_delegate;
   IOSPaymentInstrumentLauncher launcher;
@@ -247,7 +249,7 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 // Tests that if the response from the payment app does not contain a
 // method name then OnInstrumentDetailsError() of the delegate is
 // called.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        ReceiveResponseFromIOSPaymentInstrument_NoMethodName) {
   FakePaymentInstrumentDelegate instrument_delegate;
   IOSPaymentInstrumentLauncher launcher;
@@ -273,7 +275,7 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 // Tests that if the response from the payment app does not contain any
 // stringified details then OnInstrumentDetailsError() of the delegate is
 // called.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        ReceiveResponseFromIOSPaymentInstrument_NoDetails) {
   FakePaymentInstrumentDelegate instrument_delegate;
   IOSPaymentInstrumentLauncher launcher;
@@ -299,7 +301,7 @@ TEST_F(IOSPaymentInstrumentLauncherTest,
 // Tests that if the response from the payment app has all necessary
 // parameters with valid values then OnInstrumentDetailsReady() of the
 // delegate is called.
-TEST_F(IOSPaymentInstrumentLauncherTest,
+TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        ReceiveResponseFromIOSPaymentInstrument_WellFormedResponse) {
   FakePaymentInstrumentDelegate instrument_delegate;
   IOSPaymentInstrumentLauncher launcher;

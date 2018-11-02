@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">Kiri ke Kanan</translation>
 <translation id="1546280085599573572">Sambungan ini telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="1588438908519853928">Biasa</translation>
-<translation id="1616206807336925449">Sambungan ini tidak memerlukan kebenaran khas.</translation>
 <translation id="1635033183663317347">Dipasang oleh penjaga anda.</translation>
 <translation id="1723824996674794290">&amp;Tetingkap baharu</translation>
 <translation id="1729533290416704613">Sambungan turut mengawal halaman yang ditunjukkan apabila anda membuat carian dari Kotak Omni.</translation>
@@ -103,7 +102,6 @@
 <translation id="4394049700291259645">Lumpuhkan</translation>
 <translation id="4423482519432579560">&amp;Semakan ejaan</translation>
 <translation id="4522570452068850558">Butiran</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4557136421275541763">Amaran:</translation>
 <translation id="4593021220803146968">&amp;Pergi ke <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apl dan sambungan hanya boleh diubah suai oleh pengurus (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -139,7 +137,6 @@
 <translation id="5556459405103347317">Muat Semula</translation>
 <translation id="5575473780076478375">Sambungan Inkognito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Sambungan turut mengawal halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
-<translation id="5646376287012673985">Lokasi</translation>
 <translation id="5715711091495208045">Broker Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Si&amp;mpan audio sebagai...</translation>
 <translation id="5780973441651030252">Keutamaan proses</translation>
@@ -178,7 +175,6 @@
 <translation id="6900284862687837908">Apl Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Batalkan Akses Fail</translation>
 <translation id="6974053822202609517">Kanan ke Kiri</translation>
-<translation id="7013485839273047434">Dapatkan lebih banyak sambungan</translation>
 <translation id="708060913198414444">S&amp;alin alamat audio</translation>
 <translation id="7144878232160441200">Cuba semula</translation>
 <translation id="7206693748120342859">Memuat turun <ph name="PLUGIN_NAME" />...</translation>
@@ -188,7 +184,6 @@
 <translation id="7361297102842600584">Klik kanan untuk menjalankan <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Padamkan pintasan</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Tab Baharu</translation>
 <translation id="7564847347806291057">Proses akhir</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
@@ -239,7 +234,6 @@ perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> disekat oleh dasar perusahaan</translation>
 <translation id="9170848237812810038">&amp;Buat asal</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ditambah</translation>
-<translation id="9219103736887031265">Imej</translation>
 <translation id="93766956588638423">Baiki sambungan</translation>
 <translation id="994289308992179865">&amp;Gelung</translation>
 <translation id="998747458861718449">S&amp;emak</translation>

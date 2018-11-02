@@ -15,8 +15,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
@@ -53,8 +53,14 @@ void ArcPlayStoreEnabledPreferenceHandler::Start() {
   const bool is_play_store_enabled = IsArcPlayStoreEnabledForProfile(profile_);
   VLOG(1) << "Start observing Google Play Store enabled preference. "
           << "Initial value: " << is_play_store_enabled;
-  UpdateArcSessionManager();
 
+  // If the OOBE screen is shown, don't kill the mini-container.
+  // We'll do it if and when the user declines the TOS. We need to check
+  // |is_play_store_enabled| to handle the case where |kArcEnabled| is managed
+  // but some of the preferences still need to be set by the user.
+  // TODO(cmtm): This feature isn't covered by unittests. Add a unittest for it.
+  if (!IsArcOobeOptInActive() || is_play_store_enabled)
+    UpdateArcSessionManager();
   if (is_play_store_enabled)
     return;
 
@@ -138,7 +144,7 @@ void ArcPlayStoreEnabledPreferenceHandler::OnIsSyncingChanged() {
     return;
   }
 
-  auth_notification_ = base::MakeUnique<ArcAuthNotification>(profile_);
+  auth_notification_ = std::make_unique<ArcAuthNotification>(profile_);
 }
 
 }  // namespace arc

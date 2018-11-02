@@ -88,6 +88,7 @@ class PRINTING_EXPORT PrintSettings {
   // Set printer printable area in in device units.
   // Some platforms already provide flipped area. Set |landscape_needs_flip|
   // to false on those platforms to avoid double flipping.
+  // This method assumes correct DPI is already set.
   void SetPrinterPrintableArea(const gfx::Size& physical_size_device_units,
                                const gfx::Rect& printable_area_device_units,
                                bool landscape_needs_flip);
@@ -108,7 +109,7 @@ class PRINTING_EXPORT PrintSettings {
     dpi_[0] = dpi_horizontal;
     dpi_[1] = dpi_vertical;
   }
-  int dpi() const { return std::min(dpi_[0], dpi_[1]); }
+  int dpi() const { return std::max(dpi_[0], dpi_[1]); }
   int dpi_horizontal() const { return dpi_[0]; }
   int dpi_vertical() const { return dpi_[1]; }
 
@@ -184,6 +185,9 @@ class PRINTING_EXPORT PrintSettings {
   }
 #endif
 
+  void set_is_modifiable(bool is_modifiable) { is_modifiable_ = is_modifiable; }
+  bool is_modifiable() const { return is_modifiable_; }
+
   // Cookie generator. It is used to initialize PrintedDocument with its
   // associated PrintSettings, to be sure that each generated PrintedPage is
   // correctly associated with its corresponding PrintedDocument.
@@ -254,6 +258,8 @@ class PRINTING_EXPORT PrintSettings {
 
   PrinterType printer_type_;
 #endif
+
+  bool is_modifiable_;
 
   // If margin type is custom, this is what was requested.
   PageMargins requested_custom_margins_in_points_;

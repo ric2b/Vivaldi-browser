@@ -4,12 +4,23 @@
 
 #include "modules/media_controls/elements/MediaControlInputElement.h"
 
+#include "core/dom/DOMTokenList.h"
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLLabelElement.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/forms/HTMLLabelElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "modules/media_controls/MediaControlsImpl.h"
+#include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "platform/Histogram.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/text/PlatformLocale.h"
+#include "public/platform/WebSize.h"
+
+namespace {
+
+// The default size of an overflow button in pixels.
+constexpr int kDefaultButtonSize = 36;
+
+}  // namespace
 
 namespace blink {
 
@@ -101,7 +112,10 @@ MediaControlInputElement::MediaControlInputElement(
     MediaControlsImpl& media_controls,
     MediaControlElementType display_type)
     : HTMLInputElement(media_controls.GetDocument(), false),
-      MediaControlElementBase(media_controls, display_type, this) {}
+      MediaControlElementBase(media_controls, display_type, this) {
+  CreateUserAgentShadowRoot();
+  CreateShadowSubtree();
+}
 
 WebLocalizedString::Name MediaControlInputElement::GetOverflowStringName()
     const {
@@ -113,22 +127,28 @@ void MediaControlInputElement::UpdateShownState() {
   if (is_overflow_element_) {
     Element* parent = parentElement();
     DCHECK(parent);
-    DCHECK(isHTMLLabelElement(parent));
+    DCHECK(IsHTMLLabelElement(parent));
 
     if (IsWanted() && DoesFit())
       parent->RemoveInlineStyleProperty(CSSPropertyDisplay);
     else
       parent->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueNone);
 
-    return;
+    // Don't update the shown state of the element if we want to hide
+    // icons on the overflow menu.
+    if (!RuntimeEnabledFeatures::OverflowIconsForMediaControlsEnabled())
+      return;
   }
 
   MediaControlElementBase::UpdateShownState();
 }
 
 void MediaControlInputElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::click)
+  if (event->type() == EventTypeNames::click) {
+    if (IsOverflowElement())
+      GetMediaControls().MaybeRecordOverflowTimeToAction();
     MaybeRecordInteracted();
+  }
 
   HTMLInputElement::DefaultEventHandler(event);
 }
@@ -152,8 +172,6 @@ bool MediaControlInputElement::IsOverflowElement() const {
   return is_overflow_element_;
 }
 
-void MediaControlInputElement::UpdateDisplayType() {}
-
 bool MediaControlInputElement::IsMouseFocusable() const {
   return false;
 }
@@ -174,7 +192,30 @@ void MediaControlInputElement::RecordCTREvent(CTREvent event) {
   ctr_histogram.Count(static_cast<int>(event));
 }
 
-DEFINE_TRACE(MediaControlInputElement) {
+void MediaControlInputElement::SetClass(const AtomicString& class_name,
+                                        bool should_have_class) {
+  if (should_have_class)
+    classList().Add(class_name);
+  else
+    classList().Remove(class_name);
+}
+
+void MediaControlInputElement::UpdateDisplayType() {
+  if (overflow_element_)
+    overflow_element_->UpdateDisplayType();
+}
+
+WebSize MediaControlInputElement::GetSizeOrDefault() const {
+  if (HasOverflowButton()) {
+    // If this has an overflow button then it is a button control and therefore
+    // has a default size of kDefaultButtonSize.
+    return MediaControlElementsHelper::GetSizeOrDefault(
+        *this, WebSize(kDefaultButtonSize, kDefaultButtonSize));
+  }
+  return MediaControlElementsHelper::GetSizeOrDefault(*this, WebSize(0, 0));
+}
+
+void MediaControlInputElement::Trace(blink::Visitor* visitor) {
   HTMLInputElement::Trace(visitor);
   MediaControlElementBase::Trace(visitor);
   visitor->Trace(overflow_element_);

@@ -13,7 +13,7 @@
 #include "core/testing/sim/SimRequest.h"
 #include "core/testing/sim/SimTest.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -30,7 +30,7 @@ class TestIntersectionObserverDelegate : public IntersectionObserverDelegate {
   ExecutionContext* GetExecutionContext() const override { return document_; }
   int CallCount() const { return call_count_; }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     IntersectionObserverDelegate::Trace(visitor);
     visitor->Trace(document_);
   }
@@ -72,10 +72,11 @@ TEST_F(IntersectionObserverTest, ResumePostsTask) {
   WebView().Resize(WebSize(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
-  main_resource.Complete(
-      "<div id='leading-space' style='height: 700px;'></div>"
-      "<div id='target'></div>"
-      "<div id='trailing-space' style='height: 700px;'></div>");
+  main_resource.Complete(R"HTML(
+    <div id='leading-space' style='height: 700px;'></div>
+    <div id='target'></div>
+    <div id='trailing-space' style='height: 700px;'></div>
+  )HTML");
 
   IntersectionObserverInit observer_init;
   DummyExceptionStateForTesting exception_state;
@@ -105,7 +106,7 @@ TEST_F(IntersectionObserverTest, ResumePostsTask) {
   // When a document is suspended, beginFrame() will generate a notification,
   // but it will not be delivered.  The notification will, however, be
   // available via takeRecords();
-  GetDocument().SuspendScheduledTasks();
+  GetDocument().PauseScheduledTasks();
   GetDocument().View()->LayoutViewportScrollableArea()->SetScrollOffset(
       ScrollOffset(0, 0), kProgrammaticScroll);
   Compositor().BeginFrame();
@@ -121,7 +122,7 @@ TEST_F(IntersectionObserverTest, ResumePostsTask) {
   Compositor().BeginFrame();
   testing::RunPendingTasks();
   EXPECT_EQ(observer_delegate->CallCount(), 2);
-  GetDocument().ResumeScheduledTasks();
+  GetDocument().UnpauseScheduledTasks();
   EXPECT_EQ(observer_delegate->CallCount(), 2);
   testing::RunPendingTasks();
   EXPECT_EQ(observer_delegate->CallCount(), 3);
@@ -131,10 +132,11 @@ TEST_F(IntersectionObserverTest, DisconnectClearsNotifications) {
   WebView().Resize(WebSize(800, 600));
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
-  main_resource.Complete(
-      "<div id='leading-space' style='height: 700px;'></div>"
-      "<div id='target'></div>"
-      "<div id='trailing-space' style='height: 700px;'></div>");
+  main_resource.Complete(R"HTML(
+    <div id='leading-space' style='height: 700px;'></div>
+    <div id='target'></div>
+    <div id='trailing-space' style='height: 700px;'></div>
+  )HTML");
 
   IntersectionObserverInit observer_init;
   DummyExceptionStateForTesting exception_state;

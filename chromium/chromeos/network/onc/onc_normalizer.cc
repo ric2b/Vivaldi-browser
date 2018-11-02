@@ -19,8 +19,7 @@ Normalizer::Normalizer(bool remove_recommended_fields)
     : remove_recommended_fields_(remove_recommended_fields) {
 }
 
-Normalizer::~Normalizer() {
-}
+Normalizer::~Normalizer() = default;
 
 std::unique_ptr<base::DictionaryValue> Normalizer::NormalizeObject(
     const OncValueSignature* object_signature,
@@ -229,6 +228,7 @@ void Normalizer::NormalizeVPN(base::DictionaryValue* vpn) {
   RemoveEntryUnless(vpn, kIPsec, type == kIPsec || type == kTypeL2TP_IPsec);
   RemoveEntryUnless(vpn, kL2TP, type == kTypeL2TP_IPsec);
   RemoveEntryUnless(vpn, kThirdPartyVpn, type == kThirdPartyVpn);
+  RemoveEntryUnless(vpn, kArcVpn, type == kArcVpn);
 }
 
 void Normalizer::NormalizeWiFi(base::DictionaryValue* wifi) {

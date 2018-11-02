@@ -15,20 +15,10 @@ namespace switches {
 // Disables Contextual Search.
 const char kDisableContextualSearch[] = "disable-contextual-search";
 
-// Lists separated by commas the name of features to disable.
-// See base::FeatureList::InitializeFromCommandLine for details.
-const char kDisableIOSFeatures[] = "disable-features";
-
 // Disable showing available password credentials in the keyboard accessory
 // view when focused on form fields.
 const char kDisableIOSPasswordSuggestions[] =
     "disable-ios-password-suggestions";
-
-// Disables the Suggestions UI
-const char kDisableSuggestionsUI[] = "disable-suggestions-ui";
-
-// Disables the WKBackForwardList based navigation manager experiment.
-const char kDisableSlimNavigationManager[] = "disable-slim-navigation-manager";
 
 // Disables the 3rd party keyboard omnibox workaround.
 const char kDisableThirdPartyKeyboardWorkaround[] =
@@ -36,10 +26,6 @@ const char kDisableThirdPartyKeyboardWorkaround[] =
 
 // Enables Contextual Search.
 const char kEnableContextualSearch[] = "enable-contextual-search";
-
-// Lists separated by commas the name of features to disable.
-// See base::FeatureList::InitializeFromCommandLine for details.
-const char kEnableIOSFeatures[] = "enable-features";
 
 // Enables support for Handoff from Chrome on iOS to the default browser of
 // other Apple devices.
@@ -49,20 +35,9 @@ const char kEnableIOSHandoffToOtherDevices[] =
 // Enables the Spotlight actions.
 const char kEnableSpotlightActions[] = "enable-spotlight-actions";
 
-// Enables the Suggestions UI
-const char kEnableSuggestionsUI[] = "enable-suggestions-ui";
-
-// Enables the WKBackForwardList based navigation manager experiment.
-const char kEnableSlimNavigationManager[] = "enable-slim-navigation-manager";
-
 // Enables the 3rd party keyboard omnibox workaround.
 const char kEnableThirdPartyKeyboardWorkaround[] =
     "enable-third-party-keyboard-workaround";
-
-// Forces additional Chrome Variation Ids that will be sent in X-Client-Data
-// header, specified as a 64-bit encoded list of numeric experiment ids. Ids
-// prefixed with the character "t" will be treated as Trigger Variation Ids.
-const char kIOSForceVariationIds[] = "force-variation-ids";
 
 // A string used to override the default user agent with a custom one.
 const char kUserAgent[] = "user-agent";

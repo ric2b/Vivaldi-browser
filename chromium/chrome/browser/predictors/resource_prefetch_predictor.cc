@@ -62,6 +62,7 @@ void InitializeOriginStatFromOriginRequestSummary(
 // Used to fetch the visit count for a URL from the History database.
 class GetUrlVisitCountTask : public history::HistoryDBTask {
  public:
+  ~GetUrlVisitCountTask() override;
   typedef base::OnceCallback<void(size_t,  // URL visit count.
                                   const PageRequestSummary&)>
       VisitInfoCallback;
@@ -75,8 +76,6 @@ class GetUrlVisitCountTask : public history::HistoryDBTask {
   void DoneRunOnMainThread() override;
 
  private:
-  ~GetUrlVisitCountTask() override;
-
   int visit_count_;
   std::unique_ptr<PageRequestSummary> summary_;
   VisitInfoCallback callback_;
@@ -121,6 +120,11 @@ void InitializeOnDBSequence(
 }
 
 }  // namespace
+
+PreconnectRequest::PreconnectRequest(const GURL& origin, int num_sockets)
+    : origin(origin), num_sockets(num_sockets) {
+  DCHECK_GE(num_sockets, 0);
+}
 
 PreconnectPrediction::PreconnectPrediction() = default;
 PreconnectPrediction::PreconnectPrediction(
@@ -244,6 +248,11 @@ bool ResourcePrefetchPredictor::IsUrlPrefetchable(
   return GetPrefetchData(main_frame_url, nullptr);
 }
 
+bool ResourcePrefetchPredictor::IsUrlPreconnectable(
+    const GURL& main_frame_url) const {
+  return PredictPreconnectOrigins(main_frame_url, nullptr);
+}
+
 bool ResourcePrefetchPredictor::IsResourcePrefetchable(
     const ResourceData& resource) const {
   float confidence = static_cast<float>(resource.number_of_hits()) /
@@ -275,20 +284,32 @@ void ResourcePrefetchPredictor::RecordPageRequestSummary(
     return;
   }
 
-  // Kick off history lookup to determine if we should record the URL.
-  history::HistoryService* history_service =
-      HistoryServiceFactory::GetForProfile(profile_,
-                                           ServiceAccessType::EXPLICIT_ACCESS);
-  DCHECK(history_service);
-  history_service->ScheduleDBTask(
-      std::unique_ptr<history::HistoryDBTask>(new GetUrlVisitCountTask(
-          std::move(summary),
-          base::BindOnce(&ResourcePrefetchPredictor::OnVisitCountLookup,
-                         weak_factory_.GetWeakPtr()))),
-      &history_lookup_consumer_);
+  history::HistoryService* history_service = nullptr;
+  if (config_.is_url_learning_enabled) {
+    // Kick off history lookup to determine if we should record the URL.
+    history_service = HistoryServiceFactory::GetForProfile(
+        profile_, ServiceAccessType::EXPLICIT_ACCESS);
+    DCHECK(history_service);
+    history_service->ScheduleDBTask(
+        std::make_unique<GetUrlVisitCountTask>(
+            std::move(summary),
+            base::BindOnce(&ResourcePrefetchPredictor::OnVisitCountLookup,
+                           weak_factory_.GetWeakPtr())),
+        &history_lookup_consumer_);
+  } else {
+    // We won't record the URL data anyway so avoid the hop to the history
+    // sequence and back.
+    OnVisitCountLookup(0, *summary);
+  }
 
-  // Report readiness metric with 20% probability.
-  if (base::RandInt(1, 5) == 5) {
+  // Report readiness metric with 20% probability and only if the host learning
+  // is enabled.
+  if (config_.is_host_learning_enabled && base::RandInt(1, 5) == 5) {
+    if (!history_service) {
+      history_service = HistoryServiceFactory::GetForProfile(
+          profile_, ServiceAccessType::EXPLICIT_ACCESS);
+    }
+    DCHECK(history_service);
     history_service->TopHosts(
         kNumSampleHosts,
         base::Bind(&ResourcePrefetchPredictor::ReportDatabaseReadiness,
@@ -324,7 +345,8 @@ bool ResourcePrefetchPredictor::GetPrefetchData(
 
   // Use host data if the URL-based prediction isn't available.
   std::string main_frame_url_host = main_frame_url.host();
-  if (GetRedirectEndpoint(main_frame_url_host, *host_redirect_data_,
+  if (config_.is_host_learning_enabled &&
+      GetRedirectEndpoint(main_frame_url_host, *host_redirect_data_,
                           &redirect_endpoint) &&
       PopulatePrefetcherRequest(redirect_endpoint, *host_resource_data_,
                                 urls)) {
@@ -342,9 +364,7 @@ bool ResourcePrefetchPredictor::GetPrefetchData(
 bool ResourcePrefetchPredictor::PredictPreconnectOrigins(
     const GURL& url,
     PreconnectPrediction* prediction) const {
-  DCHECK(prediction);
-  DCHECK(prediction->preconnect_origins.empty());
-  DCHECK(prediction->preresolve_hosts.empty());
+  DCHECK(!prediction || prediction->requests.empty());
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (initialization_state_ != INITIALIZED)
     return false;
@@ -358,20 +378,28 @@ bool ResourcePrefetchPredictor::PredictPreconnectOrigins(
   if (!origin_data_->TryGetData(redirect_endpoint, &data))
     return false;
 
-  prediction->host = redirect_endpoint;
-  prediction->is_redirected = (host != redirect_endpoint);
+  if (prediction) {
+    prediction->host = redirect_endpoint;
+    prediction->is_redirected = (host != redirect_endpoint);
+  }
+
+  bool has_any_prediction = false;
   for (const OriginStat& origin : data.origins()) {
     float confidence = static_cast<float>(origin.number_of_hits()) /
                        (origin.number_of_hits() + origin.number_of_misses());
-    if (confidence > kMinOriginConfidenceToTriggerPreconnect) {
-      prediction->preconnect_origins.emplace_back(origin.origin());
-    } else if (confidence > kMinOriginConfidenceToTriggerPreresolve) {
-      prediction->preresolve_hosts.emplace_back(origin.origin());
+    if (confidence < kMinOriginConfidenceToTriggerPreresolve)
+      continue;
+
+    has_any_prediction = true;
+    if (prediction) {
+      if (confidence > kMinOriginConfidenceToTriggerPreconnect)
+        prediction->requests.emplace_back(GURL(origin.origin()), 1);
+      else
+        prediction->requests.emplace_back(GURL(origin.origin()), 0);
     }
   }
 
-  return !prediction->preconnect_origins.empty() ||
-         !prediction->preresolve_hosts.empty();
+  return has_any_prediction;
 }
 
 bool ResourcePrefetchPredictor::PopulatePrefetcherRequest(
@@ -477,14 +505,17 @@ void ResourcePrefetchPredictor::OnVisitCountLookup(
     }
   }
 
-  // Host level data - no cutoff, always learn the navigation if enabled.
   const std::string host = summary.main_frame_url.host();
-  LearnNavigation(host, summary.subresource_requests,
-                  host_resource_data_.get());
   LearnRedirect(summary.initial_url.host(), host, host_redirect_data_.get());
 
+  if (config_.is_host_learning_enabled) {
+    // Host level data - no cutoff, always learn the navigation if enabled.
+    LearnNavigation(host, summary.subresource_requests,
+                    host_resource_data_.get());
+  }
+
   if (config_.is_origin_learning_enabled)
-    LearnOrigins(host, summary.origins);
+    LearnOrigins(host, summary.main_frame_url.GetOrigin(), summary.origins);
 
   if (observer_)
     observer_->OnNavigationLearned(url_visit_count, summary);
@@ -679,6 +710,7 @@ void ResourcePrefetchPredictor::LearnRedirect(const std::string& key,
 
 void ResourcePrefetchPredictor::LearnOrigins(
     const std::string& host,
+    const GURL& main_frame_origin,
     const std::map<GURL, OriginRequestSummary>& summaries) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (host.size() > ResourcePrefetchPredictorTables::kMaxStringLength)
@@ -753,8 +785,8 @@ void ResourcePrefetchPredictor::LearnOrigins(
   // Trim and Sort.
   ResourcePrefetchPredictorTables::TrimOrigins(&data,
                                                config_.max_consecutive_misses);
-  ResourcePrefetchPredictorTables::SortOrigins(&data);
-  if (data.origins_size() > static_cast<int>(config_.max_resources_per_entry)) {
+  ResourcePrefetchPredictorTables::SortOrigins(&data, main_frame_origin.spec());
+  if (data.origins_size() > static_cast<int>(config_.max_origins_per_entry)) {
     data.mutable_origins()->DeleteSubrange(
         config_.max_origins_per_entry,
         data.origins_size() - config_.max_origins_per_entry);

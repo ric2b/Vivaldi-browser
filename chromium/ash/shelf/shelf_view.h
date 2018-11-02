@@ -58,14 +58,15 @@ enum ShelfAlignmentUmaEnumValue {
   SHELF_ALIGNMENT_UMA_ENUM_VALUE_COUNT,
 };
 
+// ShelfView contains the shelf items visible within an active user session.
+// ShelfView and LoginShelfView should never be shown together.
 class ASH_EXPORT ShelfView : public views::View,
                              public ShelfModelObserver,
                              public InkDropButtonListener,
                              public views::ContextMenuController,
                              public views::FocusTraversable,
                              public views::BoundsAnimatorObserver,
-                             public app_list::ApplicationDragAndDropHost,
-                             public TabletModeObserver {
+                             public app_list::ApplicationDragAndDropHost {
  public:
   ShelfView(ShelfModel* model, Shelf* shelf, ShelfWidget* shelf_widget);
   ~ShelfView() override;
@@ -99,10 +100,6 @@ class ASH_EXPORT ShelfView : public views::View,
 
   AppListButton* GetAppListButton() const;
 
-  // ash::TabletModeObserver:
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
-
   // Returns true if the mouse cursor exits the area for launcher tooltip.
   // There are thin gaps between launcher buttons but the tooltip shouldn't hide
   // in the gaps, but the tooltip should hide if the mouse moved totally outside
@@ -135,8 +132,19 @@ class ASH_EXPORT ShelfView : public views::View,
                            views::View* replaced_view,
                            const gfx::Vector2d& cursor_offset_from_center,
                            float scale_factor) override;
+
+  void CreateDragIconProxyByLocationWithNoAnimation(
+      const gfx::Point& origin_in_screen_coordinates,
+      const gfx::ImageSkia& icon,
+      views::View* replaced_view,
+      float scale_factor) override;
+
   void UpdateDragIconProxy(
       const gfx::Point& location_in_screen_coordinates) override;
+
+  void UpdateDragIconProxyByLocation(
+      const gfx::Point& origin_in_screen_coordinates) override;
+
   void DestroyDragIconProxy() override;
   bool StartDrag(const std::string& app_id,
                  const gfx::Point& location_in_screen_coordinates) override;
@@ -162,6 +170,9 @@ class ASH_EXPORT ShelfView : public views::View,
   // Updates the background for the shelf items.
   void UpdateShelfItemBackground(SkColor color);
 
+  // True if the current |drag_view_| is the given |drag_view|.
+  bool IsDraggedView(const ShelfButton* drag_view) const;
+
   // Return the view model for test purposes.
   const views::ViewModel* view_model_for_test() const {
     return view_model_.get();
@@ -177,10 +188,6 @@ class ASH_EXPORT ShelfView : public views::View,
   // animation is not running. Used to synchronize AppListButton and ShelfView's
   // icons' animations.
   double GetAppListButtonAnimationCurrentValue();
-
-  bool is_tablet_mode_animation_running() const {
-    return is_tablet_mode_animation_running_;
-  }
 
  private:
   friend class ShelfViewTestAPI;
@@ -309,12 +316,14 @@ class ASH_EXPORT ShelfView : public views::View,
   void ShelfItemChanged(int model_index, const ShelfItem& old_item) override;
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemDelegateChanged(const ShelfID& id,
+                                ShelfItemDelegate* old_delegate,
                                 ShelfItemDelegate* delegate) override;
 
   // Handles the result when querying ShelfItemDelegates for context menu items.
   // Shows a default shelf context menu with optional extra custom |menu_items|.
   void AfterGetContextMenuItems(const ShelfID& shelf_id,
                                 const gfx::Point& point,
+                                views::View* source,
                                 ui::MenuSourceType source_type,
                                 std::vector<mojom::MenuItemPtr> menu_items);
 
@@ -442,9 +451,6 @@ class ASH_EXPORT ShelfView : public views::View,
   // The timestamp of the event which closed the last menu - or 0.
   base::TimeTicks closing_event_time_;
 
-  // The timestamp of the last shelf item touch press event.
-  base::TimeTicks touch_press_time_;
-
   // True if a drag and drop operation created/pinned the item in the launcher
   // and it needs to be deleted/unpinned again if the operation gets cancelled.
   bool drag_and_drop_item_pinned_ = false;
@@ -491,14 +497,6 @@ class ASH_EXPORT ShelfView : public views::View,
   // check if a repost event occurs on the same shelf item as previous one. If
   // so, the repost event should be ignored.
   int last_pressed_index_ = -1;
-
-  // True while the animation to enter or exit tablet mode is running. Sometimes
-  // this value is true when the shelf movements are not actually animating
-  // (animation value = 0.0). This is because this is set when we enter/exit
-  // tablet mode this is set to true but the animation is not started until a
-  // shelf OnBoundsChanged is called because of tablet mode. Use this value to
-  // sync up the animation for AppListButton.
-  bool is_tablet_mode_animation_running_ = false;
 
   // Tracks UMA metrics based on shelf button press actions.
   ShelfButtonPressedMetricTracker shelf_button_pressed_metric_tracker_;

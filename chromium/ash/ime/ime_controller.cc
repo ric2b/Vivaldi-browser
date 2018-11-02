@@ -11,7 +11,7 @@
 
 namespace ash {
 
-ImeController::ImeController() = default;
+ImeController::ImeController() : binding_(this) {}
 
 ImeController::~ImeController() = default;
 
@@ -24,7 +24,7 @@ void ImeController::RemoveObserver(Observer* observer) {
 }
 
 void ImeController::BindRequest(mojom::ImeControllerRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+  binding_.Bind(std::move(request));
 }
 
 void ImeController::SetClient(mojom::ImeControllerClientPtr client) {
@@ -134,6 +134,17 @@ void ImeController::SetCapsLockState(bool caps_enabled) {
 
   for (ImeController::Observer& observer : observers_)
     observer.OnCapsLockChanged(caps_enabled);
+}
+
+void ImeController::SetExtraInputOptionsEnabledState(
+    bool is_extra_input_options_enabled,
+    bool is_emoji_enabled,
+    bool is_handwriting_enabled,
+    bool is_voice_enabled) {
+  is_extra_input_options_enabled_ = is_extra_input_options_enabled;
+  is_emoji_enabled_ = is_emoji_enabled;
+  is_handwriting_enabled_ = is_handwriting_enabled;
+  is_voice_enabled_ = is_voice_enabled;
 }
 
 void ImeController::SetCapsLockFromTray(bool caps_enabled) {

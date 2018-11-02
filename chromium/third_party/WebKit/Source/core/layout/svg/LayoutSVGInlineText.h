@@ -31,7 +31,7 @@ namespace blink {
 
 class LayoutSVGInlineText final : public LayoutText {
  public:
-  LayoutSVGInlineText(Node*, RefPtr<StringImpl>);
+  LayoutSVGInlineText(Node*, scoped_refptr<StringImpl>);
 
   bool CharacterStartsNewTextChunk(int position) const;
   SVGCharacterDataMap& CharacterDataMap() { return character_data_map_; }
@@ -53,12 +53,10 @@ class LayoutSVGInlineText final : public LayoutText {
   // round and does a better job than enclosingIntRect.
   FloatRect FloatLinesBoundingBox() const;
 
-  RefPtr<StringImpl> OriginalText() const override;
-
   const char* GetName() const override { return "LayoutSVGInlineText"; }
 
  private:
-  void SetTextInternal(RefPtr<StringImpl>) override;
+  void SetTextInternal(scoped_refptr<StringImpl>) override;
   void StyleDidChange(StyleDifference, const ComputedStyle*) override;
 
   void AddMetricsFromRun(const TextRun&, bool& last_character_was_white_space);
@@ -74,9 +72,9 @@ class LayoutSVGInlineText final : public LayoutText {
 
   PositionWithAffinity PositionForPoint(const LayoutPoint&) override;
   LayoutRect LocalCaretRect(
-      InlineBox*,
+      const InlineBox*,
       int caret_offset,
-      LayoutUnit* extra_width_to_end_of_line = nullptr) override;
+      LayoutUnit* extra_width_to_end_of_line = nullptr) const override;
   LayoutRect LinesBoundingBox() const override;
   InlineTextBox* CreateTextBox(int start, unsigned short length) override;
 

@@ -7,8 +7,8 @@
 
 #include <memory>
 
+#include "ash/app_list/model/search_result_observer.h"
 #include "base/macros.h"
-#include "ui/app_list/search_result_observer.h"
 #include "ui/app_list/views/tile_item_view.h"
 #include "ui/views/context_menu_controller.h"
 
@@ -22,6 +22,7 @@ namespace app_list {
 class AppListViewDelegate;
 class SearchResult;
 class SearchResultContainerView;
+class PaginationModel;
 
 // A TileItemView that displays a search result.
 class APP_LIST_EXPORT SearchResultTileItemView
@@ -31,8 +32,8 @@ class APP_LIST_EXPORT SearchResultTileItemView
  public:
   SearchResultTileItemView(SearchResultContainerView* result_container,
                            AppListViewDelegate* view_delegate,
+                           PaginationModel* pagination_model,
                            bool is_suggested_app,
-                           bool is_fullscreen_app_list_enabled,
                            bool is_play_store_search_enabled);
   ~SearchResultTileItemView() override;
 
@@ -41,7 +42,9 @@ class APP_LIST_EXPORT SearchResultTileItemView
 
   // Overridden from TileItemView:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  void OnFocus() override;
 
   // Overridden from SearchResultObserver:
   void OnIconChanged() override;
@@ -70,7 +73,7 @@ class APP_LIST_EXPORT SearchResultTileItemView
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
 
-  // Whether the tile item view is a suggested app, used in StartPageView.
+  // Whether the tile item view is a suggested app.
   const bool is_suggested_app_;
 
   SearchResultContainerView* result_container_;  // Parent view
@@ -84,9 +87,9 @@ class APP_LIST_EXPORT SearchResultTileItemView
 
   AppListViewDelegate* view_delegate_;
 
-  std::unique_ptr<views::MenuRunner> context_menu_runner_;
+  PaginationModel* const pagination_model_;  // Owned by AppsGridView.
 
-  const bool is_fullscreen_app_list_enabled_;
+  std::unique_ptr<views::MenuRunner> context_menu_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultTileItemView);
 };

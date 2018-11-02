@@ -16,13 +16,11 @@ namespace views {
 
 const int PlatformStyle::kMinLabelButtonWidth = 32;
 const int PlatformStyle::kMinLabelButtonHeight = 30;
-const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = false;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = false;
 const bool PlatformStyle::kSelectWordOnRightClick = true;
 const bool PlatformStyle::kSelectAllOnRightClickWhenUnfocused = true;
 const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = true;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = true;
-const bool PlatformStyle::kTreeViewUsesOpenIcon = false;
 const bool PlatformStyle::kUseRipples = false;
 
 // On Mac, the Cocoa browser window does not flip its UI in RTL (e.g. bookmark
@@ -43,28 +41,7 @@ const bool PlatformStyle::kReturnClicksFocusedControl = false;
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
-  return base::MakeUnique<CocoaScrollBar>(is_horizontal);
-}
-
-// static
-SkColor PlatformStyle::TextColorForButton(
-    const ButtonColorByState& color_by_state,
-    const LabelButton& button) {
-  Button::ButtonState state = button.state();
-  if (button.style() == Button::STYLE_BUTTON && button.is_default()) {
-    // For convenience, we currently assume Mac wants the color corresponding to
-    // the pressed state for default buttons.
-    state = Button::STATE_PRESSED;
-  }
-  return color_by_state[state];
-}
-
-// static
-void PlatformStyle::ApplyLabelButtonTextStyle(
-    views::Label* label,
-    ButtonColorByState* color_by_state) {
-  ButtonColorByState& colors = *color_by_state;
-  colors[Button::STATE_PRESSED] = SK_ColorWHITE;
+  return std::make_unique<CocoaScrollBar>(is_horizontal);
 }
 
 // static

@@ -5,7 +5,11 @@
 #ifndef ASH_WM_LOCK_ACTION_HANDLER_LAYOUT_MANAGER_H_
 #define ASH_WM_LOCK_ACTION_HANDLER_LAYOUT_MANAGER_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
+#include "ash/lock_screen_action/lock_screen_action_background_observer.h"
+#include "ash/lock_screen_action/lock_screen_action_background_state.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/tray_action/tray_action_observer.h"
 #include "ash/wm/lock_layout_manager.h"
@@ -14,6 +18,7 @@
 
 namespace ash {
 
+class LockScreenActionBackgroundController;
 class Shelf;
 class TrayAction;
 
@@ -24,8 +29,6 @@ class TrayAction;
 // container state depends on the lock screen "new_note" action state:
 //   * for active action state - the windows should be visible above the lock
 //     screen
-//   * for background action state - the windows should be visible in
-//     background, below lock screen.
 //   * for rest of the states - the windows should not be visible.
 // The layout manager will observe new note action state changes and update
 // the container's children state as needed.
@@ -34,10 +37,15 @@ class TrayAction;
 // in lock screen container.
 // Unlike lock layout manager, when maximizing windows, this layout manager will
 // ensure that the windows do not obscure the system shelf.
-class ASH_EXPORT LockActionHandlerLayoutManager : public LockLayoutManager,
-                                                  public TrayActionObserver {
+class ASH_EXPORT LockActionHandlerLayoutManager
+    : public LockLayoutManager,
+      public TrayActionObserver,
+      public LockScreenActionBackgroundObserver {
  public:
-  LockActionHandlerLayoutManager(aura::Window* window, Shelf* shelf);
+  LockActionHandlerLayoutManager(
+      aura::Window* window,
+      Shelf* shelf,
+      LockScreenActionBackgroundController* action_background_controller);
   ~LockActionHandlerLayoutManager() override;
 
   // WmSnapToPixelLayoutManager:
@@ -48,8 +56,22 @@ class ASH_EXPORT LockActionHandlerLayoutManager : public LockLayoutManager,
   // TrayActionObserver:
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
 
+  // LockScreenActionBackgroundObserver:
+  void OnLockScreenActionBackgroundStateChanged(
+      LockScreenActionBackgroundState state) override;
+
  private:
+  // Updates the child window visibility depending on lock screen note action
+  // state and the lock screen action background state.
+  void UpdateChildren(mojom::TrayActionState action_state,
+                      LockScreenActionBackgroundState background_state);
+
+  LockScreenActionBackgroundController* action_background_controller_;
+
   ScopedObserver<TrayAction, TrayActionObserver> tray_action_observer_;
+  ScopedObserver<LockScreenActionBackgroundController,
+                 LockScreenActionBackgroundObserver>
+      action_background_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(LockActionHandlerLayoutManager);
 };

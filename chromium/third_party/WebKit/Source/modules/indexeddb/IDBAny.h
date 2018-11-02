@@ -26,13 +26,13 @@
 #ifndef IDBAny_h
 #define IDBAny_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/DOMStringList.h"
 #include "modules/ModulesExport.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBValue.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -64,14 +64,14 @@ class MODULES_EXPORT IDBAny : public GarbageCollectedFinalized<IDBAny> {
     return new IDBAny(dom_string_list);
   }
   static IDBAny* Create(int64_t value) { return new IDBAny(value); }
-  static IDBAny* Create(RefPtr<IDBValue> value) {
+  static IDBAny* Create(scoped_refptr<IDBValue> value) {
     return new IDBAny(std::move(value));
   }
-  static IDBAny* Create(const Vector<RefPtr<IDBValue>>& values) {
+  static IDBAny* Create(const Vector<scoped_refptr<IDBValue>>& values) {
     return new IDBAny(values);
   }
   ~IDBAny();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void ContextWillBeDestroyed();
 
   enum Type {
@@ -98,7 +98,7 @@ class MODULES_EXPORT IDBAny : public GarbageCollectedFinalized<IDBAny> {
   IDBIndex* IdbIndex() const;
   IDBObjectStore* IdbObjectStore() const;
   IDBValue* Value() const;
-  const Vector<RefPtr<IDBValue>>* Values() const;
+  const Vector<scoped_refptr<IDBValue>>* Values() const;
   int64_t Integer() const;
   const IDBKey* Key() const;
 
@@ -110,8 +110,8 @@ class MODULES_EXPORT IDBAny : public GarbageCollectedFinalized<IDBAny> {
   explicit IDBAny(IDBIndex*);
   explicit IDBAny(IDBObjectStore*);
   explicit IDBAny(IDBKey*);
-  explicit IDBAny(const Vector<RefPtr<IDBValue>>&);
-  explicit IDBAny(RefPtr<IDBValue>);
+  explicit IDBAny(const Vector<scoped_refptr<IDBValue>>&);
+  explicit IDBAny(scoped_refptr<IDBValue>);
   explicit IDBAny(int64_t);
 
   const Type type_;
@@ -123,8 +123,8 @@ class MODULES_EXPORT IDBAny : public GarbageCollectedFinalized<IDBAny> {
   const Member<IDBIndex> idb_index_;
   const Member<IDBObjectStore> idb_object_store_;
   const Member<IDBKey> idb_key_;
-  const RefPtr<IDBValue> idb_value_;
-  const Vector<RefPtr<IDBValue>> idb_values_;
+  const scoped_refptr<IDBValue> idb_value_;
+  const Vector<scoped_refptr<IDBValue>> idb_values_;
   const int64_t integer_ = 0;
 };
 

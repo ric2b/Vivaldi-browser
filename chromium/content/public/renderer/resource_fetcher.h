@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_RENDERER_RESOURCE_FETCHER_H_
 #define CONTENT_PUBLIC_RENDERER_RESOURCE_FETCHER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
@@ -29,24 +30,24 @@ struct NetworkTrafficAnnotationTag;
 
 namespace content {
 
-// Interface to download resources asynchronously.
+// Interface to download resources asynchronously.  Specified callback will be
+// called asynchronously after the URL has been fetched, successfully or not.
+// If there is a failure, response and data will both be empty.  |response| and
+// |data| are both valid until the ResourceFetcher instance is destroyed.  If
+// the instance is destroyed before the operation is finished, the request is
+// canceled, and the callback will not be called.
 class CONTENT_EXPORT ResourceFetcher {
  public:
+  using Callback =
+      base::OnceCallback<void(const blink::WebURLResponse& response,
+                              const std::string& data)>;
+
   static constexpr size_t kDefaultMaximumDownloadSize = 1024 * 1024;
 
   virtual ~ResourceFetcher() {}
 
-  // This will be called asynchronously after the URL has been fetched,
-  // successfully or not.  If there is a failure, response and data will both be
-  // empty.  |response| and |data| are both valid until the URLFetcher instance
-  // is destroyed.
-  typedef base::Callback<void(const blink::WebURLResponse& response,
-                              const std::string& data)> Callback;
-
-  // Creates a ResourceFetcher for the specified resource.  Caller takes
-  // ownership of the returned object.  Deleting the ResourceFetcher will cancel
-  // the request, and the callback will never be run.
-  static ResourceFetcher* Create(const GURL& url);
+  // Creates a ResourceFetcher for the specified resource.
+  static std::unique_ptr<ResourceFetcher> Create(const GURL& url);
 
   // Set the corresponding parameters of the request.  Must be called before
   // Start.  By default, requests are GETs with no body and respect the default
@@ -56,12 +57,6 @@ class CONTENT_EXPORT ResourceFetcher {
   virtual void SetHeader(const std::string& header,
                          const std::string& value) = 0;
 
-  // DEPRECATED: Starts the request using the specified frame.  Calls |callback|
-  // when done.
-  virtual void Start(blink::WebLocalFrame* frame,
-                     blink::WebURLRequest::RequestContext request_context,
-                     const Callback& callback) = 0;
-
   // Starts the request using the specified frame.  Calls |callback| when
   // done.
   virtual void Start(
@@ -69,15 +64,12 @@ class CONTENT_EXPORT ResourceFetcher {
       blink::WebURLRequest::RequestContext request_context,
       mojom::URLLoaderFactory* url_loader_factory,
       const net::NetworkTrafficAnnotationTag& annotation_tag,
-      const Callback& callback,
+      Callback callback,
       size_t maximum_download_size = kDefaultMaximumDownloadSize) = 0;
 
   // Sets how long to wait for the server to reply.  By default, there is no
-  // timeout.  Must be called after a request is started.
+  // timeout.  Must be called after a request is started at most once.
   virtual void SetTimeout(const base::TimeDelta& timeout) = 0;
-
-  // Manually cancel the request.
-  virtual void Cancel() = 0;
 };
 
 }  // namespace content

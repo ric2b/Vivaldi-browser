@@ -4,7 +4,7 @@
 
 // https://w3c.github.io/mediacapture-fromelement/#html-canvas-element-media-capture-extensions
 [
-    RuntimeEnabled=MediaCaptureFromCanvas
+    ImplementedAs=HTMLCanvasElementCapture
 ] partial interface HTMLCanvasElement {
-    [RaisesException] MediaStream captureStream (optional double frameRate);
+    [RaisesException, CallWith=ScriptState] MediaStream captureStream (optional double frameRate);
 };

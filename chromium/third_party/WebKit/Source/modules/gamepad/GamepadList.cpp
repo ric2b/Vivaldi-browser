@@ -36,13 +36,14 @@ void GamepadList::Set(unsigned index, Gamepad* gamepad) {
 }
 
 Gamepad* GamepadList::item(unsigned index) {
-  return index < length() ? items_[index].Get() : 0;
+  return index < length() ? items_[index].Get() : nullptr;
 }
 
-DEFINE_TRACE(GamepadList) {
+void GamepadList::Trace(blink::Visitor* visitor) {
   for (unsigned index = 0; index < device::Gamepads::kItemsLengthCap; index++) {
     visitor->Trace(items_[index]);
   }
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

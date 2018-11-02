@@ -10,7 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/compositor_frame_metadata.h"
+#include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/native_input_event_builder.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -62,7 +62,10 @@ bool StringToGestureSourceType(Maybe<std::string> in,
   return false;
 }
 
-int GetEventModifiers(int modifiers, bool auto_repeat, bool is_keypad) {
+int GetEventModifiers(int modifiers,
+                      bool auto_repeat,
+                      bool is_keypad,
+                      int location) {
   int result = 0;
   if (auto_repeat)
     result |= blink::WebInputEvent::kIsAutoRepeat;
@@ -77,6 +80,11 @@ int GetEventModifiers(int modifiers, bool auto_repeat, bool is_keypad) {
     result |= blink::WebInputEvent::kMetaKey;
   if (modifiers & 8)
     result |= blink::WebInputEvent::kShiftKey;
+
+  if (location & 1)
+    result |= blink::WebInputEvent::kIsLeft;
+  if (location & 2)
+    result |= blink::WebInputEvent::kIsRight;
   return result;
 }
 
@@ -260,8 +268,9 @@ std::vector<InputHandler*> InputHandler::ForAgentHost(
       host, Input::Metainfo::domainName);
 }
 
-void InputHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
-  if (host == host_)
+void InputHandler::SetRenderer(RenderProcessHost* process_host,
+                               RenderFrameHostImpl* frame_host) {
+  if (frame_host == host_)
     return;
   ClearInputState();
   if (host_) {
@@ -269,9 +278,9 @@ void InputHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
     if (ignore_input_events_)
       host_->GetRenderWidgetHost()->SetIgnoreInputEvents(false);
   }
-  host_ = host;
-  if (host) {
-    host->GetRenderWidgetHost()->AddInputEventObserver(this);
+  host_ = frame_host;
+  if (host_) {
+    host_->GetRenderWidgetHost()->AddInputEventObserver(this);
     if (ignore_input_events_)
       host_->GetRenderWidgetHost()->SetIgnoreInputEvents(true);
   }
@@ -281,7 +290,9 @@ void InputHandler::OnInputEvent(const blink::WebInputEvent& event) {
   input_queued_ = true;
 }
 
-void InputHandler::OnInputEventAck(const blink::WebInputEvent& event) {
+void InputHandler::OnInputEventAck(InputEventAckSource source,
+                                   InputEventAckState state,
+                                   const blink::WebInputEvent& event) {
   if (blink::WebInputEvent::IsKeyboardEventType(event.GetType()) &&
       !pending_key_callbacks_.empty()) {
     pending_key_callbacks_.front()->sendSuccess();
@@ -302,7 +313,7 @@ void InputHandler::Wire(UberDispatcher* dispatcher) {
 }
 
 void InputHandler::OnSwapCompositorFrame(
-    const cc::CompositorFrameMetadata& frame_metadata) {
+    const viz::CompositorFrameMetadata& frame_metadata) {
   page_scale_factor_ = frame_metadata.page_scale_factor;
   scrollable_viewport_size_ = frame_metadata.scrollable_viewport_size;
 }
@@ -333,6 +344,7 @@ void InputHandler::DispatchKeyEvent(
     Maybe<bool> auto_repeat,
     Maybe<bool> is_keypad,
     Maybe<bool> is_system_key,
+    Maybe<int> location,
     std::unique_ptr<DispatchKeyEventCallback> callback) {
   blink::WebInputEvent::Type web_event_type;
 
@@ -354,7 +366,7 @@ void InputHandler::DispatchKeyEvent(
       web_event_type,
       GetEventModifiers(modifiers.fromMaybe(blink::WebInputEvent::kNoModifiers),
                         auto_repeat.fromMaybe(false),
-                        is_keypad.fromMaybe(false)),
+                        is_keypad.fromMaybe(false), location.fromMaybe(0)),
       GetEventTimeTicks(std::move(timestamp)));
 
   if (!SetKeyboardEventText(event.text, std::move(text))) {
@@ -436,7 +448,7 @@ void InputHandler::DispatchMouseEvent(
 
   int modifiers = GetEventModifiers(
       maybe_modifiers.fromMaybe(blink::WebInputEvent::kNoModifiers), false,
-      false);
+      false, 0);
   modifiers |= button_modifiers;
   double timestamp = GetEventTimestamp(std::move(maybe_timestamp));
 
@@ -511,7 +523,7 @@ void InputHandler::DispatchTouchEvent(
 
   int modifiers = GetEventModifiers(
       maybe_modifiers.fromMaybe(blink::WebInputEvent::kNoModifiers), false,
-      false);
+      false, 0);
   double timestamp = GetEventTimestamp(std::move(maybe_timestamp));
 
   if ((type == blink::WebInputEvent::kTouchStart ||
@@ -547,8 +559,8 @@ void InputHandler::DispatchTouchEvent(
     if (point->HasId())
       with_id++;
     points[id].id = id;
-    points[id].radius_x = point->GetRadiusX(1);
-    points[id].radius_y = point->GetRadiusY(1);
+    points[id].radius_x = point->GetRadiusX(1.0);
+    points[id].radius_y = point->GetRadiusY(1.0);
     points[id].rotation_angle = point->GetRotationAngle(0.0);
     points[id].force = point->GetForce(1.0);
     points[id].pointer_type = blink::WebPointerProperties::PointerType::kTouch;
@@ -669,19 +681,23 @@ Response InputHandler::EmulateTouchFromMouseEvent(const std::string& type,
         event_type,
         GetEventModifiers(
             modifiers.fromMaybe(blink::WebInputEvent::kNoModifiers), false,
-            false) |
+            false, 0) |
             button_modifiers,
         GetEventTimestamp(timestamp));
     mouse_event = wheel_event;
     event.reset(wheel_event);
     wheel_event->delta_x = static_cast<float>(delta_x.fromJust());
     wheel_event->delta_y = static_cast<float>(delta_y.fromJust());
+    if (base::FeatureList::IsEnabled(
+            features::kTouchpadAndWheelScrollLatching)) {
+      wheel_event->phase = blink::WebMouseWheelEvent::kPhaseBegan;
+    }
   } else {
     mouse_event = new blink::WebMouseEvent(
         event_type,
         GetEventModifiers(
             modifiers.fromMaybe(blink::WebInputEvent::kNoModifiers), false,
-            false) |
+            false, 0) |
             button_modifiers,
         GetEventTimestamp(timestamp));
     event.reset(mouse_event);
@@ -696,10 +712,20 @@ Response InputHandler::EmulateTouchFromMouseEvent(const std::string& type,
   if (!host_ || !host_->GetRenderWidgetHost())
     return Response::InternalError();
 
-  if (wheel_event)
+  if (wheel_event) {
     host_->GetRenderWidgetHost()->ForwardWheelEvent(*wheel_event);
-  else
+    if (base::FeatureList::IsEnabled(
+            features::kTouchpadAndWheelScrollLatching)) {
+      // Send a synthetic wheel event with phaseEnded to finish scrolling.
+      wheel_event->delta_x = 0;
+      wheel_event->delta_y = 0;
+      wheel_event->phase = blink::WebMouseWheelEvent::kPhaseEnded;
+      wheel_event->dispatch_type = blink::WebInputEvent::kEventNonBlocking;
+      host_->GetRenderWidgetHost()->ForwardWheelEvent(*wheel_event);
+    }
+  } else {
     host_->GetRenderWidgetHost()->ForwardMouseEvent(*mouse_event);
+  }
   return Response::OK();
 }
 
@@ -745,8 +771,8 @@ void InputHandler::SynthesizePinchGesture(
 
   host_->GetRenderWidgetHost()->QueueSyntheticGesture(
       SyntheticGesture::Create(gesture_params),
-      base::Bind(&SendSynthesizePinchGestureResponse,
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&SendSynthesizePinchGestureResponse,
+                     base::Passed(std::move(callback))));
 }
 
 void InputHandler::SynthesizeScrollGesture(
@@ -823,10 +849,10 @@ void InputHandler::SynthesizeRepeatingScroll(
 
   host_->GetRenderWidgetHost()->QueueSyntheticGesture(
       SyntheticGesture::Create(gesture_params),
-      base::Bind(&InputHandler::OnScrollFinished, weak_factory_.GetWeakPtr(),
-                 gesture_params, repeat_count, repeat_delay,
-                 interaction_marker_name, id,
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&InputHandler::OnScrollFinished,
+                     weak_factory_.GetWeakPtr(), gesture_params, repeat_count,
+                     repeat_delay, interaction_marker_name, id,
+                     base::Passed(std::move(callback))));
 }
 
 void InputHandler::OnScrollFinished(
@@ -898,8 +924,8 @@ void InputHandler::SynthesizeTapGesture(
   for (int i = 0; i < count; i++) {
     host_->GetRenderWidgetHost()->QueueSyntheticGesture(
         SyntheticGesture::Create(gesture_params),
-        base::Bind(&TapGestureResponse::OnGestureResult,
-                   base::Unretained(response)));
+        base::BindOnce(&TapGestureResponse::OnGestureResult,
+                       base::Unretained(response)));
   }
 }
 

@@ -32,13 +32,6 @@ public:
     T* operator->() { return 0; }
 };
 
-template<typename T> class OwnPtr {
-public:
-    ~OwnPtr() { }
-    operator T*() const { return 0; }
-    T* operator->() { return 0; }
-};
-
 class DefaultAllocator {
 public:
     static const bool isGarbageCollected = false;
@@ -162,7 +155,24 @@ public:
     T* operator->() { return 0; }
 };
 
+template <typename T, typename... Args>
+unique_ptr<T> make_unique(Args&&... args) {
+  return unique_ptr<T>();
 }
+
+}  // namespace std
+
+namespace base {
+
+template <typename T>
+std::unique_ptr<T> WrapUnique(T* ptr) {
+  return std::unique_ptr<T>();
+}
+
+template <typename T>
+class Optional {};
+
+}  // namespace base
 
 namespace blink {
 
@@ -179,10 +189,10 @@ using namespace WTF;
     void* operator new(size_t) = delete;                    \
     void* operator new(size_t, void*) = delete;
 
-#define ALLOW_ONLY_INLINE_ALLOCATION()    \
-    public:                               \
-    void* operator new(size_t, void*);    \
-    private:                              \
+#define DISALLOW_NEW_EXCEPT_PLACEMENT_NEW() \
+    public:                                 \
+    void* operator new(size_t, void*);      \
+    private:                                \
     void* operator new(size_t) = delete;
 
 #define GC_PLUGIN_IGNORE(bug)                           \

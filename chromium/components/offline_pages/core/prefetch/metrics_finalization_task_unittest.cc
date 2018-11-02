@@ -40,6 +40,15 @@ void MetricsFinalizationTaskTest::TearDown() {
   TaskTestBase::TearDown();
 }
 
+TEST_F(MetricsFinalizationTaskTest, StoreFailure) {
+  store_util()->SimulateInitializationError();
+
+  // Execute the metrics task.
+  ExpectTaskCompletes(metrics_finalization_task_.get());
+  metrics_finalization_task_->Run();
+  RunUntilIdle();
+}
+
 // Tests that the task works correctly with an empty database.
 TEST_F(MetricsFinalizationTaskTest, EmptyRun) {
   EXPECT_EQ(0, store_util()->CountPrefetchItems());
@@ -170,23 +179,23 @@ TEST_F(MetricsFinalizationTaskTest, MetricsAreReported) {
 
   // Attempt values match what was set above (non set values default to 0).
   histogram_tester.ExpectTotalCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GeneratePageBundle", 2);
+      "OfflinePages.Prefetching.ActionAttempts.GeneratePageBundle", 2);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GeneratePageBundle", 0, 1);
+      "OfflinePages.Prefetching.ActionAttempts.GeneratePageBundle", 0, 1);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GeneratePageBundle", 1, 1);
+      "OfflinePages.Prefetching.ActionAttempts.GeneratePageBundle", 1, 1);
   histogram_tester.ExpectTotalCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GetOperation", 2);
+      "OfflinePages.Prefetching.ActionAttempts.GetOperation", 2);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GetOperation", 0, 1);
+      "OfflinePages.Prefetching.ActionAttempts.GetOperation", 0, 1);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.GetOperation", 1, 1);
+      "OfflinePages.Prefetching.ActionAttempts.GetOperation", 1, 1);
   histogram_tester.ExpectTotalCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.DownloadInitiation", 2);
+      "OfflinePages.Prefetching.ActionAttempts.DownloadInitiation", 2);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.DownloadInitiation", 0, 1);
+      "OfflinePages.Prefetching.ActionAttempts.DownloadInitiation", 0, 1);
   histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.ActionRetryAttempts.DownloadInitiation", 1, 1);
+      "OfflinePages.Prefetching.ActionAttempts.DownloadInitiation", 1, 1);
 }
 
 TEST_F(MetricsFinalizationTaskTest, FileSizeMetricsAreReportedCorrectly) {
@@ -248,6 +257,82 @@ TEST_F(MetricsFinalizationTaskTest, FileSizeMetricsAreReportedCorrectly) {
   // One sample at the "above 200%" bucket.
   histogram_tester.ExpectBucketCount(
       "OfflinePages.Prefetching.DownloadedArchiveSizeVsExpected", 22, 1);
+}
+
+// Verifies that items from all states are counted properly.
+TEST_F(MetricsFinalizationTaskTest,
+       CountsItemsInEachStateMetricReportedCorectly) {
+  // Insert fresh and stale items for all expirable states from all buckets.
+  std::vector<PrefetchItemState> states_for_items = {
+      PrefetchItemState::NEW_REQUEST,
+      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
+      PrefetchItemState::AWAITING_GCM,
+      PrefetchItemState::RECEIVED_GCM,
+      PrefetchItemState::SENT_GET_OPERATION,
+      PrefetchItemState::RECEIVED_BUNDLE,
+      PrefetchItemState::DOWNLOADING,
+      PrefetchItemState::DOWNLOADED,
+      PrefetchItemState::FINISHED,
+      PrefetchItemState::FINISHED,
+      PrefetchItemState::IMPORTING,
+      PrefetchItemState::ZOMBIE,
+      PrefetchItemState::ZOMBIE,
+  };
+
+  for (auto& state : states_for_items) {
+    PrefetchItem item = item_generator()->CreateItem(state);
+    EXPECT_TRUE(store_util()->InsertPrefetchItem(item))
+        << "Failed inserting item with state " << static_cast<int>(state);
+  }
+
+  std::set<PrefetchItem> all_inserted_items;
+  EXPECT_EQ(13U, store_util()->GetAllItems(&all_inserted_items));
+
+  // Execute the task.
+  base::HistogramTester histogram_tester;
+  ExpectTaskCompletes(metrics_finalization_task_.get());
+  metrics_finalization_task_->Run();
+  RunUntilIdle();
+
+  histogram_tester.ExpectTotalCount("OfflinePages.Prefetching.StateCounts", 13);
+
+  // Check that histogram was recorded correctly for each state.
+  // One sample on most buckets, two samples for finished and zombie.
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::NEW_REQUEST), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::AWAITING_GCM), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::RECEIVED_GCM), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::SENT_GET_OPERATION), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::RECEIVED_BUNDLE), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::DOWNLOADING), 1);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::DOWNLOADED), 1);
+  // Two samples for the "finished" bucket.
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::FINISHED), 2);
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::IMPORTING), 1);
+  // Two samples for the "zombie" bucket.
+  histogram_tester.ExpectBucketCount(
+      "OfflinePages.Prefetching.StateCounts",
+      static_cast<int>(PrefetchItemState::ZOMBIE), 2);
 }
 
 }  // namespace offline_pages

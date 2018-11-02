@@ -25,7 +25,8 @@ class CORE_EXPORT DOMWindowPerformance final
   static DOMWindowPerformance& From(LocalDOMWindow&);
   static Performance* performance(LocalDOMWindow&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   explicit DOMWindowPerformance(LocalDOMWindow&);
@@ -33,7 +34,7 @@ class CORE_EXPORT DOMWindowPerformance final
 
   Performance* performance();
 
-  Member<Performance> performance_;
+  TraceWrapperMember<Performance> performance_;
 };
 
 }  // namespace blink

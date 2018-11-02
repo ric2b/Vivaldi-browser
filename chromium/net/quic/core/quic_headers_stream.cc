@@ -5,6 +5,7 @@
 #include "net/quic/core/quic_headers_stream.h"
 
 #include "net/quic/core/quic_spdy_session.h"
+#include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
 
 namespace net {
@@ -57,88 +58,60 @@ void QuicHeadersStream::MaybeReleaseSequencerBuffer() {
   }
 }
 
-QuicConsumedData QuicHeadersStream::WritevDataInner(
-    QuicIOVector iov,
-    QuicStreamOffset offset,
-    bool fin,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-  if (!session()->use_stream_notifier() ||
-      session()->save_data_before_consumption()) {
-    // If data is saved before consumption, unacked_headers has been populated.
-    return QuicStream::WritevDataInner(iov, offset, fin,
-                                       std::move(ack_listener));
-  }
-  QuicConsumedData consumed =
-      QuicStream::WritevDataInner(iov, offset, fin, nullptr);
-  if (consumed.bytes_consumed == 0 || ack_listener == nullptr) {
-    // No need to update unacked_headers_ if no byte is consumed or there is no
-    // ack listener.
-    return consumed;
-  }
-
-  if (!unacked_headers_.empty() &&
-      (offset == unacked_headers_.back().headers_stream_offset +
-                     unacked_headers_.back().full_length) &&
-      ack_listener == unacked_headers_.back().ack_listener) {
-    // Try to combine with latest inserted entry if they belong to the same
-    // header (i.e., having contiguous offset and the same ack listener).
-    unacked_headers_.back().full_length += consumed.bytes_consumed;
-    unacked_headers_.back().unacked_length += consumed.bytes_consumed;
-  } else {
-    unacked_headers_.push_back(CompressedHeaderInfo(
-        offset, consumed.bytes_consumed, std::move(ack_listener)));
-  }
-  return consumed;
-}
-
-void QuicHeadersStream::OnStreamFrameAcked(const QuicStreamFrame& frame,
+void QuicHeadersStream::OnStreamFrameAcked(QuicStreamOffset offset,
+                                           QuicByteCount data_length,
+                                           bool fin_acked,
                                            QuicTime::Delta ack_delay_time) {
-  QuicStreamOffset offset = frame.offset;
-  QuicByteCount length = frame.data_length;
-  for (CompressedHeaderInfo& header : unacked_headers_) {
-    if (offset < header.headers_stream_offset) {
-      // This header frame offset belongs to headers with smaller offset, stop
-      // processing.
-      break;
-    }
-
-    if (offset >= header.headers_stream_offset + header.full_length) {
-      // This header frame belongs to headers with larger offset.
-      continue;
-    }
-
-    QuicByteCount header_offset = offset - header.headers_stream_offset;
-    QuicByteCount acked_length =
-        std::min(length, header.full_length - header_offset);
-
-    if (header.unacked_length < acked_length) {
-      QUIC_BUG << "Unsent stream data is acked. unacked_length: "
-               << header.unacked_length << " acked_length: " << acked_length;
-      CloseConnectionWithDetails(QUIC_INTERNAL_ERROR,
-                                 "Unsent stream data is acked");
-      return;
-    }
-    if (header.ack_listener != nullptr && acked_length > 0) {
-      header.ack_listener->OnPacketAcked(acked_length, ack_delay_time);
-    }
-    header.unacked_length -= acked_length;
-    offset += acked_length;
-    length -= acked_length;
+  QuicIntervalSet<QuicStreamOffset> newly_acked(offset, offset + data_length);
+  if (session()->allow_multiple_acks_for_data()) {
+    newly_acked.Difference(bytes_acked());
   }
+  for (const auto& acked : newly_acked) {
+    QuicStreamOffset acked_offset = acked.min();
+    QuicByteCount acked_length = acked.max() - acked.min();
+    for (CompressedHeaderInfo& header : unacked_headers_) {
+      if (acked_offset < header.headers_stream_offset) {
+        // This header frame offset belongs to headers with smaller offset, stop
+        // processing.
+        break;
+      }
 
+      if (acked_offset >= header.headers_stream_offset + header.full_length) {
+        // This header frame belongs to headers with larger offset.
+        continue;
+      }
+
+      QuicByteCount header_offset = acked_offset - header.headers_stream_offset;
+      QuicByteCount header_length =
+          std::min(acked_length, header.full_length - header_offset);
+
+      if (header.unacked_length < header_length) {
+        QUIC_BUG << "Unsent stream data is acked. unacked_length: "
+                 << header.unacked_length << " acked_length: " << header_length;
+        CloseConnectionWithDetails(QUIC_INTERNAL_ERROR,
+                                   "Unsent stream data is acked");
+        return;
+      }
+      if (header.ack_listener != nullptr && header_length > 0) {
+        header.ack_listener->OnPacketAcked(header_length, ack_delay_time);
+      }
+      header.unacked_length -= header_length;
+      acked_offset += header_length;
+      acked_length -= header_length;
+    }
+  }
   // Remove headers which are fully acked. Please note, header frames can be
   // acked out of order, but unacked_headers_ is cleaned up in order.
   while (!unacked_headers_.empty() &&
          unacked_headers_.front().unacked_length == 0) {
     unacked_headers_.pop_front();
   }
-  QuicStream::OnStreamFrameAcked(frame, ack_delay_time);
+  QuicStream::OnStreamFrameAcked(offset, data_length, fin_acked,
+                                 ack_delay_time);
 }
 
-void QuicHeadersStream::OnStreamFrameRetransmitted(
-    const QuicStreamFrame& frame) {
-  QuicStreamOffset offset = frame.offset;
-  QuicByteCount length = frame.data_length;
+void QuicHeadersStream::OnStreamFrameRetransmitted(QuicStreamOffset offset,
+                                                   QuicByteCount data_length) {
   for (CompressedHeaderInfo& header : unacked_headers_) {
     if (offset < header.headers_stream_offset) {
       // This header frame offset belongs to headers with smaller offset, stop
@@ -153,12 +126,12 @@ void QuicHeadersStream::OnStreamFrameRetransmitted(
 
     QuicByteCount header_offset = offset - header.headers_stream_offset;
     QuicByteCount retransmitted_length =
-        std::min(length, header.full_length - header_offset);
+        std::min(data_length, header.full_length - header_offset);
     if (header.ack_listener != nullptr && retransmitted_length > 0) {
       header.ack_listener->OnPacketRetransmitted(retransmitted_length);
     }
     offset += retransmitted_length;
-    length -= retransmitted_length;
+    data_length -= retransmitted_length;
   }
 }
 

@@ -34,10 +34,12 @@ void AppShimHost::ServeChannel(mojo::edk::ScopedPlatformHandle handle) {
               mojo::edk::TransportProtocol::kLegacy, std::move(handle))),
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::IO)
-              .get()),
+              .get(),
+          base::ThreadTaskRunnerHandle::Get()),
       this,
       content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
-          .get());
+          .get(),
+      base::ThreadTaskRunnerHandle::Get());
 }
 
 base::FilePath AppShimHost::GetProfilePath() const {

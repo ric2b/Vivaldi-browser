@@ -11,11 +11,10 @@
 
 namespace blink {
 
-PaintRecordBuilder::PaintRecordBuilder(const FloatRect& bounds,
-                                       SkMetaData* meta_data,
+PaintRecordBuilder::PaintRecordBuilder(SkMetaData* meta_data,
                                        GraphicsContext* containing_context,
                                        PaintController* paint_controller)
-    : paint_controller_(nullptr), bounds_(bounds) {
+    : paint_controller_(nullptr) {
   GraphicsContext::DisabledMode disabled_mode =
       GraphicsContext::kNothingDisabled;
   if (containing_context && containing_context->ContextDisabled())
@@ -24,18 +23,14 @@ PaintRecordBuilder::PaintRecordBuilder(const FloatRect& bounds,
   if (paint_controller) {
     paint_controller_ = paint_controller;
   } else {
-    paint_controller_ptr_ = PaintController::Create();
-    paint_controller_ = paint_controller_ptr_.get();
+    own_paint_controller_ = PaintController::Create();
+    paint_controller_ = own_paint_controller_.get();
   }
 
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     paint_controller_->UpdateCurrentPaintChunkProperties(
-        nullptr, PropertyTreeState::Root());
+        WTF::nullopt, PropertyTreeState::Root());
   }
-
-#if DCHECK_IS_ON()
-  paint_controller_->SetUsage(PaintController::kForPaintRecordBuilder);
-#endif
 
   const HighContrastSettings* high_contrast_settings =
       containing_context ? &containing_context->high_contrast_settings()
@@ -49,30 +44,26 @@ PaintRecordBuilder::PaintRecordBuilder(const FloatRect& bounds,
     context_->SetDeviceScaleFactor(containing_context->DeviceScaleFactor());
     context_->SetPrinting(containing_context->Printing());
   }
+
+  if (!paint_controller)
+    cache_skipper_.emplace(*context_);
 }
 
-PaintRecordBuilder::~PaintRecordBuilder() {
-#if DCHECK_IS_ON()
-  paint_controller_->SetUsage(PaintController::kForNormalUsage);
-#endif
-}
-
-sk_sp<PaintRecord> PaintRecordBuilder::EndRecording() {
-  context_->BeginRecording(bounds_);
+sk_sp<PaintRecord> PaintRecordBuilder::EndRecording(
+    const PropertyTreeState& replay_state) {
+  context_->BeginRecording(FloatRect());
   paint_controller_->CommitNewDisplayItems();
-  paint_controller_->GetPaintArtifact().Replay(bounds_, *context_);
+  paint_controller_->GetPaintArtifact().Replay(*context_, replay_state);
   return context_->EndRecording();
 }
 
-void PaintRecordBuilder::EndRecording(
-    PaintCanvas& canvas,
-    const PropertyTreeState& property_tree_state) {
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+void PaintRecordBuilder::EndRecording(PaintCanvas& canvas,
+                                      const PropertyTreeState& replay_state) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     canvas.drawPicture(EndRecording());
   } else {
     paint_controller_->CommitNewDisplayItems();
-    paint_controller_->GetPaintArtifact().Replay(bounds_, canvas,
-                                                 property_tree_state);
+    paint_controller_->GetPaintArtifact().Replay(canvas, replay_state);
   }
 }
 

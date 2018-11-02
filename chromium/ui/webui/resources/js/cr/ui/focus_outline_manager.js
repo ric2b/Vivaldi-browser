@@ -29,29 +29,24 @@ cr.define('cr.ui', function() {
   function FocusOutlineManager(doc) {
     this.classList_ = doc.documentElement.classList;
 
-    var self = this;
+    var onEvent = function(focusByKeyboard, e) {
+      if (this.focusByKeyboard_ === focusByKeyboard)
+        return;
+      this.focusByKeyboard_ = focusByKeyboard;
+      this.updateVisibility();
+    };
 
-    doc.addEventListener('keydown', function(e) {
-      self.focusByKeyboard_ = true;
-    }, true);
-
-    doc.addEventListener('mousedown', function(e) {
-      self.focusByKeyboard_ = false;
-    }, true);
-
-    doc.addEventListener('focus', function(event) {
-      // Update visibility only when focus is actually changed.
-      self.updateVisibility();
-    }, true);
+    doc.addEventListener('keydown', onEvent.bind(this, true), true);
+    doc.addEventListener('mousedown', onEvent.bind(this, false), true);
 
     doc.addEventListener('focusout', function(event) {
       window.setTimeout(function() {
         if (!doc.hasFocus()) {
-          self.focusByKeyboard_ = true;
-          self.updateVisibility();
+          this.focusByKeyboard_ = true;
+          this.updateVisibility();
         }
-      }, 0);
-    });
+      }.bind(this), 0);
+    }.bind(this));
 
     this.updateVisibility();
   }
@@ -80,25 +75,21 @@ cr.define('cr.ui', function() {
     }
   };
 
-  /**
-   * Array of Document and FocusOutlineManager pairs.
-   * @type {Array}
-   */
-  var docsToManager = [];
+  /** @type {!Map<!Document, !cr.ui.FocusOutlineManager>} */
+  var docsToManager = new Map();
 
   /**
    * Gets a per document singleton focus outline manager.
-   * @param {Document} doc The document to get the |FocusOutlineManager| for.
-   * @return {cr.ui.FocusOutlineManager} The per document singleton focus
+   * @param {!Document} doc The document to get the |FocusOutlineManager| for.
+   * @return {!cr.ui.FocusOutlineManager} The per document singleton focus
    *     outline manager.
    */
   FocusOutlineManager.forDocument = function(doc) {
-    for (var i = 0; i < docsToManager.length; i++) {
-      if (doc == docsToManager[i][0])
-        return docsToManager[i][1];
+    var manager = docsToManager.get(doc);
+    if (!manager) {
+      manager = new FocusOutlineManager(doc);
+      docsToManager.set(doc, manager);
     }
-    var manager = new FocusOutlineManager(doc);
-    docsToManager.push([doc, manager]);
     return manager;
   };
 

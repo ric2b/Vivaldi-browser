@@ -8,15 +8,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
 #include <vector>
 
+#include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/host_port_pair.h"
@@ -33,6 +35,7 @@
 #include "net/socket/stream_socket.h"
 #include "net/spdy/chromium/buffered_spdy_framer.h"
 #include "net/spdy/chromium/http2_priority_dependencies.h"
+#include "net/spdy/chromium/http2_push_promise_index.h"
 #include "net/spdy/chromium/multiplexed_session.h"
 #include "net/spdy/chromium/server_push_delegate.h"
 #include "net/spdy/chromium/spdy_buffer.h"
@@ -236,57 +239,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // TODO(akalin): Use base::TickClock when it becomes available.
   typedef base::TimeTicks (*TimeFunc)(void);
 
-  // Container class for unclaimed pushed streams on a SpdySession.  Guarantees
-  // that |spdy_session_.pool_| gets notified every time a stream is pushed or
-  // an unclaimed pushed stream is claimed.
-  class UnclaimedPushedStreamContainer {
-   public:
-    struct PushedStreamInfo {
-      PushedStreamInfo() : stream_id(0) {}
-      PushedStreamInfo(SpdyStreamId stream_id, base::TimeTicks creation_time)
-          : stream_id(stream_id), creation_time(creation_time) {}
-      ~PushedStreamInfo() {}
-      size_t EstimateMemoryUsage() const { return 0; }
-
-      SpdyStreamId stream_id;
-      base::TimeTicks creation_time;
-    };
-    using PushedStreamMap = std::map<GURL, PushedStreamInfo>;
-    using iterator = PushedStreamMap::iterator;
-    using const_iterator = PushedStreamMap::const_iterator;
-
-    UnclaimedPushedStreamContainer() = delete;
-    explicit UnclaimedPushedStreamContainer(SpdySession* spdy_session);
-    ~UnclaimedPushedStreamContainer();
-
-    bool empty() const { return streams_.empty(); }
-    size_t size() const { return streams_.size(); }
-    const_iterator begin() const { return streams_.begin(); }
-    const_iterator end() const { return streams_.end(); }
-    const_iterator find(const GURL& url) const { return streams_.find(url); }
-    size_t count(const GURL& url) const { return streams_.count(url); }
-    const_iterator lower_bound(const GURL& url) const {
-      return streams_.lower_bound(url);
-    }
-
-    size_t erase(const GURL& url);
-    iterator erase(const_iterator it);
-    iterator insert(const_iterator position,
-                    const GURL& url,
-                    SpdyStreamId stream_id,
-                    const base::TimeTicks& creation_time);
-
-    size_t EstimateMemoryUsage() const;
-
-   private:
-    SpdySession* spdy_session_;
-
-    // (Bijective) map from the URL to the ID of the streams that have
-    // already started to be pushed by the server, but do not have
-    // consumers yet. Contains a subset of |active_streams_|.
-    PushedStreamMap streams_;
-  };
-
   // Returns true if |new_hostname| can be pooled into an existing connection to
   // |old_hostname| associated with |ssl_info|.
   static bool CanPool(TransportSecurityState* transport_security_state,
@@ -297,14 +249,14 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Create a new SpdySession.
   // |spdy_session_key| is the host/port that this session connects to, privacy
   // and proxy configuration settings that it's using.
-  // |session| is the HttpNetworkSession.  |net_log| is the NetLog that we log
-  // network events to.
+  // |net_log| is the NetLog that we log network events to.
   SpdySession(const SpdySessionKey& spdy_session_key,
               HttpServerProperties* http_server_properties,
               TransportSecurityState* transport_security_state,
-              const QuicVersionVector& quic_supported_versions,
+              const QuicTransportVersionVector& quic_supported_versions,
               bool enable_sending_initial_data,
               bool enable_ping_based_connection_checking,
+              bool support_ietf_format_quic_altsvc,
               size_t session_max_recv_window_size,
               const SettingsMap& initial_settings,
               TimeFunc time_func,
@@ -537,14 +489,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
     return pooled_aliases_;
   }
 
-  size_t GetFrameMaximumSize() const {
-    return buffered_spdy_framer_->GetFrameMaximumSize();
-  }
-
-  size_t GetDataFrameMaximumPayload() const {
-    return buffered_spdy_framer_->GetDataFrameMaximumPayload();
-  }
-
   // https://http2.github.io/http2-spec/#TLSUsage mandates minimum security
   // standards for TLS.
   bool HasAcceptableTransportSecurity() const;
@@ -578,14 +522,12 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Allow tests to access our innards for testing purposes.
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, ClientPing);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, FailedPing);
-  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, GetActivePushStream);
-  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, DeleteExpiredPushStreams);
-  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, MetricsCollectionOnPushStreams);
+  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, WaitingForWrongPing);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, CancelPushBeforeClaimed);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, CancelPushAfterSessionGoesAway);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, CancelPushAfterExpired);
+  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, ClaimPushedStreamBeforeExpires);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, ProtocolNegotiation);
-  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, ClearSettings);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, AdjustRecvWindowSize);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, AdjustSendWindowSize);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, SessionFlowControlInactiveStream);
@@ -612,11 +554,12 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
                            ServerPushValidCrossOrigin);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
                            ServerPushValidCrossOriginWithOpenSession);
+  FRIEND_TEST_ALL_PREFIXES(RecordPushedStreamHistogramTest, VaryResponseHeader);
 
-  typedef std::deque<base::WeakPtr<SpdyStreamRequest>>
-      PendingStreamRequestQueue;
-  typedef std::map<SpdyStreamId, SpdyStream*> ActiveStreamMap;
-  typedef std::set<SpdyStream*> CreatedStreamSet;
+  using PendingStreamRequestQueue =
+      base::circular_deque<base::WeakPtr<SpdyStreamRequest>>;
+  using ActiveStreamMap = std::map<SpdyStreamId, SpdyStream*>;
+  using CreatedStreamSet = std::set<SpdyStream*>;
 
   enum AvailabilityState {
     // The session is available in its socket pool and can be used
@@ -642,6 +585,52 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
     WRITE_STATE_IDLE,
     WRITE_STATE_DO_WRITE,
     WRITE_STATE_DO_WRITE_COMPLETE,
+  };
+
+  // Container class for unclaimed pushed streams on a SpdySession.  Guarantees
+  // that |spdy_session_.pool_| gets notified every time a stream is pushed or
+  // an unclaimed pushed stream is claimed.
+  class UnclaimedPushedStreamContainer {
+   public:
+    using PushedStreamMap = std::map<GURL, SpdyStreamId>;
+    using iterator = PushedStreamMap::iterator;
+    using const_iterator = PushedStreamMap::const_iterator;
+
+    UnclaimedPushedStreamContainer() = delete;
+    explicit UnclaimedPushedStreamContainer(SpdySession* spdy_session);
+    ~UnclaimedPushedStreamContainer();
+
+    bool empty() const { return streams_.empty(); }
+    size_t size() const { return streams_.size(); }
+    const_iterator begin() const { return streams_.begin(); }
+    const_iterator end() const { return streams_.end(); }
+    const_iterator find(const GURL& url) const { return streams_.find(url); }
+    size_t count(const GURL& url) const { return streams_.count(url); }
+    const_iterator lower_bound(const GURL& url) const {
+      return streams_.lower_bound(url);
+    }
+
+    // Return true if there was an element with |url|, which was then erased.
+    bool erase(const GURL& url);
+
+    // Return the iterator following |it|.
+    iterator erase(const_iterator it);
+
+    // Return true if there was not already an entry with |url|,
+    // in which case the insertion was successful.
+    bool insert(const GURL& url, SpdyStreamId stream_id) WARN_UNUSED_RESULT;
+
+    size_t EstimateMemoryUsage() const;
+
+   private:
+    SpdySession* spdy_session_;
+
+    // (Bijective) map from the URL to the ID of the streams that have
+    // already started to be pushed by the server, but do not have
+    // consumers yet. Contains a subset of |active_streams_|.
+    PushedStreamMap streams_;
+
+    DISALLOW_COPY_AND_ASSIGN(UnclaimedPushedStreamContainer);
   };
 
   // Called by SpdyStreamRequest to start a request to create a
@@ -752,11 +741,10 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Adjust the send window size of all ActiveStreams and PendingStreamRequests.
   void UpdateStreamsSendWindowSize(int32_t delta_window_size);
 
-  // Send the PING (preface-PING) frame.
-  void SendPrefacePingIfNoneInFlight();
-
-  // Send PING if there are no PINGs in flight and we haven't heard from server.
-  void SendPrefacePing();
+  // Send PING frame if all previous PING frames have been ACKed,
+  // all posted CheckPingStatus() tasks have been executed,
+  // and too long time has passed since last read from server.
+  void MaybeSendPrefacePing();
 
   // Send a single WINDOW_UPDATE frame.
   void SendWindowUpdateFrame(SpdyStreamId stream_id,
@@ -813,6 +801,8 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   void RecordPingRTTHistogram(base::TimeDelta duration);
   void RecordHistograms();
   void RecordProtocolErrorHistogram(SpdyProtocolErrorDetails details);
+  static void RecordPushedStreamVaryResponseHeaderHistogram(
+      const SpdyHeaderBlock& headers);
 
   // DCHECKs that |availability_state_| >= STATE_GOING_AWAY, that
   // there are no pending stream creation requests, and that there are
@@ -842,8 +832,11 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   void CompleteStreamRequest(
       const base::WeakPtr<SpdyStreamRequest>& pending_request);
 
-  // Remove old unclaimed pushed streams.
-  void DeleteExpiredPushedStreams();
+  // Cancel pushed stream with |stream_id|, if still unclaimed.  Identifying a
+  // pushed stream by GURL instead of stream ID could result in incorrect
+  // behavior if a pushed stream was claimed but later another stream was pushed
+  // for the same GURL.
+  void CancelPushedStreamIfUnclaimed(SpdyStreamId stream_id);
 
   // BufferedSpdyFramerVisitorInterface:
   void OnError(Http2DecoderAdapter::SpdyFramerError spdy_framer_error) override;
@@ -977,7 +970,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
 
   SpdyPingId next_ping_id() const { return next_ping_id_; }
 
-  base::TimeTicks last_activity_time() const { return last_activity_time_; }
+  base::TimeTicks last_read_time() const { return last_read_time_; }
 
   bool check_ping_status_pending() const { return check_ping_status_pending_; }
 
@@ -1108,18 +1101,13 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // This is the last time we have sent a PING.
   base::TimeTicks last_ping_sent_time_;
 
-  // This is the last time we had activity in the session.
-  base::TimeTicks last_activity_time_;
+  // This is the last time we had read activity in the session.
+  base::TimeTicks last_read_time_;
 
   // This is the length of the last compressed frame.
   size_t last_compressed_frame_len_;
 
-  // This is the next time that unclaimed push streams should be checked for
-  // expirations.
-  base::TimeTicks next_unclaimed_push_stream_sweep_time_;
-
-  // Indicate if we have already scheduled a delayed task to check the ping
-  // status.
+  // True if there is a CheckPingStatus() task posted on the message loop.
   bool check_ping_status_pending_;
 
   // Current send window size.  Zero unless session flow control is turned on.
@@ -1158,16 +1146,19 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
 
   // A queue of stream IDs that have been send-stalled at some point
   // in the past.
-  std::deque<SpdyStreamId> stream_send_unstall_queue_[NUM_PRIORITIES];
+  base::circular_deque<SpdyStreamId> stream_send_unstall_queue_[NUM_PRIORITIES];
 
   NetLogWithSource net_log_;
 
   // Versions of QUIC which may be used.
-  const QuicVersionVector quic_supported_versions_;
+  const QuicTransportVersionVector quic_supported_versions_;
 
   // Outside of tests, these should always be true.
   bool enable_sending_initial_data_;
   bool enable_ping_based_connection_checking_;
+
+  // If true, alt-svc headers advertising QUIC in IETF format will be supported.
+  bool support_ietf_format_quic_altsvc_;
 
   // |connection_at_risk_of_loss_time_| is an optimization to avoid sending
   // wasteful preface pings (when we just got some data).

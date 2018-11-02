@@ -31,20 +31,19 @@
 #include "bindings/core/v8/V8CSSStyleDeclaration.h"
 
 #include <algorithm>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyIDTemplates.h"
-#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSValue.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/html/custom/CEReactionsScope.h"
 #include "platform/wtf/ASCIICType.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -142,8 +141,9 @@ static CSSPropertyID CssPropertyInfo(const AtomicString& name) {
   if (unresolved_property == CSSPropertyVariable)
     unresolved_property = CSSPropertyInvalid;
   map.insert(name, unresolved_property);
-  DCHECK(!unresolved_property ||
-         CSSPropertyMetadata::IsEnabledProperty(unresolved_property));
+  DCHECK(
+      !unresolved_property ||
+      CSSProperty::Get(resolveCSSPropertyID(unresolved_property)).IsEnabled());
   return unresolved_property;
 }
 
@@ -156,7 +156,7 @@ void V8CSSStyleDeclaration::namedPropertyEnumeratorCustom(
   if (property_names.IsEmpty()) {
     for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
       CSSPropertyID property_id = static_cast<CSSPropertyID>(id);
-      if (CSSPropertyMetadata::IsEnabledProperty(property_id))
+      if (CSSProperty::Get(resolveCSSPropertyID(property_id)).IsEnabled())
         property_names.push_back(getJSPropertyName(property_id));
     }
     std::sort(property_names.begin(), property_names.end(),
@@ -200,7 +200,7 @@ void V8CSSStyleDeclaration::namedPropertyGetterCustom(
     return;
   CSSPropertyID resolved_property = resolveCSSPropertyID(unresolved_property);
 
-  CSSStyleDeclaration* impl = V8CSSStyleDeclaration::toImpl(info.Holder());
+  CSSStyleDeclaration* impl = V8CSSStyleDeclaration::ToImpl(info.Holder());
   const CSSValue* css_value =
       impl->GetPropertyCSSValueInternal(resolved_property);
   if (css_value) {
@@ -216,12 +216,14 @@ void V8CSSStyleDeclaration::namedPropertySetterCustom(
     const AtomicString& name,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CSSStyleDeclaration* impl = V8CSSStyleDeclaration::toImpl(info.Holder());
+  CSSStyleDeclaration* impl = V8CSSStyleDeclaration::ToImpl(info.Holder());
   CSSPropertyID unresolved_property = CssPropertyInfo(name);
   if (!unresolved_property)
     return;
 
   CEReactionsScope ce_reactions_scope;
+  ExecutionContext* execution_context =
+      ToExecutionContext(info.Holder()->CreationContext());
 
   TOSTRING_VOID(V8StringResource<kTreatNullAsNullString>, property_value,
                 value);
@@ -229,7 +231,8 @@ void V8CSSStyleDeclaration::namedPropertySetterCustom(
       info.GetIsolate(), ExceptionState::kSetterContext, "CSSStyleDeclaration",
       getPropertyName(resolveCSSPropertyID(unresolved_property)));
   impl->SetPropertyInternal(unresolved_property, String(), property_value,
-                            false, exception_state);
+                            false, execution_context->GetSecureContextMode(),
+                            exception_state);
 
   V8SetReturnValue(info, value);
 }

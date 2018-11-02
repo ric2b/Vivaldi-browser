@@ -29,8 +29,11 @@ class WindowTree;
 namespace aura {
 
 class Window;
+class WindowMus;
 class WindowTreeClient;
 class WindowTreeHostMus;
+
+enum class ChangeType;
 
 struct WindowTreeHostMusInitParams;
 
@@ -70,6 +73,13 @@ class WindowTreeClientPrivate {
   bool HasPointerWatcher();
 
   Window* GetWindowByServerId(Id id);
+
+  WindowMus* NewWindowFromWindowData(WindowMus* parent,
+                                     const ui::mojom::WindowData& window_data);
+
+  bool HasInFlightChanges();
+
+  bool HasChangeInFlightOfType(ChangeType type);
 
  private:
   WindowTreeClient* tree_client_impl_;

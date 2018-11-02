@@ -6,9 +6,8 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "modules/document_metadata/CopylessPasteExtractor.h"
 #include "platform/json/JSONValues.h"
 #include "public/platform/modules/document_metadata/copyless_paste.mojom-blink.h"
@@ -27,16 +26,12 @@ using mojom::document_metadata::blink::ValuesPtr;
 using mojom::document_metadata::blink::WebPage;
 using mojom::document_metadata::blink::WebPagePtr;
 
-class CopylessPasteExtractorTest : public ::testing::Test {
+class CopylessPasteExtractorTest : public PageTestBase {
  public:
   CopylessPasteExtractorTest() {}
 
  protected:
-  void SetUp() override;
-
   void TearDown() override { ThreadState::Current()->CollectAllGarbage(); }
-
-  Document& GetDocument() const { return dummy_page_holder_->GetDocument(); }
 
   WebPagePtr Extract() {
     return CopylessPasteExtractor::extract(GetDocument());
@@ -57,21 +52,14 @@ class CopylessPasteExtractorTest : public ::testing::Test {
   PropertyPtr createEntityProperty(const String& name, EntityPtr value);
 
   WebPagePtr createWebPage(const String& url, const String& title);
-
- private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
 };
 
-void CopylessPasteExtractorTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-}
-
 void CopylessPasteExtractorTest::SetHTMLInnerHTML(const String& html_content) {
-  GetDocument().documentElement()->setInnerHTML((html_content));
+  GetDocument().documentElement()->SetInnerHTMLFromString((html_content));
 }
 
 void CopylessPasteExtractorTest::SetURL(const String& url) {
-  GetDocument().SetURL(blink::KURL(blink::kParsedURLString, url));
+  GetDocument().SetURL(blink::KURL(url));
 }
 
 void CopylessPasteExtractorTest::SetTitle(const String& title) {
@@ -121,7 +109,7 @@ PropertyPtr CopylessPasteExtractorTest::createEntityProperty(const String& name,
 WebPagePtr CopylessPasteExtractorTest::createWebPage(const String& url,
                                                      const String& title) {
   WebPagePtr page = WebPage::New();
-  page->url = blink::KURL(blink::kParsedURLString, url);
+  page->url = blink::KURL(url);
   page->title = title;
   return page;
 }

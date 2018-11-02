@@ -57,8 +57,46 @@ bool PointerEvent::IsPointerEvent() const {
   return true;
 }
 
-EventDispatchMediator* PointerEvent::CreateMediator() {
-  return PointerEventDispatchMediator::Create(this);
+double PointerEvent::screenX() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(screen_location_.X())
+             : screen_location_.X();
+}
+
+double PointerEvent::screenY() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(screen_location_.Y())
+             : screen_location_.Y();
+}
+
+double PointerEvent::clientX() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(client_location_.X())
+             : client_location_.X();
+}
+
+double PointerEvent::clientY() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(client_location_.Y())
+             : client_location_.Y();
+}
+
+double PointerEvent::pageX() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(page_location_.X())
+             : page_location_.X();
+}
+
+double PointerEvent::pageY() const {
+  return (!RuntimeEnabledFeatures::FractionalMouseTypePointerEventEnabled() &&
+          pointer_type_ == "mouse")
+             ? static_cast<int>(page_location_.Y())
+             : page_location_.Y();
 }
 
 void PointerEvent::ReceivedTarget() {
@@ -75,33 +113,18 @@ HeapVector<Member<PointerEvent>> PointerEvent::getCoalescedEvents() {
   return coalesced_events_;
 }
 
-DEFINE_TRACE(PointerEvent) {
+void PointerEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(coalesced_events_);
   MouseEvent::Trace(visitor);
 }
 
-PointerEventDispatchMediator* PointerEventDispatchMediator::Create(
-    PointerEvent* pointer_event) {
-  return new PointerEventDispatchMediator(pointer_event);
-}
-
-PointerEventDispatchMediator::PointerEventDispatchMediator(
-    PointerEvent* pointer_event)
-    : EventDispatchMediator(pointer_event) {}
-
-PointerEvent& PointerEventDispatchMediator::Event() const {
-  return ToPointerEvent(EventDispatchMediator::GetEvent());
-}
-
-DispatchEventResult PointerEventDispatchMediator::DispatchEvent(
-    EventDispatcher& dispatcher) const {
-  if (Event().type().IsEmpty())
+DispatchEventResult PointerEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  if (type().IsEmpty())
     return DispatchEventResult::kNotCanceled;  // Shouldn't happen.
 
-  DCHECK(!Event().target() || Event().target() != Event().relatedTarget());
+  DCHECK(!target() || target() != relatedTarget());
 
-  Event().GetEventPath().AdjustForRelatedTarget(dispatcher.GetNode(),
-                                                Event().relatedTarget());
+  GetEventPath().AdjustForRelatedTarget(dispatcher.GetNode(), relatedTarget());
 
   return dispatcher.Dispatch();
 }

@@ -42,10 +42,9 @@ namespace {
 
 class TabIdAnnotatorTest : public ChromeRenderViewHostTestHarness {
  public:
-  TabIdAnnotatorTest() {
-    // Cannot use IO_MAIN_LOOP with RenderViewHostTestHarness.
-    SetThreadBundleOptions(content::TestBrowserThreadBundle::REAL_IO_THREAD);
-  }
+  TabIdAnnotatorTest()
+      : ChromeRenderViewHostTestHarness(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
 
   ~TabIdAnnotatorTest() override {}
 
@@ -110,8 +109,8 @@ void TestAnnotateOnIOThread(base::RunLoop* ui_run_loop,
     // values are used for all the other args.
     content::ResourceRequestInfo::AllocateForTesting(
         request.get(), content::RESOURCE_TYPE_MAIN_FRAME, nullptr,
-        render_process_id, -1, render_frame_id, true, false, true, true,
-        content::PREVIEWS_OFF);
+        render_process_id, -1, render_frame_id, true, true, true,
+        content::PREVIEWS_OFF, nullptr);
   }
 
   // An invalid tab ID to check that the annotator always sets the tab ID. -2 is

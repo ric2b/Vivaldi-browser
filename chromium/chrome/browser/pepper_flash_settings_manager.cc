@@ -351,7 +351,8 @@ void PepperFlashSettingsManager::Core::ConnectToChannel(
     return;
   }
 
-  channel_ = IPC::Channel::CreateClient(handle, this);
+  channel_ = IPC::Channel::CreateClient(handle, this,
+                                        base::ThreadTaskRunnerHandle::Get());
   if (!channel_->Connect()) {
     DLOG(ERROR) << "Couldn't connect to plugin";
     NotifyErrorFromIOThread();
@@ -458,7 +459,7 @@ void PepperFlashSettingsManager::Core::DeauthorizeContentLicensesAsync(
   // ChromeOS used to store the device ID in a file but this is no longer used.
   // Wipe that file.
   const base::FilePath& device_id_path =
-      chrome::DeviceIDFetcher::GetLegacyDeviceIDPath(profile_path);
+      DeviceIDFetcher::GetLegacyDeviceIDPath(profile_path);
   bool success = base::DeleteFile(device_id_path, false);
 
   BrowserThread::PostTask(

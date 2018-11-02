@@ -234,17 +234,33 @@ class SyncClearDataFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };
 
-class SyncPollServerFunction : public ChromeAsyncExtensionFunction {
+class SyncUpdateNotificationClientStatusFunction
+    : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.pollServer", SYNC_POLL_SERVER)
-  SyncPollServerFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.updateNotificationClientStatus",
+                             SYNC_UPDATE_NOTIFICATION_CLIENT_STATUS)
+  SyncUpdateNotificationClientStatusFunction() = default;
 
  private:
-  ~SyncPollServerFunction() override = default;
+  ~SyncUpdateNotificationClientStatusFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncPollServerFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncUpdateNotificationClientStatusFunction);
+};
+
+class SyncNotificationReceivedFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.notificationReceived",
+                             SYNC_NOTIFICATION_RECEIVED)
+  SyncNotificationReceivedFunction() = default;
+
+ private:
+  ~SyncNotificationReceivedFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncNotificationReceivedFunction);
 };
 
 }  // namespace extensions

@@ -12,8 +12,7 @@
 
 #include <stdint.h>
 
-#include <queue>
-
+#include "base/containers/queue.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/macros.h"
@@ -29,6 +28,7 @@
 
 struct AVCodecContext;
 struct AVFormatContext;
+struct AVFrame;
 
 namespace media {
 
@@ -37,6 +37,7 @@ class AudioConverter;
 class AudioFifo;
 class AudioTimestampHelper;
 class FFmpegGlue;
+class FFmpegDecodingLoop;
 class InMemoryUrlProtocol;
 class VideoFrame;
 
@@ -106,7 +107,9 @@ class FakeMediaSource : public media::AudioConverter::InputCallback {
   ScopedAVPacket DemuxOnePacket(bool* audio);
 
   void DecodeAudio(ScopedAVPacket packet);
+  bool OnNewAudioFrame(AVFrame* frame);
   void DecodeVideo(ScopedAVPacket packet);
+  bool OnNewVideoFrame(AVFrame* frame);
   void Decode(bool decode_audio);
 
   // media::AudioConverter::InputCallback implementation.
@@ -143,11 +146,13 @@ class FakeMediaSource : public media::AudioConverter::InputCallback {
 
   int audio_stream_index_;
   std::unique_ptr<AVCodecContext, ScopedPtrAVFreeContext> av_audio_context_;
+  std::unique_ptr<FFmpegDecodingLoop> audio_decoding_loop_;
   AudioParameters source_audio_params_;
   double playback_rate_;
 
   int video_stream_index_;
   std::unique_ptr<AVCodecContext, ScopedPtrAVFreeContext> av_video_context_;
+  std::unique_ptr<FFmpegDecodingLoop> video_decoding_loop_;
   int video_frame_rate_numerator_;
   int video_frame_rate_denominator_;
 
@@ -160,13 +165,13 @@ class FakeMediaSource : public media::AudioConverter::InputCallback {
   // Track the timestamp of audio sent to the receiver.
   std::unique_ptr<media::AudioTimestampHelper> audio_sent_ts_;
 
-  std::queue<scoped_refptr<VideoFrame> > video_frame_queue_;
-  std::queue<scoped_refptr<VideoFrame> > inserted_video_frame_queue_;
+  base::queue<scoped_refptr<VideoFrame>> video_frame_queue_;
+  base::queue<scoped_refptr<VideoFrame>> inserted_video_frame_queue_;
   int64_t video_first_pts_;
   bool video_first_pts_set_;
   base::TimeDelta last_video_frame_timestamp_;
 
-  std::queue<AudioBus*> audio_bus_queue_;
+  base::queue<AudioBus*> audio_bus_queue_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<FakeMediaSource> weak_factory_;

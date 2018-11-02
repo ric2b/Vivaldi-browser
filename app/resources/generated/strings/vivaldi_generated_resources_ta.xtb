@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">இடமிருந்து வலம்</translation>
 <translation id="1546280085599573572">முகப்புப் பொத்தானைக் கிளிக் செய்யும் போது காண்பிக்கப்படும் பக்கத்தை இந்த நீட்டிப்பு மாற்றியுள்ளது.</translation>
 <translation id="1588438908519853928">இயல்பு</translation>
-<translation id="1616206807336925449">இந்த நீட்டிப்பிற்குச் சிறப்பு அனுமதிகள் தேவையில்லை.</translation>
 <translation id="1635033183663317347">பாதுகாப்பாளர் நிறுவியது.</translation>
 <translation id="1723824996674794290">&amp;புதிய சாளரம்</translation>
 <translation id="1729533290416704613">சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
@@ -103,7 +102,6 @@
 <translation id="4394049700291259645">முடக்கு</translation>
 <translation id="4423482519432579560">&amp;பிழைதிருத்தம்</translation>
 <translation id="4522570452068850558">விவரங்கள்</translation>
-<translation id="4552089082226364758">ஃப்ளாஷ்</translation>
 <translation id="4557136421275541763">எச்சரிக்கை: </translation>
 <translation id="4593021220803146968"><ph name="URL" /> க்குச் &amp;செல்க</translation>
 <translation id="4595560905247879544">பயன்பாடுகளையும் நீட்டிப்புகளையும் நிர்வாகியால் (<ph name="CUSTODIAN_NAME" />) மட்டுமே மாற்ற முடியும்.</translation>
@@ -138,7 +136,6 @@
 <translation id="5556459405103347317">மீண்டும் ஏற்று</translation>
 <translation id="5575473780076478375">மறைநிலை நீட்டிப்பு: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">முகப்புப் பொத்தானைக் கிளிக் செய்யும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
-<translation id="5646376287012673985">இருப்பிடம்</translation>
 <translation id="5715711091495208045">செருகுநிரல் புரோக்கர்: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">ஆடியோவை இவ்வாறு சே&amp;மி...</translation>
 <translation id="5780973441651030252">செயல்படுத்தல் முன்னுரிமை</translation>
@@ -178,7 +175,6 @@
 <translation id="6904344821472985372">கோப்பின் அணுகலை அகற்றுதல்</translation>
 <translation id="6943176775188458830">அச்சடிப்பை ரத்து செய்</translation>
 <translation id="6974053822202609517">வலமிருந்து இடம்</translation>
-<translation id="7013485839273047434">மேலும் நீட்டிப்புகளைப் பெறுக</translation>
 <translation id="708060913198414444">ஆடியோ முகவரியை ந&amp;கலெடு</translation>
 <translation id="7144878232160441200">மீண்டும் முயலவும்</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> ஐப் பதிவிறக்குகிறது...</translation>
@@ -187,7 +183,6 @@
 <translation id="7361297102842600584"><ph name="PLUGIN_NAME" />ஐ இயக்க, வலது கிளிக் செய்யவும்</translation>
 <translation id="7401543881546089382">குறுக்குவழியை அகற்றவும்</translation>
 <translation id="7427348830195639090">பின்புல பக்கம்: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">புதிய தாவல்</translation>
 <translation id="7564847347806291057">செயலாக்கத்தை முடி</translation>
 <translation id="7629827748548208700">தாவல்: <ph name="TAB_NAME" /></translation>
@@ -235,7 +230,6 @@
 <translation id="9088234649737575428">நிறுவனக் கொள்கையால் <ph name="PLUGIN_NAME" /> முடக்கப்பட்டுள்ளது</translation>
 <translation id="9170848237812810038">&amp;செயல்தவிர்</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" சேர்க்கப்பட்டது</translation>
-<translation id="9219103736887031265">படங்கள்</translation>
 <translation id="93766956588638423">நீட்டிப்பைப் பழுதுநீக்கு</translation>
 <translation id="994289308992179865">&amp;சுழற்சி</translation>
 <translation id="998747458861718449">க&amp;ண்காணி</translation>

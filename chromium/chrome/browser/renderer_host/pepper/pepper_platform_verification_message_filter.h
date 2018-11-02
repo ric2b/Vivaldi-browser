@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "ppapi/c/pp_instance.h"
 #include "ppapi/host/resource_message_filter.h"
@@ -24,8 +27,6 @@ namespace host {
 struct HostMessageContext;
 }  // namespace host
 }  // namespace ppapi
-
-namespace chrome {
 
 // This filter handles messages for platform verification on the UI thread.
 class PepperPlatformVerificationMessageFilter
@@ -58,6 +59,8 @@ class PepperPlatformVerificationMessageFilter
 #endif
 
   int32_t OnGetStorageId(ppapi::host::HostMessageContext* context);
+  void GetStorageIdCallback(ppapi::host::ReplyMessageContext reply_context,
+                            const std::vector<uint8_t>& storage_id);
 
   // Used to lookup the WebContents associated with this PP_Instance.
   int render_process_id_;
@@ -70,7 +73,5 @@ class PepperPlatformVerificationMessageFilter
 
   DISALLOW_COPY_AND_ASSIGN(PepperPlatformVerificationMessageFilter);
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_RENDERER_HOST_PEPPER_PEPPER_PLATFORM_VERIFICATION_MESSAGE_FILTER_H_

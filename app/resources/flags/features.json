@@ -17,6 +17,12 @@
       "description": "Enables Window Panel",
       "value": "true",
       "internal_value": "true"
+    },
+    "sync": {
+      "friendly_name": "Sync",
+      "description": "Enables the synchronization functionality",
+      "value": "false",
+      "internal_value": "false"
     }
   }
 }

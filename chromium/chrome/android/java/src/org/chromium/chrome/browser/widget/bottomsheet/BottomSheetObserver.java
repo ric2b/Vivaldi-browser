@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.widget.bottomsheet;
 
+import android.support.annotation.Nullable;
+
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.SheetState;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
 
 /**
  * An interface for notifications about the state of the bottom sheet.
@@ -14,13 +17,15 @@ public interface BottomSheetObserver {
     /**
      * A notification that the sheet has been opened, meaning the sheet is any height greater
      * than its peeking state.
+     * @param reason The {@link StateChangeReason} that the sheet was opened.
      */
-    void onSheetOpened();
+    void onSheetOpened(@StateChangeReason int reason);
 
     /**
      * A notification that the sheet has closed, meaning the sheet has reached its peeking state.
+     * @param reason The {@link StateChangeReason} that the sheet was closed.
      */
-    void onSheetClosed();
+    void onSheetClosed(@StateChangeReason int reason);
 
     /**
      * A notification that the bottom sheet is no longer being dragged by the user and is instead
@@ -45,14 +50,6 @@ public interface BottomSheetObserver {
     void onSheetOffsetChanged(float heightFraction);
 
     /**
-     * A notification that the dimensions of the sheet has changed. The container height will be
-     * different from the window height when the keyboard is showing.
-     * @param windowHeight The height of the window in px.
-     * @param containerHeight The height of the bottom sheet's container in px.
-     */
-    void onSheetLayout(int windowHeight, int containerHeight);
-
-    /**
      * An event for when the sheet is transitioning from the peeking state to the half expanded
      * state. Once the sheet is outside the peek-half range, this event will no longer be
      * called. This event is guaranteed to be called at least once with 0.0f in the peeking state
@@ -73,7 +70,7 @@ public interface BottomSheetObserver {
 
     /**
      * An event for when the sheet content changes.
-     * @param newContent The new {@link BottomSheetContent}.
+     * @param newContent The new {@link BottomSheetContent}, or null if the sheet has no content.
      */
-    void onSheetContentChanged(BottomSheetContent newContent);
+    void onSheetContentChanged(@Nullable BottomSheetContent newContent);
 }

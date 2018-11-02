@@ -4,6 +4,7 @@
 
 #include "tools/gn/input_conversion.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
@@ -74,7 +75,7 @@ Value ParseValueOrScope(const Settings* settings,
   if (!parse_root)
     return Value();
 
-  std::unique_ptr<Scope> scope(new Scope(settings));
+  std::unique_ptr<Scope> scope = std::make_unique<Scope>(settings);
   Value result = parse_root->Execute(scope.get(), err);
   if (err->has_error())
     return Value();
@@ -146,7 +147,7 @@ Value DoConvertInputToValue(const Settings* settings,
 
 }  // namespace
 
-extern const char kInputConversion_Help[] =
+const char kInputConversion_Help[] =
     R"(input_conversion: Specifies how to transform input to a variable.
 
   input_conversion is an argument to read_file and exec_script that specifies

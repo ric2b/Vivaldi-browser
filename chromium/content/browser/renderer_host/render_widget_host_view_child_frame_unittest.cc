@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -28,6 +29,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/dummy_render_widget_host_delegate.h"
@@ -48,7 +50,8 @@ const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
 
 class MockFrameConnectorDelegate : public FrameConnectorDelegate {
  public:
-  MockFrameConnectorDelegate() : FrameConnectorDelegate() {}
+  MockFrameConnectorDelegate(bool use_zoom_for_device_scale_factor)
+      : FrameConnectorDelegate(use_zoom_for_device_scale_factor) {}
   ~MockFrameConnectorDelegate() override {}
 
   void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
@@ -64,7 +67,13 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
     return nullptr;
   }
 
+  void BubbleScrollEvent(const blink::WebGestureEvent& event) override {
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate)
+      seen_bubbled_gsu_ = true;
+  }
+
   viz::SurfaceInfo last_surface_info_;
+  bool seen_bubbled_gsu_ = false;
 };
 
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
@@ -74,24 +83,29 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
             base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
 
   void SetUp() override {
+    SetUpEnvironment(false /* use_zoom_for_device_scale_factor */);
+  }
+
+  void SetUpEnvironment(bool use_zoom_for_device_scale_factor) {
     browser_context_.reset(new TestBrowserContext);
 
 // ImageTransportFactory doesn't exist on Android.
 #if !defined(OS_ANDROID)
-    ImageTransportFactory::InitializeForUnitTests(
-        base::WrapUnique(new NoTransportImageTransportFactory));
+    ImageTransportFactory::SetFactory(
+        std::make_unique<NoTransportImageTransportFactory>());
 #endif
 
     MockRenderProcessHost* process_host =
         new MockRenderProcessHost(browser_context_.get());
     int32_t routing_id = process_host->GetNextRoutingID();
     mojom::WidgetPtr widget;
-    widget_impl_ = base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+    widget_impl_ = std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
     widget_host_ = new RenderWidgetHostImpl(
         &delegate_, process_host, routing_id, std::move(widget), false);
     view_ = RenderWidgetHostViewChildFrame::Create(widget_host_);
 
-    test_frame_connector_ = new MockFrameConnectorDelegate();
+    test_frame_connector_ =
+        new MockFrameConnectorDelegate(use_zoom_for_device_scale_factor);
     view_->SetFrameConnectorDelegate(test_frame_connector_);
 
     viz::mojom::CompositorFrameSinkPtr sink;
@@ -100,7 +114,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     viz::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
-        base::MakeUnique<FakeRendererCompositorFrameSink>(
+        std::make_unique<FakeRendererCompositorFrameSink>(
             std::move(sink), std::move(client_request));
     view_->DidCreateNewRendererCompositorFrameSink(
         renderer_compositor_frame_sink_ptr_.get());
@@ -156,14 +170,14 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameTest);
 };
 
-cc::CompositorFrame CreateDelegatedFrame(float scale_factor,
-                                         gfx::Size size,
-                                         const gfx::Rect& damage) {
-  cc::CompositorFrame frame;
+viz::CompositorFrame CreateDelegatedFrame(float scale_factor,
+                                          gfx::Size size,
+                                          const gfx::Rect& damage) {
+  viz::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
   frame.metadata.begin_frame_ack = viz::BeginFrameAck(0, 1, true);
 
-  std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> pass = viz::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
   frame.render_pass_list.push_back(std::move(pass));
   return frame;
@@ -196,7 +210,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
 
   view_->SubmitCompositorFrame(
       local_surface_id,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
 
   viz::SurfaceId id = GetSurfaceId();
   if (id.is_valid()) {
@@ -228,7 +242,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
   // Submit a frame.
   view_->SubmitCompositorFrame(
       kArbitraryLocalSurfaceId,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
 
   EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
   EXPECT_TRUE(view_->has_frame());
@@ -242,7 +256,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
   // usable.
   view_->SubmitCompositorFrame(
       kArbitraryLocalSurfaceId,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
   EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
   EXPECT_TRUE(view_->has_frame());
 }
@@ -266,6 +280,78 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
   std::tuple<gfx::Rect> sent_rect;
   ViewMsg_SetViewportIntersection::Read(intersection_update, &sent_rect);
   EXPECT_EQ(intersection_rect, std::get<0>(sent_rect));
+}
+
+// Tests specific to non-scroll-latching behaviour.
+// TODO(mcnee): Remove once scroll-latching lands. crbug.com/526463
+class RenderWidgetHostViewChildFrameScrollLatchingDisabledTest
+    : public RenderWidgetHostViewChildFrameTest {
+ public:
+  RenderWidgetHostViewChildFrameScrollLatchingDisabledTest() {}
+
+  void SetUp() override {
+    feature_list_.InitWithFeatures({},
+                                   {features::kTouchpadAndWheelScrollLatching,
+                                    features::kAsyncWheelEvents});
+
+    RenderWidgetHostViewChildFrameTest::SetUp();
+    DCHECK(!view_->wheel_scroll_latching_enabled());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      RenderWidgetHostViewChildFrameScrollLatchingDisabledTest);
+};
+
+class RenderWidgetHostViewChildFrameZoomForDSFTest
+    : public RenderWidgetHostViewChildFrameTest {
+ public:
+  RenderWidgetHostViewChildFrameZoomForDSFTest() {}
+
+  void SetUp() override {
+    SetUpEnvironment(true /* use_zoom_for_device_scale_factor */);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameZoomForDSFTest);
+};
+
+// Test that when a child scrolls and then stops consuming once it hits the
+// extent, we don't bubble the subsequent unconsumed GestureScrollUpdates
+// in the same gesture.
+TEST_F(RenderWidgetHostViewChildFrameScrollLatchingDisabledTest,
+       DoNotBubbleIfChildHasAlreadyScrolled) {
+  blink::WebGestureEvent gesture_scroll(
+      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::kTimeStampForTesting);
+  view_->GestureEventAck(gesture_scroll, INPUT_EVENT_ACK_STATE_IGNORED);
+
+  gesture_scroll.SetType(blink::WebGestureEvent::kGestureScrollUpdate);
+  view_->GestureEventAck(gesture_scroll, INPUT_EVENT_ACK_STATE_CONSUMED);
+  ASSERT_FALSE(test_frame_connector_->seen_bubbled_gsu_);
+
+  view_->GestureEventAck(gesture_scroll,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_FALSE(test_frame_connector_->seen_bubbled_gsu_);
+}
+
+// Tests that moving the child around does not affect the physical backing size.
+TEST_F(RenderWidgetHostViewChildFrameZoomForDSFTest, PhysicalBackingSize) {
+  ScreenInfo screen_info;
+  screen_info.device_scale_factor = 2.0f;
+  test_frame_connector_->SetScreenInfoForTesting(screen_info);
+
+  gfx::Size frame_size_in_pixels(1276, 410);
+  gfx::Rect frame_rect_in_pixels(frame_size_in_pixels);
+  test_frame_connector_->SetRect(frame_rect_in_pixels);
+  EXPECT_EQ(frame_size_in_pixels, view_->GetPhysicalBackingSize());
+
+  frame_rect_in_pixels.set_origin(gfx::Point(230, 263));
+  test_frame_connector_->SetRect(frame_rect_in_pixels);
+  EXPECT_EQ(frame_size_in_pixels, view_->GetPhysicalBackingSize());
 }
 
 }  // namespace content

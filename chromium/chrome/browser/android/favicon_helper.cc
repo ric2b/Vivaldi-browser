@@ -78,7 +78,8 @@ void OnEnsureIconIsAvailableFinished(
 
 }  // namespace
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
+static jlong JNI_FaviconHelper_Init(JNIEnv* env,
+                                    const JavaParamRef<jclass>& clazz) {
   return reinterpret_cast<intptr_t>(new FaviconHelper());
 }
 
@@ -95,7 +96,6 @@ jboolean FaviconHelper::GetLocalFaviconImageForURL(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& j_profile,
     const JavaParamRef<jstring>& j_page_url,
-    jint j_icon_types,
     jint j_desired_size_in_pixel,
     const JavaParamRef<jobject>& j_favicon_image_callback) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
@@ -116,9 +116,10 @@ jboolean FaviconHelper::GetLocalFaviconImageForURL(
 
   favicon_service->GetRawFaviconForPageURL(
       GURL(ConvertJavaStringToUTF16(env, j_page_url)),
-      static_cast<int>(j_icon_types),
-      static_cast<int>(j_desired_size_in_pixel),
-      callback_runner,
+      {favicon_base::IconType::kFavicon, favicon_base::IconType::kTouchIcon,
+       favicon_base::IconType::kTouchPrecomposedIcon,
+       favicon_base::IconType::kWebManifestIcon},
+      static_cast<int>(j_desired_size_in_pixel), callback_runner,
       cancelable_task_tracker_.get());
 
   return true;
@@ -173,8 +174,9 @@ void FaviconHelper::EnsureIconIsAvailable(
   DCHECK(web_contents);
   GURL page_url(ConvertJavaStringToUTF8(env, j_page_url));
   GURL icon_url(ConvertJavaStringToUTF8(env, j_icon_url));
-  favicon_base::IconType icon_type =
-      j_is_large_icon ? favicon_base::TOUCH_ICON : favicon_base::FAVICON;
+  favicon_base::IconType icon_type = j_is_large_icon
+                                         ? favicon_base::IconType::kTouchIcon
+                                         : favicon_base::IconType::kFavicon;
 
   // TODO(treib): Optimize this by creating a FaviconService::HasFavicon method
   // so that we don't have to actually get the image.

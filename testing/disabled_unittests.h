@@ -76,3 +76,14 @@ DISABLE(PasswordGenerationInteractiveTest, PopupShownAndPasswordSelected)
 // Will be broken until we start using the TemplateURlService for searches
 // because TemplateURLService::OnHistoryURLVisited is disabled until then.
 DISABLE(TemplateURLServiceTest, GenerateVisitOnKeyword)
+
+// Fails in raw chromium 64, too
+DISABLE(PasswordManagerBrowserTestBase, DeleteFrameBeforeSubmit)
+
+// Flaky in v64
+DISABLE(PasswordGenerationInteractiveTest, AutoSavingGeneratedPassword)
+DISABLE(WebViewContextMenuInteractiveTest, ContextMenuParamCoordinates)
+DISABLE_MULTI(ParamaterizedFullscreenControllerInteractiveTest,
+              MouseLockSilentAfterTargetUnlock)
+DISABLE(SitePerProcessTextInputManagerTest,
+        TrackStateWhenSwitchingFocusedFrames)

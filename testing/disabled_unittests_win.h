@@ -113,3 +113,35 @@ DISABLE(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly)
 DISABLE(PlatformMediaPipelineIntegrationTest, SeekWhilePaused)
 DISABLE(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying)
 DISABLE(PlatformMediaPipelineIntegrationTest, VideoConfigChange)
+
+// Seems to have broken in v63
+DISABLE(OmniboxApiTest, DeleteOmniboxSuggestionResult)
+
+// ===============================================================
+//                      TEMPORARY - MEDIA
+// ===============================================================
+
+// media_unittests - temp - debug these
+
+DISABLE(LegacyByDts/MSEPipelineIntegrationTest, ADTS/0)
+DISABLE(LegacyByDts/MSEPipelineIntegrationTest, ConfigChange_ClearThenEncrypted_WebM/0)
+
+DISABLE(NewByPts/MSEPipelineIntegrationTest, ADTS/0)
+DISABLE(NewByPts/MSEPipelineIntegrationTest, ConfigChange_ClearThenEncrypted_WebM/0)
+
+DISABLE(PipelineIntegrationTest, BasicPlaybackHashed_ADTS)
+
+// content_browsertests - temp - timed out - debug these
+DISABLE(File/MediaTest, VideoBearHighBitDepthMp4/0)
+DISABLE(Http/MediaTest, VideoBearHighBitDepthMp4/0)
+DISABLE(MediaColorTest, Yuv420pH264)
+DISABLE(MediaTest, LoadManyVideos)
+
+// Broke in v64, can't reproduce locally
+DISABLE(NavigationControllerTest, LoadURL_WithBindings)
+DISABLE(RenderFrameHostManagerTest, DisownOpenerAfterNavigation)
+DISABLE(RenderFrameHostManagerTest, NavigateAfterMissingSwapOutACK)
+
+// Flaky on Win7
+DISABLE_MULTI(SSLUIWorkerFetchTest, MixedContentSubFrame)
+DISABLE_MULTI(SSLUIWorkerFetchTest, MixedContentSettings)

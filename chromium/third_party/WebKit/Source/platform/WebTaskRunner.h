@@ -7,6 +7,7 @@
 
 #include <memory>
 #include "base/callback.h"
+#include "base/single_thread_task_runner.h"
 #include "platform/wtf/Compiler.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/RefCounted.h"
@@ -20,8 +21,6 @@ class SingleThreadTaskRunner;
 }
 
 namespace blink {
-
-using SingleThreadTaskRunner = base::SingleThreadTaskRunner;
 
 // TaskHandle is associated to a task posted by
 // WebTaskRunner::postCancellableTask or
@@ -52,39 +51,23 @@ class BLINK_PLATFORM_EXPORT TaskHandle {
  private:
   friend class WebTaskRunner;
 
-  explicit TaskHandle(RefPtr<Runner>);
-  RefPtr<Runner> runner_;
+  explicit TaskHandle(scoped_refptr<Runner>);
+  scoped_refptr<Runner> runner_;
 };
 
 // The blink representation of a chromium SingleThreadTaskRunner.
 class BLINK_PLATFORM_EXPORT WebTaskRunner
-    : public ThreadSafeRefCounted<WebTaskRunner> {
+    : public base::SingleThreadTaskRunner {
  public:
-  // Returns true if tasks posted to this TaskRunner are sequenced
-  // with this call.
-  virtual bool RunsTasksInCurrentSequence() = 0;
-
-  // ---
-
-  // Headless Chrome virtualises time for determinism and performance (fast
-  // forwarding of timers). To make this work some parts of blink (e.g. Timers)
-  // need to use virtual time, however by default new code should use the normal
-  // non-virtual time APIs.
-
-  // Returns a double which is the number of seconds since epoch (Jan 1, 1970).
-  // This may represent either the real time, or a virtual time depending on
-  // whether or not the WebTaskRunner is associated with a virtual time domain
-  // or a real time domain.
-  virtual double VirtualTimeSeconds() const = 0;
+  virtual bool PostDelayedTask(const base::Location&,
+                               base::OnceClosure,
+                               base::TimeDelta) = 0;
 
   // Returns a microsecond resolution platform dependant time source.
   // This may represent either the real time, or a virtual time depending on
   // whether or not the WebTaskRunner is associated with a virtual time domain
   // or a real time domain.
   virtual double MonotonicallyIncreasingVirtualTimeSeconds() const = 0;
-
-  // Returns the underlying task runner object.
-  virtual SingleThreadTaskRunner* ToSingleThreadTaskRunner() = 0;
 
   // Helpers for posting bound functions as tasks.
 

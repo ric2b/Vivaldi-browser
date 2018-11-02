@@ -46,84 +46,12 @@ enum WeakHandlingFlag {
   kWeakHandlingInCollections
 };
 
-template <typename T, typename From>
-class IsAssignable {
-  typedef char YesType;
-  struct NoType {
-    char padding[8];
-  };
-
-  template <typename T2,
-            typename From2,
-            typename = decltype(std::declval<T2&>() = std::declval<From2>())>
-  static YesType CheckAssignability(int);
-  template <typename T2, typename From2>
-  static NoType CheckAssignability(...);
-
- public:
-  static const bool value =
-      sizeof(CheckAssignability<T, From>(0)) == sizeof(YesType);
-};
-
-template <typename T>
-struct IsCopyAssignable {
-  static_assert(!std::is_reference<T>::value, "T must not be a reference.");
-  static const bool value = IsAssignable<T, const T&>::value;
-};
-
-template <typename T>
-struct IsMoveAssignable {
-  static_assert(!std::is_reference<T>::value, "T must not be a reference.");
-  static const bool value = IsAssignable<T, T&&>::value;
-};
-
-template <typename T>
-struct IsTriviallyCopyAssignable {
-  static const bool value =
-      __has_trivial_assign(T) && IsCopyAssignable<T>::value;
-};
-
-template <typename T>
-struct IsTriviallyMoveAssignable {
-  // TODO(yutak): This isn't really correct, because __has_trivial_assign
-  // appears to look only at copy assignment.  However,
-  // std::is_trivially_move_assignable isn't available at this moment, and
-  // there isn't a good way to write that ourselves.
-  //
-  // Here we use IsTriviallyCopyAssignable as a conservative approximation: if T
-  // is trivially copy assignable, T is trivially move assignable, too. This
-  // definition misses a case where T is trivially move-only assignable, but
-  // such cases should be rare.
-  static const bool value = IsTriviallyCopyAssignable<T>::value;
-};
-
-template <typename T>
-class IsDestructible {
-  typedef char YesType;
-  struct NoType {
-    char padding[8];
-  };
-
-  template <typename T2, typename = decltype(std::declval<T2>().~T2())>
-  static YesType CheckDestructibility(int);
-  template <typename T2>
-  static NoType CheckDestructibility(...);
-
- public:
-  static const bool value =
-      sizeof(CheckDestructibility<T>(0)) == sizeof(YesType);
-};
-
-template <typename T>
-struct IsTriviallyDefaultConstructible {
-  static const bool value =
-      __has_trivial_constructor(T) && std::is_constructible<T>::value;
-};
-
 template <typename T>
 struct IsTriviallyDestructible {
-  static const bool value =
-      __has_trivial_destructor(T) && IsDestructible<T>::value;
+  // TODO(slangley): crbug.com/783060 - std::is_trivially_destructible behaves
+  // differently on across platforms.
+  static constexpr bool value =
+      __has_trivial_destructor(T) && std::is_destructible<T>::value;
 };
 
 template <typename T, typename U>
@@ -192,49 +120,6 @@ struct IsSubclassOfTemplateTypenameSizeTypename {
  public:
   static const bool value = sizeof(SubclassCheck(t_)) == sizeof(YesType);
 };
-
-template <typename T, template <class V> class OuterTemplate>
-struct RemoveTemplate {
-  typedef T Type;
-};
-
-template <typename T, template <class V> class OuterTemplate>
-struct RemoveTemplate<OuterTemplate<T>, OuterTemplate> {
-  typedef T Type;
-};
-
-#if (defined(COMPILER_MSVC) || !GCC_VERSION_AT_LEAST(4, 9, 0)) && \
-    !defined(__clang__)
-// FIXME: MSVC bug workaround. Remove once MSVC STL is fixed.
-// FIXME: GCC before 4.9.0 seems to have the same issue.
-// C++ 2011 Spec (ISO/IEC 14882:2011(E)) 20.9.6.2 Table 51 states that
-// the template parameters shall be a complete type if they are different types.
-// However, MSVC checks for type completeness even if they are the same type.
-// Here, we use a template specialization for same type case to allow incomplete
-// types.
-
-template <typename T, typename U>
-struct IsConvertible {
-  static const bool value = std::is_convertible<T, U>::value;
-};
-
-template <typename T>
-struct IsConvertible<T, T> {
-  static const bool value = true;
-};
-
-#define EnsurePtrConvertibleArgDecl(From, To)                             \
-  typename std::enable_if<WTF::IsConvertible<From*, To*>::value>::type* = \
-      nullptr
-#define EnsurePtrConvertibleArgDefn(From, To) \
-  typename std::enable_if<WTF::IsConvertible<From*, To*>::value>::type*
-#else
-#define EnsurePtrConvertibleArgDecl(From, To)                              \
-  typename std::enable_if<std::is_convertible<From*, To*>::value>::type* = \
-      nullptr
-#define EnsurePtrConvertibleArgDefn(From, To) \
-  typename std::enable_if<std::is_convertible<From*, To*>::value>::type*
-#endif
 
 }  // namespace WTF
 

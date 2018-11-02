@@ -11,7 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "cc/test/layer_tree_test.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "ui/gl/gl_implementation.h"
 
 class SkBitmap;
@@ -19,7 +19,6 @@ class SkBitmap;
 namespace viz {
 class CopyOutputRequest;
 class CopyOutputResult;
-class TextureMailbox;
 }
 
 namespace cc {
@@ -44,7 +43,7 @@ class LayerTreePixelTest : public LayerTreeTest {
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::ContextProvider> worker_context_provider) override;
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider) override;
 
   virtual std::unique_ptr<viz::CopyOutputRequest> CreateCopyOutputRequest();
@@ -80,9 +79,9 @@ class LayerTreePixelTest : public LayerTreeTest {
                                       Layer* target,
                                       base::FilePath file_name);
 
-  std::unique_ptr<SkBitmap> CopyTextureMailboxToBitmap(
-      const gfx::Size& size,
-      const viz::TextureMailbox& texture_mailbox);
+  SkBitmap CopyMailboxToBitmap(const gfx::Size& size,
+                               const gpu::Mailbox& mailbox,
+                               const gpu::SyncToken& sync_token);
 
   void Finish();
 
@@ -97,6 +96,7 @@ class LayerTreePixelTest : public LayerTreeTest {
   static const SkColor kCSSOrange = 0xffffa500;
   static const SkColor kCSSBrown = 0xffa52a2a;
   static const SkColor kCSSGreen = 0xff008000;
+  static const SkColor kCSSBlack = 0xff000000;
 
   gl::DisableNullDrawGLBindings enable_pixel_output_;
   std::unique_ptr<PixelComparator> pixel_comparator_;

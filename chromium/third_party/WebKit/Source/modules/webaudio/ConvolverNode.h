@@ -28,9 +28,9 @@
 
 #include <memory>
 #include "base/gtest_prod_util.h"
+#include "base/memory/scoped_refptr.h"
 #include "modules/ModulesExport.h"
 #include "modules/webaudio/AudioNode.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 
 namespace blink {
@@ -42,7 +42,7 @@ class Reverb;
 
 class MODULES_EXPORT ConvolverHandler final : public AudioHandler {
  public:
-  static PassRefPtr<ConvolverHandler> Create(AudioNode&, float sample_rate);
+  static scoped_refptr<ConvolverHandler> Create(AudioNode&, float sample_rate);
   ~ConvolverHandler() override;
 
   // AudioHandler

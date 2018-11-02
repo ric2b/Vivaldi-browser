@@ -126,6 +126,11 @@ class NetworkingPrivateDelegate : public KeyedService {
                                    const std::string& new_pin,
                                    const VoidCallback& success_callback,
                                    const FailureCallback& failure_callback) = 0;
+  virtual void SelectCellularMobileNetwork(
+      const std::string& guid,
+      const std::string& network_id,
+      const VoidCallback& success_callback,
+      const FailureCallback& failure_callback) = 0;
 
   // Synchronous methods
 
@@ -152,7 +157,10 @@ class NetworkingPrivateDelegate : public KeyedService {
 
   // Returns true if a scan was requested. It may take many seconds for a scan
   // to complete. The scan may or may not trigger API events when complete.
-  virtual bool RequestScan() = 0;
+  // |type| is the type of network to request a scan for; if empty, scans for
+  // all supported network types except Cellular, which must be requested
+  // explicitly.
+  virtual bool RequestScan(const std::string& type) = 0;
 
   // Optional methods for adding a NetworkingPrivateDelegateObserver for
   // implementations that require it (non-chromeos).

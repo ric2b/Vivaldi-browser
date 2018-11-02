@@ -28,14 +28,6 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 typedef void (^UIKeyCommandAction)(void);
-typedef void (^ChromeCommandBlock)(NSInteger);
-
-// Returns an autoreleased block that sends a |chromeExecuteCommand:| message to
-// |responder| by passing a GenericChromeCommand. The tag for the
-// GenericChromeCommand is the argument to pass to the block.
-// Note that |responder| will not be retained by the block, so it's safe to
-// pass |self|, for example.
-ChromeCommandBlock ChromeCommandBlockWithResponder(UIResponder* responder);
 
 // Addition to the set of predefined modifier flags.
 extern UIKeyModifierFlags Cr_UIKeyModifierNone;
@@ -47,7 +39,7 @@ extern UIKeyModifierFlags Cr_UIKeyModifierNone;
 // foo.mm:
 //
 // - (NSArray*)keyCommands {
-//   base::WeakNSObject<AccountsTableViewController> weakSelf(self);
+//   __weak AccountsTableViewController* weakSelf = self;
 //   return @[
 //     [UIKeyCommand cr_keyCommandWithInput:UIKeyInputEscape
 //                           modifierFlags:Cr_UIKeyModifierNone

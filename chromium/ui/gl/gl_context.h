@@ -69,6 +69,8 @@ struct GLContextAttribs {
   bool bind_generates_resource = true;
   bool webgl_compatibility_context = false;
   bool global_texture_share_group = false;
+  bool robust_resource_initialization = false;
+  bool robust_buffer_access = false;
   int client_major_es_version = 3;
   int client_minor_es_version = 0;
   ContextPriority context_priority = ContextPriorityMedium;
@@ -158,19 +160,13 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   GLShareGroup* share_group();
 
-  // Create a GL context that is compatible with the given surface.
-  // |share_group|, if non-NULL, is a group of contexts which the
-  // internally created OpenGL context shares textures and other resources.
-  // DEPRECATED(kylechar): Use gl::init::CreateGLContext from gl_factory.h.
-  static scoped_refptr<GLContext> CreateGLContext(
-      GLShareGroup* share_group,
-      GLSurface* compatible_surface,
-      GpuPreference gpu_preference);
-
   static bool LosesAllContextsOnContextLost();
 
   // Returns the last GLContext made current, virtual or real.
   static GLContext* GetCurrent();
+
+  // TODO(sunnyps): Remove after crbug.com/724999 is fixed.
+  static GLContext* GetRealCurrentForDebugging();
 
   virtual bool WasAllocatedUsingRobustnessExtension();
 

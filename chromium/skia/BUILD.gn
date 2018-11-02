@@ -4,7 +4,6 @@
 
 import("//build/config/features.gni")
 import("//build/config/freetype/freetype.gni")
-import("//build/config/ui.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//printing/features/features.gni")
 import("//testing/test.gni")
@@ -44,10 +43,6 @@ config("skia_config") {
     "//third_party/skia/include/utils",
     "//third_party/skia/third_party/vulkan",
   ]
-
-  if (!is_ios) {
-    include_dirs += [ "//third_party/skia/include/codec" ]
-  }
 
   defines = skia_for_chromium_defines
   defines += [
@@ -101,6 +96,7 @@ config("skia_library_config") {
   # These include directories are only included for Skia code and are not
   # exported to dependents.
   include_dirs = [
+    "//third_party/skia/include/codec",
     "//third_party/skia/include/private",
     "//third_party/skia/include/client/android",
     "//third_party/skia/src/codec",
@@ -129,7 +125,7 @@ config("skia_library_config") {
 
   defines = []
 
-  if (!use_system_freetype) {
+  if (!is_ios && !use_system_freetype) {
     defines += [ "SK_FREETYPE_MINIMUM_RUNTIME_VERSION=(((FREETYPE_MAJOR) * 0x01000000) | ((FREETYPE_MINOR) * 0x00010000) | ((FREETYPE_PATCH) * 0x00000100))" ]
   }
 
@@ -274,6 +270,7 @@ component("skia") {
 
   # The imported Skia gni source paths are made absolute by gn.
   sources += skia_core_sources
+  defines = skia_core_defines
   sources += skia_effects_sources
   sources += skia_utils_sources
   sources += skia_xps_sources
@@ -281,8 +278,6 @@ component("skia") {
     "//third_party/skia/src/fonts/SkFontMgr_indirect.cpp",
     "//third_party/skia/src/fonts/SkRemotableFontMgr.cpp",
     "//third_party/skia/src/images/SkImageEncoder.cpp",
-    "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
-    "//third_party/skia/src/images/SkJpegEncoder.cpp",
     "//third_party/skia/src/images/SkPngEncoder.cpp",
     "//third_party/skia/src/images/SkWebpEncoder.cpp",
     "//third_party/skia/src/ports/SkGlobalInitialization_default.cpp",
@@ -293,26 +288,8 @@ component("skia") {
   ]
   if (!is_ios) {
     sources += [
-      "//third_party/skia/src/codec/SkBmpBaseCodec.cpp",
-      "//third_party/skia/src/codec/SkBmpCodec.cpp",
-      "//third_party/skia/src/codec/SkBmpMaskCodec.cpp",
-      "//third_party/skia/src/codec/SkBmpRLECodec.cpp",
-      "//third_party/skia/src/codec/SkBmpStandardCodec.cpp",
-      "//third_party/skia/src/codec/SkCodec.cpp",
-      "//third_party/skia/src/codec/SkGifCodec.cpp",
-      "//third_party/skia/src/codec/SkIcoCodec.cpp",
-      "//third_party/skia/src/codec/SkJpegCodec.cpp",
-      "//third_party/skia/src/codec/SkJpegDecoderMgr.cpp",
-      "//third_party/skia/src/codec/SkJpegUtility.cpp",
-      "//third_party/skia/src/codec/SkMaskSwizzler.cpp",
-      "//third_party/skia/src/codec/SkMasks.cpp",
-      "//third_party/skia/src/codec/SkPngCodec.cpp",
-      "//third_party/skia/src/codec/SkSampler.cpp",
-      "//third_party/skia/src/codec/SkStreamBuffer.cpp",
-      "//third_party/skia/src/codec/SkSwizzler.cpp",
-      "//third_party/skia/src/codec/SkWbmpCodec.cpp",
-      "//third_party/skia/src/codec/SkWebpCodec.cpp",
-      "//third_party/skia/third_party/gif/SkGifImageReader.cpp",
+      "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
+      "//third_party/skia/src/images/SkJpegEncoder.cpp",
     ]
   }
 
@@ -362,20 +339,16 @@ component("skia") {
     ]
   }
 
-  if (is_android && (!enable_basic_printing && !enable_print_preview)) {
-    sources -= [
-      "ext/skia_utils_base.cc",
-      "ext/skia_utils_base.h",
-    ]
-  }
-
   # Select Skia ports.
 
-  # FreeType is needed everywhere, on Linux and Android as main font backend, on Windows and Mac as fallback backend for Variations.
-  sources += [
-    "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
-    "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
-  ]
+  # FreeType is needed everywhere (except on iOS), on Linux and Android as main
+  # font backend, on Windows and Mac as fallback backend for Variations.
+  if (!is_ios) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+    ]
+  }
 
   if (is_win) {
     sources += [
@@ -464,30 +437,18 @@ component("skia") {
     ":skia_opts",
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//build/config/freetype",
-    "//third_party:jpeg",
     "//third_party/libpng",
     "//third_party/libwebp",
   ]
 
-  if (is_ios) {
-    sources -= [
-      "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
-      "//third_party/skia/src/images/SkJpegEncoder.cpp",
+  if (!is_ios) {
+    deps += [
+      "//build/config/freetype",
+      "//third_party:jpeg",
     ]
-    deps -= [ "//third_party:jpeg" ]
   }
 
   if (is_linux) {
-    if (use_pango) {
-      configs += [
-        # libpng_config will be included automatically from deps.  We do this
-        # to ensure that it is included before the pangocairo path (which also
-        # has a png.h).
-        "//third_party/libpng:libpng_config",
-        "//build/config/linux/pangocairo",
-      ]
-    }
     deps += [
       "//third_party/expat",
       "//third_party/fontconfig",
@@ -698,6 +659,10 @@ source_set("skia_opts") {
   } else if (current_cpu == "mips64el") {
     cflags += [ "-fomit-frame-pointer" ]
     sources = skia_opts.none_sources
+  } else if (current_cpu == "ppc64") {
+    sources = skia_opts.none_sources
+  } else if (current_cpu == "s390x") {
+    sources = skia_opts.none_sources
   } else {
     assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
   }
@@ -725,6 +690,7 @@ test("skia_unittests") {
     "ext/platform_canvas_unittest.cc",
     "ext/recursive_gaussian_convolution_unittest.cc",
     "ext/skia_memory_dump_provider_unittest.cc",
+    "ext/skia_utils_base_unittest.cc",
     "ext/skia_utils_ios_unittest.mm",
     "ext/skia_utils_mac_unittest.mm",
   ]
@@ -736,6 +702,7 @@ test("skia_unittests") {
   deps = [
     ":skia",
     "//base",
+    "//base/test:test_support",
     "//mojo/edk/test:run_all_unittests",
     "//testing/gtest",
     "//ui/gfx",
@@ -750,12 +717,6 @@ test("skia_unittests") {
       "//mojo/public/cpp/bindings",
       "//skia/public/interfaces:test_interfaces",
     ]
-  }
-
-  if (is_linux) {
-    if (use_pango) {
-      configs += [ "//build/config/linux/pangocairo" ]
-    }
   }
 }
 

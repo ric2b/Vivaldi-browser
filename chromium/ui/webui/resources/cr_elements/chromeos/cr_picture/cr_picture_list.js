@@ -12,6 +12,8 @@
 Polymer({
   is: 'cr-picture-list',
 
+  behaviors: [CrPngBehavior],
+
   properties: {
     cameraPresent: Boolean,
 
@@ -227,10 +229,14 @@ Polymer({
     this.cameraSelected_ =
         selected.dataset.type == CrPicture.SelectionTypes.CAMERA;
     this.selectedItem = selected;
-    if (activate && selected.dataset.type == CrPicture.SelectionTypes.OLD)
-      this.fire('discard-image');
-    else if (activate || selected.dataset.type != CrPicture.SelectionTypes.FILE)
+
+    if (selected.dataset.type == CrPicture.SelectionTypes.CAMERA) {
+      if (activate)
+        this.fire('focus-action', selected);
+    } else if (
+        activate || selected.dataset.type != CrPicture.SelectionTypes.FILE) {
       this.fire('image-activate', selected);
+    }
   },
 
   /**
@@ -239,8 +245,8 @@ Polymer({
    */
   onIronActivate_: function(event) {
     var type = event.detail.item.dataset.type;
-    // When clicking on the 'old' (current) image, do not activate (discard) it.
-    var activate = type != CrPicture.SelectionTypes.OLD;
+    // Don't change focus when activating the camera via mouse.
+    var activate = type != CrPicture.SelectionTypes.CAMERA;
     this.selectImage_(event.detail.item, activate);
   },
 
@@ -263,6 +269,13 @@ Polymer({
     // Use first frame of animated user images.
     if (url.startsWith('chrome://theme'))
       return url + '[0]';
+
+    /**
+     * Extract first frame from image by creating a single frame PNG using
+     * url as input if base64 encoded and potentially animated.
+     */
+    if (url.split(',')[0] == 'data:image/png;base64')
+      return CrPngBehavior.convertImageSequenceToPng([url]);
 
     return url;
   },

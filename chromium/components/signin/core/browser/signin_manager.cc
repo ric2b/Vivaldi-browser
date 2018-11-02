@@ -15,10 +15,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_internals_util.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -32,8 +33,11 @@ using namespace signin_internals_util;
 SigninManager::SigninManager(SigninClient* client,
                              ProfileOAuth2TokenService* token_service,
                              AccountTrackerService* account_tracker_service,
-                             GaiaCookieManagerService* cookie_manager_service)
-    : SigninManagerBase(client, account_tracker_service),
+                             GaiaCookieManagerService* cookie_manager_service,
+                             SigninErrorController* signin_error_controller)
+    : SigninManagerBase(client,
+                        account_tracker_service,
+                        signin_error_controller),
       prohibit_signout_(false),
       type_(SIGNIN_TYPE_NONE),
       client_(client),
@@ -155,15 +159,38 @@ void SigninManager::HandleAuthError(const GoogleServiceAuthError& error) {
 void SigninManager::SignOut(
     signin_metrics::ProfileSignout signout_source_metric,
     signin_metrics::SignoutDelete signout_delete_metric) {
-  client_->PreSignOut(
-      base::Bind(&SigninManager::DoSignOut, base::Unretained(this),
-                 signout_source_metric, signout_delete_metric),
-      signout_source_metric);
+  StartSignOut(signout_source_metric, signout_delete_metric,
+               !signin::IsDiceEnabledForProfile(client_->GetPrefs()));
+}
+
+void SigninManager::SignOutAndRemoveAllAccounts(
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
+  StartSignOut(signout_source_metric, signout_delete_metric,
+               true /* remove_all_tokens */);
+}
+
+void SigninManager::SignOutAndKeepAllAccounts(
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
+  StartSignOut(signout_source_metric, signout_delete_metric,
+               false /* remove_all_tokens */);
+}
+
+void SigninManager::StartSignOut(
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric,
+    bool remove_all_accounts) {
+  client_->PreSignOut(base::Bind(&SigninManager::DoSignOut,
+                                 base::Unretained(this), signout_source_metric,
+                                 signout_delete_metric, remove_all_accounts),
+                      signout_source_metric);
 }
 
 void SigninManager::DoSignOut(
     signin_metrics::ProfileSignout signout_source_metric,
-    signin_metrics::SignoutDelete signout_delete_metric) {
+    signin_metrics::SignoutDelete signout_delete_metric,
+    bool remove_all_accounts) {
   DCHECK(IsInitialized());
 
   signin_metrics::LogSignout(signout_source_metric, signout_delete_metric);
@@ -195,7 +222,7 @@ void SigninManager::DoSignOut(
   const base::Time signin_time =
       base::Time::FromInternalValue(
           client_->GetPrefs()->GetInt64(prefs::kSignedInTime));
-  clear_authenticated_user();
+  ClearAuthenticatedAccountId();
   client_->GetPrefs()->ClearPref(prefs::kGoogleServicesHostedDomain);
   client_->GetPrefs()->ClearPref(prefs::kGoogleServicesAccountId);
   client_->GetPrefs()->ClearPref(prefs::kGoogleServicesUserAccountId);
@@ -212,9 +239,11 @@ void SigninManager::DoSignOut(
   // Revoke all tokens before sending signed_out notification, because there
   // may be components that don't listen for token service events when the
   // profile is not connected to an account.
-  LOG(WARNING) << "Revoking refresh token on server. Reason: sign out, "
-               << "IsSigninAllowed: " << IsSigninAllowed();
-  token_service_->RevokeAllCredentials();
+  if (remove_all_accounts) {
+    LOG(WARNING) << "Revoking all refresh tokens on server. Reason: sign out, "
+                 << "IsSigninAllowed: " << IsSigninAllowed();
+    token_service_->RevokeAllCredentials();
+  }
 
   for (auto& observer : observer_list_)
     observer.GoogleSignedOut(account_id, username);

@@ -6,11 +6,14 @@ cr.define('extensions', function() {
   const ItemList = Polymer({
     is: 'extensions-item-list',
 
-    behaviors: [Polymer.IronResizableBehavior],
+    behaviors: [CrContainerShadowBehavior, I18nBehavior],
 
     properties: {
-      /** @type {Array<!chrome.developerPrivate.ExtensionInfo>} */
-      items: Array,
+      /** @type {!Array<!chrome.developerPrivate.ExtensionInfo>} */
+      apps: Array,
+
+      /** @type {!Array<!chrome.developerPrivate.ExtensionInfo>} */
+      extensions: Array,
 
       /** @type {extensions.ItemDelegate} */
       delegate: Object,
@@ -20,56 +23,92 @@ cr.define('extensions', function() {
         value: false,
       },
 
-      filter: String,
+      isGuest: Boolean,
 
-      /** @private {Array<!chrome.developerPrivate.ExtensionInfo>} */
-      shownItems_: {
-        type: Array,
-        computed: 'computeShownItems_(items.*, filter)',
-      }
-    },
+      filter: {
+        type: String,
+      },
 
-    listeners: {
-      'list.extension-item-size-changed': 'itemSizeChanged_',
-      'view-enter-start': 'onViewEnterStart_',
+      /** @private */
+      computedFilter_: {
+        type: String,
+        computed: 'computeFilter_(filter)',
+        observer: 'announceSearchResults_',
+      },
+
+      /** @private */
+      shownExtensionsCount_: {
+        type: Number,
+        value: 0,
+      },
+
+      /** @private */
+      shownAppsCount_: {
+        type: Number,
+        value: 0,
+      },
     },
 
     /**
-     * Updates the size for a given item.
-     * @param {CustomEvent} e
-     * @private
-     * @suppress {checkTypes} Closure doesn't know $.list is an IronList.
+     * @param {string} id
+     * @return {?Element}
      */
-    itemSizeChanged_: function(e) {
-      this.$.list.updateSizeForItem(e.detail.item);
-      this.fire('resize');
+    getDetailsButton: function(id) {
+      return this.$$(`#${id} /deep/ #details-button`);
     },
 
     /**
-     * Computes the list of items to be shown.
-     * @param {Object} changeRecord The changeRecord for |items|.
-     * @param {string} filter The updated filter string.
-     * @return {Array<!chrome.developerPrivate.ExtensionInfo>}
+     * @param {string} id
+     * @return {?Element}
+     */
+    getErrorsButton: function(id) {
+      return this.$$(`#${id} /deep/ #errors-button`);
+    },
+
+    /**
+     * Computes the filter function to be used for determining which items
+     * should be shown. A |null| value indicates that everything should be
+     * shown.
+     * return {?Function}
      * @private
      */
-    computeShownItems_: function(changeRecord, filter) {
-      return this.items.filter(function(item) {
-        return item.name.toLowerCase().includes(this.filter.toLowerCase());
-      }, this);
-    },
-
-    shouldShowEmptyItemsMessage_: function() {
-      return this.items.length === 0;
-    },
-
-    shouldShowEmptySearchMessage_: function() {
-      return !this.shouldShowEmptyItemsMessage_() &&
-          this.shownItems_.length === 0;
+    computeFilter_: function() {
+      const formattedFilter = this.filter.trim().toLowerCase();
+      return formattedFilter ?
+          i => i.name.toLowerCase().includes(formattedFilter) :
+          null;
     },
 
     /** @private */
-    onViewEnterStart_: function() {
-      this.fire('resize');  // This is needed to correctly render iron-list.
+    shouldShowEmptyItemsMessage_: function() {
+      return !this.isGuest && this.apps.length === 0 &&
+          this.extensions.length === 0;
+    },
+
+    /** @private */
+    shouldShowEmptySearchMessage_: function() {
+      return !this.isGuest && !this.shouldShowEmptyItemsMessage_() &&
+          this.shownAppsCount_ === 0 && this.shownExtensionsCount_ === 0;
+    },
+
+    /** @private */
+    onNoExtensionsTap_: function(e) {
+      if (e.target.tagName == 'A')
+        chrome.metricsPrivate.recordUserAction('Options_GetMoreExtensions');
+    },
+
+    /** @private */
+    announceSearchResults_: function() {
+      if (this.computedFilter_) {
+        Polymer.IronA11yAnnouncer.requestAvailability();
+        this.async(() => {  // Async to allow list to update.
+          this.fire('iron-announce', {
+            text: this.shouldShowEmptySearchMessage_() ?
+                this.i18n('noSearchResults') :
+                this.i18n('searchResults', this.filter),
+          });
+        });
+      }
     },
   });
 

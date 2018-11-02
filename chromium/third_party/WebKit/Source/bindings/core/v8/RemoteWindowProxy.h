@@ -31,10 +31,10 @@
 #ifndef RemoteWindowProxy_h
 #define RemoteWindowProxy_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/frame/RemoteFrame.h"
 #include "platform/bindings/DOMWrapperWorld.h"
-#include "platform/wtf/RefPtr.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -47,12 +47,12 @@ class RemoteWindowProxy final : public WindowProxy {
  public:
   static RemoteWindowProxy* Create(v8::Isolate* isolate,
                                    RemoteFrame& frame,
-                                   RefPtr<DOMWrapperWorld> world) {
+                                   scoped_refptr<DOMWrapperWorld> world) {
     return new RemoteWindowProxy(isolate, frame, std::move(world));
   }
 
  private:
-  RemoteWindowProxy(v8::Isolate*, RemoteFrame&, RefPtr<DOMWrapperWorld>);
+  RemoteWindowProxy(v8::Isolate*, RemoteFrame&, scoped_refptr<DOMWrapperWorld>);
 
   void Initialize() override;
   void DisposeContext(Lifecycle next_status, FrameReuseStatus) override;

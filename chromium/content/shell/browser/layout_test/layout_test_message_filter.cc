@@ -92,7 +92,7 @@ bool LayoutTestMessageFilter::OnMessageReceived(const IPC::Message& message) {
 
 void LayoutTestMessageFilter::OnReadFileToString(
     const base::FilePath& local_file, std::string* contents) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ReadFileToString(local_file, contents);
 }
 
@@ -103,7 +103,7 @@ void LayoutTestMessageFilter::OnRegisterIsolatedFileSystem(
   ChildProcessSecurityPolicy* policy =
       ChildProcessSecurityPolicy::GetInstance();
   for (size_t i = 0; i < absolute_filenames.size(); ++i) {
-    files.AddPath(absolute_filenames[i], NULL);
+    files.AddPath(absolute_filenames[i], nullptr);
     if (!policy->CanReadFile(render_process_id_, absolute_filenames[i]))
       policy->GrantReadFile(render_process_id_, absolute_filenames[i]);
   }
@@ -133,8 +133,8 @@ void LayoutTestMessageFilter::OnSetDatabaseQuota(int quota) {
 
 void LayoutTestMessageFilter::OnSimulateWebNotificationClick(
     const std::string& title,
-    int action_index,
-    const base::NullableString16& reply) {
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   LayoutTestNotificationManager* manager =
       LayoutTestContentBrowserClient::Get()->GetLayoutTestNotificationManager();
@@ -156,8 +156,10 @@ void LayoutTestMessageFilter::OnBlockThirdPartyCookies(bool block) {
 }
 
 void LayoutTestMessageFilter::OnDeleteAllCookies() {
-  request_context_getter_->GetURLRequestContext()->cookie_store()
-      ->DeleteAllAsync(net::CookieStore::DeleteCallback());
+  net::URLRequestContext* context =
+      request_context_getter_->GetURLRequestContext();
+  if (context)
+    context->cookie_store()->DeleteAllAsync(net::CookieStore::DeleteCallback());
 }
 
 void LayoutTestMessageFilter::OnSetPermission(
@@ -172,9 +174,7 @@ void LayoutTestMessageFilter::OnSetPermission(
     type = PermissionType::MIDI;
   } else if (name == "midi-sysex") {
     type = PermissionType::MIDI_SYSEX;
-  } else if (name == "push-messaging") {
-    type = PermissionType::PUSH_MESSAGING;
-  } else if (name == "notifications") {
+  } else if (name == "push-messaging" || name == "notifications") {
     type = PermissionType::NOTIFICATIONS;
   } else if (name == "geolocation") {
     type = PermissionType::GEOLOCATION;

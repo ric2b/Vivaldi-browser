@@ -13,17 +13,7 @@ namespace subresource_filter {
 PageLoadStatistics::PageLoadStatistics(const ActivationState& state)
     : activation_state_(state) {}
 
-PageLoadStatistics::~PageLoadStatistics() {
-  // This object is only created for pages which are activated. So, it makes
-  // sense to log blocked popups unconditionally here.
-  //
-  // We *could* restrict this for page loads with configurations allowing the
-  // strong popup blocker, but it doesn't make a big difference. Logging it
-  // always could always show us if the feature is breaking (and triggering when
-  // it shouldn't be).
-  UMA_HISTOGRAM_COUNTS_100("SubresourceFilter.PageLoad.BlockedPopups",
-                           num_popups_blocked_);
-}
+PageLoadStatistics::~PageLoadStatistics() {}
 
 void PageLoadStatistics::OnDocumentLoadStatistics(
     const DocumentLoadStatistics& statistics) {
@@ -42,8 +32,6 @@ void PageLoadStatistics::OnDocumentLoadStatistics(
       statistics.evaluation_total_cpu_duration;
 }
 
-// Do not log popup metrics here, since popups are usually not blocked during
-// the load of the page, but during interaction.
 void PageLoadStatistics::OnDidFinishLoad() {
   if (activation_state_.activation_level != ActivationLevel::DISABLED) {
     UMA_HISTOGRAM_COUNTS_1000(
@@ -78,10 +66,6 @@ void PageLoadStatistics::OnDidFinishLoad() {
     DCHECK(aggregated_document_statistics_.evaluation_total_cpu_duration
                .is_zero());
   }
-}
-
-void PageLoadStatistics::OnBlockedPopup() {
-  num_popups_blocked_++;
 }
 
 }  // namespace subresource_filter

@@ -38,7 +38,6 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 #include "url/gurl.h"
 
 using bookmarks::BookmarkExpandedStateTracker;
@@ -72,6 +71,8 @@ BookmarkEditorView::BookmarkEditorView(
   DCHECK(profile);
   DCHECK(bb_model_);
   DCHECK(bb_model_->client()->CanBeEditedByUser(parent));
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::CONTROL, views::CONTROL));
   Init();
   chrome::RecordDialogCreation(chrome::DialogIdentifier::BOOKMARK_EDITOR);
 }
@@ -335,7 +336,7 @@ void BookmarkEditorView::Init() {
     new_folder_button_->SetEnabled(false);
   }
 
-  GridLayout* layout = GridLayout::CreatePanel(this);
+  GridLayout* layout = GridLayout::CreateAndInstall(this);
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   const int labels_column_set_id = 0;
@@ -450,7 +451,7 @@ void BookmarkEditorView::UserInputChanged() {
     else
       url_tf_->UseDefaultBackgroundColor();
   }
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void BookmarkEditorView::NewFolder() {

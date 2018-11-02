@@ -53,8 +53,8 @@ class WaitForFileStream {
   }
 
   void Release() {
-    file_stream_.reset(NULL);
-    deletable_file_ = NULL;
+    file_stream_.reset(nullptr);
+    deletable_file_ = nullptr;
   }
  private:
   base::RunLoop loop_;
@@ -112,7 +112,7 @@ TEST(TemporaryFileStreamTest, Basic) {
 
   // Release everything. The file should be gone now.
   file_stream_waiter.Release();
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // The temporary should be gone now.
   EXPECT_FALSE(base::PathExists(file_path));

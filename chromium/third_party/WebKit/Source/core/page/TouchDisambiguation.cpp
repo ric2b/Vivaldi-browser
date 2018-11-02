@@ -32,7 +32,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
@@ -137,8 +136,8 @@ void FindGoodTouchTargets(const IntRect& touch_box_in_root_frame,
     for (Node& node : NodeTraversal::InclusiveAncestorsOf(*hit_result)) {
       if (black_list.Contains(&node))
         continue;
-      if (node.IsDocumentNode() || isHTMLHtmlElement(node) ||
-          isHTMLBodyElement(node))
+      if (node.IsDocumentNode() || IsHTMLHtmlElement(node) ||
+          IsHTMLBodyElement(node))
         break;
       if (node.WillRespondToMouseClickEvents()) {
         TouchTargetData& target_data =

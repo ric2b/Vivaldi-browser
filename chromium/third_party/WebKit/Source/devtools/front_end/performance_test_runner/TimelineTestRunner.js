@@ -14,16 +14,13 @@ PerformanceTestRunner.timelinePropertyFormatters = {
   startTime: 'formatAsTypeName',
   stackTrace: 'formatAsTypeName',
   url: 'formatAsURL',
+  fileName: 'formatAsURL',
   scriptName: 'formatAsTypeName',
   scriptId: 'formatAsTypeName',
   usedHeapSizeDelta: 'skip',
-  mimeType: 'formatAsTypeName',
   id: 'formatAsTypeName',
   timerId: 'formatAsTypeName',
-  scriptLine: 'formatAsTypeName',
   layerId: 'formatAsTypeName',
-  lineNumber: 'formatAsTypeName',
-  columnNumber: 'formatAsTypeName',
   frameId: 'formatAsTypeName',
   frame: 'formatAsTypeName',
   page: 'formatAsTypeName',
@@ -39,7 +36,10 @@ PerformanceTestRunner.timelinePropertyFormatters = {
   allottedMilliseconds: 'formatAsTypeName',
   timedOut: 'formatAsTypeName',
   networkTime: 'formatAsTypeName',
-  timing: 'formatAsTypeName'
+  timing: 'formatAsTypeName',
+  streamed: 'formatAsTypeName',
+  producedCacheSize: 'formatAsTypeName',
+  consumedCacheSize: 'formatAsTypeName'
 };
 
 PerformanceTestRunner.InvalidationFormatters = {
@@ -149,11 +149,8 @@ PerformanceTestRunner.stopTimeline = function(callback) {
 PerformanceTestRunner.evaluateWithTimeline = function(actions, doneCallback) {
   PerformanceTestRunner.startTimeline(step1);
 
-  function step1() {
-    TestRunner.evaluateInPage(actions, step2);
-  }
-
-  function step2() {
+  async function step1() {
+    await TestRunner.evaluateInPageAnonymously(actions);
     PerformanceTestRunner.stopTimeline(doneCallback);
   }
 };
@@ -186,14 +183,14 @@ PerformanceTestRunner.performActionsAndPrint = function(actions, typeName, inclu
 };
 
 PerformanceTestRunner.printTimelineRecords = function(name) {
-  for (let event of PerformanceTestRunner.timelineModel().mainThreadEvents()) {
+  for (let event of PerformanceTestRunner.timelineModel().inspectedTargetEvents()) {
     if (event.name === name)
       PerformanceTestRunner.printTraceEventProperties(event);
   }
 };
 
 PerformanceTestRunner.printTimelineRecordsWithDetails = function(name) {
-  for (let event of PerformanceTestRunner.timelineModel().mainThreadEvents()) {
+  for (let event of PerformanceTestRunner.timelineModel().inspectedTargetEvents()) {
     if (name === event.name)
       PerformanceTestRunner.printTraceEventPropertiesWithDetails(event);
   }
@@ -372,38 +369,36 @@ PerformanceTestRunner.loadTimeline = function(timelineData) {
   return promise;
 };
 
-TestRunner.initAsync(async function() {
-  await TestRunner.evaluateInPagePromise(`
-    function wrapCallFunctionForTimeline(f) {
-      var script = document.createElement('script');
-      script.textContent = '(' + f.toString() + ')()\n//# sourceURL=wrapCallFunctionForTimeline.js';
-      document.body.appendChild(script);
+TestRunner.deprecatedInitAsync(`
+  function wrapCallFunctionForTimeline(f) {
+    var script = document.createElement('script');
+    script.textContent = '(' + f.toString() + ')()\\n//# sourceURL=wrapCallFunctionForTimeline.js';
+    document.body.appendChild(script);
+  }
+
+  function generateFrames(count) {
+    var promise = Promise.resolve();
+
+    for (let i = count; i > 0; --i)
+      promise = promise.then(changeBackgroundAndWaitForFrame.bind(null, i));
+
+    return promise;
+
+    function changeBackgroundAndWaitForFrame(i) {
+      document.body.style.backgroundColor = (i & 1 ? 'rgb(200, 200, 200)' : 'rgb(240, 240, 240)');
+      return waitForFrame();
     }
+  }
 
-    function generateFrames(count) {
-      var promise = Promise.resolve();
+  function waitForFrame() {
+    var callback;
+    var promise = new Promise(fulfill => callback = fulfill);
 
-      for (let i = count; i > 0; --i)
-        promise = promise.then(changeBackgroundAndWaitForFrame.bind(null, i));
+    if (window.testRunner)
+      testRunner.capturePixelsAsyncThen(() => window.requestAnimationFrame(callback));
+    else
+      window.requestAnimationFrame(callback);
 
-      return promise;
-
-      function changeBackgroundAndWaitForFrame(i) {
-        document.body.style.backgroundColor = (i & 1 ? 'rgb(200, 200, 200)' : 'rgb(240, 240, 240)');
-        return waitForFrame();
-      }
-    }
-
-    function waitForFrame() {
-      var callback;
-      var promise = new Promise(fulfill => callback = fulfill);
-
-      if (window.testRunner)
-        testRunner.capturePixelsAsyncThen(() => window.requestAnimationFrame(callback));
-      else
-        window.requestAnimationFrame(callback);
-
-      return promise;
-    }
-  `);
-});
+    return promise;
+  }
+`);

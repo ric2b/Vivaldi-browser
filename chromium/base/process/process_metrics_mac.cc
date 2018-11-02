@@ -19,7 +19,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
-#include "base/sys_info.h"
 
 namespace base {
 
@@ -103,6 +102,18 @@ MachVMRegionResult ParseOutputFromMachVMRegion(kern_return_t kr) {
     return MachVMRegionResult::Error;
   }
   return MachVMRegionResult::Success;
+}
+
+bool GetPowerInfo(mach_port_t task, task_power_info* power_info_data) {
+  if (task == MACH_PORT_NULL)
+    return false;
+
+  mach_msg_type_number_t power_info_count = TASK_POWER_INFO_COUNT;
+  kern_return_t kr = task_info(task, TASK_POWER_INFO,
+                               reinterpret_cast<task_info_t>(power_info_data),
+                               &power_info_count);
+  // Most likely cause for failure: |task| is a zombie.
+  return kr == KERN_SUCCESS;
 }
 
 }  // namespace
@@ -309,7 +320,7 @@ ProcessMetrics::TaskVMInfo ProcessMetrics::GetTaskVMInfo() const {
   (r)->tv_usec = (a)->microseconds;       \
 } while (0)
 
-double ProcessMetrics::GetCPUUsage() {
+double ProcessMetrics::GetPlatformIndependentCPUUsage() {
   mach_port_t task = TaskForPid(process_);
   if (task == MACH_PORT_NULL)
     return 0;
@@ -366,22 +377,11 @@ double ProcessMetrics::GetCPUUsage() {
   return static_cast<double>(system_time_delta * 100.0) / time_delta;
 }
 
-int ProcessMetrics::GetIdleWakeupsPerSecond() {
+int ProcessMetrics::GetPackageIdleWakeupsPerSecond() {
   mach_port_t task = TaskForPid(process_);
-  if (task == MACH_PORT_NULL)
-    return 0;
-
   task_power_info power_info_data;
-  mach_msg_type_number_t power_info_count = TASK_POWER_INFO_COUNT;
-  kern_return_t kr = task_info(task,
-                               TASK_POWER_INFO,
-                               reinterpret_cast<task_info_t>(&power_info_data),
-                               &power_info_count);
-  if (kr != KERN_SUCCESS) {
-    // Most likely cause: |task| is a zombie, or this is on a pre-10.8.4 system
-    // where TASK_POWER_INFO isn't supported yet.
-    return 0;
-  }
+
+  GetPowerInfo(task, &power_info_data);
 
   // The task_power_info struct contains two wakeup counters:
   // task_interrupt_wakeups and task_platform_idle_wakeups.
@@ -393,8 +393,17 @@ int ProcessMetrics::GetIdleWakeupsPerSecond() {
   // in a greater power increase than the other interrupts which occur while the
   // CPU is already working, and reducing them has a greater overall impact on
   // power usage. See the powermetrics man page for more info.
-  return CalculateIdleWakeupsPerSecond(
+  return CalculatePackageIdleWakeupsPerSecond(
       power_info_data.task_platform_idle_wakeups);
+}
+
+int ProcessMetrics::GetIdleWakeupsPerSecond() {
+  mach_port_t task = TaskForPid(process_);
+  task_power_info power_info_data;
+
+  GetPowerInfo(task, &power_info_data);
+
+  return CalculateIdleWakeupsPerSecond(power_info_data.task_interrupt_wakeups);
 }
 
 bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
@@ -406,9 +415,8 @@ ProcessMetrics::ProcessMetrics(ProcessHandle process,
     : process_(process),
       last_system_time_(0),
       last_absolute_idle_wakeups_(0),
-      port_provider_(port_provider) {
-  processor_count_ = SysInfo::NumberOfProcessors();
-}
+      last_absolute_package_idle_wakeups_(0),
+      port_provider_(port_provider) {}
 
 mach_port_t ProcessMetrics::TaskForPid(ProcessHandle process) const {
   mach_port_t task = MACH_PORT_NULL;

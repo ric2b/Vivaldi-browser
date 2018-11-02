@@ -49,7 +49,6 @@
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/browser/safe_browsing/v4_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -60,16 +59,16 @@
 #include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safebrowsing_switches.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/metadata.pb.h"
-#include "components/safe_browsing_db/notification_types.h"
-#include "components/safe_browsing_db/test_database_manager.h"
-#include "components/safe_browsing_db/util.h"
-#include "components/safe_browsing_db/v4_database.h"
-#include "components/safe_browsing_db/v4_feature_list.h"
-#include "components/safe_browsing_db/v4_get_hash_protocol_manager.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/metadata.pb.h"
+#include "components/safe_browsing/db/notification_types.h"
+#include "components/safe_browsing/db/test_database_manager.h"
+#include "components/safe_browsing/db/util.h"
+#include "components/safe_browsing/db/v4_database.h"
+#include "components/safe_browsing/db/v4_feature_list.h"
+#include "components/safe_browsing/db/v4_get_hash_protocol_manager.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/v4_test_util.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -77,7 +76,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "crypto/sha2.h"
-#include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -109,9 +107,11 @@ namespace safe_browsing {
 
 namespace {
 
+#if defined(GOOGLE_CHROME_BUILD) || defined(ENABLE_FLAKY_PVER3_TESTS)
 const char kBlacklistResource[] = "/blacklisted/script.js";
-const char kEmptyPage[] = "/empty.html";
 const char kMaliciousResource[] = "/malware/script.js";
+#endif  // defined(GOOGLE_CHROME_BUILD) || defined(ENABLE_FLAKY_PVER3_TESTS)
+const char kEmptyPage[] = "/empty.html";
 const char kMalwareFile[] = "/downloads/dangerous/dangerous.exe";
 const char kMalwarePage[] = "/safe_browsing/malware.html";
 const char kMalwareDelayedLoadsPage[] =
@@ -323,9 +323,6 @@ class TestSafeBrowsingDatabase : public SafeBrowsingDatabase {
     return true;
   }
   bool ContainsDownloadWhitelistedUrl(const GURL& url) override { return true; }
-  bool ContainsModuleWhitelistedString(const std::string& str) override {
-    return true;
-  }
   bool ContainsExtensionPrefixes(const std::vector<SBPrefix>& prefixes,
                                  std::vector<SBPrefix>* prefix_hits) override {
     return false;
@@ -360,8 +357,6 @@ class TestSafeBrowsingDatabase : public SafeBrowsingDatabase {
                         const base::TimeDelta& cache_lifetime) override {
     // Do nothing for the cache.
   }
-  bool IsMalwareIPMatchKillSwitchOn() override { return false; }
-  bool IsCsdWhitelistKillSwitchOn() override { return false; }
 
   // Fill up the database with test URL.
   void AddUrl(const GURL& url,
@@ -453,8 +448,7 @@ class TestSafeBrowsingDatabaseFactory : public SafeBrowsingDatabaseFactory {
       bool enable_download_whitelist,
       bool enable_extension_blacklist,
       bool enable_ip_blacklist,
-      bool enabled_unwanted_software_list,
-      bool enable_module_whitelist) override {
+      bool enabled_unwanted_software_list) override {
     db_ = new TestSafeBrowsingDatabase();
     return base::WrapUnique(db_);
   }
@@ -620,10 +614,6 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Makes sure the auto update is not triggered during the test.
-    // This test will fill up the database using testing prefixes
-    // and urls.
-    command_line->AppendSwitch(safe_browsing::switches::kSbDisableAutoUpdate);
 #if defined(OS_CHROMEOS)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
@@ -762,6 +752,7 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingServiceTest);
 };
 
+#if defined(ENABLE_FLAKY_PVER3_TESTS)
 class SafeBrowsingServiceMetadataTest
     : public SafeBrowsingServiceTest,
       public ::testing::WithParamInterface<ThreatPatternType> {
@@ -1176,6 +1167,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, SubResourceHitOnFreshTab) {
   content::WaitForInterstitialDetach(new_tab_contents);
   EXPECT_FALSE(ShowingInterstitialPage());
 }
+#endif  // defined(ENABLE_FLAKY_PVER3_TESTS)
 
 namespace {
 
@@ -1292,6 +1284,7 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
 
 }  // namespace
 
+#if defined(ENABLE_FLAKY_PVER3_TESTS)
 // These tests use SafeBrowsingService::Client to directly interact with
 // SafeBrowsingService.
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, CheckDownloadUrl) {
@@ -1514,7 +1507,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, StartAndStop) {
   EXPECT_TRUE(csd_service->enabled());
 
   // Add a new Profile. SBS should keep running.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_TRUE(temp_profile_dir_.CreateUniqueTempDir());
   std::unique_ptr<Profile> profile2(Profile::CreateProfile(
       temp_profile_dir_.GetPath(), nullptr, Profile::CREATE_MODE_SYNCHRONOUS));
@@ -1659,6 +1652,7 @@ INSTANTIATE_TEST_CASE_P(
     /* no prefix */,
     SafeBrowsingServiceWebSocketSafeTest,
     ::testing::Values("window", "worker", "shared-worker", "service-worker"));
+#endif  // defined(ENABLE_FLAKY_PVER3_TESTS)
 
 class SafeBrowsingServiceShutdownTest : public SafeBrowsingServiceTest {
  public:
@@ -1708,7 +1702,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceShutdownTest,
   // the profile will get destroyed in the normal browser shutdown process.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(temp_profile_dir_.CreateUniqueTempDir());
   }
   profile_manager->CreateProfileAsync(
@@ -1925,8 +1919,10 @@ class V4SafeBrowsingServiceTest : public SafeBrowsingServiceTest {
   void MarkUrlForListIdUnexpired(const GURL& bad_url,
                                  const ListIdentifier& list_id,
                                  ThreatPatternType threat_pattern_type) {
+    ThreatMetadata metadata;
+    metadata.threat_pattern_type = threat_pattern_type;
     FullHashInfo full_hash_info =
-        GetFullHashInfoWithMetadata(bad_url, list_id, threat_pattern_type);
+        GetFullHashInfoWithMetadata(bad_url, list_id, metadata);
     v4_db_factory_->MarkPrefixAsBad(list_id, full_hash_info.full_hash);
     v4_get_hash_factory_->AddToFullHashCache(full_hash_info);
   }

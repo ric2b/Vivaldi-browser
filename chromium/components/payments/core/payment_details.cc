@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 
 namespace payments {
@@ -15,9 +14,12 @@ namespace {
 
 // These are defined as part of the spec at:
 // https://w3c.github.io/payment-request/#payment-details-dictionaries
-static const char kPaymentDetailsId[] = "id";
+static const char kPaymentDetailsAdditionalDisplayItems[] =
+    "additionalDisplayItems";
 static const char kPaymentDetailsDisplayItems[] = "displayItems";
 static const char kPaymentDetailsError[] = "error";
+static const char kPaymentDetailsId[] = "id";
+static const char kPaymentDetailsModifiers[] = "modifiers";
 static const char kPaymentDetailsShippingOptions[] = "shippingOptions";
 static const char kPaymentDetailsTotal[] = "total";
 
@@ -31,25 +33,24 @@ PaymentDetails::PaymentDetails(const PaymentDetails& other) {
 }
 
 PaymentDetails& PaymentDetails::operator=(const PaymentDetails& other) {
-  this->id = other.id;
+  id = other.id;
   if (other.total)
-    this->total = base::MakeUnique<PaymentItem>(*other.total);
+    total = std::make_unique<PaymentItem>(*other.total);
   else
-    this->total.reset(nullptr);
-  this->display_items = std::vector<PaymentItem>(other.display_items);
-  this->shipping_options =
-      std::vector<PaymentShippingOption>(other.shipping_options);
-  this->modifiers = std::vector<PaymentDetailsModifier>(other.modifiers);
+    total.reset(nullptr);
+  display_items = std::vector<PaymentItem>(other.display_items);
+  shipping_options = std::vector<PaymentShippingOption>(other.shipping_options);
+  modifiers = std::vector<PaymentDetailsModifier>(other.modifiers);
   return *this;
 }
 
 bool PaymentDetails::operator==(const PaymentDetails& other) const {
-  return this->id == other.id &&
-         ((!this->total && !other.total) ||
-          (this->total && other.total && *this->total == *other.total)) &&
-         this->display_items == other.display_items &&
-         this->shipping_options == other.shipping_options &&
-         this->modifiers == other.modifiers && this->error == other.error;
+  return id == other.id &&
+         ((!total && !other.total) ||
+          (total && other.total && *total == *other.total)) &&
+         display_items == other.display_items &&
+         shipping_options == other.shipping_options &&
+         modifiers == other.modifiers && error == other.error;
 }
 
 bool PaymentDetails::operator!=(const PaymentDetails& other) const {
@@ -58,12 +59,12 @@ bool PaymentDetails::operator!=(const PaymentDetails& other) const {
 
 bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value,
                                          bool requires_total) {
-  this->display_items.clear();
-  this->shipping_options.clear();
-  this->modifiers.clear();
+  display_items.clear();
+  shipping_options.clear();
+  modifiers.clear();
 
   // ID is optional.
-  value.GetString(kPaymentDetailsId, &this->id);
+  value.GetString(kPaymentDetailsId, &id);
 
   const base::DictionaryValue* total_dict = nullptr;
   if (!value.GetDictionary(kPaymentDetailsTotal, &total_dict) &&
@@ -71,15 +72,15 @@ bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value,
     return false;
   }
   if (total_dict) {
-    this->total = base::MakeUnique<PaymentItem>();
-    if (!this->total->FromDictionaryValue(*total_dict))
+    total = std::make_unique<PaymentItem>();
+    if (!total->FromDictionaryValue(*total_dict))
       return false;
   }
 
   const base::ListValue* display_items_list = nullptr;
   if (value.GetList(kPaymentDetailsDisplayItems, &display_items_list)) {
     for (size_t i = 0; i < display_items_list->GetSize(); ++i) {
-      const base::DictionaryValue* payment_item_dict;
+      const base::DictionaryValue* payment_item_dict = nullptr;
       if (!display_items_list->GetDictionary(i, &payment_item_dict)) {
         return false;
       }
@@ -87,14 +88,14 @@ bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value,
       if (!payment_item.FromDictionaryValue(*payment_item_dict)) {
         return false;
       }
-      this->display_items.push_back(payment_item);
+      display_items.push_back(payment_item);
     }
   }
 
   const base::ListValue* shipping_options_list = nullptr;
   if (value.GetList(kPaymentDetailsShippingOptions, &shipping_options_list)) {
     for (size_t i = 0; i < shipping_options_list->GetSize(); ++i) {
-      const base::DictionaryValue* shipping_option_dict;
+      const base::DictionaryValue* shipping_option_dict = nullptr;
       if (!shipping_options_list->GetDictionary(i, &shipping_option_dict)) {
         return false;
       }
@@ -102,12 +103,47 @@ bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value,
       if (!shipping_option.FromDictionaryValue(*shipping_option_dict)) {
         return false;
       }
-      this->shipping_options.push_back(shipping_option);
+      shipping_options.push_back(shipping_option);
+    }
+  }
+
+  const base::ListValue* modifiers_list = nullptr;
+  if (value.GetList(kPaymentDetailsModifiers, &modifiers_list)) {
+    for (size_t i = 0; i < modifiers_list->GetSize(); ++i) {
+      PaymentDetailsModifier modifier;
+      const base::DictionaryValue* modifier_dict = nullptr;
+      if (!modifiers_list->GetDictionary(i, &modifier_dict) ||
+          !modifier.method_data.FromDictionaryValue(*modifier_dict)) {
+        return false;
+      }
+      const base::DictionaryValue* modifier_total_dict = nullptr;
+      if (modifier_dict->GetDictionary(kPaymentDetailsTotal,
+                                       &modifier_total_dict)) {
+        modifier.total = std::make_unique<PaymentItem>();
+        if (!modifier.total->FromDictionaryValue(*modifier_total_dict))
+          return false;
+      }
+      const base::ListValue* additional_display_items_list = nullptr;
+      if (modifier_dict->GetList(kPaymentDetailsAdditionalDisplayItems,
+                                 &additional_display_items_list)) {
+        for (size_t j = 0; j < additional_display_items_list->GetSize(); ++j) {
+          const base::DictionaryValue* additional_display_item_dict = nullptr;
+          PaymentItem additional_display_item;
+          if (!additional_display_items_list->GetDictionary(
+                  i, &additional_display_item_dict) ||
+              !additional_display_item.FromDictionaryValue(
+                  *additional_display_item_dict)) {
+            return false;
+          }
+          modifier.additional_display_items.push_back(additional_display_item);
+        }
+      }
+      modifiers.push_back(modifier);
     }
   }
 
   // Error is optional.
-  value.GetString(kPaymentDetailsError, &this->error);
+  value.GetString(kPaymentDetailsError, &error);
 
   return true;
 }

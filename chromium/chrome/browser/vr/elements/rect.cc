@@ -13,6 +13,11 @@ namespace vr {
 Rect::Rect() {}
 Rect::~Rect() {}
 
+void Rect::SetColor(SkColor color) {
+  SetCenterColor(color);
+  SetEdgeColor(color);
+}
+
 void Rect::SetCenterColor(SkColor color) {
   animation_player().TransitionColorTo(last_frame_time(), BACKGROUND_COLOR,
                                        center_color_, color);
@@ -20,7 +25,7 @@ void Rect::SetCenterColor(SkColor color) {
 
 void Rect::SetEdgeColor(SkColor color) {
   animation_player().TransitionColorTo(last_frame_time(), FOREGROUND_COLOR,
-                                       center_color_, color);
+                                       edge_color_, color);
 }
 
 void Rect::NotifyClientColorAnimated(SkColor color,
@@ -35,10 +40,10 @@ void Rect::NotifyClientColorAnimated(SkColor color,
   }
 }
 
-void Rect::Render(UiElementRenderer* renderer,
-                  const gfx::Transform& view_proj_matrix) const {
-  renderer->DrawGradientQuad(view_proj_matrix, edge_color_, center_color_,
-                             opacity(), size(), corner_radius());
+void Rect::Render(UiElementRenderer* renderer, const CameraModel& model) const {
+  renderer->DrawGradientQuad(model.view_proj_matrix * world_space_transform(),
+                             edge_color_, center_color_, computed_opacity(),
+                             size(), corner_radius());
 }
 
 }  // namespace vr

@@ -10,8 +10,10 @@
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
+#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -96,6 +98,10 @@ class PermissionManagerTest : public ChromeRenderViewHostTestHarness {
     return other_url_;
   }
 
+  GURL google_base_url() const {
+    return GURL(UIThreadSearchTermsData(profile_.get()).GoogleBaseURLValue());
+  }
+
   bool callback_called() const {
     return callback_called_;
   }
@@ -142,7 +148,6 @@ class PermissionManagerTest : public ChromeRenderViewHostTestHarness {
 
 TEST_F(PermissionManagerTest, GetPermissionStatusDefault) {
   CheckPermissionStatus(PermissionType::MIDI_SYSEX, PermissionStatus::ASK);
-  CheckPermissionStatus(PermissionType::PUSH_MESSAGING, PermissionStatus::ASK);
   CheckPermissionStatus(PermissionType::NOTIFICATIONS, PermissionStatus::ASK);
   CheckPermissionStatus(PermissionType::GEOLOCATION, PermissionStatus::ASK);
 #if defined(OS_ANDROID)
@@ -158,8 +163,6 @@ TEST_F(PermissionManagerTest, GetPermissionStatusAfterSet) {
   SetPermission(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
   CheckPermissionStatus(PermissionType::NOTIFICATIONS,
                         PermissionStatus::GRANTED);
-  CheckPermissionStatus(PermissionType::PUSH_MESSAGING,
-                        PermissionStatus::GRANTED);
 
   SetPermission(CONTENT_SETTINGS_TYPE_MIDI_SYSEX, CONTENT_SETTING_ALLOW);
   CheckPermissionStatus(PermissionType::MIDI_SYSEX, PermissionStatus::GRANTED);
@@ -174,9 +177,6 @@ TEST_F(PermissionManagerTest, GetPermissionStatusAfterSet) {
 
 TEST_F(PermissionManagerTest, CheckPermissionResultDefault) {
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_MIDI_SYSEX, CONTENT_SETTING_ASK,
-                        PermissionStatusSource::UNSPECIFIED);
-  CheckPermissionResult(CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
-                        CONTENT_SETTING_ASK,
                         PermissionStatusSource::UNSPECIFIED);
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
                         CONTENT_SETTING_ASK,
@@ -198,9 +198,6 @@ TEST_F(PermissionManagerTest, CheckPermissionResultAfterSet) {
 
   SetPermission(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-                        CONTENT_SETTING_ALLOW,
-                        PermissionStatusSource::UNSPECIFIED);
-  CheckPermissionResult(CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
                         CONTENT_SETTING_ALLOW,
                         PermissionStatusSource::UNSPECIFIED);
 
@@ -456,7 +453,6 @@ TEST_F(PermissionManagerTest, PermissionIgnoredCleanup) {
   PermissionRequestManager* manager =
       PermissionRequestManager::FromWebContents(contents);
   auto prompt_factory = base::MakeUnique<MockPermissionPromptFactory>(manager);
-  manager->DisplayPendingRequests();
 
   NavigateAndCommit(url());
 
@@ -494,4 +490,30 @@ TEST_F(PermissionManagerTest, InsecureOrigin) {
 
   EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
   EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
+}
+
+TEST_F(PermissionManagerTest, GetCanonicalOrigin) {
+  const GURL google_com("https://www.google.com");
+  const GURL google_de("https://www.google.de");
+  const GURL other_url("https://other.url");
+  const GURL google_base = google_base_url().GetOrigin();
+  const GURL local_ntp = GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin();
+  const GURL remote_ntp = GURL(std::string("chrome-search://") +
+                               chrome::kChromeSearchRemoteNtpHost);
+  const GURL other_chrome_search = GURL("chrome-search://not-local-ntp");
+
+  // "Normal" URLs are not affected by GetCanonicalOrigin.
+  EXPECT_EQ(google_com, GetPermissionManager()->GetCanonicalOrigin(google_com));
+  EXPECT_EQ(google_de, GetPermissionManager()->GetCanonicalOrigin(google_de));
+  EXPECT_EQ(other_url, GetPermissionManager()->GetCanonicalOrigin(other_url));
+  EXPECT_EQ(google_base,
+            GetPermissionManager()->GetCanonicalOrigin(google_base));
+
+  // The local NTP URL gets mapped to the Google base URL.
+  EXPECT_EQ(google_base, GetPermissionManager()->GetCanonicalOrigin(local_ntp));
+  // However, other chrome-search:// URLs, including the remote NTP URL, are
+  // not affected.
+  EXPECT_EQ(remote_ntp, GetPermissionManager()->GetCanonicalOrigin(remote_ntp));
+  EXPECT_EQ(other_chrome_search,
+            GetPermissionManager()->GetCanonicalOrigin(other_chrome_search));
 }

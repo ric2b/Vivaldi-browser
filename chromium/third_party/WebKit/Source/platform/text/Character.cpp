@@ -45,9 +45,6 @@
 #include <utrie2.h>
 #endif
 
-using namespace WTF;
-using namespace Unicode;
-
 namespace blink {
 
 #if defined(USING_SYSTEM_ICU)
@@ -214,10 +211,36 @@ unsigned Character::ExpansionOpportunityCount(const UChar* characters,
   return count;
 }
 
+bool Character::CanTextDecorationSkipInk(UChar32 codepoint) {
+  if (Character::IsCJKIdeographOrSymbol(codepoint))
+    return false;
+
+  UBlockCode block = ublock_getCode(codepoint);
+  switch (block) {
+    // These blocks contain CJK characters we don't want to skip ink, but are
+    // not ideograph that IsCJKIdeographOrSymbol() does not cover.
+    case UBLOCK_BOPOMOFO:
+    case UBLOCK_BOPOMOFO_EXTENDED:
+    case UBLOCK_HANGUL_JAMO:
+    case UBLOCK_HANGUL_COMPATIBILITY_JAMO:
+    case UBLOCK_HANGUL_SYLLABLES:
+    case UBLOCK_HANGUL_JAMO_EXTENDED_A:
+    case UBLOCK_HANGUL_JAMO_EXTENDED_B:
+    case UBLOCK_LINEAR_B_IDEOGRAMS:
+    case UBLOCK_TANGUT:
+    case UBLOCK_TANGUT_COMPONENTS:
+      return false;
+    default:
+      return true;
+  }
+}
+
 bool Character::CanReceiveTextEmphasis(UChar32 c) {
-  CharCategory category = Unicode::Category(c);
-  if (category & (kSeparator_Space | kSeparator_Line | kSeparator_Paragraph |
-                  kOther_NotAssigned | kOther_Control | kOther_Format))
+  WTF::Unicode::CharCategory category = WTF::Unicode::Category(c);
+  if (category &
+      (WTF::Unicode::kSeparator_Space | WTF::Unicode::kSeparator_Line |
+       WTF::Unicode::kSeparator_Paragraph | WTF::Unicode::kOther_NotAssigned |
+       WTF::Unicode::kOther_Control | WTF::Unicode::kOther_Format))
     return false;
 
   // Additional word-separator characters listed in CSS Text Level 3 Editor's
@@ -231,6 +254,14 @@ bool Character::CanReceiveTextEmphasis(UChar32 c) {
     return false;
 
   return true;
+}
+
+bool Character::IsEmojiFlagSequenceTag(UChar32 c) {
+  // Only allow valid sequences from
+  // http://www.unicode.org/reports/tr51/proposed.html#valid-emoji-tag-sequences
+  return (c >= kTagDigitZero && c <= kTagDigitNine) ||
+         (c >= kTagLatinSmallLetterA && c <= kTagLatinSmallLetterZ) ||
+         c == kCancelTag;
 }
 
 template <typename CharacterType>
@@ -258,6 +289,11 @@ bool Character::IsCommonOrInheritedScript(UChar32 character) {
   UScriptCode script = uscript_getScript(character, &status);
   return U_SUCCESS(status) &&
          (script == USCRIPT_COMMON || script == USCRIPT_INHERITED);
+}
+
+bool Character::IsUnassignedOrPrivateUse(UChar32 character) {
+  return WTF::Unicode::Category(character) &
+         (WTF::Unicode::kOther_NotAssigned | WTF::Unicode::kOther_PrivateUse);
 }
 
 }  // namespace blink

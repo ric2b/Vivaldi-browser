@@ -38,13 +38,13 @@ namespace blink {
 
 namespace {
 
-static int g_unique_id = 0;
+static int g_unique_media_stream_descriptor_id = 0;
 
 }  // namespace
 
 // static
 int MediaStreamDescriptor::GenerateUniqueId() {
-  return ++g_unique_id;
+  return ++g_unique_media_stream_descriptor_id;
 }
 
 MediaStreamDescriptor* MediaStreamDescriptor::Create(
@@ -91,12 +91,12 @@ void MediaStreamDescriptor::RemoveComponent(MediaStreamComponent* component) {
     case MediaStreamSource::kTypeAudio:
       pos = audio_components_.Find(component);
       if (pos != kNotFound)
-        audio_components_.erase(pos);
+        audio_components_.EraseAt(pos);
       break;
     case MediaStreamSource::kTypeVideo:
       pos = video_components_.Find(component);
       if (pos != kNotFound)
-        video_components_.erase(pos);
+        video_components_.EraseAt(pos);
       break;
   }
 
@@ -127,7 +127,7 @@ void MediaStreamDescriptor::AddObserver(WebMediaStreamObserver* observer) {
 void MediaStreamDescriptor::RemoveObserver(WebMediaStreamObserver* observer) {
   size_t index = observers_.Find(observer);
   DCHECK(index != kNotFound);
-  observers_.erase(index);
+  observers_.EraseAt(index);
 }
 
 MediaStreamDescriptor::MediaStreamDescriptor(
@@ -159,7 +159,7 @@ MediaStreamDescriptor::MediaStreamDescriptor(
     video_components_.push_back((*iter));
 }
 
-DEFINE_TRACE(MediaStreamDescriptor) {
+void MediaStreamDescriptor::Trace(blink::Visitor* visitor) {
   visitor->Trace(audio_components_);
   visitor->Trace(video_components_);
   visitor->Trace(client_);

@@ -15,7 +15,10 @@
 #include "ui/views/controls/table/table_grouper.h"
 #include "ui/views/controls/table/table_header.h"
 #include "ui/views/controls/table/table_view_observer.h"
+#include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 
 // Put the tests in the views namespace to make it easier to declare them as
 // friend classes.
@@ -81,6 +84,9 @@ class TestTableModel2 : public ui::TableModel {
   // Changes the values of the row at |row|.
   void ChangeRow(int row, int c1_value, int c2_value);
 
+  // Reorders rows in the model.
+  void MoveRows(int row_from, int length, int row_to);
+
   // ui::TableModel:
   int RowCount() override;
   base::string16 GetText(int row, int column_id) override;
@@ -125,6 +131,21 @@ void TestTableModel2::ChangeRow(int row, int c1_value, int c2_value) {
   rows_[row][1] = c2_value;
   if (observer_)
     observer_->OnItemsChanged(row, 1);
+}
+
+void TestTableModel2::MoveRows(int row_from, int length, int row_to) {
+  DCHECK_GT(length, 0);
+  DCHECK_GE(row_from, 0);
+  DCHECK_LE(row_from + length, static_cast<int>(rows_.size()));
+  DCHECK_GE(row_to, 0);
+  DCHECK_LE(row_to + length, static_cast<int>(rows_.size()));
+
+  auto old_start = rows_.begin() + row_from;
+  std::vector<std::vector<int>> temp(old_start, old_start + length);
+  rows_.erase(old_start, old_start + length);
+  rows_.insert(rows_.begin() + row_to, temp.begin(), temp.end());
+  if (observer_)
+    observer_->OnItemsMoved(row_from, length, row_to);
 }
 
 int TestTableModel2::RowCount() {
@@ -210,10 +231,11 @@ class TableViewTest : public ViewsTestBase {
     parent->Layout();
     helper_.reset(new TableViewTestHelper(table_));
 
+    widget_ = std::make_unique<Widget>();
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     params.bounds = gfx::Rect(0, 0, 650, 650);
-    widget_.reset(new Widget);
+    params.delegate = GetWidgetDelegate(widget_.get());
     widget_->Init(params);
     widget_->GetContentsView()->AddChildView(parent);
     widget_->Show();
@@ -260,6 +282,8 @@ class TableViewTest : public ViewsTestBase {
   }
 
  protected:
+  virtual WidgetDelegate* GetWidgetDelegate(Widget* widget) { return nullptr; }
+
   std::unique_ptr<TestTableModel2> model_;
 
   // Owned by |parent_|.
@@ -267,13 +291,13 @@ class TableViewTest : public ViewsTestBase {
 
   std::unique_ptr<TableViewTestHelper> helper_;
 
+  std::unique_ptr<Widget> widget_;
+
  private:
   gfx::Point GetPointForRow(int row) {
     const int y = (row + 0.5) * table_->row_height();
     return table_->GetBoundsInScreen().origin() + gfx::Vector2d(5, y);
   }
-
-  std::unique_ptr<Widget> widget_;
 
   DISALLOW_COPY_AND_ASSIGN(TableViewTest);
 };
@@ -678,7 +702,79 @@ TEST_F(TableViewTest, Selection) {
   EXPECT_EQ(0, observer.GetChangedCountAndClear());
   EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
 
+  // Swap the first two rows. This shouldn't affect selection.
+  model_->MoveRows(0, 1, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+
+  // Move the first row to after the selection. This will change the selection
+  // state.
+  model_->MoveRows(0, 1, 3);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  // Move the first two rows to be after the selection. This will change the
+  // selection state.
+  model_->MoveRows(0, 2, 2);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=0 anchor=0 selection=0", SelectionStateAsString());
+
+  // Move some rows after the selection.
+  model_->MoveRows(2, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=0 anchor=0 selection=0", SelectionStateAsString());
+
+  // Move the selection itself.
+  model_->MoveRows(0, 1, 3);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+
+  // Move-left a range that ends at the selection
+  model_->MoveRows(2, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  // Move-right a range that ends at the selection
+  model_->MoveRows(1, 2, 2);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+
+  // Add a row at the end.
+  model_->AddRow(4, 7, 9);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+
+  // Move-left a range that includes the selection.
+  model_->MoveRows(2, 3, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  // Move-right a range that includes the selection.
+  model_->MoveRows(0, 4, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+
   table_->set_observer(NULL);
+}
+
+TEST_F(TableViewTest, RemoveUnselectedRows) {
+  TableViewObserverImpl observer;
+  table_->set_observer(&observer);
+
+  // Select a middle row.
+  table_->Select(2);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  // Remove the last row. This should notify of a change.
+  model_->RemoveRow(3);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  // Remove the first row. This should also notify of a change.
+  model_->RemoveRow(0);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=1 anchor=1 selection=1", SelectionStateAsString());
 }
 
 // 0 1 2 3:
@@ -1019,6 +1115,119 @@ TEST_F(TableViewTest, MultiselectionWithSort) {
   ClickOnRow(0, ui::EF_SHIFT_DOWN);
   EXPECT_EQ(1, observer.GetChangedCountAndClear());
   EXPECT_EQ("active=2 anchor=4 selection=2 3 4", SelectionStateAsString());
+}
+
+TEST_F(TableViewTest, MoveRowsWithMultipleSelection) {
+  model_->AddRow(3, 77, 0);
+
+  // Hide column 1.
+  table_->SetColumnVisibility(1, false);
+
+  TableViewObserverImpl observer;
+  table_->set_observer(&observer);
+
+  // Select three rows.
+  ClickOnRow(2, 0);
+  ClickOnRow(4, ui::EF_SHIFT_DOWN);
+  EXPECT_EQ(2, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=2 selection=2 3 4", SelectionStateAsString());
+  EXPECT_EQ("[0], [1], [2], [77], [3]", GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows to the middle of the current selection. None of
+  // the move operations should affect the view order.
+  model_->MoveRows(0, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ("[2], [0], [1], [77], [3]", GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows to the end of the current selection.
+  model_->MoveRows(1, 2, 3);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=0 selection=0 1 2", SelectionStateAsString());
+  EXPECT_EQ("[2], [77], [3], [0], [1]", GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows back to the middle of the selection.
+  model_->MoveRows(3, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ("[2], [0], [1], [77], [3]", GetRowsInViewOrderAsString(table_));
+
+  // Swap the unselected rows.
+  model_->MoveRows(1, 1, 2);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ("[2], [1], [0], [77], [3]", GetRowsInViewOrderAsString(table_));
+
+  // Move the second unselected row to be between two selected rows.
+  model_->MoveRows(2, 1, 3);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=0 selection=0 2 4", SelectionStateAsString());
+  EXPECT_EQ("[2], [1], [77], [0], [3]", GetRowsInViewOrderAsString(table_));
+
+  // Move the three middle rows to the beginning, including one selected row.
+  model_->MoveRows(1, 3, 0);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=4 anchor=3 selection=1 3 4", SelectionStateAsString());
+  EXPECT_EQ("[1], [77], [0], [2], [3]", GetRowsInViewOrderAsString(table_));
+
+  table_->set_observer(NULL);
+}
+
+TEST_F(TableViewTest, MoveRowsWithMultipleSelectionAndSort) {
+  model_->AddRow(3, 77, 0);
+
+  // Sort ascending by column 0, and hide column 1. The view order should not
+  // change during this test.
+  table_->ToggleSortOrder(0);
+  table_->SetColumnVisibility(1, false);
+  const char* kViewOrder = "[0], [1], [2], [3], [77]";
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  TableViewObserverImpl observer;
+  table_->set_observer(&observer);
+
+  // Select three rows.
+  ClickOnRow(2, 0);
+  ClickOnRow(4, ui::EF_SHIFT_DOWN);
+  EXPECT_EQ(2, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=2 selection=2 3 4", SelectionStateAsString());
+
+  // Move the unselected rows to the middle of the current selection. None of
+  // the move operations should affect the view order.
+  model_->MoveRows(0, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows to the end of the current selection.
+  model_->MoveRows(1, 2, 3);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=1 anchor=0 selection=0 1 2", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows back to the middle of the selection.
+  model_->MoveRows(3, 2, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  // Swap the unselected rows.
+  model_->MoveRows(1, 1, 2);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  // Swap the unselected rows again.
+  model_->MoveRows(2, 1, 1);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=0 selection=0 3 4", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
+
+  // Move the unselected rows back to the beginning.
+  model_->MoveRows(1, 2, 0);
+  EXPECT_EQ(0, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=3 anchor=2 selection=2 3 4", SelectionStateAsString());
+  EXPECT_EQ(kViewOrder, GetRowsInViewOrderAsString(table_));
 
   table_->set_observer(NULL);
 }
@@ -1036,6 +1245,91 @@ TEST_F(TableViewTest, FocusAfterRemovingAnchor) {
   helper_->SetSelectionModel(new_selection);
   model_->RemoveRow(0);
   table_->RequestFocus();
+}
+
+TEST_F(TableViewTest, RemovingInvalidRowIsNoOp) {
+  table_->Select(3);
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+  table_->OnItemsRemoved(4, 1);
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+  table_->OnItemsRemoved(2, 0);
+  EXPECT_EQ("active=3 anchor=3 selection=3", SelectionStateAsString());
+}
+
+namespace {
+
+class RemoveFocusChangeListenerDelegate : public WidgetDelegate {
+ public:
+  explicit RemoveFocusChangeListenerDelegate(Widget* widget)
+      : widget_(widget), listener_(nullptr) {}
+  ~RemoveFocusChangeListenerDelegate() override {}
+
+  // WidgetDelegate overrides:
+  void DeleteDelegate() override;
+  Widget* GetWidget() override { return widget_; }
+  const Widget* GetWidget() const override { return widget_; }
+
+  void SetFocusChangeListener(FocusChangeListener* listener);
+
+ private:
+  Widget* widget_;
+  FocusChangeListener* listener_;
+
+  DISALLOW_COPY_AND_ASSIGN(RemoveFocusChangeListenerDelegate);
+};
+
+void RemoveFocusChangeListenerDelegate::DeleteDelegate() {
+  widget_->GetFocusManager()->RemoveFocusChangeListener(listener_);
+}
+
+void RemoveFocusChangeListenerDelegate::SetFocusChangeListener(
+    FocusChangeListener* listener) {
+  listener_ = listener;
+}
+
+}  // namespace
+
+class TableViewFocusTest : public TableViewTest {
+ public:
+  TableViewFocusTest() = default;
+
+ protected:
+  WidgetDelegate* GetWidgetDelegate(Widget* widget) override;
+
+  RemoveFocusChangeListenerDelegate* GetFocusChangeListenerDelegate() {
+    return delegate_.get();
+  }
+
+ private:
+  std::unique_ptr<RemoveFocusChangeListenerDelegate> delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(TableViewFocusTest);
+};
+
+WidgetDelegate* TableViewFocusTest::GetWidgetDelegate(Widget* widget) {
+  delegate_ = std::make_unique<RemoveFocusChangeListenerDelegate>(widget);
+  return delegate_.get();
+}
+
+// Verifies that the active focus is cleared when the widget is destroyed.
+// In MD mode, if that doesn't happen a DCHECK in View::DoRemoveChildView(...)
+// will trigger due to an attempt to modify the child view list while iterating.
+TEST_F(TableViewFocusTest, FocusClearedDuringWidgetDestruction) {
+  TestFocusChangeListener listener;
+  GetFocusChangeListenerDelegate()->SetFocusChangeListener(&listener);
+
+  widget_->GetFocusManager()->AddFocusChangeListener(&listener);
+  table_->RequestFocus();
+
+  ASSERT_EQ(1u, listener.focus_changes().size());
+  EXPECT_EQ(listener.focus_changes()[0], ViewPair(nullptr, table_));
+  listener.ClearFocusChanges();
+
+  // Now destroy the widget. This should *not* cause a DCHECK in
+  // View::DoRemoveChildView(...).
+  widget_.reset();
+  ASSERT_EQ(1u, listener.focus_changes().size());
+  EXPECT_EQ(listener.focus_changes()[0], ViewPair(table_, nullptr));
 }
 
 }  // namespace views

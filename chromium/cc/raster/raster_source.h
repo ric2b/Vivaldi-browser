@@ -36,12 +36,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
     PlaybackSettings(PlaybackSettings&&);
     ~PlaybackSettings();
 
-    // If set to true, this indicates that the canvas has already been
-    // rasterized into. This means that the canvas cannot be cleared safely.
-    bool playback_to_shared_canvas : 1;
-
     // If set to true, we should use LCD text.
-    bool use_lcd_text : 1;
+    bool use_lcd_text = true;
+    bool clear_canvas_before_raster = true;
 
     // The ImageProvider used to replace images during playback.
     ImageProvider* image_provider = nullptr;
@@ -105,17 +102,22 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Valid rectangle in which everything is recorded and can be rastered from.
   virtual gfx::Rect RecordedViewport() const;
 
-  gfx::Rect GetRectForImage(PaintImage::Id image_id) const;
-
   // Tracing functionality.
   virtual void DidBeginTracing();
   virtual void AsValueInto(base::trace_event::TracedValue* array) const;
   virtual sk_sp<SkPicture> GetFlattenedPicture();
   virtual size_t GetMemoryUsage() const;
 
-  const DisplayItemList* display_list() const { return display_list_.get(); }
+  const scoped_refptr<DisplayItemList>& GetDisplayItemList() const {
+    return display_list_;
+  }
+
+  float recording_scale_factor() const { return recording_scale_factor_; }
 
   SkColor background_color() const { return background_color_; }
+
+  base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+  TakeDecodingModeMap();
 
  protected:
   // RecordingSource is the only class that can create a raster source.

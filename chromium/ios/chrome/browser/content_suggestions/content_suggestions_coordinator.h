@@ -14,9 +14,9 @@ class ChromeBrowserState;
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
-@protocol ChromeExecuteCommand;
 @class ContentSuggestionsHeaderViewController;
 @protocol OmniboxFocuser;
+@protocol SnackbarCommands;
 @protocol UrlLoader;
 class WebStateList;
 
@@ -32,8 +32,8 @@ class WebStateList;
 @property(nonatomic, assign) WebStateList* webStateList;
 @property(nonatomic, weak) id<ApplicationCommands,
                               BrowserCommands,
-                              ChromeExecuteCommand,
                               OmniboxFocuser,
+                              SnackbarCommands,
                               UrlLoader>
     dispatcher;
 // Whether the Suggestions UI is displayed. If this is true, start is a no-op.

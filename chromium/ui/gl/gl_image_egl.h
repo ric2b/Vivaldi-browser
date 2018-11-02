@@ -13,6 +13,7 @@
 
 namespace gl {
 
+// Abstract base class for EGL-based images.
 class GL_EXPORT GLImageEGL : public GLImage {
  public:
   explicit GLImageEGL(const gfx::Size& size);
@@ -21,19 +22,8 @@ class GL_EXPORT GLImageEGL : public GLImage {
 
   // Overridden from GLImage:
   gfx::Size GetSize() override;
-  unsigned GetInternalFormat() override;
   bool BindTexImage(unsigned target) override;
   void ReleaseTexImage(unsigned target) override {}
-  bool CopyTexImage(unsigned target) override;
-  bool CopyTexSubImage(unsigned target,
-                       const gfx::Point& offset,
-                       const gfx::Rect& rect) override;
-  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
-                            int z_order,
-                            gfx::OverlayTransform transform,
-                            const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect) override;
-  void Flush() override {}
 
  protected:
   ~GLImageEGL() override;

@@ -1,16 +1,10 @@
 // Copyright (c) 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/**
- * @unrestricted
- */
+
 Network.NetworkConfigView = class extends UI.VBox {
   constructor() {
     super(true);
-    /** @type {!Element} */
-    this._autoCheckbox;
-    /** @type {!{input: !Element, select: !Element}} */
-    this._customSelectAndInput;
     this.registerRequiredCSS('network/networkConfigView.css');
     this.contentElement.classList.add('network-config');
 
@@ -112,45 +106,41 @@ Network.NetworkConfigView = class extends UI.VBox {
 
   _createNetworkThrottlingSection() {
     var section = this._createSection(Common.UIString('Network throttling'), 'network-config-throttling');
-    this._networkThrottlingSelect =
+    var networkThrottlingSelect =
         /** @type {!HTMLSelectElement} */ (section.createChild('select', 'chrome-select'));
-    MobileThrottling.throttlingManager().decorateSelectWithNetworkThrottling(this._networkThrottlingSelect);
+    MobileThrottling.throttlingManager().decorateSelectWithNetworkThrottling(networkThrottlingSelect);
   }
 
   _createUserAgentSection() {
     var section = this._createSection(Common.UIString('User agent'), 'network-config-ua');
     var checkboxLabel = UI.CheckboxLabel.create(Common.UIString('Select automatically'), true);
     section.appendChild(checkboxLabel);
-    this._autoCheckbox = checkboxLabel.checkboxElement;
-    this._autoCheckbox.addEventListener('change', this._userAgentTypeChanged.bind(this));
+    var autoCheckbox = checkboxLabel.checkboxElement;
 
-    this._customUserAgentSetting = Common.settings.createSetting('customUserAgent', '');
-    this._customUserAgentSetting.addChangeListener(this._customUserAgentChanged, this);
+    var customUserAgentSetting = Common.settings.createSetting('customUserAgent', '');
+    customUserAgentSetting.addChangeListener(() => {
+      if (autoCheckbox.checked)
+        return;
+      SDK.multitargetNetworkManager.setCustomUserAgentOverride(customUserAgentSetting.get());
+    });
+    var customUserAgentSelectBox = section.createChild('div', 'network-config-ua-custom');
+    autoCheckbox.addEventListener('change', userAgentSelectBoxChanged);
+    var customSelectAndInput = Network.NetworkConfigView.createUserAgentSelectAndInput();
+    customSelectAndInput.select.classList.add('chrome-select');
+    customUserAgentSelectBox.appendChild(customSelectAndInput.select);
+    customUserAgentSelectBox.appendChild(customSelectAndInput.input);
+    userAgentSelectBoxChanged();
 
-    this._customUserAgent = section.createChild('div', 'network-config-ua-custom');
-    this._customSelectAndInput = Network.NetworkConfigView.createUserAgentSelectAndInput();
-    this._customSelectAndInput.select.classList.add('chrome-select');
-    this._customUserAgent.appendChild(this._customSelectAndInput.select);
-    this._customUserAgent.appendChild(this._customSelectAndInput.input);
-    this._userAgentTypeChanged();
-  }
-
-  _customUserAgentChanged() {
-    if (this._autoCheckbox.checked)
-      return;
-    SDK.multitargetNetworkManager.setCustomUserAgentOverride(this._customUserAgentSetting.get());
-  }
-
-  _userAgentTypeChanged() {
-    var useCustomUA = !this._autoCheckbox.checked;
-    this._customUserAgent.classList.toggle('checked', useCustomUA);
-    this._customSelectAndInput.select.disabled = !useCustomUA;
-    this._customSelectAndInput.input.disabled = !useCustomUA;
-    var customUA = useCustomUA ? this._customUserAgentSetting.get() : '';
-    SDK.multitargetNetworkManager.setCustomUserAgentOverride(customUA);
+    function userAgentSelectBoxChanged() {
+      var useCustomUA = !autoCheckbox.checked;
+      customUserAgentSelectBox.classList.toggle('checked', useCustomUA);
+      customSelectAndInput.select.disabled = !useCustomUA;
+      customSelectAndInput.input.disabled = !useCustomUA;
+      var customUA = useCustomUA ? customUserAgentSetting.get() : '';
+      SDK.multitargetNetworkManager.setCustomUserAgentOverride(customUA);
+    }
   }
 };
-
 
 /** @type {!Array.<{title: string, values: !Array.<{title: string, value: string}>}>} */
 Network.NetworkConfigView._userAgentGroups = [
@@ -211,6 +201,10 @@ Network.NetworkConfigView._userAgentGroups = [
         title: 'Chrome \u2014 iPad',
         value:
             'Mozilla/5.0 (iPad; CPU OS 9_1 like Mac OS X) AppleWebKit/601.1 (KHTML, like Gecko) CriOS/%s Mobile/13B143 Safari/601.1.46'
+      },
+      {
+        title: 'Chrome \u2014 Chrome OS',
+        value: 'Mozilla/5.0 (X11; CrOS x86_64 10066.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36'
       },
       {
         title: 'Chrome \u2014 Mac',

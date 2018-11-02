@@ -75,16 +75,14 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // The contents auto-resized and the container should match it.
   virtual void ResizeDueToAutoResize(RenderWidgetHostImpl* render_widget_host,
-                                     const gfx::Size& new_size) {}
+                                     const gfx::Size& new_size,
+                                     uint64_t sequence_number) {}
 
   // The screen info has changed.
   virtual void ScreenInfoChanged() {}
 
-  // Sets the device scale factor for frames associated with this WebContents.
-  virtual void UpdateDeviceScaleFactor(double device_scale_factor) {}
-
   // Retrieve screen information.
-  virtual void GetScreenInfo(ScreenInfo* web_screen_info);
+  virtual void GetScreenInfo(ScreenInfo* screen_info);
 
   // Callback to give the browser a chance to handle the specified keyboard
   // event before sending it to the renderer. See enum for details on return

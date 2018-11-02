@@ -13,15 +13,13 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner_helpers.h"
-#include "base/synchronization/lock.h"
 #include "content/public/browser/host_zoom_map.h"
 
 namespace content {
 
 class WebContentsImpl;
 
-// HostZoomMap needs to be deleted on the UI thread because it listens
-// to notifications on there.
+// HostZoomMap lives on the UI thread.
 class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
  public:
   HostZoomMapImpl();
@@ -40,6 +38,9 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
                     const std::string& host) const override;
   ZoomLevelVector GetAllZoomLevels() const override;
   void SetZoomLevelForHost(const std::string& host, double level) override;
+  void InitializeZoomLevelForHost(const std::string& host,
+                                  double level,
+                                  base::Time last_modified) override;
   void SetZoomLevelForHostAndScheme(const std::string& scheme,
                                     const std::string& host,
                                     double level) override;
@@ -48,7 +49,8 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
   void SetTemporaryZoomLevel(int render_process_id,
                              int render_view_id,
                              double level) override;
-
+  void ClearZoomLevels(base::Time delete_begin, base::Time delete_end) override;
+  void SetStoreLastModified(bool store_last_modified) override;
   void ClearTemporaryZoomLevel(int render_process_id,
                                int render_view_id) override;
   double GetDefaultZoomLevel() const override;
@@ -80,15 +82,11 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
   // Returns the temporary zoom level that's only valid for the lifetime of
   // the given WebContents (i.e. isn't saved and doesn't affect other
   // WebContentses) if it exists, the default zoom level otherwise.
-  //
-  // This may be called on any thread.
   double GetTemporaryZoomLevel(int render_process_id,
                                int render_view_id) const;
 
   // Returns the zoom level regardless of whether it's temporary, host-keyed or
   // scheme+host-keyed.
-  //
-  // This may be called on any thread.
   double GetZoomLevelForView(const GURL& url,
                              int render_process_id,
                              int render_view_id) const;
@@ -97,8 +95,14 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
 
   void WillCloseRenderView(int render_process_id, int render_view_id);
 
+  void SetClockForTesting(base::Clock* clock) override;
+
  private:
-  typedef std::map<std::string, double> HostZoomLevels;
+  struct ZoomLevel {
+    double level;
+    base::Time last_modified;
+  };
+  typedef std::map<std::string, ZoomLevel> HostZoomLevels;
   typedef std::map<std::string, HostZoomLevels> SchemeHostZoomLevels;
 
   struct RenderViewKey {
@@ -118,11 +122,11 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
 
   double GetZoomLevelForHost(const std::string& host) const;
 
-  // Non-locked versions for internal use. These should only be called within
-  // a scope where a lock has been acquired.
-  double GetZoomLevelForHostInternal(const std::string& host) const;
-  double GetZoomLevelForHostAndSchemeInternal(const std::string& scheme,
-                                              const std::string& host) const;
+  // Set a zoom level for |host| and store the |last_modified| timestamp.
+  // Use only to explicitly set a timestamp.
+  void SetZoomLevelForHostInternal(const std::string& host,
+                                   double level,
+                                   base::Time last_modified);
 
   // Notifies the renderers from this browser context to change the zoom level
   // for the specified host and scheme.
@@ -135,7 +139,7 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
   base::CallbackList<void(const ZoomLevelChange&)>
       zoom_level_changed_callbacks_;
 
-  // Copy of the pref data, so that we can read it on the IO thread.
+  // Copy of the pref data.
   HostZoomLevels host_zoom_levels_;
   SchemeHostZoomLevels scheme_host_zoom_levels_;
   double default_zoom_level_;
@@ -145,10 +149,9 @@ class CONTENT_EXPORT HostZoomMapImpl : public HostZoomMap {
 
   TemporaryZoomLevels temporary_zoom_levels_;
 
-  // Used around accesses to |host_zoom_levels_|, |default_zoom_level_|,
-  // |temporary_zoom_levels_|, and |view_page_scale_factors_are_one_| to
-  // guarantee thread safety.
-  mutable base::Lock lock_;
+  bool store_last_modified_;
+
+  base::Clock* clock_;
 
   DISALLOW_COPY_AND_ASSIGN(HostZoomMapImpl);
 };

@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "services/ui/demo/mus_demo.h"
-#include "services/ui/public/interfaces/window_tree_host.mojom.h"
+#include "services/ui/public/interfaces/window_tree_host_factory.mojom.h"
 
 namespace ui {
 namespace demo {
@@ -32,8 +32,6 @@ class MusDemoExternal : public MusDemo {
   void OnEmbed(std::unique_ptr<aura::WindowTreeHostMus> window_tree_host) final;
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) final;
 
-  mojom::WindowTreeHostFactoryPtr window_tree_host_factory_;
-  mojom::WindowTreeClientPtr window_tree_client_mojo_;
   size_t initialized_windows_count_ = 0;
 
   size_t number_of_windows_ = 1;

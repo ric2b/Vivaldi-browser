@@ -55,17 +55,8 @@ bool UiTexture::HitTest(const gfx::PointF& point) const {
   return false;
 }
 
-void UiTexture::SetMode(ColorScheme::Mode mode) {
-  if (mode_ == mode)
-    return;
-  mode_ = mode;
-  OnSetMode();
-}
-
-void UiTexture::OnSetMode() {}
-
-const ColorScheme& UiTexture::color_scheme() const {
-  return ColorScheme::GetColorScheme(mode());
+void UiTexture::OnInitialized() {
+  set_dirty();
 }
 
 std::vector<std::unique_ptr<gfx::RenderText>> UiTexture::PrepareDrawStringRect(
@@ -89,8 +80,8 @@ std::vector<std::unique_ptr<gfx::RenderText>> UiTexture::PrepareDrawStringRect(
     int height = 0;
     int line_height = 0;
     for (size_t i = 0; i < strings.size(); i++) {
-      std::unique_ptr<gfx::RenderText> render_text =
-          CreateRenderText(strings[i], font_list, color, text_alignment);
+      std::unique_ptr<gfx::RenderText> render_text = CreateConfiguredRenderText(
+          strings[i], font_list, color, text_alignment);
 
       if (i == 0) {
         // Measure line and center text vertically.
@@ -114,7 +105,7 @@ std::vector<std::unique_ptr<gfx::RenderText>> UiTexture::PrepareDrawStringRect(
 
   } else {
     std::unique_ptr<gfx::RenderText> render_text =
-        CreateRenderText(text, font_list, color, text_alignment);
+        CreateConfiguredRenderText(text, font_list, color, text_alignment);
     if (bounds->width() != 0)
       render_text->SetElideBehavior(gfx::TRUNCATE);
     else
@@ -134,13 +125,22 @@ std::vector<std::unique_ptr<gfx::RenderText>> UiTexture::PrepareDrawStringRect(
   return lines;
 }
 
-std::unique_ptr<gfx::RenderText> UiTexture::CreateRenderText(
+std::unique_ptr<gfx::RenderText> UiTexture::CreateRenderText() {
+  std::unique_ptr<gfx::RenderText> render_text(
+      gfx::RenderText::CreateInstance());
+
+  // Subpixel rendering is counterproductive when drawing VR textures.
+  render_text->set_subpixel_rendering_suppressed(true);
+
+  return render_text;
+}
+
+std::unique_ptr<gfx::RenderText> UiTexture::CreateConfiguredRenderText(
     const base::string16& text,
     const gfx::FontList& font_list,
     SkColor color,
     UiTexture::TextAlignment text_alignment) {
-  std::unique_ptr<gfx::RenderText> render_text(
-      gfx::RenderText::CreateInstance());
+  std::unique_ptr<gfx::RenderText> render_text(CreateRenderText());
   render_text->SetText(text);
   render_text->SetFontList(font_list);
   render_text->SetColor(color);
@@ -172,24 +172,21 @@ bool UiTexture::IsRTL() {
   return base::i18n::IsRTL();
 }
 
-gfx::FontList UiTexture::GetDefaultFontList(int size) {
-  return gfx::FontList(gfx::Font(kDefaultFontFamily, size));
-}
-
-bool UiTexture::GetFontList(int size,
+bool UiTexture::GetFontList(const std::string& preferred_font_name,
+                            int font_size,
                             base::string16 text,
                             gfx::FontList* font_list) {
   if (force_font_fallback_failure_for_testing_)
     return false;
 
-  gfx::Font default_font(kDefaultFontFamily, size);
-  std::vector<gfx::Font> fonts{default_font};
+  gfx::Font preferred_font(preferred_font_name, font_size);
+  std::vector<gfx::Font> fonts{preferred_font};
 
   std::set<std::string> names;
   // TODO(acondor): Query BrowserProcess to obtain the application locale.
   for (UChar32 c : CollectDifferentChars(text)) {
     std::string name;
-    bool found_name = GetFallbackFontNameForChar(default_font, c, "", &name);
+    bool found_name = GetFallbackFontNameForChar(preferred_font, c, "", &name);
     if (!found_name)
       return false;
     if (!name.empty())
@@ -197,10 +194,40 @@ bool UiTexture::GetFontList(int size,
   }
   for (const auto& name : names) {
     DCHECK(!name.empty());
-    fonts.push_back(gfx::Font(name, size));
+    fonts.push_back(gfx::Font(name, font_size));
   }
   *font_list = gfx::FontList(fonts);
   return true;
+}
+
+bool UiTexture::GetDefaultFontList(int font_size,
+                                   base::string16 text,
+                                   gfx::FontList* font_list) {
+  return GetFontList(kDefaultFontFamily, font_size, text, font_list);
+}
+
+SkColor UiTexture::foreground_color() const {
+  DCHECK(foreground_color_);
+  return foreground_color_.value();
+}
+
+SkColor UiTexture::background_color() const {
+  DCHECK(background_color_);
+  return background_color_.value();
+}
+
+void UiTexture::SetForegroundColor(SkColor color) {
+  if (foreground_color_ == color)
+    return;
+  foreground_color_ = color;
+  set_dirty();
+}
+
+void UiTexture::SetBackgroundColor(SkColor color) {
+  if (background_color_ == color)
+    return;
+  background_color_ = color;
+  set_dirty();
 }
 
 void UiTexture::SetForceFontFallbackFailureForTesting(bool force) {

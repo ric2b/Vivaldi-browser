@@ -19,7 +19,7 @@ using blink::WebTouchPoint;
 namespace content {
 
 MockInputRouterClient::MockInputRouterClient()
-    : input_router_(NULL),
+    : input_router_(nullptr),
       in_flight_event_count_(0),
       has_touch_handler_(false),
       filter_state_(INPUT_EVENT_ACK_STATE_NOT_CONSUMED),
@@ -38,6 +38,7 @@ InputEventAckState MockInputRouterClient::FilterInputEvent(
 
 void MockInputRouterClient::IncrementInFlightEventCount(
     blink::WebInputEvent::Type event_type) {
+  last_in_flight_event_type_ = event_type;
   ++in_flight_event_count_;
 }
 

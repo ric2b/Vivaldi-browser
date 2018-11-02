@@ -29,6 +29,7 @@
 #include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "platform/wtf/text/UTF8.h"
 #include "platform/wtf/text/Unicode.h"
+#include "third_party/skia/include/core/SkData.h"
 
 namespace blink {
 
@@ -65,8 +66,8 @@ SharedBuffer::~SharedBuffer() {
   Clear();
 }
 
-PassRefPtr<SharedBuffer> SharedBuffer::AdoptVector(Vector<char>& vector) {
-  RefPtr<SharedBuffer> buffer = Create();
+scoped_refptr<SharedBuffer> SharedBuffer::AdoptVector(Vector<char>& vector) {
+  scoped_refptr<SharedBuffer> buffer = Create();
   buffer->buffer_.swap(vector);
   buffer->size_ = buffer->buffer_.size();
   return buffer;
@@ -173,7 +174,7 @@ size_t SharedBuffer::GetSomeDataInternal(const char*& some_data,
                                          size_t position) const {
   size_t total_size = size();
   if (position >= total_size) {
-    some_data = 0;
+    some_data = nullptr;
     return 0;
   }
 
@@ -228,7 +229,7 @@ sk_sp<SkData> SharedBuffer::GetAsSkData() const {
   size_t buffer_length = size();
   sk_sp<SkData> data = SkData::MakeUninitialized(buffer_length);
   char* buffer = static_cast<char*>(data->writable_data());
-  const char* segment = 0;
+  const char* segment = nullptr;
   size_t position = 0;
   while (size_t segment_size = GetSomeDataInternal(segment, position)) {
     memcpy(buffer + position, segment, segment_size);
@@ -263,7 +264,7 @@ void SharedBuffer::OnMemoryDump(const String& dump_prefix,
 }
 
 SharedBuffer::DeprecatedFlatData::DeprecatedFlatData(
-    PassRefPtr<const SharedBuffer> buffer)
+    scoped_refptr<const SharedBuffer> buffer)
     : buffer_(std::move(buffer)) {
   DCHECK(buffer_);
 

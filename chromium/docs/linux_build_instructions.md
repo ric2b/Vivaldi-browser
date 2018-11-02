@@ -1,6 +1,6 @@
 # Checking out and building Chromium on Linux
 
-There are instructions for other platforms linked from the 
+There are instructions for other platforms linked from the
 [get the code](get_the_code.md) page.
 
 ## Instructions for Google Employees
@@ -122,11 +122,20 @@ $ gn gen out/Default
 This section contains some things you can change to speed up your builds,
 sorted so that the things that make the biggest difference are first.
 
+#### Jumbo/Unity builds
+
+Jumbo builds merge many translation units ("source files") and compile them
+together. Since a large portion of Chromium's code is in shared header files,
+this dramatically reduces the total amount of work needed. Check out the
+[Jumbo / Unity builds](jumbo.md) for more information.
+
+Enable jumbo builds by setting the GN arg `use_jumbo_build=true`.
+
 #### Disable NaCl
 
 By default, the build includes support for
 [Native Client (NaCl)](https://developer.chrome.com/native-client), but
-most of the time you won't need it. You can set the GN argument 
+most of the time you won't need it. You can set the GN argument
 `enable_nacl=false` and it won't be built.
 
 #### Include fewer debug symbols
@@ -157,7 +166,7 @@ use_debug_fission=false
 is_clang=false
 ```
 
-See these links for more on the 
+See these links for more on the
 [bundled_binutils limitation](https://github.com/icecc/icecream/commit/b2ce5b9cc4bd1900f55c3684214e409fa81e7a92),
 the [debug fission limitation](http://gcc.gnu.org/wiki/DebugFission).
 
@@ -167,7 +176,7 @@ See [related bug](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808181).
 #### ccache
 
 You can use [ccache](https://ccache.samba.org) to speed up local builds (again,
-this is not useful if you're using a Googler using Goma).
+this is not useful if you're a Googler using Goma).
 
 Increase your ccache hit rate by setting `CCACHE_BASEDIR` to a parent directory
 that the working directories all have in common (e.g.,
@@ -376,15 +385,15 @@ libcap-devel libffi-devel libgcc.i686 libgnome-keyring-devel libjpeg-devel \
 libstdc++.i686 libX11-devel libXScrnSaver-devel libXtst-devel \
 libxkbcommon-x11-devel ncurses-compat-libs nspr-devel nss-devel pam-devel \
 pango-devel pciutils-devel pulseaudio-libs-devel zlib.i686 httpd mod_ssl \
-php php-cli python-psutil wdiff'
+php php-cli python-psutil wdiff xorg-x11-server-Xvfb'
 ```
 
-The `msttcorefonts` packages can be obtained by following [these
-instructions](http://www.fedorafaq.org/#installfonts). For the optional
-packages:
+The fonts needed by Blink's LayoutTests can be obtained by following [these
+instructions](https://gist.github.com/pwnall/32a3b11c2b10f6ae5c6a6de66c1e12ae).
+For the optional packages:
 
 * `php-cgi` is provided by the `php-cli` package.
-* `sun-java6-fonts` doesn't exist in Fedora repositories, needs investigating.
+* `sun-java6-fonts` is covered by the instructions linked above.
 
 ### Gentoo
 

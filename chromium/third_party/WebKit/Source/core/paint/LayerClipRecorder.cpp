@@ -27,7 +27,7 @@ LayerClipRecorder::LayerClipRecorder(GraphicsContext& graphics_context,
     : graphics_context_(graphics_context),
       client_(client),
       clip_type_(clip_type) {
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
     return;
   IntRect snapped_clip_rect = PixelSnappedIntRect(clip_rect.Rect());
   bool painting_masks =
@@ -63,7 +63,7 @@ static bool InContainingBlockChain(const PaintLayer* start_layer,
 void LayerClipRecorder::CollectRoundedRectClips(
     const PaintLayer& paint_layer,
     const PaintLayer* clip_root,
-    const LayoutPoint& offset_within_layer,
+    const LayoutPoint& fragment_offset,
     bool cross_composited_scrollers,
     BorderRadiusClippingRule rule,
     Vector<FloatRoundedRect>& rounded_rect_clips) {
@@ -87,7 +87,10 @@ void LayerClipRecorder::CollectRoundedRectClips(
     if (layer->GetLayoutObject().HasOverflowClip() &&
         layer->GetLayoutObject().Style()->HasBorderRadius() &&
         InContainingBlockChain(&paint_layer, layer)) {
-      LayoutPoint delta(offset_within_layer);
+      LayoutPoint delta;
+      if (layer->EnclosingPaginationLayer() ==
+          paint_layer.EnclosingPaginationLayer())
+        delta.MoveBy(fragment_offset);
       layer->ConvertToLayerCoords(clip_root, delta);
 
       // The PaintLayer's size is pixel-snapped if it is a LayoutBox. We can't
@@ -95,7 +98,7 @@ void LayerClipRecorder::CollectRoundedRectClips(
       // getRoundedInnerBorderFor assumes it has not been snapped yet.
       LayoutSize size(layer->GetLayoutBox()
                           ? ToLayoutBox(layer->GetLayoutObject()).Size()
-                          : LayoutSize(layer->size()));
+                          : LayoutSize(layer->Size()));
       rounded_rect_clips.push_back(
           layer->GetLayoutObject().Style()->GetRoundedInnerBorderFor(
               LayoutRect(delta, size)));
@@ -107,7 +110,7 @@ void LayerClipRecorder::CollectRoundedRectClips(
 }
 
 LayerClipRecorder::~LayerClipRecorder() {
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
     return;
   graphics_context_.GetPaintController().EndItem<EndClipDisplayItem>(
       client_, DisplayItem::ClipTypeToEndClipType(clip_type_));

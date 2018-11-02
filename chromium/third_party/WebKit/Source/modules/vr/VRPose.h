@@ -13,7 +13,7 @@
 
 namespace blink {
 
-class VRPose final : public GarbageCollected<VRPose>, public ScriptWrappable {
+class VRPose final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -28,7 +28,7 @@ class VRPose final : public GarbageCollected<VRPose>, public ScriptWrappable {
 
   void SetPose(const device::mojom::blink::VRPosePtr&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   VRPose();

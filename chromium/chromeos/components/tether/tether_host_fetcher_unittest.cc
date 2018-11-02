@@ -37,9 +37,9 @@ const char kTestUserPrivateKey[] = "kTestUserPrivateKey";
 
 class MockCryptAuthDeviceManager : public cryptauth::CryptAuthDeviceManager {
  public:
-  ~MockCryptAuthDeviceManager() override {}
+  ~MockCryptAuthDeviceManager() override = default;
 
-  MOCK_CONST_METHOD0(GetPixelTetherHosts,
+  MOCK_CONST_METHOD0(GetTetherHosts,
                      std::vector<cryptauth::ExternalDeviceInfo>());
 };
 
@@ -55,7 +55,7 @@ class MockCryptAuthEnrollmentManager
             cryptauth::GcmDeviceInfo(),
             fake_cryptauth_gcm_manager,
             nullptr /* pref_service */) {}
-  ~MockCryptAuthEnrollmentManager() override {}
+  ~MockCryptAuthEnrollmentManager() override = default;
 
   MOCK_CONST_METHOD0(GetUserPrivateKey, std::string());
 };
@@ -90,7 +90,7 @@ class MockDeviceLoader : public cryptauth::RemoteDeviceLoader {
             "",
             "",
             nullptr) {}
-  ~MockDeviceLoader() override {}
+  ~MockDeviceLoader() override = default;
 
   MOCK_METHOD2(
       Load,
@@ -114,7 +114,7 @@ CreateTetherExternalDeviceInfosForRemoteDevices(
 
 class TetherHostFetcherTest : public testing::Test {
  public:
-  class TestRemoteDeviceLoaderFactory
+  class TestRemoteDeviceLoaderFactory final
       : public cryptauth::RemoteDeviceLoader::Factory {
    public:
     explicit TestRemoteDeviceLoaderFactory(TetherHostFetcherTest* test)
@@ -169,7 +169,7 @@ class TetherHostFetcherTest : public testing::Test {
 
     mock_device_manager_ =
         base::WrapUnique(new NiceMock<MockCryptAuthDeviceManager>());
-    ON_CALL(*mock_device_manager_, GetPixelTetherHosts())
+    ON_CALL(*mock_device_manager_, GetTetherHosts())
         .WillByDefault(Return(test_device_infos_));
 
     fake_cryptauth_gcm_manager_ =

@@ -32,8 +32,10 @@ const GURL kTestURL("http://sample.org");
 const GURL kTestURL2("http://sample.org");
 const GURL kTestFinalURL("https://sample.org/foo");
 const GURL kTestFinalURL2("https://sample.org/foo");
-const ClientId kTestClientID("Foo", "Bar");
-const ClientId kTestClientID2("Foo2", "Bar2");
+const std::string kTestGUID("C56A4180-65AA-42EC-A945-5FD21DEC0538");
+const ClientId kTestClientID("Foo", kTestGUID);
+const std::string kTestGUID2("784f1b8b-6a32-4535-9751-ade05f947aa9");
+const ClientId kTestClientID2("Foo2", kTestGUID2);
 const base::string16 kTestTitle = base::ASCIIToUTF16("Hello");
 const base::string16 kTestTitle2 = base::ASCIIToUTF16("Hello2");
 const base::FilePath kTestFilePath(FILE_PATH_LITERAL("foo"));
@@ -48,6 +50,10 @@ class TestPrefetchImporter : public PrefetchImporter {
 
   void ImportArchive(const PrefetchArchiveInfo& archive) override {
     archives_.push_back(archive);
+  }
+  void MarkImportCompleted(int64_t offline_id) override {}
+  std::set<int64_t> GetOutstandingImports() const override {
+    return std::set<int64_t>();
   }
 
   const std::vector<PrefetchArchiveInfo>& archives() const { return archives_; }
@@ -93,6 +99,7 @@ void ImportArchivesTaskTest::SetUp() {
   item.offline_id = kTestOfflineID;
   item.state = PrefetchItemState::DOWNLOADED;
   item.url = kTestURL;
+  item.guid = kTestGUID;
   item.final_archived_url = kTestFinalURL;
   item.client_id = kTestClientID;
   item.title = kTestTitle;
@@ -106,6 +113,7 @@ void ImportArchivesTaskTest::SetUp() {
   item2.offline_id = kTestOfflineID2;
   item2.state = PrefetchItemState::DOWNLOADED;
   item2.url = kTestURL2;
+  item2.guid = kTestGUID2;
   item2.final_archived_url = kTestFinalURL2;
   item2.client_id = kTestClientID2;
   item2.title = kTestTitle2;
@@ -130,6 +138,13 @@ void ImportArchivesTaskTest::TearDown() {
 
 void ImportArchivesTaskTest::PumpLoop() {
   task_runner_->RunUntilIdle();
+}
+
+TEST_F(ImportArchivesTaskTest, NullConnection) {
+  store_util()->SimulateInitializationError();
+  ImportArchivesTask task(store(), importer());
+  task.Run();
+  PumpLoop();
 }
 
 TEST_F(ImportArchivesTaskTest, Importing) {

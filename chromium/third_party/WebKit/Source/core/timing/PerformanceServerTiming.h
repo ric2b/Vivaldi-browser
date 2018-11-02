@@ -17,9 +17,7 @@ class PerformanceServerTiming;
 using PerformanceServerTimingVector =
     HeapVector<Member<PerformanceServerTiming>>;
 
-class CORE_EXPORT PerformanceServerTiming final
-    : public GarbageCollectedFinalized<PerformanceServerTiming>,
-      public ScriptWrappable {
+class CORE_EXPORT PerformanceServerTiming final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -43,8 +41,6 @@ class CORE_EXPORT PerformanceServerTiming final
       ShouldAllowTimingDetails);
 
   ScriptValue toJSONForBinding(ScriptState*) const;
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  private:
   const String name_;

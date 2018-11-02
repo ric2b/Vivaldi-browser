@@ -4,21 +4,6 @@
 <grit-part>
   <message name="IDS_EMPTY_STRING" desc="Empty string, exist only to make code generic. No translation required.">
   </message>
-  <!-- Idle logout dialog for retail mode -->
-  <message name="IDS_IDLE_LOGOUT_TITLE" desc="Dialog title for the idle logout dialog. Used in retail mode only.">
-    Are you still there?
-  </message>
-  <message name="IDS_IDLE_LOGOUT_WARNING_RESTART" desc="Restart label for the idle logout dialog. Used in retail mode only..">
-    This computer will reset in <ph name="LOGOUT_TIME_LEFT">$1<ex>20</ex></ph> seconds.
-Press any key to continue exploring.
-  </message>
-  <message name="IDS_IDLE_LOGOUT_WARNING_RESTART_1S" desc="Restart label for the idle logout dialog at 1 second left. Used in retail mode only.">
-    This computer will reset in 1 second.
-Press any key to continue exploring.
-  </message>
-  <message name="IDS_IDLE_LOGOUT_WARNING_RESTART_NOW" desc="Restart label for the idle logout dialog with no time left. Used in retail mode only.">
-    Going.. Going... Gone.
-  </message>
 
   <!-- Application name notification upon idle -->
   <message name="IDS_IDLE_APP_NAME_UNKNOWN_APPLICATION_NOTIFICATION" desc="A notification which shows that the name of the running Kiosk application cannot be determined and is probably invalid.">
@@ -77,6 +62,48 @@ Press any key to continue exploring.
   <message name="IDS_CURRENT_WALLPAPER_SET_BY_MESSAGE" desc="The string displayed to user if the current wallpaper is set by a third party wallpaper app/extension.">
     The current wallpaper is set by '<ph name="APP_NAME">$1</ph>'. You may need to uninstall '<ph name="APP_NAME">$1</ph>' before selecting a different wallpaper.
   </message>
+
+  <!-- Zip Archiver -->
+  <message desc="The product name for Zip Archiver." name="IDS_ZIP_ARCHIVER_NAME">
+    Zip Archiver
+  </message>
+  <message desc="The product description, displayed in the Chrome Extensions page." name="IDS_ZIP_ARCHIVER_DESCRIPTION">
+    Zip Archiver - Open and pack ZIP files in Files app.
+  </message>
+  <message desc="Title of the password input dialog." name="IDS_ZIP_ARCHIVER_PASSPHRASE_TITLE">
+    Enter your password
+  </message>
+  <message desc="Label of the password input field." name="IDS_ZIP_ARCHIVER_PASSPHRASE_INPUT_LABEL">
+    Password
+  </message>
+  <message desc="Short name of the password accept button." name="IDS_ZIP_ARCHIVER_PASSPHRASE_ACCEPT">
+    Unlock
+  </message>
+  <message desc="Short name of the password cancel button." name="IDS_ZIP_ARCHIVER_PASSPHRASE_CANCEL">
+    Cancel
+  </message>
+  <message desc="Title for of a checkbox whether the password should be remembered. Please keep it as short." name="IDS_ZIP_ARCHIVER_PASSPHRASE_REMEMBER">
+    Remember
+  </message>
+  <message desc="Error message when opening an archive fails because of an unknown reason." name="IDS_ZIP_ARCHIVER_OTHER_ERROR_MESSAGE">
+    The archive format is not supported, or the file is broken.
+  </message>
+  <message desc="Message shown when opening an archive takes long time." name="IDS_ZIP_ARCHIVER_MOUNTING_MESSAGE">
+    Please wait, the archive is being scanned...
+  </message>
+  <message desc="Message shown when packing an archive takes long time." name="IDS_ZIP_ARCHIVER_PACKING_DEFERRED_MESSAGE">
+    Please wait...
+  </message>
+  <message desc="Message shown when packing fails." name="IDS_ZIP_ARCHIVER_PACKING_ERROR_MESSAGE">
+    Packing failed.
+  </message>
+  <message desc="Message shown when packing is in progress." name="IDS_ZIP_ARCHIVER_PACKING_PROGRESS_MESSAGE">
+    Please wait, packing...
+  </message>
+  <message desc="Label text used to cancel zip operation in progress." name="IDS_ZIP_ARCHIVER_PACKING_CANCEL_BUTTON_LABEL">
+    Cancel
+  </message>
+
 
   <!-- File Manager -->
   <message name="IDS_FILE_SYSTEM_PROVIDER_UNRESPONSIVE_WARNING" desc="A warning shown in a notification that an operation is taking longer than expected.">
@@ -139,7 +166,7 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_MEDIA_VIEW_AUDIO_ROOT_LABEL" desc="A label for the 'Audio' root of media views.">
     Audio
   </message>
-  <message name="IDS_FILE_BROWSER_RECENT_ROOT_LABEL" desc="A label for the 'Recent' root.">
+  <message name="IDS_FILE_BROWSER_RECENT_ROOT_LABEL" desc="A label for the 'Recent' root which shows files recently modified by the user.">
     Recent
   </message>
   <message name="IDS_FILE_BROWSER_DOWNLOADS_DIRECTORY_WARNING" desc="Warning displayed to user when viewing downloads folder.">
@@ -238,11 +265,11 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_ERROR_WHITESPACE_NAME" desc="Error message displayed when the user enters a file name consisting of only whitespace characters.">
     Invalid name
   </message>
-  <message name="IDS_FILE_BROWSER_ERROR_LONG_NAME" desc="Error message displayed when user trys to enter too long name for a file or a folder.">
-    This name is too long
+  <message name="IDS_FILE_BROWSER_ERROR_LONG_NAME" desc="Error message displayed when user tries to enter too long name for a file or a folder.">
+    Use a shorter name
   </message>
-  <message name="IDS_FILE_BROWSER_ERROR_EXTERNAL_DRIVE_LONG_NAME" desc="Error message displayed when user trys to enter too long name for an external drive.">
-    This name is too long and exceeds $1 character length limit.
+  <message name="IDS_FILE_BROWSER_ERROR_EXTERNAL_DRIVE_LONG_NAME" desc="Error message displayed when user tries to enter too long name for an external drive.">
+    Use a name that's <ph name="MAX_LENGTH">$1<ex>11</ex></ph> characters or less
   </message>
   <message name="IDS_FILE_BROWSER_EMPTY_FOLDER" desc="Label shown in an empty folder.">
     Nothing to see here...
@@ -258,6 +285,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_FILE_BROWSER_PREPARING_LABEL" desc="Label informing about preparing the file.">
     Preparing
+  </message>
+  <message name="IDS_FILE_BROWSER_QUICK_VIEW_CLOSE_BUTTON_LABEL" desc="Label for button to close QuickView.">
+    Back
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_OPEN_IN_NEW_BUTTON_LABEL" desc="Label for button to open a file with external app.">
     Open
@@ -276,6 +306,11 @@ Press any key to continue exploring.
    <ph name="BEGIN_BOLD">&lt;b&gt;</ph>Don't remove your device just yet!<ph name="END_BOLD">&lt;/b&gt;</ph>
    <ph name="LINE_BREAKS">&lt;br/&gt;&lt;br/&gt;</ph>
    Removing your device while it is in use may cause data loss.  Please wait until the operation is over, then eject the device using the Files app.
+  </message>
+  <message name="IDS_FILE_BROWSER_UNMOUNT_PROVIDED_FAILED" desc="Title of the error dialog when unmount operation for a volume provided by an extension failed.">
+   <ph name="BEGIN_BOLD">&lt;b&gt;</ph>Cannot unmount volume<ph name="END_BOLD">&lt;/b&gt;</ph>
+   <ph name="LINE_BREAKS">&lt;br/&gt;&lt;br/&gt;</ph>
+   The volume is busy. Please close all the opened files from it, then try again later.
   </message>
   <message name="IDS_FILE_BROWSER_MOUNT_ARCHIVE" desc="Title of the action for mounting an archive file to work with its contents.">
     Open
@@ -539,16 +574,16 @@ Press any key to continue exploring.
     Show hidden files
   </message>
   <message name="IDS_FILE_BROWSER_TASKS_BUTTON_LABEL" desc="Label for button that selects a task to open the current file.">
-    Tasks
+    Open
   </message>
   <message name="IDS_FILE_BROWSER_CANCEL_SELECTION_BUTTON_LABEL" desc="Label for button that unselects all selected items.">
     Cancel selection
   </message>
   <message name="IDS_FILE_BROWSER_CHANGE_TO_LISTVIEW_BUTTON_LABEL" desc="Label for button that changes the view mode to 'list view' mode.">
-    List view
+    Switch to list view
   </message>
   <message name="IDS_FILE_BROWSER_CHANGE_TO_THUMBNAILVIEW_BUTTON_LABEL" desc="Label for button that changes the view mode to 'thumbnail view' mode.">
-    Thumbnail view
+    Switch to thumbnail view
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TITLE" desc="Title of the cloud import feature.">
     Cloud backup
@@ -830,8 +865,8 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_METADATA_BOX_CREATION_TIME" desc="Label for file creation time.">
     Created Time
   </message>
-  <message name="IDS_FILE_BROWSER_METADATA_BOX_DIMENSION" desc="Label for image dimension.">
-    Dimension
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_DIMENSION" desc="Label for image dimensions.">
+    Dimensions
   </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_DURATION" desc="Label for audio/video duration.">
     Duration
@@ -1293,7 +1328,7 @@ Press any key to continue exploring.
     Disable subtitles
   </message>
 
-<!-- Imageburn Strings -->
+  <!-- Update Screen Strings -->
   <message name="IDS_CHECKING_FOR_UPDATES" desc="Notification for checking for update">
     Checking for updates
   </message>
@@ -1303,109 +1338,10 @@ Press any key to continue exploring.
   <message name="IDS_UPDATE_FINALIZING" desc="Message that the system is finalizing an update">
     Finalizing...
   </message>
-  <message name="IDS_IMAGEBURN_HEADER_TITLE" desc="Title that is displayed on image burning webpage ">
-    Create OS Recovery Media
-  </message>
-  <message name="IDS_IMAGEBURN_HEADER_DESCRIPTION" desc="Text diplayed under image burning page title">
-    If you ever need to restore your computer's operating system you'll need a recovery SD card or USB memory stick.
-  </message>
-  <message name="IDS_IMAGEBURN_HEADER_LINK" desc="Link to more info on system recovery">
-    Learn more about system recovery
-  </message>
-  <message name="IDS_IMAGEBURN_NO_DEVICES_STATUS" desc="Message telling user to insert removable media image will be burnt to">
-    Insert an SD card or USB memory stick
-  </message>
-  <message name="IDS_IMAGEBURN_NO_DEVICES_WARNING" desc="Warning that device must be at least 4GB big">
-    The device must have capacity of 4GB or greater.
-  </message>
-  <message name="IDS_IMAGEBURN_MUL_DEVICES_STATUS" desc="Message telling user to select storage device to use for burning">
-    Select a removable storage device to use
-  </message>
-  <message name="IDS_IMAGEBURN_USB_DEVICE_STATUS" desc="Message telling user that an USB memory stick has been detected">
-    USB memory stick detected
-  </message>
-  <message name="IDS_IMAGEBURN_SD_DEVICE_STATUS" desc="Message telling user that a SD card has been detected">
-    SD card detected
-  </message>
-  <message name="IDS_IMAGEBURN_DEVICES_WARNING" desc="Warning that data on selected device will be erased">
-    All files on <ph name="DEVICE_NAME">$1<ex>Kingston DataTraveler</ex></ph> will be erased.
-  </message>
-  <message name="IDS_IMAGEBURN_NO_CONNECTION_STATUS" desc="Message telling user that the device is not connected to the Internet">
-    Internet not connected
-  </message>
-  <message name="IDS_IMAGEBURN_NO_CONNECTION_WARNING" desc="Message instructing user to connect to the Internet">
-    Please connect to the Internet to proceed.
-  </message>
-  <message name="IDS_IMAGEBURN_INSUFFICIENT_SPACE_STATUS" desc="Message telling user that removable device has insufficient space">
-    Insufficient space
-  </message>
-  <message name="IDS_IMAGEBURN_INSUFFICIENT_SPACE_WARNING" desc="Message instructing user to insert device with enough capacity">
-    The storage device has a capacity of <ph name="DEVICE_CAPACITY">$1<ex>1MB</ex></ph>. Please insert a SD card or USB memory stick with at least 4GB of capacity.
-  </message>
-  <message name="IDS_IMAGEBURN_DOWNLOADING_STATUS" desc="Message telling user that the image is being downloaded">
-    Downloading recovery image...
-  </message>
-  <message name="IDS_IMAGEBURN_DOWNLOAD_PROGRESS_TEXT" desc="Information on downloaded amount">
-    <ph name="DOWNLOADED_AMOUNT">$1<ex>40kB</ex></ph> of <ph name="TOTAL_SIZE">$2<ex>250kB</ex></ph> downloaded
-  </message>
-  <message name="IDS_IMAGEBURN_DOWNLOAD_TIME_REMAINING" desc="Expected remaining time of the download">
-    Time remaining: <ph name="TIME_REMAINING">$1<ex>5s</ex></ph>
-  </message>
-  <message name="IDS_IMAGEBURN_UNZIP_STATUS" desc="Message telling user that the image is being extracted">
-    Extracting recovery image...
-  </message>
-  <message name="IDS_IMAGEBURN_BURN_STATUS" desc="Message telling user that the image is being copied">
-    Copying recovery image...
-  </message>
-  <message name="IDS_IMAGEBURN_BURN_PROGRESS_TEXT" desc="Information on burned amount">
-    <ph name="BURNT_AMOUNT">$1<ex>40kB</ex></ph> of <ph name="TOTAL_SIZE">$2<ex>250kB</ex></ph> copied
-  </message>
-  <message name="IDS_IMAGEBURN_PROGRESS_TIME_UNKNOWN" desc="Message telling user that a tast could take few minutes">
-    This may take a few minutes
-  </message>
-  <message name="IDS_IMAGEBURN_ERROR_STATUS" desc="Message telling user that an error occurred">
-    An error occurred
-  </message>
-  <message name="IDS_IMAGEBURN_DOWNLOAD_ERROR" desc="Message telling user that an error occurred during download">
-    There was a problem during recovery image download.
-  </message>
-  <message name="IDS_IMAGEBURN_EXTRACTING_ERROR" desc="Message telling user that downloaded zip could not be extracted">
-    There was a problem extracting image to the machine.
-  </message>
-  <message name="IDS_IMAGEBURN_BURN_ERROR" desc="Message telling user that something went wrong while burning the image to the device">
-    There was a problem during copying recovery image to device.
-  </message>
-  <message name="IDS_IMAGEBURN_DEVICE_NOT_FOUND_ERROR" desc="Message telling user that targetd device could not be found">
-    There was a problem while creating OS recovery media. Used storage device could not be found.
-  </message>
-  <message name="IDS_IMAGEBURN_USER_ERROR" desc="Message shown when user cancels burn process">
-    OS Recovery Media creation has been cancelled.
-  </message>
-  <message name="IDS_IMAGEBURN_NETWORK_ERROR" desc="Message shown when we loose network connectivity during download">
-    There was a problem during recovery image download. Network connection has been lost.
-  </message>
-  <message name="IDS_IMAGEBURN_SUCCESS_STATUS" desc="Message telling user that image burning was successful">
-    Success
-  </message>
-  <message name="IDS_IMAGEBURN_SUCCESS_DESC" desc="Message teling user that recovery media is ready to be used">
-    Your recovery media is ready. You may remove it from your system.
-  </message>
-  <message name="IDS_IMAGEBURN_PAGE_TITLE" desc="Image-burn html page title">
-    Create a Recovery Media
-  </message>
-  <message name="IDS_IMAGEBURN_CONFIRM_BUTTON" desc="Text on the button that starts burn process">
-    OK
-  </message>
-  <message name="IDS_IMAGEBURN_CANCEL_BUTTON" desc="Text on the button that cancels download">
-    Cancel
-  </message>
-  <message name="IDS_IMAGEBURN_RETRY_BUTTON" desc="Text on the button that triggers burn restart">
-    Try again
-  </message>
 
   <!-- Chrome OS Strings -->
-  <message name="IDS_ECHO_CONSENT_DIALOG_TEXT" desc="Dialog text shown when user is asked to give consent to proceed with redeeming ECHO offer.">
-    <ph name="SERVICE_NAME">$1<ex>Google Drive</ex></ph> wants to check if your Chrome OS device is eligible for an offer. <ph name="MORE_INFO_LINK">$2<ex>More info</ex></ph>
+  <message name="IDS_ECHO_CONSENT_DIALOG_TEXT" desc="Dialog text shown when user is asked to give consent to proceed with redeeming an ECHO offer.">
+    <ph name="SERVICE_NAME">$1<ex>Google Drive</ex></ph> wants to check if you are using an eligible Chrome OS device. <ph name="MORE_INFO_LINK">$2<ex>More info</ex></ph>
   </message>
   <message name="IDS_ECHO_DISABLED_CONSENT_DIALOG_TEXT" desc="Dialog text shown when user is informed that redeeming offers is disabled for the device.">
     Your IT administrator has disabled Chrome Goodies for your device. <ph name="MORE_INFO_LINK">$1<ex>More info</ex></ph>
@@ -1440,26 +1376,11 @@ Press any key to continue exploring.
   <message name="IDS_NETWORK_ENROLLMENT_HANDLER_BUTTON" desc="Text of the accept button for generating a new network certificate.">
     Get new certificate
   </message>
-  <message name="IDS_LOW_BATTERY_TITLE" desc="Title for low battery notification">
-    Battery Low
-  </message>
-  <message name="IDS_LOW_BATTERY_MESSAGE" desc="Message for low battery notification">
-    Less than <ph name="MINUTES">$1<ex>15 mins left</ex></ph>.
-  </message>
-  <message name="IDS_UPDATE_TITLE" desc="Title for update notification">
-    System Update
-  </message>
-  <message name="IDS_UPDATE_ERROR" desc="Notification for failed update">
-    System update failed.
-  </message>
   <message name="IDS_UPDATE_AVAILABLE" desc="Notification for available update">
     System update available. Preparing to download&#x2026;
   </message>
   <message name="IDS_UPDATE_COMPLETED" desc="Notification for update completed">
     System update complete. Please restart the system.
-  </message>
-  <message name="IDS_INSTALLING_UPDATE_DESC" desc="Additional info shown on the updates installation screen during OOBE">
-    Your computer will restart when the update is complete.
   </message>
   <message name="IDS_DOWNLOADING" desc="The format for ETA during the update downloading stage">
     Downloading: <ph name="STATUS">$1<ex>Less than 1 minute left</ex></ph>
@@ -1530,9 +1451,6 @@ Press any key to continue exploring.
   <message name="IDS_ADD_WI_FI_NETWORK_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens 'Add New WiFi Network' dialog">
     Add other WiFi network
   </message>
-  <message name="IDS_ADD_MOBILE_NETWORK_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens 'Add New Mobile Network' dialog">
-    Add other mobile network
-  </message>
   <message name="IDS_AUTOSTART_WARNING_TITLE" desc="Title of the kiosk autostart screen">
     Auto-launch permission requested
   </message>
@@ -1557,9 +1475,6 @@ Press any key to continue exploring.
   <message name="IDS_KIOSK_ENABLE_SCREEN_ENABLE_BUTTON" desc="Enable button text">
     Enable
   </message>
-  <message name="IDS_EXCLAMATION_ICON_TITLE" desc="Accessible title of the reset screen icon depicting exclamation mark.">
-    Exclamation mark icon
-  </message>
   <message name="IDS_RESET_SCREEN_TITLE" desc="Title of the reset screen">
     Factory reset
   </message>
@@ -1578,9 +1493,6 @@ Press any key to continue exploring.
   <message name="IDS_UPDATE_SCREEN_ACCESSIBLE_TITLE" desc="Title to be spoken on opening the OOBE update screen">
     Chrome updates automatically so you always have the freshest version
   </message>
-  <message name="IDS_SIGNIN_SCREEN_TITLE" desc="Title of OOBE/Add User sign-in screen">
-    Sign in
-  </message>
   <message name="IDS_SIGNIN_SCREEN_TITLE_TAB_PROMPT" desc="Title of OOBE/Add User sign-in screen with TAB prompt when ChromeVox is active">
     Sign in, press the tab key to interact with input elements
   </message>
@@ -1592,9 +1504,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_NETWORK_SELECTION_TITLE" desc="Welcome title shown on network selection screen">
     Let's get started
-  </message>
-  <message name="IDS_OOBE_LANGUAGE_SELECTION_MSG" desc="Chrome OS OOBE: label for language selection dropdown">
-    What is your language?
   </message>
   <message name="IDS_OOBE_ASSET_ID_LABEL" desc="Chrome OS OOBE: label for asset identifier.">
     Asset ID: <ph name="ASSET_ID">$1<ex>None specified</ex></ph>
@@ -1649,15 +1558,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_HID_DETECTION_CONTINUE_BUTTON" desc="Text shown on continue button" meaning="Continue button label of HID detection screen.">
     Continue
-  </message>
-  <message name="IDS_NETWORK_SELECTION_NONE" desc="Text shown in combobox when no network are selected">
-    No selection
-  </message>
-  <message name="IDS_NETWORK_SELECTION_NONE_SELECTED" desc="Chrome OS Out-Of-Box: Text shown in network selection combobox when no network is selected">
-    Select
-  </message>
-  <message name="IDS_NETWORK_SELECTION_CONNECTING" desc="Text shown when known device is connecting to known network">
-    Connecting to <ph name="NETWORK_ID">$1<ex>Public Wifi</ex></ph>
   </message>
   <message name="IDS_NETWORK_SELECTION_CONTINUE_BUTTON" desc="Text shown on continue button" meaning="Continue button label of network screen.">
     Continue
@@ -1782,18 +1682,6 @@ Press any key to continue exploring.
   <message name="IDS_OOBE_EULA_ACCEPT_AND_CONTINUE_BUTTON_TEXT" desc="Label on a button on the Title of Terms of Service OOBE screen to accept EULA and continue.">
     Accept and continue
   </message>
-  <message name="IDS_LOGIN_TITLE" desc="Title of sign-in box">
-    Sign in
-  </message>
-  <message name="IDS_LOGIN_TITLE_HINT" desc="Hint under title 'Sign in to Chrome OS'">
-    with your Google Account
-  </message>
-  <message name="IDS_LOGIN_USERNAME">
-    Email
-  </message>
-  <message name="IDS_LOGIN_PASSWORD">
-    Password
-  </message>
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP" desc="Tooltip over disabled Add user button">
     The owner of this device has disabled new users from being added
   </message>
@@ -1821,12 +1709,6 @@ Press any key to continue exploring.
   <message name="IDS_APP_START_BAILOUT_SHORTCUT_FORMAT" desc="Message displayed at the bottom of app launch splash screen to show user the shortcut key to bailout the launch.">
     Press Ctrl + Alt + S to switch to <ph name="IDS_SHORT_PRODUCT_OS_NAME">$1<ex>Chrome OS</ex></ph>
   </message>
-  <message name="IDS_LOGIN_CHANGE_PHOTO">
-    Change picture
-  </message>
-  <message name="IDS_LOGIN_PASSWORD_CHANGED_DIALOG_BOX_TITLE" desc="Title for the password changed dialog box">
-    Sign in
-  </message>
   <message name="IDS_LOGIN_PASSWORD_CHANGED_OLD_PASSWORD_HINT" desc="Old password field hint on the password changed dialog.">
     Enter old password
   </message>
@@ -1835,13 +1717,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_LOGIN_PASSWORD_CHANGED_PROCEED_ANYWAY_BUTTON" desc="Button to proceed without providing old password on the password changed dialog.">
     Proceed anyway
-  </message>
-  <message name="IDS_LOGIN_PASSWORD_CHANGED_RESET" desc="Reset option of the password changed dialog">
-    Only retrieve synced settings and data
-  </message>
-  <message name="IDS_LOGIN_PASSWORD_CHANGED_MIGRATE" desc="Migrate option of the password changed dialog">
-    Migrate all Chrome OS data to the new password
-(requires previous password)
   </message>
   <message name="IDS_LOGIN_PASSWORD_CHANGED_TITLE" desc="Title for the password changed dialog box">
     To unlock and restore your local data, please enter your old <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> password.
@@ -1854,9 +1729,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_LOGIN_PASSWORD_CHANGED_TRY_AGAIN" desc="Label for the retry button on the proceed anyway step in the the GAIA password changed flow">
     Try again
-  </message>
-  <message name="IDS_LOGIN_PREVIOUS_PASSWORD" desc="Password field text on the password changed dialog">
-    Previous password
   </message>
   <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_TITLE" desc="Title for the fatal cryptohome error dialog box">
     Can't sign in
@@ -2173,12 +2045,6 @@ Press any key to continue exploring.
   <message name="IDS_OFFLINE_LOGIN_HTML" desc="Text which suggests enter as an existing user when valid network isn't presented.">
     If you've already registered on this device, you can <ph name="LINK2_START">$1<ex>&gt;a&lt;</ex></ph>sign in as an existing user<ph name="LINK2_END">$2<ex>&gt;/a&lt;</ex></ph>.
   </message>
-  <message name="IDS_RESTART_BUTTON" desc="Text shown on reboot button on login/locker screen">
-    Restart
-  </message>
-  <message name="IDS_SHUTDOWN_BUTTON" desc="Text shown on shutdown button on login/locker screen">
-    Shut down
-  </message>
   <message name="IDS_KIOSK_APPS_BUTTON" desc="Text shown on a button that brings up the kiosk apps menu on login screen">
     Apps
   </message>
@@ -2191,28 +2057,11 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_OOBE_HELP_DIALOG_TITLE" desc="Default title for help dialogs during OOBE/login">
     Help
   </message>
-  <message name="IDS_LOGIN_CAPTCHA_DIALOG_TITLE" desc="Title shown for captcha input dialog">
-    Sign in
-  </message>
-  <message name="IDS_LOGIN_CAPTCHA_INSTRUCTIONS" desc="Explanatory message shown when the user must type letters shown in a captcha image to reauthenticate.">
-    Type the characters you see in the picture below.
-  </message>
   <message name="IDS_LOGIN_NEEDS_DIRCRYPTO_MIGRATION_BANNER" desc="Banner text for users that need to migrate their data to use dircrypto.">
     You've got a new OS update. Sign in to get started.
   </message>
   <message name="IDS_LOGIN_NEW_LOCK_SCREEN_NOTE_BUTTON_TITLE" desc="Title for the button on the Chrome OS lock screen that launches an app for taking notes (the action of creating a new note is delegated to the app). The string is primarily intended to be spoken out by accessibility tools - the button is represented by an icon in the lock screen UI.">
     Create new note
-  </message>
-
-  <!-- Network state strings -->
-  <message name="IDS_CHROMEOS_NETWORK_STATE_NOT_CONNECTED" desc="Displayed state for a network when not connected.">
-    Not connected
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_STATE_CONNECTED" desc="Displayed state for a network when connected">
-    Connected
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_STATE_CONNECTING" desc="Displayed state for a network when connecting">
-    Connecting
   </message>
 
   <!-- Network error strings -->
@@ -2290,7 +2139,10 @@ Press any key to continue exploring.
   <message name="IDS_NETWORK_LIST_INITIALIZING" desc="Text in the network list element when a Cellular network is initiailizing.">
     Initializing...
   </message>
-  <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Text in the network list element when there is no network for the type.">
+  <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Text in the network list element when there is a network for the type, but it is not connected or connecting.">
+    Not connected
+  </message>
+  <message name="IDS_NETWORK_LIST_NO_NETWORK" desc="Text in the network list element when there is no network for the type.">
     No network
   </message>
   <message name="IDS_NETWORK_LIST_CONNECTING_TO" desc="Text in a network summary element when the default network for a type (e.g. WiFi) is connecting.">
@@ -2302,7 +2154,7 @@ Press any key to continue exploring.
 
   <!-- Other Network UI strings -->
   <message name="IDS_NETWORK_CONNECTION_ERROR_TITLE" desc="Title for network connection error notification">
-    Network Connection Error
+    Network connection error
   </message>
   <message name="IDS_NETWORK_CONNECTION_ERROR_MESSAGE" desc="Message for network connection error notification">
     Failed to connect to network '<ph name="name">$1<ex>GoogleGuest</ex></ph>': <ph name="details">$2<ex>Unrecognized error</ex></ph>
@@ -2321,7 +2173,7 @@ Press any key to continue exploring.
     Connection to <ph name="name">$1<ex>Google VPN</ex></ph> has been lost
   </message>
   <message name="IDS_NETWORK_OUT_OF_CREDITS_TITLE" desc="Title for network out of data error notification">
-    Network Connection Error
+    Network connection error
   </message>
   <message name="IDS_NETWORK_OUT_OF_CREDITS_BODY" desc="Message body for network out of data error notification">
     You may have used up your mobile data allowance. Visit the <ph name="name">$1<ex>GoogleGuest</ex></ph> activation portal to buy more data.
@@ -2330,13 +2182,13 @@ Press any key to continue exploring.
     Unrecognized error: <ph name="desc">$1<ex>ShillErrorString</ex></ph>
   </message>
   <message name="IDS_NETWORK_CELLULAR_ACTIVATED_TITLE" desc="Title for cellular activated notification">
-    Mobile Data Activated
+    Mobile data activated
   </message>
   <message name="IDS_NETWORK_CELLULAR_ACTIVATED" desc="Text of the cellular activated notification">
     Congratulations! Your '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data service has been activated and is ready to go.
   </message>
   <message name="IDS_NETWORK_ACTIVATION_ERROR_TITLE" desc="Title for network activation error notification">
-    Network Activation Error
+    Network activation error
   </message>
   <message name="IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION" desc="Message when attempting to activate a mobile network that requires a connection">
     Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
@@ -2370,9 +2222,6 @@ Press any key to continue exploring.
   <message name="IDS_TETHER_NOTIFICATION_SETUP_REQUIRED_MESSAGE" desc="Message shown as part of the notification shown to the user when set up is needed on another device to start tethering.">
     Tap the notification on your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph> to set up the mobile hotspot that can be used by this device.
   </message>
-  <message name="IDS_TETHER_NOTIFICATION_ENABLE_BLUETOOTH_TITLE" desc="Title of the notification shown to the user when disconnected from the Internet when Bluetooth is off; this notification alerts users to enable Bluetooth to search for Tether networks.">
-    To use Instant Tethering, turn on Bluetooth
-  </message>
 
   <!-- Misc settings related strings -->
   <message name="IDS_OPTIONS_SETTINGS_TIMEZONE_DESCRIPTION" desc="In the settings tab, the text next to the timezone combobox.">
@@ -2386,9 +2235,6 @@ Press any key to continue exploring.
   </message>
 
   <!-- Network Configuration Views UI -->
-  <message name="IDS_OPTIONS_SETTINGS_CONFIGURE" desc="In the settings tab, the text on the button to configure a network.">
-    Configure
-  </message>
   <message name="IDS_OPTIONS_SETTINGS_OTHER_WIFI_NETWORKS" desc="In the settings tab, the text on the button to display other Wi-Fi networks.">
     Other Wi-Fi network...
   </message>
@@ -2415,6 +2261,9 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_CHANGE_PICTURE_TAKE_PHOTO" desc="The text on the button to take photo of the current user.">
     Take photo
   </message>
+  <message name="IDS_OPTIONS_CHANGE_PICTURE_CAPTURE_VIDEO" desc="The text on the button to capture video of the current user.">
+    Capture video
+  </message>
   <message name="IDS_OPTIONS_CHANGE_PICTURE_PHOTO_FROM_CAMERA" desc="The accessible text on the icon in the user image grid for a camera photo, when a photo has been captured.">
     Photo from internal camera
   </message>
@@ -2427,14 +2276,11 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_PHOTO_DISCARD_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was discarded.">
     Photo was discarded
   </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_FLIP_PHOTO" desc="The text on the button to flip the camera image horizontally.">
-    Flip camera image horizontally
+  <message name="IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_CAMERA" desc="The text on the button to switch the mode of the camera to photo.">
+    Switch to camera mode
   </message>
-  <message name="IDS_OPTIONS_PHOTO_FLIP_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal flip of camera image.">
-    Photo flipped
-  </message>
-  <message name="IDS_OPTIONS_PHOTO_FLIPBACK_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal back-flip of camera image to not-flipped state.">
-    Photo flipped back
+  <message name="IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_VIDEO" desc="The text on the button to switch the mode of the camera to video.">
+    Switch to video recorder
   </message>
   <message name="IDS_IMAGE_SCREEN_PROFILE_PHOTO" desc="The title of the Google profile photo of the user on image selection screen. Please keep in sync with IDS_OPTIONS_CHANGE_PICTURE_PROFILE_PHOTO.">
     Google Profile photo
@@ -2553,9 +2399,6 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_OPEN_VPN" desc="In settings Internet options, a string specifying OpenVPN.">
     OpenVPN
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_THIRD_PARTY_VPN" desc="In settings Internet options, a string indicating that a VPN connection is provided by a third party.">
-    Third party
-  </message>
   <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_VPN_SERVICE_NAME" desc="In settings Internet options, a string specifying VPN service name.">
     Service name:
   </message>
@@ -2564,9 +2407,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_VPN_PROVIDER_TYPE" desc="In settings Internet options, a string specifying VPN provider type.">
     Provider type:
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_VPN_PROVIDER_NAME" desc="In settings Internet options, a string specifying VPN provider name.">
-    Provider name:
   </message>
   <message name="IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_VPN_PSK_PASSPHRASE" desc="In settings Internet options, a string specifying VPN PSK passphrase.">
     Pre-shared key:
@@ -2602,88 +2442,6 @@ Press any key to continue exploring.
     User certificate must be hardware-backed.
   </message>
 
-  <!-- Choose mobile network -->
-  <message name="IDS_NETWORK_CHOOSE_MOBILE_NETWORK" desc="Title of the window for choosing mobile network.">
-    Choose a mobile network
-  </message>
-  <message name="IDS_NETWORK_SCANNING_FOR_MOBILE_NETWORKS" desc="Text which appears while scanning for mobile networks.">
-    Scanning for networks.
-  </message>
-  <message name="IDS_NETWORK_SCANNING_THIS_MAY_TAKE_A_MINUTE" desc="Text which appears while scanning for mobile networks, right after IDS_NETWORK_SCANNING_FOR_MOBILE_NETWORKS text.">
-    This may take a minute...
-  </message>
-  <message name="IDS_NETWORK_NO_MOBILE_NETWORKS" desc="Text which appears when no mobile networks were found.">
-    No networks found.
-  </message>
-
-  <!-- SIM unlock -->
-  <message name="IDS_SIM_UNLOCK_CHANGE_PIN_TITLE" desc="Cellular device change PIN dialog title in chrome:settings/internet.">
-    Change SIM card PIN
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHANGE_PIN_MESSAGE" desc="Cellular device change PIN dialog message in chrome:settings/internet.">
-    Please enter old and new PIN.
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHANGE_PIN_OLD_PIN" desc="Cellular device change PIN dialog old PIN label text in chrome:settings/internet.">
-    Old PIN:
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHANGE_PIN_NEW_PIN" desc="Cellular device change PIN dialog new PIN label text in chrome:settings/internet.">
-    New PIN:
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHANGE_PIN_RETYPE_PIN" desc="Cellular device change PIN dialog re-type new PIN label text in chrome:settings/internet.">
-    Re-type new PIN:
-  </message>
-  <message name="IDS_SIM_UNLOCK_PINS_DONT_MATCH_ERROR" desc="Cellular device change PIN dialog message shown when entered new PINs don't match in chrome:settings/internet.">
-    PINs don't match!
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PIN_TITLE" desc="Title of the SIM card unlock dialog in chrome:sim-unlock.">
-    Enter SIM card PIN
-  </message>
-  <message name="IDS_SIM_ENTER_PIN_MESSAGE" desc="Message on the the SIM card dialog asking to enter PIN in chrome:sim-unlock.">
-    Please enter PIN.
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PIN_TRIES_MESSAGE" desc="Message on the the SIM card unlock dialog asking to enter PIN in chrome:sim-unlock.">
-    SIM card is locked, please enter PIN. Tries left: <ph name="TRIES_COUNT">$1<ex>42</ex></ph>
-  </message>
-  <message name="IDS_SIM_UNLOCK_INCORRECT_PIN_TRIES_MESSAGE" desc="Incorrect PIN message with the number of tries left shown on SIM card unlock dialog in chrome:sim-unlock.">
-    Incorrect PIN, please try again. Tries left: <ph name="TRIES_COUNT">$1<ex>42</ex></ph>
-  </message>
-  <message name="IDS_SIM_UNLOCK_INCORRECT_PIN_TITLE" desc="Title of the Incorrect PIN stage (no tries left) shown on SIM card unlock dialog in chrome:sim-unlock.">
-    Incorrect PIN
-  </message>
-  <message name="IDS_SIM_UNLOCK_NO_PIN_TRIES_LEFT_MESSAGE" desc="Message shown when there's no PIN tries left, shown on SIM card unlock dialog in chrome:sim-unlock.">
-    You have entered the incorrect PIN too many times. Please contact <ph name="CARRIER_ID">$1<ex>your carrier</ex></ph> to obtain a new 8-digit PIN Unlocking Key.
-  </message>
-  <message name="IDS_SIM_UNLOCK_DEFAULT_CARRIER" desc="Generic carrier name shown on SIM unlock dialog. Ex.: IDS_SIM_UNLOCK_NO_PIN_TRIES_LEFT_MESSAGE, IDS_SIM_UNLOCK_ENTER_PUK_MESSAGE">
-    your carrier
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PUK_BUTTON" desc="Text of the button that will take to Enter PUK dialog, part of SIM card unlock dialog in chrome:sim-unlock.">
-    Enter PIN Unlocking Key
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PUK_TITLE" desc="Title of the Enter PUK dialog, which is part of SIM card unlock dialog in chrome:sim-unlock.">
-    Enter PIN Unlocking Key
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PUK_WARNING" desc="Warning on the Enter PUK dialog with the number of tries left, which is part of SIM card unlock dialog in chrome:sim-unlock.">
-    Your SIM card will be permanently disabled if you cannot enter the correct PIN Unlocking Key. Tries left: <ph name="TRIES_COUNT">$1<ex>42</ex></ph>
-  </message>
-  <message name="IDS_SIM_UNLOCK_ENTER_PUK_MESSAGE" desc="Message on the Enter PUK dialog, which is part of SIM card unlock dialog in chrome:sim-unlock.">
-    Please enter the 8-digit PIN Unlocking Key provided by <ph name="CARRIER_ID">$1<ex>your carrier</ex></ph>.
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHOOSE_PIN_TITLE" desc="Title of the Choose new PIN dialog, which is part of SIM card unlock dialog in chrome:sim-unlock.">
-    Choose New PIN
-  </message>
-  <message name="IDS_SIM_UNLOCK_CHOOSE_PIN_MESSAGE" desc="Message on the Choose new PIN dialog, which is part of SIM card unlock dialog in chrome:sim-unlock.">
-    Please choose a new PIN.
-  </message>
-  <message name="IDS_SIM_UNLOCK_NO_PUK_TRIES_LEFT_MESSAGE" desc="Message shown when there're not PUK tries left, right after last try was used and SIM card is now disabled.">
-    You have entered the incorrect PIN Unlocking Key too many times. Your SIM card is permanently disabled.
-  </message>
-  <message name="IDS_SIM_UNLOCK_SIM_DISABLED_TITLE" desc="Title shown when there're not PUK tries left and SIM card is disabled.">
-    SIM card disabled
-  </message>
-  <message name="IDS_SIM_UNLOCK_SIM_DISABLED_MESSAGE" desc="Message shown when there're not PUK tries left and SIM card is disabled.">
-    This SIM card is disabled and cannot be used. Please contact your service provider for a replacement.
-  </message>
-
   <!-- Slow UI -->
   <message name="IDS_SLOW_DISABLE" desc="The text of the button that disables performance collection for feedback reports">
     Disable performance data collection
@@ -2711,9 +2469,6 @@ Press any key to continue exploring.
   <message name="IDS_EULA_SYSTEM_SECURITY_SETTING" desc="Link from the EULA wizard screen and title of the TPM info dialog">
     System security setting
   </message>
-  <message name="IDS_EULA_SYSTEM_INSTALLATION_SETTINGS" desc="Link from the EULA wizard screen and title of the TPM and RLZ info dialog">
-    System installation settings
-  </message>
   <message name="IDS_EULA_TPM_DESCRIPTION" desc="Dialog box text">
     Your computer contains a Trusted Platform Module (TPM) security device, which is used to implement many critical security features in Chrome OS. Visit the Chromebook Help Center to learn more: https://support.google.com/chromebook/?p=tpm
   </message>
@@ -2722,9 +2477,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_EULA_TPM_KEY_DESCRIPTION_POWERWASH" desc="Dialog box text in case TPM is already in owned state">
     The randomly generated TPM password is not available. This is normal after a Powerwash.
-  </message>
-  <message name="IDS_EULA_TPM_WAIT" desc="Dialog box text">
-    The TPM is being set up. Please be patient; this may take a few minutes.
   </message>
   <message name="IDS_EULA_RLZ_DESCRIPTION" desc="Dialog box text">
     Your computer also comes with <ph name="SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph>'s RLZ library built in. RLZ assigns a non-unique, non-personally identifiable tag to measure the searches and <ph name="SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> usage driven by a particular promotional campaign. These labels sometimes appear in Google Search queries in <ph name="PRODUCT_NAME">$2<ex>Google Chrome</ex></ph>.
@@ -2735,9 +2487,6 @@ Press any key to continue exploring.
   <message name="IDS_EULA_TPM_BUSY" desc="Message bubble text">
     TPM is being prepared, please wait (this may take a few minutes)...
   </message>
-  <message name="IDS_EULA_TPM_DISABLED" desc="Tooltip text describing why 'System security setting' link is disabled.">
-    Trusted Platform Module (TPM) chip is disabled or absent.
-  </message>
   <message name="IDS_EULA_SECURE_MODULE_DESCRIPTION" desc="Description of what a secure module does in the eula page.">
     Your computer contains a secure module, which is used to implement many critical security features in Chrome OS. Visit the Chromebook Help Center to learn more: https://support.google.com/chromebook/?p=sm
   </message>
@@ -2747,14 +2496,8 @@ Press any key to continue exploring.
   <message name="IDS_EULA_SECURE_MODULE_KEY_DESCRIPTION_POWERWASH" desc="Notifies users that a secure module password is unavailabe after a powerwash.">
     The randomly generated secure module password is not available. This is normal after a Powerwash.
   </message>
-  <message name="IDS_EULA_SECURE_MODULE_WAIT" desc="Message that is shown to users on the eula page while the secure module is being set up.">
-    The secure module is being set up. Please be patient; this may take a few minutes.
-  </message>
   <message name="IDS_EULA_SECURE_MODULE_BUSY" desc="Message that is shown to users on the eula page while the secure module is being prepared.">
     Secure module is being prepared, please wait (this may take a few minutes)...
-  </message>
-  <message name="IDS_EULA_SECURE_MODULE_DISABLED" desc="Tooltip text describing why 'System security setting' link is disabled.">
-    Secure module is disabled or absent.
   </message>
   <message name="IDS_ENABLE_DEBUGGING_SCREEN_TITLE" desc="Title of the enable debugging features screen">
     Enable debugging features
@@ -2834,9 +2577,6 @@ Press any key to continue exploring.
   <message name="IDS_RESET_SCREEN_RESTART_MSG" desc="Text shown on reset screen below warning messages if device needs extra restart before powerwash.">
     A restart is required to begin the Powerwash process. After restart you will be asked to confirm that you want to proceed.
   </message>
-  <message name="IDS_RESET_SCREEN_ROLLBACK_OPTION" desc="Checkbox label for rollback option of powerwash process. Is shown on reset screen.">
-    Also return to the previously installed version of <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph>.
-  </message>
   <message name="IDS_RESET_SCREEN_TPM_FIRMWARE_UPDATE_OPTION" desc="Checkbox label for the TPM firmware update option of the powerwash process, shown on the device reset screen.">
     Update firmware for added security.
   </message>
@@ -2857,9 +2597,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_RESET_SCREEN_REVERT_ERROR_EXPLANATION" desc="Error description shown when revert was initiated but unavailable to be performed.">
     <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> is unable to revert to the previously installed version. Please try again to Powerwash your device.
-  </message>
-  <message name="IDS_RESET_SCREEN_REVERT_ERROR_BUTTON" desc="Reset device dialog, error page, revert error while initiating it, button title.">
-    OK
   </message>
   <message name="IDS_RESET_SCREEN_POPUP_POWERWASH_TITLE" desc="Confirmational pop-up on top of reset device dialog. Pop-up title for powerwash.">
     Confirm Powerwash
@@ -2925,9 +2662,6 @@ Press any key to continue exploring.
     This setting belongs to <ph name="OWNER_EMAIL">$1<ex>john@google.com</ex></ph>.
   </message>
 
-  <message name="IDS_STATUSBAR_SPOKEN_FEEDBACK_ENABLED" desc="The tooltip for the status bar button to indicate that spoken feedback has been enabled.">
-    ChromeVox (spoken feedback) is enabled. Press Ctrl+Alt+Z to disable.
-  </message>
   <message name="IDS_STATUSBAR_DISABLE_SPOKEN_FEEDBACK" desc="The menu option to disable spoken feedback accessibility feature.">
     Disable ChromeVox (spoken feedback)
   </message>
@@ -2971,15 +2705,6 @@ Press any key to continue exploring.
   <message name="IDS_STATUSBAR_NETWORK_DEVICE_CONNECTED" desc="The network device status connected.">
     Connected
   </message>
-  <message name="IDS_STATUSBAR_NETWORK_DEVICE_DISCONNECTED" desc="The network device status disconnected.">
-    Disconnected
-  </message>
-  <message name="IDS_STATUSBAR_NETWORK_DEVICE_NOT_CONFIGURED" desc="The network device status not configured.">
-    Not configured
-  </message>
-  <message name="IDS_STATUSBAR_NETWORK_DEVICE_DISABLED" desc="The network device status disabled.">
-    Off
-  </message>
   <message name="IDS_STATUSBAR_NETWORK_DEVICE_ENABLE" desc="Enable the network device.">
     Enable <ph name="NETWORKDEVICE">$1<ex>Wifi</ex></ph>
   </message>
@@ -2998,189 +2723,11 @@ Press any key to continue exploring.
   <message name="IDS_STATUSBAR_NETWORK_MORE" desc="Message for last link in the network menu requesting more technical and less common stuff (proxy settings, IP and hardware addresses)">
     More...
   </message>
-  <message name="IDS_STATUSBAR_NETWORK_ADD_VPN" desc="In the network status menu, the text in Private networks submenu to add a private network.">
-    Add private network...
-  </message>
-  <message name="IDS_STATUSBAR_NETWORK_VIEW_ACCOUNT" desc="In the network status menu, the text of the top-up URL link.">
-    View account
-  </message>
   <message name="IDS_STATUSBAR_NO_NETWORKS_MESSAGE" desc="No networks are available">
     No networks are available
   </message>
-  <message name="IDS_STATUSBAR_BATTERY_CHARGING_PERCENTAGE" desc="In the power menu button, this shows what percentage of battery is left when power supply is connected.">
-    Charging battery: <ph name="PRECENTAGE">$1<ex>100</ex></ph>%
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_USING_PERCENTAGE" desc="In the power menu button, this shows what percentage of battery is left when power supply is not connected.">
-    Using battery: <ph name="PRECENTAGE">$1<ex>100</ex></ph>%
-  </message>
-  <message name="IDS_STATUSBAR_NO_BATTERY" desc="In the power menu button, menu item label shown when there is no battery installed in the device.">
-    No battery
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_TIME_UNTIL_FULL" desc="In the power menu button, this shows how much time until fully charged.">
-Charging
-<ph name="HOUR">$1<ex>2</ex></ph>:<ph name="MINUTE">$2<ex>30</ex></ph> until full
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_TIME_UNTIL_EMPTY" desc="In the power menu button, this shows how much time until empty.">
-Battery
-<ph name="HOUR">$1<ex>2</ex></ph>:<ph name="MINUTE">$2<ex>30</ex></ph> remaining
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_CALCULATING_TIME_UNTIL_FULL" desc="In the power menu button, this is the message the shows when we are calculating time until full.">
-Charging
-Calculating time until full
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_CALCULATING_TIME_UNTIL_EMPTY" desc="In the power menu button, this is the message the shows when we are calculating time until empty.">
-Battery
-Calculating remaining time
-  </message>
-  <message name="IDS_STATUSBAR_BATTERY_IS_CHARGED" desc="In the power menu button, the battery is charged message.">
-Battery full
-  </message>
-  <message name="IDS_STATUSBAR_NETWORK_CONNECTING_TOOLTIP" desc="Tooltip for the network menu status bar icon when connecting to a network.">
-    Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
-  </message>
-  <message name="IDS_STATUSBAR_NETWORK_CONNECTED_TOOLTIP" desc="Tooltip for the network menu status bar icon when connected to a network.">
-    Connected to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
-  </message>
-  <message name="IDS_STATUSBAR_VOLUME_PERCENTAGE" desc="Tooltip for the volume button, shows the percentage of volume">
-    Volume: <ph name="PRECENTAGE">$1<ex>100</ex></ph>%
-  </message>
-  <message name="IDS_STATUSBAR_VOLUME_MUTE" desc="Tooltip for the volume button when muted">
-    Volume: Muted
-  </message>
-  <message name="IDS_STATUSBAR_WINDOW_MAXIMIZE_TOOLTIP" desc="Tooltip for the layout mode button in the status bar when the window is unmaximized.">
-    Maximize
-  </message>
-  <message name="IDS_STATUSBAR_WINDOW_RESTORE_TOOLTIP" desc="Tooltip for the layout mode button in the status bar when the window is maximized.">
-    Restore
-  </message>
-  <message name="IDS_VERSION_FIELD_PREFIX" desc="Display the OS version to the user.">
-    version
-  </message>
-  <message name="IDS_PROXY_CONFIG_TITLE" desc="The title of the basic proxy config.">
-    Proxy Configuration
-  </message>
-  <message name="IDS_PROXY_DIRECT_CONNECTION" desc="Radio used to tell it to just connect directly, not use a proxy.">
-    Direct Internet connection
-  </message>
-  <message name="IDS_PROXY_MANUAL_CONFIG" desc="Radio used to tell it to configure manually.">
-    Manual proxy configuration
-  </message>
-  <message name="IDS_PROXY_SAME_FORALL" desc="Radio used to tell it to use the same proxy.">
-    Use the same proxy for all protocols
-  </message>
-  <message name="IDS_PROXY_HTTP_PROXY" desc="Label for the http proxy box.">
-    HTTP proxy
-  </message>
-  <message name="IDS_PROXY_HTTP_SECURE_HTTP_PROXY" desc="Label for the secure http proxy box.">
-    Secure HTTP proxy
-  </message>
-  <message name="IDS_PROXY_FTP_PROXY" desc="Label for the ftp proxy box.">
-    FTP proxy
-  </message>
-  <message name="IDS_PROXY_SOCKS_HOST" desc="Label for the SOCKS host box.">
-    SOCKS host
-  </message>
-  <message name="IDS_PROXY_AUTOMATIC" desc="Radio to select configuring from a URL.">
-    Automatic proxy configuration
-  </message>
-  <message name="IDS_PROXY_USE_AUTOCONFIG_URL" desc="Label for the checkbox that controls whether to use an autoconfiguration URL.">
-    Use an autoconfiguration URL
-  </message>
-  <message name="IDS_PROXY_ADD_HOST" desc="Label for the Add host button.">
-    Add
-  </message>
-  <message name="IDS_PROXY_REMOVE_HOST" desc="Label for the Remove host button.">
-    Remove
-  </message>
-  <message name="IDS_PROXY_PORT" desc="Label for the Port box.">
-    Port
-  </message>
-  <message name="IDS_PROXY_BYPASS" desc="Label for the proxy bypass list.">
-    Do not use the proxy settings for these hosts and domains:
-  </message>
-  <message name="IDS_PROXY_WEB_PROXY_AUTO_DISCOVERY" desc="Label for the web proxy auto discovery url.">
-    Web Proxy Auto Discovery URL
-  </message>
 
   <!-- Accessibility strings, to be spoken -->
-  <message name="IDS_CHROMEOS_ACC_BUTTON" desc="Label indicating that a control is a pushbutton.">
-    Button
-  </message>
-  <message name="IDS_CHROMEOS_ACC_CHECKBOX_UNCHECKED" desc="Label indicating that a control is an unchecked check box.">
-    Unchecked check box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_CHECKBOX_CHECKED" desc="Label indicating that a control is a checked check box.">
-    Checked check box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_RADIO_UNSELECTED" desc="Label indicating that a control is an unselected radio button.">
-    Unselected radio button
-  </message>
-  <message name="IDS_CHROMEOS_ACC_RADIO_SELECTED" desc="Label indicating that a control is a selected radio button.">
-    Selected radio button
-  </message>
-  <message name="IDS_CHROMEOS_ACC_COMBOBOX" desc="Label indicating that a control is a combo box, a control that pops down a list of options to choose from.">
-    Combo box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_LISTBOX" desc="Label indicating that a control is a list box, a control that shows a fixed list of options to choose from.">
-    List box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_LINK" desc="Label indicating that a control is a clickable link.">
-    Link
-  </message>
-  <message name="IDS_CHROMEOS_ACC_MENU" desc="Label indicating that a control is a menu that will drop down to reveal options if you click on it.">
-    Menu
-  </message>
-  <message name="IDS_CHROMEOS_ACC_TAB" desc="Label indicating that a control is one tab in a tabbed dialog or window.">
-    Tab
-  </message>
-  <message name="IDS_CHROMEOS_ACC_TEXTBOX" desc="Label indicating that a control is an editable text box.">
-    Text box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_PASSWORDBOX" desc="Label indicating that a control is a secure editable text box for a password, where the keys you type will be obscured.">
-    Password text box
-  </message>
-  <message name="IDS_CHROMEOS_ACC_INDEX_OF_COUNT" desc="Phrase indicating that the current selected item is number INDEX out of a list of COUNT choices, for example if the list is A, B, C, D, E and the user has selected C the phrase would be '3 of 5'.">
-    <ph name="INDEX">$1<ex>3</ex></ph> of <ph name="COUNT">$2<ex>5</ex></ph>
-  </message>
-  <message name="IDS_CHROMEOS_ACC_HAS_SUBMENU" desc="Phrase indicating that a menu item has a submenu.">
-    Has submenu
-  </message>
-  <message name="IDS_CHROMEOS_ACC_SELECTED" desc="Phrase indicating that a control was selected or activated.">
-    Selected
-  </message>
-  <message name="IDS_CHROMEOS_ACC_EXCLAMATION_POINT" desc="The name of the exclamation point character.">
-    Exclamation point
-  </message>
-  <message name="IDS_CHROMEOS_ACC_LEFT_PAREN" desc="The name of the left parenthesis character, abbreviated or shortened if possible.">
-    Left paren
-  </message>
-  <message name="IDS_CHROMEOS_ACC_RIGHT_PAREN" desc="The name of the left parenthesis character, abbreviated or shortened if possible.">
-    Right paren
-  </message>
-  <message name="IDS_CHROMEOS_ACC_SEMICOLON" desc="The name of the semicolon character.">
-    Semicolon
-  </message>
-  <message name="IDS_CHROMEOS_ACC_COLON" desc="The name of the colon character.">
-    Colon
-  </message>
-  <message name="IDS_CHROMEOS_ACC_QUOTE" desc="The name of the quotation mark character, abbreviated or shortened if possible.">
-    Quote
-  </message>
-  <message name="IDS_CHROMEOS_ACC_COMMA" desc="The name of the comma character.">
-    Comma
-  </message>
-  <message name="IDS_CHROMEOS_ACC_PERIOD" desc="The name of the period character.">
-    Period
-  </message>
-  <message name="IDS_CHROMEOS_ACC_SPACE" desc="The name of a space character.">
-    Space
-  </message>
-  <message name="IDS_CHROMEOS_ACC_TEXT_UNSELECTED" desc="A phrase to indicate to the user that text has been unselected.">
-    Unselected
-  </message>
-  <message name="IDS_CHROMEOS_ACC_USERNAME_LABEL" desc="Label for the username text field.">
-    Username.
-  </message>
   <message name="IDS_CHROMEOS_ACC_LOGIN_SIGNING_IN" desc="Status when signing in.">
     Signing in.
   </message>
@@ -3189,14 +2736,6 @@ Battery full
   </message>
   <message name="IDS_CHROMEOS_ACC_LOGIN_SIGNIN_PUBLIC_ACCOUNT" desc="Status when signing in into a public account.">
     Entering public session.
-  </message>
-  <message name="IDS_CHROMEOS_ACC_ACCOUNT_PICTURE" desc="Tooltip for the take account picture button.">
-    Take picture.
-  </message>
-
-  <!-- Audio strings -->
-  <message name="IDS_CHROMEOS_AUDIO_CRAS_DEVICE_AUTOMATIC" desc="Audio device name shown to the user when the proper device is automatically used.">
-    Automatic
   </message>
 
   <!-- Removable device notifications -->
@@ -3217,9 +2756,6 @@ Battery full
   </message>
   <message name="IDS_REMOVABLE_DEVICE_IMPORT_BUTTON_LABEL" desc="Text of a button label in a notification to start the import flow. If user clicks the button, the import flow begins.">
     View/Backup media
-  </message>
-  <message name="IDS_REMOVABLE_DEVICE_HARD_UNPLUG_TITLE" desc="Text of notification message which is shown when user removes removable device (SD card, USB key...) without clicking the eject icon">
-    You removed your device too soon!
   </message>
   <message name="IDS_DEVICE_UNSUPPORTED_MESSAGE" desc="Text of notification message which is shown when user inserts removable device (SD card, USB key...)">
    Sorry, the device <ph name="DEVICE_LABEL">$1<ex>My SD card</ex></ph> is not supported at this time.
@@ -3265,9 +2801,6 @@ Battery full
   <message name="IDS_FORMATTING_OF_DEVICE_PENDING_MESSAGE" desc="Text of notification message which is shown when formatting process of some device is in progress">
     The formatting process can take a couple of seconds. Please wait.
   </message>
-  <message name="IDS_FORMATTING_STARTED_FAILURE_MESSAGE" desc="Text of notification message which is shown when formatting process can not be started.">
-    Could not start the formatting process.
-  </message>
   <message name="IDS_FORMATTING_FINISHED_SUCCESS_MESSAGE" desc="Text of notification message which is shown when formatting finishes without any errors.">
     Formatting finished successfully!
   </message>
@@ -3276,67 +2809,11 @@ Battery full
   </message>
 
   <!-- Renaming device notifications -->
-  <message name="IDS_RENAMING_OF_DEVICE_PENDING_TITLE" desc="Title of notification message which is shown when renaming process of some device is in progress">
-    Renaming...
-  </message>
-  <message name="IDS_RENAMING_OF_DEVICE_FINISHED_TITLE" desc="Title of notification message which is shown when renaming process finshes">
-    Renaming finished
-  </message>
   <message name="IDS_RENAMING_OF_DEVICE_FAILED_TITLE" desc="Title of notification message which is shown when renaming process fails">
     Renaming failed
   </message>
-  <message name="IDS_RENAMING_OF_DEVICE_PENDING_MESSAGE" desc="Text of notification message which is shown when renaming process of some device is in progress">
-    The renaming process can take a couple of seconds. Please wait.
-  </message>
-  <message name="IDS_RENAMING_OF_DEVICE_FINISHED_SUCCESS_MESSAGE" desc="Text of notification message which is shown when renaming finishes without any errors.">
-    Renaming finished successfully!
-  </message>
   <message name="IDS_RENAMING_OF_DEVICE_FINISHED_FAILURE_MESSAGE" desc="Text of notification message which is shown when there are some errors while renaming.">
     Aw, Snap! There was an error during renaming.
-  </message>
-
-  <!-- ChromeOS GData synchronization notifications -->
-  <message name="IDS_CHROMEOS_GDATA_SYNC_TITLE" desc="Title text of notification message which is shown when gdata sync is on progress.">
-    Syncing
-  </message>
-  <message name="IDS_CHROMEOS_GDATA_SYNC_FINISHED_FAILURE_TITLE" desc="Title text of notification message which is shown when there are some errors while gdata sync.">
-    Could not sync
-  </message>
-  <message name="IDS_CHROMEOS_GDATA_SYNC_PROGRESS_MESSAGE" desc="Text of notification message which is shown when gdata file sync is on progress.">
-    Syncing <ph name="COUNT">$1<ex>3</ex></ph> files...
-  </message>
-  <message name="IDS_CHROMEOS_GDATA_SYNC_FINISHED_SUCCESS_MESSAGE" desc="Text of notification message which is shown when gdata sync finishes without any errors.">
-    Sync complete.
-  </message>
-  <message name="IDS_CHROMEOS_GDATA_SYNC_FINISHED_FAILURE_MESSAGE" desc="Text of notification message which is shown when there are some errors while gdata sync.">
-    Unable to connect.
-  </message>
-
-  <!-- Cellular network technology description strings for ChromeOS -->
-  <message name="IDS_CHROMEOS_NETWORK_CELLULAR_TECHNOLOGY_UNKNOWN" desc="Description of unknown cellular network technology. Shown under details on chrome:stettings/internet page.">
-    Unknown
-  </message>
-
-  <!-- Cellular network activation state description strings for ChromeOS -->
-  <message name="IDS_CHROMEOS_NETWORK_ACTIVATION_STATE_ACTIVATED" desc="Description of state of activated cellular data plan. Shown under details on chrome:stettings/internet page.">
-    Activated
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_ACTIVATION_STATE_ACTIVATING" desc="Description of state of currently activating cellular data plan. Shown under details on chrome:stettings/internet page.">
-    Activating
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_ACTIVATION_STATE_NOT_ACTIVATED" desc="Description of state of unactivated cellular data plan. Shown under details on chrome:stettings/internet page.">
-    Not activated
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_ACTIVATION_STATE_PARTIALLY_ACTIVATED" desc="Description of state of partially activated cellular data plan state. Shown under details on chrome:stettings/internet page.">
-    Partially activated
-  </message>
-
-  <!-- Cellular network roaming status description strings for ChromeOS -->
-  <message name="IDS_CHROMEOS_NETWORK_ROAMING_STATE_HOME" desc="Description of cellular roaming status while connected to home network. Shown under details on chrome:stettings/internet page.">
-    Home network, not roaming
-  </message>
-  <message name="IDS_CHROMEOS_NETWORK_ROAMING_STATE_ROAMING" desc="Description of cellular roaming status while roaming. Shown under details on chrome:stettings/internet page.">
-    Roaming
   </message>
 
   <!-- Extensions Kiosk apps -->
@@ -3425,6 +2902,18 @@ Battery full
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_BRIGHT_UP_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'bright up' key that turns the screen's brightness up.">
     bright up
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_ABOVE_DISPLAY" desc="The text in the keyboard overlay to explain the shortcut (move active window to above display).">
+    Window up
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_BELOW_DISPLAY" desc="The text in the keyboard overlay to explain the shortcut (move active window to below display).">
+    Window down
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_LEFT_DISPLAY" desc="The text in the keyboard overlay to explain the shortcut (move active window to left display).">
+    Window left
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_RIGHT_DISPLAY" desc="The text in the keyboard overlay to explain the shortcut (move active window to right display).">
+    Window right
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_MUTE_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'mute' key that mutes the system's sound.">
     mute
@@ -3856,9 +3345,6 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD" desc="The text in the keyboard overlay to explain the shortcut to show the points where a user interfaces with the touch screen. This would be useful for someone doing a presentation where they need the audience to see the points on the screen that are touched.">
     Show touch points
   </message>
-  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_SPEECH_INPUT" desc="The text in the keyboard overlay to explain the shortcut (start or stop speech input).">
-    Speech input
-  </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOUCH_HUD_MODE_CHANGE" desc="The text in the keyboard overlay to explain the shortcut to change the mode of the debug touch HUD. 'HUD' stands for 'heads-up display'. 'Touch' refers to the touch interface.">
     Change touch HUD mode
   </message>
@@ -3906,12 +3392,6 @@ Battery full
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_2ND_TIME_SUPERVISED" desc="Supervised user couldn't sign in because password is invalid for the 2nd time">
     Sorry, your password could not be verified. The manager of this supervised user may have changed the password recently. If so, the new password will be applied the next time you sign in. Try using your old password.
   </message>
-  <message name="IDS_LOGIN_ERROR_PASSWORD_CHANGED" desc="Couldn't log in because password specified matched as old one, but not new one (online) - password change has been detected.">
-    Your password has changed. Please try again with your new password.
-  </message>
-  <message name="IDS_LOGIN_ERROR_RESTRICTED" desc="Couldn't log in because account is disabled/deleted or not signed up">
-    Your account may have been deleted or disabled. Please sign out.
-  </message>
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_NEW" desc="Couldn't sign in because username or password invalid">
     Sorry, your email or password could not be verified. Please try again.
   </message>
@@ -3920,9 +3400,6 @@ Battery full
   </message>
   <message name="IDS_LOGIN_ERROR_OFFLINE_FAILED_NETWORK_NOT_CONNECTED" desc="Couldn't sign in because offline sign-in has failed and network is not connected">
     Sorry, your email or password could not be verified. Try connecting to a network first.
-  </message>
-  <message name="IDS_LOGIN_ERROR_NO_NETWORK_LIBRARY" desc="Couldn't sign in because nework library couldn't be loaded">
-    Can't access network library
   </message>
   <message name="IDS_LOGIN_ERROR_KEYBOARD_SWITCH_HINT" desc="A hint text for the login and lock screens about layout switching">
     Hit Control-Shift-Space to switch keyboard layout.
@@ -3972,15 +3449,6 @@ Battery full
   <message name="IDS_LOGIN_MAYBE_CAPTIVE_PORTAL_NETWORK_SELECT" desc="An offline message shown when we suggest that user may select other network.">
     You may also select another network.
   </message>
-  <message name="IDS_LOGIN_ERROR_CAPTIVE_PORTAL_NO_GUEST_MODE" desc="An error message shown when we suggest that user may be behind the captive portal but Guest mode is disabled.">
-    Your password cannot be verified on this current network. Please select another network.
-  </message>
-  <message name="IDS_NOTIFICATION_PANEL_TITLE" desc="Text for the title of the notification panel.">
-    Notifications
-  </message>
-  <message name="IDS_LOGIN_OFFLINE_TITLE" desc="Title of an offline message that shows up in OOBE sign-in screen.">
-    You are currently offline
-  </message>
   <message name="IDS_LOGIN_OFFLINE_MESSAGE" desc="An offline message that shows up in OOBE sign-in screen.">
     Please connect to the Internet to sign in to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
@@ -4001,12 +3469,6 @@ Battery full
   </message>
   <message name="IDS_UPDATE_PROXY_ERROR_MESSAGE" desc="An offline message that shows up when a proxy error has appeared in the OOBE update screen.">
     The update check failed using the current proxy settings. Please adjust your <ph name="PROXY_SETTINGS_LINK_START">$1<ex>&gt;a&lt;</ex></ph>proxy settings<ph name="PROXY_SETTINGS_LINK_END">$2<ex>&gt;/a&lt;</ex></ph>.
-  </message>
-  <message name="IDS_ADD_USER" desc="Shown in login panel for adding new user to login screen.">
-    Add a user
-  </message>
-  <message name="IDS_LANGUAGES_MORE" desc="Main language list 'more' link. Expands all possible languages, not only the main ones.">
-    More...
   </message>
   <message name="IDS_LOGIN_POD_OWNER_USER" desc="Login screen user pod menu title for a user who owns the device.">
     <ph name="USER_NAME">$1<ex>Ivan Arbuzov</ex></ph> (owner)
@@ -4200,9 +3662,6 @@ Battery full
   </message>
 
   <!-- About Chrome page -->
-  <message name="IDS_UPGRADE_BUTTON" desc="The button label to check for updates and apply (download and install) if found">
-    Check for and apply updates
-  </message>
   <message name="IDS_UPGRADE_OFFLINE" desc="Status label: Currently offline">
     You are currently offline.
   </message>
@@ -4220,20 +3679,14 @@ Battery full
   </message>
 
   <!-- EOL Notification Strings -->
-  <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that software updates for this device are no longer available.">
-    Software updates for this device are no longer available.
-  </message>
-  <message name="IDS_ABOUT_PAGE_EOL_LEARN_MORE" desc="The message in the about page to provide more information of device end of life, containing the URLs.">
-     Please consider upgrading. <ph name="BEGIN_LINK_EOL">&lt;a target="_blank" href="$1"&gt;</ph>Learn more<ph name="END_LINK_EOL">&lt;/a&gt;</ph>
-  </message>
   <message name="IDS_EOL_NOTIFICATION_DISPLAY_SOURCE" desc="Notification header title shown to inform the user that this device is no longer supported.">
     End of support
   </message>
   <message name="IDS_EOL_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that this device is no longer supported.">
     This device is no longer supported
   </message>
-  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive software updates.">
-    Software updates for this device are no longer available. Please consider upgrading.
+  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive latest software updates.">
+    This device will no longer receive the latest software updates. Please consider upgrading.
   </message>
   <message name="IDS_EOL_MORE_INFO_BUTTON" desc="A button label shown in the notification for eol status change to get more information.">
     Learn more
@@ -4261,31 +3714,6 @@ Battery full
     <ph name="DOMAIN">$1<ex>example.com</ex></ph> wants your device's identity to be verified, by Google, to determine eligibility for enhanced playback of protected content. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>.
   </message>
 
-  <!-- Multi-profiles mode -->
-  <message name="IDS_MULTIPROFILES_INTRO_HEADLINE" desc="Describes which feature multi-profiles intro dialog presents.">
-    Multiple sign-in
-  </message>
-  <message name="IDS_MULTIPROFILES_INTRO_MESSAGE" desc="Content of the multi-profiles intro dialog shown when the user adds another user in multi-profiles mode.">
-    This feature allows you to quickly access any signed-in user without requiring a password.
-
-Only use this feature with accounts you trust.
-  </message>
-  <message name="IDS_MULTIPROFILES_INTRO_EXPLANATION" desc="Content of the multi-profiles intro dialog shown when the user adds another user in multi-profiles mode.">
-  </message>
-  <message name="IDS_MULTIPROFILES_INTRO_NOSHOW_AGAIN" desc="In multi-profiles intro dialog, text for no-show-again option.">
-    Got it, don't show me this again.
-  </message>
-  <message name="IDS_MULTIPROFILES_SESSION_ABORT_HEADLINE" desc="Describes that the current multi profile session ends because one user left.">
-    Multiple sign-in has been disallowed for a user in this session
-  </message>
-  <message name="IDS_MULTIPROFILES_SESSION_ABORT_MESSAGE" desc="Content of the description that the current multi profile session ended because one user left.">
-    An administrator has disallowed multiple sign-in for <ph name="USER_EMAIL">$1<ex>john@google.com</ex></ph>.
-All users must sign out to continue.
-  </message>
-  <message name="IDS_MULTIPROFILES_SESSION_ABORT_BUTTON_LABEL" desc="Button label for the button in the multi profile session ended because one user left dialog.">
-    Sign out
-  </message>
-
   <!-- First-run tutorial -->
   <message name="IDS_FIRST_RUN_GREETING_STEP_HEADER" desc="Greeting message shown as header of the first dialog of first-run tutorial.">
     Howdy, <ph name="USER_GIVEN_NAME">$1<ex>John</ex></ph>.
@@ -4306,7 +3734,7 @@ All users must sign out to continue.
     Get to your apps fast
   </message>
   <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_1" desc="First part of message on the first-run tutorial bubble pointing to application list button.">
-    Use the Launcher to quickly get to new apps and activities.
+    Use the Launcher to quickly get to new apps and activities. To get here by keyboard, press Alt + Shift + L.
   </message>
   <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_2" desc="Second part of message on the first-run tutorial bubble pointing to application list button. Only shown if the device is Google Assistant capable.">
     Just hold the Launcher icon to talk to your Google Assistant.
@@ -4315,7 +3743,7 @@ All users must sign out to continue.
     Check your Chromebook status
   </message>
   <message name="IDS_FIRST_RUN_TRAY_STEP_TEXT" desc="Text on the first-run tutorial bubble pointing to system tray bubble.">
-    Manage connections, updates, and settings with the status tray.
+    Manage connections, updates, and settings with the status tray. To get here by keyboard, press Alt + Shift + S.
   </message>
   <message name="IDS_FIRST_RUN_HELP_STEP_HEADER" desc="Header of the first-run tutorial bubble pointing to help button in system tray.">
     Explore your Chromebook
@@ -4369,6 +3797,9 @@ All users must sign out to continue.
   </message>
 
   <!-- 3G data Notifications -->
+  <message name="IDS_MOBILE_DATA_NOTIFICATION_TITLE" desc="Title of notification telling that mobile data is enabled.">
+    Mobile data
+  </message>
   <message name="IDS_3G_NOTIFICATION_MESSAGE" desc="Text of the 3G data notification telling that 3G data is enabled.">
     Google Chrome will use mobile data if you're not connected to another network.
   </message>
@@ -4801,6 +4232,9 @@ All users must sign out to continue.
   <message name="IDS_AD_USER_HIT_JOIN_QUOTA" desc="Alert message that user can't add more machines to the domain">
     Failed to join the machine to the domain. This might be due to exceeding the maximum number of allowed machine joins for your account on the server.
   </message>
+  <message name="IDS_AD_BOARD_NOT_SUPPORTED" desc="Alert message that the Chromebook model is not supported for Active Directory">
+    Chrome <ph name="MS_AD_NAME">Microsoft® Active Directory®</ph> integration is only supported on x86_64 platforms. Chromebooks built on top of an ARM or x86 platform do not support this functionality.
+  </message>
   <message name="IDS_AD_AUTH_NETWORK_ERROR" desc="Error message to show when there is a problem contacting the logon server when authenticating for Active Directory enrollment.">
     Oops!  There was a problem contacting the logon server. Please check your network connection and the domain name, then try again.
   </message>
@@ -4863,11 +4297,17 @@ All users must sign out to continue.
   <message name="IDS_NETWORK_UI_GLOBAL_POLICY" desc="Label for global policy properties">
     Global Policy:
   </message>
+  <message name="IDS_NETWORK_UI_NETWORK_LISTS" desc="Label for network lists section">
+    Network (Service) and Device properties
+  </message>
   <message name="IDS_NETWORK_UI_VISIBLE_NETWORKS" desc="Label for list of visible networks">
     Visible Networks:
   </message>
   <message name="IDS_NETWORK_UI_FAVORITE_NETWORKS" desc="Label for list of favorite networks">
     Favorite Networks:
+  </message>
+  <message name="IDS_NETWORK_UI_DEVICES" desc="Label for list of network devices, e.g. wifi or cellular">
+    Devices:
   </message>
 
   <message name="IDS_DEVICE_LOG_LINK_TEXT" desc="Message preceeding link to chrome://device-log">
@@ -4940,6 +4380,12 @@ All users must sign out to continue.
   <message name="IDS_ARC_NOTIFICATION_TITLE" desc="Title of the first-run notification that enables Android apps.">
     Google Play on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
+  <message name="IDS_ARC_NOTIFICATION_DISPLAY_SOURCE" desc="Context title of the first-run notification that enables Android apps.">
+    Google Play
+  </message>
+  <message name="IDS_ARC_PLAYSTORE_SETTING_UP_TITLE" desc="The text tile which is shown when Play Store is initializing.">
+    Setting up Google Play...
+  </message>
   <message name="IDS_ARC_NOTIFICATION_MESSAGE" desc="Description message of the first-run notification that enables Android apps.">
     Install apps and games from Google Play
   </message>
@@ -4948,12 +4394,6 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_CANCEL_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that cancel running Android apps.">
     No thanks
-  </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_HEADER" desc="Title of the opt-in dialog for Android apps.">
-    Google Play store now on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
-  </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_DESCRIPTION" desc="Description of the opt-in dialog for Android apps.">
-    Choose from over a million apps and games on Google Play to install and use on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE" desc="Agree button of the opt-in dialog for Android apps.">
     Agree
@@ -4970,11 +4410,11 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_SEND_FEEDBACK" desc="Send feedback button of the opt-in dialog for Android apps.">
     Send feedback
   </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_LSO" desc="Name of LSO loading progress of the opt-in dialog for Android apps.">
+  <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_TERMS" desc="Name of Terms Of Services loading progress of the opt-in dialog for Android apps.">
     Just a sec...
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_ANDROID" desc="Name of Android loading progress of the opt-in dialog for Android apps.">
-    This may take up to a minute or so...
+    This may take a minute or so.
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_AUTHORIZATION_FAILED" desc="Error message shown when an auth code is not returned by server.">
     Authorization failed
@@ -5006,9 +4446,6 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_LOCATION_SETTING" desc="Message in the opt-in dialog for Android apps for the user to turn on Google location services">
     Let Google’s location service help apps find your location quickly and accurately, which can reduce battery consumption. Anonymous location data will be sent to Google, even when no apps are running. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-location-service"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
-  <message name="IDS_ARC_OPT_IN_SCANNING_SETTING" desc="Message in the opt-in dialog for Android apps for the user to enable wifi and bluetooth scanning to improve location">
-    Improve location accuracy by allowing apps and services to scan for Wi-Fi networks and Bluetooth devices.
-  </message>
   <message name="IDS_ARC_OPT_IN_LEARN_MORE_CLOSE" desc="Text for close button in learn more dialog">
     Close
   </message>
@@ -5034,22 +4471,6 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_OPT_OUT_TAB_TITLE" desc="Tab title when viewing opt-out setting dialog for android apps.">
     Settings - Remove Android apps
-  </message>
-  <message name="IDS_ARC_OPT_OUT_DIALOG_HEADER" desc="Title of the opt-out dialog for android apps.">
-    Remove Android apps?
-  </message>
-  <message name="IDS_ARC_OPT_OUT_DIALOG_DESCRIPTION" desc="Describes what will happen if the user opts out of android apps.  Note that newlines are preserved when this is rendered in the UI.">
-    Apps you’ve downloaded from Google Play will be deleted from this Chromebook.
-
-    Content you’ve purchased such as movies, TV shows, music, books, or other in-app purchases may also be deleted.
-
-    This doesn’t affect apps or content on other devices.
-  </message>
-  <message name="IDS_ARC_OPT_OUT_DIALOG_BUTTON_CONFIRM_DISABLE" desc="Button to confirm that play store should be removed from this device">
-    Remove Android apps
-  </message>
-  <message name="IDS_ARC_OPT_OUT_DIALOG_BUTTON_CANCEL" desc="Button to cancel the removal of the play store from this device">
-    Cancel
   </message>
   <message name="IDS_ARC_SIGN_IN_NETWORK_ERROR" desc="Android sign-in error because of network error">
     Network connection was lost. Please check your connection or try another Wi-Fi network.
@@ -5144,8 +4565,11 @@ All users must sign out to continue.
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_RESTART_BUTTON" desc="Label for the button in the notification that navigates the user to sign-out for completing the encryption update step.">
     Sign out &amp; sign back in
   </message>
+  <message name="IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_TITLE" desc="Title of the toast shown on the first sign-in after the successfully completed migration needed for using Android apps.">
+    OS update successful
+  </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE" desc="Message of the toast shown on the first sign-in after the successfully completed migration needed for using Android apps.">
-    Update successful. You can now use Android apps.
+    You can now use Android apps.
   </message>
   <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOADING" desc="Loading message of the voice interaction value prop dialog.">
     Loading Google Assistant...
@@ -5174,26 +4598,11 @@ All users must sign out to continue.
   <message name="IDS_VOICE_INTERACTION_LOGO" desc="Logo label for voice interaction.">
     Google assistant logo
   </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_TITLE_LOCALE" desc="Title of the error screen when voice interaction is disabled due to unsupported locale.">
-    The Google Assistant doesn’t speak this language.
-  </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_TITLE_ACCOUNT" desc="Title of the error screen when voice interaction is disabled due to unsupported account.">
-    The Google Assistant isn't enabled for your account.
-  </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_MESSAGE_LOCALE" desc="Error message of the error screen when voice interaction is disabld due to unsupported locale.">
-    Sorry, the Google Assistant doesn’t currently have support for your locale.
-  </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_MESSAGE_ACCOUNT" desc="Error message of the error screen when voice interaction is disabled due to Unsupported account.">
-    Sorry, the Google Assistant doesn’t currently work with your account.
-  </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_LINK" desc="Text on the learn more link for voice interaction error screen.">
-    Learn more
-  </message>
-  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_BUTTON" desc="Button label for accept voice interaction error message.">
-    OK
-  </message>
 
   <!-- Print Job Notification -->
+  <message name="IDS_PRINT_JOB_NOTIFICATION_DISPLAY_SOURCE" desc="The context title of printing notification.">
+    Print
+  </message>
   <message name="IDS_PRINT_JOB_PRINTING_NOTIFICATION_TITLE" desc="Title of the printing-in-progress notification.">
     Now printing <ph name="DOCUMENT_NAME">$1<ex>document.pdf</ex></ph>
   </message>
@@ -5263,4 +4672,75 @@ All users must sign out to continue.
     <ph name="PRINTER_MAKE_OR_MODEL">$1<ex>OfficeJet 8710</ex></ph> (USB)
   </message>
 
+  <!-- Unlock Strings -->
+   <message name="IDS_QUICK_UNLOCK_NOTIFICATION_TITLE" desc="The title of the notification for Quick Unlock feature notification.">
+    QU Feature notification title here
+  </message>
+  <message name="IDS_QUICK_UNLOCK_NOTIFICATION_BODY" desc="The body of the notification for Quick Unlock feature notification.">
+    QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here.
+  </message>
+  <message name="IDS_FINGERPRINT_NOTIFICATION_TITLE" desc="The title of the notification for fingerprint unlock feature notification.">
+    Enable Fingerprint unlock?
+  </message>
+  <message name="IDS_FINGERPRINT_NOTIFICATION_BODY" desc="The body of the notification for fingerprint unlock feature notification.">
+    Skip the lock screen by just tapping the fingerprint sensor. Click to configure.
+  </message>
+  <message name="IDS_FINGERPRINT_UNLOCK_FEATURE_NOTIFIER_NAME" desc="The name of fingerprint unlock feature notifier that is a system component">
+    Fingerprint Unlock Feature
+  </message>
+  <message name="IDS_PIN_UNLOCK_FEATURE_NOTIFIER_NAME" desc="The name of PIN unlock feature notifier that is a system component">
+    PIN Unlock Feature
+  </message>
+
+  <message name="IDS_WIFI_SCANNING_MESSAGE" desc="Scanning for wifi networks">
+    Searching for Wi-Fi networks...
+  </message>
+
+  <!-- Screenshot notification -->
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TITLE_SUCCESS" desc="The title of the notification when a screenshot was taken.">
+    Screenshot taken
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TITLE_DISABLED" desc="The title of the notification when taking a screenshot failed because screenshots are disabled.">
+    Screenshots disabled
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TITLE_FAIL" desc="The title of the notification when taking a screenshot failed.">
+    An error occurred
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TEXT_SUCCESS" desc="The text of the notification when a screenshot was taken. If clicked, the screenshot file is displayed in the Files app.">
+    Show in folder
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TEXT_DISABLED" desc="The text of the notification when taking a screenshot failed because screenshots are disabled by administrator policy.">
+    The ability to take screenshots has been disabled by your administrator.
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_TEXT_FAIL" desc="The text of the notification when taking a screenshot failed.">
+    Failed to save screenshot
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_NOTIFIER_NAME" desc="The name of screenshot notifier that is a system component">
+    Screenshot
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_BUTTON_COPY_TO_CLIPBOARD" desc="The button label for the screenshot notification which copies the screenshot image to clipboard on click.">
+    Copy to clipboard
+  </message>
+  <message name="IDS_SCREENSHOT_NOTIFICATION_BUTTON_ANNOTATE" desc="The label for the screenshot notification button that opens the note-taking app to annotate the screenhsot.">
+    Annotate image
+  </message>
+
+  <!-- HaTS Strings -->
+  <message name="IDS_HATS_NOTIFICATION_TITLE" desc="The title of the notification for Happiness Tracking Survey.">
+    Help us improve Chromebooks
+  </message>
+  <message name="IDS_HATS_NOTIFICATION_BODY" desc="The body of the notification for Happiness Tracking Survey.">
+    Let us know how we’re doing.
+  </message>
+  <message name="IDS_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON" desc="The title of the button in the notification for Happiness Tracking Survey to take the said survey.">
+    Take survey
+  </message>
+
+  <!-- Lock screen note app toast dialog -->
+  <message name="IDS_LOCK_SCREEN_NOTE_APP_TOAST_DIALOG_TITLE" desc="Title of the dialog shown to the user when they first launch note taking app from the lock screen - the title contains the launched app's name.">
+    Taking notes with <ph name="LOCK_SCREEN_APP_NAME">$1<ex>Lock Screen Enabled App</ex></ph>
+  </message>
+  <message name="IDS_LOCK_SCREEN_NOTE_APP_TOAST_DIALOG_MESSAGE" desc="Message shown in the body of the dialog shown to the user when they launch note taking app from the lock screen for the first time - the message has a placeholder for the launched app's name.">
+    Lock screen notes are automatically saved to <ph name="LOCK_SCREEN_APP_NAME">$1<ex>Lock Screen Enabled App</ex></ph>. Your most recent note will remain on the lock screen.
+  </message>
 </grit-part>

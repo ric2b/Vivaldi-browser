@@ -25,14 +25,14 @@
 
 #include "platform/wtf/typed_arrays/ArrayBuffer.h"
 
-#include "platform/wtf/RefPtr.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/typed_arrays/ArrayBufferView.h"
 
 namespace WTF {
 
 bool ArrayBuffer::Transfer(ArrayBufferContents& result) {
   DCHECK(!IsShared());
-  RefPtr<ArrayBuffer> keep_alive(this);
+  scoped_refptr<ArrayBuffer> keep_alive(this);
 
   if (!contents_.Data()) {
     result.Neuter();
@@ -71,7 +71,7 @@ bool ArrayBuffer::Transfer(ArrayBufferContents& result) {
 
 bool ArrayBuffer::ShareContentsWith(ArrayBufferContents& result) {
   DCHECK(IsShared());
-  RefPtr<ArrayBuffer> keep_alive(this);
+  scoped_refptr<ArrayBuffer> keep_alive(this);
 
   if (!contents_.DataShared()) {
     result.Neuter();
@@ -84,7 +84,7 @@ bool ArrayBuffer::ShareContentsWith(ArrayBufferContents& result) {
 
 void ArrayBuffer::AddView(ArrayBufferView* view) {
   view->buffer_ = this;
-  view->prev_view_ = 0;
+  view->prev_view_ = nullptr;
   view->next_view_ = first_view_;
   if (first_view_)
     first_view_->prev_view_ = view;
@@ -92,14 +92,14 @@ void ArrayBuffer::AddView(ArrayBufferView* view) {
 }
 
 void ArrayBuffer::RemoveView(ArrayBufferView* view) {
-  DCHECK_EQ(this, view->buffer_.Get());
+  DCHECK_EQ(this, view->buffer_.get());
   if (view->next_view_)
     view->next_view_->prev_view_ = view->prev_view_;
   if (view->prev_view_)
     view->prev_view_->next_view_ = view->next_view_;
   if (first_view_ == view)
     first_view_ = view->next_view_;
-  view->prev_view_ = view->next_view_ = 0;
+  view->prev_view_ = view->next_view_ = nullptr;
 }
 
 }  // namespace WTF

@@ -30,11 +30,11 @@
 
 #include "modules/speech/DOMWindowSpeechSynthesis.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -73,7 +73,7 @@ SpeechSynthesis* DOMWindowSpeechSynthesis::speechSynthesis(
   return speech_synthesis_;
 }
 
-DEFINE_TRACE(DOMWindowSpeechSynthesis) {
+void DOMWindowSpeechSynthesis::Trace(blink::Visitor* visitor) {
   visitor->Trace(speech_synthesis_);
   Supplement<LocalDOMWindow>::Trace(visitor);
 }

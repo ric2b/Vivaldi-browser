@@ -157,11 +157,6 @@ class VariationsService
     policy_pref_service_ = service;
   }
 
-  // Returns the invalid variations seed signature in base64 format, or an empty
-  // string if the signature was valid, missing, or if signature verification is
-  // disabled.
-  std::string GetInvalidVariationsSeedSignature() const;
-
   // Exposed for testing.
   void GetClientFilterableStateForVersionCalledForTesting();
 
@@ -219,6 +214,7 @@ class VariationsService
                            LoadPermanentConsistencyCountry);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, CountryHeader);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, GetVariationsServerURL);
+  FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, VariationsURLHasParams);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, RequestsInitiallyAllowed);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, RequestsInitiallyNotAllowed);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest,

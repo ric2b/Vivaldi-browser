@@ -14,7 +14,11 @@
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 
-class PaymentRequestErrorCoordinatorTest : public PlatformTest {};
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+using PaymentRequestErrorCoordinatorTest = PlatformTest;
 
 // Tests that invoking start and stop on the coordinator presents and dismisses
 // the payment request error view controller, respectively.

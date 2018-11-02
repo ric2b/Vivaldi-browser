@@ -7,8 +7,9 @@ suite('SiteDataDetailsSubpage', function() {
   /** @type {?SiteDataDetailsSubpageElement} */
   var page = null;
 
-  /** @type {TestSiteSettingsPrefsBrowserProxy} */
+  /** @type {TestLocalDataBrowserProxy} */
   var browserProxy = null;
+
   /** @type {!CookieDetails} */
   var cookieDetails = {
     accessibleToScript: "Yes",
@@ -35,9 +36,9 @@ suite('SiteDataDetailsSubpage', function() {
   var site = 'foo.com';
 
   setup(function() {
-    browserProxy = new TestSiteSettingsPrefsBrowserProxy();
+    browserProxy = new TestLocalDataBrowserProxy();
     browserProxy.setCookieDetails(cookieList);
-    settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
+    settings.LocalDataBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     page = document.createElement('site-data-details-subpage');
     settings.navigateTo(

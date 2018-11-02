@@ -11,11 +11,12 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_socket.h"
 #include "extensions/browser/api/async_api_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/common/api/cast_channel.h"
 
 class CastChannelAPITest;
@@ -37,6 +38,7 @@ namespace extensions {
 struct Event;
 
 class CastChannelAPI : public BrowserContextKeyedAPI,
+                       public EventRouter::Observer,
                        public base::SupportsWeakPtr<CastChannelAPI> {
  public:
   explicit CastChannelAPI(content::BrowserContext* context);
@@ -60,10 +62,9 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
   // Sends an event to the extension's EventRouter, if it exists.
   void SendEvent(const std::string& extension_id, std::unique_ptr<Event> event);
 
-  // Registers |extension_id| with |observer_| and returns |observer_|.
-  cast_channel::CastSocket::Observer* GetObserver(
-      const std::string& extension_id,
-      scoped_refptr<cast_channel::Logger> logger);
+  cast_channel::CastSocketService* cast_socket_service() {
+    return cast_socket_service_;
+  }
 
  private:
   friend class BrowserContextKeyedAPIFactory<CastChannelAPI>;
@@ -76,11 +77,16 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
   using EventDispatchCallback = base::Callback<void(std::unique_ptr<Event>)>;
 
   // Receives incoming messages and errors and provides additional API context.
+  // Created on the UI thread. All methods, including the destructor, must be
+  // invoked on the SeqeuncedTaskRunner given by |cast_socket_service_|.
   class CastMessageHandler : public cast_channel::CastSocket::Observer {
    public:
     CastMessageHandler(const EventDispatchCallback& ui_dispatch_cb,
-                       scoped_refptr<cast_channel::Logger> logger);
+                       cast_channel::CastSocketService* cast_socket_service);
     ~CastMessageHandler() override;
+
+    // Adds |this| as an observer to |cast_socket_service_|.
+    void Init();
 
     // CastSocket::Observer implementation.
     void OnError(const cast_channel::CastSocket& socket,
@@ -88,34 +94,45 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
     void OnMessage(const cast_channel::CastSocket& socket,
                    const cast_channel::CastMessage& message) override;
 
-    void RegisterExtensionId(const std::string& extension_id);
-
    private:
     // Callback for sending events to the extension.
     // Should be bound to a weak pointer, to prevent any use-after-free
     // conditions.
     EventDispatchCallback const ui_dispatch_cb_;
-    // Logger object for reporting error details.
-    scoped_refptr<cast_channel::Logger> logger_;
 
-    THREAD_CHECKER(thread_checker_);
+    // The CastSocketService to observe.
+    cast_channel::CastSocketService* const cast_socket_service_;
+
+    SEQUENCE_CHECKER(sequence_checker_);
 
     DISALLOW_COPY_AND_ASSIGN(CastMessageHandler);
   };
 
   ~CastChannelAPI() override;
 
+  // EventRouter::Observer:
+  void OnListenerAdded(const EventListenerInfo& details) override;
+  void OnListenerRemoved(const EventListenerInfo& details) override;
+
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "CastChannelAPI"; }
 
+  static const bool kServiceIsNULLWhileTesting = true;
+
   content::BrowserContext* const browser_context_;
   std::unique_ptr<cast_channel::CastSocket> socket_for_test_;
-  // Created and destroyed on the IO thread.
-  std::unique_ptr<CastMessageHandler, content::BrowserThread::DeleteOnIOThread>
-      observer_;
+  // Created on UI thread, accessed and destroyed on |cast_socket_service_|'s
+  // task runner.
+  std::unique_ptr<CastMessageHandler> message_handler_;
+
+  cast_channel::CastSocketService* const cast_socket_service_;
 
   DISALLOW_COPY_AND_ASSIGN(CastChannelAPI);
 };
+
+template <>
+void BrowserContextKeyedAPIFactory<
+    CastChannelAPI>::DeclareFactoryDependencies();
 
 class CastChannelAsyncApiFunction : public AsyncApiFunction {
  public:
@@ -220,7 +237,6 @@ class CastChannelCloseFunction : public CastChannelAsyncApiFunction {
   void OnClose(int result);
 
   std::unique_ptr<api::cast_channel::Close::Params> params_;
-  CastChannelAPI* api_;
 
   DISALLOW_COPY_AND_ASSIGN(CastChannelCloseFunction);
 };

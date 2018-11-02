@@ -5,6 +5,7 @@
 #include "services/ui/ws/window_server_test_base.h"
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -15,6 +16,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/display_list.h"
 #include "ui/wm/core/capture_controller.h"
@@ -91,12 +93,14 @@ WindowServerTestBase::ReleaseMostRecentClient() {
 }
 
 void WindowServerTestBase::SetUp() {
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kMus, switches::kMusHostVizValue);
   WindowServerServiceTestBase::SetUp();
 
   env_ = aura::Env::CreateInstance(aura::Env::Mode::MUS);
   display::Screen::SetScreenInstance(&screen_);
   std::unique_ptr<aura::WindowTreeClient> window_manager_window_tree_client =
-      base::MakeUnique<aura::WindowTreeClient>(connector(), this, this);
+      std::make_unique<aura::WindowTreeClient>(connector(), this, this);
   window_manager_window_tree_client->ConnectAsWindowManager();
   window_manager_ = window_manager_window_tree_client.get();
   window_tree_clients_.push_back(std::move(window_manager_window_tree_client));
@@ -288,7 +292,7 @@ void WindowServerTestBase::OnWmDeactivateWindow(aura::Window* window) {
 void WindowServerTestBase::BindWindowTreeClientRequest(
     mojom::WindowTreeClientRequest request) {
   const bool create_discardable_memory = false;
-  window_tree_clients_.push_back(base::MakeUnique<aura::WindowTreeClient>(
+  window_tree_clients_.push_back(std::make_unique<aura::WindowTreeClient>(
       connector(), this, nullptr, std::move(request), nullptr,
       create_discardable_memory));
 }

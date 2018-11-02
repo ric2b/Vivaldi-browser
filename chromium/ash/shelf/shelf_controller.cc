@@ -4,7 +4,10 @@
 
 #include "ash/shelf/shelf_controller.h"
 
+#include <memory>
+
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/remote_shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_prefs.h"
@@ -16,6 +19,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -79,6 +83,14 @@ void SetShelfAlignmentFromPrefs() {
 
 // Set each Shelf's auto-hide behavior and alignment from the per-display prefs.
 void SetShelfBehaviorsFromPrefs() {
+  // The shelf should always be bottom-aligned and not hidden in tablet mode;
+  // alignment and auto-hide are assigned from prefs when tablet mode is exited.
+  if (Shell::Get()
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
+    return;
+  }
+
   SetShelfAutoHideFromPrefs();
   SetShelfAlignmentFromPrefs();
 }
@@ -86,9 +98,17 @@ void SetShelfBehaviorsFromPrefs() {
 }  // namespace
 
 ShelfController::ShelfController() {
+  // Synchronization is required in the Mash config, since Chrome and Ash run in
+  // separate processes; it's optional via kAshDisableShelfModelSynchronization
+  // in the Classic Ash config, where Chrome can uses Ash's ShelfModel directly.
+  should_synchronize_shelf_models_ =
+      Shell::GetAshConfig() == Config::MASH ||
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshDisableShelfModelSynchronization);
+
   // Set the delegate and title string for the app list item.
   model_.SetShelfItemDelegate(ShelfID(kAppListId),
-                              base::MakeUnique<AppListShelfItemDelegate>());
+                              std::make_unique<AppListShelfItemDelegate>());
   DCHECK_EQ(0, model_.ItemIndexByID(ShelfID(kAppListId)));
   ShelfItem item = model_.items()[0];
   item.title = l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE);
@@ -106,14 +126,14 @@ ShelfController::~ShelfController() {
     Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   Shell::Get()->session_controller()->RemoveObserver(this);
   model_.RemoveObserver(this);
+  model_.DestroyItemDelegates();
 }
 
 // static
 void ShelfController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  // These prefs are marked PUBLIC for use by Chrome, they're currently only
-  // needed for ChromeLauncherController::ShelfBoundsChangesProbablyWithUser
-  // and ChromeLauncherPrefsObserver. See the pref names definitions for an
-  // explanation of the synced, local, and per-display behavior of these prefs.
+  // These prefs are public for ChromeLauncherController's OnIsSyncingChanged
+  // and ShelfBoundsChangesProbablyWithUser. See the pref names definitions for
+  // explanations of the synced, local, and per-display behaviors.
   registry->RegisterStringPref(
       prefs::kShelfAutoHideBehavior, kShelfAutoHideBehaviorNever,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
@@ -137,11 +157,11 @@ void ShelfController::AddObserver(
   mojom::ShelfObserverAssociatedPtr observer_ptr;
   observer_ptr.Bind(std::move(observer));
 
-  if (Shell::GetAshConfig() == Config::MASH) {
-    // Mash synchronizes two ShelfModel instances, owned by Ash and Chrome.
+  if (should_synchronize_shelf_models_) {
+    // Synchronize two ShelfModel instances, one each owned by Ash and Chrome.
     // Notify Chrome of existing ShelfModel items and delegates created by Ash.
     for (int i = 0; i < model_.item_count(); ++i) {
-      const ShelfItem& item = model_.items()[i];
+      ShelfItem item = model_.items()[i];
       ShelfItemDelegate* delegate = model_.GetShelfItemDelegate(item.id);
       // Notify observers of the delegate before the items themselves; Chrome
       // creates default delegates if none exist, breaking ShelfWindowWatcher.
@@ -149,6 +169,8 @@ void ShelfController::AddObserver(
         observer_ptr->OnShelfItemDelegateChanged(
             item.id, delegate->CreateInterfacePtrAndBind());
       }
+      // Pass null images to avoid transport costs; clients don't use images.
+      item.image = gfx::ImageSkia();
       observer_ptr->OnShelfItemAdded(i, item);
     }
   }
@@ -157,7 +179,7 @@ void ShelfController::AddObserver(
 }
 
 void ShelfController::AddShelfItem(int32_t index, const ShelfItem& item) {
-  DCHECK_EQ(Shell::GetAshConfig(), Config::MASH) << " Unexpected model sync";
+  DCHECK(should_synchronize_shelf_models_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
   index = index < 0 ? model_.item_count() : index;
   DCHECK_GT(index, 0) << " Items can not precede the AppList";
@@ -168,7 +190,7 @@ void ShelfController::AddShelfItem(int32_t index, const ShelfItem& item) {
 }
 
 void ShelfController::RemoveShelfItem(const ShelfID& id) {
-  DCHECK_EQ(Shell::GetAshConfig(), Config::MASH) << " Unexpected model sync";
+  DCHECK(should_synchronize_shelf_models_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
   const int index = model_.ItemIndexByID(id);
   DCHECK_GE(index, 0) << " No item found with the id: " << id;
@@ -180,7 +202,7 @@ void ShelfController::RemoveShelfItem(const ShelfID& id) {
 }
 
 void ShelfController::MoveShelfItem(const ShelfID& id, int32_t index) {
-  DCHECK_EQ(Shell::GetAshConfig(), Config::MASH) << " Unexpected model sync";
+  DCHECK(should_synchronize_shelf_models_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
   const int current_index = model_.ItemIndexByID(id);
   DCHECK_GE(current_index, 0) << " No item found with the id: " << id;
@@ -190,54 +212,59 @@ void ShelfController::MoveShelfItem(const ShelfID& id, int32_t index) {
   DCHECK_GT(index, 0) << " Items can not precede the AppList";
   DCHECK_LT(index, model_.item_count()) << " Index out of bounds";
   index = std::min(std::max(index, 1), model_.item_count() - 1);
-  DCHECK_NE(current_index, index) << " The item is already at the given index";
-  if (current_index == index)
+  if (current_index == index) {
+    DVLOG(1) << "The item is already at the given index (" << index << "). "
+             << "This happens when syncing a ShelfModel weight reordering.";
     return;
+  }
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, true);
   model_.Move(current_index, index);
 }
 
 void ShelfController::UpdateShelfItem(const ShelfItem& item) {
-  DCHECK_EQ(Shell::GetAshConfig(), Config::MASH) << " Unexpected model sync";
+  DCHECK(should_synchronize_shelf_models_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
   const int index = model_.ItemIndexByID(item.id);
   DCHECK_GE(index, 0) << " No item found with the id: " << item.id;
   if (index < 0)
     return;
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, true);
-  model_.Set(index, item);
+
+  // Keep any existing image if the item was sent without one for efficiency.
+  ash::ShelfItem new_item = item;
+  if (item.image.isNull())
+    new_item.image = model_.items()[index].image;
+  model_.Set(index, new_item);
 }
 
 void ShelfController::SetShelfItemDelegate(
     const ShelfID& id,
     mojom::ShelfItemDelegatePtr delegate) {
-  DCHECK_EQ(Shell::GetAshConfig(), Config::MASH) << " Unexpected model sync";
+  DCHECK(should_synchronize_shelf_models_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, true);
   if (delegate.is_bound())
     model_.SetShelfItemDelegate(
-        id, base::MakeUnique<RemoteShelfItemDelegate>(id, std::move(delegate)));
+        id, std::make_unique<RemoteShelfItemDelegate>(id, std::move(delegate)));
   else
     model_.SetShelfItemDelegate(id, nullptr);
 }
 
 void ShelfController::ShelfItemAdded(int index) {
-  if (applying_remote_shelf_model_changes_ ||
-      Shell::GetAshConfig() != Config::MASH) {
+  if (applying_remote_shelf_model_changes_ || !should_synchronize_shelf_models_)
     return;
-  }
 
-  const ShelfItem& item = model_.items()[index];
+  // Pass null images to avoid transport costs; clients don't use images.
+  ShelfItem item = model_.items()[index];
+  item.image = gfx::ImageSkia();
   observers_.ForAllPtrs([index, item](mojom::ShelfObserver* observer) {
     observer->OnShelfItemAdded(index, item);
   });
 }
 
 void ShelfController::ShelfItemRemoved(int index, const ShelfItem& old_item) {
-  if (applying_remote_shelf_model_changes_ ||
-      Shell::GetAshConfig() != Config::MASH) {
+  if (applying_remote_shelf_model_changes_ || !should_synchronize_shelf_models_)
     return;
-  }
 
   observers_.ForAllPtrs([old_item](mojom::ShelfObserver* observer) {
     observer->OnShelfItemRemoved(old_item.id);
@@ -245,10 +272,8 @@ void ShelfController::ShelfItemRemoved(int index, const ShelfItem& old_item) {
 }
 
 void ShelfController::ShelfItemMoved(int start_index, int target_index) {
-  if (applying_remote_shelf_model_changes_ ||
-      Shell::GetAshConfig() != Config::MASH) {
+  if (applying_remote_shelf_model_changes_ || !should_synchronize_shelf_models_)
     return;
-  }
 
   const ShelfItem& item = model_.items()[target_index];
   observers_.ForAllPtrs([item, target_index](mojom::ShelfObserver* observer) {
@@ -257,23 +282,22 @@ void ShelfController::ShelfItemMoved(int start_index, int target_index) {
 }
 
 void ShelfController::ShelfItemChanged(int index, const ShelfItem& old_item) {
-  if (applying_remote_shelf_model_changes_ ||
-      Shell::GetAshConfig() != Config::MASH) {
+  if (applying_remote_shelf_model_changes_ || !should_synchronize_shelf_models_)
     return;
-  }
 
-  const ShelfItem& item = model_.items()[index];
+  // Pass null images to avoid transport costs; clients don't use images.
+  ShelfItem item = model_.items()[index];
+  item.image = gfx::ImageSkia();
   observers_.ForAllPtrs([item](mojom::ShelfObserver* observer) {
     observer->OnShelfItemUpdated(item);
   });
 }
 
 void ShelfController::ShelfItemDelegateChanged(const ShelfID& id,
+                                               ShelfItemDelegate* old_delegate,
                                                ShelfItemDelegate* delegate) {
-  if (applying_remote_shelf_model_changes_ ||
-      Shell::GetAshConfig() != Config::MASH) {
+  if (applying_remote_shelf_model_changes_ || !should_synchronize_shelf_models_)
     return;
-  }
 
   observers_.ForAllPtrs([id, delegate](mojom::ShelfObserver* observer) {
     observer->OnShelfItemDelegateChanged(
@@ -282,10 +306,14 @@ void ShelfController::ShelfItemDelegateChanged(const ShelfID& id,
   });
 }
 
+void ShelfController::FlushForTesting() {
+  bindings_.FlushForTesting();
+}
+
 void ShelfController::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
   SetShelfBehaviorsFromPrefs();
-  pref_change_registrar_ = base::MakeUnique<PrefChangeRegistrar>();
+  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(pref_service);
   pref_change_registrar_->Add(prefs::kShelfAlignmentLocal,
                               base::Bind(&SetShelfAlignmentFromPrefs));
@@ -296,16 +324,28 @@ void ShelfController::OnActiveUserPrefServiceChanged(
 }
 
 void ShelfController::OnTabletModeStarted() {
-  // Force the shelf to be visible in tablet mode; the pref is restored on exit.
+  // Force the shelf to be visible and to be bottom aligned in tablet mode; the
+  // prefs are restored on exit.
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     Shelf* shelf = GetShelfForDisplay(display.id());
-    if (shelf)
+    if (shelf) {
+      // Only animate into tablet mode if the shelf alignment will not change.
+      if (shelf->IsHorizontalAlignment())
+        shelf->set_is_tablet_mode_animation_running(true);
       shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+      shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+    }
   }
 }
 
 void ShelfController::OnTabletModeEnded() {
-  SetShelfAutoHideFromPrefs();
+  SetShelfBehaviorsFromPrefs();
+  // Only animate out of tablet mode if the shelf alignment will not change.
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    Shelf* shelf = GetShelfForDisplay(display.id());
+    if (shelf && shelf->IsHorizontalAlignment())
+      shelf->set_is_tablet_mode_animation_running(true);
+  }
 }
 
 void ShelfController::OnDisplayConfigurationChanged() {

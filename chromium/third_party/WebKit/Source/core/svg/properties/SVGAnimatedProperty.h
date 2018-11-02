@@ -42,8 +42,7 @@ namespace blink {
 class ExceptionState;
 class SVGElement;
 
-class SVGAnimatedPropertyBase
-    : public GarbageCollectedFinalized<SVGAnimatedPropertyBase> {
+class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
   WTF_MAKE_NONCOPYABLE(SVGAnimatedPropertyBase);
 
  public:
@@ -79,9 +78,8 @@ class SVGAnimatedPropertyBase
 
   bool IsSpecified() const;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     visitor->TraceWrappersWithManualWriteBarrier(context_element_.Get());
   }
 
@@ -147,7 +145,7 @@ class SVGAnimatedPropertyCommon : public SVGAnimatedPropertyBase {
     SVGAnimatedPropertyBase::AnimationEnded();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(base_value_);
     visitor->Trace(current_value_);
     SVGAnimatedPropertyBase::Trace(visitor);
@@ -279,7 +277,7 @@ class SVGAnimatedProperty<Property, TearOffType, void>
     return anim_val_tear_off_;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(base_val_tear_off_);
     visitor->Trace(anim_val_tear_off_);
     SVGAnimatedPropertyCommon<Property>::Trace(visitor);

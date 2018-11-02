@@ -34,6 +34,7 @@
 #include "core/page/Page.h"
 #include "platform/Language.h"
 #include "platform/MemoryCoordinator.h"
+#include "third_party/WebKit/common/device_memory/approximated_device_memory.h"
 
 namespace blink {
 
@@ -52,11 +53,19 @@ String Navigator::vendor() const {
 }
 
 float Navigator::deviceMemory() const {
-  return MemoryCoordinator::GetApproximatedDeviceMemory();
+  return ApproximatedDeviceMemory::GetApproximatedDeviceMemory();
 }
 
 String Navigator::vendorSub() const {
   return "";
+}
+
+String Navigator::platform() const {
+  if (GetFrame() &&
+      !GetFrame()->GetSettings()->GetNavigatorPlatformOverride().IsEmpty()) {
+    return GetFrame()->GetSettings()->GetNavigatorPlatformOverride();
+  }
+  return NavigatorID::platform();
 }
 
 String Navigator::userAgent() const {
@@ -104,9 +113,15 @@ Vector<String> Navigator::languages() {
   return languages;
 }
 
-DEFINE_TRACE(Navigator) {
+void Navigator::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
   DOMWindowClient::Trace(visitor);
   Supplementable<Navigator>::Trace(visitor);
+}
+
+void Navigator::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+  ScriptWrappable::TraceWrappers(visitor);
+  Supplementable<Navigator>::TraceWrappers(visitor);
 }
 
 }  // namespace blink

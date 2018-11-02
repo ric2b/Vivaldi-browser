@@ -8,6 +8,7 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/public/common/content_features.h"
 #include "storage/browser/blob/blob_registry_impl.h"
+#include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/fileapi/file_system_context.h"
 
 namespace content {
@@ -55,15 +56,14 @@ scoped_refptr<BlobRegistryWrapper> BlobRegistryWrapper::Create(
 }
 
 BlobRegistryWrapper::BlobRegistryWrapper() {
-  DCHECK(base::FeatureList::IsEnabled(features::kMojoBlobs));
+  DCHECK(features::IsMojoBlobsEnabled());
 }
 
-void BlobRegistryWrapper::Bind(
-    int process_id,
-    storage::mojom::BlobRegistryRequest request) {
+void BlobRegistryWrapper::Bind(int process_id,
+                               blink::mojom::BlobRegistryRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   blob_registry_->Bind(std::move(request),
-                       base::MakeUnique<BindingDelegate>(process_id));
+                       std::make_unique<BindingDelegate>(process_id));
 }
 
 BlobRegistryWrapper::~BlobRegistryWrapper() {}
@@ -72,8 +72,9 @@ void BlobRegistryWrapper::InitializeOnIOThread(
     scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
     scoped_refptr<storage::FileSystemContext> file_system_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  blob_registry_ = base::MakeUnique<storage::BlobRegistryImpl>(
-      blob_storage_context->context(), std::move(file_system_context));
+  blob_registry_ = std::make_unique<storage::BlobRegistryImpl>(
+      blob_storage_context->context()->AsWeakPtr(),
+      std::move(file_system_context));
 }
 
 }  // namespace content

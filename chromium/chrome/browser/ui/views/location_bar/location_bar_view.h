@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/dropdown_bar_host.h"
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
+#include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "components/prefs/pref_member.h"
 #include "components/security_state/core/security_state.h"
@@ -31,8 +32,9 @@
 
 class CommandUpdater;
 class ContentSettingBubbleModelDelegate;
-class ContentSettingImageView;
+class FindBarIcon;
 class GURL;
+class IntentPickerView;
 class KeywordHintView;
 class LocationIconView;
 class ManagePasswordsIconViews;
@@ -67,7 +69,8 @@ class LocationBarView : public LocationBar,
                         public ChromeOmniboxEditController,
                         public DropdownBarHostDelegate,
                         public zoom::ZoomEventManagerObserver,
-                        public views::ButtonListener {
+                        public views::ButtonListener,
+                        public ContentSettingImageView::Delegate {
  public:
   class Delegate {
    public:
@@ -148,6 +151,11 @@ class LocationBarView : public LocationBar,
 
   // Toggles the star on or off.
   void SetStarToggled(bool on);
+
+#if defined(OS_CHROMEOS)
+  // The intent picker, should not always be visible.
+  IntentPickerView* intent_picker_view() { return intent_picker_view_; }
+#endif  // defined(OS_CHROMEOS)
 
   // The star. It may not be visible.
   StarView* star_view() { return star_view_; }
@@ -230,6 +238,11 @@ class LocationBarView : public LocationBar,
   ToolbarModel* GetToolbarModel() override;
   content::WebContents* GetWebContents() override;
 
+  // ContentSettingImageView::Delegate:
+  content::WebContents* GetContentSettingWebContents() override;
+  ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
+      override;
+
   // ZoomEventManagerObserver:
   // Updates the view for the zoom icon when default zoom levels change.
   void OnDefaultZoomLevelChanged() override;
@@ -271,6 +284,9 @@ class LocationBarView : public LocationBar,
   // Updates |save_credit_card_icon_view_|. Returns true if visibility changed.
   bool RefreshSaveCreditCardIconView();
 
+  // Updates |find_bar_icon_|. Returns true if visibility changed.
+  bool RefreshFindBarIcon();
+
   // Updates the Translate icon based on the current tab's Translate status.
   void RefreshTranslateIcon();
 
@@ -306,6 +322,7 @@ class LocationBarView : public LocationBar,
   void UpdateContentSettingsIcons() override;
   void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override;
+  void UpdateFindBarIconVisibility() override;
   void UpdateBookmarkStarVisibility() override;
   void UpdateZoomViewVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animation) override;
@@ -347,7 +364,7 @@ class LocationBarView : public LocationBar,
   // The Browser this LocationBarView is in.  Note that at least
   // chromeos::SimpleWebViewDialog uses a LocationBarView outside any browser
   // window, so this may be NULL.
-  Browser* browser_;
+  Browser* const browser_;
 
   OmniboxViewViews* omnibox_view_ = nullptr;
 
@@ -390,6 +407,14 @@ class LocationBarView : public LocationBar,
 
   // The icon for Translate.
   TranslateIconView* translate_icon_view_ = nullptr;
+
+#if defined(OS_CHROMEOS)
+  // The intent picker for accessing ARC's apps.
+  IntentPickerView* intent_picker_view_ = nullptr;
+#endif  // defined(OS_CHROMEOS)
+
+  // The icon displayed when the find bar is visible.
+  FindBarIcon* find_bar_icon_ = nullptr;
 
   // The star for bookmarking.
   StarView* star_view_ = nullptr;

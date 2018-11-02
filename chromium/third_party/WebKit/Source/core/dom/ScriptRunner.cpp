@@ -29,18 +29,18 @@
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptLoader.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebThread.h"
 
 namespace blink {
 
 ScriptRunner::ScriptRunner(Document* document)
     : document_(document),
-      task_runner_(TaskRunnerHelper::Get(TaskType::kNetworking, document)),
+      task_runner_(document->GetTaskRunner(TaskType::kNetworking)),
       number_of_in_order_scripts_with_pending_notification_(0),
       is_suspended_(false) {
   DCHECK(document);
@@ -281,19 +281,27 @@ bool ScriptRunner::DoTryStream(ScriptLoader* script_loader) {
   if (!pending_script)
     return false;
 
+#ifndef NDEBUG
+  bool was_already_streaming = pending_script->IsCurrentlyStreaming();
+#endif
+
   bool success = pending_script->StartStreamingIfPossible(
       ScriptStreamer::kAsync,
       WTF::Bind(&ScriptRunner::NotifyScriptStreamerFinished,
                 WrapPersistent(this)));
-  DCHECK_EQ(success, pending_script->IsCurrentlyStreaming());
 #ifndef NDEBUG
+  if (was_already_streaming) {
+    DCHECK(!success);
+  } else {
+    DCHECK_EQ(success, pending_script->IsCurrentlyStreaming());
+  }
   if (success)
     number_of_extra_tasks_++;
 #endif
   return success;
 }
 
-DEFINE_TRACE(ScriptRunner) {
+void ScriptRunner::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(pending_in_order_scripts_);
   visitor->Trace(pending_async_scripts_);
@@ -301,7 +309,7 @@ DEFINE_TRACE(ScriptRunner) {
   visitor->Trace(in_order_scripts_to_execute_soon_);
 }
 
-DEFINE_TRACE_WRAPPERS(ScriptRunner) {
+void ScriptRunner::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& loader : pending_in_order_scripts_)
     visitor->TraceWrappers(loader);
   for (const auto& loader : pending_async_scripts_)

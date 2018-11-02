@@ -31,6 +31,7 @@ _format_modules = {
   'android':                  'android_xml',
   'c_format':                 'c_format',
   'chrome_messages_json':     'chrome_messages_json',
+  'policy_templates':         'policy_templates_json',
   'data_package':             'data_pack',
   'js_map_format':            'js_map_format',
   'rc_all':                   'rc',
@@ -41,11 +42,6 @@ _format_modules = {
   'resource_map_source':      'resource_map',
   'resource_file_map_source': 'resource_map',
 }
-_format_modules.update(
-    (type, 'policy_templates.template_formatter') for type in
-        [ 'adm', 'admx', 'adml', 'reg', 'doc', 'json',
-          'plist', 'plist_strings', 'android_policy' ])
-
 
 def GetFormatter(type):
   modulename = 'grit.format.' + _format_modules[type]
@@ -342,6 +338,13 @@ are exported to translation interchange files (e.g. XMB files), etc.
     formatter = GetFormatter(output_node.GetType())
     formatted = formatter(node, output_node.GetLanguage(), output_dir=base_dir)
     outfile.writelines(formatted)
+    if output_node.GetType() == 'data_package':
+      with open(output_node.GetOutputFilename() + '.info', 'w') as infofile:
+        if node.info:
+          # We terminate with a newline so that when these files are
+          # concatenated later we consistently terminate with a newline so
+          # consumers can account for terminating newlines.
+          infofile.writelines(['\n'.join(node.info), '\n'])
 
 
   def Process(self):

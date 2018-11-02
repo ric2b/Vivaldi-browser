@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_METRICS_PROVIDER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_METRICS_PROVIDER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/metrics/metrics_provider.h"
-#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
+#include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
 struct OmniboxLog;
 

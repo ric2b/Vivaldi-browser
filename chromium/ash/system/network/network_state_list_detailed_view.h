@@ -13,8 +13,6 @@
 #include "base/memory/weak_ptr.h"
 
 namespace views {
-class BubbleDialogDelegateView;
-class Button;
 class Button;
 }
 
@@ -23,7 +21,8 @@ class SystemTrayItem;
 
 namespace tray {
 
-class NetworkStateListDetailedView
+// Exported for tests.
+class ASH_EXPORT NetworkStateListDetailedView
     : public TrayDetailsView,
       public base::SupportsWeakPtr<NetworkStateListDetailedView> {
  public:
@@ -34,6 +33,8 @@ class NetworkStateListDetailedView
   // Called when the contents of the network list have changed or when any
   // Manager properties (e.g. technology state) have changed.
   void Update();
+
+  void ToggleInfoBubbleForTesting();
 
  protected:
   enum ListType { LIST_TYPE_NETWORK, LIST_TYPE_VPN };
@@ -82,10 +83,9 @@ class NetworkStateListDetailedView
 
   views::Button* info_button_;
   views::Button* settings_button_;
-  views::Button* proxy_settings_button_;
 
   // A small bubble for displaying network info.
-  views::BubbleDialogDelegateView* info_bubble_;
+  InfoBubble* info_bubble_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkStateListDetailedView);
 };

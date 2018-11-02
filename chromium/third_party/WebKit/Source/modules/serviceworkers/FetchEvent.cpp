@@ -4,6 +4,7 @@
 
 #include "modules/serviceworkers/FetchEvent.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
@@ -19,7 +20,6 @@
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerError.h"
 
@@ -189,7 +189,7 @@ void FetchEvent::OnNavigationPreloadComplete(
   // According to the current spec of Resource Timing, the initiator type of
   // navigation preload request must be "other". But it may change when the spec
   // discussion is settled. https://github.com/w3c/resource-timing/issues/110
-  RefPtr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
+  scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
       "other", resource_response.GetResourceLoadTiming()->RequestTime(),
       false /* is_main_resource */);
   info->SetNegativeAllowed(true);
@@ -201,7 +201,7 @@ void FetchEvent::OnNavigationPreloadComplete(
       ->AddResourceTiming(*info);
 }
 
-DEFINE_TRACE(FetchEvent) {
+void FetchEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(observer_);
   visitor->Trace(request_);
   visitor->Trace(preload_response_property_);

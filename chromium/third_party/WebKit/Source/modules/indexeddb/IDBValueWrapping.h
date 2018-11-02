@@ -5,12 +5,12 @@
 #ifndef IDBValueWrapping_h
 #define IDBValueWrapping_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "modules/ModulesExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebBlobInfo.h"
 #include "v8/include/v8.h"
@@ -92,13 +92,13 @@ class MODULES_EXPORT IDBValueWrapper {
   // This method must be called at most once, and must be called after
   // WrapIfBiggerThan().
   void ExtractBlobDataHandles(
-      Vector<RefPtr<BlobDataHandle>>* blob_data_handles);
+      Vector<scoped_refptr<BlobDataHandle>>* blob_data_handles);
 
   // Obtains the byte array for the serialized value.
   //
   // This method must be called at most once, and must be called after
   // WrapIfBiggerThan().
-  RefPtr<SharedBuffer> ExtractWireBytes();
+  scoped_refptr<SharedBuffer> ExtractWireBytes();
 
   // Obtains WebBlobInfos for the serialized value's Blob array.
   //
@@ -121,22 +121,18 @@ class MODULES_EXPORT IDBValueWrapper {
   // storage for IndexedDB, was not designed with large values in mind. At the
   // very least, large values will slow down compaction, causing occasional I/O
   // spikes.
-  //
-  // TODO(crbug.com/756754): 128MB is the maximum IPC size, so this threshold
-  // effectively disables wrapping. Set the threshold back to 64 * 1024 after
-  // the Blob leak issue is fixed.
-  static constexpr unsigned kWrapThreshold = 128 * 1024 * 1024;
+  static constexpr unsigned kWrapThreshold = 64 * 1024;
 
   // MIME type used for Blobs that wrap IDBValues.
   static constexpr const char* kWrapMimeType =
       "application/vnd.blink-idb-value-wrapper";
 
- private:
-  // Used to serialize the wrapped value.
+  // Used to serialize the wrapped value. Exposed for testing.
   static void WriteVarint(unsigned value, Vector<char>& output);
 
-  RefPtr<SerializedScriptValue> serialized_value_;
-  RefPtr<BlobDataHandle> wrapper_handle_;
+ private:
+  scoped_refptr<SerializedScriptValue> serialized_value_;
+  scoped_refptr<BlobDataHandle> wrapper_handle_;
   Vector<WebBlobInfo> blob_info_;
   Vector<char> wire_bytes_;
   size_t original_data_length_ = 0;
@@ -164,11 +160,12 @@ class MODULES_EXPORT IDBValueUnwrapper {
   static bool IsWrapped(IDBValue*);
 
   // True if at least one of the IDBValues' data was wrapped in a Blob.
-  static bool IsWrapped(const Vector<RefPtr<IDBValue>>&);
+  static bool IsWrapped(const Vector<scoped_refptr<IDBValue>>&);
 
   // Pieces together an unwrapped IDBValue from a wrapped value and Blob data.
-  static RefPtr<IDBValue> Unwrap(IDBValue* wrapped_value,
-                                 RefPtr<SharedBuffer>&& wrapper_blob_content);
+  static scoped_refptr<IDBValue> Unwrap(
+      IDBValue* wrapped_value,
+      scoped_refptr<SharedBuffer>&& wrapper_blob_content);
 
   // Parses the wrapper Blob information from a wrapped IDBValue.
   //
@@ -188,9 +185,12 @@ class MODULES_EXPORT IDBValueUnwrapper {
   // Returns a handle to the Blob obtained by the last Unwrap() call.
   //
   // Should only be called exactly once after a successful result from Unwrap().
-  RefPtr<BlobDataHandle> WrapperBlobHandle();
+  scoped_refptr<BlobDataHandle> WrapperBlobHandle();
 
  private:
+  // Only present in tests.
+  friend class IDBValueUnwrapperReadVarintTestHelper;
+
   // Used to deserialize the wrapped value.
   bool ReadVarint(unsigned& value);
 
@@ -207,7 +207,7 @@ class MODULES_EXPORT IDBValueUnwrapper {
   unsigned blob_size_;
 
   // Handle to the Blob holding the data for the last unwrapped IDBValue.
-  RefPtr<BlobDataHandle> blob_handle_;
+  scoped_refptr<BlobDataHandle> blob_handle_;
 };
 
 }  // namespace blink

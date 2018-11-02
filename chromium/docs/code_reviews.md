@@ -23,6 +23,9 @@ If you have multiple reviewers, make it clear in the message you send
 requesting review what you expect from each reviewer. Otherwise people might
 assume their input is not required or waste time with redundant reviews.
 
+Please also read [Respectful Changes](cl_respect.md) and
+[Respectful Code Reviews](cr_respect.md).
+
 #### Expectations for all reviewers
 
   * Aim to provide some kind of actionable response within 24 hours of receipt
@@ -92,8 +95,9 @@ owners rather than large directories with many owners. Owners must:
     discourage people from sending reviews, including writing "slow" or
     "emeritus" after your name.
 
-Seldom-updated directories may have exceptions. Directories in `third_party`
-should list those most familiar with the library.
+Seldom-updated directories may have exceptions to the "substantiality" and
+"recency" requirements. Directories in `third_party` should list those most
+familiar with the library, regardless of how often the code is updated.
 
 ## TBR ("To Be Reviewed")
 

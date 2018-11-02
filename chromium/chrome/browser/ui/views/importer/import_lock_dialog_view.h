@@ -32,6 +32,9 @@ class ImportLockDialogView : public views::DialogDelegateView {
   bool Accept() override;
   bool Cancel() override;
 
+  // views::WidgetDelegate:
+  bool ShouldShowCloseButton() const override;
+
  private:
   // Called with the result of the dialog.
   base::Callback<void(bool)> callback_;

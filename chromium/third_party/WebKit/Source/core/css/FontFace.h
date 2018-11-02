@@ -31,13 +31,14 @@
 #ifndef FontFace_h
 #define FontFace_h
 
+#include "base/macros.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/fonts/FontSelectionTypes.h"
 #include "platform/wtf/text/WTFString.h"
@@ -52,17 +53,14 @@ class Document;
 class ExceptionState;
 class FontFaceDescriptors;
 class StringOrArrayBufferOrArrayBufferView;
-class StylePropertySet;
+class CSSPropertyValueSet;
 class StyleRuleFontFace;
-class WebTaskRunner;
 
-class CORE_EXPORT FontFace : public GarbageCollectedFinalized<FontFace>,
-                             public ScriptWrappable,
+class CORE_EXPORT FontFace : public ScriptWrappable,
                              public ActiveScriptWrappable<FontFace>,
                              public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FontFace);
-  WTF_MAKE_NONCOPYABLE(FontFace);
 
  public:
   enum LoadStatusType { kUnloaded, kLoading, kLoaded, kError };
@@ -111,16 +109,16 @@ class CORE_EXPORT FontFace : public GarbageCollectedFinalized<FontFace>,
   CSSFontFace* CssFontFace() { return css_font_face_.Get(); }
   size_t ApproximateBlankCharacterCount() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   bool HadBlankText() const;
 
   class CORE_EXPORT LoadFontCallback : public GarbageCollectedMixin {
    public:
-    virtual ~LoadFontCallback() {}
+    virtual ~LoadFontCallback() = default;
     virtual void NotifyLoaded(FontFace*) = 0;
     virtual void NotifyError(FontFace*) = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
   void LoadWithCallback(LoadFontCallback*);
   void AddCallback(LoadFontCallback*);
@@ -147,17 +145,16 @@ class CORE_EXPORT FontFace : public GarbageCollectedFinalized<FontFace>,
            const AtomicString& family,
            const FontFaceDescriptors&);
 
-  void InitCSSFontFace(Document*, const CSSValue* src);
+  void InitCSSFontFace(ExecutionContext*, const CSSValue* src);
   void InitCSSFontFace(const unsigned char* data, size_t);
-  void SetPropertyFromString(const Document*,
+  void SetPropertyFromString(const ExecutionContext*,
                              const String&,
                              CSSPropertyID,
-                             ExceptionState* = 0);
-  bool SetPropertyFromStyle(const StylePropertySet&, CSSPropertyID);
+                             ExceptionState* = nullptr);
+  bool SetPropertyFromStyle(const CSSPropertyValueSet&, CSSPropertyID);
   bool SetPropertyValue(const CSSValue*, CSSPropertyID);
   bool SetFamilyValue(const CSSValue&);
   ScriptPromise FontStatusPromise(ScriptState*);
-  WebTaskRunner* GetTaskRunner();
   void RunCallbacks();
 
   using LoadedProperty = ScriptPromiseProperty<Member<FontFace>,
@@ -179,6 +176,7 @@ class CORE_EXPORT FontFace : public GarbageCollectedFinalized<FontFace>,
   Member<LoadedProperty> loaded_property_;
   Member<CSSFontFace> css_font_face_;
   HeapVector<Member<LoadFontCallback>> callbacks_;
+  DISALLOW_COPY_AND_ASSIGN(FontFace);
 };
 
 using FontFaceArray = HeapVector<Member<FontFace>>;

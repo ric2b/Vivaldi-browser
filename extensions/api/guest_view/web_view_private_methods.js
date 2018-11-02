@@ -79,11 +79,13 @@ WebViewImpl.prototype.addToThumbnailService = function (
       this.guest.getId(), key, dimensions, callback);
 };
 
-WebViewImpl.prototype.setIsFullscreen = function (isFullscreen) {
+WebViewImpl.prototype.setIsFullscreen = function (isFullscreen,
+                                                  skipWindowState) {
   if (!this.guest.getId()) {
     return false;
   }
-  WebViewPrivate.setIsFullscreen(this.guest.getId(), isFullscreen);
+  WebViewPrivate.setIsFullscreen(this.guest.getId(),
+      isFullscreen, skipWindowState);
 };
 
 WebViewImpl.prototype.contextMenusCreate = function (createProperties) {

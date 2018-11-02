@@ -46,7 +46,8 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/InterfaceProvider.h"
+#include "public/platform/TaskType.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
@@ -118,7 +119,7 @@ void WorkerWebSocketChannel::Send(const DOMArrayBuffer& binary_data,
   bridge_->Send(binary_data, byte_offset, byte_length);
 }
 
-void WorkerWebSocketChannel::Send(PassRefPtr<BlobDataHandle> blob_data) {
+void WorkerWebSocketChannel::Send(scoped_refptr<BlobDataHandle> blob_data) {
   DCHECK(bridge_);
   bridge_->Send(std::move(blob_data));
 }
@@ -153,14 +154,14 @@ void WorkerWebSocketChannel::Disconnect() {
   bridge_.Clear();
 }
 
-DEFINE_TRACE(WorkerWebSocketChannel) {
+void WorkerWebSocketChannel::Trace(blink::Visitor* visitor) {
   visitor->Trace(bridge_);
   WebSocketChannel::Trace(visitor);
 }
 
 MainChannelClient::MainChannelClient(
     Bridge* bridge,
-    RefPtr<WebTaskRunner> worker_networking_task_runner,
+    scoped_refptr<WebTaskRunner> worker_networking_task_runner,
     WorkerThreadLifecycleContext* worker_thread_lifecycle_context)
     : WorkerThreadLifecycleObserver(worker_thread_lifecycle_context),
       bridge_(bridge),
@@ -210,7 +211,7 @@ void MainChannelClient::SendBinaryAsCharVector(
     main_channel_->SendBinaryAsCharVector(std::move(data));
 }
 
-void MainChannelClient::SendBlob(PassRefPtr<BlobDataHandle> blob_data) {
+void MainChannelClient::SendBlob(scoped_refptr<BlobDataHandle> blob_data) {
   DCHECK(IsMainThread());
   if (main_channel_)
     main_channel_->Send(std::move(blob_data));
@@ -357,7 +358,7 @@ void MainChannelClient::ContextDestroyed(WorkerThreadLifecycleContext*) {
   bridge_ = nullptr;
 }
 
-DEFINE_TRACE(MainChannelClient) {
+void MainChannelClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(main_channel_);
   WebSocketChannelClient::Trace(visitor);
   WorkerThreadLifecycleObserver::Trace(visitor);
@@ -377,7 +378,7 @@ Bridge::~Bridge() {
 void Bridge::ConnectOnMainThread(
     std::unique_ptr<SourceLocation> location,
     ThreadableLoadingContext* loading_context,
-    RefPtr<WebTaskRunner> worker_networking_task_runner,
+    scoped_refptr<WebTaskRunner> worker_networking_task_runner,
     WorkerThreadLifecycleContext* worker_thread_lifecycle_context,
     const KURL& url,
     const String& protocol,
@@ -403,8 +404,8 @@ bool Bridge::Connect(std::unique_ptr<SourceLocation> location,
   // Wait for completion of the task on the main thread because the mixed
   // content check must synchronously be conducted.
   WebSocketChannelSyncHelper sync_helper;
-  RefPtr<WebTaskRunner> worker_networking_task_runner =
-      TaskRunnerHelper::Get(TaskType::kNetworking, worker_global_scope_.Get());
+  scoped_refptr<WebTaskRunner> worker_networking_task_runner =
+      worker_global_scope_->GetTaskRunner(TaskType::kNetworking);
   WorkerThread* worker_thread = worker_global_scope_->GetThread();
 
   // Dedicated workers are a special case as they always have an associated
@@ -413,7 +414,7 @@ bool Bridge::Connect(std::unique_ptr<SourceLocation> location,
   // SSL interstitial decision to WebSocket connections from the worker.
   mojom::blink::WebSocketPtrInfo socket_ptr_info;
   if (!worker_global_scope_->IsDedicatedWorkerGlobalScope()) {
-    worker_thread->GetInterfaceProvider().GetInterface(
+    worker_global_scope_->GetInterfaceProvider()->GetInterface(
         mojo::MakeRequest(&socket_ptr_info));
   }
 
@@ -455,7 +456,7 @@ void Bridge::Send(const DOMArrayBuffer& binary_data,
   // ArrayBuffer isn't thread-safe, hence the content of ArrayBuffer is copied
   // into Vector<char>.
   std::unique_ptr<Vector<char>> data =
-      WTF::MakeUnique<Vector<char>>(byte_length);
+      std::make_unique<Vector<char>>(byte_length);
   if (binary_data.ByteLength())
     memcpy(data->data(),
            static_cast<const char*>(binary_data.Data()) + byte_offset,
@@ -468,7 +469,7 @@ void Bridge::Send(const DOMArrayBuffer& binary_data,
                           main_channel_client_, WTF::Passed(std::move(data))));
 }
 
-void Bridge::Send(PassRefPtr<BlobDataHandle> data) {
+void Bridge::Send(scoped_refptr<BlobDataHandle> data) {
   DCHECK(main_channel_client_);
   parent_frame_task_runners_->Get(TaskType::kNetworking)
       ->PostTask(BLINK_FROM_HERE,
@@ -509,7 +510,7 @@ void Bridge::Disconnect() {
   worker_global_scope_.Clear();
 }
 
-DEFINE_TRACE(Bridge) {
+void Bridge::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
   visitor->Trace(worker_global_scope_);
 }

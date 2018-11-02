@@ -8,7 +8,6 @@
 #import <Foundation/Foundation.h>
 
 // A detail record for a Remoting User.
-// TODO(nicholss): This is not the final object yet.
 @interface UserInfo : NSObject
 
 @property(nonatomic, copy) NSString* userId;
@@ -17,10 +16,6 @@
 // TODO(yuweih): SSO doesn't use a refresh token and it should not be used to
 // decide whether the UserInfo is authenticated.
 @property(nonatomic, copy) NSString* refreshToken;
-
-// Convert a json blob into a |UserInfo| object. Most useful for test.
-// TODO(nicholss): Might move this out into a catagory.
-+ (UserInfo*)parseListFromJSON:(NSMutableData*)data;
 
 // This returns the authenticated state of the this user info object.
 - (BOOL)isAuthenticated;

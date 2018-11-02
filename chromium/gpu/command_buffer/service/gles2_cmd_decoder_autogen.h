@@ -180,7 +180,7 @@ error::Error GLES2DecoderImpl::HandleBlendColor(uint32_t immediate_data_size,
     state_.blend_color_green = green;
     state_.blend_color_blue = blue;
     state_.blend_color_alpha = alpha;
-    glBlendColor(red, green, blue, alpha);
+    api()->glBlendColorFn(red, green, blue, alpha);
   }
   return error::kNoError;
 }
@@ -199,7 +199,7 @@ error::Error GLES2DecoderImpl::HandleBlendEquation(
       state_.blend_equation_alpha != mode) {
     state_.blend_equation_rgb = mode;
     state_.blend_equation_alpha = mode;
-    glBlendEquation(mode);
+    api()->glBlendEquationFn(mode);
   }
   return error::kNoError;
 }
@@ -226,7 +226,7 @@ error::Error GLES2DecoderImpl::HandleBlendEquationSeparate(
       state_.blend_equation_alpha != modeAlpha) {
     state_.blend_equation_rgb = modeRGB;
     state_.blend_equation_alpha = modeAlpha;
-    glBlendEquationSeparate(modeRGB, modeAlpha);
+    api()->glBlendEquationSeparateFn(modeRGB, modeAlpha);
   }
   return error::kNoError;
 }
@@ -252,7 +252,7 @@ error::Error GLES2DecoderImpl::HandleBlendFunc(uint32_t immediate_data_size,
     state_.blend_dest_rgb = dfactor;
     state_.blend_source_alpha = sfactor;
     state_.blend_dest_alpha = dfactor;
-    glBlendFunc(sfactor, dfactor);
+    api()->glBlendFuncFn(sfactor, dfactor);
   }
   return error::kNoError;
 }
@@ -291,7 +291,7 @@ error::Error GLES2DecoderImpl::HandleBlendFuncSeparate(
     state_.blend_dest_rgb = dstRGB;
     state_.blend_source_alpha = srcAlpha;
     state_.blend_dest_alpha = dstAlpha;
-    glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+    api()->glBlendFuncSeparateFn(srcRGB, dstRGB, srcAlpha, dstAlpha);
   }
   return error::kNoError;
 }
@@ -480,7 +480,7 @@ error::Error GLES2DecoderImpl::HandleClearColor(uint32_t immediate_data_size,
     state_.color_clear_green = green;
     state_.color_clear_blue = blue;
     state_.color_clear_alpha = alpha;
-    glClearColor(red, green, blue, alpha);
+    api()->glClearColorFn(red, green, blue, alpha);
   }
   return error::kNoError;
 }
@@ -506,7 +506,7 @@ error::Error GLES2DecoderImpl::HandleClearStencil(
   GLint s = static_cast<GLint>(c.s);
   if (state_.stencil_clear != s) {
     state_.stencil_clear = s;
-    glClearStencil(s);
+    api()->glClearStencilFn(s);
   }
   return error::kNoError;
 }
@@ -687,7 +687,7 @@ error::Error GLES2DecoderImpl::HandleCreateProgram(
   if (GetProgram(client_id)) {
     return error::kInvalidArguments;
   }
-  GLuint service_id = glCreateProgram();
+  GLuint service_id = api()->glCreateProgramFn();
   if (service_id) {
     CreateProgram(client_id, service_id);
   }
@@ -708,7 +708,7 @@ error::Error GLES2DecoderImpl::HandleCreateShader(
   if (GetShader(client_id)) {
     return error::kInvalidArguments;
   }
-  GLuint service_id = glCreateShader(type);
+  GLuint service_id = api()->glCreateShaderFn(type);
   if (service_id) {
     CreateShader(client_id, service_id, type);
   }
@@ -726,7 +726,7 @@ error::Error GLES2DecoderImpl::HandleCullFace(uint32_t immediate_data_size,
   }
   if (state_.cull_mode != mode) {
     state_.cull_mode = mode;
-    glCullFace(mode);
+    api()->glCullFaceFn(mode);
   }
   return error::kNoError;
 }
@@ -880,7 +880,7 @@ error::Error GLES2DecoderImpl::HandleDepthFunc(uint32_t immediate_data_size,
   }
   if (state_.depth_func != func) {
     state_.depth_func = func;
-    glDepthFunc(func);
+    api()->glDepthFuncFn(func);
   }
   return error::kNoError;
 }
@@ -1099,7 +1099,7 @@ error::Error GLES2DecoderImpl::HandleFrontFace(uint32_t immediate_data_size,
   }
   if (state_.front_face != mode) {
     state_.front_face = mode;
-    glFrontFace(mode);
+    api()->glFrontFaceFn(mode);
   }
   return error::kNoError;
 }
@@ -1119,7 +1119,7 @@ error::Error GLES2DecoderImpl::HandleGenBuffersImmediate(
   if (buffers == NULL) {
     return error::kOutOfBounds;
   }
-  auto buffers_copy = base::MakeUnique<GLuint[]>(n);
+  auto buffers_copy = std::make_unique<GLuint[]>(n);
   GLuint* buffers_safe = buffers_copy.get();
   std::copy(buffers, buffers + n, buffers_safe);
   if (!CheckUniqueAndNonNullIds(n, buffers_safe) ||
@@ -1159,7 +1159,7 @@ error::Error GLES2DecoderImpl::HandleGenFramebuffersImmediate(
   if (framebuffers == NULL) {
     return error::kOutOfBounds;
   }
-  auto framebuffers_copy = base::MakeUnique<GLuint[]>(n);
+  auto framebuffers_copy = std::make_unique<GLuint[]>(n);
   GLuint* framebuffers_safe = framebuffers_copy.get();
   std::copy(framebuffers, framebuffers + n, framebuffers_safe);
   if (!CheckUniqueAndNonNullIds(n, framebuffers_safe) ||
@@ -1185,7 +1185,7 @@ error::Error GLES2DecoderImpl::HandleGenRenderbuffersImmediate(
   if (renderbuffers == NULL) {
     return error::kOutOfBounds;
   }
-  auto renderbuffers_copy = base::MakeUnique<GLuint[]>(n);
+  auto renderbuffers_copy = std::make_unique<GLuint[]>(n);
   GLuint* renderbuffers_safe = renderbuffers_copy.get();
   std::copy(renderbuffers, renderbuffers + n, renderbuffers_safe);
   if (!CheckUniqueAndNonNullIds(n, renderbuffers_safe) ||
@@ -1212,7 +1212,7 @@ error::Error GLES2DecoderImpl::HandleGenSamplersImmediate(
   if (samplers == NULL) {
     return error::kOutOfBounds;
   }
-  auto samplers_copy = base::MakeUnique<GLuint[]>(n);
+  auto samplers_copy = std::make_unique<GLuint[]>(n);
   GLuint* samplers_safe = samplers_copy.get();
   std::copy(samplers, samplers + n, samplers_safe);
   if (!CheckUniqueAndNonNullIds(n, samplers_safe) ||
@@ -1237,7 +1237,7 @@ error::Error GLES2DecoderImpl::HandleGenTexturesImmediate(
   if (textures == NULL) {
     return error::kOutOfBounds;
   }
-  auto textures_copy = base::MakeUnique<GLuint[]>(n);
+  auto textures_copy = std::make_unique<GLuint[]>(n);
   GLuint* textures_safe = textures_copy.get();
   std::copy(textures, textures + n, textures_safe);
   if (!CheckUniqueAndNonNullIds(n, textures_safe) ||
@@ -1265,7 +1265,7 @@ error::Error GLES2DecoderImpl::HandleGenTransformFeedbacksImmediate(
   if (ids == NULL) {
     return error::kOutOfBounds;
   }
-  auto ids_copy = base::MakeUnique<GLuint[]>(n);
+  auto ids_copy = std::make_unique<GLuint[]>(n);
   GLuint* ids_safe = ids_copy.get();
   std::copy(ids, ids + n, ids_safe);
   if (!CheckUniqueAndNonNullIds(n, ids_safe) ||
@@ -1845,12 +1845,7 @@ error::Error GLES2DecoderImpl::HandleGetSynciv(uint32_t immediate_data_size,
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  GLsync service_sync = 0;
-  if (!group_->GetSyncServiceId(sync, &service_sync)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glGetSynciv", "invalid sync id");
-    return error::kNoError;
-  }
-  glGetSynciv(service_sync, pname, num_values, nullptr, values);
+  DoGetSynciv(sync, pname, num_values, nullptr, values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetSynciv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2105,7 +2100,7 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
       if (state_.hint_generate_mipmap != mode) {
         state_.hint_generate_mipmap = mode;
         if (!feature_info_->gl_version_info().is_desktop_core_profile) {
-          glHint(target, mode);
+          api()->glHintFn(target, mode);
         }
       }
       break;
@@ -2113,7 +2108,7 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
       if (state_.hint_fragment_shader_derivative != mode) {
         state_.hint_fragment_shader_derivative = mode;
         if (feature_info_->feature_flags().oes_standard_derivatives) {
-          glHint(target, mode);
+          api()->glHintFn(target, mode);
         }
       }
       break;
@@ -2421,7 +2416,7 @@ error::Error GLES2DecoderImpl::HandlePolygonOffset(
       state_.polygon_offset_units != units) {
     state_.polygon_offset_factor = factor;
     state_.polygon_offset_units = units;
-    glPolygonOffset(factor, units);
+    api()->glPolygonOffsetFn(factor, units);
   }
   return error::kNoError;
 }
@@ -2668,7 +2663,7 @@ error::Error GLES2DecoderImpl::HandleStencilFunc(
     state_.stencil_back_func = func;
     state_.stencil_back_ref = ref;
     state_.stencil_back_mask = mask;
-    glStencilFunc(func, ref, mask);
+    api()->glStencilFuncFn(func, ref, mask);
   }
   return error::kNoError;
 }
@@ -2712,7 +2707,7 @@ error::Error GLES2DecoderImpl::HandleStencilFuncSeparate(
       state_.stencil_back_ref = ref;
       state_.stencil_back_mask = mask;
     }
-    glStencilFuncSeparate(face, func, ref, mask);
+    api()->glStencilFuncSeparateFn(face, func, ref, mask);
   }
   return error::kNoError;
 }
@@ -2793,7 +2788,7 @@ error::Error GLES2DecoderImpl::HandleStencilOp(uint32_t immediate_data_size,
     state_.stencil_back_fail_op = fail;
     state_.stencil_back_z_fail_op = zfail;
     state_.stencil_back_z_pass_op = zpass;
-    glStencilOp(fail, zfail, zpass);
+    api()->glStencilOpFn(fail, zfail, zpass);
   }
   return error::kNoError;
 }
@@ -2845,7 +2840,7 @@ error::Error GLES2DecoderImpl::HandleStencilOpSeparate(
       state_.stencil_back_z_fail_op = zfail;
       state_.stencil_back_z_pass_op = zpass;
     }
-    glStencilOpSeparate(face, fail, zfail, zpass);
+    api()->glStencilOpSeparateFn(face, fail, zfail, zpass);
   }
   return error::kNoError;
 }
@@ -4318,7 +4313,7 @@ error::Error GLES2DecoderImpl::HandleGenQueriesEXTImmediate(
   if (queries == NULL) {
     return error::kOutOfBounds;
   }
-  auto queries_copy = base::MakeUnique<GLuint[]>(n);
+  auto queries_copy = std::make_unique<GLuint[]>(n);
   GLuint* queries_safe = queries_copy.get();
   std::copy(queries, queries + n, queries_safe);
   if (!CheckUniqueAndNonNullIds(n, queries_safe) ||
@@ -4436,7 +4431,7 @@ error::Error GLES2DecoderImpl::HandleGenVertexArraysOESImmediate(
   if (arrays == NULL) {
     return error::kOutOfBounds;
   }
-  auto arrays_copy = base::MakeUnique<GLuint[]>(n);
+  auto arrays_copy = std::make_unique<GLuint[]>(n);
   GLuint* arrays_safe = arrays_copy.get();
   std::copy(arrays, arrays + n, arrays_safe);
   if (!CheckUniqueAndNonNullIds(n, arrays_safe) ||
@@ -4702,33 +4697,6 @@ error::Error GLES2DecoderImpl::HandleProduceTextureDirectCHROMIUMImmediate(
     return error::kOutOfBounds;
   }
   DoProduceTextureDirectCHROMIUM(texture, target, mailbox);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleConsumeTextureCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::ConsumeTextureCHROMIUMImmediate& c = *static_cast<
-      const volatile gles2::cmds::ConsumeTextureCHROMIUMImmediate*>(cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize<GLbyte, 16>(1, &data_size)) {
-    return error::kOutOfBounds;
-  }
-  if (data_size > immediate_data_size) {
-    return error::kOutOfBounds;
-  }
-  volatile const GLbyte* mailbox = GetImmediateDataAs<volatile const GLbyte*>(
-      c, data_size, immediate_data_size);
-  if (!validators_->texture_bind_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glConsumeTextureCHROMIUM", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (mailbox == NULL) {
-    return error::kOutOfBounds;
-  }
-  DoConsumeTextureCHROMIUM(target, mailbox);
   return error::kNoError;
 }
 
@@ -5093,7 +5061,7 @@ error::Error GLES2DecoderImpl::HandleBlendBarrierKHR(
     return error::kUnknownCommand;
   }
 
-  glBlendBarrierKHR();
+  api()->glBlendBarrierKHRFn();
   return error::kNoError;
 }
 
@@ -5236,6 +5204,104 @@ error::Error GLES2DecoderImpl::HandleEndRasterCHROMIUM(
   }
 
   DoEndRasterCHROMIUM();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleDeleteTransferCacheEntryCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::DeleteTransferCacheEntryCHROMIUM& c =
+      *static_cast<
+          const volatile gles2::cmds::DeleteTransferCacheEntryCHROMIUM*>(
+          cmd_data);
+  GLuint64 handle_id = c.handle_id();
+  DoDeleteTransferCacheEntryCHROMIUM(handle_id);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleUnlockTransferCacheEntryCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::UnlockTransferCacheEntryCHROMIUM& c =
+      *static_cast<
+          const volatile gles2::cmds::UnlockTransferCacheEntryCHROMIUM*>(
+          cmd_data);
+  GLuint64 handle_id = c.handle_id();
+  DoUnlockTransferCacheEntryCHROMIUM(handle_id);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleTexStorage2DImageCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::TexStorage2DImageCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::TexStorage2DImageCHROMIUM*>(
+          cmd_data);
+  if (!features().chromium_texture_storage_image) {
+    return error::kUnknownCommand;
+  }
+
+  GLenum target = static_cast<GLenum>(c.target);
+  GLenum internalFormat = static_cast<GLenum>(c.internalFormat);
+  GLenum bufferUsage = static_cast<GLenum>(c.bufferUsage);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  if (!validators_->texture_bind_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTexStorage2DImageCHROMIUM", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (!validators_->texture_internal_format_storage.IsValid(internalFormat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTexStorage2DImageCHROMIUM",
+                                    internalFormat, "internalFormat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage2DImageCHROMIUM",
+                       "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage2DImageCHROMIUM",
+                       "height < 0");
+    return error::kNoError;
+  }
+  DoTexStorage2DImageCHROMIUM(target, internalFormat, bufferUsage, width,
+                              height);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleWindowRectanglesEXTImmediate(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  if (!feature_info_->IsWebGL2OrES3Context())
+    return error::kUnknownCommand;
+  const volatile gles2::cmds::WindowRectanglesEXTImmediate& c =
+      *static_cast<const volatile gles2::cmds::WindowRectanglesEXTImmediate*>(
+          cmd_data);
+  if (!features().ext_window_rectangles) {
+    return error::kUnknownCommand;
+  }
+
+  GLenum mode = static_cast<GLenum>(c.mode);
+  GLsizei count = static_cast<GLsizei>(c.count);
+  uint32_t data_size = 0;
+  if (count >= 0 && !GLES2Util::ComputeDataSize<GLint, 4>(count, &data_size)) {
+    return error::kOutOfBounds;
+  }
+  if (data_size > immediate_data_size) {
+    return error::kOutOfBounds;
+  }
+  volatile const GLint* box = GetImmediateDataAs<volatile const GLint*>(
+      c, data_size, immediate_data_size);
+  if (!validators_->window_rectangles_mode.IsValid(mode)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glWindowRectanglesEXT", mode, "mode");
+    return error::kNoError;
+  }
+  if (box == NULL) {
+    return error::kOutOfBounds;
+  }
+  DoWindowRectanglesEXT(mode, count, box);
   return error::kNoError;
 }
 

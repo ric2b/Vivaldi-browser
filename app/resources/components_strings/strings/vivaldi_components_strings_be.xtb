@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+<translation id="1152921474424827756">Адчыніць <ph name="BEGIN_LINK" /> версію з кэшу <ph name="END_LINK" /> старонкі <ph name="URL" /></translation>
+<translation id="1175364870820465910">&amp;Друк...</translation>
+<translation id="1506687042165942984">Паказуе старую захаваную копію гэтай старонкі.</translation>
 <translation id="1710259589646384581">Аперацыйная сістэма</translation>
+<translation id="2705137772291741111">Захаваная копія (кэшаваная) не чытаецца.</translation>
+<translation id="3005723025932146533">Паказаць захаваную копію</translation>
 <translation id="4744603770635761495">Шлях да выконвальнага файла</translation>
 <translation id="5115563688576182185">(64-бітны)</translation>
+<translation id="6264485186158353794">Назад да бязпечнасці</translation>
 <translation id="7353601530677266744">Камандны радок</translation>
 <translation id="7419106976560586862">Шлях да профілю</translation>
 <translation id="7951415247503192394">(32-бітны)</translation>
+<translation id="8150722005171944719">Файл па адрасу <ph name="URL" />  не чытальны. Магчыма, ен быў выдален, ці няма права доступа да файла.</translation>
 </translationbundle>

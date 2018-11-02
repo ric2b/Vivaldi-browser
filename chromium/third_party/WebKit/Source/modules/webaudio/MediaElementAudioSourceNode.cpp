@@ -25,8 +25,8 @@
 
 #include "modules/webaudio/MediaElementAudioSourceNode.h"
 
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/html/HTMLMediaElement.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "modules/webaudio/BaseAudioContext.h"
@@ -36,6 +36,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Locker.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -57,13 +58,19 @@ MediaElementAudioSourceHandler::MediaElementAudioSourceHandler(
   // .src is set to.
   AddOutput(2);
 
+  if (Context()->GetExecutionContext()) {
+    task_runner_ = Context()->GetExecutionContext()->GetTaskRunner(
+        TaskType::kMediaElementEvent);
+  }
+
   Initialize();
 }
 
-PassRefPtr<MediaElementAudioSourceHandler>
+scoped_refptr<MediaElementAudioSourceHandler>
 MediaElementAudioSourceHandler::Create(AudioNode& node,
                                        HTMLMediaElement& media_element) {
-  return AdoptRef(new MediaElementAudioSourceHandler(node, media_element));
+  return base::AdoptRef(
+      new MediaElementAudioSourceHandler(node, media_element));
 }
 
 MediaElementAudioSourceHandler::~MediaElementAudioSourceHandler() {
@@ -105,7 +112,7 @@ void MediaElementAudioSourceHandler::SetFormat(size_t number_of_channels,
 
     if (source_sample_rate != Context()->sampleRate()) {
       double scale_factor = source_sample_rate / Context()->sampleRate();
-      multi_channel_resampler_ = WTF::MakeUnique<MultiChannelResampler>(
+      multi_channel_resampler_ = std::make_unique<MultiChannelResampler>(
           scale_factor, number_of_channels);
     } else {
       // Bypass resampling.
@@ -114,7 +121,7 @@ void MediaElementAudioSourceHandler::SetFormat(size_t number_of_channels,
 
     {
       // The context must be locked when changing the number of output channels.
-      BaseAudioContext::AutoLocker context_locker(Context());
+      BaseAudioContext::GraphAutoLocker context_locker(Context());
 
       // Do any necesssary re-configuration to the output's number of channels.
       Output(0).SetNumberOfChannels(number_of_channels);
@@ -197,14 +204,10 @@ void MediaElementAudioSourceHandler::Process(size_t number_of_frames) {
         // Print a CORS message, but just once for each change in the current
         // media element source, and only if we have a document to print to.
         maybe_print_cors_message_ = false;
-        if (Context()->GetExecutionContext()) {
-          TaskRunnerHelper::Get(TaskType::kMediaElementEvent,
-                                Context()->GetExecutionContext())
-              ->PostTask(BLINK_FROM_HERE,
-                         CrossThreadBind(
-                             &MediaElementAudioSourceHandler::PrintCORSMessage,
-                             WrapPassRefPtr(this), current_src_string_));
-        }
+        task_runner_->PostTask(
+            BLINK_FROM_HERE,
+            CrossThreadBind(&MediaElementAudioSourceHandler::PrintCORSMessage,
+                            WrapRefCounted(this), current_src_string_));
       }
       output_bus->Zero();
     }
@@ -276,7 +279,7 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
   return Create(*context, *options.mediaElement(), exception_state);
 }
 
-DEFINE_TRACE(MediaElementAudioSourceNode) {
+void MediaElementAudioSourceNode::Trace(blink::Visitor* visitor) {
   AudioSourceProviderClient::Trace(visitor);
   AudioNode::Trace(visitor);
 }

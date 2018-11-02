@@ -101,7 +101,10 @@ bool RecordingSource::UpdateAndExpandInvalidation(
 
 void RecordingSource::UpdateDisplayItemList(
     const scoped_refptr<DisplayItemList>& display_list,
-    const size_t& painter_reported_memory_usage) {
+    const size_t& painter_reported_memory_usage,
+    float recording_scale_factor) {
+  recording_scale_factor_ = recording_scale_factor;
+
   display_list_ = display_list;
   painter_reported_memory_usage_ = painter_reported_memory_usage;
 
@@ -141,10 +144,6 @@ scoped_refptr<RasterSource> RecordingSource::CreateRasterSource() const {
   return scoped_refptr<RasterSource>(new RasterSource(this));
 }
 
-void RecordingSource::SetRecordingScaleFactor(float recording_scale_factor) {
-  recording_scale_factor_ = recording_scale_factor;
-}
-
 void RecordingSource::DetermineIfSolidColor() {
   DCHECK(display_list_);
   is_solid_color_ = false;
@@ -156,7 +155,8 @@ void RecordingSource::DetermineIfSolidColor() {
   TRACE_EVENT1("cc", "RecordingSource::DetermineIfSolidColor", "opcount",
                display_list_->op_count());
   is_solid_color_ = display_list_->GetColorIfSolidInRect(
-      gfx::Rect(GetSize()), &solid_color_, kMaxOpsToAnalyzeForLayer);
+      gfx::ScaleToRoundedRect(gfx::Rect(GetSize()), recording_scale_factor_),
+      &solid_color_, kMaxOpsToAnalyzeForLayer);
 }
 
 }  // namespace cc

@@ -23,6 +23,7 @@ class SystemMenuModelDelegate : public ui::SimpleMenuModel::Delegate {
   // Overridden from ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
+  bool IsCommandIdVisible(int command_id) const override;
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const override;
   bool IsItemForCommandIdDynamic(int command_id) const override;
@@ -30,8 +31,8 @@ class SystemMenuModelDelegate : public ui::SimpleMenuModel::Delegate {
   void ExecuteCommand(int command_id, int event_flags) override;
 
  private:
-  ui::AcceleratorProvider* provider_;  // weak
-  Browser* browser_;  // weak
+  ui::AcceleratorProvider* const provider_;  // weak
+  Browser* const browser_;                   // weak
 
   DISALLOW_COPY_AND_ASSIGN(SystemMenuModelDelegate);
 };

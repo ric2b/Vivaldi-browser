@@ -26,6 +26,7 @@
 #ifndef IdTargetObserverRegistry_h
 #define IdTargetObserverRegistry_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
@@ -38,12 +39,11 @@ class IdTargetObserver;
 
 class IdTargetObserverRegistry final
     : public GarbageCollected<IdTargetObserverRegistry> {
-  WTF_MAKE_NONCOPYABLE(IdTargetObserverRegistry);
   friend class IdTargetObserver;
 
  public:
   static IdTargetObserverRegistry* Create();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void NotifyObservers(const AtomicString& id);
   bool HasObservers(const AtomicString& id) const;
 
@@ -57,6 +57,7 @@ class IdTargetObserverRegistry final
   typedef HeapHashMap<StringImpl*, Member<ObserverSet>> IdToObserverSetMap;
   IdToObserverSetMap registry_;
   Member<ObserverSet> notifying_observers_in_set_;
+  DISALLOW_COPY_AND_ASSIGN(IdTargetObserverRegistry);
 };
 
 inline void IdTargetObserverRegistry::NotifyObservers(const AtomicString& id) {

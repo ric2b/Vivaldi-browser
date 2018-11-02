@@ -62,17 +62,6 @@ header {
   width: 99%;
 }
 
-.right-column .checkbox,
-.right-column .radio {
-  margin: 0;
-}
-
-.right-column .checkbox label,
-.right-column .radio label {
-  padding-bottom: 5px;
-  padding-top: 10px;
-}
-
 .right-column .radio input[type='radio'],
 .right-column label input[type='checkbox'] {
   --min-size: 13.19px;
@@ -105,7 +94,7 @@ header {
 }
 
 .two-column.visible .left-column.multirow {
-  padding-top: 16px;
+  padding-top: 13px;
   vertical-align: top;
 }
 
@@ -135,12 +124,6 @@ h1 {
 
 #print-preview .navbar-link {
   margin: 8px 20px;
-}
-
-#print-preview .navbar-link.disabled {
-  color: rgba(0, 0, 0, .5);
-  cursor: default;
-  pointer-events: none;
 }
 
 button.loading {

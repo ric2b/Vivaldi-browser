@@ -30,12 +30,12 @@
 #ifndef ShapeValue_h
 #define ShapeValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/BasicShapes.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "core/style/DataEquivalency.h"
 #include "core/style/StyleImage.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -48,7 +48,7 @@ class ShapeValue final : public GarbageCollectedFinalized<ShapeValue> {
     kImage
   };
 
-  static ShapeValue* CreateShapeValue(RefPtr<BasicShape> shape,
+  static ShapeValue* CreateShapeValue(scoped_refptr<BasicShape> shape,
                                       CSSBoxType css_box) {
     return new ShapeValue(std::move(shape), css_box);
   }
@@ -62,7 +62,7 @@ class ShapeValue final : public GarbageCollectedFinalized<ShapeValue> {
   }
 
   ShapeValueType GetType() const { return type_; }
-  BasicShape* Shape() const { return shape_.Get(); }
+  BasicShape* Shape() const { return shape_.get(); }
 
   StyleImage* GetImage() const { return image_.Get(); }
   bool IsImageValid() const {
@@ -81,10 +81,10 @@ class ShapeValue final : public GarbageCollectedFinalized<ShapeValue> {
 
   bool operator==(const ShapeValue& other) const;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(image_); }
+  virtual void Trace(blink::Visitor* visitor) { visitor->Trace(image_); }
 
  private:
-  ShapeValue(RefPtr<BasicShape> shape, CSSBoxType css_box)
+  ShapeValue(scoped_refptr<BasicShape> shape, CSSBoxType css_box)
       : type_(kShape), shape_(std::move(shape)), css_box_(css_box) {}
   ShapeValue(ShapeValueType type) : type_(type), css_box_(kBoxMissing) {}
   ShapeValue(StyleImage* image)
@@ -92,7 +92,7 @@ class ShapeValue final : public GarbageCollectedFinalized<ShapeValue> {
   ShapeValue(CSSBoxType css_box) : type_(kBox), css_box_(css_box) {}
 
   ShapeValueType type_;
-  RefPtr<BasicShape> shape_;
+  scoped_refptr<BasicShape> shape_;
   Member<StyleImage> image_;
   CSSBoxType css_box_;
 };

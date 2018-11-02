@@ -9,6 +9,8 @@ mojom("interfaces") {
     "battery_monitor.mojom",
     "battery_status.mojom",
     "fingerprint.mojom",
+    "hid.mojom",
+    "input_service.mojom",
     "nfc.mojom",
     "nfc_provider.mojom",
     "power_monitor.mojom",
@@ -23,9 +25,6 @@ mojom("interfaces") {
   public_deps = [
     ":constants",
   ]
-
-  # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  js_bindings_mode = "both"
 }
 
 mojom("generic_sensor") {
@@ -43,7 +42,4 @@ mojom("constants") {
   sources = [
     "constants.mojom",
   ]
-
-  # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  js_bindings_mode = "both"
 }

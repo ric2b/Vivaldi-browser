@@ -12,68 +12,42 @@
 
 namespace device {
 
-class VRDisplayImpl;
+// Must match VRViewerType in enums.xml.
+enum class VrViewerType {
+  GVR_UNKNOWN = 0,
+  GVR_CARDBOARD = 1,
+  GVR_DAYDREAM = 2,
+  ORIENTATION_SENSOR_DEVICE = 10,
+  FAKE_DEVICE = 11,
+  OPENVR_UNKNOWN = 20,
+  OPENVR_VIVE = 21,
+  OPENVR_RIFT_CV1 = 22,
+  VIEWER_TYPE_COUNT,
+};
 
 const unsigned int VR_DEVICE_LAST_ID = 0xFFFFFFFF;
 
 // Represents one of the platform's VR devices. Owned by the respective
 // VRDeviceProvider.
+// TODO(mthiesse, crbug.com/769373): Remove DEVICE_VR_EXPORT.
 class DEVICE_VR_EXPORT VRDevice {
  public:
-  VRDevice();
-  virtual ~VRDevice();
+  virtual ~VRDevice() {}
 
-  unsigned int id() const { return id_; }
+  virtual unsigned int GetId() const = 0;
+  virtual void PauseTracking() = 0;
+  virtual void ResumeTracking() = 0;
+  virtual void Blur() = 0;
+  virtual void Focus() = 0;
+  virtual mojom::VRDisplayInfoPtr GetVRDisplayInfo() = 0;
+  virtual void SetMagicWindowEnabled(bool enabled) = 0;
 
-  // Queries VR device for display info and calls onCreated once the display
-  // info object is created. If the query fails onCreated will be called with a
-  // nullptr as argument. onCreated can be called before this function returns.
-  virtual void CreateVRDisplayInfo(
-      const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) = 0;
-
-  virtual void RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
-                              mojom::VRPresentationProviderRequest request,
-                              const base::Callback<void(bool)>& callback) = 0;
-  virtual void ExitPresent() = 0;
-  virtual void GetNextMagicWindowPose(
-      VRDisplayImpl* display,
-      mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) = 0;
-
-  void AddDisplay(VRDisplayImpl* display);
-  void RemoveDisplay(VRDisplayImpl* display);
-  virtual void OnDisplayAdded(VRDisplayImpl* display) {}
-  virtual void OnDisplayRemoved(VRDisplayImpl* display) {}
-  virtual void OnListeningForActivateChanged(VRDisplayImpl* display){};
-
-  bool IsAccessAllowed(VRDisplayImpl* display);
-  bool CheckPresentingDisplay(VRDisplayImpl* display);
-  VRDisplayImpl* GetPresentingDisplay() { return presenting_display_; }
-
-  void OnChanged();
-  void OnExitPresent();
-  void OnBlur();
-  void OnFocus();
-
- protected:
-  friend class VRDisplayImpl;
-  friend class VRDisplayImplTest;
-
-  void SetPresentingDisplay(VRDisplayImpl* display);
-
- private:
-  void OnVRDisplayInfoCreated(mojom::VRDisplayInfoPtr vr_device_info);
-
-  std::set<VRDisplayImpl*> displays_;
-
-  VRDisplayImpl* presenting_display_;
-
-  unsigned int id_;
-
-  static unsigned int next_id_;
-
-  base::WeakPtrFactory<VRDevice> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VRDevice);
+  // TODO(mthiesse): The browser should handle browser-side exiting of
+  // presentation before device/ is even aware presentation is being exited.
+  // Then the browser should call ExitPresent() on Device, which does device/
+  // exiting of presentation before notifying displays. This is currently messy
+  // because browser-side notions of presentation are mostly Android-specific.
+  virtual void OnExitPresent() = 0;
 };
 
 }  // namespace device

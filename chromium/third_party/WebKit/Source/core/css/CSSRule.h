@@ -34,13 +34,13 @@ class CSSParserContext;
 class CSSRuleList;
 class CSSStyleSheet;
 class StyleRuleBase;
+enum class SecureContextMode;
 
-class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
-                            public ScriptWrappable {
+class CORE_EXPORT CSSRule : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  virtual ~CSSRule() {}
+  virtual ~CSSRule() = default;
 
   enum Type {
     kStyleRule = 1,
@@ -60,14 +60,14 @@ class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
   virtual String cssText() const = 0;
   virtual void Reattach(StyleRuleBase*) = 0;
 
-  virtual CSSRuleList* cssRules() const { return 0; }
+  virtual CSSRuleList* cssRules() const { return nullptr; }
 
   void SetParentStyleSheet(CSSStyleSheet*);
 
   void SetParentRule(CSSRule*);
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   CSSStyleSheet* parentStyleSheet() const {
     if (parent_is_rule_)
@@ -93,7 +93,7 @@ class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
     has_cached_selector_text_ = has_cached_selector_text;
   }
 
-  const CSSParserContext* ParserContext() const;
+  const CSSParserContext* ParserContext(SecureContextMode) const;
 
  private:
   mutable unsigned char has_cached_selector_text_ : 1;

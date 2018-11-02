@@ -5,9 +5,9 @@
 #ifndef ASH_HIGHLIGHTER_HIGHLIGHTER_CONTROLLER_TEST_API_H_
 #define ASH_HIGHLIGHTER_HIGHLIGHTER_CONTROLLER_TEST_API_H_
 
-#include "ash/highlighter/highlighter_selection_observer.h"
-#include "base/callback.h"
+#include "ash/public/interfaces/highlighter_controller.mojom.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ash {
@@ -16,21 +16,22 @@ class FastInkPoints;
 class HighlighterController;
 
 // An api for testing the HighlighterController class.
-// Inheriting from HighlighterSelectionObserver to provide the tests
-// with access to gesture recognition results.
-class HighlighterControllerTestApi : public HighlighterSelectionObserver {
+// Implements ash::mojom::HighlighterControllerClient and binds itself as the
+// client to provide the tests with access to gesture recognition results.
+class HighlighterControllerTestApi
+    : public ash::mojom::HighlighterControllerClient {
  public:
   explicit HighlighterControllerTestApi(HighlighterController* instance);
   ~HighlighterControllerTestApi() override;
 
-  void SetMetalayerDone(base::OnceClosure done) {
-    metalayer_done_ = std::move(done);
-  }
-  void CallMetalayerDone() {
-    if (!metalayer_done_.is_null())
-      std::move(metalayer_done_).Run();
-  }
-  void SetViaButton(bool via_button) { via_button_ = via_button; }
+  // Attaches itself as the client to the controller. This method is called
+  // automatically from the constructor, and should be explicitly called only
+  // if DetachClient has been called previously.
+  void AttachClient();
+
+  // Detaches itself from the controller.
+  void DetachClient();
+
   void SetEnabled(bool enabled);
   void DestroyPointerView();
   void SimulateInterruptedStrokeTimeout();
@@ -41,29 +42,35 @@ class HighlighterControllerTestApi : public HighlighterSelectionObserver {
   const FastInkPoints& points() const;
   const FastInkPoints& predicted_points() const;
 
-  void ResetSelection() {
-    handle_selection_called_ = false;
-    handle_failed_selection_called_ = false;
-  }
-  bool handle_selection_called() const { return handle_selection_called_; }
-  bool handle_failed_selection_called() const {
-    return handle_failed_selection_called_;
-  }
+  void ResetEnabledState() { handle_enabled_state_changed_called_ = false; }
+  // Flushes the mojo connection, then checks whether HandleEnabledStateChange
+  // has been called on the client since the last call to ResetEnabledState.
+  bool HandleEnabledStateChangedCalled();
+  bool enabled() const { return enabled_; }
+
+  void ResetSelection() { handle_selection_called_ = false; }
+  // Flushes the mojo connection, then checks whether HandleSelection
+  // has been called on the client since the last call to ResetSelection.
+  bool HandleSelectionCalled();
   const gfx::Rect& selection() const { return selection_; }
 
  private:
   // HighlighterSelectionObserver:
   void HandleSelection(const gfx::Rect& rect) override;
-  void HandleFailedSelection() override;
+  void HandleEnabledStateChange(bool enabled) override;
+
+  // Binds to the client interface.
+  mojo::Binding<ash::mojom::HighlighterControllerClient> binding_;
+
+  // HighlighterController interface.
+  ash::mojom::HighlighterControllerPtr highlighter_controller_;
 
   HighlighterController* instance_;
 
   bool handle_selection_called_ = false;
-  bool handle_failed_selection_called_ = false;
+  bool handle_enabled_state_changed_called_ = false;
   gfx::Rect selection_;
-
-  base::OnceClosure metalayer_done_;
-  bool via_button_ = false;
+  bool enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(HighlighterControllerTestApi);
 };

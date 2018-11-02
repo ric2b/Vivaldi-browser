@@ -449,16 +449,6 @@
       }
     },
     {
-      "command": "toggleChromeVoxVersion",
-      "sequence": {
-        "cvoxModifier": true,
-        "keys": {
-          "keyCode": [81],
-          "shitKey": [true]
-        }
-      }
-    },
-    {
       "command": "toggleStickyMode",
       "sequence": {
         "doubleTap": true,
@@ -930,6 +920,24 @@
         "cvoxModifier": true,
         "keys": {
           "keyCode": [119]
+        }
+      }
+    },
+    {
+      "command": "enableChromeVoxArcSupportForCurrentApp",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [65, 219]
+        }
+      }
+    },
+    {
+      "command": "disableChromeVoxArcSupportForCurrentApp",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [65, 221]
         }
       }
     }

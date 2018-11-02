@@ -7,7 +7,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/web/net/crw_request_tracker_delegate.h"
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
@@ -15,6 +14,8 @@
 #import "ios/web/web_state/ui/crw_web_view_navigation_proxy.h"
 
 namespace web {
+
+enum class NavigationInitiationType;
 
 // Page load phases.
 enum LoadPhase {
@@ -35,7 +36,6 @@ enum LoadPhase {
 @protocol CRWNativeContent;
 @protocol CRWNativeContentProvider;
 @protocol CRWSwipeRecognizerProvider;
-@protocol CRWWebControllerObserver;
 @class CRWWebViewContentView;
 @protocol CRWWebViewProxy;
 class GURL;
@@ -92,9 +92,6 @@ class WebStateImpl;
 // Returns the x, y offset the content has been scrolled.
 @property(nonatomic, readonly) CGPoint scrollPosition;
 
-// Returns whether the top of the content is visible.
-@property(nonatomic, readonly) BOOL atTop;
-
 // YES if JavaScript dialogs and window open requests should be suppressed.
 // Default is NO. When dialog is suppressed
 // |WebStateObserver::DidSuppressDialog| will be called.
@@ -102,6 +99,10 @@ class WebStateImpl;
 
 // YES if the web process backing WebView is believed to currently be crashed.
 @property(nonatomic, assign, getter=isWebProcessCrashed) BOOL webProcessCrashed;
+
+// Whether the WebController is visible. Returns YES after wasShown call and
+// NO after wasHidden() call.
+@property(nonatomic, assign, getter=isVisible) BOOL visible;
 
 // Designated initializer. Initializes web controller with |webState|. The
 // calling code must retain the ownership of |webState|.
@@ -197,25 +198,8 @@ class WebStateImpl;
 // complete it will be handled internally.
 - (void)restoreStateFromHistory;
 
-// Updates the HTML5 history state of the page using the current NavigationItem.
-// For same-document navigations and navigations affected by
-// window.history.[push/replace]State(), the URL and serialized state object
-// will be updated to the current NavigationItem's values.  A popState event
-// will be triggered for all same-document navigations.  Additionally, a
-// hashchange event will be triggered for same-document navigations where the
-// only difference between the current and previous URL is the fragment.
-- (void)updateHTML5HistoryState;
-
 // Notifies the CRWWebController that it has been shown.
 - (void)wasShown;
-
-// Notifies the CRWWebController that the current page is an HTTP page
-// containing a password field.
-- (void)didShowPasswordInputOnHTTP;
-
-// Notifies the CRWWebController that the current page is an HTTP page
-// containing a credit card field.
-- (void)didShowCreditCardInputOnHTTP;
 
 // Notifies the CRWWebController that it has been hidden.
 - (void)wasHidden;
@@ -236,13 +220,6 @@ class WebStateImpl;
 // Removes |toolbar| from the web view.
 - (void)removeToolbarViewFromWebView:(UIView*)toolbarView;
 
-// Adds a CRWWebControllerObserver to subscribe to page events. |observer|
-// cannot be nil.
-- (void)addObserver:(id<CRWWebControllerObserver>)observer;
-
-// Removes an attached CRWWebControllerObserver.
-- (void)removeObserver:(id<CRWWebControllerObserver>)observer;
-
 // Returns the always-visible frame, not including the part that could be
 // covered by the toolbar.
 - (CGRect)visibleFrame;
@@ -251,6 +228,13 @@ class WebStateImpl;
 
 // Returns the native controller (if any) current mananging the content.
 - (id<CRWNativeContent>)nativeController;
+
+// Called when NavigationManager has completed go to index same-document
+// navigation. Updates HTML5 history state, current document URL and sends
+// approprivate navigation and loading WebStateObserver callbacks.
+- (void)didFinishGoToIndexSameDocumentNavigationWithType:
+    (web::NavigationInitiationType)type;
+
 @end
 
 #pragma mark Testing
@@ -265,8 +249,8 @@ class WebStateImpl;
 - (void)injectWebViewContentView:(CRWWebViewContentView*)webViewContentView;
 - (void)resetInjectedWebViewContentView;
 
-// Returns the number of observers registered for this CRWWebController.
-- (NSUInteger)observerCount;
+// Returns whether any observers are registered with the CRWWebController.
+- (BOOL)hasObservers;
 
 // Loads the HTML into the page at the given URL.
 - (void)loadHTML:(NSString*)HTML forURL:(const GURL&)URL;

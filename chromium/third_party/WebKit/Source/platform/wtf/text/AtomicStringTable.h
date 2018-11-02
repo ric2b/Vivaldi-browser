@@ -5,6 +5,7 @@
 #ifndef WTF_AtomicStringTable_h
 #define WTF_AtomicStringTable_h
 
+#include "base/macros.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/WTFExport.h"
@@ -18,7 +19,6 @@ namespace WTF {
 // not thread safe and each WTFThreadData has one.
 class WTF_EXPORT AtomicStringTable final {
   USING_FAST_MALLOC(AtomicStringTable);
-  WTF_MAKE_NONCOPYABLE(AtomicStringTable);
 
  public:
   AtomicStringTable();
@@ -37,14 +37,14 @@ class WTF_EXPORT AtomicStringTable final {
   // a UChar string may be an LChar string as the table will attempt to
   // convert the string to save memory if possible.
   StringImpl* Add(StringImpl*);
-  RefPtr<StringImpl> Add(const LChar* chars, unsigned length);
-  RefPtr<StringImpl> Add(const UChar* chars, unsigned length);
+  scoped_refptr<StringImpl> Add(const LChar* chars, unsigned length);
+  scoped_refptr<StringImpl> Add(const UChar* chars, unsigned length);
 
   // Adding UTF8.
   // Returns null if the characters contain invalid utf8 sequences.
   // Pass null for the charactersEnd to automatically detect the length.
-  RefPtr<StringImpl> AddUTF8(const char* characters_start,
-                             const char* characters_end);
+  scoped_refptr<StringImpl> AddUTF8(const char* characters_start,
+                                    const char* characters_end);
 
   // This is for ~StringImpl to unregister a string before destruction since
   // the table is holding weak pointers. It should not be used directly.
@@ -52,9 +52,11 @@ class WTF_EXPORT AtomicStringTable final {
 
  private:
   template <typename T, typename HashTranslator>
-  inline RefPtr<StringImpl> AddToStringTable(const T& value);
+  inline scoped_refptr<StringImpl> AddToStringTable(const T& value);
 
   HashSet<StringImpl*> table_;
+
+  DISALLOW_COPY_AND_ASSIGN(AtomicStringTable);
 };
 
 }  // namespace WTF

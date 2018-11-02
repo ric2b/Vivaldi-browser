@@ -42,7 +42,7 @@ void MemoryMonitorAndroidDelegateImpl::GetMemoryInfo(MemoryInfo* out) {
 }
 
 // Called by JNI to populate ActivityManager.MemoryInfo.
-static void GetMemoryInfoCallback(
+static void JNI_MemoryMonitorAndroid_GetMemoryInfoCallback(
     JNIEnv* env,
     const base::android::JavaParamRef<jclass>& clazz,
     jlong avail_mem,
@@ -64,9 +64,10 @@ const int kTrimMemoryLevelMax = 80;
 const int kTrimMemoryRunningCritical = 15;
 
 // Called by JNI.
-static void OnTrimMemory(JNIEnv* env,
-                         const base::android::JavaParamRef<jclass>& jcaller,
-                         jint level) {
+static void JNI_MemoryMonitorAndroid_OnTrimMemory(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jclass>& jcaller,
+    jint level) {
   DCHECK(level >= 0 && level <= kTrimMemoryLevelMax);
   auto* coordinator = MemoryCoordinatorImpl::GetInstance();
   DCHECK(coordinator);
@@ -88,7 +89,7 @@ MemoryMonitorAndroid::MemoryMonitorAndroid(std::unique_ptr<Delegate> delegate)
   DCHECK(delegate_.get());
   RegisterComponentCallbacks();
   application_state_listener_ =
-      base::MakeUnique<base::android::ApplicationStatusListener>(
+      std::make_unique<base::android::ApplicationStatusListener>(
           base::Bind(&MemoryMonitorAndroid::OnApplicationStateChange,
                      base::Unretained(this)));
 }

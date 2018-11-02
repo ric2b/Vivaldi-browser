@@ -4,25 +4,19 @@
 
 #include "content/common/resource_messages.h"
 
+#include "base/files/file.h"
+#include "base/files/platform_file.h"
+#include "ipc/ipc_mojo_param_traits.h"
+#include "ipc/ipc_platform_file.h"
 #include "net/base/load_timing_info.h"
 #include "net/http/http_response_headers.h"
 
 namespace IPC {
 
-void ParamTraits<scoped_refptr<net::HttpResponseHeaders>>::GetSize(
-    base::PickleSizer* s, const param_type& p) {
-  GetParamSize(s, p.get() != NULL);
-  if (p.get()) {
-    base::Pickle temp;
-    p->Persist(&temp, net::HttpResponseHeaders::PERSIST_SANS_COOKIES);
-    s->AddBytes(temp.payload_size());
-  }
-}
-
 void ParamTraits<scoped_refptr<net::HttpResponseHeaders>>::Write(
     base::Pickle* m,
     const param_type& p) {
-  WriteParam(m, p.get() != NULL);
+  WriteParam(m, p.get() != nullptr);
   if (p.get()) {
     // Do not disclose Set-Cookie headers over IPC.
     p->Persist(m, net::HttpResponseHeaders::PERSIST_SANS_COOKIES);
@@ -48,15 +42,6 @@ void ParamTraits<scoped_refptr<net::HttpResponseHeaders> >::Log(
 
 namespace {
 
-void GetCertSize(base::PickleSizer* s, net::X509Certificate* cert) {
-  GetParamSize(s, !!cert);
-  if (cert) {
-    base::Pickle temp;
-    cert->Persist(&temp);
-    s->AddBytes(temp.payload_size());
-  }
-}
-
 void WriteCert(base::Pickle* m, net::X509Certificate* cert) {
   WriteParam(m, !!cert);
   if (cert)
@@ -72,39 +57,11 @@ bool ReadCert(const base::Pickle* m,
     return false;
   if (!has_object)
     return true;
-  *cert = net::X509Certificate::CreateFromPickle(
-      iter, net::X509Certificate::PICKLETYPE_CERTIFICATE_CHAIN_V3);
+  *cert = net::X509Certificate::CreateFromPickle(iter);
   return !!cert->get();
 }
 
 }  // namespace
-
-void ParamTraits<net::SSLInfo>::GetSize(base::PickleSizer* s,
-                                        const param_type& p) {
-  GetParamSize(s, p.is_valid());
-  if (!p.is_valid())
-    return;
-  GetCertSize(s, p.cert.get());
-  GetCertSize(s, p.unverified_cert.get());
-  GetParamSize(s, p.cert_status);
-  GetParamSize(s, p.security_bits);
-  GetParamSize(s, p.key_exchange_group);
-  GetParamSize(s, p.connection_status);
-  GetParamSize(s, p.is_issued_by_known_root);
-  GetParamSize(s, p.pkp_bypassed);
-  GetParamSize(s, p.client_cert_sent);
-  GetParamSize(s, p.channel_id_sent);
-  GetParamSize(s, p.token_binding_negotiated);
-  GetParamSize(s, p.token_binding_key_param);
-  GetParamSize(s, p.handshake_type);
-  GetParamSize(s, p.public_key_hashes);
-  GetParamSize(s, p.pinning_failure_log);
-  GetParamSize(s, p.signed_certificate_timestamps);
-  GetParamSize(s, p.ct_compliance_details_available);
-  GetParamSize(s, p.ct_cert_policy_compliance);
-  GetParamSize(s, p.ocsp_result.response_status);
-  GetParamSize(s, p.ocsp_result.revocation_status);
-}
 
 void ParamTraits<net::SSLInfo>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.is_valid());
@@ -126,8 +83,7 @@ void ParamTraits<net::SSLInfo>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.public_key_hashes);
   WriteParam(m, p.pinning_failure_log);
   WriteParam(m, p.signed_certificate_timestamps);
-  WriteParam(m, p.ct_compliance_details_available);
-  WriteParam(m, p.ct_cert_policy_compliance);
+  WriteParam(m, p.ct_policy_compliance);
   WriteParam(m, p.ocsp_result.response_status);
   WriteParam(m, p.ocsp_result.revocation_status);
 }
@@ -156,19 +112,13 @@ bool ParamTraits<net::SSLInfo>::Read(const base::Pickle* m,
          ReadParam(m, iter, &r->public_key_hashes) &&
          ReadParam(m, iter, &r->pinning_failure_log) &&
          ReadParam(m, iter, &r->signed_certificate_timestamps) &&
-         ReadParam(m, iter, &r->ct_compliance_details_available) &&
-         ReadParam(m, iter, &r->ct_cert_policy_compliance) &&
+         ReadParam(m, iter, &r->ct_policy_compliance) &&
          ReadParam(m, iter, &r->ocsp_result.response_status) &&
          ReadParam(m, iter, &r->ocsp_result.revocation_status);
 }
 
 void ParamTraits<net::SSLInfo>::Log(const param_type& p, std::string* l) {
   l->append("<SSLInfo>");
-}
-
-void ParamTraits<net::HashValue>::GetSize(base::PickleSizer* s,
-                                          const param_type& p) {
-  GetParamSize(s, p.ToString());
 }
 
 void ParamTraits<net::HashValue>::Write(base::Pickle* m, const param_type& p) {
@@ -184,49 +134,6 @@ bool ParamTraits<net::HashValue>::Read(const base::Pickle* m,
 
 void ParamTraits<net::HashValue>::Log(const param_type& p, std::string* l) {
   l->append("<HashValue>");
-}
-
-void ParamTraits<storage::DataElement>::GetSize(base::PickleSizer* s,
-                                                const param_type& p) {
-  GetParamSize(s, static_cast<int>(p.type()));
-  switch (p.type()) {
-    case storage::DataElement::TYPE_BYTES: {
-      s->AddData(static_cast<int>(p.length()));
-      break;
-    }
-    case storage::DataElement::TYPE_BYTES_DESCRIPTION: {
-      GetParamSize(s, p.length());
-      break;
-    }
-    case storage::DataElement::TYPE_FILE: {
-      GetParamSize(s, p.path());
-      GetParamSize(s, p.offset());
-      GetParamSize(s, p.length());
-      GetParamSize(s, p.expected_modification_time());
-      break;
-    }
-    case storage::DataElement::TYPE_FILE_FILESYSTEM: {
-      GetParamSize(s, p.filesystem_url());
-      GetParamSize(s, p.offset());
-      GetParamSize(s, p.length());
-      GetParamSize(s, p.expected_modification_time());
-      break;
-    }
-    case storage::DataElement::TYPE_BLOB: {
-      GetParamSize(s, p.blob_uuid());
-      GetParamSize(s, p.offset());
-      GetParamSize(s, p.length());
-      break;
-    }
-    case storage::DataElement::TYPE_DISK_CACHE_ENTRY: {
-      NOTREACHED() << "Can't be sent by IPC.";
-      break;
-    }
-    case storage::DataElement::TYPE_UNKNOWN: {
-      NOTREACHED();
-      break;
-    }
-  }
 }
 
 void ParamTraits<storage::DataElement>::Write(base::Pickle* m,
@@ -248,6 +155,16 @@ void ParamTraits<storage::DataElement>::Write(base::Pickle* m,
       WriteParam(m, p.expected_modification_time());
       break;
     }
+    case storage::DataElement::TYPE_RAW_FILE: {
+      WriteParam(
+          m, IPC::GetPlatformFileForTransit(p.file().GetPlatformFile(),
+                                            false /* close_source_handle */));
+      WriteParam(m, p.path());
+      WriteParam(m, p.offset());
+      WriteParam(m, p.length());
+      WriteParam(m, p.expected_modification_time());
+      break;
+    }
     case storage::DataElement::TYPE_FILE_FILESYSTEM: {
       WriteParam(m, p.filesystem_url());
       WriteParam(m, p.offset());
@@ -263,6 +180,14 @@ void ParamTraits<storage::DataElement>::Write(base::Pickle* m,
     }
     case storage::DataElement::TYPE_DISK_CACHE_ENTRY: {
       NOTREACHED() << "Can't be sent by IPC.";
+      break;
+    }
+    case storage::DataElement::TYPE_DATA_PIPE: {
+      WriteParam(m,
+                 const_cast<network::mojom::DataPipeGetterPtr&>(p.data_pipe())
+                     .PassInterface()
+                     .PassHandle()
+                     .release());
       break;
     }
     case storage::DataElement::TYPE_UNKNOWN: {
@@ -310,6 +235,27 @@ bool ParamTraits<storage::DataElement>::Read(const base::Pickle* m,
                             expected_modification_time);
       return true;
     }
+    case storage::DataElement::TYPE_RAW_FILE: {
+      IPC::PlatformFileForTransit platform_file_for_transit;
+      if (!ReadParam(m, iter, &platform_file_for_transit))
+        return false;
+      base::File file = PlatformFileForTransitToFile(platform_file_for_transit);
+      base::FilePath file_path;
+      if (!ReadParam(m, iter, &file_path))
+        return false;
+      uint64_t offset;
+      if (!ReadParam(m, iter, &offset))
+        return false;
+      uint64_t length;
+      if (!ReadParam(m, iter, &length))
+        return false;
+      base::Time expected_modification_time;
+      if (!ReadParam(m, iter, &expected_modification_time))
+        return false;
+      r->SetToFileRange(std::move(file), file_path, offset, length,
+                        expected_modification_time);
+      return true;
+    }
     case storage::DataElement::TYPE_FILE_FILESYSTEM: {
       GURL file_system_url;
       uint64_t offset, length;
@@ -342,6 +288,16 @@ bool ParamTraits<storage::DataElement>::Read(const base::Pickle* m,
       NOTREACHED() << "Can't be sent by IPC.";
       return false;
     }
+    case storage::DataElement::TYPE_DATA_PIPE: {
+      network::mojom::DataPipeGetterPtr data_pipe_getter;
+      mojo::MessagePipeHandle message_pipe;
+      if (!ReadParam(m, iter, &message_pipe))
+        return false;
+      data_pipe_getter.Bind(network::mojom::DataPipeGetterPtrInfo(
+          mojo::ScopedMessagePipeHandle(message_pipe), 0u));
+      r->SetToDataPipe(std::move(data_pipe_getter));
+      return true;
+    }
     case storage::DataElement::TYPE_UNKNOWN: {
       NOTREACHED();
       return false;
@@ -355,23 +311,10 @@ void ParamTraits<storage::DataElement>::Log(const param_type& p,
   l->append("<storage::DataElement>");
 }
 
-void ParamTraits<scoped_refptr<content::ResourceDevToolsInfo>>::GetSize(
-    base::PickleSizer* s, const param_type& p) {
-  GetParamSize(s, p.get() != NULL);
-  if (p.get()) {
-    GetParamSize(s, p->http_status_code);
-    GetParamSize(s, p->http_status_text);
-    GetParamSize(s, p->request_headers);
-    GetParamSize(s, p->response_headers);
-    GetParamSize(s, p->request_headers_text);
-    GetParamSize(s, p->response_headers_text);
-  }
-}
-
 void ParamTraits<scoped_refptr<content::ResourceDevToolsInfo>>::Write(
     base::Pickle* m,
     const param_type& p) {
-  WriteParam(m, p.get() != NULL);
+  WriteParam(m, p.get() != nullptr);
   if (p.get()) {
     WriteParam(m, p->http_status_code);
     WriteParam(m, p->http_status_text);
@@ -410,30 +353,6 @@ void ParamTraits<scoped_refptr<content::ResourceDevToolsInfo> >::Log(
     LogParam(p->response_headers, l);
   }
   l->append(")");
-}
-
-void ParamTraits<net::LoadTimingInfo>::GetSize(base::PickleSizer* s,
-                                               const param_type& p) {
-  GetParamSize(s, p.socket_log_id);
-  GetParamSize(s, p.socket_reused);
-  GetParamSize(s, p.request_start_time.is_null());
-  if (p.request_start_time.is_null())
-    return;
-  GetParamSize(s, p.request_start_time);
-  GetParamSize(s, p.request_start);
-  GetParamSize(s, p.proxy_resolve_start);
-  GetParamSize(s, p.proxy_resolve_end);
-  GetParamSize(s, p.connect_timing.dns_start);
-  GetParamSize(s, p.connect_timing.dns_end);
-  GetParamSize(s, p.connect_timing.connect_start);
-  GetParamSize(s, p.connect_timing.connect_end);
-  GetParamSize(s, p.connect_timing.ssl_start);
-  GetParamSize(s, p.connect_timing.ssl_end);
-  GetParamSize(s, p.send_start);
-  GetParamSize(s, p.send_end);
-  GetParamSize(s, p.receive_headers_end);
-  GetParamSize(s, p.push_start);
-  GetParamSize(s, p.push_end);
 }
 
 void ParamTraits<net::LoadTimingInfo>::Write(base::Pickle* m,
@@ -529,21 +448,10 @@ void ParamTraits<net::LoadTimingInfo>::Log(const param_type& p,
   l->append(")");
 }
 
-void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::GetSize(
-    base::PickleSizer* s,
-    const param_type& p) {
-  GetParamSize(s, p.get() != NULL);
-  if (p.get()) {
-    GetParamSize(s, *p->elements());
-    GetParamSize(s, p->identifier());
-    GetParamSize(s, p->contains_sensitive_info());
-  }
-}
-
 void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Write(
     base::Pickle* m,
     const param_type& p) {
-  WriteParam(m, p.get() != NULL);
+  WriteParam(m, p.get() != nullptr);
   if (p.get()) {
     WriteParam(m, *p->elements());
     WriteParam(m, p->identifier());
@@ -582,28 +490,10 @@ void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Log(
   l->append("<ResourceRequestBody>");
 }
 
-void ParamTraits<scoped_refptr<net::ct::SignedCertificateTimestamp>>::GetSize(
-    base::PickleSizer* s,
-    const param_type& p) {
-  GetParamSize(s, p.get() != NULL);
-  if (p.get()) {
-    GetParamSize(s, static_cast<unsigned int>(p->version));
-    GetParamSize(s, p->log_id);
-    GetParamSize(s, p->timestamp);
-    GetParamSize(s, p->extensions);
-    GetParamSize(s, static_cast<unsigned int>(p->signature.hash_algorithm));
-    GetParamSize(s,
-                 static_cast<unsigned int>(p->signature.signature_algorithm));
-    GetParamSize(s, p->signature.signature_data);
-    GetParamSize(s, static_cast<unsigned int>(p->origin));
-    GetParamSize(s, p->log_description);
-  }
-}
-
 void ParamTraits<scoped_refptr<net::ct::SignedCertificateTimestamp>>::Write(
     base::Pickle* m,
     const param_type& p) {
-  WriteParam(m, p.get() != NULL);
+  WriteParam(m, p.get() != nullptr);
   if (p.get())
     p->Persist(m);
 }

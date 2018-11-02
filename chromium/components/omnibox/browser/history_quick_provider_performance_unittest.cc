@@ -109,21 +109,15 @@ class HQPPerfTestOnePopularURL : public testing::Test {
 void HQPPerfTestOnePopularURL::SetUp() {
   if (base::ThreadTicks::IsSupported())
     base::ThreadTicks::WaitUntilInitialized();
-  client_.reset(new FakeAutocompleteProviderClient());
+  client_ = std::make_unique<FakeAutocompleteProviderClient>();
   ASSERT_TRUE(client_->GetHistoryService());
   ASSERT_NO_FATAL_FAILURE(PrepareData());
 }
 
 void HQPPerfTestOnePopularURL::TearDown() {
   provider_ = nullptr;
-  // The InMemoryURLIndex must be explicitly shut down or it will DCHECK() in
-  // its destructor.
-  client_->GetInMemoryURLIndex()->Shutdown();
-  client_->set_in_memory_url_index(nullptr);
-  // History index rebuild task is created from main thread during SetUp,
-  // performed on DB thread and must be deleted on main thread.
-  // Run main loop to process delete task, to prevent leaks.
-  base::RunLoop().RunUntilIdle();
+  client_.reset();
+  scoped_task_environment_.RunUntilIdle();
 }
 
 void HQPPerfTestOnePopularURL::PrepareData() {
@@ -161,10 +155,8 @@ void HQPPerfTestOnePopularURL::PrintMeasurements(
 
 base::TimeDelta HQPPerfTestOnePopularURL::RunTest(const base::string16& text) {
   base::RunLoop().RunUntilIdle();
-  AutocompleteInput input(text, base::string16::npos, std::string(), GURL(),
-                          base::string16(),
-                          metrics::OmniboxEventProto::INVALID_SPEC, false,
-                          false, true, true, false, TestSchemeClassifier());
+  AutocompleteInput input(text, metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
 
   if (base::ThreadTicks::IsSupported()) {
     base::ThreadTicks start = base::ThreadTicks::Now();

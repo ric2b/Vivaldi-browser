@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -29,6 +30,7 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/security_state/core/security_state.h"
@@ -147,6 +149,20 @@ bool ShouldShowManualFallbackForPreLollipop(syncer::SyncService* sync_service) {
 #endif
 }
 
+void AddSimpleSuggestionWithSeparatorOnTop(
+    int value,
+    int frontend_id,
+    std::vector<autofill::Suggestion>* suggestions) {
+#if !defined(OS_ANDROID)
+  suggestions->push_back(autofill::Suggestion());
+  suggestions->back().frontend_id = autofill::POPUP_ITEM_ID_SEPARATOR;
+#endif
+
+  autofill::Suggestion suggestion(l10n_util::GetStringUTF8(value),
+                                  std::string(), std::string(), frontend_id);
+  suggestions->push_back(suggestion);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,6 +179,8 @@ PasswordAutofillManager::PasswordAutofillManager(
       weak_ptr_factory_(this) {}
 
 PasswordAutofillManager::~PasswordAutofillManager() {
+  if (deletion_callback_)
+    std::move(deletion_callback_).Run();
 }
 
 bool PasswordAutofillManager::FillSuggestion(int key,
@@ -280,27 +298,28 @@ void PasswordAutofillManager::OnShowPasswordSuggestions(
       }
   }
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kEnableManualFallbacksFilling) &&
-      (options & autofill::IS_PASSWORD_FIELD) && password_client_ &&
-      password_client_->IsFillingFallbackEnabledForCurrentPage()) {
-#if !defined(OS_ANDROID)
-    suggestions.push_back(autofill::Suggestion());
-    suggestions.back().frontend_id = autofill::POPUP_ITEM_ID_SEPARATOR;
-#endif
-
-    if (ShouldShowManualFallbackForPreLollipop(
-            autofill_client_->GetSyncService())) {
-      autofill::Suggestion all_saved_passwords(
-          l10n_util::GetStringUTF8(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK),
-          std::string(), std::string(),
-          autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
-      suggestions.push_back(all_saved_passwords);
+  if (ShouldShowManualFallbackForPreLollipop(
+          autofill_client_->GetSyncService())) {
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::kEnableManualFallbacksFilling) &&
+        (options & autofill::IS_PASSWORD_FIELD) && password_client_ &&
+        password_client_->IsFillingFallbackEnabledForCurrentPage()) {
+      AddSimpleSuggestionWithSeparatorOnTop(
+          IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK,
+          autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY, &suggestions);
 
       show_all_saved_passwords_shown_context_ =
           metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD;
       metrics_util::LogContextOfShowAllSavedPasswordsShown(
           show_all_saved_passwords_shown_context_);
+    }
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::kEnableManualFallbacksGeneration) &&
+        password_manager_util::GetPasswordSyncState(
+            autofill_client_->GetSyncService()) == SYNCING_NORMAL_ENCRYPTION) {
+      AddSimpleSuggestionWithSeparatorOnTop(
+          IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK,
+          autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY, &suggestions);
     }
   }
 
@@ -357,6 +376,14 @@ void PasswordAutofillManager::OnShowManualFallbackSuggestion(
   metrics_util::LogContextOfShowAllSavedPasswordsShown(
       show_all_saved_passwords_shown_context_);
 
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kEnableManualFallbacksGeneration) &&
+      password_manager_util::GetPasswordSyncState(
+          autofill_client_->GetSyncService()) == SYNCING_NORMAL_ENCRYPTION) {
+    AddSimpleSuggestionWithSeparatorOnTop(
+        IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK,
+        autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY, &suggestions);
+  }
   autofill_client_->ShowAutofillPopup(bounds, text_direction, suggestions,
                                       weak_ptr_factory_.GetWeakPtr());
 }
@@ -388,7 +415,8 @@ void PasswordAutofillManager::DidSelectSuggestion(const base::string16& value,
                                                   int identifier) {
   ClearPreviewedForm();
   if (identifier == autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE ||
-      identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY)
+      identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY ||
+      identifier == autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY)
     return;
   bool success =
       PreviewSuggestion(form_data_key_, GetUsernameFromSuggestion(value));
@@ -399,8 +427,11 @@ void PasswordAutofillManager::DidAcceptSuggestion(const base::string16& value,
                                                   int identifier,
                                                   int position) {
   autofill_client_->ExecuteCommand(identifier);
-  if (identifier != autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE &&
-      identifier != autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
+  if (identifier == autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY) {
+    password_manager_driver_->UserSelectedManualGenerationOption();
+  } else if (identifier !=
+                 autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE &&
+             identifier != autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
     bool success =
         FillSuggestion(form_data_key_, GetUsernameFromSuggestion(value));
     DCHECK(success);
@@ -425,6 +456,7 @@ void PasswordAutofillManager::DidAcceptSuggestion(const base::string16& value,
           password_client_->GetMetricsRecorder().RecordPageLevelUserAction(
               UserAction::kShowAllPasswordsWhileNoneAreSuggested);
           break;
+        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_CONTEXT_MENU:
         case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE:
         case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT:
           NOTREACHED();
@@ -460,6 +492,11 @@ bool PasswordAutofillManager::IsCreditCardPopup() {
 
 autofill::AutofillDriver* PasswordAutofillManager::GetAutofillDriver() {
   return password_manager_driver_->GetAutofillDriver();
+}
+
+void PasswordAutofillManager::RegisterDeletionCallback(
+    base::OnceClosure deletion_callback) {
+  deletion_callback_ = std::move(deletion_callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

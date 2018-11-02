@@ -20,8 +20,7 @@ namespace onc {
 // First parameter: Filename of source ONC.
 // Second parameter: Filename of expected translated Shill json.
 class ONCTranslatorOncToShillTest
-    : public ::testing::TestWithParam<std::pair<std::string, std::string> > {
-};
+    : public ::testing::TestWithParam<std::pair<std::string, std::string>> {};
 
 // Test the translation from ONC to Shill json.
 TEST_P(ONCTranslatorOncToShillTest, Translate) {
@@ -66,9 +65,14 @@ INSTANTIATE_TEST_CASE_P(
                        "shill_openvpn.json"),
         std::make_pair("openvpn_clientcert_with_cert_pems.onc",
                        "shill_openvpn_clientcert.json"),
+        std::make_pair("openvpn_clientcert_pkcs11.onc",
+                       "shill_openvpn_clientcert_pkcs11.json"),
+        std::make_pair("vpn_ipsec_clientcert_pkcs11.onc",
+                       "shill_vpn_ipsec_clientcert_pkcs11.json"),
         std::make_pair("cellular.onc", "shill_cellular.json"),
         std::make_pair("wimax.onc", "shill_wimax.json"),
-        std::make_pair("third_party_vpn.onc", "shill_third_party_vpn.json")));
+        std::make_pair("third_party_vpn.onc", "shill_third_party_vpn.json"),
+        std::make_pair("arc_vpn.onc", "shill_arc_vpn.json")));
 
 // First parameter: Filename of source Shill json.
 // Second parameter: Filename of expected translated ONC network part.
@@ -76,8 +80,7 @@ INSTANTIATE_TEST_CASE_P(
 // Note: This translation direction doesn't have to reconstruct all of the ONC
 // fields, as Chrome doesn't need all of a Service's properties.
 class ONCTranslatorShillToOncTest
-    : public ::testing::TestWithParam<std::pair<std::string, std::string> > {
-};
+    : public ::testing::TestWithParam<std::pair<std::string, std::string>> {};
 
 TEST_P(ONCTranslatorShillToOncTest, Translate) {
   std::string source_shill_filename = GetParam().first;
@@ -119,6 +122,10 @@ INSTANTIATE_TEST_CASE_P(
                        "translation_of_shill_openvpn.onc"),
         std::make_pair("shill_output_openvpn_with_errors.json",
                        "translation_of_shill_openvpn_with_errors.onc"),
+        std::make_pair("shill_output_openvpn_clientcert.json",
+                       "translation_of_shill_openvpn_clientcert.onc"),
+        std::make_pair("shill_output_vpn_ipsec.json",
+                       "translation_of_shill_vpn_ipsec.onc"),
         std::make_pair("shill_tether.json", "tether.onc"),
         std::make_pair("shill_wifi_with_state.json",
                        "translation_of_shill_wifi_with_state.onc"),

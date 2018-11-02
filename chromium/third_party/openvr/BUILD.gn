@@ -10,7 +10,10 @@ component("openvr") {
 
   # This code can be built using internal OpenVR functionality, but the internal
   # dependencies aren't available to us.
-  defines = [ "VR_API_PUBLIC" ]
+  defines = [
+    "VR_API_PUBLIC",
+    "JSON_USE_EXCEPTION=0",
+  ]
 
   sources = [
     "src/src/jsoncpp.cpp",

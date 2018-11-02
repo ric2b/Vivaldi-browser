@@ -6,6 +6,7 @@
 #define NGColumnLayoutAlgorithm_h
 
 #include "core/layout/ng/geometry/ng_logical_size.h"
+#include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
 
 namespace blink {
@@ -16,20 +17,26 @@ class NGBreakToken;
 class NGConstraintSpace;
 
 class CORE_EXPORT NGColumnLayoutAlgorithm
-    : public NGLayoutAlgorithm<NGBlockNode, NGBlockBreakToken> {
+    : public NGLayoutAlgorithm<NGBlockNode,
+                               NGFragmentBuilder,
+                               NGBlockBreakToken> {
  public:
   NGColumnLayoutAlgorithm(NGBlockNode node,
                           const NGConstraintSpace& space,
                           NGBreakToken* break_token = nullptr);
 
-  RefPtr<NGLayoutResult> Layout() override;
+  scoped_refptr<NGLayoutResult> Layout() override;
 
   Optional<MinMaxSize> ComputeMinMaxSize() const override;
 
  private:
-  RefPtr<NGConstraintSpace> CreateConstraintSpaceForColumns() const;
-
-  NGLogicalSize content_box_size_;
+  NGLogicalSize CalculateColumnSize(const NGLogicalSize& content_box_size);
+  LayoutUnit CalculateBalancedColumnBlockSize(const NGLogicalSize& column_size,
+                                              int column_count);
+  scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForColumns(
+      const NGLogicalSize& column_size) const;
+  scoped_refptr<NGConstraintSpace> CreateConstaintSpaceForBalancing(
+      const NGLogicalSize& column_size) const;
 };
 
 }  // namespace Blink

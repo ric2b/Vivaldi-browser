@@ -63,6 +63,7 @@ Console.ConsoleViewport = class {
     this._headSelection = null;
     this._itemCount = 0;
     this._cumulativeHeights = new Int32Array(0);
+    this._muteCopyHandler = false;
 
     // Listen for any changes to descendants and trigger a refresh. This ensures
     // that items updated asynchronously will not break stick-to-bottom behavior
@@ -89,10 +90,18 @@ Console.ConsoleViewport = class {
       this._observer.disconnect();
   }
 
+  copyWithStyles() {
+    this._muteCopyHandler = true;
+    this.element.ownerDocument.execCommand('copy');
+    this._muteCopyHandler = false;
+  }
+
   /**
    * @param {!Event} event
    */
   _onCopy(event) {
+    if (this._muteCopyHandler)
+      return;
     var text = this._selectedText();
     if (!text)
       return;
@@ -148,7 +157,7 @@ Console.ConsoleViewport = class {
     var height = 0;
     this._cumulativeHeights = new Int32Array(this._itemCount);
     for (var i = 0; i < this._itemCount; ++i) {
-      if (firstActiveIndex <= i && i <= lastActiveIndex)
+      if (firstActiveIndex <= i && i - firstActiveIndex < this._renderedItems.length && i <= lastActiveIndex)
         height += this._renderedItems[i - firstActiveIndex].element().offsetHeight;
       else
         height += this._provider.fastHeight(i);

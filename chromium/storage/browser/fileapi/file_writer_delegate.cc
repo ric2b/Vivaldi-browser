@@ -39,8 +39,7 @@ FileWriterDelegate::FileWriterDelegate(
       io_buffer_(new net::IOBufferWithSize(kReadBufSize)),
       weak_factory_(this) {}
 
-FileWriterDelegate::~FileWriterDelegate() {
-}
+FileWriterDelegate::~FileWriterDelegate() = default;
 
 void FileWriterDelegate::Start(std::unique_ptr<net::URLRequest> request,
                                const DelegateWriteCallback& write_callback) {
@@ -50,8 +49,9 @@ void FileWriterDelegate::Start(std::unique_ptr<net::URLRequest> request,
 }
 
 void FileWriterDelegate::Cancel() {
-  // Destroy the request to prevent it from invoking any callbacks.
+  // Destroy the request and invalidate weak ptrs to prevent pending callbacks.
   request_.reset();
+  weak_factory_.InvalidateWeakPtrs();
 
   const int status = file_stream_writer_->Cancel(
       base::Bind(&FileWriterDelegate::OnWriteCancelled,
@@ -181,8 +181,9 @@ FileWriterDelegate::GetCompletionStatusOnError() const {
 }
 
 void FileWriterDelegate::OnError(base::File::Error error) {
-  // Destroy the request to prevent it from invoking any callbacks.
+  // Destroy the request and invalidate weak ptrs to prevent pending callbacks.
   request_.reset();
+  weak_factory_.InvalidateWeakPtrs();
 
   if (writing_started_)
     MaybeFlushForCompletion(error, 0, ERROR_WRITE_STARTED);

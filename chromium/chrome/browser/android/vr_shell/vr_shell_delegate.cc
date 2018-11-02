@@ -8,18 +8,17 @@
 
 #include "base/android/jni_android.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
-#include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_widget_host.h"
-#include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/origin_util.h"
-#include "device/vr/android/gvr/gvr_delegate.h"
-#include "device/vr/vr_device.h"
-#include "device/vr/vr_device_manager.h"
-#include "device/vr/vr_display_impl.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/vr_assets_component_installer.h"
+#include "chrome/browser/vr/assets.h"
+#include "chrome/browser/vr/metrics_helper.h"
+#include "chrome/browser/vr/service/vr_device_manager.h"
+#include "chrome/browser/vr/service/vr_service_impl.h"
+#include "content/public/browser/webvr_service_provider.h"
+#include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
+#include "device/vr/android/gvr/gvr_device.h"
 #include "jni/VrShellDelegate_jni.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr.h"
 
@@ -32,39 +31,23 @@ namespace vr_shell {
 
 namespace {
 
-content::RenderFrameHost* GetHostForDisplay(device::VRDisplayImpl* display) {
-  return content::RenderFrameHost::FromID(display->ProcessId(),
-                                          display->RoutingId());
-}
+class VrShellDelegateProviderFactory
+    : public device::GvrDelegateProviderFactory {
+ public:
+  VrShellDelegateProviderFactory() = default;
+  ~VrShellDelegateProviderFactory() override = default;
+  device::GvrDelegateProvider* CreateGvrDelegateProvider() override;
 
-bool IsSecureContext(content::RenderFrameHost* host) {
-  DCHECK(host);
-  while (host != nullptr) {
-    if (!content::IsOriginSecure(host->GetLastCommittedURL()))
-      return false;
-    host = host->GetParent();
-  }
-  return true;
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VrShellDelegateProviderFactory);
+};
+
+device::GvrDelegateProvider*
+VrShellDelegateProviderFactory::CreateGvrDelegateProvider() {
+  return VrShellDelegate::CreateVrShellDelegate();
 }
 
 }  // namespace
-
-class DelegateWebContentsObserver : public content::WebContentsObserver {
- public:
-  DelegateWebContentsObserver(VrShellDelegate* delegate,
-                              content::WebContents* contents)
-      : content::WebContentsObserver(contents), delegate_(delegate) {}
-
- private:
-  void OnWebContentsFocused(content::RenderWidgetHost* host) override {
-    delegate_->OnWebContentsFocused(host);
-  }
-  void OnWebContentsLostFocus(content::RenderWidgetHost* host) override {
-    delegate_->OnWebContentsLostFocus(host);
-  }
-
-  VrShellDelegate* delegate_;
-};
 
 VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj)
     : task_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -101,11 +84,15 @@ void VrShellDelegate::SetDelegate(VrShell* vr_shell,
                                   gvr::ViewerType viewer_type) {
   vr_shell_ = vr_shell;
   device::VRDevice* device = GetDevice();
+  // When VrShell is created, we disable magic window mode as the user is inside
+  // the headset. As currently implemented, orientation-based magic window
+  // doesn't make sense when the window is fixed and the user is moving.
   if (device)
-    device->OnChanged();
+    device->SetMagicWindowEnabled(false);
 
   if (pending_successful_present_request_) {
-    SetPresentResult(true);
+    CHECK(!present_callback_.is_null());
+    base::ResetAndReturn(&present_callback_).Run(true);
   }
   JNIEnv* env = AttachCurrentThread();
   std::unique_ptr<VrCoreInfo> vr_core_info = MakeVrCoreInfo(env);
@@ -116,22 +103,26 @@ void VrShellDelegate::RemoveDelegate() {
   vr_shell_ = nullptr;
   device::VRDevice* device = GetDevice();
   if (device) {
+    device->SetMagicWindowEnabled(true);
     device->OnExitPresent();
-    device->OnChanged();
   }
 }
 
 void VrShellDelegate::SetPresentResult(JNIEnv* env,
                                        const JavaParamRef<jobject>& obj,
                                        jboolean success) {
-  SetPresentResult(static_cast<bool>(success));
+  CHECK(!present_callback_.is_null());
+  base::ResetAndReturn(&present_callback_).Run(static_cast<bool>(success));
 }
 
-void VrShellDelegate::SetPresentResult(bool success) {
-  CHECK(!present_callback_.is_null());
+void VrShellDelegate::OnPresentResult(
+    device::mojom::VRSubmitFrameClientPtr submit_client,
+    device::mojom::VRPresentationProviderRequest request,
+    device::mojom::VRDisplayInfoPtr display_info,
+    base::Callback<void(bool)> callback,
+    bool success) {
   if (!success) {
-    pending_successful_present_request_ = false;
-    base::ResetAndReturn(&present_callback_).Run(false);
+    std::move(callback).Run(false);
     return;
   }
 
@@ -139,64 +130,46 @@ void VrShellDelegate::SetPresentResult(bool success) {
     // We have to wait until the GL thread is ready since we have to pass it
     // the VRSubmitFrameClient.
     pending_successful_present_request_ = true;
+    present_callback_ =
+        base::Bind(&VrShellDelegate::OnPresentResult, base::Unretained(this),
+                   base::Passed(&submit_client), base::Passed(&request),
+                   base::Passed(&display_info), base::Passed(&callback));
     return;
   }
 
   vr_shell_->ConnectPresentingService(
-      std::move(submit_client_), std::move(presentation_provider_request_));
+      std::move(submit_client), std::move(request), std::move(display_info));
 
-  base::ResetAndReturn(&present_callback_).Run(true);
+  std::move(callback).Run(true);
   pending_successful_present_request_ = false;
-
-  device::VRDevice* device = GetDevice();
-  if (!device) {
-    ExitWebVRPresent();
-    return;
-  }
-  device::VRDisplayImpl* presenting_display = device->GetPresentingDisplay();
-  if (!presenting_display) {
-    ExitWebVRPresent();
-    return;
-  }
-  content::RenderFrameHost* host = GetHostForDisplay(presenting_display);
-  if (!host) {
-    ExitWebVRPresent();
-    return;
-  }
-  vr_shell_->SetWebVRSecureOrigin(IsSecureContext(host));
 }
 
 void VrShellDelegate::DisplayActivate(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj) {
-  if (activatable_display_) {
-    activatable_display_->OnActivate(
-        device::mojom::VRDisplayEventReason::MOUNTED,
-        base::Bind(&VrShellDelegate::OnActivateDisplayHandled,
-                   weak_ptr_factory_.GetWeakPtr()));
+  device::GvrDevice* device = static_cast<device::GvrDevice*>(GetDevice());
+  if (device) {
+    device->Activate(device::mojom::VRDisplayEventReason::MOUNTED,
+                     base::Bind(&VrShellDelegate::OnActivateDisplayHandled,
+                                weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    OnActivateDisplayHandled(true /* will_not_present */);
   }
 }
 
 void VrShellDelegate::OnPause(JNIEnv* env, const JavaParamRef<jobject>& obj) {
-  if (gvr_api_) {
-    gvr_api_->PauseTracking();
-  }
+  if (vr_shell_)
+    return;
+  device::VRDevice* device = GetDevice();
+  if (device)
+    device->PauseTracking();
 }
 
 void VrShellDelegate::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
-  if (gvr_api_) {
-    gvr_api_->ResumeTracking();
-  }
-}
-
-void VrShellDelegate::UpdateNonPresentingContext(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong context) {
-  if (context == 0) {
-    gvr_api_ = nullptr;
+  if (vr_shell_)
     return;
-  }
-  gvr_api_ = gvr::GvrApi::WrapNonOwned(reinterpret_cast<gvr_context*>(context));
+  device::VRDevice* device = GetDevice();
+  if (device)
+    device->ResumeTracking();
 }
 
 bool VrShellDelegate::IsClearActivatePending(JNIEnv* env,
@@ -210,22 +183,31 @@ void VrShellDelegate::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 
 void VrShellDelegate::SetDeviceId(unsigned int device_id) {
   device_id_ = device_id;
+  if (vr_shell_) {
+    device::VRDevice* device = GetDevice();
+    // See comment in VrShellDelegate::SetDelegate. This handles the case where
+    // VrShell is created before the device/ code is initialized (like when
+    // entering VR browsing on a non-webVR page).
+    if (device)
+      device->SetMagicWindowEnabled(false);
+  }
 }
 
 void VrShellDelegate::RequestWebVRPresent(
     device::mojom::VRSubmitFrameClientPtr submit_client,
     device::mojom::VRPresentationProviderRequest request,
-    const base::Callback<void(bool)>& callback) {
+    device::mojom::VRDisplayInfoPtr display_info,
+    base::Callback<void(bool)> callback) {
   if (!present_callback_.is_null()) {
     // Can only handle one request at a time. This is also extremely unlikely to
     // happen in practice.
-    callback.Run(false);
+    std::move(callback).Run(false);
     return;
   }
-
-  present_callback_ = std::move(callback);
-  submit_client_ = std::move(submit_client);
-  presentation_provider_request_ = std::move(request);
+  present_callback_ =
+      base::Bind(&VrShellDelegate::OnPresentResult, base::Unretained(this),
+                 base::Passed(&submit_client), base::Passed(&request),
+                 base::Passed(&display_info), base::Passed(&callback));
 
   // If/When VRShell is ready for use it will call SetPresentResult.
   JNIEnv* env = AttachCurrentThread();
@@ -244,7 +226,7 @@ void VrShellDelegate::ExitWebVRPresent() {
 }
 
 std::unique_ptr<VrCoreInfo> VrShellDelegate::MakeVrCoreInfo(JNIEnv* env) {
-  return base::WrapUnique(reinterpret_cast<VrCoreInfo*>(
+  return std::unique_ptr<VrCoreInfo>(reinterpret_cast<VrCoreInfo*>(
       Java_VrShellDelegate_getVrCoreInfo(env, j_vr_shell_delegate_)));
 }
 
@@ -256,87 +238,19 @@ void VrShellDelegate::OnActivateDisplayHandled(bool will_not_present) {
   }
 }
 
-void VrShellDelegate::OnDisplayAdded(device::VRDisplayImpl* display) {
-  content::RenderFrameHost* host = GetHostForDisplay(display);
-  if (host == nullptr)
-    return;
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(host);
-  CHECK(web_contents);
-  content::RenderWidgetHost* render_widget_host =
-      host->GetView()->GetRenderWidgetHost();
-  displays_.emplace(render_widget_host, display);
-  observers_.emplace(display, base::MakeUnique<DelegateWebContentsObserver>(
-                                  this, web_contents));
-  if (host->GetView()->HasFocus())
-    OnWebContentsFocused(render_widget_host);
-}
-
-void VrShellDelegate::OnDisplayRemoved(device::VRDisplayImpl* display) {
-  if (activatable_display_ == display) {
-    SetListeningForActivate(false);
-    activatable_display_ = nullptr;
-  }
-  for (auto it = displays_.begin(); it != displays_.end();) {
-    if (it->second == display) {
-      it = displays_.erase(it);
-    } else {
-      ++it;
-    }
-  }
-  auto it = observers_.find(display);
-  if (it != observers_.end())
-    observers_.erase(it);
-}
-
-void VrShellDelegate::OnListeningForActivateChanged(
-    device::VRDisplayImpl* display) {
-  content::RenderFrameHost* host = GetHostForDisplay(display);
-  bool has_focus = host != nullptr && host->GetView()->HasFocus();
-  if (display->ListeningForActivate() && has_focus) {
-    OnFocusedAndActivatable(display);
+void VrShellDelegate::OnListeningForActivateChanged(bool listening) {
+  if (listening) {
+    SetListeningForActivate(true);
   } else {
-    if (activatable_display_ != display)
-      return;
-    OnLostFocusedAndActivatable();
+    // We post here to ensure that this runs after Android finishes running all
+    // onPause handlers. This allows us to capture the pre-paused state during
+    // onPause in java, so we know that the pause is the cause of the focus
+    // loss, and that the page is still listening for activate.
+    clear_activate_task_.Reset(
+        base::Bind(&VrShellDelegate::SetListeningForActivate,
+                   weak_ptr_factory_.GetWeakPtr(), false));
+    task_runner_->PostTask(FROM_HERE, clear_activate_task_.callback());
   }
-}
-
-void VrShellDelegate::OnWebContentsFocused(content::RenderWidgetHost* host) {
-  auto it = displays_.find(host);
-  if (it == displays_.end())
-    return;
-  if (!it->second->ListeningForActivate())
-    return;
-  OnFocusedAndActivatable(it->second);
-}
-
-void VrShellDelegate::OnWebContentsLostFocus(content::RenderWidgetHost* host) {
-  auto it = displays_.find(host);
-  if (it == displays_.end())
-    return;
-  if (activatable_display_ != it->second)
-    return;
-  if (!it->second->ListeningForActivate())
-    return;
-  OnLostFocusedAndActivatable();
-}
-
-void VrShellDelegate::OnFocusedAndActivatable(device::VRDisplayImpl* display) {
-  activatable_display_ = display;
-  SetListeningForActivate(true);
-  clear_activate_task_.Cancel();
-}
-
-void VrShellDelegate::OnLostFocusedAndActivatable() {
-  // We post here to ensure that this runs after Android finishes running all
-  // onPause handlers. This allows us to capture the pre-paused state during
-  // onPause in java, so we know that the pause is the cause of the focus loss,
-  // and that the page is still listening for activate.
-  clear_activate_task_.Reset(
-      base::Bind(&VrShellDelegate::SetListeningForActivate,
-                 weak_ptr_factory_.GetWeakPtr(), false));
-  task_runner_->PostTask(FROM_HERE, clear_activate_task_.callback());
 }
 
 void VrShellDelegate::SetListeningForActivate(bool listening) {
@@ -346,46 +260,36 @@ void VrShellDelegate::SetListeningForActivate(bool listening) {
                                                     listening);
 }
 
-void VrShellDelegate::GetNextMagicWindowPose(
-    device::VRDisplayImpl* display,
-    device::mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
-  content::RenderFrameHost* host = GetHostForDisplay(display);
-  if (!gvr_api_ || vr_shell_ || host == nullptr ||
-      !host->GetView()->HasFocus()) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-  std::move(callback).Run(
-      device::GvrDelegate::GetVRPosePtrWithNeckModel(gvr_api_.get(), nullptr));
-}
-
-void VrShellDelegate::CreateVRDisplayInfo(
-    const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
-    uint32_t device_id) {
-  if (vr_shell_) {
-    vr_shell_->CreateVRDisplayInfo(callback, device_id);
-    return;
-  }
-  // This is for magic window mode, which doesn't care what the render size is.
-  callback.Run(device::GvrDelegate::CreateDefaultVRDisplayInfo(gvr_api_.get(),
-                                                               device_id));
-}
-
 device::VRDevice* VrShellDelegate::GetDevice() {
-  return device::VRDeviceManager::GetInstance()->GetDevice(device_id_);
+  return vr::VRDeviceManager::GetInstance()->GetDevice(device_id_);
 }
 
 // ----------------------------------------------------------------------------
 // Native JNI methods
 // ----------------------------------------------------------------------------
 
-jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+jlong JNI_VrShellDelegate_Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   return reinterpret_cast<intptr_t>(new VrShellDelegate(env, obj));
 }
 
-static void OnLibraryAvailable(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
-  device::GvrDelegateProvider::SetInstance(
-      base::Bind(&VrShellDelegate::CreateVrShellDelegate));
+static void JNI_VrShellDelegate_OnLibraryAvailable(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  device::GvrDelegateProviderFactory::Install(
+      new VrShellDelegateProviderFactory);
+}
+
+static void JNI_VrShellDelegate_RegisterVrAssetsComponent(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  component_updater::RegisterVrAssetsComponent(
+      g_browser_process->component_updater());
+}
+
+static void JNI_VrShellDelegate_OnChromeStarted(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  vr::Assets::GetInstance()->GetMetricsHelper()->OnChromeStarted();
 }
 
 }  // namespace vr_shell

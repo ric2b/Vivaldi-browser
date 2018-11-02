@@ -21,7 +21,6 @@
 #ifndef SVGRadialGradientElement_h
 #define SVGRadialGradientElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGGradientElement.h"
 #include "platform/heap/Handle.h"
@@ -45,7 +44,7 @@ class SVGRadialGradientElement final : public SVGGradientElement {
   SVGAnimatedLength* fy() const { return fy_.Get(); }
   SVGAnimatedLength* fr() const { return fr_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGRadialGradientElement(Document&);

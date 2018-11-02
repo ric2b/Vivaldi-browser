@@ -124,12 +124,10 @@ class CC_EXPORT SoftwareImageDecodeCache
   ~SoftwareImageDecodeCache() override;
 
   // ImageDecodeCache overrides.
-  bool GetTaskForImageAndRef(const DrawImage& image,
-                             const TracingInfo& tracing_info,
-                             scoped_refptr<TileTask>* task) override;
-  bool GetOutOfRasterDecodeTaskForImageAndRef(
-      const DrawImage& image,
-      scoped_refptr<TileTask>* task) override;
+  TaskResult GetTaskForImageAndRef(const DrawImage& image,
+                                   const TracingInfo& tracing_info) override;
+  TaskResult GetOutOfRasterDecodeTaskForImageAndRef(
+      const DrawImage& image) override;
   void UnrefImage(const DrawImage& image) override;
   DecodedDrawImage GetDecodedImageForDraw(const DrawImage& image) override;
   void DrawWithImageFinished(const DrawImage& image,
@@ -163,8 +161,7 @@ class CC_EXPORT SoftwareImageDecodeCache
    public:
     DecodedImage(const SkImageInfo& info,
                  std::unique_ptr<base::DiscardableMemory> memory,
-                 const SkSize& src_rect_offset,
-                 uint64_t tracing_id);
+                 const SkSize& src_rect_offset);
     ~DecodedImage();
 
     const sk_sp<SkImage>& image() const {
@@ -295,10 +292,9 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   // Helper method to get the different tasks. Note that this should be used as
   // if it was public (ie, all of the locks need to be properly acquired).
-  bool GetTaskForImageAndRefInternal(const DrawImage& image,
-                                     const TracingInfo& tracing_info,
-                                     DecodeTaskType type,
-                                     scoped_refptr<TileTask>* task);
+  TaskResult GetTaskForImageAndRefInternal(const DrawImage& image,
+                                           const TracingInfo& tracing_info,
+                                           DecodeTaskType type);
 
   void CacheDecodedImages(const ImageKey& key,
                           std::unique_ptr<DecodedImage> decoded_image);
@@ -336,9 +332,9 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   SkColorType color_type_;
   size_t max_items_in_cache_;
-
-  // Used to uniquely identify DecodedImages for memory traces.
-  base::AtomicSequenceNumber next_tracing_id_;
+  // Records the maximum number of items in the cache over the lifetime of the
+  // cache. This is updated anytime we are requested to reduce cache usage.
+  size_t lifetime_max_items_in_cache_ = 0u;
 };
 
 }  // namespace cc

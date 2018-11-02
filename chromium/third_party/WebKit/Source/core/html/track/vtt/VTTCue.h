@@ -152,7 +152,7 @@ class VTTCue final : public TextTrackCue {
   String ToString() const override;
 #endif
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   VTTCue(Document&, double start_time, double end_time, const String& text);
@@ -161,7 +161,8 @@ class VTTCue final : public TextTrackCue {
 
   VTTCueBox* GetDisplayTree();
 
-  void CueDidChange() override;
+  void CueDidChange(
+      CueMutationAffectsOrder = kCueMutationDoesNotAffectOrder) override;
 
   void CreateVTTNodeTree();
   void CopyVTTNodeToDOMTree(ContainerNode* vtt_node, ContainerNode* root);

@@ -47,7 +47,7 @@ inline SVGFEDiffuseLightingElement::SVGFEDiffuseLightingElement(
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFEDiffuseLightingElement) {
+void SVGFEDiffuseLightingElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(diffuse_constant_);
   visitor->Trace(surface_scale_);
   visitor->Trace(kernel_unit_length_);
@@ -155,7 +155,7 @@ FilterEffect* SVGFEDiffuseLightingElement::Build(
 
   const SVGFELightElement* light_node =
       SVGFELightElement::FindLightElement(*this);
-  RefPtr<LightSource> light_source =
+  scoped_refptr<LightSource> light_source =
       light_node ? light_node->GetLightSource(filter) : nullptr;
 
   FilterEffect* effect = FEDiffuseLighting::Create(

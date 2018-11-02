@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <fstream>
 #include <initializer_list>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/environment.h"
+#include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -45,7 +47,13 @@
 #if defined(OS_POSIX)
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+#if defined(OS_LINUX)
+#include <linux/fs.h>
 #endif
 
 #if defined(OS_ANDROID)
@@ -632,8 +640,7 @@ TEST_F(FileUtilTest, CreateAndReadSymlinks) {
 
   // If we created the link properly, we should be able to read the contents
   // through it.
-  std::wstring contents = ReadTextFile(link_from);
-  EXPECT_EQ(bogus_content, contents);
+  EXPECT_EQ(bogus_content, ReadTextFile(link_from));
 
   FilePath result;
   ASSERT_TRUE(ReadSymbolicLink(link_from, &result));
@@ -737,20 +744,46 @@ TEST_F(FileUtilTest, DeleteSymlinkToNonExistentFile) {
   EXPECT_FALSE(IsLink(file_link));
 }
 
+TEST_F(FileUtilTest, CopyFileFollowsSymlinks) {
+  FilePath link_from = temp_dir_.GetPath().Append(FPL("from_file"));
+  FilePath link_to = temp_dir_.GetPath().Append(FPL("to_file"));
+  CreateTextFile(link_to, bogus_content);
+
+  ASSERT_TRUE(CreateSymbolicLink(link_to, link_from));
+
+  // If we created the link properly, we should be able to read the contents
+  // through it.
+  EXPECT_EQ(bogus_content, ReadTextFile(link_from));
+
+  FilePath result;
+  ASSERT_TRUE(ReadSymbolicLink(link_from, &result));
+  EXPECT_EQ(link_to.value(), result.value());
+
+  // Create another file and copy it to |link_from|.
+  FilePath src_file = temp_dir_.GetPath().Append(FPL("src.txt"));
+  const std::wstring file_contents(L"Gooooooooooooooooooooogle");
+  CreateTextFile(src_file, file_contents);
+  ASSERT_TRUE(CopyFile(src_file, link_from));
+
+  // Make sure |link_from| is still a symlink, and |link_to| has been written to
+  // by CopyFile().
+  EXPECT_TRUE(IsLink(link_from));
+  EXPECT_EQ(file_contents, ReadTextFile(link_from));
+  EXPECT_EQ(file_contents, ReadTextFile(link_to));
+}
+
 TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   // Create a file path.
   FilePath file_name =
       temp_dir_.GetPath().Append(FPL("Test Readable File.txt"));
   EXPECT_FALSE(PathExists(file_name));
 
-  const std::string kData("hello");
-
-  int buffer_size = kData.length();
-  char* buffer = new char[buffer_size];
+  static constexpr char kData[] = "hello";
+  static constexpr int kDataSize = sizeof(kData) - 1;
+  char buffer[kDataSize];
 
   // Write file.
-  EXPECT_EQ(static_cast<int>(kData.length()),
-            WriteFile(file_name, kData.data(), kData.length()));
+  EXPECT_EQ(kDataSize, WriteFile(file_name, kData, kDataSize));
   EXPECT_TRUE(PathExists(file_name));
 
   // Make sure the file is readable.
@@ -763,21 +796,18 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   EXPECT_TRUE(GetPosixFilePermissions(file_name, &mode));
   EXPECT_FALSE(mode & FILE_PERMISSION_READ_BY_USER);
   // Make sure the file can't be read.
-  EXPECT_EQ(-1, ReadFile(file_name, buffer, buffer_size));
+  EXPECT_EQ(-1, ReadFile(file_name, buffer, kDataSize));
 
   // Give the read permission.
   EXPECT_TRUE(SetPosixFilePermissions(file_name, FILE_PERMISSION_READ_BY_USER));
   EXPECT_TRUE(GetPosixFilePermissions(file_name, &mode));
   EXPECT_TRUE(mode & FILE_PERMISSION_READ_BY_USER);
   // Make sure the file can be read.
-  EXPECT_EQ(static_cast<int>(kData.length()),
-            ReadFile(file_name, buffer, buffer_size));
+  EXPECT_EQ(kDataSize, ReadFile(file_name, buffer, kDataSize));
 
   // Delete the file.
   EXPECT_TRUE(DeleteFile(file_name, false));
   EXPECT_FALSE(PathExists(file_name));
-
-  delete[] buffer;
 }
 
 TEST_F(FileUtilTest, ChangeFilePermissionsAndWrite) {
@@ -905,6 +935,193 @@ TEST_F(FileUtilTest, ExecutableExistsInPath) {
   EXPECT_TRUE(ExecutableExistsInPath(scoped_env.GetEnv(), kExeFileName));
   EXPECT_FALSE(ExecutableExistsInPath(scoped_env.GetEnv(), kRegularFileName));
   EXPECT_FALSE(ExecutableExistsInPath(scoped_env.GetEnv(), kDneFileName));
+}
+
+TEST_F(FileUtilTest, CopyDirectoryPermissions) {
+  // Create a directory.
+  FilePath dir_name_from =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_From_Subdir"));
+  CreateDirectory(dir_name_from);
+  ASSERT_TRUE(PathExists(dir_name_from));
+
+  // Create some regular files under the directory with various permissions.
+  FilePath file_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Reggy-1.txt"));
+  CreateTextFile(file_name_from, L"Mordecai");
+  ASSERT_TRUE(PathExists(file_name_from));
+  ASSERT_TRUE(SetPosixFilePermissions(file_name_from, 0755));
+
+  FilePath file2_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Reggy-2.txt"));
+  CreateTextFile(file2_name_from, L"Rigby");
+  ASSERT_TRUE(PathExists(file2_name_from));
+  ASSERT_TRUE(SetPosixFilePermissions(file2_name_from, 0777));
+
+  FilePath file3_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Reggy-3.txt"));
+  CreateTextFile(file3_name_from, L"Benson");
+  ASSERT_TRUE(PathExists(file3_name_from));
+  ASSERT_TRUE(SetPosixFilePermissions(file3_name_from, 0400));
+
+  // Copy the directory recursively.
+  FilePath dir_name_to =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_To_Subdir"));
+  FilePath file_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Reggy-1.txt"));
+  FilePath file2_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Reggy-2.txt"));
+  FilePath file3_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Reggy-3.txt"));
+
+  ASSERT_FALSE(PathExists(dir_name_to));
+
+  EXPECT_TRUE(CopyDirectory(dir_name_from, dir_name_to, true));
+  ASSERT_TRUE(PathExists(file_name_to));
+  ASSERT_TRUE(PathExists(file2_name_to));
+  ASSERT_TRUE(PathExists(file3_name_to));
+
+  int mode = 0;
+  int expected_mode;
+  ASSERT_TRUE(GetPosixFilePermissions(file_name_to, &mode));
+#if defined(OS_MACOSX)
+  expected_mode = 0755;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+
+  ASSERT_TRUE(GetPosixFilePermissions(file2_name_to, &mode));
+#if defined(OS_MACOSX)
+  expected_mode = 0755;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+
+  ASSERT_TRUE(GetPosixFilePermissions(file3_name_to, &mode));
+#if defined(OS_MACOSX)
+  expected_mode = 0600;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+}
+
+TEST_F(FileUtilTest, CopyDirectoryPermissionsOverExistingFile) {
+  // Create a directory.
+  FilePath dir_name_from =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_From_Subdir"));
+  CreateDirectory(dir_name_from);
+  ASSERT_TRUE(PathExists(dir_name_from));
+
+  // Create a file under the directory.
+  FilePath file_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Reggy-1.txt"));
+  CreateTextFile(file_name_from, L"Mordecai");
+  ASSERT_TRUE(PathExists(file_name_from));
+  ASSERT_TRUE(SetPosixFilePermissions(file_name_from, 0644));
+
+  // Create a directory.
+  FilePath dir_name_to =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_To_Subdir"));
+  CreateDirectory(dir_name_to);
+  ASSERT_TRUE(PathExists(dir_name_to));
+
+  // Create a file under the directory with wider permissions.
+  FilePath file_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Reggy-1.txt"));
+  CreateTextFile(file_name_to, L"Rigby");
+  ASSERT_TRUE(PathExists(file_name_to));
+  ASSERT_TRUE(SetPosixFilePermissions(file_name_to, 0777));
+
+  // Ensure that when we copy the directory, the file contents are copied
+  // but the permissions on the destination are left alone.
+  EXPECT_TRUE(CopyDirectory(dir_name_from, dir_name_to, false));
+  ASSERT_TRUE(PathExists(file_name_to));
+  ASSERT_EQ(L"Mordecai", ReadTextFile(file_name_to));
+
+  int mode = 0;
+  ASSERT_TRUE(GetPosixFilePermissions(file_name_to, &mode));
+  EXPECT_EQ(0777, mode);
+}
+
+TEST_F(FileUtilTest, CopyFileExecutablePermission) {
+  FilePath src = temp_dir_.GetPath().Append(FPL("src.txt"));
+  const std::wstring file_contents(L"Gooooooooooooooooooooogle");
+  CreateTextFile(src, file_contents);
+
+  ASSERT_TRUE(SetPosixFilePermissions(src, 0755));
+  int mode = 0;
+  ASSERT_TRUE(GetPosixFilePermissions(src, &mode));
+  EXPECT_EQ(0755, mode);
+
+  FilePath dst = temp_dir_.GetPath().Append(FPL("dst.txt"));
+  ASSERT_TRUE(CopyFile(src, dst));
+  EXPECT_EQ(file_contents, ReadTextFile(dst));
+
+  ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
+  int expected_mode;
+#if defined(OS_MACOSX)
+  expected_mode = 0755;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+  ASSERT_TRUE(DeleteFile(dst, false));
+
+  ASSERT_TRUE(SetPosixFilePermissions(src, 0777));
+  ASSERT_TRUE(GetPosixFilePermissions(src, &mode));
+  EXPECT_EQ(0777, mode);
+
+  ASSERT_TRUE(CopyFile(src, dst));
+  EXPECT_EQ(file_contents, ReadTextFile(dst));
+
+  ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
+#if defined(OS_MACOSX)
+  expected_mode = 0755;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+  ASSERT_TRUE(DeleteFile(dst, false));
+
+  ASSERT_TRUE(SetPosixFilePermissions(src, 0400));
+  ASSERT_TRUE(GetPosixFilePermissions(src, &mode));
+  EXPECT_EQ(0400, mode);
+
+  ASSERT_TRUE(CopyFile(src, dst));
+  EXPECT_EQ(file_contents, ReadTextFile(dst));
+
+  ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
+#if defined(OS_MACOSX)
+  expected_mode = 0600;
+#elif defined(OS_CHROMEOS)
+  expected_mode = 0644;
+#else
+  expected_mode = 0600;
+#endif
+  EXPECT_EQ(expected_mode, mode);
+
+  // This time, do not delete |dst|. Instead set its permissions to 0777.
+  ASSERT_TRUE(SetPosixFilePermissions(dst, 0777));
+  ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
+  EXPECT_EQ(0777, mode);
+
+  // Overwrite it and check the permissions again.
+  ASSERT_TRUE(CopyFile(src, dst));
+  EXPECT_EQ(file_contents, ReadTextFile(dst));
+  ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
+  EXPECT_EQ(0777, mode);
 }
 
 #endif  // !defined(OS_FUCHSIA) && defined(OS_POSIX)
@@ -1118,6 +1335,52 @@ TEST_F(FileUtilTest, DeleteDirRecursive) {
   EXPECT_FALSE(PathExists(file_name));
   EXPECT_FALSE(PathExists(subdir_path1));
   EXPECT_FALSE(PathExists(test_subdir));
+}
+
+// Tests recursive Delete() for a directory.
+TEST_F(FileUtilTest, DeleteDirRecursiveWithOpenFile) {
+  // Create a subdirectory and put a file and two directories inside.
+  FilePath test_subdir = temp_dir_.GetPath().Append(FPL("DeleteWithOpenFile"));
+  CreateDirectory(test_subdir);
+  ASSERT_TRUE(PathExists(test_subdir));
+
+  FilePath file_name1 = test_subdir.Append(FPL("Undeletebable File1.txt"));
+  File file1(file_name1,
+             File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE);
+  ASSERT_TRUE(PathExists(file_name1));
+
+  FilePath file_name2 = test_subdir.Append(FPL("Deleteable File2.txt"));
+  CreateTextFile(file_name2, bogus_content);
+  ASSERT_TRUE(PathExists(file_name2));
+
+  FilePath file_name3 = test_subdir.Append(FPL("Undeletebable File3.txt"));
+  File file3(file_name3,
+             File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE);
+  ASSERT_TRUE(PathExists(file_name3));
+
+#if defined(OS_LINUX)
+  // On Windows, holding the file open in sufficient to make it un-deletable.
+  // The POSIX code is verifiable on Linux by creating an "immutable" file but
+  // this is best-effort because it's not supported by all file systems. Both
+  // files will have the same flags so no need to get them individually.
+  int flags;
+  CHECK_EQ(0, ioctl(file1.GetPlatformFile(), FS_IOC_GETFLAGS, &flags));
+  flags |= FS_IMMUTABLE_FL;
+  ioctl(file1.GetPlatformFile(), FS_IOC_SETFLAGS, &flags);
+  ioctl(file3.GetPlatformFile(), FS_IOC_SETFLAGS, &flags);
+#endif
+
+  // Delete recursively and check that at least the second file got deleted.
+  // This ensures that un-deletable files don't impact those that can be.
+  DeleteFile(test_subdir, true);
+  EXPECT_FALSE(PathExists(file_name2));
+
+#if defined(OS_LINUX)
+  // Make sure that the test can clean up after itself.
+  flags &= ~FS_IMMUTABLE_FL;
+  ioctl(file1.GetPlatformFile(), FS_IOC_SETFLAGS, &flags);
+  ioctl(file3.GetPlatformFile(), FS_IOC_SETFLAGS, &flags);
+#endif
 }
 
 TEST_F(FileUtilTest, MoveFileNew) {
@@ -1550,12 +1813,64 @@ TEST_F(FileUtilTest, CopyDirectoryWithTrailingSeparators) {
   EXPECT_TRUE(PathExists(file_name_to));
 }
 
+#if !defined(OS_FUCHSIA) && defined(OS_POSIX)
+TEST_F(FileUtilTest, CopyDirectoryWithNonRegularFiles) {
+  // Create a directory.
+  FilePath dir_name_from =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_From_Subdir"));
+  ASSERT_TRUE(CreateDirectory(dir_name_from));
+  ASSERT_TRUE(PathExists(dir_name_from));
+
+  // Create a file under the directory.
+  FilePath file_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Copy_Test_File.txt"));
+  CreateTextFile(file_name_from, L"Gooooooooooooooooooooogle");
+  ASSERT_TRUE(PathExists(file_name_from));
+
+  // Create a symbolic link under the directory pointing to that file.
+  FilePath symlink_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Symlink"));
+  ASSERT_TRUE(CreateSymbolicLink(file_name_from, symlink_name_from));
+  ASSERT_TRUE(PathExists(symlink_name_from));
+
+  // Create a fifo under the directory.
+  FilePath fifo_name_from =
+      dir_name_from.Append(FILE_PATH_LITERAL("Fifo"));
+  ASSERT_EQ(0, mkfifo(fifo_name_from.value().c_str(), 0644));
+  ASSERT_TRUE(PathExists(fifo_name_from));
+
+  // Copy the directory.
+  FilePath dir_name_to =
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_To_Subdir"));
+  FilePath file_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Copy_Test_File.txt"));
+  FilePath symlink_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Symlink"));
+  FilePath fifo_name_to =
+      dir_name_to.Append(FILE_PATH_LITERAL("Fifo"));
+
+  ASSERT_FALSE(PathExists(dir_name_to));
+
+  EXPECT_TRUE(CopyDirectory(dir_name_from, dir_name_to, false));
+
+  // Check that only directories and regular files are copied.
+  EXPECT_TRUE(PathExists(dir_name_from));
+  EXPECT_TRUE(PathExists(file_name_from));
+  EXPECT_TRUE(PathExists(symlink_name_from));
+  EXPECT_TRUE(PathExists(fifo_name_from));
+  EXPECT_TRUE(PathExists(dir_name_to));
+  EXPECT_TRUE(PathExists(file_name_to));
+  EXPECT_FALSE(PathExists(symlink_name_to));
+  EXPECT_FALSE(PathExists(fifo_name_to));
+}
+#endif  // !defined(OS_FUCHSIA) && defined(OS_POSIX)
+
 TEST_F(FileUtilTest, CopyFile) {
   // Create a directory
   FilePath dir_name_from =
       temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Copy_From_Subdir"));
-  CreateDirectory(dir_name_from);
-  ASSERT_TRUE(PathExists(dir_name_from));
+  ASSERT_TRUE(CreateDirectory(dir_name_from));
+  ASSERT_TRUE(DirectoryExists(dir_name_from));
 
   // Create a file under the directory
   FilePath file_name_from =
@@ -1581,10 +1896,31 @@ TEST_F(FileUtilTest, CopyFile) {
   // Check expected copy results.
   EXPECT_TRUE(PathExists(file_name_from));
   EXPECT_TRUE(PathExists(dest_file));
-  const std::wstring read_contents = ReadTextFile(dest_file);
-  EXPECT_EQ(file_contents, read_contents);
+  EXPECT_EQ(file_contents, ReadTextFile(dest_file));
   EXPECT_FALSE(PathExists(dest_file2_test));
   EXPECT_FALSE(PathExists(dest_file2));
+
+  // Change |file_name_from| contents.
+  const std::wstring new_file_contents(L"Moogle");
+  CreateTextFile(file_name_from, new_file_contents);
+  ASSERT_TRUE(PathExists(file_name_from));
+  EXPECT_EQ(new_file_contents, ReadTextFile(file_name_from));
+
+  // Overwrite |dest_file|.
+  ASSERT_TRUE(CopyFile(file_name_from, dest_file));
+  EXPECT_TRUE(PathExists(dest_file));
+  EXPECT_EQ(new_file_contents, ReadTextFile(dest_file));
+
+  // Create another directory.
+  FilePath dest_dir = temp_dir_.GetPath().Append(FPL("dest_dir"));
+  ASSERT_TRUE(CreateDirectory(dest_dir));
+  EXPECT_TRUE(DirectoryExists(dest_dir));
+  EXPECT_TRUE(IsDirectoryEmpty(dest_dir));
+
+  // Make sure CopyFile() cannot overwrite a directory.
+  ASSERT_FALSE(CopyFile(file_name_from, dest_dir));
+  EXPECT_TRUE(DirectoryExists(dest_dir));
+  EXPECT_TRUE(IsDirectoryEmpty(dest_dir));
 }
 
 // file_util winds up using autoreleased objects on the Mac, so this needs
@@ -2183,9 +2519,9 @@ TEST_F(FileUtilTest, ReadFileToString) {
   EXPECT_TRUE(ReadFileToStringWithMaxSize(file_path, &data, 6));
   EXPECT_EQ("0123", data);
 
-  EXPECT_TRUE(ReadFileToStringWithMaxSize(file_path, NULL, 6));
+  EXPECT_TRUE(ReadFileToStringWithMaxSize(file_path, nullptr, 6));
 
-  EXPECT_TRUE(ReadFileToString(file_path, NULL));
+  EXPECT_TRUE(ReadFileToString(file_path, nullptr));
 
   data = "temp";
   EXPECT_FALSE(ReadFileToString(file_path_dangerous, &data));
@@ -2584,7 +2920,7 @@ TEST_F(FileUtilTest, ValidContentUriTest) {
   FilePath image_file = data_dir.Append(FILE_PATH_LITERAL("red.png"));
   int64_t image_size;
   GetFileSize(image_file, &image_size);
-  EXPECT_LT(0, image_size);
+  ASSERT_GT(image_size, 0);
 
   // Insert the image into MediaStore. MediaStore will do some conversions, and
   // return the content URI.
@@ -2598,11 +2934,10 @@ TEST_F(FileUtilTest, ValidContentUriTest) {
   EXPECT_EQ(image_size, content_uri_size);
 
   // We should be able to read the file.
-  char* buffer = new char[image_size];
   File file = OpenContentUriForRead(path);
   EXPECT_TRUE(file.IsValid());
-  EXPECT_TRUE(file.ReadAtCurrentPos(buffer, image_size));
-  delete[] buffer;
+  auto buffer = std::make_unique<char[]>(image_size);
+  EXPECT_TRUE(file.ReadAtCurrentPos(buffer.get(), image_size));
 }
 
 TEST_F(FileUtilTest, NonExistentContentUriTest) {

@@ -41,8 +41,8 @@
 #include <memory>
 
 #if INSIDE_BLINK
+#include "base/memory/scoped_refptr.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #endif
 
 namespace blink {
@@ -96,7 +96,7 @@ class WebCryptoResult {
 
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT WebCryptoResult(CryptoResult*,
-                                        PassRefPtr<CryptoResultCancel>);
+                                        scoped_refptr<CryptoResultCancel>);
 #endif
 
  private:

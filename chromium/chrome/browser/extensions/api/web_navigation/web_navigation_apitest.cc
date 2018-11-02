@@ -384,17 +384,14 @@ class WebNavigationApiTest : public ExtensionApiTest {
 };
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Api) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/api")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, GetFrame) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/getFrame")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/clientRedirect"))
       << message_;
 }
@@ -407,7 +404,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_ServerRedirect) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir download_directory;
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =
@@ -457,50 +454,42 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ForwardBack) {
   if (content::IsBrowserSideNavigationEnabled())
     return; // TODO(jam): investigate
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/forwardBack")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, IFrame) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/iframe")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SrcDoc) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/srcdoc")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, OpenTab) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/openTab")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ReferenceFragment) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/referenceFragment"))
       << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SimpleLoad) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/simpleLoad")) << message_;
 }
 
-// Flaky on Windows and Mac. See http://crbug.com/477480 (Windows) and
-// https://crbug.com/746407 (Mac).
-#if defined(OS_WIN) || defined(OS_MACOSX)
+// Flaky on Windows, Mac and Linux. See http://crbug.com/477480 (Windows) and
+// https://crbug.com/746407 (Mac, Linux).
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 #define MAYBE_Failures DISABLED_Failures
 #else
 #define MAYBE_Failures Failures
 #endif
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_Failures) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/failures")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, FilteredTest) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/filtered")) << message_;
 }
 
@@ -552,7 +541,6 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_UserAction) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Wait for the extension to set itself up and return control to us.
   ASSERT_TRUE(RunExtensionTest("webnavigation/requestOpenTab"))
@@ -648,7 +636,6 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, History) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/history")) << message_;
 }
 

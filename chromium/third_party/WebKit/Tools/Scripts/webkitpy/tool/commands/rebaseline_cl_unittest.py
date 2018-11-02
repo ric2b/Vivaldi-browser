@@ -4,6 +4,7 @@
 
 import json
 import optparse
+import textwrap
 
 from webkitpy.common.checkout.git_mock import MockGit
 from webkitpy.common.net.buildbot import Build
@@ -114,7 +115,9 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'fill_missing': None,
             'optimize': True,
             'results_directory': None,
+            'test_name_file': None,
             'verbose': False,
+            'builders': [],
         }
         options.update(kwargs)
         return optparse.Values(dict(**options))
@@ -129,6 +132,29 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO: Rebaselining one/flaky-fail.html\n',
             'INFO: Rebaselining one/missing.html\n',
             'INFO: Rebaselining one/slow-fail.html\n',
+            'INFO: Rebaselining one/text-fail.html\n',
+            'INFO: Rebaselining two/image-fail.html\n',
+        ])
+
+    def test_execute_with_test_name_file(self):
+        fs = self.mac_port.host.filesystem
+        test_name_file = fs.mktemp()
+        fs.write_text_file(test_name_file, textwrap.dedent('''
+            one/flaky-fail.html
+              one/missing.html
+            # one/slow-fail.html
+            #
+
+            one/text-fail.html
+                two/image-fail.html   '''))
+        exit_code = self.command.execute(
+            self.command_options(test_name_file=test_name_file), [], self.tool)
+        self.assertEqual(exit_code, 0)
+        self.assertLog([
+            'INFO: Finished try jobs found for all try bots.\n',
+            'INFO: Reading list of tests to rebaseline from %s\n' % test_name_file,
+            'INFO: Rebaselining one/flaky-fail.html\n',
+            'INFO: Rebaselining one/missing.html\n',
             'INFO: Rebaselining one/text-fail.html\n',
             'INFO: Rebaselining two/image-fail.html\n',
         ])
@@ -466,3 +492,18 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO: Using "MOCK Foo12" build 100 for foo-foo45.\n',
             'INFO: Using "MOCK Bar4" build 200 for bar-bar3.\n',
         ])
+
+    def test_explicit_builder_list(self):
+        builders = ['MOCK Try Linux', 'MOCK Try Mac']
+        options = self.command_options(builders=builders)
+        exit_code = self.command.execute(options, [], self.tool)
+        self.assertLog([
+            'INFO: Finished try jobs found for all try bots.\n',
+            'INFO: Rebaselining one/flaky-fail.html\n',
+            'INFO: Rebaselining one/missing.html\n',
+            'INFO: Rebaselining one/slow-fail.html\n',
+            'INFO: Rebaselining one/text-fail.html\n',
+            'INFO: Rebaselining two/image-fail.html\n',
+        ])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(self.command.selected_try_bots, frozenset(builders))

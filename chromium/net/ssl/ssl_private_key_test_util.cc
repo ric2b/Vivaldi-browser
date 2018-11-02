@@ -9,10 +9,9 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/span.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/strings/string_util.h"
 #include "crypto/openssl_util.h"
 #include "net/base/net_errors.h"
 #include "net/ssl/ssl_private_key.h"
@@ -20,9 +19,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
-#include "third_party/boringssl/src/include/openssl/ec.h"
-#include "third_party/boringssl/src/include/openssl/ec_key.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/rsa.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 using net::test::IsOk;
 
@@ -30,106 +29,46 @@ namespace net {
 
 namespace {
 
-const char* HashToString(SSLPrivateKey::Hash hash) {
-  switch (hash) {
-    case SSLPrivateKey::Hash::MD5_SHA1:
-      return "MD5_SHA1";
-    case SSLPrivateKey::Hash::SHA1:
-      return "SHA1";
-    case SSLPrivateKey::Hash::SHA256:
-      return "SHA256";
-    case SSLPrivateKey::Hash::SHA384:
-      return "SHA384";
-    case SSLPrivateKey::Hash::SHA512:
-      return "SHA512";
-  }
-
-  NOTREACHED();
-  return "";
-}
-
-const EVP_MD* HashToMD(SSLPrivateKey::Hash hash) {
-  switch (hash) {
-    case SSLPrivateKey::Hash::MD5_SHA1:
-      return EVP_md5_sha1();
-    case SSLPrivateKey::Hash::SHA1:
-      return EVP_sha1();
-    case SSLPrivateKey::Hash::SHA256:
-      return EVP_sha256();
-    case SSLPrivateKey::Hash::SHA384:
-      return EVP_sha384();
-    case SSLPrivateKey::Hash::SHA512:
-      return EVP_sha512();
-  }
-
-  NOTREACHED();
-  return nullptr;
-}
-
-// Resize a string to |size| bytes of data, then return its data buffer address
-// cast as an 'uint8_t*', as expected by OpenSSL functions.
-// |str| the target string.
-// |size| the number of bytes to write into the string.
-// Return the string's new buffer in memory, as an 'uint8_t*' pointer.
-uint8_t* OpenSSLWriteInto(std::string* str, size_t size) {
-  return reinterpret_cast<uint8_t*>(base::WriteInto(str, size + 1));
-}
-
-bool VerifyWithOpenSSL(const EVP_MD* md,
-                       const base::StringPiece& digest,
+bool VerifyWithOpenSSL(uint16_t algorithm,
+                       base::span<const uint8_t> input,
                        EVP_PKEY* key,
-                       const base::StringPiece& signature) {
-  bssl::UniquePtr<EVP_PKEY_CTX> ctx(EVP_PKEY_CTX_new(key, nullptr));
-  if (!ctx || !EVP_PKEY_verify_init(ctx.get()) ||
-      !EVP_PKEY_CTX_set_signature_md(ctx.get(), md) ||
-      !EVP_PKEY_verify(
-          ctx.get(), reinterpret_cast<const uint8_t*>(signature.data()),
-          signature.size(), reinterpret_cast<const uint8_t*>(digest.data()),
-          digest.size())) {
+                       base::span<const uint8_t> signature) {
+  bssl::ScopedEVP_MD_CTX ctx;
+  EVP_PKEY_CTX* pctx;
+  if (!EVP_DigestVerifyInit(ctx.get(), &pctx,
+                            SSL_get_signature_algorithm_digest(algorithm),
+                            nullptr, key)) {
     return false;
   }
-
-  return true;
-}
-
-bool SignWithOpenSSL(const EVP_MD* md,
-                     const base::StringPiece& digest,
-                     EVP_PKEY* key,
-                     std::string* result) {
-  size_t sig_len = EVP_PKEY_size(key);
-  bssl::UniquePtr<EVP_PKEY_CTX> ctx(EVP_PKEY_CTX_new(key, nullptr));
-  if (!ctx || !EVP_PKEY_sign_init(ctx.get()) ||
-      !EVP_PKEY_CTX_set_signature_md(ctx.get(), md) ||
-      !EVP_PKEY_sign(ctx.get(), OpenSSLWriteInto(result, sig_len), &sig_len,
-                     reinterpret_cast<const uint8_t*>(digest.data()),
-                     digest.size())) {
-    return false;
+  if (SSL_is_signature_algorithm_rsa_pss(algorithm)) {
+    if (!EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) ||
+        !EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, -1 /* hash length */)) {
+      return false;
+    }
   }
-
-  result->resize(sig_len);
-  return true;
+  return EVP_DigestVerify(ctx.get(), signature.data(), signature.size(),
+                          input.data(), input.size());
 }
 
 void OnSignComplete(base::RunLoop* loop,
                     Error* out_error,
-                    std::string* out_signature,
+                    std::vector<uint8_t>* out_signature,
                     Error error,
                     const std::vector<uint8_t>& signature) {
   *out_error = error;
-  out_signature->assign(signature.begin(), signature.end());
+  *out_signature = signature;
   loop->Quit();
 }
 
 Error DoKeySigningWithWrapper(SSLPrivateKey* key,
-                              SSLPrivateKey::Hash hash,
-                              const base::StringPiece& message,
-                              std::string* result) {
+                              uint16_t algorithm,
+                              base::span<const uint8_t> input,
+                              std::vector<uint8_t>* result) {
   Error error;
   base::RunLoop loop;
-  key->SignDigest(
-      hash, message,
-      base::Bind(OnSignComplete, base::Unretained(&loop),
-                 base::Unretained(&error), base::Unretained(result)));
+  key->Sign(algorithm, input,
+            base::Bind(OnSignComplete, base::Unretained(&loop),
+                       base::Unretained(&error), base::Unretained(result)));
   loop.Run();
   return error;
 }
@@ -146,33 +85,39 @@ void TestSSLPrivateKeyMatches(SSLPrivateKey* key, const std::string& pkcs8) {
   ASSERT_TRUE(openssl_key);
   EXPECT_EQ(0u, CBS_len(&cbs));
 
-  // Test all supported hash algorithms.
-  std::vector<SSLPrivateKey::Hash> hashes = key->GetDigestPreferences();
+  // Test all supported algorithms.
+  std::vector<uint16_t> preferences = key->GetAlgorithmPreferences();
 
   // To support TLS 1.1 and earlier, RSA keys must implicitly support MD5-SHA1,
   // despite not being advertised.
-  if (EVP_PKEY_id(openssl_key.get()) == EVP_PKEY_RSA)
-    hashes.push_back(SSLPrivateKey::Hash::MD5_SHA1);
+  preferences.push_back(SSL_SIGN_RSA_PKCS1_MD5_SHA1);
 
-  for (SSLPrivateKey::Hash hash : hashes) {
-    SCOPED_TRACE(HashToString(hash));
-    const EVP_MD* md = HashToMD(hash);
-
-    std::string digest(EVP_MD_size(md), 'a');
+  for (uint16_t algorithm : preferences) {
+    SCOPED_TRACE(
+        SSL_get_signature_algorithm_name(algorithm, 0 /* exclude curve */));
+    // BoringSSL will skip signatures algorithms that don't match the key type.
+    if (EVP_PKEY_id(openssl_key.get()) !=
+        SSL_get_signature_algorithm_key_type(algorithm)) {
+      continue;
+    }
+    // If the RSA key is too small for the hash, skip the algorithm. BoringSSL
+    // will filter this algorithm out and decline using it. In particular,
+    // 1024-bit RSA keys cannot sign RSA-PSS with SHA-512 and test keys are
+    // often 1024 bits.
+    if (SSL_is_signature_algorithm_rsa_pss(algorithm) &&
+        static_cast<size_t>(EVP_PKEY_size(openssl_key.get())) <
+            2 * EVP_MD_size(SSL_get_signature_algorithm_digest(algorithm)) +
+                2) {
+      continue;
+    }
 
     // Test the key generates valid signatures.
-    std::string signature;
-    Error error = DoKeySigningWithWrapper(key, hash, digest, &signature);
+    std::vector<uint8_t> input(100, 'a');
+    std::vector<uint8_t> signature;
+    Error error = DoKeySigningWithWrapper(key, algorithm, input, &signature);
     EXPECT_THAT(error, IsOk());
-    EXPECT_TRUE(VerifyWithOpenSSL(md, digest, openssl_key.get(), signature));
-
-    // RSA signing is deterministic, so further check the signature matches.
-    if (EVP_PKEY_id(openssl_key.get()) == EVP_PKEY_RSA) {
-      std::string openssl_signature;
-      ASSERT_TRUE(
-          SignWithOpenSSL(md, digest, openssl_key.get(), &openssl_signature));
-      EXPECT_EQ(openssl_signature, signature);
-    }
+    EXPECT_TRUE(
+        VerifyWithOpenSSL(algorithm, input, openssl_key.get(), signature));
   }
 }
 

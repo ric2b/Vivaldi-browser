@@ -5,14 +5,18 @@
 #ifndef ng_block_flow_painter_h
 #define ng_block_flow_painter_h
 
+#include "core/layout/api/HitTestAction.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
 
+class HitTestResult;
+class HitTestLocation;
 class LayoutPoint;
 struct PaintInfo;
-class LayoutNGBlockFlow;
-class NGPhysicalBoxFragment;
+class LayoutBlockFlow;
+class NGPaintFragment;
+struct PaintInfo;
 
 // Painter for NGBlockFlow which represents the root of a LayoutNG sub-tree.
 // Paints the root fragment associated with the NGBlockFlow recursively, walking
@@ -21,16 +25,21 @@ class NGBlockFlowPainter {
   STACK_ALLOCATED();
 
  public:
-  NGBlockFlowPainter(const LayoutNGBlockFlow& layout_ng_block_flow)
-      : block_(layout_ng_block_flow) {}
-  void PaintContents(const PaintInfo&, const LayoutPoint&);
+  NGBlockFlowPainter(const LayoutBlockFlow& layout_block_flow)
+      : block_(layout_block_flow) {}
+  void Paint(const PaintInfo&, const LayoutPoint&);
+
+  bool NodeAtPoint(HitTestResult&,
+                   const HitTestLocation& location_in_container,
+                   const LayoutPoint& accumulated_offset,
+                   HitTestAction);
 
  private:
-  void PaintBoxFragment(const NGPhysicalBoxFragment&,
+  void PaintBoxFragment(const NGPaintFragment&,
                         const PaintInfo&,
                         const LayoutPoint&);
 
-  const LayoutNGBlockFlow& block_;
+  const LayoutBlockFlow& block_;
 };
 
 }  // namespace blink

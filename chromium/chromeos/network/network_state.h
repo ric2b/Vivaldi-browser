@@ -69,14 +69,10 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
 
   const base::DictionaryValue& proxy_config() const { return proxy_config_; }
 
-  // IPConfig Properties. These require an extra call to ShillIPConfigClient,
-  // so cache them to avoid excessively complex client code.
-  const std::string& ip_address() const { return ip_address_; }
-  const std::string& gateway() const { return gateway_; }
-  const std::vector<std::string>& dns_servers() const { return dns_servers_; }
-  const GURL& web_proxy_auto_discovery_url() const {
-    return web_proxy_auto_discovery_url_;
-  }
+  const base::DictionaryValue& ipv4_config() const { return ipv4_config_; }
+  std::string GetIpAddress() const;
+  std::string GetGateway() const;
+  GURL GetWebProxyAutoDiscoveryUrl() const;
 
   // Wireless property accessors
   bool connectable() const { return connectable_; }
@@ -104,9 +100,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
 
   // VPN property accessors
   const std::string& vpn_provider_type() const { return vpn_provider_type_; }
-  const std::string& third_party_vpn_provider_extension_id() const {
-    return third_party_vpn_provider_extension_id_;
-  }
+  const std::string& vpn_provider_id() const { return vpn_provider_id_; }
 
   // Tether accessors and setters.
   int battery_percentage() const { return battery_percentage_; }
@@ -142,8 +136,16 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // Returns true if this is a network stored in a profile.
   bool IsInProfile() const;
 
+  // Returns true if the network is never stored in a profile (e.g. Tether and
+  // default Cellular).
+  bool IsNonProfileType() const;
+
   // Returns true if the network properties are stored in a user profile.
   bool IsPrivate() const;
+
+  // Returns true if the network is a default Cellular network (see
+  // NetworkStateHandler::EnsureCellularNetwork()).
+  bool IsDefaultCellular() const;
 
   // Returns the |raw_ssid| as a hex-encoded string
   std::string GetHexSsid() const;
@@ -171,6 +173,8 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   static bool NetworkStateIsCaptivePortal(
       const base::DictionaryValue& shill_properties);
   static bool ErrorIsValid(const std::string& error);
+  static std::unique_ptr<NetworkState> CreateDefaultCellular(
+      const std::string& device_path);
 
  private:
   friend class MobileActivatorTest;
@@ -208,14 +212,9 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // when a connection attempt is initiated.
   std::string last_error_;
 
-  // IPConfig properties.
-  // Note: These do not correspond to actual Shill.Service properties
-  // but are derived from the service's corresponding IPConfig object.
-  std::string ip_address_;
-  std::string gateway_;
-  std::vector<std::string> dns_servers_;
-  int prefix_length_ = 0;  // Used by GetNetmask()
-  GURL web_proxy_auto_discovery_url_;
+  // Cached copy of the Shill Service IPConfig object. For ipv6 properties use
+  // the ip_configs_ property in the corresponding DeviceState.
+  base::DictionaryValue ipv4_config_;
 
   // Wireless properties, used for icons and Connect logic.
   bool connectable_ = false;
@@ -236,7 +235,8 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // VPN properties, used to construct the display name and to show the correct
   // configuration dialog.
   std::string vpn_provider_type_;
-  std::string third_party_vpn_provider_extension_id_;
+  // Extension ID or Arc package name for extension or Arc provider VPNs.
+  std::string vpn_provider_id_;
 
   // Tether properties.
   std::string carrier_;

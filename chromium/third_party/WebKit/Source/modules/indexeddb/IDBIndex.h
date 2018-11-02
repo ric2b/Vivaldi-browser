@@ -43,18 +43,17 @@ namespace blink {
 class ExceptionState;
 class IDBObjectStore;
 
-class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
-                       public ScriptWrappable {
+class IDBIndex final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IDBIndex* Create(RefPtr<IDBIndexMetadata> metadata,
+  static IDBIndex* Create(scoped_refptr<IDBIndexMetadata> metadata,
                           IDBObjectStore* object_store,
                           IDBTransaction* transaction) {
     return new IDBIndex(std::move(metadata), object_store, transaction);
   }
   ~IDBIndex();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Implement the IDL
   const String& name() const { return Metadata().name; }
@@ -108,7 +107,7 @@ class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
     return Id() > old_object_store_metadata.max_index_id;
   }
 
-  void RevertMetadata(RefPtr<IDBIndexMetadata> old_metadata);
+  void RevertMetadata(scoped_refptr<IDBIndexMetadata> old_metadata);
 
   // Used internally and by InspectorIndexedDBAgent:
   IDBRequest* openCursor(
@@ -120,7 +119,7 @@ class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
   WebIDBDatabase* BackendDB() const;
 
  private:
-  IDBIndex(RefPtr<IDBIndexMetadata>, IDBObjectStore*, IDBTransaction*);
+  IDBIndex(scoped_refptr<IDBIndexMetadata>, IDBObjectStore*, IDBTransaction*);
 
   const IDBIndexMetadata& Metadata() const { return *metadata_; }
 
@@ -136,7 +135,7 @@ class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
                              bool key_only,
                              IDBRequest::AsyncTraceState metrics);
 
-  RefPtr<IDBIndexMetadata> metadata_;
+  scoped_refptr<IDBIndexMetadata> metadata_;
   Member<IDBObjectStore> object_store_;
   Member<IDBTransaction> transaction_;
   bool deleted_ = false;

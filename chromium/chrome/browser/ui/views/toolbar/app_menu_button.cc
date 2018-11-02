@@ -6,6 +6,7 @@
 
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
-#include "chrome/browser/ui/views/feature_promos/incognito_window_promo_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -41,6 +41,8 @@ namespace {
 
 constexpr float kIconSize = 16;
 
+constexpr base::TimeDelta kDelayTime = base::TimeDelta::FromMilliseconds(1500);
+
 }  // namespace
 
 // static
@@ -48,13 +50,21 @@ bool AppMenuButton::g_open_app_immediately_for_testing = false;
 
 AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
     : views::MenuButton(base::string16(), toolbar_view, false),
-      toolbar_view_(toolbar_view) {
+      toolbar_view_(toolbar_view),
+      animation_delay_timer_(FROM_HERE,
+                             kDelayTime,
+                             base::Bind(&AppMenuButton::AnimateIconIfPossible,
+                                        base::Unretained(this),
+                                        false),
+                             false) {
   SetInkDropMode(InkDropMode::ON);
   SetFocusPainter(nullptr);
 
   if (base::FeatureList::IsEnabled(features::kAnimatedAppMenuIcon)) {
     toolbar_view_->browser()->tab_strip_model()->AddObserver(this);
     should_use_new_icon_ = true;
+    should_delay_animation_ = base::GetFieldTrialParamByFeatureAsBool(
+        features::kAnimatedAppMenuIcon, "HasDelay", false);
   }
 }
 
@@ -66,6 +76,16 @@ void AppMenuButton::SetSeverity(AppMenuIconController::IconType type,
   type_ = type;
   severity_ = severity;
   UpdateIcon(animate);
+}
+
+void AppMenuButton::SetIsProminent(bool is_prominent) {
+  if (is_prominent) {
+    SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_ProminentButtonColor)));
+  } else {
+    SetBackground(nullptr);
+  }
+  SchedulePaint();
 }
 
 void AppMenuButton::ShowMenu(bool for_drop) {
@@ -85,6 +105,7 @@ void AppMenuButton::ShowMenu(bool for_drop) {
 
   menu_.reset(new AppMenu(browser, for_drop ? AppMenu::FOR_DROP : 0));
   menu_model_.reset(new AppMenuModel(toolbar_view_, browser));
+  menu_model_->Init();
   menu_->Init(menu_model_.get());
 
   for (views::MenuListener& observer : menu_listeners_)
@@ -101,7 +122,7 @@ void AppMenuButton::ShowMenu(bool for_drop) {
                         base::TimeTicks::Now() - menu_open_time);
   }
 
-  AnimateIconIfPossible();
+  AnimateIconIfPossible(false);
 }
 
 void AppMenuButton::CloseMenu() {
@@ -132,7 +153,7 @@ void AppMenuButton::Layout() {
   if (new_icon_) {
     new_icon_->SetBoundsRect(GetContentsBounds());
     ink_drop_container()->SetBoundsRect(GetLocalBounds());
-    image()->SetBoundsRect(GetLocalBounds());
+    image()->SetBoundsRect(GetContentsBounds());
     return;
   }
 
@@ -147,7 +168,7 @@ void AppMenuButton::TabInsertedAt(TabStripModel* tab_strip_model,
                                   content::WebContents* contents,
                                   int index,
                                   bool foreground) {
-  AnimateIconIfPossible();
+  AnimateIconIfPossible(true);
 }
 
 void AppMenuButton::UpdateIcon(bool should_animate) {
@@ -191,7 +212,7 @@ void AppMenuButton::UpdateIcon(bool should_animate) {
                             : toolbar_icon_color);
 
     if (should_animate)
-      AnimateIconIfPossible();
+      AnimateIconIfPossible(true);
 
     return;
   }
@@ -221,25 +242,20 @@ void AppMenuButton::SetTrailingMargin(int margin) {
   InvalidateLayout();
 }
 
-void AppMenuButton::AnimateIconIfPossible() {
+void AppMenuButton::AnimateIconIfPossible(bool with_delay) {
   if (!new_icon_ || !should_use_new_icon_ ||
       severity_ == AppMenuIconController::Severity::NONE) {
     return;
   }
 
-  new_icon_->Animate(views::AnimatedIconView::END);
-}
-
-void AppMenuButton::ShowPromo() {
-  // Owned by its native widget. Will be destroyed when its widget is destroyed.
-  IncognitoWindowPromoBubbleView* incognito_window_promo =
-      IncognitoWindowPromoBubbleView::CreateOwned(this);
-  views::Widget* widget = incognito_window_promo->GetWidget();
-  if (!incognito_window_promo_observer_.IsObserving(widget)) {
-    incognito_window_promo_observer_.Add(widget);
-    AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
-    AppMenuButton::SchedulePaint();
+  if (!should_delay_animation_ || !with_delay || new_icon_->IsAnimating()) {
+    animation_delay_timer_.Stop();
+    new_icon_->Animate(views::AnimatedIconView::END);
+    return;
   }
+
+  if (!animation_delay_timer_.IsRunning())
+    animation_delay_timer_.Reset();
 }
 
 const char* AppMenuButton::GetClassName() const {
@@ -305,12 +321,4 @@ void AppMenuButton::OnDragExited() {
 
 int AppMenuButton::OnPerformDrop(const ui::DropTargetEvent& event) {
   return ui::DragDropTypes::DRAG_MOVE;
-}
-
-void AppMenuButton::OnWidgetDestroying(views::Widget* widget) {
-  if (incognito_window_promo_observer_.IsObserving(widget)) {
-    incognito_window_promo_observer_.Remove(widget);
-    AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
-    AppMenuButton::SchedulePaint();
-  }
 }

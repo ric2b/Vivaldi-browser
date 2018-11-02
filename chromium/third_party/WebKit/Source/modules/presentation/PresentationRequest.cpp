@@ -4,6 +4,8 @@
 
 #include "modules/presentation/PresentationRequest.h"
 
+#include <memory>
+
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
@@ -11,7 +13,6 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -51,7 +52,8 @@ PresentationRequest* PresentationRequest::Create(
     ExecutionContext* execution_context,
     const Vector<String>& urls,
     ExceptionState& exception_state) {
-  if (ToDocument(execution_context)->IsSandboxed(kSandboxPresentation)) {
+  if (ToDocument(execution_context)
+          ->IsSandboxed(kSandboxPresentationController)) {
     exception_state.ThrowSecurityError(
         "The document is sandboxed and lacks the 'allow-presentation' flag.");
     return nullptr;
@@ -136,12 +138,14 @@ void PresentationRequest::RecordStartOriginTypeAccess(
 ScriptPromise PresentationRequest::start(ScriptState* script_state) {
   ExecutionContext* execution_context = GetExecutionContext();
   Settings* context_settings = GetSettings(execution_context);
+  Document* doc = ToDocumentOrNull(execution_context);
+
   bool is_user_gesture_required =
       !context_settings ||
       context_settings->GetPresentationRequiresUserGesture();
 
   if (is_user_gesture_required &&
-      !UserGestureIndicator::ProcessingUserGesture())
+      !Frame::HasTransientUserActivation(doc ? doc->GetFrame() : nullptr))
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(
@@ -160,7 +164,7 @@ ScriptPromise PresentationRequest::start(ScriptState* script_state) {
   RecordStartOriginTypeAccess(*execution_context);
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   client->StartPresentation(
-      urls_, WTF::MakeUnique<PresentationConnectionCallbacks>(resolver, this));
+      urls_, std::make_unique<PresentationConnectionCallbacks>(resolver, this));
   return resolver->Promise();
 }
 
@@ -181,17 +185,17 @@ ScriptPromise PresentationRequest::reconnect(ScriptState* script_state,
       PresentationController::FromContext(GetExecutionContext());
   DCHECK(controller);
 
-  PresentationConnection* existing_connection =
+  ControllerPresentationConnection* existing_connection =
       controller->FindExistingConnection(urls_, id);
   if (existing_connection) {
     client->ReconnectPresentation(
         urls_, id,
-        WTF::MakeUnique<PresentationConnectionCallbacks>(resolver,
-                                                         existing_connection));
+        std::make_unique<PresentationConnectionCallbacks>(resolver,
+                                                          existing_connection));
   } else {
     client->ReconnectPresentation(
         urls_, id,
-        WTF::MakeUnique<PresentationConnectionCallbacks>(resolver, this));
+        std::make_unique<PresentationConnectionCallbacks>(resolver, this));
   }
   return resolver->Promise();
 }
@@ -212,7 +216,7 @@ ScriptPromise PresentationRequest::getAvailability(ScriptState* script_state) {
         PresentationAvailabilityProperty::kReady);
 
     client->GetAvailability(urls_,
-                            WTF::MakeUnique<PresentationAvailabilityCallbacks>(
+                            std::make_unique<PresentationAvailabilityCallbacks>(
                                 availability_property_, urls_));
   }
   return availability_property_->Promise(script_state->World());
@@ -222,7 +226,7 @@ const Vector<KURL>& PresentationRequest::Urls() const {
   return urls_;
 }
 
-DEFINE_TRACE(PresentationRequest) {
+void PresentationRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(availability_property_);
   EventTargetWithInlineData::Trace(visitor);
   ContextClient::Trace(visitor);

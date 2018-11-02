@@ -13,17 +13,18 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "chrome/browser/safe_browsing/download_protection/sandboxed_zip_analyzer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
+#include "chrome/services/file_util/public/cpp/sandboxed_zip_analyzer.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing/db/database_manager.h"
 #include "content/public/browser/download_item.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -32,7 +33,7 @@
 
 #if defined(OS_MACOSX)
 #include "chrome/browser/safe_browsing/download_protection/disk_image_type_sniffer_mac.h"
-#include "chrome/browser/safe_browsing/download_protection/sandboxed_dmg_analyzer_mac.h"
+#include "chrome/services/file_util/public/cpp/sandboxed_dmg_analyzer_mac.h"
 #endif
 
 using content::BrowserThread;
@@ -66,6 +67,9 @@ class CheckClientDownloadRequest
   friend struct BrowserThread::DeleteOnThread<BrowserThread::UI>;
   friend class base::DeleteHelper<CheckClientDownloadRequest>;
 
+  using ArchivedBinaries =
+      google::protobuf::RepeatedPtrField<ClientDownloadRequest_ArchivedBinary>;
+
   ~CheckClientDownloadRequest() override;
   // Performs file feature extraction and SafeBrowsing ping for downloads that
   // don't match the URL whitelist.
@@ -75,6 +79,9 @@ class CheckClientDownloadRequest
   void ExtractFileFeatures(const base::FilePath& file_path);
   void StartExtractZipFeatures();
   void OnZipAnalysisFinished(const ArchiveAnalyzerResults& results);
+
+  static void CopyArchivedBinaries(const ArchivedBinaries& src_binaries,
+                                   ArchivedBinaries* dest_binaries);
 
 #if defined(OS_MACOSX)
   void StartExtractDmgFeatures();
@@ -123,8 +130,7 @@ class CheckClientDownloadRequest
 
   ClientDownloadRequest_SignatureInfo signature_info_;
   std::unique_ptr<ClientDownloadRequest_ImageHeaders> image_headers_;
-  google::protobuf::RepeatedPtrField<ClientDownloadRequest_ArchivedBinary>
-      archived_binary_;
+  ArchivedBinaries archived_binaries_;
   CheckDownloadCallback callback_;
   // Will be NULL if the request has been canceled.
   DownloadProtectionService* service_;
@@ -132,10 +138,10 @@ class CheckClientDownloadRequest
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
   const bool pingback_enabled_;
   std::unique_ptr<net::URLFetcher> fetcher_;
-  scoped_refptr<SandboxedZipAnalyzer> analyzer_;
+  scoped_refptr<chrome::SandboxedZipAnalyzer> analyzer_;
   base::TimeTicks zip_analysis_start_time_;
 #if defined(OS_MACOSX)
-  scoped_refptr<SandboxedDMGAnalyzer> dmg_analyzer_;
+  scoped_refptr<chrome::SandboxedDMGAnalyzer> dmg_analyzer_;
   base::TimeTicks dmg_analysis_start_time_;
 #endif
   bool finished_;
@@ -153,6 +159,9 @@ class CheckClientDownloadRequest
   // thread. The posted task will be cancelled if DownloadItem gets destroyed.
   base::CancelableTaskTracker cancelable_task_tracker_;
   base::WeakPtrFactory<CheckClientDownloadRequest> weakptr_factory_;
+
+  FRIEND_TEST_ALL_PREFIXES(CheckClientDownloadRequestTest,
+                           CheckLimitArchivedExtensions);
 
   DISALLOW_COPY_AND_ASSIGN(CheckClientDownloadRequest);
 };

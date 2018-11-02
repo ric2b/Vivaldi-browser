@@ -31,18 +31,18 @@ bool SignedCertificateTimestamp::LessThan::operator()(
 SignedCertificateTimestamp::SignedCertificateTimestamp()
     : version(V1), origin(SCT_EMBEDDED) {}
 
-SignedCertificateTimestamp::~SignedCertificateTimestamp() {}
+SignedCertificateTimestamp::~SignedCertificateTimestamp() = default;
 
 void SignedCertificateTimestamp::Persist(base::Pickle* pickle) {
-  CHECK(pickle->WriteInt(version));
-  CHECK(pickle->WriteString(log_id));
-  CHECK(pickle->WriteInt64(timestamp.ToInternalValue()));
-  CHECK(pickle->WriteString(extensions));
-  CHECK(pickle->WriteInt(signature.hash_algorithm));
-  CHECK(pickle->WriteInt(signature.signature_algorithm));
-  CHECK(pickle->WriteString(signature.signature_data));
-  CHECK(pickle->WriteInt(origin));
-  CHECK(pickle->WriteString(log_description));
+  pickle->WriteInt(version);
+  pickle->WriteString(log_id);
+  pickle->WriteInt64(timestamp.ToInternalValue());
+  pickle->WriteString(extensions);
+  pickle->WriteInt(signature.hash_algorithm);
+  pickle->WriteInt(signature.signature_algorithm);
+  pickle->WriteString(signature.signature_data);
+  pickle->WriteInt(origin);
+  pickle->WriteString(log_description);
 }
 
 // static
@@ -80,7 +80,7 @@ SignedCertificateTimestamp::CreateFromPickle(base::PickleIterator* iter) {
 
 SignedEntryData::SignedEntryData() : type(LOG_ENTRY_TYPE_X509) {}
 
-SignedEntryData::~SignedEntryData() {}
+SignedEntryData::~SignedEntryData() = default;
 
 void SignedEntryData::Reset() {
   type = SignedEntryData::LOG_ENTRY_TYPE_X509;
@@ -91,7 +91,7 @@ void SignedEntryData::Reset() {
 DigitallySigned::DigitallySigned()
     : hash_algorithm(HASH_ALGO_NONE), signature_algorithm(SIG_ALGO_ANONYMOUS) {}
 
-DigitallySigned::~DigitallySigned() {}
+DigitallySigned::~DigitallySigned() = default;
 
 bool DigitallySigned::SignatureParametersMatch(
     HashAlgorithm other_hash_algorithm,

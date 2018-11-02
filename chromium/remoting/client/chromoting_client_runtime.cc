@@ -54,7 +54,7 @@ ChromotingClientRuntime::ChromotingClientRuntime() {
   // base::MessageLoop::QuitClosure())
   ui_task_runner_ = new AutoThreadTaskRunner(ui_loop_->task_runner(),
                                              base::Bind(&base::DoNothing));
-
+  audio_task_runner_ = AutoThread::Create("native_audio", ui_task_runner_);
   display_task_runner_ = AutoThread::Create("native_disp", ui_task_runner_);
   network_task_runner_ = AutoThread::CreateWithType(
       "native_net", ui_task_runner_, base::MessageLoop::TYPE_IO);
@@ -114,5 +114,8 @@ ChromotingEventLogWriter* ChromotingClientRuntime::log_writer() {
   return log_writer_.get();
 }
 
+OAuthTokenGetter* ChromotingClientRuntime::token_getter() {
+  return delegate_->token_getter();
+}
 
 }  // namespace remoting

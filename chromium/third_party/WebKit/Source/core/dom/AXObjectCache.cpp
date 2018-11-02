@@ -29,9 +29,9 @@
 #include "core/dom/AXObjectCache.h"
 
 #include <memory>
-#include "core/HTMLElementTypeHelpers.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
+#include "core/html_element_type_helpers.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/PtrUtil.h"
@@ -66,7 +66,7 @@ std::unique_ptr<ScopedAXObjectCache> ScopedAXObjectCache::Create(
 
 ScopedAXObjectCache::ScopedAXObjectCache(Document& document)
     : document_(&document) {
-  if (!document_->AxObjectCache())
+  if (!document_->GetOrCreateAXObjectCache())
     cache_ = AXObjectCache::Create(*document_);
 }
 
@@ -78,7 +78,7 @@ ScopedAXObjectCache::~ScopedAXObjectCache() {
 AXObjectCache* ScopedAXObjectCache::Get() {
   if (cache_)
     return cache_.Get();
-  AXObjectCache* cache = document_->AxObjectCache();
+  AXObjectCache* cache = document_->GetOrCreateAXObjectCache();
   DCHECK(cache);
   return cache;
 }
@@ -162,11 +162,11 @@ bool AXObjectCache::IsInsideFocusableElementOrARIAWidget(const Node& node) {
         return true;
     }
     cur_node = cur_node->parentNode();
-  } while (cur_node && !isHTMLBodyElement(node));
+  } while (cur_node && !IsHTMLBodyElement(node));
   return false;
 }
 
-DEFINE_TRACE(AXObjectCache) {
+void AXObjectCache::Trace(blink::Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
 }
 

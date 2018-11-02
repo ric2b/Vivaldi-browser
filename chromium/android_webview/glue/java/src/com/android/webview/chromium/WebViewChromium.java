@@ -60,7 +60,6 @@ import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.content.browser.SmartClipProvider;
 import org.chromium.content_public.browser.NavigationHistory;
@@ -586,12 +585,14 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
             mFactory.addTask(new Runnable() {
                 @Override
                 public void run() {
-                    mAwContents.evaluateJavaScript(script, resultCallback);
+                    mAwContents.evaluateJavaScript(
+                            script, CallbackConverter.fromValueCallback(resultCallback));
                 }
             });
         } else {
             checkThread();
-            mAwContents.evaluateJavaScript(script, resultCallback);
+            mAwContents.evaluateJavaScript(
+                    script, CallbackConverter.fromValueCallback(resultCallback));
         }
     }
 
@@ -612,7 +613,8 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
             });
             return;
         }
-        mAwContents.saveWebArchive(basename, autoname, callback);
+        mAwContents.saveWebArchive(
+                basename, autoname, CallbackConverter.fromValueCallback(callback));
     }
 
     @Override
@@ -1172,7 +1174,6 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         mAwContents.findAllAsync(searchString);
     }
 
-    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
     @Override
     public boolean showFindDialog(final String text, final boolean showIme) {
         mFactory.startYourEngines(false);
@@ -1538,6 +1539,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         return (TextClassifier) mAwContents.getTextClassifier();
     }
 
+    @Override
     public void autofill(final SparseArray<AutofillValue> values) {
         mFactory.startYourEngines(false);
         if (checkNeedsPost()) {
@@ -1633,32 +1635,14 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
 
     @Override
     public void onInitializeAccessibilityNodeInfo(final AccessibilityNodeInfo info) {
-        mFactory.startYourEngines(false);
-        if (checkNeedsPost()) {
-            mFactory.runVoidTaskOnUiThreadBlocking(new Runnable() {
-                @Override
-                public void run() {
-                    onInitializeAccessibilityNodeInfo(info);
-                }
-            });
-            return;
-        }
-        mAwContents.onInitializeAccessibilityNodeInfo(info);
+        // Intentional no-op. Chromium accessibility implementation currently does not need this
+        // calls.
     }
 
     @Override
     public void onInitializeAccessibilityEvent(final AccessibilityEvent event) {
-        mFactory.startYourEngines(false);
-        if (checkNeedsPost()) {
-            mFactory.runVoidTaskOnUiThreadBlocking(new Runnable() {
-                @Override
-                public void run() {
-                    onInitializeAccessibilityEvent(event);
-                }
-            });
-            return;
-        }
-        mAwContents.onInitializeAccessibilityEvent(event);
+        // Intentional no-op. Chromium accessibility implementation currently does not need this
+        // calls.
     }
 
     @Override
@@ -2143,26 +2127,31 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
 
     // Overrides method added to WebViewProvider.ViewDelegate interface
     // (not called in M and below)
+    @Override
     public Handler getHandler(Handler originalHandler) {
         return originalHandler;
     }
 
     // Overrides method added to WebViewProvider.ViewDelegate interface
     // (not called in M and below)
+    @Override
     public View findFocus(View originalFocusedView) {
         return originalFocusedView;
     }
 
     // Remove from superclass
+    @Override
     public void preDispatchDraw(Canvas canvas) {
         // TODO(leandrogracia): remove this method from WebViewProvider if we think
         // we won't need it again.
     }
 
+    @Override
     public void onStartTemporaryDetach() {
         mAwContents.onStartTemporaryDetach();
     }
 
+    @Override
     public void onFinishTemporaryDetach() {
         mAwContents.onFinishTemporaryDetach();
     }

@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 
 #include <set>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -18,9 +19,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/feature_engagement/features.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
@@ -60,7 +63,7 @@
 #include "chrome/browser/browser_process.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
 #endif
@@ -153,13 +156,14 @@ void OmniboxViewViews::Init() {
 
   if (location_bar_view_) {
     // Initialize the popup view using the same font.
-    popup_view_.reset(OmniboxPopupContentsView::Create(
-        GetFontList(), this, model(), location_bar_view_));
+    popup_view_.reset(new OmniboxPopupContentsView(GetFontList(), this, model(),
+                                                   location_bar_view_));
   }
 
   // Override the default FocusableBorder from Textfield, since the
   // LocationBarView will indicate the focus state.
-  SetBorder(views::NullBorder());
+  SetBorder(views::CreateEmptyBorder(
+      ChromeLayoutProvider::Get()->GetInsetsMetric(INSETS_OMNIBOX)));
 
 #if defined(OS_CHROMEOS)
   chromeos::input_method::InputMethodManager::Get()->
@@ -190,12 +194,14 @@ void OmniboxViewViews::OnTabChanged(const content::WebContents* web_contents) {
   UpdateSecurityLevel();
   const OmniboxState* state = static_cast<OmniboxState*>(
       web_contents->GetUserData(&OmniboxState::kKey));
-  model()->RestoreState(state ? &state->model_state : NULL);
+  model()->RestoreState(
+      controller()->GetToolbarModel()->GetFormattedURL(nullptr),
+      state ? &state->model_state : NULL);
   if (state) {
     // This assumes that the omnibox has already been focused or blurred as
     // appropriate; otherwise, a subsequent OnFocus() or OnBlur() call could
-    // goof up the selection.  See comments at the end of
-    // BrowserView::ActiveTabChanged().
+    // goof up the selection.  See comments on OnActiveTabChanged() call in
+    // Browser::ActiveTabChanged().
     SelectRange(state->selection);
     saved_selection_for_focus_change_ = state->saved_selection_for_focus_change;
   }
@@ -211,7 +217,8 @@ void OmniboxViewViews::ResetTabState(content::WebContents* web_contents) {
 void OmniboxViewViews::Update() {
   const security_state::SecurityLevel old_security_level = security_level_;
   UpdateSecurityLevel();
-  if (model()->UpdatePermanentText()) {
+  if (model()->SetPermanentText(
+          controller()->GetToolbarModel()->GetFormattedURL(nullptr))) {
     RevertAll();
 
     // Only select all when we have focus.  If we don't have focus, selecting
@@ -468,6 +475,7 @@ void OmniboxViewViews::ApplyCaretVisibility() {
 
 void OmniboxViewViews::OnTemporaryTextMaybeChanged(
     const base::string16& display_text,
+    const AutocompleteMatch& match,
     bool save_original_selection,
     bool notify_text_changed) {
   if (save_original_selection)
@@ -567,9 +575,6 @@ void OmniboxViewViews::ShowImeIfNeeded() {
   GetInputMethod()->ShowImeIfNeeded();
 }
 
-void OmniboxViewViews::OnMatchOpened(AutocompleteMatch::Type match_type) {
-}
-
 int OmniboxViewViews::GetOmniboxTextLength() const {
   // TODO(oshima): Support IME.
   return static_cast<int>(text().length());
@@ -602,14 +607,11 @@ void OmniboxViewViews::EmphasizeURLComponents() {
   if (!location_bar_view_)
     return;
 
-  // If the current contents is a URL, force left-to-right rendering at the
-  // paragraph level. Right-to-left runs are still rendered RTL, but will not
-  // flip the whole URL around. For example (if "ABC" is Hebrew), this will
-  // render "ABC.com" as "CBA.com", rather than "com.CBA".
+  // If the current contents is a URL, turn on special URL rendering mode in
+  // RenderText.
   bool text_is_url = model()->CurrentTextIsURL();
-  GetRenderText()->SetDirectionalityMode(text_is_url
-                                             ? gfx::DIRECTIONALITY_FORCE_LTR
-                                             : gfx::DIRECTIONALITY_FROM_TEXT);
+  GetRenderText()->SetDirectionalityMode(
+      text_is_url ? gfx::DIRECTIONALITY_AS_URL : gfx::DIRECTIONALITY_FROM_TEXT);
   SetStyle(gfx::STRIKE, false);
   UpdateTextStyle(text(), model()->client()->GetSchemeClassifier());
 }
@@ -768,6 +770,8 @@ bool OmniboxViewViews::HandleAccessibleAction(
 
 void OmniboxViewViews::OnFocus() {
   views::Textfield::OnFocus();
+  model()->SetPermanentText(
+      controller()->GetToolbarModel()->GetFormattedURL(nullptr));
   // TODO(oshima): Get control key state.
   model()->OnSetFocus(false);
   // Don't call controller()->OnSetFocus, this view has already acquired focus.
@@ -790,7 +794,7 @@ void OmniboxViewViews::OnFocus() {
 // session, we don't want to wait until the user is in the middle of editing
 // or navigating, because we'd like to show them the promo at the time when
 // it would be immediately useful.
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
   if (controller()->GetToolbarModel()->ShouldDisplayURL()) {
     feature_engagement::NewTabTrackerFactory::GetInstance()
         ->GetForProfile(location_bar_view_->profile())
@@ -1035,10 +1039,7 @@ void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardType clipboard_type) {
     UMA_HISTOGRAM_COUNTS(OmniboxEditModel::kCutOrCopyAllTextHistogram, 1);
 
   ui::ScopedClipboardWriter scoped_clipboard_writer(clipboard_type);
-  if (write_url)
-    scoped_clipboard_writer.WriteURL(selected_text);
-  else
-    scoped_clipboard_writer.WriteText(selected_text);
+  scoped_clipboard_writer.WriteText(selected_text);
 }
 
 void OmniboxViewViews::OnWriteDragData(ui::OSExchangeData* data) {
@@ -1095,7 +1096,8 @@ int OmniboxViewViews::OnDrop(const ui::OSExchangeData& data) {
   } else if (data.HasString()) {
     base::string16 text;
     if (data.GetString(&text)) {
-      base::string16 collapsed_text(base::CollapseWhitespace(text, true));
+      base::string16 collapsed_text(
+          StripJavascriptSchemas(base::CollapseWhitespace(text, true)));
       if (model()->CanPasteAndGo(collapsed_text))
         model()->PasteAndGo(collapsed_text);
       return ui::DragDropTypes::DRAG_COPY;
@@ -1154,6 +1156,8 @@ void OmniboxViewViews::OnCompositingEnded(ui::Compositor* compositor) {
 
 void OmniboxViewViews::OnCompositingLockStateChanged(
     ui::Compositor* compositor) {}
+
+void OmniboxViewViews::OnCompositingChildResizing(ui::Compositor* compositor) {}
 
 void OmniboxViewViews::OnCompositingShuttingDown(ui::Compositor* compositor) {
   scoped_observer_.RemoveAll();

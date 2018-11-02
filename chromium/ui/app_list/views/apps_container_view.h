@@ -9,8 +9,8 @@
 
 #include <vector>
 
+#include "ash/app_list/model/app_list_folder_item.h"
 #include "base/macros.h"
-#include "ui/app_list/app_list_folder_item.h"
 #include "ui/app_list/views/app_list_page.h"
 #include "ui/app_list/views/top_icon_animation_view.h"
 
@@ -31,7 +31,8 @@ class FolderBackgroundView;
 // AppsContainerView contains a root level AppsGridView to render the root level
 // app items, and a AppListFolderView to render the app items inside the
 // active folder. Only one if them is visible to user at any time.
-class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
+class APP_LIST_EXPORT AppsContainerView : public AppListPage,
+                                          public TopIconAnimationObserver {
  public:
   AppsContainerView(AppListMainView* app_list_main_view, AppListModel* model);
   ~AppsContainerView() override;
@@ -131,6 +132,9 @@ class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
   size_t top_icon_animation_pending_count_ = 0u;
 
   const bool is_fullscreen_app_list_enabled_;
+
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppsContainerView);
 };

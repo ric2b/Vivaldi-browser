@@ -16,6 +16,14 @@
 #include "gpu/ipc/client/gpu_memory_buffer_impl_native_pixmap.h"
 #endif
 
+#if defined(OS_WIN)
+#include "gpu/ipc/client/gpu_memory_buffer_impl_dxgi.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "gpu/ipc/client/gpu_memory_buffer_impl_android_hardware_buffer.h"
+#endif
+
 namespace gpu {
 
 GpuMemoryBufferImpl::GpuMemoryBufferImpl(gfx::GpuMemoryBufferId id,
@@ -53,6 +61,16 @@ std::unique_ptr<GpuMemoryBufferImpl> GpuMemoryBufferImpl::CreateFromHandle(
 #if defined(OS_LINUX)
     case gfx::NATIVE_PIXMAP:
       return GpuMemoryBufferImplNativePixmap::CreateFromHandle(
+          handle, size, format, usage, callback);
+#endif
+#if defined(OS_WIN)
+    case gfx::DXGI_SHARED_HANDLE:
+      return GpuMemoryBufferImplDXGI::CreateFromHandle(handle, size, format,
+                                                       usage, callback);
+#endif
+#if defined(OS_ANDROID)
+    case gfx::ANDROID_HARDWARE_BUFFER:
+      return GpuMemoryBufferImplAndroidHardwareBuffer::CreateFromHandle(
           handle, size, format, usage, callback);
 #endif
     default:

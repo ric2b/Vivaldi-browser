@@ -27,7 +27,7 @@ QuicSpdyClientStream::QuicSpdyClientStream(QuicStreamId id,
       session_(session),
       has_preliminary_headers_(false) {}
 
-QuicSpdyClientStream::~QuicSpdyClientStream() {}
+QuicSpdyClientStream::~QuicSpdyClientStream() = default;
 
 void QuicSpdyClientStream::OnInitialHeadersComplete(
     bool fin,
@@ -130,7 +130,7 @@ void QuicSpdyClientStream::OnDataAvailable() {
 size_t QuicSpdyClientStream::SendRequest(SpdyHeaderBlock headers,
                                          QuicStringPiece body,
                                          bool fin) {
-  QuicConnection::ScopedPacketBundler bundler(
+  QuicConnection::ScopedPacketFlusher flusher(
       session_->connection(), QuicConnection::SEND_ACK_IF_QUEUED);
   bool send_fin_with_headers = fin && body.empty();
   size_t bytes_sent = body.size();

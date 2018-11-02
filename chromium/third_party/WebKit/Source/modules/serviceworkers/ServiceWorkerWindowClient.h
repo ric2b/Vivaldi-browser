@@ -38,12 +38,12 @@ class MODULES_EXPORT ServiceWorkerWindowClient final
   ScriptPromise focus(ScriptState*);
   ScriptPromise navigate(ScriptState*, const String& url);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   explicit ServiceWorkerWindowClient(const WebServiceWorkerClientInfo&);
 
-  WebPageVisibilityState page_visibility_state_;
+  mojom::PageVisibilityState page_visibility_state_;
   bool is_focused_;
 };
 

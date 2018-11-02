@@ -20,6 +20,8 @@ scripts_for_json5_files = [
   "$_scripts_dir/name_utilities.py",
   "$_scripts_dir/template_expander.py",
   "$_scripts_dir/templates/macros.tmpl",
+  "$_scripts_dir/core/css/field_alias_expander.py",
+  "$_scripts_dir/core/css/properties/templates/style_builder_functions.tmpl",
 ]
 
 css_properties_files =
@@ -39,22 +41,22 @@ make_names_files = scripts_for_json5_files + [
 make_qualified_names_files =
     scripts_for_json5_files + [
       "$_scripts_dir/make_qualified_names.py",
-      "$_scripts_dir/templates/MakeQualifiedNames.cpp.tmpl",
-      "$_scripts_dir/templates/MakeQualifiedNames.h.tmpl",
+      "$_scripts_dir/templates/make_qualified_names.cc.tmpl",
+      "$_scripts_dir/templates/make_qualified_names.h.tmpl",
     ]
 
 make_element_factory_files =
     make_qualified_names_files + [
       "$_scripts_dir/make_element_factory.py",
-      "$_scripts_dir/templates/ElementFactory.cpp.tmpl",
-      "$_scripts_dir/templates/ElementFactory.h.tmpl",
+      "$_scripts_dir/templates/element_factory.cc.tmpl",
+      "$_scripts_dir/templates/element_factory.h.tmpl",
     ]
 
 make_element_type_helpers_files =
     make_qualified_names_files + [
       "$_scripts_dir/make_element_type_helpers.py",
-      "$_scripts_dir/templates/ElementTypeHelpers.cpp.tmpl",
-      "$_scripts_dir/templates/ElementTypeHelpers.h.tmpl",
+      "$_scripts_dir/templates/element_type_helpers.cc.tmpl",
+      "$_scripts_dir/templates/element_type_helpers.h.tmpl",
     ]
 
 make_trie_helpers_files =
@@ -121,6 +123,9 @@ template("process_json5_files") {
     if (defined(invoker.other_args)) {
       args += invoker.other_args
     }
+    if (snake_case_source_files) {
+      args += [ "--snake-case-source-files" ]
+    }
 
     if (defined(invoker.deps)) {
       deps = invoker.deps
@@ -183,7 +188,10 @@ template("code_generator") {
 template("css_properties") {
   process_json5_files(target_name) {
     script = invoker.script
-    in_files = [ "css/CSSProperties.json5" ]
+    in_files = [
+      "css/CSSProperties.json5",
+      "css/ComputedStyleFieldAliases.json5",
+    ]
     if (defined(invoker.in_files)) {
       in_files += invoker.in_files
     }
@@ -202,10 +210,16 @@ template("css_properties") {
 # Template to run the make_names script. This is a special case of
 # process_json5_files.
 #   in_files: input files to pass to the script
-#   outputs: expected results
+#   output_dir: output directory
 #   deps [optional]:
 #     Dependencies. See process_json5_files for definition.
 template("make_names") {
+  output_dir = invoker.output_dir
+  outputs = process_file_template(invoker.in_files,
+                                  [
+                                    "$output_dir/{{source_name_part}}.cc",
+                                    "$output_dir/{{source_name_part}}.h",
+                                  ])
   process_json5_files(target_name) {
     script = "//third_party/WebKit/Source/build/scripts/make_names.py"
     other_inputs = make_names_files
@@ -213,7 +227,6 @@ template("make_names") {
                            [
                              "deps",
                              "in_files",
-                             "outputs",
                              "public_deps",
                              "visibility",
                            ])

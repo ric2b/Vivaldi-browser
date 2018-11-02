@@ -4,9 +4,7 @@
 
 #include "chrome/browser/chrome_device_client.h"
 
-#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
-#include "device/hid/hid_service.h"
 #include "device/usb/usb_service.h"
 
 using content::BrowserThread;
@@ -20,13 +18,4 @@ device::UsbService* ChromeDeviceClient::GetUsbService() {
   if (!usb_service_)
     usb_service_ = device::UsbService::Create();
   return usb_service_.get();
-}
-
-device::HidService* ChromeDeviceClient::GetHidService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-#if !defined(OS_ANDROID)
-  if (!hid_service_)
-    hid_service_ = device::HidService::Create();
-#endif
-  return hid_service_.get();
 }

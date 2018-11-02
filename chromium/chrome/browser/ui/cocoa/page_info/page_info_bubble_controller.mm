@@ -10,6 +10,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/mac/bind_objc_block.h"
+#include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/certificate_viewer.h"
@@ -23,14 +24,15 @@
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/browser/ui/cocoa/key_equivalent_constants.h"
-#import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
+#import "chrome/browser/ui/cocoa/location_bar/page_info_bubble_decoration.h"
 #import "chrome/browser/ui/cocoa/page_info/permission_selector_button.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/page_info/permission_menu_model.h"
 #import "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
@@ -48,7 +50,6 @@
 #import "ui/base/cocoa/flipped_view.h"
 #import "ui/base/cocoa/hover_image_button.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
@@ -68,68 +69,73 @@ namespace {
 
 // The default width of the window, in view coordinates. It may be larger to
 // fit the content.
-const CGFloat kDefaultWindowWidth = 320;
+constexpr CGFloat kDefaultWindowWidth = 320;
 
 // Padding around each section
-const CGFloat kSectionVerticalPadding = 20;
-const CGFloat kSectionHorizontalPadding = 16;
+constexpr CGFloat kSectionVerticalPadding = 20;
+constexpr CGFloat kSectionHorizontalPadding = 16;
 
 // Links are buttons with invisible padding, so we need to move them back to
 // align with other text.
-const CGFloat kLinkButtonXAdjustment = 1;
+constexpr CGFloat kLinkButtonXAdjustment = 1;
 
 // Built-in margin for NSButton to take into account.
-const CGFloat kNSButtonBuiltinMargin = 4;
+constexpr CGFloat kNSButtonBuiltinMargin = 4;
 
 // Security Section ------------------------------------------------------------
 
 // Spacing between security summary, security details, and cert decisions text.
-const CGFloat kSecurityParagraphSpacing = 12;
+constexpr CGFloat kSecurityParagraphSpacing = 12;
 
 // Site Settings Section -------------------------------------------------------
 
 // Square size of the permission images.
-const CGFloat kPermissionImageSize = 16;
+constexpr CGFloat kPermissionImageSize = 16;
 
 // Spacing between a permission image and the text.
-const CGFloat kPermissionImageSpacing = 6;
+constexpr CGFloat kPermissionImageSpacing = 6;
 
 // Minimum distance between the label and its corresponding menu.
-const CGFloat kMinSeparationBetweenLabelAndMenu = 16;
+constexpr CGFloat kMinSeparationBetweenLabelAndMenu = 16;
 
 // Square size of the permission delete button image.
-const CGFloat kPermissionDeleteImageSize = 16;
+constexpr CGFloat kPermissionDeleteImageSize = 16;
 
 // The spacing between individual permissions.
-const CGFloat kPermissionsVerticalSpacing = 16;
+constexpr CGFloat kPermissionsVerticalSpacing = 16;
 
 // Spacing to add after a permission label, either directly on top of
 // kPermissionsVerticalSpacing, or before additional text (e.g. "X in use" for
 // cookies).
-const CGFloat kPermissionLabelBottomPadding = 4;
+constexpr CGFloat kPermissionLabelBottomPadding = 4;
 
 // Amount to lower each permission icon to align the icon baseline with the
 // label text.
-const CGFloat kPermissionIconYAdjustment = 1;
+constexpr CGFloat kPermissionIconYAdjustment = 1;
 
 // Amount to lower each permission popup button to make its text align with the
 // permission label.
-const CGFloat kPermissionPopupButtonYAdjustment = 3;
+constexpr CGFloat kPermissionPopupButtonYAdjustment = 3;
 
 // Internal Page Bubble --------------------------------------------------------
 
 // Padding between the window frame and content for the internal page bubble.
-const CGFloat kInternalPageFramePadding = 10;
+constexpr CGFloat kInternalPageFramePadding = 10;
 
 // Spacing between the image and text for internal pages.
-const CGFloat kInternalPageImageSpacing = 10;
+constexpr CGFloat kInternalPageImageSpacing = 10;
 
 // -----------------------------------------------------------------------------
+
+// A unique tag given to chosen object views (e.g. to show a site has access to
+// a USB/Bluetooth device) in order to repopulate them on permissions updates.
+// This number must not be the same as any permission in ContentSettingsType.
+constexpr int kChosenObjectTag = CONTENT_SETTINGS_NUM_TYPES;
 
 // NOTE: This assumes that there will never be more than one page info
 // bubble shown, and that the one that is shown is associated with the current
 // window. This matches the behaviour in Views: see PageInfoBubbleView.
-bool g_is_bubble_showing = false;
+PageInfoBubbleController* g_page_info_bubble = nullptr;
 
 // Takes in the parent window, which should be a BrowserWindow, and gets the
 // proper anchor point for the bubble. The returned point is in screen
@@ -224,6 +230,10 @@ NSPoint AnchorPointForWindow(NSWindow* parent) {
 
 @implementation PageInfoBubbleController
 
++ (PageInfoBubbleController*)getPageInfoBubbleForTest {
+  return g_page_info_bubble;
+}
+
 - (CGFloat)defaultWindowWidth {
   return kDefaultWindowWidth;
 }
@@ -242,7 +252,6 @@ bool IsInternalURL(const GURL& url) {
   DCHECK(parentWindow);
 
   webContents_ = webContents;
-  permissionsPresent_ = NO;
   url_ = url;
 
   // Use an arbitrary height; it will be changed in performLayout.
@@ -284,7 +293,7 @@ bool IsInternalURL(const GURL& url) {
   BrowserWindowController* controller = [[self parentWindow] windowController];
   LocationBarViewMac* locationBar = [controller locationBarBridge];
   if (locationBar) {
-    decoration_ = locationBar->GetPageInfoDecoration();
+    decoration_ = locationBar->page_info_decoration();
     decoration_->SetActive(true);
   }
   }
@@ -428,6 +437,13 @@ bool IsInternalURL(const GURL& url) {
       [[FlippedView alloc] initWithFrame:[superview frame]]);
   [superview addSubview:siteSettingsSectionView];
 
+  permissionsView_ =
+      [[[FlippedView alloc] initWithFrame:[superview frame]] autorelease];
+  [siteSettingsSectionView addSubview:permissionsView_];
+
+  // The certificate section is created on demand.
+  certificateView_ = nil;
+
   // Initialize the two containers that hold the controls. The initial frames
   // are arbitrary, and will be adjusted after the controls are laid out.
   PageInfoUI::PermissionInfo info;
@@ -441,13 +457,6 @@ bool IsInternalURL(const GURL& url) {
                                IDS_PAGE_INFO_NUM_COOKIES, 0)];
   [cookiesView_ setLinkTarget:self
                    withAction:@selector(showCookiesAndSiteData:)];
-
-  permissionsView_ =
-      [[[FlippedView alloc] initWithFrame:[superview frame]] autorelease];
-  [siteSettingsSectionView addSubview:permissionsView_];
-
-  // The certificate section is created on demand.
-  certificateView_ = nil;
 
   // Create the link button to view site settings. Its position will be set in
   // performLayout.
@@ -624,6 +633,12 @@ bool IsInternalURL(const GURL& url) {
 // Layout all of the controls in the window. This should be called whenever
 // the content has changed.
 - (void)performLayout {
+  // Skip layout if the bubble is closing.
+  InfoBubbleWindow* bubbleWindow =
+      base::mac::ObjCCastStrict<InfoBubbleWindow>([self window]);
+  if ([bubbleWindow isClosing])
+    return;
+
   // Make the content at least as wide as the permissions view.
   CGFloat contentWidth =
       std::max([self defaultWindowWidth], NSWidth([permissionsView_ frame]));
@@ -650,7 +665,7 @@ bool IsInternalURL(const GURL& url) {
 }
 
 - (void)layoutSecuritySection {
-  // Start the layout with the first element. Margins are handled by the caller.
+  // Margins are handled by the caller.
   CGFloat yPos = 0;
 
   [self sizeTextFieldHeightToFit:securitySummaryField_];
@@ -661,8 +676,10 @@ bool IsInternalURL(const GURL& url) {
   yPos = [self setYPositionOfView:securityDetailsField_
                                to:yPos + kSecurityParagraphSpacing];
 
-  NSPoint helpOrigin =
-      NSMakePoint(kSectionHorizontalPadding - kLinkButtonXAdjustment, yPos);
+  // A common anchor point for link elements
+  CGFloat linkY = kSectionHorizontalPadding - kLinkButtonXAdjustment;
+
+  NSPoint helpOrigin = NSMakePoint(linkY, yPos);
   if (base::i18n::IsRTL()) {
     helpOrigin.x = NSWidth([contentView_ frame]) - helpOrigin.x -
                    NSWidth(connectionHelpButton_.frame);
@@ -674,46 +691,65 @@ bool IsInternalURL(const GURL& url) {
     DCHECK(resetDecisionsField_);
     yPos = [self setYPositionOfView:resetDecisionsField_
                                  to:yPos + kSecurityParagraphSpacing];
-    [resetDecisionsButton_
-        setFrameOrigin:NSMakePoint(NSMinX([resetDecisionsButton_ frame]) -
-                                       kLinkButtonXAdjustment,
-                                   yPos)];
+
+    NSPoint resetOrigin = NSMakePoint(linkY, yPos);
+    if (base::i18n::IsRTL()) {
+      resetOrigin.x = NSWidth([contentView_ frame]) - resetOrigin.x -
+                      NSWidth(resetDecisionsButton_.frame);
+    }
+    [resetDecisionsButton_ setFrameOrigin:resetOrigin];
     yPos = NSMaxY([resetDecisionsButton_ frame]);
   }
 
   if (changePasswordButton_) {
     NSPoint changePasswordButtonOrigin;
     NSPoint whitelistReuseButtonOrigin;
-    bool canFitInOneLine = NSWidth([changePasswordButton_ frame]) +
-                               NSWidth([whitelistPasswordReuseButton_ frame]) +
-                               kNSButtonBuiltinMargin <=
-                           NSWidth([contentView_ frame]);
-    bool isRTL = base::i18n::IsRTL();
+    CGFloat viewWidth = NSWidth([contentView_ frame]);
+    CGFloat changePasswordButtonWidth = NSWidth([changePasswordButton_ frame]);
+    CGFloat whitelistReuseButtonWidth =
+        NSWidth([whitelistPasswordReuseButton_ frame]);
     CGFloat horizontalPadding =
         kSectionHorizontalPadding - kNSButtonBuiltinMargin;
-    changePasswordButtonOrigin.x =
-        isRTL ? NSWidth([contentView_ frame]) -
-                    NSWidth([changePasswordButton_ frame]) - horizontalPadding
-              : horizontalPadding;
-    changePasswordButtonOrigin.y = yPos + kSecurityParagraphSpacing;
-    whitelistReuseButtonOrigin.x =
-        isRTL ? (canFitInOneLine
-                     ? changePasswordButtonOrigin.x - kNSButtonBuiltinMargin -
-                           NSWidth([whitelistPasswordReuseButton_ frame])
-                     : NSWidth([contentView_ frame]) -
-                           NSWidth([whitelistPasswordReuseButton_ frame]) -
-                           horizontalPadding)
-              : (canFitInOneLine ? changePasswordButtonOrigin.x +
-                                       NSWidth([changePasswordButton_ frame]) +
-                                       kNSButtonBuiltinMargin
-                                 : changePasswordButtonOrigin.x);
-    whitelistReuseButtonOrigin.y =
-        canFitInOneLine ? changePasswordButtonOrigin.y
-                        : yPos + NSHeight([changePasswordButton_ frame]);
+    bool canFitInOneLine = changePasswordButtonWidth +
+                               whitelistReuseButtonWidth +
+                               2 * horizontalPadding <=
+                           viewWidth;
+    bool isRTL = base::i18n::IsRTL();
+    // Buttons are left-aligned for LTR languages, and are right aligned for
+    // RTL languages. Button order follows OSX convention.
+    if (canFitInOneLine) {
+      whitelistReuseButtonOrigin.y = changePasswordButtonOrigin.y =
+          yPos + kSecurityParagraphSpacing;
+      if (isRTL) {
+        whitelistReuseButtonOrigin.x =
+            viewWidth - whitelistReuseButtonWidth - horizontalPadding;
+        changePasswordButtonOrigin.x =
+            whitelistReuseButtonOrigin.x - changePasswordButtonWidth;
+      } else {
+        whitelistReuseButtonOrigin.x = horizontalPadding;
+        changePasswordButtonOrigin.x =
+            whitelistReuseButtonOrigin.x + whitelistReuseButtonWidth;
+      }
+    } else {
+      // If these buttons cannot fit in one line, stack them vertically.
+      CGFloat buttonWidth = viewWidth - 2 * horizontalPadding;
+      whitelistReuseButtonOrigin.x = horizontalPadding;
+      whitelistReuseButtonOrigin.y = yPos + kSecurityParagraphSpacing;
+      [whitelistPasswordReuseButton_
+          setFrameSize:NSMakeSize(
+                           buttonWidth,
+                           NSHeight([whitelistPasswordReuseButton_ frame]))];
+      changePasswordButtonOrigin.x = horizontalPadding;
+      changePasswordButtonOrigin.y =
+          yPos + kSecurityParagraphSpacing +
+          NSHeight([whitelistPasswordReuseButton_ frame]);
+      [changePasswordButton_
+          setFrameSize:NSMakeSize(buttonWidth,
+                                  NSHeight([changePasswordButton_ frame]))];
+    }
     [changePasswordButton_ setFrameOrigin:changePasswordButtonOrigin];
     [whitelistPasswordReuseButton_ setFrameOrigin:whitelistReuseButtonOrigin];
-    yPos =
-        NSMaxY([whitelistPasswordReuseButton_ frame]) - kNSButtonBuiltinMargin;
+    yPos = NSMaxY([changePasswordButton_ frame]) - kNSButtonBuiltinMargin;
   }
 
   // Resize the height based on contents.
@@ -721,26 +757,25 @@ bool IsInternalURL(const GURL& url) {
 }
 
 - (void)layoutSiteSettingsSection {
-  // Start the layout with the first element. Margins are handled by the caller.
-  CGFloat yPos = kSectionVerticalPadding;
+  // Margins are handled by the caller.
+  CGFloat yPos = 0;
+
+  yPos = [self setYPositionOfView:permissionsView_ to:yPos] +
+         kPermissionsVerticalSpacing;
 
   if (certificateView_) {
     yPos = [self setYPositionOfView:certificateView_ to:yPos] +
            kPermissionsVerticalSpacing;
   }
 
-  yPos = [self setYPositionOfView:cookiesView_ to:yPos];
+  yPos =
+      [self setYPositionOfView:cookiesView_ to:yPos] + kSectionVerticalPadding;
 
-  if (permissionsPresent_) {
-    // Put the permission info just below the link button.
-    yPos = [self setYPositionOfView:permissionsView_ to:yPos];
-  }
-
-  yPos = [self layoutViewAtRTLStart:siteSettingsButton_ withYPosition:yPos];
+  yPos = [self layoutViewAtRTLStart:siteSettingsButton_ withYPosition:yPos] +
+         kSectionVerticalPadding;
 
   // Resize the height based on contents.
-  [self setHeightOfView:siteSettingsSectionView_
-                     to:yPos + kSectionVerticalPadding];
+  [self setHeightOfView:siteSettingsSectionView_ to:yPos];
 }
 
 // Adjust the size of the window to match the size of the content, and position
@@ -924,50 +959,58 @@ bool IsInternalURL(const GURL& url) {
                          toView:securitySectionView_];
       [resetDecisionsButton_ setTarget:self];
       [resetDecisionsButton_ setAction:@selector(resetCertificateDecisions:)];
-    }
 
-    if (PageInfoUI::ShouldShowCertificateLink()) {
-      bool isValid = (identityInfo.identity_status !=
-                      PageInfo::SITE_IDENTITY_STATUS_ERROR);
-      NSString* linkText = l10n_util::GetNSString(
-          isValid ? IDS_PAGE_INFO_CERTIFICATE_VALID_LINK
-                  : IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK);
-
-      certificateView_ =
-          [self addInspectLinkToView:siteSettingsSectionView_
-                         sectionIcon:NSImageFromImageSkia(
-                                         PageInfoUI::GetCertificateIcon())
-                        sectionTitle:l10n_util::GetStringUTF16(
-                                         IDS_PAGE_INFO_CERTIFICATE)
-                            linkText:linkText];
-      if (isValid) {
-        [certificateView_
-            setLinkToolTip:l10n_util::GetNSStringF(
-                               IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP,
-                               base::UTF8ToUTF16(
-                                   certificate_->issuer().GetDisplayName()))];
+      if (base::i18n::IsRTL()) {
+        resetDecisionsField_.alignment = NSRightTextAlignment;
       }
-
-      [certificateView_ setLinkTarget:self
-                           withAction:@selector(showCertificateInfo:)];
     }
+
+    // Show information about the page's certificate.
+    bool isValid =
+        (identityInfo.identity_status != PageInfo::SITE_IDENTITY_STATUS_ERROR);
+    NSString* linkText = l10n_util::GetNSString(
+        isValid ? IDS_PAGE_INFO_CERTIFICATE_VALID_LINK
+                : IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK);
+
+    certificateView_ =
+        [self addInspectLinkToView:siteSettingsSectionView_
+                       sectionIcon:NSImageFromImageSkia(
+                                       PageInfoUI::GetCertificateIcon())
+                      sectionTitle:l10n_util::GetStringUTF16(
+                                       IDS_PAGE_INFO_CERTIFICATE)
+                          linkText:linkText];
+    if (isValid) {
+      [certificateView_
+          setLinkToolTip:l10n_util::GetNSStringF(
+                             IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP,
+                             base::UTF8ToUTF16(
+                                 certificate_->issuer().GetDisplayName()))];
+    } else {
+      [certificateView_
+          setLinkToolTip:l10n_util::GetNSString(
+                             IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK_TOOLTIP)];
+    }
+
+    [certificateView_ setLinkTarget:self
+                         withAction:@selector(showCertificateInfo:)];
   }
   if (identityInfo.show_change_password_buttons) {
-    changePasswordButton_ =
-        [ButtonUtils buttonWithTitle:l10n_util::GetNSString(
-                                         IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON)
-                              action:@selector(changePasswordDecisions:)
-                              target:securitySectionView_];
-    [changePasswordButton_ sizeToFit];
-    [changePasswordButton_ setKeyEquivalent:kKeyEquivalentReturn];
-    [securitySectionView_ addSubview:changePasswordButton_];
     whitelistPasswordReuseButton_ = [ButtonUtils
         buttonWithTitle:l10n_util::GetNSString(
                             IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON)
                  action:@selector(whitelistPasswordReuseDecisions:)
-                 target:securitySectionView_];
+                 target:self];
     [whitelistPasswordReuseButton_ sizeToFit];
+    [whitelistPasswordReuseButton_ setKeyEquivalent:kKeyEquivalentEscape];
     [securitySectionView_ addSubview:whitelistPasswordReuseButton_];
+    changePasswordButton_ =
+        [ButtonUtils buttonWithTitle:l10n_util::GetNSString(
+                                         IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON)
+                              action:@selector(changePasswordDecisions:)
+                              target:self];
+    [changePasswordButton_ sizeToFit];
+    [changePasswordButton_ setKeyEquivalent:kKeyEquivalentReturn];
+    [securitySectionView_ addSubview:changePasswordButton_];
   }
 
   [self performLayout];
@@ -1004,6 +1047,9 @@ bool IsInternalURL(const GURL& url) {
                point.x + maxTitleWidth + kSectionHorizontalPadding);
   [view setFrame:containerFrame];
   [view addSubview:button.get()];
+
+  // Tag the button with the permission type so it can be updated later.
+  [button setTag:permissionInfo.type];
   return button.get();
 }
 
@@ -1029,6 +1075,7 @@ bool IsInternalURL(const GURL& url) {
                                             kSectionHorizontalPadding);
   [view setFrame:containerFrame];
   [view addSubview:button.get()];
+  [button setTag:kChosenObjectTag];
   return button.get();
 }
 
@@ -1249,6 +1296,8 @@ bool IsInternalURL(const GURL& url) {
                                            toView:view
                                           atPoint:position];
   }
+  [imageView setTag:kChosenObjectTag];
+  [label setTag:kChosenObjectTag];
 
   [view setFrameSize:NSMakeSize(viewWidth, NSHeight([view frame]))];
 
@@ -1293,12 +1342,82 @@ bool IsInternalURL(const GURL& url) {
 
 - (void)setPermissionInfo:(const PermissionInfoList&)permissionInfoList
          andChosenObjects:(ChosenObjectInfoList)chosenObjectInfoList {
-  [permissionsView_ setSubviews:[NSArray array]];
   NSPoint controlOrigin = NSMakePoint(kSectionHorizontalPadding, 0);
 
-  permissionsPresent_ = YES;
+  // If |permissionsView_| is already populated, just handle updates to
+  // permissions made by the user here. This will avoid removing/adding new
+  // views (and thus breaking the responder chain), and also avoid immediately
+  // removing permissions set back to the default, which could be user error.
+  // Note that "update" means setPermissionInfo will only change the title of
+  // the permission |PermissionSelectorButton|. This is OK because it is not
+  // possible for the following to occur without closing the Page Info bubble:
+  //   - a permission gets changed away from the factory default (and thus needs
+  //     to be shown in Page Info)
+  //   - a permission's source changes (and becomes disabled / needs to show a
+  //     reason).
+  if ([permissionsView_ subviews].count != 0) {
+    NSView* view = nil;
+    // Remove all the chosen object views. They will be repopulated if the site
+    // still has access to them.
+    while ((view = [permissionsView_ viewWithTag:kChosenObjectTag]))
+      [view removeFromSuperview];
 
-  if (permissionInfoList.size() > 0 || chosenObjectInfoList.size() > 0) {
+    for (view in [permissionsView_ subviews]) {
+      // Skip views that don't need to be modified (default tags are -1 or 0).
+      if ([view tag] <= 0)
+        continue;
+
+      ContentSettingsType permissionType =
+          static_cast<ContentSettingsType>([view tag]);
+
+      PermissionSelectorButton* button =
+          base::mac::ObjCCastStrict<PermissionSelectorButton>(view);
+      const int yOrigin = [button frame].origin.y;
+      // Permissions set back to the factory default setting will disappear from
+      // |permissionInfoList|, so use |updated| to keep track of whether
+      // |button| has been updated with its new permission value yet.
+      bool updated = false;
+      for (const auto& permission : permissionInfoList) {
+        if (permissionType != permission.type)
+          continue;
+
+        updated = true;
+        [button setButtonTitle:permission profile:[self profile]];
+        break;
+      }
+
+      if (!updated) {
+        // Permissions that are no longer in |permissionInfoList| have been set
+        // back to factory default settings.
+        PageInfoUI::PermissionInfo default_info;
+        default_info.type = permissionType;
+        default_info.setting = CONTENT_SETTING_DEFAULT;
+        default_info.default_setting =
+            content_settings::ContentSettingsRegistry::GetInstance()
+                ->Get(permissionType)
+                ->GetInitialDefaultSetting();
+        default_info.source = content_settings::SETTING_SOURCE_USER;
+        default_info.is_incognito = [self profile]->IsOffTheRecord();
+        [button setButtonTitle:default_info profile:[self profile]];
+      }
+
+      // Updating the text might have changed the width of the
+      // |PermissionSelectorRow|, so reposition here.
+      if (base::i18n::IsRTL()) {
+        [button setFrameOrigin:NSMakePoint(kSectionHorizontalPadding, yOrigin)];
+      } else {
+        [button setFrameOrigin:NSMakePoint(NSWidth([permissionsView_ frame]) -
+                                               kSectionHorizontalPadding -
+                                               NSWidth([button frame]),
+                                           yOrigin)];
+      }
+    }
+    if ([[permissionsView_ subviews] count] != 0) {
+      controlOrigin.y =
+          NSMaxY([[[permissionsView_ subviews] lastObject] frame]);
+    }
+  } else {
+    // Creates permissions views (if any) for the first time.
     for (const auto& permission : permissionInfoList) {
       controlOrigin.y += kPermissionsVerticalSpacing;
       NSPoint rowBottomRight = [self addPermission:permission
@@ -1306,17 +1425,19 @@ bool IsInternalURL(const GURL& url) {
                                            atPoint:controlOrigin];
       controlOrigin.y = rowBottomRight.y;
     }
-
-    for (auto& object : chosenObjectInfoList) {
-      controlOrigin.y += kPermissionsVerticalSpacing;
-      NSPoint rowBottomRight = [self addChosenObject:std::move(object)
-                                              toView:permissionsView_
-                                             atPoint:controlOrigin];
-      controlOrigin.y = rowBottomRight.y;
-    }
-
-    controlOrigin.y += kPermissionsVerticalSpacing;
   }
+
+  for (auto& object : chosenObjectInfoList) {
+    controlOrigin.y += kPermissionsVerticalSpacing;
+    NSPoint rowBottomRight = [self addChosenObject:std::move(object)
+                                            toView:permissionsView_
+                                           atPoint:controlOrigin];
+    controlOrigin.y = rowBottomRight.y;
+  }
+
+  // |permissionsView_| was updated here, so make sure keyboard access still
+  // works by updating the responder chain.
+  [[self window] recalculateKeyViewLoop];
 
   [permissionsView_ setFrameSize:NSMakeSize(NSWidth([permissionsView_ frame]),
                                             controlOrigin.y)];
@@ -1329,18 +1450,18 @@ PageInfoUIBridge::PageInfoUIBridge(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       web_contents_(web_contents),
       bubble_controller_(nil) {
-  DCHECK(!g_is_bubble_showing);
-  g_is_bubble_showing = true;
+  DCHECK(!g_page_info_bubble);
 }
 
 PageInfoUIBridge::~PageInfoUIBridge() {
-  DCHECK(g_is_bubble_showing);
-  g_is_bubble_showing = false;
+  DCHECK(g_page_info_bubble);
+  g_page_info_bubble = nullptr;
 }
 
 void PageInfoUIBridge::set_bubble_controller(
     PageInfoBubbleController* controller) {
   bubble_controller_ = controller;
+  g_page_info_bubble = controller;
 }
 
 void PageInfoUIBridge::SetIdentityInfo(
@@ -1380,7 +1501,7 @@ void ShowPageInfoDialogImpl(Browser* browser,
                             content::WebContents* web_contents,
                             const GURL& virtual_url,
                             const security_state::SecurityInfo& security_info) {
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (chrome::ShowAllDialogsWithViewsToolkit()) {
     chrome::ShowPageInfoBubbleViews(browser, web_contents, virtual_url,
                                     security_info);
     return;
@@ -1389,7 +1510,7 @@ void ShowPageInfoDialogImpl(Browser* browser,
   // Don't show the bubble if it's already being shown. Since this method is
   // called each time the location icon is clicked, each click toggles the
   // bubble in and out.
-  if (g_is_bubble_showing)
+  if (g_page_info_bubble)
     return;
 
   // Create the bridge. This will be owned by the bubble controller.
@@ -1397,7 +1518,7 @@ void ShowPageInfoDialogImpl(Browser* browser,
   NSWindow* parent = browser->window()->GetNativeWindow();
 
   // Create the bubble controller. It will dealloc itself when it closes,
-  // resetting |g_is_bubble_showing|.
+  // resetting |g_page_info_bubble|.
   PageInfoBubbleController* bubble_controller =
       [[PageInfoBubbleController alloc] initWithParentWindow:parent
                                             pageInfoUIBridge:bridge

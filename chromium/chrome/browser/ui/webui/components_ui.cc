@@ -63,6 +63,7 @@ content::WebUIDataSource* CreateComponentsUIHTMLSource(Profile* profile) {
   source->SetJsonPath("strings.js");
   source->AddResourcePath("components.js", IDR_COMPONENTS_JS);
   source->SetDefaultResource(IDR_COMPONENTS_HTML);
+  source->UseGzip();
   return source;
 }
 
@@ -196,8 +197,8 @@ std::unique_ptr<base::ListValue> ComponentsUI::LoadComponents() {
 // static
 base::RefCountedMemory* ComponentsUI::GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor) {
-  return ResourceBundle::GetSharedInstance().
-      LoadDataResourceBytesForScale(IDR_PLUGINS_FAVICON, scale_factor);
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+      IDR_PLUGINS_FAVICON, scale_factor);
 }
 
 base::string16 ComponentsUI::ComponentEventToString(Events event) {

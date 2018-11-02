@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "cc/output/output_surface_client.h"
-#include "cc/output/output_surface_frame.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/buffer_queue.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
@@ -73,7 +73,7 @@ GpuSurfacelessBrowserCompositorOutputSurface::GetOverlayBufferFormat() const {
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
-    cc::OutputSurfaceFrame frame) {
+    viz::OutputSurfaceFrame frame) {
   DCHECK(buffer_queue_);
   DCHECK(reshape_size_ == frame.size);
   // TODO(ccameron): What if a swap comes again before OnGpuSwapBuffersCompleted
@@ -111,20 +111,20 @@ void GpuSurfacelessBrowserCompositorOutputSurface::Reshape(
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
-    const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result,
+    const gfx::SwapResponse& response,
     const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
+  gfx::SwapResponse modified_response(response);
   bool force_swap = false;
-  if (result == gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
+  if (response.result == gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
     // Even through the swap failed, this is a fixable error so we can pretend
     // it succeeded to the rest of the system.
-    result = gfx::SwapResult::SWAP_ACK;
+    modified_response.result = gfx::SwapResult::SWAP_ACK;
     buffer_queue_->RecreateBuffers();
     force_swap = true;
   }
   buffer_queue_->PageFlipComplete();
   GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
-      latency_info, result, params_mac);
+      modified_response, params_mac);
   if (force_swap)
     client_->SetNeedsRedrawRect(gfx::Rect(swap_size_));
 }

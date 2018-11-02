@@ -52,7 +52,7 @@ struct SerializedResource;
 class PLATFORM_EXPORT MHTMLArchive final
     : public GarbageCollected<MHTMLArchive> {
  public:
-  static MHTMLArchive* Create(const KURL&, PassRefPtr<const SharedBuffer>);
+  static MHTMLArchive* Create(const KURL&, scoped_refptr<const SharedBuffer>);
 
   // Binary encoding results in smaller MHTML files but they might not work in
   // other browsers.
@@ -98,7 +98,7 @@ class PLATFORM_EXPORT MHTMLArchive final
   ArchiveResource* MainResource() { return main_resource_.Get(); }
   ArchiveResource* SubresourceForURL(const KURL&) const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   MHTMLArchive();

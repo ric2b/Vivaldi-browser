@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/overview/window_selector_controller.h"
@@ -68,8 +68,8 @@ extern const size_t kAccelerometerVerticalHingeUnstableAnglesTestDataLength;
 
 class TabletModeControllerTest : public AshTestBase {
  public:
-  TabletModeControllerTest() {}
-  ~TabletModeControllerTest() override {}
+  TabletModeControllerTest() = default;
+  ~TabletModeControllerTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -592,8 +592,8 @@ TEST_F(TabletModeControllerTest, InitializedWhileTabletModeSwitchOn) {
   chromeos::FakePowerManagerClient* power_manager_client =
       static_cast<chromeos::FakePowerManagerClient*>(
           chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
-  power_manager_client->set_tablet_mode(
-      chromeos::PowerManagerClient::TabletMode::ON);
+  power_manager_client->SetTabletMode(
+      chromeos::PowerManagerClient::TabletMode::ON, base::TimeTicks::Now());
   TabletModeController controller;
   EXPECT_FALSE(controller.IsTabletModeWindowManagerEnabled());
   // PowerManagerClient callback is a posted task.

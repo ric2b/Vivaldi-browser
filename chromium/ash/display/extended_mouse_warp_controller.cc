@@ -5,13 +5,13 @@
 #include "ash/display/extended_mouse_warp_controller.h"
 
 #include <cmath>
+#include <memory>
 
 #include "ash/display/display_util.h"
 #include "ash/display/shared_display_edge_indicator.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
@@ -82,7 +82,7 @@ ExtendedMouseWarpController::WarpRegion::WarpRegion(
       GetNativeEdgeBounds(b_ash_host, b_indicator_bounds);
 }
 
-ExtendedMouseWarpController::WarpRegion::~WarpRegion() {}
+ExtendedMouseWarpController::WarpRegion::~WarpRegion() = default;
 
 const gfx::Rect&
 ExtendedMouseWarpController::WarpRegion::GetIndicatorBoundsForTest(
@@ -116,7 +116,7 @@ ExtendedMouseWarpController::ExtendedMouseWarpController(
   }
 }
 
-ExtendedMouseWarpController::~ExtendedMouseWarpController() {}
+ExtendedMouseWarpController::~ExtendedMouseWarpController() = default;
 
 bool ExtendedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
   if (display::Screen::GetScreen()->GetNumDisplays() <= 1 || !enabled_)
@@ -212,7 +212,7 @@ ExtendedMouseWarpController::CreateWarpRegion(const display::Display& a,
       AdjustSourceEdgeBounds(b.bounds(), snap_barrier, &b_edge);
   }
 
-  return base::MakeUnique<WarpRegion>(a.id(), b.id(), a_edge, b_edge);
+  return std::make_unique<WarpRegion>(a.id(), b.id(), a_edge, b_edge);
 }
 
 }  // namespace ash

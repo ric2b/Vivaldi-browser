@@ -4,13 +4,13 @@
 
 #include "core/css/invalidation/StyleInvalidator.h"
 
+#include "core/css/StyleChangeReason.h"
 #include "core/css/invalidation/InvalidationSet.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/layout/LayoutObject.h"
@@ -167,7 +167,7 @@ PendingInvalidations& StyleInvalidator::EnsurePendingInvalidations(
   PendingInvalidationMap::AddResult add_result =
       pending_invalidation_map_.insert(&node, nullptr);
   if (add_result.is_new_entry)
-    add_result.stored_value->value = WTF::MakeUnique<PendingInvalidations>();
+    add_result.stored_value->value = std::make_unique<PendingInvalidations>();
   return *add_result.stored_value->value;
 }
 
@@ -178,7 +178,7 @@ StyleInvalidator::StyleInvalidator() {
   InvalidationSet::CacheTracingFlag();
 }
 
-StyleInvalidator::~StyleInvalidator() {}
+StyleInvalidator::~StyleInvalidator() = default;
 
 void StyleInvalidator::RecursionData::PushInvalidationSet(
     const InvalidationSet& invalidation_set) {
@@ -390,11 +390,10 @@ bool StyleInvalidator::Invalidate(Element& element,
   bool this_element_needs_style_recalc = CheckInvalidationSetsAgainstElement(
       element, recursion_data, sibling_data);
 
-  bool some_children_need_style_recalc = false;
   if (recursion_data.HasInvalidationSets() ||
-      element.ChildNeedsStyleInvalidation())
-    some_children_need_style_recalc =
-        InvalidateChildren(element, recursion_data);
+      element.ChildNeedsStyleInvalidation()) {
+    InvalidateChildren(element, recursion_data);
+  }
 
   if (this_element_needs_style_recalc) {
     DCHECK(!recursion_data.WholeSubtreeInvalid());
@@ -407,8 +406,8 @@ bool StyleInvalidator::Invalidate(Element& element,
     element.SetNeedsStyleRecalc(kSubtreeStyleChange,
                                 StyleChangeReasonForTracing::Create(
                                     StyleChangeReason::kStyleInvalidator));
-  if (recursion_data.InvalidatesSlotted() && isHTMLSlotElement(element))
-    InvalidateSlotDistributedElements(toHTMLSlotElement(element),
+  if (recursion_data.InvalidatesSlotted() && IsHTMLSlotElement(element))
+    InvalidateSlotDistributedElements(ToHTMLSlotElement(element),
                                       recursion_data);
 
   element.ClearChildNeedsStyleInvalidation();

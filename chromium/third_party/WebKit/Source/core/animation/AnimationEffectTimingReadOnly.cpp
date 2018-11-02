@@ -4,7 +4,7 @@
 
 #include "core/animation/AnimationEffectTimingReadOnly.h"
 
-#include "bindings/core/v8/UnrestrictedDoubleOrString.h"
+#include "bindings/core/v8/unrestricted_double_or_string.h"
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/KeyframeEffect.h"
 #include "platform/animation/TimingFunction.h"
@@ -43,9 +43,9 @@ double AnimationEffectTimingReadOnly::iterations() {
 void AnimationEffectTimingReadOnly::duration(
     UnrestrictedDoubleOrString& return_value) {
   if (std::isnan(parent_->SpecifiedTiming().iteration_duration)) {
-    return_value.setString("auto");
+    return_value.SetString("auto");
   } else {
-    return_value.setUnrestrictedDouble(
+    return_value.SetUnrestrictedDouble(
         parent_->SpecifiedTiming().iteration_duration * 1000);
   }
 }
@@ -62,8 +62,9 @@ String AnimationEffectTimingReadOnly::easing() {
   return parent_->SpecifiedTiming().timing_function->ToString();
 }
 
-DEFINE_TRACE(AnimationEffectTimingReadOnly) {
+void AnimationEffectTimingReadOnly::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

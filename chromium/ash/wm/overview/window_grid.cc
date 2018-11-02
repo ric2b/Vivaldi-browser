@@ -6,16 +6,18 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
 #include "ash/wm/overview/cleanup_animation_observer.h"
+#include "ash/wm/overview/rounded_rect_view.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_delegate.h"
@@ -23,7 +25,6 @@
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -79,39 +80,6 @@ const float kOverviewInsetRatio = 0.05f;
 
 // Additional vertical inset reserved for windows in overview mode.
 const float kOverviewVerticalInset = 0.1f;
-
-// A View having rounded corners and a specified background color which is
-// only painted within the bounds defined by the rounded corners.
-// TODO(varkha): This duplicates code from RoundedImageView. Refactor these
-//               classes and move into ui/views.
-class RoundedRectView : public views::View {
- public:
-  RoundedRectView(int corner_radius, SkColor background)
-      : corner_radius_(corner_radius), background_(background) {}
-
-  ~RoundedRectView() override {}
-
-  void OnPaint(gfx::Canvas* canvas) override {
-    views::View::OnPaint(canvas);
-
-    SkScalar radius = SkIntToScalar(corner_radius_);
-    const SkScalar kRadius[8] = {radius, radius, radius, radius,
-                                 radius, radius, radius, radius};
-    SkPath path;
-    gfx::Rect bounds(size());
-    bounds.set_height(bounds.height() + radius);
-    path.addRoundRect(gfx::RectToSkRect(bounds), kRadius);
-
-    canvas->ClipPath(path, true);
-    canvas->DrawColor(background_);
-  }
-
- private:
-  int corner_radius_;
-  SkColor background_;
-
-  DISALLOW_COPY_AND_ASSIGN(RoundedRectView);
-};
 
 // BackgroundWith1PxBorder renders a solid background color, with a one pixel
 // border with rounded corners. This accounts for the scaling of the canvas, so
@@ -239,7 +207,7 @@ views::Widget* CreateBackgroundWidget(aura::Window* root_window,
   } else {
     views::View* content_view =
         new RoundedRectView(border_radius, SK_ColorTRANSPARENT);
-    content_view->SetBackground(base::MakeUnique<BackgroundWith1PxBorder>(
+    content_view->SetBackground(std::make_unique<BackgroundWith1PxBorder>(
         background_color, border_color, border_thickness, border_radius));
     widget->SetContentsView(content_view);
   }
@@ -249,8 +217,8 @@ views::Widget* CreateBackgroundWidget(aura::Window* root_window,
   return widget;
 }
 
-bool IsMinimizedStateType(wm::WindowStateType type) {
-  return type == wm::WINDOW_STATE_TYPE_MINIMIZED;
+bool IsMinimizedStateType(mojom::WindowStateType type) {
+  return type == mojom::WindowStateType::MINIMIZED;
 }
 
 }  // namespace
@@ -277,11 +245,11 @@ WindowGrid::WindowGrid(aura::Window* root_window,
     window_observer_.Add(window);
     window_state_observer_.Add(wm::GetWindowState(window));
     window_list_.push_back(
-        base::MakeUnique<WindowSelectorItem>(window, window_selector_, this));
+        std::make_unique<WindowSelectorItem>(window, window_selector_, this));
   }
 }
 
-WindowGrid::~WindowGrid() {}
+WindowGrid::~WindowGrid() = default;
 
 void WindowGrid::Shutdown() {
   for (const auto& window : window_list_)
@@ -580,6 +548,21 @@ void WindowGrid::SetBoundsAndUpdatePositionsIgnoringWindow(
   PositionWindows(true /* animate */, ignored_item);
 }
 
+void WindowGrid::SetSelectionWidgetVisibility(bool visible) {
+  if (!selection_widget_)
+    return;
+
+  if (visible)
+    selection_widget_->Show();
+  else
+    selection_widget_->Hide();
+}
+
+void WindowGrid::UpdateCannotSnapWarningVisibility() {
+  for (auto& window_selector_item : window_list_)
+    window_selector_item->UpdateCannotSnapWarningVisibility();
+}
+
 void WindowGrid::OnWindowDestroying(aura::Window* window) {
   window_observer_.Remove(window);
   window_state_observer_.Remove(wm::GetWindowState(window));
@@ -614,7 +597,8 @@ void WindowGrid::OnWindowDestroying(aura::Window* window) {
 
 void WindowGrid::OnWindowBoundsChanged(aura::Window* window,
                                        const gfx::Rect& old_bounds,
-                                       const gfx::Rect& new_bounds) {
+                                       const gfx::Rect& new_bounds,
+                                       ui::PropertyChangeReason reason) {
   // During preparation, window bounds can change. Ignore bounds
   // change notifications in this case; we'll reposition soon.
   if (!prepared_for_overview_)
@@ -633,13 +617,13 @@ void WindowGrid::OnWindowBoundsChanged(aura::Window* window,
 }
 
 void WindowGrid::OnPostWindowStateTypeChange(wm::WindowState* window_state,
-                                             wm::WindowStateType old_type) {
+                                             mojom::WindowStateType old_type) {
   // During preparation, window state can change, e.g. updating shelf
   // visibility may show the temporarily hidden (minimized) panels.
   if (!prepared_for_overview_)
     return;
 
-  wm::WindowStateType new_type = window_state->GetStateType();
+  mojom::WindowStateType new_type = window_state->GetStateType();
   if (IsMinimizedStateType(old_type) == IsMinimizedStateType(new_type))
     return;
 

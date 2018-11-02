@@ -33,8 +33,8 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/fullscreen/Fullscreen.h"
-#include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/forms/HTMLFormControlElement.h"
 
 namespace blink {
 
@@ -50,7 +50,7 @@ static void SetFocusForDialog(HTMLDialogElement* dialog) {
   // currently specified.  This may change at any time.
   // See crbug/383230 and https://github.com/whatwg/html/issues/2393 .
   for (Node* node = FlatTreeTraversal::FirstChild(*dialog); node; node = next) {
-    next = isHTMLDialogElement(*node)
+    next = IsHTMLDialogElement(*node)
                ? FlatTreeTraversal::NextSkippingChildren(*node, dialog)
                : FlatTreeTraversal::Next(*node, dialog);
 
@@ -94,8 +94,6 @@ static void InertSubtreesChanged(Document& document) {
   // the tree. The most foolproof way is to clear the entire tree and rebuild
   // it, though a more clever way is probably possible.
   document.ClearAXObjectCache();
-  if (AXObjectCache* cache = document.AxObjectCache())
-    cache->ChildrenChanged(&document);
 }
 
 inline HTMLDialogElement::HTMLDialogElement(Document& document)
@@ -108,19 +106,9 @@ inline HTMLDialogElement::HTMLDialogElement(Document& document)
 
 DEFINE_NODE_FACTORY(HTMLDialogElement)
 
-void HTMLDialogElement::close(const String& return_value,
-                              ExceptionState& exception_state) {
-  if (!FastHasAttribute(openAttr)) {
-    exception_state.ThrowDOMException(kInvalidStateError,
-                                      "The element does not have an 'open' "
-                                      "attribute, and therefore cannot be "
-                                      "closed.");
-    return;
-  }
-  CloseDialog(return_value);
-}
+void HTMLDialogElement::close(const String& return_value) {
+  // https://html.spec.whatwg.org/#close-the-dialog
 
-void HTMLDialogElement::CloseDialog(const String& return_value) {
   if (!FastHasAttribute(openAttr))
     return;
   SetBooleanAttribute(openAttr, false);
@@ -222,7 +210,7 @@ bool HTMLDialogElement::IsPresentationAttribute(
 
 void HTMLDialogElement::DefaultEventHandler(Event* event) {
   if (event->type() == EventTypeNames::cancel) {
-    CloseDialog();
+    close();
     event->SetDefaultHandled();
     return;
   }

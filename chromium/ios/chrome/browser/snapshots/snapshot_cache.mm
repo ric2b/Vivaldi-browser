@@ -11,6 +11,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#import "base/ios/crb_protocol_observers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/bind_objc_block.h"
@@ -25,6 +26,7 @@
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/snapshots/lru_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_internal.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache_observer.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 
@@ -32,7 +34,22 @@
 #error "This file requires ARC support."
 #endif
 
+// Protocol observers subclass that explicitly implements
+// <SnapshotCacheObserver>.
+@interface SnapshotCacheObservers : CRBProtocolObservers<SnapshotCacheObserver>
++ (instancetype)observers;
+@end
+
+@implementation SnapshotCacheObservers
++ (instancetype)observers {
+  return [self observersWithProtocol:@protocol(SnapshotCacheObserver)];
+}
+@end
+
 @interface SnapshotCache ()
+// List of observers to be notified of changes to the snapshot cache.
+@property(nonatomic, strong) SnapshotCacheObservers* observers;
+
 // Remove all UIImages from |lruCache_|.
 - (void)handleEnterBackground;
 // Remove all but adjacent UIImages from |lruCache_|.
@@ -140,7 +157,7 @@ UIImage* ReadImageForSessionFromDisk(NSString* session_id,
                                      ImageType image_type,
                                      ImageScale image_scale,
                                      const base::FilePath& cache_directory) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   // TODO(crbug.com/295891): consider changing back to -imageWithContentsOfFile
   // instead of -imageWithData if both rdar://15747161 and the bug incorrectly
   // reporting the image as damaged https://stackoverflow.com/q/5081297/5353
@@ -155,7 +172,7 @@ UIImage* ReadImageForSessionFromDisk(NSString* session_id,
 }
 
 void WriteImageToDisk(UIImage* image, const base::FilePath& file_path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   if (!image)
     return;
 
@@ -192,7 +209,7 @@ void ConvertAndSaveGreyImage(NSString* session_id,
                              ImageScale image_scale,
                              UIImage* color_image,
                              const base::FilePath& cache_directory) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   if (!color_image) {
     color_image = ReadImageForSessionFromDisk(session_id, IMAGE_TYPE_COLOR,
                                               image_scale, cache_directory);
@@ -243,6 +260,7 @@ void ConvertAndSaveGreyImage(NSString* session_id,
 }
 
 @synthesize pinnedIDs = pinnedIDs_;
+@synthesize observers = observers_;
 
 - (instancetype)init {
   base::FilePath cacheDirectory;
@@ -263,6 +281,8 @@ void ConvertAndSaveGreyImage(NSString* session_id,
 
     taskRunner_ = base::CreateSequencedTaskRunnerWithTraits(
         {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
+
+    observers_ = [SnapshotCacheObservers observers];
 
     [[NSNotificationCenter defaultCenter]
         addObserver:self
@@ -348,6 +368,8 @@ void ConvertAndSaveGreyImage(NSString* session_id,
     return;
 
   [lruCache_ setObject:image forKey:sessionID];
+
+  [self.observers snapshotCache:self didUpdateSnapshotForTab:sessionID];
 
   // Copy ivars used by the block so that it does not reference |self|.
   const base::FilePath cacheDirectory = cacheDirectory_;
@@ -612,6 +634,14 @@ void ConvertAndSaveGreyImage(NSString* session_id,
         ConvertAndSaveGreyImage(sessionID, snapshotsScale,
                                 backgroundingColorImage, cacheDirectory);
       }));
+}
+
+- (void)addObserver:(id<SnapshotCacheObserver>)observer {
+  [self.observers addObserver:observer];
+}
+
+- (void)removeObserver:(id<SnapshotCacheObserver>)observer {
+  [self.observers removeObserver:observer];
 }
 
 - (void)shutdown {

@@ -17,7 +17,7 @@
 namespace content {
 
 namespace {
-LayoutTestRenderThreadObserver* g_instance = NULL;
+LayoutTestRenderThreadObserver* g_instance = nullptr;
 }
 
 // static
@@ -38,11 +38,7 @@ LayoutTestRenderThreadObserver::LayoutTestRenderThreadObserver() {
 
 LayoutTestRenderThreadObserver::~LayoutTestRenderThreadObserver() {
   CHECK(g_instance == this);
-  g_instance = NULL;
-}
-
-void LayoutTestRenderThreadObserver::OnRenderProcessShutdown() {
-  test_interfaces_.reset();
+  g_instance = nullptr;
 }
 
 bool LayoutTestRenderThreadObserver::OnControlMessageReceived(

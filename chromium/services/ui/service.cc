@@ -31,6 +31,7 @@
 #include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/gpu_host.h"
+#include "services/ui/ws/remote_event_dispatcher.h"
 #include "services/ui/ws/threaded_image_cursors.h"
 #include "services/ui/ws/threaded_image_cursors_factory.h"
 #include "services/ui/ws/user_activity_monitor.h"
@@ -102,10 +103,10 @@ class ThreadedImageCursorsFactoryImpl : public ws::ThreadedImageCursorsFactory {
     // point to it.
     if (!resource_runner_) {
       resource_runner_ = base::ThreadTaskRunnerHandle::Get();
-      image_cursors_set_ = base::MakeUnique<ui::ImageCursorsSet>();
+      image_cursors_set_ = std::make_unique<ui::ImageCursorsSet>();
       image_cursors_set_weak_ptr_ = image_cursors_set_->GetWeakPtr();
     }
-    return base::MakeUnique<ws::ThreadedImageCursors>(
+    return std::make_unique<ws::ThreadedImageCursors>(
         resource_runner_, image_cursors_set_weak_ptr_);
   }
 
@@ -141,11 +142,12 @@ Service::InProcessConfig::~InProcessConfig() = default;
 Service::Service(const InProcessConfig* config)
     : is_in_process_(config != nullptr),
       threaded_image_cursors_factory_(
-          base::MakeUnique<ThreadedImageCursorsFactoryImpl>(config)),
+          std::make_unique<ThreadedImageCursorsFactoryImpl>(config)),
       test_config_(false),
       ime_registrar_(&ime_driver_),
       discardable_shared_memory_manager_(config ? config->memory_manager
-                                                : nullptr) {}
+                                                : nullptr),
+      should_host_viz_(!config || config->should_host_viz) {}
 
 Service::~Service() {
   in_destructor_ = true;
@@ -155,12 +157,15 @@ Service::~Service() {
   // be destroyed before GpuState as well.
   window_server_.reset();
 
-#if defined(USE_OZONE)
+  // Must be destroyed before calling OzonePlatform::Shutdown().
+  threaded_image_cursors_factory_.reset();
+
 #if defined(OS_CHROMEOS)
   // InputDeviceController uses ozone.
   input_device_controller_.reset();
 #endif
 
+#if defined(USE_OZONE)
   OzonePlatform::Shutdown();
 #endif
 }
@@ -182,7 +187,8 @@ bool Service::InitializeResources(service_manager::Connector* connector) {
     return false;
   }
 
-  ui::RegisterPathProvider();
+  if (running_standalone_)
+    ui::RegisterPathProvider();
 
   // Initialize resource bundle with 1x and 2x cursor bitmaps.
   ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
@@ -252,11 +258,11 @@ void Service::OnStart() {
   }
 
   DCHECK(gfx::ClientNativePixmapFactory::GetInstance());
+#endif
 
 #if defined(OS_CHROMEOS)
-  input_device_controller_ = base::MakeUnique<InputDeviceController>();
+  input_device_controller_ = std::make_unique<InputDeviceController>();
   input_device_controller_->AddInterface(&registry_);
-#endif
 #endif
 
 // TODO(rjkroege): Enter sandbox here before we start threads in GpuState
@@ -271,16 +277,28 @@ void Service::OnStart() {
   // so keep this line below both of those.
   input_device_server_.RegisterAsObserver();
 
-  window_server_ = base::MakeUnique<ws::WindowServer>(this);
-  std::unique_ptr<ws::GpuHost> gpu_host =
-      base::MakeUnique<ws::DefaultGpuHost>(window_server_.get());
-  window_server_->SetGpuHost(std::move(gpu_host));
+  window_server_ = base::MakeUnique<ws::WindowServer>(this, should_host_viz_);
+  if (should_host_viz_) {
+    std::unique_ptr<ws::GpuHost> gpu_host =
+        base::MakeUnique<ws::DefaultGpuHost>(window_server_.get(),
+                                             context()->connector());
+    window_server_->SetGpuHost(std::move(gpu_host));
+
+    registry_.AddInterface<mojom::Gpu>(
+        base::Bind(&Service::BindGpuRequest, base::Unretained(this)));
+    registry_.AddInterface<mojom::VideoDetector>(
+        base::Bind(&Service::BindVideoDetectorRequest, base::Unretained(this)));
+#if defined(OS_CHROMEOS)
+    registry_.AddInterface<mojom::Arc>(
+        base::Bind(&Service::BindArcRequest, base::Unretained(this)));
+#endif  // defined(OS_CHROMEOS)
+  }
 
   ime_driver_.Init(context()->connector(), test_config_);
 
   if (!discardable_shared_memory_manager_) {
     owned_discardable_shared_memory_manager_ =
-        base::MakeUnique<discardable_memory::DiscardableSharedMemoryManager>();
+        std::make_unique<discardable_memory::DiscardableSharedMemoryManager>();
     discardable_shared_memory_manager_ =
         owned_discardable_shared_memory_manager_.get();
   }
@@ -291,8 +309,6 @@ void Service::OnStart() {
       base::Bind(&Service::BindClipboardRequest, base::Unretained(this)));
   registry_with_source_info_.AddInterface<mojom::DisplayManager>(
       base::Bind(&Service::BindDisplayManagerRequest, base::Unretained(this)));
-  registry_.AddInterface<mojom::Gpu>(
-      base::Bind(&Service::BindGpuRequest, base::Unretained(this)));
   registry_.AddInterface<mojom::IMERegistrar>(
       base::Bind(&Service::BindIMERegistrarRequest, base::Unretained(this)));
   registry_.AddInterface<mojom::IMEDriver>(
@@ -318,6 +334,8 @@ void Service::OnStart() {
     registry_.AddInterface<WindowServerTest>(base::Bind(
         &Service::BindWindowServerTestRequest, base::Unretained(this)));
   }
+  registry_.AddInterface<mojom::RemoteEventDispatcher>(base::Bind(
+      &Service::BindRemoteEventDispatcherRequest, base::Unretained(this)));
 
   // On non-Linux platforms there will be no DeviceDataManager instance and no
   // purpose in adding the Mojo interface to connect to.
@@ -393,7 +411,7 @@ void Service::OnWillCreateTreeForWindowManager(
     display::ScreenManagerForwarding::Mode mode =
         is_in_process() ? display::ScreenManagerForwarding::Mode::IN_WM_PROCESS
                         : display::ScreenManagerForwarding::Mode::OWN_PROCESS;
-    screen_manager_ = base::MakeUnique<display::ScreenManagerForwarding>(mode);
+    screen_manager_ = std::make_unique<display::ScreenManagerForwarding>(mode);
 #else
     CHECK(false);
 #endif
@@ -496,7 +514,7 @@ void Service::BindWindowTreeFactoryRequest(
   }
   AddUserIfNecessary(source_info.identity);
   mojo::MakeStrongBinding(
-      base::MakeUnique<ws::WindowTreeFactory>(window_server_.get(),
+      std::make_unique<ws::WindowTreeFactory>(window_server_.get(),
                                               source_info.identity.user_id(),
                                               source_info.identity.name()),
       std::move(request));
@@ -524,9 +542,25 @@ void Service::BindWindowServerTestRequest(
   if (!test_config_)
     return;
   mojo::MakeStrongBinding(
-      base::MakeUnique<ws::WindowServerTestImpl>(window_server_.get()),
+      std::make_unique<ws::WindowServerTestImpl>(window_server_.get()),
       std::move(request));
 }
 
+void Service::BindRemoteEventDispatcherRequest(
+    mojom::RemoteEventDispatcherRequest request) {
+  mojo::MakeStrongBinding(
+      std::make_unique<ws::RemoteEventDispatcherImpl>(window_server_.get()),
+      std::move(request));
+}
+
+void Service::BindVideoDetectorRequest(mojom::VideoDetectorRequest request) {
+  window_server_->video_detector()->AddBinding(std::move(request));
+}
+
+#if defined(OS_CHROMEOS)
+void Service::BindArcRequest(mojom::ArcRequest request) {
+  window_server_->gpu_host()->AddArc(std::move(request));
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace ui

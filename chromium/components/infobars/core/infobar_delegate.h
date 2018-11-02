@@ -14,7 +14,6 @@ class ConfirmInfoBarDelegate;
 class HungRendererInfoBarDelegate;
 class InsecureContentInfoBarDelegate;
 class NativeAppInfoBarDelegate;
-class PermissionInfoBarDelegate;
 class PopupBlockedInfoBarDelegate;
 class RegisterProtocolHandlerInfoBarDelegate;
 class ScreenCaptureInfoBarDelegate;
@@ -22,8 +21,6 @@ class ThemeInstalledInfoBarDelegate;
 class ThreeDAPIInfoBarDelegate;
 
 #if defined(OS_ANDROID)
-class MediaStreamInfoBarDelegateAndroid;
-
 namespace offline_pages {
 class OfflinePageInfoBarDelegate;
 }
@@ -73,39 +70,39 @@ class InfoBarDelegate {
     TEST_INFOBAR = 0,
     APP_BANNER_INFOBAR_DELEGATE_ANDROID = 1,
     APP_BANNER_INFOBAR_DELEGATE_DESKTOP = 2,
-    ANDROID_DOWNLOAD_MANAGER_DUPLICATE_INFOBAR_DELEGATE = 3,
+    // Removed: ANDROID_DOWNLOAD_MANAGER_DUPLICATE_INFOBAR_DELEGATE = 3,
     CHROME_DUPLICATE_DOWNLOAD_INFOBAR_DELEGATE = 4,
-    DOWNLOAD_REQUEST_INFOBAR_DELEGATE_ANDROID = 5,
+    // Removed: DOWNLOAD_REQUEST_INFOBAR_DELEGATE_ANDROID = 5,
     // Removed: FULLSCREEN_INFOBAR_DELEGATE = 6,
     HUNG_PLUGIN_INFOBAR_DELEGATE = 7,
     HUNG_RENDERER_INFOBAR_DELEGATE = 8,
-    MEDIA_STREAM_INFOBAR_DELEGATE_ANDROID = 9,
-    MEDIA_THROTTLE_INFOBAR_DELEGATE = 10,
-    REQUEST_QUOTA_INFOBAR_DELEGATE = 11,
+    // Removed: MEDIA_STREAM_INFOBAR_DELEGATE_ANDROID = 9,
+    // Removed: MEDIA_THROTTLE_INFOBAR_DELEGATE = 10,
+    // Removed: REQUEST_QUOTA_INFOBAR_DELEGATE = 11,
     DEV_TOOLS_CONFIRM_INFOBAR_DELEGATE = 12,
     EXTENSION_DEV_TOOLS_INFOBAR_DELEGATE = 13,
     INCOGNITO_CONNECTABILITY_INFOBAR_DELEGATE = 14,
     THEME_INSTALLED_INFOBAR_DELEGATE = 15,
-    GEOLOCATION_INFOBAR_DELEGATE_ANDROID = 16,
+    // Removed: GEOLOCATION_INFOBAR_DELEGATE_ANDROID = 16,
     THREE_D_API_INFOBAR_DELEGATE = 17,
     // Removed: INSECURE_CONTENT_INFOBAR_DELEGATE = 18,
-    MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID = 19,
-    PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID = 20,
+    // Removed: MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID = 19,
+    // Removed: PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID = 20,
     NACL_INFOBAR_DELEGATE = 21,
     // Removed: DATA_REDUCTION_PROXY_INFOBAR_DELEGATE_ANDROID = 22,
-    NOTIFICATION_PERMISSION_INFOBAR_DELEGATE = 23,
-    AUTO_SIGNIN_FIRST_RUN_INFOBAR_DELEGATE = 24,
+    // Removed: NOTIFICATION_PERMISSION_INFOBAR_DELEGATE = 23,
+    // Removed: AUTO_SIGNIN_FIRST_RUN_INFOBAR_DELEGATE = 24,
     GENERATED_PASSWORD_SAVED_INFOBAR_DELEGATE_ANDROID = 25,
     SAVE_PASSWORD_INFOBAR_DELEGATE = 26,
     PEPPER_BROKER_INFOBAR_DELEGATE = 27,
     PERMISSION_UPDATE_INFOBAR_DELEGATE = 28,
-    DURABLE_STORAGE_PERMISSION_INFOBAR_DELEGATE_ANDROID = 29,
+    // Removed: DURABLE_STORAGE_PERMISSION_INFOBAR_DELEGATE_ANDROID = 29,
     // Removed: NPAPI_REMOVAL_INFOBAR_DELEGATE = 30,
     OUTDATED_PLUGIN_INFOBAR_DELEGATE = 31,
-    PLUGIN_METRO_MODE_INFOBAR_DELEGATE = 32,
+    // Removed: PLUGIN_METRO_MODE_INFOBAR_DELEGATE = 32,
     RELOAD_PLUGIN_INFOBAR_DELEGATE = 33,
     PLUGIN_OBSERVER = 34,
-    SSL_ADD_CERTIFICATE = 35,
+    // Removed: SSL_ADD_CERTIFICATE = 35,
     // Removed: SSL_ADD_CERTIFICATE_INFOBAR_DELEGATE = 36,
     POPUP_BLOCKED_INFOBAR_DELEGATE = 37,
     CHROME_SELECT_FILE_POLICY = 38,
@@ -147,6 +144,9 @@ class InfoBarDelegate {
     VR_SERVICES_UPGRADE_ANDROID = 74,
     READER_MODE_INFOBAR_ANDROID = 75,
     VR_FEEDBACK_INFOBAR_ANDROID = 76,
+    FRAMEBUST_BLOCK_INFOBAR_ANDROID = 77,
+    SURVEY_INFOBAR_ANDROID = 78,
+    NEAR_OOM_INFOBAR_ANDROID = 79,
   };
 
   // Describes navigation events, used to decide whether infobars should be
@@ -219,7 +219,6 @@ class InfoBarDelegate {
   virtual HungRendererInfoBarDelegate* AsHungRendererInfoBarDelegate();
   virtual InsecureContentInfoBarDelegate* AsInsecureContentInfoBarDelegate();
   virtual NativeAppInfoBarDelegate* AsNativeAppInfoBarDelegate();
-  virtual PermissionInfoBarDelegate* AsPermissionInfoBarDelegate();
   virtual PopupBlockedInfoBarDelegate* AsPopupBlockedInfoBarDelegate();
   virtual RegisterProtocolHandlerInfoBarDelegate*
       AsRegisterProtocolHandlerInfoBarDelegate();
@@ -228,8 +227,6 @@ class InfoBarDelegate {
   virtual ThreeDAPIInfoBarDelegate* AsThreeDAPIInfoBarDelegate();
   virtual translate::TranslateInfoBarDelegate* AsTranslateInfoBarDelegate();
 #if defined(OS_ANDROID)
-  virtual MediaStreamInfoBarDelegateAndroid*
-  AsMediaStreamInfoBarDelegateAndroid();
   virtual offline_pages::OfflinePageInfoBarDelegate*
   AsOfflinePageInfoBarDelegate();
 #endif

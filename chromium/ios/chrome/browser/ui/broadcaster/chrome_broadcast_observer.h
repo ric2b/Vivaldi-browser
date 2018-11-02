@@ -7,8 +7,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-
 // Protocol collecting all of the methods that broadcast keys will trigger
 // in an observer. Each key maps to a specific observer method as indicated.
 // (this mapping is generated in the implementation of the Broadcaster class).
@@ -18,17 +16,26 @@
 @protocol ChromeBroadcastObserver<NSObject>
 @optional
 
-// Observer method for object that care about the current visibility of the tab
-// strip.
-- (void)broadcastTabStripVisible:(BOOL)visible;
+#pragma mark - Scrolling events
 
 // Observer method for objects that care about the current vertical (y-axis)
 // scroll offset of the tab content area.
 - (void)broadcastContentScrollOffset:(CGFloat)offset;
 
-// Observer method for objects that care about the current panel selected on the
-// NTP.
-- (void)broadcastSelectedNTPPanel:(ntp_home::PanelIdentifier)panelIdentifier;
+// Observer method for objects that care about whether the main content area is
+// scrolling.
+- (void)broadcastScrollViewIsScrolling:(BOOL)scrolling;
+
+// Observer method for objects that care abotu whether the main content area is
+// being dragged.  Note that if a drag ends with residual velocity, it's
+// possible for |dragging| to be NO while |scrolling| is still YES.
+- (void)broadcastScrollViewIsDragging:(BOOL)dragging;
+
+#pragma mark - Toolbar UI
+
+// Observer method for objects that care about the current height of the
+// toolbar.
+- (void)broadcastToolbarHeight:(CGFloat)height;
 
 @end
 

@@ -6,6 +6,9 @@
       "provides": {
         "browser": [
           "content::mojom::Child",
+          "content::mojom::ChildControl",
+          "content::mojom::ChildHistogramFetcher",
+          "content::mojom::ChildHistogramFetcherFactory",
           "IPC::mojom::ChannelBootstrap"
         ],
         "service_manager:service_factory": [
@@ -14,7 +17,10 @@
       },
       "requires": {
         "*": [ "app" ],
-        "content_browser": [ "plugin" ],
+        "content_browser": [
+          "font_cache",
+          "plugin"
+        ],
         "device": [ "device:power_monitor" ],
         "ui": [ "discardable_memory" ]
       }

@@ -60,11 +60,6 @@
 // Redefine as readwrite.
 @property(nonatomic, readwrite, assign) NSInteger lastCommittedItemIndex;
 
-// Expose setters for serialization properties.  These are exposed in a category
-// in SessionStorageBuilder, and will be removed as ownership of
-// their backing ivars moves to NavigationManagerImpl.
-@property(nonatomic, readwrite, assign) NSInteger previousItemIndex;
-
 // Removes all items after lastCommittedItemIndex.
 - (void)clearForwardItems;
 // Discards the transient item, if any.
@@ -462,19 +457,6 @@ initiationType:(web::NavigationInitiationType)initiationType;
 
   if (_navigationManager)
     _navigationManager->OnNavigationItemCommitted();
-}
-
-- (void)updateCurrentItemWithURL:(const GURL&)url
-                     stateObject:(NSString*)stateObject {
-  DCHECK(!self.transientItem);
-  web::NavigationItemImpl* currentItem = self.currentItem;
-  currentItem->SetURL(url);
-  currentItem->SetSerializedStateObject(stateObject);
-  currentItem->SetHasStateBeenReplaced(true);
-  currentItem->SetPostData(nil);
-  // If the change is to a committed item, notify interested parties.
-  if (currentItem != self.pendingItem && _navigationManager)
-    _navigationManager->OnNavigationItemChanged();
 }
 
 - (void)discardNonCommittedItems {

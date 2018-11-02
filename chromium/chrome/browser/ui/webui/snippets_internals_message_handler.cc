@@ -29,6 +29,7 @@
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/ntp/android_content_suggestions_notifier.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
+#include "chrome/browser/ntp_snippets/dependent_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -48,10 +49,15 @@
 #include "content/public/browser/web_ui.h"
 #include "url/gurl.h"
 
+using ntp_snippets::AreAssetDownloadsEnabled;
+using ntp_snippets::AreOfflinePageDownloadsEnabled;
 using ntp_snippets::Category;
 using ntp_snippets::CategoryInfo;
 using ntp_snippets::CategoryStatus;
 using ntp_snippets::ContentSuggestion;
+using ntp_snippets::IsBookmarkProviderEnabled;
+using ntp_snippets::IsPhysicalWebPageProviderEnabled;
+using ntp_snippets::IsRecentTabProviderEnabled;
 using ntp_snippets::KnownCategories;
 using ntp_snippets::RemoteSuggestion;
 using ntp_snippets::RemoteSuggestionsProvider;
@@ -166,6 +172,16 @@ std::string TimeToJSONTimeString(const base::Time time) {
       exploded.millisecond);
 }
 
+ntp_snippets::BreakingNewsListener* GetBreakingNewsListener(
+    ntp_snippets::ContentSuggestionsService* service) {
+  DCHECK(service);
+  RemoteSuggestionsProvider* provider =
+      service->remote_suggestions_provider_for_debugging();
+  DCHECK(provider);
+  return static_cast<ntp_snippets::RemoteSuggestionsProviderImpl*>(provider)
+      ->breaking_news_listener_for_debugging();
+}
+
 }  // namespace
 
 SnippetsInternalsMessageHandler::SnippetsInternalsMessageHandler(
@@ -242,6 +258,12 @@ void SnippetsInternalsMessageHandler::RegisterMessages() {
           &SnippetsInternalsMessageHandler::HandleToggleDismissedSuggestions,
           base::Unretained(this)));
 
+  web_ui()->RegisterMessageCallback(
+      "initializationCompleted",
+      base::Bind(
+          &SnippetsInternalsMessageHandler::HandleInitializationCompleted,
+          base::Unretained(this)));
+
   content_suggestions_service_observer_.Add(content_suggestions_service_);
 }
 
@@ -277,6 +299,12 @@ void SnippetsInternalsMessageHandler::OnFullRefreshRequired() {
 }
 
 void SnippetsInternalsMessageHandler::ContentSuggestionsServiceShutdown() {}
+
+void SnippetsInternalsMessageHandler::HandleInitializationCompleted(
+    const base::ListValue* args) {
+  DCHECK_EQ(0u, args->GetSize());
+  AllowJavascript();
+}
 
 void SnippetsInternalsMessageHandler::HandleRefreshContent(
     const base::ListValue* args) {
@@ -314,15 +342,9 @@ void SnippetsInternalsMessageHandler::HandleDownload(
 
 void SnippetsInternalsMessageHandler::HandleClearCachedSuggestions(
     const base::ListValue* args) {
-  DCHECK_EQ(1u, args->GetSize());
+  DCHECK_EQ(0u, args->GetSize());
 
-  int category_id;
-  if (!args->GetInteger(0, &category_id)) {
-    return;
-  }
-
-  content_suggestions_service_->ClearCachedSuggestions(
-      Category::FromIDValue(category_id));
+  content_suggestions_service_->ClearAllCachedSuggestions();
   SendContentSuggestions();
 }
 
@@ -440,28 +462,28 @@ void SnippetsInternalsMessageHandler::HandlePushDummySuggestionIn10Seconds(
 }
 
 void SnippetsInternalsMessageHandler::SendAllContent() {
+  if (!IsJavascriptAllowed()) {
+    return;
+  }
+
   SendBoolean(
       "flag-article-suggestions",
       base::FeatureList::IsEnabled(ntp_snippets::kArticleSuggestionsFeature));
+
   SendBoolean("flag-recent-offline-tab-suggestions",
-              base::FeatureList::IsEnabled(
-                  ntp_snippets::kRecentOfflineTabSuggestionsFeature));
+              IsRecentTabProviderEnabled());
   SendBoolean("flag-offlining-recent-pages-feature",
               base::FeatureList::IsEnabled(
                   offline_pages::kOffliningRecentPagesFeature));
-  SendBoolean(
-      "flag-asset-download-suggestions",
-      base::FeatureList::IsEnabled(features::kAssetDownloadSuggestionsFeature));
+
+  SendBoolean("flag-asset-download-suggestions", AreAssetDownloadsEnabled());
   SendBoolean("flag-offline-page-download-suggestions",
-              base::FeatureList::IsEnabled(
-                  features::kOfflinePageDownloadSuggestionsFeature));
-  SendBoolean(
-      "flag-bookmark-suggestions",
-      base::FeatureList::IsEnabled(ntp_snippets::kBookmarkSuggestionsFeature));
+              AreOfflinePageDownloadsEnabled());
+
+  SendBoolean("flag-bookmark-suggestions", IsBookmarkProviderEnabled());
 
   SendBoolean("flag-physical-web-page-suggestions",
-              base::FeatureList::IsEnabled(
-                  ntp_snippets::kPhysicalWebPageSuggestionsFeature));
+              IsPhysicalWebPageProviderEnabled());
 
   SendBoolean("flag-physical-web", base::FeatureList::IsEnabled(
                                        chrome::android::kPhysicalWebFeature));
@@ -469,6 +491,7 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
   SendClassification();
   SendRankerDebugData();
   SendLastRemoteSuggestionsBackgroundFetchTime();
+  SendWhetherSuggestionPushingPossible();
 
   if (remote_suggestions_provider_) {
     const ntp_snippets::RemoteSuggestionsFetcher* fetcher =
@@ -478,6 +501,10 @@ void SnippetsInternalsMessageHandler::SendAllContent() {
         "chrome.SnippetsInternals.receiveJson",
         base::Value(fetcher->GetLastJsonForDebugging()));
   }
+
+  CallJavascriptFunction(
+      "chrome.SnippetsInternals.receiveDebugLog",
+      base::Value(content_suggestions_service_->GetDebugLog()));
 
   std::set<variations::VariationID> ids = SnippetsExperiments();
   std::vector<std::string> string_ids;
@@ -531,6 +558,15 @@ void SnippetsInternalsMessageHandler::
       "chrome.SnippetsInternals."
       "receiveLastRemoteSuggestionsBackgroundFetchTime",
       base::Value(base::TimeFormatShortDateAndTime(time)));
+}
+
+void SnippetsInternalsMessageHandler::SendWhetherSuggestionPushingPossible() {
+  ntp_snippets::BreakingNewsListener* listener =
+      GetBreakingNewsListener(content_suggestions_service_);
+  CallJavascriptFunction(
+      "chrome.SnippetsInternals."
+      "receiveWhetherSuggestionPushingPossible",
+      base::Value(listener != nullptr && listener->IsListening()));
 }
 
 void SnippetsInternalsMessageHandler::SendContentSuggestions() {
@@ -635,13 +671,10 @@ void SnippetsInternalsMessageHandler::PushDummySuggestion() {
   gcm::IncomingMessage message;
   message.data["payload"] = json;
 
-  RemoteSuggestionsProvider* provider =
-      content_suggestions_service_->remote_suggestions_provider_for_debugging();
-  DCHECK(provider);
   ntp_snippets::BreakingNewsListener* listener =
-      static_cast<ntp_snippets::RemoteSuggestionsProviderImpl*>(provider)
-          ->breaking_news_listener_for_debugging();
+      GetBreakingNewsListener(content_suggestions_service_);
   DCHECK(listener);
+  DCHECK(listener->IsListening());
   static_cast<ntp_snippets::BreakingNewsGCMAppHandler*>(listener)->OnMessage(
       "com.google.breakingnews.gcm", message);
 }

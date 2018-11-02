@@ -32,6 +32,7 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/paint/ThemePainterDefault.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -83,11 +84,11 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   Color PlatformFocusRingColor() const override;
 
   // System fonts.
-  virtual void SystemFont(CSSValueID system_font_id,
-                          FontSelectionValue& font_slope,
-                          FontSelectionValue& font_weight,
-                          float& font_size,
-                          AtomicString& font_family) const;
+  void SystemFont(CSSValueID system_font_id,
+                  FontSelectionValue& font_slope,
+                  FontSelectionValue& font_weight,
+                  float& font_size,
+                  AtomicString& font_family) const override;
 
   int MinimumMenuListSize(const ComputedStyle&) const override;
 
@@ -152,7 +153,7 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   int MenuListInternalPadding(const ComputedStyle&, int padding) const;
 
   static const RGBA32 kDefaultTapHighlightColor = 0x2e000000;  // 18% black.
-  static double caret_blink_interval_;
+  static TimeDelta caret_blink_interval_;
 
   static unsigned active_selection_background_color_;
   static unsigned active_selection_foreground_color_;

@@ -87,9 +87,9 @@ interface CoreProbes {
   void didResizeMainFrame(LocalFrame*);
   void didPaint(LocalFrame*, const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
   void applyUserAgentOverride(ExecutionContext*, String* userAgent);
-  void didBlockRequest([Keep] ExecutionContext*, const ResourceRequest&, DocumentLoader*, const FetchInitiatorInfo&, ResourceRequestBlockedReason);
+  void didBlockRequest([Keep] ExecutionContext*, const ResourceRequest&, DocumentLoader*, const FetchInitiatorInfo&, ResourceRequestBlockedReason, Resource::Type);
   void didChangeResourcePriority(LocalFrame*, unsigned long identifier, ResourceLoadPriority loadPriority);
-  void willSendRequest([Keep] ExecutionContext*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&);
+  void willSendRequest([Keep] ExecutionContext*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&, Resource::Type);
   void markResourceAsCached(LocalFrame*, unsigned long identifier);
   void didReceiveResourceResponse(ExecutionContext*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
   void didReceiveData(ExecutionContext*, unsigned long identifier, DocumentLoader*, const char* data, int dataLength);
@@ -102,7 +102,7 @@ interface CoreProbes {
   void willSendEventSourceRequest(ExecutionContext*, ThreadableLoaderClient* eventSource);
   void willDispatchEventSourceEvent(ExecutionContext*, ThreadableLoaderClient* eventSource, const AtomicString& eventName, const AtomicString& eventId, const String& data);
   void didFinishEventSourceRequest(ExecutionContext*, ThreadableLoaderClient* eventSource);
-  void willLoadXHR(ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, RefPtr<EncodedFormData>, const HTTPHeaderMap& headers, bool includeCredentials);
+  void willLoadXHR(ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, scoped_refptr<EncodedFormData>, const HTTPHeaderMap& headers, bool includeCredentials);
   void didFailXHRLoading([Keep] ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const String& url);
   void didFinishXHRLoading([Keep] ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const String& url);
   void willStartFetch(ExecutionContext*, ThreadableLoaderClient*);
@@ -143,14 +143,15 @@ interface CoreProbes {
   void didCreateAnimation(Document*, unsigned);
   void animationPlayStateChanged(Document*, Animation*, Animation::AnimationPlayState oldPlayState, Animation::AnimationPlayState newPlayState);
   void windowCreated(LocalFrame* opener, LocalFrame* created);
+  void windowOpen([Keep] Document*, const String& url, const AtomicString& windowName, const WebWindowFeatures& windowFeatures, bool userGestrue);
   void consoleMessageAdded(ExecutionContext*, ConsoleMessage*);
   void willRunJavaScriptDialog(LocalFrame* frame);
   void didRunJavaScriptDialog(LocalFrame* frame);
   void documentWriteFetchScript([Keep] Document*);
   void didChangeViewport(LocalFrame* document);
   void breakableLocation(ExecutionContext* context, const char* name);
-  RecalculateStyle(Document*);
-  UpdateLayout(Document*);
+  RecalculateStyle(Document* document);
+  UpdateLayout(Document* document);
   ExecuteScript([Keep] ExecutionContext* context);
   CallFunction([Keep] ExecutionContext* context, v8::Local<v8::Function> function, int depth = 0);
   UserCallback([Keep] ExecutionContext* context, const char* name, const AtomicString& atomicName, bool recurring, EventTarget* eventTarget = nullptr);
@@ -160,7 +161,8 @@ interface CoreProbes {
   void shouldWaitForDebuggerOnWorkerStart(ExecutionContext* context, bool* result);
   void shouldForceCORSPreflight(ExecutionContext*, bool* result);
   void shouldBlockRequest(ExecutionContext*, const KURL&, bool* result);
+  void shouldBypassServiceWorker(ExecutionContext* context, bool* result);
   void consoleTimeStamp(ExecutionContext*, const String& title);
-  void lifecycleEvent(Document* document, const char* name, double timestamp);
-  void paintTiming([Keep] Document* document, const char* name, double timestamp);
+  void lifecycleEvent([Keep] LocalFrame*, DocumentLoader*, const char* name, double timestamp);
+  void paintTiming([Keep] Document*, const char* name, double timestamp);
 }

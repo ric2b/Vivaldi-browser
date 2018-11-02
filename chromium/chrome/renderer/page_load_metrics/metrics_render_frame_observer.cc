@@ -12,9 +12,8 @@
 #include "base/timer/timer.h"
 #include "chrome/renderer/page_load_metrics/page_timing_metrics_sender.h"
 #include "chrome/renderer/page_load_metrics/page_timing_sender.h"
-#include "chrome/renderer/searchbox/search_bouncer.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -117,6 +116,19 @@ mojom::PageLoadTimingPtr MetricsRenderFrameObserver::GetTiming() const {
   mojom::PageLoadTimingPtr timing(CreatePageLoadTiming());
   double start = perf.NavigationStart();
   timing->navigation_start = base::Time::FromDoubleT(start);
+  if (perf.PageInteractive() > 0.0) {
+    // PageInteractive and PageInteractiveDetection should be available at the
+    // same time. This is a renderer side DCHECK to ensure this.
+    DCHECK(perf.PageInteractiveDetection());
+    timing->interactive_timing->interactive =
+        ClampDelta(perf.PageInteractive(), start);
+    timing->interactive_timing->interactive_detection =
+        ClampDelta(perf.PageInteractiveDetection(), start);
+  }
+  if (perf.FirstInputInvalidatingInteractive() > 0.0) {
+    timing->interactive_timing->first_invalidating_input =
+        ClampDelta(perf.FirstInputInvalidatingInteractive(), start);
+  }
   if (perf.ResponseStart() > 0.0)
     timing->response_start = ClampDelta(perf.ResponseStart(), start);
   if (perf.DomContentLoadedEventStart() > 0.0) {

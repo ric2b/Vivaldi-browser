@@ -46,13 +46,22 @@ default_args = {
     "//third_party/WebKit/Source/core/streams/ReadableStream.js",
     "//third_party/WebKit/Source/core/streams/WritableStream.js",
   ]
-  v8_experimental_extra_library_files = []
+  v8_experimental_extra_library_files =
+      [ "//third_party/WebKit/Source/core/streams/TransformStream.js" ]
   v8_enable_gdbjit = false
   v8_imminent_deprecation_warnings = false
 
   # TODO(jochen): Remove this. http://crbug.com/v8/5830,
   # http://crbug.com/728583.
   v8_check_microtasks_scopes_consistency = false
+
+  # Don't include webrtc's builtin task queue implementation.
+  rtc_link_task_queue_impl = false
+
+  # Don't include the iLBC audio codec.
+  # TODO(bugs.webrtc.org/8396): Once WebRTC gets rid of its internal
+  # deps on codecs, we can remove this.
+  rtc_include_ilbc = false
 }
 
 # These are the targets to check headers for by default. The files in targets
@@ -64,7 +73,6 @@ check_targets = [
   "//ash/*",
   "//base/*",
   "//blink/*",
-  "//breakpad/*",
   "//build/*",
   "//cc/*",
 
@@ -76,6 +84,7 @@ check_targets = [
   "//chrome/browser/ui/*",
   "//chrome/common/*",
   "//chrome/installer/*",
+  "//chrome/profiling",
   "//chrome/third_party/mozilla_security_manager/*",
   "//chrome/tools/*",
   "//chrome/utility/*",
@@ -127,7 +136,6 @@ check_targets = [
   "//rlz/*",
 
   #"//sandbox/*",  # Medium-hard.
-  "//sdch/*",
   "//services/*",
   "//skia/*",
   "//sql/*",
@@ -135,6 +143,7 @@ check_targets = [
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
+  "//third_party/breakpad/*",
   "//third_party/brotli/*",
   "//third_party/hunspell/*",
   "//third_party/leveldatabase/*",
@@ -145,41 +154,7 @@ check_targets = [
   "//third_party/WebKit/*",
   "//tools/*",
 
-  #"//ui/*",  # Work left on Chromeos w/ use_ozone. Some parts of UI that work:
-  "//ui/accessibility/*",
-  "//ui/android/*",
-  "//ui/app_list/*",
-  "//ui/arc/*",
-  "//ui/aura/*",
-  "//ui/aura_extra/*",
-  "//ui/base/*",
-  "//ui/chromeos/*",
-  "//ui/compositor/*",
-  "//ui/content_accelerators/*",
-  "//ui/display/*",
-  "//ui/events/*",
-  "//ui/file_manager/*",
-  "//ui/gfx/*",
-  "//ui/gl/*",
-  "//ui/keyboard/*",
-  "//ui/latency_info/*",
-  "//ui/login/*",
-  "//ui/message_center/*",
-  "//ui/mojo/*",
-  "//ui/native_theme/*",
-  "//ui/ozone/*",
-  "//ui/platform_window/*",
-  "//ui/resources/*",
-  "//ui/shell_dialogs/*",
-  "//ui/snapshot/*",
-  "//ui/strings/*",
-  "//ui/surface/*",
-  "//ui/touch_selection/*",
-  "//ui/views/*",
-  "//ui/views_content_client/*",
-  "//ui/web_dialogs/*",
-  "//ui/webui/*",
-  "//ui/wm/*",
+  "//ui/*",
   "//url/*",
   "//v8/*",
   "//win8/*",
@@ -271,8 +246,6 @@ exec_script_whitelist =
       "//third_party/catapult/tracing/BUILD.gn",
       "//third_party/google_input_tools/inputview.gni",
 
-      # CLD2 should be removed soon, delete this when we do.
-      "//third_party/cld_2/BUILD.gn",
       "//tools/grit/grit_rule.gni",
 
       # Not gypi-to-gn.

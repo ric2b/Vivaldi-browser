@@ -12,7 +12,6 @@ import android.graphics.RectF;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Interpolator;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
@@ -274,7 +273,6 @@ public class Stack {
      * @return The {@link StackTab}s currently being rendered by the tab stack.
      * @VisibleForTesting
      */
-    @SuppressFBWarnings("EI_EXPOSE_REP")
     public StackTab[] getTabs() {
         return mStackTabs;
     }
@@ -2275,7 +2273,7 @@ public class Stack {
      */
     public float getMaxTabHeight() {
         if (FeatureUtilities.isChromeHomeEnabled() && mCurrentMode == Orientation.PORTRAIT) {
-            return mLayout.getHeight();
+            return mLayout.getHeightMinusBrowserControls() - StackLayout.MODERN_TOP_MARGIN_DP;
         }
         return mLayout.getHeightMinusBrowserControls();
     }

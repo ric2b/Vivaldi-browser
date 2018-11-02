@@ -6,10 +6,10 @@
 #define WebRemoteFrame_h
 
 #include "public/platform/WebContentSecurityPolicy.h"
-#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/web/WebFrame.h"
-#include "public/web/WebSandboxFlags.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -21,6 +21,8 @@ class WebLayer;
 class WebRemoteFrameClient;
 class WebString;
 class WebView;
+struct WebRect;
+struct WebRemoteScrollProperties;
 
 class WebRemoteFrame : public WebFrame {
  public:
@@ -45,14 +47,14 @@ class WebRemoteFrame : public WebFrame {
                                           WebFrameClient*,
                                           blink::InterfaceRegistry*,
                                           WebFrame* previous_sibling,
-                                          const WebParsedFeaturePolicy&,
+                                          const ParsedFeaturePolicy&,
                                           const WebFrameOwnerProperties&,
                                           WebFrame* opener) = 0;
 
   virtual WebRemoteFrame* CreateRemoteChild(WebTreeScopeType,
                                             const WebString& name,
                                             WebSandboxFlags,
-                                            const WebParsedFeaturePolicy&,
+                                            const ParsedFeaturePolicy&,
                                             WebRemoteFrameClient*,
                                             WebFrame* opener) = 0;
 
@@ -69,7 +71,7 @@ class WebRemoteFrame : public WebFrame {
   virtual void SetReplicatedName(const WebString&) = 0;
 
   virtual void SetReplicatedFeaturePolicyHeader(
-      const WebParsedFeaturePolicy& parsed_header) = 0;
+      const ParsedFeaturePolicy& parsed_header) = 0;
 
   // Adds |header| to the set of replicated CSP headers.
   virtual void AddReplicatedContentSecurityPolicyHeader(
@@ -104,6 +106,14 @@ class WebRemoteFrame : public WebFrame {
   virtual void WillEnterFullscreen() = 0;
 
   virtual void SetHasReceivedUserGesture() = 0;
+
+  // Scrolls the given rectangle into view. This kicks off the recursive scroll
+  // into visible starting from the frame's owner element. The coordinates of
+  // the rect are absolute (transforms removed) with respect to the frame in
+  // OOPIF process. The parameters are sent by the OOPIF local root and can be
+  // used to properly chain the recursive scrolling between the two processes.
+  virtual void ScrollRectToVisible(const WebRect&,
+                                   const WebRemoteScrollProperties&) = 0;
 
  protected:
   explicit WebRemoteFrame(WebTreeScopeType scope) : WebFrame(scope) {}

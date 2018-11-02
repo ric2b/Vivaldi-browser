@@ -6,7 +6,6 @@
 
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/ui_resource_layer_impl.h"
-#include "cc/quads/draw_quad.h"
 #include "cc/resources/ui_resource_bitmap.h"
 #include "cc/resources/ui_resource_client.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
@@ -16,6 +15,7 @@
 #include "cc/test/layer_test_common.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "components/viz/common/quads/draw_quad.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/transform.h"
@@ -50,14 +50,14 @@ void QuadSizeTest(FakeUIResourceLayerTreeHostImpl* host_impl,
   host_impl->active_tree()->SetRootLayerForTesting(std::move(layer));
   host_impl->active_tree()->BuildPropertyTreesForTesting();
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   AppendQuadsData data;
   host_impl->active_tree()->root_layer_for_testing()->AppendQuads(
       render_pass.get(), &data);
 
   // Verify quad rects
-  const QuadList& quads = render_pass->quad_list;
+  const viz::QuadList& quads = render_pass->quad_list;
   EXPECT_EQ(expected_quad_size, quads.size());
 
   host_impl->active_tree()->DetachLayers();
@@ -100,16 +100,18 @@ void NeedsBlendingTest(FakeUIResourceLayerTreeHostImpl* host_impl,
   host_impl->active_tree()->SetRootLayerForTesting(std::move(layer));
   host_impl->active_tree()->BuildPropertyTreesForTesting();
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   AppendQuadsData data;
   host_impl->active_tree()->root_layer_for_testing()->AppendQuads(
       render_pass.get(), &data);
 
   // Verify needs_blending is set appropriately.
-  const QuadList& quads = render_pass->quad_list;
+  const viz::QuadList& quads = render_pass->quad_list;
   EXPECT_GE(quads.size(), (size_t)0);
   EXPECT_EQ(needs_blending, quads.front()->needs_blending);
+  EXPECT_EQ(quads.front()->needs_blending,
+            !quads.front()->shared_quad_state->are_contents_opaque);
 
   host_impl->active_tree()->DetachLayers();
 }

@@ -15,6 +15,8 @@
 #include "core/css/cssom/CSSURLImageValue.h"
 #include "core/css/cssom/CSSUnparsedValue.h"
 #include "core/css/cssom/CSSUnsupportedStyleValue.h"
+#include "core/css/parser/CSSParser.h"
+#include "core/css/properties/CSSProperty.h"
 
 namespace blink {
 
@@ -41,8 +43,7 @@ CSSStyleValue* CreateStyleValue(const CSSValue& value) {
   if (value.IsVariableReferenceValue())
     return CSSUnparsedValue::FromCSSValue(ToCSSVariableReferenceValue(value));
   if (value.IsImageValue()) {
-    return CSSURLImageValue::Create(
-        ToCSSImageValue(value).ValueWithURLMadeAbsolute());
+    return CSSURLImageValue::Create(ToCSSImageValue(value).Clone());
   }
   return nullptr;
 }
@@ -64,6 +65,29 @@ CSSStyleValueVector UnsupportedCSSValue(const CSSValue& value) {
 }
 
 }  // namespace
+
+CSSStyleValueVector StyleValueFactory::FromString(
+    CSSPropertyID property_id,
+    const String& value,
+    const CSSParserContext* parser_context) {
+  DCHECK_NE(property_id, CSSPropertyInvalid);
+  DCHECK(!CSSProperty::Get(property_id).IsShorthand());
+
+  // TODO(775804): Handle custom properties
+  if (property_id == CSSPropertyVariable) {
+    return CSSStyleValueVector();
+  }
+
+  const CSSValue* css_value =
+      CSSParser::ParseSingleValue(property_id, value, parser_context);
+  if (!css_value)
+    return CSSStyleValueVector();
+
+  CSSStyleValueVector style_value_vector =
+      StyleValueFactory::CssValueToStyleValueVector(property_id, *css_value);
+  DCHECK(!style_value_vector.IsEmpty());
+  return style_value_vector;
+}
 
 CSSStyleValueVector StyleValueFactory::CssValueToStyleValueVector(
     CSSPropertyID property_id,

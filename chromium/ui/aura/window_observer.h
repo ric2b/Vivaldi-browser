@@ -8,9 +8,11 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/aura/aura_export.h"
+#include "ui/compositor/property_change_reason.h"
 
 namespace gfx {
 class Rect;
+class Transform;
 }  // namespace gfx
 
 namespace aura {
@@ -78,23 +80,47 @@ class AURA_EXPORT WindowObserver {
   // on.
   virtual void OnWindowVisibilityChanged(Window* window, bool visible) {}
 
-  // Invoked when SetBounds() is invoked on |window|. |old_bounds| and
-  // |new_bounds| are in parent coordinates.
+  // Invoked when the bounds of the |window|'s layer change. |old_bounds| and
+  // |new_bounds| are in parent coordinates. |reason| indicates whether the
+  // bounds were set directly or by an animation. This will be called at every
+  // step of a bounds animation. The client can determine whether the animation
+  // is ending by calling window->layer()->GetAnimator()->IsAnimatingProperty(
+  // ui::LayerAnimationElement::BOUNDS).
   virtual void OnWindowBoundsChanged(Window* window,
                                      const gfx::Rect& old_bounds,
-                                     const gfx::Rect& new_bounds) {}
+                                     const gfx::Rect& new_bounds,
+                                     ui::PropertyChangeReason reason) {}
 
-  // Invoked when SetTransform() is invoked on |window|.
-  virtual void OnWindowTransforming(Window* window) {}
-  virtual void OnWindowTransformed(Window* window) {}
+  // Invoked when the opacity of the |window|'s layer is set (even if it didn't
+  // change). |reason| indicates whether the opacity was set directly or by an
+  // animation. This won't necessarily be called at every step of an animation.
+  // However, it will always be called before the first frame of the animation
+  // is rendered and when the animation ends. The client can determine whether
+  // the animation is ending by calling
+  // window->layer()->GetAnimator()->IsAnimatingProperty(
+  // ui::LayerAnimationElement::OPACITY).
+  virtual void OnWindowOpacitySet(Window* window,
+                                  ui::PropertyChangeReason reason) {}
+
+  // Invoked before Window::SetTransform() sets the transform of a window.
+  virtual void OnWindowTargetTransformChanging(
+      Window* window,
+      const gfx::Transform& new_transform) {}
+
+  // Invoked when the transform of |window| is set (even if it didn't change).
+  // |reason| indicates whether the transform was set directly or by an
+  // animation. This won't necessarily be called at every step of an animation.
+  // However, it will always be called before the first frame of the animation
+  // is rendered and when the animation ends. The client can determine whether
+  // the animation is ending by calling
+  // window->layer()->GetAnimator()->IsAnimatingProperty(
+  // ui::LayerAnimationElement::TRANSFORM).
+  virtual void OnWindowTransformed(Window* window,
+                                   ui::PropertyChangeReason reason) {}
 
   // Invoked when |window|'s position among its siblings in the stacking order
   // has changed.
   virtual void OnWindowStackingChanged(Window* window) {}
-
-  // Invoked when a region of |window| has damage from a new delegated frame.
-  virtual void OnDelegatedFrameDamage(Window* window,
-                                      const gfx::Rect& damage_rect_in_dip) {}
 
   // Invoked when the Window is being destroyed (i.e. from the start of its
   // destructor). This is called before the window is removed from its parent.
@@ -121,6 +147,14 @@ class AURA_EXPORT WindowObserver {
 
   // Called when the window title has changed.
   virtual void OnWindowTitleChanged(Window* window) {}
+
+  // Called when the window's layer is recreated. The new layer may not carry
+  // animations from the old layer and animation observers attached to the old
+  // layer won't automatically be attached to the new layer. Clients that need
+  // to know when window animations end should implement this method and call
+  // window->layer()->GetAnimator()->
+  // (is_animating|IsAnimatingProperty|IsAnimatingOnePropertyOf)() from it.
+  virtual void OnWindowLayerRecreated(Window* window) {}
 
   // Called when the app embedded in |window| disconnects (is no longer
   // embedded).

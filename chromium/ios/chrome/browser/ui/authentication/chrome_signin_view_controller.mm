@@ -135,7 +135,6 @@ enum AuthenticationState {
   BOOL _didSignIn;
   BOOL _didAcceptSignIn;
   BOOL _didFinishSignIn;
-  BOOL _isPresentedOnSettings;
   signin_metrics::AccessPoint _accessPoint;
   signin_metrics::PromoAction _promoAction;
   ChromeIdentityInteractionManager* _interactionManager;
@@ -167,16 +166,13 @@ enum AuthenticationState {
 @synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-               isPresentedOnSettings:(BOOL)isPresentedOnSettings
                          accessPoint:(signin_metrics::AccessPoint)accessPoint
                          promoAction:(signin_metrics::PromoAction)promoAction
                       signInIdentity:(ChromeIdentity*)identity
-                          dispatcher:
-                              (id<ApplicationSettingsCommands>)dispatcher {
+                          dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super init];
   if (self) {
     _browserState = browserState;
-    _isPresentedOnSettings = isPresentedOnSettings;
     _accessPoint = accessPoint;
     _promoAction = promoAction;
     _dispatcher = dispatcher;

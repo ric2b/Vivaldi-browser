@@ -7,7 +7,6 @@
 #include "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
-#import "ios/chrome/browser/web/features.h"
 #import "ios/chrome/browser/web/mailto_handler.h"
 #import "ios/chrome/browser/web/mailto_url_rewriter.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -74,6 +73,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.title = l10n_util::GetNSString(IDS_IOS_COMPOSE_EMAIL_SETTING);
   self.collectionViewAccessibilityIdentifier =
       @"compose_email_handler_view_controller";
+  // TODO(crbug.com/764578): -loadModel should not be called from
+  // initializer. A possible fix is to move this call to -viewDidLoad.
   [self loadModel];
 }
 
@@ -89,20 +90,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSString* currentHandlerID = [_rewriter defaultHandlerID];
 
   // Populates the toggle "Always Ask" toggle switch row first because the
-  // state of of the Mail client apps selection list is dependent of the value
-  // of the toggle switch.
-  if (base::FeatureList::IsEnabled(kMailtoPromptInMdcStyle)) {
-    // The second section, if it exists, is the toggle switch to always prompt
-    // for selection of Mail client app.
-    [model addSectionWithIdentifier:SectionIdentifierAlwaysAsk];
-    _alwaysAskItem =
-        [[CollectionViewSwitchItem alloc] initWithType:ItemTypeAlwaysAskSwitch];
-    _alwaysAskItem.text =
-        l10n_util::GetNSString(IDS_IOS_CHOOSE_EMAIL_ASK_TOGGLE);
-    _alwaysAskItem.on = currentHandlerID == nil;
-    [model addItem:_alwaysAskItem
-        toSectionWithIdentifier:SectionIdentifierAlwaysAsk];
-  }
+  // state of of the Mail client apps selection list is dependent on the value
+  // of the toggle switch. The second section is the toggle switch to always
+  // prompt for selection of Mail client app.
+  [model addSectionWithIdentifier:SectionIdentifierAlwaysAsk];
+  _alwaysAskItem =
+      [[CollectionViewSwitchItem alloc] initWithType:ItemTypeAlwaysAskSwitch];
+  _alwaysAskItem.text = l10n_util::GetNSString(IDS_IOS_CHOOSE_EMAIL_ASK_TOGGLE);
+  _alwaysAskItem.on = currentHandlerID == nil;
+  [model addItem:_alwaysAskItem
+      toSectionWithIdentifier:SectionIdentifierAlwaysAsk];
 
   // Lists all the Mail client apps known.
   for (MailtoHandler* handler in handlers) {

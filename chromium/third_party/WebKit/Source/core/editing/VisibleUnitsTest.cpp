@@ -4,14 +4,13 @@
 
 #include "core/editing/VisibleUnits.h"
 
-#include <ostream>  // NOLINT
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/Text.h"
-#include "core/editing/EditingTestBase.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/VisiblePosition.h"
-#include "core/html/TextControlElement.h"
+#include "core/editing/testing/EditingTestBase.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/layout/LayoutTextFragment.h"
-#include "core/layout/line/InlineTextBox.h"
 
 namespace blink {
 
@@ -48,15 +47,6 @@ VisiblePositionInFlatTree CreateVisiblePositionInFlatTree(
 }
 
 }  // namespace
-
-std::ostream& operator<<(std::ostream& ostream,
-                         const InlineBoxPosition& inline_box_position) {
-  if (!inline_box_position.inline_box)
-    return ostream << "null";
-  return ostream
-         << inline_box_position.inline_box->GetLineLayoutItem().GetNode() << "@"
-         << inline_box_position.offset_in_box;
-}
 
 class VisibleUnitsTest : public EditingTestBase {};
 
@@ -205,33 +195,6 @@ TEST_F(VisibleUnitsTest, characterBefore) {
 
   EXPECT_EQ('4', CharacterBefore(CreateVisiblePositionInDOMTree(*five, 0)));
   EXPECT_EQ('1', CharacterBefore(CreateVisiblePositionInFlatTree(*five, 0)));
-}
-
-TEST_F(VisibleUnitsTest, computeInlineBoxPositionBidiIsolate) {
-  // "|" is bidi-level 0, and "foo" and "bar" are bidi-level 2
-  SetBodyContent(
-      "|<span id=sample style='unicode-bidi: isolate;'>foo<br>bar</span>|");
-
-  Element* sample = GetDocument().getElementById("sample");
-  Node* text = sample->firstChild();
-
-  const InlineBoxPosition& actual =
-      ComputeInlineBoxPosition(Position(text, 0), TextAffinity::kDownstream);
-  EXPECT_EQ(ToLayoutText(text->GetLayoutObject())->FirstTextBox(),
-            actual.inline_box);
-}
-
-// http://crbug.com/716093
-TEST_F(VisibleUnitsTest, ComputeInlineBoxPositionMixedEditable) {
-  SetBodyContent(
-      "<div contenteditable id=sample>abc<input contenteditable=false></div>");
-  Element* const sample = GetDocument().getElementById("sample");
-
-  const InlineBoxPosition& actual = ComputeInlineBoxPosition(
-      Position::LastPositionInNode(*sample), TextAffinity::kDownstream);
-  // Should not be in infinite-loop
-  EXPECT_EQ(nullptr, actual.inline_box);
-  EXPECT_EQ(0, actual.offset_in_box);
 }
 
 TEST_F(VisibleUnitsTest, endOfDocument) {
@@ -505,7 +468,6 @@ TEST_F(VisibleUnitsTest, endOfSentence) {
       "<p><i id=three>333</i> <content select=#two></content> <content "
       "select=#one></content> <i id=four>4444</i></p>";
   SetBodyContent(body_content);
-  SetShadowContent(shadow_content, "host");
   ShadowRoot* shadow_root = SetShadowContent(shadow_content, "host");
 
   Node* one = GetDocument().getElementById("one")->firstChild();
@@ -1653,12 +1615,12 @@ TEST_F(VisibleUnitsTest, startOfParagraph) {
   // crbug.com/563777. startOfParagraph() unexpectedly returned a null
   // position with nested editable <BODY>s.
   Element* root = GetDocument().documentElement();
-  root->setInnerHTML(
+  root->SetInnerHTMLFromString(
       "<style>* { display:inline-table; }</style><body "
       "contenteditable=true><svg><svg><foreignObject>abc<svg></svg></"
       "foreignObject></svg></svg></body>");
   Element* old_body = GetDocument().body();
-  root->setInnerHTML(
+  root->SetInnerHTMLFromString(
       "<body contenteditable=true><svg><foreignObject><style>def</style>");
   DCHECK_NE(old_body, GetDocument().body());
   Node* foreign_object = GetDocument().body()->firstChild()->firstChild();
@@ -1851,6 +1813,24 @@ TEST_F(VisibleUnitsTest,
   EXPECT_EQ(Position(one->firstChild(), 7),
             PreviousRootInlineBoxCandidatePosition(
                 two->lastChild(), visible_position, kContentIsEditable));
+}
+
+static unsigned MockBoundarySearch(const UChar*,
+                                   unsigned,
+                                   unsigned,
+                                   BoundarySearchContextAvailability,
+                                   bool&) {
+  return true;
+}
+
+// Regression test for crbug.com/788661
+TEST_F(VisibleUnitsTest, NextBoundaryOfEditableTableWithLeadingSpaceInOutput) {
+  VisiblePosition pos = CreateVisiblePosition(SetCaretTextToBody(
+      // The leading whitespace is necessary for bug repro
+      "<output> <table contenteditable><!--|--></table></output>"));
+  Position result = NextBoundary(pos, MockBoundarySearch);
+  EXPECT_EQ("<output> <table contenteditable>|</table></output>",
+            GetCaretTextFromBody(result));
 }
 
 }  // namespace blink

@@ -28,8 +28,8 @@
 
 #include "modules/accessibility/AXListBox.h"
 
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "modules/accessibility/AXListBoxOption.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 
@@ -58,24 +58,24 @@ AccessibilityRole AXListBox::DetermineAccessibilityRole() {
 }
 
 AXObject* AXListBox::ActiveDescendant() {
-  if (!isHTMLSelectElement(GetNode()))
+  if (!IsHTMLSelectElement(GetNode()))
     return nullptr;
 
-  HTMLSelectElement* select = toHTMLSelectElement(GetNode());
+  HTMLSelectElement* select = ToHTMLSelectElement(GetNode());
   int active_index = select->ActiveSelectionEndListIndex();
   if (active_index >= 0 && active_index < static_cast<int>(select->length())) {
     HTMLOptionElement* option = select->item(active_index_);
-    return AxObjectCache().Get(option);
+    return AXObjectCache().Get(option);
   }
 
   return nullptr;
 }
 
 void AXListBox::ActiveIndexChanged() {
-  if (!isHTMLSelectElement(GetNode()))
+  if (!IsHTMLSelectElement(GetNode()))
     return;
 
-  HTMLSelectElement* select = toHTMLSelectElement(GetNode());
+  HTMLSelectElement* select = ToHTMLSelectElement(GetNode());
   int active_index = select->ActiveSelectionEndListIndex();
   if (active_index == active_index_)
     return;
@@ -84,7 +84,7 @@ void AXListBox::ActiveIndexChanged() {
   if (!select->IsFocused())
     return;
 
-  AxObjectCache().PostNotification(
+  AXObjectCache().PostNotification(
       this, AXObjectCacheImpl::kAXActiveDescendantChanged);
 }
 

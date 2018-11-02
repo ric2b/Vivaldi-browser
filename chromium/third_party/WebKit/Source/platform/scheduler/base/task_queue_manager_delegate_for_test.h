@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "platform/scheduler/base/task_queue_manager_delegate.h"
@@ -23,10 +24,10 @@ class TaskQueueManagerDelegateForTest : public TaskQueueManagerDelegate {
       std::unique_ptr<base::TickClock> time_source);
 
   // SingleThreadTaskRunner:
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override;
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
                                   base::OnceClosure task,
                                   base::TimeDelta delay) override;
   bool RunsTasksInCurrentSequence() const override;

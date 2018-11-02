@@ -18,8 +18,8 @@ class {{v8_class}}Constructor {
   STATIC_ONLY({{v8_class}}Constructor);
  public:
   static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
-  {{exported}}static void NamedConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>& info);
-  {{exported}}static const WrapperTypeInfo wrapperTypeInfo;
+  static void NamedConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>& info);
+  static const WrapperTypeInfo wrapperTypeInfo;
 };
 
 {% endif %}
@@ -27,7 +27,7 @@ class {{v8_class}} {
   STATIC_ONLY({{v8_class}});
  public:
   {% if is_array_buffer_or_view %}
-  {{exported}}static {{cpp_class}}* toImpl(v8::Local<v8::Object> object);
+  {{exported}}static {{cpp_class}}* ToImpl(v8::Local<v8::Object> object);
   {% else %}
   {{exported}}static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
   static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
@@ -35,11 +35,11 @@ class {{v8_class}} {
   {% if has_named_properties_object %}
   {{exported}}static v8::Local<v8::FunctionTemplate> domTemplateForNamedPropertiesObject(v8::Isolate*, const DOMWrapperWorld&);
   {% endif %}
-  static {{cpp_class}}* toImpl(v8::Local<v8::Object> object) {
+  static {{cpp_class}}* ToImpl(v8::Local<v8::Object> object) {
     return ToScriptWrappable(object)->ToImpl<{{cpp_class}}>();
   }
   {% endif %}
-  {{exported}}static {{cpp_class}}* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
+  {{exported}}static {{cpp_class}}* ToImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
   {% if has_partial_interface %}
   {{exported}}static WrapperTypeInfo wrapperTypeInfo;
   {% else %}
@@ -118,21 +118,31 @@ class {{v8_class}} {
      * a C++ pointer to the DOM object (if the object is not in oilpan) #}
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount;
   {# End custom internal fields #}
-  {% if prepare_prototype_and_interface_object_func %}
-  {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+
+  {% if install_conditional_features_func %}
+  {{exported}}static void InstallConditionalFeatures(
+      v8::Local<v8::Context>,
+      const DOMWrapperWorld&,
+      v8::Local<v8::Object> instanceObject,
+      v8::Local<v8::Object> prototypeObject,
+      v8::Local<v8::Function> interfaceObject,
+      v8::Local<v8::FunctionTemplate> interfaceTemplate);
   {% elif has_partial_interface %}
-  {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) {}
+  {{exported}}static void InstallConditionalFeatures(
+      v8::Local<v8::Context>,
+      const DOMWrapperWorld&,
+      v8::Local<v8::Object> instanceObject,
+      v8::Local<v8::Object> prototypeObject,
+      v8::Local<v8::Function> interfaceObject,
+      v8::Local<v8::FunctionTemplate> interfaceTemplate) {}
   {% endif %}
-  {% if has_install_conditional_features_on_global_func %}
-  {{exported}}static void InstallConditionalFeaturesOnGlobal(v8::Local<v8::Context>, const DOMWrapperWorld&);
-  {% endif %}{# has_install_conditional_features_on_global_func #}
 
   {% if has_partial_interface %}
   {{exported}}static void UpdateWrapperTypeInfo(
       InstallTemplateFunction,
       InstallRuntimeEnabledFeaturesFunction,
       InstallRuntimeEnabledFeaturesOnTemplateFunction,
-      PreparePrototypeAndInterfaceObjectFunction);
+      InstallConditionalFeaturesFunction);
   {{exported}}static void install{{v8_class}}Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
   {% for method in methods if method.overloads and method.overloads.has_partial_overloads %}
   {{exported}}static void register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*)(const v8::FunctionCallbackInfo<v8::Value>&));
@@ -169,7 +179,7 @@ class {{v8_class}} {
     {%- else -%}
     const v8::FunctionCallbackInfo<v8::Value>&
     {%- endif -%});
-  {% elif attribute.needs_constructor_getter_callback %}
+  {% else %}
   {{exported}}static void {{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
   {% endif %}
   {% if attribute.has_setter %}
@@ -245,7 +255,7 @@ class {{v8_class}} {
   {% if indexed_property_getter or named_property_setter %}
   {{exported}}static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value>, const v8::PropertyCallbackInfo<v8::Value>&);
   {% endif %}
-  {% if indexed_property_getter %}
+  {% if indexed_property_getter or named_property_getter %}
   {{exported}}static void indexedPropertyDescriptorCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>&);
   {% endif %}
   {% if indexed_property_deleter or named_property_deleter %}

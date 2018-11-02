@@ -36,7 +36,7 @@ namespace offline_pages {
 // does not happen.
 //
 // If the page is not completely loaded, it is up to the implementation of the
-// archiver whether to respond with ERROR_CONTENT_UNAVAILBLE, wait longer to
+// archiver whether to respond with ERROR_CONTENT_UNAVAILABLE, wait longer to
 // actually snapshot a complete page, or snapshot whatever is available at that
 // point in time (what the user sees).
 class OfflinePageArchiver {
@@ -52,6 +52,9 @@ class OfflinePageArchiver {
                                     // there was a security error.
     ERROR_ERROR_PAGE,               // We detected an error page.
     ERROR_INTERSTITIAL_PAGE,        // We detected an interstitial page.
+    ERROR_SKIPPED,                  // Page shouldn't be archived like NTP or
+                                    // file urls.
+    ERROR_DIGEST_CALCULATION_FAILED,  // Failed to compute digest.
   };
 
   // Describes the parameters to control how to create an archive.
@@ -71,7 +74,8 @@ class OfflinePageArchiver {
                               const GURL& /* url */,
                               const base::FilePath& /* file_path */,
                               const base::string16& /* title */,
-                              int64_t /* file_size */)>
+                              int64_t /* file_size */,
+                              const std::string& /* digest */)>
       CreateArchiveCallback;
 
   virtual ~OfflinePageArchiver() {}

@@ -19,7 +19,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/transform.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/focus/focus_manager.h"
@@ -72,6 +72,12 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
   ~EventForwarder() override = default;
 
  private:
+  // Some swipes are handled by Android alone. We don't want to capture swipe
+  // events if we started a swipe on the chrome side then moved into the Android
+  // swipe region. So, keep track of whether swipe has been 'captured' by
+  // Android.
+  bool swipe_captured_ = false;
+
   // ui::EventHandler
   void OnEvent(ui::Event* event) override {
     // Do not forward event targeted to the floating close button so that
@@ -116,7 +122,46 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
         widget->OnScrollEvent(located_event->AsScrollEvent());
       } else if (located_event->IsGestureEvent() &&
                  event->type() != ui::ET_GESTURE_TAP) {
-        widget->OnGestureEvent(located_event->AsGestureEvent());
+        bool event_for_android_only = false;
+        if ((event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
+             event->type() == ui::ET_GESTURE_SCROLL_UPDATE ||
+             event->type() == ui::ET_GESTURE_SCROLL_END ||
+             event->type() == ui::ET_GESTURE_SWIPE) &&
+            owner_->surface_) {
+          gfx::RectF rect(owner_->item_->GetSwipeInputRect());
+          owner_->surface_->GetContentWindow()->transform().TransformRect(
+              &rect);
+          gfx::Point location = located_event->location();
+          views::View::ConvertPointFromWidget(owner_, &location);
+          bool contains = rect.Contains(gfx::PointF(location));
+
+          if (contains && event->type() == ui::ET_GESTURE_SCROLL_BEGIN)
+            swipe_captured_ = true;
+
+          event_for_android_only = contains && swipe_captured_;
+        }
+
+        if (event->type() == ui::ET_GESTURE_SCROLL_END)
+          swipe_captured_ = false;
+
+        if (!event_for_android_only)
+          widget->OnGestureEvent(located_event->AsGestureEvent());
+      }
+    }
+
+    // If AXTree is attached to notification content view, notification surface
+    // always gets focus. Tab key events are consumed by the surface, and tab
+    // focus traversal gets stuck at Android notification. To prevent it, always
+    // pass tab key event to focus manager of content view.
+    // TODO(yawano): include elements inside Android notification in tab focus
+    // traversal rather than skipping them.
+    if (owner_->surface_ && owner_->surface_->GetAXTreeId() != -1 &&
+        event->IsKeyEvent()) {
+      ui::KeyEvent* key_event = event->AsKeyEvent();
+      if (key_event->key_code() == ui::VKEY_TAB &&
+          (key_event->flags() == ui::EF_NONE ||
+           key_event->flags() == ui::EF_SHIFT_DOWN)) {
+        widget->GetFocusManager()->OnKeyEvent(*key_event);
       }
     }
   }
@@ -168,25 +213,9 @@ class ArcNotificationContentView::SlideHelper
     return layer ? layer : owner_->GetWidget()->GetLayer();
   }
 
-  void OnSlideStart() {
-    if (!owner_->surface_)
-      return;
-    DCHECK(owner_->surface_->GetWindow());
-    surface_copy_ = ::wm::RecreateLayers(owner_->surface_->GetWindow());
-    // |surface_copy_| is at (0, 0) in owner_->layer().
-    surface_copy_->root()->SetBounds(gfx::Rect(surface_copy_->root()->size()));
-    owner_->layer()->Add(surface_copy_->root());
-    owner_->surface_->GetWindow()->layer()->SetOpacity(0.0f);
-  }
+  void OnSlideStart() { owner_->ShowCopiedSurface(); }
 
-  void OnSlideEnd() {
-    if (!owner_->surface_)
-      return;
-    DCHECK(owner_->surface_->GetWindow());
-    owner_->surface_->GetWindow()->layer()->SetOpacity(1.0f);
-    owner_->Layout();
-    surface_copy_.reset();
-  }
+  void OnSlideEnd() { owner_->HideCopiedSurface(); }
 
   // ui::LayerAnimationObserver
   void OnLayerAnimationEnded(ui::LayerAnimationSequence* seq) override {
@@ -199,7 +228,6 @@ class ArcNotificationContentView::SlideHelper
 
   ArcNotificationContentView* const owner_;
   bool sliding_ = false;
-  std::unique_ptr<ui::LayerTreeOwner> surface_copy_;
 
   DISALLOW_COPY_AND_ASSIGN(SlideHelper);
 };
@@ -239,6 +267,14 @@ class ArcNotificationContentView::ContentViewDelegate
   bool IsExpanded() const override { return owner_->IsExpanded(); }
 
   void SetExpanded(bool expanded) override { owner_->SetExpanded(expanded); }
+
+  void OnContainerAnimationStarted() override {
+    owner_->OnContainerAnimationStarted();
+  }
+
+  void OnContainerAnimationEnded() override {
+    owner_->OnContainerAnimationEnded();
+  }
 
  private:
   ArcNotificationContentView* const owner_;
@@ -299,7 +335,7 @@ const char* ArcNotificationContentView::GetClassName() const {
 
 std::unique_ptr<ArcNotificationContentViewDelegate>
 ArcNotificationContentView::CreateContentViewDelegate() {
-  return base::MakeUnique<ArcNotificationContentView::ContentViewDelegate>(
+  return std::make_unique<ArcNotificationContentView::ContentViewDelegate>(
       this);
 }
 
@@ -413,6 +449,11 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
   if (!control_buttons_view_)
     return;
 
+  // If the visibility change is ongoing, skip this method to prevent an
+  // infinite loop.
+  if (updating_control_buttons_visibility_)
+    return;
+
   DCHECK(floating_control_buttons_widget_);
 
   const bool target_visiblity =
@@ -421,6 +462,10 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
 
   if (target_visiblity == floating_control_buttons_widget_->IsVisible())
     return;
+
+  // Add the guard to prevent an infinite loop. Changing visibility may generate
+  // an event and it may call thie method again.
+  base::AutoReset<bool> reset(&updating_control_buttons_visibility_, true);
 
   if (target_visiblity)
     floating_control_buttons_widget_->Show();
@@ -482,6 +527,34 @@ void ArcNotificationContentView::SetExpanded(bool expanded) {
     if (expand_state == mojom::ArcNotificationExpandState::EXPANDED)
       item_->ToggleExpansion();
   }
+}
+
+void ArcNotificationContentView::OnContainerAnimationStarted() {
+  ShowCopiedSurface();
+}
+
+void ArcNotificationContentView::OnContainerAnimationEnded() {
+  HideCopiedSurface();
+}
+
+void ArcNotificationContentView::ShowCopiedSurface() {
+  if (!surface_)
+    return;
+  DCHECK(surface_->GetWindow());
+  surface_copy_ = ::wm::RecreateLayers(surface_->GetWindow());
+  // |surface_copy_| is at (0, 0) in owner_->layer().
+  surface_copy_->root()->SetBounds(gfx::Rect(surface_copy_->root()->size()));
+  layer()->Add(surface_copy_->root());
+  surface_->GetWindow()->layer()->SetOpacity(0.0f);
+}
+
+void ArcNotificationContentView::HideCopiedSurface() {
+  if (!surface_)
+    return;
+  DCHECK(surface_->GetWindow());
+  surface_->GetWindow()->layer()->SetOpacity(1.0f);
+  Layout();
+  surface_copy_.reset();
 }
 
 void ArcNotificationContentView::ViewHierarchyChanged(
@@ -559,14 +632,20 @@ void ArcNotificationContentView::Layout() {
 void ArcNotificationContentView::OnPaint(gfx::Canvas* canvas) {
   views::NativeViewHost::OnPaint(canvas);
 
-  // Bail if there is a |surface_| or no item or no snapshot image.
-  if (surface_ || !item_ || item_->GetSnapshot().isNull())
-    return;
-  const gfx::Rect contents_bounds = GetContentsBounds();
-  canvas->DrawImageInt(item_->GetSnapshot(), 0, 0, item_->GetSnapshot().width(),
-                       item_->GetSnapshot().height(), contents_bounds.x(),
-                       contents_bounds.y(), contents_bounds.width(),
-                       contents_bounds.height(), false);
+  if (!surface_ && item_ && !item_->GetSnapshot().isNull()) {
+    // Draw the snapshot if there is no surface and the snapshot is available.
+    const gfx::Rect contents_bounds = GetContentsBounds();
+    canvas->DrawImageInt(
+        item_->GetSnapshot(), 0, 0, item_->GetSnapshot().width(),
+        item_->GetSnapshot().height(), contents_bounds.x(), contents_bounds.y(),
+        contents_bounds.width(), contents_bounds.height(), false);
+  } else {
+    // Draw a blank background otherwise. The height of the view and surface are
+    // not exactly synced and user may see the blank area out of the surface.
+    // This code prevetns an ugly blank area and show white color instead.
+    // This should be removed after b/35786193 is done.
+    canvas->DrawColor(SK_ColorWHITE);
+  }
 }
 
 void ArcNotificationContentView::OnMouseEntered(const ui::MouseEvent&) {
@@ -582,6 +661,9 @@ void ArcNotificationContentView::OnFocus() {
 
   NativeViewHost::OnFocus();
   static_cast<ArcNotificationView*>(parent())->OnContentFocused();
+
+  if (surface_ && surface_->GetAXTreeId() != -1)
+    Activate();
 }
 
 void ArcNotificationContentView::OnBlur() {
@@ -628,18 +710,25 @@ bool ArcNotificationContentView::HandleAccessibleAction(
 
 void ArcNotificationContentView::GetAccessibleNodeData(
     ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
-  node_data->AddStringAttribute(
-      ui::AX_ATTR_ROLE_DESCRIPTION,
-      l10n_util::GetStringUTF8(
-          IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+  if (surface_ && surface_->GetAXTreeId() != -1) {
+    node_data->role = ui::AX_ROLE_CLIENT;
+    node_data->AddIntAttribute(ui::AX_ATTR_CHILD_TREE_ID,
+                               surface_->GetAXTreeId());
+  } else {
+    node_data->role = ui::AX_ROLE_BUTTON;
+    node_data->AddStringAttribute(
+        ui::AX_ATTR_ROLE_DESCRIPTION,
+        l10n_util::GetStringUTF8(
+            IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+  }
   node_data->SetName(accessible_name_);
 }
 
 void ArcNotificationContentView::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
-    const gfx::Rect& new_bounds) {
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (in_layout_)
     return;
 
@@ -676,6 +765,12 @@ void ArcNotificationContentView::OnNotificationSurfaceAdded(
     return;
 
   SetSurface(surface);
+
+  // Notify AX_EVENT_CHILDREN_CHANGED to force AXNodeData of this view updated.
+  // As order of OnNotificationSurfaceAdded call is not guaranteed, we are
+  // dispatching the event in both ArcNotificationContentView and
+  // ArcAccessibilityHelperBridge.
+  NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);
 }
 
 void ArcNotificationContentView::OnNotificationSurfaceRemoved(

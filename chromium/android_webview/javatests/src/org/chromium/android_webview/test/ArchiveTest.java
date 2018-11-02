@@ -7,7 +7,6 @@ package org.chromium.android_webview.test;
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import android.support.test.filters.SmallTest;
-import android.webkit.ValueCallback;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -16,8 +15,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
+import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 
@@ -62,7 +61,7 @@ public class ArchiveTest {
         // Set up a handler to handle the completion callback
         final Semaphore s = new Semaphore(0);
         final AtomicReference<String> msgPath = new AtomicReference<String>();
-        final ValueCallback<String> callback = path1 -> {
+        final Callback<String> callback = path1 -> {
             msgPath.set(path1);
             s.release();
         };
@@ -124,7 +123,6 @@ public class ArchiveTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     public void testExplicitBadPath() throws Throwable {
         final String path = new File("/foo/bar/baz.mht").getAbsolutePath();
         deleteFile(path);
@@ -138,7 +136,6 @@ public class ArchiveTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
     public void testAutoBadPath() throws Throwable {
         final String path = new File("/foo/bar/").getAbsolutePath();
         deleteFile(path);
@@ -180,7 +177,7 @@ public class ArchiveTest {
     }
 
     private void saveWebArchiveAndWaitForUiPost(
-            final String path, boolean autoname, final ValueCallback<String> callback) {
+            final String path, boolean autoname, final Callback<String> callback) {
         ThreadUtils.runOnUiThread(
                 () -> mTestContainerView.getAwContents().saveWebArchive(path, false, callback));
         ThreadUtils.runOnUiThreadBlocking(() -> {

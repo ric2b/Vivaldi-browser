@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/payments/core/payment_options_provider.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payments_profile_comparator.h"
@@ -128,7 +129,7 @@ std::unique_ptr<views::View> GetShippingAddressLabel(
       GetShippingAddressLabelFormAutofillProfile(profile, locale);
 
   base::string16 phone =
-      data_util::GetFormattedPhoneNumberForDisplay(profile, locale);
+      autofill::i18n::GetFormattedPhoneNumberForDisplay(profile, locale);
 
   return GetBaseProfileLabel(type, name, address, phone, accessible_content,
                              enabled);
@@ -184,8 +185,8 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
     const base::string16& title,
     views::ButtonListener* listener) {
   std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
-  views::GridLayout* layout = new views::GridLayout(container.get());
-  container->SetLayoutManager(layout);
+  views::GridLayout* layout =
+      views::GridLayout::CreateAndInstall(container.get());
 
   constexpr int kHeaderTopVerticalInset = 14;
   constexpr int kHeaderBottomVerticalInset = 8;
@@ -235,19 +236,24 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
 
 std::unique_ptr<views::ImageView> CreateInstrumentIconView(
     int icon_resource_id,
+    const gfx::ImageSkia* img,
     const base::string16& tooltip_text,
     float opacity) {
-  std::unique_ptr<views::ImageView> card_icon_view =
+  std::unique_ptr<views::ImageView> icon_view =
       base::MakeUnique<views::ImageView>();
-  card_icon_view->set_can_process_events_within_subtree(false);
-  card_icon_view->SetImage(ResourceBundle::GetSharedInstance()
-                               .GetImageNamed(icon_resource_id)
-                               .AsImageSkia());
-  card_icon_view->SetTooltipText(tooltip_text);
-  card_icon_view->SetPaintToLayer();
-  card_icon_view->layer()->SetFillsBoundsOpaquely(false);
-  card_icon_view->layer()->SetOpacity(opacity);
-  return card_icon_view;
+  icon_view->set_can_process_events_within_subtree(false);
+  if (img != nullptr) {
+    icon_view->SetImage(*img);
+  } else {
+    icon_view->SetImage(ui::ResourceBundle::GetSharedInstance()
+                            .GetImageNamed(icon_resource_id)
+                            .AsImageSkia());
+  }
+  icon_view->SetTooltipText(tooltip_text);
+  icon_view->SetPaintToLayer();
+  icon_view->layer()->SetFillsBoundsOpaquely(false);
+  icon_view->layer()->SetOpacity(opacity);
+  return icon_view;
 }
 
 std::unique_ptr<views::View> CreateProductLogoFooterView() {
@@ -264,7 +270,7 @@ std::unique_ptr<views::View> CreateProductLogoFooterView() {
   std::unique_ptr<views::ImageView> chrome_logo =
       base::MakeUnique<views::ImageView>();
   chrome_logo->set_can_process_events_within_subtree(false);
-  chrome_logo->SetImage(ResourceBundle::GetSharedInstance()
+  chrome_logo->SetImage(ui::ResourceBundle::GetSharedInstance()
                             .GetImageNamed(IDR_PRODUCT_LOGO_NAME_22)
                             .AsImageSkia());
   chrome_logo->SetTooltipText(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
@@ -309,7 +315,7 @@ std::unique_ptr<views::View> GetContactInfoLabel(
 
   base::string16 phone =
       options.request_payer_phone()
-          ? data_util::GetFormattedPhoneNumberForDisplay(profile, locale)
+          ? autofill::i18n::GetFormattedPhoneNumberForDisplay(profile, locale)
           : base::string16();
 
   base::string16 email = options.request_payer_email()
@@ -345,8 +351,10 @@ std::unique_ptr<views::Label> CreateMediumLabel(const base::string16& text) {
   // Also, it needs to handle user setups where the default font is BOLD already
   // since asking for a MEDIUM font will give a lighter font.
   std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(text);
-  label->SetFontList(ResourceBundle::GetSharedInstance().GetFontListWithDelta(
-      ui::kLabelFontSizeDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+  label->SetFontList(
+      ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
+          ui::kLabelFontSizeDelta, gfx::Font::NORMAL,
+          gfx::Font::Weight::MEDIUM));
   return label;
 }
 

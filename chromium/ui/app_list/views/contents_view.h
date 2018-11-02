@@ -9,10 +9,10 @@
 #include <memory>
 #include <utility>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_export.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/pagination_model_observer.h"
 #include "ui/views/view.h"
@@ -31,13 +31,12 @@ class AppListFolderItem;
 class AppListMainView;
 class AppsContainerView;
 class AppsGridView;
-class CustomLauncherPageView;
 class PaginationModel;
 class SearchBoxView;
+class SearchResultAnswerCardView;
 class SearchResultListView;
 class SearchResultPageView;
 class SearchResultTileItemListView;
-class StartPageView;
 
 // A view to manage launcher pages within the Launcher (eg. start page, apps
 // grid view, search results). There can be any number of launcher pages, only
@@ -96,10 +95,11 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   AppsContainerView* apps_container_view() const {
     return apps_container_view_;
   }
-  StartPageView* start_page_view() const { return start_page_view_; }
-  CustomLauncherPageView* custom_page_view() const { return custom_page_view_; }
   SearchResultPageView* search_results_page_view() const {
     return search_results_page_view_;
+  }
+  SearchResultAnswerCardView* search_result_answer_card_view_for_test() const {
+    return search_result_answer_card_view_;
   }
   SearchResultTileItemListView* search_result_tile_item_list_view_for_test()
       const {
@@ -148,6 +148,7 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   void SelectedPageChanged(int old_selected, int new_selected) override;
   void TransitionStarted() override;
   void TransitionChanged() override;
+  void TransitionEnded() override;
 
   // Returns the height of current display.
   int GetDisplayHeight() const;
@@ -170,12 +171,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Returns the size of the default content area.
   gfx::Size GetDefaultContentsSize() const;
-
-  // Notifies the view delegate that the custom launcher page's animation has
-  // changed.
-  void NotifyCustomLauncherPageAnimationChanged(double progress,
-                                                int current_page,
-                                                int target_page);
 
   // Calculates and sets the bounds for the subviews. If there is currently an
   // animation, this positions the views as appropriate for the current frame.
@@ -206,10 +201,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   // Sub-views of the ContentsView. All owned by the views hierarchy.
   AppsContainerView* apps_container_view_ = nullptr;
   SearchResultPageView* search_results_page_view_ = nullptr;
+  SearchResultAnswerCardView* search_result_answer_card_view_ = nullptr;
   SearchResultTileItemListView* search_result_tile_item_list_view_ = nullptr;
   SearchResultListView* search_result_list_view_ = nullptr;
-  StartPageView* start_page_view_ = nullptr;
-  CustomLauncherPageView* custom_page_view_ = nullptr;
 
   // The child page views. Owned by the views hierarchy.
   std::vector<AppListPage*> app_list_pages_;

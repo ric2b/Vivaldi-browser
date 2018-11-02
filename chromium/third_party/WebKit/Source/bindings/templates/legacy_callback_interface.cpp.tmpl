@@ -1,7 +1,7 @@
 {% filter format_blink_cpp_source_code %}
 
 {% include 'copyright_block.txt' %}
-#include "{{v8_class}}.h"
+#include "{{this_include_header_name}}"
 
 {% for filename in cpp_includes %}
 #include "{{filename}}"
@@ -26,7 +26,6 @@ const WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = {
     WrapperTypeInfo::kWrapperTypeNoPrototype,
     WrapperTypeInfo::kObjectClassId,
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
-    WrapperTypeInfo::kDependent,
 };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop

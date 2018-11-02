@@ -31,12 +31,12 @@
 #include "public/platform/WebURLResponse.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/loader/fetch/ResourceLoadTiming.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
 #include "public/platform/WebHTTPLoadInfo.h"
 #include "public/platform/WebString.h"
@@ -49,9 +49,9 @@ namespace {
 
 class URLResponseExtraDataContainer : public ResourceResponse::ExtraData {
  public:
-  static PassRefPtr<URLResponseExtraDataContainer> Create(
+  static scoped_refptr<URLResponseExtraDataContainer> Create(
       WebURLResponse::ExtraData* extra_data) {
-    return AdoptRef(new URLResponseExtraDataContainer(extra_data));
+    return base::AdoptRef(new URLResponseExtraDataContainer(extra_data));
   }
 
   ~URLResponseExtraDataContainer() override {}
@@ -125,8 +125,8 @@ void WebURLResponse::SetConnectionReused(bool connection_reused) {
 }
 
 void WebURLResponse::SetLoadTiming(const WebURLLoadTiming& timing) {
-  RefPtr<ResourceLoadTiming> load_timing =
-      PassRefPtr<ResourceLoadTiming>(timing);
+  scoped_refptr<ResourceLoadTiming> load_timing =
+      scoped_refptr<ResourceLoadTiming>(timing);
   resource_response_->SetResourceLoadTiming(std::move(load_timing));
 }
 
@@ -232,6 +232,14 @@ void WebURLResponse::SetHasMajorCertificateErrors(bool value) {
   resource_response_->SetHasMajorCertificateErrors(value);
 }
 
+void WebURLResponse::SetIsLegacySymantecCert(bool value) {
+  resource_response_->SetIsLegacySymantecCert(value);
+}
+
+void WebURLResponse::SetCertValidityStart(base::Time expiration) {
+  resource_response_->SetCertValidityStart(expiration);
+}
+
 void WebURLResponse::SetSecurityStyle(WebSecurityStyle security_style) {
   resource_response_->SetSecurityStyle(
       static_cast<ResourceResponse::SecurityStyle>(security_style));
@@ -280,10 +288,6 @@ bool WebURLResponse::WasFetchedViaServiceWorker() const {
 
 void WebURLResponse::SetWasFetchedViaServiceWorker(bool value) {
   resource_response_->SetWasFetchedViaServiceWorker(value);
-}
-
-void WebURLResponse::SetWasFetchedViaForeignFetch(bool value) {
-  resource_response_->SetWasFetchedViaForeignFetch(value);
 }
 
 void WebURLResponse::SetWasFallbackRequiredByServiceWorker(bool value) {
@@ -361,10 +365,11 @@ void WebURLResponse::SetEncodedDataLength(long long length) {
 }
 
 WebURLResponse::ExtraData* WebURLResponse::GetExtraData() const {
-  RefPtr<ResourceResponse::ExtraData> data = resource_response_->GetExtraData();
+  scoped_refptr<ResourceResponse::ExtraData> data =
+      resource_response_->GetExtraData();
   if (!data)
-    return 0;
-  return static_cast<URLResponseExtraDataContainer*>(data.Get())
+    return nullptr;
+  return static_cast<URLResponseExtraDataContainer*>(data.get())
       ->GetExtraData();
 }
 

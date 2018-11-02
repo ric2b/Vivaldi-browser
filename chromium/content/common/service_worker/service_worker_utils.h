@@ -13,6 +13,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -43,7 +44,7 @@ class ServiceWorkerUtils {
                                           const GURL& script_url,
                                           std::string* error_message);
 
-  static bool IsScriptStreamingEnabled();
+  CONTENT_EXPORT static bool IsScriptStreamingEnabled();
 
   // Returns true if all members of |urls| have the same origin, and
   // OriginCanAccessServiceWorkers is true for this origin.
@@ -60,6 +61,12 @@ class ServiceWorkerUtils {
   static bool IsBrowserAssignedProviderId(int provider_id) {
     return provider_id < kInvalidServiceWorkerProviderId;
   }
+
+  static std::string ErrorTypeToString(
+      blink::mojom::ServiceWorkerErrorType error);
+
+  static std::string ClientTypeToString(
+      blink::mojom::ServiceWorkerClientType type);
 };
 
 class CONTENT_EXPORT LongestScopeMatcher {

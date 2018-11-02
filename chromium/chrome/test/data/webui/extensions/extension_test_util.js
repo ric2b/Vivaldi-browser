@@ -17,10 +17,13 @@ cr.define('extension_test_util', function() {
      * @param {string} callName The function expected to be called.
      * @param {Array<*>=} opt_expectedArgs The arguments the function is
      *     expected to be called with.
+     * @param {*=} opt_returnValue The value to return from the function call.
      */
-    testClickingCalls: function(element, callName, opt_expectedArgs) {
+    testClickingCalls: function(element, callName, opt_expectedArgs,
+                                opt_returnValue) {
       var mock = new MockController();
       var mockMethod = mock.createFunctionMock(this, callName);
+      mockMethod.returnValue = opt_returnValue;
       MockMethod.prototype.addExpectation.apply(
           mockMethod, opt_expectedArgs);
       MockInteractions.tap(element);
@@ -80,7 +83,7 @@ cr.define('extension_test_util', function() {
       }
       expectEquals(0, missingEvents.length, JSON.stringify(missingEvents));
     },
-  }
+  };
 
   /**
    * A mock delegate for the item, capable of testing functionality.
@@ -118,10 +121,21 @@ cr.define('extension_test_util', function() {
     inspectItemView: function(id, view) {},
 
     /** @override */
+    reloadItem: function(id) {},
+
+    /** @override */
     repairItem: function(id) {},
 
     /** @override */
     showItemOptionsPage: function(id) {},
+
+    /** @override */
+    showInFolder: function(id) {},
+
+    /** @override */
+    getExtensionSize: function(id) {
+      return Promise.resolve('10 MB');
+    },
   };
 
   /**
@@ -208,10 +222,11 @@ cr.define('extension_test_util', function() {
 
   /**
    * Tests that any visible iron-icon child of an HTML element has a
-   * corresponding non-empty svg element.
+   * corresponding non-empty svg element, and all the paper-icon-button-light
+   * elements have a valid CSS-class to apply an icon as background.
    * @param {HTMLElement} e The element to check the iron icons in.
    */
-  function testIronIcons(e) {
+  function testIcons(e) {
     e.querySelectorAll('* /deep/ iron-icon').forEach(function(icon) {
       if(isElementVisible(icon)) {
         var svg = icon.$$('svg');
@@ -219,6 +234,15 @@ cr.define('extension_test_util', function() {
                    'icon "' + icon.icon + '" is not present');
       }
     });
+
+    e.querySelectorAll('* /deep/ [is=paper-icon-button-light]')
+        .forEach(function(button) {
+          if (isElementVisible(button)) {
+            expectTrue(
+                window.getComputedStyle(button)['background-image'] != 'none',
+                'button ' + button + ' doesn\'t have a valid icon class');
+          }
+        });
   }
 
   return {
@@ -229,6 +253,6 @@ cr.define('extension_test_util', function() {
     isVisible: isVisible,
     testVisible: testVisible,
     createExtensionInfo: createExtensionInfo,
-    testIronIcons: testIronIcons,
+    testIcons: testIcons,
   };
 });

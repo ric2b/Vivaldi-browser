@@ -17,7 +17,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.signin.SigninPromoView;
+import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.components.bookmarks.BookmarkId;
 
 import java.lang.annotation.Retention;
@@ -34,12 +34,14 @@ class BookmarkItemsAdapter
      * Specifies the view types that the bookmark manager screen can contain.
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({ViewType.NEW_PROMO, ViewType.OLD_PROMO, ViewType.FOLDER, ViewType.BOOKMARK})
+    @IntDef({ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.GENERIC_SIGNIN_PROMO, ViewType.SYNC_PROMO,
+            ViewType.FOLDER, ViewType.BOOKMARK})
     private @interface ViewType {
-        int NEW_PROMO = 0;
-        int OLD_PROMO = 1;
-        int FOLDER = 2;
-        int BOOKMARK = 3;
+        int PERSONALIZED_SIGNIN_PROMO = 0;
+        int GENERIC_SIGNIN_PROMO = 1;
+        int SYNC_PROMO = 2;
+        int FOLDER = 3;
+        int BOOKMARK = 4;
     }
 
     private static final int MAXIMUM_NUMBER_OF_SEARCH_RESULTS = 500;
@@ -48,7 +50,6 @@ class BookmarkItemsAdapter
     private final List<List<? extends Object>> mSections;
 
     // The promo header section will always contain 0 or 1 elements.
-    @ViewType
     private final List<Integer> mPromoHeaderSection = new ArrayList<>();
     private final List<BookmarkId> mFolderSection = new ArrayList<>();
     private final List<BookmarkId> mBookmarkSection = new ArrayList<>();
@@ -59,6 +60,7 @@ class BookmarkItemsAdapter
     private Context mContext;
     private BookmarkPromoHeader mPromoHeaderManager;
     private String mSearchText;
+    private BookmarkId mCurrentFolder;
 
     private BookmarkModelObserver mBookmarkModelObserver = new BookmarkModelObserver() {
         @Override
@@ -72,6 +74,12 @@ class BookmarkItemsAdapter
         public void bookmarkNodeRemoved(BookmarkItem parent, int oldIndex, BookmarkItem node,
                 boolean isDoingExtensiveChanges) {
             assert mDelegate != null;
+
+            if (mDelegate.getCurrentState() == BookmarkUIState.STATE_SEARCHING
+                    && TextUtils.equals(mSearchText, EMPTY_QUERY)) {
+                mDelegate.closeSearchUI();
+            }
+
             if (node.isFolder()) {
                 mDelegate.notifyStateChange(BookmarkItemsAdapter.this);
             } else {
@@ -203,10 +211,12 @@ class BookmarkItemsAdapter
         assert mDelegate != null;
 
         switch (viewType) {
-            case ViewType.NEW_PROMO:
-                return mPromoHeaderManager.createNewPromoHolder(parent);
-            case ViewType.OLD_PROMO:
-                return mPromoHeaderManager.createOldPromoHolder(parent);
+            case ViewType.PERSONALIZED_SIGNIN_PROMO:
+                return mPromoHeaderManager.createPersonalizedSigninPromoHolder(parent);
+            case ViewType.GENERIC_SIGNIN_PROMO:
+                return mPromoHeaderManager.createGenericSigninPromoHolder(parent);
+            case ViewType.SYNC_PROMO:
+                return mPromoHeaderManager.createSyncPromoHolder(parent);
             case ViewType.FOLDER:
                 BookmarkFolderRow folder = (BookmarkFolderRow) LayoutInflater.from(
                         parent.getContext()).inflate(R.layout.bookmark_folder_row, parent, false);
@@ -226,10 +236,12 @@ class BookmarkItemsAdapter
     @Override
     public void onBindViewHolder(ViewHolder holder, int position) {
         switch (holder.getItemViewType()) {
-            case ViewType.NEW_PROMO:
-                mPromoHeaderManager.setupSigninPromo((SigninPromoView) holder.itemView);
+            case ViewType.PERSONALIZED_SIGNIN_PROMO:
+                PersonalizedSigninPromoView view = (PersonalizedSigninPromoView) holder.itemView;
+                mPromoHeaderManager.setupPersonalizedSigninPromo(view);
                 break;
-            case ViewType.OLD_PROMO:
+            case ViewType.GENERIC_SIGNIN_PROMO:
+            case ViewType.SYNC_PROMO:
                 break;
             case ViewType.FOLDER:
                 ((BookmarkRow) holder.itemView).setBookmarkId(getItem(position));
@@ -242,9 +254,21 @@ class BookmarkItemsAdapter
         }
     }
 
-    // BookmarkUIObserver implementations.
-
     @Override
+    public void onViewRecycled(ViewHolder holder) {
+        switch (holder.getItemViewType()) {
+            case ViewType.PERSONALIZED_SIGNIN_PROMO:
+                mPromoHeaderManager.detachPersonalizePromoView();
+                break;
+            default:
+                // Other view holders don't have special recycling code.
+        }
+    }
+
+    /**
+     * Sets the delegate to use to handle UI actions related to this adapter.
+     * @param delegate A {@link BookmarkDelegate} instance to handle all backend interaction.
+     */
     public void onBookmarkDelegateInitialized(BookmarkDelegate delegate) {
         mDelegate = delegate;
         mDelegate.addUIObserver(this);
@@ -269,10 +293,11 @@ class BookmarkItemsAdapter
             }
         };
 
-        mPromoHeaderManager = new BookmarkPromoHeader(mContext, promoHeaderChangeAction, mDelegate);
+        mPromoHeaderManager = new BookmarkPromoHeader(mContext, promoHeaderChangeAction);
         populateTopLevelFoldersList();
     }
 
+    // BookmarkUIObserver implementations.
     @Override
     public void onDestroy() {
         mDelegate.removeUIObserver(this);
@@ -286,6 +311,7 @@ class BookmarkItemsAdapter
         assert mDelegate != null;
 
         mSearchText = EMPTY_QUERY;
+        mCurrentFolder = folder;
 
         if (folder.equals(mDelegate.getModel().getRootFolderId())) {
             setBookmarks(mTopLevelFolders, new ArrayList<BookmarkId>());
@@ -302,6 +328,14 @@ class BookmarkItemsAdapter
 
     @Override
     public void onSelectionStateChange(List<BookmarkId> selectedBookmarks) {}
+
+    /**
+     * Refresh the list of bookmarks within the currently visible folder.
+     */
+    public void refresh() {
+        if (mCurrentFolder == null) return;
+        onFolderStateSet(mCurrentFolder);
+    }
 
     /**
      * Synchronously searches for the given query.
@@ -340,14 +374,14 @@ class BookmarkItemsAdapter
         switch (mPromoHeaderManager.getPromoState()) {
             case BookmarkPromoHeader.PromoState.PROMO_NONE:
                 return;
-            case BookmarkPromoHeader.PromoState.PROMO_SIGNIN_NEW:
-                mPromoHeaderSection.add(ViewType.NEW_PROMO);
+            case BookmarkPromoHeader.PromoState.PROMO_SIGNIN_PERSONALIZED:
+                mPromoHeaderSection.add(ViewType.PERSONALIZED_SIGNIN_PROMO);
                 return;
-            case BookmarkPromoHeader.PromoState.PROMO_SIGNIN_OLD:
-                mPromoHeaderSection.add(ViewType.OLD_PROMO);
+            case BookmarkPromoHeader.PromoState.PROMO_SIGNIN_GENERIC:
+                mPromoHeaderSection.add(ViewType.GENERIC_SIGNIN_PROMO);
                 return;
             case BookmarkPromoHeader.PromoState.PROMO_SYNC:
-                mPromoHeaderSection.add(ViewType.OLD_PROMO);
+                mPromoHeaderSection.add(ViewType.SYNC_PROMO);
                 return;
             default:
                 assert false : "Unexpected value for promo state!";

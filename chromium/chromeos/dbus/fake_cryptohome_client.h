@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
@@ -28,63 +29,60 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   ~FakeCryptohomeClient() override;
 
   void Init(dbus::Bus* bus) override;
-  void SetAsyncCallStatusHandlers(
-      const AsyncCallStatusHandler& handler,
-      const AsyncCallStatusWithDataHandler& data_handler) override;
-  void ResetAsyncCallStatusHandlers() override;
-  void SetLowDiskSpaceHandler(const LowDiskSpaceHandler& handler) override;
+  void AddObserver(Observer* observer) override;
+  void RemoveObserver(Observer* observer) override;
   void WaitForServiceToBeAvailable(
-      const WaitForServiceToBeAvailableCallback& callback) override;
-  void IsMounted(const BoolDBusMethodCallback& callback) override;
-  void Unmount(const BoolDBusMethodCallback& callback) override;
+      WaitForServiceToBeAvailableCallback callback) override;
+  void IsMounted(DBusMethodCallback<bool> callback) override;
+  void Unmount(DBusMethodCallback<bool> callback) override;
   void AsyncCheckKey(const cryptohome::Identification& cryptohome_id,
                      const std::string& key,
-                     const AsyncMethodCallback& callback) override;
+                     AsyncMethodCallback callback) override;
   void AsyncMigrateKey(const cryptohome::Identification& cryptohome_id,
                        const std::string& from_key,
                        const std::string& to_key,
-                       const AsyncMethodCallback& callback) override;
+                       AsyncMethodCallback callback) override;
   void AsyncRemove(const cryptohome::Identification& cryptohome_id,
-                   const AsyncMethodCallback& callback) override;
-  void RenameCryptohome(const cryptohome::Identification& cryptohome_id_from,
-                        const cryptohome::Identification& cryptohome_id_to,
-                        const ProtobufMethodCallback& callback) override;
-  void GetAccountDiskUsage(const cryptohome::Identification& account_id,
-                           const ProtobufMethodCallback& callback) override;
-  void GetSystemSalt(const GetSystemSaltCallback& callback) override;
+                   AsyncMethodCallback callback) override;
+  void RenameCryptohome(
+      const cryptohome::Identification& cryptohome_id_from,
+      const cryptohome::Identification& cryptohome_id_to,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void GetAccountDiskUsage(
+      const cryptohome::Identification& account_id,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void GetSystemSalt(
+      DBusMethodCallback<std::vector<uint8_t>> callback) override;
   void GetSanitizedUsername(const cryptohome::Identification& cryptohome_id,
-                            const StringDBusMethodCallback& callback) override;
+                            DBusMethodCallback<std::string> callback) override;
   std::string BlockingGetSanitizedUsername(
       const cryptohome::Identification& cryptohome_id) override;
   void AsyncMount(const cryptohome::Identification& cryptohome_id,
                   const std::string& key,
                   int flags,
-                  const AsyncMethodCallback& callback) override;
+                  AsyncMethodCallback callback) override;
   void AsyncAddKey(const cryptohome::Identification& cryptohome_id,
                    const std::string& key,
                    const std::string& new_key,
-                   const AsyncMethodCallback& callback) override;
-  void AsyncMountGuest(const AsyncMethodCallback& callback) override;
-  void AsyncMountPublic(const cryptohome::Identification& public_mount_id,
-                        int flags,
-                        const AsyncMethodCallback& callback) override;
-  void TpmIsReady(const BoolDBusMethodCallback& callback) override;
-  void TpmIsEnabled(const BoolDBusMethodCallback& callback) override;
+                   AsyncMethodCallback callback) override;
+  void AsyncMountGuest(AsyncMethodCallback callback) override;
+  void TpmIsReady(DBusMethodCallback<bool> callback) override;
+  void TpmIsEnabled(DBusMethodCallback<bool> callback) override;
   bool CallTpmIsEnabledAndBlock(bool* enabled) override;
-  void TpmGetPassword(const StringDBusMethodCallback& callback) override;
-  void TpmIsOwned(const BoolDBusMethodCallback& callback) override;
+  void TpmGetPassword(DBusMethodCallback<std::string> callback) override;
+  void TpmIsOwned(DBusMethodCallback<bool> callback) override;
   bool CallTpmIsOwnedAndBlock(bool* owned) override;
-  void TpmIsBeingOwned(const BoolDBusMethodCallback& callback) override;
+  void TpmIsBeingOwned(DBusMethodCallback<bool> callback) override;
   bool CallTpmIsBeingOwnedAndBlock(bool* owning) override;
   void TpmCanAttemptOwnership(VoidDBusMethodCallback callback) override;
   void TpmClearStoredPassword(VoidDBusMethodCallback callback) override;
   bool CallTpmClearStoredPasswordAndBlock() override;
-  void Pkcs11IsTpmTokenReady(const BoolDBusMethodCallback& callback) override;
+  void Pkcs11IsTpmTokenReady(DBusMethodCallback<bool> callback) override;
   void Pkcs11GetTpmTokenInfo(
-      const Pkcs11GetTpmTokenInfoCallback& callback) override;
+      DBusMethodCallback<TpmTokenInfo> callback) override;
   void Pkcs11GetTpmTokenInfoForUser(
       const cryptohome::Identification& cryptohome_id,
-      const Pkcs11GetTpmTokenInfoCallback& callback) override;
+      DBusMethodCallback<TpmTokenInfo> callback) override;
   bool InstallAttributesGet(const std::string& name,
                             std::vector<uint8_t>* value,
                             bool* successful) override;
@@ -92,52 +90,49 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
                             const std::vector<uint8_t>& value,
                             bool* successful) override;
   bool InstallAttributesFinalize(bool* successful) override;
-  void InstallAttributesIsReady(
-      const BoolDBusMethodCallback& callback) override;
+  void InstallAttributesIsReady(DBusMethodCallback<bool> callback) override;
   bool InstallAttributesIsInvalid(bool* is_invalid) override;
   bool InstallAttributesIsFirstInstall(bool* is_first_install) override;
-  void TpmAttestationIsPrepared(
-      const BoolDBusMethodCallback& callback) override;
-  void TpmAttestationIsEnrolled(
-      const BoolDBusMethodCallback& callback) override;
+  void TpmAttestationIsPrepared(DBusMethodCallback<bool> callback) override;
+  void TpmAttestationIsEnrolled(DBusMethodCallback<bool> callback) override;
   void AsyncTpmAttestationCreateEnrollRequest(
       chromeos::attestation::PrivacyCAType pca_type,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void AsyncTpmAttestationEnroll(chromeos::attestation::PrivacyCAType pca_type,
                                  const std::string& pca_response,
-                                 const AsyncMethodCallback& callback) override;
+                                 AsyncMethodCallback callback) override;
   void AsyncTpmAttestationCreateCertRequest(
       chromeos::attestation::PrivacyCAType pca_type,
       attestation::AttestationCertificateProfile certificate_profile,
       const cryptohome::Identification& cryptohome_id,
       const std::string& request_origin,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void AsyncTpmAttestationFinishCertRequest(
       const std::string& pca_response,
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void TpmAttestationDoesKeyExist(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const BoolDBusMethodCallback& callback) override;
+      DBusMethodCallback<bool> callback) override;
   void TpmAttestationGetCertificate(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const DataMethodCallback& callback) override;
+      DBusMethodCallback<TpmAttestationDataResult> callback) override;
   void TpmAttestationGetPublicKey(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const DataMethodCallback& callback) override;
+      DBusMethodCallback<TpmAttestationDataResult> callback) override;
   void TpmAttestationRegisterKey(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void TpmAttestationSignEnterpriseChallenge(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
@@ -146,74 +141,74 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
       const std::string& device_id,
       attestation::AttestationChallengeOptions options,
       const std::string& challenge,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void TpmAttestationSignSimpleChallenge(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
       const std::string& challenge,
-      const AsyncMethodCallback& callback) override;
+      AsyncMethodCallback callback) override;
   void TpmAttestationGetKeyPayload(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
-      const DataMethodCallback& callback) override;
+      DBusMethodCallback<TpmAttestationDataResult> callback) override;
   void TpmAttestationSetKeyPayload(
       attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_name,
       const std::string& payload,
-      const BoolDBusMethodCallback& callback) override;
-  void TpmAttestationDeleteKeys(
-      attestation::AttestationKeyType key_type,
+      DBusMethodCallback<bool> callback) override;
+  void TpmAttestationDeleteKeys(attestation::AttestationKeyType key_type,
+                                const cryptohome::Identification& cryptohome_id,
+                                const std::string& key_prefix,
+                                DBusMethodCallback<bool> callback) override;
+  void TpmGetVersion(DBusMethodCallback<TpmVersionInfo> callback) override;
+  void GetKeyDataEx(
       const cryptohome::Identification& cryptohome_id,
-      const std::string& key_prefix,
-      const BoolDBusMethodCallback& callback) override;
-  void TpmGetVersion(TpmGetVersionCallback callback) override;
-  void GetKeyDataEx(const cryptohome::Identification& cryptohome_id,
-                    const cryptohome::AuthorizationRequest& auth,
-                    const cryptohome::GetKeyDataRequest& request,
-                    const ProtobufMethodCallback& callback) override;
+      const cryptohome::AuthorizationRequest& auth,
+      const cryptohome::GetKeyDataRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void CheckKeyEx(const cryptohome::Identification& cryptohome_id,
                   const cryptohome::AuthorizationRequest& auth,
                   const cryptohome::CheckKeyRequest& request,
-                  const ProtobufMethodCallback& callback) override;
+                  DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MountEx(const cryptohome::Identification& cryptohome_id,
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
-               const ProtobufMethodCallback& callback) override;
+               DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void AddKeyEx(const cryptohome::Identification& cryptohome_id,
                 const cryptohome::AuthorizationRequest& auth,
                 const cryptohome::AddKeyRequest& request,
-                const ProtobufMethodCallback& callback) override;
+                DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void UpdateKeyEx(const cryptohome::Identification& cryptohome_id,
                    const cryptohome::AuthorizationRequest& auth,
                    const cryptohome::UpdateKeyRequest& request,
-                   const ProtobufMethodCallback& callback) override;
+                   DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void RemoveKeyEx(const cryptohome::Identification& cryptohome_id,
                    const cryptohome::AuthorizationRequest& auth,
                    const cryptohome::RemoveKeyRequest& request,
-                   const ProtobufMethodCallback& callback) override;
-  void GetBootAttribute(const cryptohome::GetBootAttributeRequest& request,
-                        const ProtobufMethodCallback& callback) override;
-  void SetBootAttribute(const cryptohome::SetBootAttributeRequest& request,
-                        const ProtobufMethodCallback& callback) override;
+                   DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void GetBootAttribute(
+      const cryptohome::GetBootAttributeRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void SetBootAttribute(
+      const cryptohome::SetBootAttributeRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
-      const ProtobufMethodCallback& callback) override;
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MigrateToDircrypto(const cryptohome::Identification& cryptohome_id,
                           const cryptohome::MigrateToDircryptoRequest& request,
                           VoidDBusMethodCallback callback) override;
-  void SetDircryptoMigrationProgressHandler(
-      const DircryptoMigrationProgessHandler& handler) override;
   void RemoveFirmwareManagementParametersFromTpm(
       const cryptohome::RemoveFirmwareManagementParametersRequest& request,
-      const ProtobufMethodCallback& callback) override;
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void SetFirmwareManagementParametersInTpm(
       const cryptohome::SetFirmwareManagementParametersRequest& request,
-      const ProtobufMethodCallback& callback) override;
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void NeedsDircryptoMigration(const cryptohome::Identification& cryptohome_id,
-                               const BoolDBusMethodCallback& callback) override;
+                               DBusMethodCallback<bool> callback) override;
 
   // Changes the behavior of WaitForServiceToBeAvailable(). This method runs
   // pending callbacks if is_available is true.
@@ -266,37 +261,53 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void SetTpmAttestationDeviceKeyPayload(const std::string& key_name,
                                          const std::string& payload);
 
-  DircryptoMigrationProgessHandler dircrypto_migration_progress_handler() {
-    return dircrypto_migration_progress_handler_;
-  }
+  // Calls DircryptoMigrationProgress() on Observer instances.
+  void NotifyDircryptoMigrationProgress(
+      cryptohome::DircryptoMigrationStatus status,
+      uint64_t current,
+      uint64_t total);
 
  private:
   void ReturnProtobufMethodCallback(
       const cryptohome::BaseReply& reply,
-      const ProtobufMethodCallback& callback);
+      DBusMethodCallback<cryptohome::BaseReply> callback);
 
   // Posts tasks which return fake results to the UI thread.
-  void ReturnAsyncMethodResult(const AsyncMethodCallback& callback);
+  void ReturnAsyncMethodResult(AsyncMethodCallback callback);
 
   // Posts tasks which return fake data to the UI thread.
-  void ReturnAsyncMethodData(const AsyncMethodCallback& callback,
+  void ReturnAsyncMethodData(AsyncMethodCallback callback,
                              const std::string& data);
 
   // This method is used to implement ReturnAsyncMethodResult without data.
-  void ReturnAsyncMethodResultInternal(const AsyncMethodCallback& callback);
+  void ReturnAsyncMethodResultInternal(AsyncMethodCallback callback);
 
   // This method is used to implement ReturnAsyncMethodResult with data.
-  void ReturnAsyncMethodDataInternal(const AsyncMethodCallback& callback,
+  void ReturnAsyncMethodDataInternal(AsyncMethodCallback callback,
                                      const std::string& data);
 
   // This method is used to implement MigrateToDircrypto with simulated progress
   // updates.
   void OnDircryptoMigrationProgressUpdated();
 
+  // Notifies AsyncCallStatus() to Observer instances.
+  void NotifyAsyncCallStatus(int async_id, bool return_status, int return_code);
+
+  // Notifies AsyncCallStatusWithData() to Observer instances.
+  void NotifyAsyncCallStatusWithData(int async_id,
+                                     bool return_status,
+                                     const std::string& data);
+
+  // Notifies LowDiskSpace() to Observer instances.
+  void NotifyLowDiskSpace(uint64_t disk_free_bytes);
+
+  // Loads install attributes from the stub file.
+  bool LoadInstallAttributes();
+
   bool service_is_available_;
+  base::ObserverList<Observer> observer_list_;
+
   int async_call_id_;
-  AsyncCallStatusHandler async_call_status_handler_;
-  AsyncCallStatusWithDataHandler async_call_status_data_handler_;
   bool unmount_result_;
   std::vector<uint8_t> system_salt_;
 
@@ -320,7 +331,6 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   // Device key payload data mapped by key_name.
   std::map<std::string, std::string> device_key_payload_map_;
 
-  DircryptoMigrationProgessHandler dircrypto_migration_progress_handler_;
   base::RepeatingTimer dircrypto_migration_progress_timer_;
   uint64_t dircrypto_migration_progress_;
 

@@ -5,40 +5,34 @@
 #include "components/cast_channel/cast_socket_service.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "components/cast_channel/cast_channel_util.h"
 #include "components/cast_channel/cast_socket.h"
 #include "components/cast_channel/logger.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
 
-namespace {
-// Connect timeout for connect calls.
-const int kConnectTimeoutSecs = 10;
-
-// Ping interval
-const int kPingIntervalInSecs = 5;
-
-// Liveness timeout for connect calls, in milliseconds. If no message is
-// received from the receiver during kConnectLivenessTimeoutSecs, it is
-// considered gone.
-const int kConnectLivenessTimeoutSecs = kPingIntervalInSecs * 2;
-}  // namespace
-
 namespace cast_channel {
 
 int CastSocketService::last_channel_id_ = 0;
 
-CastSocketService::CastSocketService() : logger_(new Logger()) {
-  DETACH_FROM_THREAD(thread_checker_);
-}
+CastSocketService::CastSocketService()
+    : logger_(new Logger()),
+      // IO thread's task runner is used because of:
+      // (1) ChromeURLRequestContextGetter::GetURLRequestContext, which is
+      // called by CastMediaSinkServiceImpl, must run on IO thread. (2) Parts of
+      // CastChannel extension API functions run on IO thread.
+      task_runner_(content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::IO)) {}
 
 // This is a leaky singleton and the dtor won't be called.
 CastSocketService::~CastSocketService() = default;
 
 // static
 CastSocketService* CastSocketService::GetInstance() {
-  return base::Singleton<CastSocketService,
-                         base::LeakySingletonTraits<CastSocketService>>::get();
+  static CastSocketService* instance = new CastSocketService();
+  return instance;
 }
 
 scoped_refptr<Logger> CastSocketService::GetLogger() {
@@ -46,7 +40,7 @@ scoped_refptr<Logger> CastSocketService::GetLogger() {
 }
 
 CastSocket* CastSocketService::AddSocket(std::unique_ptr<CastSocket> socket) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(socket);
   int id = ++last_channel_id_;
   socket->set_id(id);
@@ -57,7 +51,7 @@ CastSocket* CastSocketService::AddSocket(std::unique_ptr<CastSocket> socket) {
 }
 
 std::unique_ptr<CastSocket> CastSocketService::RemoveSocket(int channel_id) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(channel_id > 0);
   auto socket_it = sockets_.find(channel_id);
 
@@ -70,7 +64,7 @@ std::unique_ptr<CastSocket> CastSocketService::RemoveSocket(int channel_id) {
 }
 
 CastSocket* CastSocketService::GetSocket(int channel_id) const {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(channel_id > 0);
   const auto& socket_it = sockets_.find(channel_id);
   return socket_it == sockets_.end() ? nullptr : socket_it->second.get();
@@ -78,7 +72,7 @@ CastSocket* CastSocketService::GetSocket(int channel_id) const {
 
 CastSocket* CastSocketService::GetSocket(
     const net::IPEndPoint& ip_endpoint) const {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(task_runner_->BelongsToCurrentThread());
   auto it = std::find_if(
       sockets_.begin(), sockets_.end(),
       [&ip_endpoint](
@@ -88,13 +82,14 @@ CastSocket* CastSocketService::GetSocket(
   return it == sockets_.end() ? nullptr : it->second.get();
 }
 
-int CastSocketService::OpenSocket(const CastSocketOpenParams& open_params,
-                                  CastSocket::OnOpenCallback open_cb,
-                                  CastSocket::Observer* observer) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(observer);
-  auto* socket = GetSocket(open_params.ip_endpoint);
+void CastSocketService::OpenSocket(const CastSocketOpenParams& open_params,
+                                   CastSocket::OnOpenCallback open_cb) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
 
+  const net::IPEndPoint& ip_endpoint = open_params.ip_endpoint;
+  CHECK(IsValidCastIPAddress(ip_endpoint.address()));
+
+  auto* socket = GetSocket(ip_endpoint);
   if (!socket) {
     // If cast socket does not exist.
     if (socket_for_test_) {
@@ -105,29 +100,30 @@ int CastSocketService::OpenSocket(const CastSocketOpenParams& open_params,
     }
   }
 
-  socket->AddObserver(observer);
+  for (auto& observer : observers_)
+    socket->AddObserver(&observer);
+
   socket->Connect(std::move(open_cb));
-  return socket->id();
 }
 
-int CastSocketService::OpenSocket(const net::IPEndPoint& ip_endpoint,
-                                  net::NetLog* net_log,
-                                  CastSocket::OnOpenCallback open_cb,
-                                  CastSocket::Observer* observer) {
-  auto connect_timeout = base::TimeDelta::FromSeconds(kConnectTimeoutSecs);
-  auto ping_interval = base::TimeDelta::FromSeconds(kPingIntervalInSecs);
-  auto liveness_timeout =
-      base::TimeDelta::FromSeconds(kConnectLivenessTimeoutSecs);
-  CastSocketOpenParams open_params(ip_endpoint, net_log, connect_timeout,
-                                   liveness_timeout, ping_interval,
-                                   CastDeviceCapability::NONE);
+void CastSocketService::AddObserver(CastSocket::Observer* observer) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(observer);
+  if (observers_.HasObserver(observer))
+    return;
 
-  return OpenSocket(open_params, std::move(open_cb), observer);
+  observers_.AddObserver(observer);
+  for (auto& socket_it : sockets_)
+    socket_it.second->AddObserver(observer);
 }
 
 void CastSocketService::RemoveObserver(CastSocket::Observer* observer) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(observer);
+
   for (auto& socket_it : sockets_)
     socket_it.second->RemoveObserver(observer);
+  observers_.RemoveObserver(observer);
 }
 
 void CastSocketService::SetSocketForTest(

@@ -14,7 +14,7 @@ class MediaControlsImpl;
 
 class MediaControlsWindowEventListener final : public EventListener {
  public:
-  using Callback = Function<void(), WTF::kSameThreadAffinity>;
+  using Callback = WTF::RepeatingFunction<void()>;
 
   static MediaControlsWindowEventListener* Create(MediaControlsImpl*, Callback);
 
@@ -23,7 +23,7 @@ class MediaControlsWindowEventListener final : public EventListener {
   void Start();
   void Stop();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit MediaControlsWindowEventListener(MediaControlsImpl*, Callback);

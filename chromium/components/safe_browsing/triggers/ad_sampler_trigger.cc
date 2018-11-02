@@ -4,14 +4,18 @@
 
 #include "components/safe_browsing/triggers/ad_sampler_trigger.h"
 
+#include <string>
+
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
 #include "components/safe_browsing/triggers/trigger_throttler.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -32,6 +36,10 @@ const size_t kSamplerFrequencyDisabled = 0;
 // report (since this trigger runs in the background).
 const int64_t kAdSampleCollectionPeriodMilliseconds = 5000;
 
+// Metric for tracking what the Ad Sampler trigger does on each navigation.
+const char kAdSamplerTriggerActionMetricName[] =
+    "SafeBrowsing.Triggers.AdSampler.Action";
+
 namespace {
 
 size_t GetSamplerFrequencyDenominator() {
@@ -47,7 +55,8 @@ size_t GetSamplerFrequencyDenominator() {
              : kSamplerFrequencyDisabled;
 }
 
-bool DetectGoogleAd(content::NavigationHandle* navigation_handle) {
+bool DetectGoogleAd(content::RenderFrameHost* render_frame_host,
+                    const GURL& frame_url) {
   // TODO(crbug.com/742397): This function is temporarily copied from
   // c/b/page_load_metrics/observers/ads_page_load_metrics_observer.cc
   // This code should be updated to use shared infrastructure when available.
@@ -59,11 +68,8 @@ bool DetectGoogleAd(content::NavigationHandle* navigation_handle) {
   // We use the unsafe method of FindFrameByFrameTreeNodeId because we're not
   // concerned with which process the frame lives on (we only want to know if an
   // ad could be present on the page right now).
-  content::RenderFrameHost* current_frame_host =
-      navigation_handle->GetWebContents()->UnsafeFindFrameByFrameTreeNodeId(
-          navigation_handle->GetFrameTreeNodeId());
-  if (current_frame_host) {
-    const std::string& frame_name = current_frame_host->GetFrameName();
+  if (render_frame_host) {
+    const std::string& frame_name = render_frame_host->GetFrameName();
     if (base::StartsWith(frame_name, "google_ads_iframe",
                          base::CompareCase::SENSITIVE) ||
         base::StartsWith(frame_name, "google_ads_frame",
@@ -72,13 +78,12 @@ bool DetectGoogleAd(content::NavigationHandle* navigation_handle) {
     }
   }
 
-  const GURL& url = navigation_handle->GetURL();
-  return url.host_piece() == "tpc.googlesyndication.com" &&
-         base::StartsWith(url.path_piece(), "/safeframe",
+  return frame_url.host_piece() == "tpc.googlesyndication.com" &&
+         base::StartsWith(frame_url.path_piece(), "/safeframe",
                           base::CompareCase::SENSITIVE);
 }
 
-bool ShouldCheckForAd(const size_t frequency_denominator) {
+bool ShouldSampleAd(const size_t frequency_denominator) {
   return frequency_denominator != kSamplerFrequencyDisabled &&
          (base::RandUint64() % frequency_denominator) == 0;
 }
@@ -93,6 +98,7 @@ AdSamplerTrigger::AdSamplerTrigger(
     history::HistoryService* history_service)
     : content::WebContentsObserver(web_contents),
       sampler_frequency_denominator_(GetSamplerFrequencyDenominator()),
+      finish_report_delay_ms_(kAdSampleCollectionPeriodMilliseconds),
       trigger_manager_(trigger_manager),
       prefs_(prefs),
       request_context_(request_context),
@@ -116,43 +122,57 @@ void AdSamplerTrigger::CreateForWebContents(
   }
 }
 
-// TODO(lpz): In some cases, this event may be too early for ads to finish
-// loading on the page. Investigate later events or possible timer delays.
-void AdSamplerTrigger::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  // TODO(lpz): Add UMA metrics for how often we skip checking, find nothing, or
-  // take a sample.
-  if (ShouldCheckForAd(sampler_frequency_denominator_) &&
-      DetectGoogleAd(navigation_handle)) {
-    SBErrorOptions error_options =
-        TriggerManager::GetSBErrorDisplayOptions(*prefs_, *web_contents());
-
-    security_interstitials::UnsafeResource resource;
-    resource.threat_type = SB_THREAT_TYPE_AD_SAMPLE;
-    resource.url = web_contents()->GetURL();
-    resource.web_contents_getter = resource.GetWebContentsGetter(
-        web_contents()->GetRenderProcessHost()->GetID(),
-        web_contents()->GetMainFrame()->GetRoutingID());
-
-    if (!trigger_manager_->StartCollectingThreatDetails(
-            TriggerType::AD_SAMPLE, web_contents(), resource, request_context_,
-            history_service_, error_options)) {
-      return;
-    }
-
-    // Immediately call FinishCollection but include a short delay to allow data
-    // collection to happen.
-    // TODO(lpz): This is suboptimal because we can send duplicate reports if
-    // there are multiple ads on the page. To improve this, the delay should be
-    // before calling into trigger_manager_, which requires TriggerManager to be
-    // Bind-able.
-    trigger_manager_->FinishCollectingThreatDetails(
-        TriggerType::AD_SAMPLE, web_contents(),
-        base::TimeDelta::FromMilliseconds(
-            kAdSampleCollectionPeriodMilliseconds),
-        /*did_proceed=*/false,
-        /*num_visits=*/0, error_options);
+void AdSamplerTrigger::DidFinishLoad(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url) {
+  UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName, TRIGGER_CHECK,
+                            MAX_ACTIONS);
+  // We are using light-weight ad detection logic here so it's safe to do the
+  // check on each navigation for the sake of metrics.
+  if (!DetectGoogleAd(render_frame_host, validated_url)) {
+    UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName,
+                              NO_SAMPLE_NO_AD, MAX_ACTIONS);
+    return;
   }
+  if (!ShouldSampleAd(sampler_frequency_denominator_)) {
+    UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName,
+                              NO_SAMPLE_AD_SKIPPED_FOR_FREQUENCY, MAX_ACTIONS);
+    return;
+  }
+
+  SBErrorOptions error_options =
+      TriggerManager::GetSBErrorDisplayOptions(*prefs_, *web_contents());
+
+  security_interstitials::UnsafeResource resource;
+  resource.threat_type = SB_THREAT_TYPE_AD_SAMPLE;
+  resource.url = web_contents()->GetURL();
+  resource.web_contents_getter = resource.GetWebContentsGetter(
+      web_contents()->GetMainFrame()->GetProcess()->GetID(),
+      web_contents()->GetMainFrame()->GetRoutingID());
+
+  if (!trigger_manager_->StartCollectingThreatDetails(
+          TriggerType::AD_SAMPLE, web_contents(), resource, request_context_,
+          history_service_, error_options)) {
+    UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName,
+                              NO_SAMPLE_COULD_NOT_START_REPORT, MAX_ACTIONS);
+    return;
+  }
+
+  // Call into TriggerManager to finish the reports after a short delay. Any
+  // ads that are detected during this delay will be rejected by TriggerManager
+  // because a report is already being collected, so we won't send multiple
+  // reports for the same page.
+  content::BrowserThread::PostDelayedTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(
+          IgnoreResult(&TriggerManager::FinishCollectingThreatDetails),
+          base::Unretained(trigger_manager_), TriggerType::AD_SAMPLE,
+          base::Unretained(web_contents()), base::TimeDelta(),
+          /*did_proceed=*/false, /*num_visits=*/0, error_options),
+      base::TimeDelta::FromMilliseconds(finish_report_delay_ms_));
+
+  UMA_HISTOGRAM_ENUMERATION(kAdSamplerTriggerActionMetricName, AD_SAMPLED,
+                            MAX_ACTIONS);
 }
 
 }  // namespace safe_browsing

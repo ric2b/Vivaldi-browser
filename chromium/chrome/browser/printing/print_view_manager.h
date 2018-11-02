@@ -68,6 +68,7 @@ class PrintViewManager : public PrintViewManagerBase,
   };
 
   // IPC Message handlers.
+  struct FrameDispatchHelper;
   void OnDidShowPrintDialog(content::RenderFrameHost* rfh);
   void OnSetupScriptedPrintPreview(content::RenderFrameHost* rfh,
                                    IPC::Message* reply_msg);
@@ -86,6 +87,10 @@ class PrintViewManager : public PrintViewManagerBase,
 
   // Keeps track of the pending callback during scripted print preview.
   content::RenderProcessHost* scripted_print_preview_rph_;
+
+  // Indicates whether we're switching from print preview to system dialog. This
+  // flag is true between PrintForSystemDialogNow() and PrintPreviewDone().
+  bool is_switching_to_system_dialog_;
 
   DISALLOW_COPY_AND_ASSIGN(PrintViewManager);
 };

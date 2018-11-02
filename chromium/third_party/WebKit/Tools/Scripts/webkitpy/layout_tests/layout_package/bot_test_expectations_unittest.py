@@ -26,9 +26,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import sys
 import unittest
 
-from webkitpy.common.config.builders import BUILDERS
 from webkitpy.layout_tests.layout_package import bot_test_expectations
 from webkitpy.layout_tests.builder_list import BuilderList
 
@@ -37,7 +37,7 @@ class BotTestExpectationsFactoryTest(unittest.TestCase):
 
     def fake_builder_list(self):
         return BuilderList({
-            'Dummy builder name': {'port_name': 'dummy-port', 'specifiers': []},
+            'Dummy builder name': {'port_name': 'dummy-port', 'specifiers': ['dummy', 'release']},
         })
 
     def fake_results_json_for_builder(self, builder):
@@ -56,6 +56,7 @@ class BotTestExpectationsFactoryTest(unittest.TestCase):
         self.assertIsNotNone(factory.expectations_for_port('dummy-port'))
 
 
+@unittest.skipIf(sys.platform == 'win32', 'fails on Windows')
 class BotTestExpectationsTest(unittest.TestCase):
     # FIXME: Find a way to import this map from Tools/TestResultServer/model/jsonresults.py.
     FAILURE_MAP = {'A': 'AUDIO', 'C': 'CRASH', 'F': 'TEXT', 'I': 'IMAGE', 'O': 'MISSING',
@@ -66,7 +67,7 @@ class BotTestExpectationsTest(unittest.TestCase):
 
     def _assert_is_flaky(self, results_string, should_be_flaky, only_ignore_very_flaky, expected=None):
         results_json = self._results_json_from_test_data({})
-        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList(BUILDERS), set('test'))
+        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList({}), set('test'))
 
         results_entry = self._results_from_string(results_string)
         if expected:
@@ -109,12 +110,12 @@ class BotTestExpectationsTest(unittest.TestCase):
 
     def _assert_expectations(self, test_data, expectations_string, only_ignore_very_flaky):
         results_json = self._results_json_from_test_data(test_data)
-        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList(BUILDERS), set('test'))
+        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList({}), set('test'))
         self.assertEqual(expectations.flakes_by_path(only_ignore_very_flaky), expectations_string)
 
     def _assert_unexpected_results(self, test_data, expectations_string):
         results_json = self._results_json_from_test_data(test_data)
-        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList(BUILDERS), set('test'))
+        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList({}), set('test'))
         self.assertEqual(expectations.unexpected_results_by_path(), expectations_string)
 
     def test_all_results_by_path(self):
@@ -133,7 +134,7 @@ class BotTestExpectationsTest(unittest.TestCase):
         }
 
         results_json = self._results_json_from_test_data(test_data)
-        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList(BUILDERS), set('test'))
+        expectations = bot_test_expectations.BotTestExpectations(results_json, BuilderList({}), set('test'))
         results_by_path = expectations.all_results_by_path()
 
         expected_output = {

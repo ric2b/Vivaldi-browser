@@ -18,6 +18,7 @@
 #include "ui/events/ozone/evdev/event_factory_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
+#include "ui/events/system_input_injector.h"
 #include "ui/ozone/platform/cast/overlay_manager_cast.h"
 #include "ui/ozone/platform/cast/platform_window_cast.h"
 #include "ui/ozone/platform/cast/surface_factory_cast.h"
@@ -25,7 +26,6 @@
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/ozone/public/system_input_injector.h"
 
 using chromecast::CastEglPlatform;
 
@@ -98,7 +98,7 @@ class OzonePlatformCast : public OzonePlatform {
   }
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {
-    NOTREACHED();
+    // On Cast platform the display is initialized by low-level non-Ozone code.
     return nullptr;
   }
 
@@ -118,7 +118,7 @@ class OzonePlatformCast : public OzonePlatform {
 #endif  // BUILDFLAG(IS_CAST_AUDIO_ONLY)
 
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        base::MakeUnique<StubKeyboardLayoutEngine>());
+        std::make_unique<StubKeyboardLayoutEngine>());
     ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()
         ->SetCurrentLayoutByName("us");
     event_factory_ozone_.reset(new EventFactoryEvdev(

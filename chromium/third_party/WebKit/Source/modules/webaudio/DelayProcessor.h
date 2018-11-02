@@ -27,9 +27,9 @@
 #define DelayProcessor_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioParam.h"
 #include "platform/audio/AudioDSPKernelProcessor.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -51,7 +51,7 @@ class DelayProcessor final : public AudioDSPKernelProcessor {
   double MaxDelayTime() { return max_delay_time_; }
 
  private:
-  RefPtr<AudioParamHandler> delay_time_;
+  scoped_refptr<AudioParamHandler> delay_time_;
   double max_delay_time_;
 };
 

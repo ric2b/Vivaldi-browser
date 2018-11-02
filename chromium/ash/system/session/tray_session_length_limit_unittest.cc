@@ -10,7 +10,6 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
@@ -24,6 +23,8 @@ class TraySessionLengthLimitTest : public AshTestBase {
   ~TraySessionLengthLimitTest() override = default;
 
  protected:
+  static const int kNotificationThresholdInMinutes = 60;
+
   LabelTrayView* GetSessionLengthLimitTrayView() {
     return SystemTrayTestApi(GetPrimarySystemTray())
         .tray_session_length_limit()
@@ -131,6 +132,42 @@ TEST_F(TraySessionLengthLimitTest, Notification) {
   EXPECT_FALSE(GetNotification());
 }
 
+TEST_F(TraySessionLengthLimitTest, FarOffNotificationHidden) {
+  // Test that notification is not shown if the session end time is far off into
+  // the future, but an item should be present in system tray bubble.
+
+  // Notification should be absent.
+  EXPECT_FALSE(GetNotification());
+  UpdateSessionLengthLimitInMin(kNotificationThresholdInMinutes + 10);
+  EXPECT_FALSE(GetNotification());
+
+  // However, an item should be present in the system tray bubble.
+  SystemTray* system_tray = GetPrimarySystemTray();
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
+  ASSERT_TRUE(GetSessionLengthLimitTrayView());
+  EXPECT_TRUE(GetSessionLengthLimitTrayView()->visible());
+  system_tray->CloseBubble();
+
+  RemoveNotification();
+}
+
+TEST_F(TraySessionLengthLimitTest, NotificationShownAfterThreshold) {
+  // Test that a notification is shown when time runs under the notification
+  // display threshold.
+
+  // Start with a generous session length. We should not get a notification.
+  UpdateSessionLengthLimitInMin(kNotificationThresholdInMinutes + 10);
+  EXPECT_FALSE(GetNotification());
+
+  // Update the session length now, without changing limit_state_.
+  UpdateSessionLengthLimitInMin(kNotificationThresholdInMinutes - 1);
+
+  // A notification should be displayed now.
+  EXPECT_TRUE(GetNotification());
+
+  RemoveNotification();
+}
+
 TEST_F(TraySessionLengthLimitTest, RemoveNotification) {
   // Limit is 15 min.
   UpdateSessionLengthLimitInMin(15);
@@ -182,6 +219,25 @@ TEST_F(TraySessionLengthLimitLoginTest, NotificationShownAfterLogin) {
   // Notification is shown after login.
   CreateUserSessions(1);
   EXPECT_TRUE(GetNotification());
+
+  RemoveNotification();
+}
+
+TEST_F(TraySessionLengthLimitLoginTest, FarOffNotificationHiddenAfterLogin) {
+  // Test that notification is not shown if the session end time is far off into
+  // the future, but an item should be present in system tray bubble.
+
+  // Notification should be absent.
+  UpdateSessionLengthLimitInMin(kNotificationThresholdInMinutes + 10);
+  CreateUserSessions(1);
+  EXPECT_FALSE(GetNotification());
+
+  // However, an item should be present in the system tray bubble.
+  SystemTray* system_tray = GetPrimarySystemTray();
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
+  ASSERT_TRUE(GetSessionLengthLimitTrayView());
+  EXPECT_TRUE(GetSessionLengthLimitTrayView()->visible());
+  system_tray->CloseBubble();
 
   RemoveNotification();
 }

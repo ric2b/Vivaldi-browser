@@ -6,9 +6,9 @@
 
 namespace chromeos {
 
-FakeNetworkDeviceHandler::FakeNetworkDeviceHandler() {}
+FakeNetworkDeviceHandler::FakeNetworkDeviceHandler() = default;
 
-FakeNetworkDeviceHandler::~FakeNetworkDeviceHandler() {}
+FakeNetworkDeviceHandler::~FakeNetworkDeviceHandler() = default;
 
 void FakeNetworkDeviceHandler::GetDeviceProperties(
     const std::string& device_path,
@@ -23,11 +23,6 @@ void FakeNetworkDeviceHandler::SetDeviceProperty(
     const network_handler::ErrorCallback& error_callback) {}
 
 void FakeNetworkDeviceHandler::RequestRefreshIPConfigs(
-    const std::string& device_path,
-    const base::Closure& callback,
-    const network_handler::ErrorCallback& error_callback) {}
-
-void FakeNetworkDeviceHandler::ProposeScan(
     const std::string& device_path,
     const base::Closure& callback,
     const network_handler::ErrorCallback& error_callback) {}

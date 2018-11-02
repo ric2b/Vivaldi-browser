@@ -27,12 +27,11 @@
 #define ScriptProcessorNode_h
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/scoped_refptr.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "modules/webaudio/AudioNode.h"
 #include "platform/audio/AudioBus.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -51,7 +50,7 @@ class WaitableEvent;
 
 class ScriptProcessorHandler final : public AudioHandler {
  public:
-  static PassRefPtr<ScriptProcessorHandler> Create(
+  static scoped_refptr<ScriptProcessorHandler> Create(
       AudioNode&,
       float sample_rate,
       size_t buffer_size,
@@ -100,9 +99,11 @@ class ScriptProcessorHandler final : public AudioHandler {
   unsigned number_of_input_channels_;
   unsigned number_of_output_channels_;
 
-  RefPtr<AudioBus> internal_input_bus_;
+  scoped_refptr<AudioBus> internal_input_bus_;
   // Synchronize process() with fireProcessEvent().
   mutable Mutex process_event_lock_;
+
+  scoped_refptr<WebTaskRunner> task_runner_;
 
   FRIEND_TEST_ALL_PREFIXES(ScriptProcessorNodeTest, BufferLifetime);
 };
@@ -142,7 +143,7 @@ class ScriptProcessorNode final
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { AudioNode::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { AudioNode::Trace(visitor); }
 
  private:
   ScriptProcessorNode(BaseAudioContext&,

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/simple_thread.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -129,12 +128,10 @@ class ProvidedService : public Service,
     mojom::ConnectResult result;
     Identity resolved_identity;
     {
-      base::RunLoop loop;
+      base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
       Connector::TestApi test_api(context()->connector());
       test_api.SetStartServiceCallback(
           base::Bind(&QuitLoop, &loop, &result, &resolved_identity));
-      base::MessageLoop::ScopedNestableTaskAllower allow(
-          base::MessageLoop::current());
       loop.Run();
     }
     std::move(callback).Run(static_cast<int32_t>(result), resolved_identity);
@@ -213,10 +210,10 @@ class ConnectTestService : public Service,
                      const std::string& name) override {
     if (name == "connect_test_a") {
       provided_services_.emplace_back(
-          base::MakeUnique<ProvidedService>("A", std::move(request)));
+          std::make_unique<ProvidedService>("A", std::move(request)));
     } else if (name == "connect_test_b") {
       provided_services_.emplace_back(
-          base::MakeUnique<ProvidedService>("B", std::move(request)));
+          std::make_unique<ProvidedService>("B", std::move(request)));
     }
   }
 

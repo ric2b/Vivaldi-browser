@@ -11,8 +11,6 @@
 
 #define BUILD_PRECOMPILE_H_
 
-#define _USE_MATH_DEFINES
-
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -35,7 +33,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -49,7 +46,6 @@
 #include <queue>
 #include <set>
 #include <sstream>
-#include <stack>
 #include <string>
 #include <utility>
 #include <vector>

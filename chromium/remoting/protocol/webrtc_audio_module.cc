@@ -35,8 +35,8 @@ const int kBytesPerSample = 2;
 // functions that are actually used. All unused functions are marked as
 // NOTREACHED().
 
-WebrtcAudioModule::WebrtcAudioModule() {}
-WebrtcAudioModule::~WebrtcAudioModule() {}
+WebrtcAudioModule::WebrtcAudioModule() = default;
+WebrtcAudioModule::~WebrtcAudioModule() = default;
 
 void WebrtcAudioModule::SetAudioTaskRunner(
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner) {
@@ -45,26 +45,9 @@ void WebrtcAudioModule::SetAudioTaskRunner(
   audio_task_runner_ = audio_task_runner;
 }
 
-int64_t WebrtcAudioModule::TimeUntilNextProcess() {
-  // We don't need to do anything in Process(), so return an arbitrary value
-  // that's not too low, so that Process() doesn't get called too frequently.
-  return 1000000;
-}
-
-void WebrtcAudioModule::Process() {}
-
 int32_t WebrtcAudioModule::ActiveAudioLayer(AudioLayer* audio_layer) const {
   NOTREACHED();
   return -1;
-}
-
-WebrtcAudioModule::ErrorCode WebrtcAudioModule::LastError() const {
-  return kAdmErrNone;
-}
-
-int32_t WebrtcAudioModule::RegisterEventObserver(
-    webrtc::AudioDeviceObserver* event_callback) {
-  return 0;
 }
 
 int32_t WebrtcAudioModule::RegisterAudioCallback(
@@ -204,18 +187,6 @@ bool WebrtcAudioModule::AGC() const {
   return false;
 }
 
-int32_t WebrtcAudioModule::SetWaveOutVolume(uint16_t volume_left,
-                                            uint16_t volume_right) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::WaveOutVolume(uint16_t* volume_left,
-                                         uint16_t* volume_right) const {
-  NOTREACHED();
-  return -1;
-}
-
 int32_t WebrtcAudioModule::InitSpeaker() {
   return 0;
 }
@@ -257,11 +228,6 @@ int32_t WebrtcAudioModule::MinSpeakerVolume(uint32_t* min_volume) const {
   return -1;
 }
 
-int32_t WebrtcAudioModule::SpeakerVolumeStepSize(uint16_t* step_size) const {
-  NOTREACHED();
-  return -1;
-}
-
 int32_t WebrtcAudioModule::MicrophoneVolumeIsAvailable(bool* available) {
   NOTREACHED();
   return -1;
@@ -283,11 +249,6 @@ int32_t WebrtcAudioModule::MaxMicrophoneVolume(uint32_t* max_volume) const {
 }
 
 int32_t WebrtcAudioModule::MinMicrophoneVolume(uint32_t* min_volume) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::MicrophoneVolumeStepSize(uint16_t* step_size) const {
   NOTREACHED();
   return -1;
 }
@@ -322,21 +283,6 @@ int32_t WebrtcAudioModule::MicrophoneMute(bool* enabled) const {
   return -1;
 }
 
-int32_t WebrtcAudioModule::MicrophoneBoostIsAvailable(bool* available) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::SetMicrophoneBoost(bool enable) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::MicrophoneBoost(bool* enabled) const {
-  NOTREACHED();
-  return -1;
-}
-
 int32_t WebrtcAudioModule::StereoPlayoutIsAvailable(bool* available) const {
   *available = true;
   return 0;
@@ -366,100 +312,9 @@ int32_t WebrtcAudioModule::StereoRecording(bool* enabled) const {
   return -1;
 }
 
-int32_t WebrtcAudioModule::SetRecordingChannel(const ChannelType channel) {
-  return 0;
-}
-
-int32_t WebrtcAudioModule::RecordingChannel(ChannelType* channel) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::SetPlayoutBuffer(const BufferType type,
-                                            uint16_t size_ms) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::PlayoutBuffer(BufferType* type,
-                                         uint16_t* size_ms) const {
-  NOTREACHED();
-  return -1;
-}
-
 int32_t WebrtcAudioModule::PlayoutDelay(uint16_t* delay_ms) const {
   *delay_ms = 0;
   return 0;
-}
-
-int32_t WebrtcAudioModule::RecordingDelay(uint16_t* delay_ms) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::CPULoad(uint16_t* load) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::StartRawOutputFileRecording(
-    const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::StopRawOutputFileRecording() {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::StartRawInputFileRecording(
-    const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::StopRawInputFileRecording() {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::SetRecordingSampleRate(
-    const uint32_t samples_per_sec) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::RecordingSampleRate(
-    uint32_t* samples_per_sec) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::SetPlayoutSampleRate(
-    const uint32_t samples_per_sec) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::PlayoutSampleRate(uint32_t* samples_per_sec) const {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::ResetAudioDevice() {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::SetLoudspeakerStatus(bool enable) {
-  NOTREACHED();
-  return -1;
-}
-
-int32_t WebrtcAudioModule::GetLoudspeakerStatus(bool* enabled) const {
-  NOTREACHED();
-  return -1;
 }
 
 bool WebrtcAudioModule::BuiltInAECIsAvailable() const {

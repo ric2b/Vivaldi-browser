@@ -116,7 +116,10 @@ ClientView* BubbleDialogDelegateView::CreateClientView(Widget* widget) {
 NonClientFrameView* BubbleDialogDelegateView::CreateNonClientFrameView(
     Widget* widget) {
   BubbleFrameView* frame = new BubbleFrameView(title_margins_, gfx::Insets());
-  frame->set_footnote_margins(margins());
+
+  // By default, assume the footnote only contains text.
+  frame->set_footnote_margins(
+      LayoutProvider::Get()->GetDialogInsetsForContentType(TEXT, TEXT));
   frame->SetFootnoteView(CreateFootnoteView());
 
   BubbleBorder::Arrow adjusted_arrow = arrow();
@@ -155,8 +158,17 @@ void BubbleDialogDelegateView::OnWidgetVisibilityChanged(Widget* widget,
 
 void BubbleDialogDelegateView::OnWidgetActivationChanged(Widget* widget,
                                                          bool active) {
-  if (close_on_deactivate() && widget == GetWidget() && !active)
-    GetWidget()->Close();
+#if defined(OS_MACOSX)
+  // Install |mac_bubble_closer_| the first time the widget becomes active.
+  if (active && !mac_bubble_closer_ && GetWidget()) {
+    mac_bubble_closer_ = std::make_unique<ui::BubbleCloser>(
+        GetWidget()->GetNativeWindow(),
+        base::BindRepeating(&BubbleDialogDelegateView::OnDeactivate,
+                            base::Unretained(this)));
+  }
+#endif
+  if (widget == GetWidget() && !active)
+    OnDeactivate();
 }
 
 void BubbleDialogDelegateView::OnWidgetBoundsChanged(
@@ -215,17 +227,19 @@ BubbleDialogDelegateView::BubbleDialogDelegateView()
 BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
                                                    BubbleBorder::Arrow arrow)
     : close_on_deactivate_(true),
-      anchor_view_tracker_(base::MakeUnique<ViewTracker>()),
+      anchor_view_tracker_(std::make_unique<ViewTracker>()),
       anchor_widget_(nullptr),
       arrow_(arrow),
       mirror_arrow_in_rtl_(PlatformStyle::kMirrorBubbleArrowInRTLByDefault),
-      shadow_(BubbleBorder::SMALL_SHADOW),
+      shadow_(BubbleBorder::DIALOG_SHADOW),
       color_explicitly_set_(false),
       accept_events_(true),
       adjust_if_offscreen_(true),
       parent_window_(nullptr) {
   LayoutProvider* provider = LayoutProvider::Get();
-  set_margins(provider->GetInsetsMetric(INSETS_DIALOG_CONTENTS));
+  // An individual bubble should override these margins if its layout differs
+  // from the typical title/text/buttons.
+  set_margins(provider->GetDialogInsetsForContentType(TEXT, TEXT));
   title_margins_ = provider->GetInsetsMetric(INSETS_DIALOG_TITLE);
   if (anchor_view)
     SetAnchorView(anchor_view);
@@ -320,6 +334,11 @@ void BubbleDialogDelegateView::HandleVisibilityChanged(Widget* widget,
     if (GetAccessibleWindowRole() == ui::AX_ROLE_ALERT_DIALOG)
       widget->GetRootView()->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
   }
+}
+
+void BubbleDialogDelegateView::OnDeactivate() {
+  if (close_on_deactivate() && GetWidget())
+    GetWidget()->Close();
 }
 
 }  // namespace views

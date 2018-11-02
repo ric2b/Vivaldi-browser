@@ -21,7 +21,7 @@
 #include "ios/chrome/browser/tabs/tab.h"
 #include "ios/chrome/browser/ui/first_run/first_run_histograms.h"
 #import "ios/chrome/browser/ui/settings/settings_utils.h"
-#import "ios/chrome/browser/ui/sync/sync_util.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/web/public/web_thread.h"
 #import "ui/gfx/ios/NSString+CrStringDrawing.h"
@@ -159,7 +159,8 @@ void WriteFirstRunSentinelAndRecordMetrics(
 
 void FinishFirstRun(ios::ChromeBrowserState* browserState,
                     Tab* tab,
-                    FirstRunConfiguration* config) {
+                    FirstRunConfiguration* config,
+                    id<SyncPresenter> presenter) {
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kChromeFirstRunUIWillFinishNotification
                     object:nil];
@@ -167,7 +168,7 @@ void FinishFirstRun(ios::ChromeBrowserState* browserState,
                                         config.hasSSOAccount);
 
   // Display the sync errors infobar.
-  DisplaySyncErrors(browserState, tab);
+  DisplaySyncErrors(browserState, tab, presenter);
 }
 
 void RecordProductTourTimingMetrics(NSString* timer_name,

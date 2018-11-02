@@ -26,12 +26,10 @@
 #include "core/html/parser/HTMLDocumentParser.h"
 
 #include <memory>
-#include "core/HTMLNames.h"
 #include "core/css/MediaValuesCached.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLDocument.h"
@@ -41,6 +39,7 @@
 #include "core/html/parser/HTMLParserScriptRunner.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/html/parser/HTMLTreeBuilder.h"
+#include "core/html_names.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/LinkLoader.h"
@@ -50,6 +49,8 @@
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/RuntimeCallStats.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -57,6 +58,7 @@
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "public/platform/WebThread.h"
 
@@ -131,11 +133,10 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
       tokenizer_(sync_policy == kForceSynchronousParsing
                      ? HTMLTokenizer::Create(options_)
                      : nullptr),
-      loading_task_runner_(
-          TaskRunnerHelper::Get(TaskType::kNetworking, &document)),
+      loading_task_runner_(document.GetTaskRunner(TaskType::kNetworking)),
       parser_scheduler_(
           sync_policy == kAllowAsynchronousParsing
-              ? HTMLParserScheduler::Create(this, loading_task_runner_.Get())
+              ? HTMLParserScheduler::Create(this, loading_task_runner_.get())
               : nullptr),
       xss_auditor_delegate_(&document),
       weak_factory_(this),
@@ -145,7 +146,7 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
       should_use_threading_(sync_policy == kAllowAsynchronousParsing),
       end_was_delayed_(false),
       have_background_parser_(false),
-      tasks_were_suspended_(false),
+      tasks_were_paused_(false),
       pump_session_nesting_level_(0),
       pump_speculations_session_nesting_level_(0),
       is_parsing_at_line_number_(false),
@@ -166,7 +167,7 @@ void HTMLDocumentParser::Dispose() {
     StopBackgroundParser();
 }
 
-DEFINE_TRACE(HTMLDocumentParser) {
+void HTMLDocumentParser::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_builder_);
   visitor->Trace(parser_scheduler_);
   visitor->Trace(xss_auditor_delegate_);
@@ -176,7 +177,8 @@ DEFINE_TRACE(HTMLDocumentParser) {
   HTMLParserScriptRunnerHost::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLDocumentParser) {
+void HTMLDocumentParser::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(script_runner_);
 }
 
@@ -255,8 +257,8 @@ void HTMLDocumentParser::PumpTokenizerIfPossible() {
   PumpTokenizer();
 }
 
-bool HTMLDocumentParser::IsScheduledForResume() const {
-  return parser_scheduler_ && parser_scheduler_->IsScheduledForResume();
+bool HTMLDocumentParser::IsScheduledForUnpause() const {
+  return parser_scheduler_ && parser_scheduler_->IsScheduledForUnpause();
 }
 
 // Used by HTMLParserScheduler
@@ -367,11 +369,11 @@ void HTMLDocumentParser::NotifyPendingTokenizedChunks() {
   for (auto& chunk : pending_chunks)
     speculations_.push_back(std::move(chunk));
 
-  if (!IsPaused() && !IsScheduledForResume()) {
-    if (tasks_were_suspended_)
-      parser_scheduler_->ForceResumeAfterYield();
+  if (!IsPaused() && !IsScheduledForUnpause()) {
+    if (tasks_were_paused_)
+      parser_scheduler_->ForceUnpauseAfterYield();
     else
-      parser_scheduler_->ScheduleForResume();
+      parser_scheduler_->ScheduleForUnpause();
   }
 }
 
@@ -581,19 +583,19 @@ void HTMLDocumentParser::PumpPendingSpeculations() {
   DCHECK(!last_chunk_before_pause_);
   DCHECK(!IsPaused());
   DCHECK(!IsStopped());
-  DCHECK(!IsScheduledForResume());
+  DCHECK(!IsScheduledForUnpause());
   DCHECK(!InPumpSession());
 
   // FIXME: Here should never be reached when there is a blocking script,
   // but it happens in unknown scenarios. See https://crbug.com/440901
   if (IsWaitingForScripts()) {
-    parser_scheduler_->ScheduleForResume();
+    parser_scheduler_->ScheduleForUnpause();
     return;
   }
 
   // Do not allow pumping speculations in nested event loops.
   if (pump_speculations_session_nesting_level_) {
-    parser_scheduler_->ScheduleForResume();
+    parser_scheduler_->ScheduleForUnpause();
     return;
   }
 
@@ -601,17 +603,17 @@ void HTMLDocumentParser::PumpPendingSpeculations() {
 
   SpeculationsPumpSession session(pump_speculations_session_nesting_level_);
   while (!speculations_.IsEmpty()) {
-    DCHECK(!IsScheduledForResume());
+    DCHECK(!IsScheduledForUnpause());
     size_t element_token_count =
         ProcessTokenizedChunkFromBackgroundParser(speculations_.TakeFirst());
     session.AddedElementTokens(element_token_count);
 
     // Always check isParsing first as m_document may be null. Surprisingly,
-    // isScheduledForResume() may be set here as a result of
+    // isScheduledForUnpause() may be set here as a result of
     // processTokenizedChunkFromBackgroundParser running arbitrary javascript
     // which invokes nested event loops. (e.g. inspector breakpoints)
     CheckIfBodyStylesheetAdded();
-    if (!IsParsing() || IsPaused() || IsScheduledForResume())
+    if (!IsParsing() || IsPaused() || IsScheduledForUnpause())
       break;
 
     if (speculations_.IsEmpty() ||
@@ -656,8 +658,13 @@ void HTMLDocumentParser::PumpTokenizer() {
     if (xss_auditor_.IsEnabled())
       source_tracker_.Start(input_.Current(), tokenizer_.get(), Token());
 
-    if (!tokenizer_->NextToken(input_.Current(), Token()))
-      break;
+    {
+      RUNTIME_CALL_TIMER_SCOPE(
+          V8PerIsolateData::MainThreadIsolate(),
+          RuntimeCallStats::CounterId::kHTMLTokenizerNextToken);
+      if (!tokenizer_->NextToken(input_.Current(), Token()))
+        break;
+    }
 
     if (xss_auditor_.IsEnabled()) {
       source_tracker_.end(input_.Current(), tokenizer_.get(), Token());
@@ -750,7 +757,7 @@ bool HTMLDocumentParser::HasInsertionPoint() {
          (WasCreatedByScript() && !input_.HaveSeenEndOfFile());
 }
 
-void HTMLDocumentParser::insert(const SegmentedString& source) {
+void HTMLDocumentParser::insert(const String& source) {
   if (IsStopped())
     return;
 
@@ -790,11 +797,14 @@ void HTMLDocumentParser::StartBackgroundParser() {
   DCHECK(GetDocument());
   have_background_parser_ = true;
 
-  // TODO(alexclarke): Remove WebFrameScheduler::setDocumentParsingInBackground
-  // when background parser goes away.
-  if (GetDocument()->GetFrame() && GetDocument()->GetFrame()->FrameScheduler())
-    GetDocument()->GetFrame()->FrameScheduler()->SetDocumentParsingInBackground(
-        true);
+  if (GetDocument()->GetFrame() &&
+      GetDocument()->GetFrame()->FrameScheduler()) {
+    virtual_time_pauser_ = GetDocument()
+                               ->GetFrame()
+                               ->FrameScheduler()
+                               ->CreateWebScopedVirtualTimePauser();
+    virtual_time_pauser_.PauseVirtualTime(true);
+  }
 
   // Make sure that a resolver is set up, so that the correct viewport
   // dimensions will be fed to the background parser and preload scanner.
@@ -809,7 +819,7 @@ void HTMLDocumentParser::StartBackgroundParser() {
   config->xss_auditor->Init(GetDocument(), &xss_auditor_delegate_);
 
   config->decoder = TakeDecoder();
-  config->tokenized_chunk_queue = tokenized_chunk_queue_.Get();
+  config->tokenized_chunk_queue = tokenized_chunk_queue_.get();
   if (GetDocument()->GetSettings()) {
     if (GetDocument()
             ->GetSettings()
@@ -846,11 +856,7 @@ void HTMLDocumentParser::StopBackgroundParser() {
   DCHECK(ShouldUseThreading());
   DCHECK(have_background_parser_);
 
-  if (have_background_parser_ && GetDocument()->GetFrame() &&
-      GetDocument()->GetFrame()->FrameScheduler())
-    GetDocument()->GetFrame()->FrameScheduler()->SetDocumentParsingInBackground(
-        false);
-
+  virtual_time_pauser_.PauseVirtualTime(false);
   have_background_parser_ = false;
 
   // Make this sync, as lsan triggers on some unittests if the task runner is
@@ -917,7 +923,7 @@ void HTMLDocumentParser::Append(const String& input_source) {
 
 void HTMLDocumentParser::end() {
   DCHECK(!IsDetached());
-  DCHECK(!IsScheduledForResume());
+  DCHECK(!IsScheduledForUnpause());
 
   if (have_background_parser_)
     StopBackgroundParser();
@@ -1155,18 +1161,18 @@ void HTMLDocumentParser::ParseDocumentFragment(
   parser->Detach();
 }
 
-void HTMLDocumentParser::SuspendScheduledTasks() {
-  DCHECK(!tasks_were_suspended_);
-  tasks_were_suspended_ = true;
+void HTMLDocumentParser::PauseScheduledTasks() {
+  DCHECK(!tasks_were_paused_);
+  tasks_were_paused_ = true;
   if (parser_scheduler_)
-    parser_scheduler_->Suspend();
+    parser_scheduler_->Pause();
 }
 
-void HTMLDocumentParser::ResumeScheduledTasks() {
-  DCHECK(tasks_were_suspended_);
-  tasks_were_suspended_ = false;
+void HTMLDocumentParser::UnpauseScheduledTasks() {
+  DCHECK(tasks_were_paused_);
+  tasks_were_paused_ = false;
   if (parser_scheduler_)
-    parser_scheduler_->Resume();
+    parser_scheduler_->Unpause();
 }
 
 void HTMLDocumentParser::AppendBytes(const char* data, size_t length) {
@@ -1178,7 +1184,7 @@ void HTMLDocumentParser::AppendBytes(const char* data, size_t length) {
       StartBackgroundParser();
 
     std::unique_ptr<Vector<char>> buffer =
-        WTF::MakeUnique<Vector<char>>(length);
+        std::make_unique<Vector<char>>(length);
     memcpy(buffer->data(), data, length);
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                  "HTMLDocumentParser::appendBytes", "size", (unsigned)length);

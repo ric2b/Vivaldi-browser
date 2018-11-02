@@ -11,18 +11,19 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/udp_server_socket.h"
+#include "net/tools/quic/quic_dispatcher.h"
 
 namespace net {
 
 QuicSimpleServerPacketWriter::QuicSimpleServerPacketWriter(
     UDPServerSocket* socket,
-    QuicBlockedWriterInterface* blocked_writer)
+    QuicDispatcher* dispatcher)
     : socket_(socket),
-      blocked_writer_(blocked_writer),
+      dispatcher_(dispatcher),
       write_blocked_(false),
       weak_factory_(this) {}
 
-QuicSimpleServerPacketWriter::~QuicSimpleServerPacketWriter() {}
+QuicSimpleServerPacketWriter::~QuicSimpleServerPacketWriter() = default;
 
 WriteResult QuicSimpleServerPacketWriter::WritePacketWithCallback(
     const char* buffer,
@@ -48,7 +49,7 @@ void QuicSimpleServerPacketWriter::OnWriteComplete(int rv) {
   if (!callback_.is_null()) {
     base::ResetAndReturn(&callback_).Run(result);
   }
-  blocked_writer_->OnCanWrite();
+  dispatcher_->OnCanWrite();
 }
 
 bool QuicSimpleServerPacketWriter::IsWriteBlockedDataBuffered() const {

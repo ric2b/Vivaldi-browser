@@ -155,10 +155,12 @@ class TestMemoryCoordinatorImpl : public MemoryCoordinatorImpl {
   TestMemoryCoordinatorImpl(
       scoped_refptr<base::TestMockTimeTaskRunner> task_runner)
       : MemoryCoordinatorImpl(task_runner,
-                              base::MakeUnique<MockMemoryMonitor>()) {
-    SetDelegateForTesting(base::MakeUnique<TestMemoryCoordinatorDelegate>());
-    SetPolicyForTesting(base::MakeUnique<MockMemoryCoordinatorPolicy>(this));
-    SetTickClockForTesting(task_runner->GetMockTickClock());
+                              std::make_unique<MockMemoryMonitor>()) {
+    SetDelegateForTesting(std::make_unique<TestMemoryCoordinatorDelegate>());
+    SetPolicyForTesting(std::make_unique<MockMemoryCoordinatorPolicy>(this));
+
+    clock_ = task_runner->GetMockTickClock();
+    SetTickClockForTesting(clock_.get());
   }
 
   ~TestMemoryCoordinatorImpl() override {}
@@ -172,7 +174,7 @@ class TestMemoryCoordinatorImpl : public MemoryCoordinatorImpl {
     children_.push_back(std::unique_ptr<Child>(new Child(&cmc_ptr)));
     AddChildForTesting(process_id, std::move(cmc_ptr));
     render_process_hosts_[process_id] =
-        base::MakeUnique<MockRenderProcessHost>(&browser_context_);
+        std::make_unique<MockRenderProcessHost>(&browser_context_);
     return &children_.back()->cmc;
   }
 
@@ -203,6 +205,10 @@ class TestMemoryCoordinatorImpl : public MemoryCoordinatorImpl {
     RunUntilIdle();
     return result;
   }
+
+  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
+  // instance.
+  std::unique_ptr<base::TickClock> clock_;
 
   TestBrowserContext browser_context_;
   std::vector<std::unique_ptr<Child>> children_;
@@ -448,9 +454,9 @@ TEST_F(MemoryCoordinatorImplTest, MAYBE_GetStateForProcess) {
   base::Process process1 = SpawnChild("process1");
   base::Process process2 = SpawnChild("process2");
   coordinator_->GetMockRenderProcessHost(1)->SetProcessHandle(
-      base::MakeUnique<base::ProcessHandle>(process1.Handle()));
+      std::make_unique<base::ProcessHandle>(process1.Handle()));
   coordinator_->GetMockRenderProcessHost(2)->SetProcessHandle(
-      base::MakeUnique<base::ProcessHandle>(process2.Handle()));
+      std::make_unique<base::ProcessHandle>(process2.Handle()));
 
   EXPECT_EQ(base::MemoryState::NORMAL,
             coordinator_->GetStateForProcess(process1.Handle()));

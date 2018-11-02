@@ -8,31 +8,21 @@
 #include "base/test/test_timeouts.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/message_center_notification_manager.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
-#include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_profile.h"
-#include "chrome/test/base/testing_profile_manager.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/message_center/fake_message_center_tray_delegate.h"
-#include "ui/message_center/message_center_tray.h"
+#include "ui/message_center/fake_ui_delegate.h"
 #include "ui/message_center/message_center_types.h"
+#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/ash/multi_user/multi_user_notification_blocker_chromeos.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
-#include "components/signin/core/account_id/account_id.h"
-#endif
+#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/ui_controller.h"
 
 namespace message_center {
 
@@ -42,7 +32,6 @@ class MessageCenterNotificationManagerTest : public BrowserWithTestWindowTest {
 
  protected:
   void SetUp() override {
-    BrowserWithTestWindowTest::SetUp();
 #if !defined(OS_CHROMEOS)
     // BrowserWithTestWindowTest owns an AshTestHelper on OS_CHROMEOS, which
     // in turn initializes the message center.  On other platforms, we need to
@@ -50,24 +39,18 @@ class MessageCenterNotificationManagerTest : public BrowserWithTestWindowTest {
     MessageCenter::Initialize();
 #endif
 
-    TestingBrowserProcess* browser_process = TestingBrowserProcess::GetGlobal();
-    profile_manager_.reset(new TestingProfileManager(browser_process));
-    ASSERT_TRUE(profile_manager_->SetUp());
-
+    BrowserWithTestWindowTest::SetUp();
     message_center_ = MessageCenter::Get();
-    delegate_ = new FakeMessageCenterTrayDelegate(message_center_);
-    notification_manager()->SetMessageCenterTrayDelegateForTest(delegate_);
+    delegate_ = new FakeUiDelegate();
+    notification_manager()->SetUiDelegateForTest(delegate_);
   }
 
   void TearDown() override {
-    profile_manager_.reset();
-
+    BrowserWithTestWindowTest::TearDown();
 #if !defined(OS_CHROMEOS)
     // Shutdown the message center if we initialized it manually.
     MessageCenter::Shutdown();
 #endif
-
-    BrowserWithTestWindowTest::TearDown();
   }
 
   MessageCenterNotificationManager* notification_manager() {
@@ -77,24 +60,19 @@ class MessageCenterNotificationManagerTest : public BrowserWithTestWindowTest {
 
   MessageCenter* message_center() { return message_center_; }
 
-  const ::Notification GetANotification(const std::string& id) {
-    return ::Notification(
-        message_center::NOTIFICATION_TYPE_SIMPLE,
-        base::string16(),
-        base::string16(),
-        gfx::Image(),
-        NotifierId(NotifierId::APPLICATION, "adflkjsdflkdsfdsflkjdsflkdjfs"),
-        base::string16(),
+  const Notification GetANotification(const std::string& id) {
+    return Notification(
+        message_center::NOTIFICATION_TYPE_SIMPLE, id, base::string16(),
+        base::string16(), gfx::Image(), base::string16(),
         GURL("chrome-extension://adflkjsdflkdsfdsflkjdsflkdjfs"),
-        id,
+        NotifierId(NotifierId::APPLICATION, "adflkjsdflkdsfdsflkjdsflkdjfs"),
         message_center::RichNotificationData(),
-        new MockNotificationDelegate(id));
+        new message_center::NotificationDelegate());
   }
 
  private:
-  std::unique_ptr<TestingProfileManager> profile_manager_;
   MessageCenter* message_center_;
-  FakeMessageCenterTrayDelegate* delegate_;
+  FakeUiDelegate* delegate_;
 };
 
 TEST_F(MessageCenterNotificationManagerTest, SetupNotificationManager) {
@@ -126,27 +104,15 @@ TEST_F(MessageCenterNotificationManagerTest, UpdateNotification) {
   EXPECT_TRUE(message_center()->NotificationCount() == 1);
 }
 
-#if defined(OS_CHROMEOS)
-TEST_F(MessageCenterNotificationManagerTest, MultiUserUpdates) {
+// Regression test for crbug.com/767868
+TEST_F(MessageCenterNotificationManagerTest, GetAllIdsReturnsOriginalId) {
   TestingProfile profile;
-  const AccountId active_user_id(
-      multi_user_util::GetAccountIdFromProfile(&profile));
-  chrome::MultiUserWindowManagerChromeOS* multi_user_window_manager =
-      new chrome::MultiUserWindowManagerChromeOS(active_user_id);
-  multi_user_window_manager->Init();
-  chrome::MultiUserWindowManager::SetInstanceForTest(
-      multi_user_window_manager,
-      chrome::MultiUserWindowManager::MULTI_PROFILE_MODE_SEPARATED);
-  std::unique_ptr<MultiUserNotificationBlockerChromeOS> blocker(
-      new MultiUserNotificationBlockerChromeOS(
-          message_center::MessageCenter::Get(), active_user_id));
-  EXPECT_EQ(0u, message_center()->NotificationCount());
+  EXPECT_TRUE(message_center()->NotificationCount() == 0);
   notification_manager()->Add(GetANotification("test"), &profile);
-  EXPECT_EQ(1u, message_center()->NotificationCount());
-  notification_manager()->Update(GetANotification("test"), &profile);
-  EXPECT_EQ(1u, message_center()->NotificationCount());
-  chrome::MultiUserWindowManager::DeleteInstance();
+  std::set<std::string> ids = notification_manager()->GetAllIdsByProfile(
+      NotificationUIManager::GetProfileID(&profile));
+  ASSERT_EQ(1u, ids.size());
+  EXPECT_EQ(*ids.begin(), "test");
 }
-#endif
 
 }  // namespace message_center

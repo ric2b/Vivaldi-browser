@@ -32,13 +32,12 @@ void TrimLWSImplementation(ConstIterator* begin, ConstIterator* end) {
   while (*begin < *end && HttpUtil::IsLWS((*end)[-1]))
     --(*end);
 }
-}  // namespace
 
 // Helpers --------------------------------------------------------------------
 
 // Returns the index of the closing quote of the string, if any.  |start| points
 // at the opening quote.
-static size_t FindStringEnd(const std::string& line, size_t start, char delim) {
+size_t FindStringEnd(const std::string& line, size_t start, char delim) {
   DCHECK_LT(start, line.length());
   DCHECK_EQ(line[start], delim);
   DCHECK((delim == '"') || (delim == '\''));
@@ -51,7 +50,7 @@ static size_t FindStringEnd(const std::string& line, size_t start, char delim) {
   }
   return line.length();
 }
-
+}  // namespace
 
 // HttpUtil -------------------------------------------------------------------
 
@@ -98,12 +97,14 @@ void HttpUtil::ParseContentType(const std::string& content_type_str,
 
       std::string::const_iterator param_name_begin = tokenizer.token_begin();
       std::string::const_iterator param_name_end = equals_sign;
-      TrimLWS(&param_name_begin, &param_name_end);
-
       std::string::const_iterator param_value_begin = equals_sign + 1;
       std::string::const_iterator param_value_end = tokenizer.token_end();
       DCHECK(param_value_begin <= tokenizer.token_end());
-      TrimLWS(&param_value_begin, &param_value_end);
+
+      // From parameter name, only trim leading whitespace.
+      // From parameter value, only trim trailing whitespace.
+      // See https://crbug.com/772834.
+      TrimLWS(&param_name_begin, &param_value_end);
 
       if (base::LowerCaseEqualsASCII(
               base::StringPiece(param_name_begin, param_name_end), "charset")) {
@@ -121,47 +122,50 @@ void HttpUtil::ParseContentType(const std::string& content_type_str,
   }
 
   if (type_has_charset) {
-    // Trim leading and trailing whitespace from charset_val.  We include
-    // '(' in the trailing trim set to catch media-type comments, which are
-    // not at all standard, but may occur in rare cases.
+    // Trim leading whitespace from charset_val.
     charset_val = content_type_str.find_first_not_of(HTTP_LWS, charset_val);
     charset_val = std::min(charset_val, charset_end);
     char first_char = content_type_str[charset_val];
-    if (first_char == '"' || first_char == '\'') {
+    // RFC 7231 Section 3.1.1.1 allows double quotes around charset.
+    if (first_char == '"') {
       charset_end = FindStringEnd(content_type_str, charset_val, first_char);
       ++charset_val;
       DCHECK(charset_end >= charset_val);
     } else {
-      charset_end = std::min(content_type_str.find_first_of(HTTP_LWS ";(",
-                                                            charset_val),
+      // Ignore the part after '('.  This is not in the standard, but may occur
+      // in rare cases.
+      // TODO(bnc): Do not ignore the part after '('.
+      // See https://crbug.com/772343.
+      charset_end = std::min(content_type_str.find_first_of("(", charset_val),
                              charset_end);
     }
   }
 
-  // if the server sent "*/*", it is meaningless, so do not store it.
-  // also, if type_val is the same as mime_type, then just update the
-  // charset.  however, if charset is empty and mime_type hasn't
-  // changed, then don't wipe-out an existing charset.  We
-  // also want to reject a mime-type if it does not include a slash.
-  // some servers give junk after the charset parameter, which may
+  // If the server sent "*/*", it is meaningless, so do not store it.
+  // Also, reject a mime-type if it does not include a slash.
+  // Some servers give junk after the charset parameter, which may
   // include a comma, so this check makes us a bit more tolerant.
-  if (content_type_str.length() != 0 &&
-      content_type_str != "*/*" &&
-      content_type_str.find_first_of('/') != std::string::npos) {
-    // Common case here is that mime_type is empty
-    bool eq = !mime_type->empty() &&
-              base::LowerCaseEqualsASCII(
-                  base::StringPiece(begin + type_val, begin + type_end),
-                  mime_type->data());
-    if (!eq) {
-      *mime_type = base::ToLowerASCII(
-          base::StringPiece(begin + type_val, begin + type_end));
-    }
-    if ((!eq && *had_charset) || type_has_charset) {
-      *had_charset = true;
-      *charset = base::ToLowerASCII(
-          base::StringPiece(begin + charset_val, begin + charset_end));
-    }
+  if (content_type_str.length() == 0 || content_type_str == "*/*" ||
+      content_type_str.find_first_of('/') == std::string::npos) {
+    return;
+  }
+
+  // If type_val is the same as mime_type, then just update the charset.
+  // However, if charset is empty and mime_type hasn't changed, then don't
+  // wipe-out an existing charset.
+  // It is common that mime_type is empty.
+  bool eq = !mime_type->empty() &&
+            base::LowerCaseEqualsASCII(
+                base::StringPiece(begin + type_val, begin + type_end),
+                mime_type->data());
+  if (!eq) {
+    *mime_type = base::ToLowerASCII(
+        base::StringPiece(begin + type_val, begin + type_end));
+  }
+  if ((!eq && *had_charset) || type_has_charset) {
+    *had_charset = true;
+    *charset = base::ToLowerASCII(
+        base::StringPiece(begin + charset_val, begin + charset_end));
   }
 }
 
@@ -434,12 +438,6 @@ base::StringPiece HttpUtil::TrimLWS(const base::StringPiece& string) {
   return base::StringPiece(begin, end - begin);
 }
 
-bool HttpUtil::IsQuote(char c) {
-  // Single quote mark isn't actually part of quoted-text production,
-  // but apparently some servers rely on this.
-  return c == '"' || c == '\'';
-}
-
 bool HttpUtil::IsTokenChar(char c) {
   return !(c >= 0x7F || c <= 0x20 || c == '(' || c == ')' || c == '<' ||
            c == '>' || c == '@' || c == ',' || c == ';' || c == ':' ||
@@ -472,6 +470,12 @@ bool HttpUtil::IsParmName(std::string::const_iterator begin,
 }
 
 namespace {
+bool IsQuote(char c) {
+  // Single quote mark isn't actually part of quoted-text production,
+  // but apparently some servers rely on this.
+  return c == '"' || c == '\'';
+}
+
 bool UnquoteImpl(std::string::const_iterator begin,
                  std::string::const_iterator end,
                  bool strict_quotes,
@@ -481,7 +485,7 @@ bool UnquoteImpl(std::string::const_iterator begin,
     return false;
 
   // Nothing to unquote.
-  if (!HttpUtil::IsQuote(*begin))
+  if (!IsQuote(*begin))
     return false;
 
   // Anything other than double quotes in strict mode.
@@ -866,8 +870,7 @@ HttpUtil::HeadersIterator::HeadersIterator(
     : lines_(headers_begin, headers_end, line_delimiter) {
 }
 
-HttpUtil::HeadersIterator::~HeadersIterator() {
-}
+HttpUtil::HeadersIterator::~HeadersIterator() = default;
 
 bool HttpUtil::HeadersIterator::GetNext() {
   while (lines_.GetNext()) {
@@ -925,8 +928,7 @@ HttpUtil::ValuesIterator::ValuesIterator(
 
 HttpUtil::ValuesIterator::ValuesIterator(const ValuesIterator& other) = default;
 
-HttpUtil::ValuesIterator::~ValuesIterator() {
-}
+HttpUtil::ValuesIterator::~ValuesIterator() = default;
 
 bool HttpUtil::ValuesIterator::GetNext() {
   while (values_.GetNext()) {
@@ -973,7 +975,7 @@ HttpUtil::NameValuePairsIterator::NameValuePairsIterator(
 HttpUtil::NameValuePairsIterator::NameValuePairsIterator(
     const NameValuePairsIterator& other) = default;
 
-HttpUtil::NameValuePairsIterator::~NameValuePairsIterator() {}
+HttpUtil::NameValuePairsIterator::~NameValuePairsIterator() = default;
 
 // We expect properties to be formatted as one of:
 //   name="value"
@@ -1053,7 +1055,10 @@ bool HttpUtil::NameValuePairsIterator::GetNext() {
 bool HttpUtil::NameValuePairsIterator::IsQuote(char c) const {
   if (strict_quotes_)
     return c == '"';
-  return HttpUtil::IsQuote(c);
+
+  // The call to the file-scoped IsQuote must be qualified to avoid re-entrantly
+  // calling NameValuePairsIterator::IsQuote again.
+  return net::IsQuote(c);
 }
 
 bool HttpUtil::ParseAcceptEncoding(const std::string& accept_encoding,

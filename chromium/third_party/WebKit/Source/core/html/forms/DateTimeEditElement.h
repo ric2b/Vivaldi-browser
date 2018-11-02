@@ -26,6 +26,7 @@
 #ifndef DateTimeEditElement_h
 #define DateTimeEditElement_h
 
+#include "base/macros.h"
 #include "core/html/forms/DateTimeFieldElement.h"
 #include "core/html/forms/StepRange.h"
 #include "platform/DateComponents.h"
@@ -44,7 +45,6 @@ class StepRange;
 //  - Hour, Minute, Second, Millisecond, AM/PM
 class DateTimeEditElement final : public HTMLDivElement,
                                   public DateTimeFieldElement::FieldOwner {
-  WTF_MAKE_NONCOPYABLE(DateTimeEditElement);
   USING_GARBAGE_COLLECTED_MIXIN(DateTimeEditElement);
 
  public:
@@ -83,7 +83,7 @@ class DateTimeEditElement final : public HTMLDivElement,
   static DateTimeEditElement* Create(Document&, EditControlOwner&);
 
   ~DateTimeEditElement() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   void AddField(DateTimeFieldElement*);
   bool AnyEditableFieldsHaveValues() const;
@@ -94,7 +94,7 @@ class DateTimeEditElement final : public HTMLDivElement,
   void FocusIfNoFocus();
   // If oldFocusedNode is one of sub-fields, focus on it. Otherwise focus on
   // the first sub-field.
-  void FocusByOwner(Element* old_focused_element = 0);
+  void FocusByOwner(Element* old_focused_element = nullptr);
   bool HasFocusedField();
   void ReadOnlyStateChanged();
   void RemoveEditControlOwner() { edit_control_owner_ = nullptr; }
@@ -136,7 +136,7 @@ class DateTimeEditElement final : public HTMLDivElement,
   void UpdateUIState();
 
   // Element function.
-  RefPtr<ComputedStyle> CustomStyleForLayoutObject() override;
+  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() override;
   bool IsDateTimeEditElement() const override;
 
   // DateTimeFieldElement::FieldOwner functions.
@@ -152,6 +152,8 @@ class DateTimeEditElement final : public HTMLDivElement,
 
   HeapVector<Member<DateTimeFieldElement>, kMaximumNumberOfFields> fields_;
   Member<EditControlOwner> edit_control_owner_;
+
+  DISALLOW_COPY_AND_ASSIGN(DateTimeEditElement);
 };
 
 DEFINE_TYPE_CASTS(DateTimeEditElement,

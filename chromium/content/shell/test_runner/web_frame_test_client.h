@@ -50,7 +50,6 @@ class WebFrameTestClient : public blink::WebFrameClient {
   blink::WebPlugin* CreatePlugin(const blink::WebPluginParams& params) override;
   void ShowContextMenu(
       const blink::WebContextMenuData& context_menu_data) override;
-  blink::WebUserMediaClient* UserMediaClient() override;
   void DidAddMessageToConsole(const blink::WebConsoleMessage& message,
                               const blink::WebString& source_name,
                               unsigned source_line,
@@ -74,10 +73,6 @@ class WebFrameTestClient : public blink::WebFrameClient {
   void DidFailLoad(const blink::WebURLError& error,
                    blink::WebHistoryCommitType commit_type) override;
   void DidFinishLoad() override;
-  void DidNavigateWithinPage(const blink::WebHistoryItem& history_item,
-                             blink::WebHistoryCommitType commit_type,
-                             bool contentInitiated) override;
-  void DidStartLoading(bool to_different_document) override;
   void DidStopLoading() override;
   void DidDetectXSS(const blink::WebURL& insecure_url,
                     bool did_block_entire_page) override;

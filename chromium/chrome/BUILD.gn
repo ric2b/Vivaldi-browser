@@ -6,6 +6,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/compiler/pgo/pgo.gni")
 import("//build/config/features.gni")
+import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -15,6 +16,7 @@ import("//build/toolchain/toolchain.gni")
 import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")
+import("//components/nacl/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
 import("//ppapi/features/features.gni")
@@ -77,22 +79,6 @@ if (is_win) {
   }
 }
 
-# Dependencies which must accompany ChromeMainDelegate when embedded
-# Mash services are enabled.
-if (enable_package_mash_services) {
-  embedded_mash_service_deps = [
-    "//chrome/app/mash:chrome_mash_catalog",
-    "//chrome/app/mash:embedded_services",
-    "//mash/common",
-    "//mash/quick_launch/public/interfaces:constants",
-    "//services/ui/public/interfaces:constants",
-  ]
-
-  if (is_chromeos) {
-    embedded_mash_service_deps += [ "//chrome/app/mash:chrome_mus_catalog" ]
-  }
-}
-
 # This target exists above chrome and it's main components in the dependency
 # tree as a central place to put assert_no_deps annotations. Since this depends
 # on Chrome and the main DLLs it uses, it will transitively assert that those
@@ -123,7 +109,6 @@ if (!is_android && !is_mac) {
   group("chrome") {
     public_deps = [
       ":chrome_initial",
-      "//tools/v8_context_snapshot:v8_context_snapshot",
     ]
     data_deps = [
       ":chrome_initial",
@@ -133,6 +118,9 @@ if (!is_android && !is_mac) {
     }
     if (use_aura && (is_win || is_linux)) {
       data_deps += [ "//chrome/app:service_manifests" ]
+    }
+    if (is_chromeos) {
+      data_deps += [ "//sandbox/linux:chrome_sandbox" ]
     }
   }
 
@@ -205,8 +193,6 @@ if (!is_android && !is_mac) {
           ":file_pre_reader",
           ":visual_elements_resources",
           "//base",
-          "//breakpad:breakpad_handler",
-          "//breakpad:breakpad_sender",
           "//chrome/app/version_assembly:chrome_exe_manifest",
           "//chrome/browser:active_use_util",
           "//chrome/browser:chrome_process_finder",
@@ -225,6 +211,8 @@ if (!is_android && !is_mac) {
           "//crypto",
           "//gpu/config:crash_keys",
           "//sandbox",
+          "//third_party/breakpad:breakpad_handler",
+          "//third_party/breakpad:breakpad_sender",
         ]
         data_deps = [
           "//chrome/app/version_assembly:version_assembly_manifest",
@@ -266,7 +254,6 @@ if (!is_android && !is_mac) {
           # Chromium functionality directly into the executable.
           ":browser_dependencies",
           ":child_dependencies",
-          ":manpage",
 
           # Needed to use the master_preferences functions
           "//chrome/installer/util:with_no_strings",
@@ -291,9 +278,13 @@ if (!is_android && !is_mac) {
           ldflags += [ "-Wl,--long-plt" ]
         }
 
-        if (use_pango || use_cairo) {
-          # Needed for chrome_main.cc initialization of libraries.
-          configs += [ "//build/config/linux/pangocairo" ]
+        if (is_desktop_linux && !is_component_build && !using_sanitizer) {
+          version_script = "//build/linux/chrome.map"
+          inputs = [
+            version_script,
+          ]
+          ldflags += [ "-Wl,--version-script=" +
+                       rebase_path(version_script, root_build_dir) ]
         }
 
         if (use_x11) {
@@ -302,9 +293,8 @@ if (!is_android && !is_mac) {
             "//build/config/linux:xext",
           ]
         }
-
-        if (enable_package_mash_services) {
-          deps += embedded_mash_service_deps
+        if (enable_mus) {
+          deps += [ "//mash/common" ]
         }
 
         # Find lib/libffmpeg.so without the executable wrapper script. Note that
@@ -350,20 +340,19 @@ if (!is_android && !is_mac) {
     }
   }
 
-  if (enable_package_mash_services) {
+  # TODO(jonross): remove this once telemetry can differentiate between linux
+  # and linux chromiumos.
+  if (enable_mus) {
     chrome_binary("chrome_test") {
-      # Note that the output name needs to end with "chrome", because that's what
-      # telemetry test-runner expects.
+      # Note that the output name needs to end with "chrome", because that's
+      # what telemetry test-runner expects.
       output_name = "test_chrome"
       sources = []
-      deps = [
-        "//chrome/app/mash:chrome_test_catalog",
-      ]
       data = [
         "$root_out_dir/chrome_200_percent.pak",
       ]
       if (!is_win && use_aura) {
-        sources += [ "app/chrome_test_exe_main_aura.cc" ]
+        sources += [ "app/chrome_exe_main_aura.cc" ]
       }
     }
   }
@@ -390,8 +379,6 @@ if (is_win) {
       "app/chrome_main.cc",
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
-      "app/chrome_main_mac.h",
-      "app/chrome_main_mac.mm",
     ]
 
     output_name = "chrome"
@@ -418,7 +405,7 @@ if (is_win) {
       "//net:net_resources",
       "//ppapi/features",
       "//services/service_manager/embedder",
-      "//third_party/cld",
+      "//third_party/cld_3/src/src:cld_3",
       "//third_party/wtl",
       "//ui/views",
     ]
@@ -460,6 +447,7 @@ if (is_win) {
         # The browser DLL may not depend on blink or v8.
         "//third_party/WebKit/public:blink",
         "//gin",
+        "//tools/v8_context_snapshot",
         "//v8",
       ]
     } else {
@@ -467,10 +455,6 @@ if (is_win) {
         ":child_dependencies",
         "//content/public/app:both",
       ]
-    }
-
-    if (enable_package_mash_services) {
-      deps += embedded_mash_service_deps
     }
 
     if (is_clang && is_official_build && !use_lld) {
@@ -601,7 +585,7 @@ if (is_win) {
     ]
 
     outputs = [
-      "{{bundle_root_dir}}/XPCServices/{{source_file_part}}",
+      "{{bundle_contents_dir}}/XPCServices/{{source_file_part}}",
     ]
 
     public_deps = [
@@ -765,7 +749,7 @@ if (is_win) {
       ]
 
       outputs = [
-        "{{bundle_root_dir}}/Helpers/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Helpers/{{source_file_part}}",
       ]
     }
   }
@@ -776,7 +760,7 @@ if (is_win) {
       "$root_out_dir/$chrome_helper_name.app",
     ]
     outputs = [
-      "{{bundle_root_dir}}/Versions/$chrome_version_full/{{source_file_part}}",
+      "{{bundle_contents_dir}}/Versions/$chrome_version_full/{{source_file_part}}",
     ]
     public_deps = [
       ":chrome_helper_app",
@@ -874,7 +858,7 @@ if (is_win) {
     ]
 
     outputs = [
-      "{{bundle_root_dir}}/Helpers/{{source_file_part}}",
+      "{{bundle_contents_dir}}/Helpers/{{source_file_part}}",
     ]
 
     public_deps = [
@@ -911,7 +895,7 @@ if (is_win) {
     public_deps = [
       ":packed_resources",
       "//chrome/app_shim:app_mode_loader",
-      "//tools/v8_context_snapshot:v8_context_snapshot",
+      "//tools/v8_context_snapshot",
     ]
 
     if (is_chrome_branded) {
@@ -977,7 +961,7 @@ if (is_win) {
     bundle_data("chrome_framework_plugins") {
       sources = []
       outputs = [
-        "{{bundle_root_dir}}/Internet Plug-Ins/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Internet Plug-Ins/{{source_file_part}}",
       ]
       public_deps = []
 
@@ -1007,7 +991,7 @@ if (is_win) {
         "$root_out_dir/libwidevinecdm.dylib",
       ]
       outputs = [
-        "{{bundle_root_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
       ]
       public_deps = [
         # Need this intermediate dependency because "widevinecdm" is a
@@ -1051,7 +1035,7 @@ if (is_win) {
         "$root_out_dir/WidevineCdm/manifest.json",
       ]
       outputs = [
-        "{{bundle_root_dir}}/Libraries/WidevineCdm/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Libraries/WidevineCdm/{{source_file_part}}",
       ]
       public_deps = [
         "//third_party/widevine/cdm:widevine_cdm_manifest",
@@ -1083,7 +1067,7 @@ if (is_win) {
       info_plist = "//third_party/widevine/cdm/widevine_resources.plist"
       extra_substitutions = [
         "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
-        "BUNDLE_ID=widevine_resources",
+        "BUNDLE_ID=widevine-resources",
       ]
       executable_name = "Widevine Resources"
     }
@@ -1091,7 +1075,7 @@ if (is_win) {
     bundle_data("widevine_resources_plist_bundle_data") {
       sources = get_target_outputs(":widevine_resources_plist")
       outputs = [
-        "{{bundle_root_dir}}/Info.plist",
+        "{{bundle_contents_dir}}/Info.plist",
       ]
       public_deps = [
         ":widevine_resources_plist",
@@ -1114,8 +1098,9 @@ if (is_win) {
 
     create_bundle("widevine_resources_bundle") {
       output_name = "Widevine Resources.bundle"
-      bundle_root_dir = "$root_build_dir/$output_name/Contents"
-      bundle_resources_dir = bundle_root_dir + "/Resources"
+      bundle_root_dir = "$root_build_dir/$output_name"
+      bundle_contents_dir = "$bundle_root_dir/Contents"
+      bundle_resources_dir = "$bundle_contents_dir/Resources"
 
       deps = [
         ":framework_widevine_signature",
@@ -1224,7 +1209,7 @@ if (is_win) {
       "//content/public/common:service_names",
       "//headless:headless_shell_lib",
       "//services/service_manager/embedder",
-      "//third_party/cld",
+      "//third_party/cld_3/src/src:cld_3",
     ]
 
     if (is_component_build) {
@@ -1236,10 +1221,6 @@ if (is_win) {
       "-Wl," + rebase_path("app/framework.order", root_build_dir),
       "-ObjC",
     ]
-
-    if (enable_package_mash_services) {
-      deps += embedded_mash_service_deps
-    }
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
   }
@@ -1402,8 +1383,8 @@ if (is_win) {
         ":chrome_app",
         ":chrome_framework",
         ":chrome_helper_app",
-        "//breakpad:dump_syms",
         "//chrome/browser/ui/cocoa/notifications:alert_notification_xpc_service",
+        "//third_party/breakpad:dump_syms",
         "//third_party/crashpad/crashpad/handler:crashpad_handler",
       ]
     }
@@ -1462,7 +1443,7 @@ group("browser_dependencies") {
 
   if (enable_basic_printing || enable_print_preview) {
     public_deps += [ "//printing" ]
-    if (enable_print_preview) {
+    if (enable_print_preview && !is_chromeos) {
       public_deps += [ "//chrome/service" ]
     }
   }
@@ -1480,6 +1461,7 @@ group("browser_dependencies") {
       assert_no_deps += [
         # V8/Gin should not be used in the browser DLL on Windows.
         "//gin",
+        "//tools/v8_context_snapshot",
         "//v8",
       ]
     }
@@ -1597,7 +1579,6 @@ group("extra_resources") {
   public_deps = [
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:quota_internals_resources",
     "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
@@ -1620,8 +1601,14 @@ group("extra_resources") {
   }
 
   if (enable_extensions) {
-    public_deps +=
-        [ "//chrome/browser/resources:sync_file_system_internals_resources" ]
+    public_deps += [
+      "//chrome/browser/resources:extensions_resources",
+      "//chrome/browser/resources:sync_file_system_internals_resources",
+    ]
+  }
+
+  if (enable_print_preview) {
+    public_deps += [ "//chrome/browser/resources:print_preview_resources" ]
   }
 }
 
@@ -1655,7 +1642,7 @@ if (is_chrome_branded && !is_android) {
       ]
     } else {
       outputs = [
-        "{{bundle_root_dir}}/Default Apps/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Default Apps/{{source_file_part}}",
       ]
     }
 
@@ -1736,6 +1723,12 @@ if (is_android) {
     ]
   }
 
+  java_cpp_enum("assist_ranker_prediction_enum_javagen") {
+    sources = [
+      "browser/android/contextualsearch/contextual_search_ranker_logger_impl.h",
+    ]
+  }
+
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
       "browser/ui/android/page_info/page_info_popup_android.h",
@@ -1748,9 +1741,21 @@ if (is_android) {
     ]
   }
 
+  java_cpp_enum("partner_bookmarks_javagen") {
+    sources = [
+      "browser/android/bookmarks/partner_bookmarks_reader.h",
+    ]
+  }
+
   java_cpp_enum("payments_journey_logger_enum_javagen") {
     sources = [
       "../components/payments/core/journey_logger.h",
+    ]
+  }
+
+  java_cpp_enum("pref_enum_javagen") {
+    sources = [
+      "browser/android/preferences/prefs.h",
     ]
   }
 
@@ -1800,7 +1805,7 @@ if (is_android) {
       "//chrome/profiling",
       "//chrome/renderer",
       "//chrome/utility",
-      "//components/safe_browsing/db:safe_browsing_mobile",
+      "//components/safe_browsing/android:safe_browsing_mobile",
       "//content/public/app:both",
       "//content/public/common:service_names",
       "//services/service_manager/embedder",
@@ -1821,7 +1826,7 @@ if (is_android) {
 if (enable_resource_whitelist_generation) {
   generate_resource_whitelist("resource_whitelist") {
     deps = [
-      "//chrome/android:chrome",
+      "//chrome/android:libchrome",
     ]
     input = "$root_out_dir/libchrome$shlib_extension.whitelist"
     output = chrome_resource_whitelist
@@ -1829,46 +1834,11 @@ if (enable_resource_whitelist_generation) {
 }
 
 if (is_linux) {
-  action("manpage") {
-    if (is_chrome_branded) {
-      name = "Google Chrome"
-      filename = "google-chrome"
-      confdir = "google-chrome"
-    } else if (is_vivaldi) {
-      name = "Vivaldi"
-      filename = "vivaldi"
-      confdir = "vivaldi"
-    } else {
-      name = "Chromium"
-      filename = "chromium-browser"
-      confdir = "chromium"
-    }
-
-    script = "//chrome/tools/build/linux/sed.py"
-    infile = "app/resources/manpage.1.in"
-    inputs = [
-      infile,
-    ]
-
-    outfile = "$root_out_dir/chrome.1"
-    outputs = [
-      outfile,
-    ]
-
-    args = [
-      rebase_path(infile, root_build_dir),
-      rebase_path(outfile, root_build_dir),
-      "-e s/@@NAME@@/$name/",
-      "-e s/@@FILENAME@@/$filename/",
-      "-e s/@@CONFDIR@@/$confdir/",
-    ]
-  }
-
   if (is_official_build) {
     action("linux_symbols") {
       script = "//build/linux/dump_app_syms.py"
 
-      dump_syms_label = "//breakpad:dump_syms($host_toolchain)"
+      dump_syms_label = "//third_party/breakpad:dump_syms($host_toolchain)"
       dump_syms_binary =
           get_label_info(dump_syms_label, "root_out_dir") + "/" + "dump_syms"
 

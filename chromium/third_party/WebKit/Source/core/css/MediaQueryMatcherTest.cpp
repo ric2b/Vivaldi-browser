@@ -4,11 +4,11 @@
 
 #include "core/css/MediaQueryMatcher.h"
 
-#include "core/MediaTypeNames.h"
+#include <memory>
 #include "core/css/MediaList.h"
+#include "core/media_type_names.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -17,11 +17,12 @@ TEST(MediaQueryMatcherTest, LostFrame) {
       DummyPageHolder::Create(IntSize(500, 500));
   MediaQueryMatcher* matcher =
       MediaQueryMatcher::Create(page_holder->GetDocument());
-  RefPtr<MediaQuerySet> query_set = MediaQuerySet::Create(MediaTypeNames::all);
-  ASSERT_TRUE(matcher->Evaluate(query_set.Get()));
+  scoped_refptr<MediaQuerySet> query_set =
+      MediaQuerySet::Create(MediaTypeNames::all);
+  ASSERT_TRUE(matcher->Evaluate(query_set.get()));
 
   matcher->DocumentDetached();
-  ASSERT_FALSE(matcher->Evaluate(query_set.Get()));
+  ASSERT_FALSE(matcher->Evaluate(query_set.get()));
 }
 
 }  // namespace blink

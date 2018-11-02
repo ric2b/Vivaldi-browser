@@ -16,18 +16,20 @@
 namespace blink {
 namespace scheduler {
 
-class SchedulerTqmDelegate;
-
 // Common scheduler functionality for default tasks.
 class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
  public:
   explicit SchedulerHelper(
-      scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate);
+      std::unique_ptr<TaskQueueManager> task_queue_manager);
   ~SchedulerHelper() override;
 
   // TaskQueueManager::Observer implementation:
   void OnTriedToExecuteBlockedTask() override;
   void OnBeginNestedRunLoop() override;
+  void OnExitNestedRunLoop() override;
+
+  base::TickClock* GetClock() const;
+  base::TimeTicks NowTicks() const;
 
   // Returns the default task queue.
   virtual scoped_refptr<TaskQueue> DefaultTaskQueue() = 0;
@@ -68,6 +70,9 @@ class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
 
     // Called when scheduler executes task with nested run loop.
     virtual void OnBeginNestedRunLoop() = 0;
+
+    // Called when the scheduler spots we've exited a nested run loop.
+    virtual void OnExitNestedRunLoop() = 0;
   };
 
   // Called once to set the Observer. This function is called on the main
@@ -82,7 +87,6 @@ class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
   RealTimeDomain* real_time_domain() const;
   void RegisterTimeDomain(TimeDomain* time_domain);
   void UnregisterTimeDomain(TimeDomain* time_domain);
-  const scoped_refptr<SchedulerTqmDelegate>& scheduler_tqm_delegate() const;
   bool GetAndClearSystemIsQuiescentBit();
 
   size_t GetNumberOfPendingTasks() const;
@@ -96,7 +100,6 @@ class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
                          scoped_refptr<TaskQueue> control_task_queue);
 
   base::ThreadChecker thread_checker_;
-  scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate_;
   std::unique_ptr<TaskQueueManager> task_queue_manager_;
 
  private:

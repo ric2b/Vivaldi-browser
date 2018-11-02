@@ -22,12 +22,12 @@
 #ifndef StyleRule_h
 #define StyleRule_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSSelectorList.h"
 #include "core/css/MediaList.h"
-#include "core/css/StylePropertySet.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -68,18 +68,18 @@ class CORE_EXPORT StyleRuleBase
   StyleRuleBase* Copy() const;
 
   // FIXME: There shouldn't be any need for the null parent version.
-  CSSRule* CreateCSSOMWrapper(CSSStyleSheet* parent_sheet = 0) const;
+  CSSRule* CreateCSSOMWrapper(CSSStyleSheet* parent_sheet = nullptr) const;
   CSSRule* CreateCSSOMWrapper(CSSRule* parent_rule) const;
 
-  DECLARE_TRACE();
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {}
+  void Trace(blink::Visitor*);
+  void TraceAfterDispatch(blink::Visitor* visitor) {}
   void FinalizeGarbageCollectedObject();
 
   // ~StyleRuleBase should be public, because non-public ~StyleRuleBase
   // causes C2248 error : 'blink::StyleRuleBase::~StyleRuleBase' : cannot
   // access protected member declared in class 'blink::StyleRuleBase' when
   // compiling 'source\wtf\refcounted.h' by using msvc.
-  ~StyleRuleBase() {}
+  ~StyleRuleBase() = default;
 
  protected:
   StyleRuleBase(RuleType type) : type_(type) {}
@@ -96,7 +96,7 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
  public:
   // Adopts the selector list
   static StyleRule* Create(CSSSelectorList selector_list,
-                           StylePropertySet* properties) {
+                           CSSPropertyValueSet* properties) {
     return new StyleRule(std::move(selector_list), properties);
   }
   static StyleRule* CreateLazy(CSSSelectorList selector_list,
@@ -107,8 +107,8 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   ~StyleRule();
 
   const CSSSelectorList& SelectorList() const { return selector_list_; }
-  const StylePropertySet& Properties() const;
-  MutableStylePropertySet& MutableProperties();
+  const CSSPropertyValueSet& Properties() const;
+  MutableCSSPropertyValueSet& MutableProperties();
 
   void WrapperAdoptSelectorList(CSSSelectorList selectors) {
     selector_list_ = std::move(selectors);
@@ -122,13 +122,13 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   bool PropertiesHaveFailedOrCanceledSubresources() const;
   bool ShouldConsiderForMatchingRules(bool include_empty_rules) const;
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
   friend class CSSLazyParsingTest;
   bool HasParsedProperties() const;
 
-  StyleRule(CSSSelectorList, StylePropertySet*);
+  StyleRule(CSSSelectorList, CSSPropertyValueSet*);
   StyleRule(CSSSelectorList, CSSLazyPropertyParser*);
   StyleRule(const StyleRule&);
 
@@ -144,45 +144,45 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   mutable ConsiderForMatching should_consider_for_matching_rules_;
 
   CSSSelectorList selector_list_;
-  mutable Member<StylePropertySet> properties_;
+  mutable Member<CSSPropertyValueSet> properties_;
   mutable Member<CSSLazyPropertyParser> lazy_property_parser_;
 };
 
 class CORE_EXPORT StyleRuleFontFace : public StyleRuleBase {
  public:
-  static StyleRuleFontFace* Create(StylePropertySet* properties) {
+  static StyleRuleFontFace* Create(CSSPropertyValueSet* properties) {
     return new StyleRuleFontFace(properties);
   }
 
   ~StyleRuleFontFace();
 
-  const StylePropertySet& Properties() const { return *properties_; }
-  MutableStylePropertySet& MutableProperties();
+  const CSSPropertyValueSet& Properties() const { return *properties_; }
+  MutableCSSPropertyValueSet& MutableProperties();
 
   StyleRuleFontFace* Copy() const { return new StyleRuleFontFace(*this); }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  StyleRuleFontFace(StylePropertySet*);
+  StyleRuleFontFace(CSSPropertyValueSet*);
   StyleRuleFontFace(const StyleRuleFontFace&);
 
-  Member<StylePropertySet> properties_;  // Cannot be null.
+  Member<CSSPropertyValueSet> properties_;  // Cannot be null.
 };
 
 class StyleRulePage : public StyleRuleBase {
  public:
   // Adopts the selector list
   static StyleRulePage* Create(CSSSelectorList selector_list,
-                               StylePropertySet* properties) {
+                               CSSPropertyValueSet* properties) {
     return new StyleRulePage(std::move(selector_list), properties);
   }
 
   ~StyleRulePage();
 
   const CSSSelector* Selector() const { return selector_list_.First(); }
-  const StylePropertySet& Properties() const { return *properties_; }
-  MutableStylePropertySet& MutableProperties();
+  const CSSPropertyValueSet& Properties() const { return *properties_; }
+  MutableCSSPropertyValueSet& MutableProperties();
 
   void WrapperAdoptSelectorList(CSSSelectorList selectors) {
     selector_list_ = std::move(selectors);
@@ -190,13 +190,13 @@ class StyleRulePage : public StyleRuleBase {
 
   StyleRulePage* Copy() const { return new StyleRulePage(*this); }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  StyleRulePage(CSSSelectorList, StylePropertySet*);
+  StyleRulePage(CSSSelectorList, CSSPropertyValueSet*);
   StyleRulePage(const StyleRulePage&);
 
-  Member<StylePropertySet> properties_;  // Cannot be null.
+  Member<CSSPropertyValueSet> properties_;  // Cannot be null.
   CSSSelectorList selector_list_;
 };
 
@@ -209,7 +209,7 @@ class CORE_EXPORT StyleRuleGroup : public StyleRuleBase {
   void WrapperInsertRule(unsigned, StyleRuleBase*);
   void WrapperRemoveRule(unsigned);
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  protected:
   StyleRuleGroup(RuleType, HeapVector<Member<StyleRuleBase>>& adopt_rule);
@@ -223,7 +223,7 @@ class CORE_EXPORT StyleRuleCondition : public StyleRuleGroup {
  public:
   String ConditionText() const { return condition_text_; }
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     StyleRuleGroup::TraceAfterDispatch(visitor);
   }
 
@@ -239,23 +239,23 @@ class CORE_EXPORT StyleRuleCondition : public StyleRuleGroup {
 class CORE_EXPORT StyleRuleMedia : public StyleRuleCondition {
  public:
   static StyleRuleMedia* Create(
-      RefPtr<MediaQuerySet> media,
+      scoped_refptr<MediaQuerySet> media,
       HeapVector<Member<StyleRuleBase>>& adopt_rules) {
     return new StyleRuleMedia(media, adopt_rules);
   }
 
-  MediaQuerySet* MediaQueries() const { return media_queries_.Get(); }
+  MediaQuerySet* MediaQueries() const { return media_queries_.get(); }
 
   StyleRuleMedia* Copy() const { return new StyleRuleMedia(*this); }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  StyleRuleMedia(RefPtr<MediaQuerySet>,
+  StyleRuleMedia(scoped_refptr<MediaQuerySet>,
                  HeapVector<Member<StyleRuleBase>>& adopt_rules);
   StyleRuleMedia(const StyleRuleMedia&);
 
-  RefPtr<MediaQuerySet> media_queries_;
+  scoped_refptr<MediaQuerySet> media_queries_;
 };
 
 class StyleRuleSupports : public StyleRuleCondition {
@@ -271,7 +271,7 @@ class StyleRuleSupports : public StyleRuleCondition {
   bool ConditionIsSupported() const { return condition_is_supported_; }
   StyleRuleSupports* Copy() const { return new StyleRuleSupports(*this); }
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     StyleRuleCondition::TraceAfterDispatch(visitor);
   }
 
@@ -287,31 +287,31 @@ class StyleRuleSupports : public StyleRuleCondition {
 
 class StyleRuleViewport : public StyleRuleBase {
  public:
-  static StyleRuleViewport* Create(StylePropertySet* properties) {
+  static StyleRuleViewport* Create(CSSPropertyValueSet* properties) {
     return new StyleRuleViewport(properties);
   }
 
   ~StyleRuleViewport();
 
-  const StylePropertySet& Properties() const { return *properties_; }
-  MutableStylePropertySet& MutableProperties();
+  const CSSPropertyValueSet& Properties() const { return *properties_; }
+  MutableCSSPropertyValueSet& MutableProperties();
 
   StyleRuleViewport* Copy() const { return new StyleRuleViewport(*this); }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  StyleRuleViewport(StylePropertySet*);
+  StyleRuleViewport(CSSPropertyValueSet*);
   StyleRuleViewport(const StyleRuleViewport&);
 
-  Member<StylePropertySet> properties_;  // Cannot be null
+  Member<CSSPropertyValueSet> properties_;  // Cannot be null
 };
 
 // This should only be used within the CSS Parser
 class StyleRuleCharset : public StyleRuleBase {
  public:
   static StyleRuleCharset* Create() { return new StyleRuleCharset(); }
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     StyleRuleBase::TraceAfterDispatch(visitor);
   }
 

@@ -7,9 +7,11 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
+
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -29,7 +31,6 @@
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/filters/vpx_video_decoder.h"
-#include "media/renderers/skcanvas_video_renderer.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_errors.h"
@@ -159,7 +160,7 @@ GLuint VideoDecoderShim::YUVConverter::CreateTexture() {
 
   // Create texture with default size - will be resized upon first frame.
   gl_->TexImage2D(GL_TEXTURE_2D, 0, internal_format_, 2, 2, 0, format_,
-                  GL_UNSIGNED_BYTE, NULL);
+                  GL_UNSIGNED_BYTE, nullptr);
 
   gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -176,7 +177,7 @@ GLuint VideoDecoderShim::YUVConverter::CompileShader(const char* name,
                                                      const char* code) {
   GLuint shader = gl_->CreateShader(type);
 
-  gl_->ShaderSource(shader, 1, (const GLchar**)&code, NULL);
+  gl_->ShaderSource(shader, 1, (const GLchar**)&code, nullptr);
   gl_->CompileShader(shader);
 
 #ifndef NDEBUG
@@ -361,8 +362,8 @@ bool VideoDecoderShim::YUVConverter::Initialize() {
 void VideoDecoderShim::YUVConverter::Convert(
     const scoped_refptr<media::VideoFrame>& frame,
     GLuint tex_out) {
-  const float* yuv_matrix = 0;
-  const float* yuv_adjust = 0;
+  const float* yuv_matrix = nullptr;
+  const float* yuv_adjust = nullptr;
 
   if (video_format_ != frame->format()) {
     // The constants below were taken from
@@ -556,7 +557,7 @@ void VideoDecoderShim::YUVConverter::Convert(
   gl_->BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
   gl_->EnableVertexAttribArray(0);
   gl_->VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat),
-                           static_cast<const void*>(0));
+                           static_cast<const void*>(nullptr));
 
   gl_->DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
@@ -663,7 +664,7 @@ class VideoDecoderShim::DecoderImpl {
   bool initialized_ = false;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   // Queue of decodes waiting for the decoder.
-  typedef std::queue<PendingDecode> PendingDecodeQueue;
+  using PendingDecodeQueue = base::queue<PendingDecode>;
   PendingDecodeQueue pending_decodes_;
   bool awaiting_decoder_ = false;
   // VideoDecoder returns pictures without information about the decode buffer
@@ -895,7 +896,7 @@ bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
 
   media::VideoDecoderConfig video_decoder_config(
       codec, vda_config.profile, media::PIXEL_FORMAT_YV12,
-      media::COLOR_SPACE_UNSPECIFIED,
+      media::COLOR_SPACE_UNSPECIFIED, media::VIDEO_ROTATION_0,
       gfx::Size(32, 24),  // Small sizes that won't fail.
       gfx::Rect(32, 24), gfx::Size(32, 24),
       // TODO(bbudge): Verify extra data isn't needed.

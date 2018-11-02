@@ -4,8 +4,39 @@
 
 #include "chrome/browser/ui/signin_view_controller.h"
 
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/dice_tab_helper.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/signin_promo.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
+#include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/signin_manager.h"
+#include "google_apis/gaia/gaia_urls.h"
+
+namespace {
+
+// Returns the sign-in reason for |mode|.
+signin_metrics::Reason GetSigninReasonFromMode(profiles::BubbleViewMode mode) {
+  DCHECK(SigninViewController::ShouldShowSigninForMode(mode));
+  switch (mode) {
+    case profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN:
+      return signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT;
+    case profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT:
+      return signin_metrics::Reason::REASON_ADD_SECONDARY_ACCOUNT;
+    case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH:
+      return signin_metrics::Reason::REASON_REAUTHENTICATION;
+    default:
+      NOTREACHED();
+      return signin_metrics::Reason::REASON_UNKNOWN_REASON;
+  }
+}
+
+}  // namespace
 
 SigninViewController::SigninViewController() : delegate_(nullptr) {}
 
@@ -13,7 +44,34 @@ SigninViewController::~SigninViewController() {
   CloseModalSignin();
 }
 
-void SigninViewController::ShowModalSignin(
+// static
+bool SigninViewController::ShouldShowSigninForMode(
+    profiles::BubbleViewMode mode) {
+  return mode == profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN ||
+         mode == profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT ||
+         mode == profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH;
+}
+
+void SigninViewController::ShowSignin(
+    profiles::BubbleViewMode mode,
+    Browser* browser,
+    signin_metrics::AccessPoint access_point) {
+  DCHECK(ShouldShowSigninForMode(mode));
+  if (signin::IsDicePrepareMigrationEnabled()) {
+    std::string email;
+    if (GetSigninReasonFromMode(mode) ==
+        signin_metrics::Reason::REASON_REAUTHENTICATION) {
+      SigninManagerBase* manager =
+          SigninManagerFactory::GetForProfile(browser->profile());
+      email = manager->GetAuthenticatedAccountInfo().email;
+    }
+    ShowDiceSigninTab(mode, browser, access_point, email);
+  } else {
+    ShowModalSigninDialog(mode, browser, access_point);
+  }
+}
+
+void SigninViewController::ShowModalSigninDialog(
     profiles::BubbleViewMode mode,
     Browser* browser,
     signin_metrics::AccessPoint access_point) {
@@ -74,12 +132,29 @@ void SigninViewController::ResetModalSigninDelegate() {
   delegate_ = nullptr;
 }
 
-// static
-bool SigninViewController::ShouldShowModalSigninForMode(
-    profiles::BubbleViewMode mode) {
-  return mode == profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN ||
-         mode == profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT ||
-         mode == profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH;
+void SigninViewController::ShowDiceSigninTab(
+    profiles::BubbleViewMode mode,
+    Browser* browser,
+    signin_metrics::AccessPoint access_point,
+    const std::string& email) {
+  signin_metrics::Reason signin_reason = GetSigninReasonFromMode(mode);
+  GURL signin_url = signin::GetSigninURLForDice(browser->profile(), email);
+  content::WebContents* active_contents = nullptr;
+  if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE) {
+    active_contents = browser->tab_strip_model()->GetActiveWebContents();
+    content::OpenURLParams params(signin_url, content::Referrer(),
+                                  WindowOpenDisposition::CURRENT_TAB,
+                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+    active_contents->OpenURL(params);
+  } else {
+    chrome::ShowSingletonTab(browser, signin_url);
+    active_contents = browser->tab_strip_model()->GetActiveWebContents();
+  }
+  DCHECK(active_contents);
+  DCHECK_EQ(signin_url, active_contents->GetVisibleURL());
+  DiceTabHelper::CreateForWebContents(active_contents);
+  DiceTabHelper* tab_helper = DiceTabHelper::FromWebContents(active_contents);
+  tab_helper->InitializeSigninFlow(access_point, signin_reason);
 }
 
 content::WebContents*

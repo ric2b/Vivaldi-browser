@@ -167,10 +167,10 @@ scoped_refptr<ArrayBuffer::Private> ArrayBuffer::Private::From(
     CHECK_EQ(WrapperInfo::From(v8::Local<v8::Object>::Cast(array)),
              &g_array_buffer_wrapper_info)
         << "Cannot mix blink and gin ArrayBuffers";
-    return make_scoped_refptr(static_cast<Private*>(
+    return base::WrapRefCounted(static_cast<Private*>(
         array->GetAlignedPointerFromInternalField(kEncodedValueIndex)));
   }
-  return make_scoped_refptr(new Private(isolate, array));
+  return base::WrapRefCounted(new Private(isolate, array));
 }
 
 ArrayBuffer::Private::Private(v8::Isolate* isolate,
@@ -231,15 +231,9 @@ ArrayBuffer::ArrayBuffer(v8::Isolate* isolate,
   num_bytes_ = private_->length();
 }
 
-ArrayBuffer::~ArrayBuffer() {
-}
+ArrayBuffer::~ArrayBuffer() = default;
 
-ArrayBuffer& ArrayBuffer::operator=(const ArrayBuffer& other) {
-  private_ = other.private_;
-  bytes_ = other.bytes_;
-  num_bytes_ = other.num_bytes_;
-  return *this;
-}
+ArrayBuffer& ArrayBuffer::operator=(const ArrayBuffer& other) = default;
 
 // Converter<ArrayBuffer> -----------------------------------------------------
 
@@ -266,16 +260,10 @@ ArrayBufferView::ArrayBufferView(v8::Isolate* isolate,
       num_bytes_(view->ByteLength()) {
 }
 
-ArrayBufferView::~ArrayBufferView() {
-}
+ArrayBufferView::~ArrayBufferView() = default;
 
-ArrayBufferView& ArrayBufferView::operator=(const ArrayBufferView& other) {
-  array_buffer_ = other.array_buffer_;
-  offset_ = other.offset_;
-  num_bytes_ = other.num_bytes_;
-  return *this;
-}
-
+ArrayBufferView& ArrayBufferView::operator=(const ArrayBufferView& other) =
+    default;
 
 // Converter<ArrayBufferView> -------------------------------------------------
 

@@ -12,7 +12,7 @@ Polymer({
   behaviors: [
     settings.RouteObserverBehavior, I18nBehavior, WebUIListenerBehavior,
     // <if expr="chromeos">
-    LockStateBehavior,
+    CrPngBehavior, LockStateBehavior,
     // </if>
   ],
 
@@ -156,6 +156,9 @@ Polymer({
         settings.getCurrentRoute() == settings.routes.IMPORT_DATA;
 
     if (settings.getCurrentRoute() == settings.routes.SIGN_OUT) {
+      // <if expr="not chromeos">
+      settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
+      // </if>
       // If the sync status has not been fetched yet, optimistically display
       // the disconnect dialog. There is another check when the sync status is
       // fetched. The dialog will be closed then the user is not signed in.
@@ -190,6 +193,18 @@ Polymer({
    */
   handleProfileInfo_: function(info) {
     this.profileName_ = info.name;
+    /**
+     * Extract first frame from image by creating a single frame PNG using
+     * url as input if base64 encoded and potentially animated.
+     */
+    // <if expr="chromeos">
+    if (info.iconUrl.startsWith('data:image/png;base64')) {
+      this.profileIconUrl_ =
+          CrPngBehavior.convertImageSequenceToPng([info.iconUrl]);
+      return;
+    }
+    // </if>
+
     this.profileIconUrl_ = info.iconUrl;
   },
 
@@ -228,11 +243,6 @@ Polymer({
   handleSyncStatus_: function(syncStatus) {
     if (!this.syncStatus && syncStatus && !syncStatus.signedIn)
       chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
-
-    // <if expr="not chromeos">
-    if (syncStatus.signedIn)
-      settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
-    // </if>
 
     if (!syncStatus.signedIn && this.showDisconnectDialog_)
       this.$$('#disconnectDialog').close();

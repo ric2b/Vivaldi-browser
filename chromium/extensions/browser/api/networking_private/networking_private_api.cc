@@ -136,6 +136,7 @@ const char kErrorNotReady[] = "Error.NotReady";
 const char kErrorNotSupported[] = "Error.NotSupported";
 const char kErrorPolicyControlled[] = "Error.PolicyControlled";
 const char kErrorSimLocked[] = "Error.SimLocked";
+const char kErrorUnconfiguredNetwork[] = "Error.UnconfiguredNetwork";
 
 }  // namespace networking_private
 
@@ -566,7 +567,11 @@ NetworkingPrivateRequestNetworkScanFunction::
 
 ExtensionFunction::ResponseAction
 NetworkingPrivateRequestNetworkScanFunction::Run() {
-  if (!GetDelegate(browser_context())->RequestScan())
+  std::unique_ptr<private_api::RequestNetworkScan::Params> params =
+      private_api::RequestNetworkScan::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  std::string network_type = private_api::ToString(params->network_type);
+  if (!GetDelegate(browser_context())->RequestScan(network_type))
     return RespondNow(Error(networking_private::kErrorNotSupported));
   return RespondNow(NoArguments());
 }
@@ -1032,6 +1037,47 @@ void NetworkingPrivateSetCellularSimStateFunction::Success() {
 }
 
 void NetworkingPrivateSetCellularSimStateFunction::Failure(
+    const std::string& error) {
+  Respond(Error(error));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NetworkingPrivateSelectCellularMobileNetworkFunction
+
+NetworkingPrivateSelectCellularMobileNetworkFunction::
+    ~NetworkingPrivateSelectCellularMobileNetworkFunction() {}
+
+ExtensionFunction::ResponseAction
+NetworkingPrivateSelectCellularMobileNetworkFunction::Run() {
+  if (!HasPrivateNetworkingAccess(extension(), source_context_type(),
+                                  source_url())) {
+    return RespondNow(Error(kPrivateOnlyError));
+  }
+
+  std::unique_ptr<private_api::SelectCellularMobileNetwork::Params> params =
+      private_api::SelectCellularMobileNetwork::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  GetDelegate(browser_context())
+      ->SelectCellularMobileNetwork(
+          params->network_guid, params->network_id,
+          base::Bind(
+              &NetworkingPrivateSelectCellularMobileNetworkFunction::Success,
+              this),
+          base::Bind(
+              &NetworkingPrivateSelectCellularMobileNetworkFunction::Failure,
+              this));
+  // Success() or Failure() might have been called synchronously at this point.
+  // In that case this function has already called Respond(). Return
+  // AlreadyResponded() in that case.
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void NetworkingPrivateSelectCellularMobileNetworkFunction::Success() {
+  Respond(NoArguments());
+}
+
+void NetworkingPrivateSelectCellularMobileNetworkFunction::Failure(
     const std::string& error) {
   Respond(Error(error));
 }

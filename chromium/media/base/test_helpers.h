@@ -88,11 +88,12 @@ class TestVideoConfig {
 
   static VideoDecoderConfig Normal(VideoCodec codec = kCodecVP8);
   static VideoDecoderConfig NormalH264();
-  static VideoDecoderConfig NormalEncrypted();
+  static VideoDecoderConfig NormalEncrypted(VideoCodec codec = kCodecVP8);
+  static VideoDecoderConfig NormalRotated(VideoRotation rotation);
 
   // Returns a configuration that is larger in dimensions than Normal().
   static VideoDecoderConfig Large(VideoCodec codec = kCodecVP8);
-  static VideoDecoderConfig LargeEncrypted();
+  static VideoDecoderConfig LargeEncrypted(VideoCodec codec = kCodecVP8);
 
   // Returns coded size for Normal and Large config.
   static gfx::Size NormalCodedSize();
@@ -351,6 +352,20 @@ MATCHER_P2(NoSpliceForBadMux, overlapped_buffer_count, splice_time_us, "") {
                                   base::IntToString(overlapped_buffer_count) +
                                   " overlapping audio buffers at time " +
                                   base::IntToString(splice_time_us));
+}
+
+MATCHER_P(BufferingByPtsDts, by_pts_bool, "") {
+  return CONTAINS_STRING(arg, std::string("ChunkDemuxer: buffering by ") +
+                                  (by_pts_bool ? "PTS" : "DTS"));
+}
+
+MATCHER_P3(NegativeDtsFailureWhenByDts, frame_type, pts_us, dts_us, "") {
+  return CONTAINS_STRING(
+      arg, std::string(frame_type) + " frame with PTS " +
+               base::IntToString(pts_us) + "us has negative DTS " +
+               base::IntToString(dts_us) +
+               "us after applying timestampOffset, handling any discontinuity, "
+               "and filtering against append window");
 }
 
 }  // namespace media

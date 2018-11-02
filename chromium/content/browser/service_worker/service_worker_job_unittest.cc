@@ -24,7 +24,7 @@
 #include "content/browser/service_worker/service_worker_handle.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_registration.h"
-#include "content/browser/service_worker/service_worker_registration_handle.h"
+#include "content/browser/service_worker/service_worker_registration_object_host.h"
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
@@ -38,6 +38,10 @@
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 using net::IOBuffer;
 using net::TestCompletionCallback;
@@ -48,8 +52,7 @@ namespace content {
 
 namespace {
 
-// A dispatcher host that holds on to all registered ServiceWorkerHandles and
-// ServiceWorkerRegistrationHandles.
+// A dispatcher host that holds on to all registered ServiceWorkerHandles.
 class KeepHandlesDispatcherHost : public ServiceWorkerDispatcherHost {
  public:
   KeepHandlesDispatcherHost(int render_process_id,
@@ -59,31 +62,19 @@ class KeepHandlesDispatcherHost : public ServiceWorkerDispatcherHost {
       std::unique_ptr<ServiceWorkerHandle> handle) override {
     handles_.push_back(std::move(handle));
   }
-  void RegisterServiceWorkerRegistrationHandle(
-      std::unique_ptr<ServiceWorkerRegistrationHandle> handle) override {
-    registration_handles_.push_back(std::move(handle));
-  }
 
-  void RemoveHandles() {
+  void Clear() {
     handles_.clear();
-    registration_handles_.clear();
   }
 
   const std::vector<std::unique_ptr<ServiceWorkerHandle>>& handles() {
     return handles_;
   }
 
-  const std::vector<std::unique_ptr<ServiceWorkerRegistrationHandle>>&
-  registration_handles() {
-    return registration_handles_;
-  }
-
  private:
   ~KeepHandlesDispatcherHost() override {}
 
   std::vector<std::unique_ptr<ServiceWorkerHandle>> handles_;
-  std::vector<std::unique_ptr<ServiceWorkerRegistrationHandle>>
-      registration_handles_;
   DISALLOW_COPY_AND_ASSIGN(KeepHandlesDispatcherHost);
 };
 
@@ -150,37 +141,6 @@ ServiceWorkerUnregisterJob::UnregistrationCallback SaveUnregistration(
   return base::Bind(&SaveUnregistrationCallback, expected_status, called);
 }
 
-ServiceWorkerStatusCode EventResultToStatus(
-    blink::WebServiceWorkerEventResult result) {
-  switch (result) {
-    case blink::kWebServiceWorkerEventResultCompleted:
-      return SERVICE_WORKER_OK;
-    case blink::kWebServiceWorkerEventResultRejected:
-      return SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED;
-  }
-  NOTREACHED() << "Got invalid result: " << result;
-  return SERVICE_WORKER_ERROR_FAILED;
-}
-
-// This is for the test of mojom::ServiceWorkerInstallEventMethods.
-void RegisterForeignFetchScopes(
-    mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo client) {
-  GURL valid_scope_1("http://www.example.com/test/subscope");
-  GURL valid_scope_2("http://www.example.com/test/othersubscope");
-  std::vector<GURL> valid_scopes;
-  valid_scopes.push_back(valid_scope_1);
-  valid_scopes.push_back(valid_scope_2);
-
-  std::vector<url::Origin> all_origins;
-  url::Origin valid_origin(GURL("https://chromium.org/"));
-  std::vector<url::Origin> valid_origin_list(1, valid_origin);
-
-  mojom::ServiceWorkerInstallEventMethodsAssociatedPtr install_event_methods;
-  install_event_methods.Bind(std::move(client));
-  install_event_methods->RegisterForeignFetchScopes(valid_scopes,
-                                                    valid_origin_list);
-}
-
 }  // namespace
 
 class ServiceWorkerJobTest : public testing::Test {
@@ -226,8 +186,8 @@ scoped_refptr<ServiceWorkerRegistration> ServiceWorkerJobTest::RunRegisterJob(
   scoped_refptr<ServiceWorkerRegistration> registration;
   bool called;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
-      SaveRegistration(expected_status, &called, &registration));
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr, SaveRegistration(expected_status, &called, &registration));
   EXPECT_FALSE(called);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
@@ -321,7 +281,8 @@ TEST_F(ServiceWorkerJobTest, DifferentMatchDifferentRegistration) {
   scoped_refptr<ServiceWorkerRegistration> original_registration1;
   job_coordinator()->Register(
       GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/one/")),
+      blink::mojom::ServiceWorkerRegistrationOptions(
+          GURL("http://www.example.com/one/")),
       nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &called1, &original_registration1));
 
@@ -329,7 +290,8 @@ TEST_F(ServiceWorkerJobTest, DifferentMatchDifferentRegistration) {
   scoped_refptr<ServiceWorkerRegistration> original_registration2;
   job_coordinator()->Register(
       GURL("http://www.example.com/service_worker.js"),
-      ServiceWorkerRegistrationOptions(GURL("http://www.example.com/two/")),
+      blink::mojom::ServiceWorkerRegistrationOptions(
+          GURL("http://www.example.com/two/")),
       nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &called2, &original_registration2));
 
@@ -354,54 +316,27 @@ TEST_F(ServiceWorkerJobTest, DifferentMatchDifferentRegistration) {
   ASSERT_NE(registration1, registration2);
 }
 
-class RegisterForeignFetchTestHelper : public EmbeddedWorkerTestHelper {
- public:
-  RegisterForeignFetchTestHelper()
-      : EmbeddedWorkerTestHelper(base::FilePath()) {}
-
-  void OnInstallEvent(
-      mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo client,
-      mojom::ServiceWorkerEventDispatcher::DispatchInstallEventCallback
-          callback) override {
-    RegisterForeignFetchScopes(std::move(client));
-    dispatched_events()->push_back(Event::Install);
-    std::move(callback).Run(SERVICE_WORKER_OK, true /* has_fetch_handler */,
-                            base::Time::Now());
-  }
-};
-
 // Make sure basic registration is working.
 TEST_F(ServiceWorkerJobTest, Register) {
-  helper_.reset(new RegisterForeignFetchTestHelper);
-
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(GURL("http://www.example.com/"),
                      GURL("http://www.example.com/service_worker.js"));
 
-  ASSERT_NE(scoped_refptr<ServiceWorkerRegistration>(nullptr), registration);
+  EXPECT_TRUE(registration);
   EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Install,
             helper_->dispatched_events()->at(0));
   EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
             helper_->dispatched_events()->at(1));
-
-  GURL valid_scope_1("http://www.example.com/test/subscope");
-  GURL valid_scope_2("http://www.example.com/test/othersubscope");
-  url::Origin valid_origin(GURL("https://chromium.org/"));
-
-  ServiceWorkerVersion* version_ = registration->active_version();
-  EXPECT_EQ(2u, version_->foreign_fetch_scopes_.size());
-  EXPECT_EQ(valid_scope_1, version_->foreign_fetch_scopes_[0]);
-  EXPECT_EQ(valid_scope_2, version_->foreign_fetch_scopes_[1]);
-  EXPECT_EQ(1u, version_->foreign_fetch_origins_.size());
-  EXPECT_EQ(valid_origin, version_->foreign_fetch_origins_[0]);
 }
 
 // Make sure registrations are cleaned up when they are unregistered.
 TEST_F(ServiceWorkerJobTest, Unregister) {
   GURL pattern("http://www.example.com/");
 
-  // During registration, handles will be created for hosting the worker's
-  // context. KeepHandlesDispatcherHost will store the handles.
+  // During registration, service worker handles will be created to host the
+  // {installing,waiting,active} service worker objects for
+  // ServiceWorkerGlobalScope#registration. KeepHandlesDispatcherHost will store
+  // the handles.
   scoped_refptr<KeepHandlesDispatcherHost> dispatcher_host =
       base::MakeRefCounted<KeepHandlesDispatcherHost>(
           helper_->mock_render_process_id(),
@@ -413,22 +348,29 @@ TEST_F(ServiceWorkerJobTest, Unregister) {
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(pattern, GURL("http://www.example.com/service_worker.js"));
 
-  EXPECT_EQ(1UL, dispatcher_host->registration_handles().size());
+  // During the above registration, a service worker registration object host
+  // for ServiceWorkerGlobalScope#registration has been created/added into
+  // |provider_host|.
+  ServiceWorkerProviderHost* provider_host =
+      registration->active_version()->provider_host();
+  ASSERT_NE(nullptr, provider_host);
+  EXPECT_EQ(1UL, provider_host->registration_object_hosts_.size());
   EXPECT_EQ(3UL, dispatcher_host->handles().size());
 
   RunUnregisterJob(pattern);
 
-  // Remove the handles. The only reference to the registration object should be
-  // |registration|.
-  dispatcher_host->RemoveHandles();
-  EXPECT_EQ(0UL, dispatcher_host->registration_handles().size());
+  // Clear all service worker handles.
+  dispatcher_host->Clear();
   EXPECT_EQ(0UL, dispatcher_host->handles().size());
-  ASSERT_TRUE(registration->HasOneRef());
+  // The service worker registration object host has been destroyed together
+  // with |provider_host| by the above unregistration. Then the only reference
+  // to the registration should be |registration|.
+  EXPECT_TRUE(registration->HasOneRef());
 
   registration = FindRegistrationForPattern(pattern,
                                             SERVICE_WORKER_ERROR_NOT_FOUND);
 
-  ASSERT_EQ(scoped_refptr<ServiceWorkerRegistration>(nullptr), registration);
+  EXPECT_FALSE(registration);
 }
 
 TEST_F(ServiceWorkerJobTest, Unregister_NothingRegistered) {
@@ -482,10 +424,19 @@ TEST_F(ServiceWorkerJobTest, RegisterDuplicateScript) {
   scoped_refptr<ServiceWorkerRegistration> old_registration =
       RunRegisterJob(pattern, script_url);
 
-  // Ensure that the registration's handle doesn't have the reference.
-  EXPECT_EQ(1UL, dispatcher_host->registration_handles().size());
-  dispatcher_host->RemoveHandles();
-  EXPECT_EQ(0UL, dispatcher_host->registration_handles().size());
+  // During the above registration, a service worker registration object host
+  // for ServiceWorkerGlobalScope#registration has been created/added into
+  // |provider_host|.
+  ServiceWorkerProviderHost* provider_host =
+      old_registration->active_version()->provider_host();
+  ASSERT_NE(nullptr, provider_host);
+
+  // Clear all service worker handles.
+  dispatcher_host->Clear();
+  // Ensure that the registration's object host doesn't have the reference.
+  EXPECT_EQ(1UL, provider_host->registration_object_hosts_.size());
+  provider_host->registration_object_hosts_.clear();
+  EXPECT_EQ(0UL, provider_host->registration_object_hosts_.size());
   ASSERT_TRUE(old_registration->HasOneRef());
 
   scoped_refptr<ServiceWorkerRegistration> old_registration_by_pattern =
@@ -516,9 +467,12 @@ class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
       const GURL& scope,
       const GURL& script_url,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     mojom::EmbeddedWorkerInstanceHostAssociatedPtr instance_host_ptr;
     instance_host_ptr.Bind(std::move(instance_host));
@@ -547,7 +501,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegUnreg) {
   bool registration_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration_called, &registration));
 
   bool unregistration_called = false;
@@ -577,7 +532,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegNewScript) {
   bool registration1_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url1, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url1, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration1_called,
                        &registration1));
 
@@ -585,7 +541,8 @@ TEST_F(ServiceWorkerJobTest, ParallelRegNewScript) {
   bool registration2_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url2, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url2, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration2_called,
                        &registration2));
 
@@ -611,14 +568,16 @@ TEST_F(ServiceWorkerJobTest, ParallelRegSameScript) {
   bool registration1_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration1_called,
                        &registration1));
 
   bool registration2_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_OK, &registration2_called,
                        &registration2));
 
@@ -677,14 +636,16 @@ TEST_F(ServiceWorkerJobTest, AbortAll_Register) {
   bool registration_called1 = false;
   scoped_refptr<ServiceWorkerRegistration> registration1;
   job_coordinator()->Register(
-      script_url1, ServiceWorkerRegistrationOptions(pattern1), nullptr,
+      script_url1, blink::mojom::ServiceWorkerRegistrationOptions(pattern1),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called1,
                        &registration1));
 
   bool registration_called2 = false;
   scoped_refptr<ServiceWorkerRegistration> registration2;
   job_coordinator()->Register(
-      script_url2, ServiceWorkerRegistrationOptions(pattern2), nullptr,
+      script_url2, blink::mojom::ServiceWorkerRegistrationOptions(pattern2),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called2,
                        &registration2));
 
@@ -748,7 +709,8 @@ TEST_F(ServiceWorkerJobTest, AbortAll_RegUnreg) {
   bool registration_called = false;
   scoped_refptr<ServiceWorkerRegistration> registration;
   job_coordinator()->Register(
-      script_url, ServiceWorkerRegistrationOptions(pattern), nullptr,
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
+      nullptr,
       SaveRegistration(SERVICE_WORKER_ERROR_ABORT, &registration_called,
                        &registration));
 
@@ -948,8 +910,9 @@ class UpdateJobTestHelper
     bool called = false;
     job_coordinator()->Register(
         test_origin.Resolve(kScript),
-        ServiceWorkerRegistrationOptions(test_origin.Resolve(kScope)), nullptr,
-        SaveRegistration(SERVICE_WORKER_OK, &called, &registration));
+        blink::mojom::ServiceWorkerRegistrationOptions(
+            test_origin.Resolve(kScope)),
+        nullptr, SaveRegistration(SERVICE_WORKER_OK, &called, &registration));
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(called);
     EXPECT_TRUE(registration.get());
@@ -967,9 +930,12 @@ class UpdateJobTestHelper
       const GURL& scope,
       const GURL& script,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     const std::string kMockScriptBody = "mock_script";
     const uint64_t kMockScriptSize = 19284;
@@ -980,7 +946,7 @@ class UpdateJobTestHelper
                      version != registration->active_version();
 
     ASSERT_TRUE(version);
-    observed_versions_.push_back(make_scoped_refptr(version));
+    observed_versions_.push_back(base::WrapRefCounted(version));
     version->AddListener(this);
 
     // Simulate network access.
@@ -1027,7 +993,9 @@ class UpdateJobTestHelper
     started_workers_.insert(embedded_worker_id);
     EmbeddedWorkerTestHelper::OnStartWorker(
         embedded_worker_id, version_id, scope, script, pause_after_download,
-        std::move(request), std::move(instance_host), std::move(provider_info));
+        std::move(dispatcher_request), std::move(controller_request),
+        std::move(service_worker_host), std::move(instance_host),
+        std::move(provider_info), std::move(installed_scripts_info));
   }
 
   void OnStopWorker(int embedded_worker_id) override {
@@ -1100,9 +1068,12 @@ class EvictIncumbentVersionHelper : public UpdateJobTestHelper {
       const GURL& scope,
       const GURL& script,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     ServiceWorkerVersion* version = context()->GetLiveVersion(version_id);
     ServiceWorkerRegistration* registration =
@@ -1113,11 +1084,13 @@ class EvictIncumbentVersionHelper : public UpdateJobTestHelper {
       // Evict the incumbent worker.
       ASSERT_FALSE(registration->waiting_version());
       registration->DeleteVersion(
-          make_scoped_refptr(registration->active_version()));
+          base::WrapRefCounted(registration->active_version()));
     }
     UpdateJobTestHelper::OnStartWorker(
         embedded_worker_id, version_id, scope, script, pause_after_download,
-        std::move(request), std::move(instance_host), std::move(provider_info));
+        std::move(dispatcher_request), std::move(controller_request),
+        std::move(service_worker_host), std::move(instance_host),
+        std::move(provider_info), std::move(installed_scripts_info));
   }
 
   void OnRegistrationFailed(ServiceWorkerRegistration* registration) override {
@@ -1244,33 +1217,33 @@ TEST_F(ServiceWorkerJobTest, Update_NewVersion) {
   EXPECT_FALSE(entry.mask.waiting_changed());
   EXPECT_FALSE(entry.mask.active_changed());
   EXPECT_NE(entry.info.installing_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_EQ(entry.info.waiting_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_NE(entry.info.active_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
 
   entry = update_helper->attribute_change_log_[1];
   EXPECT_TRUE(entry.mask.installing_changed());
   EXPECT_TRUE(entry.mask.waiting_changed());
   EXPECT_FALSE(entry.mask.active_changed());
   EXPECT_EQ(entry.info.installing_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_NE(entry.info.waiting_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_NE(entry.info.active_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
 
   entry = update_helper->attribute_change_log_[2];
   EXPECT_FALSE(entry.mask.installing_changed());
   EXPECT_TRUE(entry.mask.waiting_changed());
   EXPECT_TRUE(entry.mask.active_changed());
   EXPECT_EQ(entry.info.installing_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_EQ(entry.info.waiting_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
   EXPECT_NE(entry.info.active_version.version_id,
-            kInvalidServiceWorkerVersionId);
+            blink::mojom::kInvalidServiceWorkerVersionId);
 
   // expected version state transitions:
   // new.installing, new.installed,
@@ -1602,33 +1575,34 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
  public:
   EventCallbackHelper()
       : EmbeddedWorkerTestHelper(base::FilePath()),
-        install_event_result_(blink::kWebServiceWorkerEventResultCompleted),
-        activate_event_result_(blink::kWebServiceWorkerEventResultCompleted) {}
+        install_event_result_(
+            blink::mojom::ServiceWorkerEventStatus::COMPLETED),
+        activate_event_result_(
+            blink::mojom::ServiceWorkerEventStatus::COMPLETED) {}
 
   void OnInstallEvent(
-      mojom::ServiceWorkerInstallEventMethodsAssociatedPtrInfo client,
       mojom::ServiceWorkerEventDispatcher::DispatchInstallEventCallback
           callback) override {
     if (!install_callback_.is_null())
       install_callback_.Run();
-    std::move(callback).Run(EventResultToStatus(install_event_result_),
-                            has_fetch_handler_, base::Time::Now());
+    std::move(callback).Run(install_event_result_, has_fetch_handler_,
+                            base::Time::Now());
   }
 
   void OnActivateEvent(
       mojom::ServiceWorkerEventDispatcher::DispatchActivateEventCallback
           callback) override {
-    std::move(callback).Run(EventResultToStatus(activate_event_result_),
-                            base::Time::Now());
+    std::move(callback).Run(activate_event_result_, base::Time::Now());
   }
 
   void set_install_callback(const base::Closure& callback) {
     install_callback_ = callback;
   }
-  void set_install_event_result(blink::WebServiceWorkerEventResult result) {
+  void set_install_event_result(blink::mojom::ServiceWorkerEventStatus result) {
     install_event_result_ = result;
   }
-  void set_activate_event_result(blink::WebServiceWorkerEventResult result) {
+  void set_activate_event_result(
+      blink::mojom::ServiceWorkerEventStatus result) {
     activate_event_result_ = result;
   }
   void set_has_fetch_handler(bool has_fetch_handler) {
@@ -1637,8 +1611,8 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
 
  private:
   base::Closure install_callback_;
-  blink::WebServiceWorkerEventResult install_event_result_;
-  blink::WebServiceWorkerEventResult activate_event_result_;
+  blink::mojom::ServiceWorkerEventStatus install_event_result_;
+  blink::mojom::ServiceWorkerEventStatus activate_event_result_;
   bool has_fetch_handler_ = true;
 };
 
@@ -1705,7 +1679,8 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringRejectedInstall) {
   helper->set_install_callback(
       base::Bind(&ServiceWorkerVersion::RemoveControllee,
                  old_version, host.get()));
-  helper->set_install_event_result(blink::kWebServiceWorkerEventResultRejected);
+  helper->set_install_event_result(
+      blink::mojom::ServiceWorkerEventStatus::REJECTED);
   EXPECT_EQ(registration, RunRegisterJob(pattern, script2));
 
   // Verify the registration was uninstalled.
@@ -1742,7 +1717,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall_RejectActivate) {
       base::Bind(&ServiceWorkerVersion::RemoveControllee,
                  old_version, host.get()));
   helper->set_activate_event_result(
-      blink::kWebServiceWorkerEventResultRejected);
+      blink::mojom::ServiceWorkerEventStatus::REJECTED);
   EXPECT_EQ(registration, RunRegisterJob(pattern, script2));
 
   // Verify the registration remains.
@@ -1792,8 +1767,10 @@ class CheckPauseAfterDownloadEmbeddedWorkerInstanceClient
  protected:
   void StartWorker(
       const EmbeddedWorkerStartParams& params,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
       mojom::ServiceWorkerInstalledScriptsInfoPtr scripts_info,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
       blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy)
@@ -1802,7 +1779,8 @@ class CheckPauseAfterDownloadEmbeddedWorkerInstanceClient
     EXPECT_EQ(next_pause_after_download_.value(), params.pause_after_download);
     num_of_startworker_++;
     EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
-        params, std::move(request), std::move(scripts_info),
+        params, std::move(dispatcher_request), std::move(controller_request),
+        std::move(scripts_info), std::move(service_worker_host),
         std::move(instance_host), std::move(provider_info),
         std::move(content_settings_proxy));
   }
@@ -1873,7 +1851,7 @@ TEST_F(ServiceWorkerJobTest, ActivateCancelsOnShutdown) {
   // easy to cause a failure with set_force_start_worker_failure after
   // shutdown is simulated. Otherwise our test helper often fails on
   // DCHECK(context)).
-  new_version->StopWorker(base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+  new_version->StopWorker(base::BindOnce(&base::DoNothing));
 
   // Remove the controllee. The new version should be activating, and delayed
   // until the runner runs again.

@@ -31,18 +31,18 @@
 #ifndef CoreInitializer_h
 #define CoreInitializer_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
 
 class Document;
-class HTMLLinkElement;
 class HTMLMediaElement;
 class InspectedFrames;
 class InspectorDOMAgent;
 class InspectorSession;
-class LinkResource;
+class InterfaceRegistry;
 class LocalFrame;
 class MediaControls;
 class Page;
@@ -60,7 +60,7 @@ class WorkerClients;
 
 class CORE_EXPORT CoreInitializer {
   USING_FAST_MALLOC(CoreInitializer);
-  WTF_MAKE_NONCOPYABLE(CoreInitializer);
+  DISALLOW_COPY_AND_ASSIGN(CoreInitializer);
 
  public:
   // Initialize must be called before GetInstance.
@@ -74,6 +74,9 @@ class CORE_EXPORT CoreInitializer {
   // Should be called by clients before trying to create Frames.
   virtual void Initialize();
 
+  // Called on startup to register Mojo interfaces that for control messages,
+  // e.g. messages that are not routed to a specific frame.
+  virtual void RegisterInterfaces(InterfaceRegistry&) = 0;
   // Methods defined in CoreInitializer and implemented by ModulesInitializer to
   // bypass the inverted dependency from core/ to modules/.
   // Mojo Interfaces registered with LocalFrame
@@ -93,8 +96,6 @@ class CORE_EXPORT CoreInitializer {
                                          InspectorDOMAgent*,
                                          InspectedFrames*,
                                          Page*) const = 0;
-  virtual LinkResource* CreateServiceWorkerLinkResource(
-      HTMLLinkElement*) const = 0;
 
   virtual void OnClearWindowObjectInMainWorld(Document&,
                                               const Settings&) const = 0;

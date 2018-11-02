@@ -108,7 +108,8 @@ void WallpaperWidgetController::RemoveObservers() {
 void WallpaperWidgetController::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
-    const gfx::Rect& new_bounds) {
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   SetBounds(new_bounds);
 }
 
@@ -129,6 +130,10 @@ void WallpaperWidgetController::StartAnimating(
 }
 
 void WallpaperWidgetController::SetWallpaperBlur(float blur_sigma) {
+  // |widget_| is set to null before destructor call. Check if |widget_| is
+  // valid to prevent crash in tests.
+  if (!widget_)
+    return;
   widget_->GetLayer()->SetLayerBlur(blur_sigma);
   // Force the use of cache render surface to make blur more efficient.
   bool has_blur_cache = blur_sigma > 0.0f;
@@ -145,7 +150,8 @@ AnimatingWallpaperWidgetController::AnimatingWallpaperWidgetController(
     WallpaperWidgetController* controller)
     : controller_(controller) {}
 
-AnimatingWallpaperWidgetController::~AnimatingWallpaperWidgetController() {}
+AnimatingWallpaperWidgetController::~AnimatingWallpaperWidgetController() =
+    default;
 
 void AnimatingWallpaperWidgetController::StopAnimating() {
   if (controller_)

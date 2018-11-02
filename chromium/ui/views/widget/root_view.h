@@ -85,7 +85,8 @@ class VIEWS_EXPORT RootView : public View,
 
   // Public API for broadcasting device scale factor change notifications to
   // this View hierarchy.
-  void DeviceScaleFactorChanged(float device_scale_factor);
+  void DeviceScaleFactorChanged(float old_device_scale_factor,
+                                float new_device_scale_factor);
 
   // Overridden from FocusTraversable:
   FocusSearch* GetFocusSearch() override;
@@ -93,6 +94,7 @@ class VIEWS_EXPORT RootView : public View,
   View* GetFocusTraversableParentView() override;
 
   // Overridden from ui::EventProcessor:
+  ui::EventTarget* GetInitialEventTarget(ui::Event* event) override;
   ui::EventTarget* GetRootForEvent(ui::Event* event) override;
   ui::EventTargeter* GetDefaultEventTargeter() override;
   void OnEventProcessingStarted(ui::Event* event) override;

@@ -216,7 +216,6 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
 void VivaldiAddEditableItems(SimpleMenuModel* menu,
                              const ContextMenuParams& params) {
   if (IsVivaldiRunning()) {
-    const bool use_spellcheck_and_search = !chrome::IsRunningInForcedAppMode();
     const bool use_paste_and_match_style =
         params.input_field_type !=
             blink::WebContextMenuData::kInputFieldTypePlainText &&
@@ -243,13 +242,13 @@ void VivaldiAddEditableItems(SimpleMenuModel* menu,
       menu->InsertSeparatorAt(index, ui::NORMAL_SEPARATOR);
     }
 
-    if (use_spellcheck_and_search && !params.keyword_url.is_empty()) {
-      // No 'Select All' when in spell check mode.
+    if (!params.vivaldi_keyword_url.is_empty()) {
       if (params.misspelled_word.empty()) {
         index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_SELECTALL);
       } else {
         index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_PASTE);
       }
+
       DCHECK_GE(index, 0);
       menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
       menu->InsertItemWithStringIdAt(++index,
@@ -323,7 +322,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
     }
 
     case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE:
-      *enabled = !params.keyword_url.is_empty();
+      *enabled = !params.vivaldi_keyword_url.is_empty();
       break;
 
     case IDC_VIV_COPY_TO_NOTE:
@@ -422,7 +421,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       base::ListValue* args = new base::ListValue;
       args->Append(base::MakeUnique<base::Value>(keyword));
       args->Append(
-          base::MakeUnique<base::Value>(params.keyword_url.spec()));
+          base::MakeUnique<base::Value>(params.vivaldi_keyword_url.spec()));
 
       vivGuestView->CreateSearch(*args);
     } break;

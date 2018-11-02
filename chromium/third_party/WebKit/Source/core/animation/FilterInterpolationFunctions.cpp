@@ -18,16 +18,16 @@ namespace blink {
 
 class FilterNonInterpolableValue : public NonInterpolableValue {
  public:
-  static RefPtr<FilterNonInterpolableValue> Create(
+  static scoped_refptr<FilterNonInterpolableValue> Create(
       FilterOperation::OperationType type,
-      RefPtr<NonInterpolableValue> type_non_interpolable_value) {
-    return AdoptRef(new FilterNonInterpolableValue(
+      scoped_refptr<NonInterpolableValue> type_non_interpolable_value) {
+    return base::AdoptRef(new FilterNonInterpolableValue(
         type, std::move(type_non_interpolable_value)));
   }
 
   FilterOperation::OperationType GetOperationType() const { return type_; }
   const NonInterpolableValue* TypeNonInterpolableValue() const {
-    return type_non_interpolable_value_.Get();
+    return type_non_interpolable_value_.get();
   }
 
   DECLARE_NON_INTERPOLABLE_VALUE_TYPE();
@@ -35,12 +35,12 @@ class FilterNonInterpolableValue : public NonInterpolableValue {
  private:
   FilterNonInterpolableValue(
       FilterOperation::OperationType type,
-      RefPtr<NonInterpolableValue> type_non_interpolable_value)
+      scoped_refptr<NonInterpolableValue> type_non_interpolable_value)
       : type_(type),
         type_non_interpolable_value_(std::move(type_non_interpolable_value)) {}
 
   const FilterOperation::OperationType type_;
-  RefPtr<NonInterpolableValue> type_non_interpolable_value_;
+  scoped_refptr<NonInterpolableValue> type_non_interpolable_value_;
 };
 
 DEFINE_NON_INTERPOLABLE_VALUE_TYPE(FilterNonInterpolableValue);

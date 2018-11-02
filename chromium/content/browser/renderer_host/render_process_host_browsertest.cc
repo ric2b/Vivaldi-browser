@@ -6,14 +6,17 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -30,6 +33,8 @@
 #include "media/base/test_data_util.h"
 #include "media/mojo/features.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -48,6 +53,20 @@ int RenderProcessHostCount() {
     hosts.Advance();
   }
   return count;
+}
+
+std::unique_ptr<net::test_server::HttpResponse> HandleBeacon(
+    const net::test_server::HttpRequest& request) {
+  if (request.relative_url != "/beacon")
+    return nullptr;
+  return std::make_unique<net::test_server::BasicHttpResponse>();
+}
+
+std::unique_ptr<net::test_server::HttpResponse> HandleHungBeacon(
+    const net::test_server::HttpRequest& request) {
+  if (request.relative_url != "/beacon")
+    return nullptr;
+  return std::make_unique<net::test_server::HungResponse>();
 }
 
 class RenderProcessHostTest : public ContentBrowserTest,
@@ -78,6 +97,10 @@ class RenderProcessHostTest : public ContentBrowserTest,
   }
   void RenderProcessHostDestroyed(RenderProcessHost* host) override {
     ++host_destructions_;
+  }
+  void WaitUntilProcessExits(int target) {
+    while (process_exits_ < target)
+      base::RunLoop().RunUntilIdle();
   }
 
   int process_exits_;
@@ -115,6 +138,19 @@ class NonSpareRendererContentBrowserClient : public TestContentBrowserClient {
   }
 };
 
+class RenderProcessHostWithKeepAliveOptionEnabledTest
+    : public RenderProcessHostTest {
+ public:
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(
+        features::kKeepAliveRendererForKeepaliveRequests);
+    RenderProcessHostTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 // Sometimes the renderer process's ShutdownRequest (corresponding to the
 // ViewMsg_WasSwappedOut from a previous navigation) doesn't arrive until after
 // the browser process decides to re-use the renderer for a new purpose.  This
@@ -131,11 +167,13 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 
   host_destructions_ = 0;
   process_exits_ = 0;
-  rph->AddObserver(this);
-  ChildProcessHostMsg_ShutdownRequest msg;
-  rph->OnMessageReceived(msg);
 
-  // If the RPH sends a mistaken ChildProcessMsg_Shutdown, the renderer process
+  rph->AddObserver(this);
+
+  static_cast<mojom::RendererHost*>(static_cast<RenderProcessHostImpl*>(rph))
+      ->ShutdownRequest();
+
+  // If the RPH sends a mistaken ProcessShutdown, the renderer process
   // will take some time to die. Wait for a second tab to load in order to give
   // that time to happen.
   NavigateToURL(CreateBrowser(), test_url);
@@ -367,8 +405,16 @@ class ObserverLogger : public RenderProcessHostObserver {
   bool host_destroyed_;
 };
 
+// Flaky on Android. http://crbug.com/759514.
+#if defined(OS_ANDROID)
+#define MAYBE_AllProcessExitedCallsBeforeAnyHostDestroyedCalls \
+  DISABLED_AllProcessExitedCallsBeforeAnyHostDestroyedCalls
+#else
+#define MAYBE_AllProcessExitedCallsBeforeAnyHostDestroyedCalls \
+  AllProcessExitedCallsBeforeAnyHostDestroyedCalls
+#endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
-                       AllProcessExitedCallsBeforeAnyHostDestroyedCalls) {
+                       MAYBE_AllProcessExitedCallsBeforeAnyHostDestroyedCalls) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL test_url = embedded_test_server()->GetURL("/simple_page.html");
@@ -444,7 +490,8 @@ class MediaStopObserver : public WebContentsObserver {
 
   void MediaStoppedPlaying(
       const WebContentsObserver::MediaPlayerInfo& media_info,
-      const WebContentsObserver::MediaPlayerId& id) override {
+      const WebContentsObserver::MediaPlayerId& id,
+      WebContentsObserver::MediaStoppedReason reason) override {
     quit_closure_.Run();
   }
 
@@ -672,6 +719,91 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   EXPECT_EQ(0, rph->get_media_stream_count_for_testing());
   EXPECT_EQ(1, process_exits_);
   EXPECT_EQ(0, host_destructions_);
+  if (!host_destructions_)
+    rph->RemoveObserver(this);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderProcessHostWithKeepAliveOptionEnabledTest,
+                       KeepAliveRendererProcess) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleBeacon));
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  NavigateToURL(shell(), embedded_test_server()->GetURL("/send-beacon.html"));
+
+  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(
+      shell()->web_contents()->GetMainFrame());
+  RenderProcessHostImpl* rph =
+      static_cast<RenderProcessHostImpl*>(rfh->GetProcess());
+
+  host_destructions_ = 0;
+  process_exits_ = 0;
+  rph->AddObserver(this);
+  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(30));
+
+  base::TimeTicks start = base::TimeTicks::Now();
+  NavigateToURL(shell(), GURL("data:text/html,<p>hello</p>"));
+
+  WaitUntilProcessExits(1);
+
+  EXPECT_LT(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(30));
+  if (!host_destructions_)
+    rph->RemoveObserver(this);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderProcessHostWithKeepAliveOptionEnabledTest,
+                       KeepAliveRendererProcess_Hung) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleHungBeacon));
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  NavigateToURL(shell(), embedded_test_server()->GetURL("/send-beacon.html"));
+
+  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(
+      shell()->web_contents()->GetMainFrame());
+  RenderProcessHostImpl* rph =
+      static_cast<RenderProcessHostImpl*>(rfh->GetProcess());
+
+  host_destructions_ = 0;
+  process_exits_ = 0;
+  rph->AddObserver(this);
+  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(1));
+
+  base::TimeTicks start = base::TimeTicks::Now();
+  NavigateToURL(shell(), GURL("data:text/html,<p>hello</p>"));
+
+  WaitUntilProcessExits(1);
+
+  EXPECT_GE(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(1));
+  if (!host_destructions_)
+    rph->RemoveObserver(this);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderProcessHostWithKeepAliveOptionEnabledTest,
+                       FetchKeepAliveRendererProcess_Hung) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleHungBeacon));
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/fetch-keepalive.html"));
+
+  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(
+      shell()->web_contents()->GetMainFrame());
+  RenderProcessHostImpl* rph =
+      static_cast<RenderProcessHostImpl*>(rfh->GetProcess());
+
+  host_destructions_ = 0;
+  process_exits_ = 0;
+  rph->AddObserver(this);
+  rfh->SetKeepAliveTimeoutForTesting(base::TimeDelta::FromSeconds(1));
+
+  base::TimeTicks start = base::TimeTicks::Now();
+  NavigateToURL(shell(), GURL("data:text/html,<p>hello</p>"));
+
+  WaitUntilProcessExits(1);
+
+  EXPECT_GE(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(1));
   if (!host_destructions_)
     rph->RemoveObserver(this);
 }

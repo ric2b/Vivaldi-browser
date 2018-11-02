@@ -25,8 +25,8 @@ public final class ContentSuggestionsTestUtils {
     public static SnippetArticle createDummySuggestion(
             @CategoryInt int category, String suffix, boolean isVideoSuggestion) {
         return new SnippetArticle(category, "https://site.com/url" + suffix, "title" + suffix,
-                "pub" + suffix, "txt" + suffix, "https://site.com/url" + suffix, 0, 0, 0,
-                isVideoSuggestion);
+                "pub" + suffix, "https://site.com/url" + suffix, 0, 0, 0, isVideoSuggestion,
+                /* thumbnailDominantColor = */ null);
     }
 
     public static SnippetArticle createDummySuggestion(@CategoryInt int category) {
@@ -195,6 +195,11 @@ public final class ContentSuggestionsTestUtils {
             @Override
             public void visitTileGrid() {
                 describeItem("SITE_SECTION");
+            }
+
+            @Override
+            public void visitLogo() {
+                describeItem("LOGO");
             }
 
             private void describeItem(String description) {

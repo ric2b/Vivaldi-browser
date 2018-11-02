@@ -7,6 +7,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
+#include "core/css/properties/CSSProperty.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -29,7 +30,7 @@ class ComputedStyleCSSValueMapping {
  public:
   // FIXME: Resolve computed auto alignment in applyProperty/ComputedStyle and
   // remove this non-const styledNode parameter.
-  static const CSSValue* Get(CSSPropertyID,
+  static const CSSValue* Get(const CSSProperty&,
                              const ComputedStyle&,
                              const LayoutObject* = nullptr,
                              Node* styled_node = nullptr,
@@ -37,7 +38,7 @@ class ComputedStyleCSSValueMapping {
   static const CSSValue* Get(const AtomicString custom_property_name,
                              const ComputedStyle&,
                              const PropertyRegistry*);
-  static std::unique_ptr<HashMap<AtomicString, RefPtr<CSSVariableData>>>
+  static std::unique_ptr<HashMap<AtomicString, scoped_refptr<CSSVariableData>>>
   GetVariables(const ComputedStyle&);
 
  private:

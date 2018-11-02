@@ -22,23 +22,17 @@ void OnEventDispatchComplete(PersistentNotificationStatus status) {}
 
 }  // namespace
 
-MockPlatformNotificationService::MockPlatformNotificationService()
-    : weak_factory_(this) {}
+MockPlatformNotificationService::MockPlatformNotificationService() = default;
 
-MockPlatformNotificationService::~MockPlatformNotificationService() {}
+MockPlatformNotificationService::~MockPlatformNotificationService() = default;
 
 void MockPlatformNotificationService::DisplayNotification(
     BrowserContext* browser_context,
     const std::string& notification_id,
     const GURL& origin,
     const PlatformNotificationData& notification_data,
-    const NotificationResources& notification_resources,
-    base::Closure* cancel_callback) {
+    const NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(cancel_callback);
-
-  *cancel_callback = base::Bind(&MockPlatformNotificationService::Close,
-                                weak_factory_.GetWeakPtr(), notification_id);
 
   ReplaceNotificationIfNeeded(notification_id);
   non_persistent_notifications_.insert(notification_id);
@@ -70,6 +64,19 @@ void MockPlatformNotificationService::DisplayPersistentNotification(
       notification_id;
 }
 
+void MockPlatformNotificationService::CloseNotification(
+    BrowserContext* browser_context,
+    const std::string& notification_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  const auto non_persistent_iter =
+      non_persistent_notifications_.find(notification_id);
+  if (non_persistent_iter == non_persistent_notifications_.end())
+    return;
+
+  non_persistent_notifications_.erase(non_persistent_iter);
+}
+
 void MockPlatformNotificationService::ClosePersistentNotification(
     BrowserContext* browser_context,
     const std::string& notification_id) {
@@ -82,7 +89,7 @@ void MockPlatformNotificationService::GetDisplayedNotifications(
     BrowserContext* browser_context,
     const DisplayedNotificationsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto displayed_notifications = base::MakeUnique<std::set<std::string>>();
+  auto displayed_notifications = std::make_unique<std::set<std::string>>();
 
   for (const auto& kv : persistent_notifications_)
     displayed_notifications->insert(kv.first);
@@ -95,8 +102,8 @@ void MockPlatformNotificationService::GetDisplayedNotifications(
 
 void MockPlatformNotificationService::SimulateClick(
     const std::string& title,
-    int action_index,
-    const base::NullableString16& reply) {
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const auto notification_id_iter = notification_id_map_.find(title);
   if (notification_id_iter == notification_id_map_.end())
@@ -114,10 +121,11 @@ void MockPlatformNotificationService::SimulateClick(
     const PersistentNotification& notification = persistent_iter->second;
     NotificationEventDispatcher::GetInstance()->DispatchNotificationClickEvent(
         notification.browser_context, notification_id, notification.origin,
-        action_index, reply, base::Bind(&OnEventDispatchComplete));
+        action_index, reply, base::BindOnce(&OnEventDispatchComplete));
   } else if (non_persistent_iter != non_persistent_notifications_.end()) {
-    DCHECK_EQ(action_index, -1) << "Action buttons are only supported for "
-                                   "persistent notifications";
+    DCHECK(!action_index.has_value())
+        << "Action buttons are only supported for "
+           "persistent notifications";
     NotificationEventDispatcher::GetInstance()->DispatchNonPersistentClickEvent(
         notification_id);
   }
@@ -140,7 +148,7 @@ void MockPlatformNotificationService::SimulateClose(const std::string& title,
   const PersistentNotification& notification = persistent_iter->second;
   NotificationEventDispatcher::GetInstance()->DispatchNotificationCloseEvent(
       notification.browser_context, notification_id, notification.origin,
-      by_user, base::Bind(&OnEventDispatchComplete));
+      by_user, base::BindOnce(&OnEventDispatchComplete));
 }
 
 blink::mojom::PermissionStatus
@@ -159,18 +167,6 @@ MockPlatformNotificationService::CheckPermissionOnIOThread(
     int render_process_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return CheckPermission(origin);
-}
-
-void MockPlatformNotificationService::Close(
-    const std::string& notification_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  const auto non_persistent_iter =
-      non_persistent_notifications_.find(notification_id);
-  if (non_persistent_iter == non_persistent_notifications_.end()) {
-    NotificationEventDispatcher::GetInstance()->DispatchNonPersistentCloseEvent(
-        notification_id);
-    non_persistent_notifications_.erase(non_persistent_iter);
-  }
 }
 
 void MockPlatformNotificationService::ReplaceNotificationIfNeeded(

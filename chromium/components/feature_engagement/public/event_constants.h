@@ -6,14 +6,24 @@
 #define COMPONENTS_FEATURE_ENGAGEMENT_PUBLIC_EVENT_CONSTANTS_H_
 
 #include "build/build_config.h"
+#include "components/feature_engagement/features.h"
 
 namespace feature_engagement {
 
 namespace events {
 
-#if defined(OS_WIN) || defined(OS_LINUX)
-// All the events declared below are the string names
-// of deferred onboarding events for the New Tab.
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+// All the events declared below are the string names of deferred onboarding
+// events for the Bookmark feature.
+
+// The user has added a Bookmark (one-off event).
+extern const char kBookmarkAdded[];
+// The user has satisfied the session time requirement to show the BookmarkPromo
+// by accumulating 5 hours of active session time (one-off event).
+extern const char kBookmarkSessionTimeMet[];
+
+// All the events declared below are the string names of deferred onboarding
+// events for the New Tab.
 
 // The user has interacted with the omnibox.
 extern const char kOmniboxInteraction[];
@@ -21,15 +31,16 @@ extern const char kOmniboxInteraction[];
 // by accumulating 2 hours of active session time (one-off event).
 extern const char kNewTabSessionTimeMet[];
 
-// All the events declared below are the string names
-// of deferred onboarding events for the Incognito Window
+// All the events declared below are the string names of deferred onboarding
+// events for the Incognito Window.
 
-// The user has deleted browsing history.
-extern const char kHistoryDeleted[];
 // The user has opened an incognito window.
 extern const char kIncognitoWindowOpened[];
-
-#endif  // defined(OS_WIN) || defined(OS_LINUX)
+// The user has satisfied the session time requirement to show the
+// IncognitoWindowPromo by accumulating 2 hours of active session time (one-off
+// event).
+extern const char kIncognitoWindowSessionTimeMet[];
+#endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_IOS)
 // This event is included in the deferred onboarding events for the New Tab
@@ -39,11 +50,9 @@ extern const char kIncognitoWindowOpened[];
 // The user has explicitly opened a new tab via an entry point from inside of
 // Chrome.
 extern const char kNewTabOpened[];
-
 #endif  // defined(OS_WIN) || defined(OS_LINUX) || defined(OS_IOS)
 
 #if defined(OS_IOS)
-
 // The user has opened Chrome (cold start or from background).
 extern const char kChromeOpened[];
 
@@ -55,7 +64,6 @@ extern const char kClearedBrowsingData[];
 
 // The user has viewed their reading list.
 extern const char kViewedReadingList[];
-
 #endif  // defined(OS_IOS)
 
 }  // namespace events

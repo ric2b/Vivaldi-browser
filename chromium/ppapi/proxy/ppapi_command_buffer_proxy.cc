@@ -231,8 +231,7 @@ bool PpapiCommandBufferProxy::CanWaitUnverifiedSyncToken(
   return false;
 }
 
-void PpapiCommandBufferProxy::AddLatencyInfo(
-    const std::vector<ui::LatencyInfo>& latency_info) {}
+void PpapiCommandBufferProxy::SetSnapshotRequested() {}
 
 void PpapiCommandBufferProxy::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {
@@ -244,7 +243,7 @@ void PpapiCommandBufferProxy::SetGpuControlClient(gpu::GpuControlClient*) {
   // to the plugin instance. Make it more uniform and use the GpuControlClient.
 }
 
-gpu::Capabilities PpapiCommandBufferProxy::GetCapabilities() {
+const gpu::Capabilities& PpapiCommandBufferProxy::GetCapabilities() const {
   return capabilities_;
 }
 

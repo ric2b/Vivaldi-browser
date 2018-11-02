@@ -4,6 +4,7 @@
 
 'use strict';
 
+var childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -20,6 +21,9 @@ const RUN_TEST_REGEX = /\s*runTest\(\);?\n*/
 const DRY_RUN = process.env.DRY_RUN || false;
 const FRONT_END_PATH = path.resolve(__dirname, '..', '..', 'front_end');
 const LINE_BREAK = '$$SECRET_IDENTIFIER_FOR_LINE_BREAK$$();';
+const LAYOUT_TESTS_PATH = path.resolve(__dirname, '..', '..', '..', '..', 'LayoutTests');
+const FLAG_EXPECTATIONS_PATH = path.resolve(LAYOUT_TESTS_PATH, 'FlagExpectations');
+const TEMP_JS_FILE = path.resolve(__dirname, 'temp.js');
 
 function main() {
   const files = process.argv.slice(2);
@@ -36,12 +40,37 @@ main();
 
 function getPrologue(inputExpectationsPath, bodyText) {
   const expectations = fs.readFileSync(inputExpectationsPath, 'utf-8').split('\n');
-  const prologueBeginning = bodyText.split('\n')[0];
+  let prologueBeginning = bodyText.split('\n')[0];
   for (const line of expectations) {
     if (line.startsWith(prologueBeginning)) {
       return line;
     }
   }
+
+  prologueBeginning = bodyText.split(' ')[0];
+  for (const line of expectations) {
+    if (line.startsWith(prologueBeginning)) {
+      return line;
+    }
+  }
+  return '';
+}
+
+function appendBugLink(prologue, text) {
+  var match;
+  if (match = text.match(/crbug.com\/\d+/)) {
+    if (!prologue.includes(match[0]))
+      return prologue + ' ' + match[0];
+  }
+  if (match = text.match(/https:\/\/bugs.webkit.org\/show_bug.cgi\?id=\d+/)) {
+    if (!prologue.includes(match[0]))
+      return prologue + ' ' + match[0];
+  }
+  return prologue;
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
 }
 
 function migrateTest(inputPath, identifierMap) {
@@ -50,9 +79,11 @@ function migrateTest(inputPath, identifierMap) {
   const htmlTestFile = fs.readFileSync(inputPath, 'utf-8');
   const $ = cheerio.load(htmlTestFile);
 
+  const inputFilename = path.basename(inputPath);
   const inputExpectationsPath = inputPath.replace('.js', '-expected.txt').replace('.html', '-expected.txt');
   const bodyText = $('body').text().trim();
-  const prologue = getPrologue(inputExpectationsPath, bodyText);
+
+  const prologue = appendBugLink(getPrologue(inputExpectationsPath, bodyText), htmlTestFile);
 
   const stylesheetPaths = $('link').toArray().filter(l => l.attribs.rel === 'stylesheet').map(l => l.attribs.href);
   const onloadFunctionName = $('body')[0].attribs.onload ? $('body')[0].attribs.onload.slice(0, -2) : '';
@@ -66,7 +97,7 @@ function migrateTest(inputPath, identifierMap) {
   const helperScripts = [];
   const resourceScripts = [];
   $('script[src]').toArray().map((n) => n.attribs.src).forEach(src => {
-    if (src.indexOf('resources/') !== -1) {
+    if (src.indexOf('resources/') !== -1 && src.indexOf('-test.js') === -1) {
       resourceScripts.push(src);
       return;
     }
@@ -80,7 +111,7 @@ function migrateTest(inputPath, identifierMap) {
 
   let outputCode;
   try {
-    const testHelpers = mapTestHelpers(helperScripts);
+    const testHelpers = mapTestHelpers(helperScripts, htmlTestFile.includes('ConsoleTestRunner'));
     let domFixture = $('body')
                          .html()
                          .trim()
@@ -90,56 +121,45 @@ function migrateTest(inputPath, identifierMap) {
                          .replace(prologue + '\n', '')
                          // Tries to remove it if it's inline
                          .replace(prologue, '')
+                         // Optimistically remove the first sentence of the prologue and everything in that block
+                         .replace(new RegExp(`<p>\\s*${escapeRegExp(prologue).split('.')[0]}[\\s\\S]*?<\\/p>`), '')
+                         .replace(new RegExp(`<div>\\s*${escapeRegExp(prologue).split('.')[0]}[\\s\\S]*?<\\/div>`), '')
                          .replace(/<p>\s*<\/p>/, '')
                          .replace(/<div>\s*<\/div>/, '')
+                         .replace(/<script.*?>([\S\s]*?)<\/script>/g, '')
                          .trim();
     const docType = htmlTestFile.match(/<!DOCTYPE.*>/) ? htmlTestFile.match(/<!DOCTYPE.*>/)[0] : '';
+    const inlineStylesheets =
+        $('style').toArray().map(n => n.children[0].data).map(text => `<style>${text}</style>`).join('\n');
+    if (inlineStylesheets)
+      domFixture = inlineStylesheets + (domFixture.length ? '\n' : '') + domFixture;
     if (docType)
       domFixture = docType + (domFixture.length ? '\n' : '') + domFixture;
     outputCode = transformTestScript(
-        inputCode, prologue, identifierMap, testHelpers, javascriptFixtures, getPanel(inputPath), domFixture,
-        onloadFunctionName, relativeResourcePaths, stylesheetPaths);
+        inputCode, prologue, identifierMap, testHelpers, javascriptFixtures, getPanels(inputPath, inputCode),
+        domFixture, onloadFunctionName, relativeResourcePaths, stylesheetPaths, inputFilename);
   } catch (err) {
     console.log('Unable to migrate: ', inputPath);
     console.log('ERROR: ', err);
     process.exit(1);
   }
-
+  fs.writeFileSync(TEMP_JS_FILE, outputCode);
+  outputCode = shellOutput(`clang-format ${TEMP_JS_FILE} --style=FILE`);
+  fs.unlinkSync(TEMP_JS_FILE);
+  outputCode = unicodeEscape(outputCode);
   console.log(outputCode);
   if (!DRY_RUN) {
-    const testsPath = path.resolve(__dirname, 'tests.txt');
-    const newToOldTests =
-        new Map(fs.readFileSync(testsPath, 'utf-8').split('\n').map(line => line.split(' ').reverse()));
-    const originalTestPath = path.resolve(
-        __dirname, '..', '..', '..', '..', 'LayoutTests',
-        newToOldTests.get(inputPath.slice(inputPath.indexOf('http/'))));
-
-    const srcResourcePaths = resourceScripts.map(s => path.resolve(path.dirname(originalTestPath), s));
-
-    fs.writeFileSync(inputPath, outputCode);
-    copyResourceScripts(srcResourcePaths, destResourcePaths, inputPath);
-    console.log('Migrated: ', inputPath);
+    const jsInputPath = inputPath.replace('.html', '.js');
+    fs.writeFileSync(jsInputPath, outputCode);
+    console.log('Migrated: ', jsInputPath);
+    fs.unlinkSync(inputPath);
+    updateTestExpectations(path.relative(LAYOUT_TESTS_PATH, inputPath), path.relative(LAYOUT_TESTS_PATH, jsInputPath));
   }
 }
 
-function copyResourceScripts(srcResourcePaths, destResourcePaths, inputPath) {
-  destResourcePaths.forEach((p, i) => {
-    mkdirp.sync(path.dirname(p));
-    if (!utils.isFile(p)) {
-      fs.writeFileSync(p, fs.readFileSync(srcResourcePaths[i]));
-    } else {
-      const originalResource = fs.readFileSync(srcResourcePaths[i]);
-      const newResource = fs.readFileSync(p);
-      if (originalResource !== newResource) {
-        console.log('Discrepancy with resource script', p, 'for file: ', inputPath);
-      }
-    }
-  });
-}
-
 function transformTestScript(
-    inputCode, prologue, identifierMap, explicitTestHelpers, javascriptFixtures, panel, domFixture, onloadFunctionName,
-    relativeResourcePaths, stylesheetPaths) {
+    inputCode, prologue, identifierMap, explicitTestHelpers, javascriptFixtures, panels, domFixture, onloadFunctionName,
+    relativeResourcePaths, stylesheetPaths, inputFilename) {
   const ast = recast.parse(inputCode);
 
   /**
@@ -178,7 +198,8 @@ function transformTestScript(
           path.parentPath.value.object.name === 'InspectorTest' && path.value.name !== 'InspectorTest') {
         const newParentIdentifier = identifierMap.get(path.value.name);
         if (!newParentIdentifier) {
-          throw new Error('Could not find identifier for: ' + path.value.name);
+          console.log('ERROR: Could not find identifier for: ' + path.value.name);
+          return false;
         }
         path.parentPath.value.object.name = newParentIdentifier;
         namespacesUsed.add(newParentIdentifier.split('.')[0]);
@@ -195,7 +216,6 @@ function transformTestScript(
     visitCallExpression: function(path) {
       const node = path.value;
       if (node.callee.property && node.callee.property.name === 'bind') {
-        const code = recast.prettyPrint(node);
         if (node.arguments[0].name === 'InspectorTest') {
           node.arguments[0].name = node.callee.object.object.name;
         }
@@ -227,13 +247,13 @@ function transformTestScript(
   for (const helper of allTestHelpers) {
     headerLines.push(createAwaitExpressionNode(`await TestRunner.loadModule('${helper}');`));
   }
-  if (panel)
+  for (const panel of panels)
     headerLines.push(createAwaitExpressionNode(`await TestRunner.showPanel('${panel}');`));
 
   if (domFixture) {
     headerLines.push(createAwaitExpressionNode(`await TestRunner.loadHTML(\`
 ${domFixture.split('\n').map(line => '    ' + line).join('\n')}
-\`);`));
+  \`);`));
   }
 
   stylesheetPaths.forEach(p => {
@@ -248,11 +268,11 @@ ${domFixture.split('\n').map(line => '    ' + line).join('\n')}
     headerLines.push(fixture);
   }
 
-  const nonTestCode = formatNonTestCode(nonTestAst, onloadFunctionName).trim();
+  const formattedNonTestCode = formatNonTestCode(nonTestAst, onloadFunctionName);
 
-  if (nonTestCode) {
+  if (formattedNonTestCode.trim()) {
     headerLines.push((createAwaitExpressionNode(`await TestRunner.evaluateInPagePromise(\`
-  ${nonTestCode}
+${formattedNonTestCode}
 \`);`)));
   }
 
@@ -267,7 +287,12 @@ ${domFixture.split('\n').map(line => '    ' + line).join('\n')}
   iife.async = true;
   ast.program.body = [b.expressionStatement(b.callExpression(iife, []))];
 
-  return print(ast);
+  const outputFilename = inputFilename.replace('.html', '.js');
+  return print(ast)
+      .split(inputFilename)
+      .join(outputFilename)
+      .replace(/TestRunner.consoleModel/g, 'ConsoleModel.consoleModel')
+      .replace(/TestRunner.networkLog/g, 'NetworkLog.networkLog');
 }
 
 /**
@@ -283,9 +308,8 @@ function processScriptCode(code, javascriptFixtures, onloadFunctionName) {
     return code;
   }
   const formattedCode = formatNonTestCode(ast, onloadFunctionName);
-
   javascriptFixtures.push(createAwaitExpressionNode(`await TestRunner.evaluateInPagePromise(\`${formattedCode}
-\`);`));
+  \`);`));
   return;
 }
 
@@ -297,6 +321,7 @@ function formatNonTestCode(ast, onloadFunctionName) {
       .split('\n')
       .map(line => '    ' + line)
       .join('\n')
+      .replace(/\\n/g, '\\\\n')
       .replace(RUN_TEST_REGEX, '');
 }
 
@@ -332,7 +357,6 @@ function replaceBodyWithFunctionDeclaration(ast, functionName) {
 }
 
 function inlineFunctionDeclaration(ast, functionName) {
-  debugger;
   const index = ast.program.body.findIndex(n => n.type === 'FunctionDeclaration' && n.id.name === functionName);
   if (index > -1) {
     const functionNode = ast.program.body[index];
@@ -347,22 +371,24 @@ function print(ast) {
 
 `;
 
-  /**
-   * Not using clang-format because certain tests look bad when formatted by it.
-   * Recast pretty print is smarter about preserving existing spacing.
-   */
-  let code = recast.print(ast).code;
+  let code = recast.print(ast, {tabWidth: 2, wrapColumn: 120}).code;
   code = code.replace(/(\/\/\#\s*sourceURL=[\w-]+)\.html/, '$1.js');
   code = code.replace(/\s*\$\$SECRET_IDENTIFIER_FOR_LINE_BREAK\$\$\(\);/g, '\n');
-  const copyrightedCode = copyrightNotice + code + '\n';
+  const copyrightedCode = copyrightNotice + code.trim() + '\n';
   return copyrightedCode;
 }
 
-function getPanel(inputPath) {
+function getPanels(inputPath, inputCode) {
+  const panels = new Set();
+  if (inputCode.includes('SourcesTestRunner.waitForScriptSource'))
+    panels.add('sources');
   const panelByFolder = {
     'animation': 'elements',
+    'appcache': 'resources',
+    'application-panel': 'resources',
     'audits': 'audits',
     'console': 'console',
+    'cache-storage': 'resources',
     'elements': 'elements',
     'editor': 'sources',
     'layers': 'layers',
@@ -380,22 +406,34 @@ function getPanel(inputPath) {
   const components = inputPath.slice(inputPath.indexOf('LayoutTests/')).split('/');
   const folder = inputPath.indexOf('LayoutTests/inspector') === -1 ? components[4] : components[2];
   if (folder.endsWith('.html'))
-    return;
-  return panelByFolder[folder];
+    return [];
+  const panel = panelByFolder[folder];
+  if (panel)
+    panels.add(panel);
+  return Array.from(panels);
 }
 
-function mapTestHelpers(testHelpers) {
+function mapTestHelpers(testHelpers, includeConsole) {
+  const specialCases = {
+    'SDKTestRunner': 'sdk_test_runner',
+  };
   const mappedHelpers = new Set();
   for (const helper of testHelpers) {
     const namespace = migrateUtils.mapTestFilename(helper).namespacePrefix + 'TestRunner';
-    const mappedHelper = namespace.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase();
+    const mappedHelper =
+        specialCases[namespace] || namespace.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase();
     if (!mappedHelper) {
       throw Error('Could not map helper ' + helper);
     }
-    if (mappedHelper !== 'inspector_test_runner') {
-      mappedHelpers.add(mappedHelper);
-    }
+    if (mappedHelper === 'inspector_test_runner')
+      continue;
+    // Some tests reference tracing-test.js which doesn't exist
+    if (mappedHelper === 'tracing_test_runner')
+      continue;
+    mappedHelpers.add(mappedHelper);
   }
+  if (includeConsole)
+    mappedHelpers.add('console_test_runner');
   return Array.from(mappedHelpers);
 }
 
@@ -455,22 +493,54 @@ function createExpressionNode(code) {
  */
 function createAwaitExpressionNode(code) {
   code = code.split('\n').map(line => line.trimRight()).join('\n');
-  var prettyPrintedCode =
-      convertToTwoSpaceIndent(recast.prettyPrint(recast.parse(`(async function(){${code}});`)).code);
-  return recast.parse(prettyPrintedCode).program.body[0].expression.body.body[0];
-}
-
-function convertToTwoSpaceIndent(code) {
-  var lines = code.split('\n').map(line => dedent(line));
-  return lines.join('\n');
-
-  function dedent(line) {
-    if (line.startsWith('    '))
-      return '  ' + dedent(line.slice(4));
-    return line;
-  }
+  return recast.parse(`(async function(){${code}});`).program.body[0].expression.body.body[0];
 }
 
 function createNewLineNode() {
   return createExpressionNode(LINE_BREAK);
+}
+
+function updateTestExpectations(oldRelativeTestPath, newRelativeTestPath) {
+  // Update additional test expectations
+  for (const filename
+           of ['TestExpectations', 'ASANExpectations', 'LeakExpectations', 'MSANExpectations', 'NeverFixTests',
+               'SlowTests', 'SmokeTests', 'StaleTestExpectations']) {
+    const filePath = path.resolve(LAYOUT_TESTS_PATH, filename);
+    updateExpectationsFile(filePath);
+  }
+
+  // Update FlagExpectations
+  for (const filename of fs.readdirSync(FLAG_EXPECTATIONS_PATH)) {
+    const filePath = path.resolve(FLAG_EXPECTATIONS_PATH, filename);
+    updateExpectationsFile(filePath);
+  }
+
+  function updateExpectationsFile(filePath) {
+    const expectations = fs.readFileSync(filePath, 'utf-8');
+    const updatedExpectations = expectations.split('\n').map(line => {
+      return line.replace(oldRelativeTestPath, newRelativeTestPath);
+    });
+    fs.writeFileSync(filePath, updatedExpectations.join('\n'));
+  }
+}
+
+function shellOutput(command) {
+  return childProcess.execSync(command).toString();
+}
+
+function unicodeEscape(string) {
+  function padWithLeadingZeros(string) {
+    return new Array(5 - string.length).join('0') + string;
+  }
+
+  function unicodeCharEscape(charCode) {
+    return '\\u' + padWithLeadingZeros(charCode.toString(16));
+  }
+
+  return string.split('')
+      .map(function(char) {
+        var charCode = char.charCodeAt(0);
+        return charCode > 127 ? unicodeCharEscape(charCode) : char;
+      })
+      .join('');
 }

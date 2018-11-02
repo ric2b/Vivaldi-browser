@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/nacl/common/features.h"
 #include "components/storage_monitor/storage_info.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/web_contents.h"
@@ -39,20 +40,12 @@
 #include "media/base/test_data_util.h"
 #include "media/media_features.h"
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#include "chrome/browser/media_galleries/fileapi/picasa_finder.h"
-#include "chrome/common/media_galleries/picasa_test_util.h"
-#include "chrome/common/media_galleries/picasa_types.h"
-#include "chrome/common/media_galleries/pmp_test_util.h"
-#endif
-
 #if defined(OS_MACOSX)
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/browser/media_galleries/fileapi/iapps_finder_impl.h"
 #endif  // OS_MACOSX
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 #include "base/command_line.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
@@ -114,7 +107,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
         test_data_dir_.AppendASCII(kTestDir + extension_name);
     from_dir = from_dir.NormalizePathSeparators();
 
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::ScopedTempDir temp_dir;
     if (!temp_dir.CreateUniqueTempDir())
       return false;
@@ -175,7 +168,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
   // with no default media galleries, such as CHROMEOS. This fake gallery is
   // pre-populated with a test.jpg and test.txt.
   void MakeSingleFakeGallery(MediaGalleryPrefId* pref_id) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_FALSE(fake_gallery_temp_dir_.IsValid());
     ASSERT_TRUE(fake_gallery_temp_dir_.CreateUniqueTempDir());
 
@@ -207,46 +200,13 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
   }
 
   void AddFileToSingleFakeGallery(const base::FilePath& source_path) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(fake_gallery_temp_dir_.IsValid());
 
     ASSERT_TRUE(base::CopyFile(
         source_path,
         fake_gallery_temp_dir_.GetPath().Append(source_path.BaseName())));
   }
-
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  void PopulatePicasaTestData(const base::FilePath& picasa_app_data_root) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-    base::FilePath picasa_database_path =
-        picasa::MakePicasaDatabasePath(picasa_app_data_root);
-    base::FilePath picasa_temp_dir_path =
-        picasa_database_path.DirName().AppendASCII(picasa::kPicasaTempDirName);
-    ASSERT_TRUE(base::CreateDirectory(picasa_database_path));
-    ASSERT_TRUE(base::CreateDirectory(picasa_temp_dir_path));
-
-    // Create fake folder directories.
-    base::FilePath folders_root =
-        ensure_media_directories_exists_->GetFakePicasaFoldersRootPath();
-    base::FilePath fake_folder_1 = folders_root.AppendASCII("folder1");
-    base::FilePath fake_folder_2 = folders_root.AppendASCII("folder2");
-    ASSERT_TRUE(base::CreateDirectory(fake_folder_1));
-    ASSERT_TRUE(base::CreateDirectory(fake_folder_2));
-
-    // Write folder and album contents.
-    picasa::WriteTestAlbumTable(
-        picasa_database_path, fake_folder_1, fake_folder_2);
-    picasa::WriteTestAlbumsImagesIndex(fake_folder_1, fake_folder_2);
-
-    base::FilePath test_jpg_path = GetCommonDataDir().AppendASCII("test.jpg");
-    ASSERT_TRUE(base::CopyFile(
-        test_jpg_path, fake_folder_1.AppendASCII("InBoth.jpg")));
-    ASSERT_TRUE(base::CopyFile(
-        test_jpg_path, fake_folder_1.AppendASCII("InSecondAlbumOnly.jpg")));
-    ASSERT_TRUE(base::CopyFile(
-        test_jpg_path, fake_folder_2.AppendASCII("InFirstAlbumOnly.jpg")));
-  }
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
   base::FilePath GetCommonDataDir() const {
     return test_data_dir_.AppendASCII("api_test")
@@ -282,7 +242,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
       ensure_media_directories_exists_;
 };
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 class MediaGalleriesPlatformAppPpapiTest
     : public MediaGalleriesPlatformAppBrowserTest {
  protected:
@@ -333,7 +293,7 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppPpapiTest, SendFilesystem) {
   ASSERT_TRUE(result) << message_;
 }
 
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 // Test is flaky, it fails on certain bots, namely WinXP Tests(1) and Linux
 // (dbg)(1)(32).  See crbug.com/354425.
@@ -409,46 +369,6 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
 
   DetachFakeDevice();
 }
-
-// These two tests are flaky, they time out frequently on Win7 bots. See
-// crbug.com/567212.
-#if defined(OS_WIN)
-#define MAYBE_PicasaDefaultLocation DISABLED_PicasaDefaultLocation
-#define MAYBE_PicasaCustomLocation DISABLED_PicasaCustomLocation
-#else
-#define MAYBE_PicasaDefaultLocation PicasaDefaultLocation
-#define MAYBE_PicasaCustomLocation PicasaCustomLocation
-#endif
-#if defined(OS_WIN)|| defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
-                       MAYBE_PicasaDefaultLocation) {
-#if defined(OS_WIN)
-  PopulatePicasaTestData(
-      ensure_media_directories_exists()->GetFakeLocalAppDataPath());
-#elif defined(OS_MACOSX)
-  PopulatePicasaTestData(
-      ensure_media_directories_exists()->GetFakeAppDataPath());
-#endif
-
-  base::ListValue custom_args;
-  custom_args.AppendInteger(test_jpg_size());
-  ASSERT_TRUE(RunMediaGalleriesTestWithArg("picasa", custom_args)) << message_;
-}
-
-IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
-                       MAYBE_PicasaCustomLocation) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  base::ScopedTempDir custom_picasa_app_data_root;
-  ASSERT_TRUE(custom_picasa_app_data_root.CreateUniqueTempDir());
-  ensure_media_directories_exists()->SetCustomPicasaAppDataPath(
-      custom_picasa_app_data_root.GetPath());
-  PopulatePicasaTestData(custom_picasa_app_data_root.GetPath());
-
-  base::ListValue custom_args;
-  custom_args.AppendInteger(test_jpg_size());
-  ASSERT_TRUE(RunMediaGalleriesTestWithArg("picasa", custom_args)) << message_;
-}
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
 IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest, ToURL) {
   RemoveAllGalleries();

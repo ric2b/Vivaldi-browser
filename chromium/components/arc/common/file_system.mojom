@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 6
+// Next MinVersion: 8
 
 module arc.mojom;
 
@@ -50,14 +50,30 @@ enum ChangeType {
 };
 
 
-// Next method ID: 1
+// Next method ID: 5
 interface FileSystemHost {
+  // Returns the name of the file specified by the URL.
+  // When an error occurs, returns null value.
+  [MinVersion=6] GetFileName@1(string url) => (string? name);
+
+  // Returns the size of the file specified by the URL.
+  // If the file does not exist or the size is unknown (e.g. directories and
+  // streams), -1 is returned.
+  [MinVersion=6] GetFileSize@2(string url) => (int64 size);
+
+  // Returns the MIME type of the file specified by the URL.
+  // When an error occurs, returns null value.
+  [MinVersion=6] GetFileType@3(string url) => (string? mime_type);
+
   // Called when a watched document was changed.
   // |type| describes the type of change made to the document.
   [MinVersion=3] OnDocumentChanged@0(int64 watcher_id, ChangeType type);
+
+  // Returns an FD for reading the file specified by the URL.
+  [MinVersion=6] OpenFileToRead@4(string url) => (handle? fd);
 };
 
-// Next method ID: 10
+// Next method ID: 11
 interface FileSystemInstance {
   // Notes about Android Documents Provider:
   //
@@ -124,8 +140,11 @@ interface FileSystemInstance {
   [MinVersion=5] GetRecentDocuments@9(string authority, string root_id) =>
       (array<Document>? documents);
 
+  // DEPRECATED: Please use Init@10 instead.
+  [MinVersion=3] InitDeprecated@5(FileSystemHost host_ptr);
+
   // Establishes full-duplex communication with the host.
-  [MinVersion=3] Init@5(FileSystemHost host_ptr);
+  [MinVersion=7] Init@10(FileSystemHost host_ptr) => ();
 
   // Asks the ContentResolver to get a FD to read the file specified by the
   // URL.

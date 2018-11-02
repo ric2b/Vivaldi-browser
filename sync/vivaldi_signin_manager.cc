@@ -20,7 +20,7 @@
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_internals_util.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -35,8 +35,11 @@ const char VivaldiSigninManager::kChromeSigninEffectiveSite[] = "";
 
 VivaldiSigninManager::VivaldiSigninManager(
     SigninClient* client,
-    AccountTrackerService* account_tracker_service)
-    : SigninManagerBase(client, account_tracker_service),
+    AccountTrackerService* account_tracker_service,
+    SigninErrorController* signin_error_controller)
+    : SigninManagerBase(client,
+                        account_tracker_service,
+                        signin_error_controller),
       type_(SIGNIN_TYPE_NONE),
       client_(client),
       signin_manager_signed_in_(false),
@@ -172,4 +175,4 @@ void VivaldiSigninManager::OnAccountUpdateFailed(
   user_info_fetched_by_account_tracker_ = true;
   PostSignedIn();
 }
-} //namespace vivaldi
+}  // namespace vivaldi

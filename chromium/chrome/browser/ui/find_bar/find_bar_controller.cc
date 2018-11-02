@@ -12,10 +12,14 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_state.h"
 #include "chrome/browser/ui/find_bar/find_bar_state_factory.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
+#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
@@ -29,11 +33,8 @@ using content::WebContents;
 // The minimum space between the FindInPage window and the search result.
 static const int kMinFindWndDistanceFromSelection = 5;
 
-FindBarController::FindBarController(FindBar* find_bar)
-    : find_bar_(find_bar),
-      web_contents_(NULL),
-      last_reported_matchcount_(0) {
-}
+FindBarController::FindBarController(FindBar* find_bar, Browser* browser)
+    : find_bar_(find_bar), browser_(browser) {}
 
 FindBarController::~FindBarController() {
   DCHECK(!web_contents_);
@@ -81,6 +82,10 @@ void FindBarController::EndFindSession(SelectionAction selection_action,
   }
 }
 
+void FindBarController::FindBarVisibilityChanged() {
+  browser_->window()->GetLocationBar()->UpdateFindBarIconVisibility();
+}
+
 void FindBarController::ChangeWebContents(WebContents* contents) {
   if (web_contents_) {
     registrar_.RemoveAll();
@@ -94,8 +99,7 @@ void FindBarController::ChangeWebContents(WebContents* contents) {
 
   web_contents_ = contents;
   FindTabHelper* find_tab_helper =
-      web_contents_ ? FindTabHelper::FromWebContents(web_contents_)
-                    : NULL;
+      web_contents_ ? FindTabHelper::FromWebContents(web_contents_) : nullptr;
 
   // Hide any visible find window from the previous tab if a NULL tab contents
   // is passed in or if the find UI is not active in the new tab.

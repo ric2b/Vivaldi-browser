@@ -248,6 +248,11 @@ const char kDeviceLoginScreenInputMethods[] =
 // A boolean pref that matches enable-per-user-time-zone chrome://flags value.
 const char kPerUserTimezoneEnabled[] = "cros.flags.per_user_timezone_enabled";
 
+// A boolean pref that matches enable-fine-graned-time-zone-detection
+// chrome://flags value.
+const char kFineGrainedTimeZoneResolveEnabled[] =
+    "cros.flags.fine_grained_time_zone_detection_enabled";
+
 // A dictionary pref containing time intervals and ignored policies.
 // It's used to allow less restricted usage of Chrome OS during off-hours.
 // This pref is set by an admin policy.
@@ -264,8 +269,37 @@ const char kPerUserTimezoneEnabled[] = "cros.flags.per_user_timezone_enabled";
 // }
 const char kDeviceOffHours[] = "cros.device_off_hours";
 
+// An external data pref for the printer configurations download.
+const char kDevicePrintersConfigurations[] =
+    "cros.device.printer_configurations";
+// An enum specifying the access policy device printers should observe.
+const char kDevicePrintersAccessMode[] = "cros.device.printers_access_mode";
+// A list of strings representing device printer ids for which access is
+// restricted.
+const char kDevicePrintersBlacklist[] = "cros.device.printers_blacklist";
+// A list of strings representing the list of device printer ids which are
+// accessible.
+const char kDevicePrintersWhitelist[] = "cros.device.printers_whitelist";
+
 // A dictionary containing parameters controlling the TPM firmware update
 // functionality.
 const char kTPMFirmwareUpdateSettings[] = "cros.tpm_firmware_update_settings";
+
+// String indicating what is the minimum version of Chrome required to
+// allow user sign in. If the string is empty or blank no restrictions will
+// be applied.
+const char kMinimumRequiredChromeVersion[] = "cros.min_version.chrome";
+
+// String indicating what name should be advertised for casting to.
+// If the string is empty or blank the system name will be used.
+const char kCastReceiverName[] = "cros.device.cast_receiver.name";
+
+// Boolean indicating whether the client needs to upload an enrollment ID
+// which can be used for automatic forced re-enrollment.
+const char kDeviceEnrollmentIdNeeded[] = "cros.device.enrollment_id_needed";
+
+// A boolean pref that indicates whether unaffiliated users are allowed to
+// use ARC.
+const char kUnaffiliatedArcAllowed[] = "cros.device.unaffiliated_arc_allowed";
 
 }  // namespace chromeos

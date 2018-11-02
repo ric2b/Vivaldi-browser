@@ -62,7 +62,7 @@ v8::Local<v8::Value> ScriptValue::V8ValueFor(
 
   DCHECK(isolate->InContext());
   v8::Local<v8::Value> value = value_->NewLocal(isolate);
-  RefPtr<SerializedScriptValue> serialized =
+  scoped_refptr<SerializedScriptValue> serialized =
       SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
   return serialized->Deserialize(isolate);
 }
@@ -71,7 +71,7 @@ bool ScriptValue::ToString(String& result) const {
   if (IsEmpty())
     return false;
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   v8::Local<v8::Value> string = V8Value();
   if (string.IsEmpty() || !string->IsString())
     return false;

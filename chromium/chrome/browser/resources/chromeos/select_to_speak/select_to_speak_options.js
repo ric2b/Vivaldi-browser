@@ -17,11 +17,15 @@ SelectToSpeakOptionsPage.prototype = {
   init_: function() {
     this.addTranslatedMessagesToDom_();
     this.populateVoiceList_('voice');
-    window.speechSynthesis.onvoiceschanged = function() {
+    window.speechSynthesis.onvoiceschanged = (function() {
       this.populateVoiceList_('voice');
-    };
+    }.bind(this));
     this.syncSelectControlToPref_('voice', 'voice');
     this.syncSelectControlToPref_('rate', 'rate');
+    this.syncCheckboxControlToPref_('wordHighlight', 'wordHighlight');
+    this.setUpHighlightListener_();
+    chrome.metricsPrivate.recordUserAction(
+        'Accessibility.CrosSelectToSpeak.LoadSettings');
   },
 
   /**
@@ -83,12 +87,42 @@ SelectToSpeakOptionsPage.prototype = {
   },
 
   /**
+   * Populate a checkbox with its current setting.
+   * @param {string} checkboxId The id of the checkbox element.
+   * @private
+   */
+  syncCheckboxControlToPref_: function(checkboxId, pref) {
+    let checkbox = document.getElementById(checkboxId);
+
+    function updateFromPref() {
+      chrome.storage.sync.get(pref, function(items) {
+        let value = items[pref];
+        if (value != null) {
+          checkbox.checked = value;
+        }
+      });
+    }
+
+    checkbox.addEventListener('change', function() {
+      let setParams = {};
+      setParams[pref] = checkbox.checked;
+      chrome.storage.sync.set(setParams);
+    });
+
+    checkbox.updateFunction = updateFromPref;
+    updateFromPref();
+    chrome.storage.onChanged.addListener(updateFromPref);
+  },
+
+  /**
    * Given the id of an HTML select element and the name of a chrome.storage
    * pref, sync them both ways.
    * @param {string} selectId The id of the select element.
    * @param {string} pref The name of a chrome.storage pref.
+   * @param {?function(string): undefined=} onChange Optional change
+   *     listener to call when the setting has been changed.
    */
-  syncSelectControlToPref_: function(selectId, pref) {
+  syncSelectControlToPref_: function(selectId, pref, onChange) {
     var element = document.getElementById(selectId);
 
     function updateFromPref() {
@@ -100,6 +134,9 @@ SelectToSpeakOptionsPage.prototype = {
             element.selectedIndex = i;
             break;
           }
+        }
+        if (onChange) {
+          onChange(value);
         }
       });
     }
@@ -114,6 +151,18 @@ SelectToSpeakOptionsPage.prototype = {
     element.updateFunction = updateFromPref;
     updateFromPref();
     chrome.storage.onChanged.addListener(updateFromPref);
+  },
+
+  /**
+   * Sets up the highlight listeners and preferences.
+   */
+  setUpHighlightListener_: function() {
+    let onChange = function(value) {
+      let example = document.getElementById('highlightExample');
+      example.style.background = value;
+    };
+
+    this.syncSelectControlToPref_('highlightColor', 'highlightColor', onChange);
   }
 };
 

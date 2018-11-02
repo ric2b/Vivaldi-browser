@@ -21,9 +21,9 @@
 #ifndef CSSQuadValue_h
 #define CSSQuadValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSValue.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -55,7 +55,7 @@ class CORE_EXPORT CSSQuadValue : public CSSValue {
            DataEquivalent(bottom_, other.bottom_);
   }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  protected:
   CSSQuadValue(CSSValue* top,

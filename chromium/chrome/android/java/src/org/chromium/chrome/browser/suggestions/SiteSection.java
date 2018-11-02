@@ -17,9 +17,6 @@ import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
 import org.chromium.chrome.browser.ntp.cards.NodeVisitor;
 import org.chromium.chrome.browser.ntp.cards.OptionalLeaf;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.suggestions.SiteSectionViewHolder.UpdateIconViewCallback;
-import org.chromium.chrome.browser.suggestions.SiteSectionViewHolder.UpdateOfflineBadgeCallback;
-import org.chromium.chrome.browser.suggestions.SiteSectionViewHolder.UpdateTilesCallback;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
@@ -51,10 +48,8 @@ public class SiteSection extends OptionalLeaf implements TileGroup.Observer {
                 .inflate(getLayout(), parent, false);
     }
 
-    public static SiteSectionViewHolder createViewHolder(ViewGroup view) {
-        return SuggestionsConfig.useSitesExplorationUi()
-                ? new SiteExploreViewHolder(view, MAX_TILE_COLUMNS)
-                : new TileGridViewHolder(view, getMaxTileRows(), MAX_TILE_COLUMNS);
+    public static SiteSectionViewHolder createViewHolder(ViewGroup view, UiConfig uiConfig) {
+        return new TileGridViewHolder(view, getMaxTileRows(), MAX_TILE_COLUMNS, uiConfig);
     }
 
     public SiteSection(SuggestionsUiDelegate uiDelegate, ContextMenuManager contextMenuManager,
@@ -65,7 +60,7 @@ public class SiteSection extends OptionalLeaf implements TileGroup.Observer {
                 uiDelegate.getImageFetcher());
         mTileGroup = new TileGroup(mTileRenderer, uiDelegate, contextMenuManager, tileGroupDelegate,
                 /* observer = */ this, offlinePageBridge);
-        mTileGroup.startObserving(getMaxTileRows() * MAX_TILE_COLUMNS);
+        mTileGroup.startObserving(MAX_TILE_COLUMNS * getMaxTileRows());
     }
 
     @Override
@@ -89,7 +84,8 @@ public class SiteSection extends OptionalLeaf implements TileGroup.Observer {
     @Override
     public void onTileDataChanged() {
         setVisibilityInternal(!mTileGroup.isEmpty());
-        if (isVisible()) notifyItemChanged(0, new UpdateTilesCallback());
+        if (!isVisible()) return;
+        notifyItemChanged(0, (holder) -> ((SiteSectionViewHolder) holder).refreshData());
     }
 
     @Override
@@ -99,12 +95,14 @@ public class SiteSection extends OptionalLeaf implements TileGroup.Observer {
 
     @Override
     public void onTileIconChanged(Tile tile) {
-        if (isVisible()) notifyItemChanged(0, new UpdateIconViewCallback(tile));
+        if (!isVisible()) return;
+        notifyItemChanged(0, (holder) -> ((SiteSectionViewHolder) holder).updateIconView(tile));
     }
 
     @Override
     public void onTileOfflineBadgeVisibilityChanged(Tile tile) {
-        if (isVisible()) notifyItemChanged(0, new UpdateOfflineBadgeCallback(tile));
+        if (!isVisible()) return;
+        notifyItemChanged(0, (holder) -> ((SiteSectionViewHolder) holder).updateOfflineBadge(tile));
     }
 
     public TileGroup getTileGroup() {
@@ -113,22 +111,21 @@ public class SiteSection extends OptionalLeaf implements TileGroup.Observer {
 
     private static int getMaxTileRows() {
         int defaultValue = 2;
+        if (!FeatureUtilities.isChromeHomeEnabled()) return defaultValue;
         return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 ChromeFeatureList.CHROME_HOME, PARAM_CHROME_HOME_MAX_TILE_ROWS, defaultValue);
     }
 
     private static int getTileTitleLines() {
         int defaultValue = 1;
+        if (!FeatureUtilities.isChromeHomeEnabled()) return defaultValue;
         return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 ChromeFeatureList.CHROME_HOME, PARAM_CHROME_HOME_TILE_TITLE_LINES, defaultValue);
     }
 
     @LayoutRes
     private static int getLayout() {
-        if (SuggestionsConfig.useSitesExplorationUi()) {
-            return R.layout.suggestions_site_explore;
-        }
-        if (FeatureUtilities.isChromeHomeModernEnabled()) {
+        if (SuggestionsConfig.useModernLayout()) {
             return R.layout.suggestions_site_tile_grid_modern;
         }
         return R.layout.suggestions_site_tile_grid;

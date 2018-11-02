@@ -10,7 +10,7 @@
 namespace content {
 
 RenderViewHostDelegateView* RenderViewHostDelegate::GetDelegateView() {
-  return NULL;
+  return nullptr;
 }
 
 bool RenderViewHostDelegate::OnMessageReceived(
@@ -20,12 +20,12 @@ bool RenderViewHostDelegate::OnMessageReceived(
 }
 
 WebContents* RenderViewHostDelegate::GetAsWebContents() {
-  return NULL;
+  return nullptr;
 }
 
 SessionStorageNamespace* RenderViewHostDelegate::GetSessionStorageNamespace(
     SiteInstance* instance) {
-  return NULL;
+  return nullptr;
 }
 
 SessionStorageNamespaceMap
@@ -34,7 +34,7 @@ RenderViewHostDelegate::GetSessionStorageNamespaceMap() {
 }
 
 FrameTree* RenderViewHostDelegate::GetFrameTree() {
-  return NULL;
+  return nullptr;
 }
 
 double RenderViewHostDelegate::GetPendingPageZoomLevel() {
@@ -42,10 +42,6 @@ double RenderViewHostDelegate::GetPendingPageZoomLevel() {
 }
 
 bool RenderViewHostDelegate::IsNeverVisible() {
-  return false;
-}
-
-bool RenderViewHostDelegate::IsVirtualKeyboardRequested() {
   return false;
 }
 
@@ -67,6 +63,10 @@ bool RenderViewHostDelegate::HideDownloadUI() const {
 
 bool RenderViewHostDelegate::HasPersistentVideo() const {
   return false;
+}
+
+RenderFrameHost* RenderViewHostDelegate::GetPendingMainFrame() {
+  return nullptr;
 }
 
 }  // namespace content

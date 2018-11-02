@@ -23,6 +23,7 @@
 @synthesize attributes = _attributes;
 @synthesize title = _title;
 @synthesize URL = _URL;
+@synthesize titleSource = _titleSource;
 @synthesize source = _source;
 @synthesize commandHandler = _commandHandler;
 @synthesize metricsRecorded = _metricsRecorded;
@@ -41,17 +42,6 @@
   cell.accessibilityLabel = self.title;
   [cell.faviconView configureWithAttributes:self.attributes];
   cell.accessibilityCustomActions = [self customActions];
-}
-
-- (ntp_tiles::TileVisualType)tileType {
-  if (!self.attributes) {
-    return ntp_tiles::TileVisualType::NONE;
-  } else if (self.attributes.faviconImage) {
-    return ntp_tiles::TileVisualType::ICON_REAL;
-  }
-  return self.attributes.defaultBackgroundColor
-             ? ntp_tiles::TileVisualType::ICON_DEFAULT
-             : ntp_tiles::TileVisualType::ICON_COLOR;
 }
 
 - (CGFloat)cellHeightForWidth:(CGFloat)width {

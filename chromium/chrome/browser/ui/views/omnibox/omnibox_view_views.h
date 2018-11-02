@@ -146,6 +146,7 @@ class OmniboxViewViews : public OmniboxView,
   void UpdatePopup() override;
   void ApplyCaretVisibility() override;
   void OnTemporaryTextMaybeChanged(const base::string16& display_text,
+                                   const AutocompleteMatch& match,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
   bool OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
@@ -159,7 +160,6 @@ class OmniboxViewViews : public OmniboxView,
   int GetWidth() const override;
   bool IsImeShowingPopup() const override;
   void ShowImeIfNeeded() override;
-  void OnMatchOpened(AutocompleteMatch::Type match_type) override;
   int GetOmniboxTextLength() const override;
   void EmphasizeURLComponents() override;
   void SetEmphasis(bool emphasize, const gfx::Range& range) override;
@@ -215,6 +215,7 @@ class OmniboxViewViews : public OmniboxView,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
+  void OnCompositingChildResizing(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
   // When true, the location bar view is read only and also is has a slightly

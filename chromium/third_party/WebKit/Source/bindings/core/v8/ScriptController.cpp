@@ -59,16 +59,16 @@
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/StringExtras.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/web/WebSettings.h"
 
 namespace blink {
 
-DEFINE_TRACE(ScriptController) {
+void ScriptController::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(window_proxy_manager_);
 }
@@ -87,22 +87,15 @@ namespace {
 V8CacheOptions CacheOptions(const ScriptResource* resource,
                             const Settings* settings) {
   V8CacheOptions v8_cache_options(kV8CacheOptionsDefault);
-  if (settings)
+  if (settings) {
     v8_cache_options = settings->GetV8CacheOptions();
-  if (resource && !resource->GetResponse().CacheStorageCacheName().IsNull()) {
-    switch (settings->GetV8CacheStrategiesForCacheStorage()) {
-      case V8CacheStrategiesForCacheStorage::kNone:
-        v8_cache_options = kV8CacheOptionsNone;
-        break;
-      case V8CacheStrategiesForCacheStorage::kNormal:
-        v8_cache_options = kV8CacheOptionsCode;
-        break;
-      case V8CacheStrategiesForCacheStorage::kDefault:
-      case V8CacheStrategiesForCacheStorage::kAggressive:
-        v8_cache_options = kV8CacheOptionsAlways;
-        break;
-    }
+    if (v8_cache_options == kV8CacheOptionsNone)
+      return kV8CacheOptionsNone;
   }
+  // If the resource is served from CacheStorage, generate the V8 code cache in
+  // the first load.
+  if (resource && !resource->GetResponse().CacheStorageCacheName().IsNull())
+    return kV8CacheOptionsCodeWithoutHeatCheck;
   return v8_cache_options;
 }
 
@@ -111,6 +104,7 @@ V8CacheOptions CacheOptions(const ScriptResource* resource,
 v8::Local<v8::Value> ScriptController::ExecuteScriptAndReturnValue(
     v8::Local<v8::Context> context,
     const ScriptSourceCode& source,
+    const ScriptFetchOptions& fetch_options,
     AccessControlStatus access_control_status) {
   TRACE_EVENT1(
       "devtools.timeline", "EvaluateScript", "data",
@@ -130,7 +124,8 @@ v8::Local<v8::Value> ScriptController::ExecuteScriptAndReturnValue(
 
     v8::Local<v8::Script> script;
     if (!V8ScriptRunner::CompileScript(ScriptState::From(context), source,
-                                       access_control_status, v8_cache_options)
+                                       fetch_options, access_control_status,
+                                       v8_cache_options)
              .ToLocal(&script))
       return result;
 
@@ -244,8 +239,14 @@ bool ScriptController::ExecuteScriptIfJavaScriptURL(const KURL& url,
       GetFrame()->GetNavigationScheduler().LocationChangePending();
 
   v8::HandleScope handle_scope(GetIsolate());
+
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate
+  // Step 12.9 "Let script be result of creating a classic script given script
+  // source, settings, base URL, and the default classic script fetch options."
+  // [spec text]
   v8::Local<v8::Value> result = EvaluateScriptInMainWorld(
-      ScriptSourceCode(script_source), kNotSharableCrossOrigin,
+      ScriptSourceCode(script_source, ScriptSourceLocationType::kJavascriptUrl),
+      ScriptFetchOptions(), kNotSharableCrossOrigin,
       kDoNotExecuteScriptWhenScriptsDisabled);
 
   // If executing script caused this frame to be removed from the page, we
@@ -271,30 +272,36 @@ bool ScriptController::ExecuteScriptIfJavaScriptURL(const KURL& url,
   return true;
 }
 
-void ScriptController::ExecuteScriptInMainWorld(const String& script,
-                                                ExecuteScriptPolicy policy) {
+void ScriptController::ExecuteScriptInMainWorld(
+    const String& script,
+    ScriptSourceLocationType source_location_type,
+    ExecuteScriptPolicy policy) {
   v8::HandleScope handle_scope(GetIsolate());
-  EvaluateScriptInMainWorld(ScriptSourceCode(script), kNotSharableCrossOrigin,
+  EvaluateScriptInMainWorld(ScriptSourceCode(script, source_location_type),
+                            ScriptFetchOptions(), kNotSharableCrossOrigin,
                             policy);
 }
 
 void ScriptController::ExecuteScriptInMainWorld(
     const ScriptSourceCode& source_code,
+    const ScriptFetchOptions& fetch_options,
     AccessControlStatus access_control_status) {
   v8::HandleScope handle_scope(GetIsolate());
-  EvaluateScriptInMainWorld(source_code, access_control_status,
+  EvaluateScriptInMainWorld(source_code, fetch_options, access_control_status,
                             kDoNotExecuteScriptWhenScriptsDisabled);
 }
 
 v8::Local<v8::Value> ScriptController::ExecuteScriptInMainWorldAndReturnValue(
     const ScriptSourceCode& source_code,
+    const ScriptFetchOptions& fetch_options,
     ExecuteScriptPolicy policy) {
-  return EvaluateScriptInMainWorld(source_code, kNotSharableCrossOrigin,
-                                   policy);
+  return EvaluateScriptInMainWorld(source_code, fetch_options,
+                                   kNotSharableCrossOrigin, policy);
 }
 
 v8::Local<v8::Value> ScriptController::EvaluateScriptInMainWorld(
     const ScriptSourceCode& source_code,
+    const ScriptFetchOptions& fetch_options,
     AccessControlStatus access_control_status,
     ExecuteScriptPolicy policy) {
   if (policy == kDoNotExecuteScriptWhenScriptsDisabled &&
@@ -312,8 +319,9 @@ v8::Local<v8::Value> ScriptController::EvaluateScriptInMainWorld(
   if (GetFrame()->Loader().StateMachine()->IsDisplayingInitialEmptyDocument())
     GetFrame()->Loader().DidAccessInitialDocument();
 
-  v8::Local<v8::Value> object = ExecuteScriptAndReturnValue(
-      script_state->GetContext(), source_code, access_control_status);
+  v8::Local<v8::Value> object =
+      ExecuteScriptAndReturnValue(script_state->GetContext(), source_code,
+                                  fetch_options, access_control_status);
 
   if (object.IsEmpty())
     return v8::Local<v8::Value>();
@@ -327,7 +335,7 @@ void ScriptController::ExecuteScriptInIsolatedWorld(
     Vector<v8::Local<v8::Value>>* results) {
   DCHECK_GT(world_id, 0);
 
-  RefPtr<DOMWrapperWorld> world =
+  scoped_refptr<DOMWrapperWorld> world =
       DOMWrapperWorld::EnsureIsolatedWorld(GetIsolate(), world_id);
   LocalWindowProxy* isolated_world_window_proxy = WindowProxy(*world);
   // TODO(dcheng): Context must always be initialized here, due to the call to
@@ -361,9 +369,9 @@ void ScriptController::ExecuteScriptInIsolatedWorld(
   }
 }
 
-PassRefPtr<DOMWrapperWorld> ScriptController::CreateNewInspectorIsolatedWorld(
-    const String& world_name) {
-  RefPtr<DOMWrapperWorld> world = DOMWrapperWorld::Create(
+scoped_refptr<DOMWrapperWorld>
+ScriptController::CreateNewInspectorIsolatedWorld(const String& world_name) {
+  scoped_refptr<DOMWrapperWorld> world = DOMWrapperWorld::Create(
       GetIsolate(), DOMWrapperWorld::WorldType::kInspectorIsolated);
   // Bail out if we could not create an isolated world.
   if (!world)
@@ -376,14 +384,5 @@ PassRefPtr<DOMWrapperWorld> ScriptController::CreateNewInspectorIsolatedWorld(
   WindowProxy(*world);
   return world;
 }
-
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kDefault,
-                   V8CacheStrategiesForCacheStorage::kDefault);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kNone,
-                   V8CacheStrategiesForCacheStorage::kNone);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kNormal,
-                   V8CacheStrategiesForCacheStorage::kNormal);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kAggressive,
-                   V8CacheStrategiesForCacheStorage::kAggressive);
 
 }  // namespace blink

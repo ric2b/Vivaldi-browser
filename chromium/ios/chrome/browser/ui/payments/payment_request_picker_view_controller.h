@@ -24,6 +24,10 @@ extern NSString* const kPaymentRequestPickerSearchBarAccessibilityID;
             (PaymentRequestPickerViewController*)controller
                               didSelectRow:(PickerRow*)row;
 
+// Notifies the delegate that the user has chosen to return to the previous
+// screen without making a selection.
+- (void)paymentRequestPickerViewControllerDidFinish:
+    (PaymentRequestPickerViewController*)controller;
 @end
 
 // TableViewController that displays a searchable list of rows featuring a

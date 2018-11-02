@@ -204,7 +204,7 @@ void CacheStorageManager::DeleteCache(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   CacheStorage* cache_storage = FindOrCreateCacheStorage(origin);
-  cache_storage->DeleteCache(cache_name, std::move(callback));
+  cache_storage->DoomCache(cache_name, std::move(callback));
 }
 
 void CacheStorageManager::EnumerateCaches(
@@ -265,13 +265,13 @@ void CacheStorageManager::RemoveObserver(
 
 void CacheStorageManager::NotifyCacheListChanged(const GURL& origin) {
   for (auto& observer : observers_)
-    observer.OnCacheListChanged(url::Origin(origin));
+    observer.OnCacheListChanged(url::Origin::Create(origin));
 }
 
 void CacheStorageManager::NotifyCacheContentChanged(const GURL& origin,
                                                     const std::string& name) {
   for (auto& observer : observers_)
-    observer.OnCacheContentChanged(url::Origin(origin), name);
+    observer.OnCacheContentChanged(url::Origin::Create(origin), name);
 }
 
 void CacheStorageManager::GetAllOriginsUsage(

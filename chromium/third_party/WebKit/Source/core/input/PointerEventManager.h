@@ -28,13 +28,13 @@ class CORE_EXPORT PointerEventManager
 
  public:
   PointerEventManager(LocalFrame&, MouseEventManager&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // This is the unified path for handling all input device events. This may
   // cause firing DOM pointerevents, mouseevent, and touch events accordingly.
   // TODO(crbug.com/625841): We need to get all event handling path to go
   // through this function.
-  WebInputEventResult HandlePointerEvent(const WebPointerEvent&, Node* target);
+  WebInputEventResult HandlePointerEvent(const WebPointerEvent&);
 
   // Sends the mouse pointer events and the boundary events
   // that it may cause. It also sends the compat mouse events
@@ -102,7 +102,7 @@ class CORE_EXPORT PointerEventManager
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
    public:
-    DEFINE_INLINE_TRACE() { visitor->Trace(target); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(target); }
     Member<EventTarget> target;
     bool has_recieved_over_event;
     EventTargetAttributes() : target(nullptr), has_recieved_over_event(false) {}
@@ -137,11 +137,10 @@ class CORE_EXPORT PointerEventManager
     Member<PointerEvent> pointer_event_;
   };
 
-  // Inhibits firing of touch-type PointerEvents until unblocked by
-  // unblockTouchPointers(). Also sends pointercancels for existing touch-type
-  // PointerEvents.  See:
-  // www.w3.org/TR/pointerevents/#declaring-candidate-regions-for-default-touch-behaviors
-  void BlockTouchPointers(TimeTicks platform_time_stamp);
+  // Sends pointercancels for existing PointerEvents. For example when browser
+  // starts dragging with mouse or when we start scrolling with scroll capable
+  // pointers pointercancel events should be dispatched.
+  void DispatchPointerCancelEvents(const WebPointerEvent&);
 
   // Enables firing of touch-type PointerEvents after they were inhibited by
   // blockTouchPointers().
@@ -154,12 +153,9 @@ class CORE_EXPORT PointerEventManager
   // Sends touch pointer events and sets consumed bits in TouchInfo array
   // based on the return value of pointer event handlers.
   void DispatchTouchPointerEvent(
-      const WebTouchPoint&,
-      const EventHandlingUtil::PointerEventTarget&,
-      const Vector<std::pair<WebTouchPoint, TimeTicks>>& coalesced_events,
-      WebInputEvent::Modifiers,
-      double timestamp,
-      uint32_t unique_touch_event_id);
+      const WebPointerEvent&,
+      const Vector<WebPointerEvent>& coalesced_events,
+      const EventHandlingUtil::PointerEventTarget&);
 
   // Returns whether the event is consumed or not.
   WebInputEventResult SendTouchPointerEvent(EventTarget*, PointerEvent*);
@@ -212,9 +208,9 @@ class CORE_EXPORT PointerEventManager
   bool prevent_mouse_event_for_pointer_type_
       [static_cast<size_t>(WebPointerProperties::PointerType::kLastEntry) + 1];
 
-  // Set upon TouchScrollStarted when sending a pointercancel, prevents PE
-  // dispatches for touches until all touch-points become inactive.
-  bool in_canceled_state_for_pointer_type_touch_;
+  // Set upon scrolling starts when sending a pointercancel, prevents PE
+  // dispatches for scroll capable pointers  until all of them become inactive.
+  bool scroll_capable_pointers_canceled_;
 
   Deque<uint32_t> touch_ids_for_canceled_pointerdowns_;
 

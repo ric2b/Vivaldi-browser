@@ -75,10 +75,6 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void DeletePagesByClientIds(const std::vector<ClientId>& client_ids,
                               const DeletePageCallback& callback) override;
 
-  void GetPagesMatchingQuery(
-      std::unique_ptr<OfflinePageModelQuery> query,
-      const MultipleOfflinePageItemCallback& callback) override;
-
   void GetPagesByClientIds(
       const std::vector<ClientId>& client_ids,
       const MultipleOfflinePageItemCallback& callback) override;
@@ -90,9 +86,6 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) override;
-  void CheckPagesExistOffline(
-      const std::set<GURL>& urls,
-      const CheckPagesExistOfflineCallback& callback) override;
   void GetAllPages(const MultipleOfflinePageItemCallback& callback) override;
   void GetOfflineIdsForClientId(
       const ClientId& client_id,
@@ -104,6 +97,16 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
       const GURL& url,
       URLSearchMode url_search_mode,
       const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesRemovedOnCacheReset(
+      const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesByNamespace(
+      const std::string& name_space,
+      const MultipleOfflinePageItemCallback& callback) override;
+  void GetPagesSupportedByDownloads(
+      const MultipleOfflinePageItemCallback& callback) override;
+  const base::FilePath& GetArchiveDirectory(
+      const std::string& name_space) const override;
+
   ClientPolicyController* GetPolicyController() override;
 
   // Methods for testing only:
@@ -111,8 +114,6 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void set_testing_clock(base::Clock* clock) { testing_clock_ = clock; }
 
   OfflinePageStorageManager* GetStorageManager();
-
-  bool is_loaded() const override;
 
   OfflineEventLogger* GetLogger() override;
 
@@ -127,6 +128,7 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OfflinePageModelImplTest, MarkPageForDeletion);
+  FRIEND_TEST_ALL_PREFIXES(OfflinePageModelImplTest, StoreLoadFailurePersists);
 
   typedef std::vector<std::unique_ptr<OfflinePageArchiver>> PendingArchivers;
 
@@ -160,9 +162,8 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
                           bool success);
   void RetryDbInitialization(const base::TimeTicks& start_time,
                              int init_attempts_spent);
-  void OnInitialGetOfflinePagesDone(
-      const base::TimeTicks& start_time,
-      const std::vector<OfflinePageItem>& offline_pages);
+  void OnInitialGetOfflinePagesDone(const base::TimeTicks& start_time,
+                                    std::vector<OfflinePageItem> offline_pages);
   void FinalizeModelLoad();
 
   // Steps for saving a page offline.
@@ -175,7 +176,8 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
                            const GURL& saved_url,
                            const base::FilePath& file_path,
                            const base::string16& title,
-                           int64_t file_size);
+                           int64_t file_size,
+                           const std::string& file_hash);
   void OnAddSavedPageDone(const OfflinePageItem& offline_page,
                           const SavePageCallback& callback,
                           AddPageResult add_result,
@@ -209,9 +211,12 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   // Callbacks for checking metadata consistency.
   void CheckMetadataConsistencyForArchivePaths(
       const std::set<base::FilePath>& archive_paths);
-  // Callbacks which would be called after orphaned archives are deleted.
-  // Orphaned archives are the files on disk which are not pointed to by any of
-  // the page entries in the metadata store.
+  // Methods that are executed during consistency check, including:
+  // 1. Delete temporary pages which are in the abandoned cache directory.
+  // 2. Delete pages without associated archive file from metadata store.
+  // 3. Delete orphaned archive files without associated metadata from the disk.
+  // And their corresponding callbacks after deletion finishes.
+  void DeleteTemporaryPagesInAbandonedCacheDir();
   void DeletePagesMissingArchiveFile(
       const std::set<base::FilePath>& archive_paths);
   void OnDeletePagesMissingArchiveFileDone(
@@ -256,9 +261,6 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
 
   // Post task to clear storage.
   void PostClearStorageIfNeededTask(bool delayed);
-
-  // Check if |offline_page| should be removed on cache reset by user.
-  bool IsRemovedOnCacheReset(const OfflinePageItem& offline_page) const;
 
   void RunWhenLoaded(const base::Closure& job);
 

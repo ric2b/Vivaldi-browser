@@ -10,14 +10,15 @@
 #define COMPONENTS_OMNIBOX_BROWSER_ZERO_SUGGEST_PROVIDER_H_
 
 #include <memory>
+#include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "components/history/core/browser/history_types.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "net/url_request/url_fetcher_delegate.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 class AutocompleteProviderListener;
 class HistoryURLProvider;

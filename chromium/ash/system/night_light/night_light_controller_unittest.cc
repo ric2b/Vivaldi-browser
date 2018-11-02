@@ -7,8 +7,8 @@
 #include <cmath>
 #include <limits>
 
-#include "ash/ash_switches.h"
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/session_types.h"
 #include "ash/session/session_controller.h"
@@ -21,6 +21,7 @@
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "components/prefs/pref_service.h"
 #include "ui/compositor/layer.h"
 

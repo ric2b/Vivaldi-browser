@@ -26,6 +26,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/updater/extension_downloader.h"
 #include "extensions/common/extension.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension_urls.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -97,7 +98,7 @@ void ExternalCache::OnDamagedFileDetected(const base::FilePath& path) {
     const base::DictionaryValue* entry = NULL;
     if (!it.value().GetAsDictionary(&entry)) {
       NOTREACHED() << "ExternalCache found bad entry with type "
-                   << it.value().GetType();
+                   << it.value().type();
       continue;
     }
 
@@ -218,6 +219,11 @@ bool ExternalCache::GetExtensionExistingVersion(const std::string& id,
   return false;
 }
 
+service_manager::Connector* ExternalCache::GetConnector() {
+  return content::ServiceManagerConnection::GetForProcess()->GetConnector();
+
+}
+
 void ExternalCache::UpdateExtensionLoader() {
   VLOG(1) << "Notify ExternalCache delegate about cache update";
   if (delegate_)
@@ -231,7 +237,7 @@ void ExternalCache::CheckCache() {
   // If request_context_ is missing we can't download anything.
   if (request_context_.get()) {
     downloader_ = ChromeExtensionDownloaderFactory::CreateForRequestContext(
-        request_context_.get(), this);
+        request_context_.get(), this, GetConnector());
   }
 
   cached_extensions_->Clear();
@@ -240,7 +246,7 @@ void ExternalCache::CheckCache() {
     const base::DictionaryValue* entry = NULL;
     if (!it.value().GetAsDictionary(&entry)) {
       LOG(ERROR) << "ExternalCache found bad entry with type "
-                 << it.value().GetType();
+                 << it.value().type();
       continue;
     }
 

@@ -13,6 +13,7 @@
 #include "content/public/browser/context_factory.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/shell/browser/shell_platform_data_aura.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -115,22 +116,22 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
   void InitShellWindow() {
     SetBackground(views::CreateStandardPanelBackground());
 
-    views::GridLayout* layout = new views::GridLayout(this);
-    SetLayoutManager(layout);
+    views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
     views::ColumnSet* column_set = layout->AddColumnSet(0);
-    column_set->AddPaddingColumn(0, 2);
+    if (!shell_->hide_toolbar())
+      column_set->AddPaddingColumn(0, 2);
     column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
                           views::GridLayout::USE_PREF, 0, 0);
-    column_set->AddPaddingColumn(0, 2);
-
-    layout->AddPaddingRow(0, 2);
+    if (!shell_->hide_toolbar())
+      column_set->AddPaddingColumn(0, 2);
 
     // Add toolbar buttons and URL text field
-    {
+    if (!shell_->hide_toolbar()) {
+      layout->AddPaddingRow(0, 2);
       layout->StartRow(0, 0);
-      views::GridLayout* toolbar_layout = new views::GridLayout(toolbar_view_);
-      toolbar_view_->SetLayoutManager(toolbar_layout);
+      views::GridLayout* toolbar_layout =
+          views::GridLayout::CreateAndInstall(toolbar_view_);
 
       views::ColumnSet* toolbar_column_set =
           toolbar_layout->AddColumnSet(0);
@@ -189,9 +190,9 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
       toolbar_layout->AddView(url_entry_);
 
       layout->AddView(toolbar_view_);
-    }
 
-    layout->AddPaddingRow(0, 5);
+      layout->AddPaddingRow(0, 5);
+    }
 
     // Add web contents view as the second row
     {
@@ -199,7 +200,8 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
       layout->AddView(contents_view_);
     }
 
-    layout->AddPaddingRow(0, 5);
+    if (!shell_->hide_toolbar())
+      layout->AddPaddingRow(0, 5);
 
     InitAccelerators();
   }
@@ -253,7 +255,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
   void WindowClosing() override {
     if (shell_) {
       delete shell_;
-      shell_ = NULL;
+      shell_ = nullptr;
     }
   }
 
@@ -332,8 +334,14 @@ void Shell::PlatformInitialize(const gfx::Size& default_window_size) {
 #if defined(OS_CHROMEOS)
   test_screen_ = aura::TestScreen::Create(gfx::Size());
   display::Screen::SetScreenInstance(test_screen_);
-  wm_test_helper_ = new wm::WMTestHelper(default_window_size,
-                                         GetContextFactory());
+  ui::ContextFactory* ui_context_factory =
+      aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL
+          ? GetContextFactory()
+          : nullptr;
+  wm_test_helper_ = new wm::WMTestHelper(
+      default_window_size,
+      ServiceManagerConnection::GetForProcess()->GetConnector(),
+      ui_context_factory);
 #else
 #if defined(USE_AURA)
   wm_state_ = new wm::WMState;
@@ -365,7 +373,7 @@ void Shell::PlatformCleanUp() {
 }
 
 void Shell::PlatformEnableUIControl(UIControl control, bool is_enabled) {
-  if (headless_)
+  if (headless_ || hide_toolbar_)
     return;
   ShellWindowDelegateView* delegate_view =
     static_cast<ShellWindowDelegateView*>(window_widget_->widget_delegate());
@@ -382,7 +390,7 @@ void Shell::PlatformEnableUIControl(UIControl control, bool is_enabled) {
 }
 
 void Shell::PlatformSetAddressBarURL(const GURL& url) {
-  if (headless_)
+  if (headless_ || hide_toolbar_)
     return;
   ShellWindowDelegateView* delegate_view =
     static_cast<ShellWindowDelegateView*>(window_widget_->widget_delegate());

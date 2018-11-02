@@ -40,16 +40,12 @@ struct BASE_EXPORT ShortcutProperties {
     PROPERTIES_ICON = 1U << 4,
     PROPERTIES_APP_ID = 1U << 5,
     PROPERTIES_DUAL_MODE = 1U << 6,
+    PROPERTIES_TOAST_ACTIVATOR_CLSID = 1U << 7,
     // Be sure to update the values below when adding a new property.
-    PROPERTIES_BASIC = PROPERTIES_TARGET |
-        PROPERTIES_WORKING_DIR |
-        PROPERTIES_ARGUMENTS |
-        PROPERTIES_DESCRIPTION |
-        PROPERTIES_ICON,
-    // TODO(pmonette): Get rid of PROPERTIES_WIN7 now that Windows 7 is the last
-    // supported Windows version.
-    PROPERTIES_WIN7 = PROPERTIES_APP_ID | PROPERTIES_DUAL_MODE,
-    PROPERTIES_ALL = PROPERTIES_BASIC | PROPERTIES_WIN7
+    PROPERTIES_ALL = PROPERTIES_TARGET | PROPERTIES_WORKING_DIR |
+                     PROPERTIES_ARGUMENTS | PROPERTIES_DESCRIPTION |
+                     PROPERTIES_ICON | PROPERTIES_APP_ID |
+                     PROPERTIES_DUAL_MODE | PROPERTIES_TOAST_ACTIVATOR_CLSID
   };
 
   ShortcutProperties();
@@ -96,6 +92,11 @@ struct BASE_EXPORT ShortcutProperties {
     options |= PROPERTIES_DUAL_MODE;
   }
 
+  void set_toast_activator_clsid(const CLSID& toast_activator_clsid_in) {
+    toast_activator_clsid = toast_activator_clsid_in;
+    options |= PROPERTIES_TOAST_ACTIVATOR_CLSID;
+  }
+
   // The target to launch from this shortcut. This is mandatory when creating
   // a shortcut.
   FilePath target;
@@ -111,10 +112,14 @@ struct BASE_EXPORT ShortcutProperties {
   // the resource id).
   FilePath icon;
   int icon_index;
-  // The app model id for the shortcut (Win7+).
+  // The app model id for the shortcut.
   string16 app_id;
   // Whether this is a dual mode shortcut (Win8+).
   bool dual_mode;
+  // The CLSID of the COM object registered with the OS via the shortcut. This
+  // is for app activation via user interaction with a toast notification in the
+  // Action Center. (Win10 version 1607, build 14393, and beyond).
+  CLSID toast_activator_clsid;
   // Bitfield made of IndividualProperties. Properties set in |options| will be
   // set on the shortcut, others will be ignored.
   uint32_t options;

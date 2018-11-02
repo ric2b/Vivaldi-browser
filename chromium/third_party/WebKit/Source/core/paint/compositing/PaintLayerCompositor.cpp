@@ -37,7 +37,7 @@
 #include "core/frame/VisualViewport.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutVideo.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -47,6 +47,7 @@
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
 #include "core/paint/FramePainter.h"
 #include "core/paint/ObjectPaintInvalidator.h"
+#include "core/paint/ScrollableAreaPainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
 #include "core/paint/compositing/CompositingInputsUpdater.h"
@@ -56,18 +57,16 @@
 #include "core/paint/compositing/GraphicsLayerUpdater.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/geometry/FloatRect.h"
-#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/json/JSONValues.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -80,8 +79,6 @@ PaintLayerCompositor::PaintLayerCompositor(LayoutView& layout_view)
       compositing_(false),
       root_should_always_composite_dirty_(true),
       needs_update_fixed_background_(false),
-      is_tracking_raster_invalidations_(
-          layout_view.GetFrameView()->IsTrackingPaintInvalidations()),
       in_overlay_fullscreen_video_(false),
       root_layer_attachment_(kRootLayerUnattached) {
   UpdateAcceleratedCompositingSettings();
@@ -171,7 +168,7 @@ static LayoutVideo* FindFullscreenVideoLayoutObject(Document& document) {
       return nullptr;
     fullscreen_element = Fullscreen::FullscreenElementFrom(*content_document);
   }
-  if (!isHTMLVideoElement(fullscreen_element))
+  if (!IsHTMLVideoElement(fullscreen_element))
     return nullptr;
   LayoutObject* layout_object = fullscreen_element->GetLayoutObject();
   if (!layout_object)
@@ -288,7 +285,7 @@ void PaintLayerCompositor::SetNeedsCompositingUpdate(
     CompositingUpdateType update_type) {
   DCHECK_NE(update_type, kCompositingUpdateNone);
   pending_update_type_ = std::max(pending_update_type_, update_type);
-  if (Page* page = this->GetPage())
+  if (Page* page = GetPage())
     page->Animator().ScheduleVisualUpdate(layout_view_.GetFrame());
   Lifecycle().EnsureStateAtMost(DocumentLifecycle::kLayoutClean);
 }
@@ -482,8 +479,10 @@ void PaintLayerCompositor::UpdateIfNeeded(
     if (layers_changed) {
       update_type = std::max(update_type, kCompositingUpdateRebuildTree);
       if (ScrollingCoordinator* scrolling_coordinator =
-              this->GetScrollingCoordinator())
-        scrolling_coordinator->NotifyGeometryChanged();
+              GetScrollingCoordinator()) {
+        LocalFrameView* frame_view = layout_view_.GetFrameView();
+        scrolling_coordinator->NotifyGeometryChanged(frame_view);
+      }
     }
   }
 
@@ -604,7 +603,7 @@ bool PaintLayerCompositor::AllocateOrClearCompositedLayerMapping(
       // frame.
       if (layer->IsRootLayer() && layout_view_.GetFrame()->IsLocalRoot()) {
         if (ScrollingCoordinator* scrolling_coordinator =
-                this->GetScrollingCoordinator()) {
+                GetScrollingCoordinator()) {
           scrolling_coordinator->FrameViewRootLayerDidChange(
               layout_view_.GetFrameView());
         }
@@ -626,29 +625,31 @@ bool PaintLayerCompositor::AllocateOrClearCompositedLayerMapping(
       break;
   }
 
-  if (composited_layer_mapping_changed &&
-      layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
+  if (!composited_layer_mapping_changed)
+    return false;
+
+  if (layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
     PaintLayerCompositor* inner_compositor = FrameContentsCompositor(
         ToLayoutEmbeddedContent(layer->GetLayoutObject()));
     if (inner_compositor && inner_compositor->StaleInCompositingMode())
       inner_compositor->EnsureRootLayer();
   }
 
-  if (composited_layer_mapping_changed)
-    layer->ClearClipRects(kPaintingClipRects);
+  layer->ClearClipRects(kPaintingClipRects);
 
   // If a fixed position layer gained/lost a compositedLayerMapping or the
   // reason not compositing it changed, the scrolling coordinator needs to
   // recalculate whether it can do fast scrolling.
-  if (composited_layer_mapping_changed) {
-    if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
-      scrolling_coordinator->FrameViewFixedObjectsDidChange(
-          layout_view_.GetFrameView());
-    }
+  if (ScrollingCoordinator* scrolling_coordinator = GetScrollingCoordinator()) {
+    scrolling_coordinator->FrameViewFixedObjectsDidChange(
+        layout_view_.GetFrameView());
   }
 
-  return composited_layer_mapping_changed;
+  // Compositing state affects whether to create paint offset translation of
+  // this layer, and amount of paint offset translation of descendants.
+  layer->GetLayoutObject().SetNeedsPaintPropertyUpdate();
+
+  return true;
 }
 
 void PaintLayerCompositor::PaintInvalidationOnCompositingChange(
@@ -664,8 +665,7 @@ void PaintLayerCompositor::PaintInvalidationOnCompositingChange(
   // to the previous frame's compositing state when changing the compositing
   // backing of the layer.
   DisableCompositingQueryAsserts disabler;
-  // FIXME: We should not allow paint invalidation out of paint invalidation
-  // state. crbug.com/457415
+  // We have to do immediate paint invalidation because compositing will change.
   DisablePaintInvalidationStateAsserts paint_invalidation_assertisabler;
 
   ObjectPaintInvalidator(layer->GetLayoutObject())
@@ -712,8 +712,7 @@ void PaintLayerCompositor::FrameViewDidScroll() {
     return;
 
   bool scrolling_coordinator_handles_offset = false;
-  if (ScrollingCoordinator* scrolling_coordinator =
-          this->GetScrollingCoordinator()) {
+  if (ScrollingCoordinator* scrolling_coordinator = GetScrollingCoordinator()) {
     scrolling_coordinator_handles_offset =
         scrolling_coordinator->ScrollableAreaScrollLayerDidChange(frame_view);
   }
@@ -929,8 +928,12 @@ bool PaintLayerCompositor::CanBeComposited(const PaintLayer* layer) const {
 // z-order hierarchy.
 bool PaintLayerCompositor::ClipsCompositingDescendants(
     const PaintLayer* layer) const {
-  return layer->HasCompositingDescendant() &&
-         layer->GetLayoutObject().HasClipRelatedProperty();
+  if (!layer->HasCompositingDescendant())
+    return false;
+  if (!layer->GetLayoutObject().IsBox())
+    return false;
+  const LayoutBox& box = ToLayoutBox(layer->GetLayoutObject());
+  return box.ShouldClipOverflow() || box.HasClip();
 }
 
 // If an element has composited negative z-index children, those children paint
@@ -941,22 +944,6 @@ bool PaintLayerCompositor::NeedsContentsCompositingLayer(
   if (!layer->HasCompositingDescendant())
     return false;
   return layer->StackingNode()->HasNegativeZOrderList();
-}
-
-static void PaintScrollbar(const GraphicsLayer* graphics_layer,
-                           const Scrollbar* scrollbar,
-                           GraphicsContext& context,
-                           const IntRect& clip) {
-  // Frame scrollbars are painted in the space of the containing frame, not the
-  // local space of the scrollbar.
-  const IntPoint& paint_offset = scrollbar->FrameRect().Location();
-  IntRect transformed_clip = clip;
-  transformed_clip.MoveBy(paint_offset);
-
-  AffineTransform translation;
-  translation.Translate(-paint_offset.X(), -paint_offset.Y());
-  TransformRecorder transform_recorder(context, *scrollbar, translation);
-  scrollbar->Paint(context, CullRect(transformed_clip));
 }
 
 IntRect PaintLayerCompositor::ComputeInterestRect(
@@ -977,27 +964,22 @@ void PaintLayerCompositor::PaintContents(const GraphicsLayer* graphics_layer,
   if (!scrollbar && graphics_layer != LayerForScrollCorner())
     return;
 
-  if (DrawingRecorder::UseCachedDrawingIfPossible(
-          context, *graphics_layer, DisplayItem::kScrollbarCompositedScrollbar))
-    return;
-
-  FloatRect layer_bounds(FloatPoint(), graphics_layer->Size());
-  PaintRecordBuilder builder(layer_bounds, nullptr, &context);
+  // Map context and cull_rect which are in the local space of the scrollbar
+  // to the space of the containing scrollable area in which Scrollbar::Paint()
+  // will paint the scrollbar.
+  IntSize offset = graphics_layer->OffsetFromLayoutObject();
+  IntRect cull_rect = interest_rect;
+  cull_rect.Move(offset);
+  TransformRecorder transform_recorder(
+      context, *graphics_layer,
+      AffineTransform::Translation(-offset.Width(), -offset.Height()));
 
   if (scrollbar) {
-    PaintScrollbar(graphics_layer, scrollbar, builder.Context(), interest_rect);
+    scrollbar->Paint(context, CullRect(cull_rect));
   } else {
     FramePainter(*layout_view_.GetFrameView())
-        .PaintScrollCorner(builder.Context(), interest_rect);
+        .PaintScrollCorner(context, cull_rect);
   }
-
-  // Replay the painted scrollbar content with the GraphicsLayer backing as the
-  // DisplayItemClient in order for the resulting DrawingDisplayItem to produce
-  // the correct visualRect (i.e., the bounds of the involved GraphicsLayer).
-  DrawingRecorder drawing_recorder(context, *graphics_layer,
-                                   DisplayItem::kScrollbarCompositedScrollbar,
-                                   layer_bounds);
-  context.Canvas()->drawPicture(builder.EndRecording());
 }
 
 Scrollbar* PaintLayerCompositor::GraphicsLayerToScrollbar(
@@ -1032,48 +1014,37 @@ GraphicsLayer* PaintLayerCompositor::FixedRootBackgroundLayer() const {
   return nullptr;
 }
 
-static void SetTracksRasterInvalidationsRecursive(
-    GraphicsLayer* graphics_layer,
-    bool tracks_paint_invalidations) {
+static void UpdateTrackingRasterInvalidationsRecursive(
+    GraphicsLayer* graphics_layer) {
   if (!graphics_layer)
     return;
 
-  graphics_layer->SetTracksRasterInvalidations(tracks_paint_invalidations);
+  graphics_layer->UpdateTrackingRasterInvalidations();
 
-  for (size_t i = 0; i < graphics_layer->Children().size(); ++i) {
-    SetTracksRasterInvalidationsRecursive(graphics_layer->Children()[i],
-                                          tracks_paint_invalidations);
-  }
+  for (size_t i = 0; i < graphics_layer->Children().size(); ++i)
+    UpdateTrackingRasterInvalidationsRecursive(graphics_layer->Children()[i]);
 
-  if (GraphicsLayer* mask_layer = graphics_layer->MaskLayer()) {
-    SetTracksRasterInvalidationsRecursive(mask_layer,
-                                          tracks_paint_invalidations);
-  }
+  if (GraphicsLayer* mask_layer = graphics_layer->MaskLayer())
+    UpdateTrackingRasterInvalidationsRecursive(mask_layer);
 
   if (GraphicsLayer* clipping_mask_layer =
-          graphics_layer->ContentsClippingMaskLayer()) {
-    SetTracksRasterInvalidationsRecursive(clipping_mask_layer,
-                                          tracks_paint_invalidations);
-  }
+          graphics_layer->ContentsClippingMaskLayer())
+    UpdateTrackingRasterInvalidationsRecursive(clipping_mask_layer);
 }
 
-void PaintLayerCompositor::SetTracksRasterInvalidations(
-    bool tracks_raster_invalidations) {
+void PaintLayerCompositor::UpdateTrackingRasterInvalidations() {
 #if DCHECK_IS_ON()
   LocalFrameView* view = layout_view_.GetFrameView();
   DCHECK(Lifecycle().GetState() == DocumentLifecycle::kPaintClean ||
          (view && view->ShouldThrottleRendering()));
 #endif
 
-  is_tracking_raster_invalidations_ = tracks_raster_invalidations;
-  if (GraphicsLayer* root_layer = RootGraphicsLayer()) {
-    SetTracksRasterInvalidationsRecursive(root_layer,
-                                          tracks_raster_invalidations);
-  }
+  if (GraphicsLayer* root_layer = RootGraphicsLayer())
+    UpdateTrackingRasterInvalidationsRecursive(root_layer);
 }
 
 bool PaintLayerCompositor::IsTrackingRasterInvalidations() const {
-  return is_tracking_raster_invalidations_;
+  return layout_view_.GetFrameView()->IsTrackingPaintInvalidations();
 }
 
 bool PaintLayerCompositor::RequiresHorizontalScrollbarLayer() const {
@@ -1089,6 +1060,9 @@ bool PaintLayerCompositor::RequiresScrollCornerLayer() const {
 }
 
 void PaintLayerCompositor::UpdateOverflowControlsLayers() {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    return;
+
   GraphicsLayer* controls_parent = overflow_controls_host_layer_.get();
   // Main frame scrollbars should always be stuck to the sides of the screen (in
   // overscroll and in pinch-zoom), so make the parent for the scrollbars be the
@@ -1105,7 +1079,7 @@ void PaintLayerCompositor::UpdateOverflowControlsLayers() {
       controls_parent->AddChild(layer_for_horizontal_scrollbar_.get());
 
       if (ScrollingCoordinator* scrolling_coordinator =
-              this->GetScrollingCoordinator()) {
+              GetScrollingCoordinator()) {
         scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
             layout_view_.GetFrameView(), kHorizontalScrollbar);
       }
@@ -1115,7 +1089,7 @@ void PaintLayerCompositor::UpdateOverflowControlsLayers() {
     layer_for_horizontal_scrollbar_ = nullptr;
 
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
+            GetScrollingCoordinator()) {
       scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
           layout_view_.GetFrameView(), kHorizontalScrollbar);
     }
@@ -1130,7 +1104,7 @@ void PaintLayerCompositor::UpdateOverflowControlsLayers() {
       controls_parent->AddChild(layer_for_vertical_scrollbar_.get());
 
       if (ScrollingCoordinator* scrolling_coordinator =
-              this->GetScrollingCoordinator()) {
+              GetScrollingCoordinator()) {
         scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
             layout_view_.GetFrameView(), kVerticalScrollbar);
       }
@@ -1140,7 +1114,7 @@ void PaintLayerCompositor::UpdateOverflowControlsLayers() {
     layer_for_vertical_scrollbar_ = nullptr;
 
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
+            GetScrollingCoordinator()) {
       scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
           layout_view_.GetFrameView(), kVerticalScrollbar);
     }
@@ -1206,13 +1180,13 @@ void PaintLayerCompositor::EnsureRootLayer() {
     container_layer_ = GraphicsLayer::Create(this);
     scroll_layer_ = GraphicsLayer::Create(this);
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
+            GetScrollingCoordinator()) {
       scrolling_coordinator->SetLayerIsContainerForFixedPositionLayers(
           scroll_layer_.get(), true);
     }
 
     // In RLS mode, LayoutView scrolling contents layer gets this element ID (in
-    // CompositedLayerMapping::updateElementIdAndCompositorMutableProperties).
+    // CompositedLayerMapping::UpdateScrollingLayers).
     if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
       scroll_layer_->SetElementId(
           layout_view_.GetFrameView()->GetCompositorElementId());
@@ -1237,7 +1211,7 @@ void PaintLayerCompositor::DestroyRootLayer() {
     layer_for_horizontal_scrollbar_->RemoveFromParent();
     layer_for_horizontal_scrollbar_ = nullptr;
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
+            GetScrollingCoordinator()) {
       scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
           layout_view_.GetFrameView(), kHorizontalScrollbar);
     }
@@ -1249,7 +1223,7 @@ void PaintLayerCompositor::DestroyRootLayer() {
     layer_for_vertical_scrollbar_->RemoveFromParent();
     layer_for_vertical_scrollbar_ = nullptr;
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator()) {
+            GetScrollingCoordinator()) {
       scrolling_coordinator->ScrollableAreaScrollbarLayerDidChange(
           layout_view_.GetFrameView(), kVerticalScrollbar);
     }
@@ -1313,7 +1287,7 @@ void PaintLayerCompositor::DetachRootLayer() {
       Page* page = frame.GetPage();
       if (!page)
         return;
-      page->GetChromeClient().AttachRootGraphicsLayer(0, &frame);
+      page->GetChromeClient().AttachRootGraphicsLayer(nullptr, &frame);
       break;
     }
     case kRootLayerPendingAttachViaChromeClient:
@@ -1353,7 +1327,7 @@ void PaintLayerCompositor::DetachCompositorTimeline() {
 }
 
 ScrollingCoordinator* PaintLayerCompositor::GetScrollingCoordinator() const {
-  if (Page* page = this->GetPage())
+  if (Page* page = GetPage())
     return page->GetScrollingCoordinator();
 
   return nullptr;

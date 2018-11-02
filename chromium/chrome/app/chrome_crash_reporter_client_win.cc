@@ -61,9 +61,6 @@ constexpr char kHungRendererReason[] = "hung-reason";
 constexpr char kInputEventFilterSendFailure[] =
     "input-event-filter-send-failure";
 
-constexpr char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
-constexpr char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
-
 constexpr char kIsEnterpriseManaged[] = "is-enterprise-managed";
 
 constexpr char kViewCount[] = "view-count";
@@ -114,8 +111,6 @@ size_t RegisterCrashKeysHelper() {
       {gpu::crash_keys::kGPUGLContextIsVirtual, kSmallSize},
 
       // browser/:
-      {kThirdPartyModulesLoaded, kSmallSize},
-      {kThirdPartyModulesNotLoaded, kSmallSize},
       {kIsEnterpriseManaged, kSmallSize},
 
       // content/:
@@ -127,7 +122,6 @@ size_t RegisterCrashKeysHelper() {
       {"ppapi_path", kMediumSize},
       {"subresource_url", kLargeSize},
       {"total-discardable-memory-allocated", kSmallSize},
-      {kBug464926CrashKey, kSmallSize},
       {kViewCount, kSmallSize},
       {kHungRendererOutstandingAckCount, kSmallSize},
       {kHungRendererOutstandingEventType, kSmallSize},
@@ -138,8 +132,12 @@ size_t RegisterCrashKeysHelper() {
       // media/:
       {kZeroEncodeDetails, kSmallSize},
 
-      // gin/:
-      {"v8-ignition", kSmallSize},
+      // Site isolation.  These keys help debug renderer kills such as
+      // https://crbug.com/773140.
+      {"requested_site_url", kSmallSize},
+      {"requested_origin", kSmallSize},
+      {"killed_process_origin_lock", kSmallSize},
+      {"site_isolation_mode", kSmallSize},
 
       // Temporary for https://crbug.com/626802.
       {"newframe_routing_id", kSmallSize},
@@ -150,25 +148,18 @@ size_t RegisterCrashKeysHelper() {
       {"newframe_widget_hidden", kSmallSize},
       {"newframe_replicated_origin", kSmallSize},
 
-      // Temporary for https://crbug.com/612711.
-      {"aci_wrong_sp_extension_id", kSmallSize},
-
-      // Temporary for http://crbug.com/621730
-      {"postmessage_src_origin", kMediumSize},
-      {"postmessage_dst_origin", kMediumSize},
-      {"postmessage_dst_url", kLargeSize},
-      {"postmessage_script_info", kLargeSize},
-
-      // Temporary for https://crbug.com/697745.
-      {"engine_params", kMediumSize},
-      {"engine1_params", kMediumSize},
-      {"engine2_params", kMediumSize},
-
       // Temporary for https://crbug.com/685996.
       {"user-cloud-policy-manager-connect-trace", kMediumSize},
 
+      // TODO(sunnyps): Remove after fixing crbug.com/724999.
+      {"gl-context-set-current-stack-trace", kMediumSize},
+
       // TODO(asvitkine): Remove after fixing https://crbug.com/736675
       {"bad_histogram", kMediumSize},
+
+      // Accessibility keys. Temporary for http://crbug.com/765490.
+      {"ax_tree_error", kSmallSize},
+      {"ax_tree_update", kMediumSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

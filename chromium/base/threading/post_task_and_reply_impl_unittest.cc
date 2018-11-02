@@ -28,8 +28,7 @@ class PostTaskAndReplyTaskRunner : public internal::PostTaskAndReplyImpl {
       : destination_(destination) {}
 
  private:
-  bool PostTask(const tracked_objects::Location& from_here,
-                OnceClosure task) override {
+  bool PostTask(const Location& from_here, OnceClosure task) override {
     return destination_->PostTask(from_here, std::move(task));
   }
 
@@ -74,13 +73,12 @@ TEST(PostTaskAndReplyImplTest, PostTaskAndReply) {
   testing::StrictMock<MockObject> mock_object;
   bool delete_flag = false;
 
-  EXPECT_TRUE(
-      PostTaskAndReplyTaskRunner(post_runner.get())
-          .PostTaskAndReply(
-              FROM_HERE,
-              BindOnce(&MockObject::Task, Unretained(&mock_object),
-                       make_scoped_refptr(new ObjectToDelete(&delete_flag))),
-              BindOnce(&MockObject::Reply, Unretained(&mock_object))));
+  EXPECT_TRUE(PostTaskAndReplyTaskRunner(post_runner.get())
+                  .PostTaskAndReply(
+                      FROM_HERE,
+                      BindOnce(&MockObject::Task, Unretained(&mock_object),
+                               MakeRefCounted<ObjectToDelete>(&delete_flag)),
+                      BindOnce(&MockObject::Reply, Unretained(&mock_object))));
 
   // Expect the task to be posted to |post_runner|.
   EXPECT_TRUE(post_runner->HasPendingTask());

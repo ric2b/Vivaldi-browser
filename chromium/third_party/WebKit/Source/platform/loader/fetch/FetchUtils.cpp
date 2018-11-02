@@ -4,9 +4,9 @@
 
 #include "platform/loader/fetch/FetchUtils.h"
 
-#include "platform/HTTPNames.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/http_names.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -78,7 +78,8 @@ const ForbiddenHeaderNames& ForbiddenHeaderNames::Get() {
 bool FetchUtils::IsCORSSafelistedMethod(const String& method) {
   // https://fetch.spec.whatwg.org/#cors-safelisted-method
   // "A CORS-safelisted method is a method that is `GET`, `HEAD`, or `POST`."
-  return method == "GET" || method == "HEAD" || method == "POST";
+  return method == HTTPNames::GET || method == HTTPNames::HEAD ||
+         method == HTTPNames::POST;
 }
 
 bool FetchUtils::IsCORSSafelistedHeader(const AtomicString& name,
@@ -103,7 +104,7 @@ bool FetchUtils::IsCORSSafelistedHeader(const AtomicString& name,
       EqualIgnoringASCIICase(name, "content-language") ||
       EqualIgnoringASCIICase(
           name, HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id) ||
-      EqualIgnoringASCIICase(name, "save-data") ||
+      EqualIgnoringASCIICase(name, HTTPNames::Save_Data) ||
       EqualIgnoringASCIICase(name, "intervention"))
     return true;
 
@@ -162,7 +163,7 @@ AtomicString FetchUtils::NormalizeMethod(const AtomicString& method) {
       "GET", "POST", "DELETE", "HEAD", "OPTIONS", "PUT",
   };
 
-  for (const auto& known : kMethods) {
+  for (auto* const known : kMethods) {
     if (EqualIgnoringASCIICase(method, known)) {
       // Don't bother allocating a new string if it's already all
       // uppercase.

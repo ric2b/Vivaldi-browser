@@ -215,7 +215,7 @@ bool GpuVideoAcceleratorFactoriesImpl::CreateTextures(
     gles2->TexParameteri(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     if (texture_target == GL_TEXTURE_2D) {
       gles2->TexImage2D(texture_target, 0, GL_RGBA, size.width(), size.height(),
-                        0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                        0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     }
     gles2->GenMailboxCHROMIUM(texture_mailboxes->at(i).name);
     gles2->ProduceTextureCHROMIUM(texture_target,
@@ -333,7 +333,7 @@ std::unique_ptr<media::GpuVideoAcceleratorFactories::ScopedGLContextLock>
 GpuVideoAcceleratorFactoriesImpl::GetGLContextLock() {
   if (CheckContextLost())
     return nullptr;
-  return base::MakeUnique<ScopedGLContextLockImpl>(context_provider_);
+  return std::make_unique<ScopedGLContextLockImpl>(context_provider_);
 }
 
 std::unique_ptr<base::SharedMemory>
@@ -361,6 +361,11 @@ GpuVideoAcceleratorFactoriesImpl::GetVideoEncodeAcceleratorSupportedProfiles() {
   return media::GpuVideoAcceleratorUtil::ConvertGpuToMediaEncodeProfiles(
       gpu_channel_host_->gpu_info()
           .video_encode_accelerator_supported_profiles);
+}
+
+viz::ContextProvider*
+GpuVideoAcceleratorFactoriesImpl::GetMediaContextProvider() {
+  return CheckContextLost() ? nullptr : context_provider_;
 }
 
 void GpuVideoAcceleratorFactoriesImpl::ReleaseContextProvider() {

@@ -14,10 +14,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/fake_display_snapshot.h"
 #include "ui/display/manager/chromeos/display_layout_manager.h"
 #include "ui/display/manager/chromeos/test/action_logger_util.h"
 #include "ui/display/manager/chromeos/test/test_native_display_delegate.h"
+#include "ui/display/manager/fake_display_snapshot.h"
 
 namespace display {
 namespace test {
@@ -256,7 +256,7 @@ TEST_F(UpdateDisplayConfigurationTaskTest, ExtendedConfiguration) {
 
   {
     UpdateDisplayConfigurationTask task(
-        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
         chromeos::DISPLAY_POWER_ALL_ON, 0, false,
         base::Bind(&UpdateDisplayConfigurationTaskTest::ResponseCallback,
                    base::Unretained(this)));
@@ -265,7 +265,7 @@ TEST_F(UpdateDisplayConfigurationTaskTest, ExtendedConfiguration) {
 
   EXPECT_TRUE(configured_);
   EXPECT_TRUE(configuration_status_);
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED, display_state_);
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED, display_state_);
   EXPECT_EQ(chromeos::DISPLAY_POWER_ALL_ON, power_state_);
   EXPECT_EQ(
       JoinActions(
@@ -325,7 +325,7 @@ TEST_F(UpdateDisplayConfigurationTaskTest, FailExtendedConfiguration) {
 
   {
     UpdateDisplayConfigurationTask task(
-        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
         chromeos::DISPLAY_POWER_ALL_ON, 0, false,
         base::Bind(&UpdateDisplayConfigurationTaskTest::ResponseCallback,
                    base::Unretained(this)));
@@ -391,12 +391,12 @@ TEST_F(UpdateDisplayConfigurationTaskTest, SingleChangePowerConfiguration) {
 TEST_F(UpdateDisplayConfigurationTaskTest, NoopSoftwareMirrorConfiguration) {
   layout_manager_.set_should_mirror(false);
   layout_manager_.set_software_mirroring_controller(
-      base::MakeUnique<TestSoftwareMirroringController>());
+      std::make_unique<TestSoftwareMirroringController>());
   UpdateDisplays(2);
 
   {
     UpdateDisplayConfigurationTask task(
-        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
         chromeos::DISPLAY_POWER_ALL_ON, 0, false,
         base::Bind(&UpdateDisplayConfigurationTaskTest::ResponseCallback,
                    base::Unretained(this)));
@@ -415,7 +415,7 @@ TEST_F(UpdateDisplayConfigurationTaskTest, NoopSoftwareMirrorConfiguration) {
   }
 
   EXPECT_TRUE(configuration_status_);
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED, display_state_);
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED, display_state_);
   EXPECT_TRUE(layout_manager_.GetSoftwareMirroringController()
                   ->SoftwareMirroringEnabled());
   EXPECT_EQ(kNoActions, log_.GetActionsAndClear());
@@ -425,12 +425,12 @@ TEST_F(UpdateDisplayConfigurationTaskTest,
        ForceConfigurationWhileGoingToSoftwareMirror) {
   layout_manager_.set_should_mirror(false);
   layout_manager_.set_software_mirroring_controller(
-      base::MakeUnique<TestSoftwareMirroringController>());
+      std::make_unique<TestSoftwareMirroringController>());
   UpdateDisplays(2);
 
   {
     UpdateDisplayConfigurationTask task(
-        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
+        &delegate_, &layout_manager_, MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
         chromeos::DISPLAY_POWER_ALL_ON, 0, false,
         base::Bind(&UpdateDisplayConfigurationTaskTest::ResponseCallback,
                    base::Unretained(this)));
@@ -449,7 +449,7 @@ TEST_F(UpdateDisplayConfigurationTaskTest,
   }
 
   EXPECT_TRUE(configuration_status_);
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED, display_state_);
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED, display_state_);
   EXPECT_TRUE(layout_manager_.GetSoftwareMirroringController()
                   ->SoftwareMirroringEnabled());
   EXPECT_EQ(

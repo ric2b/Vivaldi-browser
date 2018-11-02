@@ -126,6 +126,7 @@ class DemoWindow : public ui::PlatformWindowDelegate {
         weak_ptr_factory_(this) {
     platform_window_ =
         ui::OzonePlatform::GetInstance()->CreatePlatformWindow(this, bounds);
+    platform_window_->Show();
   }
   ~DemoWindow() override {}
 
@@ -225,16 +226,15 @@ std::unique_ptr<ui::Renderer> RendererFactory::CreateRenderer(
       scoped_refptr<gl::GLSurface> surface = CreateGLSurface(widget);
       if (!surface)
         LOG(FATAL) << "Failed to create GL surface";
-      if (!surface->SupportsAsyncSwap())
-        LOG(FATAL) << "GL surface must support SwapBuffersAsync";
-      if (surface->IsSurfaceless())
-        return base::MakeUnique<ui::SurfacelessGlRenderer>(widget, surface,
+      if (surface->IsSurfaceless()) {
+        return std::make_unique<ui::SurfacelessGlRenderer>(widget, surface,
                                                            size);
-      else
-        return base::MakeUnique<ui::GlRenderer>(widget, surface, size);
+      } else {
+        return std::make_unique<ui::GlRenderer>(widget, surface, size);
+      }
     }
     case SOFTWARE:
-      return base::MakeUnique<ui::SoftwareRenderer>(widget, size);
+      return std::make_unique<ui::SoftwareRenderer>(widget, size);
   }
 
   return nullptr;
@@ -352,7 +352,9 @@ int main(int argc, char** argv) {
   base::MessageLoopForUI message_loop;
   base::TaskScheduler::CreateAndStartWithDefaultParams("OzoneDemo");
 
-  ui::OzonePlatform::InitializeForUI();
+  ui::OzonePlatform::InitParams params;
+  params.single_process = true;
+  ui::OzonePlatform::InitializeForUI(params);
   ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()
       ->SetCurrentLayoutByName("us");
 

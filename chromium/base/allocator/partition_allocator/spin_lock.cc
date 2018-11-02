@@ -26,7 +26,7 @@
 #elif defined(COMPILER_GCC) || defined(__clang__)
 #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_X86)
 #define YIELD_PROCESSOR __asm__ __volatile__("pause")
-#elif defined(ARCH_CPU_ARMEL) || defined(ARCH_CPU_ARM64)
+#elif (defined(ARCH_CPU_ARMEL) && __ARM_ARCH >= 6) || defined(ARCH_CPU_ARM64)
 #define YIELD_PROCESSOR __asm__ __volatile__("yield")
 #elif defined(ARCH_CPU_MIPSEL)
 // The MIPS32 docs state that the PAUSE instruction is a no-op on older
@@ -37,6 +37,11 @@
 // Don't bother doing using .word here since r2 is the lowest supported mips64
 // that Chromium supports.
 #define YIELD_PROCESSOR __asm__ __volatile__("pause")
+#elif defined(ARCH_CPU_PPC64_FAMILY)
+#define YIELD_PROCESSOR __asm__ __volatile__("or 31,31,31")
+#elif defined(ARCH_CPU_S390_FAMILY)
+// just do nothing
+#define YIELD_PROCESSOR ((void)0)
 #endif
 #endif
 
@@ -56,6 +61,9 @@
 
 namespace base {
 namespace subtle {
+
+SpinLock::SpinLock() = default;
+SpinLock::~SpinLock() = default;
 
 void SpinLock::LockSlow() {
   // The value of |kYieldProcessorTries| is cargo culted from TCMalloc, Windows

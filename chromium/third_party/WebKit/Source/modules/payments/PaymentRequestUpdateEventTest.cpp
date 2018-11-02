@@ -8,7 +8,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
-#include "core/EventTypeNames.h"
+#include "core/event_type_names.h"
 #include "modules/payments/PaymentRequest.h"
 #include "modules/payments/PaymentTestHelper.h"
 #include "modules/payments/PaymentUpdater.h"
@@ -32,7 +32,7 @@ class MockPaymentUpdater : public GarbageCollectedFinalized<MockPaymentUpdater>,
                void(const ScriptValue& detailsScriptValue));
   MOCK_METHOD1(OnUpdatePaymentDetailsFailure, void(const String& error));
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 };
 
 TEST(PaymentRequestUpdateEventTest, OnUpdatePaymentDetailsCalled) {

@@ -42,14 +42,14 @@ class Document;
 class ExceptionState;
 class KURL;
 class LocalDOMWindow;
+class StringOrTrustedURL;
 
 // This class corresponds to the Location interface. Location is the only
 // interface besides Window that is accessible cross-origin and must handle
 // remote frames.
 //
 // HTML standard: https://whatwg.org/C/browsers.html#the-location-interface
-class CORE_EXPORT Location final : public GarbageCollected<Location>,
-                                   public ScriptWrappable {
+class CORE_EXPORT Location final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -61,9 +61,9 @@ class CORE_EXPORT Location final : public GarbageCollected<Location>,
 
   void setHref(LocalDOMWindow* current_window,
                LocalDOMWindow* entered_window,
-               const String&,
+               const StringOrTrustedURL&,
                ExceptionState&);
-  String href() const;
+  void href(StringOrTrustedURL&) const;
 
   void assign(LocalDOMWindow* current_window,
               LocalDOMWindow* entered_window,
@@ -120,7 +120,9 @@ class CORE_EXPORT Location final : public GarbageCollected<Location>,
   // a hook to change the string conversion behavior of location objects.
   ScriptValue valueOf(const ScriptValue& this_object) { return this_object; }
 
-  DECLARE_VIRTUAL_TRACE();
+  String toString() const;
+
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit Location(DOMWindow*);

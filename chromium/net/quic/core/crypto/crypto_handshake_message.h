@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "net/base/int128.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_string_piece.h"
@@ -59,6 +60,14 @@ class QUIC_EXPORT_PRIVATE CryptoHandshakeMessage {
     }
   }
 
+  // Sets an element with the given tag to the on-the-wire representation of
+  // |version|.
+  void SetVersion(QuicTag tag, QuicTransportVersion version);
+
+  // Sets an element with the given tag to the on-the-wire representation of
+  // the elements in |versions|.
+  void SetVersionVector(QuicTag tag, QuicTransportVersionVector versions);
+
   // Returns the message tag.
   QuicTag tag() const { return tag_; }
   // Sets the message tag.
@@ -76,6 +85,17 @@ class QUIC_EXPORT_PRIVATE CryptoHandshakeMessage {
   // populates |out_tags| with the tags and returns QUIC_NO_ERROR.
   QuicErrorCode GetTaglist(QuicTag tag, QuicTagVector* out_tags) const;
 
+  // GetVersionLabelList finds an element with the given tag containing zero or
+  // more version labels. If such a tag doesn't exist, it returns an error code.
+  // Otherwise it populates |out| with the labels and returns QUIC_NO_ERROR.
+  QuicErrorCode GetVersionLabelList(QuicTag tag,
+                                    QuicVersionLabelVector* out) const;
+
+  // GetVersionLabel finds an element with the given tag containing a single
+  // version label. If such a tag doesn't exist, it returns an error code.
+  // Otherwise it populates |out| with the label and returns QUIC_NO_ERROR.
+  QuicErrorCode GetVersionLabel(QuicTag tag, QuicVersionLabel* out) const;
+
   bool GetStringPiece(QuicTag tag, QuicStringPiece* out) const;
   bool HasStringPiece(QuicTag tag) const;
 
@@ -87,6 +107,7 @@ class QUIC_EXPORT_PRIVATE CryptoHandshakeMessage {
                               QuicStringPiece* out) const;
   QuicErrorCode GetUint32(QuicTag tag, uint32_t* out) const;
   QuicErrorCode GetUint64(QuicTag tag, uint64_t* out) const;
+  QuicErrorCode GetUint128(QuicTag tag, uint128* out) const;
 
   // size returns 4 (message tag) + 2 (uint16_t, number of entries) +
   // (4 (tag) + 4 (end offset))*tag_value_map_.size() + ∑ value sizes.

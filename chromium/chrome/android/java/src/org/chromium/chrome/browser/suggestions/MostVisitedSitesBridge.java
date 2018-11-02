@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNIAdditionalImport;
 import org.chromium.chrome.browser.ntp.NewTabPage;
@@ -13,7 +12,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -45,7 +44,7 @@ public class MostVisitedSitesBridge
             nativeSetHomePageClient(mNativeMostVisitedSitesBridge, new HomePageClient() {
                 @Override
                 public boolean isHomePageEnabled() {
-                    return HomepageManager.isHomepageEnabled(ContextUtils.getApplicationContext());
+                    return HomepageManager.isHomepageEnabled();
                 }
 
                 @Override
@@ -55,10 +54,10 @@ public class MostVisitedSitesBridge
 
                 @Override
                 public String getHomePageUrl() {
-                    return HomepageManager.getHomepageUri(ContextUtils.getApplicationContext());
+                    return HomepageManager.getHomepageUri();
                 }
             });
-            HomepageManager.getInstance(ContextUtils.getApplicationContext()).addListener(this);
+            HomepageManager.getInstance().addListener(this);
         }
     }
 
@@ -68,7 +67,7 @@ public class MostVisitedSitesBridge
     @Override
     public void destroy() {
         // Stop listening even if it was not started in the first place. (Handled without errors.)
-        HomepageManager.getInstance(ContextUtils.getApplicationContext()).removeListener(this);
+        HomepageManager.getInstance().removeListener(this);
         assert mNativeMostVisitedSitesBridge != 0;
         nativeDestroy(mNativeMostVisitedSitesBridge);
         mNativeMostVisitedSitesBridge = 0;
@@ -98,23 +97,25 @@ public class MostVisitedSitesBridge
     }
 
     @Override
-    public void recordTileImpression(int index, int type, int source, String url) {
-        nativeRecordTileImpression(mNativeMostVisitedSitesBridge, index, type, source, url);
+    public void recordTileImpression(Tile tile) {
+        nativeRecordTileImpression(mNativeMostVisitedSitesBridge, tile.getIndex(), tile.getType(),
+                tile.getIconType(), tile.getTitleSource(), tile.getSource(),
+                tile.getData().dataGenerationTime.getTime(), tile.getUrl());
     }
 
     @Override
-    public void recordOpenedMostVisitedItem(
-            int index, @TileVisualType int type, @TileSource int source) {
-        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSitesBridge, index, type, source);
+    public void recordOpenedMostVisitedItem(Tile tile) {
+        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSitesBridge, tile.getIndex(),
+                tile.getType(), tile.getTitleSource(), tile.getSource(),
+                tile.getData().dataGenerationTime.getTime());
     }
 
     @Override
     public void onHomepageStateUpdated() {
         assert mNativeMostVisitedSitesBridge != 0;
         // Ensure even a blacklisted home page can be set as tile when (re-)enabling it.
-        if (HomepageManager.isHomepageEnabled(ContextUtils.getApplicationContext())) {
-            removeBlacklistedUrl(
-                    HomepageManager.getHomepageUri(ContextUtils.getApplicationContext()));
+        if (HomepageManager.isHomepageEnabled()) {
+            removeBlacklistedUrl(HomepageManager.getHomepageUri());
         }
         nativeOnHomePageStateChanged(mNativeMostVisitedSitesBridge);
     }
@@ -124,11 +125,12 @@ public class MostVisitedSitesBridge
      * {@link SiteSuggestion}s.
      */
     public static List<SiteSuggestion> buildSiteSuggestions(String[] titles, String[] urls,
-            int[] sections, String[] whitelistIconPaths, int[] sources) {
+            int[] sections, String[] whitelistIconPaths, int[] titleSources, int[] sources,
+            long[] dataGenerationTimesMs) {
         List<SiteSuggestion> siteSuggestions = new ArrayList<>(titles.length);
         for (int i = 0; i < titles.length; ++i) {
-            siteSuggestions.add(new SiteSuggestion(
-                    titles[i], urls[i], whitelistIconPaths[i], sources[i], sections[i]));
+            siteSuggestions.add(new SiteSuggestion(titles[i], urls[i], whitelistIconPaths[i],
+                    titleSources[i], sources[i], sections[i], new Date(dataGenerationTimesMs[i])));
         }
         return siteSuggestions;
     }
@@ -147,88 +149,15 @@ public class MostVisitedSitesBridge
      */
     @CalledByNative
     private void onURLsAvailable(String[] titles, String[] urls, int[] sections,
-            String[] whitelistIconPaths, int[] sources) {
+            String[] whitelistIconPaths, int[] titleSources, int[] sources,
+            long[] dataGenerationTimesMs) {
         // Don't notify observer if we've already been destroyed.
         if (mNativeMostVisitedSitesBridge == 0) return;
 
         List<SiteSuggestion> suggestions = new ArrayList<>();
 
-        suggestions.addAll(
-                buildSiteSuggestions(titles, urls, sections, whitelistIconPaths, sources));
-
-        // TODO(galinap): Remove dummy data when backend is ready.
-        if (SuggestionsConfig.useSitesExplorationUi()
-                && allSuggestionsArePersonalized(suggestions)) {
-            String[] socialUrls = {"https://m.facebook.com/", "https://www.instagram.com",
-                    "https://twitter.com/", "https://www.pinterest.co.uk/"};
-            String[] socialTitles = {"Facebook", "Instagram", "Twitter", "Pinterest"};
-
-            int[] socialSections = new int[socialUrls.length];
-            Arrays.fill(socialSections, TileSectionType.SOCIAL);
-
-            int[] dummySources = new int[socialUrls.length];
-            String[] dummyWhitelistIconPaths = new String[socialSections.length];
-            Arrays.fill(dummySources, TileSource.POPULAR);
-            Arrays.fill(dummyWhitelistIconPaths, "");
-
-            suggestions.addAll(buildSiteSuggestions(socialTitles, socialUrls, socialSections,
-                    dummyWhitelistIconPaths, dummySources));
-
-            String[] entertainmentUrls = {"https://www.youtube.com/", "http://www.hotstar.com",
-                    "https://m.cricbuzz.com/", "https://www.wittyfeed.com/"};
-
-            String[] entertainmentTitles = {"YouTube", "HotStar", "Cricbuzz", "WhittyFeed"};
-
-            int[] entertainmentSections = new int[entertainmentUrls.length];
-            Arrays.fill(entertainmentSections, TileSectionType.ENTERTAINMENT);
-
-            suggestions.addAll(buildSiteSuggestions(entertainmentTitles, entertainmentUrls,
-                    entertainmentSections, dummyWhitelistIconPaths, dummySources));
-
-            String[] newsUrls = {"http://timesofindia.indiatimes.com/", "http://www.jagran.com/",
-                    "http://www.bbc.co.uk/news", "http://www.dailymail.co.uk/"};
-
-            String[] newsTitles = {"Times Of India", "Jagran", "BBC News", "Daily Mail"};
-
-            int[] newsSections = new int[newsUrls.length];
-            Arrays.fill(newsSections, TileSectionType.NEWS);
-
-            suggestions.addAll(buildSiteSuggestions(
-                    newsTitles, newsUrls, newsSections, dummyWhitelistIconPaths, dummySources));
-
-            String[] ecommerceUrls = {"https://www.amazon.co.uk", "https://www.flipkart.com/",
-                    "https://www.snapdeal.com/", "https://www.olx.com/"};
-
-            String[] ecommerceTitles = {"Amazon", "Flipkart", "Snapdeal", "OLX"};
-
-            int[] ecommerceSections = new int[ecommerceUrls.length];
-            Arrays.fill(ecommerceSections, TileSectionType.ECOMMERCE);
-
-            suggestions.addAll(buildSiteSuggestions(ecommerceTitles, ecommerceUrls,
-                    ecommerceSections, dummyWhitelistIconPaths, dummySources));
-
-            String[] toolsUrls = {"https://www.google.co.uk/maps/", "https://paytm.com/",
-                    "https://www.olacabs.com/", "https://in.bookmyshow.com/"};
-
-            String[] toolsTitles = {"Maps", "Paytm", "Ola Cabs", "BookMyShow"};
-
-            int[] toolsSections = new int[toolsUrls.length];
-            Arrays.fill(toolsSections, TileSectionType.TOOLS);
-
-            suggestions.addAll(buildSiteSuggestions(
-                    toolsTitles, toolsUrls, toolsSections, dummyWhitelistIconPaths, dummySources));
-
-            String[] travelUrls = {"https://www.makemytrip.com/", "https://in.via.com/",
-                    "https://housing.com/", "https://www.redbus.in/"};
-
-            String[] travelTitles = {"MakeMyTrip", "Via", "Housing", "RedBus"};
-
-            int[] travelSections = new int[travelUrls.length];
-            Arrays.fill(travelSections, TileSectionType.TRAVEL);
-
-            suggestions.addAll(buildSiteSuggestions(travelTitles, travelUrls, travelSections,
-                    dummyWhitelistIconPaths, dummySources));
-        }
+        suggestions.addAll(buildSiteSuggestions(titles, urls, sections, whitelistIconPaths,
+                titleSources, sources, dataGenerationTimesMs));
 
         mWrappedObserver.onSiteSuggestionsAvailable(suggestions);
     }
@@ -265,8 +194,9 @@ public class MostVisitedSitesBridge
             long nativeMostVisitedSitesBridge, String url, boolean addUrl);
     private native void nativeRecordPageImpression(
             long nativeMostVisitedSitesBridge, int tilesCount);
-    private native void nativeRecordTileImpression(
-            long nativeMostVisitedSitesBridge, int index, int type, int source, String url);
-    private native void nativeRecordOpenedMostVisitedItem(
-            long nativeMostVisitedSitesBridge, int index, int tileType, int source);
+    private native void nativeRecordTileImpression(long nativeMostVisitedSitesBridge, int index,
+            int type, int iconType, int titleSource, int source, long dataGenerationTimeMs,
+            String url);
+    private native void nativeRecordOpenedMostVisitedItem(long nativeMostVisitedSitesBridge,
+            int index, int tileType, int titleSource, int source, long dataGenerationTimeMs);
 }

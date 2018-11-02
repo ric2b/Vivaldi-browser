@@ -36,7 +36,7 @@ public class WebApkInfo extends WebappInfo {
     private static final String TAG = "WebApkInfo";
 
     private Icon mBadgeIcon;
-    private String mWebApkPackageName;
+    private String mApkPackageName;
     private int mShellApkVersion;
     private String mManifestUrl;
     private String mManifestStartUrl;
@@ -112,6 +112,7 @@ public class WebApkInfo extends WebappInfo {
 
         String scope = IntentUtils.safeGetString(bundle, WebApkMetaDataKeys.SCOPE);
 
+        @WebDisplayMode
         int displayMode = displayModeFromString(
                 IntentUtils.safeGetString(bundle, WebApkMetaDataKeys.DISPLAY_MODE));
         int orientation = orientationFromString(
@@ -168,10 +169,11 @@ public class WebApkInfo extends WebappInfo {
      *                                WebAPK is already open.
      */
     public static WebApkInfo create(String id, String url, String scope, Icon primaryIcon,
-            Icon badgeIcon, String name, String shortName, int displayMode, int orientation,
-            int source, long themeColor, long backgroundColor, String webApkPackageName,
-            int shellApkVersion, String manifestUrl, String manifestStartUrl,
-            Map<String, String> iconUrlToMurmur2HashMap, boolean forceNavigation) {
+            Icon badgeIcon, String name, String shortName, @WebDisplayMode int displayMode,
+            int orientation, int source, long themeColor, long backgroundColor,
+            String webApkPackageName, int shellApkVersion, String manifestUrl,
+            String manifestStartUrl, Map<String, String> iconUrlToMurmur2HashMap,
+            boolean forceNavigation) {
         if (id == null || url == null || manifestStartUrl == null || webApkPackageName == null) {
             Log.e(TAG,
                     "Incomplete data provided: " + id + ", " + url + ", " + manifestStartUrl + ", "
@@ -193,14 +195,15 @@ public class WebApkInfo extends WebappInfo {
     }
 
     protected WebApkInfo(String id, String url, String scope, Icon primaryIcon, Icon badgeIcon,
-            String name, String shortName, int displayMode, int orientation, int source,
-            long themeColor, long backgroundColor, String webApkPackageName, int shellApkVersion,
-            String manifestUrl, String manifestStartUrl,
+            String name, String shortName, @WebDisplayMode int displayMode, int orientation,
+            int source, long themeColor, long backgroundColor, String webApkPackageName,
+            int shellApkVersion, String manifestUrl, String manifestStartUrl,
             Map<String, String> iconUrlToMurmur2HashMap, boolean forceNavigation) {
         super(id, url, scope, primaryIcon, name, shortName, displayMode, orientation, source,
-                themeColor, backgroundColor, false /* isIconGenerated */, forceNavigation);
+                themeColor, backgroundColor, null /* splash_screen_url */,
+                false /* isIconGenerated */, forceNavigation);
         mBadgeIcon = badgeIcon;
-        mWebApkPackageName = webApkPackageName;
+        mApkPackageName = webApkPackageName;
         mShellApkVersion = shellApkVersion;
         mManifestUrl = manifestUrl;
         mManifestStartUrl = manifestStartUrl;
@@ -217,8 +220,8 @@ public class WebApkInfo extends WebappInfo {
     }
 
     @Override
-    public String webApkPackageName() {
-        return mWebApkPackageName;
+    public String apkPackageName() {
+        return mApkPackageName;
     }
 
     public int shellApkVersion() {
@@ -243,7 +246,7 @@ public class WebApkInfo extends WebappInfo {
         intent.putExtra(ShortcutHelper.EXTRA_ID, id());
         intent.putExtra(ShortcutHelper.EXTRA_URL, uri().toString());
         intent.putExtra(ShortcutHelper.EXTRA_SOURCE, source());
-        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, webApkPackageName());
+        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, apkPackageName());
         intent.putExtra(ShortcutHelper.EXTRA_FORCE_NAVIGATION, shouldForceNavigation());
     }
 
@@ -354,7 +357,7 @@ public class WebApkInfo extends WebappInfo {
      * @param displayMode One of https://www.w3.org/TR/appmanifest/#dfn-display-modes-values
      * @return The matching WebDisplayMode. {@link WebDisplayMode#Undefined} if there is no match.
      */
-    private static int displayModeFromString(String displayMode) {
+    private static @WebDisplayMode int displayModeFromString(String displayMode) {
         if (displayMode == null) {
             return WebDisplayMode.UNDEFINED;
         }

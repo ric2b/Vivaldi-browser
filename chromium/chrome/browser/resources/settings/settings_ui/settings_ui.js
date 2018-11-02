@@ -20,20 +20,13 @@ settings.defaultResourceLoaded = true;
 Polymer({
   is: 'settings-ui',
 
-  behaviors: [settings.RouteObserverBehavior],
+  behaviors: [settings.RouteObserverBehavior, CrContainerShadowBehavior],
 
   properties: {
     /**
      * Preferences state.
      */
     prefs: Object,
-
-    /** @type {?settings.DirectionDelegate} */
-    directionDelegate: {
-      observer: 'directionDelegateChanged_',
-      type: Object,
-      value: new settings.DirectionDelegateImpl(),
-    },
 
     /** @private */
     advancedOpened_: {
@@ -127,13 +120,15 @@ Polymer({
           loadTimeData.getString('networkListItemInitializing'),
       networkListItemNotConnected:
           loadTimeData.getString('networkListItemNotConnected'),
+      networkListItemNoNetwork:
+          loadTimeData.getString('networkListItemNoNetwork'),
       vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
     };
     // </if>
 
     this.showAndroidApps_ = loadTimeData.valueExists('androidAppsVisible') &&
         loadTimeData.getBoolean('androidAppsVisible');
-    this.showMultidevice_ =
+    this.showMultidevice_ = this.showAndroidApps_ &&
         loadTimeData.valueExists('enableMultideviceSettings') &&
         loadTimeData.getBoolean('enableMultideviceSettings');
     this.havePlayStoreApp_ = loadTimeData.valueExists('havePlayStoreApp') &&
@@ -148,9 +143,6 @@ Polymer({
     });
   },
 
-  /** @private {?IntersectionObserver} */
-  intersectionObserver_: null,
-
   /** @override */
   attached: function() {
     document.documentElement.classList.remove('loading');
@@ -164,27 +156,11 @@ Polymer({
     // Preload bold Roboto so it doesn't load and flicker the first time used.
     document.fonts.load('bold 12px Roboto');
     settings.setGlobalScrollTarget(this.$.container);
-
-    // Setup drop shadow logic.
-    var callback = entries => {
-      this.$.dropShadow.classList.toggle(
-          'has-shadow', entries[entries.length - 1].intersectionRatio == 0);
-    };
-
-    this.intersectionObserver_ = new IntersectionObserver(
-        callback,
-        /** @type {IntersectionObserverInit} */ ({
-          root: this.$.container,
-          threshold: 0,
-        }));
-    this.intersectionObserver_.observe(this.$.intersectionProbe);
   },
 
   /** @override */
   detached: function() {
     settings.resetRouteForTesting();
-    this.intersectionObserver_.disconnect();
-    this.intersectionObserver_ = null;
   },
 
   /** @param {!settings.Route} route */
@@ -264,10 +240,5 @@ Polymer({
     listenOnce(this.$.container, ['blur', 'pointerdown'], () => {
       this.$.container.removeAttribute('tabindex');
     });
-  },
-
-  /** @private */
-  directionDelegateChanged_: function() {
-    this.$.drawer.align = this.directionDelegate.isRtl() ? 'right' : 'left';
   },
 });

@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_restrictions.h"
 
 namespace device {
 
@@ -36,10 +37,12 @@ SerialDeviceEnumeratorLinux::SerialDeviceEnumeratorLinux() {
   udev_.reset(udev_new());
 }
 
-SerialDeviceEnumeratorLinux::~SerialDeviceEnumeratorLinux() {}
+SerialDeviceEnumeratorLinux::~SerialDeviceEnumeratorLinux() = default;
 
 std::vector<mojom::SerialDeviceInfoPtr>
 SerialDeviceEnumeratorLinux::GetDevices() {
+  base::AssertBlockingAllowed();
+
   std::vector<mojom::SerialDeviceInfoPtr> devices;
   ScopedUdevEnumeratePtr enumerate(udev_enumerate_new(udev_.get()));
   if (!enumerate) {

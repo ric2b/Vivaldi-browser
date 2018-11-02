@@ -24,6 +24,8 @@
 #include <unicode/rbbi.h>
 #include <unicode/ubrk.h>
 #include <memory>
+
+#include "base/macros.h"
 #include "platform/text/TextBreakIteratorInternalICU.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashMap.h"
@@ -36,7 +38,6 @@ namespace blink {
 
 class LineBreakIteratorPool final {
   USING_FAST_MALLOC(LineBreakIteratorPool);
-  WTF_MAKE_NONCOPYABLE(LineBreakIteratorPool);
 
  public:
   static LineBreakIteratorPool& SharedPool() {
@@ -50,11 +51,11 @@ class LineBreakIteratorPool final {
   }
 
   icu::BreakIterator* Take(const AtomicString& locale) {
-    icu::BreakIterator* iterator = 0;
+    icu::BreakIterator* iterator = nullptr;
     for (size_t i = 0; i < pool_.size(); ++i) {
       if (pool_[i].first == locale) {
         iterator = pool_[i].second;
-        pool_.erase(i);
+        pool_.EraseAt(i);
         break;
       }
     }
@@ -77,7 +78,7 @@ class LineBreakIteratorPool final {
       if (U_FAILURE(open_status)) {
         DLOG(ERROR) << "icu::BreakIterator construction failed with status "
                     << open_status;
-        return 0;
+        return nullptr;
       }
     }
 
@@ -91,14 +92,14 @@ class LineBreakIteratorPool final {
 
     if (pool_.size() == kCapacity) {
       delete (pool_[0].second);
-      pool_.erase(0);
+      pool_.EraseAt(0);
     }
 
     pool_.push_back(Entry(vended_iterators_.Take(iterator), iterator));
   }
 
  private:
-  LineBreakIteratorPool() {}
+  LineBreakIteratorPool() = default;
 
   static const size_t kCapacity = 4;
 
@@ -109,6 +110,8 @@ class LineBreakIteratorPool final {
 
   friend WTF::ThreadSpecific<LineBreakIteratorPool>::
   operator LineBreakIteratorPool*();
+
+  DISALLOW_COPY_AND_ASSIGN(LineBreakIteratorPool);
 };
 
 enum TextContext { kNoContext, kPriorContext, kPrimaryContext };
@@ -159,7 +162,7 @@ static UText* TextClone(UText* destination,
                         UErrorCode* status) {
   DCHECK(!deep);
   if (U_FAILURE(*status))
-    return 0;
+    return nullptr;
   int32_t extra_size = source->extraSize;
   destination = utext_setup(destination, extra_size, status);
   if (U_FAILURE(*status))
@@ -196,7 +199,7 @@ static int32_t TextExtract(UText*,
 }
 
 static void TextClose(UText* text) {
-  text->context = 0;
+  text->context = nullptr;
 }
 
 static inline TextContext TextGetContext(const UText* text,
@@ -370,9 +373,22 @@ static UBool TextLatin1Access(UText* text,
 }
 
 static const struct UTextFuncs kTextLatin1Funcs = {
-    sizeof(UTextFuncs), 0,           0, 0, TextClone, TextNativeLength,
-    TextLatin1Access,   TextExtract, 0, 0, 0,         0,
-    TextClose,          0,           0, 0,
+    sizeof(UTextFuncs),
+    0,
+    0,
+    0,
+    TextClone,
+    TextNativeLength,
+    TextLatin1Access,
+    TextExtract,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    TextClose,
+    nullptr,
+    nullptr,
+    nullptr,
 };
 
 static void TextInit(UText* text,
@@ -397,18 +413,18 @@ static UText* TextOpenLatin1(UTextWithBuffer* ut_with_buffer,
                              int prior_context_length,
                              UErrorCode* status) {
   if (U_FAILURE(*status))
-    return 0;
+    return nullptr;
 
   if (!string ||
       length > static_cast<unsigned>(std::numeric_limits<int32_t>::max())) {
     *status = U_ILLEGAL_ARGUMENT_ERROR;
-    return 0;
+    return nullptr;
   }
   UText* text = utext_setup(&ut_with_buffer->text,
                             sizeof(ut_with_buffer->buffer), status);
   if (U_FAILURE(*status)) {
     DCHECK(!text);
-    return 0;
+    return nullptr;
   }
   TextInit(text, &kTextLatin1Funcs, string, length, prior_context,
            prior_context_length);
@@ -519,9 +535,22 @@ static UBool TextUTF16Access(UText* text, int64_t native_index, UBool forward) {
 }
 
 static const struct UTextFuncs kTextUTF16Funcs = {
-    sizeof(UTextFuncs), 0,           0, 0, TextClone, TextNativeLength,
-    TextUTF16Access,    TextExtract, 0, 0, 0,         0,
-    TextClose,          0,           0, 0,
+    sizeof(UTextFuncs),
+    0,
+    0,
+    0,
+    TextClone,
+    TextNativeLength,
+    TextUTF16Access,
+    TextExtract,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    TextClose,
+    nullptr,
+    nullptr,
+    nullptr,
 };
 
 static UText* TextOpenUTF16(UText* text,
@@ -531,18 +560,18 @@ static UText* TextOpenUTF16(UText* text,
                             int prior_context_length,
                             UErrorCode* status) {
   if (U_FAILURE(*status))
-    return 0;
+    return nullptr;
 
   if (!string ||
       length > static_cast<unsigned>(std::numeric_limits<int32_t>::max())) {
     *status = U_ILLEGAL_ARGUMENT_ERROR;
-    return 0;
+    return nullptr;
   }
 
   text = utext_setup(text, 0, status);
   if (U_FAILURE(*status)) {
     DCHECK(!text);
-    return 0;
+    return nullptr;
   }
   TextInit(text, &kTextUTF16Funcs, string, length, prior_context,
            prior_context_length);
@@ -553,7 +582,7 @@ static UText g_empty_text = UTEXT_INITIALIZER;
 
 static TextBreakIterator* WordBreakIterator(const LChar* string, int length) {
   UErrorCode error_code = U_ZERO_ERROR;
-  static TextBreakIterator* break_iter = 0;
+  static TextBreakIterator* break_iter = nullptr;
   if (!break_iter) {
     break_iter = icu::BreakIterator::createWordInstance(
         icu::Locale(CurrentTextBreakLocaleID()), error_code);
@@ -561,7 +590,7 @@ static TextBreakIterator* WordBreakIterator(const LChar* string, int length) {
         << "ICU could not open a break iterator: " << u_errorName(error_code)
         << " (" << error_code << ")";
     if (!break_iter)
-      return 0;
+      return nullptr;
   }
 
   UTextWithBuffer text_local;
@@ -570,10 +599,11 @@ static TextBreakIterator* WordBreakIterator(const LChar* string, int length) {
   text_local.text.pExtra = text_local.buffer;
 
   UErrorCode open_status = U_ZERO_ERROR;
-  UText* text = TextOpenLatin1(&text_local, string, length, 0, 0, &open_status);
+  UText* text =
+      TextOpenLatin1(&text_local, string, length, nullptr, 0, &open_status);
   if (U_FAILURE(open_status)) {
     DLOG(ERROR) << "textOpenLatin1 failed with status " << open_status;
-    return 0;
+    return nullptr;
   }
 
   UErrorCode set_text_status = U_ZERO_ERROR;
@@ -600,7 +630,7 @@ static void SetText16(TextBreakIterator* iter,
 
 TextBreakIterator* WordBreakIterator(const UChar* string, int length) {
   UErrorCode error_code = U_ZERO_ERROR;
-  static TextBreakIterator* break_iter = 0;
+  static TextBreakIterator* break_iter = nullptr;
   if (!break_iter) {
     break_iter = icu::BreakIterator::createWordInstance(
         icu::Locale(CurrentTextBreakLocaleID()), error_code);
@@ -608,7 +638,7 @@ TextBreakIterator* WordBreakIterator(const UChar* string, int length) {
         << "ICU could not open a break iterator: " << u_errorName(error_code)
         << " (" << error_code << ")";
     if (!break_iter)
-      return 0;
+      return nullptr;
   }
   SetText16(break_iter, string, length);
   return break_iter;
@@ -618,7 +648,7 @@ TextBreakIterator* WordBreakIterator(const String& string,
                                      int start,
                                      int length) {
   if (string.IsEmpty())
-    return 0;
+    return nullptr;
   if (string.Is8Bit())
     return WordBreakIterator(string.Characters8() + start, length);
   return WordBreakIterator(string.Characters16() + start, length);
@@ -632,7 +662,7 @@ TextBreakIterator* AcquireLineBreakIterator(const LChar* string,
   TextBreakIterator* iterator =
       LineBreakIteratorPool::SharedPool().Take(locale);
   if (!iterator)
-    return 0;
+    return nullptr;
 
   UTextWithBuffer text_local;
   text_local.text = g_empty_text;
@@ -644,14 +674,14 @@ TextBreakIterator* AcquireLineBreakIterator(const LChar* string,
                                prior_context_length, &open_status);
   if (U_FAILURE(open_status)) {
     DLOG(ERROR) << "textOpenLatin1 failed with status " << open_status;
-    return 0;
+    return nullptr;
   }
 
   UErrorCode set_text_status = U_ZERO_ERROR;
   iterator->setText(text, set_text_status);
   if (U_FAILURE(set_text_status)) {
     DLOG(ERROR) << "ubrk_setUText failed with status " << set_text_status;
-    return 0;
+    return nullptr;
   }
 
   utext_close(text);
@@ -667,7 +697,7 @@ TextBreakIterator* AcquireLineBreakIterator(const UChar* string,
   TextBreakIterator* iterator =
       LineBreakIteratorPool::SharedPool().Take(locale);
   if (!iterator)
-    return 0;
+    return nullptr;
 
   UText text_local = UTEXT_INITIALIZER;
 
@@ -676,14 +706,14 @@ TextBreakIterator* AcquireLineBreakIterator(const UChar* string,
                               prior_context_length, &open_status);
   if (U_FAILURE(open_status)) {
     DLOG(ERROR) << "textOpenUTF16 failed with status " << open_status;
-    return 0;
+    return nullptr;
   }
 
   UErrorCode set_text_status = U_ZERO_ERROR;
   iterator->setText(text, set_text_status);
   if (U_FAILURE(set_text_status)) {
     DLOG(ERROR) << "ubrk_setUText failed with status " << set_text_status;
-    return 0;
+    return nullptr;
   }
 
   utext_close(text);
@@ -711,7 +741,11 @@ static inline bool CompareAndSwapNonSharedCharacterBreakIterator(
 
 NonSharedCharacterBreakIterator::NonSharedCharacterBreakIterator(
     const String& string)
-    : is8_bit_(true), charaters8_(0), offset_(0), length_(0), iterator_(0) {
+    : is8_bit_(true),
+      charaters8_(nullptr),
+      offset_(0),
+      length_(0),
+      iterator_(nullptr) {
   if (string.IsEmpty())
     return;
 
@@ -730,7 +764,11 @@ NonSharedCharacterBreakIterator::NonSharedCharacterBreakIterator(
 NonSharedCharacterBreakIterator::NonSharedCharacterBreakIterator(
     const UChar* buffer,
     unsigned length)
-    : is8_bit_(false), charaters8_(0), offset_(0), length_(0), iterator_(0) {
+    : is8_bit_(false),
+      charaters8_(nullptr),
+      offset_(0),
+      length_(0),
+      iterator_(nullptr) {
   CreateIteratorForBuffer(buffer, length);
 }
 
@@ -739,7 +777,8 @@ void NonSharedCharacterBreakIterator::CreateIteratorForBuffer(
     unsigned length) {
   iterator_ = g_non_shared_character_break_iterator;
   bool created_iterator =
-      iterator_ && CompareAndSwapNonSharedCharacterBreakIterator(iterator_, 0);
+      iterator_ &&
+      CompareAndSwapNonSharedCharacterBreakIterator(iterator_, nullptr);
   if (!created_iterator) {
     UErrorCode error_code = U_ZERO_ERROR;
     iterator_ = icu::BreakIterator::createCharacterInstance(
@@ -755,7 +794,7 @@ void NonSharedCharacterBreakIterator::CreateIteratorForBuffer(
 NonSharedCharacterBreakIterator::~NonSharedCharacterBreakIterator() {
   if (is8_bit_)
     return;
-  if (!CompareAndSwapNonSharedCharacterBreakIterator(0, iterator_))
+  if (!CompareAndSwapNonSharedCharacterBreakIterator(nullptr, iterator_))
     delete iterator_;
 }
 
@@ -802,7 +841,7 @@ int NonSharedCharacterBreakIterator::Following(int offset) const {
 
 TextBreakIterator* SentenceBreakIterator(const UChar* string, int length) {
   UErrorCode open_status = U_ZERO_ERROR;
-  static TextBreakIterator* iterator = 0;
+  static TextBreakIterator* iterator = nullptr;
   if (!iterator) {
     iterator = icu::BreakIterator::createSentenceInstance(
         icu::Locale(CurrentTextBreakLocaleID()), open_status);
@@ -810,7 +849,7 @@ TextBreakIterator* SentenceBreakIterator(const UChar* string, int length) {
         << "ICU could not open a break iterator: " << u_errorName(open_status)
         << " (" << open_status << ")";
     if (!iterator)
-      return 0;
+      return nullptr;
   }
 
   SetText16(iterator, string, length);
@@ -828,9 +867,9 @@ static TextBreakIterator* SetUpIteratorWithRules(const char* break_rules,
                                                  const UChar* string,
                                                  int length) {
   if (!string)
-    return 0;
+    return nullptr;
 
-  static TextBreakIterator* iterator = 0;
+  static TextBreakIterator* iterator = nullptr;
   if (!iterator) {
     UParseError parse_status;
     UErrorCode open_status = U_ZERO_ERROR;
@@ -841,7 +880,7 @@ static TextBreakIterator* SetUpIteratorWithRules(const char* break_rules,
         << "ICU could not open a break iterator: " << u_errorName(open_status)
         << " (" << open_status << ")";
     if (!iterator)
-      return 0;
+      return nullptr;
   }
 
   SetText16(iterator, string, length);

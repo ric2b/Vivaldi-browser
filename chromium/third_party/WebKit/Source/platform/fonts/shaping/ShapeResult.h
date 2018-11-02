@@ -34,8 +34,10 @@
 #include <memory>
 #include "platform/LayoutUnit.h"
 #include "platform/PlatformExport.h"
+#include "platform/fonts/CanvasRotationInVertical.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/text/TextDirection.h"
+#include "platform/wtf/Forward.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefCounted.h"
@@ -47,23 +49,27 @@ namespace blink {
 
 class Font;
 template <typename TextContainerType>
-class ShapeResultSpacing;
+class PLATFORM_EXPORT ShapeResultSpacing;
 class SimpleFontData;
 class TextRun;
 
 class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
  public:
-  static PassRefPtr<ShapeResult> Create(const Font* font,
-                                        unsigned num_characters,
-                                        TextDirection direction) {
-    return AdoptRef(new ShapeResult(font, num_characters, direction));
+  static scoped_refptr<ShapeResult> Create(const Font* font,
+                                    unsigned num_characters,
+                                    TextDirection direction) {
+    return base::AdoptRef(new ShapeResult(font, num_characters, direction));
   }
-  static PassRefPtr<ShapeResult> CreateForTabulationCharacters(
+  static scoped_refptr<ShapeResult> CreateForTabulationCharacters(
       const Font*,
       const TextRun&,
       float position_offset,
       unsigned count);
   ~ShapeResult();
+
+  // Returns a mutable unique instance. If |this| has more than 1 ref count,
+  // a clone is created.
+  scoped_refptr<ShapeResult> MutableUnique() const;
 
   // The logical width of this result.
   float Width() const { return width_; }
@@ -90,6 +96,13 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   // For memory reporting.
   size_t ByteSize() const;
 
+  // Returns the next or previous offsets respectively at which it is safe to
+  // break without reshaping.
+  // The |offset| given and the return value is for the original string, between
+  // |StartIndexForResult| and |EndIndexForResult|.
+  unsigned NextSafeToBreakOffset(unsigned offset) const;
+  unsigned PreviousSafeToBreakOffset(unsigned offset) const;
+
   unsigned OffsetForPosition(float target_x, bool include_partial_glyphs) const;
   float PositionForOffset(unsigned offset) const;
   LayoutUnit SnappedStartPositionForOffset(unsigned offset) const {
@@ -99,25 +112,41 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
     return LayoutUnit::FromFloatCeil(PositionForOffset(offset));
   }
 
-  void ApplySpacing(ShapeResultSpacing<String>&);
-  PassRefPtr<ShapeResult> ApplySpacingToCopy(ShapeResultSpacing<TextRun>&,
-                                             const TextRun&) const;
+  // Apply spacings (letter-spacing, word-spacing, and justification) as
+  // configured to |ShapeResultSpacing|.
+  // |text_start_offset| adjusts the character index in the ShapeResult before
+  // giving it to |ShapeResultSpacing|. It can be negative if
+  // |StartIndexForResult()| is larger than the text in |ShapeResultSpacing|.
+  void ApplySpacing(ShapeResultSpacing<String>&, int text_start_offset = 0);
+  scoped_refptr<ShapeResult> ApplySpacingToCopy(ShapeResultSpacing<TextRun>&,
+                                         const TextRun&) const;
 
   void CopyRange(unsigned start, unsigned end, ShapeResult*) const;
 
- protected:
+  String ToString() const;
+  void ToString(StringBuilder*) const;
+
   struct RunInfo;
+  RunInfo* InsertRunForTesting(unsigned start_index,
+                               unsigned num_characters,
+                               TextDirection,
+                               Vector<uint16_t> safe_break_offsets = {});
+#if DCHECK_IS_ON()
+  void CheckConsistency() const;
+#endif
+
+ protected:
 
   ShapeResult(const Font*, unsigned num_characters, TextDirection);
   ShapeResult(const ShapeResult&);
 
-  static PassRefPtr<ShapeResult> Create(const ShapeResult& other) {
-    return AdoptRef(new ShapeResult(other));
+  static scoped_refptr<ShapeResult> Create(const ShapeResult& other) {
+    return base::AdoptRef(new ShapeResult(other));
   }
 
   template <typename TextContainerType>
-  void ApplySpacing(ShapeResultSpacing<TextContainerType>&,
-                    const TextContainerType&);
+  void ApplySpacingImpl(ShapeResultSpacing<TextContainerType>&,
+                        int text_start_offset = 0);
   template <bool is_horizontal_run>
   void ComputeGlyphPositions(ShapeResult::RunInfo*,
                              unsigned start_glyph,
@@ -128,11 +157,13 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
                  unsigned start_glyph,
                  unsigned num_glyphs,
                  hb_buffer_t*);
+  void InsertRun(std::unique_ptr<ShapeResult::RunInfo>);
+  void ReorderRtlRuns(unsigned run_size_before);
 
   float width_;
   FloatRect glyph_bounding_box_;
   Vector<std::unique_ptr<RunInfo>> runs_;
-  RefPtr<SimpleFontData> primary_font_;
+  scoped_refptr<SimpleFontData> primary_font_;
 
   unsigned num_characters_;
   unsigned num_glyphs_ : 30;

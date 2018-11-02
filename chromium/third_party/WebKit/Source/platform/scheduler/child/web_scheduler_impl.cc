@@ -19,11 +19,16 @@ WebSchedulerImpl::WebSchedulerImpl(
     ChildScheduler* child_scheduler,
     scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner,
     scoped_refptr<TaskQueue> loading_task_runner,
-    scoped_refptr<TaskQueue> timer_task_runner)
+    scoped_refptr<TaskQueue> timer_task_runner,
+    scoped_refptr<TaskQueue> v8_task_runner)
     : child_scheduler_(child_scheduler),
       idle_task_runner_(idle_task_runner),
-      loading_web_task_runner_(WebTaskRunnerImpl::Create(loading_task_runner)),
-      timer_web_task_runner_(WebTaskRunnerImpl::Create(timer_task_runner)) {}
+      loading_web_task_runner_(
+          WebTaskRunnerImpl::Create(loading_task_runner, base::nullopt)),
+      timer_web_task_runner_(
+          WebTaskRunnerImpl::Create(timer_task_runner, base::nullopt)),
+      v8_web_task_runner_(
+          WebTaskRunnerImpl::Create(v8_task_runner, base::nullopt)) {}
 
 WebSchedulerImpl::~WebSchedulerImpl() {}
 
@@ -63,11 +68,15 @@ void WebSchedulerImpl::PostNonNestableIdleTask(
 }
 
 blink::WebTaskRunner* WebSchedulerImpl::LoadingTaskRunner() {
-  return loading_web_task_runner_.Get();
+  return loading_web_task_runner_.get();
 }
 
 blink::WebTaskRunner* WebSchedulerImpl::TimerTaskRunner() {
-  return timer_web_task_runner_.Get();
+  return timer_web_task_runner_.get();
+}
+
+blink::WebTaskRunner* WebSchedulerImpl::V8TaskRunner() {
+  return v8_web_task_runner_.get();
 }
 
 blink::WebTaskRunner* WebSchedulerImpl::CompositorTaskRunner() {
@@ -79,6 +88,11 @@ WebSchedulerImpl::CreateWebViewScheduler(
     InterventionReporter*,
     WebViewScheduler::WebViewSchedulerDelegate*) {
   NOTREACHED();
+  return nullptr;
+}
+
+std::unique_ptr<WebSchedulerImpl::RendererPauseHandle>
+WebSchedulerImpl::PauseScheduler() {
   return nullptr;
 }
 

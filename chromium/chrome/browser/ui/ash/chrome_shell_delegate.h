@@ -22,8 +22,6 @@ namespace keyboard {
 class KeyboardUI;
 }
 
-class ChromeLauncherController;
-
 class ChromeShellDelegate : public ash::ShellDelegate,
                             public content::NotificationObserver {
  public:
@@ -32,32 +30,20 @@ class ChromeShellDelegate : public ash::ShellDelegate,
 
   // ash::ShellDelegate overrides;
   service_manager::Connector* GetShellConnector() const override;
-  bool IsMultiProfilesEnabled() const override;
-  bool IsIncognitoAllowed() const override;
   bool IsRunningInForcedAppMode() const override;
   bool CanShowWindowForUser(aura::Window* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
-  void Exit() override;
   std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
-  void ShelfInit() override;
-  void ShelfShutdown() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
+  std::unique_ptr<ash::ScreenshotDelegate> CreateScreenshotDelegate() override;
   std::unique_ptr<ash::WallpaperDelegate> CreateWallpaperDelegate() override;
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  std::unique_ptr<ash::PaletteDelegate> CreatePaletteDelegate() override;
-  ash::GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   void OpenKeyboardShortcutHelpPage() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
-  bool GetTouchscreenEnabled(
-      ash::TouchscreenEnabledSource source) const override;
-  void SetTouchscreenEnabled(bool enabled,
-                             ash::TouchscreenEnabledSource source) override;
-  void ToggleTouchpad() override;
-  void SuspendMediaSessions() override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
   // content::NotificationObserver override:
@@ -69,8 +55,6 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   void PlatformInit();
 
   content::NotificationRegistrar registrar_;
-
-  std::unique_ptr<ChromeLauncherController> launcher_controller_;
 
   std::unique_ptr<chromeos::DisplayConfigurationObserver>
       display_configuration_observer_;

@@ -11,9 +11,8 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/arc/common/voice_interaction_arc_home.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/accessibility/ax_tree_update.h"
 
 namespace content {
@@ -33,8 +32,9 @@ class ArcBridgeService;
 class ArcVoiceInteractionArcHomeService
     : public KeyedService,
       public mojom::VoiceInteractionArcHomeHost,
-      public InstanceHolder<mojom::VoiceInteractionArcHomeInstance>::Observer,
-      public ArcAppListPrefs::Observer {
+      public ConnectionObserver<mojom::VoiceInteractionArcHomeInstance>,
+      public ArcAppListPrefs::Observer,
+      public ArcSessionManager::Observer {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -57,13 +57,12 @@ class ArcVoiceInteractionArcHomeService
   // KeyedService overrides:
   void Shutdown() override;
 
-  // InstanceHolder<mojom::VoiceInteractionArcHomeInstance> overrides;
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::VoiceInteractionArcHomeInstance> overrides;
+  void OnConnectionClosed() override;
 
   // Gets view hierarchy from current focused app and send it to ARC.
   void GetVoiceInteractionStructure(
-      const GetVoiceInteractionStructureCallback& callback) override;
+      GetVoiceInteractionStructureCallback callback) override;
   void OnVoiceInteractionOobeSetupComplete() override;
 
   static mojom::VoiceInteractionStructurePtr
@@ -88,6 +87,9 @@ class ArcVoiceInteractionArcHomeService
                      const std::string& intent) override;
   void OnTaskDestroyed(int32_t task_id) override;
 
+  // ArcSessionManager::Observer:
+  void OnArcPlayStoreEnabledChanged(bool enabled) override;
+
   // Locks/Unlocks Play Auto Install.
   void LockPai();
   void UnlockPai();
@@ -111,7 +113,8 @@ class ArcVoiceInteractionArcHomeService
   base::OneShotTimer wizard_completed_timer_;
   base::TimeDelta wizard_completed_timeout_;
 
-  mojo::Binding<mojom::VoiceInteractionArcHomeHost> binding_;
+  // Whether there is a pending request to lock PAI before it's available.
+  bool pending_pai_lock_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ArcVoiceInteractionArcHomeService);
 };

@@ -27,13 +27,14 @@ Persistent<CustomElementReactionStack>& GetCustomElementReactionStack() {
 
 CustomElementReactionStack::CustomElementReactionStack() {}
 
-DEFINE_TRACE(CustomElementReactionStack) {
+void CustomElementReactionStack::Trace(blink::Visitor* visitor) {
   visitor->Trace(map_);
   visitor->Trace(stack_);
   visitor->Trace(backup_queue_);
 }
 
-DEFINE_TRACE_WRAPPERS(CustomElementReactionStack) {
+void CustomElementReactionStack::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (auto key : map_.Keys()) {
     visitor->TraceWrappers(key);
   }

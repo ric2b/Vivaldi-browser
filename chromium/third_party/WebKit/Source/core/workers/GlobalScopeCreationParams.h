@@ -11,15 +11,16 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerSettings.h"
-#include "core/workers/WorkerThread.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebAddressSpace.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
 
 namespace blink {
 
@@ -37,15 +38,15 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
       const String& user_agent,
       const String& source_code,
       std::unique_ptr<Vector<char>> cached_meta_data,
-      WorkerThreadStartMode,
       const Vector<CSPHeaderAndType>* content_security_policy_parsed_headers,
-      const String& referrer_policy,
+      ReferrerPolicy referrer_policy,
       const SecurityOrigin*,
       WorkerClients*,
       WebAddressSpace,
       const Vector<String>* origin_trial_tokens,
       std::unique_ptr<WorkerSettings>,
-      V8CacheOptions);
+      V8CacheOptions,
+      service_manager::mojom::blink::InterfaceProviderPtrInfo = {});
 
   ~GlobalScopeCreationParams() = default;
 
@@ -53,7 +54,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   String user_agent;
   String source_code;
   std::unique_ptr<Vector<char>> cached_meta_data;
-  WorkerThreadStartMode start_mode;
+
   // |content_security_policy_parsed_headers| and
   // |content_security_policy_raw_headers| are mutually exclusive.
   // |content_security_policy_parsed_headers| is an empty vector
@@ -62,19 +63,23 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
       content_security_policy_parsed_headers;
   WTF::Optional<ContentSecurityPolicyResponseHeaders>
       content_security_policy_raw_headers;
-  String referrer_policy;
+
+  ReferrerPolicy referrer_policy;
   std::unique_ptr<Vector<String>> origin_trial_tokens;
 
-  // The SecurityOrigin of the Document creating a Worker may have
-  // been configured with extra policy privileges when it was created
-  // (e.g., enforce path-based file:// origins.)
-  // To ensure that these are transferred to the origin of a new worker
-  // global scope, supply the Document's SecurityOrigin as the
-  // 'starter origin'.
+  // The SecurityOrigin of the Document creating a Worker/Worklet.
   //
-  // See SecurityOrigin::transferPrivilegesFrom() for details on what
-  // privileges are transferred.
-  std::unique_ptr<SecurityOrigin::PrivilegeData> starter_origin_privilege_data;
+  // For Workers, the origin may have been configured with extra policy
+  // privileges when it was created (e.g., enforce path-based file:// origins.)
+  // To ensure that these are transferred to the origin of a new worker global
+  // scope, supply the Document's SecurityOrigin as the 'starter origin'. See
+  // SecurityOrigin::TransferPrivilegesFrom() for details on what privileges are
+  // transferred.
+  //
+  // For Worklets, the origin is used for fetching module scripts. Worklet
+  // scripts need to be fetched as sub-resources of the Document, and a module
+  // script loader uses Document's SecurityOrigin for security checks.
+  scoped_refptr<SecurityOrigin> starter_origin;
 
   // This object is created and initialized on the thread creating
   // a new worker context, but ownership of it and this
@@ -92,6 +97,8 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   std::unique_ptr<WorkerSettings> worker_settings;
 
   V8CacheOptions v8_cache_options;
+
+  service_manager::mojom::blink::InterfaceProviderPtrInfo interface_provider;
 };
 
 }  // namespace blink

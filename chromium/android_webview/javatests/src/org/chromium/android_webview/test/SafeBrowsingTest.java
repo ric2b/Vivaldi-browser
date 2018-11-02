@@ -15,7 +15,6 @@ import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.view.ViewGroup;
-import android.webkit.ValueCallback;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -41,6 +40,7 @@ import org.chromium.android_webview.ErrorCodeConversionHelper;
 import org.chromium.android_webview.SafeBrowsingAction;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedError2Helper;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
+import org.chromium.base.Callback;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
@@ -48,6 +48,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.InMemorySharedPreferences;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler.Observer;
@@ -133,6 +134,9 @@ public class SafeBrowsingTest {
         private static final int MALWARE_CODE = 4;
         private static final int UNWANTED_SOFTWARE_CODE = 3;
 
+        // Mock time it takes for a lookup request to complete.
+        private static final long CHECK_DELTA_US = 10;
+
         @Override
         public boolean init(Context context, Observer result) {
             mObserver = result;
@@ -165,9 +169,11 @@ public class SafeBrowsingTest {
                 metadata = SAFE_METADATA;
             }
 
+            // clang-format off
             ThreadUtils.runOnUiThread(
-                    (Runnable) () -> mObserver.onUrlCheckDone(callbackId, STATUS_SUCCESS,
-                            metadata));
+                    (Runnable) () -> mObserver.onUrlCheckDone(
+                        callbackId, STATUS_SUCCESS, metadata, CHECK_DELTA_US));
+            // clang-format on
         }
     }
 
@@ -246,10 +252,10 @@ public class SafeBrowsingTest {
 
         @Override
         public void onSafeBrowsingHit(AwWebResourceRequest request, int threatType,
-                ValueCallback<AwSafeBrowsingResponse> callback) {
+                Callback<AwSafeBrowsingResponse> callback) {
             mLastRequest = request;
             mLastThreatType = threatType;
-            callback.onReceiveValue(new AwSafeBrowsingResponse(mAction, mReporting));
+            callback.onResult(new AwSafeBrowsingResponse(mAction, mReporting));
         }
 
         public AwWebResourceRequest getLastRequest() {
@@ -269,7 +275,8 @@ public class SafeBrowsingTest {
         }
     }
 
-    private static class SafeBrowsingDependencyFactory extends AwTestBase.TestDependencyFactory {
+    private static class SafeBrowsingDependencyFactory
+            extends AwActivityTestRule.TestDependencyFactory {
         @Override
         public AwContents createAwContents(AwBrowserContext browserContext, ViewGroup containerView,
                 Context context, InternalAccessDelegate internalAccessAdapter,
@@ -293,10 +300,11 @@ public class SafeBrowsingTest {
         }
     }
 
-    private static class WhitelistHelper extends CallbackHelper implements ValueCallback<Boolean> {
+    private static class WhitelistHelper extends CallbackHelper implements Callback<Boolean> {
         public boolean success;
 
-        public void onReceiveValue(Boolean success) {
+        @Override
+        public void onResult(Boolean success) {
             this.success = success;
             notifyCalled();
         }
@@ -338,7 +346,7 @@ public class SafeBrowsingTest {
     }
 
     private void evaluateJavaScriptOnInterstitialOnUiThread(
-            final String script, final ValueCallback<String> callback) {
+            final String script, final Callback<String> callback) {
         ThreadUtils.runOnUiThread(
                 () -> mAwContents.evaluateJavaScriptOnInterstitialForTesting(script, callback));
     }
@@ -347,7 +355,7 @@ public class SafeBrowsingTest {
         final String script = "document.readyState;";
         final JavaScriptHelper helper = new JavaScriptHelper();
 
-        final ValueCallback<String> callback = value -> {
+        final Callback<String> callback = value -> {
             helper.setValue(value);
             helper.notifyCalled();
         };
@@ -406,18 +414,42 @@ public class SafeBrowsingTest {
 
     private void assertTargetPageHasLoaded(int pageColor) throws Exception {
         mActivityTestRule.waitForVisualStateCallback(mAwContents);
-        Assert.assertEquals("Target page should be visible", pageColor,
-                GraphicsTestUtils.getPixelColorAtCenterOfView(mAwContents, mContainerView));
+        Assert.assertEquals("Target page should be visible", colorToString(pageColor),
+                colorToString(GraphicsTestUtils.getPixelColorAtCenterOfView(
+                        mAwContents, mContainerView)));
+    }
+
+    private void assertGreenPageShowing() throws Exception {
+        Assert.assertEquals("Original page should be showing",
+                colorToString(GREEN_PAGE_BACKGROUND_COLOR),
+                colorToString(GraphicsTestUtils.getPixelColorAtCenterOfView(
+                        mAwContents, mContainerView)));
     }
 
     private void assertGreenPageNotShowing() throws Exception {
-        assertNotEquals("Original page should not be showing", GREEN_PAGE_BACKGROUND_COLOR,
-                GraphicsTestUtils.getPixelColorAtCenterOfView(mAwContents, mContainerView));
+        assertNotEquals("Original page should not be showing",
+                colorToString(GREEN_PAGE_BACKGROUND_COLOR),
+                colorToString(GraphicsTestUtils.getPixelColorAtCenterOfView(
+                        mAwContents, mContainerView)));
     }
 
     private void assertTargetPageNotShowing(int pageColor) throws Exception {
-        assertNotEquals("Target page should not be showing", pageColor,
-                GraphicsTestUtils.getPixelColorAtCenterOfView(mAwContents, mContainerView));
+        assertNotEquals("Target page should not be showing", colorToString(pageColor),
+                colorToString(GraphicsTestUtils.getPixelColorAtCenterOfView(
+                        mAwContents, mContainerView)));
+    }
+
+    /**
+     * Converts a color from the confusing integer representation to a more readable string
+     * respresentation. There is a 1:1 mapping between integer and string representations, so it's
+     * valid to compare strings directly. The string representation is better for assert output.
+     *
+     * @param color integer representation of the color
+     * @return a String representation of the color in RGBA format
+     */
+    private String colorToString(int color) {
+        return "(" + Color.red(color) + "," + Color.green(color) + "," + Color.blue(color) + ","
+                + Color.alpha(color) + ")";
     }
 
     @Test
@@ -654,6 +686,7 @@ public class SafeBrowsingTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add(AwSwitches.WEBVIEW_DISABLE_SAFEBROWSING_SUPPORT)
     public void testSafeBrowsingCanBeEnabledPerWebview() throws Throwable {
         final String responseUrl = mTestServer.getURL(MALWARE_HTML_PATH);
         mActivityTestRule.loadUrlSync(
@@ -783,8 +816,7 @@ public class SafeBrowsingTest {
         Assert.assertEquals("Network error is for the malicious page", responseUrl,
                 errorHelper.getRequest().url);
 
-        Assert.assertEquals("Original page should be showing", GREEN_PAGE_BACKGROUND_COLOR,
-                GraphicsTestUtils.getPixelColorAtCenterOfView(mAwContents, mContainerView));
+        assertGreenPageShowing();
 
         // Check onSafeBrowsingHit arguments
         Assert.assertEquals(responseUrl, mContentsClient.getLastRequest().url);
@@ -819,6 +851,7 @@ public class SafeBrowsingTest {
 
     @Test
     @SmallTest
+    @RetryOnFailure // crbug/765932
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
     public void testSafeBrowsingOnSafeBrowsingHitForSubresource() throws Throwable {
@@ -833,9 +866,11 @@ public class SafeBrowsingTest {
         mContentsClient.getOnPageFinishedHelper().waitForCallback(pageFinishedCount);
 
         // Wait for the onSafeBrowsingHit to call BACK_TO_SAFETY and navigate back
-        mActivityTestRule.pollUiThread(() -> GREEN_PAGE_BACKGROUND_COLOR
-                == GraphicsTestUtils.getPixelColorAtCenterOfView(
-                mAwContents, mContainerView));
+        // clang-format off
+        mActivityTestRule.pollUiThread(() -> colorToString(GREEN_PAGE_BACKGROUND_COLOR).equals(
+                colorToString(GraphicsTestUtils.getPixelColorAtCenterOfView(mAwContents,
+                        mContainerView))));
+        // clang-format on
 
         // Check onSafeBrowsingHit arguments
         Assert.assertFalse(mContentsClient.getLastRequest().isMainFrame);
@@ -939,13 +974,11 @@ public class SafeBrowsingTest {
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
     public void testSafeBrowsingClickDiagnosticLink() throws Throwable {
-        // Only malware interstitials have the diagnostic-link
         final String responseUrl = mTestServer.getURL(MALWARE_HTML_PATH);
         final String diagnosticUrl =
-                Uri.parse("https://www.google.com/safebrowsing/diagnostic")
+                Uri.parse("https://transparencyreport.google.com/safe-browsing/search")
                         .buildUpon()
-                        .appendQueryParameter("site", responseUrl)
-                        .appendQueryParameter("client", "chromium")
+                        .appendQueryParameter("url", responseUrl)
                         .appendQueryParameter("hl", LocaleUtils.getDefaultLocaleString())
                         .toString();
         loadInterstitialAndClickLink(MALWARE_HTML_PATH, "diagnostic-link", diagnosticUrl);
@@ -1033,6 +1066,7 @@ public class SafeBrowsingTest {
             super(context);
         }
 
+        @Override
         public Context getApplicationContext() {
             mGetApplicationContextWasCalled = true;
             return super.getApplicationContext();

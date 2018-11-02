@@ -5,7 +5,6 @@
 
 namespace webview {
 
-extern const char kEventRequestPageInfo[];
 extern const char kEventSSLStateChanged[];
 extern const char kEventTargetURLChanged[];
 extern const char kEventCreateSearch[];

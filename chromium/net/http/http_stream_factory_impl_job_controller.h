@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/cancelable_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/privacy_mode.h"
 #include "net/http/http_stream_factory_impl_job.h"
@@ -277,12 +278,13 @@ class HttpStreamFactoryImpl::JobController
       HttpStreamRequest::Delegate* delegate,
       HttpStreamRequest::StreamType stream_type);
 
-  // Returns a QuicVersion that has been advertised in |advertised_versions|
-  // and is supported.  If more than one QuicVersions are supported, the first
-  // matched in the supported versions will be returned.  If no mutually
-  // supported version is found, QUIC_VERSION_UNSUPPORTED_VERSION will be
-  // returned.
-  QuicVersion SelectQuicVersion(const QuicVersionVector& advertised_versions);
+  // Returns a QuicTransportVersion that has been advertised in
+  // |advertised_versions| and is supported.  If more than one
+  // QuicTransportVersions are supported, the first matched in the supported
+  // versions will be returned.  If no mutually supported version is found,
+  // QUIC_VERSION_UNSUPPORTED_VERSION will be returned.
+  QuicTransportVersion SelectQuicVersion(
+      const QuicTransportVersionVector& advertised_versions);
 
   // Remove session from the SpdySessionRequestMap.
   void RemoveRequestFromSpdySessionRequestMap();
@@ -310,6 +312,9 @@ class HttpStreamFactoryImpl::JobController
   // configuration is available synchronously or asynchronously.  Otherwise, the
   // given error code is simply returned.
   int ReconsiderProxyAfterError(Job* job, int error);
+
+  // Returns true if QUIC is whitelisted for |host|.
+  bool IsQuicWhitelistedForHost(const std::string& host);
 
   HttpStreamFactoryImpl* factory_;
   HttpNetworkSession* session_;
@@ -352,6 +357,8 @@ class HttpStreamFactoryImpl::JobController
   // job must not create a connection until it is resumed.
   bool main_job_is_blocked_;
 
+  // Handle for cancelling any posted delayed ResumeMainJob() task.
+  base::CancelableOnceClosure resume_main_job_callback_;
   // True if the main job was blocked and has been resumed in ResumeMainJob().
   bool main_job_is_resumed_;
 

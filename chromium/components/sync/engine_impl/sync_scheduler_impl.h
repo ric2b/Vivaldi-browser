@@ -49,21 +49,21 @@ class SyncSchedulerImpl : public SyncScheduler {
   void ScheduleConfiguration(const ConfigurationParams& params) override;
   void ScheduleClearServerData(const ClearParams& params) override;
   void Stop() override;
-  void ScheduleLocalNudge(
-      ModelTypeSet types,
-      const tracked_objects::Location& nudge_location) override;
+  void ScheduleLocalNudge(ModelTypeSet types,
+                          const base::Location& nudge_location) override;
   void ScheduleLocalRefreshRequest(
       ModelTypeSet types,
-      const tracked_objects::Location& nudge_location) override;
+      const base::Location& nudge_location) override;
   void ScheduleInvalidationNudge(
       ModelType type,
       std::unique_ptr<InvalidationInterface> invalidation,
-      const tracked_objects::Location& nudge_location) override;
+      const base::Location& nudge_location) override;
   void ScheduleInitialSyncNudge(ModelType model_type) override;
   void SetNotificationsEnabled(bool notifications_enabled) override;
 
   void OnCredentialsUpdated() override;
-  void OnConnectionStatusChange() override;
+  void OnConnectionStatusChange(
+      net::NetworkChangeNotifier::ConnectionType type) override;
 
   // SyncCycle::Delegate implementation.
   void OnThrottled(const base::TimeDelta& throttle_duration) override;
@@ -168,7 +168,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   // then post a delayed task to run it.  It may also choose to drop the job or
   // save it for later, depending on the scheduler's current state.
   void ScheduleNudgeImpl(const base::TimeDelta& delay,
-                         const tracked_objects::Location& nudge_location);
+                         const base::Location& nudge_location);
 
   // Helper to signal listeners about changed retry time.
   void NotifyRetryTime(base::Time retry_time);

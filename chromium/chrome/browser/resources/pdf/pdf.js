@@ -103,6 +103,7 @@ function PDFViewer(browserApi) {
 
   this.isPrintPreview_ = location.origin === 'chrome://print';
   this.isPrintPreviewLoaded_ = false;
+  this.isUserInitiatedEvent_ = true;
 
   // Parse open pdf parameters.
   this.paramsParser_ =
@@ -139,7 +140,8 @@ function PDFViewer(browserApi) {
   this.viewport_ = new Viewport(
       window, this.sizer_, this.viewportChanged_.bind(this),
       this.beforeZoom_.bind(this), this.afterZoom_.bind(this),
-      getScrollbarWidth(), defaultZoom, topToolbarHeight);
+      this.setUserInitiated_.bind(this), getScrollbarWidth(), defaultZoom,
+      topToolbarHeight);
 
   // Create the plugin object dynamically so we can set its src. The plugin
   // element is sized to fill the entire window and is set to be fixed
@@ -185,8 +187,7 @@ function PDFViewer(browserApi) {
   // Setup the button event listeners.
   this.zoomToolbar_ = $('zoom-toolbar');
   this.zoomToolbar_.addEventListener(
-      'fit-to-width', this.viewport_.fitToWidth.bind(this.viewport_));
-  this.zoomToolbar_.addEventListener('fit-to-page', this.fitToPage_.bind(this));
+      'fit-to-changed', this.fitToChanged_.bind(this));
   this.zoomToolbar_.addEventListener(
       'zoom-in', this.viewport_.zoomIn.bind(this.viewport_));
   this.zoomToolbar_.addEventListener(
@@ -194,7 +195,7 @@ function PDFViewer(browserApi) {
 
   this.gestureDetector_ = new GestureDetector(this.plugin_);
   this.gestureDetector_.addEventListener(
-      'pinchstart', this.viewport_.pinchZoomStart.bind(this.viewport_));
+      'pinchstart', this.onPinchStart_.bind(this));
   this.sentPinchEvent_ = false;
   this.gestureDetector_.addEventListener(
       'pinchupdate', this.onPinchUpdate_.bind(this));
@@ -218,6 +219,10 @@ function PDFViewer(browserApi) {
 
   document.body.addEventListener('change-page', e => {
     this.viewport_.goToPage(e.detail.page);
+  });
+
+  document.body.addEventListener('change-page-and-y', e => {
+    this.viewport_.goToPageAndY(e.detail.page, e.detail.y);
   });
 
   document.body.addEventListener('navigate', e => {
@@ -275,8 +280,8 @@ PDFViewer.prototype = {
     this.toolbarManager_.hideToolbarsAfterTimeout(e);
 
     var pageUpHandler = () => {
-      // Go to the previous page if we are fit-to-page.
-      if (this.viewport_.fittingType == Viewport.FittingType.FIT_TO_PAGE) {
+      // Go to the previous page if we are fit-to-page or fit-to-height.
+      if (this.viewport_.isPagedMode()) {
         this.viewport_.goToPage(this.viewport_.getMostVisiblePage() - 1);
         // Since we do the movement of the page.
         e.preventDefault();
@@ -286,8 +291,8 @@ PDFViewer.prototype = {
       }
     };
     var pageDownHandler = () => {
-      // Go to the next page if we are fit-to-page.
-      if (this.viewport_.fittingType == Viewport.FittingType.FIT_TO_PAGE) {
+      // Go to the next page if we are fit-to-page or fit-to-height.
+      if (this.viewport_.isPagedMode()) {
         this.viewport_.goToPage(this.viewport_.getMostVisiblePage() + 1);
         // Since we do the movement of the page.
         e.preventDefault();
@@ -435,11 +440,19 @@ PDFViewer.prototype = {
 
   /**
    * @private
-   * Set zoom to "fit to page".
+   * Request to change the viewport fitting type.
+   * @param {CustomEvent} e Event received with the new FittingType as detail.
    */
-  fitToPage_: function() {
-    this.viewport_.fitToPage();
-    this.toolbarManager_.forceHideTopToolbar();
+  fitToChanged_: function(e) {
+    if (e.detail == FittingType.FIT_TO_PAGE) {
+      this.viewport_.fitToPage();
+      this.toolbarManager_.forceHideTopToolbar();
+    } else if (e.detail == FittingType.FIT_TO_WIDTH) {
+      this.viewport_.fitToWidth();
+    } else if (e.detail == FittingType.FIT_TO_HEIGHT) {
+      this.viewport_.fitToHeight();
+      this.toolbarManager_.forceHideTopToolbar();
+    }
   },
 
   /**
@@ -487,21 +500,37 @@ PDFViewer.prototype = {
    * Handle open pdf parameters. This function updates the viewport as per
    * the parameters mentioned in the url while opening pdf. The order is
    * important as later actions can override the effects of previous actions.
-   * @param {Object} viewportPosition The initial position of the viewport to be
-   *     displayed.
+   * @param {Object} params The open params passed in the URL.
    */
-  handleURLParams_: function(viewportPosition) {
-    if (viewportPosition.page != undefined)
-      this.viewport_.goToPage(viewportPosition.page);
-    if (viewportPosition.position) {
+  handleURLParams_: function(params) {
+    if (params.page != undefined)
+      this.viewport_.goToPage(params.page);
+
+    if (params.position) {
       // Make sure we don't cancel effect of page parameter.
       this.viewport_.position = {
-        x: this.viewport_.position.x + viewportPosition.position.x,
-        y: this.viewport_.position.y + viewportPosition.position.y
+        x: this.viewport_.position.x + params.position.x,
+        y: this.viewport_.position.y + params.position.y
       };
     }
-    if (viewportPosition.zoom)
-      this.viewport_.setZoom(viewportPosition.zoom);
+
+    if (params.zoom)
+      this.viewport_.setZoom(params.zoom);
+
+    if (params.view) {
+      this.isUserInitiatedEvent_ = false;
+      this.zoomToolbar_.forceFit(params.view);
+      if (params.viewPosition) {
+        var zoomedPositionShift = params.viewPosition * this.viewport_.zoom;
+        var currentViewportPosition = this.viewport_.position;
+        if (params.view == FittingType.FIT_TO_WIDTH)
+          currentViewportPosition.y += zoomedPositionShift;
+        else if (params.view == FittingType.FIT_TO_HEIGHT)
+          currentViewportPosition.x += zoomedPositionShift;
+        this.viewport_.position = currentViewportPosition;
+      }
+      this.isUserInitiatedEvent_ = true;
+    }
   },
 
   /**
@@ -575,7 +604,9 @@ PDFViewer.prototype = {
     switch (message.data.type.toString()) {
       case 'documentDimensions':
         this.documentDimensions_ = message.data;
+        this.isUserInitiatedEvent_ = false;
         this.viewport_.setDocumentDimensions(this.documentDimensions_);
+        this.isUserInitiatedEvent_ = true;
         // If we received the document dimensions, the password was good so we
         // can dismiss the password screen.
         if (this.passwordScreen_.active)
@@ -652,6 +683,13 @@ PDFViewer.prototype = {
       case 'setIsSelecting':
         this.viewportScroller_.setEnableScrolling(message.data.isSelecting);
         break;
+      case 'setIsEditMode':
+        // TODO(hnakashima): Replace this with final visual indication from UX.
+        if (message.data.isEditMode)
+          this.toolbar_.docTitle = document.title + ' (edit mode)';
+        else
+          this.toolbar_.docTitle = document.title;
+        break;
       case 'getNamedDestinationReply':
         this.paramsParser_.onNamedDestinationReceived(message.data.pageNumber);
         break;
@@ -675,6 +713,7 @@ PDFViewer.prototype = {
       var pinchPhase = this.viewport_.pinchPhase;
       this.plugin_.postMessage({
         type: 'viewport',
+        userInitiated: true,
         zoom: zoom,
         xOffset: position.x,
         yOffset: position.y,
@@ -697,6 +736,7 @@ PDFViewer.prototype = {
 
     this.plugin_.postMessage({
       type: 'viewport',
+      userInitiated: this.isUserInitiatedEvent_,
       zoom: zoom,
       xOffset: position.x,
       yOffset: position.y,
@@ -707,6 +747,19 @@ PDFViewer.prototype = {
       pinchVectorY: pinchVector.y
     });
     this.zoomManager_.onPdfZoomChange();
+  },
+
+  /**
+   * @param {boolean} userInitiated The value to set |isUserInitiatedEvent_|
+   *     to.
+   * @private
+   * A callback that sets |isUserInitiatedEvent_| to |userInitiated|.
+   */
+  setUserInitiated_: function(userInitiated) {
+    if (this.isUserInitiatedEvent_ == userInitiated) {
+      throw 'Trying to set user initiated to current value.';
+    }
+    this.isUserInitiatedEvent_ = userInitiated;
   },
 
   /**
@@ -735,6 +788,19 @@ PDFViewer.prototype = {
     // sent after the pinch end.
     window.requestAnimationFrame(() => {
       this.viewport_.pinchZoomEnd(e);
+    });
+  },
+
+  /**
+   * @private
+   * A callback that's called when the start of a pinch zoom is detected.
+   * @param {!Object} e the pinch event.
+   */
+  onPinchStart_: function(e) {
+    // We also use rAF for pinch start, so that if there is a pinch end event
+    // scheduled by rAF, this pinch start will be sent after.
+    window.requestAnimationFrame(() => {
+      this.viewport_.pinchZoomStart(e);
     });
   },
 
@@ -850,7 +916,9 @@ PDFViewer.prototype = {
         this.loadState_ = LoadState.LOADING;
         if (!this.inPrintPreviewMode_) {
           this.inPrintPreviewMode_ = true;
-          this.zoomToolbar_.forceFitToPage();
+          this.isUserInitiatedEvent_ = false;
+          this.zoomToolbar_.forceFit(FittingType.FIT_TO_PAGE);
+          this.isUserInitiatedEvent_ = true;
         }
 
         // Stash the scroll location so that it can be restored when the new

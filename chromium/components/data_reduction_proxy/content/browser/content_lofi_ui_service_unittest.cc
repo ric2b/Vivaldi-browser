@@ -29,10 +29,10 @@ namespace data_reduction_proxy {
 
 class ContentLoFiUIServiceTest : public content::RenderViewHostTestHarness {
  public:
-  ContentLoFiUIServiceTest() : callback_called_(false) {
-    // Cannot use IO_MAIN_LOOP with RenderViewHostTestHarness.
-    SetThreadBundleOptions(content::TestBrowserThreadBundle::REAL_IO_THREAD);
-  }
+  ContentLoFiUIServiceTest()
+      : content::RenderViewHostTestHarness(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD),
+        callback_called_(false) {}
 
   void RunTestOnIOThread(base::RunLoop* ui_run_loop) {
     ASSERT_TRUE(ui_run_loop);
@@ -72,13 +72,13 @@ class ContentLoFiUIServiceTest : public content::RenderViewHostTestHarness {
                               delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
 
     content::ResourceRequestInfo::AllocateForTesting(
-        request.get(), content::RESOURCE_TYPE_SUB_FRAME, NULL,
+        request.get(), content::RESOURCE_TYPE_SUB_FRAME, nullptr,
         web_contents()->GetMainFrame()->GetProcess()->GetID(), -1,
         web_contents()->GetMainFrame()->GetRoutingID(),
         /*is_main_frame=*/false,
-        /*parent_is_main_frame=*/false,
         /*allow_download=*/false,
-        /*is_async=*/false, content::SERVER_LOFI_ON);
+        /*is_async=*/false, content::SERVER_LOFI_ON,
+        /*navigation_ui_data*/ nullptr);
 
     return request;
   }

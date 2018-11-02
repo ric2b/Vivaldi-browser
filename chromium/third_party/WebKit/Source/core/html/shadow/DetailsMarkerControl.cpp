@@ -30,8 +30,8 @@
 
 #include "core/html/shadow/DetailsMarkerControl.h"
 
-#include "core/HTMLNames.h"
 #include "core/html/HTMLSummaryElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutDetailsMarker.h"
 
 namespace blink {
@@ -51,7 +51,7 @@ bool DetailsMarkerControl::LayoutObjectIsNeeded(const ComputedStyle& style) {
 }
 
 HTMLSummaryElement* DetailsMarkerControl::SummaryElement() {
-  return toHTMLSummaryElement(OwnerShadowHost());
+  return ToHTMLSummaryElement(OwnerShadowHost());
 }
 
 }  // namespace blink

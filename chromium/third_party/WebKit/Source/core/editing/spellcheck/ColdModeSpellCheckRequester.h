@@ -5,11 +5,14 @@
 #ifndef ColdModeSpellCheckRequester_h
 #define ColdModeSpellCheckRequester_h
 
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
+#include "core/editing/Position.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
+class Element;
+class LocalFrame;
 class IdleDeadline;
 class SpellCheckRequester;
 
@@ -27,7 +30,7 @@ class ColdModeSpellCheckRequester
   void Invoke(IdleDeadline*);
   bool FullDocumentChecked() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit ColdModeSpellCheckRequester(LocalFrame&);

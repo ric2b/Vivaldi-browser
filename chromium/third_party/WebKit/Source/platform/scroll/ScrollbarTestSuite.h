@@ -6,6 +6,7 @@
 #define ScrollbarTestSuite_h
 
 #include <memory>
+#include "platform/PlatformChromeClient.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/scroll/ScrollableArea.h"
@@ -17,6 +18,29 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace blink {
+
+class MockPlatformChromeClient : public PlatformChromeClient {
+ public:
+  MockPlatformChromeClient() : is_popup_(false) {}
+
+  bool IsPopup() override { return is_popup_; }
+
+  void SetIsPopup(bool is_popup) { is_popup_ = is_popup; }
+
+  void InvalidateRect(const IntRect&) override {}
+
+  IntRect ViewportToScreen(const IntRect&,
+                           const PlatformFrameView*) const override {
+    return IntRect();
+  }
+
+  float WindowToViewportScalar(const float) const override { return 0; }
+
+  void ScheduleAnimation(const PlatformFrameView*) override {}
+
+ private:
+  bool is_popup_;
+};
 
 class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
                            public ScrollableArea {
@@ -71,21 +95,37 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
     ScrollableArea::SetScrollOrigin(origin);
   }
 
-  RefPtr<WebTaskRunner> GetTimerTaskRunner() const final {
+  scoped_refptr<WebTaskRunner> GetTimerTaskRunner() const final {
     return Platform::Current()->CurrentThread()->Scheduler()->TimerTaskRunner();
   }
 
+  PlatformChromeClient* GetChromeClient() const override {
+    return chrome_client_.Get();
+  }
+
+  void SetIsPopup() { chrome_client_->SetIsPopup(true); }
+
+  ScrollbarTheme& GetPageScrollbarTheme() const override {
+    return ScrollbarTheme::DeprecatedStaticGetTheme();
+  }
+
+  using ScrollableArea::ShowOverlayScrollbars;
   using ScrollableArea::HorizontalScrollbarNeedsPaintInvalidation;
   using ScrollableArea::VerticalScrollbarNeedsPaintInvalidation;
   using ScrollableArea::ClearNeedsPaintInvalidationForScrollControls;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ScrollableArea::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    visitor->Trace(chrome_client_);
+    ScrollableArea::Trace(visitor);
+  }
 
  protected:
   explicit MockScrollableArea()
-      : maximum_scroll_offset_(ScrollOffset(0, 100)) {}
+      : maximum_scroll_offset_(ScrollOffset(0, 100)),
+        chrome_client_(new MockPlatformChromeClient()) {}
   explicit MockScrollableArea(const ScrollOffset& offset)
-      : maximum_scroll_offset_(offset) {}
+      : maximum_scroll_offset_(offset),
+        chrome_client_(new MockPlatformChromeClient()) {}
 
  private:
   void SetMaximumScrollOffset(const ScrollOffset& maximum_scroll_offset) {
@@ -94,6 +134,7 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
 
   ScrollOffset scroll_offset_;
   ScrollOffset maximum_scroll_offset_;
+  Member<MockPlatformChromeClient> chrome_client_;
 };
 
 }  // namespace blink

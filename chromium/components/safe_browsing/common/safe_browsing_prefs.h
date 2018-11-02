@@ -14,10 +14,6 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace prefs {
-// Boolean that is true when Chrome settings page should show change password
-// warning.
-extern const char kSafeBrowsingChangePasswordInSettingsEnabled[];
-
 // Boolean that is true when SafeBrowsing is enabled.
 extern const char kSafeBrowsingEnabled[];
 
@@ -52,24 +48,18 @@ extern const char kSafeBrowsingScoutGroupSelected[];
 // Boolean indicating whether Safe Browsing Scout reporting is enabled, which
 // collects data for malware detection.
 extern const char kSafeBrowsingScoutReportingEnabled[];
+
+// Dictionary that records the origin and navigation ID pairs of unhandled sync
+// password reuses.
+extern const char kSafeBrowsingUnhandledSyncPasswordReuses[];
 }
 
 namespace safe_browsing {
-
-// Command-line switch for changing the scout_group_selected preference. Should
-// be set to either 'true' or 'false'. Primarily for testing purposes.
-// TODO: this is temporary (crbug.com/662944)
-extern const char kSwitchForceScoutGroup[];
 
 // When this feature is enabled, the Scout opt-in text will be displayed as of
 // the next security incident. Until then, the legacy SBER text will appear.
 // TODO: this is temporary (crbug.com/662944)
 extern const base::Feature kCanShowScoutOptIn;
-
-// When this feature is enabled, the Scout opt-in text will immediately be
-// displayed everywhere.
-// TODO: this is temporary (crbug.com/662944)
-extern const base::Feature kOnlyShowScoutOptIn;
 
 // Enumerates the level of Safe Browsing Extended Reporting that is currently
 // available.

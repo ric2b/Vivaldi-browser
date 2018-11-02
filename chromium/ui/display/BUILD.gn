@@ -24,10 +24,6 @@ component("display") {
     "display_observer.h",
     "display_switches.cc",
     "display_switches.h",
-    "fake_display_delegate.cc",
-    "fake_display_delegate.h",
-    "fake_display_snapshot.cc",
-    "fake_display_snapshot.h",
     "ios/screen_ios.mm",
     "mac/screen_mac.mm",
     "screen.cc",
@@ -36,6 +32,8 @@ component("display") {
     "screen_aura.cc",
     "screen_base.cc",
     "screen_base.h",
+    "unified_desktop_utils.cc",
+    "unified_desktop_utils.h",
     "win/color_profile_reader.cc",
     "win/color_profile_reader.h",
     "win/display_info.cc",
@@ -60,7 +58,6 @@ component("display") {
   deps = [
     "//base",
     "//mojo/public/cpp/bindings:struct_traits",
-    "//third_party/re2",
     "//ui/display/util",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -109,6 +106,10 @@ static_library("test_support") {
     "manager/chromeos/test/test_display_layout_manager.h",
     "manager/chromeos/test/test_native_display_delegate.cc",
     "manager/chromeos/test/test_native_display_delegate.h",
+    "manager/chromeos/test/touch_device_manager_test_api.cc",
+    "manager/chromeos/test/touch_device_manager_test_api.h",
+    "manager/chromeos/test/touch_transform_controller_test_api.cc",
+    "manager/chromeos/test/touch_transform_controller_test_api.h",
     "test/display_matchers.cc",
     "test/display_matchers.h",
     "test/display_test_util.h",
@@ -126,6 +127,7 @@ static_library("test_support") {
     "//base",
     "//testing/gmock",
     "//ui/display/types",
+    "//ui/events/devices",
     "//ui/gfx",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
@@ -140,20 +142,21 @@ test("display_unittests") {
     "display_layout_unittest.cc",
     "display_list_unittest.cc",
     "display_unittest.cc",
-    "fake_display_snapshot_unittests.cc",
     "manager/chromeos/apply_content_protection_task_unittest.cc",
     "manager/chromeos/configure_displays_task_unittest.cc",
     "manager/chromeos/display_change_observer_unittest.cc",
     "manager/chromeos/display_configurator_unittest.cc",
     "manager/chromeos/query_content_protection_task_unittest.cc",
+    "manager/chromeos/touch_device_manager_unittest.cc",
     "manager/chromeos/touch_transform_controller_unittest.cc",
-    "manager/chromeos/touchscreen_util_unittest.cc",
     "manager/chromeos/update_display_configuration_task_unittest.cc",
     "manager/display_manager_utilities_unittest.cc",
+    "manager/fake_display_snapshot_unittest.cc",
     "manager/json_converter_unittest.cc",
     "manager/managed_display_info_unittest.cc",
     "mojo/display_struct_traits_unittest.cc",
     "screen_unittest.cc",
+    "unified_desktop_utils_unittests.cc",
     "util/display_util_unittest.cc",
     "util/edid_parser_unittest.cc",
     "win/scaling_util_unittest.cc",
@@ -166,6 +169,7 @@ test("display_unittests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//cc/base",
     "//mojo/edk/test:run_all_unittests",
     "//testing/gmock",
     "//testing/gtest",
@@ -183,5 +187,9 @@ test("display_unittests") {
     # Do not run display_change_notifier_unittest.cc on Android because it
     # does not compile display_observer.cc
     sources -= [ "display_change_notifier_unittest.cc" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//chromeos" ]
   }
 }

@@ -27,6 +27,7 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/DOMException.h"
@@ -47,10 +48,9 @@
 #include "modules/indexeddb/MockWebIDBDatabase.h"
 #include "platform/SharedBuffer.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/dtoa/utils.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/indexeddb/WebIDBCallbacks.h"
@@ -63,7 +63,7 @@ namespace {
 class IDBRequestTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    url_loader_mock_factory_ = Platform::Current()->GetURLLoaderMockFactory();
+    url_loader_mock_factory_ = platform_->GetURLLoaderMockFactory();
     WebURLResponse response;
     response.SetURL(KURL(NullURL(), "blob:"));
     url_loader_mock_factory_->RegisterURLProtocol(WebString("blob"), response,
@@ -86,7 +86,7 @@ class IDBRequestTest : public ::testing::Test {
         kWebIDBTransactionModeReadOnly, db_.Get());
 
     IDBKeyPath store_key_path("primaryKey");
-    RefPtr<IDBObjectStoreMetadata> store_metadata = AdoptRef(
+    scoped_refptr<IDBObjectStoreMetadata> store_metadata = base::AdoptRef(
         new IDBObjectStoreMetadata("store", kStoreId, store_key_path, true, 1));
     store_ = IDBObjectStore::Create(store_metadata, transaction_);
   }
@@ -95,6 +95,7 @@ class IDBRequestTest : public ::testing::Test {
   Persistent<IDBDatabase> db_;
   Persistent<IDBTransaction> transaction_;
   Persistent<IDBObjectStore> store_;
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 
   static constexpr int64_t kTransactionId = 1234;
   static constexpr int64_t kStoreId = 5678;
@@ -163,6 +164,7 @@ TEST_F(IDBRequestTest, EventsAfterDoneStop) {
 TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithQueuedResult) {
   V8TestingScope scope;
   std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
+  EXPECT_CALL(*backend, AckReceivedBlobs(::testing::_)).Times(1);
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
@@ -186,6 +188,7 @@ TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithQueuedResult) {
 TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithTwoQueuedResults) {
   V8TestingScope scope;
   std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
+  EXPECT_CALL(*backend, AckReceivedBlobs(::testing::_)).Times(2);
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 

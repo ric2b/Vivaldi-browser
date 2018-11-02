@@ -11,11 +11,12 @@ OS_CHOICES = {
   "win": "win",
   "cygwin": "win",
   "darwin": "mac",
+  "ios": "ios",
   "mac": "mac",
-  "unix": "unix",
-  "linux": "unix",
-  "linux2": "unix",
-  "linux3": "unix",
+  "unix": "linux",
+  "linux": "linux",
+  "linux2": "linux",
+  "linux3": "linux",
   "android": "android",
 }
 
@@ -24,10 +25,12 @@ def IsAndroidEnabled():
     return True
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
 
+host_os = OS_CHOICES.get(sys.platform, 'unix')
+checkout_os = host_os
 if IsAndroidEnabled():
-  current_os = "android"
-else:
-  current_os = OS_CHOICES.get(sys.platform, 'unix')
+  checkout_os = "android"
+
+checkout_os = "checkout_"+checkout_os
 
 script_name = sys.argv[0]
 if not os.path.isabs(script_name):
@@ -56,7 +59,16 @@ def fix_action(str):
 def RunHooks(hooks, cwd, env=None, prefix_name=None):
   if not hooks:
     return
+  global_vars = {
+    '__builtin__': None,
+    'host_os': host_os,
+    checkout_os: True,
+  }
+  for an_os in set(list(OS_CHOICES.itervalues())+["telemetry_dependencies"]):
+    global_vars.setdefault("checkout_"+an_os, False)
   for hook in hooks:
+    if 'condition' in hook and not eval(hook['condition'], global_vars):
+      continue
     if "action" in hook:
       action = hook["action"]
       if prefix_name and prefix_name != "vivaldi":
@@ -91,22 +103,6 @@ if "--clobber-out" in sys.argv:
     sys.stdout.flush()
 
 deps_content = deps_utils.GetDepsContent("DEPS")
-(deps, deps_os, include_rules, skip_child_includes, hooks,
-   hooks_os, deps_vars, recursion) = deps_content
-
-if hooks_os and current_os in hooks_os:
-  hooks.extend(hooks_os[current_os])
-
-# We always add the GN bootstrap at the end.
-# Given the way DEPS works we cannot have it inside the DEPS file
-hooks.append({
-    'name': 'bootstrap-gn',
-    'pattern': '.',
-    'action': [
-      'python',
-      'vivaldi/scripts/rungn.py',
-      '--refresh',
-    ],
-  })
+(deps, hooks, deps_vars, recursion) = deps_content
 
 RunHooks(hooks, cwd=workdir, prefix_name=prefix_name)

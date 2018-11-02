@@ -114,33 +114,33 @@ class BookmarkCodecTest : public testing::Test {
   void GetBookmarksBarChildValue(base::Value* value,
                                  size_t index,
                                  base::DictionaryValue** result_value) {
-    ASSERT_EQ(base::Value::Type::DICTIONARY, value->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, value->type());
 
     base::DictionaryValue* d_value = nullptr;
     value->GetAsDictionary(&d_value);
     base::Value* roots;
     ASSERT_TRUE(d_value->Get(BookmarkCodec::kRootsKey, &roots));
-    ASSERT_EQ(base::Value::Type::DICTIONARY, roots->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, roots->type());
 
     base::DictionaryValue* roots_d_value = nullptr;
     roots->GetAsDictionary(&roots_d_value);
     base::Value* bb_value;
     ASSERT_TRUE(
         roots_d_value->Get(BookmarkCodec::kRootFolderNameKey, &bb_value));
-    ASSERT_EQ(base::Value::Type::DICTIONARY, bb_value->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, bb_value->type());
 
     base::DictionaryValue* bb_d_value = nullptr;
     bb_value->GetAsDictionary(&bb_d_value);
     base::Value* bb_children_value;
     ASSERT_TRUE(
         bb_d_value->Get(BookmarkCodec::kChildrenKey, &bb_children_value));
-    ASSERT_EQ(base::Value::Type::LIST, bb_children_value->GetType());
+    ASSERT_EQ(base::Value::Type::LIST, bb_children_value->type());
 
     base::ListValue* bb_children_l_value = nullptr;
     bb_children_value->GetAsList(&bb_children_l_value);
     base::Value* child_value;
     ASSERT_TRUE(bb_children_l_value->Get(index, &child_value));
-    ASSERT_EQ(base::Value::Type::DICTIONARY, child_value->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, child_value->type());
 
     child_value->GetAsDictionary(result_value);
   }
@@ -237,7 +237,7 @@ TEST_F(BookmarkCodecTest, ChecksumEncodeDecodeTest) {
   std::unique_ptr<base::Value> value(
       EncodeHelper(model_to_encode.get(), &enc_checksum));
 
-  EXPECT_TRUE(value.get() != NULL);
+  EXPECT_TRUE(value.get() != nullptr);
 
   std::string dec_checksum;
   std::unique_ptr<BookmarkModel> decoded_model(
@@ -251,13 +251,13 @@ TEST_F(BookmarkCodecTest, ChecksumEncodeIdenticalModelsTest) {
   std::string enc_checksum1;
   std::unique_ptr<base::Value> value1(
       EncodeHelper(model1.get(), &enc_checksum1));
-  EXPECT_TRUE(value1.get() != NULL);
+  EXPECT_TRUE(value1.get() != nullptr);
 
   std::unique_ptr<BookmarkModel> model2(CreateTestModel1());
   std::string enc_checksum2;
   std::unique_ptr<base::Value> value2(
       EncodeHelper(model2.get(), &enc_checksum2));
-  EXPECT_TRUE(value2.get() != NULL);
+  EXPECT_TRUE(value2.get() != nullptr);
 
   ASSERT_EQ(enc_checksum1, enc_checksum2);
 }
@@ -268,7 +268,7 @@ TEST_F(BookmarkCodecTest, ChecksumManualEditTest) {
   std::unique_ptr<base::Value> value(
       EncodeHelper(model_to_encode.get(), &enc_checksum));
 
-  EXPECT_TRUE(value.get() != NULL);
+  EXPECT_TRUE(value.get() != nullptr);
 
   // Change something in the encoded value before decoding it.
   base::DictionaryValue* child1_value;
@@ -299,7 +299,7 @@ TEST_F(BookmarkCodecTest, ChecksumManualEditIDsTest) {
   std::unique_ptr<base::Value> value(
       EncodeHelper(model_to_encode.get(), &enc_checksum));
 
-  EXPECT_TRUE(value.get() != NULL);
+  EXPECT_TRUE(value.get() != nullptr);
 
   // Change IDs for all children of bookmark bar to be 1.
   base::DictionaryValue* child_value;
@@ -369,7 +369,8 @@ TEST_F(BookmarkCodecTest, CanDecodeModelWithoutMobileBookmarks) {
   ASSERT_TRUE(base::PathExists(test_file));
 
   JSONFileValueDeserializer deserializer(test_file);
-  std::unique_ptr<base::Value> root = deserializer.Deserialize(NULL, NULL);
+  std::unique_ptr<base::Value> root =
+      deserializer.Deserialize(nullptr, nullptr);
 
   std::unique_ptr<BookmarkModel> decoded_model(
       TestBookmarkClient::CreateModel());
@@ -401,7 +402,7 @@ TEST_F(BookmarkCodecTest, CanDecodeModelWithoutMobileBookmarks) {
   EXPECT_EQ(BookmarkNode::URL, child->type());
   EXPECT_EQ(ASCIIToUTF16("Get started with Google Chrome"), child->GetTitle());
 
-  ASSERT_TRUE(decoded_model->mobile_node() != NULL);
+  ASSERT_TRUE(decoded_model->mobile_node() != nullptr);
 }
 
 TEST_F(BookmarkCodecTest, EncodeAndDecodeMetaInfo) {
@@ -412,7 +413,7 @@ TEST_F(BookmarkCodecTest, EncodeAndDecodeMetaInfo) {
       model->bookmark_bar_node()->GetChild(0), "node_info", "value2");
   std::string checksum;
   std::unique_ptr<base::Value> value(EncodeHelper(model.get(), &checksum));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_TRUE(value.get() != nullptr);
 
   // Decode and check for meta info.
   model.reset(DecodeHelper(*value, checksum, &checksum, false));
@@ -437,7 +438,7 @@ TEST_F(BookmarkCodecTest, EncodeAndDecodeSyncTransactionVersion) {
 
   std::string checksum;
   std::unique_ptr<base::Value> value(EncodeHelper(model.get(), &checksum));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_TRUE(value.get() != nullptr);
 
   // Decode and verify.
   model.reset(DecodeHelper(*value, checksum, &checksum, false));
@@ -456,7 +457,8 @@ TEST_F(BookmarkCodecTest, CanDecodeMetaInfoAsString) {
   ASSERT_TRUE(base::PathExists(test_file));
 
   JSONFileValueDeserializer deserializer(test_file);
-  std::unique_ptr<base::Value> root = deserializer.Deserialize(NULL, NULL);
+  std::unique_ptr<base::Value> root =
+      deserializer.Deserialize(nullptr, nullptr);
 
   std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   BookmarkCodec decoder;

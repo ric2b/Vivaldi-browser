@@ -30,17 +30,18 @@
 
 #include "core/html/forms/TimeInputType.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/frame/WebFeature.h"
 #include "core/html/forms/DateTimeFieldsState.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/DateComponents.h"
 #include "platform/text/PlatformLocale.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/DateMath.h"
 #include "platform/wtf/MathExtras.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {

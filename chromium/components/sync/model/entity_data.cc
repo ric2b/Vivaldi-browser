@@ -27,8 +27,9 @@ std::string UniquePositionToString(
 
 }  // namespace
 
-EntityData::EntityData() {}
-EntityData::~EntityData() {}
+EntityData::EntityData() = default;
+EntityData::~EntityData() = default;
+EntityData::EntityData(const EntityData& src) = default;
 
 void EntityData::Swap(EntityData* other) {
   id.swap(other->id);
@@ -50,6 +51,14 @@ EntityDataPtr EntityData::PassToPtr() {
   return target;
 }
 
+EntityDataPtr EntityData::UpdateId(const std::string& new_id) const {
+  EntityData entity_data(*this);
+  entity_data.id = new_id;
+  EntityDataPtr target;
+  target.swap_value(&entity_data);
+  return target;
+}
+
 #define ADD_TO_DICT(dict, value) \
   dict->SetString(base::ToUpperASCII(#value), value);
 
@@ -58,7 +67,8 @@ EntityDataPtr EntityData::PassToPtr() {
 
 std::unique_ptr<base::DictionaryValue> EntityData::ToDictionaryValue() {
   std::unique_ptr<base::DictionaryValue> dict =
-      EntitySpecificsToValue(specifics);
+      std::make_unique<base::DictionaryValue>();
+  dict->Set("SPECIFICS", EntitySpecificsToValue(specifics));
   ADD_TO_DICT(dict, id);
   ADD_TO_DICT(dict, client_tag_hash);
   ADD_TO_DICT(dict, non_unique_name);

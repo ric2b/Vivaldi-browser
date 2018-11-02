@@ -40,6 +40,7 @@
 #include "chromeos/dbus/shill_profile_client.h"
 #include "chromeos/dbus/shill_service_client.h"
 #include "chromeos/dbus/shill_third_party_vpn_driver_client.h"
+#include "chromeos/dbus/smb_provider_client.h"
 #include "chromeos/dbus/sms_client.h"
 #include "chromeos/dbus/system_clock_client.h"
 #include "chromeos/dbus/update_engine_client.h"
@@ -223,6 +224,11 @@ SessionManagerClient* DBusThreadManager::GetSessionManagerClient() {
   return clients_common_->session_manager_client_.get();
 }
 
+SmbProviderClient* DBusThreadManager::GetSmbProviderClient() {
+  return clients_browser_ ? clients_browser_->smb_provider_client_.get()
+                          : nullptr;
+}
+
 SMSClient* DBusThreadManager::GetSMSClient() {
   return clients_common_->sms_client_.get();
 }
@@ -237,6 +243,12 @@ UpdateEngineClient* DBusThreadManager::GetUpdateEngineClient() {
 
 UpstartClient* DBusThreadManager::GetUpstartClient() {
   return clients_browser_ ? clients_browser_->upstart_client_.get() : nullptr;
+}
+
+VirtualFileProviderClient* DBusThreadManager::GetVirtualFileProviderClient() {
+  return clients_browser_
+             ? clients_browser_->virtual_file_provider_client_.get()
+             : nullptr;
 }
 
 void DBusThreadManager::InitializeClients() {
@@ -316,9 +328,9 @@ DBusThreadManager* DBusThreadManager::Get() {
   return g_dbus_thread_manager;
 }
 
-DBusThreadManagerSetter::DBusThreadManagerSetter() {}
+DBusThreadManagerSetter::DBusThreadManagerSetter() = default;
 
-DBusThreadManagerSetter::~DBusThreadManagerSetter() {}
+DBusThreadManagerSetter::~DBusThreadManagerSetter() = default;
 
 void DBusThreadManagerSetter::SetAuthPolicyClient(
     std::unique_ptr<AuthPolicyClient> client) {
@@ -425,6 +437,18 @@ void DBusThreadManagerSetter::SetPowerManagerClient(
 void DBusThreadManagerSetter::SetSessionManagerClient(
     std::unique_ptr<SessionManagerClient> client) {
   DBusThreadManager::Get()->clients_common_->session_manager_client_ =
+      std::move(client);
+}
+
+void DBusThreadManagerSetter::SetSmbProviderClient(
+    std::unique_ptr<SmbProviderClient> client) {
+  DBusThreadManager::Get()->clients_browser_->smb_provider_client_ =
+      std::move(client);
+}
+
+void DBusThreadManagerSetter::SetSystemClockClient(
+    std::unique_ptr<SystemClockClient> client) {
+  DBusThreadManager::Get()->clients_common_->system_clock_client_ =
       std::move(client);
 }
 

@@ -47,15 +47,34 @@ class TestInputMethod : public ui::mojom::InputMethod {
   }
 
   // ui::ime::InputMethod:
-  void OnTextInputTypeChanged(ui::TextInputType text_input_type) override {}
-  void OnCaretBoundsChanged(const gfx::Rect& caret_bounds) override {}
+  void OnTextInputTypeChanged(ui::TextInputType text_input_type) override {
+    was_on_text_input_type_changed_called_ = true;
+  }
+  void OnCaretBoundsChanged(const gfx::Rect& caret_bounds) override {
+    was_on_caret_bounds_changed_called_ = true;
+  }
   void ProcessKeyEvent(std::unique_ptr<ui::Event> key_event,
                        ProcessKeyEventCallback callback) override {
     process_key_event_callbacks_.push_back(std::move(callback));
   }
-  void CancelComposition() override {}
+  void CancelComposition() override { was_cancel_composition_called_ = true; }
+
+  bool was_on_text_input_type_changed_called() {
+    return was_on_text_input_type_changed_called_;
+  }
+
+  bool was_on_caret_bounds_changed_called() {
+    return was_on_caret_bounds_changed_called_;
+  }
+
+  bool was_cancel_composition_called() {
+    return was_cancel_composition_called_;
+  }
 
  private:
+  bool was_on_text_input_type_changed_called_ = false;
+  bool was_on_caret_bounds_changed_called_ = false;
+  bool was_cancel_composition_called_ = false;
   ProcessKeyEventCallbacks process_key_event_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestInputMethod);
@@ -86,7 +105,7 @@ TEST_F(InputMethodMusTest, PendingCallbackRunFromDestruction) {
     InputMethodMusTestApi::SetInputMethod(&input_method_mus,
                                           &test_input_method);
     std::unique_ptr<EventResultCallback> callback =
-        base::MakeUnique<EventResultCallback>(base::Bind(
+        std::make_unique<EventResultCallback>(base::Bind(
             &RunFunctionWithEventResult, &was_event_result_callback_run));
 
     ui::EventDispatchDetails details =
@@ -122,7 +141,7 @@ TEST_F(InputMethodMusTest, PendingCallbackRunFromOnDidChangeFocusedClient) {
   TestInputMethod test_input_method;
   InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
   std::unique_ptr<EventResultCallback> callback =
-      base::MakeUnique<EventResultCallback>(base::Bind(
+      std::make_unique<EventResultCallback>(base::Bind(
           &RunFunctionWithEventResult, &was_event_result_callback_run));
   ui::EventDispatchDetails details =
       InputMethodMusTestApi::CallSendKeyEventToInputMethod(
@@ -188,7 +207,7 @@ TEST_F(InputMethodMusTest, ChangeTextInputTypeWhileProcessingCallback) {
   TestInputMethod test_input_method;
   InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
   std::unique_ptr<EventResultCallback> callback =
-      base::MakeUnique<EventResultCallback>(base::Bind(
+      std::make_unique<EventResultCallback>(base::Bind(
           &RunFunctionWithEventResult, &was_event_result_callback_run));
   const ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, 0);
   ui::EventDispatchDetails details =
@@ -203,7 +222,69 @@ TEST_F(InputMethodMusTest, ChangeTextInputTypeWhileProcessingCallback) {
 
   // Callback should have been run.
   EXPECT_TRUE(was_event_result_callback_run);
-  EXPECT_TRUE(input_method_delegate.was_dispatch_key_event_post_ime_called());
+}
+
+// Calling OnTextInputTypeChanged from unfocused client should
+// not trigger OnTextInputTypeChanged on mus side.
+TEST_F(InputMethodMusTest, ChangeTextInputTypeFromUnfocusedClient) {
+  aura::Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  ui::DummyTextInputClient focused_input_client;
+  ui::DummyTextInputClient unfocused_input_client;
+  // Create an InputMethodMus and set initial text input client.
+  TestInputMethodDelegate input_method_delegate;
+  InputMethodMus input_method_mus(&input_method_delegate, &window);
+  TestInputMethod test_input_method;
+  InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
+  InputMethodMusTestApi::CallOnDidChangeFocusedClient(
+      &input_method_mus, nullptr, &focused_input_client);
+
+  InputMethodMusTestApi::CallOnTextInputTypeChanged(&input_method_mus,
+                                                    &unfocused_input_client);
+
+  EXPECT_FALSE(test_input_method.was_on_text_input_type_changed_called());
+}
+
+// Calling OnCaretBoundsChanged from unfocused client should
+// not trigger OnCaretBoundsChanged on mus side.
+TEST_F(InputMethodMusTest, ChangeCaretBoundsFromUnfocusedClient) {
+  aura::Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  ui::DummyTextInputClient focused_input_client;
+  ui::DummyTextInputClient unfocused_input_client;
+  // Create an InputMethodMus and set initial text input client.
+  TestInputMethodDelegate input_method_delegate;
+  InputMethodMus input_method_mus(&input_method_delegate, &window);
+  TestInputMethod test_input_method;
+  InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
+  InputMethodMusTestApi::CallOnDidChangeFocusedClient(
+      &input_method_mus, nullptr, &focused_input_client);
+
+  InputMethodMusTestApi::CallOnCaretBoundsChanged(&input_method_mus,
+                                                  &unfocused_input_client);
+
+  EXPECT_FALSE(test_input_method.was_on_caret_bounds_changed_called());
+}
+
+// Calling CancelComposition from unfocused client should
+// not trigger CancelComposition on mus side.
+TEST_F(InputMethodMusTest, CancelCompositionFromUnfocusedClient) {
+  aura::Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  ui::DummyTextInputClient focused_input_client;
+  ui::DummyTextInputClient unfocused_input_client;
+  // Create an InputMethodMus and set initial text input client.
+  TestInputMethodDelegate input_method_delegate;
+  InputMethodMus input_method_mus(&input_method_delegate, &window);
+  TestInputMethod test_input_method;
+  InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
+  InputMethodMusTestApi::CallOnDidChangeFocusedClient(
+      &input_method_mus, nullptr, &focused_input_client);
+
+  InputMethodMusTestApi::CallCancelComposition(&input_method_mus,
+                                               &unfocused_input_client);
+
+  EXPECT_FALSE(test_input_method.was_cancel_composition_called());
 }
 
 }  // namespace aura

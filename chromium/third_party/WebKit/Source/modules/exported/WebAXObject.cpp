@@ -31,15 +31,15 @@
 #include "public/web/WebAXObject.h"
 
 #include "SkMatrix44.h"
-#include "core/HTMLNames.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
-#include "core/dom/Document.h"
 #include "core/dom/Node.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/html_names.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/api/LayoutAPIShim.h"
@@ -120,7 +120,7 @@ WebScopedAXContext::WebScopedAXContext(WebDocument& root_document)
 }
 
 WebScopedAXContext::~WebScopedAXContext() {
-  private_.reset(0);
+  private_.reset(nullptr);
 }
 
 WebAXObject WebScopedAXContext::Root() const {
@@ -150,14 +150,14 @@ int WebAXObject::AxID() const {
   if (IsDetached())
     return -1;
 
-  return private_->AxObjectID();
+  return private_->AXObjectID();
 }
 
 int WebAXObject::GenerateAXID() const {
   if (IsDetached())
     return -1;
 
-  return private_->AxObjectCache().GenerateAXID();
+  return private_->AXObjectCache().GenerateAXID();
 }
 
 bool WebAXObject::UpdateLayoutAndCheckValidity() {
@@ -497,7 +497,7 @@ bool WebAXObject::IsInLiveRegion() const {
   if (IsDetached())
     return false;
 
-  return 0 != private_->LiveRegionRoot();
+  return !!private_->LiveRegionRoot();
 }
 
 bool WebAXObject::LiveRegionAtomic() const {
@@ -965,25 +965,32 @@ WebString WebAXObject::ValueDescription() const {
   return private_->ValueDescription();
 }
 
-float WebAXObject::ValueForRange() const {
+bool WebAXObject::ValueForRange(float* out_value) const {
   if (IsDetached())
-    return 0.0;
+    return false;
 
-  return private_->ValueForRange();
+  return private_->ValueForRange(out_value);
 }
 
-float WebAXObject::MaxValueForRange() const {
+bool WebAXObject::MaxValueForRange(float* out_value) const {
   if (IsDetached())
-    return 0.0;
+    return false;
 
-  return private_->MaxValueForRange();
+  return private_->MaxValueForRange(out_value);
 }
 
-float WebAXObject::MinValueForRange() const {
+bool WebAXObject::MinValueForRange(float* out_value) const {
   if (IsDetached())
-    return 0.0;
+    return false;
 
-  return private_->MinValueForRange();
+  return private_->MinValueForRange(out_value);
+}
+
+bool WebAXObject::StepValueForRange(float* out_value) const {
+  if (IsDetached())
+    return false;
+
+  return private_->StepValueForRange(out_value);
 }
 
 WebNode WebAXObject::GetNode() const {
@@ -1434,7 +1441,8 @@ void WebAXObject::SetScrollOffset(const WebPoint& offset) const {
 
 void WebAXObject::GetRelativeBounds(WebAXObject& offset_container,
                                     WebFloatRect& bounds_in_container,
-                                    SkMatrix44& container_transform) const {
+                                    SkMatrix44& container_transform,
+                                    bool* clips_children) const {
   if (IsDetached())
     return;
 
@@ -1444,7 +1452,8 @@ void WebAXObject::GetRelativeBounds(WebAXObject& offset_container,
 
   AXObject* container = nullptr;
   FloatRect bounds;
-  private_->GetRelativeBounds(&container, bounds, container_transform);
+  private_->GetRelativeBounds(&container, bounds, container_transform,
+                              clips_children);
   offset_container = WebAXObject(container);
   bounds_in_container = WebFloatRect(bounds);
 }
@@ -1494,7 +1503,8 @@ WebAXObject WebAXObject::FromWebNode(const WebNode& web_node) {
 // static
 WebAXObject WebAXObject::FromWebDocument(const WebDocument& web_document) {
   const Document* document = web_document.ConstUnwrap<Document>();
-  AXObjectCacheImpl* cache = ToAXObjectCacheImpl(document->AxObjectCache());
+  AXObjectCacheImpl* cache =
+      ToAXObjectCacheImpl(document->GetOrCreateAXObjectCache());
   return cache ? WebAXObject(cache->GetOrCreate(
                      ToLayoutView(LayoutAPIShim::LayoutObjectFrom(
                          document->GetLayoutViewItem()))))
@@ -1505,7 +1515,8 @@ WebAXObject WebAXObject::FromWebDocument(const WebDocument& web_document) {
 WebAXObject WebAXObject::FromWebDocumentByID(const WebDocument& web_document,
                                              int ax_id) {
   const Document* document = web_document.ConstUnwrap<Document>();
-  AXObjectCacheImpl* cache = ToAXObjectCacheImpl(document->AxObjectCache());
+  AXObjectCacheImpl* cache =
+      ToAXObjectCacheImpl(document->GetOrCreateAXObjectCache());
   return cache ? WebAXObject(cache->ObjectFromAXID(ax_id)) : WebAXObject();
 }
 
@@ -1513,7 +1524,8 @@ WebAXObject WebAXObject::FromWebDocumentByID(const WebDocument& web_document,
 WebAXObject WebAXObject::FromWebDocumentFocused(
     const WebDocument& web_document) {
   const Document* document = web_document.ConstUnwrap<Document>();
-  AXObjectCacheImpl* cache = ToAXObjectCacheImpl(document->AxObjectCache());
+  AXObjectCacheImpl* cache =
+      ToAXObjectCacheImpl(document->GetOrCreateAXObjectCache());
   return cache ? WebAXObject(cache->FocusedObject()) : WebAXObject();
 }
 

@@ -38,7 +38,6 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/TagCollection.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
@@ -48,6 +47,7 @@
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutObject.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebString.h"
 #include "public/web/WebDOMEvent.h"
 #include "public/web/WebDocument.h"
@@ -161,8 +161,8 @@ bool WebNode::IsDocumentTypeNode() const {
 }
 
 void WebNode::SimulateClick() {
-  TaskRunnerHelper::Get(TaskType::kUserInteraction,
-                        private_->GetExecutionContext())
+  private_->GetExecutionContext()
+      ->GetTaskRunner(TaskType::kUserInteraction)
       ->PostTask(
           FROM_HERE,
           WTF::Bind(&Node::DispatchSimulatedClick,
@@ -185,6 +185,22 @@ WebElement WebNode::QuerySelector(const WebString& selector) const {
     return WebElement();
   return ToContainerNode(private_.Get())
       ->QuerySelector(selector, IGNORE_EXCEPTION_FOR_TESTING);
+}
+
+WebVector<WebElement> WebNode::QuerySelectorAll(
+    const WebString& selector) const {
+  if (!private_->IsContainerNode())
+    return WebVector<WebElement>();
+  StaticElementList* elements =
+      ToContainerNode(private_.Get())
+          ->QuerySelectorAll(selector, IGNORE_EXCEPTION_FOR_TESTING);
+  if (elements) {
+    WebVector<WebElement> vector((size_t)elements->length());
+    for (unsigned i = 0; i < elements->length(); ++i)
+      vector[i] = elements->item(i);
+    return vector;
+  }
+  return WebVector<WebElement>();
 }
 
 bool WebNode::Focused() const {

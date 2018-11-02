@@ -10,9 +10,10 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
@@ -22,6 +23,14 @@ namespace search_provider_logos {
 // The maximum number of milliseconds that a logo can be cached.
 extern const int64_t kMaxTimeToLiveMS;
 
+enum class LogoType {
+  SIMPLE,
+  ANIMATED,
+  INTERACTIVE,
+};
+
+// Note: whenever a new field is added here, LogoCache must be updated to
+// serialize and deserialize that field.
 struct LogoMetadata {
   LogoMetadata();
   LogoMetadata(const LogoMetadata& other);
@@ -29,18 +38,34 @@ struct LogoMetadata {
 
   // For use by the client ----------------------------------------------------
 
-  // The URL to load when the logo is clicked.
+  // SIMPLE, ANIMATED, or INTERACTIVE.
+  LogoType type = LogoType::SIMPLE;
+
+  // SIMPLE, ANIMATED: The URL to load when the logo is clicked.
+  // INTERACTIVE: Unused, on Desktop. Same as SIMPLE/ANIMATED on Mobile.
   GURL on_click_url;
-  // The accessibility text for the logo.
+
+  // INTERACTIVE: The URL of a full-page version of the logo. On Desktop, logo
+  // is embedded into an <iframe> on the NTP.
+  // SIMPLE, ANIMATED: not used.
+  GURL full_page_url;
+
+  // SIMPLE: The accessibility text for the logo.
+  // ANIMATED: The accessibility text for the CTA and animated logos.
+  // INTERACTIVE: The accessibility text for the iframe, on Desktop.
   std::string alt_text;
-  // The mime type of the logo image.
+
+  // SIMPLE: The mime type of the logo image.
+  // ANIMATED: The mime type of the CTA image.
   std::string mime_type;
-  // The URL for an animated image to display when the call to action logo is
-  // clicked. If |animated_url| is not empty, |encoded_image| refers to a call
-  // to action image.
+
+  // ANIMATED: The URL for an animated image to display when the call to action
+  // logo is clicked. If |animated_url| is not empty, |encoded_image| refers to
+  // a call to action image.
+  // SIMPLE, INTERACTIVE: not used.
   GURL animated_url;
 
-  // For use by LogoTracker ---------------------------------------------------
+  // For use by LogoService ---------------------------------------------------
 
   // The URL from which the logo was downloaded (without the fingerprint param).
   GURL source_url;
@@ -49,10 +74,34 @@ struct LogoMetadata {
   std::string fingerprint;
   // Whether the logo can be shown optimistically after it's expired while a
   // fresh logo is being downloaded.
-  bool can_show_after_expiration;
+  bool can_show_after_expiration = false;
   // When the logo expires. After this time, the logo will not be used and will
   // be deleted.
   base::Time expiration_time;
+};
+
+enum class LogoCallbackReason {
+  // The default search engine does not support logos.
+  // |logo| is nullopt. No logo should be displayed.
+  DISABLED,
+
+  // The logo was successfully determined.
+  // If |logo| is non-nullopt, it should be displayed. If nullopt, then any
+  // visible logo should be cleared.
+  DETERMINED,
+
+  // The fresh logo is the same as the cached logo. Only used for fresh logos.
+  // |logo| is non-nullopt, and the cached logo should be kept.
+  REVALIDATED,
+
+  // The default search engine could not be contacted, or provided invalid logo
+  // data. Only used for fresh logos.
+  // |logo| is non-nullopt, and the cached logo should be kept.
+  FAILED,
+
+  // The default search engine was changed while fetching the logo.
+  // |logo| is nullopt. No logo should be displayed.
+  CANCELED,
 };
 
 struct EncodedLogo {
@@ -65,6 +114,9 @@ struct EncodedLogo {
   // Metadata about the logo.
   LogoMetadata metadata;
 };
+using EncodedLogoCallback =
+    base::OnceCallback<void(LogoCallbackReason type,
+                            const base::Optional<EncodedLogo>& logo)>;
 
 struct Logo {
   Logo();
@@ -74,6 +126,19 @@ struct Logo {
   SkBitmap image;
   // Metadata about the logo.
   LogoMetadata metadata;
+};
+using LogoCallback = base::OnceCallback<void(LogoCallbackReason type,
+                                             const base::Optional<Logo>& logo)>;
+
+struct LogoCallbacks {
+  EncodedLogoCallback on_cached_encoded_logo_available;
+  LogoCallback on_cached_decoded_logo_available;
+  EncodedLogoCallback on_fresh_encoded_logo_available;
+  LogoCallback on_fresh_decoded_logo_available;
+
+  LogoCallbacks();
+  LogoCallbacks(LogoCallbacks&&);
+  ~LogoCallbacks();
 };
 
 // Parses the response from the server and returns it as an EncodedLogo. Returns

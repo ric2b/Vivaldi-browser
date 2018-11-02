@@ -97,7 +97,7 @@ bool TextTrackCueList::Remove(TextTrackCue* cue) {
   if (index == kNotFound)
     return false;
 
-  list_.erase(index);
+  list_.EraseAt(index);
   InvalidateCueIndex(index);
   cue->InvalidateCueIndex();
   return true;
@@ -142,11 +142,13 @@ void TextTrackCueList::ValidateCueIndexes() {
   first_invalid_index_ = list_.size();
 }
 
-DEFINE_TRACE(TextTrackCueList) {
+void TextTrackCueList::Trace(blink::Visitor* visitor) {
   visitor->Trace(list_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(TextTrackCueList) {
+void TextTrackCueList::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (auto cue : list_) {
     visitor->TraceWrappers(cue);
   }

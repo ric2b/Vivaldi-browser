@@ -36,8 +36,11 @@ namespace blink {
 class CSSImageSetValue;
 class ImageResourceObserver;
 
-// This class keeps one cached image and has access to a set of alternatives.
-
+// This class represents an <image> that loads one image resource out of a set
+// of alternatives (the -webkit-image-set(...) function.)
+//
+// This class keeps one cached image from the set, and has access to a set of
+// alternatives via the referenced CSSImageSetValue.
 class StyleFetchedImageSet final : public StyleImage,
                                    public ImageResourceObserver {
   USING_PRE_FINALIZER(StyleFetchedImageSet, Dispose);
@@ -69,15 +72,15 @@ class StyleFetchedImageSet final : public StyleImage,
   bool UsesImageContainerSize() const override;
   void AddClient(ImageResourceObserver*) override;
   void RemoveClient(ImageResourceObserver*) override;
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize& container_size) const override;
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size) const override;
   float ImageScaleFactor() const override { return image_scale_factor_; }
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   StyleFetchedImageSet(ImageResourceContent*,

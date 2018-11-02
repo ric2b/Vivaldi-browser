@@ -13,6 +13,10 @@
 
 #include <set>
 
+namespace ukm {
+class UkmEntryBuilder;
+}  // namespace ukm
+
 namespace blink {
 
 // These values are used for histograms. Do not reorder.
@@ -65,7 +69,7 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
  public:
   static AutoplayUmaHelper* Create(HTMLMediaElement*);
 
-  ~AutoplayUmaHelper();
+  ~AutoplayUmaHelper() override;
 
   bool operator==(const EventListener&) const override;
 
@@ -83,7 +87,7 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
 
   bool HasSource() const { return !sources_.empty(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   friend class MockAutoplayUmaHelper;
@@ -113,6 +117,10 @@ class CORE_EXPORT AutoplayUmaHelper : public EventListener,
 
   bool ShouldListenToContextDestroyed() const;
   bool ShouldRecordUserPausedAutoplayingCrossOriginVideo() const;
+
+  // Returns a ukm::UkmEntryBuilder created from the UkmRecorder associated with
+  // the Document.
+  std::unique_ptr<ukm::UkmEntryBuilder> CreateUkmBuilder(const char*);
 
   // The autoplay sources.
   std::set<AutoplaySource> sources_;

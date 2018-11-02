@@ -34,6 +34,10 @@
 namespace cast_certificate {
 namespace {
 
+#define RETURN_STRING_LITERAL(x) \
+  case x:                        \
+    return #x;
+
 // -------------------------------------------------------------------------
 // Cast trust anchors.
 // -------------------------------------------------------------------------
@@ -163,7 +167,7 @@ bool GetCommonNameFromSubject(const net::der::Input& subject_tlv,
 // See the unit-tests VerifyCastDeviceCertTest.Policies* for some
 // concrete examples of how this works.
 void DetermineDeviceCertificatePolicy(
-    const net::CertPathBuilder::ResultPath* result_path,
+    const net::CertPathBuilderResultPath* result_path,
     CastDeviceCertPolicy* policy) {
   // Iterate over all the certificates, including the root certificate. If any
   // certificate contains the audio-only policy, the whole chain is considered
@@ -174,7 +178,7 @@ void DetermineDeviceCertificatePolicy(
   // certificates in the chain do, it won't matter as the chain is already
   // restricted to being audio-only.
   bool audio_only = false;
-  for (const auto& cert : result_path->path.certs) {
+  for (const auto& cert : result_path->certs) {
     if (cert->has_policy_oids()) {
       const std::vector<net::der::Input>& policies = cert->policy_oids();
       if (base::ContainsValue(policies, AudioOnlyPolicyOid())) {
@@ -318,7 +322,7 @@ CastCertError VerifyDeviceCertUsingCustomTrustStore(
     return CastCertError::ERR_CERTS_RESTRICTIONS;
 
   // Check for revocation.
-  if (crl && !crl->CheckRevocation(result.GetBestValidPath()->path, time))
+  if (crl && !crl->CheckRevocation(result.GetBestValidPath()->certs, time))
     return CastCertError::ERR_CERTS_REVOKED;
 
   return CastCertError::OK;
@@ -330,6 +334,21 @@ std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
   // verification by unittests.
   return base::MakeUnique<CertVerificationContextImpl>(net::der::Input(spki),
                                                        "CommonName");
+}
+
+std::string CastCertErrorToString(CastCertError error) {
+  switch (error) {
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_MISSING);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_PARSE);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_DATE_INVALID);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_VERIFY_GENERIC);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_RESTRICTIONS);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CRL_INVALID);
+    RETURN_STRING_LITERAL(CastCertError::ERR_CERTS_REVOKED);
+    RETURN_STRING_LITERAL(CastCertError::ERR_UNEXPECTED);
+    RETURN_STRING_LITERAL(CastCertError::OK);
+  }
+  return "CastCertError::UNKNOWN";
 }
 
 }  // namespace cast_certificate

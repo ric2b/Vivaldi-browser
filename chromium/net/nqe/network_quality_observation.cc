@@ -22,22 +22,39 @@ Observation::Observation(int32_t value,
                          const base::Optional<int32_t>& signal_strength,
                          NetworkQualityObservationSource source,
                          const base::Optional<IPHash>& host)
-    : value(value),
-      timestamp(timestamp),
-      signal_strength(signal_strength),
-      source(source),
-      host(host) {
-  DCHECK(!timestamp.is_null());
+    : value_(value),
+      timestamp_(timestamp),
+      signal_strength_(signal_strength),
+      source_(source),
+      host_(host) {
+  DCHECK(!timestamp_.is_null());
 }
 
-Observation::Observation(const Observation& other)
-    : Observation(other.value,
-                  other.timestamp,
-                  other.signal_strength,
-                  other.source,
-                  other.host) {}
+Observation::Observation(const Observation& other) = default;
 
-Observation::~Observation() {}
+Observation& Observation::operator=(const Observation& other) = default;
+
+Observation::~Observation() = default;
+
+ObservationCategory Observation::GetObservationCategory() const {
+  switch (source_) {
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP_CACHED_ESTIMATE:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_DEFAULT_HTTP_FROM_PLATFORM:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP_EXTERNAL_ESTIMATE:
+      return ObservationCategory::kHttp;
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_TRANSPORT_CACHED_ESTIMATE:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_DEFAULT_TRANSPORT_FROM_PLATFORM:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_TCP:
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_QUIC:
+      return ObservationCategory::kTransport;
+    case NETWORK_QUALITY_OBSERVATION_SOURCE_MAX:
+      NOTREACHED();
+      return ObservationCategory::kHttp;
+  }
+  NOTREACHED();
+  return ObservationCategory::kHttp;
+}
 
 }  // namespace internal
 

@@ -91,10 +91,10 @@ class SessionRestoreStatsCollector
     base::TimeDelta foreground_tab_first_loaded;
 
     // The time elapsed between |restore_started| and reception of the first
-    // NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE event for any of
-    // the tabs involved in the session restore. If this is zero it is because
-    // it has not been recorded (all visible tabs were closed or switched away
-    // from before they were painted). Corresponds to
+    // NOTIFICATION_RENDER_WIDGET_HOST_DID_COMPLETE_RESIZE_OR_REPAINT event for
+    // any of the tabs involved in the session restore. If this is zero it is
+    // because it has not been recorded (all visible tabs were closed or
+    // switched away from before they were painted). Corresponds to
     // "SessionRestore.ForegroundTabFirstPaint3" and its _XX variants.
     base::TimeDelta foreground_tab_first_paint;
 
@@ -123,6 +123,11 @@ class SessionRestoreStatsCollector
   // Called to indicate that the loading of a tab has been deferred by session
   // restore.
   void DeferTab(content::NavigationController* tab);
+
+  // Called when about to load the next tab. Used as a signal to record how
+  // often timeout happens. Timeout means we want to start loading the next tab
+  // even though the previous tab is still loading.
+  void OnWillLoadNextTab(bool timeout);
 
   // Exposed for unittesting.
   const TabLoaderStats& tab_loader_stats() const { return tab_loader_stats_; }

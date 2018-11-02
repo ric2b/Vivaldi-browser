@@ -16,6 +16,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/rtc_base/refcount.h"
+#include "third_party/webrtc/rtc_base/refcountedobject.h"
 
 namespace remoting {
 namespace protocol {
@@ -30,8 +31,8 @@ constexpr base::TimeDelta kFrameDuration =
 
 class FakeAudioSink : public webrtc::AudioTrackSinkInterface{
  public:
-  FakeAudioSink() {}
-  ~FakeAudioSink() override {}
+  FakeAudioSink() = default;
+  ~FakeAudioSink() override = default;
 
   void OnData(const void* audio_data,
               int bits_per_sample,

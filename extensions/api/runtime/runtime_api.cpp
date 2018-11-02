@@ -71,11 +71,9 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
 #endif  // defined(OS_MACOSX)
     path = path.AppendASCII(kRuntimeFeaturesFilename);
 
-    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner =
-        JsonPrefStore::GetTaskRunnerForFile(
-            path, content::BrowserThread::GetBlockingPool());
-
-    store_ = new JsonPrefStore(path, sequenced_task_runner,
+    store_ = new JsonPrefStore(path,
+                               base::CreateSequencedTaskRunnerWithTraits(
+                                  { base::MayBlock()}) .get(),
                                std::unique_ptr<PrefFilter>());
     store_->ReadPrefs();
 

@@ -32,13 +32,14 @@ void VRPose::SetPose(const device::mojom::blink::VRPosePtr& state) {
   linear_acceleration_ = MojoArrayToFloat32Array(state->linearAcceleration);
 }
 
-DEFINE_TRACE(VRPose) {
+void VRPose::Trace(blink::Visitor* visitor) {
   visitor->Trace(orientation_);
   visitor->Trace(position_);
   visitor->Trace(angular_velocity_);
   visitor->Trace(linear_velocity_);
   visitor->Trace(angular_acceleration_);
   visitor->Trace(linear_acceleration_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

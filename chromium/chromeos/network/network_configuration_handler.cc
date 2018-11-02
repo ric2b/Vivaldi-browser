@@ -232,16 +232,15 @@ void NetworkConfigurationHandler::GetShillProperties(
   const NetworkState* network_state =
       network_state_handler_->GetNetworkState(service_path);
   if (network_state &&
-      NetworkTypePattern::Tether().MatchesType(network_state->type())) {
-    // If this is a Tether network, use the properties present in the
-    // NetworkState object provided by NetworkStateHandler. Tether networks are
-    // not present in Shill, so the Shill call below will not work.
+      (NetworkTypePattern::Tether().MatchesType(network_state->type()) ||
+       network_state->IsDefaultCellular())) {
+    // This is a Tether network or a Cellular network with no Service.
+    // Provide properties from NetworkState.
     base::DictionaryValue dictionary;
     network_state->GetStateProperties(&dictionary);
     callback.Run(service_path, dictionary);
     return;
   }
-
   DBusThreadManager::Get()->GetShillServiceClient()->GetProperties(
       dbus::ObjectPath(service_path),
       base::Bind(&NetworkConfigurationHandler::GetPropertiesCallback,
@@ -351,7 +350,7 @@ void NetworkConfigurationHandler::CreateShillConfiguration(
   properties_to_set->GetStringWithoutPathExpansion(shill::kGuidProperty, &guid);
   if (guid.empty()) {
     guid = base::GenerateGUID();
-    properties_to_set->SetKey(::onc::network_config::kGUID, base::Value(guid));
+    properties_to_set->SetKey(shill::kGuidProperty, base::Value(guid));
   }
 
   LogConfigProperties("Configure", type, *properties_to_set);
@@ -469,8 +468,7 @@ void NetworkConfigurationHandler::OnShuttingDown() {
 NetworkConfigurationHandler::NetworkConfigurationHandler()
     : network_state_handler_(nullptr), weak_ptr_factory_(this) {}
 
-NetworkConfigurationHandler::~NetworkConfigurationHandler() {
-}
+NetworkConfigurationHandler::~NetworkConfigurationHandler() = default;
 
 void NetworkConfigurationHandler::Init(
     NetworkStateHandler* network_state_handler,

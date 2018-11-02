@@ -14,12 +14,12 @@ namespace trace_event {
 // "base/trace_event/heap_profiler_allocation_register.h".
 #if defined(OS_ANDROID) || defined(OS_IOS)
 const size_t ShardCount = 1;
-#elif defined(OS_WIN)
+#elif defined(OS_MACOSX)
+const size_t ShardCount = 64;
+#else
 // Using ShardCount = 64 adds about 1.6GB of committed memory, which triggers
 // the sandbox's committed memory limit.
 const size_t ShardCount = 16;
-#else
-const size_t ShardCount = 64;
 #endif
 
 ShardedAllocationRegister::ShardedAllocationRegister() : enabled_(false) {}
@@ -52,6 +52,16 @@ void ShardedAllocationRegister::Remove(const void* address) {
   RegisterAndLock& ral = allocation_registers_[index];
   AutoLock lock(ral.lock);
   return ral.allocation_register.Remove(address);
+}
+
+bool ShardedAllocationRegister::Get(
+    const void* address,
+    AllocationRegister::Allocation* out_allocation) const {
+  AllocationRegister::AddressHasher hasher;
+  size_t index = hasher(address) % ShardCount;
+  RegisterAndLock& ral = allocation_registers_[index];
+  AutoLock lock(ral.lock);
+  return ral.allocation_register.Get(address, out_allocation);
 }
 
 void ShardedAllocationRegister::EstimateTraceMemoryOverhead(

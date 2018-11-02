@@ -28,8 +28,8 @@ class CORE_EXPORT WorkletGlobalScopeProxy : public GarbageCollectedMixin {
   virtual void FetchAndInvokeScript(
       const KURL& module_url_record,
       WorkletModuleResponsesMap*,
-      WebURLRequest::FetchCredentialsMode,
-      RefPtr<WebTaskRunner> outside_settings_task_runner,
+      network::mojom::FetchCredentialsMode,
+      scoped_refptr<WebTaskRunner> outside_settings_task_runner,
       WorkletPendingTasks*) = 0;
 
   // Notifies that the Worklet object is destroyed. This should be called in the

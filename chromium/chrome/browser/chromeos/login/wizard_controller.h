@@ -35,7 +35,7 @@ namespace pairing_chromeos {
 class ControllerPairingController;
 class HostPairingController;
 class SharkConnectionListener;
-}
+}  // namespace pairing_chromeos
 
 namespace chromeos {
 
@@ -61,15 +61,14 @@ class WizardController : public BaseScreenDelegate,
   ~WizardController() override;
 
   // Returns the default wizard controller if it has been created.
-  static WizardController* default_controller() {
-    return default_controller_;
-  }
+  static WizardController* default_controller() { return default_controller_; }
 
   // Whether to skip any screens that may normally be shown after login
   // (registration, Terms of Service, user image selection).
-  static bool skip_post_login_screens() {
-    return skip_post_login_screens_;
-  }
+  static bool skip_post_login_screens() { return skip_post_login_screens_; }
+
+  // Whether to skip any prompts that may be normally shown during enrollment.
+  static bool skip_enrollment_prompts() { return skip_enrollment_prompts_; }
 
   // Sets delays to zero. MUST be used only for tests.
   static void SetZeroDelays();
@@ -83,6 +82,9 @@ class WizardController : public BaseScreenDelegate,
   // Skips any screens that may normally be shown after login (registration,
   // Terms of Service, user image selection).
   static void SkipPostLoginScreensForTesting();
+
+  // Skips any enrollment prompts that may be normally shown.
+  static void SkipEnrollmentPromptsForTesting();
 
   // Returns true if OOBE is operating under the
   // Zero-Touch Hands-Off Enrollment Flow.
@@ -135,7 +137,6 @@ class WizardController : public BaseScreenDelegate,
  private:
   // Show specific screen.
   void ShowNetworkScreen();
-  void ShowUpdateScreen();
   void ShowUserImageScreen();
   void ShowEulaScreen();
   void ShowEnrollmentScreen();
@@ -163,7 +164,6 @@ class WizardController : public BaseScreenDelegate,
   // Exit handlers:
   void OnHIDDetectionCompleted();
   void OnNetworkConnected();
-  void OnNetworkOffline();
   void OnConnectionFailed();
   void OnUpdateCompleted();
   void OnEulaAccepted();
@@ -172,7 +172,6 @@ class WizardController : public BaseScreenDelegate,
   void OnUserImageSelected();
   void OnUserImageSkipped();
   void OnEnrollmentDone();
-  void OnAutoEnrollmentDone();
   void OnDeviceModificationCanceled();
   void OnKioskAutolaunchCanceled();
   void OnKioskAutolaunchConfirmed();
@@ -195,12 +194,6 @@ class WizardController : public BaseScreenDelegate,
 
   // Callback function after setting MetricsReporting.
   void OnChangedMetricsReportingState(bool enabled);
-
-  // Loads brand code on I/O enabled thread and stores to Local State.
-  void LoadBrandCodeFromFile();
-
-  // Called after all post-EULA blocking tasks have been completed.
-  void OnEulaBlockingTasksDone();
 
   // Shows update screen and starts update process.
   void InitiateOOBEUpdate();
@@ -345,13 +338,15 @@ class WizardController : public BaseScreenDelegate,
 
   static bool zero_delay_enabled_;
 
+  static bool skip_enrollment_prompts_;
+
   // Screen that's currently active.
   BaseScreen* current_screen_ = nullptr;
 
   // Screen that was active before, or nullptr for login screen.
   BaseScreen* previous_screen_ = nullptr;
 
-  // True if running official BUILD.
+// True if running official BUILD.
 #if defined(GOOGLE_CHROME_BUILD)
   bool is_official_build_ = true;
 #else

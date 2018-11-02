@@ -64,6 +64,8 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
 
   MOCK_METHOD1(OnSuspend, void(int player_id));
   MOCK_METHOD1(OnResume, void(int player_id));
+  MOCK_METHOD2(OnSeekForward, void(int player_id, base::TimeDelta seek_time));
+  MOCK_METHOD2(OnSeekBackward, void(int player_id, base::TimeDelta seek_time));
   MOCK_METHOD2(OnSetVolumeMultiplier,
                void(int player_id, double volume_multiplier));
 
@@ -108,8 +110,8 @@ class MediaSessionImplServiceRoutingTest
 
   void CreateServiceForFrame(TestRenderFrameHost* frame) {
     services_[frame] =
-        base::MakeUnique<NiceMock<MockMediaSessionServiceImpl>>(frame);
-    clients_[frame] = base::MakeUnique<NiceMock<MockMediaSessionClient>>();
+        std::make_unique<NiceMock<MockMediaSessionServiceImpl>>(frame);
+    clients_[frame] = std::make_unique<NiceMock<MockMediaSessionClient>>();
     services_[frame]->SetClient(clients_[frame]->CreateInterfacePtrAndBind());
   }
 
@@ -125,7 +127,7 @@ class MediaSessionImplServiceRoutingTest
 
   void StartPlayerForFrame(TestRenderFrameHost* frame) {
     players_[frame] =
-        base::MakeUnique<NiceMock<MockMediaSessionPlayerObserver>>(frame);
+        std::make_unique<NiceMock<MockMediaSessionPlayerObserver>>(frame);
     MediaSessionImpl::Get(contents())
         ->AddPlayer(players_[frame].get(), kPlayerId,
                     media::MediaContentType::Persistent);

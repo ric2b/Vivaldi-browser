@@ -15,8 +15,7 @@
 
 namespace blink {
 
-class VREyeParameters final : public GarbageCollected<VREyeParameters>,
-                              public ScriptWrappable {
+class VREyeParameters final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -29,7 +28,7 @@ class VREyeParameters final : public GarbageCollected<VREyeParameters>,
 
   void Update(const device::mojom::blink::VREyeParametersPtr&);
 
-  DECLARE_VIRTUAL_TRACE()
+  virtual void Trace(blink::Visitor*);
 
  private:
   Member<DOMFloat32Array> offset_;

@@ -34,6 +34,7 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/request_context_frame_type.h"
@@ -62,6 +63,9 @@
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/common/blob_storage/blob_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -116,10 +120,12 @@ class MockProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
 
     job_ = new ServiceWorkerURLRequestJob(
         request, network_delegate, provider_host_->client_uuid(),
-        blob_storage_context_, resource_context_, FETCH_REQUEST_MODE_NO_CORS,
-        FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        std::string() /* integrity */, resource_type_,
-        REQUEST_CONTEXT_TYPE_HYPERLINK, REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
+        blob_storage_context_, resource_context_,
+        network::mojom::FetchRequestMode::kNoCORS,
+        network::mojom::FetchCredentialsMode::kOmit,
+        FetchRedirectMode::FOLLOW_MODE, std::string() /* integrity */,
+        false /* keepalive */, resource_type_, REQUEST_CONTEXT_TYPE_HYPERLINK,
+        REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
         scoped_refptr<ResourceRequestBody>(), ServiceWorkerFetchType::FETCH,
         custom_timeout_, delegate_);
     if (simulate_navigation_preload_) {
@@ -145,12 +151,11 @@ class MockProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
 // the memory.
 std::unique_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
-  return base::MakeUnique<storage::BlobProtocolHandler>(blob_storage_context,
-                                                        nullptr);
+  return std::make_unique<storage::BlobProtocolHandler>(blob_storage_context);
 }
 
 std::unique_ptr<ServiceWorkerHeaderMap> MakeHeaders() {
-  auto headers = base::MakeUnique<ServiceWorkerHeaderMap>();
+  auto headers = std::make_unique<ServiceWorkerHeaderMap>();
   (*headers)["Pineapple"] = "Pen";
   (*headers)["Foo"] = "Bar";
   (*headers)["Set-Cookie"] = "CookieCookieCookie";
@@ -204,24 +209,42 @@ class ServiceWorkerURLRequestJobTest
 
   void SetUpWithHelper(std::unique_ptr<EmbeddedWorkerTestHelper> helper) {
     helper_ = std::move(helper);
+    helper_->context()->storage()->LazyInitializeForTest(
+        base::BindOnce(&base::DoNothing));
+    base::RunLoop().RunUntilIdle();
+
+    // Prepare HTTP response info for the version.
+    auto http_info = std::make_unique<net::HttpResponseInfo>();
+    http_info->ssl_info.cert =
+        net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+    EXPECT_TRUE(http_info->ssl_info.is_valid());
+    http_info->ssl_info.security_bits = 0x100;
+    // SSL3 TLS_DHE_RSA_WITH_AES_256_CBC_SHA
+    http_info->ssl_info.connection_status = 0x300039;
+    http_info->headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
 
     // Create a registration and service worker version.
     registration_ = new ServiceWorkerRegistration(
-        ServiceWorkerRegistrationOptions(GURL("https://example.com/")), 1L,
-        helper_->context()->AsWeakPtr());
+        blink::mojom::ServiceWorkerRegistrationOptions(
+            GURL("https://example.com/")),
+        1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(), GURL("https://example.com/service_worker.js"), 1L,
         helper_->context()->AsWeakPtr());
+    // If script streaming is not enabled, SetMainScriptHttpResponseInfo()
+    // should be called manually since |http_info| which is stored in disk cache
+    // won't be read during SWVersion::StartWorker() in tests.
+    if (!ServiceWorkerUtils::IsScriptStreamingEnabled())
+      version_->SetMainScriptHttpResponseInfo(*http_info);
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
-    records.push_back(
-        ServiceWorkerDatabase::ResourceRecord(10, version_->script_url(), 100));
+    records.push_back(WriteToDiskCacheWithCustomResponseInfoSync(
+        helper_->context()->storage(), version_->script_url(), 10,
+        std::move(http_info), "I'm the body", "I'm the meta data"));
     version_->script_cache_map()->SetResources(records);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
 
     // Make the registration findable via storage functions.
-    helper_->context()->storage()->LazyInitialize(base::Bind(&base::DoNothing));
-    base::RunLoop().RunUntilIdle();
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
     helper_->context()->storage()->StoreRegistration(
         registration_.get(),
@@ -229,17 +252,6 @@ class ServiceWorkerURLRequestJobTest
         CreateReceiverOnCurrentThread(&status));
     base::RunLoop().RunUntilIdle();
     ASSERT_EQ(SERVICE_WORKER_OK, status);
-
-    // Set HTTP response info on the version.
-    net::HttpResponseInfo http_info;
-    http_info.ssl_info.cert =
-        net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
-    EXPECT_TRUE(http_info.ssl_info.is_valid());
-    http_info.ssl_info.security_bits = 0x100;
-    // SSL3 TLS_DHE_RSA_WITH_AES_256_CBC_SHA
-    http_info.ssl_info.connection_status = 0x300039;
-    http_info.headers = make_scoped_refptr(new net::HttpResponseHeaders(""));
-    version_->SetMainScriptHttpResponseInfo(http_info);
 
     // Create a controlled client.
     std::unique_ptr<ServiceWorkerProviderHost> provider_host =
@@ -368,8 +380,8 @@ class ServiceWorkerURLRequestJobTest
         &url_request_delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
     ResourceRequestInfo::AllocateForTesting(
         request_.get(), resource_type, browser_context_->GetResourceContext(),
-        -1, -1, -1, resource_type == RESOURCE_TYPE_MAIN_FRAME, false, true,
-        true, PREVIEWS_OFF);
+        -1, -1, -1, resource_type == RESOURCE_TYPE_MAIN_FRAME, true, true,
+        PREVIEWS_OFF, nullptr);
 
     request_->set_method("GET");
     request_->Start();
@@ -409,6 +421,7 @@ class ServiceWorkerURLRequestJobTest
   // ---------------------------------------------------------------------------
 
   TestBrowserThreadBundle thread_bundle_;
+  base::SimpleTestTickClock tick_clock_;
 
   std::unique_ptr<TestBrowserContext> browser_context_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
@@ -434,7 +447,7 @@ class ServiceWorkerURLRequestJobTest
 };
 
 TEST_F(ServiceWorkerURLRequestJobTest, Simple) {
-  SetUpWithHelper(base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath()));
+  SetUpWithHelper(std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath()));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
   TestRequest(200, "OK", std::string(), true /* expect_valid_ssl */);
@@ -469,22 +482,27 @@ class DelayHelper : public EmbeddedWorkerTestHelper {
     EmbeddedWorkerTestHelper::OnStartWorker(
         embedded_worker_id_, service_worker_version_id_, scope_, script_url_,
         pause_after_download_, std::move(start_worker_request_),
-        std::move(start_worker_instance_host_), std::move(provider_info_));
+        std::move(controller_request_), std::move(service_worker_host_),
+        std::move(start_worker_instance_host_), std::move(provider_info_),
+        std::move(installed_scripts_info_));
   }
 
   void Respond() {
     response_callback_->OnResponse(
         ServiceWorkerResponse(
-            base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+            std::make_unique<std::vector<GURL>>(), 200, "OK",
             network::mojom::FetchResponseType::kDefault,
-            base::MakeUnique<ServiceWorkerHeaderMap>(), std::string(), 0,
-            nullptr /* blob */, blink::kWebServiceWorkerResponseErrorUnknown,
-            base::Time(), false /* response_is_in_cache_storage */,
+            std::make_unique<ServiceWorkerHeaderMap>(), std::string(), 0,
+            nullptr /* blob */,
+            blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
+            false /* response_is_in_cache_storage */,
             std::string() /* response_cache_storage_cache_name */,
-            base::MakeUnique<
+            std::make_unique<
                 ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
         base::Time::Now());
-    std::move(finish_callback_).Run(SERVICE_WORKER_OK, base::Time::Now());
+    std::move(finish_callback_)
+        .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+             base::Time::Now());
   }
 
  protected:
@@ -494,29 +512,34 @@ class DelayHelper : public EmbeddedWorkerTestHelper {
       const GURL& scope,
       const GURL& script_url,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     embedded_worker_id_ = embedded_worker_id;
     service_worker_version_id_ = service_worker_version_id;
     scope_ = scope;
     script_url_ = script_url;
     pause_after_download_ = pause_after_download;
-    start_worker_request_ = std::move(request);
+    start_worker_request_ = std::move(dispatcher_request);
+    controller_request_ = std::move(controller_request);
+    service_worker_host_ = std::move(service_worker_host);
     start_worker_instance_host_ = std::move(instance_host);
     provider_info_ = std::move(provider_info);
+    installed_scripts_info_ = std::move(installed_scripts_info);
   }
 
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int embedded_worker_id,
-      int fetch_event_id,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr preload_handle,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     embedded_worker_id_ = embedded_worker_id;
-    fetch_event_id_ = fetch_event_id;
     response_callback_ = std::move(response_callback);
     finish_callback_ = std::move(finish_callback);
     preload_handle_ = std::move(preload_handle);
@@ -528,28 +551,31 @@ class DelayHelper : public EmbeddedWorkerTestHelper {
   GURL script_url_;
   bool pause_after_download_;
   mojom::ServiceWorkerEventDispatcherRequest start_worker_request_;
+  mojom::ControllerServiceWorkerRequest controller_request_;
+  blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host_;
   mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
       start_worker_instance_host_;
   mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info_;
+  mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info_;
   int embedded_worker_id_ = 0;
-  int fetch_event_id_ = 0;
   mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_;
   mojom::FetchEventPreloadHandlePtr preload_handle_;
-  FetchCallback finish_callback_;
+  mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+      finish_callback_;
   ServiceWorkerURLRequestJobTest* test_;
   DISALLOW_COPY_AND_ASSIGN(DelayHelper);
 };
 
 TEST_F(ServiceWorkerURLRequestJobTest,
        NavPreloadMetrics_WorkerAlreadyStarted_MainFrame) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   // Start the worker before the navigation.
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
   base::HistogramTester histogram_tester;
   version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        base::Bind(&SaveStatusCallback, &status));
+                        base::BindOnce(&SaveStatusCallback, &status));
   base::RunLoop().RunUntilIdle();
   helper->CompleteStartWorker();
   base::RunLoop().RunUntilIdle();
@@ -576,7 +602,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
 
 TEST_F(ServiceWorkerURLRequestJobTest,
        NavPreloadMetrics_WorkerFirst_MainFrame) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   base::HistogramTester histogram_tester;
@@ -603,7 +629,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
 
 TEST_F(ServiceWorkerURLRequestJobTest,
        NavPreloadMetrics_NavPreloadFirst_MainFrame) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   base::HistogramTester histogram_tester;
@@ -629,7 +655,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
 }
 
 TEST_F(ServiceWorkerURLRequestJobTest, NavPreloadMetrics_WorkerFirst_SubFrame) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   base::HistogramTester histogram_tester;
@@ -655,7 +681,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, NavPreloadMetrics_WorkerFirst_SubFrame) {
 
 TEST_F(ServiceWorkerURLRequestJobTest,
        NavPreloadMetrics_NavPreloadFirst_SubFrame) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   base::HistogramTester histogram_tester;
@@ -680,16 +706,13 @@ TEST_F(ServiceWorkerURLRequestJobTest,
 }
 
 TEST_F(ServiceWorkerURLRequestJobTest, CustomTimeout) {
-  SetUpWithHelper(base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath()));
+  SetUpWithHelper(std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath()));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
 
   // Set mock clock on version_ to check timeout behavior.
-  {
-    auto tick_clock = base::MakeUnique<base::SimpleTestTickClock>();
-    tick_clock->SetNowTicks(base::TimeTicks::Now());
-    version_->SetTickClockForTesting(std::move(tick_clock));
-  }
+  tick_clock_.SetNowTicks(base::TimeTicks::Now());
+  version_->SetTickClockForTesting(&tick_clock_);
 
   protocol_handler_->set_custom_timeout(base::TimeDelta::FromSeconds(5));
   TestRequest(200, "OK", std::string(), true /* expect_valid_ssl */);
@@ -702,26 +725,29 @@ class ProviderDeleteHelper : public EmbeddedWorkerTestHelper {
   ~ProviderDeleteHelper() override {}
 
  protected:
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int /* embedded_worker_id */,
-      int /* fetch_event_id */,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr /* preload_handle */,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     context()->RemoveProviderHost(mock_render_process_id(), kProviderID);
     response_callback->OnResponse(
         ServiceWorkerResponse(
-            base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+            std::make_unique<std::vector<GURL>>(), 200, "OK",
             network::mojom::FetchResponseType::kDefault,
-            base::MakeUnique<ServiceWorkerHeaderMap>(), std::string(), 0,
-            nullptr /* blob */, blink::kWebServiceWorkerResponseErrorUnknown,
-            base::Time(), false /* response_is_in_cache_storage */,
+            std::make_unique<ServiceWorkerHeaderMap>(), std::string(), 0,
+            nullptr /* blob */,
+            blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
+            false /* response_is_in_cache_storage */,
             std::string() /* response_cache_storage_cache_name */,
-            base::MakeUnique<
+            std::make_unique<
                 ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
         base::Time::Now());
-    std::move(finish_callback).Run(SERVICE_WORKER_OK, base::Time::Now());
+    std::move(finish_callback)
+        .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+             base::Time::Now());
   }
 
  private:
@@ -731,9 +757,7 @@ class ProviderDeleteHelper : public EmbeddedWorkerTestHelper {
 // Shouldn't crash if the ProviderHost is deleted prior to completion of the
 // fetch event.
 TEST_F(ServiceWorkerURLRequestJobTest, DeletedProviderHostOnFetchEvent) {
-  SetUpWithHelper(base::MakeUnique<ProviderDeleteHelper>());
-
-  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
+  SetUpWithHelper(std::make_unique<ProviderDeleteHelper>());
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
   TestRequest(500, "Service Worker Response Error", std::string(),
@@ -753,7 +777,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, DeletedProviderHostOnFetchEvent) {
 }
 
 TEST_F(ServiceWorkerURLRequestJobTest, DeletedProviderHostBeforeFetchEvent) {
-  SetUpWithHelper(base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath()));
+  SetUpWithHelper(std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath()));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
   request_ = url_request_context_.CreateRequest(
@@ -791,25 +815,27 @@ class BlobResponder : public EmbeddedWorkerTestHelper {
   ~BlobResponder() override = default;
 
  protected:
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int /* embedded_worker_id */,
-      int /* fetch_event_id */,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr /* preload_handle */,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     response_callback->OnResponse(
         ServiceWorkerResponse(
-            base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+            std::make_unique<std::vector<GURL>>(), 200, "OK",
             network::mojom::FetchResponseType::kDefault, MakeHeaders(),
             blob_uuid_, blob_size_, nullptr /* blob */,
-            blink::kWebServiceWorkerResponseErrorUnknown, base::Time(),
+            blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
             false /* response_is_in_cache_storage */,
             std::string() /* response_cache_storage_cache_name */,
-            base::MakeUnique<
+            std::make_unique<
                 ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
         base::Time::Now());
-    std::move(finish_callback).Run(SERVICE_WORKER_OK, base::Time::Now());
+    std::move(finish_callback)
+        .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+             base::Time::Now());
   }
 
   std::string blob_uuid_;
@@ -828,14 +854,14 @@ TEST_F(ServiceWorkerURLRequestJobTest, BlobResponse) {
   std::string expected_response;
   expected_response.reserve((sizeof(kTestData) - 1) * 1024);
 
-  auto blob_data = base::MakeUnique<storage::BlobDataBuilder>("blob-id:myblob");
+  auto blob_data = std::make_unique<storage::BlobDataBuilder>("blob-id:myblob");
   for (int i = 0; i < 1024; ++i) {
     blob_data->AppendData(kTestData);
     expected_response += kTestData;
   }
   std::unique_ptr<storage::BlobDataHandle> blob_handle =
       blob_storage_context->context()->AddFinishedBlob(blob_data.get());
-  SetUpWithHelper(base::MakeUnique<BlobResponder>(blob_handle->uuid(),
+  SetUpWithHelper(std::make_unique<BlobResponder>(blob_handle->uuid(),
                                                   expected_response.size()));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -857,7 +883,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, BlobResponse) {
 
 TEST_F(ServiceWorkerURLRequestJobTest, NonExistentBlobUUIDResponse) {
   SetUpWithHelper(
-      base::MakeUnique<BlobResponder>("blob-id:nothing-is-here", 0));
+      std::make_unique<BlobResponder>("blob-id:nothing-is-here", 0));
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
   TestRequest(500, "Service Worker Response Error", std::string(),
               true /* expect_valid_ssl */);
@@ -890,25 +916,28 @@ class StreamResponder : public EmbeddedWorkerTestHelper {
   ~StreamResponder() override {}
 
  protected:
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int /* embedded_worker_id */,
-      int /* fetch_event_id */,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr /* preload_handle */,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     ASSERT_FALSE(stream_handle_.is_null());
     response_callback->OnResponseStream(
         ServiceWorkerResponse(
-            base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+            std::make_unique<std::vector<GURL>>(), 200, "OK",
             network::mojom::FetchResponseType::kDefault, MakeHeaders(), "", 0,
-            nullptr /* blob */, blink::kWebServiceWorkerResponseErrorUnknown,
-            base::Time(), false /* response_is_in_cache_storage */,
+            nullptr /* blob */,
+            blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
+            false /* response_is_in_cache_storage */,
             std::string() /* response_cache_storage_cache_name */,
-            base::MakeUnique<
+            std::make_unique<
                 ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
         std::move(stream_handle_), base::Time::Now());
-    std::move(finish_callback).Run(SERVICE_WORKER_OK, base::Time::Now());
+    std::move(finish_callback)
+        .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+             base::Time::Now());
   }
 
   blink::mojom::ServiceWorkerStreamHandlePtr stream_handle_;
@@ -921,7 +950,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -974,7 +1003,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_ConsecutiveRead) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1024,7 +1053,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponseAndCancel) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1077,7 +1106,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_Abort) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1131,7 +1160,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_AbortBeforeData) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1185,7 +1214,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_AbortAfterData) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1223,7 +1252,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_ConsecutiveReadAndAbort) {
   blink::mojom::ServiceWorkerStreamCallbackPtr stream_callback;
   mojo::DataPipe data_pipe;
   SetUpWithHelper(
-      base::MakeUnique<StreamResponder>(mojo::MakeRequest(&stream_callback),
+      std::make_unique<StreamResponder>(mojo::MakeRequest(&stream_callback),
                                         std::move(data_pipe.consumer_handle)));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1277,16 +1306,17 @@ class FailFetchHelper : public EmbeddedWorkerTestHelper {
   ~FailFetchHelper() override {}
 
  protected:
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int embedded_worker_id,
-      int /* fetch_event_id */,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr /* preload_handle */,
       mojom::ServiceWorkerFetchResponseCallbackPtr /* response_callback */,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     SimulateWorkerStopped(embedded_worker_id);
     std::move(finish_callback)
-        .Run(SERVICE_WORKER_ERROR_ABORT, base::Time::Now());
+        .Run(blink::mojom::ServiceWorkerEventStatus::ABORTED,
+             base::Time::Now());
   }
 
  private:
@@ -1294,7 +1324,7 @@ class FailFetchHelper : public EmbeddedWorkerTestHelper {
 };
 
 TEST_F(ServiceWorkerURLRequestJobTest, FailFetchDispatch) {
-  SetUpWithHelper(base::MakeUnique<FailFetchHelper>());
+  SetUpWithHelper(std::make_unique<FailFetchHelper>());
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
   request_ = url_request_context_.CreateRequest(
@@ -1323,7 +1353,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, FailFetchDispatch) {
 }
 
 TEST_F(ServiceWorkerURLRequestJobTest, FailToActivate_MainResource) {
-  SetUpWithHelper(base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath()));
+  SetUpWithHelper(std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath()));
   RunFailToActivateTest(RESOURCE_TYPE_MAIN_FRAME);
 
   // The load should fail and we should have fallen back to network because
@@ -1340,7 +1370,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, FailToActivate_MainResource) {
 }
 
 TEST_F(ServiceWorkerURLRequestJobTest, FailToActivate_Subresource) {
-  SetUpWithHelper(base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath()));
+  SetUpWithHelper(std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath()));
   RunFailToActivateTest(RESOURCE_TYPE_IMAGE);
 
   // The load should fail and we should not fall back to network because
@@ -1363,40 +1393,44 @@ class EarlyResponseHelper : public EmbeddedWorkerTestHelper {
   ~EarlyResponseHelper() override {}
 
   void FinishWaitUntil() {
-    std::move(finish_callback_).Run(SERVICE_WORKER_OK, base::Time::Now());
+    std::move(finish_callback_)
+        .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+             base::Time::Now());
   }
 
  protected:
-  void OnFetchEvent(
+  void OnLegacyFetchEvent(
       int /* embedded_worker_id */,
-      int /* fetch_event_id */,
       const ServiceWorkerFetchRequest& /* request */,
       mojom::FetchEventPreloadHandlePtr /* preload_handle */,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
-      FetchCallback finish_callback) override {
+      mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+          finish_callback) override {
     finish_callback_ = std::move(finish_callback);
     response_callback->OnResponse(
         ServiceWorkerResponse(
-            base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+            std::make_unique<std::vector<GURL>>(), 200, "OK",
             network::mojom::FetchResponseType::kDefault,
-            base::MakeUnique<ServiceWorkerHeaderMap>(), std::string(), 0,
-            nullptr /* blob */, blink::kWebServiceWorkerResponseErrorUnknown,
-            base::Time(), false /* response_is_in_cache_storage */,
+            std::make_unique<ServiceWorkerHeaderMap>(), std::string(), 0,
+            nullptr /* blob */,
+            blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
+            false /* response_is_in_cache_storage */,
             std::string() /* response_cache_storage_cache_name */,
-            base::MakeUnique<
+            std::make_unique<
                 ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
         base::Time::Now());
   }
 
  private:
-  FetchCallback finish_callback_;
+  mojom::ServiceWorkerEventDispatcher::DispatchFetchEventCallback
+      finish_callback_;
   DISALLOW_COPY_AND_ASSIGN(EarlyResponseHelper);
 };
 
 // This simulates the case when a response is returned and the fetch event is
 // still in flight.
 TEST_F(ServiceWorkerURLRequestJobTest, EarlyResponse) {
-  SetUpWithHelper(base::MakeUnique<EarlyResponseHelper>());
+  SetUpWithHelper(std::make_unique<EarlyResponseHelper>());
   EarlyResponseHelper* helper =
       static_cast<EarlyResponseHelper*>(helper_.get());
 
@@ -1425,7 +1459,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, EarlyResponse) {
 
 // Test cancelling the URLRequest while the fetch event is in flight.
 TEST_F(ServiceWorkerURLRequestJobTest, CancelRequest) {
-  SetUpWithHelper(base::MakeUnique<DelayHelper>(this));
+  SetUpWithHelper(std::make_unique<DelayHelper>(this));
   DelayHelper* helper = static_cast<DelayHelper*>(helper_.get());
 
   // Start the URL request. The job will be waiting for the

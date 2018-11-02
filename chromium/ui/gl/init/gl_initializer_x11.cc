@@ -10,6 +10,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "ui/gfx/switches.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_egl_api_implementation.h"
@@ -85,6 +86,8 @@ bool InitializeStaticEGLInternal(GLImplementation implementation) {
   base::FilePath glesv2_path(kGLESv2LibraryName);
   base::FilePath egl_path(kEGLLibraryName);
 
+  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+
   if (implementation == kGLImplementationSwiftShaderGL) {
 #if BUILDFLAG(ENABLE_SWIFTSHADER)
     base::FilePath module_path;
@@ -97,7 +100,8 @@ bool InitializeStaticEGLInternal(GLImplementation implementation) {
 #else
     return false;
 #endif
-  } else {
+  } else if (cmd->GetSwitchValueASCII(switches::kUseGL) ==
+             kGLImplementationANGLEName) {
     base::FilePath module_path;
     if (!PathService::Get(base::DIR_MODULE, &module_path))
       return false;
@@ -213,6 +217,7 @@ void InitializeDebugGLBindings() {
 
 void ShutdownGLPlatform() {
   GLSurfaceEGL::ShutdownOneOff();
+  GLSurfaceGLX::ShutdownOneOff();
   ClearBindingsEGL();
   ClearBindingsGL();
   ClearBindingsGLX();

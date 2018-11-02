@@ -26,9 +26,9 @@
 #ifndef PerformanceMeasure_h
 #define PerformanceMeasure_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/timing/PerformanceEntry.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -43,7 +43,9 @@ class PerformanceMeasure final : public PerformanceEntry {
     return new PerformanceMeasure(name, start_time, end_time);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { PerformanceEntry::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    PerformanceEntry::Trace(visitor);
+  }
 
  private:
   PerformanceMeasure(const String& name, double start_time, double end_time)

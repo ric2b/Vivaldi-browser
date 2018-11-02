@@ -7,12 +7,12 @@
 #include <stdint.h>
 
 #include <memory>
-#include <stack>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/containers/stack.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -171,8 +171,8 @@ class IOThread : public base::Thread {
     std::unique_ptr<net::URLRequestJobFactoryImpl> factory(
         new net::URLRequestJobFactoryImpl());
     factory->SetProtocolHandler("http",
-                                base::MakeUnique<MockHttpServerJobFactory>(
-                                    base::MakeUnique<AppCacheInterceptor>()));
+                                std::make_unique<MockHttpServerJobFactory>(
+                                    std::make_unique<AppCacheInterceptor>()));
     job_factory_ = std::move(factory);
     request_context_.reset(new net::TestURLRequestContext());
     request_context_->set_job_factory(job_factory_.get());
@@ -214,8 +214,8 @@ class AppCacheStorageImplTest : public testing::Test {
                        const GURL& manifest_url) override {
       loaded_group_ = group;
       loaded_manifest_url_ = manifest_url;
-      loaded_groups_newest_cache_ = group ? group->newest_complete_cache()
-                                          : NULL;
+      loaded_groups_newest_cache_ =
+          group ? group->newest_complete_cache() : nullptr;
       test_->ScheduleNextTask();
     }
 
@@ -310,7 +310,7 @@ class AppCacheStorageImplTest : public testing::Test {
   class MockQuotaManagerProxy : public storage::QuotaManagerProxy {
    public:
     MockQuotaManagerProxy()
-        : QuotaManagerProxy(NULL, NULL),
+        : QuotaManagerProxy(nullptr, nullptr),
           notify_storage_accessed_count_(0),
           notify_storage_modified_count_(0),
           last_delta_(0),
@@ -431,10 +431,10 @@ class AppCacheStorageImplTest : public testing::Test {
     scoped_refptr<base::SequencedTaskRunner> db_runner =
         storage()->db_task_runner_;
     storage()->CancelDelegateCallbacks(delegate());
-    group_ = NULL;
-    cache_ = NULL;
-    cache2_ = NULL;
-    mock_quota_manager_proxy_ = NULL;
+    group_ = nullptr;
+    cache_ = nullptr;
+    cache2_ = nullptr;
+    mock_quota_manager_proxy_ = nullptr;
     delegate_.reset();
     service_.reset();
     FlushTasks(db_runner.get());
@@ -588,8 +588,8 @@ class AppCacheStorageImplTest : public testing::Test {
     // Setup some preconditions. Create a group and newest cache that
     // appear to be "stored" and "not currently in use".
     MakeCacheAndGroup(kManifestUrl, 1, 1, true);
-    group_ = NULL;
-    cache_ = NULL;
+    group_ = nullptr;
+    cache_ = nullptr;
 
     // Conduct the cache load test, completes async
     storage()->LoadCache(1, delegate());
@@ -609,7 +609,7 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_EQ(0, mock_quota_manager_proxy_->notify_storage_modified_count_);
 
     // Drop things from the working set.
-    delegate()->loaded_cache_ = NULL;
+    delegate()->loaded_cache_ = nullptr;
     EXPECT_FALSE(delegate()->loaded_group_.get());
 
     // Conduct the group load test, also complete asynchronously.
@@ -624,7 +624,7 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(delegate()->loaded_group_.get());
     EXPECT_EQ(kManifestUrl, delegate()->loaded_manifest_url_);
     EXPECT_TRUE(delegate()->loaded_group_->newest_complete_cache());
-    delegate()->loaded_groups_newest_cache_ = NULL;
+    delegate()->loaded_groups_newest_cache_ = nullptr;
     EXPECT_TRUE(delegate()->loaded_group_->HasOneRef());
     EXPECT_EQ(2, mock_quota_manager_proxy_->notify_storage_accessed_count_);
     EXPECT_EQ(0, mock_quota_manager_proxy_->notify_storage_modified_count_);
@@ -947,8 +947,8 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(database()->InsertEntry(&entry_record));
     EXPECT_FALSE(cache_->GetEntry(kEntryUrl)->IsForeign());
     EXPECT_TRUE(cache_->HasOneRef());
-    cache_ = NULL;
-    group_ = NULL;
+    cache_ = nullptr;
+    group_ = nullptr;
 
     // Conduct the test, start a cache load, and prior to completion
     // of that load, mark the entry as foreign.
@@ -1027,9 +1027,9 @@ class AppCacheStorageImplTest : public testing::Test {
     // Optionally drop the cache/group pair from the working set.
     if (drop_from_working_set) {
       EXPECT_TRUE(cache_->HasOneRef());
-      cache_ = NULL;
+      cache_ = nullptr;
       EXPECT_TRUE(group_->HasOneRef());
-      group_ = NULL;
+      group_ = nullptr;
     }
 
     // Conduct the test.
@@ -1103,9 +1103,9 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(database()->InsertOnlineWhiteListRecords(whitelists));
     if (drop_from_working_set) {
       EXPECT_TRUE(cache_->HasOneRef());
-      cache_ = NULL;
+      cache_ = nullptr;
       EXPECT_TRUE(group_->HasOneRef());
-      group_ = NULL;
+      group_ = nullptr;
     }
 
     // Conduct the test. The test url is in both fallback namespace urls,
@@ -1177,9 +1177,9 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(database()->InsertOnlineWhiteListRecords(whitelists));
     if (drop_from_working_set) {
       EXPECT_TRUE(cache_->HasOneRef());
-      cache_ = NULL;
+      cache_ = nullptr;
       EXPECT_TRUE(group_->HasOneRef());
-      group_ = NULL;
+      group_ = nullptr;
     }
 
     // Conduct the test. The test url is in both intercept namespaces,
@@ -1243,9 +1243,9 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(database()->InsertNamespaceRecords(intercepts));
     if (drop_from_working_set) {
       EXPECT_TRUE(cache_->HasOneRef());
-      cache_ = NULL;
+      cache_ = nullptr;
       EXPECT_TRUE(group_->HasOneRef());
-      group_ = NULL;
+      group_ = nullptr;
     }
 
     // First test something that does not match the pattern.
@@ -1330,9 +1330,9 @@ class AppCacheStorageImplTest : public testing::Test {
     EXPECT_TRUE(database()->InsertNamespaceRecords(fallbacks));
     if (drop_from_working_set) {
       EXPECT_TRUE(cache_->HasOneRef());
-      cache_ = NULL;
+      cache_ = nullptr;
       EXPECT_TRUE(group_->HasOneRef());
-      group_ = NULL;
+      group_ = nullptr;
     }
 
     // First test something that does not match the pattern.
@@ -1581,8 +1581,8 @@ class AppCacheStorageImplTest : public testing::Test {
     whitelist_record.namespace_url = kOnlineNamespaceWithinFallback;
     EXPECT_TRUE(database()->InsertOnlineWhiteList(&whitelist_record));
     if (drop_from_working_set) {
-      cache_ = NULL;
-      group_ = NULL;
+      cache_ = nullptr;
+      group_ = nullptr;
     }
 
     // We should not find anything for the foreign entry.
@@ -1669,6 +1669,9 @@ class AppCacheStorageImplTest : public testing::Test {
                       AppCacheLogLevel log_level,
                       const std::string& message) override {}
     void OnContentBlocked(int host_id, const GURL& manifest_url) override {}
+    void OnSetSubresourceFactory(
+        int host_id,
+        mojo::MessagePipeHandle loader_factory_pipe_handle) override {}
 
     bool error_event_was_raised_;
   };
@@ -1745,7 +1748,7 @@ class AppCacheStorageImplTest : public testing::Test {
     }
 
     // Recreate the service to point at the db and corruption on disk.
-    service_.reset(new AppCacheServiceImpl(NULL));
+    service_.reset(new AppCacheServiceImpl(nullptr));
     service_->set_request_context(io_thread->request_context());
     service_->Initialize(temp_directory_.GetPath());
     mock_quota_manager_proxy_ = new MockQuotaManagerProxy();
@@ -1905,7 +1908,7 @@ class AppCacheStorageImplTest : public testing::Test {
   // Data members --------------------------------------------------
 
   std::unique_ptr<base::WaitableEvent> test_finished_event_;
-  std::stack<base::OnceClosure> task_stack_;
+  base::stack<base::OnceClosure> task_stack_;
   std::unique_ptr<AppCacheServiceImpl> service_;
   std::unique_ptr<MockStorageDelegate> delegate_;
   scoped_refptr<MockQuotaManagerProxy> mock_quota_manager_proxy_;

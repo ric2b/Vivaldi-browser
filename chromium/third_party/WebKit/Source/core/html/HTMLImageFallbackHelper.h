@@ -5,8 +5,8 @@
 #ifndef HTMLImageFallbackHelper_h
 #define HTMLImageFallbackHelper_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -18,9 +18,9 @@ class HTMLImageFallbackHelper {
 
  public:
   static void CreateAltTextShadowTree(Element&);
-  static RefPtr<ComputedStyle> CustomStyleForAltText(
+  static scoped_refptr<ComputedStyle> CustomStyleForAltText(
       Element&,
-      RefPtr<ComputedStyle> new_style);
+      scoped_refptr<ComputedStyle> new_style);
 };
 
 }  // namespace blink

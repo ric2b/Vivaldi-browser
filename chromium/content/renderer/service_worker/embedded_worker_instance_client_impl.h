@@ -33,7 +33,7 @@ class ServiceWorkerContextClient;
 // This class deletes itself when the worker stops (or if start failed). The
 // ownership graph is a cycle like this:
 // EmbeddedWorkerInstanceClientImpl -(owns)-> WorkerWrapper -(owns)->
-// WebEmbeddedWorkerInstance -(owns)-> ServiceWorkerContextClient -(owns)->
+// WebEmbeddedWorkerImpl -(owns)-> ServiceWorkerContextClient -(owns)->
 // EmbeddedWorkerInstanceClientImpl. Therefore, an instance can delete itself by
 // releasing its WorkerWrapper.
 //
@@ -89,7 +89,9 @@ class EmbeddedWorkerInstanceClientImpl
   void StartWorker(
       const EmbeddedWorkerStartParams& params,
       mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
       mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
+      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
       blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy)
@@ -99,14 +101,15 @@ class EmbeddedWorkerInstanceClientImpl
   void AddMessageToConsole(blink::WebConsoleMessage::Level level,
                            const std::string& message) override;
 
-  // Handler of connection error bound to |binding_|
+  // Handler of connection error bound to |binding_|.
   void OnError();
 
   std::unique_ptr<WorkerWrapper> StartWorkerContext(
       const EmbeddedWorkerStartParams& params,
       mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
       std::unique_ptr<ServiceWorkerContextClient> context_client,
-      blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy);
+      blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy,
+      service_manager::mojom::InterfaceProviderPtr interface_provider);
 
   mojo::AssociatedBinding<mojom::EmbeddedWorkerInstanceClient> binding_;
 

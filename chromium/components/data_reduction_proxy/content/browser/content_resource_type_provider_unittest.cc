@@ -87,6 +87,7 @@ class ContentResourceProviderTest : public testing::Test {
     context_.set_proxy_delegate(test_context_->io_data()->proxy_delegate());
     context_.Init();
 
+    test_context_->DisableWarmupURLFetch();
     test_context_->EnableDataReductionProxyWithSecureProxyCheckSuccess();
 
     std::unique_ptr<data_reduction_proxy::ContentResourceTypeProvider>
@@ -100,12 +101,12 @@ class ContentResourceProviderTest : public testing::Test {
   void AllocateRequestInfoForTesting(net::URLRequest* request,
                                      content::ResourceType resource_type) {
     content::ResourceRequestInfo::AllocateForTesting(
-        request, resource_type, NULL, -1, -1, -1,
+        request, resource_type, nullptr, -1, -1, -1,
         resource_type == content::RESOURCE_TYPE_MAIN_FRAME,
-        false,  // parent_is_main_frame
         false,  // allow_download
         false,  // is_async
-        content::PREVIEWS_OFF);
+        content::PREVIEWS_OFF,
+        nullptr);  // navigation_ui_data
   }
 
   std::unique_ptr<net::URLRequest> CreateRequestByType(

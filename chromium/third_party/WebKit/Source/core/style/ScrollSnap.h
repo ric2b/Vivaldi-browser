@@ -15,8 +15,8 @@ struct ScrollSnapType {
 
   ScrollSnapType()
       : is_none(true),
-        axis(kSnapAxisBoth),
-        strictness(kSnapStrictnessProximity) {}
+        axis(SnapAxis::kBoth),
+        strictness(SnapStrictness::kProximity) {}
 
   ScrollSnapType(const ScrollSnapType& other)
       : is_none(other.is_none),
@@ -41,7 +41,7 @@ struct ScrollSnapAlign {
   DISALLOW_NEW();
 
   ScrollSnapAlign()
-      : alignmentX(kSnapAlignmentNone), alignmentY(kSnapAlignmentNone) {}
+      : alignmentX(SnapAlignment::kNone), alignmentY(SnapAlignment::kNone) {}
 
   ScrollSnapAlign(const ScrollSnapAlign& other)
       : alignmentX(other.alignmentX), alignmentY(other.alignmentY) {}

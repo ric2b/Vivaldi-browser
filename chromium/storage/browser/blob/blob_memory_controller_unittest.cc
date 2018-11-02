@@ -49,7 +49,7 @@ int64_t FakeDiskSpaceMethod(const base::FilePath& path) {
 
 class BlobMemoryControllerTest : public testing::Test {
  protected:
-  BlobMemoryControllerTest() {}
+  BlobMemoryControllerTest() = default;
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -78,8 +78,8 @@ class BlobMemoryControllerTest : public testing::Test {
       const BlobDataBuilder& builder) {
     std::vector<scoped_refptr<ShareableBlobDataItem>> result;
     for (size_t i = 0; i < builder.items_.size(); ++i) {
-      result.push_back(make_scoped_refptr(new ShareableBlobDataItem(
-          builder.items_[i], ShareableBlobDataItem::QUOTA_NEEDED)));
+      result.push_back(base::MakeRefCounted<ShareableBlobDataItem>(
+          builder.items_[i], ShareableBlobDataItem::QUOTA_NEEDED));
     }
     return result;
   }

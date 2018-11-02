@@ -16,14 +16,15 @@ namespace ash {
 
 class VideoActivityNotifierTest : public AshTestBase {
  public:
-  VideoActivityNotifierTest() {}
-  ~VideoActivityNotifierTest() override {}
+  VideoActivityNotifierTest() = default;
+  ~VideoActivityNotifierTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
     power_client_ = static_cast<chromeos::FakePowerManagerClient*>(
         chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
-    detector_.reset(new VideoDetector());
+    detector_ = std::make_unique<VideoDetector>(
+        viz::mojom::VideoDetectorObserverRequest());
     notifier_.reset(new VideoActivityNotifier(detector_.get()));
   }
 

@@ -36,7 +36,7 @@ class PDF {
                            const unsigned short* term,
                            bool case_sensitive,
                            PP_PrivateFindResult** results,
-                           int* count);
+                           uint32_t* count);
   static void DidStartLoading(const InstanceHandle& instance);
   static void DidStopLoading(const InstanceHandle& instance);
   static void SetContentRestriction(const InstanceHandle& instance,
@@ -76,6 +76,7 @@ class PDF {
                                int32_t left_height,
                                const PP_FloatPoint& right,
                                int32_t right_height);
+  static void DidScroll(const InstanceHandle& instance);
 };
 
 }  // namespace pp

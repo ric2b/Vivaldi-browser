@@ -34,7 +34,7 @@ class PeerPidReceiver : public IPC::mojom::Channel {
   PeerPidReceiver(IPC::mojom::ChannelAssociatedRequest request,
                   const base::Closure& on_peer_pid_set)
       : binding_(this, std::move(request)), on_peer_pid_set_(on_peer_pid_set) {}
-  ~PeerPidReceiver() override {}
+  ~PeerPidReceiver() override = default;
 
   // mojom::Channel:
   void SetPeerPid(int32_t pid) override {
@@ -43,7 +43,7 @@ class PeerPidReceiver : public IPC::mojom::Channel {
   }
 
   void Receive(base::span<const uint8_t> data,
-               base::Optional<std::vector<IPC::mojom::SerializedHandlePtr>>
+               base::Optional<std::vector<mojo::native::SerializedHandlePtr>>
                    handles) override {}
 
   void GetAssociatedInterface(
@@ -69,7 +69,8 @@ TEST_F(IPCMojoBootstrapTest, Connect) {
   base::MessageLoop message_loop;
   std::unique_ptr<IPC::MojoBootstrap> bootstrap = IPC::MojoBootstrap::Create(
       helper_.StartChild("IPCMojoBootstrapTestClient"),
-      IPC::Channel::MODE_SERVER, base::ThreadTaskRunnerHandle::Get());
+      IPC::Channel::MODE_SERVER, base::ThreadTaskRunnerHandle::Get(),
+      base::ThreadTaskRunnerHandle::Get());
 
   IPC::mojom::ChannelAssociatedPtr sender;
   IPC::mojom::ChannelAssociatedRequest receiver;
@@ -92,7 +93,8 @@ MULTIPROCESS_TEST_MAIN_WITH_SETUP(
   base::MessageLoop message_loop;
   std::unique_ptr<IPC::MojoBootstrap> bootstrap = IPC::MojoBootstrap::Create(
       std::move(mojo::edk::test::MultiprocessTestHelper::primordial_pipe),
-      IPC::Channel::MODE_CLIENT, base::ThreadTaskRunnerHandle::Get());
+      IPC::Channel::MODE_CLIENT, base::ThreadTaskRunnerHandle::Get(),
+      base::ThreadTaskRunnerHandle::Get());
 
   IPC::mojom::ChannelAssociatedPtr sender;
   IPC::mojom::ChannelAssociatedRequest receiver;

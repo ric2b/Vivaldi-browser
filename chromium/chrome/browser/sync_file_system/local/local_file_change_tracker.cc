@@ -5,9 +5,10 @@
 #include "chrome/browser/sync_file_system/local/local_file_change_tracker.h"
 
 #include <stddef.h>
-#include <queue>
 #include <utility>
 
+#include "base/containers/circular_deque.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -21,9 +22,7 @@
 #include "storage/browser/fileapi/file_system_operation_context.h"
 #include "storage/common/fileapi/file_system_util.h"
 #include "third_party/leveldatabase/env_chromium.h"
-#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 
 using storage::FileSystemContext;
@@ -49,8 +48,7 @@ class LocalFileChangeTracker::TrackerDB {
 
   SyncStatusCode MarkDirty(const std::string& url);
   SyncStatusCode ClearDirty(const std::string& url);
-  SyncStatusCode GetDirtyEntries(
-      std::queue<FileSystemURL>* dirty_files);
+  SyncStatusCode GetDirtyEntries(base::queue<FileSystemURL>* dirty_files);
   SyncStatusCode WriteBatch(std::unique_ptr<leveldb::WriteBatch> batch);
 
  private:
@@ -61,7 +59,7 @@ class LocalFileChangeTracker::TrackerDB {
 
   SyncStatusCode Init(RecoveryOption recovery_option);
   SyncStatusCode Repair(const std::string& db_path);
-  void HandleError(const tracked_objects::Location& from_here,
+  void HandleError(const base::Location& from_here,
                    const leveldb::Status& status);
 
   const base::FilePath base_path_;
@@ -137,7 +135,8 @@ void LocalFileChangeTracker::OnRemoveDirectory(const FileSystemURL& url) {
 }
 
 void LocalFileChangeTracker::GetNextChangedURLs(
-    std::deque<FileSystemURL>* urls, int max_urls) {
+    base::circular_deque<FileSystemURL>* urls,
+    int max_urls) {
   DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(urls);
   urls->clear();
@@ -318,7 +317,7 @@ void LocalFileChangeTracker::UpdateNumChanges() {
 
 void LocalFileChangeTracker::GetAllChangedURLs(FileSystemURLSet* urls) {
   DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
-  std::deque<FileSystemURL> url_deque;
+  base::circular_deque<FileSystemURL> url_deque;
   GetNextChangedURLs(&url_deque, 0);
   urls->clear();
   urls->insert(url_deque.begin(), url_deque.end());
@@ -355,7 +354,7 @@ SyncStatusCode LocalFileChangeTracker::CollectLastDirtyChanges(
     FileSystemContext* file_system_context) {
   DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
 
-  std::queue<FileSystemURL> dirty_files;
+  base::queue<FileSystemURL> dirty_files;
   const SyncStatusCode status = tracker_db_->GetDirtyEntries(&dirty_files);
   if (status != SYNC_STATUS_OK)
     return status;
@@ -536,7 +535,7 @@ SyncStatusCode LocalFileChangeTracker::TrackerDB::Repair(
 
 // TODO(nhiroki): factor out the common methods into somewhere else.
 void LocalFileChangeTracker::TrackerDB::HandleError(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const leveldb::Status& status) {
   LOG(ERROR) << "LocalFileChangeTracker::TrackerDB failed at: "
              << from_here.ToString() << " with error: " << status.ToString();
@@ -584,7 +583,7 @@ SyncStatusCode LocalFileChangeTracker::TrackerDB::ClearDirty(
 }
 
 SyncStatusCode LocalFileChangeTracker::TrackerDB::GetDirtyEntries(
-    std::queue<FileSystemURL>* dirty_files) {
+    base::queue<FileSystemURL>* dirty_files) {
   if (db_status_ != SYNC_STATUS_OK)
     return db_status_;
 

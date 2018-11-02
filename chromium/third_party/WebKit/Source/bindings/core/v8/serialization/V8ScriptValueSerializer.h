@@ -5,6 +5,7 @@
 #ifndef V8ScriptValueSerializer_h
 #define V8ScriptValueSerializer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/serialization/SerializationTag.h"
 #include "bindings/core/v8/serialization/SerializedColorParams.h"
@@ -13,7 +14,7 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Vector.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -36,13 +37,11 @@ class CORE_EXPORT V8ScriptValueSerializer
 
  public:
   using Options = SerializedScriptValue::SerializeOptions;
-  explicit V8ScriptValueSerializer(RefPtr<ScriptState>,
+  explicit V8ScriptValueSerializer(scoped_refptr<ScriptState>,
                                    const Options& = Options());
 
-  RefPtr<SerializedScriptValue> Serialize(v8::Local<v8::Value>,
-                                          ExceptionState&);
-
-  static const uint32_t kLatestVersion;
+  scoped_refptr<SerializedScriptValue> Serialize(v8::Local<v8::Value>,
+                                                 ExceptionState&);
 
  protected:
   // Returns true if the DOM object was successfully written.
@@ -100,8 +99,8 @@ class CORE_EXPORT V8ScriptValueSerializer
                                size_t* actual_size) override;
   void FreeBufferMemory(void* buffer) override;
 
-  RefPtr<ScriptState> script_state_;
-  RefPtr<SerializedScriptValue> serialized_script_value_;
+  scoped_refptr<ScriptState> script_state_;
+  scoped_refptr<SerializedScriptValue> serialized_script_value_;
   v8::ValueSerializer serializer_;
   const Transferables* transferables_ = nullptr;
   const ExceptionState* exception_state_ = nullptr;
@@ -113,6 +112,10 @@ class CORE_EXPORT V8ScriptValueSerializer
   bool serialize_invoked_ = false;
 #endif
 };
+
+// For code testing V8ScriptValueSerializer
+scoped_refptr<SerializedScriptValue> SerializedValue(
+    const Vector<uint8_t>& bytes);
 
 }  // namespace blink
 

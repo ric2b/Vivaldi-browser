@@ -5,12 +5,12 @@
 #include "core/paint/TableCellPainter.h"
 
 #include "core/layout/LayoutTableCell.h"
+#include "core/paint/AdjustPaintOffsetScope.h"
 #include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxModelObjectPainter.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/BoxPainterBase.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -38,9 +38,11 @@ void TableCellPainter::PaintContainerBackgroundBehindCell(
       !layout_table_cell_.FirstChild())
     return;
 
-  LayoutRect paint_rect = PaintRectNotIncludingVisualOverflow(
-      paint_offset + layout_table_cell_.Location());
-  PaintBackground(paint_info, paint_rect, background_object);
+  AdjustPaintOffsetScope adjustment(layout_table_cell_, paint_info,
+                                    paint_offset);
+  auto paint_rect =
+      PaintRectNotIncludingVisualOverflow(adjustment.AdjustedPaintOffset());
+  PaintBackground(adjustment.GetPaintInfo(), paint_rect, background_object);
 }
 
 void TableCellPainter::PaintBackground(const PaintInfo& paint_info,
@@ -88,18 +90,14 @@ void TableCellPainter::PaintBoxDecorationBackground(
   if (!has_background && !has_box_shadow && !needs_to_paint_border)
     return;
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_table_cell_,
           DisplayItem::kBoxDecorationBackground))
     return;
 
-  LayoutRect visual_overflow_rect = layout_table_cell_.VisualOverflowRect();
-  visual_overflow_rect.MoveBy(paint_offset);
   // TODO(chrishtr): the pixel-snapping here is likely incorrect.
-  LayoutObjectDrawingRecorder recorder(
-      paint_info.context, layout_table_cell_,
-      DisplayItem::kBoxDecorationBackground,
-      PixelSnappedIntRect(visual_overflow_rect));
+  DrawingRecorder recorder(paint_info.context, layout_table_cell_,
+                           DisplayItem::kBoxDecorationBackground);
 
   LayoutRect paint_rect = PaintRectNotIncludingVisualOverflow(paint_offset);
 
@@ -133,7 +131,7 @@ void TableCellPainter::PaintBoxDecorationBackground(
 void TableCellPainter::PaintMask(const PaintInfo& paint_info,
                                  const LayoutPoint& paint_offset) {
   if (layout_table_cell_.Style()->Visibility() != EVisibility::kVisible ||
-      paint_info.phase != kPaintPhaseMask)
+      paint_info.phase != PaintPhase::kMask)
     return;
 
   LayoutTable* table_elt = layout_table_cell_.Table();
@@ -142,13 +140,13 @@ void TableCellPainter::PaintMask(const PaintInfo& paint_info,
       !layout_table_cell_.FirstChild())
     return;
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_table_cell_, paint_info.phase))
     return;
 
+  DrawingRecorder recorder(paint_info.context, layout_table_cell_,
+                           paint_info.phase);
   LayoutRect paint_rect = PaintRectNotIncludingVisualOverflow(paint_offset);
-  LayoutObjectDrawingRecorder recorder(paint_info.context, layout_table_cell_,
-                                       paint_info.phase, paint_rect);
   BoxPainter(layout_table_cell_).PaintMaskImages(paint_info, paint_rect);
 }
 

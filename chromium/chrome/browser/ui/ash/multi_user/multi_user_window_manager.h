@@ -19,8 +19,6 @@ namespace aura {
 class Window;
 }
 
-namespace chrome {
-
 // The MultiUserWindowManager manages windows from multiple users by presenting
 // only user relevant windows to the current user. The manager is automatically
 // determining the window ownership from browser and application windows and
@@ -56,14 +54,6 @@ class MultiUserWindowManager {
     virtual ~Observer() {}
   };
 
-  // The multi profile mode in use.
-  enum MultiProfileMode {
-    MULTI_PROFILE_MODE_UNINITIALIZED,  // Not initialized yet.
-    MULTI_PROFILE_MODE_OFF,            // Single user mode.
-    MULTI_PROFILE_MODE_SEPARATED,      // Each user has their own desktop.
-    MULTI_PROFILE_MODE_MIXED           // All users mix windows freely.
-  };
-
   // Creates an instance of the MultiUserWindowManager.
   // Note: This function might fail if due to the desired mode the
   // MultiUserWindowManager is not required.
@@ -73,11 +63,6 @@ class MultiUserWindowManager {
   // this will return NULL.
   static MultiUserWindowManager* GetInstance();
 
-  // Return the current multi profile mode operation. If CreateInstance was not
-  // yet called (or was already destroyed), MULTI_PROFILE_MODE_UNINITIALIZED
-  // will get returned.
-  static MultiProfileMode GetMultiProfileMode();
-
   // Whether or not the window's title should show the avatar. On chromeos,
   // this is true when the owner of the window is different from the owner of
   // the desktop.
@@ -86,10 +71,8 @@ class MultiUserWindowManager {
   // Removes the instance.
   static void DeleteInstance();
 
-  // A function to set an |instance| of a created MultiUserWinwdowManager object
-  // with a given |mode| for test purposes.
-  static void SetInstanceForTest(MultiUserWindowManager* instance,
-                                 MultiProfileMode mode);
+  // Sets the singleton instance to |instance| and enables multi-user-mode.
+  static void SetInstanceForTest(MultiUserWindowManager* instance);
 
   // Assigns an owner to a passed window. Note that this window's parent should
   // be a direct child of the root window.
@@ -142,12 +125,6 @@ class MultiUserWindowManager {
 
  protected:
   virtual ~MultiUserWindowManager() {}
-
- private:
-  // Caching the current multi profile mode since the detection is expensive.
-  static MultiProfileMode multi_user_mode_;
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_UI_ASH_MULTI_USER_MULTI_USER_WINDOW_MANAGER_H_

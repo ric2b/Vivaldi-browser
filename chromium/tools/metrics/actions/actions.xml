@@ -677,6 +677,34 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Accel_Move_Window_To_Above_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to above display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Below_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to below display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Left_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to left display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Right_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to right display.
+  </description>
+</action>
+
 <action name="Accel_NewTab_T">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -725,6 +753,14 @@ should be able to be added at any place in this file.
 <action name="Accel_Overview_F5">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Accel_PowerButton_Screenshot">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User takes a screenshot by pressing power button and volume down key
+    simultaneously on tablet mode.
+  </description>
 </action>
 
 <action name="Accel_PrevWindow_F5">
@@ -811,7 +847,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="Accel_Search_LWin">
+<action name="Accel_Search_LWin" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -1089,6 +1125,25 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Accessibility.CrosSelectToSpeak.CancelSpeech">
+  <owner>katie@chromium.org</owner>
+  <description>
+    A Chrome OS user manually cancels Select To Speak while it is speaking.
+  </description>
+</action>
+
+<action name="Accessibility.CrosSelectToSpeak.LoadSettings">
+  <owner>katie@chromium.org</owner>
+  <description>
+    A Chrome OS user loads the Select To Speak settings page.
+  </description>
+</action>
+
+<action name="Accessibility.CrosSelectToSpeak.StartSpeech">
+  <owner>katie@chromium.org</owner>
+  <description>A Chrome OS user manually starts Select To Speak.</description>
+</action>
+
 <action name="Accessibility.TwoFingersHeldGeneratedSpokenFeedbackCountdown">
   <owner>dmazzoni@chromium.org</owner>
   <description>
@@ -1139,6 +1194,28 @@ should be able to be added at any place in this file.
   <owner>miu@chromium.org</owner>
   <description>
     User clicked the tab alert indicator button to unmute the tab.
+  </description>
+</action>
+
+<action name="Android.ChromeHome.AcceptedSurvey">
+  <obsolete>
+    Deprecated 1/2018. Replaced with the
+    Android.ChromeHome.Survey.InfoBarClosingState histogram.
+  </obsolete>
+  <owner>danielpark@chromium.org</owner>
+  <description>
+    User clicked on the invite to take a survey in the survey infobar.
+  </description>
+</action>
+
+<action name="Android.ChromeHome.ClickedSurveyInfoBarCloseButton">
+  <obsolete>
+    Deprecated 1/2018. Replaced with the
+    Android.ChromeHome.Survey.InfoBarClosingState histogram.
+  </obsolete>
+  <owner>danielpark@chromium.org</owner>
+  <description>
+    User dismissed the survey infobar by tapping on its close button.
   </description>
 </action>
 
@@ -1276,6 +1353,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.ChromeHome.OptOutSnackbarClicked">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User clicked the 'Take Survey' button on the snackbar shown after they opted
+    out of Chrome Home.
+  </description>
+</action>
+
 <action name="Android.ChromeHome.ShowBookmarks">
   <owner>mdjones@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -1306,6 +1392,11 @@ should be able to be added at any place in this file.
   <owner>mdjones@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <description>User showed the suggestions bottom sheet content.</description>
+</action>
+
+<action name="Android.ChromeHome.Survey.ShowSurveyInfoBar">
+  <owner>danielpark@chromium.org</owner>
+  <description>The survey infobar was displayed.</description>
 </action>
 
 <action name="Android.ContentDetectorActivated">
@@ -1531,6 +1622,14 @@ should be able to be added at any place in this file.
   <description>Promo banner for an instant app has been dismissed.</description>
 </action>
 
+<action name="Android.InstantApps.BannerDismissedAppIsDefault">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    A promo banner shown when opening the instant app is default has been
+    dismissed.
+  </description>
+</action>
+
 <action name="Android.InstantApps.BannerOpen">
   <owner>mariakhomenko@chromium.org</owner>
   <description>
@@ -1538,9 +1637,35 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.InstantApps.BannerOpenAppIsDefault">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    User clicked &quot;Open App&quot; button on an instant apps banner that was
+    shown when opening the app was default, signaling that they were using the
+    mobile web first, and decided to switch over to the instant app.
+  </description>
+</action>
+
 <action name="Android.InstantApps.BannerShown" not_user_triggered="true">
   <owner>mariakhomenko@chromium.org</owner>
   <description>Promo banner for an instant app has been displayed.</description>
+</action>
+
+<action name="Android.InstantApps.BannerShownAppIsDefault"
+    not_user_triggered="true">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    Promo banner for an instant app has been displayed when opening the app is
+    default.
+  </description>
+</action>
+
+<action name="Android.InstantApps.InstantAppsEligiblePageLoaded">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    A page finished loading in Chrome that could have been loaded in an Instant
+    App.
+  </description>
 </action>
 
 <action name="Android.InstantApps.LaunchedByDefault" not_user_triggered="true">
@@ -1555,6 +1680,14 @@ should be able to be added at any place in this file.
   <owner>tedchoc@chromium.org</owner>
   <description>
     An instant app was launched from the page info popup.
+  </description>
+</action>
+
+<action name="Android.InstantApps.OpenInstantAppButtonShown">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    Recorded when the user opened PageInfo dialog and saw a button to launch an
+    Instant App there.
   </description>
 </action>
 
@@ -1633,6 +1766,13 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.PhoneIntent">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    A user clicked on a telephone number link in Chrome content.
+  </description>
+</action>
+
 <action name="AppCloseButton_Clk">
   <obsolete>Unused as of 08/2017</obsolete>
   <owner>jamescook@chromium.org</owner>
@@ -1685,7 +1825,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.InstantApps">
-  <owner>hejq@chromium.com</owner>
+  <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the an instant app from a Play Store app search
     query.
@@ -1693,7 +1833,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.UninstalledApps">
-  <owner>hejq@chromium.com</owner>
+  <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the installing page of a Play Store app search
     result.
@@ -2923,6 +3063,28 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="BrowserActions.MenuOpened">
+  <owner>ltian@chromium.org</owner>
+  <description>
+    A Browser Actions menu is opened in Chrome. A Browser Actions menu is a
+    Chrome style context menu opened by 3rd party apps.
+  </description>
+</action>
+
+<action name="BrowserActions.TabOpenedNotificationClicked">
+  <owner>ltian@chromium.org</owner>
+  <description>
+    Users click the notification of opening tab in background.
+  </description>
+</action>
+
+<action name="BrowserActions.TabOpenedNotificationCreated">
+  <owner>ltian@chromium.org</owner>
+  <description>
+    Browser Actions creates a notifcation of opening tab in background.
+  </description>
+</action>
+
 <action name="BrowserForSystemProfile">
   <owner>mlerman@chromium.org</owner>
   <description>
@@ -3286,6 +3448,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ClearBrowsingData_OlderThan30Days">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>
+    Browsing data has been cleared for older than 30 days timeperiod.
+  </description>
+</action>
+
 <action name="ClearBrowsingData_Passwords">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -3305,6 +3475,11 @@ should be able to be added at any place in this file.
 <action name="ClearBrowsingData_ShowDlg">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="ClearBrowsingData_SiteUsageData">
+  <owner>mlamouri@chromium.org</owner>
+  <description>Recorded when the user clears site usage data.</description>
 </action>
 
 <action name="ClearBrowsingData_SwitchTo_AdvancedTab">
@@ -3347,6 +3522,12 @@ should be able to be added at any place in this file.
   <owner>dullweber@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <description>Time period in CBD was changed.</description>
+</action>
+
+<action name="ClearBrowsingData_TimePeriodChanged_OlderThan30Days">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Time period in CBD was changed to OlderThan30Days.</description>
 </action>
 
 <action name="ClearSelection">
@@ -3690,6 +3871,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ContextualSearch.SmartSelectionSuppressed">
+  <owner>donnd@chromium.org</owner>
+  <description>
+    The user did a long-press that would normally trigger Contextual Search but
+    the UX was suppressed to allow Smart Selection to handle the gesture
+    instead.
+  </description>
+</action>
+
 <action name="ContextualSearch.SwipeOrFlingClose">
   <owner>donnd@chromium.org</owner>
   <description>
@@ -3736,6 +3926,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ContextualSearch.TapSuppressed.TapThresholdExceeded">
+  <obsolete>Deprecated as of 11/2017.</obsolete>
   <owner>donnd@chromium.org</owner>
   <description>
     A tap that typically would have triggered Contextual Search was suppressed
@@ -4600,6 +4791,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="EventTargeting_DeletedTarget">
+  <owner>riajiang@chromium.org</owner>
+  <owner>rjkroege@chromium.org</owner>
+  <description>
+    Events for a target window are processed after that target window has been
+    deleted.
+  </description>
+</action>
+
 <action name="Exit">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -5249,6 +5449,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Hotword.HotwordTrigger">
+  <obsolete>
+    Deprecated as of 10/2017. Feature removed with crbug/761426.
+  </obsolete>
   <owner>amistry@chromium.org</owner>
   <owner>rlp@chromium.org</owner>
   <owner>somast@chromium.org</owner>
@@ -5286,6 +5489,129 @@ should be able to be added at any place in this file.
   <owner>gchatz@chromium.org</owner>
   <description>
     An event related to the badged reading list in-product help experiment.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>The user triggered an event in in-product help.</description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home cold start in-product
+    help. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home menu header
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home in-product help that
+    is shown after a pull-to-refresh. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearch">
+  <obsolete>
+    Replaced with InProductHelp.NotifyEvent.IPH_ContextualSearchWebSearch.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Contextual Search in-product
+    help. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchOptIn">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to the opting-in for Contextual Search
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchPanel">
+  <obsolete>
+    Replaced with
+    InProductHelp.NotifyEvent.IPH_ContextualSearchPromotePanelOpen.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to opening the Contextual Search panel
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchPromotePanelOpen">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to opening the Contextual Search panel
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchPromoteTap">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to activation by tap for Contextual
+    Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchTap">
+  <obsolete>
+    Replaced with InProductHelp.NotifyEvent.IPH_ContextualSearchPromoteTap.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to activation by tap for Contextual
+    Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ContextualSearchWebSearch">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Contextual Search web search
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
   </description>
 </action>
 
@@ -5361,6 +5687,130 @@ should be able to be added at any place in this file.
   <description>The user triggered a used event in in-product help.</description>
 </action>
 
+<action name="InProductHelp.NotifyUsedEvent.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>The user triggered a used event in in-product help.</description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home cold start
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home menu header
+    in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home in-product help
+    that is shown after a pull-to-refresh. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearch">
+  <obsolete>
+    Replaced with InProductHelp.NotifyUsedEvent.IPH_ContextualSearchWebSearch.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Contextual Search in-product
+    help. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchOptIn">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the opting-in for Contextual
+    Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchPanel">
+  <obsolete>
+    Replaced with
+    InProductHelp.NotifyUsedEvent.IPH_ContextualSearchPromotePanelOpen.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to opening the Contextual Search
+    panel in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchPromotePanelOpen">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to opening the Contextual Search
+    panel in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchPromoteTap">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to activation by tap for Contextual
+    Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchTap">
+  <obsolete>
+    Replaced with InProductHelp.NotifyUsedEvent.IPH_ContextualSearchPromoteTap.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to activation by tap for Contextual
+    Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearchWebSearch">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Contextual Search in-product
+    help. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
 <action name="InProductHelp.NotifyUsedEvent.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
@@ -5427,6 +5877,140 @@ should be able to be added at any place in this file.
   <description>
     The feature engagement tracker tried to determine whether in-product help
     should be shown to the user.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether in-product help
+    should be shown to the user.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    cold start in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    menu header in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    in-product help that is shown after a pull-to-refresh should be shown to the
+    user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearch">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchWebSearch.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Contextual
+    Search in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchOptIn">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the in-product
+    help related to opting-in for Contextual Search should be shown to the user.
+    See //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchPanel">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchPromotePanelOpen.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the in-product
+    help related to opening the Contextual Search panel should be shown to the
+    user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchPromotePanelOpen">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the in-product
+    help related to opening the Contextual Search panel should be shown to the
+    user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchPromoteTap">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the in-product
+    help related to activation by tap for Contextual Search should be shown to
+    the user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchTap">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchPromoteTap.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the in-product
+    help related to activation by tap for Contextual Search should be shown to
+    the user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ContextualSearchWebSearch">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Contextual
+    Search in-product help should be shown to the user. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
   </description>
 </action>
 
@@ -5530,6 +6114,144 @@ should be able to be added at any place in this file.
 </action>
 
 <action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action that could have triggered In-Product Help did not.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Chrome Home cold start
+    in-product help did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Chrome Home menu header
+    in-product help did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh that could have triggered the Chrome Home in-product help
+    did not. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearch">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchWebSearch.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Contextual Search in-product
+    help did not. See //components/feature_engagement/README.md#Configuring-UMA
+    for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchOptIn">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the in-product help related to
+    opting-in for Contextual Search did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchPanel">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchPromotePanelOpen.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the in-product help related to
+    opening the Contextual Search panel did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchPromotePanelOpen">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the in-product help related to
+    opening the Contextual Search panel did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchPromoteTap">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the in-product help related to
+    activation by tap did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchTap">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchPromoteTap.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the in-product help related to
+    activation by tap did not. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearchWebSearch">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action that could have triggered the Contextual Search in-product
+    help did not. See //components/feature_engagement/README.md#Configuring-UMA
+    for details.
+  </description>
+</action>
+
+<action
     name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
@@ -5625,6 +6347,134 @@ should be able to be added at any place in this file.
   <description>A user action triggered In-Product Help.</description>
 </action>
 
+<action name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>A user action triggered In-Product Help.</description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action triggered the Chrome Home cold start in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action triggered the Chrome Home menu header in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh triggered the Chrome Home in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearch">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchWebSearch.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the Contextual Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchOptIn">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the in-product help related to opting-in for
+    Contextual Search. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchPanel">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchPromotePanelOpen.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the in-product help related to opening the
+    Contextual Search panel. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchPromotePanelOpen">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the in-product help related to opening the
+    Contextual Search panel. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchPromoteTap">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the in-product help related to activation by tap.
+    See //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchTap">
+  <obsolete>
+    Replaced with
+    InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchPromoteTap.
+  </obsolete>
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the in-product help related to activation by tap.
+    See //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearchWebSearch">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A user action triggered the Contextual Search in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
 <action
     name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_DataSaverDetail">
   <owner>nyquist@chromium.org</owner>
@@ -5691,6 +6541,159 @@ should be able to be added at any place in this file.
   <owner>edchin@chromium.org</owner>
   <owner>gchatz@chromium.org</owner>
   <description>A user action triggered In-Product Help.</description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_BadgedReadingList">
+  <owner>edchin@chromium.org</owner>
+  <owner>gchatz@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_Bookmark">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_ChromeHomeExpand">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action would have triggered the Chrome Home cold start in-product
+    help, but the feature was configured for tracking only. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_ChromeHomeMenuHeader">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A user action would have triggered the Chrome Home menu header in-product
+    help, but the feature was configured for tracking only. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh would have triggered the Chrome Home in-product help, but
+    the feature was configured for tracking only. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_DataSaverDetail">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_DataSaverPreview">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_DownloadHome">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_DownloadPage">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_DownloadPageScreenshot">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_IncognitoWindow">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_MediaDownload">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_NewIncognitoTabTip">
+  <owner>edchin@chromium.org</owner>
+  <owner>gchatz@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_NewTab">
+  <owner>nyquist@chromium.org</owner>
+  <owner>xingliu@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_NewTabTip">
+  <owner>edchin@chromium.org</owner>
+  <owner>gchatz@chromium.org</owner>
+  <description>
+    A user action would have triggered In-Product Help, but the feature was
+    configured for tracking only.
+  </description>
 </action>
 
 <action name="Indent">
@@ -9808,6 +10811,14 @@ should be able to be added at any place in this file.
   <description>The user paused a media element from the controls.</description>
 </action>
 
+<action name="Media.Controls.PauseOverlay">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    The user paused a media element from the pause overlay button.
+  </description>
+</action>
+
 <action name="Media.Controls.Play">
   <owner>mlamouri@chromium.org</owner>
   <description>The user played a media element from the controls.</description>
@@ -9833,6 +10844,23 @@ should be able to be added at any place in this file.
   <description>
     User resumes the video using any controls apart from the media element
     itself (aka remote controls: Android Wear, headset, notification, etc).
+  </description>
+</action>
+
+<action name="Media.Controls.RemoteSeekBackward">
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User seeks the video backward using any controls apart from the media
+    element itself (aka remote controls: Android wear, headset, notification,
+    etc).
+  </description>
+</action>
+
+<action name="Media.Controls.RemoteSeekForward">
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User seeks the video forward using any controls apart from the media element
+    itself (aka remote controls: Android wear, headset, notification, etc).
   </description>
 </action>
 
@@ -11217,7 +12245,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileTabClosedUndoShortCut">
-  <owner>xingliu@chromium.com</owner>
+  <owner>xingliu@chromium.org</owner>
   <description>
     Undo tab closure by keyboard shortcut ctrl+shift+T, for Android only.
   </description>
@@ -11466,7 +12494,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="Mouse_Down">
+<action name="Mouse_Down" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -12059,12 +13087,12 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="OpenFileSystemPersistent">
+<action name="OpenFileSystemPersistent" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="OpenFileSystemTemporary">
+<action name="OpenFileSystemTemporary" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -13880,7 +14908,9 @@ should be able to be added at any place in this file.
 <action name="OutdatedUpgradeBubble.Later">
   <owner>mad@chromium.org</owner>
   <description>
-    When the user clicks on the Later button of the outdated upgrade bubble.
+    When the user dismisses the outdated upgrade bubble without accepting it. In
+    m62 and earlier this was via a &quot;Later&quot; button. Since m63, that
+    button was removed and replaced by a close [x] reporting the same metric.
   </description>
 </action>
 
@@ -15605,6 +16635,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Android_GmsUserRecoverableDialogAccepted">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded when user accepts an option presented by Google Play services error
+    dialog (e.g., clicks &quot;Update&quot; button).
+  </description>
+</action>
+
 <action name="Signin_Android_GmsUserRecoverableDialogShown"
     not_user_triggered="true">
   <owner>bsazonov@chromium.org</owner>
@@ -15784,6 +16822,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Impression_FromCloudPrint">
+  <obsolete>Deprecated 10/2017. No longer needed.</obsolete>
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded when showing sign in entry in the cloud print preview page.
@@ -15911,6 +16950,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_SigninNewAccount_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, with a
+    new account.
+  </description>
+</action>
+
 <action name="Signin_SigninNewAccount_FromRecentTabs">
   <owner>jlebel@chromium.org</owner>
   <description>
@@ -15941,6 +16989,15 @@ should be able to be added at any place in this file.
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using another
     account than the default one.
+  </description>
+</action>
+
+<action name="Signin_SigninNotDefault_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, using
+    another account than the default one.
   </description>
 </action>
 
@@ -15986,6 +17043,15 @@ should be able to be added at any place in this file.
   <description>
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using the
+    default account.
+  </description>
+</action>
+
+<action name="Signin_SigninWithDefault_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, using the
     default account.
   </description>
 </action>
@@ -16385,6 +17451,82 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="SoundContentSetting.MuteBy.DefaultSwitch">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User muted all sites by changing the default sound setting from the content
+    settings privacy page (Desktop) or the SingleCategoryPreferences page
+    (Android).
+  </description>
+</action>
+
+<action name="SoundContentSetting.MuteBy.PageInfo">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User muted site via the Page Info bubble.</description>
+</action>
+
+<action name="SoundContentSetting.MuteBy.PatternException">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User muted site via adding/removing a pattern exception from the content
+    settings privacy page (Desktop) or the SingleCategoryPreferences page
+    (Android).
+  </description>
+</action>
+
+<action name="SoundContentSetting.MuteBy.SiteSettings">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User muted site via the site settings page.</description>
+</action>
+
+<action name="SoundContentSetting.MuteBy.TabStrip">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User muted site via the tab strip.</description>
+</action>
+
+<action name="SoundContentSetting.UnmuteBy.DefaultSwitch">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User unmuted all sites by changing the default sound setting from the
+    content settings privacy page (Desktop) or the SingleCategoryPreferences
+    page (Android).
+  </description>
+</action>
+
+<action name="SoundContentSetting.UnmuteBy.PageInfo">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User unmuted site via the Page Info bubble.</description>
+</action>
+
+<action name="SoundContentSetting.UnmuteBy.PatternException">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    User unmuted site via adding/removing a pattern exception from the content
+    settings privacy page (Desktop) or the SingleCategoryPreferences page
+    (Android).
+  </description>
+</action>
+
+<action name="SoundContentSetting.UnmuteBy.SiteSettings">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User unmuted site via the site settings page.</description>
+</action>
+
+<action name="SoundContentSetting.UnmuteBy.TabStrip">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>User unmuted site via the tab strip.</description>
+</action>
+
 <action name="StackedTab_DragActiveTab">
   <owner>bruthig@chromium.org</owner>
   <owner>tdanderson@chromium.org</owner>
@@ -16526,7 +17668,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="StatusArea_BrightnessChanged">
+<action name="StatusArea_BrightnessChanged" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -16973,6 +18115,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Suggestions.AllDismissed.Shown">
+  <owner>peconn@chromium.org</owner>
+  <description>
+    User dismissed all cards and was not able to get any more suggestions
+    resulting in the All Dismissed State. Only records for users with Chrome
+    Home enabled.
+  </description>
+</action>
+
 <action name="Suggestions.Card.ActionTapped">
   <owner>finkm@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
@@ -17085,6 +18236,33 @@ should be able to be added at any place in this file.
   <owner>galinap@google.com</owner>
   <description>
     Android: User opened the context menu on a suggested item.
+  </description>
+</action>
+
+<action name="Suggestions.Contextual.Carousel.Scrolled">
+  <owner>dgn@chromium.org</owner>
+  <owner>galinap@google.com</owner>
+  <description>
+    Android: The contextual suggestions carousel in Chrome Home was scrolled by
+    the user.
+  </description>
+</action>
+
+<action name="Suggestions.Contextual.Carousel.Shown">
+  <owner>dgn@chromium.org</owner>
+  <owner>galinap@google.com</owner>
+  <description>
+    Android: The contextual suggestions carousel in Chrome Home was shown to the
+    user.
+  </description>
+</action>
+
+<action name="Suggestions.ContextualSuggestion.Open">
+  <owner>dgn@chromium.org</owner>
+  <owner>galinap@google.com</owner>
+  <description>
+    Android: A contextual suggestion in the carousel in Chrome Home was opened
+    by the user.
   </description>
 </action>
 
@@ -17458,7 +18636,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="TextToSpeech.Stop">
+<action name="TextToSpeech.Stop" not_user_triggered="true">
   <owner>dmazzoni@chromium.org</owner>
   <description>Synthesized speech is stopped.</description>
 </action>
@@ -17643,7 +18821,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="TrackpadScrollFling">
+<action name="TrackpadScrollFling" not_user_triggered="true">
   <owner>tdresser@chromium.org</owner>
   <description>Logged on an ET_SCROLL_FLING_START scroll event.</description>
 </action>
@@ -18029,7 +19207,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="WebView.PermissionAllow.FileSystem">
+<action name="WebView.PermissionAllow.FileSystem" not_user_triggered="true">
   <owner>fsamuel@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <description>

@@ -52,7 +52,13 @@ struct ShortcutInfo {
     // Used for WebAPK PWAs whose install source info was lost.
     SOURCE_WEBAPK_UNKNOWN = 11,
 
-    SOURCE_COUNT = 12
+    // Used for Trusted Web Activities launched from third party Android apps.
+    SOURCE_TRUSTED_WEB_ACTIVITY = 12,
+
+    // Used for WebAPK intents received as a result of share events.
+    SOURCE_WEBAPK_SHARE_TARGET = 13,
+
+    SOURCE_COUNT = 14
   };
 
   explicit ShortcutInfo(const GURL& shortcut_url);
@@ -76,12 +82,14 @@ struct ShortcutInfo {
   Source source;
   int64_t theme_color;
   int64_t background_color;
+  GURL splash_screen_url;
   int ideal_splash_image_size_in_px;
   int minimum_splash_image_size_in_px;
   GURL splash_image_url;
   GURL best_primary_icon_url;
   GURL best_badge_icon_url;
   std::vector<std::string> icon_urls;
+  base::string16 share_target_url_template;
 };
 
 #endif  // CHROME_BROWSER_ANDROID_SHORTCUT_INFO_H_

@@ -12,8 +12,11 @@
 
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate_test_utils.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers_test_utils.h"
 #include "net/http/http_response_headers.h"
 #include "net/proxy/proxy_service.h"
@@ -604,7 +607,7 @@ TEST_F(DataReductionProxyHeadersTest, HasDataReductionProxyViaHeader) {
     bool has_chrome_proxy_via_header, has_intermediary;
     if (tests[i].ignore_intermediary) {
       has_chrome_proxy_via_header =
-          HasDataReductionProxyViaHeader(*parsed, NULL);
+          HasDataReductionProxyViaHeader(*parsed, nullptr);
     }
     else {
       has_chrome_proxy_via_header =
@@ -617,135 +620,171 @@ TEST_F(DataReductionProxyHeadersTest, HasDataReductionProxyViaHeader) {
   }
 }
 
+TEST_F(DataReductionProxyHeadersTest, MissingViaHeaderFallback) {
+  const struct {
+    const char* headers;
+    bool should_retry;
+    DataReductionProxyBypassType expected_result;
+    base::TimeDelta expected_bypass_length;
+  } tests[] = {
+      {"HTTP/1.1 200 OK\n", true, BYPASS_EVENT_TYPE_MAX,
+       base::TimeDelta::FromSeconds(30)},
+      {"HTTP/1.1 200 OK\n", false, BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_OTHER,
+       base::TimeDelta::FromSeconds(30)}};
+  for (auto test : tests) {
+    std::string headers(test.headers);
+    HeadersToRaw(&headers);
+    scoped_refptr<net::HttpResponseHeaders> parsed(
+        new net::HttpResponseHeaders(headers));
+    DataReductionProxyInfo proxy_info;
+
+    base::test::ScopedFeatureList scoped_feature_list_;
+
+    std::string bypass_duration =
+        base::IntToString(test.expected_bypass_length.InSeconds());
+    std::string should_bypass = test.should_retry ? "false" : "true";
+    std::map<std::string, std::string> feature_parameters = {
+        {"should_bypass_missing_via_cellular", should_bypass},
+        {"missing_via_min_bypass_cellular_in_seconds", bypass_duration},
+        {"missing_via_max_bypass_cellular_in_seconds", bypass_duration},
+        {"should_bypass_missing_via_wifi", should_bypass},
+        {"missing_via_min_bypass_wifi_in_seconds", bypass_duration},
+        {"missing_via_max_bypass_wifi_in_seconds", bypass_duration}};
+
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        features::kMissingViaHeaderShortDuration, feature_parameters);
+
+    EXPECT_EQ(test.expected_result,
+              GetDataReductionProxyBypassType(std::vector<GURL>(), *parsed,
+                                              &proxy_info));
+    if (!test.should_retry) {
+      EXPECT_EQ(test.expected_bypass_length.InSeconds(),
+                proxy_info.bypass_duration.InSeconds());
+      EXPECT_TRUE(proxy_info.mark_proxies_as_bad);
+    }
+  }
+}
+
 TEST_F(DataReductionProxyHeadersTest, GetDataReductionProxyBypassEventType) {
   const struct {
      const char* headers;
-     bool in_tamper_detection_experiment;
      DataReductionProxyBypassType expected_result;
   } tests[] = {
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=0\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MEDIUM,
+          BYPASS_EVENT_TYPE_MEDIUM,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=1\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_SHORT,
+          BYPASS_EVENT_TYPE_SHORT,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=59\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_SHORT,
+          BYPASS_EVENT_TYPE_SHORT,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=60\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MEDIUM,
+          BYPASS_EVENT_TYPE_MEDIUM,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=300\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MEDIUM,
+          BYPASS_EVENT_TYPE_MEDIUM,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=301\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_LONG,
+          BYPASS_EVENT_TYPE_LONG,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: block-once\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_CURRENT,
+          BYPASS_EVENT_TYPE_CURRENT,
       },
       {
           "HTTP/1.1 500 Internal Server Error\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_STATUS_500_HTTP_INTERNAL_SERVER_ERROR,
+          BYPASS_EVENT_TYPE_STATUS_500_HTTP_INTERNAL_SERVER_ERROR,
       },
       {
           "HTTP/1.1 501 Not Implemented\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MAX,
+          BYPASS_EVENT_TYPE_MAX,
       },
       {
           "HTTP/1.1 502 Bad Gateway\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_STATUS_502_HTTP_BAD_GATEWAY,
+          BYPASS_EVENT_TYPE_STATUS_502_HTTP_BAD_GATEWAY,
       },
       {
           "HTTP/1.1 503 Service Unavailable\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_STATUS_503_HTTP_SERVICE_UNAVAILABLE,
+          BYPASS_EVENT_TYPE_STATUS_503_HTTP_SERVICE_UNAVAILABLE,
       },
       {
           "HTTP/1.1 504 Gateway Timeout\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MAX,
+          BYPASS_EVENT_TYPE_MAX,
       },
       {
           "HTTP/1.1 505 HTTP Version Not Supported\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MAX,
+          BYPASS_EVENT_TYPE_MAX,
       },
       {
-          "HTTP/1.1 304 Not Modified\n", false, BYPASS_EVENT_TYPE_MAX,
+          "HTTP/1.1 304 Not Modified\n", BYPASS_EVENT_TYPE_MAX,
       },
       {
-          "HTTP/1.1 200 OK\n", false,
-          BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_OTHER,
+          "HTTP/1.1 200 OK\n", BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_OTHER,
       },
       {
           "HTTP/1.1 200 OK\n"
           "Chrome-Proxy: bypass=59\n",
-          false, BYPASS_EVENT_TYPE_SHORT,
+          BYPASS_EVENT_TYPE_SHORT,
       },
       {
-          "HTTP/1.1 502 Bad Gateway\n", false,
+          "HTTP/1.1 502 Bad Gateway\n",
           BYPASS_EVENT_TYPE_STATUS_502_HTTP_BAD_GATEWAY,
       },
       {
           "HTTP/1.1 502 Bad Gateway\n"
           "Chrome-Proxy: bypass=59\n",
-          false, BYPASS_EVENT_TYPE_SHORT,
+          BYPASS_EVENT_TYPE_SHORT,
       },
       {
           "HTTP/1.1 502 Bad Gateway\n"
           "Chrome-Proxy: bypass=59\n",
-          false, BYPASS_EVENT_TYPE_SHORT,
+          BYPASS_EVENT_TYPE_SHORT,
       },
       {
-          "HTTP/1.1 414 Request-URI Too Long\n", false,
+          "HTTP/1.1 414 Request-URI Too Long\n",
           BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_4XX,
       },
       {
           "HTTP/1.1 414 Request-URI Too Long\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MAX,
+          BYPASS_EVENT_TYPE_MAX,
       },
       {
-          "HTTP/1.1 407 Proxy Authentication Required\n", false,
+          "HTTP/1.1 407 Proxy Authentication Required\n",
           BYPASS_EVENT_TYPE_MALFORMED_407,
       },
       {
           "HTTP/1.1 407 Proxy Authentication Required\n"
           "Proxy-Authenticate: Basic\n"
           "Via: 1.1 Chrome-Compression-Proxy\n",
-          false, BYPASS_EVENT_TYPE_MAX,
-      },
-      {
-          "HTTP/1.1 200 OK\n", true, BYPASS_EVENT_TYPE_MAX,
-      },
-      {
-          "HTTP/1.1 414 Request-URI Too Long\n", true,
-          BYPASS_EVENT_TYPE_MISSING_VIA_HEADER_4XX,
+          BYPASS_EVENT_TYPE_MAX,
       }};
   for (size_t i = 0; i < arraysize(tests); ++i) {
     std::string headers(tests[i].headers);
@@ -753,12 +792,6 @@ TEST_F(DataReductionProxyHeadersTest, GetDataReductionProxyBypassEventType) {
     scoped_refptr<net::HttpResponseHeaders> parsed(
         new net::HttpResponseHeaders(headers));
     DataReductionProxyInfo chrome_proxy_info;
-
-    base::FieldTrialList trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(
-        "DataReductionProxyServerExperiments",
-        tests[i].in_tamper_detection_experiment ? "TamperDetection_Enabled"
-                                                : "TamperDetection_Disabled");
 
     EXPECT_EQ(tests[i].expected_result,
               GetDataReductionProxyBypassType(std::vector<GURL>(), *parsed,
@@ -841,249 +874,6 @@ TEST_F(DataReductionProxyHeadersTest,
     EXPECT_EQ(test.expected_result,
               GetDataReductionProxyBypassType(test.url_chain, *parsed,
                                               &chrome_proxy_info));
-  }
-}
-
-TEST_F(DataReductionProxyHeadersTest,
-       GetDataReductionProxyActionFingerprintChromeProxy) {
-  const struct {
-     std::string label;
-     const char* headers;
-     bool expected_fingerprint_exist;
-     std::string expected_fingerprint;
-  } tests[] = {
-    { "fingerprint doesn't exist",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=0\n",
-      false,
-      "",
-    },
-    { "fingerprint occurs once",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=1, fcp=fp\n",
-      true,
-      "fp",
-    },
-    { "fingerprint occurs twice",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=2, fcp=fp1, fcp=fp2\n",
-      true,
-      "fp1",
-    },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string headers(tests[i].headers);
-    HeadersToRaw(&headers);
-    scoped_refptr<net::HttpResponseHeaders> parsed(
-        new net::HttpResponseHeaders(headers));
-
-    std::string fingerprint;
-    bool fingerprint_exist = GetDataReductionProxyActionFingerprintChromeProxy(
-        parsed.get(), &fingerprint);
-    EXPECT_EQ(tests[i].expected_fingerprint_exist, fingerprint_exist)
-        << tests[i].label;
-
-    if (fingerprint_exist)
-      EXPECT_EQ(tests[i].expected_fingerprint, fingerprint) << tests[i].label;
-  }
-}
-
-TEST_F(DataReductionProxyHeadersTest,
-       GetDataReductionProxyActionFingerprintVia) {
-  const struct {
-     std::string label;
-     const char* headers;
-     bool expected_fingerprint_exist;
-     std::string expected_fingerprint;
-  } tests[] = {
-    { "fingerprint doesn't exist",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=0\n",
-      false,
-      "",
-    },
-    { "fingerprint occurs once",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=1, fvia=fvia\n",
-      true,
-      "fvia",
-    },
-    { "fingerprint occurs twice",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=2, fvia=fvia1, fvia=fvia2\n",
-      true,
-      "fvia1",
-    },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string headers(tests[i].headers);
-    HeadersToRaw(&headers);
-    scoped_refptr<net::HttpResponseHeaders> parsed(
-        new net::HttpResponseHeaders(headers));
-
-    std::string fingerprint;
-    bool fingerprint_exist =
-        GetDataReductionProxyActionFingerprintVia(parsed.get(), &fingerprint);
-    EXPECT_EQ(tests[i].expected_fingerprint_exist, fingerprint_exist)
-        << tests[i].label;
-
-    if (fingerprint_exist)
-      EXPECT_EQ(tests[i].expected_fingerprint, fingerprint) << tests[i].label;
-  }
-}
-
-TEST_F(DataReductionProxyHeadersTest,
-       GetDataReductionProxyActionFingerprintOtherHeaders) {
-  const struct {
-     std::string label;
-     const char* headers;
-     bool expected_fingerprint_exist;
-     std::string expected_fingerprint;
-  } tests[] = {
-    { "fingerprint doesn't exist",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=0\n",
-      false,
-      "",
-    },
-    { "fingerprint occurs once",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=1, foh=foh\n",
-      true,
-      "foh",
-    },
-    { "fingerprint occurs twice",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=2, foh=foh1, foh=foh2\n",
-      true,
-      "foh1",
-    },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string headers(tests[i].headers);
-    HeadersToRaw(&headers);
-    scoped_refptr<net::HttpResponseHeaders> parsed(
-        new net::HttpResponseHeaders(headers));
-
-    std::string fingerprint;
-    bool fingerprint_exist = GetDataReductionProxyActionFingerprintOtherHeaders(
-        parsed.get(), &fingerprint);
-    EXPECT_EQ(tests[i].expected_fingerprint_exist, fingerprint_exist)
-        << tests[i].label;
-
-    if (fingerprint_exist)
-      EXPECT_EQ(tests[i].expected_fingerprint, fingerprint) << tests[i].label;
-  }
-}
-
-TEST_F(DataReductionProxyHeadersTest,
-       GetDataReductionProxyActionFingerprintContentLength) {
-  const struct {
-     std::string label;
-     const char* headers;
-     bool expected_fingerprint_exist;
-     std::string expected_fingerprint;
-  } tests[] = {
-    { "fingerprint doesn't exist",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=0\n",
-      false,
-      "",
-    },
-    { "fingerprint occurs once",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=1, fcl=fcl\n",
-      true,
-      "fcl",
-    },
-    { "fingerprint occurs twice",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: bypass=2, fcl=fcl1, fcl=fcl2\n",
-      true,
-      "fcl1",
-    },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string headers(tests[i].headers);
-    HeadersToRaw(&headers);
-    scoped_refptr<net::HttpResponseHeaders> parsed(
-        new net::HttpResponseHeaders(headers));
-
-    std::string fingerprint;
-    bool fingerprint_exist =
-        GetDataReductionProxyActionFingerprintContentLength(parsed.get(),
-                                                            &fingerprint);
-    EXPECT_EQ(tests[i].expected_fingerprint_exist, fingerprint_exist)
-        << tests[i].label;
-
-    if (fingerprint_exist)
-      EXPECT_EQ(tests[i].expected_fingerprint, fingerprint) << tests[i].label;
-  }
-}
-
-TEST_F(DataReductionProxyHeadersTest,
-       GetDataReductionProxyHeaderWithFingerprintRemoved) {
-  const struct {
-    std::string label;
-    const char* headers;
-    std::string expected_output_values_string;
-  } test[] = {
-    {
-      "Checks the case that there is no Chrome-Proxy header's fingerprint.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: 1,2,3,5\n",
-      "1,2,3,5,",
-    },
-    {
-      "Checks the case that there is Chrome-Proxy header's fingerprint.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: 1,2,3,fcp=4,5\n",
-      "1,2,3,5,",
-    },
-    {
-      "Checks the case that there is Chrome-Proxy header's fingerprint, and it"
-      "occurs at the end.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: 1,2,3,fcp=4,",
-      "1,2,3,",
-    },
-    {
-      "Checks the case that there is Chrome-Proxy header's fingerprint, and it"
-      "occurs at the beginning.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: fcp=1,2,3,",
-      "2,3,",
-    },
-    {
-      "Checks the case that value is longer than prefix.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: fcp=1,fcp!=1,fcp!=2,fcpfcp=3",
-      "fcp!=1,fcp!=2,fcpfcp=3,",
-    },
-    {
-      "Checks the case that value is shorter than prefix but similar.",
-      "HTTP/1.1 200 OK\n"
-      "Chrome-Proxy: fcp=1,fcp,fcp=",
-      "fcp,fcp=,",
-    },
-  };
-
-  for (size_t i = 0; i < arraysize(test); ++i) {
-    std::string headers(test[i].headers);
-    HeadersToRaw(&headers);
-    scoped_refptr<net::HttpResponseHeaders> parsed(
-        new net::HttpResponseHeaders(headers));
-
-    std::vector<std::string> output_values;
-    GetDataReductionProxyHeaderWithFingerprintRemoved(parsed.get(),
-                                                      &output_values);
-
-    std::string output_values_string;
-    for (size_t j = 0; j < output_values.size(); ++j)
-      output_values_string += output_values[j] + ",";
-
-    EXPECT_EQ(test[i].expected_output_values_string, output_values_string)
-        << test[i].label;
   }
 }
 

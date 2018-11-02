@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bits.h"
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted_memory.h"
@@ -50,7 +51,7 @@ namespace history {
 //   id               Unique ID.
 //   url              The URL at which the favicon file is located.
 //   icon_type        The type of the favicon specified in the rel attribute of
-//                    the link tag. The FAVICON type is used for the default
+//                    the link tag. The kFavicon type is used for the default
 //                    favicon.ico favicon.
 //
 // favicon_bitmaps    This table contains the PNG encoded bitmap data of the
@@ -106,7 +107,7 @@ void FillIconMapping(const sql::Statement& statement,
   icon_mapping->mapping_id = statement.ColumnInt64(0);
   icon_mapping->icon_id = statement.ColumnInt64(1);
   icon_mapping->icon_type =
-      static_cast<favicon_base::IconType>(statement.ColumnInt(2));
+      ThumbnailDatabase::FromPersistedIconType(statement.ColumnInt(2));
   icon_mapping->icon_url = GURL(statement.ColumnString(3));
   icon_mapping->page_url = page_url;
 }
@@ -167,7 +168,7 @@ bool InitTables(sql::Connection* db) {
       "("
       "id INTEGER PRIMARY KEY,"
       "url LONGVARCHAR NOT NULL,"
-      // default icon_type FAVICON to be consistent with past migration.
+      // default icon_type kFavicon to be consistent with past migration.
       "icon_type INTEGER DEFAULT 1"
       ")";
   if (!db->Execute(kFaviconsSql))
@@ -357,8 +358,10 @@ void ThumbnailDatabase::ComputeDatabaseMetrics() {
         db_.GetCachedStatement(
             SQL_FROM_HERE,
             "SELECT COUNT(*) FROM favicons WHERE icon_type IN (?, ?)"));
-    touch_icon_count.BindInt64(0, favicon_base::TOUCH_ICON);
-    touch_icon_count.BindInt64(1, favicon_base::TOUCH_PRECOMPOSED_ICON);
+    touch_icon_count.BindInt64(
+        0, ToPersistedIconType(favicon_base::IconType::kTouchIcon));
+    touch_icon_count.BindInt64(
+        1, ToPersistedIconType(favicon_base::IconType::kTouchPrecomposedIcon));
     UMA_HISTOGRAM_COUNTS_10000(
         "History.NumTouchIconsInDB",
         touch_icon_count.Step() ? touch_icon_count.ColumnInt(0) : 0);
@@ -414,21 +417,16 @@ void ThumbnailDatabase::TrimMemory(bool aggressively) {
 
 std::map<favicon_base::FaviconID, IconMappingsForExpiry>
 ThumbnailDatabase::GetOldOnDemandFavicons(base::Time threshold) {
-  // Restrict to on-demand bitmaps (i.e. with last_requested != 0). This is
-  // called rarely during history expiration cleanup and hence not worth
+  // Restrict to on-demand bitmaps (i.e. with last_requested != 0).
+  // This is called rarely during history expiration cleanup and hence not worth
   // caching.
-  // TODO(jkrcal): In M63, remove the "(last_requested=0 AND last_updated=0)"
-  // clause which is only transitional - to clean up expired icons (previously,
-  // on-demand favicons were stored as expired on-visit favicons).
   sql::Statement old_icons(db_.GetUniqueStatement(
       "SELECT favicons.id, favicons.url, icon_mapping.page_url "
       "FROM favicons "
       "JOIN favicon_bitmaps ON (favicon_bitmaps.icon_id = favicons.id) "
       "JOIN icon_mapping ON (icon_mapping.icon_id = favicon_bitmaps.icon_id) "
-      "WHERE ((favicon_bitmaps.last_requested = 0 AND "
-      "        favicon_bitmaps.last_updated = 0) OR "
-      "       (favicon_bitmaps.last_requested > 0 AND "
-      "        favicon_bitmaps.last_requested < ?))"));
+      "WHERE (favicon_bitmaps.last_requested > 0 AND "
+      "       favicon_bitmaps.last_requested < ?)"));
   old_icons.BindInt64(0, threshold.ToInternalValue());
 
   std::map<favicon_base::FaviconID, IconMappingsForExpiry> icon_mappings;
@@ -668,7 +666,7 @@ favicon_base::FaviconID ThumbnailDatabase::GetFaviconIDForFaviconURL(
   sql::Statement statement(db_.GetCachedStatement(
       SQL_FROM_HERE, "SELECT id FROM favicons WHERE url=? AND icon_type=?"));
   statement.BindString(0, URLDatabase::GURLToDatabaseURL(icon_url));
-  statement.BindInt(1, icon_type);
+  statement.BindInt(1, ToPersistedIconType(icon_type));
 
   if (!statement.Step())
     return 0;  // not cached
@@ -691,7 +689,7 @@ bool ThumbnailDatabase::GetFaviconHeader(favicon_base::FaviconID icon_id,
   if (icon_url)
     *icon_url = GURL(statement.ColumnString(0));
   if (icon_type)
-    *icon_type = static_cast<favicon_base::IconType>(statement.ColumnInt(1));
+    *icon_type = FromPersistedIconType(statement.ColumnInt(1));
 
   return true;
 }
@@ -703,7 +701,7 @@ favicon_base::FaviconID ThumbnailDatabase::AddFavicon(
   sql::Statement statement(db_.GetCachedStatement(SQL_FROM_HERE,
       "INSERT INTO favicons (url, icon_type) VALUES (?, ?)"));
   statement.BindString(0, URLDatabase::GURLToDatabaseURL(icon_url));
-  statement.BindInt(1, icon_type);
+  statement.BindInt(1, ToPersistedIconType(icon_type));
 
   if (!statement.Run())
     return 0;
@@ -740,7 +738,7 @@ bool ThumbnailDatabase::DeleteFavicon(favicon_base::FaviconID id) {
 
 bool ThumbnailDatabase::GetIconMappingsForPageURL(
     const GURL& page_url,
-    int required_icon_types,
+    const favicon_base::IconTypeSet& required_icon_types,
     std::vector<IconMapping>* filtered_mapping_data) {
   std::vector<IconMapping> mapping_data;
   if (!GetIconMappingsForPageURL(page_url, &mapping_data))
@@ -749,7 +747,7 @@ bool ThumbnailDatabase::GetIconMappingsForPageURL(
   bool result = false;
   for (std::vector<IconMapping>::iterator m = mapping_data.begin();
        m != mapping_data.end(); ++m) {
-    if (m->icon_type & required_icon_types) {
+    if (required_icon_types.count(m->icon_type) != 0) {
       result = true;
       if (!filtered_mapping_data)
         return result;
@@ -847,7 +845,7 @@ bool ThumbnailDatabase::InitIconMappingEnumerator(
          "FROM icon_mapping JOIN favicons ON ("
               "icon_mapping.icon_id = favicons.id) "
          "WHERE favicons.icon_type = ?"));
-  enumerator->statement_.BindInt(0, type);
+  enumerator->statement_.BindInt(0, ToPersistedIconType(type));
   return enumerator->statement_.is_valid();
 }
 
@@ -977,6 +975,26 @@ bool ThumbnailDatabase::RetainDataForPageUrls(
     return false;
 
   return transaction.Commit();
+}
+
+// static
+int ThumbnailDatabase::ToPersistedIconType(favicon_base::IconType icon_type) {
+  if (icon_type == favicon_base::IconType::kInvalid)
+    return 0;
+
+  return 1 << (static_cast<int>(icon_type) - 1);
+}
+
+// static
+favicon_base::IconType ThumbnailDatabase::FromPersistedIconType(int icon_type) {
+  if (icon_type == 0)
+    return favicon_base::IconType::kInvalid;
+
+  int val = 1 + base::bits::Log2Floor(icon_type);
+  if (val > static_cast<int>(favicon_base::IconType::kMax))
+    return favicon_base::IconType::kInvalid;
+
+  return static_cast<favicon_base::IconType>(val);
 }
 
 sql::InitStatus ThumbnailDatabase::OpenDatabase(sql::Connection* db,
@@ -1119,14 +1137,16 @@ sql::InitStatus ThumbnailDatabase::CantUpgradeToVersion(int cur_version) {
 bool ThumbnailDatabase::UpgradeToVersion7() {
   // Sizes column was never used, remove it.
   bool success =
-      db_.Execute("CREATE TABLE temp_favicons ("
-                  "id INTEGER PRIMARY KEY,"
-                  "url LONGVARCHAR NOT NULL,"
-                  // default icon_type FAVICON to be consistent with
-                  // past migration.
-                  "icon_type INTEGER DEFAULT 1)") &&
-      db_.Execute("INSERT INTO temp_favicons (id, url, icon_type) "
-                  "SELECT id, url, icon_type FROM favicons") &&
+      db_.Execute(
+          "CREATE TABLE temp_favicons ("
+          "id INTEGER PRIMARY KEY,"
+          "url LONGVARCHAR NOT NULL,"
+          // default icon_type kFavicon to be consistent with
+          // past migration.
+          "icon_type INTEGER DEFAULT 1)") &&
+      db_.Execute(
+          "INSERT INTO temp_favicons (id, url, icon_type) "
+          "SELECT id, url, icon_type FROM favicons") &&
       db_.Execute("DROP TABLE favicons") &&
       db_.Execute("ALTER TABLE temp_favicons RENAME TO favicons") &&
       db_.Execute("CREATE INDEX IF NOT EXISTS favicons_url ON favicons(url)");

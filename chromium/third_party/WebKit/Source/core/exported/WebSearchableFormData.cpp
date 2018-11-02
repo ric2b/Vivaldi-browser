@@ -30,15 +30,15 @@
 
 #include "public/web/WebSearchableFormData.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
-#include "core/html/FormData.h"
-#include "core/html/HTMLFormControlElement.h"
-#include "core/html/HTMLFormElement.h"
-#include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/FormData.h"
+#include "core/html/forms/HTMLFormControlElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "platform/network/FormDataEncoder.h"
 #include "platform/wtf/text/TextEncoding.h"
 #include "public/web/WebFormElement.h"
@@ -118,15 +118,12 @@ bool IsSelectInDefaultState(const HTMLSelectElement& select) {
 // in its default state if the checked state matches the state of the checked
 // attribute.
 bool IsInDefaultState(const HTMLFormControlElement& form_element) {
-  if (isHTMLInputElement(form_element)) {
-    const HTMLInputElement& input_element = toHTMLInputElement(form_element);
-    if (input_element.type() == InputTypeNames::checkbox ||
-        input_element.type() == InputTypeNames::radio) {
-      return input_element.checked() ==
-             input_element.FastHasAttribute(checkedAttr);
-    }
-  } else if (isHTMLSelectElement(form_element)) {
-    return IsSelectInDefaultState(toHTMLSelectElement(form_element));
+  if (auto* input = ToHTMLInputElementOrNull(form_element)) {
+    if (input->type() == InputTypeNames::checkbox ||
+        input->type() == InputTypeNames::radio)
+      return input->checked() == input->FastHasAttribute(checkedAttr);
+  } else if (auto* select = ToHTMLSelectElementOrNull(form_element)) {
+    return IsSelectInDefaultState(*select);
   }
   return true;
 }
@@ -148,11 +145,11 @@ HTMLInputElement* FindSuitableSearchInputElement(const HTMLFormElement& form) {
     if (control.IsDisabledFormControl() || control.GetName().IsNull())
       continue;
 
-    if (!IsInDefaultState(control) || isHTMLTextAreaElement(control))
+    if (!IsInDefaultState(control) || IsHTMLTextAreaElement(control))
       return nullptr;
 
-    if (isHTMLInputElement(control) && control.willValidate()) {
-      const HTMLInputElement& input = toHTMLInputElement(control);
+    if (IsHTMLInputElement(control) && control.willValidate()) {
+      const HTMLInputElement& input = ToHTMLInputElement(control);
 
       // Return nothing if a file upload field or a password field are
       // found.
@@ -167,7 +164,7 @@ HTMLInputElement* FindSuitableSearchInputElement(const HTMLFormElement& form) {
           // searchable.
           return nullptr;
         }
-        text_element = toHTMLInputElement(&control);
+        text_element = ToHTMLInputElement(&control);
       }
     }
   }
@@ -268,7 +265,8 @@ WebSearchableFormData::WebSearchableFormData(
   String action(form_element->Action());
   KURL url(
       form_element->GetDocument().CompleteURL(action.IsNull() ? "" : action));
-  RefPtr<EncodedFormData> form_data = EncodedFormData::Create(encoded_string);
+  scoped_refptr<EncodedFormData> form_data =
+      EncodedFormData::Create(encoded_string);
   url.SetQuery(form_data->FlattenToString());
   url_ = url;
   encoding_ = String(encoding.GetName());

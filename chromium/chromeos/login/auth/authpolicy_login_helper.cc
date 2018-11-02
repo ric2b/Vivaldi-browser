@@ -6,12 +6,19 @@
 
 #include "base/files/file_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/upstart_client.h"
 
 namespace chromeos {
+
+namespace cu = cryptohome_util;
+
 namespace {
+
+constexpr char kAttrMode[] = "enterprise.mode";
+constexpr char kDeviceModeEnterpriseAD[] = "enterprise_ad";
 
 base::ScopedFD GetDataReadPipe(const std::string& data) {
   int pipe_fds[2];
@@ -44,8 +51,11 @@ AuthPolicyLoginHelper::AuthPolicyLoginHelper() : weak_factory_(this) {}
 void AuthPolicyLoginHelper::TryAuthenticateUser(const std::string& username,
                                                 const std::string& object_guid,
                                                 const std::string& password) {
+  authpolicy::AuthenticateUserRequest request;
+  request.set_user_principal_name(username);
+  request.set_account_id(object_guid);
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->AuthenticateUser(
-      username, object_guid, GetDataReadPipe(password).get(),
+      request, GetDataReadPipe(password).get(),
       base::BindOnce(&AuthCallbackDoNothing));
 }
 
@@ -56,13 +66,32 @@ void AuthPolicyLoginHelper::Restart() {
       ->RestartAuthPolicyService();
 }
 
+bool AuthPolicyLoginHelper::IsAdLocked() {
+  std::string mode;
+  return chromeos::cryptohome_util::InstallAttributesGet(kAttrMode, &mode) &&
+         mode == kDeviceModeEnterpriseAD;
+}
+
+// static
+bool AuthPolicyLoginHelper::LockDeviceActiveDirectoryForTesting(
+    const std::string& realm) {
+  return cu::InstallAttributesSet("enterprise.owned", "true") &&
+         cu::InstallAttributesSet("enterprise.mode", "enterprise_ad") &&
+         cu::InstallAttributesSet("enterprise.realm", realm) &&
+         cu::InstallAttributesFinalize();
+}
+
 void AuthPolicyLoginHelper::JoinAdDomain(const std::string& machine_name,
                                          const std::string& username,
                                          const std::string& password,
                                          JoinCallback callback) {
+  DCHECK(!IsAdLocked());
   DCHECK(!weak_factory_.HasWeakPtrs()) << "Another operation is in progress";
+  authpolicy::JoinDomainRequest request;
+  request.set_machine_name(machine_name);
+  request.set_user_principal_name(username);
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->JoinAdDomain(
-      machine_name, username, GetDataReadPipe(password).get(),
+      request, GetDataReadPipe(password).get(),
       base::BindOnce(&AuthPolicyLoginHelper::OnJoinCallback,
                      weak_factory_.GetWeakPtr(), base::Passed(&callback)));
 }
@@ -72,8 +101,11 @@ void AuthPolicyLoginHelper::AuthenticateUser(const std::string& username,
                                              const std::string& password,
                                              AuthCallback callback) {
   DCHECK(!weak_factory_.HasWeakPtrs()) << "Another operation is in progress";
+  authpolicy::AuthenticateUserRequest request;
+  request.set_user_principal_name(username);
+  request.set_account_id(object_guid);
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->AuthenticateUser(
-      username, object_guid, GetDataReadPipe(password).get(),
+      request, GetDataReadPipe(password).get(),
       base::BindOnce(&AuthPolicyLoginHelper::OnAuthCallback,
                      weak_factory_.GetWeakPtr(), base::Passed(&callback)));
 }
@@ -85,6 +117,28 @@ void AuthPolicyLoginHelper::CancelRequestsAndRestart() {
 
 void AuthPolicyLoginHelper::OnJoinCallback(JoinCallback callback,
                                            authpolicy::ErrorType error) {
+  DCHECK(!IsAdLocked());
+  if (error != authpolicy::ERROR_NONE) {
+    std::move(callback).Run(error);
+    return;
+  }
+  chromeos::DBusThreadManager::Get()
+      ->GetAuthPolicyClient()
+      ->RefreshDevicePolicy(
+          base::BindOnce(&AuthPolicyLoginHelper::OnFirstPolicyRefreshCallback,
+                         weak_factory_.GetWeakPtr(), base::Passed(&callback)));
+}
+
+void AuthPolicyLoginHelper::OnFirstPolicyRefreshCallback(
+    JoinCallback callback,
+    authpolicy::ErrorType error) {
+  DCHECK(!IsAdLocked());
+  // First policy refresh happens before device is locked. So policy store
+  // should not succeed. The error means that authpolicyd cached device policy
+  // and stores it in the next call to RefreshDevicePolicy in STEP_STORE_POLICY.
+  DCHECK(error != authpolicy::ERROR_NONE);
+  if (error == authpolicy::ERROR_DEVICE_POLICY_CACHED_BUT_NOT_SENT)
+    error = authpolicy::ERROR_NONE;
   std::move(callback).Run(error);
 }
 
@@ -95,6 +149,6 @@ void AuthPolicyLoginHelper::OnAuthCallback(
   std::move(callback).Run(error, account_info);
 }
 
-AuthPolicyLoginHelper::~AuthPolicyLoginHelper() {}
+AuthPolicyLoginHelper::~AuthPolicyLoginHelper() = default;
 
 }  // namespace chromeos

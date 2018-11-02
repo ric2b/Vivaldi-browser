@@ -14,8 +14,7 @@ callback DecodeErrorCallback = void (DOMException error);
 callback DecodeSuccessCallback = void (AudioBuffer decodedData);
 
 [
-    ActiveScriptWrappable,
-    DependentLifetime
+    ActiveScriptWrappable
 ] interface BaseAudioContext : EventTarget {
     // All rendered audio ultimately connects to destination, which represents the audio hardware.
     readonly attribute AudioDestinationNode destination;
@@ -68,6 +67,8 @@ callback DecodeSuccessCallback = void (AudioBuffer decodedData);
     [RaisesException, MeasureAs=AudioContextCreateMediaElementSource] MediaElementAudioSourceNode createMediaElementSource(HTMLMediaElement mediaElement);
     [RaisesException, MeasureAs=AudioContextCreateMediaStreamSource] MediaStreamAudioSourceNode createMediaStreamSource(MediaStream mediaStream);
     [RaisesException, MeasureAs=AudioContextCreateMediaStreamDestination] MediaStreamAudioDestinationNode createMediaStreamDestination();
+
+    [OriginTrialEnabled=AudioWorklet, SecureContext] readonly attribute AudioWorklet audioWorklet;
 
     attribute EventHandler onstatechange;
 };

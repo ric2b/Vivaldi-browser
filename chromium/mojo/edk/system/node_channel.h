@@ -5,11 +5,11 @@
 #ifndef MOJO_EDK_SYSTEM_NODE_CHANNEL_H_
 #define MOJO_EDK_SYSTEM_NODE_CHANNEL_H_
 
-#include <queue>
-#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
@@ -18,7 +18,6 @@
 #include "build/build_config.h"
 #include "mojo/edk/embedder/connection_params.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/edk/system/channel.h"
 #include "mojo/edk/system/ports/name.h"
@@ -165,9 +164,9 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
  private:
   friend class base::RefCountedThreadSafe<NodeChannel>;
 
-  using PendingMessageQueue = std::queue<Channel::MessagePtr>;
+  using PendingMessageQueue = base::queue<Channel::MessagePtr>;
   using PendingRelayMessageQueue =
-      std::queue<std::pair<ports::NodeName, Channel::MessagePtr>>;
+      base::queue<std::pair<ports::NodeName, Channel::MessagePtr>>;
 
   NodeChannel(Delegate* delegate,
               ConnectionParams connection_params,
@@ -178,7 +177,7 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
   // Channel::Delegate:
   void OnChannelMessage(const void* payload,
                         size_t payload_size,
-                        ScopedPlatformHandleVectorPtr handles) override;
+                        std::vector<ScopedPlatformHandle> handles) override;
   void OnChannelError(Channel::Error error) override;
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)

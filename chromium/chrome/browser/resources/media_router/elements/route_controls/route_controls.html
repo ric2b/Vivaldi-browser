@@ -1,15 +1,23 @@
+<link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/av-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-slider/paper-slider.html">
 <dom-module id="route-controls">
   <link rel="import" type="css" href="../../media_router_common.css">
   <link rel="import" type="css" href="route_controls.css">
   <template>
+    <style include="md-select"></style>
     <div id="media-controls">
+      <!--
+        TODO(crbug.com/786208): Remove the div below and always render the
+        description in the details element.  And, possibly combine details and
+        controls elements.
+      -->
       <div class="ellipsis" id="route-description"
-           title="[[displayedDescription_]]">
-        [[displayedDescription_]]
+           title="[[routeDescription_]]">
+        [[routeDescription_]]
       </div>
       <div class="ellipsis" id="route-title" title="[[routeStatus.title]]">
         [[routeStatus.title]]
@@ -36,7 +44,7 @@
             </span>
           </div>
         </div>
-        <div id="play-pause-volume-controls">
+        <div id="play-pause-volume-hangouts-controls">
           <span id="button-holder" dir="ltr">
             <paper-icon-button
                 id="route-play-pause-button"
@@ -53,17 +61,48 @@
                 title="[[getMuteUnmuteTitle_(routeStatus)]]"
                 on-click="onMuteUnmute_"></paper-icon-button>
           </span>
-          <span id="volume-holder">
+          <span id="volume-holder" hidden="[[!routeStatus.canSetVolume]]">
             <paper-slider
                 aria-valuetext$="[[getVolumeSliderValueText_(displayedVolume_)]]"
                 id="route-volume-slider"
-                hidden="[[!routeStatus.canSetVolume]]"
                 disabled="[[!routeStatus.canSetVolume]]"
                 on-change="onVolumeChangeComplete_"
                 on-immediate-value-change="onVolumeChangeByDragging_"
                 title="[[i18n('volumeTitle')]]"
                 value="[[displayedVolume_]]"
                 min="0" max="1" step="0.01"></paper-slider>
+          </span>
+          <div id="hangouts-local-present-controls"
+               hidden="[[!routeStatus.hangoutsExtraData]]">
+            <paper-checkbox
+                checked="[[hangoutsLocalPresent_]]"
+                id="hangouts-local-present-checkbox"
+                on-change="onHangoutsLocalPresentChange_"
+                tabindex="0">
+              <span id='hangouts-local-present-checkbox-title'>
+                [[i18n('hangoutsLocalPresentTitle')]]
+              </span>
+              <span id="hangouts-local-present-checkbox-subtitle">
+                [[i18n('hangoutsLocalPresentSubtitle')]]
+              </span>
+            </paper-checkbox>
+          </div>
+        </div>
+        <div id="mirroring-fullscreen-video-controls"
+             hidden="[[!routeStatus.mirroringExtraData]]">
+          [[i18n('fullscreenVideosDropdownTitle')]]
+          <span class="md-select-wrapper">
+            <select class="md-select"
+                    id="mirroring-fullscreen-video-dropdown"
+                    on-change="onFullscreenVideoDropdownChange_">
+                <option value="[[FullscreenVideoOption_.REMOTE_SCREEN]]">
+                  [[i18n('fullscreenVideosRemoteScreen')]]
+                </option>
+                <option value="[[FullscreenVideoOption_.BOTH_SCREENS]]">
+                  [[i18n('fullscreenVideosBothScreens')]]
+                </option>
+            </select>
+            <span class="md-select-underline"></span>
           </span>
         </div>
       </div>

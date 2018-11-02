@@ -47,8 +47,8 @@ struct AtomicStringHash;
 // count in StringImpl, and would hit a runtime CHECK in
 // AtomicStringTable::remove().
 //
-// Exception: nullAtom and emptyAtom, are shared in multiple threads, and are
-// never stored in AtomicStringTable.
+// Exception: g_null_atom and g_empty_atom, are shared in multiple threads, and
+// are never stored in AtomicStringTable.
 class WTF_EXPORT AtomicString {
   USING_FAST_MALLOC(AtomicString);
 
@@ -77,14 +77,6 @@ class WTF_EXPORT AtomicString {
   // the StringImpl is not already atomic.
   explicit AtomicString(StringImpl* impl) : string_(Add(impl)) {}
   explicit AtomicString(const String& s) : string_(Add(s.Impl())) {}
-
-  // Hash table deleted values, which are only constructed and never copied or
-  // destroyed.
-  AtomicString(WTF::HashTableDeletedValueType)
-      : string_(WTF::kHashTableDeletedValue) {}
-  bool IsHashTableDeletedValue() const {
-    return string_.IsHashTableDeletedValue();
-  }
 
   explicit operator bool() const { return !IsNull(); }
   operator const String&() const { return string_; }
@@ -186,9 +178,9 @@ class WTF_EXPORT AtomicString {
   AtomicString UpperASCII() const;
 
   // See comments in WTFString.h.
-  int ToInt(bool* ok = 0) const { return string_.ToInt(ok); }
-  double ToDouble(bool* ok = 0) const { return string_.ToDouble(ok); }
-  float ToFloat(bool* ok = 0) const { return string_.ToFloat(ok); }
+  int ToInt(bool* ok = nullptr) const { return string_.ToInt(ok); }
+  double ToDouble(bool* ok = nullptr) const { return string_.ToDouble(ok); }
+  float ToFloat(bool* ok = nullptr) const { return string_.ToFloat(ok); }
 
   static AtomicString Number(int);
   static AtomicString Number(unsigned);
@@ -231,16 +223,18 @@ class WTF_EXPORT AtomicString {
 #endif
 
  private:
+  friend struct HashTraits<AtomicString>;
+
   String string_;
 
-  ALWAYS_INLINE static RefPtr<StringImpl> Add(StringImpl* r) {
+  ALWAYS_INLINE static scoped_refptr<StringImpl> Add(StringImpl* r) {
     if (!r || r->IsAtomic())
       return r;
     return AddSlowCase(r);
   }
-  static RefPtr<StringImpl> AddSlowCase(StringImpl*);
+  static scoped_refptr<StringImpl> AddSlowCase(StringImpl*);
 #if defined(OS_MACOSX)
-  static RefPtr<StringImpl> Add(CFStringRef);
+  static scoped_refptr<StringImpl> Add(CFStringRef);
 #endif
 };
 

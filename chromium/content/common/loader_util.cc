@@ -8,13 +8,25 @@
 
 #include "base/strings/stringprintf.h"
 #include "content/public/common/resource_devtools_info.h"
+#include "content/public/common/resource_request.h"
 #include "content/public/common/resource_response.h"
+#include "net/base/load_flags.h"
 #include "net/base/mime_sniffer.h"
 #include "net/http/http_raw_request_headers.h"
 #include "net/http/http_util.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
+
+namespace {
+constexpr char kAcceptHeader[] = "Accept";
+constexpr char kFrameAcceptHeader[] =
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,"
+    "image/apng,*/*;q=0.8";
+constexpr char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
+constexpr char kImageAcceptHeader[] = "image/webp,image/apng,image/*,*/*;q=0.8";
+constexpr char kDefaultAcceptHeader[] = "*/*";
+}  //  namespace
 
 bool ShouldSniffContent(net::URLRequest* url_request,
                         ResourceResponse* response) {
@@ -85,6 +97,65 @@ scoped_refptr<ResourceDevToolsInfo> BuildDevToolsInfo(
     }
   }
   return info;
+}
+
+void AttachAcceptHeader(ResourceType type, net::URLRequest* request) {
+  const char* accept_value = nullptr;
+  switch (type) {
+    case RESOURCE_TYPE_MAIN_FRAME:
+    case RESOURCE_TYPE_SUB_FRAME:
+      accept_value = kFrameAcceptHeader;
+      break;
+    case RESOURCE_TYPE_STYLESHEET:
+      accept_value = kStylesheetAcceptHeader;
+      break;
+    case RESOURCE_TYPE_FAVICON:
+    case RESOURCE_TYPE_IMAGE:
+      accept_value = kImageAcceptHeader;
+      break;
+    case RESOURCE_TYPE_SCRIPT:
+    case RESOURCE_TYPE_FONT_RESOURCE:
+    case RESOURCE_TYPE_SUB_RESOURCE:
+    case RESOURCE_TYPE_OBJECT:
+    case RESOURCE_TYPE_MEDIA:
+    case RESOURCE_TYPE_WORKER:
+    case RESOURCE_TYPE_SHARED_WORKER:
+    case RESOURCE_TYPE_PREFETCH:
+    case RESOURCE_TYPE_XHR:
+    case RESOURCE_TYPE_PING:
+    case RESOURCE_TYPE_SERVICE_WORKER:
+    case RESOURCE_TYPE_CSP_REPORT:
+    case RESOURCE_TYPE_PLUGIN_RESOURCE:
+      accept_value = kDefaultAcceptHeader;
+      break;
+    case RESOURCE_TYPE_LAST_TYPE:
+      NOTREACHED();
+      break;
+  }
+  // The false parameter prevents overwriting an existing accept header value,
+  // which is needed because JS can manually set an accept header on an XHR.
+  request->SetExtraRequestHeaderByName(kAcceptHeader, accept_value, false);
+}
+
+int BuildLoadFlagsForRequest(const ResourceRequest& request,
+                             bool is_sync_load) {
+  int load_flags = request.load_flags;
+
+  // Although EV status is irrelevant to sub-frames and sub-resources, we have
+  // to perform EV certificate verification on all resources because an HTTP
+  // keep-alive connection created to load a sub-frame or a sub-resource could
+  // be reused to load a main frame.
+  load_flags |= net::LOAD_VERIFY_EV_CERT;
+  if (request.resource_type == RESOURCE_TYPE_MAIN_FRAME) {
+    load_flags |= net::LOAD_MAIN_FRAME_DEPRECATED;
+  } else if (request.resource_type == RESOURCE_TYPE_PREFETCH) {
+    load_flags |= net::LOAD_PREFETCH;
+  }
+
+  if (is_sync_load)
+    load_flags |= net::LOAD_IGNORE_LIMITS;
+
+  return load_flags;
 }
 
 }  // namespace content

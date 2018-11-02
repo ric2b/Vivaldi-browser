@@ -17,8 +17,11 @@ class FakeOfflinePageModel : public offline_pages::StubOfflinePageModel {
   FakeOfflinePageModel();
   ~FakeOfflinePageModel() override;
 
-  void GetPagesMatchingQuery(
-      std::unique_ptr<offline_pages::OfflinePageModelQuery> query,
+  void GetPagesByNamespace(
+      const std::string& name_space,
+      const offline_pages::MultipleOfflinePageItemCallback& callback) override;
+
+  void GetPagesSupportedByDownloads(
       const offline_pages::MultipleOfflinePageItemCallback& callback) override;
 
   void GetAllPages(
@@ -27,12 +30,8 @@ class FakeOfflinePageModel : public offline_pages::StubOfflinePageModel {
   const std::vector<offline_pages::OfflinePageItem>& items();
   std::vector<offline_pages::OfflinePageItem>* mutable_items();
 
-  bool is_loaded() const override;
-  void set_is_loaded(bool value);
-
  private:
   std::vector<offline_pages::OfflinePageItem> items_;
-  bool is_loaded_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeOfflinePageModel);
 };

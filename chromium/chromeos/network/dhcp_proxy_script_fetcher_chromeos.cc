@@ -25,7 +25,7 @@ std::string GetPacUrlFromDefaultNetwork() {
   const NetworkState* default_network =
       NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
   if (default_network)
-    return default_network->web_proxy_auto_discovery_url().spec();
+    return default_network->GetWebProxyAutoDiscoveryUrl().spec();
   return std::string();
 }
 
@@ -41,8 +41,7 @@ DhcpProxyScriptFetcherChromeos::DhcpProxyScriptFetcherChromeos(
     network_handler_task_runner_ = NetworkHandler::Get()->task_runner();
 }
 
-DhcpProxyScriptFetcherChromeos::~DhcpProxyScriptFetcherChromeos() {
-}
+DhcpProxyScriptFetcherChromeos::~DhcpProxyScriptFetcherChromeos() = default;
 
 int DhcpProxyScriptFetcherChromeos::Fetch(
     base::string16* utf16_text,

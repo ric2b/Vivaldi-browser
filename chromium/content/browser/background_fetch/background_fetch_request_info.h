@@ -16,13 +16,15 @@
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "content/browser/background_fetch/background_fetch_constants.h"
-#include "content/browser/background_fetch/background_fetch_response.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/download_item.h"
 #include "url/gurl.h"
 
 namespace content {
+
+struct BackgroundFetchResponse;
+struct BackgroundFetchResult;
 
 // Simple class to encapsulate the components of a fetch request.
 // TODO(peter): This can likely change to have a single owner, and thus become
@@ -33,14 +35,25 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   BackgroundFetchRequestInfo(int request_index,
                              const ServiceWorkerFetchRequest& fetch_request);
 
-  // Populates the cached state for the in-progress download.
-  void PopulateWithResponse(
-      std::unique_ptr<const BackgroundFetchResponse> response);
+  // Sets the download GUID to a newly generated value. Can only be used if no
+  // GUID is already set.
+  void InitializeDownloadGuid();
 
-  void SetResult(std::unique_ptr<const BackgroundFetchResult> result);
+  // Sets the download GUID to a given value (to be used when requests are
+  // retrieved from storage). Can only be used if no GUID is already set.
+  void SetDownloadGuid(const std::string& download_guid);
+
+  // Populates the cached state for the in-progress download.
+  void PopulateWithResponse(std::unique_ptr<BackgroundFetchResponse> response);
+
+  void SetResult(std::unique_ptr<BackgroundFetchResult> result);
 
   // Returns the index of this request within a Background Fetch registration.
   int request_index() const { return request_index_; }
+
+  // Returns the GUID used to identify this download. (Empty before the download
+  // becomes active).
+  const std::string& download_guid() const { return download_guid_; }
 
   // Returns the Fetch API Request object that details the developer's request.
   const ServiceWorkerFetchRequest& fetch_request() const {
@@ -79,7 +92,6 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   ~BackgroundFetchRequestInfo();
 
   // ---- Data associated with the request -------------------------------------
-
   int request_index_ = kInvalidBackgroundFetchRequestIndex;
   ServiceWorkerFetchRequest fetch_request_;
 
@@ -93,7 +105,7 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   std::vector<GURL> url_chain_;
 
   // ---- Data associated with the response ------------------------------------
-  std::unique_ptr<const BackgroundFetchResult> result_;
+  std::unique_ptr<BackgroundFetchResult> result_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

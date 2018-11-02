@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "SequenceTest.h"
+#include "core/testing/SequenceTest.h"
 
 namespace blink {
 
@@ -44,11 +44,12 @@ void SequenceTest::setElementSequence(const HeapVector<Member<Element>>& arg) {
 }
 
 bool SequenceTest::unionReceivedSequence(const DoubleOrDoubleSequence& arg) {
-  return arg.isDoubleSequence();
+  return arg.IsDoubleSequence();
 }
 
-DEFINE_TRACE(SequenceTest) {
+void SequenceTest::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_sequence_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

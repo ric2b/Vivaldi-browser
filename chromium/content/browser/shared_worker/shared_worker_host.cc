@@ -8,229 +8,199 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
+#include "content/browser/interface_provider_filtering.h"
+#include "content/browser/renderer_interface_binders.h"
 #include "content/browser/shared_worker/shared_worker_content_settings_proxy_impl.h"
 #include "content/browser/shared_worker/shared_worker_instance.h"
-#include "content/browser/shared_worker/shared_worker_message_filter.h"
 #include "content/browser/shared_worker/shared_worker_service_impl.h"
-#include "content/common/view_messages.h"
-#include "content/common/worker_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
+#include "third_party/WebKit/common/message_port/message_port_channel.h"
+#include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "third_party/WebKit/public/web/worker_content_settings_proxy.mojom.h"
 
 namespace content {
 namespace {
 
-void NotifyWorkerReadyForInspection(int worker_process_id,
-                                    int worker_route_id) {
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::BindOnce(NotifyWorkerReadyForInspection,
-                                           worker_process_id, worker_route_id));
-    return;
-  }
-  SharedWorkerDevToolsManager::GetInstance()->WorkerReadyForInspection(
-      worker_process_id, worker_route_id);
+void AllowFileSystemOnIOThreadResponse(base::OnceCallback<void(bool)> callback,
+                                       bool result) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(std::move(callback), result));
 }
 
-void NotifyWorkerDestroyed(int worker_process_id, int worker_route_id) {
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::BindOnce(NotifyWorkerDestroyed,
-                                           worker_process_id, worker_route_id));
-    return;
-  }
-  SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(
-      worker_process_id, worker_route_id);
+void AllowFileSystemOnIOThread(const GURL& url,
+                               ResourceContext* resource_context,
+                               std::vector<std::pair<int, int>> render_frames,
+                               base::OnceCallback<void(bool)> callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  GetContentClient()->browser()->AllowWorkerFileSystem(
+      url, resource_context, render_frames,
+      base::Bind(&AllowFileSystemOnIOThreadResponse, base::Passed(&callback)));
+}
+
+bool AllowIndexedDBOnIOThread(const GURL& url,
+                              const base::string16& name,
+                              ResourceContext* resource_context,
+                              std::vector<std::pair<int, int>> render_frames) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return GetContentClient()->browser()->AllowWorkerIndexedDB(
+      url, name, resource_context, render_frames);
 }
 
 }  // namespace
 
-SharedWorkerHost::SharedWorkerHost(SharedWorkerInstance* instance,
-                                   SharedWorkerMessageFilter* filter,
-                                   int worker_route_id)
-    : instance_(instance),
-      worker_document_set_(new WorkerDocumentSet()),
-      worker_render_filter_(filter),
-      worker_process_id_(filter->render_process_id()),
-      worker_route_id_(worker_route_id),
+SharedWorkerHost::SharedWorkerHost(
+    std::unique_ptr<SharedWorkerInstance> instance,
+    int process_id,
+    int route_id)
+    : binding_(this),
+      instance_(std::move(instance)),
+      process_id_(process_id),
+      route_id_(route_id),
       next_connection_request_id_(1),
       creation_time_(base::TimeTicks::Now()),
+      interface_provider_binding_(this),
       weak_factory_(this) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(instance_);
-  DCHECK(worker_render_filter_);
 }
 
 SharedWorkerHost::~SharedWorkerHost() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   UMA_HISTOGRAM_LONG_TIMES("SharedWorker.TimeToDeleted",
                            base::TimeTicks::Now() - creation_time_);
-  if (!closed_ && !termination_message_sent_)
-    NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
-  SharedWorkerServiceImpl::GetInstance()->NotifyWorkerDestroyed(
-      worker_process_id_, worker_route_id_);
+  if (!closed_ && !termination_message_sent_) {
+    SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(process_id_,
+                                                                route_id_);
+  }
 }
 
-void SharedWorkerHost::Start(bool pause_on_start) {
-  blink::mojom::WorkerContentSettingsProxyPtrInfo content_settings;
-  content_settings_ = base::MakeUnique<SharedWorkerContentSettingsProxyImpl>(
+void SharedWorkerHost::Start(mojom::SharedWorkerFactoryPtr factory,
+                             bool pause_on_start) {
+  blink::mojom::WorkerContentSettingsProxyPtr content_settings;
+  content_settings_ = std::make_unique<SharedWorkerContentSettingsProxyImpl>(
       instance_->url(), this, mojo::MakeRequest(&content_settings));
 
-  WorkerProcessMsg_CreateWorker_Params params;
-  params.url = instance_->url();
-  params.name = instance_->name();
-  params.content_security_policy = instance_->content_security_policy();
-  params.security_policy_type = instance_->security_policy_type();
-  params.creation_address_space = instance_->creation_address_space();
-  params.pause_on_start = pause_on_start;
-  params.route_id = worker_route_id_;
-  params.data_saver_enabled = instance_->data_saver_enabled();
-  params.content_settings_handle = content_settings.PassHandle().release();
-  Send(new WorkerProcessMsg_CreateWorker(params));
+  mojom::SharedWorkerHostPtr host;
+  binding_.Bind(mojo::MakeRequest(&host));
 
-  for (const FilterInfo& info : filters_)
-    info.filter()->Send(new ViewMsg_WorkerCreated(info.route_id()));
-}
+  service_manager::mojom::InterfaceProviderPtr interface_provider;
+  interface_provider_binding_.Bind(FilterRendererExposedInterfaces(
+      mojom::kNavigation_SharedWorkerSpec, process_id_,
+      mojo::MakeRequest(&interface_provider)));
 
-bool SharedWorkerHost::SendConnectToWorker(int worker_route_id,
-                                           const MessagePort& port,
-                                           SharedWorkerMessageFilter* filter) {
-  if (!IsAvailable() || !HasFilter(filter, worker_route_id))
-    return false;
+  mojom::SharedWorkerInfoPtr info(mojom::SharedWorkerInfo::New(
+      instance_->url(), instance_->name(), instance_->content_security_policy(),
+      instance_->content_security_policy_type(),
+      instance_->creation_address_space()));
 
-  int connection_request_id = next_connection_request_id_++;
+  factory->CreateSharedWorker(
+      std::move(info), pause_on_start, instance_->devtools_worker_token(),
+      route_id_, std::move(content_settings), std::move(host),
+      mojo::MakeRequest(&worker_), std::move(interface_provider));
 
-  SetConnectionRequestID(filter, worker_route_id, connection_request_id);
-
-  // Send the connect message with the new connection_request_id.
-  Send(new WorkerMsg_Connect(worker_route_id_, connection_request_id, port));
-  return true;
-}
-
-void SharedWorkerHost::FilterShutdown(SharedWorkerMessageFilter* filter) {
-  RemoveFilters(filter);
-  worker_document_set_->RemoveAll(filter);
-  if (worker_document_set_->IsEmpty()) {
-    // This worker has no more associated documents - shut it down.
-    TerminateWorker();
-  }
-}
-
-void SharedWorkerHost::DocumentDetached(SharedWorkerMessageFilter* filter,
-                                        unsigned long long document_id) {
-  // Walk all instances and remove the document from their document set.
-  worker_document_set_->Remove(filter, document_id);
-  if (worker_document_set_->IsEmpty()) {
-    // This worker has no more associated documents - shut it down.
-    TerminateWorker();
-  }
-}
-
-void SharedWorkerHost::RenderFrameDetached(int render_process_id,
-                                           int render_frame_id) {
-  // Walk all instances and remove all the documents in the frame from their
-  // document set.
-  worker_document_set_->RemoveRenderFrame(render_process_id, render_frame_id);
-  if (worker_document_set_->IsEmpty()) {
-    // This worker has no more associated documents - shut it down.
-    TerminateWorker();
-  }
-}
-
-void SharedWorkerHost::CountFeature(uint32_t feature) {
-  if (!used_features_.insert(feature).second)
-    return;
-  for (const auto& filter_info : filters_) {
-    filter_info.filter()->Send(new ViewMsg_CountFeatureOnSharedWorker(
-        filter_info.route_id(), feature));
-  }
-}
-
-void SharedWorkerHost::WorkerContextClosed() {
-  // Set the closed flag - this will stop any further messages from
-  // being sent to the worker (messages can still be sent from the worker,
-  // for exception reporting, etc).
-  closed_ = true;
-  if (!termination_message_sent_)
-    NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
-}
-
-void SharedWorkerHost::WorkerContextDestroyed() {
-  for (const auto& filter_info : filters_) {
-    filter_info.filter()->Send(
-        new ViewMsg_WorkerDestroyed(filter_info.route_id()));
-  }
-}
-
-void SharedWorkerHost::WorkerReadyForInspection() {
-  NotifyWorkerReadyForInspection(worker_process_id_, worker_route_id_);
-}
-
-void SharedWorkerHost::WorkerScriptLoaded() {
-  UMA_HISTOGRAM_TIMES("SharedWorker.TimeToScriptLoaded",
-                      base::TimeTicks::Now() - creation_time_);
-}
-
-void SharedWorkerHost::WorkerScriptLoadFailed() {
-  UMA_HISTOGRAM_TIMES("SharedWorker.TimeToScriptLoadFailed",
-                      base::TimeTicks::Now() - creation_time_);
-  for (const FilterInfo& info : filters_)
-    info.filter()->Send(new ViewMsg_WorkerScriptLoadFailed(info.route_id()));
-}
-
-void SharedWorkerHost::WorkerConnected(int connection_request_id) {
-  if (!instance_)
-    return;
-  for (const FilterInfo& info : filters_) {
-    if (info.connection_request_id() != connection_request_id)
-      continue;
-    info.filter()->Send(
-        new ViewMsg_WorkerConnected(info.route_id(), used_features_));
-    return;
-  }
+  // Monitor the lifetime of the worker.
+  worker_.set_connection_error_handler(base::BindOnce(
+      &SharedWorkerHost::OnWorkerConnectionLost, weak_factory_.GetWeakPtr()));
 }
 
 void SharedWorkerHost::AllowFileSystem(
     const GURL& url,
     base::OnceCallback<void(bool)> callback) {
-  GetContentClient()->browser()->AllowWorkerFileSystem(
-      url, instance_->resource_context(), GetRenderFrameIDsForWorker(),
-      base::Bind(&SharedWorkerHost::AllowFileSystemResponse,
-                 weak_factory_.GetWeakPtr(), base::Passed(&callback)));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&AllowFileSystemOnIOThread, url,
+                     instance_->resource_context(),
+                     GetRenderFrameIDsForWorker(), std::move(callback)));
 }
 
-void SharedWorkerHost::AllowFileSystemResponse(
-    base::OnceCallback<void(bool)> callback,
-    bool allowed) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  std::move(callback).Run(allowed);
-}
-
-bool SharedWorkerHost::AllowIndexedDB(const GURL& url,
-                                      const base::string16& name) {
-  return GetContentClient()->browser()->AllowWorkerIndexedDB(
-      url, name, instance_->resource_context(), GetRenderFrameIDsForWorker());
+void SharedWorkerHost::AllowIndexedDB(const GURL& url,
+                                      const base::string16& name,
+                                      base::OnceCallback<void(bool)> callback) {
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&AllowIndexedDBOnIOThread, url, name,
+                     instance_->resource_context(),
+                     GetRenderFrameIDsForWorker()),
+      std::move(callback));
 }
 
 void SharedWorkerHost::TerminateWorker() {
   termination_message_sent_ = true;
-  if (!closed_)
-    NotifyWorkerDestroyed(worker_process_id_, worker_route_id_);
-  Send(new WorkerMsg_TerminateWorkerContext(worker_route_id_));
+  if (!closed_) {
+    SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(process_id_,
+                                                                route_id_);
+  }
+  worker_->Terminate();
+  // Now, we wait to observe OnWorkerConnectionLost.
 }
 
-std::vector<std::pair<int, int> >
-SharedWorkerHost::GetRenderFrameIDsForWorker() {
-  std::vector<std::pair<int, int> > result;
-  const WorkerDocumentSet::DocumentInfoSet& documents =
-      worker_document_set_->documents();
-  for (const WorkerDocumentSet::DocumentInfo& doc : documents) {
-    result.push_back(
-        std::make_pair(doc.render_process_id(), doc.render_frame_id()));
+SharedWorkerHost::ClientInfo::ClientInfo(mojom::SharedWorkerClientPtr client,
+                                         int connection_request_id,
+                                         int process_id,
+                                         int frame_id)
+    : client(std::move(client)),
+      connection_request_id(connection_request_id),
+      process_id(process_id),
+      frame_id(frame_id) {}
+
+SharedWorkerHost::ClientInfo::~ClientInfo() {}
+
+void SharedWorkerHost::OnConnected(int connection_request_id) {
+  if (!instance_)
+    return;
+  for (const ClientInfo& info : clients_) {
+    if (info.connection_request_id != connection_request_id)
+      continue;
+    info.client->OnConnected(std::vector<blink::mojom::WebFeature>(
+        used_features_.begin(), used_features_.end()));
+    return;
   }
+}
+
+void SharedWorkerHost::OnContextClosed() {
+  // Set the closed flag - this will stop any further messages from
+  // being sent to the worker (messages can still be sent from the worker,
+  // for exception reporting, etc).
+  closed_ = true;
+  if (!termination_message_sent_) {
+    SharedWorkerDevToolsManager::GetInstance()->WorkerDestroyed(process_id_,
+                                                                route_id_);
+  }
+}
+
+void SharedWorkerHost::OnReadyForInspection() {
+  SharedWorkerDevToolsManager::GetInstance()->WorkerReadyForInspection(
+      process_id_, route_id_);
+}
+
+void SharedWorkerHost::OnScriptLoaded() {
+  UMA_HISTOGRAM_TIMES("SharedWorker.TimeToScriptLoaded",
+                      base::TimeTicks::Now() - creation_time_);
+}
+
+void SharedWorkerHost::OnScriptLoadFailed() {
+  UMA_HISTOGRAM_TIMES("SharedWorker.TimeToScriptLoadFailed",
+                      base::TimeTicks::Now() - creation_time_);
+  for (const ClientInfo& info : clients_)
+    info.client->OnScriptLoadFailed();
+}
+
+void SharedWorkerHost::OnFeatureUsed(blink::mojom::WebFeature feature) {
+  // Avoid reporting a feature more than once, and enable any new clients to
+  // observe features that were historically used.
+  if (!used_features_.insert(feature).second)
+    return;
+  for (const ClientInfo& info : clients_)
+    info.client->OnFeatureUsed(feature);
+}
+
+std::vector<std::pair<int, int>>
+SharedWorkerHost::GetRenderFrameIDsForWorker() {
+  std::vector<std::pair<int, int>> result;
+  for (const ClientInfo& info : clients_)
+    result.push_back(std::make_pair(info.process_id, info.frame_id));
   return result;
 }
 
@@ -238,46 +208,64 @@ bool SharedWorkerHost::IsAvailable() const {
   return !termination_message_sent_ && !closed_;
 }
 
-void SharedWorkerHost::AddFilter(SharedWorkerMessageFilter* filter,
-                                 int route_id) {
-  CHECK(filter);
-  if (!HasFilter(filter, route_id)) {
-    FilterInfo info(filter, route_id);
-    filters_.push_back(info);
-  }
+void SharedWorkerHost::AddClient(mojom::SharedWorkerClientPtr client,
+                                 int process_id,
+                                 int frame_id,
+                                 const blink::MessagePortChannel& port) {
+  // Pass the actual creation context type, so the client can understand if
+  // there is a mismatch between security levels.
+  client->OnCreated(instance_->creation_context_type());
+
+  clients_.emplace_back(std::move(client), next_connection_request_id_++,
+                        process_id, frame_id);
+  ClientInfo& info = clients_.back();
+
+  // Observe when the client goes away.
+  info.client.set_connection_error_handler(base::BindOnce(
+      &SharedWorkerHost::OnClientConnectionLost, weak_factory_.GetWeakPtr()));
+
+  worker_->Connect(info.connection_request_id, port.ReleaseHandle());
 }
 
-void SharedWorkerHost::RemoveFilters(SharedWorkerMessageFilter* filter) {
-  for (FilterList::iterator i = filters_.begin(); i != filters_.end();) {
-    if (i->filter() == filter)
-      i = filters_.erase(i);
-    else
-      ++i;
-  }
-}
-
-bool SharedWorkerHost::HasFilter(SharedWorkerMessageFilter* filter,
-                                 int route_id) const {
-  for (const FilterInfo& info : filters_) {
-    if (info.filter() == filter && info.route_id() == route_id)
+bool SharedWorkerHost::ServesExternalClient() {
+  for (const ClientInfo& info : clients_) {
+    if (info.process_id != process_id_)
       return true;
   }
   return false;
 }
 
-void SharedWorkerHost::SetConnectionRequestID(SharedWorkerMessageFilter* filter,
-                                              int route_id,
-                                              int connection_request_id) {
-  for (FilterList::iterator i = filters_.begin(); i != filters_.end(); ++i) {
-    if (i->filter() == filter && i->route_id() == route_id) {
-      i->set_connection_request_id(connection_request_id);
-      return;
+void SharedWorkerHost::OnClientConnectionLost() {
+  // We'll get a notification for each dropped connection.
+  for (auto it = clients_.begin(); it != clients_.end(); ++it) {
+    if (it->client.encountered_error()) {
+      clients_.erase(it);
+      break;
     }
   }
+  // If there are no clients left, then it's cleanup time.
+  if (clients_.empty())
+    TerminateWorker();
 }
 
-bool SharedWorkerHost::Send(IPC::Message* message) {
-  return worker_render_filter_->Send(message);
+void SharedWorkerHost::OnWorkerConnectionLost() {
+  // This will destroy |this| resulting in client's observing their mojo
+  // connection being dropped.
+  static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
+      ->DestroyHost(process_id_, route_id_);
+}
+
+void SharedWorkerHost::GetInterface(
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  auto* process = RenderProcessHost::FromID(process_id_);
+  if (!process)
+    return;
+
+  BindWorkerInterface(interface_name, std::move(interface_pipe), process,
+                      url::Origin::Create(instance()->url()));
 }
 
 }  // namespace content

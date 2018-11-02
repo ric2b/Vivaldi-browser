@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -23,17 +24,19 @@
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/view.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
+#include "chrome/browser/ui/views/intent_picker_bubble_view.h"
+#include "components/arc/common/intent_helper.mojom.h"  // nogncheck https://crbug.com/784179
+#include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#endif  // defined(OS_CHROMEOS)
+
 class AppMenuButton;
 class Browser;
 class BrowserActionsContainer;
 class HomeButton;
 class ReloadButton;
 class ToolbarButton;
-
-namespace autofill {
-class SaveCardBubbleController;
-class SaveCardBubbleView;
-}
 
 namespace bookmarks {
 class BookmarkBubbleObserver;
@@ -77,16 +80,16 @@ class ToolbarView : public views::AccessiblePaneView,
 
   virtual bool GetAcceleratorInfo(int id, ui::Accelerator* accel);
 
+#if defined(OS_CHROMEOS)
+  void ShowIntentPickerBubble(
+      const std::vector<IntentPickerBubbleView::AppInfo>& app_info,
+      IntentPickerResponse callback);
+#endif  // defined(OS_CHROMEOS)
+
   // Shows a bookmark bubble and anchors it appropriately.
   void ShowBookmarkBubble(const GURL& url,
                           bool already_bookmarked,
                           bookmarks::BookmarkBubbleObserver* observer);
-
-  // Shows a bubble offering to save a credit card and anchors it appropriately.
-  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
-      content::WebContents* contents,
-      autofill::SaveCardBubbleController* controller,
-      bool is_user_gesture);
 
   // Shows the translate bubble and anchors it appropriately.
   void ShowTranslateBubble(content::WebContents* web_contents,
@@ -200,7 +203,7 @@ class ToolbarView : public views::AccessiblePaneView,
   BrowserActionsContainer* browser_actions_;
   AppMenuButton* app_menu_button_;
 
-  Browser* browser_;
+  Browser* const browser_;
 
   AppMenuIconController app_menu_icon_controller_;
 

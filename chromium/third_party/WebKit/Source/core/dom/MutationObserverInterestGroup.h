@@ -78,14 +78,14 @@ class MutationObserverInterestGroup final
   bool IsOldValueRequested();
   void EnqueueMutationRecord(MutationRecord*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   static MutationObserverInterestGroup* CreateIfNeeded(
       Node& target,
       MutationObserver::MutationType,
       MutationRecordDeliveryOptions old_value_flag,
-      const QualifiedName* attribute_name = 0);
+      const QualifiedName* attribute_name = nullptr);
   MutationObserverInterestGroup(
       HeapHashMap<Member<MutationObserver>, MutationRecordDeliveryOptions>&
           observers,

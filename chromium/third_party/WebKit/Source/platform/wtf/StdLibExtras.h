@@ -27,11 +27,12 @@
 #define WTF_StdLibExtras_h
 
 #include <cstddef>
+
+#include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/LeakAnnotations.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/TypeTraits.h"
 
 #if DCHECK_IS_ON()
@@ -76,8 +77,6 @@ namespace WTF {
 
 template <typename Type>
 class StaticSingleton final {
-  WTF_MAKE_NONCOPYABLE(StaticSingleton);
-
  public:
   template <typename T,
             bool = WTF::IsGarbageCollectedType<T>::value &&
@@ -175,6 +174,8 @@ class StaticSingleton final {
   bool safely_initialized_;
   ThreadIdentifier thread_;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(StaticSingleton);
 };
 
 }  // namespace WTF
@@ -184,8 +185,12 @@ class StaticSingleton final {
 // exit.  This macro should be used with ref-counted objects rather than
 // DEFINE_STATIC_LOCAL macro, as this macro does not lead to an extra memory
 // allocation.
-#define DEFINE_STATIC_REF(type, name, arguments) \
-  static type* name = RefPtr<type>(arguments).LeakRef();
+#define DEFINE_STATIC_REF(type, name, arguments)  \
+  static type* name = [](scoped_refptr<type> o) { \
+    if (o)                                        \
+      o->AddRef();                                \
+    return o.get();                               \
+  }(arguments);
 
 /*
  * The reinterpret_cast<Type1*>([pointer to Type2]) expressions - where
@@ -221,6 +226,24 @@ bool isPointerTypeAlignmentOkay(Type*) {
 }
 #define reinterpret_cast_ptr reinterpret_cast
 #endif
+
+template <typename TypePtr>
+NO_SANITIZE_UNRELATED_CAST
+TypePtr unsafe_reinterpret_cast_ptr(void* ptr) {
+#if defined(ARCH_CPU_ARMEL) && defined(COMPILER_GCC)
+  DCHECK(isPointerTypeAlignmentOkay(reinterpret_cast<TypePtr>(ptr)));
+#endif
+  return reinterpret_cast<TypePtr>(ptr);
+}
+
+template <typename TypePtr>
+NO_SANITIZE_UNRELATED_CAST
+TypePtr unsafe_reinterpret_cast_ptr(const void* ptr) {
+#if defined(ARCH_CPU_ARMEL) && defined(COMPILER_GCC)
+  DCHECK(isPointerTypeAlignmentOkay(reinterpret_cast<TypePtr>(ptr)));
+#endif
+  return reinterpret_cast<TypePtr>(ptr);
+}
 
 namespace WTF {
 

@@ -4,7 +4,6 @@
 
 #include "tools/gn/xcode_object.h"
 
-#include "base/memory/ptr_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -306,20 +305,131 @@ TEST(XcodeObject, XCConfigurationListObjectToClass) {
 
 // Tests the mapping between PBXObjectClass and it's name as a string.
 TEST(XcodeObject, ClassToString) {
-  EXPECT_EQ("PBXAggregateTarget", ToString(PBXAggregateTargetClass));
-  EXPECT_EQ("PBXBuildFile", ToString(PBXBuildFileClass));
-  EXPECT_EQ("PBXAggregateTarget", ToString(PBXAggregateTargetClass));
-  EXPECT_EQ("PBXBuildFile", ToString(PBXBuildFileClass));
-  EXPECT_EQ("PBXContainerItemProxy", ToString(PBXContainerItemProxyClass));
-  EXPECT_EQ("PBXFileReference", ToString(PBXFileReferenceClass));
-  EXPECT_EQ("PBXFrameworksBuildPhase", ToString(PBXFrameworksBuildPhaseClass));
-  EXPECT_EQ("PBXGroup", ToString(PBXGroupClass));
-  EXPECT_EQ("PBXNativeTarget", ToString(PBXNativeTargetClass));
-  EXPECT_EQ("PBXProject", ToString(PBXProjectClass));
-  EXPECT_EQ("PBXSourcesBuildPhase", ToString(PBXSourcesBuildPhaseClass));
-  EXPECT_EQ("PBXTargetDependency", ToString(PBXTargetDependencyClass));
-  EXPECT_EQ("XCBuildConfiguration", ToString(XCBuildConfigurationClass));
-  EXPECT_EQ("XCConfigurationList", ToString(XCConfigurationListClass));
-  EXPECT_EQ("PBXShellScriptBuildPhase",
-            ToString(PBXShellScriptBuildPhaseClass));
+  EXPECT_STREQ("PBXAggregateTarget", ToString(PBXAggregateTargetClass));
+  EXPECT_STREQ("PBXBuildFile", ToString(PBXBuildFileClass));
+  EXPECT_STREQ("PBXAggregateTarget", ToString(PBXAggregateTargetClass));
+  EXPECT_STREQ("PBXBuildFile", ToString(PBXBuildFileClass));
+  EXPECT_STREQ("PBXContainerItemProxy", ToString(PBXContainerItemProxyClass));
+  EXPECT_STREQ("PBXFileReference", ToString(PBXFileReferenceClass));
+  EXPECT_STREQ("PBXFrameworksBuildPhase",
+               ToString(PBXFrameworksBuildPhaseClass));
+  EXPECT_STREQ("PBXGroup", ToString(PBXGroupClass));
+  EXPECT_STREQ("PBXNativeTarget", ToString(PBXNativeTargetClass));
+  EXPECT_STREQ("PBXProject", ToString(PBXProjectClass));
+  EXPECT_STREQ("PBXSourcesBuildPhase", ToString(PBXSourcesBuildPhaseClass));
+  EXPECT_STREQ("PBXTargetDependency", ToString(PBXTargetDependencyClass));
+  EXPECT_STREQ("XCBuildConfiguration", ToString(XCBuildConfigurationClass));
+  EXPECT_STREQ("XCConfigurationList", ToString(XCConfigurationListClass));
+  EXPECT_STREQ("PBXShellScriptBuildPhase",
+               ToString(PBXShellScriptBuildPhaseClass));
+}
+
+// Tests the mapping between PBXObject and it's name as a string.
+TEST(XcodeObject, PBXSourcesBuildPhaseName) {
+  std::unique_ptr<PBXSourcesBuildPhase> pbx_sources_build_phase =
+      GetPBXSourcesBuildPhaseObject();
+  EXPECT_EQ("Sources", pbx_sources_build_phase->Name());
+}
+
+TEST(XcodeObject, PBXFrameworksBuildPhaseName) {
+  std::unique_ptr<PBXFrameworksBuildPhase> pbx_frameworks_build_phase =
+      GetPBXFrameworksBuildPhaseObject();
+  EXPECT_EQ("Frameworks", pbx_frameworks_build_phase->Name());
+}
+
+TEST(XcodeObject, PBXShellScriptBuildPhaseName) {
+  std::unique_ptr<PBXShellScriptBuildPhase> pbx_shell_script_build_phase =
+      GetPBXShellScriptBuildPhaseObject();
+  EXPECT_EQ("Action \"Compile and copy name via ninja\"",
+            pbx_shell_script_build_phase->Name());
+}
+
+TEST(XcodeObject, PBXGroupName) {
+  PBXGroup pbx_group_with_name(std::string(), "name");
+  EXPECT_EQ("name", pbx_group_with_name.Name());
+
+  PBXGroup pbx_group_with_path("path", std::string());
+  EXPECT_EQ("path", pbx_group_with_path.Name());
+
+  PBXGroup pbx_group_empty{std::string(), std::string()};
+  EXPECT_EQ(std::string(), pbx_group_empty.Name());
+}
+
+TEST(XcodeObject, PBXProjectName) {
+  std::unique_ptr<PBXProject> pbx_project = GetPBXProjectObject();
+  EXPECT_EQ("project", pbx_project->Name());
+}
+
+TEST(XcodeObject, PBXFileReferenceName) {
+  std::unique_ptr<PBXFileReference> pbx_file_reference =
+      GetPBXFileReferenceObject();
+  EXPECT_EQ("product.app", pbx_file_reference->Name());
+}
+
+TEST(XcodeObject, PBXBuildFileName) {
+  std::unique_ptr<PBXFileReference> pbx_file_reference =
+      GetPBXFileReferenceObject();
+  std::unique_ptr<PBXSourcesBuildPhase> pbx_sources_build_phase =
+      GetPBXSourcesBuildPhaseObject();
+  std::unique_ptr<PBXBuildFile> pbx_build_file = GetPBXBuildFileObject(
+      pbx_file_reference.get(), pbx_sources_build_phase.get());
+  EXPECT_EQ("product.app in Sources", pbx_build_file->Name());
+}
+
+TEST(XcodeObject, PBXAggregateTargetName) {
+  std::unique_ptr<PBXAggregateTarget> pbx_aggregate_target =
+      GetPBXAggregateTargetObject();
+  EXPECT_EQ("target_name", pbx_aggregate_target->Name());
+}
+
+TEST(XcodeObject, PBXNativeTargetName) {
+  std::unique_ptr<PBXFileReference> product_reference =
+      GetPBXFileReferenceObject();
+  std::unique_ptr<PBXNativeTarget> pbx_native_target =
+      GetPBXNativeTargetObject(product_reference.get());
+  EXPECT_EQ("target_name", pbx_native_target->Name());
+}
+
+TEST(XcodeObject, PBXContainerItemProxyName) {
+  std::unique_ptr<PBXFileReference> product_reference =
+      GetPBXFileReferenceObject();
+  std::unique_ptr<PBXNativeTarget> pbx_native_target =
+      GetPBXNativeTargetObject(product_reference.get());
+  std::unique_ptr<PBXProject> pbx_project = GetPBXProjectObject();
+  std::unique_ptr<PBXContainerItemProxy> pbx_container_item_proxy =
+      GetPBXContainerItemProxyObject(pbx_project.get(),
+                                     pbx_native_target.get());
+  EXPECT_EQ("PBXContainerItemProxy", pbx_container_item_proxy->Name());
+}
+
+TEST(XcodeObject, PBXTargetDependencyName) {
+  std::unique_ptr<PBXFileReference> product_reference =
+      GetPBXFileReferenceObject();
+  std::unique_ptr<PBXProject> pbx_project = GetPBXProjectObject();
+  std::unique_ptr<PBXNativeTarget> pbx_native_target =
+      GetPBXNativeTargetObject(product_reference.get());
+  std::unique_ptr<PBXContainerItemProxy> pbx_container_item_proxy =
+      GetPBXContainerItemProxyObject(pbx_project.get(),
+                                     pbx_native_target.get());
+  std::unique_ptr<PBXTargetDependency> pbx_target_dependency =
+      GetPBXTargetDependencyObject(pbx_native_target.get(),
+                                   std::move(pbx_container_item_proxy));
+  EXPECT_EQ("PBXTargetDependency", pbx_target_dependency->Name());
+}
+
+TEST(XcodeObject, XCBuildConfigurationName) {
+  std::unique_ptr<XCBuildConfiguration> xc_build_configuration =
+      GetXCBuildConfigurationObject();
+  EXPECT_EQ("config_name", xc_build_configuration->Name());
+}
+
+TEST(XcodeObject, XCConfigurationListName) {
+  std::unique_ptr<PBXFileReference> product_reference =
+      GetPBXFileReferenceObject();
+  std::unique_ptr<PBXNativeTarget> pbx_native_target =
+      GetPBXNativeTargetObject(product_reference.get());
+  std::unique_ptr<XCConfigurationList> xc_configuration_list =
+      GetXCConfigurationListObject(pbx_native_target.get());
+  EXPECT_EQ("Build configuration list for PBXNativeTarget \"target_name\"",
+            xc_configuration_list->Name());
 }

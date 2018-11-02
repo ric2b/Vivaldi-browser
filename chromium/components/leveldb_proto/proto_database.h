@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "components/leveldb_proto/options.h"
+#include "third_party/leveldatabase/env_chromium.h"
 
 namespace base {
 class FilePath;
@@ -40,21 +40,12 @@ class ProtoDatabase {
 
   virtual ~ProtoDatabase() {}
 
-  // Asynchronously initializes the object with default options. |callback| will
-  // be invoked on the calling thread when complete.
-  void Init(const char* client_name,
-            const base::FilePath& database_dir,
-            InitCallback callback) {
-    InitWithOptions(
-        client_name,
-        Options(database_dir, leveldb_env::SharedReadCache::Default),
-        std::move(callback));
-  }
-
-  // Similar to Init, but takes additional options.
-  virtual void InitWithOptions(const char* client_name,
-                               const Options& options,
-                               InitCallback callback) = 0;
+  // Asynchronously initializes the object with the specified |options|.
+  // |callback| will be invoked on the calling thread when complete.
+  virtual void Init(const char* client_name,
+                    const base::FilePath& database_dir,
+                    const leveldb_env::Options& options,
+                    InitCallback callback) = 0;
 
   // Asynchronously saves |entries_to_save| and deletes entries from
   // |keys_to_remove| from the database. |callback| will be invoked on the
@@ -80,6 +71,11 @@ class ProtoDatabase {
   // Asynchronously destroys the database.
   virtual void Destroy(DestroyCallback callback) = 0;
 };
+
+// Return a new instance of Options, but with two additions:
+// 1) create_if_missing = true
+// 2) max_open_files = 0
+leveldb_env::Options CreateSimpleOptions();
 
 }  // namespace leveldb_proto
 

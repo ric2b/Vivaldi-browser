@@ -11,7 +11,7 @@
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/testing/MockResource.h"
 #include "platform/loader/testing/MockResourceClient.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
@@ -77,13 +77,13 @@ TEST(
 
 TEST(ResourceTest, RevalidateWithFragment) {
   ScopedTestingPlatformSupport<MockPlatform> mock;
-  KURL url(kParsedURLString, "http://127.0.0.1:8000/foo.html");
+  KURL url("http://127.0.0.1:8000/foo.html");
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
   Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
-  resource->Finish();
+  resource->FinishForTest();
 
   // Revalidating with a url that differs by only the fragment
   // shouldn't trigger a securiy check.
@@ -97,14 +97,14 @@ TEST(ResourceTest, RevalidateWithFragment) {
 
 TEST(ResourceTest, Vary) {
   ScopedTestingPlatformSupport<MockPlatform> mock;
-  KURL url(kParsedURLString, "http://127.0.0.1:8000/foo.html");
+  KURL url("http://127.0.0.1:8000/foo.html");
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
 
   Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
-  resource->Finish();
+  resource->FinishForTest();
 
   ResourceRequest new_request(url);
   EXPECT_FALSE(resource->MustReloadDueToVaryHeader(new_request));
@@ -130,7 +130,7 @@ TEST(ResourceTest, Vary) {
   old_request.SetHTTPHeaderField(HTTPNames::Referer, "http://foo.com");
   resource = RawResource::CreateForTest(old_request, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
-  resource->Finish();
+  resource->FinishForTest();
 
   // Header present on old but not new
   new_request.ClearHTTPHeaderField(HTTPNames::User_Agent);
@@ -161,7 +161,7 @@ TEST(ResourceTest, RevalidationSucceeded) {
   resource->ResponseReceived(response, nullptr);
   const char kData[5] = "abcd";
   resource->AppendData(kData, 4);
-  resource->Finish();
+  resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
   // Simulate a successful revalidation.
@@ -175,8 +175,8 @@ TEST(ResourceTest, RevalidationSucceeded) {
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_EQ(4u, resource->ResourceBuffer()->size());
-  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(
-                          KURL(kParsedURLString, "data:text/html,")));
+  EXPECT_EQ(resource,
+            GetMemoryCache()->ResourceForURL(KURL("data:text/html,")));
   GetMemoryCache()->Remove(resource);
 
   client->RemoveAsClient();
@@ -191,7 +191,7 @@ TEST(ResourceTest, RevalidationSucceededForResourceWithoutBody) {
   ResourceResponse response;
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
-  resource->Finish();
+  resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
   // Simulate a successful revalidation.
@@ -205,8 +205,8 @@ TEST(ResourceTest, RevalidationSucceededForResourceWithoutBody) {
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_FALSE(resource->ResourceBuffer());
-  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(
-                          KURL(kParsedURLString, "data:text/html,")));
+  EXPECT_EQ(resource,
+            GetMemoryCache()->ResourceForURL(KURL("data:text/html,")));
   GetMemoryCache()->Remove(resource);
 
   client->RemoveAsClient();
@@ -227,7 +227,7 @@ TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
   response.AddHTTPHeaderField("proxy-connection", "proxy-connection value");
   response.AddHTTPHeaderField("x-custom", "custom value");
   resource->ResponseReceived(response, nullptr);
-  resource->Finish();
+  resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
   // Simulate a successful revalidation.
@@ -295,12 +295,12 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
   Resource* resource =
       MockResource::Create(ResourceRequest("https://example.com/1"));
   ResourceResponse response;
-  response.SetURL(KURL(kParsedURLString, "https://example.com/1"));
+  response.SetURL(KURL("https://example.com/1"));
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
   const char kData[5] = "abcd";
   resource->AppendData(kData, 4);
-  resource->Finish();
+  resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
   EXPECT_FALSE(resource->IsCacheValidator());
@@ -321,7 +321,7 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
 
   // The revalidating request is redirected.
   ResourceResponse redirect_response;
-  redirect_response.SetURL(KURL(kParsedURLString, "https://example.com/1"));
+  redirect_response.SetURL(KURL("https://example.com/1"));
   redirect_response.SetHTTPHeaderField("location", "https://example.com/2");
   redirect_response.SetHTTPStatusCode(308);
   ResourceRequest redirected_revalidating_request("https://example.com/2");
@@ -335,12 +335,12 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
 
   // The final response is received.
   ResourceResponse revalidating_response;
-  revalidating_response.SetURL(KURL(kParsedURLString, "https://example.com/2"));
+  revalidating_response.SetURL(KURL("https://example.com/2"));
   revalidating_response.SetHTTPStatusCode(200);
   resource->ResponseReceived(revalidating_response, nullptr);
   const char kData2[4] = "xyz";
   resource->AppendData(kData2, 3);
-  resource->Finish();
+  resource->FinishForTest();
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ("https://example.com/1",
             resource->GetResourceRequest().Url().GetString());
@@ -349,8 +349,8 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_EQ(3u, resource->ResourceBuffer()->size());
-  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(
-                          KURL(kParsedURLString, "https://example.com/1")));
+  EXPECT_EQ(resource,
+            GetMemoryCache()->ResourceForURL(KURL("https://example.com/1")));
 
   EXPECT_TRUE(client->NotifyFinishedCalled());
 

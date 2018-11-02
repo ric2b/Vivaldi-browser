@@ -45,7 +45,7 @@ using ppapi::proxy::UDPSocketResourceConstants;
 
 namespace {
 
-size_t g_num_instances = 0;
+size_t g_num_udp_filter_instances = 0;
 
 }  // namespace
 
@@ -82,7 +82,7 @@ PepperUDPSocketMessageFilter::PepperUDPSocketMessageFilter(
       render_frame_id_(0),
       is_potentially_secure_plugin_context_(
           host->IsPotentiallySecurePluginContext(instance)) {
-  ++g_num_instances;
+  ++g_num_udp_filter_instances;
   DCHECK(host);
 
   if (!host->GetRenderFrameIDsForInstance(
@@ -93,12 +93,12 @@ PepperUDPSocketMessageFilter::PepperUDPSocketMessageFilter(
 
 PepperUDPSocketMessageFilter::~PepperUDPSocketMessageFilter() {
   Close();
-  --g_num_instances;
+  --g_num_udp_filter_instances;
 }
 
 // static
 size_t PepperUDPSocketMessageFilter::GetNumInstances() {
-  return g_num_instances;
+  return g_num_udp_filter_instances;
 }
 
 scoped_refptr<base::TaskRunner>
@@ -115,7 +115,7 @@ PepperUDPSocketMessageFilter::OverrideTaskRunnerForMessage(
     case PpapiHostMsg_UDPSocket_LeaveGroup::ID:
       return BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
   }
-  return NULL;
+  return nullptr;
 }
 
 int32_t PepperUDPSocketMessageFilter::OnResourceMessageReceived(
@@ -401,7 +401,7 @@ void PepperUDPSocketMessageFilter::DoBind(
 
   std::unique_ptr<net::UDPSocket> socket(
       new net::UDPSocket(net::DatagramSocket::DEFAULT_BIND,
-                         net::RandIntCallback(), NULL, net::NetLogSource()));
+                         net::RandIntCallback(), nullptr, net::NetLogSource()));
 
   net::IPAddressBytes address;
   uint16_t port;
@@ -660,7 +660,7 @@ void PepperUDPSocketMessageFilter::OnRecvFromCompleted(int net_result) {
     SendRecvFromError(pp_result);
   }
 
-  recvfrom_buffer_ = NULL;
+  recvfrom_buffer_ = nullptr;
 
   DCHECK_GT(remaining_recv_slots_, 0u);
   remaining_recv_slots_--;

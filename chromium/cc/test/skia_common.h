@@ -8,7 +8,12 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "cc/base/region.h"
+#include "cc/paint/discardable_image_map.h"
+#include "cc/paint/draw_image.h"
+#include "cc/paint/image_animation_count.h"
 #include "cc/paint/paint_image.h"
+#include "cc/paint/paint_image_generator.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -28,11 +33,27 @@ bool AreDisplayListDrawingResultsSame(const gfx::Rect& layer_rect,
                                       const DisplayItemList* list_a,
                                       const DisplayItemList* list_b);
 
+Region ImageRectsToRegion(const DiscardableImageMap::Rects& rects);
+
 sk_sp<PaintImageGenerator> CreatePaintImageGenerator(const gfx::Size& size);
 
 PaintImage CreateDiscardablePaintImage(
     const gfx::Size& size,
-    sk_sp<SkColorSpace> color_space = nullptr);
+    sk_sp<SkColorSpace> color_space = nullptr,
+    bool allocate_encoded_memory = true);
+
+DrawImage CreateDiscardableDrawImage(const gfx::Size& size,
+                                     sk_sp<SkColorSpace> color_space,
+                                     SkRect rect,
+                                     SkFilterQuality filter_quality,
+                                     const SkMatrix& matrix);
+
+PaintImage CreateAnimatedImage(
+    const gfx::Size& size,
+    std::vector<FrameMetadata> frames,
+    int repetition_count = kAnimationLoopInfinite,
+    size_t frame_index = PaintImage::kDefaultFrameIndex,
+    PaintImage::Id id = PaintImage::GetNextId());
 
 }  // namespace cc
 

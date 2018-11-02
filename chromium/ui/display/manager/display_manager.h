@@ -25,10 +25,14 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager_export.h"
 #include "ui/display/manager/managed_display_info.h"
+#include "ui/display/mojo/dev_display_controller.mojom.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/display/unified_desktop_utils.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/optional.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/touch_device_manager.h"
 #endif
 
 namespace gfx {
@@ -78,25 +82,27 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 #endif
   };
 
-  // How the second display will be used.
-  // 1) EXTENDED mode extends the desktop to the second dislpay.
-  // 2) MIRRORING mode copies the content of the primary display to
-  //    the 2nd display. (Software Mirroring).
-  // 3) UNIFIED mode creates single desktop across multiple displays.
+  // How secondary displays will be used.
+  // 1) EXTENDED mode extends the desktop onto additional displays, creating one
+  //    root window for each display. Each display has a shelf and status tray,
+  //    and each user window is only rendered on a single display.
+  // 2) MIRRORING mode copies the content of the primary display to the second
+  //    display via software mirroring. This only supports 2 displays for now.
+  // 3) UNIFIED mode creates a virtual desktop with a *single* root window that
+  //    spans multiple physical displays via software mirroring. The primary
+  //    physical display has a shelf and status tray, and user windows may
+  //    render spanning across multiple displays.
   enum MultiDisplayMode {
     EXTENDED = 0,
     MIRRORING,
     UNIFIED,
   };
 
-  // The display ID for a virtual display assigned to a unified desktop.
-  static int64_t kUnifiedDisplayId;
-
   explicit DisplayManager(std::unique_ptr<Screen> screen);
 #if defined(OS_CHROMEOS)
   ~DisplayManager() override;
 #else
-  virtual ~DisplayManager();
+  ~DisplayManager();
 #endif
 
   DisplayLayoutStore* layout_store() { return layout_store_.get(); }
@@ -119,6 +125,25 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Returns the display id of the first display in the outupt list.
   int64_t first_display_id() const { return first_display_id_; }
+
+#if defined(OS_CHROMEOS)
+  TouchDeviceManager* touch_device_manager() const {
+    return touch_device_manager_.get();
+  }
+#endif
+
+  bool is_multi_mirroring_enabled() const {
+    return is_multi_mirroring_enabled_;
+  }
+
+  const UnifiedDesktopLayoutMatrix& current_unified_desktop_matrix() const {
+    return current_unified_desktop_matrix_;
+  }
+
+  // Sets controller used to add/remove fake displays. If this is set then
+  // AddRemoveDisplay() will delegate out to |dev_display_controller_| instead
+  // of adding/removing a ManagedDisplayInfo.
+  void SetDevDisplayController(mojom::DevDisplayControllerPtr controller);
 
   // Initializes displays using command line flag. Returns false if no command
   // line flag was provided.
@@ -180,20 +205,18 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // the display resolution so that the caller needs to show a notification in
   // case the new resolution actually doesn't work.
   bool SetDisplayMode(int64_t display_id,
-                      const scoped_refptr<ManagedDisplayMode>& display_mode);
+                      const ManagedDisplayMode& display_mode);
 
   // Register per display properties.
   // |overscan_insets| is null if the display has no custom overscan insets.
   // |touch_calibration_data| is null if the display has no touch calibration
   // associated data.
-  void RegisterDisplayProperty(
-      int64_t display_id,
-      Display::Rotation rotation,
-      float ui_scale,
-      const gfx::Insets* overscan_insets,
-      const gfx::Size& resolution_in_pixels,
-      float device_scale_factor,
-      const TouchCalibrationData* touch_calibration_data);
+  void RegisterDisplayProperty(int64_t display_id,
+                               Display::Rotation rotation,
+                               float ui_scale,
+                               const gfx::Insets* overscan_insets,
+                               const gfx::Size& resolution_in_pixels,
+                               float device_scale_factor);
 
   // Register stored rotation properties for the internal display.
   void RegisterDisplayRotationProperties(bool rotation_lock,
@@ -211,21 +234,21 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     return registered_internal_display_rotation_;
   }
 
-  // Returns the display mode of |display_id| which is currently used.
-  scoped_refptr<ManagedDisplayMode> GetActiveModeForDisplayId(
-      int64_t display_id) const;
+  // Fills in the display |mode| currently in use in |display_id| if found,
+  // returning true in that case, otherwise false.
+  bool GetActiveModeForDisplayId(int64_t display_id,
+                                 ManagedDisplayMode* mode) const;
 
-  // Returns the display's selected mode.
-  scoped_refptr<ManagedDisplayMode> GetSelectedModeForDisplayId(
-      int64_t display_id) const;
+  // Returns true and fills in the display's selected |mode| if found, or false.
+  bool GetSelectedModeForDisplayId(int64_t display_id,
+                                   ManagedDisplayMode* mode) const;
 
   // Sets the selected mode of |display_id| to |display_mode| if it's a
   // supported mode. This doesn't trigger reconfiguration or observers
   // notifications. This is suitable to be used from within an observer
   // notification to prevent reentrance to UpdateDisplaysWith().
-  void SetSelectedModeForDisplayId(
-      int64_t display_id,
-      const scoped_refptr<ManagedDisplayMode>& display_mode);
+  void SetSelectedModeForDisplayId(int64_t display_id,
+                                   const ManagedDisplayMode& display_mode);
 
   // Tells if the virtual resolution feature is enabled.
   bool IsDisplayUIScalingEnabled() const;
@@ -277,12 +300,30 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // mirrored.
   size_t num_connected_displays() const { return num_connected_displays_; }
 
-  // Returns the mirroring status.
+  // Returns true if either software or hardware mirror mode is active.
   bool IsInMirrorMode() const;
-  int64_t mirroring_display_id() const { return mirroring_display_id_; }
+
+  // Returns true if software mirror mode is active. Note that when
+  // SoftwareMirroringEnabled() returns true, it only means software mirroring
+  // mode is requested, but it does not guarantee that the mode is active. The
+  // mode will be active after UpdateDisplaysWith() is called.
+  bool IsInSoftwareMirrorMode() const;
+
+  // Returns true if hardware mirror mode is active.
+  bool IsInHardwareMirrorMode() const;
+
+  int64_t mirroring_source_id() const { return mirroring_source_id_; }
+
+  // Returns a list of mirroring destination display ids.
+  DisplayIdList GetMirroringDestinationDisplayIdList() const;
+
   const Displays& software_mirroring_display_list() const {
     return software_mirroring_display_list_;
   }
+
+  // Remove mirroring source and destination displays, so that they will be
+  // updated when UpdateDisplaysWith() is called.
+  void ClearMirroringSourceAndDestination();
 
   // Sets/gets if the unified desktop feature is enabled.
   void SetUnifiedDesktopEnabled(bool enabled);
@@ -290,6 +331,24 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Returns true if it's in unified desktop mode.
   bool IsInUnifiedMode() const;
+
+  // Sets the Unified Desktop layout using the given |matrix| and sets the
+  // current mode to Unified Desktop.
+  void SetUnifiedDesktopMatrix(const UnifiedDesktopLayoutMatrix& matrix);
+
+  // In Unified Desktop mode, we consider the first mirroring display to be the
+  // primary. It's also the top-left display in the layout matrix, and it's
+  // where the shelf is placed.
+  // This returns nullptr if we're not in unified desktop mode.
+  const Display* GetPrimaryMirroringDisplayForUnifiedDesktop() const;
+
+  // Returns the index of the row in the Unified Mode layout matrix which
+  // contains the display with |display_id|.
+  int GetMirroringDisplayRowIndexInUnifiedMatrix(int64_t display_id) const;
+
+  // Returns the maximum display height of the row with |row_index| in the
+  // Unified Mode layout matrix.
+  int GetUnifiedDesktopRowMaxHeight(int row_index) const;
 
   // Returns the display used for software mirrroring. Returns invalid display
   // if not found.
@@ -322,8 +381,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   void SetTouchCalibrationData(
       int64_t display_id,
       const TouchCalibrationData::CalibrationPointPairQuad& point_pair_quad,
-      const gfx::Size& display_bounds);
-  void ClearTouchCalibrationData(int64_t display_id);
+      const gfx::Size& display_bounds,
+      const TouchDeviceIdentifier& touch_device_identifier);
+  void ClearTouchCalibrationData(
+      int64_t display_id,
+      base::Optional<TouchDeviceIdentifier> touch_device_identifier);
 #endif
 
   // Sets/gets default multi display mode.
@@ -387,10 +449,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     DISALLOW_COPY_AND_ASSIGN(BeginEndNotifier);
   };
 
-  bool software_mirroring_enabled() const {
-    return multi_display_mode_ == MIRRORING;
-  }
-
   void set_change_display_upon_host_resize(bool value) {
     change_display_upon_host_resize_ = value;
   }
@@ -399,10 +457,13 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // mirror the content is removed from the |display_info_list|.
   void CreateSoftwareMirroringDisplayInfo(DisplayInfoList* display_info_list);
 
+  // Same as above but for Unified Desktop.
+  void CreateUnifiedDesktopDisplayInfo(DisplayInfoList* display_info_list);
+
   Display* FindDisplayForId(int64_t id);
 
   // Add the mirror display's display info if the software based mirroring is in
-  // use.
+  // use. This should only be called before UpdateDisplaysWith().
   void AddMirrorDisplayInfoIfAny(DisplayInfoList* display_info_list);
 
   // Inserts and update the ManagedDisplayInfo according to the overscan state.
@@ -454,6 +515,13 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   std::unique_ptr<DisplayLayout> current_resolved_layout_;
 
+  // The matrix that's used to layout the displays in Unified Desktop mode.
+  UnifiedDesktopLayoutMatrix current_unified_desktop_matrix_;
+
+  std::map<int64_t, int> mirroring_display_id_to_unified_matrix_row_;
+
+  std::vector<int> unified_display_rows_heights_;
+
   int64_t first_display_id_ = kInvalidDisplayId;
 
   // List of current active displays.
@@ -476,7 +544,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   std::map<int64_t, ManagedDisplayInfo> display_info_;
 
   // Selected display modes for displays. Key is the displays' ID.
-  std::map<int64_t, scoped_refptr<ManagedDisplayMode>> display_modes_;
+  std::map<int64_t, ManagedDisplayMode> display_modes_;
 
   // When set to true, the host window's resize event updates the display's
   // size. This is set to true when running on desktop environment (for
@@ -487,8 +555,24 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   MultiDisplayMode multi_display_mode_ = EXTENDED;
   MultiDisplayMode current_default_multi_display_mode_ = EXTENDED;
 
-  int64_t mirroring_display_id_ = kInvalidDisplayId;
+  // This is used in two distinct ways:
+  // 1. The source display id when software mirroring is active.
+  // 2. There's no source and destination display in hardware mirroring, so we
+  // treat the first mirroring display id as source id when hardware mirroring
+  // is active.
+  int64_t mirroring_source_id_ = kInvalidDisplayId;
+
+  // This is used in two distinct ways:
+  // 1. when software mirroring is active this contains the destination
+  // displays.
+  // 2. when unified mode is enabled this is the set of physical displays.
   Displays software_mirroring_display_list_;
+
+  // There's no source and destination display in hardware mirroring, so we
+  // treat the first mirroring display as source and store its id in
+  // |mirroring_source_id_| and treat the rest of mirroring displays as
+  // destination and store their ids in this list.
+  DisplayIdList hardware_mirroring_display_id_list_;
 
   // Cached mirror mode for metrics changed notification.
   bool mirror_mode_for_metrics_ = false;
@@ -507,10 +591,19 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   base::ObserverList<DisplayObserver> observers_;
 
+  display::mojom::DevDisplayControllerPtr dev_display_controller_;
+
   // This is incremented whenever a BeginEndNotifier is created and decremented
   // when destroyed. BeginEndNotifier uses this to track when it should call
   // OnWillProcessDisplayChanges() and OnDidProcessDisplayChanges().
   int notify_depth_ = 0;
+
+#if defined(OS_CHROMEOS)
+  std::unique_ptr<TouchDeviceManager> touch_device_manager_;
+#endif
+
+  // Whether mirroring across multiple displays is enabled.
+  bool is_multi_mirroring_enabled_;
 
   base::WeakPtrFactory<DisplayManager> weak_ptr_factory_;
 

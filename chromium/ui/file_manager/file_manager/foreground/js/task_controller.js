@@ -418,13 +418,8 @@ TaskController.prototype.canExecuteMoreActions = function() {
  */
 TaskController.prototype.updateContextMenuTaskItems_ = function(
     openTasks, nonOpenTasks) {
-  // Always show a default item in case at least one task is available, even
-  // if there is no corresponding default task (i.e. the available task is
-  // a generic handler).
-  if (openTasks.length >= 1) {
-    var defaultTask = FileTasks.getDefaultTask(
-        openTasks, openTasks[0] /* task to use in case of no default */);
-
+  var defaultTask = FileTasks.getDefaultTask(openTasks, this.taskHistory_);
+  if (defaultTask) {
     if (defaultTask.iconType) {
       this.ui_.fileContextMenu.defaultTaskMenuItem.style.backgroundImage = '';
       this.ui_.fileContextMenu.defaultTaskMenuItem.setAttribute(
@@ -436,15 +431,18 @@ TaskController.prototype.updateContextMenuTaskItems_ = function(
       this.ui_.fileContextMenu.defaultTaskMenuItem.style.backgroundImage = '';
     }
 
-    this.ui_.fileContextMenu.defaultTaskMenuItem.label =
-        defaultTask.taskId === FileTasks.ZIP_UNPACKER_TASK_ID ?
-        str('TASK_OPEN') : defaultTask.title;
+    if (defaultTask.taskId === FileTasks.ZIP_UNPACKER_TASK_ID ||
+        defaultTask.taskId === FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID)
+      this.ui_.fileContextMenu.defaultTaskMenuItem.label = str('TASK_OPEN');
+    else
+      this.ui_.fileContextMenu.defaultTaskMenuItem.label = defaultTask.title;
+
     this.ui_.fileContextMenu.defaultTaskMenuItem.disabled =
         !!defaultTask.disabled;
     this.ui_.fileContextMenu.defaultTaskMenuItem.taskId = defaultTask.taskId;
   }
 
-  this.canExecuteDefaultTask_ = openTasks.length >= 1;
+  this.canExecuteDefaultTask_ = defaultTask != null;
   this.defaultTaskCommand_.canExecuteChange(this.ui_.listContainer.element);
 
   this.canExecuteOpenActions_ = openTasks.length > 1;

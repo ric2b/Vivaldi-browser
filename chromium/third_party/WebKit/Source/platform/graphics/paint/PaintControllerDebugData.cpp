@@ -6,6 +6,8 @@
 
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 
+#if DCHECK_IS_ON()
+
 namespace blink {
 
 class PaintController::DisplayItemListAsJSON {
@@ -74,8 +76,8 @@ PaintController::DisplayItemListAsJSON::SubsequenceAsJSONObjectRecursive() {
 
   json_object->SetString("subsequence", ClientName(*subsequence.client));
   json_object->SetArray(
-      RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ? "chunks"
-                                                       : "displayItems",
+      RuntimeEnabledFeatures::SlimmingPaintV175Enabled() ? "chunks"
+                                                         : "displayItems",
       SubsequenceAsJSONArrayRecursive(subsequence.start, subsequence.end));
 
   return json_object;
@@ -112,7 +114,7 @@ void PaintController::DisplayItemListAsJSON::AppendSubsequenceAsJSON(
     JSONArray& json_array) {
   DCHECK(end_item > start_item);
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     list_.AppendSubsequenceAsJSON(start_item, end_item, flags_, json_array);
     return;
   }
@@ -127,12 +129,8 @@ void PaintController::DisplayItemListAsJSON::AppendSubsequenceAsJSON(
 
     String chunk_name = ClientName(chunk.id.client);
     if (chunk.id.type != DisplayItem::kUninitializedType) {
-#ifndef NDEBUG
       chunk_name.append(" type: ");
       chunk_name.append(DisplayItem::TypeAsDebugString(chunk.id.type));
-#else
-      chunk_name.append(String::Format(" type: %d", chunk.id.type));
-#endif
     }
     json_object->SetString("chunk", chunk_name);
 
@@ -147,53 +145,43 @@ void PaintController::DisplayItemListAsJSON::AppendSubsequenceAsJSON(
 
 String PaintController::DisplayItemListAsJSON::ClientName(
     const DisplayItemClient& client) const {
-  bool show_client_debug_name = flags_ & DisplayItemList::kShowClientDebugName;
-#if DCHECK_IS_ON()
-  if (client.IsAlive())
-    show_client_debug_name = true;
-#endif
-  String result = String::Format("client: %p", &client);
-  if (show_client_debug_name) {
-    result.append(' ');
-    result.append(client.DebugName());
-  }
-  return result;
+  return String::Format("client: %p ", &client) +
+         DisplayItemClient::SafeDebugName(
+             client, flags_ & DisplayItemList::kClientKnownToBeAlive);
 }
 
-void PaintController::ShowDebugDataInternal(bool show_paint_records) const {
-  DisplayItemList::JsonFlags flags =
-      show_paint_records ? DisplayItemList::JsonOptions::kShowPaintRecords
-                         : DisplayItemList::JsonOptions::kDefault;
+void PaintController::ShowDebugDataInternal(
+    DisplayItemList::JsonFlags flags) const {
+  LOG(ERROR) << "current display item list: "
+             << DisplayItemListAsJSON(
+                    current_paint_artifact_.GetDisplayItemList(),
+                    current_cached_subsequences_,
+                    current_paint_artifact_.PaintChunks(), flags)
+                    .ToString()
+                    .Utf8()
+                    .data();
 
-  WTFLogAlways(
-      "current display item list: %s\n",
-      DisplayItemListAsJSON(current_paint_artifact_.GetDisplayItemList(),
-                            current_cached_subsequences_,
-                            current_paint_artifact_.PaintChunks(), flags)
-          .ToString()
-          .Utf8()
-          .data());
-  // DebugName() and ClientCacheIsValid() can only be called on a live client,
-  // so only output it for new_display_item_list_, in which we are sure the
-  // clients are all alive.
-  WTFLogAlways(
-      "new display item list: %s\n",
-      DisplayItemListAsJSON(new_display_item_list_, new_cached_subsequences_,
-                            new_paint_chunks_.PaintChunks(),
-                            flags | DisplayItemList::kShowClientDebugName)
-          .ToString()
-          .Utf8()
-          .data());
+  LOG(ERROR) << "new display item list: "
+             << DisplayItemListAsJSON(
+                    new_display_item_list_, new_cached_subsequences_,
+                    new_paint_chunks_.PaintChunks(),
+                    // The clients in new_display_item_list_ are all alive.
+                    flags | DisplayItemList::kClientKnownToBeAlive)
+                    .ToString()
+                    .Utf8()
+                    .data();
 }
 
 void PaintController::ShowDebugData() const {
-  return ShowDebugDataInternal(false);
+  return ShowDebugDataInternal(DisplayItemList::kDefault);
 }
 
 #ifndef NDEBUG
 void PaintController::ShowDebugDataWithRecords() const {
-  return ShowDebugDataInternal(true);
+  return ShowDebugDataInternal(DisplayItemList::kShowPaintRecords);
 }
 #endif
 
 }  // namespace blink
+
+#endif  // DCHECK_IS_ON()

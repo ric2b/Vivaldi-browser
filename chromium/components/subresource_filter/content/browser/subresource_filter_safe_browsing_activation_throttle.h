@@ -15,7 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing/db/database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
@@ -51,7 +51,6 @@ class SubresourceFilterSafeBrowsingActivationThrottle
   static bool NavigationIsPageReload(content::NavigationHandle* handle);
 
   // content::NavigationThrottle:
-  content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
   content::NavigationThrottle::ThrottleCheckResult WillRedirectRequest()
       override;
   content::NavigationThrottle::ThrottleCheckResult WillProcessResponse()
@@ -65,7 +64,8 @@ class SubresourceFilterSafeBrowsingActivationThrottle
   void CheckCurrentUrl();
   void NotifyResult();
 
-  ActivationDecision ComputeActivation(Configuration* configuration);
+  ActivationDecision ComputeActivation(ActivationList matched_list,
+                                       Configuration* configuration);
 
   // Returns whether a main-frame navigation to the given |url| satisfies the
   // activation |conditions| of a given configuration, except for |priority|.
@@ -73,10 +73,10 @@ class SubresourceFilterSafeBrowsingActivationThrottle
       const GURL& url,
       bool scheme_is_http_or_https,
       const Configuration::ActivationConditions& conditions,
-      ActivationList matched_list,
-      bool experimental_list) const;
+      ActivationList matched_list) const;
 
   std::vector<SubresourceFilterSafeBrowsingClient::CheckResult> check_results_;
+  std::vector<base::TimeTicks> check_start_times_;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
@@ -94,9 +94,6 @@ class SubresourceFilterSafeBrowsingActivationThrottle
   // Whether this throttle is deferring the navigation. Only set to true in
   // WillProcessResponse if there are ongoing safe browsing checks.
   bool deferring_ = false;
-
-  // Added to investigate crbug.com/733099.
-  bool will_start_request_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterSafeBrowsingActivationThrottle);
 };

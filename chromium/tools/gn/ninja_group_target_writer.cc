@@ -15,8 +15,7 @@ NinjaGroupTargetWriter::NinjaGroupTargetWriter(const Target* target,
     : NinjaTargetWriter(target, out) {
 }
 
-NinjaGroupTargetWriter::~NinjaGroupTargetWriter() {
-}
+NinjaGroupTargetWriter::~NinjaGroupTargetWriter() = default;
 
 void NinjaGroupTargetWriter::Run() {
   if (target_->is_disabled())

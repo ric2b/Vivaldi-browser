@@ -31,10 +31,10 @@
 #ifndef WebSocketHandshakeRequest_h
 #define WebSocketHandshakeRequest_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -45,15 +45,15 @@ class HTTPHeaderMap;
 class PLATFORM_EXPORT WebSocketHandshakeRequest final
     : public RefCounted<WebSocketHandshakeRequest> {
  public:
-  static PassRefPtr<WebSocketHandshakeRequest> Create(const KURL& url) {
-    return AdoptRef(new WebSocketHandshakeRequest(url));
+  static scoped_refptr<WebSocketHandshakeRequest> Create(const KURL& url) {
+    return base::AdoptRef(new WebSocketHandshakeRequest(url));
   }
-  static PassRefPtr<WebSocketHandshakeRequest> Create() {
-    return AdoptRef(new WebSocketHandshakeRequest);
+  static scoped_refptr<WebSocketHandshakeRequest> Create() {
+    return base::AdoptRef(new WebSocketHandshakeRequest);
   }
-  static PassRefPtr<WebSocketHandshakeRequest> Create(
+  static scoped_refptr<WebSocketHandshakeRequest> Create(
       const WebSocketHandshakeRequest& request) {
-    return AdoptRef(new WebSocketHandshakeRequest(request));
+    return base::AdoptRef(new WebSocketHandshakeRequest(request));
   }
   virtual ~WebSocketHandshakeRequest();
 

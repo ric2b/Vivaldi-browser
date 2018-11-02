@@ -12,7 +12,6 @@
 #include "base/files/memory_mapped_file.h"
 #include "base/hash.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/single_thread_task_runner.h"
@@ -211,8 +210,7 @@ SimpleIndexLoadResult::SimpleIndexLoadResult()
       index_write_reason(SimpleIndex::INDEX_WRITE_REASON_MAX),
       flush_required(false) {}
 
-SimpleIndexLoadResult::~SimpleIndexLoadResult() {
-}
+SimpleIndexLoadResult::~SimpleIndexLoadResult() = default;
 
 void SimpleIndexLoadResult::Reset() {
   did_load = false;
@@ -255,13 +253,11 @@ void SimpleIndexFile::IndexMetadata::Serialize(base::Pickle* pickle) const {
 }
 
 // static
-bool SimpleIndexFile::SerializeFinalData(base::Time cache_modified,
+void SimpleIndexFile::SerializeFinalData(base::Time cache_modified,
                                          base::Pickle* pickle) {
-  if (!pickle->WriteInt64(cache_modified.ToInternalValue()))
-    return false;
+  pickle->WriteInt64(cache_modified.ToInternalValue());
   SimpleIndexFile::PickleHeader* header_p = pickle->headerT<PickleHeader>();
   header_p->crc = CalculatePickleCRC(*pickle);
-  return true;
 }
 
 bool SimpleIndexFile::IndexMetadata::Deserialize(base::PickleIterator* it) {
@@ -314,9 +310,6 @@ void SimpleIndexFile::SyncWriteToDisk(net::CacheType cache_type,
   }
 
   // Atomically rename the temporary index file to become the real one.
-  // TODO(gavinp): DCHECK when not shutting down, since that is very strange.
-  // The rename failing during shutdown is legal because it's legal to begin
-  // erasing a cache as soon as the destructor has been called.
   if (!base::ReplaceFile(temp_index_filename, index_filename, NULL))
     return;
 
@@ -359,7 +352,7 @@ SimpleIndexFile::SimpleIndexFile(
       temp_index_file_(cache_directory_.AppendASCII(kIndexDirectory)
                            .AppendASCII(kTempIndexFileName)) {}
 
-SimpleIndexFile::~SimpleIndexFile() {}
+SimpleIndexFile::~SimpleIndexFile() = default;
 
 void SimpleIndexFile::LoadIndexEntries(base::Time cache_last_modified,
                                        const base::Closure& callback,

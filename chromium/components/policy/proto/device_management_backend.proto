@@ -112,7 +112,10 @@ message DeviceRegisterRequest {
     // mechanism.
     FLAVOR_ENROLLMENT_ATTESTATION = 8;
     // Forced attestation-based enrollment (cannot fallback to another flavor).
-    FLAVOR_ENROLLMENT_ATTESTATION_FORCED = 9;
+    FLAVOR_ENROLLMENT_ATTESTATION_LOCAL_FORCED = 9;
+    // Device state downloaded from the server during OOBE indicates that
+    // (re-)enrollment is mandatory and should be attestation-based.
+    FLAVOR_ENROLLMENT_ATTESTATION_SERVER_FORCED = 10;
   };
 
   // Indicates the registration flavor. This is passed to the server FYI when
@@ -270,6 +273,15 @@ message PolicyFetchRequest {
   // have the key which matches this hash string, that could indicate malicious
   // or out-of-date Chrome client.
   optional string verification_key_hash = 9;
+
+  // Encoded information from a policy invalidation notification. This is opaque
+  // to the client and should be forwarded from the invalidation notification.
+  optional string policy_invalidation_info = 10;
+
+  // Whether or not the client only supports the new PolicyData invalidation
+  // topics. If true, only the policy_invalidation_topic and
+  // command_invalidation_topic fields will be set in the PolicyData response.
+  optional bool invalidation_topics_only = 11;
 }
 
 // This message customizes how the device behaves when it is disabled by its
@@ -347,7 +359,8 @@ message PolicyData {
   optional string username = 7;
 
   // In this field the DMServer should echo back the "deviceid" HTTP parameter
-  // from the request.
+  // from the request. This is also used for user and device local accounts ids,
+  // see client_id in code.
   optional string device_id = 8;
 
   // Indicates which state this association with DMServer is in. This can be
@@ -445,6 +458,15 @@ message PolicyData {
   // Used as the display domain when the primary domain gets renamed. This field
   // is present only for device policies.
   optional string display_domain = 25;
+
+  // Invalidation topic for devices. Clients register for FCM messages using
+  // this topic in order to receive notifications for device policy changes.
+  optional string policy_invalidation_topic = 26;
+
+  // Invalidation topic for commands. Clients register for FCM messages using
+  // this topic in order to receive notifications that one or more commands are
+  // available for execution.
+  optional string command_invalidation_topic = 27;
 }
 
 message PolicyFetchResponse {
@@ -898,6 +920,8 @@ message DeviceStateRetrievalResponse {
     // The device has been disabled by its owner. The device will show a warning
     // screen and prevent the user from proceeding further.
     RESTORE_MODE_DISABLED = 3;
+    // Enterprise enrollment is enforced using Zero-Touch and cannot be skipped.
+    RESTORE_MODE_REENROLLMENT_ZERO_TOUCH = 4;
   };
   // The server-indicated restore mode.
   optional RestoreMode restore_mode = 1 [default = RESTORE_MODE_NONE];
@@ -1164,6 +1188,9 @@ message CertificateBasedDeviceRegistrationData {
   optional DeviceRegisterRequest device_register_request = 3;
 }
 
+// Request to enroll a Chrome browser.
+message BrowserRegisterRequest {}
+
 // Gets an enrollment token to a managed Google Play account for using it with
 // Active Directory. Sent when a new user logs in with Active Directory and
 // opens Play Store for the first time.
@@ -1252,6 +1279,20 @@ message CheckDeviceLicenseResponse {
   repeated LicenseAvailability license_availability = 2;
 }
 
+// Sign in an Active Directory user using SAML SSO. The device management server
+// redirects the client to the Active Directory server in order to authenticate
+// and identify the Active Directory user. Active Directory redirects the client
+// back to the device management server with an assertion of the Active
+// Directory user's identity. The device management server then redirects the
+// client to Google's authentication service in order to provision the user on
+// the device.
+message ActiveDirectoryUserSigninRequest {}
+
+message ActiveDirectoryUserSigninResponse {
+  // Initial Redirect URL to start the SAML flow.
+  optional string auth_redirect_url = 1;
+}
+
 // Contains information about the TPM used on the device.
 message TpmVersionInfo {
   optional uint32 family = 1;
@@ -1291,20 +1332,25 @@ message TpmVersionInfo {
 //     * active_directory_enroll_play_user
 //     * active_directory_play_activity
 //     * check_device_license
-//
-//   * devicetype: MUST BE "1" for Android or "2" for Chrome OS.
+//     * active_directory_user_signin
+//     * browser_register
+//   * devicetype: MUST BE "1" for Android, "2" for Chrome OS or "3" for Chrome
+//     browser.
 //   * apptype: MUST BE Android or Chrome.
 //   * deviceid: MUST BE no more than 64-char in [\x21-\x7E].
 //   * agent: MUST BE no more than 64-char long.
 // * HTTP Authorization header MUST be in the following formats:
 //   * For register, ping, check_android_management and
-//     check_device_license requests
+//     check_device_license requests with user authentication
 //     Authorization: GoogleLogin auth=<auth cookie for Mobile Sync>
 //
+//   * For register for Chrome browsers
+//     Authorization: GoogleEnrollmentToken token=<enrollment token>
+//
 //   * For unregister, policy, status, cert_upload, remote_commands,
-//     gcm_id_update, active_directory_enroll_play_user and
-//     active_directory_play_activity requests
-//      Authorization: GoogleDMToken token=<dm token from register>
+//     gcm_id_update, active_directory_enroll_play_user,
+//     active_directory_play_activity, and active_directory_user_signin requests
+//     Authorization: GoogleDMToken token=<dm token from register>
 //
 //   * The Authorization header isn't used for enterprise_check or for
 //     certificate_based_register requests, nor for register requests
@@ -1334,6 +1380,8 @@ message TpmVersionInfo {
 //       active_directory_enroll_play_user_request
 //   active_directory_play_activity: active_directory_play_activity_request
 //   check_device_license: check_device_license_request
+//   active_directory_user_signin: active_directory_user_signin_request
+//   browser_register: browser_register_request
 //
 message DeviceManagementRequest {
   // Register request.
@@ -1378,8 +1426,7 @@ message DeviceManagementRequest {
       device_attribute_update_permission_request = 14;
 
   // Update device attribute.
-  optional DeviceAttributeUpdateRequest device_attribute_update_request
-      = 15;
+  optional DeviceAttributeUpdateRequest device_attribute_update_request = 15;
 
   // Update the GCM id to device_id mapping.
   optional GcmIdUpdateRequest gcm_id_update_request = 16;
@@ -1402,6 +1449,13 @@ message DeviceManagementRequest {
 
   // Request device license information.
   optional CheckDeviceLicenseRequest check_device_license_request = 21;
+
+  // Initiate an Active Directory user signin.
+  optional ActiveDirectoryUserSigninRequest
+      active_directory_user_signin_request = 22;
+
+  // Request to register a browser independently of its users.
+  optional BrowserRegisterRequest browser_register_request = 23;
 }
 
 // Response from server to device.
@@ -1518,4 +1572,8 @@ message DeviceManagementResponse {
 
   // Response to a check device license request.
   optional CheckDeviceLicenseResponse check_device_license_response = 21;
+
+  // Response to a request initiating an Active Directory user signin.
+  optional ActiveDirectoryUserSigninResponse
+      active_directory_user_signin_response = 22;
 }

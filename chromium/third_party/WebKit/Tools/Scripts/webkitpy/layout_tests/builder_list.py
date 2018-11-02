@@ -30,26 +30,42 @@
 
 This class is used to hold a list of builder bots running layout tests and their
 corresponding port names and TestExpectations specifiers.
-
-The actual constants are in webkitpy.common.config.builders.
 """
+
+import json
+
+from webkitpy.common.path_finder import PathFinder
 
 
 class BuilderList(object):
 
     def __init__(self, builders_dict):
-        """The given dictionary maps builder names to dicts with the keys:
+        """Creates and validates a builders list.
+
+        The given dictionary maps builder names to dicts with the keys:
             "port_name": A fully qualified port name.
             "specifiers": A two-item list: [version specifier, build type specifier].
                 Valid values for the version specifier can be found in
                 TestExpectationsParser._configuration_tokens_list, and valid
                 values for the build type specifier include "Release" and "Debug".
+            "is_try_builder": Whether the builder is a try bot.
 
         Possible refactoring note: Potentially, it might make sense to use
         webkitpy.common.buildbot.Builder and add port_name and specifiers
         properties to that class.
         """
         self._builders = builders_dict
+        for builder in builders_dict:
+            assert 'port_name' in builders_dict[builder]
+            assert len(builders_dict[builder]['specifiers']) == 2
+
+    @staticmethod
+    def load_default_builder_list(filesystem):
+        """Loads the set of builders from a JSON file and returns the BuilderList."""
+        path = PathFinder(filesystem).path_from_tools_scripts(
+            'webkitpy', 'common', 'config', 'builders.json')
+        contents = filesystem.read_text_file(path)
+        return BuilderList(json.loads(contents))
 
     def all_builder_names(self):
         return sorted(self._builders)
@@ -68,6 +84,9 @@ class BuilderList(object):
 
     def specifiers_for_builder(self, builder_name):
         return self._builders[builder_name]['specifiers']
+
+    def platform_specifier_for_builder(self, builder_name):
+        return self.specifiers_for_builder(builder_name)[0]
 
     def builder_name_for_port_name(self, target_port_name):
         """Returns a builder name for the given port name.

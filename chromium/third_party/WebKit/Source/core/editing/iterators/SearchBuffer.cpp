@@ -28,6 +28,7 @@
 #include "core/editing/iterators/SearchBuffer.h"
 
 #include "core/dom/Document.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/iterators/SimplifiedBackwardsTextIterator.h"
 #include "core/editing/iterators/TextSearcherICU.h"
@@ -83,7 +84,7 @@ inline SearchBuffer::SearchBuffer(const String& target, FindOptions options)
     }
   }
 
-  text_searcher_ = WTF::MakeUnique<TextSearcherICU>();
+  text_searcher_ = std::make_unique<TextSearcherICU>();
   text_searcher_->SetPattern(StringView(target_.data(), target_.size()),
                              !(options_ & kCaseInsensitive));
 

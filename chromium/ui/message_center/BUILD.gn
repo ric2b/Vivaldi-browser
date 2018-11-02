@@ -18,7 +18,6 @@ aggregate_vector_icons("message_center_vector_icons") {
     "notification_expand_more.icon",
     "notification_settings_button.1x.icon",
     "notification_settings_button.icon",
-    "product.1x.icon",
     "product.icon",
   ]
 }
@@ -28,6 +27,7 @@ component("message_center") {
   deps = [
     "//base",
     "//ui/base",
+    "//ui/message_center/public/cpp",
     "//ui/strings",
     "//url",
   ]
@@ -57,6 +57,8 @@ component("message_center") {
       "//build/config/compiler:no_size_t_to_int_warning",
     ]
     sources = [
+      "change_queue.cc",
+      "change_queue.h",
       "cocoa/notification_controller.h",
       "cocoa/notification_controller.mm",
       "cocoa/opaque_views.h",
@@ -73,11 +75,6 @@ component("message_center") {
       "message_center_observer.h",
       "message_center_style.cc",
       "message_center_style.h",
-      "message_center_switches.cc",
-      "message_center_switches.h",
-      "message_center_tray.cc",
-      "message_center_tray.h",
-      "message_center_tray_delegate.h",
       "message_center_types.h",
       "notification.cc",
       "notification.h",
@@ -89,12 +86,15 @@ component("message_center") {
       "notification_list.h",
       "notification_types.cc",
       "notification_types.h",
-      "notifier_settings.cc",
-      "notifier_settings.h",
+      "notifier_id.cc",
+      "notifier_id.h",
       "popup_timer.cc",
       "popup_timer.h",
       "popup_timers_controller.cc",
       "popup_timers_controller.h",
+      "ui_controller.cc",
+      "ui_controller.h",
+      "ui_delegate.h",
     ]
 
     sources += get_target_outputs(":message_center_vector_icons")
@@ -117,25 +117,18 @@ component("message_center") {
     # with message_center_unittests below.
     if (toolkit_views && !is_mac) {
       sources += [
-        "notification_delegate_views.cc",
         "views/bounded_label.cc",
         "views/bounded_label.h",
         "views/constants.h",
         "views/desktop_popup_alignment_delegate.cc",
         "views/desktop_popup_alignment_delegate.h",
-        "views/message_center_button_bar.cc",
-        "views/message_center_button_bar.h",
-        "views/message_center_controller.h",
-        "views/message_center_view.cc",
-        "views/message_center_view.h",
-        "views/message_list_view.cc",
-        "views/message_list_view.h",
         "views/message_popup_collection.cc",
         "views/message_popup_collection.h",
         "views/message_view.cc",
         "views/message_view.h",
         "views/message_view_context_menu_controller.cc",
         "views/message_view_context_menu_controller.h",
+        "views/message_view_delegate.h",
         "views/message_view_factory.cc",
         "views/message_view_factory.h",
         "views/notification_button.cc",
@@ -144,12 +137,12 @@ component("message_center") {
         "views/notification_control_buttons_view.h",
         "views/notification_header_view.cc",
         "views/notification_header_view.h",
+        "views/notification_menu_model.cc",
+        "views/notification_menu_model.h",
         "views/notification_view.cc",
         "views/notification_view.h",
         "views/notification_view_md.cc",
         "views/notification_view_md.h",
-        "views/notifier_settings_view.cc",
-        "views/notifier_settings_view.h",
         "views/padded_button.cc",
         "views/padded_button.h",
         "views/popup_alignment_delegate.cc",
@@ -182,8 +175,8 @@ component("message_center") {
       sources += [
         "notification.cc",
         "notification.h",
-        "notifier_settings.cc",
-        "notifier_settings.h",
+        "notifier_id.cc",
+        "notifier_id.h",
       ]
     }
   }
@@ -196,8 +189,8 @@ if (enable_message_center) {
     sources = [
       "fake_message_center.cc",
       "fake_message_center.h",
-      "fake_message_center_tray_delegate.cc",
-      "fake_message_center_tray_delegate.h",
+      "fake_ui_delegate.cc",
+      "fake_ui_delegate.h",
     ]
 
     deps = [
@@ -215,15 +208,15 @@ if (enable_message_center) {
 
   test("message_center_unittests") {
     sources = [
+      "change_queue_unittest.cc",
       "cocoa/notification_controller_unittest.mm",
       "cocoa/popup_collection_unittest.mm",
       "cocoa/popup_controller_unittest.mm",
       "message_center_impl_unittest.cc",
-      "message_center_tray_unittest.cc",
-      "mojo/struct_traits_unittest.cc",
       "notification_delegate_unittest.cc",
       "notification_list_unittest.cc",
       "test/run_all_unittests.cc",
+      "ui_controller_unittest.cc",
     ]
 
     deps = [
@@ -231,7 +224,6 @@ if (enable_message_center) {
       ":test_support",
       "//base",
       "//base/test:test_support",
-      "//mojo/edk/system",
       "//skia",
       "//testing/gmock",
       "//testing/gtest",
@@ -244,7 +236,7 @@ if (enable_message_center) {
       "//ui/gfx/geometry",
       "//ui/gl",
       "//ui/gl:test_support",
-      "//ui/message_center/mojo:test_interfaces",
+      "//ui/message_center/public/cpp",
       "//ui/resources",
       "//ui/resources:ui_test_pak",
       "//url",
@@ -255,6 +247,14 @@ if (enable_message_center) {
       "//ui/resources:ui_test_pak_data",
     ]
 
+    if (is_chromeos) {
+      sources += [ "mojo/struct_traits_unittest.cc" ]
+      deps += [
+        "//mojo/edk/system",
+        "//ui/message_center/mojo:test_interfaces",
+      ]
+    }
+
     if (is_mac) {
       deps += [ "//ui/gfx:test_support" ]
     }
@@ -262,12 +262,10 @@ if (enable_message_center) {
     if (toolkit_views && !is_mac) {
       sources += [
         "views/bounded_label_unittest.cc",
-        "views/message_center_view_unittest.cc",
-        "views/message_list_view_unittest.cc",
         "views/message_popup_collection_unittest.cc",
+        "views/notification_menu_model_unittest.cc",
         "views/notification_view_md_unittest.cc",
         "views/notification_view_unittest.cc",
-        "views/notifier_settings_view_unittest.cc",
       ]
       deps += [
         # Compositor is needed by message_center_view_unittest.cc and for the

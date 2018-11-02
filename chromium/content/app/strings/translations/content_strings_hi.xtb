@@ -105,7 +105,7 @@
 <translation id="5641012560118721995">प्लेबैक रोकें</translation>
 <translation id="5643186887447432888">बटन</translation>
 <translation id="5677946354068040947">अधिक विकल्प</translation>
-<translation id="57838592816432529">आवाज़ बंद करें</translation>
+<translation id="57838592816432529">म्यूट करें</translation>
 <translation id="5860033963881614850">बंद</translation>
 <translation id="588258955323874662">पूर्णस्‍क्रीन</translation>
 <translation id="5888666972993069672">अब <ph name="DEVICE_FRIENDLY_NAME" /> पर कास्ट किया जा रहा है</translation>
@@ -119,6 +119,7 @@
 <translation id="6398862346408813489">माह चयन फलक दिखाएं</translation>
 <translation id="6404546809543547843">ऑडियो समय स्क्रबर</translation>
 <translation id="648732519525291180">समय पिकर</translation>
+<translation id="6550675742724504774">विकल्प</translation>
 <translation id="658823671542763450">पूर्ण स्क्रीन में प्रवेश करें</translation>
 <translation id="663493177488814956">फ़ीड</translation>
 <translation id="6637586476836377253">लॉग</translation>
@@ -128,7 +129,7 @@
 <translation id="6755330956360078551">टूलटिप</translation>
 <translation id="6790428901817661496">चलाएं</translation>
 <translation id="6820355525329141109">प्लग इन लोड नहीं किया जा सका.</translation>
-<translation id="6843725295806269523">आवाज़ बंद करें</translation>
+<translation id="6843725295806269523">म्यूट करें</translation>
 <translation id="6853785296079745596">बंद कैप्शन छिपाएं</translation>
 <translation id="6885760532393684712">निर्देशिका</translation>
 <translation id="6934078000481955284">ब्लॉककोट</translation>
@@ -163,7 +164,6 @@
 <translation id="8451268428117625855">कृपया किसी फ़ाइल को चुनें.</translation>
 <translation id="8461852803063341183">रेडियो बटन</translation>
 <translation id="8511325616783751178">ड्रॉप डाउन बटन</translation>
-<translation id="8519420564908284378">दोनों स्क्रीन पर चलाएं</translation>
 <translation id="8534579021159131403">मिनट</translation>
 <translation id="8541249477527128034">मीडिया नियंत्रण</translation>
 <translation id="8583702881314752957">परिभाषा सूची</translation>

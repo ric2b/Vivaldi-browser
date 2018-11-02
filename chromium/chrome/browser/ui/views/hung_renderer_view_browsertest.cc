@@ -11,7 +11,9 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents_unresponsive_state.h"
+#include "content/public/test/browser_test_utils.h"
 
 class HungRendererDialogViewBrowserTest : public DialogBrowserTest {
  public:

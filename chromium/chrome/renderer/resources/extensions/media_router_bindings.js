@@ -90,14 +90,15 @@ define('media_router_bindings', [
       'description': route.description,
       'icon_url': route.iconUrl,
       'is_local': route.isLocal,
-      'custom_controller_path': route.customControllerPath,
+      'custom_controller_path': route.customControllerPath || '',
       'for_display': route.forDisplay,
       'is_incognito': route.offTheRecord,
-      'is_offscreen_presentation': route.isOffscreenPresentation,
+      'is_local_presentation': route.isOffscreenPresentation,
+      'supports_media_route_controller': route.supportsMediaRouteController,
+      'controller_type': route.controllerType,
       // Begin newly added properties, followed by the milestone they were
       // added.  The guard should be safe to remove N+2 milestones later.
-      'supports_media_route_controller':
-          !!route.supportsMediaRouteController  // M61
+      'presentation_id': route.presentationId || ''  // M64
     });
   }
 
@@ -163,35 +164,6 @@ define('media_router_bindings', [
             reason);
         return PresentationConnectionCloseReason.CONNECTION_ERROR;
     }
-  }
-
-  // TODO(crbug.com/688177): remove this conversion when M60 is in stable.
-  /**
-   * Converts string to Mojo origin.
-   * @param {string|!originMojom.Origin} origin
-   * @return {!originMojom.Origin}
-   */
-  function stringToMojoOrigin_(origin) {
-    if (origin instanceof originMojom.Origin) {
-      return origin;
-    }
-    const url = new URL(origin);
-    const mojoOrigin = {};
-    mojoOrigin.scheme = url.protocol.replace(':', '');
-    mojoOrigin.host = url.hostname;
-    var port = url.port ? Number.parseInt(url.port) : 0;
-    switch (mojoOrigin.scheme) {
-      case 'http':
-        mojoOrigin.port = port || 80;
-        break;
-      case 'https':
-        mojoOrigin.port = port || 443;
-        break;
-      default:
-        throw new Error('Scheme must be http or https');
-    }
-    mojoOrigin.suborigin = '';
-    return new originMojom.Origin(mojoOrigin);
   }
 
   /**
@@ -281,6 +253,10 @@ define('media_router_bindings', [
       Binding: bindings.Binding,
       DialMediaSink: mediaRouterMojom.DialMediaSink,
       CastMediaSink: mediaRouterMojom.CastMediaSink,
+      HangoutsMediaRouteController:
+          mediaControllerMojom.HangoutsMediaRouteController,
+      HangoutsMediaStatusExtraData:
+          mediaStatusMojom.HangoutsMediaStatusExtraData,
       IPAddress: ipAddressMojom.IPAddress,
       IPEndpoint: ipEndpointMojom.IPEndpoint,
       InterfacePtrController: bindings.InterfacePtrController,
@@ -300,6 +276,7 @@ define('media_router_bindings', [
       RemotingSinkVideoCapability:
           remotingCommonMojom.RemotingSinkVideoCapability,
       RemotingSinkMetadata: remotingCommonMojom.RemotingSinkMetadata,
+      RouteControllerType: mediaRouterMojom.RouteControllerType,
       Origin: originMojom.Origin,
       Sink: mediaRouterMojom.MediaSink,
       SinkExtraData: mediaRouterMojom.MediaSinkExtraData,
@@ -315,6 +292,7 @@ define('media_router_bindings', [
    */
   MediaRouter.prototype.start = function() {
     return this.service_.registerMediaRouteProvider(
+        mediaRouterMojom.MediaRouteProvider.Id.EXTENSION,
         this.mediaRouteProviderBinding_.createInterfacePtrAndBind());
   }
 
@@ -339,12 +317,12 @@ define('media_router_bindings', [
    * updated.
    * @param {!string} sourceUrn
    * @param {!Array<!MediaSink>} sinks
-   * @param {!Array<string>} origins
+   * @param {!Array<!originMojom.Origin>} origins
    */
-  MediaRouter.prototype.onSinksReceived = function(sourceUrn, sinks,
-      origins) {
-    this.service_.onSinksReceived(sourceUrn, sinks.map(sinkToMojo_),
-        origins.map(stringToMojoOrigin_));
+  MediaRouter.prototype.onSinksReceived = function(sourceUrn, sinks, origins) {
+    this.service_.onSinksReceived(
+        mediaRouterMojom.MediaRouteProvider.Id.EXTENSION, sourceUrn,
+        sinks.map(sinkToMojo_), origins);
   };
 
   /**
@@ -415,10 +393,10 @@ define('media_router_bindings', [
       return issueActionToMojo_(e);
     });
     this.service_.onIssue(new mediaRouterMojom.Issue({
-      'route_id': issue.routeId,
+      'route_id': issue.routeId || '',
       'severity': issueSeverityToMojo_(issue.severity),
       'title': issue.title,
-      'message': issue.message,
+      'message': issue.message || '',
       'default_action': issueActionToMojo_(issue.defaultAction),
       'secondary_actions': secondaryActions,
       'help_page_id': issue.helpPageId,
@@ -435,12 +413,11 @@ define('media_router_bindings', [
    * @param {Array<string>=} joinableRouteIds The active set of joinable
    *     media routes.
    */
-  MediaRouter.prototype.onRoutesUpdated =
-      function(routes, sourceUrn = '', joinableRouteIds = []) {
+  MediaRouter.prototype.onRoutesUpdated = function(
+      routes, sourceUrn = '', joinableRouteIds = []) {
     this.service_.onRoutesUpdated(
-        routes.map(routeToMojo_),
-        sourceUrn,
-        joinableRouteIds);
+        mediaRouterMojom.MediaRouteProvider.Id.EXTENSION,
+        routes.map(routeToMojo_), sourceUrn, joinableRouteIds);
   };
 
   /**
@@ -449,7 +426,8 @@ define('media_router_bindings', [
    *     The new sink availability.
    */
   MediaRouter.prototype.onSinkAvailabilityUpdated = function(availability) {
-    this.service_.onSinkAvailabilityUpdated(availability);
+    this.service_.onSinkAvailabilityUpdated(
+        mediaRouterMojom.MediaRouteProvider.Id.EXTENSION, availability);
   };
 
   /**
@@ -945,11 +923,6 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.createMediaRouteController = function(
       routeId, controllerRequest, observer) {
-    // TODO(imcheng): Remove this check when M60 is in stable.
-    if (!this.handlers_.createMediaRouteController) {
-      return Promise.resolve({success: false});
-    }
-
     this.handlers_.onBeforeInvokeHandler();
     return this.handlers_
         .createMediaRouteController(routeId, controllerRequest, observer)

@@ -65,10 +65,10 @@ const TextInputState* TextInputManager::GetTextInputState() const {
 
 const TextInputManager::SelectionRegion* TextInputManager::GetSelectionRegion(
     RenderWidgetHostViewBase* view) const {
-  DCHECK(!view || IsRegistered(view));
+  //DCHECK(!view || IsRegistered(view));
   if (!view)
     view = active_view_;
-  return view ? &selection_region_map_.at(view) : nullptr;
+  return view && IsRegistered(view) ? &selection_region_map_.at(view) : nullptr;
 }
 
 const TextInputManager::CompositionRangeInfo*

@@ -30,9 +30,9 @@
 
 #include "core/html/LinkResource.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -65,7 +65,7 @@ WTF::TextEncoding LinkResource::GetCharset() const {
   return WTF::TextEncoding(charset);
 }
 
-DEFINE_TRACE(LinkResource) {
+void LinkResource::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_);
 }
 

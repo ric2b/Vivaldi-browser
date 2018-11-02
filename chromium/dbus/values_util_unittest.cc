@@ -14,7 +14,6 @@
 
 #include "base/json/json_writer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "dbus/message.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -55,62 +54,62 @@ TEST(ValuesUtilTest, PopBasicTypes) {
   std::unique_ptr<base::Value> expected_value;
   // Pop a byte.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kByteValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a bool.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kBoolValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an int16_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kInt16Value));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a uint16_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kUint16Value));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an int32_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kInt32Value));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a uint32_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(static_cast<double>(kUint32Value)));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an int64_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(static_cast<double>(kInt64Value)));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a uint64_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(static_cast<double>(kUint64Value)));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a double.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kDoubleValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a string.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kStringValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an empty string.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kEmptyStringValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an object path.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kObjectPathValue.value()));
   EXPECT_TRUE(value->Equals(expected_value.get()));
 }
@@ -133,22 +132,22 @@ TEST(ValuesUtilTest, PopVariant) {
   std::unique_ptr<base::Value> expected_value;
   // Pop a bool.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kBoolValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop an int32_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kInt32Value));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a double.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kDoubleValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   // Pop a string.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(kStringValue));
   EXPECT_TRUE(value->Equals(expected_value.get()));
 }
@@ -170,14 +169,14 @@ TEST(ValuesUtilTest, PopExtremelyLargeIntegers) {
   double double_value = 0;
   // Pop an int64_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(static_cast<double>(kInt64Value)));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   ASSERT_TRUE(value->GetAsDouble(&double_value));
   EXPECT_NE(kInt64Value, static_cast<int64_t>(double_value));
   // Pop a uint64_t.
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   expected_value.reset(new base::Value(static_cast<double>(kUint64Value)));
   EXPECT_TRUE(value->Equals(expected_value.get()));
   ASSERT_TRUE(value->GetAsDouble(&double_value));
@@ -188,7 +187,7 @@ TEST(ValuesUtilTest, PopIntArray) {
   std::unique_ptr<Response> response(Response::CreateEmpty());
   // Append an int32_t array.
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
+  MessageWriter sub_writer(nullptr);
   std::vector<int32_t> data;
   data.push_back(0);
   data.push_back(1);
@@ -206,7 +205,7 @@ TEST(ValuesUtilTest, PopIntArray) {
   // Pop an int32_t array.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(list_value.get()));
 }
 
@@ -214,7 +213,7 @@ TEST(ValuesUtilTest, PopStringArray) {
   std::unique_ptr<Response> response(Response::CreateEmpty());
   // Append a string array.
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
+  MessageWriter sub_writer(nullptr);
   std::vector<std::string> data;
   data.push_back("Dreamlifter");
   data.push_back("Beluga");
@@ -229,7 +228,7 @@ TEST(ValuesUtilTest, PopStringArray) {
   // Pop a string array.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(list_value.get()));
 }
 
@@ -237,7 +236,7 @@ TEST(ValuesUtilTest, PopStruct) {
   std::unique_ptr<Response> response(Response::CreateEmpty());
   // Append a struct.
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
+  MessageWriter sub_writer(nullptr);
   writer.OpenStruct(&sub_writer);
   const bool kBoolValue = true;
   sub_writer.AppendBool(kBoolValue);
@@ -259,7 +258,7 @@ TEST(ValuesUtilTest, PopStruct) {
   // Pop a struct.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&list_value));
 }
 
@@ -267,8 +266,8 @@ TEST(ValuesUtilTest, PopStringToVariantDictionary) {
   std::unique_ptr<Response> response(Response::CreateEmpty());
   // Append a dictionary.
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
-  MessageWriter entry_writer(NULL);
+  MessageWriter sub_writer(nullptr);
+  MessageWriter entry_writer(nullptr);
   writer.OpenArray("{sv}", &sub_writer);
   sub_writer.OpenDictEntry(&entry_writer);
   const std::string kKey1 = "one";
@@ -306,7 +305,7 @@ TEST(ValuesUtilTest, PopStringToVariantDictionary) {
   // Pop a dictinoary.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&dictionary_value));
 }
 
@@ -314,8 +313,8 @@ TEST(ValuesUtilTest, PopDictionaryWithDottedStringKey) {
   std::unique_ptr<Response> response(Response::CreateEmpty());
   // Append a dictionary.
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
-  MessageWriter entry_writer(NULL);
+  MessageWriter sub_writer(nullptr);
+  MessageWriter entry_writer(nullptr);
   writer.OpenArray("{sv}", &sub_writer);
   sub_writer.OpenDictEntry(&entry_writer);
   const std::string kKey1 = "www.example.com";  // String including dots.
@@ -346,7 +345,7 @@ TEST(ValuesUtilTest, PopDictionaryWithDottedStringKey) {
   // Pop a dictinoary.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&dictionary_value));
 }
 
@@ -361,10 +360,10 @@ TEST(ValuesUtilTest, PopDoubleToIntDictionary) {
   // Append a dictionary.
   std::unique_ptr<Response> response(Response::CreateEmpty());
   MessageWriter writer(response.get());
-  MessageWriter sub_writer(NULL);
+  MessageWriter sub_writer(nullptr);
   writer.OpenArray("{di}", &sub_writer);
   for (size_t i = 0; i != values.size(); ++i) {
-    MessageWriter entry_writer(NULL);
+    MessageWriter entry_writer(nullptr);
     sub_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendDouble(keys[i]);
     entry_writer.AppendInt32(values[i]);
@@ -383,7 +382,7 @@ TEST(ValuesUtilTest, PopDoubleToIntDictionary) {
   // Pop a dictionary.
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value(PopDataAsValue(&reader));
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&dictionary_value));
 }
 
@@ -403,16 +402,16 @@ TEST(ValuesUtilTest, AppendBasicTypes) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kBoolValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kIntegerValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kDoubleValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kStringValue));
 }
 
@@ -432,16 +431,16 @@ TEST(ValuesUtilTest, AppendBasicTypesAsVariant) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kBoolValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kIntegerValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kDoubleValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kStringValue));
 }
 
@@ -461,16 +460,16 @@ TEST(ValuesUtilTest, AppendValueDataBasicTypes) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kBoolValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kIntegerValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kDoubleValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kStringValue));
 }
 
@@ -490,16 +489,16 @@ TEST(ValuesUtilTest, AppendValueDataAsVariantBasicTypes) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kBoolValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kIntegerValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kDoubleValue));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&kStringValue));
 }
 
@@ -517,11 +516,11 @@ TEST(ValuesUtilTest, AppendDictionary) {
   const double kDoubleValue = 4.9;
   const std::string kStringValue = "fifty";
 
-  auto list_value = base::MakeUnique<base::ListValue>();
+  auto list_value = std::make_unique<base::ListValue>();
   list_value->AppendBoolean(kBoolValue);
   list_value->AppendInteger(kInt32Value);
 
-  auto dictionary_value = base::MakeUnique<base::DictionaryValue>();
+  auto dictionary_value = std::make_unique<base::DictionaryValue>();
   dictionary_value->SetBoolean(kKey1, kBoolValue);
   dictionary_value->SetInteger(kKey2, kDoubleValue);
 
@@ -543,10 +542,10 @@ TEST(ValuesUtilTest, AppendDictionary) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&test_dictionary));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&int_value));
 }
 
@@ -564,11 +563,11 @@ TEST(ValuesUtilTest, AppendDictionaryAsVariant) {
   const double kDoubleValue = 4.9;
   const std::string kStringValue = "fifty";
 
-  auto list_value = base::MakeUnique<base::ListValue>();
+  auto list_value = std::make_unique<base::ListValue>();
   list_value->AppendBoolean(kBoolValue);
   list_value->AppendInteger(kInt32Value);
 
-  auto dictionary_value = base::MakeUnique<base::DictionaryValue>();
+  auto dictionary_value = std::make_unique<base::DictionaryValue>();
   dictionary_value->SetBoolean(kKey1, kBoolValue);
   dictionary_value->SetInteger(kKey2, kDoubleValue);
 
@@ -590,10 +589,10 @@ TEST(ValuesUtilTest, AppendDictionaryAsVariant) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&test_dictionary));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&int_value));
 }
 
@@ -634,10 +633,10 @@ TEST(ValuesUtilTest, AppendList) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&test_list));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&int_value));
 }
 
@@ -678,10 +677,10 @@ TEST(ValuesUtilTest, AppendListAsVariant) {
   MessageReader reader(response.get());
   std::unique_ptr<base::Value> value;
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&test_list));
   value = PopDataAsValue(&reader);
-  ASSERT_TRUE(value.get() != NULL);
+  ASSERT_NE(nullptr, value);
   EXPECT_TRUE(value->Equals(&int_value));
 }
 

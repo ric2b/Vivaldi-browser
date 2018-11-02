@@ -6,7 +6,6 @@
 #define ModuleTreeLinkerRegistry_h
 
 #include "core/CoreExport.h"
-#include "core/dom/AncestorList.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
@@ -17,9 +16,7 @@ class Modulator;
 class ModuleScriptFetchRequest;
 class ModuleTreeClient;
 class ModuleTreeLinker;
-enum class ModuleGraphLevel;
 class ModuleScript;
-class ModuleTreeReachedUrlSet;
 
 // ModuleTreeLinkerRegistry keeps active ModuleTreeLinkers alive.
 class CORE_EXPORT ModuleTreeLinkerRegistry
@@ -29,14 +26,11 @@ class CORE_EXPORT ModuleTreeLinkerRegistry
   static ModuleTreeLinkerRegistry* Create() {
     return new ModuleTreeLinkerRegistry;
   }
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
   ModuleTreeLinker* Fetch(const ModuleScriptFetchRequest&,
-                          const AncestorList&,
-                          ModuleGraphLevel,
                           Modulator*,
-                          ModuleTreeReachedUrlSet*,
                           ModuleTreeClient*);
   ModuleTreeLinker* FetchDescendantsForInlineScript(ModuleScript*,
                                                     Modulator*,

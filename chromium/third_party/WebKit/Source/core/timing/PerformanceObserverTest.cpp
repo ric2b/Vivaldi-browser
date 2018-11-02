@@ -4,14 +4,14 @@
 
 #include "core/timing/PerformanceObserver.h"
 
-#include "bindings/core/v8/PerformanceObserverCallback.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "bindings/core/v8/v8_performance_observer_callback.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/timing/Performance.h"
 #include "core/timing/PerformanceBase.h"
 #include "core/timing/PerformanceMark.h"
 #include "core/timing/PerformanceObserverInit.h"
+#include "public/platform/TaskType.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -20,8 +20,8 @@ class MockPerformanceBase : public PerformanceBase {
  public:
   explicit MockPerformanceBase(ScriptState* script_state)
       : PerformanceBase(0,
-                        TaskRunnerHelper::Get(TaskType::kPerformanceTimeline,
-                                              script_state)) {}
+                        ExecutionContext::From(script_state)
+                            ->GetTaskRunner(TaskType::kPerformanceTimeline)) {}
   ~MockPerformanceBase() {}
 
   ExecutionContext* GetExecutionContext() const override { return nullptr; }
@@ -33,7 +33,7 @@ class PerformanceObserverTest : public ::testing::Test {
     v8::Local<v8::Function> callback =
         v8::Function::New(script_state->GetContext(), nullptr).ToLocalChecked();
     base_ = new MockPerformanceBase(script_state);
-    cb_ = PerformanceObserverCallback::Create(script_state, callback);
+    cb_ = V8PerformanceObserverCallback::Create(callback);
     observer_ = new PerformanceObserver(ExecutionContext::From(script_state),
                                         base_, cb_);
   }
@@ -43,7 +43,7 @@ class PerformanceObserverTest : public ::testing::Test {
   void Deliver() { observer_->Deliver(); }
 
   Persistent<MockPerformanceBase> base_;
-  Persistent<PerformanceObserverCallback> cb_;
+  Persistent<V8PerformanceObserverCallback> cb_;
   Persistent<PerformanceObserver> observer_;
 };
 

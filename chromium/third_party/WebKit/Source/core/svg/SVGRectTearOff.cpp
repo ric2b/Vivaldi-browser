@@ -84,9 +84,4 @@ SVGRectTearOff* SVGRectTearOff::CreateDetached(const FloatRect& rect) {
                 QualifiedName::Null());
 }
 
-DEFINE_TRACE_WRAPPERS(SVGRectTearOff) {
-  SVGPropertyTearOff<SVGRect>::TraceWrappers(visitor);
-  ScriptWrappable::TraceWrappers(visitor);
-}
-
 }  // namespace blink

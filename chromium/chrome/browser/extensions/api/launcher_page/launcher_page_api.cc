@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/launcher_page/launcher_page_api.h"
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
@@ -11,17 +12,16 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/common/extensions/api/launcher_page.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/app_list/app_list_model.h"
 
 namespace extensions {
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<LauncherPageAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_launcher_api_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<LauncherPageAPI>*
 LauncherPageAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_launcher_api_factory.Pointer();
 }
 
 LauncherPageAPI::LauncherPageAPI(content::BrowserContext* context)

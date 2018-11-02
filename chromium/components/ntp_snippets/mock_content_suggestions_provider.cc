@@ -18,7 +18,11 @@ MockContentSuggestionsProvider::MockContentSuggestionsProvider(
   SetProvidedCategories(provided_categories);
 }
 
-MockContentSuggestionsProvider::~MockContentSuggestionsProvider() {}
+MockContentSuggestionsProvider::~MockContentSuggestionsProvider() {
+  if (destructor_callback_) {
+    std::move(destructor_callback_).Run();
+  }
+}
 
 void MockContentSuggestionsProvider::SetProvidedCategories(
     const std::vector<Category>& provided_categories) {
@@ -43,10 +47,15 @@ CategoryInfo MockContentSuggestionsProvider::GetCategoryInfo(
                       base::ASCIIToUTF16("No suggestions message"));
 }
 
+void MockContentSuggestionsProvider::SetDestructorCallback(
+    DestructorCallback callback) {
+  destructor_callback_ = std::move(callback);
+}
+
 void MockContentSuggestionsProvider::Fetch(const Category& category,
                                            const std::set<std::string>& set,
                                            FetchDoneCallback callback) {
-  FetchMock(category, set, callback);
+  FetchMock(category, set, &callback);
 }
 
 void MockContentSuggestionsProvider::FetchSuggestionImage(

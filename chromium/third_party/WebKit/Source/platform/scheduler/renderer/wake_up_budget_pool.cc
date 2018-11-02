@@ -6,8 +6,8 @@
 
 #include <cstdint>
 
-#include "platform/scheduler/base/trace_helper.h"
 #include "platform/scheduler/renderer/task_queue_throttler.h"
+#include "platform/scheduler/util/tracing_helper.h"
 
 namespace blink {
 namespace scheduler {
@@ -49,6 +49,16 @@ bool WakeUpBudgetPool::CanRunTasksAt(base::TimeTicks moment,
   if (last_wake_up_ == moment && is_wake_up)
     return true;
   return moment < last_wake_up_.value() + wake_up_duration_;
+}
+
+base::Optional<base::TimeTicks> WakeUpBudgetPool::GetTimeTasksCanRunUntil(
+    base::TimeTicks now,
+    bool is_wake_up) const {
+  if (!last_wake_up_)
+    return base::TimeTicks();
+  if (!CanRunTasksAt(now, is_wake_up))
+    return base::TimeTicks();
+  return last_wake_up_.value() + wake_up_duration_;
 }
 
 namespace {
@@ -104,7 +114,7 @@ void WakeUpBudgetPool::AsValueInto(base::trace_event::TracedValue* state,
 
   state->BeginArray("task_queues");
   for (TaskQueue* queue : associated_task_queues_) {
-    state->AppendString(trace_helper::PointerToString(queue));
+    state->AppendString(PointerToString(queue));
   }
   state->EndArray();
 

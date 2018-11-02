@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "snapshot/annotation_snapshot.h"
 #include "snapshot/module_snapshot.h"
 #include "util/file/file_reader.h"
 #include "util/misc/initialization_state_dcheck.h"
@@ -76,6 +77,7 @@ class ModuleSnapshotMinidump final : public ModuleSnapshot {
   std::string DebugFileName() const override;
   std::vector<std::string> AnnotationsVector() const override;
   std::map<std::string, std::string> AnnotationsSimpleMap() const override;
+  std::vector<AnnotationSnapshot> AnnotationObjects() const override;
   std::set<CheckedRange<uint64_t>> ExtraMemoryRanges() const override;
   std::vector<const UserMinidumpStream*> CustomMinidumpStreams() const override;
 
@@ -89,6 +91,7 @@ class ModuleSnapshotMinidump final : public ModuleSnapshot {
   MINIDUMP_MODULE minidump_module_;
   std::vector<std::string> annotations_vector_;
   std::map<std::string, std::string> annotations_simple_map_;
+  std::vector<AnnotationSnapshot> annotation_objects_;
   InitializationStateDcheck initialized_;
 
   DISALLOW_COPY_AND_ASSIGN(ModuleSnapshotMinidump);

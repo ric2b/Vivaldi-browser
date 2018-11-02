@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// MSVC++ requires this to be set before any other includes to get M_SQRT1_2.
-#define _USE_MATH_DEFINES
-
-#include <cmath>
 #include <memory>
 
 #include "base/macros.h"
@@ -158,30 +154,46 @@ TEST_P(ChannelMixerTest, Mixing) {
 
 static float kStereoToMonoValues[] = { 0.5f, 0.75f };
 static float kMonoToStereoValues[] = { 0.5f };
-// Zero the center channel since it will be mixed at scale 1 vs M_SQRT1_2.
+// Zero the center channel since it will be mixed at scale 1 vs 1/sqrt(2).
 static float kFiveOneToMonoValues[] = { 0.1f, 0.2f, 0.0f, 0.4f, 0.5f, 0.6f };
 static float kFiveDiscreteValues[] = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f };
 
 // Run through basic sanity tests for some common conversions.
-INSTANTIATE_TEST_CASE_P(ChannelMixerTest, ChannelMixerTest, testing::Values(
-    ChannelMixerTestData(CHANNEL_LAYOUT_STEREO, CHANNEL_LAYOUT_MONO,
-                         kStereoToMonoValues, arraysize(kStereoToMonoValues),
-                         0.5f),
-    ChannelMixerTestData(CHANNEL_LAYOUT_MONO, CHANNEL_LAYOUT_STEREO,
-                         kMonoToStereoValues, arraysize(kMonoToStereoValues),
-                         1.0f),
-    ChannelMixerTestData(CHANNEL_LAYOUT_5_1, CHANNEL_LAYOUT_MONO,
-                         kFiveOneToMonoValues, arraysize(kFiveOneToMonoValues),
-                         static_cast<float>(M_SQRT1_2)),
-    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE, 2,
-                         CHANNEL_LAYOUT_DISCRETE, 2,
-                         kStereoToMonoValues, arraysize(kStereoToMonoValues)),
-    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE, 2,
-                         CHANNEL_LAYOUT_DISCRETE, 5,
-                         kStereoToMonoValues, arraysize(kStereoToMonoValues)),
-    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE, 5,
-                         CHANNEL_LAYOUT_DISCRETE, 2,
-                         kFiveDiscreteValues, arraysize(kFiveDiscreteValues))
-));
+INSTANTIATE_TEST_CASE_P(
+    ChannelMixerTest,
+    ChannelMixerTest,
+    testing::Values(ChannelMixerTestData(CHANNEL_LAYOUT_STEREO,
+                                         CHANNEL_LAYOUT_MONO,
+                                         kStereoToMonoValues,
+                                         arraysize(kStereoToMonoValues),
+                                         0.5f),
+                    ChannelMixerTestData(CHANNEL_LAYOUT_MONO,
+                                         CHANNEL_LAYOUT_STEREO,
+                                         kMonoToStereoValues,
+                                         arraysize(kMonoToStereoValues),
+                                         1.0f),
+                    ChannelMixerTestData(CHANNEL_LAYOUT_5_1,
+                                         CHANNEL_LAYOUT_MONO,
+                                         kFiveOneToMonoValues,
+                                         arraysize(kFiveOneToMonoValues),
+                                         ChannelMixer::kHalfPower),
+                    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE,
+                                         2,
+                                         CHANNEL_LAYOUT_DISCRETE,
+                                         2,
+                                         kStereoToMonoValues,
+                                         arraysize(kStereoToMonoValues)),
+                    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE,
+                                         2,
+                                         CHANNEL_LAYOUT_DISCRETE,
+                                         5,
+                                         kStereoToMonoValues,
+                                         arraysize(kStereoToMonoValues)),
+                    ChannelMixerTestData(CHANNEL_LAYOUT_DISCRETE,
+                                         5,
+                                         CHANNEL_LAYOUT_DISCRETE,
+                                         2,
+                                         kFiveDiscreteValues,
+                                         arraysize(kFiveDiscreteValues))));
 
 }  // namespace media

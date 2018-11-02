@@ -6,11 +6,11 @@
 #define COMPONENTS_UPDATE_CLIENT_UPDATE_CLIENT_INTERNAL_H_
 
 #include <memory>
-#include <queue>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
@@ -38,11 +38,11 @@ class UpdateClientImpl : public UpdateClient {
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   void Install(const std::string& id,
-               const CrxDataCallback& crx_data_callback,
-               const Callback& callback) override;
+               CrxDataCallback crx_data_callback,
+               Callback callback) override;
   void Update(const std::vector<std::string>& ids,
-              const CrxDataCallback& crx_data_callback,
-              const Callback& callback) override;
+              CrxDataCallback crx_data_callback,
+              Callback callback) override;
   bool GetCrxUpdateState(const std::string& id,
                          CrxUpdateItem* update_item) const override;
   bool IsUpdating(const std::string& id) const override;
@@ -50,13 +50,13 @@ class UpdateClientImpl : public UpdateClient {
   void SendUninstallPing(const std::string& id,
                          const base::Version& version,
                          int reason,
-                         const Callback& callback) override;
+                         Callback callback) override;
 
  private:
   ~UpdateClientImpl() override;
 
   void RunTask(std::unique_ptr<Task> task);
-  void OnTaskComplete(const Callback& callback, Task* task, Error error);
+  void OnTaskComplete(Callback callback, Task* task, Error error);
 
   void NotifyObservers(Observer::Events event, const std::string& id);
 
@@ -71,7 +71,7 @@ class UpdateClientImpl : public UpdateClient {
   // only update tasks (background tasks) are queued up. These tasks are
   // pending while they are in this queue. They have not been picked up yet
   // by the update engine.
-  std::queue<Task*> task_queue_;
+  base::circular_deque<Task*> task_queue_;
 
   // Contains all tasks in progress. These are the tasks that the update engine
   // is executing at one moment. Install tasks are run concurrently, update

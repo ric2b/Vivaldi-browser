@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "base/compiler_specific.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
 #include "base/pickle.h"
@@ -185,7 +186,7 @@ HistogramSamples::HistogramSamples(uint64_t id, Metadata* meta)
 
 // This mustn't do anything with |meta_|. It was passed to the ctor and may
 // be invalid by the time this dtor gets called.
-HistogramSamples::~HistogramSamples() {}
+HistogramSamples::~HistogramSamples() = default;
 
 void HistogramSamples::Add(const HistogramSamples& other) {
   IncreaseSumAndCount(other.sum(), other.redundant_count());
@@ -214,11 +215,9 @@ void HistogramSamples::Subtract(const HistogramSamples& other) {
   DCHECK(success);
 }
 
-bool HistogramSamples::Serialize(Pickle* pickle) const {
-  if (!pickle->WriteInt64(sum()))
-    return false;
-  if (!pickle->WriteInt(redundant_count()))
-    return false;
+void HistogramSamples::Serialize(Pickle* pickle) const {
+  pickle->WriteInt64(sum());
+  pickle->WriteInt(redundant_count());
 
   HistogramBase::Sample min;
   int64_t max;
@@ -226,12 +225,10 @@ bool HistogramSamples::Serialize(Pickle* pickle) const {
   for (std::unique_ptr<SampleCountIterator> it = Iterator(); !it->Done();
        it->Next()) {
     it->Get(&min, &max, &count);
-    if (!pickle->WriteInt(min) || !pickle->WriteInt64(max) ||
-        !pickle->WriteInt(count)) {
-      return false;
-    }
+    pickle->WriteInt(min);
+    pickle->WriteInt64(max);
+    pickle->WriteInt(count);
   }
-  return true;
 }
 
 bool HistogramSamples::AccumulateSingleSample(HistogramBase::Sample value,
@@ -255,7 +252,17 @@ void HistogramSamples::IncreaseSumAndCount(int64_t sum,
   subtle::NoBarrier_AtomicIncrement(&meta_->redundant_count, count);
 }
 
-SampleCountIterator::~SampleCountIterator() {}
+void HistogramSamples::RecordNegativeSample(NegativeSampleReason reason,
+                                            HistogramBase::Count increment) {
+  UMA_HISTOGRAM_ENUMERATION("UMA.NegativeSamples.Reason", reason,
+                            MAX_NEGATIVE_SAMPLE_REASONS);
+  UMA_HISTOGRAM_CUSTOM_COUNTS("UMA.NegativeSamples.Increment", increment, 1,
+                              1 << 30, 100);
+  UMA_HISTOGRAM_SPARSE_SLOWLY("UMA.NegativeSamples.Histogram",
+                              static_cast<int32_t>(id()));
+}
+
+SampleCountIterator::~SampleCountIterator() = default;
 
 bool SampleCountIterator::GetBucketIndex(size_t* index) const {
   DCHECK(!Done());
@@ -273,7 +280,7 @@ SingleSampleIterator::SingleSampleIterator(HistogramBase::Sample min,
                                            size_t bucket_index)
     : min_(min), max_(max), bucket_index_(bucket_index), count_(count) {}
 
-SingleSampleIterator::~SingleSampleIterator() {}
+SingleSampleIterator::~SingleSampleIterator() = default;
 
 bool SingleSampleIterator::Done() const {
   return count_ == 0;

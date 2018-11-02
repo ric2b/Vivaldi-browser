@@ -23,18 +23,16 @@ TraceEvent::TraceEvent()
       timestamp(0),
       duration(0),
       phase(TRACE_EVENT_PHASE_BEGIN),
-      other_event(NULL) {
-}
+      other_event(nullptr) {}
 
 TraceEvent::TraceEvent(TraceEvent&& other) = default;
 
-TraceEvent::~TraceEvent() {
-}
+TraceEvent::~TraceEvent() = default;
 
 TraceEvent& TraceEvent::operator=(TraceEvent&& rhs) = default;
 
 bool TraceEvent::SetFromJSON(const base::Value* event_value) {
-  if (event_value->GetType() != base::Value::Type::DICTIONARY) {
+  if (event_value->type() != base::Value::Type::DICTIONARY) {
     LOG(ERROR) << "Value must be Type::DICTIONARY";
     return false;
   }
@@ -42,7 +40,7 @@ bool TraceEvent::SetFromJSON(const base::Value* event_value) {
       static_cast<const base::DictionaryValue*>(event_value);
 
   std::string phase_str;
-  const base::DictionaryValue* args = NULL;
+  const base::DictionaryValue* args = nullptr;
 
   if (!dictionary->GetString("ph", &phase_str)) {
     LOG(ERROR) << "ph is missing from TraceEvent JSON";
@@ -206,8 +204,7 @@ std::unique_ptr<base::Value> TraceEvent::GetKnownArgAsValue(
 QueryNode::QueryNode(const Query& query) : query_(query) {
 }
 
-QueryNode::~QueryNode() {
-}
+QueryNode::~QueryNode() = default;
 
 // Query
 
@@ -228,19 +225,9 @@ Query::Query(TraceEventMember member, const std::string& arg_name)
       is_pattern_(false) {
 }
 
-Query::Query(const Query& query)
-    : type_(query.type_),
-      operator_(query.operator_),
-      left_(query.left_),
-      right_(query.right_),
-      member_(query.member_),
-      number_(query.number_),
-      string_(query.string_),
-      is_pattern_(query.is_pattern_) {
-}
+Query::Query(const Query& query) = default;
 
-Query::~Query() {
-}
+Query::~Query() = default;
 
 Query Query::String(const std::string& str) {
   return Query(str);
@@ -704,12 +691,12 @@ bool ParseEventsFromJson(const std::string& json,
                          std::vector<TraceEvent>* output) {
   std::unique_ptr<base::Value> root = base::JSONReader::Read(json);
 
-  base::ListValue* root_list = NULL;
+  base::ListValue* root_list = nullptr;
   if (!root.get() || !root->GetAsList(&root_list))
     return false;
 
   for (size_t i = 0; i < root_list->GetSize(); ++i) {
-    base::Value* item = NULL;
+    base::Value* item = nullptr;
     if (root_list->Get(i, &item)) {
       TraceEvent event;
       if (event.SetFromJSON(item))
@@ -727,18 +714,16 @@ bool ParseEventsFromJson(const std::string& json,
 // TraceAnalyzer
 
 TraceAnalyzer::TraceAnalyzer()
-    : ignore_metadata_events_(false),
-      allow_assocation_changes_(true) {}
+    : ignore_metadata_events_(false), allow_association_changes_(true) {}
 
-TraceAnalyzer::~TraceAnalyzer() {
-}
+TraceAnalyzer::~TraceAnalyzer() = default;
 
 // static
 TraceAnalyzer* TraceAnalyzer::Create(const std::string& json_events) {
   std::unique_ptr<TraceAnalyzer> analyzer(new TraceAnalyzer());
   if (analyzer->SetEvents(json_events))
     return analyzer.release();
-  return NULL;
+  return nullptr;
 }
 
 bool TraceAnalyzer::SetEvents(const std::string& json_events) {
@@ -786,7 +771,7 @@ void TraceAnalyzer::AssociateAsyncBeginEndEvents(bool match_pid) {
 void TraceAnalyzer::AssociateEvents(const Query& first,
                                     const Query& second,
                                     const Query& match) {
-  DCHECK(allow_assocation_changes_)
+  DCHECK(allow_association_changes_)
       << "AssociateEvents not allowed after FindEvents";
 
   // Search for matching begin/end event pairs. When a matching end is found,
@@ -849,7 +834,7 @@ void TraceAnalyzer::MergeAssociatedEventArgs() {
 }
 
 size_t TraceAnalyzer::FindEvents(const Query& query, TraceEventVector* output) {
-  allow_assocation_changes_ = false;
+  allow_association_changes_ = false;
   output->clear();
   return FindMatchingEvents(
       raw_events_, query, output, ignore_metadata_events_);
@@ -859,14 +844,14 @@ const TraceEvent* TraceAnalyzer::FindFirstOf(const Query& query) {
   TraceEventVector output;
   if (FindEvents(query, &output) > 0)
     return output.front();
-  return NULL;
+  return nullptr;
 }
 
 const TraceEvent* TraceAnalyzer::FindLastOf(const Query& query) {
   TraceEventVector output;
   if (FindEvents(query, &output) > 0)
     return output.back();
-  return NULL;
+  return nullptr;
 }
 
 const std::string& TraceAnalyzer::GetThreadName(

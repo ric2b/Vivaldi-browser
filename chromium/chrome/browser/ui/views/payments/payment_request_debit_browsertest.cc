@@ -20,8 +20,7 @@ constexpr auto UNKNOWN = ::autofill::CreditCard::CardType::CARD_TYPE_UNKNOWN;
 // Tests for a merchant that requests a debit card.
 class PaymentRequestDebitTest : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestDebitTest()
-      : PaymentRequestBrowserTestBase("/payment_request_debit_test.html") {}
+  PaymentRequestDebitTest() {}
 
   const std::string& GetOrCreateBillingAddressId() {
     if (billing_address_id_.empty()) {
@@ -41,7 +40,8 @@ class PaymentRequestDebitTest : public PaymentRequestBrowserTestBase {
   }
 
   void CallCanMakePayment() {
-    ResetEventObserver(DialogEvent::CAN_MAKE_PAYMENT_CALLED);
+    ResetEventWaiterForSequence({DialogEvent::CAN_MAKE_PAYMENT_CALLED,
+                                 DialogEvent::CAN_MAKE_PAYMENT_RETURNED});
     ASSERT_TRUE(
         content::ExecuteScript(GetActiveWebContents(), "canMakePayment();"));
     WaitForObservedEvent();
@@ -54,6 +54,7 @@ class PaymentRequestDebitTest : public PaymentRequestBrowserTestBase {
 };
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, CanMakePaymentWithDebitCard) {
+  NavigateTo("/payment_request_debit_test.html");
   AddServerCardWithType(DEBIT);
   CallCanMakePayment();
   ExpectBodyContains({"true"});
@@ -61,6 +62,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, CanMakePaymentWithDebitCard) {
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
                        CanMakePaymentWithUnknownCardType) {
+  NavigateTo("/payment_request_debit_test.html");
   AddServerCardWithType(UNKNOWN);
   CallCanMakePayment();
   ExpectBodyContains({"true"});
@@ -68,6 +70,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
                        CannotMakePaymentWithCreditAndPrepaidCard) {
+  NavigateTo("/payment_request_debit_test.html");
   AddServerCardWithType(CREDIT);
   AddServerCardWithType(PREPAID);
   CallCanMakePayment();
@@ -75,6 +78,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, DebitCardIsPreselected) {
+  NavigateTo("/payment_request_debit_test.html");
   AddServerCardWithType(DEBIT);
   CallCanMakePayment();
   InvokePaymentRequestUI();
@@ -84,6 +88,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, DebitCardIsPreselected) {
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
                        UnknownCardTypeIsNotPreselected) {
+  NavigateTo("/payment_request_debit_test.html");
   AddServerCardWithType(UNKNOWN);
   InvokePaymentRequestUI();
   EXPECT_FALSE(IsPayButtonEnabled());
@@ -91,6 +96,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, PayWithLocalCard) {
+  NavigateTo("/payment_request_debit_test.html");
   // All local cards have "unknown" card type by design.
   autofill::CreditCard card = autofill::test::GetCreditCard();
   card.set_billing_address_id(GetOrCreateBillingAddressId());
@@ -102,13 +108,13 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestDebitTest, PayWithLocalCard) {
 
   // Select the local card and click the "Pay" button.
   OpenPaymentMethodScreen();
-  ResetEventObserver(DialogEvent::BACK_NAVIGATION);
+  ResetEventWaiter(DialogEvent::BACK_NAVIGATION);
   ClickOnChildInListViewAndWait(/*child_index=*/0, /*num_children=*/1,
                                 DialogViewID::PAYMENT_METHOD_SHEET_LIST_VIEW);
   EXPECT_TRUE(IsPayButtonEnabled());
 
   // Type in the CVC number and verify that it's sent to the page.
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("012"));
   ExpectBodyContains({"\"cardSecurityCode\": \"012\""});
 }

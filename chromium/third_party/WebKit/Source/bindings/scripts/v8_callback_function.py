@@ -7,24 +7,19 @@
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 
-from v8_globals import includes  # pylint: disable=W0403
-import v8_utilities  # pylint: disable=W0403
+from utilities import to_snake_case
+from v8_globals import includes
 
 CALLBACK_FUNCTION_H_INCLUDES = frozenset([
-    'bindings/core/v8/NativeValueTraits.h',
-    'platform/bindings/ScriptWrappable.h',
-    'platform/bindings/TraceWrapperV8Reference.h',
-    'platform/heap/Handle.h',
-    'platform/wtf/text/WTFString.h',
+    'platform/bindings/CallbackFunctionBase.h',
 ])
 CALLBACK_FUNCTION_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
-    'platform/bindings/ScriptState.h',
+    'bindings/core/v8/GeneratedCodeHelper.h',
     'bindings/core/v8/NativeValueTraitsImpl.h',
     'bindings/core/v8/ToV8ForCore.h',
     'bindings/core/v8/V8BindingForCore.h',
     'core/dom/ExecutionContext.h',
-    'platform/wtf/Assertions.h',
 ])
 
 
@@ -44,24 +39,24 @@ def callback_function_context(callback_function):
         # in the future (e.g. if we support [ImplementedAs=] in callback
         # functions).
         'callback_function_name': callback_function.name,
-        'cpp_class': callback_function.name,
+        'cpp_class': 'V8%s' % callback_function.name,
         'cpp_includes': sorted(includes),
         'forward_declarations': sorted(forward_declarations(callback_function)),
         'header_includes': sorted(CALLBACK_FUNCTION_H_INCLUDES),
         'idl_type': idl_type_str,
+        'return_cpp_type': idl_type.cpp_type,
+        'this_include_header_name': to_snake_case('V8%s' % callback_function.name),
     }
 
     if idl_type_str != 'void':
         context.update({
-            'return_cpp_type': idl_type.cpp_type + '&',
-            'return_value': idl_type.v8_value_to_local_cpp_value(
+            'return_value_conversion': idl_type.v8_value_to_local_cpp_value(
                 callback_function.extended_attributes,
-                'v8ReturnValue', 'cppValue',
-                isolate='script_state_->GetIsolate()',
-                bailout_return_value='false'),
+                'call_result', 'native_result', isolate='GetIsolate()',
+                bailout_return_value='v8::Nothing<%s>()' % context['return_cpp_type']),
         })
 
-    context.update(arguments_context(callback_function.arguments, context.get('return_cpp_type')))
+    context.update(arguments_context(callback_function.arguments))
     return context
 
 
@@ -73,7 +68,7 @@ def forward_declarations(callback_function):
             return find_forward_declaration(idl_type.element_type)
         return None
 
-    declarations = []
+    declarations = ['ScriptWrappable']
     for argument in callback_function.arguments:
         name = find_forward_declaration(argument.idl_type)
         if name:
@@ -81,13 +76,13 @@ def forward_declarations(callback_function):
     return declarations
 
 
-def arguments_context(arguments, return_cpp_type):
+def arguments_context(arguments):
     def argument_context(argument):
         idl_type = argument.idl_type
         return {
             'cpp_value_to_v8_value': idl_type.cpp_value_to_v8_value(
-                argument.name, isolate='script_state_->GetIsolate()',
-                creation_context='script_state_->GetContext()->Global()'),
+                argument.name, isolate='GetIsolate()',
+                creation_context='argument_creation_context'),
             'enum_type': idl_type.enum_type,
             'enum_values': idl_type.enum_values,
             'name': argument.name,
@@ -95,13 +90,11 @@ def arguments_context(arguments, return_cpp_type):
         }
 
     argument_declarations = [
-        'ScriptWrappable* scriptWrappable',
+        'ScriptWrappable* callback_this_value',
     ]
     argument_declarations.extend(
         '%s %s' % (argument.idl_type.callback_cpp_type, argument.name)
         for argument in arguments)
-    if return_cpp_type:
-        argument_declarations.append('%s returnValue' % return_cpp_type)
     return {
         'argument_declarations': argument_declarations,
         'arguments': [argument_context(argument) for argument in arguments],

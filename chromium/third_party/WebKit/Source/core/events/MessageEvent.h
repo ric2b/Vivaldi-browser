@@ -56,7 +56,7 @@ class CORE_EXPORT MessageEvent final : public Event {
     return new MessageEvent(origin, last_event_id, source, ports, suborigin);
   }
   static MessageEvent* Create(MessagePortArray* ports,
-                              RefPtr<SerializedScriptValue> data,
+                              scoped_refptr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr,
@@ -64,8 +64,8 @@ class CORE_EXPORT MessageEvent final : public Event {
     return new MessageEvent(std::move(data), origin, last_event_id, source,
                             ports, suborigin);
   }
-  static MessageEvent* Create(MessagePortChannelArray channels,
-                              RefPtr<SerializedScriptValue> data,
+  static MessageEvent* Create(Vector<MessagePortChannel> channels,
+                              scoped_refptr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr,
@@ -104,7 +104,7 @@ class CORE_EXPORT MessageEvent final : public Event {
   void initMessageEvent(const AtomicString& type,
                         bool can_bubble,
                         bool cancelable,
-                        PassRefPtr<SerializedScriptValue> data,
+                        scoped_refptr<SerializedScriptValue> data,
                         const String& origin,
                         const String& last_event_id,
                         EventTarget* source,
@@ -125,7 +125,7 @@ class CORE_EXPORT MessageEvent final : public Event {
   MessagePortArray ports();
   bool isPortsDirty() const { return is_ports_dirty_; }
 
-  MessagePortChannelArray ReleaseChannels() { return std::move(channels_); }
+  Vector<MessagePortChannel> ReleaseChannels() { return std::move(channels_); }
 
   const AtomicString& InterfaceName() const override;
 
@@ -166,7 +166,7 @@ class CORE_EXPORT MessageEvent final : public Event {
 
   void EntangleMessagePorts(ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
       v8::Isolate*,
@@ -181,17 +181,17 @@ class CORE_EXPORT MessageEvent final : public Event {
                EventTarget* source,
                MessagePortArray*,
                const String& suborigin);
-  MessageEvent(RefPtr<SerializedScriptValue> data,
+  MessageEvent(scoped_refptr<SerializedScriptValue> data,
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
                MessagePortArray*,
                const String& suborigin);
-  MessageEvent(RefPtr<SerializedScriptValue> data,
+  MessageEvent(scoped_refptr<SerializedScriptValue> data,
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
-               MessagePortChannelArray,
+               Vector<MessagePortChannel>,
                const String& suborigin);
 
   MessageEvent(const String& data,
@@ -216,7 +216,7 @@ class CORE_EXPORT MessageEvent final : public Event {
   // non-empty at a time. EntangleMessagePorts() moves between the states.
   Member<MessagePortArray> ports_;
   bool is_ports_dirty_ = true;
-  MessagePortChannelArray channels_;
+  Vector<MessagePortChannel> channels_;
   String suborigin_;
 };
 

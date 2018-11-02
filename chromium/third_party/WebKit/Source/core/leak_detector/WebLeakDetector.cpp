@@ -86,8 +86,8 @@ void WebLeakDetectorImpl::OnLeakDetectionComplete() {
       InstanceCounters::CounterValue(InstanceCounters::kLayoutObjectCounter);
   result.number_of_live_resources =
       InstanceCounters::CounterValue(InstanceCounters::kResourceCounter);
-  result.number_of_live_suspendable_objects = InstanceCounters::CounterValue(
-      InstanceCounters::kSuspendableObjectCounter);
+  result.number_of_live_pausable_objects =
+      InstanceCounters::CounterValue(InstanceCounters::kPausableObjectCounter);
   result.number_of_live_script_promises =
       InstanceCounters::CounterValue(InstanceCounters::kScriptPromiseCounter);
   result.number_of_live_frames =
@@ -96,6 +96,8 @@ void WebLeakDetectorImpl::OnLeakDetectionComplete() {
       InstanceCounters::kV8PerContextDataCounter);
   result.number_of_worker_global_scopes = InstanceCounters::CounterValue(
       InstanceCounters::kWorkerGlobalScopeCounter);
+  result.number_of_live_ua_css_resources =
+      InstanceCounters::CounterValue(InstanceCounters::kUACSSResourceCounter);
 
   client_->OnLeakDetectionComplete(result);
   detector_.reset();

@@ -28,7 +28,7 @@
 
 #include "modules/accessibility/AXMediaControls.h"
 
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/media_controls/elements/MediaControlElementsHelper.h"
@@ -333,12 +333,9 @@ AXObject* AccessibilityMediaTimeline::Create(
 }
 
 String AccessibilityMediaTimeline::ValueDescription() const {
-  Node* node = layout_object_->GetNode();
-  if (!isHTMLInputElement(node))
-    return String();
-
-  return LocalizedMediaTimeDescription(
-      toHTMLInputElement(node)->value().ToFloat());
+  if (auto* input = ToHTMLInputElementOrNull(layout_object_->GetNode()))
+    return LocalizedMediaTimeDescription(input->value().ToFloat());
+  return String();
 }
 
 String AccessibilityMediaTimeline::Description(

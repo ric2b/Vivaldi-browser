@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -28,8 +29,8 @@ namespace test {
 
 const size_t kMaxPacketSize = 65536;
 
-PacketPipe::PacketPipe() {}
-PacketPipe::~PacketPipe() {}
+PacketPipe::PacketPipe() = default;
+PacketPipe::~PacketPipe() = default;
 void PacketPipe::InitOnIOThread(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     base::TickClock* clock) {
@@ -104,7 +105,7 @@ class Buffer : public PacketPipe {
     }
   }
 
-  std::deque<linked_ptr<Packet> > buffer_;
+  base::circular_deque<linked_ptr<Packet>> buffer_;
   base::TimeTicks last_schedule_;
   size_t buffer_size_;
   size_t max_buffer_size_;
@@ -138,7 +139,7 @@ std::unique_ptr<PacketPipe> NewRandomDrop(double drop_fraction) {
 class SimpleDelayBase : public PacketPipe {
  public:
   SimpleDelayBase() : weak_factory_(this) {}
-  ~SimpleDelayBase() override {}
+  ~SimpleDelayBase() override = default;
 
   void Send(std::unique_ptr<Packet> packet) override {
     double seconds = GetDelay();
@@ -282,7 +283,7 @@ class RandomSortedDelay : public PacketPipe {
   }
 
   base::TimeTicks block_until_;
-  std::deque<linked_ptr<Packet> > buffer_;
+  base::circular_deque<linked_ptr<Packet>> buffer_;
   double random_delay_;
   double extra_delay_;
   double seconds_between_extra_delay_;
@@ -402,8 +403,8 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
   const base::WeakPtr<InterruptedPoissonProcess> ipp_;
   size_t stored_size_;
   const size_t stored_limit_;
-  std::deque<linked_ptr<Packet> > buffer_;
-  std::deque<base::TimeTicks> buffer_time_;
+  base::circular_deque<linked_ptr<Packet>> buffer_;
+  base::circular_deque<base::TimeTicks> buffer_time_;
   base::TickClock* clock_;
   base::WeakPtrFactory<InternalBuffer> weak_factory_;
 
@@ -427,8 +428,7 @@ InterruptedPoissonProcess::InterruptedPoissonProcess(
   ComputeRates();
 }
 
-InterruptedPoissonProcess::~InterruptedPoissonProcess() {
-}
+InterruptedPoissonProcess::~InterruptedPoissonProcess() = default;
 
 void InterruptedPoissonProcess::InitOnIOThread(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,

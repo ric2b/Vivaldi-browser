@@ -39,7 +39,7 @@ class WebAudioLatencyHint;
 
 class DefaultAudioDestinationHandler final : public AudioDestinationHandler {
  public:
-  static PassRefPtr<DefaultAudioDestinationHandler> Create(
+  static scoped_refptr<DefaultAudioDestinationHandler> Create(
       AudioNode&,
       const WebAudioLatencyHint&);
   ~DefaultAudioDestinationHandler() override;
@@ -53,6 +53,7 @@ class DefaultAudioDestinationHandler final : public AudioDestinationHandler {
   // AudioDestinationHandler
   void StartRendering() override;
   void StopRendering() override;
+  void RestartRendering() override;
   unsigned long MaxChannelCount() const override;
   // Returns the rendering callback buffer size.
   size_t CallbackBufferSize() const override;
@@ -76,7 +77,7 @@ class DefaultAudioDestinationHandler final : public AudioDestinationHandler {
 
   // Uses |RefPtr| to keep the AudioDestination alive until all the cross-thread
   // tasks are completed.
-  RefPtr<AudioDestination> destination_;
+  scoped_refptr<AudioDestination> destination_;
 
   String input_device_id_;
   unsigned number_of_input_channels_;

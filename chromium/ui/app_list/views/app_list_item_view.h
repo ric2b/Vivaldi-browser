@@ -8,12 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "ash/app_list/model/app_list_item_observer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "ui/app_list/app_list_export.h"
-#include "ui/app_list/app_list_item_observer.h"
 #include "ui/app_list/views/image_shadow_animator.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
@@ -95,8 +95,8 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
  private:
   enum UIState {
-    UI_STATE_NORMAL,    // Normal UI (icon + label)
-    UI_STATE_DRAGGING,  // Dragging UI (scaled icon only)
+    UI_STATE_NORMAL,              // Normal UI (icon + label)
+    UI_STATE_DRAGGING,            // Dragging UI (scaled icon only)
     UI_STATE_DROPPING_IN_FOLDER,  // Folder dropping preview UI
   };
 
@@ -108,8 +108,15 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   void SetUIState(UIState state);
 
+  // Scales up app icon if |scale_up| is true; otherwise, scale it back to
+  // normal size.
+  void ScaleAppIcon(bool scale_up);
+
   // Sets |touch_dragging_| flag and updates UI.
   void SetTouchDragging(bool touch_dragging);
+  // Sets |mouse_dragging_| flag and updates UI. Only to be called on
+  // |mouse_drag_timer_|.
+  void SetMouseDragging(bool mouse_dragging);
 
   // Invoked when |mouse_drag_timer_| fires to show dragging UI.
   void OnMouseDragTimer();
@@ -136,6 +143,8 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnFocus() override;
+  void OnBlur() override;
 
   // AppListItemObserver overrides:
   void ItemIconChanged() override;
@@ -149,9 +158,9 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   AppListItem* item_weak_;  // Owned by AppListModel. Can be NULL.
 
-  AppsGridView* apps_grid_view_;   // Parent view, owns this.
-  views::ImageView* icon_;         // Strongly typed child view.
-  views::Label* title_;            // Strongly typed child view.
+  AppsGridView* apps_grid_view_;      // Parent view, owns this.
+  views::ImageView* icon_;            // Strongly typed child view.
+  views::Label* title_;               // Strongly typed child view.
   views::ProgressBar* progress_bar_;  // Strongly typed child view.
 
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
@@ -161,12 +170,15 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   // True if scroll gestures should contribute to dragging.
   bool touch_dragging_ = false;
 
+  // True if the app is enabled for drag/drop operation by mouse.
+  bool mouse_dragging_ = false;
+  // True if the drag host proxy is crated for mouse dragging.
+  bool mouse_drag_proxy_created_ = false;
+
   std::unique_ptr<ImageShadowAnimator> shadow_animator_;
 
   bool is_installing_ = false;
   bool is_highlighted_ = false;
-
-  const bool is_fullscreen_app_list_enabled_;
 
   base::string16 tooltip_text_;
 

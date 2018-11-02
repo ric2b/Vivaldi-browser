@@ -77,7 +77,7 @@ class PowerSaveBlocker::Delegate
     : public base::RefCountedThreadSafe<PowerSaveBlocker::Delegate> {
  public:
   // Picks an appropriate D-Bus API to use based on the desktop environment.
-  Delegate(PowerSaveBlockerType type,
+  Delegate(mojom::WakeLockType type,
            const std::string& description,
            bool freedesktop_only,
            scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
@@ -135,7 +135,7 @@ class PowerSaveBlocker::Delegate
   // Must be called on the UI thread, as it may call DPMSEnabled() above.
   DBusAPI SelectAPI();
 
-  const PowerSaveBlockerType type_;
+  const mojom::WakeLockType type_;
   const std::string description_;
   const bool freedesktop_only_;
 
@@ -170,7 +170,7 @@ class PowerSaveBlocker::Delegate
 };
 
 PowerSaveBlocker::Delegate::Delegate(
-    PowerSaveBlockerType type,
+    mojom::WakeLockType type,
     const std::string& description,
     bool freedesktop_only,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
@@ -275,11 +275,12 @@ void PowerSaveBlocker::Delegate::ApplyBlock() {
       {
         uint32_t flags = 0;
         switch (type_) {
-          case kPowerSaveBlockPreventDisplaySleep:
+          case mojom::WakeLockType::kPreventDisplaySleep:
+          case mojom::WakeLockType::kPreventDisplaySleepAllowDimming:
             flags |= INHIBIT_MARK_SESSION_IDLE;
             flags |= INHIBIT_SUSPEND_SESSION;
             break;
-          case kPowerSaveBlockPreventAppSuspension:
+          case mojom::WakeLockType::kPreventAppSuspension:
             flags |= INHIBIT_SUSPEND_SESSION;
             break;
         }
@@ -288,14 +289,15 @@ void PowerSaveBlocker::Delegate::ApplyBlock() {
       break;
     case FREEDESKTOP_API:
       switch (type_) {
-        case kPowerSaveBlockPreventDisplaySleep:
+        case mojom::WakeLockType::kPreventDisplaySleep:
+        case mojom::WakeLockType::kPreventDisplaySleepAllowDimming:
           object_proxy = bus_->GetObjectProxy(
               kFreeDesktopAPIScreenServiceName,
               dbus::ObjectPath(kFreeDesktopAPIScreenObjectPath));
           method_call.reset(new dbus::MethodCall(
               kFreeDesktopAPIScreenInterfaceName, "Inhibit"));
           break;
-        case kPowerSaveBlockPreventAppSuspension:
+        case mojom::WakeLockType::kPreventAppSuspension:
           object_proxy = bus_->GetObjectProxy(
               kFreeDesktopAPIPowerServiceName,
               dbus::ObjectPath(kFreeDesktopAPIPowerObjectPath));
@@ -373,14 +375,15 @@ void PowerSaveBlocker::Delegate::RemoveBlock() {
       break;
     case FREEDESKTOP_API:
       switch (type_) {
-        case kPowerSaveBlockPreventDisplaySleep:
+        case mojom::WakeLockType::kPreventDisplaySleep:
+        case mojom::WakeLockType::kPreventDisplaySleepAllowDimming:
           object_proxy = bus_->GetObjectProxy(
               kFreeDesktopAPIScreenServiceName,
               dbus::ObjectPath(kFreeDesktopAPIScreenObjectPath));
           method_call.reset(new dbus::MethodCall(
               kFreeDesktopAPIScreenInterfaceName, "UnInhibit"));
           break;
-        case kPowerSaveBlockPreventAppSuspension:
+        case mojom::WakeLockType::kPreventAppSuspension:
           object_proxy = bus_->GetObjectProxy(
               kFreeDesktopAPIPowerServiceName,
               dbus::ObjectPath(kFreeDesktopAPIPowerObjectPath));
@@ -463,6 +466,7 @@ DBusAPI PowerSaveBlocker::Delegate::SelectAPI() {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   switch (base::nix::GetDesktopEnvironment(env.get())) {
     case base::nix::DESKTOP_ENVIRONMENT_GNOME:
+    case base::nix::DESKTOP_ENVIRONMENT_PANTHEON:
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
       if (DPMSEnabled())
         return GNOME_API;
@@ -482,8 +486,8 @@ DBusAPI PowerSaveBlocker::Delegate::SelectAPI() {
 }
 
 PowerSaveBlocker::PowerSaveBlocker(
-    PowerSaveBlockerType type,
-    Reason reason,
+    mojom::WakeLockType type,
+    mojom::WakeLockReason reason,
     const std::string& description,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> blocking_task_runner)
@@ -496,9 +500,10 @@ PowerSaveBlocker::PowerSaveBlocker(
       blocking_task_runner_(blocking_task_runner) {
   delegate_->Init();
 
-  if (type == kPowerSaveBlockPreventDisplaySleep) {
+  if (type == mojom::WakeLockType::kPreventDisplaySleep ||
+      type == mojom::WakeLockType::kPreventDisplaySleepAllowDimming) {
     freedesktop_suspend_delegate_ = new Delegate(
-        kPowerSaveBlockPreventAppSuspension, description,
+        mojom::WakeLockType::kPreventAppSuspension, description,
         true /* freedesktop_only */, ui_task_runner, blocking_task_runner);
     freedesktop_suspend_delegate_->Init();
   }

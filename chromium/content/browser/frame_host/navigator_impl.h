@@ -71,7 +71,6 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       const std::string& extra_headers,
       const Referrer& referrer,
       WindowOpenDisposition disposition,
-      bool force_new_process_for_new_contents,
       bool should_replace_current_entry,
       bool user_gesture,
       blink::WebTriggeringEventInfo triggering_event_info) override;
@@ -120,8 +119,6 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                        bool is_history_navigation_in_new_child,
                        bool is_pending_entry,
                        const scoped_refptr<ResourceRequestBody>& post_body);
-
-  bool ShouldAssignSiteForURL(const GURL& url);
 
   // PlzNavigate: if needed, sends a BeforeUnload IPC to the renderer to ask it
   // to execute the beforeUnload event. Otherwise, the navigation request will

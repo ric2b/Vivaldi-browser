@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include <memory>
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -22,31 +23,38 @@ class AnimationDelegate;
 class AnimationEvents;
 class AnimationHost;
 class AnimationTimeline;
+class AnimationTicker;
 struct AnimationEvent;
-struct PropertyAnimationState;
 
-// An AnimationPlayer owns all animations to be run on particular CC Layer.
-// Multiple AnimationPlayers can be attached to one layer. In this case,
-// they share common ElementAnimations so the
-// ElementAnimations-to-Layer relationship is 1:1.
-// For now, the blink logic is responsible for handling of conflicting
-// same-property animations.
-// Each AnimationPlayer has its copy on the impl thread.
-// This is a CC counterpart for blink::AnimationPlayer (in 1:1 relationship).
+// An AnimationPlayer manages grouped sets of animations (each set of which are
+// stored in an AnimationTicker), and handles the interaction with the
+// AnimationHost and AnimationTimeline.
+//
+// This class is a CC counterpart for blink::Animation, currently in a 1:1
+// relationship. Currently the blink logic is responsible for handling of
+// conflicting same-property animations.
+//
+// Each cc AnimationPlayer has a copy on the impl thread, and will take care of
+// synchronizing properties to/from the impl thread when requested.
+//
+// NOTE(smcgruer): As of 2017/09/06 there is a 1:1 relationship between
+// AnimationPlayer and the AnimationTicker. This is intended to become a 1:N
+// relationship to allow for grouped animations.
 class CC_ANIMATION_EXPORT AnimationPlayer
     : public base::RefCounted<AnimationPlayer> {
  public:
   static scoped_refptr<AnimationPlayer> Create(int id);
-  scoped_refptr<AnimationPlayer> CreateImplInstance() const;
+  virtual scoped_refptr<AnimationPlayer> CreateImplInstance() const;
 
   int id() const { return id_; }
-  ElementId element_id() const { return element_id_; }
+  ElementId element_id() const;
 
   // Parent AnimationHost. AnimationPlayer can be detached from
   // AnimationTimeline.
   AnimationHost* animation_host() { return animation_host_; }
   const AnimationHost* animation_host() const { return animation_host_; }
   void SetAnimationHost(AnimationHost* animation_host);
+  bool has_animation_host() const { return !!animation_host_; }
 
   // Parent AnimationTimeline.
   AnimationTimeline* animation_timeline() { return animation_timeline_; }
@@ -55,10 +63,12 @@ class CC_ANIMATION_EXPORT AnimationPlayer
   }
   void SetAnimationTimeline(AnimationTimeline* timeline);
 
-  // ElementAnimations object where this player is listed.
-  scoped_refptr<ElementAnimations> element_animations() const {
-    return element_animations_;
-  }
+  AnimationTicker* animation_ticker() const { return animation_ticker_.get(); }
+
+  // TODO(smcgruer): Only used by a ui/ unittest: remove.
+  bool has_any_animation() const;
+
+  scoped_refptr<ElementAnimations> element_animations() const;
 
   void set_animation_delegate(AnimationDelegate* delegate) {
     animation_delegate_ = delegate;
@@ -74,157 +84,57 @@ class CC_ANIMATION_EXPORT AnimationPlayer
   void AbortAnimations(TargetProperty::Type target_property,
                        bool needs_completion);
 
-  void PushPropertiesTo(AnimationPlayer* player_impl);
+  virtual void PushPropertiesTo(AnimationPlayer* player_impl);
 
-  void Tick(base::TimeTicks monotonic_time);
   void UpdateState(bool start_ready_animations, AnimationEvents* events);
+  virtual void Tick(base::TimeTicks monotonic_time);
 
-  void UpdateTickingState(UpdateTickingType type);
-  void RemoveFromTicking();
+  void AddToTicking();
+  void AnimationRemovedFromTicking();
 
   // AnimationDelegate routing.
-  bool NotifyAnimationStarted(const AnimationEvent& event);
-  bool NotifyAnimationFinished(const AnimationEvent& event);
-  bool NotifyAnimationAborted(const AnimationEvent& event);
+  void NotifyAnimationStarted(const AnimationEvent& event);
+  void NotifyAnimationFinished(const AnimationEvent& event);
+  void NotifyAnimationAborted(const AnimationEvent& event);
   void NotifyAnimationTakeover(const AnimationEvent& event);
   bool NotifyAnimationFinishedForTesting(TargetProperty::Type target_property,
                                          int group_id);
+  size_t TickingAnimationsCount() const;
 
-  // Returns true if there are any animations that have neither finished nor
-  // aborted.
-  bool HasTickingAnimation() const;
-
-  // Returns true if there are any animations at all to process.
-  bool has_any_animation() const { return !animations_.empty(); }
-
-  bool needs_push_properties() const { return needs_push_properties_; }
   void SetNeedsPushProperties();
-
-  bool HasNonDeletedAnimation() const;
-
-  bool needs_to_start_animations() const { return needs_to_start_animations_; }
-
-  void StartAnimations(base::TimeTicks monotonic_time);
-  void PromoteStartedAnimations(base::TimeTicks monotonic_time,
-                                AnimationEvents* events);
-  void MarkAnimationsForDeletion(base::TimeTicks monotonic_time,
-                                 AnimationEvents* events);
-
-  static void TickAnimation(base::TimeTicks monotonic_time,
-                            Animation* animation,
-                            AnimationTarget* target);
-  void TickAnimations(base::TimeTicks monotonic_time);
-
-  void MarkFinishedAnimations(base::TimeTicks monotonic_time);
 
   // Make animations affect active elements if and only if they affect
   // pending elements. Any animations that no longer affect any elements
   // are deleted.
   void ActivateAnimations();
 
-  bool HasTransformAnimationThatInflatesBounds() const;
-
-  bool TransformAnimationBoundsForBox(const gfx::BoxF& box,
-                                      gfx::BoxF* bounds) const;
-  bool HasOnlyTranslationTransforms(ElementListType list_type) const;
-  bool AnimationsPreserveAxisAlignment() const;
-
-  // Sets |start_scale| to the maximum of starting animation scale along any
-  // dimension at any destination in active animations. Returns false if the
-  // starting scale cannot be computed.
-  bool AnimationStartScale(ElementListType list_type, float* start_scale) const;
-
-  // Sets |max_scale| to the maximum scale along any dimension at any
-  // destination in active animations. Returns false if the maximum scale cannot
-  // be computed.
-  bool MaximumTargetScale(ElementListType list_type, float* max_scale) const;
-
-  // Returns true if there is an animation that is either currently animating
-  // the given property or scheduled to animate this property in the future, and
-  // that affects the given tree type.
-  bool IsPotentiallyAnimatingProperty(TargetProperty::Type target_property,
-                                      ElementListType list_type) const;
-
-  // Returns true if there is an animation that is currently animating the given
-  // property and that affects the given tree type.
-  bool IsCurrentlyAnimatingProperty(TargetProperty::Type target_property,
-                                    ElementListType list_type) const;
-
-  bool HasElementInActiveList() const;
-  gfx::ScrollOffset ScrollOffsetForAnimation() const;
-
   // Returns the animation animating the given property that is either
   // running, or is next to run, if such an animation exists.
   Animation* GetAnimation(TargetProperty::Type target_property) const;
 
-  // Returns animation for the given unique animation id.
-  Animation* GetAnimationById(int animation_id) const;
-
-  void GetPropertyAnimationState(PropertyAnimationState* pending_state,
-                                 PropertyAnimationState* active_state) const;
-
-  // When a scroll animation is removed on the main thread, its compositor
-  // thread counterpart continues producing scroll deltas until activation.
-  // These scroll deltas need to be cleared at activation, so that the active
-  // element's scroll offset matches the offset provided by the main thread
-  // rather than a combination of this offset and scroll deltas produced by
-  // the removed animation. This is to provide the illusion of synchronicity to
-  // JS that simultaneously removes an animation and sets the scroll offset.
-  bool scroll_offset_animation_was_interrupted() const {
-    return scroll_offset_animation_was_interrupted_;
-  }
-
   std::string ToString() const;
+
+  void SetNeedsCommit();
+
+  virtual bool IsWorkletAnimationPlayer() const;
 
  private:
   friend class base::RefCounted<AnimationPlayer>;
 
-  explicit AnimationPlayer(int id);
-  ~AnimationPlayer();
-
-  void SetNeedsCommit();
-
   void RegisterPlayer();
   void UnregisterPlayer();
 
-  void BindElementAnimations();
-  void UnbindElementAnimations();
-
-  void AnimationAdded();
-
-  void MarkAbortedAnimationsForDeletion(
-      AnimationPlayer* animation_player_impl) const;
-  void PurgeAnimationsMarkedForDeletion(bool impl_only);
-  void PushNewAnimationsToImplThread(
-      AnimationPlayer* animation_player_impl) const;
-  void RemoveAnimationsCompletedOnMainThread(
-      AnimationPlayer* animation_player_impl) const;
-  void PushPropertiesToImplThread(AnimationPlayer* animation_player_impl);
-
-  std::string AnimationsToString() const;
-
-  using Animations = std::vector<std::unique_ptr<Animation>>;
-  Animations animations_;
-
   AnimationHost* animation_host_;
   AnimationTimeline* animation_timeline_;
-  // element_animations isn't null if player attached to an element (layer).
-  scoped_refptr<ElementAnimations> element_animations_;
   AnimationDelegate* animation_delegate_;
 
   int id_;
-  ElementId element_id_;
-  bool needs_push_properties_;
-  base::TimeTicks last_tick_time_;
 
-  // Only try to start animations when new animations are added or when the
-  // previous attempt at starting animations failed to start all animations.
-  bool needs_to_start_animations_;
+ protected:
+  explicit AnimationPlayer(int id);
+  virtual ~AnimationPlayer();
 
-  // This is used to ensure that we don't spam the animation host.
-  bool is_ticking_;
-
-  bool scroll_offset_animation_was_interrupted_;
+  std::unique_ptr<AnimationTicker> animation_ticker_;
 
   DISALLOW_COPY_AND_ASSIGN(AnimationPlayer);
 };

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "tools/traffic_annotation/auditor/traffic_annotation_auditor.h"
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
@@ -11,9 +12,12 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "tools/traffic_annotation/auditor/traffic_annotation_exporter.h"
 #include "tools/traffic_annotation/auditor/traffic_annotation_file_filter.h"
 
 namespace {
@@ -31,7 +35,24 @@ const char* kIrrelevantFiles[] = {
 const char* kRelevantFiles[] = {
     "tools/traffic_annotation/auditor/tests/relevant_file_name_and_content.cc",
     "tools/traffic_annotation/auditor/tests/relevant_file_name_and_content.mm"};
-}
+
+const base::FilePath kTestsFolder =
+    base::FilePath(FILE_PATH_LITERAL("tools"))
+        .Append(FILE_PATH_LITERAL("traffic_annotation"))
+        .Append(FILE_PATH_LITERAL("auditor"))
+        .Append(FILE_PATH_LITERAL("tests"));
+
+const base::FilePath kClangToolPath =
+    base::FilePath(FILE_PATH_LITERAL("tools"))
+        .Append(FILE_PATH_LITERAL("traffic_annotation/bin"));
+
+const base::FilePath kDownstreamUnittests =
+    base::FilePath(FILE_PATH_LITERAL("tools"))
+        .Append(FILE_PATH_LITERAL("traffic_annotation"))
+        .Append(FILE_PATH_LITERAL("scripts"))
+        .Append(FILE_PATH_LITERAL("annotations_xml_downstream_caller.py"));
+
+}  // namespace
 
 using namespace testing;
 
@@ -43,16 +64,31 @@ class TrafficAnnotationAuditorTest : public ::testing::Test {
       return;
     }
 
-    tests_folder_ = source_path_.Append(FILE_PATH_LITERAL("tools"))
-                        .Append(FILE_PATH_LITERAL("traffic_annotation"))
-                        .Append(FILE_PATH_LITERAL("auditor"))
-                        .Append(FILE_PATH_LITERAL("tests"));
-    auditor_ =
-        base::MakeUnique<TrafficAnnotationAuditor>(source_path(), build_path());
+    tests_folder_ = source_path_.Append(kTestsFolder);
+
+#if defined(OS_WIN)
+    base::FilePath platform_name(FILE_PATH_LITERAL("win32"));
+#elif defined(OS_LINUX)
+    base::FilePath platform_name(FILE_PATH_LITERAL("linux64"));
+#elif defined(OS_MACOSX)
+    base::FilePath platform_name(FILE_PATH_LITERAL("mac"));
+#else
+    NOTREACHED() << "Unexpected platform.";
+#endif
+
+    base::FilePath clang_tool_path =
+        source_path_.Append(kClangToolPath).Append(platform_name);
+
+    // As build path is not available and not used in tests, the default (empty)
+    // build path is passed to auditor.
+    auditor_ = std::make_unique<TrafficAnnotationAuditor>(
+        source_path_,
+        source_path_.Append(FILE_PATH_LITERAL("out"))
+            .Append(FILE_PATH_LITERAL("Default")),
+        clang_tool_path);
   }
 
   const base::FilePath source_path() const { return source_path_; }
-  const base::FilePath build_path() const { return build_path_; }
   const base::FilePath tests_folder() const { return tests_folder_; };
   TrafficAnnotationAuditor& auditor() { return *auditor_; }
 
@@ -74,9 +110,6 @@ class TrafficAnnotationAuditorTest : public ::testing::Test {
 
  private:
   base::FilePath source_path_;
-  base::FilePath build_path_;  // Currently stays empty. Will be set if access
-                               // to a compiled build directory would be
-                               // granted.
   base::FilePath tests_folder_;
   std::unique_ptr<TrafficAnnotationAuditor> auditor_;
 };
@@ -88,7 +121,8 @@ AuditorResult::Type TrafficAnnotationAuditorTest::Deserialize(
   EXPECT_TRUE(base::ReadFileToString(
       tests_folder_.Append(FILE_PATH_LITERAL("extractor_outputs"))
           .AppendASCII(file_name),
-      &file_content));
+      &file_content))
+      << file_name;
   base::RemoveChars(file_content, "\r", &file_content);
   std::vector<std::string> lines = base::SplitString(
       file_content, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -818,4 +852,87 @@ TEST_F(TrafficAnnotationAuditorTest, CreateCompleteAnnotation) {
           NetworkTrafficAnnotation_TrafficSemantics_Destination_LOCAL);
   EXPECT_NE(instance.CreateCompleteAnnotation(other, &combination).type(),
             AuditorResult::Type::RESULT_OK);
+}
+
+// Tests if Annotations.xml has proper content.
+TEST_F(TrafficAnnotationAuditorTest, AnnotationsXML) {
+  TrafficAnnotationExporter exporter(source_path());
+
+  EXPECT_TRUE(exporter.LoadAnnotationsXML());
+  EXPECT_TRUE(exporter.CheckReportItems());
+}
+
+// Tests if downstream files depending on of Annotations.xml are updated.
+TEST_F(TrafficAnnotationAuditorTest, AnnotationsDownstreamUnittests) {
+  base::CommandLine cmdline(source_path().Append(kDownstreamUnittests));
+  cmdline.AppendSwitch("test");
+
+  int tests_result;
+#if defined(OS_WIN)
+  cmdline.PrependWrapper(L"python");
+  tests_result =
+      system(base::UTF16ToASCII(cmdline.GetCommandLineString()).c_str());
+#else
+  tests_result = system(cmdline.GetCommandLineString().c_str());
+#endif
+  EXPECT_EQ(0, tests_result);
+}
+
+// Tests if AnnotationInstance::GetClangLibraryPath finds a path.
+TEST_F(TrafficAnnotationAuditorTest, GetClangLibraryPath) {
+  base::FilePath clang_library = auditor().GetClangLibraryPath();
+  EXPECT_FALSE(clang_library.empty());
+}
+
+// Tests if 'annotations.xml' is read and has at least one item.
+TEST_F(TrafficAnnotationAuditorTest, AnnotationsXMLLines) {
+  TrafficAnnotationExporter exporter(source_path());
+  EXPECT_LE(1u, exporter.GetXMLItemsCountForTesting());
+}
+
+// Tests if 'annotations.xml' changes are correctly reported.
+TEST_F(TrafficAnnotationAuditorTest, AnnotationsXMLDifferences) {
+  TrafficAnnotationExporter exporter(source_path());
+
+  std::string xml1;
+  std::string xml2;
+  std::string xml3;
+
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_sample1.xml"))),
+      &xml1));
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_sample2.xml"))),
+      &xml2));
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_sample3.xml"))),
+      &xml3));
+
+  std::string diff12 = exporter.GetXMLDifferencesForTesting(xml1, xml2);
+  std::string diff13 = exporter.GetXMLDifferencesForTesting(xml1, xml3);
+  std::string diff23 = exporter.GetXMLDifferencesForTesting(xml2, xml3);
+
+  std::string expected_diff12;
+  std::string expected_diff13;
+  std::string expected_diff23;
+
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_diff12.txt"))),
+      &expected_diff12));
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_diff13.txt"))),
+      &expected_diff13));
+  EXPECT_TRUE(base::ReadFileToString(
+      base::MakeAbsoluteFilePath(
+          tests_folder().Append(FILE_PATH_LITERAL("annotations_diff23.txt"))),
+      &expected_diff23));
+
+  EXPECT_EQ(diff12, expected_diff12);
+  EXPECT_EQ(diff13, expected_diff13);
+  EXPECT_EQ(diff23, expected_diff23);
 }

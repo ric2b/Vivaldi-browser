@@ -5,8 +5,10 @@
 #include "cc/paint/paint_op_reader.h"
 
 #include <stddef.h>
+#include <algorithm>
 
 #include "cc/paint/paint_flags.h"
+#include "cc/paint/paint_op_buffer.h"
 #include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/core/SkFlattenableSerialization.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -16,8 +18,33 @@
 namespace cc {
 namespace {
 
+uint32_t kMaxTypefacesCount = 128;
+size_t kMaxFilenameSize = 1024;
+size_t kMaxFamilyNameSize = 128;
+
 // If we have more than this many colors, abort deserialization.
 const size_t kMaxShaderColorsSupported = 10000;
+
+struct TypefacesCatalog {
+  const std::vector<PaintTypeface>* typefaces;
+  bool had_null = false;
+};
+
+sk_sp<SkTypeface> ResolveTypeface(uint32_t id, void* ctx) {
+  TypefacesCatalog* catalog = static_cast<TypefacesCatalog*>(ctx);
+  auto typeface_it = std::find_if(
+      catalog->typefaces->begin(), catalog->typefaces->end(),
+      [id](const PaintTypeface& typeface) { return typeface.sk_id() == id; });
+  // TODO(vmpstr): The !*typeface check is here because not all typefaces are
+  // supported right now. Instead of making the reader invalid during the
+  // typeface deserialization, which results in an invalid op, instead just make
+  // the textblob be null by setting |had_null| to true.
+  if (typeface_it == catalog->typefaces->end() || !*typeface_it) {
+    catalog->had_null = true;
+    return nullptr;
+  }
+  return typeface_it->ToSkTypeface();
+}
 
 bool IsValidPaintShaderType(PaintShader::Type type) {
   return static_cast<uint8_t>(type) <
@@ -35,14 +62,42 @@ bool IsValidPaintShaderScalingBehavior(PaintShader::ScalingBehavior behavior) {
 
 }  // namespace
 
+// static
+void PaintOpReader::FixupMatrixPostSerialization(SkMatrix* matrix) {
+  // Can't trust malicious clients to provide the correct derived matrix type.
+  // However, if a matrix thinks that it's identity, then make it so.
+  if (matrix->isIdentity())
+    matrix->setIdentity();
+  else
+    matrix->dirtyMatrixTypeCache();
+}
+
+// static
+bool PaintOpReader::ReadAndValidateOpHeader(const volatile void* input,
+                                            size_t input_size,
+                                            uint8_t* type,
+                                            uint32_t* skip) {
+  uint32_t first_word = reinterpret_cast<const volatile uint32_t*>(input)[0];
+  *type = static_cast<uint8_t>(first_word & 0xFF);
+  *skip = first_word >> 8;
+
+  if (input_size < *skip)
+    return false;
+  if (*skip % PaintOpBuffer::PaintOpAlign != 0)
+    return false;
+  if (*type > static_cast<uint8_t>(PaintOpType::LastPaintOpType))
+    return false;
+  return true;
+}
+
 template <typename T>
 void PaintOpReader::ReadSimple(T* val) {
   static_assert(base::is_trivially_copyable<T>::value,
                 "Not trivially copyable");
   if (!AlignMemory(alignof(T)))
-    valid_ = false;
+    SetInvalid();
   if (remaining_bytes_ < sizeof(T))
-    valid_ = false;
+    SetInvalid();
   if (!valid_)
     return;
 
@@ -61,9 +116,9 @@ void PaintOpReader::ReadFlattenable(sk_sp<T>* val) {
   size_t bytes = 0;
   ReadSimple(&bytes);
   if (remaining_bytes_ < bytes)
-    valid_ = false;
+    SetInvalid();
   if (!SkIsAlign4(reinterpret_cast<uintptr_t>(memory_)))
-    valid_ = false;
+    SetInvalid();
   if (!valid_)
     return;
   if (bytes == 0)
@@ -75,7 +130,7 @@ void PaintOpReader::ReadFlattenable(sk_sp<T>* val) {
   val->reset(static_cast<T*>(SkValidatingDeserializeFlattenable(
       const_cast<const char*>(memory_), bytes, T::GetFlattenableType())));
   if (!val)
-    valid_ = false;
+    SetInvalid();
 
   memory_ += bytes;
   remaining_bytes_ -= bytes;
@@ -83,7 +138,7 @@ void PaintOpReader::ReadFlattenable(sk_sp<T>* val) {
 
 void PaintOpReader::ReadData(size_t bytes, void* data) {
   if (remaining_bytes_ < bytes)
-    valid_ = false;
+    SetInvalid();
   if (!valid_)
     return;
   if (bytes == 0)
@@ -97,10 +152,10 @@ void PaintOpReader::ReadData(size_t bytes, void* data) {
 void PaintOpReader::ReadArray(size_t count, SkPoint* array) {
   size_t bytes = count * sizeof(SkPoint);
   if (remaining_bytes_ < bytes)
-    valid_ = false;
+    SetInvalid();
   // Overflow?
   if (count > static_cast<size_t>(~0) / sizeof(SkPoint))
-    valid_ = false;
+    SetInvalid();
   if (!valid_)
     return;
   if (count == 0)
@@ -111,15 +166,27 @@ void PaintOpReader::ReadArray(size_t count, SkPoint* array) {
   remaining_bytes_ -= bytes;
 }
 
+void PaintOpReader::ReadSize(size_t* size) {
+  ReadSimple(size);
+}
+
 void PaintOpReader::Read(SkScalar* data) {
   ReadSimple(data);
 }
 
-void PaintOpReader::Read(size_t* data) {
+void PaintOpReader::Read(uint8_t* data) {
   ReadSimple(data);
 }
 
-void PaintOpReader::Read(uint8_t* data) {
+void PaintOpReader::Read(uint32_t* data) {
+  ReadSimple(data);
+}
+
+void PaintOpReader::Read(uint64_t* data) {
+  ReadSimple(data);
+}
+
+void PaintOpReader::Read(int32_t* data) {
   ReadSimple(data);
 }
 
@@ -146,7 +213,7 @@ void PaintOpReader::Read(SkPath* path) {
   size_t read_bytes =
       path->readFromMemory(const_cast<const char*>(memory_), remaining_bytes_);
   if (!read_bytes)
-    valid_ = false;
+    SetInvalid();
 
   memory_ += read_bytes;
   remaining_bytes_ -= read_bytes;
@@ -168,7 +235,6 @@ void PaintOpReader::Read(PaintFlags* flags) {
   ReadFlattenable(&flags->mask_filter_);
   ReadFlattenable(&flags->color_filter_);
   ReadFlattenable(&flags->draw_looper_);
-  ReadFlattenable(&flags->image_filter_);
 
   Read(&flags->shader_);
 }
@@ -181,7 +247,7 @@ void PaintOpReader::Read(sk_sp<SkData>* data) {
   size_t bytes = 0;
   ReadSimple(&bytes);
   if (remaining_bytes_ < bytes)
-    valid_ = false;
+    SetInvalid();
   if (!valid_)
     return;
 
@@ -201,8 +267,120 @@ void PaintOpReader::Read(sk_sp<SkData>* data) {
   remaining_bytes_ -= bytes;
 }
 
-void PaintOpReader::Read(sk_sp<SkTextBlob>* blob) {
-  // TODO(enne): implement SkTextBlob serialization: http://crbug.com/737629
+void PaintOpReader::Read(std::vector<PaintTypeface>* typefaces) {
+  uint32_t typefaces_count;
+  ReadSimple(&typefaces_count);
+  if (!valid_ || typefaces_count > kMaxTypefacesCount) {
+    SetInvalid();
+    return;
+  }
+  typefaces->reserve(typefaces_count);
+  for (uint32_t i = 0; i < typefaces_count; ++i) {
+    SkFontID id;
+    uint8_t type;
+    PaintTypeface typeface;
+    ReadSimple(&id);
+    ReadSimple(&type);
+    if (!valid_)
+      return;
+    switch (static_cast<PaintTypeface::Type>(type)) {
+      case PaintTypeface::Type::kTestTypeface:
+        typeface = PaintTypeface::TestTypeface();
+        break;
+      case PaintTypeface::Type::kSkTypeface:
+        // TODO(vmpstr): This shouldn't ever happen once everything is
+        // implemented. So this should be a failure (ie |valid_| = false).
+        break;
+      case PaintTypeface::Type::kFontConfigInterfaceIdAndTtcIndex: {
+        int font_config_interface_id;
+        int ttc_index;
+        ReadSimple(&font_config_interface_id);
+        ReadSimple(&ttc_index);
+        typeface = PaintTypeface::FromFontConfigInterfaceIdAndTtcIndex(
+            font_config_interface_id, ttc_index);
+        break;
+      }
+      case PaintTypeface::Type::kFilenameAndTtcIndex: {
+        size_t size;
+        ReadSimple(&size);
+        if (!valid_ || size > kMaxFilenameSize) {
+          SetInvalid();
+          return;
+        }
+
+        std::unique_ptr<char[]> buffer(new char[size]);
+        ReadData(size, buffer.get());
+        std::string filename(buffer.get(), size);
+
+        int ttc_index;
+        ReadSimple(&ttc_index);
+        typeface = PaintTypeface::FromFilenameAndTtcIndex(filename, ttc_index);
+        break;
+      }
+      case PaintTypeface::Type::kFamilyNameAndFontStyle: {
+        size_t size;
+        ReadSimple(&size);
+        if (!valid_ || size > kMaxFamilyNameSize) {
+          SetInvalid();
+          return;
+        }
+
+        std::unique_ptr<char[]> buffer(new char[size]);
+        ReadData(size, buffer.get());
+        std::string family_name(buffer.get(), size);
+
+        int weight;
+        int width;
+        SkFontStyle::Slant slant;
+        ReadSimple(&weight);
+        ReadSimple(&width);
+        ReadSimple(&slant);
+        typeface = PaintTypeface::FromFamilyNameAndFontStyle(
+            family_name, SkFontStyle(weight, width, slant));
+        break;
+      }
+    }
+    typeface.SetSkId(id);
+    typefaces->emplace_back(std::move(typeface));
+  }
+}
+
+void PaintOpReader::Read(const std::vector<PaintTypeface>& typefaces,
+                         sk_sp<SkTextBlob>* blob) {
+  sk_sp<SkData> data;
+  Read(&data);
+  if (!data || !valid_)
+    return;
+
+  // Skia expects the following to be true, make sure we don't pass it incorrect
+  // data.
+  if (!data->data() || !SkIsAlign4(data->size())) {
+    SetInvalid();
+    return;
+  }
+
+  TypefacesCatalog catalog;
+  catalog.typefaces = &typefaces;
+  *blob = SkTextBlob::Deserialize(data->data(), data->size(), &ResolveTypeface,
+                                  &catalog);
+  if (catalog.had_null)
+    *blob = nullptr;
+}
+
+void PaintOpReader::Read(scoped_refptr<PaintTextBlob>* paint_blob) {
+  std::vector<PaintTypeface> typefaces;
+  sk_sp<SkTextBlob> blob;
+
+  Read(&typefaces);
+  Read(typefaces, &blob);
+  // TODO(vmpstr): If we couldn't serialize |blob|, we should make |paint_blob|
+  // nullptr. However, this causes GL errors right now, because not all
+  // typefaces are serialized. Fix this once we serialize everything. For now
+  // the behavior is that the |paint_blob| op exists and is valid, but
+  // internally it has a nullptr SkTextBlob which skia ignores.
+  // See also: TODO in paint_op_buffer_eq_fuzzer.
+  *paint_blob = base::MakeRefCounted<PaintTextBlob>(std::move(blob),
+                                                    std::move(typefaces));
 }
 
 void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
@@ -216,7 +394,7 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
   ReadSimple(&shader_type);
   // Avoid creating a shader if something is invalid.
   if (!valid_ || !IsValidPaintShaderType(shader_type)) {
-    valid_ = false;
+    SetInvalid();
     return;
   }
 
@@ -228,16 +406,16 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
   ReadSimple(&ref.tx_);
   ReadSimple(&ref.ty_);
   if (!IsValidSkShaderTileMode(ref.tx_) || !IsValidSkShaderTileMode(ref.ty_))
-    valid_ = false;
+    SetInvalid();
   ReadSimple(&ref.fallback_color_);
   ReadSimple(&ref.scaling_behavior_);
   if (!IsValidPaintShaderScalingBehavior(ref.scaling_behavior_))
-    valid_ = false;
+    SetInvalid();
   bool has_local_matrix = false;
   ReadSimple(&has_local_matrix);
   if (has_local_matrix) {
     ref.local_matrix_.emplace();
-    ReadSimple(&*ref.local_matrix_);
+    Read(&*ref.local_matrix_);
   }
   ReadSimple(&ref.center_);
   ReadSimple(&ref.tile_);
@@ -252,12 +430,12 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
 
   // If there are too many colors, abort.
   if (colors_size > kMaxShaderColorsSupported) {
-    valid_ = false;
+    SetInvalid();
     return;
   }
   size_t colors_bytes = colors_size * sizeof(SkColor);
   if (colors_bytes > remaining_bytes_) {
-    valid_ = false;
+    SetInvalid();
     return;
   }
   ref.colors_.resize(colors_size);
@@ -265,15 +443,14 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
 
   decltype(ref.positions_)::size_type positions_size = 0;
   ReadSimple(&positions_size);
-  // TODO(enne): positions and colors have to have the same count, so maybe
-  // don't serialize this either?
-  if (positions_size != colors_size) {
-    valid_ = false;
+  // Positions are optional. If they exist, they have the same count as colors.
+  if (positions_size > 0 && positions_size != colors_size) {
+    SetInvalid();
     return;
   }
   size_t positions_bytes = positions_size * sizeof(SkScalar);
   if (positions_bytes > remaining_bytes_) {
-    valid_ = false;
+    SetInvalid();
     return;
   }
   ref.positions_.resize(positions_size);
@@ -292,8 +469,25 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
   }
 
   if (!(*shader)->IsValid()) {
-    valid_ = false;
+    SetInvalid();
   }
+}
+
+void PaintOpReader::Read(SkMatrix* matrix) {
+  ReadSimple(matrix);
+  FixupMatrixPostSerialization(matrix);
+}
+
+void PaintOpReader::Read(SkColorType* color_type) {
+  uint32_t raw_color_type;
+  ReadSimple(&raw_color_type);
+
+  if (raw_color_type > kLastEnum_SkColorType) {
+    SetInvalid();
+    return;
+  }
+
+  *color_type = static_cast<SkColorType>(raw_color_type);
 }
 
 bool PaintOpReader::AlignMemory(size_t alignment) {
@@ -313,6 +507,24 @@ bool PaintOpReader::AlignMemory(size_t alignment) {
   memory_ += padding;
   remaining_bytes_ -= padding;
   return true;
+}
+
+inline void PaintOpReader::SetInvalid() {
+  valid_ = false;
+}
+
+const volatile void* PaintOpReader::ExtractReadableMemory(size_t bytes) {
+  if (remaining_bytes_ < bytes)
+    SetInvalid();
+  if (!valid_)
+    return nullptr;
+  if (bytes == 0)
+    return nullptr;
+
+  const volatile void* extracted_memory = memory_;
+  memory_ += bytes;
+  remaining_bytes_ -= bytes;
+  return extracted_memory;
 }
 
 }  // namespace cc

@@ -24,8 +24,9 @@
 #include "core/html/forms/BaseTextInputType.h"
 
 #include "bindings/core/v8/ScriptRegexp.h"
-#include "core/HTMLNames.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/dom/Document.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 
 namespace blink {
@@ -87,12 +88,11 @@ bool BaseTextInputType::PatternMismatch(const String& value) const {
         new ScriptRegexp(raw_pattern, kTextCaseSensitive, kMultilineDisabled,
                          ScriptRegexp::UTF16));
     if (!raw_regexp->IsValid()) {
-      GetElement().GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-          kRenderingMessageSource, kErrorMessageLevel,
-          String::Format("Pattern attribute value %s is not a valid regular "
-                         "expression: %s",
-                         raw_pattern.Utf8().data(),
-                         raw_regexp->ExceptionMessage().Utf8().data())));
+      GetElement().GetDocument().AddConsoleMessage(
+          ConsoleMessage::Create(kRenderingMessageSource, kErrorMessageLevel,
+                                 "Pattern attribute value " + raw_pattern +
+                                     " is not a valid regular expression: " +
+                                     raw_regexp->ExceptionMessage()));
       regexp_.reset(raw_regexp.release());
       pattern_for_regexp_ = raw_pattern;
       return false;

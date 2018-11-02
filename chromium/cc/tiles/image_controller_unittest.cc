@@ -69,13 +69,13 @@ class WorkerTaskRunner : public base::SequencedTaskRunner {
  public:
   WorkerTaskRunner() { thread_.Start(); }
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
                                   base::OnceClosure task,
                                   base::TimeDelta delay) override {
     return PostDelayedTask(from_here, std::move(task), delay);
   }
 
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     thread_.PostTask(std::move(task));
@@ -98,25 +98,22 @@ class TestableCache : public StubDecodeCache {
  public:
   ~TestableCache() override { EXPECT_EQ(number_of_refs_, 0); }
 
-  bool GetTaskForImageAndRef(const DrawImage& image,
-                             const TracingInfo& tracing_info,
-                             scoped_refptr<TileTask>* task) override {
+  TaskResult GetTaskForImageAndRef(const DrawImage& image,
+                                   const TracingInfo& tracing_info) override {
     // Return false for large images to mimic "won't fit in memory"
     // behavior.
     if (image.paint_image() &&
         image.paint_image().width() * image.paint_image().height() >=
             1000 * 1000) {
-      return false;
+      return TaskResult(false);
     }
 
-    *task = task_to_use_;
     ++number_of_refs_;
-    return true;
+    return TaskResult(task_to_use_);
   }
-  bool GetOutOfRasterDecodeTaskForImageAndRef(
-      const DrawImage& image,
-      scoped_refptr<TileTask>* task) override {
-    return GetTaskForImageAndRef(image, TracingInfo(), task);
+  TaskResult GetOutOfRasterDecodeTaskForImageAndRef(
+      const DrawImage& image) override {
+    return GetTaskForImageAndRef(image, TracingInfo());
   }
 
   void UnrefImage(const DrawImage& image) override {
@@ -231,18 +228,21 @@ int kDefaultTimeoutSeconds = 10;
 DrawImage CreateDiscardableDrawImage(gfx::Size size) {
   return DrawImage(CreateDiscardablePaintImage(size),
                    SkIRect::MakeWH(size.width(), size.height()),
-                   kNone_SkFilterQuality, SkMatrix::I(), gfx::ColorSpace());
+                   kNone_SkFilterQuality, SkMatrix::I(),
+                   PaintImage::kDefaultFrameIndex, gfx::ColorSpace());
 }
 
 class ImageControllerTest : public testing::Test {
  public:
-  ImageControllerTest() : task_runner_(base::SequencedTaskRunnerHandle::Get()) {
+  ImageControllerTest()
+      : task_runner_(base::SequencedTaskRunnerHandle::Get()),
+        weak_ptr_factory_(this) {
     image_ = CreateDiscardableDrawImage(gfx::Size(1, 1));
   }
   ~ImageControllerTest() override = default;
 
   void SetUp() override {
-    worker_task_runner_ = make_scoped_refptr(new WorkerTaskRunner);
+    worker_task_runner_ = base::MakeRefCounted<WorkerTaskRunner>();
     controller_.reset(
         new ImageController(task_runner_.get(), worker_task_runner_));
     cache_ = TestableCache();
@@ -252,6 +252,7 @@ class ImageControllerTest : public testing::Test {
   void TearDown() override {
     controller_.reset();
     worker_task_runner_ = nullptr;
+    weak_ptr_factory_.InvalidateWeakPtrs();
   }
 
   base::SequencedTaskRunner* task_runner() { return task_runner_.get(); }
@@ -260,7 +261,7 @@ class ImageControllerTest : public testing::Test {
   const DrawImage& image() const { return image_; }
 
   // Timeout callback, which errors and exits the runloop.
-  static void Timeout(base::RunLoop* run_loop) {
+  void Timeout(base::RunLoop* run_loop) {
     ADD_FAILURE() << "Timeout.";
     run_loop->Quit();
   }
@@ -270,6 +271,7 @@ class ImageControllerTest : public testing::Test {
     task_runner_->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&ImageControllerTest::Timeout,
+                       weak_ptr_factory_.GetWeakPtr(),
                        base::Unretained(run_loop)),
         base::TimeDelta::FromSeconds(kDefaultTimeoutSeconds));
     run_loop->Run();
@@ -283,6 +285,8 @@ class ImageControllerTest : public testing::Test {
   TestableCache cache_;
   std::unique_ptr<ImageController> controller_;
   DrawImage image_;
+
+  base::WeakPtrFactory<ImageControllerTest> weak_ptr_factory_;
 };
 
 TEST_F(ImageControllerTest, NullControllerUnrefsImages) {
@@ -320,12 +324,13 @@ TEST_F(ImageControllerTest, QueueImageDecodeNonLazy) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(1, 1);
-  DrawImage image = DrawImage(PaintImageBuilder()
-                                  .set_id(PaintImage::GetNextId())
-                                  .set_image(SkImage::MakeFromBitmap(bitmap))
-                                  .TakePaintImage(),
-                              SkIRect::MakeWH(1, 1), kNone_SkFilterQuality,
-                              SkMatrix::I(), gfx::ColorSpace());
+  DrawImage image =
+      DrawImage(PaintImageBuilder::WithDefault()
+                    .set_id(PaintImage::GetNextId())
+                    .set_image(SkImage::MakeFromBitmap(bitmap))
+                    .TakePaintImage(),
+                SkIRect::MakeWH(1, 1), kNone_SkFilterQuality, SkMatrix::I(),
+                PaintImage::kDefaultFrameIndex, gfx::ColorSpace());
 
   ImageController::ImageDecodeRequestId expected_id =
       controller()->QueueImageDecode(

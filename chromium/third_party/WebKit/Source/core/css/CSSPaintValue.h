@@ -5,6 +5,7 @@
 #ifndef CSSPaintValue_h
 #define CSSPaintValue_h
 
+#include "base/macros.h"
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSImageGeneratorValue.h"
 #include "core/css/CSSPaintImageGenerator.h"
@@ -20,8 +21,9 @@ class CSSPaintValue : public CSSImageGeneratorValue {
     return new CSSPaintValue(name);
   }
 
-  static CSSPaintValue* Create(CSSCustomIdentValue* name,
-                               Vector<RefPtr<CSSVariableData>>& variable_data) {
+  static CSSPaintValue* Create(
+      CSSCustomIdentValue* name,
+      Vector<scoped_refptr<CSSVariableData>>& variable_data) {
     return new CSSPaintValue(name, variable_data);
   }
 
@@ -31,10 +33,11 @@ class CSSPaintValue : public CSSImageGeneratorValue {
 
   String GetName() const;
 
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize&);
+  // The |container_size| is container size with subpixel snapping.
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size);
   bool IsFixedSize() const { return false; }
   IntSize FixedSize(const Document&) { return IntSize(); }
 
@@ -52,21 +55,20 @@ class CSSPaintValue : public CSSImageGeneratorValue {
     return generator_ ? &generator_->CustomInvalidationProperties() : nullptr;
   }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
   explicit CSSPaintValue(CSSCustomIdentValue* name);
 
-  CSSPaintValue(CSSCustomIdentValue* name, Vector<RefPtr<CSSVariableData>>&);
+  CSSPaintValue(CSSCustomIdentValue* name,
+                Vector<scoped_refptr<CSSVariableData>>&);
 
   class Observer final : public CSSPaintImageGenerator::Observer {
-    WTF_MAKE_NONCOPYABLE(Observer);
-
    public:
     explicit Observer(CSSPaintValue* owner_value) : owner_value_(owner_value) {}
 
-    ~Observer() override {}
-    DEFINE_INLINE_VIRTUAL_TRACE() {
+    ~Observer() override = default;
+    virtual void Trace(blink::Visitor* visitor) {
       visitor->Trace(owner_value_);
       CSSPaintImageGenerator::Observer::Trace(visitor);
     }
@@ -75,11 +77,12 @@ class CSSPaintValue : public CSSImageGeneratorValue {
 
    private:
     Member<CSSPaintValue> owner_value_;
+    DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   void PaintImageGeneratorReady();
 
-  bool ParseInputArguments();
+  bool ParseInputArguments(const Document&);
 
   bool input_arguments_invalid_ = false;
 
@@ -87,7 +90,7 @@ class CSSPaintValue : public CSSImageGeneratorValue {
   Member<CSSPaintImageGenerator> generator_;
   Member<Observer> paint_image_generator_observer_;
   Member<CSSStyleValueVector> parsed_input_arguments_;
-  Vector<RefPtr<CSSVariableData>> argument_variable_data_;
+  Vector<scoped_refptr<CSSVariableData>> argument_variable_data_;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSPaintValue, IsPaintValue());

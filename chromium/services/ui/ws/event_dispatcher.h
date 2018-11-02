@@ -20,7 +20,9 @@
 #include "services/ui/ws/event_targeter.h"
 #include "services/ui/ws/event_targeter_delegate.h"
 #include "services/ui/ws/modal_window_controller.h"
-#include "services/ui/ws/server_window_observer.h"
+#include "services/ui/ws/server_window_drawn_tracker_observer.h"
+#include "ui/display/types/display_constants.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace viz {
@@ -41,15 +43,16 @@ class DragSource;
 class DragTargetConnection;
 class EventDispatcherDelegate;
 class ServerWindow;
+class ServerWindowDrawnTracker;
 
-struct DisplayLocation;
+struct EventLocation;
 
 namespace test {
 class EventDispatcherTestApi;
 }
 
 // Handles dispatching events to the right location as well as updating focus.
-class EventDispatcher : public ServerWindowObserver,
+class EventDispatcher : public ServerWindowDrawnTrackerObserver,
                         public DragCursorUpdater,
                         public EventTargeterDelegate {
  public:
@@ -73,12 +76,7 @@ class EventDispatcher : public ServerWindowObserver,
   // any events to the delegate.
   void Reset();
 
-  // Generates a mouse move event corresponding to the mouse moving to a
-  // particular location.
-  std::unique_ptr<ui::Event> GenerateMouseMoveFor(
-      const gfx::Point& display_location) const;
-
-  const gfx::Point& mouse_pointer_last_location() const {
+  const gfx::PointF& mouse_pointer_last_location() const {
     return mouse_pointer_last_location_;
   }
   int64_t mouse_pointer_display_id() const { return mouse_pointer_display_id_; }
@@ -165,13 +163,14 @@ class EventDispatcher : public ServerWindowObserver,
   // handled this is again called with an AcceleratorMatchPhase of POST_ONLY.
   // This may be asynchronous if we need to find the target window for |event|
   // asynchronously.
+  // NOTE: if |event| is a LocatedEvent, then |event_location.location| is the
+  // same as the location (and root_location) of |event|.
   void ProcessEvent(const ui::Event& event,
-                    int64_t display_id,
+                    const EventLocation& event_location,
                     AcceleratorMatchPhase match_phase);
 
   // EventTargeterDelegate:
-  ServerWindow* GetRootWindowContaining(gfx::Point* location_in_display,
-                                        int64_t* display_id) override;
+  ServerWindow* GetRootWindowForDisplay(int64_t display_id) override;
   void ProcessNextAvailableEvent() override;
   viz::HitTestQuery* GetHitTestQueryForDisplay(int64_t display_id) override;
   ServerWindow* GetWindowFromFrameSinkId(
@@ -182,23 +181,19 @@ class EventDispatcher : public ServerWindowObserver,
 
   // Keeps track of state associated with an active pointer.
   struct PointerTarget {
-    PointerTarget()
-        : window(nullptr),
-          is_mouse_event(false),
-          in_nonclient_area(false),
-          is_pointer_down(false) {}
-
     // The target window, which may be null. null is used in two situations:
     // when there is no valid window target, or there was a target but the
     // window is destroyed before a corresponding release/cancel.
-    ServerWindow* window;
+    ServerWindow* window = nullptr;
 
-    bool is_mouse_event;
+    bool is_mouse_event = false;
 
     // Did the pointer event start in the non-client area.
-    bool in_nonclient_area;
+    bool in_nonclient_area = false;
 
-    bool is_pointer_down;
+    bool is_pointer_down = false;
+
+    int64_t display_id = display::kInvalidDisplayId;
   };
 
   struct DeepestWindowAndTarget {
@@ -206,8 +201,15 @@ class EventDispatcher : public ServerWindowObserver,
     DeepestWindow deepest_window;
   };
 
-  DisplayLocation GetDisplayLocationFromEvent(const ui::PointerEvent& event,
-                                              int64_t display_id) const;
+  struct ObservedWindow {
+    ObservedWindow();
+    ~ObservedWindow();
+
+    // Number of times ObserveWindow() has been called.
+    uint8_t num_observers = 0;
+
+    std::unique_ptr<ServerWindowDrawnTracker> drawn_tracker;
+  };
 
   // EventTargeter returns the deepest window based on hit-test data. If the
   // target is blocked by a modal window this returns a different target,
@@ -224,10 +226,11 @@ class EventDispatcher : public ServerWindowObserver,
   // TODO(riajiang): No need to update mouse location after ozone drm can tell
   // us the right display the cursor is on for drag-n-drop events.
   // crbug.com/726470
-  void SetMousePointerLocation(const gfx::Point& new_mouse_location,
+  void SetMousePointerLocation(const gfx::PointF& new_mouse_location,
                                int64_t new_mouse_display_id);
 
   void ProcessKeyEvent(const ui::KeyEvent& event,
+                       int64_t display_id,
                        AcceleratorMatchPhase match_phase);
 
   // When the user presses a key, we want to hide the cursor if it doesn't
@@ -244,7 +247,7 @@ class EventDispatcher : public ServerWindowObserver,
   // Callback from EventTargeter once the target has been found. Calls
   // ProcessPointerEventOnFoundTargetImpl().
   void ProcessPointerEventOnFoundTarget(const ui::PointerEvent& event,
-                                        const DisplayLocation& display_location,
+                                        const EventLocation& event_location,
                                         const DeepestWindow& target);
 
   // EventDispatcher provides the following logic for pointer events:
@@ -261,24 +264,23 @@ class EventDispatcher : public ServerWindowObserver,
   // If ShouldUseEventTargeter() returned false it means this function should
   // not need |found_target| and has enough information to process the event
   // without a DeepestWindow.
-  void ProcessPointerEventOnFoundTargetImpl(
-      const ui::PointerEvent& event,
-      const DisplayLocation& display_location,
-      const DeepestWindow* found_target);
+  void ProcessPointerEventOnFoundTargetImpl(const ui::PointerEvent& event,
+                                            const EventLocation& event_location,
+                                            const DeepestWindow* found_target);
 
   // Called when processing a pointer event to updated cursor related
   // properties.
   void UpdateCursorRelatedProperties(const ui::PointerEvent& event,
-                                     const DisplayLocation& display_location);
+                                     const EventLocation& event_location);
 
   void UpdateNonClientAreaForCurrentWindowOnFoundWindow(
-      const DisplayLocation& display_location,
+      const EventLocation& event_location,
       const DeepestWindow& target);
 
   // This callback is triggered by UpdateCursorProviderByLastKnownLocation().
   // It calls UpdateCursorProvider() as appropriate.
   void UpdateCursorProviderByLastKnownLocationOnFoundWindow(
-      const DisplayLocation& display_location,
+      const EventLocation& event_location,
       const DeepestWindow& target);
 
   // Immediatley updates the cursor provider (|mouse_cursor_source_window_|)
@@ -300,19 +302,22 @@ class EventDispatcher : public ServerWindowObserver,
   // currently tracked PointerTarget appropriately.
   void UpdateTargetForPointer(int32_t pointer_id,
                               const ui::PointerEvent& event,
-                              const PointerTarget& pointer_target);
+                              const PointerTarget& pointer_target,
+                              const EventLocation& event_location);
 
   // Returns true if any pointers are in the pressed/down state.
   bool AreAnyPointersDown() const;
 
   // If |target->window| is valid, then passes the event to the delegate.
   void DispatchToPointerTarget(const PointerTarget& target,
-                               const ui::LocatedEvent& event);
+                               const ui::LocatedEvent& event,
+                               const EventLocation& event_location);
 
   // Dispatch |event| to the delegate.
   void DispatchToClient(ServerWindow* window,
                         ClientSpecificId client_id,
-                        const ui::LocatedEvent& event);
+                        const ui::LocatedEvent& event,
+                        const EventLocation& event_location);
 
   // Stops sending pointer events to |window|. This does not remove the entry
   // for |window| from |pointer_targets_|, rather it nulls out the window. This
@@ -336,12 +341,15 @@ class EventDispatcher : public ServerWindowObserver,
   void CancelImplicitCaptureExcept(ServerWindow* window,
                                    ClientSpecificId client_id);
 
-  // ServerWindowObserver:
-  void OnWillChangeWindowHierarchy(ServerWindow* window,
-                                   ServerWindow* new_parent,
-                                   ServerWindow* old_parent) override;
-  void OnWindowVisibilityChanged(ServerWindow* window) override;
-  void OnWindowDestroyed(ServerWindow* window) override;
+  // Called when |window| is no longer a valid target for events, for example,
+  // the window was removed from the hierarchy.
+  void WindowNoLongerValidTarget(ServerWindow* window);
+
+  // ServerWindowDrawnTrackerObserver:
+  void OnDrawnStateChanged(ServerWindow* ancestor,
+                           ServerWindow* window,
+                           bool is_drawn) override;
+  void OnRootDidChange(ServerWindow* ancestor, ServerWindow* window) override;
 
   // DragCursorUpdater:
   void OnDragCursorUpdated() override;
@@ -361,21 +369,12 @@ class EventDispatcher : public ServerWindowObserver,
   ServerWindow* mouse_cursor_source_window_;
   bool mouse_cursor_in_non_client_area_;
 
-  // We calculate out the button flags for any synthetic mouse events we need
-  // to create during SetMousePointerDisplayLocation(). We don't try to set
-  // this on a per-PointerTarget because modified PointerTargets aren't always
-  // committed back into |pointer_targets_|.
-  int next_mouse_button_flags_;
-
   // The location of the mouse pointer in display coordinates. This can be
   // outside the bounds of |mouse_cursor_source_window_|, which can capture the
   // cursor.
-  gfx::Point mouse_pointer_last_location_;
+  gfx::PointF mouse_pointer_last_location_;
   // Id of the display |mouse_pointer_last_location_| is on.
   int64_t mouse_pointer_display_id_ = display::kInvalidDisplayId;
-
-  // Id of the display the most recent event is on.
-  int64_t event_display_id_ = display::kInvalidDisplayId;
 
   std::map<uint32_t, std::unique_ptr<Accelerator>> accelerators_;
 
@@ -393,7 +392,8 @@ class EventDispatcher : public ServerWindowObserver,
   PointerIdToTargetMap pointer_targets_;
 
   // Keeps track of number of observe requests for each observed window.
-  std::map<const ServerWindow*, uint8_t> observed_windows_;
+  std::map<const ServerWindow*, std::unique_ptr<ObservedWindow>>
+      observed_windows_;
 
   // Set to true when querying EventTargeter for the target.
   bool waiting_on_event_targeter_ = false;

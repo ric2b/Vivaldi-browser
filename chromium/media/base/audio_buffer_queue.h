@@ -5,8 +5,7 @@
 #ifndef MEDIA_BASE_AUDIO_BUFFER_QUEUE_H_
 #define MEDIA_BASE_AUDIO_BUFFER_QUEUE_H_
 
-#include <deque>
-
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/media_export.h"
@@ -58,7 +57,7 @@ class MEDIA_EXPORT AudioBufferQueue {
 
  private:
   // Definition of the buffer queue.
-  typedef std::deque<scoped_refptr<AudioBuffer> > BufferQueue;
+  using BufferQueue = base::circular_deque<scoped_refptr<AudioBuffer>>;
 
   // An internal method shared by ReadFrames() and SeekFrames() that actually
   // does reading. It reads a maximum of |frames| frames into |dest|. Returns
@@ -73,9 +72,8 @@ class MEDIA_EXPORT AudioBufferQueue {
                    int dest_frame_offset,
                    AudioBus* dest);
 
-  BufferQueue::iterator current_buffer_;
   BufferQueue buffers_;
-  int current_buffer_offset_;
+  int front_buffer_offset_;  // Offset into buffers_.front().
 
   // Number of frames available to be read in the buffer.
   int frames_;

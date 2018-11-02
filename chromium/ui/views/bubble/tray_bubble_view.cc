@@ -250,14 +250,14 @@ void TrayBubbleView::InitializeAndShowBubble() {
   // corresponding tray view, register pre target event handler to reroute key
   // events to the widget for activating the view or closing it.
   if (!CanActivate() && params_.show_by_click) {
-    reroute_event_handler_ = base::MakeUnique<RerouteEventHandler>(this);
+    reroute_event_handler_ = std::make_unique<RerouteEventHandler>(this);
   }
 }
 
 void TrayBubbleView::UpdateBubble() {
   if (GetWidget()) {
     SizeToContents();
-    bubble_content_mask_->layer()->SetBounds(layer()->bounds());
+    bubble_content_mask_->layer()->SetBounds(GetBubbleBounds());
     GetWidget()->GetRootView()->SchedulePaint();
 
     // When extra keyboard accessibility is enabled, focus the default item if
@@ -302,7 +302,7 @@ int TrayBubbleView::GetDialogButtons() const {
 
 void TrayBubbleView::SizeToContents() {
   BubbleDialogDelegateView::SizeToContents();
-  bubble_content_mask_->layer()->SetBounds(layer()->bounds());
+  bubble_content_mask_->layer()->SetBounds(GetBubbleBounds());
 }
 
 void TrayBubbleView::OnBeforeBubbleWidgetInit(Widget::InitParams* params,
@@ -387,9 +387,8 @@ void TrayBubbleView::OnMouseEntered(const ui::MouseEvent& event) {
     // do not call the delegate, but wait for the first mouse move within the
     // bubble. The used MouseWatcher will notify use of a movement and call
     // |MouseMovedOutOfHost|.
-    mouse_watcher_.reset(new MouseWatcher(
-        new views::internal::MouseMoveDetectorHost(),
-        this));
+    mouse_watcher_ = std::make_unique<MouseWatcher>(
+        std::make_unique<views::internal::MouseMoveDetectorHost>(), this);
     // Set the mouse sampling frequency to roughly a frame time so that the user
     // cannot see a lag.
     mouse_watcher_->set_notify_on_exit_time(

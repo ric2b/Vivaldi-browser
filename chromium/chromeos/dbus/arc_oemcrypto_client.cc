@@ -21,19 +21,24 @@ namespace {
 class ArcOemCryptoClientImpl : public ArcOemCryptoClient {
  public:
   ArcOemCryptoClientImpl() : weak_ptr_factory_(this) {}
-  ~ArcOemCryptoClientImpl() override {}
+  ~ArcOemCryptoClientImpl() override = default;
 
   // ArcOemCryptoClient override:
   void BootstrapMojoConnection(base::ScopedFD fd,
                                VoidDBusMethodCallback callback) override {
+    if (!service_available_) {
+      DVLOG(1) << "ArcOemCrypto D-Bus service not available";
+      std::move(callback).Run(false);
+      return;
+    }
     dbus::MethodCall method_call(arc_oemcrypto::kArcOemCryptoServiceInterface,
                                  arc_oemcrypto::kBootstrapMojoConnection);
     dbus::MessageWriter writer(&method_call);
     writer.AppendFileDescriptor(fd.get());
-    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                       base::Bind(&ArcOemCryptoClientImpl::OnVoidDBusMethod,
-                                  weak_ptr_factory_.GetWeakPtr(),
-                                  base::Passed(std::move(callback))));
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&ArcOemCryptoClientImpl::OnVoidDBusMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
  protected:
@@ -42,17 +47,24 @@ class ArcOemCryptoClientImpl : public ArcOemCryptoClient {
     proxy_ = bus->GetObjectProxy(
         arc_oemcrypto::kArcOemCryptoServiceName,
         dbus::ObjectPath(arc_oemcrypto::kArcOemCryptoServicePath));
+    proxy_->WaitForServiceToBeAvailable(
+        base::BindOnce(&ArcOemCryptoClientImpl::OnServiceAvailable,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
  private:
   // Runs the callback with the method call result.
   void OnVoidDBusMethod(VoidDBusMethodCallback callback,
                         dbus::Response* response) {
-    std::move(callback).Run(response ? DBUS_METHOD_CALL_SUCCESS
-                                     : DBUS_METHOD_CALL_FAILURE);
+    std::move(callback).Run(response != nullptr);
+  }
+
+  void OnServiceAvailable(bool service_is_available) {
+    service_available_ = service_is_available;
   }
 
   dbus::ObjectProxy* proxy_ = nullptr;
+  bool service_available_ = false;
 
   base::WeakPtrFactory<ArcOemCryptoClientImpl> weak_ptr_factory_;
 
@@ -61,9 +73,9 @@ class ArcOemCryptoClientImpl : public ArcOemCryptoClient {
 
 }  // namespace
 
-ArcOemCryptoClient::ArcOemCryptoClient() {}
+ArcOemCryptoClient::ArcOemCryptoClient() = default;
 
-ArcOemCryptoClient::~ArcOemCryptoClient() {}
+ArcOemCryptoClient::~ArcOemCryptoClient() = default;
 
 // static
 ArcOemCryptoClient* ArcOemCryptoClient::Create() {

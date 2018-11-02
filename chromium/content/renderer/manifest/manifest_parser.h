@@ -15,7 +15,7 @@
 #include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
 #include "content/public/common/manifest.h"
-#include "content/renderer/manifest/manifest_debug_info.h"
+#include "third_party/WebKit/public/platform/modules/manifest/manifest.mojom.h"
 
 class GURL;
 
@@ -42,13 +42,19 @@ class CONTENT_EXPORT ManifestParser {
   const Manifest& manifest() const;
   bool failed() const;
 
-  void TakeErrors(std::vector<ManifestDebugInfo::Error>* errors);
+  void TakeErrors(std::vector<blink::mojom::ManifestErrorPtr>* errors);
 
  private:
   // Used to indicate whether to strip whitespace when parsing a string.
   enum TrimType {
     Trim,
     NoTrim
+  };
+
+  // Indicate whether a parsed URL should be restricted to document origin.
+  enum class ParseURLOriginRestrictions {
+    kNoRestrictions = 0,
+    kSameOriginOnly,
   };
 
   // Helper function to parse booleans present on a given |dictionary| in a
@@ -74,11 +80,14 @@ class CONTENT_EXPORT ManifestParser {
 
   // Helper function to parse URLs present on a given |dictionary| in a given
   // field identified by its |key|. The URL is first parsed as a string then
-  // resolved using |base_url|.
-  // Returns a GURL. If the parsing failed, the GURL will not be valid.
+  // resolved using |base_url|. |enforce_document_origin| specified whether to
+  // enforce matching of the document's and parsed URL's origins.
+  // Returns a GURL. If the parsing failed or origin matching was enforced but
+  // not present, the returned GURL will be empty.
   GURL ParseURL(const base::DictionaryValue& dictionary,
                 const std::string& key,
-                const GURL& base_url);
+                const GURL& base_url,
+                ParseURLOriginRestrictions origin_restriction);
 
   // Parses the 'name' field of the manifest, as defined in:
   // https://w3c.github.io/manifest/#dfn-steps-for-processing-the-name-member
@@ -204,6 +213,10 @@ class CONTENT_EXPORT ManifestParser {
   // Manifest::kInvalidOrMissingColor if the parsing failed.
   int64_t ParseBackgroundColor(const base::DictionaryValue& dictionary);
 
+  // Parses the 'splash_screen_url' field of the manifest.
+  // Returns the parsed GURL if any, an empty GURL if the parsing failed.
+  GURL ParseSplashScreenURL(const base::DictionaryValue& dictionary);
+
   // Parses the 'gcm_sender_id' field of the manifest.
   // This is a proprietary extension of the Web Manifest specification.
   // Returns the parsed string if any, a null string if the parsing failed.
@@ -221,7 +234,7 @@ class CONTENT_EXPORT ManifestParser {
 
   bool failed_;
   Manifest manifest_;
-  std::vector<ManifestDebugInfo::Error> errors_;
+  std::vector<blink::mojom::ManifestErrorPtr> errors_;
 
   DISALLOW_COPY_AND_ASSIGN(ManifestParser);
 };

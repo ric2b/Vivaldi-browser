@@ -9,29 +9,37 @@
 namespace blink {
 
 WorkletModuleScriptFetcher::WorkletModuleScriptFetcher(
-    const FetchParameters& fetch_params,
-    ResourceFetcher* fetcher,
-    ModuleScriptFetcher::Client* client,
     WorkletModuleResponsesMapProxy* module_responses_map_proxy)
-    : ModuleScriptFetcher(fetch_params, fetcher, client),
-      module_responses_map_proxy_(module_responses_map_proxy) {}
+    : module_responses_map_proxy_(module_responses_map_proxy) {
+  DCHECK(module_responses_map_proxy_);
+}
 
-DEFINE_TRACE(WorkletModuleScriptFetcher) {
+void WorkletModuleScriptFetcher::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_responses_map_proxy_);
   ModuleScriptFetcher::Trace(visitor);
 }
 
-void WorkletModuleScriptFetcher::Fetch() {
-  module_responses_map_proxy_->ReadEntry(GetFetchParams(), this);
+void WorkletModuleScriptFetcher::Fetch(FetchParameters& fetch_params,
+                                       ModuleScriptFetcher::Client* client) {
+  SetClient(client);
+  module_responses_map_proxy_->ReadEntry(fetch_params, this);
 }
 
 void WorkletModuleScriptFetcher::OnRead(
     const ModuleScriptCreationParams& params) {
-  Finalize(params, nullptr /* error_message */);
+  HeapVector<Member<ConsoleMessage>> error_messages;
+  Finalize(params, error_messages);
 }
 
 void WorkletModuleScriptFetcher::OnFailed() {
-  Finalize(WTF::nullopt, nullptr /* error_message */);
+  HeapVector<Member<ConsoleMessage>> error_messages;
+  Finalize(WTF::nullopt, error_messages);
+}
+
+void WorkletModuleScriptFetcher::Finalize(
+    const WTF::Optional<ModuleScriptCreationParams>& params,
+    const HeapVector<Member<ConsoleMessage>>& error_messages) {
+  NotifyFetchFinished(params, error_messages);
 }
 
 }  // namespace blink

@@ -16,8 +16,8 @@ import sys
 import tempfile
 import time
 
-from runner_common import RunFuchsia, BuildBootfs, ReadRuntimeDeps, \
-    HOST_IP_ADDRESS
+from runner_common import AddRunnerCommandLineArguments, BuildBootfs, \
+    ImageCreationData, ReadRuntimeDeps, RunFuchsia, HOST_IP_ADDRESS
 
 DIR_SOURCE_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
@@ -59,6 +59,7 @@ def WaitUntil(predicate, timeout_seconds=1):
     time.sleep(sleep_time_sec)
     sleep_time_sec = min(1, sleep_time_sec * 2)  # Don't wait more than 1 sec.
 
+
 # Implementation of chrome_test_server_spawner.PortForwarder that doesn't
 # forward ports. Instead the tests are expected to connect to the host IP
 # address inside the virtual network provided by qemu. qemu will forward
@@ -85,18 +86,7 @@ class PortForwarderNoop(chrome_test_server_spawner.PortForwarder):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--dry-run', '-n', action='store_true', default=False,
-                      help='Just print commands, don\'t execute them.')
-  parser.add_argument('--output-directory',
-                      type=os.path.realpath,
-                      help=('Path to the directory in which build files are'
-                            ' located (must include build type).'))
-  parser.add_argument('--runtime-deps-path',
-                      type=os.path.realpath,
-                      help='Runtime data dependency file from GN.')
-  parser.add_argument('--exe-name',
-                      type=os.path.realpath,
-                      help='Name of the the test')
+  AddRunnerCommandLineArguments(parser)
   parser.add_argument('--enable-test-server', action='store_true',
                       default=False,
                       help='Enable testserver spawner.')
@@ -120,16 +110,17 @@ def main():
   # --test-launcher-filter-file is specified relative to --output-directory,
   # so specifying type=os.path.* will break it.
   parser.add_argument('--test-launcher-filter-file',
-                      help='Pass filter file through to target process.')
+                      default=None,
+                      help='Override default filter file passed to target test '
+                      'process. Set an empty path to disable filtering.')
   parser.add_argument('--test-launcher-jobs',
                       type=int,
                       help='Sets the number of parallel test jobs.')
-  parser.add_argument('--test_launcher_summary_output',
-                      help='Currently ignored for 2-sided roll.')
+  parser.add_argument('--test-launcher-summary-output',
+                      '--test_launcher_summary_output',
+                      help='Where the test launcher will output its json.')
   parser.add_argument('child_args', nargs='*',
                       help='Arguments for the test process.')
-  parser.add_argument('-d', '--device', action='store_true', default=False,
-                      help='Run on hardware device instead of QEMU.')
   args = parser.parse_args()
 
   child_args = ['--test-launcher-retry-limit=0']
@@ -176,6 +167,16 @@ def main():
     config_file.flush()
     runtime_deps.append(('net-test-server-config', config_file.name))
 
+  # If no --test-launcher-filter-file is specified, use the default filter path.
+  if args.test_launcher_filter_file == None:
+    exe_base_name = os.path.basename(args.exe_name)
+    test_launcher_filter_file = os.path.normpath(os.path.join(
+        args.output_directory,
+        '../../testing/buildbot/filters/fuchsia.%s.filter' % exe_base_name))
+    if os.path.exists(test_launcher_filter_file):
+      args.test_launcher_filter_file = test_launcher_filter_file
+
+  # Copy the test-launcher-filter-file to the bootfs, if set.
   if args.test_launcher_filter_file:
     # Bundle the filter file in the runtime deps and compose the command-line
     # flag which references it.
@@ -184,14 +185,31 @@ def main():
     runtime_deps.append(('test_filter_file', test_launcher_filter_file))
     child_args.append('--test-launcher-filter-file=/system/test_filter_file')
 
+  if args.dry_run:
+    print 'Filter file is %s' % (args.test_launcher_filter_file if
+                                 args.test_launcher_filter_file else
+                                 'not applied.')
+
   try:
-    bootfs = BuildBootfs(args.output_directory, runtime_deps, args.exe_name,
-                         child_args, args.dry_run, power_off=not args.device)
+    image_creation_data = ImageCreationData(
+        output_directory=args.output_directory,
+        exe_name=args.exe_name,
+        runtime_deps=runtime_deps,
+        target_cpu=args.target_cpu,
+        dry_run=args.dry_run,
+        child_args=child_args,
+        use_device=args.device,
+        bootdata=args.bootdata,
+        summary_output=args.test_launcher_summary_output,
+        shutdown_machine=True,
+        wait_for_network=args.wait_for_network,
+        use_autorun=True)
+    bootfs = BuildBootfs(image_creation_data)
     if not bootfs:
       return 2
 
-    return RunFuchsia(bootfs, args.device, args.dry_run)
-
+    return RunFuchsia(bootfs, args.device, args.kernel, args.dry_run,
+                      args.test_launcher_summary_output)
   finally:
     # Stop the spawner to make sure it doesn't leave testserver running, in
     # case some tests failed.

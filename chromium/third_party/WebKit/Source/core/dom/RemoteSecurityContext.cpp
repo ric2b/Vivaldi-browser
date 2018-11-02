@@ -27,11 +27,12 @@ RemoteSecurityContext* RemoteSecurityContext::Create() {
   return new RemoteSecurityContext();
 }
 
-DEFINE_TRACE(RemoteSecurityContext) {
+void RemoteSecurityContext::Trace(blink::Visitor* visitor) {
   SecurityContext::Trace(visitor);
 }
 
-void RemoteSecurityContext::SetReplicatedOrigin(RefPtr<SecurityOrigin> origin) {
+void RemoteSecurityContext::SetReplicatedOrigin(
+    scoped_refptr<SecurityOrigin> origin) {
   DCHECK(origin);
   SetSecurityOrigin(std::move(origin));
   GetContentSecurityPolicy()->SetupSelf(*GetSecurityOrigin());
@@ -41,6 +42,10 @@ void RemoteSecurityContext::ResetReplicatedContentSecurityPolicy() {
   DCHECK(GetSecurityOrigin());
   SetContentSecurityPolicy(ContentSecurityPolicy::Create());
   GetContentSecurityPolicy()->SetupSelf(*GetSecurityOrigin());
+}
+
+void RemoteSecurityContext::ResetSandboxFlags() {
+  sandbox_flags_ = kSandboxNone;
 }
 
 }  // namespace blink

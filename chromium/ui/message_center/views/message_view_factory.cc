@@ -5,8 +5,9 @@
 #include "ui/message_center/views/message_view_factory.h"
 
 #include "base/command_line.h"
-#include "ui/message_center/message_center.h"
+#include "base/lazy_instance.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/message_center/views/notification_view.h"
 #include "ui/message_center/views/notification_view_md.h"
 
@@ -16,8 +17,15 @@
 
 namespace message_center {
 
+namespace {
+
+base::LazyInstance<MessageViewFactory::CustomMessageViewFactoryFunction>::Leaky
+    g_custom_view_factory = LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
 // static
-MessageView* MessageViewFactory::Create(MessageCenterController* controller,
+MessageView* MessageViewFactory::Create(MessageViewDelegate* controller,
                                         const Notification& notification,
                                         bool top_level) {
   MessageView* notification_view = nullptr;
@@ -28,19 +36,15 @@ MessageView* MessageViewFactory::Create(MessageCenterController* controller,
     case NOTIFICATION_TYPE_SIMPLE:
     case NOTIFICATION_TYPE_PROGRESS:
       // All above roads lead to the generic NotificationView.
-      if (MessageCenter::IsNewStyleNotificationEnabled())
+      if (IsNewStyleNotificationEnabled())
         notification_view = new NotificationViewMD(controller, notification);
       else
         notification_view = new NotificationView(controller, notification);
       break;
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
     case NOTIFICATION_TYPE_CUSTOM:
       notification_view =
-          notification.delegate()
-              ->CreateCustomMessageView(controller, notification)
-              .release();
+          g_custom_view_factory.Get().Run(controller, notification).release();
       break;
-#endif
     default:
       // If the caller asks for an unrecognized kind of view (entirely possible
       // if an application is running on an older version of this code that
@@ -68,6 +72,17 @@ MessageView* MessageViewFactory::Create(MessageCenterController* controller,
 
   notification_view->SetIsNested();
   return notification_view;
+}
+
+// static
+void MessageViewFactory::SetCustomNotificationViewFactory(
+    const CustomMessageViewFactoryFunction& factory_function) {
+  g_custom_view_factory.Get() = factory_function;
+}
+
+// static
+bool MessageViewFactory::HasCustomNotificationViewFactory() {
+  return !g_custom_view_factory.Get().is_null();
 }
 
 }  // namespace message_center

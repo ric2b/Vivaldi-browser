@@ -7,14 +7,13 @@
 
 #include "public/platform/scheduler/child/webthread_base.h"
 
+#include <memory>
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pending_task.h"
 #include "base/threading/platform_thread.h"
 #include "platform/scheduler/child/compositor_worker_scheduler.h"
-#include "platform/scheduler/child/scheduler_tqm_delegate_impl.h"
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "platform/scheduler/utility/webthread_impl_for_utility_thread.h"
 #include "public/platform/WebTraceLocation.h"
@@ -119,8 +118,8 @@ class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
   // WebThreadImplForWorkerScheduler:
   std::unique_ptr<blink::scheduler::WorkerScheduler> CreateWorkerScheduler()
       override {
-    return base::MakeUnique<CompositorWorkerScheduler>(GetThread(),
-                                                       task_runner_delegate());
+    return std::make_unique<CompositorWorkerScheduler>(
+        GetThread(), TaskQueueManager::TakeOverCurrentThread());
   }
 
   DISALLOW_COPY_AND_ASSIGN(WebThreadForCompositor);
@@ -131,16 +130,16 @@ class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
 std::unique_ptr<WebThreadBase> WebThreadBase::CreateWorkerThread(
     const char* name,
     base::Thread::Options options) {
-  return base::MakeUnique<WebThreadImplForWorkerScheduler>(name, options);
+  return std::make_unique<WebThreadImplForWorkerScheduler>(name, options);
 }
 
 std::unique_ptr<WebThreadBase> WebThreadBase::CreateCompositorThread(
     base::Thread::Options options) {
-  return base::MakeUnique<WebThreadForCompositor>(options);
+  return std::make_unique<WebThreadForCompositor>(options);
 }
 
 std::unique_ptr<WebThreadBase> WebThreadBase::InitializeUtilityThread() {
-  return base::MakeUnique<WebThreadImplForUtilityThread>();
+  return std::make_unique<WebThreadImplForUtilityThread>();
 }
 
 }  // namespace scheduler

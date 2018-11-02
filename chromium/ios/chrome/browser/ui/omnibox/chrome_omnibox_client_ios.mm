@@ -22,8 +22,8 @@
 #include "ios/chrome/browser/prerender/prerender_service_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
+#include "ios/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/shared/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "url/gurl.h"
@@ -216,7 +216,7 @@ gfx::Image ChromeOmniboxClientIOS::GetFavicon() const {
 void ChromeOmniboxClientIOS::OnTextChanged(
     const AutocompleteMatch& current_match,
     bool user_input_in_progress,
-    base::string16& user_text,
+    const base::string16& user_text,
     const AutocompleteResult& result,
     bool is_popup_open,
     bool has_focus) {}

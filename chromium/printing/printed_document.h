@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "printing/native_drawing_context.h"
 #include "printing/print_settings.h"
 
@@ -24,7 +25,6 @@ namespace printing {
 
 class MetafilePlayer;
 class PrintedPage;
-class PrintedPagesSource;
 class PrintingContext;
 
 // A collection of rendered pages. The settings are immutable. If the print
@@ -39,7 +39,7 @@ class PRINTING_EXPORT PrintedDocument
   // The cookie shall be unique and has a specific relationship with its
   // originating source and settings.
   PrintedDocument(const PrintSettings& settings,
-                  PrintedPagesSource* source,
+                  const base::string16& name,
                   int cookie);
 
   // Sets a page's data. 0-based. Takes metafile ownership.
@@ -48,7 +48,7 @@ class PRINTING_EXPORT PrintedDocument
                std::unique_ptr<MetafilePlayer> metafile,
 #if defined(OS_WIN)
                float shrink,
-#endif  // OS_WIN
+#endif
                const gfx::Size& paper_size,
                const gfx::Rect& page_rect);
 
@@ -59,9 +59,9 @@ class PRINTING_EXPORT PrintedDocument
 
   // Draws the page in the context.
   // Note: locks for a short amount of time in debug only.
-#if defined(OS_WIN) || defined(OS_MACOSX) && !defined(USE_AURA)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(USE_AURA))
   void RenderPrintedPage(const PrintedPage& page,
-                         skia::NativeDrawingContext context) const;
+                         printing::NativeDrawingContext context) const;
 #elif defined(OS_POSIX)
   void RenderPrintedPage(const PrintedPage& page,
                          PrintingContext* context) const;
@@ -71,10 +71,6 @@ class PRINTING_EXPORT PrintedDocument
   // rendered.
   // Note: locks while parsing the whole tree.
   bool IsComplete() const;
-
-  // Disconnects the PrintedPage source (PrintedPagesSource). It is done when
-  // the source is being destroyed.
-  void DisconnectSource();
 
   // Sets the number of pages in the document to be rendered. Can only be set
   // once.
@@ -122,12 +118,8 @@ class PRINTING_EXPORT PrintedDocument
   // Contains all the mutable stuff. All this stuff MUST be accessed with the
   // lock held.
   struct Mutable {
-    explicit Mutable(PrintedPagesSource* source);
+    Mutable();
     ~Mutable();
-
-    // Source that generates the PrintedPage's (i.e. a TabContents). It will be
-    // set back to NULL if the source is deleted before this object.
-    PrintedPagesSource* source_;
 
     // Contains the pages' representation. This is a collection of PrintedPage.
     // Warning: Lock must be held when accessing this member.
@@ -135,14 +127,14 @@ class PRINTING_EXPORT PrintedDocument
 
     // Number of expected pages to be rendered.
     // Warning: Lock must be held when accessing this member.
-    int expected_page_count_;
+    int expected_page_count_ = 0;
 
     // The total number of pages in the document.
-    int page_count_;
+    int page_count_ = 0;
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX)
     // Page number of the first page.
-    int first_page;
+    int first_page = INT_MAX;
 #endif
   };
 
@@ -151,7 +143,7 @@ class PRINTING_EXPORT PrintedDocument
   // construction.
   struct Immutable {
     Immutable(const PrintSettings& settings,
-              PrintedPagesSource* source,
+              const base::string16& name,
               int cookie);
     ~Immutable();
 

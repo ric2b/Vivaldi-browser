@@ -30,9 +30,9 @@
 #ifndef BasicShapeFunctions_h
 #define BasicShapeFunctions_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/style/BasicShapes.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -42,8 +42,8 @@ class StyleResolverState;
 class ComputedStyle;
 
 CSSValue* ValueForBasicShape(const ComputedStyle&, const BasicShape*);
-RefPtr<BasicShape> BasicShapeForValue(const StyleResolverState&,
-                                      const CSSValue&);
+scoped_refptr<BasicShape> BasicShapeForValue(const StyleResolverState&,
+                                             const CSSValue&);
 FloatPoint FloatPointForCenterCoordinate(const BasicShapeCenterCoordinate&,
                                          const BasicShapeCenterCoordinate&,
                                          FloatSize);

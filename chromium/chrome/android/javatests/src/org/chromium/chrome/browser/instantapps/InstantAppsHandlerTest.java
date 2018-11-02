@@ -13,7 +13,7 @@ import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.provider.Browser;
 import android.support.test.InstrumentationRegistry;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -59,7 +59,7 @@ public class InstantAppsHandlerTest {
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
 
-        mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        mContext = InstrumentationRegistry.getTargetContext();
         mHandler = new TestInstantAppsHandler();
 
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
@@ -145,16 +145,16 @@ public class InstantAppsHandlerTest {
     public void testInstantAppsEnabled() {
         Intent i = createViewIntent();
         Assert.assertTrue(mHandler.handleIncomingIntent(
-                InstrumentationRegistry.getInstrumentation().getContext(), i, false, true));
+                InstrumentationRegistry.getContext(), i, false, true));
 
         // Check that identical intent wouldn't be enabled for CustomTab flow.
-        Assert.assertFalse(mHandler.handleIncomingIntent(
-                InstrumentationRegistry.getInstrumentation().getContext(), i, true, true));
+        Assert.assertFalse(
+                mHandler.handleIncomingIntent(InstrumentationRegistry.getContext(), i, true, true));
 
         // Add CustomTab specific extra and check it's now enabled.
         i.putExtra("android.support.customtabs.extra.EXTRA_ENABLE_INSTANT_APPS", true);
-        Assert.assertTrue(mHandler.handleIncomingIntent(
-                InstrumentationRegistry.getInstrumentation().getContext(), i, true, true));
+        Assert.assertTrue(
+                mHandler.handleIncomingIntent(InstrumentationRegistry.getContext(), i, true, true));
     }
 
     @Test
@@ -163,7 +163,7 @@ public class InstantAppsHandlerTest {
         Intent i = new Intent(NfcAdapter.ACTION_NDEF_DISCOVERED);
         i.setData(Uri.parse("http://instantapp.com/"));
         Assert.assertTrue(mHandler.handleIncomingIntent(
-                InstrumentationRegistry.getInstrumentation().getContext(), i, false, true));
+                InstrumentationRegistry.getContext(), i, false, true));
     }
 
     @Test
@@ -246,10 +246,9 @@ public class InstantAppsHandlerTest {
         }
 
         @Override
-        protected boolean startCheckForInstantApps(
-                Context context, String url, Uri referrer, Tab tab) {
+        protected void maybeShowInstantAppBanner(
+                Context context, String url, Uri referrer, Tab tab, boolean instantAppIsDefault) {
             mStartedAsyncCall = true;
-            return false;
         }
     }
 }

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -48,6 +48,12 @@ const CommandLinePrefStore::SwitchToPreferenceMapEntry
         {switches::kAuthAndroidNegotiateAccountType,
          prefs::kAuthAndroidNegotiateAccountType},
 #endif
+        {switches::kUnsafelyTreatInsecureOriginAsSecure,
+         prefs::kUnsafelyTreatInsecureOriginAsSecure},
+        // TODO(https://crbug.com/760761): This is not the ideal way to
+        // implement this. Refactor enterprise policy and command line handling
+        // so that this line isn't necessary, if possible.
+        {switches::kIsolateOrigins, prefs::kIsolateOrigins},
 };
 
 const CommandLinePrefStore::SwitchToPreferenceMapEntry
@@ -86,6 +92,7 @@ const CommandLinePrefStore::BooleanSwitchToPreferenceMapEntry
         {switches::kUseSystemDefaultPrinter,
          prefs::kPrintPreviewUseSystemDefaultPrinter, true},
 #endif
+        {switches::kSitePerProcess, prefs::kSitePerProcess, true},
 };
 
 const CommandLinePrefStore::SwitchToPreferenceMapEntry

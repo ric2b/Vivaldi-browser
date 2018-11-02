@@ -122,14 +122,13 @@ void MultiBuffer::GlobalLRU::PruneTask() {
   SchedulePrune();
 }
 
-void MultiBuffer::GlobalLRU::Prune(int64_t max_to_free) {
+void MultiBuffer::GlobalLRU::TryFree(int64_t max_to_free) {
   // We group the blocks by multibuffer so that we can free as many blocks as
   // possible in one call. This reduces the number of callbacks to clients
   // when their available ranges change.
   std::map<MultiBuffer*, std::vector<MultiBufferBlockId>> to_free;
   int64_t freed = 0;
-  while (data_size_ - freed > max_size_ && !lru_.Empty() &&
-         freed < max_to_free) {
+  while (!lru_.Empty() && freed < max_to_free) {
     GlobalBlockId block_id = lru_.Pop();
     to_free[block_id.first].push_back(block_id.second);
     freed++;
@@ -137,6 +136,23 @@ void MultiBuffer::GlobalLRU::Prune(int64_t max_to_free) {
   for (const auto& to_free_pair : to_free) {
     to_free_pair.first->ReleaseBlocks(to_free_pair.second);
   }
+}
+
+void MultiBuffer::GlobalLRU::TryFreeAll() {
+  // Since TryFree also allocates memory, avoid freeing everything
+  // in one large chunk to avoid running out of memory before we
+  // start freeing memory. Freeing 100 at a time should be a reasonable
+  // compromise between efficiency and not building large data structures.
+  while (true) {
+    int64_t data_size_before = data_size_;
+    TryFree(100);
+    if (data_size_ >= data_size_before)
+      break;
+  }
+}
+
+void MultiBuffer::GlobalLRU::Prune(int64_t max_to_free) {
+  TryFree(std::min(max_to_free, data_size_ - max_size_));
 }
 
 int64_t MultiBuffer::GlobalLRU::Size() const {
@@ -252,15 +268,18 @@ void MultiBuffer::NotifyAvailableRange(
 
 void MultiBuffer::ReleaseBlocks(const std::vector<MultiBufferBlockId>& blocks) {
   IntervalMap<BlockId, int32_t> freed;
-  for (MultiBufferBlockId to_free : blocks) {
-    DCHECK(data_[to_free]);
-    DCHECK_EQ(pinned_[to_free], 0);
-    DCHECK_EQ(present_[to_free], 1);
-    data_.erase(to_free);
-    freed.IncrementInterval(to_free, to_free + 1, 1);
-    present_.IncrementInterval(to_free, to_free + 1, -1);
+  {
+    base::AutoLock auto_lock(data_lock_);
+    for (MultiBufferBlockId to_free : blocks) {
+      DCHECK(data_[to_free]);
+      DCHECK_EQ(pinned_[to_free], 0);
+      DCHECK_EQ(present_[to_free], 1);
+      data_.erase(to_free);
+      freed.IncrementInterval(to_free, to_free + 1, 1);
+      present_.IncrementInterval(to_free, to_free + 1, -1);
+    }
+    lru_->IncrementDataSize(-static_cast<int64_t>(blocks.size()));
   }
-  lru_->IncrementDataSize(-static_cast<int64_t>(blocks.size()));
 
   for (const auto& freed_range : freed) {
     if (freed_range.second) {
@@ -369,18 +388,21 @@ void MultiBuffer::OnDataProviderEvent(DataProvider* provider_tmp) {
   bool eof = false;
   int64_t blocks_before = data_.size();
 
-  while (!ProviderCollision(pos) && !eof) {
-    if (!provider->Available()) {
-      AddProvider(std::move(provider));
-      break;
+  {
+    base::AutoLock auto_lock(data_lock_);
+    while (!ProviderCollision(pos) && !eof) {
+      if (!provider->Available()) {
+        AddProvider(std::move(provider));
+        break;
+      }
+      DCHECK_GE(pos, 0);
+      scoped_refptr<DataBuffer> data = provider->Read();
+      data_[pos] = data;
+      eof = data->end_of_stream();
+      if (!pinned_[pos])
+        lru_->Use(this, pos);
+      ++pos;
     }
-    DCHECK_GE(pos, 0);
-    scoped_refptr<DataBuffer> data = provider->Read();
-    data_[pos] = data;
-    eof = data->end_of_stream();
-    if (!pinned_[pos])
-      lru_->Use(this, pos);
-    ++pos;
   }
   int64_t blocks_after = data_.size();
   int64_t blocks_added = blocks_after - blocks_before;
@@ -420,16 +442,19 @@ void MultiBuffer::OnDataProviderEvent(DataProvider* provider_tmp) {
 }
 
 void MultiBuffer::MergeFrom(MultiBuffer* other) {
-  // Import data and update LRU.
-  size_t data_size = data_.size();
-  for (const auto& data : other->data_) {
-    if (data_.insert(std::make_pair(data.first, data.second)).second) {
-      if (!pinned_[data.first]) {
-        lru_->Insert(this, data.first);
+  {
+    base::AutoLock auto_lock(data_lock_);
+    // Import data and update LRU.
+    size_t data_size = data_.size();
+    for (const auto& data : other->data_) {
+      if (data_.insert(std::make_pair(data.first, data.second)).second) {
+        if (!pinned_[data.first]) {
+          lru_->Insert(this, data.first);
+        }
       }
     }
+    lru_->IncrementDataSize(static_cast<int64_t>(data_.size() - data_size));
   }
-  lru_->IncrementDataSize(static_cast<int64_t>(data_.size() - data_size));
   // Update present_
   for (const auto& r : other->present_) {
     if (r.second) {
@@ -446,6 +471,20 @@ void MultiBuffer::MergeFrom(MultiBuffer* other) {
         last = i;
       }
     }
+  }
+}
+
+void MultiBuffer::GetBlocksThreadsafe(
+    const BlockId& from,
+    const BlockId& to,
+    std::vector<scoped_refptr<DataBuffer>>* output) {
+  base::AutoLock auto_lock(data_lock_);
+  auto i = data_.find(from);
+  BlockId j = from;
+  while (j <= to && i != data_.end() && i->first == j) {
+    output->push_back(i->second);
+    ++j;
+    ++i;
   }
 }
 

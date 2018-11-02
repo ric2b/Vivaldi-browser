@@ -4,15 +4,19 @@ URL: https://github.com/ValveSoftware/openvr
 Version: 1.0.4
 Date: 2 Feb 2017
 Revision: 7fa6470f2972970859f2395f1390f6d87d4b0fc3
-License: MIT
-License File: src\LICENSE
+License: BSD 3-Clause
+License File: src/LICENSE
 Security Critical: yes
 
 Description:
 The OpenVR API supports HTC Vive and other headsets for VR.
 
 Local Modifications:
-Only contains a subset of the git repo necessary to build Chromium.
+Only contains a subset of the git repo necessary to build Chromium.  jsoncpp.cpp
+has been modified to remove exceptions.
+json.h has been modified to remove exceptions (delete "throw()").
+openvr.h has been modified to remove dllimport/dllexport when building a
+non-component build so this can be built as a static library.
 
 Copy the correct files with these commands:
 copy %openvrsdk%\README.md %chromium%\src\third_party\openvr\src

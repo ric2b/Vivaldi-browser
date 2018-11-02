@@ -26,11 +26,9 @@ void DeleteCaptureMachine(
 
 }  // namespace
 
-VideoCaptureMachine::VideoCaptureMachine() {
-}
+VideoCaptureMachine::VideoCaptureMachine() = default;
 
-VideoCaptureMachine::~VideoCaptureMachine() {
-}
+VideoCaptureMachine::~VideoCaptureMachine() = default;
 
 bool VideoCaptureMachine::IsAutoThrottlingEnabled() const {
   return false;
@@ -173,7 +171,7 @@ void ScreenCaptureDeviceCore::TransitionStateTo(State next_state) {
   state_ = next_state;
 }
 
-void ScreenCaptureDeviceCore::Error(const tracked_objects::Location& from_here,
+void ScreenCaptureDeviceCore::Error(const base::Location& from_here,
                                     const std::string& reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
 

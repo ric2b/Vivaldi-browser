@@ -6,6 +6,7 @@
 
 #import <MobileCoreServices/MobileCoreServices.h>
 
+#import "ios/web_view/shell/shell_autofill_delegate.h"
 #import "ios/web_view/shell/shell_translation_delegate.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -32,6 +33,8 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 @property(nonatomic, strong) UIBarButtonItem* forwardButton;
 // Toolbar containing navigation buttons and |field|.
 @property(nonatomic, strong) UIToolbar* toolbar;
+// Handles the autofill of the content displayed in |webView|.
+@property(nonatomic, strong) ShellAutofillDelegate* autofillDelegate;
 // Handles the translation of the content displayed in |webView|.
 @property(nonatomic, strong) ShellTranslationDelegate* translationDelegate;
 
@@ -46,6 +49,7 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 
 @implementation ShellViewController
 
+@synthesize autofillDelegate = _autofillDelegate;
 @synthesize backButton = _backButton;
 @synthesize containerView = _containerView;
 @synthesize field = _field;
@@ -251,6 +255,8 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
   _webView.UIDelegate = self;
   _translationDelegate = [[ShellTranslationDelegate alloc] init];
   _webView.translationController.delegate = _translationDelegate;
+  _autofillDelegate = [[ShellAutofillDelegate alloc] init];
+  _webView.autofillController.delegate = _autofillDelegate;
 
   [_webView setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                 UIViewAutoresizingFlexibleHeight];
@@ -461,6 +467,23 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 }
 
 - (void)webViewWebContentProcessDidTerminate:(CWVWebView*)webView {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+}
+
+- (BOOL)webView:(CWVWebView*)webView
+    shouldPreviewElement:(CWVPreviewElementInfo*)elementInfo {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+  return YES;
+}
+
+- (UIViewController*)webView:(CWVWebView*)webView
+    previewingViewControllerForElement:(CWVPreviewElementInfo*)elementInfo {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+  return nil;
+}
+
+- (void)webView:(CWVWebView*)webView
+    commitPreviewingViewController:(UIViewController*)previewingViewController {
   NSLog(@"%@", NSStringFromSelector(_cmd));
 }
 

@@ -68,6 +68,9 @@ class PasswordsModelDelegate {
   virtual const password_manager::InteractionsStats*
   GetCurrentInteractionStats() const = 0;
 
+  // Returns true iff the current bubble is the manual fallback for saving.
+  virtual bool BubbleIsManualFallbackForSaving() const = 0;
+
   // Called from the model when the bubble is displayed.
   virtual void OnBubbleShown() = 0;
 
@@ -84,9 +87,10 @@ class PasswordsModelDelegate {
   virtual void NeverSavePassword() = 0;
 
   // Called from the model when the user chooses to save a password. The
-  // username seen on the ui is sent as a parameter, and handled accordingly if
-  // user had edited it.
-  virtual void SavePassword(const base::string16& username) = 0;
+  // username and password seen on the ui is sent as a parameter, and
+  // handled accordingly if user had edited them.
+  virtual void SavePassword(const base::string16& username,
+                            const base::string16& password) = 0;
 
   // Called from the model when the user chooses to update a password.
   virtual void UpdatePassword(const autofill::PasswordForm& password_form) = 0;

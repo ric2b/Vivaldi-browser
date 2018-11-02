@@ -45,10 +45,7 @@ void HoldRefCallback(const scoped_refptr<PrintJobWorkerOwner>& owner,
 }  // namespace
 
 PrintJob::PrintJob()
-    : source_(nullptr),
-      is_job_pending_(false),
-      is_canceling_(false),
-      quit_factory_(this) {
+    : is_job_pending_(false), is_canceling_(false), quit_factory_(this) {
   // This is normally a UI message loop, but in unit tests, the message loop is
   // of the 'default' type.
   DCHECK(base::MessageLoopForUI::IsCurrent() ||
@@ -65,19 +62,17 @@ PrintJob::~PrintJob() {
 }
 
 void PrintJob::Initialize(PrintJobWorkerOwner* job,
-                          PrintedPagesSource* source,
+                          const base::string16& name,
                           int page_count) {
-  DCHECK(!source_);
   DCHECK(!worker_);
   DCHECK(!is_job_pending_);
   DCHECK(!is_canceling_);
   DCHECK(!document_.get());
-  source_ = source;
   worker_ = job->DetachWorker(this);
   settings_ = job->settings();
 
   PrintedDocument* new_doc =
-      new PrintedDocument(settings_, source_, job->cookie());
+      new PrintedDocument(settings_, name, job->cookie());
 
   new_doc->set_page_count(page_count);
   UpdatePrintedDocument(new_doc);
@@ -127,7 +122,7 @@ void PrintJob::StartPrinting() {
 
   // Real work is done in PrintJobWorker::StartPrinting().
   worker_->PostTask(FROM_HERE,
-                    base::Bind(&HoldRefCallback, make_scoped_refptr(this),
+                    base::Bind(&HoldRefCallback, base::WrapRefCounted(this),
                                base::Bind(&PrintJobWorker::StartPrinting,
                                           base::Unretained(worker_.get()),
                                           base::RetainedRef(document_))));
@@ -198,17 +193,9 @@ bool PrintJob::FlushJob(base::TimeDelta timeout) {
       FROM_HERE, base::BindOnce(&PrintJob::Quit, quit_factory_.GetWeakPtr()),
       timeout);
 
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
-  base::RunLoop().Run();
+  base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).Run();
 
   return true;
-}
-
-void PrintJob::DisconnectSource() {
-  source_ = nullptr;
-  if (document_.get())
-    document_->DisconnectSource();
 }
 
 bool PrintJob::is_job_pending() const {
@@ -222,7 +209,7 @@ PrintedDocument* PrintJob::document() const {
 #if defined(OS_WIN)
 class PrintJob::PdfConversionState {
  public:
-  PdfConversionState(gfx::Size page_size, gfx::Rect content_area)
+  PdfConversionState(const gfx::Size& page_size, const gfx::Rect& content_area)
       : page_count_(0),
         current_page_(0),
         pages_in_progress_(0),
@@ -254,8 +241,8 @@ class PrintJob::PdfConversionState {
   }
 
   void set_page_count(int page_count) { page_count_ = page_count; }
-  gfx::Size page_size() const { return page_size_; }
-  gfx::Rect content_area() const { return content_area_; }
+  const gfx::Size& page_size() const { return page_size_; }
+  const gfx::Rect& content_area() const { return content_area_; }
 
  private:
   int page_count_;
@@ -364,7 +351,7 @@ void PrintJob::UpdatePrintedDocument(PrintedDocument* new_document) {
     DCHECK(!is_job_pending_);
     // Sync the document with the worker.
     worker_->PostTask(FROM_HERE,
-                      base::Bind(&HoldRefCallback, make_scoped_refptr(this),
+                      base::Bind(&HoldRefCallback, base::WrapRefCounted(this),
                                  base::Bind(&PrintJobWorker::OnDocumentChanged,
                                             base::Unretained(worker_.get()),
                                             base::RetainedRef(document_))));
@@ -458,8 +445,6 @@ void PrintJob::ControlledWorkerShutdown() {
 
   // Now make sure the thread object is cleaned up. Do this on a worker
   // thread because it may block.
-  // TODO(fdoray): Remove MayBlock() once base::Thread::Stop() passes
-  // base::ThreadRestrictions::AssertWaitAllowed().
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
       {base::MayBlock(), base::WithBaseSyncPrimitives(),

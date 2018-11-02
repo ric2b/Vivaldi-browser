@@ -91,7 +91,7 @@ ExtensionActionAPI::Observer::~Observer() {
 //
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<ExtensionActionAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_extension_action_api_factory = LAZY_INSTANCE_INITIALIZER;
 
 ExtensionActionAPI::ExtensionActionAPI(content::BrowserContext* context)
     : browser_context_(context),
@@ -129,7 +129,7 @@ ExtensionActionAPI::~ExtensionActionAPI() {
 // static
 BrowserContextKeyedAPIFactory<ExtensionActionAPI>*
 ExtensionActionAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_extension_action_api_factory.Pointer();
 }
 
 // static
@@ -359,7 +359,7 @@ bool ExtensionActionFunction::ExtractDataFromArguments() {
   if (!args_->Get(0, &first_arg))
     return true;
 
-  switch (first_arg->GetType()) {
+  switch (first_arg->type()) {
     case base::Value::Type::INTEGER:
       CHECK(first_arg->GetAsInteger(&tab_id_));
       break;
@@ -370,7 +370,7 @@ bool ExtensionActionFunction::ExtractDataFromArguments() {
       // Still need to check for the tabId within details.
       base::Value* tab_id_value = NULL;
       if (details_->Get("tabId", &tab_id_value)) {
-        switch (tab_id_value->GetType()) {
+        switch (tab_id_value->type()) {
           case base::Value::Type::NONE:
             // OK; tabId is optional, leave it default.
             return true;
@@ -490,7 +490,7 @@ ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
   base::Value* color_value = NULL;
   EXTENSION_FUNCTION_VALIDATE(details_->Get("color", &color_value));
   SkColor color = 0;
-  if (color_value->IsType(base::Value::Type::LIST)) {
+  if (color_value->is_list()) {
     base::ListValue* list = NULL;
     EXTENSION_FUNCTION_VALIDATE(details_->GetList("color", &list));
     EXTENSION_FUNCTION_VALIDATE(list->GetSize() == 4);
@@ -502,7 +502,7 @@ ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
 
     color = SkColorSetARGB(color_array[3], color_array[0],
                            color_array[1], color_array[2]);
-  } else if (color_value->IsType(base::Value::Type::STRING)) {
+  } else if (color_value->is_string()) {
     std::string color_string;
     EXTENSION_FUNCTION_VALIDATE(details_->GetString("color", &color_string));
     if (!image_util::ParseCssColorString(color_string, &color))

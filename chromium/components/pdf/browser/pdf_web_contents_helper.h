@@ -51,6 +51,7 @@ class PDFWebContentsHelper
                                 const gfx::PointF& extent) override;
   void OnSelectionEvent(ui::SelectionEventType event) override;
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
+  void DidScroll() override;
 
   // ui::TouchSelectionMenuRunner:
   bool IsCommandIdEnabled(int command_id) const override;
@@ -66,6 +67,9 @@ class PDFWebContentsHelper
                        std::unique_ptr<PDFWebContentsHelperClient> client);
 
   void InitTouchSelectionClientManager();
+  gfx::PointF ConvertFromRoot(const gfx::PointF& point_f) const;
+  gfx::PointF ConvertToRoot(const gfx::PointF& point_f) const;
+  gfx::PointF ConvertHelper(const gfx::PointF& point_f, float scale) const;
 
   // mojom::PdfService:
   void SetListener(mojom::PdfListenerPtr listener) override;
@@ -81,8 +85,17 @@ class PDFWebContentsHelper
   std::unique_ptr<PDFWebContentsHelperClient> client_;
   content::TouchSelectionControllerClientManager*
       touch_selection_controller_client_manager_;
+
+  // Latest selection bounds received from PDFium.
+  gfx::PointF selection_left_;
+  int32_t selection_left_height_;
+  gfx::PointF selection_right_;
+  int32_t selection_right_height_;
   bool has_selection_;
+
   mojom::PdfListenerPtr remote_pdf_client_;
+  // Not owned.
+  content::WebContents* web_contents_;
 
   DISALLOW_COPY_AND_ASSIGN(PDFWebContentsHelper);
 };

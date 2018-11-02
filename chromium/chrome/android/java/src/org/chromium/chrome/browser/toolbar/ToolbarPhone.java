@@ -25,7 +25,9 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.os.Build;
 import android.os.SystemClock;
+import android.support.annotation.Nullable;
 import android.support.v4.view.animation.FastOutSlowInInterpolator;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Property;
 import android.util.TypedValue;
@@ -48,6 +50,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -62,6 +65,7 @@ import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.chrome.browser.widget.newtab.NewTabButton;
@@ -120,7 +124,7 @@ public class ToolbarPhone extends ToolbarLayout
     protected ViewGroup mToolbarButtonsContainer;
     protected ImageView mToggleTabStackButton;
     protected NewTabButton mNewTabButton;
-    private TintedImageButton mHomeButton;
+    protected @Nullable TintedImageButton mHomeButton;
     private TextView mUrlBar;
     protected View mUrlActionContainer;
     protected ImageView mToolbarShadow;
@@ -186,6 +190,10 @@ public class ToolbarPhone extends ToolbarLayout
     @ViewDebug.ExportedProperty(category = "chrome")
     protected float mUrlExpansionPercent;
     private AnimatorSet mUrlFocusLayoutAnimator;
+
+    private CharSequence mUrlTextPreFocus;
+    private int mUrlScrollXPositionPreFocus;
+
     protected boolean mDisableLocationBarRelayout;
     protected boolean mLayoutLocationBarInFocusedMode;
     protected int mUnfocusedLocationBarLayoutWidth;
@@ -432,7 +440,7 @@ public class ToolbarPhone extends ToolbarLayout
 
         enableTabSwitchingResources();
 
-        mHomeButton.setOnClickListener(this);
+        if (mHomeButton != null) mHomeButton.setOnClickListener(this);
 
         mMenuButton.setOnKeyListener(new KeyboardNavigationListener() {
             @Override
@@ -450,7 +458,7 @@ public class ToolbarPhone extends ToolbarLayout
                 return getMenuButtonHelper().onEnterKeyPress(mMenuButton);
             }
         });
-        onHomeButtonUpdate(HomepageManager.isHomepageEnabled(getContext()));
+        onHomeButtonUpdate(HomepageManager.isHomepageEnabled());
 
         updateVisualsForToolbarState();
     }
@@ -479,6 +487,7 @@ public class ToolbarPhone extends ToolbarLayout
             // No null check -- the toolbar should not be moved if we are not on an NTP.
             return newTabPage.getView().dispatchTouchEvent(ev);
         }
+
         return super.onTouchEvent(ev);
     }
 
@@ -488,15 +497,12 @@ public class ToolbarPhone extends ToolbarLayout
         if (mLocationBar != null && mLocationBar.hasFocus()) return;
 
         if (mToggleTabStackButton == v) {
-            // The button is clickable before the native library is loaded
-            // and the listener is setup.
-            if (mToggleTabStackButton != null && mToggleTabStackButton.isClickable()
-                    && mTabSwitcherListener != null) {
-                dismissTabSwitcherCallout();
-                cancelAppMenuUpdateBadgeAnimation();
-                mTabSwitcherListener.onClick(mToggleTabStackButton);
-                RecordUserAction.record("MobileToolbarShowStackView");
+            if (ChromeFeatureList.isInitialized()
+                    && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_MEMEX)) {
+                openMemexUI();
+                return;
             }
+            handleToggleTabStack();
         } else if (mNewTabButton == v) {
             v.setEnabled(false);
 
@@ -506,13 +512,30 @@ public class ToolbarPhone extends ToolbarLayout
                 RecordUserAction.record("MobileNewTabOpened");
                 // TODO(kkimlabs): Record UMA action for homepage button.
             }
-        } else if (mHomeButton == v) {
+        } else if (mHomeButton != null && mHomeButton == v) {
             openHomepage();
+        }
+    }
+
+    private void handleToggleTabStack() {
+        // The button is clickable before the native library is loaded
+        // and the listener is setup.
+        if (mToggleTabStackButton != null && mToggleTabStackButton.isClickable()
+                && mTabSwitcherListener != null) {
+            dismissTabSwitcherCallout();
+            cancelAppMenuUpdateBadgeAnimation();
+            mTabSwitcherListener.onClick(mToggleTabStackButton);
+            RecordUserAction.record("MobileToolbarShowStackView");
         }
     }
 
     @Override
     public boolean onLongClick(View v) {
+        if (v == mToggleTabStackButton && ChromeFeatureList.isInitialized()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_MEMEX)) {
+            handleToggleTabStack();
+            return true;
+        }
         CharSequence description = null;
         if (v == mToggleTabStackButton) {
             description = getResources().getString(R.string.open_tabs);
@@ -681,7 +704,9 @@ public class ToolbarPhone extends ToolbarLayout
      */
     private int getBoundsAfterAccountingForLeftButton() {
         int padding = mToolbarSidePadding;
-        if (mHomeButton.getVisibility() != GONE) padding = mHomeButton.getMeasuredWidth();
+        if (mHomeButton != null && mHomeButton.getVisibility() != GONE) {
+            padding = mHomeButton.getMeasuredWidth();
+        }
         return padding;
     }
 
@@ -901,7 +926,7 @@ public class ToolbarPhone extends ToolbarLayout
 
         int toolbarButtonVisibility = getToolbarButtonVisibility();
         mToolbarButtonsContainer.setVisibility(toolbarButtonVisibility);
-        if (mHomeButton.getVisibility() != GONE) {
+        if (mHomeButton != null && mHomeButton.getVisibility() != GONE) {
             mHomeButton.setVisibility(toolbarButtonVisibility);
         }
 
@@ -1011,7 +1036,7 @@ public class ToolbarPhone extends ToolbarLayout
         mLocationBar.setTranslationY(0);
         if (!mUrlFocusChangeInProgress) {
             mToolbarButtonsContainer.setTranslationY(0);
-            mHomeButton.setTranslationY(0);
+            if (mHomeButton != null) mHomeButton.setTranslationY(0);
         }
         if (!mToolbarShadowPermanentlyHidden) mToolbarShadow.setAlpha(1f);
         mLocationBar.setAlpha(1);
@@ -1084,18 +1109,13 @@ public class ToolbarPhone extends ToolbarLayout
         int transY = mTabSwitcherState == STATIC_TAB ? Math.min(mNtpSearchBoxTranslation.y, 0) : 0;
 
         mToolbarButtonsContainer.setTranslationY(transY);
-        mHomeButton.setTranslationY(transY);
+        if (mHomeButton != null) mHomeButton.setTranslationY(transY);
     }
 
     private void setAncestorsShouldClipChildren(boolean clip) {
         if (!isLocationBarShownInNTP()) return;
-        ViewGroup parent = this;
-        while (parent != null) {
-            parent.setClipChildren(clip);
-            if (!(parent.getParent() instanceof ViewGroup)) break;
-            if (parent.getId() == android.R.id.content) break;
-            parent = (ViewGroup) parent.getParent();
-        }
+
+        ViewUtils.setAncestorsShouldClipChildren(this, clip);
     }
 
     protected void drawTabSwitcherFadeAnimation(boolean animationFinished, float progress) {
@@ -1123,7 +1143,7 @@ public class ToolbarPhone extends ToolbarLayout
         canvas.clipRect(mBackgroundOverlayBounds);
 
         float previousAlpha = 0.f;
-        if (mHomeButton.getVisibility() != View.GONE) {
+        if (mHomeButton != null && mHomeButton.getVisibility() != View.GONE) {
             // Draw the New Tab button used in the URL view.
             previousAlpha = mHomeButton.getAlpha();
             mHomeButton.setAlpha(previousAlpha * floatAlpha);
@@ -1278,7 +1298,8 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     protected boolean isChildLeft(View child) {
-        return (child == mNewTabButton || child == mHomeButton) ^ LocalizationUtils.isLayoutRtl();
+        return (child == mNewTabButton || (mHomeButton != null && child == mHomeButton))
+                ^ LocalizationUtils.isLayoutRtl();
     }
 
     /**
@@ -1484,9 +1505,12 @@ public class ToolbarPhone extends ToolbarLayout
 
     @Override
     public void updateButtonVisibility() {
+        if (mHomeButton == null) return;
+
         if (mIsHomeButtonEnabled) {
             mHomeButton.setVisibility(urlHasFocus() || isTabSwitcherAnimationRunning()
                     ? INVISIBLE : VISIBLE);
+            mHomeButton.setTint(mUseLightToolbarDrawables ? mLightModeTint : mDarkModeTint);
             mBrowsingModeViews.add(mHomeButton);
         } else {
             mHomeButton.setVisibility(GONE);
@@ -1886,7 +1910,9 @@ public class ToolbarPhone extends ToolbarLayout
         boolean isLocationBarRtl = ApiCompatibilityUtils.isLayoutRtl(mLocationBar);
         if (!isLocationBarRtl || mUrlBar.getLayout() != null) {
             int urlBarStartScrollX = 0;
-            if (isLocationBarRtl) {
+            if (TextUtils.equals(mUrlBar.getText(), mUrlTextPreFocus)) {
+                urlBarStartScrollX = mUrlScrollXPositionPreFocus;
+            } else if (isLocationBarRtl) {
                 urlBarStartScrollX = (int) mUrlBar.getLayout().getPrimaryHorizontal(0);
                 urlBarStartScrollX -= mUrlBar.getWidth();
             }
@@ -1931,8 +1957,12 @@ public class ToolbarPhone extends ToolbarLayout
         List<Animator> animators = new ArrayList<>();
         if (hasFocus) {
             populateUrlFocusingAnimatorSet(animators);
+            mUrlTextPreFocus = mUrlBar.getText();
+            mUrlScrollXPositionPreFocus = mUrlBar.getScrollX();
         } else {
             populateUrlClearFocusingAnimatorSet(animators);
+            mUrlTextPreFocus = null;
+            mUrlScrollXPositionPreFocus = 0;
         }
         mUrlFocusLayoutAnimator = new AnimatorSet();
         mUrlFocusLayoutAnimator.playTogether(animators);
@@ -2265,8 +2295,10 @@ public class ToolbarPhone extends ToolbarLayout
         getProgressBar().setThemeColor(themeColorForProgressBar, isIncognito());
 
         if (inOrEnteringTabSwitcher) {
+            assert mVisualState == VisualState.TAB_SWITCHER_NORMAL
+                    || mVisualState == VisualState.TAB_SWITCHER_INCOGNITO;
             mUseLightToolbarDrawables = ColorUtils.shouldUseLightForegroundOnBackground(
-                    getToolbarColorForVisualState(VisualState.TAB_SWITCHER_NORMAL));
+                    getToolbarColorForVisualState(mVisualState));
             mLocationBarBackgroundAlpha = LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA;
             getProgressBar().setBackgroundColor(mProgressBackBackgroundColorWhite);
             getProgressBar().setForegroundColor(ApiCompatibilityUtils.getColor(getResources(),
@@ -2300,7 +2332,7 @@ public class ToolbarPhone extends ToolbarLayout
             setAppMenuUpdateBadgeDrawable(mUseLightToolbarDrawables);
         }
         ColorStateList tint = mUseLightToolbarDrawables ? mLightModeTint : mDarkModeTint;
-        if (mIsHomeButtonEnabled) mHomeButton.setTint(tint);
+        if (mIsHomeButtonEnabled && mHomeButton != null) mHomeButton.setTint(tint);
 
         mLocationBar.updateVisualsForState();
         // Remove the side padding for incognito to ensure the badge icon aligns correctly with the
@@ -2383,8 +2415,8 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private void setTabSwitcherAnimationMenuDrawable() {
-        mTabSwitcherAnimationMenuDrawable = ApiCompatibilityUtils.getDrawable(getResources(),
-                R.drawable.btn_menu);
+        mTabSwitcherAnimationMenuDrawable = ApiCompatibilityUtils.getDrawable(
+                getResources(), R.drawable.ic_more_vert_black_24dp);
         mTabSwitcherAnimationMenuDrawable.mutate();
         mTabSwitcherAnimationMenuDrawable.setColorFilter(
                 isIncognito() ? mLightModeDefaultColor : mDarkModeDefaultColor,

@@ -25,12 +25,12 @@ class MOJO_SYSTEM_IMPL_EXPORT ScopedPlatformHandle {
       : handle_(other.release()) {}
 
   ScopedPlatformHandle& operator=(ScopedPlatformHandle&& other) {
-    if (this != &other)
-      handle_ = other.release();
+    reset(other.release());
     return *this;
   }
 
   const PlatformHandle& get() const { return handle_; }
+  PlatformHandle& get() { return handle_; }
 
   void swap(ScopedPlatformHandle& other) {
     PlatformHandle temp = handle_;

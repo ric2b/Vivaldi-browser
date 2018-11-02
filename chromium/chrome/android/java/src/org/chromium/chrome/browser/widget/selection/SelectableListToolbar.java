@@ -215,7 +215,7 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
         mSelectionMenuButton = TintedDrawable.constructTintedDrawable(
                 getResources(), R.drawable.ic_more_vert_black_24dp, android.R.color.white);
 
-        if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+        if (!FeatureUtilities.isChromeHomeEnabled()) {
             setTitleTextAppearance(getContext(), R.style.BlackHeadline2);
         }
     }
@@ -266,7 +266,7 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
             }
         });
 
-        if (FeatureUtilities.isChromeHomeModernEnabled()) {
+        if (FeatureUtilities.isChromeHomeEnabled()) {
             mClearTextButton.setPadding(ApiCompatibilityUtils.getPaddingStart(mClearTextButton),
                     mClearTextButton.getPaddingTop(),
                     getResources().getDimensionPixelSize(R.dimen.clear_text_button_end_padding),
@@ -311,6 +311,8 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
 
     @Override
     public void onClick(View view) {
+        if (mIsDestroyed) return;
+
         switch (mNavigationButton) {
             case NAVIGATION_BUTTON_NONE:
                 break;
@@ -482,7 +484,6 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
 
         mUiConfig = uiConfig;
         mUiConfig.addObserver(this);
-
     }
 
     @Override
@@ -490,8 +491,8 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
         int padding =
                 SelectableListLayout.getPaddingForDisplayStyle(newDisplayStyle, getResources());
         int paddingStartOffset = 0;
-        boolean isModernSearchViewEnabled = mIsSearching && !mIsSelectionEnabled
-                && FeatureUtilities.isChromeHomeModernEnabled();
+        boolean isModernSearchViewEnabled =
+                mIsSearching && !mIsSelectionEnabled && FeatureUtilities.isChromeHomeEnabled();
         MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
 
         if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE
@@ -610,7 +611,7 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
         mSearchView.setVisibility(View.VISIBLE);
 
         setNavigationButton(NAVIGATION_BUTTON_BACK);
-        if (FeatureUtilities.isChromeHomeModernEnabled()) {
+        if (FeatureUtilities.isChromeHomeEnabled()) {
             setBackgroundResource(R.drawable.search_toolbar_modern_bg);
         } else {
             setBackgroundColor(mSearchBackgroundColor);
@@ -666,6 +667,15 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
         }
     }
 
+    @Override
+    public void setTitle(CharSequence title) {
+        super.setTitle(title);
+
+        // The super class adds an AppCompatTextView for the title which not focusable by default.
+        // Set TextView children to focusable so the title can gain focus in accessibility mode.
+        makeTextViewChildrenAccessible();
+    }
+
     @VisibleForTesting
     public View getSearchViewForTests() {
         return mSearchView;
@@ -674,5 +684,20 @@ public class SelectableListToolbar<E> extends Toolbar implements SelectionObserv
     @VisibleForTesting
     public int getNavigationButtonForTests() {
         return mNavigationButton;
+    }
+
+    /** Ends any in-progress animations. */
+    @VisibleForTesting
+    public void endAnimationsForTesting() {
+        mNumberRollView.endAnimationsForTesting();
+    }
+
+    private void makeTextViewChildrenAccessible() {
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!(child instanceof TextView)) continue;
+            child.setFocusable(true);
+            child.setFocusableInTouchMode(true);
+        }
     }
 }

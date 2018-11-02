@@ -16,12 +16,15 @@
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/frame_sinks/primary_begin_frame_source.h"
+#include "components/viz/service/frame_sinks/video_detector.h"
+#include "components/viz/service/hit_test/hit_test_manager.h"
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "components/viz/service/surfaces/surface_observer.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
+#include "services/viz/public/interfaces/compositing/video_detector_observer.mojom.h"
 
 namespace cc {
 
@@ -35,6 +38,8 @@ class SurfaceSynchronizationTest;
 
 namespace viz {
 
+class CapturableFrameSink;
+class CompositorFrameSinkSupport;
 class DisplayProvider;
 class FrameSinkManagerClient;
 
@@ -61,6 +66,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // mojom::FrameSinkManager implementation:
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id) override;
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) override;
+  void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
+                              const std::string& debug_label) override;
   void CreateRootCompositorFrameSink(
       const FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
@@ -81,6 +88,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   void AssignTemporaryReference(const SurfaceId& surface_id,
                                 const FrameSinkId& owner) override;
   void DropTemporaryReference(const SurfaceId& surface_id) override;
+  void AddVideoDetectorObserver(
+      mojom::VideoDetectorObserverPtr observer) override;
 
   // CompositorFrameSinkSupport, hierarchy, and BeginFrameSource can be
   // registered and unregistered in any order with respect to each other.
@@ -110,6 +119,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
 
   SurfaceManager* surface_manager() { return &surface_manager_; }
 
+  const HitTestManager* hit_test_manager() { return &hit_test_manager_; }
+
   // SurfaceObserver implementation.
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
   void OnSurfaceActivated(const SurfaceId& surface_id) override;
@@ -119,7 +130,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   void OnSurfaceDestroyed(const SurfaceId& surface_id) override;
   void OnSurfaceDamageExpected(const SurfaceId& surface_id,
                                const BeginFrameArgs& args) override;
-  void OnSurfaceWillDraw(const SurfaceId& surface_id) override;
+  void OnSurfaceSubtreeDamaged(const SurfaceId& surface_id) override;
 
   void OnClientConnectionLost(const FrameSinkId& frame_sink_id);
 
@@ -139,6 +150,24 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // by value avoids this.
   void DestroyCompositorFrameSink(FrameSinkId frame_sink_id);
 
+  void SubmitHitTestRegionList(
+      const SurfaceId& surface_id,
+      uint64_t frame_index,
+      mojom::HitTestRegionListPtr hit_test_region_list);
+
+  // This method is virtual so the implementation can be modified in unit tests.
+  virtual uint64_t GetActiveFrameIndex(const SurfaceId& surface_id);
+
+  // Instantiates |video_detector_| for tests where we simulate the passage of
+  // time.
+  VideoDetector* CreateVideoDetectorForTesting(
+      std::unique_ptr<base::TickClock> tick_clock,
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
+
+  // Called when |frame_token| is changed on a submitted CompositorFrame.
+  void OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
+                           uint32_t frame_token);
+
  private:
   friend class cc::test::SurfaceSynchronizationTest;
 
@@ -146,6 +175,11 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
                                          BeginFrameSource* source);
   void RecursivelyDetachBeginFrameSource(const FrameSinkId& frame_sink_id,
                                          BeginFrameSource* source);
+
+  // TODO(crbug.com/754872): To be used by FrameSinkVideoCapturerImpl in
+  // an upcoming change.
+  CapturableFrameSink* FindCapturableFrameSink(
+      const FrameSinkId& frame_sink_id);
 
   // Returns true if |child framesink| is or has |search_frame_sink_id| as a
   // child.
@@ -184,9 +218,15 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // surfaces are destroyed before |primary_source_|.
   SurfaceManager surface_manager_;
 
-  std::unordered_map<FrameSinkId,
-                     std::unique_ptr<mojom::CompositorFrameSink>,
-                     FrameSinkIdHash>
+  HitTestManager hit_test_manager_;
+
+  struct SinkAndSupport {
+    SinkAndSupport();
+    ~SinkAndSupport();
+    std::unique_ptr<mojom::CompositorFrameSink> sink;
+    CompositorFrameSinkSupport* support;  // Owned by |sink|.
+  };
+  std::unordered_map<FrameSinkId, SinkAndSupport, FrameSinkIdHash>
       compositor_frame_sinks_;
 
   THREAD_CHECKER(thread_checker_);
@@ -194,6 +234,10 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl : public SurfaceObserver,
   // This will point to |client_ptr_| if using Mojo or a provided client if
   // directly connected. Use this to make function calls.
   mojom::FrameSinkManagerClient* client_ = nullptr;
+
+  // |video_detector_| is instantiated lazily in order to avoid overhead on
+  // platforms that don't need video detection.
+  std::unique_ptr<VideoDetector> video_detector_;
 
   mojom::FrameSinkManagerClientPtr client_ptr_;
   mojo::Binding<mojom::FrameSinkManager> binding_;

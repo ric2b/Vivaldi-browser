@@ -28,12 +28,12 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
                            bool cancelable,
                            AbstractView*,
                            int detail,
-                           int screen_x,
-                           int screen_y,
-                           int window_x,
-                           int window_y,
-                           int movement_x,
-                           int movement_y,
+                           double screen_x,
+                           double screen_y,
+                           double window_x,
+                           double window_y,
+                           double movement_x,
+                           double movement_y,
                            WebInputEvent::Modifiers,
                            short button,
                            unsigned short buttons,
@@ -54,9 +54,9 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
   bool IsDragEvent() const override;
   bool IsMouseEvent() const override;
 
-  EventDispatchMediator* CreateMediator() override;
+  DispatchEventResult DispatchEvent(EventDispatcher&) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   DragEvent();
@@ -66,12 +66,12 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
             bool cancelable,
             AbstractView*,
             int detail,
-            int screen_x,
-            int screen_y,
-            int window_x,
-            int window_y,
-            int movement_x,
-            int movement_y,
+            double screen_x,
+            double screen_y,
+            double window_x,
+            double window_y,
+            double movement_x,
+            double movement_y,
             WebInputEvent::Modifiers,
             short button,
             unsigned short buttons,
@@ -83,16 +83,6 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
   DragEvent(const AtomicString& type, const DragEventInit&);
 
   Member<DataTransfer> data_transfer_;
-};
-
-class DragEventDispatchMediator final : public EventDispatchMediator {
- public:
-  static DragEventDispatchMediator* Create(DragEvent*);
-
- private:
-  explicit DragEventDispatchMediator(DragEvent*);
-  DragEvent& Event() const;
-  DispatchEventResult DispatchEvent(EventDispatcher&) const override;
 };
 
 DEFINE_EVENT_TYPE_CASTS(DragEvent);

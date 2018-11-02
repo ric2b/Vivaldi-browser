@@ -52,7 +52,8 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest,
       base::UTF8ToUTF16("window.open('about:blank');"));
   content::WebContents* tab2 = new_wc_observer.GetWebContents();
   ASSERT_NE(tab1, tab2);
-  ASSERT_EQ(tab1->GetRenderProcessHost(), tab2->GetRenderProcessHost());
+  ASSERT_EQ(tab1->GetMainFrame()->GetProcess(),
+            tab2->GetMainFrame()->GetProcess());
 
   // Tab two shows a dialog.
   scoped_refptr<content::MessageLoopRunner> runner =
@@ -104,8 +105,8 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest,
 class JavaScriptCallbackHelper {
  public:
   JavaScriptDialogTabHelper::DialogClosedCallback GetCallback() {
-    return base::Bind(&JavaScriptCallbackHelper::DialogClosed,
-                      base::Unretained(this));
+    return base::BindOnce(&JavaScriptCallbackHelper::DialogClosed,
+                          base::Unretained(this));
   }
 
   bool last_success() { return last_success_; }
@@ -129,14 +130,12 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest, HandleJavaScriptDialog) {
       JavaScriptDialogTabHelper::FromWebContents(tab);
 
   JavaScriptCallbackHelper callback_helper;
-  JavaScriptDialogTabHelper::DialogClosedCallback callback =
-      callback_helper.GetCallback();
 
   // alert
   bool did_suppress = false;
   js_helper->RunJavaScriptDialog(
       tab, GURL(), content::JAVASCRIPT_DIALOG_TYPE_ALERT, base::string16(),
-      base::string16(), callback, &did_suppress);
+      base::string16(), callback_helper.GetCallback(), &did_suppress);
   ASSERT_TRUE(js_helper->IsShowingDialogForTesting());
   js_helper->HandleJavaScriptDialog(tab, true, nullptr);
   ASSERT_FALSE(js_helper->IsShowingDialogForTesting());
@@ -147,7 +146,7 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest, HandleJavaScriptDialog) {
   for (auto response : {true, false}) {
     js_helper->RunJavaScriptDialog(
         tab, GURL(), content::JAVASCRIPT_DIALOG_TYPE_CONFIRM, base::string16(),
-        base::string16(), callback, &did_suppress);
+        base::string16(), callback_helper.GetCallback(), &did_suppress);
     ASSERT_TRUE(js_helper->IsShowingDialogForTesting());
     js_helper->HandleJavaScriptDialog(tab, response, nullptr);
     ASSERT_FALSE(js_helper->IsShowingDialogForTesting());
@@ -158,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest, HandleJavaScriptDialog) {
   // prompt, cancel
   js_helper->RunJavaScriptDialog(
       tab, GURL(), content::JAVASCRIPT_DIALOG_TYPE_PROMPT, base::string16(),
-      base::string16(), callback, &did_suppress);
+      base::string16(), callback_helper.GetCallback(), &did_suppress);
   ASSERT_TRUE(js_helper->IsShowingDialogForTesting());
   js_helper->HandleJavaScriptDialog(tab, false, nullptr);
   ASSERT_FALSE(js_helper->IsShowingDialogForTesting());
@@ -171,7 +170,7 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest, HandleJavaScriptDialog) {
   // prompt, ok + override
   js_helper->RunJavaScriptDialog(
       tab, GURL(), content::JAVASCRIPT_DIALOG_TYPE_PROMPT, base::string16(),
-      value1, callback, &did_suppress);
+      value1, callback_helper.GetCallback(), &did_suppress);
   ASSERT_TRUE(js_helper->IsShowingDialogForTesting());
   js_helper->HandleJavaScriptDialog(tab, true, &value2);
   ASSERT_FALSE(js_helper->IsShowingDialogForTesting());
@@ -181,7 +180,7 @@ IN_PROC_BROWSER_TEST_F(JavaScriptDialogTest, HandleJavaScriptDialog) {
   // prompt, ok + no override
   js_helper->RunJavaScriptDialog(
       tab, GURL(), content::JAVASCRIPT_DIALOG_TYPE_PROMPT, base::string16(),
-      value1, callback, &did_suppress);
+      value1, callback_helper.GetCallback(), &did_suppress);
   ASSERT_TRUE(js_helper->IsShowingDialogForTesting());
   js_helper->HandleJavaScriptDialog(tab, true, nullptr);
   ASSERT_FALSE(js_helper->IsShowingDialogForTesting());

@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("metrics") {
+import("//chromecast/chromecast.gni")
+
+cast_source_set("metrics") {
   sources = [
     "cast_metrics_prefs.cc",
     "cast_metrics_prefs.h",
@@ -20,7 +22,6 @@ source_set("metrics") {
     "//components/metrics",
     "//components/metrics:gpu",
     "//components/metrics:net",
-    "//components/metrics:profiler",
     "//components/prefs",
     "//content/public/browser",
     "//content/public/common",

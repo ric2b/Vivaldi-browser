@@ -17,15 +17,15 @@ namespace cc {
 namespace {
 
 void CheckDrawLayer(HeadsUpDisplayLayerImpl* layer,
-                    ResourceProvider* resource_provider,
+                    LayerTreeResourceProvider* resource_provider,
                     viz::ContextProvider* context_provider,
                     DrawMode draw_mode) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   bool will_draw = layer->WillDraw(draw_mode, resource_provider);
   if (will_draw)
     layer->AppendQuads(render_pass.get(), &data);
-  RenderPassList pass_list;
+  viz::RenderPassList pass_list;
   pass_list.push_back(std::move(render_pass));
   layer->UpdateHudTexture(draw_mode, resource_provider, context_provider,
                           pass_list);
@@ -92,7 +92,7 @@ TEST(HeadsUpDisplayLayerImplTest, CPUAndGPURasterCanvas) {
                  layer_tree_frame_sink->context_provider(), DRAW_MODE_HARDWARE);
 
   // Check SW canvas drawing is ok.
-  CheckDrawLayer(layer, host_impl.resource_provider(), NULL,
+  CheckDrawLayer(layer, host_impl.resource_provider(), nullptr,
                  DRAW_MODE_SOFTWARE);
 }
 

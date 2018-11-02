@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include <algorithm>
-#include <deque>
 #include <utility>
 
 #include "base/bind.h"
@@ -27,7 +26,7 @@
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
-#include "cc/output/latency_info_swap_promise.h"
+#include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -49,7 +48,6 @@
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
@@ -76,11 +74,16 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
       allow_locks_to_extend_timeout_(false),
       is_pixel_canvas_(enable_pixel_canvas),
       weak_ptr_factory_(this),
-      lock_timeout_weak_ptr_factory_(this) {
+      lock_timeout_weak_ptr_factory_(this),
+      context_creation_weak_ptr_factory_(this) {
   if (context_factory_private) {
     auto* host_frame_sink_manager =
         context_factory_private_->GetHostFrameSinkManager();
     host_frame_sink_manager->RegisterFrameSinkId(frame_sink_id_, this);
+#if DCHECK_IS_ON()
+    host_frame_sink_manager->SetFrameSinkDebugLabel(frame_sink_id_,
+                                                    "Compositor");
+#endif
   }
   root_web_layer_ = cc::Layer::Create();
 
@@ -96,6 +99,9 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.use_occlusion_for_tile_prioritization = true;
   refresh_rate_ = context_factory_->GetRefreshRate();
   settings.main_frame_before_activation_enabled = false;
+
+  // Disable edge anti-aliasing in order to increase support for HW overlays.
+  settings.enable_edge_anti_aliasing = false;
 
   if (command_line->HasSwitch(switches::kLimitFps)) {
     std::string fps_str =
@@ -155,9 +161,6 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.use_layer_lists =
       command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
 
-  settings.enable_color_correct_rasterization =
-      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
-
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
@@ -166,6 +169,13 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
     settings.preferred_tile_format = viz::RGBA_4444;
   settings.resource_settings = context_factory_->GetResourceSettings();
 
+#if defined(OS_MACOSX)
+  // Using CoreAnimation to composite requires using GpuMemoryBuffers, which
+  // require zero copy.
+  settings.resource_settings.use_gpu_memory_buffer_resources =
+      settings.use_zero_copy;
+#endif
+
   settings.gpu_memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
   settings.gpu_memory_policy.priority_cutoff_when_visible =
       gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
@@ -173,8 +183,11 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.disallow_non_exact_resource_reuse =
       command_line->HasSwitch(switches::kDisallowNonExactResourceReuse);
 
-  settings.wait_for_all_pipeline_stages_before_draw =
-      command_line->HasSwitch(cc::switches::kRunAllCompositorStagesBeforeDraw);
+  if (command_line->HasSwitch(
+          cc::switches::kRunAllCompositorStagesBeforeDraw)) {
+    settings.wait_for_all_pipeline_stages_before_draw = true;
+    settings.enable_latency_recovery = false;
+  }
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
@@ -199,7 +212,7 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   host_->SetVisible(true);
 
   if (command_line->HasSwitch(switches::kUISlowAnimations)) {
-    slow_animations_ = base::MakeUnique<ScopedAnimationDurationScaleMode>(
+    slow_animations_ = std::make_unique<ScopedAnimationDurationScaleMode>(
         ScopedAnimationDurationScaleMode::SLOW_DURATION);
   }
 }
@@ -245,6 +258,7 @@ void Compositor::AddFrameSink(const viz::FrameSinkId& frame_sink_id) {
     return;
   context_factory_private_->GetHostFrameSinkManager()
       ->RegisterFrameSinkHierarchy(frame_sink_id_, frame_sink_id);
+
   child_frame_sinks_.insert(frame_sink_id);
 }
 
@@ -277,6 +291,11 @@ void Compositor::SetLayerTreeFrameSink(
   }
 }
 
+void Compositor::OnChildResizing() {
+  for (auto& observer : observer_list_)
+    observer.OnCompositingChildResizing(this);
+}
+
 void Compositor::ScheduleDraw() {
   host_->SetNeedsCommit();
 }
@@ -294,11 +313,6 @@ void Compositor::SetRootLayer(Layer* root_layer) {
 
 cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
   return animation_timeline_.get();
-}
-
-void Compositor::SetHostHasTransparentBackground(
-    bool host_has_transparent_background) {
-  host_->set_has_transparent_background(host_has_transparent_background);
 }
 
 void Compositor::ScheduleFullRedraw() {
@@ -351,7 +365,11 @@ void Compositor::SetScaleAndSize(float scale,
 void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
   output_color_space_ = color_space;
   blending_color_space_ = output_color_space_.GetBlendingColorSpace();
-  host_->SetRasterColorSpace(output_color_space_.GetRasterColorSpace());
+  // Do all ui::Compositor rasterization to sRGB because UI resources will not
+  // have their color conversion results cached, and will suffer repeated
+  // image color conversions.
+  // https://crbug.com/769677
+  host_->SetRasterColorSpace(gfx::ColorSpace::CreateSRGB());
   // Color space is reset when the output surface is lost, so this must also be
   // updated then.
   // TODO(fsamuel): Get rid of this.
@@ -424,14 +442,17 @@ void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
   DCHECK(!widget_valid_);
   widget_ = widget;
   widget_valid_ = true;
-  if (layer_tree_frame_sink_requested_)
-    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
+  if (layer_tree_frame_sink_requested_) {
+    context_factory_->CreateLayerTreeFrameSink(
+        context_creation_weak_ptr_factory_.GetWeakPtr());
+  }
 }
 
 gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
   DCHECK(!IsVisible());
   host_->ReleaseLayerTreeFrameSink();
   context_factory_->RemoveCompositor(this);
+  context_creation_weak_ptr_factory_.InvalidateWeakPtrs();
   widget_valid_ = false;
   gfx::AcceleratedWidget widget = widget_;
   widget_ = gfx::kNullAcceleratedWidget;
@@ -448,6 +469,8 @@ scoped_refptr<CompositorVSyncManager> Compositor::vsync_manager() const {
 }
 
 void Compositor::IssueExternalBeginFrame(const viz::BeginFrameArgs& args) {
+  TRACE_EVENT1("ui", "Compositor::IssueExternalBeginFrame", "args",
+               args.AsValue());
   DCHECK(external_begin_frames_enabled_);
   if (context_factory_private_)
     context_factory_private_->IssueExternalBeginFrame(this, args);
@@ -456,7 +479,7 @@ void Compositor::IssueExternalBeginFrame(const viz::BeginFrameArgs& args) {
 void Compositor::SetExternalBeginFrameClient(ExternalBeginFrameClient* client) {
   DCHECK(external_begin_frames_enabled_);
   external_begin_frame_client_ = client;
-  if (needs_external_begin_frames_)
+  if (needs_external_begin_frames_ && external_begin_frame_client_)
     external_begin_frame_client_->OnNeedsExternalBeginFrames(true);
 }
 
@@ -530,8 +553,10 @@ void Compositor::UpdateLayerTreeHost() {
 void Compositor::RequestNewLayerTreeFrameSink() {
   DCHECK(!layer_tree_frame_sink_requested_);
   layer_tree_frame_sink_requested_ = true;
-  if (widget_valid_)
-    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
+  if (widget_valid_) {
+    context_factory_->CreateLayerTreeFrameSink(
+        context_creation_weak_ptr_factory_.GetWeakPtr());
+  }
 }
 
 void Compositor::DidFailToInitializeLayerTreeFrameSink() {
@@ -565,6 +590,11 @@ void Compositor::OnFirstSurfaceActivation(
   // surface should be set here.
 }
 
+void Compositor::OnFrameTokenChanged(uint32_t frame_token) {
+  // TODO(yiyix, fsamuel): Implement frame token propagation for Compositor.
+  NOTREACHED();
+}
+
 void Compositor::SetOutputIsSecure(bool output_is_secure) {
   if (context_factory_private_)
     context_factory_private_->SetOutputIsSecure(this, output_is_secure);
@@ -585,7 +615,7 @@ std::unique_ptr<CompositorLock> Compositor::GetCompositorLock(
   // This uses the main WeakPtrFactory to break the connection from the lock to
   // the Compositor when the Compositor is destroyed.
   auto lock =
-      base::MakeUnique<CompositorLock>(client, weak_ptr_factory_.GetWeakPtr());
+      std::make_unique<CompositorLock>(client, weak_ptr_factory_.GetWeakPtr());
   bool was_empty = active_locks_.empty();
   active_locks_.push_back(lock.get());
 

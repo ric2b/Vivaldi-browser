@@ -26,13 +26,13 @@
 
 #include "core/html/parser/HTMLElementStack.h"
 
-#include "core/HTMLNames.h"
-#include "core/MathMLNames.h"
-#include "core/SVGNames.h"
 #include "core/dom/Element.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/HTMLFormControlElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLFormControlElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
+#include "core/html_names.h"
+#include "core/mathml_names.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -118,7 +118,7 @@ bool HTMLElementStack::ElementRecord::IsAbove(ElementRecord* other) const {
   return false;
 }
 
-DEFINE_TRACE(HTMLElementStack::ElementRecord) {
+void HTMLElementStack::ElementRecord::Trace(blink::Visitor* visitor) {
   visitor->Trace(item_);
   visitor->Trace(next_);
 }
@@ -167,8 +167,8 @@ void HTMLElementStack::PopAll() {
     Node& node = *TopNode();
     if (node.IsElementNode()) {
       ToElement(node).FinishParsingChildren();
-      if (isHTMLSelectElement(node))
-        ToHTMLFormControlElement(node).SetBlocksFormSubmission(true);
+      if (auto* select = ToHTMLSelectElementOrNull(node))
+        select->SetBlocksFormSubmission(true);
     }
     top_ = top_->ReleaseNext();
   }
@@ -351,7 +351,7 @@ void HTMLElementStack::RemoveHTMLHeadElement(Element* element) {
 }
 
 void HTMLElementStack::Remove(Element* element) {
-  DCHECK(!isHTMLHeadElement(element));
+  DCHECK(!IsHTMLHeadElement(element));
   if (top_->GetElement() == element) {
     Pop();
     return;
@@ -505,8 +505,8 @@ void HTMLElementStack::PopCommon() {
 }
 
 void HTMLElementStack::RemoveNonTopCommon(Element* element) {
-  DCHECK(!isHTMLHtmlElement(element));
-  DCHECK(!isHTMLBodyElement(element));
+  DCHECK(!IsHTMLHtmlElement(element));
+  DCHECK(!IsHTMLBodyElement(element));
   DCHECK_NE(Top(), element);
   for (ElementRecord* pos = top_.Get(); pos; pos = pos->Next()) {
     if (pos->Next()->GetElement() == element) {
@@ -524,7 +524,7 @@ void HTMLElementStack::RemoveNonTopCommon(Element* element) {
 HTMLElementStack::ElementRecord*
 HTMLElementStack::FurthestBlockForFormattingElement(
     Element* formatting_element) const {
-  ElementRecord* furthest_block = 0;
+  ElementRecord* furthest_block = nullptr;
   for (ElementRecord* pos = top_.Get(); pos; pos = pos->Next()) {
     if (pos->GetElement() == formatting_element)
       return furthest_block;
@@ -535,7 +535,7 @@ HTMLElementStack::FurthestBlockForFormattingElement(
   return nullptr;
 }
 
-DEFINE_TRACE(HTMLElementStack) {
+void HTMLElementStack::Trace(blink::Visitor* visitor) {
   visitor->Trace(top_);
   visitor->Trace(root_node_);
   visitor->Trace(head_element_);

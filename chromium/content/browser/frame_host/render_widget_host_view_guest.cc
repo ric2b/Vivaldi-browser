@@ -13,10 +13,13 @@
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_hittest.h"
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
+#include "content/browser/mus_util.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -31,6 +34,7 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "skia/ext/platform_canvas.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/gfx/geometry/dip_util.h"
 
 #if defined(OS_MACOSX)
 #import "content/browser/renderer_host/render_widget_host_view_mac_dictionary_helper.h"
@@ -38,6 +42,7 @@
 
 #if defined(USE_AURA)
 #include "content/browser/renderer_host/ui_events_helper.h"
+#include "ui/aura/env.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -93,11 +98,22 @@ RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
       // |guest| is NULL during test.
       guest_(guest ? guest->AsWeakPtr() : base::WeakPtr<BrowserPluginGuest>()),
       platform_view_(platform_view),
-      should_forward_text_selection_(false) {
+      weak_ptr_factory_(this) {
   // In tests |guest_| and therefore |owner| can be null.
   auto* owner = GetOwnerRenderWidgetHostView();
   if (owner)
     SetParentFrameSinkId(owner->GetFrameSinkId());
+
+  // NOTE(andre@vivaldi.com) : Under certain navigations we can end up with a
+  // new RWHV where the page-level inputrouter is not aware of this. So make
+  // sure this is the case. See VB-36503.
+  if (owner) {
+    RenderWidgetHostImpl* host =
+        RenderWidgetHostImpl::From(owner->GetRenderWidgetHost());
+    if (!host->delegate()->GetInputEventRouter()->is_registered(frame_sink_id_))
+      host->delegate()->GetInputEventRouter()->AddFrameSinkIdOwner(
+          frame_sink_id_, this);
+  }
 
   gfx::NativeView view = GetNativeView();
   if (view)
@@ -168,7 +184,6 @@ void RenderWidgetHostViewGuest::Hide() {
 }
 
 void RenderWidgetHostViewGuest::SetSize(const gfx::Size& size) {
-  size_ = size;
   host_->WasResized();
 }
 
@@ -248,12 +263,97 @@ gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
   gfx::Rect embedder_bounds;
   if (rwhv)
     embedder_bounds = rwhv->GetViewBounds();
-  return gfx::Rect(
-      guest_->GetScreenCoordinates(embedder_bounds.origin()), size_);
+  return gfx::Rect(guest_->GetScreenCoordinates(embedder_bounds.origin()),
+                   guest_->frame_rect().size());
 }
 
 gfx::Rect RenderWidgetHostViewGuest::GetBoundsInRootWindow() {
   return GetViewBounds();
+}
+
+namespace {
+
+RenderWidgetHostViewBase* GetRootView(RenderWidgetHostViewBase* rwhv) {
+  // If we're a pdf in a WebView, we could have nested guest views here.
+  while (rwhv && rwhv->IsRenderWidgetHostViewGuest()) {
+    rwhv = static_cast<RenderWidgetHostViewGuest*>(rwhv)
+               ->GetOwnerRenderWidgetHostView();
+  }
+  if (!rwhv)
+    return nullptr;
+
+  // We could be a guest inside an oopif frame, in which case we're not the
+  // root.
+  if (rwhv->IsRenderWidgetHostViewChildFrame()) {
+    rwhv = static_cast<RenderWidgetHostViewChildFrame*>(rwhv)
+               ->GetRootRenderWidgetHostView();
+  }
+  return rwhv;
+}
+
+}  // namespace
+
+gfx::PointF RenderWidgetHostViewGuest::TransformPointToRootCoordSpaceF(
+    const gfx::PointF& point) {
+  if (!guest_ || !last_received_local_surface_id_.is_valid())
+    return point;
+
+  RenderWidgetHostViewBase* root_rwhv = GetRootView(this);
+  if (!root_rwhv)
+    return point;
+
+  gfx::PointF transformed_point = point;
+  // TODO(wjmaclean): If we knew that TransformPointToLocalCoordSpace would
+  // guarantee not to change transformed_point on failure, then we could skip
+  // checking the function return value and directly return transformed_point.
+  if (!root_rwhv->TransformPointToLocalCoordSpace(
+          point,
+          viz::SurfaceId(frame_sink_id_, last_received_local_surface_id_),
+          &transformed_point)) {
+    return point;
+  }
+  return transformed_point;
+}
+
+bool RenderWidgetHostViewGuest::TransformPointToLocalCoordSpace(
+    const gfx::PointF& point,
+    const viz::SurfaceId& original_surface,
+    gfx::PointF* transformed_point) {
+  *transformed_point = point;
+  if (!guest_ || !last_received_local_surface_id_.is_valid())
+    return false;
+
+  auto local_surface_id =
+      viz::SurfaceId(frame_sink_id_, last_received_local_surface_id_);
+  if (original_surface == local_surface_id)
+    return true;
+
+  *transformed_point =
+      gfx::ConvertPointToPixel(current_surface_scale_factor(), point);
+  viz::SurfaceHittest hittest(nullptr,
+                              GetFrameSinkManager()->surface_manager());
+  if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
+                                             transformed_point)) {
+    return false;
+  }
+
+  *transformed_point = gfx::ConvertPointToDIP(current_surface_scale_factor(),
+                                              *transformed_point);
+  return true;
+}
+
+gfx::PointF RenderWidgetHostViewGuest::TransformRootPointToViewCoordSpace(
+    const gfx::PointF& point) {
+  RenderWidgetHostViewBase* root_rwhv = GetRootView(this);
+  if (!root_rwhv)
+    return point;
+
+  gfx::PointF transformed_point;
+  if (!root_rwhv->TransformPointToCoordSpaceForView(point, this,
+                                                    &transformed_point)) {
+    return point;
+  }
+  return transformed_point;
 }
 
 void RenderWidgetHostViewGuest::RenderProcessGone(
@@ -276,13 +376,12 @@ void RenderWidgetHostViewGuest::Destroy() {
 }
 
 gfx::Size RenderWidgetHostViewGuest::GetPhysicalBackingSize() const {
-  // We obtain the reference to native view from the owner RenderWidgetHostView.
-  // If the guest is embedded inside a cross-process frame, it is possible to
-  // reach here after the frame is detached in which case there will be no owner
-  // view.
-  if (!guest_ || !GetOwnerRenderWidgetHostView())
-    return gfx::Size();
-  return RenderWidgetHostViewBase::GetPhysicalBackingSize();
+  gfx::Size size;
+  if (guest_) {
+    size = gfx::ScaleToCeiledSize(guest_->frame_rect().size(),
+                                  guest_->screen_info().device_scale_factor);
+  }
+  return size;
 }
 
 base::string16 RenderWidgetHostViewGuest::GetSelectedText() {
@@ -311,7 +410,7 @@ void RenderWidgetHostViewGuest::SetNeedsBeginFrames(bool needs_begin_frames) {
 
 TouchSelectionControllerClientManager*
 RenderWidgetHostViewGuest::GetTouchSelectionControllerClientManager() {
-  RenderWidgetHostView* root_view = GetOwnerRenderWidgetHostView();
+  RenderWidgetHostView* root_view = GetRootView(this);
   if (!root_view)
     return nullptr;
 
@@ -334,17 +433,31 @@ void RenderWidgetHostViewGuest::SendSurfaceInfoToEmbedderImpl(
 
 void RenderWidgetHostViewGuest::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
-  ProcessCompositorFrame(local_surface_id, std::move(frame));
+  ProcessCompositorFrame(local_surface_id, std::move(frame),
+                         std::move(hit_test_region_list));
 
   // If after detaching we are sent a frame, we should finish processing it, and
   // then we should clear the surface so that we are not holding resources we
   // no longer need.
   if (!guest_ || !guest_->attached())
     ClearCompositorSurfaceIfNecessary();
+}
+
+void RenderWidgetHostViewGuest::OnAttached() {
+  RegisterFrameSinkId();
+#if defined(USE_AURA)
+  if (IsUsingMus()) {
+    aura::Env::GetInstance()->ScheduleEmbed(
+        GetWindowTreeClientFromRenderer(),
+        base::BindOnce(&RenderWidgetHostViewGuest::OnGotEmbedToken,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+#endif
 }
 
 bool RenderWidgetHostViewGuest::OnMessageReceived(const IPC::Message& msg) {
@@ -359,7 +472,8 @@ bool RenderWidgetHostViewGuest::OnMessageReceived(const IPC::Message& msg) {
 
 void RenderWidgetHostViewGuest::InitAsChild(
     gfx::NativeView parent_view) {
-  platform_view_->InitAsChild(parent_view);
+  // This should never get called.
+  NOTREACHED();
 }
 
 void RenderWidgetHostViewGuest::InitAsPopup(
@@ -485,12 +599,33 @@ void RenderWidgetHostViewGuest::SelectionBoundsChanged(
   rwhv->SelectionBoundsChanged(guest_params);
 }
 
+void RenderWidgetHostViewGuest::DidStopFlinging() {
+  RenderWidgetHostViewBase* rwhv = this;
+  // If we're a pdf in a WebView, we could have nested guest views here.
+  while (rwhv && rwhv->IsRenderWidgetHostViewGuest()) {
+    rwhv = static_cast<RenderWidgetHostViewGuest*>(rwhv)
+               ->GetOwnerRenderWidgetHostView();
+  }
+  // DidStopFlinging() is used by TouchSelection to correctly detect the end of
+  // scroll events, so we forward this to the top-level RenderWidgetHostViewBase
+  // so it can be passed along to its TouchSelectionController.
+  if (rwhv)
+    rwhv->DidStopFlinging();
+}
+
 bool RenderWidgetHostViewGuest::LockMouse() {
   return platform_view_->LockMouse();
 }
 
 void RenderWidgetHostViewGuest::UnlockMouse() {
-  return platform_view_->UnlockMouse();
+  if(platform_view_)
+  platform_view_->UnlockMouse();
+}
+
+viz::LocalSurfaceId RenderWidgetHostViewGuest::GetLocalSurfaceId() const {
+  if (guest_)
+    return guest_->local_surface_id();
+  return viz::LocalSurfaceId();
 }
 
 void RenderWidgetHostViewGuest::DidCreateNewRendererCompositorFrameSink(
@@ -510,7 +645,6 @@ void RenderWidgetHostViewGuest::ShowDefinitionForSelection() {
   if (!guest_)
     return;
 
-  gfx::Point origin;
   gfx::Rect guest_bounds = GetViewBounds();
   RenderWidgetHostView* rwhv = guest_->GetOwnerRenderWidgetHostView();
   gfx::Rect embedder_bounds;
@@ -647,6 +781,25 @@ InputEventAckState RenderWidgetHostViewGuest::FilterInputEvent(
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
+void RenderWidgetHostViewGuest::GetScreenInfo(ScreenInfo* screen_info) {
+  DCHECK(screen_info);
+  auto* owner = GetOwnerRenderWidgetHostView();
+  if (owner) {
+    owner->GetScreenInfo(screen_info);
+  } else if (guest_) {
+    *screen_info = guest_->screen_info();
+  } else {
+    *screen_info = ScreenInfo();
+  }
+}
+
+void RenderWidgetHostViewGuest::ResizeDueToAutoResize(
+    const gfx::Size& new_size,
+    uint64_t sequence_number) {
+  if (guest_)
+    guest_->ResizeDueToAutoResize(new_size, sequence_number);
+}
+
 bool RenderWidgetHostViewGuest::IsRenderWidgetHostViewGuest() {
   return true;
 }
@@ -718,8 +871,8 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
       float scale = exp(wheelEvent->delta_y / 100.0f);
       host_->Send(new VivaldiMsg_SetPinchZoom(
           host_->GetRoutingID(), scale,
-          wheelEvent->PositionInScreen().x,
-          wheelEvent->PositionInScreen().y));
+          wheelEvent->PositionInScreen().x - GetViewBounds().x(),
+          wheelEvent->PositionInScreen().y - GetViewBounds().y()));
     } else {
     ui::LatencyInfo latency_info(ui::SourceEventType::WHEEL);
     host_->ForwardWheelEventWithLatencyInfo(
@@ -730,7 +883,7 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
 
   if (blink::WebInputEvent::IsKeyboardEventType(event->GetType())) {
     NativeWebKeyboardEvent keyboard_event(
-        *static_cast<const blink::WebKeyboardEvent*>(event));
+        *static_cast<const blink::WebKeyboardEvent*>(event), GetNativeView());
     host_->ForwardKeyboardEvent(keyboard_event);
     return;
   }
@@ -772,6 +925,18 @@ bool RenderWidgetHostViewGuest::HasEmbedderChanged() {
   return guest_ && guest_->has_attached_since_surface_set();
 }
 
+#if defined(USE_AURA)
+void RenderWidgetHostViewGuest::OnGotEmbedToken(
+    const base::UnguessableToken& token) {
+  if (!guest_)
+    return;
+
+  guest_->SendMessageToEmbedder(
+      base::MakeUnique<BrowserPluginMsg_SetMusEmbedToken>(
+          guest_->browser_plugin_instance_id(), token));
+}
+#endif
+
 void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
   const gfx::Rect& src_rect,
   scoped_refptr<media::VideoFrame> target,
@@ -779,8 +944,9 @@ void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
 
 
   std::unique_ptr<viz::CopyOutputRequest> request =
-      viz::CopyOutputRequest::CreateRequest(base::Bind(
-          &RenderWidgetHostViewGuest::DidCopyOutput,
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
+          base::BindOnce(&RenderWidgetHostViewGuest::DidCopyOutput,
           std::move(target), callback));
 
   if (!src_rect.IsEmpty())
@@ -802,14 +968,11 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
   if (!gl_helper) {
     callback.Run(gfx::Rect(), false);
   }
+  DCHECK_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
 
-  viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
-  result->TakeTexture(&texture_mailbox, &release_callback);
-  if (!texture_mailbox.IsTexture()) {
-    callback.Run(gfx::Rect(), false);
-    return;
-  }
+  auto* mailbox = result->GetTextureResult();
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback =
+      result->TakeTextureOwnership();
 
   gfx::Rect region_in_frame = media::ComputeLetterboxRegion(
       video_frame->visible_rect(), result->size());
@@ -821,14 +984,23 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
   std::unique_ptr<viz::ReadbackYUVInterface>
       yuv_readback_pipeline_;
 
-  gfx::Rect result_rect(result->size());
-  if (!yuv_readback_pipeline_ ||
-      yuv_readback_pipeline_->scaler()->SrcSize() != result_rect.size() ||
-      yuv_readback_pipeline_->scaler()->SrcSubrect() != result_rect ||
-      yuv_readback_pipeline_->scaler()->DstSize() != region_in_frame.size()) {
-    yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
-        viz::GLHelper::SCALER_QUALITY_GOOD, result_rect.size(),
-        result_rect, region_in_frame.size(), true, true));
+  if (!yuv_readback_pipeline_)
+    yuv_readback_pipeline_ = gl_helper->CreateReadbackPipelineYUV(true, true);
+  viz::GLHelper::ScalerInterface* const scaler =
+    yuv_readback_pipeline_->scaler();
+  const gfx::Vector2d scale_from(result->size().width(),
+    result->size().height());
+  const gfx::Vector2d scale_to(region_in_frame.width(),
+    region_in_frame.height());
+  if (scale_from == scale_to) {
+    if (scaler)
+      yuv_readback_pipeline_->SetScaler(nullptr);
+  } else if (!scaler || !scaler->IsSameScaleRatio(scale_from, scale_to)) {
+    std::unique_ptr<viz::GLHelper::ScalerInterface> scaler =
+      gl_helper->CreateScaler(viz::GLHelper::SCALER_QUALITY_GOOD, scale_from,
+        scale_to, false, false, false);
+    DCHECK(scaler);  // Arguments to CreateScaler() should never be invalid.
+    yuv_readback_pipeline_->SetScaler(std::move(scaler));
   }
 
   base::Callback<void(bool result)> finished_callback = base::Bind(
@@ -838,7 +1010,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
 
 
   yuv_readback_pipeline_->ReadbackYUV(
-      texture_mailbox.mailbox(), texture_mailbox.sync_token(),
+      mailbox->mailbox, mailbox->sync_token, result->size(),
       video_frame->visible_rect(),
       video_frame->stride(media::VideoFrame::kYPlane),
       video_frame->data(media::VideoFrame::kYPlane),

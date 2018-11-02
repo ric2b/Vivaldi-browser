@@ -21,9 +21,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
+#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_test_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -552,8 +554,7 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
 
 // Test that basic form fill is working.
 // Flakily times out on ChromeOS http://crbug.com/585885
-// Flakily fails on Windows http://crbug.com/639940
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_BasicFormFill DISABLED_BasicFormFill
 #else
 #define MAYBE_BasicFormFill BasicFormFill
@@ -633,8 +634,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillSelectViaTab) {
 }
 
 // crbug.com/516052
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_AutofillViaClick DISABLED_AutofillViaClick
 #else
 #define MAYBE_AutofillViaClick AutofillViaClick
@@ -665,14 +665,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillViaClick) {
 }
 
 // Makes sure that the first click does *not* activate the popup.
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_WIN)
-#define MAYBE_DontAutofillForFirstClick DISABLED_DontAutofillForFirstClick
-#else
-#define MAYBE_DontAutofillForFirstClick DontAutofillForFirstClick
-#endif
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       MAYBE_DontAutofillForFirstClick) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DontAutofillForFirstClick) {
   CreateTestProfile();
 
   // Load the test page.
@@ -694,14 +687,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
 // Makes sure that clicking outside the focused field doesn't activate
 // the popup.
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_WIN)
-#define MAYBE_DontAutofillForOutsideClick DISABLED_DontAutofillForOutsideClick
-#else
-#define MAYBE_DontAutofillForOutsideClick DontAutofillForOutsideClick
-#endif
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       MAYBE_DontAutofillForOutsideClick) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DontAutofillForOutsideClick) {
   CreateTestProfile();
 
   // Load the test page.
@@ -726,8 +712,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 // Test that a field is still autofillable after the previously autofilled
 // value is deleted.
 // TODO(crbug.com/603488) Test is timing out flakily on CrOS.
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_OnDeleteValueAfterAutofill DISABLED_OnDeleteValueAfterAutofill
 #else
 #define MAYBE_OnDeleteValueAfterAutofill OnDeleteValueAfterAutofill
@@ -803,8 +788,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
 // Test that a JavaScript oninput event is fired after auto-filling a form.
 // Flakily times out on ChromeOS http://crbug.com/585885
-// Flaky on Windows. http://crbug.com/726659
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_OnInputAfterAutofill DISABLED_OnInputAfterAutofill
 #else
 #define MAYBE_OnInputAfterAutofill OnInputAfterAutofill
@@ -883,8 +867,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_OnInputAfterAutofill) {
 
 // Test that a JavaScript onchange event is fired after auto-filling a form.
 // Flaky on CrOS.  http://crbug.com/578095
-// Flaky on Windows. http://crbug.com/726659
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_OnChangeAfterAutofill DISABLED_OnChangeAfterAutofill
 #else
 #define MAYBE_OnChangeAfterAutofill OnChangeAfterAutofill
@@ -962,8 +945,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_OnChangeAfterAutofill) {
 }
 
 // Flakily times out on ChromeOS http://crbug.com/585885
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_InputFiresBeforeChange DISABLED_InputFiresBeforeChange
 #else
 #define MAYBE_InputFiresBeforeChange InputFiresBeforeChange
@@ -1049,8 +1031,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_InputFiresBeforeChange) {
 
 // Test that we can autofill forms distinguished only by their |id| attribute.
 // Flaky on CrOS.  http://crbug.com/578095
-// Flaky on Windows. http://crbug.com/726659
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_AutofillFormsDistinguishedById \
   DISABLED_AutofillFormsDistinguishedById
 #else
@@ -1083,8 +1064,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 // (duplicated for "confirmation"); or variants that are hot-swapped via
 // JavaScript, with only one actually visible at any given time.
 // Flakily times out on ChromeOS http://crbug.com/585885
-// Flaky on Windows. http://crbug.com/726659
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_AutofillFormWithRepeatedField \
   DISABLED_AutofillFormWithRepeatedField
 #else
@@ -1136,8 +1116,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 }
 
 // TODO(crbug.com/603488) Test is timing out flakily on CrOS.
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_AutofillFormWithNonAutofillableField \
   DISABLED_AutofillFormWithNonAutofillableField
 #else
@@ -1189,8 +1168,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 }
 
 // Flakily fails on ChromeOS (crbug.com/646576).
-// Flaky on Windows (crbug.com/726659).
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_DynamicFormFill DISABLED_DynamicFormFill
 #else
 #define MAYBE_DynamicFormFill DynamicFormFill
@@ -1309,8 +1287,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterReload) {
 // Test that filling a form sends all the expected events to the different
 // fields being filled.
 // Flakily fails on ChromeOS (crbug.com/646576).
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_AutofillEvents DISABLED_AutofillEvents
 #else
 #define MAYBE_AutofillEvents AutofillEvents
@@ -1422,8 +1399,18 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
 // TODO(groby): Remove once the bubble is enabled by default everywhere.
 // http://crbug.com/507442
 #if defined(OS_MACOSX)
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ::switches::kEnableTranslateNewUX);
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kEnableTranslateNewUX)) {
+    // On MacViews kEnableTranslateNewUX will engage the MacViews bubble UI
+    // which isn't ready and isn't used yet. The Cocoa browser still uses an
+    // InfoBar. See http://crbug.com/781134. So only continue when testing the
+    // Cocoa UI.
+    if (base::FeatureList::IsEnabled(features::kShowAllDialogsWithViewsToolkit))
+      return;
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kEnableTranslateNewUX);
+  }
 #endif
   ASSERT_TRUE(TranslateService::IsTranslateBubbleEnabled());
 
@@ -1506,13 +1493,12 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
 // The high level key presses execute the following: Select the first text
 // field, invoke the autofill popup list, select the first profile within the
 // list, and commit to the profile to populate the form.
-// Flakily times out on windows (https://crbug.com/390564), and on CrOS
-// (https://crbug.com/516052).
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+// Flakily times out on CrOS (https://crbug.com/516052).
+#if defined(OS_CHROMEOS)
 #define MAYBE_ComparePhoneNumbers DISABLED_ComparePhoneNumbers
 #else
 #define MAYBE_ComparePhoneNumbers ComparePhoneNumbers
-#endif  // defined(OS_WIN) || defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
   AutofillProfile profile;
   profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Bob"));
@@ -1526,32 +1512,44 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_ComparePhoneNumbers) {
 
   GURL url = embedded_test_server()->GetURL("/autofill/form_phones.html");
   ui_test_utils::NavigateToURL(browser(), url);
-  PopulateForm("NAME_FIRST");
+  PopulateForm("NAME_FIRST1");
 
-  ExpectFieldValue("NAME_FIRST", "Bob");
-  ExpectFieldValue("NAME_LAST", "Smith");
+  ExpectFieldValue("NAME_FIRST1", "Bob");
+  ExpectFieldValue("NAME_LAST1", "Smith");
   ExpectFieldValue("ADDRESS_HOME_LINE1", "1234 H St.");
   ExpectFieldValue("ADDRESS_HOME_CITY", "San Jose");
   ExpectFieldValue("ADDRESS_HOME_STATE", "CA");
   ExpectFieldValue("ADDRESS_HOME_ZIP", "95110");
   ExpectFieldValue("PHONE_HOME_WHOLE_NUMBER", "14085554567");
+
+  PopulateForm("NAME_FIRST2");
+  ExpectFieldValue("NAME_FIRST2", "Bob");
+  ExpectFieldValue("NAME_LAST2", "Smith");
   ExpectFieldValue("PHONE_HOME_CITY_CODE-1", "408");
-  ExpectFieldValue("PHONE_HOME_CITY_CODE-2", "408");
   ExpectFieldValue("PHONE_HOME_NUMBER", "5554567");
+
+  PopulateForm("NAME_FIRST3");
+  ExpectFieldValue("NAME_FIRST3", "Bob");
+  ExpectFieldValue("NAME_LAST3", "Smith");
+  ExpectFieldValue("PHONE_HOME_CITY_CODE-2", "408");
   ExpectFieldValue("PHONE_HOME_NUMBER_3-1", "555");
-  ExpectFieldValue("PHONE_HOME_NUMBER_3-2", "555");
   ExpectFieldValue("PHONE_HOME_NUMBER_4-1", "4567");
-  ExpectFieldValue("PHONE_HOME_NUMBER_4-2", "4567");
   ExpectFieldValue("PHONE_HOME_EXT-1", std::string());
-  ExpectFieldValue("PHONE_HOME_EXT-2", std::string());
+
+  PopulateForm("NAME_FIRST4");
+  ExpectFieldValue("NAME_FIRST4", "Bob");
+  ExpectFieldValue("NAME_LAST4", "Smith");
   ExpectFieldValue("PHONE_HOME_COUNTRY_CODE-1", "1");
+  ExpectFieldValue("PHONE_HOME_CITY_CODE-3", "408");
+  ExpectFieldValue("PHONE_HOME_NUMBER_3-2", "555");
+  ExpectFieldValue("PHONE_HOME_NUMBER_4-2", "4567");
+  ExpectFieldValue("PHONE_HOME_EXT-2", std::string());
 }
 
 // Test that Autofill does not fill in read-only fields.
 // Flaky on the official cros-trunk. crbug.com/516052
 // Also flaky on ChromiumOS generally. crbug.com/585885
-// Also flaky on Windows. crbug.com/726659
-#if defined(OFFICIAL_BUILD) || defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OFFICIAL_BUILD) || defined(OS_CHROMEOS)
 #define MAYBE_NoAutofillForReadOnlyFields DISABLED_NoAutofillForReadOnlyFields
 #else
 #define MAYBE_NoAutofillForReadOnlyFields NoAutofillForReadOnlyFields
@@ -1586,8 +1584,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 //   1. Fill form using a saved profile.
 //   2. Reset the form.
 //   3. Fill form using a saved profile.
-// Flakily times out: http://crbug.com/270341
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DISABLED_FormFillableOnReset) {
+// Tests using PopulateForm() are flaky on CrOS; see https://crbug.com/516052.
+#if defined(OS_CHROMEOS)
+#define MAYBE_FormFillableOnReset DISABLED_FormFillableOnReset
+#else
+#define MAYBE_FormFillableOnReset FormFillableOnReset
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_FormFillableOnReset) {
   CreateTestProfile();
 
   GURL url =
@@ -1612,9 +1615,16 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DISABLED_FormFillableOnReset) {
 }
 
 // Test Autofill distinguishes a middle initial in a name.
-// Flakily times out: http://crbug.com/270341
+// Tests using PopulateForm() are flaky on CrOS; see https://crbug.com/516052.
+#if defined(OS_CHROMEOS)
+#define MAYBE_DistinguishMiddleInitialWithinName \
+  DISABLED_DistinguishMiddleInitialWithinName
+#else
+#define MAYBE_DistinguishMiddleInitialWithinName \
+  DistinguishMiddleInitialWithinName
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       DISABLED_DistinguishMiddleInitialWithinName) {
+                       MAYBE_DistinguishMiddleInitialWithinName) {
   CreateTestProfile();
 
   GURL url =
@@ -1627,9 +1637,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
 // Test forms with multiple email addresses are filled properly.
 // Entire form should be filled with one user gesture.
-// Flakily times out: http://crbug.com/270341
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       DISABLED_MultipleEmailFilledByOneUserGesture) {
+                       MultipleEmailFilledByOneUserGesture) {
   std::string email("bsmith@gmail.com");
 
   AutofillProfile profile;
@@ -1716,8 +1725,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 // is interacting with the form.  This is a regression test for
 // http://crbug.com/160476
 // Flakily times out on ChromeOS http://crbug.com/585885
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS)
 #define MAYBE_DisableAutocompleteWhileFilling \
   DISABLED_DisableAutocompleteWhileFilling
 #else
@@ -1758,6 +1766,15 @@ class AutofillInteractiveIsolationTest : public AutofillInteractiveTest {
     AutofillInteractiveTest::SendKeyToPopupAndWait(key, code, key_code, widget);
   }
 
+  bool IsPopupShown() {
+    return !!static_cast<ChromeAutofillClient*>(
+                 ContentAutofillDriverFactory::FromWebContents(GetWebContents())
+                     ->DriverForFrame(GetWebContents()->GetMainFrame())
+                     ->autofill_manager()
+                     ->client())
+                 ->popup_controller_for_testing();
+  }
+
  private:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     AutofillInteractiveTest::SetUpCommandLine(command_line);
@@ -1766,15 +1783,7 @@ class AutofillInteractiveIsolationTest : public AutofillInteractiveTest {
   }
 };
 
-#if defined(OS_WIN)
-// Flaky on Windows 7 in debug build. http://crbug.com/710436
-#define MAYBE_SimpleCrossSiteFill DISABLED_SimpleCrossSiteFill
-#else
-#define MAYBE_SimpleCrossSiteFill SimpleCrossSiteFill
-#endif
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
-                       MAYBE_SimpleCrossSiteFill) {
-
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest, SimpleCrossSiteFill) {
   CreateTestProfile();
 
   // Main frame is on a.com, iframe is on b.com.
@@ -1820,7 +1829,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
 // form is inside an OOPIF.
 // Flaky on Windows http://crbug.com/728488
 #if defined(OS_WIN)
-#define MAYBE_CrossSitePaymentForms DISABLED_MAYBE_CrossSitePaymentForms
+#define MAYBE_CrossSitePaymentForms DISABLED_CrossSitePaymentForms
 #else
 #define MAYBE_CrossSitePaymentForms CrossSitePaymentForms
 #endif
@@ -1853,6 +1862,49 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_CrossSitePaymentForms) {
 
   // Send an arrow dow keypress in order to trigger the autofill popup.
   SendKeyToPageAndWait(ui::DomKey::ARROW_DOWN);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
+                       DeletingFrameUnderSuggestion) {
+  CreateTestProfile();
+
+  // Main frame is on a.com, iframe is on b.com.
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/autofill/cross_origin_iframe.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  GURL iframe_url = embedded_test_server()->GetURL(
+      "b.com", "/autofill/autofill_test_form.html");
+  EXPECT_TRUE(
+      content::NavigateIframeToURL(GetWebContents(), "crossFrame", iframe_url));
+
+  // Let |test_delegate()| also observe autofill events in the iframe.
+  content::RenderFrameHost* cross_frame =
+      RenderFrameHostForName(GetWebContents(), "crossFrame");
+  ASSERT_TRUE(cross_frame);
+  ContentAutofillDriver* cross_driver =
+      ContentAutofillDriverFactory::FromWebContents(GetWebContents())
+          ->DriverForFrame(cross_frame);
+  ASSERT_TRUE(cross_driver);
+  cross_driver->autofill_manager()->SetTestDelegate(test_delegate());
+
+  // Focus the form in the iframe and simulate choosing a suggestion via
+  // keyboard.
+  std::string script_focus("document.getElementById('NAME_FIRST').focus();");
+  ASSERT_TRUE(content::ExecuteScript(cross_frame, script_focus));
+  SendKeyToPageAndWait(ui::DomKey::ARROW_DOWN);
+  content::RenderWidgetHost* widget =
+      cross_frame->GetView()->GetRenderWidgetHost();
+  SendKeyToPopupAndWait(ui::DomKey::ARROW_DOWN, widget);
+  // Do not accept the suggestion yet, to keep the pop-up shown.
+  EXPECT_TRUE(IsPopupShown());
+
+  // Delete the iframe.
+  std::string script_delete =
+      "document.body.removeChild(document.getElementById('crossFrame'));";
+  ASSERT_TRUE(content::ExecuteScript(GetRenderViewHost(), script_delete));
+
+  // The popup should have disappeared with the iframe.
+  EXPECT_FALSE(IsPopupShown());
 }
 
 }  // namespace autofill

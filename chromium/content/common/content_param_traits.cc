@@ -7,19 +7,14 @@
 #include <stddef.h>
 
 #include "base/strings/string_number_conversions.h"
-#include "content/common/message_port.h"
 #include "ipc/ipc_mojo_message_helper.h"
 #include "ipc/ipc_mojo_param_traits.h"
 #include "net/base/ip_endpoint.h"
+#include "third_party/WebKit/common/message_port/message_port_channel.h"
 #include "ui/accessibility/ax_modes.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
 namespace IPC {
-
-void ParamTraits<WebInputEventPointer>::GetSize(base::PickleSizer* s,
-                                                const param_type& p) {
-  s->AddData(p->size());
-}
 
 void ParamTraits<WebInputEventPointer>::Write(base::Pickle* m,
                                               const param_type& p) {
@@ -66,35 +61,23 @@ void ParamTraits<WebInputEventPointer>::Log(const param_type& p,
   l->append(")");
 }
 
-void ParamTraits<content::MessagePort>::GetSize(base::PickleSizer* s,
-                                                const param_type& p) {
-  ParamTraits<mojo::MessagePipeHandle>::GetSize(s, p.GetHandle().get());
-}
-
-void ParamTraits<content::MessagePort>::Write(base::Pickle* m,
-                                              const param_type& p) {
+void ParamTraits<blink::MessagePortChannel>::Write(base::Pickle* m,
+                                                   const param_type& p) {
   ParamTraits<mojo::MessagePipeHandle>::Write(m, p.ReleaseHandle().release());
 }
 
-bool ParamTraits<content::MessagePort>::Read(
-    const base::Pickle* m,
-    base::PickleIterator* iter,
-    param_type* r) {
+bool ParamTraits<blink::MessagePortChannel>::Read(const base::Pickle* m,
+                                                  base::PickleIterator* iter,
+                                                  param_type* r) {
   mojo::MessagePipeHandle handle;
   if (!ParamTraits<mojo::MessagePipeHandle>::Read(m, iter, &handle))
     return false;
-  *r = content::MessagePort(mojo::ScopedMessagePipeHandle(handle));
+  *r = blink::MessagePortChannel(mojo::ScopedMessagePipeHandle(handle));
   return true;
 }
 
-void ParamTraits<content::MessagePort>::Log(const param_type& p,
-                                            std::string* l) {
-}
-
-void ParamTraits<ui::AXMode>::GetSize(base::PickleSizer* s,
-                                      const param_type& p) {
-  IPC::GetParamSize(s, p.mode());
-}
+void ParamTraits<blink::MessagePortChannel>::Log(const param_type& p,
+                                                 std::string* l) {}
 
 void ParamTraits<ui::AXMode>::Write(base::Pickle* m, const param_type& p) {
   IPC::WriteParam(m, p.mode());
@@ -111,16 +94,6 @@ bool ParamTraits<ui::AXMode>::Read(const base::Pickle* m,
 }
 
 void ParamTraits<ui::AXMode>::Log(const param_type& p, std::string* l) {}
-
-void ParamTraits<scoped_refptr<storage::BlobHandle>>::GetSize(
-    base::PickleSizer* s,
-    const param_type& p) {
-  s->AddBool();
-  if (p) {
-    s->AddUInt32();
-    s->AddAttachment();
-  }
-}
 
 void ParamTraits<scoped_refptr<storage::BlobHandle>>::Write(
     base::Pickle* m,
@@ -150,8 +123,8 @@ bool ParamTraits<scoped_refptr<storage::BlobHandle>>::Read(
   if (!MojoMessageHelper::ReadMessagePipeFrom(m, iter, &handle))
     return false;
   DCHECK(handle.is_valid());
-  storage::mojom::BlobPtr blob;
-  blob.Bind(storage::mojom::BlobPtrInfo(std::move(handle), version));
+  blink::mojom::BlobPtr blob;
+  blob.Bind(blink::mojom::BlobPtrInfo(std::move(handle), version));
   *r = base::MakeRefCounted<storage::BlobHandle>(std::move(blob));
   return true;
 }
@@ -162,13 +135,6 @@ void ParamTraits<scoped_refptr<storage::BlobHandle>>::Log(const param_type& p,
 }
 
 }  // namespace IPC
-
-// Generate param traits size methods.
-#include "ipc/param_traits_size_macros.h"
-namespace IPC {
-#undef CONTENT_COMMON_CONTENT_PARAM_TRAITS_MACROS_H_
-#include "content/common/content_param_traits_macros.h"
-}
 
 // Generate param traits write methods.
 #include "ipc/param_traits_write_macros.h"

@@ -25,10 +25,12 @@ namespace media {
 
 namespace {
 
+const size_t kMemorySegmentCount = 10u;
+
 class MockAudioInputIPC : public AudioInputIPC {
  public:
-  MockAudioInputIPC() {}
-  ~MockAudioInputIPC() override {}
+  MockAudioInputIPC() = default;
+  ~MockAudioInputIPC() override = default;
 
   MOCK_METHOD5(CreateStream,
                void(AudioInputIPCDelegate* delegate,
@@ -43,8 +45,8 @@ class MockAudioInputIPC : public AudioInputIPC {
 
 class MockCaptureCallback : public AudioCapturerSource::CaptureCallback {
  public:
-  MockCaptureCallback() {}
-  ~MockCaptureCallback() override {}
+  MockCaptureCallback() = default;
+  ~MockCaptureCallback() override = default;
 
   MOCK_METHOD0(OnCaptureStarted, void());
   MOCK_METHOD4(Capture,
@@ -98,9 +100,9 @@ TEST(AudioInputDeviceTest, FailToCreateStream) {
   base::RunLoop().RunUntilIdle();
 }
 
-ACTION_P5(ReportOnStreamCreated, device, handle, socket, length, segments) {
-  static_cast<AudioInputIPCDelegate*>(device)->OnStreamCreated(
-      handle, socket, length, segments, false);
+ACTION_P3(ReportOnStreamCreated, device, handle, socket) {
+  static_cast<AudioInputIPCDelegate*>(device)->OnStreamCreated(handle, socket,
+                                                               false);
 }
 
 TEST(AudioInputDeviceTest, CreateStream) {
@@ -110,8 +112,8 @@ TEST(AudioInputDeviceTest, CreateStream) {
   CancelableSyncSocket browser_socket;
   CancelableSyncSocket renderer_socket;
 
-  const int memory_size = sizeof(AudioInputBufferParameters) +
-                          AudioBus::CalculateMemorySize(params);
+  const uint32_t memory_size =
+      media::ComputeAudioInputBufferSize(params, kMemorySegmentCount);
 
   ASSERT_TRUE(shared_memory.CreateAndMapAnonymous(memory_size));
   memset(shared_memory.memory(), 0xff, memory_size);
@@ -136,8 +138,7 @@ TEST(AudioInputDeviceTest, CreateStream) {
   EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _, _))
       .WillOnce(ReportOnStreamCreated(
           device.get(), duplicated_memory_handle,
-          SyncSocket::UnwrapHandle(audio_device_socket_descriptor), memory_size,
-          1));
+          SyncSocket::UnwrapHandle(audio_device_socket_descriptor)));
   EXPECT_CALL(*input_ipc, RecordStream());
   EXPECT_CALL(callback, OnCaptureStarted())
       .WillOnce(QuitLoop(io_loop.task_runner()));

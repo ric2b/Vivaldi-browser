@@ -26,7 +26,7 @@
 #include "media/base/audio_converter.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
-#include "third_party/webrtc_overrides/webrtc/rtc_base/task_queue.h"
+#include "third_party/webrtc/rtc_base/task_queue.h"
 
 // The audio repetition detector is by default only used on non-official
 // ChromeOS builds for debugging purposes. http://crbug.com/658719.
@@ -118,6 +118,8 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
 
   // AecDumpMessageFilter::AecDumpDelegate implementation.
   // Called on the main render thread.
+  // TODO(grunell): Remove OnAec3Enable when clients have changed to enable
+  // before creating streams.
   void OnAecDumpFile(const IPC::PlatformFileForTransit& file_handle) override;
   void OnDisableAecDump() override;
   void OnAec3Enable(bool enable) override;
@@ -148,6 +150,9 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
   // webrtc::AudioProcessorInterface implementation.
   // This method is called on the libjingle thread.
   void GetStats(AudioProcessorStats* stats) override;
+
+  // This method is called on the libjingle thread.
+  AudioProcessorStatistics GetStats(bool has_remote_tracks) override;
 
   // Helper to initialize the WebRtc AudioProcessing.
   void InitializeAudioProcessingModule(

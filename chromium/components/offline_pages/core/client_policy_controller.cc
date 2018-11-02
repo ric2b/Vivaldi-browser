@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/offline_page_feature.h"
 
 using LifetimeType = offline_pages::LifetimePolicy::LifetimeType;
 
@@ -25,7 +26,7 @@ ClientPolicyController::ClientPolicyController() {
       kLastNNamespace,
       OfflinePageClientPolicyBuilder(kLastNNamespace, LifetimeType::TEMPORARY,
                                      kUnlimitedPages, kUnlimitedPages)
-          .SetExpirePeriod(base::TimeDelta::FromDays(2))
+          .SetExpirePeriod(base::TimeDelta::FromDays(30))
           .SetIsSupportedByRecentTabs(true)
           .SetIsOnlyShownInOriginalTab(true)
           .Build()));
@@ -66,6 +67,16 @@ ClientPolicyController::ClientPolicyController() {
           .SetIsRemovedOnCacheReset(true)
           .SetIsDisabledWhenPrefetchDisabled(true)
           .SetExpirePeriod(base::TimeDelta::FromDays(30))
+          .SetIsSupportedByDownload(IsOfflinePagesPrefetchingUIEnabled())
+          .SetIsSuggested(true)
+          .Build()));
+  policies_.insert(std::make_pair(
+      kBrowserActionsNamespace,
+      OfflinePageClientPolicyBuilder(kBrowserActionsNamespace,
+                                     LifetimeType::PERSISTENT, kUnlimitedPages,
+                                     kUnlimitedPages)
+          .SetIsRemovedOnCacheReset(false)
+          .SetIsSupportedByDownload(true)
           .Build()));
 
   // Fallback policy.
@@ -114,6 +125,19 @@ bool ClientPolicyController::IsRemovedOnCacheReset(
 bool ClientPolicyController::IsSupportedByDownload(
     const std::string& name_space) const {
   return GetPolicy(name_space).feature_policy.is_supported_by_download;
+}
+
+const std::vector<std::string>&
+ClientPolicyController::GetNamespacesRemovedOnCacheReset() const {
+  if (cache_reset_namespace_cache_)
+    return *cache_reset_namespace_cache_;
+
+  cache_reset_namespace_cache_ = base::MakeUnique<std::vector<std::string>>();
+  for (const auto& policy_item : policies_) {
+    if (policy_item.second.feature_policy.is_removed_on_cache_reset)
+      cache_reset_namespace_cache_->emplace_back(policy_item.first);
+  }
+  return *cache_reset_namespace_cache_;
 }
 
 const std::vector<std::string>&
@@ -185,6 +209,10 @@ ClientPolicyController::GetNamespacesDisabledWhenPrefetchDisabled() const {
   }
 
   return *disabled_when_prefetch_disabled_cache_;
+}
+
+bool ClientPolicyController::IsSuggested(const std::string& name_space) const {
+  return GetPolicy(name_space).feature_policy.is_suggested;
 }
 
 void ClientPolicyController::AddPolicyForTest(

@@ -50,7 +50,7 @@ class CORE_EXPORT InspectorWorkerAgent final
  public:
   explicit InspectorWorkerAgent(InspectedFrames*);
   ~InspectorWorkerAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   protocol::Response disable() override;
   void Restore() override;

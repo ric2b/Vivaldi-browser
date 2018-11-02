@@ -7,8 +7,44 @@
 #include <stdint.h>
 
 #include "base/pickle.h"
+#include "third_party/skia/include/core/SkData.h"
+#include "third_party/skia/include/core/SkImageDeserializer.h"
+#include "third_party/skia/include/core/SkWriteBuffer.h"
+#include "third_party/skia/src/core/SkValidatingReadBuffer.h"
 
 namespace skia {
+namespace {
+
+class CodecDecodingPixelSerializer : public SkPixelSerializer {
+ public:
+  CodecDecodingPixelSerializer() = default;
+  ~CodecDecodingPixelSerializer() override = default;
+
+ protected:
+  // Disallowing serializing the encoded data.
+  bool onUseEncodedData(const void* data, size_t len) override { return false; }
+
+  // Don't return any encoded data to ensure the decoded bitmap is serialized.
+  SkData* onEncode(const SkPixmap&) override { return nullptr; }
+};
+
+class CodecDisallowingImageDeserializer : public SkImageDeserializer {
+ public:
+  ~CodecDisallowingImageDeserializer() override = default;
+
+  sk_sp<SkImage> makeFromData(SkData*, const SkIRect* subset) override {
+    LOG(ERROR) << "Encoded image rejected during SkFlattenable deserialization";
+    return nullptr;
+  }
+  sk_sp<SkImage> makeFromMemory(const void* data,
+                                size_t length,
+                                const SkIRect* subset) override {
+    LOG(ERROR) << "Encoded image rejected during SkFlattenable deserialization";
+    return nullptr;
+  }
+};
+
+}  // namespace
 
 bool ReadSkString(base::PickleIterator* iter, SkString* str) {
   int reply_length;
@@ -60,21 +96,40 @@ bool ReadSkFontStyle(base::PickleIterator* iter, SkFontStyle* style) {
   return true;
 }
 
-bool WriteSkString(base::Pickle* pickle, const SkString& str) {
-  return pickle->WriteData(str.c_str(), str.size());
+void WriteSkString(base::Pickle* pickle, const SkString& str) {
+  pickle->WriteData(str.c_str(), str.size());
 }
 
-bool WriteSkFontIdentity(base::Pickle* pickle,
+void WriteSkFontIdentity(base::Pickle* pickle,
                          const SkFontConfigInterface::FontIdentity& identity) {
-  return pickle->WriteUInt32(identity.fID) &&
-         pickle->WriteUInt32(identity.fTTCIndex) &&
-         WriteSkString(pickle, identity.fString);
+  pickle->WriteUInt32(identity.fID);
+  pickle->WriteUInt32(identity.fTTCIndex);
+  WriteSkString(pickle, identity.fString);
 }
 
-bool WriteSkFontStyle(base::Pickle* pickle, SkFontStyle style) {
-  return pickle->WriteUInt16(style.weight()) &&
-         pickle->WriteUInt16(style.width()) &&
-         pickle->WriteUInt16(style.slant());
+void WriteSkFontStyle(base::Pickle* pickle, SkFontStyle style) {
+  pickle->WriteUInt16(style.weight());
+  pickle->WriteUInt16(style.width());
+  pickle->WriteUInt16(style.slant());
+}
+
+sk_sp<SkData> ValidatingSerializeFlattenable(SkFlattenable* flattenable) {
+  SkBinaryWriteBuffer writer;
+  writer.setPixelSerializer(sk_make_sp<CodecDecodingPixelSerializer>());
+  writer.writeFlattenable(flattenable);
+  size_t size = writer.bytesWritten();
+  auto data = SkData::MakeUninitialized(size);
+  writer.writeToMemory(data->writable_data());
+  return data;
+}
+
+SkFlattenable* ValidatingDeserializeFlattenable(const void* data,
+                                                size_t size,
+                                                SkFlattenable::Type type) {
+  SkValidatingReadBuffer buffer(data, size);
+  CodecDisallowingImageDeserializer image_deserializer;
+  buffer.setImageDeserializer(&image_deserializer);
+  return buffer.readFlattenable(type);
 }
 
 }  // namespace skia

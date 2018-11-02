@@ -19,7 +19,7 @@ enum class LoginStatus;
 namespace views {
 class Widget;
 class WidgetDelegate;
-}
+}  // namespace views
 
 // Handles method calls delegated back to chrome from ash. Also notifies ash of
 // relevant state changes in chrome.
@@ -33,9 +33,6 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   ~SystemTrayClient() override;
 
   static SystemTrayClient* Get();
-
-  // Returns the login state based on the user type, lock screen status, etc.
-  static ash::LoginStatus GetUserLoginStatus();
 
   // Returns the container id for the parent window for new dialogs. The parent
   // varies based on the current login and lock screen state.
@@ -80,9 +77,8 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   void ShowNetworkConfigure(const std::string& network_id) override;
   void ShowNetworkCreate(const std::string& type) override;
   void ShowThirdPartyVpnCreate(const std::string& extension_id) override;
+  void ShowArcVpnCreate(const std::string& app_id) override;
   void ShowNetworkSettings(const std::string& network_id) override;
-  void ShowProxySettings() override;
-  void SignOut() override;
   void RequestRestartForUpdate() override;
 
  private:

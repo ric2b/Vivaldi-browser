@@ -8,7 +8,6 @@
 #include <set>
 #include <string>
 
-#include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -44,19 +43,18 @@
 
 namespace chromeos {
 
-namespace {
-
-const char* const kTestUsers[] = {"test-user1@gmail.com",
-                                  "test-user2@gmail.com"};
-
-}  // namespace
-
 class PreferencesTest : public LoginManagerTest {
  public:
   PreferencesTest()
       : LoginManagerTest(true), input_settings_(nullptr), keyboard_(nullptr) {
+    struct {
+      const char* email;
+      const char* gaia_id;
+    } const kTestUsers[] = {{"test-user1@gmail.com", "1111111111"},
+                            {"test-user2@gmail.com", "2222222222"}};
     for (size_t i = 0; i < arraysize(kTestUsers); ++i) {
-      test_users_.push_back(AccountId::FromUserEmail(kTestUsers[i]));
+      test_users_.push_back(AccountId::FromUserEmailGaiaId(
+          kTestUsers[i].email, kTestUsers[i].gaia_id));
     }
   }
 
@@ -88,7 +86,6 @@ class PreferencesTest : public LoginManagerTest {
     prefs->SetBoolean(prefs::kNaturalScroll, variant);
     prefs->SetInteger(prefs::kMouseSensitivity, !variant);
     prefs->SetInteger(prefs::kTouchpadSensitivity, variant);
-    prefs->SetBoolean(prefs::kTouchHudProjectionEnabled, !variant);
     prefs->SetBoolean(prefs::kLanguageXkbAutoRepeatEnabled, variant);
     prefs->SetInteger(prefs::kLanguageXkbAutoRepeatDelay, variant ? 100 : 500);
     prefs->SetInteger(prefs::kLanguageXkbAutoRepeatInterval, variant ? 1 : 4);
@@ -114,8 +111,6 @@ class PreferencesTest : public LoginManagerTest {
               input_settings_->current_mouse_settings().GetSensitivity());
     EXPECT_EQ(prefs->GetInteger(prefs::kTouchpadSensitivity),
               input_settings_->current_touchpad_settings().GetSensitivity());
-    EXPECT_EQ(prefs->GetBoolean(prefs::kTouchHudProjectionEnabled),
-              ash::Shell::Get()->is_touch_hud_projection_enabled());
     EXPECT_EQ(prefs->GetBoolean(prefs::kLanguageXkbAutoRepeatEnabled),
               keyboard_->auto_repeat_is_enabled_);
     input_method::AutoRepeatRate rate = keyboard_->last_auto_repeat_rate_;
@@ -140,11 +135,11 @@ class PreferencesTest : public LoginManagerTest {
 
   void DisableAnimations() {
     // Disable animations for user transitions.
-    chrome::MultiUserWindowManagerChromeOS* manager =
-        static_cast<chrome::MultiUserWindowManagerChromeOS*>(
-            chrome::MultiUserWindowManager::GetInstance());
+    MultiUserWindowManagerChromeOS* manager =
+        static_cast<MultiUserWindowManagerChromeOS*>(
+            MultiUserWindowManager::GetInstance());
     manager->SetAnimationSpeedForTest(
-        chrome::MultiUserWindowManagerChromeOS::ANIMATION_SPEED_DISABLED);
+        MultiUserWindowManagerChromeOS::ANIMATION_SPEED_DISABLED);
   }
 
   std::vector<AccountId> test_users_;
@@ -212,17 +207,18 @@ class PreferencesServiceBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(PreferencesTest, PRE_MultiProfiles) {
-  RegisterUser(test_users_[0].GetUserEmail());
-  RegisterUser(test_users_[1].GetUserEmail());
+  RegisterUser(test_users_[0]);
+  RegisterUser(test_users_[1]);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
-IN_PROC_BROWSER_TEST_F(PreferencesTest, MultiProfiles) {
+// This test is flaking both with and without mash. http://crbug.com/787050
+IN_PROC_BROWSER_TEST_F(PreferencesTest, DISABLED_MultiProfiles) {
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
 
   // Add first user and init its preferences. Check that corresponding
   // settings has been changed.
-  LoginUser(test_users_[0].GetUserEmail());
+  LoginUser(test_users_[0]);
   const user_manager::User* user1 = user_manager->FindUser(test_users_[0]);
   PrefService* prefs1 =
       ProfileHelper::Get()->GetProfileByUserUnsafe(user1)->GetPrefs();
@@ -234,7 +230,7 @@ IN_PROC_BROWSER_TEST_F(PreferencesTest, MultiProfiles) {
   UserAddingScreen::Get()->Start();
   content::RunAllPendingInMessageLoop();
   DisableAnimations();
-  AddUser(test_users_[1].GetUserEmail());
+  AddUser(test_users_[1]);
   content::RunAllPendingInMessageLoop();
   const user_manager::User* user2 = user_manager->FindUser(test_users_[1]);
   EXPECT_TRUE(user2->is_active());

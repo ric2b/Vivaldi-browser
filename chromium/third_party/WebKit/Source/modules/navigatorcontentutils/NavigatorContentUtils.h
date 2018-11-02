@@ -37,7 +37,6 @@
 namespace blink {
 
 class ExceptionState;
-class Navigator;
 
 class MODULES_EXPORT NavigatorContentUtils final
     : public GarbageCollectedFinalized<NavigatorContentUtils>,
@@ -55,10 +54,6 @@ class MODULES_EXPORT NavigatorContentUtils final
                                       const String& url,
                                       const String& title,
                                       ExceptionState&);
-  static String isProtocolHandlerRegistered(Navigator&,
-                                            const String& scheme,
-                                            const String& url,
-                                            ExceptionState&);
   static void unregisterProtocolHandler(Navigator&,
                                         const String& scheme,
                                         const String& url,
@@ -66,7 +61,7 @@ class MODULES_EXPORT NavigatorContentUtils final
 
   static void ProvideTo(Navigator&, NavigatorContentUtilsClient*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void SetClientForTest(NavigatorContentUtilsClient* client) {
     client_ = client;

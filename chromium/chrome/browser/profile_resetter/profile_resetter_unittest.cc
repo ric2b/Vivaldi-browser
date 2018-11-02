@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/macros.h"
@@ -25,7 +27,6 @@
 #include "chrome/browser/profile_resetter/profile_resetter_test_base.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -38,7 +39,6 @@
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/search_engines/template_url_service_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_browser_thread.h"
 #include "extensions/browser/extension_registry.h"
@@ -120,9 +120,6 @@ class ProfileResetterTest : public extensions::ExtensionServiceTestBase,
 
   TestingProfile* profile() { return profile_.get(); }
 
-  static std::unique_ptr<KeyedService> CreateTemplateURLService(
-      content::BrowserContext* context);
-
  private:
 #if defined(OS_WIN)
   base::ScopedPathOverride user_desktop_override_;
@@ -151,24 +148,9 @@ void ProfileResetterTest::SetUp() {
 
   profile()->CreateWebDataService();
   TemplateURLServiceFactory::GetInstance()->SetTestingFactory(
-      profile(),
-      &ProfileResetterTest::CreateTemplateURLService);
+      profile(), &CreateTemplateURLServiceForTesting);
   resetter_.reset(new ProfileResetter(profile()));
 }
-
-// static
-std::unique_ptr<KeyedService> ProfileResetterTest::CreateTemplateURLService(
-    content::BrowserContext* context) {
-  Profile* profile = static_cast<Profile*>(context);
-  return base::WrapUnique(new TemplateURLService(
-      profile->GetPrefs(),
-      std::unique_ptr<SearchTermsData>(new UIThreadSearchTermsData(profile)),
-      WebDataServiceFactory::GetKeywordWebDataForProfile(
-          profile, ServiceAccessType::EXPLICIT_ACCESS),
-      std::unique_ptr<TemplateURLServiceClient>(), NULL, NULL,
-      base::Closure()));
-}
-
 
 // PinnedTabsResetTest --------------------------------------------------------
 
@@ -865,7 +847,7 @@ TEST_F(ProfileResetterTest, CheckSnapshots) {
   ResettableSettingsSnapshot nonorganic_snap(profile());
   nonorganic_snap.RequestShortcuts(base::Closure());
   // Let it enumerate shortcuts on a blockable task runner.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   int diff_fields = ResettableSettingsSnapshot::ALL_FIELDS;
   if (!ShortcutHandler::IsSupported())
     diff_fields &= ~ResettableSettingsSnapshot::SHORTCUTS;
@@ -893,7 +875,7 @@ TEST_F(ProfileResetterTest, CheckSnapshots) {
   ResettableSettingsSnapshot organic_snap(profile());
   organic_snap.RequestShortcuts(base::Closure());
   // Let it enumerate shortcuts on a blockable task runner.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(diff_fields, nonorganic_snap.FindDifferentFields(organic_snap));
   nonorganic_snap.Subtract(organic_snap);
   const GURL urls[] = {GURL("http://foo.de"), GURL("http://goo.gl")};
@@ -937,7 +919,7 @@ TEST_F(ProfileResetterTest, FeedbackSerializationAsProtoTest) {
   ResettableSettingsSnapshot nonorganic_snap(profile());
   nonorganic_snap.RequestShortcuts(base::Closure());
   // Let it enumerate shortcuts on a blockable task runner.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   static_assert(ResettableSettingsSnapshot::ALL_FIELDS == 31,
                 "this test needs to be expanded");
@@ -1016,7 +998,7 @@ TEST_F(ProfileResetterTest, GetReadableFeedback) {
                                        profile(),
                                        base::ConstRef(snapshot)));
   // Let it enumerate shortcuts on a blockable task runner.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(snapshot.shortcuts_determined());
   ::testing::Mock::VerifyAndClearExpectations(&capture);
   // The homepage and the startup page are in punycode. They are unreadable.

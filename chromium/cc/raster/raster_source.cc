@@ -11,6 +11,7 @@
 #include "cc/base/region.h"
 #include "cc/debug/debug_colors.h"
 #include "cc/paint/display_item_list.h"
+#include "cc/paint/image_provider.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/common/traced_value.h"
 #include "skia/ext/analysis_canvas.h"
@@ -74,7 +75,8 @@ void RasterSource::PlaybackToCanvas(SkCanvas* input_canvas,
     raster_canvas = color_transform_canvas.get();
   }
 
-  if (!settings.playback_to_shared_canvas)
+  // Some tests want to avoid complicated clearing logic for consistency.
+  if (settings.clear_canvas_before_raster)
     ClearCanvasForPlayback(raster_canvas);
 
   RasterCommon(raster_canvas, settings.image_provider);
@@ -151,10 +153,16 @@ void RasterSource::ClearCanvasForPlayback(SkCanvas* canvas) const {
 void RasterSource::RasterCommon(SkCanvas* raster_canvas,
                                 ImageProvider* image_provider,
                                 SkPicture::AbortCallback* callback) const {
+  if (image_provider)
+    image_provider->BeginRaster();
+
   DCHECK(display_list_.get());
   int repeat_count = std::max(1, slow_down_raster_scale_factor_for_debug_);
   for (int i = 0; i < repeat_count; ++i)
     display_list_->Raster(raster_canvas, image_provider, callback);
+
+  if (image_provider)
+    image_provider->EndRaster();
 }
 
 sk_sp<SkPicture> RasterSource::GetFlattenedPicture() {
@@ -193,10 +201,9 @@ void RasterSource::GetDiscardableImagesInRect(
                                                                     images);
 }
 
-gfx::Rect RasterSource::GetRectForImage(PaintImage::Id image_id) const {
-  if (!display_list_)
-    return gfx::Rect();
-  return display_list_->discardable_image_map().GetRectForImage(image_id);
+base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+RasterSource::TakeDecodingModeMap() {
+  return display_list_->TakeDecodingModeMap();
 }
 
 bool RasterSource::CoversRect(const gfx::Rect& layer_rect) const {
@@ -238,9 +245,7 @@ void RasterSource::DidBeginTracing() {
     display_list_->EmitTraceSnapshot();
 }
 
-RasterSource::PlaybackSettings::PlaybackSettings()
-    : playback_to_shared_canvas(false),
-      use_lcd_text(true) {}
+RasterSource::PlaybackSettings::PlaybackSettings() = default;
 
 RasterSource::PlaybackSettings::PlaybackSettings(const PlaybackSettings&) =
     default;

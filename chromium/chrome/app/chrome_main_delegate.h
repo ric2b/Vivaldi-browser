@@ -31,10 +31,6 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   explicit ChromeMainDelegate(base::TimeTicks exe_entry_point_ticks);
   ~ChromeMainDelegate() override;
 
-  using ServiceCatalogFactory =
-      base::RepeatingCallback<std::unique_ptr<base::Value>(void)>;
-  static void InstallServiceCatalogFactory(ServiceCatalogFactory factory);
-
  protected:
   // content::ContentMainDelegate implementation:
   bool BasicStartupComplete(int* exit_code) override;
@@ -49,25 +45,13 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
       const std::string& process_type) override;
   bool ShouldSendMachPort(const std::string& process_type) override;
   bool DelaySandboxInitialization(const std::string& process_type) override;
-#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+#elif defined(OS_LINUX)
   void ZygoteStarting(std::vector<std::unique_ptr<content::ZygoteForkDelegate>>*
                           delegates) override;
   void ZygoteForked() override;
 #endif
   bool ShouldEnableProfilerRecording() override;
   service_manager::ProcessType OverrideProcessType() override;
-  std::unique_ptr<base::Value> CreateServiceCatalog() override;
-  void AdjustServiceProcessCommandLine(
-      const service_manager::Identity& identity,
-      base::CommandLine* command_line) override;
-  bool ShouldTerminateServiceManagerOnInstanceQuit(
-      const service_manager::Identity& identity,
-      int* exit_code) override;
-  void OnServiceManagerInitialized(
-      const base::Closure& quit_closure,
-      service_manager::BackgroundServiceManager* service_manager) override;
-  std::unique_ptr<service_manager::Service> CreateEmbeddedService(
-      const std::string& service_name) override;
 
   content::ContentBrowserClient* CreateContentBrowserClient() override;
   content::ContentGpuClient* CreateContentGpuClient() override;

@@ -25,10 +25,10 @@
 
 #include "core/html/forms/ExternalDateTimeChooser.h"
 
-#include "core/InputTypeNames.h"
 #include "core/html/forms/DateTimeChooserClient.h"
+#include "core/input_type_names.h"
 #include "core/page/ChromeClient.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "public/web/WebDateTimeChooserCompletion.h"
 #include "public/web/WebDateTimeChooserParams.h"
@@ -57,7 +57,7 @@ class WebDateTimeChooserCompletionImpl : public WebDateTimeChooserCompletion {
 
 ExternalDateTimeChooser::~ExternalDateTimeChooser() {}
 
-DEFINE_TRACE(ExternalDateTimeChooser) {
+void ExternalDateTimeChooser::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
   DateTimeChooser::Trace(visitor);
 }

@@ -32,7 +32,7 @@
 #include "core/layout/LayoutSliderContainer.h"
 
 #include "core/dom/ShadowRoot.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/SliderThumbElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ShadowElementNames.h"
@@ -53,8 +53,9 @@ inline static Decimal SliderPosition(HTMLInputElement* element) {
 
 inline static bool HasVerticalAppearance(HTMLInputElement* input) {
   DCHECK(input->GetLayoutObject());
+  if (!input->GetLayoutObject() || !input->GetLayoutObject()->Style())
+    return false;
   const ComputedStyle& slider_style = input->GetLayoutObject()->StyleRef();
-
   return slider_style.Appearance() == kSliderVerticalPart;
 }
 
@@ -62,7 +63,7 @@ void LayoutSliderContainer::ComputeLogicalHeight(
     LayoutUnit logical_height,
     LayoutUnit logical_top,
     LogicalExtentComputedValues& computed_values) const {
-  HTMLInputElement* input = toHTMLInputElement(GetNode()->OwnerShadowHost());
+  HTMLInputElement* input = ToHTMLInputElement(GetNode()->OwnerShadowHost());
   bool is_vertical = HasVerticalAppearance(input);
 
   if (input->GetLayoutObject()->IsSlider() && !is_vertical && input->list()) {
@@ -97,7 +98,7 @@ void LayoutSliderContainer::ComputeLogicalHeight(
 }
 
 void LayoutSliderContainer::UpdateLayout() {
-  HTMLInputElement* input = toHTMLInputElement(GetNode()->OwnerShadowHost());
+  HTMLInputElement* input = ToHTMLInputElement(GetNode()->OwnerShadowHost());
   bool is_vertical = HasVerticalAppearance(input);
   MutableStyleRef().SetFlexDirection(is_vertical ? EFlexDirection::kColumn
                                                  : EFlexDirection::kRow);
@@ -113,8 +114,8 @@ void LayoutSliderContainer::UpdateLayout() {
       ShadowElementNames::SliderThumb());
   Element* track_element = input->UserAgentShadowRoot()->getElementById(
       ShadowElementNames::SliderTrack());
-  LayoutBox* thumb = thumb_element ? thumb_element->GetLayoutBox() : 0;
-  LayoutBox* track = track_element ? track_element->GetLayoutBox() : 0;
+  LayoutBox* thumb = thumb_element ? thumb_element->GetLayoutBox() : nullptr;
+  LayoutBox* track = track_element ? track_element->GetLayoutBox() : nullptr;
 
   SubtreeLayoutScope layout_scope(*this);
   // Force a layout to reset the position of the thumb so the code below doesn't

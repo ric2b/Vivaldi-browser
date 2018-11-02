@@ -26,8 +26,8 @@
 #ifndef NativeXPathNSResolver_h
 #define NativeXPathNSResolver_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/xml/XPathNSResolver.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -41,7 +41,7 @@ class NativeXPathNSResolver final : public XPathNSResolver {
 
   AtomicString lookupNamespaceURI(const String& prefix) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit NativeXPathNSResolver(Node*);

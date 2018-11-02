@@ -27,6 +27,7 @@
 #ifndef CSSPreloadScanner_h
 #define CSSPreloadScanner_h
 
+#include "base/macros.h"
 #include "core/html/parser/HTMLToken.h"
 #include "core/html/parser/PreloadRequest.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
@@ -42,7 +43,6 @@ class HTMLResourcePreloader;
 
 class CSSPreloadScanner {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(CSSPreloadScanner);
 
  public:
   CSSPreloadScanner();
@@ -94,6 +94,8 @@ class CSSPreloadScanner {
   // Below members only non-null during scan()
   PreloadRequestStream* requests_ = nullptr;
   const KURL* predicted_base_element_url_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(CSSPreloadScanner);
 };
 
 // Each CSSPreloaderResourceClient keeps track of a single CSS resource, and
@@ -106,16 +108,16 @@ class CORE_EXPORT CSSPreloaderResourceClient
 
  public:
   CSSPreloaderResourceClient(Resource*, HTMLResourcePreloader*);
-  ~CSSPreloaderResourceClient();
+  ~CSSPreloaderResourceClient() override;
   void SetCSSStyleSheet(const String& href,
                         const KURL& base_url,
                         ReferrerPolicy,
                         const WTF::TextEncoding&,
                         const CSSStyleSheetResource*) override;
-  void DidAppendFirstData(const CSSStyleSheetResource*) override;
+  void DataReceived(Resource*, const char*, size_t) override;
   String DebugName() const override { return "CSSPreloaderResourceClient"; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   // Protected for tests, which don't want to initialize a fully featured
@@ -134,6 +136,7 @@ class CORE_EXPORT CSSPreloaderResourceClient
   const PreloadPolicy policy_;
   WeakMember<HTMLResourcePreloader> preloader_;
   WeakMember<CSSStyleSheetResource> resource_;
+  bool received_first_data_ = false;
 };
 
 }  // namespace blink

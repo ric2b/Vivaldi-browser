@@ -56,7 +56,7 @@ void SourceBufferList::Remove(SourceBuffer* buffer) {
   size_t index = list_.Find(buffer);
   if (index == kNotFound)
     return;
-  list_.erase(index);
+  list_.EraseAt(index);
   ScheduleEvent(EventTypeNames::removesourcebuffer);
 }
 
@@ -78,7 +78,7 @@ const AtomicString& SourceBufferList::InterfaceName() const {
   return EventTargetNames::SourceBufferList;
 }
 
-DEFINE_TRACE(SourceBufferList) {
+void SourceBufferList::Trace(blink::Visitor* visitor) {
   visitor->Trace(async_event_queue_);
   visitor->Trace(list_);
   EventTargetWithInlineData::Trace(visitor);

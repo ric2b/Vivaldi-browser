@@ -21,7 +21,7 @@ MojoDecoderFactory::MojoDecoderFactory(
   DCHECK(interface_factory_);
 }
 
-MojoDecoderFactory::~MojoDecoderFactory() {}
+MojoDecoderFactory::~MojoDecoderFactory() = default;
 
 void MojoDecoderFactory::CreateAudioDecoders(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -39,13 +39,15 @@ void MojoDecoderFactory::CreateVideoDecoders(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     GpuVideoAcceleratorFactories* gpu_factories,
     MediaLog* media_log,
+    const RequestOverlayInfoCB& request_overlay_info_cb,
     std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) {
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
   mojom::VideoDecoderPtr video_decoder_ptr;
   interface_factory_->CreateVideoDecoder(mojo::MakeRequest(&video_decoder_ptr));
 
   video_decoders->push_back(base::MakeUnique<MojoVideoDecoder>(
-      task_runner, gpu_factories, media_log, std::move(video_decoder_ptr)));
+      task_runner, gpu_factories, media_log, std::move(video_decoder_ptr),
+      request_overlay_info_cb));
 #endif
 }
 

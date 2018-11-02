@@ -96,8 +96,8 @@ void SubSurface::OnSurfaceCommit() {
   if (IsSurfaceSynchronized())
     return;
 
-  // TODO(penghuang): http://crbug.com/740110 Support async mode.
-  NOTIMPLEMENTED() << "Async subsurface is not supported!";
+  if (parent_)
+    parent_->OnSubSurfaceCommit();
 }
 
 bool SubSurface::IsSurfaceSynchronized() const {
@@ -106,7 +106,11 @@ bool SubSurface::IsSurfaceSynchronized() const {
   if (is_synchronized_)
     return true;
 
-  return parent_ ? parent_->IsSynchronized() : false;
+  return parent_ && parent_->IsSynchronized();
+}
+
+bool SubSurface::IsTouchEnabled(Surface* surface) const {
+  return !parent_ || parent_->IsTouchEnabled(surface);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

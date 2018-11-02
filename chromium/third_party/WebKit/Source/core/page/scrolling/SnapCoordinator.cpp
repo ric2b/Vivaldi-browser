@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "SnapCoordinator.h"
+#include "core/page/scrolling/SnapCoordinator.h"
 
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -43,8 +43,8 @@ static LayoutBox* FindSnapContainer(const LayoutBox& snap_area) {
 
 void SnapCoordinator::SnapAreaDidChange(LayoutBox& snap_area,
                                         ScrollSnapAlign scroll_snap_align) {
-  if (scroll_snap_align.alignmentX == kSnapAlignmentNone &&
-      scroll_snap_align.alignmentY == kSnapAlignmentNone) {
+  if (scroll_snap_align.alignmentX == SnapAlignment::kNone &&
+      scroll_snap_align.alignmentY == SnapAlignment::kNone) {
     snap_area.SetSnapContainer(nullptr);
     return;
   }
@@ -61,8 +61,6 @@ void SnapCoordinator::SnapAreaDidChange(LayoutBox& snap_area,
 void SnapCoordinator::SnapContainerDidChange(LayoutBox& snap_container,
                                              ScrollSnapType scroll_snap_type) {
   if (scroll_snap_type.is_none) {
-    // TODO(majidvp): Track and report these removals to CompositorWorker
-    // instance responsible for snapping
     snap_containers_.erase(&snap_container);
     snap_container.ClearSnapAreas();
   } else {

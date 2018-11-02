@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "ash/highlighter/highlighter_controller.h"
 #include "ash/highlighter/highlighter_controller_test_api.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/shell.h"
 #include "ash/shell_test_api.h"
 #include "ash/system/palette/mock_palette_tool_delegate.h"
 #include "ash/system/palette/palette_ids.h"
 #include "ash/system/palette/palette_tool.h"
-#include "ash/system/palette/test_palette_delegate.h"
 #include "ash/system/palette/tools/metalayer_mode.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,39 +29,27 @@ namespace {
 // Base class for all metalayer ash tests.
 class MetalayerToolTest : public AshTestBase {
  public:
-  MetalayerToolTest() {}
-  ~MetalayerToolTest() override {}
+  MetalayerToolTest() = default;
+  ~MetalayerToolTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
 
-    ShellTestApi().SetPaletteDelegate(base::MakeUnique<TestPaletteDelegate>());
-
-    palette_tool_delegate_ = base::MakeUnique<MockPaletteToolDelegate>();
-    tool_ = base::MakeUnique<MetalayerMode>(palette_tool_delegate_.get());
-    highlighter_controller_ = base::MakeUnique<HighlighterController>();
-    highlighter_test_api_ = base::MakeUnique<HighlighterControllerTestApi>(
-        highlighter_controller_.get());
-    test_palette_delegate()->set_highlighter_test_api(
-        highlighter_test_api_.get());
+    palette_tool_delegate_ = std::make_unique<MockPaletteToolDelegate>();
+    tool_ = std::make_unique<MetalayerMode>(palette_tool_delegate_.get());
+    highlighter_test_api_ = std::make_unique<HighlighterControllerTestApi>(
+        Shell::Get()->highlighter_controller());
   }
 
   void TearDown() override {
-    // This needs to be called first to remove the event handler before the
+    // This needs to be called first to reset the controller state before the
     // shell instance gets torn down.
-    test_palette_delegate()->set_highlighter_test_api(nullptr);
     highlighter_test_api_.reset();
-    highlighter_controller_.reset();
     tool_.reset();
     AshTestBase::TearDown();
   }
 
-  TestPaletteDelegate* test_palette_delegate() {
-    return static_cast<TestPaletteDelegate*>(Shell::Get()->palette_delegate());
-  }
-
  protected:
-  std::unique_ptr<HighlighterController> highlighter_controller_;
   std::unique_ptr<HighlighterControllerTestApi> highlighter_test_api_;
   std::unique_ptr<MockPaletteToolDelegate> palette_tool_delegate_;
   std::unique_ptr<PaletteTool> tool_;
@@ -72,21 +63,25 @@ class MetalayerToolTest : public AshTestBase {
 // The metalayer tool is always visible, but only enabled when the user
 // has enabled the metalayer AND the voice interaction framework is ready.
 TEST_F(MetalayerToolTest, PaletteMenuState) {
-  const VoiceInteractionState kStates[] = {VoiceInteractionState::NOT_READY,
-                                           VoiceInteractionState::STOPPED,
-                                           VoiceInteractionState::RUNNING};
+  const mojom::VoiceInteractionState kStates[] = {
+      mojom::VoiceInteractionState::NOT_READY,
+      mojom::VoiceInteractionState::STOPPED,
+      mojom::VoiceInteractionState::RUNNING};
   const base::string16 kLoading(base::ASCIIToUTF16("loading"));
 
   // Iterate over every possible combination of states.
-  for (VoiceInteractionState state : kStates) {
+  for (mojom::VoiceInteractionState state : kStates) {
     for (int enabled = 0; enabled <= 1; enabled++) {
       for (int context = 0; context <= 1; context++) {
-        const bool ready = state != VoiceInteractionState::NOT_READY;
+        const bool ready = state != mojom::VoiceInteractionState::NOT_READY;
         const bool selectable = enabled && context && ready;
 
-        Shell::Get()->NotifyVoiceInteractionStatusChanged(state);
-        Shell::Get()->NotifyVoiceInteractionEnabled(enabled);
-        Shell::Get()->NotifyVoiceInteractionContextEnabled(context);
+        Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
+            state);
+        Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(
+            enabled);
+        Shell::Get()->voice_interaction_controller()->NotifyContextEnabled(
+            context);
 
         std::unique_ptr<views::View> view =
             base::WrapUnique(tool_->CreateView());
@@ -106,45 +101,47 @@ TEST_F(MetalayerToolTest, PaletteMenuState) {
   }
 }
 
-// Verifies that enabling/disabling the metalayer tool invokes the delegate.
-TEST_F(MetalayerToolTest, EnablingDisablingMetalayerCallsDelegate) {
-  // Enabling the metalayer tool calls the delegate to show the metalayer.
+// Verifies that the metalayer enabled/disabled state propagates to the
+// highlighter controller.
+TEST_F(MetalayerToolTest, EnablingDisablingMetalayerEnablesDisablesController) {
+  // Enabling the metalayer tool enables the highligher controller.
   // It should also hide the palette.
   EXPECT_CALL(*palette_tool_delegate_.get(), HidePalette());
+  highlighter_test_api_->ResetEnabledState();
   tool_->OnEnable();
-  EXPECT_EQ(1, test_palette_delegate()->show_metalayer_count());
-  EXPECT_EQ(0, test_palette_delegate()->hide_metalayer_count());
+  EXPECT_TRUE(highlighter_test_api_->HandleEnabledStateChangedCalled());
+  EXPECT_TRUE(highlighter_test_api_->enabled());
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
 
-  // Enabling the metalayer tool calls the delegate to hide the metalayer.
+  // Disabling the metalayer tool disables the highlighter controller.
+  highlighter_test_api_->ResetEnabledState();
   tool_->OnDisable();
-  EXPECT_EQ(1, test_palette_delegate()->show_metalayer_count());
-  EXPECT_EQ(1, test_palette_delegate()->hide_metalayer_count());
+  EXPECT_TRUE(highlighter_test_api_->HandleEnabledStateChangedCalled());
+  EXPECT_FALSE(highlighter_test_api_->enabled());
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
 }
 
-// Verifies that disabling the metalayer support in the delegate disables the
-// tool.
+// Verifies that disabling the metalayer support disables the tool.
 TEST_F(MetalayerToolTest, MetalayerUnsupportedDisablesPaletteTool) {
-  Shell::Get()->NotifyVoiceInteractionStatusChanged(
-      VoiceInteractionState::RUNNING);
-  Shell::Get()->NotifyVoiceInteractionEnabled(true);
-  Shell::Get()->NotifyVoiceInteractionContextEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
+      mojom::VoiceInteractionState::RUNNING);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifyContextEnabled(true);
 
   // Disabling the user prefs individually should disable the tool.
   tool_->OnEnable();
   EXPECT_CALL(*palette_tool_delegate_.get(),
               DisableTool(PaletteToolId::METALAYER));
-  Shell::Get()->NotifyVoiceInteractionEnabled(false);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(false);
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
-  Shell::Get()->NotifyVoiceInteractionEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
 
   tool_->OnEnable();
   EXPECT_CALL(*palette_tool_delegate_.get(),
               DisableTool(PaletteToolId::METALAYER));
-  Shell::Get()->NotifyVoiceInteractionContextEnabled(false);
+  Shell::Get()->voice_interaction_controller()->NotifyContextEnabled(false);
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
-  Shell::Get()->NotifyVoiceInteractionContextEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifyContextEnabled(true);
 
   // Test VoiceInteractionState changes.
   tool_->OnEnable();
@@ -154,27 +151,35 @@ TEST_F(MetalayerToolTest, MetalayerUnsupportedDisablesPaletteTool) {
   EXPECT_CALL(*palette_tool_delegate_.get(),
               DisableTool(PaletteToolId::METALAYER))
       .Times(0);
-  Shell::Get()->NotifyVoiceInteractionStatusChanged(
-      VoiceInteractionState::STOPPED);
-  Shell::Get()->NotifyVoiceInteractionStatusChanged(
-      VoiceInteractionState::RUNNING);
+  Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
+      mojom::VoiceInteractionState::STOPPED);
+  Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
+      mojom::VoiceInteractionState::RUNNING);
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
 
   // Changing the state to NOT_READY should disable the tool.
   EXPECT_CALL(*palette_tool_delegate_.get(),
               DisableTool(PaletteToolId::METALAYER));
-  Shell::Get()->NotifyVoiceInteractionStatusChanged(
-      VoiceInteractionState::NOT_READY);
+  Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
+      mojom::VoiceInteractionState::NOT_READY);
   testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
 }
 
-// Verifies that invoking the callback passed to the delegate disables the tool.
-TEST_F(MetalayerToolTest, MetalayerCallbackDisablesPaletteTool) {
+// Verifies that detaching the highlighter client disables the palette tool.
+TEST_F(MetalayerToolTest, DetachingClientDisablesPaletteTool) {
   tool_->OnEnable();
-  // Calling the associated callback |metalayer_done| will disable the tool.
+  // If the client detaches, the tool should become disabled.
   EXPECT_CALL(*palette_tool_delegate_.get(),
               DisableTool(PaletteToolId::METALAYER));
-  highlighter_test_api_->CallMetalayerDone();
+  highlighter_test_api_->DetachClient();
+  testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
+
+  // If the client attaches again, the tool should not become enabled.
+  highlighter_test_api_->AttachClient();
+  EXPECT_CALL(*palette_tool_delegate_.get(),
+              EnableTool(PaletteToolId::METALAYER))
+      .Times(0);
+  testing::Mock::VerifyAndClearExpectations(palette_tool_delegate_.get());
 }
 
 }  // namespace ash

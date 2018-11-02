@@ -6,16 +6,19 @@
 
 #include <algorithm>
 
+#include "base/i18n/number_formatting.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/pagination_model.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -61,6 +64,8 @@ class PageSwitcherButton : public views::Button {
 
     selected_ = selected;
     SchedulePaint();
+    if (selected)
+      NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
   }
 
   // Overridden from views::View:
@@ -83,7 +88,7 @@ class PageSwitcherButton : public views::Button {
   }
 
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
-    return base::MakeUnique<views::CircleInkDropMask>(
+    return std::make_unique<views::CircleInkDropMask>(
         size(), GetLocalBounds().CenterPoint(), kMaxButtonRadius);
   }
 
@@ -92,16 +97,16 @@ class PageSwitcherButton : public views::Button {
     gfx::Rect bounds(center.x() - kMaxButtonRadius,
                      center.y() - kMaxButtonRadius, 2 * kMaxButtonRadius,
                      2 * kMaxButtonRadius);
-    return base::MakeUnique<views::FloodFillInkDropRipple>(
+    return std::make_unique<views::FloodFillInkDropRipple>(
         size(), GetLocalBounds().InsetsFrom(bounds),
         GetInkDropCenterBasedOnLastEvent(), kInkDropRippleColor, 1.0f);
   }
 
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override {
-    return base::MakeUnique<views::InkDropHighlight>(
+    return std::make_unique<views::InkDropHighlight>(
         gfx::PointF(GetLocalBounds().CenterPoint()),
-        base::MakeUnique<views::CircleLayerDelegate>(kInkDropHighlightColor,
+        std::make_unique<views::CircleLayerDelegate>(kInkDropHighlightColor,
                                                      kInkDropRadius));
   }
 
@@ -257,6 +262,9 @@ void PageSwitcherVertical::TotalPagesChanged() {
   buttons_->RemoveAllChildViews(true);
   for (int i = 0; i < model_->total_pages(); ++i) {
     PageSwitcherButton* button = new PageSwitcherButton(this);
+    button->SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_APP_LIST_PAGE_SWITCHER, base::FormatNumber(i + 1),
+        base::FormatNumber(model_->total_pages())));
     button->SetSelected(i == model_->selected_page() ? true : false);
     buttons_->AddChildView(button);
   }
@@ -275,5 +283,7 @@ void PageSwitcherVertical::SelectedPageChanged(int old_selected,
 void PageSwitcherVertical::TransitionStarted() {}
 
 void PageSwitcherVertical::TransitionChanged() {}
+
+void PageSwitcherVertical::TransitionEnded() {}
 
 }  // namespace app_list

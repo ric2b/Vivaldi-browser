@@ -27,11 +27,11 @@
 #define ScrollableArea_h
 
 #include "platform/PlatformExport.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/Scrollbar.h"
@@ -66,7 +66,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
  public:
   static int PixelsPerLineStep(PlatformChromeClient*);
   static float MinFractionToStepWhenPaging();
-  static int MaxOverlapBetweenPages();
+  int MaxOverlapBetweenPages() const;
 
   // Convert a non-finite scroll value (Infinity, -Infinity, NaN) to 0 as
   // per http://dev.w3.org/csswg/cssom-view/#normalize-non_finite-values.
@@ -74,7 +74,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return std::isfinite(value) ? value : 0.0;
   }
 
-  virtual PlatformChromeClient* GetChromeClient() const { return 0; }
+  virtual PlatformChromeClient* GetChromeClient() const { return nullptr; }
 
   virtual SmoothScrollSequencer* GetSmoothScrollSequencer() const {
     return nullptr;
@@ -298,10 +298,10 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   }
 
   virtual GraphicsLayer* LayerForContainer() const;
-  virtual GraphicsLayer* LayerForScrolling() const { return 0; }
-  virtual GraphicsLayer* LayerForHorizontalScrollbar() const { return 0; }
-  virtual GraphicsLayer* LayerForVerticalScrollbar() const { return 0; }
-  virtual GraphicsLayer* LayerForScrollCorner() const { return 0; }
+  virtual GraphicsLayer* LayerForScrolling() const { return nullptr; }
+  virtual GraphicsLayer* LayerForHorizontalScrollbar() const { return nullptr; }
+  virtual GraphicsLayer* LayerForVerticalScrollbar() const { return nullptr; }
+  virtual GraphicsLayer* LayerForScrollCorner() const { return nullptr; }
   bool HasLayerForHorizontalScrollbar() const;
   bool HasLayerForVerticalScrollbar() const;
   bool HasLayerForScrollCorner() const;
@@ -364,7 +364,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   // Need to promptly let go of owned animator objects.
   EAGERLY_FINALIZE();
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   virtual void ClearScrollableArea();
 
@@ -374,12 +374,14 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   // Returns the task runner to be used for scrollable area timers.
   // Ideally a frame-specific throttled one can be used.
-  virtual RefPtr<WebTaskRunner> GetTimerTaskRunner() const = 0;
+  virtual scoped_refptr<WebTaskRunner> GetTimerTaskRunner() const = 0;
 
   // Callback for compositor-side scrolling.
   virtual void DidScroll(const gfx::ScrollOffset&);
 
   virtual void ScrollbarFrameRectChanged() {}
+
+  virtual ScrollbarTheme& GetPageScrollbarTheme() const = 0;
 
  protected:
   ScrollableArea();
@@ -418,6 +420,9 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual void ScrollbarVisibilityChanged() {}
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ScrollableAreaTest,
+                           PopupOverlayScrollbarShouldNotFadeOut);
+
   void ProgrammaticScrollHelper(const ScrollOffset&, ScrollBehavior, bool);
   void UserScrollHelper(const ScrollOffset&, ScrollBehavior);
 

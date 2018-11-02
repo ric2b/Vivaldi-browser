@@ -20,8 +20,8 @@
 
 #include "core/svg/SVGFEGaussianBlurElement.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/FEGaussianBlur.h"
 
 namespace blink {
@@ -39,7 +39,7 @@ inline SVGFEGaussianBlurElement::SVGFEGaussianBlurElement(Document& document)
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFEGaussianBlurElement) {
+void SVGFEGaussianBlurElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(std_deviation_);
   visitor->Trace(in1_);
   SVGFilterPrimitiveStandardAttributes::Trace(visitor);

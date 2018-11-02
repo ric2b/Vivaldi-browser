@@ -69,9 +69,9 @@ void LayoutReplaced::StyleDidChange(StyleDifference diff,
                                     const ComputedStyle* old_style) {
   LayoutBox::StyleDidChange(diff, old_style);
 
-  bool had_style = (old_style != 0);
-  float old_zoom =
-      had_style ? old_style->EffectiveZoom() : ComputedStyle::InitialZoom();
+  bool had_style = !!old_style;
+  float old_zoom = had_style ? old_style->EffectiveZoom()
+                             : ComputedStyleInitialValues::InitialZoom();
   if (Style() && Style()->EffectiveZoom() != old_zoom)
     IntrinsicSizeChanged();
 }
@@ -94,8 +94,7 @@ void LayoutReplaced::UpdateLayout() {
 
   ClearNeedsLayout();
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-      ReplacedContentRect() != old_content_rect)
+  if (ReplacedContentRect() != old_content_rect)
     SetShouldDoFullPaintInvalidation();
 }
 
@@ -586,7 +585,8 @@ LayoutRect LayoutReplaced::ComputeObjectFit(
   EObjectFit object_fit = Style()->GetObjectFit();
 
   if (object_fit == EObjectFit::kFill &&
-      Style()->ObjectPosition() == ComputedStyle::InitialObjectPosition()) {
+      Style()->ObjectPosition() ==
+          ComputedStyleInitialValues::InitialObjectPosition()) {
     return content_rect;
   }
 
@@ -595,9 +595,8 @@ LayoutRect LayoutReplaced::ComputeObjectFit(
   // intrinsic ratio but no intrinsic size. In order to maintain aspect ratio,
   // the intrinsic size for SVG might be faked from the aspect ratio,
   // see SVGImage::containerSize().
-  LayoutSize intrinsic_size = overridden_intrinsic_size
-                                  ? *overridden_intrinsic_size
-                                  : this->IntrinsicSize();
+  LayoutSize intrinsic_size =
+      overridden_intrinsic_size ? *overridden_intrinsic_size : IntrinsicSize();
   if (!intrinsic_size.Width() || !intrinsic_size.Height())
     return content_rect;
 
@@ -886,7 +885,7 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
     const LayoutPoint& point) {
   // FIXME: This code is buggy if the replaced element is relative positioned.
   InlineBox* box = InlineBoxWrapper();
-  RootInlineBox* root_box = box ? &box->Root() : 0;
+  RootInlineBox* root_box = box ? &box->Root() : nullptr;
 
   LayoutUnit top = root_box ? root_box->SelectionTop() : LogicalTop();
   LayoutUnit bottom = root_box ? root_box->SelectionBottom() : LogicalBottom();

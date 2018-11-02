@@ -86,8 +86,6 @@ struct URLRequestContextConfig {
       const std::string& quic_user_agent_id,
       // Enable SPDY.
       bool enable_spdy,
-      // Enable SDCH.
-      bool enable_sdch,
       // Enable Brotli.
       bool enable_brotli,
       // Type of http cache.
@@ -124,8 +122,6 @@ struct URLRequestContextConfig {
   const std::string quic_user_agent_id;
   // Enable SPDY.
   const bool enable_spdy;
-  // Enable SDCH.
-  const bool enable_sdch;
   // Enable Brotli.
   const bool enable_brotli;
   // Type of http cache.
@@ -168,9 +164,6 @@ struct URLRequestContextConfig {
   // Experimental options that are recognized by the config parser.
   std::unique_ptr<base::DictionaryValue> effective_experimental_options =
       nullptr;
-
-  // Enable reading of the network quality from the prefs.
-  bool nqe_persistent_caching_enabled;
 
   // If set, forces NQE to return the set value as the effective connection
   // type.
@@ -215,8 +208,6 @@ struct URLRequestContextConfigBuilder {
   std::string quic_user_agent_id = "";
   // Enable SPDY.
   bool enable_spdy = true;
-  // Enable SDCH.
-  bool enable_sdch = false;
   // Enable Brotli.
   bool enable_brotli = false;
   // Type of http cache.

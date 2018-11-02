@@ -25,6 +25,25 @@ namespace profiling {
 // This class is threadsafe.
 class BacktraceStorage {
  public:
+  // Instantiating this lock will prevent backtraces from being deleted from
+  // the strorage for as long as it's alive. This class is moveable but not
+  // copyable.
+  class Lock {
+   public:
+    Lock();                                    // Doesn't take the lock.
+    explicit Lock(BacktraceStorage* storage);  // Takes the lock.
+    Lock(const Lock&) = delete;
+    Lock(Lock&&);
+    ~Lock();
+
+    Lock& operator=(Lock&& other);
+    Lock& operator=(const Lock&) = delete;
+    bool IsLocked();
+
+   private:
+    BacktraceStorage* storage_;  // May be null if moved from.
+  };
+
   BacktraceStorage();
   ~BacktraceStorage();
 
@@ -41,12 +60,46 @@ class BacktraceStorage {
   void Free(const std::vector<const Backtrace*>& bts);
 
  private:
+  friend Lock;
   using Container = std::unordered_set<Backtrace>;
 
-  mutable base::Lock lock_;
+  // Called by the BacktraceStorage::Lock class.
+  void LockStorage();
+  void UnlockStorage();
 
-  // List of live backtraces for de-duping. Protected by the lock_.
-  Container backtraces_;
+  // Releases all backtraces in the vector assuming |lock| is already held
+  // and |consumer_count| is zero.
+  void ReleaseBacktracesLocked(const std::vector<const Backtrace*>& bts,
+                               size_t shard_index);
+
+  struct ContainerShard {
+    ContainerShard();
+    ~ContainerShard();
+
+    // Container of de-duped, live backtraces. All modifications to |backtraces|
+    // or the Backtrace elements owned by |backtraces| must be protected by
+    // |lock|.
+    Container backtraces;
+    mutable base::Lock lock;
+
+    // Protected by |lock|. This indicates the number of consumers that have
+    // raw backtrace pointers owned by |backtraces|. As long as this count is
+    // non-zero, Backtraces owned by |backtraces| cannot be modified or
+    // destroyed. Elements can be inserted into |backtraces| even when this is
+    // non-zero because existing raw backtrace pointers are stable.
+    int consumer_count = 0;
+
+    // When |consumer_count| is non-zero, no backtraces will be deleted from
+    // the storage. Instead, they are accumulated here for releasing after
+    // consumer_count becomes non-zero.
+    std::vector<const Backtrace*> release_after_lock;
+
+    DISALLOW_COPY_AND_ASSIGN(ContainerShard);
+  };
+
+  // Backtraces are sharded by fingerprint to reduce lock contention.
+  std::vector<ContainerShard> shards_;
+  DISALLOW_COPY_AND_ASSIGN(BacktraceStorage);
 };
 
 }  // namespace profiling

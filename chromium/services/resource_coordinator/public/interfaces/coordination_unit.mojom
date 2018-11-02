@@ -4,16 +4,15 @@
 
 module resource_coordinator.mojom;
 
+import "mojo/common/time.mojom";
 import "signals.mojom";
-import "mojo/common/values.mojom";
 
 // Any new type here needs to be mirrored between coordination_unit_types.h and
 // coordination_unit.mojom, and have mappings between the two defined in
 // coordination_unit_struct_traits.h/.cc (see comment in coordination_unit_id.h).
 enum CoordinationUnitType {
-  kWebContents,
   kFrame,
-  kNavigation,
+  kPage,
   kProcess,
 };
 
@@ -22,26 +21,65 @@ struct CoordinationUnitID {
   int64 id;
 };
 
-interface CoordinationUnit {
+// A FrameCoordinationUnit has at most one ProcessCoordinationUnit as its
+// parent, at most one PageCoordinationUnit as its parent, at most one
+// FrameCoordinationUnit as parent frame, and can have many child frames.
+interface FrameCoordinationUnit {
   // Mainly used to force a round-trip to the service over the pipe for
   // a specific unit, so we don't have to deal with possibly-not-yet-created
-  // children in AddChild()
+  // children.
   GetID() => (CoordinationUnitID id);
 
-  // Add a new binding to an existing CoordinationUnit.
-  AddBinding(CoordinationUnit& request);
+  // Add a new binding to an existing FrameCoordinationUnit.
+  AddBinding(FrameCoordinationUnit& request);
+  AddChildFrame(CoordinationUnitID cu_id);
+  RemoveChildFrame(CoordinationUnitID cu_id);
 
-  // child_id must represent a CU that already exists service-side,
-  // and can't be a direct ascendent or descendent of the current unit.
-  AddChild(CoordinationUnitID child_id);
+  // Property signals.
+  SetAudibility(bool audible);
+  SetNetworkAlmostIdle(bool idle);
 
-  // child_id must represent a CU that already exists service-side
-  // and is a direct descendent of the current unit.
-  RemoveChild(CoordinationUnitID child_id);
+  // Event signals.
+  OnAlertFired();
+  OnNonPersistentNotificationCreated();
+};
 
-  // Sends event signal to CoordinationUnit, an event signal are non-persistent.
-  SendEvent(Event event);
+interface PageCoordinationUnit {
+  // Mainly used to force a round-trip to the service over the pipe for
+  // a specific unit, so we don't have to deal with possibly-not-yet-created
+  // children.
+  GetID() => (CoordinationUnitID id);
 
-  // Sets a property on the CoordinationUnit's internal key-value store.
-  SetProperty(PropertyType property_type, int64 value);
+  // Add a new binding to an existing PageCoordinationUnit.
+  AddBinding(PageCoordinationUnit& request);
+  AddFrame(CoordinationUnitID cu_id);
+  RemoveFrame(CoordinationUnitID cu_id);
+
+  // Property signals.
+  SetVisibility(bool visible);
+  SetUKMSourceId(int64 ukm_source_id);
+
+  // Event signals.
+  OnFaviconUpdated();
+  OnTitleUpdated();
+  OnMainFrameNavigationCommitted();
+};
+
+interface ProcessCoordinationUnit {
+  // Mainly used to force a round-trip to the service over the pipe for
+  // a specific unit, so we don't have to deal with possibly-not-yet-created
+  // children.
+  GetID() => (CoordinationUnitID id);
+
+  // Add a new binding to an existing ProcessCoordinationUnit.
+  AddBinding(ProcessCoordinationUnit& request);
+  AddFrame(CoordinationUnitID cu_id);
+  RemoveFrame(CoordinationUnitID cu_id);
+
+  // Property signals.
+  SetCPUUsage(double cpu_usage);
+  SetExpectedTaskQueueingDuration(mojo.common.mojom.TimeDelta duration);
+  SetLaunchTime(mojo.common.mojom.Time launch_time);
+  SetMainThreadTaskLoadIsLow(bool main_thread_task_load_is_low);
+  SetPID(int64 pid);
 };

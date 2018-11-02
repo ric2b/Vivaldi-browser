@@ -22,7 +22,6 @@
 
 #include "core/html/HTMLMetaElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/LocalFrame.h"
@@ -30,9 +29,9 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/HttpEquiv.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/text/StringToNumber.h"
 
 namespace blink {
@@ -180,15 +179,20 @@ Length HTMLMetaElement::ParseViewportValueAsLength(Document* document,
   // 1) Non-negative number values are translated to px lengths.
   // 2) Negative number values are translated to auto.
   // 3) device-width and device-height are used as keywords.
-  // 4) Other keywords and unknown values translate to 0.0.
+  // 4) Other keywords and unknown values translate to auto.
 
   if (DeprecatedEqualIgnoringCase(value_string, "device-width"))
     return Length(kDeviceWidth);
   if (DeprecatedEqualIgnoringCase(value_string, "device-height"))
     return Length(kDeviceHeight);
 
-  float value =
-      ParsePositiveNumber(document, report_warnings, key_string, value_string);
+  bool ok;
+
+  float value = ParsePositiveNumber(document, report_warnings, key_string,
+                                    value_string, &ok);
+
+  if (!ok)
+    return Length();  // auto
 
   if (value < 0)
     return Length();  // auto
@@ -340,6 +344,8 @@ void HTMLMetaElement::ProcessViewportKeyValuePair(
       ReportViewportWarning(document, kTargetDensityDpiUnsupported, String(),
                             String());
   } else if (key_string == "minimal-ui") {
+    // Ignore vendor-specific argument.
+  } else if (key_string == "viewport-fit") {
     // Ignore vendor-specific argument.
   } else if (key_string == "shrink-to-fit") {
     // Ignore vendor-specific argument.

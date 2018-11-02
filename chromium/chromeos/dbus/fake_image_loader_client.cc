@@ -4,25 +4,35 @@
 
 #include "chromeos/dbus/fake_image_loader_client.h"
 
+#include <utility>
+
+#include "base/optional.h"
+
 namespace chromeos {
 
-// ImageLoaderClient override:
 void FakeImageLoaderClient::RegisterComponent(
     const std::string& name,
     const std::string& version,
     const std::string& component_folder_abs_path,
-    const BoolDBusMethodCallback& callback) {
-  callback.Run(DBUS_METHOD_CALL_FAILURE, false);
+    DBusMethodCallback<bool> callback) {
+  std::move(callback).Run(base::nullopt);
 }
+
 void FakeImageLoaderClient::LoadComponent(
     const std::string& name,
-    const StringDBusMethodCallback& callback) {
-  callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+    DBusMethodCallback<std::string> callback) {
+  std::move(callback).Run(base::nullopt);
 }
+
+void FakeImageLoaderClient::RemoveComponent(const std::string& name,
+                                            DBusMethodCallback<bool> callback) {
+  std::move(callback).Run(base::nullopt);
+}
+
 void FakeImageLoaderClient::RequestComponentVersion(
     const std::string& name,
-    const StringDBusMethodCallback& callback) {
-  callback.Run(DBUS_METHOD_CALL_FAILURE, "");
+    DBusMethodCallback<std::string> callback) {
+  std::move(callback).Run(base::nullopt);
 }
 
 }  // namespace chromeos

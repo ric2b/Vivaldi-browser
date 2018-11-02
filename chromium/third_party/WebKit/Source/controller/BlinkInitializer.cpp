@@ -28,17 +28,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "controller/BlinkInitializer.h"
+
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/modules/v8/V8ContextSnapshotExternalReferences.h"
 #include "build/build_config.h"
+#include "controller/OomInterventionImpl.h"
 #include "core/animation/AnimationClock.h"
-#include "modules/ModulesInitializer.h"
+#include "core/frame/LocalFrame.h"
+#include "platform/Histogram.h"
 #include "platform/bindings/Microtask.h"
 #include "platform/bindings/V8PerIsolateData.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/WTF.h"
+#include "public/platform/InterfaceRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "public/web/WebKit.h"
@@ -61,13 +66,14 @@ class EndOfTaskRunner : public WebThread::TaskObserver {
 
 static WebThread::TaskObserver* g_end_of_task_runner = nullptr;
 
-static ModulesInitializer& GetModulesInitializer() {
-  DEFINE_STATIC_LOCAL(std::unique_ptr<ModulesInitializer>, initializer,
-                      (WTF::WrapUnique(new ModulesInitializer)));
+static BlinkInitializer& GetBlinkInitializer() {
+  DEFINE_STATIC_LOCAL(std::unique_ptr<BlinkInitializer>, initializer,
+                      (WTF::WrapUnique(new BlinkInitializer)));
   return *initializer;
 }
 
-void Initialize(Platform* platform) {
+void Initialize(Platform* platform, InterfaceRegistry* registry) {
+  DCHECK(registry);
   Platform::Initialize(platform);
 
 #if !defined(ARCH_CPU_X86_64) && !defined(ARCH_CPU_ARM64) && defined(OS_WIN)
@@ -81,6 +87,11 @@ void Initialize(Platform* platform) {
     const size_t kMB = 1024 * 1024;
     for (size_t size = 512 * kMB; size >= 32 * kMB; size -= 16 * kMB) {
       if (base::ReserveAddressSpace(size)) {
+        // Report successful reservation.
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, reservation_size_histogram,
+                            ("Renderer4.ReservedMemory", 32, 512, 32));
+        reservation_size_histogram.Count(size / kMB);
+
         break;
       }
     }
@@ -91,7 +102,9 @@ void Initialize(Platform* platform) {
   V8Initializer::InitializeMainThread(
       V8ContextSnapshotExternalReferences::GetTable());
 
-  GetModulesInitializer().Initialize();
+  GetBlinkInitializer().Initialize();
+
+  GetBlinkInitializer().RegisterInterfaces(*registry);
 
   // currentThread is null if we are running on a thread without a message loop.
   if (WebThread* current_thread = platform->CurrentThread()) {
@@ -99,6 +112,18 @@ void Initialize(Platform* platform) {
     g_end_of_task_runner = new EndOfTaskRunner;
     current_thread->AddTaskObserver(g_end_of_task_runner);
   }
+}
+
+void BlinkInitializer::RegisterInterfaces(InterfaceRegistry& registry) {
+  ModulesInitializer::RegisterInterfaces(registry);
+  WebThread* main_thread = Platform::Current()->MainThread();
+  // GetSingleThreadTaskRunner() uses GetWebTaskRunner() internally.
+  // crbug.com/781664
+  if (!main_thread || !main_thread->GetWebTaskRunner())
+    return;
+
+  registry.AddInterface(CrossThreadBind(&OomInterventionImpl::Create),
+                        main_thread->GetSingleThreadTaskRunner());
 }
 
 }  // namespace blink

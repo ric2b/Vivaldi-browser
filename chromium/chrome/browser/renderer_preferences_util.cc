@@ -90,6 +90,8 @@ void UpdateFromSystemSettings(content::RendererPreferences* prefs,
   prefs->enable_referrers = pref_service->GetBoolean(prefs::kEnableReferrers);
   prefs->enable_do_not_track =
       pref_service->GetBoolean(prefs::kEnableDoNotTrack);
+  prefs->enable_encrypted_media =
+      pref_service->GetBoolean(prefs::kEnableEncryptedMedia);
 #if BUILDFLAG(ENABLE_WEBRTC)
   prefs->webrtc_ip_handling_policy = std::string();
   // Handling the backward compatibility of previous boolean verions of policy
@@ -125,13 +127,13 @@ void UpdateFromSystemSettings(content::RendererPreferences* prefs,
 #endif
 
 #if defined(TOOLKIT_VIEWS)
-  prefs->caret_blink_interval = views::Textfield::GetCaretBlinkMs() / 1000.0;
+  prefs->caret_blink_interval = views::Textfield::GetCaretBlinkInterval();
 #endif
 
 #if defined(OS_MACOSX)
   base::TimeDelta interval;
   if (ui::TextInsertionCaretBlinkPeriod(&interval))
-    prefs->caret_blink_interval = interval.InSecondsF();
+    prefs->caret_blink_interval = interval;
 #endif
 
 #if defined(USE_AURA) && defined(OS_LINUX) && !defined(OS_CHROMEOS)

@@ -156,8 +156,6 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   void LayoutFlexItems(bool relayout_children, SubtreeLayoutScope&);
   LayoutUnit AutoMarginOffsetInMainAxis(const Vector<FlexItem>&,
                                         LayoutUnit& available_free_space);
-  void UpdateAutoMarginsInMainAxis(LayoutBox& child,
-                                   LayoutUnit auto_margin_offset);
   bool HasAutoMarginsInCrossAxis(const LayoutBox& child) const;
   bool UpdateAutoMarginsInCrossAxis(LayoutBox& child,
                                     LayoutUnit available_alignment_space);
@@ -181,9 +179,6 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
                                               LayoutUnit child_preferred_size);
   void PrepareChildForPositionedLayout(LayoutBox& child);
   void LayoutLineItems(FlexLine*, bool relayout_children, SubtreeLayoutScope&);
-  void ComputeLineItemsPosition(LayoutUnit& cross_axis_offset,
-                                FlexLine*,
-                                LayoutUnit main_axis_offset);
   void ApplyLineItemsPosition(FlexLine*);
   void LayoutColumnReverse(Vector<FlexItem>&,
                            LayoutUnit cross_axis_offset,
@@ -200,6 +195,8 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
       LayoutUnit max_preferred_width,
       LayoutBox* child,
       float previous_max_content_flex_fraction) const;
+
+  void MergeAnonymousFlexItems(LayoutObject* remove_child);
 
   // This is used to cache the preferred size for orthogonal flow children so we
   // don't have to relayout to get it

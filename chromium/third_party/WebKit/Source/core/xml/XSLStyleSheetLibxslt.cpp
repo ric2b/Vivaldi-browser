@@ -27,15 +27,17 @@
 #include "core/dom/Node.h"
 #include "core/dom/TransformSource.h"
 #include "core/frame/LocalFrame.h"
-#include "core/xml/XSLImportRule.h"
+#include "core/loader/resource/XSLStyleSheetResource.h"
 #include "core/xml/XSLTProcessor.h"
 #include "core/xml/parser/XMLDocumentParserScope.h"
 #include "core/xml/parser/XMLParserInput.h"
+#include "platform/loader/fetch/FetchParameters.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/wtf/text/CString.h"
 
 namespace blink {
 
-XSLStyleSheet::XSLStyleSheet(XSLImportRule* parent_rule,
+XSLStyleSheet::XSLStyleSheet(XSLStyleSheet* parent_style_sheet,
                              const String& original_url,
                              const KURL& final_url)
     : owner_node_(nullptr),
@@ -46,10 +48,10 @@ XSLStyleSheet::XSLStyleSheet(XSLImportRule* parent_rule,
       // Child sheets get marked as processed when the libxslt engine has
       // finally seen them.
       processed_(false),
-      stylesheet_doc_(0),
+      stylesheet_doc_(nullptr),
       stylesheet_doc_taken_(false),
       compilation_failed_(false),
-      parent_style_sheet_(parent_rule ? parent_rule->ParentStyleSheet() : 0),
+      parent_style_sheet_(parent_style_sheet),
       owner_document_(nullptr) {}
 
 XSLStyleSheet::XSLStyleSheet(Node* parent_node,
@@ -62,7 +64,7 @@ XSLStyleSheet::XSLStyleSheet(Node* parent_node,
       is_disabled_(false),
       embedded_(embedded),
       processed_(true),  // The root sheet starts off processed.
-      stylesheet_doc_(0),
+      stylesheet_doc_(nullptr),
       stylesheet_doc_taken_(false),
       compilation_failed_(false),
       parent_style_sheet_(nullptr),
@@ -79,7 +81,7 @@ XSLStyleSheet::XSLStyleSheet(Document* owner_document,
       is_disabled_(false),
       embedded_(embedded),
       processed_(true),  // The root sheet starts off processed.
-      stylesheet_doc_(0),
+      stylesheet_doc_(nullptr),
       stylesheet_doc_taken_(false),
       compilation_failed_(false),
       parent_style_sheet_(nullptr),
@@ -90,17 +92,7 @@ XSLStyleSheet::~XSLStyleSheet() {
     xmlFreeDoc(stylesheet_doc_);
 }
 
-bool XSLStyleSheet::IsLoading() const {
-  for (unsigned i = 0; i < children_.size(); ++i) {
-    if (children_.at(i)->IsLoading())
-      return true;
-  }
-  return false;
-}
-
 void XSLStyleSheet::CheckLoaded() {
-  if (IsLoading())
-    return;
   if (XSLStyleSheet* style_sheet = parentStyleSheet())
     style_sheet->CheckLoaded();
   if (ownerNode())
@@ -114,12 +106,9 @@ xmlDocPtr XSLStyleSheet::GetDocument() {
 }
 
 void XSLStyleSheet::ClearDocuments() {
-  stylesheet_doc_ = 0;
-  for (unsigned i = 0; i < children_.size(); ++i) {
-    XSLImportRule* import = children_.at(i).Get();
-    if (import->GetStyleSheet())
-      import->GetStyleSheet()->ClearDocuments();
-  }
+  stylesheet_doc_ = nullptr;
+  for (unsigned i = 0; i < children_.size(); ++i)
+    children_.at(i)->ClearDocuments();
 }
 
 bool XSLStyleSheet::ParseString(const String& source) {
@@ -154,7 +143,7 @@ bool XSLStyleSheet::ParseString(const String& source) {
 
   stylesheet_doc_ =
       xmlCtxtReadMemory(ctxt, input.Data(), input.size(),
-                        FinalURL().GetString().Utf8().data(), input.Encoding(),
+                        final_url_.GetString().Utf8().data(), input.Encoding(),
                         XML_PARSE_NOENT | XML_PARSE_DTDATTR |
                             XML_PARSE_NOWARNING | XML_PARSE_NOCDATA);
 
@@ -178,7 +167,7 @@ void XSLStyleSheet::LoadChildSheets() {
     // We have to locate (by ID) the appropriate embedded stylesheet
     // element, so that we can walk the import/include list.
     xmlAttrPtr id_node = xmlGetID(
-        GetDocument(), (const xmlChar*)(FinalURL().GetString().Utf8().data()));
+        GetDocument(), (const xmlChar*)(final_url_.GetString().Utf8().data()));
     if (!id_node)
       return;
     stylesheet_root = id_node->parent;
@@ -222,9 +211,33 @@ void XSLStyleSheet::LoadChildSheets() {
 }
 
 void XSLStyleSheet::LoadChildSheet(const String& href) {
-  XSLImportRule* child_rule = XSLImportRule::Create(this, href);
-  children_.push_back(child_rule);
-  child_rule->LoadSheet();
+  // Use parent styleheet's URL as the base URL
+  KURL url(BaseURL(), href);
+
+  // Check for a cycle in our import chain. If we encounter a stylesheet in
+  // our parent chain with the same URL, then just bail.
+  for (XSLStyleSheet* parent_sheet = parentStyleSheet(); parent_sheet;
+       parent_sheet = parent_sheet->parentStyleSheet()) {
+    if (url == parent_sheet->BaseURL())
+      return;
+  }
+
+  const String& url_string = url.GetString();
+  ResourceLoaderOptions fetch_options;
+  fetch_options.initiator_info.name = FetchInitiatorTypeNames::xml;
+  FetchParameters params(
+      ResourceRequest(OwnerDocument()->CompleteURL(url_string)), fetch_options);
+  params.SetOriginRestriction(FetchParameters::kRestrictToSameOrigin);
+  XSLStyleSheetResource* resource = XSLStyleSheetResource::FetchSynchronously(
+      params, OwnerDocument()->Fetcher());
+  if (!resource || !resource->Sheet())
+    return;
+
+  XSLStyleSheet* style_sheet =
+      new XSLStyleSheet(this, url_string, resource->GetResponse().Url());
+  children_.push_back(style_sheet);
+  style_sheet->ParseString(resource->Sheet());
+  CheckLoaded();
 }
 
 xsltStylesheetPtr XSLStyleSheet::CompileStyleSheet() {
@@ -235,7 +248,7 @@ xsltStylesheetPtr XSLStyleSheet::CompileStyleSheet() {
   // Certain libxslt versions are corrupting the xmlDoc on compilation
   // failures - hence attempting to recompile after a failure is unsafe.
   if (compilation_failed_)
-    return 0;
+    return nullptr;
 
   // xsltParseStylesheetDoc makes the document part of the stylesheet
   // so we have to release our pointer to it.
@@ -246,10 +259,6 @@ xsltStylesheetPtr XSLStyleSheet::CompileStyleSheet() {
   else
     compilation_failed_ = true;
   return result;
-}
-
-void XSLStyleSheet::SetParentStyleSheet(XSLStyleSheet* parent) {
-  parent_style_sheet_ = parent;
 }
 
 Document* XSLStyleSheet::OwnerDocument() {
@@ -268,10 +277,7 @@ xmlDocPtr XSLStyleSheet::LocateStylesheetSubResource(xmlDocPtr parent_doc,
                                                      const xmlChar* uri) {
   bool matched_parent = (parent_doc == GetDocument());
   for (unsigned i = 0; i < children_.size(); ++i) {
-    XSLImportRule* import = children_.at(i).Get();
-    XSLStyleSheet* child = import->GetStyleSheet();
-    if (!child)
-      continue;
+    XSLStyleSheet* child = children_.at(i).Get();
     if (matched_parent) {
       if (child->Processed())
         continue;  // libxslt has been given this sheet already.
@@ -280,7 +286,7 @@ xmlDocPtr XSLStyleSheet::LocateStylesheetSubResource(xmlDocPtr parent_doc,
       // In order to ensure that libxml canonicalized both URLs, we get
       // the original href string from the import rule and canonicalize it
       // using libxml before comparing it with the URI argument.
-      CString import_href = import->Href().Utf8();
+      CString import_href = child->href().Utf8();
       xmlChar* base = xmlNodeGetBase(parent_doc, (xmlNodePtr)parent_doc);
       xmlChar* child_uri =
           xmlBuildURI((const xmlChar*)import_href.data(), base);
@@ -293,13 +299,12 @@ xmlDocPtr XSLStyleSheet::LocateStylesheetSubResource(xmlDocPtr parent_doc,
       }
       continue;
     }
-    xmlDocPtr result =
-        import->GetStyleSheet()->LocateStylesheetSubResource(parent_doc, uri);
+    xmlDocPtr result = child->LocateStylesheetSubResource(parent_doc, uri);
     if (result)
       return result;
   }
 
-  return 0;
+  return nullptr;
 }
 
 void XSLStyleSheet::MarkAsProcessed() {
@@ -309,7 +314,7 @@ void XSLStyleSheet::MarkAsProcessed() {
   stylesheet_doc_taken_ = true;
 }
 
-DEFINE_TRACE(XSLStyleSheet) {
+void XSLStyleSheet::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_node_);
   visitor->Trace(children_);
   visitor->Trace(parent_style_sheet_);

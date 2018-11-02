@@ -61,22 +61,16 @@ const int kMaxExpectedResponseLength = 2048;
 
 class TestHttpClient {
  public:
-  TestHttpClient() : connect_result_(OK) {}
+  TestHttpClient() = default;
 
   int ConnectAndWait(const IPEndPoint& address) {
     AddressList addresses(address);
     NetLogSource source;
     socket_.reset(new TCPClientSocket(addresses, NULL, NULL, source));
 
-    base::RunLoop run_loop;
-    connect_result_ = socket_->Connect(base::Bind(&TestHttpClient::OnConnect,
-                                                  base::Unretained(this),
-                                                  run_loop.QuitClosure()));
-    if (connect_result_ != OK && connect_result_ != ERR_IO_PENDING)
-      return connect_result_;
-
-    run_loop.Run();
-    return connect_result_;
+    TestCompletionCallback callback;
+    int rv = socket_->Connect(callback.callback());
+    return callback.GetResult(rv);
   }
 
   void Send(const std::string& data) {
@@ -127,11 +121,6 @@ class TestHttpClient {
   TCPClientSocket& socket() { return *socket_; }
 
  private:
-  void OnConnect(const base::Closure& quit_loop, int result) {
-    connect_result_ = result;
-    quit_loop.Run();
-  }
-
   void Write() {
     int result = socket_->Write(
         write_buffer_.get(),
@@ -174,7 +163,6 @@ class TestHttpClient {
   scoped_refptr<IOBufferWithSize> read_buffer_;
   scoped_refptr<DrainableIOBuffer> write_buffer_;
   std::unique_ptr<TCPClientSocket> socket_;
-  int connect_result_;
 };
 
 }  // namespace
@@ -465,7 +453,7 @@ TEST_F(HttpServerTest, RequestWithTooLargeBody) {
    public:
     TestURLFetcherDelegate(const base::Closure& quit_loop_func)
         : quit_loop_func_(quit_loop_func) {}
-    ~TestURLFetcherDelegate() override {}
+    ~TestURLFetcherDelegate() override = default;
 
     void OnURLFetchComplete(const URLFetcher* source) override {
       EXPECT_EQ(HTTP_INTERNAL_SERVER_ERROR, source->GetResponseCode());
@@ -636,7 +624,7 @@ class MockStreamSocket : public StreamSocket {
   }
 
  private:
-  ~MockStreamSocket() override {}
+  ~MockStreamSocket() override = default;
 
   bool connected_;
   scoped_refptr<IOBuffer> read_buf_;

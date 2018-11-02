@@ -43,10 +43,8 @@
 #endif
 
 #if defined(USE_X11)
-#include <X11/Xlib.h>
-#undef Bool
-#undef None
 #include "ui/events/test/events_test_utils_x11.h"
+#include "ui/gfx/x/x11.h"
 #endif
 
 namespace views {
@@ -152,6 +150,20 @@ class TestEventHandler : public ui::EventHandler {
  private:
   int outstanding_touches_;
   DISALLOW_COPY_AND_ASSIGN(TestEventHandler);
+};
+
+// A test widget that counts gesture events.
+class GestureTestWidget : public Widget {
+ public:
+  GestureTestWidget() {}
+
+  void OnGestureEvent(ui::GestureEvent* event) override { ++gesture_count_; }
+
+  int gesture_count() const { return gesture_count_; }
+
+ private:
+  int gesture_count_ = 0;
+  DISALLOW_COPY_AND_ASSIGN(GestureTestWidget);
 };
 
 #if defined(USE_AURA)
@@ -463,7 +475,7 @@ class MenuControllerTest : public ViewsTestBase {
         menu_item()->GetSubmenu()->GetMenuItemAt(0)->CreateSubmenu(), location);
   }
 
-  Widget* owner() { return owner_.get(); }
+  GestureTestWidget* owner() { return owner_.get(); }
   ui::test::EventGenerator* event_generator() { return event_generator_.get(); }
   TestMenuItemViewShown* menu_item() { return menu_item_.get(); }
   TestMenuDelegate* menu_delegate() { return menu_delegate_.get(); }
@@ -518,9 +530,11 @@ class MenuControllerTest : public ViewsTestBase {
     menu_controller_ = nullptr;
   }
 
+  int CountOwnerOnGestureEvent() const { return owner_->gesture_count(); }
+
  private:
   void Init() {
-    owner_.reset(new Widget);
+    owner_ = std::make_unique<GestureTestWidget>();
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
     params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     owner_->Init(params);
@@ -555,7 +569,7 @@ class MenuControllerTest : public ViewsTestBase {
   // Not owned.
   DestructingTestViewsDelegate* test_views_delegate_;
 
-  std::unique_ptr<Widget> owner_;
+  std::unique_ptr<GestureTestWidget> owner_;
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
   std::unique_ptr<TestMenuItemViewShown> menu_item_;
   std::unique_ptr<TestMenuControllerDelegate> menu_controller_delegate_;
@@ -565,7 +579,7 @@ class MenuControllerTest : public ViewsTestBase {
   DISALLOW_COPY_AND_ASSIGN(MenuControllerTest);
 };
 
-#if defined(OS_LINUX) && defined(USE_X11)
+#if defined(USE_X11)
 // Tests that an event targeter which blocks events will be honored by the menu
 // event dispatcher.
 TEST_F(MenuControllerTest, EventTargeter) {
@@ -584,7 +598,7 @@ TEST_F(MenuControllerTest, EventTargeter) {
   EXPECT_EQ(MenuController::EXIT_ALL, menu_exit_type());
 }
 
-#endif  // defined(OS_LINUX) && defined(USE_X11)
+#endif  // defined(USE_X11)
 
 #if defined(USE_X11)
 // Tests that touch event ids are released correctly. See crbug.com/439051 for
@@ -1100,6 +1114,42 @@ TEST_F(MenuControllerTest, DoubleAsynchronousNested) {
   EXPECT_EQ(1, nested_delegate->on_menu_closed_called());
 }
 
+TEST_F(MenuControllerTest, PreserveGestureForOwner) {
+  MenuController* controller = menu_controller();
+  MenuItemView* item = menu_item();
+  controller->Run(owner(), nullptr, item, gfx::Rect(),
+                  MENU_ANCHOR_FIXED_BOTTOMCENTER, false, false);
+  SubmenuView* sub_menu = item->GetSubmenu();
+  sub_menu->ShowAt(owner(), gfx::Rect(0, 0, 100, 100), true);
+
+  gfx::Point location(sub_menu->bounds().bottom_left().x(),
+                      sub_menu->bounds().bottom_left().y() + 10);
+  ui::GestureEvent event(location.x(), location.y(), 0, ui::EventTimeForNow(),
+                         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
+
+  // Gesture events should not be forwarded if the flag is not set.
+  EXPECT_EQ(CountOwnerOnGestureEvent(), 0);
+  EXPECT_FALSE(controller->send_gesture_events_to_owner());
+  controller->OnGestureEvent(sub_menu, &event);
+  EXPECT_EQ(CountOwnerOnGestureEvent(), 0);
+
+  // The menu's owner should receive gestures triggered outside the menu.
+  controller->set_send_gesture_events_to_owner(true);
+  controller->OnGestureEvent(sub_menu, &event);
+  EXPECT_EQ(CountOwnerOnGestureEvent(), 1);
+
+  ui::GestureEvent event2(location.x(), location.y(), 0, ui::EventTimeForNow(),
+                          ui::GestureEventDetails(ui::ET_GESTURE_END));
+
+  controller->OnGestureEvent(sub_menu, &event2);
+  EXPECT_EQ(CountOwnerOnGestureEvent(), 2);
+
+  // ET_GESTURE_END resets the |send_gesture_events_to_owner_| flag, so futher
+  // gesture events should not be sent to the owner.
+  controller->OnGestureEvent(sub_menu, &event2);
+  EXPECT_EQ(CountOwnerOnGestureEvent(), 2);
+}
+
 // Tests that a nested menu does not crash when trying to repost events that
 // occur outside of the bounds of the menu. Instead a proper shutdown should
 // occur.
@@ -1322,9 +1372,9 @@ TEST_F(MenuControllerTest, RepostEventToEmptyMenuItem) {
   // appropriate Widget and View containersm with counds, so that hit testing
   // works.
   std::unique_ptr<TestMenuDelegate> sub_menu_item_delegate =
-      base::MakeUnique<TestMenuDelegate>();
+      std::make_unique<TestMenuDelegate>();
   std::unique_ptr<TestMenuItemViewShown> sub_menu_item =
-      base::MakeUnique<TestMenuItemViewShown>(sub_menu_item_delegate.get());
+      std::make_unique<TestMenuItemViewShown>(sub_menu_item_delegate.get());
   sub_menu_item->AddEmptyMenusForTest();
   sub_menu_item->SetController(controller);
   sub_menu_item->SetBounds(0, 50, 50, 50);
@@ -1341,13 +1391,13 @@ TEST_F(MenuControllerTest, RepostEventToEmptyMenuItem) {
 
   // Nest a context menu.
   std::unique_ptr<TestMenuDelegate> nested_menu_delegate_1 =
-      base::MakeUnique<TestMenuDelegate>();
+      std::make_unique<TestMenuDelegate>();
   std::unique_ptr<TestMenuItemViewShown> nested_menu_item_1 =
-      base::MakeUnique<TestMenuItemViewShown>(nested_menu_delegate_1.get());
+      std::make_unique<TestMenuItemViewShown>(nested_menu_delegate_1.get());
   nested_menu_item_1->SetBounds(0, 0, 100, 100);
   nested_menu_item_1->SetController(controller);
   std::unique_ptr<TestMenuControllerDelegate> nested_controller_delegate_1 =
-      base::MakeUnique<TestMenuControllerDelegate>();
+      std::make_unique<TestMenuControllerDelegate>();
   controller->AddNestedDelegate(nested_controller_delegate_1.get());
   controller->Run(owner(), nullptr, nested_menu_item_1.get(),
                   gfx::Rect(150, 50, 100, 100), MENU_ANCHOR_TOPLEFT, true,
@@ -1391,14 +1441,14 @@ TEST_F(MenuControllerTest, RepostEventToEmptyMenuItem) {
 
   // Nest a context menu.
   std::unique_ptr<TestMenuDelegate> nested_menu_delegate_2 =
-      base::MakeUnique<TestMenuDelegate>();
+      std::make_unique<TestMenuDelegate>();
   std::unique_ptr<TestMenuItemViewShown> nested_menu_item_2 =
-      base::MakeUnique<TestMenuItemViewShown>(nested_menu_delegate_2.get());
+      std::make_unique<TestMenuItemViewShown>(nested_menu_delegate_2.get());
   nested_menu_item_2->SetBounds(0, 0, 100, 100);
   nested_menu_item_2->SetController(controller);
 
   std::unique_ptr<TestMenuControllerDelegate> nested_controller_delegate_2 =
-      base::MakeUnique<TestMenuControllerDelegate>();
+      std::make_unique<TestMenuControllerDelegate>();
   controller->AddNestedDelegate(nested_controller_delegate_2.get());
   controller->Run(owner(), nullptr, nested_menu_item_2.get(),
                   gfx::Rect(150, 50, 100, 100), MENU_ANCHOR_TOPLEFT, true,
@@ -1418,7 +1468,7 @@ TEST_F(MenuControllerTest, DragFromViewIntoMenuAndExit) {
   SubmenuView* sub_menu = menu_item()->GetSubmenu();
   MenuItemView* first_item = sub_menu->GetMenuItemAt(0);
 
-  std::unique_ptr<View> drag_view = base::MakeUnique<View>();
+  std::unique_ptr<View> drag_view = std::make_unique<View>();
   drag_view->SetBoundsRect(gfx::Rect(0, 500, 100, 100));
   sub_menu->ShowAt(owner(), gfx::Rect(0, 0, 100, 100), false);
   gfx::Point press_location(drag_view->bounds().CenterPoint());

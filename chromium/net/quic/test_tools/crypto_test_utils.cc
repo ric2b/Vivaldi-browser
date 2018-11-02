@@ -5,6 +5,7 @@
 #include "net/quic/test_tools/crypto_test_utils.h"
 
 #include <memory>
+#include <string>
 
 #include "net/quic/core/crypto/channel_id.h"
 #include "net/quic/core/crypto/common_cert_set.h"
@@ -19,6 +20,7 @@
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_clock.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_socket_address.h"
@@ -307,7 +309,8 @@ class FullChloGenerator {
     result_ = result;
     crypto_config_->ProcessClientHello(
         result_, /*reject_only=*/false, /*connection_id=*/1, server_addr_,
-        client_addr_, AllSupportedVersions().front(), AllSupportedVersions(),
+        client_addr_, AllSupportedTransportVersions().front(),
+        AllSupportedTransportVersions(),
         /*use_stateless_rejects=*/true, /*server_designated_connection_id=*/0,
         clock_, QuicRandom::GetInstance(), compressed_certs_cache_, params_,
         signed_config_, /*total_framing_overhead=*/50, kDefaultMaxPacketSize,
@@ -594,8 +597,7 @@ uint64_t LeafCertHashForTesting() {
   // Note: relies on the callback being invoked synchronously
   bool ok = false;
   proof_source->GetProof(
-      server_address, "", "", AllSupportedVersions().front(), "",
-      QuicTagVector(),
+      server_address, "", "", AllSupportedTransportVersions().front(), "",
       std::unique_ptr<ProofSource::Callback>(new Callback(&ok, &chain)));
   if (!ok || chain->certs.empty()) {
     DCHECK(false) << "Proof generation failed";
@@ -611,7 +613,7 @@ class MockCommonCertSets : public CommonCertSets {
       : cert_(cert.as_string()), hash_(hash), index_(index) {}
 
   QuicStringPiece GetCommonHashes() const override {
-    CHECK(false) << "not implemented";
+    QUIC_BUG << "not implemented";
     return QuicStringPiece();
   }
 
@@ -947,7 +949,7 @@ void MovePackets(PacketSavingConnection* source_conn,
 
 CryptoHandshakeMessage GenerateDefaultInchoateCHLO(
     const QuicClock* clock,
-    QuicVersion version,
+    QuicTransportVersion version,
     QuicCryptoServerConfig* crypto_config) {
   // clang-format off
   return CreateCHLO(
@@ -956,7 +958,8 @@ CryptoHandshakeMessage GenerateDefaultInchoateCHLO(
        {"KEXS", "C255"},
        {"PUBS", GenerateClientPublicValuesHex().c_str()},
        {"NONC", GenerateClientNonceHex(clock, crypto_config).c_str()},
-       {"VER\0", QuicTagToString(QuicVersionToQuicTag(version)).c_str()}},
+       {"VER\0", QuicVersionLabelToString(
+           QuicVersionToQuicVersionLabel(version)).c_str()}},
       kClientHelloMinimumSize);
   // clang-format on
 }
@@ -995,7 +998,7 @@ void GenerateFullCHLO(const CryptoHandshakeMessage& inchoate_chlo,
                       QuicCryptoServerConfig* crypto_config,
                       QuicSocketAddress server_addr,
                       QuicSocketAddress client_addr,
-                      QuicVersion version,
+                      QuicTransportVersion version,
                       const QuicClock* clock,
                       QuicReferenceCountedPointer<QuicSignedServerConfig> proof,
                       QuicCompressedCertsCache* compressed_certs_cache,

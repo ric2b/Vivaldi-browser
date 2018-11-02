@@ -2,21 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_COMMON_INPUT_MESSAGES_H_
+#define CONTENT_COMMON_INPUT_MESSAGES_H_
+
 // IPC messages for input events and other messages that require processing in
 // order relative to input events.
-// Multiply-included message file, hence no include guard.
 
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "cc/input/scroll_boundary_behavior.h"
+#include "cc/input/overscroll_behavior.h"
 #include "cc/input/touch_action.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/input_event.h"
 #include "content/common/input/input_event_ack.h"
-#include "content/common/input/input_event_ack_source.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/input_param_traits.h"
 #include "content/common/input/synthetic_gesture_params.h"
@@ -26,6 +26,8 @@
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
+#include "content/public/common/input_event_ack_source.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebPointerProperties.h"
@@ -82,19 +84,18 @@ IPC_ENUM_TRAITS_MAX_VALUE(
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTouchPoint::State,
                           blink::WebTouchPoint::State::kStateMax)
 IPC_ENUM_TRAITS_MAX_VALUE(
-    cc::ScrollBoundaryBehavior::ScrollBoundaryBehaviorType,
-    cc::ScrollBoundaryBehavior::ScrollBoundaryBehaviorType::
-        kScrollBoundaryBehaviorTypeMax)
+    cc::OverscrollBehavior::OverscrollBehaviorType,
+    cc::OverscrollBehavior::OverscrollBehaviorType::kOverscrollBehaviorTypeMax)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::DidOverscrollParams)
   IPC_STRUCT_TRAITS_MEMBER(accumulated_overscroll)
   IPC_STRUCT_TRAITS_MEMBER(latest_overscroll_delta)
   IPC_STRUCT_TRAITS_MEMBER(current_fling_velocity)
   IPC_STRUCT_TRAITS_MEMBER(causal_event_viewport_point)
-  IPC_STRUCT_TRAITS_MEMBER(scroll_boundary_behavior)
+  IPC_STRUCT_TRAITS_MEMBER(overscroll_behavior)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::ScrollBoundaryBehavior)
+IPC_STRUCT_TRAITS_BEGIN(cc::OverscrollBehavior)
   IPC_STRUCT_TRAITS_MEMBER(x)
   IPC_STRUCT_TRAITS_MEMBER(y)
 IPC_STRUCT_TRAITS_END()
@@ -291,10 +292,12 @@ IPC_MESSAGE_ROUTED2(InputMsg_SelectRange,
 // Sent by the browser to ask the renderer to adjust the selection start and
 // end points by the given amounts. A negative amount moves the selection
 // towards the beginning of the document, a positive amount moves the selection
-// towards the end of the document.
-IPC_MESSAGE_ROUTED2(InputMsg_AdjustSelectionByCharacterOffset,
+// towards the end of the document. Will send show selection menu event when
+// needed.
+IPC_MESSAGE_ROUTED3(InputMsg_AdjustSelectionByCharacterOffset,
                     int /* start_adjust*/,
-                    int /* end_adjust */)
+                    int /* end_adjust */,
+                    bool /* show_selection_menu */)
 
 // Requests the renderer to move the selection extent point to a new position.
 // Expects a MoveRangeSelectionExtent_ACK message when finished.
@@ -373,3 +376,5 @@ IPC_MESSAGE_ROUTED2(InputHostMsg_ImeCompositionRangeChanged,
 // independent InputMsg, then ifdefs for platform specific InputMsg, then
 // platform independent InputHostMsg, then ifdefs for platform specific
 // InputHostMsg.
+
+#endif  // CONTENT_COMMON_INPUT_MESSAGES_H_

@@ -7,6 +7,7 @@
 
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutTestHelper.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -22,17 +23,18 @@ TEST_F(LayoutBlockTest, LayoutNameCalledWithNullStyle) {
 }
 
 TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
-  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
-  SetBodyInnerHTML(
-      "<!DOCTYPE html>"
-      "<div id='list' style='overflow-y:auto; width:150px; height:100px'>"
-      "  <div style='height:20px'>Item</div>"
-      "  <div style='height:20px'>Item</div>"
-      "  <div style='height:20px'>Item</div>"
-      "  <div style='height:20px'>Item</div>"
-      "  <div style='height:20px'>Item</div>"
-      "  <div style='height:20px'>Item</div>"
-      "</div>");
+  ScopedOverlayScrollbarsForTest overlay_scrollbars(false);
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <div id='list' style='overflow-y:auto; width:150px; height:100px'>
+      <div style='height:20px'>Item</div>
+      <div style='height:20px'>Item</div>
+      <div style='height:20px'>Item</div>
+      <div style='height:20px'>Item</div>
+      <div style='height:20px'>Item</div>
+      <div style='height:20px'>Item</div>
+    </div>
+  )HTML");
   Element* list_element = GetDocument().getElementById("list");
   ASSERT_TRUE(list_element);
   LayoutBox* list_box = ToLayoutBox(list_element->GetLayoutObject());
@@ -43,7 +45,7 @@ TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
             150 - list_box->VerticalScrollbarWidth());
 
   DummyExceptionStateForTesting exception_state;
-  list_element->style()->setCSSText("width:150px;height:100px;",
+  list_element->style()->setCSSText(&GetDocument(), "width:150px;height:100px;",
                                     exception_state);
   ASSERT_FALSE(exception_state.HadException());
   GetDocument().View()->UpdateAllLifecyclePhases();
@@ -52,12 +54,13 @@ TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
 }
 
 TEST_F(LayoutBlockTest, OverflowWithTransformAndPerspective) {
-  SetBodyInnerHTML(
-      "<div id='target' style='width: 100px; height: 100px; overflow: scroll;"
-      "    perspective: 200px;'>"
-      "  <div style='transform: rotateY(-45deg); width: 140px; height: 100px'>"
-      "  </div>"
-      "</div>");
+  SetBodyInnerHTML(R"HTML(
+    <div id='target' style='width: 100px; height: 100px; overflow: scroll;
+        perspective: 200px;'>
+      <div style='transform: rotateY(-45deg); width: 140px; height: 100px'>
+      </div>
+    </div>
+  )HTML");
   LayoutBox* scroller =
       ToLayoutBox(GetDocument().getElementById("target")->GetLayoutObject());
   EXPECT_EQ(119.5, scroller->LayoutOverflowRect().Width().ToFloat());

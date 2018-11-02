@@ -17,7 +17,6 @@ void ApplyCommonFontStyles(int context,
   if (context == CONTEXT_WINDOWS10_NATIVE) {
     // Adjusts default font size up to match Win10 modern UI.
     *size_delta = 15 - gfx::PlatformFont::kDefaultBaseFontSize;
-    *weight = views::TypographyProvider::MediumWeightForUI();
   }
 #endif
 }
@@ -31,7 +30,7 @@ const gfx::FontList& LegacyTypographyProvider::GetFont(int context,
   gfx::Font::Weight font_weight;
   GetDefaultFont(context, style, &size_delta, &font_weight);
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   ash::ApplyAshFontStyles(context, style, &size_delta, &font_weight);
 #endif
 
@@ -63,12 +62,12 @@ const gfx::FontList& LegacyTypographyProvider::GetFont(int context,
       size_delta, kFontStyle, font_weight);
 }
 
-SkColor LegacyTypographyProvider::GetColor(int context,
-                                           int style,
-                                           const ui::NativeTheme& theme) const {
+SkColor LegacyTypographyProvider::GetColor(const views::View& view,
+                                           int context,
+                                           int style) const {
   // Use "disabled grey" for HINT and SECONDARY when Harmony is disabled.
   if (style == STYLE_HINT || style == STYLE_SECONDARY)
     style = views::style::STYLE_DISABLED;
 
-  return DefaultTypographyProvider::GetColor(context, style, theme);
+  return DefaultTypographyProvider::GetColor(view, context, style);
 }

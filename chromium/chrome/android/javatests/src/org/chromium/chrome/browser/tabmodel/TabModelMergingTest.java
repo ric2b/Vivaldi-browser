@@ -32,8 +32,8 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtilsTest;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStoreTest.MockTabPersistentStoreObserver;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -94,7 +94,7 @@ public class TabModelMergingTest {
         // Start multi-instance mode so that ChromeTabbedActivity's check for whether the activity
         // is started up correctly doesn't fail.
         ChromeTabbedActivity.onMultiInstanceModeStarted();
-        mActivity2 = MultiWindowUtilsTest.createSecondChromeTabbedActivity(mActivity1);
+        mActivity2 = MultiWindowTestHelper.createSecondChromeTabbedActivity(mActivity1);
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -322,7 +322,7 @@ public class TabModelMergingTest {
         MockTabPersistentStoreObserver mockObserver = new MockTabPersistentStoreObserver();
         TabModelSelectorImpl tabModelSelector =
                 (TabModelSelectorImpl) mActivity2.getTabModelSelector();
-        tabModelSelector.getTabPersistentStoreForTesting().setObserverForTesting(mockObserver);
+        tabModelSelector.getTabPersistentStoreForTesting().addObserver(mockObserver);
 
         // Merge tabs into ChromeTabbedActivity2. Wait for the merge to finish, ensuring the
         // tab metadata file for ChromeTabbedActivity gets deleted before attempting to merge

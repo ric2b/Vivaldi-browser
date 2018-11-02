@@ -5,12 +5,12 @@
 #ifndef GPU_IPC_SERVICE_DIRECT_COMPOSITION_SURFACE_WIN_H_
 #define GPU_IPC_SERVICE_DIRECT_COMPOSITION_SURFACE_WIN_H_
 
+#include <windows.h>
 #include <d3d11.h>
 #include <dcomp.h>
-#include <windows.h>
+#include <wrl/client.h>
 
 #include "base/memory/weak_ptr.h"
-#include "base/win/scoped_comptr.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/child_window_win.h"
@@ -50,8 +50,12 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
               float scale_factor,
               ColorSpace color_space,
               bool has_alpha) override;
-  gfx::SwapResult SwapBuffers() override;
-  gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
+  gfx::SwapResult SwapBuffers(const PresentationCallback& callback) override;
+  gfx::SwapResult PostSubBuffer(int x,
+                                int y,
+                                int width,
+                                int height,
+                                const PresentationCallback& callback) override;
   gfx::VSyncProvider* GetVSyncProvider() override;
   bool SetEnableDCLayers(bool enable) override;
   bool FlipsVertically() const override;
@@ -70,14 +74,14 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
   // tree at z-order 0.
   bool ScheduleDCLayer(const ui::DCRendererLayerParams& params) override;
 
-  const base::win::ScopedComPtr<IDCompositionSurface> dcomp_surface() const;
-  const base::win::ScopedComPtr<IDXGISwapChain1> swap_chain() const;
+  const Microsoft::WRL::ComPtr<IDCompositionSurface> dcomp_surface() const;
+  const Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain() const;
 
   uint64_t GetDCompSurfaceSerial() const;
 
   scoped_refptr<base::TaskRunner> GetWindowTaskRunnerForTesting();
 
-  base::win::ScopedComPtr<IDXGISwapChain1> GetLayerSwapChainForTesting(
+  Microsoft::WRL::ComPtr<IDXGISwapChain1> GetLayerSwapChainForTesting(
       size_t index) const;
 
   const GpuDriverBugWorkarounds& workarounds() const { return workarounds_; }
@@ -105,8 +109,8 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
   scoped_refptr<DirectCompositionChildSurfaceWin> root_surface_;
   std::unique_ptr<DCLayerTree> layer_tree_;
 
-  base::win::ScopedComPtr<ID3D11Device> d3d11_device_;
-  base::win::ScopedComPtr<IDCompositionDevice2> dcomp_device_;
+  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
+  Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectCompositionSurfaceWin);
 };

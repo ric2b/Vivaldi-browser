@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_OBSERVER_H_
 
 #include "base/macros.h"
+#include "chrome/browser/ui/tabs/tab_change_type.h"
 
 class TabStripModel;
 
@@ -34,18 +35,6 @@ class ListSelectionModel;
 ////////////////////////////////////////////////////////////////////////////////
 class TabStripModelObserver {
  public:
-  // Enumeration of the possible values supplied to TabChangedAt.
-  enum TabChangeType {
-    // Only the loading state changed.
-    LOADING_ONLY,
-
-    // Only the title changed and page isn't loading.
-    TITLE_NOT_LOADING,
-
-    // Change not characterized by LOADING_ONLY or TITLE_NOT_LOADING.
-    ALL
-  };
-
   enum ChangeReason {
     // Used to indicate that none of the reasons below are responsible for the
     // active tab change.
@@ -115,13 +104,12 @@ class TabStripModelObserver {
   // may be an entirely different object and the old value is no longer
   // available by the time this message is delivered.
   //
-  // See TabChangeType for a description of |change_type|.
+  // See tab_change_type.h for a description of |change_type|.
   virtual void TabChangedAt(content::WebContents* contents,
                             int index,
                             TabChangeType change_type);
 
-  // The WebContents was replaced at the specified index. This is invoked
-  // when instant is enabled and the user navigates by way of instant or when
+  // The WebContents was replaced at the specified index. This is invoked when
   // prerendering swaps in a prerendered WebContents.
   virtual void TabReplacedAt(TabStripModel* tab_strip_model,
                              content::WebContents* old_contents,
@@ -154,9 +142,9 @@ class TabStripModelObserver {
   virtual void CloseAllTabsCanceled();
 
   // The specified tab at |index| requires the display of a UI indication to the
-  // user that it needs their attention. The UI indication must be cleared when
-  // the tab is next activated.
-  virtual void TabNeedsAttentionAt(int index);
+  // user that it needs their attention. The UI indication is set iff
+  // |attention| is true.
+  virtual void SetTabNeedsAttentionAt(int index, bool attention);
 
  protected:
   TabStripModelObserver();

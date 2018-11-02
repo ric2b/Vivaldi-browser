@@ -17,6 +17,7 @@
 
 class CookieInfoView;
 class CookiesTreeModel;
+class CookiesTreeViewDrawingProvider;
 class InfobarView;
 
 namespace content {
@@ -48,8 +49,10 @@ class CollectedCookiesViews : public views::DialogDelegateView,
   base::string16 GetWindowTitle() const override;
   int GetDialogButtons() const override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  bool Cancel() override;
+  bool Accept() override;
   ui::ModalType GetModalType() const override;
+  bool ShouldShowCloseButton() const override;
+  views::View* CreateExtraView() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -75,6 +78,11 @@ class CollectedCookiesViews : public views::DialogDelegateView,
   views::View* CreateAllowedPane();
 
   views::View* CreateBlockedPane();
+
+  // Creates and returns the "buttons pane", which is the view in the
+  // bottom-leading edge of this dialog containing the action buttons for the
+  // currently selected host or cookie.
+  std::unique_ptr<views::View> CreateButtonsPane();
 
   // Creates and returns a containing ScrollView around the given tree view.
   views::View* CreateScrollView(views::TreeView* pane);
@@ -110,9 +118,22 @@ class CollectedCookiesViews : public views::DialogDelegateView,
   std::unique_ptr<CookiesTreeModel> allowed_cookies_tree_model_;
   std::unique_ptr<CookiesTreeModel> blocked_cookies_tree_model_;
 
+  CookiesTreeViewDrawingProvider* allowed_cookies_drawing_provider_;
+  CookiesTreeViewDrawingProvider* blocked_cookies_drawing_provider_;
+
   CookieInfoView* cookie_info_view_;
 
   InfobarView* infobar_;
+
+  // The buttons pane is owned by this class until the containing
+  // DialogClientView requests it via |CreateExtraView|, at which point
+  // ownership is handed off and this pointer becomes null.
+  std::unique_ptr<views::View> buttons_pane_;
+
+  // Weak pointers to the allowed and blocked panes so that they can be
+  // shown/hidden as needed.
+  views::View* allowed_buttons_pane_;
+  views::View* blocked_buttons_pane_;
 
   bool status_changed_;
 

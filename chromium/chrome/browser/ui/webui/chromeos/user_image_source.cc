@@ -69,20 +69,47 @@ scoped_refptr<base::RefCountedMemory> LoadUserImageFrameForScaleFactor(
     ui::ScaleFactor scale_factor) {
   // Load all frames.
   if (frame == -1) {
-    return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-        resource_id, scale_factor);
+    return ui::ResourceBundle::GetSharedInstance()
+        .LoadDataResourceBytesForScale(resource_id, scale_factor);
   }
-  // TODO(reveman): Add support frames beyond 0 (crbug.com/750064).
+  // TODO(reveman): Add support for frames beyond 0 (crbug.com/750064).
   if (frame) {
     NOTIMPLEMENTED() << "Unsupported frame: " << frame;
     return nullptr;
   }
   gfx::ImageSkia* image =
-      ResourceBundle::GetSharedInstance().GetImageSkiaNamed(resource_id);
+      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(resource_id);
   float scale = ui::GetScaleForScaleFactor(scale_factor);
   scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes);
   gfx::PNGCodec::EncodeBGRASkBitmap(image->GetRepresentation(scale).sk_bitmap(),
                                     false /* discard transparency */,
+                                    &data->data());
+  return data;
+}
+
+scoped_refptr<base::RefCountedMemory> GetUserImageFrame(
+    scoped_refptr<base::RefCountedMemory> image_bytes,
+    user_manager::UserImage::ImageFormat image_format,
+    int frame) {
+  // Return all frames.
+  if (frame == -1)
+    return image_bytes;
+  // TODO(reveman): Add support for frames beyond 0 (crbug.com/750064).
+  if (frame) {
+    NOTIMPLEMENTED() << "Unsupported frame: " << frame;
+    return nullptr;
+  }
+  // Only PNGs can be animated.
+  if (image_format != user_manager::UserImage::FORMAT_PNG)
+    return image_bytes;
+  // Extract first frame by re-encoding image.
+  SkBitmap bitmap;
+  if (!gfx::PNGCodec::Decode(image_bytes->front(), image_bytes->size(),
+                             &bitmap)) {
+    return nullptr;
+  }
+  scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes);
+  gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false /* discard transparency */,
                                     &data->data());
   return data;
 }
@@ -103,8 +130,18 @@ scoped_refptr<base::RefCountedMemory> GetUserImageInternal(
   }
 
   if (user) {
-    if (user->has_image_bytes())
-      return user->image_bytes();
+    if (user->has_image_bytes()) {
+      if (user->image_format() == user_manager::UserImage::FORMAT_PNG) {
+        return GetUserImageFrame(user->image_bytes(), user->image_format(),
+                                 frame);
+      } else {
+        scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes);
+        gfx::PNGCodec::EncodeBGRASkBitmap(*user->GetImage().bitmap(),
+                                          false /* discard transparency */,
+                                          &data->data());
+        return data;
+      }
+    }
     if (user->image_is_stub()) {
       return LoadUserImageFrameForScaleFactor(IDR_LOGIN_DEFAULT_USER, frame,
                                               scale_factor);

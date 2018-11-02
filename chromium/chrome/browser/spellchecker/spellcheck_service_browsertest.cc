@@ -76,7 +76,7 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
     prefs_->Set(spellcheck::prefs::kSpellCheckDictionaries, dictionaries_value);
 
     SpellcheckService* spellcheck =
-        SpellcheckServiceFactory::GetForRenderProcessId(renderer_->GetID());
+        SpellcheckServiceFactory::GetForRenderer(renderer_->GetChildIdentity());
     ASSERT_NE(nullptr, spellcheck);
 
     // Override |renderer_| requests for the spellcheck::mojom::SpellChecker
@@ -94,7 +94,7 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
 
   void ChangeCustomDictionary() {
     SpellcheckService* spellcheck =
-        SpellcheckServiceFactory::GetForRenderProcessId(renderer_->GetID());
+        SpellcheckServiceFactory::GetForRenderer(renderer_->GetChildIdentity());
     ASSERT_NE(nullptr, spellcheck);
 
     SpellcheckCustomDictionary::Change change;
@@ -256,8 +256,9 @@ class SpellcheckServiceHostBrowserTest : public SpellcheckServiceBrowserTest {
 
  private:
   void RequestSpellCheckHost(spellcheck::mojom::SpellCheckHostPtr* interface) {
-    SpellCheckHostImpl::Create(GetRenderer()->GetID(),
-                               mojo::MakeRequest(interface));
+    service_manager::BindSourceInfo source_info;
+    source_info.identity = GetRenderer()->GetChildIdentity();
+    SpellCheckHostImpl::Create(mojo::MakeRequest(interface), source_info);
   }
 
   void SpellingServiceDone(bool success,
@@ -428,7 +429,7 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, DeleteCorruptedBDICT) {
       spellcheck::GetVersionedFileName("en-US", dict_dir);
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     size_t actual = base::WriteFile(
         bdict_path, reinterpret_cast<const char*>(kCorruptedBDICT),
         arraysize(kCorruptedBDICT));
@@ -461,11 +462,10 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, DeleteCorruptedBDICT) {
   // Check the received event. Also we check if Chrome has successfully deleted
   // the corrupted dictionary. We delete the corrupted dictionary to avoid
   // leaking it when this test fails.
-  content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
-  content::RunAllPendingInMessageLoop(content::BrowserThread::UI);
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(SpellcheckService::BDICT_CORRUPTED,
             SpellcheckService::GetStatusEvent());
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (base::PathExists(bdict_path)) {
     ADD_FAILURE();
     EXPECT_TRUE(base::DeleteFile(bdict_path, true));

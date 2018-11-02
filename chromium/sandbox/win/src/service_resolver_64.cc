@@ -104,8 +104,7 @@ struct ServiceFullThunk {
 #pragma pack(pop)
 
 bool IsService(const void* source) {
-  const ServiceEntry* service =
-      reinterpret_cast<const ServiceEntry*>(source);
+  const ServiceEntry* service = reinterpret_cast<const ServiceEntry*>(source);
 
   return (kMmovR10EcxMovEax == service->mov_r10_rcx_mov_eax &&
           kSyscall == service->syscall && kRetNp == service->ret);
@@ -150,15 +149,15 @@ NTSTATUS ServiceResolverThunk::Setup(const void* target_module,
 
   size_t thunk_bytes = GetThunkSize();
   std::unique_ptr<char[]> thunk_buffer(new char[thunk_bytes]);
-  ServiceFullThunk* thunk = reinterpret_cast<ServiceFullThunk*>(
-                                thunk_buffer.get());
+  ServiceFullThunk* thunk =
+      reinterpret_cast<ServiceFullThunk*>(thunk_buffer.get());
 
   if (!IsFunctionAService(&thunk->original))
     return STATUS_OBJECT_NAME_COLLISION;
 
   ret = PerformPatch(thunk, thunk_storage);
 
-  if (NULL != storage_used)
+  if (storage_used)
     *storage_used = thunk_bytes;
 
   return ret;
@@ -186,7 +185,7 @@ NTSTATUS ServiceResolverThunk::CopyThunk(const void* target_module,
   if (!IsFunctionAService(&thunk->original))
     return STATUS_OBJECT_NAME_COLLISION;
 
-  if (NULL != storage_used)
+  if (storage_used)
     *storage_used = thunk_bytes;
 
   return ret;
@@ -217,7 +216,7 @@ NTSTATUS ServiceResolverThunk::PerformPatch(void* local_thunk,
   // Patch the original code.
   ServiceEntry local_service;
   DCHECK_NT(GetInternalThunkSize() <= sizeof(local_service));
-  if (!SetInternalThunk(&local_service, sizeof(local_service), NULL,
+  if (!SetInternalThunk(&local_service, sizeof(local_service), nullptr,
                         interceptor_))
     return STATUS_UNSUCCESSFUL;
 
@@ -231,7 +230,7 @@ NTSTATUS ServiceResolverThunk::PerformPatch(void* local_thunk,
     return STATUS_UNSUCCESSFUL;
 
   // And now change the function to intercept, on the child.
-  if (NULL != ntdll_base_) {
+  if (ntdll_base_) {
     // Running a unit test.
     if (!::WriteProcessMemory(process_, target_, &local_service,
                               sizeof(local_service), &actual))

@@ -22,6 +22,12 @@ def main():
   sys.path.insert(0, descriptor_pool_path)
   sys.path.append(symbol_database_path)
   sys.path.append(chrome_device_policy_pb2_path)
+  # Make reload google library
+  # which might be already loaded due to Google App Engine
+  # TODO(crbug.com/764314): find better solution how to import protobuf.
+  import google.protobuf
+  reload(google)
+  reload(google.protobuf)
   from chrome_device_policy_pb2 import ChromeDeviceSettingsProto
   with open(off_hours_cleaner_path, 'wt') as file:
     file.write('//\n'
@@ -36,17 +42,20 @@ def main():
                'namespace em = enterprise_management;\n\n'
                'void RemovePolicies(\n'
                '    em::ChromeDeviceSettingsProto* policies,\n'
-               '    const std::vector<std::string>& '
-               'input_policies_to_remove) {\n'
-               '  std::vector<std::string> policies_to_remove'
-               '(input_policies_to_remove);\n'
-               '  std::sort(policies_to_remove.begin(),'
-               ' policies_to_remove.end());\n')
+               '    const std::vector<int>& '
+               'input_policy_proto_tags_to_remove) {\n'
+               '  std::vector<int> policy_proto_tags_to_remove'
+               '(input_policy_proto_tags_to_remove);\n'
+               '  std::sort(policy_proto_tags_to_remove.begin(),'
+               ' policy_proto_tags_to_remove.end());\n')
     for field in ChromeDeviceSettingsProto.DESCRIPTOR.fields:
-      file.write('  if (std::binary_search(policies_to_remove.begin(),\n'
-                 '                         policies_to_remove.end(),\n'
-                 '                         "{name}"))\n'
-                 '    policies->clear_{name}();\n'.format(name=field.name))
+      file.write('  if (std::binary_search('
+                 'policy_proto_tags_to_remove.begin(),\n'
+                 '                         '
+                 'policy_proto_tags_to_remove.end(),\n'
+                 '                         {proto_tag}))\n'
+                 '    policies->clear_{name}();'
+                 '\n'.format(proto_tag=field.number, name=field.name))
     file.write('}\n}\n')
   return 0
 

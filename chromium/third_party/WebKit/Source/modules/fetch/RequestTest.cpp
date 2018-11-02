@@ -7,12 +7,12 @@
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
-#include "core/dom/Document.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -22,7 +22,7 @@ TEST(ServiceWorkerRequestTest, FromString) {
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
 
-  KURL url(kParsedURLString, "http://www.example.com/");
+  KURL url("http://www.example.com/");
   Request* request =
       Request::Create(scope.GetScriptState(), url, exception_state);
   ASSERT_FALSE(exception_state.HadException());
@@ -34,7 +34,7 @@ TEST(ServiceWorkerRequestTest, FromRequest) {
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
 
-  KURL url(kParsedURLString, "http://www.example.com/");
+  KURL url("http://www.example.com/");
   Request* request1 =
       Request::Create(scope.GetScriptState(), url, exception_state);
   DCHECK(request1);
@@ -50,22 +50,21 @@ TEST(ServiceWorkerRequestTest, FromAndToWebRequest) {
   V8TestingScope scope;
   WebServiceWorkerRequest web_request;
 
-  const KURL url(kParsedURLString, "http://www.example.com/");
+  const KURL url("http://www.example.com/");
   const String method = "GET";
   struct {
     const char* key;
     const char* value;
-  } headers[] = {{"X-Foo", "bar"}, {"X-Quux", "foop"}, {0, 0}};
+  } headers[] = {{"X-Foo", "bar"}, {"X-Quux", "foop"}, {nullptr, nullptr}};
   const String referrer = "http://www.referrer.com/";
   const WebReferrerPolicy kReferrerPolicy = kWebReferrerPolicyAlways;
   const WebURLRequest::RequestContext kContext =
       WebURLRequest::kRequestContextAudio;
-  const WebURLRequest::FetchRequestMode kMode =
-      WebURLRequest::kFetchRequestModeNavigate;
-  const WebURLRequest::FetchCredentialsMode kCredentialsMode =
-      WebURLRequest::kFetchCredentialsModeInclude;
-  const WebURLRequest::FetchRequestCacheMode kCacheMode =
-      WebURLRequest::kFetchRequestCacheModeNoCache;
+  const network::mojom::FetchRequestMode kMode =
+      network::mojom::FetchRequestMode::kNavigate;
+  const network::mojom::FetchCredentialsMode kCredentialsMode =
+      network::mojom::FetchCredentialsMode::kInclude;
+  const auto kCacheMode = mojom::FetchCacheMode::kValidateCache;
   const WebURLRequest::FetchRedirectMode kRedirectMode =
       WebURLRequest::kFetchRedirectModeError;
 

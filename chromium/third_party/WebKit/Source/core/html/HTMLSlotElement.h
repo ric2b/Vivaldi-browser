@@ -44,21 +44,31 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
  public:
   DECLARE_NODE_FACTORY(HTMLSlotElement);
 
-  const HeapVector<Member<Node>>& AssignedNodes();
+  const HeapVector<Member<Node>>& AssignedNodes() const;
   const HeapVector<Member<Node>>& GetDistributedNodes();
   const HeapVector<Member<Node>> assignedNodesForBinding(
       const AssignedNodesOptions&);
 
+  Node* FirstAssignedNode() const {
+    return assigned_nodes_.IsEmpty() ? nullptr : assigned_nodes_.front().Get();
+  }
+  Node* LastAssignedNode() const {
+    return assigned_nodes_.IsEmpty() ? nullptr : assigned_nodes_.back().Get();
+  }
+
   Node* FirstDistributedNode() const {
-    DCHECK(SupportsDistribution());
+    DCHECK(SupportsAssignment());
     return distributed_nodes_.IsEmpty() ? nullptr
                                         : distributed_nodes_.front().Get();
   }
   Node* LastDistributedNode() const {
-    DCHECK(SupportsDistribution());
+    DCHECK(SupportsAssignment());
     return distributed_nodes_.IsEmpty() ? nullptr
                                         : distributed_nodes_.back().Get();
   }
+
+  Node* AssignedNodeNextTo(const Node&) const;
+  Node* AssignedNodePreviousTo(const Node&) const;
 
   Node* DistributedNodeNextTo(const Node&) const;
   Node* DistributedNodePreviousTo(const Node&) const;
@@ -91,7 +101,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void ClearDistribution();
   void SaveAndClearDistribution();
 
-  bool SupportsDistribution() const { return IsInV1ShadowTree(); }
+  bool SupportsAssignment() const { return IsInV1ShadowTree(); }
 
   void CheckFallbackAfterInsertedIntoShadowTree();
   void CheckFallbackAfterRemovedFromShadowTree();
@@ -102,9 +112,12 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void DispatchSlotChangeEvent();
   void ClearSlotChangeEventEnqueued() { slotchange_event_enqueued_ = false; }
 
+  // For Incremental Shadow DOM
+  void ClearAssignedNodes();
+
   static AtomicString NormalizeSlotName(const AtomicString&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   HTMLSlotElement(Document&);
@@ -117,11 +130,15 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   bool HasSlotableChild() const;
 
+  const HeapVector<Member<Node>>& ChildrenInFlatTreeIfAssignmentIsSupported();
+
   void LazyReattachDistributedNodesNaive();
 
   static void LazyReattachDistributedNodesByDynamicProgramming(
       const HeapVector<Member<Node>>&,
       const HeapVector<Member<Node>>&);
+
+  void SetNeedsDistributionRecalcWillBeSetNeedsAssignmentRecalc();
 
   HeapVector<Member<Node>> assigned_nodes_;
   HeapVector<Member<Node>> distributed_nodes_;

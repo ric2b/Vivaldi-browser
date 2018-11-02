@@ -431,13 +431,16 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   WebAXObject offset_container;
   WebFloatRect bounds_in_container;
   SkMatrix44 container_transform;
+  bool clips_children = false;
   src.GetRelativeBounds(offset_container, bounds_in_container,
-                        container_transform);
+                        container_transform, &clips_children);
   dst->location = bounds_in_container;
   if (!container_transform.isIdentity())
     dst->transform = base::WrapUnique(new gfx::Transform(container_transform));
   if (!offset_container.IsDetached())
     dst->offset_container_id = offset_container.AxID();
+  if (clips_children)
+    dst->AddBoolAttribute(ui::AX_ATTR_CLIPS_CHILDREN, true);
 
   AXContentNodeDataSparseAttributeAdapter sparse_attribute_adapter(dst);
   src.GetSparseAXAttributes(sparse_attribute_adapter);
@@ -704,11 +707,24 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
         dst->role == ui::AX_ROLE_SLIDER ||
         dst->role == ui::AX_ROLE_SPIN_BUTTON ||
         (dst->role == ui::AX_ROLE_SPLITTER && src.CanSetFocusAttribute())) {
-      dst->AddFloatAttribute(ui::AX_ATTR_VALUE_FOR_RANGE, src.ValueForRange());
-      dst->AddFloatAttribute(ui::AX_ATTR_MAX_VALUE_FOR_RANGE,
-                             src.MaxValueForRange());
-      dst->AddFloatAttribute(ui::AX_ATTR_MIN_VALUE_FOR_RANGE,
-                             src.MinValueForRange());
+      float value;
+      if (src.ValueForRange(&value))
+        dst->AddFloatAttribute(ui::AX_ATTR_VALUE_FOR_RANGE, value);
+
+      float max_value;
+      if (src.MaxValueForRange(&max_value)) {
+        dst->AddFloatAttribute(ui::AX_ATTR_MAX_VALUE_FOR_RANGE, max_value);
+      }
+
+      float min_value;
+      if (src.MinValueForRange(&min_value)) {
+        dst->AddFloatAttribute(ui::AX_ATTR_MIN_VALUE_FOR_RANGE, min_value);
+      }
+
+      float step_value;
+      if (src.StepValueForRange(&step_value)) {
+        dst->AddFloatAttribute(ui::AX_ATTR_STEP_VALUE_FOR_RANGE, step_value);
+      }
     }
 
     if (dst->role == ui::AX_ROLE_DIALOG ||
@@ -897,15 +913,15 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   // parent is the row, the row adds it as a child, and the column adds it
   // as an indirect child.
   int child_count = src.ChildCount();
+  std::vector<int32_t> indirect_child_ids;
   for (int i = 0; i < child_count; ++i) {
     WebAXObject child = src.ChildAt(i);
-    std::vector<int32_t> indirect_child_ids;
     if (!is_iframe && !child.IsDetached() && !IsParentUnignoredOf(src, child))
       indirect_child_ids.push_back(child.AxID());
-    if (indirect_child_ids.size() > 0) {
-      dst->AddIntListAttribute(
-          ui::AX_ATTR_INDIRECT_CHILD_IDS, indirect_child_ids);
-    }
+  }
+  if (indirect_child_ids.size() > 0) {
+    dst->AddIntListAttribute(ui::AX_ATTR_INDIRECT_CHILD_IDS,
+                             indirect_child_ids);
   }
 
   if (src.IsScrollableContainer()) {

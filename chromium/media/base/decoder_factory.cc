@@ -8,9 +8,9 @@
 
 namespace media {
 
-DecoderFactory::DecoderFactory() {}
+DecoderFactory::DecoderFactory() = default;
 
-DecoderFactory::~DecoderFactory() {}
+DecoderFactory::~DecoderFactory() = default;
 
 void DecoderFactory::CreateAudioDecoders(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -20,6 +20,7 @@ void DecoderFactory::CreateVideoDecoders(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     GpuVideoAcceleratorFactories* gpu_factories,
     MediaLog* media_log,
+    const RequestOverlayInfoCB& request_overlay_info_cb,
     std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) {}
 
 }  // namespace media

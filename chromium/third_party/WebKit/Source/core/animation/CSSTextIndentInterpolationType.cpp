@@ -36,17 +36,17 @@ struct IndentMode {
 
 class CSSTextIndentNonInterpolableValue : public NonInterpolableValue {
  public:
-  static RefPtr<CSSTextIndentNonInterpolableValue> Create(
-      RefPtr<NonInterpolableValue> length_non_interpolable_value,
+  static scoped_refptr<CSSTextIndentNonInterpolableValue> Create(
+      scoped_refptr<NonInterpolableValue> length_non_interpolable_value,
       const IndentMode& mode) {
-    return AdoptRef(new CSSTextIndentNonInterpolableValue(
+    return base::AdoptRef(new CSSTextIndentNonInterpolableValue(
         std::move(length_non_interpolable_value), mode));
   }
 
   const NonInterpolableValue* LengthNonInterpolableValue() const {
-    return length_non_interpolable_value_.Get();
+    return length_non_interpolable_value_.get();
   }
-  RefPtr<NonInterpolableValue>& LengthNonInterpolableValue() {
+  scoped_refptr<NonInterpolableValue>& LengthNonInterpolableValue() {
     return length_non_interpolable_value_;
   }
   const IndentMode& Mode() const { return mode_; }
@@ -55,13 +55,13 @@ class CSSTextIndentNonInterpolableValue : public NonInterpolableValue {
 
  private:
   CSSTextIndentNonInterpolableValue(
-      RefPtr<NonInterpolableValue> length_non_interpolable_value,
+      scoped_refptr<NonInterpolableValue> length_non_interpolable_value,
       const IndentMode& mode)
       : length_non_interpolable_value_(
             std::move(length_non_interpolable_value)),
         mode_(mode) {}
 
-  RefPtr<NonInterpolableValue> length_non_interpolable_value_;
+  scoped_refptr<NonInterpolableValue> length_non_interpolable_value_;
   const IndentMode mode_;
 };
 
@@ -91,22 +91,26 @@ class UnderlyingIndentModeChecker
   const IndentMode mode_;
 };
 
-class InheritedIndentModeChecker
+class InheritedIndentChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
-  static std::unique_ptr<InheritedIndentModeChecker> Create(
+  static std::unique_ptr<InheritedIndentChecker> Create(
+      const Length& length,
       const IndentMode& mode) {
-    return WTF::WrapUnique(new InheritedIndentModeChecker(mode));
+    return WTF::WrapUnique(new InheritedIndentChecker(length, mode));
   }
 
   bool IsValid(const StyleResolverState& state,
                const InterpolationValue&) const final {
-    return mode_ == IndentMode(*state.ParentStyle());
+    return length_ == state.ParentStyle()->TextIndent() &&
+           mode_ == IndentMode(*state.ParentStyle());
   }
 
  private:
-  InheritedIndentModeChecker(const IndentMode& mode) : mode_(mode) {}
+  InheritedIndentChecker(const Length& length, const IndentMode& mode)
+      : length_(length), mode_(mode) {}
 
+  const Length length_;
   const IndentMode mode_;
 };
 
@@ -137,9 +141,9 @@ InterpolationValue CSSTextIndentInterpolationType::MaybeConvertNeutral(
 InterpolationValue CSSTextIndentInterpolationType::MaybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers&) const {
-  IndentMode mode(ComputedStyle::InitialTextIndentLine(),
-                  ComputedStyle::InitialTextIndentType());
-  return CreateValue(ComputedStyle::InitialTextIndent(), mode, 1);
+  IndentMode mode(ComputedStyleInitialValues::InitialTextIndentLine(),
+                  ComputedStyleInitialValues::InitialTextIndentType());
+  return CreateValue(ComputedStyleInitialValues::InitialTextIndent(), mode, 1);
 }
 
 InterpolationValue CSSTextIndentInterpolationType::MaybeConvertInherit(
@@ -147,7 +151,8 @@ InterpolationValue CSSTextIndentInterpolationType::MaybeConvertInherit(
     ConversionCheckers& conversion_checkers) const {
   const ComputedStyle& parent_style = *state.ParentStyle();
   IndentMode mode(parent_style);
-  conversion_checkers.push_back(InheritedIndentModeChecker::Create(mode));
+  conversion_checkers.push_back(
+      InheritedIndentChecker::Create(parent_style.TextIndent(), mode));
   return CreateValue(parent_style.TextIndent(), mode,
                      parent_style.EffectiveZoom());
 }
@@ -157,8 +162,8 @@ InterpolationValue CSSTextIndentInterpolationType::MaybeConvertValue(
     const StyleResolverState*,
     ConversionCheckers&) const {
   InterpolationValue length = nullptr;
-  TextIndentLine line = ComputedStyle::InitialTextIndentLine();
-  TextIndentType type = ComputedStyle::InitialTextIndentType();
+  TextIndentLine line = ComputedStyleInitialValues::InitialTextIndentLine();
+  TextIndentType type = ComputedStyleInitialValues::InitialTextIndentType();
 
   for (const auto& item : ToCSSValueList(value)) {
     if (item->IsIdentifierValue() &&

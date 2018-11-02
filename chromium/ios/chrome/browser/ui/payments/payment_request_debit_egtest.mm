@@ -77,7 +77,7 @@ std::unique_ptr<autofill::AutofillProfile> _profile;
   autofill::CreditCard card = autofill::test::GetMaskedServerCard();
   card.set_card_type(cardType);
   card.set_billing_address_id(_profile->guid());
-  [self addCreditCard:card];
+  [self addServerCreditCard:card];
 }
 
 #pragma mark - Tests
@@ -169,7 +169,8 @@ std::unique_ptr<autofill::AutofillProfile> _profile;
       assertWithMatcher:grey_notNil()];
 
   // Select the local card
-  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Payment")]
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                          IDS_CHOOSE_PAYMENT_METHOD)]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:PaymentMethodCellMatcher(card, *_profile)]
       performAction:grey_tap()];

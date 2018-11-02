@@ -7,10 +7,10 @@
 #include <memory>
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/DictionarySequenceOrDictionary.h"
-#include "bindings/core/v8/UnrestrictedDoubleOrKeyframeEffectOptions.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8KeyframeEffectOptions.h"
+#include "bindings/core/v8/dictionary_sequence_or_dictionary.h"
+#include "bindings/core/v8/unrestricted_double_or_keyframe_effect_options.h"
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationEffectTiming.h"
@@ -38,6 +38,10 @@ class KeyframeEffectTest : public ::testing::Test {
 
   Document& GetDocument() const { return page_holder->GetDocument(); }
 
+  KeyframeEffectModelBase* CreateEmptyEffectModel() {
+    return StringKeyframeEffectModel::Create(StringKeyframeVector());
+  }
+
   std::unique_ptr<DummyPageHolder> page_holder;
   Persistent<Element> element;
 };
@@ -51,9 +55,9 @@ class AnimationKeyframeEffectV8Test : public KeyframeEffectTest {
     NonThrowableExceptionState exception_state;
     return KeyframeEffect::Create(
         nullptr, element,
-        DictionarySequenceOrDictionary::fromDictionarySequence(
+        DictionarySequenceOrDictionary::FromDictionarySequence(
             keyframe_dictionary_vector),
-        UnrestrictedDoubleOrKeyframeEffectOptions::fromUnrestrictedDouble(
+        UnrestrictedDoubleOrKeyframeEffectOptions::FromUnrestrictedDouble(
             timing_input),
         exception_state);
   }
@@ -64,9 +68,9 @@ class AnimationKeyframeEffectV8Test : public KeyframeEffectTest {
     NonThrowableExceptionState exception_state;
     return KeyframeEffect::Create(
         nullptr, element,
-        DictionarySequenceOrDictionary::fromDictionarySequence(
+        DictionarySequenceOrDictionary::FromDictionarySequence(
             keyframe_dictionary_vector),
-        UnrestrictedDoubleOrKeyframeEffectOptions::fromKeyframeEffectOptions(
+        UnrestrictedDoubleOrKeyframeEffectOptions::FromKeyframeEffectOptions(
             timing_input),
         exception_state);
   }
@@ -76,7 +80,7 @@ class AnimationKeyframeEffectV8Test : public KeyframeEffectTest {
     NonThrowableExceptionState exception_state;
     return KeyframeEffect::Create(
         nullptr, element,
-        DictionarySequenceOrDictionary::fromDictionarySequence(
+        DictionarySequenceOrDictionary::FromDictionarySequence(
             keyframe_dictionary_vector),
         exception_state);
   }
@@ -117,18 +121,17 @@ TEST_F(AnimationKeyframeEffectV8Test, CanCreateAnAnimation) {
   Element* target = animation->Target();
   EXPECT_EQ(*element.Get(), *target);
 
-  const KeyframeVector keyframes =
-      ToKeyframeEffectModelBase(animation->Model())->GetFrames();
+  const KeyframeVector keyframes = animation->Model()->GetFrames();
 
   EXPECT_EQ(0, keyframes[0]->Offset());
   EXPECT_EQ(1, keyframes[1]->Offset());
 
   const CSSValue& keyframe1_width =
-      ToStringKeyframe(keyframes[0].Get())
-          ->CssPropertyValue(PropertyHandle(CSSPropertyWidth));
+      ToStringKeyframe(keyframes[0].get())
+          ->CssPropertyValue(PropertyHandle(GetCSSPropertyWidth()));
   const CSSValue& keyframe2_width =
-      ToStringKeyframe(keyframes[1].Get())
-          ->CssPropertyValue(PropertyHandle(CSSPropertyWidth));
+      ToStringKeyframe(keyframes[1].get())
+          ->CssPropertyValue(PropertyHandle(GetCSSPropertyWidth()));
 
   EXPECT_EQ("100px", keyframe1_width.CssText());
   EXPECT_EQ("0px", keyframe2_width.CssText());
@@ -136,8 +139,72 @@ TEST_F(AnimationKeyframeEffectV8Test, CanCreateAnAnimation) {
   EXPECT_EQ(*(CubicBezierTimingFunction::Preset(
                 CubicBezierTimingFunction::EaseType::EASE_IN_OUT)),
             keyframes[0]->Easing());
-  EXPECT_EQ(*(CubicBezierTimingFunction::Create(1, 1, 0.3, 0.3).Get()),
+  EXPECT_EQ(*(CubicBezierTimingFunction::Create(1, 1, 0.3, 0.3).get()),
             keyframes[1]->Easing());
+}
+
+TEST_F(AnimationKeyframeEffectV8Test, SetAndRetrieveEffectComposite) {
+  V8TestingScope scope;
+  NonThrowableExceptionState exception_state;
+
+  v8::Local<v8::Object> effect_options = v8::Object::New(scope.GetIsolate());
+  SetV8ObjectPropertyAsString(scope.GetIsolate(), effect_options, "composite",
+                              "add");
+  KeyframeEffectOptions effect_options_dictionary;
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), effect_options,
+                                  effect_options_dictionary, exception_state);
+  EXPECT_FALSE(exception_state.HadException());
+
+  Vector<Dictionary> js_keyframes;
+  KeyframeEffect* effect =
+      CreateAnimation(element.Get(), js_keyframes, effect_options_dictionary);
+  EXPECT_EQ("add", effect->composite());
+
+  effect->setComposite("replace");
+  EXPECT_EQ("replace", effect->composite());
+
+  // TODO(crbug.com/788440): Once accumulate is supported as a composite
+  // property, setting it here should work.
+  effect->setComposite("accumulate");
+  EXPECT_EQ("replace", effect->composite());
+}
+
+TEST_F(AnimationKeyframeEffectV8Test, KeyframeCompositeOverridesEffect) {
+  V8TestingScope scope;
+  NonThrowableExceptionState exception_state;
+
+  v8::Local<v8::Object> effect_options = v8::Object::New(scope.GetIsolate());
+  SetV8ObjectPropertyAsString(scope.GetIsolate(), effect_options, "composite",
+                              "add");
+  KeyframeEffectOptions effect_options_dictionary;
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), effect_options,
+                                  effect_options_dictionary, exception_state);
+  EXPECT_FALSE(exception_state.HadException());
+
+  Vector<Dictionary> js_keyframes;
+  v8::Local<v8::Object> keyframe1 = v8::Object::New(scope.GetIsolate());
+  v8::Local<v8::Object> keyframe2 = v8::Object::New(scope.GetIsolate());
+
+  SetV8ObjectPropertyAsString(scope.GetIsolate(), keyframe1, "width", "100px");
+  SetV8ObjectPropertyAsString(scope.GetIsolate(), keyframe1, "composite",
+                              "replace");
+  SetV8ObjectPropertyAsString(scope.GetIsolate(), keyframe2, "width", "0px");
+
+  js_keyframes.push_back(
+      Dictionary(scope.GetIsolate(), keyframe1, exception_state));
+  js_keyframes.push_back(
+      Dictionary(scope.GetIsolate(), keyframe2, exception_state));
+
+  KeyframeEffect* effect =
+      CreateAnimation(element.Get(), js_keyframes, effect_options_dictionary);
+  EXPECT_EQ("add", effect->composite());
+
+  PropertyHandle property(GetCSSPropertyWidth());
+  const PropertySpecificKeyframeVector& keyframes =
+      effect->Model()->GetPropertySpecificKeyframes(property);
+
+  EXPECT_EQ(EffectModel::kCompositeReplace, keyframes[0]->Composite());
+  EXPECT_EQ(EffectModel::kCompositeAdd, keyframes[1]->Composite());
 }
 
 TEST_F(AnimationKeyframeEffectV8Test, CanSetDuration) {
@@ -176,7 +243,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedGetters) {
                               "ease-in-out");
   KeyframeEffectOptions timing_input_dictionary;
   DummyExceptionStateForTesting exception_state;
-  V8KeyframeEffectOptions::toImpl(scope.GetIsolate(), timing_input,
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), timing_input,
                                   timing_input_dictionary, exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
@@ -203,7 +270,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedDurationGetter) {
                               "duration", 2.5);
   KeyframeEffectOptions timing_input_dictionary_with_duration;
   DummyExceptionStateForTesting exception_state;
-  V8KeyframeEffectOptions::toImpl(
+  V8KeyframeEffectOptions::ToImpl(
       scope.GetIsolate(), timing_input_with_duration,
       timing_input_dictionary_with_duration, exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -215,14 +282,14 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedDurationGetter) {
       animation_with_duration->timing();
   UnrestrictedDoubleOrString duration;
   specified_with_duration->duration(duration);
-  EXPECT_TRUE(duration.isUnrestrictedDouble());
-  EXPECT_EQ(2.5, duration.getAsUnrestrictedDouble());
-  EXPECT_FALSE(duration.isString());
+  EXPECT_TRUE(duration.IsUnrestrictedDouble());
+  EXPECT_EQ(2.5, duration.GetAsUnrestrictedDouble());
+  EXPECT_FALSE(duration.IsString());
 
   v8::Local<v8::Object> timing_input_no_duration =
       v8::Object::New(scope.GetIsolate());
   KeyframeEffectOptions timing_input_dictionary_no_duration;
-  V8KeyframeEffectOptions::toImpl(scope.GetIsolate(), timing_input_no_duration,
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), timing_input_no_duration,
                                   timing_input_dictionary_no_duration,
                                   exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -234,9 +301,9 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedDurationGetter) {
       animation_no_duration->timing();
   UnrestrictedDoubleOrString duration2;
   specified_no_duration->duration(duration2);
-  EXPECT_FALSE(duration2.isUnrestrictedDouble());
-  EXPECT_TRUE(duration2.isString());
-  EXPECT_EQ("auto", duration2.getAsString());
+  EXPECT_FALSE(duration2.IsUnrestrictedDouble());
+  EXPECT_TRUE(duration2.IsString());
+  EXPECT_EQ("auto", duration2.GetAsString());
 }
 
 TEST_F(AnimationKeyframeEffectV8Test, SpecifiedSetters) {
@@ -245,7 +312,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedSetters) {
   v8::Local<v8::Object> timing_input = v8::Object::New(scope.GetIsolate());
   KeyframeEffectOptions timing_input_dictionary;
   DummyExceptionStateForTesting exception_state;
-  V8KeyframeEffectOptions::toImpl(scope.GetIsolate(), timing_input,
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), timing_input,
                                   timing_input_dictionary, exception_state);
   EXPECT_FALSE(exception_state.HadException());
   KeyframeEffect* animation =
@@ -295,7 +362,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SetSpecifiedDuration) {
   v8::Local<v8::Object> timing_input = v8::Object::New(scope.GetIsolate());
   KeyframeEffectOptions timing_input_dictionary;
   DummyExceptionStateForTesting exception_state;
-  V8KeyframeEffectOptions::toImpl(scope.GetIsolate(), timing_input,
+  V8KeyframeEffectOptions::ToImpl(scope.GetIsolate(), timing_input,
                                   timing_input_dictionary, exception_state);
   EXPECT_FALSE(exception_state.HadException());
   KeyframeEffect* animation =
@@ -305,19 +372,19 @@ TEST_F(AnimationKeyframeEffectV8Test, SetSpecifiedDuration) {
 
   UnrestrictedDoubleOrString duration;
   specified->duration(duration);
-  EXPECT_FALSE(duration.isUnrestrictedDouble());
-  EXPECT_TRUE(duration.isString());
-  EXPECT_EQ("auto", duration.getAsString());
+  EXPECT_FALSE(duration.IsUnrestrictedDouble());
+  EXPECT_TRUE(duration.IsString());
+  EXPECT_EQ("auto", duration.GetAsString());
 
   UnrestrictedDoubleOrString in_duration;
-  in_duration.setUnrestrictedDouble(2.5);
+  in_duration.SetUnrestrictedDouble(2.5);
   specified->setDuration(in_duration, exception_state);
   ASSERT_FALSE(exception_state.HadException());
   UnrestrictedDoubleOrString duration2;
   specified->duration(duration2);
-  EXPECT_TRUE(duration2.isUnrestrictedDouble());
-  EXPECT_EQ(2.5, duration2.getAsUnrestrictedDouble());
-  EXPECT_FALSE(duration2.isString());
+  EXPECT_TRUE(duration2.IsUnrestrictedDouble());
+  EXPECT_EQ(2.5, duration2.GetAsUnrestrictedDouble());
+  EXPECT_FALSE(duration2.IsString());
 }
 
 TEST_F(KeyframeEffectTest, TimeToEffectChange) {
@@ -326,7 +393,8 @@ TEST_F(KeyframeEffectTest, TimeToEffectChange) {
   timing.start_delay = 100;
   timing.end_delay = 100;
   timing.fill_mode = Timing::FillMode::NONE;
-  KeyframeEffect* animation = KeyframeEffect::Create(0, nullptr, timing);
+  KeyframeEffect* animation =
+      KeyframeEffect::Create(nullptr, CreateEmptyEffectModel(), timing);
   Animation* player = GetDocument().Timeline().Play(animation);
   double inf = std::numeric_limits<double>::infinity();
 
@@ -358,7 +426,8 @@ TEST_F(KeyframeEffectTest, TimeToEffectChangeWithPlaybackRate) {
   timing.end_delay = 100;
   timing.playback_rate = 2;
   timing.fill_mode = Timing::FillMode::NONE;
-  KeyframeEffect* animation = KeyframeEffect::Create(0, nullptr, timing);
+  KeyframeEffect* animation =
+      KeyframeEffect::Create(nullptr, CreateEmptyEffectModel(), timing);
   Animation* player = GetDocument().Timeline().Play(animation);
   double inf = std::numeric_limits<double>::infinity();
 
@@ -390,7 +459,8 @@ TEST_F(KeyframeEffectTest, TimeToEffectChangeWithNegativePlaybackRate) {
   timing.end_delay = 100;
   timing.playback_rate = -2;
   timing.fill_mode = Timing::FillMode::NONE;
-  KeyframeEffect* animation = KeyframeEffect::Create(0, nullptr, timing);
+  KeyframeEffect* animation =
+      KeyframeEffect::Create(nullptr, CreateEmptyEffectModel(), timing);
   Animation* player = GetDocument().Timeline().Play(animation);
   double inf = std::numeric_limits<double>::infinity();
 
@@ -420,7 +490,7 @@ TEST_F(KeyframeEffectTest, ElementDestructorClearsAnimationTarget) {
   Timing timing;
   timing.iteration_duration = 5;
   KeyframeEffect* animation =
-      KeyframeEffect::Create(element.Get(), nullptr, timing);
+      KeyframeEffect::Create(element.Get(), CreateEmptyEffectModel(), timing);
   EXPECT_EQ(element.Get(), animation->Target());
   GetDocument().Timeline().Play(animation);
   page_holder.reset();

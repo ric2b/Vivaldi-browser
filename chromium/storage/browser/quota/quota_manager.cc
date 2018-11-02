@@ -21,7 +21,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -1158,8 +1157,7 @@ QuotaManager::EvictionContext::EvictionContext()
     : evicted_type(kStorageTypeUnknown) {
 }
 
-QuotaManager::EvictionContext::~EvictionContext() {
-}
+QuotaManager::EvictionContext::~EvictionContext() = default;
 
 void QuotaManager::LazyInitialize() {
   DCHECK(io_thread_->BelongsToCurrentThread());
@@ -1677,7 +1675,7 @@ void QuotaManager::DeleteOnCorrectThread() const {
 }
 
 void QuotaManager::PostTaskAndReplyWithResultForDBThread(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::Callback<bool(QuotaDatabase*)> task,
     base::Callback<void(bool)> reply) {
   // Deleting manager will post another task to DB sequence to delete

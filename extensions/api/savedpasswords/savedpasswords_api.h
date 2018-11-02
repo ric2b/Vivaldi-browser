@@ -40,8 +40,6 @@ class SavedpasswordsGetListFunction : public ChromeAsyncExtensionFunction,
   // PasswordUIView implementation.
   Profile* GetProfile() override;
   void ShowPassword(size_t index,
-                    const std::string& origin_url,
-                    const std::string& username,
                     const base::string16& password_value) override;
   void SetPasswordList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
@@ -79,8 +77,6 @@ class SavedpasswordsRemoveFunction : public ChromeAsyncExtensionFunction,
   // PasswordUIView implementation.
   Profile* GetProfile() override;
   void ShowPassword(size_t index,
-                    const std::string& origin_url,
-                    const std::string& username,
                     const base::string16& password_value) override;
   void SetPasswordList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)

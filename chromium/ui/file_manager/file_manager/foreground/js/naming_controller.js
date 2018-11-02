@@ -91,7 +91,7 @@ NamingController.prototype.validateFileName = function(
 
 /**
  * @param {string} filename
- * @return {Promise.<string>}
+ * @return {Promise<string>}
  */
 NamingController.prototype.validateFileNameForSaving = function(filename) {
   var directory = /** @type {DirectoryEntry} */ (
@@ -257,7 +257,7 @@ NamingController.prototype.commitRename_ = function() {
   var entry = input.currentEntry;
   var newName = input.value;
 
-  if (newName == entry.name) {
+  if (!newName || newName == entry.name) {
     this.cancelRename_();
     return;
   }

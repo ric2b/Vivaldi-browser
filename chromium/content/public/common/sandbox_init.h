@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/launch.h"
@@ -14,6 +15,7 @@
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 namespace base {
 class CommandLine;
@@ -33,14 +35,15 @@ class SandboxedProcessLauncherDelegate;
 
 #if defined(OS_WIN)
 
-// Initialize the sandbox for renderer, gpu, utility, worker, nacl, and plugin
-// processes, depending on the command line flags. Although The browser process
-// is not sandboxed, this also needs to be called because it will initialize
-// the broker code.
+// Initialize the sandbox of the given |sandbox_type|. Although The browser
+// process is not sandboxed, this also needs to be called because it will
+// initialize the broker code.
+//
 // Returns true if the sandbox was initialized succesfully, false if an error
 // occurred.  If process_type isn't one that needs sandboxing true is always
 // returned.
 CONTENT_EXPORT bool InitializeSandbox(
+    service_manager::SandboxType sandbox_type,
     sandbox::SandboxInterfaceInfo* sandbox_info);
 
 // Launch a sandboxed process. |delegate| may be NULL. If |delegate| is non-NULL
@@ -49,7 +52,7 @@ CONTENT_EXPORT bool InitializeSandbox(
 // the handles.
 CONTENT_EXPORT sandbox::ResultCode StartSandboxedProcess(
     SandboxedProcessLauncherDelegate* delegate,
-    base::CommandLine* cmd_line,
+    base::CommandLine* child_command_line,
     const base::HandlesToInheritVector& handles_to_inherit,
     base::Process* process);
 
@@ -58,23 +61,26 @@ CONTENT_EXPORT sandbox::ResultCode StartSandboxedProcess(
 // Initialize the sandbox of the given |sandbox_type|, optionally specifying a
 // directory to allow access to. Note specifying a directory needs to be
 // supported by the sandbox profile associated with the given |sandbox_type|.
-// Valid values for |sandbox_type| are defined either by the enum SandboxType,
-// or by ContentClient::GetSandboxProfileForSandboxType().
-//
-// If the |sandbox_type| isn't one of the ones defined by content then the
-// embedder is queried using ContentClient::GetSandboxPolicyForSandboxType().
-// The embedder can use values for |sandbox_type| starting from
-// sandbox::SANDBOX_PROCESS_TYPE_AFTER_LAST_TYPE.
 //
 // Returns true if the sandbox was initialized succesfully, false if an error
 // occurred.  If process_type isn't one that needs sandboxing, no action is
 // taken and true is always returned.
-CONTENT_EXPORT bool InitializeSandbox(int sandbox_type,
+CONTENT_EXPORT bool InitializeSandbox(service_manager::SandboxType sandbox_type,
                                       const base::FilePath& allowed_path);
 
-#elif defined(OS_LINUX) || defined(OS_NACL_NONSFI)
+// Initialize the sandbox for renderer, gpu, utility, worker, and plugin
+// processes, depending on the command line flags. For the browser process which
+// is not sandboxed, this call is a no-op.
+// Returns true if the sandbox was initialized succesfully, false if an error
+// occurred.  If process_type isn't one that needs sandboxing, true is always
+// returned.
+CONTENT_EXPORT bool InitializeSandbox();
 
-class SandboxInitializerDelegate;
+// Initializes the sandbox, as described above, but executes the callback after
+// warmup and before initialization.
+CONTENT_EXPORT bool InitializeSandbox(base::OnceClosure post_warmup_hook);
+
+#elif defined(OS_LINUX) || defined(OS_NACL_NONSFI)
 
 // Initialize a seccomp-bpf sandbox. |policy| may not be NULL.
 // If an existing layer of sandboxing is present that would prevent access to
@@ -84,8 +90,8 @@ CONTENT_EXPORT bool InitializeSandbox(
     std::unique_ptr<sandbox::bpf_dsl::Policy> policy,
     base::ScopedFD proc_fd);
 
-// Return a "baseline" policy. This is used by a SandboxInitializerDelegate to
-// implement a policy that is derived from the baseline.
+// Return a "baseline" policy. This is used by other modules to implement a
+// policy that is derived from the baseline.
 CONTENT_EXPORT std::unique_ptr<sandbox::bpf_dsl::Policy>
 GetBPFSandboxBaselinePolicy();
 #endif  // defined(OS_LINUX) || defined(OS_NACL_NONSFI)

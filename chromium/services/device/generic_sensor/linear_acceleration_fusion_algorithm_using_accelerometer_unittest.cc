@@ -20,7 +20,7 @@ class LinearAccelerationFusionAlgorithmUsingAccelerometerTest
  public:
   LinearAccelerationFusionAlgorithmUsingAccelerometerTest() {
     auto fusion_algorithm =
-        base::MakeUnique<LinearAccelerationFusionAlgorithmUsingAccelerometer>();
+        std::make_unique<LinearAccelerationFusionAlgorithmUsingAccelerometer>();
     fusion_algorithm_ = fusion_algorithm.get();
     fake_fusion_sensor_ = base::MakeRefCounted<FakePlatformSensorFusion>(
         std::move(fusion_algorithm));
@@ -275,7 +275,7 @@ TEST_F(LinearAccelerationFusionAlgorithmUsingAccelerometerTest,
   VerifyLinearAccelerationWhenAccelerometerReadingDifferentNonZeroXYZ(
       timestamp1, timestamp2, timestamp3);
 
-  fake_fusion_sensor_->StopSensor();
+  fusion_algorithm_->Reset();
 
   // After sensor stops, all internal statistical data are reset. When using
   // the same accelerometer data but different timestamps, the linear

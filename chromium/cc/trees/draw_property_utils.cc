@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "base/containers/stack.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer.h"
@@ -221,7 +222,7 @@ static ConditionalClip ComputeAccumulatedClip(PropertyTrees* property_trees,
   ConditionalClip unclipped = ConditionalClip{false, gfx::RectF()};
 
   // Collect all the clips that need to be accumulated.
-  std::stack<const ClipNode*, std::vector<const ClipNode*>> parent_chain;
+  base::stack<const ClipNode*, std::vector<const ClipNode*>> parent_chain;
 
   // If target is not direct ancestor of clip, this will find least common
   // ancestor between the target and the clip. Or, if the target has a
@@ -814,8 +815,11 @@ void FindLayersThatNeedUpdates(LayerTreeHost* layer_tree_host,
 
     // Append mask layers to the update layer list. They don't have valid
     // visible rects, so need to get added after the above calculation.
-    if (Layer* mask_layer = layer->mask_layer())
-      update_layer_list->push_back(mask_layer);
+    if (Layer* mask_layer = layer->mask_layer()) {
+      // Layers with empty bounds should never be painted, including masks.
+      if (!mask_layer->bounds().IsEmpty())
+        update_layer_list->push_back(mask_layer);
+    }
   }
 }
 
@@ -1009,6 +1013,7 @@ void ComputeMaskDrawProperties(LayerImpl* mask_layer,
                                    property_trees->transform_tree);
   mask_layer->draw_properties().visible_layer_rect =
       gfx::Rect(mask_layer->bounds());
+  mask_layer->draw_properties().opacity = 1;
 }
 
 void ComputeSurfaceDrawProperties(PropertyTrees* property_trees,

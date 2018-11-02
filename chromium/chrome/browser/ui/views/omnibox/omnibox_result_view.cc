@@ -172,9 +172,6 @@ TextStyle GetTextStyle(int type) {
 
 }  // namespace
 
-////////////////////////////////////////////////////////////////////////////////
-// OmniboxResultView, public:
-
 // This class is a utility class for calculations affected by whether the result
 // view is horizontally mirrored.  The drawing functions can be written as if
 // all drawing occurs left-to-right, and then use this class to get the actual
@@ -211,6 +208,9 @@ class OmniboxResultView::MirroringContext {
   DISALLOW_COPY_AND_ASSIGN(MirroringContext);
 };
 
+////////////////////////////////////////////////////////////////////////////////
+// OmniboxResultView, public:
+
 OmniboxResultView::OmniboxResultView(OmniboxPopupContentsView* model,
                                      int model_index,
                                      const gfx::FontList& font_list)
@@ -227,7 +227,8 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupContentsView* model,
   CHECK_GE(model_index, 0);
   keyword_icon_->set_owned_by_client();
   keyword_icon_->EnableCanvasFlippingForRTLUI(true);
-  keyword_icon_->SetImage(GetVectorIcon(omnibox::kKeywordSearchIcon));
+  keyword_icon_->SetImage(gfx::CreateVectorIcon(omnibox::kKeywordSearchIcon, 16,
+                                                GetVectorIconColor()));
   keyword_icon_->SizeToPreferredSize();
 }
 
@@ -237,6 +238,8 @@ OmniboxResultView::~OmniboxResultView() {
 SkColor OmniboxResultView::GetColor(
     ResultViewState state,
     ColorKind kind) const {
+  if (kind == INVISIBLE_TEXT)
+    return SK_ColorTRANSPARENT;
   for (size_t i = 0; i < arraysize(kTranslationTable); ++i) {
     if (kTranslationTable[i].state == state &&
         kTranslationTable[i].kind == kind) {
@@ -306,13 +309,66 @@ void OmniboxResultView::OnSelected() {
     NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
 }
 
-gfx::Size OmniboxResultView::CalculatePreferredSize() const {
-  int height = GetTextHeight() + (2 * GetVerticalMargin());
-  if (match_.answer)
-    height += GetAnswerHeight();
-  else if (base::FeatureList::IsEnabled(omnibox::kUIExperimentVerticalLayout))
-    height += GetTextHeight();
-  return gfx::Size(0, height);
+OmniboxResultView::ResultViewState OmniboxResultView::GetState() const {
+  if (model_->IsSelectedIndex(model_index_))
+    return SELECTED;
+  return is_hovered_ ? HOVERED : NORMAL;
+}
+
+void OmniboxResultView::OnMatchIconUpdated() {
+  // The new icon will be fetched during repaint.
+  SchedulePaint();
+}
+
+void OmniboxResultView::SetAnswerImage(const gfx::ImageSkia& image) {
+  answer_image_ = image;
+  SchedulePaint();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// OmniboxResultView, views::View overrides:
+
+bool OmniboxResultView::OnMousePressed(const ui::MouseEvent& event) {
+  if (event.IsOnlyLeftMouseButton())
+    model_->SetSelectedLine(model_index_);
+  return true;
+}
+
+bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
+  if (HitTestPoint(event.location())) {
+    // When the drag enters or remains within the bounds of this view, either
+    // set the state to be selected or hovered, depending on the mouse button.
+    if (event.IsOnlyLeftMouseButton()) {
+      if (GetState() != SELECTED)
+        model_->SetSelectedLine(model_index_);
+    } else {
+      SetHovered(true);
+    }
+    return true;
+  }
+
+  // When the drag leaves the bounds of this view, cancel the hover state and
+  // pass control to the popup view.
+  SetHovered(false);
+  SetMouseHandler(model_);
+  return false;
+}
+
+void OmniboxResultView::OnMouseReleased(const ui::MouseEvent& event) {
+  if (event.IsOnlyMiddleMouseButton() || event.IsOnlyLeftMouseButton()) {
+    model_->OpenMatch(model_index_,
+                      event.IsOnlyLeftMouseButton()
+                          ? WindowOpenDisposition::CURRENT_TAB
+                          : WindowOpenDisposition::NEW_BACKGROUND_TAB);
+  }
+}
+
+void OmniboxResultView::OnMouseMoved(const ui::MouseEvent& event) {
+  SetHovered(true);
+}
+
+void OmniboxResultView::OnMouseExited(const ui::MouseEvent& event) {
+  SetHovered(false);
 }
 
 void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -323,19 +379,22 @@ void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
                          : match_.contents);
 }
 
+gfx::Size OmniboxResultView::CalculatePreferredSize() const {
+  int height = GetTextHeight() + (2 * GetVerticalMargin());
+  if (match_.answer)
+    height += GetAnswerHeight();
+  else if (base::FeatureList::IsEnabled(omnibox::kUIExperimentVerticalLayout))
+    height += GetTextHeight();
+  return gfx::Size(0, height);
+}
+
 void OmniboxResultView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   Invalidate();
   SchedulePaint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// OmniboxResultView, protected:
-
-OmniboxResultView::ResultViewState OmniboxResultView::GetState() const {
-  if (model_->IsSelectedIndex(model_index_))
-    return SELECTED;
-  return is_hovered_ ? HOVERED : NORMAL;
-}
+// OmniboxResultView, private:
 
 int OmniboxResultView::GetTextHeight() const {
   return font_height_ + kVerticalPadding;
@@ -477,70 +536,28 @@ std::unique_ptr<gfx::RenderText> OmniboxResultView::CreateClassifiedRenderText(
     ColorKind color_kind = TEXT;
     if (classifications[i].style & ACMatchClassification::URL) {
       color_kind = URL;
-      // URL Standard specifies that a URL "should be rendered as if it were in
-      // a left-to-right embedding". https://url.spec.whatwg.org/#url-rendering
-      //
-      // Consider logical string for domain "ABC.com/hello" (where ABC are
-      // Hebrew (RTL) characters). The normal Bidi algorithm renders this as
-      // "com/hello.CBA"; by forcing LTR, it is rendered as "CBA.com/hello".
-      //
-      // Note that this only applies a LTR embedding at the top level; it
-      // doesn't change the Bidi algorithm, so there are still some URLs that
-      // will render in a confusing order. Consider the logical string
-      // "abc.COM/HELLO/world", which will render as "abc.OLLEH/MOC/world".
-      // See https://crbug.com/351639.
-      render_text->SetDirectionalityMode(gfx::DIRECTIONALITY_FORCE_LTR);
+      render_text->SetDirectionalityMode(gfx::DIRECTIONALITY_AS_URL);
     } else if (force_dim ||
         (classifications[i].style & ACMatchClassification::DIM)) {
       color_kind = DIMMED_TEXT;
+    } else if (classifications[i].style & ACMatchClassification::INVISIBLE) {
+      color_kind = INVISIBLE_TEXT;
     }
     render_text->ApplyColor(GetColor(GetState(), color_kind), current_range);
   }
   return render_text;
 }
 
-int OmniboxResultView::GetMatchContentsWidth() const {
-  InitContentsRenderTextIfNecessary();
-  contents_rendertext_->SetDisplayRect(gfx::Rect(gfx::Size(INT_MAX, 0)));
-  return contents_rendertext_->GetContentWidth();
+gfx::Image OmniboxResultView::GetIcon() const {
+  return model_->GetMatchIcon(match_, GetVectorIconColor());
 }
 
-void OmniboxResultView::SetCustomIcon(const gfx::ImageSkia& icon) {
-  custom_icon_ = icon;
-  SchedulePaint();
-}
-
-void OmniboxResultView::SetAnswerImage(const gfx::ImageSkia& image) {
-  answer_image_ = image;
-  SchedulePaint();
-}
-
-const char* OmniboxResultView::GetClassName() const {
-  return "OmniboxResultView";
-}
-
-gfx::ImageSkia OmniboxResultView::GetIcon() const {
-  // TODO(tommycli): Consolidate the extension icons, custom icons, and vector
-  // icons into a single concept at the cross-platform layer.
-  const gfx::Image image = model_->GetIconIfExtensionMatch(model_index_);
-  if (!image.IsEmpty())
-    return image.AsImageSkia();
-
-  if (!custom_icon_.isNull())
-    return custom_icon_;
-
-  return GetVectorIcon(model_->IsStarredMatch(match_)
-                           ? omnibox::kStarIcon
-                           : AutocompleteMatch::TypeToVectorIcon(match_.type));
-}
-
-gfx::ImageSkia OmniboxResultView::GetVectorIcon(
-    const gfx::VectorIcon& icon) const {
+SkColor OmniboxResultView::GetVectorIconColor() const {
   // For selected rows, paint the icon the same color as the text.
   SkColor color = GetColor(GetState(), TEXT);
   if (GetState() != SELECTED)
     color = color_utils::DeriveDefaultIconColor(color);
-  return gfx::CreateVectorIcon(icon, 16, color);
+  return color;
 }
 
 bool OmniboxResultView::ShowOnlyKeywordMatch() const {
@@ -565,104 +582,6 @@ void OmniboxResultView::InitContentsRenderTextIfNecessary() const {
           false);
     }
   }
-}
-
-void OmniboxResultView::Layout() {
-  const int horizontal_padding =
-      GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
-      LocationBarView::kIconInteriorPadding;
-  // The horizontal bounds we're given are the outside bounds, so we can match
-  // the omnibox border outline shape exactly in OnPaint().  We have to inset
-  // here to keep the icons lined up.
-  const int start_x = BackgroundWith1PxBorder::kLocationBarBorderThicknessDip +
-                      horizontal_padding;
-  const int end_x = width() - start_x;
-
-  const gfx::ImageSkia icon = GetIcon();
-
-  int row_height = GetTextHeight();
-  if (base::FeatureList::IsEnabled(omnibox::kUIExperimentVerticalLayout))
-    row_height += match_.answer ? GetAnswerHeight() : GetTextHeight();
-
-  const int icon_y = GetVerticalMargin() + (row_height - icon.height()) / 2;
-  icon_bounds_.SetRect(start_x, icon_y, icon.width(), icon.height());
-
-  const int text_x = start_x + LocationBarView::kIconWidth + horizontal_padding;
-  int text_width = end_x - text_x;
-
-  if (match_.associated_keyword.get()) {
-    const int max_kw_x = end_x - keyword_icon_->width();
-    const int kw_x = animation_->CurrentValueBetween(max_kw_x, start_x);
-    const int kw_text_x = kw_x + keyword_icon_->width() + horizontal_padding;
-
-    text_width = kw_x - text_x - horizontal_padding;
-    keyword_text_bounds_.SetRect(
-        kw_text_x, 0, std::max(end_x - kw_text_x, 0), height());
-    keyword_icon_->SetPosition(
-        gfx::Point(kw_x, (height() - keyword_icon_->height()) / 2));
-  }
-
-  text_bounds_.SetRect(text_x, 0, std::max(text_width, 0), height());
-}
-
-void OmniboxResultView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  animation_->SetSlideDuration(width() / 4);
-}
-
-void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
-  View::OnPaint(canvas);
-
-  // NOTE: While animating the keyword match, both matches may be visible.
-
-  if (!ShowOnlyKeywordMatch()) {
-    canvas->DrawImageInt(GetIcon(), GetMirroredXForRect(icon_bounds_),
-                         icon_bounds_.y());
-    int x = GetMirroredXForRect(text_bounds_);
-    mirroring_context_->Initialize(x, text_bounds_.width());
-    InitContentsRenderTextIfNecessary();
-
-    if (!description_rendertext_) {
-      if (match_.answer) {
-        description_rendertext_ =
-            CreateAnswerText(match_.answer->second_line(), GetAnswerFont());
-      } else if (!match_.description.empty()) {
-        // If the description is empty, we wouldn't swap with the contents --
-        // nor would we create the description RenderText object anyways.
-        bool swap_match_text = base::FeatureList::IsEnabled(
-                                   omnibox::kUIExperimentVerticalLayout) &&
-                               !AutocompleteMatch::IsSearchType(match_.type);
-
-        description_rendertext_ = CreateClassifiedRenderText(
-            swap_match_text ? match_.contents : match_.description,
-            swap_match_text ? match_.contents_class : match_.description_class,
-            false);
-      }
-    }
-    PaintMatch(match_, contents_rendertext_.get(),
-               description_rendertext_.get(), canvas, x);
-  }
-
-  AutocompleteMatch* keyword_match = match_.associated_keyword.get();
-  if (keyword_match) {
-    int x = GetMirroredXForRect(keyword_text_bounds_);
-    mirroring_context_->Initialize(x, keyword_text_bounds_.width());
-    if (!keyword_contents_rendertext_) {
-      keyword_contents_rendertext_ = CreateClassifiedRenderText(
-          keyword_match->contents, keyword_match->contents_class, false);
-    }
-    if (!keyword_description_rendertext_ &&
-        !keyword_match->description.empty()) {
-      keyword_description_rendertext_ = CreateClassifiedRenderText(
-          keyword_match->description, keyword_match->description_class, true);
-    }
-    PaintMatch(*keyword_match, keyword_contents_rendertext_.get(),
-               keyword_description_rendertext_.get(), canvas, x);
-  }
-}
-
-void OmniboxResultView::AnimationProgressed(const gfx::Animation* animation) {
-  Layout();
-  SchedulePaint();
 }
 
 const gfx::FontList& OmniboxResultView::GetAnswerFont() const {
@@ -701,22 +620,6 @@ int OmniboxResultView::GetAnswerHeight() const {
   return (GetAnswerFont().GetHeight() *
           description_rendertext_->GetNumLines()) +
          kVerticalPadding;
-}
-
-bool OmniboxResultView::OnMousePressed(const ui::MouseEvent& event) {
-  // Cancel the hover state in case the user starts a drag, in which case we
-  // won't be notified on mouse exit.
-  if (event.IsLeftMouseButton() || event.IsMiddleMouseButton())
-    SetHovered(false);
-  return false;
-}
-
-void OmniboxResultView::OnMouseMoved(const ui::MouseEvent& event) {
-  SetHovered(true);
-}
-
-void OmniboxResultView::OnMouseExited(const ui::MouseEvent& event) {
-  SetHovered(false);
 }
 
 int OmniboxResultView::GetVerticalMargin() const {
@@ -819,4 +722,112 @@ void OmniboxResultView::SetHovered(bool hovered) {
     Invalidate();
     SchedulePaint();
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// OmniboxResultView, views::View overrides, private:
+
+void OmniboxResultView::Layout() {
+  const int horizontal_padding =
+      GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
+      LocationBarView::kIconInteriorPadding;
+  // The horizontal bounds we're given are the outside bounds, so we can match
+  // the omnibox border outline shape exactly in OnPaint().  We have to inset
+  // here to keep the icons lined up.
+  const int start_x = BackgroundWith1PxBorder::kLocationBarBorderThicknessDip +
+                      horizontal_padding;
+  const int end_x = width() - start_x;
+
+  const gfx::Image icon = GetIcon();
+
+  int row_height = GetTextHeight();
+  if (base::FeatureList::IsEnabled(omnibox::kUIExperimentVerticalLayout))
+    row_height += match_.answer ? GetAnswerHeight() : GetTextHeight();
+
+  const int icon_y = GetVerticalMargin() + (row_height - icon.Height()) / 2;
+  icon_bounds_.SetRect(start_x, icon_y, icon.Width(), icon.Height());
+
+  const int text_x = start_x + LocationBarView::kIconWidth + horizontal_padding;
+  int text_width = end_x - text_x;
+
+  if (match_.associated_keyword.get()) {
+    const int max_kw_x = end_x - keyword_icon_->width();
+    const int kw_x = animation_->CurrentValueBetween(max_kw_x, start_x);
+    const int kw_text_x = kw_x + keyword_icon_->width() + horizontal_padding;
+
+    text_width = kw_x - text_x - horizontal_padding;
+    keyword_text_bounds_.SetRect(kw_text_x, 0, std::max(end_x - kw_text_x, 0),
+                                 height());
+    keyword_icon_->SetPosition(
+        gfx::Point(kw_x, (height() - keyword_icon_->height()) / 2));
+  }
+
+  text_bounds_.SetRect(text_x, 0, std::max(text_width, 0), height());
+}
+
+const char* OmniboxResultView::GetClassName() const {
+  return "OmniboxResultView";
+}
+
+void OmniboxResultView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  animation_->SetSlideDuration(width() / 4);
+}
+
+void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
+  View::OnPaint(canvas);
+
+  // NOTE: While animating the keyword match, both matches may be visible.
+
+  if (!ShowOnlyKeywordMatch()) {
+    canvas->DrawImageInt(GetIcon().AsImageSkia(),
+                         GetMirroredXForRect(icon_bounds_), icon_bounds_.y());
+    int x = GetMirroredXForRect(text_bounds_);
+    mirroring_context_->Initialize(x, text_bounds_.width());
+    InitContentsRenderTextIfNecessary();
+
+    if (!description_rendertext_) {
+      if (match_.answer) {
+        description_rendertext_ =
+            CreateAnswerText(match_.answer->second_line(), GetAnswerFont());
+      } else if (!match_.description.empty()) {
+        // If the description is empty, we wouldn't swap with the contents --
+        // nor would we create the description RenderText object anyways.
+        bool swap_match_text = base::FeatureList::IsEnabled(
+                                   omnibox::kUIExperimentVerticalLayout) &&
+                               !AutocompleteMatch::IsSearchType(match_.type);
+
+        description_rendertext_ = CreateClassifiedRenderText(
+            swap_match_text ? match_.contents : match_.description,
+            swap_match_text ? match_.contents_class : match_.description_class,
+            false);
+      }
+    }
+    PaintMatch(match_, contents_rendertext_.get(),
+               description_rendertext_.get(), canvas, x);
+  }
+
+  AutocompleteMatch* keyword_match = match_.associated_keyword.get();
+  if (keyword_match) {
+    int x = GetMirroredXForRect(keyword_text_bounds_);
+    mirroring_context_->Initialize(x, keyword_text_bounds_.width());
+    if (!keyword_contents_rendertext_) {
+      keyword_contents_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->contents, keyword_match->contents_class, false);
+    }
+    if (!keyword_description_rendertext_ &&
+        !keyword_match->description.empty()) {
+      keyword_description_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->description, keyword_match->description_class, true);
+    }
+    PaintMatch(*keyword_match, keyword_contents_rendertext_.get(),
+               keyword_description_rendertext_.get(), canvas, x);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// OmniboxResultView, gfx::AnimationProgressed overrides, private:
+
+void OmniboxResultView::AnimationProgressed(const gfx::Animation* animation) {
+  Layout();
+  SchedulePaint();
 }

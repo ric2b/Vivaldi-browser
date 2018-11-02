@@ -27,13 +27,15 @@
 #define FontDescription_h
 
 #include "SkFontStyle.h"
-#include "platform/FontFamilyNames.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/LayoutLocale.h"
+#include "platform/font_family_names.h"
 #include "platform/fonts/FontCacheKey.h"
 #include "platform/fonts/FontFamily.h"
 #include "platform/fonts/FontOrientation.h"
 #include "platform/fonts/FontSelectionTypes.h"
 #include "platform/fonts/FontSmoothingMode.h"
+#include "platform/fonts/FontVariantEastAsian.h"
 #include "platform/fonts/FontVariantNumeric.h"
 #include "platform/fonts/FontWidthVariant.h"
 #include "platform/fonts/TextRenderingMode.h"
@@ -41,8 +43,6 @@
 #include "platform/fonts/opentype/FontSettings.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/MathExtras.h"
-
-#include "platform/wtf/RefPtr.h"
 
 #include <unicode/uscript.h>
 
@@ -65,14 +65,17 @@ class PLATFORM_EXPORT FontDescription {
     kFantasyFamily,
     kPictographFamily
   };
+  static String ToString(GenericFamilyType);
 
   enum Kerning { kAutoKerning, kNormalKerning, kNoneKerning };
+  static String ToString(Kerning);
 
   enum LigaturesState {
     kNormalLigaturesState,
     kDisabledLigaturesState,
     kEnabledLigaturesState
   };
+  static String ToString(LigaturesState);
 
   enum FontVariantCaps {
     kCapsNormal,
@@ -83,6 +86,7 @@ class PLATFORM_EXPORT FontDescription {
     kUnicase,
     kTitlingCaps
   };
+  static String ToString(FontVariantCaps);
 
   FontDescription();
   FontDescription(const FontDescription&);
@@ -102,6 +106,8 @@ class PLATFORM_EXPORT FontDescription {
           historical(state),
           contextual(state) {}
 
+    String ToString() const;
+
     unsigned common : 2;
     unsigned discretionary : 2;
     unsigned historical : 2;
@@ -112,9 +118,12 @@ class PLATFORM_EXPORT FontDescription {
     STACK_ALLOCATED();
     Size(unsigned keyword, float value, bool is_absolute)
         : keyword(keyword), is_absolute(is_absolute), value(value) {}
-    unsigned keyword : 4;     // FontDescription::keywordSize
-    unsigned is_absolute : 1;  // FontDescription::isAbsoluteSize
-    float value;
+
+    String ToString() const;
+
+    unsigned keyword : 4;      // FontDescription::KeywordSize
+    unsigned is_absolute : 1;  // FontDescription::IsAbsoluteSize
+    float value;               // FontDescription::SpecifiedSize
   };
 
   struct FamilyDescription {
@@ -124,6 +133,9 @@ class PLATFORM_EXPORT FontDescription {
     FamilyDescription(GenericFamilyType generic_family,
                       const FontFamily& family)
         : generic_family(generic_family), family(family) {}
+
+    String ToString() const;
+
     GenericFamilyType generic_family;
     FontFamily family;
   };
@@ -164,6 +176,10 @@ class PLATFORM_EXPORT FontDescription {
            Family().Family() == FontFamilyNames::webkit_monospace;
   }
   Kerning GetKerning() const { return static_cast<Kerning>(fields_.kerning_); }
+  FontVariantEastAsian VariantEastAsian() const {
+    return FontVariantEastAsian::InitializeFromUnsigned(
+        fields_.variant_east_asian_);
+  }
   VariantLigatures GetVariantLigatures() const;
   FontVariantNumeric VariantNumeric() const {
     return FontVariantNumeric::InitializeFromUnsigned(fields_.variant_numeric_);
@@ -187,9 +203,9 @@ class PLATFORM_EXPORT FontDescription {
   TextRenderingMode TextRendering() const {
     return static_cast<TextRenderingMode>(fields_.text_rendering_);
   }
-  const LayoutLocale* Locale() const { return locale_.Get(); }
+  const LayoutLocale* Locale() const { return locale_.get(); }
   const LayoutLocale& LocaleOrDefault() const {
-    return LayoutLocale::ValueOrDefault(locale_.Get());
+    return LayoutLocale::ValueOrDefault(locale_.get());
   }
   UScriptCode GetScript() const { return LocaleOrDefault().GetScript(); }
   bool IsSyntheticBold() const { return fields_.synthetic_bold_; }
@@ -220,10 +236,10 @@ class PLATFORM_EXPORT FontDescription {
     return static_cast<FontWidthVariant>(fields_.width_variant_);
   }
   FontFeatureSettings* FeatureSettings() const {
-    return feature_settings_.Get();
+    return feature_settings_.get();
   }
   FontVariationSettings* VariationSettings() const {
-    return variation_settings_.Get();
+    return variation_settings_.get();
   }
 
   float EffectiveFontSize()
@@ -243,6 +259,7 @@ class PLATFORM_EXPORT FontDescription {
   void SetStretch(FontSelectionValue s) { font_selection_request_.width = s; }
 
   void SetVariantCaps(FontVariantCaps);
+  void SetVariantEastAsian(const FontVariantEastAsian);
   void SetVariantLigatures(const VariantLigatures&);
   void SetVariantNumeric(const FontVariantNumeric&);
   void SetIsAbsoluteSize(bool s) { fields_.is_absolute_size_ = s; }
@@ -268,7 +285,7 @@ class PLATFORM_EXPORT FontDescription {
   void SetWidthVariant(FontWidthVariant width_variant) {
     fields_.width_variant_ = width_variant;
   }
-  void SetLocale(PassRefPtr<const LayoutLocale> locale) {
+  void SetLocale(scoped_refptr<const LayoutLocale> locale) {
     locale_ = std::move(locale);
   }
   void SetSyntheticBold(bool synthetic_bold) {
@@ -277,10 +294,10 @@ class PLATFORM_EXPORT FontDescription {
   void SetSyntheticItalic(bool synthetic_italic) {
     fields_.synthetic_italic_ = synthetic_italic;
   }
-  void SetFeatureSettings(PassRefPtr<FontFeatureSettings> settings) {
+  void SetFeatureSettings(scoped_refptr<FontFeatureSettings> settings) {
     feature_settings_ = std::move(settings);
   }
-  void SetVariationSettings(PassRefPtr<FontVariationSettings> settings) {
+  void SetVariationSettings(scoped_refptr<FontVariationSettings> settings) {
     variation_settings_ = std::move(settings);
   }
   void SetWordSpacing(float s) { word_spacing_ = s; }
@@ -319,11 +336,13 @@ class PLATFORM_EXPORT FontDescription {
 
   SkFontStyle SkiaFontStyle() const;
 
+  String ToString() const;
+
  private:
   FontFamily family_list_;  // The list of font families to be used.
-  RefPtr<FontFeatureSettings> feature_settings_;
-  RefPtr<FontVariationSettings> variation_settings_;
-  RefPtr<const LayoutLocale> locale_;
+  scoped_refptr<FontFeatureSettings> feature_settings_;
+  scoped_refptr<FontVariationSettings> variation_settings_;
+  scoped_refptr<const LayoutLocale> locale_;
 
   void UpdateTypesettingFeatures();
 
@@ -349,7 +368,10 @@ class PLATFORM_EXPORT FontDescription {
 
   struct BitFields {
     DISALLOW_NEW();
-    unsigned orientation_ : static_cast<unsigned>(FontOrientation::kBitCount);
+
+    String ToString() const;
+
+    unsigned orientation_ : kFontOrientationBitCount;
 
     unsigned width_variant_ : 2;  // FontWidthVariant
 
@@ -380,6 +402,7 @@ class PLATFORM_EXPORT FontDescription {
     unsigned subpixel_text_position_ : 1;
     unsigned typesetting_features_ : 3;
     unsigned variant_numeric_ : 8;
+    unsigned variant_east_asian_ : 6;
     mutable unsigned subpixel_ascent_descent_ : 1;
   };
 

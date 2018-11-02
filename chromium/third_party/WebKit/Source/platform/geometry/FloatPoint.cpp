@@ -27,22 +27,22 @@
 #include "platform/geometry/FloatPoint.h"
 
 #include <math.h>
+#include <algorithm>
 #include <limits>
 #include "SkPoint.h"
 #include "platform/geometry/DoublePoint.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/geometry/LayoutSize.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/text/WTFString.h"
+#include "third_party/skia/include/core/SkPoint.h"
 
 namespace blink {
 
-// Skia has problems when passed infinite, etc floats, filter them to 0.
-static inline SkScalar WebCoreFloatToSkScalar(float f) {
-  return SkFloatToScalar(std::isfinite(f) ? f : 0);
-}
-
 FloatPoint::FloatPoint(const IntPoint& p) : x_(p.X()), y_(p.Y()) {}
+
+FloatPoint::FloatPoint(const SkPoint& point) : x_(point.x()), y_(point.y()) {}
 
 FloatPoint::FloatPoint(const DoublePoint& p) : x_(p.X()), y_(p.Y()) {}
 
@@ -58,6 +58,14 @@ float FloatPoint::SlopeAngleRadians() const {
 
 float FloatPoint::length() const {
   return hypotf(x_, y_);
+}
+
+FloatPoint FloatPoint::ExpandedTo(const FloatPoint& other) const {
+  return FloatPoint(std::max(x_, other.x_), std::max(y_, other.y_));
+}
+
+FloatPoint FloatPoint::ShrunkTo(const FloatPoint& other) const {
+  return FloatPoint(std::min(x_, other.x_), std::min(y_, other.y_));
 }
 
 void FloatPoint::Move(const LayoutSize& size) {
@@ -100,6 +108,14 @@ bool FindIntersection(const FloatPoint& p1,
   intersection.SetX(p1.X() + param * px_length);
   intersection.SetY(p1.Y() + param * py_length);
   return true;
+}
+
+FloatPoint::operator SkPoint() const {
+  return SkPoint::Make(x_, y_);
+}
+
+std::ostream& operator<<(std::ostream& ostream, const FloatPoint& point) {
+  return ostream << point.ToString();
 }
 
 String FloatPoint::ToString() const {

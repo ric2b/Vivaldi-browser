@@ -79,7 +79,6 @@
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/self_cleaning_temp_dir.h"
 #include "chrome/installer/util/shell_util.h"
-#include "chrome/installer/util/user_experiment.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/crash/content/app/crash_switches.h"
 #include "components/crash/content/app/run_as_crashpad_handler_win.h"
@@ -1015,37 +1014,6 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
                                  MasterPreferences::ForCurrentProcess(),
                                  original_state, installer_state);
     exit_code = 0;
-  } else if (cmd_line.HasSwitch(installer::switches::kInactiveUserToast)) {
-    // Launch the inactive user toast experiment.
-    int flavor = -1;
-    base::StringToInt(cmd_line.GetSwitchValueNative(
-        installer::switches::kInactiveUserToast), &flavor);
-    std::string experiment_group =
-        cmd_line.GetSwitchValueASCII(installer::switches::kExperimentGroup);
-    DCHECK_NE(-1, flavor);
-    if (flavor == -1) {
-      *exit_code = installer::UNKNOWN_STATUS;
-    } else {
-      // This code is called (via setup.exe relaunch) only if a product is known
-      // to run user experiments, so no check is required.
-      installer::InactiveUserToastExperiment(
-          flavor, base::ASCIIToUTF16(experiment_group),
-          installer_state->product(), installer_state->target_path());
-    }
-  } else if (cmd_line.HasSwitch(installer::switches::kSystemLevelToast)) {
-    const Product& product = installer_state->product();
-    BrowserDistribution* browser_dist = product.distribution();
-    // We started as system-level and have been re-launched as user level
-    // to continue with the toast experiment.
-    base::Version installed_version;
-    InstallUtil::GetChromeVersion(browser_dist, true, &installed_version);
-    if (!installed_version.IsValid()) {
-      LOG(ERROR) << "No installation of " << browser_dist->GetDisplayName()
-                 << " found for system-level toast.";
-    } else {
-      product.LaunchUserExperiment(setup_exe, installer::REENTRY_SYS_UPDATE,
-                                   true);
-    }
   } else if (cmd_line.HasSwitch(installer::switches::kPatch)) {
     const std::string patch_type_str(
         cmd_line.GetSwitchValueASCII(installer::switches::kPatch));
@@ -1429,24 +1397,6 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     installer::LaunchDeleteOldVersionsProcess(new_version_setup_path,
                                               installer_state);
   }
-  // There might be an experiment (for upgrade usually) that needs to happen.
-  // An experiment's outcome can include chrome's uninstallation. If that is
-  // the case we would not do that directly at this point but in another
-  // instance of setup.exe
-  //
-  // There is another way to reach this same function if this is a system
-  // level install. See HandleNonInstallCmdLineOptions().
-  {
-    // If installation failed, use the path to the currently running setup.
-    // If installation succeeded, use the path to setup in the installer dir.
-    base::FilePath setup_path(setup_exe);
-    if (InstallUtil::GetInstallReturnCode(install_status) == 0) {
-      setup_path = installer_state.GetInstallerDirectory(*installer_version)
-          .Append(setup_path.BaseName());
-    }
-    installer_state.product().LaunchUserExperiment(setup_path, install_status,
-                                                   system_install);
-  }
 
   // If the installation completed successfully...
   VivaldiUpdateDeltaPatchStatus(true);
@@ -1653,6 +1603,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       cmd_line.AppendSwitch(installer::switches::kVivaldiStandalone);
       VLOG(1) << "Vivaldi: standalone install - install dir=" << path.value();
       break;
+    default:
+      NOTREACHED();
     }
 
     if (dlg.GetRegisterBrowser()) {
@@ -1784,7 +1736,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   // Initialize COM for use later.
   base::win::ScopedCOMInitializer com_initializer;
-  if (!com_initializer.succeeded()) {
+  if (!com_initializer.Succeeded()) {
     installer_state.WriteInstallerResult(
         installer::OS_ERROR, IDS_INSTALL_OS_ERROR_BASE, NULL);
     return installer::OS_ERROR;
@@ -1809,8 +1761,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   }
   // Some switches only apply for modes that support retention experiments.
   if (!install_static::SupportsRetentionExperiments() &&
-      (cmd_line.HasSwitch(installer::switches::kInactiveUserToast) ||
-       cmd_line.HasSwitch(installer::switches::kSystemLevelToast))) {
+      cmd_line.HasSwitch(installer::switches::kUserExperiment)) {
     return installer::SXS_OPTION_NOT_SUPPORTED;
   }
 
@@ -1897,9 +1848,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
                         &installer_state, &installer_directory);
     DoLegacyCleanups(installer_state, install_status);
 
-    // It may be time to kick off an experiment if this was a successful update.
-    if ((install_status == installer::NEW_VERSION_UPDATED ||
-         install_status == installer::IN_USE_UPDATED) &&
+    // It may be time to kick off an experiment if this was a successful update
+    // and Chrome was not in use (since the experiment only applies to inactive
+    // installs).
+    if (install_status == installer::NEW_VERSION_UPDATED &&
         installer::ShouldRunUserExperiment(installer_state)) {
       installer::BeginUserExperiment(
           installer_state, installer_directory.Append(setup_exe.BaseName()),

@@ -356,14 +356,15 @@ filelist.handlePointerDownUp = function(e, index) {
         // 1) When checkmark area is clicked, toggle item selection and enable
         //    the check-select mode.
         if (isClickOnCheckmark) {
-          // If a selected item's checkmark is clicked when the selection mode
-          // is not check-select, we should avoid toggling(unselecting) the
-          // item. It is done here by toggling the selection twice.
-          if (!sm.getCheckSelectMode() && sm.getIndexSelected(index))
-            sm.setIndexSelected(index, !sm.getIndexSelected(index));
-          // Always enables check-select mode on clicks on checkmark.
-          sm.setCheckSelectMode(true);
+          // If Files app enters check-select mode by clicking an item's icon,
+          // existing selection should be cleared.
+          if (!sm.getCheckSelectMode())
+            sm.unselectAll();
         }
+        // Always enables check-select mode when the selection is updated by
+        // Ctrl+Click or Click on an item's icon.
+        sm.setCheckSelectMode(true);
+
         // Toggle the current one and make it anchor index.
         sm.setIndexSelected(index, !sm.getIndexSelected(index));
         sm.leadIndex = index;

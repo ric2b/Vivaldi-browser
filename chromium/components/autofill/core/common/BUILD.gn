@@ -10,6 +10,8 @@ static_library("common") {
     "autofill_constants.h",
     "autofill_data_validation.cc",
     "autofill_data_validation.h",
+    "autofill_features.cc",
+    "autofill_features.h",
     "autofill_l10n_util.cc",
     "autofill_l10n_util.h",
     "autofill_pref_names.cc",
@@ -49,7 +51,6 @@ static_library("common") {
     "//base",
     "//base:i18n",
     "//components/variations",
-    "//third_party/re2",
     "//url",
   ]
 

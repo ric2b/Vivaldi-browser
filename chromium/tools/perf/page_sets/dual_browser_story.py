@@ -97,10 +97,9 @@ class MultiBrowserSharedState(story_module.SharedState):
       wpr_mode = wpr_modes.WPR_RECORD
     else:
       wpr_mode = wpr_modes.WPR_REPLAY
+    self._extra_wpr_args = browser_options.extra_wpr_args
 
-    self.platform.network_controller.Open(
-        wpr_mode, browser_options.extra_wpr_args,
-        use_wpr_go=story_set.wpr_archive_info.is_using_wpr_go_archives)
+    self.platform.network_controller.Open(wpr_mode)
 
   @property
   def current_tab(self):
@@ -125,10 +124,6 @@ class MultiBrowserSharedState(story_module.SharedState):
 
     if self._platform is None:
       self._platform = possible_browser.platform
-      # TODO(nedn): Remove the if condition once
-      # https://codereview.chromium.org/2265593003/ is rolled to Chromium tree.
-      if hasattr(self._platform.network_controller, 'InitializeIfNeeded'):
-        self._platform.network_controller.InitializeIfNeeded()
     else:
       assert self._platform is possible_browser.platform
     self._possible_browsers[browser_type] = (possible_browser, options)
@@ -168,7 +163,8 @@ class MultiBrowserSharedState(story_module.SharedState):
 
     self.platform.network_controller.StartReplay(
         self._story_set.WprFilePathForStory(story),
-        story.make_javascript_deterministic)
+        story.make_javascript_deterministic,
+        self._extra_wpr_args)
 
     # Note: browsers need to be created after replay has been started.
     self._CreateAllBrowsersIfNeeeded()

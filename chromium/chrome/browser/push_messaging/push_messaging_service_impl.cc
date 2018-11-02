@@ -30,7 +30,6 @@
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
-#include "chrome/browser/push_messaging/push_messaging_service_observer.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -60,8 +59,13 @@
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "base/android/jni_android.h"
+#include "jni/PushMessagingServiceObserver_jni.h"
 #endif
 
 using instance_id::InstanceID;
@@ -162,7 +166,6 @@ PushMessagingServiceImpl::PushMessagingServiceImpl(Profile* profile)
       push_subscription_count_(0),
       pending_push_subscription_count_(0),
       notification_manager_(profile),
-      push_messaging_service_observer_(PushMessagingServiceObserver::Create()),
       weak_factory_(this) {
   DCHECK(profile);
   HostContentSettingsMapFactory::GetForProfile(profile_)->AddObserver(this);
@@ -261,9 +264,9 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
   }
 
   if (!in_flight_keep_alive_) {
-    in_flight_keep_alive_.reset(
-        new ScopedKeepAlive(KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
-                            KeepAliveRestartOption::DISABLED));
+    in_flight_keep_alive_ = std::make_unique<ScopedKeepAlive>(
+        KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
+        KeepAliveRestartOption::DISABLED);
   }
 #endif
 
@@ -414,8 +417,10 @@ void PushMessagingServiceImpl::DidHandleMessage(
 
   message_handled_closure.Run();
 
-  if (push_messaging_service_observer_)
-    push_messaging_service_observer_->OnMessageHandled();
+#if defined(OS_ANDROID)
+  chrome::android::Java_PushMessagingServiceObserver_onMessageHandled(
+      base::android::AttachCurrentThread());
+#endif
 }
 
 void PushMessagingServiceImpl::SetMessageCallbackForTesting(
@@ -488,7 +493,7 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
 
   // Push does not allow permission requests from iframes.
   PermissionManager::Get(profile_)->RequestPermission(
-      CONTENT_SETTINGS_TYPE_PUSH_MESSAGING, web_contents->GetMainFrame(),
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, web_contents->GetMainFrame(),
       requesting_origin, user_gesture,
       base::Bind(&PushMessagingServiceImpl::DoSubscribe,
                  weak_factory_.GetWeakPtr(), app_identifier, options,
@@ -537,7 +542,7 @@ blink::WebPushPermissionStatus PushMessagingServiceImpl::GetPermissionStatus(
   // |origin| when checking whether permission to use the API has been granted.
   return ToPushPermission(
       PermissionManager::Get(profile_)
-          ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_PUSH_MESSAGING, origin,
+          ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, origin,
                                 origin)
           .content_setting);
 }

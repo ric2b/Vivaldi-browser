@@ -5,7 +5,6 @@
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
 
 #include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
@@ -28,6 +27,7 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 
 namespace content {
@@ -120,7 +120,7 @@ void ServiceWorkerWriteToCacheJob::StartAsync() {
     copy_reader =
         context_->storage()->CreateResponseReader(incumbent_resource_id_);
   }
-  cache_writer_ = base::MakeUnique<ServiceWorkerCacheWriter>(
+  cache_writer_ = std::make_unique<ServiceWorkerCacheWriter>(
       std::move(compare_reader), std::move(copy_reader),
       context_->storage()->CreateResponseWriter(resource_id_));
 
@@ -237,7 +237,7 @@ void ServiceWorkerWriteToCacheJob::InitNetRequest(
   net_request_->set_initiator(request()->initiator());
   net_request_->SetReferrer(request()->referrer());
   net_request_->SetUserData(URLRequestServiceWorkerData::kUserDataKey,
-                            base::MakeUnique<URLRequestServiceWorkerData>());
+                            std::make_unique<URLRequestServiceWorkerData>());
   if (extra_load_flags)
     net_request_->SetLoadFlags(net_request_->load_flags() | extra_load_flags);
 
@@ -303,10 +303,13 @@ void ServiceWorkerWriteToCacheJob::OnSSLCertificateError(
   DCHECK_EQ(net_request_.get(), request);
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerWriteToCacheJob::OnSSLCertificateError");
-  if (ShouldIgnoreSSLError(request))
+  if (ShouldIgnoreSSLError(request)) {
     request->ContinueDespiteLastError();
-  else
-    NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
+  } else {
+    NotifyStartErrorHelper(
+        net::Error(net::MapCertStatusToNetError(ssl_info.cert_status)),
+        kSSLError);
+  }
 }
 
 void ServiceWorkerWriteToCacheJob::OnResponseStarted(net::URLRequest* request,
@@ -331,16 +334,16 @@ void ServiceWorkerWriteToCacheJob::OnResponseStarted(net::URLRequest* request,
   // So we check cert_status here.
   if (net::IsCertStatusError(request->ssl_info().cert_status) &&
       !ShouldIgnoreSSLError(request)) {
-    NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
+    NotifyStartErrorHelper(net::Error(net::MapCertStatusToNetError(
+                               request->ssl_info().cert_status)),
+                           kSSLError);
     return;
   }
 
   if (resource_type_ == RESOURCE_TYPE_SERVICE_WORKER) {
     std::string mime_type;
     request->GetMimeType(&mime_type);
-    if (mime_type != "application/x-javascript" &&
-        mime_type != "text/javascript" &&
-        mime_type != "application/javascript") {
+    if (!blink::IsSupportedJavascriptMimeType(mime_type)) {
       std::string error_message =
           mime_type.empty()
               ? kNoMIMEError
@@ -366,8 +369,8 @@ void ServiceWorkerWriteToCacheJob::OnResponseStarted(net::URLRequest* request,
           new net::HttpResponseInfo(net_request_->response_info()));
   net::Error error = cache_writer_->MaybeWriteHeaders(
       info_buffer.get(),
-      base::Bind(&ServiceWorkerWriteToCacheJob::OnWriteHeadersComplete,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerWriteToCacheJob::OnWriteHeadersComplete,
+                     weak_factory_.GetWeakPtr()));
   if (error == net::ERR_IO_PENDING)
     return;
   OnWriteHeadersComplete(error);
@@ -440,8 +443,8 @@ int ServiceWorkerWriteToCacheJob::HandleNetData(int bytes_read) {
   io_buffer_bytes_ = bytes_read;
   net::Error error = cache_writer_->MaybeWriteData(
       io_buffer_.get(), bytes_read,
-      base::Bind(&ServiceWorkerWriteToCacheJob::OnWriteDataComplete,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerWriteToCacheJob::OnWriteDataComplete,
+                     weak_factory_.GetWeakPtr()));
 
   // In case of ERR_IO_PENDING, this logic is done in OnWriteDataComplete.
   if (error != net::ERR_IO_PENDING && bytes_read == 0) {

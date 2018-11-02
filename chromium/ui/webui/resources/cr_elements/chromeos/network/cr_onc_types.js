@@ -31,6 +31,7 @@
  *   networkListItemConnectingTo: string,
  *   networkListItemInitializing: string,
  *   networkListItemNotConnected: string,
+ *   networkListItemNoNetwork: string,
  *   vpnNameTemplate: string,
  * }}
  */
@@ -123,6 +124,18 @@ CrOnc.ProxySettingsType = chrome.networkingPrivate.ProxySettingsType;
 CrOnc.Type = chrome.networkingPrivate.NetworkType;
 
 /** @enum {string} */
+CrOnc.Authentication = {
+  NONE: 'None',
+  WEP_8021X: '8021X',
+};
+
+/** @enum {string} */
+CrOnc.IPsecAuthenticationType = {
+  CERT: 'Cert',
+  PSK: 'PSK',
+};
+
+/** @enum {string} */
 CrOnc.IPType = {
   IPV4: 'IPv4',
   IPV6: 'IPv6',
@@ -183,6 +196,22 @@ CrOnc.Source = {
   USER: 'User',
   USER_POLICY: 'UserPolicy',
   ACTIVE_EXTENSION: 'ActiveExtension',
+};
+
+/** @enum {string} */
+CrOnc.UserAuthenticationType = {
+  NONE: 'None',
+  OTP: 'OTP',
+  PASSWORD: 'Password',
+  PASSWORD_AND_OTP: 'PasswordAndOTP',
+};
+
+/** @enum {string} */
+CrOnc.VPNType = {
+  L2TP_IPSEC: 'L2TP-IPsec',
+  OPEN_VPN: 'OpenVPN',
+  THIRD_PARTY_VPN: 'ThirdPartyVPN',
+  ARCVPN: 'ARCVPN',
 };
 
 /**

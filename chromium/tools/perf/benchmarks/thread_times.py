@@ -54,6 +54,12 @@ class ThreadTimesKeySilkCases(_ThreadTimes):
                           [story.expectations.ALL], 'crbug.com/338838')
         self.DisableStory('inbox_app.html?slide_drawer',
                           [story.expectations.ALL], 'crbug.com/446332')
+        self.DisableStory('http://s.codepen.io/befamous/fullpage/pFsqb?scroll',
+                          [story.expectations.ALL], 'crbug.com/764825')
+        self.DisableStory('inbox_app.html?swipe_to_dismiss',
+                          [story.expectations.ALL], 'crbug.com/764825')
+        self.DisableStory('masonry.html',
+                          [story.expectations.ALL], 'crbug.com/764825')
     return StoryExpectations()
 
 
@@ -208,5 +214,34 @@ class ThreadTimesToughScrollingCases(_ThreadTimes):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing disabled.
+        self.DisableStory('canvas_05000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_10000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_15000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_20000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_30000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_40000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_50000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_60000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_75000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
+        self.DisableStory('canvas_90000_pixels_per_second',
+                          [story.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/783362')
     return StoryExpectations()

@@ -21,15 +21,18 @@ target("source_set", "network_sources") {
   configs += [ "//content:content_implementation" ]
 
   sources = [
+    "ignore_errors_cert_verifier.cc",
+    "ignore_errors_cert_verifier.h",
     "network_service.h",
+    "url_request_context_builder_mojo.cc",
+    "url_request_context_builder_mojo.h",
   ]
 
   deps = [
     "//base",
     "//content:export",
     "//content/common:mojo_bindings",
-    "//content/network:network_sources",
+    "//content/public/common:common_sources",
+    "//services/proxy_resolver/public/interfaces",
   ]
-
-  allow_circular_includes_from = [ "//content/network:network_sources" ]
 }

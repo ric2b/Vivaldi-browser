@@ -25,13 +25,13 @@
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/switch_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/switch_utils.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -59,7 +59,7 @@
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
 #include "chrome/browser/service_process/service_process_control.h"
 #endif
 
@@ -156,10 +156,10 @@ bool ShutdownPreThreadsStop() {
   chromeos::BootTimesRecorder::Get()->AddLogoutTimeMarker(
       "BrowserShutdownStarted", false);
 #endif
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
   // Shutdown the IPC channel to the service processes.
   ServiceProcessControl::GetInstance()->Disconnect();
-#endif  // ENABLE_PRINT_PREVIEW
+#endif
 
   // WARNING: During logoff/shutdown (WM_ENDSESSION) we may not have enough
   // time to get here. If you have something that *must* happen on end session,
@@ -209,7 +209,7 @@ bool RecordShutdownInfoPrefs() {
 
 void ShutdownPostThreadsStop(int shutdown_flags) {
   delete g_browser_process;
-  g_browser_process = NULL;
+  g_browser_process = nullptr;
 
   // crbug.com/95079 - This needs to happen after the browser process object
   // goes away.
@@ -228,7 +228,9 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
 #endif
 
   if (shutdown_flags & RESTART_LAST_SESSION) {
-#if !defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
+    NOTIMPLEMENTED();
+#else
     // Make sure to relaunch the browser with the original command line plus
     // the Restore Last Session flag. Note that Chrome can be launched (ie.
     // through ShellExecute on Windows) with a switch argument terminator at
@@ -237,31 +239,25 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
     // 46182). We therefore use GetSwitches to copy the command line (it stops
     // at the switch argument terminator).
     base::CommandLine old_cl(*base::CommandLine::ForCurrentProcess());
-    std::unique_ptr<base::CommandLine> new_cl(
-        new base::CommandLine(old_cl.GetProgram()));
-    std::map<std::string, base::CommandLine::StringType> switches =
-        old_cl.GetSwitches();
+    auto new_cl = std::make_unique<base::CommandLine>(old_cl.GetProgram());
+    base::CommandLine::SwitchMap switches = old_cl.GetSwitches();
     // Remove the switches that shouldn't persist across restart.
     about_flags::RemoveFlagsSwitches(&switches);
     switches::RemoveSwitchesForAutostart(&switches);
     // Append the old switches to the new command line.
     for (const auto& it : switches) {
-      const base::CommandLine::StringType& switch_value = it.second;
-      if (!switch_value.empty())
-        new_cl->AppendSwitchNative(it.first, it.second);
+      const auto& switch_name = it.first;
+      const auto& switch_value = it.second;
+      if (switch_value.empty())
+        new_cl->AppendSwitch(switch_name);
       else
-        new_cl->AppendSwitch(it.first);
+        new_cl->AppendSwitchNative(switch_name, switch_value);
     }
     if (shutdown_flags & RESTART_IN_BACKGROUND)
       new_cl->AppendSwitch(switches::kNoStartupWindow);
 
-#if defined(OS_POSIX) || defined(OS_WIN)
-    upgrade_util::RelaunchChromeBrowser(*new_cl.get());
-#endif  // defined(OS_WIN)
-
-#else
-    NOTIMPLEMENTED();
-#endif  // !defined(OS_CHROMEOS)
+    upgrade_util::RelaunchChromeBrowser(*new_cl);
+#endif  // defined(OS_CHROMEOS)
   }
 
   if (g_shutdown_type > NOT_VALID && g_shutdown_num_processes > 0) {
@@ -289,7 +285,7 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
 void ReadLastShutdownFile(ShutdownType type,
                           int num_procs,
                           int num_procs_slow) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath shutdown_ms_file = GetShutdownMsPath();
   std::string shutdown_ms_str;

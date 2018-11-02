@@ -62,29 +62,6 @@ NSString* JSONEscape(NSString* JSONString) {
   }];
 }
 
-- (void)clearAutofilledPasswordsInForm:(NSString*)formName
-                     completionHandler:(void (^)(BOOL))completionHandler {
-  NSString* script =
-      [NSString stringWithFormat:@"__gCrWeb.clearAutofilledPasswords(%@)",
-                                 JSONEscape(formName)];
-  [self executeJavaScript:script completionHandler:^(id result, NSError*) {
-    completionHandler([result isEqual:@YES]);
-  }];
-}
-
-- (void)fillPasswordForm:(NSString*)formName
-   withGeneratedPassword:(NSString*)password
-       completionHandler:(void (^)(BOOL))completionHandler {
-  NSString* script =
-      [NSString stringWithFormat:
-                    @"__gCrWeb.fillPasswordFormWithGeneratedPassword(%@, %@)",
-                    JSONEscape(formName), JSONEscape(password)];
-  [self executeJavaScript:script completionHandler:^(id result, NSError*) {
-    if (completionHandler)
-      completionHandler([result isEqual:@YES]);
-  }];
-}
-
 #pragma mark -
 #pragma mark ProtectedMethods
 

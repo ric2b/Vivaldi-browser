@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "HitTestCanvasResult.h"
+#include "core/layout/HitTestCanvasResult.h"
 
 namespace blink {
 
@@ -17,7 +17,7 @@ Element* HitTestCanvasResult::GetControl() const {
   return control_.Get();
 };
 
-DEFINE_TRACE(HitTestCanvasResult) {
+void HitTestCanvasResult::Trace(blink::Visitor* visitor) {
   visitor->Trace(control_);
 }
 

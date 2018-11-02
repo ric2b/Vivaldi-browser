@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//chrome/common/features.gni")
+import("//components/nacl/features.gni")
 import("//components/spellcheck/spellcheck_build_features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
@@ -88,12 +89,6 @@ static_library("renderer") {
     "prerender/prerenderer_client.h",
     "sandbox_status_extension_android.cc",
     "sandbox_status_extension_android.h",
-    "searchbox/search_bouncer.cc",
-    "searchbox/search_bouncer.h",
-    "searchbox/searchbox.cc",
-    "searchbox/searchbox.h",
-    "searchbox/searchbox_extension.cc",
-    "searchbox/searchbox_extension.h",
     "security_filter_peer.cc",
     "security_filter_peer.h",
     "tts_dispatcher.cc",
@@ -159,6 +154,7 @@ static_library("renderer") {
     "//third_party/icu",
     "//third_party/re2",
     "//third_party/widevine/cdm:headers",
+    "//tools/v8_context_snapshot",
     "//ui/surface",
     "//v8:v8",
   ]
@@ -252,6 +248,8 @@ static_library("renderer") {
       "extensions/app_bindings_core.h",
       "extensions/app_hooks_delegate.cc",
       "extensions/app_hooks_delegate.h",
+      "extensions/automation_ax_tree_wrapper.cc",
+      "extensions/automation_ax_tree_wrapper.h",
       "extensions/automation_internal_custom_bindings.cc",
       "extensions/automation_internal_custom_bindings.h",
       "extensions/chrome_extensions_dispatcher_delegate.cc",
@@ -260,6 +258,8 @@ static_library("renderer") {
       "extensions/chrome_extensions_renderer_client.h",
       "extensions/chrome_v8_extension_handler.cc",
       "extensions/chrome_v8_extension_handler.h",
+      "extensions/extension_hooks_delegate.cc",
+      "extensions/extension_hooks_delegate.h",
       "extensions/extension_localization_peer.cc",
       "extensions/extension_localization_peer.h",
       "extensions/media_galleries_custom_bindings.cc",
@@ -274,6 +274,8 @@ static_library("renderer") {
       "extensions/resource_request_policy.h",
       "extensions/sync_file_system_custom_bindings.cc",
       "extensions/sync_file_system_custom_bindings.h",
+      "extensions/tabs_hooks_delegate.cc",
+      "extensions/tabs_hooks_delegate.h",
       "extensions/webstore_bindings.cc",
       "extensions/webstore_bindings.h",
       "media/cast_ipc_dispatcher.cc",
@@ -394,6 +396,17 @@ static_library("renderer") {
       "resources/extensions/file_system_provider_custom_bindings.js",
     ]
   }
+
+  if (!is_android) {
+    sources += [
+      "searchbox/search_bouncer.cc",
+      "searchbox/search_bouncer.h",
+      "searchbox/searchbox.cc",
+      "searchbox/searchbox.h",
+      "searchbox/searchbox_extension.cc",
+      "searchbox/searchbox_extension.h",
+    ]
+  }
 }
 
 static_library("test_support") {
@@ -417,10 +430,6 @@ static_library("test_support") {
     "//testing/gmock",
     "//testing/gtest",
   ]
-
-  if (enable_print_preview) {
-    deps += [ "//chrome/service" ]
-  }
 
   if (enable_webrtc) {
     sources += [

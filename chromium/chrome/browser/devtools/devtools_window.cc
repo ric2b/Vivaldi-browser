@@ -112,7 +112,7 @@ void SetPreferencesFromJson(Profile* profile, const std::string& json) {
     return;
   DictionaryPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
   for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
-    if (!it.value().IsType(base::Value::Type::STRING))
+    if (!it.value().is_string())
       continue;
     update.Get()->SetWithoutPathExpansion(
         it.key(), it.value().CreateDeepCopy());
@@ -722,8 +722,9 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
 
       if (!connector_item_) {
         connector_item_ =
-          make_scoped_refptr(api->GetOrCreateDevtoolsConnectorItem(
-            SessionTabHelper::IdForTab(GetInspectedWebContents())));
+          base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
+            api->GetOrCreateDevtoolsConnectorItem(
+                SessionTabHelper::IdForTab(GetInspectedWebContents())));
       }
       connector_item_->set_devtools_delegate(this);
       main_web_contents_->SetDelegate(connector_item_.get());
@@ -782,8 +783,9 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
     }
     if (!connector_item_) {
       connector_item_ =
-        make_scoped_refptr(api->GetOrCreateDevtoolsConnectorItem(
-          SessionTabHelper::IdForTab(inspected_contents)));
+        base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
+            api->GetOrCreateDevtoolsConnectorItem(
+                SessionTabHelper::IdForTab(inspected_contents)));
     }
     connector_item_->set_devtools_delegate(this);
     main_web_contents_->SetDelegate(connector_item_.get());
@@ -903,8 +905,9 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
       extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(profile_);
     DCHECK(api);
 
-    connector_item_ = make_scoped_refptr(api->GetOrCreateDevtoolsConnectorItem(
-        SessionTabHelper::IdForTab(inspected_web_contents)));
+    connector_item_ = base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
+        api->GetOrCreateDevtoolsConnectorItem(
+           SessionTabHelper::IdForTab(inspected_web_contents)));
     connector_item_->set_ui_bindings_delegate(this);
     bindings_->SetDelegate(connector_item_->ui_bindings_delegate());
   } else {
@@ -1367,7 +1370,7 @@ void DevToolsWindow::RenderProcessGone(bool crashed) {
 
 void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
   std::unique_ptr<base::Value> value = base::JSONReader::Read(cert_chain);
-  if (!value || value->GetType() != base::Value::Type::LIST) {
+  if (!value || value->type() != base::Value::Type::LIST) {
     NOTREACHED();
     return;
   }
@@ -1377,7 +1380,7 @@ void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
   std::vector<std::string> decoded;
   for (size_t i = 0; i < list->GetSize(); ++i) {
     base::Value* item;
-    if (!list->Get(i, &item) || item->GetType() != base::Value::Type::STRING) {
+    if (!list->Get(i, &item) || !item->is_string()) {
       NOTREACHED();
       return;
     }

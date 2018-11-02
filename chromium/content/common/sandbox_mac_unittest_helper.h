@@ -6,7 +6,8 @@
 #define CONTENT_COMMON_SANDBOX_MAC_UNITTEST_HELPER_H_
 
 #include "base/test/multiprocess_test.h"
-#include "content/common/sandbox_mac.h"
+#include "services/service_manager/sandbox/mac/sandbox_mac.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 namespace content {
 
@@ -49,7 +50,7 @@ class MacSandboxTest : public base::MultiProcessTest {
   // required.
   // Returns true if the test passes, false if either of the functions in
   // the corresponding MacSandboxTestCase return false.
-  bool RunTestInSandbox(content::SandboxType sandbox_type,
+  bool RunTestInSandbox(service_manager::SandboxType sandbox_type,
                         const char* test_name,
                         const char* test_data);
 

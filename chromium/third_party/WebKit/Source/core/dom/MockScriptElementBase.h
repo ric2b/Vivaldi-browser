@@ -5,7 +5,7 @@
 #ifndef MockScriptElementBase_h
 #define MockScriptElementBase_h
 
-#include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
+#include "bindings/core/v8/html_script_element_or_svg_script_element.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptElementBase.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -42,6 +42,7 @@ class MockScriptElementBase
   MOCK_CONST_METHOD0(IsConnected, bool());
   MOCK_CONST_METHOD0(HasChildren, bool());
   MOCK_CONST_METHOD0(GetNonceForElement, const AtomicString&());
+  MOCK_CONST_METHOD0(ElementHasDuplicateAttributes, bool());
   MOCK_CONST_METHOD0(InitiatorName, AtomicString());
   MOCK_METHOD4(AllowInlineScriptForCSP,
                bool(const AtomicString&,
@@ -53,7 +54,9 @@ class MockScriptElementBase
                void(HTMLScriptElementOrSVGScriptElement&));
   MOCK_CONST_METHOD0(Loader, ScriptLoader*());
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ScriptElementBase::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    ScriptElementBase::Trace(visitor);
+  }
 };
 
 }  // namespace blink

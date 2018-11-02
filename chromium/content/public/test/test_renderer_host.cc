@@ -26,6 +26,7 @@
 #include "content/test/test_render_frame_host_factory.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_view_host_factory.h"
+#include "content/test/test_render_widget_host_factory.h"
 #include "content/test/test_web_contents.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/test/material_design_controller_test_api.h"
@@ -134,16 +135,17 @@ bool RenderViewHostTester::HasTouchEventHandler(RenderViewHost* rvh) {
 RenderViewHostTestEnabler::RenderViewHostTestEnabler()
     : rph_factory_(new MockRenderProcessHostFactory()),
       rvh_factory_(new TestRenderViewHostFactory(rph_factory_.get())),
-      rfh_factory_(new TestRenderFrameHostFactory()) {
+      rfh_factory_(new TestRenderFrameHostFactory()),
+      rwhi_factory_(new TestRenderWidgetHostFactory()) {
   // A MessageLoop is needed for Mojo bindings to graphics services. Some
   // tests have their own, so this only creates one when none exists. This
   // means tests must ensure any MessageLoop they make is created before
   // the RenderViewHostTestEnabler.
   if (!base::MessageLoop::current())
-    message_loop_ = base::MakeUnique<base::MessageLoop>();
+    message_loop_ = std::make_unique<base::MessageLoop>();
 #if !defined(OS_ANDROID)
-  ImageTransportFactory::InitializeForUnitTests(
-      base::MakeUnique<NoTransportImageTransportFactory>());
+  ImageTransportFactory::SetFactory(
+      std::make_unique<NoTransportImageTransportFactory>());
 #else
   if (!screen_)
     screen_.reset(ui::CreateDummyScreenAndroid());
@@ -171,9 +173,9 @@ RenderViewHostTestEnabler::~RenderViewHostTestEnabler() {
 
 // RenderViewHostTestHarness --------------------------------------------------
 
-RenderViewHostTestHarness::RenderViewHostTestHarness()
-    : use_scoped_task_environment_(true),
-      thread_bundle_options_(TestBrowserThreadBundle::DEFAULT) {}
+RenderViewHostTestHarness::RenderViewHostTestHarness(int thread_bundle_options)
+    : thread_bundle_(
+          std::make_unique<TestBrowserThreadBundle>(thread_bundle_options)) {}
 
 RenderViewHostTestHarness::~RenderViewHostTestHarness() {
 }
@@ -193,7 +195,7 @@ RenderViewHost* RenderViewHostTestHarness::rvh() {
 }
 
 RenderViewHost* RenderViewHostTestHarness::pending_rvh() {
-  return pending_main_rfh() ? pending_main_rfh()->GetRenderViewHost() : NULL;
+  return pending_main_rfh() ? pending_main_rfh()->GetRenderViewHost() : nullptr;
 }
 
 RenderViewHost* RenderViewHostTestHarness::active_rvh() {
@@ -205,7 +207,7 @@ RenderFrameHost* RenderViewHostTestHarness::main_rfh() {
 }
 
 RenderFrameHost* RenderViewHostTestHarness::pending_main_rfh() {
-  return WebContentsTester::For(web_contents())->GetPendingMainFrame();
+  return static_cast<TestWebContents*>(web_contents())->GetPendingMainFrame();
 }
 
 BrowserContext* RenderViewHostTestHarness::browser_context() {
@@ -217,7 +219,7 @@ MockRenderProcessHost* RenderViewHostTestHarness::process() {
 }
 
 void RenderViewHostTestHarness::DeleteContents() {
-  SetContents(NULL);
+  SetContents(nullptr);
 }
 
 void RenderViewHostTestHarness::SetContents(WebContents* contents) {
@@ -230,7 +232,7 @@ WebContents* RenderViewHostTestHarness::CreateTestWebContents() {
   DCHECK(ole_initializer_ != NULL);
 #endif
 #if defined(USE_AURA)
-  DCHECK(aura_test_helper_ != NULL);
+  DCHECK(aura_test_helper_ != nullptr);
 #endif
 
   scoped_refptr<SiteInstance> instance =
@@ -244,38 +246,11 @@ void RenderViewHostTestHarness::NavigateAndCommit(const GURL& url) {
   static_cast<TestWebContents*>(web_contents())->NavigateAndCommit(url);
 }
 
-void RenderViewHostTestHarness::Reload() {
-  NavigationEntry* entry = controller().GetLastCommittedEntry();
-  DCHECK(entry);
-  controller().Reload(ReloadType::NORMAL, false);
-  RenderFrameHostTester::For(main_rfh())
-      ->SendNavigateWithTransition(entry->GetUniqueID(),
-                                   false, entry->GetURL(),
-                                   ui::PAGE_TRANSITION_RELOAD);
-}
-
-void RenderViewHostTestHarness::FailedReload() {
-  NavigationEntry* entry = controller().GetLastCommittedEntry();
-  DCHECK(entry);
-  controller().Reload(ReloadType::NORMAL, false);
-  RenderFrameHostTester::For(main_rfh())
-      ->SendFailedNavigate(entry->GetUniqueID(), false, entry->GetURL());
-}
-
 void RenderViewHostTestHarness::SetUp() {
   // ContentTestSuiteBase might have already initialized
   // MaterialDesignController in unit_tests suite.
   ui::test::MaterialDesignControllerTestAPI::Uninitialize();
   ui::MaterialDesignController::Initialize();
-
-  if (use_scoped_task_environment_) {
-    // The TestBrowserThreadBundle is compatible with an existing
-    // ScopedTaskEnvironment if the main message loop is of UI type.
-    scoped_task_environment_ =
-        base::MakeUnique<base::test::ScopedTaskEnvironment>(
-            base::test::ScopedTaskEnvironment::MainThreadType::UI);
-  }
-  thread_bundle_.reset(new TestBrowserThreadBundle(thread_bundle_options_));
 
   rvh_test_enabler_.reset(new RenderViewHostTestEnabler);
   if (factory_)
@@ -310,7 +285,7 @@ void RenderViewHostTestHarness::TearDown() {
   if (IsBrowserSideNavigationEnabled())
     BrowserSideNavigationTearDown();
 
-  SetContents(NULL);
+  SetContents(nullptr);
 #if defined(USE_AURA)
   aura_test_helper_->TearDown();
   ui::TerminateContextFactoryForTests();
@@ -336,8 +311,11 @@ void RenderViewHostTestHarness::TearDown() {
   BrowserThread::DeleteSoon(content::BrowserThread::UI,
                             FROM_HERE,
                             browser_context_.release());
+
+  // Although this isn't required by many, some subclasses members require that
+  // the task environment is gone by the time that they are destroyed (akin to
+  // browser shutdown).
   thread_bundle_.reset();
-  scoped_task_environment_.reset();
 }
 
 BrowserContext* RenderViewHostTestHarness::CreateBrowserContext() {

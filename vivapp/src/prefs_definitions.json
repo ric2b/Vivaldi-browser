@@ -1,0 +1,333 @@
+{
+  "vivaldi": {
+    "address_bar": {
+      "autocomplete": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "tld": {
+          "type": "string",
+          "default": "com",
+          "syncable": true
+        },
+        "prefer_bookmarks": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "cutcopy_encoded": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "omnibox": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_bookmarks": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_typed_history": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "position": {
+        "type": "enum",
+        "enum_values": {
+          "top": 0,
+          "bottom": 1
+        },
+        "default": "top",
+        "syncable": true
+      },
+      "select_on_click": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_progress": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "url_open_shortcut": {
+        "type": "enum",
+        "enum_values": {
+          "alt": 0,
+          "shift": 1
+        },
+        "default": "alt",
+        "syncable": true
+      }
+    },
+    "bookmarks": {
+      "bar": {
+        "bookmarkssort": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": true
+        },
+        "display": {
+          "type": "enum",
+          "enum_values": {
+            "default": 0,
+            "text": 1,
+            "icon": 2,
+            "iconexceptfolders": 3
+          },
+          "default": "default",
+          "syncable": true
+        },
+        "folder_ids": {
+          "type": "list",
+          "default": ["1"],
+          "syncable": true
+        },
+        "position": {
+          "type": "enum",
+          "enum_values": {
+            "top": 0,
+            "bottom": 1
+          },
+          "default": "top",
+          "syncable": true
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "manager": {
+        "bookmarkssort": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": true
+        }
+      },
+      "open_in_new_tab": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "panel": {
+        "bookmarkssort": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": true
+        }
+      }
+    },
+    "homepage": {
+      "type": "string",
+      "default": "https://vivaldi.com",
+      "syncable": true
+    },
+    "history": {
+      "days_to_keep_visits": {
+        "type": "integer",
+        "default": 91,
+        "syncable": true
+      }
+    },
+    "incognito": {
+      "show_intro": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
+    "mouse_gestures": {
+      "alt_gestures_enabled": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "rocker_gestures": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      }
+    },
+    "plugins": {
+      "widevine": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      }
+    },
+    "settings": {
+      "size": {
+        "width": {
+          "type": "integer",
+          "default": 740,
+          "syncable": false
+        },
+        "height": {
+          "type": "integer",
+          "default": 800,
+          "syncable": false
+        },
+        "top": {
+          "type": "integer",
+          "default": -1,
+          "syncable": false
+        },
+        "left": {
+          "type": "integer",
+          "default": -1,
+          "syncable": false
+        }
+      }
+    },
+    "startpage": {
+      "image": {
+        "type": "file_path",
+        "default": "./../resources/bg.jpg",
+        "syncable": false
+      }
+    },
+    "sync": {
+      "is_using_separate_encryption_password": {
+        "type": "enum",
+        "enum_values": {
+          "unknown": 0,
+          "aye": 1,
+          "nay": 2
+        },
+        "default": "unknown",
+        "syncable": false
+      }
+    },
+    "tabs": {
+      "always_load_pinned_after_restore": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "defer_loading_after_restore": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
+    "theme": {
+      "border_radius": {
+        "type": "integer",
+        "default": 0,
+        "syncable": true
+      }
+    },
+    "webpages": {
+      "capture": {
+        "directory": {
+          "type": "file_path",
+          "syncable": false
+        }
+      },
+      "full_screen": {
+        "hide_mouse": {
+          "type": "boolean",
+          "default_win": true,
+          "default_linux": true,
+          "syncable": true
+        }
+      },
+      "smooth_scrolling": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "default_mac": false,
+          "syncable": true
+        }
+      },
+      "tab_focuses_links": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "tab_zoom": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      }
+    },
+    "windows": {
+      "use_native_decoration": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
+
+    "system": {
+      "has_desktop_wallpaper_protocol": {
+        "type": "boolean",
+        "default_linux": false,
+        "default_mac": false,
+        "syncable": false
+      },
+      "mac": {
+        "action_on_double_click": {
+          "type": "string",
+          "syncable": false
+        },
+        "aqua_color_variant": {
+          "type": "integer",
+          "syncable": false
+        },
+        "interface_style": {
+          "type": "integer",
+          "syncable": false
+        },
+        "keyboard_ui_mode": {
+          "type": "integer",
+          "syncable": false
+        },
+        "swipe_scroll_direction": {
+          "type": "boolean",
+          "syncable": false
+        }
+      }
+    }
+  },
+
+  "chromium": {
+    "kCredentialsEnableService": "credentials_enable_service",
+    "kDownloadDefaultDirectory": "download.default_directory",
+    "kEnableDoNotTrack": "enable_do_not_track",
+    "kExtensionURLOverrides": "extensions.chrome_url_overrides",
+    "kPluginsAlwaysOpenPdfExternally": "plugins.always_open_pdf_externally",
+    "kSafeBrowsingEnabled": "safebrowsing.enabled",
+    "kSafeBrowsingExtendedReportingEnabled": "safebrowsing.extended_reporting_enabled",
+    "kURLsToRestoreOnStartup": "session.startup_urls",
+    "kWebKitCursiveFontFamily": "webkit.webprefs.fonts.cursive.Zyyy",
+    "kWebKitFantasyFontFamily": "webkit.webprefs.fonts.fantasy.Zyyy",
+    "kWebKitFixedFontFamily": "webkit.webprefs.fonts.fixed.Zyyy",
+    "kWebKitMinimumFontSize": "webkit.webprefs.minimum_font_size",
+    "kWebKitSansSerifFontFamily": "webkit.webprefs.fonts.sansserif.Zyyy",
+    "kWebKitSerifFontFamily": "webkit.webprefs.fonts.serif.Zyyy",
+    "kWebKitStandardFontFamily": "webkit.webprefs.fonts.standard.Zyyy",
+    "kWebRTCIPHandlingPolicy": "webrtc.ip_handling_policy"
+  }
+}

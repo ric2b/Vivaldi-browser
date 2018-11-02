@@ -93,8 +93,9 @@ int StringContainsName(
       str, " .,()-_", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (size_t ii = 0; ii < tokens.size(); ++ii) {
     for (size_t name_index = 0; name_index < num_names; ++name_index) {
-      if (tokens[ii] == names[name_index])
-        return name_index;
+      if (tokens[ii] == names[name_index]) {
+        return base::checked_cast<int>(name_index);
+      }
     }
   }
   return -1;
@@ -229,7 +230,6 @@ void MergeGPUInfoGL(GPUInfo* basic_gpu_info,
   basic_gpu_info->passthrough_cmd_decoder =
       context_gpu_info.passthrough_cmd_decoder;
   basic_gpu_info->supports_overlays = context_gpu_info.supports_overlays;
-  basic_gpu_info->hdr = context_gpu_info.hdr;
   basic_gpu_info->context_info_state = context_gpu_info.context_info_state;
   basic_gpu_info->initialization_time = context_gpu_info.initialization_time;
   basic_gpu_info->video_decode_accelerator_capabilities =

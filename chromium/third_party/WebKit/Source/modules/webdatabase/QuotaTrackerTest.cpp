@@ -4,8 +4,8 @@
 
 #include "modules/webdatabase/QuotaTracker.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/RefPtr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -13,16 +13,16 @@ namespace {
 
 TEST(QuotaTrackerTest, UpdateAndGetSizeAndSpaceAvailable) {
   QuotaTracker& tracker = QuotaTracker::Instance();
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("file:///a/b/c");
 
   const String database_name = "db";
   const unsigned long long kDatabaseSize = 1234ULL;
-  tracker.UpdateDatabaseSize(origin.Get(), database_name, kDatabaseSize);
+  tracker.UpdateDatabaseSize(origin.get(), database_name, kDatabaseSize);
 
   unsigned long long used = 0;
   unsigned long long available = 0;
-  tracker.GetDatabaseSizeAndSpaceAvailableToOrigin(origin.Get(), database_name,
+  tracker.GetDatabaseSizeAndSpaceAvailableToOrigin(origin.get(), database_name,
                                                    &used, &available);
 
   EXPECT_EQ(used, kDatabaseSize);
@@ -31,19 +31,19 @@ TEST(QuotaTrackerTest, UpdateAndGetSizeAndSpaceAvailable) {
 
 TEST(QuotaTrackerTest, LocalAccessBlocked) {
   QuotaTracker& tracker = QuotaTracker::Instance();
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("file:///a/b/c");
 
   const String database_name = "db";
   const unsigned long long kDatabaseSize = 1234ULL;
-  tracker.UpdateDatabaseSize(origin.Get(), database_name, kDatabaseSize);
+  tracker.UpdateDatabaseSize(origin.get(), database_name, kDatabaseSize);
 
   // QuotaTracker should not care about policy, just identity.
   origin->BlockLocalAccessFromLocalOrigin();
 
   unsigned long long used = 0;
   unsigned long long available = 0;
-  tracker.GetDatabaseSizeAndSpaceAvailableToOrigin(origin.Get(), database_name,
+  tracker.GetDatabaseSizeAndSpaceAvailableToOrigin(origin.get(), database_name,
                                                    &used, &available);
 
   EXPECT_EQ(used, kDatabaseSize);

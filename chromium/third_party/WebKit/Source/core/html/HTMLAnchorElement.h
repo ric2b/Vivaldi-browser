@@ -25,9 +25,9 @@
 #define HTMLAnchorElement_h
 
 #include "core/CoreExport.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "core/url/DOMURLUtils.h"
 #include "platform/LinkHash.h"
 
@@ -120,9 +120,9 @@ class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
   InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void HandleClick(Event*);
 
-  uint32_t link_relations_;
+  unsigned link_relations_ : 31;
+  unsigned was_focused_by_mouse_ : 1;
   mutable LinkHash cached_visited_link_hash_;
-  bool was_focused_by_mouse_;
 };
 
 inline LinkHash HTMLAnchorElement::VisitedLinkHash() const {

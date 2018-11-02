@@ -65,9 +65,9 @@ namespace {
 
 class ExecuteSQLCallbackWrapper : public RefCounted<ExecuteSQLCallbackWrapper> {
  public:
-  static PassRefPtr<ExecuteSQLCallbackWrapper> Create(
+  static scoped_refptr<ExecuteSQLCallbackWrapper> Create(
       std::unique_ptr<ExecuteSQLCallback> callback) {
-    return AdoptRef(new ExecuteSQLCallbackWrapper(std::move(callback)));
+    return base::AdoptRef(new ExecuteSQLCallbackWrapper(std::move(callback)));
   }
   ~ExecuteSQLCallbackWrapper() {}
   ExecuteSQLCallback* Get() { return callback_.get(); }
@@ -93,13 +93,15 @@ class ExecuteSQLCallbackWrapper : public RefCounted<ExecuteSQLCallbackWrapper> {
 class StatementCallback final : public SQLStatementCallback {
  public:
   static StatementCallback* Create(
-      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback) {
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback) {
     return new StatementCallback(std::move(request_callback));
   }
 
   ~StatementCallback() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { SQLStatementCallback::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    SQLStatementCallback::Trace(visitor);
+  }
 
   bool handleEvent(SQLTransaction*, SQLResultSet* result_set) override {
     SQLResultSetRowList* row_list = result_set->rows();
@@ -134,21 +136,23 @@ class StatementCallback final : public SQLStatementCallback {
   }
 
  private:
-  StatementCallback(PassRefPtr<ExecuteSQLCallbackWrapper> request_callback)
+  StatementCallback(scoped_refptr<ExecuteSQLCallbackWrapper> request_callback)
       : request_callback_(std::move(request_callback)) {}
-  RefPtr<ExecuteSQLCallbackWrapper> request_callback_;
+  scoped_refptr<ExecuteSQLCallbackWrapper> request_callback_;
 };
 
 class StatementErrorCallback final : public SQLStatementErrorCallback {
  public:
   static StatementErrorCallback* Create(
-      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback) {
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback) {
     return new StatementErrorCallback(std::move(request_callback));
   }
 
   ~StatementErrorCallback() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { SQLStatementErrorCallback::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    SQLStatementErrorCallback::Trace(visitor);
+  }
 
   bool handleEvent(SQLTransaction*, SQLError* error) override {
     request_callback_->ReportTransactionFailed(error);
@@ -156,22 +160,25 @@ class StatementErrorCallback final : public SQLStatementErrorCallback {
   }
 
  private:
-  StatementErrorCallback(PassRefPtr<ExecuteSQLCallbackWrapper> request_callback)
+  StatementErrorCallback(
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback)
       : request_callback_(std::move(request_callback)) {}
-  RefPtr<ExecuteSQLCallbackWrapper> request_callback_;
+  scoped_refptr<ExecuteSQLCallbackWrapper> request_callback_;
 };
 
 class TransactionCallback final : public SQLTransactionCallback {
  public:
   static TransactionCallback* Create(
       const String& sql_statement,
-      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback) {
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback) {
     return new TransactionCallback(sql_statement, std::move(request_callback));
   }
 
   ~TransactionCallback() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { SQLTransactionCallback::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    SQLTransactionCallback::Trace(visitor);
+  }
 
   bool handleEvent(SQLTransaction* transaction) override {
     Vector<SQLValue> sql_values;
@@ -186,23 +193,25 @@ class TransactionCallback final : public SQLTransactionCallback {
 
  private:
   TransactionCallback(const String& sql_statement,
-                      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback)
+                      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback)
       : sql_statement_(sql_statement),
         request_callback_(std::move(request_callback)) {}
   String sql_statement_;
-  RefPtr<ExecuteSQLCallbackWrapper> request_callback_;
+  scoped_refptr<ExecuteSQLCallbackWrapper> request_callback_;
 };
 
 class TransactionErrorCallback final : public SQLTransactionErrorCallback {
  public:
   static TransactionErrorCallback* Create(
-      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback) {
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback) {
     return new TransactionErrorCallback(std::move(request_callback));
   }
 
   ~TransactionErrorCallback() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { SQLTransactionErrorCallback::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    SQLTransactionErrorCallback::Trace(visitor);
+  }
 
   bool handleEvent(SQLError* error) override {
     request_callback_->ReportTransactionFailed(error);
@@ -211,9 +220,9 @@ class TransactionErrorCallback final : public SQLTransactionErrorCallback {
 
  private:
   TransactionErrorCallback(
-      PassRefPtr<ExecuteSQLCallbackWrapper> request_callback)
+      scoped_refptr<ExecuteSQLCallbackWrapper> request_callback)
       : request_callback_(std::move(request_callback)) {}
-  RefPtr<ExecuteSQLCallbackWrapper> request_callback_;
+  scoped_refptr<ExecuteSQLCallbackWrapper> request_callback_;
 };
 
 class TransactionSuccessCallback final : public VoidCallback {
@@ -338,7 +347,7 @@ void InspectorDatabaseAgent::executeSQL(
     return;
   }
 
-  RefPtr<ExecuteSQLCallbackWrapper> wrapper =
+  scoped_refptr<ExecuteSQLCallbackWrapper> wrapper =
       ExecuteSQLCallbackWrapper::Create(std::move(request_callback));
   SQLTransactionCallback* callback =
       TransactionCallback::Create(query, wrapper);
@@ -355,18 +364,18 @@ InspectorDatabaseResource* InspectorDatabaseAgent::FindByFileName(
     if (it->value->GetDatabase()->FileName() == file_name)
       return it->value.Get();
   }
-  return 0;
+  return nullptr;
 }
 
 blink::Database* InspectorDatabaseAgent::DatabaseForId(
     const String& database_id) {
   DatabaseResourcesHeapMap::iterator it = resources_.find(database_id);
   if (it == resources_.end())
-    return 0;
+    return nullptr;
   return it->value->GetDatabase();
 }
 
-DEFINE_TRACE(InspectorDatabaseAgent) {
+void InspectorDatabaseAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
   visitor->Trace(resources_);
   InspectorBaseAgent::Trace(visitor);

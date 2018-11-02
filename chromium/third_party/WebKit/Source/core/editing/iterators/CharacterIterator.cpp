@@ -27,6 +27,8 @@
 
 #include "core/editing/iterators/CharacterIterator.h"
 
+#include "core/editing/EphemeralRange.h"
+
 namespace blink {
 
 template <typename Strategy>
@@ -56,30 +58,12 @@ void CharacterIteratorAlgorithm<Strategy>::Initialize() {
 }
 
 template <typename Strategy>
-EphemeralRangeTemplate<Strategy> CharacterIteratorAlgorithm<Strategy>::Range()
-    const {
-  EphemeralRangeTemplate<Strategy> range(text_iterator_.Range());
-  if (text_iterator_.AtEnd() || text_iterator_.length() <= 1)
-    return range;
-  PositionTemplate<Strategy> start_position =
-      range.StartPosition().ParentAnchoredEquivalent();
-  PositionTemplate<Strategy> end_position =
-      range.EndPosition().ParentAnchoredEquivalent();
-  Node* node = start_position.ComputeContainerNode();
-  DCHECK_EQ(node, end_position.ComputeContainerNode());
-  int offset = start_position.OffsetInContainerNode() + run_offset_;
-  return EphemeralRangeTemplate<Strategy>(
-      PositionTemplate<Strategy>(node, offset),
-      PositionTemplate<Strategy>(node, offset + 1));
-}
-
-template <typename Strategy>
 Document* CharacterIteratorAlgorithm<Strategy>::OwnerDocument() const {
   return text_iterator_.OwnerDocument();
 }
 
 template <typename Strategy>
-Node* CharacterIteratorAlgorithm<Strategy>::CurrentContainer() const {
+const Node* CharacterIteratorAlgorithm<Strategy>::CurrentContainer() const {
   return text_iterator_.CurrentContainer();
 }
 
@@ -108,7 +92,7 @@ PositionTemplate<Strategy> CharacterIteratorAlgorithm<Strategy>::StartPosition()
     const {
   if (!text_iterator_.AtEnd()) {
     if (text_iterator_.length() > 1) {
-      Node* n = text_iterator_.CurrentContainer();
+      const Node* n = text_iterator_.CurrentContainer();
       int offset = text_iterator_.StartOffsetInCurrentContainer() + run_offset_;
       return PositionTemplate<Strategy>::EditingPositionOf(n, offset);
     }
@@ -122,7 +106,7 @@ PositionTemplate<Strategy> CharacterIteratorAlgorithm<Strategy>::EndPosition()
     const {
   if (!text_iterator_.AtEnd()) {
     if (text_iterator_.length() > 1) {
-      Node* n = text_iterator_.CurrentContainer();
+      const Node* n = text_iterator_.CurrentContainer();
       int offset = text_iterator_.StartOffsetInCurrentContainer() + run_offset_;
       return PositionTemplate<Strategy>::EditingPositionOf(n, offset + 1);
     }

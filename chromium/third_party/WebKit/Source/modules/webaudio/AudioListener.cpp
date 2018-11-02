@@ -35,21 +35,42 @@
 namespace blink {
 
 AudioListener::AudioListener(BaseAudioContext& context)
-    : position_x_(
-          AudioParam::Create(context, kParamTypeAudioListenerPositionX, 0.0)),
-      position_y_(
-          AudioParam::Create(context, kParamTypeAudioListenerPositionY, 0.0)),
-      position_z_(
-          AudioParam::Create(context, kParamTypeAudioListenerPositionZ, 0.0)),
-      forward_x_(
-          AudioParam::Create(context, kParamTypeAudioListenerForwardX, 0.0)),
-      forward_y_(
-          AudioParam::Create(context, kParamTypeAudioListenerForwardY, 0.0)),
-      forward_z_(
-          AudioParam::Create(context, kParamTypeAudioListenerForwardZ, -1.0)),
-      up_x_(AudioParam::Create(context, kParamTypeAudioListenerUpX, 0.0)),
-      up_y_(AudioParam::Create(context, kParamTypeAudioListenerUpY, 1.0)),
-      up_z_(AudioParam::Create(context, kParamTypeAudioListenerUpZ, 0.0)),
+    : position_x_(AudioParam::Create(context,
+                                     kParamTypeAudioListenerPositionX,
+                                     "AudioListener.positionX",
+                                     0.0)),
+      position_y_(AudioParam::Create(context,
+                                     kParamTypeAudioListenerPositionY,
+                                     "AudioListener.positionY",
+                                     0.0)),
+      position_z_(AudioParam::Create(context,
+                                     kParamTypeAudioListenerPositionZ,
+                                     "AudioListener.positionZ",
+                                     0.0)),
+      forward_x_(AudioParam::Create(context,
+                                    kParamTypeAudioListenerForwardX,
+                                    "AudioListener.forwardX",
+                                    0.0)),
+      forward_y_(AudioParam::Create(context,
+                                    kParamTypeAudioListenerForwardY,
+                                    "AudioListener.forwardY",
+                                    0.0)),
+      forward_z_(AudioParam::Create(context,
+                                    kParamTypeAudioListenerForwardZ,
+                                    "AudioListener.forwardZ",
+                                    -1.0)),
+      up_x_(AudioParam::Create(context,
+                               kParamTypeAudioListenerUpX,
+                               "AudioListener.upX",
+                               0.0)),
+      up_y_(AudioParam::Create(context,
+                               kParamTypeAudioListenerUpY,
+                               "AudioListener.upY",
+                               1.0)),
+      up_z_(AudioParam::Create(context,
+                               kParamTypeAudioListenerUpZ,
+                               "AudioListener.upZ",
+                               0.0)),
       last_update_time_(-1),
       is_listener_dirty_(false),
       position_x_values_(AudioUtilities::kRenderQuantumFrames),
@@ -70,7 +91,7 @@ AudioListener::AudioListener(BaseAudioContext& context)
 
 AudioListener::~AudioListener() {}
 
-DEFINE_TRACE(AudioListener) {
+void AudioListener::Trace(blink::Visitor* visitor) {
   visitor->Trace(position_x_);
   visitor->Trace(position_y_);
   visitor->Trace(position_z_);
@@ -82,6 +103,8 @@ DEFINE_TRACE(AudioListener) {
   visitor->Trace(up_x_);
   visitor->Trace(up_y_);
   visitor->Trace(up_z_);
+
+  ScriptWrappable::Trace(visitor);
 }
 
 void AudioListener::AddPanner(PannerHandler& panner) {

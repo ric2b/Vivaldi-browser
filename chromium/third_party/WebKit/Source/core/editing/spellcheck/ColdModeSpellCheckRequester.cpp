@@ -7,6 +7,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/IdleDeadline.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/spellcheck/SpellCheckRequester.h"
@@ -40,7 +41,7 @@ ColdModeSpellCheckRequester* ColdModeSpellCheckRequester::Create(
   return new ColdModeSpellCheckRequester(frame);
 }
 
-DEFINE_TRACE(ColdModeSpellCheckRequester) {
+void ColdModeSpellCheckRequester::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(next_node_);
   visitor->Trace(current_root_editable_);

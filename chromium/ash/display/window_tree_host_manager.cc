@@ -10,7 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ash_switches.h"
 #include "ash/display/cursor_window_controller.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/root_window_transformers.h"
@@ -19,6 +18,7 @@
 #include "ash/host/root_window_transformer.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
@@ -28,10 +28,12 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/screen_position_client.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
@@ -73,12 +75,12 @@ void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
       CreateRootWindowTransformerForDisplay(host->window(), display));
   ash_host->SetRootWindowTransformer(std::move(transformer));
 
-  scoped_refptr<display::ManagedDisplayMode> mode =
-      GetDisplayManager()->GetActiveModeForDisplayId(display.id());
-  if (mode && mode->refresh_rate() > 0.0f) {
+  display::ManagedDisplayMode mode;
+  if (GetDisplayManager()->GetActiveModeForDisplayId(display.id(), &mode) &&
+      mode.refresh_rate() > 0.0f) {
     host->compositor()->SetAuthoritativeVSyncInterval(
         base::TimeDelta::FromMicroseconds(base::Time::kMicrosecondsPerSecond /
-                                          mode->refresh_rate()));
+                                          mode.refresh_rate()));
   }
 
   // Just moving the display requires the full redraw.
@@ -177,7 +179,7 @@ WindowTreeHostManager::WindowTreeHostManager()
   primary_display_id = display::kInvalidDisplayId;
 }
 
-WindowTreeHostManager::~WindowTreeHostManager() {}
+WindowTreeHostManager::~WindowTreeHostManager() = default;
 
 void WindowTreeHostManager::Start() {
   display::Screen::GetScreen()->AddObserver(this);
@@ -492,8 +494,8 @@ void WindowTreeHostManager::OnDisplayAdded(const display::Display& display) {
   // create new WTH for primary display instead of reusing.
   if (primary_tree_host_for_replace_ &&
       (GetRootWindowSettings(GetWindow(primary_tree_host_for_replace_))
-               ->display_id == display::DisplayManager::kUnifiedDisplayId ||
-       display.id() == display::DisplayManager::kUnifiedDisplayId)) {
+               ->display_id == display::kUnifiedDisplayId ||
+       display.id() == display::kUnifiedDisplayId)) {
     DCHECK_EQ(display::kInvalidDisplayId, primary_display_id);
     primary_display_id = display.id();
 
@@ -648,7 +650,9 @@ void WindowTreeHostManager::OnHostResized(aura::WindowTreeHost* host) {
   display::DisplayManager* display_manager = GetDisplayManager();
   if (display_manager->UpdateDisplayBounds(display.id(),
                                            host->GetBoundsInPixels())) {
-    mirror_window_controller_->UpdateWindow();
+    // The window server controls mirroring in Mus, not Ash.
+    if (aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL)
+      mirror_window_controller_->UpdateWindow();
     cursor_window_controller_->UpdateContainer();
   }
 }
@@ -657,7 +661,9 @@ void WindowTreeHostManager::CreateOrUpdateMirroringDisplay(
     const display::DisplayInfoList& info_list) {
   if (GetDisplayManager()->IsInMirrorMode() ||
       GetDisplayManager()->IsInUnifiedMode()) {
-    mirror_window_controller_->UpdateWindow(info_list);
+    // The window server controls mirroring in Mus, not Ash.
+    if (aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL)
+      mirror_window_controller_->UpdateWindow(info_list);
     cursor_window_controller_->UpdateContainer();
   } else {
     NOTREACHED();
@@ -665,7 +671,9 @@ void WindowTreeHostManager::CreateOrUpdateMirroringDisplay(
 }
 
 void WindowTreeHostManager::CloseMirroringDisplayIfNotNecessary() {
-  mirror_window_controller_->CloseIfNotNecessary();
+  // The window server controls mirroring in Mus, not Ash.
+  if (aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL)
+    mirror_window_controller_->CloseIfNotNecessary();
   // If cursor_compositing is enabled for large cursor, the cursor window is
   // always on the desktop display (the visible cursor on the non-desktop
   // display is drawn through compositor mirroring). Therefore, it's unnecessary
@@ -724,6 +732,11 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
   for (auto& observer : observers_)
     observer.OnDisplayConfigurationChanged();
   UpdateMouseLocationAfterDisplayChange();
+
+  // Enable cursor compositing, so that cursor could be mirrored to destination
+  // displays along with other display content through reflector.
+  if (display_manager->is_multi_mirroring_enabled())
+    Shell::Get()->UpdateCursorCompositingEnabled();
 }
 
 display::DisplayConfigurator* WindowTreeHostManager::display_configurator() {
@@ -755,8 +768,10 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
       GetDisplayManager()->GetDisplayInfo(display.id());
   AshWindowTreeHostInitParams params_with_bounds(init_params);
   params_with_bounds.initial_bounds = display_info.bounds_in_native();
-  params_with_bounds.offscreen =
-      display.id() == display::DisplayManager::kUnifiedDisplayId;
+  if (display.id() == display::kUnifiedDisplayId) {
+    params_with_bounds.offscreen = true;
+    params_with_bounds.mirroring_delegate = mirror_window_controller();
+  }
   params_with_bounds.display_id = display.id();
   params_with_bounds.device_scale_factor = display.device_scale_factor();
   params_with_bounds.ui_scale_factor = display_info.configured_ui_scale();
@@ -794,8 +809,11 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
   window_tree_hosts_[display.id()] = ash_host;
   SetDisplayPropertiesOnHost(ash_host, display);
 
-  if (switches::ConstrainPointerToRoot())
+  if (base::SysInfo::IsRunningOnChromeOS() ||
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshConstrainPointerToRoot)) {
     ash_host->ConfineCursorToRootWindow();
+  }
   return ash_host;
 }
 

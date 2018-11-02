@@ -22,9 +22,11 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/lifetime/keep_alive_state_observer.h"
 #include "chrome/common/features.h"
+#include "components/keep_alive_registry/keep_alive_state_observer.h"
+#include "components/nacl/common/features.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "content/public/common/network_service.mojom.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
@@ -68,12 +70,12 @@ class BrowserProcessImpl : public BrowserProcess,
                            public KeepAliveStateObserver {
  public:
   // |local_state_task_runner| must be a shutdown-blocking task runner.
-  BrowserProcessImpl(base::SequencedTaskRunner* local_state_task_runner,
-                     const base::CommandLine& command_line);
+  explicit BrowserProcessImpl(
+      base::SequencedTaskRunner* local_state_task_runner);
   ~BrowserProcessImpl() override;
 
   // Called before the browser threads are created.
-  void PreCreateThreads();
+  void PreCreateThreads(const base::CommandLine& command_line);
 
   // Called after the threads have been created but before the message loops
   // starts running. Allows the browser process to do any initialization that
@@ -97,9 +99,9 @@ class BrowserProcessImpl : public BrowserProcess,
       override;
   metrics::MetricsService* metrics_service() override;
   rappor::RapporServiceImpl* rappor_service() override;
-  ukm::UkmRecorder* ukm_recorder() override;
   IOThread* io_thread() override;
   SystemNetworkContextManager* system_network_context_manager() override;
+  content::NetworkConnectionTracker* network_connection_tracker() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
@@ -137,6 +139,8 @@ class BrowserProcessImpl : public BrowserProcess,
       override;
   subresource_filter::ContentRulesetService*
   subresource_filter_ruleset_service() override;
+  optimization_guide::OptimizationGuideService* optimization_guide_service()
+      override;
 
 #if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   void StartAutoupdateTimer() override;
@@ -144,9 +148,6 @@ class BrowserProcessImpl : public BrowserProcess,
 
   net_log::ChromeNetLog* net_log() override;
   component_updater::ComponentUpdateService* component_updater() override;
-  CRLSetFetcher* crl_set_fetcher() override;
-  component_updater::PnaclComponentInstaller* pnacl_component_installer()
-      override;
   component_updater::SupervisedUserWhitelistInstaller*
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
@@ -182,6 +183,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void CreateSafeBrowsingService();
   void CreateSafeBrowsingDetectionService();
   void CreateSubresourceFilterRulesetService();
+  void CreateOptimizationGuideService();
   void CreateStatusTray();
   void CreateBackgroundModeManager();
   void CreateGCMDriver();
@@ -218,6 +220,9 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<PrefService> local_state_;
 
   std::unique_ptr<SystemNetworkContextManager> system_network_context_manager_;
+
+  std::unique_ptr<content::NetworkConnectionTracker>
+      network_connection_tracker_;
 
   bool created_icon_manager_;
   std::unique_ptr<IconManager> icon_manager_;
@@ -271,6 +276,10 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<subresource_filter::ContentRulesetService>
       subresource_filter_ruleset_service_;
 
+  bool created_optimization_guide_service_;
+  std::unique_ptr<optimization_guide::OptimizationGuideService>
+      optimization_guide_service_;
+
   bool shutting_down_;
 
   bool tearing_down_;
@@ -306,7 +315,8 @@ class BrowserProcessImpl : public BrowserProcess,
   // Gets called by autoupdate timer to see if browser needs restart and can be
   // restarted, and if that's the case, restarts the browser.
   void OnAutoupdateTimer();
-  bool CanAutorestartForUpdate() const;
+  bool IsRunningInBackground() const;
+  void OnPendingRestartResult(bool is_update_pending_restart);
   void RestartBackgroundInstance();
 #endif  // defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 
@@ -314,12 +324,6 @@ class BrowserProcessImpl : public BrowserProcess,
   // to concerns over integrity of data shared between profiles,
   // but some users of component updater only install per-user.
   std::unique_ptr<component_updater::ComponentUpdateService> component_updater_;
-  scoped_refptr<CRLSetFetcher> crl_set_fetcher_;
-
-#if !defined(DISABLE_NACL)
-  scoped_refptr<component_updater::PnaclComponentInstaller>
-      pnacl_component_installer_;
-#endif
 
   std::unique_ptr<component_updater::SupervisedUserWhitelistInstaller>
       supervised_user_whitelist_installer_;

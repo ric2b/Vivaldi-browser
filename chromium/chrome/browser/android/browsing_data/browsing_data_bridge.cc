@@ -60,7 +60,7 @@ void OnBrowsingDataRemoverDone(
 
 }  // namespace
 
-static void ClearBrowsingData(
+static void JNI_BrowsingDataBridge_ClearBrowsingData(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jintArray>& data_types,
@@ -149,18 +149,6 @@ static void ClearBrowsingData(
       std::move(filter_builder), browsing_data_remover, std::move(callback));
 }
 
-static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
-    const JavaRef<jobject>& listener,
-    bool show) {
-  JNIEnv* env = AttachCurrentThread();
-  UMA_HISTOGRAM_BOOLEAN(
-      "History.ClearBrowsingData.HistoryNoticeShownInFooterWhenUpdated", show);
-  if (!show)
-    return;
-  Java_OtherFormsOfBrowsingHistoryListener_showNoticeAboutOtherFormsOfBrowsingHistory(
-      env, listener);
-}
-
 static void EnableDialogAboutOtherFormsOfBrowsingHistory(
     const JavaRef<jobject>& listener,
     bool enabled) {
@@ -171,17 +159,10 @@ static void EnableDialogAboutOtherFormsOfBrowsingHistory(
       env, listener);
 }
 
-static void RequestInfoAboutOtherFormsOfBrowsingHistory(
+static void JNI_BrowsingDataBridge_RequestInfoAboutOtherFormsOfBrowsingHistory(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& listener) {
-  // The permanent notice in the footer.
-  browsing_data::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
-      ProfileSyncServiceFactory::GetForProfile(GetOriginalProfile()),
-      WebHistoryServiceFactory::GetForProfile(GetOriginalProfile()),
-      base::Bind(&ShowNoticeAboutOtherFormsOfBrowsingHistory,
-                 ScopedJavaGlobalRef<jobject>(env, listener)));
-
   // The one-time notice in the dialog.
   browsing_data::ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
       ProfileSyncServiceFactory::GetForProfile(GetOriginalProfile()),
@@ -191,9 +172,10 @@ static void RequestInfoAboutOtherFormsOfBrowsingHistory(
                  ScopedJavaGlobalRef<jobject>(env, listener)));
 }
 
-static void FetchImportantSites(JNIEnv* env,
-                                const JavaParamRef<jclass>& clazz,
-                                const JavaParamRef<jobject>& java_callback) {
+static void JNI_BrowsingDataBridge_FetchImportantSites(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& java_callback) {
   Profile* profile = GetOriginalProfile();
   std::vector<ImportantSitesUtil::ImportantDomainInfo> important_sites =
       ImportantSitesUtil::GetImportantRegisterableDomains(
@@ -222,12 +204,13 @@ static void FetchImportantSites(JNIEnv* env,
 }
 
 // This value should not change during a sessions, as it's used for UMA metrics.
-static jint GetMaxImportantSites(JNIEnv* env,
-                                 const JavaParamRef<jclass>& clazz) {
+static jint JNI_BrowsingDataBridge_GetMaxImportantSites(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   return ImportantSitesUtil::kMaxImportantSites;
 }
 
-static void MarkOriginAsImportantForTesting(
+static void JNI_BrowsingDataBridge_MarkOriginAsImportantForTesting(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& jorigin) {

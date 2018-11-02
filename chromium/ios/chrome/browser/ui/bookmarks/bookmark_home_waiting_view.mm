@@ -5,9 +5,11 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_waiting_view.h"
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/material_components/activity_indicator.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/third_party/material_components_ios/src/components/ActivityIndicator/src/MaterialActivityIndicator.h"
+#import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -24,9 +26,14 @@
 @synthesize animateOutCompletionBlock = _animateOutCompletionBlock;
 
 - (instancetype)initWithFrame:(CGRect)frame {
+  return [self initWithFrame:frame
+             backgroundColor:bookmark_utils_ios::mainBackgroundColor()];
+}
+
+- (instancetype)initWithFrame:(CGRect)frame backgroundColor:(UIColor*)color {
   self = [super initWithFrame:frame];
   if (self) {
-    self.backgroundColor = bookmark_utils_ios::mainBackgroundColor();
+    self.backgroundColor = color;
     self.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   }
@@ -48,7 +55,8 @@
         UIViewAutoresizingFlexibleBottomMargin;
     self.activityIndicator.center = CGPointMake(
         CGRectGetWidth(self.bounds) / 2, CGRectGetHeight(self.bounds) / 2);
-    self.activityIndicator.cycleColors = ActivityIndicatorBrandedCycleColors();
+    self.activityIndicator.cycleColors =
+        @[ [[MDCPalette cr_bluePalette] tint500] ];
     [self addSubview:self.activityIndicator];
     [self.activityIndicator startAnimating];
   });

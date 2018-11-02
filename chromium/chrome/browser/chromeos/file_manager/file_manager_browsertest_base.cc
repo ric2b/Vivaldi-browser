@@ -6,8 +6,7 @@
 
 #include <stddef.h>
 
-#include <deque>
-
+#include "base/containers/circular_deque.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
@@ -26,7 +25,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/chromeos_switches.h"
@@ -41,6 +39,7 @@
 #include "google_apis/drive/test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "storage/browser/fileapi/external_mount_points.h"
+#include "ui/message_center/notification.h"
 
 namespace file_manager {
 namespace {
@@ -251,7 +250,7 @@ class FileManagerTestListener : public content::NotificationObserver {
   }
 
  private:
-  std::deque<Message> messages_;
+  base::circular_deque<Message> messages_;
   content::NotificationRegistrar registrar_;
 };
 
@@ -395,7 +394,7 @@ class DriveTestVolume : public TestVolume {
         drive::util::GetDriveMyDriveRootPath().Append(path).DirName(),
         google_apis::test_util::CreateCopyResultCallback(&error,
                                                          &parent_entry));
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
     ASSERT_EQ(drive::FILE_ERROR_OK, error);
     ASSERT_TRUE(parent_entry);
 
@@ -626,7 +625,7 @@ void FileManagerBrowserTestBase::RunTestMessageLoop() {
 void FileManagerBrowserTestBase::OnMessage(const std::string& name,
                                            const base::DictionaryValue& value,
                                            std::string* output) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (name == "getTestName") {
     // Pass the test case name.
     *output = GetTestCaseNameParam();
@@ -717,7 +716,7 @@ void FileManagerBrowserTestBase::OnMessage(const std::string& name,
 
   if (name == "useCellularNetwork") {
     net::NetworkChangeNotifier::NotifyObserversOfMaxBandwidthChangeForTests(
-        net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+        net::NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
             net::NetworkChangeNotifier::SUBTYPE_HSPA),
         net::NetworkChangeNotifier::CONNECTION_3G);
     return;
@@ -732,7 +731,7 @@ void FileManagerBrowserTestBase::OnMessage(const std::string& name,
     ASSERT_TRUE(value.GetInteger("index", &index));
 
     const std::string delegate_id = extension_id + "-" + notification_id;
-    const Notification* notification =
+    const message_center::Notification* notification =
         g_browser_process->notification_ui_manager()->FindById(delegate_id,
                                                                profile());
     ASSERT_TRUE(notification);

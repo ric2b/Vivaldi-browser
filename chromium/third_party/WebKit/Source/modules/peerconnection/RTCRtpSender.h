@@ -17,8 +17,7 @@ namespace blink {
 class MediaStreamTrack;
 
 // https://w3c.github.io/webrtc-pc/#rtcrtpsender-interface
-class RTCRtpSender final : public GarbageCollectedFinalized<RTCRtpSender>,
-                           public ScriptWrappable {
+class RTCRtpSender final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -31,7 +30,7 @@ class RTCRtpSender final : public GarbageCollectedFinalized<RTCRtpSender>,
   // track updated, and the |track| must match the |WebRTCRtpSender::Track|.
   void SetTrack(MediaStreamTrack*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   std::unique_ptr<WebRTCRtpSender> sender_;

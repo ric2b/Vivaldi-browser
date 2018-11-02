@@ -15,7 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/safe_browsing/browser_feature_extractor.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing/db/database_manager.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
@@ -40,8 +40,6 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
   // From content::WebContentsObserver.
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
-  void DidGetResourceResponseStart(
-      const content::ResourceRequestDetails& details) override;
 
   // From content::WebContentsObserver.  If we navigate away we cancel all
   // pending callbacks that could show an interstitial, and check to see whether
@@ -56,6 +54,8 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
 
   virtual scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
 
+  BrowseInfo* GetBrowseInfo() const { return browse_info_.get(); }
+
  protected:
   explicit ClientSideDetectionHost(content::WebContents* tab);
 
@@ -67,18 +67,26 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
       SafeBrowsingUIManager* ui_manager,
       SafeBrowsingDatabaseManager* database_manager);
 
+  // Called when pre-classification checks are done for the malware classifiers.
+  // Overridden in test.
+  virtual void OnMalwarePreClassificationDone(bool should_classify);
+
  private:
   friend class ClientSideDetectionHostTest;
   class ShouldClassifyUrlRequest;
   friend class ShouldClassifyUrlRequest;
 
-  // These methods are called when pre-classification checks are done for
-  // the phishing and malware clasifiers.
+  // Called when pre-classification checks are done for the phishing
+  // classifiers.
   void OnPhishingPreClassificationDone(bool should_classify);
-  void OnMalwarePreClassificationDone(bool should_classify);
 
   // Verdict is an encoded ClientPhishingRequest protocol message.
   void OnPhishingDetectionDone(const std::string& verdict);
+  void OnSubresourceResponseStarted(const std::string& ip,
+                                    const GURL& url,
+                                    const std::string& method,
+                                    const GURL& referrer,
+                                    content::ResourceType resource_type);
 
   // Callback that is called when the server ping back is
   // done. Display an interstitial if |is_phishing| is true.

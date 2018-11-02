@@ -1,8 +1,23 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 source_set("omnibox") {
+  sources = [
+    "location_bar_controller.cc",
+    "location_bar_controller.h",
+    "location_bar_delegate.h",
+    "web_omnibox_edit_controller.cc",
+    "web_omnibox_edit_controller.h",
+  ]
+  deps = [
+    "//base",
+    "//components/omnibox/browser",
+    "//ui/base",
+  ]
+}
+
+source_set("omnibox_util") {
   sources = [
     "omnibox_util.cc",
     "omnibox_util.h",
@@ -18,15 +33,27 @@ source_set("omnibox") {
 source_set("omnibox_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "autocomplete_match_formatter.h",
+    "autocomplete_match_formatter.mm",
+    "autocomplete_result_consumer.h",
+    "autocomplete_suggestion.h",
     "chrome_omnibox_client_ios.h",
     "chrome_omnibox_client_ios.mm",
+    "image_retriever.h",
     "location_bar_controller_impl.h",
     "location_bar_controller_impl.mm",
-    "omnibox_popup_material_row.h",
-    "omnibox_popup_material_row.mm",
-    "omnibox_popup_material_view_controller.h",
-    "omnibox_popup_material_view_controller.mm",
+    "location_bar_view.h",
+    "location_bar_view.mm",
+    "omnibox_popup_mediator.h",
+    "omnibox_popup_mediator.mm",
     "omnibox_popup_positioner.h",
+    "omnibox_popup_presenter.h",
+    "omnibox_popup_presenter.mm",
+    "omnibox_popup_provider.h",
+    "omnibox_popup_row.h",
+    "omnibox_popup_row.mm",
+    "omnibox_popup_view_controller.h",
+    "omnibox_popup_view_controller.mm",
     "omnibox_popup_view_ios.h",
     "omnibox_popup_view_ios.mm",
     "omnibox_popup_view_suggestions_delegate.h",
@@ -37,28 +64,21 @@ source_set("omnibox_internal") {
     "omnibox_text_field_paste_delegate.mm",
     "omnibox_view_ios.h",
     "omnibox_view_ios.mm",
-    "page_info_model.cc",
-    "page_info_model.h",
-    "page_info_model_observer.h",
-    "page_info_view_controller.h",
-    "page_info_view_controller.mm",
     "truncating_attributed_label.h",
     "truncating_attributed_label.mm",
   ]
   deps = [
     ":omnibox",
+    ":omnibox_util",
     "resources:omnibox_background",
     "resources:omnibox_transparent_background",
     "//base",
-    "//base:i18n",
     "//components/favicon/ios",
     "//components/image_fetcher/ios",
-    "//components/keyed_service/core",
     "//components/open_from_clipboard",
     "//components/resources",
     "//components/search_engines",
     "//components/security_state/core",
-    "//components/ssl_errors",
     "//components/strings",
     "//components/toolbar",
     "//ios/chrome/app/strings",
@@ -70,16 +90,13 @@ source_set("omnibox_internal") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/prerender",
-    "//ios/chrome/browser/prerender:provider",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/fancy_ui",
-    "//ios/chrome/browser/ui/popup_menu",
+    "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/common",
     "//ios/public/provider/chrome/browser",
-    "//ios/shared/chrome/browser/ui/omnibox",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",

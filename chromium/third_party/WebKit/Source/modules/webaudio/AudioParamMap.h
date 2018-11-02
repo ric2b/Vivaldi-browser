@@ -17,8 +17,7 @@ namespace blink {
 
 class AudioParam;
 
-class AudioParamMap final : public GarbageCollectedFinalized<AudioParamMap>,
-                            public ScriptWrappable,
+class AudioParamMap final : public ScriptWrappable,
                             public Maplike<String, AudioParam*> {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -32,7 +31,10 @@ class AudioParamMap final : public GarbageCollectedFinalized<AudioParamMap>,
   AudioParam* At(String name) { return parameter_map_.at(name); }
   bool Contains(String name) { return parameter_map_.Contains(name); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(parameter_map_); }
+  void Trace(blink::Visitor* visitor) override {
+    visitor->Trace(parameter_map_);
+    ScriptWrappable::Trace(visitor);
+  }
 
  private:
   PairIterable<String, AudioParam*>::IterationSource* StartIteration(

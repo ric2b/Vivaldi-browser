@@ -66,7 +66,9 @@ def run_build(tempdir, options):
   out_work_dir = SRC_ROOT
   if options.outwork:
     out_work_dir = os.path.normpath(os.path.join(out_work_dir, options.outwork))
-  if options.debug:
+  if options.build_path:
+    build_rel = options.build_path
+  elif options.debug:
     build_rel = 'Debug' if options.outwork else os.path.join('out', 'Debug')
   else:
     build_rel = 'Release' if options.outwork else os.path.join('out', 'Release')
@@ -113,6 +115,8 @@ def main(argv):
                     help='Re-used build directory instead of using new '
                          'temporary location each time')
   parser.add_option('--gn-gen-args', help='Args to pass to gn gen --args')
+  parser.add_option('--build-path', help='The directory in which to build gn, '
+                    'relative to the src directory. (eg. out/Release)')
   parser.add_option('-v', '--verbose', action='store_true',
                     help='Log more details')
   parser.add_option('--outwork',
@@ -193,8 +197,18 @@ def build_gn_with_ninja_manually(tempdir, options):
 
   write_buildflag_header_manually(root_gen_dir, 'base/debug/debugging_flags.h',
       {
+          'ENABLE_LOCATION_SOURCE': 'false',
           'ENABLE_PROFILING': 'false',
-          'CAN_UNWIND_WITH_FRAME_POINTERS': 'false'
+          'CAN_UNWIND_WITH_FRAME_POINTERS': 'false',
+          'UNSAFE_DEVELOPER_BUILD': 'false'
+      })
+
+  write_buildflag_header_manually(root_gen_dir, 'base/cfi_flags.h',
+      {
+          'CFI_CAST_CHECK': 'false',
+          'CFI_ICALL_CHECK': 'false',
+          'CFI_ENFORCEMENT_TRAP': 'false',
+          'CFI_ENFORCEMENT_DIAGNOSTIC': 'false'
       })
 
   write_build_date_header(root_gen_dir)
@@ -218,7 +232,7 @@ def build_gn_with_ninja_manually(tempdir, options):
 
   write_gn_ninja(os.path.join(tempdir, 'build.ninja'),
                  root_gen_dir, options)
-  cmd = ['ninja', '-C', tempdir]
+  cmd = ['ninja', '-C', tempdir, '-w', 'dupbuild=err']
   if options.verbose:
     cmd.append('-v')
 
@@ -483,8 +497,8 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/message_loop/message_pump_default.cc',
       'base/metrics/bucket_ranges.cc',
       'base/metrics/field_trial.cc',
-      'base/metrics/field_trial_params.cc',
       'base/metrics/field_trial_param_associator.cc',
+      'base/metrics/field_trial_params.cc',
       'base/metrics/histogram.cc',
       'base/metrics/histogram_base.cc',
       'base/metrics/histogram_functions.cc',
@@ -498,6 +512,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/metrics/sample_vector.cc',
       'base/metrics/sparse_histogram.cc',
       'base/metrics/statistics_recorder.cc',
+      'base/observer_list_threadsafe.cc',
       'base/path_service.cc',
       'base/pending_task.cc',
       'base/pickle.cc',
@@ -506,8 +521,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/process/process_handle.cc',
       'base/process/process_iterator.cc',
       'base/process/process_metrics.cc',
-      'base/profiler/scoped_profile.cc',
-      'base/profiler/scoped_tracker.cc',
       'base/rand_util.cc',
       'base/run_loop.cc',
       'base/sequence_token.cc',
@@ -563,7 +576,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/threading/thread_local_storage.cc',
       'base/threading/thread_restrictions.cc',
       'base/threading/thread_task_runner_handle.cc',
-      'base/threading/worker_pool.cc',
       'base/time/clock.cc',
       'base/time/default_clock.cc',
       'base/time/default_tick_clock.cc',
@@ -603,8 +615,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/trace_log.cc',
       'base/trace_event/trace_log_constants.cc',
       'base/trace_event/tracing_agent.cc',
-      'base/tracked_objects.cc',
-      'base/tracking_info.cc',
       'base/unguessable_token.cc',
       'base/values.cc',
       'base/value_iterators.cc',
@@ -634,21 +644,14 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/strings/string16.cc',
         'base/synchronization/condition_variable_posix.cc',
         'base/synchronization/lock_impl_posix.cc',
-        'base/synchronization/read_write_lock_posix.cc',
         'base/sys_info_posix.cc',
         'base/task_scheduler/task_tracker_posix.cc',
         'base/threading/platform_thread_internal_posix.cc',
         'base/threading/platform_thread_posix.cc',
         'base/threading/thread_local_storage_posix.cc',
-        'base/threading/worker_pool_posix.cc',
         'base/time/time_conversion_posix.cc',
         'base/trace_event/heap_profiler_allocation_register_posix.cc',
     ])
-    if not is_mac:
-      static_libraries['base']['sources'].extend([
-        'base/time/time_exploded_posix.cc',
-        'base/time/time_now_posix.cc',
-      ])
     static_libraries['libevent'] = {
         'sources': [
             'base/third_party/libevent/buffer.c',
@@ -691,14 +694,16 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/process/process_linux.cc',
         'base/process/process_metrics_linux.cc',
         'base/strings/sys_string_conversions_posix.cc',
+        'base/synchronization/waitable_event_posix.cc',
         'base/sys_info_linux.cc',
+        'base/time/time_exploded_posix.cc',
+        'base/time/time_now_posix.cc',
         'base/threading/platform_thread_linux.cc',
     ])
     if is_linux:
       static_libraries['base']['sources'].extend([
         'base/allocator/allocator_shim.cc',
         'base/allocator/allocator_shim_default_dispatch_to_glibc.cc',
-        "base/synchronization/waitable_event_posix.cc",
       ])
       libs.extend(['-lrt', '-latomic'])
       static_libraries['libevent']['include_dirs'].extend([
@@ -739,8 +744,9 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/process/process_iterator_mac.cc',
         'base/process/process_metrics_mac.cc',
         'base/strings/sys_string_conversions_mac.mm',
-        "base/synchronization/waitable_event_mac.cc",
+        'base/synchronization/waitable_event_mac.cc',
         'base/sys_info_mac.mm',
+        'base/time/time_exploded_posix.cc',
         'base/time/time_mac.cc',
         'base/threading/platform_thread_mac.mm',
     ])
@@ -796,17 +802,16 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/sync_socket_win.cc',
         'base/synchronization/condition_variable_win.cc',
         'base/synchronization/lock_impl_win.cc',
-        'base/synchronization/read_write_lock_win.cc',
         'base/synchronization/waitable_event_watcher_win.cc',
         'base/synchronization/waitable_event_win.cc',
         'base/sys_info_win.cc',
         'base/threading/platform_thread_win.cc',
         'base/threading/thread_local_storage_win.cc',
-        'base/threading/worker_pool_win.cc',
         'base/time/time_win.cc',
         'base/timer/hi_res_timer_manager_win.cc',
         'base/trace_event/heap_profiler_allocation_register_win.cc',
         'base/trace_event/trace_event_etw_export_win.cc',
+        'base/win/core_winrt_util.cc',
         'base/win/enum_variant.cc',
         'base/win/event_trace_controller.cc',
         'base/win/event_trace_provider.cc',
@@ -820,9 +825,11 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/win/registry.cc',
         'base/win/resource_util.cc',
         'base/win/scoped_bstr.cc',
+        'base/win/scoped_com_initializer.cc',
         'base/win/scoped_handle.cc',
         'base/win/scoped_process_information.cc',
         'base/win/scoped_variant.cc',
+        'base/win/scoped_winrt_initializer.cc',
         'base/win/shortcut.cc',
         'base/win/startup_information.cc',
         'base/win/wait_chain.cc',
@@ -860,7 +867,7 @@ def build_gn_with_gn(temp_gn, build_dir, options):
          ]
   check_call(cmd)
 
-  cmd = ['ninja', '-C', build_dir]
+  cmd = ['ninja', '-C', build_dir, '-w', 'dupbuild=err']
   if options.verbose:
     cmd.append('-v')
   cmd.append('gn')

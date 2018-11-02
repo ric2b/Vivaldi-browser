@@ -30,8 +30,8 @@ class VIEWS_EXPORT BasePaintedLayerDelegate : public ui::LayerDelegate {
   virtual gfx::Vector2dF GetCenteringOffset() const;
 
   // ui::LayerDelegate:
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override;
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override;
 
  protected:
   explicit BasePaintedLayerDelegate(SkColor color);

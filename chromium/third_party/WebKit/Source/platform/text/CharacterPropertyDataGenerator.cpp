@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// TODO(kojii): This file is compiled with $host_toolchain, which cannot find
-// include files in platform/fonts. The build scripts should include this
-// directory, and fix these #include's to "platform/fonts/...".
-#include "CharacterPropertyDataGenerator.h"
+#include "platform/text/CharacterPropertyDataGenerator.h"
 
-#include "CharacterProperty.h"
+#include <stdio.h>
 #include <cassert>
 #include <cstring>
 #include <memory>
-#include <stdio.h>
+#include "platform/text/CharacterProperty.h"
 #if !defined(USING_SYSTEM_ICU)
 #define MUTEX_H  // Prevent compile failure of utrie2.h on Windows
 #include <utrie2.h>
@@ -55,7 +52,9 @@ static void GenerateUTrieSerialized(FILE* fp, int32_t size, uint8_t* array) {
           "#include <cstdint>\n\n"
           "namespace blink {\n\n"
           "extern const int32_t kSerializedCharacterDataSize = %d;\n"
-          "extern const uint8_t kSerializedCharacterData[] = {",
+          // The utrie2_openFromSerialized function requires character data to
+          // be aligned to 4 bytes.
+          "alignas(4) extern const uint8_t kSerializedCharacterData[] = {",
           size);
   for (int32_t i = 0; i < size;) {
     fprintf(fp, "\n   ");

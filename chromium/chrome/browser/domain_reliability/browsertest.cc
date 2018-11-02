@@ -165,7 +165,7 @@ IN_PROC_BROWSER_TEST_F(DomainReliabilityBrowserTest, Upload) {
 
   std::string url;
   ASSERT_TRUE(entry->GetString("url", &url));
-  EXPECT_EQ(url, error_url.spec());
+  EXPECT_EQ(url, error_url);
 }
 
 IN_PROC_BROWSER_TEST_F(DomainReliabilityBrowserTest, UploadAtShutdown) {

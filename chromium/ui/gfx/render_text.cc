@@ -10,17 +10,19 @@
 #include <climits>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/break_iterator.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "cc/base/math_util.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_shader.h"
+#include "cc/paint/paint_text_blob.h"
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
@@ -67,16 +69,13 @@ const SkScalar kLineThicknessFactor = (SK_Scalar1 / 18);
 // re-calculation of baseline.
 const int kInvalidBaseline = INT_MAX;
 
-int round(float value) {
-  return static_cast<int>(floor(value + 0.5f));
-}
-
 // Given |font| and |display_width|, returns the width of the fade gradient.
 int CalculateFadeGradientWidth(const FontList& font_list, int display_width) {
   // Fade in/out about 3 characters of the beginning/end of the string.
   // Use a 1/3 of the display width if the display width is very short.
   const int narrow_width = font_list.GetExpectedTextWidth(3);
-  const int gradient_width = std::min(narrow_width, round(display_width / 3.f));
+  const int gradient_width =
+      std::min(narrow_width, gfx::ToRoundedInt(display_width / 3.f));
   DCHECK_GE(gradient_width, 0);
   return gradient_width;
 }
@@ -122,8 +121,10 @@ sk_sp<cc::PaintShader> CreateFadeShader(const FontList& font_list,
   const float width_fraction =
       text_rect.width() / static_cast<float>(font_list.GetExpectedTextWidth(4));
   const SkAlpha kAlphaAtZeroWidth = 51;
-  const SkAlpha alpha = (width_fraction < 1) ?
-      static_cast<SkAlpha>(round((1 - width_fraction) * kAlphaAtZeroWidth)) : 0;
+  const SkAlpha alpha =
+      (width_fraction < 1)
+          ? gfx::ToRoundedInt((1 - width_fraction) * kAlphaAtZeroWidth)
+          : 0;
   const SkColor fade_color = SkColorSetA(color, alpha);
 
   std::vector<SkScalar> positions;
@@ -241,7 +242,12 @@ void SkiaTextRenderer::DrawPosText(const SkPoint* pos,
   static_assert(sizeof(*pos) == 2 * sizeof(*run_buffer.pos), "");
   memcpy(run_buffer.pos, pos, glyph_count * sizeof(*pos));
 
-  canvas_skia_->drawTextBlob(builder.make(), 0, 0, flags_);
+  // TODO(vmpstr): In order to OOP raster this, we would have to plumb PaintFont
+  // here instead of |flags_|.
+  canvas_skia_->drawTextBlob(
+      base::MakeRefCounted<cc::PaintTextBlob>(builder.make(),
+                                              std::vector<cc::PaintTypeface>{}),
+      0, 0, flags_);
 }
 
 void SkiaTextRenderer::DrawUnderline(int x, int y, int width) {
@@ -509,23 +515,46 @@ void RenderText::SetDisplayRect(const Rect& r) {
 }
 
 void RenderText::SetCursorPosition(size_t position) {
-  MoveCursorTo(position, false);
+  size_t cursor = std::min(position, text().length());
+  if (IsValidCursorIndex(cursor)) {
+    SetSelectionModel(SelectionModel(
+        cursor, (cursor == 0) ? CURSOR_FORWARD : CURSOR_BACKWARD));
+  }
 }
 
 void RenderText::MoveCursor(BreakType break_type,
                             VisualCursorDirection direction,
                             SelectionBehavior selection_behavior) {
   SelectionModel cursor(cursor_position(), selection_model_.caret_affinity());
+
+  // Ensure |cursor| is at the "end" of the current selection, since this
+  // determines which side should grow or shrink. If the prior change to the
+  // selection wasn't from cursor movement, the selection may be undirected. Or,
+  // the selection may be collapsing. In these cases, pick the "end" using
+  // |direction| (e.g. the arrow key) rather than the current selection range.
+  if ((!has_directed_selection_ || selection_behavior == SELECTION_NONE) &&
+      !selection().is_empty()) {
+    SelectionModel start = GetSelectionModelForSelectionStart();
+    int start_x = GetCursorBounds(start, true).x();
+    int end_x = GetCursorBounds(cursor, true).x();
+
+    // Use the selection start if it is left (when |direction| is CURSOR_LEFT)
+    // or right (when |direction| is CURSOR_RIGHT) of the selection end.
+    if (direction == CURSOR_RIGHT ? start_x > end_x : start_x < end_x) {
+      // In this case, a direction has been chosen that doesn't match
+      // |selection_model|, so the range must be reversed to place the cursor at
+      // the other end. Note the affinity won't matter: only the affinity of
+      // |start| (which points "in" to the selection) determines the movement.
+      Range range = selection_model_.selection();
+      selection_model_ = SelectionModel(Range(range.end(), range.start()),
+                                        selection_model_.caret_affinity());
+      cursor = start;
+    }
+  }
+
   // Cancelling a selection moves to the edge of the selection.
   if (break_type != LINE_BREAK && !selection().is_empty() &&
       selection_behavior == SELECTION_NONE) {
-    SelectionModel selection_start = GetSelectionModelForSelectionStart();
-    int start_x = GetCursorBounds(selection_start, true).x();
-    int cursor_x = GetCursorBounds(cursor, true).x();
-    // Use the selection start if it is left (when |direction| is CURSOR_LEFT)
-    // or right (when |direction| is CURSOR_RIGHT) of the selection end.
-    if (direction == CURSOR_RIGHT ? start_x > cursor_x : start_x < cursor_x)
-      cursor = selection_start;
     // Use the nearest word boundary in the proper |direction| for word breaks.
     if (break_type == WORD_BREAK)
       cursor = GetAdjacentSelectionModel(cursor, break_type, direction);
@@ -570,15 +599,16 @@ void RenderText::MoveCursor(BreakType break_type,
       break;
   }
 
-  MoveCursorTo(cursor);
+  SetSelection(cursor);
+  has_directed_selection_ = true;
 }
 
-bool RenderText::MoveCursorTo(const SelectionModel& model) {
+bool RenderText::SetSelection(const SelectionModel& model) {
   // Enforce valid selection model components.
   size_t text_length = text().length();
-  Range range(std::min(model.selection().start(),
-                       static_cast<uint32_t>(text_length)),
-              std::min(model.caret_pos(), text_length));
+  Range range(
+      std::min(model.selection().start(), static_cast<uint32_t>(text_length)),
+      std::min(model.caret_pos(), text_length));
   // The current model only supports caret positions at valid cursor indices.
   if (!IsValidCursorIndex(range.start()) || !IsValidCursorIndex(range.end()))
     return false;
@@ -588,11 +618,11 @@ bool RenderText::MoveCursorTo(const SelectionModel& model) {
   return changed;
 }
 
-bool RenderText::MoveCursorTo(const gfx::Point& point, bool select) {
+bool RenderText::MoveCursorToPoint(const gfx::Point& point, bool select) {
   gfx::SelectionModel model = FindCursorPosition(point);
   if (select)
     model.set_selection_start(selection().start());
-  return MoveCursorTo(model);
+  return SetSelection(model);
 }
 
 bool RenderText::SelectRange(const Range& range) {
@@ -617,8 +647,8 @@ bool RenderText::IsPointInSelection(const Point& point) {
 }
 
 void RenderText::ClearSelection() {
-  SetSelectionModel(SelectionModel(cursor_position(),
-                                   selection_model_.caret_affinity()));
+  SetSelectionModel(
+      SelectionModel(cursor_position(), selection_model_.caret_affinity()));
 }
 
 void RenderText::SelectAll(bool reversed) {
@@ -804,17 +834,26 @@ Rect RenderText::GetCursorBounds(const SelectionModel& caret,
       insert_mode ? caret.caret_affinity() : CURSOR_FORWARD;
   int x = 0, width = 1;
   Size size = GetStringSize();
-  if (caret_pos == (caret_affinity == CURSOR_BACKWARD ? 0 : text().length())) {
-    // The caret is attached to the boundary. Always return a 1-dip width caret,
-    // since there is nothing to overtype.
-    if ((GetDisplayTextDirection() == base::i18n::RIGHT_TO_LEFT)
-        == (caret_pos == 0)) {
+
+  // Check whether the caret is attached to a boundary. Always return a 1-dip
+  // width caret at the boundary. Avoid calling IndexOfAdjacentGrapheme(), since
+  // it is slow and can impact browser startup here.
+  // In insert mode, index 0 is always a boundary. The end, however, is not at a
+  // boundary when the string ends in RTL text and there is LTR text around it.
+  const bool at_boundary =
+      (insert_mode && caret_pos == 0) ||
+      caret_pos == (caret_affinity == CURSOR_BACKWARD ? 0 : text().length());
+  if (at_boundary) {
+    const bool rtl = GetDisplayTextDirection() == base::i18n::RIGHT_TO_LEFT;
+    if (rtl == (caret_pos == 0))
       x = size.width();
-    }
   } else {
-    size_t grapheme_start = (caret_affinity == CURSOR_FORWARD) ?
-        caret_pos : IndexOfAdjacentGrapheme(caret_pos, CURSOR_BACKWARD);
-    Range xspan(GetGlyphBounds(grapheme_start));
+    // Find the next grapheme continuing in the current direction. This
+    // determines the substring range that should be highlighted.
+    size_t caret_end = IndexOfAdjacentGrapheme(caret_pos, caret_affinity);
+    if (caret_end < caret_pos)
+      std::swap(caret_end, caret_pos);
+    const Range xspan = GetCursorSpan(Range(caret_pos, caret_end));
     if (insert_mode) {
       x = (caret_affinity == CURSOR_BACKWARD) ? xspan.end() : xspan.start();
     } else {  // overtype mode
@@ -969,6 +1008,7 @@ RenderText::RenderText()
       directionality_mode_(DIRECTIONALITY_FROM_TEXT),
       text_direction_(base::i18n::UNKNOWN_DIRECTION),
       cursor_enabled_(true),
+      has_directed_selection_(kSelectionIsAlwaysDirected),
       selection_color_(kDefaultColor),
       selection_background_focused_color_(kDefaultSelectionBackgroundColor),
       focused_(false),
@@ -1042,6 +1082,7 @@ void RenderText::SetSelectionModel(const SelectionModel& model) {
   DCHECK_LE(model.selection().GetMax(), text().length());
   selection_model_ = model;
   cached_bounds_and_offset_valid_ = false;
+  has_directed_selection_ = kSelectionIsAlwaysDirected;
 }
 
 void RenderText::OnTextColorChanged() {
@@ -1256,6 +1297,27 @@ base::i18n::TextDirection RenderText::GetTextDirection(
       case DIRECTIONALITY_FORCE_RTL:
         text_direction_ = base::i18n::RIGHT_TO_LEFT;
         break;
+      case DIRECTIONALITY_AS_URL:
+        // Rendering as a URL implies left-to-right paragraph direction.
+        // URL Standard specifies that a URL "should be rendered as if it were
+        // in a left-to-right embedding".
+        // https://url.spec.whatwg.org/#url-rendering
+        //
+        // Consider logical string for domain "ABC.com/hello" (where ABC are
+        // Hebrew (RTL) characters). The normal Bidi algorithm renders this as
+        // "com/hello.CBA"; by forcing LTR, it is rendered as "CBA.com/hello".
+        //
+        // Note that this only applies a LTR embedding at the top level; it
+        // doesn't change the Bidi algorithm, so there are still some URLs that
+        // will render in a confusing order. Consider the logical string
+        // "abc.COM/HELLO/world", which will render as "abc.OLLEH/MOC/world".
+        // See https://crbug.com/351639.
+        //
+        // Note that the LeftToRightUrls feature flag enables additional
+        // behaviour for DIRECTIONALITY_AS_URL, but the left-to-right embedding
+        // behaviour is always enabled, regardless of the flag.
+        text_direction_ = base::i18n::LEFT_TO_RIGHT;
+        break;
       default:
         NOTREACHED();
     }
@@ -1330,14 +1392,6 @@ int RenderText::DetermineBaselineCenteringText(const int display_height,
   return baseline + std::max(min_shift, std::min(max_shift, baseline_shift));
 }
 
-void RenderText::MoveCursorTo(size_t position, bool select) {
-  size_t cursor = std::min(position, text().length());
-  if (IsValidCursorIndex(cursor))
-    SetSelectionModel(SelectionModel(
-        Range(select ? selection().start() : cursor, cursor),
-        (cursor == 0) ? CURSOR_FORWARD : CURSOR_BACKWARD));
-}
-
 void RenderText::OnTextAttributeChanged() {
   layout_text_.clear();
   display_text_.clear();
@@ -1347,8 +1401,7 @@ void RenderText::OnTextAttributeChanged() {
   if (obscured_) {
     size_t obscured_text_length =
         static_cast<size_t>(UTF16IndexToOffset(text_, 0, text_.length()));
-    layout_text_.assign(obscured_text_length,
-                        RenderText::kPasswordReplacementChar);
+    layout_text_.assign(obscured_text_length, kPasswordReplacementChar);
 
     if (obscured_reveal_index_ >= 0 &&
         obscured_reveal_index_ < static_cast<int>(text_.length())) {
@@ -1458,7 +1511,7 @@ base::string16 RenderText::Elide(const base::string16& text,
     guess = lo + static_cast<size_t>(ToRoundedInt((available_width - lo_width) *
                                                   (hi - lo) /
                                                   (hi_width - lo_width)));
-    guess = cc::MathUtil::ClampToRange(guess, lo, hi);
+    guess = base::ClampToRange(guess, lo, hi);
     DCHECK_NE(last_guess, guess);
 
     // Restore colors. They will be truncated to size by SetText.

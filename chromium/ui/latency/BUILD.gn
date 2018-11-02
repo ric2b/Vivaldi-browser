@@ -17,6 +17,10 @@ source_set("latency") {
     "//base",
     "//ui/gfx",
   ]
+
+  public_deps = [
+    "//services/metrics/public/cpp:metrics_cpp",
+  ]
 }
 
 source_set("test_support") {
@@ -52,6 +56,7 @@ test("latency_unittests") {
     deps += [
       "//ipc:test_support",
       "//mojo/public/cpp/bindings",
+      "//ui/gfx/ipc/geometry",
       "//ui/latency/ipc",
       "//ui/latency/mojo:test_interfaces",
     ]

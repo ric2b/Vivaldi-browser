@@ -24,8 +24,8 @@
 #ifndef DataRef_h
 #define DataRef_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -34,7 +34,7 @@ class DataRef {
   USING_FAST_MALLOC(DataRef);
 
  public:
-  const T* Get() const { return data_.Get(); }
+  const T* Get() const { return data_.get(); }
 
   const T& operator*() const { return *Get(); }
   const T* operator->() const { return Get(); }
@@ -42,7 +42,7 @@ class DataRef {
   T* Access() {
     if (!data_->HasOneRef())
       data_ = data_->Copy();
-    return data_.Get();
+    return data_.get();
   }
 
   void Init() {
@@ -65,7 +65,7 @@ class DataRef {
   void operator=(std::nullptr_t) { data_ = nullptr; }
 
  private:
-  RefPtr<T> data_;
+  scoped_refptr<T> data_;
 };
 
 }  // namespace blink

@@ -35,8 +35,6 @@ class TabWebContentsDelegateAndroid
   TabWebContentsDelegateAndroid(JNIEnv* env, jobject obj);
   ~TabWebContentsDelegateAndroid() override;
 
-  void LoadingStateChanged(content::WebContents* source,
-                           bool to_different_document) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
@@ -83,6 +81,10 @@ class TabWebContentsDelegateAndroid
                       bool* was_blocked) override;
   void RequestAppBannerFromDevTools(
       content::WebContents* web_contents) override;
+  void OnAudioStateChanged(content::WebContents* web_contents,
+                           bool audible) override;
+  void OnDidBlockFramebust(content::WebContents* web_contents,
+                           const GURL& url) override;
 
  private:
   // NotificationObserver implementation.

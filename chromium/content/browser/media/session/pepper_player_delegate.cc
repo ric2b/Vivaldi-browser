@@ -16,12 +16,6 @@ namespace {
 
 const double kDuckVolume = 0.2f;
 
-bool ShouldDuckFlash() {
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-             switches::kEnableAudioFocus) ==
-         switches::kEnableAudioFocusDuckFlash;
-}
-
 }  // anonymous namespace
 
 const int PepperPlayerDelegate::kPlayerId = 0;
@@ -34,7 +28,7 @@ PepperPlayerDelegate::PepperPlayerDelegate(
 PepperPlayerDelegate::~PepperPlayerDelegate() = default;
 
 void PepperPlayerDelegate::OnSuspend(int player_id) {
-  if (!ShouldDuckFlash())
+  if (!media::IsAudioFocusDuckFlashEnabled())
     return;
 
   // Pepper player cannot be really suspended. Duck the volume instead.
@@ -43,16 +37,26 @@ void PepperPlayerDelegate::OnSuspend(int player_id) {
 }
 
 void PepperPlayerDelegate::OnResume(int player_id) {
-  if (!ShouldDuckFlash())
+  if (!media::IsAudioFocusDuckFlashEnabled())
     return;
 
   DCHECK_EQ(player_id, kPlayerId);
   SetVolume(player_id, 1.0f);
 }
 
+void PepperPlayerDelegate::OnSeekForward(int player_id,
+                                         base::TimeDelta seek_time) {
+  // Cannot seek pepper player. Do nothing.
+}
+
+void PepperPlayerDelegate::OnSeekBackward(int player_id,
+                                          base::TimeDelta seek_time) {
+  // Cannot seek pepper player. Do nothing.
+}
+
 void PepperPlayerDelegate::OnSetVolumeMultiplier(int player_id,
                                                  double volume_multiplier) {
-  if (!ShouldDuckFlash())
+  if (!media::IsAudioFocusDuckFlashEnabled())
     return;
 
   DCHECK_EQ(player_id, kPlayerId);

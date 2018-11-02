@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
-#include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_delegate.h"
+#include "ui/gfx/image/image.h"
 
 class Profile;
+
+namespace message_center {
+class Notification;
+}
 
 namespace chromeos {
 
@@ -39,7 +42,6 @@ class CupsPrintJobNotification {
 
   void CloseNotificationByUser();
   void ClickOnNotificationButton(int button_index);
-  const std::string& GetNotificationId();
 
  private:
   // Update the notification based on the print job's status.
@@ -51,15 +53,14 @@ class CupsPrintJobNotification {
   void UpdateNotificationButtons();
 
   // Returns the buttons according to the print job's current status.
-  std::unique_ptr<std::vector<ButtonCommand>> GetButtonCommands() const;
+  std::vector<ButtonCommand> GetButtonCommands() const;
   base::string16 GetButtonLabel(ButtonCommand button) const;
   gfx::Image GetButtonIcon(ButtonCommand button) const;
 
   CupsPrintJobNotificationManager* notification_manager_;
-  std::unique_ptr<Notification> notification_;
+  std::unique_ptr<message_center::Notification> notification_;
   std::string notification_id_;
   CupsPrintJob* print_job_;
-  scoped_refptr<NotificationDelegate> delegate_;
   Profile* profile_;
 
   // If the notification has been closed in the middle of printing or not. If it
@@ -73,7 +74,7 @@ class CupsPrintJobNotification {
 
   // Maintains a list of button actions according to the print job's current
   // status.
-  std::unique_ptr<std::vector<ButtonCommand>> button_commands_;
+  std::vector<ButtonCommand> button_commands_;
 
   DISALLOW_COPY_AND_ASSIGN(CupsPrintJobNotification);
 };

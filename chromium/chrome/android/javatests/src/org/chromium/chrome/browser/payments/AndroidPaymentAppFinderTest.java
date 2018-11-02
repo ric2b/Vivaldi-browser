@@ -7,9 +7,8 @@ package org.chromium.chrome.browser.payments;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 
-import junit.framework.Assert;
-
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -26,7 +25,6 @@ import org.chromium.components.payments.PaymentManifestDownloader;
 import org.chromium.components.payments.PaymentManifestParser;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.net.URI;
@@ -61,12 +59,6 @@ public class AndroidPaymentAppFinderTest implements PaymentAppCreatedCallback {
         /* package */ void setTestServerUri(URI uri) {
             assert mTestServerUri == null : "Test server URI should be set only once";
             mTestServerUri = uri;
-        }
-
-        @Override
-        public void initialize(WebContents webContents) {
-            super.initialize(webContents);
-            allowHttpForTest();
         }
 
         @Override
@@ -113,8 +105,7 @@ public class AndroidPaymentAppFinderTest implements PaymentAppCreatedCallback {
     public void setUp() throws Throwable {
         mRule.startMainActivityOnBlankPage();
         mPackageManager.reset();
-        mServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mDownloader.setTestServerUri(new URI(mServer.getURL("/components/test/data/payments/")));
         mPaymentApps = new ArrayList<>();
         mAllPaymentAppsCreated = false;
@@ -1021,6 +1012,92 @@ public class AndroidPaymentAppFinderTest implements PaymentAppCreatedCallback {
 
         Assert.assertEquals("1 app should still match the query", 1, mPaymentApps.size());
         Assert.assertEquals("com.henrypay", mPaymentApps.get(0).getAppIdentifier());
+    }
+
+    /**
+     * If a payment method supports two apps from different origins, both apps should be found.
+     * Repeated app look ups should succeed.
+     */
+    @Test
+    @Feature({"Payments"})
+    public void testTwoAppsFromDifferentOriginsWithTheSamePaymentMethod() throws Throwable {
+        Set<String> methods = new HashSet<>();
+        methods.add("https://jonpay.com/webpay");
+        mPackageManager.installPaymentApp(
+                "AlicePay", "com.alicepay", "https://alicepay.com/webpay", "ABCDEFABCDEFABCDEFAB");
+        mPackageManager.installPaymentApp(
+                "BobPay", "com.bobpay", "https://bobpay.com/webpay", "01020304050607080900");
+        mPackageManager.setStringArrayMetaData(
+                "com.alicepay", new String[] {"https://jonpay.com/webpay"});
+        mPackageManager.setStringArrayMetaData(
+                "com.bobpay", new String[] {"https://jonpay.com/webpay"});
+
+        findApps(methods);
+
+        Assert.assertEquals("2 apps should match the query", 2, mPaymentApps.size());
+        Set<String> appIdentifiers = new HashSet<>();
+        appIdentifiers.add(mPaymentApps.get(0).getAppIdentifier());
+        appIdentifiers.add(mPaymentApps.get(1).getAppIdentifier());
+        Assert.assertTrue(appIdentifiers.contains("com.alicepay"));
+        Assert.assertTrue(appIdentifiers.contains("com.bobpay"));
+
+        mPaymentApps.clear();
+        mAllPaymentAppsCreated = false;
+
+        findApps(methods);
+
+        Assert.assertEquals("2 apps should still match the query", 2, mPaymentApps.size());
+        appIdentifiers.clear();
+        appIdentifiers.add(mPaymentApps.get(0).getAppIdentifier());
+        appIdentifiers.add(mPaymentApps.get(1).getAppIdentifier());
+        Assert.assertTrue(appIdentifiers.contains("com.alicepay"));
+        Assert.assertTrue(appIdentifiers.contains("com.bobpay"));
+    }
+
+    /**
+     * All known payment method names are valid.
+     */
+    @Test
+    @Feature({"Payments"})
+    public void testAllKnownPaymentMethodNames() throws Throwable {
+        Set<String> methods = new HashSet<>();
+        methods.add("basic-card");
+        methods.add("interledger");
+        methods.add("payee-credit-transfer");
+        methods.add("payer-credit-transfer");
+        methods.add("not-supported");
+        mPackageManager.installPaymentApp("AlicePay", "com.alicepay",
+                "" /* no default payment method name in metadata */, "AA");
+        mPackageManager.setStringArrayMetaData("com.alicepay",
+                new String[] {"basic-card", "interledger", "payee-credit-transfer",
+                        "payer-credit-transfer", "not-supported"});
+
+        findApps(methods);
+
+        Assert.assertEquals("1 app should match the query", 1, mPaymentApps.size());
+        Assert.assertEquals("com.alicepay", mPaymentApps.get(0).getAppIdentifier());
+        Assert.assertEquals(4, mPaymentApps.get(0).getAppMethodNames().size());
+        Assert.assertTrue(mPaymentApps.get(0).getAppMethodNames().contains("basic-card"));
+        Assert.assertTrue(mPaymentApps.get(0).getAppMethodNames().contains("interledger"));
+        Assert.assertTrue(
+                mPaymentApps.get(0).getAppMethodNames().contains("payee-credit-transfer"));
+        Assert.assertTrue(
+                mPaymentApps.get(0).getAppMethodNames().contains("payer-credit-transfer"));
+
+        mPaymentApps.clear();
+        mAllPaymentAppsCreated = false;
+
+        findApps(methods);
+
+        Assert.assertEquals("1 app should still match the query", 1, mPaymentApps.size());
+        Assert.assertEquals("com.alicepay", mPaymentApps.get(0).getAppIdentifier());
+        Assert.assertEquals(4, mPaymentApps.get(0).getAppMethodNames().size());
+        Assert.assertTrue(mPaymentApps.get(0).getAppMethodNames().contains("basic-card"));
+        Assert.assertTrue(mPaymentApps.get(0).getAppMethodNames().contains("interledger"));
+        Assert.assertTrue(
+                mPaymentApps.get(0).getAppMethodNames().contains("payee-credit-transfer"));
+        Assert.assertTrue(
+                mPaymentApps.get(0).getAppMethodNames().contains("payer-credit-transfer"));
     }
 
     private void findApps(final Set<String> methodNames) throws Throwable {

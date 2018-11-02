@@ -4,6 +4,7 @@
 
 #include "chromeos/dbus/fake_shill_service_client.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -29,11 +30,6 @@ namespace chromeos {
 
 namespace {
 
-void PassStubListValue(const ShillServiceClient::ListValueCallback& callback,
-                       base::ListValue* value) {
-  callback.Run(*value);
-}
-
 void PassStubServiceProperties(
     const ShillServiceClient::DictionaryValueCallback& callback,
     DBusMethodCallStatus call_status,
@@ -56,9 +52,7 @@ int GetInteractiveDelay() {
 FakeShillServiceClient::FakeShillServiceClient() : weak_ptr_factory_(this) {
 }
 
-FakeShillServiceClient::~FakeShillServiceClient() {
-}
-
+FakeShillServiceClient::~FakeShillServiceClient() = default;
 
 // ShillServiceClient overrides.
 
@@ -153,22 +147,20 @@ void FakeShillServiceClient::ClearProperties(
     const std::vector<std::string>& names,
     const ListValueCallback& callback,
     const ErrorCallback& error_callback) {
-  base::DictionaryValue* dict = NULL;
-  if (!stub_services_.GetDictionaryWithoutPathExpansion(
-      service_path.value(), &dict)) {
+  base::Value* dict = stub_services_.FindKeyOfType(
+      service_path.value(), base::Value::Type::DICTIONARY);
+  if (!dict) {
     error_callback.Run("Error.InvalidService", "Invalid Service");
     return;
   }
-  std::unique_ptr<base::ListValue> results(new base::ListValue);
-  for (std::vector<std::string>::const_iterator iter = names.begin();
-      iter != names.end(); ++iter) {
-    dict->RemoveWithoutPathExpansion(*iter, NULL);
+
+  base::ListValue result;
+  for (const auto& name : names) {
     // Note: Shill does not send notifications when properties are cleared.
-    results->AppendBoolean(true);
+    result.AppendBoolean(dict->RemoveKey(name));
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&PassStubListValue, callback, base::Owned(results.release())));
+      FROM_HERE, base::BindOnce(callback, std::move(result)));
 }
 
 void FakeShillServiceClient::Connect(const dbus::ObjectPath& service_path,
@@ -296,9 +288,8 @@ void FakeShillServiceClient::AddService(const std::string& service_path,
                                         const std::string& type,
                                         const std::string& state,
                                         bool visible) {
-  AddServiceWithIPConfig(service_path, guid, name,
-                         type, state, "" /* ipconfig_path */,
-                         visible);
+  AddServiceWithIPConfig(service_path, guid, name, type, state,
+                         std::string() /* ipconfig_path */, visible);
 }
 
 void FakeShillServiceClient::AddServiceWithIPConfig(
@@ -312,17 +303,8 @@ void FakeShillServiceClient::AddServiceWithIPConfig(
   base::DictionaryValue* properties = SetServiceProperties(
       service_path, guid, name, type, state, visible);
 
-  std::string profile_path;
-  if (properties->GetStringWithoutPathExpansion(shill::kProfileProperty,
-                                                &profile_path) &&
-      !profile_path.empty()) {
-    DBusThreadManager::Get()->GetShillProfileClient()->GetTestInterface()->
-        UpdateService(profile_path, service_path);
-  }
-
-  if (!ipconfig_path.empty()) {
+  if (!ipconfig_path.empty())
     properties->SetKey(shill::kIPConfigProperty, base::Value(ipconfig_path));
-  }
 
   DBusThreadManager::Get()->GetShillManagerClient()->GetTestInterface()->
       AddManagerService(service_path, true);
@@ -339,22 +321,20 @@ base::DictionaryValue* FakeShillServiceClient::SetServiceProperties(
       GetModifiableServiceProperties(service_path, true);
   connect_behavior_.erase(service_path);
 
-  std::string profile_path;
-  base::DictionaryValue profile_properties;
-  if (DBusThreadManager::Get()
-          ->GetShillProfileClient()
-          ->GetTestInterface()
-          ->GetService(service_path, &profile_path, &profile_properties)) {
-    properties->SetKey(shill::kProfileProperty, base::Value(profile_path));
-  }
-
   // If |guid| is provided, set Service.GUID to that. Otherwise if a GUID is
   // stored in a profile entry, use that. Otherwise leave it blank. Shill does
   // not enforce a valid guid, we do that at the NetworkStateHandler layer.
   std::string guid_to_set = guid;
   if (guid_to_set.empty()) {
-    profile_properties.GetStringWithoutPathExpansion(shill::kGuidProperty,
-                                                     &guid_to_set);
+    std::string profile_path;
+    base::DictionaryValue profile_properties;
+    if (DBusThreadManager::Get()
+            ->GetShillProfileClient()
+            ->GetTestInterface()
+            ->GetService(service_path, &profile_path, &profile_properties)) {
+      profile_properties.GetStringWithoutPathExpansion(shill::kGuidProperty,
+                                                       &guid_to_set);
+    }
   }
   if (!guid_to_set.empty()) {
     properties->SetKey(shill::kGuidProperty, base::Value(guid_to_set));
@@ -408,13 +388,11 @@ bool FakeShillServiceClient::SetServiceProperty(const std::string& service_path,
     std::string key = property;
     if (base::StartsWith(property, "Provider.", case_sensitive))
       key = property.substr(strlen("Provider."));
-    base::DictionaryValue* provider =
-        new_properties.SetDictionaryWithoutPathExpansion(
-            shill::kProviderProperty,
-            base::MakeUnique<base::DictionaryValue>());
+    base::Value* provider = new_properties.SetKey(
+        shill::kProviderProperty, base::Value(base::Value::Type::DICTIONARY));
     provider->SetKey(key, value.Clone());
     changed_property = shill::kProviderProperty;
-  } else if (value.GetType() == base::Value::Type::DICTIONARY) {
+  } else if (value.is_dict()) {
     const base::DictionaryValue* new_dict = NULL;
     value.GetAsDictionary(&new_dict);
     CHECK(new_dict);
@@ -526,7 +504,7 @@ base::DictionaryValue* FakeShillServiceClient::GetModifiableServiceProperties(
                                                         &properties) &&
       create_if_missing) {
     properties = stub_services_.SetDictionary(
-        service_path, base::MakeUnique<base::DictionaryValue>());
+        service_path, std::make_unique<base::DictionaryValue>());
   }
   return properties;
 }

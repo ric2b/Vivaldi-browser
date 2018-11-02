@@ -43,29 +43,6 @@
     ],
     "functions": [
       {
-        "name": "toggle",
-        "type": "function",
-        "description": "Toggles the value of a boolean preference.",
-        "parameters": [
-          {
-            "name": "path",
-            "type": "string",
-            "description": "The preference path"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Returns the value of the preference after toggling.",
-            "parameters": [
-              {
-                "name": "newValue",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "get",
         "type": "function",
         "description": "Get a specific named preference value.",

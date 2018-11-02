@@ -45,7 +45,7 @@ class ProfileSyncServiceMock : public ProfileSyncService {
                void(bool sync_everything, syncer::ModelTypeSet chosen_types));
 
   MOCK_METHOD2(OnUnrecoverableError,
-               void(const tracked_objects::Location& location,
+               void(const base::Location& location,
                     const std::string& message));
   MOCK_CONST_METHOD0(GetUserShare, syncer::UserShare*());
   MOCK_METHOD0(RequestStart, void());
@@ -71,7 +71,7 @@ class ProfileSyncServiceMock : public ProfileSyncService {
                bool(syncer::SyncEngine::Status* result));
   MOCK_CONST_METHOD0(GetAuthError, const GoogleServiceAuthError&());
   MOCK_CONST_METHOD0(IsFirstSetupInProgress, bool());
-  MOCK_CONST_METHOD0(GetLastSyncedTimeString, base::string16());
+  MOCK_CONST_METHOD0(GetLastSyncedTime, base::Time());
   MOCK_CONST_METHOD0(HasUnrecoverableError, bool());
   MOCK_CONST_METHOD0(IsSyncActive, bool());
   MOCK_CONST_METHOD0(IsEngineInitialized, bool());

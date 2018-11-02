@@ -51,7 +51,7 @@ void GpuDataManagerImpl::BlacklistWebGLForTesting() {
       0,        // exceptions count
       nullptr,  // exceptions
   };
-  static const gpu::GpuControlListData kData("1.0", 1, &kEntry);
+  static const gpu::GpuControlListData kData(1, &kEntry);
 
   gpu::GPUInfo gpu_info;
 
@@ -81,9 +81,9 @@ bool GpuDataManagerImpl::IsWebGLEnabled() const {
   return private_->IsWebGLEnabled();
 }
 
-bool GpuDataManagerImpl::IsDriverBugWorkaroundActive(int feature) const {
+bool GpuDataManagerImpl::IsWebGL2Enabled() const {
   base::AutoLock auto_lock(lock_);
-  return private_->IsDriverBugWorkaroundActive(feature);
+  return private_->IsWebGL2Enabled();
 }
 
 gpu::GPUInfo GpuDataManagerImpl::GetGPUInfo() const {
@@ -165,11 +165,6 @@ bool GpuDataManagerImpl::HardwareAccelerationEnabled() const {
          private_->GpuAccessAllowed(nullptr);
 }
 
-bool GpuDataManagerImpl::CanUseGpuBrowserCompositor() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->CanUseGpuBrowserCompositor();
-}
-
 void GpuDataManagerImpl::GetDisabledExtensions(
     std::string* disabled_extensions) const {
   base::AutoLock auto_lock(lock_);
@@ -197,6 +192,11 @@ void GpuDataManagerImpl::UpdateGpuFeatureInfo(
   private_->UpdateGpuFeatureInfo(gpu_feature_info);
 }
 
+gpu::GpuFeatureInfo GpuDataManagerImpl::GetGpuFeatureInfo() const {
+  base::AutoLock auto_lock(lock_);
+  return private_->GetGpuFeatureInfo();
+}
+
 void GpuDataManagerImpl::AppendRendererCommandLine(
     base::CommandLine* command_line) const {
   base::AutoLock auto_lock(lock_);
@@ -219,16 +219,6 @@ void GpuDataManagerImpl::UpdateGpuPreferences(
     gpu::GpuPreferences* gpu_preferences) const {
   base::AutoLock auto_lock(lock_);
   private_->UpdateGpuPreferences(gpu_preferences);
-}
-
-std::string GpuDataManagerImpl::GetBlacklistVersion() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->GetBlacklistVersion();
-}
-
-std::string GpuDataManagerImpl::GetDriverBugListVersion() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->GetDriverBugListVersion();
 }
 
 void GpuDataManagerImpl::GetBlacklistReasons(base::ListValue* reasons) const {

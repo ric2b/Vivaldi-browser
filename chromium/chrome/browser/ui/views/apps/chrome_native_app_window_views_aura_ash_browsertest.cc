@@ -6,8 +6,10 @@
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_aura_ash.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "ui/base/ui_base_types.h"
 
 class ChromeNativeAppWindowViewsAuraAshBrowserTest
     : public extensions::PlatformAppBrowserTest {
@@ -39,23 +41,48 @@ IN_PROC_BROWSER_TEST_F(ChromeNativeAppWindowViewsAuraAshBrowserTest,
   // Verify that since the auto hide title bars in tablet mode feature turned
   // on, immersive mode is enabled once tablet mode is entered, and disabled
   // once tablet mode is exited.
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      true);
+  ash::TabletModeController* tablet_mode_controller =
+      ash::Shell::Get()->tablet_mode_controller();
+  tablet_mode_controller->EnableTabletModeWindowManager(true);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      false);
+  tablet_mode_controller->EnableTabletModeWindowManager(false);
+  tablet_mode_controller->FlushForTesting();
   EXPECT_FALSE(window->immersive_fullscreen_controller_->IsEnabled());
 
   // Verify that the window was fullscreened before entering tablet mode, it
   // will remain fullscreened after exiting tablet mode.
   window->SetFullscreen(extensions::AppWindow::FULLSCREEN_TYPE_OS);
   EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
+  tablet_mode_controller->EnableTabletModeWindowManager(true);
+  tablet_mode_controller->FlushForTesting();
+  EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
+  tablet_mode_controller->EnableTabletModeWindowManager(false);
+  tablet_mode_controller->FlushForTesting();
+  EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
+
+  CloseAppWindow(app_window);
+}
+
+// Verifies that apps in immersive fullscreen will have a restore state of
+// maximized.
+IN_PROC_BROWSER_TEST_F(ChromeNativeAppWindowViewsAuraAshBrowserTest,
+                       ImmersiveModeFullscreenRestoreType) {
+  extensions::AppWindow* app_window = CreateTestAppWindow("{}");
+  auto* window = static_cast<ChromeNativeAppWindowViewsAuraAsh*>(
+      GetNativeAppWindowForAppWindow(app_window));
+  ASSERT_TRUE(window != nullptr);
+  ASSERT_TRUE(window->immersive_fullscreen_controller_.get() != nullptr);
+
+  window->SetFullscreen(extensions::AppWindow::FULLSCREEN_TYPE_OS);
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED, window->GetRestoredState());
   ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
       true);
-  EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
+  EXPECT_TRUE(window->IsFullscreen());
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED, window->GetRestoredState());
   ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
       false);
-  EXPECT_TRUE(window->immersive_fullscreen_controller_->IsEnabled());
+  EXPECT_EQ(ui::SHOW_STATE_MAXIMIZED, window->GetRestoredState());
 
   CloseAppWindow(app_window);
 }

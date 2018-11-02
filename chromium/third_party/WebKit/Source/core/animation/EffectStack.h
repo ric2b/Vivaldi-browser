@@ -31,6 +31,7 @@
 #ifndef EffectStack_h
 #define EffectStack_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/animation/Animation.h"
 #include "core/animation/EffectModel.h"
@@ -49,7 +50,6 @@ class InertEffect;
 // This sequence is broken down to per PropertyHandle granularity.
 class CORE_EXPORT EffectStack {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(EffectStack);
 
  public:
   EffectStack();
@@ -69,8 +69,8 @@ class CORE_EXPORT EffectStack {
       KeyframeEffectReadOnly::Priority,
       PropertyHandleFilter = nullptr);
 
-  bool GetAnimatedBoundingBox(FloatBox&, CSSPropertyID) const;
-  DECLARE_TRACE();
+  bool GetAnimatedBoundingBox(FloatBox&, const CSSProperty&) const;
+  void Trace(blink::Visitor*);
 
  private:
   void RemoveRedundantSampledEffects();
@@ -79,6 +79,7 @@ class CORE_EXPORT EffectStack {
   HeapVector<Member<SampledEffect>> sampled_effects_;
 
   friend class AnimationEffectStackTest;
+  DISALLOW_COPY_AND_ASSIGN(EffectStack);
 };
 
 }  // namespace blink

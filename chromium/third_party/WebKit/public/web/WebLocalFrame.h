@@ -12,18 +12,19 @@
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "WebImeTextSpan.h"
-#include "public/platform/WebCachePolicy.h"
+#include "base/unguessable_token.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/platform/site_engagement.mojom-shared.h"
-#include "public/web/WebSandboxFlags.h"
+#include "public/web/WebTextDirection.h"
+#include "public/web/selection_menu_behavior.mojom-shared.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 #include "v8/include/v8.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}
 
 namespace blink {
 
@@ -51,7 +52,7 @@ class WebSpellCheckPanelHostClient;
 class WebString;
 class WebTextCheckClient;
 class WebURL;
-class WebURLLoader;
+class WebURLLoaderFactory;
 class WebView;
 enum class WebTreeScopeType;
 struct WebAssociatedURLLoaderOptions;
@@ -105,7 +106,7 @@ class WebLocalFrame : public WebFrame {
       blink::InterfaceRegistry*,
       WebRemoteFrame*,
       WebSandboxFlags,
-      WebParsedFeaturePolicy);
+      ParsedFeaturePolicy);
 
   // Creates a new local child of this frame. Similar to the other methods that
   // create frames, the returned frame should be freed by calling Close() when
@@ -181,7 +182,7 @@ class WebLocalFrame : public WebFrame {
 
   // Returns a WebURLRequest corresponding to the load of the WebHistoryItem.
   virtual WebURLRequest RequestFromHistoryItem(const WebHistoryItem&,
-                                               WebCachePolicy) const = 0;
+                                               mojom::FetchCacheMode) const = 0;
 
   // Returns a WebURLRequest corresponding to the reload of the current
   // HistoryItem.
@@ -191,11 +192,13 @@ class WebLocalFrame : public WebFrame {
 
   // Load the given URL. For history navigations, a valid WebHistoryItem
   // should be given, as well as a WebHistoryLoadType.
-  virtual void Load(const WebURLRequest&,
-                    WebFrameLoadType = WebFrameLoadType::kStandard,
-                    const WebHistoryItem& = WebHistoryItem(),
-                    WebHistoryLoadType = kWebHistoryDifferentDocumentLoad,
-                    bool is_client_redirect = false) = 0;
+  virtual void Load(
+      const WebURLRequest&,
+      WebFrameLoadType,
+      const WebHistoryItem&,
+      WebHistoryLoadType,
+      bool is_client_redirect,
+      const base::UnguessableToken& devtools_navigation_token) = 0;
 
   // This method is short-hand for calling LoadData, where mime_type is
   // "text/html" and text_encoding is "UTF-8".
@@ -259,7 +262,7 @@ class WebLocalFrame : public WebFrame {
   // Navigation State -------------------------------------------------------
 
   // Returns true if the current frame's load event has not completed.
-  virtual bool IsLoading() const = 0;
+  bool IsLoading() const override = 0;
 
   // Returns true if there is a pending redirect or location change
   // within specified interval (in seconds). This could be caused by:
@@ -476,6 +479,16 @@ class WebLocalFrame : public WebFrame {
   virtual bool ExecuteCommand(const WebString&, const WebString& value) = 0;
   virtual bool IsCommandEnabled(const WebString&) const = 0;
 
+  // Returns the text direction at the start and end bounds of the current
+  // selection.  If the selection range is empty, it returns false.
+  virtual bool SelectionTextDirection(WebTextDirection& start,
+                                      WebTextDirection& end) const = 0;
+  // Returns true if the selection range is nonempty and its anchor is first
+  // (i.e its anchor is its start).
+  virtual bool IsSelectionAnchorFirst() const = 0;
+  // Changes the text direction of the selected input node.
+  virtual void SetTextDirection(WebTextDirection) = 0;
+
   // Selection -----------------------------------------------------------
 
   virtual bool HasSelection() const = 0;
@@ -501,8 +514,10 @@ class WebLocalFrame : public WebFrame {
     // Keep the current handle visibility.
     kPreserveHandleVisibility,
   };
+
   virtual void SelectRange(const WebRange&,
-                           HandleVisibilityBehavior = kHideSelectionHandle) = 0;
+                           HandleVisibilityBehavior,
+                           mojom::SelectionMenuBehavior) = 0;
 
   virtual WebString RangeAsText(const WebRange&) = 0;
 
@@ -710,20 +725,17 @@ class WebLocalFrame : public WebFrame {
 
   // Returns frame-specific task runner to run tasks of this type on.
   // They have the same lifetime as the frame.
-  virtual base::SingleThreadTaskRunner* TimerTaskRunner() = 0;
-  virtual base::SingleThreadTaskRunner* LoadingTaskRunner() = 0;
-  virtual base::SingleThreadTaskRunner* UnthrottledTaskRunner() = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
+      TaskType) = 0;
 
   // Returns the WebInputMethodController associated with this local frame.
   virtual WebInputMethodController* GetInputMethodController() = 0;
 
   // Loading ------------------------------------------------------------------
 
-  // Creates and returns a loader. This function can be called only when this
-  // frame is attached to a document.
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      base::SingleThreadTaskRunner*) = 0;
+  // Creates and returns a new WebURLLoaderFactory. This function can be called
+  // only when this frame is attached to a document.
+  virtual std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() = 0;
 
   // Returns an AssociatedURLLoader that is associated with this frame.  The
   // loader will, for example, be cancelled when WebFrame::stopLoading is
@@ -766,6 +778,11 @@ class WebLocalFrame : public WebFrame {
 
   // Printing ------------------------------------------------------------
 
+  // Dispatch |beforeprint| event, and execute event handlers. They might detach
+  // this frame from the owner WebView.
+  // This function should be called before pairs of PrintBegin() and PrintEnd().
+  virtual void DispatchBeforePrintEvent() = 0;
+
   // Reformats the WebFrame for printing. WebPrintParams specifies the printable
   // content size, paper size, printable area size, printer DPI and print
   // scaling option. If constrainToNode node is specified, then only the given
@@ -788,6 +805,11 @@ class WebLocalFrame : public WebFrame {
 
   // Reformats the WebFrame for screen display.
   virtual void PrintEnd() = 0;
+
+  // Dispatch |afterprint| event, and execute event handlers. They might detach
+  // this frame from the owner WebView.
+  // This function should be called after pairs of PrintBegin() and PrintEnd().
+  virtual void DispatchAfterPrintEvent() = 0;
 
   // If the frame contains a full-frame plugin or the given node refers to a
   // plugin whose content indicates that printed output should not be scaled,

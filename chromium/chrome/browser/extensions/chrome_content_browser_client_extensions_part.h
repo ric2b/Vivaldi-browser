@@ -16,7 +16,13 @@ class ResourceContext;
 class VpnServiceProxy;
 }
 
+namespace url {
+class Origin;
+}
+
 namespace extensions {
+
+class URLPatternSet;
 
 // Implements the extensions portion of ChromeContentBrowserClient.
 class ChromeContentBrowserClientExtensionsPart
@@ -34,6 +40,7 @@ class ChromeContentBrowserClientExtensionsPart
       const GURL& effective_site_url);
   static bool ShouldLockToOrigin(content::BrowserContext* browser_context,
                                  const GURL& effective_site_url);
+  static bool ShouldBypassDocumentBlocking(const url::Origin& initiator);
   static bool CanCommitURL(content::RenderProcessHost* process_host,
                            const GURL& url);
   static bool IsSuitableHost(Profile* profile,
@@ -80,6 +87,8 @@ class ChromeContentBrowserClientExtensionsPart
                            ShouldAllowOpenURLMetricsForEmptySiteURL);
   FRIEND_TEST_ALL_PREFIXES(ChromeContentBrowserClientExtensionsPartTest,
                            ShouldAllowOpenURLMetricsForKnownSchemes);
+  FRIEND_TEST_ALL_PREFIXES(ChromeContentBrowserClientExtensionsPartTest,
+                           IsolatedOriginsAndHostedAppWebExtents);
 
   // Specifies reasons why web-accessible resource checks in ShouldAllowOpenURL
   // might fail.
@@ -100,6 +109,15 @@ class ChromeContentBrowserClientExtensionsPart
   static void RecordShouldAllowOpenURLFailure(
       ShouldAllowOpenURLFailureReason reason,
       const GURL& site_url);
+
+  // Returns true if all URLs matched by |web_extent| have the same origin as
+  // |origin|, or have an origin which is a subdomain of |origin|.
+  //
+  // When |origin| requires a dedicated process, this helps determine whether
+  // all URLs in |web_extent| are ok to go into |origin|'s process.
+  static bool DoesOriginMatchAllURLsInWebExtent(
+      const url::Origin& origin,
+      const URLPatternSet& web_extent);
 
   // ChromeContentBrowserClientParts:
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;

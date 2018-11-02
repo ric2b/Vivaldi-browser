@@ -3,8 +3,12 @@
 # found in the LICENSE file.
 
 import("//media/media_options.gni")
+import("//third_party/libaom/options.gni")
 
 source_set("filters") {
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
   visibility = [
     "//media",
     "//media/muxers",
@@ -35,16 +39,18 @@ source_set("filters") {
     "decrypting_video_decoder.h",
     "file_data_source.cc",
     "file_data_source.h",
+    "frame_buffer_pool.cc",
+    "frame_buffer_pool.h",
     "frame_processor.cc",
     "frame_processor.h",
     "gpu_video_decoder.cc",
     "gpu_video_decoder.h",
-    "ivf_parser.cc",
-    "ivf_parser.h",
     "jpeg_parser.cc",
     "jpeg_parser.h",
     "memory_data_source.cc",
     "memory_data_source.h",
+    "offloading_video_decoder.cc",
+    "offloading_video_decoder.h",
     "opus_constants.cc",
     "opus_constants.h",
     "pipeline_controller.cc",
@@ -52,6 +58,10 @@ source_set("filters") {
     "source_buffer_parse_warnings.h",
     "source_buffer_range.cc",
     "source_buffer_range.h",
+    "source_buffer_range_by_dts.cc",
+    "source_buffer_range_by_dts.h",
+    "source_buffer_range_by_pts.cc",
+    "source_buffer_range_by_pts.h",
     "source_buffer_state.cc",
     "source_buffer_state.h",
     "source_buffer_stream.cc",
@@ -93,6 +103,7 @@ source_set("filters") {
     "//media/formats",
     "//media/video",
     "//skia",
+    "//third_party/libaom:av1_features",
     "//third_party/libyuv",
   ]
 
@@ -145,6 +156,14 @@ source_set("filters") {
     deps += [ "//third_party/libvpx" ]
   }
 
+  if (enable_av1_decoder) {
+    sources += [
+      "aom_video_decoder.cc",
+      "aom_video_decoder.h",
+    ]
+    deps += [ "//third_party/libaom" ]
+  }
+
   if (proprietary_codecs && media_use_ffmpeg) {
     sources += [
       "ffmpeg_aac_bitstream_converter.cc",
@@ -182,22 +201,10 @@ source_set("filters") {
     deps += [ "//media/base/android" ]
   }
 
-  if (current_cpu != "arm" && is_chromeos) {
+  if (current_cpu != "arm" && is_linux) {
     sources += [
       "h264_bitstream_buffer.cc",
       "h264_bitstream_buffer.h",
-    ]
-  }
-
-  if (use_low_memory_buffer) {
-    sources += [
-      "source_buffer_platform.h",
-      "source_buffer_platform_lowmem.cc",
-    ]
-  } else {
-    sources += [
-      "source_buffer_platform.cc",
-      "source_buffer_platform.h",
     ]
   }
 }
@@ -221,6 +228,26 @@ source_set("perftests") {
   ]
 }
 
+static_library("test_support") {
+  testonly = true
+  visibility = [ "//media:test_support" ]
+
+  sources = [
+    "ivf_parser.cc",
+    "ivf_parser.h",
+  ]
+
+  configs += [
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//media/base:test_support",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -236,10 +263,12 @@ source_set("unit_tests") {
     "fake_video_decoder.h",
     "fake_video_decoder_unittest.cc",
     "file_data_source_unittest.cc",
+    "frame_buffer_pool_unittest.cc",
     "frame_processor_unittest.cc",
     "ivf_parser_unittest.cc",
     "jpeg_parser_unittest.cc",
     "memory_data_source_unittest.cc",
+    "offloading_video_decoder_unittest.cc",
     "pipeline_controller_unittest.cc",
     "source_buffer_state_unittest.cc",
     "source_buffer_stream_unittest.cc",
@@ -273,6 +302,12 @@ source_set("unit_tests") {
     ]
 
     deps += [ "//ui/gl" ]
+  }
+
+  # libvpx for running vpx test on chromecast doesn't support high bit depth.
+  # This may cause some unit tests failure.
+  if (is_chromecast) {
+    defines = [ "LIBVPX_NO_HIGH_BIT_DEPTH" ]
   }
 
   if (media_use_ffmpeg) {
@@ -309,7 +344,11 @@ source_set("unit_tests") {
     sources += [ "vpx_video_decoder_unittest.cc" ]
   }
 
-  if (current_cpu != "arm" && is_chromeos) {
+  if (enable_av1_decoder) {
+    sources += [ "aom_video_decoder_unittest.cc" ]
+  }
+
+  if (current_cpu != "arm" && is_linux) {
     sources += [ "h264_bitstream_buffer_unittest.cc" ]
   }
 

@@ -22,7 +22,7 @@ static const int kAllSchemes =
     URLPattern::SCHEME_FILE | URLPattern::SCHEME_FTP |
     URLPattern::SCHEME_CHROMEUI | URLPattern::SCHEME_EXTENSION |
     URLPattern::SCHEME_FILESYSTEM | URLPattern::SCHEME_WS |
-  	URLPattern::SCHEME_VIVALDIUI |
+    URLPattern::SCHEME_VIVALDIUI |
     URLPattern::SCHEME_WSS;
 
 TEST(ExtensionURLPatternTest, ParseInvalid) {

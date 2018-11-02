@@ -24,18 +24,17 @@ template <class GLES2InterfaceType>
 class SharedGpuContextTestBase : public Test {
  public:
   void SetUp() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting([this] {
-      gl_.SetIsContextLost(false);
-      return std::unique_ptr<WebGraphicsContext3DProvider>(
-          new FakeWebGraphicsContext3DProvider(&gl_));
-    });
+    auto factory = [](GLES2InterfaceType* gl, bool* gpu_compositing_disabled)
+        -> std::unique_ptr<WebGraphicsContext3DProvider> {
+      *gpu_compositing_disabled = false;
+      gl->SetIsContextLost(false);
+      return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
+    };
+    SharedGpuContext::SetContextProviderFactoryForTesting(
+        WTF::Bind(factory, WTF::Unretained(&gl_)));
   }
 
-  void TearDown() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting(nullptr);
-  }
-
-  bool IsUnitTest() { return true; }
+  void TearDown() override { SharedGpuContext::ResetForTesting(); }
 
   GLES2InterfaceType gl_;
 };
@@ -54,17 +53,41 @@ class MailboxMockGLES2Interface : public FakeGLES2Interface {
 class MailboxSharedGpuContextTest
     : public SharedGpuContextTestBase<MailboxMockGLES2Interface> {};
 
-// Test fixure that simulate a graphics context creation failure
+// Test fixure that simulate a graphics context creation failure, when using gpu
+// compositing.
 class BadSharedGpuContextTest : public Test {
  public:
   void SetUp() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting(
-        [] { return std::unique_ptr<WebGraphicsContext3DProvider>(nullptr); });
+    auto factory = [](bool* gpu_compositing_disabled)
+        -> std::unique_ptr<WebGraphicsContext3DProvider> {
+      *gpu_compositing_disabled = false;
+      return nullptr;
+    };
+    SharedGpuContext::SetContextProviderFactoryForTesting(WTF::Bind(factory));
   }
 
-  void TearDown() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting(nullptr);
+  void TearDown() override { SharedGpuContext::ResetForTesting(); }
+};
+
+// Test fixure that simulate not using gpu compositing.
+class SoftwareCompositingTest : public Test {
+ public:
+  void SetUp() override {
+    auto factory = [](FakeGLES2Interface* gl, bool* gpu_compositing_disabled)
+        -> std::unique_ptr<WebGraphicsContext3DProvider> {
+      *gpu_compositing_disabled = true;
+      // Return a context anyway, to ensure that's not what the class checks
+      // to determine compositing mode.
+      gl->SetIsContextLost(false);
+      return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
+    };
+    SharedGpuContext::SetContextProviderFactoryForTesting(
+        WTF::Bind(factory, WTF::Unretained(&gl_)));
   }
+
+  void TearDown() override { SharedGpuContext::ResetForTesting(); }
+
+  FakeGLES2Interface gl_;
 };
 
 TEST_F(SharedGpuContextTest, contextLossAutoRecovery) {
@@ -87,7 +110,7 @@ TEST_F(SharedGpuContextTest, AccelerateImageBufferSurfaceAutoRecovery) {
   EXPECT_FALSE(SharedGpuContext::IsValidWithoutRestoring());
   IntSize size(10, 10);
   std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size, kNonOpaque));
+      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
   EXPECT_TRUE(surface->IsValid());
   EXPECT_TRUE(SharedGpuContext::IsValidWithoutRestoring());
 }
@@ -102,8 +125,7 @@ TEST_F(SharedGpuContextTest, Canvas2DLayerBridgeAutoRecovery) {
   std::unique_ptr<Canvas2DLayerBridge> bridge =
       WTF::WrapUnique(new Canvas2DLayerBridge(
           size, 0, /*msaa sample count*/
-          kNonOpaque, Canvas2DLayerBridge::kEnableAcceleration, color_params,
-          IsUnitTest()));
+          Canvas2DLayerBridge::kEnableAcceleration, color_params));
   EXPECT_TRUE(bridge->IsAccelerated());
   EXPECT_TRUE(SharedGpuContext::IsValidWithoutRestoring());
   bridge->BeginDestruction();
@@ -127,8 +149,20 @@ TEST_F(BadSharedGpuContextTest, AccelerateImageBufferSurfaceCreationFails) {
   // fail gracefully
   IntSize size(10, 10);
   std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size, kNonOpaque));
+      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
   EXPECT_FALSE(surface->IsValid());
+}
+
+TEST_F(SharedGpuContextTest, CompositingMode) {
+  EXPECT_TRUE(SharedGpuContext::IsGpuCompositingEnabled());
+}
+
+TEST_F(BadSharedGpuContextTest, CompositingMode) {
+  EXPECT_TRUE(SharedGpuContext::IsGpuCompositingEnabled());
+}
+
+TEST_F(SoftwareCompositingTest, CompositingMode) {
+  EXPECT_FALSE(SharedGpuContext::IsGpuCompositingEnabled());
 }
 
 class FakeMailboxGenerator {
@@ -141,9 +175,9 @@ class FakeMailboxGenerator {
 TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
   IntSize size(10, 10);
   std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size, kNonOpaque));
+      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
   EXPECT_TRUE(surface->IsValid());
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
@@ -177,9 +211,9 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
 TEST_F(MailboxSharedGpuContextTest, MailboxCacheSurvivesSkiaRecycling) {
   IntSize size(10, 10);
   std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size, kNonOpaque));
+      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
   EXPECT_TRUE(surface->IsValid());
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
@@ -199,14 +233,13 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCacheSurvivesSkiaRecycling) {
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   // Destroy image and surface to return texture to recleable resource pool
-  image.Clear();
+  image = nullptr;
   surface = nullptr;
 
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   // Re-creating surface should recycle the old GrTexture inside skia
-  surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size, kNonOpaque));
+  surface = WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
   EXPECT_TRUE(surface->IsValid());
   image =
       surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);

@@ -72,7 +72,7 @@ GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
       visible_rect(vr),
       natural_size(ns) {}
 
-GpuVideoDecoder::BufferData::~BufferData() {}
+GpuVideoDecoder::BufferData::~BufferData() = default;
 
 GpuVideoDecoder::GpuVideoDecoder(
     GpuVideoAcceleratorFactories* factories,
@@ -82,6 +82,7 @@ GpuVideoDecoder::GpuVideoDecoder(
     : needs_bitstream_conversion_(false),
       factories_(factories),
       request_overlay_info_cb_(request_overlay_info_cb),
+      overlay_info_requested_(false),
       target_color_space_(target_color_space),
       media_log_(media_log),
       vda_initialized_(false),
@@ -214,7 +215,8 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
   needs_all_picture_buffers_to_decode_ =
       capabilities.flags &
       VideoDecodeAccelerator::Capabilities::NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
-  needs_bitstream_conversion_ = (config.codec() == kCodecH264);
+  needs_bitstream_conversion_ =
+      (config.codec() == kCodecH264) || (config.codec() == kCodecHEVC);
   requires_texture_copy_ =
       !!(capabilities.flags &
          VideoDecodeAccelerator::Capabilities::REQUIRES_TEXTURE_COPY);
@@ -295,6 +297,7 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
         requires_restart_for_external_output_surface,
         BindToCurrentLoop(base::Bind(&GpuVideoDecoder::OnOverlayInfoAvailable,
                                      weak_factory_.GetWeakPtr())));
+    overlay_info_requested_ = true;
     return;
   }
 
@@ -696,6 +699,8 @@ void GpuVideoDecoder::DeliverFrame(
   if (!pending_reset_cb_.is_null())
     return;
 
+  frame->metadata()->SetBoolean(VideoFrameMetadata::POWER_EFFICIENT, true);
+
   output_cb_.Run(frame);
 }
 
@@ -814,9 +819,10 @@ GpuVideoDecoder::~GpuVideoDecoder() {
 
   if (!init_cb_.is_null())
     base::ResetAndReturn(&init_cb_).Run(false);
-  if (!request_overlay_info_cb_.is_null())
+  if (request_overlay_info_cb_ && overlay_info_requested_) {
     base::ResetAndReturn(&request_overlay_info_cb_)
         .Run(false, ProvideOverlayInfoCB());
+  }
 
   for (std::map<int32_t, PendingDecoderBuffer>::iterator it =
            bitstream_buffers_in_decoder_.begin();

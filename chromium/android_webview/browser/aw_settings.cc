@@ -434,9 +434,10 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
     // Using 100M instead of max int to avoid overflows.
     web_prefs->minimum_accelerated_2d_canvas_size = 100 * 1000 * 1000;
   }
-  web_prefs->experimental_webgl_enabled =
-      web_prefs->experimental_webgl_enabled &&
-      enable_supported_hardware_accelerated_features;
+  web_prefs->webgl1_enabled = web_prefs->webgl1_enabled &&
+                              enable_supported_hardware_accelerated_features;
+  web_prefs->webgl2_enabled = web_prefs->webgl2_enabled &&
+                              enable_supported_hardware_accelerated_features;
 
   // If strict mixed content checking is enabled then running should not be
   // allowed.
@@ -472,16 +473,16 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       Java_AwSettings_getScrollTopLeftInteropEnabledLocked(env, obj);
 }
 
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& obj,
-                  const JavaParamRef<jobject>& web_contents) {
+static jlong JNI_AwSettings_Init(JNIEnv* env,
+                                 const JavaParamRef<jobject>& obj,
+                                 const JavaParamRef<jobject>& web_contents) {
   content::WebContents* contents =
       content::WebContents::FromJavaWebContents(web_contents);
   AwSettings* settings = new AwSettings(env, obj, contents);
   return reinterpret_cast<intptr_t>(settings);
 }
 
-static ScopedJavaLocalRef<jstring> GetDefaultUserAgent(
+static ScopedJavaLocalRef<jstring> JNI_AwSettings_GetDefaultUserAgent(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
   return base::android::ConvertUTF8ToJavaString(env, GetUserAgent());

@@ -21,12 +21,21 @@ bool RefCountedThreadSafeBase::HasOneRef() const {
   return ref_count_.IsOne();
 }
 
-RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
 #if DCHECK_IS_ON()
+RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
   DCHECK(in_dtor_) << "RefCountedThreadSafe object deleted without "
                       "calling Release()";
-#endif
 }
+#endif
+
+#if defined(ARCH_CPU_64_BIT)
+void RefCountedBase::AddRefImpl() const {
+  // Check if |ref_count_| overflow only on 64 bit archs since the number of
+  // objects may exceed 2^32.
+  // To avoid the binary size bloat, use non-inline function here.
+  CHECK(++ref_count_ > 0);
+}
+#endif
 
 #if !defined(ARCH_CPU_X86_FAMILY)
 bool RefCountedThreadSafeBase::Release() const {

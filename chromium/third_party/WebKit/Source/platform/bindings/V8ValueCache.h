@@ -26,12 +26,12 @@
 #ifndef V8ValueCache_h
 #define V8ValueCache_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/bindings/V8GlobalValueMap.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
@@ -89,7 +89,7 @@ class PLATFORM_EXPORT StringCache {
   v8::Local<v8::String> V8ExternalString(v8::Isolate* isolate,
                                          StringImpl* string_impl) {
     DCHECK(string_impl);
-    if (last_string_impl_.Get() == string_impl)
+    if (last_string_impl_.get() == string_impl)
       return last_v8_string_.NewLocal(isolate);
     return V8ExternalStringSlow(isolate, string_impl);
   }
@@ -97,7 +97,7 @@ class PLATFORM_EXPORT StringCache {
   void SetReturnValueFromString(v8::ReturnValue<v8::Value> return_value,
                                 StringImpl* string_impl) {
     DCHECK(string_impl);
-    if (last_string_impl_.Get() == string_impl)
+    if (last_string_impl_.get() == string_impl)
       last_v8_string_.SetReturnValue(return_value);
     else
       SetReturnValueFromStringSlow(return_value, string_impl);
@@ -120,7 +120,7 @@ class PLATFORM_EXPORT StringCache {
   // Note: RefPtr is a must as we cache by StringImpl* equality, not identity
   // hence lastStringImpl might be not a key of the cache (in sense of identity)
   // and hence it's not refed on addition.
-  RefPtr<StringImpl> last_string_impl_;
+  scoped_refptr<StringImpl> last_string_impl_;
 };
 
 }  // namespace blink

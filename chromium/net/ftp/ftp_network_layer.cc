@@ -5,7 +5,6 @@
 #include "net/ftp/ftp_network_layer.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "net/ftp/ftp_network_session.h"
 #include "net/ftp/ftp_network_transaction.h"
 #include "net/socket/client_socket_factory.h"
@@ -18,8 +17,7 @@ FtpNetworkLayer::FtpNetworkLayer(HostResolver* host_resolver)
   DCHECK(host_resolver);
 }
 
-FtpNetworkLayer::~FtpNetworkLayer() {
-}
+FtpNetworkLayer::~FtpNetworkLayer() = default;
 
 std::unique_ptr<FtpTransaction> FtpNetworkLayer::CreateTransaction() {
   if (suspended_)

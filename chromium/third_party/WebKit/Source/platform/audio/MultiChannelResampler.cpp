@@ -27,8 +27,9 @@
  */
 
 #include "platform/audio/MultiChannelResampler.h"
+
+#include <memory>
 #include "platform/audio/AudioBus.h"
-#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -62,14 +63,14 @@ class ChannelProvider final : public AudioSourceProvider {
       frames_to_process_ = frames_to_process;
       multi_channel_bus_ =
           AudioBus::Create(number_of_channels_, frames_to_process);
-      multi_channel_provider_->ProvideInput(multi_channel_bus_.Get(),
+      multi_channel_provider_->ProvideInput(multi_channel_bus_.get(),
                                             frames_to_process);
     }
 
     // All channels must ask for the same amount. This should always be the
     // case, but let's just make sure.
     bool is_good =
-        multi_channel_bus_.Get() && frames_to_process == frames_to_process_;
+        multi_channel_bus_.get() && frames_to_process == frames_to_process_;
     DCHECK(is_good);
     if (!is_good)
       return;
@@ -86,7 +87,7 @@ class ChannelProvider final : public AudioSourceProvider {
 
  private:
   AudioSourceProvider* multi_channel_provider_;
-  RefPtr<AudioBus> multi_channel_bus_;
+  scoped_refptr<AudioBus> multi_channel_bus_;
   unsigned number_of_channels_;
   unsigned current_channel_;
   // Used to verify that all channels ask for the same amount.
@@ -101,7 +102,7 @@ MultiChannelResampler::MultiChannelResampler(double scale_factor,
   // Create each channel's resampler.
   for (unsigned channel_index = 0; channel_index < number_of_channels;
        ++channel_index)
-    kernels_.push_back(WTF::MakeUnique<SincResampler>(scale_factor));
+    kernels_.push_back(std::make_unique<SincResampler>(scale_factor));
 }
 
 void MultiChannelResampler::Process(AudioSourceProvider* provider,

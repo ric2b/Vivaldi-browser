@@ -20,7 +20,7 @@
 namespace blink {
 namespace {
 
-void SetDictionaryMembers(DOMMatrixInit& other) {
+void SetDictionaryMembers(DOMMatrix2DInit& other) {
   if (!other.hasM11())
     other.setM11(other.hasA() ? other.a() : 1);
 
@@ -47,8 +47,8 @@ String GetErrorMessage(const char* a, const char* b) {
 
 }  // namespace
 
-bool DOMMatrixReadOnly::ValidateAndFixup(DOMMatrixInit& other,
-                                         ExceptionState& exception_state) {
+bool DOMMatrixReadOnly::ValidateAndFixup2D(DOMMatrix2DInit& other,
+                                           ExceptionState& exception_state) {
   if (other.hasA() && other.hasM11() && other.a() != other.m11() &&
       !(std::isnan(other.a()) && std::isnan(other.m11()))) {
     exception_state.ThrowTypeError(GetErrorMessage("a", "m11"));
@@ -79,16 +79,25 @@ bool DOMMatrixReadOnly::ValidateAndFixup(DOMMatrixInit& other,
     exception_state.ThrowTypeError(GetErrorMessage("f", "m42"));
     return false;
   }
+
+  SetDictionaryMembers(other);
+  return true;
+}
+
+bool DOMMatrixReadOnly::ValidateAndFixup(DOMMatrixInit& other,
+                                         ExceptionState& exception_state) {
+  if (!ValidateAndFixup2D(other, exception_state))
+    return false;
+
   if (other.hasIs2D() && other.is2D() &&
       (other.m31() || other.m32() || other.m13() || other.m23() ||
        other.m43() || other.m14() || other.m24() || other.m34() ||
        other.m33() != 1 || other.m44() != 1)) {
     exception_state.ThrowTypeError(
-        "The is2D member is set to true but the input matrix is 3d matrix.");
+        "The is2D member is set to true but the input matrix is a 3d matrix.");
     return false;
   }
 
-  SetDictionaryMembers(other);
   if (!other.hasIs2D()) {
     bool is2d = !(other.m31() || other.m32() || other.m13() || other.m23() ||
                   other.m43() || other.m14() || other.m24() || other.m34() ||
@@ -108,7 +117,7 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::Create(
     ExecutionContext* execution_context,
     StringOrUnrestrictedDoubleSequence& init,
     ExceptionState& exception_state) {
-  if (init.isString()) {
+  if (init.IsString()) {
     if (!execution_context->IsDocument()) {
       exception_state.ThrowTypeError(
           "DOMMatrix can't be constructed with strings on workers.");
@@ -116,12 +125,13 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::Create(
     }
 
     DOMMatrixReadOnly* matrix = new DOMMatrixReadOnly(TransformationMatrix());
-    matrix->SetMatrixValueFromString(init.getAsString(), exception_state);
+    matrix->SetMatrixValueFromString(execution_context, init.GetAsString(),
+                                     exception_state);
     return matrix;
   }
 
-  if (init.isUnrestrictedDoubleSequence()) {
-    const Vector<double>& sequence = init.getAsUnrestrictedDoubleSequence();
+  if (init.IsUnrestrictedDoubleSequence()) {
+    const Vector<double>& sequence = init.GetAsUnrestrictedDoubleSequence();
     if (sequence.size() != 6 && sequence.size() != 16) {
       exception_state.ThrowTypeError(
           "The sequence must contain 6 elements for a 2D matrix or 16 elements "
@@ -166,6 +176,18 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::fromFloat64Array(
   }
   return new DOMMatrixReadOnly(float64_array.View()->Data(),
                                float64_array.View()->length());
+}
+
+DOMMatrixReadOnly* DOMMatrixReadOnly::fromMatrix2D(
+    DOMMatrix2DInit& other,
+    ExceptionState& exception_state) {
+  if (!ValidateAndFixup2D(other, exception_state)) {
+    DCHECK(exception_state.HadException());
+    return nullptr;
+  }
+  double args[] = {other.m11(), other.m12(), other.m21(),
+                   other.m22(), other.m41(), other.m42()};
+  return new DOMMatrixReadOnly(args, 6);
 }
 
 DOMMatrixReadOnly* DOMMatrixReadOnly::fromMatrix(
@@ -438,6 +460,7 @@ ScriptValue DOMMatrixReadOnly::toJSONForBinding(
 }
 
 void DOMMatrixReadOnly::SetMatrixValueFromString(
+    const ExecutionContext* execution_context,
     const String& input_string,
     ExceptionState& exception_state) {
   DEFINE_STATIC_LOCAL(String, identity_matrix2d, ("matrix(1, 0, 0, 1, 0, 0)"));
@@ -445,8 +468,9 @@ void DOMMatrixReadOnly::SetMatrixValueFromString(
   if (string.IsEmpty())
     string = identity_matrix2d;
 
-  const CSSValue* value =
-      CSSParser::ParseSingleValue(CSSPropertyTransform, string);
+  const CSSValue* value = CSSParser::ParseSingleValue(
+      CSSPropertyTransform, string,
+      StrictCSSParserContext(execution_context->GetSecureContextMode()));
 
   if (!value || value->IsCSSWideKeyword()) {
     exception_state.ThrowDOMException(

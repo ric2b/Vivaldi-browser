@@ -31,12 +31,12 @@
 #ifndef WindowProxy_h
 #define WindowProxy_h
 
+#include "base/debug/stack_trace.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScopedPersistent.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
-#include "platform/wtf/debug/StackTrace.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -145,7 +145,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
  public:
   virtual ~WindowProxy();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void InitializeIfNeeded();
 
@@ -226,7 +226,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
     kFrameIsDetached,
   };
 
-  WindowProxy(v8::Isolate*, Frame&, RefPtr<DOMWrapperWorld>);
+  WindowProxy(v8::Isolate*, Frame&, scoped_refptr<DOMWrapperWorld>);
 
   virtual void Initialize() = 0;
 
@@ -254,7 +254,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
 
  protected:
   // TODO(dcheng): Consider making these private and using getters.
-  const RefPtr<DOMWrapperWorld> world_;
+  const scoped_refptr<DOMWrapperWorld> world_;
   // |global_proxy_| is the root reference from Blink to v8::Context (a strong
   // reference to the global proxy makes the entire context alive).  In order to
   // discard the v8::Context, |global_proxy_| needs to be a weak reference or
@@ -264,7 +264,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
 
   // TODO(dcheng): Remove this temporary code for debugging
   // https://crbug.com/728693.
-  WTF::debug::StackTrace initialization_stack_;
+  base::debug::StackTrace initialization_stack_;
 };
 
 }  // namespace blink

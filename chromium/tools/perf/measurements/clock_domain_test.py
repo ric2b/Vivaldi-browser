@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from telemetry import benchmark
 from telemetry import decorators
 from telemetry.testing import tab_test_case
 from telemetry.timeline import tracing_config
@@ -17,7 +16,7 @@ class ClockDomainTest(tab_test_case.TabTestCase):
   # Don't run this test on Android; it's not supposed to work on Android
   # (since when doing Android tracing there are two different devices,
   # so the clock domains will be different)
-  @benchmark.Disabled('android')
+  @decorators.Disabled('android')
   @decorators.Isolated
   def testTelemetryUsesChromeClockDomain(self):
 
@@ -27,6 +26,14 @@ class ClockDomainTest(tab_test_case.TabTestCase):
     tracing_controller.StartTracing(options)
 
     full_trace = tracing_controller.StopTracing()
+
+    # TODO(charliea): This is part of a three-sided Chromium/Telemetry patch
+    # where we're changing the return type of StopTracing from a TraceValue to a
+    # (TraceValue, nonfatal_exception_list) tuple. Once the tuple return value
+    # lands in Chromium, the non-tuple logic should be deleted.
+    if isinstance(full_trace, tuple):
+      full_trace = full_trace[0]
+
     chrome_sync = GetSyncEvents(
         full_trace.GetTraceFor(trace_data.CHROME_TRACE_PART)['traceEvents'])
     telemetry_sync = GetSyncEvents(

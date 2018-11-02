@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/containers/mru_cache.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/gpu_export.h"
@@ -64,12 +65,15 @@ class GPU_EXPORT ServiceDiscardableManager {
       uint32_t texture_id,
       gles2::TextureManager* texture_manager) const;
 
-  // TODO(ericrk): Arbitrary limit, refine this once we actually use this class
-  // in production. crbug.com/706456
-  static const size_t kMaxSize = 256 * 1024 * 1024;
+  void SetCacheSizeLimitForTesting(size_t cache_size_limit) {
+    cache_size_limit_ = cache_size_limit;
+  }
+
+  void HandleMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
  private:
-  void EnforceLimits();
+  void EnforceCacheSizeLimit(size_t limit);
 
   struct GpuDiscardableEntry {
    public:
@@ -105,6 +109,9 @@ class GPU_EXPORT ServiceDiscardableManager {
   // Total size of all |entries_|. The same as summing
   // GpuDiscardableEntry::size for each entry.
   size_t total_size_ = 0;
+
+  // The limit above which the cache will start evicting resources.
+  size_t cache_size_limit_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceDiscardableManager);
 };

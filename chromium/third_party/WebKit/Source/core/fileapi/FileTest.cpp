@@ -17,7 +17,8 @@ TEST(FileTest, nativeFile) {
 }
 
 TEST(FileTest, blobBackingFile) {
-  const RefPtr<BlobDataHandle> blob_data_handle = BlobDataHandle::Create();
+  const scoped_refptr<BlobDataHandle> blob_data_handle =
+      BlobDataHandle::Create();
   File* const file = File::Create("name", 0.0, blob_data_handle);
   EXPECT_FALSE(file->HasBackingFile());
   EXPECT_TRUE(file->GetPath().IsEmpty());
@@ -46,8 +47,7 @@ TEST(FileTest, fileSystemFileWithNativeSnapshotAndSize) {
 }
 
 TEST(FileTest, fileSystemFileWithoutNativeSnapshot) {
-  KURL url(ParsedURLStringTag(),
-           "filesystem:http://example.com/isolated/hash/non-native-file");
+  KURL url("filesystem:http://example.com/isolated/hash/non-native-file");
   FileMetadata metadata;
   File* const file =
       File::CreateForFileSystemFile(url, metadata, File::kIsUserVisible);
@@ -61,16 +61,14 @@ TEST(FileTest, hsaSameSource) {
   File* const native_file_a2 = File::Create("/native/pathA");
   File* const native_file_b = File::Create("/native/pathB");
 
-  const RefPtr<BlobDataHandle> blob_data_a = BlobDataHandle::Create();
-  const RefPtr<BlobDataHandle> blob_data_b = BlobDataHandle::Create();
+  const scoped_refptr<BlobDataHandle> blob_data_a = BlobDataHandle::Create();
+  const scoped_refptr<BlobDataHandle> blob_data_b = BlobDataHandle::Create();
   File* const blob_file_a1 = File::Create("name", 0.0, blob_data_a);
   File* const blob_file_a2 = File::Create("name", 0.0, blob_data_a);
   File* const blob_file_b = File::Create("name", 0.0, blob_data_b);
 
-  KURL url_a(ParsedURLStringTag(),
-             "filesystem:http://example.com/isolated/hash/non-native-file-A");
-  KURL url_b(ParsedURLStringTag(),
-             "filesystem:http://example.com/isolated/hash/non-native-file-B");
+  KURL url_a("filesystem:http://example.com/isolated/hash/non-native-file-A");
+  KURL url_b("filesystem:http://example.com/isolated/hash/non-native-file-B");
   FileMetadata metadata;
   File* const file_system_file_a1 =
       File::CreateForFileSystemFile(url_a, metadata, File::kIsUserVisible);

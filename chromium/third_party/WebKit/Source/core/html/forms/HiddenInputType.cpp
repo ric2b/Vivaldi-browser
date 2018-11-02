@@ -31,11 +31,11 @@
 
 #include "core/html/forms/HiddenInputType.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
-#include "core/html/FormData.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/FormData.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 
 namespace blink {
 
@@ -45,7 +45,7 @@ InputType* HiddenInputType::Create(HTMLInputElement& element) {
   return new HiddenInputType(element);
 }
 
-DEFINE_TRACE(HiddenInputType) {
+void HiddenInputType::Trace(blink::Visitor* visitor) {
   InputTypeView::Trace(visitor);
   InputType::Trace(visitor);
 }

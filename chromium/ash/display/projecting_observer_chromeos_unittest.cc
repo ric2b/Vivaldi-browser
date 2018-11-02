@@ -9,7 +9,7 @@
 
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/fake_display_snapshot.h"
+#include "ui/display/manager/fake_display_snapshot.h"
 
 namespace ash {
 namespace {
@@ -34,7 +34,7 @@ class ProjectingObserverTest : public testing::Test {
  public:
   ProjectingObserverTest() : observer_(&fake_power_client_) {}
 
-  ~ProjectingObserverTest() override {}
+  ~ProjectingObserverTest() override = default;
 
  protected:
   chromeos::FakePowerManagerClient fake_power_client_;

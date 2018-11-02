@@ -2,12 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#define _USE_MATH_DEFINES // For VC++ to get M_PI. This has to be first.
-
 #include "ui/views/view.h"
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -40,6 +37,7 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/interpolated_transform.h"
@@ -836,13 +834,12 @@ void View::Paint(const PaintInfo& parent_paint_info) {
   if (!ShouldPaint())
     return;
 
-  const gfx::Rect& parent_bounds = !parent()
-                                       ? GetPaintRecordingBounds()
-                                       : parent()->GetPaintRecordingBounds();
+  const gfx::Rect& parent_bounds =
+      !parent() ? GetMirroredBounds() : parent()->GetMirroredBounds();
 
   PaintInfo paint_info = PaintInfo::CreateChildPaintInfo(
-      parent_paint_info, GetPaintRecordingBounds(), parent_bounds.size(),
-      GetPaintScaleType());
+      parent_paint_info, GetMirroredBounds(), parent_bounds.size(),
+      GetPaintScaleType(), !!layer());
 
   const ui::PaintContext& context = paint_info.context();
   bool is_invalidated = true;
@@ -1178,7 +1175,7 @@ ui::EventTarget* View::GetParentTarget() {
 }
 
 std::unique_ptr<ui::EventTargetIterator> View::GetChildIterator() const {
-  return base::MakeUnique<ui::EventTargetIteratorPtrImpl<View>>(children_);
+  return std::make_unique<ui::EventTargetIteratorPtrImpl<View>>(children_);
 }
 
 ui::EventTargeter* View::GetEventTargeter() {
@@ -1467,7 +1464,11 @@ void View::NotifyAccessibilityEvent(
     if (native_view_accessibility_)
       native_view_accessibility_->NotifyAccessibilityEvent(event_type);
   }
+
+  OnAccessibilityEvent(event_type);
 }
+
+void View::OnAccessibilityEvent(ui::AXEvent event_type) {}
 
 // Scrolling -------------------------------------------------------------------
 
@@ -1706,13 +1707,10 @@ void View::OnPaintLayer(const ui::PaintContext& context) {
   PaintFromPaintRoot(context);
 }
 
-void View::OnDelegatedFrameDamage(
-    const gfx::Rect& damage_rect_in_dip) {
-}
-
-void View::OnDeviceScaleFactorChanged(float device_scale_factor) {
+void View::OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                      float new_device_scale_factor) {
   snap_layer_to_pixel_boundary_ =
-      (device_scale_factor - std::floor(device_scale_factor)) != 0.0f;
+      (new_device_scale_factor - std::floor(new_device_scale_factor)) != 0.0f;
 
   if (!layer())
     return;
@@ -1910,7 +1908,7 @@ std::string View::DoPrintViewGraph(bool first, View* view_with_children) {
 
     base::snprintf(bounds_buffer, arraysize(bounds_buffer),
                    "\\n rotation: %3.2f",
-                   std::acos(decomp.quaternion.w()) * 360.0 / M_PI);
+                   gfx::RadToDeg(std::acos(decomp.quaternion.w()) * 2));
     result.append(bounds_buffer);
 
     base::snprintf(bounds_buffer,
@@ -2004,14 +2002,6 @@ bool View::ShouldPaint() const {
   return visible_ && !size().IsEmpty();
 }
 
-gfx::Rect View::GetPaintRecordingBounds() const {
-  // If the View has a layer() then it is a paint root and no offset information
-  // is needed. Otherwise, we need bounds that includes an offset from the
-  // parent to add to the total offset from the paint root.
-  DCHECK(layer() || parent() || origin() == gfx::Point());
-  return layer() ? GetLocalBounds() : GetMirroredBounds();
-}
-
 void View::SetupTransformRecorderForPainting(
     const gfx::Vector2d& offset_from_parent,
     ui::TransformRecorder* recorder) const {
@@ -2052,11 +2042,11 @@ void View::PaintDebugRects(const PaintInfo& parent_paint_info) {
     return;
 
   const gfx::Rect& parent_bounds = (layer() || !parent())
-                                       ? GetPaintRecordingBounds()
-                                       : parent()->GetPaintRecordingBounds();
+                                       ? GetMirroredBounds()
+                                       : parent()->GetMirroredBounds();
   PaintInfo paint_info = PaintInfo::CreateChildPaintInfo(
-      parent_paint_info, GetPaintRecordingBounds(), parent_bounds.size(),
-      GetPaintScaleType());
+      parent_paint_info, GetMirroredBounds(), parent_bounds.size(),
+      GetPaintScaleType(), !!layer());
 
   const ui::PaintContext& context = paint_info.context();
 
@@ -2074,6 +2064,13 @@ void View::PaintDebugRects(const PaintInfo& parent_paint_info) {
   gfx::Canvas* canvas = recorder.canvas();
   const float scale = canvas->UndoDeviceScaleFactor();
   gfx::RectF outline_rect(ScaleToEnclosedRect(GetLocalBounds(), scale));
+  gfx::RectF content_outline_rect(
+      ScaleToEnclosedRect(GetContentsBounds(), scale));
+  if (content_outline_rect != outline_rect) {
+    content_outline_rect.Inset(0.5f, 0.5f);
+    const SkColor content_color = SkColorSetARGB(0x30, 0, 0, 0xff);
+    canvas->DrawRect(content_outline_rect, content_color);
+  }
   outline_rect.Inset(0.5f, 0.5f);
   const SkColor color = SkColorSetARGB(0x30, 0xff, 0, 0);
   canvas->DrawRect(outline_rect, color);
@@ -2283,6 +2280,8 @@ void View::BoundsChanged(const gfx::Rect& previous_bounds) {
   }
 
   OnBoundsChanged(previous_bounds);
+  if (bounds_ != previous_bounds)
+    NotifyAccessibilityEvent(ui::AX_EVENT_LOCATION_CHANGED, false);
 
   if (needs_layout_ || previous_bounds.size() != size()) {
     needs_layout_ = false;
@@ -2429,7 +2428,7 @@ void View::CreateLayer(ui::LayerType layer_type) {
       child->UpdateChildLayerVisibility(true);
   }
 
-  SetLayer(base::MakeUnique<ui::Layer>(layer_type));
+  SetLayer(std::make_unique<ui::Layer>(layer_type));
   layer()->set_delegate(this);
   layer()->set_name(GetClassName());
 
@@ -2690,17 +2689,21 @@ void View::PropagateThemeChanged() {
   OnThemeChanged();
 }
 
-void View::PropagateDeviceScaleFactorChanged(float device_scale_factor) {
+void View::PropagateDeviceScaleFactorChanged(float old_device_scale_factor,
+                                             float new_device_scale_factor) {
   {
     internal::ScopedChildrenLock lock(this);
-    for (auto* child : base::Reversed(children_))
-      child->PropagateDeviceScaleFactorChanged(device_scale_factor);
+    for (auto* child : base::Reversed(children_)) {
+      child->PropagateDeviceScaleFactorChanged(old_device_scale_factor,
+                                               new_device_scale_factor);
+    }
   }
 
   // If the view is drawing to the layer, OnDeviceScaleFactorChanged() is called
   // through LayerDelegate callback.
   if (!layer())
-    OnDeviceScaleFactorChanged(device_scale_factor);
+    OnDeviceScaleFactorChanged(old_device_scale_factor,
+                               new_device_scale_factor);
 }
 
 // Tooltips --------------------------------------------------------------------

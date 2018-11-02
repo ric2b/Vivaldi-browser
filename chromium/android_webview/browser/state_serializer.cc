@@ -8,7 +8,6 @@
 
 #include "base/pickle.h"
 #include "base/time/time.h"
-#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
@@ -36,12 +35,11 @@ const uint32_t AW_STATE_VERSION = internal::AW_STATE_VERSION_DATA_URL;
 
 }  // namespace
 
-bool WriteToPickle(const content::WebContents& web_contents,
+void WriteToPickle(const content::WebContents& web_contents,
                    base::Pickle* pickle) {
   DCHECK(pickle);
 
-  if (!internal::WriteHeaderToPickle(pickle))
-    return false;
+  internal::WriteHeaderToPickle(pickle);
 
   const content::NavigationController& controller =
       web_contents.GetController();
@@ -51,24 +49,17 @@ bool WriteToPickle(const content::WebContents& web_contents,
   DCHECK_GE(selected_entry, -1);  // -1 is valid
   DCHECK_LT(selected_entry, entry_count);
 
-  if (!pickle->WriteInt(entry_count))
-    return false;
-
-  if (!pickle->WriteInt(selected_entry))
-    return false;
-
+  pickle->WriteInt(entry_count);
+  pickle->WriteInt(selected_entry);
   for (int i = 0; i < entry_count; ++i) {
-    if (!internal::WriteNavigationEntryToPickle(*controller.GetEntryAtIndex(i),
-                                                pickle))
-      return false;
+    internal::WriteNavigationEntryToPickle(*controller.GetEntryAtIndex(i),
+                                           pickle);
   }
 
   // Please update AW_STATE_VERSION and IsSupportedVersion() if serialization
   // format is changed.
   // Make sure the serialization format is updated in a backwards compatible
   // way.
-
-  return true;
 }
 
 bool RestoreFromPickle(base::PickleIterator* iterator,
@@ -111,23 +102,6 @@ bool RestoreFromPickle(base::PickleIterator* iterator,
                      content::RestoreType::LAST_SESSION_EXITED_CLEANLY,
                      &entries);
   DCHECK_EQ(0u, entries.size());
-
-  if (controller.GetLastCommittedEntry()) {
-    // Set up the file access rights for the selected navigation entry.
-    // TODO(joth): This is duplicated from chrome/.../session_restore.cc and
-    // should be shared e.g. in  NavigationController. http://crbug.com/68222
-    const int id = web_contents->GetRenderProcessHost()->GetID();
-    const content::PageState& page_state =
-        controller.GetLastCommittedEntry()->GetPageState();
-    const std::vector<base::FilePath>& file_paths =
-        page_state.GetReferencedFiles();
-    for (std::vector<base::FilePath>::const_iterator file = file_paths.begin();
-         file != file_paths.end(); ++file) {
-      content::ChildProcessSecurityPolicy::GetInstance()->GrantReadFile(id,
-                                                                        *file);
-    }
-  }
-
   controller.LoadIfNecessary();
 
   return true;
@@ -135,12 +109,12 @@ bool RestoreFromPickle(base::PickleIterator* iterator,
 
 namespace internal {
 
-bool WriteHeaderToPickle(base::Pickle* pickle) {
-  return WriteHeaderToPickle(AW_STATE_VERSION, pickle);
+void WriteHeaderToPickle(base::Pickle* pickle) {
+  WriteHeaderToPickle(AW_STATE_VERSION, pickle);
 }
 
-bool WriteHeaderToPickle(uint32_t state_version, base::Pickle* pickle) {
-  return pickle->WriteUInt32(state_version);
+void WriteHeaderToPickle(uint32_t state_version, base::Pickle* pickle) {
+  pickle->WriteUInt32(state_version);
 }
 
 uint32_t RestoreHeaderFromPickle(base::PickleIterator* iterator) {
@@ -160,71 +134,50 @@ bool IsSupportedVersion(uint32_t state_version) {
          state_version == internal::AW_STATE_VERSION_DATA_URL;
 }
 
-bool WriteNavigationEntryToPickle(const content::NavigationEntry& entry,
+void WriteNavigationEntryToPickle(const content::NavigationEntry& entry,
                                   base::Pickle* pickle) {
-  return WriteNavigationEntryToPickle(AW_STATE_VERSION, entry, pickle);
+  WriteNavigationEntryToPickle(AW_STATE_VERSION, entry, pickle);
 }
 
-bool WriteNavigationEntryToPickle(uint32_t state_version,
+void WriteNavigationEntryToPickle(uint32_t state_version,
                                   const content::NavigationEntry& entry,
                                   base::Pickle* pickle) {
   DCHECK(IsSupportedVersion(state_version));
-  if (!pickle->WriteString(entry.GetURL().spec()))
-    return false;
-
-  if (!pickle->WriteString(entry.GetVirtualURL().spec()))
-    return false;
+  pickle->WriteString(entry.GetURL().spec());
+  pickle->WriteString(entry.GetVirtualURL().spec());
 
   const content::Referrer& referrer = entry.GetReferrer();
-  if (!pickle->WriteString(referrer.url.spec()))
-    return false;
-  if (!pickle->WriteInt(static_cast<int>(referrer.policy)))
-    return false;
+  pickle->WriteString(referrer.url.spec());
+  pickle->WriteInt(static_cast<int>(referrer.policy));
 
-  if (!pickle->WriteString16(entry.GetTitle()))
-    return false;
-
-  if (!pickle->WriteString(entry.GetPageState().ToEncodedData()))
-    return false;
-
-  if (!pickle->WriteBool(static_cast<int>(entry.GetHasPostData())))
-    return false;
-
-  if (!pickle->WriteString(entry.GetOriginalRequestURL().spec()))
-    return false;
-
-  if (!pickle->WriteString(entry.GetBaseURLForDataURL().spec()))
-    return false;
+  pickle->WriteString16(entry.GetTitle());
+  pickle->WriteString(entry.GetPageState().ToEncodedData());
+  pickle->WriteBool(static_cast<int>(entry.GetHasPostData()));
+  pickle->WriteString(entry.GetOriginalRequestURL().spec());
+  pickle->WriteString(entry.GetBaseURLForDataURL().spec());
 
   if (state_version >= internal::AW_STATE_VERSION_DATA_URL) {
     const char* data = nullptr;
     size_t size = 0;
-    scoped_refptr<const base::RefCountedString> s = entry.GetDataURLAsString();
+    const scoped_refptr<const base::RefCountedString>& s =
+        entry.GetDataURLAsString();
     if (s) {
       data = s->front_as<char>();
       size = s->size();
     }
     // Even when |entry.GetDataForDataURL()| is null we still need to write a
     // zero-length entry to ensure the fields all line up when read back in.
-    if (!pickle->WriteData(data, size))
-      return false;
+    pickle->WriteData(data, size);
   }
 
-  if (!pickle->WriteBool(static_cast<int>(entry.GetIsOverridingUserAgent())))
-    return false;
-
-  if (!pickle->WriteInt64(entry.GetTimestamp().ToInternalValue()))
-    return false;
-
-  if (!pickle->WriteInt(entry.GetHttpStatusCode()))
-    return false;
+  pickle->WriteBool(static_cast<int>(entry.GetIsOverridingUserAgent()));
+  pickle->WriteInt64(entry.GetTimestamp().ToInternalValue());
+  pickle->WriteInt(entry.GetHttpStatusCode());
 
   // Please update AW_STATE_VERSION and IsSupportedVersion() if serialization
   // format is changed.
   // Make sure the serialization format is updated in a backwards compatible
   // way.
-
-  return true;
 }
 
 bool RestoreNavigationEntryFromPickle(base::PickleIterator* iterator,

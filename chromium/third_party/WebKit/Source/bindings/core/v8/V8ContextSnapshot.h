@@ -43,14 +43,13 @@ class CORE_EXPORT V8ContextSnapshot {
       v8::ExtensionConfiguration*,
       v8::Local<v8::Object> global_proxy,
       Document*);
-  // Install runtime enabled features on some v8::Object's in a context
-  // created from a snapshot.
-  static void InstallRuntimeEnabledFeatures(v8::Local<v8::Context>, Document*);
+
+  // If the context was created from the snapshot, installs conditionally
+  // enabled features on some v8::Object's in the context and returns true.
+  // Otherwise, does nothing and returns false.
+  static bool InstallConditionalFeatures(v8::Local<v8::Context>, Document*);
 
   static void EnsureInterfaceTemplates(v8::Isolate*);
-
-  static void SetReferenceTable(intptr_t* table);
-  static intptr_t* GetReferenceTable();
 
   // Do not call this in production.
   static v8::StartupData TakeSnapshot();

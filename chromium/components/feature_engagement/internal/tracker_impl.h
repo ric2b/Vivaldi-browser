@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_FEATURE_ENGAGEMENT_INTERNAL_TRACKER_IMPL_H_
 #define COMPONENTS_FEATURE_ENGAGEMENT_INTERNAL_TRACKER_IMPL_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,8 @@ namespace feature_engagement {
 class AvailabilityModel;
 class Configuration;
 class ConditionValidator;
+class DisplayLockController;
+class DisplayLockHandle;
 class EventModel;
 class TimeProvider;
 
@@ -27,6 +30,7 @@ class TrackerImpl : public Tracker, public base::SupportsUserData {
   TrackerImpl(std::unique_ptr<EventModel> event_model,
               std::unique_ptr<AvailabilityModel> availability_model,
               std::unique_ptr<Configuration> configuration,
+              std::unique_ptr<DisplayLockController> display_lock_controller,
               std::unique_ptr<ConditionValidator> condition_validator,
               std::unique_ptr<TimeProvider> time_provider);
   ~TrackerImpl() override;
@@ -34,9 +38,12 @@ class TrackerImpl : public Tracker, public base::SupportsUserData {
   // Tracker implementation.
   void NotifyEvent(const std::string& event) override;
   bool ShouldTriggerHelpUI(const base::Feature& feature) override;
-  Tracker::TriggerState GetTriggerState(const base::Feature& feature) override;
+  bool WouldTriggerHelpUI(const base::Feature& feature) const override;
+  Tracker::TriggerState GetTriggerState(
+      const base::Feature& feature) const override;
   void Dismissed(const base::Feature& feature) override;
-  bool IsInitialized() override;
+  std::unique_ptr<DisplayLockHandle> AcquireDisplayLock() override;
+  bool IsInitialized() const override;
   void AddOnInitializedCallback(OnInitializedCallback callback) override;
 
  private:
@@ -63,6 +70,11 @@ class TrackerImpl : public Tracker, public base::SupportsUserData {
 
   // The current configuration for all features.
   std::unique_ptr<Configuration> configuration_;
+
+  // The DisplayLockController provides functionality for letting API users hold
+  // a lock to ensure no feature enlightenment is happening while any lock is
+  // held.
+  std::unique_ptr<DisplayLockController> display_lock_controller_;
 
   // The ConditionValidator provides functionality for knowing when to trigger
   // help UI.

@@ -14,8 +14,8 @@
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/Threading.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/notifications/WebNotificationConstants.h"
 #include "skia/ext/image_operations.h"
@@ -114,7 +114,7 @@ void NotificationImageLoader::Start(ExecutionContext* execution_context,
 
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextImage);
-  resource_request.SetPriority(kResourceLoadPriorityMedium);
+  resource_request.SetPriority(ResourceLoadPriority::kMedium);
   resource_request.SetRequestorOrigin(execution_context->GetSecurityOrigin());
 
   threadable_loader_ = ThreadableLoader::Create(*execution_context, this,
@@ -159,12 +159,12 @@ void NotificationImageLoader::DidFinishLoading(
 
     std::unique_ptr<ImageDecoder> decoder = ImageDecoder::Create(
         data_, true /* dataComplete */, ImageDecoder::kAlphaPremultiplied,
-        ColorBehavior::TransformToGlobalTarget());
+        ColorBehavior::TransformToSRGB());
     if (decoder) {
       // The |ImageFrame*| is owned by the decoder.
       ImageFrame* image_frame = decoder->DecodeFrameBufferAtIndex(0);
       if (image_frame) {
-        image_callback_(image_frame->Bitmap());
+        std::move(image_callback_).Run(image_frame->Bitmap());
         return;
       }
     }
@@ -190,7 +190,7 @@ void NotificationImageLoader::RunCallbackWithEmptyBitmap() {
   if (stopped_)
     return;
 
-  image_callback_(SkBitmap());
+  std::move(image_callback_).Run(SkBitmap());
 }
 
 }  // namespace blink

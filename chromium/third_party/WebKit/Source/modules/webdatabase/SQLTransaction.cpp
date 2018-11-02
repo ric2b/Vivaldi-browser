@@ -77,12 +77,13 @@ SQLTransaction::SQLTransaction(Database* db,
 
 SQLTransaction::~SQLTransaction() {}
 
-DEFINE_TRACE(SQLTransaction) {
+void SQLTransaction::Trace(blink::Visitor* visitor) {
   visitor->Trace(database_);
   visitor->Trace(backend_);
   visitor->Trace(callback_);
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);
+  ScriptWrappable::Trace(visitor);
 }
 
 bool SQLTransaction::HasCallback() const {

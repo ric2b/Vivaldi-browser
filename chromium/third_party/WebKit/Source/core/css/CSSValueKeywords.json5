@@ -77,6 +77,19 @@
     "unicase",
     "titling-caps",
 
+    // font-variant-caps:
+    //
+    // normal
+    "jis78",
+    "jis83",
+    "jis90",
+    "jis04",
+    "simplified",
+    "traditional",
+    "full-width",
+    "proportional-width",
+    "ruby",
+
     // font-variant-numeric
     // normal
     "lining-nums",
@@ -585,10 +598,10 @@
     "ellipsis",
 
     //
-    // text-decoration-skip
+    // text-decoration-skip-ink
     //
-    "objects",
-    "ink",
+    // auto
+    // none
 
     //
     // -webkit-margin-collapse
@@ -660,6 +673,7 @@
     "-internal-media-overflow-button",
     "-internal-media-download-button",
     "-internal-media-remoting-cast-icon",
+    "-internal-media-control",
     "menulist",
     "menulist-button",
     "menulist-text",
@@ -1154,7 +1168,7 @@
     "p3",
     "rec2020",
 
-    // scroll-boundary-behavior
+    // overscroll-behavior
     // auto,
     // contain
     // none

@@ -35,9 +35,8 @@ class DummyProofSource : public ProofSource {
   void GetProof(const QuicSocketAddress& server_addr,
                 const string& hostname,
                 const string& server_config,
-                QuicVersion quic_version,
+                QuicTransportVersion transport_version,
                 QuicStringPiece chlo_hash,
-                const QuicTagVector& connection_options,
                 std::unique_ptr<Callback> callback) override {
     QuicReferenceCountedPointer<ProofSource::Chain> chain;
     QuicCryptoProof proof;
@@ -78,7 +77,7 @@ class InsecureProofVerifier : public ProofVerifier {
       const string& hostname,
       const uint16_t port,
       const string& server_config,
-      QuicVersion quic_version,
+      QuicTransportVersion transport_version,
       QuicStringPiece chlo_hash,
       const std::vector<string>& certs,
       const string& cert_sct,
@@ -162,10 +161,9 @@ QuicCryptoStream* QuartcSession::GetMutableCryptoStream() {
   return crypto_stream_.get();
 }
 
-QuartcStream* QuartcSession::CreateOutgoingDynamicStream(
-    SpdyPriority priority) {
+QuartcStream* QuartcSession::CreateOutgoingDynamicStream() {
   return ActivateDataStream(
-      CreateDataStream(GetNextOutgoingStreamId(), priority));
+      CreateDataStream(GetNextOutgoingStreamId(), kDefaultPriority));
 }
 
 void QuartcSession::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
@@ -204,11 +202,16 @@ void QuartcSession::ResetStream(QuicStreamId stream_id,
   }
 }
 
+bool QuartcSession::IsOpenStream(QuicStreamId stream_id) {
+  return QuicSession::IsOpenStream(stream_id);
+}
+
 QuartcSessionStats QuartcSession::GetStats() {
   QuartcSessionStats stats;
   const QuicConnectionStats& connection_stats = connection_->GetStats();
-  stats.bandwidth_estimate_bits_per_second =
-      connection_stats.estimated_bandwidth.ToBitsPerSecond();
+  stats.bandwidth_estimate = connection_stats.estimated_bandwidth;
+  stats.smoothed_rtt =
+      QuicTime::Delta::FromMicroseconds(connection_stats.srtt_us);
   return stats;
 }
 
@@ -257,10 +260,16 @@ bool QuartcSession::ExportKeyingMaterial(const string& label,
   return success;
 }
 
+void QuartcSession::CloseConnection(const string& details) {
+  connection_->CloseConnection(
+      QuicErrorCode::QUIC_CONNECTION_CANCELLED, details,
+      ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET_WITH_NO_ACK);
+}
+
 QuartcStreamInterface* QuartcSession::CreateOutgoingStream(
     const OutgoingStreamParameters& param) {
   // The |param| is for forward-compatibility. Not used for now.
-  return CreateOutgoingDynamicStream(kDefaultPriority);
+  return CreateOutgoingDynamicStream();
 }
 
 void QuartcSession::SetDelegate(

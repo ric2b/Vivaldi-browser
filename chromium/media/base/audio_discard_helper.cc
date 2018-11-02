@@ -13,7 +13,7 @@ namespace media {
 
 static void WarnOnNonMonotonicTimestamps(base::TimeDelta last_timestamp,
                                          base::TimeDelta current_timestamp) {
-  if (last_timestamp == kNoTimestamp || last_timestamp < current_timestamp)
+  if (last_timestamp == kNoTimestamp || last_timestamp <= current_timestamp)
     return;
 
   const base::TimeDelta diff = current_timestamp - last_timestamp;
@@ -35,8 +35,7 @@ AudioDiscardHelper::AudioDiscardHelper(int sample_rate,
   DCHECK_GT(sample_rate_, 0);
 }
 
-AudioDiscardHelper::~AudioDiscardHelper() {
-}
+AudioDiscardHelper::~AudioDiscardHelper() = default;
 
 size_t AudioDiscardHelper::TimeDeltaToFrames(base::TimeDelta duration) const {
   DCHECK(duration >= base::TimeDelta());

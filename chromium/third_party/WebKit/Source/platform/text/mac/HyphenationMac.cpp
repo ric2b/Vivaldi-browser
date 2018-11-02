@@ -49,14 +49,14 @@ class HyphenationCF final : public Hyphenation {
   RetainPtr<CFLocaleRef> locale_cf_;
 };
 
-RefPtr<Hyphenation> Hyphenation::PlatformGetHyphenation(
+scoped_refptr<Hyphenation> Hyphenation::PlatformGetHyphenation(
     const AtomicString& locale) {
   RetainPtr<CFStringRef> locale_cf_string = locale.Impl()->CreateCFString();
   RetainPtr<CFLocaleRef> locale_cf =
       AdoptCF(CFLocaleCreate(kCFAllocatorDefault, locale_cf_string.Get()));
   if (!CFStringIsHyphenationAvailableForLocale(locale_cf.Get()))
     return nullptr;
-  return AdoptRef(new HyphenationCF(locale_cf));
+  return base::AdoptRef(new HyphenationCF(locale_cf));
 }
 
 }  // namespace blink

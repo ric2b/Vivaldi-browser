@@ -6,6 +6,7 @@
 #define CompositorMutator_h
 
 #include "platform/PlatformExport.h"
+#include "platform/graphics/CompositorAnimatorsState.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -15,13 +16,13 @@ class PLATFORM_EXPORT CompositorMutator
  public:
   virtual ~CompositorMutator() {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   // Called from compositor thread to run the animation frame callbacks from all
-  // connected CompositorWorkers and AnimationWorklets.
-  // Returns true if any animation callbacks requested an animation frame
-  // (i.e. should be reinvoked next frame).
-  virtual bool Mutate(double monotonic_time_now) = 0;
+  // connected AnimationWorklets.
+  virtual void Mutate(std::unique_ptr<CompositorMutatorInputState>) = 0;
+  // Returns true if Mutate may do something if called 'now'.
+  virtual bool HasAnimators() = 0;
 };
 
 }  // namespace blink

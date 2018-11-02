@@ -10,8 +10,8 @@
 
 #include <list>
 #include <memory>
-#include <queue>
 
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/threading/thread.h"
@@ -46,6 +46,7 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   void RequestEncodingParametersChange(uint32_t bitrate,
                                        uint32_t framerate) override;
   void Destroy() override;
+  void Flush(FlushCallback flush_callback) override;
 
  private:
   // Reference picture list.
@@ -100,6 +101,7 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   void RequestEncodingParametersChangeTask(uint32_t bitrate,
                                            uint32_t framerate);
   void DestroyTask();
+  void FlushTask();
 
   // Prepare and schedule an encode job if we have an input to encode
   // and enough resources to proceed.
@@ -232,13 +234,15 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   VASurface::ReleaseCB va_surface_release_cb_;
 
   // VideoFrames passed from the client, waiting to be encoded.
-  std::queue<linked_ptr<InputFrameRef>> encoder_input_queue_;
+  base::queue<linked_ptr<InputFrameRef>> encoder_input_queue_;
 
   // BitstreamBuffers mapped, ready to be filled.
-  std::queue<linked_ptr<BitstreamBufferRef>> available_bitstream_buffers_;
+  base::queue<linked_ptr<BitstreamBufferRef>> available_bitstream_buffers_;
 
   // Jobs submitted for encode, awaiting bitstream buffers to become available.
-  std::queue<linked_ptr<EncodeJob>> submitted_encode_jobs_;
+  // A pending flush command, indicated by a null job, will be also put in the
+  // queue.
+  base::queue<linked_ptr<EncodeJob>> submitted_encode_jobs_;
 
   // Encoder thread. All tasks are executed on it.
   base::Thread encoder_thread_;
@@ -257,6 +261,10 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   // to the encoder thread is safe, because |this| always outlives the encoder
   // thread (it's a member of this class).
   base::WeakPtr<VaapiVideoEncodeAccelerator> weak_this_;
+
+  // The completion callback of the Flush() function.
+  FlushCallback flush_callback_;
+
   base::WeakPtrFactory<VaapiVideoEncodeAccelerator> weak_this_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiVideoEncodeAccelerator);

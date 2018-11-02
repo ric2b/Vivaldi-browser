@@ -76,13 +76,13 @@ class StatusBubbleMacIgnoreMouseMoved : public StatusBubbleMac {
     mouseLocation_.SetPoint(NSMaxX(contentBounds), NSMaxY(contentBounds));
   }
 
-  void MouseMoved(const gfx::Point& location, bool left_content) override {}
+  void MouseMoved(bool left_content) override {}
 
   gfx::Point GetMouseLocation() override { return mouseLocation_; }
 
   void SetMouseLocationForTesting(int x, int y) {
     mouseLocation_.SetPoint(x, y);
-    StatusBubbleMac::MouseMoved(gfx::Point(x, y), false);
+    StatusBubbleMac::MouseMovedAt(gfx::Point(x, y), false);
   }
 
  private:
@@ -93,7 +93,7 @@ class StatusBubbleMacTest : public CocoaTest {
  public:
   void SetUp() override {
     CocoaTest::SetUp();
-    NSWindow* window = test_window();
+    CocoaTestHelperWindow* window = test_window();
     EXPECT_TRUE(window);
     delegate_.reset(
         [[StatusBubbleMacTestDelegate alloc] initWithWindow: window]);
@@ -133,9 +133,7 @@ class StatusBubbleMacTest : public CocoaTest {
     BubbleView* bubbleView = [bubble_->window_ contentView];
     return [bubbleView content];
   }
-  StatusBubbleWindow* GetWindow() {
-    return bubble_->window_;
-  }
+  NSWindow* GetWindow() { return bubble_->GetWindow(); }
   NSWindow* parent() {
     return bubble_->parent_;
   }
@@ -534,7 +532,7 @@ TEST_F(StatusBubbleMacTest, MovingWindowUpdatesPosition) {
 
   // Show the bubble and make sure it has the same origin as |window|.
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
-  StatusBubbleWindow* child = GetWindow();
+  NSWindow* child = GetWindow();
   EXPECT_NSEQ([window frame].origin, [child frame].origin);
 
   // Hide the bubble, move the window, and show it again.
@@ -554,7 +552,7 @@ TEST_F(StatusBubbleMacTest, StatuBubbleRespectsBaseFrameLimits) {
 
   // Show the bubble and make sure it has the same origin as |window|.
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
-  StatusBubbleWindow* child = GetWindow();
+  NSWindow* child = GetWindow();
   EXPECT_NSEQ([window frame].origin, [child frame].origin);
 
   // Hide the bubble, change base frame offset, and show it again.
@@ -680,4 +678,22 @@ TEST_F(StatusBubbleMacTest, ReparentBubble) {
   // Switch back to the original parent with the bubble showing.
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
   bubble_->SwitchParentWindow(test_window());
+}
+
+TEST_F(StatusBubbleMacTest, WaitsUntilVisible) {
+  [test_window() orderOut:nil];
+  bubble_->SetStatus(UTF8ToUTF16("Show soon"));
+  EXPECT_NSEQ(nil, GetWindow().parentWindow);
+
+  [test_window() orderBack:nil];
+  EXPECT_NSNE(nil, GetWindow().parentWindow);
+}
+
+TEST_F(StatusBubbleMacTest, WaitsUntilOnActiveSpace) {
+  test_window().pretendIsOnActiveSpace = NO;
+  bubble_->SetStatus(UTF8ToUTF16("Show soon"));
+  EXPECT_NSEQ(nil, GetWindow().parentWindow);
+
+  test_window().pretendIsOnActiveSpace = YES;
+  EXPECT_NSNE(nil, GetWindow().parentWindow);
 }

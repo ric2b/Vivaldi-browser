@@ -7,6 +7,7 @@
 
 #include "core/frame/PlatformEventDispatcher.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "device/gamepad/public/interfaces/gamepad.mojom-blink.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebGamepadListener.h"
 
@@ -24,6 +25,15 @@ class GamepadDispatcher final
 
   void SampleGamepads(device::Gamepads&);
 
+  void PlayVibrationEffectOnce(int pad_index,
+                               device::mojom::blink::GamepadHapticEffectType,
+                               device::mojom::blink::GamepadEffectParametersPtr,
+                               device::mojom::blink::GamepadHapticsManager::
+                                   PlayVibrationEffectOnceCallback);
+  void ResetVibrationActuator(int pad_index,
+                              device::mojom::blink::GamepadHapticsManager::
+                                  ResetVibrationActuatorCallback);
+
   struct ConnectionChange {
     DISALLOW_NEW();
     device::Gamepad pad;
@@ -34,10 +44,12 @@ class GamepadDispatcher final
     return latest_change_;
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   GamepadDispatcher();
+
+  void InitializeHaptics();
 
   // WebGamepadListener
   void DidConnectGamepad(unsigned index, const device::Gamepad&) override;
@@ -52,6 +64,8 @@ class GamepadDispatcher final
                                              bool connected);
 
   ConnectionChange latest_change_;
+
+  device::mojom::blink::GamepadHapticsManagerPtr gamepad_haptics_manager_;
 };
 
 }  // namespace blink

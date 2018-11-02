@@ -154,6 +154,17 @@ TEST(VideoFrame, CreateFrame) {
   base::MD5Final(&digest, &context);
   EXPECT_EQ(MD5DigestToBase16(digest), "911991d51438ad2e1a40ed5f6fc7c796");
 
+  // Test single planar frame.
+  frame = VideoFrame::CreateFrame(media::PIXEL_FORMAT_ARGB, size,
+                                  gfx::Rect(size), size, kTimestamp);
+  EXPECT_EQ(media::PIXEL_FORMAT_ARGB, frame->format());
+  EXPECT_GE(frame->stride(VideoFrame::kARGBPlane), frame->coded_size().width());
+
+  // Test double planar frame.
+  frame = VideoFrame::CreateFrame(media::PIXEL_FORMAT_NV12, size,
+                                  gfx::Rect(size), size, kTimestamp);
+  EXPECT_EQ(media::PIXEL_FORMAT_NV12, frame->format());
+
   // Test an empty frame.
   frame = VideoFrame::CreateEOSFrame();
   EXPECT_TRUE(
@@ -317,7 +328,7 @@ class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
  public:
   explicit SyncTokenClientImpl(const gpu::SyncToken& sync_token)
       : sync_token_(sync_token) {}
-  ~SyncTokenClientImpl() override {}
+  ~SyncTokenClientImpl() override = default;
   void GenerateSyncToken(gpu::SyncToken* sync_token) override {
     *sync_token = sync_token_;
   }
@@ -544,7 +555,7 @@ TEST(VideoFrameMetadata, SetAndThenGetAllKeysForAllTypes) {
     EXPECT_TRUE(metadata.HasKey(key));
     const base::Value* const null_value = metadata.GetValue(key);
     EXPECT_TRUE(null_value);
-    EXPECT_EQ(base::Value::Type::NONE, null_value->GetType());
+    EXPECT_EQ(base::Value::Type::NONE, null_value->type());
     metadata.Clear();
   }
 }

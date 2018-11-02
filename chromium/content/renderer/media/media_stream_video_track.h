@@ -17,6 +17,7 @@
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/secure_display_link_tracker.h"
+#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 
 namespace content {
 
@@ -37,6 +38,11 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   // If |enabled| is true, sinks added to the track will
   // receive video frames when the source delivers frames to the track.
   static blink::WebMediaStreamTrack CreateVideoTrack(
+      MediaStreamVideoSource* source,
+      const MediaStreamVideoSource::ConstraintsCallback& callback,
+      bool enabled);
+  static blink::WebMediaStreamTrack CreateVideoTrack(
+      const blink::WebString& id,
       MediaStreamVideoSource* source,
       const MediaStreamVideoSource::ConstraintsCallback& callback,
       bool enabled);
@@ -71,7 +77,7 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   void SetEnabled(bool enabled) override;
   void SetContentHint(
       blink::WebMediaStreamTrack::ContentHintType content_hint) override;
-  void Stop() override;
+  void StopAndNotify(base::OnceClosure callback) override;
   void GetSettings(blink::WebMediaStreamTrack::Settings& settings) override;
 
   void OnReadyStateChanged(blink::WebMediaStreamSource::ReadyState state);
@@ -91,6 +97,7 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   const VideoTrackAdapterSettings& adapter_settings() const {
     return *adapter_settings_;
   }
+  blink::WebMediaStreamTrack::FacingMode FacingMode() const;
 
   // Setting information about the track size.
   // Called from MediaStreamVideoSource at track initialization.
@@ -99,6 +106,8 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
     height_ = height;
     frame_rate_ = frame_rate;
   }
+
+  MediaStreamVideoSource* source() const { return source_.get(); }
 
  private:
   // MediaStreamVideoSink is a friend to allow it to call AddSink() and

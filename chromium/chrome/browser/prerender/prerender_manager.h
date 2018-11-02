@@ -154,30 +154,6 @@ class PrerenderManager : public content::NotificationObserver,
       content::SessionStorageNamespace* session_storage_namespace,
       const gfx::Rect& bounds);
 
-  // Adds a prerender for Instant Search |url| if valid. The
-  // |session_storage_namespace| matches the namespace of the active tab at the
-  // time the prerender is generated. Returns a PrerenderHandle or NULL.
-  std::unique_ptr<PrerenderHandle> AddPrerenderForInstant(
-      const GURL& url,
-      content::SessionStorageNamespace* session_storage_namespace,
-      const gfx::Size& size);
-
-  // Adds a prerender for the background loader. Returns a PrerenderHandle if
-  // the URL was added, NULL if it was not.
-  //
-  // The caller may set an observer on the handle to receive load events. When
-  // the caller is done using the WebContents, it should call OnCancel() on the
-  // handle to free the resources associated with the prerender.
-  //
-  // The caller must provide two guarantees:
-  // 1. It must never ask for a swap-in;
-  // 2. The SessionStorageNamespace must not be shared with any tab / page load
-  //    to avoid swapping in from there.
-  std::unique_ptr<PrerenderHandle> AddPrerenderForOffline(
-      const GURL& url,
-      content::SessionStorageNamespace* session_storage_namespace,
-      const gfx::Size& size);
-
   // Cancels all active prerenders.
   void CancelAllPrerenders();
 
@@ -238,7 +214,6 @@ class PrerenderManager : public content::NotificationObserver,
   static PrerenderManagerMode GetMode(Origin origin);
   static void SetMode(PrerenderManagerMode mode);
   static void SetOmniboxMode(PrerenderManagerMode mode);
-  static void SetInstantMode(PrerenderManagerMode mode);
   static bool IsAnyPrerenderingPossible();
   static bool IsNoStatePrefetch(Origin origin);
   static bool IsSimpleLoadExperiment(Origin origin);
@@ -348,7 +323,7 @@ class PrerenderManager : public content::NotificationObserver,
 
   // Notification that a prerender has completed and its bytes should be
   // recorded.
-  void RecordNetworkBytes(Origin origin, bool used, int64_t prerender_bytes);
+  void RecordNetworkBytesConsumed(Origin origin, int64_t prerender_bytes);
 
   // Add to the running tally of bytes transferred over the network for this
   // profile if prerendering is currently enabled.
@@ -594,12 +569,7 @@ class PrerenderManager : public content::NotificationObserver,
   std::unique_ptr<PrerenderContents::Factory> prerender_contents_factory_;
 
   static PrerenderManagerMode mode_;
-  static PrerenderManagerMode instant_mode_;
   static PrerenderManagerMode omnibox_mode_;
-
-  // A count of how many prerenders we do per session. Initialized to 0 then
-  // incremented and emitted to a histogram on each successful prerender.
-  static int prerenders_per_session_count_;
 
   // RepeatingTimer to perform periodic cleanups of pending prerendered
   // pages.

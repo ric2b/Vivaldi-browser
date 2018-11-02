@@ -7,11 +7,13 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "content/browser/android/composited_touch_handle_drawable.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
-#include "content/public/browser/web_contents.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/context_menu_params.h"
 #include "jni/SelectionPopupController_jni.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF16ToJavaString;
@@ -22,9 +24,10 @@ using blink::WebContextMenuData;
 
 namespace content {
 
-void Init(JNIEnv* env,
-          const JavaParamRef<jobject>& obj,
-          const JavaParamRef<jobject>& jweb_contents) {
+void JNI_SelectionPopupController_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jweb_contents) {
   WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
   DCHECK(web_contents);
 
@@ -38,6 +41,51 @@ SelectionPopupController::SelectionPopupController(
     WebContents* web_contents)
     : RenderWidgetHostConnector(web_contents) {
   java_obj_ = JavaObjectWeakGlobalRef(env, obj);
+}
+
+ScopedJavaLocalRef<jobject> SelectionPopupController::GetContext() const {
+  JNIEnv* env = AttachCurrentThread();
+
+  ScopedJavaLocalRef<jobject> obj = java_obj_.get(env);
+  if (obj.is_null())
+    return nullptr;
+
+  return Java_SelectionPopupController_getContext(env, obj);
+}
+
+std::unique_ptr<ui::TouchHandleDrawable>
+SelectionPopupController::CreateTouchHandleDrawable() {
+  ScopedJavaLocalRef<jobject> activityContext = GetContext();
+  // If activityContext is null then Application context is used instead on
+  // the java side in CompositedTouchHandleDrawable.
+  auto* view = web_contents()->GetNativeView();
+  return std::unique_ptr<ui::TouchHandleDrawable>(
+      new CompositedTouchHandleDrawable(view->GetLayer(), view->GetDipScale(),
+                                        activityContext));
+}
+
+void SelectionPopupController::MoveRangeSelectionExtent(
+    const gfx::PointF& extent) {
+  auto* web_contents_impl = static_cast<WebContentsImpl*>(web_contents());
+  if (!web_contents_impl)
+    return;
+
+  web_contents_impl->MoveRangeSelectionExtent(gfx::ToRoundedPoint(extent));
+}
+
+void SelectionPopupController::SelectBetweenCoordinates(
+    const gfx::PointF& base,
+    const gfx::PointF& extent) {
+  auto* web_contents_impl = static_cast<WebContentsImpl*>(web_contents());
+  if (!web_contents_impl)
+    return;
+
+  gfx::Point base_point = gfx::ToRoundedPoint(base);
+  gfx::Point extent_point = gfx::ToRoundedPoint(extent);
+  if (base_point == extent_point)
+    return;
+
+  web_contents_impl->SelectRange(base_point, extent_point);
 }
 
 void SelectionPopupController::UpdateRenderProcessConnection(
@@ -84,16 +132,25 @@ bool SelectionPopupController::ShowSelectionMenu(
                           params.source_type == ui::MENU_SOURCE_LONG_PRESS ||
                           params.source_type == ui::MENU_SOURCE_TOUCH_HANDLE ||
                           params.source_type == ui::MENU_SOURCE_STYLUS;
-  if (!from_touch || (!params.is_editable && params.selection_text.empty()))
+
+  const bool from_selection_adjustment =
+      params.source_type == ui::MENU_SOURCE_ADJUST_SELECTION ||
+      params.source_type == ui::MENU_SOURCE_ADJUST_SELECTION_RESET;
+
+  // If source_type is not in the list then return.
+  if (!from_touch && !from_selection_adjustment)
+    return false;
+
+  // Don't show paste pop-up for non-editable textarea.
+  if (!params.is_editable && params.selection_text.empty())
     return false;
 
   const bool can_select_all =
       !!(params.edit_flags & WebContextMenuData::kCanSelectAll);
   const bool can_edit_richly =
-      !!(params.edit_flags & blink::WebContextMenuData::kCanEditRichly);
+      !!(params.edit_flags & WebContextMenuData::kCanEditRichly);
   const bool is_password_type =
-      params.input_field_type ==
-      blink::WebContextMenuData::kInputFieldTypePassword;
+      params.input_field_type == WebContextMenuData::kInputFieldTypePassword;
   const ScopedJavaLocalRef<jstring> jselected_text =
       ConvertUTF16ToJavaString(env, params.selection_text);
   const bool should_suggest = params.source_type == ui::MENU_SOURCE_TOUCH ||
@@ -103,8 +160,8 @@ bool SelectionPopupController::ShowSelectionMenu(
       env, obj, params.selection_rect.x(), params.selection_rect.y(),
       params.selection_rect.right(),
       params.selection_rect.bottom() + handle_height, params.is_editable,
-      is_password_type, jselected_text, can_select_all, can_edit_richly,
-      should_suggest);
+      is_password_type, jselected_text, params.selection_start_offset,
+      can_select_all, can_edit_richly, should_suggest, params.source_type);
   return true;
 }
 

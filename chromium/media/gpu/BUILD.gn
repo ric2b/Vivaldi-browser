@@ -17,6 +17,7 @@ buildflag_header("features") {
     "USE_V4L2_CODEC=$use_v4l2_codec",
     "USE_LIBV4L2=$use_v4lplugin",
     "ENABLE_MEDIA_CODEC_VIDEO_DECODER=$enable_media_codec_video_decoder",
+    "ENABLE_D3D11_VIDEO_DECODER=$enable_d3d11_video_decoder",
   ]
 }
 
@@ -26,7 +27,7 @@ if (is_mac) {
 
 if (use_vaapi) {
   action("libva_generate_stubs") {
-    extra_header = "va_stub_header.fragment"
+    extra_header = "vaapi/va_stub_header.fragment"
 
     script = "../../tools/generate_stubs/generate_stubs.py"
     sources = [
@@ -38,7 +39,7 @@ if (use_vaapi) {
     if (use_x11) {
       sources += [ "vaapi/va_x11.sigs" ]
     }
-    if (use_ozone) {
+    if (is_linux) {
       sources += [ "vaapi/va_drm.sigs" ]
     }
     stubs_filename_root = "va_stubs"
@@ -68,7 +69,7 @@ if (use_vaapi) {
 
 if (is_chromeos && use_v4lplugin) {
   action("libv4l2_generate_stubs") {
-    extra_header = "v4l2_stub_header.fragment"
+    extra_header = "v4l2/v4l2_stub_header.fragment"
 
     script = "../../tools/generate_stubs/generate_stubs.py"
     sources = [
@@ -108,7 +109,9 @@ component("gpu") {
   # Only local test code, GPU-related IPC code in the media layer, and
   # media-related content code should access //media/gpu.
   visibility = [
-    "//chrome/gpu:*",
+    "//components/arc/common:media",
+    "//components/arc/video_accelerator",
+    "//components/viz/service/main",
     "//content/gpu:*",
     "//content/renderer:*",
     "//media/gpu/ipc/*",
@@ -131,8 +134,12 @@ component("gpu") {
     "fake_jpeg_decode_accelerator.h",
     "fake_video_decode_accelerator.cc",
     "fake_video_decode_accelerator.h",
+    "format_utils.cc",
+    "format_utils.h",
     "gles2_decoder_helper.cc",
     "gles2_decoder_helper.h",
+    "gpu_jpeg_decode_accelerator_factory.cc",
+    "gpu_jpeg_decode_accelerator_factory.h",
     "gpu_video_accelerator_util.cc",
     "gpu_video_accelerator_util.h",
     "gpu_video_decode_accelerator_factory.cc",
@@ -184,33 +191,35 @@ component("gpu") {
 
   if (is_android) {
     sources += [
+      "android/android_video_decode_accelerator.cc",
+      "android/android_video_decode_accelerator.h",
+      "android/android_video_surface_chooser.h",
+      "android/android_video_surface_chooser_impl.cc",
+      "android/android_video_surface_chooser_impl.h",
+      "android/avda_codec_allocator.cc",
+      "android/avda_codec_allocator.h",
+      "android/avda_codec_image.cc",
+      "android/avda_codec_image.h",
+      "android/avda_picture_buffer_manager.cc",
+      "android/avda_picture_buffer_manager.h",
+      "android/avda_shared_state.cc",
+      "android/avda_shared_state.h",
+      "android/avda_state_provider.h",
+      "android/avda_surface_bundle.cc",
+      "android/avda_surface_bundle.h",
+      "android/content_video_view_overlay.cc",
+      "android/content_video_view_overlay.h",
+      "android/content_video_view_overlay_allocator.cc",
+      "android/content_video_view_overlay_allocator.h",
       "android/device_info.cc",
       "android/device_info.h",
       "android/promotion_hint_aggregator.h",
       "android/promotion_hint_aggregator_impl.cc",
       "android/promotion_hint_aggregator_impl.h",
-      "android_video_decode_accelerator.cc",
-      "android_video_decode_accelerator.h",
-      "android_video_surface_chooser.h",
-      "android_video_surface_chooser_impl.cc",
-      "android_video_surface_chooser_impl.h",
-      "avda_codec_allocator.cc",
-      "avda_codec_allocator.h",
-      "avda_codec_image.cc",
-      "avda_codec_image.h",
-      "avda_picture_buffer_manager.cc",
-      "avda_picture_buffer_manager.h",
-      "avda_shared_state.cc",
-      "avda_shared_state.h",
-      "avda_state_provider.h",
-      "avda_surface_bundle.cc",
-      "avda_surface_bundle.h",
-      "content_video_view_overlay.cc",
-      "content_video_view_overlay.h",
-      "content_video_view_overlay_allocator.cc",
-      "content_video_view_overlay_allocator.h",
-      "surface_texture_gl_owner.cc",
-      "surface_texture_gl_owner.h",
+      "android/surface_chooser_helper.cc",
+      "android/surface_chooser_helper.h",
+      "android/surface_texture_gl_owner.cc",
+      "android/surface_texture_gl_owner.h",
     ]
     deps += [
       "//media/mojo:features",
@@ -219,8 +228,8 @@ component("gpu") {
     if (enable_webrtc) {
       deps += [ "//third_party/libyuv" ]
       sources += [
-        "android_video_encode_accelerator.cc",
-        "android_video_encode_accelerator.h",
+        "android/android_video_encode_accelerator.cc",
+        "android/android_video_encode_accelerator.h",
       ]
     }
     if (enable_media_codec_video_decoder) {
@@ -228,6 +237,8 @@ component("gpu") {
       sources += [
         "android/codec_image.cc",
         "android/codec_image.h",
+        "android/codec_image_group.cc",
+        "android/codec_image_group.h",
         "android/codec_wrapper.cc",
         "android/codec_wrapper.h",
         "android/media_codec_video_decoder.cc",
@@ -299,13 +310,20 @@ component("gpu") {
 
   if (use_vaapi) {
     sources += [
+                 "va_surface.cc",
                  "va_surface.h",
+                 "vaapi/vaapi_picture_factory.cc",
+                 "vaapi/vaapi_picture_factory.h",
+                 "vaapi/vaapi_picture.cc",
+                 "vaapi/vaapi_picture.h",
                  "vaapi_jpeg_decode_accelerator.cc",
                  "vaapi_jpeg_decode_accelerator.h",
                  "vaapi_jpeg_decoder.cc",
                  "vaapi_jpeg_decoder.h",
-                 "vaapi_picture.cc",
-                 "vaapi_picture.h",
+                 "vaapi_jpeg_encode_accelerator.cc",
+                 "vaapi_jpeg_encode_accelerator.h",
+                 "vaapi_jpeg_encoder.cc",
+                 "vaapi_jpeg_encoder.h",
                  "vaapi_video_decode_accelerator.cc",
                  "vaapi_video_decode_accelerator.h",
                  "vaapi_video_encode_accelerator.cc",
@@ -323,16 +341,20 @@ component("gpu") {
       configs += [ "//build/config/linux:x11" ]
       deps += [ "//ui/gfx/x" ]
       sources += [
-        "vaapi_tfp_picture.cc",
-        "vaapi_tfp_picture.h",
+        "vaapi/vaapi_tfp_picture.cc",
+        "vaapi/vaapi_tfp_picture.h",
       ]
     }
+
+    if (is_linux) {
+      sources += [
+        "vaapi/vaapi_drm_picture.cc",
+        "vaapi/vaapi_drm_picture.h",
+      ]
+    }
+
     if (use_ozone) {
       deps += [ "//ui/ozone" ]
-      sources += [
-        "vaapi_drm_picture.cc",
-        "vaapi_drm_picture.h",
-      ]
     }
   }
 
@@ -376,6 +398,14 @@ component("gpu") {
       "/DELAYLOAD:mf.dll",
       "/DELAYLOAD:mfplat.dll",
     ]
+    if (enable_d3d11_video_decoder) {
+      sources += [
+        "windows/d3d11_video_decoder.cc",
+        "windows/d3d11_video_decoder.h",
+        "windows/d3d11_video_decoder_impl.cc",
+        "windows/d3d11_video_decoder_impl.h",
+      ]
+    }
   }
 }
 
@@ -408,7 +438,7 @@ if (is_win || is_android || use_v4l2_codec || use_vaapi) {
 
     configs += [ "//third_party/khronos:khronos_headers" ]
 
-    if (is_win || is_chromeos) {
+    if (is_win || is_chromeos || use_v4l2_codec) {
       sources += [
         "rendering_helper.cc",
         "rendering_helper.h",
@@ -454,23 +484,27 @@ source_set("android_video_decode_accelerator_unittests") {
   if (is_android) {
     testonly = true
     sources = [
+      "android/android_video_decode_accelerator_unittest.cc",
+      "android/android_video_surface_chooser_impl_unittest.cc",
+      "android/avda_codec_allocator_unittest.cc",
+      "android/content_video_view_overlay_allocator_unittest.cc",
       "android/fake_codec_allocator.cc",
       "android/fake_codec_allocator.h",
+      "android/mock_android_video_surface_chooser.cc",
+      "android/mock_android_video_surface_chooser.h",
       "android/mock_device_info.cc",
       "android/mock_device_info.h",
+      "android/mock_promotion_hint_aggregator.cc",
+      "android/mock_promotion_hint_aggregator.h",
+      "android/mock_surface_texture_gl_owner.cc",
+      "android/mock_surface_texture_gl_owner.h",
       "android/promotion_hint_aggregator_impl_unittest.cc",
-      "android_video_decode_accelerator_unittest.cc",
-      "android_video_surface_chooser_impl_unittest.cc",
-      "avda_codec_allocator_unittest.cc",
-      "content_video_view_overlay_allocator_unittest.cc",
-      "fake_android_video_surface_chooser.cc",
-      "fake_android_video_surface_chooser.h",
-      "mock_surface_texture_gl_owner.cc",
-      "mock_surface_texture_gl_owner.h",
-      "surface_texture_gl_owner_unittest.cc",
+      "android/surface_chooser_helper_unittest.cc",
+      "android/surface_texture_gl_owner_unittest.cc",
     ]
     if (enable_media_codec_video_decoder) {
       sources += [
+        "android/codec_image_group_unittest.cc",
         "android/codec_image_unittest.cc",
         "android/codec_wrapper_unittest.cc",
         "android/media_codec_video_decoder_unittest.cc",
@@ -524,6 +558,7 @@ if (use_v4l2_codec || use_vaapi) {
       "//media:test_support",
       "//media/gpu",
       "//media/gpu/ipc/service",
+      "//media/mojo/services",
       "//testing/gtest",
       "//third_party/libyuv",
       "//ui/base",
@@ -559,24 +594,15 @@ source_set("unit_tests") {
   sources = [
     "h264_decoder_unittest.cc",
   ]
-}
 
-test("video_decode_accelerator_service_unittest") {
-  sources = [
-    "ipc/service/gpu_jpeg_decode_accelerator_unittest.cc",
-  ]
-
-  deps = [
-    ":gpu",
-    "//base",
-    "//base/test:run_all_unittests",
-    "//base/test:test_support",
-    "//gpu:test_support",
-    "//media/gpu/ipc/common",
-    "//media/gpu/ipc/service",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//ui/gfx:test_support",
-    "//ui/gfx/geometry",
-  ]
+  if (use_vaapi) {
+    sources += [ "vaapi_video_decode_accelerator_unittest.cc" ]
+    deps += [
+      ":gpu",
+      "//base/test:test_support",
+      "//gpu:test_support",
+      "//ui/gfx:test_support",
+      "//ui/gfx/geometry",
+    ]
+  }
 }

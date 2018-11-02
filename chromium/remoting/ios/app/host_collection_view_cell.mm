@@ -12,6 +12,7 @@
 
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "remoting/ios/app/remoting_theme.h"
+#import "remoting/ios/app/view_utils.h"
 #import "remoting/ios/domain/host_info.h"
 
 #include "base/strings/sys_string_conversions.h"
@@ -22,6 +23,30 @@ static const CGFloat kLinePadding = 2.f;
 static const CGFloat kHostCardIconInset = 10.f;
 static const CGFloat kHostCardPadding = 4.f;
 static const CGFloat kHostCardIconSize = 45.f;
+
+// Maps an offline reason enum string to the l10n ID used to retrieve the
+// localized message.
+static NSDictionary<NSString*, NSNumber*>* const kOfflineReasonL10nId = @{
+  @"INITIALIZATION_FAILED" : @(IDS_OFFLINE_REASON_INITIALIZATION_FAILED),
+  @"INVALID_HOST_CONFIGURATION" :
+      @(IDS_OFFLINE_REASON_INVALID_HOST_CONFIGURATION),
+  @"INVALID_HOST_ID" : @(IDS_OFFLINE_REASON_INVALID_HOST_ID),
+  @"INVALID_OAUTH_CREDENTIALS" :
+      @(IDS_OFFLINE_REASON_INVALID_OAUTH_CREDENTIALS),
+  @"INVALID_HOST_DOMAIN" : @(IDS_OFFLINE_REASON_INVALID_HOST_DOMAIN),
+  @"LOGIN_SCREEN_NOT_SUPPORTED" :
+      @(IDS_OFFLINE_REASON_LOGIN_SCREEN_NOT_SUPPORTED),
+  @"POLICY_READ_ERROR" : @(IDS_OFFLINE_REASON_POLICY_READ_ERROR),
+  @"POLICY_CHANGE_REQUIRES_RESTART" :
+      @(IDS_OFFLINE_REASON_POLICY_CHANGE_REQUIRES_RESTART),
+  @"USERNAME_MISMATCH" : @(IDS_OFFLINE_REASON_USERNAME_MISMATCH),
+  @"X_SERVER_RETRIES_EXCEEDED" :
+      @(IDS_OFFLINE_REASON_X_SERVER_RETRIES_EXCEEDED),
+  @"SESSION_RETRIES_EXCEEDED" : @(IDS_OFFLINE_REASON_SESSION_RETRIES_EXCEEDED),
+  @"HOST_RETRIES_EXCEEDED" : @(IDS_OFFLINE_REASON_HOST_RETRIES_EXCEEDED),
+  @"UNKNOWN" : @(IDS_OFFLINE_REASON_UNKNOWN),
+  // Don't need to show offline reason for "SUCCESS_EXIT".
+};
 
 @interface HostCollectionViewCell () {
   UIImageView* _imageView;
@@ -50,6 +75,8 @@ static const CGFloat kHostCardIconSize = 45.f;
 }
 
 - (void)commonInit {
+  self.isAccessibilityElement = YES;
+
   _imageView = [[UIImageView alloc] init];
   _imageView.translatesAutoresizingMaskIntoConstraints = NO;
   _imageView.contentMode = UIViewContentModeCenter;
@@ -65,17 +92,20 @@ static const CGFloat kHostCardIconSize = 45.f;
 
   _titleLabel = [[UILabel alloc] init];
   _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  _titleLabel.font = [MDCTypography titleFont];
-  _titleLabel.alpha = [MDCTypography titleFontOpacity];
-  _titleLabel.textColor = [UIColor colorWithWhite:0 alpha:0.87f];
+  _titleLabel.font = [MDCTypography boldFontFromFont:MDCTypography.subheadFont];
+  _titleLabel.alpha = MDCTypography.subheadFontOpacity;
+  _titleLabel.textColor = RemotingTheme.hostCellTitleColor;
   [_labelView addSubview:_titleLabel];
 
   _statusLabel = [[UILabel alloc] init];
   _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  _statusLabel.font = [MDCTypography captionFont];
-  _statusLabel.alpha = [MDCTypography captionFontOpacity];
-  _statusLabel.textColor = [UIColor colorWithWhite:0 alpha:0.60f];
+  _statusLabel.font = MDCTypography.captionFont;
+  _statusLabel.alpha = MDCTypography.captionFontOpacity;
+  _statusLabel.textColor = RemotingTheme.hostCellStatusTextColor;
   [_labelView addSubview:_statusLabel];
+
+  UILayoutGuide* safeAreaLayoutGuide =
+      remoting::SafeAreaLayoutGuideForView(self);
 
   // Constraints
   NSArray* constraints = @[
@@ -89,10 +119,10 @@ static const CGFloat kHostCardIconSize = 45.f;
     //       |              |
     //  Image View     Label View
     [[_imageView leadingAnchor]
-        constraintEqualToAnchor:[self.contentView leadingAnchor]
+        constraintEqualToAnchor:safeAreaLayoutGuide.leadingAnchor
                        constant:kHostCardIconInset],
     [[_imageView centerYAnchor]
-        constraintEqualToAnchor:[self.contentView centerYAnchor]],
+        constraintEqualToAnchor:safeAreaLayoutGuide.centerYAnchor],
     [[_imageView widthAnchor] constraintEqualToConstant:kHostCardIconSize],
     [[_imageView heightAnchor] constraintEqualToConstant:kHostCardIconSize],
 
@@ -100,12 +130,12 @@ static const CGFloat kHostCardIconSize = 45.f;
         constraintEqualToAnchor:[_imageView trailingAnchor]
                        constant:kHostCardIconInset],
     [[_labelView trailingAnchor]
-        constraintEqualToAnchor:[self.contentView trailingAnchor]
+        constraintEqualToAnchor:safeAreaLayoutGuide.trailingAnchor
                        constant:-kHostCardPadding / 2.f],
     [[_labelView topAnchor]
-        constraintEqualToAnchor:[self.contentView topAnchor]],
+        constraintEqualToAnchor:safeAreaLayoutGuide.topAnchor],
     [[_labelView bottomAnchor]
-        constraintEqualToAnchor:[self.contentView bottomAnchor]],
+        constraintEqualToAnchor:safeAreaLayoutGuide.bottomAnchor],
 
     // Put titleLable and statusLable symmetrically around centerY.
     [[_titleLabel leadingAnchor]
@@ -139,14 +169,33 @@ static const CGFloat kHostCardIconSize = 45.f;
     _imageView.backgroundColor = RemotingTheme.hostOnlineColor;
     _statusLabel.text = l10n_util::GetNSString(IDS_HOST_ONLINE_SUBTITLE);
   } else {
-    _imageView.backgroundColor = RemotingTheme.hostOfflineColor;
-    _statusLabel.text =
+    NSString* statusText =
         hostInfo.updatedTime
             ? l10n_util::GetNSStringF(
                   IDS_LAST_ONLINE_SUBTITLE,
                   base::SysNSStringToUTF16(hostInfo.updatedTime))
             : l10n_util::GetNSString(IDS_HOST_OFFLINE_SUBTITLE);
+    NSString* localizedOfflineReason = nil;
+    if (hostInfo.offlineReason.length > 0) {
+      NSNumber* offlineReasonId = kOfflineReasonL10nId[hostInfo.offlineReason];
+      if (offlineReasonId) {
+        localizedOfflineReason =
+            l10n_util::GetNSString(offlineReasonId.intValue);
+      }
+    }
+
+    if (localizedOfflineReason) {
+      _imageView.backgroundColor = RemotingTheme.hostWarningColor;
+      _statusLabel.text = [NSString
+          stringWithFormat:@"%@ %@", localizedOfflineReason, statusText];
+    } else {
+      _imageView.backgroundColor = RemotingTheme.hostOfflineColor;
+      _statusLabel.text = statusText;
+    }
   }
+
+  self.accessibilityLabel = [NSString
+      stringWithFormat:@"%@\n%@", _titleLabel.text, _statusLabel.text];
 }
 
 #pragma mark - UICollectionReusableView
@@ -156,6 +205,7 @@ static const CGFloat kHostCardIconSize = 45.f;
   _hostInfo = nil;
   _statusLabel.text = nil;
   _titleLabel.text = nil;
+  self.accessibilityLabel = nil;
 }
 
 @end

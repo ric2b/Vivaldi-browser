@@ -9,6 +9,7 @@
 
 @class FirstRunConfiguration;
 @class Tab;
+@protocol SyncPresenter;
 
 namespace base {
 class TimeTicks;
@@ -45,7 +46,8 @@ void WriteFirstRunSentinelAndRecordMetrics(
 // Methods for writing sentinel and recording metrics and posting notifications
 void FinishFirstRun(ios::ChromeBrowserState* browserState,
                     Tab* tab,
-                    FirstRunConfiguration* config);
+                    FirstRunConfiguration* config,
+                    id<SyncPresenter> presenter);
 
 // Records Product tour timing metrics using histogram.
 void RecordProductTourTimingMetrics(NSString* timer_name,

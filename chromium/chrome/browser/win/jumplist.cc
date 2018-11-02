@@ -71,9 +71,9 @@ constexpr size_t kRecentlyClosedItems = 0;
 // Vivaldi: The "Speed Dials" category takes 1 slot. Allocate 9 for items.
 constexpr size_t kVivaldiSpeedDialItems = 9;
 
-// The number of updates to skip to alleviate the machine when a previous update
-// was too slow.
-constexpr int kUpdatesToSkipUnderHeavyLoad = 10;
+// The number of update notifications to skip to alleviate the machine when a
+// previous update was too slow.
+constexpr int kNotificationsToSkipUnderHeavyLoad = 2;
 
 // The delay before updating the JumpList for users who haven't used it in a
 // session. A delay of 2000 ms is chosen to coalesce more updates when tabs are
@@ -669,7 +669,7 @@ void JumpList::OnRunUpdateCompletion(
   // Update JumpList member variables based on the results from the update run
   // just finished.
   if (update_transaction->update_timeout)
-    updates_to_skip_ = kUpdatesToSkipUnderHeavyLoad;
+    updates_to_skip_ = kNotificationsToSkipUnderHeavyLoad;
 
   if (update_transaction->update_success) {
     if (most_visited_should_update_) {
@@ -814,7 +814,8 @@ void JumpList::CreateNewJumpListAndNotifyOS(
 
   // If JumpListUpdater::BeginUpdate takes longer than the maximum allowed time,
   // abort the current update as it's very likely the following steps will also
-  // take a long time, and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
+  // take a long time, and skip the next |kNotificationsToSkipUnderHeavyLoad|
+  // update notifications.
   if (begin_update_timer.Elapsed() >= kTimeOutForBeginUpdate) {
     update_transaction->update_timeout = true;
     return;
@@ -862,7 +863,8 @@ void JumpList::CreateNewJumpListAndNotifyOS(
       kMostVisitedItems);
 
   // If AddCustomCategory takes longer than the maximum allowed time, abort the
-  // current update and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
+  // current update and skip the next |kNotificationsToSkipUnderHeavyLoad|
+  // update notifications.
   //
   // We only time adding custom category for most visited pages because
   // 1. If processing the first category times out or fails, there is no need to
@@ -908,7 +910,7 @@ void JumpList::CreateNewJumpListAndNotifyOS(
   bool commit_success = jumplist_updater.CommitUpdate();
 
   // If CommitUpdate call takes longer than the maximum allowed time, skip the
-  // next |kUpdatesToSkipUnderHeavyLoad| updates.
+  // next |kNotificationsToSkipUnderHeavyLoad| update notifications.
   if (commit_update_timer.Elapsed() >= kTimeOutForCommitUpdate)
     update_transaction->update_timeout = true;
 

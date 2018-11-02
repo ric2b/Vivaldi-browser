@@ -14,7 +14,6 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Promise;
@@ -25,8 +24,8 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
-import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
+import org.chromium.components.signin.AccountIdProvider;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.AndroidSyncSettings;
@@ -60,11 +59,10 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     private boolean mFirstRunCheckIsPending = true;
 
-    private final ObserverList<SignInStateObserver> mSignInStateObservers =
-            new ObserverList<SignInStateObserver>();
+    private final ObserverList<SignInStateObserver> mSignInStateObservers = new ObserverList<>();
 
     private final ObserverList<SignInAllowedObserver> mSignInAllowedObservers =
-            new ObserverList<SignInAllowedObserver>();
+            new ObserverList<>();
 
     /**
     * Will be set during the sign in process, and nulled out when there is not a pending sign in.
@@ -126,12 +124,12 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         /**
          * Called before data is wiped.
          */
-        public void preWipeData();
+        void preWipeData();
 
         /**
          * Called after data is wiped.
          */
-        public void postWipeData();
+        void postWipeData();
     }
 
     /**
@@ -289,12 +287,9 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     }
 
     private void notifySignInAllowedChanged() {
-        new Handler().post(new Runnable() {
-            @Override
-            public void run() {
-                for (SignInAllowedObserver observer : mSignInAllowedObservers) {
-                    observer.onSignInAllowedChanged();
-                }
+        new Handler().post(() -> {
+            for (SignInAllowedObserver observer : mSignInAllowedObservers) {
+                observer.onSignInAllowedChanged();
             }
         });
     }
@@ -341,11 +336,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     public void signIn(
             Account account, @Nullable Activity activity, @Nullable SignInCallback callback) {
-        // TODO(https://crbug.com/761476): remove this as soon as race condition in Sync is fixed.
-        // SyncController has a race condition inside so it needs to be initialized before actually
-        // signin in.
-        SyncController.get(ContextUtils.getApplicationContext());
-
         if (account == null) {
             Log.w(TAG, "Ignoring sign-in request due to null account.");
             if (callback != null) callback.onSignInAborted();
@@ -375,12 +365,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     public void signIn(String accountName, @Nullable final Activity activity,
             @Nullable final SignInCallback callback) {
-        AccountManagerFacade.get().getAccountFromName(accountName, new Callback<Account>() {
-            @Override
-            public void onResult(Account account) {
-                signIn(account, activity, callback);
-            }
-        });
+        AccountManagerFacade.get().getAccountFromName(
+                accountName, account -> signIn(account, activity, callback));
     }
 
     private void progressSignInFlowSeedSystemAccounts() {
@@ -393,7 +379,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             UserRecoverableErrorHandler errorHandler = activity != null
                     ? new UserRecoverableErrorHandler.ModalDialog(activity, !isForceSigninEnabled())
                     : new UserRecoverableErrorHandler.SystemNotification();
-            ExternalAuthUtils.getInstance().canUseGooglePlayServices(mContext, errorHandler);
+            ExternalAuthUtils.getInstance().canUseGooglePlayServices(errorHandler);
             Log.w(TAG, "Cancelling the sign-in process as Google Play services is unavailable");
             abortSignIn();
         }
@@ -463,6 +449,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // sync tries to start without being signed in natively and crashes.
         ChromeSigninController.get().setSignedInAccountName(mSignInState.account.name);
         AndroidSyncSettings.updateAccount(mContext, mSignInState.account);
+        AndroidSyncSettings.enableChromeSync(mContext);
 
         if (mSignInState.callback != null) {
             mSignInState.callback.onSignInComplete();
@@ -496,14 +483,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * fulfills the returned {@link Promise}.
      */
     public Promise<Void> signOutPromise() {
-        final Promise<Void> promise = new Promise<Void>();
-
-        signOut(new Runnable(){
-            @Override
-            public void run() {
-                promise.fulfill(null);
-            }
-        });
+        final Promise<Void> promise = new Promise<>();
+        signOut(() -> promise.fulfill(null));
 
         return promise;
     }

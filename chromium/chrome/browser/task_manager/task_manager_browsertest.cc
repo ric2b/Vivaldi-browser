@@ -11,6 +11,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -18,7 +19,6 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -182,16 +182,15 @@ class TaskManagerUtilityProcessBrowserTest : public TaskManagerBrowserTest {
 
 class TaskManagerMemoryCoordinatorBrowserTest : public TaskManagerBrowserTest {
  public:
-  TaskManagerMemoryCoordinatorBrowserTest() {}
-  ~TaskManagerMemoryCoordinatorBrowserTest() override {}
-
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kEnableFeatures,
-                                    features::kMemoryCoordinator.name);
+  TaskManagerMemoryCoordinatorBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(features::kMemoryCoordinator);
   }
 
+  ~TaskManagerMemoryCoordinatorBrowserTest() override {}
+
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(TaskManagerMemoryCoordinatorBrowserTest);
 };
 
@@ -640,6 +639,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, WebWorkerJSHeapMemory) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
       MatchTab("title1.html"), ColumnSpecifier::V8_MEMORY_USED,
       minimal_heap_size));
+  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
+      MatchTab("title1.html"), ColumnSpecifier::MEMORY_FOOTPRINT,
+      minimal_heap_size));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("title1.html")));
 }
@@ -891,9 +893,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, HistoryNavigationInNewTab) {
       MatchTab("title1.html"), ColumnSpecifier::PROCESS_ID,
       base::kNullProcessId));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchTab("title1.html"), ColumnSpecifier::PHYSICAL_MEMORY, 1000));
+      MatchTab("title1.html"), ColumnSpecifier::MEMORY_FOOTPRINT, 1000));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchTab("About Version"), ColumnSpecifier::PHYSICAL_MEMORY, 1000));
+      MatchTab("About Version"), ColumnSpecifier::MEMORY_FOOTPRINT, 1000));
 }
 
 IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, SubframeHistoryNavigation) {
@@ -945,7 +947,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, SubframeHistoryNavigation) {
       WaitForTaskManagerRows(1, MatchSubframe("http://b.com/")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(2, MatchAnySubframe()));
 
-  chrome::GoForward(browser(), WindowOpenDisposition::NEW_BACKGROUND_TAB);
+  chrome::GoForward(browser(), WindowOpenDisposition::CURRENT_TAB);
 
   // When the subframe appears in the cloned process, it must have a valid
   // process ID.
@@ -956,19 +958,21 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, SubframeHistoryNavigation) {
       MatchSubframe("http://e.com/"), ColumnSpecifier::PROCESS_ID,
       base::kNullProcessId));
   ASSERT_NO_FATAL_FAILURE(
-      WaitForTaskManagerRows(2, MatchSubframe("http://b.com/")));
+      WaitForTaskManagerRows(0, MatchSubframe("http://c.com/")));
   ASSERT_NO_FATAL_FAILURE(
-      WaitForTaskManagerRows(2, MatchSubframe("http://b.com/")));
+      WaitForTaskManagerRows(1, MatchSubframe("http://d.com/")));
   ASSERT_NO_FATAL_FAILURE(
-      WaitForTaskManagerRows(1, MatchSubframe("http://c.com/")));
-  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(5, MatchAnySubframe()));
-  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(2, MatchAnyTab()));
+      WaitForTaskManagerRows(1, MatchSubframe("http://e.com/")));
+  ASSERT_NO_FATAL_FAILURE(
+      WaitForTaskManagerRows(1, MatchSubframe("http://b.com/")));
+  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(3, MatchAnySubframe()));
+  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
 
   // Subframe processes should report some amount of physical memory usage.
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchSubframe("http://d.com/"), ColumnSpecifier::PHYSICAL_MEMORY, 1000));
+      MatchSubframe("http://d.com/"), ColumnSpecifier::MEMORY_FOOTPRINT, 1000));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchSubframe("http://e.com/"), ColumnSpecifier::PHYSICAL_MEMORY, 1000));
+      MatchSubframe("http://e.com/"), ColumnSpecifier::MEMORY_FOOTPRINT, 1000));
 }
 
 IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, KillSubframe) {

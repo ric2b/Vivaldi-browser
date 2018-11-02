@@ -29,8 +29,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/dom/ParserContentPolicy.h"
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/Position.h"
+#include "core/editing/Forward.h"
 #include "core/editing/serializers/HTMLInterchange.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -43,7 +42,7 @@ class DocumentFragment;
 class Element;
 class ExceptionState;
 class Node;
-class StylePropertySet;
+class CSSPropertyValueSet;
 
 enum EChildrenOnly { kIncludeNode, kChildrenOnly };
 enum EAbsoluteURLs { kDoNotResolveURLs, kResolveAllURLs, kResolveNonLocalURLs };
@@ -106,7 +105,7 @@ CreateMarkup(const PositionInFlatTree& start,
 
 void MergeWithNextTextNode(Text*, ExceptionState&);
 
-bool PropertyMissingOrEqualToNone(StylePropertySet*, CSSPropertyID);
+bool PropertyMissingOrEqualToNone(CSSPropertyValueSet*, CSSPropertyID);
 
 }  // namespace blink
 

@@ -4,11 +4,9 @@
 
 #include "net/websockets/websocket_stream.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/time/time.h"
@@ -149,7 +147,7 @@ class WebSocketStreamRequestImpl : public WebSocketStreamRequest {
 
   // Destroying this object destroys the URLRequest, which cancels the request
   // and so terminates the handshake if it is incomplete.
-  ~WebSocketStreamRequestImpl() override {}
+  ~WebSocketStreamRequestImpl() override = default;
 
   void OnHandshakeStreamCreated(
       WebSocketHandshakeStreamBase* handshake_stream) override {
@@ -388,12 +386,12 @@ void Delegate::OnReadCompleted(URLRequest* request, int bytes_read) {
 
 }  // namespace
 
-WebSocketStreamRequest::~WebSocketStreamRequest() {}
+WebSocketStreamRequest::~WebSocketStreamRequest() = default;
 
-WebSocketStream::WebSocketStream() {}
-WebSocketStream::~WebSocketStream() {}
+WebSocketStream::WebSocketStream() = default;
+WebSocketStream::~WebSocketStream() = default;
 
-WebSocketStream::ConnectDelegate::~ConnectDelegate() {}
+WebSocketStream::ConnectDelegate::~ConnectDelegate() = default;
 
 std::unique_ptr<WebSocketStreamRequest> WebSocketStream::CreateAndConnectStream(
     const GURL& socket_url,

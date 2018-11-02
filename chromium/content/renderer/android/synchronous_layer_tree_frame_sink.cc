@@ -13,18 +13,18 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/layer_tree_frame_sink_client.h"
-#include "cc/output/output_surface.h"
-#include "cc/output/output_surface_frame.h"
-#include "cc/output/software_output_device.h"
-#include "cc/output/texture_mailbox_deleter.h"
-#include "cc/quads/render_pass.h"
-#include "cc/quads/surface_draw_quad.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
+#include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/output_surface_frame.h"
+#include "components/viz/service/display/software_output_device.h"
+#include "components/viz/service/display/texture_deleter.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/common/android/sync_compositor_messages.h"
@@ -55,7 +55,7 @@ const viz::FrameSinkId kChildFrameSinkId(1, 2);
 // Do not limit number of resources, so use an unrealistically high value.
 const size_t kNumResourcesLimit = 10 * 1000 * 1000;
 
-class SoftwareDevice : public cc::SoftwareOutputDevice {
+class SoftwareDevice : public viz::SoftwareOutputDevice {
  public:
   SoftwareDevice(SkCanvas** canvas) : canvas_(canvas) {}
 
@@ -77,25 +77,26 @@ class SoftwareDevice : public cc::SoftwareOutputDevice {
 }  // namespace
 
 class SynchronousLayerTreeFrameSink::SoftwareOutputSurface
-    : public cc::OutputSurface {
+    : public viz::OutputSurface {
  public:
   SoftwareOutputSurface(std::unique_ptr<SoftwareDevice> software_device)
-      : cc::OutputSurface(std::move(software_device)) {}
+      : viz::OutputSurface(std::move(software_device)) {}
 
-  // cc::OutputSurface implementation.
-  void BindToClient(cc::OutputSurfaceClient* client) override {}
+  // viz::OutputSurface implementation.
+  void BindToClient(viz::OutputSurfaceClient* client) override {}
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {}
   void SetDrawRectangle(const gfx::Rect& rect) override {}
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override {}
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override {}
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return 0; }
-  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
+  viz::OverlayCandidateValidator* GetOverlayCandidateValidator()
+      const override {
     return nullptr;
   }
   bool IsDisplayedAsOverlayPlane() const override { return false; }
@@ -189,8 +190,8 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
 
   viz::RendererSettings software_renderer_settings;
 
-  auto output_surface = base::MakeUnique<SoftwareOutputSurface>(
-      base::MakeUnique<SoftwareDevice>(&current_sw_canvas_));
+  auto output_surface = std::make_unique<SoftwareOutputSurface>(
+      std::make_unique<SoftwareDevice>(&current_sw_canvas_));
   software_output_surface_ = output_surface.get();
 
   // The gpu_memory_buffer_manager here is null as the Display is only used for
@@ -200,10 +201,10 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   // resources.
   // TODO(crbug.com/692814): The Display never sends its resources out of
   // process so there is no reason for it to use a SharedBitmapManager.
-  display_ = base::MakeUnique<viz::Display>(
+  display_ = std::make_unique<viz::Display>(
       shared_bitmap_manager_, nullptr /* gpu_memory_buffer_manager */,
       software_renderer_settings, kRootFrameSinkId, std::move(output_surface),
-      nullptr /* scheduler */, nullptr /* texture_mailbox_deleter */);
+      nullptr /* scheduler */, nullptr /* current_task_runner */);
   display_->Initialize(&display_client_,
                        frame_sink_manager_->surface_manager());
   display_->SetVisible(true);
@@ -228,7 +229,7 @@ void SynchronousLayerTreeFrameSink::DetachFromClient() {
 }
 
 void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   DCHECK(CalledOnValidThread());
   DCHECK(sync_client_);
 
@@ -240,7 +241,7 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
     return;
   }
 
-  cc::CompositorFrame submit_frame;
+  viz::CompositorFrame submit_frame;
 
   if (in_software_draw_) {
     // The frame we send to the client is actually just the metadata. Preserve
@@ -286,11 +287,11 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
     // TODO(danakj): We could apply the transform here instead of passing it to
     // the LayerTreeFrameSink client too? (We'd have to do the same for
     // hardware frames in SurfacesInstance?)
-    cc::CompositorFrame embed_frame;
+    viz::CompositorFrame embed_frame;
     embed_frame.metadata.begin_frame_ack = frame.metadata.begin_frame_ack;
     embed_frame.metadata.device_scale_factor =
         frame.metadata.device_scale_factor;
-    embed_frame.render_pass_list.push_back(cc::RenderPass::Create());
+    embed_frame.render_pass_list.push_back(viz::RenderPass::Create());
 
     // The embedding RenderPass covers the entire Display's area.
     const auto& embed_render_pass = embed_frame.render_pass_list.back();
@@ -299,18 +300,21 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
     embed_render_pass->has_transparent_background = false;
 
     // The RenderPass has a single SurfaceDrawQuad (and SharedQuadState for it).
+    bool are_contents_opaque =
+        !frame.render_pass_list.back()->has_transparent_background;
     auto* shared_quad_state =
         embed_render_pass->CreateAndAppendSharedQuadState();
     auto* surface_quad =
-        embed_render_pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+        embed_render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
     shared_quad_state->SetAll(
         child_transform, gfx::Rect(child_size), gfx::Rect(child_size),
-        gfx::Rect() /* clip_rect */, false /* is_clipped */, 1.f /* opacity */,
+        gfx::Rect() /* clip_rect */, false /* is_clipped */,
+        are_contents_opaque /* are_contents_opaque */, 1.f /* opacity */,
         SkBlendMode::kSrcOver, 0 /* sorting_context_id */);
     surface_quad->SetNew(
         shared_quad_state, gfx::Rect(child_size), gfx::Rect(child_size),
         viz::SurfaceId(kChildFrameSinkId, child_local_surface_id_),
-        cc::SurfaceDrawQuadType::PRIMARY, nullptr);
+        base::nullopt, SK_ColorWHITE, false);
 
     bool result = child_support_->SubmitCompositorFrame(child_local_surface_id_,
                                                         std::move(frame));
@@ -493,6 +497,15 @@ void SynchronousLayerTreeFrameSink::DidReceiveCompositorFrameAck(
   ReclaimResources(resources);
 }
 
+void SynchronousLayerTreeFrameSink::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {}
+
+void SynchronousLayerTreeFrameSink::DidDiscardCompositorFrame(
+    uint32_t presentation_token) {}
+
 void SynchronousLayerTreeFrameSink::OnBeginFrame(
     const viz::BeginFrameArgs& args) {}
 
@@ -501,10 +514,6 @@ void SynchronousLayerTreeFrameSink::ReclaimResources(
   DCHECK(resources.empty());
   client_->ReclaimResources(resources);
 }
-
-void SynchronousLayerTreeFrameSink::WillDrawSurface(
-    const viz::LocalSurfaceId& local_surface_id,
-    const gfx::Rect& damage_rect) {}
 
 void SynchronousLayerTreeFrameSink::OnBeginFramePausedChanged(bool paused) {}
 

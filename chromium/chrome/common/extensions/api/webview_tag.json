@@ -1474,18 +1474,6 @@
             "description": "The new zoom factor that the page was zoomed to."
           }
         ]
-      },
-      {
-        "name": "requestpageinfo",
-        "options": { },
-        "description": "Request displaying of page info.",
-        "parameters": [
-          {
-            "name": "url",
-            "description": "Requested URL.",
-            "type": "string"
-          }
-        ]
       }
     ],
     "properties": {

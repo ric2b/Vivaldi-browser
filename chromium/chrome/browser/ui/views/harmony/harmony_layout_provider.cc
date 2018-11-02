@@ -4,10 +4,17 @@
 
 #include "chrome/browser/ui/views/harmony/harmony_layout_provider.h"
 
+namespace {
+constexpr int kSmallSnapPoint = 320;
+constexpr int kMediumSnapPoint = 448;
+constexpr int kLargeSnapPoint = 512;
+}  // namespace
+
 gfx::Insets HarmonyLayoutProvider::GetInsetsMetric(int metric) const {
   DCHECK_LT(metric, views::VIEWS_INSETS_MAX);
   switch (metric) {
     case views::INSETS_DIALOG:
+    case views::INSETS_DIALOG_SUBSECTION:
       return gfx::Insets(kHarmonyLayoutUnit);
     case views::INSETS_CHECKBOX_RADIO_BUTTON: {
       gfx::Insets insets = ChromeLayoutProvider::GetInsetsMetric(metric);
@@ -27,6 +34,10 @@ gfx::Insets HarmonyLayoutProvider::GetInsetsMetric(int metric) const {
 int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
   DCHECK_GE(metric, views::VIEWS_INSETS_MAX);
   switch (metric) {
+    case DISTANCE_CONTENT_LIST_VERTICAL_SINGLE:
+      return kHarmonyLayoutUnit / 4;
+    case DISTANCE_CONTENT_LIST_VERTICAL_MULTI:
+      return kHarmonyLayoutUnit / 2;
     case DISTANCE_CONTROL_LIST_VERTICAL:
       return kHarmonyLayoutUnit * 3 / 4;
     case views::DISTANCE_CLOSE_BUTTON_MARGIN: {
@@ -35,12 +46,25 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       // margin we need to subtract out the padding.
       return kVisibleMargin - kHarmonyLayoutUnit / 4;
     }
-    case views::DISTANCE_CONTROL_TOTAL_VERTICAL_TEXT_PADDING:
-      return kHarmonyLayoutUnit / 2;
-    case views::DISTANCE_DIALOG_CONTENT_TO_BUTTONS:
+    case views::DISTANCE_CONTROL_VERTICAL_TEXT_PADDING:
+      return kHarmonyLayoutUnit / 4;
+    case views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL:
+      return kHarmonyLayoutUnit * 3 / 2;
+    case views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_TEXT: {
+      // This is reduced so there is about the same amount of visible
+      // whitespace, compensating for the text's internal leading.
+      return GetDistanceMetric(
+                 views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL) -
+             8;
+    }
+    case views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_CONTROL:
       return kHarmonyLayoutUnit;
-    case views::DISTANCE_DIALOG_TITLE_TO_CONTENT:
-      return kHarmonyLayoutUnit;
+    case views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_TEXT: {
+      // See the comment in DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_TEXT above.
+      return GetDistanceMetric(
+                 views::DISTANCE_DIALOG_CONTENT_MARGIN_TOP_CONTROL) -
+             8;
+    }
     case views::DISTANCE_RELATED_BUTTON_HORIZONTAL:
       return kHarmonyLayoutUnit / 2;
     case views::DISTANCE_RELATED_CONTROL_HORIZONTAL:
@@ -68,6 +92,8 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       return 0;
     case views::DISTANCE_TABLE_CELL_HORIZONTAL_MARGIN:
       return kHarmonyLayoutUnit;
+    case views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING:
+      return kHarmonyLayoutUnit / 2;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL:
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE:
@@ -76,6 +102,8 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE:
       return kHarmonyLayoutUnit;
+    case DISTANCE_MODAL_DIALOG_WIDTH_CONTAINING_MULTILINE_TEXT:
+      return kMediumSnapPoint;
     default:
       return ChromeLayoutProvider::GetDistanceMetric(metric);
   }
@@ -99,7 +127,7 @@ bool HarmonyLayoutProvider::IsHarmonyMode() const {
 }
 
 int HarmonyLayoutProvider::GetSnappedDialogWidth(int min_width) const {
-  for (int snap_point : {320, 448, 512}) {
+  for (int snap_point : {kSmallSnapPoint, kMediumSnapPoint, kLargeSnapPoint}) {
     if (min_width <= snap_point)
       return snap_point;
   }

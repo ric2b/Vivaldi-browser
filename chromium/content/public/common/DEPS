@@ -1,6 +1,7 @@
 specific_include_rules = {
   ".*\.cc": [
     "+content/common",
+    "+services/network/public/cpp",
     "+third_party/WebKit/common",
   ],
   "simple_url_loader\.cc": [
@@ -12,6 +13,9 @@ specific_include_rules = {
     "+content/public/common/url_loader_factory\.mojom\.h",
   ],
   "simple_url_loader_unittest\.cc": [
+    "+content/public/network",
+  ],
+  "network_connection_tracker_unittest\.cc": [
     "+content/public/network",
   ],
 }

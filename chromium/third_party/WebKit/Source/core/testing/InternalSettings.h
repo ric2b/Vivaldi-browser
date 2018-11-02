@@ -57,7 +57,6 @@ class InternalSettings final : public InternalSettingsGenerated,
     void RestoreTo(Settings*);
 
     bool original_csp_;
-    bool original_css_sticky_position_enabled_;
     bool original_overlay_scrollbars_enabled_;
     EditingBehaviorType original_editing_behavior_;
     bool original_text_autosizing_enabled_;
@@ -72,7 +71,7 @@ class InternalSettings final : public InternalSettingsGenerated,
     String default_video_poster_url_;
     ImageAnimationPolicy original_image_animation_policy_;
     bool original_scroll_top_left_interop_enabled_;
-    bool original_compositor_worker_enabled_;
+    bool original_animation_worklet_enabled_;
   };
 
   static InternalSettings* Create(Page& page) {
@@ -124,21 +123,20 @@ class InternalSettings final : public InternalSettingsGenerated,
   void setViewportEnabled(bool, ExceptionState&);
   void setViewportMetaEnabled(bool, ExceptionState&);
   void setViewportStyle(const String& preference, ExceptionState&);
-  void setCompositorWorkerEnabled(bool, ExceptionState&);
+  void setAnimationWorkletEnabled(bool, ExceptionState&);
   void setPresentationReceiver(bool, ExceptionState&);
   void setAutoplayPolicy(const String&, ExceptionState&);
 
   // FIXME: The following are RuntimeEnabledFeatures and likely
   // cannot be changed after process start. These setters should
   // be removed or moved onto internals.runtimeFlags:
-  void setCSSStickyPositionEnabled(bool);
   void setLangAttributeAwareFormControlUIEnabled(bool);
   void setOverlayScrollbarsEnabled(bool);
   void setExperimentalContentSecurityPolicyFeaturesEnabled(bool);
   void setImageAnimationPolicy(const String&, ExceptionState&);
   void setScrollTopLeftInteropEnabled(bool);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void setAvailablePointerTypes(const String&, ExceptionState&);
   void setPrimaryPointerType(const String&, ExceptionState&);

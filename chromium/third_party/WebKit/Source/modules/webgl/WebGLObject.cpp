@@ -96,6 +96,4 @@ void WebGLObject::OnDetached(gpu::gles2::GLES2Interface* gl) {
     DeleteObject(gl);
 }
 
-DEFINE_TRACE_WRAPPERS(WebGLObject) {}
-
 }  // namespace blink

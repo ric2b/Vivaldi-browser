@@ -15,12 +15,12 @@ DragEvent* DragEvent::Create(const AtomicString& type,
                              bool cancelable,
                              AbstractView* view,
                              int detail,
-                             int screen_x,
-                             int screen_y,
-                             int window_x,
-                             int window_y,
-                             int movement_x,
-                             int movement_y,
+                             double screen_x,
+                             double screen_y,
+                             double window_x,
+                             double window_y,
+                             double movement_x,
+                             double movement_y,
                              WebInputEvent::Modifiers modifiers,
                              short button,
                              unsigned short buttons,
@@ -44,12 +44,12 @@ DragEvent::DragEvent(const AtomicString& event_type,
                      bool cancelable,
                      AbstractView* view,
                      int detail,
-                     int screen_x,
-                     int screen_y,
-                     int window_x,
-                     int window_y,
-                     int movement_x,
-                     int movement_y,
+                     double screen_x,
+                     double screen_y,
+                     double window_x,
+                     double window_y,
+                     double movement_x,
+                     double movement_y,
                      WebInputEvent::Modifiers modifiers,
                      short button,
                      unsigned short buttons,
@@ -94,32 +94,14 @@ bool DragEvent::IsMouseEvent() const {
   return false;
 }
 
-EventDispatchMediator* DragEvent::CreateMediator() {
-  return DragEventDispatchMediator::Create(this);
-}
-
-DEFINE_TRACE(DragEvent) {
+void DragEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(data_transfer_);
   MouseEvent::Trace(visitor);
 }
 
-DragEventDispatchMediator* DragEventDispatchMediator::Create(
-    DragEvent* drag_event) {
-  return new DragEventDispatchMediator(drag_event);
-}
-
-DragEventDispatchMediator::DragEventDispatchMediator(DragEvent* drag_event)
-    : EventDispatchMediator(drag_event) {}
-
-DragEvent& DragEventDispatchMediator::Event() const {
-  return ToDragEvent(EventDispatchMediator::GetEvent());
-}
-
-DispatchEventResult DragEventDispatchMediator::DispatchEvent(
-    EventDispatcher& dispatcher) const {
-  Event().GetEventPath().AdjustForRelatedTarget(dispatcher.GetNode(),
-                                                Event().relatedTarget());
-  return EventDispatchMediator::DispatchEvent(dispatcher);
+DispatchEventResult DragEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  GetEventPath().AdjustForRelatedTarget(dispatcher.GetNode(), relatedTarget());
+  return dispatcher.Dispatch();
 }
 
 }  // namespace blink

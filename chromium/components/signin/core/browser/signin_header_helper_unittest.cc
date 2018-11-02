@@ -11,10 +11,11 @@
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/prefs/pref_member.h"
 #include "components/signin/core/browser/chrome_connected_header_helper.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/scoped_account_consistency.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_features.h"
+#include "components/signin/core/browser/signin_features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -33,12 +34,14 @@ class SigninHeaderHelperTest : public testing::Test {
   void SetUp() override {
     content_settings::CookieSettings::RegisterProfilePrefs(prefs_.registry());
     HostContentSettingsMap::RegisterProfilePrefs(prefs_.registry());
+    signin::RegisterAccountConsistencyProfilePrefs(prefs_.registry());
 
     settings_map_ = new HostContentSettingsMap(
         &prefs_, false /* incognito_profile */, false /* guest_profile */,
         false /* store_last_modified */);
     cookie_settings_ =
         new content_settings::CookieSettings(settings_map_.get(), &prefs_, "");
+    dice_enabled_pref_member_ = signin::CreateDicePrefMember(&prefs_);
   }
 
   void TearDown() override { settings_map_->ShutdownOnUIThread(); }
@@ -58,9 +61,13 @@ class SigninHeaderHelperTest : public testing::Test {
     std::unique_ptr<net::URLRequest> url_request =
         url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
                                            TRAFFIC_ANNOTATION_FOR_TESTS);
-    AppendOrRemoveAccountConsistencyRequestHeader(
-        url_request.get(), GURL(), account_id, sync_enabled_,
-        sync_has_auth_error_, cookie_settings_.get(), PROFILE_MODE_DEFAULT);
+    AppendOrRemoveMirrorRequestHeader(
+        url_request.get(), GURL(), account_id, cookie_settings_.get(),
+        IsAccountConsistencyMirrorEnabled(), PROFILE_MODE_DEFAULT);
+    AppendOrRemoveDiceRequestHeader(url_request.get(), GURL(), account_id,
+                                    sync_enabled_, sync_has_auth_error_,
+                                    dice_enabled_pref_member_.get(),
+                                    cookie_settings_.get());
     return url_request;
   }
 
@@ -112,6 +119,7 @@ class SigninHeaderHelperTest : public testing::Test {
 
   scoped_refptr<HostContentSettingsMap> settings_map_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
+  std::unique_ptr<BooleanPrefMember> dice_enabled_pref_member_;
 };
 
 // Tests that no Mirror request is returned when the user is not signed in (no
@@ -159,6 +167,33 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestGoogleCom) {
       "id=0123456789:mode=0:enable_account_consistency=true");
 }
 
+// Tests that no header sent when mirror account consistency is nor requested.
+TEST_F(SigninHeaderHelperTest, TestMirrorRequestGoogleComNoProfileConsistency) {
+  std::unique_ptr<net::URLRequest> url_request =
+      url_request_context_.CreateRequest(GURL("https://www.google.com"),
+                                         net::DEFAULT_PRIORITY, nullptr,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS);
+  AppendOrRemoveMirrorRequestHeader(
+      url_request.get(), GURL(), "0123456789", cookie_settings_.get(),
+      false /* is_mirror_enabled */, PROFILE_MODE_DEFAULT);
+  CheckAccountConsistencyHeaderRequest(url_request.get(),
+                                       kChromeConnectedHeader, "");
+}
+
+// Tests that header sent when mirror account consistency is requested.
+TEST_F(SigninHeaderHelperTest, TestMirrorRequestGoogleComProfileConsistency) {
+  std::unique_ptr<net::URLRequest> url_request =
+      url_request_context_.CreateRequest(GURL("https://www.google.com"),
+                                         net::DEFAULT_PRIORITY, nullptr,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS);
+  AppendOrRemoveMirrorRequestHeader(
+      url_request.get(), GURL(), "0123456789", cookie_settings_.get(),
+      true /* is_mirror_enabled */, PROFILE_MODE_DEFAULT);
+  CheckAccountConsistencyHeaderRequest(
+      url_request.get(), kChromeConnectedHeader,
+      "mode=0,enable_account_consistency=true");
+}
+
 // Mirror is always enabled on Android and iOS, so these tests are only relevant
 // on Desktop.
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -166,6 +201,7 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestGoogleCom) {
 // Tests that the Mirror request is returned when the target is a Gaia URL, even
 // if account consistency is disabled.
 TEST_F(SigninHeaderHelperTest, TestMirrorRequestGaiaURL) {
+  ScopedAccountConsistencyDisabled scoped_no_consistency;
   ASSERT_FALSE(IsAccountConsistencyMirrorEnabled());
   CheckMirrorHeaderRequest(GURL("https://accounts.google.com"), "0123456789",
                            "mode=0,enable_account_consistency=false");
@@ -186,16 +222,22 @@ TEST_F(SigninHeaderHelperTest, TestDiceRequest) {
   // Sync disabled.
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   ASSERT_FALSE(client_id.empty());
-  CheckDiceHeaderRequest(GURL("https://accounts.google.com"), "0123456789",
-                         "mode=0,enable_account_consistency=false",
-                         "client_id=" + client_id);
+  CheckDiceHeaderRequest(
+      GURL("https://accounts.google.com"), "0123456789",
+      "mode=0,enable_account_consistency=false",
+      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
+                         "signout_mode=show_confirmation",
+                         kDiceProtocolVersion, client_id.c_str()));
   // Sync enabled: check that the Dice header has the Sync account ID and that
   // the mirror header is not modified.
   sync_enabled_ = true;
   CheckDiceHeaderRequest(
       GURL("https://accounts.google.com"), "0123456789",
       "mode=0,enable_account_consistency=false",
-      "client_id=" + client_id + ",sync_account_id=0123456789");
+      base::StringPrintf("version=%s,client_id=%s,sync_account_id=0123456789,"
+                         "signin_mode=all_accounts,"
+                         "signout_mode=show_confirmation",
+                         kDiceProtocolVersion, client_id.c_str()));
   sync_enabled_ = false;
 
   // No ChromeConnected and no Dice for other URLs.
@@ -209,25 +251,66 @@ TEST_F(SigninHeaderHelperTest, TestNoDiceRequestWhenDisabled) {
                          "mode=0,enable_account_consistency=true", "");
 }
 
+// Tests that the signout confirmation is requested iff the Dice migration is
+// complete.
+TEST_F(SigninHeaderHelperTest, TestDiceMigration) {
+  ScopedAccountConsistencyDiceMigration scoped_dice_migration;
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+  ASSERT_FALSE(client_id.empty());
+
+  // No signout confirmation by default.
+  CheckDiceHeaderRequest(
+      GURL("https://accounts.google.com"), "0123456789",
+      "mode=0,enable_account_consistency=false",
+      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
+                         "signout_mode=no_confirmation",
+                         kDiceProtocolVersion, client_id.c_str()));
+
+  // Signout confirmation after the migration is complete.
+  MigrateProfileToDice(&prefs_);
+  CheckDiceHeaderRequest(
+      GURL("https://accounts.google.com"), "0123456789",
+      "mode=0,enable_account_consistency=false",
+      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
+                         "signout_mode=show_confirmation",
+                         kDiceProtocolVersion, client_id.c_str()));
+}
+
 // Tests that a Dice request is returned only when there is an authentication
 // error if the method is kDiceFixAuthErrors.
 TEST_F(SigninHeaderHelperTest, TestDiceFixAuthError) {
   ScopedAccountConsistencyDiceFixAuthErrors scoped_dice_fix_auth_errors;
-  // Without authentication error, no Dice request.
+  // No Dice request unless all conditions are met.
   CheckDiceHeaderRequest(GURL("https://accounts.google.com"), "0123456789",
                          "mode=0,enable_account_consistency=false", "");
-
-  // With authentication error, there is a Dice request.
+  sync_has_auth_error_ = false;
+  sync_enabled_ = true;
+  CheckDiceHeaderRequest(GURL("https://accounts.google.com"), "0123456789",
+                         "mode=0,enable_account_consistency=false", "");
   sync_has_auth_error_ = true;
+  sync_enabled_ = false;
+  CheckDiceHeaderRequest(GURL("https://accounts.google.com"), "0123456789",
+                         "mode=0,enable_account_consistency=false", "");
+  sync_has_auth_error_ = true;
+  sync_enabled_ = true;
+  CheckDiceHeaderRequest(GURL("https://accounts.google.com"), "", "", "");
+
+  // Dice request when there is an account id, Sync is enabled and in error
+  // state.
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   CheckDiceHeaderRequest(
       GURL("https://accounts.google.com"), "0123456789",
       "mode=0,enable_account_consistency=false",
-      "client_id=" + GaiaUrls::GetInstance()->oauth2_chrome_client_id());
+      base::StringPrintf("version=%s,client_id=%s,sync_account_id=0123456789,"
+                         "signin_mode=sync_account,"
+                         "signout_mode=no_confirmation",
+                         kDiceProtocolVersion, client_id.c_str()));
 }
 
 // Tests that the Mirror request is returned with the GAIA Id on Drive origin,
 // even if account consistency is disabled.
 TEST_F(SigninHeaderHelperTest, TestMirrorRequestDrive) {
+  ScopedAccountConsistencyDisabled scoped_no_consistency;
   ASSERT_FALSE(IsAccountConsistencyMirrorEnabled());
   CheckMirrorHeaderRequest(
       GURL("https://docs.google.com/document"), "0123456789",
@@ -249,6 +332,8 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestDrive) {
 TEST_F(SigninHeaderHelperTest, TestDiceInvalidResponseParams) {
   DiceResponseParams params = BuildDiceSigninResponseParams("blah");
   EXPECT_EQ(DiceAction::NONE, params.user_intention);
+  params = BuildDiceSignoutResponseParams("blah");
+  EXPECT_EQ(DiceAction::NONE, params.user_intention);
 }
 
 TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
@@ -264,10 +349,24 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
             "action=SIGNIN,id=%s,email=%s,authuser=%i,authorization_code=%s",
             kGaiaID, kEmail, kSessionIndex, kAuthorizationCode));
     EXPECT_EQ(DiceAction::SIGNIN, params.user_intention);
-    EXPECT_EQ(kGaiaID, params.signin_info.gaia_id);
-    EXPECT_EQ(kEmail, params.signin_info.email);
-    EXPECT_EQ(kSessionIndex, params.signin_info.session_index);
-    EXPECT_EQ(kAuthorizationCode, params.signin_info.authorization_code);
+    ASSERT_TRUE(params.signin_info);
+    EXPECT_EQ(kGaiaID, params.signin_info->account_info.gaia_id);
+    EXPECT_EQ(kEmail, params.signin_info->account_info.email);
+    EXPECT_EQ(kSessionIndex, params.signin_info->account_info.session_index);
+    EXPECT_EQ(kAuthorizationCode, params.signin_info->authorization_code);
+  }
+
+  {
+    // EnableSync response.
+    DiceResponseParams params = BuildDiceSigninResponseParams(
+        base::StringPrintf("action=ENABLE_SYNC,id=%s,email=%s,authuser=%i",
+                           kGaiaID, kEmail, kSessionIndex));
+    EXPECT_EQ(DiceAction::ENABLE_SYNC, params.user_intention);
+    ASSERT_TRUE(params.enable_sync_info);
+    EXPECT_EQ(kGaiaID, params.enable_sync_info->account_info.gaia_id);
+    EXPECT_EQ(kEmail, params.enable_sync_info->account_info.email);
+    EXPECT_EQ(kSessionIndex,
+              params.enable_sync_info->account_info.session_index);
   }
 
   {
@@ -278,12 +377,12 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
         base::StringPrintf("email=\"%s\", sessionindex=%i, obfuscatedid=\"%s\"",
                            kEmail, kSessionIndex, kGaiaID));
     ASSERT_EQ(DiceAction::SIGNOUT, params.user_intention);
-    EXPECT_EQ(1u, params.signout_info.gaia_id.size());
-    EXPECT_EQ(1u, params.signout_info.email.size());
-    EXPECT_EQ(1u, params.signout_info.session_index.size());
-    EXPECT_EQ(kGaiaID, params.signout_info.gaia_id[0]);
-    EXPECT_EQ(kEmail, params.signout_info.email[0]);
-    EXPECT_EQ(kSessionIndex, params.signout_info.session_index[0]);
+    ASSERT_TRUE(params.signout_info);
+    EXPECT_EQ(1u, params.signout_info->account_infos.size());
+    EXPECT_EQ(kGaiaID, params.signout_info->account_infos[0].gaia_id);
+    EXPECT_EQ(kEmail, params.signout_info->account_infos[0].email);
+    EXPECT_EQ(kSessionIndex,
+              params.signout_info->account_infos[0].session_index);
   }
 
   {
@@ -297,15 +396,16 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
             "email=\"%s\", sessionindex=%i, obfuscatedid=\"%s\"",
             kEmail, kSessionIndex, kGaiaID, kEmail2, kSessionIndex2, kGaiaID2));
     ASSERT_EQ(DiceAction::SIGNOUT, params.user_intention);
-    EXPECT_EQ(2u, params.signout_info.gaia_id.size());
-    EXPECT_EQ(2u, params.signout_info.email.size());
-    EXPECT_EQ(2u, params.signout_info.session_index.size());
-    EXPECT_EQ(kGaiaID, params.signout_info.gaia_id[0]);
-    EXPECT_EQ(kEmail, params.signout_info.email[0]);
-    EXPECT_EQ(kSessionIndex, params.signout_info.session_index[0]);
-    EXPECT_EQ(kGaiaID2, params.signout_info.gaia_id[1]);
-    EXPECT_EQ(kEmail2, params.signout_info.email[1]);
-    EXPECT_EQ(kSessionIndex2, params.signout_info.session_index[1]);
+    ASSERT_TRUE(params.signout_info);
+    EXPECT_EQ(2u, params.signout_info->account_infos.size());
+    EXPECT_EQ(kGaiaID, params.signout_info->account_infos[0].gaia_id);
+    EXPECT_EQ(kEmail, params.signout_info->account_infos[0].email);
+    EXPECT_EQ(kSessionIndex,
+              params.signout_info->account_infos[0].session_index);
+    EXPECT_EQ(kGaiaID2, params.signout_info->account_infos[1].gaia_id);
+    EXPECT_EQ(kEmail2, params.signout_info->account_infos[1].email);
+    EXPECT_EQ(kSessionIndex2,
+              params.signout_info->account_infos[1].session_index);
   }
 
   {
@@ -347,9 +447,9 @@ TEST_F(SigninHeaderHelperTest, TestMirrorHeaderEligibleRedirectURL) {
   std::unique_ptr<net::URLRequest> url_request =
       url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
                                          TRAFFIC_ANNOTATION_FOR_TESTS);
-  AppendOrRemoveAccountConsistencyRequestHeader(
-      url_request.get(), redirect_url, account_id, sync_enabled_,
-      sync_has_auth_error_, cookie_settings_.get(), PROFILE_MODE_DEFAULT);
+  AppendOrRemoveMirrorRequestHeader(
+      url_request.get(), redirect_url, account_id, cookie_settings_.get(),
+      IsAccountConsistencyMirrorEnabled(), PROFILE_MODE_DEFAULT);
   EXPECT_TRUE(
       url_request->extra_request_headers().HasHeader(kChromeConnectedHeader));
 }
@@ -364,9 +464,9 @@ TEST_F(SigninHeaderHelperTest, TestMirrorHeaderNonEligibleRedirectURL) {
   std::unique_ptr<net::URLRequest> url_request =
       url_request_context_.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr,
                                          TRAFFIC_ANNOTATION_FOR_TESTS);
-  AppendOrRemoveAccountConsistencyRequestHeader(
-      url_request.get(), redirect_url, account_id, sync_enabled_,
-      sync_has_auth_error_, cookie_settings_.get(), PROFILE_MODE_DEFAULT);
+  AppendOrRemoveMirrorRequestHeader(
+      url_request.get(), redirect_url, account_id, cookie_settings_.get(),
+      IsAccountConsistencyMirrorEnabled(), PROFILE_MODE_DEFAULT);
   EXPECT_FALSE(
       url_request->extra_request_headers().HasHeader(kChromeConnectedHeader));
 }
@@ -384,9 +484,9 @@ TEST_F(SigninHeaderHelperTest, TestIgnoreMirrorHeaderNonEligibleURLs) {
                                          TRAFFIC_ANNOTATION_FOR_TESTS);
   url_request->SetExtraRequestHeaderByName(kChromeConnectedHeader, fake_header,
                                            false);
-  AppendOrRemoveAccountConsistencyRequestHeader(
-      url_request.get(), redirect_url, account_id, sync_enabled_,
-      sync_has_auth_error_, cookie_settings_.get(), PROFILE_MODE_DEFAULT);
+  AppendOrRemoveMirrorRequestHeader(
+      url_request.get(), redirect_url, account_id, cookie_settings_.get(),
+      IsAccountConsistencyMirrorEnabled(), PROFILE_MODE_DEFAULT);
   std::string header;
   EXPECT_TRUE(url_request->extra_request_headers().GetHeader(
       kChromeConnectedHeader, &header));

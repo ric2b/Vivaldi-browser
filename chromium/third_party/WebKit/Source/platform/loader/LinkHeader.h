@@ -21,6 +21,8 @@ class LinkHeader {
   const String& MimeType() const { return mime_type_; }
   const String& Media() const { return media_; }
   const String& CrossOrigin() const { return cross_origin_; }
+  const String& Nonce() const { return nonce_; }
+  const String& Integrity() const { return integrity_; }
   bool Valid() const { return is_valid_; }
 
   enum LinkParameterName {
@@ -35,6 +37,8 @@ class LinkHeader {
     kLinkParameterUnknown,
     kLinkParameterCrossOrigin,
     kLinkParameterAs,
+    kLinkParameterNonce,
+    kLinkParameterIntegrity,
   };
 
  private:
@@ -50,6 +54,8 @@ class LinkHeader {
   String mime_type_;
   String media_;
   String cross_origin_;
+  String nonce_;
+  String integrity_;
   bool is_valid_;
 };
 

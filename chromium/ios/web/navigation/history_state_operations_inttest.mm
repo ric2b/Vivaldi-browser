@@ -19,6 +19,10 @@
 #include "testing/gtest_mac.h"
 #include "url/url_canon.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::ASCIIToUTF16;
 
 namespace {
@@ -439,4 +443,19 @@ TEST_F(HistoryStateOperationsTest, ReplaceStateNoHashChangeEvent) {
   // Verify that the hashchange event was not fired.
   EXPECT_FALSE(static_cast<web::NavigationItemImpl*>(GetLastCommittedItem())
                    ->IsCreatedFromHashChange());
+}
+
+// Regression test for crbug.com/788464.
+TEST_F(HistoryStateOperationsTest, ReplaceStateThenReload) {
+  GURL url = web::test::HttpServer::MakeUrl(
+      "http://ios/testing/data/http_server_files/"
+      "onload_replacestate_reload.html");
+  LoadUrl(url);
+  GURL new_url = web::test::HttpServer::MakeUrl(
+      "http://ios/testing/data/http_server_files/pony.html");
+  BOOL completed =
+      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+        return GetLastCommittedItem()->GetURL() == new_url;
+      });
+  EXPECT_TRUE(completed);
 }

@@ -32,7 +32,7 @@
 #define WrapperTypeInfo_h
 
 #include "gin/public/wrapper_info.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
+#include "platform/bindings/ActiveScriptWrappableBase.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
@@ -67,9 +67,10 @@ typedef void (*ResolveWrapperReachabilityFunction)(
     v8::Isolate*,
     ScriptWrappable*,
     const v8::Persistent<v8::Object>&);
-typedef void (*PreparePrototypeAndInterfaceObjectFunction)(
+typedef void (*InstallConditionalFeaturesFunction)(
     v8::Local<v8::Context>,
     const DOMWrapperWorld&,
+    v8::Local<v8::Object>,
     v8::Local<v8::Object>,
     v8::Local<v8::Function>,
     v8::Local<v8::FunctionTemplate>);
@@ -94,11 +95,6 @@ struct WrapperTypeInfo {
   enum ActiveScriptWrappableInheritance {
     kNotInheritFromActiveScriptWrappable,
     kInheritFromActiveScriptWrappable,
-  };
-
-  enum Lifetime {
-    kDependent,
-    kIndependent,
   };
 
   static const WrapperTypeInfo* Unwrap(v8::Local<v8::Value> type_info_wrapper) {
@@ -130,8 +126,6 @@ struct WrapperTypeInfo {
 
   void ConfigureWrapper(v8::PersistentBase<v8::Object>* wrapper) const {
     wrapper->SetWrapperClassId(wrapper_class_id);
-    if (lifetime == kIndependent)
-      wrapper->MarkIndependent();
   }
 
   v8::Local<v8::FunctionTemplate> domTemplate(
@@ -151,16 +145,17 @@ struct WrapperTypeInfo {
     return trace_wrappers_function(visitor, script_wrappable);
   }
 
-  void PreparePrototypeAndInterfaceObject(
+  void InstallConditionalFeatures(
       v8::Local<v8::Context> context,
       const DOMWrapperWorld& world,
+      v8::Local<v8::Object> instance_object,
       v8::Local<v8::Object> prototype_object,
       v8::Local<v8::Function> interface_object,
       v8::Local<v8::FunctionTemplate> interface_template) const {
-    if (prepare_prototype_and_interface_object_function) {
-      prepare_prototype_and_interface_object_function(
-          context, world, prototype_object, interface_object,
-          interface_template);
+    if (install_conditional_features_function) {
+      install_conditional_features_function(context, world, instance_object,
+                                            prototype_object, interface_object,
+                                            interface_template);
     }
   }
 
@@ -176,15 +171,13 @@ struct WrapperTypeInfo {
   DomTemplateFunction dom_template_function;
   const TraceFunction trace_function;
   const TraceWrappersFunction trace_wrappers_function;
-  PreparePrototypeAndInterfaceObjectFunction
-      prepare_prototype_and_interface_object_function;
+  InstallConditionalFeaturesFunction install_conditional_features_function;
   const char* const interface_name;
   const WrapperTypeInfo* parent_class;
   const unsigned wrapper_type_prototype : 2;  // WrapperTypePrototype
   const unsigned wrapper_class_id : 2;        // WrapperClassId
   const unsigned  // ActiveScriptWrappableInheritance
       active_script_wrappable_inheritance : 1;
-  const unsigned lifetime : 1;  // Lifetime
 };
 
 template <typename T, int offset>

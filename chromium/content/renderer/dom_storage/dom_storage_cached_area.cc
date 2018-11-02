@@ -8,18 +8,23 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/common/dom_storage/dom_storage_map.h"
 #include "content/renderer/dom_storage/dom_storage_proxy.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 
 namespace content {
 
-DOMStorageCachedArea::DOMStorageCachedArea(int64_t namespace_id,
-                                           const GURL& origin,
-                                           DOMStorageProxy* proxy)
+DOMStorageCachedArea::DOMStorageCachedArea(
+    int64_t namespace_id,
+    const GURL& origin,
+    DOMStorageProxy* proxy,
+    blink::scheduler::RendererScheduler* renderer_scheduler)
     : ignore_all_mutations_(false),
       namespace_id_(namespace_id),
       origin_(origin),
       proxy_(proxy),
+      renderer_scheduler_(renderer_scheduler),
       weak_factory_(this) {}
 
 DOMStorageCachedArea::~DOMStorageCachedArea() {}
@@ -54,14 +59,27 @@ bool DOMStorageCachedArea::SetItem(int connection_id,
 
   PrimeIfNeeded(connection_id);
   base::NullableString16 old_value;
+#if !defined(OS_ANDROID)
+  if (!map_->SetItem(key, value, nullptr))
+    return false;
+#else
+  // The old value is only used on Android when the cache stores only the keys.
+  // Do not send old value on other platforms.
+  // TODO(ssid): Clear this value when values are stored in the browser cache on
+  // Android, crbug.com/743187.
   if (!map_->SetItem(key, value, &old_value))
     return false;
+#endif  // !defined(OS_ANDROID)
 
   // Ignore mutations to 'key' until OnSetItemComplete.
+  blink::WebScopedVirtualTimePauser virtual_time_pauser =
+      renderer_scheduler_->CreateWebScopedVirtualTimePauser();
+  virtual_time_pauser.PauseVirtualTime(true);
   ignore_key_mutations_[key]++;
   proxy_->SetItem(connection_id, key, value, old_value, page_url,
                   base::Bind(&DOMStorageCachedArea::OnSetItemComplete,
-                             weak_factory_.GetWeakPtr(), key));
+                             weak_factory_.GetWeakPtr(), key,
+                             base::Passed(std::move(virtual_time_pauser))));
   return true;
 }
 
@@ -70,15 +88,26 @@ void DOMStorageCachedArea::RemoveItem(int connection_id,
                                       const GURL& page_url) {
   PrimeIfNeeded(connection_id);
   base::string16 old_value;
+#if !defined(OS_ANDROID)
+  if (!map_->RemoveItem(key, nullptr))
+    return;
+#else
+  // The old value is only used on Android when the cache stores only the keys.
+  // Do not send old value on other platforms.
   if (!map_->RemoveItem(key, &old_value))
     return;
+#endif
 
   // Ignore mutations to 'key' until OnRemoveItemComplete.
+  blink::WebScopedVirtualTimePauser virtual_time_pauser =
+      renderer_scheduler_->CreateWebScopedVirtualTimePauser();
+  virtual_time_pauser.PauseVirtualTime(true);
   ignore_key_mutations_[key]++;
   proxy_->RemoveItem(connection_id, key,
                      base::NullableString16(old_value, false), page_url,
                      base::Bind(&DOMStorageCachedArea::OnRemoveItemComplete,
-                                weak_factory_.GetWeakPtr(), key));
+                                weak_factory_.GetWeakPtr(), key,
+                                base::Passed(std::move(virtual_time_pauser))));
 }
 
 void DOMStorageCachedArea::Clear(int connection_id, const GURL& page_url) {
@@ -87,11 +116,14 @@ void DOMStorageCachedArea::Clear(int connection_id, const GURL& page_url) {
   map_ = new DOMStorageMap(kPerStorageAreaQuota);
 
   // Ignore all mutations until OnClearComplete time.
+  blink::WebScopedVirtualTimePauser virtual_time_pauser =
+      renderer_scheduler_->CreateWebScopedVirtualTimePauser();
+  virtual_time_pauser.PauseVirtualTime(true);
   ignore_all_mutations_ = true;
-  proxy_->ClearArea(connection_id,
-                    page_url,
+  proxy_->ClearArea(connection_id, page_url,
                     base::Bind(&DOMStorageCachedArea::OnClearComplete,
-                               weak_factory_.GetWeakPtr()));
+                               weak_factory_.GetWeakPtr(),
+                               base::Passed(std::move(virtual_time_pauser))));
 }
 
 void DOMStorageCachedArea::ApplyMutation(
@@ -112,8 +144,7 @@ void DOMStorageCachedArea::ApplyMutation(
     while (iter != ignore_key_mutations_.end()) {
       base::NullableString16 value = old->GetItem(iter->first);
       if (!value.is_null()) {
-        base::NullableString16 unused;
-        map_->SetItem(iter->first, value.string(), &unused);
+        map_->SetItem(iter->first, value.string(), nullptr);
       }
       ++iter;
     }
@@ -126,17 +157,15 @@ void DOMStorageCachedArea::ApplyMutation(
 
   if (new_value.is_null()) {
     // It's a remove item event.
-    base::string16 unused;
-    map_->RemoveItem(key.string(), &unused);
+    map_->RemoveItem(key.string(), nullptr);
     return;
   }
 
   // It's a set item event.
   // We turn off quota checking here to accomodate the over budget
   // allowance that's provided in the browser process.
-  base::NullableString16 unused;
   map_->set_quota(std::numeric_limits<int32_t>::max());
-  map_->SetItem(key.string(), new_value.string(), &unused);
+  map_->SetItem(key.string(), new_value.string(), nullptr);
   map_->set_quota(kPerStorageAreaQuota);
 }
 
@@ -165,7 +194,7 @@ void DOMStorageCachedArea::Prime(int connection_id) {
   map_ = new DOMStorageMap(kPerStorageAreaQuota);
   map_->SwapValues(&values);
 
-  size_t local_storage_size_kb = map_->bytes_used() / 1024;
+  size_t local_storage_size_kb = map_->storage_used() / 1024;
   // Track localStorage size, from 0-6MB. Note that the maximum size should be
   // 5MB, but we add some slop since we want to make sure the max size is always
   // above what we see in practice, since histograms can't change.
@@ -188,7 +217,7 @@ void DOMStorageCachedArea::Prime(int connection_id) {
 }
 
 void DOMStorageCachedArea::Reset() {
-  map_ = NULL;
+  map_ = nullptr;
   weak_factory_.InvalidateWeakPtrs();
   ignore_key_mutations_.clear();
   ignore_all_mutations_ = false;
@@ -201,6 +230,7 @@ void DOMStorageCachedArea::OnLoadComplete(bool success) {
 }
 
 void DOMStorageCachedArea::OnSetItemComplete(const base::string16& key,
+                                             blink::WebScopedVirtualTimePauser,
                                              bool success) {
   if (!success) {
     Reset();
@@ -213,8 +243,10 @@ void DOMStorageCachedArea::OnSetItemComplete(const base::string16& key,
     ignore_key_mutations_.erase(found);
 }
 
-void DOMStorageCachedArea::OnRemoveItemComplete(const base::string16& key,
-                                                bool success) {
+void DOMStorageCachedArea::OnRemoveItemComplete(
+    const base::string16& key,
+    blink::WebScopedVirtualTimePauser,
+    bool success) {
   DCHECK(success);
   std::map<base::string16, int>::iterator found =
       ignore_key_mutations_.find(key);
@@ -223,7 +255,8 @@ void DOMStorageCachedArea::OnRemoveItemComplete(const base::string16& key,
     ignore_key_mutations_.erase(found);
 }
 
-void DOMStorageCachedArea::OnClearComplete(bool success) {
+void DOMStorageCachedArea::OnClearComplete(blink::WebScopedVirtualTimePauser,
+                                           bool success) {
   DCHECK(success);
   DCHECK(ignore_all_mutations_);
   ignore_all_mutations_ = false;

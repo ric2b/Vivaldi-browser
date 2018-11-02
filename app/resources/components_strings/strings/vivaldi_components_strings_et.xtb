@@ -34,7 +34,6 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrolli puhverserveri, tulemüüri ja DNS-i seadistust<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Kui kasutad puhverserverit:</translation>
 <translation id="3973234410852337861">Sait <ph name="HOST_NAME" /> on blokeeritud</translation>
-<translation id="4021036232240155012">DNS on võrguteenus, mis tõlgib veebisaidi nime selle Interneti-aadressiks.</translation>
 <translation id="4165986682804962316">Saidi seaded</translation>
 <translation id="4432688616882109544">Host <ph name="HOST_NAME" /> ei aktsepteerinud teie sisselogimise sertifikaati või te ei esitanud seda.</translation>
 <translation id="4522570452068850558">Üksikasjad</translation>
@@ -76,7 +75,6 @@
 <translation id="7716424297397655342">Seda saiti ei saa vahemälust laadida</translation>
 <translation id="7758069387465995638">Tulemüür või viirusetõrjetarkvara võis ühenduse blokeerida.</translation>
 <translation id="7951415247503192394">(32-bitine)</translation>
-<translation id="8134994873729925007">Saidi <ph name="HOST_NAME" /> serveri <ph name="BEGIN_ABBR" />DNS-aadressi<ph name="END_ABBR" /> ei leitud.</translation>
 <translation id="8142868475871995937">Külastage saiti &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, et näha mustas nimekirjas olevate URL-ide loendit ja teisi reegleid, mille on jõustanud teie süsteemiadministraator.</translation>
 <translation id="8149426793427495338">Teie arvuti lülitus unerežiimile.</translation>
 <translation id="8150722005171944719">Fail <ph name="URL" /> ei ole loetav. Võimalik, et see on eemaldatud, teisaldatud või faili load takistavad juurdepääsu.</translation>

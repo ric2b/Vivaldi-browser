@@ -68,7 +68,7 @@ int GetDeviceIndexByAddress(const BluetoothAdapter::DeviceList& devices,
 class FakeBluetoothProfileServiceProviderDelegate
     : public bluez::BluetoothProfileServiceProvider::Delegate {
  public:
-  FakeBluetoothProfileServiceProviderDelegate() {}
+  FakeBluetoothProfileServiceProviderDelegate() = default;
 
   // bluez::BluetoothProfileServiceProvider::Delegate:
   void Released() override {}
@@ -100,7 +100,7 @@ class TestPairingDelegate : public BluetoothDevice::PairingDelegate {
         authorize_pairing_count_(0),
         last_passkey_(9999999U),
         last_entered_(999U) {}
-  ~TestPairingDelegate() override {}
+  ~TestPairingDelegate() override = default;
 
   void RequestPinCode(BluetoothDevice* device) override {
     ++call_count_;
@@ -580,7 +580,7 @@ TEST_F(BluetoothBlueZTest, SetPoweredWhenNotPresent) {
 TEST_F(BluetoothBlueZTest, ChangeAdapterName) {
   GetAdapter();
 
-  static const std::string new_name(".__.");
+  const std::string new_name(".__.");
 
   adapter_->SetName(new_name, GetCallback(), GetErrorCallback());
   EXPECT_EQ(1, callback_count_);
@@ -2358,7 +2358,7 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
       fake_bluetooth_device_client_->GetProperties(dbus::ObjectPath(
           bluez::FakeBluetoothDeviceClient::kPairedDevicePath));
 
-  static const std::string new_name("New Device Name");
+  const std::string new_name("New Device Name");
   properties->name.ReplaceValue(new_name);
 
   EXPECT_EQ(1, observer.device_changed_count());

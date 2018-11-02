@@ -8,7 +8,7 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/GetPtr.h"
 #if DCHECK_IS_ON()
-#include "platform/wtf/RefPtr.h"
+#include "base/memory/scoped_refptr.h"
 #endif
 #include "platform/wtf/text/StringImpl.h"
 #include "platform/wtf/text/Unicode.h"
@@ -156,7 +156,7 @@ class WTF_EXPORT StringView {
 // we were constructed from a char pointer. So m_impl->bytes() might have
 // nothing to do with this view's bytes().
 #if DCHECK_IS_ON()
-  RefPtr<StringImpl> impl_;
+  scoped_refptr<StringImpl> impl_;
 #else
   StringImpl* impl_;
 #endif

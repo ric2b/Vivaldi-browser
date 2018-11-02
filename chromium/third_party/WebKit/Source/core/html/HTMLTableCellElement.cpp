@@ -26,13 +26,13 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/TableConstants.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutTableCell.h"
 
 namespace blink {
@@ -73,7 +73,7 @@ unsigned HTMLTableCellElement::rowSpan() const {
 }
 
 int HTMLTableCellElement::cellIndex() const {
-  if (!isHTMLTableRowElement(parentElement()))
+  if (!IsHTMLTableRowElement(parentElement()))
     return -1;
 
   int index = 0;
@@ -96,7 +96,7 @@ bool HTMLTableCellElement::IsPresentationAttribute(
 void HTMLTableCellElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == nowrapAttr) {
     AddPropertyToPresentationAttributeStyle(style, CSSPropertyWhiteSpace,
                                             CSSValueWebkitNowrap);
@@ -129,7 +129,7 @@ void HTMLTableCellElement::ParseAttribute(
   }
 }
 
-const StylePropertySet*
+const CSSPropertyValueSet*
 HTMLTableCellElement::AdditionalPresentationAttributeStyle() {
   if (HTMLTableElement* table = FindParentTable())
     return table->AdditionalCellStyle();

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -26,7 +27,6 @@
 #include "components/user_manager/user.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "net/base/data_url.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
@@ -93,8 +93,12 @@ void UserImageScreenHandler::DeclareLocalizedValues(
   builder->Add("userImageScreenDescription",
                IDS_USER_IMAGE_SCREEN_DESCRIPTION);
   builder->Add("takePhoto", IDS_OPTIONS_CHANGE_PICTURE_TAKE_PHOTO);
+  builder->Add("captureVideo", IDS_OPTIONS_CHANGE_PICTURE_CAPTURE_VIDEO);
   builder->Add("discardPhoto", IDS_OPTIONS_CHANGE_PICTURE_DISCARD_PHOTO);
-  builder->Add("flipPhoto", IDS_OPTIONS_CHANGE_PICTURE_FLIP_PHOTO);
+  builder->Add("switchModeToCamera",
+               IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_CAMERA);
+  builder->Add("switchModeToVideo",
+               IDS_OPTIONS_CHANGE_PICTURE_SWITCH_MODE_TO_VIDEO);
   builder->Add("profilePhoto", IDS_IMAGE_SCREEN_PROFILE_PHOTO);
   builder->Add("profilePhotoLoading",
                IDS_IMAGE_SCREEN_PROFILE_LOADING_PHOTO);
@@ -132,12 +136,18 @@ void UserImageScreenHandler::HandleScreenReady() {
 }
 
 void UserImageScreenHandler::HandlePhotoTaken(const std::string& image_url) {
-  std::string mime_type, charset, raw_data;
-  if (!net::DataURL::Parse(GURL(image_url), &mime_type, &charset, &raw_data))
-    NOTREACHED();
-  DCHECK_EQ("image/png", mime_type);
   AccessibilityManager::Get()->PlayEarcon(
       SOUND_CAMERA_SNAP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+
+  std::string raw_data;
+  base::StringPiece url(image_url);
+  const char kDataUrlPrefix[] = "data:image/png;base64,";
+  const size_t kDataUrlPrefixLength = arraysize(kDataUrlPrefix) - 1;
+  if (!url.starts_with(kDataUrlPrefix) ||
+      !base::Base64Decode(url.substr(kDataUrlPrefixLength), &raw_data)) {
+    LOG(WARNING) << "Invalid image URL";
+    return;
+  }
 
   if (screen_)
     screen_->OnPhotoTaken(raw_data);

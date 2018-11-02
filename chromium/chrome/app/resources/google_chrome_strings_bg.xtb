@@ -7,10 +7,11 @@
 <translation id="1088300314857992706">По-рано <ph name="USER_EMAIL_ADDRESS" /> използва Chrome</translation>
 <translation id="1104959162601287462">Всичко за &amp;Chrome OS</translation>
 <translation id="110877069173485804">Това е вашият Chrome</translation>
+<translation id="1142745911746664600">Chrome не може да се актуализира</translation>
+<translation id="1154147086299354128">&amp;Отваряне в Chrome</translation>
 <translation id="123620459398936149">Chrome OS не можа да синхронизира данните ви. Моля, актуализирайте пропуска си за синхронизиране.</translation>
 <translation id="127345590676626841">Chrome се актуализира автоматично, така че винаги да имате най-новата версия. Когато това изтегляне завърши, браузърът ще се рестартира и ще можете да започнете работа.</translation>
 <translation id="1302523850133262269">Моля, изчакайте, докато Chrome инсталира най-новите системни актуализации.</translation>
-<translation id="1350930993895295930">Chrome установи необичайно поведение</translation>
 <translation id="137466361146087520">Google Chrome бета</translation>
 <translation id="1393853151966637042">Получаване на помощ за използването на Chrome</translation>
 <translation id="1399397803214730675">На този компютър вече има по-нова версия на Google Chrome. Ако софтуерът не работи, моля, деинсталирайте Google Chrome и опитайте отново.</translation>
@@ -18,12 +19,14 @@
 <translation id="1457721931618994305">Google Chrome се актуализира...</translation>
 <translation id="1469002951682717133">Стартов панел с приложения за Chrome</translation>
 <translation id="1553358976309200471">Актуализиране на Chrome</translation>
+<translation id="1585657529869845941">Кликнете върху бутона <ph name="BEGIN_BOLD" />Превключване въпреки това<ph name="END_BOLD" />, ако се показва</translation>
 <translation id="1587223624401073077">Google Chrome използва камерата ви.</translation>
 <translation id="1587325591171447154">Chrome блокира „<ph name="FILE_NAME" />“, тъй като файлът е опасен.</translation>
 <translation id="1619887657840448962">За да направим Chrome по-безопасен, деактивирахме следното разширение, което липсва от <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е било добавено без ваше знание.</translation>
 <translation id="1628000112320670027">Получаване на помощ за Chrome</translation>
 <translation id="163860049029591106">Първи стъпки с Chrome OS</translation>
 <translation id="1653828314016431939">OK – Рестартиране сега</translation>
+<translation id="1674870198290878346">Отваряне на връзката в прозорец в режим „инко&amp;гнито“ на Chrome</translation>
 <translation id="1682634494516646069">Google Chrome не може да чете и записва в директорията си за данни:
 
 <ph name="USER_DATA_DIRECTORY" /></translation>
@@ -34,7 +37,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Получаване на помощ за използването на Chrome OS</translation>
 <translation id="1795405610103747296">Инсталирайте Chrome на телефона си. Ще ви изпратим SMS на него: <ph name="PHONE_NUMBER" /></translation>
-<translation id="1818142563254268765">Chrome не можа да се актуализира до последната версия, така че пропускате невероятни нови функции и поправки за подобряване на сигурността. Налага се да актуализирате браузъра.</translation>
 <translation id="1874309113135274312">Google Chrome бета (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome не е актуален</translation>
 <translation id="2063848847527508675">Chrome OS трябва да се рестартира, за да приложи актуализацията.</translation>
@@ -60,12 +62,13 @@
 <translation id="2446511512801740068">Chrome не е актуален, защото не е бил стартиран отново известно време. Налице е актуализация, която ще бъде приложена веднага, когато рестартирате.</translation>
 <translation id="2485422356828889247">Деинсталиране</translation>
 <translation id="2580411288591421699">Не може да се инсталира същата версия на Google Chrome, която се използва понастоящем. Моля, затворете браузъра и опитайте отново.</translation>
-<translation id="2582790009689336987">Компютърът скоро ще спре да получава актуализации на Google Chrome, тъй като тази система Linux вече няма да се поддържа.</translation>
 <translation id="2586406160782125153">Данните за сърфирането ви ще се изтрият от това устройство. За да ги извлечете по-късно, влезте в Chrome като <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Лого на Chrome</translation>
+<translation id="2652691236519827073">Отваряне на връзката в нов &amp;раздел на Chrome</translation>
 <translation id="2664962310688259219">Лицензи за отворен код за Chrome OS</translation>
 <translation id="2665296953892887393">Помогнете ни да подобрим Google Chrome, като ни изпращате <ph name="UMA_LINK" /> му и сигнали за сривове</translation>
 <translation id="2689103672227170538">Това разширение промени страницата, която се показва при стартиране на Chrome.</translation>
+<translation id="2705403826523567092">Влезте в профила си, за да сърфирате персонализирано и активността ви да се синхронизира на всички устройства</translation>
 <translation id="2769762047821873045">Google Chrome не е браузърът ви по подразбиране.</translation>
 <translation id="2770231113462710648">Промяна на браузъра по подразбиране с/ъс:</translation>
 <translation id="2799223571221894425">Стартиране отново</translation>
@@ -86,26 +89,28 @@
 
 За допълнителни инструкции, моля, проверете електронната си поща на адрес <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Вход в Chrome</translation>
-<translation id="3311976847535831054">Този компютър вече няма да получава актуализации за 32-битовата версия на Google Chrome. Моля, надстройте до 64-битовата версия на браузъра.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
 <translation id="3395323229510056640">Получаване на помощ за Chrome OS</translation>
 <translation id="3396977131400919238">По време на инсталирането възникна грешка в операционната система. Моля, изтеглете Google Chrome отново.</translation>
 <translation id="3398288718845740432">Скриване в менюто на Chrome</translation>
 <translation id="3451115285585441894">Добавя се към Chrome...</translation>
 <translation id="345171907106878721">Добавяне на вас към Chrome</translation>
+<translation id="3479552764303398839">Не сега</translation>
 <translation id="3612333635265770873">Известно е, че модул със същото име влиза в конфликт с Google Chrome.</translation>
 <translation id="3622797965165704966">Вече е по-лесно да използвате Chrome с профила си в Google и на споделени компютри.</translation>
 <translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Общи условия<ph name="END_TERMS_OF_SERVICE_LINK" /> на Google Chrome OS</translation>
+<translation id="3716182511346448902">Тази страница използва твърде много памет, така че Chrome я постави на пауза.</translation>
 <translation id="3718181793972440140">1 елемент ще се изтрие от това устройство. За да извлечете данните си по-късно, влезте в Chrome като <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Разширението „<ph name="EXTENSION_NAME" />“ промени страницата, която се показва при стартиране на Chrome.</translation>
-<translation id="3738139272394829648">Търсене чрез докосване</translation>
 <translation id="3780814664026482060">Chrome – <ph name="PAGE_TITLE" /></translation>
 <translation id="3784527566857328444">Премахване от Chrome...</translation>
-<translation id="3847841918622877581">Google Chrome може да използва уеб услуги, за да подобри сърфирането ви.</translation>
 <translation id="386202838227397562">Моля, затворете всички прозорци на Google Chrome и опитайте отново.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
+<translation id="3873044882194371212">Отваряне на връзката в прозорец в режим „инко&amp;гнито“ на Chrome</translation>
 <translation id="3889417619312448367">Деинсталиране на Google Chrome</translation>
+<translation id="3898493977366060150">Интелигентен начин за сърфиране в мрежата, създаден от Google</translation>
 <translation id="4028693306634653894">Стартирайте Chrome по-бързо</translation>
+<translation id="4031074602479304239">Chrome спря пренасочването ви от този сайт към</translation>
 <translation id="4042449298237264661">От сега нататък този компютър няма да получава актуализации на Google Chrome, тъй като Windows XP и Windows Vista вече не се поддържат.</translation>
 <translation id="4050175100176540509">В последната версия са налице важни подобрения в сигурността и нови функции.</translation>
 <translation id="4053720452172726777">Персонализиране и контролиране на Google Chrome</translation>
@@ -116,26 +121,25 @@
 <translation id="4309555186815777032">(изисква <ph name="BEGIN_BUTTON" />рестартиране<ph name="END_BUTTON" /> на Chrome)</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
-<translation id="437002079035561265">Занапред компютърът няма да получава актуализации на Google Chrome, защото тази система Linux вече не се поддържа.</translation>
 <translation id="4407807842708586359">Google Chrome OS</translation>
 <translation id="4458285410772214805">Моля, излезте от профила си и влезте отново, за да влезе в сила тази промяна.</translation>
 <translation id="4458462641685292929">Извършва се друго действие, свързано с Google Chrome. Моля, опитайте отново по-късно.</translation>
 <translation id="4480040274068703980">Chrome OS не можа да синхронизира данните ви поради грешка при влизане в профила.</translation>
 <translation id="4561051373932531560">Google Chrome ви позволява да кликнете върху телефонен номер в мрежата и да се обадите до него със Skype!</translation>
 <translation id="4567424176335768812">Влезли сте като <ph name="USER_EMAIL_ADDRESS" />. Сега имате достъп до отметките, историята и другите си настройки на всички устройства, на които сте влезли.</translation>
+<translation id="4600710005438004015">Chrome не можа да се актуализира до най-новата версия. Това означава, че пропускате нови функции и корекции за сигурност.</translation>
 <translation id="4631713731678262610">Скриване в менюто на Chrome</translation>
 <translation id="4633000520311261472">За да направим Chrome по-безопасен, деактивирахме някои разширения, които не са посочени в <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да са били добавени без ваше знание.</translation>
 <translation id="4664415150087723341">Току-що бе приложена специална актуализация за сигурност за Chromium. Сега трябва да рестартирате, за да влезе в сила (ще възстановим разделите ви).</translation>
 <translation id="4700157086864140907">Google Chrome може да предостави по-интелигентна проверка на правописа, като изпрати до сървърите ни въвежданото от вас в браузъра, позволявайки ви да използвате същата технология за проверка на правописа, ползвана при търсенето с Google.</translation>
 <translation id="4728575227883772061">Инсталирането не бе успешно поради неизвестна грешка. Ако Google Chrome понастоящем работи, моля, затворете го и опитайте отново.</translation>
-<translation id="4743926867934016338">Приемане и търсене</translation>
 <translation id="4750550185319565338">Рестартирайте Chrome, за да активирате <ph name="PLUGIN_NAME" /></translation>
-<translation id="4751441238232965030">Този компютър скоро ще спре да получава актуализации за 32-битовата версия на Google Chrome. Моля, надстройте до 64-битовата версия на браузъра.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (входящ трафик за mDNS)</translation>
 <translation id="4771048833395599659">Chrome блокира този файл, тъй като може да е опасен.</translation>
 <translation id="4794050651896644714">Подробностите да се запазват в Chrome</translation>
 <translation id="4804732725083176494">Функцията за влизане в Chrome е деактивирана от администратора на това устройство.</translation>
 <translation id="4891791193823137474">Google Chrome да се изпълнява на заден план</translation>
+<translation id="4895437082222824641">Отваряне на връзката в нов &amp;раздел на Chrome</translation>
 <translation id="4921569541910214635">Споделяте компютър? Вече можете да настроите Chrome точно по свой вкус.</translation>
 <translation id="4953650215774548573">Задаване на Google Chrome като браузър по подразбиране</translation>
 <translation id="495931528404527476">В Chrome</translation>
@@ -150,20 +154,17 @@
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Общи условия<ph name="END_TERMS_OF_SERVICE_LINK" /> на Google Chrome</translation>
 <translation id="5243785881901838525">Google Payments (копирано в Chrome)</translation>
 <translation id="5251420635869119124">Гостите могат да използват Chrome, без да оставят следи.</translation>
-<translation id="5253588388888612165">Ако споделяте компютъра с/ъс <ph name="PROFILE_NAME" />, добавете се към Chrome, за да сърфирате отделно. В противен случай прекратете връзката с профила в Google на този потребител.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome ще се рестартира след 1 секунда.}other{Google Chrome ще се рестартира след # секунди.}}</translation>
+<translation id="532046782124376502">Предупреждение: Google Chrome не може да попречи на разширенията да записват историята ви на сърфиране. За да деактивирате това разширение в режим „инкогнито“, премахнете отметката от тази опция.</translation>
 <translation id="5334545119300433702">За този модул е известно, че влиза в конфликт с Google Chrome.</translation>
 <translation id="5386244825306882791">То също контролира коя страница се показва при стартиране на Chrome или при търсене от полето за всичко.</translation>
 <translation id="5430073640787465221">Файлът с предпочитанията ви е повреден или невалиден. Google Chrome не може да възстанови настройките ви.</translation>
 <translation id="5453904507266736060">Нека Google Chrome да се изпълнява на заден план</translation>
 <translation id="5495581687705680288">Модули, заредени в Google Chrome</translation>
 <translation id="556024056938947818">Google Chrome опитва да покаже паролите.</translation>
-<translation id="5563479599352954471">Търсене с едно докосване</translation>
 <translation id="5566025111015594046">Google Chrome (входящ трафик за mDNS)</translation>
 <translation id="557283862590186398">Chrome се нуждае от разрешение за достъп до микрофона ви за този сайт.</translation>
-<translation id="5620765574781326016">Научете за темите в уебсайтовете, без да излизате от страницата.</translation>
 <translation id="565744775970812598">Chrome блокира „<ph name="FILE_NAME" />“, тъй като файлът може да е опасен.</translation>
-<translation id="568643307450491754">Намерете отметките си в менюто на Chrome или в лентата на отметките.</translation>
 <translation id="573759479754913123">Всичко за Chrome OS</translation>
 <translation id="5749068826913805084">Chrome се нуждае от достъп до хранилището, за да изтегля файлове.</translation>
 <translation id="5774845247549698882">Chrome OS се показва на този език</translation>
@@ -193,13 +194,11 @@
 <translation id="6566149418543181476">Google Chrome се актуализира (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Използвате <ph name="PROFILE_EMAIL" /> за синхронизиране на нещата си в Chrome. За да актуализирате съответното предпочитание или да ползвате браузъра без профил в Google, посетете <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6600954340915313787">Копирано в Chrome</translation>
-<translation id="6626317981028933585">За съжаление настройките на Mozilla Firefox са недостъпни, докато този браузър работи. За да импортирате тези настройки в Google Chrome, запазете работата си и затворете всички прозорци на Firefox. След това кликнете върху „Напред”.</translation>
 <translation id="6634887557811630702">Google Chrome е актуален.</translation>
 <translation id="6676384891291319759">Достъп до интернет</translation>
 <translation id="6697947395630195233">Chrome се нуждае от достъп до данните за местоположението ви, за да ги сподели с този сайт.</translation>
 <translation id="683440813066116847">Правило за Google Chrome Canary за допускане на входящия трафик за mDNS.</translation>
 <translation id="686561893457936865">Използвайте Chrome навсякъде</translation>
-<translation id="6883876366448858277">изпраща дума и текста около нея до Google Търсене, извеждайки определения, снимки и други резултати от търсенето.</translation>
 <translation id="6885412569789873916">Приложения за Chrome бета</translation>
 <translation id="6967962315388095737">Правило за Google Chrome бета за допускане на входящия трафик за mDNS.</translation>
 <translation id="6970811910055250180">Устройството ви се актуализира...</translation>
@@ -207,7 +206,6 @@
 <translation id="6989339256997917931">Google Chrome е актуализиран, но не сте го използвали от поне 30 дни.</translation>
 <translation id="7098166902387133879">Google Chrome използва микрофона ви.</translation>
 <translation id="7106741999175697885">Диспечер на задачите - Google Chrome</translation>
-<translation id="7125719106133729027">Chrome не можа да се актуализира до последната версия, така че пропускате невероятни нови функции и поправки за подобряване на сигурността. Налага се ръчно да инсталирате отново браузъра.</translation>
 <translation id="7161904924553537242">Добре дошли в Google Chrome</translation>
 <translation id="7164397146364144019">Можете да ни помогнете да направим Chrome по-надежден и по-лесен за използване, като автоматично ни съобщавате подробности за инциденти, свързани със сигурността.</translation>
 <translation id="7185038942300673794">Разширението <ph name="EXTENSION_NAME" /> е добавено към Chrome.</translation>
@@ -217,13 +215,11 @@
 <translation id="7339898014177206373">Нов прозорец</translation>
 <translation id="7369650938475876456">Използвайте надеждна парола, генерирана от Chrome</translation>
 <translation id="7398801000654795464">Бяхте влезли в Chrome като <ph name="USER_EMAIL_ADDRESS" />. Моля, използвайте същия профил, за да влезете отново.</translation>
-<translation id="7400722733683201933">Всичко за Google Chrome</translation>
 <translation id="7408085963519505752">Общи условия на Chrome OS</translation>
 <translation id="7419046106786626209">Chrome OS не можа да синхронизира данните ви, защото тази функция не е налице за домейна ви.</translation>
 <translation id="7437998757836447326">Изход от Chrome</translation>
 <translation id="7459554271817304652">Настройте синхронизирането, за да запазите онлайн персонализираните функции на браузъра си и да осъществявате достъп до тях от Google Chrome на всеки компютър.</translation>
 <translation id="7473136999113284234">Chrome се актуализира автоматично, така че винаги да имате най-новата версия.</translation>
-<translation id="7473891865547856676">Не, благодаря</translation>
 <translation id="7494905215383356681">Лицензи за отворен код за Chrome</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Показване на Chrome OS на този език</translation>
@@ -278,7 +274,6 @@
 <translation id="9026991721384951619">Chrome OS не можа да синхронизира данните ви, защото потребителското име и паролата за вход в профила ви не са актуални.</translation>
 <translation id="9067395829937117663">За Google Chrome се изисква Windows 7 или по-нова версия.</translation>
 <translation id="9084668267983921457">Грешка в сертификата за удостоверяване. Моля, влезте отново в Google Chrome или се свържете с администратора си за повече информация. <ph name="ADDITIONAL_EXPLANATION" /></translation>
-<translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Предупреждение<ph name="END_BOLD" />: Google Chrome не може да попречи на разширенията да записват историята ви на сърфиране. За да деактивирате това разширение в режим „инкогнито“, премахнете отметката от тази опция.</translation>
 <translation id="911206726377975832">Да се изтрият ли и данните от сърфирането?</translation>
 <translation id="919706545465235479">Актуализирайте Chrome, за да стартира синхронизирането</translation>
 <translation id="924447568950697217">Задаване на Chrome като браузър по подразбиране</translation>

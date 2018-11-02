@@ -106,7 +106,7 @@ class TestDelegateBase : public BidirectionalStream::Delegate {
         run_until_completion_(false),
         not_expect_callback_(false) {}
 
-  ~TestDelegateBase() override {}
+  ~TestDelegateBase() override = default;
 
   void OnStreamReady(bool request_headers_sent) override {
     // Request headers should always be sent in H2's case, because the
@@ -312,7 +312,7 @@ class DeleteStreamDelegate : public TestDelegateBase {
 
   DeleteStreamDelegate(IOBuffer* buf, int buf_len, Phase phase)
       : TestDelegateBase(buf, buf_len), phase_(phase) {}
-  ~DeleteStreamDelegate() override {}
+  ~DeleteStreamDelegate() override = default;
 
   void OnHeadersReceived(const SpdyHeaderBlock& response_headers) override {
     TestDelegateBase::OnHeadersReceived(response_headers);
@@ -370,9 +370,9 @@ class DeleteStreamDelegate : public TestDelegateBase {
 class MockTimer : public base::MockTimer {
  public:
   MockTimer() : base::MockTimer(false, false) {}
-  ~MockTimer() override {}
+  ~MockTimer() override = default;
 
-  void Start(const tracked_objects::Location& posted_from,
+  void Start(const base::Location& posted_from,
              base::TimeDelta delay,
              const base::Closure& user_task) override {
     // Sets a maximum delay, so the timer does not fire unless it is told to.
@@ -394,7 +394,8 @@ class BidirectionalStreamTest : public testing::Test {
         key_(host_port_pair_, ProxyServer::Direct(), PRIVACY_MODE_DISABLED),
         ssl_data_(SSLSocketDataProvider(ASYNC, OK)) {
     ssl_data_.next_proto = kProtoHTTP2;
-    ssl_data_.cert = ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+    ssl_data_.ssl_info.cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
     net_log_.SetCaptureMode(NetLogCaptureMode::IncludeSocketBytes());
   }
 
@@ -411,7 +412,7 @@ class BidirectionalStreamTest : public testing::Test {
                    size_t reads_count,
                    MockWrite* writes,
                    size_t writes_count) {
-    ASSERT_TRUE(ssl_data_.cert.get());
+    ASSERT_TRUE(ssl_data_.ssl_info.cert.get());
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_data_);
     sequenced_data_.reset(
         new SequencedSocketData(reads, reads_count, writes, writes_count));
@@ -474,7 +475,7 @@ TEST_F(BidirectionalStreamTest, SimplePostRequest) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize));
+                                        base::NumberToString(kBodyDataSize));
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   std::unique_ptr<TestDelegateBase> delegate(
       new TestDelegateBase(read_buffer.get(), kReadBufferSize));
@@ -693,8 +694,9 @@ TEST_F(BidirectionalStreamTest, TestNetLogContainEntries) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->priority = LOWEST;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 3));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   MockTimer* timer = new MockTimer();
@@ -836,8 +838,9 @@ TEST_F(BidirectionalStreamTest, TestInterleaveReadDataAndSendData) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->priority = LOWEST;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 3));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   MockTimer* timer = new MockTimer();
@@ -926,8 +929,9 @@ TEST_F(BidirectionalStreamTest, TestCoalesceSmallDataBuffers) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->priority = LOWEST;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 1));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 1));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   MockTimer* timer = new MockTimer();
@@ -1233,8 +1237,9 @@ TEST_F(BidirectionalStreamTest, DeleteStreamAfterSendData) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->priority = LOWEST;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 3));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   std::unique_ptr<TestDelegateBase> delegate(
@@ -1294,8 +1299,9 @@ TEST_F(BidirectionalStreamTest, DeleteStreamDuringReadData) {
   request_info->method = "POST";
   request_info->url = default_url_;
   request_info->priority = LOWEST;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 3));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   std::unique_ptr<TestDelegateBase> delegate(
@@ -1352,8 +1358,9 @@ TEST_F(BidirectionalStreamTest, PropagateProtocolError) {
       new BidirectionalStreamRequestInfo);
   request_info->method = "POST";
   request_info->url = default_url_;
-  request_info->extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                        base::SizeTToString(kBodyDataSize * 3));
+  request_info->extra_headers.SetHeader(
+      net::HttpRequestHeaders::kContentLength,
+      base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   std::unique_ptr<TestDelegateBase> delegate(
@@ -1371,8 +1378,7 @@ TEST_F(BidirectionalStreamTest, PropagateProtocolError) {
   // BidirectionalStreamSpdyStreamJob does not count the bytes sent for |rst|
   // because it is sent after SpdyStream::Delegate::OnClose is called.
   EXPECT_EQ(CountWriteBytes(writes, 1), delegate->GetTotalSentBytes());
-  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
-            delegate->GetTotalReceivedBytes());
+  EXPECT_EQ(0, delegate->GetTotalReceivedBytes());
 
   TestNetLogEntry::List entries;
   net_log_.GetEntries(&entries);
@@ -1600,8 +1606,7 @@ TEST_F(BidirectionalStreamTest, DeleteStreamDuringOnFailed) {
   // Bytes sent excludes the RST frame.
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes) - 1),
             delegate->GetTotalSentBytes());
-  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
-            delegate->GetTotalReceivedBytes());
+  EXPECT_EQ(0, delegate->GetTotalReceivedBytes());
 }
 
 TEST_F(BidirectionalStreamTest, TestHonorAlternativeServiceHeader) {

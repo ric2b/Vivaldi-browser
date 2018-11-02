@@ -11,6 +11,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "media/base/android_overlay_mojo_factory.h"
 #include "media/mojo/services/mojo_media_client.h"
 
 namespace media {
@@ -22,8 +24,10 @@ class GpuMojoMediaClient : public MojoMediaClient {
   // |media_gpu_channel_manager| must only be used on |gpu_task_runner|, which
   // is expected to be the GPU main thread task runner.
   GpuMojoMediaClient(
+      const gpu::GpuPreferences& gpu_preferences,
       scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
-      base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager);
+      base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
+      AndroidOverlayMojoFactoryCB android_overlay_factory_cb);
   ~GpuMojoMediaClient() final;
 
   // MojoMediaClient implementation.
@@ -36,14 +40,17 @@ class GpuMojoMediaClient : public MojoMediaClient {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
       mojom::CommandBufferIdPtr command_buffer_id,
-      OutputWithReleaseMailboxCB output_cb) final;
+      OutputWithReleaseMailboxCB output_cb,
+      RequestOverlayInfoCB request_overlay_info_cb) final;
   std::unique_ptr<CdmFactory> CreateCdmFactory(
       service_manager::mojom::InterfaceProvider* interface_provider) final;
 
  private:
+  gpu::GpuPreferences gpu_preferences_;
   scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
   base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager_;
   service_manager::ServiceContextRefFactory* context_ref_factory_;
+  AndroidOverlayMojoFactoryCB android_overlay_factory_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuMojoMediaClient);
 };

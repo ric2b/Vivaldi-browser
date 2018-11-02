@@ -9,6 +9,8 @@
 
 namespace blink {
 
+class LayoutObject;
+
 // A mock class providing all APIs of an offset mapping builder, but not doing
 // anything. For templates functions/classes that can optionally create an
 // offset mapping, this mock class is passed to create an instantiation that
@@ -19,11 +21,15 @@ class EmptyOffsetMappingBuilder {
  public:
   EmptyOffsetMappingBuilder() = default;
   void Annotate(const void*) {}
+  void AnnotateRange(unsigned, unsigned, const void*) {}
+  void AnnotateSuffix(unsigned, const void*) {}
   void AppendIdentityMapping(unsigned) {}
   void AppendCollapsedMapping(unsigned) {}
   void CollapseTrailingSpace(unsigned) {}
   void Composite(const EmptyOffsetMappingBuilder&) {}
   void Concatenate(const EmptyOffsetMappingBuilder&) {}
+  void EnterInline(const LayoutObject&) {}
+  void ExitInline(const LayoutObject&) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EmptyOffsetMappingBuilder);

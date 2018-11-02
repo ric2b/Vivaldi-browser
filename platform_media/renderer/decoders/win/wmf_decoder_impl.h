@@ -1,21 +1,24 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef MEDIA_FILTERS_WMF_DECODER_IMPL_H_
-#define MEDIA_FILTERS_WMF_DECODER_IMPL_H_
+#ifndef PLATFORM_MEDIA_RENDERER_DECODERS_WIN_WMF_DECODER_IMPL_H_
+#define PLATFORM_MEDIA_RENDERER_DECODERS_WIN_WMF_DECODER_IMPL_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <mfapi.h>
 #include <mftransform.h>
 
 #include <deque>
 #include <string>
+#include <wrl/client.h>
 
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
-#include "base/win/scoped_comptr.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/audio_discard_helper.h"
@@ -70,7 +73,7 @@ class WMFDecoderImpl {
   static bool IsValidConfig(const DecoderConfig& config);
   static std::string GetModuleName(const DecoderConfig& config);
   static GUID GetMediaObjectGUID(const DecoderConfig& config);
-  static base::win::ScopedComPtr<IMFTransform> CreateWMFDecoder(
+  static Microsoft::WRL::ComPtr<IMFTransform> CreateWMFDecoder(
       const DecoderConfig& config);
 
   // Methods used for initialization and configuration.
@@ -89,7 +92,7 @@ class WMFDecoderImpl {
   bool ProcessBuffer(const scoped_refptr<OutputType>& output);
   bool ProcessOutputLoop();
   bool Drain();
-  base::win::ScopedComPtr<IMFSample> PrepareInputSample(
+  Microsoft::WRL::ComPtr<IMFSample> PrepareInputSample(
       const scoped_refptr<DecoderBuffer>& input) const;
   scoped_refptr<OutputType> CreateOutputBuffer(
       const MFT_OUTPUT_DATA_BUFFER& output_data_buffer);
@@ -97,16 +100,16 @@ class WMFDecoderImpl {
       const uint8_t* data,
       DWORD data_size,
       base::TimeDelta timestamp);
-  base::win::ScopedComPtr<IMFSample> CreateSample(DWORD buffer_size,
+  Microsoft::WRL::ComPtr<IMFSample> CreateSample(DWORD buffer_size,
                                                   int buffer_alignment) const;
   void ResetTimestampState();
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  base::win::ScopedComPtr<IMFTransform> decoder_;
+  Microsoft::WRL::ComPtr<IMFTransform> decoder_;
   DecoderConfig config_;
   OutputCB output_cb_;
   MFT_INPUT_STREAM_INFO input_stream_info_;
-  base::win::ScopedComPtr<IMFSample> output_sample_;
+  Microsoft::WRL::ComPtr<IMFSample> output_sample_;
   uint32_t output_sample_size_;  // in Bytes
 
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
@@ -124,4 +127,4 @@ class WMFDecoderImpl {
 
 }  // namespace media
 
-#endif  // MEDIA_FILTERS_WMF_DECODER_IMPL_H_
+#endif  // PLATFORM_MEDIA_RENDERER_DECODERS_WIN_WMF_DECODER_IMPL_H_

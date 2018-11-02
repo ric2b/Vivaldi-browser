@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "ash/accessibility_types.h"
+#include "ash/public/cpp/accessibility_types.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -20,12 +20,12 @@
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -309,24 +309,22 @@ IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyLoginScreenBrowsertest,
 }
 
 IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyLoginScreenBrowsertest,
-                       DeviceLoginScreenDefaultScreenMagnifierType) {
-  // Verifies that the default screen magnifier type enabled on the login screen
-  // can be controlled through device policy.
+                       DeviceLoginScreenDefaultScreenMagnifierEnabled) {
+  // Verifies that the screen magnifier enabled on the login screen can be
+  // controlled through device policy.
 
-  // Set the screen magnifier type through device policy and wait for the change
+  // Set the screen magnifier through device policy and wait for the change
   // to take effect.
   em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
   proto.mutable_accessibility_settings()->
       set_login_screen_default_screen_magnifier_type(kFullScreenMagnifier);
   RefreshDevicePolicyAndWaitForPrefChange(
-      ash::prefs::kAccessibilityScreenMagnifierType);
+      ash::prefs::kAccessibilityScreenMagnifierEnabled);
 
-  // Verify that the prefs which control the screen magnifier type have changed
+  // Verify that the prefs which control the screen magnifier have changed
   // to the policy-supplied default.
   VerifyPrefFollowsRecommendation(
       ash::prefs::kAccessibilityScreenMagnifierEnabled, base::Value(true));
-  VerifyPrefFollowsRecommendation(ash::prefs::kAccessibilityScreenMagnifierType,
-                                  base::Value(ash::MAGNIFIER_FULL));
 
   // Verify that the full-screen magnifier is enabled.
   chromeos::MagnificationManager* magnification_manager =
@@ -411,22 +409,21 @@ IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyInSessionBrowsertest,
 }
 
 IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyInSessionBrowsertest,
-                       DeviceLoginScreenDefaultScreenMagnifierType) {
-  // Verifies that changing the default screen magnifier type enabled on the
-  // login screen through policy does not affect its state in a session.
+                       DeviceLoginScreenDefaultScreenMagnifierEnabled) {
+  // Verifies that changing the screen magnifier enabled on the login screen
+  // through policy does not affect its state in a session.
 
-  // Set the screen magnifier type through device policy and wait for the change
+  // Set the screen magnifier through device policy and wait for the change
   // to take effect.
   em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
   proto.mutable_accessibility_settings()->
       set_login_screen_default_screen_magnifier_type(kFullScreenMagnifier);
   RefreshDevicePolicyAndWaitForPrefChange(
-      ash::prefs::kAccessibilityScreenMagnifierType);
+      ash::prefs::kAccessibilityScreenMagnifierEnabled);
 
   // Verify that the prefs which control the screen magnifier in the session are
   // unchanged.
   VerifyPrefFollowsDefault(ash::prefs::kAccessibilityScreenMagnifierEnabled);
-  VerifyPrefFollowsDefault(ash::prefs::kAccessibilityScreenMagnifierType);
 
   // Verify that the screen magnifier is disabled.
   chromeos::MagnificationManager* magnification_manager =

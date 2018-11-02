@@ -94,7 +94,7 @@ class FormSubmission : public GarbageCollectedFinalized<FormSubmission> {
                                 const Attributes&,
                                 Event*,
                                 HTMLFormControlElement* submit_button);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   FrameLoadRequest CreateFrameLoadRequest(Document* origin_document);
 
@@ -105,7 +105,7 @@ class FormSubmission : public GarbageCollectedFinalized<FormSubmission> {
   const AtomicString& Target() const { return target_; }
   void ClearTarget() { target_ = g_null_atom; }
   HTMLFormElement* Form() const { return form_.Get(); }
-  EncodedFormData* Data() const { return form_data_.Get(); }
+  EncodedFormData* Data() const { return form_data_.get(); }
 
   const String& Result() const { return result_; }
 
@@ -115,7 +115,7 @@ class FormSubmission : public GarbageCollectedFinalized<FormSubmission> {
                  const AtomicString& target,
                  const AtomicString& content_type,
                  HTMLFormElement*,
-                 RefPtr<EncodedFormData>,
+                 scoped_refptr<EncodedFormData>,
                  const String& boundary,
                  Event*);
   // FormSubmission for DialogMethod
@@ -127,7 +127,7 @@ class FormSubmission : public GarbageCollectedFinalized<FormSubmission> {
   AtomicString target_;
   AtomicString content_type_;
   Member<HTMLFormElement> form_;
-  RefPtr<EncodedFormData> form_data_;
+  scoped_refptr<EncodedFormData> form_data_;
   String boundary_;
   Member<Event> event_;
   String result_;

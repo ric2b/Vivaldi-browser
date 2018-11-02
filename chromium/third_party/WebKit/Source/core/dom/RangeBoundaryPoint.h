@@ -58,7 +58,7 @@ class RangeBoundaryPoint {
   void InvalidateOffset();
   void MarkValid() const;
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(container_node_);
     visitor->Trace(child_before_boundary_);
   }
@@ -142,7 +142,7 @@ inline void RangeBoundaryPoint::Set(Node& container,
                                     Node* child_before) {
   DCHECK_GE(offset, 0u);
   DCHECK_EQ(child_before,
-            offset ? NodeTraversal::ChildAt(container, offset - 1) : 0);
+            offset ? NodeTraversal::ChildAt(container, offset - 1) : nullptr);
   container_node_ = container;
   offset_in_container_ = offset;
   child_before_boundary_ = child_before;

@@ -25,6 +25,10 @@
 
 namespace net {
 
+namespace test {
+class QuicSentPacketManagerPeer;
+}  // namespace test
+
 class QUIC_EXPORT_PRIVATE PacingSender {
  public:
   PacingSender();
@@ -39,24 +43,27 @@ class QUIC_EXPORT_PRIVATE PacingSender {
     max_pacing_rate_ = max_pacing_rate;
   }
 
-  void OnCongestionEvent(
-      bool rtt_updated,
-      QuicByteCount bytes_in_flight,
-      QuicTime event_time,
-      const SendAlgorithmInterface::AckedPacketVector& acked_packets,
-      const SendAlgorithmInterface::CongestionVector& lost_packets);
+  QuicBandwidth max_pacing_rate() const { return max_pacing_rate_; }
 
-  bool OnPacketSent(QuicTime sent_time,
+  void OnCongestionEvent(bool rtt_updated,
+                         QuicByteCount bytes_in_flight,
+                         QuicTime event_time,
+                         const AckedPacketVector& acked_packets,
+                         const LostPacketVector& lost_packets);
+
+  void OnPacketSent(QuicTime sent_time,
                     QuicByteCount bytes_in_flight,
                     QuicPacketNumber packet_number,
                     QuicByteCount bytes,
-                    HasRetransmittableData is_retransmittable);
+                    HasRetransmittableData has_retransmittable_data);
 
   QuicTime::Delta TimeUntilSend(QuicTime now, QuicByteCount bytes_in_flight);
 
   QuicBandwidth PacingRate(QuicByteCount bytes_in_flight) const;
 
  private:
+  friend class test::QuicSentPacketManagerPeer;
+
   // Underlying sender. Not owned.
   SendAlgorithmInterface* sender_;
   // If not QuicBandidth::Zero, the maximum rate the PacingSender will use.
@@ -68,6 +75,7 @@ class QUIC_EXPORT_PRIVATE PacingSender {
   QuicTime last_delayed_packet_sent_time_;
   QuicTime ideal_next_packet_send_time_;  // When can the next packet be sent.
   bool was_last_send_delayed_;  // True when the last send was delayed.
+  uint32_t initial_burst_size_;
 
   DISALLOW_COPY_AND_ASSIGN(PacingSender);
 };

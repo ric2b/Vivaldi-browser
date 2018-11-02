@@ -4,7 +4,7 @@
 
 #include "core/html/track/VideoTrack.h"
 
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 
 namespace blink {
 
@@ -18,7 +18,8 @@ VideoTrack::VideoTrack(const String& id,
 
 VideoTrack::~VideoTrack() {}
 
-DEFINE_TRACE(VideoTrack) {
+void VideoTrack::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
   TrackBase::Trace(visitor);
 }
 

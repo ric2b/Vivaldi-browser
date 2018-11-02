@@ -24,9 +24,10 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/ListItemOrdinal.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutListItem.h"
 
 namespace blink {
@@ -53,7 +54,7 @@ bool HTMLOListElement::IsPresentationAttribute(
 void HTMLOListElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == typeAttr) {
     if (value == "a")
       AddPropertyToPresentationAttributeStyle(style, CSSPropertyListStyleType,
@@ -105,11 +106,11 @@ void HTMLOListElement::UpdateItemValues() {
   if (!GetLayoutObject())
     return;
   UpdateDistribution();
-  LayoutListItem::UpdateItemValuesForOrderedList(this);
+  ListItemOrdinal::InvalidateAllItemsForOrderedList(this);
 }
 
 void HTMLOListElement::RecalculateItemCount() {
-  item_count_ = LayoutListItem::ItemCountForOrderedList(this);
+  item_count_ = ListItemOrdinal::ItemCountForOrderedList(this);
   should_recalculate_item_count_ = false;
 }
 

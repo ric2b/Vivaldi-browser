@@ -26,6 +26,7 @@ const base::Feature* const kAllFeatures[] = {
     &kBreakingNewsPushFeature,
     &kCategoryOrder,
     &kCategoryRanker,
+    &kContentSuggestionsDebugLog,
     &kForeignSessionsSuggestionsFeature,
     &kIncreasedVisibility,
     &kKeepPrefetchedContentSuggestions,
@@ -72,17 +73,17 @@ const char kCategoryRankerParameter[] = "category_ranker";
 const char kCategoryRankerConstantRanker[] = "constant";
 const char kCategoryRankerClickBasedRanker[] = "click_based";
 
-CategoryRankerChoice GetSelectedCategoryRanker() {
+CategoryRankerChoice GetSelectedCategoryRanker(bool is_chrome_home_enabled) {
   std::string category_ranker_value =
       variations::GetVariationParamValueByFeature(kCategoryRanker,
                                                   kCategoryRankerParameter);
 
   if (category_ranker_value.empty()) {
-    // TODO(crbug.com/735066): Remove the experiment configurations from
-    // fieldtrial_testing_config.json when enabling ClickBasedRanker by default.
-
     // Default, Enabled or Disabled.
-    return CategoryRankerChoice::CONSTANT;
+    if (is_chrome_home_enabled) {
+      return CategoryRankerChoice::CONSTANT;
+    }
+    return CategoryRankerChoice::CLICK_BASED;
   }
   if (category_ranker_value == kCategoryRankerConstantRanker) {
     return CategoryRankerChoice::CONSTANT;
@@ -98,8 +99,11 @@ CategoryRankerChoice GetSelectedCategoryRanker() {
 
 std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
     PrefService* pref_service,
-    std::unique_ptr<base::Clock> clock) {
-  CategoryRankerChoice choice = ntp_snippets::GetSelectedCategoryRanker();
+    std::unique_ptr<base::Clock> clock,
+    bool is_chrome_home_enabled) {
+  CategoryRankerChoice choice =
+      ntp_snippets::GetSelectedCategoryRanker(is_chrome_home_enabled);
+
   switch (choice) {
     case CategoryRankerChoice::CONSTANT:
       return base::MakeUnique<ConstantCategoryRanker>();
@@ -129,7 +133,7 @@ CategoryOrderChoice GetSelectedCategoryOrder() {
 
   if (category_order_value.empty()) {
     // Enabled with no parameters.
-    return CategoryOrderChoice::GENERAL;
+    return CategoryOrderChoice::EMERGING_MARKETS_ORIENTED;
   }
   if (category_order_value == kCategoryOrderGeneral) {
     return CategoryOrderChoice::GENERAL;
@@ -159,5 +163,8 @@ const char kNotificationsIgnoredLimitParam[] = "ignored_limit";
 
 const base::Feature kKeepPrefetchedContentSuggestions{
     "KeepPrefetchedContentSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContentSuggestionsDebugLog{
+    "ContentSuggestionsDebugLog", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace ntp_snippets

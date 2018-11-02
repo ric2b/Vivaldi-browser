@@ -3,12 +3,13 @@
 // found in the LICENSE file.
 
 #include "cc/paint/solid_color_analyzer.h"
+
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "cc/paint/display_item_list.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/record_paint_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/skia/include/effects/SkOffsetImageFilter.h"
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
@@ -27,6 +28,11 @@ class SolidColorAnalyzerTest : public testing::Test {
     canvas_.reset();
     display_item_list_ = nullptr;
     buffer_ = nullptr;
+  }
+
+  void Reset() {
+    TearDown();
+    SetUp();
   }
 
   void Initialize(const gfx::Rect& rect = gfx::Rect(0, 0, 100, 100)) {
@@ -124,6 +130,21 @@ TEST_F(SolidColorAnalyzerTest, DrawRect) {
   SkRect rect = SkRect::MakeWH(200, 200);
   canvas()->clipRect(rect, SkClipOp::kIntersect, false);
   canvas()->drawRect(rect, flags);
+  EXPECT_EQ(color, GetColor());
+}
+
+// TODO(vmpstr): Generalize the DrawRect test cases so that we can test both
+// Rect and RRect.
+TEST_F(SolidColorAnalyzerTest, DrawRRect) {
+  SkRect rect = SkRect::MakeWH(200, 200);
+  SkRRect rrect;
+  rrect.setRectXY(rect, 5, 5);
+  gfx::Rect canvas_rect(5, 5, 190, 190);
+  Initialize(canvas_rect);
+  PaintFlags flags;
+  SkColor color = SkColorSetARGB(255, 11, 22, 33);
+  flags.setColor(color);
+  canvas()->drawRRect(rrect, flags);
   EXPECT_EQ(color, GetColor());
 }
 
@@ -242,7 +263,7 @@ TEST_F(SolidColorAnalyzerTest, DrawRectFilterPaint) {
   PaintFlags flags;
   SkColor color = SkColorSetARGB(255, 11, 22, 33);
   flags.setColor(color);
-  flags.setImageFilter(SkOffsetImageFilter::Make(10, 10, nullptr));
+  flags.setImageFilter(sk_make_sp<OffsetPaintFilter>(10, 10, nullptr));
   SkRect rect = SkRect::MakeWH(200, 200);
   canvas()->drawRect(rect, flags);
   EXPECT_FALSE(IsSolidColor());
@@ -276,6 +297,86 @@ TEST_F(SolidColorAnalyzerTest, SaveLayer) {
   SkRect rect = SkRect::MakeWH(200, 200);
   canvas()->saveLayer(&rect, &flags);
   EXPECT_FALSE(IsSolidColor());
+}
+
+TEST_F(SolidColorAnalyzerTest, ClipRRectCoversCanvas) {
+  SkVector radii[4] = {
+      SkVector::Make(10.0, 15.0), SkVector::Make(20.0, 25.0),
+      SkVector::Make(30.0, 35.0), SkVector::Make(40.0, 45.0),
+  };
+
+  SkVector radii_scale[4] = {
+      SkVector::Make(100.0, 150.0), SkVector::Make(200.0, 250.0),
+      SkVector::Make(300.0, 350.0), SkVector::Make(400.0, 450.0),
+  };
+
+  int rr_size = 600;
+  int canvas_size = 255;
+  gfx::Rect canvas_rect(canvas_size, canvas_size);
+  PaintFlags flags;
+  flags.setColor(SK_ColorWHITE);
+
+  struct {
+    SkVector offset;
+    SkVector offset_scale;
+    bool expected;
+  } cases[] = {
+      // Not within bounding box of |rr|.
+      {SkVector::Make(100, 100), SkVector::Make(100, 100), false},
+
+      // Intersects UL corner.
+      {SkVector::Make(0, 0), SkVector::Make(0, 0), false},
+
+      // Between UL and UR.
+      {SkVector::Make(-50, 0), SkVector::Make(-50, -15), true},
+
+      // Intersects UR corner.
+      {SkVector::Make(canvas_size - rr_size, 0),
+       SkVector::Make(canvas_size - rr_size, 0), false},
+
+      // Between UR and LR.
+      {SkVector::Make(canvas_size - rr_size, -50), SkVector::Make(-305, -80),
+       true},
+
+      // Intersects LR corner.
+      {SkVector::Make(canvas_size - rr_size, canvas_size - rr_size),
+       SkVector::Make(canvas_size - rr_size, canvas_size - rr_size), false},
+
+      // Between LL and LR
+      {SkVector::Make(-50, canvas_size - rr_size), SkVector::Make(-205, -310),
+       true},
+
+      // Intersects LL corner
+      {SkVector::Make(0, canvas_size - rr_size),
+       SkVector::Make(0, canvas_size - rr_size), false},
+
+      // Between UL and LL
+      {SkVector::Make(0, -50), SkVector::Make(-15, -60), true},
+
+      // In center
+      {SkVector::Make(-100, -100), SkVector::Make(-100, -100), true},
+  };
+
+  for (int case_scale = 0; case_scale < 2; ++case_scale) {
+    bool scaled = case_scale > 0;
+    for (size_t i = 0; i < arraysize(cases); ++i) {
+      Reset();
+      Initialize(canvas_rect);
+
+      SkRect bounding_rect = SkRect::MakeXYWH(
+          scaled ? cases[i].offset_scale.x() : cases[i].offset.x(),
+          scaled ? cases[i].offset_scale.y() : cases[i].offset.y(), rr_size,
+          rr_size);
+
+      SkRRect rr;
+      rr.setRectRadii(bounding_rect, scaled ? radii_scale : radii);
+
+      canvas()->clipRRect(rr, SkClipOp::kIntersect, false);
+      canvas()->drawRect(RectToSkRect(canvas_rect), flags);
+      EXPECT_EQ(cases[i].expected, IsSolidColor())
+          << "Case " << i << ", " << scaled << " failed.";
+    }
+  }
 }
 
 }  // namespace

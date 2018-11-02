@@ -96,6 +96,11 @@ BASE_EXPORT bool SetStringValueForPropertyStore(
     const PROPERTYKEY& property_key,
     const wchar_t* property_string_value);
 
+// Sets the CLSID value for a given key in a given IPropertyStore.
+BASE_EXPORT bool SetClsidForPropertyStore(IPropertyStore* property_store,
+                                          const PROPERTYKEY& property_key,
+                                          const CLSID& property_clsid_value);
+
 // Sets the application id in given IPropertyStore. The function is intended
 // for tagging application/chromium shortcut, browser window and jump list for
 // Win7.
@@ -142,12 +147,12 @@ BASE_EXPORT bool IsWindows10TabletMode(HWND hwnd);
 // This function optionally sets the |reason| parameter to determine as to why
 // or why not a device was deemed to be a tablet.
 // Returns true if the device is in tablet mode.
-BASE_EXPORT bool IsTabletDevice(std::string* reason);
+BASE_EXPORT bool IsTabletDevice(std::string* reason, HWND hwnd);
 
 // A slate is a touch device that may have a keyboard attached. This function
-// returns true if a keyboard is attached and optionally will set the reason
+// returns true if a keyboard is attached and optionally will set the |reason|
 // parameter to the detection method that was used to detect the keyboard.
-BASE_EXPORT bool IsKeyboardPresentOnSlate(std::string* reason);
+BASE_EXPORT bool IsKeyboardPresentOnSlate(std::string* reason, HWND hwnd);
 
 // Get the size of a struct up to and including the specified member.
 // This is necessary to set compatible struct sizes for different versions
@@ -193,6 +198,9 @@ BASE_EXPORT void DisableFlicks(HWND hwnd);
 
 // Returns true if the process is per monitor DPI aware.
 BASE_EXPORT bool IsProcessPerMonitorDpiAware();
+
+// Enable high-DPI support for the current process.
+BASE_EXPORT void EnableHighDPISupport();
 
 }  // namespace win
 }  // namespace base

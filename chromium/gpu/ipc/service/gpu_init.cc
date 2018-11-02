@@ -68,9 +68,6 @@ void CollectGraphicsInfo(GPUInfo* gpu_info) {
       DirectCompositionSurfaceWin::AreOverlaysSupported()) {
     gpu_info->supports_overlays = true;
   }
-  if (DirectCompositionSurfaceWin::IsHDRSupported()) {
-    gpu_info->hdr = true;
-  }
 #endif  // defined(OS_WIN)
 
   if (result != kCollectInfoFatalFailure) {
@@ -85,7 +82,7 @@ void CollectGraphicsInfo(GPUInfo* gpu_info) {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 bool CanAccessNvidiaDeviceFile() {
   bool res = true;
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   if (access("/dev/nvidiactl", R_OK) != 0) {
     DVLOG(1) << "NVIDIA device file /dev/nvidiactl access denied";
     res = false;
@@ -103,7 +100,8 @@ GpuInit::~GpuInit() {
 }
 
 bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
-                                        bool in_process_gpu) {
+                                        const GpuPreferences& gpu_preferences) {
+  gpu_preferences_ = gpu_preferences;
 #if defined(OS_ANDROID)
   // Android doesn't have PCI vendor/device IDs, so collecting GL strings early
   // is necessary.
@@ -117,12 +115,17 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // passing from browser process.
   GetGpuInfoFromCommandLine(*command_line, &gpu_info_);
 #endif  // OS_ANDROID
+
+  // Set keys for crash logging based on preliminary gpu info, in case we
+  // crash during feature collection.
+  gpu::SetKeysForCrashLogging(gpu_info_);
+
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
       gpu_info_.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
     return false;
 #endif
-  gpu_info_.in_process_gpu = in_process_gpu;
+  gpu_info_.in_process_gpu = false;
 
   // Compute blacklist and driver bug workaround decisions based on basic GPU
   // info.
@@ -131,13 +134,18 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     gpu::InitializeSwitchableGPUs(
         gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
   }
+  if (kGpuFeatureStatusEnabled !=
+      gpu_feature_info_
+          .status_values[GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE]) {
+    gpu_preferences_.disable_accelerated_video_decode = true;
+  }
 
   // In addition to disabling the watchdog if the command line switch is
   // present, disable the watchdog on valgrind because the code is expected
   // to run slowly in that case.
-  bool enable_watchdog =
-      !command_line->HasSwitch(switches::kDisableGpuWatchdog) &&
-      !command_line->HasSwitch(switches::kHeadless) && !RunningOnValgrind();
+  bool enable_watchdog = !gpu_preferences.disable_gpu_watchdog &&
+                         !command_line->HasSwitch(switches::kHeadless) &&
+                         !RunningOnValgrind();
 
   // Disable the watchdog in debug builds because they tend to only be run by
   // developers who will not appreciate the watchdog killing the GPU process.
@@ -179,9 +187,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // On Chrome OS ARM Mali, GPU driver userspace creates threads when
   // initializing a GL context, so start the sandbox early.
   // TODO(zmo): Need to collect OS version before this.
-  if (command_line->HasSwitch(switches::kGpuSandboxStartEarly)) {
-    gpu_info_.sandboxed =
-        sandbox_helper_->EnsureSandboxInitialized(watchdog_thread_.get());
+  if (gpu_preferences.gpu_sandbox_start_early) {
+    gpu_info_.sandboxed = sandbox_helper_->EnsureSandboxInitialized(
+        watchdog_thread_.get(), &gpu_info_, gpu_preferences_);
     attempted_startsandbox = true;
   }
 #endif  // defined(OS_LINUX)
@@ -192,7 +200,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // Initialize Ozone GPU after the watchdog in case it hangs. The sandbox
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
-  params.single_process = in_process_gpu;
+  params.single_process = false;
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 
@@ -219,6 +227,11 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   if (gpu_info_.context_info_state == gpu::kCollectInfoFatalFailure)
     return false;
   gpu_feature_info_ = gpu::ComputeGpuFeatureInfo(gpu_info_, command_line);
+  if (kGpuFeatureStatusEnabled !=
+      gpu_feature_info_
+          .status_values[GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE]) {
+    gpu_preferences_.disable_accelerated_video_decode = true;
+  }
 #endif
 
   if (!gpu_feature_info_.disabled_extensions.empty()) {
@@ -247,17 +260,65 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   }
 
   if (!gpu_info_.sandboxed && !attempted_startsandbox) {
-    gpu_info_.sandboxed =
-        sandbox_helper_->EnsureSandboxInitialized(watchdog_thread_.get());
+    gpu_info_.sandboxed = sandbox_helper_->EnsureSandboxInitialized(
+        watchdog_thread_.get(), &gpu_info_, gpu_preferences_);
   }
   UMA_HISTOGRAM_BOOLEAN("GPU.Sandbox.InitializedSuccessfully",
                         gpu_info_.sandboxed);
 
   gpu_info_.passthrough_cmd_decoder =
-      gl::UsePassthroughCommandDecoder(command_line) &&
+      gles2::UsePassthroughCommandDecoder(command_line) &&
       gles2::PassthroughCommandDecoderSupported();
 
+  init_successful_ = true;
   return true;
+}
+
+void GpuInit::InitializeInProcess(base::CommandLine* command_line,
+                                  const GpuPreferences& gpu_preferences,
+                                  const GPUInfo* gpu_info,
+                                  const GpuFeatureInfo* gpu_feature_info) {
+  gpu_preferences_ = gpu_preferences;
+  init_successful_ = true;
+#if defined(USE_OZONE)
+  ui::OzonePlatform::InitParams params;
+  params.single_process = true;
+  ui::OzonePlatform::InitializeForGPU(params);
+#endif
+
+  if (gpu_info && gpu_feature_info) {
+    gpu_info_ = *gpu_info;
+    gpu_feature_info_ = *gpu_feature_info;
+  } else {
+#if defined(OS_ANDROID)
+    gpu::CollectContextGraphicsInfo(&gpu_info_);
+#else
+    // TODO(zmo): Collect basic GPU info here instead.
+    gpu::GetGpuInfoFromCommandLine(*command_line, &gpu_info_);
+#endif
+    gpu_feature_info_ = gpu::ComputeGpuFeatureInfo(gpu_info_, command_line);
+  }
+  if (gpu::SwitchableGPUsSupported(gpu_info_, *command_line)) {
+    gpu::InitializeSwitchableGPUs(
+        gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
+  }
+
+  if (!gl::init::InitializeGLNoExtensionsOneOff()) {
+    VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
+    return;
+  }
+
+#if !defined(OS_ANDROID)
+  gpu::CollectContextGraphicsInfo(&gpu_info_);
+  gpu_feature_info_ = gpu::ComputeGpuFeatureInfo(gpu_info_, command_line);
+#endif
+  if (!gpu_feature_info_.disabled_extensions.empty()) {
+    gl::init::SetDisabledExtensionsPlatform(
+        gpu_feature_info_.disabled_extensions);
+  }
+  if (!gl::init::InitializeExtensionSettingsOneOffPlatform()) {
+    VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
+  }
 }
 
 }  // namespace gpu

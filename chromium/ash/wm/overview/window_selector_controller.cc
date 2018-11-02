@@ -14,14 +14,16 @@
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_item.h"
+#include "ash/wm/root_window_finder.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "base/metrics/histogram_macros.h"
 
 namespace ash {
 
-WindowSelectorController::WindowSelectorController() {}
+WindowSelectorController::WindowSelectorController() = default;
 
 WindowSelectorController::~WindowSelectorController() {
   // Destroy widgets that may be still animating if shell shuts down soon after
@@ -39,14 +41,15 @@ WindowSelectorController::~WindowSelectorController() {
 
 // static
 bool WindowSelectorController::CanSelect() {
-  // Don't allow a window overview if the screen is locked or a modal dialog is
-  // open or running in kiosk app session.
+  // Don't allow a window overview if the user session is not active (e.g.
+  // locked or in user-adding screen) or a modal dialog is open or running in
+  // kiosk app session.
   SessionController* session_controller = Shell::Get()->session_controller();
-  return session_controller->IsActiveUserSessionStarted() &&
-         !session_controller->IsScreenLocked() &&
+  return session_controller->GetSessionState() ==
+             session_manager::SessionState::ACTIVE &&
          !ShellPort::Get()->IsSystemModalWindowOpen() &&
          !Shell::Get()->screen_pinning_controller()->IsPinned() &&
-         !session_controller->IsKioskSession();
+         !session_controller->IsRunningInAppMode();
 }
 
 bool WindowSelectorController::ToggleOverview() {
@@ -127,6 +130,95 @@ bool WindowSelectorController::AcceptSelection() {
 bool WindowSelectorController::IsRestoringMinimizedWindows() const {
   return window_selector_.get() != NULL &&
          window_selector_->restoring_minimized_windows();
+}
+
+void WindowSelectorController::OnOverviewButtonTrayLongPressed(
+    const gfx::Point& event_location) {
+  // Do nothing if split view is not enabled.
+  if (!SplitViewController::ShouldAllowSplitView())
+    return;
+
+  // Depending on the state of the windows and split view, a long press has many
+  // different results.
+  // 1. Already in split view - exit split view. Activate the left window if it
+  // is snapped left or both sides. Activate the right window if it is snapped
+  // right.
+  // 2. Not in overview mode - enter split view iff
+  //     a) there is an active window
+  //     b) there are at least two windows in the mru list
+  //     c) the active window is snappable
+  // 3. In overview mode - enter split view iff
+  //     a) there are at least two windows in the mru list
+  //     b) the first window in the mru list is snappable
+
+  auto* split_view_controller = Shell::Get()->split_view_controller();
+  // Exit split view mode if we are already in it.
+  if (split_view_controller->IsSplitViewModeActive()) {
+    aura::Window* active_window = split_view_controller->left_window()
+                                      ? split_view_controller->left_window()
+                                      : split_view_controller->right_window();
+    DCHECK(active_window);
+    split_view_controller->EndSplitView();
+    if (IsSelecting())
+      ToggleOverview();
+    // In some cases the window returned by wm::GetActiveWindow will be an item
+    // in overview mode. To work around this set |active_window| before exiting
+    // split view.
+    wm::ActivateWindow(active_window);
+    return;
+  }
+
+  if (!IsSelecting()) {
+    aura::Window* active_window = wm::GetActiveWindow();
+    // Do nothing if there are no active windows or less than two windows to
+    // work with.
+    if (!active_window ||
+        Shell::Get()->mru_window_tracker()->BuildMruWindowList().size() < 2u) {
+      return;
+    }
+
+    // Show a toast if the window cannot be snapped.
+    if (!split_view_controller->CanSnap(active_window)) {
+      split_view_controller->ShowAppCannotSnapToast();
+      return;
+    }
+
+    // If we are not in overview mode snap the window left and enter overview
+    // mode.
+    split_view_controller->SnapWindow(active_window, SplitViewController::LEFT);
+    ToggleOverview();
+    return;
+  }
+
+  // Currently in overview mode, with no snapped windows. Retrieve the first
+  // window selector item and attempt to snap that window.
+  DCHECK(window_selector_);
+  WindowSelectorItem* item_to_snap = nullptr;
+  WindowGrid* current_grid = window_selector_->GetGridWithRootWindow(
+      wm::GetRootWindowAt(event_location));
+  if (current_grid) {
+    const auto& windows = current_grid->window_list();
+    if (windows.size() > 1)
+      item_to_snap = windows[0].get();
+  }
+
+  // Do nothing if no item was retrieved, or if the retrieved item is
+  // unsnappable.
+  // TODO(sammiequon): Bounce the window if it is not snappable.
+  if (!item_to_snap ||
+      !split_view_controller->CanSnap(item_to_snap->GetWindow())) {
+    return;
+  }
+
+  // Snap the window selector item and remove it from the grid.
+  item_to_snap->EnsureVisible();
+  item_to_snap->RestoreWindow();
+  aura::Window* window = item_to_snap->GetWindow();
+  window_selector_->RemoveWindowSelectorItem(item_to_snap);
+  split_view_controller->SnapWindow(window, SplitViewController::LEFT);
+  window_selector_->SetBoundsForWindowGridsInScreen(
+      split_view_controller->GetSnappedWindowBoundsInScreen(
+          window, SplitViewController::RIGHT));
 }
 
 std::vector<aura::Window*>

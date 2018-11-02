@@ -246,34 +246,35 @@ bool SchedulerStateMachine::PendingDrawsShouldBeAborted() const {
   if (resourceless_draw_)
     return is_layer_tree_frame_sink_lost || !can_draw_;
 
-  // These are all the cases where we normally cannot or do not want to draw
-  // but, if needs_redraw_ is true and we do not draw to make forward progress,
-  // we might deadlock with the main thread.
-  // This should be a superset of PendingActivationsShouldBeForced() since
-  // activation of the pending tree is blocked by drawing of the active tree and
-  // the main thread might be blocked on activation of the most recent commit.
+  // These are all the cases where we normally cannot or do not want
+  // to draw but, if |needs_redraw_| is true and we do not draw to
+  // make forward progress, we might deadlock with the main
+  // thread. This should be a superset of ShouldAbortCurrentFrame()
+  // since activation of the pending tree is blocked by drawing of the
+  // active tree and the main thread might be blocked on activation of
+  // the most recent commit.
   return is_layer_tree_frame_sink_lost || !can_draw_ || !visible_ ||
          begin_frame_source_paused_;
 }
 
-bool SchedulerStateMachine::PendingActivationsShouldBeForced() const {
-  // There is no output surface to trigger our activations.
-  // If we do not force activations to make forward progress, we might deadlock
-  // with the main thread.
+bool SchedulerStateMachine::ShouldAbortCurrentFrame() const {
+  // Abort the frame if there is no output surface to trigger our
+  // activations, avoiding deadlock with the main thread.
   if (layer_tree_frame_sink_state_ == LAYER_TREE_FRAME_SINK_NONE)
     return true;
 
-  // If we're not visible, we should force activation.
-  // Since we set RequiresHighResToDraw when becoming visible, we ensure that we
-  // don't checkerboard until all visible resources are done. Furthermore, if we
-  // do keep the pending tree around, when becoming visible we might activate
-  // prematurely causing RequiresHighResToDraw flag to be reset. In all cases,
-  // we can simply activate on becoming invisible since we don't need to draw
+  // If we're not visible, we should just abort the frame. Since we
+  // set RequiresHighResToDraw when becoming visible, we ensure that
+  // we don't checkerboard until all visible resources are
+  // done. Furthermore, if we do keep the pending tree around, when
+  // becoming visible we might activate prematurely causing
+  // RequiresHighResToDraw flag to be reset. In all cases, we can
+  // simply activate on becoming invisible since we don't need to draw
   // the active tree when we're in this state.
   if (!visible_)
     return true;
 
-  // Force pending activations when viz::BeginFrameSource is paused to avoid
+  // Abort the frame when viz::BeginFrameSource is paused to avoid
   // deadlocking the main thread.
   if (begin_frame_source_paused_)
     return true;
@@ -366,8 +367,7 @@ bool SchedulerStateMachine::ShouldActivateSyncTree() const {
   if (active_tree_needs_first_draw_)
     return false;
 
-  // If we want to force activation, do so ASAP.
-  if (PendingActivationsShouldBeForced())
+  if (ShouldAbortCurrentFrame())
     return true;
 
   // At this point, only activate if we are ready to activate.
@@ -526,6 +526,11 @@ bool SchedulerStateMachine::ShouldCommit() const {
 }
 
 bool SchedulerStateMachine::ShouldPrepareTiles() const {
+  // In full-pipeline mode, we need to prepare tiles ASAP to ensure that we
+  // don't get stuck.
+  if (settings_.wait_for_all_pipeline_stages_before_draw)
+    return needs_prepare_tiles_;
+
   // Do not prepare tiles if we've already done so in commit or impl side
   // invalidation.
   if (did_prepare_tiles_)
@@ -590,22 +595,22 @@ bool SchedulerStateMachine::ShouldPerformImplSideInvalidation() const {
   if (!needs_impl_side_invalidation_)
     return false;
 
-  // Only perform impl side invalidation after the frame ends so that we wait
-  // for any commit to happen before invalidating.
-  if (begin_impl_frame_state_ != BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE)
-    return false;
-
-  if (!CouldCreatePendingTree())
-    return false;
-
-  // If the main thread is ready to commit, the impl-side invalidations will be
-  // merged with the incoming main frame.
-  if (begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_READY_TO_COMMIT)
-    return false;
-
   // Don't invalidate if we've already done so either from the scheduler or as
   // part of commit.
   if (did_perform_impl_side_invalidation_)
+    return false;
+
+  // No invalidations should be done outside the impl frame.
+  if (begin_impl_frame_state_ == BEGIN_IMPL_FRAME_STATE_IDLE)
+    return false;
+
+  // We need to be able to create a pending tree to perform an invalidation.
+  if (!CouldCreatePendingTree())
+    return false;
+
+  // Check if we should defer invalidating so we can merge these invalidations
+  // with the main frame.
+  if (ShouldDeferInvalidatingForMainFrame())
     return false;
 
   // If invalidations go to the active tree and we are waiting for the previous
@@ -616,6 +621,58 @@ bool SchedulerStateMachine::ShouldPerformImplSideInvalidation() const {
   }
 
   return true;
+}
+
+bool SchedulerStateMachine::ShouldDeferInvalidatingForMainFrame() const {
+  DCHECK_NE(begin_impl_frame_state_, BEGIN_IMPL_FRAME_STATE_IDLE);
+
+  // If the main thread is ready to commit, the impl-side invalidations will be
+  // merged with the incoming main frame.
+  if (begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_READY_TO_COMMIT)
+    return true;
+
+  // If we are inside the deadline, and haven't performed an invalidation yet,
+  // do it now.
+  // TODO(khushalsagar): We could do better by scheduling a deadline for
+  // invalidating prior to the draw deadline. Since invalidating now implies
+  // this pending tree will miss the draw for this frame. And scheduling this
+  // deadline should only be required if:
+  // a) There is a request for impl-side invalidation.
+  // b) We have to wait on the main thread to respond to a main frame.
+  // In addition, the deadline task can be cancelled if the main thread
+  // responds before it runs.
+  if (begin_impl_frame_state_ == BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE)
+    return false;
+
+  // If commits are being aborted (which would be the common case for a
+  // compositor scroll), don't defer the invalidation.
+  if (last_frame_events_.commit_had_no_updates)
+    return false;
+
+  // If there is a request for a main frame, then this could either be a
+  // request that we need to respond to in this impl frame or its possible the
+  // request is for the next frame (a rAF issued at the beginning of the current
+  // main frame). In either case, defer invalidating so we can merge it with the
+  // main frame.
+  if (needs_begin_main_frame_)
+    return true;
+
+  // If the main frame was already sent, wait for the main thread to respond.
+  if (begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_SENT ||
+      begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_STARTED)
+    return true;
+
+  // If the main thread committed during the last frame, i.e. it was not
+  // aborted, then we might get another main frame request later in the impl
+  // frame. This could be the case for a timer based animation running on the
+  // main thread which doesn't align with our vsync. For such cases,
+  // conservatively defer invalidating until the deadline.
+  if (last_frame_events_.did_commit_during_frame)
+    return true;
+
+  // If the main thread is not requesting any frames, perform the invalidation
+  // at the beginning of the impl frame.
+  return false;
 }
 
 void SchedulerStateMachine::WillPerformImplSideInvalidation() {
@@ -946,10 +1003,15 @@ bool SchedulerStateMachine::ProactiveBeginFrameWanted() const {
   return false;
 }
 
-void SchedulerStateMachine::OnBeginImplFrame(uint32_t source_id,
+void SchedulerStateMachine::OnBeginImplFrame(uint64_t source_id,
                                              uint64_t sequence_number) {
   begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME;
   current_frame_number_++;
+
+  // Cache the values from the previous impl frame before reseting them for this
+  // frame.
+  last_frame_events_.commit_had_no_updates = last_commit_had_no_updates_;
+  last_frame_events_.did_commit_during_frame = did_commit_during_frame_;
 
   last_commit_had_no_updates_ = false;
   did_draw_in_last_frame_ = false;
@@ -1014,8 +1076,8 @@ SchedulerStateMachine::CurrentBeginImplFrameDeadlineMode() const {
 
 bool SchedulerStateMachine::ShouldTriggerBeginImplFrameDeadlineImmediately()
     const {
-  // If we just forced activation, we should end the deadline right now.
-  if (PendingActivationsShouldBeForced() && !has_pending_tree_)
+  // If we aborted the current frame we should end the deadline right now.
+  if (ShouldAbortCurrentFrame() && !has_pending_tree_)
     return true;
 
   // Throttle the deadline on CompositorFrameAck since we wont draw and submit
@@ -1055,21 +1117,39 @@ bool SchedulerStateMachine::ShouldBlockDeadlineIndefinitely() const {
     return false;
   }
 
-  // Avoid blocking when invisible / frame sink lost / can't draw, i.e. when
-  // PendingDrawsShouldBeAborted is true.
-  if (PendingDrawsShouldBeAborted())
+  // Avoid blocking for any reason if we don't have a layer tree frame sink or
+  // are invisible.
+  if (layer_tree_frame_sink_state_ == LAYER_TREE_FRAME_SINK_NONE)
     return false;
 
-  // Wait for all pipeline stages.
+  if (!visible_)
+    return false;
+
+  // Wait for main frame to be ready for commits if in full-pipe mode, so that
+  // we ensure we block during renderer initialization. In commit_to_active_tree
+  // mode, we cannot block for defer_commits_, as this may negatively affect
+  // animation smoothness during resize or orientation changes.
+  if (defer_commits_ && settings_.wait_for_all_pipeline_stages_before_draw)
+    return true;
+
+  // Wait for main frame if one is in progress or about to be started.
   if (ShouldSendBeginMainFrame())
     return true;
 
   if (begin_main_frame_state_ != BEGIN_MAIN_FRAME_STATE_IDLE)
     return true;
 
+  // Wait for tiles and activation.
   if (has_pending_tree_)
     return true;
 
+  // Avoid blocking for draw when we can't draw. We block in the above cases
+  // even if we cannot draw, because we may still be waiting for the first
+  // active tree.
+  if (!can_draw_)
+    return false;
+
+  // Wait for remaining tiles and draw.
   if (!active_tree_is_ready_to_draw_)
     return true;
 

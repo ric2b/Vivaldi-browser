@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/ash_view_ids.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -18,6 +19,7 @@
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_icon_animation.h"
 #include "ash/system/network/network_info.h"
+#include "ash/system/network/network_row_title_view.h"
 #include "ash/system/network/network_state_list_detailed_view.h"
 #include "ash/system/networking_config_delegate.h"
 #include "ash/system/power/power_status.h"
@@ -31,13 +33,13 @@
 #include "ash/system/tray/tri_view.h"
 #include "base/i18n/number_formatting.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/login/login_state.h"
+#include "chromeos/network/device_state.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -51,6 +53,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/background.h"
@@ -75,6 +78,8 @@ namespace tray {
 namespace {
 
 const int64_t kBluetoothTimeoutDelaySeconds = 2;
+const int kMobileNetworkBatteryIconSize = 14;
+const int kPowerStatusPaddingRight = 10;
 
 bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
   if (!NetworkTypePattern::WiFi().MatchesType(network->type()))
@@ -98,6 +103,21 @@ bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
       network->guid(), network->profile_path(), nullptr /* onc_source */);
 }
 
+bool IsCellularSimLocked() {
+  const chromeos::DeviceState* cellular_device =
+      NetworkHandler::Get()->network_state_handler()->GetDeviceStateByType(
+          NetworkTypePattern::Cellular());
+  return cellular_device && cellular_device->IsSimLocked();
+}
+
+void ShowCellularSettings() {
+  const chromeos::NetworkState* cellular_network =
+      NetworkHandler::Get()->network_state_handler()->FirstNetworkByType(
+          NetworkTypePattern::Cellular());
+  Shell::Get()->system_tray_controller()->ShowNetworkSettings(
+      cellular_network ? cellular_network->guid() : std::string());
+}
+
 }  // namespace
 
 // A header row for sections in network detailed view which contains a title and
@@ -109,22 +129,35 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   explicit SectionHeaderRowView(int title_id)
       : title_id_(title_id),
         container_(nullptr),
-        toggle_(nullptr),
-        style_(
-            new TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::SUB_HEADER)) {
-  }
+        network_row_title_view_(nullptr),
+        toggle_(nullptr) {}
 
-  ~SectionHeaderRowView() override {}
+  ~SectionHeaderRowView() override = default;
 
-  void Init(bool enabled) {
+  virtual void Init(bool enabled) {
     InitializeLayout();
     AddExtraButtons(enabled);
     AddToggleButton(enabled);
   }
 
-  virtual void SetIsOn(bool enabled) {
-    toggle_->set_accepts_events(true);
-    toggle_->SetIsOn(enabled, true);
+  void SetSubtitle(int subtitle_id) {
+    network_row_title_view_->SetSubtitle(subtitle_id);
+
+    // The left padding of the toggle is different depending on whether the
+    // subtitle is displayed.
+    const int toggle_left_padding = subtitle_id == 0
+                                        ? kToggleLeftPaddingWithoutSubtitle
+                                        : kToggleLeftPaddingWithSubtitle;
+    const gfx::Insets previous_insets = toggle_->border()->GetInsets();
+    toggle_->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets(previous_insets.top(), toggle_left_padding,
+                    previous_insets.bottom(), previous_insets.right())));
+  }
+
+  virtual void SetToggleState(bool toggle_enabled, bool is_on) {
+    toggle_->SetEnabled(toggle_enabled);
+    toggle_->set_accepts_events(toggle_enabled);
+    toggle_->SetIsOn(is_on, true /* animate */);
   }
 
  protected:
@@ -138,7 +171,6 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   virtual void OnToggleToggled(bool is_on) = 0;
 
   TriView* container() const { return container_; }
-  TrayPopupItemStyle* style() const { return style_.get(); }
 
   int GetHeightForWidth(int w) const override {
     // Make row height fixed avoiding layout manager adjustments.
@@ -158,16 +190,17 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   }
 
  private:
+  static const int kToggleLeftPaddingWithoutSubtitle = 18;
+  static const int kToggleLeftPaddingWithSubtitle = 8;
+
   void InitializeLayout() {
     TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(new views::FillLayout);
     container_ = TrayPopupUtils::CreateSubHeaderRowView(false);
     AddChildView(container_);
 
-    views::Label* label = TrayPopupUtils::CreateDefaultLabel();
-    style()->SetupLabel(label);
-    label->SetText(l10n_util::GetStringUTF16(title_id_));
-    container_->AddView(TriView::Container::CENTER, label);
+    network_row_title_view_ = new NetworkRowTitleView(title_id_);
+    container_->AddView(TriView::Container::CENTER, network_row_title_view_);
   }
 
   void AddToggleButton(bool enabled) {
@@ -184,18 +217,21 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   // buttons.
   TriView* container_;
 
+  // View containing the header row view. Is a child of the CENTER of
+  // |container_|.
+  NetworkRowTitleView* network_row_title_view_;
+
   // ToggleButton to toggle section on or off.
   views::ToggleButton* toggle_;
-
-  // TrayPopupItemStyle used to configure labels and buttons.
-  std::unique_ptr<TrayPopupItemStyle> style_;
 
   DISALLOW_COPY_AND_ASSIGN(SectionHeaderRowView);
 };
 
 namespace {
 
-// "Mobile Data" header row.
+// "Mobile Data" header row. Mobile Data reflects both Cellular state and
+// Tether state. When both technologies are available, Cellular state takes
+// precedence over Tether (but in some cases Tether state may be shown).
 class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
                             public chromeos::NetworkStateHandlerObserver {
  public:
@@ -210,91 +246,158 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
     network_state_handler_->RemoveObserver(this, FROM_HERE);
   }
 
-  void SetIsOn(bool enabled) override {
-    // If Mobile data is in the process of being enabled, keep the toggle
-    // enabled. This ensures that the user does not see any UI jank in which the
-    // toggle changes values during this process.
-    enabled |= (status_ != Status::IDLE);
-    SectionHeaderRowView::SetIsOn(enabled);
+  void Init(bool enabled) override {
+    SectionHeaderRowView::Init(enabled);
+    UpdateState();
   }
 
   const char* GetClassName() const override { return "MobileHeaderRowView"; }
 
  protected:
-  enum class Status {
-    IDLE,
-    WAITING_FOR_DEVICE_LIST_CHANGE
-  };
-
   // NetworkListView::SectionHeaderRowView:
   void OnToggleToggled(bool is_on) override {
-    // The Mobile network type contains both Cellular and Tether technologies,
-    // though one or both of these may be unavailable. When Cellular technology
-    // is available, the enabled value of Tether depends on the enabled value of
-    // Cellular, so the toggle should only explicitly change the enabled value
-    // of Cellular.
-    if (network_state_handler_->IsTechnologyAvailable(
-            NetworkTypePattern::Cellular())) {
+    NetworkStateHandler::TechnologyState cellular_state =
+        network_state_handler_->GetTechnologyState(
+            NetworkTypePattern::Cellular());
+
+    // When Cellular is available, the toggle controls Cellular enabled state.
+    // (Tether may be enabled by turning on Bluetooth and turning on
+    // 'Get data connection' in the Settings > Mobile data subpage).
+    if (cellular_state != NetworkStateHandler::TECHNOLOGY_UNAVAILABLE) {
+      if (is_on && IsCellularSimLocked()) {
+        ShowCellularSettings();
+        return;
+      }
       network_state_handler_->SetTechnologyEnabled(
           NetworkTypePattern::Cellular(), is_on,
           chromeos::network_handler::ErrorCallback());
       return;
     }
 
-    // However, if Cellular technology is not available but Tether technology is
-    // available, the toggle should explicitly change the enabled value of
-    // Tether.
-    DCHECK(network_state_handler_->IsTechnologyAvailable(
-        NetworkTypePattern::Tether()));
+    NetworkStateHandler::TechnologyState tether_state =
+        network_state_handler_->GetTechnologyState(
+            NetworkTypePattern::Tether());
 
-    // If Tether is uninitialized, it is disabled because Bluetooth is off. In
-    // this case, enabling the toggle should enable Bluetooth and Tether.
-    if (network_state_handler_->IsTechnologyUninitialized(
-            NetworkTypePattern::Tether())) {
-      DCHECK(is_on);
+    // Tether is also unavailable (edge case).
+    if (tether_state == NetworkStateHandler::TECHNOLOGY_UNAVAILABLE)
+      return;
 
-      // If Bluetooth is in the process of being enabled, continue waiting for
-      // this to occur.
-      if (status_ != Status::IDLE)
-        return;
-
-      EnableBluetooth();
+    // If Tether is available but uninitialized, we expect Bluetooth to be off.
+    // Enable Bluetooth so that Tether will be initialized. Ignore edge cases
+    // (e.g. Bluetooth was disabled from a different UI).
+    if (tether_state == NetworkStateHandler::TECHNOLOGY_UNINITIALIZED) {
+      if (is_on && !waiting_for_tether_initialize_)
+        EnableBluetooth();
       return;
     }
 
-    // Otherwise, simply set the value of the toggle.
+    // Otherwise the toggle controls the Tether enabled state.
     network_state_handler_->SetTechnologyEnabled(
         NetworkTypePattern::Tether(), is_on,
         chromeos::network_handler::ErrorCallback());
   }
 
-  // chromeos::NetworkStateHandlerObserver:
-  void DeviceListChanged() override {
-    if (network_state_handler_->IsTechnologyAvailable(
-            NetworkTypePattern::Cellular())) {
-      status_ = Status::IDLE;
-      SetIsOn(network_state_handler_->IsTechnologyEnabled(
-          NetworkTypePattern::Cellular()));
+  // chromeos::NetworkStateHandlerObserver
+  // Update state if the Cellular or Tether device state may have changed, or if
+  // the list of Cellular or Tether networks may have changed.
+  void DeviceListChanged() override { UpdateState(); }
+  void NetworkListChanged() override { UpdateState(); }
+
+  void UpdateState() {
+    NetworkStateHandler::TechnologyState cellular_state =
+        network_state_handler_->GetTechnologyState(
+            NetworkTypePattern::Cellular());
+    NetworkStateHandler::TechnologyState tether_state =
+        network_state_handler_->GetTechnologyState(
+            NetworkTypePattern::Tether());
+
+    // If Cellular is available, toggle state and subtitle reflect Cellular.
+    if (cellular_state != NetworkStateHandler::TECHNOLOGY_UNAVAILABLE) {
+      const chromeos::DeviceState* cellular_device =
+          network_state_handler_->GetDeviceStateByType(
+              NetworkTypePattern::Cellular());
+      bool cellular_enabled =
+          cellular_state == NetworkStateHandler::TECHNOLOGY_ENABLED;
+      SetToggleState(true /* toggle_enabled */, cellular_enabled);
+
+      int subtitle = 0;
+      if (!cellular_device ||
+          cellular_state == NetworkStateHandler::TECHNOLOGY_UNINITIALIZED) {
+        subtitle = IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR;
+      } else if (cellular_device->scanning()) {
+        subtitle = IDS_ASH_STATUS_TRAY_MOBILE_SCANNING;
+      } else if (cellular_device->IsSimAbsent()) {
+        subtitle = IDS_ASH_STATUS_TRAY_SIM_CARD_MISSING;
+      } else if (cellular_device->IsSimLocked()) {
+        subtitle = IDS_ASH_STATUS_TRAY_SIM_CARD_LOCKED;
+      } else {
+        const chromeos::NetworkState* mobile_network =
+            network_state_handler_->FirstNetworkByType(
+                NetworkTypePattern::Mobile());
+        if (cellular_enabled &&
+            (!mobile_network || mobile_network->IsDefaultCellular())) {
+          // If no connectable Cellular network is available (see
+          // network_state_handler.h re: IsDefaultCellular), show 'turn on
+          // Bluetooth' if Tether is available but not initialized, otherwise
+          // show 'no networks'.
+          if (tether_state == NetworkStateHandler::TECHNOLOGY_UNINITIALIZED)
+            subtitle = IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH;
+          else
+            subtitle = IDS_ASH_STATUS_TRAY_NO_MOBILE_NETWORKS;
+        }
+      }
+      SetSubtitle(subtitle);
       return;
     }
 
-    if (!network_state_handler_->IsTechnologyAvailable(
-            NetworkTypePattern::Tether())) {
-      // If Tether has become unavailable, it is disabled for some other reason
-      // (e.g., the device could be in the process of being shut down).
-      status_ = Status::IDLE;
-      SetIsOn(false);
+    // Tether is also unavailable (edge case).
+    if (tether_state == NetworkStateHandler::TECHNOLOGY_UNAVAILABLE) {
+      SetToggleState(false /* toggle_enabled */, false /* is_on */);
+      SetSubtitle(IDS_ASH_STATUS_TRAY_NETWORK_MOBILE_DISABLED);
       return;
     }
 
-    if (status_ != Status::WAITING_FOR_DEVICE_LIST_CHANGE ||
-        network_state_handler_->IsTechnologyUninitialized(
-            NetworkTypePattern::Tether())) {
-      // If the device list change was unrelated to Tether, keep waiting.
+    // Otherwise, toggle state and subtitle reflect Tether.
+
+    if (tether_state == NetworkStateHandler::TECHNOLOGY_UNINITIALIZED) {
+      if (waiting_for_tether_initialize_) {
+        SetToggleState(false /* toggle_enabled */, true /* is_on */);
+        // "Initializing...". TODO(stevenjb): Rename the string to _MOBILE.
+        SetSubtitle(IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR);
+      } else {
+        SetToggleState(true /* toggle_enabled */, false /* is_on */);
+        SetSubtitle(IDS_ASH_STATUS_TRAY_ENABLING_MOBILE_ENABLES_BLUETOOTH);
+      }
       return;
     }
 
-    OnEnableBluetoothSuccess();
+    bool tether_enabled =
+        tether_state == NetworkStateHandler::TECHNOLOGY_ENABLED;
+
+    if (waiting_for_tether_initialize_) {
+      waiting_for_tether_initialize_ = false;
+      enable_bluetooth_timer_.Stop();
+      if (!tether_enabled) {
+        // We enabled Bluetooth so Tether is now initialized, but it was not
+        // enabled so enable it.
+        network_state_handler_->SetTechnologyEnabled(
+            NetworkTypePattern::Tether(), true /* enabled */,
+            chromeos::network_handler::ErrorCallback());
+        SetToggleState(true /* toggle_enabled */, true /* is_on */);
+        // "Initializing...". TODO(stevenjb): Rename the string to _MOBILE.
+        SetSubtitle(IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR);
+        return;
+      }
+    }
+
+    // Ensure that the toggle state and subtitle match the tether state.
+    int subtitle = 0;
+    if (tether_enabled && !network_state_handler_->FirstNetworkByType(
+                              NetworkTypePattern::Tether())) {
+      subtitle = IDS_ASH_STATUS_TRAY_NO_MOBILE_DEVICES_FOUND;
+    }
+    SetToggleState(true /* toggle_enabled */, tether_enabled /* is_on */);
+    SetSubtitle(subtitle);
   }
 
  private:
@@ -303,47 +406,35 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
   // period, it is assumed that there was an error. In that case, Tether will
   // remain uninitialized and Mobile Data will remain toggled off.
   void EnableBluetooth() {
-    DCHECK(status_ == Status::IDLE);
+    DCHECK(!waiting_for_tether_initialize_);
 
     Shell::Get()
         ->bluetooth_power_controller()
         ->SetPrimaryUserBluetoothPowerSetting(true /* enabled */);
-    status_ = Status::WAITING_FOR_DEVICE_LIST_CHANGE;
-    timer_.Start(FROM_HERE,
-                 base::TimeDelta::FromSeconds(kBluetoothTimeoutDelaySeconds),
-                 base::Bind(&MobileHeaderRowView::OnEnableBluetoothTimeout,
-                            weak_ptr_factory_.GetWeakPtr()));
+    waiting_for_tether_initialize_ = true;
+    enable_bluetooth_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromSeconds(kBluetoothTimeoutDelaySeconds),
+        base::Bind(&MobileHeaderRowView::OnEnableBluetoothTimeout,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   void OnEnableBluetoothTimeout() {
-    DCHECK(status_ == Status::WAITING_FOR_DEVICE_LIST_CHANGE);
-    status_ = Status::IDLE;
-    SetIsOn(false);
+    DCHECK(waiting_for_tether_initialize_);
+    waiting_for_tether_initialize_ = false;
+    SetToggleState(true /* toggle_enabled */, false /* is_on */);
 
-    LOG(ERROR) << "Error enabling Bluetooth adapter. Cannot enable Mobile "
-               << "data.";
-  }
-
-  void OnEnableBluetoothSuccess() {
-    DCHECK(timer_.IsRunning());
-    timer_.Stop();
-
-    status_ = Status::IDLE;
-    network_state_handler_->SetTechnologyEnabled(
-        NetworkTypePattern::Tether(), true /* enabled */,
-        chromeos::network_handler::ErrorCallback());
+    LOG(ERROR) << "Error enabling Bluetooth. Cannot enable Mobile data.";
   }
 
   NetworkStateHandler* network_state_handler_;
 
-  Status status_ = Status::IDLE;
-  base::OneShotTimer timer_;
+  bool waiting_for_tether_initialize_ = false;
+  base::OneShotTimer enable_bluetooth_timer_;
 
   base::WeakPtrFactory<MobileHeaderRowView> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MobileHeaderRowView);
 };
-
 
 class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
  public:
@@ -351,11 +442,11 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
       : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_WIFI),
         join_(nullptr) {}
 
-  ~WifiHeaderRowView() override {}
+  ~WifiHeaderRowView() override = default;
 
-  void SetIsOn(bool enabled) override {
-    join_->SetEnabled(enabled);
-    SectionHeaderRowView::SetIsOn(enabled);
+  void SetToggleState(bool toggle_enabled, bool is_on) override {
+    join_->SetEnabled(is_on);
+    SectionHeaderRowView::SetToggleState(toggle_enabled, is_on);
   }
 
   const char* GetClassName() const override { return "WifiHeaderRowView"; }
@@ -424,7 +515,6 @@ NetworkListView::NetworkListView(SystemTrayItem* owner, LoginStatus login)
     : NetworkStateListDetailedView(owner, LIST_TYPE_NETWORK, login),
       needs_relayout_(false),
       no_wifi_networks_view_(nullptr),
-      no_mobile_networks_view_(nullptr),
       mobile_header_view_(nullptr),
       wifi_header_view_(nullptr),
       mobile_separator_view_(nullptr),
@@ -466,11 +556,17 @@ void NetworkListView::UpdateNetworks(
   for (auto& info : network_list_)
     last_network_info_map_[info->guid] = std::move(info);
 
+  bool cellular_enabled =
+      NetworkHandler::Get()->network_state_handler()->IsTechnologyEnabled(
+          NetworkTypePattern::Cellular());
   network_list_.clear();
   for (const auto* network : networks) {
     if (!NetworkTypePattern::NonVirtual().MatchesType(network->type()))
       continue;
-    network_list_.push_back(base::MakeUnique<NetworkInfo>(network->guid()));
+    // If cellular is disabled, skip the default cellular service.
+    if (network->Matches(NetworkTypePattern::Cellular()) && !cellular_enabled)
+      continue;
+    network_list_.push_back(std::make_unique<NetworkInfo>(network->guid()));
   }
 }
 
@@ -583,52 +679,10 @@ NetworkListView::UpdateNetworkListEntries() {
   index += new_guids->size();
 
   if (ShouldMobileDataSectionBeShown()) {
-    bool cellular_enabled =
-        handler->IsTechnologyEnabled(NetworkTypePattern::Cellular());
-    bool tether_enabled =
-        handler->IsTechnologyEnabled(NetworkTypePattern::Tether());
-    int mobile_message_id = 0;
-
-    if (handler->IsTechnologyAvailable(NetworkTypePattern::Cellular()) &&
-        !handler->IsTechnologyAvailable(NetworkTypePattern::Tether())) {
-      // If Cellular is available and Tether is not, display cellular-specific
-      // messages if necessary. Note that GetCellularUninitializedMsg() returns
-      // 0 if no special message should be displayed.
-      mobile_message_id = network_icon::GetCellularUninitializedMsg();
-      if (!mobile_message_id &&
-          !handler->FirstNetworkByType(NetworkTypePattern::Cellular())) {
-        mobile_message_id = IDS_ASH_STATUS_TRAY_NO_MOBILE_NETWORKS;
-      }
-    } else {
-      if (handler->IsTechnologyUninitialized(NetworkTypePattern::Tether())) {
-        // If Tether is uninitialized, it is disabled due to Bluetooth being
-        // off. If Cellular is available, the Mobile toggle is on, so display a
-        // message to enable Bluetooth. If Cellular is unavailable, the Mobile
-        // toggle is off, so display a message stating that toggling it on will
-        // enable Bluetooth.
-        mobile_message_id =
-            cellular_enabled
-                ? IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH
-                : IDS_ASH_STATUS_TRAY_ENABLING_MOBILE_ENABLES_BLUETOOTH;
-      } else {
-        if (!cellular_enabled && !tether_enabled)
-          mobile_message_id = IDS_ASH_STATUS_TRAY_NETWORK_MOBILE_DISABLED;
-      }
-
-      if (!mobile_message_id &&
-          !handler->FirstNetworkByType(NetworkTypePattern::Mobile())) {
-        mobile_message_id = IDS_ASH_STATUS_TRAY_NO_MOBILE_DEVICES_FOUND;
-      }
-    }
-
+    // Note: Mobile will update its own enabled state.
     index = UpdateSectionHeaderRow(
-        NetworkTypePattern::Mobile(),
-        cellular_enabled || tether_enabled /* enabled */, index,
+        NetworkTypePattern::Mobile(), false /* enabled */, index,
         &mobile_header_view_, &mobile_separator_view_);
-
-    UpdateInfoLabel(mobile_message_id, index, &no_mobile_networks_view_);
-    if (mobile_message_id)
-      ++index;
 
     std::unique_ptr<std::set<std::string>> new_cellular_guids =
         UpdateNetworkChildren(NetworkInfo::Type::MOBILE, index);
@@ -694,7 +748,19 @@ bool NetworkListView::ShouldMobileDataSectionBeShown() {
 void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
                                            const NetworkInfo& info) {
   view->Reset();
-  view->AddIconAndLabel(info.image, info.label);
+  gfx::ImageSkia network_image;
+  if (info.type == NetworkInfo::Type::MOBILE &&
+      (!info.connected && !info.connecting)) {
+    // Mobile icons which are not connecting or connected should display a small
+    // "X" icon superimposed so that it is clear that they are disconnected.
+    network_image = gfx::ImageSkiaOperations::CreateSuperimposedImage(
+        info.image, gfx::CreateVectorIcon(kNetworkMobileNotConnectedXIcon,
+                                          info.image.height(),
+                                          kMobileNotConnectedXIconColor));
+  } else {
+    network_image = info.image;
+  }
+  view->AddIconAndLabel(network_image, info.label);
   if (info.connected)
     SetupConnectedScrollListItem(view);
   else if (info.connecting)
@@ -705,7 +771,10 @@ void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
   // that require it (e.g. Tether, controlled by extension).
   views::View* power_icon = CreatePowerStatusView(info);
   if (power_icon) {
-    view->AddRightView(power_icon);
+    view->AddRightView(
+        power_icon, views::CreateEmptyBorder(
+                        gfx::Insets(0 /* top */, 0 /* left */, 0 /* bottom */,
+                                    kPowerStatusPaddingRight)));
   } else {
     views::View* controlled_icon = CreateControlledByExtensionView(info);
     if (controlled_icon)
@@ -731,8 +800,9 @@ views::View* NetworkListView::CreatePowerStatusView(const NetworkInfo& info) {
   views::ImageView* icon = TrayPopupUtils::CreateMoreImageView();
   PowerStatus::BatteryImageInfo icon_info;
   icon_info.charge_percent = network->battery_percentage();
-  icon->SetImage(PowerStatus::GetBatteryImage(
-      icon_info, kMenuIconSize, kMenuIconColorDisabled, kMenuIconColor));
+  icon->SetImage(
+      PowerStatus::GetBatteryImage(icon_info, kMobileNetworkBatteryIconSize,
+                                   kMenuIconColorDisabled, kMenuIconColor));
 
   // Show the numeric battery percentage on hover.
   icon->SetTooltipText(base::FormatPercent(network->battery_percentage()));
@@ -758,6 +828,7 @@ views::View* NetworkListView::CreateControlledByExtensionView(
   controlled_icon->SetTooltipText(l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_EXTENSION_CONTROLLED_WIFI,
       base::UTF8ToUTF16(extension_info->extension_name)));
+  controlled_icon->set_id(VIEW_ID_EXTENSION_CONTROLLED_WIFI);
   return controlled_icon;
 }
 
@@ -817,21 +888,12 @@ void NetworkListView::UpdateInfoLabel(int message_id,
     return;
   }
   if (!info_label)
-    info_label = new TrayInfoLabel(this /* delegate */, message_id);
+    info_label = new TrayInfoLabel(nullptr /* delegate */, message_id);
   else
     info_label->Update(message_id);
 
   PlaceViewAtIndex(info_label, insertion_index);
   *info_label_ptr = info_label;
-}
-
-void NetworkListView::OnLabelClicked(int message_id) {
-  if (message_id == IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH)
-    Shell::Get()->system_tray_controller()->ShowBluetoothSettings();
-}
-
-bool NetworkListView::IsLabelClickable(int message_id) const {
-  return message_id == IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH;
 }
 
 int NetworkListView::UpdateSectionHeaderRow(NetworkTypePattern pattern,
@@ -861,7 +923,9 @@ int NetworkListView::UpdateSectionHeaderRow(NetworkTypePattern pattern,
     *separator_view = nullptr;
   }
 
-  (*view)->SetIsOn(enabled);
+  // Mobile updates its toggle state independently.
+  if (!pattern.MatchesPattern(NetworkTypePattern::Mobile()))
+    (*view)->SetToggleState(true /* toggle_enabled */, enabled /* is_on */);
   PlaceViewAtIndex(*view, child_index++);
   return child_index;
 }

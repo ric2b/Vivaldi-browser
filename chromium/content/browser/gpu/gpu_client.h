@@ -7,7 +7,6 @@
 
 #include "base/memory/weak_ptr.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "ipc/ipc_channel_handle.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/ui/public/interfaces/gpu.mojom.h"
 
@@ -20,21 +19,24 @@ class GpuClient : public ui::mojom::Gpu {
 
   void Add(ui::mojom::GpuRequest request);
 
+  void PreEstablishGpuChannel();
+
  private:
   void OnError();
-  void OnEstablishGpuChannel(const EstablishGpuChannelCallback& callback,
-                             const IPC::ChannelHandle& channel,
+  void OnEstablishGpuChannel(mojo::ScopedMessagePipeHandle channel_handle,
                              const gpu::GPUInfo& gpu_info,
+                             const gpu::GpuFeatureInfo& gpu_feature_info,
                              GpuProcessHost::EstablishChannelStatus status);
   void OnCreateGpuMemoryBuffer(const CreateGpuMemoryBufferCallback& callback,
                                const gfx::GpuMemoryBufferHandle& handle);
+  void ClearCallback();
 
   // ui::mojom::Gpu overrides:
   void EstablishGpuChannel(
       const EstablishGpuChannelCallback& callback) override;
   void SetForceAllowAccessToGpu(bool enable) override;
   void CreateJpegDecodeAccelerator(
-      media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override;
+      media::mojom::JpegDecodeAcceleratorRequest jda_request) override;
   void CreateVideoEncodeAcceleratorProvider(
       media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request)
       override;
@@ -49,6 +51,11 @@ class GpuClient : public ui::mojom::Gpu {
 
   const int render_process_id_;
   mojo::BindingSet<ui::mojom::Gpu> bindings_;
+  bool gpu_channel_requested_ = false;
+  EstablishGpuChannelCallback callback_;
+  mojo::ScopedMessagePipeHandle channel_handle_;
+  gpu::GPUInfo gpu_info_;
+  gpu::GpuFeatureInfo gpu_feature_info_;
   base::WeakPtrFactory<GpuClient> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuClient);

@@ -32,13 +32,13 @@
 #include "extensions/common/manifest_constants.h"
 #endif
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
 #endif
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 using blink::WebPluginParams;
 using blink::WebString;
 using blink::WebVector;
@@ -49,7 +49,7 @@ using content::WebPluginMimeType;
 
 namespace {
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 const bool kNaClRestricted = false;
 const bool kNaClUnrestricted = true;
 const bool kExtensionNotFromWebStore = false;
@@ -61,7 +61,7 @@ const bool kNotHostedApp = false;
 const bool kHostedApp = true;
 #endif
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 const char kExtensionUrl[] = "chrome-extension://extension_id/background.html";
 
 const char kChatManifestFS[] = "filesystem:https://talkgadget.google.com/foo";
@@ -69,7 +69,7 @@ const char kChatManifestFS[] = "filesystem:https://talkgadget.google.com/foo";
 
 const char kChatAppURL[] = "https://talkgadget.google.com/hangouts/foo";
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 bool AllowsDevInterfaces(const WebPluginParams& params) {
   for (size_t i = 0; i < params.attribute_names.size(); ++i) {
     if (params.attribute_names[i] == "@dev")
@@ -93,9 +93,8 @@ void AddContentTypeHandler(content::WebPluginInfo* info,
                            const char* manifest_url) {
   content::WebPluginMimeType mime_type_info;
   mime_type_info.mime_type = mime_type;
-  mime_type_info.additional_param_names.push_back(base::UTF8ToUTF16("nacl"));
-  mime_type_info.additional_param_values.push_back(
-      base::UTF8ToUTF16(manifest_url));
+  mime_type_info.additional_params.emplace_back(
+      base::UTF8ToUTF16("nacl"), base::UTF8ToUTF16(manifest_url));
   info->mime_types.push_back(mime_type_info);
 }
 
@@ -165,7 +164,7 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
               ChromeContentRendererClient::GetNaClContentHandlerURL(
                   "application/x-foo", info));
   }
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   // --enable-nacl allows all NaCl apps, with 'dev' interfaces.
   {
     WebPluginParams params;
@@ -363,7 +362,7 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
                         "http://example.com/").get(),
         &params));
   }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 }
 
 TEST_F(ChromeContentRendererClientTest, AllowPepperMediaStreamAPI) {
@@ -375,17 +374,26 @@ TEST_F(ChromeContentRendererClientTest, AllowPepperMediaStreamAPI) {
 #endif
 }
 
+// SearchBouncer doesn't exist on Android.
+#if !defined(OS_ANDROID)
 TEST_F(ChromeContentRendererClientTest, ShouldSuppressErrorPage) {
   ChromeContentRendererClient client;
-  SearchBouncer::GetInstance()->SetSearchURLs(std::vector<GURL>(),
-                                              GURL("http://example.com/n"));
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL("http://example.com/n"));
   EXPECT_FALSE(client.ShouldSuppressErrorPage(nullptr,
                                               GURL("http://example.com")));
   EXPECT_TRUE(client.ShouldSuppressErrorPage(nullptr,
                                              GURL("http://example.com/n")));
-  SearchBouncer::GetInstance()->SetSearchURLs(std::vector<GURL>(),
-                                              GURL::EmptyGURL());
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL::EmptyGURL());
 }
+
+TEST_F(ChromeContentRendererClientTest, ShouldTrackUseCounter) {
+  ChromeContentRendererClient client;
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL("http://example.com/n"));
+  EXPECT_TRUE(client.ShouldTrackUseCounter(GURL("http://example.com")));
+  EXPECT_FALSE(client.ShouldTrackUseCounter(GURL("http://example.com/n")));
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL::EmptyGURL());
+}
+#endif
 
 TEST_F(ChromeContentRendererClientTest, AddImageContextMenuPropertiesForLoFi) {
   ChromeContentRendererClient client;
@@ -418,8 +426,7 @@ TEST_F(ChromeContentRendererClientTest,
           [data_reduction_proxy::chrome_proxy_content_transform_header()]);
 }
 
-// These are tests that are common for both Android and desktop browsers.
-TEST_F(ChromeContentRendererClientTest, RewriteEmbedCommon) {
+TEST_F(ChromeContentRendererClientTest, RewriteEmbed) {
   struct TestData {
     std::string original;
     std::string expected;
@@ -498,21 +505,6 @@ TEST_F(ChromeContentRendererClientTest, RewriteEmbedCommon) {
       // youtube-nocookie.com, https
       {"https://www.youtube-nocookie.com/v/123/",
        "https://www.youtube-nocookie.com/embed/123/"},
-  };
-
-  ChromeContentRendererClient client;
-
-  for (const auto& data : test_data)
-    EXPECT_EQ(GURL(data.expected),
-              client.OverrideFlashEmbedWithHTML(GURL(data.original)));
-}
-
-#if defined(OS_ANDROID)
-TEST_F(ChromeContentRendererClientTest, RewriteEmbedAndroid) {
-  struct TestData {
-    std::string original;
-    std::string expected;
-  } test_data[] = {
       // URL isn't using Flash, has JS API enabled
       {"http://www.youtube.com/embed/deadbeef?enablejsapi=1", ""},
       // URL is using Flash, has JS API enabled
@@ -532,38 +524,11 @@ TEST_F(ChromeContentRendererClientTest, RewriteEmbedAndroid) {
 
   ChromeContentRendererClient client;
 
-  for (const auto& data : test_data) {
+  for (const auto& data : test_data)
     EXPECT_EQ(GURL(data.expected),
               client.OverrideFlashEmbedWithHTML(GURL(data.original)));
-  }
 }
-#else
-TEST_F(ChromeContentRendererClientTest, RewriteEmbedDesktop) {
-  struct TestData {
-    std::string original;
-    std::string expected;
-  } test_data[] = {
-      // URL isn't using Flash, has JS API enabled
-      {"http://www.youtube.com/embed/deadbeef?enablejsapi=1", ""},
-      // URL is using Flash, has JS API enabled
-      {"http://www.youtube.com/v/deadbeef?enablejsapi=1", ""},
-      // youtube-nocookie.com, has JS API enabled
-      {"http://www.youtube-nocookie.com/v/123?enablejsapi=1", ""},
-      // URL is using Flash, has JS API enabled, invalid parameter construct
-      {"http://www.youtube.com/v/deadbeef&enablejsapi=1", ""},
-      // URL is using Flash, has JS API enabled, invalid parameter construct,
-      // has multiple parameters
-      {"http://www.youtube.com/v/deadbeef&start=4&enablejsapi=1", ""},
-  };
 
-  ChromeContentRendererClient client;
-
-  for (const auto& data : test_data) {
-    EXPECT_EQ(GURL(data.expected),
-              client.OverrideFlashEmbedWithHTML(GURL(data.original)));
-  }
-}
-#endif
 class ChromeContentRendererClientMetricsTest : public testing::Test {
  public:
   ChromeContentRendererClientMetricsTest() = default;
@@ -680,9 +645,7 @@ TEST_F(ChromeContentRendererClientMetricsTest, RewriteEmbedSuccessRewrite) {
   EXPECT_EQ(total_count, samples->TotalCount());
 }
 
-#if defined(OS_ANDROID)
-TEST_F(ChromeContentRendererClientMetricsTest,
-       RewriteEmbedFailureJSAPIAndroid) {
+TEST_F(ChromeContentRendererClientMetricsTest, RewriteEmbedJSAPI) {
   ChromeContentRendererClient client;
 
   std::unique_ptr<base::HistogramSamples> samples = GetHistogramSamples();
@@ -709,30 +672,3 @@ TEST_F(ChromeContentRendererClientMetricsTest,
   }
 }
 
-#else
-TEST_F(ChromeContentRendererClientMetricsTest,
-       RewriteEmbedFailureJSAPIDesktop) {
-  ChromeContentRendererClient client;
-
-  std::unique_ptr<base::HistogramSamples> samples = GetHistogramSamples();
-  auto total_count = 0;
-  EXPECT_EQ(total_count, samples->TotalCount());
-
-  const std::string test_data[] = {
-      // Valid parameter construct, one parameter
-      "http://www.youtube.com/v/deadbeef?enablejsapi=1",
-      // Invalid parameter construct, one parameter
-      "http://www.youtube.com/v/deadbeef&enablejsapi=1",
-      // Invalid parameter construct, has multiple parameters
-      "http://www.youtube.com/v/deadbeef&start=4&enablejsapi=1?foo=2"};
-
-  for (const auto& data : test_data) {
-    ++total_count;
-    GURL gurl = GURL(data);
-    OverrideFlashEmbed(gurl);
-    samples = GetHistogramSamples();
-    EXPECT_EQ(total_count, samples->GetCount(internal::FAILURE_ENABLEJSAPI));
-    EXPECT_EQ(total_count, samples->TotalCount());
-  }
-}
-#endif

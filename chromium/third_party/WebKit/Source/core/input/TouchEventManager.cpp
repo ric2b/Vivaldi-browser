@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "core/dom/Document.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/events/TouchEvent.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/EventHandlerRegistry.h"
@@ -17,8 +18,8 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebTouchEvent.h"
 
@@ -144,7 +145,7 @@ void TouchEventManager::Clear() {
   current_touch_action_ = TouchAction::kTouchActionAuto;
 }
 
-DEFINE_TRACE(TouchEventManager) {
+void TouchEventManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(touch_sequence_document_);
   visitor->Trace(touch_attribute_map_);
@@ -517,9 +518,9 @@ void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
       Node* node = result.InnerNode();
       if (!node)
         return;
-      if (isHTMLCanvasElement(node)) {
+      if (auto* canvas = ToHTMLCanvasElementOrNull(node)) {
         HitTestCanvasResult* hit_test_canvas_result =
-            toHTMLCanvasElement(node)->GetControlAndIdIfHitRegionExists(
+            canvas->GetControlAndIdIfHitRegionExists(
                 result.PointInInnerNodeFrame());
         if (hit_test_canvas_result->GetControl())
           node = hit_test_canvas_result->GetControl();
@@ -581,6 +582,11 @@ void TouchEventManager::HandleTouchPoint(
        !touch_sequence_document_->GetFrame()->View())) {
     // If the active touch document has no frame or view, it's probably being
     // destroyed so we can't dispatch events.
+    // Update the points so they get removed in flush when they are released.
+    if (touch_attribute_map_.Contains(event.id)) {
+      TouchPointAttributes* attributes = touch_attribute_map_.at(event.id);
+      attributes->event_ = event;
+    }
     return;
   }
 

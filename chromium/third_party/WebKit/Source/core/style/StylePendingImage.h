@@ -41,7 +41,6 @@ class ImageResourceObserver;
 // ComputedStyle during style resolution, in order to avoid loading images that
 // are not referenced by the final style.  They should never exist in a
 // ComputedStyle after it has been returned from the style selector.
-
 class StylePendingImage final : public StyleImage {
  public:
   static StylePendingImage* Create(const CSSValue& value) {
@@ -58,18 +57,19 @@ class StylePendingImage final : public StyleImage {
   }
 
   CSSImageValue* CssImageValue() const {
-    return value_->IsImageValue() ? ToCSSImageValue(value_.Get()) : 0;
+    return value_->IsImageValue() ? ToCSSImageValue(value_.Get()) : nullptr;
   }
   CSSPaintValue* CssPaintValue() const {
-    return value_->IsPaintValue() ? ToCSSPaintValue(value_.Get()) : 0;
+    return value_->IsPaintValue() ? ToCSSPaintValue(value_.Get()) : nullptr;
   }
   CSSImageGeneratorValue* CssImageGeneratorValue() const {
     return value_->IsImageGeneratorValue()
                ? ToCSSImageGeneratorValue(value_.Get())
-               : 0;
+               : nullptr;
   }
   CSSImageSetValue* CssImageSetValue() const {
-    return value_->IsImageSetValue() ? ToCSSImageSetValue(value_.Get()) : 0;
+    return value_->IsImageSetValue() ? ToCSSImageSetValue(value_.Get())
+                                     : nullptr;
   }
 
   LayoutSize ImageSize(const Document&,
@@ -81,10 +81,10 @@ class StylePendingImage final : public StyleImage {
   bool UsesImageContainerSize() const override { return false; }
   void AddClient(ImageResourceObserver*) override {}
   void RemoveClient(ImageResourceObserver*) override {}
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize&) const override {
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size) const override {
     NOTREACHED();
     return nullptr;
   }
@@ -92,7 +92,7 @@ class StylePendingImage final : public StyleImage {
     return false;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(value_);
     StyleImage::Trace(visitor);
   }

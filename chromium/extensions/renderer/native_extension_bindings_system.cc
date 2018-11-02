@@ -9,9 +9,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
-#include "content/public/child/worker_thread.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/renderer/worker_thread.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/event_filtering_info.h"
 #include "extensions/common/extension_api.h"
@@ -21,12 +21,14 @@
 #include "extensions/renderer/bindings/api_binding_bridge.h"
 #include "extensions/renderer/bindings/api_binding_hooks.h"
 #include "extensions/renderer/bindings/api_binding_js_util.h"
+#include "extensions/renderer/bindings/api_binding_util.h"
 #include "extensions/renderer/chrome_setting.h"
 #include "extensions/renderer/console.h"
 #include "extensions/renderer/content_setting.h"
 #include "extensions/renderer/declarative_content_hooks_delegate.h"
 #include "extensions/renderer/easy_unlock_proximity_required_stub.h"
 #include "extensions/renderer/extension_frame_helper.h"
+#include "extensions/renderer/extension_js_runner.h"
 #include "extensions/renderer/ipc_message_sender.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
@@ -136,7 +138,7 @@ v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
 BindingsSystemPerContextData* GetBindingsDataFromContext(
     v8::Local<v8::Context> context) {
   gin::PerContextData* per_context_data = gin::PerContextData::From(context);
-  if (!per_context_data)
+  if (!per_context_data || !binding::IsContextValid(context))
     return nullptr;  // Context is shutting down.
 
   auto* data = static_cast<BindingsSystemPerContextData*>(
@@ -168,44 +170,6 @@ ScriptContext* GetScriptContextChecked(v8::Local<v8::Context> context) {
   ScriptContext* script_context = GetScriptContext(context);
   CHECK(script_context);
   return script_context;
-}
-
-// Handler for calling safely into JS.
-void CallJsFunction(v8::Local<v8::Function> function,
-                    v8::Local<v8::Context> context,
-                    int argc,
-                    v8::Local<v8::Value> argv[]) {
-  // TODO(devlin): Is using GetScriptContextChecked() (instead of
-  // GetScriptContext()) safe? If our custom bindings can continue running after
-  // contexts are removed from the set, it's likely not, but that's mostly a
-  // bug. In a perfect world, we *should* be able to do this CHECK.
-  ScriptContext* script_context = GetScriptContextChecked(context);
-  script_context->SafeCallFunction(function, argc, argv);
-}
-
-v8::Global<v8::Value> CallJsFunctionSync(v8::Local<v8::Function> function,
-                                         v8::Local<v8::Context> context,
-                                         int argc,
-                                         v8::Local<v8::Value> argv[]) {
-  bool did_complete = false;
-  v8::Global<v8::Value> result;
-  auto callback = base::Bind([](
-      v8::Isolate* isolate,
-      bool* did_complete_out,
-      v8::Global<v8::Value>* result_out,
-      const std::vector<v8::Local<v8::Value>>& results) {
-    *did_complete_out = true;
-    // The locals are released after the callback is executed, so we need to
-    // grab a persistent handle.
-    if (!results.empty() && !results[0].IsEmpty())
-      result_out->Reset(isolate, results[0]);
-  }, base::Unretained(context->GetIsolate()),
-     base::Unretained(&did_complete), base::Unretained(&result));
-
-  ScriptContext* script_context = GetScriptContextChecked(context);
-  script_context->SafeCallFunction(function, argc, argv, callback);
-  CHECK(did_complete) << "expected script to execute synchronously";
-  return result;
 }
 
 void AddConsoleError(v8::Local<v8::Context> context, const std::string& error) {
@@ -252,8 +216,7 @@ v8::Local<v8::Object> CreateRootBinding(v8::Local<v8::Context> context,
       context->GetIsolate(),
       new APIBindingBridge(hooks, context, binding_object,
                            script_context->GetExtensionID(),
-                           script_context->GetContextTypeDescription(),
-                           base::Bind(&CallJsFunction)));
+                           script_context->GetContextTypeDescription()));
   v8::Local<v8::Value> native_api_bridge = bridge_handle.ToV8();
   script_context->module_system()->OnNativeBindingCreated(name,
                                                           native_api_bridge);
@@ -389,8 +352,6 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
     std::unique_ptr<IPCMessageSender> ipc_message_sender)
     : ipc_message_sender_(std::move(ipc_message_sender)),
       api_system_(
-          base::Bind(&CallJsFunction),
-          base::Bind(&CallJsFunctionSync),
           base::Bind(&GetAPISchema),
           base::Bind(&IsAPIFeatureAvailable),
           base::Bind(&NativeExtensionBindingsSystem::SendRequest,
@@ -401,6 +362,7 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
           base::Bind(&AddConsoleError),
           APILastError(base::Bind(&GetLastErrorParents),
                        base::Bind(&AddConsoleError))),
+      messaging_service_(this),
       weak_factory_(this) {
   api_system_.RegisterCustomType("storage.StorageArea",
                                  base::Bind(&StorageArea::CreateStorageArea));
@@ -409,9 +371,8 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
       base::Bind(&EasyUnlockProximityRequiredStub::Create));
   api_system_.RegisterCustomType("types.ChromeSetting",
                                  base::Bind(&ChromeSetting::Create));
-  api_system_.RegisterCustomType(
-      "contentSettings.ContentSetting",
-      base::Bind(&ContentSetting::Create, base::Bind(&CallJsFunction)));
+  api_system_.RegisterCustomType("contentSettings.ContentSetting",
+                                 base::Bind(&ContentSetting::Create));
   api_system_.GetHooksForAPI("webRequest")
       ->SetDelegate(std::make_unique<WebRequestHooks>());
   api_system_.GetHooksForAPI("declarativeContent")
@@ -425,9 +386,14 @@ void NativeExtensionBindingsSystem::DidCreateScriptContext(
   v8::Isolate* isolate = context->isolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> v8_context = context->v8_context();
+
+  JSRunner::SetInstanceForContext(v8_context,
+                                  std::make_unique<ExtensionJSRunner>(context));
+
   gin::PerContextData* per_context_data = gin::PerContextData::From(v8_context);
   DCHECK(per_context_data);
   DCHECK(!per_context_data->GetUserData(kBindingsSystemPerContextKey));
+
   auto data = std::make_unique<BindingsSystemPerContextData>(
       weak_factory_.GetWeakPtr());
   per_context_data->SetUserData(kBindingsSystemPerContextKey, std::move(data));
@@ -453,7 +419,9 @@ void NativeExtensionBindingsSystem::DidCreateScriptContext(
 void NativeExtensionBindingsSystem::WillReleaseScriptContext(
     ScriptContext* context) {
   v8::HandleScope handle_scope(context->isolate());
-  api_system_.WillReleaseContext(context->v8_context());
+  v8::Local<v8::Context> v8_context = context->v8_context();
+  JSRunner::ClearInstanceForContext(v8_context);
+  api_system_.WillReleaseContext(v8_context);
 }
 
 void NativeExtensionBindingsSystem::UpdateBindingsForContext(
@@ -591,6 +559,10 @@ RequestSender* NativeExtensionBindingsSystem::GetRequestSender() {
 
 IPCMessageSender* NativeExtensionBindingsSystem::GetIPCMessageSender() {
   return ipc_message_sender_.get();
+}
+
+RendererMessagingService* NativeExtensionBindingsSystem::GetMessagingService() {
+  return &messaging_service_;
 }
 
 void NativeExtensionBindingsSystem::OnExtensionPermissionsUpdated(
@@ -841,8 +813,7 @@ void NativeExtensionBindingsSystem::GetJSBindingUtil(
       context->GetIsolate(),
       new APIBindingJSUtil(
           api_system_.type_reference_map(), api_system_.request_handler(),
-          api_system_.event_handler(), api_system_.exception_handler(),
-          base::Bind(&CallJsFunction)));
+          api_system_.event_handler(), api_system_.exception_handler()));
   *binding_util_out = handle.ToV8();
 }
 

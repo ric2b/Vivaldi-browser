@@ -5,10 +5,16 @@
 #include "components/offline_pages/core/offline_page_storage_manager.h"
 
 #include <algorithm>
+#include <map>
+#include <string>
+#include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/client_policy_controller.h"
 #include "components/offline_pages/core/offline_page_client_policy.h"
 #include "components/offline_pages/core/offline_page_item.h"
@@ -31,6 +37,7 @@ OfflinePageStorageManager::OfflinePageStorageManager(
       policy_controller_(policy_controller),
       archive_manager_(archive_manager),
       clock_(new base::DefaultClock()),
+      reported_usage_this_launch_(false),
       weak_ptr_factory_(this) {}
 
 OfflinePageStorageManager::~OfflinePageStorageManager() {}
@@ -48,6 +55,10 @@ void OfflinePageStorageManager::ClearPagesIfNeeded(
 void OfflinePageStorageManager::SetClockForTesting(
     std::unique_ptr<base::Clock> clock) {
   clock_ = std::move(clock);
+}
+
+void OfflinePageStorageManager::ResetUsageReportingFlagForTesting() {
+  reported_usage_this_launch_ = false;
 }
 
 void OfflinePageStorageManager::OnGetStorageStatsDoneForClearingPages(
@@ -69,6 +80,7 @@ void OfflinePageStorageManager::OnGetAllPagesDoneForClearingPages(
     const ClearStorageCallback& callback,
     const ArchiveManager::StorageStats& stats,
     const MultipleOfflinePageItemResult& pages) {
+  ReportStorageUsageUMA(pages);
   std::vector<int64_t> page_ids_to_clear;
   GetPageIdsToClear(pages, stats, &page_ids_to_clear);
   model_->DeletePagesByOfflineId(
@@ -139,7 +151,7 @@ void OfflinePageStorageManager::GetPageIdsToClear(
   // If we're still over the clear threshold, we're going to clear remaining
   // pages from oldest last access time.
   int64_t free_space = stats.free_disk_space;
-  int64_t total_size = stats.total_archives_size;
+  int64_t total_size = stats.temporary_archives_size;
   int64_t space_to_release =
       kept_pages_size -
       (total_size + free_space) * constants::kOfflinePageStorageClearThreshold;
@@ -162,7 +174,7 @@ void OfflinePageStorageManager::GetPageIdsToClear(
 OfflinePageStorageManager::ClearMode
 OfflinePageStorageManager::ShouldClearPages(
     const ArchiveManager::StorageStats& storage_stats) {
-  int64_t total_size = storage_stats.total_archives_size;
+  int64_t total_size = storage_stats.temporary_archives_size;
   int64_t free_space = storage_stats.free_disk_space;
   if (total_size == 0)
     return ClearMode::NOT_NEEDED;
@@ -181,6 +193,36 @@ OfflinePageStorageManager::ShouldClearPages(
   }
   // Otherwise there's no need to clear storage right now.
   return ClearMode::NOT_NEEDED;
+}
+
+void OfflinePageStorageManager::ReportStorageUsageUMA(
+    const MultipleOfflinePageItemResult& pages) {
+  // Only run once per app launch to make the data less noisy.
+  // TODO(petewil): Once per day might be better, but would need a new field in
+  // the database, and a new async task to get it.
+  if (reported_usage_this_launch_)
+    return;
+  reported_usage_this_launch_ = true;
+
+  // Iterate through all the pages, getting their size, and adding to the proper
+  // namespace accumulator.
+  std::map<std::string, int64_t> page_sizes;
+  for (const OfflinePageItem& item : pages) {
+    const std::string& name_space = item.client_id.name_space;
+    // Note: if |name_space| is not yet a key in the map a new entry will be
+    // properly initialized with the value 0 because |int| is
+    // default-constructible (int() == 0).
+    page_sizes[name_space] += item.file_size;
+  }
+
+  // Report usages for all namespaces known to ClientPolicyController and only
+  // for those.
+  std::string base_histogram_name = "OfflinePages.ClearStoragePreRunUsage2.";
+  for (const std::string name_space : policy_controller_->GetAllNamespaces()) {
+    int size_in_kib = base::saturated_cast<int>(page_sizes[name_space] / 1024);
+    base::UmaHistogramCustomCounts(base_histogram_name + name_space,
+                                   size_in_kib, 1, 10000000, 50);
+  }
 }
 
 bool OfflinePageStorageManager::IsExpired(const OfflinePageItem& page) const {

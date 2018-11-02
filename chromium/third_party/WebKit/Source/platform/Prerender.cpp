@@ -45,13 +45,13 @@ Prerender::Prerender(PrerenderClient* client,
 
 Prerender::~Prerender() {}
 
-DEFINE_TRACE(Prerender) {
+void Prerender::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
 }
 
 void Prerender::Dispose() {
   client_ = nullptr;
-  extra_data_.Clear();
+  extra_data_ = nullptr;
 }
 
 void Prerender::Add() {

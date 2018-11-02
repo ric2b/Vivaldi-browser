@@ -12,10 +12,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/android/location_settings.h"
 #include "chrome/browser/android/location_settings_impl.h"
-#include "chrome/browser/android/search_geolocation/search_geolocation_disclosure_tab_helper.h"
-#include "chrome/browser/android/search_geolocation/search_geolocation_service.h"
+#include "chrome/browser/android/search_permissions/search_geolocation_disclosure_tab_helper.h"
+#include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/permissions/permission_request_id.h"
+#include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -44,6 +45,10 @@ const char kLocationSettingsAcceptMetricBase[] =
     "Geolocation.SettingsDialog.AcceptEvent.";
 const char kLocationSettingsDenyMetricBase[] =
     "Geolocation.SettingsDialog.DenyEvent.";
+const char kLocationSettingsAcceptBatteryMetric[] =
+    "Permissions.BatteryLevel.Accepted.LocationSettingsDialog";
+const char kLocationSettingsDenyBatteryMetric[] =
+    "Permissions.BatteryLevel.Denied.LocationSettingsDialog";
 
 const char kLocationSettingsMetricDSESuffix[] = "DSE";
 const char kLocationSettingsMetricNonDSESuffix[] = "NonDSE";
@@ -104,20 +109,19 @@ ContentSetting GeolocationPermissionContextAndroid::GetPermissionStatusInternal(
     // consulted when the content setting is ASK. In the other cases (ALLOW or
     // BLOCK) checking the setting is redundant, as the setting is kept
     // consistent with the content setting.
-    SearchGeolocationService* search_helper =
-        SearchGeolocationService::Factory::GetForBrowserContext(profile());
+    SearchPermissionsService* search_helper =
+        SearchPermissionsService::Factory::GetForBrowserContext(profile());
 
     // If the user is incognito, use the DSE Geolocation setting from the
     // original profile - but only if it is BLOCK.
     if (!search_helper) {
       DCHECK(profile()->IsOffTheRecord());
-      search_helper = SearchGeolocationService::Factory::GetForBrowserContext(
+      search_helper = SearchPermissionsService::Factory::GetForBrowserContext(
           profile()->GetOriginalProfile());
     }
 
-    if (search_helper &&
-        search_helper->UseDSEGeolocationSetting(
-            url::Origin(embedding_origin))) {
+    if (search_helper && search_helper->UseDSEGeolocationSetting(
+                             url::Origin::Create(embedding_origin))) {
       if (!search_helper->GetDSEGeolocationSetting()) {
         // If the DSE setting is off, always return BLOCK.
         value = CONTENT_SETTING_BLOCK;
@@ -469,11 +473,15 @@ void GeolocationPermissionContextAndroid::OnLocationSettingsDialogShown(
     LogLocationSettingsMetric(kLocationSettingsAcceptMetricBase,
                               is_default_search,
                               LocationSettingsBackOffLevel(is_default_search));
+    PermissionUmaUtil::RecordWithBatteryBucket(
+        kLocationSettingsAcceptBatteryMetric);
     ResetLocationSettingsBackOff(is_default_search);
   } else {
     LogLocationSettingsMetric(kLocationSettingsDenyMetricBase,
                               is_default_search,
                               LocationSettingsBackOffLevel(is_default_search));
+    PermissionUmaUtil::RecordWithBatteryBucket(
+        kLocationSettingsDenyBatteryMetric);
     UpdateLocationSettingsBackOff(is_default_search);
     content_setting = CONTENT_SETTING_BLOCK;
     persist = false;

@@ -7,11 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -42,7 +42,7 @@ FrameId GetFirstTestFrameId() {
 class FakeFrameClient {
  public:
   FakeFrameClient() : num_called_(0) {}
-  virtual ~FakeFrameClient() {}
+  virtual ~FakeFrameClient() = default;
 
   void AddExpectedResult(FrameId expected_frame_id,
                          const base::TimeTicks& expected_playout_time) {
@@ -64,7 +64,7 @@ class FakeFrameClient {
   int number_times_called() const { return num_called_; }
 
  private:
-  std::deque<std::pair<FrameId, base::TimeTicks>> expected_results_;
+  base::circular_deque<std::pair<FrameId, base::TimeTicks>> expected_results_;
   int num_called_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeFrameClient);
@@ -84,7 +84,7 @@ class FrameReceiverTest : public ::testing::Test {
                             task_runner_, task_runner_, task_runner_);
   }
 
-  ~FrameReceiverTest() override {}
+  ~FrameReceiverTest() override = default;
 
   void SetUp() final {
     payload_.assign(kPacketSize, 0);

@@ -9,7 +9,9 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/test/base/web_ui_browser_test.h"
+#include "extensions/browser/scoped_ignore_content_verifier_for_test.h"
 #include "extensions/browser/test_management_policy.h"
 #include "extensions/common/feature_switch.h"
 
@@ -37,6 +39,10 @@ class ExtensionSettingsUIBrowserTest : public WebUIBrowserTest {
 
   void InstallPlatformApp();
 
+  // Installs chrome/test/data/extensions/options_page_in_view extension
+  // and returns it back to the caller.  Can return null upon failure.
+  const extensions::Extension* InstallExtensionWithInPageOptions();
+
   void AddManagedPolicyProvider();
 
   void SetAutoConfirmUninstall();
@@ -47,6 +53,8 @@ class ExtensionSettingsUIBrowserTest : public WebUIBrowserTest {
   // Shrinks the web contents view in order to ensure vertical overflow.
   void ShrinkWebContentsView();
 
+  const base::FilePath& test_data_dir() { return test_data_dir_; }
+
  private:
   const extensions::Extension* InstallExtension(const base::FilePath& path);
 
@@ -54,6 +62,12 @@ class ExtensionSettingsUIBrowserTest : public WebUIBrowserTest {
   extensions::TestManagementPolicyProvider policy_provider_;
 
   base::FilePath test_data_dir_;
+
+  // Disable extension content verification.
+  extensions::ScopedIgnoreContentVerifierForTest ignore_content_verification_;
+
+  // Disable extension install verification.
+  extensions::ScopedInstallVerifierBypassForTest ignore_install_verification_;
 
   // Used to enable the error console.
   std::unique_ptr<extensions::FeatureSwitch::ScopedOverride>

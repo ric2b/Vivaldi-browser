@@ -13,8 +13,7 @@ namespace blink {
 class DOMRect;
 class Landmark;
 
-class MODULES_EXPORT DetectedFace final : public GarbageCollected<DetectedFace>,
-                                          public ScriptWrappable {
+class MODULES_EXPORT DetectedFace final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -25,7 +24,7 @@ class MODULES_EXPORT DetectedFace final : public GarbageCollected<DetectedFace>,
   DOMRect* boundingBox() const;
   const HeapVector<Landmark>& landmarks() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit DetectedFace(DOMRect*);

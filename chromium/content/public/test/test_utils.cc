@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -154,18 +155,14 @@ void RunAllPendingInMessageLoop(BrowserThread::ID thread_id) {
   RunThisRunLoop(&run_loop);
 }
 
-void RunAllBlockingPoolTasksUntilIdle() {
+void RunAllTasksUntilIdle() {
   while (true) {
-    content::BrowserThread::GetBlockingPool()->FlushForTesting();
-
     // Setup a task observer to determine if MessageLoop tasks run in the
     // current loop iteration. This must be done before
     // TaskScheduler::FlushForTesting() since this may spin the MessageLoop.
     TaskObserver task_observer;
     base::MessageLoop::current()->AddTaskObserver(&task_observer);
 
-    // Since all blocking pool call sites are being migrated to TaskScheduler,
-    // flush TaskScheduler in addition to the blocking pool.
     base::TaskScheduler::GetInstance()->FlushForTesting();
 
     base::RunLoop().RunUntilIdle();
@@ -208,10 +205,10 @@ void ResetSchemesAndOriginsWhitelist() {
   url::Initialize();
 }
 
-void EnableFeatureWithParam(const base::Feature& feature,
-                            const std::string& param_name,
-                            const std::string& param_value,
-                            base::CommandLine* command_line) {
+void DeprecatedEnableFeatureWithParam(const base::Feature& feature,
+                                      const std::string& param_name,
+                                      const std::string& param_value,
+                                      base::CommandLine* command_line) {
   static const char kFakeTrialName[] = "TrialNameForTesting";
   static const char kFakeTrialGroupName[] = "TrialGroupForTesting";
 
@@ -397,7 +394,7 @@ void RenderFrameDeletedObserver::WaitUntilDeleted() {
 WebContentsDestroyedWatcher::WebContentsDestroyedWatcher(
     WebContents* web_contents)
     : WebContentsObserver(web_contents) {
-  EXPECT_TRUE(web_contents != NULL);
+  EXPECT_TRUE(web_contents != nullptr);
 }
 
 WebContentsDestroyedWatcher::~WebContentsDestroyedWatcher() {
@@ -409,6 +406,14 @@ void WebContentsDestroyedWatcher::Wait() {
 
 void WebContentsDestroyedWatcher::WebContentsDestroyed() {
   run_loop_.Quit();
+}
+
+GURL EffectiveURLContentBrowserClient::GetEffectiveURL(
+    BrowserContext* browser_context,
+    const GURL& url) {
+  if (url == url_to_modify_)
+    return url_to_return_;
+  return url;
 }
 
 }  // namespace content

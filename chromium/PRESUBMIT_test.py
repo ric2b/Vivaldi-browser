@@ -504,7 +504,6 @@ class TryServerMasterTest(unittest.TestCase):
             'android_clang_dbg_recipe',
             'android_compile_dbg',
             'android_compile_mips_dbg',
-            'android_compile_rel',
             'android_compile_x64_dbg',
             'android_compile_x86_dbg',
             'android_coverage',
@@ -695,7 +694,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
       MockAffectedFile('A.py', []),
     ]
 
-    def mock_check_output(cmd, shell=False):
+    def mock_check_output(cmd, shell=False, env=None):
       self.assertEqual('CMD A --output ""', cmd)
       return self.checker._file_cache['A.pydeps']
 
@@ -713,7 +712,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
       MockAffectedFile('A.py', []),
     ]
 
-    def mock_check_output(cmd, shell=False):
+    def mock_check_output(cmd, shell=False, env=None):
       self.assertEqual('CMD A --output ""', cmd)
       return 'changed data'
 
@@ -732,7 +731,7 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
       MockAffectedFile('C.py', []),
     ]
 
-    def mock_check_output(cmd, shell=False):
+    def mock_check_output(cmd, shell=False, env=None):
       return 'changed data'
 
     self.mock_input_api.subprocess.check_output = mock_check_output

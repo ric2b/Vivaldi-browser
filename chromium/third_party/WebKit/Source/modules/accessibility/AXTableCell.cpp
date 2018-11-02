@@ -80,11 +80,11 @@ bool AXTableCell::ComputeAccessibilityIsIgnored(
 
 AXObject* AXTableCell::ParentTable() const {
   if (!layout_object_ || !layout_object_->IsTableCell())
-    return 0;
+    return nullptr;
 
   // If the document no longer exists, we might not have an axObjectCache.
   if (IsDetached())
-    return 0;
+    return nullptr;
 
   // Do not use getOrCreate. parentTable() can be called while the layout tree
   // is being modified by javascript, and creating a table element may try to
@@ -92,15 +92,23 @@ AXObject* AXTableCell::ParentTable() const {
   // that the AXTable must be created before AXTableCells. This should always be
   // the case when AT clients access a table.
   // https://bugs.webkit.org/show_bug.cgi?id=42652
-  return AxObjectCache().Get(ToLayoutTableCell(layout_object_)->Table());
+  return AXObjectCache().Get(ToLayoutTableCell(layout_object_)->Table());
+}
+
+AXObject* AXTableCell::ParentRow() const {
+  if (!layout_object_ || !layout_object_->IsTableCell())
+    return nullptr;
+
+  // If the document no longer exists, we might not have an axObjectCache.
+  if (IsDetached())
+    return nullptr;
+
+  return AXObjectCache().Get(ToLayoutTableCell(layout_object_)->Row());
 }
 
 bool AXTableCell::IsTableCell() const {
-  AXObject* parent = ParentObjectUnignored();
-  if (!parent || !parent->IsTableRow())
-    return false;
-
-  return true;
+  AXObject* row = ParentRow();
+  return row && row->IsTableRow();
 }
 
 unsigned AXTableCell::AriaColumnIndex() const {
@@ -110,11 +118,8 @@ unsigned AXTableCell::AriaColumnIndex() const {
     return col_index;
   }
 
-  AXObject* parent = ParentObjectUnignored();
-  if (!parent || !parent->IsTableRow())
-    return 0;
-
-  return aria_col_index_from_row_;
+  AXObject* parent = ParentRow();
+  return parent ? aria_col_index_from_row_ : 0;
 }
 
 unsigned AXTableCell::AriaRowIndex() const {
@@ -124,11 +129,8 @@ unsigned AXTableCell::AriaRowIndex() const {
     return row_index;
   }
 
-  AXObject* parent = ParentObjectUnignored();
-  if (!parent || !parent->IsTableRow())
-    return 0;
-
-  return ToAXTableRow(parent)->AriaRowIndex();
+  AXObject* parent = ParentRow();
+  return parent ? ToAXTableRow(parent)->AriaRowIndex() : 0;
 }
 
 static AccessibilityRole DecideRoleFromSibling(LayoutTableCell* sibling_cell) {
@@ -180,6 +182,7 @@ AccessibilityRole AXTableCell::DetermineAccessibilityRole() {
   if (!IsTableCell())
     return AXLayoutObject::DetermineAccessibilityRole();
 
+  aria_role_ = DetermineAriaRoleAttribute();
   return ScanToDecideHeaderRole();
 }
 

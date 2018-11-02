@@ -6,13 +6,13 @@
 
 #include <stdint.h>
 
-#include <stack>
 #include <utility>
 
 #include "base/bits.h"
+#include "base/containers/circular_deque.h"
 #include "base/json/string_escape.h"
 #include "base/memory/ptr_util.h"
-#include "base/trace_event/common/trace_event_common.h"
+#include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "base/trace_event/trace_event_memory_overhead.h"
 #include "base/values.h"
@@ -246,7 +246,7 @@ void TracedValue::SetValue(const char* name,
 void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
                                              const base::Value& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
-  switch (value.GetType()) {
+  switch (value.type()) {
     case base::Value::Type::NONE:
     case base::Value::Type::BINARY:
       NOTREACHED();
@@ -300,7 +300,7 @@ void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
 
 void TracedValue::AppendBaseValue(const base::Value& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeArray);
-  switch (value.GetType()) {
+  switch (value.type()) {
     case base::Value::Type::NONE:
     case base::Value::Type::BINARY:
       NOTREACHED();
@@ -353,9 +353,9 @@ void TracedValue::AppendBaseValue(const base::Value& value) {
 }
 
 std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
-  std::unique_ptr<DictionaryValue> root(new DictionaryValue);
-  DictionaryValue* cur_dict = root.get();
-  ListValue* cur_list = nullptr;
+  base::Value root(base::Value::Type::DICTIONARY);
+  Value* cur_dict = &root;
+  Value* cur_list = nullptr;
   std::vector<Value*> stack;
   PickleIterator it(pickle_);
   const char* type;
@@ -364,16 +364,15 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
     DCHECK((cur_dict && !cur_list) || (cur_list && !cur_dict));
     switch (*type) {
       case kTypeStartDict: {
-        auto new_dict = std::make_unique<DictionaryValue>();
+        base::Value new_dict(base::Value::Type::DICTIONARY);
         if (cur_dict) {
           stack.push_back(cur_dict);
-          cur_dict = cur_dict->SetDictionaryWithoutPathExpansion(
-              ReadKeyName(it), std::move(new_dict));
+          cur_dict = cur_dict->SetKey(ReadKeyName(it), std::move(new_dict));
         } else {
-          cur_list->Append(std::move(new_dict));
+          cur_list->GetList().push_back(std::move(new_dict));
           // |new_dict| is invalidated at this point, so |cur_dict| needs to be
           // reset.
-          cur_list->GetDictionary(cur_list->GetSize() - 1, &cur_dict);
+          cur_dict = &cur_list->GetList().back();
           stack.push_back(cur_list);
           cur_list = nullptr;
         }
@@ -381,67 +380,72 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
 
       case kTypeEndArray:
       case kTypeEndDict: {
-        if (stack.back()->GetAsDictionary(&cur_dict)) {
+        if (stack.back()->is_dict()) {
+          cur_dict = stack.back();
           cur_list = nullptr;
-        } else if (stack.back()->GetAsList(&cur_list)) {
+        } else if (stack.back()->is_list()) {
+          cur_list = stack.back();
           cur_dict = nullptr;
         }
         stack.pop_back();
       } break;
 
       case kTypeStartArray: {
-        auto new_list = std::make_unique<ListValue>();
+        base::Value new_list(base::Value::Type::LIST);
         if (cur_dict) {
           stack.push_back(cur_dict);
-          cur_list = cur_dict->SetListWithoutPathExpansion(ReadKeyName(it),
-                                                           std::move(new_list));
+          cur_list = cur_dict->SetKey(ReadKeyName(it), std::move(new_list));
           cur_dict = nullptr;
         } else {
-          cur_list->Append(std::move(new_list));
+          cur_list->GetList().push_back(std::move(new_list));
           stack.push_back(cur_list);
           // |cur_list| is invalidated at this point by the Append, so it needs
           // to be reset.
-          cur_list->GetList(cur_list->GetSize() - 1, &cur_list);
+          cur_list = &cur_list->GetList().back();
         }
       } break;
 
       case kTypeBool: {
         bool value;
         CHECK(it.ReadBool(&value));
+        base::Value new_bool(value);
         if (cur_dict) {
-          cur_dict->SetKey(ReadKeyName(it), Value(value));
+          cur_dict->SetKey(ReadKeyName(it), std::move(new_bool));
         } else {
-          cur_list->AppendBoolean(value);
+          cur_list->GetList().push_back(std::move(new_bool));
         }
       } break;
 
       case kTypeInt: {
         int value;
         CHECK(it.ReadInt(&value));
+        base::Value new_int(value);
         if (cur_dict) {
-          cur_dict->SetKey(ReadKeyName(it), Value(value));
+          cur_dict->SetKey(ReadKeyName(it), std::move(new_int));
         } else {
-          cur_list->AppendInteger(value);
+          cur_list->GetList().push_back(std::move(new_int));
         }
       } break;
 
       case kTypeDouble: {
         double value;
         CHECK(it.ReadDouble(&value));
+        base::Value new_double(value);
         if (cur_dict) {
-          cur_dict->SetKey(ReadKeyName(it), Value(value));
+          cur_dict->SetKey(ReadKeyName(it), std::move(new_double));
         } else {
-          cur_list->AppendDouble(value);
+          cur_list->GetList().push_back(std::move(new_double));
         }
       } break;
 
       case kTypeString: {
         std::string value;
         CHECK(it.ReadString(&value));
+        base::Value new_str(std::move(value));
         if (cur_dict) {
-          cur_dict->SetKey(ReadKeyName(it), Value(value));
+          cur_dict->SetKey(ReadKeyName(it), std::move(new_str));
         } else {
-          cur_list->AppendString(value);
+          cur_list->GetList().push_back(std::move(new_str));
         }
       } break;
 
@@ -450,7 +454,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
     }
   }
   DCHECK(stack.empty());
-  return std::move(root);
+  return base::Value::ToUniquePtrValue(std::move(root));
 }
 
 void TracedValue::AppendAsTraceFormat(std::string* out) const {
@@ -471,84 +475,90 @@ void TracedValue::AppendAsTraceFormat(std::string* out) const {
     }
   };
 
-  std::stack<State> state_stack;
+  base::circular_deque<State> state_stack;
 
   out->append("{");
-  state_stack.push({State::kTypeDict});
+  state_stack.push_back({State::kTypeDict});
 
   PickleIterator it(pickle_);
   for (const char* type; it.ReadBytes(&type, 1);) {
     switch (*type) {
       case kTypeEndDict:
         out->append("}");
-        state_stack.pop();
+        state_stack.pop_back();
         continue;
 
       case kTypeEndArray:
         out->append("]");
-        state_stack.pop();
+        state_stack.pop_back();
         continue;
     }
 
-    State& current_state = state_stack.top();
-    if (current_state.needs_comma) {
+    // Use an index so it will stay valid across resizes.
+    size_t current_state_index = state_stack.size() - 1;
+    if (state_stack[current_state_index].needs_comma)
       out->append(",");
-    }
 
     switch (*type) {
-      case kTypeStartDict:
-        maybe_append_key_name(current_state, &it, out);
+      case kTypeStartDict: {
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         out->append("{");
-        state_stack.push({State::kTypeDict});
+        state_stack.push_back({State::kTypeDict});
         break;
+      }
 
-      case kTypeStartArray:
-        maybe_append_key_name(current_state, &it, out);
+      case kTypeStartArray: {
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         out->append("[");
-        state_stack.push({State::kTypeArray});
+        state_stack.push_back({State::kTypeArray});
         break;
+      }
 
       case kTypeBool: {
         TraceEvent::TraceValue json_value;
         CHECK(it.ReadBool(&json_value.as_bool));
-        maybe_append_key_name(current_state, &it, out);
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_BOOL, json_value, out);
-      } break;
+        break;
+      }
 
       case kTypeInt: {
         int value;
         CHECK(it.ReadInt(&value));
-        maybe_append_key_name(current_state, &it, out);
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         TraceEvent::TraceValue json_value;
         json_value.as_int = value;
         TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_INT, json_value, out);
-      } break;
+        break;
+      }
 
       case kTypeDouble: {
         TraceEvent::TraceValue json_value;
         CHECK(it.ReadDouble(&json_value.as_double));
-        maybe_append_key_name(current_state, &it, out);
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_DOUBLE, json_value, out);
-      } break;
+        break;
+      }
 
       case kTypeString: {
         std::string value;
         CHECK(it.ReadString(&value));
-        maybe_append_key_name(current_state, &it, out);
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
         TraceEvent::TraceValue json_value;
         json_value.as_string = value.c_str();
         TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_STRING, json_value, out);
-      } break;
+        break;
+      }
 
       default:
         NOTREACHED();
     }
 
-    current_state.needs_comma = true;
+    state_stack[current_state_index].needs_comma = true;
   }
 
   out->append("}");
-  state_stack.pop();
+  state_stack.pop_back();
 
   DCHECK(state_stack.empty());
 }

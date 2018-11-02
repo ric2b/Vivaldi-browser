@@ -185,6 +185,15 @@ Status WebViewImpl::Load(const std::string& url, const Timeout* timeout) {
     return Status(kUnknownError, "unsupported protocol");
   base::DictionaryValue params;
   params.SetString("url", url);
+  if (browser_info_->major_version >= 63 &&
+      navigation_tracker_->IsNonBlocking()) {
+    // With non-bloakcing navigation tracker, the previous navigation might
+    // still be in progress, and this can cause the new navigate command to be
+    // ignored on Chrome v63 and above. Stop previous navigation first.
+    client_->SendCommand("Page.stopLoading", base::DictionaryValue());
+    // Use SendCommandAndIgnoreResponse to ensure no blocking occurs.
+    return client_->SendCommandAndIgnoreResponse("Page.navigate", params);
+  }
   return client_->SendCommandWithTimeout("Page.navigate", params, timeout);
 }
 
@@ -486,7 +495,14 @@ Status WebViewImpl::AddCookie(const std::string& name,
   params.SetBoolean("httpOnly", httpOnly);
   params.SetDouble("expirationDate", expiry);
   params.SetDouble("expires", expiry);
-  return client_->SendCommand("Network.setCookie", params);
+
+  std::unique_ptr<base::DictionaryValue> result;
+  Status status =
+      client_->SendCommandAndGetResult("Network.setCookie", params, &result);
+  bool success;
+  if (!result->GetBoolean("success", &success) || !success)
+    return Status(kUnableToSetCookie);
+  return Status(kOk);
 }
 
 Status WebViewImpl::WaitForPendingNavigations(const std::string& frame_id,
@@ -499,9 +515,13 @@ Status WebViewImpl::WaitForPendingNavigations(const std::string& frame_id,
   Status status = client_->HandleEventsUntil(not_pending_navigation, timeout);
   if (status.code() == kTimeout && stop_load_on_timeout) {
     VLOG(0) << "Timed out. Stopping navigation...";
-    std::unique_ptr<base::Value> unused_value;
     navigation_tracker_->set_timed_out(true);
-    EvaluateScript(std::string(), "window.stop();", &unused_value);
+    if (browser_info_->major_version >= 63) {
+      client_->SendCommand("Page.stopLoading", base::DictionaryValue());
+    } else {
+      std::unique_ptr<base::Value> unused_value;
+      EvaluateScript(std::string(), "window.stop();", &unused_value);
+    }
     // We don't consider |timeout| here to make sure the navigation actually
     // stops and we cleanup properly after a command that caused a navigation
     // that timed out.  Otherwise we might have to wait for that before

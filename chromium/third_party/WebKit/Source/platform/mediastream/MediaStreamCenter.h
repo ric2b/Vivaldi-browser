@@ -32,10 +32,12 @@
 #define MediaStreamCenter_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebMediaStreamCenterClient.h"
 
@@ -51,7 +53,6 @@ class WebMediaStreamCenter;
 class PLATFORM_EXPORT MediaStreamCenter final
     : public WebMediaStreamCenterClient {
   USING_FAST_MALLOC(MediaStreamCenter);
-  WTF_MAKE_NONCOPYABLE(MediaStreamCenter);
 
  public:
   ~MediaStreamCenter() override;
@@ -63,12 +64,10 @@ class PLATFORM_EXPORT MediaStreamCenter final
                                 MediaStreamComponent* clone);
   void DidSetMediaStreamTrackEnabled(MediaStreamComponent*);
   void DidSetContentHint(MediaStreamComponent*);
-  bool DidStopMediaStreamTrack(MediaStreamComponent*);
   std::unique_ptr<AudioSourceProvider> CreateWebAudioSourceFromMediaStreamTrack(
       MediaStreamComponent*);
 
   void DidCreateMediaStreamAndTracks(MediaStreamDescriptor*);
-  void DidStopLocalMediaStream(MediaStreamDescriptor*);
 
   void DidStopMediaStreamSource(MediaStreamSource*);
 
@@ -79,6 +78,8 @@ class PLATFORM_EXPORT MediaStreamCenter final
   MediaStreamCenter();
 
   std::unique_ptr<WebMediaStreamCenter> private_;
+
+  DISALLOW_COPY_AND_ASSIGN(MediaStreamCenter);
 };
 
 }  // namespace blink

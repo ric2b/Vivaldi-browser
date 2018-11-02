@@ -12,18 +12,24 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/chromeos/lock_screen_apps/app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_observer.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/api/app_runtime.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/aura/window.h"
 #include "ui/events/devices/input_device_event_observer.h"
 
 class PrefRegistrySimple;
+class Profile;
+
+namespace aura {
+class Window;
+}
 
 namespace base {
 class TickClock;
@@ -55,59 +61,20 @@ namespace lock_screen_apps {
 
 class AppWindowMetricsTracker;
 class FocusCyclerDelegate;
+class LockScreenProfileCreator;
 class StateObserver;
+class FirstAppRunToastManager;
 
 // Manages state of lock screen action handler apps, and notifies
 // interested parties as the state changes.
 // Currently assumes single supported action - NEW_NOTE.
 class StateController : public ash::mojom::TrayActionClient,
                         public session_manager::SessionManagerObserver,
+                        public aura::WindowObserver,
                         public extensions::AppWindowRegistry::Observer,
                         public ui::InputDeviceEventObserver,
                         public chromeos::PowerManagerClient::Observer {
  public:
-  // Type of action that triggered a request for new note.
-  // Used in histograms - should be kept in sync with
-  // NewLockScreenNoteRequestType histogram enum, and assigned values should
-  // never be changed.
-  enum class NewNoteRequestType {
-    kTrayAction = 0,
-    kLockScreenUiTap = 1,
-    kLockScreenUiSwipe = 2,
-    kLockScreenUiKeyboard = 3,
-    kStylusEject = 4,
-    kCount,
-  };
-
-  // Reason for resetting note taking app window, and exiting note taking app.
-  // Used primarily for metrics reporting.
-  // IMPORTANT: The values should be kept in sync with
-  // LockScreenNoteTakingExitReason histogram enum, and assigned values should
-  // never be changed.
-  enum class NoteTakingExitReason {
-    kSessionUnlock = 0,
-    kShutdown = 1,
-    kScreenDimmed = 2,
-    kSuspend = 3,
-    kAppWindowClosed = 4,
-    kAppLockScreenSupportDisabled = 5,
-    kUnlockButtonPressed = 6,
-    kCount
-  };
-
-  // Action taken by the user on lock screen when a lock screen app window was
-  // in the background - used primarily for metrics reporting.
-  // IMPORTANT: The values should be kept in sync with
-  // LockScreenNoteTakingUnlockUIAction, and assigned values should never be
-  // changed.
-  enum class LockScreenUnlockAction {
-    kSessionUnlocked = 0,
-    kUnlockCancelled = 1,
-    kShutdown = 2,
-    kSignOut = 3,
-    kCount
-  };
-
   // Returns whether the StateController is enabled - it is currently guarded by
   // a feature flag. If not enabled, |StateController| instance is not allowed
   // to be created. |Get| will still work, but it will return nullptr.
@@ -132,9 +99,15 @@ class StateController : public ash::mojom::TrayActionClient,
   // Sets the callback that will be run when the state controller is fully
   // initialized and ready for action.
   void SetReadyCallbackForTesting(const base::Closure& ready_callback);
+  // Sets the tick clock to be used in tests.
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> clock);
   // Sets test AppManager implementation. Should be called before
   // |SetPrimaryProfile|
   void SetAppManagerForTesting(std::unique_ptr<AppManager> app_manager);
+  // Sets test LockScreenProfileCreator implementation. Should be called before
+  // |SetPrimaryProfile|
+  void SetLockScreenLockScreenProfileCreatorForTesting(
+      std::unique_ptr<LockScreenProfileCreator> profile_creator);
 
   // Initializes mojo bindings for the StateController - it creates binding to
   // ash's tray action interface and sets this object as the interface's client.
@@ -163,21 +136,26 @@ class StateController : public ash::mojom::TrayActionClient,
   ash::mojom::TrayActionState GetLockScreenNoteState() const;
 
   // ash::mojom::TrayActionClient:
-  void RequestNewLockScreenNote() override;
+  void RequestNewLockScreenNote(
+      ash::mojom::LockScreenNoteOrigin origin) override;
+  void CloseLockScreenNote(
+      ash::mojom::CloseLockScreenNoteReason reason) override;
 
   // session_manager::SessionManagerObserver:
   void OnSessionStateChanged() override;
+
+  // aura::WindowObserver:
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
 
   // extensions::AppWindowRegistry::Observer:
   void OnAppWindowAdded(extensions::AppWindow* app_window) override;
   void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
 
   // ui::InputDeviceEventObserver:
-  void OnStylusStateChanged(ui::StylusState state) override;
+  void OnTouchscreenDeviceConfigurationChanged() override;
 
   // chromeos::PowerManagerClient::Observer
-  void BrightnessChanged(int level, bool user_initiated) override;
-  void SuspendImminent() override;
+  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
 
   // Creates and registers an app window as action handler for the action on
   // Chrome OS lock screen. The ownership of the returned app window is passed
@@ -197,31 +175,16 @@ class StateController : public ash::mojom::TrayActionClient,
   // Returns whether the focus has been taken from the app window.
   bool HandleTakeFocus(content::WebContents* web_contents, bool reverse);
 
-  // If there are any active lock screen action handlers, moved their windows
-  // to background, to ensure lock screen UI is visible.
-  void MoveToBackground();
+  // Called from the lock screen Web UI when the animation shown on a note
+  // action launch finishes (the animation is started when the lock screen
+  // note state changes to kLaunching).
+  void NewNoteLaunchAnimationDone();
 
-  // If there are any lock screen action handler in background, moves their
-  // windows back to foreground (i.e. visible over lock screen UI).
-  void MoveToForeground();
-
-  // Handles new note requests that come from lock screen UI.
-  void HandleNewNoteRequestFromLockScreen(NewNoteRequestType type);
-
-  // Records the user action taken on lock screen when the lock screen app
-  // unlock UI is shown - i.e. when lock UI is shown on top of backgrounded
-  // lock screen app window.
-  void RecordLockScreenAppUnlockAction(LockScreenUnlockAction action);
+  FirstAppRunToastManager* first_app_run_toast_manager() {
+    return first_app_run_toast_manager_.get();
+  }
 
  private:
-  // Called when profiles needed to run lock screen apps are ready - i.e. when
-  // primary user profile was set using |SetPrimaryProfile| and the profile in
-  // which app lock screen windows will be run creation is done.
-  // |status| - The lock screen profile creation status.
-  void OnProfilesReady(Profile* primary_profile,
-                       Profile* lock_screen_profile,
-                       Profile::CreateStatus status);
-
   // Gets the encryption key that should be used to encrypt user data created on
   // the lock screen. If a key hadn't previously been created and saved to
   // user prefs, a new key is created and saved.
@@ -229,13 +192,19 @@ class StateController : public ash::mojom::TrayActionClient,
   // Returns whether |crypto_key| was successfully retrieved.
   bool GetUserCryptoKey(Profile* profile, std::string* crypto_key);
 
-  // Finishes lock screen apps initialization with primary user profile and
+  // Continues lock screen apps initialization with primary user profile and
   // associated encryption key to be used for encrypting user data created in
   // lock screen context.
   void InitializeWithCryptoKey(Profile* profile, const std::string& crypto_key);
 
-  // Handles request to launch a new-note lock screen flow.
-  void HandleNewNoteRequest(NewNoteRequestType type);
+  // Continues lock screen apps initialization. Should be called when stylus
+  // input has been detected.
+  void InitializeWithStylusInputPresent();
+
+  // Issues a lock screen note app launch request to |app_manager_|.
+  // Expected to be called only in kLaunching state. In the case the launch is
+  // not successful, the note taking action state will be changed accordingly.
+  void StartLaunchRequest();
 
   // Called when app manager reports that note taking availability has changed.
   void OnNoteTakingAvailabilityChanged();
@@ -246,7 +215,7 @@ class StateController : public ash::mojom::TrayActionClient,
   // on whether lock screen note taking action can still be handled.
   void ResetNoteTakingWindowAndMoveToNextState(
       bool close_window,
-      NoteTakingExitReason exit_reason);
+      ash::mojom::CloseLockScreenNoteReason reason);
 
   // Requests lock screen note action state change to |state|.
   // Returns whether the action state has changed.
@@ -269,7 +238,19 @@ class StateController : public ash::mojom::TrayActionClient,
   mojo::Binding<ash::mojom::TrayActionClient> binding_;
   ash::mojom::TrayActionPtr tray_action_ptr_;
 
-  Profile* lock_screen_profile_ = nullptr;
+  std::unique_ptr<LockScreenProfileCreator> lock_screen_profile_creator_;
+
+  // Whether sending app launch request to the note taking app (using
+  // |app_manager_|) was delayed until the note action launch animation is
+  // completed by lock screen UI - this is only used with Web UI lock
+  // implementation, and for note action launch requests that don't come from
+  // the lock UI (i.e. stylus removal).
+  bool app_launch_delayed_for_animation_ = false;
+
+  // Whether lock screen apps initialization was stopped due to stylus input
+  // missing (or stylus not being otherwise enabled). If stylus availability
+  // changes due to stylus input being detected, initialization will continue.
+  bool stylus_input_missing_ = false;
 
   std::unique_ptr<extensions::lock_screen_data::LockScreenItemStorage>
       lock_screen_data_;
@@ -285,6 +266,14 @@ class StateController : public ash::mojom::TrayActionClient,
   // launches per lock screen.
   std::unique_ptr<AppWindowMetricsTracker> note_app_window_metrics_;
 
+  // Used to show first lock screen app run (toast) dialog when an app window
+  // is first launched for an app.
+  // NOTE: The manager can be used for every app launch - before showing the
+  // toast dialog, the manager will bail out if it determines that the toast
+  // for the associated app has been previosly seen (and closed) by the user.
+  std::unique_ptr<FirstAppRunToastManager> first_app_run_toast_manager_;
+
+  ScopedObserver<aura::Window, aura::WindowObserver> note_window_observer_;
   ScopedObserver<extensions::AppWindowRegistry,
                  extensions::AppWindowRegistry::Observer>
       app_window_observer_;

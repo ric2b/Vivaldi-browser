@@ -5,7 +5,7 @@
 #include "core/paint/PaintPropertyTreePrinter.h"
 
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTestHelper.h"
+#include "core/paint/PaintControllerPaintTest.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -14,34 +14,22 @@
 
 namespace blink {
 
-typedef bool TestParamRootLayerScrolling;
-class PaintPropertyTreePrinterTest
-    : public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
-      private ScopedSlimmingPaintV2ForTest,
-      private ScopedRootLayerScrollingForTest,
-      public RenderingTest {
+class PaintPropertyTreePrinterTest : public PaintControllerPaintTest {
  public:
   PaintPropertyTreePrinterTest()
-      : ScopedSlimmingPaintV2ForTest(true),
-        ScopedRootLayerScrollingForTest(GetParam()),
-        RenderingTest(SingleChildLocalFrameClient::Create()) {}
+      : PaintControllerPaintTest(SingleChildLocalFrameClient::Create()) {}
 
  private:
   void SetUp() override {
-    Settings::SetMockScrollbarsEnabled(true);
-
     RenderingTest::SetUp();
     EnableCompositing();
   }
-
-  void TearDown() override {
-    RenderingTest::TearDown();
-
-    Settings::SetMockScrollbarsEnabled(false);
-  }
 };
 
-INSTANTIATE_TEST_CASE_P(All, PaintPropertyTreePrinterTest, ::testing::Bool());
+INSTANTIATE_TEST_CASE_P(
+    All,
+    PaintPropertyTreePrinterTest,
+    ::testing::ValuesIn(kSlimmingPaintV2TestConfigurations));
 
 TEST_P(PaintPropertyTreePrinterTest, SimpleTransformTree) {
   SetBodyInnerHTML("hello world");
@@ -85,14 +73,14 @@ TEST_P(PaintPropertyTreePrinterTest, SimpleTransformTreePath) {
   LayoutObject* transformed_object =
       GetDocument().getElementById("transform")->GetLayoutObject();
   const auto* transformed_object_properties =
-      transformed_object->FirstFragment()->PaintProperties();
+      transformed_object->FirstFragment().PaintProperties();
   String transform_path_as_string =
       transformed_object_properties->Transform()->ToTreeString();
   EXPECT_THAT(transform_path_as_string.Ascii().data(),
-              ::testing::MatchesRegex("root .* transform.*"
-                                      "  .* transform.*"
-                                      "    .* transform.*"
-                                      "       .* transform.*"));
+              ::testing::MatchesRegex("root .*\"scroll\".*"
+                                      "  .*\"parent\".*"
+                                      "    .*\"matrix\".*"
+                                      "       .*\"matrix\".*"));
 }
 
 TEST_P(PaintPropertyTreePrinterTest, SimpleClipTreePath) {
@@ -102,13 +90,13 @@ TEST_P(PaintPropertyTreePrinterTest, SimpleClipTreePath) {
   LayoutObject* clipped_object =
       GetDocument().getElementById("clip")->GetLayoutObject();
   const auto* clipped_object_properties =
-      clipped_object->FirstFragment()->PaintProperties();
+      clipped_object->FirstFragment().PaintProperties();
   String clip_path_as_string =
       clipped_object_properties->CssClip()->ToTreeString();
   EXPECT_THAT(clip_path_as_string.Ascii().data(),
-              ::testing::MatchesRegex("root .* rect.*"
-                                      "  .* rect.*"
-                                      "    .* rect.*"));
+              ::testing::MatchesRegex("root .*\"rect\".*"
+                                      "  .*\"rect\".*"
+                                      "    .*\"rect\".*"));
 }
 
 TEST_P(PaintPropertyTreePrinterTest, SimpleEffectTreePath) {
@@ -116,29 +104,30 @@ TEST_P(PaintPropertyTreePrinterTest, SimpleEffectTreePath) {
   LayoutObject* effect_object =
       GetDocument().getElementById("effect")->GetLayoutObject();
   const auto* effect_object_properties =
-      effect_object->FirstFragment()->PaintProperties();
+      effect_object->FirstFragment().PaintProperties();
   String effect_path_as_string =
       effect_object_properties->Effect()->ToTreeString();
   EXPECT_THAT(effect_path_as_string.Ascii().data(),
-              ::testing::MatchesRegex("root .* opacity.*"
-                                      "  .* opacity.*"));
+              ::testing::MatchesRegex("root .*\"outputClip\".*"
+                                      "  .*\"parent\".*\"opacity\".*"));
 }
 
 TEST_P(PaintPropertyTreePrinterTest, SimpleScrollTreePath) {
-  SetBodyInnerHTML(
-      "<div id='scroll' style='overflow: scroll; height: 100px;'>"
-      "  <div id='forceScroll' style='height: 4000px;'></div>"
-      "</div>");
+  SetBodyInnerHTML(R"HTML(
+    <div id='scroll' style='overflow: scroll; height: 100px;'>
+      <div id='forceScroll' style='height: 4000px;'></div>
+    </div>
+  )HTML");
   LayoutObject* scroll_object =
       GetDocument().getElementById("scroll")->GetLayoutObject();
   const auto* scroll_object_properties =
-      scroll_object->FirstFragment()->PaintProperties();
+      scroll_object->FirstFragment().PaintProperties();
   String scroll_path_as_string = scroll_object_properties->ScrollTranslation()
                                      ->ScrollNode()
                                      ->ToTreeString();
   EXPECT_THAT(scroll_path_as_string.Ascii().data(),
-              ::testing::MatchesRegex("root .* parent.*"
-                                      "  .* parent.*"));
+              ::testing::MatchesRegex("root .* \\{\\}.*"
+                                      "  .*\"parent\".*"));
 }
 
 }  // namespace blink

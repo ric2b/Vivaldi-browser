@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import posixpath
 
 from code_generator import initialize_jinja_env
 from idl_reader import IdlReader
@@ -55,6 +56,8 @@ def parse_args():
                         help='cache directory')
     parser.add_argument('--target-component', type=str, required=True,
                         help='target component')
+    parser.add_argument('--snake-case-generated-files', action='store_true',
+                        default=False)
     return parser.parse_known_args()
 
 
@@ -153,12 +156,12 @@ class ExternalReferenceTableGenerator(object):
     # Creates a Jinja context from an IDL file.
     def process_idl_file(self, idl_filename):
         definitions = self._reader.read_idl_definitions(idl_filename)
-        base_name, _ = os.path.splitext(os.path.basename(idl_filename))
         for component in definitions:
             target_definitions = definitions[component]
             interfaces = target_definitions.interfaces
-            if base_name in interfaces.keys():
-                interface = interfaces[base_name]
+            first_name = target_definitions.first_name
+            if first_name in interfaces.keys():
+                interface = interfaces[first_name]
                 self._process_interface(interface, component, interfaces)
 
     # Creates a Jinja context from an interface. Some interfaces are not used
@@ -181,7 +184,10 @@ class ExternalReferenceTableGenerator(object):
         context = context_builder.create_interface_context(interface, interfaces)
         name = '%s%s' % (interface.name, 'Partial' if interface.is_partial else '')
         self._interface_contexts[name] = context
-        include_file = 'bindings/%s/v8/%s.h' % (component, context['v8_name'])
+        if self._opts.snake_case_generated_files:
+            include_file = 'bindings/%s/v8/%s.h' % (component, utilities.to_snake_case(context['v8_name']))
+        else:
+            include_file = 'bindings/%s/v8/%s.h' % (component, context['v8_name'])
         self._include_files.add(include_file)
 
     # Gathers all interface-dependent information and returns as a Jinja template context.
@@ -189,10 +195,26 @@ class ExternalReferenceTableGenerator(object):
         interfaces = []
         for name in sorted(self._interface_contexts):
             interfaces.append(self._interface_contexts[name])
+        header_name = 'V8ContextSnapshotExternalReferences.h'
+        if self._opts.snake_case_generated_files:
+            header_name = 'v8_context_snapshot_external_references.h'
+        include_files = list(self._include_files)
+        # TODO(tkent): Update INCLUDES after the great mv, and remove the
+        # following block. crbug.com/760462
+        if self._opts.snake_case_generated_files:
+            include_files = []
+            for include in self._include_files:
+                dirname, basename = posixpath.split(include)
+                name, ext = posixpath.splitext(basename)
+                include_files.append(posixpath.join(
+                    dirname, utilities.to_snake_case(name) + ext))
         return {
             'class': 'V8ContextSnapshotExternalReferences',
             'interfaces': interfaces,
-            'include_files': sorted(list(self._include_files)),
+            'include_files': sorted(include_files),
+            'this_include_header_name': header_name,
+            'code_generator': os.path.basename(__file__),
+            'jinja_template_filename': TEMPLATE_FILE
         }
 
     # Applies a Jinja template on a context and generates a C++ code.

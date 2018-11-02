@@ -16,15 +16,17 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/stacked_tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "chrome/browser/ui/views/tabs/window_finder.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -40,12 +42,11 @@
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
-#if defined(USE_ASH)
-#include "ash/accelerators/accelerator_commands.h"  // nogncheck
-#include "ash/shell.h"                   // nogncheck
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"  // nogncheck
-#include "ash/wm/window_state.h"  // nogncheck
-#include "ui/wm/core/coordinate_conversion.h"  // nogncheck
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/window_properties.h"               // nogncheck
+#include "ash/public/interfaces/window_state_type.mojom.h"  // nogncheck
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #endif
 
 #if defined(USE_AURA)
@@ -97,16 +98,18 @@ const int kStackedDistance = 36;
 // maximized size.
 const int kMaximizedWindowInset = 10;  // DIPs.
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
 // Returns true if |tab_strip| browser window is snapped.
-bool IsSnapped(const TabStrip* tab_strip) {
+bool IsSnapped(const TabStripImpl* tab_strip) {
   DCHECK(tab_strip);
-  ash::wm::WindowState* window_state =
-      ash::wm::GetWindowState(tab_strip->GetWidget()->GetNativeWindow());
-  return window_state->IsSnapped();
+  ash::mojom::WindowStateType type =
+      tab_strip->GetWidget()->GetNativeWindow()->GetProperty(
+          ash::kWindowStateTypeKey);
+  return type == ash::mojom::WindowStateType::LEFT_SNAPPED ||
+         type == ash::mojom::WindowStateType::RIGHT_SNAPPED;
 }
 #else
-bool IsSnapped(const TabStrip* tab_strip) {
+bool IsSnapped(const TabStripImpl* tab_strip) {
   return false;
 }
 #endif
@@ -232,21 +235,20 @@ TabDragController::~TabDragController() {
     GetModel(source_tabstrip_)->RemoveObserver(this);
 
   if (event_source_ == EVENT_SOURCE_TOUCH) {
-    TabStrip* capture_tabstrip = attached_tabstrip_ ?
-        attached_tabstrip_ : source_tabstrip_;
+    TabStripImpl* capture_tabstrip =
+        attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
     capture_tabstrip->GetWidget()->ReleaseCapture();
   }
 }
 
-void TabDragController::Init(
-    TabStrip* source_tabstrip,
-    Tab* source_tab,
-    const std::vector<Tab*>& tabs,
-    const gfx::Point& mouse_offset,
-    int source_tab_offset,
-    const ui::ListSelectionModel& initial_selection_model,
-    MoveBehavior move_behavior,
-    EventSource event_source) {
+void TabDragController::Init(TabStripImpl* source_tabstrip,
+                             Tab* source_tab,
+                             const std::vector<Tab*>& tabs,
+                             const gfx::Point& mouse_offset,
+                             int source_tab_offset,
+                             ui::ListSelectionModel initial_selection_model,
+                             MoveBehavior move_behavior,
+                             EventSource event_source) {
   DCHECK(!tabs.empty());
   DCHECK(base::ContainsValue(tabs, source_tab));
   source_tabstrip_ = source_tabstrip;
@@ -257,9 +259,9 @@ void TabDragController::Init(
   //     Mouse capture is not synchronous on desktop Linux. Chrome makes
   //     transferring capture between widgets without releasing capture appear
   //     synchronous on desktop Linux, so use that.
-  // - Ash
+  // - Chrome OS
   //     Releasing capture on Ash cancels gestures so avoid it.
-#if defined(OS_LINUX) || defined(USE_ASH)
+#if defined(OS_LINUX)
   can_release_capture_ = false;
 #endif
   start_point_in_screen_ = gfx::Point(source_tab_offset, mouse_offset.y());
@@ -291,24 +293,21 @@ void TabDragController::Init(
         static_cast<float>(source_tab->width());
   }
   InitWindowCreatePoint();
-  initial_selection_model_.Copy(initial_selection_model);
+  initial_selection_model_ = std::move(initial_selection_model);
 
   // Gestures don't automatically do a capture. We don't allow multiple drags at
   // the same time, so we explicitly capture.
   if (event_source == EVENT_SOURCE_TOUCH)
     source_tabstrip_->GetWidget()->SetCapture(source_tabstrip_);
 
-#if defined(USE_ASH)
-  if (ash::Shell::HasInstance() && ash::Shell::Get()
-                                       ->tablet_mode_controller()
-                                       ->IsTabletModeWindowManagerEnabled()) {
+#if defined(OS_CHROMEOS)
+  if (TabletModeClient::Get()->tablet_mode_enabled())
     detach_behavior_ = NOT_DETACHABLE;
-  }
 #endif
 }
 
 // static
-bool TabDragController::IsAttachedTo(const TabStrip* tab_strip) {
+bool TabDragController::IsAttachedTo(const TabStripImpl* tab_strip) {
   return (instance_ && instance_->active() &&
           instance_->attached_tabstrip() == tab_strip);
 }
@@ -513,7 +512,7 @@ TabDragController::Liveness TabDragController::ContinueDragging(
 
   DCHECK(attached_tabstrip_);
 
-  TabStrip* target_tabstrip = source_tabstrip_;
+  TabStripImpl* target_tabstrip = source_tabstrip_;
   if (detach_behavior_ == DETACHABLE &&
       GetTargetTabStripForPoint(point_in_screen, &target_tabstrip) ==
           Liveness::DELETED) {
@@ -561,9 +560,8 @@ TabDragController::Liveness TabDragController::ContinueDragging(
 }
 
 TabDragController::DragBrowserResultType
-TabDragController::DragBrowserToNewTabStrip(
-    TabStrip* target_tabstrip,
-    const gfx::Point& point_in_screen) {
+TabDragController::DragBrowserToNewTabStrip(TabStripImpl* target_tabstrip,
+                                            const gfx::Point& point_in_screen) {
   TRACE_EVENT1("views", "TabDragController::DragBrowserToNewTabStrip",
                "point_in_screen", point_in_screen.ToString());
 
@@ -584,10 +582,10 @@ TabDragController::DragBrowserToNewTabStrip(
     // ReleaseCapture() is going to result in calling back to us (because it
     // results in a move). That'll cause all sorts of problems.  Reset the
     // observer so we don't get notified and process the event.
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
     move_loop_widget_->RemoveObserver(this);
     move_loop_widget_ = nullptr;
-#endif  // USE_ASH
+#endif  // OS_CHROMEOS
     views::Widget* browser_widget = GetAttachedBrowserWidget();
     // Need to release the drag controller before starting the move loop as it's
     // going to trigger capture lost, which cancels drag.
@@ -800,7 +798,7 @@ TabDragController::DetachPosition TabDragController::GetDetachPosition(
 
 TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
     const gfx::Point& point_in_screen,
-    TabStrip** tab_strip) {
+    TabStripImpl** tab_strip) {
   *tab_strip = nullptr;
   TRACE_EVENT1("views", "TabDragController::GetTargetTabStripForPoint",
                "point_in_screen", point_in_screen.ToString());
@@ -825,7 +823,7 @@ TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
   // Do not allow dragging into a window with a modal dialog, it causes a weird
   // behavior.  See crbug.com/336691
   if (!GetModalTransient(local_window)) {
-    TabStrip* result = GetTabStripForWindow(local_window);
+    TabStripImpl* result = GetTabStripForWindow(local_window);
     if (result && DoesTabStripContain(result, point_in_screen)) {
       *tab_strip = result;
       return Liveness::ALIVE;
@@ -836,7 +834,8 @@ TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
   return Liveness::ALIVE;
 }
 
-TabStrip* TabDragController::GetTabStripForWindow(gfx::NativeWindow window) {
+TabStripImpl* TabDragController::GetTabStripForWindow(
+    gfx::NativeWindow window) {
   if (!window)
     return NULL;
   BrowserView* browser_view =
@@ -847,8 +846,10 @@ TabStrip* TabDragController::GetTabStripForWindow(gfx::NativeWindow window) {
           Browser::FEATURE_TABSTRIP))
     return NULL;
 
-  TabStrip* other_tabstrip = browser_view->tabstrip();
-  TabStrip* tab_strip =
+  // TabDragController is a helper for TabStripImpl and will only be used
+  // when the Impl (not the experimental one) is used.
+  TabStripImpl* other_tabstrip = browser_view->tabstrip()->AsTabStripImpl();
+  TabStripImpl* tab_strip =
       attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   DCHECK(tab_strip);
 
@@ -857,7 +858,7 @@ TabStrip* TabDragController::GetTabStripForWindow(gfx::NativeWindow window) {
 }
 
 bool TabDragController::DoesTabStripContain(
-    TabStrip* tabstrip,
+    TabStripImpl* tabstrip,
     const gfx::Point& point_in_screen) const {
   // Make sure the specified screen point is actually within the bounds of the
   // specified tabstrip...
@@ -869,7 +870,7 @@ bool TabDragController::DoesTabStripContain(
                                            point_in_screen.y());
 }
 
-void TabDragController::Attach(TabStrip* attached_tabstrip,
+void TabDragController::Attach(TabStripImpl* attached_tabstrip,
                                const gfx::Point& point_in_screen) {
   TRACE_EVENT1("views", "TabDragController::Attach",
                "point_in_screen", point_in_screen.ToString());
@@ -886,7 +887,7 @@ void TabDragController::Attach(TabStrip* attached_tabstrip,
     // Transitioning from detached to attached to a new tabstrip. Add tabs to
     // the new model.
 
-    selection_model_before_attach_.Copy(attached_tabstrip->GetSelectionModel());
+    selection_model_before_attach_ = attached_tabstrip->GetSelectionModel();
 
     // Inserting counts as a move. We don't want the tabs to jitter when the
     // user moves the tab immediately after attaching it.
@@ -1035,7 +1036,9 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
   Detach(can_release_capture_ ? RELEASE_CAPTURE : DONT_RELEASE_CAPTURE);
 
   dragged_widget->SetVisibilityChangedAnimationsEnabled(false);
-  Attach(dragged_browser_view->tabstrip(), gfx::Point());
+  // TabDragController is a helper for TabStripImpl and will only be used
+  // when the Impl (not the experimental one) is used.
+  Attach(dragged_browser_view->tabstrip()->AsTabStripImpl(), gfx::Point());
   AdjustBrowserAndTabBoundsForDrag(last_tabstrip_width,
                                    point_in_screen,
                                    &drag_bounds);
@@ -1298,7 +1301,7 @@ gfx::Point TabDragController::GetAttachedDragPoint(
 }
 
 std::vector<Tab*> TabDragController::GetTabsMatchingDraggedContents(
-    TabStrip* tabstrip) {
+    TabStripImpl* tabstrip) {
   TabStripModel* model = GetModel(attached_tabstrip_);
   std::vector<Tab*> tabs;
   for (size_t i = 0; i < drag_data_.size(); ++i) {
@@ -1354,8 +1357,8 @@ void TabDragController::EndDragImpl(EndDragType type) {
   // Clear out drag data so we don't attempt to do anything with it.
   drag_data_.clear();
 
-  TabStrip* owning_tabstrip = attached_tabstrip_ ?
-      attached_tabstrip_ : source_tabstrip_;
+  TabStripImpl* owning_tabstrip =
+      attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   owning_tabstrip->DestroyDragController();
 }
 
@@ -1420,8 +1423,7 @@ void TabDragController::RestoreInitialSelection() {
   // initial_selection_model_. Before resetting though we have to remove all
   // the tabs from initial_selection_model_ as it was created with the tabs
   // still there.
-  ui::ListSelectionModel selection_model;
-  selection_model.Copy(initial_selection_model_);
+  ui::ListSelectionModel selection_model = initial_selection_model_;
   for (DragData::const_reverse_iterator i(drag_data_.rbegin());
        i != drag_data_.rend(); ++i) {
     selection_model.DecrementFrom(i->source_model_index);
@@ -1529,11 +1531,11 @@ void TabDragController::MaximizeAttachedWindow() {
     added_observer_to_move_loop_widget_ = false;
   }
   GetAttachedBrowserWidget()->Maximize();
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
   if (was_source_fullscreen_) {
     // In fullscreen mode it is only possible to get here if the source
     // was in "immersive fullscreen" mode, so toggle it back on.
-    ash::accelerators::ToggleFullscreen();
+    GetAttachedBrowserWidget()->SetFullscreen(true);
   }
 #endif
 }
@@ -1566,7 +1568,7 @@ void TabDragController::BringWindowUnderPointToFront(
     if (!widget_window)
       return;
 
-#if defined(USE_ASH)
+#if defined(OS_CHROMEOS)
     // TODO(varkha): The code below ensures that the phantom drag widget
     // is shown on top of browser windows. The code should be moved to ash/
     // and the phantom should be able to assert its top-most state on its own.
@@ -1605,8 +1607,7 @@ void TabDragController::BringWindowUnderPointToFront(
   }
 }
 
-TabStripModel* TabDragController::GetModel(
-    TabStrip* tabstrip) const {
+TabStripModel* TabDragController::GetModel(TabStripImpl* tabstrip) const {
   return static_cast<BrowserTabStripController*>(tabstrip->controller())->
       model();
 }
@@ -1626,7 +1627,7 @@ bool TabDragController::AreTabsConsecutive() {
 }
 
 gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
-    TabStrip* source,
+    TabStripImpl* source,
     const gfx::Point& point_in_screen,
     std::vector<gfx::Rect>* drag_bounds) {
   gfx::Point center(0, source->height() / 2);
@@ -1725,7 +1726,7 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
 }
 
 Browser* TabDragController::CreateBrowserForDrag(
-    TabStrip* source,
+    TabStripImpl* source,
     const gfx::Point& point_in_screen,
     gfx::Vector2d* drag_offset,
     std::vector<gfx::Rect>* drag_bounds) {
@@ -1748,8 +1749,11 @@ Browser* TabDragController::CreateBrowserForDrag(
 }
 
 gfx::Point TabDragController::GetCursorScreenPoint() {
-#if defined(USE_ASH)
-  if (event_source_ == EVENT_SOURCE_TOUCH &&
+#if defined(OS_CHROMEOS)
+  // TODO(erg): Temporarily disable getting location from the gesture
+  // recognizer in mash until the mus side/window manager side RunMoveLoop() is
+  // fixed to understand routing touch events. crbug.com/769507
+  if (!ash_util::IsRunningInMash() && event_source_ == EVENT_SOURCE_TOUCH &&
       aura::Env::GetInstance()->is_touch_down()) {
     views::Widget* widget = GetAttachedBrowserWidget();
     DCHECK(widget);
@@ -1770,8 +1774,8 @@ gfx::Point TabDragController::GetCursorScreenPoint() {
 
 gfx::Vector2d TabDragController::GetWindowOffset(
     const gfx::Point& point_in_screen) {
-  TabStrip* owning_tabstrip = attached_tabstrip_ ?
-      attached_tabstrip_ : source_tabstrip_;
+  TabStripImpl* owning_tabstrip =
+      attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   views::View* toplevel_view = owning_tabstrip->GetWidget()->GetContentsView();
 
   gfx::Point point = point_in_screen;

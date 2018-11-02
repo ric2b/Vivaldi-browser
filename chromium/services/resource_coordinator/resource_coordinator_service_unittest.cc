@@ -42,10 +42,10 @@ TEST_F(ResourceCoordinatorTest, ResourceCoordinatorInstantiate) {
   mojom::CoordinationUnitProviderPtr provider;
   connector()->BindInterface(mojom::kServiceName, mojo::MakeRequest(&provider));
 
-  CoordinationUnitID new_id(CoordinationUnitType::kWebContents, "test_id");
-  mojom::CoordinationUnitPtr coordination_unit;
-  provider->CreateCoordinationUnit(mojo::MakeRequest(&coordination_unit),
-                                   new_id);
+  CoordinationUnitID new_id(CoordinationUnitType::kPage, "test_id");
+  mojom::PageCoordinationUnitPtr coordination_unit;
+  provider->CreatePageCoordinationUnit(mojo::MakeRequest(&coordination_unit),
+                                       new_id);
 
   coordination_unit->GetID(base::Bind(&ResourceCoordinatorTest::GetIDCallback,
                                       base::Unretained(this)));

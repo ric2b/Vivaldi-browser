@@ -4,12 +4,13 @@
 
 #include "ash/system/tray/tray_item_more.h"
 
+#include <memory>
+
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
-#include "base/memory/ptr_util.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/image_view.h"
@@ -34,7 +35,7 @@ TrayItemMore::TrayItemMore(SystemTrayItem* owner)
   SetInkDropMode(InkDropHostView::InkDropMode::ON);
 }
 
-TrayItemMore::~TrayItemMore() {}
+TrayItemMore::~TrayItemMore() = default;
 
 void TrayItemMore::SetLabel(const base::string16& label) {
   label_->SetText(label);
@@ -47,10 +48,6 @@ void TrayItemMore::SetImage(const gfx::ImageSkia& image_skia) {
   SchedulePaint();
 }
 
-void TrayItemMore::SetAccessibleName(const base::string16& name) {
-  accessible_name_ = name;
-}
-
 std::unique_ptr<TrayPopupItemStyle> TrayItemMore::CreateStyle() const {
   std::unique_ptr<TrayPopupItemStyle> style = HandleCreateStyle();
   if (!enabled())
@@ -59,7 +56,7 @@ std::unique_ptr<TrayPopupItemStyle> TrayItemMore::CreateStyle() const {
 }
 
 std::unique_ptr<TrayPopupItemStyle> TrayItemMore::HandleCreateStyle() const {
-  return base::MakeUnique<TrayPopupItemStyle>(
+  return std::make_unique<TrayPopupItemStyle>(
       TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
 }
 
@@ -75,8 +72,8 @@ bool TrayItemMore::PerformAction(const ui::Event& event) {
 
 void TrayItemMore::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ActionableView::GetAccessibleNodeData(node_data);
-  if (!accessible_name_.empty())
-    node_data->SetName(accessible_name_);
+  if (!accessible_name().empty())
+    node_data->SetName(accessible_name());
 }
 
 void TrayItemMore::OnEnabledChanged() {

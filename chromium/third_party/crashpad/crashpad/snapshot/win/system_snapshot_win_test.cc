@@ -123,16 +123,14 @@ TEST_F(SystemSnapshotWinTest, TimeZone) {
 
   // |standard_offset_seconds| gives seconds east of UTC, and |timezone| gives
   // seconds west of UTC.
-#if _MSC_VER >= 1900
   long timezone = 0;
   _get_timezone(&timezone);
-#endif
   EXPECT_EQ(standard_offset_seconds, -timezone);
 
   // In contemporary usage, most time zones have an integer hour offset from
   // UTC, although several are at a half-hour offset, and two are at 15-minute
   // offsets. Throughout history, other variations existed. See
-  // http://www.timeanddate.com/time/time-zones-interesting.html.
+  // https://www.timeanddate.com/time/time-zones-interesting.html.
   EXPECT_EQ(standard_offset_seconds % (15 * 60), 0)
       << "standard_offset_seconds " << standard_offset_seconds;
 
@@ -144,9 +142,9 @@ TEST_F(SystemSnapshotWinTest, TimeZone) {
         << "daylight_offset_seconds " << daylight_offset_seconds;
 
     // In contemporary usage, dst_delta_seconds will almost always be one hour,
-    // except for Lord Howe Island, Australia, which uses a 30-minute
-    // delta. Throughout history, other variations existed. See
-    // http://www.timeanddate.com/time/dst/#brief.
+    // except for Lord Howe Island, Australia, which uses a 30-minute delta.
+    // Throughout history, other variations existed. See
+    // https://www.timeanddate.com/time/dst/.
     int dst_delta_seconds = daylight_offset_seconds - standard_offset_seconds;
     if (dst_delta_seconds != 60 * 60 && dst_delta_seconds != 30 * 60) {
       FAIL() << "dst_delta_seconds " << dst_delta_seconds;

@@ -54,13 +54,11 @@ class SpellCheckTest : public testing::Test {
   }
 
   void ReinitializeSpellCheck(const std::string& language) {
-    spell_check_.reset(new SpellCheck());
+    spell_check_.reset(new SpellCheck(nullptr));
     InitializeSpellCheck(language);
   }
 
-  void UninitializeSpellCheck() {
-    spell_check_.reset(new SpellCheck());
-  }
+  void UninitializeSpellCheck() { spell_check_.reset(new SpellCheck(nullptr)); }
 
   bool InitializeIfNeeded() {
     return spell_check()->InitializeIfNeeded();
@@ -75,9 +73,10 @@ class SpellCheckTest : public testing::Test {
 #if defined(OS_MACOSX)
     // TODO(groby): Forcing spellcheck to use hunspell, even on OSX.
     // Instead, tests should exercise individual spelling engines.
-    spell_check_->languages_.push_back(base::MakeUnique<SpellcheckLanguage>());
+    spell_check_->languages_.push_back(
+        base::MakeUnique<SpellcheckLanguage>(nullptr));
     spell_check_->languages_.front()->platform_spelling_engine_.reset(
-        new HunspellEngine);
+        new HunspellEngine(nullptr));
     spell_check_->languages_.front()->Init(std::move(file), language);
 #else
     spell_check_->AddSpellcheckLanguage(std::move(file), language);
@@ -402,18 +401,15 @@ TEST_F(SpellCheckTest, SpellCheckStrings_EN_US) {
 
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
     size_t input_length = 0;
-    if (kTestCases[i].input != NULL) {
+    if (kTestCases[i].input != nullptr) {
       input_length = wcslen(kTestCases[i].input);
     }
     int misspelling_start;
     int misspelling_length;
     bool result = spell_check()->SpellCheckWord(
-        base::WideToUTF16(kTestCases[i].input).c_str(),
-        kNoOffset,
-        static_cast<int>(input_length),
-        kNoTag,
-        &misspelling_start,
-        &misspelling_length, NULL);
+        base::WideToUTF16(kTestCases[i].input).c_str(), kNoOffset,
+        static_cast<int>(input_length), kNoTag, &misspelling_start,
+        &misspelling_length, nullptr);
 
     EXPECT_EQ(kTestCases[i].expected_result, result);
     EXPECT_EQ(kTestCases[i].misspelling_start, misspelling_start);
@@ -455,7 +451,7 @@ TEST_F(SpellCheckTest, SpellCheckSuggestions_EN_US) {
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
     std::vector<base::string16> suggestions;
     size_t input_length = 0;
-    if (kTestCases[i].input != NULL) {
+    if (kTestCases[i].input != nullptr) {
       input_length = wcslen(kTestCases[i].input);
     }
     int misspelling_start;
@@ -841,18 +837,15 @@ TEST_F(SpellCheckTest, SpellCheckText) {
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
     ReinitializeSpellCheck(kTestCases[i].language);
     size_t input_length = 0;
-    if (kTestCases[i].input != NULL)
+    if (kTestCases[i].input != nullptr)
       input_length = wcslen(kTestCases[i].input);
 
     int misspelling_start = 0;
     int misspelling_length = 0;
     bool result = spell_check()->SpellCheckWord(
-        base::WideToUTF16(kTestCases[i].input).c_str(),
-        kNoOffset,
-        static_cast<int>(input_length),
-        kNoTag,
-        &misspelling_start,
-        &misspelling_length, NULL);
+        base::WideToUTF16(kTestCases[i].input).c_str(), kNoOffset,
+        static_cast<int>(input_length), kNoTag, &misspelling_start,
+        &misspelling_length, nullptr);
 
     EXPECT_TRUE(result)
         << "\""
@@ -907,13 +900,9 @@ TEST_F(SpellCheckTest, MisspelledWords) {
     int word_length = static_cast<int>(word.length());
     int misspelling_start = 0;
     int misspelling_length = 0;
-    bool result = spell_check()->SpellCheckWord(word.c_str(),
-                                                kNoOffset,
-                                                word_length,
-                                                kNoTag,
-                                                &misspelling_start,
-                                                &misspelling_length,
-                                                NULL);
+    bool result = spell_check()->SpellCheckWord(
+        word.c_str(), kNoOffset, word_length, kNoTag, &misspelling_start,
+        &misspelling_length, nullptr);
     EXPECT_FALSE(result);
     EXPECT_EQ(0, misspelling_start);
     EXPECT_EQ(word_length, misspelling_length);
@@ -1316,18 +1305,15 @@ TEST_F(SpellCheckTest, EnglishWords) {
     ReinitializeSpellCheck(kLocales[j]);
     for (size_t i = 0; i < arraysize(kTestCases); ++i) {
       size_t input_length = 0;
-      if (kTestCases[i].input != NULL)
+      if (kTestCases[i].input != nullptr)
         input_length = strlen(kTestCases[i].input);
 
       int misspelling_start = 0;
       int misspelling_length = 0;
       bool result = spell_check()->SpellCheckWord(
-          base::ASCIIToUTF16(kTestCases[i].input).c_str(),
-          kNoOffset,
-          static_cast<int>(input_length),
-          kNoTag,
-          &misspelling_start,
-          &misspelling_length, NULL);
+          base::ASCIIToUTF16(kTestCases[i].input).c_str(), kNoOffset,
+          static_cast<int>(input_length), kNoTag, &misspelling_start,
+          &misspelling_length, nullptr);
 
       EXPECT_EQ(kTestCases[i].should_pass, result) << kTestCases[i].input <<
           " in " << kLocales[j];
@@ -1362,7 +1348,7 @@ TEST_F(SpellCheckTest, NoSuggest) {
   for (size_t i = 0; i < test_cases_size; ++i) {
     ReinitializeSpellCheck(kTestCases[i].locale);
     size_t suggestion_length = 0;
-    if (kTestCases[i].suggestion != NULL)
+    if (kTestCases[i].suggestion != nullptr)
       suggestion_length = strlen(kTestCases[i].suggestion);
 
     // First check that the NOSUGGEST flag didn't mark this word as not being in
@@ -1370,12 +1356,9 @@ TEST_F(SpellCheckTest, NoSuggest) {
     int misspelling_start = 0;
     int misspelling_length = 0;
     bool result = spell_check()->SpellCheckWord(
-        base::ASCIIToUTF16(kTestCases[i].suggestion).c_str(),
-        kNoOffset,
-        static_cast<int>(suggestion_length),
-        kNoTag,
-        &misspelling_start,
-        &misspelling_length, NULL);
+        base::ASCIIToUTF16(kTestCases[i].suggestion).c_str(), kNoOffset,
+        static_cast<int>(suggestion_length), kNoTag, &misspelling_start,
+        &misspelling_length, nullptr);
 
     EXPECT_EQ(kTestCases[i].should_pass, result) << kTestCases[i].suggestion <<
         " in " << kTestCases[i].locale;

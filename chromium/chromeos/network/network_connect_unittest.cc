@@ -44,13 +44,12 @@ const char kTetherGuid[] = "tether_guid";
 
 class MockDelegate : public NetworkConnect::Delegate {
  public:
-  MockDelegate() {}
-  ~MockDelegate() override {}
+  MockDelegate() = default;
+  ~MockDelegate() override = default;
 
   MOCK_METHOD1(ShowNetworkConfigure, void(const std::string& network_id));
   MOCK_METHOD1(ShowNetworkSettings, void(const std::string& network_id));
   MOCK_METHOD1(ShowEnrollNetwork, bool(const std::string& network_id));
-  MOCK_METHOD0(ShowMobileSimDialog, void());
   MOCK_METHOD1(ShowMobileSetupDialog, void(const std::string& network_id));
   MOCK_METHOD2(ShowNetworkConnectError,
                void(const std::string& error_name,
@@ -60,8 +59,8 @@ class MockDelegate : public NetworkConnect::Delegate {
 
 class FakeTetherDelegate : public NetworkConnectionHandler::TetherDelegate {
  public:
-  FakeTetherDelegate() {}
-  ~FakeTetherDelegate() override {}
+  FakeTetherDelegate() = default;
+  ~FakeTetherDelegate() override = default;
 
   std::string last_connected_tether_network_guid() {
     return last_connected_tether_network_guid_;
@@ -88,8 +87,8 @@ class FakeTetherDelegate : public NetworkConnectionHandler::TetherDelegate {
 
 class NetworkConnectTest : public testing::Test {
  public:
-  NetworkConnectTest() {}
-  ~NetworkConnectTest() override {}
+  NetworkConnectTest() = default;
+  ~NetworkConnectTest() override = default;
 
   void SetUp() override {
     testing::Test::SetUp();
@@ -348,54 +347,6 @@ TEST_F(NetworkConnectTest, ActivateCellular_Error) {
   base::RunLoop().RunUntilIdle();
 
   NetworkConnect::Get()->ConnectToNetworkId(kCellular1Guid);
-}
-
-TEST_F(NetworkConnectTest, ShowMobileSimDialog) {
-  EXPECT_CALL(*mock_delegate_, ShowMobileSimDialog());
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              false);
-
-  device_test_->SetDeviceProperty(
-      kCellular1DevicePath, shill::kSIMPresentProperty, base::Value(true));
-  device_test_->SetSimLocked(kCellular1DevicePath, true);
-
-  base::RunLoop().RunUntilIdle();
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              true);
-}
-
-TEST_F(NetworkConnectTest, ShowMobileSimDialog_SimAbsent) {
-  EXPECT_CALL(*mock_delegate_, ShowMobileSimDialog()).Times(0);
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              false);
-
-  device_test_->SetDeviceProperty(
-      kCellular1DevicePath, shill::kSIMPresentProperty, base::Value(false));
-  device_test_->SetSimLocked(kCellular1DevicePath, true);
-
-  base::RunLoop().RunUntilIdle();
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              true);
-}
-
-TEST_F(NetworkConnectTest, ShowMobileSimDialog_SimUnlocked) {
-  EXPECT_CALL(*mock_delegate_, ShowMobileSimDialog()).Times(0);
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              false);
-
-  device_test_->SetDeviceProperty(
-      kCellular1DevicePath, shill::kSIMPresentProperty, base::Value(true));
-  device_test_->SetSimLocked(kCellular1DevicePath, false);
-
-  base::RunLoop().RunUntilIdle();
-
-  NetworkConnect::Get()->SetTechnologyEnabled(NetworkTypePattern::Cellular(),
-                                              true);
 }
 
 }  // namespace chromeos

@@ -15,7 +15,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
-#include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "url/origin.h"
 
 namespace content {
@@ -38,7 +38,7 @@ class TestWebContentsDelegate : public content::WebContentsDelegate {
 class MediaDevicesPermissionCheckerTest : public RenderViewHostImplTestHarness {
  public:
   MediaDevicesPermissionCheckerTest()
-      : origin_(GURL("https://www.google.com")),
+      : origin_(url::Origin::Create(GURL("https://www.google.com"))),
         callback_run_(false),
         callback_result_(false) {}
 
@@ -51,7 +51,7 @@ class MediaDevicesPermissionCheckerTest : public RenderViewHostImplTestHarness {
  protected:
   // The header policy should only be set once on page load, so we refresh the
   // page to simulate that.
-  void RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature feature,
+  void RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature feature,
                                      bool enabled) {
     NavigateAndCommit(origin_.GetURL());
     std::vector<url::Origin> whitelist;
@@ -108,12 +108,12 @@ TEST_F(MediaDevicesPermissionCheckerTest, CheckPermissionWithFeaturePolicy) {
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_AUDIO_INPUT));
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_VIDEO_INPUT));
 
-  RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature::kMicrophone,
+  RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature::kMicrophone,
                                 /*enabled=*/false);
   EXPECT_FALSE(CheckPermission(MEDIA_DEVICE_TYPE_AUDIO_INPUT));
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_VIDEO_INPUT));
 
-  RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature::kCamera,
+  RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature::kCamera,
                                 /*enabled=*/false);
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_AUDIO_INPUT));
   EXPECT_FALSE(CheckPermission(MEDIA_DEVICE_TYPE_VIDEO_INPUT));
@@ -121,7 +121,8 @@ TEST_F(MediaDevicesPermissionCheckerTest, CheckPermissionWithFeaturePolicy) {
   // Ensure that the policy is ignored if kUseFeaturePolicyForPermissions is
   // disabled.
   base::test::ScopedFeatureList empty_feature_list;
-  empty_feature_list.Init();
+  empty_feature_list.InitAndDisableFeature(
+      features::kUseFeaturePolicyForPermissions);
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_AUDIO_INPUT));
   EXPECT_TRUE(CheckPermission(MEDIA_DEVICE_TYPE_VIDEO_INPUT));
 }

@@ -5,9 +5,12 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "media/base/test_data_util.h"
 
+#if defined(PLATFORM_MEDIA_HWA)
 #include "gpu/GLES2/gl2extchromium.h"
+#endif
 #include "media/base/limits.h"
 #if defined(OS_MACOSX)
 #include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
@@ -39,7 +42,8 @@ namespace media {
 
 namespace {
 
-const int kNumPictureBuffers = media::limits::kMaxVideoFrames + 1;
+#if defined(PLATFORM_MEDIA_HWA)
+const int kNumPictureBuffers = limits::kMaxVideoFrames + 1;
 const int kMaxPictureWidth = 1920;
 const int kMaxPictureHeight = 1080;
 
@@ -55,6 +59,7 @@ bool CreateTextures(int32_t count,
   }
   return true;
 }
+#endif
 
 VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles() {
   VideoDecodeAccelerator::SupportedProfile profile_prototype;
@@ -72,6 +77,7 @@ VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles() {
 
 }  // namespace
 
+#if defined(PLATFORM_MEDIA_HWA)
 // A MockVideoDecodeAccelerator that pretends it reallly decodes.
 class PlatformPipelineTestBase::DecodingMockVDA
     : public MockVideoDecodeAccelerator {
@@ -105,14 +111,14 @@ class PlatformPipelineTestBase::DecodingMockVDA
     if (!enabled_)
       return false;
 
-    if (config.profile < media::H264PROFILE_MIN ||
-      config.profile > media::H264PROFILE_MAX)
+    if (config.profile < VideoCodecProfile::H264PROFILE_MIN ||
+      config.profile > VideoCodecProfile::H264PROFILE_MAX)
       return false;
 
     client_ = client;
     client_->ProvidePictureBuffers(
         kNumPictureBuffers,
-        PIXEL_FORMAT_UNKNOWN,
+        VideoPixelFormat::PIXEL_FORMAT_UNKNOWN,
         1,
         gfx::Size(kMaxPictureWidth, kMaxPictureHeight),
         GL_TEXTURE_RECTANGLE_ARB);
@@ -183,24 +189,27 @@ class PlatformPipelineTestBase::DecodingMockVDA
   std::queue<int32_t> finished_bitstream_buffers_ids_;
   bool enabled_;
 };
-
+#endif
 PlatformPipelineTestBase::PlatformPipelineTestBase()
-    : mock_video_accelerator_factories_(new MockGpuVideoAcceleratorFactories(nullptr)),
-      mock_vda_(new DecodingMockVDA) {
+    : mock_video_accelerator_factories_(new MockGpuVideoAcceleratorFactories(nullptr))
+#if defined(PLATFORM_MEDIA_HWA)
+    , mock_vda_(new DecodingMockVDA)
+#endif
+{
 }
 PlatformPipelineTestBase::~PlatformPipelineTestBase() {
 }
 
 Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(
-    std::unique_ptr<media::DataSource> & data_source,
+    std::unique_ptr<DataSource> & data_source,
     base::test::ScopedTaskEnvironment & task_environment_,
     MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
-  if (media::IPCDemuxer::CanPlayType(content_type, url)) {
-    std::unique_ptr<media::IPCMediaPipelineHost> pipeline_host(
-          new content::TestPipelineHost(data_source.get()));
-    return new media::IPCDemuxer(
+  if (IPCDemuxer::CanPlayType(content_type, url)) {
+    std::unique_ptr<IPCMediaPipelineHost> pipeline_host(
+          new TestPipelineHost(data_source.get()));
+    return new IPCDemuxer(
                      task_environment_.GetMainThreadTaskRunner(), data_source.get(),
                      std::move(pipeline_host), content_type, url,
                      media_log);
@@ -225,7 +234,7 @@ void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
       base::MakeUnique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
   audio_decoders.push_back(
-      base::MakeUnique<media::WMFAudioDecoder>(media_task_runner));
+      base::MakeUnique<WMFAudioDecoder>(media_task_runner));
 #endif
 }
 
@@ -243,7 +252,7 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
 
 #if defined(OS_WIN)
   video_decoders.push_back(
-      base::MakeUnique<media::WMFVideoDecoder>(media_task_runner));
+      base::MakeUnique<WMFVideoDecoder>(media_task_runner));
 #endif
 
   video_decoders.push_back(
@@ -252,7 +261,7 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
                                         gfx::ColorSpace(),
                                         media_log));
 
-  media::VideoDecodeAccelerator::Capabilities capabilities;
+  VideoDecodeAccelerator::Capabilities capabilities;
   capabilities.supported_profiles = GetSupportedProfiles();
 
   EXPECT_CALL(*mock_video_accelerator_factories_, GetTaskRunner())
@@ -260,6 +269,7 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
   EXPECT_CALL(*mock_video_accelerator_factories_,
               GetVideoDecodeAcceleratorCapabilities())
       .WillRepeatedly(testing::Return(capabilities));
+#if defined(PLATFORM_MEDIA_HWA)
   EXPECT_CALL(*mock_video_accelerator_factories_,
               DoCreateVideoDecodeAccelerator())
       .WillRepeatedly(testing::Return(mock_vda_.get()));
@@ -267,25 +277,34 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
       .WillRepeatedly(testing::Invoke(&CreateTextures));
   EXPECT_CALL(*mock_video_accelerator_factories_, DeleteTexture(_))
       .Times(testing::AnyNumber());
+#endif
   EXPECT_CALL(*mock_video_accelerator_factories_, WaitSyncToken(_))
       .Times(testing::AnyNumber());
+#if defined(PLATFORM_MEDIA_HWA)
   DCHECK(mock_vda_);
   EXPECT_CALL(*mock_vda_, Destroy())
       .WillRepeatedly(
           testing::Invoke(this, &PlatformPipelineTestBase::DestroyMockVDA));
+#endif
 }
 
 void PlatformPipelineTestBase::EnableMockVDA() {
+#if defined(PLATFORM_MEDIA_HWA)
   mock_vda_->Enable();
+#endif
 }
 
 void PlatformPipelineTestBase::DestroyMockVDA() {
+#if defined(PLATFORM_MEDIA_HWA)
   mock_vda_.reset();
+#endif
 }
 
 void PlatformPipelineTestBase::ResumeMockVDA() {
+#if defined(PLATFORM_MEDIA_HWA)
 if (!mock_vda_)
   mock_vda_.reset(new DecodingMockVDA);
+#endif
 }
 
 }

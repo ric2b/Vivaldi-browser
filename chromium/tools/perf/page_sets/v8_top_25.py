@@ -1,21 +1,22 @@
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-from telemetry.page import page as page_module
+
+from page_sets import page_cycler_story
 from telemetry import story
+from telemetry.page import cache_temperature as cache_temperature_module
 
+cache_temperatures = [
+    cache_temperature_module.COLD,
+    cache_temperature_module.WARM_BROWSER,
+    cache_temperature_module.HOT_BROWSER,
+]
 
-class V8Top25(page_module.Page):
-
-  def __init__(self, url, page_set, name=''):
-    super(V8Top25, self).__init__(
-        url=url, page_set=page_set, name=name)
-
-  def RunPageInteractions(self, action_runner):
-    # We wait for 20 seconds to make sure we capture enough information
-    # to calculate the interactive time correctly.
-    action_runner.Wait(20)
-
+temperature_warmup_run_count = {
+  cache_temperature_module.COLD: 0,
+  cache_temperature_module.WARM_BROWSER: 1,
+  cache_temperature_module.HOT_BROWSER: 2,
+}
 
 # This URL list is a migration of a non-telemetry existing V8 benchmark.
 urls_list = [
@@ -57,16 +58,71 @@ urls_list = [
     'https://cdn.ampproject.org/c/www.bbc.co.uk/news/amp/37344292#log=3',
 ]
 
+# URL list to measure performance of Ad scripts.
+ads_urls_list = [
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/adsense_image.html',
+   'SyncAdSenseImage', False),
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/click-url-async.html',
+   'AsyncAdSenseImage', False),
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/refresh.html',
+   'SyncLoadAsyncRenderAdSenseImage', False),
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/gpt-adx-backfill.html',
+   'DoubleClickAsyncAds', False),
+  # pylint: disable=line-too-long
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/release_smoke_tests.html',
+   'AdSenseAsyncAds', False),
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/five-level-iu-sra.html',
+   'MultipleAdSlots', False),
+  # pylint: disable=line-too-long
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/target_page_with_ose.html',
+   'OnScreenDetection', False),
+  # pylint: disable=line-too-long
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/view-optimized-rendering-adsense.html',
+   'ViewOptimizedRendering', True),
+  ('https://www.googletagservices.com/tests/gpt/168/impl_manual_tests/tests/amp.html',
+   'AMPAds', False)
+]
+
+
+class V8Top25Story(page_cycler_story.PageCyclerStory):
+
+  def __init__(self, url, page_set, name='',
+               cache_temperature=cache_temperature_module.ANY, scroll=False):
+    super(V8Top25Story, self).__init__(
+        url=url, page_set=page_set, name=name,
+        cache_temperature=cache_temperature)
+    self.remaining_warmups = temperature_warmup_run_count[cache_temperature]
+    self.should_scroll=scroll
+
+  def RunPageInteractions(self, action_runner):
+    if self.should_scroll:
+        action_runner.RepeatableBrowserDrivenScroll(
+          repeat_count=0, x_scroll_distance_ratio = 0,
+          y_scroll_distance_ratio = 4, speed=400)
+    if self.remaining_warmups == 0:
+        # We wait for 20 seconds to make sure we capture enough information
+        # to calculate the interactive time correctly.
+        action_runner.Wait(20)
+    else:
+        action_runner.Wait(2)
+        self.remaining_warmups -= 1
 
 class V8Top25StorySet(story.StorySet):
   """~25 of top pages, used for v8 testing. They represent popular websites as
   well as other pages the V8 team wants to track due to their unique
   characteristics."""
 
+  # When recording this pageset record only for the cold run.
   def __init__(self):
     super(V8Top25StorySet, self).__init__(
         archive_data_file='data/v8_top_25.json',
         cloud_storage_bucket=story.INTERNAL_BUCKET)
 
     for url in urls_list:
-      self.AddStory(V8Top25(url, self, url))
+      for temp in cache_temperatures:
+        self.AddStory(V8Top25Story(url, self, url, cache_temperature=temp))
+
+    for (url, name, needs_scroll) in ads_urls_list:
+      for temp in cache_temperatures:
+        self.AddStory(V8Top25Story(url, self, 'Ads'+name,
+          cache_temperature=temp, scroll=needs_scroll))

@@ -99,8 +99,8 @@ public class PartnerHomepageIntegrationTest {
     @MediumTest
     @Feature({"Homepage"})
     public void testHomepageButtonClick() throws InterruptedException {
-        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        EmbeddedTestServer testServer =
+                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         try {
             // Load non-homepage URL.
             mActivityTestRule.loadUrl(testServer.getURL(TEST_PAGE));
@@ -146,7 +146,7 @@ public class PartnerHomepageIntegrationTest {
         homepagePreferenceActivity.finish();
 
         // Assert no homepage button.
-        Assert.assertFalse(HomepageManager.isHomepageEnabled(mActivityTestRule.getActivity()));
+        Assert.assertFalse(HomepageManager.isHomepageEnabled());
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -167,7 +167,7 @@ public class PartnerHomepageIntegrationTest {
         homepagePreferenceActivity.finish();
 
         // Assert homepage button.
-        Assert.assertTrue(HomepageManager.isHomepageEnabled(mActivityTestRule.getActivity()));
+        Assert.assertTrue(HomepageManager.isHomepageEnabled());
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -225,8 +225,7 @@ public class PartnerHomepageIntegrationTest {
             }
         });
 
-        Assert.assertEquals("http://chrome.com/",
-                HomepageManager.getHomepageUri(mActivityTestRule.getActivity()));
+        Assert.assertEquals("http://chrome.com/", HomepageManager.getHomepageUri());
     }
 
     /**

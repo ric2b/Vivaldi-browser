@@ -16,8 +16,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
-#include "ui/display/fake_display_delegate.h"
-#include "ui/display/fake_display_snapshot.h"
+#include "ui/display/manager/fake_display_delegate.h"
+#include "ui/display/manager/fake_display_snapshot.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
@@ -155,11 +155,11 @@ class ScreenManagerOzoneInternalTest : public ui::TaskRunnerTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitchNative(
         switches::kScreenConfig, "none");
 
-    screen_manager_ = base::MakeUnique<ScreenManagerOzoneInternal>();
+    screen_manager_ = std::make_unique<ScreenManagerOzoneInternal>();
 
     // Create NDD for FakeDisplayController.
     std::unique_ptr<NativeDisplayDelegate> ndd =
-        base::MakeUnique<FakeDisplayDelegate>();
+        std::make_unique<FakeDisplayDelegate>();
     fake_display_controller_ = ndd->GetFakeDisplayController();
 
     // Add NDD to ScreenManager so one isn't loaded from Ozone.

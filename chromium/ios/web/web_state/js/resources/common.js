@@ -74,7 +74,13 @@ __gCrWeb['common'] = __gCrWeb.common;
   /**
    * Prefix used in references to form elements that have no 'id' or 'name'
    */
-  __gCrWeb.common.kNamelessFormIDPrefix = 'gChrome~';
+  __gCrWeb.common.kNamelessFormIDPrefix = 'gChrome~form~';
+
+  /**
+   * Prefix used in references to field elements that have no 'id' or 'name' but
+   * are included in a form.
+   */
+  __gCrWeb.common.kNamelessFieldIDPrefix = 'gChrome~field~';
 
   /**
    * Tests an element's visiblity. This test is expensive so should be used
@@ -426,11 +432,16 @@ __gCrWeb['common'] = __gCrWeb.common;
   };
 
   /**
-   * Returns the name that should be used for the specified |element| when
+   * Returns the form's |name| attribute if not space only; otherwise the
+   * form's |id| attribute.
+   *
+   * It is the name that should be used for the specified |element| when
    * storing Autofill data. Various attributes are used to attempt to identify
-   * the element, beginning with 'name' and 'id' attributes. Providing a
-   * uniquely reversible identifier for any element is a non-trivial problem;
-   * this solution attempts to satisfy the majority of cases.
+   * the element, beginning with 'name' and 'id' attributes. If both name and id
+   * are empty and the field is in a form, returns
+   * __gCrWeb.common.kNamelessFieldIDPrefix + index of the field in the form.
+   * Providing a uniquely reversible identifier for any element is a non-trivial
+   * problem; this solution attempts to satisfy the majority of cases.
    *
    * It aims to provide the logic in
    *     WebString nameForAutofill() const;
@@ -441,7 +452,7 @@ __gCrWeb['common'] = __gCrWeb.common;
    *     returned.
    * @return {string} the name for Autofill.
    */
-  __gCrWeb.common.nameForAutofill = function(element) {
+  __gCrWeb.common.getFieldIdentifier = function(element) {
     if (!element) {
       return '';
     }
@@ -452,9 +463,17 @@ __gCrWeb['common'] = __gCrWeb.common;
         return trimmedName;
       }
     }
-    trimmedName = element.getAttribute('id');
+    trimmedName = element.id;
     if (trimmedName) {
       return __gCrWeb.common.trim(trimmedName);
+    }
+    if (element.form) {
+      var elements = __gCrWeb.common.getFormControlElements(element.form);
+      for (var index = 0; index < elements.length; index++) {
+        if (elements[index] === element) {
+          return __gCrWeb.common.kNamelessFieldIDPrefix + index;
+        }
+      }
     }
     return '';
   };
@@ -507,16 +526,11 @@ __gCrWeb['common'] = __gCrWeb.common;
    * @return {string} Web page URL with query and reference removed.
    */
   __gCrWeb.common.removeQueryAndReferenceFromURL = function(url) {
-    var queryIndex = url.indexOf('?');
-    if (queryIndex != -1) {
-      return url.substring(0, queryIndex);
-    }
-
-    var hashIndex = url.indexOf('#');
-    if (hashIndex != -1) {
-      return url.substring(0, hashIndex);
-    }
-    return url;
+    var parsed = new URL(url);
+    // For some protocols (eg. data:, javascript:) URL.origin is "null" so
+    // URL.protocol is used instead.
+    return (parsed.origin !== "null" ? parsed.origin : parsed.protocol)
+      + parsed.pathname;
   };
 
   /**
@@ -534,7 +548,7 @@ __gCrWeb['common'] = __gCrWeb.common;
     if (!form)
       return '';
     var name = form.getAttribute('name');
-    if (name && name.length != 0) {
+    if (name && name.length != 0 && document.forms.namedItem(name) === form) {
       return name;
     }
     name = form.getAttribute('id');

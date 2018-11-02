@@ -7,6 +7,7 @@
 
 #include "core/layout/ng/geometry/ng_border_edges.h"
 #include "core/layout/ng/geometry/ng_logical_size.h"
+#include "core/layout/ng/inline/ng_line_box_fragment_builder.h"
 #include "core/layout/ng/inline/ng_line_height_metrics.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/LayoutUnit.h"
@@ -17,7 +18,6 @@ namespace blink {
 
 class NGInlineItem;
 struct NGInlineItemResult;
-class NGLineBoxFragmentBuilder;
 class ShapeResult;
 
 // Fragments that require the layout position/size of ancestor are packed in
@@ -51,6 +51,9 @@ struct NGInlineBoxState {
   // text-top does not include leadings.
   LayoutUnit text_top;
 
+  // The height of the text fragments.
+  LayoutUnit text_height;
+
   // These values are to create a box fragment. Set only when needs_box_fragment
   // is set.
   LayoutUnit line_left_position;
@@ -64,56 +67,75 @@ struct NGInlineBoxState {
   bool needs_box_fragment = false;
   bool needs_box_fragment_when_empty = false;
 
-  // Compute text metrics for a box. All text in a box share the same metrics.
-  void ComputeTextMetrics(const ComputedStyle& style, FontBaseline);
+  // Compute text metrics for a box. All text in a box share the same
+  // metrics.  When line_height_quirk is set, text metrics won't
+  // influence box height until ActivateTextMetrics() is called.
+  void ComputeTextMetrics(const ComputedStyle& style,
+                          FontBaseline baseline_type,
+                          bool line_height_quirk);
   void AccumulateUsedFonts(const ShapeResult*, FontBaseline);
+
+  // Activate text metrics.  Used by the line height quirk when the
+  // box gets text content or has border, padding or margin in the
+  // inline layout direction.
+  void ActivateTextMetrics() { metrics.Unite(text_metrics); }
 
   // Create a box fragment for this box.
   void SetNeedsBoxFragment(bool when_empty);
   void SetLineRightForBoxFragment(const NGInlineItem&,
                                   const NGInlineItemResult&,
                                   LayoutUnit position);
+
+  // Returns if the text style can be added without open-tag.
+  // Text with different font or vertical-align needs to be wrapped with an
+  // inline box.
+  bool CanAddTextOfStyle(const ComputedStyle&) const;
 };
 
 // Represents the inline tree structure. This class provides:
 // 1) Allow access to fragments belonging to the current box.
 // 2) Performs layout when the positin/size of a box was computed.
 // 3) Cache common values for a box.
-class NGInlineLayoutStateStack {
+class CORE_EXPORT NGInlineLayoutStateStack {
  public:
   // The box state for the line box.
   NGInlineBoxState& LineBoxState() { return stack_.front(); }
 
   // Initialize the box state stack for a new line.
   // @return The initial box state for the line.
-  NGInlineBoxState* OnBeginPlaceItems(const ComputedStyle*, FontBaseline);
+  NGInlineBoxState* OnBeginPlaceItems(const ComputedStyle*, FontBaseline, bool);
 
   // Push a box state stack.
   NGInlineBoxState* OnOpenTag(const NGInlineItem&,
                               const NGInlineItemResult&,
-                              NGLineBoxFragmentBuilder*,
+                              const NGLineBoxFragmentBuilder::ChildList&,
                               LayoutUnit position);
+  NGInlineBoxState* OnOpenTag(const ComputedStyle&,
+                              const NGLineBoxFragmentBuilder::ChildList&);
 
   // Pop a box state stack.
-  NGInlineBoxState* OnCloseTag(const NGInlineItem&,
-                               NGLineBoxFragmentBuilder*,
+  NGInlineBoxState* OnCloseTag(NGLineBoxFragmentBuilder::ChildList*,
                                NGInlineBoxState*,
                                FontBaseline);
 
   // Compute all the pending positioning at the end of a line.
-  void OnEndPlaceItems(NGLineBoxFragmentBuilder*,
+  void OnEndPlaceItems(NGLineBoxFragmentBuilder::ChildList*,
                        FontBaseline,
                        LayoutUnit position);
+
+  LayoutObject* ContainingLayoutObjectForAbsolutePositionObjects() const;
 
  private:
   // End of a box state, either explicitly by close tag, or implicitly at the
   // end of a line.
-  void EndBoxState(NGInlineBoxState*, NGLineBoxFragmentBuilder*, FontBaseline);
+  void EndBoxState(NGInlineBoxState*,
+                   NGLineBoxFragmentBuilder::ChildList*,
+                   FontBaseline);
 
   void AddBoxFragmentPlaceholder(NGInlineBoxState*,
-                                 NGLineBoxFragmentBuilder*,
+                                 NGLineBoxFragmentBuilder::ChildList*,
                                  FontBaseline);
-  void CreateBoxFragments(NGLineBoxFragmentBuilder*);
+  void CreateBoxFragments(NGLineBoxFragmentBuilder::ChildList*);
 
   enum PositionPending { kPositionNotPending, kPositionPending };
 
@@ -124,7 +146,7 @@ class NGInlineLayoutStateStack {
   // https://www.w3.org/TR/CSS22/visudet.html#propdef-vertical-align
   // https://www.w3.org/TR/css-inline-3/#propdef-vertical-align
   PositionPending ApplyBaselineShift(NGInlineBoxState*,
-                                     NGLineBoxFragmentBuilder*,
+                                     NGLineBoxFragmentBuilder::ChildList*,
                                      FontBaseline);
 
   // Data for a box fragment placeholder. See AddBoxFragmentPlaceholder().

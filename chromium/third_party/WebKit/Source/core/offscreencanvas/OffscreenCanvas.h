@@ -96,13 +96,12 @@ class CORE_EXPORT OffscreenCanvas final
   uint32_t ClientId() const { return client_id_; }
   uint32_t SinkId() const { return sink_id_; }
 
-  ScriptPromise Commit(RefPtr<StaticBitmapImage>,
+  // CanvasRenderingContextHost implementation.
+  ScriptPromise Commit(scoped_refptr<StaticBitmapImage>,
                        const SkIRect& damage_rect,
-                       bool is_web_gl_software_rendering,
                        ScriptState*,
                        ExceptionState&) override;
   void FinalizeFrame() override;
-
   void DetachContext() override { context_ = nullptr; }
 
   // OffscreenCanvasFrameDispatcherClient implementation
@@ -132,28 +131,28 @@ class CORE_EXPORT OffscreenCanvas final
                                   const ImageBitmapOptions&) final;
 
   // CanvasImageSource implementation
-  RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                        AccelerationHint,
-                                        SnapshotReason,
-                                        const FloatSize&) final;
+  scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                               AccelerationHint,
+                                               SnapshotReason,
+                                               const FloatSize&) final;
   bool WouldTaintOrigin(SecurityOrigin*) const final { return !origin_clean_; }
   FloatSize ElementSize(const FloatSize& default_object_size) const final {
     return FloatSize(width(), height());
   }
   bool IsOpaque() const final;
   bool IsAccelerated() const final;
-  int SourceWidth() final { return width(); }
-  int SourceHeight() final { return height(); }
 
   DispatchEventResult HostDispatchEvent(Event* event) {
     return DispatchEvent(event);
   }
 
-  bool IsWebGLAllowed() const override { return true; }
+  bool IsWebGL1Enabled() const override { return true; }
+  bool IsWebGL2Enabled() const override { return true; }
+  bool IsWebGLBlocked() const override { return false; }
 
   FontSelector* GetFontSelector() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class OffscreenCanvasTest;
@@ -181,8 +180,7 @@ class CORE_EXPORT OffscreenCanvas final
   std::unique_ptr<OffscreenCanvasFrameDispatcher> frame_dispatcher_;
 
   Member<ScriptPromiseResolver> commit_promise_resolver_;
-  RefPtr<StaticBitmapImage> current_frame_;
-  bool current_frame_is_web_gl_software_rendering_ = false;
+  scoped_refptr<StaticBitmapImage> current_frame_;
   SkIRect current_frame_damage_rect_;
 
   std::unique_ptr<ImageBuffer> image_buffer_;

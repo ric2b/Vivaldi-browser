@@ -58,7 +58,7 @@ class WebContentsEntry : public content::WebContentsObserver {
   void OnRendererUnresponsive(RenderWidgetHost* render_widget_host) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void TitleWasSet(content::NavigationEntry* entry, bool explicit_set) override;
+  void TitleWasSet(content::NavigationEntry* entry) override;
 
   void RenderFrameReady(int process_routing_id, int frame_routing_id);
 
@@ -249,8 +249,7 @@ void WebContentsEntry::DidFinishNavigation(
   }));
 }
 
-void WebContentsEntry::TitleWasSet(content::NavigationEntry* entry,
-                                   bool explicit_set) {
+void WebContentsEntry::TitleWasSet(content::NavigationEntry* entry) {
   ForEachTask(base::Bind([](RendererTask* task) {
     task->UpdateTitle();
     task->UpdateFavicon();
@@ -417,18 +416,14 @@ void WebContentsTaskProvider::OnWebContentsTagRemoved(
   entries_map_.erase(itr);  // Deletes the WebContentsEntry.
 }
 
-Task* WebContentsTaskProvider::GetTaskOfUrlRequest(int origin_pid,
-                                                   int child_id,
-                                                   int route_id) {
-  // If an origin PID was specified then the URL request originated in a plugin
-  // working on the WebContents' behalf, so ignore it.
-  if (origin_pid)
-    return nullptr;
-
+Task* WebContentsTaskProvider::GetTaskOfUrlRequest(int child_id, int route_id) {
   content::RenderFrameHost* rfh =
       content::RenderFrameHost::FromID(child_id, route_id);
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(rfh);
+
+  if (!web_contents)
+    return nullptr;
 
   auto itr = entries_map_.find(web_contents);
   if (itr == entries_map_.end()) {

@@ -4,6 +4,7 @@
 
 #include "content/renderer/input/main_thread_event_queue.h"
 
+#include "base/containers/circular_deque.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -137,8 +138,14 @@ class QueuedWebInputEvent : public ScopedWebInputEventWithLatencyInfo,
       DCHECK(!overscroll) << "Unexpected overscroll for un-acked event";
     }
 
-    for (auto&& callback : blocking_coalesced_callbacks_)
-      std::move(callback).Run(ack_result, latency_info, nullptr, base::nullopt);
+    if (!blocking_coalesced_callbacks_.empty()) {
+      ui::LatencyInfo coalesced_latency_info = latency_info;
+      coalesced_latency_info.set_coalesced();
+      for (auto&& callback : blocking_coalesced_callbacks_) {
+        std::move(callback).Run(ack_result, coalesced_latency_info, nullptr,
+                                base::nullopt);
+      }
+    }
 
     size_t num_events_handled = 1 + blocking_coalesced_callbacks_.size();
     if (queue->renderer_scheduler_) {
@@ -199,7 +206,7 @@ class QueuedWebInputEvent : public ScopedWebInputEventWithLatencyInfo,
   }
 
   // Contains the pending callbacks to be called.
-  std::deque<HandledEventCallback> blocking_coalesced_callbacks_;
+  base::circular_deque<HandledEventCallback> blocking_coalesced_callbacks_;
   // Contains the number of non-blocking events coalesced.
   size_t non_blocking_coalesced_count_;
   base::TimeTicks creation_timestamp_;
@@ -231,13 +238,8 @@ MainThreadEventQueue::MainThreadEventQueue(
       enable_non_blocking_due_to_main_thread_responsiveness_flag_(
           base::FeatureList::IsEnabled(
               features::kMainThreadBusyScrollIntervention)),
-      handle_raf_aligned_touch_input_(
-          allow_raf_aligned_input &&
-          base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents)),
-      handle_raf_aligned_mouse_input_(
-          allow_raf_aligned_input &&
-          base::FeatureList::IsEnabled(features::kRafAlignedMouseInputEvents)),
       needs_low_latency_(false),
+      allow_raf_aligned_input_(allow_raf_aligned_input),
       main_task_runner_(main_task_runner),
       renderer_scheduler_(renderer_scheduler),
       use_raf_fallback_timer_(true) {
@@ -372,8 +374,6 @@ void MainThreadEventQueue::QueueClosure(base::OnceClosure closure) {
 }
 
 void MainThreadEventQueue::PossiblyScheduleMainFrame() {
-  if (IsRafAlignedInputDisabled())
-    return;
   bool needs_main_frame = false;
   {
     base::AutoLock lock(shared_state_lock_);
@@ -440,9 +440,6 @@ void MainThreadEventQueue::RafFallbackTimerFired() {
 }
 
 void MainThreadEventQueue::DispatchRafAlignedInput(base::TimeTicks frame_time) {
-  if (IsRafAlignedInputDisabled())
-    return;
-
   raf_fallback_timer_.Stop();
   size_t queue_size_at_start;
 
@@ -464,8 +461,7 @@ void MainThreadEventQueue::DispatchRafAlignedInput(base::TimeTicks frame_time) {
 
       if (IsRafAlignedEvent(shared_state_.events_.front())) {
         // Throttle touchmoves that are async.
-        if (handle_raf_aligned_touch_input_ &&
-            IsAsyncTouchMove(shared_state_.events_.front())) {
+        if (IsAsyncTouchMove(shared_state_.events_.front())) {
           if (shared_state_.events_.size() == 1 &&
               frame_time < shared_state_.last_async_touch_move_timestamp_ +
                                kAsyncTouchMoveInterval) {
@@ -516,10 +512,6 @@ void MainThreadEventQueue::QueueEvent(
     SetNeedsMainFrame();
 }
 
-bool MainThreadEventQueue::IsRafAlignedInputDisabled() const {
-  return !handle_raf_aligned_mouse_input_ && !handle_raf_aligned_touch_input_;
-}
-
 bool MainThreadEventQueue::IsRafAlignedEvent(
     const std::unique_ptr<MainThreadEventQueueTask>& item) const {
   if (!item->IsWebInputEvent())
@@ -529,9 +521,9 @@ bool MainThreadEventQueue::IsRafAlignedEvent(
   switch (event->event().GetType()) {
     case blink::WebInputEvent::kMouseMove:
     case blink::WebInputEvent::kMouseWheel:
-      return handle_raf_aligned_mouse_input_ && !needs_low_latency_;
     case blink::WebInputEvent::kTouchMove:
-      return handle_raf_aligned_touch_input_ && !needs_low_latency_;
+      return allow_raf_aligned_input_ && !needs_low_latency_ &&
+             !needs_low_latency_until_pointer_up_;
     default:
       return false;
   }
@@ -543,6 +535,21 @@ void MainThreadEventQueue::HandleEventOnMainThread(
     HandledEventCallback handled_callback) {
   if (client_)
     client_->HandleInputEvent(event, latency, std::move(handled_callback));
+
+  if (needs_low_latency_until_pointer_up_) {
+    // Reset the needs low latency until pointer up mode if necessary.
+    switch (event.Event().GetType()) {
+      case blink::WebInputEvent::kMouseUp:
+      case blink::WebInputEvent::kTouchCancel:
+      case blink::WebInputEvent::kTouchEnd:
+      case blink::WebInputEvent::kPointerCancel:
+      case blink::WebInputEvent::kPointerUp:
+        needs_low_latency_until_pointer_up_ = false;
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 void MainThreadEventQueue::SetNeedsMainFrame() {
@@ -569,6 +576,10 @@ void MainThreadEventQueue::ClearClient() {
 
 void MainThreadEventQueue::SetNeedsLowLatency(bool low_latency) {
   needs_low_latency_ = low_latency;
+}
+
+void MainThreadEventQueue::RequestUnbufferedInputEvents() {
+  needs_low_latency_until_pointer_up_ = true;
 }
 
 }  // namespace content

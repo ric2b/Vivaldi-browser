@@ -98,7 +98,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_model_observer.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -109,7 +109,6 @@
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #import "ui/base/cocoa/touch_bar_forward_declarations.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/display/screen.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
@@ -368,7 +367,7 @@ bool IsTabDetachingInFullscreenEnabled() {
     // registering for the appropriate command state changes from the back-end.
     // Adds the toolbar to the content area.
     toolbarController_.reset([[ToolbarController alloc]
-        initWithCommands:browser->command_controller()->command_updater()
+        initWithCommands:browser->command_controller()
                  profile:browser->profile()
                  browser:browser]);
     [[toolbarController_ toolbarView] setResizeDelegate:self];
@@ -1076,20 +1075,6 @@ bool IsTabDetachingInFullscreenEnabled() {
 
 - (void)onActiveTabChanged:(content::WebContents*)oldContents
                         to:(content::WebContents*)newContents {
-  // No need to remove previous bubble. It will close itself.
-  PermissionRequestManager* manager(nullptr);
-  if (oldContents) {
-    manager = PermissionRequestManager::FromWebContents(oldContents);
-    if (manager)
-      manager->HideBubble();
-  }
-
-  if (newContents) {
-    manager = PermissionRequestManager::FromWebContents(newContents);
-    if (manager)
-      manager->DisplayPendingRequests();
-  }
-
   if ([self isInAnyFullscreenMode]) {
     [[self fullscreenToolbarController] revealToolbarForWebContents:newContents
                                                        inForeground:YES];
@@ -1209,6 +1194,34 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)setIsLoading:(BOOL)isLoading force:(BOOL)force {
   [toolbarController_ setIsLoading:isLoading force:force];
   [touchBar_ setIsPageLoading:isLoading];
+}
+
+- (void)firstResponderUpdated:(NSResponder*)responder {
+  if (![self isInAppKitFullscreen] ||
+      [fullscreenToolbarController_ toolbarStyle] ==
+          FullscreenToolbarStyle::TOOLBAR_NONE) {
+    return;
+  }
+
+  if (!responder) {
+    [self releaseToolbarVisibilityForOwner:self withAnimation:YES];
+    return;
+  }
+
+  if (![responder isKindOfClass:[NSView class]])
+    return;
+
+  // If the view is in the download shelf or the tab content area, don't
+  // lock the toolbar.
+  NSView* view = base::mac::ObjCCastStrict<NSView>(responder);
+  if (![view isDescendantOf:[[self window] contentView]] ||
+      [view isDescendantOf:[downloadShelfController_ view]] ||
+      [view isDescendantOf:[self tabContentArea]]) {
+    [self releaseToolbarVisibilityForOwner:self withAnimation:YES];
+    return;
+  }
+
+  [self lockToolbarVisibilityForOwner:self withAnimation:YES];
 }
 
 // Make the location bar the first responder, if possible.
@@ -1510,11 +1523,10 @@ bool IsTabDetachingInFullscreenEnabled() {
                                         withProfile:browser_->profile()];
 }
 
-- (void)onTabChanged:(TabStripModelObserver::TabChangeType)change
-        withContents:(WebContents*)contents {
+- (void)onTabChanged:(TabChangeType)change withContents:(WebContents*)contents {
   // Update titles if this is the currently selected tab and if it isn't just
   // the loading state which changed.
-  if (change != TabStripModelObserver::LOADING_ONLY)
+  if (change != TabChangeType::kLoadingOnly)
     windowShim_->UpdateTitleBar();
 
   // Update the bookmark bar if this is the currently selected tab and if it
@@ -1522,7 +1534,7 @@ bool IsTabDetachingInFullscreenEnabled() {
   // (showing its floating bookmark bar) and normal web pages (showing no
   // bookmark bar).
   // TODO(viettrungluu): perhaps update to not terminate running animations?
-  if (change != TabStripModelObserver::TITLE_NOT_LOADING) {
+  if (change != TabChangeType::kTitleNotLoading) {
     windowShim_->BookmarkBarStateChanged(
         BookmarkBar::DONT_ANIMATE_STATE_CHANGE);
   }
@@ -1530,14 +1542,6 @@ bool IsTabDetachingInFullscreenEnabled() {
 
 - (void)onTabDetachedWithContents:(WebContents*)contents {
   [infoBarContainerController_ tabDetachedWithContents:contents];
-
-  // If there are permission requests, hide them. This may be checked again in
-  // -onActiveTabChanged:, but not if this was the last tab in the window, in
-  // which case there is nothing to change to.
-  if (PermissionRequestManager* manager =
-          PermissionRequestManager::FromWebContents(contents)) {
-    manager->HideBubble();
-  }
 }
 
 - (void)onTabInsertedWithContents:(content::WebContents*)contents
@@ -1550,7 +1554,7 @@ bool IsTabDetachingInFullscreenEnabled() {
   if (inForeground) {
     AppToolbarButton* appMenuButton =
         static_cast<AppToolbarButton*>([toolbarController_ appMenuButton]);
-    [appMenuButton animateIfPossible];
+    [appMenuButton animateIfPossibleWithDelay:YES];
   }
 }
 
@@ -1605,7 +1609,7 @@ bool IsTabDetachingInFullscreenEnabled() {
 
   bookmarkBubbleObserver_.reset(new BookmarkBubbleObserverCocoa(self));
 
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (chrome::ShowPilotDialogsWithViewsToolkit()) {
     chrome::ShowBookmarkBubbleViewsAtPoint(
         gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
             [self window], [self bookmarkBubblePoint])),
@@ -1653,7 +1657,7 @@ bool IsTabDetachingInFullscreenEnabled() {
                                      step:(translate::TranslateStep)step
                                 errorType:(translate::TranslateErrors::Type)
                                 errorType {
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (chrome::ShowAllDialogsWithViewsToolkit()) {
     ShowTranslateBubbleViews([self window], [self locationBarBridge], contents,
                              step, errorType, true);
     return;
@@ -1926,6 +1930,10 @@ willAnimateFromState:(BookmarkBar::State)oldState
   fullscreenToolbarController_.reset([controller retain]);
 }
 
+- (void)setBrowserWindowTouchBar:(BrowserWindowTouchBar*)touchBar {
+  touchBar_.reset(touchBar);
+}
+
 - (void)executeExtensionCommand:(const std::string&)extension_id
                         command:(const extensions::Command&)command {
   // Global commands are handled by the ExtensionCommandsGlobalRegistry
@@ -1975,7 +1983,7 @@ willAnimateFromState:(BookmarkBar::State)oldState
     (ExclusiveAccessContext::TabFullscreenState)state {
   DCHECK([self isInAnyFullscreenMode]);
   [fullscreenToolbarController_
-      updateToolbarStyleExitingTabFullscreen:
+      layoutToolbarStyleIsExitingTabFullscreen:
           state == ExclusiveAccessContext::STATE_EXIT_TAB_FULLSCREEN];
 }
 

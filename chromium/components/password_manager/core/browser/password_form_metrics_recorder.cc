@@ -109,9 +109,29 @@ PasswordFormMetricsRecorder::~PasswordFormMetricsRecorder() {
   ukm_entry_builder_.SetUpdating_Prompt_Shown(update_prompt_shown_);
   ukm_entry_builder_.SetSaving_Prompt_Shown(save_prompt_shown_);
 
-  // TODO(crbug/755407): This shouldn't depend on UKM keeping repeated metrics.
-  for (const DetailedUserAction& action : one_time_report_user_actions_)
-    ukm_entry_builder_.SetUser_Action(static_cast<int64_t>(action));
+  for (const auto& action : detailed_user_actions_counts_) {
+    switch (action.first) {
+      case DetailedUserAction::kEditedUsernameInBubble:
+        ukm_entry_builder_.SetUser_Action_EditedUsernameInBubble(action.second);
+        break;
+      case DetailedUserAction::kSelectedDifferentPasswordInBubble:
+        ukm_entry_builder_.SetUser_Action_SelectedDifferentPasswordInBubble(
+            action.second);
+        break;
+      case DetailedUserAction::kTriggeredManualFallbackForSaving:
+        ukm_entry_builder_.SetUser_Action_TriggeredManualFallbackForSaving(
+            action.second);
+        break;
+      case DetailedUserAction::kTriggeredManualFallbackForUpdating:
+        ukm_entry_builder_.SetUser_Action_TriggeredManualFallbackForUpdating(
+            action.second);
+        break;
+      case DetailedUserAction::kCorrectedUsernameInForm:
+        ukm_entry_builder_.SetUser_Action_CorrectedUsernameInForm(
+            action.second);
+        break;
+    }
+  }
 
   ukm_entry_builder_.Record(ukm_recorder_);
 
@@ -204,15 +224,7 @@ int PasswordFormMetricsRecorder::GetActionsTakenNew() const {
 
 void PasswordFormMetricsRecorder::RecordDetailedUserAction(
     PasswordFormMetricsRecorder::DetailedUserAction action) {
-  // One-time actions are collected and reported during destruction of the
-  // PasswordFormMetricsRecorder.
-  if (!IsRepeatedUserAction(action)) {
-    one_time_report_user_actions_.insert(action);
-    return;
-  }
-  // Repeated actions can be reported immediately.
-  // TODO(crbug/755407): This shouldn't depend on UKM keeping repeated metrics.
-  ukm_entry_builder_.SetUser_Action(static_cast<int64_t>(action));
+  detailed_user_actions_counts_[action]++;
 }
 
 int PasswordFormMetricsRecorder::GetActionsTaken() const {
@@ -342,6 +354,7 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     // Other reasons to show a bubble:
     case metrics_util::MANUAL_MANAGE_PASSWORDS:
     case metrics_util::AUTOMATIC_GENERATED_PASSWORD_CONFIRMATION:
+    case metrics_util::MANUAL_GENERATED_PASSWORD_CONFIRMATION:
     case metrics_util::AUTOMATIC_SIGNIN_TOAST:
       // Do nothing.
       return;
@@ -412,19 +425,6 @@ int PasswordFormMetricsRecorder::GetHistogramSampleForSuppressedAccounts(
   mixed_base_encoding += GetActionsTakenNew();
   DCHECK_LT(mixed_base_encoding, kMaxSuppressedAccountStats);
   return mixed_base_encoding;
-}
-
-// static
-bool PasswordFormMetricsRecorder::IsRepeatedUserAction(
-    DetailedUserAction action) {
-  switch (action) {
-    case DetailedUserAction::kUnknown:
-      return true;
-    case DetailedUserAction::kEditedUsernameInBubble:
-      return false;
-  }
-  NOTREACHED();
-  return true;
 }
 
 }  // namespace password_manager

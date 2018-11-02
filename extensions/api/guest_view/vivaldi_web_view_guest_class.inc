@@ -27,14 +27,8 @@
   void PasteAndGo(const base::ListValue& search) override;
   void SimpleAction(const base::ListValue& search);
   void ToggleFullscreenModeForTab(content::WebContents* web_contents,
-                                  bool enter_fullscreen);
-  void ShowValidationMessage(content::WebContents* web_contents,
-                             const gfx::Rect& anchor_in_root_view,
-                             const base::string16& main_text,
-                             const base::string16& sub_text) override;
-  void HideValidationMessage(content::WebContents* web_contents) override;
-  void MoveValidationMessage(content::WebContents* web_contents,
-                             const gfx::Rect& anchor_in_root_view) override;
+                                  bool enter_fullscreen,
+                                  bool skip_window_state = false);
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
                          bool* proceed_to_fire_unload) override;
   // From WebContentsObserver, avoid compile error on the above override.
@@ -50,11 +44,7 @@
 
   void UpdateMediaState(TabAlertState state);
 
-  void SetIsFullscreen(bool is_fullscreen);
-
-  // gisli@vivaldi.com.  Request that page info is displayed, sends event
-  // to from the <webview> tag (requestpageinfo).
-  bool RequestPageInfo(const GURL& url);
+  void SetIsFullscreen(bool is_fullscreen, bool skip_window_state);
 
   // Sets the extension id used when creating the |ExtensionHost|
   void SetExtensionHost(const std::string& name);
@@ -66,6 +56,11 @@
   void OnContentBlocked(ContentSettingsType settings_type,
                         const base::string16& details);
   void AllowRunningInsecureContent();
+
+  bool ShouldAllowRunningInsecureContent(content::WebContents* web_contents,
+                                         bool allowed_per_prefs,
+                                         const url::Origin& origin,
+                                         const GURL& resource_url) override;
 
   // Note(andre@vivaldi.com):
   // This is used for pages opened from extensions. The delegate is not set
@@ -135,8 +130,6 @@
   bool is_visible_;
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
-
-  base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
   std::unique_ptr<ExtensionHostForWebContents> extension_host_;
 

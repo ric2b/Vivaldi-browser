@@ -4,9 +4,9 @@
 
 #include "modules/media_controls/elements/MediaControlMuteButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/input_type_names.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "public/platform/Platform.h"
 
@@ -15,7 +15,6 @@ namespace blink {
 MediaControlMuteButtonElement::MediaControlMuteButtonElement(
     MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaMuteButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-webkit-media-controls-mute-button"));
 }
@@ -28,10 +27,12 @@ void MediaControlMuteButtonElement::UpdateDisplayType() {
   // TODO(mlamouri): checking for volume == 0 because the mute button will look
   // 'muted' when the volume is 0 even if the element is not muted. This allows
   // the painting and the display type to actually match.
-  SetDisplayType((MediaElement().muted() || MediaElement().volume() == 0)
-                     ? kMediaUnMuteButton
-                     : kMediaMuteButton);
+  bool muted = MediaElement().muted() || MediaElement().volume() == 0;
+  SetDisplayType(muted ? kMediaUnMuteButton : kMediaMuteButton);
+  SetClass("muted", muted);
   UpdateOverflowString();
+
+  MediaControlInputElement::UpdateDisplayType();
 }
 
 WebLocalizedString::Name MediaControlMuteButtonElement::GetOverflowStringName()

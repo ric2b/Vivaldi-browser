@@ -5,18 +5,14 @@
 #ifndef CHROME_BROWSER_UI_STARTUP_STARTUP_BROWSER_CREATOR_H_
 #define CHROME_BROWSER_UI_STARTUP_STARTUP_BROWSER_CREATOR_H_
 
-#include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "build/build_config.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/startup/startup_types.h"
-#include "url/gurl.h"
 
 class Browser;
 class GURL;
@@ -129,11 +125,6 @@ class StartupBrowserCreator {
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-  // Returns whether the Consolidated startup flow will be used, based on the
-  // platform-appropriate Feature.
-  // TODO(tmartino): Remove once this is on 100%.
-  static bool UseConsolidatedFlow();
-
  private:
   friend class CloudPrintProxyPolicyTest;
   friend class CloudPrintProxyPolicyStartupTest;
@@ -152,6 +143,27 @@ class StartupBrowserCreator {
                           bool process_startup,
                           Profile* last_used_profile,
                           const Profiles& last_opened_profiles);
+
+  // Launch browser for |last_opened_profiles| if it's not empty. Otherwise,
+  // launch browser for |last_used_profile|. Return false if any browser is
+  // failed to be launched. Otherwise, return true.
+  bool LaunchBrowserForLastProfiles(const base::CommandLine& command_line,
+                                    const base::FilePath& cur_dir,
+                                    bool process_startup,
+                                    Profile* last_used_profile,
+                                    const Profiles& last_opened_profiles);
+
+  // Launch the |last_used_profile| with the full command line, and the other
+  // |last_opened_profiles| without the URLs to launch. Return false if any
+  // browser is failed to be launched. Otherwise, return true.
+
+  bool ProcessLastOpenedProfiles(
+      const base::CommandLine& command_line,
+      const base::FilePath& cur_dir,
+      chrome::startup::IsProcessStartup is_process_startup,
+      chrome::startup::IsFirstRun is_first_run,
+      Profile* last_used_profile,
+      const Profiles& last_opened_profiles);
 
   // Returns the list of URLs to open from the command line.
   static std::vector<GURL> GetURLsFromCommandLine(

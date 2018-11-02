@@ -82,15 +82,15 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
   if (!frame->GetPage()->IsPageVisible())
     return false;
 
-  if (IsSupportedInFeaturePolicy(blink::WebFeaturePolicyFeature::kVibrate) &&
-      !frame->IsFeatureEnabled(blink::WebFeaturePolicyFeature::kVibrate)) {
+  if (IsSupportedInFeaturePolicy(blink::FeaturePolicyFeature::kVibrate) &&
+      !frame->IsFeatureEnabled(blink::FeaturePolicyFeature::kVibrate)) {
     frame->DomWindow()->PrintErrorMessage(
         "Navigator.vibrate() is not enabled in feature policy for this "
         "frame.");
     return false;
   }
 
-  if (!frame->HasReceivedUserGesture()) {
+  if (!frame->HasBeenActivated()) {
     String message;
     MessageLevel level = kErrorMessageLevel;
     if (frame->IsCrossOriginSubframe()) {
@@ -124,7 +124,7 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
 // static
 void NavigatorVibration::CollectHistogramMetrics(const LocalFrame& frame) {
   NavigatorVibrationType type;
-  bool user_gesture = frame.HasReceivedUserGesture();
+  bool user_gesture = frame.HasBeenActivated();
   UseCounter::Count(&frame, WebFeature::kNavigatorVibrate);
   if (!frame.IsMainFrame()) {
     UseCounter::Count(&frame, WebFeature::kNavigatorVibrateSubFrame);
@@ -185,7 +185,7 @@ void NavigatorVibration::ContextDestroyed(ExecutionContext*) {
   }
 }
 
-DEFINE_TRACE(NavigatorVibration) {
+void NavigatorVibration::Trace(blink::Visitor* visitor) {
   visitor->Trace(controller_);
   Supplement<Navigator>::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);

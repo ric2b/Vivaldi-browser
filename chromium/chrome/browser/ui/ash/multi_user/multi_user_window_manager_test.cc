@@ -21,8 +21,7 @@ TestMultiUserWindowManager::TestMultiUserWindowManager(
       current_account_id_(desktop_owner) {
   // Register this object with the system (which will take ownership). It will
   // be deleted by ChromeLauncherController::~ChromeLauncherController().
-  chrome::MultiUserWindowManager::SetInstanceForTest(
-      this, chrome::MultiUserWindowManager::MULTI_PROFILE_MODE_SEPARATED);
+  MultiUserWindowManager::SetInstanceForTest(this);
 }
 
 TestMultiUserWindowManager::~TestMultiUserWindowManager() {
@@ -30,9 +29,8 @@ TestMultiUserWindowManager::~TestMultiUserWindowManager() {
   // SetInstanceForTest call. As such no uninstall is required.
 }
 
-void TestMultiUserWindowManager::SetWindowOwner(
-    aura::Window* window,
-    const AccountId& account_id) {
+void TestMultiUserWindowManager::SetWindowOwner(aura::Window* window,
+                                                const AccountId& account_id) {
   NOTREACHED();
 }
 
@@ -88,11 +86,8 @@ const AccountId& TestMultiUserWindowManager::GetUserPresentingWindow(
   return browser_owner_;
 }
 
-void TestMultiUserWindowManager::AddUser(content::BrowserContext* profile) {
-}
+void TestMultiUserWindowManager::AddUser(content::BrowserContext* profile) {}
 
-void TestMultiUserWindowManager::AddObserver(Observer* observer) {
-}
+void TestMultiUserWindowManager::AddObserver(Observer* observer) {}
 
-void TestMultiUserWindowManager::RemoveObserver(Observer* observer) {
-}
+void TestMultiUserWindowManager::RemoveObserver(Observer* observer) {}

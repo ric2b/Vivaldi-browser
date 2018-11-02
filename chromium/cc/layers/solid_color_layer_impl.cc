@@ -7,8 +7,9 @@
 #include <algorithm>
 
 #include "cc/layers/append_quads_data.h"
-#include "cc/quads/solid_color_draw_quad.h"
+#include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
 
 namespace cc {
 
@@ -28,11 +29,12 @@ std::unique_ptr<LayerImpl> SolidColorLayerImpl::CreateLayerImpl(
 }
 
 void SolidColorLayerImpl::AppendSolidQuads(
-    RenderPass* render_pass,
+    viz::RenderPass* render_pass,
     const Occlusion& occlusion_in_layer_space,
     viz::SharedQuadState* shared_quad_state,
     const gfx::Rect& visible_layer_rect,
     SkColor color,
+    bool force_anti_aliasing_off,
     AppendQuadsData* append_quads_data) {
   float alpha =
       (SkColorGetA(color) * (1.0f / 255.0f)) * shared_quad_state->opacity;
@@ -59,28 +61,28 @@ void SolidColorLayerImpl::AppendSolidQuads(
       append_quads_data->visible_layer_area +=
           visible_quad_rect.width() * visible_quad_rect.height();
 
-      SolidColorDrawQuad* quad =
-          render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
-      quad->SetNew(
-          shared_quad_state, quad_rect, visible_quad_rect, color, false);
+      auto* quad =
+          render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+      quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect, color,
+                   force_anti_aliasing_off);
     }
   }
 }
 
-void SolidColorLayerImpl::AppendQuads(
-    RenderPass* render_pass,
-    AppendQuadsData* append_quads_data) {
+void SolidColorLayerImpl::AppendQuads(viz::RenderPass* render_pass,
+                                      AppendQuadsData* append_quads_data) {
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  PopulateSharedQuadState(shared_quad_state);
+  PopulateSharedQuadState(shared_quad_state, contents_opaque());
 
-  AppendDebugBorderQuad(render_pass, bounds(), shared_quad_state,
+  AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
                         append_quads_data);
 
   // TODO(hendrikw): We need to pass the visible content rect rather than
   // |bounds()| here.
   AppendSolidQuads(render_pass, draw_properties().occlusion_in_content_space,
                    shared_quad_state, gfx::Rect(bounds()), background_color(),
+                   !layer_tree_impl()->settings().enable_edge_anti_aliasing,
                    append_quads_data);
 }
 

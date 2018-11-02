@@ -6,13 +6,13 @@
 
 #include "base/base64.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager_factory.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
@@ -23,6 +23,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "crypto/scoped_test_nss_chromeos_user.h"
@@ -196,7 +197,7 @@ class EasyUnlockTpmKeyManagerTest : public testing::Test {
   EasyUnlockTpmKeyManagerTest()
       : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD),
         user_manager_(new chromeos::FakeChromeUserManager()),
-        user_manager_enabler_(user_manager_),
+        user_manager_enabler_(base::WrapUnique(user_manager_)),
         profile_manager_(TestingBrowserProcess::GetGlobal()) {}
   ~EasyUnlockTpmKeyManagerTest() override {}
 
@@ -302,15 +303,14 @@ class EasyUnlockTpmKeyManagerTest : public testing::Test {
       key_size
     };
 
-    return SECSuccess ==
-           PK11_ImportDERPrivateKeyInfo(test_system_slot_->slot(),
-                                        &pki_der_user,
-                                        NULL,    // nickname
-                                        NULL,    // publicValue
-                                        true,    // isPerm
-                                        true,    // isPrivate
-                                        KU_ALL,  // usage
-                                        NULL);
+    return SECSuccess == PK11_ImportDERPrivateKeyInfo(test_system_slot_->slot(),
+                                                      &pki_der_user,
+                                                      NULL,    // nickname
+                                                      NULL,    // publicValue
+                                                      true,    // isPerm
+                                                      true,    // isPrivate
+                                                      KU_ALL,  // usage
+                                                      NULL);
   }
 
   // Returns EasyUnlockTPMKeyManager for user profile.
@@ -345,7 +345,7 @@ class EasyUnlockTpmKeyManagerTest : public testing::Test {
 
   // Needed to properly set up signin and user profiles for test.
   chromeos::FakeChromeUserManager* user_manager_;
-  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
   TestingProfileManager profile_manager_;
 
   // The testing profiles that own EasyUnlockTPMKeyManager services.
@@ -365,9 +365,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPair) {
   base::RunLoop run_loop;
   EXPECT_TRUE(user_key_manager()->GetPublicTpmKey(test_account_id_).empty());
   EXPECT_TRUE(signin_key_manager()->GetPublicTpmKey(test_account_id_).empty());
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop.QuitClosure()));
   EXPECT_TRUE(user_key_manager()->GetPublicTpmKey(test_account_id_).empty());
 
   ASSERT_TRUE(SetUpTestSystemSlot());
@@ -379,8 +378,7 @@ TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPair) {
             signin_key_manager()->GetPublicTpmKey(test_account_id_));
 
   EXPECT_TRUE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      base::Bind(&ExpectNotCalledCallback)));
+      false /* check_private_key */, base::Bind(&ExpectNotCalledCallback)));
 }
 
 TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPairMultipleCallbacks) {
@@ -389,9 +387,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPairMultipleCallbacks) {
   int callback_count = 0;
   base::RunLoop run_loop;
 
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop.QuitClosure()));
   EXPECT_FALSE(user_key_manager()->PrepareTpmKey(
       false /* check_private_key */,
       base::Bind(&IncreaseCount, &callback_count)));
@@ -399,8 +396,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPairMultipleCallbacks) {
       false /* check_private_key */,
       base::Bind(&IncreaseCount, &callback_count)));
   // Verify that the method works with empty callback.
-  EXPECT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */, base::Closure()));
+  EXPECT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 base::Closure()));
 
   ASSERT_TRUE(SetUpTestSystemSlot());
   VerifyKeyGenerationNotStartedAndFinalizeTestNssUser();
@@ -414,8 +411,7 @@ TEST_F(EasyUnlockTpmKeyManagerTest, CreateKeyPairMultipleCallbacks) {
             signin_key_manager()->GetPublicTpmKey(test_account_id_));
 
   EXPECT_TRUE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      base::Bind(&ExpectNotCalledCallback)));
+      false /* check_private_key */, base::Bind(&ExpectNotCalledCallback)));
 }
 
 TEST_F(EasyUnlockTpmKeyManagerTest, PublicKeySetInPrefs) {
@@ -423,8 +419,7 @@ TEST_F(EasyUnlockTpmKeyManagerTest, PublicKeySetInPrefs) {
       test_account_id_, std::string(kTestPublicKey, arraysize(kTestPublicKey)));
 
   EXPECT_TRUE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      base::Bind(&ExpectNotCalledCallback)));
+      false /* check_private_key */, base::Bind(&ExpectNotCalledCallback)));
 
   EXPECT_FALSE(user_key_manager()->GetPublicTpmKey(test_account_id_).empty());
   EXPECT_EQ(user_key_manager()->GetPublicTpmKey(test_account_id_),
@@ -440,9 +435,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, PublicKeySetInPrefsCheckPrivateKey) {
       test_account_id_, std::string(kTestPublicKey, arraysize(kTestPublicKey)));
 
   base::RunLoop run_loop;
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      true /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(true /* check_private_key */,
+                                                 run_loop.QuitClosure()));
 
   ASSERT_TRUE(SetUpTestSystemSlot());
   VerifyKeyGenerationNotStartedAndFinalizeTestNssUser();
@@ -459,15 +453,14 @@ TEST_F(EasyUnlockTpmKeyManagerTest, PublicKeySetInPrefsCheckPrivateKey_OK) {
   ASSERT_TRUE(InitTestNssUser());
   ASSERT_TRUE(SetUpTestSystemSlot());
   VerifyKeyGenerationNotStartedAndFinalizeTestNssUser();
-  ASSERT_TRUE(ImportPrivateKey(kTestPrivateKey,  arraysize(kTestPrivateKey)));
+  ASSERT_TRUE(ImportPrivateKey(kTestPrivateKey, arraysize(kTestPrivateKey)));
   SetLocalStatePublicKey(
       test_account_id_, std::string(kTestPublicKey, arraysize(kTestPublicKey)));
 
   int callback_count = 0;
   base::RunLoop run_loop;
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      true /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(true /* check_private_key */,
+                                                 run_loop.QuitClosure()));
 
   EXPECT_FALSE(user_key_manager()->PrepareTpmKey(
       false /* check_private_key */,
@@ -483,17 +476,15 @@ TEST_F(EasyUnlockTpmKeyManagerTest, PublicKeySetInPrefsCheckPrivateKey_OK) {
             signin_key_manager()->GetPublicTpmKey(test_account_id_));
 
   EXPECT_TRUE(user_key_manager()->PrepareTpmKey(
-      true /* check_private_key */,
-      base::Bind(&ExpectNotCalledCallback)));
+      true /* check_private_key */, base::Bind(&ExpectNotCalledCallback)));
 }
 
 TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotTimeoutTriggers) {
   ASSERT_TRUE(InitTestNssUser());
 
   base::RunLoop run_loop;
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop.QuitClosure()));
 
   base::RunLoop run_loop_get_slot_timeout;
   ASSERT_TRUE(user_key_manager()->StartGetSystemSlotTimeoutMs(0));
@@ -510,9 +501,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotTimeoutTriggers) {
 TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotTimeoutAfterSlotFetched) {
   ASSERT_TRUE(InitTestNssUser());
   base::RunLoop run_loop;
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop.QuitClosure()));
 
   base::RunLoop run_loop_slot;
   VerifyKeyGenerationNotStartedAndFinalizeTestNssUser();
@@ -529,9 +519,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotTimeoutAfterSlotFetched) {
 TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotRetryAfterFailure) {
   ASSERT_TRUE(InitTestNssUser());
   base::RunLoop run_loop;
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop.QuitClosure()));
 
   base::RunLoop run_loop_get_slot_timeout;
   ASSERT_TRUE(user_key_manager()->StartGetSystemSlotTimeoutMs(0));
@@ -543,9 +532,8 @@ TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotRetryAfterFailure) {
 
   base::RunLoop run_loop_retry;
 
-  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(
-      false /* check_private_key */,
-      run_loop_retry.QuitClosure()));
+  ASSERT_FALSE(user_key_manager()->PrepareTpmKey(false /* check_private_key */,
+                                                 run_loop_retry.QuitClosure()));
 
   ASSERT_TRUE(SetUpTestSystemSlot());
   VerifyKeyGenerationNotStartedAndFinalizeTestNssUser();
@@ -557,7 +545,7 @@ TEST_F(EasyUnlockTpmKeyManagerTest, GetSystemSlotRetryAfterFailure) {
 
 TEST_F(EasyUnlockTpmKeyManagerTest, SignData) {
   ASSERT_TRUE(SetUpTestSystemSlot());
-  ASSERT_TRUE(ImportPrivateKey(kTestPrivateKey,  arraysize(kTestPrivateKey)));
+  ASSERT_TRUE(ImportPrivateKey(kTestPrivateKey, arraysize(kTestPrivateKey)));
   SetLocalStatePublicKey(
       test_account_id_, std::string(kTestPublicKey, arraysize(kTestPublicKey)));
 

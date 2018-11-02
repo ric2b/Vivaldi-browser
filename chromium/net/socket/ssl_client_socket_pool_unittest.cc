@@ -116,11 +116,13 @@ class SSLClientSocketPoolTest : public testing::Test {
         http_proxy_socket_params_(
             new HttpProxySocketParams(proxy_transport_socket_params_,
                                       NULL,
+                                      QUIC_VERSION_UNSUPPORTED,
                                       std::string(),
                                       HostPortPair("host", 80),
                                       session_->http_auth_cache(),
                                       session_->http_auth_handler_factory(),
                                       session_->spdy_session_pool(),
+                                      session_->quic_stream_factory(),
                                       true,
                                       NULL)),
         http_proxy_socket_pool_(kMaxSockets,
@@ -147,13 +149,13 @@ class SSLClientSocketPoolTest : public testing::Test {
 
   scoped_refptr<SSLSocketParams> SSLParams(ProxyServer::Scheme proxy,
                                            bool expect_spdy) {
-    return make_scoped_refptr(new SSLSocketParams(
+    return base::MakeRefCounted<SSLSocketParams>(
         proxy == ProxyServer::SCHEME_DIRECT ? direct_transport_socket_params_
                                             : NULL,
         proxy == ProxyServer::SCHEME_SOCKS5 ? socks_socket_params_ : NULL,
         proxy == ProxyServer::SCHEME_HTTP ? http_proxy_socket_params_ : NULL,
         HostPortPair("host", 443), ssl_config_, PRIVACY_MODE_DISABLED, 0,
-        expect_spdy));
+        expect_spdy);
   }
 
   void AddAuthToCache() {
@@ -847,9 +849,9 @@ TEST_F(SSLClientSocketPoolTest, IPPooling) {
   StaticSocketDataProvider data(reads, arraysize(reads), NULL, 0);
   socket_factory_.AddSocketDataProvider(&data);
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = X509Certificate::CreateFromBytes(
+  ssl.ssl_info.cert = X509Certificate::CreateFromBytes(
       reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der));
-  ASSERT_TRUE(ssl.cert);
+  ASSERT_TRUE(ssl.ssl_info.cert);
   ssl.next_proto = kProtoHTTP2;
   socket_factory_.AddSSLSocketDataProvider(&ssl);
 
@@ -924,10 +926,10 @@ void SSLClientSocketPoolTest::TestIPPoolingDisabled(
 // pooling.
 TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = X509Certificate::CreateFromBytes(
+  ssl.ssl_info.cert = X509Certificate::CreateFromBytes(
       reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der));
-  ASSERT_TRUE(ssl.cert);
-  ssl.client_cert_sent = true;
+  ASSERT_TRUE(ssl.ssl_info.cert);
+  ssl.ssl_info.client_cert_sent = true;
   ssl.next_proto = kProtoHTTP2;
   TestIPPoolingDisabled(&ssl);
 }
@@ -935,7 +937,7 @@ TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
 // Verifies that an SSL connection with channel ID disables SPDY IP pooling.
 TEST_F(SSLClientSocketPoolTest, IPPoolingChannelID) {
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.channel_id_sent = true;
+  ssl.ssl_info.channel_id_sent = true;
   ssl.next_proto = kProtoHTTP2;
   TestIPPoolingDisabled(&ssl);
 }

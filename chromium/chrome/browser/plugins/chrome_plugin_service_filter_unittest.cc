@@ -34,6 +34,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
@@ -94,7 +95,7 @@ class ChromePluginServiceFilterTest : public ChromeRenderViewHostTestHarness {
                                    content::WebPluginInfo plugin_info,
                                    bool* is_available) {
     *is_available = filter_->IsPluginAvailable(
-        web_contents()->GetRenderProcessHost()->GetID(),
+        web_contents()->GetMainFrame()->GetProcess()->GetID(),
         web_contents()->GetMainFrame()->GetRoutingID(), resource_context,
         plugin_content_url, main_frame_origin, &plugin_info);
   }
@@ -112,7 +113,7 @@ TEST_F(ChromePluginServiceFilterTest, PreferHtmlOverPluginsDefault) {
   // The default content setting should block Flash, as there should be 0
   // engagement.
   GURL url("http://www.google.com");
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
   EXPECT_FALSE(IsPluginAvailable(
       url, main_frame_origin, profile()->GetResourceContext(), flash_plugin));
 
@@ -171,7 +172,7 @@ TEST_F(ChromePluginServiceFilterTest,
   base::HistogramTester histograms;
 
   GURL url("http://www.google.com");
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
 
   // Allow plugins.
   HostContentSettingsMap* map =
@@ -264,7 +265,7 @@ TEST_F(ChromePluginServiceFilterTest, PreferHtmlOverPluginsCustomEngagement) {
 
   // This should be blocked due to 0 engagement.
   GURL url("http://www.google.com");
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
   EXPECT_FALSE(IsPluginAvailable(
       url, main_frame_origin, profile()->GetResourceContext(), flash_plugin));
 
@@ -312,7 +313,7 @@ TEST_F(ChromePluginServiceFilterTest,
 
   // We should fail the availablity check in incognito.
   GURL url("http://www.google.com");
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
   EXPECT_FALSE(IsPluginAvailable(
       url, main_frame_origin, incognito->GetResourceContext(), flash_plugin));
 
@@ -357,7 +358,7 @@ TEST_F(ChromePluginServiceFilterTest,
 
   // We pass the availablity check in incognito based on the original content
   // setting.
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
   EXPECT_TRUE(IsPluginAvailable(url, main_frame_origin,
                                 incognito->GetResourceContext(), flash_plugin));
 
@@ -398,7 +399,7 @@ TEST_F(ChromePluginServiceFilterTest, ManagedSetting) {
 
   SiteEngagementService* service = SiteEngagementService::Get(profile());
   GURL url("http://www.google.com");
-  url::Origin main_frame_origin(url);
+  url::Origin main_frame_origin = url::Origin::Create(url);
   NavigateAndCommit(url);
 
   service->ResetBaseScoreForURL(url, 30.0);

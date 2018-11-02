@@ -160,12 +160,32 @@ interface SessionController {
   // http://crbug.com/729808
   SetSessionLengthLimit(mojo.common.mojom.TimeDelta length_limit,
                         mojo.common.mojom.TimeTicks start_time);
+
+  // Returns whether it's ok to switch the active multiprofile user. May affect
+  // or be affected by system state such as window overview mode and screen
+  // casting.
+  CanSwitchActiveUser() => (bool can_switch);
+
+  // Shows a dialog to explain the implications of signing in multiple users.
+  // If |on_accept| is false, |permanently_accept| is ignored.
+  ShowMultiprofilesIntroDialog() => (bool on_accept, bool permanently_accept);
+
+  // Shows a dialog to confirm that the user wants to teleport a window to
+  // another desktop. If |on_accept| is false, |permanently_accept| is ignored.
+  ShowTeleportWarningDialog() => (bool on_accept, bool permanently_accept);
+
+  // Shows a dialog that explains that the given user is no longer allowed in
+  // the session due to a policy change, and aborts the session.
+  ShowMultiprofilesSessionAbortedDialog(string user_email);
 };
 
 // Interface for ash to request session service from its client (e.g. Chrome).
 interface SessionControllerClient {
   // Requests to lock screen.
   RequestLockScreen();
+
+  // Requests signing out all users, ending the current session.
+  RequestSignOut();
 
   // Switch to the active user with |account_id| (if the user has already signed
   // in).

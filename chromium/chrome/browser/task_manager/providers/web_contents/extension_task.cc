@@ -27,11 +27,11 @@ namespace {
 gfx::ImageSkia* g_default_icon = nullptr;
 
 gfx::ImageSkia* GetDefaultIcon() {
-  if (!ResourceBundle::HasSharedInstance())
+  if (!ui::ResourceBundle::HasSharedInstance())
     return nullptr;
 
   if (!g_default_icon) {
-    g_default_icon = ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+    g_default_icon = ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
         IDR_EXTENSIONS_FAVICON);
   }
 
@@ -45,8 +45,7 @@ ExtensionTask::ExtensionTask(content::WebContents* web_contents,
                              extensions::ViewType view_type)
     : RendererTask(GetExtensionTitle(web_contents, extension, view_type),
                    GetDefaultIcon(),
-                   web_contents,
-                   web_contents->GetRenderProcessHost()),
+                   web_contents),
       view_type_(view_type) {
   LoadExtensionIcon(extension);
 }

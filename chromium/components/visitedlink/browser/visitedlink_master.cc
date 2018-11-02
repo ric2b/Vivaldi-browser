@@ -228,9 +228,7 @@ VisitedLinkMaster::VisitedLinkMaster(content::BrowserContext* browser_context,
       delegate_(delegate),
       listener_(base::MakeUnique<VisitedLinkEventListener>(browser_context)),
       persist_to_disk_(persist_to_disk),
-      table_is_loading_from_file_(false),
       weak_ptr_factory_(this) {
-  InitMembers();
 }
 
 VisitedLinkMaster::VisitedLinkMaster(Listener* listener,
@@ -239,14 +237,11 @@ VisitedLinkMaster::VisitedLinkMaster(Listener* listener,
                                      bool suppress_rebuild,
                                      const base::FilePath& filename,
                                      int32_t default_table_size)
-    : browser_context_(NULL),
-      delegate_(delegate),
+    : delegate_(delegate),
       persist_to_disk_(persist_to_disk),
-      table_is_loading_from_file_(false),
       weak_ptr_factory_(this) {
   listener_.reset(listener);
   DCHECK(listener_.get());
-  InitMembers();
 
   database_name_override_ = filename;
   table_size_override_ = default_table_size;
@@ -275,15 +270,6 @@ VisitedLinkMaster::~VisitedLinkMaster() {
     PostIOTask(FROM_HERE,
                base::Bind(IgnoreResult(&base::DeleteFile), filename, false));
   }
-}
-
-void VisitedLinkMaster::InitMembers() {
-  file_ = NULL;
-  shared_memory_serial_ = 0;
-  used_items_ = 0;
-  table_size_override_ = 0;
-  suppress_rebuild_ = false;
-  sequence_token_ = base::SequencedWorkerPool::GetSequenceToken();
 }
 
 bool VisitedLinkMaster::Init() {
@@ -354,11 +340,10 @@ VisitedLinkMaster::Hash VisitedLinkMaster::TryToAddURL(const GURL& url) {
   return AddFingerprint(fingerprint, true);
 }
 
-void VisitedLinkMaster::PostIOTask(const tracked_objects::Location& from_here,
+void VisitedLinkMaster::PostIOTask(const base::Location& from_here,
                                    const base::Closure& task) {
   DCHECK(persist_to_disk_);
-  BrowserThread::GetBlockingPool()->PostSequencedWorkerTask(sequence_token_,
-                                                            from_here, task);
+  file_task_runner_->PostTask(from_here, task);
 }
 
 void VisitedLinkMaster::AddURL(const GURL& url) {
@@ -944,7 +929,7 @@ void VisitedLinkMaster::FreeURLTable() {
     return;
   PostIOTask(FROM_HERE, base::Bind(&AsyncClose, file_));
   // AsyncClose() will close the file and free the memory pointed by |file_|.
-  file_ = NULL;
+  file_ = nullptr;
 }
 
 bool VisitedLinkMaster::ResizeTableIfNecessary() {
@@ -1099,7 +1084,7 @@ void VisitedLinkMaster::OnTableRebuildComplete(
         WriteFullTable();
     }
   }
-  table_builder_ = NULL;  // Will release our reference to the builder.
+  table_builder_ = nullptr;  // Will release our reference to the builder.
 
   // Notify the unit test that the rebuild is complete (will be NULL in prod.)
   if (!rebuild_complete_task_.is_null()) {
@@ -1173,7 +1158,7 @@ VisitedLinkMaster::TableBuilder::TableBuilder(
 // TODO(brettw): Do we want to try to cancel the request if this happens? It
 // could delay shutdown if there are a lot of URLs.
 void VisitedLinkMaster::TableBuilder::DisownMaster() {
-  master_ = NULL;
+  master_ = nullptr;
 }
 
 void VisitedLinkMaster::TableBuilder::OnURL(const GURL& url) {

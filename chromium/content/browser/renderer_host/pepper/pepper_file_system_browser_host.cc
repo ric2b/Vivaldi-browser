@@ -40,10 +40,10 @@ scoped_refptr<storage::FileSystemContext> GetFileSystemContextFromRenderId(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RenderProcessHost* host = RenderProcessHost::FromID(render_process_id);
   if (!host)
-    return NULL;
+    return nullptr;
   StoragePartition* storage_partition = host->GetStoragePartition();
   if (!storage_partition)
-    return NULL;
+    return nullptr;
   return storage_partition->GetFileSystemContext();
 }
 
@@ -58,7 +58,7 @@ PepperFileSystemBrowserHost::PepperFileSystemBrowserHost(BrowserPpapiHost* host,
       type_(type),
       called_open_(false),
       opened_(false),
-      file_system_context_(NULL),
+      file_system_context_(nullptr),
       reserved_quota_(0),
       reserving_quota_(false),
       weak_factory_(this) {}
@@ -219,12 +219,9 @@ void PepperFileSystemBrowserHost::OpenFileSystem(
   GURL origin =
       browser_ppapi_host_->GetDocumentURLForInstance(pp_instance()).GetOrigin();
   file_system_context_->OpenFileSystem(
-      origin,
-      file_system_type,
-      storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-      base::Bind(&PepperFileSystemBrowserHost::OpenFileSystemComplete,
-                 weak_factory_.GetWeakPtr(),
-                 reply_context));
+      origin, file_system_type, storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
+      base::BindOnce(&PepperFileSystemBrowserHost::OpenFileSystemComplete,
+                     weak_factory_.GetWeakPtr(), reply_context));
 }
 
 void PepperFileSystemBrowserHost::OpenFileSystemComplete(
@@ -302,16 +299,11 @@ void PepperFileSystemBrowserHost::OpenPluginPrivateFileSystem(
   }
 
   file_system_context->OpenPluginPrivateFileSystem(
-      origin,
-      storage::kFileSystemTypePluginPrivate,
-      fsid,
-      plugin_id,
+      origin, storage::kFileSystemTypePluginPrivate, fsid, plugin_id,
       storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-      base::Bind(
+      base::BindOnce(
           &PepperFileSystemBrowserHost::OpenPluginPrivateFileSystemComplete,
-          weak_factory_.GetWeakPtr(),
-          reply_context,
-          fsid));
+          weak_factory_.GetWeakPtr(), reply_context, fsid));
 }
 
 void PepperFileSystemBrowserHost::OpenPluginPrivateFileSystemComplete(

@@ -19,7 +19,13 @@ String SVGAnimatedString::animVal() {
   return SVGAnimatedProperty<SVGString>::animVal();
 }
 
-DEFINE_TRACE_WRAPPERS(SVGAnimatedString) {
+void SVGAnimatedString::Trace(blink::Visitor* visitor) {
+  SVGAnimatedProperty<SVGString>::Trace(visitor);
+  ScriptWrappable::Trace(visitor);
+}
+
+void SVGAnimatedString::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   SVGAnimatedProperty<SVGString>::TraceWrappers(visitor);
   ScriptWrappable::TraceWrappers(visitor);
 }

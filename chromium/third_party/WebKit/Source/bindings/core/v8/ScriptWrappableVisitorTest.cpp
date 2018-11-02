@@ -246,8 +246,8 @@ class HandleContainer
   static HandleContainer* Create() { return new HandleContainer(); }
   virtual ~HandleContainer() {}
 
-  DEFINE_INLINE_TRACE() {}
-  DEFINE_INLINE_TRACE_WRAPPERS() {
+  void Trace(blink::Visitor* visitor) {}
+  void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     visitor->TraceWrappers(handle_.Cast<v8::Value>());
   }
 
@@ -439,7 +439,9 @@ class Mixin : public GarbageCollectedMixin {
   explicit Mixin(DeathAwareScriptWrappable* wrapper_in_mixin)
       : wrapper_in_mixin_(wrapper_in_mixin) {}
 
-  DEFINE_INLINE_TRACE_WRAPPERS() { visitor->TraceWrappers(wrapper_in_mixin_); }
+  void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+    visitor->TraceWrappers(wrapper_in_mixin_);
+  }
 
  protected:
   DeathAwareScriptWrappable::Wrapper wrapper_in_mixin_;
@@ -462,7 +464,7 @@ class Base : public blink::GarbageCollected<Base>,
     return new Base(wrapper_in_base, wrapper_in_mixin);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     visitor->TraceWrappers(wrapper_in_base_);
     Mixin::TraceWrappers(visitor);
   }

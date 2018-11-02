@@ -5,8 +5,8 @@
 #include "core/html/track/CueTimeline.h"
 
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLTrackElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/LoadableTextTrack.h"
 #include "core/html/track/TextTrack.h"
 #include "core/html/track/TextTrackCue.h"
@@ -67,7 +67,7 @@ void CueTimeline::RemoveCueInternal(TextTrackCue* cue) {
   size_t index = currently_active_cues_.Find(interval);
   if (index != kNotFound) {
     DCHECK(cue->IsActive());
-    currently_active_cues_.erase(index);
+    currently_active_cues_.EraseAt(index);
     cue->SetIsActive(false);
     // Since the cue will be removed from the media element and likely the
     // TextTrack might also be destructed, notifying the region of the cue
@@ -366,7 +366,7 @@ void CueTimeline::EndIgnoringUpdateRequests() {
     UpdateActiveCues(MediaElement().currentTime());
 }
 
-DEFINE_TRACE(CueTimeline) {
+void CueTimeline::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_element_);
 }
 

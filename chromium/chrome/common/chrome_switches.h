@@ -12,6 +12,7 @@
 #include "chrome/common/features.h"
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
+#include "ui/base/ui_features.h"
 
 // Don't add more switch files here. This is linked into some places like the
 // installer where dependencies should be limited. Instead, have files
@@ -19,7 +20,7 @@
 
 namespace base {
 class CommandLine;
-};
+}
 
 namespace switches {
 
@@ -58,11 +59,13 @@ extern const char kCloudPrintJobTitle[];
 extern const char kCloudPrintPrintTicket[];
 extern const char kCloudPrintServiceProcess[];
 extern const char kCloudPrintSetupProxy[];
+extern const char kCommittedInterstitials[];
 extern const char kCrashOnHangThreads[];
 extern const char kCreateBrowserOnStartupForTests[];
 extern const char kCustomDevtoolsFrontend[];
 extern const char kDebugEnableFrameToggle[];
 extern const char kDebugPackedApps[];
+extern const char kDenyPermissionPrompts[];
 extern const char kDevToolsFlags[];
 extern const char kDiagnostics[];
 extern const char kDiagnosticsFormat[];
@@ -70,7 +73,6 @@ extern const char kDiagnosticsRecovery[];
 extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
 extern const char kDisableCastStreamingHWEncoding[];
-extern const char kDisableClearBrowsingDataCounters[];
 extern const char kDisableClientSidePhishingDetection[];
 extern const char kDisableComponentExtensionsWithBackgroundPages[];
 extern const char kDisableComponentUpdate[];
@@ -89,7 +91,6 @@ extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableSearchGeolocationDisclosure[];
-extern const char kDisableWebNotificationCustomLayouts[];
 extern const char kDisableZeroBrowsersOpenForTests[];
 extern const char kDiskCacheDir[];
 extern const char kDiskCacheSize[];
@@ -97,19 +98,15 @@ extern const char kDnsLogDetails[];
 extern const char kDumpBrowserHistograms[];
 extern const char kEasyUnlockAppPath[];
 extern const char kEnableAudioDebugRecordingsFromExtension[];
-extern const char kEnableAutomation[];
 extern const char kEnableBookmarkUndo[];
-extern const char kEnableClearBrowsingDataCounters[];
 extern const char kEnableCloudPrintProxy[];
 extern const char kEnableDeviceDiscoveryNotifications[];
 extern const char kEnableDevToolsExperiments[];
 extern const char kEnableDomainReliability[];
 extern const char kEnableExperimentalFullscreenExitUI[];
-extern const char kEnableExperimentalHotwordHardware[];
 extern const char kEnableExtensionActivityLogging[];
 extern const char kEnableExtensionActivityLogTesting[];
 extern const char kEnableFastUnload[];
-extern const char kEnableMaterialDesignFeedback[];
 extern const char kEnableNaCl[];
 extern const char kEnableNavigationTracing[];
 extern const char kEnableNetBenchmarking[];
@@ -120,12 +117,9 @@ extern const char kEnablePictureInPicture[];
 extern const char kEnablePotentiallyAnnoyingSecurityFeatures[];
 extern const char kEnablePowerOverlay[];
 extern const char kEnablePrintPreviewRegisterPromos[];
-extern const char kEnableProfiling[];
 extern const char kEnablePushApiBackgroundMode[];
 extern const char kEnableSiteSettings[];
-extern const char kEnableSupervisedUserManagedBookmarksFolder[];
 extern const char kEnableTabAudioMuting[];
-extern const char kEnableWebNotificationCustomLayouts[];
 extern const char kEnableWebRtcEventLoggingFromExtension[];
 extern const char kExtensionContentVerification[];
 extern const char kExtensionContentVerificationBootstrap[];
@@ -141,6 +135,7 @@ extern const char kForceDesktopIOSPromotion[];
 extern const char kForceEffectiveConnectionType[];
 extern const char kForceEnableMetricsReporting[];
 extern const char kForceFirstRun[];
+extern const char kForceFirstRunDialog[];
 extern const char kForceLocalNtp[];
 extern const char kHomePage[];
 extern const char kIgnoreUrlFetcherCertRequests[];
@@ -157,6 +152,9 @@ extern const char kMediaCacheSize[];
 extern const char kMemlog[];
 extern const char kMemlogModeAll[];
 extern const char kMemlogModeBrowser[];
+extern const char kMemlogModeGpu[];
+extern const char kMemlogModeMinimal[];
+extern const char kMemlogModeRendererSampling[];
 extern const char kMonitoringDestinationID[];
 extern const char kNetLogCaptureMode[];
 extern const char kNoDefaultBrowserCheck[];
@@ -191,7 +189,6 @@ extern const char kRemoteDebuggingTargets[];
 extern const char kRestoreLastSession[];
 extern const char kSavePageAsMHTML[];
 extern const char kShowAppList[];
-extern const char kShowCertLink[];
 extern const char kSilentDebuggerExtensionAPI[];
 extern const char kSilentLaunch[];
 extern const char kSimulateCriticalUpdate[];
@@ -253,10 +250,6 @@ extern const char kDisableLoggingRedirect[];
 extern const char kDisableLoginScreenApps[];
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(USE_ASH)
-extern const char kOpenAsh[];
-#endif
-
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
 extern const char kHelp[];
 extern const char kHelpShort[];
@@ -303,10 +296,10 @@ extern const char kWatcherProcess[];
 extern const char kWindows10CustomTitlebar[];
 #endif  // defined(OS_WIN)
 
-#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+#if BUILDFLAG(ENABLE_MUS)
 extern const char kMash[];
+extern const char kMashServiceName[];
 extern const char kMus[];
-extern const char kMusConfig[];
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
@@ -338,14 +331,9 @@ extern const char kUseSystemDefaultPrinter[];
 
 bool ExtensionsDisabled(const base::CommandLine& command_line);
 bool ExtensionsDisabled();
-bool MdFeedbackEnabled();
 
 #if defined(OS_CHROMEOS)
 bool PowerOverlayEnabled();
-#endif
-
-#if defined(OS_WIN)
-bool GDITextPrintingEnabled();
 #endif
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

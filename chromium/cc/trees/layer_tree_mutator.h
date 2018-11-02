@@ -9,28 +9,66 @@
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace cc {
+
+// TODO(majidvp): Currently the sync mechanism between cc and worklet is
+// stateless meaning that it sends a new copy of the world every sync cycle.
+// This has the benefit of keeping things very simple but we should revisit this
+// and only send data relevant to particular phase of animator lifecycle e.g.,
+// name and options dictionary are used just for construction.
+struct CC_EXPORT MutatorInputState {
+  struct CC_EXPORT AnimationState {
+    int animation_player_id = 0;
+    // Name associated with worklet animation player.
+    std::string name;
+    // Worklet animation player's current time, from its associated timeline.
+    double current_time = 0;
+  };
+
+  MutatorInputState();
+  ~MutatorInputState();
+
+  std::vector<AnimationState> animations;
+};
+
+struct CC_EXPORT MutatorOutputState {
+  struct CC_EXPORT AnimationState {
+    int animation_player_id = 0;
+    // The animator effect's local time.
+    // TODO(majidvp): This assumes each animator has a single output effect
+    // which does not hold once we state support group effects.
+    // http://crbug.com/767043
+    base::TimeDelta local_time;
+  };
+
+  MutatorOutputState();
+  ~MutatorOutputState();
+
+  std::vector<AnimationState> animations;
+};
 
 class LayerTreeMutatorClient {
  public:
-  // This is necessary because it forces an impl frame. We couldn't, for
-  // example, just assume that we will "always mutate" and early-out in the
-  // mutator if there was nothing to do because we won't always be producing
-  // impl frames.
-  virtual void SetNeedsMutate() = 0;
+  // Called when mutator needs to update its output.
+  //
+  // |output_state|: Most recent output of the mutator.
+  virtual void SetMutationUpdate(
+      std::unique_ptr<MutatorOutputState> output_state) = 0;
 };
 
 class CC_EXPORT LayerTreeMutator {
  public:
   virtual ~LayerTreeMutator() {}
 
-  // Returns true if the mutator should be rescheduled.
-  virtual bool Mutate(base::TimeTicks now) = 0;
   virtual void SetClient(LayerTreeMutatorClient* client) = 0;
 
-  // Returns a callback which is responsible for applying layer tree mutations
-  // to DOM elements.
-  virtual base::Closure TakeMutations() = 0;
+  virtual void Mutate(std::unique_ptr<MutatorInputState> input_state) = 0;
+  // TODO(majidvp): Remove when timeline inputs are known.
+  virtual bool HasAnimators() = 0;
 };
 
 }  // namespace cc

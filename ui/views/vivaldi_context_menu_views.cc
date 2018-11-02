@@ -63,10 +63,8 @@ void VivaldiContextMenuViews::Show() {
   if (menu_model_->GetItemCount() == 0)
     return;
 
-  gfx::Point screen_point(params_.x, params_.y);
-  screen_point += RenderViewContextMenuViews::GetOffset(render_frame_host_);
-
   // Convert from target window coordinates to root window coordinates.
+  gfx::Point screen_point(params_.x, params_.y);
   aura::Window* target_window = GetActiveNativeView();
   aura::Window* root_window = target_window->GetRootWindow();
   aura::client::ScreenPositionClient* screen_position_client =

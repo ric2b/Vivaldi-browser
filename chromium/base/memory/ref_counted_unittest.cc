@@ -14,7 +14,7 @@ namespace {
 
 class SelfAssign : public base::RefCounted<SelfAssign> {
  protected:
-  virtual ~SelfAssign() {}
+  virtual ~SelfAssign() = default;
 
  private:
   friend class base::RefCounted<SelfAssign>;
@@ -22,7 +22,7 @@ class SelfAssign : public base::RefCounted<SelfAssign> {
 
 class Derived : public SelfAssign {
  protected:
-  ~Derived() override {}
+  ~Derived() override = default;
 
  private:
   friend class base::RefCounted<Derived>;
@@ -112,8 +112,28 @@ class Other : public base::RefCounted<Other> {
  private:
   friend class base::RefCounted<Other>;
 
-  ~Other() {}
+  ~Other() = default;
 };
+
+class HasPrivateDestructorWithDeleter;
+
+struct Deleter {
+  static void Destruct(const HasPrivateDestructorWithDeleter* x);
+};
+
+class HasPrivateDestructorWithDeleter
+    : public base::RefCounted<HasPrivateDestructorWithDeleter, Deleter> {
+ public:
+  HasPrivateDestructorWithDeleter() = default;
+
+ private:
+  friend struct Deleter;
+  ~HasPrivateDestructorWithDeleter() = default;
+};
+
+void Deleter::Destruct(const HasPrivateDestructorWithDeleter* x) {
+  delete x;
+}
 
 scoped_refptr<Other> Overloaded(scoped_refptr<Other> other) {
   return other;
@@ -127,11 +147,11 @@ class InitialRefCountIsOne : public base::RefCounted<InitialRefCountIsOne> {
  public:
   REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
 
-  InitialRefCountIsOne() {}
+  InitialRefCountIsOne() = default;
 
  private:
   friend class base::RefCounted<InitialRefCountIsOne>;
-  ~InitialRefCountIsOne() {}
+  ~InitialRefCountIsOne() = default;
 };
 
 }  // end namespace
@@ -561,6 +581,16 @@ TEST(RefCountedUnitTest, TestOverloadResolutionMove) {
   EXPECT_EQ(other2, Overloaded(std::move(other)));
 }
 
+TEST(RefCountedUnitTest, TestMakeRefCounted) {
+  scoped_refptr<Derived> derived = new Derived;
+  EXPECT_TRUE(derived->HasOneRef());
+  derived = nullptr;
+
+  scoped_refptr<Derived> derived2 = base::MakeRefCounted<Derived>();
+  EXPECT_TRUE(derived2->HasOneRef());
+  derived2 = nullptr;
+}
+
 TEST(RefCountedUnitTest, TestInitialRefCountIsOne) {
   scoped_refptr<InitialRefCountIsOne> obj =
       base::MakeRefCounted<InitialRefCountIsOne>();
@@ -578,12 +608,24 @@ TEST(RefCountedUnitTest, TestInitialRefCountIsOne) {
 }
 
 TEST(RefCountedDeathTest, TestAdoptRef) {
-  EXPECT_DCHECK_DEATH(make_scoped_refptr(new InitialRefCountIsOne));
+  // Check that WrapRefCounted() DCHECKs if passed a type that defines
+  // REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE.
+  EXPECT_DCHECK_DEATH(base::WrapRefCounted(new InitialRefCountIsOne));
 
+  // Check that AdoptRef() DCHECKs if passed a nullptr.
   InitialRefCountIsOne* ptr = nullptr;
   EXPECT_DCHECK_DEATH(base::AdoptRef(ptr));
 
+  // Check that AdoptRef() DCHECKs if passed an object that doesn't need to be
+  // adopted.
   scoped_refptr<InitialRefCountIsOne> obj =
       base::MakeRefCounted<InitialRefCountIsOne>();
   EXPECT_DCHECK_DEATH(base::AdoptRef(obj.get()));
+}
+
+TEST(RefCountedUnitTest, TestPrivateDestructorWithDeleter) {
+  // Ensure that RefCounted doesn't need the access to the pointee dtor when
+  // a custom deleter is given.
+  scoped_refptr<HasPrivateDestructorWithDeleter> obj =
+      base::MakeRefCounted<HasPrivateDestructorWithDeleter>();
 }

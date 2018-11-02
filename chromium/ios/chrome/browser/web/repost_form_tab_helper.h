@@ -9,19 +9,22 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#import "base/mac/scoped_nsobject.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_user_data.h"
 
-@class RepostFormCoordinator;
+@protocol RepostFormTabHelperDelegate;
 
 // Allows presenting a repost form dialog. Listens to web::WebState activity
 // and dismisses the dialog when necessary.
 class RepostFormTabHelper : public web::WebStateUserData<RepostFormTabHelper>,
                             public web::WebStateObserver {
  public:
-  explicit RepostFormTabHelper(web::WebState* web_state);
   ~RepostFormTabHelper() override;
+
+  // Creates TabHelper. |delegate| is not retained by TabHelper and must not be
+  // null.
+  static void CreateForWebState(web::WebState* web_state,
+                                id<RepostFormTabHelperDelegate> delegate);
 
   // Presents a repost form dialog at the given |location|. |callback| is called
   // with true if the repost was confirmed and with false if it was cancelled.
@@ -29,12 +32,25 @@ class RepostFormTabHelper : public web::WebStateUserData<RepostFormTabHelper>,
                      const base::Callback<void(bool)>& callback);
 
  private:
-  // web::WebStateObserver overrides:
-  void DidStartNavigation(web::NavigationContext* navigation_context) override;
-  void WebStateDestroyed() override;
+  RepostFormTabHelper(web::WebState* web_state,
+                      id<RepostFormTabHelperDelegate> delegate);
 
-  // Coordinates repost form dialog presentation.
-  base::scoped_nsobject<RepostFormCoordinator> coordinator_;
+  // Called to dismiss the repost form dialog.
+  void DismissReportFormDialog();
+
+  // web::WebStateObserver overrides:
+  void DidStartNavigation(web::WebState* web_state,
+                          web::NavigationContext* navigation_context) override;
+  void WebStateDestroyed(web::WebState* web_state) override;
+
+  // The WebState this instance is observing. Will be null after
+  // WebStateDestroyed has been called.
+  web::WebState* web_state_ = nullptr;
+
+  __weak id<RepostFormTabHelperDelegate> delegate_ = nil;
+
+  // true if form repost dialog is currently being presented.
+  bool is_presenting_dialog_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(RepostFormTabHelper);
 };

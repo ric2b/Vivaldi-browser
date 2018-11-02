@@ -33,7 +33,7 @@ class MessagePumpLibeventTest : public testing::Test {
   MessagePumpLibeventTest()
       : ui_loop_(new MessageLoop(MessageLoop::TYPE_UI)),
         io_thread_("MessagePumpLibeventTestIOThread") {}
-  ~MessagePumpLibeventTest() override {}
+  ~MessagePumpLibeventTest() override = default;
 
   void SetUp() override {
     Thread::Options options(MessageLoop::TYPE_IO, 0);
@@ -77,7 +77,7 @@ namespace {
 // nothing useful.
 class StupidWatcher : public MessagePumpLibevent::Watcher {
  public:
-  ~StupidWatcher() override {}
+  ~StupidWatcher() override = default;
 
   // base:MessagePumpLibevent::Watcher interface
   void OnFileCanReadWithoutBlocking(int fd) override {}
@@ -111,7 +111,7 @@ class BaseWatcher : public MessagePumpLibevent::Watcher {
       : controller_(controller) {
     DCHECK(controller_);
   }
-  ~BaseWatcher() override {}
+  ~BaseWatcher() override = default;
 
   // base:MessagePumpLibevent::Watcher interface
   void OnFileCanReadWithoutBlocking(int /* fd */) override { NOTREACHED(); }
@@ -133,7 +133,7 @@ class DeleteWatcher : public BaseWatcher {
   void OnFileCanWriteWithoutBlocking(int /* fd */) override {
     DCHECK(controller_);
     delete controller_;
-    controller_ = NULL;
+    controller_ = nullptr;
   }
 };
 
@@ -155,7 +155,7 @@ class StopWatcher : public BaseWatcher {
       MessagePumpLibevent::FileDescriptorWatcher* controller)
       : BaseWatcher(controller) {}
 
-  ~StopWatcher() override {}
+  ~StopWatcher() override = default;
 
   void OnFileCanWriteWithoutBlocking(int /* fd */) override {
     controller_->StopWatchingFileDescriptor();
@@ -176,16 +176,15 @@ TEST_F(MessagePumpLibeventTest, StopWatcher) {
 void QuitMessageLoopAndStart(const Closure& quit_closure) {
   quit_closure.Run();
 
-  MessageLoop::ScopedNestableTaskAllower allow(MessageLoop::current());
-  RunLoop runloop;
+  RunLoop runloop(RunLoop::Type::kNestableTasksAllowed);
   ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, runloop.QuitClosure());
   runloop.Run();
 }
 
 class NestedPumpWatcher : public MessagePumpLibevent::Watcher {
  public:
-  NestedPumpWatcher() {}
-  ~NestedPumpWatcher() override {}
+  NestedPumpWatcher() = default;
+  ~NestedPumpWatcher() override = default;
 
   void OnFileCanReadWithoutBlocking(int /* fd */) override {
     RunLoop runloop;

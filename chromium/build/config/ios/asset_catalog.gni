@@ -2,24 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-declare_args() {
-  # Controls whether the "imageset" template sets up the build to compile
-  # the asset catalogs (to generate an Assets.car file). If set to false,
-  # instead the assets will be copied verbatim to the generated bundle.
-  # As loading resources from the compiled asset catalog or unpacked is
-  # transparent to application code, this results in faster build but in
-  # a larger application.
-  #
-  # This requires that resources uses scale (like "@2x", "@3x") and idiom
-  # (like "~ipad", "~iphone") suffixes and use the same basename as the
-  # imageset directory in order for the correct resource to be loaded if
-  # ios_compile_asset_catalogs is set to false.
-  #
-  # Note: flipping this variable requires a clobber build (as there is no
-  # way to specify that unknown files are deleted as part of the build).
-  ios_compile_asset_catalogs = true
-}
-
 # This template declares a bundle_data target that references an asset
 # catalog so that it is compiled to the asset catalog of the generated
 # bundle.
@@ -45,11 +27,6 @@ declare_args() {
 #
 # This template also ensures that the file are only copied once when the
 # build targets multiple architectures at the same time (aka "fat build").
-#
-# If ios_compile_asset_catalogs is set to false, the resources will instead
-# just be copied into the final bundles (they are still copied to a temporary
-# location in gen/ to avoid accidentally compiling them if they are located
-# in a .xcassets directory).
 #
 # Arguments
 #
@@ -77,46 +54,28 @@ template("asset_catalog") {
     }
   } else {
     _copy_target_name = target_name + "__copy"
-    _fake_target_name = target_name + "__fake"
     _data_target_name = target_name
 
     _sources = invoker.sources
-    _extension = invoker.asset_type
-
-    foreach(_source, invoker.sources) {
-      _dir = get_path_info(_source, "dir")
-
-      assert(get_path_info(_dir, "extension") == _extension,
-             "$_source dirname must have .$_extension extension")
-
-      # If the compilation of asset catalogs is disabled, the Contents.json
-      # file must not be copied.
-      if (!ios_compile_asset_catalogs) {
-        if (get_path_info(_source, "file") == "Contents.json") {
-          _sources -= [ _source ]
-        }
-      }
-    }
+    _outputs = []
 
     # The compilation of resources into Assets.car is enabled automatically
     # by the "create_bundle" target if any of the "bundle_data" sources's
     # path is in a .xcassets directory and matches one of the know asset
     # catalog type.
-    #
-    # Copy the file to a directory that either matches that pattern if the
-    # compilation of asset catalogs is enabled or not. The detection will
-    # be performed by gn and the correct ninja rules generated. This is the
-    # main difference between the two variants for this template.
-    if (ios_compile_asset_catalogs) {
-      _xcassets_dir = "$target_gen_dir/${target_name}.xcassets"
-    } else {
-      _xcassets_dir = "$target_gen_dir/${target_name}_xcassets"
-    }
-
+    _xcassets_dir = "$target_gen_dir/${target_name}.xcassets"
     _output_dir = "$_xcassets_dir/" +
                   get_path_info(get_path_info(_sources[0], "dir"), "file")
 
-    copy(_copy_target_name) {
+    foreach(_source, invoker.sources) {
+      _dir = get_path_info(_source, "dir")
+      _outputs += [ "$_output_dir/" + get_path_info(_source, "file") ]
+
+      assert(get_path_info(_dir, "extension") == invoker.asset_type,
+             "$_source dirname must have .${invoker.asset_type} extension")
+    }
+
+    action(_copy_target_name) {
       # Forward "deps", "public_deps" and "testonly" in case some of the
       # source files are generated.
       forward_variables_from(invoker,
@@ -126,27 +85,16 @@ template("asset_catalog") {
                                "testonly",
                              ])
 
-      visibility = [ ":$_fake_target_name" ]
-      sources = _sources
-      outputs = [
-        "$_output_dir/{{source_file_part}}",
-      ]
-    }
-
-    action(_fake_target_name) {
-      forward_variables_from(invoker, [ "testonly" ])
+      script = "//build/config/ios/hardlink.py"
 
       visibility = [ ":$_data_target_name" ]
-      script = "//build/config/ios/dummy.py"
       sources = _sources
-      outputs = [
-        "$_xcassets_dir",
+      outputs = _outputs + [ _xcassets_dir ]
+
+      args = [
+        rebase_path(get_path_info(_sources[0], "dir"), root_out_dir),
+        rebase_path(_output_dir, root_out_dir),
       ]
-      public_deps = [
-        ":$_copy_target_name",
-      ]
-      args = rebase_path(sources, root_build_dir) +
-             rebase_path(outputs, root_build_dir)
     }
 
     bundle_data(_data_target_name) {
@@ -159,12 +107,12 @@ template("asset_catalog") {
                                "sources",
                              ])
 
-      sources = get_target_outputs(":$_copy_target_name")
+      sources = _outputs
       outputs = [
         "{{bundle_resources_dir}}/{{source_file_part}}",
       ]
       public_deps = [
-        ":$_fake_target_name",
+        ":$_copy_target_name",
       ]
     }
   }

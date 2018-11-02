@@ -5,7 +5,7 @@
 #include "modules/mediasession/MediaSession.h"
 
 #include <memory>
-#include "bindings/modules/v8/MediaSessionActionHandler.h"
+#include "bindings/modules/v8/v8_media_session_action_handler.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -151,7 +151,7 @@ void MediaSession::OnMetadataChanged() {
 }
 
 void MediaSession::setActionHandler(const String& action,
-                                    MediaSessionActionHandler* handler) {
+                                    V8MediaSessionActionHandler* handler) {
   if (handler) {
     auto add_result = action_handlers_.Set(action, handler);
 
@@ -219,22 +219,23 @@ void MediaSession::DidReceiveAction(
   DCHECK(GetExecutionContext()->IsDocument());
   Document* document = ToDocument(GetExecutionContext());
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr);
+      Frame::NotifyUserActivation(document ? document->GetFrame() : nullptr);
 
   auto iter = action_handlers_.find(MojomActionToActionName(action));
   if (iter == action_handlers_.end())
     return;
 
-  iter->value->call(this);
+  iter->value->InvokeAndReportException(this);
 }
 
-DEFINE_TRACE(MediaSession) {
+void MediaSession::Trace(blink::Visitor* visitor) {
   visitor->Trace(metadata_);
   visitor->Trace(action_handlers_);
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(MediaSession) {
+void MediaSession::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (auto handler : action_handlers_.Values())
     visitor->TraceWrappers(handler);
 }

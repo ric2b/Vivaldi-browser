@@ -29,6 +29,10 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::Time;
 using base::TimeDelta;
 using history::BrowsingHistoryService;
@@ -121,18 +125,17 @@ class HistoryCollectionViewControllerTest : public BlockCleanupTest {
   DISALLOW_COPY_AND_ASSIGN(HistoryCollectionViewControllerTest);
 };
 
-// Tests that hasHistoryEntries property returns YES after entries have been
-// received.
-TEST_F(HistoryCollectionViewControllerTest, HasHistoryEntries) {
+// Tests that isEmpty property returns NO after entries have been received.
+TEST_F(HistoryCollectionViewControllerTest, IsEmpty) {
   QueryHistory({{GURL(kTestUrl1), Time::Now()}});
-  EXPECT_TRUE([history_collection_view_controller_ hasHistoryEntries]);
+  EXPECT_FALSE([history_collection_view_controller_ isEmpty]);
 }
 
 // Tests that local history items are shown when sync is enabled,
 // HISTORY_DELETE_DIRECTIVES is enabled, and sync_returned is false.
 // This ensures that when HISTORY_DELETE_DIRECTIVES is disabled,
 // only local device history items are shown.
-TEST_F(HistoryCollectionViewControllerTest, HasHistoryEntriesWhenSyncEnabled) {
+TEST_F(HistoryCollectionViewControllerTest, IsNotEmptyWhenSyncEnabled) {
   EXPECT_CALL(*sync_setup_service_mock_, IsSyncEnabled())
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*sync_setup_service_mock_,
@@ -140,7 +143,7 @@ TEST_F(HistoryCollectionViewControllerTest, HasHistoryEntriesWhenSyncEnabled) {
       .WillRepeatedly(testing::Return(false));
 
   QueryHistory({{GURL(kTestUrl1), Time::Now()}});
-  EXPECT_TRUE([history_collection_view_controller_ hasHistoryEntries]);
+  EXPECT_FALSE([history_collection_view_controller_ isEmpty]);
 }
 
 // Tests adding two entries to history from the same day, then deleting the

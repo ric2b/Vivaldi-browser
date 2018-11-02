@@ -4,9 +4,9 @@
 
 #include "core/page/scrolling/RootScrollerController.h"
 
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
@@ -61,7 +61,7 @@ RootScrollerController::RootScrollerController(Document& document)
       effective_root_scroller_(&document),
       document_has_document_element_(false) {}
 
-DEFINE_TRACE(RootScrollerController) {
+void RootScrollerController::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(root_scroller_);
   visitor->Trace(effective_root_scroller_);
@@ -85,7 +85,6 @@ Node& RootScrollerController::EffectiveRootScroller() const {
 }
 
 void RootScrollerController::DidUpdateLayout() {
-  DCHECK(document_->Lifecycle().GetState() == DocumentLifecycle::kLayoutClean);
   RecomputeEffectiveRootScroller();
 }
 
@@ -133,14 +132,6 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
 
   ApplyRootScrollerProperties(*old_effective_root_scroller);
   ApplyRootScrollerProperties(*effective_root_scroller_);
-
-  // Document (i.e. LayoutView) gets its background style from the rootScroller
-  // so we need to recalc its style. Ensure that we get back to a LayoutClean
-  // state after.
-  document_->SetNeedsStyleRecalc(kLocalStyleChange,
-                                 StyleChangeReasonForTracing::Create(
-                                     StyleChangeReason::kStyleInvalidator));
-  document_->UpdateStyleAndLayout();
 
   if (Page* page = document_->GetPage())
     page->GlobalRootScrollerController().DidChangeRootScroller();

@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/UseCounter.h"
+#include "core/origin_trials/OriginTrialContext.h"
 #include "core/testing/DummyPageHolder.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/MainThreadWorkletReportingProxy.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/TaskType.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -41,24 +43,39 @@ class MainThreadWorkletReportingProxyForTest final
 class MainThreadWorkletTest : public ::testing::Test {
  public:
   void SetUp() override {
-    KURL url(kParsedURLString, "https://example.com/");
     page_ = DummyPageHolder::Create();
-    security_origin_ = SecurityOrigin::Create(url);
-    reporting_proxy_ = WTF::MakeUnique<MainThreadWorkletReportingProxyForTest>(
-        page_->GetFrame().GetDocument());
+    Document* document = page_->GetFrame().GetDocument();
+    document->SetURL(KURL("https://example.com/"));
+    document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
+    reporting_proxy_ =
+        std::make_unique<MainThreadWorkletReportingProxyForTest>(document);
+    auto creation_params = std::make_unique<GlobalScopeCreationParams>(
+        document->Url(), document->UserAgent(), String() /* source_code */,
+        nullptr /* cached_meta_data */,
+        nullptr /* content_security_policy_parsed_headers */,
+        document->GetReferrerPolicy(), document->GetSecurityOrigin(),
+        nullptr /* worker_clients */, document->AddressSpace(),
+        OriginTrialContext::GetTokens(document).get(),
+        nullptr /* worker_settings */, kV8CacheOptionsDefault);
     global_scope_ = new MainThreadWorkletGlobalScope(
-        &page_->GetFrame(), url, "fake user agent", security_origin_.Get(),
-        ToIsolate(page_->GetFrame().GetDocument()), *reporting_proxy_);
+        &page_->GetFrame(), std::move(creation_params), ToIsolate(document),
+        *reporting_proxy_);
   }
 
   void TearDown() override { global_scope_->Terminate(); }
 
  protected:
-  RefPtr<SecurityOrigin> security_origin_;
   std::unique_ptr<DummyPageHolder> page_;
   std::unique_ptr<MainThreadWorkletReportingProxyForTest> reporting_proxy_;
   Persistent<MainThreadWorkletGlobalScope> global_scope_;
 };
+
+TEST_F(MainThreadWorkletTest, SecurityOrigin) {
+  // The SecurityOrigin for a worklet should be a unique opaque origin, while
+  // the owner Document's SecurityOrigin shouldn't.
+  EXPECT_TRUE(global_scope_->GetSecurityOrigin()->IsUnique());
+  EXPECT_FALSE(global_scope_->DocumentSecurityOrigin()->IsUnique());
+}
 
 TEST_F(MainThreadWorkletTest, UseCounter) {
   Document& document = *page_->GetFrame().GetDocument();
@@ -91,8 +108,8 @@ TEST_F(MainThreadWorkletTest, UseCounter) {
 }
 
 TEST_F(MainThreadWorkletTest, TaskRunner) {
-  RefPtr<WebTaskRunner> task_runner =
-      TaskRunnerHelper::Get(TaskType::kUnthrottled, global_scope_);
+  scoped_refptr<WebTaskRunner> task_runner =
+      global_scope_->GetTaskRunner(TaskType::kUnthrottled);
   EXPECT_TRUE(task_runner->RunsTasksInCurrentSequence());
 }
 

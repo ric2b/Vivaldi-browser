@@ -45,21 +45,20 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
 
   void SetUp() override {
 #if !defined(OS_ANDROID)
-    ImageTransportFactory::InitializeForUnitTests(
-        std::unique_ptr<ImageTransportFactory>(
-            new NoTransportImageTransportFactory));
+    ImageTransportFactory::SetFactory(
+        std::make_unique<NoTransportImageTransportFactory>());
 #endif
     browser_context_.reset(new TestBrowserContext);
     MockRenderProcessHost* process_host =
         new MockRenderProcessHost(browser_context_.get());
     int32_t routing_id = process_host->GetNextRoutingID();
     mojom::WidgetPtr widget;
-    widget_impl_ = base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+    widget_impl_ = std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
     widget_host_ = new RenderWidgetHostImpl(
         &delegate_, process_host, routing_id, std::move(widget), false);
     view_ = RenderWidgetHostViewGuest::Create(
-        widget_host_, NULL,
+        widget_host_, nullptr,
         (new TestRenderWidgetHostView(widget_host_))->GetWeakPtr());
   }
 
@@ -144,9 +143,8 @@ class RenderWidgetHostViewGuestSurfaceTest
 
   void SetUp() override {
 #if !defined(OS_ANDROID)
-    ImageTransportFactory::InitializeForUnitTests(
-        std::unique_ptr<ImageTransportFactory>(
-            new NoTransportImageTransportFactory));
+    ImageTransportFactory::SetFactory(
+        std::make_unique<NoTransportImageTransportFactory>());
 #endif
     browser_context_.reset(new TestBrowserContext);
     MockRenderProcessHost* process_host =
@@ -159,7 +157,7 @@ class RenderWidgetHostViewGuestSurfaceTest
 
     int32_t routing_id = process_host->GetNextRoutingID();
     mojom::WidgetPtr widget;
-    widget_impl_ = base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+    widget_impl_ = std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
     widget_host_ = new RenderWidgetHostImpl(
         &delegate_, process_host, routing_id, std::move(widget), false);
@@ -172,7 +170,7 @@ class RenderWidgetHostViewGuestSurfaceTest
     viz::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
-        base::MakeUnique<FakeRendererCompositorFrameSink>(
+        std::make_unique<FakeRendererCompositorFrameSink>(
             std::move(sink), std::move(client_request));
     view_->DidCreateNewRendererCompositorFrameSink(
         renderer_compositor_frame_sink_ptr_.get());
@@ -224,14 +222,14 @@ class RenderWidgetHostViewGuestSurfaceTest
 };
 
 namespace {
-cc::CompositorFrame CreateDelegatedFrame(float scale_factor,
-                                         gfx::Size size,
-                                         const gfx::Rect& damage) {
-  cc::CompositorFrame frame;
+viz::CompositorFrame CreateDelegatedFrame(float scale_factor,
+                                          gfx::Size size,
+                                          const gfx::Rect& damage) {
+  viz::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
   frame.metadata.begin_frame_ack = viz::BeginFrameAck(0, 1, true);
 
-  std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> pass = viz::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
   frame.render_pass_list.push_back(std::move(pass));
   return frame;
@@ -252,7 +250,7 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
   browser_plugin_guest_->set_attached(true);
   view_->SubmitCompositorFrame(
       local_surface_id,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
 
   viz::SurfaceId id = GetSurfaceId();
 
@@ -276,7 +274,7 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
 
   view_->SubmitCompositorFrame(
       local_surface_id,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
 
   // Since we have not changed the frame size and scale factor, the same surface
   // id must be used.
@@ -296,7 +294,7 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
 
   view_->SubmitCompositorFrame(
       local_surface_id,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect));
+      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
   // Since guest is not attached, the CompositorFrame must be processed but the
   // frame must be evicted to return the resources immediately.
   EXPECT_FALSE(view_->has_frame());

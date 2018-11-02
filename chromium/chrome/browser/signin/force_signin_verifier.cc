@@ -4,12 +4,13 @@
 
 #include <string>
 
-#include "base/bind.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/force_signin_verifier.h"
+
+#include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/ui/forced_reauthentication_dialog.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "google_apis/gaia/gaia_constants.h"
 
@@ -25,29 +26,26 @@ const net::BackoffEntry::Policy kBackoffPolicy = {
     false           // Do not always use initial delay.
 };
 
-// The duration of window closing countdown when verification failed. Use the
-// short countdown if the verfication is finished in
-// |kShortCountdownVerificationTimeLimitInSeconds|, otherwise use the normal
-// countdown.
-const int kShortCountdownVerificationTimeLimitInSeconds = 3;
-const int kWindowClosingNormalCountdownDurationInSecond = 300;
-const int kWindowClosingShortCountdownDurationInSecond = 30;
-
 }  // namespace
+
+const char kForceSigninVerificationMetricsName[] =
+    "Signin.ForceSigninVerificationRequest";
+const char kForceSigninVerificationSuccessTimeMetricsName[] =
+    "Signin.ForceSigninVerificationTime.Success";
+const char kForceSigninVerificationFailureTimeMetricsName[] =
+    "Signin.ForceSigninVerificationTime.Failure";
 
 ForceSigninVerifier::ForceSigninVerifier(Profile* profile)
     : OAuth2TokenService::Consumer("force_signin_verifier"),
-#if !defined(OS_MACOSX)
-      profile_(profile),
-      dialog_(ForcedReauthenticationDialog::Create()),
-#endif
       has_token_verified_(false),
       backoff_entry_(&kBackoffPolicy),
+      creation_time_(base::TimeTicks::Now()),
       oauth2_token_service_(
           ProfileOAuth2TokenServiceFactory::GetForProfile(profile)),
-      signin_manager_(SigninManagerFactory::GetForProfile(profile)),
-      token_request_time_(base::Time::Now()) {
+      signin_manager_(SigninManagerFactory::GetForProfile(profile)) {
   net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  UMA_HISTOGRAM_BOOLEAN(kForceSigninVerificationMetricsName,
+                        ShouldSendRequest());
   SendRequest();
 }
 
@@ -59,6 +57,8 @@ void ForceSigninVerifier::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
     const std::string& access_token,
     const base::Time& expiration_time) {
+  UMA_HISTOGRAM_MEDIUM_TIMES(kForceSigninVerificationSuccessTimeMetricsName,
+                             base::TimeTicks::Now() - creation_time_);
   has_token_verified_ = true;
   net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
   Cancel();
@@ -68,8 +68,10 @@ void ForceSigninVerifier::OnGetTokenFailure(
     const OAuth2TokenService::Request* request,
     const GoogleServiceAuthError& error) {
   if (error.IsPersistentError()) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(kForceSigninVerificationFailureTimeMetricsName,
+                               base::TimeTicks::Now() - creation_time_);
     has_token_verified_ = true;
-    ShowDialog();
+    CloseAllBrowserWindows();
     net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
     Cancel();
   } else {
@@ -104,10 +106,6 @@ bool ForceSigninVerifier::HasTokenBeenVerified() {
   return has_token_verified_;
 }
 
-void ForceSigninVerifier::AbortSignoutCountdownIfExisted() {
-  window_close_timer_.Stop();
-}
-
 void ForceSigninVerifier::SendRequest() {
   if (!ShouldSendRequest())
     return;
@@ -125,36 +123,12 @@ bool ForceSigninVerifier::ShouldSendRequest() {
          signin_manager_->IsAuthenticated();
 }
 
-base::TimeDelta ForceSigninVerifier::StartCountdown() {
-  base::TimeDelta countdown_duration;
-  if (base::Time::Now() - token_request_time_ >
-      base::TimeDelta::FromSeconds(
-          kShortCountdownVerificationTimeLimitInSeconds)) {
-    countdown_duration = base::TimeDelta::FromSeconds(
-        kWindowClosingNormalCountdownDurationInSecond);
-  } else {
-    countdown_duration = base::TimeDelta::FromSeconds(
-        kWindowClosingShortCountdownDurationInSecond);
-  }
-
-  window_close_timer_.Start(FROM_HERE, countdown_duration, this,
-                            &ForceSigninVerifier::CloseAllBrowserWindows);
-  return countdown_duration;
-}
-
-void ForceSigninVerifier::ShowDialog() {
-#if !defined(OS_MACOSX)
-  base::TimeDelta countdown_duration = StartCountdown();
-  dialog_->ShowDialog(profile_, signin_manager_, countdown_duration);
-#endif
-}
-
 void ForceSigninVerifier::CloseAllBrowserWindows() {
   // Do not close window if there is ongoing reauth. If it fails later, the
   // signin process should take care of the signout.
   if (signin_manager_->AuthInProgress())
     return;
-  signin_manager_->SignOut(
+  signin_manager_->SignOutAndRemoveAllAccounts(
       signin_metrics::AUTHENTICATION_FAILED_WITH_FORCE_SIGNIN,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
 }
@@ -169,8 +143,4 @@ net::BackoffEntry* ForceSigninVerifier::GetBackoffEntryForTesting() {
 
 base::OneShotTimer* ForceSigninVerifier::GetOneShotTimerForTesting() {
   return &backoff_request_timer_;
-}
-
-base::OneShotTimer* ForceSigninVerifier::GetWindowCloseTimerForTesting() {
-  return &window_close_timer_;
 }

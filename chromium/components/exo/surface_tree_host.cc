@@ -8,10 +8,13 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/exo/surface.h"
+#include "components/exo/wm_helper.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -50,7 +53,7 @@ class CustomWindowTargeter : public aura::WindowTargeter {
       aura::Window::ConvertPointToTarget(window->parent(), window,
                                          &local_point);
     aura::Window::ConvertPointToTarget(window, surface->window(), &local_point);
-    return surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1)));
+    return surface->HitTest(local_point);
   }
 
   ui::EventTarget* FindTargetForEvent(ui::EventTarget* root,
@@ -75,34 +78,27 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceTreeHost, public:
 
-SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name,
-                                 aura::WindowDelegate* window_delegate)
-    : host_window_(new aura::Window(window_delegate)),
-      surface_host_(new aura::Window(nullptr)) {
+SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name)
+    : host_window_(std::make_unique<aura::Window>(nullptr)) {
   host_window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   host_window_->SetName(window_name);
-  host_window_->Init(ui::LAYER_NOT_DRAWN);
+  host_window_->Init(ui::LAYER_SOLID_COLOR);
   host_window_->set_owned_by_parent(false);
-  host_window_->SetEventTargeter(base::MakeUnique<CustomWindowTargeter>(this));
-
-  surface_host_->SetName("ExoSurfaceHost");
-  surface_host_->Init(ui::LAYER_SOLID_COLOR);
-  layer_tree_frame_sink_holder_ = base::MakeUnique<LayerTreeFrameSinkHolder>(
-      this, surface_host_->CreateLayerTreeFrameSink());
-
-  host_window_->AddChild(surface_host_);
-  surface_host_->Show();
-
+  // The host window is a container of surface tree. It doesn't handle pointer
+  // events.
+  host_window_->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
+  layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
+      this, host_window_->CreateLayerTreeFrameSink());
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
 }
 
 SurfaceTreeHost::~SurfaceTreeHost() {
   aura::Env::GetInstance()->context_factory()->RemoveObserver(this);
   SetRootSurface(nullptr);
-  if (host_window_->layer()->GetCompositor()) {
-    host_window_->layer()->GetCompositor()->vsync_manager()->RemoveObserver(
-        this);
-  }
+  LayerTreeFrameSinkHolder::DeleteWhenLastResourceHasBeenReclaimed(
+      std::move(layer_tree_frame_sink_holder_));
 }
 
 void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
@@ -128,39 +124,32 @@ void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
       active_frame_callbacks_.pop_front();
     }
 
-    swapping_presentation_callbacks_.splice(
-        swapping_presentation_callbacks_.end(), presentation_callbacks_);
-    swapped_presentation_callbacks_.splice(
-        swapped_presentation_callbacks_.end(),
-        swapping_presentation_callbacks_);
-    // Call all presentation callbacks with a null presentation time to indicate
-    // that they have been cancelled.
-    while (!swapped_presentation_callbacks_.empty()) {
-      swapped_presentation_callbacks_.front().Run(base::TimeTicks(),
-                                                  base::TimeDelta());
-      swapped_presentation_callbacks_.pop_front();
+    DCHECK(presentation_callbacks_.empty());
+    for (auto entry : active_presentation_callbacks_) {
+      while (!entry.second.empty()) {
+        entry.second.front().Run(base::TimeTicks(), base::TimeDelta(), 0);
+        entry.second.pop_front();
+      }
     }
+    active_presentation_callbacks_.clear();
   }
 
   if (root_surface) {
     root_surface_ = root_surface;
     root_surface_->SetSurfaceDelegate(this);
     host_window_->AddChild(root_surface_->window());
+    UpdateHostWindowBounds();
     root_surface_->window()->Show();
   }
 }
 
-bool SurfaceTreeHost::HasHitTestMask() const {
-  return root_surface_ ? root_surface_->HasHitTestMask() : false;
+bool SurfaceTreeHost::HasHitTestRegion() const {
+  return root_surface_ && root_surface_->HasHitTestRegion();
 }
 
 void SurfaceTreeHost::GetHitTestMask(gfx::Path* mask) const {
   if (root_surface_)
     root_surface_->GetHitTestMask(mask);
-}
-
-gfx::Rect SurfaceTreeHost::GetHitTestBounds() const {
-  return root_surface_ ? root_surface_->GetHitTestBounds() : gfx::Rect();
 }
 
 gfx::NativeCursor SurfaceTreeHost::GetCursor(const gfx::Point& point) const {
@@ -170,9 +159,23 @@ gfx::NativeCursor SurfaceTreeHost::GetCursor(const gfx::Point& point) const {
 void SurfaceTreeHost::DidReceiveCompositorFrameAck() {
   active_frame_callbacks_.splice(active_frame_callbacks_.end(),
                                  frame_callbacks_);
-  swapping_presentation_callbacks_.splice(
-      swapping_presentation_callbacks_.end(), presentation_callbacks_);
   UpdateNeedsBeginFrame();
+}
+
+void SurfaceTreeHost::DidPresentCompositorFrame(uint32_t presentation_token,
+                                                base::TimeTicks time,
+                                                base::TimeDelta refresh,
+                                                uint32_t flags) {
+  auto it = active_presentation_callbacks_.find(presentation_token);
+  DCHECK(it != active_presentation_callbacks_.end());
+  for (auto callback : it->second)
+    callback.Run(time, refresh, flags);
+  active_presentation_callbacks_.erase(it);
+}
+
+void SurfaceTreeHost::DidDiscardCompositorFrame(uint32_t presentation_token) {
+  DidPresentCompositorFrame(presentation_token, base::TimeTicks(),
+                            base::TimeDelta(), 0);
 }
 
 void SurfaceTreeHost::SetBeginFrameSource(
@@ -203,19 +206,9 @@ void SurfaceTreeHost::UpdateNeedsBeginFrame() {
 // SurfaceDelegate overrides:
 
 void SurfaceTreeHost::OnSurfaceCommit() {
-  gfx::Rect bounds = root_surface_->CommitSurfaceHierarchy(
-      &frame_callbacks_, &presentation_callbacks_);
-
-  gfx::Point origin = bounds.origin();
-  origin.SetToMin(gfx::Point());
-
-  surface_host_->SetBounds(gfx::Rect(origin, bounds.size()));
-  surface_host_->layer()->SetFillsBoundsOpaquely(
-      bounds.size() == root_surface_->content_size() &&
-      root_surface_->FillsBoundsOpaquely());
-
-  host_window_->SetBounds(
-      gfx::Rect(host_window_->bounds().origin(), bounds.size()));
+  DCHECK(presentation_callbacks_.empty());
+  root_surface_->CommitSurfaceHierarchy(false);
+  UpdateHostWindowBounds();
 }
 
 bool SurfaceTreeHost::IsSurfaceSynchronized() const {
@@ -224,23 +217,8 @@ bool SurfaceTreeHost::IsSurfaceSynchronized() const {
   return false;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// aura::WindowObserver overrides:
-
-void SurfaceTreeHost::OnWindowAddedToRootWindow(aura::Window* window) {
-  DCHECK_EQ(window, host_window());
-  window->layer()->GetCompositor()->vsync_manager()->AddObserver(this);
-}
-
-void SurfaceTreeHost::OnWindowRemovingFromRootWindow(aura::Window* window,
-                                                     aura::Window* new_root) {
-  DCHECK_EQ(window, host_window());
-  window->layer()->GetCompositor()->vsync_manager()->RemoveObserver(this);
-}
-
-void SurfaceTreeHost::OnWindowDestroying(aura::Window* window) {
-  DCHECK_EQ(window, host_window());
-  window->RemoveObserver(this);
+bool SurfaceTreeHost::IsTouchEnabled(Surface*) const {
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -249,6 +227,18 @@ void SurfaceTreeHost::OnWindowDestroying(aura::Window* window) {
 bool SurfaceTreeHost::OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) {
   current_begin_frame_ack_ =
       viz::BeginFrameAck(args.source_id, args.sequence_number, false);
+
+  if (!frame_callbacks_.empty()) {
+    // In this case, the begin frame arrives just before
+    // |DidReceivedCompositorFrameAck()|, we need more begin frames to run
+    // |frame_callbacks_| which will be moved to |active_frame_callbacks_| by
+    // |DidReceivedCompositorFrameAck()| shortly.
+    layer_tree_frame_sink_holder_->DidNotProduceFrame(current_begin_frame_ack_);
+    current_begin_frame_ack_.sequence_number =
+        viz::BeginFrameArgs::kInvalidFrameNumber;
+    begin_frame_source_->DidFinishFrame(this);
+  }
+
   while (!active_frame_callbacks_.empty()) {
     active_frame_callbacks_.front().Run(args.frame_time);
     active_frame_callbacks_.pop_front();
@@ -257,30 +247,10 @@ bool SurfaceTreeHost::OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ui::CompositorVSyncManager::Observer overrides:
-
-void SurfaceTreeHost::OnUpdateVSyncParameters(base::TimeTicks timebase,
-                                              base::TimeDelta interval) {
-  // Use current time if platform doesn't provide an accurate timebase.
-  if (timebase.is_null())
-    timebase = base::TimeTicks::Now();
-  while (!swapped_presentation_callbacks_.empty()) {
-    swapped_presentation_callbacks_.front().Run(timebase, interval);
-    swapped_presentation_callbacks_.pop_front();
-  }
-  // VSync parameters updates are generated at the start of a new swap. Move
-  // the swapping presentation callbacks to swapped callbacks so they fire
-  // at the next VSync parameters update as that will contain the presentation
-  // time for the previous frame.
-  swapped_presentation_callbacks_.splice(swapped_presentation_callbacks_.end(),
-                                         swapping_presentation_callbacks_);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // ui::ContextFactoryObserver overrides:
 
 void SurfaceTreeHost::OnLostResources() {
-  if (!surface_host_->GetSurfaceId().is_valid() || !root_surface_)
+  if (!host_window_->GetSurfaceId().is_valid() || !root_surface_)
     return;
   root_surface_->SurfaceHierarchyResourcesLost();
   SubmitCompositorFrame();
@@ -291,7 +261,7 @@ void SurfaceTreeHost::OnLostResources() {
 
 void SurfaceTreeHost::SubmitCompositorFrame() {
   DCHECK(root_surface_);
-  cc::CompositorFrame frame;
+  viz::CompositorFrame frame;
   // If we commit while we don't have an active BeginFrame, we acknowledge a
   // manual one.
   if (current_begin_frame_ack_.sequence_number ==
@@ -301,37 +271,46 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
     current_begin_frame_ack_.has_damage = true;
   }
   frame.metadata.begin_frame_ack = current_begin_frame_ack_;
-  frame.render_pass_list.push_back(cc::RenderPass::Create());
-  const std::unique_ptr<cc::RenderPass>& render_pass =
+  root_surface_->AppendSurfaceHierarchyCallbacks(&frame_callbacks_,
+                                                 &presentation_callbacks_);
+  if (!presentation_callbacks_.empty()) {
+    // If overflow happens, we increase it again.
+    if (!++presentation_token_)
+      ++presentation_token_;
+    frame.metadata.presentation_token = presentation_token_;
+    DCHECK_EQ(active_presentation_callbacks_.count(presentation_token_), 0u);
+    active_presentation_callbacks_[presentation_token_] =
+        std::move(presentation_callbacks_);
+  }
+  frame.render_pass_list.push_back(viz::RenderPass::Create());
+  const std::unique_ptr<viz::RenderPass>& render_pass =
       frame.render_pass_list.back();
   const int kRenderPassId = 1;
   render_pass->SetNew(kRenderPassId, gfx::Rect(), gfx::Rect(),
                       gfx::Transform());
-  float device_scale_factor = surface_host_->layer()->device_scale_factor();
+  float device_scale_factor = host_window()->layer()->device_scale_factor();
   frame.metadata.device_scale_factor = device_scale_factor;
   root_surface_->AppendSurfaceHierarchyContentsToFrame(
-      gfx::Point(), device_scale_factor, layer_tree_frame_sink_holder_.get(),
-      &frame);
+      root_surface_origin_, device_scale_factor,
+      layer_tree_frame_sink_holder_.get(), &frame);
 
-  gfx::Point origin = render_pass->output_rect.origin();
-  origin.SetToMin(gfx::Point());
+  if (WMHelper::GetInstance()->AreVerifiedSyncTokensNeeded()) {
+    std::vector<GLbyte*> sync_tokens;
+    for (auto& resource : frame.resource_list)
+      sync_tokens.push_back(resource.mailbox_holder.sync_token.GetData());
+    ui::ContextFactory* context_factory =
+        aura::Env::GetInstance()->context_factory();
+    gpu::gles2::GLES2Interface* gles2 =
+        context_factory->SharedMainThreadContextProvider()->ContextGL();
+    gles2->VerifySyncTokensCHROMIUM(sync_tokens.data(), sync_tokens.size());
+  }
 
-  render_pass->output_rect -= origin.OffsetFromOrigin();
-  render_pass->damage_rect -= origin.OffsetFromOrigin();
-
-  gfx::Transform translation;
-  translation.Translate(-origin.x(), -origin.y());
-
-  for (auto* quad_state : render_pass->shared_quad_state_list)
-    quad_state->quad_to_target_transform.ConcatTransform(translation);
-
-  layer_tree_frame_sink_holder_->frame_sink()->SubmitCompositorFrame(
-      std::move(frame));
+  layer_tree_frame_sink_holder_->SubmitCompositorFrame(std::move(frame));
 
   if (current_begin_frame_ack_.sequence_number !=
       viz::BeginFrameArgs::kInvalidFrameNumber) {
     if (!current_begin_frame_ack_.has_damage) {
-      layer_tree_frame_sink_holder_->frame_sink()->DidNotProduceFrame(
+      layer_tree_frame_sink_holder_->DidNotProduceFrame(
           current_begin_frame_ack_);
     }
     current_begin_frame_ack_.sequence_number =
@@ -339,6 +318,22 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
     if (begin_frame_source_)
       begin_frame_source_->DidFinishFrame(this);
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SurfaceTreeHost, private:
+
+void SurfaceTreeHost::UpdateHostWindowBounds() {
+  gfx::Rect bounds = root_surface_->surface_hierarchy_content_bounds();
+  host_window_->SetBounds(
+      gfx::Rect(host_window_->bounds().origin(), bounds.size()));
+  host_window_->layer()->SetFillsBoundsOpaquely(
+      bounds.size() == root_surface_->content_size() &&
+      root_surface_->FillsBoundsOpaquely());
+
+  root_surface_origin_ = gfx::Point() - bounds.OffsetFromOrigin();
+  root_surface_->window()->SetBounds(gfx::Rect(
+      root_surface_origin_, root_surface_->window()->bounds().size()));
 }
 
 }  // namespace exo

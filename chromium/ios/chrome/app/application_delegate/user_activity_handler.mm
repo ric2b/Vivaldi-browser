@@ -17,9 +17,9 @@
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #import "ios/chrome/app/application_delegate/tab_opening.h"
 #include "ios/chrome/app/application_mode.h"
-#include "ios/chrome/app/chrome_app_startup_parameters.h"
 #import "ios/chrome/app/spotlight/actions_spotlight_manager.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
+#include "ios/chrome/app/startup/chrome_app_startup_parameters.h"
 #include "ios/chrome/browser/app_startup_parameters.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
@@ -116,24 +116,24 @@ NSString* const kShortcutQRScanner = @"OpenQRScanner";
       }
       [startupInformation setStartupParameters:startupParams];
     } else if (!webpageURL && base::ios::IsRunningOnIOS10OrLater()) {
-      // spotlight::GetURLForSpotlightItemID uses CSSearchQuery, which is only
-      // supported from iOS 10.
-      spotlight::GetURLForSpotlightItemID(itemID, ^(NSURL* contentURL) {
-        if (!contentURL) {
-          return;
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-          // Update the isActive flag as it may have changed during the async
-          // calls.
-          BOOL isActive = [[UIApplication sharedApplication]
-                              applicationState] == UIApplicationStateActive;
-          [self continueUserActivityURL:contentURL
-                    applicationIsActive:isActive
-                              tabOpener:tabOpener
-                     startupInformation:startupInformation];
+      if (@available(iOS 10, *)) {
+        spotlight::GetURLForSpotlightItemID(itemID, ^(NSURL* contentURL) {
+          if (!contentURL) {
+            return;
+          }
+          dispatch_async(dispatch_get_main_queue(), ^{
+            // Update the isActive flag as it may have changed during the async
+            // calls.
+            BOOL isActive = [[UIApplication sharedApplication]
+                                applicationState] == UIApplicationStateActive;
+            [self continueUserActivityURL:contentURL
+                      applicationIsActive:isActive
+                                tabOpener:tabOpener
+                       startupInformation:startupInformation];
+          });
         });
-      });
-      return YES;
+        return YES;
+      }
     }
   } else {
     // Do nothing for unknown activity type.

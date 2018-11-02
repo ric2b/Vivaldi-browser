@@ -48,6 +48,7 @@ class ChildNodeList final : public NodeList {
   }
 
   // Non-DOM API.
+  void ChildrenChanged(const ContainerNode::ChildrenChange&);
   void InvalidateCache() { collection_index_cache_.Invalidate(); }
   ContainerNode& OwnerNode() const { return *parent_; }
 
@@ -64,7 +65,7 @@ class ChildNodeList final : public NodeList {
                                  Node& current_node,
                                  unsigned& current_offset) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit ChildNodeList(ContainerNode& root_node);

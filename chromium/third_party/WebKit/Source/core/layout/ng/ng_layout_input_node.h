@@ -12,6 +12,7 @@
 namespace blink {
 
 class ComputedStyle;
+class Document;
 class LayoutObject;
 class LayoutBox;
 class NGBreakToken;
@@ -40,6 +41,9 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsFloating() const;
   bool IsOutOfFlowPositioned() const;
   bool IsReplaced() const;
+  bool IsAbsoluteContainer() const;
+  bool IsFixedContainer() const;
+  bool ShouldBeConsideredAsReplaced() const;
 
   // If the node is a quirky container for margin collapsing, see:
   // https://html.spec.whatwg.org/#margin-collapsing-quirks
@@ -49,7 +53,7 @@ class CORE_EXPORT NGLayoutInputNode {
   bool CreatesNewFormattingContext() const;
 
   // Performs layout on this input node, will return the layout result.
-  RefPtr<NGLayoutResult> Layout(const NGConstraintSpace&, NGBreakToken*);
+  scoped_refptr<NGLayoutResult> Layout(const NGConstraintSpace&, NGBreakToken*);
 
   MinMaxSize ComputeMinMaxSize();
 
@@ -65,6 +69,8 @@ class CORE_EXPORT NGLayoutInputNode {
 
   // Returns the next sibling.
   NGLayoutInputNode NextSibling();
+
+  Document& GetDocument() const;
 
   // Returns the LayoutObject which is associated with this node.
   LayoutObject* GetLayoutObject() const;

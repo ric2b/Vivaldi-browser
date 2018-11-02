@@ -5,13 +5,16 @@
 package org.chromium.chrome.browser.suggestions;
 
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.media.ThumbnailUtils;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.support.annotation.DimenRes;
 import android.support.annotation.Nullable;
 import android.support.v4.text.BidiFormatter;
 import android.text.TextUtils;
@@ -42,6 +45,7 @@ import org.chromium.chrome.browser.widget.TintedImageView;
 public class SuggestionsBinder {
     private static final String ARTICLE_AGE_FORMAT_STRING = " - %s";
     private static final int FADE_IN_ANIMATION_TIME_MS = 300;
+    private static final int MAX_HEADER_LINES = 3;
 
     private final ImageFetcher mImageFetcher;
     private final SuggestionsUiDelegate mUiDelegate;
@@ -50,17 +54,15 @@ public class SuggestionsBinder {
     private final LinearLayout mTextLayout;
     private final TextView mHeadlineTextView;
     private final TextView mPublisherTextView;
-    private final TextView mSnippetTextView;
     private final TextView mAgeTextView;
     private final TintedImageView mThumbnailView;
-    // TODO(dgn): Modern suggestions currently do not support the video overlay at all.
-    private final @Nullable ImageView mThumbnailVideoOverlay;
+    private final @Nullable ImageView mVideoBadge;
     private final ImageView mOfflineBadge;
     private final View mPublisherBar;
-
-    /** Total horizontal space occupied by the thumbnail, sum of its size and margin. */
-    private final int mThumbnailFootprintPx;
     private final int mThumbnailSize;
+
+    boolean mHasVideoBadge;
+    boolean mHasOfflineBadge;
 
     @Nullable
     private ImageFetcher.DownloadThumbnailRequest mThumbnailRequest;
@@ -74,31 +76,20 @@ public class SuggestionsBinder {
 
         mTextLayout = mCardContainerView.findViewById(R.id.text_layout);
         mThumbnailView = mCardContainerView.findViewById(R.id.article_thumbnail);
-
         mHeadlineTextView = mCardContainerView.findViewById(R.id.article_headline);
         mPublisherTextView = mCardContainerView.findViewById(R.id.article_publisher);
-        mSnippetTextView = mCardContainerView.findViewById(R.id.article_snippet);
         mAgeTextView = mCardContainerView.findViewById(R.id.article_age);
-        mThumbnailVideoOverlay =
-                mCardContainerView.findViewById(R.id.article_thumbnail_video_overlay);
-        mPublisherBar = mCardContainerView.findViewById(R.id.publisher_bar);
+        mVideoBadge = mCardContainerView.findViewById(R.id.video_badge);
         mOfflineBadge = mCardContainerView.findViewById(R.id.offline_icon);
+        mPublisherBar = mCardContainerView.findViewById(R.id.publisher_bar);
 
-        boolean useLargeThumbnailLayout =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.CONTENT_SUGGESTIONS_LARGE_THUMBNAIL);
-        mThumbnailSize = mCardContainerView.getResources().getDimensionPixelSize(
-                useLargeThumbnailLayout ? R.dimen.snippets_thumbnail_size_large
-                                        : R.dimen.snippets_thumbnail_size);
-        mThumbnailFootprintPx = mThumbnailSize
-                + mCardContainerView.getResources().getDimensionPixelSize(
-                          R.dimen.snippets_thumbnail_margin);
+        mThumbnailSize = getThumbnailSize(mCardContainerView.getResources());
     }
 
     public void updateViewInformation(SnippetArticle suggestion) {
         mSuggestion = suggestion;
 
         mHeadlineTextView.setText(suggestion.mTitle);
-        mSnippetTextView.setText(suggestion.mPreviewText);
         mPublisherTextView.setText(getPublisherString(suggestion));
         mAgeTextView.setText(getArticleAge(suggestion));
 
@@ -106,47 +97,46 @@ public class SuggestionsBinder {
         setThumbnail();
     }
 
-    public void updateFieldsVisibility(boolean showHeadline, boolean showDescription,
-            boolean showThumbnail, boolean showThumbnailVideoOverlay, int headerMaxLines) {
+    public void updateFieldsVisibility(
+            boolean showHeadline, boolean showThumbnail, boolean showThumbnailVideoBadge) {
         mHeadlineTextView.setVisibility(showHeadline ? View.VISIBLE : View.GONE);
-        mHeadlineTextView.setMaxLines(headerMaxLines);
-        mSnippetTextView.setVisibility(showDescription ? View.VISIBLE : View.GONE);
+        mHeadlineTextView.setMaxLines(MAX_HEADER_LINES);
         mThumbnailView.setVisibility(showThumbnail ? View.VISIBLE : View.GONE);
-        if (mThumbnailVideoOverlay != null) {
-            mThumbnailVideoOverlay.setVisibility(
-                    showThumbnailVideoOverlay ? View.VISIBLE : View.GONE);
-        }
+        mHasVideoBadge = showThumbnailVideoBadge;
+        updateVisibilityForBadges();
 
         ViewGroup.MarginLayoutParams publisherBarParams =
                 (ViewGroup.MarginLayoutParams) mPublisherBar.getLayoutParams();
 
-        if (showDescription) {
-            publisherBarParams.topMargin = mPublisherBar.getResources().getDimensionPixelSize(
-                    R.dimen.snippets_publisher_margin_top_with_article_snippet);
-        } else if (showHeadline) {
+        if (showHeadline) {
             // When we show a headline and not a description, we reduce the top margin of the
             // publisher bar.
             publisherBarParams.topMargin = mPublisherBar.getResources().getDimensionPixelSize(
-                    R.dimen.snippets_publisher_margin_top_without_article_snippet);
+                    R.dimen.snippets_publisher_margin_top);
         } else {
             // When there is no headline and no description, we remove the top margin of the
             // publisher bar.
             publisherBarParams.topMargin = 0;
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONTENT_SUGGESTIONS_LARGE_THUMBNAIL)) {
-            mTextLayout.setMinimumHeight(showThumbnail ? mThumbnailSize : 0);
-        } else {
-            ApiCompatibilityUtils.setMarginEnd(
-                    publisherBarParams, showThumbnail ? mThumbnailFootprintPx : 0);
-        }
-
+        mTextLayout.setMinimumHeight(showThumbnail ? mThumbnailSize : 0);
         mPublisherBar.setLayoutParams(publisherBarParams);
     }
 
     public void updateOfflineBadgeVisibility(boolean visible) {
-        if (visible == (mOfflineBadge.getVisibility() == View.VISIBLE)) return;
-        mOfflineBadge.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mHasOfflineBadge = visible;
+        updateVisibilityForBadges();
+    }
+
+    private void updateVisibilityForBadges() {
+        // Never show both the video and offline badges. That would be overpromising as the video is
+        // not available offline, just the page that embeds it. It would also clutter the UI. The
+        // offline badge takes precedence.
+        if (mVideoBadge != null) {
+            mVideoBadge.setVisibility(
+                    mHasVideoBadge && !mHasOfflineBadge ? View.VISIBLE : View.GONE);
+        }
+        mOfflineBadge.setVisibility(mHasOfflineBadge ? View.VISIBLE : View.GONE);
     }
 
     private void setFavicon() {
@@ -154,18 +144,14 @@ public class SuggestionsBinder {
         int widthSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         mPublisherTextView.measure(widthSpec, heightSpec);
-        final int publisherFaviconSizePx = mPublisherTextView.getMeasuredHeight();
+        int publisherFaviconSizePx = mPublisherTextView.getMeasuredHeight();
 
         // Set the favicon of the publisher.
         // We start initialising with the default favicon to reserve the space and prevent the text
         // from moving later.
         setDefaultFaviconOnView(publisherFaviconSizePx);
-        Callback<Bitmap> faviconCallback = new Callback<Bitmap>() {
-            @Override
-            public void onResult(Bitmap bitmap) {
-                setFaviconOnView(bitmap, publisherFaviconSizePx);
-            }
-        };
+        Callback<Bitmap> faviconCallback =
+                bitmap -> setFaviconOnView(bitmap, publisherFaviconSizePx);
 
         mImageFetcher.makeFaviconRequest(mSuggestion, publisherFaviconSizePx, faviconCallback);
     }
@@ -190,7 +176,18 @@ public class SuggestionsBinder {
 
         // Temporarily set placeholder and then fetch the thumbnail from a provider.
         mThumbnailView.setBackground(null);
-        mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
+        if (SuggestionsConfig.useModernLayout()
+                && ChromeFeatureList.isEnabled(
+                           ChromeFeatureList.CONTENT_SUGGESTIONS_THUMBNAIL_DOMINANT_COLOR)) {
+            ColorDrawable colorDrawable =
+                    new ColorDrawable(mSuggestion.getThumbnailDominantColor() != null
+                                    ? mSuggestion.getThumbnailDominantColor()
+                                    : ApiCompatibilityUtils.getColor(mThumbnailView.getResources(),
+                                              R.color.modern_light_grey));
+            mThumbnailView.setImageDrawable(colorDrawable);
+        } else {
+            mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
+        }
         mThumbnailView.setTint(null);
 
         // Fetch thumbnail for the current article.
@@ -397,5 +394,16 @@ public class SuggestionsBinder {
     private void verifyBitmap(Bitmap bitmap) {
         assert !bitmap.isRecycled();
         assert bitmap.getWidth() <= mThumbnailSize || bitmap.getHeight() <= mThumbnailSize;
+    }
+
+    private static int getThumbnailSize(Resources resources) {
+        @DimenRes
+        final int dimension;
+        if (SuggestionsConfig.useModernLayout()) {
+            dimension = R.dimen.snippets_thumbnail_size_modern;
+        } else {
+            dimension = R.dimen.snippets_thumbnail_size;
+        }
+        return resources.getDimensionPixelSize(dimension);
     }
 }

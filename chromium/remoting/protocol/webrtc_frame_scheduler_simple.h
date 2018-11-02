@@ -7,16 +7,21 @@
 
 #include "remoting/protocol/webrtc_frame_scheduler.h"
 
-#include <queue>
+#include <memory>
 
+#include "base/containers/queue.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "remoting/base/leaky_bucket.h"
 #include "remoting/base/running_samples.h"
+#include "remoting/base/session_options.h"
+#include "remoting/codec/frame_processing_time_estimator.h"
 #include "remoting/protocol/video_channel_state_observer.h"
 
 namespace remoting {
 namespace protocol {
+
+class BandwidthEstimator;
 
 // WebrtcFrameSchedulerSimple is a simple implementation of WebrtcFrameScheduler
 // that always keeps only one frame in the pipeline. It schedules each frame
@@ -25,7 +30,7 @@ namespace protocol {
 class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
                                    public WebrtcFrameScheduler {
  public:
-  WebrtcFrameSchedulerSimple();
+  explicit WebrtcFrameSchedulerSimple(const SessionOptions& options);
   ~WebrtcFrameSchedulerSimple() override;
 
   // VideoChannelStateObserver implementation.
@@ -42,29 +47,19 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
   void OnFrameEncoded(const WebrtcVideoEncoder::EncodedFrame* encoded_frame,
                       HostFrameStats* frame_stats) override;
 
+  // Allows unit-tests to fake the current time.
+  void SetCurrentTimeForTest(base::TimeTicks now);
+
  private:
-  // Helper class used to calculate target encoder bitrate.
-  class EncoderBitrateFilter {
-   public:
-    EncoderBitrateFilter();
-    ~EncoderBitrateFilter();
-
-    void SetBandwidthEstimate(int bandwidth_kbps, base::TimeTicks now);
-    void SetFrameSize(webrtc::DesktopSize size);
-    int GetTargetBitrateKbps() const;
-
-   private:
-    void UpdateTargetBitrate();
-
-    std::queue<std::pair<base::TimeTicks, int>> bandwidth_samples_;
-    int bandwidth_samples_sum_ = 0;
-
-    int minimum_bitrate_ = 0;
-    int current_target_bitrate_ = 0;
-  };
-
-  void ScheduleNextFrame(base::TimeTicks now);
+  void ScheduleNextFrame();
   void CaptureNextFrame();
+
+  // Returns the current time according to base::TimeTicks::Now(),
+  // or a fake time provided by a unit-test.
+  base::TimeTicks Now();
+
+  // Non-null if a fake current time is set by unit-test.
+  base::TimeTicks fake_now_for_test_;
 
   base::Closure capture_callback_;
   bool paused_ = false;
@@ -72,17 +67,17 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
   // Set to true after the first key frame is requested.
   bool encoder_ready_ = false;
 
-  // Set to false until the first frame frame was captured successfully.
-  bool captured_first_frame_ = false;
-
   // Set to true when a key frame was requested.
   bool key_frame_request_ = false;
 
   base::TimeTicks last_capture_started_time_;
 
-  LeakyBucket pacing_bucket_;
+  // Set in OnFrameCaptured() whenever a (non-null) frame (possibly with an
+  // empty updated region) is sent to the encoder. Empty frames are still sent,
+  // but at a throttled rate.
+  base::TimeTicks latest_frame_encode_start_time_;
 
-  EncoderBitrateFilter encoder_bitrate_;
+  LeakyBucket pacing_bucket_;
 
   // Set to true when a frame is being captured or encoded.
   bool frame_pending_ = false;
@@ -92,13 +87,17 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
   // Set to true when encoding unchanged frames for top-off.
   bool top_off_is_active_ = false;
 
-  // Accumulator for capture and encoder delay history.
-  RunningSamples frame_processing_delay_us_;
+  // Accumulator for capture and encoder delay history, as well as the transit
+  // time.
+  FrameProcessingTimeEstimator processing_time_estimator_;
 
   // Accumulator for updated region area in the previously encoded frames.
   RunningSamples updated_region_area_;
 
   base::OneShotTimer capture_timer_;
+
+  // Estimates the bandwidth.
+  const std::unique_ptr<BandwidthEstimator> bandwidth_estimator_;
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<WebrtcFrameSchedulerSimple> weak_factory_;

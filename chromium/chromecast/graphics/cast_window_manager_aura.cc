@@ -193,7 +193,6 @@ void CastWindowManagerAura::Setup() {
   window_tree_host_->window()->SetLayoutManager(new CastLayoutManager());
 
   // Allow seeing through to the hardware video plane:
-  window_tree_host_->compositor()->SetHostHasTransparentBackground(true);
   window_tree_host_->compositor()->SetBackgroundColor(SK_ColorTRANSPARENT);
 
   focus_client_.reset(new CastFocusClientAura());
@@ -222,6 +221,13 @@ void CastWindowManagerAura::TearDown() {
 void CastWindowManagerAura::SetWindowId(gfx::NativeView window,
                                         WindowId window_id) {
   window->set_id(window_id);
+}
+
+void CastWindowManagerAura::InjectEvent(ui::Event* event) {
+  if (!window_tree_host_) {
+    return;
+  }
+  window_tree_host_->DispatchEvent(event);
 }
 
 gfx::NativeView CastWindowManagerAura::GetRootWindow() {

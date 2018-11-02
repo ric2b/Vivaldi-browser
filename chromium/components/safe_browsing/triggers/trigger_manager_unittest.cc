@@ -5,9 +5,11 @@
 #include "components/safe_browsing/triggers/trigger_manager.h"
 
 #include "base/stl_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/browser/threat_details.h"
+#include "components/safe_browsing/features.h"
 #include "components/safe_browsing/triggers/trigger_throttler.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -43,7 +45,8 @@ class MockThreatDetailsFactory : public ThreatDetailsFactory {
       const security_interstitials::UnsafeResource& unsafe_resource,
       net::URLRequestContextGetter* request_context_getter,
       history::HistoryService* history_service,
-      bool trim_to_ad_tags) override {
+      bool trim_to_ad_tags,
+      ThreatDetailsDoneCallback done_callback) override {
     MockThreatDetails* threat_details = new MockThreatDetails();
     return threat_details;
   }
@@ -122,12 +125,26 @@ class TriggerManagerTest : public ::testing::Test {
     }
     SBErrorOptions options =
         TriggerManager::GetSBErrorDisplayOptions(pref_service_, *web_contents);
-    return trigger_manager_.FinishCollectingThreatDetails(
+    bool result = trigger_manager_.FinishCollectingThreatDetails(
         trigger_type, web_contents, base::TimeDelta(), false, 0, options);
+
+    // Invoke the callback if the report was to be sent.
+    if (expect_report_sent)
+      trigger_manager_.ThreatDetailsDone(web_contents);
+
+    return result;
   }
 
   const DataCollectorsMap& data_collectors_map() {
     return trigger_manager_.data_collectors_map_;
+  }
+
+  void SetCollectDontSendFeature(bool enabled) {
+    feature_list_.reset(new base::test::ScopedFeatureList);
+    if (enabled)
+      feature_list_->InitAndEnableFeature(kAdSamplerCollectButDontSendFeature);
+    else
+      feature_list_->InitAndDisableFeature(kAdSamplerCollectButDontSendFeature);
   }
 
  private:
@@ -137,6 +154,7 @@ class TriggerManagerTest : public ::testing::Test {
   content::TestBrowserContext browser_context_;
   content::TestWebContentsFactory web_contents_factory_;
   TestingPrefServiceSimple pref_service_;
+  std::unique_ptr<base::test::ScopedFeatureList> feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(TriggerManagerTest);
 };
@@ -148,9 +166,10 @@ TEST_F(TriggerManagerTest, StartAndFinishCollectingThreatDetails) {
   EXPECT_TRUE(StartCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                            web_contents1));
   EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents1)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents1, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents1).threat_details);
 
   // More complex scenarios can happen, where collection happens on two
   // WebContents at the same time, possibly starting and completing in different
@@ -162,36 +181,40 @@ TEST_F(TriggerManagerTest, StartAndFinishCollectingThreatDetails) {
                                            web_contents2));
   EXPECT_THAT(data_collectors_map(),
               UnorderedElementsAre(Key(web_contents1), Key(web_contents2)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents2).threat_details);
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents2, true));
-  EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents1)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents2).threat_details);
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents1, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents1).threat_details);
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents2).threat_details);
 
   // Calling Start twice with the same WebContents is an error, and will return
   // false the second time. But it can still be completed normally.
   EXPECT_TRUE(StartCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                            web_contents1));
-  EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents1)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
   EXPECT_FALSE(StartCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents1));
-  EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents1)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents1, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents1).threat_details);
 
   // Calling Finish twice with the same WebContents is an error, and will return
   // false the second time. It's basically a no-op.
   EXPECT_TRUE(StartCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                            web_contents1));
-  EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents1)));
+  EXPECT_NE(nullptr, data_collectors_map().at(web_contents1).threat_details);
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents1, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents1).threat_details);
   EXPECT_FALSE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                              web_contents1, false));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents1).threat_details);
 }
 
 TEST_F(TriggerManagerTest, NoDataCollection_Incognito) {
@@ -241,7 +264,7 @@ TEST_F(TriggerManagerTest, UserOptedOutOfSBER_DataCollected_NoReportSent) {
   EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents)));
   EXPECT_FALSE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                              web_contents, false));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 }
 
 TEST_F(TriggerManagerTest, UserOptsOutOfSBER_DataCollected_NoReportSent) {
@@ -257,7 +280,7 @@ TEST_F(TriggerManagerTest, UserOptsOutOfSBER_DataCollected_NoReportSent) {
 
   EXPECT_FALSE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                              web_contents, false));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 }
 
 TEST_F(TriggerManagerTest, UserOptsInToSBER_DataCollected_ReportSent) {
@@ -274,7 +297,7 @@ TEST_F(TriggerManagerTest, UserOptsInToSBER_DataCollected_ReportSent) {
 
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                             web_contents, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 }
 
 TEST_F(TriggerManagerTest,
@@ -291,7 +314,7 @@ TEST_F(TriggerManagerTest,
 
   EXPECT_FALSE(FinishCollectingThreatDetails(TriggerType::SECURITY_INTERSTITIAL,
                                              web_contents, false));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 }
 
 TEST_F(TriggerManagerTest, NoCollectionWhenOutOfQuota) {
@@ -307,14 +330,14 @@ TEST_F(TriggerManagerTest, NoCollectionWhenOutOfQuota) {
   EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents)));
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
                                             web_contents, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 
   // Turn off the AD_SAMPLE trigger inside the throttler, the trigger should no
   // longer be able to fire.
   SetTriggerHasQuota(TriggerType::AD_SAMPLE, false);
   EXPECT_FALSE(
       StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 }
 
 TEST_F(TriggerManagerTest, AdSamplerTrigger) {
@@ -329,12 +352,19 @@ TEST_F(TriggerManagerTest, AdSamplerTrigger) {
   EXPECT_THAT(data_collectors_map(), UnorderedElementsAre(Key(web_contents)));
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
                                             web_contents, true));
-  EXPECT_TRUE(data_collectors_map().empty());
+  EXPECT_EQ(nullptr, data_collectors_map().at(web_contents).threat_details);
 
   // Disabling SBEROptInAllowed disables this trigger.
   SetPref(prefs::kSafeBrowsingExtendedReportingOptInAllowed, false);
   EXPECT_FALSE(
       StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  // It can be forced on via a finch feature.
+  SetCollectDontSendFeature(true);
+  EXPECT_TRUE(
+      StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
+                                            web_contents, true));
+  SetCollectDontSendFeature(false);
   // Confirm it can fire when we re-enable SBEROptInAllowed
   SetPref(prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
   EXPECT_TRUE(
@@ -347,6 +377,13 @@ TEST_F(TriggerManagerTest, AdSamplerTrigger) {
   SetPref(prefs::kSafeBrowsingExtendedReportingEnabled, true);
   EXPECT_FALSE(
       StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  // It can be forced on via a finch feature.
+  SetCollectDontSendFeature(true);
+  EXPECT_TRUE(
+      StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
+                                            web_contents, true));
+  SetCollectDontSendFeature(false);
   // Confirm it can fire when we re-enable Scout and disable legacy SBER.
   SetPref(prefs::kSafeBrowsingScoutReportingEnabled, true);
   SetPref(prefs::kSafeBrowsingExtendedReportingEnabled, false);
@@ -359,8 +396,35 @@ TEST_F(TriggerManagerTest, AdSamplerTrigger) {
   SetTriggerHasQuota(TriggerType::AD_SAMPLE, false);
   EXPECT_FALSE(
       StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  // It can be forced on via a finch feature.
+  SetCollectDontSendFeature(true);
+  EXPECT_TRUE(
+      StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
+                                            web_contents, true));
+  SetCollectDontSendFeature(false);
   // Confirm it can fire again when quota is available.
   SetTriggerHasQuota(TriggerType::AD_SAMPLE, true);
+  EXPECT_TRUE(
+      StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+  EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,
+                                            web_contents, true));
+}
+
+TEST_F(TriggerManagerTest, AdSamplerTrigger_Incognito) {
+  // Check the conditions required for the Ad Sampler trigger to fire. It needs
+  // opt-in to start collecting data, scout opt-in, and quota, and it can't fire
+  // in inconito (except when forced on by finch feature).
+  content::WebContents* web_contents = CreateIncognitoWebContents();
+
+  // The default setup in this test makes the trigger fire (all prefs enabled,
+  // all triggers have quota), but the incognito window prevents it from firing.
+  EXPECT_FALSE(
+      StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
+
+  // The Finch feature makes the trigger fire even in incognito (which is safe
+  // because data is discarded and not sent to Google downstream).
+  SetCollectDontSendFeature(true);
   EXPECT_TRUE(
       StartCollectingThreatDetails(TriggerType::AD_SAMPLE, web_contents));
   EXPECT_TRUE(FinishCollectingThreatDetails(TriggerType::AD_SAMPLE,

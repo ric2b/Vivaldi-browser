@@ -39,7 +39,7 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
     WebURLLoaderTestDelegate* delegate,
     const WebURLResponse& response,
     const WebData& data,
-    const WebURLError& error) {
+    const Optional<WebURLError>& error) {
   DCHECK(!using_default_loader_);
   if (!client_)
     return;
@@ -60,8 +60,8 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
   if (!self)
     return;
 
-  if (error.reason) {
-    delegate->DidFail(client_, error, data.size(), 0, 0);
+  if (error) {
+    delegate->DidFail(client_, *error, data.size(), 0, 0);
     return;
   }
 
@@ -83,8 +83,7 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
 WebURL WebURLLoaderMock::ServeRedirect(
     const WebURLRequest& request,
     const WebURLResponse& redirect_response) {
-  KURL redirect_url(kParsedURLString,
-                    redirect_response.HttpHeaderField("Location"));
+  KURL redirect_url(redirect_response.HttpHeaderField("Location"));
 
   WeakPtr<WebURLLoaderMock> self = weak_factory_.CreateWeakPtr();
 
@@ -104,7 +103,7 @@ WebURL WebURLLoaderMock::ServeRedirect(
 
 void WebURLLoaderMock::LoadSynchronously(const WebURLRequest& request,
                                          WebURLResponse& response,
-                                         WebURLError& error,
+                                         base::Optional<WebURLError>& error,
                                          WebData& data,
                                          int64_t& encoded_data_length,
                                          int64_t& encoded_body_length) {

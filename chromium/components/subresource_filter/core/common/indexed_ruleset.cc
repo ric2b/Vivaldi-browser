@@ -5,20 +5,24 @@
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "components/subresource_filter/core/common/first_party_origin.h"
-#include "components/subresource_filter/core/common/time_measurements.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace subresource_filter {
 
+namespace {
 namespace proto = url_pattern_index::proto;
+using FindRuleStrategy =
+    url_pattern_index::UrlPatternIndexMatcher::FindRuleStrategy;
+}  // namespace
 
 // RulesetIndexer --------------------------------------------------------------
 
 // static
-const int RulesetIndexer::kIndexedFormatVersion = 18;
+const int RulesetIndexer::kIndexedFormatVersion = 19;
 
 RulesetIndexer::RulesetIndexer()
     : blacklist_(&builder_), whitelist_(&builder_), deactivation_(&builder_) {}
@@ -62,8 +66,8 @@ void RulesetIndexer::Finish() {
 bool IndexedRulesetMatcher::Verify(const uint8_t* buffer, size_t size) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "IndexedRulesetMatcher::Verify");
-  SCOPED_UMA_HISTOGRAM_MICRO_TIMER(
-      "SubresourceFilter.IndexRuleset.Verify.WallDuration");
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "SubresourceFilter.IndexRuleset.Verify2.WallDuration");
   flatbuffers::Verifier verifier(buffer, size);
   return flat::VerifyIndexedRulesetBuffer(verifier);
 }
@@ -82,7 +86,7 @@ bool IndexedRulesetMatcher::ShouldDisableFilteringForDocument(
       document_url, parent_document_origin, proto::ELEMENT_TYPE_UNSPECIFIED,
       activation_type,
       FirstPartyOrigin::IsThirdParty(document_url, parent_document_origin),
-      false);
+      false, FindRuleStrategy::kAny);
 }
 
 bool IndexedRulesetMatcher::ShouldDisallowResourceLoad(
@@ -93,10 +97,12 @@ bool IndexedRulesetMatcher::ShouldDisallowResourceLoad(
   const bool is_third_party = first_party.IsThirdParty(url);
   return !!blacklist_.FindMatch(url, first_party.origin(), element_type,
                                 proto::ACTIVATION_TYPE_UNSPECIFIED,
-                                is_third_party, disable_generic_rules) &&
+                                is_third_party, disable_generic_rules,
+                                FindRuleStrategy::kAny) &&
          !whitelist_.FindMatch(url, first_party.origin(), element_type,
                                proto::ACTIVATION_TYPE_UNSPECIFIED,
-                               is_third_party, disable_generic_rules);
+                               is_third_party, disable_generic_rules,
+                               FindRuleStrategy::kAny);
 }
 
 }  // namespace subresource_filter

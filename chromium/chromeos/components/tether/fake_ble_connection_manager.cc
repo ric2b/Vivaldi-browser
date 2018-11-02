@@ -5,6 +5,7 @@
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 
 #include "chromeos/components/tether/timer_factory.h"
+#include "device/bluetooth/bluetooth_adapter.h"
 
 namespace chromeos {
 
@@ -16,21 +17,20 @@ FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
 
 FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
     StatusAndRegisteredMessageTypes(
-        const StatusAndRegisteredMessageTypes& other)
-    : status(other.status),
-      registered_message_types(other.registered_message_types) {}
+        const StatusAndRegisteredMessageTypes& other) = default;
 
 FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
-    ~StatusAndRegisteredMessageTypes() {}
+    ~StatusAndRegisteredMessageTypes() = default;
 
 FakeBleConnectionManager::FakeBleConnectionManager()
     : BleConnectionManager(nullptr,
                            nullptr,
                            nullptr,
                            nullptr,
+                           nullptr,
                            nullptr) {}
 
-FakeBleConnectionManager::~FakeBleConnectionManager() {}
+FakeBleConnectionManager::~FakeBleConnectionManager() = default;
 
 void FakeBleConnectionManager::SetDeviceStatus(
     const cryptauth::RemoteDevice& remote_device,

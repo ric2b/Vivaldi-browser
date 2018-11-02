@@ -4,7 +4,9 @@
 
 #include "platform/graphics/OffscreenCanvasResourceProvider.h"
 
+#include "base/numerics/checked_math.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/wtf/typed_arrays/ArrayBuffer.h"
 #include "platform/wtf/typed_arrays/Uint8Array.h"
@@ -14,23 +16,24 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkSwizzle.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 
 namespace blink {
 
 OffscreenCanvasResourceProvider::OffscreenCanvasResourceProvider(int width,
                                                                  int height)
-    : width_(width), height_(height), next_resource_id_(1u) {}
+    : width_(width), height_(height), next_resource_id_(0u) {}
 
 OffscreenCanvasResourceProvider::~OffscreenCanvasResourceProvider() {}
 
 std::unique_ptr<OffscreenCanvasResourceProvider::FrameResource>
 OffscreenCanvasResourceProvider::CreateOrRecycleFrameResource() {
-  if (recycleable_resource_) {
-    recycleable_resource_->spare_lock_ = true;
-    return std::move(recycleable_resource_);
+  if (recyclable_resource_) {
+    recyclable_resource_->spare_lock_ = true;
+    return std::move(recyclable_resource_);
   }
-  return std::unique_ptr<FrameResource>(new FrameResource());
+  return std::make_unique<FrameResource>();
 }
 
 void OffscreenCanvasResourceProvider::TransferResource(
@@ -45,9 +48,11 @@ void OffscreenCanvasResourceProvider::TransferResource(
   resource->is_overlay_candidate = false;
 }
 
+// TODO(xlai): Handle error cases when, by any reason,
+// OffscreenCanvasResourceProvider fails to get image data.
 void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedBitmap(
     viz::TransferableResource& resource,
-    RefPtr<StaticBitmapImage> image) {
+    scoped_refptr<StaticBitmapImage> image) {
   std::unique_ptr<FrameResource> frame_resource =
       CreateOrRecycleFrameResource();
   if (!frame_resource->shared_bitmap_) {
@@ -61,11 +66,19 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedBitmap(
   SkImageInfo image_info = SkImageInfo::Make(
       width_, height_, kN32_SkColorType,
       image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
+  if (image_info.isEmpty())
+    return;
   // TODO(xlai): Optimize to avoid copying pixels. See crbug.com/651456.
   // However, in the case when |image| is texture backed, this function call
   // does a GPU readback which is required.
-  image->PaintImageForCurrentFrame().GetSkImage()->readPixels(
-      image_info, pixels, image_info.minRowBytes(), 0, 0);
+  sk_sp<SkImage> sk_image = image->PaintImageForCurrentFrame().GetSkImage();
+  if (sk_image->bounds().isEmpty())
+    return;
+  bool read_pixels_successful =
+      sk_image->readPixels(image_info, pixels, image_info.minRowBytes(), 0, 0);
+  DCHECK(read_pixels_successful);
+  if (!read_pixels_successful)
+    return;
   resource.mailbox_holder.mailbox = frame_resource->shared_bitmap_->id();
   resource.mailbox_holder.texture_target = 0;
   resource.is_software = true;
@@ -73,88 +86,10 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedBitmap(
   resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
-void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedGPUContext(
-    viz::TransferableResource& resource,
-    RefPtr<StaticBitmapImage> image) {
-  DCHECK(!image->IsTextureBacked());
-
-  // TODO(crbug.com/652707): When committing the first frame, there is no
-  // instance of SharedGpuContext yet, calling SharedGpuContext::gl() will
-  // trigger a creation of an instace, which requires to create a
-  // WebGraphicsContext3DProvider. This process is quite expensive, because
-  // WebGraphicsContext3DProvider can only be constructed on the main thread,
-  // and bind to the worker thread if commit() is called on worker. In the
-  // subsequent frame, we should already have a SharedGpuContext, then getting
-  // the gl interface should not be expensive.
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
-      SharedGpuContext::ContextProviderWrapper();
-  if (!context_provider_wrapper)
-    return;
-
-  gpu::gles2::GLES2Interface* gl =
-      context_provider_wrapper->ContextProvider()->ContextGL();
-  GrContext* gr = context_provider_wrapper->ContextProvider()->GetGrContext();
-  if (!gl || !gr)
-    return;
-
-  std::unique_ptr<FrameResource> frame_resource =
-      CreateOrRecycleFrameResource();
-
-  SkImageInfo info = SkImageInfo::Make(
-      width_, height_, kN32_SkColorType,
-      image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
-  RefPtr<ArrayBuffer> dst_buffer =
-      ArrayBuffer::CreateOrNull(width_ * height_, info.bytesPerPixel());
-  // If it fails to create a buffer for copying the pixel data, then exit early.
-  if (!dst_buffer)
-    return;
-  unsigned byte_length = dst_buffer->ByteLength();
-  RefPtr<Uint8Array> dst_pixels =
-      Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
-  image->PaintImageForCurrentFrame().GetSkImage()->readPixels(
-      info, dst_pixels->Data(), info.minRowBytes(), 0, 0);
-  DCHECK(frame_resource->context_provider_wrapper_.get() ==
-             context_provider_wrapper.get() ||
-         !frame_resource->context_provider_wrapper_);
-
-  if (frame_resource->texture_id_ == 0u ||
-      !frame_resource->context_provider_wrapper_) {
-    frame_resource->context_provider_wrapper_ = context_provider_wrapper;
-    gl->GenTextures(1, &frame_resource->texture_id_);
-    gl->BindTexture(GL_TEXTURE_2D, frame_resource->texture_id_);
-    GLenum format =
-        (kN32_SkColorType == kRGBA_8888_SkColorType) ? GL_RGBA : GL_BGRA_EXT;
-    gl->TexImage2D(GL_TEXTURE_2D, 0, format, width_, height_, 0, format,
-                   GL_UNSIGNED_BYTE, 0);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, format,
-                      GL_UNSIGNED_BYTE, dst_pixels->Data());
-
-    gl->GenMailboxCHROMIUM(frame_resource->mailbox_.name);
-    gl->ProduceTextureCHROMIUM(GL_TEXTURE_2D, frame_resource->mailbox_.name);
-  }
-
-  const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
-  gl->Flush();
-  gpu::SyncToken sync_token;
-  gl->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
-
-  resource.mailbox_holder =
-      gpu::MailboxHolder(frame_resource->mailbox_, sync_token, GL_TEXTURE_2D);
-  resource.read_lock_fences_enabled = false;
-  resource.is_software = false;
-
-  resources_.insert(next_resource_id_, std::move(frame_resource));
-  gr->resetContext(kTextureBinding_GrGLBackendState);
-}
-
 void OffscreenCanvasResourceProvider::
     SetTransferableResourceToStaticBitmapImage(
         viz::TransferableResource& resource,
-        RefPtr<StaticBitmapImage> image) {
+        scoped_refptr<StaticBitmapImage> image) {
   DCHECK(image->IsTextureBacked());
   DCHECK(image->IsValid());
   image->EnsureMailbox(kVerifiedSyncToken);
@@ -165,20 +100,12 @@ void OffscreenCanvasResourceProvider::
 
   std::unique_ptr<FrameResource> frame_resource =
       CreateOrRecycleFrameResource();
+
   frame_resource->image_ = std::move(image);
   resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
-OffscreenCanvasResourceProvider::FrameResource::~FrameResource() {
-  if (context_provider_wrapper_) {
-    gpu::gles2::GLES2Interface* gl =
-        context_provider_wrapper_->ContextProvider()->ContextGL();
-    if (texture_id_)
-      gl->DeleteTextures(1, &texture_id_);
-    if (image_id_)
-      gl->DestroyImageCHROMIUM(image_id_);
-  }
-}
+OffscreenCanvasResourceProvider::FrameResource::~FrameResource() {}
 
 void OffscreenCanvasResourceProvider::ReclaimResources(
     const WTF::Vector<viz::ReturnedResource>& resources) {
@@ -189,8 +116,10 @@ void OffscreenCanvasResourceProvider::ReclaimResources(
     if (it == resources_.end())
       continue;
 
-    if (it->value->context_provider_wrapper_ && resource.sync_token.HasData()) {
-      it->value->context_provider_wrapper_->ContextProvider()
+    if (it->value->image_ && it->value->image_->ContextProviderWrapper() &&
+        resource.sync_token.HasData()) {
+      it->value->image_->ContextProviderWrapper()
+          ->ContextProvider()
           ->ContextGL()
           ->WaitSyncTokenCHROMIUM(resource.sync_token.GetConstData());
     }
@@ -211,9 +140,9 @@ void OffscreenCanvasResourceProvider::ReclaimResourceInternal(
     it->value->spare_lock_ = false;
   } else {
     // Really reclaim the resources
-    recycleable_resource_ = std::move(it->value);
-    // release SkImage immediately since it is not recycleable
-    recycleable_resource_->image_ = nullptr;
+    recyclable_resource_ = std::move(it->value);
+    // release SkImage immediately since it is not recyclable
+    recyclable_resource_->image_ = nullptr;
     resources_.erase(it);
   }
 }

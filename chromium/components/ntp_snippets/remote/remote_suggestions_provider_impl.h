@@ -20,10 +20,12 @@
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/logger.h"
 #include "components/ntp_snippets/remote/cached_image_fetcher.h"
 #include "components/ntp_snippets/remote/json_to_categories.h"
 #include "components/ntp_snippets/remote/prefetched_pages_tracker.h"
@@ -70,16 +72,13 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       std::unique_ptr<RemoteSuggestionsDatabase> database,
       std::unique_ptr<RemoteSuggestionsStatusService> status_service,
       std::unique_ptr<PrefetchedPagesTracker> prefetched_pages_tracker,
-      std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider);
+      std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider,
+      Logger* debug_logger,
+      std::unique_ptr<base::OneShotTimer> fetch_timeout_timer);
 
   ~RemoteSuggestionsProviderImpl() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
-
-  // Returns whether the service is ready. While this is false, the list of
-  // suggestions will be empty, and all modifications to it (fetch, dismiss,
-  // etc) will be ignored.
-  bool ready() const { return state_ == State::READY; }
 
   // Returns whether the service is successfully initialized. While this is
   // false, some calls may trigger DCHECKs.
@@ -87,16 +86,15 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   // RemoteSuggestionsProvider implementation.
   void RefetchInTheBackground(FetchStatusCallback callback) override;
-
+  void RefetchWhileDisplaying(FetchStatusCallback callback) override;
   // TODO(fhorschig): Remove this getter when there is an interface for the
   // fetcher that allows better mocks.
   const RemoteSuggestionsFetcher* suggestions_fetcher_for_debugging()
       const override;
-
   GURL GetUrlWithFavicon(
       const ContentSuggestion::ID& suggestion_id) const override;
-
   bool IsDisabled() const override;
+  bool ready() const override;
 
   // ContentSuggestionsProvider implementation.
   CategoryStatus GetCategoryStatus(Category category) override;
@@ -112,15 +110,16 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       base::Time begin,
       base::Time end,
       const base::Callback<bool(const GURL& url)>& filter) override;
-  void ClearCachedSuggestions(Category category) override;
+  void ClearCachedSuggestions() override;
   void OnSignInStateChanged() override;
   void GetDismissedSuggestionsForDebugging(
       Category category,
       DismissedSuggestionsCallback callback) override;
   void ClearDismissedSuggestionsForDebugging(Category category) override;
 
-  // Returns the maximum number of suggestions that will be shown at once.
-  static int GetMaxSuggestionCountForTesting();
+  // Returns the maximum number of suggestions we expect to receive from the
+  // server during a normal (not fetch-more) fetch..
+  static int GetMaxNormalFetchSuggestionCountForTesting();
 
   // Available suggestions, only for unit tests.
   // TODO(treib): Get rid of this. Tests should use a fake observer instead.
@@ -164,6 +163,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
                            CallsSchedulerWhenSignedIn);
   FRIEND_TEST_ALL_PREFIXES(RemoteSuggestionsProviderImplTest,
                            CallsSchedulerWhenSignedOut);
+  FRIEND_TEST_ALL_PREFIXES(
+      RemoteSuggestionsProviderImplTest,
+      ShouldNotSetExclusiveCategoryWhenFetchingSuggestions);
 
   // Possible state transitions:
   //       NOT_INITED --------+
@@ -251,6 +253,18 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // status of the fetch.
   void FetchSuggestions(bool interactive_request, FetchStatusCallback callback);
 
+  // Similar To FetchSuggestions, only adds a loading indicator on top of that.
+  // If |enable_loading_indication_timeout| is true, the indicator is hidden if
+  // the fetch does not finish within a certain amount of time (the fetch itself
+  // is not canceled, though).
+  void FetchSuggestionsWithLoadingIndicator(
+      bool interactive_request,
+      FetchStatusCallback callback,
+      bool enable_loading_indication_timeout);
+  void OnFetchSuggestionsWithLoadingIndicatorFinished(
+      FetchStatusCallback callback,
+      Status status);
+
   // Returns the URL of the image of a suggestion if it is among the current or
   // among the archived suggestions in the matching category. Returns an empty
   // URL otherwise.
@@ -295,6 +309,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   void PrependArticleSuggestion(
       std::unique_ptr<RemoteSuggestion> remote_suggestion);
 
+  // Refreshes the content suggestions upon receiving a push-to-refresh request.
+  void RefreshSuggestionsUponPushToRefreshRequest();
+
   // Dismisses a suggestion within a given category content.
   // Note that this modifies the suggestion datastructures of |content|
   // invalidating iterators.
@@ -318,10 +335,6 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // Clears suggestions because any history item has been removed.
   void ClearHistoryDependentState();
 
-  // Clears suggestions for any non-history related reason (e.g., sign-in status
-  // change, etc.).
-  void ClearSuggestions();
-
   // Clears all stored suggestions and updates the observer.
   void NukeAllSuggestions();
 
@@ -343,24 +356,15 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // SetProviderStatusCallback().
   void NotifyStateChanged();
 
-  // Enables the service. Do not call directly, use |EnterState| instead.
-  void EnterStateReady();
-
-  // Disables the service. Do not call directly, use |EnterState| instead.
-  void EnterStateDisabled();
-
-  // Disables the service permanently because an unrecoverable error occurred.
-  // Do not call directly, use |EnterState| instead.
-  void EnterStateError();
-
   // Subscribes or unsubcribes from pushed suggestions depending on the new
   // status.
   void UpdatePushedSuggestionsSubscriptionDueToStatusChange(
       RemoteSuggestionsStatus new_status);
 
-  // Converts the cached suggestions in the given |category| to content
-  // suggestions and notifies the observer.
-  void NotifyNewSuggestions(Category category, const CategoryContent& content);
+  // Converts the given |suggestions| to content suggestions and notifies the
+  // observer with them for category |category|.
+  void NotifyNewSuggestions(Category category,
+                            const RemoteSuggestion::PtrVector& suggestions);
 
   // Updates the internal status for |category| to |category_status_| and
   // notifies the content suggestions observer if it changed.
@@ -377,11 +381,17 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   void RestoreCategoriesFromPrefs();
   void StoreCategoriesToPrefs();
 
-  // Absence of fetched category corresponds to fetching all categories.
-  RequestParams BuildFetchParams(
-      base::Optional<Category> fetched_category) const;
+  // If |fetched_category| is nullopt, fetches all categories. Otherwise,
+  // fetches at most |count_to_fetch| suggestions only from |fetched_category|.
+  // TODO(vitaliii): Also support |count_to_fetch| when |fetched_category| is
+  // nullopt.
+  RequestParams BuildFetchParams(base::Optional<Category> fetched_category,
+                                 int count_to_fetch) const;
 
-  void MarkEmptyCategoriesAsLoading();
+  bool AreArticlesEmpty() const;
+  bool AreArticlesAvailable() const;
+  void NotifyFetchWithLoadingIndicatorStarted();
+  void NotifyFetchWithLoadingIndicatorFailedOrTimeouted();
 
   State state_;
 
@@ -413,24 +423,15 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // The service that provides events and data about the signin and sync state.
   std::unique_ptr<RemoteSuggestionsStatusService> status_service_;
 
-  // TODO(tschumann): All "fetch-when-available" logic should live in the
-  // RemoteSuggestionsScheduler. Remove this here. Instead, the scheduler should
-  // also call ready() before forwarding requests. If the provider becomes
-  // ready, it calls OnProviderActivated() which will process triggers queued in
-  // the scheduler.
-  // Set to true if FetchSuggestions is called while the service isn't ready.
-  // The fetch will be executed once the service enters the READY state.
-  // TODO(jkrcal): create a struct and have here just one base::Optional<>?
-  bool fetch_when_ready_;
-
-  // The parameters for the fetch to perform later.
-  bool fetch_when_ready_interactive_;
-  FetchStatusCallback fetch_when_ready_callback_;
-
   // Set to true if ClearHistoryDependentState is called while the service isn't
   // ready. The nuke will be executed once the service finishes initialization
   // or enters the READY state.
   bool clear_history_dependent_state_when_initialized_;
+
+  // Set to true if ClearCachedSuggestions has been called while the service
+  // isn't ready. The clearing will be executed once the service finishes
+  // initialization or enters the READY state.
+  bool clear_cached_suggestions_when_initialized_;
 
   // A clock for getting the time. This allows to inject a clock in tests.
   std::unique_ptr<base::Clock> clock_;
@@ -442,6 +443,12 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   // Listens for BreakingNews updates (e.g. through GCM) and notifies the
   // provider.
   std::unique_ptr<BreakingNewsListener> breaking_news_raw_data_provider_;
+
+  // Additional logging, accesible through snippets-internals.
+  Logger* debug_logger_;
+
+  // A Timer for canceling too long fetches.
+  std::unique_ptr<base::OneShotTimer> fetch_timeout_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoteSuggestionsProviderImpl);
 };

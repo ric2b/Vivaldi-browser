@@ -27,10 +27,12 @@
 #define AtomicHTMLToken_h
 
 #include <memory>
-#include "core/HTMLElementLookupTrie.h"
+
+#include "base/macros.h"
 #include "core/dom/Attribute.h"
 #include "core/html/parser/CompactHTMLToken.h"
 #include "core/html/parser/HTMLToken.h"
+#include "core/html_element_lookup_trie.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -38,7 +40,6 @@ namespace blink {
 
 class CORE_EXPORT AtomicHTMLToken {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(AtomicHTMLToken);
 
  public:
   bool ForceQuirks() const {
@@ -62,6 +63,8 @@ class CORE_EXPORT AtomicHTMLToken {
     DCHECK(type_ == HTMLToken::kStartTag || type_ == HTMLToken::kEndTag);
     return self_closing_;
   }
+
+  bool HasDuplicateAttribute() const { return duplicate_attribute_; }
 
   Attribute* GetAttributeItem(const QualifiedName& attribute_name) {
     DCHECK(UsesAttributes());
@@ -114,9 +117,9 @@ class CORE_EXPORT AtomicHTMLToken {
       case HTMLToken::kStartTag:
       case HTMLToken::kEndTag: {
         self_closing_ = token.SelfClosing();
-        if (StringImpl* tag_name =
+        if (const AtomicString& tag_name =
                 lookupHTMLTag(token.GetName().data(), token.GetName().size()))
-          name_ = AtomicString(tag_name);
+          name_ = tag_name;
         else
           name_ = AtomicString(token.GetName());
         InitializeAttributes(token.Attributes());
@@ -140,7 +143,7 @@ class CORE_EXPORT AtomicHTMLToken {
         break;
       case HTMLToken::DOCTYPE:
         name_ = AtomicString(token.Data());
-        doctype_data_ = WTF::MakeUnique<DoctypeData>();
+        doctype_data_ = std::make_unique<DoctypeData>();
         doctype_data_->has_public_identifier_ = true;
         token.PublicIdentifier().AppendTo(doctype_data_->public_identifier_);
         doctype_data_->has_system_identifier_ = true;
@@ -156,9 +159,12 @@ class CORE_EXPORT AtomicHTMLToken {
           QualifiedName name(g_null_atom, AtomicString(attribute.GetName()),
                              g_null_atom);
           // FIXME: This is N^2 for the number of attributes.
-          if (!FindAttributeInVector(attributes_, name))
+          if (!FindAttributeInVector(attributes_, name)) {
             attributes_.push_back(
                 Attribute(name, AtomicString(attribute.Value())));
+          } else {
+            duplicate_attribute_ = true;
+          }
         }
       // Fall through!
       case HTMLToken::kEndTag:
@@ -172,15 +178,13 @@ class CORE_EXPORT AtomicHTMLToken {
     }
   }
 
-  explicit AtomicHTMLToken(HTMLToken::TokenType type)
-      : type_(type), self_closing_(false) {}
+  explicit AtomicHTMLToken(HTMLToken::TokenType type) : type_(type) {}
 
   AtomicHTMLToken(HTMLToken::TokenType type,
                   const AtomicString& name,
                   const Vector<Attribute>& attributes = Vector<Attribute>())
       : type_(type),
         name_(name),
-        self_closing_(false),
         attributes_(attributes) {
     DCHECK(UsesName());
   }
@@ -209,9 +213,13 @@ class CORE_EXPORT AtomicHTMLToken {
   std::unique_ptr<DoctypeData> doctype_data_;
 
   // For StartTag and EndTag
-  bool self_closing_;
+  bool self_closing_ = false;
+
+  bool duplicate_attribute_ = false;
 
   Vector<Attribute> attributes_;
+
+  DISALLOW_COPY_AND_ASSIGN(AtomicHTMLToken);
 };
 
 inline void AtomicHTMLToken::InitializeAttributes(
@@ -229,11 +237,20 @@ inline void AtomicHTMLToken::InitializeAttributes(
     attribute.NameRange().CheckValid();
     attribute.ValueRange().CheckValid();
 
-    AtomicString value(attribute.Value8BitIfNecessary());
+    AtomicString value(attribute.ValueAsVector());
+    // attribute.ValueAsVector.data() is null for attributes with no values, but
+    // the null atom is used to represent absence of attributes; attributes with
+    // no values have the value set to an empty atom instead.
+    if (value == g_null_atom) {
+      value = g_empty_atom;
+    }
     const QualifiedName& name = NameForAttribute(attribute);
     // FIXME: This is N^2 for the number of attributes.
-    if (!FindAttributeInVector(attributes_, name))
+    if (!FindAttributeInVector(attributes_, name)) {
       attributes_.push_back(Attribute(name, value));
+    } else {
+      duplicate_attribute_ = true;
+    }
   }
 }
 

@@ -21,10 +21,11 @@
 #include "cc/test/layer_tree_json_parser.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "components/viz/common/quads/single_release_callback.h"
-#include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/test/paths.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "testing/perf/perf_test.h"
 
 namespace cc {
@@ -324,10 +325,11 @@ class BrowserCompositorInvalidateLayerTreePerfTest
                                    gpu::CommandBufferId::FromUnsafeValue(1),
                                    next_fence_sync_);
     next_sync_token.SetVerifyFlush();
-    viz::TextureMailbox mailbox(gpu_mailbox, next_sync_token, GL_TEXTURE_2D);
+    viz::TransferableResource resource = viz::TransferableResource::MakeGL(
+        gpu_mailbox, GL_LINEAR, GL_TEXTURE_2D, next_sync_token);
     next_fence_sync_++;
 
-    tab_contents_->SetTextureMailbox(mailbox, std::move(callback));
+    tab_contents_->SetTransferableResource(resource, std::move(callback));
     ++sent_mailboxes_count_;
     tab_contents_->SetNeedsDisplay();
   }
@@ -348,7 +350,7 @@ class BrowserCompositorInvalidateLayerTreePerfTest
   }
 
   void CleanUpAndEndTestOnMainThread() {
-    tab_contents_->SetTextureMailbox(viz::TextureMailbox(), nullptr);
+    tab_contents_->ClearTexture();
     // ReleaseMailbox will end the test when we get the last mailbox back.
   }
 

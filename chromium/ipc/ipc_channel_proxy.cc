@@ -14,7 +14,6 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -31,8 +30,9 @@ namespace IPC {
 
 ChannelProxy::Context::Context(
     Listener* listener,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner)
-    : listener_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& listener_task_runner)
+    : listener_task_runner_(listener_task_runner),
       listener_(listener),
       ipc_task_runner_(ipc_task_runner),
       channel_connected_called_(false),
@@ -50,8 +50,7 @@ ChannelProxy::Context::Context(
   DCHECK(!listener || (ipc_task_runner_.get() != listener_task_runner_.get()));
 }
 
-ChannelProxy::Context::~Context() {
-}
+ChannelProxy::Context::~Context() = default;
 
 void ChannelProxy::Context::ClearIPCTaskRunner() {
   ipc_task_runner_ = NULL;
@@ -188,10 +187,6 @@ void ChannelProxy::Context::OnChannelOpened() {
 
 // Called on the IPC::Channel thread
 void ChannelProxy::Context::OnChannelClosed() {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "477117 ChannelProxy::Context::OnChannelClosed"));
   // It's okay for IPC::ChannelProxy::Close to be called more than once, which
   // would result in this branch being taken.
   if (!channel_)
@@ -226,10 +221,6 @@ void ChannelProxy::Context::Clear() {
 
 // Called on the IPC::Channel thread
 void ChannelProxy::Context::OnSendMessage(std::unique_ptr<Message> message) {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "477117 ChannelProxy::Context::OnSendMessage"));
   if (!channel_) {
     OnChannelClosed();
     return;
@@ -303,7 +294,7 @@ void ChannelProxy::Context::OnRemoveFilter(MessageFilter* filter) {
 // Called on the listener's thread
 void ChannelProxy::Context::AddFilter(MessageFilter* filter) {
   base::AutoLock auto_lock(pending_filters_lock_);
-  pending_filters_.push_back(make_scoped_refptr(filter));
+  pending_filters_.push_back(base::WrapRefCounted(filter));
   ipc_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Context::OnAddFilter, this));
 }
@@ -404,9 +395,10 @@ std::unique_ptr<ChannelProxy> ChannelProxy::Create(
     const IPC::ChannelHandle& channel_handle,
     Channel::Mode mode,
     Listener* listener,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& listener_task_runner) {
   std::unique_ptr<ChannelProxy> channel(
-      new ChannelProxy(listener, ipc_task_runner));
+      new ChannelProxy(listener, ipc_task_runner, listener_task_runner));
   channel->Init(channel_handle, mode, true);
   return channel;
 }
@@ -415,9 +407,10 @@ std::unique_ptr<ChannelProxy> ChannelProxy::Create(
 std::unique_ptr<ChannelProxy> ChannelProxy::Create(
     std::unique_ptr<ChannelFactory> factory,
     Listener* listener,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& listener_task_runner) {
   std::unique_ptr<ChannelProxy> channel(
-      new ChannelProxy(listener, ipc_task_runner));
+      new ChannelProxy(listener, ipc_task_runner, listener_task_runner));
   channel->Init(std::move(factory), true);
   return channel;
 }
@@ -431,8 +424,10 @@ ChannelProxy::ChannelProxy(Context* context)
 
 ChannelProxy::ChannelProxy(
     Listener* listener,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner)
-    : context_(new Context(listener, ipc_task_runner)), did_init_(false) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& listener_task_runner)
+    : context_(new Context(listener, ipc_task_runner, listener_task_runner)),
+      did_init_(false) {
 #if defined(ENABLE_IPC_FUZZER)
   outgoing_message_filter_ = NULL;
 #endif

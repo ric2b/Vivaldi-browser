@@ -47,7 +47,7 @@ T ConstructShaderVariable(
     bool static_use, const std::string& name) {
   T var;
   var.type = type;
-  var.arraySize = array_size;
+  var.setArraySize(array_size);
   var.precision = precision;
   var.staticUse = static_use;
   var.name = name;
@@ -336,7 +336,8 @@ void TestHelper::SetupContextGroupInitExpectations(
   EXPECT_CALL(*gl, GetIntegerv(GL_MAX_RENDERBUFFER_SIZE, _))
       .WillOnce(SetArgPointee<1>(kMaxRenderbufferSize))
       .RetiresOnSaturation();
-  if (gl::HasExtension(extension_set, "GL_EXT_framebuffer_multisample") ||
+  if (gl::HasExtension(extension_set, "GL_ARB_framebuffer_object") ||
+      gl::HasExtension(extension_set, "GL_EXT_framebuffer_multisample") ||
       gl::HasExtension(extension_set,
                        "GL_EXT_multisampled_render_to_texture") ||
       gl_info.is_es3 || gl_info.is_desktop_core_profile) {
@@ -624,26 +625,9 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
     }
     if (!enable_es3 &&
         !gl::HasExtension(extension_set, "GL_EXT_color_buffer_half_float") &&
-        (gl_info.is_es || gl_info.IsAtLeastGL(3, 0))) {
-      EXPECT_CALL(
-          *gl,
-          TexImage2D(GL_TEXTURE_2D, 0, GL_R16F, width, width, 0, GL_RED, _, _))
-          .Times(1)
-          .RetiresOnSaturation();
-      EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
-          .Times(1)
-          .RetiresOnSaturation();
-      EXPECT_CALL(
-          *gl,
-          TexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, width, 0, GL_RG, _, _))
-          .Times(1)
-          .RetiresOnSaturation();
-      EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
-          .Times(1)
-          .RetiresOnSaturation();
-      EXPECT_CALL(*gl,
-                  TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, width, 0,
-                             GL_RGBA, _, _))
+        (gl_info.IsAtLeastGLES(3, 0) || gl_info.IsAtLeastGL(3, 0))) {
+      EXPECT_CALL(*gl, TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, width, 0,
+                                  GL_RGBA, GL_HALF_FLOAT, nullptr))
           .Times(1)
           .RetiresOnSaturation();
       EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
@@ -688,6 +672,11 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
   if (gl_info.is_es3 || gl_info.is_desktop_core_profile ||
       gl::HasExtension(extension_set, "GL_EXT_texture_rg") ||
       (gl::HasExtension(extension_set, "GL_ARB_texture_rg"))) {
+#if DCHECK_IS_ON()
+    EXPECT_CALL(*gl, GetError())
+        .WillOnce(Return(GL_NO_ERROR))
+        .RetiresOnSaturation();
+#endif
     static const GLuint tx_ids[] = {101, 102};
     static const GLuint fb_ids[] = {103, 104};
     const GLsizei width = 1;
@@ -1263,4 +1252,3 @@ sh::OutputVariable TestHelper::ConstructOutputVariable(
 
 }  // namespace gles2
 }  // namespace gpu
-

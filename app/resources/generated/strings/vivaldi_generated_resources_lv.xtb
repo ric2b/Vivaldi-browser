@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">No kreisās uz labo pusi</translation>
 <translation id="1546280085599573572">Šis paplašinājums mainīja iestatījumu, kura lapa tiek parādīta, noklikšķinot uz pogas Sākums.</translation>
 <translation id="1588438908519853928">Parasts</translation>
-<translation id="1616206807336925449">Šim paplašinājumam nav nepieciešamas īpašas atļaujas.</translation>
 <translation id="1635033183663317347">Instalēja aizbildnis.</translation>
 <translation id="1723824996674794290">Jauns logs</translation>
 <translation id="1729533290416704613">Tas nosaka arī to, kāda lapa tiks rādīta, kad meklēsiet, izmantojot universālo lodziņu.</translation>
@@ -103,7 +102,6 @@
 <translation id="4394049700291259645">Atspējot</translation>
 <translation id="4423482519432579560">&amp;Pareizrakstības pārbaudītājs</translation>
 <translation id="4522570452068850558">Informācija</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4557136421275541763">Brīdinājums:</translation>
 <translation id="4593021220803146968">Doties uz <ph name="URL" /></translation>
 <translation id="4595560905247879544">Lietotnes un paplašinājumus var pārveidot tikai pārvaldnieks (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -138,7 +136,6 @@
 <translation id="5556459405103347317">Pārlādēt</translation>
 <translation id="5575473780076478375">Inkognito paplašinājums: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Tas nosaka arī to, kāda lapa tiks rādīta, kad noklikšķināsiet uz pogas “Sākums”.</translation>
-<translation id="5646376287012673985">Atrašanās vieta</translation>
 <translation id="5715711091495208045">Spraudņa starpnieks: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">S&amp;aglabāt audio kā...</translation>
 <translation id="5780973441651030252">Procesa prioritāte</translation>
@@ -177,7 +174,6 @@
 <translation id="6900284862687837908">Fona lietotne: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Atsaukt piekļuvi failiem</translation>
 <translation id="6974053822202609517">No labās uz kreiso pusi</translation>
-<translation id="7013485839273047434">Iegūt vairāk paplašinājumu</translation>
 <translation id="708060913198414444">Kopēt audio adresi</translation>
 <translation id="7144878232160441200">Mēģināt vēlreiz</translation>
 <translation id="7206693748120342859">Notiek spraudņa <ph name="PLUGIN_NAME" /> lejupielāde...</translation>
@@ -186,7 +182,6 @@
 <translation id="7361297102842600584">Lai palaistu spraudni <ph name="PLUGIN_NAME" />, noklikšķiniet ar labo peles pogu</translation>
 <translation id="7401543881546089382">Dzēst saīsni</translation>
 <translation id="7427348830195639090">Fona lapa: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Jauna cilne</translation>
 <translation id="7564847347806291057">Pārtraukt procesu</translation>
 <translation id="7629827748548208700">Cilne: <ph name="TAB_NAME" /></translation>
@@ -234,7 +229,6 @@ Glabājiet atslēgas failu drošā vietā. Tas būs vajadzīgs, lai izveidotu ja
 <translation id="9088234649737575428">Spraudnis <ph name="PLUGIN_NAME" /> tika bloķēts saskaņā ar uzņēmuma politiku</translation>
 <translation id="9170848237812810038">&amp;Atsaukt</translation>
 <translation id="9215293857209265904">Ir pievienots paplašinājums <ph name="EXTENSION_NAME" /></translation>
-<translation id="9219103736887031265">Attēli</translation>
 <translation id="93766956588638423">Labot paplašinājumu</translation>
 <translation id="994289308992179865">A&amp;utomātiski atkārtot</translation>
 <translation id="998747458861718449">Pārbaudīt</translation>

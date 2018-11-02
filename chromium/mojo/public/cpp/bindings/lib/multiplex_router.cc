@@ -275,8 +275,13 @@ class MultiplexRouter::MessageWrapper {
   // Returns a null message if it fails to deseralize the associated endpoint
   // handles.
   Message DeserializeEndpointHandlesAndTake() {
-    if (!value_.DeserializeAssociatedEndpointHandles(router_))
+    if (!value_.DeserializeAssociatedEndpointHandles(router_)) {
+      // The previous call may have deserialized part of the associated
+      // interface endpoint handles. They must be destroyed outside of the
+      // router's lock, so we cannot wait until destruction of MessageWrapper.
+      value_.Reset();
       return Message();
+    }
     return std::move(value_);
   }
 
@@ -659,16 +664,19 @@ void MultiplexRouter::OnPipeConnectionError() {
 
   encountered_error_ = true;
 
-  for (auto iter = endpoints_.begin(); iter != endpoints_.end();) {
-    InterfaceEndpoint* endpoint = iter->second.get();
-    // Increment the iterator before calling UpdateEndpointStateMayRemove()
-    // because it may remove the corresponding value from the map.
-    ++iter;
+  // Calling UpdateEndpointStateMayRemove() may remove the corresponding value
+  // from |endpoints_| and invalidate any iterator of |endpoints_|. Therefore,
+  // copy the endpoint pointers to a vector and iterate over it instead.
+  std::vector<scoped_refptr<InterfaceEndpoint>> endpoint_vector;
+  endpoint_vector.reserve(endpoints_.size());
+  for (const auto& pair : endpoints_)
+    endpoint_vector.push_back(pair.second);
 
+  for (const auto& endpoint : endpoint_vector) {
     if (endpoint->client())
-      tasks_.push_back(Task::CreateNotifyErrorTask(endpoint));
+      tasks_.push_back(Task::CreateNotifyErrorTask(endpoint.get()));
 
-    UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
+    UpdateEndpointStateMayRemove(endpoint.get(), PEER_ENDPOINT_CLOSED);
   }
 
   ProcessTasks(connector_.during_sync_handle_watcher_callback()

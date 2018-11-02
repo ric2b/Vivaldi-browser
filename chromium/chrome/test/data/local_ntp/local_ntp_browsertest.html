@@ -5,21 +5,44 @@
      found in the LICENSE file. -->
 <head>
   <script>window.localNTPUnitTest = true;</script>
-  <script src="chrome-search://local-ntp/config.js"></script>
-  <script src="chrome-search://local-ntp/local-ntp.js"></script>
-  <script src="chrome-search://most-visited/util.js"></script>
+  <script src="chrome-search://local-ntp/config.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/local-ntp.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/voice.js" charset="utf-8"></script>
+  <script src="chrome-search://most-visited/util.js" charset="utf-8"></script>
   <link rel="stylesheet" href="chrome-search://local-ntp/local-ntp.css"></link>
-  <script src="test_utils.js"></script>
-  <script src="local_ntp_browsertest.js"></script>
+  <script src="test_utils.js" charset="utf-8"></script>
+  <script src="local_ntp_browsertest.js" charset="utf-8"></script>
   <template id="local-ntp-template">
     <div id="ntp-contents">
-      <div id="logo" title="Google"></div>
-      <div id="fakebox">
-        <div id="fakebox-text"></div>
-        <input id="fakebox-input" autocomplete="off" tabIndex="-1" type="url"
-            aria-hidden="true">
-        <div id="fakebox-cursor"></div>
-        <div id="fakebox-speech" tabIndex="0" hidden></div>
+      <div id="search">
+        <!-- Container for the logo, whether default or doodle. -->
+        <div id="logo">
+          <!-- The logo that is displayed in the absence of a doodle. -->
+          <div id="logo-default" title="Google"></div>
+          <!-- Logo displayed when theme prevents doodles. Doesn't fade. -->
+          <div id="logo-non-white" title="Google"></div>
+          <!-- A doodle, if any: its link and image. -->
+          <div id="logo-doodle">
+            <button id="logo-doodle-button">
+              <img id="logo-doodle-image"></img>
+            </button>
+            <iframe id="logo-doodle-iframe"></iframe>
+            <!-- A spinner, visible on dark-themed NTPs, prompting the doodle -->
+            <button id="logo-doodle-notifier">
+              <div class="outer ball0"><div class="inner"></div></div>
+              <div class="outer ball1"><div class="inner"></div></div>
+              <div class="outer ball2"><div class="inner"></div></div>
+              <div class="outer ball3"><div class="inner"></div></div>
+            </button>
+          </div>
+        </div>
+        <div id="fakebox">
+          <div id="fakebox-text"></div>
+          <input id="fakebox-input" autocomplete="off" tabIndex="-1" type="url"
+              aria-hidden="true">
+          <div id="fakebox-cursor"></div>
+          <button id="fakebox-microphone" hidden></button>
+        </div>
       </div>
       <div id="most-visited">
         <!-- The container for the tiles. The MV iframe goes in here. -->
@@ -36,6 +59,35 @@
         </div>
       </div>
       <div id="attribution"><div id="attribution-text"></div></div>
+    </div>
+
+    <div id="voice-overlay" class="overlay-hidden" hidden>
+      <div id="voice-outer" class="outer">
+        <div class="inner-container">
+          <div id="voice-button-container" class="button-container">
+            <!-- The audio level animation. -->
+            <span id="voice-level" class="level"></span>
+            <!-- The microphone button. -->
+            <span id="voice-button" class="button">
+              <!-- The microphone icon (in CSS). -->
+              <div class="microphone">
+                <span class="receiver"></span>
+                <div class="wrapper">
+                  <span class="stem"></span>
+                  <span class="shell"></span>
+                </div>
+              </div>
+            </span>
+          </div>
+          <div class="text-container">
+            <!-- Low confidence text underneath high confidence text. -->
+            <span id="voice-text-i" class="voice-text"></span>
+            <!-- High confidence text on top of low confidence text. -->
+            <span id="voice-text-f" class="voice-text"></span>
+          </div>
+        </div>
+      </div>
+      <div id="voice-close-button" class="close-button">&times;</div>
     </div>
   </template>
 </head>

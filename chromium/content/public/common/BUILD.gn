@@ -108,8 +108,6 @@ source_set("common_sources") {
 
   sources = [
     "appcache_info.h",
-    "associated_interface_provider.h",
-    "associated_interface_registry.h",
     "bind_interface_helpers.h",
     "bindings_policy.h",
     "browser_controls_state.h",
@@ -140,8 +138,6 @@ source_set("common_sources") {
     "content_switches.h",
     "context_menu_params.cc",
     "context_menu_params.h",
-    "cookie_manager_traits.cc",
-    "cookie_manager_traits.h",
     "cursor_info.h",
     "drop_data.cc",
     "drop_data.h",
@@ -155,6 +151,8 @@ source_set("common_sources") {
     "frame_navigate_params.h",
     "injection_test_mac.h",
     "injection_test_win.h",
+    "input_event_ack_source.h",
+    "input_event_ack_state.h",
     "isolated_world_ids.h",
     "javascript_dialog_type.h",
     "main_function_params.h",
@@ -172,7 +170,8 @@ source_set("common_sources") {
     "mhtml_generation_params.h",
     "mojo_channel_switches.cc",
     "mojo_channel_switches.h",
-    "mutable_network_traffic_annotation_tag_struct_traits.h",
+    "network_connection_tracker.cc",
+    "network_connection_tracker.h",
     "notification_resources.cc",
     "notification_resources.h",
     "origin_trial_policy.cc",
@@ -209,8 +208,6 @@ source_set("common_sources") {
     "resource_request.h",
     "resource_request_body.cc",
     "resource_request_body.h",
-    "resource_request_completion_status.cc",
-    "resource_request_completion_status.h",
     "resource_response.cc",
     "resource_response.h",
     "resource_response_info.cc",
@@ -219,9 +216,6 @@ source_set("common_sources") {
     "resource_type.h",
     "result_codes.h",
     "sandbox_init.h",
-    "sandbox_linux.h",
-    "sandbox_type.cc",
-    "sandbox_type.h",
     "sandboxed_process_launcher_delegate.cc",
     "sandboxed_process_launcher_delegate.h",
     "screen_info.cc",
@@ -245,6 +239,7 @@ source_set("common_sources") {
     "url_constants.cc",
     "url_constants.h",
     "url_fetcher.h",
+    "url_loader_throttle.cc",
     "url_loader_throttle.h",
     "url_utils.cc",
     "url_utils.h",
@@ -253,6 +248,7 @@ source_set("common_sources") {
     "web_preferences.h",
     "webplugininfo.cc",
     "webplugininfo.h",
+    "webplugininfo_param_traits.h",
     "zygote_fork_delegate_linux.h",
     "zygote_handle.h",
   ]
@@ -276,6 +272,7 @@ source_set("common_sources") {
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//third_party/WebKit/public:blink_headers",
+    "//third_party/WebKit/public:mojo_bindings",
     "//ui/accessibility",
     "//ui/surface",
     "//url/ipc:url_ipc",
@@ -353,21 +350,26 @@ mojom("interfaces") {
   visibility = [
     ":common_sources",
     "//content/common/*",
+    "//chrome/common:mojo_bindings",
+    "//chrome/common:mojo_bindings_blink",
   ]
 
   sources = [
-    "cookie_manager.mojom",
-    "mutable_network_traffic_annotation_tag.mojom",
+    "appcache_info.mojom",
+    "download_stream.mojom",
     "network_service.mojom",
     "network_service_test.mojom",
     "push_messaging_status.mojom",
     "url_loader.mojom",
     "url_loader_factory.mojom",
+    "webplugininfo.mojom",
     "window_container_type.mojom",
   ]
 
   public_deps = [
+    ":resource_type_bindings",
     "//mojo/common:common_custom_types",
+    "//services/network/public/interfaces",
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]

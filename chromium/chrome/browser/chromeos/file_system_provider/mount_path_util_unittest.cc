@@ -8,18 +8,20 @@
 #include <string>
 
 #include "base/files/file.h"
+#include "base/memory/ptr_util.h"
+#include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "chrome/browser/chromeos/file_system_provider/service_factory.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_registry.h"
@@ -36,14 +38,15 @@ namespace {
 const char kExtensionId[] = "mbflcebpggnecokmikipoihdbecnjfoj";
 const char kFileSystemId[] = "File/System/Id";
 const char kDisplayName[] = "Camera Pictures";
+const ProviderId kProviderId = ProviderId::CreateFromExtensionId(kExtensionId);
+const ProviderId kNativeProviderId = ProviderId::CreateFromNativeId("native");
 
 // Creates a FileSystemURL for tests.
 storage::FileSystemURL CreateFileSystemURL(
     Profile* profile,
     const ProvidedFileSystemInfo& file_system_info,
     const base::FilePath& file_path) {
-  const std::string origin =
-      std::string("chrome-extension://") + file_system_info.extension_id();
+  const std::string origin = std::string("chrome-extension://") + kExtensionId;
   const base::FilePath mount_path = file_system_info.mount_path();
   const storage::ExternalMountPoints* const mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
@@ -69,34 +72,42 @@ class FileSystemProviderMountPathUtilTest : public testing::Test {
     ASSERT_TRUE(profile_manager_->SetUp());
     profile_ = profile_manager_->CreateTestingProfile("testing-profile");
     user_manager_ = new FakeChromeUserManager();
-    user_manager_enabler_.reset(new ScopedUserManagerEnabler(user_manager_));
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        base::WrapUnique(user_manager_));
     user_manager_->AddUser(
         AccountId::FromUserEmail(profile_->GetProfileUserName()));
     file_system_provider_service_ = Service::Get(profile_);
-    file_system_provider_service_->SetFileSystemFactoryForTesting(
-        base::Bind(&FakeProvidedFileSystem::Create));
+    file_system_provider_service_->SetExtensionProviderForTesting(
+        std::make_unique<FakeExtensionProvider>());
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   TestingProfile* profile_;  // Owned by TestingProfileManager.
-  std::unique_ptr<ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   FakeChromeUserManager* user_manager_;
   Service* file_system_provider_service_;  // Owned by its factory.
 };
 
 TEST_F(FileSystemProviderMountPathUtilTest, GetMountPath) {
-  const base::FilePath result =
-      GetMountPath(profile_, kExtensionId, kFileSystemId);
-  const std::string expected =
+  const base::FilePath extension_result =
+      GetMountPath(profile_, kProviderId, kFileSystemId);
+  const std::string extension_expected =
       "/provided/mbflcebpggnecokmikipoihdbecnjfoj:"
       "File%2FSystem%2FId:testing-profile-hash";
-  EXPECT_EQ(expected, result.AsUTF8Unsafe());
+  EXPECT_EQ(extension_expected, extension_result.AsUTF8Unsafe());
+
+  const base::FilePath native_result =
+      GetMountPath(profile_, kNativeProviderId, kFileSystemId);
+  const std::string native_expected =
+      "/provided/@native:"
+      "File%2FSystem%2FId:testing-profile-hash";
+  EXPECT_EQ(native_expected, native_result.AsUTF8Unsafe());
 }
 
 TEST_F(FileSystemProviderMountPathUtilTest, IsFileSystemProviderLocalPath) {
   const base::FilePath mount_path =
-      GetMountPath(profile_, kExtensionId, kFileSystemId);
+      GetMountPath(profile_, kProviderId, kFileSystemId);
   const base::FilePath file_path =
       base::FilePath(FILE_PATH_LITERAL("/hello/world.txt"));
   const base::FilePath local_file_path =
@@ -117,11 +128,11 @@ TEST_F(FileSystemProviderMountPathUtilTest, IsFileSystemProviderLocalPath) {
 TEST_F(FileSystemProviderMountPathUtilTest, Parser) {
   const base::File::Error result =
       file_system_provider_service_->MountFileSystem(
-          kExtensionId, MountOptions(kFileSystemId, kDisplayName));
+          kProviderId, MountOptions(kFileSystemId, kDisplayName));
   ASSERT_EQ(base::File::FILE_OK, result);
   const ProvidedFileSystemInfo file_system_info =
-      file_system_provider_service_->GetProvidedFileSystem(kExtensionId,
-                                                           kFileSystemId)
+      file_system_provider_service_
+          ->GetProvidedFileSystem(kProviderId, kFileSystemId)
           ->GetFileSystemInfo();
 
   const base::FilePath kFilePath =
@@ -142,11 +153,11 @@ TEST_F(FileSystemProviderMountPathUtilTest, Parser) {
 TEST_F(FileSystemProviderMountPathUtilTest, Parser_RootPath) {
   const base::File::Error result =
       file_system_provider_service_->MountFileSystem(
-          kExtensionId, MountOptions(kFileSystemId, kDisplayName));
+          kProviderId, MountOptions(kFileSystemId, kDisplayName));
   ASSERT_EQ(base::File::FILE_OK, result);
   const ProvidedFileSystemInfo file_system_info =
-      file_system_provider_service_->GetProvidedFileSystem(kExtensionId,
-                                                           kFileSystemId)
+      file_system_provider_service_
+          ->GetProvidedFileSystem(kProviderId, kFileSystemId)
           ->GetFileSystemInfo();
 
   const base::FilePath kFilePath = base::FilePath(FILE_PATH_LITERAL("/"));
@@ -165,8 +176,8 @@ TEST_F(FileSystemProviderMountPathUtilTest, Parser_RootPath) {
 
 TEST_F(FileSystemProviderMountPathUtilTest, Parser_WrongUrl) {
   const ProvidedFileSystemInfo file_system_info(
-      kExtensionId, MountOptions(kFileSystemId, kDisplayName),
-      GetMountPath(profile_, kExtensionId, kFileSystemId),
+      kProviderId, MountOptions(kFileSystemId, kDisplayName),
+      GetMountPath(profile_, kProviderId, kFileSystemId),
       false /* configurable */, true /* watchable */, extensions::SOURCE_FILE);
 
   const base::FilePath kFilePath = base::FilePath(FILE_PATH_LITERAL("/hello"));
@@ -183,11 +194,11 @@ TEST_F(FileSystemProviderMountPathUtilTest, Parser_WrongUrl) {
 TEST_F(FileSystemProviderMountPathUtilTest, Parser_IsolatedURL) {
   const base::File::Error result =
       file_system_provider_service_->MountFileSystem(
-          kExtensionId, MountOptions(kFileSystemId, kDisplayName));
+          kProviderId, MountOptions(kFileSystemId, kDisplayName));
   ASSERT_EQ(base::File::FILE_OK, result);
   const ProvidedFileSystemInfo file_system_info =
-      file_system_provider_service_->GetProvidedFileSystem(kExtensionId,
-                                                           kFileSystemId)
+      file_system_provider_service_
+          ->GetProvidedFileSystem(kProviderId, kFileSystemId)
           ->GetFileSystemInfo();
 
   const base::FilePath kFilePath =
@@ -230,11 +241,11 @@ TEST_F(FileSystemProviderMountPathUtilTest, Parser_IsolatedURL) {
 TEST_F(FileSystemProviderMountPathUtilTest, LocalPathParser) {
   const base::File::Error result =
       file_system_provider_service_->MountFileSystem(
-          kExtensionId, MountOptions(kFileSystemId, kDisplayName));
+          kProviderId, MountOptions(kFileSystemId, kDisplayName));
   ASSERT_EQ(base::File::FILE_OK, result);
   const ProvidedFileSystemInfo file_system_info =
-      file_system_provider_service_->GetProvidedFileSystem(kExtensionId,
-                                                           kFileSystemId)
+      file_system_provider_service_
+          ->GetProvidedFileSystem(kProviderId, kFileSystemId)
           ->GetFileSystemInfo();
 
   const base::FilePath kFilePath =
@@ -255,11 +266,11 @@ TEST_F(FileSystemProviderMountPathUtilTest, LocalPathParser) {
 TEST_F(FileSystemProviderMountPathUtilTest, LocalPathParser_RootPath) {
   const base::File::Error result =
       file_system_provider_service_->MountFileSystem(
-          kExtensionId, MountOptions(kFileSystemId, kDisplayName));
+          kProviderId, MountOptions(kFileSystemId, kDisplayName));
   ASSERT_EQ(base::File::FILE_OK, result);
   const ProvidedFileSystemInfo file_system_info =
-      file_system_provider_service_->GetProvidedFileSystem(kExtensionId,
-                                                           kFileSystemId)
+      file_system_provider_service_
+          ->GetProvidedFileSystem(kProviderId, kFileSystemId)
           ->GetFileSystemInfo();
 
   const base::FilePath kFilePath = base::FilePath(FILE_PATH_LITERAL("/"));

@@ -56,7 +56,8 @@ class BLINK_EXPORT WebEmbeddedWorker {
   static std::unique_ptr<WebEmbeddedWorker> Create(
       std::unique_ptr<WebServiceWorkerContextClient>,
       std::unique_ptr<WebServiceWorkerInstalledScriptsManager>,
-      mojo::ScopedMessagePipeHandle content_settings_handle);
+      mojo::ScopedMessagePipeHandle content_settings_handle,
+      mojo::ScopedMessagePipeHandle interface_provider);
 
   virtual ~WebEmbeddedWorker() {}
 
@@ -69,9 +70,8 @@ class BLINK_EXPORT WebEmbeddedWorker {
   virtual void ResumeAfterDownload() = 0;
 
   // Inspector related methods.
-  virtual void AttachDevTools(const WebString& host_id, int session_id) = 0;
-  virtual void ReattachDevTools(const WebString& host_id,
-                                int session_id,
+  virtual void AttachDevTools(int session_id) = 0;
+  virtual void ReattachDevTools(int session_id,
                                 const WebString& saved_state) = 0;
   virtual void DetachDevTools(int session_id) = 0;
   virtual void DispatchDevToolsMessage(int session_id,

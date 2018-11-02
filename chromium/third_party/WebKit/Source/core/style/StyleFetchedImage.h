@@ -32,6 +32,8 @@ namespace blink {
 
 class Document;
 
+// This class represents an <image> that loads a single image resource (the
+// url(...) function.)
 class StyleFetchedImage final : public StyleImage,
                                 public ImageResourceObserver {
   USING_PRE_FINALIZER(StyleFetchedImage, Dispose);
@@ -61,14 +63,14 @@ class StyleFetchedImage final : public StyleImage,
   void RemoveClient(ImageResourceObserver*) override;
   void ImageNotifyFinished(ImageResourceContent*) override;
   String DebugName() const override { return "StyleFetchedImage"; }
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize&) const override;
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size) const override;
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   StyleFetchedImage(ImageResourceContent*, const Document&, const KURL&);

@@ -29,7 +29,7 @@ class RemoteFrameClient : public FrameClient {
 
   // Forwards a postMessage for a remote frame.
   virtual void ForwardPostMessage(MessageEvent*,
-                                  RefPtr<SecurityOrigin> target,
+                                  scoped_refptr<SecurityOrigin> target,
                                   LocalFrame* source_frame) const = 0;
 
   virtual void FrameRectsChanged(const IntRect& frame_rect) = 0;
@@ -42,6 +42,9 @@ class RemoteFrameClient : public FrameClient {
   virtual void VisibilityChanged(bool visible) = 0;
 
   virtual void SetIsInert(bool) = 0;
+
+  virtual void UpdateRenderThrottlingStatus(bool isThrottled,
+                                            bool subtreeThrottled) = 0;
 };
 
 }  // namespace blink

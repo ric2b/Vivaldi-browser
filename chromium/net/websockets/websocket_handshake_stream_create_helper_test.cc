@@ -63,7 +63,7 @@ class MockClientSocketHandleFactory {
 
 class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
  public:
-  ~TestConnectDelegate() override {}
+  ~TestConnectDelegate() override = default;
 
   void OnCreateRequest(URLRequest* request) override {}
   void OnSuccess(std::unique_ptr<WebSocketStream> stream) override {}
@@ -104,7 +104,7 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
     std::unique_ptr<ClientSocketHandle> socket_handle =
         socket_handle_factory_.CreateClientSocketHandle(
             WebSocketStandardRequest("/", "localhost",
-                                     url::Origin(GURL(kOrigin)), "",
+                                     url::Origin::Create(GURL(kOrigin)), "",
                                      extra_request_headers),
             WebSocketStandardResponse(extra_response_headers));
 

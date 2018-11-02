@@ -41,6 +41,7 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
+#include "third_party/webrtc/modules/desktop_capture/fake_desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
 
 namespace content {
@@ -128,7 +129,7 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
   webrtc::DesktopSize previous_frame_size_;
 
   // Determines the size of frames to deliver to the |client_|.
-  std::unique_ptr<media::CaptureResolutionChooser> resolution_chooser_;
+  media::CaptureResolutionChooser resolution_chooser_;
 
   // DesktopFrame into which captured frames are down-scaled and/or letterboxed,
   // depending upon the caller's requested capture capabilities. If frames can
@@ -193,9 +194,13 @@ void DesktopCaptureDevice::Core::AllocateAndStart(
 
   client_ = std::move(client);
   requested_frame_rate_ = params.requested_format.frame_rate;
-  resolution_chooser_.reset(new media::CaptureResolutionChooser(
-      params.requested_format.frame_size,
-      params.resolution_change_policy));
+
+  // Pass the min/max resolution and fixed aspect ratio settings from |params|
+  // to the CaptureResolutionChooser.
+  const auto constraints = params.SuggestConstraints();
+  resolution_chooser_.SetConstraints(constraints.min_frame_size,
+                                     constraints.max_frame_size,
+                                     constraints.fixed_aspect_ratio);
 
   DCHECK(!wake_lock_);
   // Gets a service_manager::Connector first, then request a wake lock.
@@ -261,15 +266,15 @@ void DesktopCaptureDevice::Core::OnCaptureResult(
   // determine the new output size.
   if (!previous_frame_size_.equals(frame->size())) {
     output_frame_.reset();
-    resolution_chooser_->SetSourceSize(gfx::Size(frame->size().width(),
-                                                 frame->size().height()));
+    resolution_chooser_.SetSourceSize(
+        gfx::Size(frame->size().width(), frame->size().height()));
     previous_frame_size_ = frame->size();
   }
   // Align to 2x2 pixel boundaries, as required by OnIncomingCapturedData() so
   // it can convert the frame to I420 format.
   webrtc::DesktopSize output_size(
-      resolution_chooser_->capture_size().width() & ~1,
-      resolution_chooser_->capture_size().height() & ~1);
+      resolution_chooser_.capture_size().width() & ~1,
+      resolution_chooser_.capture_size().height() & ~1);
   if (output_size.is_empty()) {
     // Even RESOLUTION_POLICY_ANY_WITHIN_LIMIT is used, a non-empty size should
     // be guaranteed.
@@ -411,8 +416,8 @@ void DesktopCaptureDevice::Core::RequestWakeLock(
   connector->BindInterface(device::mojom::kServiceName,
                            mojo::MakeRequest(&wake_lock_provider));
   wake_lock_provider->GetWakeLockWithoutContext(
-      device::mojom::WakeLockType::PreventDisplaySleep,
-      device::mojom::WakeLockReason::ReasonOther, "Desktop capture is running",
+      device::mojom::WakeLockType::kPreventDisplaySleep,
+      device::mojom::WakeLockReason::kOther, "Desktop capture is running",
       mojo::MakeRequest(&wake_lock_));
 
   wake_lock_->RequestWakeLock();
@@ -423,6 +428,14 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
     const DesktopMediaID& source) {
   auto options = CreateDesktopCaptureOptions();
   std::unique_ptr<webrtc::DesktopCapturer> capturer;
+  std::unique_ptr<media::VideoCaptureDevice> result;
+
+  // For browser tests, to create a fake desktop capturer.
+  if (source.id == DesktopMediaID::kFakeId) {
+    capturer.reset(new webrtc::FakeDesktopCapturer());
+    result.reset(new DesktopCaptureDevice(std::move(capturer), source.type));
+    return result;
+  }
 
   switch (source.type) {
     case DesktopMediaID::TYPE_SCREEN: {
@@ -456,7 +469,6 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
     default: { NOTREACHED(); }
   }
 
-  std::unique_ptr<media::VideoCaptureDevice> result;
   if (capturer)
     result.reset(new DesktopCaptureDevice(std::move(capturer), source.type));
 

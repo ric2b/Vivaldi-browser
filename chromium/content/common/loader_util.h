@@ -6,6 +6,7 @@
 #define CONTENT_COMMON_LOADER_UTIL_H_
 
 #include "base/memory/ref_counted.h"
+#include "content/public/common/resource_type.h"
 
 namespace net {
 class HttpRawRequestHeaders;
@@ -15,6 +16,7 @@ class URLRequest;
 
 namespace content {
 struct ResourceDevToolsInfo;
+struct ResourceRequest;
 struct ResourceResponse;
 
 // Helper utilities shared between network service and ResourceDispatcherHost
@@ -30,6 +32,11 @@ scoped_refptr<ResourceDevToolsInfo> BuildDevToolsInfo(
     const net::URLRequest& request,
     const net::HttpRawRequestHeaders& raw_request_headers,
     const net::HttpResponseHeaders* raw_response_headers);
+
+void AttachAcceptHeader(ResourceType type, net::URLRequest* request);
+
+int BuildLoadFlagsForRequest(const ResourceRequest& request_data,
+                             bool is_sync_load);
 
 }  // namespace content
 

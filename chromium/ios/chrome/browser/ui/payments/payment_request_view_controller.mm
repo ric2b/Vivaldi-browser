@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/payments/cells/page_info_item.h"
+#import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
 #import "ios/chrome/browser/ui/payments/payment_request_view_controller_actions.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -50,7 +51,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSummaryPageInfo = kItemTypeEnumZero,
   ItemTypeSpinner,
   ItemTypeSummaryTotal,
-  ItemTypeShippingTitle,
+  ItemTypeShippingHeader,
   ItemTypeShippingAddress,
   ItemTypeShippingOption,
   ItemTypePaymentHeader,
@@ -109,6 +110,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [_payButton setBackgroundColor:[[MDCPalette cr_bluePalette] tint500]];
     [_payButton setTitleColor:[UIColor whiteColor]
                      forState:UIControlStateNormal];
+    [_payButton setTitleColor:[UIColor whiteColor]
+                     forState:UIControlStateDisabled];
     [_payButton setInkColor:[UIColor colorWithWhite:1 alpha:0.2]];
     [_payButton addTarget:self
                    action:@selector(onConfirm)
@@ -198,23 +201,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if ([_dataSource requestShipping]) {
     [model addSectionWithIdentifier:SectionIdentifierShipping];
 
-    CollectionViewItem* shippingSectionHeaderItem =
+    PaymentsTextItem* shippingSectionHeaderItem =
         [_dataSource shippingSectionHeaderItem];
-    [shippingSectionHeaderItem setType:ItemTypeShippingTitle];
+    [shippingSectionHeaderItem setTextColor:[[MDCPalette greyPalette] tint500]];
+    [shippingSectionHeaderItem setType:ItemTypeShippingHeader];
     [model setHeader:shippingSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierShipping];
 
-    [self populateShippingSection];
+    [self populateModelForShippingSection];
   }
 
   // Payment method section.
   [model addSectionWithIdentifier:SectionIdentifierPayment];
-  [self populatePaymentMethodSection];
+  [self populateModelForPaymentMethodSection];
 
   // Contact Info section.
   if ([_dataSource requestContactInfo]) {
     [model addSectionWithIdentifier:SectionIdentifierContactInfo];
-    [self populateContactInfoSection];
+    [self populateModelForContactInfoSection];
   }
 
   // Footer Text section.
@@ -251,64 +255,52 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.collectionView reloadItemsAtIndexPaths:@[ indexPath ]];
 }
 
-- (void)updateShippingSection {
+#pragma mark - Public methods
+
+- (void)reloadSections {
   CollectionViewModel* model = self.collectionViewModel;
+  NSMutableIndexSet* sections = [NSMutableIndexSet indexSet];
 
-  [model removeItemWithType:ItemTypeShippingAddress
-      fromSectionWithIdentifier:SectionIdentifierShipping];
-
-  if ([model hasItemForItemType:ItemTypeShippingOption
-              sectionIdentifier:SectionIdentifierShipping]) {
-    [model removeItemWithType:ItemTypeShippingOption
-        fromSectionWithIdentifier:SectionIdentifierShipping];
+  if ([_dataSource requestShipping]) {
+    [self populateModelForShippingSection];
+    [sections
+        addIndex:[model sectionForSectionIdentifier:SectionIdentifierShipping]];
   }
 
-  [self populateShippingSection];
+  [self populateModelForPaymentMethodSection];
+  [sections
+      addIndex:[model sectionForSectionIdentifier:SectionIdentifierPayment]];
 
-  // Reload the section.
-  NSInteger sectionIndex =
-      [model sectionForSectionIdentifier:SectionIdentifierShipping];
-  [self.collectionView
-      reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
+  if ([_dataSource requestContactInfo]) {
+    [self populateModelForContactInfoSection];
+    [sections
+        addIndex:[model
+                     sectionForSectionIdentifier:SectionIdentifierContactInfo]];
+  }
 
-  // Update the pay button.
+  [self.collectionView reloadSections:sections];
   [_payButton setEnabled:[_dataSource canPay]];
 }
 
-- (void)updatePaymentMethodSection {
-  CollectionViewModel* model = self.collectionViewModel;
-
-  [model removeItemWithType:ItemTypePaymentMethod
-      fromSectionWithIdentifier:SectionIdentifierPayment];
-
-  [self populatePaymentMethodSection];
-
-  // Reload the section.
-  NSInteger sectionIndex =
-      [model sectionForSectionIdentifier:SectionIdentifierPayment];
-  [self.collectionView
-      reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
-
-  // Update the pay button.
-  [_payButton setEnabled:[_dataSource canPay]];
+- (void)reloadShippingSection {
+  [self populateModelForShippingSection];
+  [self reloadSectionWithIndex:
+            [self.collectionViewModel
+                sectionForSectionIdentifier:SectionIdentifierShipping]];
 }
 
-- (void)updateContactInfoSection {
-  CollectionViewModel* model = self.collectionViewModel;
+- (void)reloadPaymentMethodSection {
+  [self populateModelForPaymentMethodSection];
+  [self reloadSectionWithIndex:
+            [self.collectionViewModel
+                sectionForSectionIdentifier:SectionIdentifierPayment]];
+}
 
-  [model removeItemWithType:ItemTypeContactInfo
-      fromSectionWithIdentifier:SectionIdentifierContactInfo];
-
-  [self populateContactInfoSection];
-
-  // Reload the section.
-  NSInteger sectionIndex =
-      [model sectionForSectionIdentifier:SectionIdentifierContactInfo];
-  [self.collectionView
-      reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
-
-  // Update the pay button.
-  [_payButton setEnabled:[_dataSource canPay]];
+- (void)reloadContactInfoSection {
+  [self populateModelForContactInfoSection];
+  [self reloadSectionWithIndex:
+            [self.collectionViewModel
+                sectionForSectionIdentifier:SectionIdentifierContactInfo]];
 }
 
 #pragma mark - CollectionViewFooterLinkDelegate
@@ -331,12 +323,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
     case ItemTypePaymentMethod:
     case ItemTypeShippingOption:
     case ItemTypeContactInfo: {
-      if ([cell isKindOfClass:[CollectionViewDetailCell class]]) {
-        CollectionViewDetailCell* detailCell =
-            base::mac::ObjCCastStrict<CollectionViewDetailCell>(cell);
-        detailCell.detailTextLabel.font = [MDCTypography body2Font];
-        detailCell.detailTextLabel.textColor =
-            [[MDCPalette cr_bluePalette] tint700];
+      if ([cell isKindOfClass:[PaymentsTextCell class]]) {
+        PaymentsTextCell* paymentsTextCell =
+            base::mac::ObjCCastStrict<PaymentsTextCell>(cell);
+        // Style call to action cells.
+        if (paymentsTextCell.cellType == PaymentsTextCellTypeCallToAction) {
+          paymentsTextCell.textLabel.textColor =
+              [[MDCPalette cr_bluePalette] tint500];
+        }
       }
       break;
     }
@@ -443,8 +437,20 @@ typedef NS_ENUM(NSInteger, ItemType) {
             toSectionWithIdentifier:SectionIdentifierSummary];
 }
 
-- (void)populateShippingSection {
+- (void)populateModelForShippingSection {
   CollectionViewModel* model = self.collectionViewModel;
+
+  if ([model hasItemForItemType:ItemTypeShippingAddress
+              sectionIdentifier:SectionIdentifierShipping]) {
+    [model removeItemWithType:ItemTypeShippingAddress
+        fromSectionWithIdentifier:SectionIdentifierShipping];
+  }
+
+  if ([model hasItemForItemType:ItemTypeShippingOption
+              sectionIdentifier:SectionIdentifierShipping]) {
+    [model removeItemWithType:ItemTypeShippingOption
+        fromSectionWithIdentifier:SectionIdentifierShipping];
+  }
 
   CollectionViewItem* shippingAddressItem = [_dataSource shippingAddressItem];
   [shippingAddressItem setType:ItemTypeShippingAddress];
@@ -452,8 +458,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:shippingAddressItem
       toSectionWithIdentifier:SectionIdentifierShipping];
 
-  if ([_dataSource canShip]) {
-    CollectionViewItem* shippingOptionItem = [_dataSource shippingOptionItem];
+  CollectionViewItem* shippingOptionItem = [_dataSource shippingOptionItem];
+  if (shippingOptionItem) {
     [shippingOptionItem setType:ItemTypeShippingOption];
     shippingOptionItem.accessibilityTraits |= UIAccessibilityTraitButton;
     [model addItem:shippingOptionItem
@@ -461,13 +467,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 }
 
-- (void)populatePaymentMethodSection {
+- (void)populateModelForPaymentMethodSection {
   CollectionViewModel* model = self.collectionViewModel;
 
-  CollectionViewItem* paymentMethodSectionHeaderItem =
+  if ([model hasItemForItemType:ItemTypePaymentMethod
+              sectionIdentifier:SectionIdentifierPayment]) {
+    [model removeItemWithType:ItemTypePaymentMethod
+        fromSectionWithIdentifier:SectionIdentifierPayment];
+  }
+
+  PaymentsTextItem* paymentMethodSectionHeaderItem =
       [_dataSource paymentMethodSectionHeaderItem];
   if (paymentMethodSectionHeaderItem) {
     [paymentMethodSectionHeaderItem setType:ItemTypePaymentHeader];
+    [paymentMethodSectionHeaderItem
+        setTextColor:[[MDCPalette greyPalette] tint500]];
     [model setHeader:paymentMethodSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierPayment];
   }
@@ -479,13 +493,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
       toSectionWithIdentifier:SectionIdentifierPayment];
 }
 
-- (void)populateContactInfoSection {
+- (void)populateModelForContactInfoSection {
   CollectionViewModel* model = self.collectionViewModel;
 
-  CollectionViewItem* contactInfoSectionHeaderItem =
+  if ([model hasItemForItemType:ItemTypeContactInfo
+              sectionIdentifier:SectionIdentifierContactInfo]) {
+    [model removeItemWithType:ItemTypeContactInfo
+        fromSectionWithIdentifier:SectionIdentifierContactInfo];
+  }
+
+  PaymentsTextItem* contactInfoSectionHeaderItem =
       [_dataSource contactInfoSectionHeaderItem];
   if (contactInfoSectionHeaderItem) {
     [contactInfoSectionHeaderItem setType:ItemTypeContactInfoHeader];
+    [contactInfoSectionHeaderItem
+        setTextColor:[[MDCPalette greyPalette] tint500]];
     [model setHeader:contactInfoSectionHeaderItem
         forSectionWithIdentifier:SectionIdentifierContactInfo];
   }
@@ -495,6 +517,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
   contactInfoItem.accessibilityTraits |= UIAccessibilityTraitButton;
   [model addItem:contactInfoItem
       toSectionWithIdentifier:SectionIdentifierContactInfo];
+}
+
+- (void)reloadSectionWithIndex:(NSInteger)sectionIndex {
+  [self.collectionView
+      reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
+
+  // Update the pay button.
+  [_payButton setEnabled:[_dataSource canPay]];
+}
+
+#pragma mark - UIAccessibilityAction
+
+- (BOOL)accessibilityPerformEscape {
+  [self onCancel];
+  return YES;
 }
 
 @end

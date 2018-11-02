@@ -64,7 +64,7 @@ String GetDomainAndRegistry(const String& host, PrivateRegistryFilter filter) {
   return String(domain.data(), domain.length());
 }
 
-PassRefPtr<SharedBuffer> ParseDataURLAndPopulateResponse(
+scoped_refptr<SharedBuffer> ParseDataURLAndPopulateResponse(
     const KURL& url,
     ResourceResponse& response) {
   // The following code contains duplication of GetInfoFromDataURL() and
@@ -86,7 +86,7 @@ PassRefPtr<SharedBuffer> ParseDataURLAndPopulateResponse(
   if (!blink::IsSupportedMimeType(utf8_mime_type))
     return nullptr;
 
-  RefPtr<SharedBuffer> data =
+  scoped_refptr<SharedBuffer> data =
       SharedBuffer::Create(data_string.data(), data_string.size());
   response.SetHTTPStatusCode(200);
   response.SetHTTPStatusText("OK");
@@ -117,6 +117,10 @@ bool IsDataURLMimeTypeSupported(const KURL& url) {
 
 bool IsRedirectResponseCode(int response_code) {
   return net::HttpResponseHeaders::IsRedirectResponseCode(response_code);
+}
+
+bool IsCertificateTransparencyRequiredError(int error_code) {
+  return error_code == net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED;
 }
 
 }  // NetworkUtils

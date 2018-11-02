@@ -7,12 +7,15 @@
 
 #include <stddef.h>
 
+#include <utility>
+#include <vector>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 class AutocompleteInput;
 

@@ -10,9 +10,8 @@
 #include "base/macros.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "components/arc/common/audio.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 class BrowserContext;
@@ -23,7 +22,7 @@ namespace arc {
 class ArcBridgeService;
 
 class ArcAudioBridge : public KeyedService,
-                       public InstanceHolder<mojom::AudioInstance>::Observer,
+                       public ConnectionObserver<mojom::AudioInstance>,
                        public mojom::AudioHost,
                        public chromeos::CrasAudioHandler::AudioObserver {
  public:
@@ -35,9 +34,9 @@ class ArcAudioBridge : public KeyedService,
                  ArcBridgeService* bridge_service);
   ~ArcAudioBridge() override;
 
-  // InstanceHolder<mojom::AudioInstance>::Observer overrides.
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::AudioInstance> overrides.
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // mojom::AudioHost overrides.
   void ShowVolumeControls() override;
@@ -53,8 +52,6 @@ class ArcAudioBridge : public KeyedService,
   void SendVolumeState();
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
-
-  mojo::Binding<mojom::AudioHost> binding_;
 
   chromeos::CrasAudioHandler* cras_audio_handler_ = nullptr;
 

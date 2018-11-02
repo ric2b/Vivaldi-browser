@@ -232,7 +232,7 @@ class NetworkIconImageSource : public gfx::CanvasImageSource {
     return gfx::ImageSkia(base::WrapUnique(source), source->size());
   }
 
-  ~NetworkIconImageSource() override {}
+  ~NetworkIconImageSource() override = default;
 
   // gfx::CanvasImageSource:
   void Draw(gfx::Canvas* canvas) override {
@@ -540,7 +540,7 @@ bool NetworkIconImpl::UpdateWirelessStrengthIndex(const NetworkState* network) {
 bool NetworkIconImpl::UpdateCellularState(const NetworkState* network) {
   bool dirty = false;
   const Badge technology_badge = BadgeForNetworkTechnology(network, icon_type_);
-  if (technology_badge == technology_badge_) {
+  if (technology_badge != technology_badge_) {
     technology_badge_ = technology_badge;
     dirty = true;
   }
@@ -674,7 +674,7 @@ SignalStrengthImageSource::SignalStrengthImageSource(ImageType image_type,
                                 GetSizeForIconType(icon_type),
                                 signal_strength) {}
 
-SignalStrengthImageSource::~SignalStrengthImageSource() {}
+SignalStrengthImageSource::~SignalStrengthImageSource() = default;
 
 void SignalStrengthImageSource::set_color(SkColor color) {
   color_ = color;
@@ -890,13 +890,6 @@ int GetCellularUninitializedMsg() {
 
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
 
-  // Never show messages if the list of Cellular networks is non-empty.
-  NetworkStateHandler::NetworkStateList cellular_networks;
-  handler->GetVisibleNetworkListByType(chromeos::NetworkTypePattern::Cellular(),
-                                       &cellular_networks);
-  if (!cellular_networks.empty())
-    return 0;
-
   if (handler->GetTechnologyState(NetworkTypePattern::Cellular()) ==
       NetworkStateHandler::TECHNOLOGY_UNINITIALIZED) {
     s_uninitialized_msg = IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR;
@@ -1014,6 +1007,30 @@ void PurgeNetworkIconCache() {
   PurgeIconMap(ICON_TYPE_DEFAULT_VIEW, network_paths);
   PurgeIconMap(ICON_TYPE_LIST, network_paths);
   PurgeIconMap(ICON_TYPE_MENU_LIST, network_paths);
+}
+
+SignalStrength GetSignalStrengthForNetwork(
+    const chromeos::NetworkState* network) {
+  if (!network->Matches(NetworkTypePattern::Wireless()))
+    return SignalStrength::NOT_WIRELESS;
+
+  // Decide whether the signal is considered weak, medium or strong based on the
+  // strength index. Each signal strength corresponds to a bucket which
+  // attempted to be split evenly from |kNumNetworkImages| - 1. Remainders go
+  // first to the lowest bucket and then the second lowest bucket.
+  const int index = StrengthIndex(network->signal_strength());
+  const int seperations = kNumNetworkImages - 1;
+  const int bucket_size = seperations / 3;
+
+  const int weak_max = bucket_size + static_cast<int>(seperations % 3 != 0);
+  const int medium_max =
+      weak_max + bucket_size + static_cast<int>(seperations % 3 == 2);
+  if (index <= weak_max)
+    return SignalStrength::WEAK;
+  else if (index <= medium_max)
+    return SignalStrength::MEDIUM;
+
+  return SignalStrength::STRONG;
 }
 
 }  // namespace network_icon

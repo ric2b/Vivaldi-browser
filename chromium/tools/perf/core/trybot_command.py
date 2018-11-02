@@ -20,8 +20,6 @@ import urllib2
 from core import benchmark_finders
 from core import path_util
 
-from telemetry import benchmark
-from telemetry import decorators
 from telemetry.util import command_line
 from telemetry.util import matching
 
@@ -278,8 +276,8 @@ class Trybot(command_line.ArgParseCommand):
     """Return whether benchmark will be disabled on trybot platform.
 
     Note that we cannot tell with certainty whether the benchmark will be
-    disabled on the trybot platform since the disable logic in ShouldDisable()
-    can be very dynamic and can only be verified on the trybot server platform.
+    disabled on the trybot platform since the disable logic can be very dynamic
+    and can only be verified on the trybot server platform.
 
     We are biased on the side of enabling the benchmark, and attempt to
     early discover whether the benchmark will be disabled as our best.
@@ -293,32 +291,11 @@ class Trybot(command_line.ArgParseCommand):
       disabled, and |reason| is a string that shows the reason why we think the
       benchmark is disabled for sure.
     """
-    benchmark_name = benchmark_class.Name()
-    benchmark_disabled_strings = decorators.GetDisabledAttributes(
-        benchmark_class)
-    if 'all' in benchmark_disabled_strings:
-      return True, 'Benchmark %s is disabled on all platform.' % benchmark_name
-    if trybot_name == 'all':
-      return False, ''
-    trybot_platform = _GetBotPlatformFromTrybotName(trybot_name)
-    if trybot_platform in benchmark_disabled_strings:
-      return True, (
-          "Benchmark %s is disabled on %s, and trybot's platform is %s." %
-          (benchmark_name, ', '.join(benchmark_disabled_strings),
-           trybot_platform))
-    benchmark_enabled_strings = decorators.GetEnabledAttributes(benchmark_class)
-    if (benchmark_enabled_strings and
-        trybot_platform not in benchmark_enabled_strings and
-        'all' not in benchmark_enabled_strings):
-      return True, (
-          "Benchmark %s is only enabled on %s, and trybot's platform is %s." %
-          (benchmark_name, ', '.join(benchmark_enabled_strings),
-           trybot_platform))
-    if benchmark_class.ShouldDisable != benchmark.Benchmark.ShouldDisable:
-      logging.warning(
-          'Benchmark %s has ShouldDisable() method defined. If your trybot run '
-          'does not produce any results, it is possible that the benchmark '
-          'is disabled on the target trybot platform.', benchmark_name)
+    # TODO(rnephew): This method has been a noop for awhile now. Decorators and
+    # ShouldDisable() are deprecated in favor of StoryExpectations(). That
+    # is in turn being replaced by 1-click disabling via SoM. Once 1-click
+    # diabling is ready this should be updated to use it.
+    del benchmark_class, trybot_name  # unused until updated.
     return False, ''
 
   @classmethod
@@ -370,7 +347,7 @@ E.g.,
     """Sends a tryjob to a perf trybot.
 
     This creates a branch, telemetry-tryjob, switches to that branch, edits
-    the bisect config, commits it, uploads the CL to rietveld, and runs a
+    the bisect config, commits it, uploads the CL, and runs a
     tryjob on the given bot.
     """
     if extra_args is None:
@@ -415,6 +392,12 @@ E.g.,
       target_arch = 'x64'
     else:
       arguments.insert(1, '--browser=release')
+
+    dummy_parser = argparse.ArgumentParser()
+    dummy_parser.add_argument('--output-format', action='append')
+    args, _ = dummy_parser.parse_known_args(arguments)
+    if not args.output_format or 'html' not in args.output_format:
+      arguments.append('--output-format=html')
 
     command = ' '.join(arguments)
 
@@ -464,7 +447,7 @@ E.g.,
     if output:
       raise TrybotError(
           'Cannot send a try job with a dirty tree.\nPlease commit locally and '
-          'upload your changes to rietveld in %s repository.' % repo_path)
+          'upload your changes for review in %s repository.' % repo_path)
 
     return (repo_name, branch_name)
 
@@ -531,12 +514,11 @@ E.g.,
       except OSError:
         pass
 
-    # Make sure the local commits are uploaded to rietveld.
     if not json_output.get('issue'):
       raise TrybotError(
           'PLEASE NOTE: The workflow for Perf Try jobs is changed. '
           'In order to run the perf try job, you must first upload your '
-          'changes to rietveld.')
+          'changes for review.')
     return json_output.get('issue_url')
 
   def _AttemptTryjob(self, options, extra_args):
@@ -571,10 +553,10 @@ E.g.,
               branch_name, repo_info.get('url'))
         deps_override = {repo_info.get('src'): options.deps_revision}
 
-      rietveld_url = self._GetChangeList()
+      review_url = self._GetChangeList()
       print ('\nRunning try job....\nview progress here %s.'
              '\n\tRepo Name: %s\n\tPath: %s\n\tBranch: %s' % (
-                 rietveld_url, repo_name, repo_path, branch_name))
+                 review_url, repo_name, repo_path, branch_name))
 
       for bot_platform in self._builder_names:
         if not self._builder_names[bot_platform]:
@@ -624,4 +606,4 @@ E.g.,
       git_try_command.extend(['-b', bot])
 
     RunGit(git_try_command, error_msg_on_fail)
-    print 'Perf Try job sent to rietveld for %s platform.' % bot_platform
+    print 'Perf Try job started for %s platform.' % bot_platform

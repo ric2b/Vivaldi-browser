@@ -56,8 +56,9 @@ XPathExpression* XPathExpression::CreateExpression(
   return expr;
 }
 
-DEFINE_TRACE(XPathExpression) {
+void XPathExpression::Trace(blink::Visitor* visitor) {
   visitor->Trace(top_expression_);
+  ScriptWrappable::Trace(visitor);
 }
 
 XPathResult* XPathExpression::evaluate(Node* context_node,

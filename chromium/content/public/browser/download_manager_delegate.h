@@ -14,7 +14,12 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_item.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/save_page_type.h"
+
+namespace download {
+class InProgressCache;
+}  // namespace download
 
 namespace content {
 
@@ -67,6 +72,9 @@ using DownloadOpenDelayedCallback = base::Callback<void(bool)>;
 using CheckForFileExistenceCallback = base::OnceCallback<void(bool result)>;
 
 using DownloadIdCallback = base::Callback<void(uint32_t)>;
+
+// Called on whether a download is allowed to continue.
+using CheckDownloadAllowedCallback = base::OnceCallback<void(bool /*allow*/)>;
 
 // Browser's download manager: manages all downloads and destination view.
 class CONTENT_EXPORT DownloadManagerDelegate {
@@ -123,6 +131,9 @@ class CONTENT_EXPORT DownloadManagerDelegate {
                           base::FilePath* download_save_dir,
                           bool* skip_dir_check) {}
 
+  // Returns the metadata cache for in-progress downloads.
+  virtual download::InProgressCache* GetInProgressCache();
+
   // Asks the user for the path to save a page. The delegate calls the callback
   // to give the answer.
   virtual void ChooseSavePath(
@@ -148,6 +159,10 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   // Opens the file associated with this download.
   virtual void OpenDownload(DownloadItem* download) {}
 
+  // Returns whether this is the most recent download in the rare event where
+  // multiple downloads are associated with the same file path.
+  virtual bool IsMostRecentDownloadItemAtFilePath(DownloadItem* download);
+
   // Shows the download via the OS shell.
   virtual void ShowDownloadInShell(DownloadItem* download) {}
 
@@ -162,6 +177,14 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   //
   // This GUID is only used on Windows.
   virtual std::string ApplicationClientIdForFileScanning() const;
+
+  // Checks whether download is allowed to continue. |check_download_allowed_cb|
+  // is called with the decision on completion.
+  virtual void CheckDownloadAllowed(
+      const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+      const GURL& url,
+      const std::string& request_method,
+      CheckDownloadAllowedCallback check_download_allowed_cb);
 
  protected:
   virtual ~DownloadManagerDelegate();

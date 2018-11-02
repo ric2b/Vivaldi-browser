@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/ssl/common_name_mismatch_handler.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/browser/ssl/ssl_error_assistant.pb.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/ssl_errors/error_classification.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -41,6 +43,11 @@ namespace network_time {
 class NetworkTimeTracker;
 }
 
+extern const base::Feature kMITMSoftwareInterstitial;
+extern const base::Feature kCaptivePortalInterstitial;
+extern const base::Feature kCaptivePortalCertificateList;
+extern const base::Feature kSuperfishInterstitial;
+
 // This class is responsible for deciding what type of interstitial to display
 // for an SSL validation error and actually displaying it. The display of the
 // interstitial might be delayed by a few seconds while trying to determine the
@@ -49,9 +56,13 @@ class NetworkTimeTracker;
 // - Check for a known captive portal certificate SPKI
 // - Wait for a name-mismatch suggested URL
 // - or Wait for a captive portal result to arrive.
+//
 // Based on the result of these checks, SSLErrorHandler will show a customized
 // interstitial, redirect to a different suggested URL, or, if all else fails,
-// show the normal SSL interstitial.
+// show the normal SSL interstitial. When --committed--interstitials is enabled,
+// it passes a constructed blocking page to the |blocking_page_ready_callback|
+// that was given to HandleSSLError(), instead of showing the interstitial
+// directly.
 //
 // This class should only be used on the UI thread because its implementation
 // uses captive_portal::CaptivePortalService which can only be accessed on the
@@ -61,11 +72,15 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
                         public content::NotificationObserver {
  public:
   typedef base::Callback<void(content::WebContents*)> TimerStartedCallback;
+  typedef base::OnceCallback<void(
+      std::unique_ptr<security_interstitials::SecurityInterstitialPage>)>
+      BlockingPageReadyCallback;
 
   ~SSLErrorHandler() override;
 
   // Events for UMA. Do not rename or remove values, add new values to the end.
   // Public for testing.
+  // If you change this, change the values in CaptivePortalTest.java as well.
   enum UMAEvent {
     HANDLE_ALL = 0,
     SHOW_CAPTIVE_PORTAL_INTERSTITIAL_NONOVERRIDABLE = 1,
@@ -79,6 +94,7 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
     CAPTIVE_PORTAL_CERT_FOUND = 9,
     WWW_MISMATCH_FOUND_IN_SAN = 10,
     SHOW_MITM_SOFTWARE_INTERSTITIAL = 11,
+    OS_REPORTS_CAPTIVE_PORTAL = 12,
     SSL_ERROR_HANDLER_EVENT_COUNT
   };
 
@@ -88,6 +104,7 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
    public:
     virtual ~Delegate() {}
     virtual void CheckForCaptivePortal() = 0;
+    virtual bool DoesOSReportCaptivePortal() = 0;
     virtual bool GetSuggestedUrl(const std::vector<std::string>& dns_names,
                                  GURL* suggested_url) const = 0;
     virtual void CheckSuggestedUrl(
@@ -105,17 +122,23 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
         ssl_errors::ClockState clock_state) = 0;
   };
 
-  // Entry point for the class. The parameters are the same as SSLBlockingPage
-  // constructor.
+  // Entry point for the class. All parameters except
+  // |blocking_page_ready_callback| are the same as SSLBlockingPage constructor.
+  // |blocking_page_ready_callback| is intended for committed interstitials. If
+  // |blocking_page_ready_callback| is null, this function will create a
+  // blocking page and call Show() on it. Otherwise, this function creates an
+  // interstitial and passes it to |blocking_page_ready_callback|.
   static void HandleSSLError(
       content::WebContents* web_contents,
       int cert_error,
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
-      int options_mask,
+      bool should_ssl_errors_be_fatal,
+      bool expired_previous_decision,
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
       const base::Callback<void(content::CertificateRequestResultType)>&
-          callback);
+          decision_callback,
+      BlockingPageReadyCallback blocking_page_ready_callback);
 
   // Sets the binary proto for SSL error assistant. The binary proto
   // can be downloaded by the component updater, or set by tests.
@@ -135,9 +158,9 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   static void SetEnterpriseManagedForTesting(bool enterprise_managed);
   static bool IsEnterpriseManagedFlagSetForTesting();
   static std::string GetHistogramNameForTesting();
-  static void SetErrorAssistantConfig(
-      std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig>
-          config_proto);
+  static int GetErrorAssistantProtoVersionIdForTesting();
+  static void SetOSReportsCaptivePortalForTesting(
+      bool os_reports_captive_portal);
   bool IsTimerRunningForTesting() const;
 
  protected:
@@ -157,6 +180,8 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   void StartHandlingError();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(SSLErrorHandlerTest, CalculateOptionsMask);
+
   void ShowCaptivePortalInterstitial(const GURL& landing_url);
   void ShowMITMSoftwareInterstitial(const std::string& mitm_software_name,
                                     bool is_enterprise_managed);
@@ -192,13 +217,21 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
 
   bool IsOnlyCertError(net::CertStatus only_cert_error_expected) const;
 
+  // Calculates a mask encoded using flags in SSLErrorUI::SSLErrorOptionsMask.
+  static int CalculateOptionsMask(int cert_error,
+                                  bool hard_override_disabled,
+                                  bool should_ssl_errors_be_fatal,
+                                  bool is_superfish,
+                                  bool expired_previous_decision);
+
   std::unique_ptr<Delegate> delegate_;
   content::WebContents* const web_contents_;
   Profile* const profile_;
   const int cert_error_;
   const net::SSLInfo ssl_info_;
   const GURL request_url_;
-  base::Callback<void(content::CertificateRequestResultType)> callback_;
+  base::Callback<void(content::CertificateRequestResultType)>
+      decision_callback_;
 
   content::NotificationRegistrar registrar_;
   base::OneShotTimer timer_;

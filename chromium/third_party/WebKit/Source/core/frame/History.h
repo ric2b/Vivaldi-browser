@@ -44,8 +44,7 @@ class SecurityOrigin;
 class ScriptState;
 
 // This class corresponds to the History interface.
-class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
-                                  public ScriptWrappable,
+class CORE_EXPORT History final : public ScriptWrappable,
                                   public DOMWindowClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(History);
@@ -60,12 +59,12 @@ class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
   void forward(ScriptState*, ExceptionState&);
   void go(ScriptState*, int delta, ExceptionState&);
 
-  void pushState(RefPtr<SerializedScriptValue>,
+  void pushState(scoped_refptr<SerializedScriptValue>,
                  const String& title,
                  const String& url,
                  ExceptionState&);
 
-  void replaceState(RefPtr<SerializedScriptValue> data,
+  void replaceState(scoped_refptr<SerializedScriptValue> data,
                     const String& title,
                     const String& url,
                     ExceptionState& exception_state) {
@@ -79,7 +78,7 @@ class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
   bool stateChanged() const;
   bool IsSameAsCurrentState(SerializedScriptValue*) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(HistoryTest, CanChangeToURL);
@@ -94,7 +93,7 @@ class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
 
   KURL UrlForState(const String& url);
 
-  void StateObjectAdded(RefPtr<SerializedScriptValue>,
+  void StateObjectAdded(scoped_refptr<SerializedScriptValue>,
                         const String& title,
                         const String& url,
                         HistoryScrollRestorationType,
@@ -105,7 +104,7 @@ class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
 
   bool ShouldThrottleStateObjectChanges();
 
-  RefPtr<SerializedScriptValue> last_state_object_requested_;
+  scoped_refptr<SerializedScriptValue> last_state_object_requested_;
   struct {
     int count;
     TimeTicks last_updated;

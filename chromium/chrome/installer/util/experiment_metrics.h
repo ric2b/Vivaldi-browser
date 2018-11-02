@@ -73,6 +73,12 @@ struct ExperimentMetrics {
     // User logged off (gracefully) without interacting with toast.
     kUserLogOff = 15,
 
+    // Another Chrome launch closed the toast.
+    kOtherLaunch = 16,
+
+    // The toast was closed via external means.
+    kOtherClose = 17,
+
     NUM_STATES
   };
 

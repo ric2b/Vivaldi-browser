@@ -20,9 +20,9 @@ namespace net {
 namespace ct {
 
 STHDistributor::STHDistributor()
-    : observer_list_(base::ObserverList<STHObserver>::NOTIFY_EXISTING_ONLY) {}
+    : observer_list_(base::ObserverListPolicy::EXISTING_ONLY) {}
 
-STHDistributor::~STHDistributor() {}
+STHDistributor::~STHDistributor() = default;
 
 void STHDistributor::NewSTHObserved(const SignedTreeHead& sth) {
   auto it = std::find_if(observed_sths_.begin(), observed_sths_.end(),

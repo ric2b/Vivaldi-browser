@@ -29,6 +29,9 @@
 #include "net/cert/cert_status_flags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
+#include "app/vivaldi_apptools.h"
+#include "content/public/browser/guest_mode.h"
+
 namespace password_manager {
 
 ContentPasswordManagerDriver::ContentPasswordManagerDriver(
@@ -105,6 +108,10 @@ void ContentPasswordManagerDriver::AutofillDataReceived(
 void ContentPasswordManagerDriver::GeneratedPasswordAccepted(
     const base::string16& password) {
   GetPasswordGenerationAgent()->GeneratedPasswordAccepted(password);
+}
+
+void ContentPasswordManagerDriver::UserSelectedManualGenerationOption() {
+  GetPasswordGenerationAgent()->UserSelectedManualGenerationOption();
 }
 
 void ContentPasswordManagerDriver::FillSuggestion(
@@ -328,6 +335,14 @@ void ContentPasswordManagerDriver::UserModifiedPasswordField() {
 bool ContentPasswordManagerDriver::CheckChildProcessSecurityPolicy(
     const GURL& url,
     BadMessageReason reason) {
+  // Renderer-side logic should prevent any password manager usage for
+  // about:blank frames as well as data URLs.  If that's not the case, kill the
+  // renderer, as it might be exploited.
+  if (url.SchemeIs(url::kAboutScheme) || url.SchemeIs(url::kDataScheme)) {
+    bad_message::ReceivedBadMessage(render_frame_host_->GetProcess(), reason);
+    return false;
+  }
+
   content::ChildProcessSecurityPolicy* policy =
       content::ChildProcessSecurityPolicy::GetInstance();
   if (!policy->CanAccessDataForOrigin(render_frame_host_->GetProcess()->GetID(),
@@ -374,6 +389,15 @@ ContentPasswordManagerDriver::GetPasswordGenerationAgent() {
 
 gfx::RectF ContentPasswordManagerDriver::TransformToRootCoordinates(
     const gfx::RectF& bounds_in_frame_coordinates) {
+  if (vivaldi::IsVivaldiRunning()) {
+    // Same code in
+    // ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates
+    // Both should be in sync.
+    if (!content::GuestMode::IsCrossProcessFrameGuest(
+        content::WebContents::FromRenderFrameHost(render_frame_host_))) {
+      return bounds_in_frame_coordinates;
+    }
+  }
   content::RenderWidgetHostView* rwhv = render_frame_host_->GetView();
   if (!rwhv)
     return bounds_in_frame_coordinates;

@@ -7,13 +7,13 @@
 #include <algorithm>
 #include <vector>
 
+#include "ash/app_list/model/search_result.h"
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_view_delegate.h"
-#include "ui/app_list/search_result.h"
 #include "ui/app_list/views/app_list_main_view.h"
 #include "ui/app_list/views/search_result_view.h"
 #include "ui/events/event.h"
@@ -24,8 +24,7 @@
 
 namespace {
 
-constexpr int kMaxResults = 6;
-constexpr int kMaxResultsFullscreen = 5;
+constexpr int kMaxResults = 5;
 constexpr int kTimeoutIndicatorHeight = 2;
 constexpr int kTimeoutFramerate = 60;
 constexpr SkColor kTimeoutIndicatorColor =
@@ -40,14 +39,11 @@ SearchResultListView::SearchResultListView(AppListMainView* main_view,
     : main_view_(main_view),
       view_delegate_(view_delegate),
       results_container_(new views::View),
-      auto_launch_indicator_(new views::View),
-      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
+      auto_launch_indicator_(new views::View) {
   results_container_->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical));
 
-  const int max_results =
-      is_fullscreen_app_list_enabled_ ? kMaxResultsFullscreen : kMaxResults;
-  for (int i = 0; i < max_results; ++i)
+  for (int i = 0; i < kMaxResults; ++i)
     results_container_->AddChildView(new SearchResultView(this));
   AddChildView(results_container_);
 
@@ -74,6 +70,11 @@ void SearchResultListView::UpdateAutoLaunchState() {
 }
 
 bool SearchResultListView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (features::IsAppListFocusEnabled()) {
+    // TODO(weidongg/766807) Remove this function when the flag is enabled by
+    // default.
+    return false;
+  }
   if (selected_index() >= 0 &&
       results_container_->child_at(selected_index())->OnKeyPressed(event)) {
     return true;
@@ -95,12 +96,10 @@ bool SearchResultListView::OnKeyPressed(const ui::KeyEvent& event) {
       selection_index = selected_index() + 1;
       break;
     case ui::VKEY_LEFT:
-      if (is_fullscreen_app_list_enabled_)
-        selection_index = selected_index() - forward_dir;
+      selection_index = selected_index() - forward_dir;
       break;
     case ui::VKEY_RIGHT:
-      if (is_fullscreen_app_list_enabled_)
-        selection_index = selected_index() + forward_dir;
+      selection_index = selected_index() + forward_dir;
       break;
     default:
       break;
@@ -170,6 +169,16 @@ views::View* SearchResultListView::GetSelectedView() const {
   return IsValidSelectionIndex(selected_index())
              ? GetResultViewAt(selected_index())
              : nullptr;
+}
+
+views::View* SearchResultListView::SetFirstResultSelected(bool selected) {
+  DCHECK(results_container_->has_children());
+  if (num_results() <= 0)
+    return nullptr;
+  SearchResultView* search_result_view =
+      static_cast<SearchResultView*>(results_container_->child_at(0));
+  search_result_view->SetSelected(selected);
+  return search_result_view;
 }
 
 int SearchResultListView::DoUpdate() {

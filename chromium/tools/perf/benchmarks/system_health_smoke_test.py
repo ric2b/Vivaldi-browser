@@ -45,10 +45,11 @@ _DISABLED_TESTS = frozenset({
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.long_running:tools:gmail-foreground',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.long_running:tools:gmail-background',  # pylint: disable=line-too-long
 
-  # Disable media tests in CQ. crbug.com/649392
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:media:soundcloud',  # pylint: disable=line-too-long
+  # crbug.com/769263
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:soundcloud',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:google_play_music',  # pylint: disable=line-too-long
+
+  # crbug.com/769809
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse_accessibility:tools:gmail_compose', # pylint: disable=line-too-long
 
   # crbug.com/
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:nytimes',  # pylint: disable=line-too-long
@@ -63,14 +64,12 @@ _DISABLED_TESTS = frozenset({
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:drive',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:gmail',  # pylint: disable=line-too-long
 
-  # crbug.com/699966
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.multitab:misc:typical24', # pylint: disable=line-too-long
   # crbug.com/725386
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:social:twitter', # pylint: disable=line-too-long
-
-  # crbug.com/755969
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:search:google', # pylint: disable=line-too-long
 })
+
+
+MAX_NUM_VALUES = 50000
 
 
 def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
@@ -96,12 +95,21 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
         return story_set
 
     options = GenerateBenchmarkOptions(benchmark_class)
+
+    # Prevent benchmarks from accidentally trying to upload too much data to the
+    # chromeperf dashboard. The number of values uploaded is equal to (the
+    # average number of values produced by a single story) * (1 + (the number of
+    # stories)). The "1 + " accounts for values summarized across all stories.
+    # We can approximate "the average number of values produced by a single
+    # story" as the number of values produced by the given story.
+    # pageset_repeat doesn't matter because values are summarized across
+    # repetitions before uploading.
+    story_set = benchmark_class().CreateStorySet(options)
+    SinglePageBenchmark.MAX_NUM_VALUES = MAX_NUM_VALUES / len(story_set.stories)
+
     possible_browser = browser_finder.FindBrowser(options)
     if possible_browser is None:
       self.skipTest('Cannot find the browser to run the test.')
-    if (SinglePageBenchmark.ShouldDisable(possible_browser) or
-        not decorators.IsEnabled(benchmark_class, possible_browser)[0]):
-      self.skipTest('Benchmark %s is disabled' % SinglePageBenchmark.Name())
 
     if self.id() in _DISABLED_TESTS:
       self.skipTest('Test is explicitly disabled')

@@ -49,7 +49,7 @@ static LayoutRect ScrollControlVisualRect(
   // transform space than their contained box (the scrollbarPaintOffset
   // transform node).
   if (!visual_rect.IsEmpty() &&
-      !RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+      !RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     // PaintInvalidatorContext::mapLocalRectToPaintInvalidationBacking() treats
     // the rect as in flipped block direction, but scrollbar controls don't
     // flip for block direction, so flip here to undo the flip in the function.
@@ -68,19 +68,20 @@ static bool InvalidatePaintOfScrollControlIfNeeded(
     const LayoutBoxModelObject& paint_invalidation_container) {
   bool should_invalidate_new_rect = needs_paint_invalidation;
   if (new_visual_rect != previous_visual_rect) {
-    // TODO(crbug.com/732612)): Implement partial raster invalidation for scroll
-    // controls.
-    if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
       ObjectPaintInvalidator(box).InvalidatePaintUsingContainer(
           paint_invalidation_container, previous_visual_rect,
           PaintInvalidationReason::kScrollControl);
     }
     should_invalidate_new_rect = true;
+  } else if (previous_visual_rect.IsEmpty()) {
+    DCHECK(new_visual_rect.IsEmpty());
+    // Do not issue an empty invalidation.
+    should_invalidate_new_rect = false;
   }
+
   if (should_invalidate_new_rect) {
-    // TODO(crbug.com/732612): Implement partial raster invalidation for scroll
-    // controls.
-    if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
       ObjectPaintInvalidator(box).InvalidatePaintUsingContainer(
           paint_invalidation_container, new_visual_rect,
           PaintInvalidationReason::kScrollControl);
@@ -120,7 +121,7 @@ static LayoutRect InvalidatePaintOfScrollbarIfNeeded(
     // invalidated.
     needs_paint_invalidation = false;
     DCHECK(!graphics_layer->DrawsContent() ||
-           graphics_layer->GetPaintController().CacheIsEmpty());
+           graphics_layer->GetPaintController().GetPaintArtifact().IsEmpty());
   }
 
   // Invalidate the box's display item client if the box's padding box size is
@@ -189,12 +190,12 @@ void PaintInvalidationCapableScrollableArea::
           ScrollCornerNeedsPaintInvalidation(), box,
           paint_invalidation_container)) {
     SetScrollCornerAndResizerVisualRect(scroll_corner_and_resizer_visual_rect);
-    if (LayoutScrollbarPart* scroll_corner = this->ScrollCorner()) {
+    if (LayoutScrollbarPart* scroll_corner = ScrollCorner()) {
       ObjectPaintInvalidator(*scroll_corner)
           .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
               PaintInvalidationReason::kScrollControl);
     }
-    if (LayoutScrollbarPart* resizer = this->Resizer()) {
+    if (LayoutScrollbarPart* resizer = Resizer()) {
       ObjectPaintInvalidator(*resizer)
           .InvalidateDisplayItemClientsIncludingNonCompositingDescendants(
               PaintInvalidationReason::kScrollControl);
@@ -213,24 +214,47 @@ void PaintInvalidationCapableScrollableArea::ClearPreviousVisualRects() {
 void PaintInvalidationCapableScrollableArea::SetHorizontalScrollbarVisualRect(
     const LayoutRect& rect) {
   horizontal_scrollbar_visual_rect_ = rect;
-  if (Scrollbar* scrollbar = HorizontalScrollbar())
-    scrollbar->SetVisualRect(rect);
+
+  if (Scrollbar* scrollbar = HorizontalScrollbar()) {
+    // Composited scrollbar paints into its own backing, so set its visual rect
+    // to the visual rect of the backing.
+    if (const auto* graphics_layer = LayerForHorizontalScrollbar())
+      scrollbar->SetVisualRect(graphics_layer->VisualRect());
+    else
+      scrollbar->SetVisualRect(rect);
+  }
 }
 
 void PaintInvalidationCapableScrollableArea::SetVerticalScrollbarVisualRect(
     const LayoutRect& rect) {
   vertical_scrollbar_visual_rect_ = rect;
-  if (Scrollbar* scrollbar = VerticalScrollbar())
-    scrollbar->SetVisualRect(rect);
+
+  if (Scrollbar* scrollbar = VerticalScrollbar()) {
+    // Composited scrollbar paints into its own backing, so set its visual rect
+    // to the visual rect of the backing.
+    if (const auto* layer = LayerForVerticalScrollbar())
+      scrollbar->SetVisualRect(layer->VisualRect());
+    else
+      scrollbar->SetVisualRect(rect);
+  }
 }
 
 void PaintInvalidationCapableScrollableArea::
     SetScrollCornerAndResizerVisualRect(const LayoutRect& rect) {
   scroll_corner_and_resizer_visual_rect_ = rect;
-  if (LayoutScrollbarPart* scroll_corner = this->ScrollCorner())
-    scroll_corner->SetVisualRect(rect);
-  if (LayoutScrollbarPart* resizer = this->Resizer())
-    resizer->SetVisualRect(rect);
+
+  // Composited scroll corner and resizer paint into their own backing, so set
+  // their visual rect to the visual rect of the backing.
+  const auto* layer = LayerForScrollCorner();
+  auto custom_visual_rect = layer ? layer->VisualRect() : rect;
+  if (LayoutScrollbarPart* scroll_corner = ScrollCorner()) {
+    scroll_corner->GetMutableForPainting().FirstFragment().SetVisualRect(
+        custom_visual_rect);
+  }
+  if (LayoutScrollbarPart* resizer = Resizer()) {
+    resizer->GetMutableForPainting().FirstFragment().SetVisualRect(
+        custom_visual_rect);
+  }
 }
 
 void PaintInvalidationCapableScrollableArea::

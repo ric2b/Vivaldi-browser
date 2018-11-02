@@ -5,6 +5,8 @@
 #include "core/html/parser/CSSPreloadScanner.h"
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/testing/DummyPageHolder.h"
@@ -18,6 +20,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/text/TextEncoding.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -26,7 +29,6 @@ namespace blink {
 namespace {
 
 class CSSMockHTMLResourcePreloader : public HTMLResourcePreloader {
-  WTF_MAKE_NONCOPYABLE(CSSMockHTMLResourcePreloader);
 
  public:
   explicit CSSMockHTMLResourcePreloader(Document& document,
@@ -46,6 +48,8 @@ class CSSMockHTMLResourcePreloader : public HTMLResourcePreloader {
   }
 
   const char* expected_referrer_;
+
+  DISALLOW_COPY_AND_ASSIGN(CSSMockHTMLResourcePreloader);
 };
 
 class PreloadRecordingCSSPreloaderResourceClient final
@@ -81,7 +85,7 @@ TEST_F(CSSPreloadScannerTest, ScanFromResourceClient) {
   CSSMockHTMLResourcePreloader* preloader =
       new CSSMockHTMLResourcePreloader(dummy_page_holder->GetDocument());
 
-  KURL url(kParsedURLString, "http://127.0.0.1/foo.css");
+  KURL url("http://127.0.0.1/foo.css");
   CSSStyleSheetResource* resource =
       CSSStyleSheetResource::CreateForTest(url, UTF8Encoding());
   resource->SetStatus(ResourceStatus::kPending);
@@ -109,7 +113,7 @@ TEST_F(CSSPreloadScannerTest, DestroyClientBeforeDataSent) {
   Persistent<CSSMockHTMLResourcePreloader> preloader =
       new CSSMockHTMLResourcePreloader(dummy_page_holder->GetDocument());
 
-  KURL url(kParsedURLString, "http://127.0.0.1/foo.css");
+  KURL url("http://127.0.0.1/foo.css");
   Persistent<CSSStyleSheetResource> resource =
       CSSStyleSheetResource::CreateForTest(url, UTF8Encoding());
   resource->SetStatus(ResourceStatus::kPending);
@@ -136,14 +140,16 @@ TEST_F(CSSPreloadScannerTest, DontReadFromClearedData) {
   CSSMockHTMLResourcePreloader* preloader =
       new CSSMockHTMLResourcePreloader(dummy_page_holder->GetDocument());
 
-  KURL url(kParsedURLString, "http://127.0.0.1/foo.css");
+  KURL url("http://127.0.0.1/foo.css");
   CSSStyleSheetResource* resource =
       CSSStyleSheetResource::CreateForTest(url, UTF8Encoding());
 
   const char* data = "@import url('http://127.0.0.1/preload.css');";
   resource->AppendData(data, strlen(data));
-  ResourceError error(ResourceError::Domain::kTest, 0, url, "");
-  resource->FinishAsError(error);
+  ResourceError error = ResourceError::Failure(url);
+  resource->FinishAsError(error, dummy_page_holder->GetDocument()
+                                     .GetTaskRunner(TaskType::kUnspecedLoading)
+                                     .get());
 
   // Should not crash.
   PreloadRecordingCSSPreloaderResourceClient* resource_client =
@@ -164,7 +170,7 @@ TEST_F(CSSPreloadScannerTest, DoNotExpectValidDocument) {
   CSSMockHTMLResourcePreloader* preloader =
       new CSSMockHTMLResourcePreloader(dummy_page_holder->GetDocument());
 
-  KURL url(kParsedURLString, "http://127.0.0.1/foo.css");
+  KURL url("http://127.0.0.1/foo.css");
   CSSStyleSheetResource* resource =
       CSSStyleSheetResource::CreateForTest(url, UTF8Encoding());
   resource->SetStatus(ResourceStatus::kPending);
@@ -191,7 +197,7 @@ TEST_F(CSSPreloadScannerTest, ReferrerPolicyHeader) {
   CSSMockHTMLResourcePreloader* preloader = new CSSMockHTMLResourcePreloader(
       dummy_page_holder->GetDocument(), "http://127.0.0.1/foo.css");
 
-  KURL url(kParsedURLString, "http://127.0.0.1/foo.css");
+  KURL url("http://127.0.0.1/foo.css");
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
@@ -204,7 +210,7 @@ TEST_F(CSSPreloadScannerTest, ReferrerPolicyHeader) {
   PreloadRecordingCSSPreloaderResourceClient* resource_client =
       new PreloadRecordingCSSPreloaderResourceClient(resource, preloader);
 
-  KURL preload_url(kParsedURLString, "http://127.0.0.1/preload.css");
+  KURL preload_url("http://127.0.0.1/preload.css");
   Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
       preload_url, WrappedResourceResponse(ResourceResponse()), "");
 

@@ -42,7 +42,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
   // Is this navigation targeting an extension resource?
   const GURL& url = navigation_handle()->GetURL();
   bool url_has_extension_scheme = url.SchemeIs(kExtensionScheme);
-  url::Origin target_origin(url);
+  url::Origin target_origin = url::Origin::Create(url);
   const Extension* target_extension = nullptr;
   if (url_has_extension_scheme) {
     // "chrome-extension://" URL.
@@ -141,7 +141,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     // case of sandboxed extension resources, which commit with a null origin,
     // but are permitted to load non-webaccessible extension resources in
     // subframes.
-    if (url::Origin(ancestor->GetLastCommittedURL()) == target_origin)
+    if (url::Origin::Create(ancestor->GetLastCommittedURL()) == target_origin)
       continue;
     // Ignore DevTools, as it is allowed to embed extension pages.
     if (ancestor->GetLastCommittedURL().SchemeIs(
@@ -191,7 +191,7 @@ ExtensionNavigationThrottle::WillStartRequest() {
 content::NavigationThrottle::ThrottleCheckResult
 ExtensionNavigationThrottle::WillRedirectRequest() {
   ThrottleCheckResult result = WillStartOrRedirectRequest();
-  if (result == BLOCK_REQUEST) {
+  if (result.action() == BLOCK_REQUEST) {
     // TODO(nick): https://crbug.com/695421 means that BLOCK_REQUEST does not
     // work here. Once PlzNavigate is enabled 100%, just return |result|.
     return CANCEL;

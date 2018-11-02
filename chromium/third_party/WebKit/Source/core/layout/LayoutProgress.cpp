@@ -20,11 +20,11 @@
 
 #include "core/layout/LayoutProgress.h"
 
-#include "core/dom/TaskRunnerHelper.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/html/HTMLProgressElement.h"
 #include "core/layout/LayoutTheme.h"
-#include "platform/wtf/CurrentTime.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -35,10 +35,10 @@ LayoutProgress::LayoutProgress(HTMLProgressElement* element)
       animation_repeat_interval_(0),
       animation_duration_(0),
       animating_(false),
-      animation_timer_(TaskRunnerHelper::Get(TaskType::kUnspecedTimer,
-                                             &element->GetDocument()),
-                       this,
-                       &LayoutProgress::AnimationTimerFired) {}
+      animation_timer_(
+          element->GetDocument().GetTaskRunner(TaskType::kUnspecedTimer),
+          this,
+          &LayoutProgress::AnimationTimerFired) {}
 
 LayoutProgress::~LayoutProgress() {}
 
@@ -108,7 +108,7 @@ void LayoutProgress::UpdateAnimationState() {
 }
 
 HTMLProgressElement* LayoutProgress::ProgressElement() const {
-  return toHTMLProgressElement(GetNode());
+  return ToHTMLProgressElement(GetNode());
 }
 
 }  // namespace blink

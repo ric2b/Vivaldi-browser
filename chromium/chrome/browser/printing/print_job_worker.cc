@@ -59,9 +59,14 @@ class PrintingContextDelegate : public PrintingContext::Delegate {
   // Not exposed to PrintingContext::Delegate because of dependency issues.
   content::WebContents* GetWebContents();
 
+  int render_process_id() const { return render_process_id_; }
+  int render_frame_id() const { return render_frame_id_; }
+
  private:
   const int render_process_id_;
   const int render_frame_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(PrintingContextDelegate);
 };
 
 PrintingContextDelegate::PrintingContextDelegate(int render_process_id,
@@ -114,17 +119,16 @@ void PostOnOwnerThread(const scoped_refptr<PrintJobWorkerOwner>& owner,
 PrintJobWorker::PrintJobWorker(int render_process_id,
                                int render_frame_id,
                                PrintJobWorkerOwner* owner)
-    : render_process_id_(render_process_id),
-      render_frame_id_(render_frame_id),
+    : printing_context_delegate_(
+          std::make_unique<PrintingContextDelegate>(render_process_id,
+                                                    render_frame_id)),
+      printing_context_(
+          PrintingContext::Create(printing_context_delegate_.get())),
       owner_(owner),
       thread_("Printing_Worker"),
       weak_factory_(this) {
   // The object is created in the IO thread.
   DCHECK(owner_->RunsTasksInCurrentSequence());
-
-  printing_context_delegate_ = base::MakeUnique<PrintingContextDelegate>(
-      render_process_id, render_frame_id);
-  printing_context_ = PrintingContext::Create(printing_context_delegate_.get());
 }
 
 PrintJobWorker::~PrintJobWorker() {
@@ -163,14 +167,14 @@ void PrintJobWorker::GetSettings(bool ask_user_for_settings,
   if (ask_user_for_settings) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&HoldRefCallback, make_scoped_refptr(owner_),
+        base::BindOnce(&HoldRefCallback, base::WrapRefCounted(owner_),
                        base::Bind(&PrintJobWorker::GetSettingsWithUI,
                                   base::Unretained(this), document_page_count,
                                   has_selection, is_scripted)));
   } else {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&HoldRefCallback, make_scoped_refptr(owner_),
+        base::BindOnce(&HoldRefCallback, base::WrapRefCounted(owner_),
                        base::Bind(&PrintJobWorker::UseDefaultSettings,
                                   base::Unretained(this))));
   }
@@ -183,7 +187,7 @@ void PrintJobWorker::SetSettings(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(
-          &HoldRefCallback, make_scoped_refptr(owner_),
+          &HoldRefCallback, base::WrapRefCounted(owner_),
           base::Bind(&PrintJobWorker::UpdatePrintSettings,
                      base::Unretained(this), base::Passed(&new_settings))));
 }
@@ -209,9 +213,8 @@ void PrintJobWorker::GetSettingsDone(PrintingContext::Result result) {
   // PrintJob will create the new PrintedDocument.
   owner_->PostTask(FROM_HERE,
                    base::Bind(&PrintJobWorkerOwner::GetSettingsDone,
-                              make_scoped_refptr(owner_),
-                              printing_context_->settings(),
-                              result));
+                              base::WrapRefCounted(owner_),
+                              printing_context_->settings(), result));
 }
 
 void PrintJobWorker::GetSettingsWithUI(
@@ -233,8 +236,10 @@ void PrintJobWorker::GetSettingsWithUI(
     // Regardless of whether the following call fails or not, the javascript
     // call will return since startPendingPrint will make it return immediately
     // in case of error.
-    if (tab)
-      tab->SetPendingPrint(render_process_id_, render_frame_id_);
+    if (tab) {
+      tab->SetPendingPrint(printing_context_delegate->render_process_id(),
+                           printing_context_delegate->render_frame_id());
+    }
   }
 #endif
 
@@ -246,7 +251,7 @@ void PrintJobWorker::GetSettingsWithUI(
   // weak_factory_ creates pointers valid only on owner_ thread.
   printing_context_->AskUserForSettings(
       document_page_count, has_selection, is_scripted,
-      base::Bind(&PostOnOwnerThread, make_scoped_refptr(owner_),
+      base::Bind(&PostOnOwnerThread, base::WrapRefCounted(owner_),
                  base::Bind(&PrintJobWorker::GetSettingsDone,
                             weak_factory_.GetWeakPtr())));
 }
@@ -353,7 +358,7 @@ bool PrintJobWorker::IsRunning() const {
   return thread_.IsRunning();
 }
 
-bool PrintJobWorker::PostTask(const tracked_objects::Location& from_here,
+bool PrintJobWorker::PostTask(const base::Location& from_here,
                               const base::Closure& task) {
   if (task_runner_.get())
     return task_runner_->PostTask(from_here, task);

@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -37,12 +38,13 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_cookie_changed_subscription.h"
+#include "components/signin/core/browser/signin_features.h"
 #include "components/signin/core/browser/signin_header_helper.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_pref_names.h"
-#include "components/signin/core/common/signin_switches.h"
+#include "components/signin/core/browser/signin_pref_names.h"
+#include "components/signin/core/browser/signin_switches.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -68,10 +70,13 @@ ChromeSigninClient::ChromeSigninClient(
     SigninErrorController* signin_error_controller)
     : OAuth2TokenService::Consumer("chrome_signin_client"),
       profile_(profile),
-      signin_error_controller_(signin_error_controller) {
+      signin_error_controller_(signin_error_controller),
+      account_consistency_mode_manager_(profile),
+      weak_ptr_factory_(this) {
   signin_error_controller_->AddObserver(this);
 #if !defined(OS_CHROMEOS)
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  g_browser_process->network_connection_tracker()->AddNetworkConnectionObserver(
+      this);
 #else
   // UserManager may not exist in unit_tests.
   if (!user_manager::UserManager::IsInitialized())
@@ -103,11 +108,9 @@ ChromeSigninClient::ChromeSigninClient(
 
 ChromeSigninClient::~ChromeSigninClient() {
   signin_error_controller_->RemoveObserver(this);
-}
-
-void ChromeSigninClient::Shutdown() {
 #if !defined(OS_CHROMEOS)
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  g_browser_process->network_connection_tracker()
+      ->RemoveNetworkConnectionObserver(this);
 #endif
 }
 
@@ -378,9 +381,9 @@ void ChromeSigninClient::OnGetTokenFailure(
 }
 
 #if !defined(OS_CHROMEOS)
-void ChromeSigninClient::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
-  if (type >= net::NetworkChangeNotifier::ConnectionType::CONNECTION_NONE)
+void ChromeSigninClient::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
+  if (type == network::mojom::ConnectionType::CONNECTION_NONE)
     return;
 
   for (const base::Closure& callback : delayed_callbacks_)
@@ -398,7 +401,13 @@ void ChromeSigninClient::DelayNetworkCall(const base::Closure& callback) {
   return;
 #else
   // Don't bother if we don't have any kind of network connection.
-  if (net::NetworkChangeNotifier::IsOffline()) {
+  network::mojom::ConnectionType type;
+  bool sync =
+      g_browser_process->network_connection_tracker()->GetConnectionType(
+          &type, base::BindOnce(&ChromeSigninClient::OnConnectionChanged,
+                                weak_ptr_factory_.GetWeakPtr()));
+  if (!sync || type == network::mojom::ConnectionType::CONNECTION_NONE) {
+    // Connection type cannot be retrieved synchronously so delay the callback.
     delayed_callbacks_.push_back(callback);
   } else {
     callback.Run();
@@ -457,6 +466,14 @@ void ChromeSigninClient::AfterCredentialsCopied() {
   }
 }
 
+void ChromeSigninClient::SetReadyForDiceMigration(bool is_ready) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  account_consistency_mode_manager_.SetReadyForDiceMigration(is_ready);
+#else
+  NOTREACHED();
+#endif
+}
+
 void ChromeSigninClient::OnCloseBrowsersSuccess(
     const base::Callback<void()>& sign_out,
     const signin_metrics::ProfileSignout signout_source_metric,
@@ -464,7 +481,6 @@ void ChromeSigninClient::OnCloseBrowsersSuccess(
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   if (signin_util::IsForceSigninEnabled() && force_signin_verifier_.get()) {
     force_signin_verifier_->Cancel();
-    force_signin_verifier_->AbortSignoutCountdownIfExisted();
   }
 #endif
   SigninClient::PreSignOut(sign_out, signout_source_metric);

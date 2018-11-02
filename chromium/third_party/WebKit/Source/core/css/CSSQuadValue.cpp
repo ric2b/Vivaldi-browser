@@ -15,7 +15,7 @@ String CSSQuadValue::CustomCSSText() const {
   String left = left_->CssText();
 
   if (serialization_type_ == TypeForSerialization::kSerializeAsRect)
-    return "rect(" + top + ' ' + right + ' ' + bottom + ' ' + left + ')';
+    return "rect(" + top + ", " + right + ", " + bottom + ", " + left + ')';
 
   StringBuilder result;
   // reserve space for the four strings, plus three space separator characters.
@@ -37,7 +37,7 @@ String CSSQuadValue::CustomCSSText() const {
   return result.ToString();
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSQuadValue) {
+void CSSQuadValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(top_);
   visitor->Trace(right_);
   visitor->Trace(bottom_);

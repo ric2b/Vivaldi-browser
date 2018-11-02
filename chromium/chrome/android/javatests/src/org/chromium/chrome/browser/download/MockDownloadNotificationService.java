@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.download;
 import android.app.Notification;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.util.Pair;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -25,6 +24,7 @@ public class MockDownloadNotificationService extends DownloadNotificationService
     private boolean mPaused = false;
     private Context mContext;
     private int mLastNotificationId;
+    private boolean mIsForegroundRunning = false;
 
     void setContext(Context context) {
         mContext = context;
@@ -34,10 +34,17 @@ public class MockDownloadNotificationService extends DownloadNotificationService
     public void stopForegroundInternal(boolean killNotification) {
         if (!useForegroundService()) return;
         if (killNotification) mNotificationIds.clear();
+        mIsForegroundRunning = false;
     }
 
     @Override
-    public void startForegroundInternal() {}
+    public void startForegroundInternal() {
+        mIsForegroundRunning = true;
+    }
+
+    public boolean isForegroundRunning() {
+        return mIsForegroundRunning;
+    }
 
     @Override
     public void cancelOffTheRecordDownloads() {
@@ -56,10 +63,6 @@ public class MockDownloadNotificationService extends DownloadNotificationService
 
         return !mNotificationIds.isEmpty();
     }
-
-    @Override
-    void updateSummaryIconInternal(
-            int removedNotificationId, Pair<Integer, Notification> addedNotification) {}
 
     @Override
     void cancelSummaryNotification() {}

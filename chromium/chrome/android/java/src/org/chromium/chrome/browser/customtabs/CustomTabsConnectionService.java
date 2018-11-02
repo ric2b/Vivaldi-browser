@@ -91,7 +91,7 @@ public class CustomTabsConnectionService extends CustomTabsService {
     @Override
     protected boolean validateRelationship(
             CustomTabsSessionToken sessionToken, int relation, Uri origin, Bundle extras) {
-        return false;
+        return mConnection.validateRelationship(sessionToken, relation, origin, extras);
     }
 
     @Override
@@ -103,8 +103,7 @@ public class CustomTabsConnectionService extends CustomTabsService {
     private boolean isFirstRunDone() {
         if (mBindIntent == null) return true;
         boolean firstRunNecessary = FirstRunFlowSequencer.checkIfFirstRunIsNecessary(
-                                            getApplicationContext(), mBindIntent, false)
-                != null;
+                getApplicationContext(), mBindIntent, false);
         if (!firstRunNecessary) {
             mBindIntent = null;
             return true;

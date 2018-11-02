@@ -13,28 +13,25 @@
 #include <vector>
 
 #include "base/atomic_sequence_num.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/flush_params.h"
 #include "ipc/ipc_channel_handle.h"
-#include "ipc/ipc_sync_channel.h"
 #include "ipc/message_filter.h"
 #include "ipc/message_router.h"
 #include "ui/gfx/gpu_memory_buffer.h"
-#include "ui/latency/latency_info.h"
-
-namespace base {
-class WaitableEvent;
-}
 
 namespace IPC {
-class SyncMessageFilter;
+struct PendingSyncMsg;
+class ChannelMojo;
 }
 
 namespace gpu {
@@ -53,20 +50,12 @@ class GPU_EXPORT GpuChannelEstablishFactory {
 
   virtual void EstablishGpuChannel(
       const GpuChannelEstablishedCallback& callback) = 0;
-  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync() = 0;
+  // If the connection to the host process fails so the channel can not be
+  // established, then |connection_error| is set to true (if it's not null).
+  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync(
+      bool* connection_error) = 0;
   virtual void SetForceAllowAccessToGpu(bool enable) = 0;
   virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
-};
-
-class GPU_EXPORT GpuChannelHostFactory {
- public:
-  virtual ~GpuChannelHostFactory() {}
-
-  virtual bool IsMainThread() = 0;
-  virtual scoped_refptr<base::SingleThreadTaskRunner>
-  GetIOThreadTaskRunner() = 0;
-  virtual std::unique_ptr<base::SharedMemory> AllocateSharedMemory(
-      size_t size) = 0;
 };
 
 // Encapsulates an IPC channel between the client and one GPU process.
@@ -77,24 +66,25 @@ class GPU_EXPORT GpuChannelHost
     : public IPC::Sender,
       public base::RefCountedThreadSafe<GpuChannelHost> {
  public:
-  // Must be called on the main thread (as defined by the factory).
-  static scoped_refptr<GpuChannelHost> Create(
-      GpuChannelHostFactory* factory,
-      int channel_id,
-      const gpu::GPUInfo& gpu_info,
-      const IPC::ChannelHandle& channel_handle,
-      base::WaitableEvent* shutdown_event,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
+  GpuChannelHost(scoped_refptr<base::SingleThreadTaskRunner> io_thread,
+                 int channel_id,
+                 const gpu::GPUInfo& gpu_info,
+                 const gpu::GpuFeatureInfo& gpu_feature_info,
+                 mojo::ScopedMessagePipeHandle handle,
+                 gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
   bool IsLost() const {
-    DCHECK(channel_filter_.get());
-    return channel_filter_->IsLost();
+    DCHECK(listener_.get());
+    return listener_->IsLost();
   }
 
   int channel_id() const { return channel_id_; }
 
   // The GPU stats reported by the GPU process.
   const gpu::GPUInfo& gpu_info() const { return gpu_info_; }
+  const gpu::GpuFeatureInfo& gpu_feature_info() const {
+    return gpu_feature_info_;
+  }
 
   // IPC::Sender implementation:
   bool Send(IPC::Message* msg) override;
@@ -103,7 +93,7 @@ class GPU_EXPORT GpuChannelHost
   // that can be used to ensure or verify the flush later.
   uint32_t OrderingBarrier(int32_t route_id,
                            int32_t put_offset,
-                           std::vector<ui::LatencyInfo> latency_info,
+                           bool snapshot_requested,
                            std::vector<SyncToken> sync_token_fences);
 
   // Ensure that the all ordering barriers prior upto |flush_id| have been
@@ -132,8 +122,6 @@ class GPU_EXPORT GpuChannelHost
   // Remove the message route associated with |route_id|.
   void RemoveRoute(int route_id);
 
-  GpuChannelHostFactory* factory() const { return factory_; }
-
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() const {
     return gpu_memory_buffer_manager_;
   }
@@ -159,9 +147,15 @@ class GPU_EXPORT GpuChannelHost
   // A filter used internally to route incoming messages from the IO thread
   // to the correct message loop. It also maintains some shared state between
   // all the contexts.
-  class MessageFilter : public IPC::MessageFilter {
+  class Listener : public IPC::Listener {
    public:
-    MessageFilter();
+    Listener(mojo::ScopedMessagePipeHandle handle,
+             scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
+
+    ~Listener() override;
+
+    // Called on the IO thread.
+    void Close();
 
     // Called on the IO thread.
     void AddRoute(int32_t route_id,
@@ -170,10 +164,13 @@ class GPU_EXPORT GpuChannelHost
     // Called on the IO thread.
     void RemoveRoute(int32_t route_id);
 
-    // IPC::MessageFilter implementation
+    // IPC::Listener implementation
     // (called on the IO thread):
     bool OnMessageReceived(const IPC::Message& msg) override;
     void OnChannelError() override;
+
+    void SendMessage(std::unique_ptr<IPC::Message> msg,
+                     IPC::PendingSyncMsg* pending_sync);
 
     // The following methods can be called on any thread.
 
@@ -181,54 +178,54 @@ class GPU_EXPORT GpuChannelHost
     bool IsLost() const;
 
    private:
-    struct ListenerInfo {
-      ListenerInfo();
-      ListenerInfo(const ListenerInfo& other);
-      ~ListenerInfo();
+    struct RouteInfo {
+      RouteInfo();
+      RouteInfo(const RouteInfo& other);
+      RouteInfo(RouteInfo&& other);
+      ~RouteInfo();
+      RouteInfo& operator=(const RouteInfo& other);
+      RouteInfo& operator=(RouteInfo&& other);
 
       base::WeakPtr<IPC::Listener> listener;
       scoped_refptr<base::SingleThreadTaskRunner> task_runner;
     };
 
-    ~MessageFilter() override;
+    // Called on the IO thread.
+    void Connect();
 
-    // Threading notes: |listeners_| is only accessed on the IO thread. Every
-    // other field is protected by |lock_|.
-    base::hash_map<int32_t, ListenerInfo> listeners_;
+    // Threading notes: most fields are only accessed on the IO thread, except
+    // for lost_ which is protected by |lock_|.
+    base::hash_map<int32_t, RouteInfo> routes_;
+    std::unique_ptr<IPC::ChannelMojo> channel_;
+    base::flat_map<int, IPC::PendingSyncMsg*> pending_syncs_;
 
     // Protects all fields below this one.
     mutable base::Lock lock_;
 
     // Whether the channel has been lost.
-    bool lost_;
+    bool lost_ = false;
   };
 
-  GpuChannelHost(GpuChannelHostFactory* factory,
-                 int channel_id,
-                 const gpu::GPUInfo& gpu_info,
-                 gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
   ~GpuChannelHost() override;
-  void Connect(const IPC::ChannelHandle& channel_handle,
-               base::WaitableEvent* shutdown_event);
-  bool InternalSend(IPC::Message* msg);
   void InternalFlush(uint32_t flush_id);
 
   // Threading notes: all fields are constant during the lifetime of |this|
   // except:
   // - |next_image_id_|, atomic type
   // - |next_route_id_|, atomic type
-  // - |channel_| and |flush_list_|, protected by |context_lock_|
-  GpuChannelHostFactory* const factory_;
+  // - |flush_list_| and |*_flush_id_| protected by |context_lock_|
+  const scoped_refptr<base::SingleThreadTaskRunner> io_thread_;
 
   const int channel_id_;
   const gpu::GPUInfo gpu_info_;
+  const gpu::GpuFeatureInfo gpu_feature_info_;
 
-  scoped_refptr<MessageFilter> channel_filter_;
+  // Lifetime/threading notes: Listener only operates on the IO thread, and
+  // outlives |this|. It is therefore safe to PostTask calls to the IO thread
+  // with base::Unretained(listener_).
+  std::unique_ptr<Listener, base::OnTaskRunnerDeleter> listener_;
 
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-
-  // A filter for sending messages from thread other than the main thread.
-  scoped_refptr<IPC::SyncMessageFilter> sync_filter_;
 
   // Image IDs are allocated in sequence.
   base::AtomicSequenceNumber next_image_id_;
@@ -236,9 +233,8 @@ class GPU_EXPORT GpuChannelHost
   // Route IDs are allocated in sequence.
   base::AtomicSequenceNumber next_route_id_;
 
-  // Protects channel_ and flush_list_.
+  // Protects |flush_list_| and |*_flush_id_|.
   mutable base::Lock context_lock_;
-  std::unique_ptr<IPC::SyncChannel> channel_;
   std::vector<FlushParams> flush_list_;
   uint32_t next_flush_id_ = 1;
   uint32_t flushed_flush_id_ = 0;

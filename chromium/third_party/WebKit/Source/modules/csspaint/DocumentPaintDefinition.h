@@ -39,7 +39,9 @@ class DocumentPaintDefinition final
   const Vector<CSSSyntaxDescriptor>& InputArgumentTypes() const {
     return paint_definition_->InputArgumentTypes();
   }
-  bool HasAlpha() const { return paint_definition_->HasAlpha(); }
+  PaintRenderingContext2DSettings GetPaintRenderingContext2DSettings() const {
+    return paint_definition_->GetPaintRenderingContext2DSettings();
+  }
 
   bool RegisterAdditionalPaintDefinition(const CSSPaintDefinition&);
 
@@ -47,8 +49,8 @@ class DocumentPaintDefinition final
     return registered_definitions_count_;
   }
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_TRACE_WRAPPERS(){};
+  virtual void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor* visitor) const override{};
 
  private:
   Member<CSSPaintDefinition> paint_definition_;

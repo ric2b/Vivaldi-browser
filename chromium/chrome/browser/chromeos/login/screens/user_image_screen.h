@@ -20,7 +20,7 @@
 namespace base {
 class Timer;
 class Value;
-}
+}  // namespace base
 
 namespace policy {
 class PolicyChangeRegistrar;
@@ -129,6 +129,9 @@ class UserImageScreen : public BaseScreen,
 
   // Last user photo, if taken.
   gfx::ImageSkia user_photo_;
+
+  // Data for |user_photo_|.
+  scoped_refptr<base::RefCountedBytes> user_photo_data_;
 
   // If |true|, decoded photo should be immediately accepted (i.e., both
   // HandleTakePhoto and HandleImageAccepted have already been called but we're

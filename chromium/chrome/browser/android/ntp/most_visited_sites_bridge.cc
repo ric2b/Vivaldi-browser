@@ -21,6 +21,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/thumbnails/thumbnail_list_source.h"
+#include "components/favicon_base/favicon_types.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/most_visited_sites.h"
@@ -38,9 +39,11 @@ using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaArrayOfStrings;
 using base::android::ToJavaIntArray;
+using base::android::ToJavaLongArray;
 using ntp_tiles::MostVisitedSites;
 using ntp_tiles::NTPTilesVector;
 using ntp_tiles::SectionType;
+using ntp_tiles::TileTitleSource;
 using ntp_tiles::TileSource;
 using ntp_tiles::TileVisualType;
 
@@ -160,8 +163,10 @@ void MostVisitedSitesBridge::JavaObserver::OnURLsAvailable(
   std::vector<base::string16> titles;
   std::vector<std::string> urls;
   std::vector<std::string> whitelist_icons;
+  std::vector<int> title_sources;
   std::vector<int> sources;
   std::vector<int> section_types;
+  std::vector<int64_t> data_generation_times;
   for (const auto& section : sections) {
     const NTPTilesVector& tiles = section.second;
     section_types.resize(section_types.size() + tiles.size(),
@@ -170,13 +175,18 @@ void MostVisitedSitesBridge::JavaObserver::OnURLsAvailable(
       titles.emplace_back(tile.title);
       urls.emplace_back(tile.url.spec());
       whitelist_icons.emplace_back(tile.whitelist_icon_path.value());
+      title_sources.emplace_back(static_cast<int>(tile.title_source));
       sources.emplace_back(static_cast<int>(tile.source));
+      data_generation_times.emplace_back(
+          tile.data_generation_time.ToJavaTime());
     }
   }
   Java_MostVisitedSitesBridge_onURLsAvailable(
       env, observer_, ToJavaArrayOfStrings(env, titles),
       ToJavaArrayOfStrings(env, urls), ToJavaIntArray(env, section_types),
-      ToJavaArrayOfStrings(env, whitelist_icons), ToJavaIntArray(env, sources));
+      ToJavaArrayOfStrings(env, whitelist_icons),
+      ToJavaIntArray(env, title_sources), ToJavaIntArray(env, sources),
+      ToJavaLongArray(env, data_generation_times));
 }
 
 void MostVisitedSitesBridge::JavaObserver::OnIconMadeAvailable(
@@ -245,15 +255,24 @@ void MostVisitedSitesBridge::RecordTileImpression(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint jindex,
-    jint jtype,
+    jint jvisual_type,
+    jint jicon_type,
+    jint jtitle_source,
     jint jsource,
+    jlong jdata_generation_time_ms,
     const JavaParamRef<jstring>& jurl) {
   GURL url(ConvertJavaStringToUTF8(env, jurl));
+  TileTitleSource title_source = static_cast<TileTitleSource>(jtitle_source);
   TileSource source = static_cast<TileSource>(jsource);
-  TileVisualType type = static_cast<TileVisualType>(jtype);
+  TileVisualType visual_type = static_cast<TileVisualType>(jvisual_type);
+  favicon_base::IconType icon_type =
+      static_cast<favicon_base::IconType>(jicon_type);
 
-  ntp_tiles::metrics::RecordTileImpression(jindex, source, type, url,
-                                           g_browser_process->rappor_service());
+  ntp_tiles::metrics::RecordTileImpression(
+      ntp_tiles::NTPTileImpression(
+          jindex, source, title_source, visual_type, icon_type,
+          base::Time::FromJavaTime(jdata_generation_time_ms), url),
+      g_browser_process->rappor_service());
 }
 
 void MostVisitedSitesBridge::RecordOpenedMostVisitedItem(
@@ -261,14 +280,21 @@ void MostVisitedSitesBridge::RecordOpenedMostVisitedItem(
     const JavaParamRef<jobject>& obj,
     jint index,
     jint tile_type,
-    jint source) {
-  ntp_tiles::metrics::RecordTileClick(index, static_cast<TileSource>(source),
-                                      static_cast<TileVisualType>(tile_type));
+    jint title_source,
+    jint source,
+    jlong jdata_generation_time_ms) {
+  ntp_tiles::metrics::RecordTileClick(ntp_tiles::NTPTileImpression(
+      index, static_cast<TileSource>(source),
+      static_cast<TileTitleSource>(title_source),
+      static_cast<TileVisualType>(tile_type), favicon_base::IconType::kInvalid,
+      base::Time::FromJavaTime(jdata_generation_time_ms),
+      /*url_for_rappor=*/GURL()));
 }
 
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& obj,
-                  const JavaParamRef<jobject>& jprofile) {
+static jlong JNI_MostVisitedSitesBridge_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jprofile) {
   MostVisitedSitesBridge* most_visited_sites =
       new MostVisitedSitesBridge(ProfileAndroid::FromProfileAndroid(jprofile));
   return reinterpret_cast<intptr_t>(most_visited_sites);

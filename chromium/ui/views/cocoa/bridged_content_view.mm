@@ -649,8 +649,11 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 
 // NSView implementation.
 
+// Always refuse first responder. Note this does not prevent the view becoming
+// first responder via -[NSWindow makeFirstResponder:] when invoked during Init
+// or by FocusManager.
 - (BOOL)acceptsFirstResponder {
-  return YES;
+  return NO;
 }
 
 - (BOOL)becomeFirstResponder {
@@ -777,6 +780,12 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
   views::DragDropClientMac* client = [self dragDropClient];
   return client ? client->DragUpdate(sender) : ui::DragDropTypes::DRAG_NONE;
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)sender {
+  views::DragDropClientMac* client = [self dragDropClient];
+  if (client)
+    client->DragExit();
 }
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {

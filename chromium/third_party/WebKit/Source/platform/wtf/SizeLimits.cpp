@@ -28,37 +28,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/ContainerAnnotations.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadRestrictionVerifier.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/WTFString.h"
-#include <memory>
 
 namespace WTF {
 
-#if DCHECK_IS_ON() || ENABLE_SECURITY_ASSERT
-// The debug/assertion version may get bigger.
 struct SameSizeAsRefCounted {
-  int a;
-#if ENABLE_SECURITY_ASSERT
-  bool b;
-#endif
-#if DCHECK_IS_ON()
-  bool c;
-  ThreadRestrictionVerifier d;
-#endif
-};
-#else
-struct SameSizeAsRefCounted {
-  int a;
+  uint32_t a;
   // Don't add anything here because this should stay small.
 };
-#endif
+
 template <typename T, unsigned inlineCapacity = 0>
 struct SameSizeAsVectorWithInlineCapacity;
 
@@ -77,13 +63,14 @@ struct SameSizeAsVectorWithInlineCapacity {
 #endif
 };
 
-static_assert(sizeof(std::unique_ptr<int>) == sizeof(int*),
-              "std::unique_ptr should stay small");
-static_assert(sizeof(PassRefPtr<RefCounted<int>>) == sizeof(int*),
-              "PassRefPtr should stay small");
+#if !DCHECK_IS_ON()
 static_assert(sizeof(RefCounted<int>) == sizeof(SameSizeAsRefCounted),
               "RefCounted should stay small");
-static_assert(sizeof(RefPtr<RefCounted<int>>) == sizeof(int*),
+#endif
+
+static_assert(sizeof(std::unique_ptr<int>) == sizeof(int*),
+              "std::unique_ptr should stay small");
+static_assert(sizeof(scoped_refptr<RefCounted<int>>) == sizeof(int*),
               "RefPtr should stay small");
 static_assert(sizeof(String) == sizeof(int*), "String should stay small");
 static_assert(sizeof(AtomicString) == sizeof(String),
@@ -100,4 +87,5 @@ static_assert(sizeof(Vector<int, 2>) ==
 static_assert(sizeof(Vector<int, 3>) ==
                   sizeof(SameSizeAsVectorWithInlineCapacity<int, 3>),
               "Vector should stay small");
+
 }  // namespace WTF

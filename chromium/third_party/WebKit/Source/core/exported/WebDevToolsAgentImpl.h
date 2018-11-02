@@ -41,7 +41,6 @@
 #include "core/inspector/InspectorTracingAgent.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/Vector.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
 #include "public/web/WebDevToolsAgent.h"
@@ -73,7 +72,7 @@ class CORE_EXPORT WebDevToolsAgentImpl final
   static WebDevToolsAgentImpl* Create(WebLocalFrameImpl*,
                                       WebDevToolsAgentClient*);
   ~WebDevToolsAgentImpl() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void WillBeDestroyed();
   WebDevToolsAgentClient* Client() { return client_; }
@@ -91,10 +90,8 @@ class CORE_EXPORT WebDevToolsAgentImpl final
   bool CacheDisabled() override;
 
   // WebDevToolsAgent implementation.
-  void Attach(const WebString& host_id, int session_id) override;
-  void Reattach(const WebString& host_id,
-                int session_id,
-                const WebString& saved_state) override;
+  void Attach(int session_id) override;
+  void Reattach(int session_id, const WebString& saved_state) override;
   void Detach(int session_id) override;
   void ContinueProgram() override;
   void DispatchOnInspectorBackend(int session_id,
@@ -102,7 +99,7 @@ class CORE_EXPORT WebDevToolsAgentImpl final
                                   const WebString& method,
                                   const WebString& message) override;
   void InspectElementAt(int session_id, const WebPoint&) override;
-  void FailedToRequestDevTools() override;
+  void FailedToRequestDevTools(int session_id) override;
   WebString EvaluateInWebInspectorOverlay(const WebString& script) override;
 
  private:
@@ -121,7 +118,7 @@ class CORE_EXPORT WebDevToolsAgentImpl final
 
   // InspectorPageAgent::Client implementation.
   void PageLayoutInvalidated(bool resized) override;
-  void WaitForCreateWindow(LocalFrame*) override;
+  void WaitForCreateWindow(InspectorPageAgent*, LocalFrame*) override;
 
   // InspectorLayerTreeAgent::Client implementation.
   bool IsInspectorLayer(GraphicsLayer*) override;
@@ -137,7 +134,6 @@ class CORE_EXPORT WebDevToolsAgentImpl final
   void DidProcessTask() override;
 
   InspectorSession* InitializeSession(int session_id,
-                                      const String& host_id,
                                       String* state);
   void DestroySession(int session_id);
   void DispatchMessageFromFrontend(int session_id,

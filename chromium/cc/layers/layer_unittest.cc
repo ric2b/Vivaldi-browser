@@ -25,11 +25,10 @@
 #include "cc/test/stub_layer_tree_host_single_thread_client.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
-#include "cc/trees/mutable_properties.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/transform_node.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -923,8 +922,6 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurfaceForTesting(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetHideLayerAndSubtree(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(ElementId(2)));
-  EXPECT_SET_NEEDS_COMMIT(
-      1, test_layer->SetMutableProperties(MutableProperty::kTransform));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, test_layer->SetMaskLayer(
       dummy_layer1.get()));
@@ -1266,7 +1263,7 @@ TEST_F(LayerTest, SafeOpaqueBackgroundColor) {
 class DrawsContentChangeLayer : public Layer {
  public:
   static scoped_refptr<DrawsContentChangeLayer> Create() {
-    return make_scoped_refptr(new DrawsContentChangeLayer());
+    return base::WrapRefCounted(new DrawsContentChangeLayer());
   }
 
   void SetLayerTreeHost(LayerTreeHost* host) override {
@@ -1308,6 +1305,38 @@ TEST_F(LayerTest, DrawsContentChangedInSetLayerTreeHost) {
   EXPECT_EQ(1, root_layer->NumDescendantsThatDrawContent());
 }
 
+TEST_F(LayerTest, PushUpdatesShouldHitTest) {
+  scoped_refptr<Layer> root_layer = Layer::Create();
+  std::unique_ptr<LayerImpl> impl_layer =
+      LayerImpl::Create(host_impl_.active_tree(), 1);
+  EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
+                                  layer_tree_host_->SetRootLayer(root_layer));
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(3);
+
+  // A layer that draws content should be hit testable.
+  root_layer->SetIsDrawable(true);
+  root_layer->PushPropertiesTo(impl_layer.get());
+  EXPECT_TRUE(impl_layer->DrawsContent());
+  EXPECT_FALSE(impl_layer->hit_testable_without_draws_content());
+  EXPECT_TRUE(impl_layer->should_hit_test());
+
+  // A layer that does not draw content and does not hit test without drawing
+  // content should not be hit testable.
+  root_layer->SetIsDrawable(false);
+  root_layer->PushPropertiesTo(impl_layer.get());
+  EXPECT_FALSE(impl_layer->DrawsContent());
+  EXPECT_FALSE(impl_layer->hit_testable_without_draws_content());
+  EXPECT_FALSE(impl_layer->should_hit_test());
+
+  // |SetHitTestableWithoutDrawsContent| should cause a layer to become hit
+  // testable even though it does not draw content.
+  root_layer->SetHitTestableWithoutDrawsContent(true);
+  root_layer->PushPropertiesTo(impl_layer.get());
+  EXPECT_FALSE(impl_layer->DrawsContent());
+  EXPECT_TRUE(impl_layer->hit_testable_without_draws_content());
+  EXPECT_TRUE(impl_layer->should_hit_test());
+}
+
 void ReceiveCopyOutputResult(int* result_count,
                              std::unique_ptr<viz::CopyOutputResult> result) {
   ++(*result_count);
@@ -1320,11 +1349,13 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // Create identical requests without the source being set, and expect the
   // layer does not abort either one.
   std::unique_ptr<viz::CopyOutputRequest> request =
-      viz::CopyOutputRequest::CreateRequest(
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
-  request = viz::CopyOutputRequest::CreateRequest(
+  request = std::make_unique<viz::CopyOutputRequest>(
+      viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
@@ -1340,28 +1371,36 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // the first request using |kArbitrarySourceId1| aborts immediately when
   // the second request using |kArbitrarySourceId1| is made.
   int did_receive_first_result_from_this_source = 0;
-  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
-      &ReceiveCopyOutputResult, &did_receive_first_result_from_this_source));
+  request = std::make_unique<viz::CopyOutputRequest>(
+      viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+      base::BindOnce(&ReceiveCopyOutputResult,
+                     &did_receive_first_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_first_result_from_this_source);
   // Make a request from a different source.
   int did_receive_result_from_different_source = 0;
-  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
-      &ReceiveCopyOutputResult, &did_receive_result_from_different_source));
+  request = std::make_unique<viz::CopyOutputRequest>(
+      viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+      base::BindOnce(&ReceiveCopyOutputResult,
+                     &did_receive_result_from_different_source));
   request->set_source(kArbitrarySourceId2);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_different_source);
   // Make a request without specifying the source.
   int did_receive_result_from_anonymous_source = 0;
-  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
-      &ReceiveCopyOutputResult, &did_receive_result_from_anonymous_source));
+  request = std::make_unique<viz::CopyOutputRequest>(
+      viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+      base::BindOnce(&ReceiveCopyOutputResult,
+                     &did_receive_result_from_anonymous_source));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
   // Make the second request from |kArbitrarySourceId1|.
   int did_receive_second_result_from_this_source = 0;
-  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
-      &ReceiveCopyOutputResult, &did_receive_second_result_from_this_source));
+  request = std::make_unique<viz::CopyOutputRequest>(
+      viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+      base::BindOnce(&ReceiveCopyOutputResult,
+                     &did_receive_second_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(
       std::move(request));  // First request to be aborted.
@@ -1407,7 +1446,7 @@ TEST_F(LayerTest, AnimationSchedulesLayerUpdate) {
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
 }
 
-TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
+TEST_F(LayerTest, ElementIdIsPushed) {
   scoped_refptr<Layer> test_layer = Layer::Create();
   std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
@@ -1415,18 +1454,15 @@ TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
                                   layer_tree_host_->SetRootLayer(test_layer));
 
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(2);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
 
   test_layer->SetElementId(ElementId(2));
-  test_layer->SetMutableProperties(MutableProperty::kTransform);
 
   EXPECT_FALSE(impl_layer->element_id());
-  EXPECT_EQ(MutableProperty::kNone, impl_layer->mutable_properties());
 
   test_layer->PushPropertiesTo(impl_layer.get());
 
   EXPECT_EQ(ElementId(2), impl_layer->element_id());
-  EXPECT_EQ(MutableProperty::kTransform, impl_layer->mutable_properties());
 }
 
 TEST_F(LayerTest, SetLayerTreeHostNotUsingLayerListsManagesElementId) {

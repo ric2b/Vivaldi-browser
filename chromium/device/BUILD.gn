@@ -71,6 +71,13 @@ test("device_unittests") {
     "sensors/sensor_manager_android_unittest.cc",
     "sensors/sensor_manager_chromeos_unittest.cc",
     "test/run_all_unittests.cc",
+    "u2f/u2f_apdu_unittest.cc",
+    "u2f/u2f_ble_frames_unittest.cc",
+    "u2f/u2f_discovery_unittest.cc",
+    "u2f/u2f_message_unittest.cc",
+    "u2f/u2f_register_unittest.cc",
+    "u2f/u2f_request_unittest.cc",
+    "u2f/u2f_sign_unittest.cc",
   ]
 
   deps = [
@@ -90,6 +97,8 @@ test("device_unittests") {
     "//device/sensors",
     "//device/sensors/public/cpp:full",
     "//device/sensors/public/interfaces",
+    "//device/u2f",
+    "//device/u2f:mocks",
     "//mojo/common",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
@@ -101,34 +110,32 @@ test("device_unittests") {
     "//url",
   ]
 
-  # HID and Serial:
+  # U2F and Serial:
   # Android doesn't compile.
   # Linux, requires udev.
   if (!is_linux_without_udev && !is_android) {
     sources += [
-      "hid/hid_connection_unittest.cc",
-      "hid/hid_device_filter_unittest.cc",
-      "hid/hid_report_descriptor_unittest.cc",
-      "hid/hid_service_unittest.cc",
-      "hid/input_service_linux_unittest.cc",
-      "hid/test_report_descriptors.cc",
-      "hid/test_report_descriptors.h",
-      "serial/serial_io_handler_posix_unittest.cc",
-      "u2f/u2f_apdu_unittest.cc",
+      "u2f/fake_hid_impl_for_testing.cc",
+      "u2f/fake_hid_impl_for_testing.h",
       "u2f/u2f_hid_device_unittest.cc",
-      "u2f/u2f_message_unittest.cc",
-      "u2f/u2f_register_unittest.cc",
-      "u2f/u2f_request_unittest.cc",
-      "u2f/u2f_sign_unittest.cc",
+      "u2f/u2f_hid_discovery_unittest.cc",
     ]
     deps += [
-      "//device/hid",
-      "//device/hid:mocks",
-      "//device/serial",
-      "//device/serial:test_support",
-      "//device/u2f",
-      "//device/u2f:mocks",
+      "//services/device/public/cpp/hid",
+      "//services/device/public/interfaces",
+      "//services/service_manager/public/cpp",
+      "//services/service_manager/public/interfaces",
     ]
+
+    # Serial is supported in below platforms. See //device/servial/BUILD.gn
+    if (is_win || is_linux || is_mac) {
+      sources += [
+        "serial/serial_io_handler_posix_unittest.cc",
+      ]
+      deps += [
+        "//device/serial",
+      ]
+    }
   }
 
   if (use_udev) {
@@ -141,8 +148,6 @@ test("device_unittests") {
     sources += [
       "test/test_device_client.cc",
       "test/test_device_client.h",
-      "test/usb_test_gadget.h",
-      "test/usb_test_gadget_impl.cc",
       "usb/mojo/device_impl_unittest.cc",
       "usb/mojo/device_manager_impl_unittest.cc",
       "usb/mojo/mock_permission_provider.cc",
@@ -150,11 +155,11 @@ test("device_unittests") {
       "usb/public/cpp/filter_utils_unittest.cc",
       "usb/usb_descriptors_unittest.cc",
       "usb/usb_device_handle_unittest.cc",
-      "usb/usb_ids_unittest.cc",
       "usb/usb_service_unittest.cc",
       "usb/webusb_descriptors_unittest.cc",
     ]
     deps += [
+      ":usb_test_gadget",
       "//device/base",
       "//device/base:mocks",
       "//device/usb",
@@ -164,6 +169,10 @@ test("device_unittests") {
       "//device/usb/public/interfaces",
       "//net:test_support",
     ]
+
+    if (!is_android) {
+      sources += [ "usb/usb_ids_unittest.cc" ]
+    }
   }
 
   # UsbContext is a libusb-specific object.
@@ -210,6 +219,11 @@ test("device_unittests") {
     deps += [ "//dbus" ]
   }
 
+  # BLE discovery: works on Linux.
+  if (is_linux) {
+    sources += [ "u2f/u2f_ble_discovery_unittest.cc" ]
+  }
+
   if (is_mac) {
     deps += [ "//third_party/ocmock" ]
     ldflags = [ "-ObjC" ]
@@ -241,17 +255,32 @@ test("device_unittests") {
 
   if (enable_vr && is_android) {
     sources += [
-      "vr/vr_device_manager_unittest.cc",
+      "vr/vr_device_base_unittest.cc",
       "vr/vr_display_impl_unittest.cc",
-      "vr/vr_service_impl_unittest.cc",
     ]
 
     deps += [
       "//device/vr",
       "//device/vr:fakes",
+      "//device/vr:java",
       "//device/vr:mojo_bindings",
     ]
   }
+}
+
+source_set("usb_test_gadget") {
+  testonly = true
+
+  sources = [
+    "test/usb_test_gadget.h",
+    "test/usb_test_gadget_impl.cc",
+  ]
+
+  deps = [
+    "//device/base",
+    "//device/usb",
+    "//net:test_support",
+  ]
 }
 
 if (is_android) {

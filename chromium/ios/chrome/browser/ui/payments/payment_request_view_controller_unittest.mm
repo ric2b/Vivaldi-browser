@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
+#import "ios/chrome/browser/payments/payment_request_unittest_base.h"
 #import "ios/chrome/browser/ui/autofill/cells/status_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
@@ -22,7 +23,6 @@
 #import "ios/chrome/browser/ui/payments/cells/payment_method_item.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
-#import "ios/chrome/browser/ui/payments/payment_request_unittest_base.h"
 #import "ios/chrome/browser/ui/payments/payment_request_view_controller_data_source.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -39,10 +39,6 @@
 @implementation TestPaymentRequestMediator
 
 - (BOOL)canPay {
-  return YES;
-}
-
-- (BOOL)canShip {
   return YES;
 }
 
@@ -121,14 +117,6 @@
 @end
 
 @interface TestPaymentRequestMediatorCantShip : TestPaymentRequestMediator
-
-@end
-
-@implementation TestPaymentRequestMediatorCantShip
-
-- (BOOL)canShip {
-  return NO;
-}
 
 @end
 
@@ -248,28 +236,13 @@ TEST_F(PaymentRequestViewControllerTest, TestModelNoContactInfo) {
   EXPECT_TRUE([item isMemberOfClass:[CollectionViewFooterItem class]]);
 }
 
-// Tests that the correct items are displayed after loading the model, when
-// shipping can't be made.
-TEST_F(PaymentRequestViewControllerTest, TestModelCantShip) {
-  mediator_ = [[TestPaymentRequestMediatorCantShip alloc] init];
-
-  CreateController();
-  CheckController();
-
-  // There should only be one item in the Shipping section and it should be of
-  // type AutofillProfileItem.
-  ASSERT_EQ(1U, static_cast<unsigned int>(NumberOfItemsInSection(1)));
-  id item = GetCollectionViewItem(1, 0);
-  EXPECT_TRUE([item isMemberOfClass:[AutofillProfileItem class]]);
-}
-
 // Tests that the correct items are displayed after updating the Shipping
 // section.
 TEST_F(PaymentRequestViewControllerTest, TestUpdateShippingSection) {
   CreateController();
   CheckController();
 
-  [GetPaymentRequestViewController() updateShippingSection];
+  [GetPaymentRequestViewController() reloadShippingSection];
 
   // There should be two items in the Shipping section.
   ASSERT_EQ(2U, static_cast<unsigned int>(NumberOfItemsInSection(1)));
@@ -289,7 +262,7 @@ TEST_F(PaymentRequestViewControllerTest, TestUpdatePaymentMethodSection) {
   CreateController();
   CheckController();
 
-  [GetPaymentRequestViewController() updatePaymentMethodSection];
+  [GetPaymentRequestViewController() reloadPaymentMethodSection];
 
   // The only item in the Payment Method section should be of type
   // PaymentMethodItem.
@@ -304,7 +277,7 @@ TEST_F(PaymentRequestViewControllerTest, TestUpdateContactInfoSection) {
   CreateController();
   CheckController();
 
-  [GetPaymentRequestViewController() updatePaymentMethodSection];
+  [GetPaymentRequestViewController() reloadPaymentMethodSection];
 
   // The only item in the Contact Info section should be of type
   // AutofillProfileItem.

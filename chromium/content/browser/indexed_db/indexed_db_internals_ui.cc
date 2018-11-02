@@ -8,8 +8,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -69,7 +72,7 @@ IndexedDBInternalsUI::IndexedDBInternalsUI(WebUI* web_ui)
   source->AddResourcePath("indexeddb_internals.css",
                           IDR_INDEXED_DB_INTERNALS_CSS);
   source->SetDefaultResource(IDR_INDEXED_DB_INTERNALS_HTML);
-  source->UseGzip(std::unordered_set<std::string>());
+  source->UseGzip();
 
   BrowserContext* browser_context =
       web_ui->GetWebContents()->GetBrowserContext();
@@ -151,7 +154,7 @@ bool IndexedDBInternalsUI::GetOriginData(
   if (!args->GetString(1, &url_string))
     return false;
 
-  *origin = Origin(GURL(url_string));
+  *origin = Origin::Create(GURL(url_string));
 
   return GetOriginContext(*partition_path, *origin, context);
 }
@@ -225,8 +228,7 @@ void IndexedDBInternalsUI::DownloadOriginDataOnIndexedDBThread(
   if (!temp_dir.CreateUniqueTempDir())
     return;
 
-  // This will get cleaned up on the File thread after the download
-  // has completed.
+  // This will get cleaned up after the download has completed.
   base::FilePath temp_path = temp_dir.Take();
 
   std::string origin_id = storage::GetIdentifierFromOrigin(origin.GetURL());
@@ -346,7 +348,7 @@ void FileDeleter::OnDownloadUpdated(DownloadItem* item) {
     case DownloadItem::CANCELLED:
     case DownloadItem::INTERRUPTED: {
       item->RemoveObserver(this);
-      BrowserThread::DeleteOnFileThread::Destruct(this);
+      delete this;
       break;
     }
     default:
@@ -355,9 +357,11 @@ void FileDeleter::OnDownloadUpdated(DownloadItem* item) {
 }
 
 FileDeleter::~FileDeleter() {
-  base::ScopedTempDir path;
-  bool will_delete = path.Set(temp_dir_);
-  DCHECK(will_delete);
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                            base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+                           base::Bind(base::IgnoreResult(&base::DeleteFile),
+                                      std::move(temp_dir_), true));
 }
 
 void IndexedDBInternalsUI::OnDownloadStarted(

@@ -31,13 +31,14 @@
 #include "modules/quota/DeprecatedStorageInfo.h"
 
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/ExecutionContext.h"
 #include "modules/quota/DeprecatedStorageQuota.h"
 #include "modules/quota/StorageErrorCallback.h"
 #include "modules/quota/StorageQuotaCallback.h"
 #include "modules/quota/StorageUsageCallback.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/bindings/ScriptState.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebTraceLocation.h"
 
 namespace blink {
@@ -54,7 +55,8 @@ void DeprecatedStorageInfo::queryUsageAndQuota(
   DeprecatedStorageQuota* storage_quota = GetStorageQuota(storage_type);
   if (!storage_quota) {
     // Unknown storage type is requested.
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;
@@ -73,7 +75,8 @@ void DeprecatedStorageInfo::requestQuota(ScriptState* script_state,
   DeprecatedStorageQuota* storage_quota = GetStorageQuota(storage_type);
   if (!storage_quota) {
     // Unknown storage type is requested.
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;
@@ -96,12 +99,13 @@ DeprecatedStorageQuota* DeprecatedStorageInfo::GetStorageQuota(
             DeprecatedStorageQuota::Create(DeprecatedStorageQuota::kPersistent);
       return persistent_storage_.Get();
   }
-  return 0;
+  return nullptr;
 }
 
-DEFINE_TRACE(DeprecatedStorageInfo) {
+void DeprecatedStorageInfo::Trace(blink::Visitor* visitor) {
   visitor->Trace(temporary_storage_);
   visitor->Trace(persistent_storage_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

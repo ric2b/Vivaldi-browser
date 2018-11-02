@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "chrome/browser/android/search_geolocation/search_geolocation_service.h"
+#include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
@@ -79,7 +79,8 @@ HostContentSettingsMap* GetHostContentSettingsMap(bool is_incognito) {
       GetActiveUserProfile(is_incognito));
 }
 
-ScopedJavaLocalRef<jstring> ConvertOriginToJavaString(
+ScopedJavaLocalRef<jstring>
+JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(
     JNIEnv* env,
     const std::string& origin) {
   // The string |jorigin| is used to group permissions together in the Site
@@ -115,11 +116,12 @@ typedef void (*InfoListInsertionFunction)(
     const base::android::JavaRef<jstring>&,
     const base::android::JavaRef<jstring>&);
 
-void GetOrigins(JNIEnv* env,
-                ContentSettingsType content_type,
-                InfoListInsertionFunction insertionFunc,
-                const JavaRef<jobject>& list,
-                jboolean managedOnly) {
+void JNI_WebsitePreferenceBridge_GetOrigins(
+    JNIEnv* env,
+    ContentSettingsType content_type,
+    InfoListInsertionFunction insertionFunc,
+    const JavaRef<jobject>& list,
+    jboolean managedOnly) {
   HostContentSettingsMap* content_settings_map =
       GetHostContentSettingsMap(false);  // is_incognito
   ContentSettingsForOneType all_settings;
@@ -153,7 +155,10 @@ void GetOrigins(JNIEnv* env,
       jembedder = ConvertUTF8ToJavaString(env, embedder);
 
     seen_origins.push_back(origin);
-    insertionFunc(env, list, ConvertOriginToJavaString(env, origin), jembedder);
+    insertionFunc(
+        env, list,
+        JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(env, origin),
+        jembedder);
   }
 
   // Add any origins which have a default content setting value (thus skipped
@@ -174,15 +179,17 @@ void GetOrigins(JNIEnv* env,
     if (auto_blocker->GetEmbargoResult(GURL(origin), content_type)
             .content_setting == CONTENT_SETTING_BLOCK) {
       seen_origins.push_back(origin);
-      insertionFunc(env, list, ConvertOriginToJavaString(env, origin),
-                    jembedder);
+      insertionFunc(
+          env, list,
+          JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(env, origin),
+          jembedder);
     }
   }
 
   // Add the DSE origin if it allows geolocation.
   if (content_type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
-    SearchGeolocationService* search_helper =
-        SearchGeolocationService::Factory::GetForBrowserContext(
+    SearchPermissionsService* search_helper =
+        SearchPermissionsService::Factory::GetForBrowserContext(
             GetActiveUserProfile(false /* is_incognito */));
     if (search_helper) {
       const url::Origin& dse_origin = search_helper->GetDSEOriginIfEnabled();
@@ -191,7 +198,8 @@ void GetOrigins(JNIEnv* env,
         if (!base::ContainsValue(seen_origins, dse_origin_string)) {
           seen_origins.push_back(dse_origin_string);
           insertionFunc(env, list,
-                        ConvertOriginToJavaString(env, dse_origin_string),
+                        JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(
+                            env, dse_origin_string),
                         jembedder);
         }
       }
@@ -199,11 +207,12 @@ void GetOrigins(JNIEnv* env,
   }
 }
 
-ContentSetting GetSettingForOrigin(JNIEnv* env,
-                                   ContentSettingsType content_type,
-                                   jstring origin,
-                                   jstring embedder,
-                                   jboolean is_incognito) {
+ContentSetting JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+    JNIEnv* env,
+    ContentSettingsType content_type,
+    jstring origin,
+    jstring embedder,
+    jboolean is_incognito) {
   GURL url(ConvertJavaStringToUTF8(env, origin));
   std::string embedder_str = ConvertJavaStringToUTF8(env, embedder);
   GURL embedder_url;
@@ -219,12 +228,13 @@ ContentSetting GetSettingForOrigin(JNIEnv* env,
       .content_setting;
 }
 
-void SetSettingForOrigin(JNIEnv* env,
-                         ContentSettingsType content_type,
-                         jstring origin,
-                         jstring embedder,
-                         ContentSetting setting,
-                         jboolean is_incognito) {
+void JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+    JNIEnv* env,
+    ContentSettingsType content_type,
+    jstring origin,
+    jstring embedder,
+    ContentSetting setting,
+    jboolean is_incognito) {
   GURL origin_url(ConvertJavaStringToUTF8(env, origin));
   GURL embedder_url =
       embedder ? GURL(ConvertJavaStringToUTF8(env, embedder)) : GURL();
@@ -248,113 +258,124 @@ void SetSettingForOrigin(JNIEnv* env,
 
 }  // anonymous namespace
 
-static void GetGeolocationOrigins(JNIEnv* env,
-                                  const JavaParamRef<jclass>& clazz,
-                                  const JavaParamRef<jobject>& list,
-                                  jboolean managedOnly) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_GEOLOCATION,
-             &Java_WebsitePreferenceBridge_insertGeolocationInfoIntoList, list,
-             managedOnly);
+static void JNI_WebsitePreferenceBridge_GetGeolocationOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list,
+    jboolean managedOnly) {
+  JNI_WebsitePreferenceBridge_GetOrigins(
+      env, CONTENT_SETTINGS_TYPE_GEOLOCATION,
+      &Java_WebsitePreferenceBridge_insertGeolocationInfoIntoList, list,
+      managedOnly);
 }
 
-static jint GetGeolocationSettingForOrigin(
+static jint JNI_WebsitePreferenceBridge_GetGeolocationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     const JavaParamRef<jstring>& embedder,
     jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_GEOLOCATION, origin,
-                             embedder, is_incognito);
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_GEOLOCATION, origin, embedder, is_incognito);
 }
 
-static void SetGeolocationSettingForOrigin(
+static void JNI_WebsitePreferenceBridge_SetGeolocationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     const JavaParamRef<jstring>& embedder,
     jint value,
     jboolean is_incognito) {
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_GEOLOCATION, origin, embedder,
-                      static_cast<ContentSetting>(value), is_incognito);
+  JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_GEOLOCATION, origin, embedder,
+      static_cast<ContentSetting>(value), is_incognito);
 }
 
-static void GetMidiOrigins(JNIEnv* env,
-                           const JavaParamRef<jclass>& clazz,
-                           const JavaParamRef<jobject>& list) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
-             &Java_WebsitePreferenceBridge_insertMidiInfoIntoList, list, false);
-}
-
-static jint GetMidiSettingForOrigin(JNIEnv* env,
-                                    const JavaParamRef<jclass>& clazz,
-                                    const JavaParamRef<jstring>& origin,
-                                    const JavaParamRef<jstring>& embedder,
-                                    jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX, origin,
-                             embedder, is_incognito);
-}
-
-static void SetMidiSettingForOrigin(JNIEnv* env,
-                                    const JavaParamRef<jclass>& clazz,
-                                    const JavaParamRef<jstring>& origin,
-                                    const JavaParamRef<jstring>& embedder,
-                                    jint value,
-                                    jboolean is_incognito) {
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX, origin, embedder,
-                      static_cast<ContentSetting>(value), is_incognito);
-}
-
-static void GetProtectedMediaIdentifierOrigins(
+static void JNI_WebsitePreferenceBridge_GetMidiOrigins(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jobject>& list) {
-  GetOrigins(
+  JNI_WebsitePreferenceBridge_GetOrigins(
+      env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
+      &Java_WebsitePreferenceBridge_insertMidiInfoIntoList, list, false);
+}
+
+static jint JNI_WebsitePreferenceBridge_GetMidiSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder,
+    jboolean is_incognito) {
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX, origin, embedder, is_incognito);
+}
+
+static void JNI_WebsitePreferenceBridge_SetMidiSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder,
+    jint value,
+    jboolean is_incognito) {
+  JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MIDI_SYSEX, origin, embedder,
+      static_cast<ContentSetting>(value), is_incognito);
+}
+
+static void JNI_WebsitePreferenceBridge_GetProtectedMediaIdentifierOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list) {
+  JNI_WebsitePreferenceBridge_GetOrigins(
       env, CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
       &Java_WebsitePreferenceBridge_insertProtectedMediaIdentifierInfoIntoList,
       list, false);
 }
 
-static jint GetProtectedMediaIdentifierSettingForOrigin(
+static jint
+JNI_WebsitePreferenceBridge_GetProtectedMediaIdentifierSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     const JavaParamRef<jstring>& embedder,
     jboolean is_incognito) {
-  return GetSettingForOrigin(env,
-                             CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
-                             origin, embedder, is_incognito);
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, origin, embedder,
+      is_incognito);
 }
 
-static void SetProtectedMediaIdentifierSettingForOrigin(
+static void
+JNI_WebsitePreferenceBridge_SetProtectedMediaIdentifierSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     const JavaParamRef<jstring>& embedder,
     jint value,
     jboolean is_incognito) {
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
-                      origin, embedder, static_cast<ContentSetting>(value),
-                      is_incognito);
+  JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, origin, embedder,
+      static_cast<ContentSetting>(value), is_incognito);
 }
 
-static void GetNotificationOrigins(JNIEnv* env,
-                                   const JavaParamRef<jclass>& clazz,
-                                   const JavaParamRef<jobject>& list) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-             &Java_WebsitePreferenceBridge_insertNotificationIntoList, list,
-             false);
+static void JNI_WebsitePreferenceBridge_GetNotificationOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list) {
+  JNI_WebsitePreferenceBridge_GetOrigins(
+      env, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+      &Java_WebsitePreferenceBridge_insertNotificationIntoList, list, false);
 }
 
-static jint GetNotificationSettingForOrigin(
+static jint JNI_WebsitePreferenceBridge_GetNotificationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-                             origin, origin, is_incognito);
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, origin, origin, is_incognito);
 }
 
-static void SetNotificationSettingForOrigin(
+static void JNI_WebsitePreferenceBridge_SetNotificationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
@@ -388,65 +409,75 @@ static void SetNotificationSettingForOrigin(
       CONTENT_SETTINGS_TYPE_NOTIFICATIONS, setting);
 }
 
-static void GetCameraOrigins(JNIEnv* env,
-                             const JavaParamRef<jclass>& clazz,
-                             const JavaParamRef<jobject>& list,
-                             jboolean managedOnly) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
-             &Java_WebsitePreferenceBridge_insertCameraInfoIntoList, list,
-             managedOnly);
+static void JNI_WebsitePreferenceBridge_GetCameraOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list,
+    jboolean managedOnly) {
+  JNI_WebsitePreferenceBridge_GetOrigins(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+      &Java_WebsitePreferenceBridge_insertCameraInfoIntoList, list,
+      managedOnly);
 }
 
-static void GetMicrophoneOrigins(JNIEnv* env,
-                                 const JavaParamRef<jclass>& clazz,
-                                 const JavaParamRef<jobject>& list,
-                                 jboolean managedOnly) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-             &Java_WebsitePreferenceBridge_insertMicrophoneInfoIntoList, list,
-             managedOnly);
+static void JNI_WebsitePreferenceBridge_GetMicrophoneOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list,
+    jboolean managedOnly) {
+  JNI_WebsitePreferenceBridge_GetOrigins(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+      &Java_WebsitePreferenceBridge_insertMicrophoneInfoIntoList, list,
+      managedOnly);
 }
 
-static jint GetMicrophoneSettingForOrigin(JNIEnv* env,
-                                          const JavaParamRef<jclass>& clazz,
-                                          const JavaParamRef<jstring>& origin,
-                                          const JavaParamRef<jstring>& embedder,
-                                          jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, origin,
-                             embedder, is_incognito);
+static jint JNI_WebsitePreferenceBridge_GetMicrophoneSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder,
+    jboolean is_incognito) {
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, origin, embedder,
+      is_incognito);
 }
 
-static jint GetCameraSettingForOrigin(JNIEnv* env,
-                                      const JavaParamRef<jclass>& clazz,
-                                      const JavaParamRef<jstring>& origin,
-                                      const JavaParamRef<jstring>& embedder,
-                                      jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
-                             origin, embedder, is_incognito);
+static jint JNI_WebsitePreferenceBridge_GetCameraSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder,
+    jboolean is_incognito) {
+  return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, origin, embedder,
+      is_incognito);
 }
 
-static void SetMicrophoneSettingForOrigin(JNIEnv* env,
-                                          const JavaParamRef<jclass>& clazz,
-                                          const JavaParamRef<jstring>& origin,
-                                          jint value,
-                                          jboolean is_incognito) {
+static void JNI_WebsitePreferenceBridge_SetMicrophoneSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    jint value,
+    jboolean is_incognito) {
   // Here 'nullptr' indicates that microphone uses wildcard for embedder.
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, origin,
-                      nullptr, static_cast<ContentSetting>(value),
-                      is_incognito);
+  JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, origin, nullptr,
+      static_cast<ContentSetting>(value), is_incognito);
 }
 
-static void SetCameraSettingForOrigin(JNIEnv* env,
-                                      const JavaParamRef<jclass>& clazz,
-                                      const JavaParamRef<jstring>& origin,
-                                      jint value,
-                                      jboolean is_incognito) {
+static void JNI_WebsitePreferenceBridge_SetCameraSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& origin,
+    jint value,
+    jboolean is_incognito) {
   // Here 'nullptr' indicates that camera uses wildcard for embedder.
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, origin,
-                      nullptr, static_cast<ContentSetting>(value),
-                      is_incognito);
+  JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+      env, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, origin, nullptr,
+      static_cast<ContentSetting>(value), is_incognito);
 }
 
-static jboolean IsContentSettingsPatternValid(
+static jboolean JNI_WebsitePreferenceBridge_IsContentSettingsPatternValid(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& pattern) {
@@ -454,7 +485,7 @@ static jboolean IsContentSettingsPatternValid(
       ConvertJavaStringToUTF8(env, pattern)).IsValid();
 }
 
-static jboolean UrlMatchesContentSettingsPattern(
+static jboolean JNI_WebsitePreferenceBridge_UrlMatchesContentSettingsPattern(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& jurl,
@@ -464,9 +495,10 @@ static jboolean UrlMatchesContentSettingsPattern(
   return pattern.Matches(GURL(ConvertJavaStringToUTF8(env, jurl)));
 }
 
-static void GetUsbOrigins(JNIEnv* env,
-                          const JavaParamRef<jclass>& clazz,
-                          const JavaParamRef<jobject>& list) {
+static void JNI_WebsitePreferenceBridge_GetUsbOrigins(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& list) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   UsbChooserContext* context = UsbChooserContextFactory::GetForProfile(profile);
   for (const auto& object : context->GetAllGrantedObjects()) {
@@ -500,11 +532,12 @@ static void GetUsbOrigins(JNIEnv* env,
   }
 }
 
-static void RevokeUsbPermission(JNIEnv* env,
-                                const JavaParamRef<jclass>& clazz,
-                                const JavaParamRef<jstring>& jorigin,
-                                const JavaParamRef<jstring>& jembedder,
-                                const JavaParamRef<jstring>& jobject) {
+static void JNI_WebsitePreferenceBridge_RevokeUsbPermission(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin,
+    const JavaParamRef<jstring>& jembedder,
+    const JavaParamRef<jstring>& jobject) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   UsbChooserContext* context = UsbChooserContextFactory::GetForProfile(profile);
   GURL origin(ConvertJavaStringToUTF8(env, jorigin));
@@ -522,17 +555,13 @@ static void RevokeUsbPermission(JNIEnv* env,
 
 namespace {
 
-class SiteDataDeleteHelper :
-      public base::RefCountedThreadSafe<SiteDataDeleteHelper>,
-      public CookiesTreeModel::Observer {
+class SiteDataDeleteHelper : public CookiesTreeModel::Observer {
  public:
   SiteDataDeleteHelper(Profile* profile, const GURL& domain)
       : profile_(profile), domain_(domain), ending_batch_processing_(false) {
   }
 
   void Run() {
-    AddRef();  // Balanced in TreeModelEndBatch.
-
     content::StoragePartition* storage_partition =
         content::BrowserContext::GetDefaultStoragePartition(profile_);
     content::IndexedDBContext* indexed_db_context =
@@ -543,35 +572,35 @@ class SiteDataDeleteHelper :
         storage_partition->GetCacheStorageContext();
     storage::FileSystemContext* file_system_context =
         storage_partition->GetFileSystemContext();
-    LocalDataContainer* container = new LocalDataContainer(
+    auto container = std::make_unique<LocalDataContainer>(
         new BrowsingDataCookieHelper(profile_->GetRequestContext()),
         new BrowsingDataDatabaseHelper(profile_),
-        new BrowsingDataLocalStorageHelper(profile_),
-        nullptr,
+        new BrowsingDataLocalStorageHelper(profile_), nullptr,
         new BrowsingDataAppCacheHelper(profile_),
         new BrowsingDataIndexedDBHelper(indexed_db_context),
         BrowsingDataFileSystemHelper::Create(file_system_context),
         BrowsingDataQuotaHelper::Create(profile_),
         BrowsingDataChannelIDHelper::Create(profile_->GetRequestContext()),
         new BrowsingDataServiceWorkerHelper(service_worker_context),
-        new BrowsingDataCacheStorageHelper(cache_storage_context),
-        nullptr,
+        new BrowsingDataSharedWorkerHelper(storage_partition,
+                                           profile_->GetResourceContext()),
+        new BrowsingDataCacheStorageHelper(cache_storage_context), nullptr,
         nullptr);
 
-    cookies_tree_model_.reset(new CookiesTreeModel(
-        container, profile_->GetExtensionSpecialStoragePolicy()));
+    cookies_tree_model_ = std::make_unique<CookiesTreeModel>(
+        container.release(), profile_->GetExtensionSpecialStoragePolicy());
     cookies_tree_model_->AddCookiesTreeObserver(this);
   }
 
   // TreeModelObserver:
   void TreeNodesAdded(ui::TreeModel* model,
-                              ui::TreeModelNode* parent,
-                              int start,
-                              int count) override {}
+                      ui::TreeModelNode* parent,
+                      int start,
+                      int count) override {}
   void TreeNodesRemoved(ui::TreeModel* model,
-                                ui::TreeModelNode* parent,
-                                int start,
-                                int count) override {}
+                        ui::TreeModelNode* parent,
+                        int start,
+                        int count) override {}
 
   // CookiesTreeModel::Observer:
   void TreeNodeChanged(ui::TreeModel* model, ui::TreeModelNode* node) override {
@@ -587,8 +616,10 @@ class SiteDataDeleteHelper :
 
     RecursivelyFindSiteAndDelete(cookies_tree_model_->GetRoot());
 
-    // This will result in this class getting deleted.
-    BrowserThread::ReleaseSoon(BrowserThread::UI, FROM_HERE, this);
+    // Delete this object after the current iteration of the message loop,
+    // because we are in a callback from the CookiesTreeModel, which we own,
+    // so it will be destroyed with this object.
+    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
   }
 
   void RecursivelyFindSiteAndDelete(CookieTreeNode* node) {
@@ -602,7 +633,7 @@ class SiteDataDeleteHelper :
   }
 
  private:
-  friend class base::RefCountedThreadSafe<SiteDataDeleteHelper>;
+  friend class base::DeleteHelper<SiteDataDeleteHelper>;
 
   ~SiteDataDeleteHelper() override {}
 
@@ -619,124 +650,88 @@ class SiteDataDeleteHelper :
   DISALLOW_COPY_AND_ASSIGN(SiteDataDeleteHelper);
 };
 
-class StorageInfoReadyCallback {
- public:
-  explicit StorageInfoReadyCallback(const JavaRef<jobject>& java_callback)
-      : env_(base::android::AttachCurrentThread()),
-        java_callback_(java_callback) {
+void OnStorageInfoReady(const ScopedJavaGlobalRef<jobject>& java_callback,
+                        const storage::UsageInfoEntries& entries) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> list =
+      Java_WebsitePreferenceBridge_createStorageInfoList(env);
+
+  storage::UsageInfoEntries::const_iterator i;
+  for (i = entries.begin(); i != entries.end(); ++i) {
+    if (i->usage <= 0)
+      continue;
+    ScopedJavaLocalRef<jstring> host = ConvertUTF8ToJavaString(env, i->host);
+
+    Java_WebsitePreferenceBridge_insertStorageInfoIntoList(env, list, host,
+                                                           i->type, i->usage);
   }
 
-  void OnStorageInfoReady(const storage::UsageInfoEntries& entries) {
-    ScopedJavaLocalRef<jobject> list =
-        Java_WebsitePreferenceBridge_createStorageInfoList(env_);
+  base::android::RunCallbackAndroid(java_callback, list);
+}
 
-    storage::UsageInfoEntries::const_iterator i;
-    for (i = entries.begin(); i != entries.end(); ++i) {
-      if (i->usage <= 0) continue;
-      ScopedJavaLocalRef<jstring> host =
-          ConvertUTF8ToJavaString(env_, i->host);
+void OnStorageInfoCleared(const ScopedJavaGlobalRef<jobject>& java_callback,
+                          storage::QuotaStatusCode code) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-      Java_WebsitePreferenceBridge_insertStorageInfoIntoList(env_, list, host,
-                                                             i->type, i->usage);
-    }
+  Java_StorageInfoClearedCallback_onStorageInfoCleared(
+      base::android::AttachCurrentThread(), java_callback);
+}
 
-    base::android::RunCallbackAndroid(java_callback_, list);
-    delete this;
+void OnLocalStorageModelInfoLoaded(
+    Profile* profile,
+    bool fetch_important,
+    const ScopedJavaGlobalRef<jobject>& java_callback,
+    const std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>&
+        local_storage_info) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> map =
+      Java_WebsitePreferenceBridge_createLocalStorageInfoMap(env);
+
+  std::vector<ImportantSitesUtil::ImportantDomainInfo> important_domains;
+  if (fetch_important) {
+    important_domains = ImportantSitesUtil::GetImportantRegisterableDomains(
+        profile, kMaxImportantSites);
   }
 
- private:
-  JNIEnv* env_;
-  ScopedJavaGlobalRef<jobject> java_callback_;
-};
+  for (const BrowsingDataLocalStorageHelper::LocalStorageInfo& info :
+       local_storage_info) {
+    ScopedJavaLocalRef<jstring> full_origin =
+        ConvertUTF8ToJavaString(env, info.origin_url.spec());
+    std::string origin_str = info.origin_url.GetOrigin().spec();
 
-class StorageInfoClearedCallback {
- public:
-  explicit StorageInfoClearedCallback(const JavaRef<jobject>& java_callback)
-      : env_(base::android::AttachCurrentThread()),
-        java_callback_(java_callback) {
-  }
-
-  void OnStorageInfoCleared(storage::QuotaStatusCode code) {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-    Java_StorageInfoClearedCallback_onStorageInfoCleared(env_, java_callback_);
-
-    delete this;
-  }
-
- private:
-  JNIEnv* env_;
-  ScopedJavaGlobalRef<jobject> java_callback_;
-};
-
-class LocalStorageInfoReadyCallback {
- public:
-  LocalStorageInfoReadyCallback(const JavaRef<jobject>& java_callback,
-                                bool fetch_important)
-      : env_(base::android::AttachCurrentThread()),
-        java_callback_(java_callback),
-        fetch_important_(fetch_important) {}
-
-  void OnLocalStorageModelInfoLoaded(
-      Profile* profile,
-      const std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>&
-          local_storage_info) {
-    ScopedJavaLocalRef<jobject> map =
-        Java_WebsitePreferenceBridge_createLocalStorageInfoMap(env_);
-
-    std::vector<ImportantSitesUtil::ImportantDomainInfo> important_domains;
-    if (fetch_important_) {
-      important_domains = ImportantSitesUtil::GetImportantRegisterableDomains(
-          profile, kMaxImportantSites);
-    }
-
-    std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>::const_iterator
-        i;
-    for (i = local_storage_info.begin(); i != local_storage_info.end(); ++i) {
-      ScopedJavaLocalRef<jstring> full_origin =
-          ConvertUTF8ToJavaString(env_, i->origin_url.spec());
-      std::string origin_str = i->origin_url.GetOrigin().spec();
-
-      bool important = false;
-      if (fetch_important_) {
-        std::string registerable_domain;
-        if (i->origin_url.HostIsIPAddress()) {
-          registerable_domain = i->origin_url.host();
-        } else {
-          registerable_domain =
-              net::registry_controlled_domains::GetDomainAndRegistry(
-                  i->origin_url,
-                  net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-        }
-        auto important_domain_search =
-            [&registerable_domain](
-                const ImportantSitesUtil::ImportantDomainInfo& item) {
-              return item.registerable_domain == registerable_domain;
-            };
-        if (std::find_if(important_domains.begin(), important_domains.end(),
-                         important_domain_search) != important_domains.end()) {
-          important = true;
-        }
+    bool important = false;
+    if (fetch_important) {
+      std::string registerable_domain;
+      if (info.origin_url.HostIsIPAddress()) {
+        registerable_domain = info.origin_url.host();
+      } else {
+        registerable_domain =
+            net::registry_controlled_domains::GetDomainAndRegistry(
+                info.origin_url,
+                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
       }
-      // Remove the trailing slash so the origin is matched correctly in
-      // SingleWebsitePreferences.mergePermissionInfoForTopLevelOrigin.
-      DCHECK_EQ('/', origin_str.back());
-      origin_str.pop_back();
-      ScopedJavaLocalRef<jstring> origin =
-          ConvertUTF8ToJavaString(env_, origin_str);
-      Java_WebsitePreferenceBridge_insertLocalStorageInfoIntoMap(
-          env_, map, origin, full_origin, i->size, important);
+      auto important_domain_search =
+          [&registerable_domain](
+              const ImportantSitesUtil::ImportantDomainInfo& item) {
+            return item.registerable_domain == registerable_domain;
+          };
+      if (std::find_if(important_domains.begin(), important_domains.end(),
+                       important_domain_search) != important_domains.end()) {
+        important = true;
+      }
     }
-
-    base::android::RunCallbackAndroid(java_callback_, map);
-    delete this;
+    // Remove the trailing slash so the origin is matched correctly in
+    // SingleWebsitePreferences.mergePermissionInfoForTopLevelOrigin.
+    DCHECK_EQ('/', origin_str.back());
+    origin_str.pop_back();
+    ScopedJavaLocalRef<jstring> origin =
+        ConvertUTF8ToJavaString(env, origin_str);
+    Java_WebsitePreferenceBridge_insertLocalStorageInfoIntoMap(
+        env, map, origin, full_origin, info.size, important);
   }
 
- private:
-  JNIEnv* env_;
-  ScopedJavaGlobalRef<jobject> java_callback_;
-  bool fetch_important_;
-};
+  base::android::RunCallbackAndroid(java_callback, map);
+}
 
 }  // anonymous namespace
 
@@ -750,117 +745,115 @@ class LocalStorageInfoReadyCallback {
 // helpers keep a reference to themselves for the duration of their tasks,
 // which includes callback invocation.
 
-static void FetchLocalStorageInfo(JNIEnv* env,
-                                  const JavaParamRef<jclass>& clazz,
-                                  const JavaParamRef<jobject>& java_callback,
-                                  jboolean fetch_important) {
+static void JNI_WebsitePreferenceBridge_FetchLocalStorageInfo(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& java_callback,
+    jboolean fetch_important) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
-  scoped_refptr<BrowsingDataLocalStorageHelper> local_storage_helper(
-      new BrowsingDataLocalStorageHelper(profile));
-  // local_storage_callback will delete itself when it is run.
-  LocalStorageInfoReadyCallback* local_storage_callback =
-      new LocalStorageInfoReadyCallback(java_callback, fetch_important);
+  auto local_storage_helper =
+      base::MakeRefCounted<BrowsingDataLocalStorageHelper>(profile);
   local_storage_helper->StartFetching(
-      base::Bind(&LocalStorageInfoReadyCallback::OnLocalStorageModelInfoLoaded,
-                 base::Unretained(local_storage_callback), profile));
+      base::Bind(&OnLocalStorageModelInfoLoaded, profile, fetch_important,
+                 ScopedJavaGlobalRef<jobject>(java_callback)));
 }
 
-static void FetchStorageInfo(JNIEnv* env,
-                             const JavaParamRef<jclass>& clazz,
-                             const JavaParamRef<jobject>& java_callback) {
+static void JNI_WebsitePreferenceBridge_FetchStorageInfo(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& java_callback) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
 
-  // storage_info_ready_callback will delete itself when it is run.
-  StorageInfoReadyCallback* storage_info_ready_callback =
-      new StorageInfoReadyCallback(java_callback);
-  scoped_refptr<StorageInfoFetcher> storage_info_fetcher =
-      new StorageInfoFetcher(profile);
-  storage_info_fetcher->FetchStorageInfo(
-      base::Bind(&StorageInfoReadyCallback::OnStorageInfoReady,
-          base::Unretained(storage_info_ready_callback)));
+  auto storage_info_fetcher = base::MakeRefCounted<StorageInfoFetcher>(profile);
+  storage_info_fetcher->FetchStorageInfo(base::Bind(
+      &OnStorageInfoReady, ScopedJavaGlobalRef<jobject>(java_callback)));
 }
 
-static void ClearLocalStorageData(JNIEnv* env,
-                                  const JavaParamRef<jclass>& clazz,
-                                  const JavaParamRef<jstring>& jorigin) {
+static void JNI_WebsitePreferenceBridge_ClearLocalStorageData(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
-  scoped_refptr<BrowsingDataLocalStorageHelper> local_storage_helper =
-      new BrowsingDataLocalStorageHelper(profile);
+  auto local_storage_helper =
+      base::MakeRefCounted<BrowsingDataLocalStorageHelper>(profile);
   GURL origin_url = GURL(ConvertJavaStringToUTF8(env, jorigin));
   local_storage_helper->DeleteOrigin(origin_url);
 }
 
-static void ClearStorageData(JNIEnv* env,
-                             const JavaParamRef<jclass>& clazz,
-                             const JavaParamRef<jstring>& jhost,
-                             jint type,
-                             const JavaParamRef<jobject>& java_callback) {
+static void JNI_WebsitePreferenceBridge_ClearStorageData(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jhost,
+    jint type,
+    const JavaParamRef<jobject>& java_callback) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   std::string host = ConvertJavaStringToUTF8(env, jhost);
 
-  // storage_info_cleared_callback will delete itself when it is run.
-  StorageInfoClearedCallback* storage_info_cleared_callback =
-      new StorageInfoClearedCallback(java_callback);
-  scoped_refptr<StorageInfoFetcher> storage_info_fetcher =
-      new StorageInfoFetcher(profile);
+  auto storage_info_fetcher = base::MakeRefCounted<StorageInfoFetcher>(profile);
   storage_info_fetcher->ClearStorage(
-      host,
-      static_cast<storage::StorageType>(type),
-      base::Bind(&StorageInfoClearedCallback::OnStorageInfoCleared,
-          base::Unretained(storage_info_cleared_callback)));
+      host, static_cast<storage::StorageType>(type),
+      base::Bind(&OnStorageInfoCleared,
+                 ScopedJavaGlobalRef<jobject>(java_callback)));
 }
 
-static void ClearCookieData(JNIEnv* env,
-                            const JavaParamRef<jclass>& clazz,
-                            const JavaParamRef<jstring>& jorigin) {
+static void JNI_WebsitePreferenceBridge_ClearCookieData(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   GURL url(ConvertJavaStringToUTF8(env, jorigin));
-  scoped_refptr<SiteDataDeleteHelper> site_data_deleter(
-      new SiteDataDeleteHelper(profile, url));
+
+  // Deletes itself when done.
+  SiteDataDeleteHelper* site_data_deleter =
+      new SiteDataDeleteHelper(profile, url);
   site_data_deleter->Run();
 }
 
-static void ClearBannerData(JNIEnv* env,
-                            const JavaParamRef<jclass>& clazz,
-                            const JavaParamRef<jstring>& jorigin) {
+static void JNI_WebsitePreferenceBridge_ClearBannerData(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin) {
   GetHostContentSettingsMap(false)->SetWebsiteSettingDefaultScope(
       GURL(ConvertJavaStringToUTF8(env, jorigin)), GURL(),
       CONTENT_SETTINGS_TYPE_APP_BANNER, std::string(), nullptr);
 }
 
-static jboolean ShouldUseDSEGeolocationSetting(
+static jboolean JNI_WebsitePreferenceBridge_ShouldUseDSEGeolocationSetting(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& jorigin,
     jboolean is_incognito) {
-  SearchGeolocationService* search_helper =
-      SearchGeolocationService::Factory::GetForBrowserContext(
+  SearchPermissionsService* search_helper =
+      SearchPermissionsService::Factory::GetForBrowserContext(
           GetActiveUserProfile(is_incognito));
   return search_helper &&
          search_helper->UseDSEGeolocationSetting(
-             url::Origin(GURL(ConvertJavaStringToUTF8(env, jorigin))));
+             url::Origin::Create(GURL(ConvertJavaStringToUTF8(env, jorigin))));
 }
 
-static jboolean GetDSEGeolocationSetting(JNIEnv* env,
-                                         const JavaParamRef<jclass>& clazz) {
-  SearchGeolocationService* search_helper =
-      SearchGeolocationService::Factory::GetForBrowserContext(
+static jboolean JNI_WebsitePreferenceBridge_GetDSEGeolocationSetting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  SearchPermissionsService* search_helper =
+      SearchPermissionsService::Factory::GetForBrowserContext(
           GetActiveUserProfile(false /* is_incognito */));
   return search_helper->GetDSEGeolocationSetting();
 }
 
-static void SetDSEGeolocationSetting(JNIEnv* env,
-                                     const JavaParamRef<jclass>& clazz,
-                                     jboolean setting) {
-  SearchGeolocationService* search_helper =
-      SearchGeolocationService::Factory::GetForBrowserContext(
+static void JNI_WebsitePreferenceBridge_SetDSEGeolocationSetting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jboolean setting) {
+  SearchPermissionsService* search_helper =
+      SearchPermissionsService::Factory::GetForBrowserContext(
           GetActiveUserProfile(false /* is_incognito */));
   return search_helper->SetDSEGeolocationSetting(setting);
 }
 
-static jboolean GetAdBlockingActivated(JNIEnv* env,
-                                       const JavaParamRef<jclass>& clazz,
-                                       const JavaParamRef<jstring>& jorigin) {
+static jboolean JNI_WebsitePreferenceBridge_GetAdBlockingActivated(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin) {
   GURL url(ConvertJavaStringToUTF8(env, jorigin));
   return !!GetHostContentSettingsMap(false)->GetWebsiteSetting(
       url, GURL(), CONTENT_SETTINGS_TYPE_ADS_DATA, std::string(), nullptr);

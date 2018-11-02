@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
@@ -51,11 +50,8 @@ class KeyPressCounterView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(KeyPressCounterView);
 };
 
-// These tests run with both FullscreenAppList enabled and disabled.
-// TODO(crbug.com/743113) Unify the two test classes.
 class SearchBoxViewTest : public views::test::WidgetTest,
-                          public SearchBoxViewDelegate,
-                          public testing::WithParamInterface<bool> {
+                          public SearchBoxViewDelegate {
  public:
   SearchBoxViewTest() = default;
   ~SearchBoxViewTest() override = default;
@@ -64,21 +60,14 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   void SetUp() override {
     views::test::WidgetTest::SetUp();
 
-    if (testing::UnitTest::GetInstance()->current_test_info()->value_param()) {
-      // Current test is parameterized.
-      test_with_fullscreen_ = GetParam();
-      if (test_with_fullscreen_) {
-        scoped_feature_list_.InitAndEnableFeature(
-            features::kEnableFullscreenAppList);
-      }
-    }
-
-    gfx::NativeView parent = GetContext();
     app_list_view_ = new AppListView(&view_delegate_);
-    app_list_view()->Initialize(parent, 0, false, false);
+    AppListView::InitParams params;
+    params.parent = GetContext();
+    app_list_view()->Initialize(params);
 
     widget_ = CreateTopLevelPlatformWidget();
     view_.reset(new SearchBoxView(this, &view_delegate_, app_list_view()));
+    widget_->SetBounds(gfx::Rect(0, 0, 300, 200));
     counter_view_ = new KeyPressCounterView();
     widget_->GetContentsView()->AddChildView(view());
     widget_->GetContentsView()->AddChildView(counter_view_);
@@ -93,10 +82,15 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   }
 
  protected:
+  views::Widget* widget() { return widget_; }
   SearchBoxView* view() { return view_.get(); }
   AppListView* app_list_view() { return app_list_view_; }
 
-  bool test_with_fullscreen() { return test_with_fullscreen_; }
+  void SetSearchEngineIsGoogle(bool is_google) {
+    view_delegate_.SetSearchEngineIsGoogle(is_google);
+  }
+
+  void SetSearchBoxActive(bool active) { view()->SetSearchBoxActive(active); }
 
   void SetLongAutoLaunchTimeout() {
     // Sets a long timeout that lasts longer than the test run.
@@ -155,105 +149,12 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   KeyPressCounterView* counter_view_;
   base::string16 last_query_;
   int query_changed_count_ = 0;
-  bool test_with_fullscreen_ = false;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxViewTest);
 };
 
-class SearchBoxViewFullscreenTest : public views::test::WidgetTest,
-                                    public SearchBoxViewDelegate {
- public:
-  SearchBoxViewFullscreenTest() {}
-  ~SearchBoxViewFullscreenTest() override {}
-
-  // Overridden from testing::Test:
-  void SetUp() override {
-    views::test::WidgetTest::SetUp();
-    scoped_feature_list_.InitAndEnableFeature(
-        app_list::features::kEnableFullscreenAppList);
-
-    gfx::NativeView parent = GetContext();
-    app_list_view_ = new AppListView(&view_delegate_);
-    app_list_view_->Initialize(parent, 0, false, false);
-
-    widget_ = CreateTopLevelPlatformWidget();
-    view_.reset(new SearchBoxView(this, &view_delegate_, app_list_view()));
-    widget_->SetBounds(gfx::Rect(0, 0, 300, 200));
-    widget_->GetContentsView()->AddChildView(view());
-  }
-
-  void TearDown() override {
-    view_.reset();
-    app_list_view_->GetWidget()->Close();
-    widget_->CloseNow();
-    views::test::WidgetTest::TearDown();
-  }
-
- protected:
-  views::Widget* widget() { return widget_; }
-  SearchBoxView* view() { return view_.get(); }
-  AppListView* app_list_view() { return app_list_view_; }
-
-  void SetSearchEngineIsGoogle(bool is_google) {
-    view_delegate_.SetSearchEngineIsGoogle(is_google);
-  }
-
-  void SetSearchBoxActive(bool active) { view()->SetSearchBoxActive(active); }
-
-  void KeyPress(ui::KeyboardCode key_code) {
-    ui::KeyEvent event(ui::ET_KEY_PRESSED, key_code, ui::EF_NONE);
-    view()->search_box()->OnKeyEvent(&event);
-    // Emulates the input method.
-    if (::isalnum(static_cast<int>(key_code))) {
-      base::char16 character = ::tolower(static_cast<int>(key_code));
-      view()->search_box()->InsertText(base::string16(1, character));
-    }
-  }
-
- private:
-  // Overridden from SearchBoxViewDelegate:
-  void QueryChanged(SearchBoxView* sender) override {}
-
-  void BackButtonPressed() override {}
-
-  void SetSearchResultSelection(bool select) override {}
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  AppListTestViewDelegate view_delegate_;
-  views::Widget* widget_;
-  AppListView* app_list_view_ = nullptr;
-  std::unique_ptr<SearchBoxView> view_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchBoxViewFullscreenTest);
-};
-
-// Instantiate the Boolean which is used to toggle the Fullscreen app list in
-// the parameterized tests.
-INSTANTIATE_TEST_CASE_P(, SearchBoxViewTest, testing::Bool());
-
-TEST_P(SearchBoxViewTest, Basic) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (features::IsFullscreenAppListEnabled())
-    return;
-
-  KeyPress(ui::VKEY_A);
-  EXPECT_EQ("a", GetLastQueryAndReset());
-  EXPECT_EQ(1, GetQueryChangedCountAndReset());
-  EXPECT_EQ(0, GetContentsViewKeyPressCountAndReset());
-
-  KeyPress(ui::VKEY_DOWN);
-  EXPECT_EQ(0, GetQueryChangedCountAndReset());
-  EXPECT_EQ(1, GetContentsViewKeyPressCountAndReset());
-
-  view()->ClearSearch();
-  EXPECT_EQ(1, GetQueryChangedCountAndReset());
-  EXPECT_TRUE(GetLastQueryAndReset().empty());
-}
-
-TEST_P(SearchBoxViewTest, CancelAutoLaunch) {
+// TODO(crbug.com/781407) Re-enable the test once voice search is back.
+TEST_F(SearchBoxViewTest, DISABLED_CancelAutoLaunch) {
   SetLongAutoLaunchTimeout();
   ASSERT_NE(base::TimeDelta(), GetAutoLaunchTimeout());
 
@@ -276,26 +177,25 @@ TEST_P(SearchBoxViewTest, CancelAutoLaunch) {
 }
 
 // Tests that the close button is invisible by default.
-TEST_F(SearchBoxViewFullscreenTest, CloseButtonInvisibleByDefault) {
+TEST_F(SearchBoxViewTest, CloseButtonInvisibleByDefault) {
   EXPECT_FALSE(view()->close_button()->visible());
 }
 
 // Tests that the close button becomes visible after typing in the search box.
-TEST_F(SearchBoxViewFullscreenTest, CloseButtonVisibleAfterTyping) {
+TEST_F(SearchBoxViewTest, CloseButtonVisibleAfterTyping) {
   KeyPress(ui::VKEY_A);
   EXPECT_TRUE(view()->close_button()->visible());
 }
 
 // Tests that the close button is still invisible after the search box is
 // activated.
-TEST_F(SearchBoxViewFullscreenTest, CloseButtonInvisibleAfterSearchBoxActived) {
+TEST_F(SearchBoxViewTest, CloseButtonInvisibleAfterSearchBoxActived) {
   view()->SetSearchBoxActive(true);
   EXPECT_FALSE(view()->close_button()->visible());
 }
 
 // Tests that the close button becomes invisible after close button is clicked.
-TEST_F(SearchBoxViewFullscreenTest,
-       CloseButtonInvisibleAfterCloseButtonClicked) {
+TEST_F(SearchBoxViewTest, CloseButtonInvisibleAfterCloseButtonClicked) {
   KeyPress(ui::VKEY_A);
   view()->ButtonPressed(
       view()->close_button(),
@@ -306,7 +206,7 @@ TEST_F(SearchBoxViewFullscreenTest,
 }
 
 // Tests that the search box becomes empty after close button is clicked.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxEmptyAfterCloseButtonClicked) {
+TEST_F(SearchBoxViewTest, SearchBoxEmptyAfterCloseButtonClicked) {
   KeyPress(ui::VKEY_A);
   view()->ButtonPressed(
       view()->close_button(),
@@ -317,7 +217,7 @@ TEST_F(SearchBoxViewFullscreenTest, SearchBoxEmptyAfterCloseButtonClicked) {
 }
 
 // Tests that the search box is still active after close button is clicked.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveAfterCloseButtonClicked) {
+TEST_F(SearchBoxViewTest, SearchBoxActiveAfterCloseButtonClicked) {
   KeyPress(ui::VKEY_A);
   view()->ButtonPressed(
       view()->close_button(),
@@ -328,12 +228,12 @@ TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveAfterCloseButtonClicked) {
 }
 
 // Tests that the search box is inactive by default.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxInactiveByDefault) {
+TEST_F(SearchBoxViewTest, SearchBoxInactiveByDefault) {
   ASSERT_FALSE(view()->is_search_box_active());
 }
 
 // Tests that the black Google icon is used for an inactive Google search.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxInactiveSearchBoxGoogle) {
+TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchBoxGoogle) {
   SetSearchEngineIsGoogle(true);
   SetSearchBoxActive(false);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
@@ -348,7 +248,7 @@ TEST_F(SearchBoxViewFullscreenTest, SearchBoxInactiveSearchBoxGoogle) {
 }
 
 // Tests that the colored Google icon is used for an active Google search.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveSearchEngineGoogle) {
+TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineGoogle) {
   SetSearchEngineIsGoogle(true);
   SetSearchBoxActive(true);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
@@ -363,7 +263,7 @@ TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveSearchEngineGoogle) {
 }
 
 // Tests that the non-Google icon is used for an inactive non-Google search.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxInactiveSearchEngineNotGoogle) {
+TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
   SetSearchBoxActive(false);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
@@ -378,7 +278,7 @@ TEST_F(SearchBoxViewFullscreenTest, SearchBoxInactiveSearchEngineNotGoogle) {
 }
 
 // Tests that the non-Google icon is used for an active non-Google search.
-TEST_F(SearchBoxViewFullscreenTest, SearchBoxActiveSearchEngineNotGoogle) {
+TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
   SetSearchBoxActive(true);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(

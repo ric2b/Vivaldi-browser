@@ -16,33 +16,35 @@ namespace {
 
 const int kDefaultTransitionDurationMs = 200;
 
-class CacheRenderSurfaceObserver : public ui::ImplicitAnimationObserver,
-                                   public ui::LayerObserver {
+template <typename Trait>
+class ScopedLayerAnimationObserver : public ui::ImplicitAnimationObserver,
+                                     public ui::LayerObserver {
  public:
-  CacheRenderSurfaceObserver(ui::Layer* layer) : layer_(layer) {
+  ScopedLayerAnimationObserver(ui::Layer* layer) : layer_(layer) {
     layer_->AddObserver(this);
-    layer_->AddCacheRenderSurfaceRequest();
+    Trait::AddRequest(layer_);
   }
-  ~CacheRenderSurfaceObserver() override {
+  ~ScopedLayerAnimationObserver() override {
     if (layer_)
       layer_->RemoveObserver(this);
   }
 
   // ui::ImplicitAnimationObserver overrides:
   void OnImplicitAnimationsCompleted() override {
-    // If animation finishes before |layer_| is destoyed, we will reset the
-    // cache and remove |this| from the |layer_| observer list when deleting
-    // |this|.
-    if (layer_)
-      layer_->RemoveCacheRenderSurfaceRequest();
-    delete this;
+    // If animation finishes before |layer_| is destoyed, we will remove the
+    // request applied on the layer and remove |this| from the |layer_|
+    // observer list when deleting |this|.
+    if (layer_) {
+      Trait::RemoveRequest(layer_);
+      layer_->GetAnimator()->RemoveAndDestroyOwnedObserver(this);
+    }
   }
 
   // ui::LayerObserver overrides:
   void LayerDestroyed(ui::Layer* layer) override {
     // If the animation is still going past layer destruction then we want the
-    // layer too keep being cached until the animation has finished. We will
-    // defer deleting |this| until the animation finishes.
+    // layer to keep the request until the animation has finished. We will defer
+    // deleting |this| until the animation finishes.
     layer_->RemoveObserver(this);
     layer_ = nullptr;
   }
@@ -50,8 +52,55 @@ class CacheRenderSurfaceObserver : public ui::ImplicitAnimationObserver,
  private:
   ui::Layer* layer_;
 
-  DISALLOW_COPY_AND_ASSIGN(CacheRenderSurfaceObserver);
+  DISALLOW_COPY_AND_ASSIGN(ScopedLayerAnimationObserver);
 };
+
+struct RenderSurfaceCachingTrait {
+  static void AddRequest(ui::Layer* layer) {
+    layer->AddCacheRenderSurfaceRequest();
+  }
+  static void RemoveRequest(ui::Layer* layer) {
+    layer->RemoveCacheRenderSurfaceRequest();
+  }
+};
+using ScopedRenderSurfaceCaching =
+    ScopedLayerAnimationObserver<RenderSurfaceCachingTrait>;
+
+struct DeferredPaintingTrait {
+  static void AddRequest(ui::Layer* layer) { layer->AddDeferredPaintRequest(); }
+  static void RemoveRequest(ui::Layer* layer) {
+    layer->RemoveDeferredPaintRequest();
+  }
+};
+using ScopedDeferredPainting =
+    ScopedLayerAnimationObserver<DeferredPaintingTrait>;
+
+struct TrilinearFilteringTrait {
+  static void AddRequest(ui::Layer* layer) {
+    layer->AddTrilinearFilteringRequest();
+  }
+  static void RemoveRequest(ui::Layer* layer) {
+    layer->RemoveTrilinearFilteringRequest();
+  }
+};
+using ScopedTrilinearFiltering =
+    ScopedLayerAnimationObserver<TrilinearFilteringTrait>;
+
+void AddObserverToSettings(
+    ui::ScopedLayerAnimationSettings* settings,
+    std::unique_ptr<ui::ImplicitAnimationObserver> observer) {
+  settings->AddObserver(observer.get());
+  settings->GetAnimator()->AddOwnedObserver(std::move(observer));
+}
+
+void AddScopedDeferredPaintingObserverRecursive(
+    ui::Layer* layer,
+    ui::ScopedLayerAnimationSettings* settings) {
+  auto observer = std::make_unique<ScopedDeferredPainting>(layer);
+  AddObserverToSettings(settings, std::move(observer));
+  for (auto* child : layer->children())
+    AddScopedDeferredPaintingObserverRecursive(child, settings);
+}
 
 }  // namespace
 
@@ -78,10 +127,13 @@ ScopedLayerAnimationSettings::~ScopedLayerAnimationSettings() {
   animator_->set_tween_type(old_tween_type_);
   animator_->set_preemption_strategy(old_preemption_strategy_);
 
-  for (std::set<ImplicitAnimationObserver*>::const_iterator i =
-       observers_.begin(); i != observers_.end(); ++i) {
-    animator_->observers_.RemoveObserver(*i);
-    (*i)->SetActive(true);
+  for (auto* observer : observers_) {
+    // Directly remove |observer| from |LayerAnimator::observers_| rather than
+    // calling LayerAnimator::RemoveObserver(), to avoid removing it from the
+    // observer list of LayerAnimationSequences that have already been
+    // scheduled.
+    animator_->observers_.RemoveObserver(observer);
+    observer->SetActive(true);
   }
 }
 
@@ -101,17 +153,12 @@ void ScopedLayerAnimationSettings::SetTransitionDuration(
   animator_->SetTransitionDuration(duration);
 }
 
-void ScopedLayerAnimationSettings::CacheRenderSurface() {
-  AddObserver(
-      new CacheRenderSurfaceObserver(animator_->delegate()->GetLayer()));
+base::TimeDelta ScopedLayerAnimationSettings::GetTransitionDuration() const {
+  return animator_->GetTransitionDuration();
 }
 
 void ScopedLayerAnimationSettings::LockTransitionDuration() {
   animator_->is_transition_duration_locked_ = true;
-}
-
-base::TimeDelta ScopedLayerAnimationSettings::GetTransitionDuration() const {
-  return animator_->GetTransitionDuration();
 }
 
 void ScopedLayerAnimationSettings::SetTweenType(gfx::Tween::Type tween_type) {
@@ -130,6 +177,23 @@ void ScopedLayerAnimationSettings::SetPreemptionStrategy(
 LayerAnimator::PreemptionStrategy
 ScopedLayerAnimationSettings::GetPreemptionStrategy() const {
   return animator_->preemption_strategy();
+}
+
+void ScopedLayerAnimationSettings::CacheRenderSurface() {
+  auto observer = std::make_unique<ScopedRenderSurfaceCaching>(
+      animator_->delegate()->GetLayer());
+  AddObserverToSettings(this, std::move(observer));
+}
+
+void ScopedLayerAnimationSettings::DeferPaint() {
+  AddScopedDeferredPaintingObserverRecursive(animator_->delegate()->GetLayer(),
+                                             this);
+}
+
+void ScopedLayerAnimationSettings::TrilinearFiltering() {
+  auto observer = std::make_unique<ScopedTrilinearFiltering>(
+      animator_->delegate()->GetLayer());
+  AddObserverToSettings(this, std::move(observer));
 }
 
 }  // namespace ui

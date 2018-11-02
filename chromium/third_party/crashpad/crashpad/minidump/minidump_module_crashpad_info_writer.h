@@ -25,10 +25,10 @@
 #include "minidump/minidump_extensions.h"
 #include "minidump/minidump_string_writer.h"
 #include "minidump/minidump_writable.h"
-#include "util/stdlib/pointer_container.h"
 
 namespace crashpad {
 
+class MinidumpAnnotationListWriter;
 class MinidumpSimpleStringDictionaryWriter;
 class ModuleSnapshot;
 
@@ -75,6 +75,17 @@ class MinidumpModuleCrashpadInfoWriter final
   void SetSimpleAnnotations(
       std::unique_ptr<MinidumpSimpleStringDictionaryWriter> simple_annotations);
 
+  //! \brief Arranges for MinidumpModuleCrashpadInfo::annotation_objects to
+  //!     point to the MinidumpAnnotationListWriter object to be written by
+  //!     \a annotation_objects.
+  //!
+  //! This object takes ownership of \a annotation_objects and becomes its
+  //! parent in the overall tree of internal::MinidumpWritable objects.
+  //!
+  //! \note Valid in #kStateMutable.
+  void SetAnnotationObjects(
+      std::unique_ptr<MinidumpAnnotationListWriter> annotation_objects);
+
   //! \brief Determines whether the object is useful.
   //!
   //! A useful object is one that carries data that makes a meaningful
@@ -95,6 +106,7 @@ class MinidumpModuleCrashpadInfoWriter final
   MinidumpModuleCrashpadInfo module_;
   std::unique_ptr<MinidumpUTF8StringListWriter> list_annotations_;
   std::unique_ptr<MinidumpSimpleStringDictionaryWriter> simple_annotations_;
+  std::unique_ptr<MinidumpAnnotationListWriter> annotation_objects_;
 
   DISALLOW_COPY_AND_ASSIGN(MinidumpModuleCrashpadInfoWriter);
 };
@@ -155,7 +167,8 @@ class MinidumpModuleCrashpadInfoListWriter final
   bool WriteObject(FileWriterInterface* file_writer) override;
 
  private:
-  PointerVector<MinidumpModuleCrashpadInfoWriter> module_crashpad_infos_;
+  std::vector<std::unique_ptr<MinidumpModuleCrashpadInfoWriter>>
+      module_crashpad_infos_;
   std::vector<MinidumpModuleCrashpadInfoLink> module_crashpad_info_links_;
   MinidumpModuleCrashpadInfoList module_crashpad_info_list_base_;
 

@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.support.test.filters.SmallTest;
+import android.view.View;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -24,7 +25,6 @@ import org.chromium.chrome.browser.download.DownloadSheetContent;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistorySheetContent;
-import org.chromium.chrome.browser.suggestions.SuggestionsBottomSheetContent;
 import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.ui.test.util.UiRestriction;
@@ -59,26 +59,26 @@ public class BottomSheetContentControllerTest {
         int closedCount = mObserver.mClosedCallbackHelper.getCallCount();
 
         mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_HALF, false);
-        mObserver.mOpenedCallbackHelper.waitForCallback(openedCount, 1);
-        openedCount++;
-        assertEquals(contentChangedCount, mObserver.mContentChangedCallbackHelper.getCallCount());
+        mObserver.mOpenedCallbackHelper.waitForCallback(openedCount++, 1);
+        mObserver.mContentChangedCallbackHelper.waitForCallback(contentChangedCount++, 1);
         assertEquals(closedCount, mObserver.mClosedCallbackHelper.getCallCount());
 
         mBottomSheetTestRule.selectBottomSheetContent(R.id.action_history);
-        mObserver.mContentChangedCallbackHelper.waitForCallback(contentChangedCount, 1);
-        contentChangedCount++;
+        mObserver.mContentChangedCallbackHelper.waitForCallback(contentChangedCount++, 1);
         assertEquals(openedCount, mObserver.mOpenedCallbackHelper.getCallCount());
         assertEquals(closedCount, mObserver.mClosedCallbackHelper.getCallCount());
         assertTrue(mBottomSheet.getCurrentSheetContent() instanceof HistorySheetContent);
         assertEquals(
                 R.id.action_history, mBottomSheetContentController.getSelectedItemIdForTests());
+        assertEquals(View.INVISIBLE, mBottomSheet.getDefaultToolbarView().getVisibility());
 
         mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
         mObserver.mClosedCallbackHelper.waitForCallback(closedCount, 1);
-        mObserver.mContentChangedCallbackHelper.waitForCallback(contentChangedCount, 1);
+        mObserver.mContentChangedCallbackHelper.waitForCallback(contentChangedCount++, 1);
         assertEquals(openedCount, mObserver.mOpenedCallbackHelper.getCallCount());
-        assertTrue(mBottomSheet.getCurrentSheetContent() instanceof SuggestionsBottomSheetContent);
-        assertEquals(R.id.action_home, mBottomSheetContentController.getSelectedItemIdForTests());
+        assertEquals(null, mBottomSheet.getCurrentSheetContent());
+        assertEquals(0, mBottomSheetContentController.getSelectedItemIdForTests());
+        assertEquals(View.VISIBLE, mBottomSheet.getDefaultToolbarView().getVisibility());
     }
 
     @Test

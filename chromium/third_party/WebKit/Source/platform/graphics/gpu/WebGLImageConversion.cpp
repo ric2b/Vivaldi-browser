@@ -450,7 +450,7 @@ void Unpack<WebGLImageConversion::kDataFormatBGRA8, uint8_t, uint8_t>(
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
   SIMD::unpackOneRowOfBGRA8LittleToRGBA8MSA(source32, destination32,
-                                            pixelsPerRow);
+                                            pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     uint32_t bgra = source32[i];
@@ -480,7 +480,7 @@ void Unpack<WebGLImageConversion::kDataFormatRGBA5551, uint16_t, uint8_t>(
   SIMD::UnpackOneRowOfRGBA5551ToRGBA8(source, destination, pixels_per_row);
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
-  SIMD::unpackOneRowOfRGBA5551ToRGBA8MSA(source, destination, pixelsPerRow);
+  SIMD::unpackOneRowOfRGBA5551ToRGBA8MSA(source, destination, pixels_per_row);
 #endif
 
   for (unsigned i = 0; i < pixels_per_row; ++i) {
@@ -510,7 +510,7 @@ void Unpack<WebGLImageConversion::kDataFormatRGBA4444, uint16_t, uint8_t>(
   SIMD::UnpackOneRowOfRGBA4444ToRGBA8(source, destination, pixels_per_row);
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
-  SIMD::unpackOneRowOfRGBA4444ToRGBA8MSA(source, destination, pixelsPerRow);
+  SIMD::unpackOneRowOfRGBA4444ToRGBA8MSA(source, destination, pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     uint16_t packed_value = source[0];
@@ -722,7 +722,7 @@ void Pack<WebGLImageConversion::kDataFormatR8,
   SIMD::PackOneRowOfRGBA8LittleToR8(source, destination, pixels_per_row);
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
-  SIMD::packOneRowOfRGBA8LittleToR8MSA(source, destination, pixelsPerRow);
+  SIMD::packOneRowOfRGBA8LittleToR8MSA(source, destination, pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     float scale_factor = source[3] ? 255.0f / source[3] : 1.0f;
@@ -779,7 +779,7 @@ void Pack<WebGLImageConversion::kDataFormatRA8,
   SIMD::PackOneRowOfRGBA8LittleToRA8(source, destination, pixels_per_row);
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
-  SIMD::packOneRowOfRGBA8LittleToRA8MSA(source, destination, pixelsPerRow);
+  SIMD::packOneRowOfRGBA8LittleToRA8MSA(source, destination, pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     float scale_factor = source[3] ? 255.0f / source[3] : 1.0f;
@@ -891,7 +891,7 @@ void Pack<WebGLImageConversion::kDataFormatRGBA8,
   SIMD::PackOneRowOfRGBA8LittleToRGBA8(source, destination, pixels_per_row);
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
-  SIMD::packOneRowOfRGBA8LittleToRGBA8MSA(source, destination, pixelsPerRow);
+  SIMD::packOneRowOfRGBA8LittleToRGBA8MSA(source, destination, pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     float scale_factor = source[3] ? 255.0f / source[3] : 1.0f;
@@ -923,7 +923,7 @@ void Pack<WebGLImageConversion::kDataFormatRGBA4444,
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
   SIMD::packOneRowOfRGBA8ToUnsignedShort4444MSA(source, destination,
-                                                pixelsPerRow);
+                                                pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     *destination = (((source[0] & 0xF0) << 8) | ((source[1] & 0xF0) << 4) |
@@ -991,7 +991,7 @@ void Pack<WebGLImageConversion::kDataFormatRGBA5551,
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
   SIMD::packOneRowOfRGBA8ToUnsignedShort5551MSA(source, destination,
-                                                pixelsPerRow);
+                                                pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     *destination = (((source[0] & 0xF8) << 8) | ((source[1] & 0xF8) << 3) |
@@ -1059,7 +1059,7 @@ void Pack<WebGLImageConversion::kDataFormatRGB565,
 #endif
 #if HAVE_MIPS_MSA_INTRINSICS
   SIMD::packOneRowOfRGBA8ToUnsignedShort565MSA(source, destination,
-                                               pixelsPerRow);
+                                               pixels_per_row);
 #endif
   for (unsigned i = 0; i < pixels_per_row; ++i) {
     *destination = (((source[0] & 0xF8) << 8) | ((source[1] & 0xFC) << 3) |
@@ -2813,7 +2813,7 @@ void WebGLImageConversion::ImageExtractor::ExtractImage(
     std::unique_ptr<ImageDecoder> decoder(ImageDecoder::Create(
         image_->Data(), true, ImageDecoder::kAlphaNotPremultiplied,
         ignore_color_space ? ColorBehavior::Ignore()
-                           : ColorBehavior::TransformToGlobalTarget()));
+                           : ColorBehavior::TransformToSRGB()));
     if (!decoder || !decoder->FrameCount())
       return;
     ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
@@ -2977,7 +2977,8 @@ bool WebGLImageConversion::PackImageData(
   params.alignment = 1;
   if (ComputeImageSizeInBytes(format, type, source_image_sub_rectangle.Width(),
                               source_image_sub_rectangle.Height(), depth,
-                              params, &packed_size, 0, 0) != GL_NO_ERROR)
+                              params, &packed_size, nullptr,
+                              nullptr) != GL_NO_ERROR)
     return false;
   data.resize(packed_size);
 
@@ -3011,7 +3012,8 @@ bool WebGLImageConversion::ExtractImageData(
   params.alignment = 1;
   if (ComputeImageSizeInBytes(format, type, source_image_sub_rectangle.Width(),
                               source_image_sub_rectangle.Height(), depth,
-                              params, &packed_size, 0, 0) != GL_NO_ERROR)
+                              params, &packed_size, nullptr,
+                              nullptr) != GL_NO_ERROR)
     return false;
   data.resize(packed_size);
 
@@ -3025,15 +3027,16 @@ bool WebGLImageConversion::ExtractImageData(
   return true;
 }
 
-bool WebGLImageConversion::ExtractTextureData(unsigned width,
-                                              unsigned height,
-                                              GLenum format,
-                                              GLenum type,
-                                              unsigned unpack_alignment,
-                                              bool flip_y,
-                                              bool premultiply_alpha,
-                                              const void* pixels,
-                                              Vector<uint8_t>& data) {
+bool WebGLImageConversion::ExtractTextureData(
+    unsigned width,
+    unsigned height,
+    GLenum format,
+    GLenum type,
+    const PixelStoreParams& unpack_params,
+    bool flip_y,
+    bool premultiply_alpha,
+    const void* pixels,
+    Vector<uint8_t>& data) {
   // Assumes format, type, etc. have already been validated.
   DataFormat source_data_format = GetDataFormat(format, type);
   if (source_data_format == kDataFormatNumFormats)
@@ -3047,9 +3050,18 @@ bool WebGLImageConversion::ExtractTextureData(unsigned width,
   unsigned bytes_per_pixel = components_per_pixel * bytes_per_component;
   data.resize(width * height * bytes_per_pixel);
 
-  if (!PackPixels(static_cast<const uint8_t*>(pixels), source_data_format,
-                  width, height, IntRect(0, 0, width, height), 1,
-                  unpack_alignment, 0, format, type,
+  unsigned image_size_in_bytes, skip_size_in_bytes;
+  ComputeImageSizeInBytes(format, type, width, height, 1, unpack_params,
+                          &image_size_in_bytes, nullptr, &skip_size_in_bytes);
+  const uint8_t* src_data = static_cast<const uint8_t*>(pixels);
+  if (skip_size_in_bytes) {
+    src_data += skip_size_in_bytes;
+  }
+
+  if (!PackPixels(src_data, source_data_format,
+                  unpack_params.row_length ? unpack_params.row_length : width,
+                  height, IntRect(0, 0, width, height), 1,
+                  unpack_params.alignment, 0, format, type,
                   (premultiply_alpha ? kAlphaDoPremultiply : kAlphaDoNothing),
                   data.data(), flip_y))
     return false;

@@ -26,14 +26,15 @@
 
 #include "platform/wtf/text/TextEncodingRegistry.h"
 
+#include <memory>
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/Atomics.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/StringExtras.h"
 #include "platform/wtf/ThreadingPrimitives.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/TextCodecICU.h"
 #include "platform/wtf/text/TextCodecLatin1.h"
@@ -42,7 +43,6 @@
 #include "platform/wtf/text/TextCodecUTF8.h"
 #include "platform/wtf/text/TextCodecUserDefined.h"
 #include "platform/wtf/text/TextEncoding.h"
-#include <memory>
 
 namespace WTF {
 
@@ -87,7 +87,7 @@ struct TextEncodingNameHash {
 struct TextCodecFactory {
   NewTextCodecFunction function;
   const void* additional_data;
-  TextCodecFactory(NewTextCodecFunction f = 0, const void* d = 0)
+  TextCodecFactory(NewTextCodecFunction f = nullptr, const void* d = nullptr)
       : function(f), additional_data(d) {}
 };
 

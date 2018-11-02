@@ -114,7 +114,9 @@ class PLATFORM_EXPORT ScrollAnimatorMac : public ScrollAnimatorBase {
 
   void SetVisibleScrollerThumbRect(const IntRect&);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ScrollAnimatorBase::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) {
+    ScrollAnimatorBase::Trace(visitor);
+  }
 
  private:
   RetainPtr<id> scroll_animation_helper_;
@@ -133,7 +135,7 @@ class PLATFORM_EXPORT ScrollAnimatorMac : public ScrollAnimatorBase {
 
   void SendContentAreaScrolledTask();
   TaskHandle send_content_area_scrolled_task_handle_;
-  RefPtr<WebTaskRunner> task_runner_;
+  scoped_refptr<WebTaskRunner> task_runner_;
   ScrollOffset content_area_scrolled_timer_scroll_delta_;
 
   ScrollResult UserScroll(ScrollGranularity,

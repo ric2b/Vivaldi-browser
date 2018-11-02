@@ -26,9 +26,9 @@ static_library("ukm") {
   ]
 
   public_deps = [
-    "//components/metrics/proto",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/interfaces",
+    "//third_party/metrics_proto",
   ]
 
   deps = [
@@ -38,25 +38,6 @@ static_library("ukm") {
     "//components/prefs",
     "//components/variations",
     "//url",
-  ]
-}
-
-static_library("ukm_interface") {
-  sources = [
-    "ukm_interface.cc",
-    "ukm_interface.h",
-  ]
-
-  public_deps = [
-    "//base",
-    "//services/metrics/public/cpp:metrics_cpp",
-    "//services/metrics/public/interfaces",
-  ]
-
-  deps = [
-    ":ukm",
-    "//mojo/public/cpp/bindings",
-    "//services/metrics/public/cpp:metrics_cpp",
   ]
 }
 
@@ -85,7 +66,7 @@ static_library("test_support") {
 
   public_deps = [
     ":ukm",
-    "//components/metrics/proto",
+    "//third_party/metrics_proto",
   ]
   deps = [
     "//base",

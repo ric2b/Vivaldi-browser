@@ -4,6 +4,7 @@
 <translation id="100812568230599391">将显示样式更改为交错。</translation>
 <translation id="1012173283529841972">列表项</translation>
 <translation id="1013742170491673792">srched</translation>
+<translation id="1022586497894531524">您是初次使用 ChromeVox 语音反馈功能吗？此教程将提供基本的操作说明，协助您开始使用 ChromeVox。</translation>
 <translation id="1023866615269196768">已跨行或跨列。</translation>
 <translation id="1025074108959230262">已停用粘滞模式</translation>
 <translation id="1031961866430398710">再按</translation>
@@ -29,12 +30,12 @@
 <translation id="1201402288615127009">下一步</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - 为Chrome提供语音功能</translation>
-<translation id="1226487719524433143">我们非常期待能收到您对这一全新体验的反馈。先按 Search+A 组合键，然后再按 I 键，即可直接向我们发送反馈。按“下一步”按钮则可进入教程页面以全面学习入门指南。</translation>
+<translation id="1225437811932752266">恭喜！您已顺利学完使用 ChromeVox 所需掌握的基本知识。请记住，您随时可通过按搜索键+句点键打开 ChromeVox 命令菜单。要详细了解 ChromeVox 和 Chrome 操作系统，请阅读以下文章。
+若要结束此教程，请使用 ChromeVox 找到“关闭”按钮，然后点击该按钮。</translation>
 <translation id="1229276918471378188">上一个跳转</translation>
 <translation id="1237866625126425153">rdgrp</translation>
 <translation id="1251750620252348585">下一个6级标题</translation>
 <translation id="1275718070701477396">已选中</translation>
-<translation id="1310230882256010289">后台升级。我们彻底改变了 ChromeVox 的运作方式。用户将会享受到更好的性能、稳定性和网络支持/合规性。</translation>
 <translation id="1319608975892113573">不存在上一段引用。</translation>
 <translation id="1321576897702511272">隐藏ChromeVox帮助</translation>
 <translation id="1331702245475014624">第<ph name="INDEX" />个，共<ph name="TOTAL" />个</translation>
@@ -42,6 +43,7 @@
 <translation id="1339428534620983148">表格上一列</translation>
 <translation id="1342835525016946179">文章标记</translation>
 <translation id="1346748346194534595">向右</translation>
+<translation id="135978014023467274">您已更新至 ChromeVox 63！</translation>
 <translation id="136718599399906424">表格下一行</translation>
 <translation id="1377925789329510816">这是最后一个标题。按 Search+H 组合键可跳回至第一个标题，按 Search+Shift+H 组合键则可转到此页面上的第二个标题。</translation>
 <translation id="1383876407941801731">搜索</translation>
@@ -168,6 +170,7 @@
 <translation id="2770781857296573485">进入群组浏览</translation>
 <translation id="2777845298774924149">已退出</translation>
 <translation id="2781264313200109999">链接开头</translation>
+<translation id="2784959586797362050">和往常一样，您只需先按搜索键+A 键，然后再按 I 键，即可直接向我们发送反馈。我们非常渴望收到您的反馈。</translation>
 <translation id="2800204403141299078">没有其他任何元素。</translation>
 <translation id="2800780099804980316">不存在上一个1级标题。</translation>
 <translation id="280499067616661124">ChromeVox 在网页中查找</translation>
@@ -224,8 +227,6 @@
 <translation id="3163593631834463955">列标题为空</translation>
 <translation id="316542773973815724">导航</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{1个空格}other{#个空格}}</translation>
-<translation id="3183233191569362040">恭喜！您已顺利学完使用 ChromeVox Next（测试版）的基本知识。请注意，您可以随时按搜索键 + 句点打开 ChromeVox 命令菜单。要详细了解 ChromeVox 和 Chrome 操作系统，请阅读以下文章。
-如果您要结束此教程，请使用 ChromeVox 找到“关闭”按钮，然后点击该按钮。</translation>
 <translation id="320961988183078793">进入了<ph name="TYPE" /></translation>
 <translation id="3223701887221307104"><ph name="NAME" />，标签页</translation>
 <translation id="3226035351387556942">chk</translation>
@@ -235,6 +236,7 @@
 <translation id="3241638166094654466">每行中的单元格数：</translation>
 <translation id="3286390186030710347">滑块</translation>
 <translation id="3299925995433437805">不存在下一个访问过的链接。</translation>
+<translation id="3300348286427369683">支持富文本。ChromeVox 现在支持富文本字段，包括跳转命令、盲文光标路由、选择等等。</translation>
 <translation id="3307886118343381874">转到表格末尾</translation>
 <translation id="3311969765485641742">按Alt+Shift+A即可查看所有提醒</translation>
 <translation id="3312997241656799641">下一个访问过的链接</translation>
@@ -299,6 +301,7 @@
 <translation id="3458865416877308321">“<ph name="NAME" />”已关闭</translation>
 <translation id="3462439746547587373"><ph name="NAME" />，按钮</translation>
 <translation id="3466530247399808663">无效的按键操作</translation>
+<translation id="3468959318854349468">无标题</translation>
 <translation id="3473644018603298796">已选择<ph name="COUNT" />项</translation>
 <translation id="3486232535569802404"><ph name="V1" />到<ph name="V2" /></translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{1个右方括号}other{#个右方括号}}</translation>
@@ -337,7 +340,7 @@
 <translation id="3897092660631435901">菜单</translation>
 <translation id="3909320334364316587">上一个6级标题</translation>
 <translation id="3914173277599553213">必需</translation>
-<translation id="3951424903203718058">您是初次使用 ChromeVox Next 语音反馈功能吗？此教程简要介绍了基本的 ChromeVox Next 入门知识。</translation>
+<translation id="3914732343065571127">ChromeVox 命令参考</translation>
 <translation id="3962990492275676168">从当前位置开始读</translation>
 <translation id="4004802134384979325">已选中</translation>
 <translation id="4006140876663370126">图片</translation>
@@ -408,7 +411,9 @@
 <translation id="4601367666219428522">表格“<ph name="TABLENAME" />”<ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">将忽略下一次按键</translation>
 <translation id="461613135510474570">逐句</translation>
+<translation id="463135993322337640">按 ChromeVox 的 O 键、N 键，即可了解最新功能</translation>
 <translation id="4647836961514597010">颜色选择器</translation>
+<translation id="4660783501463101648">移除了 Classic。现已无法再通过键盘切换回 ChromeVox Classic。</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4688873778442829762">网格</translation>
@@ -428,10 +433,10 @@
 <translation id="4827410568042294688">已取消选中</translation>
 <translation id="4842108708071771135">不存在下一个块引用。</translation>
 <translation id="4844625982113518938">按任意键可听到相应键名的读音。按 Ctrl+W 组合键可关闭学习模式。</translation>
+<translation id="4846428657345567687">欢迎使用 ChromeVox！</translation>
 <translation id="4846487886195635104">划删除线的文字的末尾</translation>
 <translation id="4848993367330139335">定时器</translation>
 <translation id="4850023505158945298">上一个类似元素。</translation>
-<translation id="485011152882364255">在 ChromeVox Next 中，搜索键可以用作辅助键。大多数 ChromeVox 快捷键是使用搜索键搭配其他按键。此外，进行导航时还将用到箭头键。</translation>
 <translation id="4866956062845190338">rdmnuitm</translation>
 <translation id="4867316986324544967">启用TTS日志记录</translation>
 <translation id="4877261390094455813">输入搜索查询内容。</translation>
@@ -466,6 +471,7 @@
 <translation id="5098541983634824365">即将离开网格。</translation>
 <translation id="5102981729317424850">工具栏</translation>
 <translation id="5105050547967751155">rq</translation>
+<translation id="5106547198195128110">这一新版本中有一些重大变更，具体如下：</translation>
 <translation id="5110983769041734144">不存在上一个表单字段。</translation>
 <translation id="5111640677200759579">列标题</translation>
 <translation id="5136967254288895616">不存在上一个链接。</translation>
@@ -500,7 +506,6 @@
 <translation id="5444587279251314700">（有效）</translation>
 <translation id="5451268436205074266">点 <ph name="DOT" /></translation>
 <translation id="5455441614648621694">补充的内容</translation>
-<translation id="5458780372341732962">使用 ChromeVox Next（测试版）</translation>
 <translation id="5485036206801896268">不存在上一个图形。</translation>
 <translation id="5486947920110100234">不存在下一个跳转点。</translation>
 <translation id="549602578321198708">逐字</translation>
@@ -509,7 +514,6 @@
 <translation id="5507663321906818013">调试基准</translation>
 <translation id="5518443085409638729">编辑文本时将光标置于字符之间（与Mac OS X类似）。</translation>
 <translation id="552195134157544755">单选按钮</translation>
-<translation id="5531530875187439488">新耳标。我们更新了可供您收听的音频图标集，以让您获得更灵敏的浏览体验。</translation>
 <translation id="5534303576632885660">标头标记</translation>
 <translation id="5546092960038624944">不存在上一个5级标题。</translation>
 <translation id="556042886152191864">按钮</translation>
@@ -536,7 +540,6 @@
 <translation id="5682113568322255809">地标</translation>
 <translation id="5683155931978483559">上一个复选框</translation>
 <translation id="5684277895745049190">列表</translation>
-<translation id="5684905390246898631">欢迎使用 ChromeVox Next！</translation>
 <translation id="5695831708991916435">以下几个快捷键并不是 ChromeVox 命令，但它们非常实用，有助于您充分利用 Chrome。
 要移到下一个可操作项（例如按钮和链接），请按 Tab 键。要移到前一个可操作项，请按 Shift+Tab。
 要进入 Chrome 浏览器的地址框（也称为多功能框），请按 Ctrl+L。
@@ -571,7 +574,6 @@
 <translation id="5937336320314038555">{COUNT,plural, =1{1个等号}other{#个等号}}</translation>
 <translation id="5939518447894949180">重置</translation>
 <translation id="5948123859135882163">在数学表达式的结构化解释和语义解释之间来回切换</translation>
-<translation id="5948485979596965684">您已更新至 ChromeVox 的主要新版本！</translation>
 <translation id="5955304353782037793">应用</translation>
 <translation id="5956928062748260866">对话框</translation>
 <translation id="5963413905009737549">章节标记</translation>
@@ -586,6 +588,7 @@
 <translation id="6065293622157674001">语法错误的开头</translation>
 <translation id="6082768461603900813">基本导航操作</translation>
 <translation id="6092707270915298410">链接末尾</translation>
+<translation id="6118126368611144850">适合在 Chrome 中使用的 Android 应用。如果您的设备上安装了 Play 商店，则可以通过 Android 应用抢先体验 ChromeVox。只需从 Play 商店下载 Google Chrome Canary，即可体验实验功能。</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">单元格结束。</translation>
 <translation id="6122013438240733403">按钮</translation>
@@ -626,6 +629,7 @@
 <translation id="6493991254603208962">调低亮度</translation>
 <translation id="6508059270146105198">将盲文显示移动到页底</translation>
 <translation id="6536864053412760904">数学标记语言令牌</translation>
+<translation id="6540201937398578274">在 ChromeVox 中，搜索键是辅助键。大多数 ChromeVox 快捷键都是用搜索键搭配其他按键。若要进行导航，您也会用到箭头键。</translation>
 <translation id="6550720799683018100">从下面的列表中选择一个选项，以更改当前键映射。</translation>
 <translation id="6561818612645211875">转到当前行的开头</translation>
 <translation id="6587021927234520429">不存在下一个4级标题。</translation>
@@ -650,7 +654,6 @@
 <translation id="6786800275320335305">文章</translation>
 <translation id="6787839852456839824">键盘快捷键</translation>
 <translation id="6793101435925451627">列表框</translation>
-<translation id="6818172019016005152">我们一直致力于为您带来经过改进的全新 ChromeVox 体验；以下是新变化</translation>
 <translation id="6833103209700200188">页脚标记</translation>
 <translation id="6871161210040114857">不区分大小写。</translation>
 <translation id="6877435256196695200">不存在下一个图形。</translation>
@@ -668,7 +671,6 @@
 <translation id="7037042857287298941">上一个列表</translation>
 <translation id="7041173719775863268">结束选择</translation>
 <translation id="7086377898680121060">调高亮度</translation>
-<translation id="7094527465295945904">新的键组合。我们已将 Search 键用作 ChromeVox 辅助键，并大大简化了键组合。</translation>
 <translation id="7095834689119144465">仅修改数字文本</translation>
 <translation id="7096001299300236431">上一个媒体内容</translation>
 <translation id="7116595520562830928">multln</translation>
@@ -772,7 +774,6 @@
 <translation id="8066678206530322333">横幅</translation>
 <translation id="8076492880354921740">标签页</translation>
 <translation id="8091452896542422286">空格</translation>
-<translation id="8104178626892949749">按 ChromeVox 的 O 键、N 键，即可详细了解 ChromeVox Next。</translation>
 <translation id="8110647606445335195">无ARIA地标。</translation>
 <translation id="8153880621934657047">不在表格内。</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{1个下划线}other{#个下划线}}</translation>
@@ -782,7 +783,6 @@
 <translation id="8199231515320852133">读出当前单元格的标题</translation>
 <translation id="820417203470636242">空白单元格。</translation>
 <translation id="8215202828671303819">多选</translation>
-<translation id="8224171046658870249">已切换到 ChromeVox Next</translation>
 <translation id="826991282343985864">行 $1 列 $2</translation>
 <translation id="8276439074553447000">跳转到上一个可设置为焦点的项</translation>
 <translation id="8278417001922463147">不存在上一篇文章。</translation>
@@ -827,7 +827,6 @@
 <translation id="8664519043722036194">秒</translation>
 <translation id="867187640362843212">5级标题标记</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{1个竖线符号}other{#个竖线符号}}</translation>
-<translation id="8721861170709424373">ChromeVox Next 命令参考</translation>
 <translation id="8735450637152821465">开始选择</translation>
 <translation id="8743786158317878347">进入结构化内容，如表格</translation>
 <translation id="8747966237988593539">经过排序的列表</translation>
@@ -880,7 +879,6 @@
 <translation id="923331726185079994">ChromeVox 已更新</translation>
 <translation id="930275611743429116">开始或结束选择。</translation>
 <translation id="948171205378458592">减慢语速</translation>
-<translation id="955917170449423694">已切换到经典版 ChromeVox</translation>
 <translation id="962913030769097253">下一个1级标题</translation>
 <translation id="973955474346881951">启用/停用粘滞模式</translation>
 <translation id="976849232629612000">无菜单项。</translation>

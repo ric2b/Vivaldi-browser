@@ -5,6 +5,7 @@
 #include "components/update_client/request_sender.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -72,7 +73,7 @@ class RequestSenderTest : public testing::Test {
   std::string response_;
 
  private:
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestSenderTest);
 };
@@ -105,6 +106,9 @@ void RequestSenderTest::TearDown() {
 
   interceptor_factory_ = nullptr;
 
+  // Run the threads until they are idle to allow the clean up
+  // of the network interceptors on the IO thread.
+  scoped_task_environment_.RunUntilIdle();
   config_ = nullptr;
 }
 
@@ -112,17 +116,11 @@ void RequestSenderTest::RunThreads() {
   base::RunLoop runloop;
   quit_closure_ = runloop.QuitClosure();
   runloop.Run();
-
-  // Since some tests need to drain currently enqueued tasks such as network
-  // intercepts on the IO thread, run the threads until they are
-  // idle. The component updater service won't loop again until the loop count
-  // is set and the service is started.
-  scoped_task_environment_.RunUntilIdle();
 }
 
 void RequestSenderTest::Quit() {
   if (!quit_closure_.is_null())
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
 }
 
 void RequestSenderTest::RequestSenderComplete(int error,
@@ -142,9 +140,10 @@ TEST_F(RequestSenderTest, RequestSendSuccess) {
 
   const std::vector<GURL> urls = {GURL(kUrl1), GURL(kUrl2)};
   request_sender_ = base::MakeUnique<RequestSender>(config_);
-  request_sender_->Send(false, "test", urls,
-                        base::Bind(&RequestSenderTest::RequestSenderComplete,
-                                   base::Unretained(this)));
+  request_sender_->Send(
+      false, "test", urls,
+      base::BindOnce(&RequestSenderTest::RequestSenderComplete,
+                     base::Unretained(this)));
   RunThreads();
 
   EXPECT_EQ(1, post_interceptor_1_->GetHitCount())
@@ -166,6 +165,8 @@ TEST_F(RequestSenderTest, RequestSendSuccess) {
                                "<?xml version='1.0' encoding='UTF-8'?>",
                                base::CompareCase::SENSITIVE));
   EXPECT_EQ(505ul, response_.size());
+
+  interceptor_factory_ = nullptr;
 }
 
 // Tests that the request succeeds using the second url after the first url
@@ -177,9 +178,10 @@ TEST_F(RequestSenderTest, RequestSendSuccessWithFallback) {
 
   const std::vector<GURL> urls = {GURL(kUrl1), GURL(kUrl2)};
   request_sender_ = base::MakeUnique<RequestSender>(config_);
-  request_sender_->Send(false, "test", urls,
-                        base::Bind(&RequestSenderTest::RequestSenderComplete,
-                                   base::Unretained(this)));
+  request_sender_->Send(
+      false, "test", urls,
+      base::BindOnce(&RequestSenderTest::RequestSenderComplete,
+                     base::Unretained(this)));
   RunThreads();
 
   EXPECT_EQ(1, post_interceptor_1_->GetHitCount())
@@ -205,9 +207,10 @@ TEST_F(RequestSenderTest, RequestSendFailed) {
 
   const std::vector<GURL> urls = {GURL(kUrl1), GURL(kUrl2)};
   request_sender_ = base::MakeUnique<RequestSender>(config_);
-  request_sender_->Send(false, "test", urls,
-                        base::Bind(&RequestSenderTest::RequestSenderComplete,
-                                   base::Unretained(this)));
+  request_sender_->Send(
+      false, "test", urls,
+      base::BindOnce(&RequestSenderTest::RequestSenderComplete,
+                     base::Unretained(this)));
   RunThreads();
 
   EXPECT_EQ(1, post_interceptor_1_->GetHitCount())
@@ -228,9 +231,10 @@ TEST_F(RequestSenderTest, RequestSendFailed) {
 TEST_F(RequestSenderTest, RequestSendFailedNoUrls) {
   std::vector<GURL> urls;
   request_sender_ = base::MakeUnique<RequestSender>(config_);
-  request_sender_->Send(false, "test", urls,
-                        base::Bind(&RequestSenderTest::RequestSenderComplete,
-                                   base::Unretained(this)));
+  request_sender_->Send(
+      false, "test", urls,
+      base::BindOnce(&RequestSenderTest::RequestSenderComplete,
+                     base::Unretained(this)));
   RunThreads();
 
   EXPECT_EQ(-1, error_);
@@ -243,9 +247,10 @@ TEST_F(RequestSenderTest, RequestSendCupError) {
 
   const std::vector<GURL> urls = {GURL(kUrl1)};
   request_sender_ = base::MakeUnique<RequestSender>(config_);
-  request_sender_->Send(true, "test", urls,
-                        base::Bind(&RequestSenderTest::RequestSenderComplete,
-                                   base::Unretained(this)));
+  request_sender_->Send(
+      true, "test", urls,
+      base::BindOnce(&RequestSenderTest::RequestSenderComplete,
+                     base::Unretained(this)));
   RunThreads();
 
   EXPECT_EQ(1, post_interceptor_1_->GetHitCount())

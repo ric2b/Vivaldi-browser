@@ -21,7 +21,6 @@
 #ifndef SVGLineElement_h
 #define SVGLineElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGGeometryElement.h"
 #include "platform/heap/Handle.h"
@@ -41,7 +40,7 @@ class SVGLineElement final : public SVGGeometryElement {
   SVGAnimatedLength* x2() const { return x2_.Get(); }
   SVGAnimatedLength* y2() const { return y2_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGLineElement(Document&);

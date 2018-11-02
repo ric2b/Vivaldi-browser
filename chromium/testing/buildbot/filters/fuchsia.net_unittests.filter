@@ -1,26 +1,19 @@
-# TODO(fuchsia): Fix these tests and remove the filter. crbug.com/731302 .
--*HTTPS*
--*QuicEndToEndTest.Large*
--*QuicEndToEndTest.TokenBinding*
--*QuicEndToEndTest.Uber*
--CertVerifyProcInternalTest.*
--CloseOnConnectHttpServerTest.ServerImmediatelyClosesConnection
--DiskCacheEntryTest*AsyncIO*  # Flaky on the bots
--DiskCacheTest.BlockFiles_Grow  # Flaky timeouts
--HttpCache.RangeGET_ParallelValidationDifferentRanges  # https://crbug.com/755552
--HttpCache.RangeGET_ParallelValidationOverlappingRanges  # https://crbug.com/758221
+# TODO(fuchsia): Fix these tests and remove the filter. https://crbug.com/731302 .
+
+# Timeout on the bots exceeding 45s on the bots (apperently due to slow IO).
+-DiskCacheTest.BlockFiles_Grow
+-DiskCacheBackendTest.SimpleCacheDeleteQuickly
+
+# Exceeds FD limit, ZX-1127.
+-ProxyScriptFetcherImplTest.Priority
+
+# base::MakeFileUnreadable() doesn't work. https://crbug.com/759853
 -HttpNetworkTransactionTest.UploadUnreadableFile
--HttpServerTest.*
--NetworkInterfacesTest.GetNetworkList
--NetworkQualityEstimatorTest*
--Proxy*
--PythonUtils*
--ReportingUploader*
 -SpdyNetworkTransactionTest.UnreadableFilePost
--SQLite*
--SSL*
--TokenBindingURLRequest*
--UnixDomain*Socket*
--URLFetcher*
--URLRequest*
--WebSocket*
+
+# These stress tests take a very long time on emulated ARM cores.
+-SupportedVersion/QuicConnectionTest.TooManySentPackets/*
+-RangeOfTreeSizes/CTLogVerifierTestUsingGenerator.VerifiesValidConsistencyProof/*
+
+# Flaky, https://crbug.com/784448.
+-DiskCacheBackendTest.InvalidEntry5

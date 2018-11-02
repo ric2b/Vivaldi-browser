@@ -26,6 +26,7 @@
 #ifndef DeleteSelectionCommand_h
 #define DeleteSelectionCommand_h
 
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 
 namespace blink {
@@ -60,7 +61,7 @@ class CORE_EXPORT DeleteSelectionCommand final : public CompositeEditCommand {
         expand_for_special_elements, sanitize_markup, input_type);
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   DeleteSelectionCommand(Document&,

@@ -43,8 +43,9 @@ SQLResultSet::SQLResultSet()
   DCHECK(IsMainThread());
 }
 
-DEFINE_TRACE(SQLResultSet) {
+void SQLResultSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(rows_);
+  ScriptWrappable::Trace(visitor);
 }
 
 int64_t SQLResultSet::insertId(ExceptionState& exception_state) const {

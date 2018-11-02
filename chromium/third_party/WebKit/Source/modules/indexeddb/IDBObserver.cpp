@@ -7,11 +7,11 @@
 #include <bitset>
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/modules/v8/IDBObserverCallback.h"
 #include "bindings/modules/v8/ToV8ForModules.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
+#include "bindings/modules/v8/v8_idb_observer_callback.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/IndexedDBNames.h"
+#include "modules/indexed_db_names.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBObserverChanges.h"
 #include "modules/indexeddb/IDBObserverInit.h"
@@ -19,11 +19,12 @@
 
 namespace blink {
 
-IDBObserver* IDBObserver::Create(IDBObserverCallback* callback) {
+IDBObserver* IDBObserver::Create(V8IDBObserverCallback* callback) {
   return new IDBObserver(callback);
 }
 
-IDBObserver::IDBObserver(IDBObserverCallback* callback) : callback_(callback) {}
+IDBObserver::IDBObserver(V8IDBObserverCallback* callback)
+    : callback_(callback) {}
 
 void IDBObserver::observe(IDBDatabase* database,
                           IDBTransaction* transaction,
@@ -97,12 +98,13 @@ void IDBObserver::unobserve(IDBDatabase* database,
     database->RemoveObservers(observer_ids_to_remove);
 }
 
-DEFINE_TRACE(IDBObserver) {
+void IDBObserver::Trace(blink::Visitor* visitor) {
   visitor->Trace(callback_);
   visitor->Trace(observer_ids_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(IDBObserver) {
+void IDBObserver::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(callback_);
   ScriptWrappable::TraceWrappers(visitor);
 }

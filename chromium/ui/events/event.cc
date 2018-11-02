@@ -4,18 +4,9 @@
 
 #include "ui/events/event.h"
 
-#include <utility>
-
-#include "base/memory/ptr_util.h"
-
-#if defined(USE_X11)
-#include <X11/extensions/XInput2.h>
-#include <X11/keysym.h>
-#include <X11/Xlib.h>
-#endif
-
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
@@ -36,6 +27,7 @@
 
 #if defined(USE_X11)
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"  // nogncheck
+#include "ui/gfx/x/x11.h"                                   // nogncheck
 #elif defined(USE_OZONE)
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"  // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
@@ -214,34 +206,34 @@ bool X11EventHasNonStandardState(const base::NativeEvent& event) {
 // static
 std::unique_ptr<Event> Event::Clone(const Event& event) {
   if (event.IsKeyEvent()) {
-    return base::MakeUnique<KeyEvent>(static_cast<const KeyEvent&>(event));
+    return std::make_unique<KeyEvent>(static_cast<const KeyEvent&>(event));
   }
 
   if (event.IsMouseEvent()) {
     if (event.IsMouseWheelEvent()) {
-      return base::MakeUnique<MouseWheelEvent>(
+      return std::make_unique<MouseWheelEvent>(
           static_cast<const MouseWheelEvent&>(event));
     }
 
-    return base::MakeUnique<MouseEvent>(static_cast<const MouseEvent&>(event));
+    return std::make_unique<MouseEvent>(static_cast<const MouseEvent&>(event));
   }
 
   if (event.IsTouchEvent()) {
-    return base::MakeUnique<TouchEvent>(static_cast<const TouchEvent&>(event));
+    return std::make_unique<TouchEvent>(static_cast<const TouchEvent&>(event));
   }
 
   if (event.IsGestureEvent()) {
-    return base::MakeUnique<GestureEvent>(
+    return std::make_unique<GestureEvent>(
         static_cast<const GestureEvent&>(event));
   }
 
   if (event.IsPointerEvent()) {
-    return base::MakeUnique<PointerEvent>(
+    return std::make_unique<PointerEvent>(
         static_cast<const PointerEvent&>(event));
   }
 
   if (event.IsScrollEvent()) {
-    return base::MakeUnique<ScrollEvent>(
+    return std::make_unique<ScrollEvent>(
         static_cast<const ScrollEvent&>(event));
   }
 
@@ -267,6 +259,11 @@ bool Event::IsTouchPointerEvent() const {
   return IsPointerEvent() &&
          AsPointerEvent()->pointer_details().pointer_type ==
              EventPointerType::POINTER_TYPE_TOUCH;
+}
+
+bool Event::IsPenPointerEvent() const {
+  return IsPointerEvent() && AsPointerEvent()->pointer_details().pointer_type ==
+                                 EventPointerType::POINTER_TYPE_PEN;
 }
 
 CancelModeEvent* Event::AsCancelModeEvent() {
@@ -849,7 +846,8 @@ TouchEvent::TouchEvent(const PointerEvent& pointer_event)
       may_cause_scrolling_(false),
       should_remove_native_touch_id_mapping_(false),
       pointer_details_(pointer_event.pointer_details()) {
-  DCHECK(pointer_event.IsTouchPointerEvent());
+  DCHECK(pointer_event.IsTouchPointerEvent() ||
+         pointer_event.IsPenPointerEvent());
   switch (pointer_event.type()) {
     case ET_POINTER_DOWN:
       SetType(ET_TOUCH_PRESSED);
@@ -1115,6 +1113,7 @@ bool KeyEvent::IsRepeated(const KeyEvent& event) {
   }
 
   CHECK_EQ(ui::ET_KEY_PRESSED, event.type());
+
   if (!(*last_key_event)) {
     *last_key_event = new KeyEvent(event);
     return false;
@@ -1122,16 +1121,36 @@ bool KeyEvent::IsRepeated(const KeyEvent& event) {
     // The KeyEvent is created from the same native event.
     return ((*last_key_event)->flags() & ui::EF_IS_REPEAT) != 0;
   }
-  if (event.key_code() == (*last_key_event)->key_code() &&
-      event.flags() == ((*last_key_event)->flags() & ~ui::EF_IS_REPEAT) &&
-      (event.time_stamp() - (*last_key_event)->time_stamp()).InMilliseconds() <
-          kMaxAutoRepeatTimeMs) {
+
+  DCHECK(*last_key_event);
+  bool is_repeat = false;
+
+#if defined(OS_WIN)
+  if (event.HasNativeEvent()) {
+    // Bit 30 of lParam represents the "previous key state". If set, the key
+    // was already down, therefore this is an auto-repeat.
+    is_repeat = (event.native_event().lParam & 0x40000000) != 0;
+  } else
+#endif
+  {
+    // Note that this is only reach for non-native events under Windows.
+    if (event.key_code() == (*last_key_event)->key_code() &&
+        event.flags() == ((*last_key_event)->flags() & ~ui::EF_IS_REPEAT) &&
+        (event.time_stamp() - (*last_key_event)->time_stamp())
+                .InMilliseconds() < kMaxAutoRepeatTimeMs) {
+      is_repeat = true;
+    }
+  }
+
+  if (is_repeat) {
     (*last_key_event)->set_time_stamp(event.time_stamp());
     (*last_key_event)->set_flags((*last_key_event)->flags() | ui::EF_IS_REPEAT);
     return true;
   }
+
   delete *last_key_event;
   *last_key_event = new KeyEvent(event);
+
   return false;
 }
 
@@ -1155,10 +1174,13 @@ KeyEvent::KeyEvent(const base::NativeEvent& native_event, int event_flags)
 #endif
 #if defined(OS_WIN)
   // Only Windows has native character events.
-  if (is_char_)
+  if (is_char_) {
     key_ = DomKey::FromCharacter(native_event.wParam);
-  else
-    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), flags());
+  } else {
+    int adjusted_flags = flags();
+    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), &adjusted_flags);
+    set_flags(adjusted_flags);
+  }
 #endif
 }
 
@@ -1211,7 +1233,7 @@ KeyEvent::KeyEvent(const KeyEvent& rhs)
       is_char_(rhs.is_char_),
       key_(rhs.key_),
       properties_(rhs.properties_
-                      ? base::MakeUnique<Properties>(*rhs.properties_)
+                      ? std::make_unique<Properties>(*rhs.properties_)
                       : nullptr) {}
 
 KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
@@ -1222,7 +1244,7 @@ KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
     key_ = rhs.key_;
     is_char_ = rhs.is_char_;
     if (rhs.properties_)
-      properties_ = base::MakeUnique<Properties>(*rhs.properties_);
+      properties_ = std::make_unique<Properties>(*rhs.properties_);
     else
       properties_.reset();
   }
@@ -1361,7 +1383,7 @@ void KeyEvent::NormalizeFlags() {
 }
 
 void KeyEvent::SetProperties(const Properties& properties) {
-  properties_ = base::MakeUnique<Properties>(properties);
+  properties_ = std::make_unique<Properties>(properties);
 }
 
 KeyboardCode KeyEvent::GetLocatedWindowsKeyboardCode() const {

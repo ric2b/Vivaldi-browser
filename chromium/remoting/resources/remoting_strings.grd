@@ -31,8 +31,8 @@
     <output filename="remoting/resources/es.pak" lang="es" type="data_package"/>
     <output filename="remoting/resources/et.pak" lang="et" type="data_package"/>
     <output filename="remoting/resources/fa.pak" lang="fa" type="data_package"/>
-    <if expr="not _official_build">
-      <!-- We don't need to generate the fake-bidi locale for official builds. -->
+    <if expr="not is_ios or not _official_build">
+      <!-- The fake-bidi locale isn't accepted by the app store. -->
       <output filename="remoting/resources/fake-bidi.pak" lang="fake-bidi" type="data_package"/>
     </if>
     <output filename="remoting/resources/fi.pak" lang="fi" type="data_package"/>
@@ -90,8 +90,8 @@
     <output filename="remoting/webapp/_locales/da/messages.json" lang="da" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/de/messages.json" lang="de" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/fa/messages.json" lang="fa" type="chrome_messages_json"/>
-    <if expr="not _official_build">
-      <!-- We don't need to generate the fake-bidi locale for official builds. -->
+    <if expr="not is_ios or not _official_build">
+      <!-- The fake-bidi locale isn't accepted by the app store. -->
       <output filename="remoting/webapp/_locales/fake_bidi/messages.json" lang="fake-bidi" type="chrome_messages_json"/>
     </if>
     <output filename="remoting/webapp/_locales/el/messages.json" lang="el" type="chrome_messages_json"/>
@@ -676,27 +676,25 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
           Chrome Remote Desktop
         </message>
         <message name="IDS_APP_STORE_KEYWORDS" desc="App Store keywords (to be used to search for the app) for the Chrome Remote Desktop app for iOS. Separate keywords with newline. [NAME=app_store_keywords]">
-Chrome Remote Desktop
-Remote Desktop
-Remote PC
-Remote Computer
-Remote Access
-Remote Support
+Chrome
+Remote
+Desktop
+Access
+Support
+Computer
+PC
         </message>
         <message name="IDS_APP_STORE_DESCRIPTION" desc="App Store description of the Chrome Remote Desktop app for iOS. [CHAR-LIMIT=4000] [NAME=app_store_description]">
-Securely access your computer from your iOS device. Its fast, simple and free.
+Securely access your computer from your iOS device. It's fast, simple and free.
 
-• On the computer you want to access remotely, find the Chrome Remote Desktop app on the Chrome Web Store  https://chrome.google.com/remotedesktop
+• Download the Chrome Remote Desktop app from the Chrome WebStore on the computer you want to access remotely.
 • Install Chrome Remote Desktop software and follow the instructions to complete setup.
 • On your iOS device, open the app and tap on any of your online computers to connect.
-
-For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj).
         </message>
         <message name="IDS_APP_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for iOS. [CHAR-LIMIT=500] [NAME=app_store_changes]">
-• Redesigned user interface.
+• New look and feel.
 • Improved performance, responsiveness and reliability.
 • Support for playing audio from Windows or Linux computers.
-• Enhanced keyboard support.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -784,13 +782,15 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Title for the instructions for setting up a remote host. Shown when the user has no host available." name="IDS_HOST_SETUP_TITLE">
         Welcome to Chrome Remote Desktop
       </message>
-      <message desc="Instructions for setting up a computer to be remotely accessible. Please make sure the translated string has exactly the same number of lines." name="IDS_HOST_SETUP_INSTRUCTIONS">
-On the computer you want to access remotely, open Chrome and visit <ph name="INSTALLATION_LINK">$1<ex>google.com/remotedesktop</ex></ph>
-Install Chrome Remote Desktop software and follow the instructions to complete setup
-After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code
-      </message>
+      <message desc="Step 1 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_1">On the computer you want to access remotely, open Chrome and visit <ph name="INSTALLATION_LINK">$1<ex>google.com/remotedesktop</ex></ph></message>
+      <message desc="Step 2 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_2">Install Chrome Remote Desktop software and follow the instructions to complete setup</message>
+      <message desc="Step 3 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_3">After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code</message>
       <message desc="Label for a button for sending the user an email with link and instructions for setting up a computer for remote access." name="IDS_EMAIL_LINKS_AND_INSTRUCTIONS">
         Email these instructions
+      </message>
+
+      <message desc="Message being spoken for accessibility when the user is just connected to the remote device." name="IDS_HOST_CONNECTED_ANNOUNCEMENT">
+        You are connected to your remote device. To open the menu, please tap the screen with four fingers.
       </message>
 
       <message desc="Label for the access code entry box. This is where the client user enters the code that permits access to the host." name="IDS_ACCESS_CODE">
@@ -1099,6 +1099,18 @@ After setup is complete, you'll be able to access the computer from this page by
                name="IDS_OFFLINE_REASON_USERNAME_MISMATCH" formatter_data="android_java">
         Invalid host owner.
       </message>
+      <message desc="Error message indicating that the host is offline because the X server keeps dying."
+               name="IDS_OFFLINE_REASON_X_SERVER_RETRIES_EXCEEDED" formatter_data="android_java">
+        X server crashed or failed to start.
+      </message>
+      <message desc="Error message indicating that the host is offline because the session script keeps dying."
+               name="IDS_OFFLINE_REASON_SESSION_RETRIES_EXCEEDED" formatter_data="android_java">
+        Session crashed or failed to start. If ~/.chrome-remote-desktop-session exists on the remote computer, make sure it starts a long-running foreground process such as a desktop environment or window manager.
+      </message>
+      <message desc="Error message indicating that the host is offline because the host keeps dying."
+               name="IDS_OFFLINE_REASON_HOST_RETRIES_EXCEEDED" formatter_data="android_java">
+        Host crashed or failed to start.
+      </message>
       <if expr="is_android">
         <message desc="Description of why host is offline, when client gets a host-offline-reason it doesn't recognize."
                  name="IDS_OFFLINE_REASON_UNKNOWN" formatter_data="android_java">
@@ -1300,7 +1312,7 @@ After setup is complete, you'll be able to access the computer from this page by
       <message desc="Message displayed before sharing computer in 'It2Me' mode when the email of the remote user attempting to connect is known." name="IDS_SHARE_CONFIRM_DIALOG_MESSAGE_WITH_USERNAME" >
         Would you like to allow <ph name="CLIENT_USERNAME">{0}<ex>client@email.com</ex></ph> to see and control your computer?
       </message>
-      <message desc="Label for the button to accept sharing the computer in 'It2Me' mode." name="IDS_SHARE_CONFIRM_DIALOG_CONFIRM" >
+      <message desc="Label for the button to accept sharing the computer in 'It2Me' mode." meaning="Accept share request." name="IDS_SHARE_CONFIRM_DIALOG_CONFIRM" >
         Share
       </message>
       <message desc="Label for the button to decline sharing the computer in 'It2Me' mode." name="IDS_SHARE_CONFIRM_DIALOG_DECLINE" >

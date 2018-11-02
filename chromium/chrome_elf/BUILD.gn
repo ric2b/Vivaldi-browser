@@ -28,6 +28,14 @@ windows_manifest("chrome_elf_manifest") {
   ]
 }
 
+# Users of chrome_elf exports can depend on this target, which doesn't
+# pin them to linking either chrome_elf.dll or test_stubs.
+source_set("chrome_elf_main_include") {
+  sources = [
+    "chrome_elf_main.h",
+  ]
+}
+
 # We should move chrome_result_codes.h to another target which does not bring
 # in the world.
 shared_library("chrome_elf") {
@@ -50,6 +58,7 @@ shared_library("chrome_elf") {
     ":hook_util",
     ":nt_registry",
     ":security",
+    ":whitelist",
     "//build/config:exe_and_shlib_deps",
     "//chrome/install_static:install_static_util",
     "//chrome/install_static:primary_module",
@@ -92,18 +101,6 @@ static_library("test_stubs") {
 ## source sets
 ##------------------------------------------------------------------------------
 
-source_set("security") {
-  sources = [
-    "chrome_elf_security.cc",
-    "chrome_elf_security.h",
-  ]
-  deps = [
-    ":constants",
-    ":nt_registry",
-    "//chrome/install_static:install_static_util",
-  ]
-}
-
 source_set("constants") {
   sources = [
     "chrome_elf_constants.cc",
@@ -118,6 +115,25 @@ source_set("dll_hash") {
   sources = [
     "dll_hash/dll_hash.cc",
     "dll_hash/dll_hash.h",
+  ]
+}
+
+source_set("security") {
+  sources = [
+    "chrome_elf_security.cc",
+    "chrome_elf_security.h",
+  ]
+  deps = [
+    ":constants",
+    ":nt_registry",
+    "//chrome/install_static:install_static_util",
+  ]
+}
+
+source_set("sha1") {
+  sources = [
+    "sha1/sha1.cc",
+    "sha1/sha1.h",
   ]
 }
 
@@ -210,6 +226,23 @@ static_library("nt_registry") {
   libs = [ "kernel32.lib" ]
 }
 
+static_library("whitelist") {
+  sources = [
+    "whitelist/whitelist.cc",
+    "whitelist/whitelist.h",
+    "whitelist/whitelist_file.cc",
+    "whitelist/whitelist_file.h",
+    "whitelist/whitelist_file_format.h",
+    "whitelist/whitelist_ime.cc",
+    "whitelist/whitelist_ime.h",
+  ]
+  deps = [
+    ":nt_registry",
+    ":sha1",
+    "//chrome/install_static:install_static_util",
+  ]
+}
+
 ##------------------------------------------------------------------------------
 ## tests
 ##------------------------------------------------------------------------------
@@ -219,10 +252,12 @@ test("chrome_elf_unittests") {
   sources = [
     "blacklist/test/blacklist_test.cc",
     "chrome_elf_util_unittest.cc",
-    "elf_imports_unittest.cc",
     "hook_util/test/hook_util_test.cc",
     "nt_registry/nt_registry_unittest.cc",
     "run_all_unittests.cc",
+    "sha1/sha1_unittest.cc",
+    "whitelist/whitelist_file_unittest.cc",
+    "whitelist/whitelist_ime_unittest.cc",
   ]
   include_dirs = [ "$target_gen_dir" ]
   deps = [
@@ -234,14 +269,37 @@ test("chrome_elf_unittests") {
     ":hook_util_test_dll",
     ":nt_registry",
     ":security",
+    ":sha1",
+    ":whitelist",
     "//base",
     "//base/test:test_support",
-    "//chrome",
     "//chrome/common:version_header",
     "//chrome/install_static:install_static_util",
     "//chrome/install_static/test:test_support",
     "//components/crash/content/app:test_support",
     "//sandbox",
+    "//testing/gtest",
+  ]
+  data_deps = [
+    ":blacklist_test_dll_1",
+    ":blacklist_test_dll_2",
+    ":blacklist_test_dll_3",
+    ":chrome_elf",
+  ]
+}
+
+test("chrome_elf_import_unittests") {
+  output_name = "chrome_elf_import_unittests"
+  sources = [
+    "elf_imports_unittest.cc",
+  ]
+  include_dirs = [ "$target_gen_dir" ]
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//chrome",
+    "//chrome/install_static:install_static_util",
+    "//chrome/install_static/test:test_support",
     "//testing/gtest",
   ]
 
@@ -253,9 +311,6 @@ test("chrome_elf_unittests") {
     "$root_out_dir/chrome.exe",
   ]
   data_deps = [
-    ":blacklist_test_dll_1",
-    ":blacklist_test_dll_2",
-    ":blacklist_test_dll_3",
     ":chrome_elf",
   ]
 

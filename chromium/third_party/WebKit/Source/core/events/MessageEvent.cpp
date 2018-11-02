@@ -74,7 +74,7 @@ MessageEvent::MessageEvent(const String& origin,
   DCHECK(IsValidSource(source_.Get()));
 }
 
-MessageEvent::MessageEvent(RefPtr<SerializedScriptValue> data,
+MessageEvent::MessageEvent(scoped_refptr<SerializedScriptValue> data,
                            const String& origin,
                            const String& last_event_id,
                            EventTarget* source,
@@ -94,11 +94,11 @@ MessageEvent::MessageEvent(RefPtr<SerializedScriptValue> data,
   DCHECK(IsValidSource(source_.Get()));
 }
 
-MessageEvent::MessageEvent(RefPtr<SerializedScriptValue> data,
+MessageEvent::MessageEvent(scoped_refptr<SerializedScriptValue> data,
                            const String& origin,
                            const String& last_event_id,
                            EventTarget* source,
-                           MessagePortChannelArray channels,
+                           Vector<MessagePortChannel> channels,
                            const String& suborigin)
     : Event(EventTypeNames::message, false, false),
       data_type_(kDataTypeSerializedScriptValue),
@@ -178,7 +178,7 @@ void MessageEvent::initMessageEvent(const AtomicString& type,
 void MessageEvent::initMessageEvent(const AtomicString& type,
                                     bool can_bubble,
                                     bool cancelable,
-                                    PassRefPtr<SerializedScriptValue> data,
+                                    scoped_refptr<SerializedScriptValue> data,
                                     const String& origin,
                                     const String& last_event_id,
                                     EventTarget* source,
@@ -244,7 +244,7 @@ void MessageEvent::EntangleMessagePorts(ExecutionContext* context) {
   is_ports_dirty_ = true;
 }
 
-DEFINE_TRACE(MessageEvent) {
+void MessageEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(data_as_serialized_script_value_);
   visitor->Trace(data_as_blob_);
   visitor->Trace(data_as_array_buffer_);

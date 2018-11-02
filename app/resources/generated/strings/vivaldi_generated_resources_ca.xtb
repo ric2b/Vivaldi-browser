@@ -19,7 +19,6 @@
 <translation id="1580652505892042215">Context:</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1603914832182249871">(Incògnit)</translation>
-<translation id="1616206807336925449">Aquesta extensió no requereix cap permís especial.</translation>
 <translation id="1635033183663317347">Extensió instal·lada pel tutor.</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">&amp;Finestra nova</translation>
@@ -69,7 +68,6 @@
 <translation id="3084548735795614657">Deixeu anar per a instal·lar</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Controls d'USUARI</translation>
-<translation id="3149510190863420837">Aplicacions de Chrome</translation>
 <translation id="3222066309010235055">Renderitzador previ: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Seleccioneu el directori arrel de l'extensió que voleu empaquetar. Per actualitzar una extensió, cal que seleccioneu també el fitxer de clau privada que s'utilitzarà.</translation>
 <translation id="3280237271814976245">Desa &amp;com a...</translation>
@@ -116,7 +114,6 @@
 <translation id="4394049700291259645">Desactiva</translation>
 <translation id="4423482519432579560">&amp;Corrector ortogràfic</translation>
 <translation id="4522570452068850558">Detalls</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4557136421275541763">Advertiment:</translation>
 <translation id="4593021220803146968">&amp;Vés a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Només el gestor (<ph name="CUSTODIAN_NAME" />) pot modificar les aplicacions i les extensions.</translation>
@@ -155,7 +152,6 @@
 <translation id="5556459405103347317">Torna a carregar</translation>
 <translation id="5575473780076478375">Extensió d'incògnit: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">També controla la pàgina que es mostra quan feu clic al botó d'inici.</translation>
-<translation id="5646376287012673985">Ubicació</translation>
 <translation id="5707185214361380026">No s'ha pogut carregat l'extensió des de:</translation>
 <translation id="5715711091495208045">Agent de connectors: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">No es pot mostrar el codi per aquest error.</translation>
@@ -200,7 +196,6 @@
 <translation id="6904344821472985372">Revoca l'accés al fitxer</translation>
 <translation id="6974053822202609517">De dreta a esquerra</translation>
 <translation id="6985276906761169321">ID:</translation>
-<translation id="7013485839273047434">Baixa més extensions</translation>
 <translation id="708060913198414444">C&amp;opia l'adreça de l'àudio</translation>
 <translation id="7144878232160441200">Torna-ho a provar</translation>
 <translation id="7175353351958621980">Carregada des de:</translation>
@@ -211,7 +206,6 @@
 <translation id="7361297102842600584">Fes clic amb el botó dret per executar <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Suprimeix la drecera</translation>
 <translation id="7427348830195639090">Pàgina en segon pla: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Pestanya nova</translation>
 <translation id="7564847347806291057">Finalitza el procés</translation>
 <translation id="7629827748548208700">Pestanya: <ph name="TAB_NAME" /></translation>
@@ -265,7 +259,6 @@ Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versi
 <translation id="9153341767479566106">Altres extension que no s'han carregat:</translation>
 <translation id="9170848237812810038">&amp;Desfés</translation>
 <translation id="9215293857209265904">S'ha afegit "<ph name="EXTENSION_NAME" />"</translation>
-<translation id="9219103736887031265">Imatges</translation>
 <translation id="93766956588638423">Repara l'extensió</translation>
 <translation id="994289308992179865">&amp;Bucle</translation>
 <translation id="998747458861718449">I&amp;nspecciona</translation>

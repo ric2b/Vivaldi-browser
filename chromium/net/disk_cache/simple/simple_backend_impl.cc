@@ -9,8 +9,6 @@
 #include <functional>
 #include <limits>
 
-#include "base/memory/ptr_util.h"
-
 #if defined(OS_POSIX)
 #include <sys/resource.h>
 #endif
@@ -28,7 +26,7 @@
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -39,6 +37,7 @@
 #include "net/disk_cache/simple/simple_entry_format.h"
 #include "net/disk_cache/simple/simple_entry_impl.h"
 #include "net/disk_cache/simple/simple_experiment.h"
+#include "net/disk_cache/simple/simple_file_tracker.h"
 #include "net/disk_cache/simple/simple_histogram_macros.h"
 #include "net/disk_cache/simple/simple_index.h"
 #include "net/disk_cache/simple/simple_index_file.h"
@@ -49,7 +48,6 @@
 using base::Callback;
 using base::Closure;
 using base::FilePath;
-using base::SequencedWorkerPool;
 using base::Time;
 using base::DirectoryExists;
 using base::CreateDirectory;
@@ -58,38 +56,8 @@ namespace disk_cache {
 
 namespace {
 
-// Maximum number of concurrent worker pool threads, which also is the limit
-// on concurrent IO (as we use one thread per IO request).
-const size_t kMaxWorkerThreads = 5U;
-
-const char kThreadNamePrefix[] = "SimpleCache";
-
 // Maximum fraction of the cache that one entry can consume.
 const int kMaxFileRatio = 8;
-
-class LeakySequencedWorkerPool {
- public:
-  LeakySequencedWorkerPool()
-      : sequenced_worker_pool_(
-            new SequencedWorkerPool(kMaxWorkerThreads,
-                                    kThreadNamePrefix,
-                                    base::TaskPriority::USER_BLOCKING)) {}
-
-  void FlushForTesting() { sequenced_worker_pool_->FlushForTesting(); }
-
-  scoped_refptr<base::TaskRunner> GetTaskRunner() {
-    return sequenced_worker_pool_->GetTaskRunnerWithShutdownBehavior(
-        SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
-  }
-
- private:
-  scoped_refptr<SequencedWorkerPool> sequenced_worker_pool_;
-
-  DISALLOW_COPY_AND_ASSIGN(LeakySequencedWorkerPool);
-};
-
-base::LazyInstance<LeakySequencedWorkerPool>::Leaky g_sequenced_worker_pool =
-    LAZY_INSTANCE_INITIALIZER;
 
 scoped_refptr<base::SequencedTaskRunner> FallbackToInternalIfNull(
     const scoped_refptr<base::SequencedTaskRunner>& cache_runner) {
@@ -140,6 +108,11 @@ void MaybeHistogramFdLimit(net::CacheType cache_type) {
 
   g_fd_limit_histogram_has_been_populated = true;
 }
+
+// Global context of all the files we have open --- this permits some to be
+// closed on demand if too many FDs are being used, to avoid running out.
+base::LazyInstance<SimpleFileTracker>::Leaky g_simple_file_tracker =
+    LAZY_INSTANCE_INITIALIZER;
 
 // Detects if the files in the cache directory match the current disk cache
 // backend type and version. If the directory contains no cache, occupies it
@@ -253,11 +226,14 @@ class SimpleBackendImpl::ActiveEntryProxy
 SimpleBackendImpl::SimpleBackendImpl(
     const FilePath& path,
     scoped_refptr<BackendCleanupTracker> cleanup_tracker,
+    SimpleFileTracker* file_tracker,
     int max_bytes,
     net::CacheType cache_type,
     const scoped_refptr<base::SequencedTaskRunner>& cache_runner,
     net::NetLog* net_log)
     : cleanup_tracker_(std::move(cleanup_tracker)),
+      file_tracker_(file_tracker ? file_tracker
+                                 : g_simple_file_tracker.Pointer()),
       path_(path),
       cache_type_(cache_type),
       cache_runner_(FallbackToInternalIfNull(cache_runner)),
@@ -278,7 +254,10 @@ SimpleBackendImpl::~SimpleBackendImpl() {
 }
 
 int SimpleBackendImpl::Init(const CompletionCallback& completion_callback) {
-  worker_pool_ = g_sequenced_worker_pool.Get().GetTaskRunner();
+  worker_pool_ = base::TaskScheduler::GetInstance()->CreateTaskRunnerWithTraits(
+      {base::MayBlock(), base::WithBaseSyncPrimitives(),
+       base::TaskPriority::USER_BLOCKING,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 
   index_ = std::make_unique<SimpleIndex>(
       base::ThreadTaskRunnerHandle::Get(), cleanup_tracker_.get(), this,
@@ -336,14 +315,12 @@ void SimpleBackendImpl::DoomEntries(std::vector<uint64_t>* entry_hashes,
   std::vector<uint64_t> to_doom_individually_hashes;
 
   // For each of the entry hashes, there are two cases:
-  // 1. The entry is either open or pending doom, and so it should be doomed
-  //    individually to avoid flakes.
-  // 2. The entry is not in use at all, so we can call
+  // 1. There are corresponding entries in active set, pending doom, or both
+  //    sets, and so the hash should be doomed individually to avoid flakes.
+  // 2. The hash is not in active use at all, so we can call
   //    SimpleSynchronousEntry::DoomEntrySet and delete the files en masse.
   for (int i = mass_doom_entry_hashes->size() - 1; i >= 0; --i) {
     const uint64_t entry_hash = (*mass_doom_entry_hashes)[i];
-    DCHECK(active_entries_.count(entry_hash) == 0 ||
-           entries_pending_doom_.count(entry_hash) == 0);
     if (!active_entries_.count(entry_hash) &&
         !entries_pending_doom_.count(entry_hash)) {
       continue;
@@ -404,20 +381,17 @@ int SimpleBackendImpl::OpenEntry(const std::string& key,
                                  const CompletionCallback& callback) {
   const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
 
-  // TODO(gavinp): Factor out this (not quite completely) repetitive code
-  // block from OpenEntry/CreateEntry/DoomEntry.
-  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
-      entries_pending_doom_.find(entry_hash);
-  if (it != entries_pending_doom_.end()) {
+  std::vector<Closure>* post_doom = nullptr;
+  scoped_refptr<SimpleEntryImpl> simple_entry =
+      CreateOrFindActiveOrDoomedEntry(entry_hash, key, &post_doom);
+  if (!simple_entry) {
     Callback<int(const net::CompletionCallback&)> operation =
         base::Bind(&SimpleBackendImpl::OpenEntry,
                    base::Unretained(this), key, entry);
-    it->second.push_back(base::Bind(&RunOperationAndCallback,
-                                    operation, callback));
+    post_doom->push_back(
+        base::Bind(&RunOperationAndCallback, operation, callback));
     return net::ERR_IO_PENDING;
   }
-  scoped_refptr<SimpleEntryImpl> simple_entry =
-      CreateOrFindActiveEntry(entry_hash, key);
   return simple_entry->OpenEntry(entry, callback);
 }
 
@@ -427,18 +401,38 @@ int SimpleBackendImpl::CreateEntry(const std::string& key,
   DCHECK_LT(0u, key.size());
   const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
 
-  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
-      entries_pending_doom_.find(entry_hash);
-  if (it != entries_pending_doom_.end()) {
-    Callback<int(const net::CompletionCallback&)> operation =
-        base::Bind(&SimpleBackendImpl::CreateEntry,
-                   base::Unretained(this), key, entry);
-    it->second.push_back(base::Bind(&RunOperationAndCallback,
-                                    operation, callback));
-    return net::ERR_IO_PENDING;
-  }
+  std::vector<Closure>* post_doom = nullptr;
   scoped_refptr<SimpleEntryImpl> simple_entry =
-      CreateOrFindActiveEntry(entry_hash, key);
+      CreateOrFindActiveOrDoomedEntry(entry_hash, key, &post_doom);
+
+  if (!simple_entry) {
+    // We would like to optimistically have create go ahead, for benefit of
+    // HTTP cache use. This can only be sanely done if we are the only op
+    // serialized after doom's completion.
+    if (post_doom->empty() &&
+        entry_operations_mode_ == SimpleEntryImpl::OPTIMISTIC_OPERATIONS) {
+      simple_entry = new SimpleEntryImpl(
+          cache_type_, path_, cleanup_tracker_.get(), entry_hash,
+          entry_operations_mode_, this, file_tracker_, net_log_);
+      simple_entry->SetKey(key);
+      simple_entry->SetActiveEntryProxy(
+          ActiveEntryProxy::Create(entry_hash, this));
+      simple_entry->SetCreatePendingDoom();
+      std::pair<EntryMap::iterator, bool> insert_result =
+          active_entries_.insert(
+              EntryMap::value_type(entry_hash, simple_entry.get()));
+      post_doom->push_back(base::Bind(
+          &SimpleEntryImpl::NotifyDoomBeforeCreateComplete, simple_entry));
+      DCHECK(insert_result.second);
+    } else {
+      Callback<int(const net::CompletionCallback&)> operation = base::Bind(
+          &SimpleBackendImpl::CreateEntry, base::Unretained(this), key, entry);
+      post_doom->push_back(
+          base::Bind(&RunOperationAndCallback, operation, callback));
+      return net::ERR_IO_PENDING;
+    }
+  }
+
   return simple_entry->CreateEntry(entry, callback);
 }
 
@@ -446,17 +440,21 @@ int SimpleBackendImpl::DoomEntry(const std::string& key,
                                  const net::CompletionCallback& callback) {
   const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
 
-  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
-      entries_pending_doom_.find(entry_hash);
-  if (it != entries_pending_doom_.end()) {
+  std::vector<Closure>* post_doom = nullptr;
+  scoped_refptr<SimpleEntryImpl> simple_entry =
+      CreateOrFindActiveOrDoomedEntry(entry_hash, key, &post_doom);
+  if (!simple_entry) {
+    // At first glance, it appears exceedingly silly to queue up a doom
+    // when we get here because the files corresponding to our key are being
+    // deleted... but it's possible that one of the things in post_doom is a
+    // create for our key, in which case we still have work to do.
     Callback<int(const net::CompletionCallback&)> operation =
         base::Bind(&SimpleBackendImpl::DoomEntry, base::Unretained(this), key);
-    it->second.push_back(base::Bind(&RunOperationAndCallback,
-                                    operation, callback));
+    post_doom->push_back(
+        base::Bind(&RunOperationAndCallback, operation, callback));
     return net::ERR_IO_PENDING;
   }
-  scoped_refptr<SimpleEntryImpl> simple_entry =
-      CreateOrFindActiveEntry(entry_hash, key);
+
   return simple_entry->DoomEntry(callback);
 }
 
@@ -680,18 +678,29 @@ SimpleBackendImpl::DiskStatResult SimpleBackendImpl::InitCacheStructureOnDisk(
   return result;
 }
 
-scoped_refptr<SimpleEntryImpl> SimpleBackendImpl::CreateOrFindActiveEntry(
+scoped_refptr<SimpleEntryImpl>
+SimpleBackendImpl::CreateOrFindActiveOrDoomedEntry(
     const uint64_t entry_hash,
-    const std::string& key) {
+    const std::string& key,
+    std::vector<Closure>** post_doom) {
   DCHECK_EQ(entry_hash, simple_util::GetEntryHashKey(key));
+
+  // If there is a doom pending, we would want to serialize after it.
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator doom_it =
+      entries_pending_doom_.find(entry_hash);
+  if (doom_it != entries_pending_doom_.end()) {
+    *post_doom = &doom_it->second;
+    return nullptr;
+  }
+
   std::pair<EntryMap::iterator, bool> insert_result =
       active_entries_.insert(EntryMap::value_type(entry_hash, NULL));
   EntryMap::iterator& it = insert_result.first;
   const bool did_insert = insert_result.second;
   if (did_insert) {
-    SimpleEntryImpl* entry = it->second =
-        new SimpleEntryImpl(cache_type_, path_, cleanup_tracker_.get(),
-                            entry_hash, entry_operations_mode_, this, net_log_);
+    SimpleEntryImpl* entry = it->second = new SimpleEntryImpl(
+        cache_type_, path_, cleanup_tracker_.get(), entry_hash,
+        entry_operations_mode_, this, file_tracker_, net_log_);
     entry->SetKey(key);
     entry->SetActiveEntryProxy(ActiveEntryProxy::Create(entry_hash, this));
   }
@@ -701,9 +710,11 @@ scoped_refptr<SimpleEntryImpl> SimpleBackendImpl::CreateOrFindActiveEntry(
   if (key != it->second->key()) {
     it->second->Doom();
     DCHECK_EQ(0U, active_entries_.count(entry_hash));
-    return CreateOrFindActiveEntry(entry_hash, key);
+    DCHECK_EQ(1U, entries_pending_doom_.count(entry_hash));
+    // Re-run ourselves to handle the now-pending doom.
+    return CreateOrFindActiveOrDoomedEntry(entry_hash, key, post_doom);
   }
-  return make_scoped_refptr(it->second);
+  return base::WrapRefCounted(it->second);
 }
 
 int SimpleBackendImpl::OpenEntryFromHash(uint64_t entry_hash,
@@ -725,9 +736,9 @@ int SimpleBackendImpl::OpenEntryFromHash(uint64_t entry_hash,
     return OpenEntry(has_active->second->key(), entry, callback);
   }
 
-  scoped_refptr<SimpleEntryImpl> simple_entry =
-      new SimpleEntryImpl(cache_type_, path_, cleanup_tracker_.get(),
-                          entry_hash, entry_operations_mode_, this, net_log_);
+  scoped_refptr<SimpleEntryImpl> simple_entry = new SimpleEntryImpl(
+      cache_type_, path_, cleanup_tracker_.get(), entry_hash,
+      entry_operations_mode_, this, file_tracker_, net_log_);
   CompletionCallback backend_callback =
       base::Bind(&SimpleBackendImpl::OnEntryOpenedFromHash,
                  AsWeakPtr(), entry_hash, entry, simple_entry, callback);
@@ -803,9 +814,8 @@ void SimpleBackendImpl::DoomEntriesComplete(
 
 // static
 void SimpleBackendImpl::FlushWorkerPoolForTesting() {
-  // We only need to do this if we there is an active task runner.
-  if (base::ThreadTaskRunnerHandle::IsSet())
-    g_sequenced_worker_pool.Get().FlushForTesting();
+  // TODO(morlovich): Remove this, move everything over to disk_cache:: use.
+  base::TaskScheduler::GetInstance()->FlushForTesting();
 }
 
 }  // namespace disk_cache

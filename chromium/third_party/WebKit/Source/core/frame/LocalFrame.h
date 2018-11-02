@@ -33,6 +33,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/dom/WeakIdentifierMap.h"
+#include "core/editing/Forward.h"
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/loader/FrameLoader.h"
@@ -47,15 +48,12 @@ class InterfaceProvider;
 
 namespace blink {
 
+class AssociatedInterfaceProvider;
 class Color;
 class ContentSettingsClient;
 class Document;
 class Editor;
-template <typename Traversal>
-class EditingAlgorithm;
 class Element;
-template <typename Strategy>
-class EphemeralRangeTemplate;
 class EventHandler;
 class FetchParameters;
 class FloatSize;
@@ -64,6 +62,7 @@ class FrameResourceCoordinator;
 class FrameSelection;
 class InputMethodController;
 class CoreProbeSink;
+class IdlenessDetector;
 class InterfaceRegistry;
 class IntPoint;
 class IntSize;
@@ -76,17 +75,13 @@ class NavigationScheduler;
 class Node;
 class NodeTraversal;
 class PerformanceMonitor;
-template <typename Strategy>
-class PositionWithAffinityTemplate;
 class PluginData;
-class ResourceRequest;
 class ScriptController;
 class SpellChecker;
 class TextSuggestionController;
 class WebFrameScheduler;
 class WebPluginContainerImpl;
-class WebTaskRunner;
-class WebURLLoader;
+class WebURLLoaderFactory;
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
@@ -111,13 +106,14 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Frame overrides:
   ~LocalFrame() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
   void Navigate(Document& origin_document,
                 const KURL&,
                 bool replace_current_item,
                 UserGestureStatus) override;
   void Navigate(const FrameLoadRequest&) override;
   void Reload(FrameLoadType, ClientRedirectPolicy) override;
+  void AddResourceTiming(const ResourceTimingInfo&) override;
   void Detach(FrameDetachType) override;
   bool ShouldClose() override;
   SecurityContext* GetSecurityContext() const override;
@@ -210,8 +206,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   String SelectedTextForClipboard() const;
 
   PositionWithAffinityTemplate<EditingAlgorithm<NodeTraversal>>
-  PositionForPoint(const IntPoint& frame_point);
-  Document* DocumentAtPoint(const IntPoint&);
+  PositionForPoint(const LayoutPoint& frame_point);
+  Document* DocumentAtPoint(const LayoutPoint&);
   EphemeralRangeTemplate<EditingAlgorithm<NodeTraversal>> RangeForPoint(
       const IntPoint& frame_point);
 
@@ -222,6 +218,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Returns the frame scheduler, creating one if needed.
   WebFrameScheduler* FrameScheduler();
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType);
   void ScheduleVisualUpdateUnlessThrottled();
 
   bool IsNavigationAllowed() const { return navigation_disable_count_ == 0; }
@@ -234,6 +231,21 @@ class CORE_EXPORT LocalFrame final : public Frame,
   service_manager::InterfaceProvider& GetInterfaceProvider();
   InterfaceRegistry* GetInterfaceRegistry() { return interface_registry_; }
 
+  // Returns an AssociatedInterfaceProvider the frame can use to request
+  // navigation-associated interfaces from the browser. Messages transmitted
+  // over such interfaces will be dispatched in FIFO order with respect to each
+  // other and messages implementing navigation.
+  //
+  // Carefully consider whether an interface needs to be navigation-associated
+  // before introducing new navigation-associated interfaces.
+  //
+  // Navigation-associated interfaces are currently implemented as
+  // channel-associated interfaces. See
+  // https://chromium.googlesource.com/chromium/src/+/master/ipc#Using-Channel_associated-Interfaces.
+  AssociatedInterfaceProvider* GetRemoteNavigationAssociatedInterfaces();
+
+  String GetInstrumentationToken() { return instrumentation_token_; }
+
   LocalFrameClient* Client() const;
 
   ContentSettingsClient* GetContentSettingsClient();
@@ -245,14 +257,15 @@ class CORE_EXPORT LocalFrame final : public Frame,
   PluginData* GetPluginData() const;
 
   PerformanceMonitor* GetPerformanceMonitor() { return performance_monitor_; }
+  IdlenessDetector* GetIdlenessDetector() { return idleness_detector_; }
 
   // Convenience function to allow loading image placeholders for the request if
   // either the flag in Settings() for using image placeholders is set, or if
   // the embedder decides that Client Lo-Fi should be used for this request.
   void MaybeAllowImagePlaceholder(FetchParameters&) const;
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
-                                                WebTaskRunner*);
+  // The returned value is a off-heap raw-ptr and should not be stored.
+  WebURLLoaderFactory* GetURLLoaderFactory();
 
   bool IsInert() const { return is_inert_; }
 
@@ -270,14 +283,18 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void SetViewportIntersectionFromParent(const IntRect&);
   IntRect RemoteViewportIntersection() { return remote_viewport_intersection_; }
 
-  void NotifyUserActivation();
-
-  // Creates a UserGestureIndicator that contains a UserGestureToken with the
-  // given status. Also if a non-null LocalFrame* is provided, associates the
-  // token with the frame tree.
+  // Dummy leftover for compile test.
   static std::unique_ptr<UserGestureIndicator> CreateUserGesture(
       LocalFrame*,
-      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture);
+      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture) {
+    return std::make_unique<UserGestureIndicator>();
+  }
+
+  // Replaces the initial empty document with a Document suitable for
+  // |mime_type| and populated with the contents of |data|. Only intended for
+  // use in internal-implementation LocalFrames that aren't in the frame tree.
+  void ForceSynchronousDocumentInstall(const AtomicString& mime_type,
+                                       scoped_refptr<SharedBuffer> data);
 
  private:
   friend class FrameNavigationDisabler;
@@ -328,11 +345,16 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   Member<CoreProbeSink> probe_sink_;
   Member<PerformanceMonitor> performance_monitor_;
+  Member<IdlenessDetector> idleness_detector_;
 
   InterfaceRegistry* const interface_registry_;
+  String instrumentation_token_;
 
   IntRect remote_viewport_intersection_;
   std::unique_ptr<FrameResourceCoordinator> frame_resource_coordinator_;
+
+  // Per-frame URLLoader factory.
+  std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

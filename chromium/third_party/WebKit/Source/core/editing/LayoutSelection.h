@@ -22,12 +22,15 @@
 #ifndef LayoutSelection_h
 #define LayoutSelection_h
 
-#include "core/editing/Position.h"
-#include "core/editing/VisibleSelection.h"
+#include "core/CoreExport.h"
+#include "core/editing/Forward.h"
 #include "platform/heap/Handle.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 
+class IntRect;
+class LayoutObject;
 class FrameSelection;
 
 // This class represents a selection range in layout tree for painting and
@@ -40,8 +43,6 @@ class FrameSelection;
 // editing/ passes them as offsets in the DOM tree but layout uses them as
 // offset in the layout tree. This doesn't work in the cases of
 // CSS first-letter or character transform. See crbug.com/17528.
-// TODO(yoichio): Remove unused functionality comparing to
-// SelectionMarkingRange.
 class SelectionPaintRange {
   DISALLOW_NEW();
 
@@ -67,24 +68,24 @@ class SelectionPaintRange {
 
   SelectionPaintRange() = default;
   SelectionPaintRange(LayoutObject* start_layout_object,
-                      int start_offset,
+                      WTF::Optional<unsigned> start_offset,
                       LayoutObject* end_layout_object,
-                      int end_offset);
+                      WTF::Optional<unsigned> end_offset);
 
   bool operator==(const SelectionPaintRange& other) const;
 
   LayoutObject* StartLayoutObject() const;
-  int StartOffset() const;
+  WTF::Optional<unsigned> StartOffset() const;
   LayoutObject* EndLayoutObject() const;
-  int EndOffset() const;
+  WTF::Optional<unsigned> EndOffset() const;
 
   bool IsNull() const { return !start_layout_object_; }
 
  private:
   LayoutObject* start_layout_object_ = nullptr;
-  int start_offset_ = -1;
+  WTF::Optional<unsigned> start_offset_ = WTF::nullopt;
   LayoutObject* end_layout_object_ = nullptr;
-  int end_offset_ = -1;
+  WTF::Optional<unsigned> end_offset_ = WTF::nullopt;
 };
 
 class LayoutSelection final : public GarbageCollected<LayoutSelection> {
@@ -101,11 +102,11 @@ class LayoutSelection final : public GarbageCollected<LayoutSelection> {
   void InvalidatePaintForSelection();
 
   void ClearSelection();
-  base::Optional<int> SelectionStart() const;
-  base::Optional<int> SelectionEnd() const;
+  WTF::Optional<unsigned> SelectionStart() const;
+  WTF::Optional<unsigned> SelectionEnd() const;
   void OnDocumentShutdown();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   LayoutSelection(FrameSelection&);

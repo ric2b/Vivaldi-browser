@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "chromeos/cryptohome/homedir_methods.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace cryptohome {
@@ -21,35 +22,35 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
 
   void SetUp(bool success, MountError return_code);
 
-  MOCK_METHOD3(GetKeyDataEx,
+  MOCK_METHOD4(GetKeyDataEx,
                void(const Identification& id,
-                    const std::string& label,
+                    const AuthorizationRequest& auth,
+                    const GetKeyDataRequest& request,
                     const GetKeyDataCallback& callback));
-  MOCK_METHOD3(CheckKeyEx,
+  MOCK_METHOD4(CheckKeyEx,
                void(const Identification& id,
-                    const Authorization& key,
+                    const AuthorizationRequest& auth,
+                    const CheckKeyRequest& request,
                     const Callback& callback));
   MOCK_METHOD4(MountEx,
                void(const Identification& id,
-                    const Authorization& key,
+                    const AuthorizationRequest& auth,
                     const MountRequest& request,
                     const MountCallback& callback));
-  MOCK_METHOD5(AddKeyEx,
+  MOCK_METHOD4(AddKeyEx,
                void(const Identification& id,
-                    const Authorization& auth,
-                    const KeyDefinition& key,
-                    bool clobber_if_exist,
+                    const AuthorizationRequest& auth,
+                    const AddKeyRequest& request,
                     const Callback& callback));
   MOCK_METHOD4(RemoveKeyEx,
                void(const Identification& id,
-                    const Authorization& auth,
-                    const std::string& label,
+                    const AuthorizationRequest& auth,
+                    const RemoveKeyRequest& request,
                     const Callback& callback));
-  MOCK_METHOD5(UpdateKeyEx,
+  MOCK_METHOD4(UpdateKeyEx,
                void(const Identification& id,
-                    const Authorization& auth,
-                    const KeyDefinition& key,
-                    const std::string& signature,
+                    const AuthorizationRequest& auth,
+                    const UpdateKeyRequest& request,
                     const Callback& callback));
   MOCK_METHOD3(RenameCryptohome,
                void(const Identification& id_from,
@@ -58,10 +59,6 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
   MOCK_METHOD2(GetAccountDiskUsage,
                void(const Identification& id,
                     const GetAccountDiskUsageCallback& callback));
-  MOCK_METHOD3(MigrateToDircrypto,
-               void(const Identification& id,
-                    bool minimal_migration,
-                    const DBusResultCallback& callback));
 
   void set_mount_callback(const base::Closure& callback) {
     on_mount_called_ = callback;

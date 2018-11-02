@@ -15,9 +15,11 @@ def _CommonChecks(input_api, output_api):
   """Performs common checks, which includes running pylint."""
   results = []
 
+  _UpdatePerfData(input_api)
+  results.extend(_CheckNoUncommittedFiles(input_api, output_api))
+
   results.extend(_CheckWprShaFiles(input_api, output_api))
   results.extend(_CheckJson(input_api, output_api))
-  results.extend(_CheckPerfJsonUpToDate(input_api, output_api))
   results.extend(_CheckExpectations(input_api, output_api))
   results.extend(input_api.RunTests(input_api.canned_checks.GetPylint(
       input_api, output_api, extra_paths_list=_GetPathsToPrepend(input_api),
@@ -67,17 +69,12 @@ def _CheckExpectations(input_api, output_api):
         'Validating story expectation data failed.', long_text=out))
   return results
 
-def _CheckPerfJsonUpToDate(input_api, output_api):
-  results = []
+
+def _UpdatePerfData(input_api):
   perf_dir = input_api.PresubmitLocalPath()
-  out, return_code = _RunArgs([
+  _RunArgs([
       input_api.python_executable,
-      input_api.os_path.join(perf_dir, 'generate_perf_data'),
-      '--validate-only'], input_api)
-  if return_code:
-      results.append(output_api.PresubmitError(
-          'Validating Perf JSON configs failed.', long_text=out))
-  return results
+      input_api.os_path.join(perf_dir, 'generate_perf_data')], input_api)
 
 
 def _CheckWprShaFiles(input_api, output_api):
@@ -114,6 +111,18 @@ def _CheckJson(input_api, output_api):
     except ValueError:
       return [output_api.PresubmitError('Error parsing JSON in %s!' % filename)]
   return []
+
+
+def _CheckNoUncommittedFiles(input_api, output_api):
+  """Ensures that uncommitted updated files will block presubmit."""
+  results = []
+  diff_text = _RunArgs(['git', 'diff', '--name-only'], input_api)[0]
+
+  if diff_text != "":
+    results.append(output_api.PresubmitError(
+        ('Please add the following changed files to your git client: %s' %
+             diff_text)))
+  return results
 
 
 def CheckChangeOnUpload(input_api, output_api):

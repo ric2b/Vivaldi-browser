@@ -18,7 +18,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
@@ -389,7 +388,7 @@ public class PaymentRequestImpl
 
         mApps = new ArrayList<>();
 
-        mAddressEditor = new AddressEditor();
+        mAddressEditor = new AddressEditor(/*emailFieldIncluded=*/false);
         mCardEditor = new CardEditor(mWebContents, mAddressEditor, sObserverForTest);
 
         ChromeActivity activity = ChromeActivity.fromWebContents(mWebContents);
@@ -401,16 +400,6 @@ public class PaymentRequestImpl
         if (sCanMakePaymentQueries == null) sCanMakePaymentQueries = new ArrayMap<>();
 
         mCurrencyFormatterMap = new HashMap<>();
-    }
-
-    @Override
-    protected void finalize() throws Throwable {
-        super.finalize();
-        for (CurrencyFormatter formatter : mCurrencyFormatterMap.values()) {
-            assert formatter != null;
-            // Ensures the native implementation of currency formatter does not leak.
-            formatter.destroy();
-        }
     }
 
     /**
@@ -487,8 +476,8 @@ public class PaymentRequestImpl
         // Checks whether the merchant supports autofill payment instrument before show is called.
         mMerchantSupportsAutofillPaymentInstruments =
                 AutofillPaymentApp.merchantSupportsAutofillPaymentInstruments(mMethodData);
-        PaymentAppFactory.getInstance().create(mWebContents,
-                Collections.unmodifiableSet(mMethodData.keySet()), this /* callback */);
+        PaymentAppFactory.getInstance().create(
+                mWebContents, Collections.unmodifiableMap(mMethodData), this /* callback */);
 
         // Log the various types of payment methods that were requested by the merchant.
         boolean requestedMethodGoogle = false;
@@ -675,12 +664,16 @@ public class PaymentRequestImpl
                 && mIsCurrentPaymentRequestShowing) {
             assert !mPaymentMethodsSection.isEmpty();
 
-            mDidRecordShowEvent = true;
-            mShouldRecordAbortReason = true;
-            mJourneyLogger.setEventOccurred(Event.SKIPPED_SHOW);
+            if (mPaymentMethodsSection.getSize() > 1) {
+                mUI.show();
+            } else {
+                mDidRecordShowEvent = true;
+                mShouldRecordAbortReason = true;
+                mJourneyLogger.setEventOccurred(Event.SKIPPED_SHOW);
 
-            onPayClicked(null /* selectedShippingAddress */, null /* selectedShippingOption */,
-                    mPaymentMethodsSection.getItem(0));
+                onPayClicked(null /* selectedShippingAddress */, null /* selectedShippingOption */,
+                        mPaymentMethodsSection.getItem(0));
+            }
         }
     }
 
@@ -746,8 +739,10 @@ public class PaymentRequestImpl
         if (disconnectIfNoPaymentMethodsSupported()) return;
 
         for (Map.Entry<PaymentApp, Map<String, PaymentMethodData>> q : queryApps.entrySet()) {
-            q.getKey().getInstruments(
-                    q.getValue(), mTopLevelOrigin, mPaymentRequestOrigin, mCertificateChain, this);
+            q.getKey().getInstruments(q.getValue(), mTopLevelOrigin, mPaymentRequestOrigin,
+                    mCertificateChain,
+                    mModifiers == null ? new HashMap() : Collections.unmodifiableMap(mModifiers),
+                    this);
         }
     }
 
@@ -832,6 +827,28 @@ public class PaymentRequestImpl
             mShippingAddressesSection.setErrorMessage(details.error);
         }
 
+        enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent();
+    }
+
+    /**
+     * Called when the merchant received a new shipping address or shipping option, but did not
+     * update the payment details in response.
+     */
+    @Override
+    public void noUpdatedPaymentDetails() {
+        if (mClient == null) return;
+
+        if (mUI == null) {
+            mJourneyLogger.setAborted(AbortReason.INVALID_DATA_FROM_RENDERER);
+            disconnectFromClientWithDebugMessage(
+                    "PaymentRequestUpdateEvent fired without PaymentRequest.show()");
+            return;
+        }
+
+        enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent();
+    }
+
+    private void enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent() {
         if (mPaymentInformationCallback != null) {
             providePaymentInformation();
         } else {
@@ -933,33 +950,11 @@ public class PaymentRequestImpl
         methodNames.retainAll(mModifiers.keySet());
         if (methodNames.isEmpty()) return null;
 
-        // Non-AutofillPaymentInstrument has no extra data to check.
-        if (!instrument.isAutofillInstrument()) {
-            return mModifiers.get(methodNames.iterator().next());
-        }
-
-        // Checks extra data to match card type and issuer network.
-        int cardType = ((AutofillPaymentInstrument) instrument).getCard().getCardType();
-        String cardIssuerNetwork =
-                ((AutofillPaymentInstrument) instrument).getCard().getBasicCardIssuerNetwork();
         for (String methodName : methodNames) {
             PaymentDetailsModifier modifier = mModifiers.get(methodName);
-
-            if (AutofillPaymentApp.isBasicCardTypeSpecified(modifier.methodData)) {
-                Set<Integer> targetCardTypes =
-                        AutofillPaymentApp.convertBasicCardToTypes(modifier.methodData);
-                targetCardTypes.remove(CardType.UNKNOWN);
-                assert targetCardTypes.size() > 0;
-                if (!targetCardTypes.contains(cardType)) continue;
+            if (instrument.isValidForPaymentMethodData(methodName, modifier.methodData)) {
+                return modifier;
             }
-
-            Set<String> targetCardNetworks =
-                    AutofillPaymentApp.convertBasicCardToNetworks(modifier.methodData);
-            if (targetCardNetworks != null && !targetCardNetworks.contains(cardIssuerNetwork)) {
-                continue;
-            }
-
-            return modifier;
         }
 
         return null;
@@ -1410,7 +1405,7 @@ public class PaymentRequestImpl
         Log.d(TAG, debugMessage);
         if (mClient != null) mClient.onError(reason);
         closeClient();
-        closeUI(true);
+        closeUIAndDestroyNativeObjects(/*immediateClose=*/true);
     }
 
     /**
@@ -1433,8 +1428,8 @@ public class PaymentRequestImpl
         mClient.onAbort(abortSucceeded);
         if (abortSucceeded) {
             closeClient();
-            closeUI(true);
             mJourneyLogger.setAborted(AbortReason.ABORTED_BY_MERCHANT);
+            closeUIAndDestroyNativeObjects(/*immediateClose=*/true);
         } else {
             if (sObserverForTest != null) sObserverForTest.onPaymentRequestServiceUnableToAbort();
         }
@@ -1461,7 +1456,7 @@ public class PaymentRequestImpl
         PaymentPreferencesUtil.setPaymentInstrumentLastUseDate(
                 selectedPaymentMethod.getIdentifier(), System.currentTimeMillis());
 
-        closeUI(PaymentComplete.FAIL != result);
+        closeUIAndDestroyNativeObjects(/*immediateClose=*/PaymentComplete.FAIL != result);
     }
 
     @Override
@@ -1563,8 +1558,8 @@ public class PaymentRequestImpl
     public void close() {
         if (mClient == null) return;
         closeClient();
-        closeUI(true);
         mJourneyLogger.setAborted(AbortReason.MOJO_RENDERER_CLOSING);
+        closeUIAndDestroyNativeObjects(/*immediateClose=*/true);
     }
 
     /**
@@ -1574,8 +1569,8 @@ public class PaymentRequestImpl
     public void onConnectionError(MojoException e) {
         if (mClient == null) return;
         closeClient();
-        closeUI(true);
         mJourneyLogger.setAborted(AbortReason.MOJO_CONNECTION_ERROR);
+        closeUIAndDestroyNativeObjects(/*immediateClose=*/true);
     }
 
     /**
@@ -1814,12 +1809,13 @@ public class PaymentRequestImpl
      * onAddressNormalized or onCouldNotNormalize which will send the result to the merchant.
      */
     private void startShippingAddressChangeNormalization(AutofillAddress address) {
-        PersonalDataManager.getInstance().normalizeAddress(
-                address.getProfile(), AutofillAddress.getCountryCode(address.getProfile()), this);
+        PersonalDataManager.getInstance().normalizeAddress(address.getProfile(), this);
     }
 
     /**
-     * Closes the UI. If the client is still connected, then it's notified of UI hiding.
+     * Closes the UI and destroys native objects. If the client is still connected, then it's
+     * notified of UI hiding. This PaymentRequestImpl object can't be reused after this function is
+     * called.
      *
      * @param immediateClose If true, then UI immediately closes. If false, the UI shows the error
      *                       message "There was an error processing your order." This message
@@ -1829,7 +1825,7 @@ public class PaymentRequestImpl
      *                       {@link PaymentRequestImpl#complete(int)}. All other callers should
      *                       always pass "true."
      */
-    private void closeUI(boolean immediateClose) {
+    private void closeUIAndDestroyNativeObjects(boolean immediateClose) {
         if (mUI != null) {
             mUI.close(immediateClose, () -> {
                 if (mClient != null) mClient.onComplete();
@@ -1857,6 +1853,14 @@ public class PaymentRequestImpl
             mObservedTabModel.removeObserver(mTabModelObserver);
             mObservedTabModel = null;
         }
+
+        // Destroy native objects.
+        for (CurrencyFormatter formatter : mCurrencyFormatterMap.values()) {
+            assert formatter != null;
+            // Ensures the native implementation of currency formatter does not leak.
+            formatter.destroy();
+        }
+        mJourneyLogger.destroy();
     }
 
     private void closeClient() {

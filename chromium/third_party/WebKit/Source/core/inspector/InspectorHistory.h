@@ -31,8 +31,9 @@
 #ifndef InspectorHistory_h
 #define InspectorHistory_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -41,14 +42,12 @@ namespace blink {
 class ExceptionState;
 
 class InspectorHistory final : public GarbageCollected<InspectorHistory> {
-  WTF_MAKE_NONCOPYABLE(InspectorHistory);
-
  public:
   class Action : public GarbageCollectedFinalized<Action> {
    public:
     explicit Action(const String& name);
     virtual ~Action();
-    DECLARE_VIRTUAL_TRACE();
+    virtual void Trace(blink::Visitor*);
     virtual String ToString();
 
     virtual String MergeId();
@@ -68,7 +67,7 @@ class InspectorHistory final : public GarbageCollected<InspectorHistory> {
   };
 
   InspectorHistory();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   bool Perform(Action*, ExceptionState&);
   void AppendPerformedAction(Action*);
@@ -81,6 +80,8 @@ class InspectorHistory final : public GarbageCollected<InspectorHistory> {
  private:
   HeapVector<Member<Action>> history_;
   size_t after_last_action_index_;
+
+  DISALLOW_COPY_AND_ASSIGN(InspectorHistory);
 };
 
 }  // namespace blink

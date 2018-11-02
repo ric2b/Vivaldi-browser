@@ -6,10 +6,10 @@
 #define CSSPathValue_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/css/CSSValue.h"
 #include "core/style/StylePath.h"
 #include "core/svg/SVGPathByteStream.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -19,26 +19,26 @@ namespace cssvalue {
 
 class CSSPathValue : public CSSValue {
  public:
-  static CSSPathValue* Create(RefPtr<StylePath>);
+  static CSSPathValue* Create(scoped_refptr<StylePath>);
   static CSSPathValue* Create(std::unique_ptr<SVGPathByteStream>);
 
   static CSSPathValue& EmptyPathValue();
 
-  StylePath* GetStylePath() const { return style_path_.Get(); }
+  StylePath* GetStylePath() const { return style_path_.get(); }
   String CustomCSSText() const;
 
   bool Equals(const CSSPathValue&) const;
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
   const SVGPathByteStream& ByteStream() const {
     return style_path_->ByteStream();
   }
 
  private:
-  CSSPathValue(RefPtr<StylePath>);
+  CSSPathValue(scoped_refptr<StylePath>);
 
-  RefPtr<StylePath> style_path_;
+  scoped_refptr<StylePath> style_path_;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSPathValue, IsPathValue());

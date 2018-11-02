@@ -4,10 +4,14 @@
 
 #include "components/omnibox/browser/contextual_suggestions_service.h"
 
+#include <utility>
+
 #include "base/feature_list.h"
+#include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/search_engines/template_url_service.h"
@@ -22,8 +26,60 @@
 namespace {
 
 // Server address for the experimental suggestions service.
-const char kExperimentalServerAddress[] =
-    "https://cuscochromeextension-pa.googleapis.com/v1/zerosuggestions";
+const char kDefaultExperimentalServerAddress[] =
+    "https://cuscochromeextension-pa.googleapis.com/v1/omniboxsuggestions";
+
+void AddVariationHeaders(const std::unique_ptr<net::URLFetcher>& fetcher) {
+  net::HttpRequestHeaders headers;
+  // Add Chrome experiment state to the request headers.
+  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
+  // not affect transmission of experiments coming from the variations server.
+  //
+  // Note: It's OK to pass |is_incognito| false since we are expected to be in
+  // non-incognito state here (i.e. contextual sugestions are not served in
+  // incognito mode).
+  variations::AppendVariationHeaders(fetcher->GetOriginalURL(),
+                                     /*incognito=*/false, /*uma_enabled=*/false,
+                                     /*is_signed_in=*/false, &headers);
+  for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();) {
+    fetcher->AddExtraRequestHeader(it.name() + ":" + it.value());
+  }
+}
+
+// Returns API request body. The final result depends on the following input
+// variables:
+//     * <current_url>: The current url visited by the user.
+//     * <experiment_id>: the experiment id associated with the current field
+//       trial group.
+//
+// The format of the request body is:
+//
+//     urls: {
+//       url : <current_url>
+//     }
+//     // stream_type = 1 corresponds to zero suggest suggestions.
+//     stream_type: 1
+//     // experiment_id is only set when <experiment_id> is well defined.
+//     experiment_id: <experiment_id>
+//
+std::string FormatRequestBodyExperimentalService(
+    const std::string& current_url) {
+  auto request = base::MakeUnique<base::DictionaryValue>();
+  auto url_list = base::MakeUnique<base::ListValue>();
+  auto url_entry = base::MakeUnique<base::DictionaryValue>();
+  url_entry->SetString("url", current_url);
+  url_list->Append(std::move(url_entry));
+  request->Set("urls", std::move(url_list));
+  // stream_type = 1 corresponds to zero suggest suggestions.
+  request->SetInteger("stream_type", 1);
+  const int experiment_id =
+      OmniboxFieldTrial::GetZeroSuggestRedirectToChromeExperimentId();
+  if (experiment_id >= 0)
+    request->SetInteger("experiment_id", experiment_id);
+  std::string result;
+  base::JSONWriter::Write(*request, &result);
+  return result;
+}
 
 }  // namespace
 
@@ -44,35 +100,13 @@ void ContextualSuggestionsService::CreateContextualSuggestionsRequest(
     net::URLFetcherDelegate* fetcher_delegate,
     ContextualSuggestionsCallback callback) {
   const GURL experimental_suggest_url =
-      ExperimentalZeroSuggestURL(current_url, template_url_service);
-  const bool is_experimental = experimental_suggest_url.is_valid();
-  const GURL suggest_url =
-      is_experimental
-          ? experimental_suggest_url
-          : ContextualSuggestionsUrl(current_url, template_url_service);
-
-  std::unique_ptr<net::URLFetcher> fetcher =
-      CreateRequest(suggest_url, is_experimental, fetcher_delegate);
-
-  const bool should_fetch_access_token = is_experimental &&
-                                         (signin_manager_ != nullptr) &&
-                                         (token_service_ != nullptr);
-  // If authentication services are unavailable or if this request is still
-  // waiting for an oauth2 token, run the contextual service without access
-  // tokens.
-  if (!should_fetch_access_token || (token_fetcher_ != nullptr)) {
-    std::move(callback).Run(std::move(fetcher));
-    return;
-  }
-
-  // Create the oauth2 token fetcher.
-  const OAuth2TokenService::ScopeSet scopes{
-      "https://www.googleapis.com/auth/cusco-chrome-extension"};
-  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
-      "contextual_suggestions_service", signin_manager_, token_service_, scopes,
-      base::BindOnce(&ContextualSuggestionsService::AccessTokenAvailable,
-                     base::Unretained(this), std::move(fetcher),
-                     std::move(callback)));
+      ExperimentalContextualSuggestionsUrl(current_url, template_url_service);
+  if (experimental_suggest_url.is_valid())
+    CreateExperimentalRequest(current_url, experimental_suggest_url,
+                              fetcher_delegate, std::move(callback));
+  else
+    CreateDefaultRequest(current_url, template_url_service, fetcher_delegate,
+                         std::move(callback));
 }
 
 void ContextualSuggestionsService::StopCreatingContextualSuggestionsRequest() {
@@ -107,7 +141,7 @@ GURL ContextualSuggestionsService::ContextualSuggestionsUrl(
                                                     search_terms_data));
 }
 
-GURL ContextualSuggestionsService::ExperimentalZeroSuggestURL(
+GURL ContextualSuggestionsService::ExperimentalContextualSuggestionsUrl(
     const std::string& current_url,
     const TemplateURLService* template_url_service) const {
   if (current_url.empty()) {
@@ -129,21 +163,11 @@ GURL ContextualSuggestionsService::ExperimentalZeroSuggestURL(
     return GURL();
   }
 
-  // Assemble the actual suggest URL.
-  const std::string server_address(kExperimentalServerAddress);
-  const int experiment_id =
-      OmniboxFieldTrial::GetZeroSuggestRedirectToChromeExperimentId();
-  // The experimental suggest endpoint does not handle URLs terminating with a
-  // slash properly, causing some urls like http://example.com/some/path/ to
-  // lose the last slash, which changes the URL. If we add an extra ampersand,
-  // as in the else case here it handles the URL properly.
-  const std::string additional_parameters =
-      (experiment_id >= 0)
-          ? base::StringPrintf("&experiment_id=%d", experiment_id)
-          : "&";
-  GURL suggest_url(server_address + "/url=" + net::EscapePath(current_url) +
-                   additional_parameters);
-
+  const std::string server_address_param =
+      OmniboxFieldTrial::GetZeroSuggestRedirectToChromeServerAddress();
+  GURL suggest_url(server_address_param.empty()
+                       ? kDefaultExperimentalServerAddress
+                       : server_address_param);
   // Check that the suggest URL for redirect to chrome field trial is valid.
   if (!suggest_url.is_valid()) {
     return GURL();
@@ -157,43 +181,17 @@ GURL ContextualSuggestionsService::ExperimentalZeroSuggestURL(
   return suggest_url;
 }
 
-std::unique_ptr<net::URLFetcher> ContextualSuggestionsService::CreateRequest(
-    const GURL& suggest_url,
-    bool is_experimental,
-    net::URLFetcherDelegate* fetcher_delegate) const {
+void ContextualSuggestionsService::CreateDefaultRequest(
+    const std::string& current_url,
+    const TemplateURLService* template_url_service,
+    net::URLFetcherDelegate* fetcher_delegate,
+    ContextualSuggestionsCallback callback) {
+  const GURL suggest_url =
+      ContextualSuggestionsUrl(current_url, template_url_service);
   DCHECK(suggest_url.is_valid());
 
-  net::NetworkTrafficAnnotationTag annotation_tag =
-      is_experimental
-          ? net::DefineNetworkTrafficAnnotation(
-                "omnibox_zerosuggest_experimental", R"(
-        semantics {
-          sender: "Omnibox"
-          description:
-            "When the user focuses the omnibox, Chrome can provide search or "
-            "navigation suggestions from the default search provider in the "
-            "omnibox dropdown, based on the current page URL.\n"
-            "This is limited to users whose default search engine is Google, "
-            "as no other search engines currently support this kind of "
-            "suggestion."
-          trigger: "The omnibox receives focus."
-          data: "The user's OAuth2 credentials and the URL of the current page."
-          destination: GOOGLE_OWNED_SERVICE
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "Users can control this feature via the 'Use a prediction service "
-            "to help complete searches and URLs typed in the address bar' "
-            "settings under 'Privacy'. The feature is enabled by default."
-          chrome_policy {
-            SearchSuggestEnabled {
-                policy_options {mode: MANDATORY}
-                SearchSuggestEnabled: false
-            }
-          }
-        })")
-          : net::DefineNetworkTrafficAnnotation("omnibox_zerosuggest", R"(
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("omnibox_zerosuggest", R"(
         semantics {
           sender: "Omnibox"
           description:
@@ -221,34 +219,90 @@ std::unique_ptr<net::URLFetcher> ContextualSuggestionsService::CreateRequest(
             }
           }
         })");
-
   const int kFetcherID = 1;
   std::unique_ptr<net::URLFetcher> fetcher =
       net::URLFetcher::Create(kFetcherID, suggest_url, net::URLFetcher::GET,
-                              fetcher_delegate, annotation_tag);
+                              fetcher_delegate, traffic_annotation);
   fetcher->SetRequestContext(request_context_);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher.get(), data_use_measurement::DataUseUserData::OMNIBOX);
+  AddVariationHeaders(fetcher);
+  fetcher->SetLoadFlags(net::LOAD_DO_NOT_SAVE_COOKIES);
 
-  // Add Chrome experiment state to the request headers.
-  net::HttpRequestHeaders headers;
-  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
-  // not affect transmission of experiments coming from the variations server.
-  variations::AppendVariationHeaders(fetcher->GetOriginalURL(),
-                                     /*incognito=*/false, /*uma_enabled=*/false,
-                                     /*is_signed_in=*/false, &headers);
-  for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();) {
-    fetcher->AddExtraRequestHeader(it.name() + ":" + it.value());
+  std::move(callback).Run(std::move(fetcher));
+}
+
+void ContextualSuggestionsService::CreateExperimentalRequest(
+    const std::string& current_url,
+    const GURL& suggest_url,
+    net::URLFetcherDelegate* fetcher_delegate,
+    ContextualSuggestionsCallback callback) {
+  DCHECK(suggest_url.is_valid());
+
+  // This traffic annotation is nearly identical to the annotation for
+  // `omnibox_zerosuggest`. The main difference is that the experimental traffic
+  // is not allowed cookies.
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("omnibox_zerosuggest_experimental",
+                                          R"(
+        semantics {
+          sender: "Omnibox"
+          description:
+            "When the user focuses the omnibox, Chrome can provide search or "
+            "navigation suggestions from the default search provider in the "
+            "omnibox dropdown, based on the current page URL.\n"
+            "This is limited to users whose default search engine is Google, "
+            "as no other search engines currently support this kind of "
+            "suggestion."
+          trigger: "The omnibox receives focus."
+          data: "The user's OAuth2 credentials and the URL of the current page."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "Users can control this feature via the 'Use a prediction service "
+            "to help complete searches and URLs typed in the address bar' "
+            "settings under 'Privacy'. The feature is enabled by default."
+          chrome_policy {
+            SearchSuggestEnabled {
+                policy_options {mode: MANDATORY}
+                SearchSuggestEnabled: false
+            }
+          }
+        })");
+  const int kFetcherID = 1;
+  std::string request_body = FormatRequestBodyExperimentalService(current_url);
+  std::unique_ptr<net::URLFetcher> fetcher =
+      net::URLFetcher::Create(kFetcherID, suggest_url,
+                              /*request_type=*/net::URLFetcher::POST,
+                              fetcher_delegate, traffic_annotation);
+  fetcher->SetUploadData("application/json", request_body);
+  fetcher->SetRequestContext(request_context_);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher.get(), data_use_measurement::DataUseUserData::OMNIBOX);
+  AddVariationHeaders(fetcher);
+  fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
+                        net::LOAD_DO_NOT_SAVE_COOKIES);
+
+  const bool should_fetch_access_token =
+      (signin_manager_ != nullptr) && (token_service_ != nullptr);
+  // If authentication services are unavailable or if this request is still
+  // waiting for an oauth2 token, run the contextual service without access
+  // tokens.
+  if (!should_fetch_access_token || (token_fetcher_ != nullptr)) {
+    std::move(callback).Run(std::move(fetcher));
+    return;
   }
 
-  if (is_experimental) {
-    fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
-                          net::LOAD_DO_NOT_SAVE_COOKIES);
-  } else {
-    fetcher->SetLoadFlags(net::LOAD_DO_NOT_SAVE_COOKIES);
-  }
-
-  return fetcher;
+  // Create the oauth2 token fetcher.
+  const OAuth2TokenService::ScopeSet scopes{
+      "https://www.googleapis.com/auth/cusco-chrome-extension"};
+  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
+      "contextual_suggestions_service", signin_manager_, token_service_, scopes,
+      base::BindOnce(&ContextualSuggestionsService::AccessTokenAvailable,
+                     base::Unretained(this), std::move(fetcher),
+                     std::move(callback)));
 }
 
 void ContextualSuggestionsService::AccessTokenAvailable(

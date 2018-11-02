@@ -4,7 +4,6 @@
 
 #include "ash/system/toast/toast_manager.h"
 
-#include "ash/public/cpp/config.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
@@ -23,13 +22,13 @@ namespace ash {
 class DummyEvent : public ui::Event {
  public:
   DummyEvent() : Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
-  ~DummyEvent() override {}
+  ~DummyEvent() override = default;
 };
 
 class ToastManagerTest : public AshTestBase {
  public:
-  ToastManagerTest() {}
-  ~ToastManagerTest() override {}
+  ToastManagerTest() = default;
+  ~ToastManagerTest() override = default;
 
  private:
   void SetUp() override {
@@ -129,10 +128,6 @@ TEST_F(ToastManagerTest, ShowAndCloseManually) {
 }
 
 TEST_F(ToastManagerTest, ShowAndCloseManuallyDuringAnimation) {
-  // TODO: gets wedged running animator. http://crbug.com/698016.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   ui::ScopedAnimationDurationScaleMode slow_animation_duration(
       ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
 
@@ -195,9 +190,10 @@ TEST_F(ToastManagerTest, PositionWithVisibleBottomShelf) {
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));
-  EXPECT_EQ(shelf_bounds.y() - 5, toast_bounds.bottom());
-  EXPECT_EQ(root_bounds.bottom() - shelf_bounds.height() - 5,
-            toast_bounds.bottom());
+  EXPECT_EQ(shelf_bounds.y() - ToastOverlay::kOffset, toast_bounds.bottom());
+  EXPECT_EQ(
+      root_bounds.bottom() - shelf_bounds.height() - ToastOverlay::kOffset,
+      toast_bounds.bottom());
 }
 
 TEST_F(ToastManagerTest, PositionWithAutoHiddenBottomShelf) {
@@ -218,7 +214,7 @@ TEST_F(ToastManagerTest, PositionWithAutoHiddenBottomShelf) {
 
   EXPECT_TRUE(toast_bounds.Intersects(shelf->GetUserWorkAreaBounds()));
   EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
-  EXPECT_EQ(root_bounds.bottom() - kShelfAutoHideSize - 5,
+  EXPECT_EQ(root_bounds.bottom() - kShelfAutoHideSize - ToastOverlay::kOffset,
             toast_bounds.bottom());
 }
 
@@ -237,7 +233,8 @@ TEST_F(ToastManagerTest, PositionWithHiddenBottomShelf) {
 
   EXPECT_TRUE(toast_bounds.Intersects(shelf->GetUserWorkAreaBounds()));
   EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
-  EXPECT_EQ(root_bounds.bottom() - 5, toast_bounds.bottom());
+  EXPECT_EQ(root_bounds.bottom() - ToastOverlay::kOffset,
+            toast_bounds.bottom());
 }
 
 TEST_F(ToastManagerTest, PositionWithVisibleLeftShelf) {
@@ -254,7 +251,8 @@ TEST_F(ToastManagerTest, PositionWithVisibleLeftShelf) {
       ScreenUtil::GetDisplayBoundsWithShelf(shelf->GetWindow());
 
   EXPECT_TRUE(toast_bounds.Intersects(shelf->GetUserWorkAreaBounds()));
-  EXPECT_EQ(root_bounds.bottom() - 5, toast_bounds.bottom());
+  EXPECT_EQ(root_bounds.bottom() - ToastOverlay::kOffset,
+            toast_bounds.bottom());
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));
@@ -264,10 +262,6 @@ TEST_F(ToastManagerTest, PositionWithVisibleLeftShelf) {
 }
 
 TEST_F(ToastManagerTest, PositionWithUnifiedDesktop) {
-  // TODO: needs unified mode. http://crbug.com/698024.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   display_manager()->SetUnifiedDesktopEnabled(true);
   UpdateDisplay("1000x500,0+600-100x500");
 
@@ -288,9 +282,10 @@ TEST_F(ToastManagerTest, PositionWithUnifiedDesktop) {
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));
-  EXPECT_EQ(shelf_bounds.y() - 5, toast_bounds.bottom());
-  EXPECT_EQ(root_bounds.bottom() - shelf_bounds.height() - 5,
-            toast_bounds.bottom());
+  EXPECT_EQ(shelf_bounds.y() - ToastOverlay::kOffset, toast_bounds.bottom());
+  EXPECT_EQ(
+      root_bounds.bottom() - shelf_bounds.height() - ToastOverlay::kOffset,
+      toast_bounds.bottom());
 }
 
 TEST_F(ToastManagerTest, CancelToast) {

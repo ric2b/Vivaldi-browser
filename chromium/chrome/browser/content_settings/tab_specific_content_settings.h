@@ -36,6 +36,10 @@ namespace net {
 class CookieOptions;
 }
 
+namespace url {
+class Origin;
+}  // namespace url
+
 // TODO(msramek): Media is storing their state in TabSpecificContentSettings:
 // |microphone_camera_state_| without being tied to a single content setting.
 // This state is not ideal, potential solution is to save this information via
@@ -115,7 +119,7 @@ class TabSpecificContentSettings
       const base::Callback<content::WebContents*(void)>& wc_getter,
       const GURL& url,
       const GURL& first_party_url,
-      const std::string& cookie_line,
+      const net::CanonicalCookie& cookie,
       const net::CookieOptions& options,
       bool blocked_by_policy);
 
@@ -170,6 +174,14 @@ class TabSpecificContentSettings
       bool blocked_by_policy_javascript,
       bool blocked_by_policy_cookie);
 
+  // Called when a specific Shared Worker was accessed.
+  static void SharedWorkerAccessed(int render_process_id,
+                                   int render_frame_id,
+                                   const GURL& worker_url,
+                                   const std::string& name,
+                                   const url::Origin& constructor_origin,
+                                   bool blocked_by_policy);
+
   // Resets the |content_settings_status_|, except for
   // information which are needed for navigation: CONTENT_SETTINGS_TYPE_COOKIES
   // for cookies and service workers, and CONTENT_SETTINGS_TYPE_JAVASCRIPT for
@@ -188,6 +200,9 @@ class TabSpecificContentSettings
   // Changes the |content_blocked_| entry for popups.
   void SetPopupsBlocked(bool blocked);
 
+  // Called when audio has been blocked on the page.
+  void OnAudioBlocked();
+
   // Returns whether a particular kind of content has been blocked for this
   // page.
   bool IsContentBlocked(ContentSettingsType content_type) const;
@@ -200,11 +215,6 @@ class TabSpecificContentSettings
   // Returns whether a particular kind of content has been allowed. Currently
   // only tracks cookies.
   bool IsContentAllowed(ContentSettingsType content_type) const;
-
-  // Returns the names of plugins that have been blocked for this tab.
-  const std::vector<base::string16>& blocked_plugin_names() const {
-    return blocked_plugin_names_;
-  }
 
   const GURL& media_stream_access_origin() const {
     return media_stream_access_origin_;
@@ -317,7 +327,7 @@ class TabSpecificContentSettings
                      bool blocked_by_policy);
   void OnCookieChanged(const GURL& url,
                        const GURL& first_party_url,
-                       const std::string& cookie_line,
+                       const net::CanonicalCookie& cookie,
                        const net::CookieOptions& options,
                        bool blocked_by_policy);
   void OnFileSystemAccessed(const GURL& url,
@@ -331,6 +341,10 @@ class TabSpecificContentSettings
   void OnServiceWorkerAccessed(const GURL& scope,
                                bool blocked_by_policy_javascript,
                                bool blocked_by_policy_cookie);
+  void OnSharedWorkerAccessed(const GURL& worker_url,
+                              const std::string& name,
+                              const url::Origin& constructor_origin,
+                              bool blocked_by_policy);
   void OnWebDatabaseAccessed(const GURL& url,
                              const base::string16& name,
                              const base::string16& display_name,
@@ -440,9 +454,6 @@ class TabSpecificContentSettings
   // the user opens the bubble and makes changes multiple times.
   ContentSetting pending_protocol_handler_setting_;
 
-  // The name(s) of the plugin(s) being blocked.
-  std::vector<base::string16> blocked_plugin_names_;
-
   // Stores whether the user can load blocked plugins on this page.
   bool load_plugins_link_enabled_;
 
@@ -461,9 +472,6 @@ class TabSpecificContentSettings
   // request is requesting certain specific devices.
   std::string media_stream_requested_audio_device_;
   std::string media_stream_requested_video_device_;
-
-  // Holds the previous committed url during a navigation.
-  GURL previous_url_;
 
   // Observer to watch for content settings changed.
   ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_;

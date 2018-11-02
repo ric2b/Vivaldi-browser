@@ -20,9 +20,9 @@
 
 #include "core/svg/SVGTests.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGStaticStringList.h"
+#include "core/svg_names.h"
 #include "platform/Language.h"
 
 namespace blink {
@@ -40,7 +40,7 @@ SVGTests::SVGTests(SVGElement* context_element)
   context_element->AddToPropertyMap(system_language_);
 }
 
-DEFINE_TRACE(SVGTests) {
+void SVGTests::Trace(blink::Visitor* visitor) {
   visitor->Trace(required_extensions_);
   visitor->Trace(system_language_);
 }

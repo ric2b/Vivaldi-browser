@@ -47,8 +47,8 @@ const OncFieldSignature certificate_pattern_fields[] = {
 const OncFieldSignature eap_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::eap::kAnonymousIdentity, &kStringSignature},
-    {::onc::client_cert::kClientCertPattern, &kCertificatePatternSignature},
     {::onc::client_cert::kClientCertPKCS11Id, &kStringSignature},
+    {::onc::client_cert::kClientCertPattern, &kCertificatePatternSignature},
     {::onc::client_cert::kClientCertRef, &kStringSignature},
     {::onc::client_cert::kClientCertType, &kStringSignature},
     {::onc::eap::kIdentity, &kStringSignature},
@@ -61,6 +61,8 @@ const OncFieldSignature eap_fields[] = {
     // Deprecated.
     {::onc::eap::kServerCARef, &kStringSignature},
     {::onc::eap::kServerCARefs, &kStringListSignature},
+    {::onc::eap::kSubjectMatch, &kStringSignature},
+    {::onc::eap::kTLSVersionMax, &kStringSignature},
     {::onc::eap::kUseProactiveKeyCaching, &kBoolSignature},
     {::onc::eap::kUseSystemCAs, &kBoolSignature},
     {NULL}};
@@ -68,6 +70,7 @@ const OncFieldSignature eap_fields[] = {
 const OncFieldSignature ipsec_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::ipsec::kAuthenticationType, &kStringSignature},
+    {::onc::client_cert::kClientCertPKCS11Id, &kStringSignature},
     {::onc::client_cert::kClientCertPattern, &kCertificatePatternSignature},
     {::onc::client_cert::kClientCertRef, &kStringSignature},
     {::onc::client_cert::kClientCertType, &kStringSignature},
@@ -103,11 +106,13 @@ const OncFieldSignature openvpn_fields[] = {
     {::onc::openvpn::kAuthNoCache, &kBoolSignature},
     {::onc::openvpn::kAuthRetry, &kStringSignature},
     {::onc::openvpn::kCipher, &kStringSignature},
+    {::onc::client_cert::kClientCertPKCS11Id, &kStringSignature},
     {::onc::client_cert::kClientCertPattern, &kCertificatePatternSignature},
     {::onc::client_cert::kClientCertRef, &kStringSignature},
     {::onc::client_cert::kClientCertType, &kStringSignature},
     {::onc::openvpn::kCompLZO, &kStringSignature},
     {::onc::openvpn::kCompNoAdapt, &kBoolSignature},
+    {::onc::openvpn::kExtraHosts, &kStringListSignature},
     {::onc::openvpn::kIgnoreDefaultRoute, &kBoolSignature},
     {::onc::openvpn::kKeyDirection, &kStringSignature},
     {::onc::openvpn::kNsCertType, &kStringSignature},
@@ -146,6 +151,11 @@ const OncFieldSignature third_party_vpn_fields[] = {
     {::onc::third_party_vpn::kExtensionID, &kStringSignature},
     {NULL}};
 
+const OncFieldSignature arc_vpn_fields[] = {
+    {::onc::kRecommended, &kRecommendedSignature},
+    {::onc::arc_vpn::kTunnelChrome, &kStringSignature},
+    {NULL}};
+
 const OncFieldSignature verify_x509_fields[] = {
     {::onc::verify_x509::kName, &kStringSignature},
     {::onc::verify_x509::kType, &kStringSignature},
@@ -159,6 +169,7 @@ const OncFieldSignature vpn_fields[] = {
     {::onc::vpn::kL2TP, &kL2TPSignature},
     {::onc::vpn::kOpenVPN, &kOpenVPNSignature},
     {::onc::vpn::kThirdPartyVpn, &kThirdPartyVPNSignature},
+    {::onc::vpn::kArcVpn, &kARCVPNSignature},
     {::onc::vpn::kType, &kStringSignature},
     {NULL}};
 
@@ -183,6 +194,8 @@ const OncFieldSignature ipconfig_fields[] = {
     {::onc::ipconfig::kNameServers, &kStringListSignature},
     {::onc::ipconfig::kRoutingPrefix, &kIntegerSignature},
     {::onc::ipconfig::kSearchDomains, &kStringListSignature},
+    {::onc::ipconfig::kIncludedRoutes, &kStringListSignature},
+    {::onc::ipconfig::kExcludedRoutes, &kStringListSignature},
     {::onc::ipconfig::kType, &kStringSignature},
     {::onc::ipconfig::kWebProxyAutoDiscoveryUrl, &kStringSignature},
     {NULL}};
@@ -303,6 +316,7 @@ const OncFieldSignature cellular_with_state_fields[] = {
     {::onc::cellular::kPaymentPortal, &kCellularPaymentPortalSignature},
     {::onc::cellular::kPRLVersion, &kIntegerSignature},
     {::onc::cellular::kRoamingState, &kStringSignature},
+    {::onc::cellular::kScanning, &kBoolSignature},
     {::onc::cellular::kServingOperator, &kCellularProviderSignature},
     {::onc::cellular::kSignalStrength, &kIntegerSignature},
     {::onc::cellular::kSIMLockStatus, &kSIMLockStatusSignature},
@@ -399,6 +413,8 @@ const OncValueSignature kOpenVPNSignature = {base::Value::Type::DICTIONARY,
                                              openvpn_fields, NULL};
 const OncValueSignature kThirdPartyVPNSignature = {
     base::Value::Type::DICTIONARY, third_party_vpn_fields, NULL};
+const OncValueSignature kARCVPNSignature = {base::Value::Type::DICTIONARY,
+                                            arc_vpn_fields, NULL};
 const OncValueSignature kVerifyX509Signature = {base::Value::Type::DICTIONARY,
                                                 verify_x509_fields, NULL};
 const OncValueSignature kVPNSignature = {base::Value::Type::DICTIONARY,

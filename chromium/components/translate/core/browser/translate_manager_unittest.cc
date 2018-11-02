@@ -13,7 +13,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/infobars/core/infobar.h"
-#include "components/metrics/proto/translate_event.pb.h"
+#include "components/language/core/browser/language_model.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/translate/core/browser/mock_translate_client.h"
@@ -28,6 +28,7 @@
 #include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/translate_event.pb.h"
 
 using testing::_;
 using testing::Return;
@@ -38,7 +39,6 @@ namespace translate {
 
 namespace {
 
-const char kTrialName[] = "MyTrial";
 const char kInitiationStatusName[] = "Translate.InitiationStatus.v2";
 
 // Overrides NetworkChangeNotifier, simulating connection type changes
@@ -89,6 +89,17 @@ MATCHER_P(EqualsTranslateEventProto, translate_event, "") {
           arg.event_type() == tep.event_type());
 }
 
+// A language model that just returns its instance variable.
+class MockLanguageModel : public language::LanguageModel {
+ public:
+  explicit MockLanguageModel(const std::vector<LanguageDetails>& in_details)
+      : details(in_details) {}
+
+  std::vector<LanguageDetails> GetLanguages() override { return details; }
+
+  std::vector<LanguageDetails> details;
+};
+
 }  // namespace
 
 namespace testing {
@@ -101,6 +112,7 @@ class TranslateManagerTest : public ::testing::Test {
                          preferred_languages_prefs),
         manager_(TranslateDownloadManager::GetInstance()),
         mock_translate_client_(&driver_, &prefs_),
+        mock_language_model_({MockLanguageModel::LanguageDetails("en", 1.0)}),
         field_trial_list_(new base::FieldTrialList(nullptr)) {}
 
   void SetUp() override {
@@ -115,7 +127,7 @@ class TranslateManagerTest : public ::testing::Test {
     TranslatePrefs::RegisterProfilePrefs(prefs_.registry());
     // TODO(groby): Figure out RegisterProfilePrefs() should register this.
     prefs_.registry()->RegisterBooleanPref(
-        prefs::kEnableTranslate, true,
+        prefs::kOfferTranslateEnabled, true,
         user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
     manager_->ResetForTesting();
   }
@@ -130,54 +142,7 @@ class TranslateManagerTest : public ::testing::Test {
     TranslateManager::SetIgnoreMissingKeyForTesting(true);
     translate_manager_.reset(new translate::TranslateManager(
         &mock_translate_client_, &mock_translate_ranker_,
-        accept_languages_prefs));
-  }
-
-  // Prepare the test for ULP related tests.
-  // Put the ulp json into profile.
-  void PrepareULPTest(const char* ulp_json, bool turn_on_feature) {
-    PrepareTranslateManager();
-    std::unique_ptr<base::Value> profile(CreateProfileFromJSON(ulp_json));
-    prefs_.SetUserPref(TranslatePrefs::kPrefLanguageProfile,
-                       std::move(profile));
-    if (turn_on_feature)
-      TurnOnTranslateByULP();
-  }
-
-  std::unique_ptr<base::Value> CreateProfileFromJSON(const char* json) {
-    int error_code = 0;
-    std::string error_msg;
-    int error_line = 0;
-    int error_column = 0;
-
-    std::unique_ptr<base::Value> profile(base::JSONReader::ReadAndReturnError(
-        json, 0, &error_code, &error_msg, &error_line, &error_column));
-
-    EXPECT_EQ(0, error_code)
-        << error_msg << " at " << error_line << ":" << error_column << std::endl
-        << json;
-    return profile;
-  }
-
-  void TurnOnTranslateByULP() {
-    scoped_refptr<base::FieldTrial> trial(
-        CreateFieldTrial(kTrialName, 100, "Enabled", NULL));
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->RegisterFieldTrialOverride(
-        translate::kTranslateLanguageByULP.name,
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
-    scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
-  }
-
-  scoped_refptr<base::FieldTrial> CreateFieldTrial(
-      const std::string& trial_name,
-      int total_probability,
-      const std::string& default_group_name,
-      int* default_group_number) {
-    return base::FieldTrialList::FactoryGetFieldTrial(
-        trial_name, total_probability, default_group_name,
-        base::FieldTrialList::kNoExpirationYear, 1, 1,
-        base::FieldTrial::SESSION_RANDOMIZED, default_group_number);
+        &mock_language_model_));
   }
 
   void SetHasLanguageChanged(bool has_language_changed) {
@@ -204,14 +169,6 @@ class TranslateManagerTest : public ::testing::Test {
     EXPECT_FALSE(translate_prefs_.IsTooOftenDenied("other_language"));
   }
 
-  // Functions to help TEST_F in subclass to access private functions in
-  // TranslateManager so we can unit test them.
-  std::string CallGetTargetLanguageFromULP() {
-    return TranslateManager::GetTargetLanguageFromULP(&translate_prefs_);
-  }
-  bool CallLanguageInULP(const std::string& language) {
-    return translate_manager_->LanguageInULP(language);
-  }
   void InitTranslateEvent(const std::string& src_lang,
                           const std::string& dst_lang) {
     translate_manager_->InitTranslateEvent(src_lang, dst_lang,
@@ -229,6 +186,7 @@ class TranslateManagerTest : public ::testing::Test {
   translate::testing::MockTranslateRanker mock_translate_ranker_;
   ::testing::NiceMock<translate::testing::MockTranslateClient>
       mock_translate_client_;
+  MockLanguageModel mock_language_model_;
   std::unique_ptr<TranslateManager> translate_manager_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -240,69 +198,103 @@ TEST_F(TranslateManagerTest, GetTargetLanguageDefaultsToAppLocale) {
   // Ensure the locale is set to a supported language.
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("en"));
   manager_->set_application_locale("en");
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  EXPECT_EQ("en",
+            TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 
   // Try a second supported language.
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("de"));
   manager_->set_application_locale("de");
-  EXPECT_EQ("de", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  EXPECT_EQ("de",
+            TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 
   // Try a those case of non standard code.
   // 'he', 'fil', 'nb' => 'iw', 'tl', 'no'
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("iw"));
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("he"));
   manager_->set_application_locale("he");
-  EXPECT_EQ("iw", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  EXPECT_EQ("iw",
+            TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("tl"));
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("fil"));
   manager_->set_application_locale("fil");
-  EXPECT_EQ("tl", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  EXPECT_EQ("tl",
+            TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("no"));
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("nb"));
   manager_->set_application_locale("nb");
-  EXPECT_EQ("no", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  EXPECT_EQ("no",
+            TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 }
 
-// If the application locale's language is not supported, the target language
-// falls back to the first supported language in |accept_languages_list|. If
-// none of the languages in |accept_language_list| is supported, the target
-// language is empty.
-TEST_F(TranslateManagerTest, GetTargetLanguageAcceptLangFallback) {
-  std::vector<std::string> accept_language_list;
-
-  // Ensure locale is set to a not-supported language.
-  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("xy"));
-  manager_->set_application_locale("xy");
-
-  // Default return is empty string.
-  EXPECT_EQ("", TranslateManager::GetTargetLanguage(&translate_prefs_));
-
-  // Unsupported languages still result in the empty string.
-  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("zy"));
-  accept_language_list.push_back("zy");
-  translate_prefs_.UpdateLanguageList(accept_language_list);
-  EXPECT_EQ("", TranslateManager::GetTargetLanguage(&translate_prefs_));
-
-  // First supported language is the fallback language.
+// Test that the language model is used if provided.
+TEST_F(TranslateManagerTest, GetTargetLanguageFromModel) {
+  // Try with a single, supported language.
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("en"));
-  accept_language_list.push_back("en");
-  translate_prefs_.UpdateLanguageList(accept_language_list);
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("en", 1.0)};
+  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  // Try with two supported languages.
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("de"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("de", 1.0),
+      MockLanguageModel::LanguageDetails("en", 0.5)};
+  EXPECT_EQ("de", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  // Try with first supported language lower in the list.
+  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("xx"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("xx", 1.0),
+      MockLanguageModel::LanguageDetails("en", 0.5)};
+  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  // Try with no supported languages.
+  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("yy"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("xx", 1.0),
+      MockLanguageModel::LanguageDetails("yy", 0.5)};
+  EXPECT_EQ("", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                    &mock_language_model_));
+
+  // Try non standard codes.
+  // 'he', 'fil', 'nb' => 'iw', 'tl', 'no'
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("iw"));
+  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("he"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("he", 1.0)};
+  EXPECT_EQ("iw", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("tl"));
+  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("fil"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("fil", 1.0)};
+  EXPECT_EQ("tl", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("no"));
+  ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("nb"));
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("nb", 1.0)};
+  EXPECT_EQ("no", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
 }
 
 TEST_F(TranslateManagerTest, DontTranslateOffline) {
   TranslateManager::SetIgnoreMissingKeyForTesting(true);
   translate_manager_.reset(new translate::TranslateManager(
-      &mock_translate_client_, &mock_translate_ranker_,
-      accept_languages_prefs));
+      &mock_translate_client_, &mock_translate_ranker_, &mock_language_model_));
 
   // The test measures that the "Translate was disabled" exit can only be
   // reached after the early-out tests including IsOffline() passed.
   base::HistogramTester histogram_tester;
 
-  prefs_.SetBoolean(prefs::kEnableTranslate, false);
+  prefs_.SetBoolean(prefs::kOfferTranslateEnabled, false);
 
   translate_manager_->GetLanguageState().LanguageDetermined("de", true);
 
@@ -319,149 +311,6 @@ TEST_F(TranslateManagerTest, DontTranslateOffline) {
       kInitiationStatusName,
       translate::TranslateBrowserMetrics::INITIATION_STATUS_DISABLED_BY_PREFS,
       1);
-}
-
-// Utility function to set the threshold params
-void ChangeThresholdInParams(
-    const char* initiate_translation_confidence_threshold,
-    const char* initiate_translation_probability_threshold,
-    const char* target_language_confidence_threshold,
-    const char* target_language_probability_threshold) {
-  ASSERT_TRUE(variations::AssociateVariationParams(
-      kTrialName, "Enabled",
-      {{"initiate_translation_ulp_confidence_threshold",
-        initiate_translation_confidence_threshold},
-       {"initiate_translation_ulp_probability_threshold",
-        initiate_translation_probability_threshold},
-       {"target_language_ulp_confidence_threshold",
-        target_language_confidence_threshold},
-       {"target_language_ulp_probability_threshold",
-        target_language_probability_threshold}}));
-}
-
-// Normal ULP in Json
-const char ulp_1[] =
-    "{\n"
-    "  \"reading\": {\n"
-    "    \"confidence\": 0.8,\n"
-    "    \"preference\": [\n"
-    "      {\n"
-    "        \"language\": \"fr\",\n"
-    "        \"probability\": 0.6\n"
-    "      }, {\n"
-    "        \"language\": \"pt-PT\",\n"
-    "        \"probability\": 0.4\n"
-    "      }\n"
-    "    ]\n"
-    "  }\n"
-    "}";
-
-// ULP in Json with smaller probability of several es-* language codes
-// sum up to 0.7.
-const char ulp_2[] =
-    "{\n"
-    "  \"reading\": {\n"
-    "    \"confidence\": 0.9,\n"
-    "    \"preference\": [\n"
-    "      {\n"
-    "        \"language\": \"fr\",\n"
-    "        \"probability\": 0.3\n"
-    "      }, {\n"
-    "        \"language\": \"es-419\",\n"
-    "        \"probability\": 0.2\n"
-    "      }, {\n"
-    "        \"language\": \"es-MX\",\n"
-    "        \"probability\": 0.2\n"
-    "      }, {\n"
-    "        \"language\": \"es-US\",\n"
-    "        \"probability\": 0.2\n"
-    "      }, {\n"
-    "        \"language\": \"es-CL\",\n"
-    "        \"probability\": 0.1\n"
-    "      }\n"
-    "    ]\n"
-    "  }\n"
-    "}";
-
-TEST_F(TranslateManagerTest, TestGetTargetLanguageFromULPFeatureOff) {
-  PrepareULPTest(ulp_1, false);
-
-  EXPECT_STREQ("", CallGetTargetLanguageFromULP().c_str());
-}
-
-TEST_F(TranslateManagerTest, TestGetTargetLanguageFromULPHighConfidence) {
-  PrepareULPTest(ulp_1, true);
-
-  // The default hardcoded threshold are confidence: 0.7, probability: 0.55
-  EXPECT_STREQ("fr", CallGetTargetLanguageFromULP().c_str());
-}
-
-TEST_F(TranslateManagerTest,
-       TestGetTargetLanguageFromULPHighConfidenceThresholdFromConfig) {
-  PrepareULPTest(ulp_1, true);
-  ChangeThresholdInParams("", "", "0.81", "0.5");
-
-  // Should get empty string as result since the confidence threshold is above
-  // the ULP (0.8 in the ulp_1).
-  EXPECT_STREQ("", CallGetTargetLanguageFromULP().c_str());
-}
-
-TEST_F(TranslateManagerTest,
-       TestGetTargetLanguageFromULPHighProbabilityThresholdFromConfig) {
-  PrepareULPTest(ulp_1, true);
-  ChangeThresholdInParams("", "", "0.4", "0.61");
-
-  // Should get empty string as result since the confidence threshold is above
-  // the ULP (0.6 for fr in the ulp_1).
-  EXPECT_STREQ("", CallGetTargetLanguageFromULP().c_str());
-}
-
-TEST_F(TranslateManagerTest, TestGetTargetLanguageFromULPProbabilitySumUp) {
-  PrepareULPTest(ulp_2, true);
-  ChangeThresholdInParams("", "", "0.4", "0.61");
-
-  // Should get "es" since the sum of the "es-*" probability is 0.7.
-  EXPECT_STREQ("es", CallGetTargetLanguageFromULP().c_str());
-}
-
-TEST_F(TranslateManagerTest, TestLanguageInULPFeatureOff) {
-  PrepareULPTest(ulp_1, false);
-
-  EXPECT_FALSE(CallLanguageInULP("fr"));
-  EXPECT_FALSE(CallLanguageInULP("pt"));
-  EXPECT_FALSE(CallLanguageInULP("zh-TW"));
-}
-
-TEST_F(TranslateManagerTest, TestLanguageInULPDefaultThreshold) {
-  PrepareULPTest(ulp_1, true);
-
-  // The default hardcoded threshold are confidence: 0.75, probability: 0.5
-  EXPECT_TRUE(CallLanguageInULP("fr"));
-  EXPECT_FALSE(CallLanguageInULP("pt"));
-  EXPECT_FALSE(CallLanguageInULP("zh-TW"));
-}
-
-TEST_F(TranslateManagerTest,
-       TestLanguageInULPHighConfidenceThresholdFromConfig) {
-  PrepareULPTest(ulp_1, true);
-  ChangeThresholdInParams("0.9", "0.5", "", "");
-  // "fr" and "pt" should return false because the confidence threshold is set
-  // to 0.9.
-  EXPECT_FALSE(CallLanguageInULP("fr"));
-  EXPECT_FALSE(CallLanguageInULP("pt"));
-  EXPECT_FALSE(CallLanguageInULP("zh-TW"));
-}
-
-TEST_F(TranslateManagerTest,
-       TestLanguageInULPLowConfidenceThresholdFromConfig) {
-  PrepareULPTest(ulp_1, true);
-  ChangeThresholdInParams("0.79", "0.39", "", "");
-  // Both "fr" and "pt" should return true because the confidence threshold is
-  // 0.79 and lower than 0.8 and the probability threshold is lower than both
-  // the one with "fr" (0.6) and "pt-PT" (0.4).
-  EXPECT_TRUE(CallLanguageInULP("fr"));
-  EXPECT_TRUE(CallLanguageInULP("pt"));
-  EXPECT_FALSE(CallLanguageInULP("zh-TW"));
 }
 
 TEST_F(TranslateManagerTest, TestRecordTranslateEvent) {

@@ -5,15 +5,15 @@
 #include "components/omnibox/browser/autocomplete_result.h"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
+#include <string>
 
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
@@ -21,6 +21,8 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/url_formatter/url_fixer.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
 // static
 size_t AutocompleteResult::GetMaxMatches() {
@@ -30,12 +32,6 @@ size_t AutocompleteResult::GetMaxMatches() {
       omnibox::kUIExperimentMaxAutocompleteMatches,
       OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam,
       kDefaultMaxAutocompleteMatches);
-}
-
-void AutocompleteResult::Selection::Clear() {
-  destination_url = GURL();
-  provider_affinity = NULL;
-  is_history_what_you_typed_match = false;
 }
 
 AutocompleteResult::AutocompleteResult() {
@@ -52,14 +48,14 @@ AutocompleteResult::~AutocompleteResult() {}
 
 void AutocompleteResult::CopyOldMatches(
     const AutocompleteInput& input,
-    const AutocompleteResult& old_matches,
+    AutocompleteResult* old_matches,
     TemplateURLService* template_url_service) {
-  if (old_matches.empty())
+  if (old_matches->empty())
     return;
 
   if (empty()) {
     // If we've got no matches we can copy everything from the last result.
-    CopyFrom(old_matches);
+    Swap(old_matches);
     for (ACMatches::iterator i(begin()); i != end(); ++i)
       i->from_previous = true;
     return;
@@ -80,9 +76,16 @@ void AutocompleteResult::CopyOldMatches(
   // if it doesn't, then once the providers are done and we expire the old
   // matches, the new ones will all become visible, so we won't have lost
   // anything permanently.
+  //
+  // Note that culling tail suggestions (see |MaybeCullTailSuggestions()|)
+  // relies on the behavior below of capping the total number of suggestions to
+  // the higher of the number of new and old suggestions.  Without it, a
+  // provider could have one old and one new suggestion, cull tail suggestions,
+  // expire the old suggestion, and restore tail suggestions.  This would be
+  // visually unappealing, and could occur on each keystroke.
   ProviderToMatches matches_per_provider, old_matches_per_provider;
   BuildProviderToMatches(&matches_per_provider);
-  old_matches.BuildProviderToMatches(&old_matches_per_provider);
+  old_matches->BuildProviderToMatches(&old_matches_per_provider);
   for (ProviderToMatches::const_iterator i(old_matches_per_provider.begin());
        i != old_matches_per_provider.end(); ++i) {
     MergeMatchesByProvider(input.current_page_classification(),
@@ -136,10 +139,13 @@ void AutocompleteResult::SortAndCull(
   for (ACMatches::iterator i(matches_.begin()); i != matches_.end(); ++i)
     i->ComputeStrippedDestinationURL(input, template_url_service);
 
+#if !(defined(OS_ANDROID) || defined(OS_IOS))
+  // Wipe tail suggestions if not exclusive (minus default match).
+  MaybeCullTailSuggestions(&matches_);
+#endif
   SortAndDedupMatches(input.current_page_classification(), &matches_);
 
   // Sort and trim to the most relevant GetMaxMatches() matches.
-  size_t max_num_matches = std::min(GetMaxMatches(), matches_.size());
   CompareWithDemoteByType<AutocompleteMatch> comparing_object(
       input.current_page_classification());
   std::sort(matches_.begin(), matches_.end(), comparing_object);
@@ -150,6 +156,7 @@ void AutocompleteResult::SortAndCull(
     std::rotate(matches_.begin(), it, it + 1);
   // In the process of trimming, drop all matches with a demoted relevance
   // score of 0.
+  const size_t max_num_matches = std::min(GetMaxMatches(), matches_.size());
   size_t num_matches;
   for (num_matches = 0u; (num_matches < max_num_matches) &&
        (comparing_object.GetDemotedRelevance(*match_at(num_matches)) > 0);
@@ -160,14 +167,12 @@ void AutocompleteResult::SortAndCull(
 
   if (default_match_ != matches_.end()) {
     const base::string16 debug_info =
-        base::ASCIIToUTF16("fill_into_edit=") +
-        default_match_->fill_into_edit +
+        base::ASCIIToUTF16("fill_into_edit=") + default_match_->fill_into_edit +
         base::ASCIIToUTF16(", provider=") +
-        ((default_match_->provider != NULL)
-            ? base::ASCIIToUTF16(default_match_->provider->GetName())
-            : base::string16()) +
-        base::ASCIIToUTF16(", input=") +
-        input.text();
+        ((default_match_->provider != nullptr)
+             ? base::ASCIIToUTF16(default_match_->provider->GetName())
+             : base::string16()) +
+        base::ASCIIToUTF16(", input=") + input.text();
 
     // We should only get here with an empty omnibox for automatic suggestions
     // on focus on the NTP; in these cases hitting enter should do nothing, so
@@ -294,6 +299,20 @@ void AutocompleteResult::Swap(AutocompleteResult* other) {
   alternate_nav_url_.Swap(&(other->alternate_nav_url_));
 }
 
+void AutocompleteResult::CopyFrom(const AutocompleteResult& rhs) {
+  if (this == &rhs)
+    return;
+
+  matches_ = rhs.matches_;
+  // Careful!  You can't just copy iterators from another container, you have to
+  // reconstruct them.
+  default_match_ = (rhs.default_match_ == rhs.end())
+                       ? end()
+                       : (begin() + (rhs.default_match_ - rhs.begin()));
+
+  alternate_nav_url_ = rhs.alternate_nav_url_;
+}
+
 #ifndef NDEBUG
 void AutocompleteResult::Validate() const {
   for (const_iterator i(begin()); i != end(); ++i)
@@ -363,25 +382,6 @@ void AutocompleteResult::InlineTailPrefixes() {
   }
 }
 
-void AutocompleteResult::CopyFrom(const AutocompleteResult& rhs) {
-  if (this == &rhs)
-    return;
-
-  matches_ = rhs.matches_;
-  // Careful!  You can't just copy iterators from another container, you have to
-  // reconstruct them.
-  default_match_ = (rhs.default_match_ == rhs.end()) ?
-      end() : (begin() + (rhs.default_match_ - rhs.begin()));
-
-  alternate_nav_url_ = rhs.alternate_nav_url_;
-}
-
-void AutocompleteResult::BuildProviderToMatches(
-    ProviderToMatches* provider_to_matches) const {
-  for (ACMatches::const_iterator i(begin()); i != end(); ++i)
-    (*provider_to_matches)[i->provider].push_back(*i);
-}
-
 // static
 bool AutocompleteResult::HasMatchByDestination(const AutocompleteMatch& match,
                                                const ACMatches& matches) {
@@ -390,6 +390,67 @@ bool AutocompleteResult::HasMatchByDestination(const AutocompleteMatch& match,
       return true;
   }
   return false;
+}
+
+// static
+void AutocompleteResult::MaybeCullTailSuggestions(ACMatches* matches) {
+  std::function<bool(const AutocompleteMatch&)> is_tail =
+      [](const AutocompleteMatch& match) {
+        return match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL;
+      };
+  auto non_tail_default = std::find_if(
+      matches->begin(), matches->end(), [&](const AutocompleteMatch& match) {
+        return match.allowed_to_be_default_match && !is_tail(match);
+      });
+  // If the only default matches are tail suggestions, let them remain and
+  // instead remove the non-tail suggestions.  This is necessary because we do
+  // not want to display tail suggestions mixed with other suggestions in the
+  // dropdown below the first item (the default match).  In this case, we
+  // cannot remove the tail suggestions because we'll be left without a legal
+  // default match--the non-tail ones much go.  This situation though is
+  // unlikely, as we normally would expect the search-what-you-typed suggestion
+  // as a default match (and that's a non-tail suggestion).
+  if (non_tail_default == matches->end()) {
+    matches->erase(
+        std::remove_if(matches->begin(), matches->end(), std::not1(is_tail)),
+        matches->end());
+    return;
+  }
+  // Determine if there are both tail and non-tail matches, excluding the
+  // non-tail default match.
+  bool any_tail = false, any_non_tail = false;
+  for (auto i = matches->begin();
+       i != matches->end() && !(any_tail && any_non_tail); ++i) {
+    // We allow one default non-tail match.
+    if (i != non_tail_default) {
+      if (is_tail(*i))
+        any_tail = true;
+      else
+        any_non_tail = true;
+    }
+  }
+  // If both tail and non-tail matches, remove tail. Note that this can
+  // remove the highest rated suggestions.
+  if (any_tail) {
+    if (any_non_tail) {
+      matches->erase(std::remove_if(matches->begin(), matches->end(), is_tail),
+                     matches->end());
+    } else {
+      // We want the non-tail default match to be first. Mark tail suggestions
+      // as not a legal default match, so that the default match will be moved
+      // up explicitly.
+      for (auto& match : *matches) {
+        if (is_tail(match))
+          match.allowed_to_be_default_match = false;
+      }
+    }
+  }
+}
+
+void AutocompleteResult::BuildProviderToMatches(
+    ProviderToMatches* provider_to_matches) const {
+  for (ACMatches::const_iterator i(begin()); i != end(); ++i)
+    (*provider_to_matches)[i->provider].push_back(*i);
 }
 
 void AutocompleteResult::MergeMatchesByProvider(

@@ -205,7 +205,8 @@ class PolicyJson(skeleton_gatherer.SkeletonGatherer):
           self._AddIndentedNontranslateableChunk(depth + 1, "'items': [\n")
           self._AddItems(item1['items'], 'enum_item', item1, depth + 2)
           self._AddIndentedNontranslateableChunk(depth + 1, "],\n")
-        elif key == 'policies':
+        elif key == 'policies' and all(not isinstance(x, str)
+                                       for x in item1['policies']):
           self._AddIndentedNontranslateableChunk(depth + 1, "'policies': [\n")
           self._AddItems(item1['policies'], 'policy', item1, depth + 2)
           self._AddIndentedNontranslateableChunk(depth + 1, "],\n")

@@ -33,7 +33,6 @@
 #include "platform/wtf/text/ASCIIFastPath.h"
 #include "platform/wtf/text/StringImpl.h"
 #include "platform/wtf/text/StringView.h"
-#include <algorithm>
 #include <iosfwd>
 
 #ifdef __OBJC__
@@ -97,9 +96,9 @@ class WTF_EXPORT String {
 
   // Construct a string referencing an existing StringImpl.
   String(StringImpl* impl) : impl_(impl) {}
-  String(RefPtr<StringImpl> impl) : impl_(std::move(impl)) {}
+  String(scoped_refptr<StringImpl> impl) : impl_(std::move(impl)) {}
 
-  void swap(String& o) { impl_.Swap(o.impl_); }
+  void swap(String& o) { impl_.swap(o.impl_); }
 
   template <typename CharType>
   static String Adopt(StringBuffer<CharType>& buffer) {
@@ -112,8 +111,8 @@ class WTF_EXPORT String {
   bool IsNull() const { return !impl_; }
   bool IsEmpty() const { return !impl_ || !impl_->length(); }
 
-  StringImpl* Impl() const { return impl_.Get(); }
-  RefPtr<StringImpl> ReleaseImpl() { return std::move(impl_); }
+  StringImpl* Impl() const { return impl_.get(); }
+  scoped_refptr<StringImpl> ReleaseImpl() { return std::move(impl_); }
 
   unsigned length() const {
     if (!impl_)
@@ -123,14 +122,14 @@ class WTF_EXPORT String {
 
   const LChar* Characters8() const {
     if (!impl_)
-      return 0;
+      return nullptr;
     DCHECK(impl_->Is8Bit());
     return impl_->Characters8();
   }
 
   const UChar* Characters16() const {
     if (!impl_)
-      return 0;
+      return nullptr;
     DCHECK(!impl_->Is8Bit());
     return impl_->Characters16();
   }
@@ -333,6 +332,7 @@ class WTF_EXPORT String {
   String FoldCase() const;
 
   // Takes a printf format and args and prints into a String.
+  // This function supports Latin-1 characters only.
   PRINTF_FORMAT(1, 2) static String Format(const char* format, ...);
 
   // Returns an uninitialized string. The characters needs to be written
@@ -386,11 +386,11 @@ class WTF_EXPORT String {
   // We can use these functions to implement a Web Platform feature only if the
   // input string is already valid according to the specification of the
   // feature.
-  int ToIntStrict(bool* ok = 0) const;
-  unsigned ToUIntStrict(bool* ok = 0) const;
+  int ToIntStrict(bool* ok = nullptr) const;
+  unsigned ToUIntStrict(bool* ok = nullptr) const;
   unsigned HexToUIntStrict(bool* ok) const;
-  int64_t ToInt64Strict(bool* ok = 0) const;
-  uint64_t ToUInt64Strict(bool* ok = 0) const;
+  int64_t ToInt64Strict(bool* ok = nullptr) const;
+  uint64_t ToUInt64Strict(bool* ok = nullptr) const;
 
   // The following ToFoo functions accept:
   //  - leading '+'
@@ -405,8 +405,8 @@ class WTF_EXPORT String {
   // We can use these functions to implement a Web Platform feature only if the
   // input string is already valid according to the specification of the
   // feature.
-  int ToInt(bool* ok = 0) const;
-  unsigned ToUInt(bool* ok = 0) const;
+  int ToInt(bool* ok = nullptr) const;
+  unsigned ToUInt(bool* ok = nullptr) const;
 
   // These functions accepts:
   //  - leading '+'
@@ -435,8 +435,8 @@ class WTF_EXPORT String {
   // there is trailing garbage.  Like the non-strict functions above, these
   // return the value when there is trailing garbage.  It would be better if
   // these were more consistent with the above functions instead.
-  double ToDouble(bool* ok = 0) const;
-  float ToFloat(bool* ok = 0) const;
+  double ToDouble(bool* ok = nullptr) const;
+  float ToFloat(bool* ok = nullptr) const;
 
   String IsolatedCopy() const;
   bool IsSafeToSendToAnotherThread() const;
@@ -495,23 +495,18 @@ class WTF_EXPORT String {
     return impl_ ? impl_->CharactersSizeInBytes() : 0;
   }
 
-  // Hash table deleted values, which are only constructed and never copied or
-  // destroyed.
-  String(WTF::HashTableDeletedValueType) : impl_(WTF::kHashTableDeletedValue) {}
-  bool IsHashTableDeletedValue() const {
-    return impl_.IsHashTableDeletedValue();
-  }
-
 #ifndef NDEBUG
   // For use in the debugger.
   void Show() const;
 #endif
 
  private:
+  friend struct HashTraits<String>;
+
   template <typename CharacterType>
   void AppendInternal(CharacterType);
 
-  RefPtr<StringImpl> impl_;
+  scoped_refptr<StringImpl> impl_;
 };
 
 #undef DISPATCH_CASE_OP

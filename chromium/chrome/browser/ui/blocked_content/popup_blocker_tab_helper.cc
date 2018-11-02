@@ -15,14 +15,13 @@
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/ui/blocked_content/blocked_window_params.h"
 #include "chrome/browser/ui/blocked_content/popup_tracker.h"
+#include "chrome/browser/ui/blocked_content/safe_browsing_triggered_popup_blocker.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -30,7 +29,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/associated_interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -50,10 +49,10 @@ struct PopupBlockerTabHelper::BlockedRequest {
   blink::mojom::WindowFeatures window_features;
 };
 
-PopupBlockerTabHelper::PopupBlockerTabHelper(
-    content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {
-}
+PopupBlockerTabHelper::PopupBlockerTabHelper(content::WebContents* web_contents)
+    : content::WebContentsObserver(web_contents),
+      safe_browsing_triggered_popup_blocker_(
+          SafeBrowsingTriggeredPopupBlocker::MaybeCreate(web_contents)) {}
 
 PopupBlockerTabHelper::~PopupBlockerTabHelper() {
 }
@@ -144,16 +143,14 @@ bool PopupBlockerTabHelper::MaybeBlockPopup(
     return false;
   }
 
-  // The subresource_filter triggers an extra aggressive popup blocker on
-  // pages where ads are being blocked, even if there is a user gesture.
   if (user_gesture) {
-    auto* driver_factory = subresource_filter::
-        ContentSubresourceFilterDriverFactory::FromWebContents(web_contents);
-    if (!driver_factory ||
-        !driver_factory->ShouldDisallowNewWindow(open_url_params)) {
+    auto* safe_browsing_blocker =
+        popup_blocker->safe_browsing_triggered_popup_blocker_.get();
+    if (!safe_browsing_blocker ||
+        !safe_browsing_blocker->ShouldApplyStrongPopupBlocker(
+            open_url_params)) {
       return false;
     }
-    ChromeSubresourceFilterClient::LogAction(kActionPopupBlocked);
   }
 
   popup_blocker->AddBlockedPopup(params, window_features);
@@ -200,7 +197,8 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
   chrome::Navigate(&popup->params);
 #endif
   if (popup->params.target_contents) {
-    PopupTracker::CreateForWebContents(popup->params.target_contents);
+    PopupTracker::CreateForWebContents(popup->params.target_contents,
+                                       web_contents());
 
     if (popup->params.disposition == WindowOpenDisposition::NEW_POPUP) {
       content::RenderFrameHost* host =

@@ -12,11 +12,14 @@
 #include "chrome/browser/ui/webui/media_router/media_cast_mode.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 using base::Bucket;
 using testing::ElementsAre;
 
 namespace media_router {
+
+using DialParsingError = SafeDialDeviceDescriptionParser::ParsingError;
 
 TEST(MediaRouterMetricsTest, RecordMediaRouterDialogOrigin) {
   base::HistogramTester tester;
@@ -119,12 +122,9 @@ TEST(MediaRouterMetricsTest, RecordMediaRouterCastingSource) {
 
 TEST(MediaRouterMetricsTest, RecordDialDeviceDescriptionParsingError) {
   base::HistogramTester tester;
-  const chrome::mojom::DialParsingError action1 =
-      chrome::mojom::DialParsingError::MISSING_UNIQUE_ID;
-  const chrome::mojom::DialParsingError action2 =
-      chrome::mojom::DialParsingError::MISSING_FRIENDLY_NAME;
-  const chrome::mojom::DialParsingError action3 =
-      chrome::mojom::DialParsingError::MISSING_APP_URL;
+  const DialParsingError action1 = DialParsingError::kMissingUniqueId;
+  const DialParsingError action2 = DialParsingError::kMissingFriendlyName;
+  const DialParsingError action3 = DialParsingError::kMissingAppUrl;
 
   tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialParsingError, 0);
   MediaRouterMetrics::RecordDialParsingError(action3);
@@ -137,6 +137,34 @@ TEST(MediaRouterMetricsTest, RecordDialDeviceDescriptionParsingError) {
       ElementsAre(Bucket(static_cast<int>(action1), 1),
                   Bucket(static_cast<int>(action2), 1),
                   Bucket(static_cast<int>(action3), 2)));
+}
+
+TEST(MediaRouterMetricsTest, RecordPresentationUrlType) {
+  base::HistogramTester tester;
+
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramPresentationUrlType, 0);
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("cast:DEADBEEF"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("dial:AppName"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("cast-dial:AppName"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("https://example.com"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("http://example.com"));
+  MediaRouterMetrics::RecordPresentationUrlType(
+      GURL("https://google.com/cast#__castAppId__=DEADBEEF"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("remote-playback:foo"));
+  MediaRouterMetrics::RecordPresentationUrlType(GURL("test:test"));
+
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramPresentationUrlType, 8);
+  EXPECT_THAT(
+      tester.GetAllSamples(MediaRouterMetrics::kHistogramPresentationUrlType),
+      ElementsAre(
+          Bucket(static_cast<int>(PresentationUrlType::kOther), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kCast), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kCastDial), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kCastLegacy), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kDial), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kHttp), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kHttps), 1),
+          Bucket(static_cast<int>(PresentationUrlType::kRemotePlayback), 1)));
 }
 
 }  // namespace media_router

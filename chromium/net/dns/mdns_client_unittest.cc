@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <memory>
-#include <queue>
 #include <vector>
 
 #include "base/location.h"
@@ -331,8 +330,8 @@ std::string MakeString(const uint8_t* data, unsigned size) {
 
 class PtrRecordCopyContainer {
  public:
-  PtrRecordCopyContainer() {}
-  ~PtrRecordCopyContainer() {}
+  PtrRecordCopyContainer() = default;
+  ~PtrRecordCopyContainer() = default;
 
   bool is_set() const { return set_; }
 
@@ -365,7 +364,7 @@ class PtrRecordCopyContainer {
 class MockClock : public base::DefaultClock {
  public:
   MockClock() : base::DefaultClock() {}
-  virtual ~MockClock() {}
+  virtual ~MockClock() = default;
 
   MOCK_METHOD0(Now, base::Time());
 
@@ -376,9 +375,9 @@ class MockClock : public base::DefaultClock {
 class MockTimer : public base::MockTimer {
  public:
   MockTimer() : base::MockTimer(false, false) {}
-  ~MockTimer() {}
+  ~MockTimer() = default;
 
-  void Start(const tracked_objects::Location& posted_from,
+  void Start(const base::Location& posted_from,
              base::TimeDelta delay,
              const base::Closure& user_task) {
     StartObserver(posted_from, delay, user_task);
@@ -388,7 +387,7 @@ class MockTimer : public base::MockTimer {
   // StartObserver is invoked when MockTimer::Start() is called.
   // Does not replace the behavior of MockTimer::Start().
   MOCK_METHOD3(StartObserver,
-               void(const tracked_objects::Location& posted_from,
+               void(const base::Location& posted_from,
                     base::TimeDelta delay,
                     const base::Closure& user_task));
 

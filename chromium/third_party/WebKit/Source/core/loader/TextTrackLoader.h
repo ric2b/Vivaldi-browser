@@ -60,12 +60,12 @@ class TextTrackLoader final : public GarbageCollectedFinalized<TextTrackLoader>,
   bool Load(const KURL&, CrossOriginAttributeValue);
   void CancelLoad();
 
-  enum State { kIdle, kLoading, kFinished, kFailed };
+  enum State { kLoading, kFinished, kFailed };
   State LoadState() { return state_; }
 
   void GetNewCues(HeapVector<Member<TextTrackCue>>& output_cues);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   // RawResourceClient

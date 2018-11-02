@@ -10,6 +10,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -26,31 +27,6 @@ namespace {
 const int kMinFailedRequestsWhenUnavailable = 1;
 const int kMaxSuccessfulRequestsWhenUnavailable = 0;
 const int kMaxFailedRequestsBeforeReset = 3;
-
-// Scheme of the data reduction proxy used.
-enum ProxyScheme {
-  PROXY_SCHEME_UNKNOWN = 0,
-  PROXY_SCHEME_HTTP,
-  PROXY_SCHEME_HTTPS,
-  PROXY_SCHEME_QUIC,
-  PROXY_SCHEME_MAX
-};
-
-// Converts net::ProxyServer::Scheme to type ProxyScheme.
-ProxyScheme ConvertNetProxySchemeToProxyScheme(
-    net::ProxyServer::Scheme scheme) {
-  switch (scheme) {
-    case net::ProxyServer::SCHEME_HTTP:
-      return PROXY_SCHEME_HTTP;
-    case net::ProxyServer::SCHEME_HTTPS:
-      return PROXY_SCHEME_HTTPS;
-    case net::ProxyServer::SCHEME_QUIC:
-      return PROXY_SCHEME_QUIC;
-    default:
-      NOTREACHED() << scheme;
-      return PROXY_SCHEME_UNKNOWN;
-  }
-}
 
 // Records a net error code that resulted in bypassing the data reduction
 // proxy (|is_primary| is true) or the data reduction proxy fallback.
@@ -171,10 +147,10 @@ void DataReductionProxyBypassStats::OnUrlRequestCompleted(
   // from the scheme of proxy_info.proxy_servers.front(). The former may be set
   // to QUIC by the network stack, while the latter may be set to HTTPS.
 
-  UMA_HISTOGRAM_ENUMERATION(
-      "DataReductionProxy.ProxySchemeUsed",
-      ConvertNetProxySchemeToProxyScheme(request->proxy_server().scheme()),
-      PROXY_SCHEME_MAX);
+  UMA_HISTOGRAM_ENUMERATION("DataReductionProxy.ProxySchemeUsed",
+                            util::ConvertNetProxySchemeToProxyScheme(
+                                request->proxy_server().scheme()),
+                            PROXY_SCHEME_MAX);
   if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
     UMA_HISTOGRAM_COUNTS_100(
         "DataReductionProxy.SuccessfulRequestCompletionCounts.MainFrame",
@@ -356,7 +332,7 @@ void DataReductionProxyBypassStats::RecordBypassedBytesHistograms(
   }
 
   if (data_reduction_proxy_config_->AreDataReductionProxiesBypassed(
-          request, data_reduction_proxy_config, NULL)) {
+          request, data_reduction_proxy_config, nullptr)) {
     RecordBypassedBytes(last_bypass_type_,
                         DataReductionProxyBypassStats::NETWORK_ERROR,
                         content_length);
@@ -371,8 +347,8 @@ void DataReductionProxyBypassStats::RecordMissingViaHeaderBytes(
   DCHECK(!request.was_cached());
 
   if (!data_reduction_proxy_config_->WasDataReductionProxyUsed(&request,
-                                                               NULL) ||
-      HasDataReductionProxyViaHeader(*request.response_headers(), NULL)) {
+                                                               nullptr) ||
+      HasDataReductionProxyViaHeader(*request.response_headers(), nullptr)) {
     // Only track requests that used the data reduction proxy and had responses
     // that were missing the data reduction proxy via header.
     return;

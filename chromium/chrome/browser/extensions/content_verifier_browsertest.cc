@@ -392,7 +392,7 @@ class TestExternalProvider : public ExternalProviderInterface {
     visitor_->OnExternalExtensionUpdateUrlFound(
         ExternalInstallInfoUpdateUrl(
             extension_id_, std::string() /* install_parameter */,
-            base::MakeUnique<GURL>(extension_urls::GetWebstoreUpdateUrl()),
+            extension_urls::GetWebstoreUpdateUrl(),
             Manifest::EXTERNAL_POLICY_DOWNLOAD, 0 /* creation_flags */,
             true /* mark_acknowledged */),
         true /* is_initial_load */);
@@ -476,6 +476,8 @@ class ContentVerifierTest : public ExtensionBrowserTest {
         switches::kExtensionContentVerificationEnforce);
   }
 
+  bool ShouldEnableContentVerification() override { return true; }
+
   virtual void OpenPageAndWaitForUnload() {
     ScopedContentVerifyJobDelegateOverride scoped_delegate(&delegate_);
     std::string id = "npnbmohejbjohgpjnmjagbafnjhkmgko";
@@ -540,7 +542,7 @@ class ContentVerifierTest : public ExtensionBrowserTest {
     base::FilePath scriptfile = extension->path().AppendASCII(script_relpath);
     std::string extra = "some_extra_function_call();";
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       ASSERT_TRUE(base::AppendToFile(scriptfile, extra.data(), extra.size()));
     }
     DisableExtension(id);

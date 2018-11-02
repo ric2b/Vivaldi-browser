@@ -13,6 +13,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/offline_event_logger.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "components/offline_pages/core/prefetch/add_unique_urls_task.h"
 #include "components/offline_pages/core/prefetch/download_archives_task.h"
 #include "components/offline_pages/core/prefetch/download_cleanup_task.h"
@@ -21,12 +22,16 @@
 #include "components/offline_pages/core/prefetch/generate_page_bundle_task.h"
 #include "components/offline_pages/core/prefetch/get_operation_task.h"
 #include "components/offline_pages/core/prefetch/import_archives_task.h"
+#include "components/offline_pages/core/prefetch/import_cleanup_task.h"
 #include "components/offline_pages/core/prefetch/import_completed_task.h"
 #include "components/offline_pages/core/prefetch/mark_operation_done_task.h"
 #include "components/offline_pages/core/prefetch/metrics_finalization_task.h"
+#include "components/offline_pages/core/prefetch/offline_metrics_collector.h"
 #include "components/offline_pages/core/prefetch/page_bundle_update_task.h"
+#include "components/offline_pages/core/prefetch/prefetch_background_task.h"
 #include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
 #include "components/offline_pages/core/prefetch/prefetch_configuration.h"
+#include "components/offline_pages/core/prefetch/prefetch_downloader.h"
 #include "components/offline_pages/core/prefetch/prefetch_gcm_handler.h"
 #include "components/offline_pages/core/prefetch/prefetch_importer.h"
 #include "components/offline_pages/core/prefetch/prefetch_network_request_factory.h"
@@ -41,8 +46,7 @@
 namespace offline_pages {
 
 namespace {
-void DeleteBackgroundTaskHelper(
-    std::unique_ptr<PrefetchDispatcher::ScopedBackgroundTask> task) {
+void DeleteBackgroundTaskHelper(std::unique_ptr<PrefetchBackgroundTask> task) {
   task.reset();
 }
 }  // namespace
@@ -65,8 +69,8 @@ void PrefetchDispatcherImpl::SchedulePipelineProcessing() {
 
 void PrefetchDispatcherImpl::EnsureTaskScheduled() {
   if (background_task_) {
-    background_task_->SetNeedsReschedule(true /* reschedule */,
-                                         false /* backoff */);
+    background_task_->SetReschedule(
+        PrefetchBackgroundTaskRescheduleType::RESCHEDULE_WITHOUT_BACKOFF);
   } else {
     service_->GetPrefetchBackgroundTaskHandler()->EnsureTaskScheduled();
   }
@@ -83,12 +87,25 @@ void PrefetchDispatcherImpl::AddCandidatePrefetchURLs(
                                         " suggested URLs.");
 
   PrefetchStore* prefetch_store = service_->GetPrefetchStore();
+
+  // Run 2 pipeline expiration tasks first to ensure there is no buildup of URLs
+  // in the pipeline if the new ones are coming but NOW can't be entered (for
+  // example, if the user is never on WiFi with enough battery charge).
+  // First, detect stale entries and move them to FINISHED.
+  task_queue_.AddTask(
+      base::MakeUnique<StaleEntryFinalizerTask>(this, prefetch_store));
+
+  // Second, move FINISHED to ZOMBIE.
+  task_queue_.AddTask(
+      base::MakeUnique<MetricsFinalizationTask>(prefetch_store));
+
+  // Third, add new unique URLs and remove unneeded ZOMBIEs.
   std::unique_ptr<Task> add_task = base::MakeUnique<AddUniqueUrlsTask>(
       this, prefetch_store, name_space, prefetch_urls);
   task_queue_.AddTask(std::move(add_task));
 
-  // TODO(dewittj): Remove when we have proper scheduling.
-  EnsureTaskScheduled();
+  // Report the 'enabled' day if we receive URLs and Prefetch is enabled.
+  service_->GetOfflineMetricsCollector()->OnPrefetchEnabled();
 }
 
 void PrefetchDispatcherImpl::RemoveAllUnprocessedPrefetchURLs(
@@ -108,19 +125,27 @@ void PrefetchDispatcherImpl::RemovePrefetchURLsByClientId(
 }
 
 void PrefetchDispatcherImpl::BeginBackgroundTask(
-    std::unique_ptr<ScopedBackgroundTask> background_task) {
+    std::unique_ptr<PrefetchBackgroundTask> background_task) {
   if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
   service_->GetLogger()->RecordActivity(
       "Dispatcher: Beginning background task.");
 
   background_task_ = std::move(background_task);
+  service_->GetPrefetchBackgroundTaskHandler()->RemoveSuspension();
+
+  // Reset suspended state in case that it was set last time and Chrome is still
+  // running till new background task starts after the suspension period.
+  suspended_ = false;
 
   QueueReconcileTasks();
   QueueActionTasks();
 }
 
 void PrefetchDispatcherImpl::QueueReconcileTasks() {
+  if (suspended_)
+    return;
+
   service_->GetLogger()->RecordActivity("Dispatcher: Adding reconcile tasks.");
   // Note: For optimal results StaleEntryFinalizerTask should be executed before
   // other reconciler tasks that deal with external systems so that entries
@@ -137,6 +162,15 @@ void PrefetchDispatcherImpl::QueueReconcileTasks() {
       service_->GetPrefetchStore(),
       service_->GetPrefetchNetworkRequestFactory()));
 
+  // Notifies the downloader that the download cleanup can proceed when the
+  // download service is up. The prefetch service and download service are two
+  // separate services which can start up on their own. The download cleanup
+  // should only kick in when both services are ready.
+  service_->GetPrefetchDownloader()->CleanupDownloadsWhenReady();
+
+  task_queue_.AddTask(base::MakeUnique<ImportCleanupTask>(
+      service_->GetPrefetchStore(), service_->GetPrefetchImporter()));
+
   // This task should be last, because it is least important for correct
   // operation of the system, and because any reconciliation tasks might
   // generate more entries in the FINISHED state that the finalization task
@@ -148,30 +182,40 @@ void PrefetchDispatcherImpl::QueueReconcileTasks() {
 void PrefetchDispatcherImpl::QueueActionTasks() {
   service_->GetLogger()->RecordActivity("Dispatcher: Adding action tasks.");
 
+  // Import should be run first to minimize time to import after download
+  // finishes, during the download background task.
+  std::unique_ptr<Task> import_archives_task =
+      base::MakeUnique<ImportArchivesTask>(service_->GetPrefetchStore(),
+                                           service_->GetPrefetchImporter());
+  task_queue_.AddTask(std::move(import_archives_task));
+
   std::unique_ptr<Task> download_archives_task =
       base::MakeUnique<DownloadArchivesTask>(service_->GetPrefetchStore(),
                                              service_->GetPrefetchDownloader());
   task_queue_.AddTask(std::move(download_archives_task));
 
+  // The following tasks should not be run unless we are in the background task,
+  // as we need to ensure WiFi access at that time.
+  if (!background_task_)
+    return;
+
   std::unique_ptr<Task> get_operation_task = base::MakeUnique<GetOperationTask>(
       service_->GetPrefetchStore(),
       service_->GetPrefetchNetworkRequestFactory(),
-      base::Bind(&PrefetchDispatcherImpl::DidGetOperationRequest,
-                 weak_factory_.GetWeakPtr()));
+      base::Bind(
+          &PrefetchDispatcherImpl::DidGenerateBundleOrGetOperationRequest,
+          weak_factory_.GetWeakPtr(), "GetOperationRequest"));
   task_queue_.AddTask(std::move(get_operation_task));
 
   std::unique_ptr<Task> generate_page_bundle_task =
       base::MakeUnique<GeneratePageBundleTask>(
           service_->GetPrefetchStore(), service_->GetPrefetchGCMHandler(),
           service_->GetPrefetchNetworkRequestFactory(),
-          base::Bind(&PrefetchDispatcherImpl::DidGenerateBundleRequest,
-                     weak_factory_.GetWeakPtr()));
+          base::Bind(
+              &PrefetchDispatcherImpl::DidGenerateBundleOrGetOperationRequest,
+              weak_factory_.GetWeakPtr(), "GeneratePageBundleRequest"));
   task_queue_.AddTask(std::move(generate_page_bundle_task));
 
-  std::unique_ptr<Task> import_archives_task =
-      base::MakeUnique<ImportArchivesTask>(service_->GetPrefetchStore(),
-                                           service_->GetPrefetchImporter());
-  task_queue_.AddTask(std::move(import_archives_task));
 }
 
 void PrefetchDispatcherImpl::StopBackgroundTask() {
@@ -184,15 +228,8 @@ void PrefetchDispatcherImpl::StopBackgroundTask() {
   DisposeTask();
 }
 
-void PrefetchDispatcherImpl::RequestFinishBackgroundTaskForTest() {
-  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
-    return;
-
-  DisposeTask();
-}
-
 void PrefetchDispatcherImpl::OnTaskQueueIsIdle() {
-  if (needs_pipeline_processing_) {
+  if (!suspended_ && needs_pipeline_processing_) {
     needs_pipeline_processing_ = false;
     QueueActionTasks();
   } else {
@@ -225,24 +262,45 @@ void PrefetchDispatcherImpl::GCMOperationCompletedMessageReceived(
       this, prefetch_store, operation_name));
 }
 
-void PrefetchDispatcherImpl::DidGenerateBundleRequest(
+void PrefetchDispatcherImpl::DidGenerateBundleOrGetOperationRequest(
+    const std::string& request_name_for_logging,
     PrefetchRequestStatus status,
     const std::string& operation_name,
     const std::vector<RenderPageInfo>& pages) {
-  PrefetchStore* prefetch_store = service_->GetPrefetchStore();
-  task_queue_.AddTask(base::MakeUnique<PageBundleUpdateTask>(
-      prefetch_store, this, operation_name, pages));
-  LogRequestResult("GeneratePageBundleRequest", status, operation_name, pages);
-}
+  LogRequestResult(request_name_for_logging, status, operation_name, pages);
 
-void PrefetchDispatcherImpl::DidGetOperationRequest(
-    PrefetchRequestStatus status,
-    const std::string& operation_name,
-    const std::vector<RenderPageInfo>& pages) {
+  // Note that we still want to trigger PageBundleUpdateTask even if the request
+  // fails and no page is returned. This is because currently we only check for
+  // the empty task queue and no outstanding request in order to decide whether
+  // to dispose th background task upon the completion of a task.
   PrefetchStore* prefetch_store = service_->GetPrefetchStore();
   task_queue_.AddTask(base::MakeUnique<PageBundleUpdateTask>(
       prefetch_store, this, operation_name, pages));
-  LogRequestResult("GetOperationRequest", status, operation_name, pages);
+
+  if (background_task_ && status != PrefetchRequestStatus::SUCCESS) {
+    PrefetchBackgroundTaskRescheduleType reschedule_type =
+        PrefetchBackgroundTaskRescheduleType::NO_RESCHEDULE;
+    switch (status) {
+      case PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF:
+        reschedule_type =
+            PrefetchBackgroundTaskRescheduleType::RESCHEDULE_WITH_BACKOFF;
+        break;
+      case PrefetchRequestStatus::SHOULD_RETRY_WITHOUT_BACKOFF:
+        reschedule_type =
+            PrefetchBackgroundTaskRescheduleType::RESCHEDULE_WITHOUT_BACKOFF;
+        break;
+      case PrefetchRequestStatus::SHOULD_SUSPEND:
+        reschedule_type = PrefetchBackgroundTaskRescheduleType::SUSPEND;
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
+    background_task_->SetReschedule(reschedule_type);
+
+    if (reschedule_type == PrefetchBackgroundTaskRescheduleType::SUSPEND)
+      suspended_ = true;
+  }
 }
 
 void PrefetchDispatcherImpl::CleanupDownloads(
@@ -250,8 +308,8 @@ void PrefetchDispatcherImpl::CleanupDownloads(
     const std::map<std::string, std::pair<base::FilePath, int64_t>>&
         success_downloads) {
   task_queue_.AddTask(base::MakeUnique<DownloadCleanupTask>(
-      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
-      outstanding_download_ids, success_downloads));
+      this, service_->GetPrefetchStore(), outstanding_download_ids,
+      success_downloads));
 }
 
 void PrefetchDispatcherImpl::DownloadCompleted(
@@ -268,11 +326,14 @@ void PrefetchDispatcherImpl::DownloadCompleted(
   }
 
   task_queue_.AddTask(base::MakeUnique<DownloadCompletedTask>(
-      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
-      download_result));
+      this, service_->GetPrefetchStore(), download_result));
+  task_queue_.AddTask(base::MakeUnique<ImportArchivesTask>(
+      service_->GetPrefetchStore(), service_->GetPrefetchImporter()));
 }
 
-void PrefetchDispatcherImpl::ImportCompleted(int64_t offline_id, bool success) {
+void PrefetchDispatcherImpl::ArchiveImported(int64_t offline_id, bool success) {
+  DCHECK_NE(OfflinePageModel::kInvalidOfflineId, offline_id);
+
   if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
 
@@ -280,8 +341,11 @@ void PrefetchDispatcherImpl::ImportCompleted(int64_t offline_id, bool success) {
                                         std::to_string(offline_id) +
                                         (success ? "succeeded" : "failed"));
 
+  if (success)
+    service_->GetOfflineMetricsCollector()->OnSuccessfulPagePrefetch();
+
   task_queue_.AddTask(base::MakeUnique<ImportCompletedTask>(
-      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
+      this, service_->GetPrefetchStore(), service_->GetPrefetchImporter(),
       offline_id, success));
 }
 

@@ -15,6 +15,9 @@
 #include "build/build_config.h"
 #include "content/browser/browser_process_sub_thread.h"
 #include "content/public/browser/browser_main_runner.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
+#include "ui/base/ui_features.h"
 
 #if defined(USE_AURA)
 namespace aura {
@@ -58,10 +61,6 @@ class DeviceMonitorMac;
 #endif
 }  // namespace media
 
-namespace memory_instrumentation {
-class CoordinatorImpl;
-}  // memory_instrumentation
-
 namespace midi {
 class MidiService;
 }  // namespace midi
@@ -82,7 +81,15 @@ class ClientNativePixmapFactory;
 }  // namespace gfx
 #endif
 
+#if BUILDFLAG(ENABLE_MUS)
+namespace ui {
+class ImageCursorsSet;
+}
+#endif
+
 namespace viz {
+class CompositingModeReporterImpl;
+class ForwardingCompositingModeReporterImpl;
 class FrameSinkManagerImpl;
 class HostFrameSinkManager;
 }
@@ -99,6 +106,7 @@ class ServiceManagerContext;
 class SpeechRecognitionManagerImpl;
 class StartupTaskRunner;
 class SwapMetricsDriver;
+class TracingControllerImpl;
 struct MainFunctionParams;
 
 #if defined(OS_ANDROID)
@@ -172,6 +180,10 @@ class CONTENT_EXPORT BrowserMainLoop {
     return startup_trace_file_;
   }
 
+#if BUILDFLAG(ENABLE_MUS)
+  ui::ImageCursorsSet* image_cursors_set() { return image_cursors_set_.get(); }
+#endif
+
   // Returns the task runner for tasks that that are critical to producing a new
   // CompositorFrame on resize. On Mac this will be the task runner provided by
   // WindowResizeHelperMac, on other platforms it will just be the thread task
@@ -195,6 +207,10 @@ class CONTENT_EXPORT BrowserMainLoop {
   // SurfaceManager is being moved out of process.
   viz::FrameSinkManagerImpl* GetFrameSinkManager() const;
 #endif
+
+  // Fulfills a mojo pointer to the singleton CompositingModeReporter.
+  void GetCompositingModeReporter(
+      viz::mojom::CompositingModeReporterRequest request);
 
   void StopStartupTracingTimer();
 
@@ -243,11 +259,12 @@ class CONTENT_EXPORT BrowserMainLoop {
   // MainMessageLoopStart()
   //   InitializeMainThread()
   // PostMainMessageLoopStart()
-  //   InitStartupTracingForDuration()
   // CreateStartupTasks()
   //   PreCreateThreads()
   //   CreateThreads()
   //   BrowserThreadsStarted()
+  //     InitializeMojo()
+  //     InitStartupTracingForDuration()
   //   PreMainMessageLoopRun()
 
   // Members initialized on construction ---------------------------------------
@@ -274,6 +291,9 @@ class CONTENT_EXPORT BrowserMainLoop {
 
 #if defined(USE_AURA)
   std::unique_ptr<aura::Env> env_;
+#endif
+#if BUILDFLAG(ENABLE_MUS)
+  std::unique_ptr<ui::ImageCursorsSet> image_cursors_set_;
 #endif
 
 #if defined(OS_ANDROID)
@@ -332,8 +352,6 @@ class CONTENT_EXPORT BrowserMainLoop {
   // |user_input_monitor_| has to outlive |audio_manager_|, so declared first.
   std::unique_ptr<media::UserInputMonitor> user_input_monitor_;
   std::unique_ptr<media::AudioManager> audio_manager_;
-  // Calls to |audio_system_| must not be posted to the audio thread if it
-  // differs from the UI one. See http://crbug.com/705455.
   std::unique_ptr<media::AudioSystem> audio_system_;
 
   std::unique_ptr<midi::MidiService> midi_service_;
@@ -358,8 +376,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
   scoped_refptr<SaveFileManager> save_file_manager_;
-  std::unique_ptr<memory_instrumentation::CoordinatorImpl>
-      memory_instrumentation_coordinator_;
+  std::unique_ptr<content::TracingControllerImpl> tracing_controller_;
 #if !defined(OS_ANDROID)
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   // This is owned here so that SurfaceManager will be accessible in process
@@ -368,6 +385,16 @@ class CONTENT_EXPORT BrowserMainLoop {
   // |host_frame_sink_manager_| instead which uses Mojo. See
   // http://crbug.com/657959.
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_impl_;
+
+  // Forwards requests to watch the compositing mode on to the viz process. This
+  // is null if the display compositor in this process.
+  std::unique_ptr<viz::ForwardingCompositingModeReporterImpl>
+      forwarding_compositing_mode_reporter_impl_;
+  // Reports on the compositing mode in the system for clients to submit
+  // resources of the right type. This is null if the display compositor
+  // is not in this process.
+  std::unique_ptr<viz::CompositingModeReporterImpl>
+      compositing_mode_reporter_impl_;
 #endif
 
   // DO NOT add members here. Add them to the right categories above.

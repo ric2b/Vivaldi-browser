@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/android/webapk/webapk_update_manager.h"
-
 #include <jni.h>
 #include <memory>
 #include <vector>
@@ -13,6 +11,7 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
+#include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -33,10 +32,10 @@ using base::android::ScopedJavaGlobalRef;
 
 namespace {
 
-// Called with the serialized proto to send to the WebAPK server.
-void OnBuiltProto(const JavaRef<jobject>& java_callback,
-                  std::unique_ptr<std::vector<uint8_t>> proto) {
-  base::android::RunCallbackAndroid(java_callback, *proto);
+// Called after saving the update request proto either succeeds or fails.
+void OnStoredUpdateRequest(const JavaRef<jobject>& java_callback,
+                           bool success) {
+  base::android::RunCallbackAndroid(java_callback, success);
 }
 
 // Called after the update either succeeds or fails.
@@ -52,9 +51,10 @@ void OnUpdated(const JavaRef<jobject>& java_callback,
 }  // anonymous namespace
 
 // static JNI method.
-static void BuildUpdateWebApkProto(
+static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& java_update_request_path,
     const JavaParamRef<jstring>& java_start_url,
     const JavaParamRef<jstring>& java_scope,
     const JavaParamRef<jstring>& java_name,
@@ -73,8 +73,12 @@ static void BuildUpdateWebApkProto(
     const JavaParamRef<jstring>& java_webapk_package,
     jint java_webapk_version,
     jboolean java_is_manifest_stale,
+    jint java_update_reason,
     const JavaParamRef<jobject>& java_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  std::string update_request_path =
+      ConvertJavaStringToUTF8(env, java_update_request_path);
 
   ShortcutInfo info(GURL(ConvertJavaStringToUTF8(env, java_start_url)));
   info.scope = GURL(ConvertJavaStringToUTF8(env, java_scope));
@@ -118,21 +122,23 @@ static void BuildUpdateWebApkProto(
   std::string webapk_package;
   ConvertJavaStringToUTF8(env, java_webapk_package, &webapk_package);
 
-  WebApkInstaller::BuildProto(
-      info, primary_icon, badge_icon, webapk_package,
-      std::to_string(java_webapk_version), icon_url_to_murmur2_hash,
-      java_is_manifest_stale,
-      base::Bind(&OnBuiltProto, ScopedJavaGlobalRef<jobject>(java_callback)));
+  WebApkUpdateReason update_reason =
+      static_cast<WebApkUpdateReason>(java_update_reason);
+
+  WebApkInstaller::StoreUpdateRequestToFile(
+      base::FilePath(update_request_path), info, primary_icon, badge_icon,
+      webapk_package, std::to_string(java_webapk_version),
+      icon_url_to_murmur2_hash, java_is_manifest_stale, update_reason,
+      base::Bind(&OnStoredUpdateRequest,
+                 ScopedJavaGlobalRef<jobject>(java_callback)));
 }
 
 // static JNI method.
-static void UpdateWebApk(JNIEnv* env,
-                         const JavaParamRef<jclass>& clazz,
-                         const JavaParamRef<jstring>& java_webapk_package,
-                         const JavaParamRef<jstring>& java_start_url,
-                         const JavaParamRef<jstring>& java_short_name,
-                         const JavaParamRef<jbyteArray>& java_serialized_proto,
-                         const JavaParamRef<jobject>& java_callback) {
+static void JNI_WebApkUpdateManager_UpdateWebApkFromFile(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& java_update_request_path,
+    const JavaParamRef<jobject>& java_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   ScopedJavaGlobalRef<jobject> callback_ref(java_callback);
@@ -146,15 +152,9 @@ static void UpdateWebApk(JNIEnv* env,
     return;
   }
 
-  std::string webapk_package =
-      ConvertJavaStringToUTF8(env, java_webapk_package);
-  GURL start_url = GURL(ConvertJavaStringToUTF8(env, java_start_url));
-  base::string16 short_name = ConvertJavaStringToUTF16(env, java_short_name);
-  std::unique_ptr<std::vector<uint8_t>> serialized_proto =
-      base::MakeUnique<std::vector<uint8_t>>();
-  JavaByteArrayToByteVector(env, java_serialized_proto, serialized_proto.get());
-
+  std::string update_request_path =
+      ConvertJavaStringToUTF8(env, java_update_request_path);
   WebApkInstallService::Get(profile)->UpdateAsync(
-      webapk_package, start_url, short_name, std::move(serialized_proto),
+      base::FilePath(update_request_path),
       base::Bind(&OnUpdated, callback_ref));
 }

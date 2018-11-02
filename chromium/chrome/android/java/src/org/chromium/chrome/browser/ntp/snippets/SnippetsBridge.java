@@ -20,8 +20,6 @@ import java.util.List;
  * Provides access to the snippets to display on the NTP using the C++ ContentSuggestionsService.
  */
 public class SnippetsBridge implements SuggestionsSource {
-    private static final String TAG = "SnippetsBridge";
-
     private long mNativeSnippetsBridge;
     private final ObserverList<Observer> mObserverList = new ObserverList<>();
 
@@ -186,9 +184,13 @@ public class SnippetsBridge implements SuggestionsSource {
 
     @Override
     public void fetchSuggestions(@CategoryInt int category, String[] displayedSuggestionIds,
-            Callback<List<SnippetArticle>> callback) {
+            Callback<List<SnippetArticle>> successCallback, Runnable failureRunnable) {
         assert mNativeSnippetsBridge != 0;
-        nativeFetch(mNativeSnippetsBridge, category, displayedSuggestionIds, callback);
+        // We have nice JNI support for Callbacks but not for Runnables, so wrap the Runnable
+        // in a Callback and discard the parameter.
+        // TODO(peconn): Use a Runnable here if they get nice JNI support.
+        nativeFetch(mNativeSnippetsBridge, category, displayedSuggestionIds, successCallback,
+                ignored -> failureRunnable.run());
     }
 
     @CalledByNative
@@ -198,11 +200,14 @@ public class SnippetsBridge implements SuggestionsSource {
 
     @CalledByNative
     private static SnippetArticle addSuggestion(List<SnippetArticle> suggestions, int category,
-            String id, String title, String publisher, String previewText, String url,
-            long timestamp, float score, long fetchTime, boolean isVideoSuggestion) {
+            String id, String title, String publisher, String url, long timestamp, float score,
+            long fetchTime, boolean isVideoSuggestion, int thumbnailDominantColor) {
         int position = suggestions.size();
-        suggestions.add(new SnippetArticle(category, id, title, publisher, previewText, url,
-                timestamp, score, fetchTime, isVideoSuggestion));
+        // thumbnailDominantColor equal to 0 encodes absence of the value. 0 is not a valid color,
+        // because the passed color cannot be fully transparent.
+        suggestions.add(new SnippetArticle(category, id, title, publisher, url, timestamp, score,
+                fetchTime, isVideoSuggestion,
+                thumbnailDominantColor == 0 ? null : thumbnailDominantColor));
         return suggestions.get(position);
     }
 
@@ -277,7 +282,8 @@ public class SnippetsBridge implements SuggestionsSource {
             String idWithinCategory, int minimumSizePx, int desiredSizePx,
             Callback<Bitmap> callback);
     private native void nativeFetch(long nativeNTPSnippetsBridge, int category,
-            String[] knownSuggestions, Callback<List<SnippetArticle>> callback);
+            String[] knownSuggestions, Callback<List<SnippetArticle>> successCallback,
+            Callback<Integer> failureCallback);
     private native void nativeFetchContextualSuggestions(
             long nativeNTPSnippetsBridge, String url, Callback<List<SnippetArticle>> callback);
     private native void nativeFetchContextualSuggestionImage(long nativeNTPSnippetsBridge,

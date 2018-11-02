@@ -60,35 +60,35 @@ void FlatTreeTraversalTest::SetupSampleHTML(const char* main_html,
                                             const char* shadow_html,
                                             unsigned index) {
   Element* body = GetDocument().body();
-  body->setInnerHTML(String::FromUTF8(main_html));
+  body->SetInnerHTMLFromString(String::FromUTF8(main_html));
   Element* shadow_host = ToElement(NodeTraversal::ChildAt(*body, index));
-  ShadowRoot* shadow_root = shadow_host->CreateShadowRootInternal(
-      ShadowRootType::V0, ASSERT_NO_EXCEPTION);
-  shadow_root->setInnerHTML(String::FromUTF8(shadow_html));
+  ShadowRoot& shadow_root = shadow_host->CreateShadowRootInternal();
+  shadow_root.SetInnerHTMLFromString(String::FromUTF8(shadow_html));
   body->UpdateDistribution();
 }
 
 void FlatTreeTraversalTest::SetupDocumentTree(const char* main_html) {
   Element* body = GetDocument().body();
-  body->setInnerHTML(String::FromUTF8(main_html));
+  body->SetInnerHTMLFromString(String::FromUTF8(main_html));
 }
 
 void FlatTreeTraversalTest::AttachV0ShadowRoot(Element& shadow_host,
                                                const char* shadow_inner_html) {
-  ShadowRoot* shadow_root = shadow_host.CreateShadowRootInternal(
-      ShadowRootType::V0, ASSERT_NO_EXCEPTION);
-  shadow_root->setInnerHTML(String::FromUTF8(shadow_inner_html));
+  ShadowRoot& shadow_root = shadow_host.CreateShadowRootInternal();
+  shadow_root.SetInnerHTMLFromString(String::FromUTF8(shadow_inner_html));
   GetDocument().body()->UpdateDistribution();
 }
 
 void FlatTreeTraversalTest::AttachOpenShadowRoot(
     Element& shadow_host,
     const char* shadow_inner_html) {
-  ShadowRoot* shadow_root = shadow_host.CreateShadowRootInternal(
-      ShadowRootType::kOpen, ASSERT_NO_EXCEPTION);
-  shadow_root->setInnerHTML(String::FromUTF8(shadow_inner_html));
+  ShadowRoot& shadow_root =
+      shadow_host.AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.SetInnerHTMLFromString(String::FromUTF8(shadow_inner_html));
   GetDocument().body()->UpdateDistribution();
 }
+
+namespace {
 
 void TestCommonAncestor(Node* expected_result,
                         const Node& node_a,
@@ -102,6 +102,8 @@ void TestCommonAncestor(Node* expected_result,
       << "commonAncestor(" << node_b.textContent() << ","
       << node_a.textContent() << ")";
 }
+
+}  // namespace
 
 // Test case for
 //  - childAt
@@ -159,6 +161,26 @@ TEST_F(FlatTreeTraversalTest, childAt) {
 
   // Distribute node |m00| is child of node in shadow tree |s03|.
   EXPECT_EQ(m00, FlatTreeTraversal::ChildAt(*s03, 0));
+}
+
+TEST_F(FlatTreeTraversalTest, ChildrenOf) {
+  SetupSampleHTML(
+      "<p id=sample>ZERO<span slot=three>three</b><span "
+      "slot=one>one</b>FOUR</p>",
+      "zero<slot name=one></slot>two<slot name=three></slot>four", 0);
+  Element* const sample = GetDocument().getElementById("sample");
+
+  HeapVector<Member<Node>> expected_nodes;
+  for (Node* runner = FlatTreeTraversal::FirstChild(*sample); runner;
+       runner = FlatTreeTraversal::NextSibling(*runner)) {
+    expected_nodes.push_back(runner);
+  }
+
+  HeapVector<Member<Node>> actual_nodes;
+  for (Node& child : FlatTreeTraversal::ChildrenOf(*sample))
+    actual_nodes.push_back(&child);
+
+  EXPECT_EQ(expected_nodes, actual_nodes);
 }
 
 // Test case for
@@ -306,6 +328,23 @@ TEST_F(FlatTreeTraversalTest, nextSkippingChildren) {
   // Node in shadow tree to main tree
   EXPECT_EQ(*m2, FlatTreeTraversal::NextSkippingChildren(*s12));
   EXPECT_EQ(*m1, FlatTreeTraversal::PreviousSkippingChildren(*m2));
+}
+
+TEST_F(FlatTreeTraversalTest, InclusiveAncestorsOf) {
+  SetupDocumentTree("<div><div><div id=sample></div></div></div>");
+  Element* const sample = GetDocument().getElementById("sample");
+
+  HeapVector<Member<Node>> expected_nodes;
+  for (Node* parent = sample; parent;
+       parent = FlatTreeTraversal::Parent(*parent)) {
+    expected_nodes.push_back(parent);
+  }
+
+  HeapVector<Member<Node>> actual_nodes;
+  for (Node& ancestor : FlatTreeTraversal::InclusiveAncestorsOf(*sample))
+    actual_nodes.push_back(&ancestor);
+
+  EXPECT_EQ(expected_nodes, actual_nodes);
 }
 
 // Test case for

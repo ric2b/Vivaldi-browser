@@ -214,7 +214,7 @@ class RedirectToFileResourceHandlerTest
                                                TRAFFIC_ANNOTATION_FOR_TESTS)) {
     base::CreateTemporaryFile(&temp_file_path_);
     std::unique_ptr<TestResourceHandler> test_handler =
-        base::MakeUnique<TestResourceHandler>();
+        std::make_unique<TestResourceHandler>();
     test_handler->set_expect_on_data_downloaded(true);
     if (GetParam() == CompletionMode::ASYNC) {
       // Don't defer OnResponseCompleted, by default, since that's really
@@ -224,16 +224,16 @@ class RedirectToFileResourceHandlerTest
     }
     test_handler_ = test_handler->GetWeakPtr();
 
-    redirect_to_file_handler_ = base::MakeUnique<RedirectToFileResourceHandler>(
+    redirect_to_file_handler_ = std::make_unique<RedirectToFileResourceHandler>(
         std::move(test_handler), url_request_.get());
     mock_loader_ =
-        base::MakeUnique<MockResourceLoader>(redirect_to_file_handler_.get());
+        std::make_unique<MockResourceLoader>(redirect_to_file_handler_.get());
     redirect_to_file_handler_->SetCreateTemporaryFileStreamFunctionForTesting(
         base::Bind(&RedirectToFileResourceHandlerTest::
                        SetCreateTemporaryFileStreamCallback,
                    base::Unretained(this)));
 
-    file_stream_ = base::MakeUnique<MockFileStream>();
+    file_stream_ = std::make_unique<MockFileStream>();
     file_stream_->set_open_result(
         MockFileStream::OperationResult(net::OK, GetParam()));
     file_stream_->set_all_write_results(MockFileStream::OperationResult(
@@ -332,7 +332,7 @@ class RedirectToFileResourceHandlerTest
   // and wait for it to resume the request if running an async test.
   MockResourceLoader::Status OnResponseStartedAndWaitForResult()
       WARN_UNUSED_RESULT {
-    mock_loader_->OnResponseStarted(make_scoped_refptr(new ResourceResponse()));
+    mock_loader_->OnResponseStarted(base::MakeRefCounted<ResourceResponse>());
     if (GetParam() == CompletionMode::ASYNC) {
       EXPECT_EQ(MockResourceLoader::Status::CALLBACK_PENDING,
                 mock_loader_->status());
@@ -417,7 +417,7 @@ TEST_P(RedirectToFileResourceHandlerTest, SingleBodyReadDelayedFileOnResponse) {
     mock_loader_->WaitUntilIdleOrCanceled();
   }
   ASSERT_EQ(MockResourceLoader::Status::IDLE, mock_loader_->status());
-  mock_loader_->OnResponseStarted(make_scoped_refptr(new ResourceResponse()));
+  mock_loader_->OnResponseStarted(base::MakeRefCounted<ResourceResponse>());
   ASSERT_EQ(MockResourceLoader::Status::CALLBACK_PENDING,
             mock_loader_->status());
 
@@ -451,7 +451,7 @@ TEST_P(RedirectToFileResourceHandlerTest, SingleBodyReadDelayedFileError) {
     mock_loader_->WaitUntilIdleOrCanceled();
   }
   ASSERT_EQ(MockResourceLoader::Status::IDLE, mock_loader_->status());
-  mock_loader_->OnResponseStarted(make_scoped_refptr(new ResourceResponse()));
+  mock_loader_->OnResponseStarted(base::MakeRefCounted<ResourceResponse>());
   ASSERT_EQ(MockResourceLoader::Status::CALLBACK_PENDING,
             mock_loader_->status());
 

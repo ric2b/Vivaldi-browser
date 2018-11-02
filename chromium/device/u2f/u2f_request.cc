@@ -2,22 +2,35 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "u2f_request.h"
+#include "device/u2f/u2f_request.h"
+
+#include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "device/base/device_client.h"
-#include "u2f_hid_device.h"
 
 namespace device {
 
-U2fRequest::U2fRequest(const ResponseCallback& cb)
+U2fRequest::U2fRequest(std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
+                       ResponseCallback cb)
     : state_(State::INIT),
-      cb_(cb),
-      hid_service_observer_(this),
+      discoveries_(std::move(discoveries)),
+      cb_(std::move(cb)),
       weak_factory_(this) {
-  filter_.SetUsagePage(0xf1d0);
+  for (auto& discovery : discoveries_) {
+    discovery->SetDelegate(weak_factory_.GetWeakPtr());
+  }
+}
+
+U2fRequest::~U2fRequest() = default;
+
+void U2fRequest::Start() {
+  if (state_ == State::INIT) {
+    state_ = State::BUSY;
+    for (auto& discovery : discoveries_) {
+      discovery->Start();
+    }
+  }
 }
 
 void U2fRequest::Transition() {
@@ -41,53 +54,35 @@ void U2fRequest::Transition() {
   }
 }
 
-void U2fRequest::Start() {
-  if (state_ == State::INIT) {
-    state_ = State::BUSY;
-    Enumerate();
-  }
-}
-
-void U2fRequest::Enumerate() {
-  HidService* hid_service = DeviceClient::Get()->GetHidService();
-  DCHECK(hid_service);
-  hid_service->GetDevices(base::Bind(&U2fRequest::OnEnumerate,
-                                     weak_factory_.GetWeakPtr(), hid_service));
-}
-
-void U2fRequest::OnEnumerate(
-    HidService* hid_service,
-    std::vector<device::mojom::HidDeviceInfoPtr> devices) {
-  for (auto& device_info : devices) {
-    if (filter_.Matches(*device_info))
-      devices_.push_back(
-          std::make_unique<U2fHidDevice>(std::move(device_info)));
-  }
-
-  hid_service_observer_.Add(hid_service);
+void U2fRequest::OnStarted(bool success) {
+  if (++started_count_ < discoveries_.size())
+    return;
 
   state_ = State::IDLE;
   Transition();
 }
 
-void U2fRequest::OnDeviceAdded(device::mojom::HidDeviceInfoPtr device_info) {
-  // Ignore non-U2F devices
-  if (!filter_.Matches(*device_info))
-    return;
+void U2fRequest::OnStopped(bool success) {}
 
-  auto device = std::make_unique<U2fHidDevice>(std::move(device_info));
-  AddDevice(std::move(device));
+void U2fRequest::OnDeviceAdded(std::unique_ptr<U2fDevice> device) {
+  devices_.push_back(std::move(device));
+
+  // Start the state machine if this is the only device
+  if (state_ == State::OFF) {
+    state_ = State::IDLE;
+    delay_callback_.Cancel();
+    Transition();
+  }
 }
 
-void U2fRequest::OnDeviceRemoved(device::mojom::HidDeviceInfoPtr device_info) {
-  // Ignore non-U2F devices
-  if (!filter_.Matches(*device_info))
-    return;
-
-  auto device = std::make_unique<U2fHidDevice>(std::move(device_info));
+void U2fRequest::OnDeviceRemoved(base::StringPiece device_id) {
+  auto device_id_eq =
+      [&device_id](const std::unique_ptr<U2fDevice>& this_device) {
+        return device_id == this_device->GetId();
+      };
 
   // Check if the active device was removed
-  if (current_device_ && current_device_->GetId() == device->GetId()) {
+  if (current_device_ && device_id_eq(current_device_)) {
     current_device_ = nullptr;
     state_ = State::IDLE;
     Transition();
@@ -95,13 +90,8 @@ void U2fRequest::OnDeviceRemoved(device::mojom::HidDeviceInfoPtr device_info) {
   }
 
   // Remove the device if it exists in either device list
-  devices_.remove_if([&device](const std::unique_ptr<U2fDevice>& this_device) {
-    return this_device->GetId() == device->GetId();
-  });
-  attempted_devices_.remove_if(
-      [&device](const std::unique_ptr<U2fDevice>& this_device) {
-        return this_device->GetId() == device->GetId();
-      });
+  devices_.remove_if(device_id_eq);
+  attempted_devices_.remove_if(device_id_eq);
 }
 
 void U2fRequest::IterateDevice() {
@@ -131,21 +121,16 @@ void U2fRequest::OnWaitComplete() {
   Transition();
 }
 
-void U2fRequest::AddDevice(std::unique_ptr<U2fDevice> device) {
-  devices_.push_back(std::move(device));
-
-  // Start the state machine if this is the only device
-  if (state_ == State::OFF) {
-    state_ = State::IDLE;
-    delay_callback_.Cancel();
-    Transition();
-  }
+// static
+const std::vector<uint8_t>& U2fRequest::GetBogusAppParam() {
+  static const std::vector<uint8_t> kBogusAppParam(32, 0x41);
+  return kBogusAppParam;
 }
 
-void U2fRequest::AddDeviceForTesting(std::unique_ptr<U2fDevice> device) {
-  AddDevice(std::move(device));
+// static
+const std::vector<uint8_t>& U2fRequest::GetBogusChallenge() {
+  static const std::vector<uint8_t> kBogusChallenge(32, 0x42);
+  return kBogusChallenge;
 }
-
-U2fRequest::~U2fRequest() {}
 
 }  // namespace device

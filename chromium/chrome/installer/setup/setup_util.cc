@@ -129,6 +129,7 @@ void RemoveLegacyIExecuteCommandKey(const InstallerState& installer_state) {
   }
 }
 
+#if !defined(VIVALDI_BUILD)
 // "The binaries" once referred to the on-disk footprint of Chrome and/or Chrome
 // Frame when the products were configured to share such on-disk bits. Support
 // for this mode of install was dropped from ToT in December 2016. Remove any
@@ -275,6 +276,7 @@ void RemoveLegacyChromeAppCommands(const InstallerState& installer_state) {
   }
 #endif  // GOOGLE_CHROME_BUILD
 }
+#endif // !defined(VIVALDI_BUILD)
 
 }  // namespace
 
@@ -898,7 +900,7 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
     if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
                                                 process_image_name))
       continue;
- 
+
     processes.push_back(std::move(process));
   } while (Process32Next(snapshot.Get(), &entry) != FALSE);
   VLOG(1) << "GetRunningProcessesForPath: processes.size()=" << processes.size();

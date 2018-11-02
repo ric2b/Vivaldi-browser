@@ -22,7 +22,6 @@
 class ChromeZoomLevelPrefs;
 #endif
 
-class DevToolsNetworkControllerHandle;
 class ExtensionSpecialStoragePolicy;
 class PrefProxyConfigTracker;
 class PrefService;
@@ -163,6 +162,10 @@ class Profile : public content::BrowserContext {
   // profile is not incognito.
   virtual Profile* GetOriginalProfile() = 0;
 
+  // Return the original "recording" profile. This method returns this if the
+  // profile is not incognito.
+  virtual const Profile* GetOriginalProfile() const = 0;
+
   // Returns whether the profile is supervised (either a legacy supervised
   // user or a child account; see SupervisedUserService).
   virtual bool IsSupervised() const = 0;
@@ -254,19 +257,6 @@ class Profile : public content::BrowserContext {
 
   // Returns the Predictor object used for dns prefetch.
   virtual chrome_browser_net::Predictor* GetNetworkPredictor() = 0;
-
-  // Returns the DevToolsNetworkControllerHandle for this profile.
-  virtual DevToolsNetworkControllerHandle*
-  GetDevToolsNetworkControllerHandle() = 0;
-
-  // Deletes all network related data since |time|. It deletes transport
-  // security state since |time| and it also deletes HttpServerProperties data.
-  // Works asynchronously, however if the |completion| callback is non-null, it
-  // will be posted on the UI thread once the removal process completes.
-  // Be aware that theoretically it is possible that |completion| will be
-  // invoked after the Profile instance has been destroyed.
-  virtual void ClearNetworkingHistorySince(base::Time time,
-                                           const base::Closure& completion) = 0;
 
   // Returns the home page for this profile.
   virtual GURL GetHomePage() = 0;

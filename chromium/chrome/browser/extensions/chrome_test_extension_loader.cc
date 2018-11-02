@@ -38,7 +38,7 @@ ChromeTestExtensionLoader::ChromeTestExtensionLoader(
 ChromeTestExtensionLoader::~ChromeTestExtensionLoader() {
   // If there was a temporary directory created for a CRX, we need to clean it
   // up before the member is destroyed so we can explicitly allow IO.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (temp_dir_.IsValid())
     EXPECT_TRUE(temp_dir_.Delete());
 }
@@ -109,7 +109,7 @@ bool ChromeTestExtensionLoader::WaitForExtensionReady() {
 
 base::FilePath ChromeTestExtensionLoader::PackExtension(
     const base::FilePath& unpacked_path) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (!base::PathExists(unpacked_path)) {
     ADD_FAILURE() << "Unpacked path does not exist: " << unpacked_path.value();
     return base::FilePath();
@@ -229,7 +229,6 @@ scoped_refptr<const Extension> ChromeTestExtensionLoader::LoadUnpacked(
   TestExtensionRegistryObserver registry_observer(extension_registry_);
   scoped_refptr<UnpackedInstaller> installer =
       UnpackedInstaller::Create(extension_service_);
-  installer->set_prompt_for_plugins(false);
   installer->set_require_modern_manifest_version(
       require_modern_manifest_version_);
   installer->Load(file_path);

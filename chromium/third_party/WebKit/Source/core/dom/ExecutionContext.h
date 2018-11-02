@@ -30,6 +30,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -39,9 +40,12 @@
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
-#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebTraceLocation.h"
 #include "v8/include/v8.h"
+
+namespace service_manager {
+class InterfaceProvider;
+}
 
 namespace blink {
 
@@ -52,10 +56,12 @@ class ErrorEvent;
 class EventQueue;
 class EventTarget;
 class LocalDOMWindow;
-class SuspendableObject;
+class PausableObject;
 class PublicURLManager;
+class ResourceFetcher;
 class SecurityOrigin;
 class ScriptState;
+
 enum class TaskType : unsigned;
 
 enum ReasonForCallingCanExecuteScripts {
@@ -63,12 +69,14 @@ enum ReasonForCallingCanExecuteScripts {
   kNotAboutToExecuteScript
 };
 
+enum class SecureContextMode { kInsecureContext, kSecureContext };
+
 class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
                                      public Supplementable<ExecutionContext> {
-  WTF_MAKE_NONCOPYABLE(ExecutionContext);
+  MERGE_GARBAGE_COLLECTED_MIXINS();
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static ExecutionContext* From(const ScriptState*);
 
@@ -87,7 +95,6 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   virtual bool IsDedicatedWorkerGlobalScope() const { return false; }
   virtual bool IsSharedWorkerGlobalScope() const { return false; }
   virtual bool IsServiceWorkerGlobalScope() const { return false; }
-  virtual bool IsCompositorWorkerGlobalScope() const { return false; }
   virtual bool IsAnimationWorkletGlobalScope() const { return false; }
   virtual bool IsAudioWorkletGlobalScope() const { return false; }
   virtual bool IsPaintWorkletGlobalScope() const { return false; }
@@ -96,10 +103,15 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   virtual bool IsContextThread() const { return true; }
 
+  // TODO(hiroshige): Make GetSecurityOrigin() return |const SecurityOrigin*|.
+  // crbug.com/779730
   SecurityOrigin* GetSecurityOrigin();
+  SecurityOrigin* GetMutableSecurityOrigin();
+
   ContentSecurityPolicy* GetContentSecurityPolicy();
-  const KURL& Url() const;
-  KURL CompleteURL(const String& url) const;
+  virtual const KURL& Url() const = 0;
+  virtual const KURL& BaseURL() const = 0;
+  virtual KURL CompleteURL(const String& url) const = 0;
   virtual void DisableEval(const String& error_message) = 0;
   virtual LocalDOMWindow* ExecutingWindow() const { return nullptr; }
   virtual String UserAgent() const = 0;
@@ -110,11 +122,9 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   // not be used after the ExecutionContext is destroyed.
   virtual DOMTimerCoordinator* Timers() = 0;
 
+  virtual ResourceFetcher* Fetcher() const = 0;
+
   virtual SecurityContext& GetSecurityContext() = 0;
-  KURL ContextURL() const { return VirtualURL(); }
-  KURL ContextCompleteURL(const String& url) const {
-    return VirtualCompleteURL(url);
-  }
 
   virtual bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) {
     return false;
@@ -130,28 +140,27 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   virtual void RemoveURLFromMemoryCache(const KURL&);
 
-  void SuspendSuspendableObjects();
-  void ResumeSuspendableObjects();
-  void StopSuspendableObjects();
+  void PausePausableObjects();
+  void UnpausePausableObjects();
+  void StopPausableObjects();
   void NotifyContextDestroyed() override;
 
-  void SuspendScheduledTasks();
-  void ResumeScheduledTasks();
+  void PauseScheduledTasks();
+  void UnpauseScheduledTasks();
 
   // TODO(haraken): Remove these methods by making the customers inherit from
-  // SuspendableObject. SuspendableObject is a standard way to observe context
+  // PausableObject. PausableObject is a standard way to observe context
   // suspension/resumption.
-  virtual bool TasksNeedSuspension() { return false; }
-  virtual void TasksWereSuspended() {}
-  virtual void TasksWereResumed() {}
+  virtual bool TasksNeedPause() { return false; }
+  virtual void TasksWerePaused() {}
+  virtual void TasksWereUnpaused() {}
 
-  bool IsContextSuspended() const { return is_context_suspended_; }
+  bool IsContextPaused() const { return is_context_paused_; }
   bool IsContextDestroyed() const { return is_context_destroyed_; }
 
-  // Called after the construction of an SuspendableObject to synchronize
-  // suspend
-  // state.
-  void SuspendSuspendableObjectIfNeeded(SuspendableObject*);
+  // Called after the construction of an PausableObject to synchronize
+  // pause state.
+  void PausePausableObjectIfNeeded(PausableObject*);
 
   // Gets the next id in a circular sequence from 1 to 2^31-1.
   int CircularSequentialID();
@@ -170,6 +179,11 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   virtual bool IsSecureContext(String& error_message) const = 0;
   virtual bool IsSecureContext() const;
 
+  SecureContextMode GetSecureContextMode() const {
+    return IsSecureContext() ? SecureContextMode::kSecureContext
+                             : SecureContextMode::kInsecureContext;
+  }
+
   virtual String OutgoingReferrer() const;
   // Parses a comma-separated list of referrer policy tokens, and sets
   // the context's referrer policy to the last one that is a valid
@@ -186,12 +200,15 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   virtual CoreProbeSink* GetProbeSink() { return nullptr; }
 
+  virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
+    return nullptr;
+  }
+
+  virtual scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) = 0;
+
  protected:
   ExecutionContext();
   virtual ~ExecutionContext();
-
-  virtual const KURL& VirtualURL() const = 0;
-  virtual KURL VirtualCompleteURL(const String&) const = 0;
 
  private:
   bool DispatchErrorEventInternal(ErrorEvent*, AccessControlStatus);
@@ -201,7 +218,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   bool in_dispatch_error_event_;
   HeapVector<Member<ErrorEvent>> pending_exceptions_;
 
-  bool is_context_suspended_;
+  bool is_context_paused_;
   bool is_context_destroyed_;
 
   Member<PublicURLManager> public_url_manager_;
@@ -213,6 +230,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   int window_interaction_tokens_;
 
   ReferrerPolicy referrer_policy_;
+  DISALLOW_COPY_AND_ASSIGN(ExecutionContext);
 };
 
 }  // namespace blink

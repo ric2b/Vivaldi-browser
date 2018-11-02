@@ -5,8 +5,8 @@
 #include <memory>
 #include <vector>
 
-#include "ash/accessibility_delegate.h"
-#include "ash/accessibility_types.h"
+#include "ash/accessibility/accessibility_delegate.h"
+#include "ash/public/cpp/accessibility_types.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "chrome/browser/browser_process.h"

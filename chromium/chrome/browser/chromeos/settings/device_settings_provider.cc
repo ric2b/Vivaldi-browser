@@ -21,7 +21,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
-#include "chrome/browser/chromeos/policy/device_off_hours_controller.h"
+#include "chrome/browser/chromeos/policy/off_hours/off_hours_proto_parser.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_cache.h"
 #include "chrome/browser/chromeos/tpm_firmware_update.h"
@@ -47,26 +47,35 @@ namespace {
 const char* const kKnownSettings[] = {
     kAccountsPrefAllowGuest,
     kAccountsPrefAllowNewUser,
-    kAccountsPrefDeviceLocalAccounts,
     kAccountsPrefDeviceLocalAccountAutoLoginBailoutEnabled,
     kAccountsPrefDeviceLocalAccountAutoLoginDelay,
     kAccountsPrefDeviceLocalAccountAutoLoginId,
     kAccountsPrefDeviceLocalAccountPromptForNetworkWhenOffline,
+    kAccountsPrefDeviceLocalAccounts,
     kAccountsPrefEphemeralUsersEnabled,
+    kAccountsPrefLoginScreenDomainAutoComplete,
     kAccountsPrefShowUserNamesOnSignIn,
     kAccountsPrefSupervisedUsersEnabled,
     kAccountsPrefTransferSAMLCookies,
     kAccountsPrefUsers,
-    kAccountsPrefLoginScreenDomainAutoComplete,
     kAllowBluetooth,
-    kAllowRedeemChromeOsRegistrationOffers,
     kAllowedConnectionTypesForUpdate,
+    kAllowRedeemChromeOsRegistrationOffers,
     kAttestationForContentProtectionEnabled,
+    kCastReceiverName,
     kDeviceAttestationEnabled,
     kDeviceDisabled,
     kDeviceDisabledMessage,
+    kDeviceEnrollmentIdNeeded,
     kDeviceLoginScreenAppInstallList,
+    kDeviceLoginScreenInputMethods,
+    kDeviceLoginScreenLocales,
+    kDeviceOffHours,
     kDeviceOwner,
+    kDevicePrintersAccessMode,
+    kDevicePrintersBlacklist,
+    kDevicePrintersConfigurations,
+    kDevicePrintersWhitelist,
     kDeviceQuirksDownloadEnabled,
     kDeviceWallpaperImage,
     kDisplayRotationDefault,
@@ -75,6 +84,7 @@ const char* const kKnownSettings[] = {
     kHeartbeatFrequency,
     kLoginAuthenticationBehavior,
     kLoginVideoCaptureAllowedUrls,
+    kMinimumRequiredChromeVersion,
     kPolicyMissingMitigationMode,
     kRebootOnShutdown,
     kReleaseChannel,
@@ -98,12 +108,10 @@ const char* const kKnownSettings[] = {
     kSystemTimezonePolicy,
     kSystemUse24HourClock,
     kTargetVersionPrefix,
+    kTPMFirmwareUpdateSettings,
+    kUnaffiliatedArcAllowed,
     kUpdateDisabled,
     kVariationsRestrictParameter,
-    kDeviceLoginScreenLocales,
-    kDeviceLoginScreenInputMethods,
-    kDeviceOffHours,
-    kTPMFirmwareUpdateSettings,
 };
 
 void DecodeLoginPolicies(
@@ -376,8 +384,10 @@ void DecodeAutoUpdatePolicies(
          i != allowed_connection_types.end(); ++i) {
       list->AppendInteger(*i);
     }
-    new_values_cache->SetValue(kAllowedConnectionTypesForUpdate,
-                               std::move(list));
+    if (!list->empty()) {
+      new_values_cache->SetValue(kAllowedConnectionTypesForUpdate,
+                                 std::move(list));
+    }
   }
 }
 
@@ -571,8 +581,8 @@ void DecodeGenericPolicies(
   }
 
   if (policy.has_device_off_hours()) {
-    auto off_hours_policy =
-        policy::off_hours::ConvertPolicyProtoToValue(policy.device_off_hours());
+    auto off_hours_policy = policy::off_hours::ConvertOffHoursProtoToValue(
+        policy.device_off_hours());
     if (off_hours_policy)
       new_values_cache->SetValue(kDeviceOffHours, std::move(off_hours_policy));
   }
@@ -581,6 +591,41 @@ void DecodeGenericPolicies(
     new_values_cache->SetValue(kTPMFirmwareUpdateSettings,
                                tpm_firmware_update::DecodeSettingsProto(
                                    policy.tpm_firmware_update_settings()));
+  }
+
+  if (policy.has_minimum_required_version()) {
+    const em::MinimumRequiredVersionProto& container(
+        policy.minimum_required_version());
+    if (container.has_chrome_version())
+      new_values_cache->SetString(kMinimumRequiredChromeVersion,
+                                  container.chrome_version());
+  }
+
+  if (policy.has_cast_receiver_name()) {
+    const em::CastReceiverNameProto& container(policy.cast_receiver_name());
+    if (container.has_name()) {
+      new_values_cache->SetValue(
+          kCastReceiverName, base::MakeUnique<base::Value>(container.name()));
+    }
+  }
+
+  if (policy.has_forced_reenrollment()) {
+    const em::ForcedReenrollmentProto& container(policy.forced_reenrollment());
+    if (container.has_enrollment_id_needed()) {
+      new_values_cache->SetValue(
+          kDeviceEnrollmentIdNeeded,
+          base::MakeUnique<base::Value>(container.enrollment_id_needed()));
+    }
+  }
+
+  if (policy.has_unaffiliated_arc_allowed()) {
+    const em::UnaffiliatedArcAllowedProto& container(
+        policy.unaffiliated_arc_allowed());
+    if (container.has_unaffiliated_arc_allowed()) {
+      new_values_cache->SetValue(
+          kUnaffiliatedArcAllowed,
+          base::MakeUnique<base::Value>(container.unaffiliated_arc_allowed()));
+    }
   }
 }
 

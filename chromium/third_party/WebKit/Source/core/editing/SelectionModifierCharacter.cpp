@@ -31,7 +31,9 @@
 #include "core/editing/SelectionModifier.h"
 
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/InlineBoxPosition.h"
 #include "core/editing/InlineBoxTraversal.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutItem.h"
@@ -87,7 +89,7 @@ struct TraversalLeft {
   }
 
   static int ForwardGraphemeBoundaryOf(TextDirection direction,
-                                       Node* node,
+                                       const Node& node,
                                        int offset) {
     if (direction == TextDirection::kLtr)
       return PreviousGraphemeBoundaryOf(node, offset);
@@ -179,7 +181,7 @@ struct TraversalRight {
   }
 
   static int ForwardGraphemeBoundaryOf(TextDirection direction,
-                                       Node* node,
+                                       const Node& node,
                                        int offset) {
     if (direction == TextDirection::kLtr)
       return NextGraphemeBoundaryOf(node, offset);
@@ -246,9 +248,9 @@ static PositionTemplate<Strategy> TraverseInternalAlgorithm(
   const TextAffinity affinity = visible_position.Affinity();
 
   while (true) {
-    InlineBoxPosition box_position =
-        ComputeInlineBoxPosition(p, affinity, primary_direction);
-    InlineBox* box = box_position.inline_box;
+    InlineBoxPosition box_position = ComputeInlineBoxPosition(
+        PositionWithAffinityTemplate<Strategy>(p, affinity), primary_direction);
+    const InlineBox* box = box_position.inline_box;
     int offset = box_position.offset_in_box;
     if (!box) {
       return Traversal::ForwardVisuallyDistinctCandidateOf(primary_direction,
@@ -274,7 +276,7 @@ static PositionTemplate<Strategy> TraverseInternalAlgorithm(
       }
 
       offset = Traversal::ForwardGraphemeBoundaryOf(
-          box->Direction(), line_layout_item.GetNode(), offset);
+          box->Direction(), *line_layout_item.GetNode(), offset);
 
       const int caret_min_offset = box->CaretMinOffset();
       const int caret_max_offset = box->CaretMaxOffset();
@@ -293,8 +295,9 @@ static PositionTemplate<Strategy> TraverseInternalAlgorithm(
           if (position_on_left.IsNull())
             return PositionTemplate<Strategy>();
 
-          InlineBox* box_on_left =
-              ComputeInlineBoxPosition(position_on_left, affinity,
+          const InlineBox* box_on_left =
+              ComputeInlineBoxPosition(PositionWithAffinityTemplate<Strategy>(
+                                           position_on_left, affinity),
                                        primary_direction)
                   .inline_box;
           if (box_on_left && box_on_left->Root() == box->Root())

@@ -26,9 +26,9 @@
 namespace {
 
 // UDP packets cannot be bigger than 64k.
-const int kReadBufferSize = 65536;
+const int kUdpReadBufferSize = 65536;
 // Socket receive buffer size.
-const int kRecvSocketBufferSize = 65536;  // 64K
+const int kUdpRecvSocketBufferSize = 65536;  // 64K
 
 // Defines set of transient errors. These errors are ignored when we get them
 // from sendto() or recvfrom() calls.
@@ -97,21 +97,25 @@ P2PSocketHostUdp::P2PSocketHostUdp(
     IPC::Sender* message_sender,
     int socket_id,
     P2PMessageThrottler* throttler,
+    net::NetLog* net_log,
     const DatagramServerSocketFactory& socket_factory)
     : P2PSocketHost(message_sender, socket_id, P2PSocketHost::UDP),
-      socket_(socket_factory.Run()),
+      socket_(socket_factory.Run(net_log)),
       send_pending_(false),
       last_dscp_(net::DSCP_CS0),
       throttler_(throttler),
       send_buffer_size_(0),
+      net_log_(net_log),
       socket_factory_(socket_factory) {}
 
 P2PSocketHostUdp::P2PSocketHostUdp(IPC::Sender* message_sender,
                                    int socket_id,
-                                   P2PMessageThrottler* throttler)
+                                   P2PMessageThrottler* throttler,
+                                   net::NetLog* net_log)
     : P2PSocketHostUdp(message_sender,
                        socket_id,
                        throttler,
+                       net_log,
                        base::Bind(&P2PSocketHostUdp::DefaultSocketFactory)) {}
 
 P2PSocketHostUdp::~P2PSocketHostUdp() {
@@ -153,7 +157,7 @@ bool P2PSocketHostUdp::Init(const net::IPEndPoint& local_address,
     for (unsigned port = min_port; port <= max_port && result < 0; ++port) {
       result = socket_->Listen(net::IPEndPoint(local_address.address(), port));
       if (result < 0 && port != max_port)
-        socket_ = socket_factory_.Run();
+        socket_ = socket_factory_.Run(net_log_);
     }
   } else if (local_address.port() >= min_port &&
              local_address.port() <= max_port) {
@@ -171,9 +175,9 @@ bool P2PSocketHostUdp::Init(const net::IPEndPoint& local_address,
   }
 
   // Setting recv socket buffer size.
-  if (socket_->SetReceiveBufferSize(kRecvSocketBufferSize) != net::OK) {
+  if (socket_->SetReceiveBufferSize(kUdpRecvSocketBufferSize) != net::OK) {
     LOG(WARNING) << "Failed to set socket receive buffer size to "
-                 << kRecvSocketBufferSize;
+                 << kUdpRecvSocketBufferSize;
   }
 
   net::IPEndPoint address;
@@ -194,7 +198,7 @@ bool P2PSocketHostUdp::Init(const net::IPEndPoint& local_address,
   message_sender_->Send(new P2PMsg_OnSocketCreated(
       id_, address, remote_address.ip_address));
 
-  recv_buffer_ = new net::IOBuffer(kReadBufferSize);
+  recv_buffer_ = new net::IOBuffer(kUdpReadBufferSize);
   DoRead();
 
   return true;
@@ -214,9 +218,7 @@ void P2PSocketHostUdp::DoRead() {
   int result;
   do {
     result = socket_->RecvFrom(
-        recv_buffer_.get(),
-        kReadBufferSize,
-        &recv_address_,
+        recv_buffer_.get(), kUdpReadBufferSize, &recv_address_,
         base::Bind(&P2PSocketHostUdp::OnRecv, base::Unretained(this)));
     if (result == net::ERR_IO_PENDING)
       return;
@@ -448,9 +450,9 @@ bool P2PSocketHostUdp::SetOption(P2PSocketOption option, int value) {
 
 // static
 std::unique_ptr<net::DatagramServerSocket>
-P2PSocketHostUdp::DefaultSocketFactory() {
-  net::UDPServerSocket* socket = new net::UDPServerSocket(
-      GetContentClient()->browser()->GetNetLog(), net::NetLogSource());
+P2PSocketHostUdp::DefaultSocketFactory(net::NetLog* net_log) {
+  net::UDPServerSocket* socket =
+      new net::UDPServerSocket(net_log, net::NetLogSource());
 #if defined(OS_WIN)
   socket->UseNonBlockingIO();
 #endif

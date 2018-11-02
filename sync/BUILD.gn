@@ -52,6 +52,7 @@ source_set("browser") {
     "//components/signin/core/browser",
     "//components/sync/protocol",
     "//components/translate/content/common",
+    "//vivaldi/prefs:prefs_files_generator",
     "//skia",
     "//third_party/icu",
     "//third_party/cacheinvalidation",

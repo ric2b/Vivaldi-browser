@@ -83,6 +83,8 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
  private:
   void OnMediaDelegatePause(int player_id);
   void OnMediaDelegatePlay(int player_id);
+  void OnMediaDelegateSeekForward(int player_id, base::TimeDelta seek_time);
+  void OnMediaDelegateSeekBackward(int player_id, base::TimeDelta seek_time);
   void OnMediaDelegateSuspendAllMediaPlayers();
   void OnMediaDelegateVolumeMultiplierUpdate(int player_id, double multiplier);
   void OnMediaDelegateBecamePersistentVideo(int player_id, bool value);
@@ -134,7 +136,6 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
 
   // Clock used for calculating when players have become stale. May be
   // overridden for testing.
-  std::unique_ptr<base::DefaultTickClock> default_tick_clock_;
   base::TickClock* tick_clock_;
 
 #if defined(OS_ANDROID)

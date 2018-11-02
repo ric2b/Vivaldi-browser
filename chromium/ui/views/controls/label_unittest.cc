@@ -10,18 +10,20 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/switches.h"
+#include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/link.h"
@@ -120,15 +122,9 @@ class LabelTest : public ViewsTestBase {
  public:
   LabelTest() {}
 
-  // Called after ViewsTestBase is set up. ViewsTestBase initializes the
-  // MaterialDesignController, so this allows a subclass to influence settings
-  // used for the remainder of SetUp().
-  virtual void OnBaseSetUp() {}
-
   // ViewsTestBase:
   void SetUp() override {
     ViewsTestBase::SetUp();
-    OnBaseSetUp();
 
     Widget::InitParams params =
         CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -186,7 +182,7 @@ class LabelSelectionTest : public LabelTest {
 #endif
     LabelTest::SetUp();
     event_generator_ =
-        base::MakeUnique<ui::test::EventGenerator>(widget()->GetNativeWindow());
+        std::make_unique<ui::test::EventGenerator>(widget()->GetNativeWindow());
   }
 
  protected:
@@ -229,19 +225,20 @@ class LabelSelectionTest : public LabelTest {
     SimulatePaint();
     gfx::RenderText* render_text =
         label()->GetRenderTextForSelectionController();
+    const gfx::Range range(index, index + 1);
     const std::vector<gfx::Rect> bounds =
-        render_text->GetSubstringBoundsForTesting(gfx::Range(index, index + 1));
+        render_text->GetSubstringBoundsForTesting(range);
     DCHECK_EQ(1u, bounds.size());
     const int mid_y = bounds[0].y() + bounds[0].height() / 2;
 
-    // For single-line text, use the glyph bounds since it's a better
+    // For single-line text, use the glyph bounds since it gives a better
     // representation of the midpoint between glyphs when considering selection.
-    // TODO(tapted): When GetGlyphBounds() supports returning a vertical range
+    // TODO(tapted): When GetCursorSpan() supports returning a vertical range
     // as well as a horizontal range, just use that here.
     if (!render_text->multiline())
-      return gfx::Point(render_text->GetGlyphBounds(index).start(), mid_y);
+      return gfx::Point(render_text->GetCursorSpan(range).start(), mid_y);
 
-    // Otherwise, GetGlyphBounds() will give incorrect results. Multiline
+    // Otherwise, GetCursorSpan() will give incorrect results. Multiline
     // editing is not supported (http://crbug.com/248597) so there hasn't been
     // a need to draw a cursor. Instead, derive a point from the selection
     // bounds, which always rounds up to an integer after the end of a glyph.
@@ -276,16 +273,19 @@ class LabelSelectionTest : public LabelTest {
 class MDLabelTest : public LabelTest,
                     public ::testing::WithParamInterface<SecondaryUiMode> {
  public:
-  MDLabelTest()
-      : md_test_api_(ui::MaterialDesignController::Mode::MATERIAL_NORMAL) {}
+  MDLabelTest() {}
 
   // LabelTest:
-  void OnBaseSetUp() override {
-    md_test_api_.SetSecondaryUiMaterial(GetParam() == SecondaryUiMode::MD);
+  void SetUp() override {
+    if (GetParam() == SecondaryUiMode::MD)
+      scoped_feature_list_.InitAndEnableFeature(features::kSecondaryUiMd);
+    else
+      scoped_feature_list_.InitAndDisableFeature(features::kSecondaryUiMd);
+    LabelTest::SetUp();
   }
 
  private:
-  ui::test::MaterialDesignControllerTestAPI md_test_api_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(MDLabelTest);
 };
@@ -369,6 +369,41 @@ TEST_F(LabelTest, ElideBehavior) {
   EXPECT_GT(text.size(), label()->GetDisplayTextForTesting().size());
 
   label()->SetElideBehavior(gfx::NO_ELIDE);
+  EXPECT_EQ(text, label()->GetDisplayTextForTesting());
+}
+
+// Test the minimum width of a Label is correct depending on its ElideBehavior,
+// including |gfx::NO_ELIDE|.
+TEST_F(LabelTest, ElideBehaviorMinimumWidth) {
+  base::string16 text(ASCIIToUTF16("This is example text."));
+  label()->SetText(text);
+
+  // Default should be |gfx::ELIDE_TAIL|.
+  EXPECT_EQ(gfx::ELIDE_TAIL, label()->elide_behavior());
+  gfx::Size size = label()->GetMinimumSize();
+  // Elidable labels have a minimum width that fits |gfx::kEllipsisUTF16|.
+  EXPECT_EQ(gfx::Canvas::GetStringWidth(base::string16(gfx::kEllipsisUTF16),
+                                        label()->font_list()),
+            size.width());
+  label()->SetSize(label()->GetMinimumSize());
+  EXPECT_GT(text.length(), label()->GetDisplayTextForTesting().length());
+
+  // Truncated labels can take up the size they are given, but not exceed that
+  // if the text can't fit.
+  label()->SetElideBehavior(gfx::TRUNCATE);
+  label()->SetSize(gfx::Size(10, 10));
+  size = label()->GetMinimumSize();
+  EXPECT_LT(size.width(), label()->size().width());
+  EXPECT_GT(text.length(), label()->GetDisplayTextForTesting().length());
+
+  // Non-elidable single-line labels should take up their full text size, since
+  // this behavior implies the text should not be cut off.
+  EXPECT_FALSE(label()->multi_line());
+  label()->SetElideBehavior(gfx::NO_ELIDE);
+  size = label()->GetMinimumSize();
+  EXPECT_EQ(text.length(), label()->GetDisplayTextForTesting().length());
+
+  label()->SetSize(label()->GetMinimumSize());
   EXPECT_EQ(text, label()->GetDisplayTextForTesting());
 }
 

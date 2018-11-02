@@ -20,6 +20,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.vr_shell.rules.ChromeTabbedActivityVrTestRule;
 import org.chromium.chrome.browser.vr_shell.util.VrInfoBarUtils;
@@ -36,9 +37,10 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-features=VrShell",
-        "enable-webvr"})
+        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-webvr"})
 @Restriction(RESTRICTION_TYPE_DEVICE_DAYDREAM)
+@RetryOnFailure(message = "These tests have a habit of hitting a race condition, preventing "
+                + "VR entry. See crbug.com/762724")
 public class VrFeedbackInfoBarTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
     // only ever runs in ChromeTabbedActivity.
@@ -128,11 +130,11 @@ public class VrFeedbackInfoBarTest {
         // Enter VR presentation mode.
         mVrTestFramework.loadUrlAndAwaitInitialization(TEST_PAGE_WEBVR_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertTrue("VRDisplay found",
-                mVrTestFramework.vrDisplayFound(mVrTestFramework.getFirstTabWebContents()));
+                VrTestFramework.vrDisplayFound(mVrTestFramework.getFirstTabWebContents()));
         VrTransitionUtils.enterPresentationAndWait(
                 mVrTestFramework.getFirstTabCvc(), mVrTestFramework.getFirstTabWebContents());
         assertState(true /* isInVr */, false /* isInfobarVisible  */);
-        Assert.assertTrue(VrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
+        Assert.assertTrue(TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
 
         // Exiting VR should not prompt for feedback since the no VR browsing was performed.
         VrTransitionUtils.forceExitVr();
@@ -149,18 +151,18 @@ public class VrFeedbackInfoBarTest {
         // Enter VR presentation mode.
         mVrTestFramework.loadUrlAndAwaitInitialization(TEST_PAGE_WEBVR_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertTrue("VRDisplay found",
-                mVrTestFramework.vrDisplayFound(mVrTestFramework.getFirstTabWebContents()));
+                VrTestFramework.vrDisplayFound(mVrTestFramework.getFirstTabWebContents()));
         VrTransitionUtils.enterPresentationAndWait(
                 mVrTestFramework.getFirstTabCvc(), mVrTestFramework.getFirstTabWebContents());
         assertState(true /* isInVr */, false /* isInfobarVisible  */);
-        Assert.assertTrue(VrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
+        Assert.assertTrue(TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
 
         // Exit presentation mode by navigating to a different url.
         ChromeTabUtils.waitForTabPageLoaded(
                 mVrTestRule.getActivity().getActivityTab(), new Runnable() {
                     @Override
                     public void run() {
-                        mVrTestFramework.runJavaScriptOrFail(
+                        VrTestFramework.runJavaScriptOrFail(
                                 "window.location.href = '" + TEST_PAGE_2D_URL + "';",
                                 POLL_TIMEOUT_SHORT_MS, mVrTestFramework.getFirstTabWebContents());
                     }

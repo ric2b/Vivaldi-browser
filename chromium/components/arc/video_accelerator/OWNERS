@@ -1,2 +1,4 @@
-per-file *_struct_traits*.*=set noparent
-per-file *_struct_traits*.*=file://ipc/SECURITY_OWNERS
+kcwu@chromium.org
+piman@chromium.org
+posciak@chromium.org
+wuchengli@chromium.org

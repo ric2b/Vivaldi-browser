@@ -23,19 +23,20 @@
       :host,
       #container {
         height: 100%;
+        word-break: break-word;
       }
 
       :host(.opening) {
         left: 0;
       }
 
-      :host([align=right]) {
+      :host([align=rtl]) {
         left: auto;
         right: calc(-1 * var(--drawer-width));
         transition: right var(--transition-timing);
       }
 
-      :host(.opening[align=right]) {
+      :host(.opening[align=rtl]) {
         right: 0;
       }
 
@@ -59,7 +60,7 @@
         align-items: center;
         border-bottom: var(--cr-separator-line);
         display: flex;
-        font-size: 123.08%; /* go to 16px from 13px */
+        font-size: 123.08%;  /* go to 16px from 13px */
         min-height: 56px;
         outline: none;
       }

@@ -5,7 +5,9 @@
 #include "core/editing/commands/SelectionForUndoStep.h"
 
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/TextAffinity.h"
+#include "core/editing/VisibleSelection.h"
 
 namespace blink {
 
@@ -93,12 +95,10 @@ bool SelectionForUndoStep::IsRange() const {
 bool SelectionForUndoStep::IsValidFor(const Document& document) const {
   if (base_.IsNull())
     return true;
-  if (base_.IsOrphan() || extent_.IsOrphan())
-    return false;
-  return base_.GetDocument() == document && extent_.GetDocument() == document;
+  return base_.IsValidFor(document) && extent_.IsValidFor(document);
 }
 
-DEFINE_TRACE(SelectionForUndoStep) {
+void SelectionForUndoStep::Trace(blink::Visitor* visitor) {
   visitor->Trace(base_);
   visitor->Trace(extent_);
 }
@@ -132,7 +132,7 @@ SelectionForUndoStep::Builder::SetBaseAndExtentAsForwardSelection(
   return *this;
 }
 
-DEFINE_TRACE(SelectionForUndoStep::Builder) {
+void SelectionForUndoStep::Builder::Trace(blink::Visitor* visitor) {
   visitor->Trace(selection_);
 }
 

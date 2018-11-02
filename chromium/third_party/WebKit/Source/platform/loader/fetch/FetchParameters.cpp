@@ -25,6 +25,8 @@
 
 #include "platform/loader/fetch/FetchParameters.h"
 
+#include <memory>
+
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -75,21 +77,22 @@ void FetchParameters::SetCrossOriginAccessControl(
       break;
     case kCrossOriginAttributeAnonymous:
       SetCrossOriginAccessControl(
-          origin, WebURLRequest::kFetchCredentialsModeSameOrigin);
+          origin, network::mojom::FetchCredentialsMode::kSameOrigin);
       break;
     case kCrossOriginAttributeUseCredentials:
-      SetCrossOriginAccessControl(origin,
-                                  WebURLRequest::kFetchCredentialsModeInclude);
+      SetCrossOriginAccessControl(
+          origin, network::mojom::FetchCredentialsMode::kInclude);
       break;
   }
 }
 
 void FetchParameters::SetCrossOriginAccessControl(
     SecurityOrigin* origin,
-    WebURLRequest::FetchCredentialsMode credentials_mode) {
+    network::mojom::FetchCredentialsMode credentials_mode) {
   // Currently FetchParametersMode is only used when the request goes to
   // Service Worker.
-  resource_request_.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+  resource_request_.SetFetchRequestMode(
+      network::mojom::FetchRequestMode::kCORS);
   resource_request_.SetFetchCredentialsMode(credentials_mode);
 
   options_.security_origin = origin;
@@ -118,7 +121,7 @@ void FetchParameters::SetSpeculativePreloadType(
 void FetchParameters::MakeSynchronous() {
   // Synchronous requests should always be max priority, lest they hang the
   // renderer.
-  resource_request_.SetPriority(kResourceLoadPriorityHighest);
+  resource_request_.SetPriority(ResourceLoadPriority::kHighest);
   resource_request_.SetTimeoutInterval(10);
   options_.synchronous_policy = kRequestSynchronously;
 }
@@ -150,7 +153,7 @@ void FetchParameters::SetAllowImagePlaceholder() {
 
 std::unique_ptr<CrossThreadFetchParametersData> FetchParameters::CopyData()
     const {
-  auto data = WTF::MakeUnique<CrossThreadFetchParametersData>();
+  auto data = std::make_unique<CrossThreadFetchParametersData>();
   data->resource_request = resource_request_.CopyData();
   data->decoder_options = decoder_options_;
   data->options = CrossThreadResourceLoaderOptionsData(options_);

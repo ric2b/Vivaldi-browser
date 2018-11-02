@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "ash/ime/ime_controller.h"
+#include "ash/ime/test_ime_controller.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ime_controller_client.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,8 +36,6 @@
 #include "ui/base/ime/chromeos/mock_ime_engine_handler.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_initializer.h"
-#include "ui/chromeos/ime/input_method_menu_item.h"
-#include "ui/chromeos/ime/input_method_menu_manager.h"
 #include "ui/keyboard/content/keyboard_content_util.h"
 
 namespace chromeos {
@@ -66,39 +64,6 @@ bool Contain(const InputMethodDescriptors& descriptors,
 std::string ImeIdFromEngineId(const std::string& id) {
   return extension_ime_util::GetInputMethodIDByEngineID(id);
 }
-
-class TestImeController : ash::mojom::ImeController {
- public:
-  TestImeController() : binding_(this) {}
-  ~TestImeController() override = default;
-
-  // Returns a mojo interface pointer bound to this object.
-  ash::mojom::ImeControllerPtr CreateInterfacePtr() {
-    ash::mojom::ImeControllerPtr ptr;
-    binding_.Bind(mojo::MakeRequest(&ptr));
-    return ptr;
-  }
-
-  // ash::mojom::ImeController:
-  void SetClient(ash::mojom::ImeControllerClientPtr client) override {}
-  void RefreshIme(const std::string& current_ime_id,
-                  std::vector<ash::mojom::ImeInfoPtr> available_imes,
-                  std::vector<ash::mojom::ImeMenuItemPtr> menu_items) override {
-    current_ime_id_ = current_ime_id;
-    available_imes_ = std::move(available_imes);
-  }
-  void SetImesManagedByPolicy(bool managed) override {}
-  void ShowImeMenuOnShelf(bool show) override {}
-  void SetCapsLockState(bool enabled) override {}
-
-  std::string current_ime_id_;
-  std::vector<ash::mojom::ImeInfoPtr> available_imes_;
-
- private:
-  mojo::Binding<ash::mojom::ImeController> binding_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestImeController);
-};
 
 class TestObserver : public InputMethodManager::Observer,
                      public ui::ime::InputMethodMenuManager::Observer {
@@ -164,9 +129,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
   ~InputMethodManagerImplTest() override {}
 
   void SetUp() override {
-    profile_manager_.reset(new TestingProfileManager(GetBrowserProcess()));
-    ASSERT_TRUE(profile_manager_->SetUp());
-
     ui::InitializeInputMethodForTesting();
 
     delegate_ = new FakeInputMethodDelegate();
@@ -198,8 +160,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     candidate_window_controller_ = NULL;
     keyboard_ = NULL;
     manager_.reset();
-
-    profile_manager_.reset();
   }
 
  protected:
@@ -379,11 +339,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     ime_list_.push_back(ext2);
   }
 
-  TestingBrowserProcess* GetBrowserProcess() {
-    return TestingBrowserProcess::GetGlobal();
-  }
-
-  std::unique_ptr<TestingProfileManager> profile_manager_;
   std::unique_ptr<InputMethodManagerImpl> manager_;
   FakeInputMethodDelegate* delegate_;
   MockCandidateWindowController* candidate_window_controller_;
@@ -1460,7 +1415,7 @@ TEST_F(InputMethodManagerImplTest, SetLoginDefaultWithAllowedKeyboardLayouts) {
 // Verifies that the combination of InputMethodManagerImpl and
 // ImeControllerClient sends the correct data to ash.
 TEST_F(InputMethodManagerImplTest, IntegrationWithAsh) {
-  TestImeController ime_controller;  // Mojo interface to ash.
+  ash::TestImeController ime_controller;  // Mojo interface to ash.
   ImeControllerClient ime_controller_client(manager_.get());
   ime_controller_client.InitForTesting(ime_controller.CreateInterfacePtr());
 

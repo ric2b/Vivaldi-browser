@@ -45,6 +45,8 @@ ChromeLayoutProvider::CreateLayoutProvider() {
 
 gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
   switch (metric) {
+    case ChromeInsetsMetric::INSETS_OMNIBOX:
+      return gfx::Insets(3);
     case ChromeInsetsMetric::INSETS_TOAST:
       return gfx::Insets(0, 8);
     default:
@@ -56,8 +58,12 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
   switch (metric) {
     case DISTANCE_BUTTON_MINIMUM_WIDTH:
       return 48;
+    case DISTANCE_CONTENT_LIST_VERTICAL_SINGLE:
+      return 4;
+    case DISTANCE_CONTENT_LIST_VERTICAL_MULTI:
+      return 8;
     case DISTANCE_CONTROL_LIST_VERTICAL:
-      return GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
+      return GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
     case DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL:
       return 8;
     case DISTANCE_RELATED_CONTROL_VERTICAL_SMALL:
@@ -76,6 +82,8 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_TOAST_LABEL_VERTICAL:
       return 12;
+    case DISTANCE_MODAL_DIALOG_WIDTH_CONTAINING_MULTILINE_TEXT:
+      return 400;
     default:
       return views::LayoutProvider::GetDistanceMetric(metric);
   }

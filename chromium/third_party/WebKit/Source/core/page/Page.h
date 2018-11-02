@@ -32,6 +32,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/page/Page.h"
 #include "core/page/PageAnimator.h"
+#include "core/page/PageLifecycleState.h"
 #include "core/page/PageVisibilityNotifier.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "core/page/PageVisibilityState.h"
@@ -66,12 +67,12 @@ class PageScaleConstraintsSet;
 class PluginData;
 class PluginsChangedObserver;
 class PointerLockController;
-class ScopedPageSuspender;
+class ScopedPagePauser;
 class ScrollingCoordinator;
+class ScrollbarTheme;
 class SmoothScrollSequencer;
 class Settings;
 class ConsoleMessageStorage;
-class SpellCheckerClient;
 class TopDocumentRootScrollerController;
 class ValidationMessageClient;
 class VisualViewport;
@@ -103,7 +104,6 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
     Member<ChromeClient> chrome_client;
     ContextMenuClient* context_menu_client;
     EditorClient* editor_client;
-    SpellCheckerClient* spell_checker_client;
   };
 
   static Page* Create(PageClients& page_clients) {
@@ -145,9 +145,14 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   static void ResetPluginData();
 
   EditorClient& GetEditorClient() const { return *editor_client_; }
-  SpellCheckerClient& GetSpellCheckerClient() const {
-    return *spell_checker_client_;
+
+  // This flag controls whether spell check for this page is manually
+  // turned on/off. The default setting is kAutomatic.
+  enum class SpellCheckStatus { kAutomatic, kForcedOn, kForcedOff };
+  void SetSpellCheckStatus(SpellCheckStatus status) {
+    spell_check_status_ = status;
   }
+  SpellCheckStatus GetSpellCheckStatus() { return spell_check_status_; }
 
   void SetMainFrame(Frame*);
   Frame* MainFrame() const { return main_frame_; }
@@ -261,9 +266,12 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   static void AllVisitedStateChanged(bool invalidate_visited_link_hashes);
   static void VisitedStateChanged(LinkHash visited_hash);
 
-  void SetVisibilityState(PageVisibilityState, bool);
-  PageVisibilityState VisibilityState() const;
+  void SetVisibilityState(mojom::PageVisibilityState, bool);
+  mojom::PageVisibilityState VisibilityState() const;
   bool IsPageVisible() const;
+
+  void SetLifecycleState(PageLifecycleState);
+  PageLifecycleState LifecycleState() const;
 
   bool IsCursorVisible() const;
   void SetIsCursorVisible(bool is_visible) { is_cursor_visible_ = is_visible; }
@@ -293,7 +301,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   void AcceptLanguagesChanged();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void LayerTreeViewInitialized(WebLayerTreeView&, LocalFrameView*);
   void WillCloseLayerTreeView(WebLayerTreeView&, LocalFrameView*);
@@ -302,8 +310,10 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   void RegisterPluginsChangedObserver(PluginsChangedObserver*);
 
+  ScrollbarTheme& GetScrollbarTheme() const;
+
  private:
-  friend class ScopedPageSuspender;
+  friend class ScopedPagePauser;
 
   explicit Page(PageClients&);
 
@@ -312,7 +322,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // SettingsDelegate overrides.
   void SettingsChanged(SettingsDelegate::ChangeType) override;
 
-  // ScopedPageSuspender helpers.
+  // ScopedPagePauser helpers.
   void SetPaused(bool);
 
   // Notify |plugins_changed_observers_| that plugins have changed.
@@ -354,7 +364,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   Member<PluginData> plugin_data_;
 
   EditorClient* const editor_client_;
-  SpellCheckerClient* const spell_checker_client_;
+  SpellCheckStatus spell_check_status_ = SpellCheckStatus::kAutomatic;
   Member<ValidationMessageClient> validation_message_client_;
 
   UseCounter use_counter_;
@@ -375,7 +385,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   float device_scale_factor_;
 
-  PageVisibilityState visibility_state_;
+  mojom::PageVisibilityState visibility_state_;
+
+  PageLifecycleState page_lifecycle_state_;
 
   bool is_cursor_visible_;
 

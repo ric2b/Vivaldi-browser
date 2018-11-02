@@ -229,7 +229,7 @@ void BackendIO::ReadyForSparseIO(EntryImpl* entry) {
   entry_ = entry;
 }
 
-BackendIO::~BackendIO() {}
+BackendIO::~BackendIO() = default;
 
 bool BackendIO::ReturnsEntry() {
   return operation_ == OP_OPEN || operation_ == OP_CREATE ||
@@ -364,8 +364,7 @@ InFlightBackendIO::InFlightBackendIO(
       ptr_factory_(this) {
 }
 
-InFlightBackendIO::~InFlightBackendIO() {
-}
+InFlightBackendIO::~InFlightBackendIO() = default;
 
 void InFlightBackendIO::Init(const net::CompletionCallback& callback) {
   scoped_refptr<BackendIO> operation(new BackendIO(this, backend_, callback));
@@ -550,9 +549,8 @@ void InFlightBackendIO::OnOperationComplete(BackgroundIO* operation,
     op->callback().Run(op->result());
 }
 
-void InFlightBackendIO::PostOperation(
-    const tracked_objects::Location& from_here,
-    BackendIO* operation) {
+void InFlightBackendIO::PostOperation(const base::Location& from_here,
+                                      BackendIO* operation) {
   background_thread_->PostTask(
       from_here, base::Bind(&BackendIO::ExecuteOperation, operation));
   OnOperationPosted(operation);

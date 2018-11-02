@@ -80,7 +80,7 @@ BluetoothSocketWin::CreateBluetoothSocket(
     scoped_refptr<device::BluetoothSocketThread> socket_thread) {
   DCHECK(ui_task_runner->RunsTasksInCurrentSequence());
 
-  return make_scoped_refptr(
+  return base::WrapRefCounted(
       new BluetoothSocketWin(ui_task_runner, socket_thread));
 }
 
@@ -181,7 +181,7 @@ void BluetoothSocketWin::DoConnect(
     const base::Closure& success_callback,
     const ErrorCompletionCallback& error_callback) {
   DCHECK(socket_thread()->task_runner()->RunsTasksInCurrentSequence());
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   if (tcp_socket()) {
     error_callback.Run(kSocketAlreadyConnected);

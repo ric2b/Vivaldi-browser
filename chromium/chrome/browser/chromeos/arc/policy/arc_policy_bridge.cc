@@ -4,15 +4,14 @@
 
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
 
-#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,17 +23,18 @@
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/pref_names.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "components/arc/arc_prefs.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_json/safe_json_parser.h"
+#include "content/public/common/service_manager_connection.h"
 #include "crypto/sha2.h"
+#include "services/data_decoder/public/cpp/safe_json_parser.h"
 
 namespace arc {
 
@@ -54,7 +54,7 @@ void MapBoolToBool(const std::string& arc_policy_name,
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
   if (!policy_value)
     return;
-  if (!policy_value->IsType(base::Value::Type::BOOLEAN)) {
+  if (!policy_value->is_bool()) {
     NOTREACHED() << "Policy " << policy_name << " is not a boolean.";
     return;
   }
@@ -74,7 +74,7 @@ void MapIntToBool(const std::string& arc_policy_name,
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
   if (!policy_value)
     return;
-  if (!policy_value->IsType(base::Value::Type::INTEGER)) {
+  if (!policy_value->is_int()) {
     NOTREACHED() << "Policy " << policy_name << " is not an integer.";
     return;
   }
@@ -145,7 +145,7 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
   }
 
   std::unique_ptr<base::ListValue> ca_certs(
-      base::MakeUnique<base::ListValue>());
+      std::make_unique<base::ListValue>());
   for (const auto& entry : certificates) {
     const base::DictionaryValue* certificate = nullptr;
     if (!entry.GetAsDictionary(&certificate)) {
@@ -245,11 +245,11 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map) {
 }
 
 void OnReportComplianceParseFailure(
-    const ArcPolicyBridge::ReportComplianceCallback& callback,
+    base::OnceCallback<void(const std::string&)> callback,
     const std::string& error) {
   // TODO(poromov@): Report to histogram.
   DLOG(ERROR) << "Can't parse policy compliance report";
-  callback.Run(kPolicyCompliantJson);
+  std::move(callback).Run(kPolicyCompliantJson);
 }
 
 void UpdateFirstComplianceSinceSignInTiming(
@@ -315,77 +315,64 @@ ArcPolicyBridge* ArcPolicyBridge::GetForBrowserContext(
 
 ArcPolicyBridge::ArcPolicyBridge(content::BrowserContext* context,
                                  ArcBridgeService* bridge_service)
-    : context_(context),
-      arc_bridge_service_(bridge_service),
-      binding_(this),
-      weak_ptr_factory_(this) {
-  VLOG(2) << "ArcPolicyBridge::ArcPolicyBridge";
-  arc_bridge_service_->policy()->AddObserver(this);
-}
+    : ArcPolicyBridge(context, bridge_service, nullptr /* policy_service */) {}
 
 ArcPolicyBridge::ArcPolicyBridge(content::BrowserContext* context,
                                  ArcBridgeService* bridge_service,
                                  policy::PolicyService* policy_service)
     : context_(context),
       arc_bridge_service_(bridge_service),
-      binding_(this),
       policy_service_(policy_service),
       weak_ptr_factory_(this) {
-  VLOG(2) << "ArcPolicyBridge::ArcPolicyBridge(bridge_service, policy_service)";
+  VLOG(2) << "ArcPolicyBridge::ArcPolicyBridge";
+  arc_bridge_service_->policy()->SetHost(this);
   arc_bridge_service_->policy()->AddObserver(this);
 }
 
 ArcPolicyBridge::~ArcPolicyBridge() {
   VLOG(2) << "ArcPolicyBridge::~ArcPolicyBridge";
   arc_bridge_service_->policy()->RemoveObserver(this);
-}
-
-// static
-void ArcPolicyBridge::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(prefs::kArcPolicyComplianceReported, false);
+  arc_bridge_service_->policy()->SetHost(nullptr);
 }
 
 void ArcPolicyBridge::OverrideIsManagedForTesting(bool is_managed) {
   is_managed_ = is_managed;
 }
 
-void ArcPolicyBridge::OnInstanceReady() {
-  VLOG(1) << "ArcPolicyBridge::OnPolicyInstanceReady";
+void ArcPolicyBridge::OnConnectionReady() {
+  VLOG(1) << "ArcPolicyBridge::OnConnectionReady";
   if (policy_service_ == nullptr) {
     InitializePolicyService();
   }
   policy_service_->AddObserver(policy::POLICY_DOMAIN_CHROME, this);
   initial_policies_hash_ = GetPoliciesHash(GetCurrentJSONPolicies());
-
-  mojom::PolicyInstance* const policy_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->policy(), Init);
-  DCHECK(policy_instance);
-  mojom::PolicyHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  policy_instance->Init(std::move(host_proxy));
 }
 
-void ArcPolicyBridge::OnInstanceClosed() {
-  VLOG(1) << "ArcPolicyBridge::OnPolicyInstanceClosed";
+void ArcPolicyBridge::OnConnectionClosed() {
+  VLOG(1) << "ArcPolicyBridge::OnConnectionClosed";
   policy_service_->RemoveObserver(policy::POLICY_DOMAIN_CHROME, this);
   policy_service_ = nullptr;
   initial_policies_hash_.clear();
 }
 
-void ArcPolicyBridge::GetPolicies(const GetPoliciesCallback& callback) {
+void ArcPolicyBridge::GetPolicies(GetPoliciesCallback callback) {
   VLOG(1) << "ArcPolicyBridge::GetPolicies";
-  callback.Run(GetCurrentJSONPolicies());
+  std::move(callback).Run(GetCurrentJSONPolicies());
 }
 
-void ArcPolicyBridge::ReportCompliance(
-    const std::string& request,
-    const ReportComplianceCallback& callback) {
+void ArcPolicyBridge::ReportCompliance(const std::string& request,
+                                       ReportComplianceCallback callback) {
   VLOG(1) << "ArcPolicyBridge::ReportCompliance";
-  safe_json::SafeJsonParser::Parse(
-      request, base::Bind(&ArcPolicyBridge::OnReportComplianceParseSuccess,
-                          weak_ptr_factory_.GetWeakPtr(), callback),
-      base::Bind(&OnReportComplianceParseFailure, callback));
+  // TODO(crbug.com/730593): Remove AdaptCallbackForRepeating() by updating
+  // the callee interface.
+  auto repeating_callback =
+      base::AdaptCallbackForRepeating(std::move(callback));
+  data_decoder::SafeJsonParser::Parse(
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      request,
+      base::Bind(&ArcPolicyBridge::OnReportComplianceParseSuccess,
+                 weak_ptr_factory_.GetWeakPtr(), repeating_callback),
+      base::Bind(&OnReportComplianceParseFailure, repeating_callback));
 }
 
 void ArcPolicyBridge::OnPolicyUpdated(const policy::PolicyNamespace& ns,
@@ -425,10 +412,10 @@ std::string ArcPolicyBridge::GetCurrentJSONPolicies() const {
 }
 
 void ArcPolicyBridge::OnReportComplianceParseSuccess(
-    const ArcPolicyBridge::ReportComplianceCallback& callback,
+    base::OnceCallback<void(const std::string&)> callback,
     std::unique_ptr<base::Value> parsed_json) {
   // Always returns "compliant".
-  callback.Run(kPolicyCompliantJson);
+  std::move(callback).Run(kPolicyCompliantJson);
   Profile::FromBrowserContext(context_)->GetPrefs()->SetBoolean(
       prefs::kArcPolicyComplianceReported, true);
 

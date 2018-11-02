@@ -21,13 +21,8 @@ BarcodeDetector* BarcodeDetector::Create(ExecutionContext* context) {
 
 BarcodeDetector::BarcodeDetector(ExecutionContext* context) : ShapeDetector() {
   auto request = mojo::MakeRequest(&barcode_service_);
-  if (context->IsDocument()) {
-    LocalFrame* frame = ToDocument(context)->GetFrame();
-    if (frame)
-      frame->GetInterfaceProvider().GetInterface(std::move(request));
-  } else {
-    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
-    thread->GetInterfaceProvider().GetInterface(std::move(request));
+  if (auto* interface_provider = context->GetInterfaceProvider()) {
+    interface_provider->GetInterface(std::move(request));
   }
 
   barcode_service_.set_connection_error_handler(ConvertToBaseCallback(
@@ -87,7 +82,7 @@ void BarcodeDetector::OnBarcodeServiceConnectionError() {
   barcode_service_.reset();
 }
 
-DEFINE_TRACE(BarcodeDetector) {
+void BarcodeDetector::Trace(blink::Visitor* visitor) {
   ShapeDetector::Trace(visitor);
   visitor->Trace(barcode_service_requests_);
 }

@@ -19,8 +19,8 @@ typedef void (*CallbackFunc)();
 template <size_t alignment>
 class AlignedData {
  public:
-  AlignedData() {}
-  ~AlignedData() {}
+  AlignedData() = default;
+  ~AlignedData() = default;
   alignas(alignment) char data_[alignment];
 };
 
@@ -71,7 +71,7 @@ struct CallbackTrait : public DefaultSingletonTraits<Type> {
 
 class CallbackSingleton {
  public:
-  CallbackSingleton() : callback_(NULL) { }
+  CallbackSingleton() : callback_(nullptr) {}
   CallbackFunc callback_;
 };
 
@@ -123,8 +123,8 @@ struct CallbackSingletonWithStaticTrait::Trait
 template <class Type>
 class AlignedTestSingleton {
  public:
-  AlignedTestSingleton() {}
-  ~AlignedTestSingleton() {}
+  AlignedTestSingleton() = default;
+  ~AlignedTestSingleton() = default;
   static AlignedTestSingleton* GetInstance() {
     return Singleton<AlignedTestSingleton,
                      StaticMemorySingletonTraits<AlignedTestSingleton>>::get();
@@ -162,7 +162,7 @@ CallbackFunc* GetStaticSingleton() {
 
 class SingletonTest : public testing::Test {
  public:
-  SingletonTest() {}
+  SingletonTest() = default;
 
   void SetUp() override {
     non_leak_called_ = false;
@@ -249,7 +249,7 @@ TEST_F(SingletonTest, Basic) {
   DeleteLeakySingleton();
 
   // The static singleton can't be acquired post-atexit.
-  EXPECT_EQ(NULL, GetStaticSingleton());
+  EXPECT_EQ(nullptr, GetStaticSingleton());
 
   {
     ShadowingAtExitManager sem;

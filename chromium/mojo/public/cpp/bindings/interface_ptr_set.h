@@ -49,6 +49,15 @@ class PtrSet {
     ptrs_.clear();
   }
 
+  bool empty() const { return ptrs_.empty(); }
+
+  void FlushForTesting() {
+    for (const auto& it : ptrs_) {
+      if (it)
+        it->FlushForTesting();
+    }
+  }
+
  private:
   class Element {
    public:
@@ -72,6 +81,8 @@ class PtrSet {
     base::WeakPtr<Element> GetWeakPtr() {
       return weak_ptr_factory_.GetWeakPtr();
     }
+
+    void FlushForTesting() { ptr_.FlushForTesting(); }
 
    private:
     static void DeleteElement(Element* element) { delete element; }

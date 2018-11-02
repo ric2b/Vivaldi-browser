@@ -13,11 +13,13 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "cc/test/test_context_support.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace skia_bindings {
@@ -42,19 +44,23 @@ class TestContextProvider : public viz::ContextProvider {
   static scoped_refptr<TestContextProvider> Create(
       std::unique_ptr<TestWebGraphicsContext3D> context,
       std::unique_ptr<TestContextSupport> support);
+  static scoped_refptr<TestContextProvider> CreateWorker(
+      std::unique_ptr<TestWebGraphicsContext3D> context,
+      std::unique_ptr<TestContextSupport> support);
   static scoped_refptr<TestContextProvider> Create(
       std::unique_ptr<TestGLES2Interface> gl);
 
-  bool BindToCurrentThread() override;
-  void DetachFromThread() override;
-  gpu::Capabilities ContextCapabilities() override;
+  gpu::ContextResult BindToCurrentThread() override;
+  const gpu::Capabilities& ContextCapabilities() const override;
+  const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
   viz::ContextCacheController* CacheController() override;
   void InvalidateGrContext(uint32_t state) override;
   base::Lock* GetLock() override;
-  void SetLostContextCallback(const LostContextCallback& cb) override;
+  void AddObserver(viz::ContextLostObserver* obs) override;
+  void RemoveObserver(viz::ContextLostObserver* obs) override;
 
   TestWebGraphicsContext3D* TestContext3d();
 
@@ -64,31 +70,45 @@ class TestContextProvider : public viz::ContextProvider {
   // InitializeOnCurrentThread on the context returned from this method.
   TestWebGraphicsContext3D* UnboundTestContext3d();
 
+  TestGLES2Interface* TestContextGL() { return context_gl_.get(); }
   TestContextSupport* support() { return support_.get(); }
 
  protected:
   explicit TestContextProvider(
       std::unique_ptr<TestContextSupport> support,
       std::unique_ptr<TestGLES2Interface> gl,
-      std::unique_ptr<TestWebGraphicsContext3D> context);
+      std::unique_ptr<TestWebGraphicsContext3D> context,
+      bool support_locking);
   ~TestContextProvider() override;
 
  private:
   void OnLostContext();
+  void CheckValidThreadOrLockAcquired() const {
+#if DCHECK_IS_ON()
+    if (support_locking_) {
+      context_lock_.AssertAcquired();
+    } else {
+      DCHECK(context_thread_checker_.CalledOnValidThread());
+    }
+#endif
+  }
 
   std::unique_ptr<TestContextSupport> support_;
   std::unique_ptr<TestWebGraphicsContext3D> context3d_;
   std::unique_ptr<TestGLES2Interface> context_gl_;
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
   std::unique_ptr<viz::ContextCacheController> cache_controller_;
+  const bool support_locking_ ALLOW_UNUSED_TYPE;
   bool bound_ = false;
+
+  gpu::GpuFeatureInfo gpu_feature_info_;
 
   base::ThreadChecker main_thread_checker_;
   base::ThreadChecker context_thread_checker_;
 
   base::Lock context_lock_;
 
-  LostContextCallback lost_context_callback_;
+  base::ObserverList<viz::ContextLostObserver> observers_;
 
   base::WeakPtrFactory<TestContextProvider> weak_ptr_factory_;
 
@@ -98,4 +118,3 @@ class TestContextProvider : public viz::ContextProvider {
 }  // namespace cc
 
 #endif  // CC_TEST_TEST_CONTEXT_PROVIDER_H_
-

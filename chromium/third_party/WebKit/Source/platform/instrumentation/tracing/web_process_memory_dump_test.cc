@@ -11,9 +11,15 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
+
+using testing::Contains;
+using testing::Eq;
+using testing::ByRef;
+using base::trace_event::MemoryAllocatorDump;
 
 // Tests that the Chromium<>Blink plumbing that exposes the MemoryInfra classes
 // behaves correctly, performs the right transfers of memory ownerships and
@@ -46,23 +52,17 @@ TEST(WebProcessMemoryDumpTest, IntegrationTest) {
   wmad->AddScalar("attr_name", "bytes", 42);
   ASSERT_EQ(1u, wpmd2->process_memory_dump()->allocator_dumps().size());
   auto mad = wpmd2->process_memory_dump()->GetAllocatorDump("2/new");
-  ASSERT_NE(static_cast<base::trace_event::MemoryAllocatorDump*>(nullptr), mad);
+  ASSERT_NE(static_cast<MemoryAllocatorDump*>(nullptr), mad);
   ASSERT_EQ(wmad, wpmd2->GetMemoryAllocatorDump("2/new"));
 
   // Check that the attributes are propagated correctly.
-  auto raw_attrs = mad->attributes_for_testing()->ToBaseValue();
-  base::DictionaryValue* attrs = nullptr;
-  ASSERT_TRUE(raw_attrs->GetAsDictionary(&attrs));
-  base::DictionaryValue* attr = nullptr;
-  ASSERT_TRUE(attrs->GetDictionary("attr_name", &attr));
-  std::string attr_value;
-  ASSERT_TRUE(attr->GetString("type", &attr_value));
-  ASSERT_EQ(base::trace_event::MemoryAllocatorDump::kTypeScalar, attr_value);
-  ASSERT_TRUE(attr->GetString("units", &attr_value));
-  ASSERT_EQ("bytes", attr_value);
+  MemoryAllocatorDump::Entry expected("attr_name", "bytes", 42);
+  ASSERT_THAT(mad->entries(), Contains(Eq(ByRef(expected))));
 
-  // Check that AsValueInto() doesn't cause a crash.
-  wpmd2->process_memory_dump()->AsValueInto(traced_value.get());
+  // Check that calling serialization routines doesn't cause a crash.
+  wpmd2->process_memory_dump()->SerializeAllocatorDumpsInto(traced_value.get());
+  wpmd2->process_memory_dump()->SerializeHeapProfilerDumpsInto(
+      traced_value.get());
 
   // Free the |wpmd2| to check that the memory ownership of the two MAD(s)
   // has been transferred to |wpmd1|.
@@ -82,9 +82,11 @@ TEST(WebProcessMemoryDumpTest, IntegrationTest) {
   ASSERT_NE(null_wmad, wpmd1->GetMemoryAllocatorDump("2/1"));
   ASSERT_NE(null_wmad, wpmd1->GetMemoryAllocatorDump("2/2"));
 
-  // Check that AsValueInto() doesn't cause a crash.
+  // Check that calling serialization routines doesn't cause a crash.
   traced_value.reset(new base::trace_event::TracedValue);
-  wpmd1->process_memory_dump()->AsValueInto(traced_value.get());
+  wpmd1->process_memory_dump()->SerializeAllocatorDumpsInto(traced_value.get());
+  wpmd1->process_memory_dump()->SerializeHeapProfilerDumpsInto(
+      traced_value.get());
 
   // Check that clear() actually works.
   wpmd1->Clear();
@@ -92,9 +94,11 @@ TEST(WebProcessMemoryDumpTest, IntegrationTest) {
   ASSERT_EQ(nullptr, wpmd1->process_memory_dump()->GetAllocatorDump("1/1"));
   ASSERT_EQ(nullptr, wpmd1->process_memory_dump()->GetAllocatorDump("2/1"));
 
-  // Check that AsValueInto() doesn't cause a crash.
+  // Check that calling serialization routines doesn't cause a crash.
   traced_value.reset(new base::trace_event::TracedValue);
-  wpmd1->process_memory_dump()->AsValueInto(traced_value.get());
+  wpmd1->process_memory_dump()->SerializeAllocatorDumpsInto(traced_value.get());
+  wpmd1->process_memory_dump()->SerializeHeapProfilerDumpsInto(
+      traced_value.get());
 
   // Check if a WebMemoryAllocatorDump created with guid, has correct guid.
   blink::WebMemoryAllocatorDumpGuid guid =
@@ -107,7 +111,7 @@ TEST(WebProcessMemoryDumpTest, IntegrationTest) {
   auto wmad4 = wpmd1->CreateMemoryAllocatorDump("1/4");
   wpmd1->AddOwnershipEdge(wmad4->Guid(), guid);
   auto allocator_dumps_edges =
-      wpmd1->process_memory_dump()->allocator_dumps_edges_for_testing();
+      wpmd1->process_memory_dump()->allocator_dumps_edges();
   ASSERT_EQ(1u, allocator_dumps_edges.size());
   auto it = allocator_dumps_edges.begin();
   ASSERT_NE(allocator_dumps_edges.end(), it);

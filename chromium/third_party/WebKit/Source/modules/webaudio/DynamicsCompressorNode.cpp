@@ -47,18 +47,18 @@ DynamicsCompressorHandler::DynamicsCompressorHandler(
     AudioParamHandler& attack,
     AudioParamHandler& release)
     : AudioHandler(kNodeTypeDynamicsCompressor, node, sample_rate),
-      threshold_(threshold),
-      knee_(knee),
-      ratio_(ratio),
+      threshold_(&threshold),
+      knee_(&knee),
+      ratio_(&ratio),
       reduction_(0),
-      attack_(attack),
-      release_(release) {
+      attack_(&attack),
+      release_(&release) {
   AddInput();
   AddOutput(defaultNumberOfOutputChannels);
   Initialize();
 }
 
-PassRefPtr<DynamicsCompressorHandler> DynamicsCompressorHandler::Create(
+scoped_refptr<DynamicsCompressorHandler> DynamicsCompressorHandler::Create(
     AudioNode& node,
     float sample_rate,
     AudioParamHandler& threshold,
@@ -66,8 +66,8 @@ PassRefPtr<DynamicsCompressorHandler> DynamicsCompressorHandler::Create(
     AudioParamHandler& ratio,
     AudioParamHandler& attack,
     AudioParamHandler& release) {
-  return AdoptRef(new DynamicsCompressorHandler(node, sample_rate, threshold,
-                                                knee, ratio, attack, release));
+  return base::AdoptRef(new DynamicsCompressorHandler(
+      node, sample_rate, threshold, knee, ratio, attack, release));
 }
 
 DynamicsCompressorHandler::~DynamicsCompressorHandler() {
@@ -139,7 +139,7 @@ void DynamicsCompressorHandler::SetChannelCount(
     unsigned long channel_count,
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   // A DynamicsCompressorNode only supports 1 or 2 channels
   if (channel_count > 0 && channel_count <= 2) {
@@ -161,7 +161,7 @@ void DynamicsCompressorHandler::SetChannelCountMode(
     const String& mode,
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-  BaseAudioContext::AutoLocker locker(Context());
+  BaseAudioContext::GraphAutoLocker locker(Context());
 
   ChannelCountMode old_mode = InternalChannelCountMode();
 
@@ -190,26 +190,31 @@ DynamicsCompressorNode::DynamicsCompressorNode(BaseAudioContext& context)
     : AudioNode(context),
       threshold_(AudioParam::Create(context,
                                     kParamTypeDynamicsCompressorThreshold,
+                                    "DynamicsCompressor.threshold",
                                     -24,
                                     -100,
                                     0)),
       knee_(AudioParam::Create(context,
                                kParamTypeDynamicsCompressorKnee,
+                               "DynamicsCompressor.knee",
                                30,
                                0,
                                40)),
       ratio_(AudioParam::Create(context,
                                 kParamTypeDynamicsCompressorRatio,
+                                "DynamicsCompressor.ratio",
                                 12,
                                 1,
                                 20)),
       attack_(AudioParam::Create(context,
                                  kParamTypeDynamicsCompressorAttack,
+                                 "DynamicsCompressor.attack",
                                  0.003,
                                  0,
                                  1)),
       release_(AudioParam::Create(context,
                                   kParamTypeDynamicsCompressorRelease,
+                                  "DynamicsCompressor.release",
                                   0.250,
                                   0,
                                   1)) {
@@ -251,7 +256,7 @@ DynamicsCompressorNode* DynamicsCompressorNode::Create(
   return node;
 }
 
-DEFINE_TRACE(DynamicsCompressorNode) {
+void DynamicsCompressorNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(threshold_);
   visitor->Trace(knee_);
   visitor->Trace(ratio_);

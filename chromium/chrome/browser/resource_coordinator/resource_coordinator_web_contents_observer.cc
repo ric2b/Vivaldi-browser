@@ -10,97 +10,46 @@
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/resource_coordinator/tab_manager_grc_tab_signal_observer.h"
-#include "components/ukm/ukm_interface.h"
+#include "chrome/browser/resource_coordinator/page_signal_receiver.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
-#include "services/metrics/public/cpp/ukm_recorder.h"
-#include "services/metrics/public/interfaces/ukm_interface.mojom.h"
+#include "services/resource_coordinator/public/cpp/page_resource_coordinator.h"
+#include "services/resource_coordinator/public/cpp/process_resource_coordinator.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 #include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
-#include "services/resource_coordinator/public/interfaces/service_callbacks.mojom.h"
 #include "services/resource_coordinator/public/interfaces/service_constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ResourceCoordinatorWebContentsObserver);
 
-bool ResourceCoordinatorWebContentsObserver::ukm_recorder_initialized = false;
-
 ResourceCoordinatorWebContentsObserver::ResourceCoordinatorWebContentsObserver(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents) {
-  service_manager::Connector* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
+  service_manager::Connector* connector = nullptr;
+  // |ServiceManagerConnection| is null in test.
+  if (content::ServiceManagerConnection::GetForProcess()) {
+    connector =
+        content::ServiceManagerConnection::GetForProcess()->GetConnector();
+  }
 
-  tab_resource_coordinator_ =
-      base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-          connector, resource_coordinator::CoordinationUnitType::kWebContents);
+  page_resource_coordinator_ =
+      base::MakeUnique<resource_coordinator::PageResourceCoordinator>(
+          connector);
 
   // Make sure to set the visibility property when we create
-  // |tab_resource_coordinator_|.
-  tab_resource_coordinator_->SetProperty(
-      resource_coordinator::mojom::PropertyType::kVisible,
-      web_contents->IsVisible());
+  // |page_resource_coordinator_|.
+  page_resource_coordinator_->SetVisibility(web_contents->IsVisible());
 
-  connector->BindInterface(resource_coordinator::mojom::kServiceName,
-                           mojo::MakeRequest(&service_callbacks_));
-
-  if (base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
-    EnsureUkmRecorderInterface();
-  }
-
-#if !defined(OS_ANDROID)
-  if (auto* grc_tab_signal_observer = resource_coordinator::TabManager::
-          GRCTabSignalObserver::GetInstance()) {
+  if (auto* page_signal_receiver =
+          resource_coordinator::PageSignalReceiver::GetInstance()) {
     // Gets CoordinationUnitID for this WebContents and adds it to
-    // GRCTabSignalObserver.
-    grc_tab_signal_observer->AssociateCoordinationUnitIDWithWebContents(
-        tab_resource_coordinator_->id(), web_contents);
+    // PageSignalReceiver.
+    page_signal_receiver->AssociateCoordinationUnitIDWithWebContents(
+        page_resource_coordinator_->id(), web_contents);
   }
-#endif
-}
-
-// TODO(matthalp) integrate into ResourceCoordinatorService once the UKM mojo
-// interface can be accessed directly within GRC. GRC cannot currently use
-// the UKM mojo inteface directly because of software layering issues
-// (i.e. the UKM mojo interface is only reachable from the content_browser
-// service which cannot be accesses by services in the services/ directory).
-// Instead the ResourceCoordinatorWebContentsObserver is used as it lives
-// within the content_browser service and can initialize the
-// UkmRecorderInterface and pass that interface into GRC through
-// resource_coordinator::mojom::ServiceCallbacks.
-void ResourceCoordinatorWebContentsObserver::EnsureUkmRecorderInterface() {
-  if (ukm_recorder_initialized) {
-    return;
-  }
-
-  service_manager::Connector* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
-  connector->BindInterface(resource_coordinator::mojom::kServiceName,
-                           mojo::MakeRequest(&service_callbacks_));
-
-  service_callbacks_->IsUkmRecorderInterfaceInitialized(base::Bind(
-      &ResourceCoordinatorWebContentsObserver::MaybeSetUkmRecorderInterface,
-      base::Unretained(this)));
-}
-
-void ResourceCoordinatorWebContentsObserver::MaybeSetUkmRecorderInterface(
-    bool ukm_recorder_already_initialized) {
-  if (ukm_recorder_already_initialized) {
-    return;
-  }
-
-  ukm::mojom::UkmRecorderInterfacePtr ukm_recorder_interface;
-  ukm::UkmInterface::Create(g_browser_process->ukm_recorder(),
-                            mojo::MakeRequest(&ukm_recorder_interface));
-
-  service_callbacks_->SetUkmRecorderInterface(
-      std::move(ukm_recorder_interface));
-  ukm_recorder_initialized = true;
 }
 
 ResourceCoordinatorWebContentsObserver::
@@ -114,25 +63,21 @@ bool ResourceCoordinatorWebContentsObserver::IsEnabled() {
 }
 
 void ResourceCoordinatorWebContentsObserver::WasShown() {
-  tab_resource_coordinator_->SetProperty(
-      resource_coordinator::mojom::PropertyType::kVisible, true);
+  page_resource_coordinator_->SetVisibility(true);
 }
 
 void ResourceCoordinatorWebContentsObserver::WasHidden() {
-  tab_resource_coordinator_->SetProperty(
-      resource_coordinator::mojom::PropertyType::kVisible, false);
+  page_resource_coordinator_->SetVisibility(false);
 }
 
 void ResourceCoordinatorWebContentsObserver::WebContentsDestroyed() {
-#if !defined(OS_ANDROID)
-  if (auto* grc_tab_signal_observer = resource_coordinator::TabManager::
-          GRCTabSignalObserver::GetInstance()) {
+  if (auto* page_signal_receiver =
+          resource_coordinator::PageSignalReceiver::GetInstance()) {
     // Gets CoordinationUnitID for this WebContents and removes it from
-    // GRCTabSignalObserver.
-    grc_tab_signal_observer->RemoveCoordinationUnitID(
-        tab_resource_coordinator_->id());
+    // PageSignalReceiver.
+    page_signal_receiver->RemoveCoordinationUnitID(
+        page_resource_coordinator_->id());
   }
-#endif
 }
 
 void ResourceCoordinatorWebContentsObserver::DidFinishNavigation(
@@ -142,34 +87,33 @@ void ResourceCoordinatorWebContentsObserver::DidFinishNavigation(
     return;
   }
 
-  if (navigation_handle->IsInMainFrame()) {
-    UpdateUkmRecorder(navigation_handle->GetNavigationId());
-    ResetFlag();
-    tab_resource_coordinator_->SendEvent(
-        resource_coordinator::mojom::Event::kNavigationCommitted);
-  }
-
   content::RenderFrameHost* render_frame_host =
       navigation_handle->GetRenderFrameHost();
 
+  // Make sure the hierarchical structure is constructured before sending signal
+  // to Resource Coordinator.
   auto* frame_resource_coordinator =
       render_frame_host->GetFrameResourceCoordinator();
-  tab_resource_coordinator_->AddChild(*frame_resource_coordinator);
+  page_resource_coordinator_->AddFrame(*frame_resource_coordinator);
 
   auto* process_resource_coordinator =
       render_frame_host->GetProcess()->GetProcessResourceCoordinator();
-  process_resource_coordinator->AddChild(*frame_resource_coordinator);
+  process_resource_coordinator->AddFrame(*frame_resource_coordinator);
+
+  if (navigation_handle->IsInMainFrame()) {
+    UpdateUkmRecorder(navigation_handle->GetNavigationId());
+    ResetFlag();
+    page_resource_coordinator_->OnMainFrameNavigationCommitted();
+  }
 }
 
 void ResourceCoordinatorWebContentsObserver::TitleWasSet(
-    content::NavigationEntry* entry,
-    bool explicit_set) {
+    content::NavigationEntry* entry) {
   if (!first_time_title_set_) {
     first_time_title_set_ = true;
     return;
   }
-  tab_resource_coordinator_->SendEvent(
-      resource_coordinator::mojom::Event::kTitleUpdated);
+  page_resource_coordinator_->OnTitleUpdated();
 }
 
 void ResourceCoordinatorWebContentsObserver::DidUpdateFaviconURL(
@@ -178,20 +122,14 @@ void ResourceCoordinatorWebContentsObserver::DidUpdateFaviconURL(
     first_time_favicon_set_ = true;
     return;
   }
-  tab_resource_coordinator_->SendEvent(
-      resource_coordinator::mojom::Event::kFaviconUpdated);
+  page_resource_coordinator_->OnFaviconUpdated();
 }
 
 void ResourceCoordinatorWebContentsObserver::UpdateUkmRecorder(
     int64_t navigation_id) {
-  if (!base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
-    return;
-  }
-
   ukm_source_id_ =
       ukm::ConvertToSourceId(navigation_id, ukm::SourceIdType::NAVIGATION_ID);
-  tab_resource_coordinator_->SetProperty(
-      resource_coordinator::mojom::PropertyType::kUKMSourceId, ukm_source_id_);
+  page_resource_coordinator_->SetUKMSourceId(ukm_source_id_);
 }
 
 void ResourceCoordinatorWebContentsObserver::ResetFlag() {

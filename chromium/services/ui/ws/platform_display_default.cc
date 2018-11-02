@@ -21,13 +21,12 @@
 
 #if defined(OS_WIN)
 #include "ui/platform_window/win/win_window.h"
-#elif defined(USE_X11) && !defined(OS_CHROMEOS)
+#elif defined(USE_X11)
 #include "ui/platform_window/x11/x11_window.h"
 #elif defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
 #elif defined(USE_OZONE)
 #include "ui/events/ozone/chromeos/cursor_controller.h"
-#include "ui/ozone/public/cursor_factory_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -73,11 +72,11 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
   DCHECK(!bounds.size().IsEmpty());
 
 #if defined(OS_WIN)
-  platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
-#elif defined(USE_X11) && !defined(OS_CHROMEOS)
-  platform_window_ = base::MakeUnique<ui::X11Window>(this, bounds);
+  platform_window_ = std::make_unique<ui::WinWindow>(this, bounds);
+#elif defined(USE_X11)
+  platform_window_ = std::make_unique<ui::X11Window>(this, bounds);
 #elif defined(OS_ANDROID)
-  platform_window_ = base::MakeUnique<ui::PlatformWindowAndroid>(this);
+  platform_window_ = std::make_unique<ui::PlatformWindowAndroid>(this);
   platform_window_->SetBounds(bounds);
 #elif defined(USE_OZONE)
   platform_window_ =
@@ -113,41 +112,7 @@ void PlatformDisplayDefault::SetCursor(const ui::CursorData& cursor_data) {
   if (!image_cursors_)
     return;
 
-  ui::CursorType cursor_type = cursor_data.cursor_type();
-
-#if defined(USE_OZONE)
-  if (cursor_type != ui::CursorType::kCustom) {
-    // |platform_window_| is destroyed after |image_cursors_|, so it is
-    // guaranteed to outlive |image_cursors_|.
-    image_cursors_->SetCursor(cursor_type, platform_window_.get());
-  } else {
-    ui::Cursor native_cursor(cursor_type);
-    // In Ozone builds, we have an interface available which turns bitmap data
-    // into platform cursors.
-    ui::CursorFactoryOzone* cursor_factory =
-        delegate_->GetOzonePlatform()->GetCursorFactoryOzone();
-    native_cursor.SetPlatformCursor(cursor_factory->CreateAnimatedCursor(
-        cursor_data.cursor_frames(), cursor_data.hotspot_in_pixels(),
-        cursor_data.frame_delay().InMilliseconds(),
-        cursor_data.scale_factor()));
-    platform_window_->SetCursor(native_cursor.platform());
-  }
-#else
-  // Outside of ozone builds, there isn't a single interface for creating
-  // PlatformCursors. The closest thing to one is in //content/ instead of
-  // //ui/ which means we can't use it from here. For now, just don't handle
-  // custom image cursors.
-  //
-  // TODO(erg): Once blink speaks directly to mus, make blink perform its own
-  // cursor management on its own mus windows so we can remove Webcursor from
-  // //content/ and do this in way that's safe cross-platform, instead of as an
-  // ozone-specific hack.
-  if (cursor_type == ui::CursorType::kCustom) {
-    NOTIMPLEMENTED() << "No custom cursor support on non-ozone yet.";
-    cursor_type = ui::CursorType::kPointer;
-  }
-  image_cursors_->SetCursor(cursor_type, platform_window_.get());
-#endif
+  image_cursors_->SetCursor(cursor_data, platform_window_.get());
 }
 
 void PlatformDisplayDefault::MoveCursorTo(
@@ -277,6 +242,9 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
 
+  if (!delegate_->IsHostingViz())
+    return;
+
   viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink;
   viz::mojom::DisplayPrivateAssociatedPtr display_private;
   viz::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client;
@@ -290,9 +258,9 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
       mojo::MakeRequest(&display_private));
 
   display_private->SetDisplayVisible(true);
-  frame_generator_ = base::MakeUnique<FrameGenerator>();
+  frame_generator_ = std::make_unique<FrameGenerator>();
   auto frame_sink_client_binding =
-      base::MakeUnique<CompositorFrameSinkClientBinding>(
+      std::make_unique<CompositorFrameSinkClientBinding>(
           frame_generator_.get(),
           std::move(compositor_frame_sink_client_request),
           std::move(compositor_frame_sink), std::move(display_private));

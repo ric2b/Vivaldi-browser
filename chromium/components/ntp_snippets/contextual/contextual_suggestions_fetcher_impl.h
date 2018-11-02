@@ -6,18 +6,18 @@
 #define COMPONENTS_NTP_SNIPPETS_CONTEXTUAL_CONTEXTUAL_SUGGESTIONS_FETCHER_IMPL_H_
 
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_info.h"
 #include "components/ntp_snippets/contextual/contextual_json_request.h"
+#include "components/ntp_snippets/contextual/contextual_suggestion.h"
 #include "components/ntp_snippets/contextual/contextual_suggestions_fetcher.h"
-#include "components/ntp_snippets/remote/remote_suggestion.h"
 #include "components/ntp_snippets/status.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -71,7 +71,7 @@ class ContextualSuggestionsFetcherImpl : public ContextualSuggestionsFetcher {
                      const std::string& error_details);
 
   bool JsonToSuggestions(const base::Value& parsed,
-                         RemoteSuggestion::PtrVector* suggestions);
+                         ContextualSuggestion::PtrVector* suggestions);
 
   // Authentication for signed-in users.
   SigninManagerBase* signin_manager_;
@@ -83,8 +83,8 @@ class ContextualSuggestionsFetcherImpl : public ContextualSuggestionsFetcher {
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
   // Stores requests that wait for an access token.
-  std::queue<std::pair<internal::ContextualJsonRequest::Builder,
-                       SuggestionsAvailableCallback>>
+  base::queue<std::pair<internal::ContextualJsonRequest::Builder,
+                        SuggestionsAvailableCallback>>
       pending_requests_;
 
   const ParseJSONCallback parse_json_callback_;

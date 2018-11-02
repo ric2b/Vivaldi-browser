@@ -8,8 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -44,7 +46,7 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
   void Wire(UberDispatcher* dispatcher) override;
   Response Disable() override;
 
-  void OnTraceDataCollected(const std::string& trace_fragment);
+  void OnTraceDataCollected(std::unique_ptr<std::string> trace_fragment);
   void OnTraceComplete();
   void OnTraceToStreamComplete(const std::string& stream_handle);
 
@@ -73,6 +75,7 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
     int open_braces = 0;
     bool in_string = false;
     bool slashed = false;
+    size_t offset = 0;
   };
 
   void OnRecordingEnabled(std::unique_ptr<StartCallback> callback);
@@ -91,7 +94,8 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
 
   void SetupTimer(double usage_reporting_interval);
   void StopTracing(
-      const scoped_refptr<TracingController::TraceDataSink>& trace_data_sink);
+      const scoped_refptr<TracingController::TraceDataEndpoint>& endpoint,
+      const std::string& agent_label);
   bool IsTracing() const;
   static bool IsStartupTracingActive();
   CONTENT_EXPORT static base::trace_event::TraceConfig

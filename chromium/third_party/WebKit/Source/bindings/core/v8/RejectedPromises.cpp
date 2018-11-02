@@ -222,9 +222,9 @@ void RejectedPromises::HandlerAdded(v8::PromiseRejectMessage data) {
           ->TimerTaskRunner()
           ->PostTask(BLINK_FROM_HERE,
                      WTF::Bind(&RejectedPromises::RevokeNow,
-                               RefPtr<RejectedPromises>(this),
+                               scoped_refptr<RejectedPromises>(this),
                                WTF::Passed(std::move(message))));
-      reported_as_errors_.erase(i);
+      reported_as_errors_.EraseAt(i);
       return;
     }
   }
@@ -232,7 +232,7 @@ void RejectedPromises::HandlerAdded(v8::PromiseRejectMessage data) {
 
 std::unique_ptr<RejectedPromises::MessageQueue>
 RejectedPromises::CreateMessageQueue() {
-  return WTF::MakeUnique<MessageQueue>();
+  return std::make_unique<MessageQueue>();
 }
 
 void RejectedPromises::Dispose() {
@@ -254,16 +254,17 @@ void RejectedPromises::ProcessQueue() {
       ->CurrentThread()
       ->Scheduler()
       ->TimerTaskRunner()
-      ->PostTask(BLINK_FROM_HERE, WTF::Bind(&RejectedPromises::ProcessQueueNow,
-                                            PassRefPtr<RejectedPromises>(this),
-                                            WTF::Passed(std::move(queue))));
+      ->PostTask(BLINK_FROM_HERE,
+                 WTF::Bind(&RejectedPromises::ProcessQueueNow,
+                           scoped_refptr<RejectedPromises>(this),
+                           WTF::Passed(std::move(queue))));
 }
 
 void RejectedPromises::ProcessQueueNow(std::unique_ptr<MessageQueue> queue) {
   // Remove collected handlers.
   for (size_t i = 0; i < reported_as_errors_.size();) {
     if (reported_as_errors_.at(i)->IsCollected())
-      reported_as_errors_.erase(i);
+      reported_as_errors_.EraseAt(i);
     else
       ++i;
   }
@@ -276,9 +277,10 @@ void RejectedPromises::ProcessQueueNow(std::unique_ptr<MessageQueue> queue) {
       message->Report();
       message->MakePromiseWeak();
       reported_as_errors_.push_back(std::move(message));
-      if (reported_as_errors_.size() > kMaxReportedHandlersPendingResolution)
-        reported_as_errors_.erase(0,
-                                  kMaxReportedHandlersPendingResolution / 10);
+      if (reported_as_errors_.size() > kMaxReportedHandlersPendingResolution) {
+        reported_as_errors_.EraseAt(0,
+                                    kMaxReportedHandlersPendingResolution / 10);
+      }
     }
   }
 }

@@ -5,7 +5,9 @@
 #ifndef SelectionAdjuster_h
 #define SelectionAdjuster_h
 
-#include "core/editing/VisibleSelection.h"
+#include "core/CoreExport.h"
+#include "core/editing/Forward.h"
+#include "core/editing/TextGranularity.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
@@ -17,6 +19,7 @@ class CORE_EXPORT SelectionAdjuster final {
   STATIC_ONLY(SelectionAdjuster);
 
  public:
+  // TODO(editing-dev): Move these functions to ShadowBoundaryAdjuster.
   static Position AdjustSelectionStartToAvoidCrossingShadowBoundaries(
       const EphemeralRange&);
   static Position AdjustSelectionEndToAvoidCrossingShadowBoundaries(
@@ -25,6 +28,20 @@ class CORE_EXPORT SelectionAdjuster final {
       const EphemeralRangeInFlatTree&);
   static PositionInFlatTree AdjustSelectionEndToAvoidCrossingShadowBoundaries(
       const EphemeralRangeInFlatTree&);
+  static SelectionInDOMTree AdjustSelectionRespectingGranularity(
+      const SelectionInDOMTree&,
+      TextGranularity);
+  static SelectionInFlatTree AdjustSelectionRespectingGranularity(
+      const SelectionInFlatTree&,
+      TextGranularity);
+  static SelectionInDOMTree AdjustSelectionToAvoidCrossingShadowBoundaries(
+      const SelectionInDOMTree&);
+  static SelectionInFlatTree AdjustSelectionToAvoidCrossingShadowBoundaries(
+      const SelectionInFlatTree&);
+  static SelectionInDOMTree AdjustSelectionToAvoidCrossingEditingBoundaries(
+      const SelectionInDOMTree&);
+  static SelectionInFlatTree AdjustSelectionToAvoidCrossingEditingBoundaries(
+      const SelectionInFlatTree&);
 };
 
 }  // namespace blink

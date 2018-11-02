@@ -30,7 +30,7 @@ std::unique_ptr<EventListener> EventListener::ForExtension(
     content::RenderProcessHost* process,
     std::unique_ptr<base::DictionaryValue> filter) {
   return base::WrapUnique(new EventListener(event_name, extension_id, GURL(),
-                                            process, false, kNonWorkerThreadId,
+                                            process, false, kMainThreadId,
                                             std::move(filter)));
 }
 
@@ -45,8 +45,8 @@ std::unique_ptr<EventListener> EventListener::ForURL(
   // for the same process. See crbug.com/536858 for details. // TODO(devlin): If
   // we dispatched events to processes more intelligently this could be avoided.
   return base::WrapUnique(new EventListener(
-      event_name, ExtensionId(), url::Origin(listener_url).GetURL(), process,
-      false, kNonWorkerThreadId, std::move(filter)));
+      event_name, ExtensionId(), url::Origin::Create(listener_url).GetURL(),
+      process, false, kMainThreadId, std::move(filter)));
 }
 
 std::unique_ptr<EventListener> EventListener::ForExtensionServiceWorker(
@@ -90,7 +90,11 @@ bool EventListener::IsLazy() const {
 }
 
 void EventListener::MakeLazy() {
-  DCHECK_EQ(worker_thread_id_, kNonWorkerThreadId);
+  // A lazy listener neither has a process attached to it nor it has a worker
+  // thread id (if the listener was for a service worker), so reset these values
+  // below to reflect that.
+  if (is_for_service_worker_)
+    worker_thread_id_ = kMainThreadId;
   process_ = nullptr;
 }
 
@@ -236,8 +240,23 @@ void EventListenerMap::LoadUnfilteredLazyListeners(
   }
 }
 
+void EventListenerMap::LoadUnfilteredWorkerListeners(
+    const ExtensionId& extension_id,
+    const std::set<std::string>& event_names) {
+  for (const auto& name : event_names) {
+    AddListener(EventListener::ForExtensionServiceWorker(
+        name, extension_id, nullptr,
+        // TODO(lazyboy): We need to store correct scopes of each worker into
+        // ExtensionPrefs for events. This currently assumes all workers are
+        // registered in the '/' scope. https://crbug.com/773103.
+        Extension::GetBaseURLFromExtensionId(extension_id), kMainThreadId,
+        nullptr));
+  }
+}
+
 void EventListenerMap::LoadFilteredLazyListeners(
     const std::string& extension_id,
+    bool is_for_service_worker,
     const DictionaryValue& filtered) {
   for (DictionaryValue::Iterator it(filtered); !it.IsAtEnd(); it.Advance()) {
     // We skip entries if they are malformed.
@@ -248,11 +267,19 @@ void EventListenerMap::LoadFilteredLazyListeners(
       const DictionaryValue* filter = nullptr;
       if (!filter_list->GetDictionary(i, &filter))
         continue;
-      // Currently this is only used for lazy background page events.
-      // TODO(lazyboy): Add extension SW lazy events.
-      AddListener(
-          EventListener::ForExtension(it.key(), extension_id, nullptr,
-                                      base::WrapUnique(filter->DeepCopy())));
+      if (is_for_service_worker) {
+        AddListener(EventListener::ForExtensionServiceWorker(
+            it.key(), extension_id, nullptr,
+            // TODO(lazyboy): We need to store correct scopes of each worker
+            // into ExtensionPrefs for events. This currently assumes all
+            // workers are registered in the '/' scope.
+            // https://crbug.com/773103.
+            Extension::GetBaseURLFromExtensionId(extension_id), kMainThreadId,
+            nullptr));
+      } else {
+        AddListener(EventListener::ForExtension(it.key(), extension_id, nullptr,
+                                                filter->CreateDeepCopy()));
+      }
     }
   }
 }

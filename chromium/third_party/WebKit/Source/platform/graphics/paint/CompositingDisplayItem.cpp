@@ -4,7 +4,6 @@
 
 #include "platform/graphics/paint/CompositingDisplayItem.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "public/platform/WebDisplayItemList.h"
@@ -26,18 +25,13 @@ void BeginCompositingDisplayItem::AppendToWebDisplayItemList(
           .get());
 }
 
-#ifndef NDEBUG
-void BeginCompositingDisplayItem::DumpPropertiesAsDebugString(
-    WTF::StringBuilder& string_builder) const {
-  DisplayItem::DumpPropertiesAsDebugString(string_builder);
-  string_builder.Append(WTF::String::Format(
-      ", xferMode: %d, opacity: %f", static_cast<int>(xfer_mode_), opacity_));
-  if (has_bounds_) {
-    string_builder.Append(
-        WTF::String::Format(", bounds: [%f, %f, %f, %f]",
-                            bounds_.Location().X(), bounds_.Location().Y(),
-                            bounds_.Size().Width(), bounds_.Size().Height()));
-  }
+#if DCHECK_IS_ON()
+void BeginCompositingDisplayItem::PropertiesAsJSON(JSONObject& json) const {
+  DisplayItem::PropertiesAsJSON(json);
+  json.SetInteger("xferMode", static_cast<int>(xfer_mode_));
+  json.SetDouble("opacity", opacity_);
+  if (has_bounds_)
+    json.SetString("bounds", bounds_.ToString());
 }
 #endif
 

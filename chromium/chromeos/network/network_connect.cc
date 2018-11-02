@@ -113,7 +113,7 @@ class NetworkConnectImpl : public NetworkConnect {
 NetworkConnectImpl::NetworkConnectImpl(Delegate* delegate)
     : delegate_(delegate), weak_factory_(this) {}
 
-NetworkConnectImpl::~NetworkConnectImpl() {}
+NetworkConnectImpl::~NetworkConnectImpl() = default;
 
 void NetworkConnectImpl::HandleUnconfiguredNetwork(
     const std::string& network_id) {
@@ -454,10 +454,11 @@ void NetworkConnectImpl::SetTechnologyEnabled(
       NET_LOG_USER("Cannot enable cellular device without SIM.", log_string);
       return;
     }
-    if (!mobile->sim_lock_type().empty()) {
+    if (!mobile->IsSimLocked()) {
       // A SIM has been inserted, but it is locked. Let the user unlock it
-      // via the dialog.
-      delegate_->ShowMobileSimDialog();
+      // via Settings or the details dialog.
+      const NetworkState* network = handler->FirstNetworkByType(technology);
+      delegate_->ShowNetworkSettings(network ? network->guid() : "");
       return;
     }
   }
@@ -582,8 +583,8 @@ NetworkConnect* NetworkConnect::Get() {
   return g_network_connect;
 }
 
-NetworkConnect::NetworkConnect() {}
+NetworkConnect::NetworkConnect() = default;
 
-NetworkConnect::~NetworkConnect() {}
+NetworkConnect::~NetworkConnect() = default;
 
 }  // namespace chromeos

@@ -5,8 +5,33 @@
 cr.define('print_preview', function() {
   'use strict';
 
-  /** Namespace that contains a method to parse local print destinations. */
-  function LocalDestinationParser() {}
+  /**
+   * @param{!print_preview.PrinterType} type The type of printer to parse.
+   * @param{!print_preview.LocalDestinationInfo |
+   *        !print_preview.PrivetPrinterDescription |
+   *        !print_preview.ProvisionalDestinationInfo} printer Information
+   *     about the printer. Type expected depends on |type|:
+   *       For LOCAL_PRINTER => print_preview.LocalDestinationInfo
+   *       For PRIVET_PRINTER => print_preview.PrivetPrinterDescription
+   *       For EXTENSION_PRINTER => print_preview.ProvisionalDestinationInfo
+   * @return {!Array<!print_preview.Destination> | !print_preview.Destination}
+   */
+  function parseDestination(type, printer) {
+    if (type === print_preview.PrinterType.LOCAL_PRINTER) {
+      return parseLocalDestination(
+          /** @type {!print_preview.LocalDestinationInfo} */ (printer));
+    }
+    if (type === print_preview.PrinterType.PRIVET_PRINTER) {
+      return parsePrivetDestination(
+          /** @type {!print_preview.PrivetPrinterDescription} */ (printer));
+    }
+    if (type === print_preview.PrinterType.EXTENSION_PRINTER) {
+      return parseExtensionDestination(
+          /** @type {!print_preview.ProvisionalDestinationInfo} */ (printer));
+    }
+    assertNotReached('Unknown printer type ' + type);
+    return [];
+  }
 
   /**
    * Parses a local print destination.
@@ -14,8 +39,8 @@ cr.define('print_preview', function() {
    *     describing a local print destination.
    * @return {!print_preview.Destination} Parsed local print destination.
    */
-  LocalDestinationParser.parse = function(destinationInfo) {
-    var options = {
+  function parseLocalDestination(destinationInfo) {
+    const options = {
       description: destinationInfo.printerDescription,
       isEnterprisePrinter: destinationInfo.cupsEnterprisePrinter
     };
@@ -32,18 +57,17 @@ cr.define('print_preview', function() {
                         print_preview.DestinationOrigin.LOCAL,
         destinationInfo.printerName, false /*isRecent*/,
         print_preview.DestinationConnectionStatus.ONLINE, options);
-  };
-
-  function PrivetDestinationParser() {}
+  }
 
   /**
    * Parses a privet destination as one or more local printers.
    * @param {!print_preview.PrivetPrinterDescription} destinationInfo Object
    *     that describes a privet printer.
-   * @return {!Array<!print_preview.Destination>} Parsed destination info.
+   * @return {!print_preview.Destination |
+   *          !Array<!print_preview.Destination>} Parsed destination info.
    */
-  PrivetDestinationParser.parse = function(destinationInfo) {
-    var returnedPrinters = [];
+  function parsePrivetDestination(destinationInfo) {
+    const returnedPrinters = [];
 
     if (destinationInfo.hasLocalPrinting) {
       returnedPrinters.push(new print_preview.Destination(
@@ -61,10 +85,9 @@ cr.define('print_preview', function() {
           print_preview.DestinationConnectionStatus.UNREGISTERED));
     }
 
-    return returnedPrinters;
-  };
-
-  function ExtensionDestinationParser() {}
+    return returnedPrinters.length === 1 ? returnedPrinters[0] :
+                                           returnedPrinters;
+  }
 
   /**
    * Parses an extension destination from an extension supplied printer
@@ -73,8 +96,8 @@ cr.define('print_preview', function() {
    *     describing an extension printer.
    * @return {!print_preview.Destination} Parsed destination.
    */
-  ExtensionDestinationParser.parse = function(destinationInfo) {
-    var provisionalType = destinationInfo.provisional ?
+  function parseExtensionDestination(destinationInfo) {
+    const provisionalType = destinationInfo.provisional ?
         print_preview.DestinationProvisionalType.NEEDS_USB_PERMISSION :
         print_preview.DestinationProvisionalType.NONE;
 
@@ -88,12 +111,11 @@ cr.define('print_preview', function() {
           extensionName: destinationInfo.extensionName || '',
           provisionalType: provisionalType
         });
-  };
+  }
 
   // Export
   return {
-    LocalDestinationParser: LocalDestinationParser,
-    PrivetDestinationParser: PrivetDestinationParser,
-    ExtensionDestinationParser: ExtensionDestinationParser
+    parseDestination: parseDestination,
+    parseExtensionDestination: parseExtensionDestination
   };
 });

@@ -44,6 +44,8 @@ class ExceptionState;
 class KURL;
 class ExecutionContext;
 
+// Implementation of the AbstractWorker interface defined in the WebWorker HTML
+// spec: https://html.spec.whatwg.org/multipage/workers.html#abstractworker
 class CORE_EXPORT AbstractWorker : public EventTargetWithInlineData,
                                    public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(AbstractWorker);
@@ -59,14 +61,15 @@ class CORE_EXPORT AbstractWorker : public EventTargetWithInlineData,
   AbstractWorker(ExecutionContext*);
   ~AbstractWorker() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   // Helper function that converts a URL to an absolute URL and checks the
   // result for validity.
-  KURL ResolveURL(const String& url,
-                  ExceptionState&,
-                  WebURLRequest::RequestContext);
+  static KURL ResolveURL(ExecutionContext*,
+                         const String& url,
+                         ExceptionState&,
+                         WebURLRequest::RequestContext);
 };
 
 }  // namespace blink

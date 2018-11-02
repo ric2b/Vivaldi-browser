@@ -18,7 +18,6 @@
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_row_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/payments/content/payment_request_state.h"
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/payment_instrument.h"
@@ -68,7 +67,8 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
                                      list,
                                      selected,
                                      /*clickable=*/true,
-                                     /*show_edit_button=*/true),
+                                     /*show_edit_button=*/instrument->type() ==
+                                         PaymentInstrument::Type::AUTOFILL),
         instrument_(instrument),
         dialog_(dialog) {
     Init();
@@ -92,7 +92,9 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
                 ->credit_card());
         return;
       case PaymentInstrument::Type::NATIVE_MOBILE_APP:
-        // We cannot edit a native mobile app instrument.
+      case PaymentInstrument::Type::SERVICE_WORKER_APP:
+        // We cannot edit a native mobile app instrument and service worker
+        // based payment instrument.
         return;
     }
     NOTREACHED();
@@ -100,10 +102,11 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
 
   // PaymentRequestItemList::Item:
   std::unique_ptr<views::View> CreateExtraView() override {
-    std::unique_ptr<views::ImageView> card_icon_view = CreateInstrumentIconView(
-        instrument_->icon_resource_id(), instrument_->GetLabel());
-    card_icon_view->SetImageSize(gfx::Size(32, 20));
-    return std::move(card_icon_view);
+    std::unique_ptr<views::ImageView> icon_view = CreateInstrumentIconView(
+        instrument_->icon_resource_id(), instrument_->icon_image_skia(),
+        instrument_->GetLabel());
+    icon_view->SetImageSize(gfx::Size(32, 20));
+    return std::move(icon_view);
   }
 
   std::unique_ptr<views::View> CreateContentView(

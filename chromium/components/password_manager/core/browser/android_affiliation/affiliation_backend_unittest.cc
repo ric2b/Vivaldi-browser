@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_simple_task_runner.h"
@@ -333,12 +332,13 @@ class AffiliationBackendTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(CreateTemporaryFile(&db_path_));
     backend_.reset(new AffiliationBackend(
-        NULL, backend_task_runner_, backend_task_runner_->GetMockClock(),
+        nullptr, backend_task_runner_, backend_task_runner_->GetMockClock(),
         backend_task_runner_->GetMockTickClock()));
     backend_->Initialize(db_path());
-    mock_fetch_throttler_ = new MockAffiliationFetchThrottler(backend_.get());
-    backend_->SetThrottlerForTesting(
-        base::WrapUnique<AffiliationFetchThrottler>(mock_fetch_throttler_));
+    auto mock_fetch_throttler =
+        std::make_unique<MockAffiliationFetchThrottler>(backend_.get());
+    mock_fetch_throttler_ = mock_fetch_throttler.get();
+    backend_->SetThrottlerForTesting(std::move(mock_fetch_throttler));
 
     fake_affiliation_api_.AddTestEquivalenceClass(
         GetTestEquivalenceClassAlpha());

@@ -13,6 +13,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/gtest_prod_util.h"
@@ -21,12 +22,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_client.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 
 class GURL;
-class OmniboxClient;
 class OmniboxEditController;
 class OmniboxViewMacTest;
 class OmniboxEditModel;
@@ -145,11 +146,13 @@ class OmniboxView {
   virtual void ApplyCaretVisibility() = 0;
 
   // Called when the temporary text in the model may have changed.
-  // |display_text| is the new text to show; |save_original_selection| is true
-  // when there wasn't previously a temporary text and thus we need to save off
-  // the user's existing selection. |notify_text_changed| is true if the model
-  // should be notified of the change.
+  // |display_text| is the new text to show; |match_type| is the type of the
+  // match the new text came from. |save_original_selection| is true when there
+  // wasn't previously a temporary text and thus we need to save off the user's
+  // existing selection. |notify_text_changed| is true if the model should be
+  // notified of the change.
   virtual void OnTemporaryTextMaybeChanged(const base::string16& display_text,
+                                           const AutocompleteMatch& match,
                                            bool save_original_selection,
                                            bool notify_text_changed) = 0;
 
@@ -210,19 +213,17 @@ class OmniboxView {
   // only ever return true on mobile ports.
   virtual bool IsIndicatingQueryRefinement() const;
 
-  // Called after a match has been opened.
-  virtual void OnMatchOpened(AutocompleteMatch::Type match_type);
-
   // Returns |text| with any leading javascript schemas stripped.
   static base::string16 StripJavascriptSchemas(const base::string16& text);
 
-  // First, calls StripJavascriptSchemas().  Then automatically collapses
-  // internal whitespace as follows:
+  // Automatically collapses internal whitespace as follows:
   // * If the only whitespace in |text| is newlines, users are most likely
   // pasting in URLs split into multiple lines by terminals, email programs,
   // etc. So all newlines are removed.
   // * Otherwise, users may be pasting in search data, e.g. street addresses. In
   // this case, runs of whitespace are collapsed down to single spaces.
+  //
+  // Finally, calls StripJavascriptSchemas() on the resulting string.
   static base::string16 SanitizeTextForPaste(const base::string16& text);
 
  protected:

@@ -7,7 +7,6 @@
 
 #import <UIKit/UIKit.h>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/string16.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
 
@@ -65,19 +64,6 @@ typedef enum {
 // on older version of iOS.
 - (NSString*)markedText;
 
-// Display a placeholder image. There is no iOS concept of placeholder images,
-// circumventing it by using leftView property of UITextField and controlling
-// its visibility programatically.
-- (void)showPlaceholderImage;
-
-// Hide a placeholder image. There is no iOS concept of placeholder images,
-// circumventing it by using leftView property of UITextField and controlling
-// its visibility programatically.
-- (void)hidePlaceholderImage;
-
-// Select which placeholder image to display.
-- (void)setPlaceholderImage:(int)imageId;
-
 // Initial touch on the Omnibox triggers a "pre-edit" state. The current
 // URL is shown without any insertion point. First character typed replaces
 // the URL. A second touch turns on the insertion point. |preEditStaticLabel|
@@ -86,9 +72,6 @@ typedef enum {
 - (void)enterPreEditState;
 - (void)exitPreEditState;
 - (BOOL)isPreEditing;
-
-// Enable or disable the padlock button.
-- (void)enableLeftViewButton:(BOOL)isEnabled;
 
 // Returns the current selected text range as an NSRange.
 - (NSRange)selectedNSRange;
@@ -107,8 +90,6 @@ typedef enum {
 
 // Fade in/out the text and auxiliary views depending on |style|.
 - (void)animateFadeWithStyle:(OmniboxTextFieldFadeStyle)style;
-// Reverses animations added by |-animateFadeWithStyle:|.
-- (void)reverseFadeAnimations;
 // Called when animations added by |-animateFadeWithStyle:| can be removed.
 - (void)cleanUpFadeAnimations;
 
@@ -121,6 +102,11 @@ typedef enum {
 @property(nonatomic, strong) UIColor* selectedTextBackgroundColor;
 @property(nonatomic, strong) UIColor* placeholderTextColor;
 @property(nonatomic, assign) BOOL incognito;
+
+- (void)addExpandOmniboxAnimations:(UIViewPropertyAnimator*)animator
+    API_AVAILABLE(ios(10.0));
+- (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator
+    API_AVAILABLE(ios(10.0));
 
 @end
 

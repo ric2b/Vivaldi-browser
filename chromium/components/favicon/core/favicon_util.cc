@@ -38,13 +38,14 @@ base::CancelableTaskTracker::TaskId GetFaviconImageForPageURL(
   if (!favicon_service)
     return base::CancelableTaskTracker::kBadTaskId;
 
-  if (type == favicon_base::FAVICON) {
+  if (type == favicon_base::IconType::kFavicon) {
     return favicon_service->GetFaviconImageForPageURL(page_url, callback,
                                                       tracker);
   }
 
   return favicon_service->GetRawFaviconForPageURL(
-      page_url, type, 0, base::Bind(&RunCallbackWithImage, callback), tracker);
+      page_url, {type}, 0, base::Bind(&RunCallbackWithImage, callback),
+      tracker);
 }
 
 }  // namespace favicon

@@ -35,8 +35,8 @@
 
 #include "bindings/core/v8/V8Window.h"
 #include "platform/Histogram.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/Assertions.h"
@@ -46,7 +46,7 @@ namespace blink {
 
 RemoteWindowProxy::RemoteWindowProxy(v8::Isolate* isolate,
                                      RemoteFrame& frame,
-                                     RefPtr<DOMWrapperWorld> world)
+                                     scoped_refptr<DOMWrapperWorld> world)
     : WindowProxy(isolate, frame, std::move(world)) {}
 
 void RemoteWindowProxy::DisposeContext(Lifecycle next_status,

@@ -6,16 +6,39 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
-#include "dbus/object_proxy.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
+namespace {
+
+// Handles replies to D-Bus calls made by GetLastSyncInfo.
+void OnGetLastSyncInfo(SystemClockClient::GetLastSyncInfoCallback callback,
+                       dbus::Response* response) {
+  if (!response) {
+    LOG(ERROR) << system_clock::kSystemClockInterface << "."
+               << system_clock::kSystemLastSyncInfo << " request failed.";
+    return;
+  }
+  dbus::MessageReader reader(response);
+  bool network_synchronized = false;
+  if (!reader.PopBool(&network_synchronized)) {
+    LOG(ERROR) << system_clock::kSystemClockInterface << "."
+               << system_clock::kSystemLastSyncInfo
+               << " response lacks network-synchronized argument.";
+    return;
+  }
+  std::move(callback).Run(network_synchronized);
+}
+
+}  // namespace
 
 // The SystemClockClient implementation used in production.
 class SystemClockClientImpl : public SystemClockClient {
@@ -26,7 +49,7 @@ class SystemClockClientImpl : public SystemClockClient {
         system_clock_proxy_(nullptr),
         weak_ptr_factory_(this) {}
 
-  ~SystemClockClientImpl() override {}
+  ~SystemClockClientImpl() override = default;
 
   void AddObserver(Observer* observer) override {
     observers_.AddObserver(observer);
@@ -53,6 +76,20 @@ class SystemClockClientImpl : public SystemClockClient {
 
   bool CanSetTime() override { return can_set_time_; }
 
+  void GetLastSyncInfo(GetLastSyncInfoCallback callback) override {
+    dbus::MethodCall method_call(system_clock::kSystemClockInterface,
+                                 system_clock::kSystemLastSyncInfo);
+    system_clock_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(OnGetLastSyncInfo, std::move(callback)));
+  }
+
+  void WaitForServiceToBeAvailable(
+      dbus::ObjectProxy::WaitForServiceToBeAvailableCallback callback)
+      override {
+    system_clock_proxy_->WaitForServiceToBeAvailable(std::move(callback));
+  }
+
  protected:
   void Init(dbus::Bus* bus) override {
     system_clock_proxy_ = bus->GetObjectProxy(
@@ -65,9 +102,9 @@ class SystemClockClientImpl : public SystemClockClient {
                    weak_ptr_factory_.GetWeakPtr()),
         base::Bind(&SystemClockClientImpl::TimeUpdatedConnected,
                    weak_ptr_factory_.GetWeakPtr()));
-    system_clock_proxy_->WaitForServiceToBeAvailable(
-        base::Bind(&SystemClockClientImpl::ServiceInitiallyAvailable,
-                   weak_ptr_factory_.GetWeakPtr()));
+    WaitForServiceToBeAvailable(
+        base::BindOnce(&SystemClockClientImpl::ServiceInitiallyAvailable,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
  private:
@@ -131,8 +168,8 @@ class SystemClockClientImpl : public SystemClockClient {
     dbus::MessageWriter writer(&method_call);
     system_clock_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&SystemClockClientImpl::OnGetCanSet,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SystemClockClientImpl::OnGetCanSet,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Whether the time can be set. Value is false until the first
@@ -152,6 +189,6 @@ SystemClockClient* SystemClockClient::Create() {
   return new SystemClockClientImpl();
 }
 
-SystemClockClient::SystemClockClient() {}
+SystemClockClient::SystemClockClient() = default;
 
 }  // namespace chromeos

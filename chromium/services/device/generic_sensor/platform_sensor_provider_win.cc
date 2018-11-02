@@ -21,11 +21,11 @@ class PlatformSensorProviderWin::SensorThread final : public base::Thread {
   SensorThread() : base::Thread("Sensor thread") { init_com_with_mta(true); }
 
   void SetSensorManagerForTesting(
-      base::win::ScopedComPtr<ISensorManager> sensor_manager) {
+      Microsoft::WRL::ComPtr<ISensorManager> sensor_manager) {
     sensor_manager_ = sensor_manager;
   }
 
-  const base::win::ScopedComPtr<ISensorManager>& sensor_manager() const {
+  const Microsoft::WRL::ComPtr<ISensorManager>& sensor_manager() const {
     return sensor_manager_;
   }
 
@@ -40,7 +40,7 @@ class PlatformSensorProviderWin::SensorThread final : public base::Thread {
   void CleanUp() override { sensor_manager_.Reset(); }
 
  private:
-  base::win::ScopedComPtr<ISensorManager> sensor_manager_;
+  Microsoft::WRL::ComPtr<ISensorManager> sensor_manager_;
 };
 
 // static
@@ -51,7 +51,7 @@ PlatformSensorProviderWin* PlatformSensorProviderWin::GetInstance() {
 }
 
 void PlatformSensorProviderWin::SetSensorManagerForTesting(
-    base::win::ScopedComPtr<ISensorManager> sensor_manager) {
+    Microsoft::WRL::ComPtr<ISensorManager> sensor_manager) {
   CreateSensorThread();
   sensor_thread_->SetSensorManagerForTesting(sensor_manager);
 }
@@ -72,7 +72,7 @@ void PlatformSensorProviderWin::CreateSensorInternal(
   switch (type) {
     // Fusion sensor.
     case mojom::SensorType::LINEAR_ACCELERATION: {
-      auto linear_acceleration_fusion_algorithm = base::MakeUnique<
+      auto linear_acceleration_fusion_algorithm = std::make_unique<
           LinearAccelerationFusionAlgorithmUsingAccelerometer>();
       // If this PlatformSensorFusion object is successfully initialized,
       // |callback| will be run with a reference to this object.
@@ -96,13 +96,13 @@ void PlatformSensorProviderWin::CreateSensorInternal(
   }
 }
 
-void PlatformSensorProviderWin::AllSensorsRemoved() {
+void PlatformSensorProviderWin::FreeResources() {
   StopSensorThread();
 }
 
 void PlatformSensorProviderWin::CreateSensorThread() {
   if (!sensor_thread_)
-    sensor_thread_ = base::MakeUnique<SensorThread>();
+    sensor_thread_ = std::make_unique<SensorThread>();
 }
 
 bool PlatformSensorProviderWin::StartSensorThread() {
@@ -125,8 +125,6 @@ void PlatformSensorProviderWin::SensorReaderCreated(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!sensor_reader) {
     callback.Run(nullptr);
-    if (!HasSensors())
-      StopSensorThread();
     return;
   }
 

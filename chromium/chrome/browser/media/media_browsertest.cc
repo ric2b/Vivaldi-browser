@@ -17,20 +17,6 @@
 #include "media/base/test_data_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-namespace chrome {
-
-// TODO(sandersd): Change the tests to use a more unique message.
-// See http://crbug.com/592067
-
-// Normal failure title.
-const char MediaBrowserTest::kFailed[] = "FAILED";
-
-// Upper case event name set by Utils.installTitleEventHandler().
-const char MediaBrowserTest::kEnded[] = "ENDED";
-
-// Lower case event name as set by Utils.failTest().
-const char MediaBrowserTest::kError[] = "error";
-
 MediaBrowserTest::MediaBrowserTest() : ignore_plugin_crash_(false) {}
 
 MediaBrowserTest::~MediaBrowserTest() {}
@@ -73,9 +59,9 @@ std::string MediaBrowserTest::RunTest(const GURL& gurl,
 }
 
 void MediaBrowserTest::AddWaitForTitles(content::TitleWatcher* title_watcher) {
-  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(kEnded));
-  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(kError));
-  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(kFailed));
+  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(media::kEnded));
+  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(media::kError));
+  title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(media::kFailed));
 }
 
 void MediaBrowserTest::PluginCrashed(const base::FilePath& plugin_path,
@@ -89,5 +75,3 @@ void MediaBrowserTest::PluginCrashed(const base::FilePath& plugin_path,
 void MediaBrowserTest::IgnorePluginCrash() {
   ignore_plugin_crash_ = true;
 }
-
-}  // namespace chrome

@@ -10,7 +10,9 @@
 #include <string>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "sandbox/win/src/crosscall_client.h"
 #include "sandbox/win/src/crosscall_params.h"
 
@@ -23,7 +25,7 @@ namespace {
 // The buffer for a message must match the max channel size.
 const size_t kMaxBufferSize = sandbox::kIPCChannelSize;
 
-}
+}  // namespace
 
 namespace sandbox {
 
@@ -88,16 +90,14 @@ bool IsSizeWithinRange(uint32_t buffer_size,
   return true;
 }
 
-CrossCallParamsEx::CrossCallParamsEx()
-  :CrossCallParams(0, 0) {
-}
+CrossCallParamsEx::CrossCallParamsEx() : CrossCallParams(0, 0) {}
 
 // We override the delete operator because the object's backing memory
 // is hand allocated in CreateFromBuffer. We don't override the new operator
 // because the constructors are private so there is no way to mismatch
 // new & delete.
 void CrossCallParamsEx::operator delete(void* raw_memory) throw() {
-  if (NULL == raw_memory) {
+  if (!raw_memory) {
     // C++ standard allows 'delete 0' behavior.
     return;
   }
@@ -112,21 +112,18 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
                                                        uint32_t* output_size) {
   // IMPORTANT: Everything inside buffer_base and derived from it such
   // as param_count and declared_size is untrusted.
-  if (NULL == buffer_base) {
-    return NULL;
-  }
-  if (buffer_size < sizeof(CrossCallParams)) {
-    return NULL;
-  }
-  if (buffer_size > kMaxBufferSize) {
-    return NULL;
-  }
+  if (!buffer_base)
+    return nullptr;
+  if (buffer_size < sizeof(CrossCallParams))
+    return nullptr;
+  if (buffer_size > kMaxBufferSize)
+    return nullptr;
 
-  char* backing_mem = NULL;
+  char* backing_mem = nullptr;
   uint32_t param_count = 0;
   uint32_t declared_size;
   uint32_t min_declared_size;
-  CrossCallParamsEx* copied_params = NULL;
+  CrossCallParamsEx* copied_params = nullptr;
 
   // Touching the untrusted buffer is done under a SEH try block. This
   // will catch memory access violations so we don't crash.
@@ -137,14 +134,19 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
     // Check against the minimum size given the number of stated params
     // if too small we bail out.
     param_count = call_params->GetParamsCount();
-    min_declared_size = sizeof(CrossCallParams) +
-                        ((param_count + 1) * sizeof(ParamInfo));
+    min_declared_size =
+        sizeof(CrossCallParams) + ((param_count + 1) * sizeof(ParamInfo));
+
+    // Initial check for the buffer being big enough to determine the actual
+    // buffer size.
+    if (buffer_size < min_declared_size)
+      return nullptr;
 
     // Retrieve the declared size which if it fails returns 0.
     declared_size = GetActualBufferSize(param_count, buffer_base);
 
     if (!IsSizeWithinRange(buffer_size, min_declared_size, declared_size))
-      return NULL;
+      return nullptr;
 
     // Now we copy the actual amount of the message.
     *output_size = declared_size;
@@ -155,24 +157,24 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
     // Avoid compiler optimizations across this point. Any value stored in
     // memory should be stored for real, and values previously read from memory
     // should be actually read.
-    _ReadWriteBarrier();
+    base::subtle::MemoryBarrier();
 
-    min_declared_size = sizeof(CrossCallParams) +
-                        ((param_count + 1) * sizeof(ParamInfo));
+    min_declared_size =
+        sizeof(CrossCallParams) + ((param_count + 1) * sizeof(ParamInfo));
 
     // Check that the copied buffer is still valid.
     if (copied_params->GetParamsCount() != param_count ||
         GetActualBufferSize(param_count, backing_mem) != declared_size ||
         !IsSizeWithinRange(buffer_size, min_declared_size, declared_size)) {
-      delete [] backing_mem;
-      return NULL;
+      delete[] backing_mem;
+      return nullptr;
     }
 
-  } __except(EXCEPTION_EXECUTE_HANDLER) {
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
     // In case of a windows exception we know it occurred while touching the
     // untrusted buffer so we bail out as is.
-    delete [] backing_mem;
-    return NULL;
+    delete[] backing_mem;
+    return nullptr;
   }
 
   const char* last_byte = &backing_mem[declared_size];
@@ -184,8 +186,8 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
     uint32_t size = 0;
     ArgType type;
     char* address = reinterpret_cast<char*>(
-                        copied_params->GetRawParameter(ix, &size, &type));
-    if ((NULL == address) ||               // No null params.
+        copied_params->GetRawParameter(ix, &size, &type));
+    if ((!address) ||                                     // No null params.
         (INVALID_TYPE >= type) || (LAST_TYPE <= type) ||  // Unknown type.
         (address < backing_mem) ||         // Start cannot point before buffer.
         (address < first_byte) ||          // Start cannot point too low.
@@ -194,7 +196,7 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
         ((address + size) > last_byte)) {  // End cannot point past buffer.
       // Malformed.
       delete[] backing_mem;
-      return NULL;
+      return nullptr;
     }
   }
   // The parameter buffer looks good.
@@ -205,9 +207,8 @@ CrossCallParamsEx* CrossCallParamsEx::CreateFromBuffer(void* buffer_base,
 void* CrossCallParamsEx::GetRawParameter(uint32_t index,
                                          uint32_t* size,
                                          ArgType* type) {
-  if (index >= GetParamsCount()) {
-    return NULL;
-  }
+  if (index >= GetParamsCount())
+    return nullptr;
   // The size is always computed from the parameter minus the next
   // parameter, this works because the message has an extra parameter slot
   *size = param_info_[index].size_;
@@ -221,9 +222,8 @@ bool CrossCallParamsEx::GetParameter32(uint32_t index, uint32_t* param) {
   uint32_t size = 0;
   ArgType type;
   void* start = GetRawParameter(index, &size, &type);
-  if ((NULL == start) || (4 != size) || (UINT32_TYPE != type)) {
+  if (!start || (4 != size) || (UINT32_TYPE != type))
     return false;
-  }
   // Copy the 4 bytes.
   *(reinterpret_cast<uint32_t*>(param)) = *(reinterpret_cast<uint32_t*>(start));
   return true;
@@ -233,9 +233,8 @@ bool CrossCallParamsEx::GetParameterVoidPtr(uint32_t index, void** param) {
   uint32_t size = 0;
   ArgType type;
   void* start = GetRawParameter(index, &size, &type);
-  if ((NULL == start) || (sizeof(void*) != size) || (VOIDPTR_TYPE != type)) {
+  if (!start || (sizeof(void*) != size) || (VOIDPTR_TYPE != type))
     return false;
-  }
   *param = *(reinterpret_cast<void**>(start));
   return true;
 }
@@ -244,24 +243,23 @@ bool CrossCallParamsEx::GetParameterVoidPtr(uint32_t index, void** param) {
 // scanned for invalid characters.
 bool CrossCallParamsEx::GetParameterStr(uint32_t index,
                                         base::string16* string) {
+  DCHECK(string->empty());
   uint32_t size = 0;
   ArgType type;
   void* start = GetRawParameter(index, &size, &type);
-  if (WCHAR_TYPE != type) {
+  if (WCHAR_TYPE != type)
     return false;
-  }
 
   // Check if this is an empty string.
   if (size == 0) {
-    *string = L"";
+    *string = base::WideToUTF16(L"");
     return true;
   }
 
-  if ((NULL == start) || ((size % sizeof(wchar_t)) != 0)) {
+  if (!start || ((size % sizeof(wchar_t)) != 0))
     return false;
-  }
-  string->append(reinterpret_cast<wchar_t*>(start), size/(sizeof(wchar_t)));
-  return true;
+  return base::WideToUTF16(reinterpret_cast<wchar_t*>(start),
+                           size / sizeof(wchar_t), string);
 }
 
 bool CrossCallParamsEx::GetParameterPtr(uint32_t index,
@@ -271,13 +269,11 @@ bool CrossCallParamsEx::GetParameterPtr(uint32_t index,
   ArgType type;
   void* start = GetRawParameter(index, &size, &type);
 
-  if ((size != expected_size) || (INOUTPTR_TYPE != type)) {
+  if ((size != expected_size) || (INOUTPTR_TYPE != type))
     return false;
-  }
 
-  if (NULL == start) {
+  if (!start)
     return false;
-  }
 
   *pointer = start;
   return true;
@@ -293,7 +289,7 @@ void SetCallSuccess(CrossCallReturn* call_return) {
 }
 
 Dispatcher* Dispatcher::OnMessageReady(IPCParams* ipc,
-                                      CallbackGeneric* callback) {
+                                       CallbackGeneric* callback) {
   DCHECK(callback);
   std::vector<IPCCall>::iterator it = ipc_calls_.begin();
   for (; it != ipc_calls_.end(); ++it) {
@@ -302,13 +298,11 @@ Dispatcher* Dispatcher::OnMessageReady(IPCParams* ipc,
       return this;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
-Dispatcher::Dispatcher() {
-}
+Dispatcher::Dispatcher() {}
 
-Dispatcher::~Dispatcher() {
-}
+Dispatcher::~Dispatcher() {}
 
 }  // namespace sandbox

@@ -4,40 +4,35 @@
 
 #include "platform/heap/Persistent.h"
 
+#include <memory>
 #include "platform/CrossThreadFunctional.h"
 #include "platform/heap/Handle.h"
+#include "platform/heap/HeapTestUtilities.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 namespace {
-
-void PreciselyCollectGarbage() {
-  ThreadState::Current()->CollectGarbage(BlinkGC::kNoHeapPointersOnStack,
-                                         BlinkGC::kGCWithSweep,
-                                         BlinkGC::kForcedGC);
-}
 
 class Receiver : public GarbageCollected<Receiver> {
  public:
   void Increment(int* counter) { ++*counter; }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 };
 
 TEST(PersistentTest, BindCancellation) {
   Receiver* receiver = new Receiver;
   int counter = 0;
-  WTF::Closure function =
+  WTF::RepeatingClosure function =
       WTF::Bind(&Receiver::Increment, WrapWeakPersistent(receiver),
                 WTF::Unretained(&counter));
 
-  function();
+  function.Run();
   EXPECT_EQ(1, counter);
 
   receiver = nullptr;
   PreciselyCollectGarbage();
-  function();
+  function.Run();
   EXPECT_EQ(1, counter);
 }
 
@@ -48,13 +43,10 @@ TEST(PersistentTest, CrossThreadBindCancellation) {
       &Receiver::Increment, WrapCrossThreadWeakPersistent(receiver),
       WTF::CrossThreadUnretained(&counter));
 
-  function();
-  EXPECT_EQ(1, counter);
-
   receiver = nullptr;
   PreciselyCollectGarbage();
-  function();
-  EXPECT_EQ(1, counter);
+  std::move(function).Run();
+  EXPECT_EQ(0, counter);
 }
 
 }  // namespace

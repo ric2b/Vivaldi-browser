@@ -10,6 +10,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
@@ -45,9 +46,10 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   static TestWebContents* Create(BrowserContext* browser_context,
                                  scoped_refptr<SiteInstance> instance);
+  static TestWebContents* Create(const CreateParams& params);
 
   // WebContentsImpl overrides (returning the same values, but in Test* types)
-  TestRenderFrameHost* GetMainFrame() override;
+  TestRenderFrameHost* GetMainFrame() const override;
   TestRenderViewHost* GetRenderViewHost() const override;
   // Overrides to avoid establishing Mojo connection with renderer process.
   int DownloadImage(const GURL& url,
@@ -59,21 +61,14 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   // WebContentsTester implementation.
   void CommitPendingNavigation() override;
-  TestRenderFrameHost* GetPendingMainFrame() const override;
+  TestRenderFrameHost* GetPendingMainFrame() override;
   void NavigateAndCommit(const GURL& url) override;
   void TestSetIsLoading(bool value) override;
-  void ProceedWithCrossSiteNavigation() override;
   void TestDidNavigate(RenderFrameHost* render_frame_host,
                        int nav_entry_id,
                        bool did_create_new_entry,
                        const GURL& url,
                        ui::PageTransition transition) override;
-  void TestDidNavigateWithReferrer(RenderFrameHost* render_frame_host,
-                                   int nav_entry_id,
-                                   bool did_create_new_entry,
-                                   const GURL& url,
-                                   const Referrer& referrer,
-                                   ui::PageTransition transition) override;
   void TestDidNavigateWithSequenceNumber(RenderFrameHost* render_frame_host,
                                          int nav_entry_id,
                                          bool did_create_new_entry,
@@ -92,6 +87,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       const std::vector<gfx::Size>& original_bitmap_sizes) override;
   void SetLastCommittedURL(const GURL& url) override;
   void SetWasRecentlyAudible(bool audible) override;
+  void SetIsCurrentlyAudible(bool audible) override;
 
   // True if a cross-site navigation is pending.
   bool CrossProcessNavigationPending();
@@ -101,6 +97,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       RenderViewHost* render_view_host,
       int opener_frame_routing_id,
       int proxy_routing_id,
+      const base::UnguessableToken& devtools_frame_token,
       const FrameReplicationState& replicated_frame_state) override;
   void UpdateRenderViewSizeForRenderManager() override {}
 

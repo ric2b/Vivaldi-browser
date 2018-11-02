@@ -44,7 +44,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/ListHashSet.h"
+#include "platform/wtf/LinkedHashSet.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -59,7 +59,6 @@ class UserTiming;
 class SubTaskAttribution;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
-using PerformanceObservers = HeapListHashSet<Member<PerformanceObserver>>;
 
 class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
@@ -137,12 +136,59 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void ActivateObserver(PerformanceObserver&);
   void ResumeSuspendedObservers();
 
+  // This enum is used to index different possible strings for for UMA enum
+  // histogram. New enum values can be added, but existing enums must never be
+  // renumbered or deleted and reused.
+  // This enum should be consistent with PerformanceMeasurePassedInParameterType
+  // in tools/metrics/histograms/enums.xml.
+  enum PerformanceMeasurePassedInParameterType {
+    kObjectObject = 0,
+    // 1 to 8 are navigation-timing types.
+    kUnloadEventStart = 1,
+    kUnloadEventEnd = 2,
+    kDomInteractive = 3,
+    kDomContentLoadedEventStart = 4,
+    kDomContentLoadedEventEnd = 5,
+    kDomComplete = 6,
+    kLoadEventStart = 7,
+    kLoadEventEnd = 8,
+    kOther = 9,
+    kPerformanceMeasurePassedInParameterCount
+  };
+
+  static PerformanceMeasurePassedInParameterType
+  ToPerformanceMeasurePassedInParameterType(const String& s) {
+    // All passed-in objects will be stringified into this type.
+    if (s == "[object Object]")
+      return kObjectObject;
+    // The following names come from
+    // https://w3c.github.io/navigation-timing/#sec-PerformanceNavigationTiming.
+    if (s == "unloadEventStart")
+      return kUnloadEventStart;
+    if (s == "unloadEventEnd")
+      return kUnloadEventEnd;
+    if (s == "domInteractive")
+      return kDomInteractive;
+    if (s == "domContentLoadedEventStart")
+      return kDomContentLoadedEventStart;
+    if (s == "domContentLoadedEventEnd")
+      return kDomContentLoadedEventEnd;
+    if (s == "domComplete")
+      return kDomComplete;
+    if (s == "loadEventStart")
+      return kLoadEventStart;
+    if (s == "loadEventEnd")
+      return kLoadEventEnd;
+    return kOther;
+  }
+
   static bool AllowsTimingRedirect(const Vector<ResourceResponse>&,
                                    const ResourceResponse&,
                                    const SecurityOrigin&,
                                    ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   static bool PassesTimingAllowCheck(const ResourceResponse&,
@@ -153,7 +199,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void AddPaintTiming(PerformancePaintTiming::PaintType, double start_time);
 
  protected:
-  explicit PerformanceBase(double time_origin, RefPtr<WebTaskRunner>);
+  PerformanceBase(double time_origin, scoped_refptr<WebTaskRunner>);
 
   // Expect Performance to override this method,
   // WorkerPerformance doesn't have to override this.
@@ -182,9 +228,9 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   double time_origin_;
 
   PerformanceEntryTypeMask observer_filter_options_;
-  PerformanceObservers observers_;
-  PerformanceObservers active_observers_;
-  PerformanceObservers suspended_observers_;
+  HeapLinkedHashSet<TraceWrapperMember<PerformanceObserver>> observers_;
+  HeapLinkedHashSet<Member<PerformanceObserver>> active_observers_;
+  HeapLinkedHashSet<Member<PerformanceObserver>> suspended_observers_;
   TaskRunnerTimer<PerformanceBase> deliver_observations_timer_;
 };
 

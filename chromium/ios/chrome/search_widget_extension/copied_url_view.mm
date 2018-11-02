@@ -27,8 +27,8 @@ const CGFloat kURLButtonMargin = 10;
 @property(nonatomic, strong) UILabel* openCopiedURLTitleLabel;
 // The hairline view potentially shown at the top of the copied URL view.
 @property(nonatomic, strong) UIView* hairlineView;
-// The button shown when there is a copied URL to open.
-@property(nonatomic, strong) UIButton* copiedButtonView;
+// The button-shaped background view shown when there is a copied URL to open.
+@property(nonatomic, strong) UIView* copiedButtonView;
 
 // Updates the view to show the copied URL in a button.
 - (void)updateUICopiedURL;
@@ -63,15 +63,22 @@ const CGFloat kURLButtonMargin = 10;
   if (self) {
     self.translatesAutoresizingMaskIntoConstraints = NO;
 
+    [self addTarget:target
+                  action:actionSelector
+        forControlEvents:UIControlEventTouchUpInside];
+
     UIVibrancyEffect* primaryEffect;
     UIVibrancyEffect* secondaryEffect;
-    if (base::ios::IsRunningOnIOS10OrLater()) {
+    if (@available(iOS 10, *)) {
       primaryEffect = [UIVibrancyEffect widgetPrimaryVibrancyEffect];
       secondaryEffect = [UIVibrancyEffect widgetSecondaryVibrancyEffect];
-    } else {
+    }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+    else {
       primaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
       secondaryEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
     }
+#endif
 
     UIVisualEffectView* primaryEffectView =
         [[UIVisualEffectView alloc] initWithEffect:primaryEffect];
@@ -83,6 +90,7 @@ const CGFloat kURLButtonMargin = 10;
       effectView.translatesAutoresizingMaskIntoConstraints = NO;
       [NSLayoutConstraint
           activateConstraints:ui_util::CreateSameConstraints(self, effectView)];
+      effectView.userInteractionEnabled = NO;
     }
 
     _hairlineView = [[UIView alloc] initWithFrame:CGRectZero];
@@ -92,16 +100,11 @@ const CGFloat kURLButtonMargin = 10;
     _hairlineView.translatesAutoresizingMaskIntoConstraints = NO;
     [secondaryEffectView.contentView addSubview:_hairlineView];
 
-    _copiedButtonView = [[UIButton alloc] initWithFrame:CGRectZero];
+    _copiedButtonView = [[UIView alloc] init];
     _copiedButtonView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.05];
     _copiedButtonView.layer.cornerRadius = 5;
     _copiedButtonView.translatesAutoresizingMaskIntoConstraints = NO;
-    _copiedButtonView.accessibilityLabel =
-        NSLocalizedString(@"IDS_IOS_OPEN_COPIED_LINK", nil);
     [secondaryEffectView.contentView addSubview:_copiedButtonView];
-    [_copiedButtonView addTarget:target
-                          action:actionSelector
-                forControlEvents:UIControlEventTouchUpInside];
 
     _openCopiedURLTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _openCopiedURLTitleLabel.textAlignment = NSTextAlignmentCenter;
@@ -130,7 +133,7 @@ const CGFloat kURLButtonMargin = 10;
           constraintEqualToAnchor:self.trailingAnchor
                          constant:-ui_util::kContentMargin],
       [_copiedButtonView.topAnchor
-          constraintEqualToAnchor:_hairlineView.bottomAnchor
+          constraintEqualToAnchor:self.topAnchor
                          constant:ui_util::kContentMargin],
       [_copiedButtonView.bottomAnchor
           constraintEqualToAnchor:self.bottomAnchor
@@ -165,27 +168,31 @@ const CGFloat kURLButtonMargin = 10;
   self.copiedButtonView.hidden = NO;
   self.hairlineView.hidden = YES;
   self.copiedURLLabel.text = self.copiedURLString;
-  self.copiedURLLabel.accessibilityLabel = self.copiedURLString;
   self.openCopiedURLTitleLabel.alpha = 1;
   self.openCopiedURLTitleLabel.text =
       NSLocalizedString(@"IDS_IOS_OPEN_COPIED_LINK", nil);
-  self.openCopiedURLTitleLabel.isAccessibilityElement = NO;
   self.copiedURLLabel.alpha = 1;
+  self.userInteractionEnabled = YES;
+  self.accessibilityLabel = [NSString
+      stringWithFormat:@"%@ - %@",
+                       NSLocalizedString(@"IDS_IOS_OPEN_COPIED_LINK", nil),
+                       self.copiedURLString];
+  self.accessibilityTraits = UIAccessibilityTraitLink;
 }
 
 - (void)updateUINoCopiedURL {
+  self.userInteractionEnabled = NO;
   self.copiedButtonView.hidden = YES;
   self.hairlineView.hidden = NO;
   self.copiedURLLabel.text =
       NSLocalizedString(@"IDS_IOS_NO_COPIED_LINK_MESSAGE", nil);
-  self.copiedURLLabel.accessibilityLabel =
+  self.accessibilityLabel =
       NSLocalizedString(@"IDS_IOS_NO_COPIED_LINK_MESSAGE", nil);
   self.openCopiedURLTitleLabel.text =
       NSLocalizedString(@"IDS_IOS_NO_COPIED_LINK_TITLE", nil);
-  self.openCopiedURLTitleLabel.accessibilityLabel =
+  self.accessibilityLabel =
       NSLocalizedString(@"IDS_IOS_NO_COPIED_LINK_TITLE", nil);
-  self.openCopiedURLTitleLabel.isAccessibilityElement = YES;
-
+  self.accessibilityTraits = UIAccessibilityTraitNone;
   if (base::ios::IsRunningOnIOS10OrLater()) {
     self.copiedURLLabel.alpha = 0.5;
     self.openCopiedURLTitleLabel.alpha = 0.5;

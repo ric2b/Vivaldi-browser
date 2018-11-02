@@ -287,7 +287,7 @@ void ExtensionServiceTestWithInstall::UpdateExtension(
   if (installer)
     observer.Wait();
   else
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
 
   std::vector<base::string16> errors = GetErrors();
   int error_count = errors.size();
@@ -316,7 +316,7 @@ void ExtensionServiceTestWithInstall::UpdateExtension(
 
   // Verify that after running all pending tasks, the temporary file has been
   // deleted.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_FALSE(base::PathExists(path));
 }
 
@@ -345,8 +345,7 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
         service(), id, extensions::UNINSTALL_REASON_FOR_TESTING));
   } else {
     EXPECT_TRUE(service()->UninstallExtension(
-        id, extensions::UNINSTALL_REASON_FOR_TESTING,
-        base::Bind(&base::DoNothing), nullptr));
+        id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr));
   }
   --expected_extensions_count_;
 
@@ -365,7 +364,7 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
 
   // The extension should not be in the service anymore.
   EXPECT_FALSE(service()->GetInstalledExtension(extension_id));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // The directory should be gone.
   EXPECT_FALSE(base::PathExists(extension_path));
@@ -373,18 +372,17 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
 
 void ExtensionServiceTestWithInstall::TerminateExtension(
     const std::string& id) {
-  const Extension* extension = service()->GetInstalledExtension(id);
-  if (!extension) {
+  if (!service()->GetInstalledExtension(id)) {
     ADD_FAILURE();
     return;
   }
-  service()->TrackTerminatedExtensionForTest(extension);
+  service()->TerminateExtension(id);
 }
 
 void ExtensionServiceTestWithInstall::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
-  loaded_.push_back(make_scoped_refptr(extension));
+  loaded_.push_back(base::WrapRefCounted(extension));
   // The tests rely on the errors being in a certain order, which can vary
   // depending on how filesystem iteration works.
   std::stable_sort(loaded_.begin(), loaded_.end(), ExtensionsOrder());

@@ -51,7 +51,7 @@ void BusyWork(std::vector<std::string>* vec) {
 // Exists as a class so it can be a friend of SystemMetrics.
 class SystemMetricsTest : public testing::Test {
  public:
-  SystemMetricsTest() {}
+  SystemMetricsTest() = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SystemMetricsTest);
@@ -251,7 +251,7 @@ TEST_F(SystemMetricsTest, ParseMeminfo) {
 }
 
 TEST_F(SystemMetricsTest, ParseVmstat) {
-  SystemMemoryInfoKB meminfo;
+  VmStatInfo vmstat;
   // part of vmstat from a 3.2 kernel with numa enabled
   const char valid_input1[] =
       "nr_free_pages 905104\n"
@@ -341,35 +341,35 @@ TEST_F(SystemMetricsTest, ParseVmstat) {
       "pgrefill_normal 0\n"
       "pgrefill_high 0\n"
       "pgrefill_movable 0\n";
-  EXPECT_TRUE(ParseProcVmstat(valid_input1, &meminfo));
-  EXPECT_EQ(179LU, meminfo.pswpin);
-  EXPECT_EQ(406LU, meminfo.pswpout);
-  EXPECT_EQ(487192LU, meminfo.pgmajfault);
-  EXPECT_TRUE(ParseProcVmstat(valid_input2, &meminfo));
-  EXPECT_EQ(12LU, meminfo.pswpin);
-  EXPECT_EQ(901LU, meminfo.pswpout);
-  EXPECT_EQ(2023LU, meminfo.pgmajfault);
+  EXPECT_TRUE(ParseProcVmstat(valid_input1, &vmstat));
+  EXPECT_EQ(179LU, vmstat.pswpin);
+  EXPECT_EQ(406LU, vmstat.pswpout);
+  EXPECT_EQ(487192LU, vmstat.pgmajfault);
+  EXPECT_TRUE(ParseProcVmstat(valid_input2, &vmstat));
+  EXPECT_EQ(12LU, vmstat.pswpin);
+  EXPECT_EQ(901LU, vmstat.pswpout);
+  EXPECT_EQ(2023LU, vmstat.pgmajfault);
 
   const char missing_pgmajfault_input[] =
       "pswpin 12\n"
       "pswpout 901\n";
-  EXPECT_FALSE(ParseProcVmstat(missing_pgmajfault_input, &meminfo));
+  EXPECT_FALSE(ParseProcVmstat(missing_pgmajfault_input, &vmstat));
   const char empty_input[] = "";
-  EXPECT_FALSE(ParseProcVmstat(empty_input, &meminfo));
+  EXPECT_FALSE(ParseProcVmstat(empty_input, &vmstat));
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-// Test that ProcessMetrics::GetCPUUsage() doesn't return negative values when
-// the number of threads running on the process decreases between two successive
-// calls to it.
+// Test that ProcessMetrics::GetPlatformIndependentCPUUsage() doesn't return
+// negative values when the number of threads running on the process decreases
+// between two successive calls to it.
 TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   ProcessHandle handle = GetCurrentProcessHandle();
   std::unique_ptr<ProcessMetrics> metrics(
       ProcessMetrics::CreateProcessMetrics(handle));
 
-  EXPECT_GE(metrics->GetCPUUsage(), 0.0);
+  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
   Thread thread1("thread1");
   Thread thread2("thread2");
   Thread thread3("thread3");
@@ -390,16 +390,16 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   thread2.task_runner()->PostTask(FROM_HERE, BindOnce(&BusyWork, &vec2));
   thread3.task_runner()->PostTask(FROM_HERE, BindOnce(&BusyWork, &vec3));
 
-  EXPECT_GE(metrics->GetCPUUsage(), 0.0);
+  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread1.Stop();
-  EXPECT_GE(metrics->GetCPUUsage(), 0.0);
+  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread2.Stop();
-  EXPECT_GE(metrics->GetCPUUsage(), 0.0);
+  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread3.Stop();
-  EXPECT_GE(metrics->GetCPUUsage(), 0.0);
+  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 }
 
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)

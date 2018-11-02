@@ -216,12 +216,11 @@ GaiaAuthFetcherIOSBridge::GaiaAuthFetcherIOSBridge(
     GaiaAuthFetcherIOS* fetcher,
     web::BrowserState* browser_state)
     : browser_state_(browser_state), fetcher_(fetcher), request_() {
-  web::BrowserState::GetActiveStateManager(browser_state_)->AddObserver(this);
+  ActiveStateManager::FromBrowserState(browser_state_)->AddObserver(this);
 }
 
 GaiaAuthFetcherIOSBridge::~GaiaAuthFetcherIOSBridge() {
-  web::BrowserState::GetActiveStateManager(browser_state_)
-      ->RemoveObserver(this);
+  ActiveStateManager::FromBrowserState(browser_state_)->RemoveObserver(this);
   ResetWKWebView();
 }
 
@@ -282,7 +281,7 @@ GURL GaiaAuthFetcherIOSBridge::FinishPendingRequest() {
 }
 
 WKWebView* GaiaAuthFetcherIOSBridge::GetWKWebView() {
-  if (!web::BrowserState::GetActiveStateManager(browser_state_)->IsActive()) {
+  if (!ActiveStateManager::FromBrowserState(browser_state_)->IsActive()) {
     // |browser_state_| is not active, WKWebView linked to this browser state
     // should not exist or be created.
     return nil;
@@ -326,12 +325,7 @@ GaiaAuthFetcherIOS::GaiaAuthFetcherIOS(GaiaAuthConsumer* consumer,
                                        web::BrowserState* browser_state)
     : GaiaAuthFetcher(consumer, source, getter),
       bridge_(new GaiaAuthFetcherIOSBridge(this, browser_state)),
-      browser_state_(browser_state) {
-  // Account Consistency needs to be disabled for the Logout call. There is a
-  // race with the cookie clearing request (handled by
-  // AccountConsistencyService), so we invalidate the cookie for the call.
-  SetLogoutHeaders("Cookie: CHROME_CONNECTED=EXPIRED;");
-}
+      browser_state_(browser_state) {}
 
 GaiaAuthFetcherIOS::~GaiaAuthFetcherIOS() {
 }

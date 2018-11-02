@@ -101,6 +101,12 @@ std::string WinHttpMessage(const char* extra) {
                               GetLastError(),
                               error_code);
   }
+
+  // Most system messages end in a space. Remove the space if it’s there,
+  // because the StringPrintf() below includes one.
+  if (len >= 1 && msgbuf[len - 1] == ' ') {
+    msgbuf[len - 1] = '\0';
+  }
   return base::StringPrintf("%s: %s (0x%lx)", extra, msgbuf, error_code);
 }
 
@@ -163,8 +169,7 @@ bool HTTPTransportWin::ExecuteSynchronously(std::string* response_body) {
   url_components.dwUrlPathLength = 1;
   url_components.dwExtraInfoLength = 1;
   std::wstring url_wide(base::UTF8ToUTF16(url()));
-  // dwFlags = ICU_REJECT_USERPWD fails on XP. See "Community Additions" at:
-  // https://msdn.microsoft.com/en-us/library/aa384092.aspx
+  // dwFlags = ICU_REJECT_USERPWD fails on XP.
   if (!WinHttpCrackUrl(
           url_wide.c_str(), 0, 0, &url_components)) {
     LOG(ERROR) << WinHttpMessage("WinHttpCrackUrl");

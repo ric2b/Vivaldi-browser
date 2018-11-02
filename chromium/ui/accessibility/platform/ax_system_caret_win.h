@@ -6,9 +6,9 @@
 #define UI_ACCESSIBILITY_PLATFORM_AX_SYSTEM_CARET_WIN_H_
 
 #include <oleacc.h>
+#include <wrl/client.h>
 
 #include "base/macros.h"
-#include "base/win/scoped_comptr.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_data.h"
@@ -29,7 +29,7 @@ class AX_EXPORT AXSystemCaretWin : private AXPlatformNodeDelegate {
   explicit AXSystemCaretWin(gfx::AcceleratedWidget event_target);
   virtual ~AXSystemCaretWin();
 
-  base::win::ScopedComPtr<IAccessible> GetCaret() const;
+  Microsoft::WRL::ComPtr<IAccessible> GetCaret() const;
   void MoveCaretTo(const gfx::Rect& bounds);
 
  private:
@@ -44,9 +44,11 @@ class AX_EXPORT AXSystemCaretWin : private AXPlatformNodeDelegate {
   gfx::NativeViewAccessible HitTestSync(int x, int y) override;
   gfx::NativeViewAccessible GetFocus() override;
   AXPlatformNode* GetFromNodeID(int32_t id) override;
+  int GetIndexInParent() const override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
   bool AccessibilityPerformAction(const AXActionData& data) override;
   bool ShouldIgnoreHoveredStateForTesting() override;
+  bool IsOffscreen() const override;
 
   AXPlatformNodeWin* caret_;
   gfx::AcceleratedWidget event_target_;

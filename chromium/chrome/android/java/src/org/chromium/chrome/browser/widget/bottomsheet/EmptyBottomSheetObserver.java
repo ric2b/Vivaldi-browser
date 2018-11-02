@@ -5,16 +5,17 @@
 package org.chromium.chrome.browser.widget.bottomsheet;
 
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
 
 /**
  * An empty base implementation of the {@link BottomSheetObserver} interface.
  */
 public class EmptyBottomSheetObserver implements BottomSheetObserver {
     @Override
-    public void onSheetOpened() {}
+    public void onSheetOpened(@StateChangeReason int reason) {}
 
     @Override
-    public void onSheetClosed() {}
+    public void onSheetClosed(@StateChangeReason int reason) {}
 
     @Override
     public void onSheetReleased() {}
@@ -24,9 +25,6 @@ public class EmptyBottomSheetObserver implements BottomSheetObserver {
 
     @Override
     public void onSheetOffsetChanged(float heightFraction) {}
-
-    @Override
-    public void onSheetLayout(int windowHeight, int containerHeight) {}
 
     @Override
     public void onTransitionPeekToHalf(float transitionFraction) {}

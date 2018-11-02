@@ -12,6 +12,8 @@ static_library("sandbox") {
   sources = [
     "src/acl.cc",
     "src/acl.h",
+    "src/app_container_profile.cc",
+    "src/app_container_profile.h",
     "src/broker_services.cc",
     "src/broker_services.h",
     "src/crosscall_client.h",
@@ -39,6 +41,8 @@ static_library("sandbox") {
     "src/interception_internal.h",
     "src/interceptors.h",
     "src/internal_types.h",
+    "src/ipc_args.cc",
+    "src/ipc_args.h",
     "src/ipc_tags.h",
     "src/job.cc",
     "src/job.h",
@@ -102,6 +106,8 @@ static_library("sandbox") {
     "src/sandbox_types.h",
     "src/sandbox_utils.cc",
     "src/sandbox_utils.h",
+    "src/security_capabilities.cc",
+    "src/security_capabilities.h",
     "src/security_level.h",
     "src/service_resolver.cc",
     "src/service_resolver.h",
@@ -178,6 +184,7 @@ test("sbox_integration_tests") {
     "src/handle_closer_test.cc",
     "src/handle_inheritance_test.cc",
     "src/integrity_level_test.cc",
+    "src/ipc_leak_test.cc",
     "src/ipc_ping_test.cc",
     "src/lpc_policy_test.cc",
     "src/named_pipe_policy_test.cc",
@@ -290,6 +297,7 @@ test("sbox_validation_tests") {
 
 test("sbox_unittests") {
   sources = [
+    "src/app_container_unittest.cc",
     "src/interception_unittest.cc",
     "src/ipc_unittest.cc",
     "src/job_unittest.cc",
@@ -321,7 +329,6 @@ test("sandbox_poc") {
     "sandbox_poc/resource.h",
     "sandbox_poc/sandbox.cc",
     "sandbox_poc/sandbox.h",
-    "sandbox_poc/sandbox.ico",
     "sandbox_poc/sandbox.rc",
   ]
 

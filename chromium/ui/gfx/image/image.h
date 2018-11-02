@@ -70,10 +70,6 @@ class GFX_EXPORT Image {
 #if defined(OS_IOS)
   // Retains |image|.
   explicit Image(UIImage* image);
-
-  // Retains argument according to |policy|.
-  Image(UIImage* image, base::scoped_policy::OwnershipPolicy policy);
-
 #elif defined(OS_MACOSX)
   // Does not retain |image|; expects to take ownership.
   // A single NSImage object can contain multiple bitmaps so there's no reason
@@ -140,8 +136,10 @@ class GFX_EXPORT Image {
   // image is empty.
   ImageSkia AsImageSkia() const;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
   // Same as ToSkBitmap(), but returns nil if this image is empty.
+#if defined(OS_IOS)
+  UIImage* AsUIImage() const;
+#elif defined(OS_MACOSX)
   NSImage* AsNSImage() const;
 #endif
 
@@ -154,9 +152,7 @@ class GFX_EXPORT Image {
   scoped_refptr<base::RefCountedMemory> Copy1xPNGBytes() const;
   ImageSkia* CopyImageSkia() const;
   SkBitmap* CopySkBitmap() const;
-#if defined(OS_IOS)
-  UIImage* CopyUIImage() const;
-#elif defined(OS_MACOSX)
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   NSImage* CopyNSImage() const;
 #endif
 

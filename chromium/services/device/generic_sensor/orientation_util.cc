@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#define _USE_MATH_DEFINES  // For VC++ to get M_PI. This has to be first.
-
 #include "services/device/generic_sensor/orientation_util.h"
 
 #include <cmath>
 
 #include "base/logging.h"
+#include "base/numerics/math_constants.h"
+#include "services/device/generic_sensor/generic_sensor_consts.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 
 namespace {
 
@@ -59,19 +60,21 @@ void ComputeOrientationEulerAnglesInRadiansFromRotationMatrix(
     if (std::abs(r[6]) < kEpsilon) {  // r[6] == 0, cos(beta) == 0
       // gimbal lock discontinuity
       *alpha_in_radians = std::atan2(r[3], r[0]);
-      *beta_in_radians = (r[7] > 0) ? M_PI / 2 : -M_PI / 2;  // beta = +-pi/2
+      *beta_in_radians = (r[7] > 0) ? base::kPiDouble / 2
+                                    : -base::kPiDouble / 2;  // beta = +-pi/2
       *gamma_in_radians = 0;                                 // gamma = 0
     } else if (r[6] > 0) {  // cos(gamma) == 0, cos(beta) > 0
       *alpha_in_radians = std::atan2(-r[1], r[4]);
       *beta_in_radians = std::asin(r[7]);  // beta [-pi/2, pi/2]
-      *gamma_in_radians = -M_PI / 2;       // gamma = -pi/2
+      *gamma_in_radians = -base::kPiDouble / 2;  // gamma = -pi/2
     } else {                               // cos(gamma) == 0, cos(beta) < 0
       *alpha_in_radians = std::atan2(r[1], -r[4]);
       *beta_in_radians = -std::asin(r[7]);
-      *beta_in_radians += (*beta_in_radians >= 0)
-                              ? -M_PI
-                              : M_PI;  // beta [-pi,-pi/2) U (pi/2,pi)
-      *gamma_in_radians = -M_PI / 2;   // gamma = -pi/2
+      *beta_in_radians +=
+          (*beta_in_radians >= 0)
+              ? -base::kPiDouble
+              : base::kPiDouble;                 // beta [-pi,-pi/2) U (pi/2,pi)
+      *gamma_in_radians = -base::kPiDouble / 2;  // gamma = -pi/2
     }
   } else if (r[8] > 0) {  // cos(beta) > 0
     *alpha_in_radians = std::atan2(-r[1], r[4]);
@@ -80,23 +83,20 @@ void ComputeOrientationEulerAnglesInRadiansFromRotationMatrix(
   } else {                                        // cos(beta) < 0
     *alpha_in_radians = std::atan2(r[1], -r[4]);
     *beta_in_radians = -std::asin(r[7]);
-    *beta_in_radians +=
-        (*beta_in_radians >= 0) ? -M_PI : M_PI;  // beta [-pi,-pi/2) U (pi/2,pi)
+    *beta_in_radians += (*beta_in_radians >= 0)
+                            ? -base::kPiDouble
+                            : base::kPiDouble;  // beta [-pi,-pi/2) U (pi/2,pi)
     *gamma_in_radians = std::atan2(r[6], -r[8]);  // gamma (-pi/2, pi/2)
   }
 
   // alpha is in [-pi, pi], make sure it is in [0, 2*pi).
   if (*alpha_in_radians < 0)
-    *alpha_in_radians += 2 * M_PI;  // alpha [0, 2*pi)
+    *alpha_in_radians += 2 * base::kPiDouble;  // alpha [0, 2*pi)
 }
 
 }  // namespace
 
 namespace device {
-
-const double kRadToDeg = 180.0 / M_PI;
-
-const double kDegToRad = M_PI / 180.0;
 
 void ComputeOrientationEulerAnglesFromRotationMatrix(
     const std::vector<double>& r,
@@ -106,9 +106,9 @@ void ComputeOrientationEulerAnglesFromRotationMatrix(
   double alpha_in_radians, beta_in_radians, gamma_in_radians;
   ComputeOrientationEulerAnglesInRadiansFromRotationMatrix(
       r, &alpha_in_radians, &beta_in_radians, &gamma_in_radians);
-  *alpha_in_degrees = kRadToDeg * alpha_in_radians;
-  *beta_in_degrees = kRadToDeg * beta_in_radians;
-  *gamma_in_degrees = kRadToDeg * gamma_in_radians;
+  *alpha_in_degrees = gfx::RadToDeg(alpha_in_radians);
+  *beta_in_degrees = gfx::RadToDeg(beta_in_radians);
+  *gamma_in_degrees = gfx::RadToDeg(gamma_in_radians);
 }
 
 }  // namespace device

@@ -28,13 +28,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Deprecation.h"
 #include "modules/mediastream/MediaStreamRegistry.h"
 #include "modules/mediastream/MediaStreamTrackEvent.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/mediastream/MediaStreamCenter.h"
 #include "platform/mediastream/MediaStreamSource.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -97,12 +97,20 @@ MediaStream* MediaStream::Create(ExecutionContext* context,
   return new MediaStream(context, stream_descriptor);
 }
 
+MediaStream* MediaStream::Create(ExecutionContext* context,
+                                 MediaStreamDescriptor* stream_descriptor,
+                                 const MediaStreamTrackVector& audio_tracks,
+                                 const MediaStreamTrackVector& video_tracks) {
+  return new MediaStream(context, stream_descriptor, audio_tracks,
+                         video_tracks);
+}
+
 MediaStream::MediaStream(ExecutionContext* context,
                          MediaStreamDescriptor* stream_descriptor)
     : ContextClient(context),
       descriptor_(stream_descriptor),
       scheduled_event_timer_(
-          TaskRunnerHelper::Get(TaskType::kMediaElementEvent, context),
+          context->GetTaskRunner(TaskType::kMediaElementEvent),
           this,
           &MediaStream::ScheduledEventTimerFired) {
   descriptor_->SetClient(this);
@@ -131,11 +139,44 @@ MediaStream::MediaStream(ExecutionContext* context,
 }
 
 MediaStream::MediaStream(ExecutionContext* context,
+                         MediaStreamDescriptor* stream_descriptor,
+                         const MediaStreamTrackVector& audio_tracks,
+                         const MediaStreamTrackVector& video_tracks)
+    : ContextClient(context),
+      descriptor_(stream_descriptor),
+      scheduled_event_timer_(
+          context->GetTaskRunner(TaskType::kMediaElementEvent),
+          this,
+          &MediaStream::ScheduledEventTimerFired) {
+  descriptor_->SetClient(this);
+
+  audio_tracks_.ReserveCapacity(audio_tracks.size());
+  for (size_t i = 0; i < audio_tracks.size(); ++i) {
+    MediaStreamTrack* audio_track = audio_tracks[i];
+    DCHECK_EQ("audio", audio_track->kind());
+    audio_track->RegisterMediaStream(this);
+    audio_tracks_.push_back(audio_track);
+  }
+  video_tracks_.ReserveCapacity(video_tracks.size());
+  for (size_t i = 0; i < video_tracks.size(); ++i) {
+    MediaStreamTrack* video_track = video_tracks[i];
+    DCHECK_EQ("video", video_track->kind());
+    video_track->RegisterMediaStream(this);
+    video_tracks_.push_back(video_track);
+  }
+  DCHECK(TracksMatchDescriptor());
+
+  if (EmptyOrOnlyEndedTracks()) {
+    descriptor_->SetActive(false);
+  }
+}
+
+MediaStream::MediaStream(ExecutionContext* context,
                          const MediaStreamTrackVector& audio_tracks,
                          const MediaStreamTrackVector& video_tracks)
     : ContextClient(context),
       scheduled_event_timer_(
-          TaskRunnerHelper::Get(TaskType::kMediaElementEvent, context),
+          context->GetTaskRunner(TaskType::kMediaElementEvent),
           this,
           &MediaStream::ScheduledEventTimerFired) {
   MediaStreamComponentVector audio_components;
@@ -176,6 +217,22 @@ bool MediaStream::EmptyOrOnlyEndedTracks() {
   for (MediaStreamTrackVector::iterator iter = video_tracks_.begin();
        iter != video_tracks_.end(); ++iter) {
     if (!iter->Get()->Ended())
+      return false;
+  }
+  return true;
+}
+
+bool MediaStream::TracksMatchDescriptor() {
+  if (audio_tracks_.size() != descriptor_->NumberOfAudioComponents())
+    return false;
+  for (size_t i = 0; i < audio_tracks_.size(); i++) {
+    if (audio_tracks_[i]->Component() != descriptor_->AudioComponent(i))
+      return false;
+  }
+  if (video_tracks_.size() != descriptor_->NumberOfVideoComponents())
+    return false;
+  for (size_t i = 0; i < video_tracks_.size(); i++) {
+    if (video_tracks_[i]->Component() != descriptor_->VideoComponent(i))
       return false;
   }
   return true;
@@ -236,12 +293,12 @@ void MediaStream::removeTrack(MediaStreamTrack* track,
     case MediaStreamSource::kTypeAudio:
       pos = audio_tracks_.Find(track);
       if (pos != kNotFound)
-        audio_tracks_.erase(pos);
+        audio_tracks_.EraseAt(pos);
       break;
     case MediaStreamSource::kTypeVideo:
       pos = video_tracks_.Find(track);
       if (pos != kNotFound)
-        video_tracks_.erase(pos);
+        video_tracks_.EraseAt(pos);
       break;
   }
 
@@ -272,7 +329,7 @@ MediaStreamTrack* MediaStream::getTrackById(String id) {
       return iter->Get();
   }
 
-  return 0;
+  return nullptr;
 }
 
 MediaStream* MediaStream::clone(ScriptState* script_state) {
@@ -373,7 +430,7 @@ void MediaStream::RemoveTrackByComponent(MediaStreamComponent* component) {
   if (!GetExecutionContext())
     return;
 
-  MediaStreamTrackVector* tracks = 0;
+  MediaStreamTrackVector* tracks = nullptr;
   switch (component->Source()->GetType()) {
     case MediaStreamSource::kTypeAudio:
       tracks = &audio_tracks_;
@@ -397,7 +454,7 @@ void MediaStream::RemoveTrackByComponent(MediaStreamComponent* component) {
 
   MediaStreamTrack* track = (*tracks)[index];
   track->UnregisterMediaStream(this);
-  tracks->erase(index);
+  tracks->EraseAt(index);
   ScheduleDispatchEvent(
       MediaStreamTrackEvent::Create(EventTypeNames::removetrack, track));
 
@@ -411,7 +468,7 @@ void MediaStream::ScheduleDispatchEvent(Event* event) {
   scheduled_events_.push_back(event);
 
   if (!scheduled_event_timer_.IsActive())
-    scheduled_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    scheduled_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void MediaStream::ScheduledEventTimerFired(TimerBase*) {
@@ -432,7 +489,7 @@ URLRegistry& MediaStream::Registry() const {
   return MediaStreamRegistry::Registry();
 }
 
-DEFINE_TRACE(MediaStream) {
+void MediaStream::Trace(blink::Visitor* visitor) {
   visitor->Trace(audio_tracks_);
   visitor->Trace(video_tracks_);
   visitor->Trace(descriptor_);

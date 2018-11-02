@@ -11,6 +11,7 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -140,9 +141,9 @@ class ServiceWorkerContextWatcherTest : public testing::Test {
     return helper_->context_wrapper();
   }
   int64_t RegisterServiceWorker(const GURL& scope, const GURL& script_url) {
-    int64_t registration_id = kInvalidServiceWorkerRegistrationId;
+    int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
     context()->RegisterServiceWorker(
-        script_url, ServiceWorkerRegistrationOptions(scope),
+        script_url, blink::mojom::ServiceWorkerRegistrationOptions(scope),
         nullptr /* provider_host */,
         base::Bind(&DidRegisterServiceWorker, &registration_id));
     base::RunLoop().RunUntilIdle();
@@ -194,12 +195,14 @@ TEST_F(ServiceWorkerContextWatcherTest, StoredServiceWorkers) {
   GURL scope_1 = GURL("https://www1.example.com/");
   GURL script_1 = GURL("https://www1.example.com/worker.js");
   int64_t registration_id_1 = RegisterServiceWorker(scope_1, script_1);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id_1);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
+            registration_id_1);
 
   GURL scope_2 = GURL("https://www2.example.com/");
   GURL script_2 = GURL("https://www2.example.com/worker.js");
   int64_t registration_id_2 = RegisterServiceWorker(scope_2, script_2);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id_2);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
+            registration_id_2);
 
   WatcherCallback watcher_callback;
   scoped_refptr<ServiceWorkerContextWatcher> watcher =
@@ -230,7 +233,8 @@ TEST_F(ServiceWorkerContextWatcherTest, RegisteredServiceWorker) {
   GURL scope_1 = GURL("https://www1.example.com/");
   GURL script_1 = GURL("https://www1.example.com/worker.js");
   int64_t registration_id_1 = RegisterServiceWorker(scope_1, script_1);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id_1);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
+            registration_id_1);
 
   WatcherCallback watcher_callback;
   scoped_refptr<ServiceWorkerContextWatcher> watcher =
@@ -273,7 +277,8 @@ TEST_F(ServiceWorkerContextWatcherTest, UnregisteredServiceWorker) {
   GURL scope_1 = GURL("https://www1.example.com/");
   GURL script_1 = GURL("https://www1.example.com/worker.js");
   int64_t registration_id_1 = RegisterServiceWorker(scope_1, script_1);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id_1);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
+            registration_id_1);
 
   GURL scope_2 = GURL("https://www2.example.com/");
   GURL script_2 = GURL("https://www2.example.com/worker.js");
@@ -305,7 +310,7 @@ TEST_F(ServiceWorkerContextWatcherTest, ErrorReport) {
   GURL scope = GURL("https://www1.example.com/");
   GURL script = GURL("https://www1.example.com/worker.js");
   int64_t registration_id = RegisterServiceWorker(scope, script);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId, registration_id);
 
   WatcherCallback watcher_callback;
   scoped_refptr<ServiceWorkerContextWatcher> watcher =
@@ -354,7 +359,7 @@ TEST_F(ServiceWorkerContextWatcherTest, StopQuickly) {
   GURL scope = GURL("https://www1.example.com/");
   GURL script = GURL("https://www1.example.com/worker.js");
   int64_t registration_id = RegisterServiceWorker(scope, script);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId, registration_id);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(callback_count, watcher_callback.callback_count());
 }
@@ -365,7 +370,7 @@ TEST_F(ServiceWorkerContextWatcherTest, Race) {
   GURL scope = GURL("https://www1.example.com/");
   GURL script = GURL("https://www1.example.com/worker.js");
   int64_t registration_id = RegisterServiceWorker(scope, script);
-  ASSERT_NE(kInvalidServiceWorkerRegistrationId, registration_id);
+  ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId, registration_id);
   base::RunLoop().RunUntilIdle();
 
   WatcherCallback watcher_callback;

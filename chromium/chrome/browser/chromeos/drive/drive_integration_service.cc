@@ -255,7 +255,8 @@ DriveIntegrationService::DriveIntegrationService(
 
   logger_.reset(new EventLogger);
   blocking_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
+      {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+       base::WithBaseSyncPrimitives()});
 
   ProfileOAuth2TokenService* oauth_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
@@ -402,6 +403,8 @@ void DriveIntegrationService::RemoveObserver(
 }
 
 void DriveIntegrationService::OnNotificationReceived() {
+  logger_->Log(logging::LOG_INFO,
+               "Received Drive update notification. Will check for update.");
   file_system_->CheckForUpdates();
   drive_app_registry_->Update();
 }

@@ -26,7 +26,6 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_data.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
@@ -44,6 +43,7 @@
 #include "chromeos/dbus/fake_update_engine_client.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_ipconfig_client.h"
+#include "chromeos/dbus/shill_profile_client.h"
 #include "chromeos/dbus/shill_service_client.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
@@ -56,6 +56,7 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -88,6 +89,8 @@ const char kArcStatus[] = "{\"applications\":[ { "
     "\"permissions\": [\"android.permission.INTERNET\"] }],"
     "\"userEmail\":\"xxx@google.com\"}";
 const char kDroidGuardInfo[] = "{\"droid_guard_info\":42}";
+const std::string kShillFakeProfilePath = "/profile/user1/shill";
+const std::string kShillFakeUserhash = "user1";
 
 class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
  public:
@@ -155,7 +158,7 @@ class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
 
   void RefreshSampleResourceUsage() {
     SampleResourceUsage();
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   }
 
  protected:
@@ -279,7 +282,7 @@ class DeviceStatusCollectorTest : public testing::Test {
                 "device_id")),
         settings_helper_(false),
         user_manager_(new chromeos::MockUserManager()),
-        user_manager_enabler_(user_manager_),
+        user_manager_enabler_(base::WrapUnique(user_manager_)),
         got_session_status_(false),
         fake_device_local_account_(policy::DeviceLocalAccount::TYPE_KIOSK_APP,
                                    kKioskAccountId,
@@ -357,7 +360,7 @@ class DeviceStatusCollectorTest : public testing::Test {
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
 
     // Finish pending tasks.
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
     storage::ExternalMountPoints::GetSystemInstance()->RevokeAllFileSystems();
     DiskMountManager::Shutdown();
   }
@@ -502,7 +505,7 @@ class DeviceStatusCollectorTest : public testing::Test {
   // Only set after MockRunningKioskApp was called.
   std::unique_ptr<TestingProfile> testing_profile_;
   chromeos::MockUserManager* const user_manager_;
-  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
   em::DeviceStatusReportRequest device_status_;
   em::SessionStatusReportRequest session_status_;
   bool got_session_status_;
@@ -936,7 +939,7 @@ TEST_F(DeviceStatusCollectorTest, TestVolumeInfo) {
                          base::Bind(&GetEmptyCPUTempInfo),
                          base::Bind(&GetEmptyAndroidStatus));
   // Force finishing tasks posted by ctor of DeviceStatusCollector.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   GetStatus();
   EXPECT_EQ(expected_mount_points.size(),
@@ -989,7 +992,7 @@ TEST_F(DeviceStatusCollectorTest, TestCPUSamples) {
                          base::Bind(&GetEmptyCPUTempInfo),
                          base::Bind(&GetEmptyAndroidStatus));
   // Force finishing tasks posted by ctor of DeviceStatusCollector.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   GetStatus();
   ASSERT_EQ(1, device_status_.cpu_utilization_pct().size());
   EXPECT_EQ(100, device_status_.cpu_utilization_pct(0));
@@ -1040,7 +1043,7 @@ TEST_F(DeviceStatusCollectorTest, TestCPUTemp) {
                          base::Bind(&GetFakeCPUTempInfo, expected_temp_info),
                          base::Bind(&GetEmptyAndroidStatus));
   // Force finishing tasks posted by ctor of DeviceStatusCollector.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   GetStatus();
   EXPECT_EQ(expected_temp_info.size(),
@@ -1433,46 +1436,55 @@ class DeviceStatusCollectorNetworkInterfacesTest
   void SetUp() override {
     chromeos::DBusThreadManager::Initialize();
     chromeos::NetworkHandler::Initialize();
-    chromeos::ShillDeviceClient::TestInterface* test_device_client =
-        chromeos::DBusThreadManager::Get()->GetShillDeviceClient()->
-            GetTestInterface();
-    test_device_client->ClearDevices();
-    for (size_t i = 0; i < arraysize(kFakeDevices); ++i) {
-      const FakeDeviceData& dev = kFakeDevices[i];
-      test_device_client->AddDevice(dev.device_path, dev.type,
-                                    dev.object_path);
+    base::RunLoop().RunUntilIdle();
+
+    chromeos::ShillDeviceClient::TestInterface* device_client =
+        chromeos::DBusThreadManager::Get()
+            ->GetShillDeviceClient()
+            ->GetTestInterface();
+    chromeos::ShillServiceClient::TestInterface* service_client =
+        chromeos::DBusThreadManager::Get()
+            ->GetShillServiceClient()
+            ->GetTestInterface();
+    chromeos::ShillIPConfigClient::TestInterface* ip_config_client =
+        chromeos::DBusThreadManager::Get()
+            ->GetShillIPConfigClient()
+            ->GetTestInterface();
+
+    device_client->ClearDevices();
+    service_client->ClearServices();
+
+    for (const FakeDeviceData& dev : kFakeDevices) {
+      device_client->AddDevice(dev.device_path, dev.type, dev.object_path);
       if (*dev.mac_address) {
-        test_device_client->SetDeviceProperty(dev.device_path,
-                                              shill::kAddressProperty,
-                                              base::Value(dev.mac_address));
+        device_client->SetDeviceProperty(dev.device_path,
+                                         shill::kAddressProperty,
+                                         base::Value(dev.mac_address));
       }
       if (*dev.meid) {
-        test_device_client->SetDeviceProperty(
-            dev.device_path, shill::kMeidProperty, base::Value(dev.meid));
+        device_client->SetDeviceProperty(dev.device_path, shill::kMeidProperty,
+                                         base::Value(dev.meid));
       }
       if (*dev.imei) {
-        test_device_client->SetDeviceProperty(
-            dev.device_path, shill::kImeiProperty, base::Value(dev.imei));
+        device_client->SetDeviceProperty(dev.device_path, shill::kImeiProperty,
+                                         base::Value(dev.imei));
       }
     }
 
-    chromeos::ShillServiceClient::TestInterface* service_client =
-        chromeos::DBusThreadManager::Get()->GetShillServiceClient()->
-            GetTestInterface();
-    service_client->ClearServices();
+    chromeos::DBusThreadManager::Get()
+        ->GetShillProfileClient()
+        ->GetTestInterface()
+        ->AddProfile(kShillFakeProfilePath, kShillFakeUserhash);
 
     // Now add services for every fake network.
     for (const FakeNetworkState& fake_network : kFakeNetworks) {
       // Shill forces non-visible networks to report a disconnected state.
       bool is_visible =
           fake_network.connection_status != shill::kStateDisconnect;
-      service_client->AddService(
-          fake_network.name,       /* service_path */
-          fake_network.name        /* guid */,
-          fake_network.name        /* name */,
-          fake_network.type        /* type */,
-          fake_network.connection_status,
-          is_visible);
+      service_client->AddService(fake_network.name /* service_path */,
+                                 fake_network.name /* guid */,
+                                 fake_network.name, fake_network.type,
+                                 fake_network.connection_status, is_visible);
       service_client->SetServiceProperty(
           fake_network.name, shill::kSignalStrengthProperty,
           base::Value(fake_network.signal_strength));
@@ -1482,7 +1494,7 @@ class DeviceStatusCollectorNetworkInterfacesTest
       // Set the profile so this shows up as a configured network.
       service_client->SetServiceProperty(fake_network.name,
                                          shill::kProfileProperty,
-                                         base::Value(fake_network.name));
+                                         base::Value(kShillFakeProfilePath));
       if (strlen(fake_network.address) > 0) {
         // Set the IP config.
         base::DictionaryValue ip_config_properties;
@@ -1490,11 +1502,8 @@ class DeviceStatusCollectorNetworkInterfacesTest
                                     base::Value(fake_network.address));
         ip_config_properties.SetKey(shill::kGatewayProperty,
                                     base::Value(fake_network.gateway));
-        chromeos::ShillIPConfigClient::TestInterface* ip_config_test =
-            chromeos::DBusThreadManager::Get()->GetShillIPConfigClient()->
-            GetTestInterface();
         const std::string kIPConfigPath = "test_ip_config";
-        ip_config_test->AddIPConfig(kIPConfigPath, ip_config_properties);
+        ip_config_client->AddIPConfig(kIPConfigPath, ip_config_properties);
         service_client->SetServiceProperty(fake_network.name,
                                            shill::kIPConfigProperty,
                                            base::Value(kIPConfigPath));
@@ -1503,13 +1512,12 @@ class DeviceStatusCollectorNetworkInterfacesTest
 
     // Now add an unconfigured network - it should not show up in the
     // reported list of networks because it doesn't have a profile specified.
-    service_client->AddService(
-        kUnconfiguredNetwork.name,       /* service_path */
-        kUnconfiguredNetwork.name        /* guid */,
-        kUnconfiguredNetwork.name        /* name */,
-        kUnconfiguredNetwork.type        /* type */,
-        kUnconfiguredNetwork.connection_status,
-        true /* visible */);
+    service_client->AddService(kUnconfiguredNetwork.name, /* service_path */
+                               kUnconfiguredNetwork.name /* guid */,
+                               kUnconfiguredNetwork.name /* name */,
+                               kUnconfiguredNetwork.type /* type */,
+                               kUnconfiguredNetwork.connection_status,
+                               true /* visible */);
     service_client->SetServiceProperty(
         kUnconfiguredNetwork.name, shill::kSignalStrengthProperty,
         base::Value(kUnconfiguredNetwork.signal_strength));
@@ -1539,8 +1547,7 @@ class DeviceStatusCollectorNetworkInterfacesTest
 
   void VerifyNetworkReporting() {
     int count = 0;
-    for (size_t i = 0; i < arraysize(kFakeDevices); ++i) {
-      const FakeDeviceData& dev = kFakeDevices[i];
+    for (const FakeDeviceData& dev : kFakeDevices) {
       if (dev.expected_type == -1)
         continue;
 
@@ -1563,7 +1570,8 @@ class DeviceStatusCollectorNetworkInterfacesTest
         }
       }
 
-      EXPECT_TRUE(found_match) << "No matching interface for fake device " << i;
+      EXPECT_TRUE(found_match)
+          << "No matching interface for fake device " << dev.device_path;
       count++;
     }
 

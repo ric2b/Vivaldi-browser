@@ -125,7 +125,7 @@ NetworkDropdown::NetworkDropdown(View* view, content::WebUI* web_ui, bool oobe)
   network_menu_.reset(new NetworkMenuWebUI(this, web_ui));
   DCHECK(NetworkHandler::IsInitialized());
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
-  handler->RequestScan();
+  handler->RequestScan(NetworkTypePattern::WiFi());
   handler->AddObserver(this, FROM_HERE);
   Refresh();
   network_scan_timer_.Start(
@@ -151,7 +151,7 @@ gfx::NativeWindow NetworkDropdown::GetNativeWindow() const {
 }
 
 void NetworkDropdown::OpenButtonOptions() {
-  LoginDisplayHost::default_host()->OpenProxySettings("");
+  LoginDisplayHost::default_host()->OpenInternetDetailDialog("");
 }
 
 bool NetworkDropdown::ShouldOpenButtonOptions() const {
@@ -208,7 +208,8 @@ void NetworkDropdown::SetNetworkIconAndText() {
 }
 
 void NetworkDropdown::RequestNetworkScan() {
-  NetworkHandler::Get()->network_state_handler()->RequestScan();
+  NetworkHandler::Get()->network_state_handler()->RequestScan(
+      NetworkTypePattern::WiFi());
   Refresh();
 }
 

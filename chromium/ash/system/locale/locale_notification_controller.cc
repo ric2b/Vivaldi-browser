@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/resources/grit/ash_resources.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_notifier.h"
@@ -36,7 +37,6 @@ class LocaleNotificationDelegate : public message_center::NotificationDelegate {
 
   // message_center::NotificationDelegate overrides:
   void Close(bool by_user) override;
-  bool HasClickedListener() override;
   void Click() override;
   void ButtonClick(int button_index) override;
 
@@ -64,10 +64,6 @@ void LocaleNotificationDelegate::Close(bool by_user) {
   }
 }
 
-bool LocaleNotificationDelegate::HasClickedListener() {
-  return true;
-}
-
 void LocaleNotificationDelegate::Click() {
   if (callback_) {
     std::move(callback_).Run(ash::mojom::LocaleNotificationResult::ACCEPT);
@@ -84,9 +80,9 @@ void LocaleNotificationDelegate::ButtonClick(int button_index) {
 
 }  // namespace
 
-LocaleNotificationController::LocaleNotificationController() {}
+LocaleNotificationController::LocaleNotificationController() = default;
 
-LocaleNotificationController::~LocaleNotificationController() {}
+LocaleNotificationController::~LocaleNotificationController() = default;
 
 void LocaleNotificationController::BindRequest(
     mojom::LocaleNotificationControllerRequest request) {
@@ -110,16 +106,21 @@ void LocaleNotificationController::OnLocaleChanged(
   optional.never_timeout = true;
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, kLocaleChangeNotificationId,
-      base::string16() /* title */,
-      l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_MESSAGE,
-                                 from, to),
-      bundle.GetImageNamed(IDR_AURA_UBER_TRAY_LOCALE),
-      base::string16() /* display_source */, GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 system_notifier::kNotifierLocale),
-      optional, new LocaleNotificationDelegate(std::move(callback))));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kLocaleChangeNotificationId,
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_TITLE),
+          l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_MESSAGE,
+                                     from, to),
+          bundle.GetImageNamed(IDR_AURA_UBER_TRAY_LOCALE),
+          base::string16() /* display_source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierLocale),
+          optional, new LocaleNotificationDelegate(std::move(callback)),
+          kNotificationSettingsIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->set_clickable(true);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 }

@@ -61,7 +61,7 @@ class TestNetworkConnectionHandler : public NetworkConnectionHandler {
   TestNetworkConnectionHandler(
       const base::Callback<void(const std::string&)>& disconnect_handler)
       : NetworkConnectionHandler(), disconnect_handler_(disconnect_handler) {}
-  ~TestNetworkConnectionHandler() override {}
+  ~TestNetworkConnectionHandler() override = default;
 
   // NetworkConnectionHandler:
   void DisconnectNetwork(
@@ -107,8 +107,6 @@ class AutoConnectHandlerTest : public NetworkStateTest {
     test_nsscertdb_.reset(new net::NSSCertDatabaseChromeOS(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())),
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot()))));
-    test_nsscertdb_->SetSlowTaskRunnerForTest(
-        scoped_task_environment_.GetMainThreadTaskRunner());
 
     CertLoader::Initialize();
     CertLoader::ForceHardwareBackedForTesting();
@@ -186,9 +184,10 @@ class AutoConnectHandlerTest : public NetworkStateTest {
   }
 
   scoped_refptr<net::X509Certificate> ImportTestClientCert() {
-    net::CertificateList ca_cert_list = net::CreateCertificateListFromFile(
-        net::GetTestCertsDirectory(), "client_1_ca.pem",
-        net::X509Certificate::FORMAT_AUTO);
+    net::ScopedCERTCertificateList ca_cert_list =
+        net::CreateCERTCertificateListFromFile(
+            net::GetTestCertsDirectory(), "client_1_ca.pem",
+            net::X509Certificate::FORMAT_AUTO);
     if (ca_cert_list.empty()) {
       LOG(ERROR) << "No CA cert loaded.";
       return nullptr;

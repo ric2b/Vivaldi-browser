@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -37,9 +38,6 @@ const char kQuicFieldTrial[] = "DataReductionProxyUseQuic";
 
 const char kLoFiFieldTrial[] = "DataCompressionProxyLoFi";
 const char kLoFiFlagFieldTrial[] = "DataCompressionProxyLoFiFlag";
-
-const char kBlackListTransitionFieldTrial[] =
-    "DataReductionProxyPreviewsBlackListTransition";
 
 // Default URL for retrieving the Data Reduction Proxy configuration.
 const char kClientConfigURL[] =
@@ -148,26 +146,10 @@ bool IsIncludedInServerExperimentsFieldTrial() {
          base::FieldTrialList::FindFullName(kServerExperimentsFieldTrial)
                  .find(kDisabled) != 0;
 }
-bool IsIncludedInTamperDetectionExperiment() {
-  return IsIncludedInServerExperimentsFieldTrial() &&
-         base::StartsWith(
-             base::FieldTrialList::FindFullName(kServerExperimentsFieldTrial),
-             "TamperDetection_Enabled", base::CompareCase::SENSITIVE);
-}
 
 bool FetchWarmupURLEnabled() {
-  // Fetching of the warmup URL can be enabled only for Enabled* and Control*
-  // groups.
-  if (!IsIncludedInQuicFieldTrial() &&
-      !base::StartsWith(base::FieldTrialList::FindFullName(kQuicFieldTrial),
-                        kControl, base::CompareCase::SENSITIVE)) {
-    return false;
-  }
-
-  std::map<std::string, std::string> params;
-  variations::GetVariationParams(GetQuicFieldTrialName(), &params);
-  return GetStringValueForVariationParamWithDefaultValue(
-             params, "enable_warmup", "false") == "true";
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableDataReductionProxyWarmupURLFetch);
 }
 
 GURL GetWarmupURL() {
@@ -175,6 +157,31 @@ GURL GetWarmupURL() {
   variations::GetVariationParams(GetQuicFieldTrialName(), &params);
   return GURL(GetStringValueForVariationParamWithDefaultValue(
       params, "warmup_url", kDefaultWarmupUrl));
+}
+
+bool ShouldBypassMissingViaHeader(bool connection_is_cellular) {
+  return GetFieldTrialParamByFeatureAsBool(
+      data_reduction_proxy::features::kMissingViaHeaderShortDuration,
+      connection_is_cellular ? "should_bypass_missing_via_cellular"
+                             : "should_bypass_missing_via_wifi",
+      true);
+}
+
+std::pair<base::TimeDelta, base::TimeDelta>
+GetMissingViaHeaderBypassDurationRange(bool connection_is_cellular) {
+  base::TimeDelta bypass_max =
+      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+          data_reduction_proxy::features::kMissingViaHeaderShortDuration,
+          connection_is_cellular ? "missing_via_max_bypass_cellular_in_seconds"
+                                 : "missing_via_max_bypass_wifi_in_seconds",
+          300));
+  base::TimeDelta bypass_min =
+      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+          data_reduction_proxy::features::kMissingViaHeaderShortDuration,
+          connection_is_cellular ? "missing_via_min_bypass_cellular_in_seconds"
+                                 : "missing_via_min_bypass_wifi_in_seconds",
+          60));
+  return {bypass_min, bypass_max};
 }
 
 bool IsLoFiOnViaFlags() {
@@ -247,7 +254,7 @@ bool IsQuicEnabledForNonCoreProxies() {
   std::map<std::string, std::string> params;
   variations::GetVariationParams(GetQuicFieldTrialName(), &params);
   return GetStringValueForVariationParamWithDefaultValue(
-             params, "enable_quic_non_core_proxies", "false") == "true";
+             params, "enable_quic_non_core_proxies", "true") != "false";
 }
 
 const char* GetQuicFieldTrialName() {
@@ -270,12 +277,6 @@ bool IsConfigClientEnabled() {
   return !base::StartsWith(
       base::FieldTrialList::FindFullName("DataReductionProxyConfigService"),
       kDisabled, base::CompareCase::SENSITIVE);
-}
-
-bool IsBlackListEnabledForServerPreviews() {
-  return base::StartsWith(
-      base::FieldTrialList::FindFullName(kBlackListTransitionFieldTrial),
-      kEnabled, base::CompareCase::SENSITIVE);
 }
 
 GURL GetConfigServiceURL() {

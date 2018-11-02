@@ -48,7 +48,7 @@ bool CSSValueList::RemoveAll(const CSSValue& val) {
   for (int index = values_.size() - 1; index >= 0; --index) {
     Member<const CSSValue>& value = values_.at(index);
     if (value && *value == val) {
-      values_.erase(index);
+      values_.EraseAt(index);
       found = true;
     }
   }
@@ -138,7 +138,7 @@ void CSSValueList::ReResolveUrl(const Document& document) const {
     value->ReResolveUrl(document);
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSValueList) {
+void CSSValueList::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(values_);
   CSSValue::TraceAfterDispatch(visitor);
 }

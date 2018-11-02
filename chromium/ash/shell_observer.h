@@ -16,8 +16,6 @@ class PrefService;
 
 namespace ash {
 
-enum class VoiceInteractionState;
-
 class ASH_EXPORT ShellObserver {
  public:
   // Called when the AppList is shown or dismissed.
@@ -38,9 +36,6 @@ class ASH_EXPORT ShellObserver {
 
   // Invoked when the shelf auto-hide behavior in |root_window| is changed.
   virtual void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) {}
-
-  // Invoked when the projection touch HUD is toggled.
-  virtual void OnTouchHudProjectionToggled(bool enabled) {}
 
   // Invoked when entering or exiting fullscreen mode in |root_window|.
   virtual void OnFullscreenStateChanged(bool is_fullscreen,
@@ -69,21 +64,6 @@ class ASH_EXPORT ShellObserver {
 
   // Called when a new KeyboardController is created.
   virtual void OnKeyboardControllerCreated() {}
-
-  // TODO(kaznacheev) Move voice interaction related methods to a separate
-  // observer (crbug.com/758650)
-  // Called when voice interaction session state changes.
-  virtual void OnVoiceInteractionStatusChanged(VoiceInteractionState state) {}
-
-  // Called when voice interaction is enabled/disabled.
-  virtual void OnVoiceInteractionEnabled(bool enabled) {}
-
-  // Called when voice interaction service is allowed/disallowed to access
-  // the "context" (text and graphic content that is currently on screen).
-  virtual void OnVoiceInteractionContextEnabled(bool enabled) {}
-
-  // Called when voice interaction setup flow completed.
-  virtual void OnVoiceInteractionSetupCompleted() {}
 
   // Called at the end of Shell::Init.
   virtual void OnShellInitialized() {}

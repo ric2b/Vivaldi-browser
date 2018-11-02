@@ -75,7 +75,7 @@ SVGFilterElement::~SVGFilterElement() {}
 
 DEFINE_NODE_FACTORY(SVGFilterElement)
 
-DEFINE_TRACE(SVGFilterElement) {
+void SVGFilterElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);
@@ -96,15 +96,29 @@ void SVGFilterElement::SvgAttributeChanged(const QualifiedName& attr_name) {
   if (is_xywh || attr_name == SVGNames::filterUnitsAttr ||
       attr_name == SVGNames::primitiveUnitsAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
-    LayoutSVGResourceContainer* layout_object =
-        ToLayoutSVGResourceContainer(this->GetLayoutObject());
-    if (layout_object)
-      layout_object->InvalidateCacheAndMarkForLayout();
-
+    InvalidateFilterChain();
     return;
   }
 
   SVGElement::SvgAttributeChanged(attr_name);
+}
+
+void SVGFilterElement::PrimitiveAttributeChanged(
+    SVGFilterPrimitiveStandardAttributes& primitive,
+    const QualifiedName& attribute) {
+  if (LayoutObject* layout_object = GetLayoutObject()) {
+    ToLayoutSVGResourceFilter(layout_object)
+        ->PrimitiveAttributeChanged(primitive, attribute);
+  } else if (SVGElementProxySet* proxy_set = ElementProxySet()) {
+    proxy_set->NotifyContentChanged(GetTreeScope());
+  }
+}
+
+void SVGFilterElement::InvalidateFilterChain() {
+  if (LayoutObject* layout_object = GetLayoutObject())
+    ToLayoutSVGResourceFilter(layout_object)->RemoveAllClientsFromCache();
+  else if (SVGElementProxySet* proxy_set = ElementProxySet())
+    proxy_set->NotifyContentChanged(GetTreeScope());
 }
 
 void SVGFilterElement::ChildrenChanged(const ChildrenChange& change) {
@@ -116,6 +130,7 @@ void SVGFilterElement::ChildrenChanged(const ChildrenChange& change) {
   if (LayoutObject* object = GetLayoutObject())
     object->SetNeedsLayoutAndFullPaintInvalidation(
         LayoutInvalidationReason::kChildChanged);
+  InvalidateFilterChain();
 }
 
 LayoutObject* SVGFilterElement::CreateLayoutObject(const ComputedStyle&) {

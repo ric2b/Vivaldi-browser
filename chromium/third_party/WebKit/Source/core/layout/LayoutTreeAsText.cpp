@@ -25,15 +25,16 @@
 
 #include "core/layout/LayoutTreeAsText.h"
 
-#include "core/HTMLNames.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/Document.h"
 #include "core/dom/PseudoElement.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutDetailsMarker.h"
 #include "core/layout/LayoutEmbeddedContent.h"
@@ -45,7 +46,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/layout/svg/LayoutSVGGradientStop.h"
+#include "core/layout/ng/layout_ng_list_item.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/layout/svg/LayoutSVGInline.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
@@ -450,10 +451,6 @@ void Write(TextStream& ts,
     Write(ts, ToLayoutSVGShape(o), indent);
     return;
   }
-  if (o.IsSVGGradientStop()) {
-    WriteSVGGradientStop(ts, ToLayoutSVGGradientStop(o), indent);
-    return;
-  }
   if (o.IsSVGResourceContainer()) {
     WriteSVGResourceContainer(ts, o, indent);
     return;
@@ -514,10 +511,11 @@ void Write(TextStream& ts,
       LayoutViewItem root_item = frame_view->GetLayoutViewItem();
       if (!root_item.IsNull()) {
         root_item.UpdateStyleAndLayout();
-        PaintLayer* layer = root_item.Layer();
-        if (layer)
-          LayoutTreeAsText::WriteLayers(ts, layer, layer, layer->Rect(),
-                                        indent + 1, behavior);
+        if (auto* layer = root_item.Layer()) {
+          LayoutTreeAsText::WriteLayers(
+              ts, layer, layer, layer->RectIgnoringNeedsPositionUpdate(),
+              indent + 1, behavior);
+        }
       }
     }
   }
@@ -658,7 +656,7 @@ void LayoutTreeAsText::WriteLayers(TextStream& ts,
   LayoutRect layer_bounds;
   ClipRect damage_rect, clip_rect_to_apply;
   layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
-      .CalculateRects(ClipRectsContext(root_layer, kUncachedClipRects),
+      .CalculateRects(ClipRectsContext(root_layer, kUncachedClipRects), nullptr,
                       paint_rect, layer_bounds, damage_rect,
                       clip_rect_to_apply);
 
@@ -676,6 +674,13 @@ void LayoutTreeAsText::WriteLayers(TextStream& ts,
   if (layer->GetLayoutObject().IsLayoutEmbeddedContent() &&
       ToLayoutEmbeddedContent(layer->GetLayoutObject()).IsThrottledFrameView())
     should_paint = false;
+
+#if DCHECK_IS_ON()
+  if (layer->NeedsPositionUpdate()) {
+    WriteIndent(ts, indent);
+    ts << " NEEDS POSITION UPDATE\n";
+  }
+#endif
 
   Vector<PaintLayerStackingNode*>* neg_list =
       layer->StackingNode()->NegZOrderList();
@@ -801,8 +806,9 @@ static String ExternalRepresentation(LayoutBox* layout_object,
     return ts.Release();
 
   PaintLayer* layer = layout_object->Layer();
-  LayoutTreeAsText::WriteLayers(ts, layer, layer, layer->Rect(), 0, behavior,
-                                marked_layer);
+  LayoutTreeAsText::WriteLayers(ts, layer, layer,
+                                layer->RectIgnoringNeedsPositionUpdate(), 0,
+                                behavior, marked_layer);
   WriteSelection(ts, layout_object);
   return ts.Release();
 }
@@ -816,12 +822,13 @@ String ExternalRepresentation(LocalFrame* frame,
   LayoutObject* layout_object = frame->ContentLayoutObject();
   if (!layout_object || !layout_object->IsBox())
     return String();
+  LayoutBox* layout_box = ToLayoutBox(layout_object);
 
   PrintContext print_context(frame);
   bool is_text_printing_mode = !!(behavior & kLayoutAsTextPrintingMode);
   if (is_text_printing_mode) {
-    FloatSize size(ToLayoutBox(layout_object)->Size());
-    print_context.BeginPrintMode(size.Width(), size.Height());
+    print_context.BeginPrintMode(layout_box->ClientWidth(),
+                                 layout_box->ClientHeight());
   }
 
   String representation = ExternalRepresentation(ToLayoutBox(layout_object),
@@ -878,10 +885,13 @@ String MarkerTextForListItem(Element* element) {
   element->GetDocument().UpdateStyleAndLayout();
 
   LayoutObject* layout_object = element->GetLayoutObject();
-  if (!layout_object || !layout_object->IsListItem())
-    return String();
-
-  return ToLayoutListItem(layout_object)->MarkerText();
+  if (layout_object) {
+    if (layout_object->IsListItem())
+      return ToLayoutListItem(layout_object)->MarkerText();
+    if (layout_object->IsLayoutNGListItem())
+      return ToLayoutNGListItem(layout_object)->MarkerTextWithoutSuffix();
+  }
+  return String();
 }
 
 }  // namespace blink

@@ -5,13 +5,13 @@
 source_set("autofill") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "autofill_client_ios.h",
-    "autofill_client_ios.mm",
     "autofill_save_card_infobar.mm",
     "autofill_ui_type_util.h",
     "autofill_ui_type_util.mm",
     "card_unmask_prompt_view_bridge.h",
     "card_unmask_prompt_view_bridge.mm",
+    "chrome_autofill_client_ios.h",
+    "chrome_autofill_client_ios.mm",
     "storage_switch_tooltip.h",
     "storage_switch_tooltip.mm",
   ]
@@ -31,6 +31,7 @@ source_set("autofill") {
     "//ios/chrome/browser/autofill",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/infobars",
+    "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/autofill/cells",
     "//ios/chrome/browser/ui/collection_view/cells",

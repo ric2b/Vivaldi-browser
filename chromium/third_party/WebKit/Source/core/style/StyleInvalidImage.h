@@ -12,6 +12,9 @@ namespace blink {
 
 class ImageResourceObserver;
 
+// This class represents an <image> (url(...) even) that was invalid or because
+// of other reasons failed to initiate a load of the underlying image
+// resource.
 class StyleInvalidImage final : public StyleImage {
  public:
   static StyleInvalidImage* Create(const String& url) {
@@ -25,6 +28,7 @@ class StyleInvalidImage final : public StyleImage {
   }
 
   CSSValue* ComputedCSSValue() const override { return CssValue(); }
+  bool CanRender() const override { return false; }
 
   LayoutSize ImageSize(const Document&,
                        float /*multiplier*/,
@@ -35,17 +39,17 @@ class StyleInvalidImage final : public StyleImage {
   bool UsesImageContainerSize() const override { return false; }
   void AddClient(ImageResourceObserver*) override {}
   void RemoveClient(ImageResourceObserver*) override {}
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize&) const override {
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size) const override {
     return nullptr;
   }
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override {
     return false;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { StyleImage::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { StyleImage::Trace(visitor); }
 
  private:
   explicit StyleInvalidImage(const String& url) : url_(url) {

@@ -16,14 +16,7 @@
   right: 20px;
 }
 
-.ellipsis {
-  padding: 0 1%;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 90%;
-}
-
-:host-context([dir='rtl']) #play-pause-volume-controls {
+:host-context([dir='rtl']) #play-pause-volume-hangouts-controls {
   transform: scaleX(-1);
 }
 
@@ -40,7 +33,7 @@
   margin: 0 8px;
 }
 
-#play-pause-volume-controls {
+#play-pause-volume-hangouts-controls {
   display: block;
   margin-top: 13px;
   overflow: hidden;
@@ -48,7 +41,7 @@
 
 #route-description {
   margin: 15px 8px 3px 8px;
-  overflow: hidden;
+  width: 90%;
 }
 
 #route-time-controls {
@@ -85,4 +78,39 @@
   display: block;
   overflow: hidden;
   padding: 0.3em 0;
+}
+
+paper-checkbox {
+  --paper-checkbox-checked-color: #1976D2;
+}
+
+#hangouts-local-present-controls {
+  cursor: pointer;
+  display: inline-block;
+  float: right;
+  padding-top: 10.5px;
+  white-space: nowrap;
+}
+
+#hangouts-local-present-checkbox {
+  --paper-checkbox-vertical-align: top;
+};
+
+#hangouts-local-present-checkbox-subtitle {
+  display: block;
+  font-size: 0.8em;
+  margin-top: 2px;
+  width: 249px;
+}
+
+#mirroring-fullscreen-video-controls {
+  display: inline-block;
+  font-size: 0.8em;
+  margin: 15px 8px 3px 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+#mirroring-fullscreen-video-dropdown {
+  width: auto;
 }

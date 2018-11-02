@@ -15,7 +15,7 @@
                 "Workspace.UILocation",
                 "SDK.RemoteObject",
                 "SDK.NetworkRequest",
-                "SourceFrame.UISourceCodeFrame"
+                "Sources.UISourceCodeFrame"
             ],
             "className": "Sources.SourcesPanel"
         },
@@ -88,6 +88,21 @@
                 {
                     "platform": "mac",
                     "shortcut": "F11 Meta+;"
+                }
+            ]
+        },
+        {
+            "type": "@UI.ActionDelegate",
+            "actionId": "debugger.step-into-async",
+            "className": "Sources.SourcesPanel.DebuggingActionDelegate",
+            "title": "Step into async function call",
+            "iconClass": "largeicon-step-into-async",
+            "contextTypes": [
+                "Sources.SourcesPanel"
+            ],
+            "bindings": [
+                {
+                    "shortcut": "F9"
                 }
             ]
         },
@@ -185,7 +200,7 @@
             "className": "Sources.WatchExpressionsSidebarPane",
             "title": "Add selected text to watches",
             "contextTypes": [
-                "SourceFrame.UISourceCodeFrame"
+                "Sources.UISourceCodeFrame"
             ],
             "bindings": [
                 {
@@ -206,7 +221,7 @@
             "className": "Sources.SourcesPanel.DebuggingActionDelegate",
             "title": "Evaluate in console",
             "contextTypes": [
-                "SourceFrame.UISourceCodeFrame"
+                "Sources.UISourceCodeFrame"
             ],
             "bindings": [
                 {
@@ -234,12 +249,12 @@
         },
         {
             "type": "context-menu-item",
-            "location": "mainMenu/navigate",
+            "location": "mainMenu/default",
             "actionId": "sources.search.toggle"
         },
         {
             "type": "context-menu-item",
-            "location": "navigatorMenu/navigate",
+            "location": "navigatorMenu/default",
             "actionId": "quickOpen.show"
         },
         {
@@ -311,9 +326,19 @@
         {
             "type": "view",
             "location": "navigator-view",
+            "id": "navigator-overrides",
+            "title": "Overrides",
+            "order": 4,
+            "persistence": "permanent",
+            "className": "Sources.OverridesNavigatorView",
+            "experiment": "networkPersistence"
+        },
+        {
+            "type": "view",
+            "location": "navigator-view",
             "id": "navigator-contentScripts",
             "title": "Content scripts",
-            "order": 4,
+            "order": 5,
             "persistence": "permanent",
             "className": "Sources.ContentScriptsNavigatorView"
         },
@@ -322,7 +347,7 @@
             "location": "navigator-view",
             "id": "navigator-snippets",
             "title": "Snippets",
-            "order": 5,
+            "order": 6,
             "persistence": "permanent",
             "className": "Sources.SnippetsNavigatorView"
         },
@@ -343,6 +368,12 @@
             "viewId": "navigator-files",
             "className": "Sources.FilesNavigatorView",
             "experiment": "persistence2"
+        },
+        {
+            "type": "@Sources.NavigatorView",
+            "viewId": "navigator-overrides",
+            "className": "Sources.OverridesNavigatorView",
+            "experiment": "networkPersistence"
         },
         {
             "type": "@Sources.NavigatorView",
@@ -379,7 +410,17 @@
             "title": "Search in anonymous and content scripts",
             "settingName": "searchInAnonymousAndContentScripts",
             "settingType": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Search in anonymous and content scripts"
+                },
+                {
+                    "value": false,
+                    "title": "Do not search in anonymous and content scripts"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -387,7 +428,17 @@
             "title": "Automatically reveal files in navigator",
             "settingName": "autoRevealInNavigator",
             "settingType": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Automatically reveal files in navigator"
+                },
+                {
+                    "value": false,
+                    "title": "Do not automatically reveal files in navigator"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -395,7 +446,17 @@
             "title": "Enable JavaScript source maps",
             "settingName": "jsSourceMapsEnabled",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Enable JavaScript source maps"
+                },
+                {
+                    "value": false,
+                    "title": "Disable JavaScript source maps"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -403,7 +464,17 @@
             "title": "Detect indentation",
             "settingName": "textEditorAutoDetectIndent",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Detect indentation"
+                },
+                {
+                    "value": false,
+                    "title": "Do not detect indentation"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -411,7 +482,17 @@
             "title": "Autocompletion",
             "settingName": "textEditorAutocompletion",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Enable autocompletion"
+                },
+                {
+                    "value": false,
+                    "title": "Disable autocompletion"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -419,7 +500,17 @@
             "title": "Bracket matching",
             "settingName": "textEditorBracketMatching",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Enable bracket matching"
+                },
+                {
+                    "value": false,
+                    "title": "Disable bracket matching"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -452,7 +543,17 @@
             "title": "Display variable values inline while debugging",
             "settingName": "inlineVariableValues",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Display variable values inline while debugging"
+                },
+                {
+                    "value": false,
+                    "title": "Do not display variable values inline while debugging"
+                }
+            ]
         },
         {
             "type": "setting",
@@ -460,7 +561,17 @@
             "title": "Enable CSS source maps",
             "settingName": "cssSourceMapsEnabled",
             "settingType": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Enable CSS source maps"
+                },
+                {
+                    "value": false,
+                    "title": "Disable CSS source maps"
+                }
+            ]
         },
         {
             "type": "view",
@@ -470,14 +581,6 @@
             "persistence": "closeable",
             "order": 100,
             "className": "Sources.AdvancedSearchView"
-        },
-        {
-            "type": "view",
-            "location": "drawer-view",
-            "id": "sources.history",
-            "title": "History",
-            "persistence": "transient",
-            "className": "Sources.RevisionHistoryView"
         },
         {
             "type": "view",
@@ -524,7 +627,7 @@
             "type": "view",
             "location": "sources-sidebar",
             "id": "sources.xhrBreakpoints",
-            "title": "XHR Breakpoints",
+            "title": "XHR/fetch Breakpoints",
             "order": 5,
             "hasToolbar": true,
             "persistence": "permanent",
@@ -632,10 +735,10 @@
         "GoToLineQuickOpen.js",
         "SourceMapNamesResolver.js",
         "JavaScriptBreakpointsSidebarPane.js",
+        "UISourceCodeFrame.js",
         "JavaScriptSourceFrame.js",
-        "CSSSourceFrame.js",
+        "CSSPlugin.js",
         "NavigatorView.js",
-        "RevisionHistoryView.js",
         "ScopeChainSidebarPane.js",
         "SourcesNavigator.js",
         "OutlineQuickOpen.js",
@@ -653,7 +756,7 @@
         "SourcesPanel.js",
         "WorkspaceMappingTip.js",
         "XHRBreakpointsSidebarPane.js",
-        "JavaScriptCompiler.js",
+        "JavaScriptCompilerPlugin.js",
         "ObjectEventListenersSidebarPane.js"
     ],
     "resources": [

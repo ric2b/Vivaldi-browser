@@ -13,16 +13,12 @@
 #include "base/task_runner.h"
 #include "components/wallpaper/wallpaper_resizer_observer.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/skia_util.h"
 
 namespace wallpaper {
 namespace {
-
-// For our scaling ratios we need to round positive numbers.
-int RoundPositive(double x) {
-  return static_cast<int>(floor(x + 0.5));
-}
 
 // Resizes |image| to |target_size| using |layout| and stores the
 // resulting bitmap at |resized_bitmap_out|.
@@ -75,12 +71,10 @@ void Resize(const gfx::ImageSkia image,
 
           if (vertical_ratio > horizontal_ratio) {
             cropped_size = gfx::Size(
-                RoundPositive(static_cast<double>(new_width) / vertical_ratio),
-                orig_height);
+                gfx::ToRoundedInt(new_width / vertical_ratio), orig_height);
           } else {
             cropped_size = gfx::Size(
-                orig_width, RoundPositive(static_cast<double>(new_height) /
-                                          horizontal_ratio));
+                orig_width, gfx::ToRoundedInt(new_height / horizontal_ratio));
           }
           wallpaper_rect.ClampToCenteredSize(cropped_size);
           SkBitmap sub_image;
@@ -109,15 +103,14 @@ uint32_t WallpaperResizer::GetImageId(const gfx::ImageSkia& image) {
   return image_rep.is_null() ? 0 : image_rep.sk_bitmap().getGenerationID();
 }
 
-WallpaperResizer::WallpaperResizer(
-    const gfx::ImageSkia& image,
-    const gfx::Size& target_size,
-    WallpaperLayout layout,
-    scoped_refptr<base::TaskRunner> task_runner)
+WallpaperResizer::WallpaperResizer(const gfx::ImageSkia& image,
+                                   const gfx::Size& target_size,
+                                   const WallpaperInfo& wallpaper_info,
+                                   scoped_refptr<base::TaskRunner> task_runner)
     : image_(image),
       original_image_id_(GetImageId(image_)),
       target_size_(target_size),
-      layout_(layout),
+      wallpaper_info_(wallpaper_info),
       task_runner_(std::move(task_runner)),
       weak_ptr_factory_(this) {
   image_.MakeThreadSafe();
@@ -132,8 +125,8 @@ void WallpaperResizer::StartResize() {
   SkBitmap* resized_bitmap = new SkBitmap;
   if (!task_runner_->PostTaskAndReply(
           FROM_HERE,
-          base::Bind(&Resize, image_, target_size_, layout_, resized_bitmap,
-                     base::RetainedRef(task_runner_)),
+          base::Bind(&Resize, image_, target_size_, wallpaper_info_.layout,
+                     resized_bitmap, base::RetainedRef(task_runner_)),
           base::Bind(&WallpaperResizer::OnResizeFinished,
                      weak_ptr_factory_.GetWeakPtr(),
                      base::Owned(resized_bitmap)))) {

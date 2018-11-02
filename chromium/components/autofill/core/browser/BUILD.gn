@@ -14,11 +14,14 @@ static_library("browser") {
     "address_field.h",
     "address_i18n.cc",
     "address_i18n.h",
+    "address_normalization_manager.cc",
+    "address_normalization_manager.h",
+    "address_normalizer.h",
+    "address_normalizer_impl.cc",
+    "address_normalizer_impl.h",
     "address_rewriter.cc",
     "address_rewriter.h",
     "address_rewriter_rules.cc",
-    "address_validation_util.cc",
-    "address_validation_util.h",
     "autocomplete_history_manager.cc",
     "autocomplete_history_manager.h",
     "autofill-inl.h",
@@ -58,6 +61,8 @@ static_library("browser") {
     "autofill_profile.h",
     "autofill_profile_comparator.cc",
     "autofill_profile_comparator.h",
+    "autofill_profile_validation_util.cc",
+    "autofill_profile_validation_util.h",
     "autofill_profile_validator.cc",
     "autofill_profile_validator.h",
     "autofill_provider.cc",
@@ -82,17 +87,25 @@ static_library("browser") {
     "credit_card.h",
     "credit_card_field.cc",
     "credit_card_field.h",
+    "credit_card_save_manager.cc",
+    "credit_card_save_manager.h",
     "email_field.cc",
     "email_field.h",
     "field_candidates.cc",
     "field_candidates.h",
+    "field_filler.cc",
+    "field_filler.h",
     "field_types.h",
+    "form_data_importer.cc",
+    "form_data_importer.h",
     "form_field.cc",
     "form_field.h",
     "form_group.cc",
     "form_group.h",
     "form_structure.cc",
     "form_structure.h",
+    "form_types.cc",
+    "form_types.h",
     "legal_message_line.cc",
     "legal_message_line.h",
     "name_field.cc",
@@ -109,8 +122,6 @@ static_library("browser") {
     "personal_data_manager.cc",
     "personal_data_manager.h",
     "personal_data_manager_observer.h",
-    "phone_email_validation_util.cc",
-    "phone_email_validation_util.h",
     "phone_field.cc",
     "phone_field.h",
     "phone_number.cc",
@@ -118,6 +129,8 @@ static_library("browser") {
     "phone_number_i18n.cc",
     "phone_number_i18n.h",
     "popup_item_ids.h",
+    "rationalization_util.cc",
+    "rationalization_util.h",
     "region_combobox_model.cc",
     "region_combobox_model.h",
     "region_data_loader.h",
@@ -126,6 +139,8 @@ static_library("browser") {
     "risk_data_loader.h",
     "state_names.cc",
     "state_names.h",
+    "subkey_requester.cc",
+    "subkey_requester.h",
     "suggestion.cc",
     "suggestion.h",
     "ui/card_unmask_prompt_controller.h",
@@ -193,6 +208,15 @@ static_library("browser") {
     sources += [ "ui/save_card_bubble_controller.h" ]
   }
 
+  if (!is_ios) {
+    sources += [
+      "autofill_credit_card_policy_handler.cc",
+      "autofill_credit_card_policy_handler.h",
+      "autofill_policy_handler.cc",
+      "autofill_policy_handler.h",
+    ]
+  }
+
   configs += [ "//build/config:precompiled_headers" ]
 
   public_deps = [
@@ -200,6 +224,7 @@ static_library("browser") {
     "//components/autofill/core/common",
     "//components/resources",
     "//skia",
+    "//third_party/libaddressinput",
   ]
   deps = [
     "//base",
@@ -212,7 +237,6 @@ static_library("browser") {
     "//components/prefs",
     "//components/security_state/core",
     "//components/signin/core/browser",
-    "//components/signin/core/common",
     "//components/strings",
     "//components/sync",
     "//components/variations/net",
@@ -225,7 +249,6 @@ static_library("browser") {
     "//sql",
     "//third_party/fips181",
     "//third_party/icu",
-    "//third_party/libaddressinput",
     "//third_party/libphonenumber",
     "//third_party/re2",
     "//ui/base",
@@ -234,6 +257,13 @@ static_library("browser") {
     "//ui/gfx/range",
     "//url",
   ]
+
+  if (!is_ios) {
+    deps += [
+      "//components/policy/core/browser",
+      "//components/policy/core/common",
+    ]
+  }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
@@ -250,6 +280,8 @@ static_library("test_support") {
     "data_driven_test.cc",
     "data_driven_test.h",
     "suggestion_test_helpers.h",
+    "test_address_normalizer.cc",
+    "test_address_normalizer.h",
     "test_autofill_client.cc",
     "test_autofill_client.h",
     "test_autofill_clock.cc",
@@ -285,7 +317,6 @@ static_library("test_support") {
     "//components/pref_registry",
     "//components/prefs:test_support",
     "//components/signin/core/browser",
-    "//components/signin/core/common",
     "//components/ukm",
     "//components/ukm:test_support",
     "//google_apis:test_support",
@@ -326,31 +357,37 @@ source_set("unit_tests") {
     "address_combobox_model_unittest.cc",
     "address_field_unittest.cc",
     "address_i18n_unittest.cc",
+    "address_normalization_manager_unittest.cc",
+    "address_normalizer_impl_unittest.cc",
     "address_rewriter_unittest.cc",
     "address_unittest.cc",
-    "address_validation_util_unittest.cc",
     "autocomplete_history_manager_unittest.cc",
     "autofill_country_unittest.cc",
     "autofill_data_model_unittest.cc",
     "autofill_data_util_unittest.cc",
     "autofill_download_manager_unittest.cc",
     "autofill_driver_factory_unittest.cc",
+    "autofill_experiments_unittest.cc",
     "autofill_external_delegate_unittest.cc",
-    "autofill_field_unittest.cc",
     "autofill_ie_toolbar_import_win_unittest.cc",
     "autofill_manager_unittest.cc",
     "autofill_merge_unittest.cc",
     "autofill_metrics_unittest.cc",
     "autofill_profile_comparator_unittest.cc",
     "autofill_profile_unittest.cc",
+    "autofill_profile_validation_util_unittest.cc",
     "autofill_profile_validator_unittest.cc",
     "autofill_type_unittest.cc",
+    "autofill_wallet_data_type_controller_unittest.cc",
     "contact_info_unittest.cc",
     "country_combobox_model_unittest.cc",
     "country_names_unittest.cc",
     "credit_card_field_unittest.cc",
+    "credit_card_save_manager_unittest.cc",
     "credit_card_unittest.cc",
     "field_candidates_unittest.cc",
+    "field_filler_unittest.cc",
+    "form_data_importer_unittest.cc",
     "form_field_unittest.cc",
     "form_structure_unittest.cc",
     "legal_message_line_unittest.cc",
@@ -360,11 +397,12 @@ source_set("unit_tests") {
     "payments/payments_client_unittest.cc",
     "payments/payments_service_url_unittest.cc",
     "personal_data_manager_unittest.cc",
-    "phone_email_validation_util_unittest.cc",
     "phone_field_unittest.cc",
     "phone_number_i18n_unittest.cc",
     "phone_number_unittest.cc",
+    "rationalization_util_unittest.cc",
     "region_combobox_model_unittest.cc",
+    "subkey_requester_unittest.cc",
     "ui/card_unmask_prompt_controller_impl_unittest.cc",
     "validation_unittest.cc",
     "webdata/autocomplete_sync_bridge_unittest.cc",
@@ -380,6 +418,13 @@ source_set("unit_tests") {
     sources += [ "autofill_assistant_unittest.cc" ]
   }
 
+  if (!is_ios) {
+    sources += [
+      "autofill_credit_card_policy_handler_unittest.cc",
+      "autofill_policy_handler_unittest.cc",
+    ]
+  }
+
   deps = [
     ":browser",
     ":test_support",
@@ -387,7 +432,6 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/common",
-    "//components/metrics/proto",
     "//components/os_crypt",
     "//components/os_crypt:test_support",
     "//components/prefs:test_support",
@@ -395,7 +439,6 @@ source_set("unit_tests") {
     "//components/security_state/core",
     "//components/signin/core/browser",
     "//components/signin/core/browser:test_support",
-    "//components/signin/core/common",
     "//components/strings",
     "//components/sync",
     "//components/sync:test_support_driver",
@@ -413,9 +456,14 @@ source_set("unit_tests") {
     "//sql",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/libaddressinput:test_support",
     "//third_party/libaddressinput:util",
     "//third_party/libphonenumber",
     "//ui/base",
     "//url",
   ]
+
+  if (!is_ios) {
+    deps += [ "//components/policy/core/common" ]
+  }
 }

@@ -29,13 +29,13 @@
 
 #include <ostream>  // NOLINT
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/wtf/text/CString.h"
 
@@ -65,7 +65,7 @@ VisiblePositionTemplate<Strategy>::VisiblePositionTemplate(
 }
 
 template <typename Strategy>
-DEFINE_TRACE(VisiblePositionTemplate<Strategy>) {
+void VisiblePositionTemplate<Strategy>::Trace(blink::Visitor* visitor) {
   visitor->Trace(position_with_affinity_);
 }
 
@@ -184,6 +184,12 @@ bool VisiblePositionTemplate<Strategy>::IsValid() const {
 #else
   return true;
 #endif
+}
+
+template <typename Strategy>
+bool VisiblePositionTemplate<Strategy>::IsValidFor(
+    const Document& document) const {
+  return position_with_affinity_.IsValidFor(document);
 }
 
 template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingStrategy>;

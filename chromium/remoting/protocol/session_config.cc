@@ -83,10 +83,6 @@ std::unique_ptr<SessionConfig> SessionConfig::SelectCommon(
     return nullptr;
 
   std::unique_ptr<SessionConfig> result(new SessionConfig(Protocol::ICE));
-  ChannelConfig control_config;
-  ChannelConfig event_config;
-  ChannelConfig video_config;
-  ChannelConfig audio_config;
 
   // If neither host nor the client have VP9 experiment enabled then remove it
   // from the list of host video configs.
@@ -212,10 +208,10 @@ const ChannelConfig& SessionConfig::audio_config() const {
 
 SessionConfig::SessionConfig(Protocol protocol) : protocol_(protocol) {}
 
-CandidateSessionConfig::CandidateSessionConfig() {}
+CandidateSessionConfig::CandidateSessionConfig() = default;
 CandidateSessionConfig::CandidateSessionConfig(
     const CandidateSessionConfig& config) = default;
-CandidateSessionConfig::~CandidateSessionConfig() {}
+CandidateSessionConfig::~CandidateSessionConfig() = default;
 
 bool CandidateSessionConfig::IsSupported(const SessionConfig& config) const {
   switch (config.protocol()) {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- This grd file contains images that are pre-scaled for device scale
-     factors. The image returned by |base::ResourceBundle::GetImageNamed|
-     will contain multiple |gfx:ImageSkiaReps| for each scale factors. The
+     factors. The image returned by ui::ResourceBundle::GetImageNamed()
+     will contain multiple gfx:ImageSkiaReps for each scale factors. The
      |fallback_to_low_resolution| attribute controls behavior when
      an image file is missing for target scale factor. If true, chrome
      will automatically scale the 1x image to the target scale factor.
@@ -33,7 +33,6 @@
            The easiest way to find the use of a given resource ID:
            'git grep TOOLBAR_IDR_.*BACK' -->
       <structure type="chrome_scaled_image" name="IDR_IOS_CHECKMARK" file="checkmark.png" />
-      <structure type="chrome_scaled_image" name="IDR_IOS_CONTEXTUAL_SEARCH_HEADER" file="contextual_search_header.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_CONTROLLED_SETTING_MANDATORY" file="controlled_setting_mandatory.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_ERROR" file="error.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_INFOBAR_AUTOLOGIN" file="infobar_autologin.png" />
@@ -41,6 +40,7 @@
       <structure type="chrome_scaled_image" name="IDR_IOS_INFOBAR_SAVE_PASSWORD" file="infobar_save_password.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_INFOBAR_TRANSLATE" file="infobar_translate.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_LOCATION_BAR_HTTP" file="omnibox_http.png" />
+      <structure type="chrome_scaled_image" name="IDR_IOS_OMNIBOX_CALCULATOR" file="omnibox_calculator.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_OMNIBOX_CLEAR" file="omnibox/omnibox_clear.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_OMNIBOX_CLEAR_OTR" file="omnibox/omnibox_incognito_clear.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_OMNIBOX_CLEAR_OTR_PRESSED" file="omnibox/omnibox_incognito_clear_pressed.png" />
@@ -64,7 +64,6 @@
       <structure type="chrome_scaled_image" name="IDR_IOS_PAGEINFO_BAD" file="omnibox/pageinfo_bad.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_PAGEINFO_GOOD" file="omnibox/pageinfo_good.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_PAGEINFO_INFO" file="omnibox/pageinfo_info.png" />
-      <structure type="chrome_scaled_image" name="IDR_IOS_PAYMENTS_ADD" file="payments_add.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_PAYMENTS_WARNING" file="payments_warning.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_PROMO_INFO" file="promo_info.png" />
       <structure type="chrome_scaled_image" name="IDR_IOS_SETTINGS_INFO_24" file="settings_info_24.png" />

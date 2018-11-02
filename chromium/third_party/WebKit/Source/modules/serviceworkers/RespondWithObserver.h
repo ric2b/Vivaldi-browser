@@ -9,7 +9,7 @@
 #include "core/dom/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
+#include "public/platform/modules/serviceworker/service_worker_error_type.mojom-shared.h"
 
 namespace blink {
 
@@ -43,7 +43,7 @@ class MODULES_EXPORT RespondWithObserver
   void RespondWith(ScriptState*, ScriptPromise, ExceptionState&);
 
   // Called when the respondWith() promise was rejected.
-  virtual void OnResponseRejected(WebServiceWorkerResponseError) = 0;
+  virtual void OnResponseRejected(mojom::ServiceWorkerResponseError) = 0;
 
   // Called when the respondWith() promise was fulfilled.
   virtual void OnResponseFulfilled(const ScriptValue&) = 0;
@@ -51,7 +51,7 @@ class MODULES_EXPORT RespondWithObserver
   // Called when the event handler finished without calling respondWith().
   virtual void OnNoResponse() = 0;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   RespondWithObserver(ExecutionContext*, int event_id, WaitUntilObserver*);
@@ -61,7 +61,8 @@ class MODULES_EXPORT RespondWithObserver
  private:
   class ThenFunction;
 
-  void ResponseWasRejected(WebServiceWorkerResponseError, const ScriptValue&);
+  void ResponseWasRejected(mojom::ServiceWorkerResponseError,
+                           const ScriptValue&);
   void ResponseWasFulfilled(const ScriptValue&);
 
   enum State { kInitial, kPending, kDone };

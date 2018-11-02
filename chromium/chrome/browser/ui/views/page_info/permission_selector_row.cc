@@ -9,10 +9,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/ui/page_info/permission_menu_model.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/page_info/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/gfx/image/image.h"
@@ -25,6 +28,34 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+
+namespace {
+
+// The text context / style of the |PermissionSelectorRow| combobox and label.
+constexpr int kTextContext = views::style::CONTEXT_LABEL;
+constexpr int kTextStyle = views::style::STYLE_PRIMARY;
+
+// Calculates the amount of padding to add beneath a |PermissionSelectorRow|
+// depending on whether it has an accompanying permission decision reason.
+int CalculatePaddingBeneathPermissionRow(bool has_reason) {
+  const int list_item_padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                    DISTANCE_CONTROL_LIST_VERTICAL) /
+                                2;
+  if (!ui::MaterialDesignController::IsSecondaryUiMaterial() || !has_reason)
+    return list_item_padding;
+
+  const int combobox_height =
+      PermissionSelectorRow::MinHeightForPermissionRow();
+  // Match the amount of padding above the |PermissionSelectorRow| title text
+  // here by calculating its full height of this |PermissionSelectorRow| and
+  // subtracting the line height, then dividing everything by two. Note it is
+  // assumed the combobox is the tallest part of the row.
+  return (list_item_padding * 2 + combobox_height -
+          views::style::GetLineHeight(kTextContext, kTextStyle)) /
+         2;
+}
+
+}  // namespace
 
 namespace internal {
 
@@ -182,14 +213,21 @@ class PermissionCombobox : public views::Combobox,
 
   void UpdateSelectedIndex(bool use_default);
 
- private:
-  // views::Combobox:
-  void OnPaintBorder(gfx::Canvas* canvas) override;
+  void set_min_width(int width) { min_width_ = width; }
 
+  // views::Combobox:
+  gfx::Size CalculatePreferredSize() const override;
+
+ private:
   // views::ComboboxListener:
   void OnPerformAction(Combobox* combobox) override;
 
   ComboboxModelAdapter* model_;
+
+  // Minimum width for |PermissionCombobox|.
+  int min_width_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(PermissionCombobox);
 };
 
 PermissionCombobox::PermissionCombobox(ComboboxModelAdapter* model,
@@ -215,12 +253,10 @@ void PermissionCombobox::UpdateSelectedIndex(bool use_default) {
   SetSelectedIndex(index);
 }
 
-void PermissionCombobox::OnPaintBorder(gfx::Canvas* canvas) {
-  // No border except a focus indicator for MD mode.
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial() && !HasFocus()) {
-    return;
-  }
-  Combobox::OnPaintBorder(canvas);
+gfx::Size PermissionCombobox::CalculatePreferredSize() const {
+  gfx::Size preferred_size = Combobox::CalculatePreferredSize();
+  preferred_size.SetToMax(gfx::Size(min_width_, 0));
+  return preferred_size;
 }
 
 void PermissionCombobox::OnPerformAction(Combobox* combobox) {
@@ -239,18 +275,22 @@ PermissionSelectorRow::PermissionSelectorRow(
     const PageInfoUI::PermissionInfo& permission,
     views::GridLayout* layout)
     : profile_(profile), icon_(NULL), menu_button_(NULL), combobox_(NULL) {
+  const int list_item_padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
+                                    DISTANCE_CONTROL_LIST_VERTICAL) /
+                                2;
+  layout->StartRowWithPadding(1, PageInfoBubbleView::kPermissionColumnSetId, 0,
+                              list_item_padding);
+
   // Create the permission icon.
   icon_ = new NonAccessibleImageView();
   const gfx::Image& image = PageInfoUI::GetPermissionIcon(permission);
   icon_->SetImage(image.ToImageSkia());
-  layout->AddView(icon_, 1, 1, views::GridLayout::CENTER,
-                  views::GridLayout::CENTER);
+  layout->AddView(icon_);
   // Create the label that displays the permission type.
   label_ =
       new views::Label(PageInfoUI::PermissionTypeToUIString(permission.type),
                        CONTEXT_BODY_TEXT_LARGE);
-  layout->AddView(label_, 1, 1, views::GridLayout::LEADING,
-                  views::GridLayout::CENTER);
+  layout->AddView(label_);
   // Create the menu model.
   menu_model_.reset(new PermissionMenuModel(
       profile, url, permission,
@@ -274,22 +314,24 @@ PermissionSelectorRow::PermissionSelectorRow(
   base::string16 reason =
       PageInfoUI::PermissionDecisionReasonToUIString(profile, permission, url);
   if (!reason.empty()) {
-    layout->StartRow(1, 1);
+    layout->StartRow(1, PageInfoBubbleView::kPermissionColumnSetId);
     layout->SkipColumns(1);
     views::Label* permission_decision_reason = new views::Label(reason);
     permission_decision_reason->SetEnabledColor(
         PageInfoUI::GetPermissionDecisionTextColor());
-    // Long labels should span the remaining width of the row.
-    views::ColumnSet* column_set = layout->GetColumnSet(1);
-    DCHECK(column_set);
-    layout->AddView(permission_decision_reason, column_set->num_columns() - 2,
-                    1, views::GridLayout::LEADING, views::GridLayout::CENTER);
-  }
-}
 
-void PermissionSelectorRow::AddObserver(
-    PermissionSelectorRowObserver* observer) {
-  observer_list_.AddObserver(observer);
+    views::ColumnSet* column_set =
+        layout->GetColumnSet(PageInfoBubbleView::kPermissionColumnSetId);
+    DCHECK(column_set);
+    // Long labels should span the remaining width of the row (minus the end
+    // margin). This includes the permission label, combobox, and space between
+    // them (3 columns total).
+    constexpr int kColumnSpan = 3;
+    layout->AddView(permission_decision_reason, kColumnSpan, 1,
+                    views::GridLayout::LEADING, views::GridLayout::CENTER);
+  }
+  layout->AddPaddingRow(0,
+                        CalculatePaddingBeneathPermissionRow(!reason.empty()));
 }
 
 PermissionSelectorRow::~PermissionSelectorRow() {
@@ -303,9 +345,18 @@ PermissionSelectorRow::~PermissionSelectorRow() {
   //
   // Technically, the MenuButton has the same problem, but MenuButton doesn't
   // use its model in its destructor.
-  if (combobox_) {
-    combobox_->parent()->RemoveChildView(combobox_);
-  }
+  delete combobox_;
+}
+
+// static
+int PermissionSelectorRow::MinHeightForPermissionRow() {
+  return ChromeLayoutProvider::Get()->GetControlHeightForFont(
+      kTextContext, kTextStyle, views::Combobox::GetFontList());
+}
+
+void PermissionSelectorRow::AddObserver(
+    PermissionSelectorRowObserver* observer) {
+  observer_list_.AddObserver(observer);
 }
 
 void PermissionSelectorRow::InitializeMenuButtonView(
@@ -319,8 +370,9 @@ void PermissionSelectorRow::InitializeMenuButtonView(
           permission.default_setting, permission.source),
       menu_model_.get(), button_enabled);
   menu_button_->SetEnabled(button_enabled);
-  menu_button_->SetAccessibleName(
-      PageInfoUI::PermissionTypeToUIString(permission.type));
+  menu_button_->SetTooltipText(l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_SELECTOR_TOOLTIP,
+      PageInfoUI::PermissionTypeToUIString(permission.type)));
   layout->AddView(menu_button_);
 }
 
@@ -334,8 +386,9 @@ void PermissionSelectorRow::InitializeComboboxView(
   combobox_ = new internal::PermissionCombobox(combobox_model_adapter_.get(),
                                                button_enabled, true);
   combobox_->SetEnabled(button_enabled);
-  combobox_->SetAccessibleName(
-      PageInfoUI::PermissionTypeToUIString(permission.type));
+  combobox_->SetTooltipText(l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_SELECTOR_TOOLTIP,
+      PageInfoUI::PermissionTypeToUIString(permission.type)));
   layout->AddView(combobox_);
 }
 
@@ -363,6 +416,16 @@ void PermissionSelectorRow::PermissionChanged(
   for (PermissionSelectorRowObserver& observer : observer_list_) {
     observer.OnPermissionChanged(permission);
   }
+}
+
+int PermissionSelectorRow::GetComboboxWidth() const {
+  DCHECK(combobox_);
+  return combobox_->Combobox::GetPreferredSize().width();
+}
+
+void PermissionSelectorRow::SetMinComboboxWidth(int width) {
+  DCHECK(combobox_);
+  combobox_->set_min_width(width);
 }
 
 views::View* PermissionSelectorRow::button() {

@@ -8,7 +8,6 @@
 #include "core/CoreExport.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -36,7 +35,7 @@ class CORE_EXPORT SnapCoordinator final
  public:
   static SnapCoordinator* Create();
   ~SnapCoordinator();
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
   void SnapContainerDidChange(LayoutBox&, ScrollSnapType);
   void SnapAreaDidChange(LayoutBox&, ScrollSnapAlign);

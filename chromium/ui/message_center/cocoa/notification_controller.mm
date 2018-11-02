@@ -23,6 +23,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "url/gurl.h"
@@ -339,8 +340,7 @@
   [rootView addSubview:[self createSmallImageInFrame:rootFrame]];
 
   // Create the settings button.
-  if (notification_->delegate() &&
-      notification_->delegate()->ShouldDisplaySettingsButton()) {
+  if (notification_->should_show_settings_button()) {
     [self configureSettingsButtonInFrame:rootFrame];
     [rootView addSubview:settingsButton_];
   }

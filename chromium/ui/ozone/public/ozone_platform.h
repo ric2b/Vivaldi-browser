@@ -11,6 +11,7 @@
 #include "base/message_loop/message_loop.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "ui/events/system_input_injector.h"
 #include "ui/ozone/ozone_export.h"
 
 namespace display {
@@ -78,11 +79,6 @@ class OZONE_EXPORT OzonePlatform {
   // This is useful in order call virtual methods that depend on the ozone
   // platform selected at runtime, e.g. ::GetMessageLoopTypeForGpu.
   static OzonePlatform* EnsureInstance();
-
-  // Initializes the subsystems/resources necessary for the UI process (e.g.
-  // events, etc.)
-  // TODO(rjkroege): Remove deprecated entry point (http://crbug.com/620934)
-  static void InitializeForUI();
 
   // Initializes the subsystems/resources necessary for the UI process (e.g.
   // events) with additional properties to customize the ozone platform

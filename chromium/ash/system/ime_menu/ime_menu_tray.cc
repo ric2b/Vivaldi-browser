@@ -4,7 +4,7 @@
 
 #include "ash/system/ime_menu/ime_menu_tray.h"
 
-#include "ash/accessibility_delegate.h"
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/ash_constants.h"
 #include "ash/ime/ime_controller.h"
 #include "ash/root_window_controller.h"
@@ -109,7 +109,7 @@ class ImeMenuLabel : public views::Label {
     // truncated.
     SetBorder(views::CreateEmptyBorder(gfx::Insets(0, 6)));
   }
-  ~ImeMenuLabel() override {}
+  ~ImeMenuLabel() override = default;
 
   // views:Label:
   gfx::Size CalculatePreferredSize() const override {
@@ -166,7 +166,7 @@ class ImeTitleView : public views::View, public views::ButtonListener {
     ShowIMESettings();
   }
 
-  ~ImeTitleView() override {}
+  ~ImeTitleView() override = default;
 
  private:
   // Settings button that is only used if the emoji, handwriting and voice
@@ -189,7 +189,7 @@ class ImeButtonsView : public views::View, public views::ButtonListener {
     Init(show_emoji, show_handwriting, show_voice);
   }
 
-  ~ImeButtonsView() override {}
+  ~ImeButtonsView() override = default;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
@@ -277,7 +277,7 @@ class ImeMenuListView : public ImeListView {
     set_should_focus_ime_after_selection_with_keyboard(true);
   }
 
-  ~ImeMenuListView() override {}
+  ~ImeMenuListView() override = default;
 
  protected:
   void Layout() override {
@@ -299,14 +299,15 @@ ImeMenuTray::ImeMenuTray(Shelf* shelf)
       force_show_keyboard_(false),
       keyboard_suppressed_(false),
       show_bubble_after_keyboard_hidden_(false),
-      emoji_enabled_(false),
-      handwriting_enabled_(false),
-      voice_enabled_(false),
+      is_emoji_enabled_(false),
+      is_handwriting_enabled_(false),
+      is_voice_enabled_(false),
       weak_ptr_factory_(this) {
   DCHECK(ime_controller_);
   SetInkDropMode(InkDropMode::ON);
   SetupLabelForTray(label_);
   label_->SetElideBehavior(gfx::TRUNCATE);
+  label_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
   tray_container()->AddChildView(label_);
   SystemTrayNotifier* tray_notifier = Shell::Get()->system_tray_notifier();
   tray_notifier->AddIMEObserver(this);
@@ -351,10 +352,11 @@ void ImeMenuTray::ShowImeMenuBubbleInternal(bool show_by_click) {
 
   if (show_bottom_buttons) {
     bubble_view->AddChildView(new ImeButtonsView(
-        this, emoji_enabled_, handwriting_enabled_, voice_enabled_));
+        this, is_emoji_enabled_, is_handwriting_enabled_, is_voice_enabled_));
   }
 
-  bubble_.reset(new TrayBubbleWrapper(this, bubble_view));
+  bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view,
+                                                false /* is_persistent */);
   SetIsActive(true);
 }
 
@@ -405,25 +407,22 @@ bool ImeMenuTray::ShouldShowBottomButtons() {
   // 2) third party IME extensions.
   // 3) login/lock screen.
   // 4) password input client.
-  InputMethodManager* input_method_manager = InputMethodManager::Get();
+
   bool should_show_buttom_buttoms =
-      input_method_manager &&
-      input_method_manager->IsEmojiHandwritingVoiceOnImeMenuEnabled() &&
+      ime_controller_->is_extra_input_options_enabled() &&
       !ime_controller_->current_ime().third_party && !IsInLoginOrLockScreen() &&
       !IsInPasswordInputContext();
 
   if (!should_show_buttom_buttoms) {
-    emoji_enabled_ = handwriting_enabled_ = voice_enabled_ = false;
+    is_emoji_enabled_ = is_handwriting_enabled_ = is_voice_enabled_ = false;
     return false;
   }
 
-  emoji_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_EMOJI);
-  handwriting_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_HANDWRITING);
-  voice_enabled_ = input_method_manager->GetImeMenuFeatureEnabled(
-      InputMethodManager::FEATURE_VOICE);
-  return emoji_enabled_ || handwriting_enabled_ || voice_enabled_;
+  is_emoji_enabled_ = ime_controller_->is_emoji_enabled();
+  is_handwriting_enabled_ = ime_controller_->is_handwriting_enabled();
+  is_voice_enabled_ = ime_controller_->is_voice_enabled();
+
+  return is_emoji_enabled_ || is_handwriting_enabled_ || is_voice_enabled_;
 }
 
 bool ImeMenuTray::ShouldShowKeyboardToggle() const {
@@ -445,6 +444,8 @@ void ImeMenuTray::ClickedOutsideBubble() {
 }
 
 bool ImeMenuTray::PerformAction(const ui::Event& event) {
+  UserMetricsRecorder::RecordUserClick(
+      LoginMetricsRecorder::LockScreenUserClickTarget::kImeTray);
   if (bubble_)
     CloseBubble();
   else

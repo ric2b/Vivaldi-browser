@@ -31,6 +31,8 @@ void NOINLINE ForceSystemLeaks() {
 
 @implementation CocoaTestHelperWindow
 
+@synthesize pretendIsOnActiveSpace = pretendIsOnActiveSpace_;
+
 - (id)initWithContentRect:(NSRect)contentRect {
   self = [super initWithContentRect:contentRect
                           styleMask:NSBorderlessWindowMask
@@ -38,6 +40,7 @@ void NOINLINE ForceSystemLeaks() {
                               defer:NO];
   if (self) {
     useDefaultConstraints_ = YES;
+    pretendIsOnActiveSpace_ = YES;
   }
   return self;
 }
@@ -64,6 +67,17 @@ void NOINLINE ForceSystemLeaks() {
 
 - (void)setPretendIsKeyWindow:(BOOL)flag {
   pretendIsKeyWindow_ = flag;
+}
+
+- (BOOL)isOnActiveSpace {
+  return pretendIsOnActiveSpace_;
+}
+
+- (void)setPretendIsOnActiveSpace:(BOOL)pretendIsOnActiveSpace {
+  pretendIsOnActiveSpace_ = pretendIsOnActiveSpace;
+  [[NSWorkspace sharedWorkspace].notificationCenter
+      postNotificationName:NSWorkspaceActiveSpaceDidChangeNotification
+                    object:[NSWorkspace sharedWorkspace]];
 }
 
 - (void)setUseDefaultConstraints:(BOOL)useDefaultConstraints {

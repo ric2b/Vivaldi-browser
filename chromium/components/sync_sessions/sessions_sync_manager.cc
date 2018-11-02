@@ -616,8 +616,10 @@ void SessionsSyncManager::OnLocalTabModified(SyncedTabDelegate* modified_tab) {
 
 void SessionsSyncManager::OnFaviconsChanged(const std::set<GURL>& page_urls,
                                             const GURL& /* icon_url */) {
-  for (const GURL& page_url : page_urls)
-    favicon_cache_.OnPageFaviconUpdated(page_url);
+  for (const GURL& page_url : page_urls) {
+    if (page_url.is_valid())
+      favicon_cache_.OnPageFaviconUpdated(page_url);
+  }
 }
 
 void SessionsSyncManager::StopSyncing(syncer::ModelType type) {
@@ -678,7 +680,7 @@ bool SessionsSyncManager::GetLocalSession(const SyncedSession** local_session) {
 }
 
 syncer::SyncError SessionsSyncManager::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   if (!sync_processor_.get()) {
     syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,

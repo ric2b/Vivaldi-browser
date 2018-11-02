@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
@@ -47,21 +48,19 @@ const int kRetryLimit = 100;
 //   on_true - Called when status=success and value=true.
 //   on_false - Called when status=success and value=false.
 //   status - The dbus operation status.
-//   value - The value returned by the dbus operation.
+//   result - The value returned by the dbus operation.
 void DBusBoolRedirectCallback(const base::Closure& on_true,
                               const base::Closure& on_false,
                               const base::Closure& on_failure,
-                              const tracked_objects::Location& from_here,
-                              chromeos::DBusMethodCallStatus status,
-                              bool value) {
-  if (status != chromeos::DBUS_METHOD_CALL_SUCCESS) {
-    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString()
-               << " - " << status;
+                              const base::Location& from_here,
+                              base::Optional<bool> result) {
+  if (!result.has_value()) {
+    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString();
     if (!on_failure.is_null())
       on_failure.Run();
     return;
   }
-  const base::Closure& task = value ? on_true : on_false;
+  const base::Closure& task = result.value() ? on_true : on_false;
   if (!task.is_null())
     task.Run();
 }
@@ -76,18 +75,16 @@ void DBusBoolRedirectCallback(const base::Closure& on_true,
 void DBusStringCallback(
     const base::Callback<void(const std::string&)> on_success,
     const base::Closure& on_failure,
-    const tracked_objects::Location& from_here,
-    chromeos::DBusMethodCallStatus status,
-    bool result,
-    const std::string& data) {
-  if (status != chromeos::DBUS_METHOD_CALL_SUCCESS || !result) {
-    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString()
-               << " - " << status << " - " << result;
+    const base::Location& from_here,
+    base::Optional<chromeos::CryptohomeClient::TpmAttestationDataResult>
+        result) {
+  if (!result.has_value() || !result->success) {
+    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString();
     if (!on_failure.is_null())
       on_failure.Run();
     return;
   }
-  on_success.Run(data);
+  on_success.Run(result->data);
 }
 
 }  // namespace
@@ -177,10 +174,10 @@ void AttestationPolicyObserver::Start() {
       KEY_DEVICE,
       cryptohome::Identification(),  // Not used.
       kEnterpriseMachineKey,
-      base::Bind(DBusBoolRedirectCallback, on_does_exist, on_does_not_exist,
-                 base::Bind(&AttestationPolicyObserver::Reschedule,
-                            weak_factory_.GetWeakPtr()),
-                 FROM_HERE));
+      base::BindOnce(DBusBoolRedirectCallback, on_does_exist, on_does_not_exist,
+                     base::Bind(&AttestationPolicyObserver::Reschedule,
+                                weak_factory_.GetWeakPtr()),
+                     FROM_HERE));
 }
 
 void AttestationPolicyObserver::GetNewCertificate() {
@@ -190,12 +187,19 @@ void AttestationPolicyObserver::GetNewCertificate() {
       EmptyAccountId(),  // Not used.
       std::string(),     // Not used.
       true,              // Force a new key to be generated.
-      base::Bind(DBusStringCallback,
-                 base::Bind(&AttestationPolicyObserver::UploadCertificate,
-                            weak_factory_.GetWeakPtr()),
-                 base::Bind(&AttestationPolicyObserver::Reschedule,
-                            weak_factory_.GetWeakPtr()),
-                 FROM_HERE, DBUS_METHOD_CALL_SUCCESS));
+      base::Bind(
+          [](const base::Callback<void(const std::string&)> on_success,
+             const base::Closure& on_failure, const base::Location& from_here,
+             bool success, const std::string& data) {
+            DBusStringCallback(on_success, on_failure, from_here,
+                               CryptohomeClient::TpmAttestationDataResult{
+                                   success, std::move(data)});
+          },
+          base::Bind(&AttestationPolicyObserver::UploadCertificate,
+                     weak_factory_.GetWeakPtr()),
+          base::Bind(&AttestationPolicyObserver::Reschedule,
+                     weak_factory_.GetWeakPtr()),
+          FROM_HERE));
 }
 
 void AttestationPolicyObserver::GetExistingCertificate() {
@@ -303,8 +307,8 @@ void AttestationPolicyObserver::MarkAsUploaded(const std::string& key_payload) {
       KEY_DEVICE,
       cryptohome::Identification(),  // Not used.
       kEnterpriseMachineKey, new_payload,
-      base::Bind(DBusBoolRedirectCallback, base::Closure(), base::Closure(),
-                 base::Closure(), FROM_HERE));
+      base::BindOnce(DBusBoolRedirectCallback, base::Closure(), base::Closure(),
+                     base::Closure(), FROM_HERE));
 }
 
 void AttestationPolicyObserver::Reschedule() {

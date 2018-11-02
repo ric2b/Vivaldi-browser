@@ -4,6 +4,7 @@
 
 #include "ash/system/update/tray_update.h"
 
+#include "ash/ash_view_ids.h"
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/interfaces/update.mojom.h"
@@ -84,6 +85,8 @@ class TrayUpdate::UpdateView : public ActionableView {
 
     base::string16 label_text;
     update_label_ = TrayPopupUtils::CreateDefaultLabel();
+    update_label_->set_id(VIEW_ID_TRAY_UPDATE_MENU_LABEL);
+    update_label_->SetMultiLine(true);
     if (owner->factory_reset_required_) {
       label_text = bundle.GetLocalizedString(
           IDS_ASH_STATUS_TRAY_RESTART_AND_POWERWASH_TO_UPDATE);
@@ -112,7 +115,7 @@ class TrayUpdate::UpdateView : public ActionableView {
     SetInkDropMode(InkDropHostView::InkDropMode::ON);
   }
 
-  ~UpdateView() override {}
+  ~UpdateView() override = default;
 
   views::Label* update_label_;
 
@@ -139,12 +142,18 @@ class TrayUpdate::UpdateView : public ActionableView {
 TrayUpdate::TrayUpdate(SystemTray* system_tray)
     : TrayImageItem(system_tray, kSystemTrayUpdateIcon, UMA_UPDATE) {}
 
-TrayUpdate::~TrayUpdate() {}
+TrayUpdate::~TrayUpdate() = default;
 
 bool TrayUpdate::GetInitialVisibility() {
   // If chrome tells ash there is an update available before this item's system
   // tray is constructed then show the icon.
   return update_required_ || update_over_cellular_available_;
+}
+
+views::View* TrayUpdate::CreateTrayView(LoginStatus status) {
+  views::View* view = TrayImageItem::CreateTrayView(status);
+  view->set_id(VIEW_ID_TRAY_UPDATE_ICON);
+  return view;
 }
 
 views::View* TrayUpdate::CreateDefaultView(LoginStatus status) {

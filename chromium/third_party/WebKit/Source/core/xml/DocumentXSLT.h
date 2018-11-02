@@ -5,9 +5,9 @@
 #ifndef DocumentXSLT_h
 #define DocumentXSLT_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/Document.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -43,7 +43,7 @@ class DocumentXSLT final : public GarbageCollected<DocumentXSLT>,
   static bool SheetLoaded(Document&, ProcessingInstruction*);
   static bool HasTransformSourceDocument(Document&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit DocumentXSLT(Document&);

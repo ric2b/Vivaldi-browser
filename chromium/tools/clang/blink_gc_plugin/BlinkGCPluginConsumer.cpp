@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 
+#include "BadPatternFinder.h"
 #include "CheckDispatchVisitor.h"
 #include "CheckFieldsVisitor.h"
 #include "CheckFinalizerVisitor.h"
@@ -122,6 +123,8 @@ void BlinkGCPluginConsumer::HandleTranslationUnit(ASTContext& context) {
     delete json_;
     json_ = 0;
   }
+
+  FindBadPatterns(context, reporter_);
 }
 
 void BlinkGCPluginConsumer::ParseFunctionTemplates(TranslationUnitDecl* decl) {
@@ -360,7 +363,7 @@ void BlinkGCPluginConsumer::CheckLeftMostDerived(RecordInfo* info) {
   CXXRecordDecl* left_most = GetLeftMostBase(info->record());
   if (!left_most)
     return;
-  if (!Config::IsGCBase(left_most->getName()))
+  if (!Config::IsGCBase(left_most->getName()) || Config::IsGCMixinBase(left_most->getName()))
     reporter_.ClassMustLeftMostlyDeriveGC(info);
 }
 
@@ -590,7 +593,6 @@ void BlinkGCPluginConsumer::DumpClass(RecordInfo* info) {
                        (static_cast<RawPtr*>(Parent())->HasReferenceType() ?
                         "reference" : "raw") :
                    Parent()->IsRefPtr() ? "ref" :
-                   Parent()->IsOwnPtr() ? "own" :
                    Parent()->IsUniquePtr() ? "unique" :
                    (Parent()->IsMember() || Parent()->IsWeakMember()) ? "mem" :
                    "val");

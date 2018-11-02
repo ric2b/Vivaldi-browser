@@ -28,6 +28,7 @@
 
 #include "core/dom/events/EventDispatcher.h"
 #include "core/frame/FrameConsole.h"
+#include "core/frame/Intervention.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
@@ -317,9 +318,8 @@ void TouchEvent::preventDefault() {
 
   if (!warning_message.IsEmpty() && view() && view()->IsLocalDOMWindow() &&
       view()->GetFrame()) {
-    ToLocalDOMWindow(view())->GetFrame()->Console().AddMessage(
-        ConsoleMessage::Create(message_source, kWarningMessageLevel,
-                               warning_message));
+    Intervention::GenerateReport(ToLocalDOMWindow(view())->GetFrame(),
+                                 warning_message);
   }
 
   if ((type() == EventTypeNames::touchstart ||
@@ -362,32 +362,15 @@ void TouchEvent::DoneDispatchingEventAtCurrentTarget() {
   default_prevented_before_current_target_ = canceled;
 }
 
-EventDispatchMediator* TouchEvent::CreateMediator() {
-  return TouchEventDispatchMediator::Create(this);
-}
-
-DEFINE_TRACE(TouchEvent) {
+void TouchEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(touches_);
   visitor->Trace(target_touches_);
   visitor->Trace(changed_touches_);
   UIEventWithKeyState::Trace(visitor);
 }
 
-TouchEventDispatchMediator* TouchEventDispatchMediator::Create(
-    TouchEvent* touch_event) {
-  return new TouchEventDispatchMediator(touch_event);
-}
-
-TouchEventDispatchMediator::TouchEventDispatchMediator(TouchEvent* touch_event)
-    : EventDispatchMediator(touch_event) {}
-
-TouchEvent& TouchEventDispatchMediator::Event() const {
-  return ToTouchEvent(EventDispatchMediator::GetEvent());
-}
-
-DispatchEventResult TouchEventDispatchMediator::DispatchEvent(
-    EventDispatcher& dispatcher) const {
-  Event().GetEventPath().AdjustForTouchEvent(Event());
+DispatchEventResult TouchEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  GetEventPath().AdjustForTouchEvent(*this);
   return dispatcher.Dispatch();
 }
 

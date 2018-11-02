@@ -53,7 +53,6 @@ var BrowserBridge = (function() {
     this.addNetInfoPollableDataHelper(
         'altSvcMappings', 'onAltSvcMappingsChanged');
     this.addNetInfoPollableDataHelper('quicInfo', 'onQuicInfoChanged');
-    this.addNetInfoPollableDataHelper('sdchInfo', 'onSdchInfoChanged');
     this.addNetInfoPollableDataHelper(
         'httpCacheInfo', 'onHttpCacheInfoChanged');
 
@@ -183,6 +182,10 @@ var BrowserBridge = (function() {
 
     sendExpectCTAdd: function(domain, report_uri, enforce) {
       this.send('expectCTAdd', [domain, report_uri, enforce]);
+    },
+
+    sendExpectCTTestReport: function(report_uri) {
+      this.send('expectCTTestReport', [report_uri]);
     },
 
     sendGetSessionNetworkStats: function() {
@@ -330,6 +333,11 @@ var BrowserBridge = (function() {
     receivedExpectCTResult: function(info) {
       for (var i = 0; i < this.expectCTObservers_.length; i++)
         this.expectCTObservers_[i].onExpectCTQueryResult(info);
+    },
+
+    receivedExpectCTTestReportResult: function(result) {
+      for (var i = 0; i < this.expectCTObservers_.length; i++)
+        this.expectCTObservers_[i].onExpectCTTestReportResult(result);
     },
 
     receivedONCFileParse: function(error) {
@@ -636,17 +644,6 @@ var BrowserBridge = (function() {
      */
     addDataReductionProxyInfoObserver: function(observer, ignoreWhenUnchanged) {
       this.pollableDataHelpers_.dataReductionProxyInfo.addObserver(
-          observer, ignoreWhenUnchanged);
-    },
-
-    /**
-     * Adds a listener of SDCH information. |observer| will be called
-     * back when data is received, through:
-     *
-     *   observer.onSdchInfoChanged(sdchInfo)
-     */
-    addSdchInfoObserver: function(observer, ignoreWhenUnchanged) {
-      this.pollableDataHelpers_.sdchInfo.addObserver(
           observer, ignoreWhenUnchanged);
     },
 

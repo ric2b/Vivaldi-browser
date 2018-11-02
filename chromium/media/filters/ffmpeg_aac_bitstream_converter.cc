@@ -168,8 +168,7 @@ FFmpegAACBitstreamConverter::FFmpegAACBitstreamConverter(
   CHECK(stream_codec_parameters_);
 }
 
-FFmpegAACBitstreamConverter::~FFmpegAACBitstreamConverter() {
-}
+FFmpegAACBitstreamConverter::~FFmpegAACBitstreamConverter() = default;
 
 bool FFmpegAACBitstreamConverter::ConvertPacket(AVPacket* packet) {
   if (packet == NULL || !packet->data) {
@@ -239,8 +238,9 @@ bool FFmpegAACBitstreamConverter::ConvertPacket(AVPacket* packet) {
 
   // Release the old packet.
   av_packet_unref(packet);
-  *packet = dest_packet;  // Finally, replace the values in the input packet.
 
+  // Finally, replace the values in the input packet.
+  memcpy(packet, &dest_packet, sizeof(*packet));
   return true;
 }
 

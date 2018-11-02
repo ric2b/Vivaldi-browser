@@ -14,6 +14,7 @@ group("all") {
     ":ui",
     "//services/ui/ime/test_ime_driver",
     "//services/ui/test_wm",
+    "//services/viz",
   ]
 }
 
@@ -31,7 +32,7 @@ service("ui") {
     ":resources_100",
     ":resources_200",
     ":resources_strings",
-    "//services/ui/ime/test_ime_driver",
+    "//services/viz",
   ]
 }
 

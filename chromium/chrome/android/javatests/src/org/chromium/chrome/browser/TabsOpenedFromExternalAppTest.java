@@ -183,8 +183,7 @@ public class TabsOpenedFromExternalAppTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
     }
 
     @After
@@ -211,7 +210,7 @@ public class TabsOpenedFromExternalAppTest {
         if (extras != null) intent.putExtras(extras);
 
         if (firstParty) {
-            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+            Context context = InstrumentationRegistry.getTargetContext();
             intent.setPackage(context.getPackageName());
             IntentHandler.addTrustedIntentExtras(intent);
         }
@@ -348,7 +347,7 @@ public class TabsOpenedFromExternalAppTest {
     public void testReferrerPolicyHttpsReferrerPolicyOrigin() throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
         launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.WEB_REFERRER_POLICY_ORIGIN, HTTPS_REFERRER_WITH_PATH,
+                WebReferrerPolicy.ORIGIN, HTTPS_REFERRER_WITH_PATH,
                 HTTPS_REFERRER);
     }
 
@@ -364,7 +363,7 @@ public class TabsOpenedFromExternalAppTest {
             throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
         launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.WEB_REFERRER_POLICY_ORIGIN_WHEN_CROSS_ORIGIN,
+                WebReferrerPolicy.ORIGIN_WHEN_CROSS_ORIGIN,
                 HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
     }
 
@@ -378,7 +377,7 @@ public class TabsOpenedFromExternalAppTest {
     public void testReferrerPolicyHttpsReferrerPolicyStrictOrigin() throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
         launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.WEB_REFERRER_POLICY_STRICT_ORIGIN, HTTPS_REFERRER, "");
+                WebReferrerPolicy.STRICT_ORIGIN, HTTPS_REFERRER, "");
     }
 
     /**
@@ -741,12 +740,11 @@ public class TabsOpenedFromExternalAppTest {
 
         // Open a tab via an external application.
         final Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(hrefLink));
-        intent.setClassName(
-                InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageName(),
+        intent.setClassName(InstrumentationRegistry.getTargetContext().getPackageName(),
                 ChromeTabbedActivity.class.getName());
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, "com.legit.totes");
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        InstrumentationRegistry.getInstrumentation().getTargetContext().startActivity(intent);
+        InstrumentationRegistry.getTargetContext().startActivity(intent);
 
         CriteriaHelper.pollUiThread(Criteria.equals(1,
                 () -> mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount()));
@@ -793,16 +791,16 @@ public class TabsOpenedFromExternalAppTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "enable-features=DataReductionProxyDecidesTransform"})
     public void testLaunchWebLiteURL() throws InterruptedException {
         mActivityTestRule.startMainActivityFromLauncher();
 
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
 
         // Launch a first URL from an app.
-        launchUrlFromExternalApp("http://googleweblight.com/?lite_url=" + url, url,
-                EXTERNAL_APP_1_ID, false, null);
+        launchUrlFromExternalApp(
+                "http://googleweblight.com/i?u=" + url, url, EXTERNAL_APP_1_ID, false, null);
 
         Assert.assertEquals("Selected tab is not on the right URL.", url,
                 mActivityTestRule.getActivity().getActivityTab().getUrl());
@@ -814,10 +812,12 @@ public class TabsOpenedFromExternalAppTest {
      */
     @Test
     @MediumTest
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "disable-features=DataReductionProxyDecidesTransform"})
     public void testLaunchWebLiteURLNoPreviews() throws InterruptedException {
         mActivityTestRule.startMainActivityFromLauncher();
 
-        String url = "http://googleweblight.com/?lite_url=chrome/test/data/android/about.html";
+        String url = "http://googleweblight.com/i?u=chrome/test/data/android/about.html";
 
         // Launch a first URL from an app.
         launchUrlFromExternalApp(url, url, EXTERNAL_APP_1_ID, false, null);

@@ -57,7 +57,7 @@ class CORE_EXPORT LiveNodeList : public NodeList, public LiveNodeListBase {
   Element* item(unsigned offset) const final;
   virtual bool ElementMatches(const Element&) const = 0;
 
-  void InvalidateCache(Document* old_document = 0) const final;
+  void InvalidateCache(Document* old_document = nullptr) const final;
   void InvalidateCacheForAttribute(const QualifiedName*) const;
 
   // Collection IndexCache API.
@@ -71,7 +71,7 @@ class CORE_EXPORT LiveNodeList : public NodeList, public LiveNodeListBase {
                                     Element& current_node,
                                     unsigned& current_offset) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   Node* VirtualOwnerNode() const final;

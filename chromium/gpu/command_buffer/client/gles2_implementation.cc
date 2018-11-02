@@ -51,6 +51,10 @@
 
 #if !defined(OS_NACL)
 #include "cc/paint/display_item_list.h"  // nogncheck
+#include "cc/paint/paint_op_buffer_serializer.h"
+#include "cc/paint/transfer_cache_entry.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/skia_util.h"
 #endif
 
 #if !defined(__native_client__)
@@ -192,7 +196,8 @@ GLES2Implementation::GLES2Implementation(
   memset(&reserved_ids_, 0, sizeof(reserved_ids_));
 }
 
-bool GLES2Implementation::Initialize(const SharedMemoryLimits& limits) {
+gpu::ContextResult GLES2Implementation::Initialize(
+    const SharedMemoryLimits& limits) {
   TRACE_EVENT0("gpu", "GLES2Implementation::Initialize");
   DCHECK_GE(limits.start_transfer_buffer_size, limits.min_transfer_buffer_size);
   DCHECK_LE(limits.start_transfer_buffer_size, limits.max_transfer_buffer_size);
@@ -204,12 +209,16 @@ bool GLES2Implementation::Initialize(const SharedMemoryLimits& limits) {
           limits.start_transfer_buffer_size, kStartingOffset,
           limits.min_transfer_buffer_size, limits.max_transfer_buffer_size,
           kAlignment, kSizeToFlush)) {
-    return false;
+    // TransferBuffer::Initialize doesn't fail for transient reasons such as if
+    // the context was lost. See http://crrev.com/c/720269
+    LOG(ERROR) << "ContextResult::kFatalFailure: "
+               << "TransferBuffer::Initailize() failed";
+    return gpu::ContextResult::kFatalFailure;
   }
 
   max_extra_transfer_buffer_size_ = limits.max_mapped_memory_for_texture_upload;
-  mapped_memory_.reset(
-      new MappedMemoryManager(helper_, limits.mapped_memory_reclaim_limit));
+  mapped_memory_ = std::make_unique<MappedMemoryManager>(
+      helper_, limits.mapped_memory_reclaim_limit);
   mapped_memory_->set_chunk_size_multiple(limits.mapped_memory_chunk_size);
 
   GLStaticState::ShaderPrecisionMap* shader_precisions =
@@ -226,11 +235,11 @@ bool GLES2Implementation::Initialize(const SharedMemoryLimits& limits) {
       capabilities_.num_compressed_texture_formats);
   util_.set_num_shader_binary_formats(capabilities_.num_shader_binary_formats);
 
-  texture_units_.reset(
-      new TextureUnit[capabilities_.max_combined_texture_image_units]);
+  texture_units_ = std::make_unique<TextureUnit[]>(
+      capabilities_.max_combined_texture_image_units);
 
-  query_tracker_.reset(new QueryTracker(mapped_memory_.get()));
-  buffer_tracker_.reset(new BufferTracker(mapped_memory_.get()));
+  query_tracker_ = std::make_unique<QueryTracker>(mapped_memory_.get());
+  buffer_tracker_ = std::make_unique<BufferTracker>(mapped_memory_.get());
 
   for (int i = 0; i < static_cast<int>(IdNamespaces::kNumIdNamespaces); ++i)
     id_allocators_[i].reset(new IdAllocator());
@@ -252,10 +261,12 @@ bool GLES2Implementation::Initialize(const SharedMemoryLimits& limits) {
     SetGLError(GL_INVALID_OPERATION,
                "Initialize",
                "Service bind_generates_resource mismatch.");
-    return false;
+    LOG(ERROR) << "ContextResult::kFatalFailure: "
+               << "bind_generates_resource mismatch";
+    return gpu::ContextResult::kFatalFailure;
   }
 
-  return true;
+  return gpu::ContextResult::kSuccess;
 }
 
 GLES2Implementation::~GLES2Implementation() {
@@ -357,9 +368,9 @@ void GLES2Implementation::FreeSharedMemory(void* mem) {
   mapped_memory_->FreePendingToken(mem, helper_->InsertToken());
 }
 
-void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
+void GLES2Implementation::RunIfContextNotLost(base::OnceClosure callback) {
   if (!lost_context_callback_run_)
-    callback.Run();
+    std::move(callback).Run();
 }
 
 void GLES2Implementation::FlushPendingWork() {
@@ -367,7 +378,7 @@ void GLES2Implementation::FlushPendingWork() {
 }
 
 void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
-                                          const base::Closure& callback) {
+                                          base::OnceClosure callback) {
   SyncToken verified_sync_token;
   if (sync_token.HasData() &&
       GetVerifiedSyncTokenForIPC(sync_token, &verified_sync_token)) {
@@ -375,10 +386,10 @@ void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
     gpu_control_->SignalSyncToken(
         verified_sync_token,
         base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+                   weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
   } else {
     // Invalid sync token, just call the callback immediately.
-    callback.Run();
+    std::move(callback).Run();
   }
 }
 
@@ -393,15 +404,14 @@ bool GLES2Implementation::IsSyncTokenSignaled(
 }
 
 void GLES2Implementation::SignalQuery(uint32_t query,
-                                      const base::Closure& callback) {
+                                      base::OnceClosure callback) {
   // Flush previously entered commands to ensure ordering with any
   // glBeginQueryEXT() calls that may have been put into the context.
   ShallowFlushCHROMIUM();
   gpu_control_->SignalQuery(
       query,
       base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback));
+                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
 }
 
 void GLES2Implementation::SetAggressivelyFreeResources(
@@ -4619,7 +4629,7 @@ void GLES2Implementation::DeleteTexturesHelper(
     return;
   }
   for (GLsizei ii = 0; ii < n; ++ii) {
-    share_group_->discardable_manager()->FreeTexture(textures[ii]);
+    share_group_->discardable_texture_manager()->FreeTexture(textures[ii]);
 
     for (GLint tt = 0; tt < capabilities_.max_combined_texture_image_units;
          ++tt) {
@@ -4977,13 +4987,13 @@ void GLES2Implementation::ScheduleDCLayerSharedStateCHROMIUM(
                                               buffer.shm_id(), buffer.offset());
 }
 
-void GLES2Implementation::SetColorSpaceForScanoutCHROMIUM(
+void GLES2Implementation::SetColorSpaceMetadataCHROMIUM(
     GLuint texture_id,
     GLColorSpace color_space) {
 #if defined(__native_client__)
   // Including gfx::ColorSpace would bring Skia and a lot of other code into
   // NaCl's IRT.
-  SetGLError(GL_INVALID_VALUE, "GLES2::SetColorSpaceForScanoutCHROMIUM",
+  SetGLError(GL_INVALID_VALUE, "GLES2::SetColorSpaceMetadataCHROMIUM",
              "not supported");
 #else
   gfx::ColorSpace* gfx_color_space =
@@ -4994,12 +5004,12 @@ void GLES2Implementation::SetColorSpaceForScanoutCHROMIUM(
   ScopedTransferBufferPtr buffer(color_space_data.size(), helper_,
                                  transfer_buffer_);
   if (!buffer.valid() || buffer.size() < color_space_data.size()) {
-    SetGLError(GL_OUT_OF_MEMORY, "GLES2::SetColorSpaceForScanoutCHROMIUM",
+    SetGLError(GL_OUT_OF_MEMORY, "GLES2::SetColorSpaceMetadataCHROMIUM",
                "out of memory");
     return;
   }
   memcpy(buffer.address(), color_space_data.data(), color_space_data.size());
-  helper_->SetColorSpaceForScanoutCHROMIUM(
+  helper_->SetColorSpaceMetadataCHROMIUM(
       texture_id, buffer.shm_id(), buffer.offset(), color_space_data.size());
 #endif
 }
@@ -5922,19 +5932,6 @@ void GLES2Implementation::ProduceTextureDirectCHROMIUM(
   CheckGLError();
 }
 
-void GLES2Implementation::ConsumeTextureCHROMIUM(GLenum target,
-                                                 const GLbyte* data) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glConsumeTextureCHROMIUM("
-                     << static_cast<const void*>(data) << ")");
-  const Mailbox& mailbox = *reinterpret_cast<const Mailbox*>(data);
-  DCHECK(mailbox.Verify()) << "ConsumeTextureCHROMIUM was passed a "
-                              "mailbox that was not generated by "
-                              "GenMailboxCHROMIUM.";
-  helper_->ConsumeTextureCHROMIUMImmediate(target, data);
-  CheckGLError();
-}
-
 GLuint GLES2Implementation::CreateAndConsumeTextureCHROMIUM(
     GLenum target, const GLbyte* data) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
@@ -6092,18 +6089,18 @@ uint64_t GLES2Implementation::ShareGroupTracingGUID() const {
 }
 
 void GLES2Implementation::SetErrorMessageCallback(
-    const base::Callback<void(const char*, int32_t)>& callback) {
-  error_message_callback_ = callback;
+    base::RepeatingCallback<void(const char*, int32_t)> callback) {
+  error_message_callback_ = std::move(callback);
 }
 
-void GLES2Implementation::AddLatencyInfo(
-    const std::vector<ui::LatencyInfo>& latency_info) {
-  gpu_control_->AddLatencyInfo(latency_info);
+void GLES2Implementation::SetSnapshotRequested() {
+  gpu_control_->SetSnapshotRequested();
 }
 
 bool GLES2Implementation::ThreadSafeShallowLockDiscardableTexture(
     uint32_t texture_id) {
-  ClientDiscardableManager* manager = share_group()->discardable_manager();
+  ClientDiscardableTextureManager* manager =
+      share_group()->discardable_texture_manager();
   return manager->TextureIsValid(texture_id) &&
          manager->LockTexture(texture_id);
 }
@@ -7069,7 +7066,8 @@ void GLES2Implementation::ProgramPathFragmentInputGenCHROMIUM(
 
 void GLES2Implementation::InitializeDiscardableTextureCHROMIUM(
     GLuint texture_id) {
-  ClientDiscardableManager* manager = share_group()->discardable_manager();
+  ClientDiscardableTextureManager* manager =
+      share_group()->discardable_texture_manager();
   if (manager->TextureIsValid(texture_id)) {
     SetGLError(GL_INVALID_VALUE, "glInitializeDiscardableTextureCHROMIUM",
                "Texture ID already initialized");
@@ -7077,12 +7075,16 @@ void GLES2Implementation::InitializeDiscardableTextureCHROMIUM(
   }
   ClientDiscardableHandle handle =
       manager->InitializeTexture(helper_->command_buffer(), texture_id);
+  if (!handle.IsValid())
+    return;
+
   helper_->InitializeDiscardableTextureCHROMIUM(texture_id, handle.shm_id(),
                                                 handle.byte_offset());
 }
 
 void GLES2Implementation::UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
-  ClientDiscardableManager* manager = share_group()->discardable_manager();
+  ClientDiscardableTextureManager* manager =
+      share_group()->discardable_texture_manager();
   if (!manager->TextureIsValid(texture_id)) {
     SetGLError(GL_INVALID_VALUE, "glUnlockDiscardableTextureCHROMIUM",
                "Texture ID not initialized");
@@ -7092,7 +7094,8 @@ void GLES2Implementation::UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
 }
 
 bool GLES2Implementation::LockDiscardableTextureCHROMIUM(GLuint texture_id) {
-  ClientDiscardableManager* manager = share_group()->discardable_manager();
+  ClientDiscardableTextureManager* manager =
+      share_group()->discardable_texture_manager();
   if (!manager->TextureIsValid(texture_id)) {
     SetGLError(GL_INVALID_VALUE, "glLockDiscardableTextureCHROMIUM",
                "Texture ID not initialized");
@@ -7106,6 +7109,28 @@ bool GLES2Implementation::LockDiscardableTextureCHROMIUM(GLuint texture_id) {
   }
   helper_->LockDiscardableTextureCHROMIUM(texture_id);
   return true;
+}
+
+void GLES2Implementation::CreateTransferCacheEntryCHROMIUM(
+    GLuint64 handle_id,
+    GLuint handle_shm_id,
+    GLuint handle_shm_offset,
+    const cc::ClientTransferCacheEntry& entry) {
+#if defined(OS_NACL)
+  NOTREACHED();
+#else
+  ScopedMappedMemoryPtr mapped_alloc(entry.SerializedSize(), helper_,
+                                     mapped_memory_.get());
+  DCHECK(mapped_alloc.valid());
+  bool succeeded = entry.Serialize(
+      mapped_alloc.size(), reinterpret_cast<uint8_t*>(mapped_alloc.address()));
+  DCHECK(succeeded);
+
+  helper_->CreateTransferCacheEntryCHROMIUM(
+      handle_id, handle_shm_id, handle_shm_offset,
+      static_cast<uint32_t>(entry.Type()), mapped_alloc.shm_id(),
+      mapped_alloc.offset(), mapped_alloc.size());
+#endif
 }
 
 void GLES2Implementation::UpdateCachedExtensionsIfNeeded() {
@@ -7136,68 +7161,115 @@ void GLES2Implementation::Viewport(GLint x,
   CheckGLError();
 }
 
+#if !defined(OS_NACL)
+struct PaintOpSerializer {
+ public:
+  PaintOpSerializer(size_t initial_size,
+                    TransferBufferInterface* transfer_buffer,
+                    GLES2CmdHelper* helper)
+      : transfer_buffer_(initial_size, helper, transfer_buffer),
+        helper_(helper),
+        free_bytes_(initial_size) {
+    DCHECK(transfer_buffer_.valid());
+  }
+
+  ~PaintOpSerializer() {
+    // Need to call SendSerializedData;
+    DCHECK(!written_bytes_);
+  }
+
+  size_t Serialize(const cc::PaintOp* op,
+                   const cc::PaintOp::SerializeOptions& options) {
+    char* memory = static_cast<char*>(transfer_buffer_.address());
+    size_t size = op->Serialize(memory + written_bytes_, free_bytes_, options);
+    if (!size) {
+      SendSerializedData();
+      transfer_buffer_.Reset(kBlockAlloc);
+      memory = static_cast<char*>(transfer_buffer_.address());
+      free_bytes_ = transfer_buffer_.size();
+      size = op->Serialize(memory + written_bytes_, free_bytes_, options);
+    }
+    DCHECK_LE(size, free_bytes_);
+    DCHECK_EQ(free_bytes_ + written_bytes_, transfer_buffer_.size());
+
+    written_bytes_ += size;
+    free_bytes_ -= size;
+    return size;
+  }
+
+  void SendSerializedData() {
+    if (!written_bytes_)
+      return;
+    transfer_buffer_.Shrink(written_bytes_);
+    helper_->RasterCHROMIUM(transfer_buffer_.shm_id(),
+                            transfer_buffer_.offset(), written_bytes_);
+    written_bytes_ = 0;
+  }
+
+ private:
+  static constexpr unsigned int kBlockAlloc = 512 * 1024;
+
+  ScopedTransferBufferPtr transfer_buffer_;
+  GLES2CmdHelper* helper_;
+
+  size_t written_bytes_ = 0;
+  size_t free_bytes_ = 0;
+};
+#endif
+
 void GLES2Implementation::RasterCHROMIUM(const cc::DisplayItemList* list,
-                                         GLint x,
-                                         GLint y,
-                                         GLint w,
-                                         GLint h) {
+                                         GLint translate_x,
+                                         GLint translate_y,
+                                         GLint clip_x,
+                                         GLint clip_y,
+                                         GLint clip_w,
+                                         GLint clip_h,
+                                         GLfloat post_translate_x,
+                                         GLfloat post_translate_y,
+                                         GLfloat post_scale) {
 #if defined(OS_NACL)
   NOTREACHED();
 #else
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glRasterChromium(" << list << ", "
-                     << x << ", " << y << ", " << w << ", " << h << ")");
+                     << translate_x << ", " << translate_y << ", " << clip_x
+                     << ", " << clip_y << ", " << clip_w << ", " << clip_h
+                     << ", " << post_translate_x << ", " << post_translate_y
+                     << ", " << post_scale << ")");
+
+  if (std::abs(post_scale) < std::numeric_limits<float>::epsilon())
+    return;
+
+  gfx::Rect playback_rect(clip_x, clip_y, clip_w, clip_h);
+  gfx::Rect query_rect =
+      gfx::ScaleToEnclosingRect(playback_rect, 1.f / post_scale);
+  std::vector<size_t> offsets = list->rtree_.Search(query_rect);
+  if (offsets.empty())
+    return;
 
   // TODO(enne): tune these numbers
   // TODO(enne): convert these types here and in transfer buffer to be size_t.
   static constexpr unsigned int kMinAlloc = 16 * 1024;
-  static constexpr unsigned int kBlockAlloc = 512 * 1024;
-
   unsigned int free_size = std::max(transfer_buffer_->GetFreeSize(), kMinAlloc);
-  ScopedTransferBufferPtr buffer(free_size, helper_, transfer_buffer_);
-  DCHECK(buffer.valid());
 
-  char* memory = static_cast<char*>(buffer.address());
-  size_t written_bytes = 0;
-  size_t free_bytes = buffer.size();
-
-  cc::PaintOp::SerializeOptions options;
+  // This section duplicates RasterSource::PlaybackToCanvas setup preamble.
+  cc::PaintOpBufferSerializer::Preamble preamble;
+  preamble.translation =
+      gfx::Vector2dF(SkIntToScalar(translate_x), SkIntToScalar(translate_y));
+  preamble.playback_rect = playback_rect;
+  preamble.post_translation =
+      gfx::Vector2dF(post_translate_x, post_translate_y);
+  preamble.post_scale = post_scale;
 
   // TODO(enne): need to implement alpha folding optimization from POB.
   // TODO(enne): don't access private members of DisplayItemList.
-  gfx::Rect playback_rect(x, y, w, h);
-  std::vector<size_t> indices = list->rtree_.Search(playback_rect);
-  for (cc::PaintOpBuffer::FlatteningIterator iter(&list->paint_op_buffer_,
-                                                  &indices);
-       iter; ++iter) {
-    const cc::PaintOp* op = *iter;
-    size_t size = op->Serialize(memory + written_bytes, free_bytes, options);
-    if (!size) {
-      buffer.Shrink(written_bytes);
-      helper_->RasterCHROMIUM(buffer.shm_id(), buffer.offset(), x, y, w, h,
-                              written_bytes);
-      buffer.Reset(kBlockAlloc);
-      memory = static_cast<char*>(buffer.address());
-      written_bytes = 0;
-      free_bytes = buffer.size();
-
-      size = op->Serialize(memory + written_bytes, free_bytes, options);
-    }
-    DCHECK_GE(size, 4u);
-    DCHECK_EQ(size % cc::PaintOpBuffer::PaintOpAlign, 0u);
-    DCHECK_LE(size, free_bytes);
-    DCHECK_EQ(free_bytes + written_bytes, buffer.size());
-
-    written_bytes += size;
-    free_bytes -= size;
-  }
-
-  buffer.Shrink(written_bytes);
-
-  if (!written_bytes)
-    return;
-  helper_->RasterCHROMIUM(buffer.shm_id(), buffer.offset(), x, y, w, h,
-                          buffer.size());
+  PaintOpSerializer op_serializer(free_size, transfer_buffer_, helper_);
+  cc::PaintOpBufferSerializer::SerializeCallback serialize_cb = base::Bind(
+      &PaintOpSerializer::Serialize, base::Unretained(&op_serializer));
+  cc::PaintOpBufferSerializer serializer(serialize_cb, nullptr);
+  serializer.Serialize(&list->paint_op_buffer_, &offsets, preamble);
+  DCHECK(serializer.valid());
+  op_serializer.SendSerializedData();
 
   CheckGLError();
 #endif

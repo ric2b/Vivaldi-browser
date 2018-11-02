@@ -26,7 +26,6 @@
 #include "core/html/HTMLTableRowElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeListsNodeData.h"
@@ -35,6 +34,7 @@
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTableSectionElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -71,9 +71,9 @@ int HTMLTableRowElement::rowIndex() const {
     // Skip THEAD, TBODY and TFOOT.
     maybe_table = maybe_table->parentNode();
   }
-  if (!(maybe_table && isHTMLTableElement(maybe_table)))
+  if (!(maybe_table && IsHTMLTableElement(maybe_table)))
     return -1;
-  return FindIndexInRowCollection(*toHTMLTableElement(maybe_table)->rows(),
+  return FindIndexInRowCollection(*ToHTMLTableElement(maybe_table)->rows(),
                                   *this);
 }
 
@@ -82,10 +82,10 @@ int HTMLTableRowElement::sectionRowIndex() const {
   if (!maybe_table)
     return -1;
   HTMLCollection* rows = nullptr;
-  if (IsHTMLTableSectionElement(maybe_table))
-    rows = ToHTMLTableSectionElement(maybe_table)->rows();
-  else if (isHTMLTableElement(maybe_table))
-    rows = toHTMLTableElement(maybe_table)->rows();
+  if (auto* section = ToHTMLTableSectionElementOrNull(maybe_table))
+    rows = section->rows();
+  else if (auto* table = ToHTMLTableElementOrNull(maybe_table))
+    rows = table->rows();
   if (!rows)
     return -1;
   return FindIndexInRowCollection(*rows, *this);

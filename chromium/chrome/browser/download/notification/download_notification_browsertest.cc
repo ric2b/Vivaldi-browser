@@ -39,6 +39,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "url/gurl.h"
 
 namespace {
@@ -439,10 +440,18 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, DownloadFile) {
   }
 
   // Checks strings.
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_DOWNLOAD_STATUS_DOWNLOADED_TITLE,
-                download_item()->GetFileNameToReportUser().LossyDisplayName()),
-            GetNotification(notification_id())->title());
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    EXPECT_EQ(l10n_util::GetStringUTF16(IDS_DOWNLOAD_STATUS_COMPLETE_TITLE),
+              GetNotification(notification_id())->title());
+    EXPECT_EQ(download_item()->GetFileNameToReportUser().LossyDisplayName(),
+              GetNotification(notification_id())->message());
+  } else {
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF16(
+            IDS_DOWNLOAD_STATUS_DOWNLOADED_TITLE,
+            download_item()->GetFileNameToReportUser().LossyDisplayName()),
+        GetNotification(notification_id())->title());
+  }
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_BASE_FORMAT,
             GetNotification(notification_id())->type());
 
@@ -832,10 +841,12 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, DownloadMultipleFiles) {
   EXPECT_TRUE(IsInNotifications(popup_notifications, notification_id2));
 
   // Confirms that the old one is low priority, and the new one is default.
-  EXPECT_EQ(message_center::LOW_PRIORITY,
-            GetNotification(notification_id1)->priority());
-  EXPECT_EQ(message_center::DEFAULT_PRIORITY,
-            GetNotification(notification_id2)->priority());
+  const int in_progress_priority1 =
+      GetNotification(notification_id1)->priority();
+  const int in_progress_priority2 =
+      GetNotification(notification_id2)->priority();
+  EXPECT_EQ(message_center::LOW_PRIORITY, in_progress_priority1);
+  EXPECT_EQ(message_center::DEFAULT_PRIORITY, in_progress_priority2);
 
   // Confirms that the updates of both download are delivered to the
   // notifications.
@@ -873,11 +884,11 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, DownloadMultipleFiles) {
   EXPECT_TRUE(IsInNotifications(popup_notifications, notification_id1));
   EXPECT_TRUE(IsInNotifications(popup_notifications, notification_id2));
 
-  // Confirms that the both are default priority after downloads finish.
-  EXPECT_EQ(message_center::DEFAULT_PRIORITY,
-            GetNotification(notification_id1)->priority());
-  EXPECT_EQ(message_center::DEFAULT_PRIORITY,
-            GetNotification(notification_id2)->priority());
+  // Confirms that both increase in priority when finished.
+  EXPECT_GT(GetNotification(notification_id1)->priority(),
+            in_progress_priority1);
+  EXPECT_GT(GetNotification(notification_id2)->priority(),
+            in_progress_priority2);
 
   // Confirms the types of download notifications are correct.
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_BASE_FORMAT,
@@ -1045,10 +1056,18 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, IncognitoDownloadFile) {
     download_change_notification_observer.Reset();
   }
 
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_DOWNLOAD_STATUS_DOWNLOADED_TITLE,
-                download_item()->GetFileNameToReportUser().LossyDisplayName()),
-            GetNotification(notification_id())->title());
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    EXPECT_EQ(l10n_util::GetStringUTF16(IDS_DOWNLOAD_STATUS_COMPLETE_TITLE),
+              GetNotification(notification_id())->title());
+    EXPECT_EQ(download_item()->GetFileNameToReportUser().LossyDisplayName(),
+              GetNotification(notification_id())->message());
+  } else {
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF16(
+            IDS_DOWNLOAD_STATUS_DOWNLOADED_TITLE,
+            download_item()->GetFileNameToReportUser().LossyDisplayName()),
+        GetNotification(notification_id())->title());
+  }
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_BASE_FORMAT,
             GetNotification(notification_id())->type());
 
@@ -1184,7 +1203,8 @@ class MultiProfileDownloadNotificationTest
   void AddUser(const TestAccountInfo& info, bool log_in) {
     if (log_in) {
       session_manager::SessionManager::Get()->CreateSession(
-          AccountId::FromUserEmailGaiaId(info.email, info.gaia_id), info.hash);
+          AccountId::FromUserEmailGaiaId(info.email, info.gaia_id), info.hash,
+          false);
     }
     user_manager::UserManager::Get()->SaveUserDisplayName(
         AccountId::FromUserEmailGaiaId(info.email, info.gaia_id),

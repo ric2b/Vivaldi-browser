@@ -6,9 +6,9 @@
 #define TokenizedChunkQueue_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "platform/wtf/Deque.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 #include "platform/wtf/Vector.h"
@@ -25,8 +25,8 @@ namespace blink {
 // thread kicks a consumer task on Blink main thread.
 class TokenizedChunkQueue : public ThreadSafeRefCounted<TokenizedChunkQueue> {
  public:
-  static RefPtr<TokenizedChunkQueue> Create() {
-    return AdoptRef(new TokenizedChunkQueue);
+  static scoped_refptr<TokenizedChunkQueue> Create() {
+    return base::AdoptRef(new TokenizedChunkQueue);
   }
 
   ~TokenizedChunkQueue();

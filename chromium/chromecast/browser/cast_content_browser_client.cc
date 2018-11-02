@@ -42,12 +42,11 @@
 #include "chromecast/media/cma/backend/media_pipeline_backend_factory_impl.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
-#include "components/crash/content/app/breakpad_linux.h"
-#include "components/crash/content/browser/crash_handler_host_linux.h"
 #include "components/network_hints/browser/network_hints_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -72,9 +71,18 @@
 #include "media/mojo/services/media_service.h"      // nogncheck
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+#include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/content/browser/crash_handler_host_linux.h"
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_dump_observer_android.h"
+#if !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#include "components/cdm/browser/media_drm_storage_impl.h"
+#include "url/origin.h"
+#endif  // !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
@@ -106,6 +114,36 @@ static std::unique_ptr<service_manager::Service> CreateMediaService(
       new ::media::MediaService(std::move(mojo_media_client)));
 }
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+
+#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
+                           ::media::mojom::MediaDrmStorageRequest request) {
+  DVLOG(1) << __func__;
+  PrefService* pref_service = CastBrowserProcess::GetInstance()->pref_service();
+  DCHECK(pref_service);
+
+  if (render_frame_host->GetLastCommittedOrigin().unique()) {
+    DVLOG(1) << __func__ << ": Unique origin.";
+    return;
+  }
+
+  // The object will be deleted on connection error, or when the frame navigates
+  // away.
+  new cdm::MediaDrmStorageImpl(render_frame_host, pref_service,
+                               std::move(request));
+}
+#endif  // defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+
+// Gets the URL request context getter for the single Cast browser context.
+// Must be called on the UI thread.
+scoped_refptr<net::URLRequestContextGetter>
+GetRequestContextGetterFromBrowserContext() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  return scoped_refptr<net::URLRequestContextGetter>(
+      content::BrowserContext::GetDefaultStoragePartition(
+          CastBrowserProcess::GetInstance()->browser_context())
+          ->GetURLRequestContext());
+}
 
 }  // namespace
 
@@ -323,12 +361,14 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
   base::CommandLine* browser_command_line =
       base::CommandLine::ForCurrentProcess();
 
+#if !defined(OS_FUCHSIA)
   // IsCrashReporterEnabled() is set when InitCrashReporter() is called, and
   // controlled by GetBreakpadClient()->EnableBreakpadForProcess(), therefore
   // it's ok to add switch to every process here.
   if (breakpad::IsCrashReporterEnabled()) {
     command_line->AppendSwitch(switches::kEnableCrashReporter);
   }
+#endif  // !defined(OS_FUCHSIA)
 
   // Command-line for different processes.
   if (process_type == switches::kRendererProcess) {
@@ -392,6 +432,15 @@ std::string CastContentBrowserClient::GetApplicationLocale() {
   return locale.empty() ? "en-US" : locale;
 }
 
+void CastContentBrowserClient::GetGeolocationRequestContext(
+    base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
+        callback) {
+  content::BrowserThread::PostTaskAndReplyWithResult(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&GetRequestContextGetterFromBrowserContext),
+      std::move(callback));
+}
+
 content::QuotaPermissionContext*
 CastContentBrowserClient::CreateQuotaPermissionContext() {
   return new CastQuotaPermissionContext();
@@ -411,7 +460,6 @@ void CastContentBrowserClient::AllowCertificateError(
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
     content::ResourceType resource_type,
-    bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -453,7 +501,7 @@ void CastContentBrowserClient::SelectClientCertificate(
       base::BindOnce(
           &CastContentBrowserClient::SelectClientCertificateOnIOThread,
           base::Unretained(this), requesting_url,
-          web_contents->GetRenderProcessHost()->GetID(),
+          web_contents->GetMainFrame()->GetProcess()->GetID(),
           base::SequencedTaskRunnerHandle::Get(),
           base::Bind(
               &content::ClientCertificateDelegate::ContinueWithCertificate,
@@ -473,9 +521,7 @@ void CastContentBrowserClient::SelectClientCertificateOnIOThread(
   if (network_delegate->IsWhitelisted(requesting_url, render_process_id,
                                       false)) {
     original_runner->PostTask(
-        FROM_HERE,
-        base::Bind(continue_callback, CastNetworkDelegate::DeviceCert(),
-                   CastNetworkDelegate::DeviceKey()));
+        FROM_HERE, base::Bind(continue_callback, DeviceCert(), DeviceKey()));
     return;
   } else {
     LOG(ERROR) << "Invalid host for client certificate request: "
@@ -506,14 +552,14 @@ bool CastContentBrowserClient::CanCreateWindow(
 
 void CastContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
-    content::AssociatedInterfaceRegistry* associated_registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
       base::Bind(&media::MediaCapsImpl::AddBinding,
                  base::Unretained(cast_browser_main_parts_->media_caps())),
       base::ThreadTaskRunnerHandle::Get());
 
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   if (!memory_pressure_controller_) {
     memory_pressure_controller_.reset(new MemoryPressureControllerImpl());
   }
@@ -522,7 +568,16 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
       base::Bind(&MemoryPressureControllerImpl::AddBinding,
                  base::Unretained(memory_pressure_controller_.get())),
       base::ThreadTaskRunnerHandle::Get());
-#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+}
+
+void CastContentBrowserClient::ExposeInterfacesToMediaService(
+    service_manager::BinderRegistry* registry,
+    content::RenderFrameHost* render_frame_host) {
+#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+  registry->AddInterface(
+      base::BindRepeating(&CreateMediaDrmStorage, render_frame_host));
+#endif
 }
 
 void CastContentBrowserClient::RegisterInProcessServices(
@@ -538,7 +593,7 @@ void CastContentBrowserClient::RegisterInProcessServices(
 std::unique_ptr<base::Value>
 CastContentBrowserClient::GetServiceManifestOverlay(
     base::StringPiece service_name) {
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   int id = -1;
   if (service_name == content::mojom::kBrowserServiceName)
     id = IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY;
@@ -562,12 +617,13 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
       base::GlobalDescriptors::GetInstance()->GetRegion(kAndroidPakDescriptor));
   breakpad::CrashDumpObserver::GetInstance()->BrowserChildProcessStarted(
       child_process_id, mappings);
-#else
+#elif !defined(OS_FUCHSIA)
+  // TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
     mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
-#endif  // defined(OS_ANDROID)
+#endif  // !defined(OS_FUCHSIA)
 }
 
 void CastContentBrowserClient::GetAdditionalWebUISchemes(
@@ -580,7 +636,15 @@ CastContentBrowserClient::GetDevToolsManagerDelegate() {
   return new CastDevToolsManagerDelegate();
 }
 
-#if !defined(OS_ANDROID)
+scoped_refptr<net::X509Certificate> CastContentBrowserClient::DeviceCert() {
+  return nullptr;
+}
+
+scoped_refptr<net::SSLPrivateKey> CastContentBrowserClient::DeviceKey() {
+  return nullptr;
+}
+
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 int CastContentBrowserClient::GetCrashSignalFD(
     const base::CommandLine& command_line) {
   std::string process_type =

@@ -34,7 +34,7 @@ LayoutSVGResourceLinearGradient::~LayoutSVGResourceLinearGradient() {}
 bool LayoutSVGResourceLinearGradient::CollectGradientAttributes() {
   DCHECK(GetElement());
   attributes_wrapper_->Set(LinearGradientAttributes());
-  return toSVGLinearGradientElement(GetElement())
+  return ToSVGLinearGradientElement(GetElement())
       ->CollectGradientAttributes(MutableAttributes());
 }
 
@@ -52,9 +52,9 @@ FloatPoint LayoutSVGResourceLinearGradient::EndPoint(
                                         *attributes.X2(), *attributes.Y2());
 }
 
-RefPtr<Gradient> LayoutSVGResourceLinearGradient::BuildGradient() const {
-  const LinearGradientAttributes& attributes = this->Attributes();
-  RefPtr<Gradient> gradient = Gradient::CreateLinear(
+scoped_refptr<Gradient> LayoutSVGResourceLinearGradient::BuildGradient() const {
+  const LinearGradientAttributes& attributes = Attributes();
+  scoped_refptr<Gradient> gradient = Gradient::CreateLinear(
       StartPoint(attributes), EndPoint(attributes),
       PlatformSpreadMethodFromSVGType(attributes.SpreadMethod()),
       Gradient::ColorInterpolation::kUnpremultiplied);

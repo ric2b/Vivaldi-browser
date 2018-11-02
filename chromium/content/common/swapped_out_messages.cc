@@ -19,7 +19,7 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
   switch (msg->type()) {
     // Handled by RenderWidgetHost.
     case InputHostMsg_HandleInputEvent_ACK::ID:
-    case ViewHostMsg_UpdateRect::ID:
+    case ViewHostMsg_ResizeOrRepaint_ACK::ID:
     // Handled by RenderWidgetHostView.
     case ViewHostMsg_SetNeedsBeginFrames::ID:
     // Handled by RenderViewHost.
@@ -28,8 +28,6 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
     case ViewHostMsg_Focus::ID:
     case ViewHostMsg_ShowFullscreenWidget::ID:
     case ViewHostMsg_ShowWidget::ID:
-    // Handled by SharedWorkerMessageFilter.
-    case ViewHostMsg_DocumentDetached::ID:
     // Allow cross-process JavaScript calls.
     case ViewHostMsg_RouteCloseEvent::ID:
     // Send page scale factor reset notification upon cross-process navigations.

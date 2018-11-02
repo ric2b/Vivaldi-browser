@@ -69,8 +69,8 @@ class PLATFORM_EXPORT HeapAllocator {
         ThreadStateFor<ThreadingTrait<T>::kAffinity>::GetState();
     DCHECK(state->IsAllocationAllowed());
     size_t gc_info_index = GCInfoTrait<HeapVectorBacking<T>>::Index();
-    NormalPageArena* arena =
-        static_cast<NormalPageArena*>(state->VectorBackingArena(gc_info_index));
+    NormalPageArena* arena = static_cast<NormalPageArena*>(
+        state->Heap().VectorBackingArena(gc_info_index));
     return reinterpret_cast<T*>(arena->AllocateObject(
         ThreadHeap::AllocationSizeFromSize(size), gc_info_index));
   }
@@ -81,7 +81,7 @@ class PLATFORM_EXPORT HeapAllocator {
     DCHECK(state->IsAllocationAllowed());
     size_t gc_info_index = GCInfoTrait<HeapVectorBacking<T>>::Index();
     NormalPageArena* arena = static_cast<NormalPageArena*>(
-        state->ExpandedVectorBackingArena(gc_info_index));
+        state->Heap().ExpandedVectorBackingArena(gc_info_index));
     return reinterpret_cast<T*>(arena->AllocateObject(
         ThreadHeap::AllocationSizeFromSize(size), gc_info_index));
   }
@@ -96,7 +96,7 @@ class PLATFORM_EXPORT HeapAllocator {
     ThreadState* state =
         ThreadStateFor<ThreadingTrait<T>::kAffinity>::GetState();
     const char* type_name = WTF_HEAP_PROFILER_TYPE_NAME(HeapVectorBacking<T>);
-    return reinterpret_cast<T*>(ThreadHeap::AllocateOnArenaIndex(
+    return reinterpret_cast<T*>(state->Heap().AllocateOnArenaIndex(
         state, size, BlinkGC::kInlineVectorArenaIndex, gc_info_index,
         type_name));
   }
@@ -114,7 +114,7 @@ class PLATFORM_EXPORT HeapAllocator {
         ThreadStateFor<ThreadingTrait<T>::kAffinity>::GetState();
     const char* type_name =
         WTF_HEAP_PROFILER_TYPE_NAME(HeapHashTableBacking<HashTable>);
-    return reinterpret_cast<T*>(ThreadHeap::AllocateOnArenaIndex(
+    return reinterpret_cast<T*>(state->Heap().AllocateOnArenaIndex(
         state, size, BlinkGC::kHashTableArenaIndex, gc_info_index, type_name));
   }
   template <typename T, typename HashTable>
@@ -143,7 +143,7 @@ class PLATFORM_EXPORT HeapAllocator {
   template <typename T>
   static void* NewArray(size_t bytes) {
     NOTREACHED();
-    return 0;
+    return nullptr;
   }
 
   static void DeleteArray(void* ptr) { NOTREACHED(); }
@@ -280,7 +280,7 @@ class HeapListHashSetAllocator : public HeapAllocator {
    public:
     // For the heap allocation we don't need an actual allocator object, so
     // we just return null.
-    HeapListHashSetAllocator* Get() const { return 0; }
+    HeapListHashSetAllocator* Get() const { return nullptr; }
 
     // No allocator object is needed.
     void CreateAllocatorIfNeeded() {}

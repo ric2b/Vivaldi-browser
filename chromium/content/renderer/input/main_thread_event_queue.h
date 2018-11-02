@@ -5,15 +5,14 @@
 #ifndef CONTENT_RENDERER_INPUT_MAIN_THREAD_EVENT_QUEUE_H_
 #define CONTENT_RENDERER_INPUT_MAIN_THREAD_EVENT_QUEUE_H_
 
-#include <deque>
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/input/touch_action.h"
 #include "content/common/content_export.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "content/renderer/input/main_thread_event_queue_task_list.h"
 #include "content/renderer/input/scoped_web_input_event_with_latency_info.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -101,6 +100,9 @@ class CONTENT_EXPORT MainThreadEventQueue
   void ClearClient();
   void SetNeedsLowLatency(bool low_latency);
 
+  // Request unbuffered input events until next pointerup.
+  void RequestUnbufferedInputEvents();
+
  protected:
   friend class base::RefCountedThreadSafe<MainThreadEventQueue>;
   virtual ~MainThreadEventQueue();
@@ -113,11 +115,6 @@ class CONTENT_EXPORT MainThreadEventQueue
                                const ui::LatencyInfo& latency,
                                HandledEventCallback handled_callback);
 
-  void SendEventToMainThread(const blink::WebInputEvent* event,
-                             const ui::LatencyInfo& latency,
-                             InputEventDispatchType original_dispatch_type);
-
-  bool IsRafAlignedInputDisabled() const;
   bool IsRafAlignedEvent(
       const std::unique_ptr<MainThreadEventQueueTask>& item) const;
   void RafFallbackTimerFired();
@@ -134,9 +131,9 @@ class CONTENT_EXPORT MainThreadEventQueue
   bool enable_fling_passive_listener_flag_;
   bool enable_non_blocking_due_to_main_thread_responsiveness_flag_;
   base::TimeDelta main_thread_responsiveness_threshold_;
-  bool handle_raf_aligned_touch_input_;
-  bool handle_raf_aligned_mouse_input_;
   bool needs_low_latency_;
+  bool allow_raf_aligned_input_;
+  bool needs_low_latency_until_pointer_up_ = false;
 
   // Contains data to be shared between main thread and compositor thread.
   struct SharedState {

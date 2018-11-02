@@ -19,6 +19,20 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   // Make sure that info.Holder() really points to an instance if [LenientThis].
   if (!{{v8_class}}::hasInstance(info.Holder(), info.GetIsolate()))
     return; // Return silently because of [LenientThis].
+  {% elif attribute.has_promise_type %}
+  // This attribute returns a Promise.
+  // Per https://heycam.github.io/webidl/#dfn-attribute-getter, all exceptions
+  // must be turned into a Promise rejection.
+  {{define_exception_state}}
+  ExceptionToRejectPromiseScope rejectPromiseScope(info, exceptionState);
+
+  // Returning a Promise type requires us to disable some of V8's type checks,
+  // so we have to manually check that info.Holder() really points to an
+  // instance of the type.
+  if (!{{v8_class}}::hasInstance(info.Holder(), info.GetIsolate())) {
+    exceptionState.ThrowTypeError("Illegal invocation");
+    return;
+  }
   {% endif %}
 
   {% if not attribute.is_static or attribute.is_save_same_object %}
@@ -47,15 +61,15 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   {% set local_dom_window_only = interface_name == 'Window' and not attribute.has_cross_origin_getter %}
   {% if local_dom_window_only %}
   {% if attribute.is_check_security_for_receiver %}
-  {{cpp_class}}* uncheckedImpl = {{v8_class}}::toImpl(holder);
+  {{cpp_class}}* uncheckedImpl = {{v8_class}}::ToImpl(holder);
   {% else %}
   // Same-origin attribute getters are never exposed via the cross-origin
   // interceptors. Since same-origin access requires a LocalDOMWindow, it is
   // safe to downcast here.
-  LocalDOMWindow* impl = ToLocalDOMWindow({{v8_class}}::toImpl(holder));
+  LocalDOMWindow* impl = ToLocalDOMWindow({{v8_class}}::ToImpl(holder));
   {% endif %}{# attribute.is_check_security_for_receiver #}
   {% else %}
-  {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
+  {{cpp_class}}* impl = {{v8_class}}::ToImpl(holder);
   {% endif %}{# local_dom_window_only #}
   {% endif %}{# not attribute.is_static #}
 
@@ -274,7 +288,11 @@ void {{v8_class_or_partial}}::{{attribute.name}}ConstructorGetterCallback{{world
   UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.measure_as('ConstructorGetter')}});
   {% endif %}
 
-  V8ConstructorAttributeGetter(property, info);
+  {% if attribute.is_named_constructor %}
+  V8{{attribute.constructor_type}}::NamedConstructorAttributeGetter(property, info);
+  {% else %}
+  V8ConstructorAttributeGetter(property, info, &V8{{attribute.constructor_type}}::wrapperTypeInfo);
+  {% endif %}
 }
 {% endmacro %}
 
@@ -311,15 +329,15 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   {% set local_dom_window_only = interface_name == 'Window' and not attribute.has_cross_origin_setter %}
   {% if local_dom_window_only %}
   {% if attribute.is_check_security_for_receiver %}
-  {{cpp_class}}* uncheckedImpl = {{v8_class}}::toImpl(holder);
+  {{cpp_class}}* uncheckedImpl = {{v8_class}}::ToImpl(holder);
   {% else %}
   // Same-origin attributes setters are never exposed via the cross-origin
   // interceptors. Since same-origin access requires a LocalDOMWindow, it is
   // safe to downcast here.
-  LocalDOMWindow* impl = ToLocalDOMWindow({{v8_class}}::toImpl(holder));
+  LocalDOMWindow* impl = ToLocalDOMWindow({{v8_class}}::ToImpl(holder));
   {% endif %}{# attribute.is_check_security_for_receiver #}
   {% else %}
-  {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
+  {{cpp_class}}* impl = {{v8_class}}::ToImpl(holder);
   {% endif %}{# local_dom_window_only #}
   {% endif %}
 
@@ -359,9 +377,7 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   if (!result)
     return;
   {% else %}{# attribute.is_put_forwards #}
-  {% if attribute.is_custom_element_callbacks or
-        (attribute.is_reflect and not (attribute.idl_type == 'DOMString' and is_node)) %}
-  // Skip on compact node DOMString getters.
+  {% if attribute.is_custom_element_callbacks or attribute.is_reflect %}
   V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
   {% endif %}
 
@@ -479,10 +495,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   CEReactionsScope ceReactionsScope;
   {% endif %}
 
-  {% if attribute.is_custom_element_callbacks or attribute.is_reflect %}
-  V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
-  {% endif %}
-
   {% if attribute.has_custom_setter %}
   {{v8_class}}::{{attribute.name}}AttributeSetterCustom(v8Value, info);
   {% elif attribute.has_cross_origin_setter %}
@@ -498,12 +510,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 {% macro build_attribute_or_accessor_configuration(attribute, config_type) %}
 {% from 'utilities.cpp.tmpl' import property_location %}
 {% if attribute.constructor_type %}
-  {% if attribute.needs_constructor_getter_callback %}
-    {% set getter_callback = '%s::%sConstructorGetterCallback' % (v8_class_or_partial, attribute.name) %}
-  {% else %}
-    {% set getter_callback = 'V8%s::NamedConstructorAttributeGetter' % (attribute.constructor_type)
-        if attribute.is_named_constructor else 'V8ConstructorAttributeGetter' %}
-  {% endif %}
+  {% set getter_callback = '%s::%sConstructorGetterCallback' % (v8_class_or_partial, attribute.name) %}
   {% set setter_callback = 'nullptr' %}
 {% else %}{# regular attributes #}
   {% set getter_callback = '%s::%sAttributeGetterCallback' % (v8_class_or_partial, attribute.name) %}
@@ -511,16 +518,14 @@ const v8::FunctionCallbackInfo<v8::Value>& info
       if attribute.has_setter else 'nullptr' %}
 {% endif %}
 
-{% set wrapper_type_info =
-    'const_cast<WrapperTypeInfo*>(&V8%s::wrapperTypeInfo)' % attribute.constructor_type
-    if attribute.constructor_type else 'nullptr' %}
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
 {% set cached_property_key = 'V8PrivateProperty::k' +
     (attribute.cached_accessor_name if attribute.is_cached_accessor
      else 'NoCachedAccessor') %}
 {% set holder_check = 'V8DOMConfiguration::kDoNotCheckHolder'
-    if attribute.is_lenient_this else 'V8DOMConfiguration::kCheckHolder' %}
+    if attribute.is_lenient_this or attribute.has_promise_type
+    else 'V8DOMConfiguration::kCheckHolder' %}
 {% if attribute.is_per_world_bindings %}
   {% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
   {% set setter_callback_for_main_world =
@@ -531,13 +536,11 @@ const v8::FunctionCallbackInfo<v8::Value>& info
         '"%s"' % attribute.name,
         getter_callback_for_main_world,
         setter_callback_for_main_world,
-        wrapper_type_info,
     ],
     'non_main' : [
         '"%s"' % attribute.name,
         getter_callback,
         setter_callback,
-        wrapper_type_info,
     ],
 } %}
 {% set accessor_only_fields = [] if config_type == 'attribute' else [cached_property_key] %}
@@ -577,8 +580,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
 
 {##############################################################################}
-{% macro install_conditionally_enabled_attributes_on_prototype(secure_context_test_result) %}
-{% for exposed_test, exposed_attribute_list in conditionally_enabled_attributes | selectattr('on_prototype') | groupby('exposed_test') %}
+{# This macro installs |attributes_to_install| on v8::Object/v8::Function, not on v8::ObjectTemplate/v8::FunctionTemplate. #}
+{% macro install_conditional_attributes(secure_context_test_result, attributes_to_install) %}
+{% for exposed_test, exposed_attribute_list in attributes_to_install | groupby('exposed_test') %}
 {% filter exposed(exposed_test) %}
 {% for secure_context_test, secure_context_attribute_list in exposed_attribute_list | groupby('secure_context_test') %}
 {% filter secure_context(secure_context_test, secure_context_test_result) %}
@@ -589,7 +593,10 @@ static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[]
     {{accessor_configuration(attribute) | indent(4)}},
     {% endfor %}
 };
-V8DOMConfiguration::InstallAccessors(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessor_configurations, WTF_ARRAY_LENGTH(accessor_configurations));
+V8DOMConfiguration::InstallAccessors(
+    isolate, world, instanceObject, prototypeObject, interfaceObject,
+    signature, accessor_configurations,
+    WTF_ARRAY_LENGTH(accessor_configurations));
 {% endfilter %}{# runtime_enabled #}
 {% endfor %}{# secure_context_attribute_list grouped by runtime_enabled #}
 {% endfilter %}{# secure_context #}
@@ -600,19 +607,21 @@ V8DOMConfiguration::InstallAccessors(isolate, world, v8::Local<v8::Object>(), pr
 
 
 {##############################################################################}
-{% macro install_conditionally_enabled_constructors(secure_context_test_result) %}
-{% for exposed_test, exposed_attribute_list in conditionally_enabled_attributes | selectattr('constructor_type') | groupby('exposed_test') %}
+{% macro install_conditional_interface_objects(secure_context_test_result, attributes_to_install) %}
+{% for exposed_test, exposed_attribute_list in attributes_to_install | groupby('exposed_test') %}
 {% filter exposed(exposed_test) %}
 {% for secure_context_test, secure_context_attribute_list in exposed_attribute_list | groupby('secure_context_test') %}
 {% filter secure_context(secure_context_test, secure_context_test_result) %}
 {% for feature_name, attribute_list in secure_context_attribute_list | groupby('runtime_enabled_feature_name') %}
 {% filter runtime_enabled(feature_name) %}
-static const V8DOMConfiguration::AttributeConfiguration constructor_configurations[] = {
+static const V8DOMConfiguration::AttributeConfiguration attribute_configurations[] = {
     {% for attribute in attribute_list | sort %}
     {{attribute_configuration(attribute) | indent(4)}},
     {% endfor %}
 };
-V8DOMConfiguration::InstallAttributes(isolate, world, instance, prototype_object, constructor_configurations, WTF_ARRAY_LENGTH(constructor_configurations));
+V8DOMConfiguration::InstallAttributes(
+    isolate, world, instanceObject, prototypeObject,
+    attribute_configurations, WTF_ARRAY_LENGTH(attribute_configurations));
 {% endfilter %}{# runtime_enabled #}
 {% endfor %}{# secure_context_attribute_list grouped by runtime_enabled #}
 {% endfilter %}{# secure_context #}

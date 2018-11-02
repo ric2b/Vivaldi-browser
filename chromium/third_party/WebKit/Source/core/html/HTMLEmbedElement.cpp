@@ -25,7 +25,6 @@
 #include "core/html/HTMLEmbedElement.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ShadowRoot.h"
@@ -34,6 +33,7 @@
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/PluginDocument.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/api/LayoutEmbeddedItem.h"
 
@@ -80,7 +80,7 @@ bool HTMLEmbedElement::IsPresentationAttribute(
 void HTMLEmbedElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == hiddenAttr) {
     if (DeprecatedEqualIgnoringCase(value, "yes") ||
         DeprecatedEqualIgnoringCase(value, "true")) {
@@ -197,10 +197,10 @@ bool HTMLEmbedElement::LayoutObjectIsNeeded(const ComputedStyle& style) {
   // * The element has an ancestor object element that is not showing its
   //   fallback content.
   ContainerNode* p = parentNode();
-  if (isHTMLObjectElement(p)) {
+  if (auto* object = ToHTMLObjectElementOrNull(p)) {
     DCHECK(p->GetLayoutObject());
-    if (!toHTMLObjectElement(p)->WillUseFallbackContentAtLayout() &&
-        !toHTMLObjectElement(p)->UseFallbackContent()) {
+    if (!object->WillUseFallbackContentAtLayout() &&
+        !object->UseFallbackContent()) {
       DCHECK(!p->GetLayoutObject()->IsEmbeddedObject());
       return false;
     }

@@ -31,6 +31,7 @@
 #ifndef QuotaTracker_h
 #define QuotaTracker_h
 
+#include "base/macros.h"
 #include "modules/ModulesExport.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/ThreadingPrimitives.h"
@@ -43,7 +44,6 @@ class SecurityOrigin;
 
 class MODULES_EXPORT QuotaTracker {
   USING_FAST_MALLOC(QuotaTracker);
-  WTF_MAKE_NONCOPYABLE(QuotaTracker);
 
  public:
   static QuotaTracker& Instance();
@@ -53,16 +53,18 @@ class MODULES_EXPORT QuotaTracker {
       const String& database_name,
       unsigned long long* database_size,
       unsigned long long* space_available);
-  void UpdateDatabaseSize(SecurityOrigin*,
+  void UpdateDatabaseSize(const SecurityOrigin*,
                           const String& database_name,
                           unsigned long long database_size);
 
  private:
-  QuotaTracker() {}
+  QuotaTracker() = default;
 
   typedef HashMap<String, unsigned long long> SizeMap;
   HashMap<String, SizeMap> database_sizes_;
   Mutex data_guard_;
+
+  DISALLOW_COPY_AND_ASSIGN(QuotaTracker);
 };
 
 }  // namespace blink

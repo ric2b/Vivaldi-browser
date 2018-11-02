@@ -8,6 +8,8 @@ import("//testing/test.gni")
 
 static_library("zucchini_lib") {
   sources = [
+    "abs32_utils.cc",
+    "abs32_utils.h",
     "address_translator.cc",
     "address_translator.h",
     "algorithm.h",
@@ -48,7 +50,11 @@ static_library("zucchini_lib") {
     "rel32_finder.h",
     "rel32_utils.cc",
     "rel32_utils.h",
+    "reloc_utils.cc",
+    "reloc_utils.h",
     "suffix_array.h",
+    "targets_affinity.cc",
+    "targets_affinity.h",
     "type_win_pe.h",
     "typed_value.h",
     "zucchini.h",
@@ -120,6 +126,7 @@ fuzzer_test("zucchini_patch_fuzzer") {
 
 test("zucchini_unittests") {
   sources = [
+    "abs32_utils_unittest.cc",
     "address_translator_unittest.cc",
     "algorithm_unittest.cc",
     "binary_data_histogram_unittest.cc",
@@ -139,11 +146,15 @@ test("zucchini_unittests") {
     "patch_utils_unittest.cc",
     "rel32_finder_unittest.cc",
     "rel32_utils_unittest.cc",
+    "reloc_utils_unittest.cc",
     "suffix_array_unittest.cc",
+    "targets_affinity_unittest.cc",
     "test_disassembler.cc",
     "test_disassembler.h",
     "test_reference_reader.cc",
     "test_reference_reader.h",
+    "test_utils.cc",
+    "test_utils.h",
     "typed_value_unittest.cc",
     "zucchini_apply_unittest.cc",
     "zucchini_gen_unittest.cc",

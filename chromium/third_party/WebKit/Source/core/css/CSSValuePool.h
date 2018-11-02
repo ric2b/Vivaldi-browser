@@ -26,6 +26,8 @@
 #ifndef CSSValuePool_h
 #define CSSValuePool_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
@@ -39,14 +41,12 @@
 #include "core/css/CSSUnsetValue.h"
 #include "core/css/CSSValueList.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicStringHash.h"
 
 namespace blink {
 
 class CORE_EXPORT CSSValuePool
     : public GarbageCollectedFinalized<CSSValuePool> {
-  WTF_MAKE_NONCOPYABLE(CSSValuePool);
 
  public:
   // TODO(sashab): Make all the value pools store const CSSValues.
@@ -116,7 +116,7 @@ class CORE_EXPORT CSSValuePool
     return font_face_value_cache_.insert(string, nullptr);
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   CSSValuePool();
@@ -145,6 +145,7 @@ class CORE_EXPORT CSSValuePool
   FontFamilyValueCache font_family_value_cache_;
 
   friend CORE_EXPORT CSSValuePool& CssValuePool();
+  DISALLOW_COPY_AND_ASSIGN(CSSValuePool);
 };
 
 CORE_EXPORT CSSValuePool& CssValuePool();

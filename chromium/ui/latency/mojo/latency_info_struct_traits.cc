@@ -4,7 +4,7 @@
 
 #include "ui/latency/mojo/latency_info_struct_traits.h"
 
-#include "ipc/ipc_message_utils.h"
+#include "mojo/common/time_struct_traits.h"
 
 namespace mojo {
 
@@ -285,6 +285,13 @@ int64_t StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::trace_id(
 }
 
 // static
+ukm::SourceId
+StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::ukm_source_id(
+    const ui::LatencyInfo& info) {
+  return info.ukm_source_id();
+}
+
+// static
 bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::coalesced(
     const ui::LatencyInfo& info) {
   return info.coalesced();
@@ -336,6 +343,7 @@ bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::Read(
   }
 
   out->trace_id_ = data.trace_id();
+  out->ukm_source_id_ = data.ukm_source_id();
   out->coalesced_ = data.coalesced();
   out->began_ = data.began();
   out->terminated_ = data.terminated();

@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/clear_browsing_data_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
-#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/material_components/app_bar_presenting.h"
@@ -29,6 +28,7 @@
 #import "ios/chrome/browser/ui/settings/sync_settings_collection_view_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
@@ -40,7 +40,8 @@
 #error "This file requires ARC support."
 #endif
 
-// TODO(crbug.com/620361): Remove the entire class when iOS 9 is dropped.
+// TODO(crbug.com/785484): Implements workarounds for bugs between iOS and MDC.
+// To be removed or refactored when iOS 9 is dropped.
 @interface SettingsAppBarContainerViewController
     : MDCAppBarContainerViewController
 @end
@@ -51,12 +52,31 @@
 
 - (UIViewController*)childViewControllerForStatusBarHidden {
   if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
+    // TODO(crbug.com/785484): Remove the entire method override when iOS 9 is
     // dropped.
     return self.contentViewController;
   } else {
     return [super childViewControllerForStatusBarHidden];
   }
+}
+
+// TODO(crbug.com/785484): Investigate if this can be fixed in MDC.
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+
+  UILayoutGuide* safeAreaLayoutGuide = SafeAreaLayoutGuideForView(self.view);
+  UIView* contentView = self.contentViewController.view;
+  UIView* headerView = self.appBar.headerViewController.headerView;
+  contentView.translatesAutoresizingMaskIntoConstraints = NO;
+  [NSLayoutConstraint activateConstraints:@[
+    [contentView.topAnchor constraintEqualToAnchor:headerView.bottomAnchor],
+    [contentView.leadingAnchor
+        constraintEqualToAnchor:safeAreaLayoutGuide.leadingAnchor],
+    [contentView.trailingAnchor
+        constraintEqualToAnchor:safeAreaLayoutGuide.trailingAnchor],
+    [contentView.bottomAnchor
+        constraintEqualToAnchor:safeAreaLayoutGuide.bottomAnchor],
+  ]];
 }
 
 - (UIViewController*)childViewControllerForStatusBarStyle {
@@ -464,11 +484,6 @@ initWithRootViewController:(UIViewController*)rootViewController
 
 - (void)chromeExecuteCommand:(id)sender {
   switch ([sender tag]) {
-    case IDC_SHOW_SIGNIN_IOS:
-      // Sign-in actions can only happen on the main browser state (not on
-      // incognito browser state), which is unique. The command can just be
-      // forwarded up the responder chain.
-      break;
     case IDC_CLEAR_BROWSING_DATA_IOS: {
       // Check that the data for the right browser state is being cleared before
       // forwarding it up the responder chain.
@@ -480,23 +495,6 @@ initWithRootViewController:(UIViewController*)rootViewController
       // app if this ever happens.
       CHECK_EQ(commandBrowserState, [self mainBrowserState]);
       break;
-    }
-    case IDC_SHOW_SYNC_SETTINGS: {
-      SyncSettingsCollectionViewController* controller =
-          [[SyncSettingsCollectionViewController alloc]
-                initWithBrowserState:mainBrowserState_
-              allowSwitchSyncAccount:YES];
-      controller.dispatcher = [delegate_ dispatcherForSettings];
-      [self pushViewController:controller animated:YES];
-      return;
-    }
-    case IDC_SHOW_SYNC_PASSPHRASE_SETTINGS: {
-      SyncEncryptionPassphraseCollectionViewController* controller =
-          [[SyncEncryptionPassphraseCollectionViewController alloc]
-              initWithBrowserState:mainBrowserState_];
-      controller.dispatcher = [delegate_ dispatcherForSettings];
-      [self pushViewController:controller animated:YES];
-      return;
     }
     default:
       NOTREACHED()
@@ -525,11 +523,34 @@ initWithRootViewController:(UIViewController*)rootViewController
 
 #pragma mark - ApplicationSettingsCommands
 
-- (void)showAccountsSettings {
+// TODO(crbug.com/779791) : Do not pass |baseViewController| through dispatcher.
+- (void)showAccountsSettingsFromViewController:
+    (UIViewController*)baseViewController {
   AccountsCollectionViewController* controller =
       [[AccountsCollectionViewController alloc]
                initWithBrowserState:mainBrowserState_
           closeSettingsOnAddAccount:NO];
+  controller.dispatcher = [delegate_ dispatcherForSettings];
+  [self pushViewController:controller animated:YES];
+}
+
+// TODO(crbug.com/779791) : Do not pass |baseViewController| through dispatcher.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  SyncSettingsCollectionViewController* controller =
+      [[SyncSettingsCollectionViewController alloc]
+            initWithBrowserState:mainBrowserState_
+          allowSwitchSyncAccount:YES];
+  controller.dispatcher = [delegate_ dispatcherForSettings];
+  [self pushViewController:controller animated:YES];
+}
+
+// TODO(crbug.com/779791) : Do not pass |baseViewController| through dispatcher.
+- (void)showSyncPassphraseSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  SyncEncryptionPassphraseCollectionViewController* controller =
+      [[SyncEncryptionPassphraseCollectionViewController alloc]
+          initWithBrowserState:mainBrowserState_];
   controller.dispatcher = [delegate_ dispatcherForSettings];
   [self pushViewController:controller animated:YES];
 }
@@ -574,17 +595,10 @@ initWithRootViewController:(UIViewController*)rootViewController
         [[SettingsAppBarContainerViewController alloc]
             initWithContentViewController:controller];
 
+    // TODO(crbug.com/785484): Investigate if this and below can be removed.
     // Configure the style.
+    appBarContainer.view.backgroundColor = [UIColor whiteColor];
     ConfigureAppBarWithCardStyle(appBarContainer.appBar);
-
-    // Adjust the frame of the contained view controller's view to be below the
-    // app bar.
-    CGRect contentFrame = controller.view.frame;
-    CGSize headerSize = [appBarContainer.appBar.headerViewController.headerView
-        sizeThatFits:contentFrame.size];
-    contentFrame = UIEdgeInsetsInsetRect(
-        contentFrame, UIEdgeInsetsMake(headerSize.height, 0, 0, 0));
-    controller.view.frame = contentFrame;
 
     // Register the app bar container and return it.
     [self registerAppBarContainer:appBarContainer];

@@ -36,6 +36,7 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8Event.h"
 #include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8Node.h"
@@ -68,7 +69,7 @@ void V8Window::locationAttributeGetterCustom(
   v8::Isolate* isolate = info.GetIsolate();
   v8::Local<v8::Object> holder = info.Holder();
 
-  DOMWindow* window = V8Window::toImpl(holder);
+  DOMWindow* window = V8Window::ToImpl(holder);
   Location* location = window->location();
   DCHECK(location);
 
@@ -102,7 +103,7 @@ void V8Window::locationAttributeGetterCustom(
 
 void V8Window::eventAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::toImpl(info.Holder()));
+  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::ToImpl(info.Holder()));
   v8::Isolate* isolate = info.GetIsolate();
   ExceptionState exception_state(isolate, ExceptionState::kGetterContext,
                                  "Window", "event");
@@ -113,13 +114,29 @@ void V8Window::eventAttributeGetterCustom(
 
   v8::Local<v8::Value> js_event =
       V8PrivateProperty::GetGlobalEvent(isolate).GetOrUndefined(info.Holder());
+
+  // Track usage of window.event when the event's target is inside V0 shadow
+  // tree.
+  // TODO(yukishiino): Make window.event [Replaceable] and simplify the
+  // following IsWrapper/ToImplWithTypeCheck hack.
+  if (V8DOMWrapper::IsWrapper(isolate, js_event)) {
+    if (Event* event = V8Event::ToImplWithTypeCheck(isolate, js_event)) {
+      if (event->target()) {
+        Node* target_node = event->target()->ToNode();
+        if (target_node && target_node->IsInV0ShadowTree()) {
+          UseCounter::Count(CurrentExecutionContext(isolate),
+                            WebFeature::kWindowEventInV0ShadowTree);
+        }
+      }
+    }
+  }
   V8SetReturnValue(info, js_event);
 }
 
 void V8Window::eventAttributeSetterCustom(
     v8::Local<v8::Value> value,
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::toImpl(info.Holder()));
+  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::ToImpl(info.Holder()));
   v8::Isolate* isolate = info.GetIsolate();
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext,
                                  "Window", "event");
@@ -133,7 +150,7 @@ void V8Window::eventAttributeSetterCustom(
 
 void V8Window::frameElementAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::toImpl(info.Holder()));
+  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::ToImpl(info.Holder()));
   Element* frameElement = impl->frameElement();
 
   if (!BindingSecurity::ShouldAllowAccessTo(
@@ -160,7 +177,7 @@ void V8Window::openerAttributeSetterCustom(
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   v8::Isolate* isolate = info.GetIsolate();
-  DOMWindow* impl = V8Window::toImpl(info.Holder());
+  DOMWindow* impl = V8Window::ToImpl(info.Holder());
   if (!impl->GetFrame())
     return;
 
@@ -171,7 +188,7 @@ void V8Window::openerAttributeSetterCustom(
     // impl->frame() has to be a non-null LocalFrame.  Otherwise, the
     // same-origin check would have failed.
     DCHECK(impl->GetFrame());
-    ToLocalFrame(impl->GetFrame())->Loader().SetOpener(0);
+    ToLocalFrame(impl->GetFrame())->Loader().SetOpener(nullptr);
   }
 
   // Delete the accessor from the inner object.
@@ -205,7 +222,7 @@ void V8Window::postMessageMethodCustom(
 
   // None of these need to be RefPtr because info and context are guaranteed
   // to hold on to them.
-  DOMWindow* window = V8Window::toImpl(info.Holder());
+  DOMWindow* window = V8Window::ToImpl(info.Holder());
   // TODO(yukishiino): The HTML spec specifies that we should use the
   // Incumbent Realm instead of the Current Realm, but currently we don't have
   // a way to retrieve the Incumbent Realm.  See also:
@@ -244,23 +261,35 @@ void V8Window::postMessageMethodCustom(
 
   SerializedScriptValue::SerializeOptions options;
   options.transferables = &transferables;
-  RefPtr<SerializedScriptValue> message = SerializedScriptValue::Serialize(
-      info.GetIsolate(), info[0], options, exception_state);
+  scoped_refptr<SerializedScriptValue> message =
+      SerializedScriptValue::Serialize(info.GetIsolate(), info[0], options,
+                                       exception_state);
   if (exception_state.HadException())
     return;
 
   message->UnregisterMemoryAllocatedWithCurrentScriptContext();
-  window->postMessage(message.Get(), transferables.message_ports, target_origin,
+  window->postMessage(message.get(), transferables.message_ports, target_origin,
                       source, exception_state);
 }
 
 void V8Window::openMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  DOMWindow* impl = V8Window::toImpl(info.Holder());
+  DOMWindow* impl = V8Window::ToImpl(info.Holder());
   ExceptionState exception_state(
       info.GetIsolate(), ExceptionState::kExecutionContext, "Window", "open");
   if (!BindingSecurity::ShouldAllowAccessTo(CurrentDOMWindow(info.GetIsolate()),
                                             impl, exception_state)) {
+    return;
+  }
+
+  // If the bindings implementation is 100% correct, the current realm and the
+  // entered realm should be same origin-domain. However, to be on the safe
+  // side and add some defense in depth, we'll check against the entered realm
+  // as well here.
+  if (!BindingSecurity::ShouldAllowAccessTo(EnteredDOMWindow(info.GetIsolate()),
+                                            impl, exception_state)) {
+    UseCounter::Count(CurrentExecutionContext(info.GetIsolate()),
+                      WebFeature::kWindowOpenRealmMismatch);
     return;
   }
 
@@ -296,7 +325,7 @@ void V8Window::openMethodCustom(
 void V8Window::namedPropertyGetterCustom(
     const AtomicString& name,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  DOMWindow* window = V8Window::toImpl(info.Holder());
+  DOMWindow* window = V8Window::ToImpl(info.Holder());
   if (!window)
     return;
 
@@ -345,6 +374,17 @@ void V8Window::namedPropertyGetterCustom(
   if (!BindingSecurity::ShouldAllowAccessTo(
           CurrentDOMWindow(info.GetIsolate()), window,
           BindingSecurity::ErrorReportOption::kDoNotReport)) {
+    // HTML 7.2.3.3 CrossOriginGetOwnPropertyHelper ( O, P )
+    // https://html.spec.whatwg.org/multipage/browsers.html#crossorigingetownpropertyhelper-(-o,-p-)
+    // step 3. If P is "then", @@toStringTag, @@hasInstance, or
+    //   @@isConcatSpreadable, then return PropertyDescriptor{ [[Value]]:
+    //   undefined, [[Writable]]: false, [[Enumerable]]: false,
+    //   [[Configurable]]: true }.
+    if (name == "then") {
+      V8SetReturnValueFast(info, v8::Undefined(info.GetIsolate()), window);
+      return;
+    }
+
     BindingSecurity::FailedAccessCheckFor(
         info.GetIsolate(), window->GetWrapperTypeInfo(), info.Holder());
     return;

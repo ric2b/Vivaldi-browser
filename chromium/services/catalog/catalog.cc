@@ -15,9 +15,11 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/lock_table.h"
 #include "components/filesystem/public/interfaces/types.mojom.h"
@@ -113,6 +115,34 @@ void LoadCatalogManifestIntoCache(const base::Value* root, EntryCache* cache) {
 
 }  // namespace
 
+// Wraps state needed for servicing directory requests on a separate thread.
+// filesystem::LockTable is not thread safe, so it's wrapped in
+// DirectoryThreadState.
+class Catalog::DirectoryThreadState
+    : public base::RefCountedDeleteOnSequence<DirectoryThreadState> {
+ public:
+  explicit DirectoryThreadState(
+      scoped_refptr<base::SequencedTaskRunner> task_runner)
+      : base::RefCountedDeleteOnSequence<DirectoryThreadState>(
+            std::move(task_runner)) {}
+
+  scoped_refptr<filesystem::LockTable> lock_table() {
+    if (!lock_table_)
+      lock_table_ = new filesystem::LockTable;
+    return lock_table_;
+  }
+
+ private:
+  friend class base::DeleteHelper<DirectoryThreadState>;
+  friend class base::RefCountedDeleteOnSequence<DirectoryThreadState>;
+
+  ~DirectoryThreadState() = default;
+
+  scoped_refptr<filesystem::LockTable> lock_table_;
+
+  DISALLOW_COPY_AND_ASSIGN(DirectoryThreadState);
+};
+
 class Catalog::ServiceImpl : public service_manager::Service {
  public:
   explicit ServiceImpl(Catalog* catalog) : catalog_(catalog) {
@@ -143,7 +173,7 @@ class Catalog::ServiceImpl : public service_manager::Service {
 Catalog::Catalog(std::unique_ptr<base::Value> static_manifest,
                  ManifestProvider* service_manifest_provider)
     : service_context_(new service_manager::ServiceContext(
-          base::MakeUnique<ServiceImpl>(this),
+          std::make_unique<ServiceImpl>(this),
           mojo::MakeRequest(&service_))),
       service_manifest_provider_(service_manifest_provider),
       weak_factory_(this) {
@@ -188,7 +218,7 @@ Instance* Catalog::GetInstanceForUserId(const std::string& user_id) {
 
   auto result = instances_.insert(std::make_pair(
       user_id,
-      base::MakeUnique<Instance>(&system_cache_, service_manifest_provider_)));
+      std::make_unique<Instance>(&system_cache_, service_manifest_provider_)));
   return result.first->second.get();
 }
 
@@ -202,15 +232,31 @@ void Catalog::BindCatalogRequest(
 void Catalog::BindDirectoryRequest(
     filesystem::mojom::DirectoryRequest request,
     const service_manager::BindSourceInfo& source_info) {
-  if (!lock_table_)
-    lock_table_ = new filesystem::LockTable;
+  if (!directory_task_runner_) {
+    directory_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+        {base::MayBlock(),
+         // Use USER_BLOCKING as this gates showing UI during startup.
+         base::TaskPriority::USER_BLOCKING,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+    directory_thread_state_ = new DirectoryThreadState(directory_task_runner_);
+  }
+  directory_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&Catalog::BindDirectoryRequestOnBackgroundThread,
+                     directory_thread_state_, std::move(request), source_info));
+}
 
+// static
+void Catalog::BindDirectoryRequestOnBackgroundThread(
+    scoped_refptr<DirectoryThreadState> thread_state,
+    filesystem::mojom::DirectoryRequest request,
+    const service_manager::BindSourceInfo& source_info) {
   base::FilePath resources_path;
   base::PathService::Get(base::DIR_MODULE, &resources_path);
   mojo::MakeStrongBinding(
-      base::MakeUnique<filesystem::DirectoryImpl>(
+      std::make_unique<filesystem::DirectoryImpl>(
           resources_path, scoped_refptr<filesystem::SharedTempDir>(),
-          lock_table_),
+          thread_state->lock_table()),
       std::move(request));
 }
 

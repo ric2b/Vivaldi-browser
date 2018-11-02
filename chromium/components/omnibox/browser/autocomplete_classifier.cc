@@ -9,12 +9,12 @@
 #include "base/auto_reset.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
 AutocompleteClassifier::AutocompleteClassifier(
@@ -43,19 +43,20 @@ int AutocompleteClassifier::DefaultOmniboxProviders() {
       // Custom search engines cannot be used on mobile.
       AutocompleteProvider::TYPE_KEYWORD |
 #endif
-#if !defined(OS_IOS)
-      // "Shortcuts" and "Zero Suggest" are not supported on iOS.
-      AutocompleteProvider::TYPE_SHORTCUTS |
+#if defined(OS_IOS)
+      (base::FeatureList::IsEnabled(omnibox::kZeroSuggestProviderIOS)
+           ? AutocompleteProvider::TYPE_ZERO_SUGGEST
+           : 0) |
+#else
       AutocompleteProvider::TYPE_ZERO_SUGGEST |
 #endif
       (base::FeatureList::IsEnabled(omnibox::kEnableClipboardProvider)
            ? AutocompleteProvider::TYPE_CLIPBOARD_URL
            : 0) |
-      AutocompleteProvider::TYPE_BOOKMARK |
-      AutocompleteProvider::TYPE_BUILTIN |
+      AutocompleteProvider::TYPE_BOOKMARK | AutocompleteProvider::TYPE_BUILTIN |
       AutocompleteProvider::TYPE_HISTORY_QUICK |
       AutocompleteProvider::TYPE_HISTORY_URL |
-      AutocompleteProvider::TYPE_SEARCH;
+      AutocompleteProvider::TYPE_SEARCH | AutocompleteProvider::TYPE_SHORTCUTS;
 }
 
 void AutocompleteClassifier::Classify(
@@ -67,10 +68,12 @@ void AutocompleteClassifier::Classify(
     GURL* alternate_nav_url) {
   DCHECK(!inside_classify_);
   base::AutoReset<bool> reset(&inside_classify_, true);
-  controller_->Start(AutocompleteInput(
-      text, base::string16::npos, std::string(), GURL(), base::string16(),
-      page_classification, true, prefer_keyword, allow_exact_keyword_match,
-      false, false, *scheme_classifier_));
+  AutocompleteInput input(text, page_classification, *scheme_classifier_);
+  input.set_prevent_inline_autocomplete(true);
+  input.set_prefer_keyword(prefer_keyword);
+  input.set_allow_exact_keyword_match(allow_exact_keyword_match);
+  input.set_want_asynchronous_matches(false);
+  controller_->Start(input);
   DCHECK(controller_->done());
   const AutocompleteResult& result = controller_->result();
   if (result.empty()) {

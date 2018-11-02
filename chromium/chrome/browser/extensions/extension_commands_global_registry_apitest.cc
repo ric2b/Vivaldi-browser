@@ -13,12 +13,10 @@
 #include "ui/base/base_window.h"
 #include "ui/base/test/ui_controls.h"
 
-#if defined(OS_LINUX) && defined(USE_X11)
-#include <X11/Xlib.h>
-#include <X11/extensions/XTest.h>
-#include <X11/keysym.h>
+#if defined(USE_X11)
 #include "ui/aura/window.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_observer_x11.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
@@ -34,7 +32,7 @@ namespace extensions {
 
 typedef ExtensionApiTest GlobalCommandsApiTest;
 
-#if defined(OS_LINUX) && defined(USE_X11)
+#if defined(USE_X11)
 // Send a simulated key press and release event, where |control|, |shift| or
 // |alt| indicates whether the key is struck with corresponding modifier.
 void SendNativeKeyEventToXDisplay(ui::KeyboardCode key,
@@ -49,9 +47,9 @@ void SendNativeKeyEventToXDisplay(ui::KeyboardCode key,
   // Release modifiers first of all to make sure this function can work as
   // expected. For example, when |control| is false, but the status of Ctrl key
   // is down, we will generate a keyboard event with unwanted Ctrl key.
-  XTestFakeKeyEvent(display, ctrl_key_code, False, CurrentTime);
-  XTestFakeKeyEvent(display, shift_key_code, False, CurrentTime);
-  XTestFakeKeyEvent(display, alt_key_code, False, CurrentTime);
+  XTestFakeKeyEvent(display, ctrl_key_code, x11::False, x11::CurrentTime);
+  XTestFakeKeyEvent(display, shift_key_code, x11::False, x11::CurrentTime);
+  XTestFakeKeyEvent(display, alt_key_code, x11::False, x11::CurrentTime);
 
   typedef std::vector<KeyCode> KeyCodes;
   KeyCodes key_codes;
@@ -67,15 +65,15 @@ void SendNativeKeyEventToXDisplay(ui::KeyboardCode key,
 
   // Simulate the keys being pressed.
   for (KeyCodes::iterator it = key_codes.begin(); it != key_codes.end(); it++)
-    XTestFakeKeyEvent(display, *it, True, CurrentTime);
+    XTestFakeKeyEvent(display, *it, x11::True, x11::CurrentTime);
 
   // Simulate the keys being released.
   for (KeyCodes::iterator it = key_codes.begin(); it != key_codes.end(); it++)
-    XTestFakeKeyEvent(display, *it, False, CurrentTime);
+    XTestFakeKeyEvent(display, *it, x11::False, x11::CurrentTime);
 
   XFlush(display);
 }
-#endif  // OS_LINUX && USE_X11
+#endif  // defined(USE_X11)
 
 #if defined(OS_MACOSX)
 using base::ScopedCFTypeRef;
@@ -155,7 +153,7 @@ IN_PROC_BROWSER_TEST_F(GlobalCommandsApiTest, MAYBE_GlobalCommand) {
   // Activate the shortcut (Ctrl+Shift+8). This should have an effect.
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
       incognito_browser, ui::VKEY_8, true, true, false, false));
-#elif defined(OS_LINUX) && defined(USE_X11)
+#elif defined(USE_X11)
   // Create an incognito browser to capture the focus.
   Browser* incognito_browser = CreateIncognitoBrowser();
 
@@ -206,8 +204,7 @@ IN_PROC_BROWSER_TEST_F(GlobalCommandsApiTest, MAYBE_GlobalCommand) {
 #if defined(OS_WIN)
 // Feature only fully implemented on Windows, other platforms coming.
 // TODO(smus): On mac, SendKeyPress must first support media keys.
-// Test occasionally times out on Windows. http://crbug.com/428813
-#define MAYBE_GlobalDuplicatedMediaKey DISABLED_GlobalDuplicatedMediaKey
+#define MAYBE_GlobalDuplicatedMediaKey GlobalDuplicatedMediaKey
 #else
 #define MAYBE_GlobalDuplicatedMediaKey DISABLED_GlobalDuplicatedMediaKey
 #endif

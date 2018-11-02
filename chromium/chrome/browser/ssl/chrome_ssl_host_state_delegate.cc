@@ -89,9 +89,7 @@ bool ExpireAtSessionEnd() {
 std::string GetKey(const net::X509Certificate& cert, net::CertStatus error) {
   // Since a security decision will be made based on the fingerprint, Chrome
   // should use the SHA-256 fingerprint for the certificate.
-  net::SHA256HashValue fingerprint =
-      net::X509Certificate::CalculateChainFingerprint256(
-          cert.os_cert_handle(), cert.GetIntermediateCertificates());
+  net::SHA256HashValue fingerprint = cert.CalculateChainFingerprint256();
   std::string base64_fingerprint;
   base::Base64Encode(
       base::StringPiece(reinterpret_cast<const char*>(fingerprint.data),
@@ -302,7 +300,7 @@ void ChromeSSLHostStateDelegate::AllowCert(const std::string& host,
   std::unique_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
 
-  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
+  if (!value.get() || !value->is_dict())
     value.reset(new base::DictionaryValue());
 
   base::DictionaryValue* dict;
@@ -369,7 +367,7 @@ ChromeSSLHostStateDelegate::QueryPolicy(const std::string& host,
   if (allow_localhost && net::IsLocalhost(url.host()))
     return ALLOWED;
 
-  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
+  if (!value.get() || !value->is_dict())
     return DENIED;
 
   base::DictionaryValue* dict;  // Owned by value
@@ -445,7 +443,7 @@ bool ChromeSSLHostStateDelegate::HasAllowException(
   std::unique_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
 
-  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
+  if (!value.get() || !value->is_dict())
     return false;
 
   base::DictionaryValue* dict;  // Owned by value

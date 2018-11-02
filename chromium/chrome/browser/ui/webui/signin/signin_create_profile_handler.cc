@@ -86,7 +86,7 @@ void SigninCreateProfileHandler::GetLocalizedValues(
       l10n_util::GetStringUTF16(
           IDS_PROFILES_CREATE_SUPERVISED_NO_SIGNED_IN_USER_TEXT));
   localized_strings->SetString("createProfileConfirm",
-                               l10n_util::GetStringUTF16(IDS_SAVE));
+                               l10n_util::GetStringUTF16(IDS_ADD));
   localized_strings->SetString("learnMore",
                                l10n_util::GetStringUTF16(IDS_LEARN_MORE));
   localized_strings->SetString(
@@ -431,7 +431,10 @@ void SigninCreateProfileHandler::OpenNewWindowForProfile(
 
 void SigninCreateProfileHandler::OpenSigninDialogForProfile(Profile* profile) {
   UserManagerProfileDialog::ShowSigninDialog(
-      web_ui()->GetWebContents()->GetBrowserContext(), profile->GetPath());
+      web_ui()->GetWebContents()->GetBrowserContext(), profile->GetPath(),
+      signin_util::IsForceSigninEnabled()
+          ? signin_metrics::Reason::REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT
+          : signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT);
 }
 
 void SigninCreateProfileHandler::ShowProfileCreationError(

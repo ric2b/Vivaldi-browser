@@ -11,6 +11,7 @@
 #include <stdint.h>
 #import <UIKit/UIKit.h>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -29,19 +30,27 @@
 #include "components/flags_ui/flags_ui_switches.h"
 #include "components/ntp_tiles/switches.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
-#include "components/search_provider_logos/features.h"
+#include "components/search_provider_logos/switches.h"
 #include "components/security_state/core/switches.h"
-#include "components/signin/core/common/signin_switches.h"
+#include "components/signin/core/browser/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/ios_chrome_flag_descriptions.h"
 #include "ios/chrome/browser/ssl/captive_portal_features.h"
-#include "ios/chrome/browser/web/features.h"
+#include "ios/chrome/browser/ui/activity_services/canonical_url_feature.h"
+#include "ios/chrome/browser/ui/external_search/features.h"
+#include "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
+#import "ios/chrome/browser/ui/history/history_base_feature.h"
+#include "ios/chrome/browser/ui/main/main_feature_flags.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/toolbar_private_base_feature.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#include "ios/web/public/features.h"
 #include "ios/web/public/user_agent.h"
 #include "ios/web/public/web_view_creation_util.h"
 
@@ -58,46 +67,23 @@ using flags_ui::FeatureEntry;
 namespace {
 const FeatureEntry::Choice kMarkHttpAsChoices[] = {
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},
-    {flag_descriptions::kMarkHttpAsNonSecureAfterEditing,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureAfterEditing},
-    {flag_descriptions::kMarkHttpAsNonSecureWhileIncognito,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureWhileIncognito},
-    {flag_descriptions::kMarkHttpAsNonSecureWhileIncognitoOrEditing,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureWhileIncognitoOrEditing},
     {flag_descriptions::kMarkHttpAsDangerous,
      security_state::switches::kMarkHttpAs,
      security_state::switches::kMarkHttpAsDangerous}};
 
-const FeatureEntry::FeatureParam kUseDdljsonApiTest0[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios0.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest1[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios1.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest2[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios2.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest3[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios3.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest4[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios4.json"}};
-
-const FeatureEntry::FeatureVariation kUseDdljsonApiVariations[] = {
-    {"(force test doodle 0)", kUseDdljsonApiTest0,
-     arraysize(kUseDdljsonApiTest0), nullptr},
-    {"(force test doodle 1)", kUseDdljsonApiTest1,
-     arraysize(kUseDdljsonApiTest1), nullptr},
-    {"(force test doodle 2)", kUseDdljsonApiTest2,
-     arraysize(kUseDdljsonApiTest2), nullptr},
-    {"(force test doodle 3)", kUseDdljsonApiTest3,
-     arraysize(kUseDdljsonApiTest3), nullptr},
-    {"(force test doodle 4)", kUseDdljsonApiTest4,
-     arraysize(kUseDdljsonApiTest4), nullptr}};
+const FeatureEntry::Choice kUseDdljsonApiChoices[] = {
+    {flags_ui::kGenericExperimentChoiceDefault, "", ""},
+    {"(force test doodle 0)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios0.json"},
+    {"(force test doodle 1)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios1.json"},
+    {"(force test doodle 2)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios2.json"},
+    {"(force test doodle 3)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios3.json"},
+    {"(force test doodle 4)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_ios4.json"},
+};
 
 // To add a new entry, add to the end of kFeatureEntries. There are four
 // distinct types of entries:
@@ -152,10 +138,7 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
          "IPH_DemoMode")},
     {"use-ddljson-api", flag_descriptions::kUseDdljsonApiName,
      flag_descriptions::kUseDdljsonApiDescription, flags_ui::kOsIos,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(
-         search_provider_logos::features::kUseDdljsonApi,
-         kUseDdljsonApiVariations,
-         "NTPUseDdljsonApi")},
+     MULTI_VALUE_TYPE(kUseDdljsonApiChoices)},
     {"omnibox-ui-elide-suggestion-url-after-host",
      flag_descriptions::kOmniboxUIElideSuggestionUrlAfterHostName,
      flag_descriptions::kOmniboxUIElideSuggestionUrlAfterHostDescription,
@@ -174,18 +157,49 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
          omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains)},
     {"bookmark-new-generation", flag_descriptions::kBookmarkNewGenerationName,
      flag_descriptions::kBookmarkNewGenerationDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         bookmark_new_generation::features::kBookmarkNewGeneration)},
-    {"mailto-prompt-for-user-choice",
-     flag_descriptions::kMailtoPromptForUserChoiceName,
-     flag_descriptions::kMailtoPromptForUserChoiceDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kMailtoPromptForUserChoice)},
+     FEATURE_VALUE_TYPE(kBookmarkNewGeneration)},
 #if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
     {"drag_and_drop", flag_descriptions::kDragAndDropName,
      flag_descriptions::kDragAndDropDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kDragAndDrop)}
+     FEATURE_VALUE_TYPE(kDragAndDrop)},
 #endif
-};
+    {"tab_switcher_presents_bvc",
+     flag_descriptions::kTabSwitcherPresentsBVCName,
+     flag_descriptions::kTabSwitcherPresentsBVCDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kTabSwitcherPresentsBVC)},
+    {"safe_area_compatible_toolbar",
+     flag_descriptions::kSafeAreaCompatibleToolbarName,
+     flag_descriptions::kSafeAreaCompatibleToolbarDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kSafeAreaCompatibleToolbar)},
+    {"external-search", flag_descriptions::kExternalSearchName,
+     flag_descriptions::kExternalSearchDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kExternalSearch)},
+    {"history-batch-updates-filter",
+     flag_descriptions::kHistoryBatchUpdatesFilterName,
+     flag_descriptions::kHistoryBatchUpdatesFilterDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kHistoryBatchUpdatesFilter)},
+    {"slim-navigation-manager", flag_descriptions::kSlimNavigationManagerName,
+     flag_descriptions::kSlimNavigationManagerDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::features::kSlimNavigationManager)},
+    {"ios-share-canonical-url", flag_descriptions::kShareCanonicalURLName,
+     flag_descriptions::kShareCanonicalURLDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(activity_services::kShareCanonicalURL)},
+    {"property-animations-toolbar",
+     flag_descriptions::kPropertyAnimationsToolbarName,
+     flag_descriptions::kPropertyAnimationsToolbarDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kPropertyAnimationsToolbar)},
+    {"new-fullscreen-controller", flag_descriptions::kNewFullscreenName,
+     flag_descriptions::kNewFullscreenDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(fullscreen::features::kNewFullscreen)},
+    {"clean-toolbar", flag_descriptions::kCleanToolbarName,
+     flag_descriptions::kCleanToolbarDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kCleanToolbar)},
+    {"bookmark-new-edit-page", flag_descriptions::kBookmarkNewEditPageName,
+     flag_descriptions::kBookmarkNewEditPageDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kBookmarkNewEditPage)},
+    {"password-export", flag_descriptions::kPasswordExportName,
+     flag_descriptions::kPasswordExportDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(password_manager::features::kPasswordExport)}};
 
 // Add all switches from experimental flags to |command_line|.
 void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
@@ -219,35 +233,6 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
                                     web::BuildUserAgentFromProduct(product));
   }
 
-  // Populate command line flag for Suggestions UI display.
-  NSString* enableSuggestions = [defaults stringForKey:@"EnableSuggestions"];
-  if ([enableSuggestions isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableSuggestionsUI);
-  } else if ([enableSuggestions isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableSuggestionsUI);
-  }
-
-  // Populate command line flag for fetching missing favicons for NTP tiles.
-  NSString* enableMostLikelyFaviconsFromServer =
-      [defaults stringForKey:@"EnableNtpMostLikelyFaviconsFromServer"];
-  if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(
-        ntp_tiles::switches::kEnableNtpMostLikelyFaviconsFromServer);
-  } else if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(
-        ntp_tiles::switches::kDisableNtpMostLikelyFaviconsFromServer);
-  }
-
-  // Populate command line flag for the native to WKBackForwardList based
-  // navigation manager experiment.
-  NSString* enableSlimNavigationManager =
-      [defaults stringForKey:@"EnableSlimNavigationManager"];
-  if ([enableSlimNavigationManager isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableSlimNavigationManager);
-  } else if ([enableSlimNavigationManager isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableSlimNavigationManager);
-  }
-
   // Freeform commandline flags.  These are added last, so that any flags added
   // earlier in this function take precedence.
   if ([defaults boolForKey:@"EnableFreeformCommandLineFlags"]) {
@@ -269,14 +254,6 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
 
     base::CommandLine temp_command_line(flags);
     command_line->AppendArguments(temp_command_line, false);
-  }
-
-  // Populate command line flag for Sign-in promo.
-  NSString* enableSigninPromo = [defaults stringForKey:@"EnableSigninPromo"];
-  if ([enableSigninPromo isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableSigninPromo);
-  } else if ([enableSigninPromo isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableSigninPromo);
   }
 
   // Populate command line flag for 3rd party keyboard omnibox workaround.
@@ -319,10 +296,10 @@ class FlagsStateSingleton {
 
 void ConvertFlagsToSwitches(flags_ui::FlagsStorage* flags_storage,
                             base::CommandLine* command_line) {
+  AppendSwitchesFromExperimentalSettings(command_line);
   FlagsStateSingleton::GetFlagsState()->ConvertFlagsToSwitches(
       flags_storage, command_line, flags_ui::kAddSentinels,
-      switches::kEnableIOSFeatures, switches::kDisableIOSFeatures);
-  AppendSwitchesFromExperimentalSettings(command_line);
+      switches::kEnableFeatures, switches::kDisableFeatures);
 }
 
 std::vector<std::string> RegisterAllFeatureVariationParameters(

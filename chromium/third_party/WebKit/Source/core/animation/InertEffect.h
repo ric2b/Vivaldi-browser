@@ -31,10 +31,10 @@
 #ifndef InertEffect_h
 #define InertEffect_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
-#include "core/animation/EffectModel.h"
-#include "platform/wtf/RefPtr.h"
+#include "core/animation/KeyframeEffectModel.h"
 
 namespace blink {
 
@@ -43,17 +43,17 @@ namespace blink {
 // Interpolation sampling.
 class CORE_EXPORT InertEffect final : public AnimationEffectReadOnly {
  public:
-  static InertEffect* Create(EffectModel*,
+  static InertEffect* Create(KeyframeEffectModelBase*,
                              const Timing&,
                              bool paused,
                              double inherited_time);
-  void Sample(Vector<RefPtr<Interpolation>>&) const;
-  EffectModel* Model() const { return model_.Get(); }
+  void Sample(Vector<scoped_refptr<Interpolation>>&) const;
+  KeyframeEffectModelBase* Model() const { return model_.Get(); }
   bool Paused() const { return paused_; }
 
   bool IsInertEffect() const final { return true; }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   void UpdateChildrenAndEffects() const override {}
@@ -63,8 +63,11 @@ class CORE_EXPORT InertEffect final : public AnimationEffectReadOnly {
       double time_to_next_iteration) const override;
 
  private:
-  InertEffect(EffectModel*, const Timing&, bool paused, double inherited_time);
-  Member<EffectModel> model_;
+  InertEffect(KeyframeEffectModelBase*,
+              const Timing&,
+              bool paused,
+              double inherited_time);
+  Member<KeyframeEffectModelBase> model_;
   bool paused_;
   double inherited_time_;
 };

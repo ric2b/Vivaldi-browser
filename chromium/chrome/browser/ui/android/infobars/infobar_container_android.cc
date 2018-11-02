@@ -83,9 +83,9 @@ void InfoBarContainerAndroid::AttachJavaInfoBar(InfoBarAndroid* android_bar) {
 
   base::android::ScopedJavaLocalRef<jobject> java_infobar =
       android_bar->CreateRenderInfoBar(env);
+  android_bar->SetJavaInfoBar(java_infobar);
   Java_InfoBarContainer_addInfoBar(env, weak_java_infobar_container_.get(env),
                                    java_infobar);
-  android_bar->SetJavaInfoBar(java_infobar);
 }
 
 void InfoBarContainerAndroid::PlatformSpecificReplaceInfoBar(
@@ -104,7 +104,8 @@ void InfoBarContainerAndroid::PlatformSpecificRemoveInfoBar(
 
 // Native JNI methods ---------------------------------------------------------
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_InfoBarContainer_Init(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   InfoBarContainerAndroid* infobar_container =
       new InfoBarContainerAndroid(env, obj);
   return reinterpret_cast<intptr_t>(infobar_container);

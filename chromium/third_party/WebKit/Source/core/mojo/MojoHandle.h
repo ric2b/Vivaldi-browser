@@ -21,14 +21,13 @@ class MojoReadDataOptions;
 class MojoReadDataResult;
 class MojoReadMessageFlags;
 class MojoReadMessageResult;
-class MojoWatchCallback;
 class MojoWatcher;
 class MojoWriteDataOptions;
 class MojoWriteDataResult;
 class ScriptState;
+class V8MojoWatchCallback;
 
-class MojoHandle final : public GarbageCollectedFinalized<MojoHandle>,
-                         public ScriptWrappable {
+class MojoHandle final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -39,7 +38,7 @@ class MojoHandle final : public GarbageCollectedFinalized<MojoHandle>,
   void close();
   MojoWatcher* watch(ScriptState*,
                      const MojoHandleSignals&,
-                     MojoWatchCallback*);
+                     V8MojoWatchCallback*);
 
   // MessagePipe handle.
   MojoResult writeMessage(ArrayBufferOrArrayBufferView&,
@@ -62,8 +61,6 @@ class MojoHandle final : public GarbageCollectedFinalized<MojoHandle>,
   void mapBuffer(unsigned offset, unsigned num_bytes, MojoMapBufferResult&);
   void duplicateBufferHandle(const MojoDuplicateBufferHandleOptions&,
                              MojoCreateSharedBufferResult&);
-
-  DEFINE_INLINE_TRACE() {}
 
  private:
   explicit MojoHandle(mojo::ScopedHandle);

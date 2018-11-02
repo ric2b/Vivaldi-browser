@@ -27,8 +27,7 @@ import("//testing/test.gni")
 # config (.options file) file would be generated or modified in root output
 # dir (next to test).
 template("fuzzer_test") {
-  if (!disable_libfuzzer &&
-      (use_libfuzzer || use_afl || use_drfuzz || is_linux)) {
+  if (!disable_libfuzzer && (use_fuzzing_engine || use_drfuzz || is_linux)) {
     assert(defined(invoker.sources), "Need sources in $target_name.")
 
     test_deps = [ "//testing/libfuzzer:libfuzzer_main" ]
@@ -119,6 +118,8 @@ template("fuzzer_test") {
     test(target_name) {
       forward_variables_from(invoker,
                              [
+                               "cflags",
+                               "cflags_cc",
                                "check_includes",
                                "defines",
                                "include_dirs",
@@ -134,6 +135,10 @@ template("fuzzer_test") {
       # Used by WebRTC to suppress some Clang warnings in their codebase.
       if (defined(invoker.suppressed_configs)) {
         configs -= invoker.suppressed_configs
+      }
+
+      if (is_mac) {
+        sources += [ "//testing/libfuzzer/libfuzzer_exports.h" ]
       }
     }
   } else {

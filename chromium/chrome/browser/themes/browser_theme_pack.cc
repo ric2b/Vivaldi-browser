@@ -180,13 +180,12 @@ int GetMaxPersistentId() {
 // The order must match as the index is used in determining the raw id.
 bool InputScalesValid(const base::StringPiece& input,
                       const std::vector<ui::ScaleFactor>& expected) {
-  size_t scales_size = static_cast<size_t>(input.size() / sizeof(float));
-  if (scales_size != expected.size())
+  if (input.size() != expected.size() * sizeof(float))
     return false;
-  std::unique_ptr<float[]> scales(new float[scales_size]);
+  std::unique_ptr<float[]> scales(new float[expected.size()]);
   // Do a memcpy to avoid misaligned memory access.
   memcpy(scales.get(), input.data(), input.size());
-  for (size_t index = 0; index < scales_size; ++index) {
+  for (size_t index = 0; index < expected.size(); ++index) {
     if (scales[index] != ui::GetScaleForScaleFactor(expected[index]))
       return false;
   }
@@ -1069,7 +1068,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
 
   for (base::DictionaryValue::Iterator iter(*images_value); !iter.IsAtEnd();
        iter.Advance()) {
-    if (iter.value().IsType(base::Value::Type::DICTIONARY)) {
+    if (iter.value().is_dict()) {
       const base::DictionaryValue* inner_value = NULL;
       if (iter.value().GetAsDictionary(&inner_value)) {
         for (base::DictionaryValue::Iterator inner_iter(*inner_value);
@@ -1078,7 +1077,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
           std::string name;
           ui::ScaleFactor scale_factor = ui::SCALE_FACTOR_NONE;
           if (GetScaleFactorFromManifestKey(inner_iter.key(), &scale_factor) &&
-              inner_iter.value().IsType(base::Value::Type::STRING) &&
+              inner_iter.value().is_string() &&
               inner_iter.value().GetAsString(&name)) {
             AddFileAtScaleToMap(iter.key(),
                                 scale_factor,
@@ -1087,7 +1086,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
           }
         }
       }
-    } else if (iter.value().IsType(base::Value::Type::STRING)) {
+    } else if (iter.value().is_string()) {
       std::string name;
       if (iter.value().GetAsString(&name)) {
         AddFileAtScaleToMap(iter.key(),

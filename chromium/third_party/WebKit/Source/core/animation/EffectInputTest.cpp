@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/DictionarySequenceOrDictionary.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "bindings/core/v8/dictionary_sequence_or_dictionary.h"
 #include "core/animation/AnimationTestHelper.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/dom/Document.h"
@@ -43,14 +43,12 @@ TEST(AnimationEffectInputTest, SortedOffsets) {
       Dictionary(scope.GetIsolate(), keyframe2, scope.GetExceptionState()));
 
   Element* element = AppendElement(scope.GetDocument());
-  EffectModel* animation_effect = EffectInput::Convert(
+  KeyframeEffectModelBase* effect = EffectInput::Convert(
       element,
-      DictionarySequenceOrDictionary::fromDictionarySequence(js_keyframes),
-      nullptr, scope.GetExceptionState());
+      DictionarySequenceOrDictionary::FromDictionarySequence(js_keyframes),
+      EffectModel::kCompositeReplace, nullptr, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
-  const KeyframeEffectModelBase& keyframe_effect =
-      *ToKeyframeEffectModelBase(animation_effect);
-  EXPECT_EQ(1.0, keyframe_effect.GetFrames()[1]->Offset());
+  EXPECT_EQ(1.0, effect->GetFrames()[1]->Offset());
 }
 
 TEST(AnimationEffectInputTest, UnsortedOffsets) {
@@ -72,8 +70,8 @@ TEST(AnimationEffectInputTest, UnsortedOffsets) {
   Element* element = AppendElement(scope.GetDocument());
   EffectInput::Convert(
       element,
-      DictionarySequenceOrDictionary::fromDictionarySequence(js_keyframes),
-      nullptr, scope.GetExceptionState());
+      DictionarySequenceOrDictionary::FromDictionarySequence(js_keyframes),
+      EffectModel::kCompositeReplace, nullptr, scope.GetExceptionState());
   EXPECT_TRUE(scope.GetExceptionState().HadException());
   EXPECT_EQ(kV8TypeError, scope.GetExceptionState().Code());
 }
@@ -99,14 +97,12 @@ TEST(AnimationEffectInputTest, LooslySorted) {
       Dictionary(scope.GetIsolate(), keyframe3, scope.GetExceptionState()));
 
   Element* element = AppendElement(scope.GetDocument());
-  EffectModel* animation_effect = EffectInput::Convert(
+  KeyframeEffectModelBase* effect = EffectInput::Convert(
       element,
-      DictionarySequenceOrDictionary::fromDictionarySequence(js_keyframes),
-      nullptr, scope.GetExceptionState());
+      DictionarySequenceOrDictionary::FromDictionarySequence(js_keyframes),
+      EffectModel::kCompositeReplace, nullptr, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
-  const KeyframeEffectModelBase& keyframe_effect =
-      *ToKeyframeEffectModelBase(animation_effect);
-  EXPECT_EQ(1, keyframe_effect.GetFrames()[2]->Offset());
+  EXPECT_EQ(1, effect->GetFrames()[2]->Offset());
 }
 
 TEST(AnimationEffectInputTest, OutOfOrderWithNullOffsets) {
@@ -137,8 +133,8 @@ TEST(AnimationEffectInputTest, OutOfOrderWithNullOffsets) {
   Element* element = AppendElement(scope.GetDocument());
   EffectInput::Convert(
       element,
-      DictionarySequenceOrDictionary::fromDictionarySequence(js_keyframes),
-      nullptr, scope.GetExceptionState());
+      DictionarySequenceOrDictionary::FromDictionarySequence(js_keyframes),
+      EffectModel::kCompositeReplace, nullptr, scope.GetExceptionState());
   EXPECT_TRUE(scope.GetExceptionState().HadException());
 }
 
@@ -166,8 +162,8 @@ TEST(AnimationEffectInputTest, Invalid) {
   Element* element = AppendElement(scope.GetDocument());
   EffectInput::Convert(
       element,
-      DictionarySequenceOrDictionary::fromDictionarySequence(js_keyframes),
-      nullptr, scope.GetExceptionState());
+      DictionarySequenceOrDictionary::FromDictionarySequence(js_keyframes),
+      EffectModel::kCompositeReplace, nullptr, scope.GetExceptionState());
   EXPECT_TRUE(scope.GetExceptionState().HadException());
   EXPECT_EQ(kV8TypeError, scope.GetExceptionState().Code());
 }

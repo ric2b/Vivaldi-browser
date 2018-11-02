@@ -36,13 +36,16 @@ enum CanvasPixelFormat {
 
 [PermissiveDictionaryConversion]
 dictionary CanvasContextCreationAttributes {
+    // This is an experimental feature, but it is not hidden behind a flag in
+    // the bindings because origin trial bindings don't work in extensions.
+    // The trial's runtime flag is instead checked inside
+    // HTMLCanvasElement.getContext().
+    boolean lowLatency = false;
+
     // Canvas 2D attributes
     boolean alpha = true;  // Also used for WebGL.
-    // TODO(crbug.com/637288): Do we keep "legacy-srgb" as the default?
-    // Must decide before shipping.
-    [RuntimeEnabled=ExperimentalCanvasFeatures] CanvasColorSpace colorSpace = "legacy-srgb";
+    [RuntimeEnabled=ExperimentalCanvasFeatures] CanvasColorSpace colorSpace = "srgb";
     [RuntimeEnabled=ExperimentalCanvasFeatures] CanvasPixelFormat pixelFormat = "8-8-8-8";
-    [RuntimeEnabled=ExperimentalCanvasFeatures] boolean linearPixelMath = false;
 
     // WebGL attributes
     boolean depth = true;

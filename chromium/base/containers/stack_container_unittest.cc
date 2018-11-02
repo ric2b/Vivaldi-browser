@@ -90,7 +90,7 @@ TEST(StackContainer, VectorDoubleDelete) {
   EXPECT_EQ(alive, 1);
 
   Dummy* dummy_unref = dummy.get();
-  dummy = NULL;
+  dummy = nullptr;
   EXPECT_EQ(alive, 1);
 
   Container::iterator itr = std::find(vect->begin(), vect->end(), dummy_unref);
@@ -107,7 +107,7 @@ template <size_t alignment>
 class AlignedData {
  public:
   AlignedData() { memset(data_, 0, alignment); }
-  ~AlignedData() {}
+  ~AlignedData() = default;
   alignas(alignment) char data_[alignment];
 };
 

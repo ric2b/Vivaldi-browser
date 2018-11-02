@@ -30,8 +30,8 @@ class BytesConsumerTestUtil {
     MOCK_METHOD2(BeginRead, Result(const char**, size_t*));
     MOCK_METHOD1(EndRead, Result(size_t));
     MOCK_METHOD1(DrainAsBlobDataHandle,
-                 PassRefPtr<BlobDataHandle>(BlobSizePolicy));
-    MOCK_METHOD0(DrainAsFormData, PassRefPtr<EncodedFormData>());
+                 scoped_refptr<BlobDataHandle>(BlobSizePolicy));
+    MOCK_METHOD0(DrainAsFormData, scoped_refptr<EncodedFormData>());
     MOCK_METHOD1(SetClient, void(Client*));
     MOCK_METHOD0(ClearClient, void());
     MOCK_METHOD0(Cancel, void());
@@ -54,10 +54,12 @@ class BytesConsumerTestUtil {
       return new ::testing::StrictMock<MockFetchDataLoaderClient>;
     }
 
-    DEFINE_INLINE_VIRTUAL_TRACE() { FetchDataLoader::Client::Trace(visitor); }
+    virtual void Trace(blink::Visitor* visitor) {
+      FetchDataLoader::Client::Trace(visitor);
+    }
 
     MOCK_METHOD1(DidFetchDataLoadedBlobHandleMock,
-                 void(RefPtr<BlobDataHandle>));
+                 void(scoped_refptr<BlobDataHandle>));
     MOCK_METHOD1(DidFetchDataLoadedArrayBufferMock, void(DOMArrayBuffer*));
     MOCK_METHOD1(DidFetchDataLoadedFormDataMock, void(FormData*));
     MOCK_METHOD1(DidFetchDataLoadedString, void(const String&));
@@ -67,9 +69,9 @@ class BytesConsumerTestUtil {
     void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer* array_buffer) override {
       DidFetchDataLoadedArrayBufferMock(array_buffer);
     }
-    // In mock methods we use RefPtr<> rather than PassRefPtr<>.
+    // TODO(yhirano): Remove DidFetchDataLoadedBlobHandleMock.
     void DidFetchDataLoadedBlobHandle(
-        PassRefPtr<BlobDataHandle> blob_data_handle) override {
+        scoped_refptr<BlobDataHandle> blob_data_handle) override {
       DidFetchDataLoadedBlobHandleMock(std::move(blob_data_handle));
     }
     void DidFetchDataLoadedFormData(FormData* FormData) override {
@@ -108,7 +110,7 @@ class BytesConsumerTestUtil {
    public:
     // The ExecutionContext is needed to get a WebTaskRunner.
     explicit ReplayingBytesConsumer(ExecutionContext*);
-    ~ReplayingBytesConsumer();
+    ~ReplayingBytesConsumer() override;
 
     // Add a command to this handle. This function must be called BEFORE
     // any BytesConsumer methods are called.
@@ -126,12 +128,12 @@ class BytesConsumerTestUtil {
 
     bool IsCancelled() const { return is_cancelled_; }
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*) override;
 
    private:
     void NotifyAsReadable(int notification_token);
     void Close();
-    void GetError(const Error&);
+    void MakeErrored(const Error&);
 
     Member<ExecutionContext> execution_context_;
     Member<BytesConsumer::Client> client_;
@@ -152,9 +154,10 @@ class BytesConsumerTestUtil {
     explicit TwoPhaseReader(BytesConsumer* /* consumer */);
 
     void OnStateChange() override;
+    String DebugName() const override { return "TwoPhaseReader"; }
     std::pair<BytesConsumer::Result, Vector<char>> Run();
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) override {
       visitor->Trace(consumer_);
       BytesConsumer::Client::Trace(visitor);
     }

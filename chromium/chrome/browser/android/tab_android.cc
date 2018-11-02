@@ -45,7 +45,7 @@
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
-#include "chrome/common/image_context_menu_renderer.mojom.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -79,6 +79,7 @@
 #include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -468,7 +469,7 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
     // during shutdown. See https://codereview.chromium.org/146693011/
     // and http://crbug.com/338709 for details.
     content::RenderProcessHost* process =
-        web_contents()->GetRenderProcessHost();
+        web_contents()->GetMainFrame()->GetProcess();
     if (process)
       process->FastShutdownIfPossible(1, false);
 
@@ -719,14 +720,16 @@ void TabAndroid::UpdateBrowserControlsState(JNIEnv* env,
       static_cast<content::BrowserControlsState>(constraints);
   content::BrowserControlsState current_state =
       static_cast<content::BrowserControlsState>(current);
-  WebContents* sender = web_contents();
+  content::RenderViewHost* sender = web_contents()->GetRenderViewHost();
   sender->Send(new ChromeViewMsg_UpdateBrowserControlsState(
-      sender->GetRenderViewHost()->GetRoutingID(), constraints_state,
-      current_state, animate));
+      sender->GetRoutingID(), constraints_state, current_state, animate));
 
-  if (sender->ShowingInterstitialPage()) {
+  if (web_contents()->ShowingInterstitialPage()) {
     content::RenderViewHost* interstitial_view_host =
-        sender->GetInterstitialPage()->GetMainFrame()->GetRenderViewHost();
+        web_contents()
+            ->GetInterstitialPage()
+            ->GetMainFrame()
+            ->GetRenderViewHost();
     interstitial_view_host->Send(new ChromeViewMsg_UpdateBrowserControlsState(
         interstitial_view_host->GetRoutingID(), constraints_state,
         current_state, animate));
@@ -737,8 +740,8 @@ void TabAndroid::LoadOriginalImage(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj) {
   content::RenderFrameHost* render_frame_host =
       web_contents()->GetFocusedFrame();
-  chrome::mojom::ImageContextMenuRendererPtr renderer;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(&renderer);
+  chrome::mojom::ChromeRenderFrameAssociatedPtr renderer;
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->RequestReloadImageForContextNode();
 }
 
@@ -895,18 +898,23 @@ void TabAndroid::ShowMediaDownloadInProductHelp(
 
   // We need to account for the browser controls offset to get the location for
   // the widget in the view.
-  float content_offset = web_contents_->GetNativeView()->content_offset();
-  gfx::Rect rect_in_view(rect_in_frame.x(), rect_in_frame.y() + content_offset,
+  gfx::NativeView view = web_contents_->GetNativeView();
+  gfx::Rect rect_in_view(rect_in_frame.x(),
+                         rect_in_frame.y() + view->content_offset(),
                          rect_in_frame.width(), rect_in_frame.height());
-  gfx::Rect rect_in_view_scaled = gfx::ScaleToEnclosingRectSafe(
-      rect_in_view,
-      ui::GetScaleFactorForNativeView(web_contents_->GetNativeView()));
+  gfx::Rect scaled_rect_on_screen = gfx::ScaleToEnclosingRectSafe(
+      rect_in_view, ui::GetScaleFactorForNativeView(view));
+
+  // We also need to account for the offset of the viewport location on screen.
+  scaled_rect_on_screen.set_origin(
+      scaled_rect_on_screen.origin() +
+      view->GetLocationOfContainerViewInWindow().OffsetFromOrigin());
 
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_Tab_showMediaDownloadInProductHelp(
-      env, weak_java_tab_.get(env), rect_in_view_scaled.x(),
-      rect_in_view_scaled.y(), rect_in_view_scaled.width(),
-      rect_in_view_scaled.height());
+      env, weak_java_tab_.get(env), scaled_rect_on_screen.x(),
+      scaled_rect_on_screen.y(), scaled_rect_on_screen.width(),
+      scaled_rect_on_screen.height());
 }
 
 void TabAndroid::DismissMediaDownloadInProductHelp() {
@@ -946,7 +954,7 @@ void TabAndroid::SetDevToolsAgentHost(
   devtools_host_ = std::move(host);
 }
 
-static void Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static void JNI_Tab_Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   TRACE_EVENT0("native", "TabAndroid::Init");
   // This will automatically bind to the Java object and pass ownership there.
   new TabAndroid(env, obj);

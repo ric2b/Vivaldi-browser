@@ -11,10 +11,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/policy/cached_policy_key_loader_chromeos.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
-#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
@@ -71,6 +71,7 @@ class PreSigninPolicyFetcher : public CloudPolicyClient::Observer {
   PreSigninPolicyFetcher(chromeos::CryptohomeClient* cryptohome_client,
                          chromeos::SessionManagerClient* session_manager_client,
                          std::unique_ptr<CloudPolicyClient> cloud_policy_client,
+                         bool is_active_directory_managed,
                          const AccountId& account_id,
                          const cryptohome::KeyDefinition& auth_key);
   ~PreSigninPolicyFetcher() override;
@@ -93,17 +94,16 @@ class PreSigninPolicyFetcher : public CloudPolicyClient::Observer {
                                 const std::string& mount_hash);
 
   void OnCachedPolicyRetrieved(
-      const std::string& policy_blob,
-      RetrievePolicyResponseType retrieve_policy_response);
+      RetrievePolicyResponseType retrieve_policy_response,
+      const std::string& policy_blob);
 
-  void OnPolicyKeyLoaded(const std::string& policy_blob,
-                         RetrievePolicyResponseType retrieve_policy_response);
+  void OnPolicyKeyLoaded(RetrievePolicyResponseType retrieve_policy_response,
+                         const std::string& policy_blob);
 
   void OnUnmountTemporaryUserHome(
-      const std::string& policy_blob,
       RetrievePolicyResponseType retrieve_policy_response,
-      chromeos::DBusMethodCallStatus unmount_call_status,
-      bool unmount_success);
+      const std::string& policy_blob,
+      base::Optional<bool> unmount_success);
 
   void OnCachedPolicyValidated(UserCloudPolicyValidator* validator);
 
@@ -134,6 +134,7 @@ class PreSigninPolicyFetcher : public CloudPolicyClient::Observer {
   chromeos::CryptohomeClient* const cryptohome_client_;
   chromeos::SessionManagerClient* const session_manager_client_;
   const std::unique_ptr<CloudPolicyClient> cloud_policy_client_;
+  const bool is_active_directory_managed_;
   const AccountId account_id_;
   const cryptohome::KeyDefinition auth_key_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

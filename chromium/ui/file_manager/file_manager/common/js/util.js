@@ -834,7 +834,7 @@ util.comparePath = function(entry1, entry2) {
  *
  * @param {Entry} entry The presumptive child.
  * @param {DirectoryEntry|FakeEntry} directory The presumptive parent.
- * @return {!Promise.<boolean>} Resolves with true if {@code directory} is
+ * @return {!Promise<boolean>} Resolves with true if {@code directory} is
  *     parent of {@code entry}.
  */
 util.isChildEntry = function(entry, directory) {
@@ -971,7 +971,7 @@ util.URLsToEntries = function(urls, opt_callback) {
  *
  * @param {string} url
  *
- * @return {!Promise.<!Entry>} Promise Resolves with the corresponding
+ * @return {!Promise<!Entry>} Promise Resolves with the corresponding
  *     {!Entry} if possible, else rejects.
  */
 util.urlToEntry = function(url) {
@@ -982,7 +982,7 @@ util.urlToEntry = function(url) {
 /**
  * Returns whether the window is teleported or not.
  * @param {Window} window Window.
- * @return {Promise.<boolean>} Whether the window is teleported or not.
+ * @return {Promise<boolean>} Whether the window is teleported or not.
  */
 util.isTeleported = function(window) {
   return new Promise(function(onFulfilled) {
@@ -1113,6 +1113,20 @@ util.isDropEffectAllowed = function(effectAllowed, dropEffect) {
 };
 
 /**
+ * Checks if the specified character is printable ASCII.
+ *
+ * @param {string} character The input character.
+ * @return {boolean} True if |character| is printable ASCII, else false.
+ */
+util.isPrintable = function(character) {
+  if (character.length != 1)
+    return false;
+
+  var charCode = character.charCodeAt(0);
+  return charCode >= 32 && charCode <= 126;
+};
+
+/**
  * Verifies the user entered name for file or folder to be created or
  * renamed to. Name restrictions must correspond to File API restrictions
  * (see DOMFilePath::isValidPath). Curernt WebKit implementation is
@@ -1191,12 +1205,12 @@ util.validateExternalDriveName = function(name, volumeInfo) {
         VolumeManagerCommon.FileSystemTypeVolumeNameLengthLimit.EXFAT));
   }
 
-  // Only printable ASCII (from ' ' to '~')
-  var containsNonPrintableAscii = /[\x00-\x1F\x7F-\x7F]/.exec(name);
-  if (containsNonPrintableAscii) {
-    return Promise.reject(strf(
-        'ERROR_EXTERNAL_DRIVE_INVALID_CHARACTER',
-        containsNonPrintableAscii[0]));
+  // Checks if name contains only printable ASCII (from ' ' to '~')
+  for (var i = 0; i < nameLength; i++) {
+    if (!util.isPrintable(name[i])) {
+      return Promise.reject(
+          strf('ERROR_EXTERNAL_DRIVE_INVALID_CHARACTER', name[i]));
+    }
   }
 
   var containsForbiddenCharacters =

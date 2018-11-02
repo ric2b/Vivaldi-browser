@@ -10,9 +10,9 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "modules/payments/PaymentUpdater.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebTraceLocation.h"
 
 namespace blink {
@@ -31,7 +31,7 @@ class UpdatePaymentDetailsFunction : public ScriptFunction {
     return self->BindToV8Function();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(updater_);
     ScriptFunction::Trace(visitor);
   }
@@ -60,7 +60,7 @@ class UpdatePaymentDetailsErrorFunction : public ScriptFunction {
     return self->BindToV8Function();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(updater_);
     ScriptFunction::Trace(visitor);
   }
@@ -96,8 +96,6 @@ PaymentRequestUpdateEvent* PaymentRequestUpdateEvent::Create(
 
 void PaymentRequestUpdateEvent::SetPaymentDetailsUpdater(
     PaymentUpdater* updater) {
-  DCHECK(!abort_timer_.IsActive());
-  abort_timer_.StartOneShot(kAbortTimeout, BLINK_FROM_HERE);
   updater_ = updater;
 }
 
@@ -124,6 +122,9 @@ void PaymentRequestUpdateEvent::updateWith(ScriptState* script_state,
   stopImmediatePropagation();
   wait_for_update_ = true;
 
+  DCHECK(!abort_timer_.IsActive());
+  abort_timer_.StartOneShot(kAbortTimeout, BLINK_FROM_HERE);
+
   promise.Then(
       UpdatePaymentDetailsFunction::CreateFunction(script_state, this),
       UpdatePaymentDetailsErrorFunction::CreateFunction(script_state, this));
@@ -147,7 +148,7 @@ void PaymentRequestUpdateEvent::OnUpdatePaymentDetailsFailure(
   updater_ = nullptr;
 }
 
-DEFINE_TRACE(PaymentRequestUpdateEvent) {
+void PaymentRequestUpdateEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(updater_);
   Event::Trace(visitor);
 }
@@ -162,10 +163,9 @@ PaymentRequestUpdateEvent::PaymentRequestUpdateEvent(
     const PaymentRequestUpdateEventInit& init)
     : Event(type, init),
       wait_for_update_(false),
-      abort_timer_(
-          TaskRunnerHelper::Get(TaskType::kUserInteraction, execution_context),
-          this,
-          &PaymentRequestUpdateEvent::OnUpdateEventTimeout) {}
+      abort_timer_(execution_context->GetTaskRunner(TaskType::kUserInteraction),
+                   this,
+                   &PaymentRequestUpdateEvent::OnUpdateEventTimeout) {}
 
 void PaymentRequestUpdateEvent::OnUpdateEventTimeout(TimerBase*) {
   OnUpdatePaymentDetailsFailure("Timed out waiting for a response to a '" +

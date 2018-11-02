@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/notifications/extension_notification_handler.h"
 
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/nullable_string16.h"
@@ -13,29 +14,18 @@
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/notifications.h"
-#include "chrome/common/features.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/common/constants.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "url/gurl.h"
 
 namespace extensions {
 
 namespace notifications = api::notifications;
 
-const base::Feature kAllowFullscreenAppNotificationsFeature{
-    "FSNotificationsApp", base::FEATURE_ENABLED_BY_DEFAULT};
-
 namespace {
-
-std::string GetExtensionId(const std::string& extension_url) {
-  GURL url(extension_url);
-  if (!url.is_valid() || !url.SchemeIs(extensions::kExtensionScheme))
-    return "";
-  return url.GetOrigin().host_piece().as_string();
-}
 
 std::unique_ptr<base::ListValue> CreateBaseEventArgs(
     const std::string& extension_id,
@@ -57,17 +47,23 @@ ExtensionNotificationHandler::ExtensionNotificationHandler() = default;
 
 ExtensionNotificationHandler::~ExtensionNotificationHandler() = default;
 
-void ExtensionNotificationHandler::OnShow(Profile* profile,
-                                          const std::string& notification_id) {}
+// static
+std::string ExtensionNotificationHandler::GetExtensionId(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIs(extensions::kExtensionScheme))
+    return "";
+  return url.GetOrigin().host_piece().as_string();
+}
 
-void ExtensionNotificationHandler::OnClose(Profile* profile,
-                                           const std::string& origin,
-                                           const std::string& notification_id,
-                                           bool by_user) {
+void ExtensionNotificationHandler::OnClose(
+    Profile* profile,
+    const GURL& origin,
+    const std::string& notification_id,
+    bool by_user,
+    base::OnceClosure completed_closure) {
   EventRouter::UserGestureState gesture =
       by_user ? EventRouter::USER_GESTURE_ENABLED
               : EventRouter::USER_GESTURE_NOT_ENABLED;
-  std::string extension_id(GetExtensionId(origin));
+  std::string extension_id(GetExtensionId(GURL(origin)));
   DCHECK(!extension_id.empty());
 
   std::unique_ptr<base::ListValue> args(
@@ -80,66 +76,35 @@ void ExtensionNotificationHandler::OnClose(Profile* profile,
       ExtensionNotificationDisplayHelperFactory::GetForProfile(profile);
   if (display_helper)
     display_helper->EraseDataForNotificationId(notification_id);
+
+  std::move(completed_closure).Run();
 }
 
 void ExtensionNotificationHandler::OnClick(
     Profile* profile,
-    const std::string& origin,
+    const GURL& origin,
     const std::string& notification_id,
-    int action_index,
-    const base::NullableString16& reply) {
-  DCHECK(reply.is_null());
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply,
+    base::OnceClosure completed_closure) {
+  DCHECK(!reply.has_value());
 
-  std::string extension_id(GetExtensionId(origin));
+  std::string extension_id(GetExtensionId(GURL(origin)));
   std::unique_ptr<base::ListValue> args(
       CreateBaseEventArgs(extension_id, notification_id));
-  if (action_index > -1)
-    args->AppendInteger(action_index);
+  if (action_index.has_value())
+    args->AppendInteger(action_index.value());
   events::HistogramValue histogram_value =
-      action_index > -1 ? events::NOTIFICATIONS_ON_BUTTON_CLICKED
-                        : events::NOTIFICATIONS_ON_CLICKED;
+      action_index.has_value() ? events::NOTIFICATIONS_ON_BUTTON_CLICKED
+                               : events::NOTIFICATIONS_ON_CLICKED;
   const std::string& event_name =
-      action_index > -1 ? api::notifications::OnButtonClicked::kEventName
-                        : api::notifications::OnClicked::kEventName;
+      action_index.has_value() ? api::notifications::OnButtonClicked::kEventName
+                               : api::notifications::OnClicked::kEventName;
 
   SendEvent(profile, extension_id, histogram_value, event_name,
             EventRouter::USER_GESTURE_ENABLED, std::move(args));
-}
 
-void ExtensionNotificationHandler::OpenSettings(Profile* profile) {
-  // Extension notifications don't display a settings button.
-  NOTREACHED();
-}
-
-// Should only display when fullscreen if this app is the source of the
-// fullscreen window.
-bool ExtensionNotificationHandler::ShouldDisplayOnFullScreen(
-    Profile* profile,
-    const std::string& origin) {
-  DCHECK(profile);
-  DCHECK(!GetExtensionId(origin).empty());
-  AppWindowRegistry::AppWindowList windows =
-      AppWindowRegistry::Get(profile)->GetAppWindowsForApp(
-          GetExtensionId(origin));
-  for (auto* window : windows) {
-    // Window must be fullscreen and visible
-    if (window->IsFullscreen() && window->GetBaseWindow()->IsActive()) {
-      bool enabled =
-          base::FeatureList::IsEnabled(kAllowFullscreenAppNotificationsFeature);
-      if (enabled) {
-        UMA_HISTOGRAM_ENUMERATION("Notifications.Display_Fullscreen.Shown",
-                                  message_center::NotifierId::APPLICATION,
-                                  message_center::NotifierId::SIZE);
-      } else {
-        UMA_HISTOGRAM_ENUMERATION("Notifications.Display_Fullscreen.Suppressed",
-                                  message_center::NotifierId::APPLICATION,
-                                  message_center::NotifierId::SIZE);
-      }
-      return enabled;
-    }
-  }
-
-  return false;
+  std::move(completed_closure).Run();
 }
 
 void ExtensionNotificationHandler::SendEvent(

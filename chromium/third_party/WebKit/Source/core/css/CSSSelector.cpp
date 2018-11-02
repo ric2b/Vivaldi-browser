@@ -28,11 +28,11 @@
 
 #include <algorithm>
 #include <memory>
-#include "core/HTMLNames.h"
 #include "core/css/CSSMarkup.h"
 #include "core/css/CSSSelectorList.h"
 #include "core/css/parser/CSSParserContext.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/html_names.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -60,8 +60,10 @@ void CSSSelector::CreateRareData() {
     return;
   AtomicString value(data_.value_);
   if (data_.value_)
-    data_.value_->Deref();
-  data_.rare_data_ = RareData::Create(value).LeakRef();
+    data_.value_->Release();
+  auto rare_data = RareData::Create(value);
+  rare_data->AddRef();
+  data_.rare_data_ = rare_data.get();
   has_rare_data_ = true;
 }
 
@@ -267,6 +269,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoShadow:
     case kPseudoFullScreen:
     case kPseudoFullScreenAncestor:
+    case kPseudoFullscreen:
     case kPseudoSpatialNavigationFocus:
     case kPseudoListBox:
     case kPseudoHostHasAppearance:
@@ -336,6 +339,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"first-of-type", CSSSelector::kPseudoFirstOfType},
     {"focus", CSSSelector::kPseudoFocus},
     {"focus-within", CSSSelector::kPseudoFocusWithin},
+    {"fullscreen", CSSSelector::kPseudoFullscreen},
     {"future", CSSSelector::kPseudoFutureCue},
     {"horizontal", CSSSelector::kPseudoHorizontal},
     {"host", CSSSelector::kPseudoHost},
@@ -422,11 +426,15 @@ static CSSSelector::PseudoType NameToPseudoType(const AtomicString& name,
     pseudo_type_map_end = kPseudoTypeWithoutArgumentsMap +
                           WTF_ARRAY_LENGTH(kPseudoTypeWithoutArgumentsMap);
   }
-  NameToPseudoStruct dummy_key = {0, CSSSelector::kPseudoUnknown};
+  NameToPseudoStruct dummy_key = {nullptr, CSSSelector::kPseudoUnknown};
   const NameToPseudoStruct* match =
       std::lower_bound(pseudo_type_map, pseudo_type_map_end, dummy_key,
                        NameToPseudoCompare(name));
   if (match == pseudo_type_map_end || match->string != name.GetString())
+    return CSSSelector::kPseudoUnknown;
+
+  if (match->type == CSSSelector::kPseudoFullscreen &&
+      !RuntimeEnabledFeatures::FullscreenUnprefixedEnabled())
     return CSSSelector::kPseudoUnknown;
 
   return static_cast<CSSSelector::PseudoType>(match->type);
@@ -578,6 +586,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoFullPageMedia:
     case kPseudoFullScreen:
     case kPseudoFullScreenAncestor:
+    case kPseudoFullscreen:
     case kPseudoFutureCue:
     case kPseudoHorizontal:
     case kPseudoHost:
@@ -1048,7 +1057,7 @@ CSSSelector::RareData::RareData(const AtomicString& value)
       attribute_(AnyQName()),
       argument_(g_null_atom) {}
 
-CSSSelector::RareData::~RareData() {}
+CSSSelector::RareData::~RareData() = default;
 
 // a helper function for checking nth-arguments
 bool CSSSelector::RareData::MatchNth(unsigned unsigned_count) {

@@ -13,29 +13,26 @@
 
 namespace blink {
 
-class BlockPainterTest : public ::testing::WithParamInterface<bool>,
-                         private ScopedRootLayerScrollingForTest,
-                         public PaintControllerPaintTestBase {
- public:
-  BlockPainterTest()
-      : ScopedRootLayerScrollingForTest(GetParam()),
-        PaintControllerPaintTestBase(true) {}
-};
+using BlockPainterTest = PaintControllerPaintTest;
 
-INSTANTIATE_TEST_CASE_P(All, BlockPainterTest, ::testing::Bool());
+INSTANTIATE_TEST_CASE_P(
+    All,
+    BlockPainterTest,
+    ::testing::ValuesIn(kSlimmingPaintV2TestConfigurations));
 
 TEST_P(BlockPainterTest, ScrollHitTestProperties) {
-  SetBodyInnerHTML(
-      "<style>"
-      "  ::-webkit-scrollbar { display: none; }"
-      "  body { margin: 0 }"
-      "  #container { width: 200px; height: 200px;"
-      "              overflow: scroll; background: blue; }"
-      "  #child { width: 100px; height: 300px; background: green; }"
-      "</style>"
-      "<div id='container'>"
-      "  <div id='child'></div>"
-      "</div>");
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      ::-webkit-scrollbar { display: none; }
+      body { margin: 0 }
+      #container { width: 200px; height: 200px;
+                  overflow: scroll; background: blue; }
+      #child { width: 100px; height: 300px; background: green; }
+    </style>
+    <div id='container'>
+      <div id='child'></div>
+    </div>
+  )HTML");
 
   auto& container = *GetLayoutObjectByElementId("container");
   auto& child = *GetLayoutObjectByElementId("child");
@@ -68,15 +65,18 @@ TEST_P(BlockPainterTest, ScrollHitTestProperties) {
   EXPECT_EQ(nullptr, root_transform->ScrollNode());
 
   // The container's background chunk should not scroll and therefore should use
-  // the root transform.
+  // the root transform. Its local transform is actually a paint offset
+  // transform.
   auto* container_transform =
-      container_chunk.properties.property_tree_state.Transform();
+      container_chunk.properties.property_tree_state.Transform()->Parent();
   EXPECT_EQ(root_transform, container_transform);
   EXPECT_EQ(nullptr, container_transform->ScrollNode());
 
   // The scroll hit test should not be scrolled and should not be clipped.
+  // Its local transform is actually a paint offset transform.
   auto* scroll_hit_test_transform =
-      scroll_hit_test_chunk.properties.property_tree_state.Transform();
+      scroll_hit_test_chunk.properties.property_tree_state.Transform()
+          ->Parent();
   EXPECT_EQ(nullptr, scroll_hit_test_transform->ScrollNode());
   EXPECT_EQ(root_transform, scroll_hit_test_transform);
   auto* scroll_hit_test_clip =
@@ -87,8 +87,8 @@ TEST_P(BlockPainterTest, ScrollHitTestProperties) {
   auto* contents_transform =
       contents_chunk.properties.property_tree_state.Transform();
   auto* contents_scroll = contents_transform->ScrollNode();
-  EXPECT_EQ(IntSize(200, 300), contents_scroll->Bounds());
-  EXPECT_EQ(IntSize(200, 200), contents_scroll->ContainerBounds());
+  EXPECT_EQ(IntRect(0, 0, 200, 300), contents_scroll->ContentsRect());
+  EXPECT_EQ(IntRect(0, 0, 200, 200), contents_scroll->ContainerRect());
   auto* contents_clip = contents_chunk.properties.property_tree_state.Clip();
   EXPECT_EQ(FloatRect(0, 0, 200, 200), contents_clip->ClipRect().Rect());
 
@@ -103,13 +103,14 @@ TEST_P(BlockPainterTest, ScrollHitTestProperties) {
 }
 
 TEST_P(BlockPainterTest, FrameScrollHitTestProperties) {
-  SetBodyInnerHTML(
-      "<style>"
-      "  ::-webkit-scrollbar { display: none; }"
-      "  body { margin: 0; }"
-      "  #child { width: 100px; height: 2000px; background: green; }"
-      "</style>"
-      "<div id='child'></div>");
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      ::-webkit-scrollbar { display: none; }
+      body { margin: 0; }
+      #child { width: 100px; height: 2000px; background: green; }
+    </style>
+    <div id='child'></div>
+  )HTML");
 
   auto& html = *GetDocument().documentElement()->GetLayoutObject();
   auto& child = *GetLayoutObjectByElementId("child");
@@ -145,8 +146,8 @@ TEST_P(BlockPainterTest, FrameScrollHitTestProperties) {
   auto* contents_transform =
       contents_chunk.properties.property_tree_state.Transform();
   auto* contents_scroll = contents_transform->ScrollNode();
-  EXPECT_EQ(IntSize(800, 2000), contents_scroll->Bounds());
-  EXPECT_EQ(IntSize(800, 600), contents_scroll->ContainerBounds());
+  EXPECT_EQ(IntRect(0, 0, 800, 2000), contents_scroll->ContentsRect());
+  EXPECT_EQ(IntRect(0, 0, 800, 600), contents_scroll->ContainerRect());
   auto* contents_clip = contents_chunk.properties.property_tree_state.Clip();
   EXPECT_EQ(FloatRect(0, 0, 800, 600), contents_clip->ClipRect().Rect());
 

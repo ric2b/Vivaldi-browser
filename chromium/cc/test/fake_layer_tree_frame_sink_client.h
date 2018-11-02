@@ -5,9 +5,9 @@
 #ifndef CC_TEST_FAKE_LAYER_TREE_FRAME_SINK_CLIENT_H_
 #define CC_TEST_FAKE_LAYER_TREE_FRAME_SINK_CLIENT_H_
 
-#include "cc/output/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
 
-#include "cc/output/managed_memory_policy.h"
+#include "cc/trees/managed_memory_policy.h"
 
 namespace cc {
 
@@ -17,6 +17,11 @@ class FakeLayerTreeFrameSinkClient : public LayerTreeFrameSinkClient {
 
   void SetBeginFrameSource(viz::BeginFrameSource* source) override;
   void DidReceiveCompositorFrameAck() override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override {}
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override {}
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override {}
   void DidLoseLayerTreeFrameSink() override;

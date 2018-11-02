@@ -33,15 +33,15 @@ const double kMinSourceAspectRatio = 0.05;
 const char kVideoKindColor[] = "color";
 const char kVideoKindDepth[] = "depth";
 
-blink::WebString ToWebString(::mojom::FacingMode facing_mode) {
+blink::WebString ToWebString(blink::mojom::FacingMode facing_mode) {
   switch (facing_mode) {
-    case ::mojom::FacingMode::USER:
+    case blink::mojom::FacingMode::USER:
       return blink::WebString::FromASCII("user");
-    case ::mojom::FacingMode::ENVIRONMENT:
+    case blink::mojom::FacingMode::ENVIRONMENT:
       return blink::WebString::FromASCII("environment");
-    case ::mojom::FacingMode::LEFT:
+    case blink::mojom::FacingMode::LEFT:
       return blink::WebString::FromASCII("left");
-    case ::mojom::FacingMode::RIGHT:
+    case blink::mojom::FacingMode::RIGHT:
       return blink::WebString::FromASCII("right");
     default:
       return blink::WebString::FromASCII("");
@@ -52,7 +52,7 @@ struct Candidate {
  public:
   Candidate(const std::string& device_id,
             const media::VideoCaptureFormat& format,
-            ::mojom::FacingMode facing_mode,
+            blink::mojom::FacingMode facing_mode,
             media::PowerLineFrequency power_line_frequency,
             const base::Optional<bool>& noise_reduction)
       : device_id_(device_id),
@@ -77,7 +77,7 @@ struct Candidate {
   // Accessors.
   const media::VideoCaptureFormat& format() const { return format_; }
   const std::string& device_id() const { return device_id_; }
-  ::mojom::FacingMode facing_mode() const { return facing_mode_; }
+  blink::mojom::FacingMode facing_mode() const { return facing_mode_; }
   media::PowerLineFrequency power_line_frequency() const {
     return power_line_frequency_;
   }
@@ -88,7 +88,7 @@ struct Candidate {
  private:
   std::string device_id_;
   media::VideoCaptureFormat format_;
-  ::mojom::FacingMode facing_mode_;
+  blink::mojom::FacingMode facing_mode_;
   media::PowerLineFrequency power_line_frequency_;
   base::Optional<bool> noise_reduction_;
 };
@@ -180,13 +180,10 @@ VideoCaptureSettings ComputeVideoDeviceCaptureSettings(
   media::VideoCaptureParams capture_params;
   capture_params.requested_format = candidate.format();
   capture_params.power_line_frequency = candidate.power_line_frequency();
-  // With device capture, incoming frames are expected to have the size
-  // specified in the requested capture format.
-  bool expect_source_native_size = true;
   auto track_adapter_settings = SelectVideoTrackAdapterSettings(
       basic_constraint_set, constrained_format.constrained_resolution(),
       constrained_format.constrained_frame_rate(),
-      capture_params.requested_format, expect_source_native_size);
+      capture_params.requested_format);
 
   return VideoCaptureSettings(
       candidate.device_id(), capture_params, candidate.noise_reduction(),
@@ -259,7 +256,7 @@ double ResolutionConstraintSourceDistance(
     int max_source_value,
     const blink::LongConstraint& constraint,
     const char** failed_constraint_name) {
-  DCHECK_GE(native_source_value, 1);
+  DCHECK_GE(native_source_value, 0);
   bool constraint_has_min = ConstraintHasMin(constraint);
   long constraint_min = constraint_has_min ? ConstraintMin(constraint) : -1;
   bool constraint_has_max = ConstraintHasMax(constraint);
@@ -436,7 +433,7 @@ double NoiseReductionConstraintSourceDistance(
 // characteristics that have a fixed value.
 double DeviceSourceDistance(
     const std::string& device_id,
-    ::mojom::FacingMode facing_mode,
+    blink::mojom::FacingMode facing_mode,
     const blink::WebMediaTrackConstraintSet& constraint_set,
     const char** failed_constraint_name) {
   return StringConstraintSourceDistance(blink::WebString::FromASCII(device_id),
@@ -700,6 +697,9 @@ using DistanceVector = std::vector<double>;
 void AppendDistanceFromDefault(
     const Candidate& candidate,
     const VideoDeviceCaptureCapabilities& capabilities,
+    int default_width,
+    int default_height,
+    double default_frame_rate,
     DistanceVector* distance_vector) {
   // Favor IDs that appear first in the enumeration.
   for (size_t i = 0; i < capabilities.device_capabilities.size(); ++i) {
@@ -728,17 +728,15 @@ void AppendDistanceFromDefault(
   double resolution_distance = ResolutionSet::Point::SquareEuclideanDistance(
       ResolutionSet::Point(candidate.format().frame_size.height(),
                            candidate.format().frame_size.width()),
-      ResolutionSet::Point(MediaStreamVideoSource::kDefaultHeight,
-                           MediaStreamVideoSource::kDefaultWidth));
+      ResolutionSet::Point(default_height, default_width));
   distance_vector->push_back(resolution_distance);
 
   // Prefer a frame rate close to the default.
   double frame_rate_distance =
-      candidate.format().frame_rate == MediaStreamVideoSource::kDefaultFrameRate
+      candidate.format().frame_rate == default_frame_rate
           ? 0.0
-          : NumericConstraintFitnessDistance(
-                candidate.format().frame_rate,
-                MediaStreamVideoSource::kDefaultFrameRate);
+          : NumericConstraintFitnessDistance(candidate.format().frame_rate,
+                                             default_frame_rate);
   distance_vector->push_back(frame_rate_distance);
 }
 
@@ -760,9 +758,15 @@ VideoDeviceCaptureCapabilities& VideoDeviceCaptureCapabilities::operator=(
 
 VideoCaptureSettings SelectSettingsVideoDeviceCapture(
     const VideoDeviceCaptureCapabilities& capabilities,
-    const blink::WebMediaConstraints& constraints) {
+    const blink::WebMediaConstraints& constraints,
+    int default_width,
+    int default_height,
+    double default_frame_rate) {
+  DCHECK_GT(default_width, 0);
+  DCHECK_GT(default_height, 0);
+  DCHECK_GE(default_frame_rate, 0.0);
   // This function works only if infinity is defined for the double type.
-  DCHECK(std::numeric_limits<double>::has_infinity);
+  static_assert(std::numeric_limits<double>::has_infinity, "Requires infinity");
 
   // A distance vector contains:
   // a) For each advanced constraint set, a 0/1 value indicating if the
@@ -859,7 +863,8 @@ VideoCaptureSettings SelectSettingsVideoDeviceCapture(
               constrained_format, constraints.Basic()));
 
           // Final criteria are custom distances to default settings.
-          AppendDistanceFromDefault(candidate, capabilities,
+          AppendDistanceFromDefault(candidate, capabilities, default_width,
+                                    default_height, default_frame_rate,
                                     &candidate_distance_vector);
 
           DCHECK_EQ(best_distance.size(), candidate_distance_vector.size());

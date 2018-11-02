@@ -7,12 +7,20 @@
     {
       "name": "testJavascriptInterfaceForClientPopup",
       "_bug_id": "crbug.com/698369"
+    },
+    {
+      "name": "testJavascriptInterfaceCustomPropertiesClearedOnReload",
+      "_bug_id": "crbug.com/767847"
     }
   ],
   "android.webkit.cts.WebSettingsTest": [
     {
       "name": "testLocalImageLoads",
       "_bug_id": "crbug.com/680759"
+    },
+    {
+      "name": "testAllowMixedMode",
+      "_bug_id": "crbug.com/777393"
     }
   ],
   "android.webkit.cts.WebViewClientTest": [

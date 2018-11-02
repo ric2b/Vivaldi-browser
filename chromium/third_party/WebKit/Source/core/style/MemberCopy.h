@@ -6,16 +6,16 @@
 #define MemberCopy_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/style/ContentData.h"
 #include "core/style/DataRef.h"
 #include "core/style/StyleFilterData.h"
 #include "platform/heap/Persistent.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 template <typename T>
-RefPtr<T> MemberCopy(const RefPtr<T>& v) {
+scoped_refptr<T> MemberCopy(const scoped_refptr<T>& v) {
   return v;
 }
 

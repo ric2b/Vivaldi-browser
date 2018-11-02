@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -928,7 +930,7 @@ void NodeController::OnAcceptBrokerClient(const ports::NodeName& from_node,
   DCHECK(parent_name == from_node);
   DCHECK(parent);
 
-  std::queue<ports::NodeName> pending_broker_clients;
+  base::queue<ports::NodeName> pending_broker_clients;
   std::unordered_map<ports::NodeName, OutgoingMessageQueue>
       pending_relay_messages;
   {
@@ -1144,30 +1146,30 @@ void NodeController::OnRelayEventMessage(const ports::NodeName& from_node,
   // Note that we explicitly mark the handles as being owned by the sending
   // process before rewriting them, in order to accommodate RewriteHandles'
   // internal sanity checks.
-  ScopedPlatformHandleVectorPtr handles = message->TakeHandles();
-  for (size_t i = 0; i < handles->size(); ++i)
-    (*handles)[i].owning_process = from_process;
-  if (!Channel::Message::RewriteHandles(from_process,
-                                        base::GetCurrentProcessHandle(),
-                                        handles.get())) {
+  std::vector<ScopedPlatformHandle> handles = message->TakeHandles();
+  for (auto& handle : handles)
+    handle.get().owning_process = from_process;
+  if (!Channel::Message::RewriteHandles(
+          from_process, base::GetCurrentProcessHandle(), &handles)) {
     DLOG(ERROR) << "Failed to relay one or more handles.";
   }
   message->SetHandles(std::move(handles));
 #else
-  MachPortRelay* relay = GetMachPortRelay();
-  if (!relay) {
-    LOG(ERROR) << "Receiving Mach ports without a port relay from "
-               << from_node << ". Dropping message.";
-    return;
+  std::vector<ScopedPlatformHandle> handles = message->TakeHandles();
+  for (auto& handle : handles) {
+    if (handle.get().type == PlatformHandle::Type::MACH_NAME) {
+      MachPortRelay* relay = GetMachPortRelay();
+      if (!relay) {
+        handle.get().type = PlatformHandle::Type::MACH;
+        handle.get().port = MACH_PORT_NULL;
+        DLOG(ERROR) << "Receiving Mach ports without a port relay from "
+                    << from_node << ".";
+        continue;
+      }
+      relay->ExtractPort(&handle, from_process);
+    }
   }
-  if (!relay->ExtractPortRights(message.get(), from_process)) {
-    // NodeChannel should ensure that MachPortRelay is ready for the remote
-    // process. At this point, if the port extraction failed, either something
-    // went wrong in the mach stuff, or the remote process died.
-    LOG(ERROR) << "Error on receiving Mach ports " << from_node
-               << ". Dropping message.";
-    return;
-  }
+  message->SetHandles(std::move(handles));
 #endif  // defined(OS_WIN)
 
   if (destination == name_) {

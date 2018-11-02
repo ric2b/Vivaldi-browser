@@ -125,6 +125,11 @@ bear-1280x720-hls-sample-aes.ts: produced using Apple's mediafilesegmenter tool 
   (Additional TS packets were constructed manually and prepended to convey the encryption metadata, notably key id and IV).
   mediafilesegmenter -S -P -k 'key_iv.bin' -t 10 -start-segments-with-iframe -f 'output/' bear-1280x720.ts
 
+bear-1280x720-hls-with-CAT.ts: same as bear-1280x720-hls.ts but with an extra TS packet prepended. This is the same as the first of the metadata packets in
+  bear-1280x720-hls-sample-aes.ts. Its presence indicates that SAMPLE_AES encryption may occur later in the stream, and causes the initial audio and video configs
+  to have an encryption_scheme (of AES-CBC). The actual data is unencrypted, which is indicated by the lack of key ID and IV. This ends up very similar to how
+  clear leader of an otherwise encrypted stream can occur in MP4.
+
 [1] 30313233343536373839303132333435
 [2] ebdd62f16814d27b68ef122afce4ae3c
 [3] KeyIds and Keys are created by left rotating key ID [1] and key [2] using
@@ -189,6 +194,15 @@ test-25fps.vp9.md5:
   MD5 of RGB thumbnail rendered version of test-25fps.vp9. Written out by
   video_decode_accelerator_unittest.
 
+test-25fps.vp9_2:
+  Similar to test-25fps.vp9, substituting the option "--profile=0" with
+  "--profile=2 --bit-depth=10" to vpxenc. (Note that vpxenc must have been
+  configured with the option --enable-vp9-highbitdepth).
+
+test-25fps.vp9_2.md5:
+  MD5 of RGB thumbnail rendered version of test-25fps.vp9_@. Written out by
+  video_decode_accelerator_unittest.
+
 // VDA test files: bear
 bear.h264:
   Using ffmpeg version 0.8.6-4:0.8.6-0ubuntu0.12.04.1, generated with
@@ -242,7 +256,7 @@ bear_320x192_40frames.yuv
 // VP9 parser test files:
 bear-vp9.ivf
   - Created using "avconv -i bear-vp9.webm -vcodec copy -an -f ivf bear-vp9.ivf".
-bear-vp9.ivf.context 
+bear-vp9.ivf.context
 test-25fps.vp9.context
   - Manually dumped from libvpx with bear-vp9.ivf and test-25fps.vp9. See
     vp9_parser_unittest.cc for description of their format.

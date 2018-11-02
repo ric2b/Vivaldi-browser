@@ -17,9 +17,14 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
+#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
 namespace autofill {
 namespace payments {
 
@@ -59,13 +64,21 @@ class MockPersonalDataManager : public PersonalDataManager {
 
 // The test fixture for full card request.
 class FullCardRequestTest : public testing::Test,
-                            public PaymentsClientDelegate {
+                            public PaymentsClientUnmaskDelegate {
  public:
   FullCardRequestTest()
       : request_context_(new net::TestURLRequestContextGetter(
-            base::ThreadTaskRunnerHandle::Get())),
-        payments_client_(request_context_.get(), this),
-        request_(&autofill_client_, &payments_client_, &personal_data_) {
+            base::ThreadTaskRunnerHandle::Get())) {
+    std::unique_ptr<TestingPrefServiceSimple> pref_service(
+        new TestingPrefServiceSimple());
+    pref_service->registry()->RegisterDoublePref(
+        prefs::kAutofillBillingCustomerNumber, 0.0);
+    autofill_client_.SetPrefs(std::move(pref_service));
+    payments_client_ = std::make_unique<PaymentsClient>(
+        request_context_.get(), autofill_client_.GetPrefs(),
+        autofill_client_.GetIdentityProvider(), this, nullptr);
+    request_ = std::make_unique<FullCardRequest>(
+        &autofill_client_, payments_client_.get(), &personal_data_);
     // Silence the warning from PaymentsClient about matching sync and Payments
     // server types.
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -76,46 +89,31 @@ class FullCardRequestTest : public testing::Test,
 
   MockPersonalDataManager* personal_data() { return &personal_data_; }
 
-  FullCardRequest* request() { return &request_; }
+  FullCardRequest* request() { return request_.get(); }
 
   CardUnmaskDelegate* card_unmask_delegate() {
-    return static_cast<CardUnmaskDelegate*>(&request_);
+    return static_cast<CardUnmaskDelegate*>(request_.get());
   }
 
   MockResultDelegate* result_delegate() { return &result_delegate_; }
 
   MockUIDelegate* ui_delegate() { return &ui_delegate_; }
 
-  // PaymentsClientDelegate:
+  // PaymentsClientUnmaskDelegate:
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
                        const std::string& real_pan) override {
-    request_.OnDidGetRealPan(result, real_pan);
+    request_->OnDidGetRealPan(result, real_pan);
   }
 
  private:
-  // PaymentsClientDelegate:
-  IdentityProvider* GetIdentityProvider() override {
-    return autofill_client_.GetIdentityProvider();
-  }
-  void OnDidGetUploadDetails(
-      AutofillClient::PaymentsRpcResult result,
-      const base::string16& context_token,
-      std::unique_ptr<base::DictionaryValue> legal_message) override {
-    ASSERT_TRUE(false) << "No upload details in this test";
-  }
-  void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
-                       const std::string& server_id) override {
-    ASSERT_TRUE(false) << "No card uploads in this test.";
-  }
-
   base::MessageLoop message_loop_;
   MockPersonalDataManager personal_data_;
-  TestAutofillClient autofill_client_;
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_;
-  PaymentsClient payments_client_;
   MockResultDelegate result_delegate_;
   MockUIDelegate ui_delegate_;
-  FullCardRequest request_;
+  TestAutofillClient autofill_client_;
+  scoped_refptr<net::TestURLRequestContextGetter> request_context_;
+  std::unique_ptr<PaymentsClient> payments_client_;
+  std::unique_ptr<FullCardRequest> request_;
 
   DISALLOW_COPY_AND_ASSIGN(FullCardRequestTest);
 };

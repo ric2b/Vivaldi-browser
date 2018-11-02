@@ -20,11 +20,11 @@
 
 #include "core/css/StyleSheetList.h"
 
-#include "core/HTMLNames.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleEngine.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLStyleElement.h"
+#include "core/html_names.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -57,7 +57,7 @@ HTMLStyleElement* StyleSheetList::GetNamedItem(const AtomicString& name) const {
   // practice anyway ;)
   // FIXME: We should figure out if we should change this or fix the spec.
   Element* element = tree_scope_->getElementById(name);
-  return isHTMLStyleElement(element) ? toHTMLStyleElement(element) : nullptr;
+  return IsHTMLStyleElement(element) ? ToHTMLStyleElement(element) : nullptr;
 }
 
 CSSStyleSheet* StyleSheetList::AnonymousNamedGetter(const AtomicString& name) {
@@ -76,8 +76,9 @@ CSSStyleSheet* StyleSheetList::AnonymousNamedGetter(const AtomicString& name) {
   return sheet;
 }
 
-DEFINE_TRACE(StyleSheetList) {
+void StyleSheetList::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_scope_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

@@ -32,9 +32,7 @@
 
 namespace blink {
 
-class WebGLUniformLocation final
-    : public GarbageCollected<WebGLUniformLocation>,
-      public ScriptWrappable {
+class WebGLUniformLocation final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -44,7 +42,7 @@ class WebGLUniformLocation final
 
   GLint Location() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
   WebGLUniformLocation(WebGLProgram*, GLint location);

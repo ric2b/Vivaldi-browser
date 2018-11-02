@@ -11,16 +11,19 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/persistent_scheduler.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
 #include "components/ntp_snippets/status.h"
+#include "components/ntp_snippets/time_serialization.h"
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -70,7 +73,7 @@ const double kDefaultFetchingIntervalHoursActiveNtpUser[] = {96.0, 48.0, 24.0,
 const double kDefaultFetchingIntervalHoursActiveSuggestionsConsumer[] = {
     48.0, 24.0, 12.0, 12.0, 1.0, 1.0};
 
-// For a simple comparision: fetching intervals that emulate the state really
+// For a simple comparison: fetching intervals that emulate the state really
 // rolled out to 100% M58 Stable. Used for evaluation of later changes. DBL_MAX
 // values simulate this interval being disabled.
 // TODO(jkrcal): Remove when not needed any more, incl. the feature. Probably
@@ -140,10 +143,9 @@ const char* const kTriggerTypesParamValueForEmptyList = "-";
 
 const int kBlockBackgroundFetchesMinutesAfterClearingHistory = 30;
 
-const char kSnippetSoftFetchingIntervalOnUsageEventDeprecated[] =
-    "ntp_snippets.soft_fetching_interval_on_usage_event";
-const char kSnippetSoftFetchingIntervalOnNtpOpenedDeprecated[] =
-    "ntp_snippets.soft_fetching_interval_on_ntp_opened";
+// Variation parameter for minimal age of a fetch to be considered "stale".
+const char kMinAgeForStaleFetchHoursParamName[] =
+    "min_age_for_stale_fetch_hours";
 
 // Returns the time interval to use for scheduling remote suggestion fetches for
 // the given interval and user_class.
@@ -414,6 +416,16 @@ bool RemoteSuggestionsSchedulerImpl::FetchingSchedule::is_empty() const {
          interval_shown_fallback.is_zero();
 }
 
+base::TimeDelta
+RemoteSuggestionsSchedulerImpl::FetchingSchedule::GetStalenessInterval() const {
+  // The default value for staleness is |interval_startup_wifi| which is not
+  // constant. It depends on user class and is configurable by field trial
+  // params as well.
+  return base::TimeDelta::FromHours(base::GetFieldTrialParamByFeatureAsInt(
+      ntp_snippets::kArticleSuggestionsFeature,
+      kMinAgeForStaleFetchHoursParamName, interval_startup_wifi.InHours()));
+}
+
 // The TriggerType enum specifies values for the events that can trigger
 // fetching remote suggestions. These values are written to logs. New enum
 // values can be added, but existing enums must never be renumbered or deleted
@@ -432,7 +444,8 @@ RemoteSuggestionsSchedulerImpl::RemoteSuggestionsSchedulerImpl(
     const UserClassifier* user_classifier,
     PrefService* profile_prefs,
     PrefService* local_state_prefs,
-    std::unique_ptr<base::Clock> clock)
+    std::unique_ptr<base::Clock> clock,
+    Logger* debug_logger)
     : persistent_scheduler_(persistent_scheduler),
       provider_(nullptr),
       background_fetch_in_progress_(false),
@@ -457,15 +470,11 @@ RemoteSuggestionsSchedulerImpl::RemoteSuggestionsSchedulerImpl(
                      base::Unretained(this)))),
       profile_prefs_(profile_prefs),
       clock_(std::move(clock)),
-      enabled_triggers_(GetEnabledTriggerTypes()) {
+      enabled_triggers_(GetEnabledTriggerTypes()),
+      debug_logger_(debug_logger) {
   DCHECK(user_classifier);
   DCHECK(profile_prefs);
-
-  // Cleanup procedure in M59. Remove for M62.
-  profile_prefs_->ClearPref(kSnippetSoftFetchingIntervalOnUsageEventDeprecated);
-  profile_prefs_->ClearPref(kSnippetSoftFetchingIntervalOnNtpOpenedDeprecated);
-
-  LoadLastFetchingSchedule();
+  DCHECK(debug_logger_);
 }
 
 RemoteSuggestionsSchedulerImpl::~RemoteSuggestionsSchedulerImpl() = default;
@@ -481,13 +490,8 @@ void RemoteSuggestionsSchedulerImpl::RegisterProfilePrefs(
                               0);
   registry->RegisterInt64Pref(prefs::kSnippetShownFetchingIntervalWifi, 0);
   registry->RegisterInt64Pref(prefs::kSnippetShownFetchingIntervalFallback, 0);
-  registry->RegisterInt64Pref(prefs::kSnippetLastFetchAttempt, 0);
-
-  // Cleanup procedure in M59. Remove for M62.
-  registry->RegisterInt64Pref(
-      kSnippetSoftFetchingIntervalOnUsageEventDeprecated, 0);
-  registry->RegisterInt64Pref(kSnippetSoftFetchingIntervalOnNtpOpenedDeprecated,
-                              0);
+  registry->RegisterInt64Pref(prefs::kSnippetLastFetchAttemptTime, 0);
+  registry->RegisterInt64Pref(prefs::kSnippetLastSuccessfulFetchTime, 0);
 }
 
 void RemoteSuggestionsSchedulerImpl::SetProvider(
@@ -497,6 +501,7 @@ void RemoteSuggestionsSchedulerImpl::SetProvider(
 }
 
 void RemoteSuggestionsSchedulerImpl::OnProviderActivated() {
+  LoadLastFetchingSchedule();
   StartScheduling();
   RunQueuedTriggersIfReady();
 }
@@ -507,7 +512,7 @@ void RemoteSuggestionsSchedulerImpl::RunQueuedTriggersIfReady() {
     std::set<TriggerType> queued_triggers_copy;
     queued_triggers_copy.swap(queued_triggers_);
     for (const TriggerType trigger : queued_triggers_copy) {
-      RefetchInTheBackgroundIfAppropriate(trigger);
+      RefetchIfAppropriate(trigger);
     }
   }
 }
@@ -517,11 +522,16 @@ void RemoteSuggestionsSchedulerImpl::OnProviderDeactivated() {
 }
 
 void RemoteSuggestionsSchedulerImpl::OnSuggestionsCleared() {
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
   // This should be called by |provider_| so it should exist.
   DCHECK(provider_);
-  // Some user action causes suggestions to be cleared, fetch now (as an
-  // interactive request).
-  provider_->ReloadSuggestions();
+  // Some user action causes suggestions to be cleared, we need to fetch as soon
+  // as possible.
+  ClearLastFetchAttemptTime();
+  // We cannot guarantee that the surface is not visible when the event happens.
+  // To make sure the suggestions get replaced, we use the SURFACE_OPENED
+  // trigger.
+  RefetchIfAppropriate(TriggerType::SURFACE_OPENED);
 }
 
 void RemoteSuggestionsSchedulerImpl::OnHistoryCleared() {
@@ -552,26 +562,29 @@ void RemoteSuggestionsSchedulerImpl::OnInteractiveFetchFinished(
 }
 
 void RemoteSuggestionsSchedulerImpl::OnPersistentSchedulerWakeUp() {
-  RefetchInTheBackgroundIfAppropriate(
-      TriggerType::PERSISTENT_SCHEDULER_WAKE_UP);
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
+  RefetchIfAppropriate(TriggerType::PERSISTENT_SCHEDULER_WAKE_UP);
 }
 
 void RemoteSuggestionsSchedulerImpl::OnBrowserForegrounded() {
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
   // TODO(jkrcal): Consider that this is called whenever we open or return to an
   // Activity. Therefore, keep work light for fast start up calls.
-  RefetchInTheBackgroundIfAppropriate(TriggerType::BROWSER_FOREGROUNDED);
+  RefetchIfAppropriate(TriggerType::BROWSER_FOREGROUNDED);
 }
 
 void RemoteSuggestionsSchedulerImpl::OnBrowserColdStart() {
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
   // TODO(jkrcal): Consider that work here must be kept light for fast
   // cold start ups.
-  RefetchInTheBackgroundIfAppropriate(TriggerType::BROWSER_COLD_START);
+  RefetchIfAppropriate(TriggerType::BROWSER_COLD_START);
 }
 
 void RemoteSuggestionsSchedulerImpl::OnSuggestionsSurfaceOpened() {
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
   // TODO(jkrcal): Consider that this is called whenever we open an NTP.
   // Therefore, keep work light for fast start up calls.
-  RefetchInTheBackgroundIfAppropriate(TriggerType::SURFACE_OPENED);
+  RefetchIfAppropriate(TriggerType::SURFACE_OPENED);
 }
 
 void RemoteSuggestionsSchedulerImpl::StartScheduling() {
@@ -632,46 +645,64 @@ RemoteSuggestionsSchedulerImpl::GetDesiredFetchingSchedule() const {
 }
 
 void RemoteSuggestionsSchedulerImpl::LoadLastFetchingSchedule() {
-  schedule_.interval_persistent_wifi = base::TimeDelta::FromInternalValue(
+  schedule_.interval_persistent_wifi = DeserializeTimeDelta(
       profile_prefs_->GetInt64(prefs::kSnippetPersistentFetchingIntervalWifi));
   schedule_.interval_persistent_fallback =
-      base::TimeDelta::FromInternalValue(profile_prefs_->GetInt64(
+      DeserializeTimeDelta(profile_prefs_->GetInt64(
           prefs::kSnippetPersistentFetchingIntervalFallback));
-  schedule_.interval_startup_wifi = base::TimeDelta::FromInternalValue(
+  schedule_.interval_startup_wifi = DeserializeTimeDelta(
       profile_prefs_->GetInt64(prefs::kSnippetStartupFetchingIntervalWifi));
-  schedule_.interval_startup_fallback = base::TimeDelta::FromInternalValue(
+  schedule_.interval_startup_fallback = DeserializeTimeDelta(
       profile_prefs_->GetInt64(prefs::kSnippetStartupFetchingIntervalFallback));
-  schedule_.interval_shown_wifi = base::TimeDelta::FromInternalValue(
+  schedule_.interval_shown_wifi = DeserializeTimeDelta(
       profile_prefs_->GetInt64(prefs::kSnippetShownFetchingIntervalWifi));
-  schedule_.interval_shown_fallback = base::TimeDelta::FromInternalValue(
+  schedule_.interval_shown_fallback = DeserializeTimeDelta(
       profile_prefs_->GetInt64(prefs::kSnippetShownFetchingIntervalFallback));
 }
 
 void RemoteSuggestionsSchedulerImpl::StoreFetchingSchedule() {
   profile_prefs_->SetInt64(
       prefs::kSnippetPersistentFetchingIntervalWifi,
-      schedule_.interval_persistent_wifi.ToInternalValue());
+      SerializeTimeDelta(schedule_.interval_persistent_wifi));
   profile_prefs_->SetInt64(
       prefs::kSnippetPersistentFetchingIntervalFallback,
-      schedule_.interval_persistent_fallback.ToInternalValue());
+      SerializeTimeDelta(schedule_.interval_persistent_fallback));
   profile_prefs_->SetInt64(prefs::kSnippetStartupFetchingIntervalWifi,
-                           schedule_.interval_startup_wifi.ToInternalValue());
+                           SerializeTimeDelta(schedule_.interval_startup_wifi));
   profile_prefs_->SetInt64(
       prefs::kSnippetStartupFetchingIntervalFallback,
-      schedule_.interval_startup_fallback.ToInternalValue());
+      SerializeTimeDelta(schedule_.interval_startup_fallback));
   profile_prefs_->SetInt64(prefs::kSnippetShownFetchingIntervalWifi,
-                           schedule_.interval_shown_wifi.ToInternalValue());
-  profile_prefs_->SetInt64(prefs::kSnippetShownFetchingIntervalFallback,
-                           schedule_.interval_shown_fallback.ToInternalValue());
+                           SerializeTimeDelta(schedule_.interval_shown_wifi));
+  profile_prefs_->SetInt64(
+      prefs::kSnippetShownFetchingIntervalFallback,
+      SerializeTimeDelta(schedule_.interval_shown_fallback));
 }
 
-void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
-    TriggerType trigger) {
+bool RemoteSuggestionsSchedulerImpl::IsLastSuccessfulFetchStale() const {
+  // Avoid claiming staleness on the first fetch ever (after installing /
+  // upgrading Chrome to a version that writes this pref). We really do not
+  // know when was the last fetch.
+  if (!profile_prefs_->HasPrefPath(prefs::kSnippetLastSuccessfulFetchTime)) {
+    return false;
+  }
+  const base::Time last_successful_fetch_time = DeserializeTime(
+      profile_prefs_->GetInt64(prefs::kSnippetLastSuccessfulFetchTime));
+
+  return clock_->Now() - last_successful_fetch_time >
+         schedule_.GetStalenessInterval();
+}
+
+void RemoteSuggestionsSchedulerImpl::RefetchIfAppropriate(TriggerType trigger) {
+  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
+
   if (background_fetch_in_progress_) {
+    debug_logger_->Log(FROM_HERE, "stop due to ongoing fetch");
     return;
   }
 
   if (enabled_triggers_.count(trigger) == 0) {
+    debug_logger_->Log(FROM_HERE, "stop due to disabled trigger");
     return;
   }
 
@@ -679,16 +710,18 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
     // Do not let a request fail due to lack of internet connection. Then, such
     // a failure would get logged and further requests would be blocked for a
     // while (even after becoming online).
+    debug_logger_->Log(FROM_HERE, "stop due to being offline");
     return;
   }
 
   if (!IsReadyForBackgroundFetches()) {
+    debug_logger_->Log(FROM_HERE, "delay until ready");
     queued_triggers_.insert(trigger);
     return;
   }
 
   const base::Time last_fetch_attempt_time = base::Time::FromInternalValue(
-      profile_prefs_->GetInt64(prefs::kSnippetLastFetchAttempt));
+      profile_prefs_->GetInt64(prefs::kSnippetLastFetchAttemptTime));
 
   if (trigger == TriggerType::SURFACE_OPENED &&
       !time_until_first_shown_trigger_reported_) {
@@ -706,11 +739,13 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
   }
 
   if (trigger != TriggerType::PERSISTENT_SCHEDULER_WAKE_UP &&
-      !ShouldRefetchInTheBackgroundNow(last_fetch_attempt_time, trigger)) {
+      !ShouldRefetchNow(last_fetch_attempt_time, trigger)) {
+    debug_logger_->Log(FROM_HERE, "stop, because too soon");
     return;
   }
 
   if (!AcquireQuota(/*interactive_request=*/false)) {
+    debug_logger_->Log(FROM_HERE, "stop due to quota");
     return;
   }
 
@@ -734,13 +769,25 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
       "NewTabPage.ContentSuggestions.BackgroundFetchTrigger",
       static_cast<int>(trigger), static_cast<int>(TriggerType::COUNT));
 
+  debug_logger_->Log(FROM_HERE, "issuing a fetch");
   background_fetch_in_progress_ = true;
-  provider_->RefetchInTheBackground(base::Bind(
-      &RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundFinished,
-      base::Unretained(this)));
+
+  if ((trigger == TriggerType::BROWSER_COLD_START ||
+       trigger == TriggerType::BROWSER_FOREGROUNDED ||
+       trigger == TriggerType::SURFACE_OPENED) &&
+      IsLastSuccessfulFetchStale()) {
+    provider_->RefetchWhileDisplaying(
+        base::Bind(&RemoteSuggestionsSchedulerImpl::RefetchFinished,
+                   base::Unretained(this)));
+    return;
+  }
+
+  provider_->RefetchInTheBackground(
+      base::Bind(&RemoteSuggestionsSchedulerImpl::RefetchFinished,
+                 base::Unretained(this)));
 }
 
-bool RemoteSuggestionsSchedulerImpl::ShouldRefetchInTheBackgroundNow(
+bool RemoteSuggestionsSchedulerImpl::ShouldRefetchNow(
     base::Time last_fetch_attempt_time,
     TriggerType trigger) {
   // If we have no persistent scheduler to ask, err on the side of caution.
@@ -759,14 +806,33 @@ bool RemoteSuggestionsSchedulerImpl::ShouldRefetchInTheBackgroundNow(
   }
 
   base::Time now = clock_->Now();
+  if (Logger::IsLoggingEnabled()) {
+    if (background_fetches_allowed_after_ > now) {
+      debug_logger_->Log(
+          FROM_HERE,
+          base::StringPrintf(
+              "due to privacy, next fetch is allowed after %s",
+              Logger::TimeToString(background_fetches_allowed_after_).c_str()));
+    }
+    if (first_allowed_fetch_time > now) {
+      debug_logger_->Log(
+          FROM_HERE,
+          base::StringPrintf(
+              "next fetch is scheduled after %s (as last fetch "
+              "attempt occured at %s)",
+              Logger::TimeToString(first_allowed_fetch_time).c_str(),
+              Logger::TimeToString(last_fetch_attempt_time).c_str()));
+    }
+  }
+
   return background_fetches_allowed_after_ <= now &&
          first_allowed_fetch_time <= now;
 }
 
 bool RemoteSuggestionsSchedulerImpl::IsReadyForBackgroundFetches() const {
-  if (!provider_) {
+  if (!provider_ || !provider_->ready()) {
     return false;  // Cannot fetch as remote suggestions provider does not
-                   // exist.
+                   // exist or is not active yet.
   }
 
   if (schedule_.is_empty()) {
@@ -795,15 +861,14 @@ bool RemoteSuggestionsSchedulerImpl::AcquireQuota(bool interactive_request) {
   return false;
 }
 
-void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundFinished(
-    Status fetch_status) {
+void RemoteSuggestionsSchedulerImpl::RefetchFinished(Status fetch_status) {
   background_fetch_in_progress_ = false;
   OnFetchCompleted(fetch_status);
 }
 
 void RemoteSuggestionsSchedulerImpl::OnFetchCompleted(Status fetch_status) {
-  profile_prefs_->SetInt64(prefs::kSnippetLastFetchAttempt,
-                           clock_->Now().ToInternalValue());
+  profile_prefs_->SetInt64(prefs::kSnippetLastFetchAttemptTime,
+                           SerializeTime(clock_->Now()));
   time_until_first_shown_trigger_reported_ = false;
   time_until_first_startup_trigger_reported_ = false;
 
@@ -814,11 +879,19 @@ void RemoteSuggestionsSchedulerImpl::OnFetchCompleted(Status fetch_status) {
   if (fetch_status.code != StatusCode::SUCCESS) {
     return;
   }
+
+  profile_prefs_->SetInt64(prefs::kSnippetLastSuccessfulFetchTime,
+                           SerializeTime(clock_->Now()));
+
   ApplyPersistentFetchingSchedule();
 }
 
 void RemoteSuggestionsSchedulerImpl::ClearLastFetchAttemptTime() {
-  profile_prefs_->ClearPref(prefs::kSnippetLastFetchAttempt);
+  profile_prefs_->ClearPref(prefs::kSnippetLastFetchAttemptTime);
+  // To mark the last fetch as stale, we need to keep the time in prefs, only
+  // making sure it is long ago.
+  profile_prefs_->SetInt64(prefs::kSnippetLastSuccessfulFetchTime,
+                           SerializeTime(base::Time()));
 }
 
 std::set<RemoteSuggestionsSchedulerImpl::TriggerType>

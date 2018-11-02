@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.init;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -26,8 +27,8 @@ import org.chromium.base.PowerMonitor;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.BuildHooksAndroid;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AfterStartupTaskUtils;
 import org.chromium.chrome.browser.AppHooks;
@@ -55,8 +56,6 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
 import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.PhotoPickerDialog;
@@ -117,7 +116,6 @@ public class ProcessInitializationHandler {
     /**
      * @return The ProcessInitializationHandler for use during the lifetime of the browser process.
      */
-    @SuppressFBWarnings("LI_LAZY_INIT_STATIC")
     public static ProcessInitializationHandler getInstance() {
         ThreadUtils.checkUiThread();
         if (sInstance == null) {
@@ -275,20 +273,16 @@ public class ProcessInitializationHandler {
                 PartnerBrowserCustomizations.setOnInitializeAsyncFinished(new Runnable() {
                     @Override
                     public void run() {
-                        String homepageUrl = HomepageManager.getHomepageUri(application);
+                        String homepageUrl = HomepageManager.getHomepageUri();
                         LaunchMetrics.recordHomePageLaunchMetrics(
-                                HomepageManager.isHomepageEnabled(application),
+                                HomepageManager.isHomepageEnabled(),
                                 NewTabPage.isNTPUrl(homepageUrl), homepageUrl);
                     }
                 });
 
-                PartnerBookmarksShim.kickOffReading(application);
-
                 PowerMonitor.create();
 
                 ShareHelper.clearSharedImages();
-
-                OfflinePageUtils.clearSharedOfflineFiles(application);
 
                 SelectFileDialog.clearCapturedCameraFiles();
 
@@ -409,6 +403,9 @@ public class ProcessInitializationHandler {
                 logEGLShaderCacheSizeHistogram();
             }
         });
+
+        deferredStartupHandler.addDeferredTask(
+                () -> { BuildHooksAndroid.maybeRecordResourceMetrics(); });
     }
 
     private void initChannelsAsync() {
@@ -654,9 +651,10 @@ public class ProcessInitializationHandler {
     /**
      * Logs a histogram with the size of the Android EGL shader cache.
      */
+    @TargetApi(Build.VERSION_CODES.N)
     private static void logEGLShaderCacheSizeHistogram() {
         // To simplify logic, only log this value on Android N+.
-        if (Build.VERSION.SDK_INT < 24) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             return;
         }
         final Context cacheContext =

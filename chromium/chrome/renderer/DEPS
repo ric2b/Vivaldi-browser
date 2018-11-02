@@ -15,10 +15,10 @@ include_rules = [
   "+components/grit",
   "+components/guest_view/renderer",
   "+components/metrics/leak_detector",
-  "+components/metrics/proto",
   "+components/nacl/common",
   "+components/nacl/renderer",
   "+components/network_hints/renderer",
+  "+components/network_session_configurator/common",
   "+components/password_manager/content/renderer",
   "+components/password_manager/core/common",
   "+components/pdf/renderer",
@@ -28,9 +28,7 @@ include_rules = [
   "+components/rappor/public/interfaces",
   "+components/safe_browsing/common",
   "+components/safe_browsing/renderer",
-  "+components/signin/core/common",
   "+components/spellcheck",
-  "-components/spellcheck/browser",  # Allow all spellcheck but browser.
   "+components/startup_metric_utils/common",
   "+components/strings/grit",
   "+components/subresource_filter/content/renderer",
@@ -53,13 +51,18 @@ include_rules = [
   "+media/base",
   "+ppapi/c",
   "+ppapi/shared_impl",
+  "+services/network/public/cpp",
   "+services/service_manager/public/cpp",
   "+skia",
   "+storage/common",
+  "+third_party/WebKit/common",
+  "+third_party/metrics_proto",
+  "-components/spellcheck/browser",  # Allow all spellcheck but browser.
 ]
 
 specific_include_rules = {
   "chrome_content_renderer_client_browsertest\.cc" : [
+    "+chrome/browser/profiles/profile_io_data.h",
     "+chrome/browser/ui",
     "+chrome/browser/ui/tabs",
   ],

@@ -52,7 +52,7 @@ class VivaldiInstallDialog {
   InstallType GetInstallType() const { return install_type_; }
   bool GetSetAsDefaultBrowser() const { return set_as_default_browser_; }
   std::wstring GetLanguageCode() const { return language_code_; }
-  const bool GetRegisterBrowser() const;
+  bool GetRegisterBrowser() const;
 
   static bool IsVivaldiInstalled(const base::FilePath& path,
                                  InstallType* installed_type);
@@ -76,7 +76,7 @@ class VivaldiInstallDialog {
   void ShowDlgControls(HWND hwnd_dlg, bool show = true);
   void ShowOptions(HWND hwnd_dlg, bool show = true);
   void UpdateRegisterCheckboxVisibility();
-  const bool IsRegisterBrowserValid() const;
+  bool IsRegisterBrowserValid() const;
 
   void InitBkgnd(HWND hdlg, int cx, int cy);
 

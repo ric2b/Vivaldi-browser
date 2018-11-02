@@ -14,7 +14,7 @@ TextKeyboardInputStrategy::TextKeyboardInputStrategy(
     ClientInputInjector* input_injector)
     : input_injector_(input_injector) {}
 
-TextKeyboardInputStrategy::~TextKeyboardInputStrategy() {}
+TextKeyboardInputStrategy::~TextKeyboardInputStrategy() = default;
 
 // KeyboardInputStrategy
 
@@ -24,7 +24,7 @@ void TextKeyboardInputStrategy::HandleTextEvent(const std::string& text,
   input_injector_->SendTextEvent(text);
 }
 
-void TextKeyboardInputStrategy::HandleKeysEvent(std::queue<KeyEvent> keys) {
+void TextKeyboardInputStrategy::HandleKeysEvent(base::queue<KeyEvent> keys) {
   while (!keys.empty()) {
     KeyEvent key = keys.front();
     input_injector_->SendKeyEvent(0, key.keycode, key.keydown);

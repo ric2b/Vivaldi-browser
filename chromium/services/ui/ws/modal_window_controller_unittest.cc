@@ -12,8 +12,23 @@
 namespace ui {
 namespace ws {
 
-TEST(ModalWindowControllerTest, MinContainer) {
-  TestServerWindowDelegate window_delegate;
+class ModalWindowControllerTest : public testing::Test {
+ public:
+  ModalWindowControllerTest() {}
+  ~ModalWindowControllerTest() override {}
+
+  VizHostProxy* viz_host_proxy() {
+    return ws_test_helper_.window_server()->GetVizHostProxy();
+  }
+
+ private:
+  test::WindowServerTestHelper ws_test_helper_;
+
+  DISALLOW_COPY_AND_ASSIGN(ModalWindowControllerTest);
+};
+
+TEST_F(ModalWindowControllerTest, MinContainer) {
+  TestServerWindowDelegate window_delegate(viz_host_proxy());
   ServerWindow root_window(&window_delegate, WindowId(1, 1));
   window_delegate.set_root_window(&root_window);
   ServerWindow container1(&window_delegate, WindowId(1, 2));
@@ -58,8 +73,8 @@ TEST(ModalWindowControllerTest, MinContainer) {
   EXPECT_FALSE(modal_window_controller.IsWindowBlocked(&window));
 }
 
-TEST(ModalWindowControllerTest, SystemModalContainer) {
-  TestServerWindowDelegate window_delegate;
+TEST_F(ModalWindowControllerTest, SystemModalContainer) {
+  TestServerWindowDelegate window_delegate(viz_host_proxy());
   ServerWindow root_window(&window_delegate, WindowId(1, 1));
   window_delegate.set_root_window(&root_window);
   ServerWindow container1(&window_delegate, WindowId(1, 2));

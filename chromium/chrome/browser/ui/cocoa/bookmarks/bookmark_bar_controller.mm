@@ -198,7 +198,6 @@ BookmarkBarLayout::BookmarkBarLayout()
     : visible_elements(0),
       apps_button_offset(0),
       managed_bookmarks_button_offset(0),
-      supervised_bookmarks_button_offset(0),
       off_the_side_button_offset(0),
       other_bookmarks_button_offset(0),
       no_item_textfield_offset(0),
@@ -214,7 +213,6 @@ BookmarkBarLayout& BookmarkBarLayout::operator=(BookmarkBarLayout&& other) =
 bool operator==(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
   return std::tie(lhs.visible_elements, lhs.apps_button_offset,
                   lhs.managed_bookmarks_button_offset,
-                  lhs.supervised_bookmarks_button_offset,
                   lhs.off_the_side_button_offset,
                   lhs.other_bookmarks_button_offset,
                   lhs.no_item_textfield_offset, lhs.no_item_textfield_width,
@@ -224,7 +222,6 @@ bool operator==(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
          std::tie(
              rhs.visible_elements, rhs.apps_button_offset,
              rhs.managed_bookmarks_button_offset,
-             rhs.supervised_bookmarks_button_offset,
              rhs.off_the_side_button_offset, rhs.other_bookmarks_button_offset,
              rhs.no_item_textfield_offset, rhs.no_item_textfield_width,
              rhs.import_bookmarks_button_offset,
@@ -281,7 +278,7 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
                                                  profile:browser_->profile()]);
     didCreateExtraButtons_ = NO;
 
-    ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     folderImage_.reset(
         rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_FOLDER).CopyNSImage());
     folderImageWhite_.reset(
@@ -354,9 +351,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
     // parent is the boomark bar, find the corresponding button.
     if ([managedBookmarksButton_ bookmarkNode] == node)
       return managedBookmarksButton_;
-
-    if ([supervisedBookmarksButton_ bookmarkNode] == node)
-      return supervisedBookmarksButton_;
 
     if ([otherBookmarksButton_ bookmarkNode] == node)
       return otherBookmarksButton_;
@@ -442,8 +436,8 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
   [buttons addObjectsFromArray:unusedButtonPool_];
   if (didCreateExtraButtons_) {
     [buttons addObjectsFromArray:@[
-      appsPageShortcutButton_, managedBookmarksButton_,
-      supervisedBookmarksButton_, otherBookmarksButton_, offTheSideButton_
+      appsPageShortcutButton_, managedBookmarksButton_, otherBookmarksButton_,
+      offTheSideButton_
     ]];
   }
 
@@ -587,7 +581,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
     // buttons_ array.
     [appsPageShortcutButton_ setNeedsDisplay:YES];
     [managedBookmarksButton_ setNeedsDisplay:YES];
-    [supervisedBookmarksButton_ setNeedsDisplay:YES];
     [otherBookmarksButton_ setNeedsDisplay:YES];
   }
 }
@@ -664,15 +657,9 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
 
   if (forADarkTheme) {
     if (node == managedBookmarkService_->managed_node()) {
-      ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+      ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       return rb.GetNativeImageNamed(
           IDR_BOOKMARK_BAR_FOLDER_MANAGED_WHITE).ToNSImage();
-    }
-
-    if (node == managedBookmarkService_->supervised_node()) {
-      ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-      return rb.GetNativeImageNamed(
-          IDR_BOOKMARK_BAR_FOLDER_SUPERVISED_WHITE).ToNSImage();
     }
 
     if (node->is_folder())
@@ -680,16 +667,9 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
   } else {
     if (node == managedBookmarkService_->managed_node()) {
       // Most users never see this node, so the image is only loaded if needed.
-      ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+      ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       return rb.GetNativeImageNamed(
           IDR_BOOKMARK_BAR_FOLDER_MANAGED).ToNSImage();
-    }
-
-    if (node == managedBookmarkService_->supervised_node()) {
-      // Most users never see this node, so the image is only loaded if needed.
-      ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-      return rb.GetNativeImageNamed(
-          IDR_BOOKMARK_BAR_FOLDER_SUPERVISED).ToNSImage();
     }
 
     if (node->is_folder())
@@ -730,49 +710,33 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
   [sender highlight:YES];
 }
 
-- (void)setButtonFlashStateOff:(id)sender {
+- (void)setButtonFlashStateOffAndCleanUp:(id)sender {
   [sender highlight:NO];
-}
-
-- (void)cleanupAfterMenuFlashThread:(id)sender {
   [self closeFolderAndStopTrackingMenus];
 
-  // Items retained by doMenuFlashOnSeparateThread below.
+  // Release the items retained by doMenuFlashOnSeparateThread.
   [sender release];
   [self release];
 }
 
-// End runMenuFlashThread helper methods.
-
 // This call is invoked only by doMenuFlashOnSeparateThread below.
 // It makes the selected BookmarkButton (which is masquerading as a menu item)
-// flash a few times to give confirmation feedback, then it closes the menu.
+// flash once to give confirmation feedback, then it closes the menu.
 // It spends all its time sleeping or scheduling UI work on the main thread.
 - (void)runMenuFlashThread:(id)sender {
 
   // Check this is not running on the main thread, as it sleeps.
   DCHECK(![NSThread isMainThread]);
 
-  // Duration of flash phases and number of flashes designed to evoke a
-  // slightly retro "more mac-like than the Mac" feel.
-  // Current Cocoa UI has a barely perceptible flash,probably because Apple
-  // doesn't fire the action til after the animation and so there's a hurry.
-  // As this code is fully asynchronous, it can take its time.
-  const float kBBOnFlashTime = 0.08;
-  const float kBBOffFlashTime = 0.08;
-  const int kBookmarkButtonMenuFlashes = 3;
+  // Duration of flash when the item is clicked on.
+  const float kBBFlashTime = 0.08;
 
-  for (int count = 0 ; count < kBookmarkButtonMenuFlashes ; count++) {
-    [self performSelectorOnMainThread:@selector(setButtonFlashStateOn:)
-                           withObject:sender
-                        waitUntilDone:NO];
-    [NSThread sleepForTimeInterval:kBBOnFlashTime];
-    [self performSelectorOnMainThread:@selector(setButtonFlashStateOff:)
-                           withObject:sender
-                        waitUntilDone:NO];
-    [NSThread sleepForTimeInterval:kBBOffFlashTime];
-  }
-  [self performSelectorOnMainThread:@selector(cleanupAfterMenuFlashThread:)
+  [self performSelectorOnMainThread:@selector(setButtonFlashStateOn:)
+                         withObject:sender
+                      waitUntilDone:NO];
+  [NSThread sleepForTimeInterval:kBBFlashTime];
+
+  [self performSelectorOnMainThread:@selector(setButtonFlashStateOffAndCleanUp:)
                          withObject:sender
                       waitUntilDone:NO];
 }
@@ -1175,27 +1139,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
 
 }
 
-// Creates the button for "Supervised Bookmarks", but does not position it.
-- (void)createSupervisedBookmarksButton {
-  if (supervisedBookmarksButton_.get()) {
-    return;
-  }
-
-  NSCell* cell =
-      [self cellForBookmarkNode:managedBookmarkService_->supervised_node()];
-  supervisedBookmarksButton_.reset(
-      [self createCustomBookmarkButtonForCell:cell]);
-  [supervisedBookmarksButton_
-      setAction:@selector(openBookmarkFolderFromButton:)];
-  view_id_util::SetID(supervisedBookmarksButton_.get(),
-                      VIEW_ID_SUPERVISED_BOOKMARKS);
-  NSRect frame = NSMakeRect(0, bookmarks::kBookmarkVerticalPadding,
-                            [self widthForBookmarkButtonCell:cell],
-                            kBookmarkButtonHeightMinusPadding);
-  [supervisedBookmarksButton_ setFrame:frame];
-  [buttonView_ addSubview:supervisedBookmarksButton_.get()];
-}
-
 // Creates the button for "Other Bookmarks", but does not position it.
 - (void)createOtherBookmarksButton {
   // Can't create this until the model is loaded, but only need to
@@ -1221,7 +1164,7 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
     return;
   }
 
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   NSString* text = l10n_util::GetNSString(IDS_BOOKMARK_BAR_APPS_SHORTCUT_NAME);
   NSImage* image = rb.GetNativeImageNamed(
       IDR_BOOKMARK_BAR_APPS_SHORTCUT).ToNSImage();
@@ -1278,7 +1221,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
 
 - (void)createExtraButtons {
   DCHECK(!didCreateExtraButtons_);
-  [self createSupervisedBookmarksButton];
   [self createManagedBookmarksButton];
   [self createOtherBookmarksButton];
   [self createAppsPageShortcutButton];
@@ -1448,10 +1390,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
   return managedBookmarksButton_.get();
 }
 
-- (BookmarkButton*)supervisedBookmarksButton {
-  return supervisedBookmarksButton_.get();
-}
-
 - (BookmarkBarFolderController*)folderController {
   return folderController_;
 }
@@ -1518,7 +1456,6 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
     [cell setTextColor:color];
   }
   [[managedBookmarksButton_ cell] setTextColor:color];
-  [[supervisedBookmarksButton_ cell] setTextColor:color];
   [[otherBookmarksButton_ cell] setTextColor:color];
   [[appsPageShortcutButton_ cell] setTextColor:color];
 }
@@ -1831,7 +1768,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   layout.visible_elements = bookmarks::kVisibleElementsMaskNone;
   layout.max_x = maxX;
 
-  // Lay out "extra" buttons (apps, managed, supervised, "Other").
+  // Lay out "extra" buttons (apps, managed, "Other").
   if (chrome::ShouldShowAppsShortcutInBookmarkBar(browser_->profile())) {
     layout.visible_elements |= bookmarks::kVisibleElementsMaskAppsButton;
     layout.apps_button_offset = xOffset;
@@ -1843,13 +1780,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
         bookmarks::kVisibleElementsMaskManagedBookmarksButton;
     layout.managed_bookmarks_button_offset = xOffset;
     xOffset += NSWidth([managedBookmarksButton_ frame]) +
-               bookmarks::kBookmarkHorizontalPadding;
-  }
-  if (!managedBookmarkService_->supervised_node()->empty()) {
-    layout.visible_elements |=
-        bookmarks::kVisibleElementsMaskSupervisedBookmarksButton;
-    layout.supervised_bookmarks_button_offset = xOffset;
-    xOffset += NSWidth([supervisedBookmarksButton_ frame]) +
                bookmarks::kBookmarkHorizontalPadding;
   }
   if (!bookmarkModel_->other_node()->empty()) {
@@ -1935,12 +1865,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
             toButton:managedBookmarksButton_
             animated:NO];
   [managedBookmarksButton_ setHidden:!layout.IsManagedBookmarksButtonVisible()];
-
-  [self applyXOffset:layout.supervised_bookmarks_button_offset
-            toButton:supervisedBookmarksButton_
-            animated:NO];
-  [supervisedBookmarksButton_
-      setHidden:!layout.IsSupervisedBookmarksButtonVisible()];
 
   [self applyXOffset:layout.other_bookmarks_button_offset
             toButton:otherBookmarksButton_
@@ -2500,10 +2424,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   int numButtons = layout_.VisibleButtonCount();
 
   CGFloat leadingOffset;
-  if (layout_.IsSupervisedBookmarksButtonVisible()) {
-    leadingOffset =
-        layout_.supervised_bookmarks_button_offset + halfHorizontalPadding;
-  } else if (layout_.IsManagedBookmarksButtonVisible()) {
+  if (layout_.IsManagedBookmarksButtonVisible()) {
     leadingOffset =
         layout_.managed_bookmarks_button_offset + halfHorizontalPadding;
   } else if (layout_.IsAppsButtonVisible()) {
@@ -2662,10 +2583,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   if ((size_t)buttonIndex < layout_.VisibleButtonCount()) {
     // The button being removed is showing in the bar.
     BookmarkButton* oldButton = buttons_[buttonIndex];
-    if (oldButton == [folderController_ parentButton]) {
-      // If we are deleting a button whose folder is currently open, close it!
-      [self closeAllBookmarkFolders];
-    }
     if (animate && innerContentAnimationsEnabled_ && [self isVisible] &&
         [[self browserWindow] isMainWindow]) {
       NSPoint poofPoint = [oldButton screenLocationForRemoveAnimation];

@@ -43,13 +43,13 @@ std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
   attribs.fail_if_major_perf_caveat = false;
   attribs.bind_generates_resource = false;
 
-  std::unique_ptr<gpu::GLInProcessContext> context =
-      base::WrapUnique(gpu::GLInProcessContext::Create(
-          nullptr, nullptr, is_offscreen, gpu::kNullSurfaceHandle,
-          shared_context, attribs, gpu::SharedMemoryLimits(),
-          gpu_memory_buffer_manager, image_factory, std::move(task_runner)));
+  auto context = gpu::GLInProcessContext::CreateWithoutInit();
+  auto result = context->Initialize(
+      nullptr, nullptr, is_offscreen, gpu::kNullSurfaceHandle, shared_context,
+      attribs, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager,
+      image_factory, std::move(task_runner));
 
-  DCHECK(context);
+  DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   return context;
 }
 
@@ -66,13 +66,25 @@ TestInProcessContextProvider::TestInProcessContextProvider(
       base::ThreadTaskRunnerHandle::Get());
   cache_controller_.reset(new viz::ContextCacheController(
       context_->GetImplementation(), base::ThreadTaskRunnerHandle::Get()));
+
+  capabilities_.texture_rectangle = true;
+  capabilities_.sync_query = true;
+  capabilities_.texture_norm16 = true;
+  switch (viz::PlatformColor::Format()) {
+    case viz::PlatformColor::SOURCE_FORMAT_RGBA8:
+      capabilities_.texture_format_bgra8888 = false;
+      break;
+    case viz::PlatformColor::SOURCE_FORMAT_BGRA8:
+      capabilities_.texture_format_bgra8888 = true;
+      break;
+  }
 }
 
 TestInProcessContextProvider::~TestInProcessContextProvider() {
 }
 
-bool TestInProcessContextProvider::BindToCurrentThread() {
-  return true;
+gpu::ContextResult TestInProcessContextProvider::BindToCurrentThread() {
+  return gpu::ContextResult::kSuccess;
 }
 
 gpu::gles2::GLES2Interface* TestInProcessContextProvider::ContextGL() {
@@ -106,22 +118,14 @@ base::Lock* TestInProcessContextProvider::GetLock() {
   return &context_lock_;
 }
 
-gpu::Capabilities TestInProcessContextProvider::ContextCapabilities() {
-  gpu::Capabilities capabilities;
-  capabilities.texture_rectangle = true;
-  capabilities.sync_query = true;
-  switch (viz::PlatformColor::Format()) {
-    case viz::PlatformColor::SOURCE_FORMAT_RGBA8:
-      capabilities.texture_format_bgra8888 = false;
-      break;
-    case viz::PlatformColor::SOURCE_FORMAT_BGRA8:
-      capabilities.texture_format_bgra8888 = true;
-      break;
-  }
-  return capabilities;
+const gpu::Capabilities& TestInProcessContextProvider::ContextCapabilities()
+    const {
+  return capabilities_;
 }
 
-void TestInProcessContextProvider::SetLostContextCallback(
-    const LostContextCallback& lost_context_callback) {}
+const gpu::GpuFeatureInfo& TestInProcessContextProvider::GetGpuFeatureInfo()
+    const {
+  return gpu_feature_info_;
+}
 
 }  // namespace cc

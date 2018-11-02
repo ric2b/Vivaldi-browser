@@ -8,10 +8,10 @@
 #include <stdint.h>
 
 #include <memory>
-#include <queue>
 #include <set>
-#include <stack>
 
+#include "base/containers/queue.h"
+#include "base/containers/stack.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -183,7 +183,7 @@ class CONTENT_EXPORT IndexedDBTransaction {
     void clear();
 
    private:
-    std::queue<Operation> queue_;
+    base::queue<Operation> queue_;
 
     DISALLOW_COPY_AND_ASSIGN(TaskQueue);
   };
@@ -198,7 +198,7 @@ class CONTENT_EXPORT IndexedDBTransaction {
     void clear();
 
    private:
-    std::stack<AbortOperation> stack_;
+    base::stack<AbortOperation> stack_;
 
     DISALLOW_COPY_AND_ASSIGN(TaskStack);
   };

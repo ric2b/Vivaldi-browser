@@ -113,12 +113,14 @@ blink::WebPluginContainer::TouchEventRequestType ParseTouchEventRequestType(
 }  // namespace
 
 TestPlugin::TestPlugin(const blink::WebPluginParams& params,
-                       WebTestDelegate* delegate)
+                       WebTestDelegate* delegate,
+                       blink::WebLocalFrame* frame)
     : delegate_(delegate),
       container_(nullptr),
+      web_local_frame_(frame),
       gl_(nullptr),
       color_texture_(0),
-      mailbox_changed_(false),
+      content_changed_(false),
       framebuffer_(0),
       touch_event_request_(
           blink::WebPluginContainer::kTouchEventRequestTypeNone),
@@ -178,7 +180,7 @@ bool TestPlugin::Initialize(blink::WebPluginContainer* container) {
   context_provider_ =
       blink::Platform::Current()->CreateOffscreenGraphicsContext3DProvider(
           attrs, url, nullptr, &gl_info);
-  if (!context_provider_->BindToCurrentThread())
+  if (context_provider_ && !context_provider_->BindToCurrentThread())
     context_provider_ = nullptr;
   gl_ = context_provider_ ? context_provider_->ContextGL() : nullptr;
 
@@ -203,9 +205,9 @@ void TestPlugin::Destroy() {
   if (layer_.get())
     layer_->ClearTexture();
   if (container_)
-    container_->SetWebLayer(0);
+    container_->SetWebLayer(nullptr);
   web_layer_.reset();
-  layer_ = NULL;
+  layer_ = nullptr;
   DestroyScene();
 
   gl_ = nullptr;
@@ -241,7 +243,9 @@ void TestPlugin::UpdateGeometry(
   rect_ = clip_rect;
 
   if (rect_.IsEmpty()) {
-    texture_mailbox_ = viz::TextureMailbox();
+    mailbox_ = gpu::Mailbox();
+    sync_token_ = gpu::SyncToken();
+    shared_bitmap_ = nullptr;
   } else if (gl_) {
     gl_->Viewport(0, 0, rect_.width, rect_.height);
 
@@ -251,37 +255,30 @@ void TestPlugin::UpdateGeometry(
     gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     gl_->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rect_.width, rect_.height, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, 0);
+                    GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     gl_->BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
     gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                               GL_TEXTURE_2D, color_texture_, 0);
 
     DrawSceneGL();
 
-    gpu::Mailbox mailbox;
-    gl_->GenMailboxCHROMIUM(mailbox.name);
-    gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+    gl_->GenMailboxCHROMIUM(mailbox_.name);
+    gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox_.name);
     const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
     gl_->Flush();
 
-    gpu::SyncToken sync_token;
-    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
-    texture_mailbox_ = viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D);
+    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+
+    shared_bitmap_ = nullptr;
   } else {
-    std::unique_ptr<viz::SharedBitmap> bitmap =
-        delegate_->GetSharedBitmapManager()->AllocateSharedBitmap(
-            gfx::Rect(rect_).size());
-    if (!bitmap) {
-      texture_mailbox_ = viz::TextureMailbox();
-    } else {
-      DrawSceneSoftware(bitmap->pixels());
-      texture_mailbox_ = viz::TextureMailbox(
-          bitmap.get(), gfx::Size(rect_.width, rect_.height));
-      shared_bitmap_ = std::move(bitmap);
-    }
+    mailbox_ = gpu::Mailbox();
+    sync_token_ = gpu::SyncToken();
+    shared_bitmap_ = delegate_->GetSharedBitmapManager()->AllocateSharedBitmap(
+        gfx::Rect(rect_).size());
+    DrawSceneSoftware(shared_bitmap_->pixels());
   }
 
-  mailbox_changed_ = true;
+  content_changed_ = true;
   layer_->SetNeedsDisplay();
 }
 
@@ -296,20 +293,24 @@ static void ReleaseSharedMemory(std::unique_ptr<viz::SharedBitmap> bitmap,
                                 const gpu::SyncToken& sync_token,
                                 bool lost) {}
 
-bool TestPlugin::PrepareTextureMailbox(
-    viz::TextureMailbox* mailbox,
+bool TestPlugin::PrepareTransferableResource(
+    viz::TransferableResource* resource,
     std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
-  if (!mailbox_changed_)
+  if (!content_changed_)
     return false;
-  *mailbox = texture_mailbox_;
-  if (texture_mailbox_.IsTexture()) {
+  if (!mailbox_.IsZero()) {
+    *resource = viz::TransferableResource::MakeGL(mailbox_, GL_LINEAR,
+                                                  GL_TEXTURE_2D, sync_token_);
     *release_callback =
         viz::SingleReleaseCallback::Create(base::Bind(&IgnoreReleaseCallback));
-  } else if (texture_mailbox_.IsSharedMemory()) {
+  } else if (shared_bitmap_) {
+    *resource = viz::TransferableResource::MakeSoftware(
+        shared_bitmap_->id(), shared_bitmap_->sequence_number(),
+        gfx::Size(rect_.width, rect_.height));
     *release_callback = viz::SingleReleaseCallback::Create(
         base::Bind(&ReleaseSharedMemory, base::Passed(&shared_bitmap_)));
   }
-  mailbox_changed_ = false;
+  content_changed_ = false;
   return true;
 }
 
@@ -468,7 +469,7 @@ bool TestPlugin::InitPrimitive() {
   const float vertices[] = {0.0f, 0.8f, 0.0f,  -0.8f, -0.8f,
                             0.0f, 0.8f, -0.8f, 0.0f};
   gl_->BindBuffer(GL_ARRAY_BUFFER, scene_.vbo);
-  gl_->BufferData(GL_ARRAY_BUFFER, sizeof(vertices), 0, GL_STATIC_DRAW);
+  gl_->BufferData(GL_ARRAY_BUFFER, sizeof(vertices), nullptr, GL_STATIC_DRAW);
   gl_->BufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
   return true;
 }
@@ -547,12 +548,16 @@ blink::WebInputEventResult TestPlugin::HandleInputEvent(
                           "\n");
   if (print_event_details_)
     PrintEventDetails(delegate_, event);
-  if (print_user_gesture_status_)
-    delegate_->PrintMessage(
-        std::string("* ") +
-        (blink::WebUserGestureIndicator::IsProcessingUserGesture() ? ""
-                                                                   : "not ") +
-        "handling user gesture\n");
+
+  if (print_user_gesture_status_) {
+    bool has_user_gesture =
+        blink::WebUserGestureIndicator::IsProcessingUserGesture(
+            web_local_frame_);
+    delegate_->PrintMessage(std::string("* ") +
+                            (has_user_gesture ? "" : "not ") +
+                            "handling user gesture\n");
+  }
+
   if (is_persistent_)
     delegate_->PrintMessage(std::string("TestPlugin: isPersistent\n"));
   return blink::WebInputEventResult::kNotHandled;
@@ -562,9 +567,9 @@ bool TestPlugin::HandleDragStatusUpdate(
     blink::WebDragStatus drag_status,
     const blink::WebDragData& data,
     blink::WebDragOperationsMask mask,
-    const blink::WebPoint& position,
-    const blink::WebPoint& screen_position) {
-  const char* drag_status_name = 0;
+    const blink::WebFloatPoint& position,
+    const blink::WebFloatPoint& screen_position) {
+  const char* drag_status_name = nullptr;
   switch (drag_status) {
     case blink::kWebDragStatusEnter:
       drag_status_name = "DragEnter";
@@ -587,8 +592,9 @@ bool TestPlugin::HandleDragStatusUpdate(
 }
 
 TestPlugin* TestPlugin::Create(const blink::WebPluginParams& params,
-                               WebTestDelegate* delegate) {
-  return new TestPlugin(params, delegate);
+                               WebTestDelegate* delegate,
+                               blink::WebLocalFrame* frame) {
+  return new TestPlugin(params, delegate, frame);
 }
 
 const blink::WebString& TestPlugin::MimeType() {

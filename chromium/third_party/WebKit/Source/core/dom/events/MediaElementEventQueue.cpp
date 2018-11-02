@@ -25,28 +25,30 @@
 
 #include "core/dom/events/MediaElementEventQueue.h"
 
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
-MediaElementEventQueue* MediaElementEventQueue::Create(EventTarget* owner) {
-  return new MediaElementEventQueue(owner);
+MediaElementEventQueue* MediaElementEventQueue::Create(
+    EventTarget* owner,
+    ExecutionContext* context) {
+  return new MediaElementEventQueue(owner, context);
 }
 
-MediaElementEventQueue::MediaElementEventQueue(EventTarget* owner)
+MediaElementEventQueue::MediaElementEventQueue(EventTarget* owner,
+                                               ExecutionContext* context)
     : owner_(owner),
-      timer_(TaskRunnerHelper::Get(TaskType::kMediaElementEvent,
-                                   owner->GetExecutionContext()),
+      timer_(context->GetTaskRunner(TaskType::kMediaElementEvent),
              this,
              &MediaElementEventQueue::TimerFired),
       is_closed_(false) {}
 
 MediaElementEventQueue::~MediaElementEventQueue() {}
 
-DEFINE_TRACE(MediaElementEventQueue) {
+void MediaElementEventQueue::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_);
   visitor->Trace(pending_events_);
   EventQueue::Trace(visitor);
@@ -68,7 +70,7 @@ bool MediaElementEventQueue::EnqueueEvent(const WebTraceLocation& from_here,
   pending_events_.push_back(event);
 
   if (!timer_.IsActive())
-    timer_.StartOneShot(0, from_here);
+    timer_.StartOneShot(TimeDelta(), from_here);
 
   return true;
 }
@@ -79,7 +81,7 @@ bool MediaElementEventQueue::CancelEvent(Event* event) {
   if (found) {
     EventTarget* target = event->target() ? event->target() : owner_.Get();
     probe::AsyncTaskCanceled(target->GetExecutionContext(), event);
-    pending_events_.erase(pending_events_.Find(event));
+    pending_events_.EraseAt(pending_events_.Find(event));
     TRACE_EVENT_ASYNC_END2("event", "MediaElementEventQueue:enqueueEvent",
                            event, "type", event->type().Ascii(), "status",
                            "cancelled");

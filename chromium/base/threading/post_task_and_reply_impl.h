@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file contains the implementation shared by
-// TaskRunner::PostTaskAndReply and WorkerPool::PostTaskAndReply.
+// This file contains the implementation for TaskRunner::PostTaskAndReply.
 
 #ifndef BASE_THREADING_POST_TASK_AND_REPLY_IMPL_H_
 #define BASE_THREADING_POST_TASK_AND_REPLY_IMPL_H_
@@ -19,7 +18,9 @@ namespace internal {
 // custom execution context.
 //
 // If you're looking for a concrete implementation of PostTaskAndReply, you
-// probably want base::TaskRunner, or you may want base::WorkerPool.
+// probably want base::TaskRunner.
+//
+// TODO(fdoray): Move this to the anonymous namespace of base/task_runner.cc.
 class BASE_EXPORT PostTaskAndReplyImpl {
  public:
   virtual ~PostTaskAndReplyImpl() = default;
@@ -28,13 +29,12 @@ class BASE_EXPORT PostTaskAndReplyImpl {
   // sequence or thread that called this. Can only be called when
   // SequencedTaskRunnerHandle::IsSet(). Both |task| and |reply| are guaranteed
   // to be deleted on the sequence or thread that called this.
-  bool PostTaskAndReply(const tracked_objects::Location& from_here,
+  bool PostTaskAndReply(const Location& from_here,
                         OnceClosure task,
                         OnceClosure reply);
 
  private:
-  virtual bool PostTask(const tracked_objects::Location& from_here,
-                        OnceClosure task) = 0;
+  virtual bool PostTask(const Location& from_here, OnceClosure task) = 0;
 };
 
 }  // namespace internal

@@ -6,8 +6,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper_mock.h"
@@ -63,8 +63,8 @@ class EnrollmentScreenUnitTest : public testing::Test {
   policy::EnrollmentConfig enrollment_config_;
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   // Replace main thread's task runner with a mock for duration of test.
-  base::MessageLoop loop_;
   base::ScopedMockTimeMessageLoopTaskRunner runner_;
 
   // Objects required by the EnrollmentScreen that can be re-used.
@@ -119,7 +119,8 @@ class ZeroTouchEnrollmentScreenUnitTest : public EnrollmentScreenUnitTest {
   }
 
   void SetUpEnrollmentScreen() override {
-    enrollment_config_.mode = policy::EnrollmentConfig::MODE_ATTESTATION_FORCED;
+    enrollment_config_.mode =
+        policy::EnrollmentConfig::MODE_ATTESTATION_LOCAL_FORCED;
     enrollment_config_.auth_mechanism =
         policy::EnrollmentConfig::AUTH_MECHANISM_ATTESTATION;
     EnrollmentScreenUnitTest::SetUpEnrollmentScreen();

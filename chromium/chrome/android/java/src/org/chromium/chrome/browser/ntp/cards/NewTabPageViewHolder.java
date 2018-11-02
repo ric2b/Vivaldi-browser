@@ -9,18 +9,14 @@ import android.support.v7.widget.RecyclerView;
 import android.view.View;
 
 import org.chromium.base.Callback;
+import org.chromium.chrome.browser.metrics.ImpressionTracker;
 
 /**
  * Holds metadata about an item we want to display on the NTP. An item can be anything that will be
  * displayed on the NTP {@link RecyclerView}.
  */
 public class NewTabPageViewHolder extends RecyclerView.ViewHolder {
-    /**
-     * A single instance of {@link UpdateLayoutParamsCallback} that can be reused as it has no
-     * state.
-     */
-    public static final UpdateLayoutParamsCallback UPDATE_LAYOUT_PARAMS_CALLBACK =
-            new UpdateLayoutParamsCallback();
+    private final ImpressionTracker mImpressionTracker;
 
     /**
      * Constructs a {@link NewTabPageViewHolder} used to display an part of the NTP (e.g., header,
@@ -30,6 +26,7 @@ public class NewTabPageViewHolder extends RecyclerView.ViewHolder {
      */
     public NewTabPageViewHolder(View itemView) {
         super(itemView);
+        mImpressionTracker = new ImpressionTracker(itemView);
     }
 
     /**
@@ -51,29 +48,25 @@ public class NewTabPageViewHolder extends RecyclerView.ViewHolder {
      * @see NewTabPageAdapter#onViewRecycled(NewTabPageViewHolder)
      */
     @CallSuper
-    public void recycle() {}
+    public void recycle() {
+        mImpressionTracker.setListener(null);
+    }
 
     protected RecyclerView.LayoutParams getParams() {
         return (RecyclerView.LayoutParams) itemView.getLayoutParams();
     }
 
-    /**
-     * A callback to perform a partial bind on a {@link NewTabPageViewHolder}.
-     * @see org.chromium.chrome.browser.ntp.cards.InnerNode#notifyItemChanged(int,
-     * PartialBindCallback)
-     *
-     * This empty class is used to strengthen type assertions, as those would be less useful with a
-     * generic class due to type erasure.
-     */
-    public abstract static class PartialBindCallback implements Callback<NewTabPageViewHolder> {}
+    protected void setImpressionListener(ImpressionTracker.Listener listener) {
+        mImpressionTracker.setListener(listener);
+    }
 
     /**
-     * Callback to update the layout params for the view holder.
+     * A callback to perform a partial bind on a {@link NewTabPageViewHolder}.
+     *
+     * This interface is used to strengthen type assertions, as those would be less useful with a
+     * generic class due to type erasure.
+     *
+     * @see InnerNode#notifyItemChanged(int, PartialBindCallback)
      */
-    public static class UpdateLayoutParamsCallback extends PartialBindCallback {
-        @Override
-        public void onResult(NewTabPageViewHolder holder) {
-            holder.updateLayoutParams();
-        }
-    }
+    public interface PartialBindCallback extends Callback<NewTabPageViewHolder> {}
 }

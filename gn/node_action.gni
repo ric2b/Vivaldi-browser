@@ -14,7 +14,7 @@ template("node_action") {
     command_cwd = cwd
   }
   command_outputs = outputs
-  command_base(target_name) {
+  system_command(target_name) {
     forward_variables_from(invoker, [ "testonly" ])
     if (defined(command_cwd)) {
       command_script = rebase_path(script, command_cwd)

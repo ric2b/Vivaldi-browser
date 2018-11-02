@@ -88,6 +88,9 @@ NSString* const kSigninPromoCloseButtonId = @"kSigninPromoCloseButtonId";
     _closeButton = [[UIButton alloc] init];
     _closeButton.translatesAutoresizingMaskIntoConstraints = NO;
     _closeButton.accessibilityIdentifier = kSigninPromoCloseButtonId;
+    [_closeButton addTarget:self
+                     action:@selector(onCloseButtonAction:)
+           forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_closeButton];
 
     // Adding style.
@@ -162,6 +165,10 @@ NSString* const kSigninPromoCloseButtonId = @"kSigninPromoCloseButtonId";
     [self activateColdMode];
   }
   return self;
+}
+
+- (void)prepareForReuse {
+  _delegate = nil;
 }
 
 - (void)setMode:(SigninPromoViewMode)mode {
@@ -239,6 +246,10 @@ NSString* const kSigninPromoCloseButtonId = @"kSigninPromoCloseButtonId";
 
 - (void)onSecondaryButtonAction:(id)unused {
   [_delegate signinPromoViewDidTapSigninWithOtherAccount:self];
+}
+
+- (void)onCloseButtonAction:(id)unused {
+  [_delegate signinPromoViewCloseButtonWasTapped:self];
 }
 
 #pragma mark - NSObject(Accessibility)

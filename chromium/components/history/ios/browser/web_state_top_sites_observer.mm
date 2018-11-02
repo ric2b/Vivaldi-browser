@@ -31,17 +31,23 @@ void WebStateTopSitesObserver::CreateForWebState(web::WebState* web_state,
 
 WebStateTopSitesObserver::WebStateTopSitesObserver(web::WebState* web_state,
                                                    TopSites* top_sites)
-    : web::WebStateObserver(web_state), top_sites_(top_sites) {
+    : top_sites_(top_sites) {
+  web_state->AddObserver(this);
 }
 
 WebStateTopSitesObserver::~WebStateTopSitesObserver() {
 }
 
 void WebStateTopSitesObserver::NavigationItemCommitted(
+    web::WebState* web_state,
     const web::LoadCommittedDetails& load_details) {
   DCHECK(load_details.item);
   if (top_sites_)
     top_sites_->OnNavigationCommitted(load_details.item->GetURL());
+}
+
+void WebStateTopSitesObserver::WebStateDestroyed(web::WebState* web_state) {
+  web_state->RemoveObserver(this);
 }
 
 }  // namespace history

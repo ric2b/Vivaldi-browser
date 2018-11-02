@@ -9,25 +9,26 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "ui/aura/window.h"
 #include "ui/base/models/menu_model.h"
 
 namespace ash {
 
-// A test class for preparing the chrome::MultiUserContextMenu.
+// A test class for preparing the MultiUserContextMenu.
 class MultiUserContextMenuChromeOSTest : public AshTestBase {
  public:
   MultiUserContextMenuChromeOSTest()
       : multi_user_window_manager_(nullptr),
         fake_user_manager_(new chromeos::FakeChromeUserManager),
-        user_manager_enabler_(fake_user_manager_) {}
+        user_manager_enabler_(base::WrapUnique(fake_user_manager_)) {}
 
   void SetUp() override;
   void TearDown() override;
@@ -49,7 +50,7 @@ class MultiUserContextMenuChromeOSTest : public AshTestBase {
   }
 
   aura::Window* window() { return window_; }
-  chrome::MultiUserWindowManagerChromeOS* multi_user_window_manager() {
+  MultiUserWindowManagerChromeOS* multi_user_window_manager() {
     return multi_user_window_manager_;
   }
 
@@ -58,10 +59,10 @@ class MultiUserContextMenuChromeOSTest : public AshTestBase {
   aura::Window* window_;
 
   // The instance of the MultiUserWindowManager.
-  chrome::MultiUserWindowManagerChromeOS* multi_user_window_manager_;
+  MultiUserWindowManagerChromeOS* multi_user_window_manager_;
   // Owned by |user_manager_enabler_|.
   chromeos::FakeChromeUserManager* fake_user_manager_ = nullptr;
-  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiUserContextMenuChromeOSTest);
 };
@@ -73,17 +74,16 @@ void MultiUserContextMenuChromeOSTest::SetUp() {
   window_->Show();
 
   multi_user_window_manager_ =
-      new chrome::MultiUserWindowManagerChromeOS(AccountId::FromUserEmail("A"));
+      new MultiUserWindowManagerChromeOS(AccountId::FromUserEmail("A"));
   multi_user_window_manager_->Init();
-  chrome::MultiUserWindowManager::SetInstanceForTest(multi_user_window_manager_,
-        chrome::MultiUserWindowManager::MULTI_PROFILE_MODE_SEPARATED);
+  MultiUserWindowManager::SetInstanceForTest(multi_user_window_manager_);
   EXPECT_TRUE(multi_user_window_manager_);
 }
 
 void MultiUserContextMenuChromeOSTest::TearDown() {
   delete window_;
 
-  chrome::MultiUserWindowManager::DeleteInstance();
+  MultiUserWindowManager::DeleteInstance();
   AshTestBase::TearDown();
 }
 

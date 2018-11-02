@@ -7,10 +7,11 @@
 
 [
     ActiveScriptWrappable,
-    DependentLifetime,
-    RuntimeEnabled=Sensor
+    SecureContext,
+    OriginTrialEnabled=Sensor
 ] interface Sensor : EventTarget {
     [MeasureAs=GenericSensorActivated] readonly attribute boolean activated;
+    readonly attribute boolean hasReading;
     [CallWith=ScriptState] readonly attribute DOMHighResTimeStamp? timestamp;
 
     [MeasureAs=GenericSensorStart] void start();

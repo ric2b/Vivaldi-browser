@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2013 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_WMF_BYTE_STREAM_H_
-#define CONTENT_COMMON_GPU_MEDIA_WMF_BYTE_STREAM_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_WIN_WMF_BYTE_STREAM_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_WIN_WMF_BYTE_STREAM_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "platform_media/gpu/decoders/win/read_stream_listener.h"
 
@@ -15,15 +18,16 @@
 
 #include <vector>
 
+#include <wrl/client.h>
+
 #include "base/threading/thread_checker.h"
 #include "base/win/iunknown_impl.h"
-#include "base/win/scoped_comptr.h"
 
 namespace media {
 class DataSource;
 }
 
-namespace content {
+namespace media {
 
 class ReadStream;
 
@@ -32,7 +36,7 @@ class WMFByteStream : public ReadStreamListener,
                       public base::win::IUnknownImpl,
                       public IMFAttributes {
  public:
-  explicit WMFByteStream(media::DataSource* data_source);
+  explicit WMFByteStream(DataSource* data_source);
   ~WMFByteStream() override;
 
   HRESULT Initialize(LPCWSTR mime_type);
@@ -129,11 +133,11 @@ class WMFByteStream : public ReadStreamListener,
 
   // We implement IMFAttributes by forwarding all calls to an instance of the
   // standard IMFAttributes class, which we store a reference to here.
-  base::win::ScopedComPtr<IMFAttributes> attributes_;
+  Microsoft::WRL::ComPtr<IMFAttributes> attributes_;
 
   base::ThreadChecker thread_checker_;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_WMF_BYTE_STREAM_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_WIN_WMF_BYTE_STREAM_H_

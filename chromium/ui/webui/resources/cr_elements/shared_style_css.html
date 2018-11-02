@@ -57,6 +57,15 @@
         display: block;
       }
 
+      /* Horizontal rule line. */
+      .hr {
+        border-top: var(--cr-separator-line);
+      }
+
+      iron-list.cr-separators > *:not([first]) {
+        border-top: var(--cr-separator-line);
+      }
+
       [scrollable] {
         border-color: transparent;
         border-style: solid;
@@ -86,6 +95,15 @@
       }
       [selectable] > * {
         @apply(--cr-actionable);
+      }
+
+      /** Styles for elements that implement the CrContainerShadowBehavior */
+      #cr-container-shadow {
+        @apply(--cr-container-shadow);
+      }
+
+      #cr-container-shadow.has-shadow {
+        opacity: var(--cr-container-shadow-max-opacity);
       }
     </style>
   </template>

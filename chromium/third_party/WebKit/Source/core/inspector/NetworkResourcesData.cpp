@@ -44,7 +44,7 @@ XHRReplayData* XHRReplayData::Create(ExecutionContext* execution_context,
                                      const AtomicString& method,
                                      const KURL& url,
                                      bool async,
-                                     RefPtr<EncodedFormData> form_data,
+                                     scoped_refptr<EncodedFormData> form_data,
                                      bool include_credentials) {
   return new XHRReplayData(execution_context, method, url, async,
                            std::move(form_data), include_credentials);
@@ -59,7 +59,7 @@ XHRReplayData::XHRReplayData(ExecutionContext* execution_context,
                              const AtomicString& method,
                              const KURL& url,
                              bool async,
-                             RefPtr<EncodedFormData> form_data,
+                             scoped_refptr<EncodedFormData> form_data,
                              bool include_credentials)
     : execution_context_(execution_context),
       method_(method),
@@ -68,7 +68,7 @@ XHRReplayData::XHRReplayData(ExecutionContext* execution_context,
       form_data_(std::move(form_data)),
       include_credentials_(include_credentials) {}
 
-DEFINE_TRACE(XHRReplayData) {
+void XHRReplayData::Trace(blink::Visitor* visitor) {
   visitor->Trace(execution_context_);
 }
 
@@ -90,7 +90,7 @@ NetworkResourcesData::ResourceData::ResourceData(
       pending_encoded_data_length_(0),
       cached_resource_(nullptr) {}
 
-DEFINE_TRACE(NetworkResourcesData::ResourceData) {
+void NetworkResourcesData::ResourceData::Trace(blink::Visitor* visitor) {
   visitor->Trace(network_resources_data_);
   visitor->Trace(xhr_replay_data_);
   visitor->template RegisterWeakMembers<
@@ -190,7 +190,7 @@ NetworkResourcesData::NetworkResourcesData(size_t total_buffer_size,
 
 NetworkResourcesData::~NetworkResourcesData() {}
 
-DEFINE_TRACE(NetworkResourcesData) {
+void NetworkResourcesData::Trace(blink::Visitor* visitor) {
   visitor->Trace(request_id_to_resource_data_map_);
 }
 
@@ -303,7 +303,7 @@ void NetworkResourcesData::MaybeAddResourceData(const String& request_id,
 
 void NetworkResourcesData::MaybeAddResourceData(
     const String& request_id,
-    RefPtr<const SharedBuffer> data) {
+    scoped_refptr<const SharedBuffer> data) {
   DCHECK(data);
   if (ResourceData* resource_data =
           PrepareToAddResourceData(request_id, data->size())) {
@@ -347,7 +347,7 @@ XHRReplayData* NetworkResourcesData::XhrReplayData(const String& request_id) {
 
   ResourceData* resource_data = ResourceDataForRequestId(request_id);
   if (!resource_data)
-    return 0;
+    return nullptr;
   return resource_data->XhrReplayData();
 }
 
@@ -434,7 +434,7 @@ void NetworkResourcesData::SetResourcesDataSizeLimits(
 NetworkResourcesData::ResourceData*
 NetworkResourcesData::ResourceDataForRequestId(const String& request_id) {
   if (request_id.IsNull())
-    return 0;
+    return nullptr;
   return request_id_to_resource_data_map_.at(request_id);
 }
 

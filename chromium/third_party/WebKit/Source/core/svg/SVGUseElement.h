@@ -33,7 +33,7 @@ namespace blink {
 
 class SVGUseElement final : public SVGGraphicsElement,
                             public SVGURIReference,
-                            public DocumentResourceClient {
+                            public ResourceClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SVGUseElement);
   USING_PRE_FINALIZER(SVGUseElement, Dispose);
@@ -59,7 +59,7 @@ class SVGUseElement final : public SVGGraphicsElement,
   void DispatchPendingEvent();
   void ToClipPath(Path&) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGUseElement(Document&);
@@ -68,9 +68,10 @@ class SVGUseElement final : public SVGGraphicsElement,
 
   FloatRect GetBBox() override;
 
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
 
   bool IsStructurallyExternal() const override;
 

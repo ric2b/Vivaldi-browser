@@ -18,4 +18,7 @@ interface IWebApkApi {
 
     // Cancel a notification.
     void cancelNotification(String platformTag, int platformID);
+
+    // Get if notification permission is enabled.
+    boolean notificationPermissionEnabled();
 }

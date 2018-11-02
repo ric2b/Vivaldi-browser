@@ -8,20 +8,13 @@ Make sure you have followed
 [android build instructions](android_build_instructions.md) already.
 
 ```shell
-build/android/gradle/generate_gradle.py
+build/android/gradle/generate_gradle.py --output-directory out/Debug [--canary]  # Use --canary for Android Studio 3.1 canary
 ```
 
 This creates a project at `out/Debug/gradle`. To create elsewhere:
 
 ```shell
-build/android/gradle/generate_gradle.py --output-directory out/My-Out-Dir --project-dir my-project
-```
-
-By default, common targets are generated. To add more targets to generate
-projects for:
-
-```shell
-build/android/gradle/generate_gradle.py --extra-target //chrome/android:chrome_public_apk
+build/android/gradle/generate_gradle.py --output-directory out/Debug --project-dir my-project
 ```
 
 For first-time Android Studio users:
@@ -36,6 +29,14 @@ To import the project:
 * Use "Import Project", and select the directory containing the generated
   project, by default `out/Debug/gradle`.
 
+If you're asked to use Studio's Android SDK:
+
+* No. (Always use project's own SDK)
+
+If you're asked to use Studio's Gradle wrapper:
+
+* Yes.
+
 You need to re-run `generate_gradle.py` whenever `BUILD.gn` files change.
 
 * After regenerating, Android Studio should prompt you to "Sync". If it
@@ -43,10 +44,6 @@ You need to re-run `generate_gradle.py` whenever `BUILD.gn` files change.
     * Button with two arrows on the right side of the top strip.
     * Help -&gt; Find Action -&gt; "Sync Project with Gradle Files"
     * After `gn clean` you may need to restart Android Studio.
-
-* You can try out Android Studio canary by adding `--canary` to your
-  `generate_gradle.py` call, but as it is canary, expect to have to make manual
-  adjustments when building/syncing.
 
 ## How It Works
 
@@ -83,15 +80,19 @@ includes `R.java`).
 
 ## Android Studio Tips
 
+* Using the Java debugger is documented at [android_debugging_instructions.md#android-studio](android_debugging_instructions.md#android-studio).
 * Configuration instructions can be found
   [here](http://tools.android.com/tech-docs/configuration). One suggestions:
     * Launch it with more RAM:
       `STUDIO_VM_OPTIONS=-Xmx2048m /opt/android-studio-stable/bin/studio-launcher.sh`
 * If you ever need to reset it: `rm -r ~/.AndroidStudio*/`
-* Import Android style settings:
+* Import Chromium-specific style and inspections settings:
     * Help -&gt; Find Action -&gt; "Code Style" (settings) -&gt; Java -&gt;
-      Manage -&gt; Import -&gt; select "Intellij IDEA code style XML" -&gt; OK
-        * Select `tools/android/android_studio/ChromiumStyle.xml`
+      Scheme -&gt; Import Scheme
+        * Select `tools/android/android_studio/ChromiumStyle.xml` -&gt; OK
+    * Help -&gt; Find Action -&gt; "Inspections" (settings) -&gt;
+      Profile -&gt; Import profile
+        * Select `tools/android/android_studio/ChromiumInspections.xml` -&gt; OK
 * Turn on automatic import:
     * Help -&gt; Find Action -&gt; "Auto Import"
         * Tick all the boxes under "Java" and change the dropdown to "All".
@@ -137,15 +138,16 @@ resources, native libraries, etc.
     * Add the line `org.gradle.daemon=true` to `~/.gradle/gradle.properties`,
       creating it if necessary.
 
-## Status (as of April 27th, 2017)
+## Status (as of Nov 1, 2017)
 
 ### What works
 
-* Android Studio v2.3.
-* Java editing and gradle compile.
+* Android Studio v3.0 and v3.1 canary with `--canary` flag.
+* Java editing and gradle compile (mostly).
 * Instrumentation tests included as androidTest.
 * Symlinks to existing .so files in jniLibs (doesn't generate them).
-* Editing resource xml files.
+* Editing resource xml files
+* Layout editor (somewhat :P).
 * Java debugging (see
 [here](/docs/android_debugging_instructions.md#Android-Studio)).
 * Import resolution and refactoring across all modules.
@@ -154,6 +156,5 @@ resources, native libraries, etc.
 ### What doesn't work (yet) ([crbug](https://bugs.chromium.org/p/chromium/issues/detail?id=620034))
 
 * Gradle being aware of assets.
-* Layout editor.
-* Add support for native code editing.
-* Make the "Make Project" button work correctly.
+* Native code editing.
+* Having the "Make Project" button work correctly.

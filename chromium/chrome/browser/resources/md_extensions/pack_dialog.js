@@ -6,32 +6,31 @@ cr.define('extensions', function() {
   'use strict';
 
   /** @interface */
-  function PackDialogDelegate() {}
-
-  PackDialogDelegate.prototype = {
+  class PackDialogDelegate {
     /**
      * Opens a file browser for the user to select the root directory.
      * @return {Promise<string>} A promise that is resolved with the path the
      *     user selected.
      */
-    choosePackRootDirectory: assertNotReached,
+    choosePackRootDirectory() {}
 
     /**
      * Opens a file browser for the user to select the private key file.
      * @return {Promise<string>} A promise that is resolved with the path the
      *     user selected.
      */
-    choosePrivateKeyPath: assertNotReached,
+    choosePrivateKeyPath() {}
 
     /**
      * Packs the extension into a .crx.
      * @param {string} rootPath
      * @param {string} keyPath
      * @param {number=} flag
-     * @param {function(chrome.developerPrivate.PackDirectoryResponse)=} callback
+     * @param {function(chrome.developerPrivate.PackDirectoryResponse)=}
+     *     callback
      */
-    packExtension: assertNotReached,
-  };
+    packExtension(rootPath, keyPath, flag, callback) {}
+  }
 
   const PackDialog = Polymer({
     is: 'extensions-pack-dialog',
@@ -90,25 +89,33 @@ cr.define('extensions', function() {
      * @private
      */
     onPackResponse_: function(response) {
-      if (response.status === chrome.developerPrivate.PackStatus.SUCCESS) {
-        this.$.dialog.close();
-      } else {
-        this.set('lastResponse_', response);
-      }
+      this.lastResponse_ = response;
     },
 
     /**
-     * The handler function when user chooses to 'Proceed Anyway' upon
-     * receiving a waring.
+     * In the case that the alert dialog was a success message, the entire
+     * pack-dialog should close. Otherwise, we detach the alert by setting
+     * lastResponse_ null. Additionally, if the user selected "proceed anyway"
+     * in the warning dialog, we pack the extension again with override flags.
+     * @param {!Event} e
      * @private
      */
-    onWarningConfirmed_: function() {
-      this.delegate.packExtension(
-          this.lastResponse_.item_path, this.lastResponse_.pem_path,
-          this.lastResponse_.override_flags, this.onPackResponse_.bind(this));
-    },
+    onAlertClose_: function(e) {
+      e.stopPropagation();
 
-    resetResponse_: function() {
+      if (this.lastResponse_.status ==
+          chrome.developerPrivate.PackStatus.SUCCESS) {
+        this.$.dialog.close();
+        return;
+      }
+
+      /* This is only possible for a warning dialog. */
+      if (this.$$('extensions-pack-dialog-alert').returnValue == 'success') {
+        this.delegate.packExtension(
+            this.lastResponse_.item_path, this.lastResponse_.pem_path,
+            this.lastResponse_.override_flags, this.onPackResponse_.bind(this));
+      }
+
       this.lastResponse_ = null;
     },
   });

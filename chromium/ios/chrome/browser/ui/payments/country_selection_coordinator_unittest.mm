@@ -10,7 +10,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
-class PaymentRequestCountrySelectionCoordinatorTest : public PlatformTest {};
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+using PaymentRequestCountrySelectionCoordinatorTest = PlatformTest;
 
 // Tests that invoking start and stop on the coordinator presents and dismisses
 // the payment request picker view controller, respectively.

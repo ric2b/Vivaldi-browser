@@ -30,10 +30,10 @@ EncryptionScheme GetEncryptionScheme(const AVStream* stream) {
 
 }  // namespace
 
-// Why FF_INPUT_BUFFER_PADDING_SIZE? FFmpeg assumes all input buffers are
+// Why AV_INPUT_BUFFER_PADDING_SIZE? FFmpeg assumes all input buffers are
 // padded. Check here to ensure FFmpeg only receives data padded to its
 // specifications.
-static_assert(DecoderBuffer::kPaddingSize >= FF_INPUT_BUFFER_PADDING_SIZE,
+static_assert(DecoderBuffer::kPaddingSize >= AV_INPUT_BUFFER_PADDING_SIZE,
               "DecoderBuffer padding size does not fit ffmpeg requirement");
 
 // Alignment requirement by FFmpeg for input and output buffers. This need to
@@ -189,6 +189,8 @@ static VideoCodec CodecIDToVideoCodec(AVCodecID codec_id) {
       return kCodecVP8;
     case AV_CODEC_ID_VP9:
       return kCodecVP9;
+    case AV_CODEC_ID_AV1:
+      return kCodecAV1;
     default:
       DVLOG(1) << "Unknown video CodecID: " << codec_id;
   }
@@ -211,6 +213,8 @@ AVCodecID VideoCodecToCodecID(VideoCodec video_codec) {
       return AV_CODEC_ID_VP8;
     case kCodecVP9:
       return AV_CODEC_ID_VP9;
+    case kCodecAV1:
+      return AV_CODEC_ID_AV1;
     default:
       DVLOG(1) << "Unknown VideoCodec: " << video_codec;
   }
@@ -433,11 +437,11 @@ void AudioDecoderConfigToAVCodecContext(const AudioDecoderConfig& config,
   } else {
     codec_context->extradata_size = config.extra_data().size();
     codec_context->extradata = reinterpret_cast<uint8_t*>(
-        av_malloc(config.extra_data().size() + FF_INPUT_BUFFER_PADDING_SIZE));
+        av_malloc(config.extra_data().size() + AV_INPUT_BUFFER_PADDING_SIZE));
     memcpy(codec_context->extradata, &config.extra_data()[0],
            config.extra_data().size());
     memset(codec_context->extradata + config.extra_data().size(), '\0',
-           FF_INPUT_BUFFER_PADDING_SIZE);
+           AV_INPUT_BUFFER_PADDING_SIZE);
   }
 }
 
@@ -448,15 +452,12 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   if (!codec_context)
     return false;
 
-  // AVStream.codec->coded_{width,height} access is deprecated in ffmpeg.
-  // Use just the width and height as hints of coded size.
-  gfx::Size coded_size(codec_context->width, codec_context->height);
-
   // TODO(vrk): This assumes decoded frame data starts at (0, 0), which is true
   // for now, but may not always be true forever. Fix this in the future.
   gfx::Rect visible_rect(codec_context->width, codec_context->height);
+  gfx::Size coded_size = visible_rect.size();
 
-  AVRational aspect_ratio = { 1, 1 };
+  AVRational aspect_ratio = {1, 1};
   if (stream->sample_aspect_ratio.num)
     aspect_ratio = stream->sample_aspect_ratio;
   else if (codec_context->sample_aspect_ratio.num)
@@ -464,47 +465,57 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
 
   VideoCodec codec = CodecIDToVideoCodec(codec_context->codec_id);
 
-  VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
-  if (codec == kCodecVP8)
-    profile = VP8PROFILE_ANY;
-  else if (codec == kCodecVP9)
-    // TODO(servolk): Find a way to obtain actual VP9 profile from FFmpeg.
-    // crbug.com/592074
-    profile = VP9PROFILE_PROFILE0;
-  else
-    profile = ProfileIDToVideoCodecProfile(codec_context->profile);
-
-  // Without the FFmpeg h264 decoder, AVFormat is unable to get the profile, so
-  // default to baseline and let the VDA fail later if it doesn't support the
-  // real profile. This is alright because if the FFmpeg h264 decoder isn't
-  // enabled, there is no fallback if the VDA fails.
-#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-  if (codec == kCodecH264)
-    profile = H264PROFILE_BASELINE;
-#endif
-
-  gfx::Size natural_size = GetNaturalSize(
-      visible_rect.size(), aspect_ratio.num, aspect_ratio.den);
+  gfx::Size natural_size =
+      GetNaturalSize(visible_rect.size(), aspect_ratio.num, aspect_ratio.den);
 
   VideoPixelFormat format =
       AVPixelFormatToVideoPixelFormat(codec_context->pix_fmt);
-  // The format and coded size may be unknown if FFmpeg is compiled without
-  // video decoders.
-#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-  if (format == PIXEL_FORMAT_UNKNOWN)
-    format = PIXEL_FORMAT_YV12;
-  if (coded_size == gfx::Size(0, 0))
-    coded_size = visible_rect.size();
-#endif
 
-  if (codec == kCodecVP9) {
-    // TODO(tomfinegan): libavcodec doesn't know about VP9.
-    format = PIXEL_FORMAT_YV12;
-    coded_size = visible_rect.size();
+  // Without the ffmpeg decoder configured, libavformat is unable to get the
+  // profile, format, or coded size. So choose sensible defaults and let
+  // decoders fail later if the configuration is actually unsupported.
+  //
+  // TODO(chcunningham): We need real profiles for all of the codecs below to
+  // actually handle capabilities requests correctly. http://crbug.com/784610
+  VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
+  switch (codec) {
+#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+    case kCodecH264:
+      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
+      format = PIXEL_FORMAT_YV12;
+      profile = H264PROFILE_BASELINE;
+      break;
+#endif
+    case kCodecVP8:
+#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
+      format = PIXEL_FORMAT_YV12;
+#endif
+      profile = VP8PROFILE_ANY;
+      break;
+    case kCodecVP9:
+      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
+      format = PIXEL_FORMAT_YV12;
+      profile = VP9PROFILE_PROFILE0;
+      break;
+    case kCodecAV1:
+      format = PIXEL_FORMAT_I420;
+      profile = AV1PROFILE_PROFILE0;
+      break;
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    case kCodecHEVC:
+      profile = HEVCPROFILE_MAIN;
+      break;
+#endif
+    case kCodecTheora:
+      profile = THEORAPROFILE_ANY;
+      break;
+    default:
+      profile = ProfileIDToVideoCodecProfile(codec_context->profile);
   }
 
   // Pad out |coded_size| for subsampled YUV formats.
-  if (format != PIXEL_FORMAT_YV24) {
+  if (format != PIXEL_FORMAT_YV24 && format != PIXEL_FORMAT_UNKNOWN) {
     coded_size.set_width((coded_size.width() + 1) / 2 * 2);
     if (format != PIXEL_FORMAT_YV16)
       coded_size.set_height((coded_size.height() + 1) / 2 * 2);
@@ -514,6 +525,30 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
       av_dict_get(stream->metadata, "alpha_mode", nullptr, 0);
   if (webm_alpha && !strcmp(webm_alpha->value, "1")) {
     format = PIXEL_FORMAT_YV12A;
+  }
+
+  VideoRotation video_rotation = VIDEO_ROTATION_0;
+  int rotation = 0;
+  AVDictionaryEntry* rotation_entry = NULL;
+  rotation_entry = av_dict_get(stream->metadata, "rotate", nullptr, 0);
+  if (rotation_entry && rotation_entry->value && rotation_entry->value[0])
+    base::StringToInt(rotation_entry->value, &rotation);
+
+  switch (rotation) {
+    case 0:
+      break;
+    case 90:
+      video_rotation = VIDEO_ROTATION_90;
+      break;
+    case 180:
+      video_rotation = VIDEO_ROTATION_180;
+      break;
+    case 270:
+      video_rotation = VIDEO_ROTATION_270;
+      break;
+    default:
+      DLOG(ERROR) << "Unsupported video rotation metadata: " << rotation;
+      break;
   }
 
   // Prefer the color space found by libavcodec if available.
@@ -530,19 +565,17 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   // http://crbug.com/517163
   if (codec_context->extradata != nullptr &&
       codec_context->extradata_size == 0) {
-    LOG(ERROR) << __func__ << " Non-Null extra data cannot have size of 0.";
+    DLOG(ERROR) << __func__ << " Non-Null extra data cannot have size of 0.";
     return false;
   }
-  CHECK_EQ(codec_context->extradata == nullptr,
-           codec_context->extradata_size == 0);
 
   std::vector<uint8_t> extra_data;
   if (codec_context->extradata_size > 0) {
     extra_data.assign(codec_context->extradata,
                       codec_context->extradata + codec_context->extradata_size);
   }
-  config->Initialize(codec, profile, format, color_space, coded_size,
-                     visible_rect, natural_size, extra_data,
+  config->Initialize(codec, profile, format, color_space, video_rotation,
+                     coded_size, visible_rect, natural_size, extra_data,
                      GetEncryptionScheme(stream));
 
   const AVCodecParameters* codec_parameters = stream->codecpar;
@@ -574,11 +607,11 @@ void VideoDecoderConfigToAVCodecContext(
   } else {
     codec_context->extradata_size = config.extra_data().size();
     codec_context->extradata = reinterpret_cast<uint8_t*>(
-        av_malloc(config.extra_data().size() + FF_INPUT_BUFFER_PADDING_SIZE));
+        av_malloc(config.extra_data().size() + AV_INPUT_BUFFER_PADDING_SIZE));
     memcpy(codec_context->extradata, &config.extra_data()[0],
            config.extra_data().size());
     memset(codec_context->extradata + config.extra_data().size(), '\0',
-           FF_INPUT_BUFFER_PADDING_SIZE);
+           AV_INPUT_BUFFER_PADDING_SIZE);
   }
 }
 
@@ -655,15 +688,19 @@ VideoPixelFormat AVPixelFormatToVideoPixelFormat(AVPixelFormat pixel_format) {
   // The YUVJ alternatives are FFmpeg's (deprecated, but still in use) way to
   // specify a pixel format and full range color combination.
   switch (pixel_format) {
-    case AV_PIX_FMT_YUV422P:
-    case AV_PIX_FMT_YUVJ422P:
-      return PIXEL_FORMAT_YV16;
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUVJ444P:
       return PIXEL_FORMAT_YV24;
+
+    // TODO(dalecurtis): These are incorrect; see http://crbug.com/784627. This
+    // should actually be PIXEL_FORMAT_I420 and PIXEL_FORMAT_I422.
     case AV_PIX_FMT_YUV420P:
     case AV_PIX_FMT_YUVJ420P:
       return PIXEL_FORMAT_YV12;
+    case AV_PIX_FMT_YUV422P:
+    case AV_PIX_FMT_YUVJ422P:
+      return PIXEL_FORMAT_YV16;
+
     case AV_PIX_FMT_YUVA420P:
       return PIXEL_FORMAT_YV12A;
 
@@ -696,10 +733,13 @@ VideoPixelFormat AVPixelFormatToVideoPixelFormat(AVPixelFormat pixel_format) {
 
 AVPixelFormat VideoPixelFormatToAVPixelFormat(VideoPixelFormat video_format) {
   switch (video_format) {
+    // TODO(dalecurtis): These are incorrect; see http://crbug.com/784627.
+    // FFmpeg actually has no YVU format...
     case PIXEL_FORMAT_YV16:
       return AV_PIX_FMT_YUV422P;
     case PIXEL_FORMAT_YV12:
       return AV_PIX_FMT_YUV420P;
+
     case PIXEL_FORMAT_YV12A:
       return AV_PIX_FMT_YUVA420P;
     case PIXEL_FORMAT_YV24:

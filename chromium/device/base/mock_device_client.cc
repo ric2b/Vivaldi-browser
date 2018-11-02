@@ -4,27 +4,16 @@
 
 #include "device/base/mock_device_client.h"
 
-#include "device/hid/mock_hid_service.h"
 #include "device/usb/mock_usb_service.h"
 
 namespace device {
 
-MockDeviceClient::MockDeviceClient() {}
+MockDeviceClient::MockDeviceClient() = default;
 
-MockDeviceClient::~MockDeviceClient() {}
-
-HidService* MockDeviceClient::GetHidService() {
-  return hid_service();
-}
+MockDeviceClient::~MockDeviceClient() = default;
 
 UsbService* MockDeviceClient::GetUsbService() {
   return usb_service();
-}
-
-MockHidService* MockDeviceClient::hid_service() {
-  if (!hid_service_)
-    hid_service_.reset(new MockHidService());
-  return hid_service_.get();
 }
 
 MockUsbService* MockDeviceClient::usb_service() {

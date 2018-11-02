@@ -80,6 +80,7 @@ class CORE_EXPORT CSSPrimitiveValue : public CSSValue {
     kInches,
     kPoints,
     kPicas,
+    kQuarterMillimeters,
     kViewportWidth,
     kViewportHeight,
     kViewportMin,
@@ -269,7 +270,7 @@ class CORE_EXPORT CSSPrimitiveValue : public CSSValue {
 
   bool Equals(const CSSPrimitiveValue&) const;
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
   static UnitType CanonicalUnitTypeForCategory(UnitCategory);
   static double ConversionToCanonicalUnitsScaleFactor(UnitType);

@@ -9,12 +9,14 @@
 #include <string>
 
 #include "base/macros.h"
-#include "content/public/common/associated_interface_registry.h"
+#include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
 
 namespace content {
 
-class AssociatedInterfaceRegistryImpl : public AssociatedInterfaceRegistry {
+class AssociatedInterfaceRegistryImpl
+    : public blink::AssociatedInterfaceRegistry {
  public:
   AssociatedInterfaceRegistryImpl();
   ~AssociatedInterfaceRegistryImpl() override;
@@ -27,8 +29,11 @@ class AssociatedInterfaceRegistryImpl : public AssociatedInterfaceRegistry {
   void AddInterface(const std::string& name, const Binder& binder) override;
   void RemoveInterface(const std::string& name) override;
 
+  base::WeakPtr<AssociatedInterfaceRegistryImpl> GetWeakPtr();
+
  private:
   std::map<std::string, Binder> interfaces_;
+  base::WeakPtrFactory<AssociatedInterfaceRegistryImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AssociatedInterfaceRegistryImpl);
 };

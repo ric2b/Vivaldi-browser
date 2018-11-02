@@ -7,10 +7,12 @@
 #include <stdint.h>
 #include <climits>
 
+#include "base/bind.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
+#include "cc/animation/animation_ticker.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
@@ -466,7 +468,7 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
     EXPECT_EQ(1, update_check_layer_->update_count());
 
     // clear update_check_layer_ so LayerTreeHost dies.
-    update_check_layer_ = NULL;
+    update_check_layer_ = nullptr;
   }
 
  private:
@@ -754,6 +756,8 @@ class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
         break;
       }
       default:
+        EXPECT_GE(scroll_layer_->scroll_offset().x(), 10);
+        EXPECT_GE(scroll_layer_->scroll_offset().y(), 20);
         if (scroll_layer_->scroll_offset().x() > 10 &&
             scroll_layer_->scroll_offset().y() > 20)
           EndTest();
@@ -850,17 +854,17 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
     AttachPlayersToTimeline();
   }
 
-  AnimationPlayer& ScrollOffsetPlayer(
+  AnimationTicker& ScrollOffsetTicker(
       const LayerTreeHostImpl& host_impl,
       scoped_refptr<FakePictureLayer> layer) const {
     scoped_refptr<ElementAnimations> element_animations =
         GetImplAnimationHost(&host_impl)
             ->GetElementAnimationsForElementId(layer->element_id());
     DCHECK(element_animations);
-    DCHECK(element_animations->players_list().might_have_observers());
-    AnimationPlayer* player = &*element_animations->players_list().begin();
-    DCHECK(player);
-    return *player;
+    DCHECK(element_animations->tickers_list().might_have_observers());
+    AnimationTicker* ticker = &*element_animations->tickers_list().begin();
+    DCHECK(ticker);
+    return *ticker;
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -887,7 +891,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
       GetImplTimelineAndPlayerByID(*host_impl);
       // This happens after the impl-only animation is added in
       // WillCommitCompleteOnThread.
-      Animation* animation = ScrollOffsetPlayer(*host_impl, scroll_layer_)
+      Animation* animation = ScrollOffsetTicker(*host_impl, scroll_layer_)
                                  .GetAnimation(TargetProperty::SCROLL_OFFSET);
       DCHECK(animation);
       ScrollOffsetAnimationCurve* curve =
@@ -911,7 +915,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() == 1) {
-      Animation* animation = ScrollOffsetPlayer(*host_impl, scroll_layer_)
+      Animation* animation = ScrollOffsetTicker(*host_impl, scroll_layer_)
                                  .GetAnimation(TargetProperty::SCROLL_OFFSET);
       DCHECK(animation);
       ScrollOffsetAnimationCurve* curve =
@@ -975,8 +979,12 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
   void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
+        EXPECT_EQ(scroll_layer_->scroll_offset().x(), 100);
+        EXPECT_EQ(scroll_layer_->scroll_offset().y(), 200);
         break;
       case 1: {
+        EXPECT_GE(scroll_layer_->scroll_offset().x(), 100);
+        EXPECT_GE(scroll_layer_->scroll_offset().y(), 200);
         Animation* animation =
             player_child_->GetAnimation(TargetProperty::SCROLL_OFFSET);
         player_child_->RemoveAnimation(animation->id());
@@ -1466,7 +1474,7 @@ class LayerTreeHostAnimationTestRemoveAnimation
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() >= last_frame_number_) {
       // Check that eventually the animation is removed.
-      EXPECT_FALSE(player_child_impl_->has_any_animation());
+      EXPECT_FALSE(player_child_impl_->animation_ticker()->has_any_animation());
       EndTest();
     }
   }

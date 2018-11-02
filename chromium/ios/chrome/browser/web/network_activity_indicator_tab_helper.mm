@@ -8,6 +8,10 @@
 #import "ios/chrome/browser/ui/network_activity_indicator_manager.h"
 #import "ios/web/public/web_state/web_state.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 DEFINE_WEB_STATE_USER_DATA_KEY(NetworkActivityIndicatorTabHelper);
 
 // static
@@ -25,13 +29,16 @@ void NetworkActivityIndicatorTabHelper::CreateForWebState(
 NetworkActivityIndicatorTabHelper::NetworkActivityIndicatorTabHelper(
     web::WebState* web_state,
     NSString* tab_id)
-    : web::WebStateObserver(web_state), network_activity_key_([tab_id copy]) {}
+    : network_activity_key_([tab_id copy]) {
+  web_state->AddObserver(this);
+}
 
 NetworkActivityIndicatorTabHelper::~NetworkActivityIndicatorTabHelper() {
   Stop();
 }
 
-void NetworkActivityIndicatorTabHelper::DidStartLoading() {
+void NetworkActivityIndicatorTabHelper::DidStartLoading(
+    web::WebState* web_state) {
   NetworkActivityIndicatorManager* shared_manager =
       [NetworkActivityIndicatorManager sharedInstance];
   // Verifies that there are not any network tasks associated with this instance
@@ -40,8 +47,14 @@ void NetworkActivityIndicatorTabHelper::DidStartLoading() {
     [shared_manager startNetworkTaskForGroup:network_activity_key_];
 }
 
-void NetworkActivityIndicatorTabHelper::DidStopLoading() {
+void NetworkActivityIndicatorTabHelper::DidStopLoading(
+    web::WebState* web_state) {
   Stop();
+}
+
+void NetworkActivityIndicatorTabHelper::WebStateDestroyed(
+    web::WebState* web_state) {
+  web_state->RemoveObserver(this);
 }
 
 void NetworkActivityIndicatorTabHelper::Stop() {

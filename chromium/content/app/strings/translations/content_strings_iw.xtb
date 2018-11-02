@@ -85,7 +85,7 @@
 <translation id="4757246831282535685">חלונית כרטיסיות</translation>
 <translation id="4763480195061959176">סרטוני וידאו</translation>
 <translation id="479989351350248267">Search</translation>
-<translation id="4812940957355064477">הזן מספר.</translation>
+<translation id="4812940957355064477">יש להזין מספר.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> נבחרו</translation>
 <translation id="4992066212339426712">בטל השתקה</translation>
 <translation id="49969490063480558">הזן חלק ולאחריו '<ph name="ATSIGN" />'‏. השדה '<ph name="INVALIDADDRESS" />' אינו מלא.</translation>
@@ -119,6 +119,7 @@
 <translation id="6398862346408813489">הצג חלונית לבחירת חודש</translation>
 <translation id="6404546809543547843">מסתיר משך אודיו</translation>
 <translation id="648732519525291180">בוחר שעות</translation>
+<translation id="6550675742724504774">אפשרויות</translation>
 <translation id="658823671542763450">היכנס למסך מלא</translation>
 <translation id="663493177488814956">פיד</translation>
 <translation id="6637586476836377253">log</translation>
@@ -138,7 +139,7 @@
 <translation id="7223624360433298498">זמן שחלף</translation>
 <translation id="7263440858009898357">בחר פריט מהרשימה.</translation>
 <translation id="727747134524199931">כותרת עמודה</translation>
-<translation id="7364796246159120393">בחר קובץ</translation>
+<translation id="7364796246159120393">בחירת קובץ</translation>
 <translation id="739024184232394898">אחר...</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7514365320538308">הורד</translation>
@@ -163,7 +164,6 @@
 <translation id="8451268428117625855">בחר קובץ.</translation>
 <translation id="8461852803063341183">לחצן בחירה</translation>
 <translation id="8511325616783751178">לחצן רשימה נפתחת</translation>
-<translation id="8519420564908284378">הפעל בשני המסכים</translation>
 <translation id="8534579021159131403">דקות</translation>
 <translation id="8541249477527128034">שליטה במדיה</translation>
 <translation id="8583702881314752957">רשימת הגדרות</translation>

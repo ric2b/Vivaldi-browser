@@ -38,15 +38,15 @@
 
 namespace blink {
 
-static RefPtr<SharedBuffer> ReadFile(const char* file_name) {
+static scoped_refptr<SharedBuffer> ReadFile(const char* file_name) {
   String file_path = testing::CoreTestDataPath(file_name);
 
   return testing::ReadFromFile(file_path);
 }
 
 TEST(WebImageTest, PNGImage) {
-  RefPtr<SharedBuffer> data = ReadFile("white-1x1.png");
-  ASSERT_TRUE(data.Get());
+  scoped_refptr<SharedBuffer> data = ReadFile("white-1x1.png");
+  ASSERT_TRUE(data.get());
 
   WebImage image = WebImage::FromData(WebData(data), WebSize());
   EXPECT_TRUE(image.Size() == WebSize(1, 1));
@@ -55,8 +55,8 @@ TEST(WebImageTest, PNGImage) {
 }
 
 TEST(WebImageTest, ICOImage) {
-  RefPtr<SharedBuffer> data = ReadFile("black-and-white.ico");
-  ASSERT_TRUE(data.Get());
+  scoped_refptr<SharedBuffer> data = ReadFile("black-and-white.ico");
+  ASSERT_TRUE(data.get());
 
   WebVector<WebImage> images = WebImage::FramesFromData(WebData(data));
   ASSERT_EQ(2u, images.size());
@@ -69,8 +69,9 @@ TEST(WebImageTest, ICOImage) {
 }
 
 TEST(WebImageTest, ICOValidHeaderMissingBitmap) {
-  RefPtr<SharedBuffer> data = ReadFile("valid_header_missing_bitmap.ico");
-  ASSERT_TRUE(data.Get());
+  scoped_refptr<SharedBuffer> data =
+      ReadFile("valid_header_missing_bitmap.ico");
+  ASSERT_TRUE(data.get());
 
   WebVector<WebImage> images = WebImage::FramesFromData(WebData(data));
   ASSERT_TRUE(images.IsEmpty());

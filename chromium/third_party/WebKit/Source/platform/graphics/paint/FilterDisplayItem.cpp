@@ -32,13 +32,10 @@ bool BeginFilterDisplayItem::DrawsContent() const {
   return true;
 }
 
-#ifndef NDEBUG
-void BeginFilterDisplayItem::DumpPropertiesAsDebugString(
-    WTF::StringBuilder& string_builder) const {
-  DisplayItem::DumpPropertiesAsDebugString(string_builder);
-  string_builder.Append(WTF::String::Format(", filter bounds: [%f,%f,%f,%f]",
-                                            bounds_.X(), bounds_.Y(),
-                                            bounds_.Width(), bounds_.Height()));
+#if DCHECK_IS_ON()
+void BeginFilterDisplayItem::PropertiesAsJSON(JSONObject& json) const {
+  DisplayItem::PropertiesAsJSON(json);
+  json.SetString("filterBounds", bounds_.ToString());
 }
 #endif
 

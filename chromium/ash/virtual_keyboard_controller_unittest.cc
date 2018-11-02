@@ -14,9 +14,8 @@
 #include "ash/wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
-#include "ui/events/devices/device_data_manager.h"
-#include "ui/events/devices/device_hotplug_event_observer.h"
 #include "ui/events/devices/input_device.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/keyboard/keyboard_export.h"
 #include "ui/keyboard/keyboard_switches.h"
@@ -26,20 +25,18 @@ namespace ash {
 
 class VirtualKeyboardControllerTest : public AshTestBase {
  public:
-  VirtualKeyboardControllerTest() {}
-  ~VirtualKeyboardControllerTest() override {}
+  VirtualKeyboardControllerTest() = default;
+  ~VirtualKeyboardControllerTest() override = default;
 
   void UpdateTouchscreenDevices(
       std::vector<ui::TouchscreenDevice> touchscreen_devices) {
-    ui::DeviceHotplugEventObserver* manager =
-        ui::DeviceDataManager::GetInstance();
-    manager->OnTouchscreenDevicesUpdated(touchscreen_devices);
+    ui::InputDeviceManager::GetInstance()->SetTouchscreenDevicesForTesting(
+        touchscreen_devices);
   }
 
   void UpdateKeyboardDevices(std::vector<ui::InputDevice> keyboard_devices) {
-    ui::DeviceHotplugEventObserver* manager =
-        ui::DeviceDataManager::GetInstance();
-    manager->OnKeyboardDevicesUpdated(keyboard_devices);
+    ui::InputDeviceManager::GetInstance()->SetKeyboardDevicesForTesting(
+        keyboard_devices);
   }
 
   // Sets the event blocker on the maximized window controller.
@@ -62,14 +59,13 @@ class VirtualKeyboardControllerTest : public AshTestBase {
 // is called.
 class MockEventBlocker : public ScopedDisableInternalMouseAndKeyboard {
  public:
-  MockEventBlocker() {}
+  MockEventBlocker() = default;
   ~MockEventBlocker() override {
     std::vector<ui::InputDevice> keyboard_devices;
     keyboard_devices.push_back(ui::InputDevice(
         1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "keyboard"));
-    ui::DeviceHotplugEventObserver* manager =
-        ui::DeviceDataManager::GetInstance();
-    manager->OnKeyboardDevicesUpdated(keyboard_devices);
+    ui::InputDeviceManager::GetInstance()->SetKeyboardDevicesForTesting(
+        keyboard_devices);
   }
 
  private:
@@ -90,7 +86,7 @@ class VirtualKeyboardControllerAutoTest : public VirtualKeyboardControllerTest,
                                           public VirtualKeyboardObserver {
  public:
   VirtualKeyboardControllerAutoTest() : notified_(false), suppressed_(false) {}
-  ~VirtualKeyboardControllerAutoTest() override {}
+  ~VirtualKeyboardControllerAutoTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -166,9 +162,9 @@ TEST_F(VirtualKeyboardControllerAutoTest, DisabledIfNoTouchScreen) {
 
 TEST_F(VirtualKeyboardControllerAutoTest, SuppressedIfExternalKeyboardPresent) {
   std::vector<ui::TouchscreenDevice> screens;
-  screens.push_back(
-      ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
-                            "Touchscreen", gfx::Size(1024, 768), 0));
+  screens.push_back(ui::TouchscreenDevice(
+      1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "Touchscreen",
+      gfx::Size(1024, 768), 0, false /* has_stylus */));
   UpdateTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
@@ -279,7 +275,7 @@ class VirtualKeyboardControllerAlwaysEnabledTest
  public:
   VirtualKeyboardControllerAlwaysEnabledTest()
       : VirtualKeyboardControllerAutoTest() {}
-  ~VirtualKeyboardControllerAlwaysEnabledTest() override {}
+  ~VirtualKeyboardControllerAlwaysEnabledTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(

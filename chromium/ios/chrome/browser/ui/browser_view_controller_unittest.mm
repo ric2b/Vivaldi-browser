@@ -21,10 +21,12 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -37,8 +39,6 @@
 #import "ios/chrome/browser/ui/browser_view_controller_dependency_factory.h"
 #import "ios/chrome/browser/ui/browser_view_controller_testing.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/page_not_available_controller.h"
 #include "ios/chrome/browser/ui/toolbar/test_toolbar_model_ios.h"
@@ -84,17 +84,12 @@ using web::WebStateImpl;
 - (void)tabSelected:(Tab*)tab;
 - (void)tabDeselected:(NSNotification*)notification;
 - (void)tabCountChanged:(NSNotification*)notification;
-- (IBAction)chromeExecuteCommand:(id)sender;
 @end
 
 @interface BVCTestTabMock : OCMockComplexTypeHelper {
-  GURL _lastCommittedURL;
-  GURL _visibleURL;
   WebStateImpl* _webState;
 }
 
-@property(nonatomic, assign) const GURL& lastCommittedURL;
-@property(nonatomic, assign) const GURL& visibleURL;
 @property(nonatomic, assign) WebStateImpl* webState;
 
 - (web::NavigationManager*)navigationManager;
@@ -103,18 +98,6 @@ using web::WebStateImpl;
 @end
 
 @implementation BVCTestTabMock
-- (const GURL&)lastCommittedURL {
-  return _lastCommittedURL;
-}
-- (void)setLastCommittedURL:(const GURL&)lastCommittedURL {
-  _lastCommittedURL = lastCommittedURL;
-}
-- (const GURL&)visibleURL {
-  return _visibleURL;
-}
-- (void)setVisibleURL:(const GURL&)visibleURL {
-  _visibleURL = visibleURL;
-}
 - (WebStateImpl*)webState {
   return _webState;
 }
@@ -131,12 +114,14 @@ using web::WebStateImpl;
 
 @interface BVCTestTabModel : OCMockComplexTypeHelper
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
+@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 @end
 
 @implementation BVCTestTabModel {
   FakeWebStateListDelegate _webStateListDelegate;
   std::unique_ptr<WebStateList> _webStateList;
 }
+@synthesize browserState = _browserState;
 
 - (instancetype)init {
   if ((self = [super
@@ -149,6 +134,66 @@ using web::WebStateImpl;
 
 - (WebStateList*)webStateList {
   return _webStateList.get();
+}
+@end
+
+// Fake WebToolbarController for testing.
+@interface TestWebToolbarController : UIViewController
+- (void)setTabCount:(NSInteger)tabCount;
+- (void)updateToolbarState;
+- (void)setShareButtonEnabled:(BOOL)enabled;
+- (id)toolsPopupController;
+- (BOOL)isOmniboxFirstResponder;
+- (BOOL)showingOmniboxPopup;
+- (void)selectedTabChanged;
+- (void)dismissToolsMenuPopup;
+- (void)cancelOmniboxEdit;
+
+- (ToolbarButtonUpdater*)buttonUpdater;
+- (void)setToolsMenuStateProvider:(id)provider;
+@property(nonatomic, readonly, weak) UIViewController* viewController;
+
+@end
+
+@implementation TestWebToolbarController
+- (void)setTabCount:(NSInteger)tabCount {
+  return;
+}
+- (void)updateToolbarState {
+  return;
+}
+- (void)setShareButtonEnabled:(BOOL)enabled {
+  return;
+}
+- (id)toolsPopupController {
+  return nil;
+}
+- (BOOL)isOmniboxFirstResponder {
+  return NO;
+}
+- (BOOL)showingOmniboxPopup {
+  return NO;
+}
+- (void)selectedTabChanged {
+  return;
+}
+- (void)dismissToolsMenuPopup {
+  return;
+}
+- (void)cancelOmniboxEdit {
+  return;
+}
+- (UIViewController*)viewController {
+  return self;
+}
+- (ToolbarButtonUpdater*)buttonUpdater {
+  return nil;
+}
+- (void)setToolsMenuStateProvider:(id)provider {
+  return;
+}
+- (void)start {
+  return;
 }
 @end
 
@@ -177,6 +222,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        IOSChromeLargeIconServiceFactory::GetInstance(),
+        IOSChromeLargeIconServiceFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
     chrome_browser_state_->CreateBookmarkModel(false);
     bookmarks::BookmarkModel* bookmark_model =
@@ -186,6 +234,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
 
     // Set up mock TabModel, Tab, and CRWWebController.
     id tabModel = [[BVCTestTabModel alloc] init];
+    [tabModel setBrowserState:chrome_browser_state_.get()];
     id currentTab = [[BVCTestTabMock alloc]
         initWithRepresentedObject:[OCMockObject niceMockForClass:[Tab class]]];
     id webControllerMock =
@@ -223,20 +272,19 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     // It will be owned (and destroyed) by the BVC.
     toolbarModelIOS_ = new TestToolbarModelIOS();
 
+    // Create fake WTC.
+    TestWebToolbarController* testWTC = [[TestWebToolbarController alloc] init];
+
     // Set up a stub dependency factory.
     id factory = [OCMockObject
         mockForClass:[BrowserViewControllerDependencyFactory class]];
-    [[[factory stub] andReturn:nil]
-        newTabStripControllerWithTabModel:[OCMArg any]
-                               dispatcher:[OCMArg any]];
     [[[factory stub] andReturnValue:OCMOCK_VALUE(toolbarModelIOS_)]
         newToolbarModelIOSWithDelegate:static_cast<ToolbarModelDelegateIOS*>(
                                            [OCMArg anyPointer])];
-    [[[factory stub] andReturn:nil]
-        newWebToolbarControllerWithDelegate:[OCMArg any]
-                                  urlLoader:[OCMArg any]
-                            preloadProvider:[OCMArg any]
-                                 dispatcher:[OCMArg any]];
+    [[[factory stub] andReturn:testWTC]
+        newToolbarControllerWithDelegate:[OCMArg any]
+                               urlLoader:[OCMArg any]
+                              dispatcher:[OCMArg any]];
     [[[factory stub] andReturn:passKitViewController_]
         newPassKitViewControllerForPass:nil];
     [[[factory stub] andReturn:nil] showPassKitErrorInfoBarForManager:nil];
@@ -268,10 +316,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     [bvc_ shutdown];
 
     BlockCleanupTest::TearDown();
-  }
-
-  GenericChromeCommand* GetCommandWithTag(NSInteger tag) {
-    return [[GenericChromeCommand alloc] initWithTag:tag];
   }
 
   MOCK_METHOD0(OnCompletionCalled, void());
@@ -354,11 +398,13 @@ TEST_F(BrowserViewControllerTest, TestNativeContentController) {
       [bvc_ controllerForURL:GURL(kChromeUIBookmarksURL)
                     webState:webStateImpl_.get()];
   EXPECT_TRUE(controller != nil);
-  if (IsIPadIdiom()) {
-    EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
-  } else {
+  // TODO(crbug.com/753599): When the old bookmark is gone, rewrite the
+  // following so that it will expect PageNotAvailable only.
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration) || !IsIPadIdiom()) {
     EXPECT_TRUE(
         [controller isMemberOfClass:[PageNotAvailableController class]]);
+  } else {
+    EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
   }
 
   controller = [bvc_ controllerForURL:GURL(kChromeUINewTabURL)
@@ -415,7 +461,7 @@ TEST_F(BrowserViewControllerTest,
   // The tab should only stop loading on handsets.
   if (!IsIPadIdiom())
     [[static_cast<OCMockObject*>(webController_) expect] stopLoading];
-  [bvc_ locationBarBeganEdit:nil];
+  [bvc_ locationBarBeganEdit];
 
   EXPECT_OCMOCK_VERIFY(static_cast<OCMockObject*>(webController_));
   EXPECT_OCMOCK_VERIFY(tabMock);
@@ -431,7 +477,7 @@ TEST_F(BrowserViewControllerTest,
   static_cast<TestToolbarModelIOS*>(toolbarModelIOS_)->set_is_loading(false);
 
   // Don't set any expectation for stopLoading to be called on the mock tab.
-  [bvc_ locationBarBeganEdit:nil];
+  [bvc_ locationBarBeganEdit];
 
   EXPECT_OCMOCK_VERIFY(tabMock);
 }

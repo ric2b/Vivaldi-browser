@@ -25,8 +25,8 @@
 
 #include "core/xml/NativeXPathNSResolver.h"
 
-#include "core/XMLNames.h"
 #include "core/dom/Node.h"
+#include "core/xml_names.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -42,7 +42,7 @@ AtomicString NativeXPathNSResolver::lookupNamespaceURI(const String& prefix) {
   return node_ ? node_->lookupNamespaceURI(prefix) : g_null_atom;
 }
 
-DEFINE_TRACE(NativeXPathNSResolver) {
+void NativeXPathNSResolver::Trace(blink::Visitor* visitor) {
   visitor->Trace(node_);
   XPathNSResolver::Trace(visitor);
 }

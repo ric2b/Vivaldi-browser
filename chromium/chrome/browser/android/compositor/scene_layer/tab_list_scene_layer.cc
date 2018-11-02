@@ -4,7 +4,6 @@
 
 #include "chrome/browser/android/compositor/scene_layer/tab_list_scene_layer.h"
 
-#include "base/android/jni_android.h"
 #include "chrome/browser/android/compositor/layer/content_layer.h"
 #include "chrome/browser/android/compositor/layer/tab_layer.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
@@ -186,11 +185,6 @@ void TabListSceneLayer::PutTabLayer(
   content_obscures_self_ |= content.Contains(self);
 }
 
-base::android::ScopedJavaLocalRef<jobject> TabListSceneLayer::GetJavaObject(
-    JNIEnv* env) {
-  return base::android::ScopedJavaLocalRef<jobject>(java_obj_);
-}
-
 void TabListSceneLayer::OnDetach() {
   SceneLayer::OnDetach();
   for (auto tab : tab_map_)
@@ -206,7 +200,8 @@ SkColor TabListSceneLayer::GetBackgroundColor() {
   return background_color_;
 }
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
+static jlong JNI_TabListSceneLayer_Init(JNIEnv* env,
+                                        const JavaParamRef<jobject>& jobj) {
   // This will automatically bind to the Java object and pass ownership there.
   TabListSceneLayer* scene_layer = new TabListSceneLayer(env, jobj);
   return reinterpret_cast<intptr_t>(scene_layer);

@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "components/offline_pages/core/offline_store_utils.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
 #include "sql/connection.h"
@@ -22,7 +23,7 @@ namespace {
 std::unique_ptr<std::vector<PrefetchArchiveInfo>> GetArchivesSync(
     sql::Connection* db) {
   static const char kSql[] =
-      "SELECT offline_id, client_namespace, client_id, requested_url,"
+      "SELECT offline_id, client_namespace, guid, requested_url,"
       "  final_archived_url, title, file_path, file_size"
       " FROM prefetch_items"
       " WHERE state = ?";
@@ -34,12 +35,14 @@ std::unique_ptr<std::vector<PrefetchArchiveInfo>> GetArchivesSync(
     PrefetchArchiveInfo archive;
     archive.offline_id = statement.ColumnInt64(0);
     archive.client_id.name_space = statement.ColumnString(1);
+    // The client ID is the GUID of the download so that it can be shown
+    // consistently in Downloads Home.
     archive.client_id.id = statement.ColumnString(2);
     archive.url = GURL(statement.ColumnString(3));
     archive.final_archived_url = GURL(statement.ColumnString(4));
     archive.title = statement.ColumnString16(5);
     archive.file_path =
-        base::FilePath::FromUTF8Unsafe(statement.ColumnString(6));
+        store_utils::FromDatabaseFilePath(statement.ColumnString(6));
     archive.file_size = statement.ColumnInt64(7);
     if (!archives)
       archives = base::MakeUnique<std::vector<PrefetchArchiveInfo>>();
@@ -64,6 +67,9 @@ bool UpdateToImportingStateSync(int64_t offline_id, sql::Connection* db) {
 
 std::unique_ptr<std::vector<PrefetchArchiveInfo>>
 GetArchivesAndUpdateToImportingStateSync(sql::Connection* db) {
+  if (!db)
+    return nullptr;
+
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return nullptr;

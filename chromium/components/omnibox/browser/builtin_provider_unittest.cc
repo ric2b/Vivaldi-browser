@@ -6,18 +6,21 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <string>
+
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
 using base::ASCIIToUTF16;
@@ -86,24 +89,23 @@ class BuiltinProviderTest : public testing::Test {
     const GURL output[3];
   };
 
-  BuiltinProviderTest() : provider_(NULL) {}
+  BuiltinProviderTest() : provider_(nullptr) {}
   ~BuiltinProviderTest() override {}
 
   void SetUp() override {
     client_.reset(new FakeAutocompleteProviderClient());
     provider_ = new BuiltinProvider(client_.get());
   }
-  void TearDown() override { provider_ = NULL; }
+  void TearDown() override { provider_ = nullptr; }
 
   void RunTest(const TestData cases[], size_t num_cases) {
     ACMatches matches;
     for (size_t i = 0; i < num_cases; ++i) {
       SCOPED_TRACE(base::StringPrintf(
           "case %" PRIuS ": %s", i, base::UTF16ToUTF8(cases[i].input).c_str()));
-      const AutocompleteInput input(
-          cases[i].input, base::string16::npos, std::string(), GURL(),
-          base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, true,
-          false, true, true, false, TestSchemeClassifier());
+      AutocompleteInput input(cases[i].input, metrics::OmniboxEventProto::OTHER,
+                              TestSchemeClassifier());
+      input.set_prevent_inline_autocomplete(true);
       provider_->Start(input, false);
       EXPECT_TRUE(provider_->done());
       matches = provider_->matches();
@@ -295,10 +297,10 @@ TEST_F(BuiltinProviderTest, AboutBlank) {
 }
 
 TEST_F(BuiltinProviderTest, DoesNotSupportMatchesOnFocus) {
-  const AutocompleteInput input(
-      ASCIIToUTF16("chrome://m"), base::string16::npos, std::string(), GURL(),
-      base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, true, false,
-      true, true, true, TestSchemeClassifier());
+  AutocompleteInput input(ASCIIToUTF16("chrome://m"),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  input.set_from_omnibox_focus(true);
   provider_->Start(input, false);
   EXPECT_TRUE(provider_->matches().empty());
 }
@@ -342,7 +344,7 @@ TEST_F(BuiltinProviderTest, Inlining) {
     // Typing along "about://media" should not yield an inline autocompletion
     // until the completion is unique.  We don't bother checking every single
     // character before the first "m" is typed.
-    {kAbout.substr(0,2),                  base::string16()},
+    {kAbout.substr(0, 2),                 base::string16()},
     {kAbout,                              base::string16()},
     {kAbout + kSep,                       base::string16()},
     {kAbout + kSep + kHostM.substr(0, 1), base::string16()},
@@ -351,7 +353,7 @@ TEST_F(BuiltinProviderTest, Inlining) {
     {kAbout + kSep + kHostM.substr(0, 4), kHostM.substr(4)},
 
     // Ditto with "chrome://media".
-    {kEmbedder.substr(0,2),                  base::string16()},
+    {kEmbedder.substr(0, 2),                 base::string16()},
     {kEmbedder,                              base::string16()},
     {kEmbedder + kSep,                       base::string16()},
     {kEmbedder + kSep + kHostM.substr(0, 1), base::string16()},
@@ -382,10 +384,8 @@ TEST_F(BuiltinProviderTest, Inlining) {
   for (size_t i = 0; i < arraysize(cases); ++i) {
     SCOPED_TRACE(base::StringPrintf(
         "case %" PRIuS ": %s", i, base::UTF16ToUTF8(cases[i].input).c_str()));
-    const AutocompleteInput input(
-        cases[i].input, base::string16::npos, std::string(), GURL(),
-        base::string16(), metrics::OmniboxEventProto::INVALID_SPEC, false,
-        false, true, true, false, TestSchemeClassifier());
+    AutocompleteInput input(cases[i].input, metrics::OmniboxEventProto::OTHER,
+                            TestSchemeClassifier());
     provider_->Start(input, false);
     EXPECT_TRUE(provider_->done());
     matches = provider_->matches();

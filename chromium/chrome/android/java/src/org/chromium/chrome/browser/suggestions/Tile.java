@@ -7,6 +7,8 @@ package org.chromium.chrome.browser.suggestions;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
 
+import org.chromium.chrome.browser.favicon.IconType;
+
 /**
  * Holds the details to populate a site suggestion tile.
  */
@@ -17,6 +19,9 @@ public class Tile implements OfflinableSuggestion {
 
     @TileVisualType
     private int mType = TileVisualType.NONE;
+
+    @IconType
+    private int mIconType = IconType.INVALID;
 
     @Nullable
     private Drawable mIcon;
@@ -80,6 +85,15 @@ public class Tile implements OfflinableSuggestion {
     }
 
     /**
+     * @return The source of this tile's title. Used for metrics tracking. Valid values are listed
+     * in {@code TileTitleSource}.
+     */
+    @TileTitleSource
+    public int getTitleSource() {
+        return mSiteData.titleSource;
+    }
+
+    /**
      * @return The source of this tile. Used for metrics tracking. Valid values are listed in
      * {@code TileSource}.
      */
@@ -102,6 +116,21 @@ public class Tile implements OfflinableSuggestion {
      */
     public void setType(@TileVisualType int type) {
         mType = type;
+    }
+
+    /**
+     * @return The icon type of this tile. Valid values are listed in {@link IconType}.
+     */
+    @IconType
+    public int getIconType() {
+        return mIconType;
+    }
+
+    /**
+     * Sets the icon type of this tile. Valid values are listed in {@link IconType}.
+     */
+    public void setIconType(@IconType int iconType) {
+        mIconType = iconType;
     }
 
     /**

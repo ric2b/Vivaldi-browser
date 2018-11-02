@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -29,6 +29,7 @@ using chrome_test_util::AccountConsistencySetupSigninButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ClearBrowsingDataCollectionView;
 using chrome_test_util::SettingsMenuButton;
+using chrome_test_util::ToolsMenuView;
 using testing::WaitUntilConditionOrTimeout;
 using testing::kWaitForPageLoadTimeout;
 
@@ -48,14 +49,6 @@ id<GREYAction> ScrollDown() {
 @implementation ChromeEarlGreyUI
 
 + (void)openToolsMenu {
-  // TODO(crbug.com/685570): Fix the tap instead of adding a delay.
-  GREYCondition* myCondition = [GREYCondition
-      conditionWithName:@"Delay to ensure the toolbar menu can be opened"
-                  block:^BOOL {
-                    return NO;
-                  }];
-  [myCondition waitWithTimeout:0.5];
-
   // TODO(crbug.com/639524): Add logic to ensure the app is in the correct
   // state, for example DCHECK if no tabs are displayed.
   [[[EarlGrey
@@ -71,12 +64,15 @@ id<GREYAction> ScrollDown() {
 
 + (void)openSettingsMenu {
   [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI tapToolsMenuButton:SettingsMenuButton()];
+}
+
++ (void)tapToolsMenuButton:(id<GREYMatcher>)buttonMatcher {
   id<GREYMatcher> interactableSettingsButton =
-      grey_allOf(SettingsMenuButton(), grey_interactable(), nil);
+      grey_allOf(buttonMatcher, grey_interactable(), nil);
   [[[EarlGrey selectElementWithMatcher:interactableSettingsButton]
          usingSearchAction:ScrollDown()
-      onElementWithMatcher:grey_accessibilityID(kToolsMenuTableViewId)]
-      performAction:grey_tap()];
+      onElementWithMatcher:ToolsMenuView()] performAction:grey_tap()];
 }
 
 + (void)tapSettingsMenuButton:(id<GREYMatcher>)buttonMatcher {
@@ -84,7 +80,7 @@ id<GREYAction> ScrollDown() {
       grey_allOf(buttonMatcher, grey_interactable(), nil);
   [[[EarlGrey selectElementWithMatcher:interactableButtonMatcher]
          usingSearchAction:ScrollDown()
-      onElementWithMatcher:grey_accessibilityID(kSettingsCollectionViewId)]
+      onElementWithMatcher:chrome_test_util::SettingsCollectionView()]
       performAction:grey_tap()];
 }
 

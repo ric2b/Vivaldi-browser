@@ -10,6 +10,7 @@
 #include "media/base/android/android_overlay.h"
 #include "media/mojo/interfaces/android_overlay.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/service_context_ref.h"
 
 namespace media {
 
@@ -17,9 +18,12 @@ namespace media {
 class MojoAndroidOverlay : public AndroidOverlay,
                            public mojom::AndroidOverlayClient {
  public:
-  MojoAndroidOverlay(mojom::AndroidOverlayProviderPtr provider_ptr,
-                     AndroidOverlayConfig config,
-                     const base::UnguessableToken& routing_token);
+  // |context_ref| may be null.
+  MojoAndroidOverlay(
+      mojom::AndroidOverlayProviderPtr provider_ptr,
+      AndroidOverlayConfig config,
+      const base::UnguessableToken& routing_token,
+      std::unique_ptr<service_manager::ServiceContextRef> context_ref);
 
   ~MojoAndroidOverlay() override;
 
@@ -30,12 +34,14 @@ class MojoAndroidOverlay : public AndroidOverlay,
   // mojom::AndroidOverlayClient
   void OnSurfaceReady(uint64_t surface_key) override;
   void OnDestroyed() override;
+  void OnPowerEfficientState(bool is_power_efficient) override;
 
  private:
   AndroidOverlayConfig config_;
   mojom::AndroidOverlayPtr overlay_ptr_;
-  std::unique_ptr<mojo::Binding<mojom::AndroidOverlayClient>> binding_;
+  mojo::Binding<mojom::AndroidOverlayClient> binding_;
   gl::ScopedJavaSurface surface_;
+  std::unique_ptr<service_manager::ServiceContextRef> context_ref_;
 
   // Have we received OnSurfaceReady yet?
   bool received_surface_ = false;

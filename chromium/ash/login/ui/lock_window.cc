@@ -4,13 +4,10 @@
 
 #include "ash/login/ui/lock_window.h"
 
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "ui/aura/window.h"
 #include "ui/events/gestures/gesture_recognizer.h"
+#include "ui/keyboard/keyboard_util.h"
 
 namespace ash {
 
@@ -22,20 +19,26 @@ LockWindow::LockWindow(Config config) {
   params.delegate = this;
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  const int kLockContainer = ash::kShellWindowId_LockScreenContainer;
-
-  if (config == Config::MASH) {
-    params.mus_properties[ui::mojom::WindowManager::kContainerId_InitProperty] =
-        mojo::ConvertTo<std::vector<uint8_t>>(kLockContainer);
-  } else {
-    params.parent = ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                                             kLockContainer);
+  // Shell may be null in tests.
+  if (Shell::HasInstance()) {
+    params.parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
+                                        kShellWindowId_LockScreenContainer);
   }
   Init(params);
   SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
+
+  // TODO(agawronska): Add tests for UI visibility when virtual keyboard is
+  // present.
+  // Disable virtual keyboard overscroll because it interferes with scrolling
+  // login/lock content. See crbug.com/363635.
+  keyboard::SetKeyboardOverscrollOverride(
+      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_DISABLED);
 }
 
 LockWindow::~LockWindow() {
+  keyboard::SetKeyboardOverscrollOverride(
+      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE);
+
   // We need to destroy the root view before destroying |data_dispatcher_|
   // because lock screen destruction assumes it is alive. We could hand out
   // base::WeakPtr<LoginDataDispatcher> instances if needed instead.

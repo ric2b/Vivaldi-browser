@@ -406,7 +406,7 @@
        inkscape:connector-curvature="0" />
   </g>
   <g
-     transform="translate(110,0)"
+     transform="translate(106,1)"
      id="g182">
     <path
        transform="matrix(0,-1,1,0,-112,-260)"
@@ -429,17 +429,17 @@
      style="fill:none;stroke:#000000"
      inkscape:connector-curvature="0"
      id="path196"
-     d="m 118.5,30.5 h 14 v 12 h -14 z" />
+     d="m 119.5,30.5 h 14 v 12 h -14 z" />
   <path
      inkscape:connector-curvature="0"
      id="path198"
-     d="m 125,36.5 5,-3.25 v 6.5" />
+     d="m 126,36.5 5,-3.25 v 6.5" />
   <path
      inkscape:connector-curvature="0"
      id="path200"
-     d="m 122,30 h 1 v 13 h -1 z" />
+     d="m 123,30 h 1 v 13 h -1 z" />
   <g
-     transform="translate(110,48)"
+     transform="translate(111,48)"
      id="g202">
     <path
        transform="matrix(-1,0,0,1,-192,-120)"
@@ -459,7 +459,7 @@
        inkscape:connector-curvature="0" />
   </g>
   <g
-     transform="translate(110,72)"
+     transform="translate(106,73)"
      id="g212">
     <path
        transform="matrix(0,1,1,0,-88,283)"
@@ -942,7 +942,7 @@
        inkscape:connector-curvature="0" />
   </g>
   <g
-     transform="translate(166,72)"
+     transform="translate(162,73)"
      id="g466">
     <path
        transform="matrix(0,-1,1,0,-136,251)"
@@ -1002,7 +1002,7 @@
        inkscape:connector-curvature="0" />
   </g>
   <g
-     transform="translate(166,144)"
+     transform="translate(162,145)"
      id="g496">
     <path
        transform="matrix(0,1,1,0,-88,219)"
@@ -1434,4 +1434,18 @@
      id="path4295-3"
      inkscape:connector-curvature="0"
      sodipodi:nodetypes="ccccccccccccc" />
+  <g
+     transform="translate(197.30508,191.99048)"
+     id="g512-9">
+    <path
+       transform="translate(-64,-72)"
+       d="m 78.5,89 c 0,1.1 0.9,2 2,2 1.1,0 2,-0.9 2,-2 0,-1.1 -0.9,-2 -2,-2 -1.1,0 -2,0.9 -2,2"
+       id="path516-3"
+       inkscape:connector-curvature="0" />
+    <path
+       d="m 5.5630094,8.1068581 4.6549716,4.6312779 -2.12132,2.121321 6.010407,-0.353554 0.353554,-6.010407 -2.121321,2.12132 -4.6549696,-4.6312799 z"
+       id="path518-6"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="cccccccc" />
+  </g>
 </svg>

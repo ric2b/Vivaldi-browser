@@ -27,21 +27,21 @@
 #ifndef CaretDisplayItemClient_h
 #define CaretDisplayItemClient_h
 
-#include "core/editing/PositionWithAffinity.h"
+#include "base/macros.h"
+#include "core/editing/Forward.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
+#include "platform/graphics/Color.h"
 #include "platform/graphics/paint/DisplayItem.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
+class Node;
 class GraphicsContext;
 class LayoutBlock;
 struct PaintInvalidatorContext;
 
 class CaretDisplayItemClient final : public DisplayItemClient {
-  WTF_MAKE_NONCOPYABLE(CaretDisplayItemClient);
-
  public:
   CaretDisplayItemClient();
   virtual ~CaretDisplayItemClient();
@@ -104,6 +104,8 @@ class CaretDisplayItemClient final : public DisplayItemClient {
   LayoutRect visual_rect_in_previous_layout_block_;
 
   bool needs_paint_invalidation_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(CaretDisplayItemClient);
 };
 
 }  // namespace blink

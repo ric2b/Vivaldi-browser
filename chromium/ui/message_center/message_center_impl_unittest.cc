@@ -4,12 +4,12 @@
 
 #include "ui/message_center/message_center_impl.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -21,15 +21,57 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_blocker.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 
 using base::UTF8ToUTF16;
 
 namespace message_center {
+
+namespace {
+
+class CheckObserver : public MessageCenterObserver {
+ public:
+  CheckObserver(MessageCenter* message_center, const std::string& target_id)
+      : message_center_(message_center), target_id_(target_id) {
+    DCHECK(message_center);
+    DCHECK(!target_id.empty());
+  }
+
+  void OnNotificationUpdated(const std::string& notification_id) override {
+    EXPECT_TRUE(message_center_->FindVisibleNotificationById(target_id_));
+  }
+
+ private:
+  MessageCenter* message_center_;
+  std::string target_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(CheckObserver);
+};
+
+class RemoveObserver : public MessageCenterObserver {
+ public:
+  RemoveObserver(MessageCenter* message_center, const std::string& target_id)
+      : message_center_(message_center), target_id_(target_id) {
+    DCHECK(message_center);
+    DCHECK(!target_id.empty());
+  }
+
+  void OnNotificationUpdated(const std::string& notification_id) override {
+    message_center_->RemoveNotification(target_id_, false);
+  }
+
+ private:
+  MessageCenter* message_center_;
+  std::string target_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(RemoveObserver);
+};
+
+}  // anonymous namespace
 
 class MessageCenterImplTest : public testing::Test,
                               public MessageCenterObserver {
@@ -52,9 +94,6 @@ class MessageCenterImplTest : public testing::Test,
   }
 
   MessageCenter* message_center() const { return message_center_; }
-  NotifierSettingsObserver* notifier_settings_observer() const {
-    return static_cast<NotifierSettingsObserver*>(message_center_impl());
-  }
   MessageCenterImpl* message_center_impl() const {
     return reinterpret_cast<MessageCenterImpl*>(message_center_);
   }
@@ -97,10 +136,6 @@ class MessageCenterImplTest : public testing::Test,
                             optional_fields, NULL);
   }
 
-  void ForceNotificationFlush(const std::string& id) {
-    message_center()->ForceNotificationFlush(id);
-  }
-
  private:
   MessageCenter* message_center_;
   std::unique_ptr<base::MessageLoop> loop_;
@@ -108,34 +143,6 @@ class MessageCenterImplTest : public testing::Test,
   base::Closure closure_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterImplTest);
-};
-
-class MessageCenterImplTestWithChangeQueue : public MessageCenterImplTest {
- public:
-  MessageCenterImplTestWithChangeQueue() {}
-  ~MessageCenterImplTestWithChangeQueue() override {}
-
-  void SetUp() override {
-    MessageCenterImplTest::SetUp();
-    message_center()->EnableChangeQueueForTest(true);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MessageCenterImplTestWithChangeQueue);
-};
-
-class MessageCenterImplTestWithoutChangeQueue : public MessageCenterImplTest {
- public:
-  MessageCenterImplTestWithoutChangeQueue() {}
-  ~MessageCenterImplTestWithoutChangeQueue() override {}
-
-  void SetUp() override {
-    MessageCenterImplTest::SetUp();
-    message_center()->EnableChangeQueueForTest(false);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MessageCenterImplTestWithoutChangeQueue);
 };
 
 namespace {
@@ -257,7 +264,7 @@ class MockPopupTimersController : public PopupTimersController {
 
 TEST_F(MessageCenterImplTest, PopupTimersEmptyController) {
   std::unique_ptr<PopupTimersController> popup_timers_controller =
-      base::MakeUnique<PopupTimersController>(message_center());
+      std::make_unique<PopupTimersController>(message_center());
 
   // Test that all functions succed without any timers created.
   popup_timers_controller->PauseAll();
@@ -269,7 +276,7 @@ TEST_F(MessageCenterImplTest, PopupTimersEmptyController) {
 
 TEST_F(MessageCenterImplTest, PopupTimersControllerStartTimer) {
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
   popup_timers_controller->StartTimer("test",
                                       base::TimeDelta::FromMilliseconds(1));
   run_loop()->Run();
@@ -278,7 +285,7 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerStartTimer) {
 
 TEST_F(MessageCenterImplTest, PopupTimersControllerCancelTimer) {
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
   popup_timers_controller->StartTimer("test",
                                       base::TimeDelta::FromMilliseconds(1));
   popup_timers_controller->CancelTimer("test");
@@ -289,7 +296,7 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerCancelTimer) {
 
 TEST_F(MessageCenterImplTest, PopupTimersControllerPauseAllTimers) {
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
   popup_timers_controller->StartTimer("test",
                                       base::TimeDelta::FromMilliseconds(1));
   popup_timers_controller->PauseAll();
@@ -300,7 +307,7 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerPauseAllTimers) {
 
 TEST_F(MessageCenterImplTest, PopupTimersControllerStartAllTimers) {
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
   popup_timers_controller->StartTimer("test",
                                       base::TimeDelta::FromMilliseconds(1));
   popup_timers_controller->PauseAll();
@@ -312,7 +319,7 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerStartAllTimers) {
 
 TEST_F(MessageCenterImplTest, PopupTimersControllerStartMultipleTimers) {
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
   popup_timers_controller->StartTimer("test", base::TimeDelta::Max());
   popup_timers_controller->StartTimer("test2",
                                       base::TimeDelta::FromMilliseconds(1));
@@ -343,15 +350,20 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerRestartOnUpdate) {
                        notifier_id, RichNotificationData(), NULL)));
 
   std::unique_ptr<MockPopupTimersController> popup_timers_controller =
-      base::MakeUnique<MockPopupTimersController>(message_center(), closure());
+      std::make_unique<MockPopupTimersController>(message_center(), closure());
 
   popup_timers_controller->OnNotificationDisplayed("id1", DISPLAY_SOURCE_POPUP);
   ASSERT_EQ(popup_timers_controller->timer_finished(), 0);
 
+#if defined(OS_CHROMEOS)
+  const int dismiss_time = kAutocloseDefaultDelaySeconds;
+#else
+  const int dismiss_time = kAutocloseHighPriorityDelaySeconds;
+#endif
+
   // Fast forward the |task_runner| by one second less than the auto-close timer
   // frequency for Web Notifications. (As set by the |notifier_id|.)
-  task_runner->FastForwardBy(
-      base::TimeDelta::FromSeconds(kAutocloseHighPriorityDelaySeconds - 1));
+  task_runner->FastForwardBy(base::TimeDelta::FromSeconds(dismiss_time - 1));
   ASSERT_EQ(popup_timers_controller->timer_finished(), 0);
 
   // Trigger a replacement of the notification in the timer controller.
@@ -359,8 +371,7 @@ TEST_F(MessageCenterImplTest, PopupTimersControllerRestartOnUpdate) {
 
   // Fast forward the |task_runner| by one second less than the auto-close timer
   // frequency for Web Notifications again. It should have been reset.
-  task_runner->FastForwardBy(
-      base::TimeDelta::FromSeconds(kAutocloseHighPriorityDelaySeconds - 1));
+  task_runner->FastForwardBy(base::TimeDelta::FromSeconds(dismiss_time - 1));
   ASSERT_EQ(popup_timers_controller->timer_finished(), 0);
 
   // Now fast forward the |task_runner| by two seconds (to avoid flakiness),
@@ -391,6 +402,10 @@ TEST_F(MessageCenterImplTest, NotificationBlocker) {
   EXPECT_EQ(2u, message_center()->GetPopupNotifications().size());
   EXPECT_EQ(2u, message_center()->GetVisibleNotifications().size());
 
+  // "id1" is displayed as a pop-up so that it will be closed when blocked.
+  message_center()->DisplayedNotification("id1",
+                                          message_center::DISPLAY_SOURCE_POPUP);
+
   // Block all notifications. All popups are gone and message center should be
   // hidden.
   blocker1.SetNotificationsEnabled(false);
@@ -413,10 +428,14 @@ TEST_F(MessageCenterImplTest, NotificationBlocker) {
   EXPECT_TRUE(message_center()->GetPopupNotifications().empty());
   EXPECT_EQ(2u, message_center()->GetVisibleNotifications().size());
 
-  // Unblock both blockers, which recovers the global state, but the popups
-  // aren't shown.
+  // Unblock both blockers, which recovers the global state, the displayed
+  // pop-ups before blocking aren't shown but the never-displayed ones will
+  // be shown.
   blocker2.SetNotificationsEnabled(true);
-  EXPECT_TRUE(message_center()->GetPopupNotifications().empty());
+  NotificationList::PopupNotifications popups =
+      message_center()->GetPopupNotifications();
+  EXPECT_EQ(1u, popups.size());
+  EXPECT_TRUE(PopupNotificationsContain(popups, "id2"));
   EXPECT_EQ(2u, message_center()->GetVisibleNotifications().size());
 }
 
@@ -431,6 +450,10 @@ TEST_F(MessageCenterImplTest, NotificationsDuringBlocked) {
                        notifier_id, RichNotificationData(), NULL)));
   EXPECT_EQ(1u, message_center()->GetPopupNotifications().size());
   EXPECT_EQ(1u, message_center()->GetVisibleNotifications().size());
+
+  // "id1" is displayed as a pop-up so that it will be closed when blocked.
+  message_center()->DisplayedNotification("id1",
+                                          message_center::DISPLAY_SOURCE_POPUP);
 
   // Create a notification during blocked. Still no popups.
   blocker.SetNotificationsEnabled(false);
@@ -468,6 +491,10 @@ TEST_F(MessageCenterImplTest, NotificationBlockerAllowsPopups) {
                        UTF8ToUTF16("message"), gfx::Image() /* icon */,
                        base::string16() /* display_source */, GURL(),
                        notifier_id2, RichNotificationData(), NULL)));
+
+  // "id1" is displayed as a pop-up so that it will be closed when blocked.
+  message_center()->DisplayedNotification("id1",
+                                          message_center::DISPLAY_SOURCE_POPUP);
 
   // "id1" is closed but "id2" is still visible as a popup.
   blocker.SetNotificationsEnabled(false);
@@ -672,99 +699,6 @@ TEST_F(MessageCenterImplTest, RemoveAllNotificationsWithPinned) {
 }
 #endif
 
-#if defined(OS_CHROMEOS)
-TEST_F(MessageCenterImplTest, CachedUnreadCount) {
-  message_center()->AddNotification(
-      std::unique_ptr<Notification>(CreateSimpleNotification("id1")));
-  message_center()->AddNotification(
-      std::unique_ptr<Notification>(CreateSimpleNotification("id2")));
-  message_center()->AddNotification(
-      std::unique_ptr<Notification>(CreateSimpleNotification("id3")));
-  ASSERT_EQ(3u, message_center()->UnreadNotificationCount());
-
-  // Mark 'displayed' on all notifications by using for-loop. This shouldn't
-  // recreate |notifications| inside of the loop.
-  const NotificationList::Notifications& notifications =
-      message_center()->GetVisibleNotifications();
-  for (NotificationList::Notifications::const_iterator iter =
-           notifications.begin(); iter != notifications.end(); ++iter) {
-    message_center()->DisplayedNotification(
-        (*iter)->id(), message_center::DISPLAY_SOURCE_MESSAGE_CENTER);
-  }
-  EXPECT_EQ(0u, message_center()->UnreadNotificationCount());
-
-  // Imitate the timeout, which recovers the unread count. Again, this shouldn't
-  // recreate |notifications| inside of the loop.
-  for (NotificationList::Notifications::const_iterator iter =
-           notifications.begin(); iter != notifications.end(); ++iter) {
-    message_center()->MarkSinglePopupAsShown((*iter)->id(), false);
-  }
-  EXPECT_EQ(3u, message_center()->UnreadNotificationCount());
-
-  // Opening the message center will reset the unread count.
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-  EXPECT_EQ(0u, message_center()->UnreadNotificationCount());
-}
-#endif  // OS_CHROMEOS
-
-TEST_F(MessageCenterImplTest, ForceNotificationFlush_InconsistentUpdate) {
-  std::string id1("id1");
-  std::string id2("id2");
-  std::string id3("id3");
-
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // Add -> Update (with ID change)
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id1));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->UpdateNotification(id1, std::move(notification));
-
-  // Add (although the same ID exists) -> Update (with ID change) -> Remove
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(id3));
-  message_center()->UpdateNotification(id2, std::move(notification));
-  message_center()->RemoveNotification(id3, false);
-
-  // Remove (although the ID has already removed)
-  message_center()->RemoveNotification(id3, false);
-
-  // Notification is not added since the message center has opened.
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-
-  // Forced to update.
-  ForceNotificationFlush(id3);
-
-  // Confirms the chagnes are applied.
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-}
-
-TEST_F(MessageCenterImplTest, DisableNotificationsByNotifier) {
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-  message_center()->AddNotification(std::unique_ptr<Notification>(
-      CreateSimpleNotificationWithNotifierId("id1-1", "app1")));
-  message_center()->AddNotification(std::unique_ptr<Notification>(
-      CreateSimpleNotificationWithNotifierId("id1-2", "app1")));
-  message_center()->AddNotification(std::unique_ptr<Notification>(
-      CreateSimpleNotificationWithNotifierId("id2-1", "app2")));
-  message_center()->AddNotification(std::unique_ptr<Notification>(
-      CreateSimpleNotificationWithNotifierId("id2-2", "app2")));
-  message_center()->AddNotification(std::unique_ptr<Notification>(
-      CreateSimpleNotificationWithNotifierId("id2-3", "app2")));
-  ASSERT_EQ(5u, message_center()->NotificationCount());
-
-  // Removing all of app1's notifications should only leave app2's.
-  message_center()->DisableNotificationsByNotifier(
-      NotifierId(NotifierId::APPLICATION, "app1"));
-  ASSERT_EQ(3u, message_center()->NotificationCount());
-
-  // Now we remove the remaining notifications.
-  message_center()->DisableNotificationsByNotifier(
-      NotifierId(NotifierId::APPLICATION, "app2"));
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-}
-
 TEST_F(MessageCenterImplTest, NotifierEnabledChanged) {
   ASSERT_EQ(0u, message_center()->NotificationCount());
   message_center()->AddNotification(std::unique_ptr<Notification>(
@@ -785,434 +719,23 @@ TEST_F(MessageCenterImplTest, NotifierEnabledChanged) {
       CreateSimpleNotificationWithNotifierId("id2-5", "app2")));
   ASSERT_EQ(8u, message_center()->NotificationCount());
 
-  // Enabling an extension should have no effect on the count.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app1"), true);
-  ASSERT_EQ(8u, message_center()->NotificationCount());
-
   // Removing all of app2's notifications should only leave app1's.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app2"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app2"));
   ASSERT_EQ(3u, message_center()->NotificationCount());
 
   // Removal operations should be idempotent.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app2"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app2"));
   ASSERT_EQ(3u, message_center()->NotificationCount());
 
   // Now we remove the remaining notifications.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app1"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app1"));
   ASSERT_EQ(0u, message_center()->NotificationCount());
 }
 
-TEST_F(MessageCenterImplTestWithChangeQueue, QueueUpdatesWithCenterVisible) {
-  std::string id("id1");
-  std::string id2("id2");
-  NotifierId notifier_id1(NotifierId::APPLICATION, "app1");
-
-  // First, add and update a notification to ensure updates happen
-  // normally.
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->UpdateNotification(id, std::move(notification));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
-
-  // Then open the message center.
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // Then update a notification; nothing should have happened.
-  notification.reset(CreateSimpleNotification(id));
-  message_center()->UpdateNotification(id2, std::move(notification));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
-
-  // Close the message center; then the update should have propagated.
-  message_center()->SetVisibility(VISIBILITY_TRANSIENT);
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue, ComplexQueueing) {
-  std::string ids[6] = {"0", "1", "2", "3", "4p", "5"};
-  NotifierId notifier_id1(NotifierId::APPLICATION, "app1");
-
-  std::unique_ptr<Notification> notification;
-  // Add some notifications
-  int i = 0;
-  for (; i < 3; i++) {
-    notification.reset(CreateSimpleNotification(ids[i]));
-    message_center()->AddNotification(std::move(notification));
-  }
-  for (i = 0; i < 3; i++) {
-    EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[i]));
-  }
-  for (; i < 6; i++) {
-    EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[i]));
-  }
-
-  notification.reset(CreateNotification(ids[4], NOTIFICATION_TYPE_PROGRESS));
-  message_center()->AddNotification(std::move(notification));
-
-  // Now start queueing.
-  // NL: ["0", "1", "2", "4p"]
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // This should update notification "1" to have id "3".
-  notification.reset(CreateSimpleNotification(ids[3]));
-  message_center()->UpdateNotification(ids[1], std::move(notification));
-
-  // Change the ID: "4p" -> "5", "5" -> "1", "1" -> "4p". They shouldn't
-  // override the previous change ("1" -> "3") nor the next one ("3" -> "5").
-  notification.reset(CreateSimpleNotification(ids[5]));
-  message_center()->UpdateNotification(ids[4], std::move(notification));
-  notification.reset(CreateSimpleNotification(ids[1]));
-  message_center()->UpdateNotification(ids[5], std::move(notification));
-  notification.reset(CreateNotification(ids[4], NOTIFICATION_TYPE_PROGRESS));
-  message_center()->UpdateNotification(ids[1], std::move(notification));
-
-  // This should update notification "3" to "5" after we go TRANSIENT.
-  notification.reset(CreateSimpleNotification(ids[5]));
-  message_center()->UpdateNotification(ids[3], std::move(notification));
-
-  // This should create a new "3", that doesn't overwrite the update to 3
-  // before.
-  notification.reset(CreateSimpleNotification(ids[3]));
-  message_center()->AddNotification(std::move(notification));
-
-  // The NL should still be the same: ["0", "1", "2", "4p"]
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[0]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[1]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[2]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[3]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[4]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[5]));
-  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 4u);
-  message_center()->SetVisibility(VISIBILITY_TRANSIENT);
-
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[0]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[1]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[2]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[3]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[4]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[5]));
-  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 5u);
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue, UpdateWhileQueueing) {
-  std::string ids[11] =
-      {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10p"};
-  NotifierId notifier_id1(NotifierId::APPLICATION, "app1");
-
-  std::unique_ptr<Notification> notification;
-  // Add some notifications
-  int i = 0;
-  for (; i < 6; i++) {
-    notification.reset(CreateSimpleNotification(ids[i]));
-    notification->set_title(base::ASCIIToUTF16("ORIGINAL TITLE"));
-    message_center()->AddNotification(std::move(notification));
-  }
-  for (i = 0; i < 6; i++) {
-    EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[i]));
-  }
-  for (; i < 8; i++) {
-    EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[i]));
-  }
-
-  notification.reset(CreateNotification(ids[10], NOTIFICATION_TYPE_PROGRESS));
-  notification->set_progress(10);
-  message_center()->AddNotification(std::move(notification));
-
-  // Now start queueing.
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // Notification 0: (Exists) -> Removed
-  message_center()->RemoveNotification(ids[0], false);
-
-  // Notification 1: (Exists) -> Removed (by user)
-  message_center()->RemoveNotification(ids[1], true);  // removed immediately
-
-  // Notification 2: (Exists) -> Removed -> Added
-  message_center()->RemoveNotification(ids[2], false);
-  notification.reset(CreateSimpleNotification(ids[2]));
-  notification->set_title(base::ASCIIToUTF16("NEW TITLE 2"));
-  message_center()->UpdateNotification(ids[2], std::move(notification));
-
-  // Notification 3: (Exists) -> Removed -> Updated
-  message_center()->RemoveNotification(ids[3], false);
-  notification.reset(CreateSimpleNotification(ids[3]));
-  notification->set_title(base::ASCIIToUTF16("NEW TITLE 3"));
-  message_center()->UpdateNotification(ids[3], std::move(notification));
-
-  // Notification 4: (Exists) -> Removed -> Added -> Removed
-  message_center()->RemoveNotification(ids[4], false);
-  notification.reset(CreateSimpleNotification(ids[4]));
-  message_center()->AddNotification(std::move(notification));
-  message_center()->RemoveNotification(ids[4], false);
-
-  // Notification 5: (Exists) -> Updated
-  notification.reset(CreateSimpleNotification(ids[5]));
-  notification->set_title(base::ASCIIToUTF16("NEW TITLE 5"));
-  message_center()->UpdateNotification(ids[5], std::move(notification));
-
-  // Notification 6: Updated
-  notification.reset(CreateSimpleNotification(ids[6]));
-  message_center()->UpdateNotification(ids[6], std::move(notification));
-
-  // Notification 7: Updated -> Removed
-  notification.reset(CreateSimpleNotification(ids[7]));
-  message_center()->UpdateNotification(ids[7], std::move(notification));
-  message_center()->RemoveNotification(ids[7], false);
-
-  // Notification 8: Added -> Updated
-  notification.reset(CreateSimpleNotification(ids[8]));
-  notification->set_title(base::ASCIIToUTF16("UPDATING 8-1"));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(ids[8]));
-  notification->set_title(base::ASCIIToUTF16("NEW TITLE 8"));
-  message_center()->UpdateNotification(ids[8], std::move(notification));
-
-  // Notification 9: Added -> Updated -> Removed
-  notification.reset(CreateSimpleNotification(ids[9]));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(ids[9]));
-  message_center()->UpdateNotification(ids[9], std::move(notification));
-  message_center()->RemoveNotification(ids[9], false);
-
-  // Notification 10 (TYPE_PROGRESS): Updated -> Removed -> Added -> Updated
-  // Step 1) Progress is updated immediately before removed.
-  notification.reset(CreateNotification(ids[10], NOTIFICATION_TYPE_PROGRESS));
-  notification->set_progress(20);
-  message_center()->UpdateNotification(ids[10], std::move(notification));
-  EXPECT_EQ(20,
-            message_center()->FindVisibleNotificationById(ids[10])->progress());
-  message_center()->RemoveNotification(ids[10], false);
-  // Step 2) Progress isn't updated after removed.
-  notification.reset(CreateSimpleNotification(ids[10]));
-  message_center()->AddNotification(std::move(notification));
-  EXPECT_EQ(20,
-            message_center()->FindVisibleNotificationById(ids[10])->progress());
-  notification.reset(CreateSimpleNotification(ids[10]));
-  notification->set_progress(40);
-  message_center()->UpdateNotification(ids[10], std::move(notification));
-  EXPECT_EQ(20,
-            message_center()->FindVisibleNotificationById(ids[10])->progress());
-
-  // All changes except the notification 1 and 10 are not refrected.
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[0]));
-  EXPECT_EQ(base::ASCIIToUTF16("ORIGINAL TITLE"),
-            message_center()->FindVisibleNotificationById(ids[0])->title());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[1]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[2]));
-  EXPECT_EQ(base::ASCIIToUTF16("ORIGINAL TITLE"),
-            message_center()->FindVisibleNotificationById(ids[2])->title());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[3]));
-  EXPECT_EQ(base::ASCIIToUTF16("ORIGINAL TITLE"),
-            message_center()->FindVisibleNotificationById(ids[3])->title());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[4]));
-  EXPECT_EQ(base::ASCIIToUTF16("ORIGINAL TITLE"),
-            message_center()->FindVisibleNotificationById(ids[4])->title());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[5]));
-  EXPECT_EQ(base::ASCIIToUTF16("ORIGINAL TITLE"),
-            message_center()->FindVisibleNotificationById(ids[5])->title());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[6]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[7]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[8]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[9]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[10]));
-  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 6u);
-
-  message_center()->SetVisibility(VISIBILITY_TRANSIENT);
-
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[0]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[1]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[2]));
-  EXPECT_EQ(base::ASCIIToUTF16("NEW TITLE 2"),
-            message_center()->FindVisibleNotificationById(ids[2])->title());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[3]));
-  EXPECT_EQ(base::ASCIIToUTF16("NEW TITLE 3"),
-            message_center()->FindVisibleNotificationById(ids[3])->title());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[4]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[5]));
-  EXPECT_EQ(base::ASCIIToUTF16("NEW TITLE 5"),
-            message_center()->FindVisibleNotificationById(ids[5])->title());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[6]));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[7]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[8]));
-  EXPECT_EQ(base::ASCIIToUTF16("NEW TITLE 8"),
-            message_center()->FindVisibleNotificationById(ids[8])->title());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(ids[9]));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(ids[10]));
-  EXPECT_EQ(40,
-            message_center()->FindVisibleNotificationById(ids[10])->progress());
-  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 5u);
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue, QueuedDirectUpdates) {
-  std::string id("id1");
-  std::string id2("id2");
-  NotifierId notifier_id1(NotifierId::APPLICATION, "app1");
-
-  gfx::Size original_size(0, 0);
-  // Open the message center to prevent adding notifications
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // Create new notification to be added to the queue; images all have the same
-  // original size.
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id));
-
-  // Double-check that sizes all match.
-  const std::vector<ButtonInfo>& original_buttons = notification->buttons();
-  ASSERT_EQ(2u, original_buttons.size());
-
-  EXPECT_EQ(original_size, notification->icon().Size());
-  EXPECT_EQ(original_size, notification->image().Size());
-  EXPECT_EQ(original_size, original_buttons[0].icon.Size());
-  EXPECT_EQ(original_size, original_buttons[1].icon.Size());
-
-  message_center()->AddNotification(std::move(notification));
-
-  // The notification should be in the queue.
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
-
-  // Now try setting the icon to a different size.
-  gfx::Size new_size(16, 16);
-  EXPECT_NE(original_size, new_size);
-
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(new_size.width(), new_size.height(), true);
-  SkCanvas canvas(bitmap);
-  canvas.drawColor(SK_ColorBLUE);
-  gfx::Image test_image(
-      gfx::Image(gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, 1.f))));
-  message_center()->SetNotificationIcon(id, test_image);
-  message_center()->SetNotificationImage(id, test_image);
-  message_center()->SetNotificationButtonIcon(id, 0, test_image);
-  message_center()->SetNotificationButtonIcon(id, 1, test_image);
-
-  // The notification should be in the queue.
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
-
-  // Close the message center; then the update should have propagated.
-  message_center()->SetVisibility(VISIBILITY_TRANSIENT);
-  // The notification should no longer be in the queue.
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
-
-  Notification* mc_notification =
-      *(message_center()->GetVisibleNotifications().begin());
-  const std::vector<ButtonInfo>& buttons = mc_notification->buttons();
-  ASSERT_EQ(2u, buttons.size());
-
-  EXPECT_EQ(new_size, mc_notification->icon().Size());
-  EXPECT_EQ(new_size, mc_notification->image().Size());
-  EXPECT_EQ(new_size, buttons[0].icon.Size());
-  EXPECT_EQ(new_size, buttons[1].icon.Size());
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue, ForceNotificationFlushAdd) {
-  std::string id("id1");
-
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-  message_center()->AddNotification(
-      std::unique_ptr<Notification>(CreateSimpleNotification(id)));
-
-  // Notification is not added yet.
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-  // Forced to update.
-  ForceNotificationFlush(id);
-  // Notification is added.
-  ASSERT_EQ(1u, message_center()->NotificationCount());
-}
-
-
-TEST_F(MessageCenterImplTestWithChangeQueue, ForceNotificationFlushUpdate) {
-  std::string id("id1");
-  std::string id2("id2");
-
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id));
-  message_center()->AddNotification(std::move(notification));
-
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->UpdateNotification(id, std::move(notification));
-
-  // Nothing is changed.
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
-
-  // Forced to update ID1.
-  ForceNotificationFlush(id);
-
-  // Nothing is changed, since the ID is changed.
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
-
-  // Forced to update ID2.
-  ForceNotificationFlush(id2);
-
-  // The ID is changed.
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id2));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
-
-  // Makes sure if there is only one notification.
-  ASSERT_EQ(1u, message_center()->NotificationCount());
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue, ForceNotificationFlushRemove) {
-  std::string id("id1");
-
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id));
-  message_center()->AddNotification(std::move(notification));
-
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-  message_center()->RemoveNotification(id, false);
-
-  // Notification is not removed yet.
-  ASSERT_EQ(1u, message_center()->NotificationCount());
-
-  // Forced to update.
-  ForceNotificationFlush(id);
-
-  // Notification is removed.
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-}
-
-TEST_F(MessageCenterImplTestWithChangeQueue,
-       ForceNotificationFlush_ComplexUpdate) {
-  std::string id1("id1");
-  std::string id2("id2");
-  std::string id3("id3");
-
-  message_center()->SetVisibility(VISIBILITY_MESSAGE_CENTER);
-
-  // Add -> Update (with ID change) -> Remove
-  std::unique_ptr<Notification> notification(CreateSimpleNotification(id1));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->UpdateNotification(id1, std::move(notification));
-  message_center()->RemoveNotification(id2, false);
-
-  // Add -> Update (with ID change)
-  notification.reset(CreateSimpleNotification(id2));
-  message_center()->AddNotification(std::move(notification));
-  notification.reset(CreateSimpleNotification(id3));
-  message_center()->UpdateNotification(id2, std::move(notification));
-
-  // Notification is not added since the message center has opened.
-  ASSERT_EQ(0u, message_center()->NotificationCount());
-
-  // Forced to update.
-  ForceNotificationFlush(id3);
-
-  // Confirms the chagnes are applied.
-  ASSERT_EQ(1u, message_center()->NotificationCount());
-}
-
-TEST_F(MessageCenterImplTestWithoutChangeQueue,
-       UpdateWhileMessageCenterVisible) {
+TEST_F(MessageCenterImplTest, UpdateWhileMessageCenterVisible) {
   std::string id("id1");
   std::string id2("id2");
   NotifierId notifier_id1(NotifierId::APPLICATION, "app1");
@@ -1236,7 +759,7 @@ TEST_F(MessageCenterImplTestWithoutChangeQueue,
   EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
 }
 
-TEST_F(MessageCenterImplTestWithoutChangeQueue, AddWhileMessageCenterVisible) {
+TEST_F(MessageCenterImplTest, AddWhileMessageCenterVisible) {
   std::string id("id1");
 
   // Then open the message center.
@@ -1248,8 +771,7 @@ TEST_F(MessageCenterImplTestWithoutChangeQueue, AddWhileMessageCenterVisible) {
   EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
 }
 
-TEST_F(MessageCenterImplTestWithoutChangeQueue,
-       RemoveWhileMessageCenterVisible) {
+TEST_F(MessageCenterImplTest, RemoveWhileMessageCenterVisible) {
   std::string id("id1");
 
   // First, add a notification to ensure updates happen normally.
@@ -1263,6 +785,37 @@ TEST_F(MessageCenterImplTestWithoutChangeQueue,
   // Then update a notification; the update should have propagated.
   message_center()->RemoveNotification(id, false);
   EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
+}
+
+TEST_F(MessageCenterImplTest, RemoveWhileIteratingObserver) {
+  std::string id("id1");
+  CheckObserver check1(message_center(), id);
+  CheckObserver check2(message_center(), id);
+  RemoveObserver remove(message_center(), id);
+
+  // Prepare a notification
+  std::unique_ptr<Notification> notification(CreateSimpleNotification(id));
+  message_center()->AddNotification(std::move(notification));
+  EXPECT_TRUE(message_center()->FindVisibleNotificationById(id));
+
+  // Install the test handlers
+  message_center()->AddObserver(&check1);
+  message_center()->AddObserver(&remove);
+  message_center()->AddObserver(&check2);
+
+  // Update the notification. The notification will be removed in the observer,
+  // but the actual removal will be done at the end of the iteration.
+  // Notification keeps alive during iteration. This is checked by
+  // CheckObserver.
+  notification.reset(CreateSimpleNotification(id));
+  message_center()->UpdateNotification(id, std::move(notification));
+
+  // Notification is removed correctly.
+  EXPECT_FALSE(message_center()->FindVisibleNotificationById(id));
+
+  message_center()->RemoveObserver(&check1);
+  message_center()->RemoveObserver(&remove);
+  message_center()->RemoveObserver(&check2);
 }
 
 }  // namespace internal

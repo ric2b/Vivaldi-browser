@@ -9,15 +9,15 @@
 #include "core/layout/MinMaxSize.h"
 #include "core/layout/ng/geometry/ng_box_strut.h"
 #include "core/layout/ng/geometry/ng_logical_size.h"
-#include "core/layout/ng/ng_writing_mode.h"
 #include "platform/text/TextDirection.h"
+#include "platform/text/WritingMode.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
 class ComputedStyle;
-class LayoutObject;
 class Length;
 class NGConstraintSpace;
+class NGBlockNode;
 class NGLayoutInputNode;
 
 enum class LengthResolveType {
@@ -92,6 +92,8 @@ CORE_EXPORT int ResolveUsedColumnCount(int computed_count,
                                        LayoutUnit computed_size,
                                        LayoutUnit used_gap,
                                        LayoutUnit available_size);
+CORE_EXPORT int ResolveUsedColumnCount(LayoutUnit available_size,
+                                       const ComputedStyle&);
 
 // Based on available inline size, CSS computed column-width, CSS computed
 // column-count and CSS used column-gap, return CSS used column-width.
@@ -104,10 +106,23 @@ CORE_EXPORT LayoutUnit ResolveUsedColumnInlineSize(LayoutUnit available_size,
 
 CORE_EXPORT LayoutUnit ResolveUsedColumnGap(const ComputedStyle&);
 
-CORE_EXPORT NGBoxStrut ComputeMargins(const NGConstraintSpace&,
-                                      const ComputedStyle&,
-                                      const NGWritingMode writing_mode,
-                                      const TextDirection direction);
+// Compute physical margins.
+CORE_EXPORT NGPhysicalBoxStrut ComputePhysicalMargins(const NGConstraintSpace&,
+                                                      const ComputedStyle&);
+// Compute margins for the specified NGConstraintSpace.
+CORE_EXPORT NGBoxStrut ComputeMarginsFor(const NGConstraintSpace&,
+                                         const ComputedStyle&,
+                                         const NGConstraintSpace& compute_for);
+// Compute margins for the NGConstraintSpace.
+CORE_EXPORT NGBoxStrut ComputeMarginsForContainer(const NGConstraintSpace&,
+                                                  const ComputedStyle&);
+// Compute margins for the NGConstraintSpace in the visual order.
+CORE_EXPORT NGBoxStrut
+ComputeMarginsForVisualContainer(const NGConstraintSpace&,
+                                 const ComputedStyle&);
+// Compute margins for the style owner.
+CORE_EXPORT NGBoxStrut ComputeMarginsForSelf(const NGConstraintSpace&,
+                                             const ComputedStyle&);
 
 CORE_EXPORT NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,
                                       const ComputedStyle&);
@@ -119,26 +134,20 @@ CORE_EXPORT NGBoxStrut ComputePadding(const NGConstraintSpace&,
 // This uses the available size from the constraint space and inline size to
 // compute the margins that are auto, if any, and adjusts
 // the given NGBoxStrut accordingly.
-CORE_EXPORT void ApplyAutoMargins(const NGConstraintSpace&,
-                                  const ComputedStyle&,
-                                  const LayoutUnit& inline_size,
+CORE_EXPORT void ApplyAutoMargins(const ComputedStyle& child_style,
+                                  const ComputedStyle& containing_block_style,
+                                  LayoutUnit available_inline_size,
+                                  LayoutUnit inline_size,
                                   NGBoxStrut* margins);
 
 CORE_EXPORT LayoutUnit ConstrainByMinMax(LayoutUnit length,
                                          Optional<LayoutUnit> min,
                                          Optional<LayoutUnit> max);
 
-// Returns scrollbar sizes or this layout object.
-NGBoxStrut GetScrollbarSizes(const LayoutObject*);
-
-inline NGBoxStrut CalculateBorderScrollbarPadding(
+NGBoxStrut CalculateBorderScrollbarPadding(
     const NGConstraintSpace& constraint_space,
     const ComputedStyle& style,
-    const LayoutObject* layout_object) {
-  return ComputeBorders(constraint_space, style) +
-         ComputePadding(constraint_space, style) +
-         GetScrollbarSizes(layout_object);
-}
+    const NGBlockNode node);
 
 inline NGLogicalSize CalculateBorderBoxSize(
     const NGConstraintSpace& constraint_space,

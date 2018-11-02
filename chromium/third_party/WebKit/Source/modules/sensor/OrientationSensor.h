@@ -5,7 +5,7 @@
 #ifndef OrientationSensor_h
 #define OrientationSensor_h
 
-#include "bindings/modules/v8/Float32ArrayOrFloat64ArrayOrDOMMatrix.h"
+#include "bindings/modules/v8/float32_array_or_float64_array_or_dom_matrix.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/sensor/Sensor.h"
 
@@ -20,7 +20,7 @@ class OrientationSensor : public Sensor {
 
   bool isReadingDirty() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   OrientationSensor(ExecutionContext*,

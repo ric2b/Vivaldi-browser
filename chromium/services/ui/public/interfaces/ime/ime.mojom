@@ -8,6 +8,7 @@ import "mojo/common/text_direction.mojom";
 import "ui/events/mojo/event.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "ui/gfx/range/mojo/range.mojom";
+import "ui/platform_window/mojo/text_input_state.mojom";
 
 // Specifies where to display the candidate window.
 enum CandidateWindowPosition {
@@ -56,14 +57,24 @@ struct CandidateWindowEntry {
   string description_body;
 };
 
+// See comments for ui::ImeTextSpan::Type for more details.
+enum ImeTextSpanType {
+  kComposition,
+  kSuggestion,
+  kMisspellingSuggestion,
+};
+
 // Represents an underlined segment of text currently composed by IME.
 // Corresponds to ui::ImeTextSpan.
 struct ImeTextSpan {
+  ImeTextSpanType type;
   uint32 start_offset;
   uint32 end_offset;
-  bool thick;
   uint32 underline_color;
+  bool thick;
   uint32 background_color;
+  uint32 suggestion_highlight_color;
+  array<string> suggestions;
 };
 
 // Represents a text currently being composed by IME. Corresponds to
@@ -72,27 +83,6 @@ struct CompositionText {
   string text;
   array<ImeTextSpan> ime_text_spans;
   gfx.mojom.Range selection;
-};
-
-// See comments for ui::TextInputType for more details.
-enum TextInputType {
-  kNone,
-  kText,
-  kPassword,
-  kSearch,
-  kEmail,
-  kNumber,
-  kTelephone,
-  kUrl,
-  kDate,
-  kTime,
-  kDateTime,
-  kDateTimeLocal,
-  kMonth,
-  kWeek,
-  kTextArea,
-  kContentEditable,
-  kDateTimeField
 };
 
 // See comments for ui::TextInputMode for more details.
@@ -183,6 +173,9 @@ interface TextInputClient {
   // the character is not processed. See ui::TextInputClient::InsertChar()
   // for more details.
   InsertChar(ui.mojom.Event event);
+
+  // Dispatch a key event skipping IME. Returns true if event was consumed.
+  DispatchKeyEventPostIME(ui.mojom.Event event) => (bool stopped_propagation);
 
   // TODO(moshayedi): Add functions corresponding to ui::TextInputClient for:
   // - Input context information

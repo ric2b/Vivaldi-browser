@@ -1,6 +1,3 @@
-[submodule "breakpad/src"]
-	path = breakpad/src
-	url = ../../breakpad/breakpad/src.git
 [submodule "buildtools"]
 	path = buildtools
 	url = ../buildtools.git
@@ -22,9 +19,6 @@
 [submodule "native_client"]
 	path = native_client
 	url = ../../native_client/src/native_client.git
-[submodule "sdch/open-vcdiff"]
-	path = sdch/open-vcdiff
-	url = ../../external/github.com/google/open-vcdiff.git
 [submodule "third_party/SPIRV-Tools/src"]
 	path = third_party/SPIRV-Tools/src
 	url = ../../external/github.com/KhronosGroup/SPIRV-Tools.git
@@ -40,15 +34,15 @@
 [submodule "third_party/boringssl/src"]
 	path = third_party/boringssl/src
 	url = ../../boringssl/boringssl.git
+[submodule "third_party/breakpad/breakpad"]
+	path = third_party/breakpad/breakpad
+	url = ../../breakpad/breakpad.git
 [submodule "third_party/catapult"]
 	path = third_party/catapult
-	url = ../../external/github.com/catapult-project/catapult.git
+	url = ../../catapult.git
 [submodule "third_party/ced/src"]
 	path = third_party/ced/src
 	url = ../../external/github.com/google/compact_enc_det.git
-[submodule "third_party/cld_2/src"]
-	path = third_party/cld_2/src
-	url = ../../external/github.com/CLD2Owners/cld2.git
 [submodule "third_party/cld_3/src"]
 	path = third_party/cld_3/src
 	url = ../../external/github.com/google/cld_3.git
@@ -69,7 +63,7 @@
 	url = ../../android/platform/external/deqp.git
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
-	url = ../../external/github.com/chromium/dom-distiller-dist.git
+	url = ../dom-distiller/dist.git
 [submodule "third_party/ffmpeg"]
 	path = third_party/ffmpeg
 	url = ../third_party/ffmpeg.git
@@ -97,9 +91,6 @@
 [submodule "third_party/gnu_binutils"]
 	path = third_party/gnu_binutils
 	url = ../../native_client/deps/third_party/gnu_binutils.git
-[submodule "third_party/google_toolbox_for_mac/src"]
-	path = third_party/google_toolbox_for_mac/src
-	url = ../../external/github.com/google/google-toolbox-for-mac.git
 [submodule "third_party/googletest/src"]
 	path = third_party/googletest/src
 	url = ../../external/github.com/google/googletest.git
@@ -160,9 +151,6 @@
 [submodule "third_party/lighttpd"]
 	path = third_party/lighttpd
 	url = ../deps/lighttpd.git
-[submodule "third_party/lss"]
-	path = third_party/lss
-	url = ../../linux-syscall-support.git
 [submodule "third_party/mesa/src"]
 	path = third_party/mesa/src
 	url = ../deps/mesa.git
@@ -183,16 +171,13 @@
 	url = ../../external/github.com/cisco/openh264.git
 [submodule "third_party/openmax_dl"]
 	path = third_party/openmax_dl
-	url = ../../external/webrtc/deps/third_party/openmax.git
+	url = ../../webrtc/deps/third_party/openmax.git
 [submodule "third_party/pdfium"]
 	path = third_party/pdfium
 	url = ../../pdfium/pdfium.git
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
-[submodule "third_party/psyco_win32"]
-	path = third_party/psyco_win32
-	url = ../deps/psyco_win32.git
 [submodule "third_party/pyftpdlib/src"]
 	path = third_party/pyftpdlib/src
 	url = ../../external/pyftpdlib.git
@@ -202,9 +187,6 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
-[submodule "third_party/scons-2.0.1"]
-	path = third_party/scons-2.0.1
-	url = ../../native_client/src/third_party/scons-2.0.1.git
 [submodule "third_party/sfntly/src"]
 	path = third_party/sfntly/src
 	url = ../../external/github.com/googlei18n/sfntly.git
@@ -255,7 +237,7 @@
 	url = ../../external/khronosgroup/webgl.git
 [submodule "third_party/webrtc"]
 	path = third_party/webrtc
-	url = ../../external/webrtc/trunk/webrtc.git
+	url = ../../webrtc/src.git
 [submodule "third_party/xdg-utils"]
 	path = third_party/xdg-utils
 	url = ../deps/xdg-utils.git
@@ -274,3 +256,9 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
+[submodule "third_party/google_toolbox_for_mac/src"]
+	path = third_party/google_toolbox_for_mac/src
+	url = ../../external/github.com/google/google-toolbox-for-mac.git
+[submodule "third_party/lss"]
+	path = third_party/lss
+	url = ../../linux-syscall-support.git

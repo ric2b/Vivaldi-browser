@@ -4,6 +4,7 @@
 
 #include "ash/system/session/logout_confirmation_controller.h"
 
+#include <memory>
 #include <utility>
 
 #include "ash/login_status.h"
@@ -12,7 +13,6 @@
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/system/session/logout_confirmation_dialog.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/time/default_tick_clock.h"
@@ -30,7 +30,7 @@ const int kLastWindowClosedContainerIds[] = {
     kShellWindowId_DefaultContainer, kShellWindowId_AlwaysOnTopContainer};
 
 void SignOut() {
-  Shell::Get()->system_tray_controller()->SignOut();
+  Shell::Get()->session_controller()->RequestSignOut();
 }
 
 }  // namespace
@@ -109,7 +109,7 @@ class LogoutConfirmationController::LastWindowClosedObserver
 };
 
 LogoutConfirmationController::LogoutConfirmationController()
-    : clock_(base::MakeUnique<base::DefaultTickClock>()),
+    : clock_(std::make_unique<base::DefaultTickClock>()),
       logout_closure_(base::Bind(&SignOut)),
       logout_timer_(false, false),
       scoped_session_observer_(this) {}
@@ -143,7 +143,7 @@ void LogoutConfirmationController::ConfirmLogout(base::TimeTicks logout_time) {
 void LogoutConfirmationController::OnLoginStatusChanged(
     LoginStatus login_status) {
   if (login_status == LoginStatus::PUBLIC)
-    last_window_closed_observer_ = base::MakeUnique<LastWindowClosedObserver>();
+    last_window_closed_observer_ = std::make_unique<LastWindowClosedObserver>();
   else
     last_window_closed_observer_.reset();
 }

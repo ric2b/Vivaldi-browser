@@ -5,28 +5,52 @@
 #ifndef SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_PROCESS_COORDINATION_UNIT_IMPL_H_
 #define SERVICES_RESOURCE_COORDINATOR_COORDINATION_UNIT_PROCESS_COORDINATION_UNIT_IMPL_H_
 
-#include <set>
-
 #include "base/macros.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_base.h"
 
 namespace resource_coordinator {
 
-class ProcessCoordinationUnitImpl : public CoordinationUnitImpl {
+class FrameCoordinationUnitImpl;
+class ProcessCoordinationUnitImpl;
+
+class ProcessCoordinationUnitImpl
+    : public CoordinationUnitInterface<ProcessCoordinationUnitImpl,
+                                       mojom::ProcessCoordinationUnit,
+                                       mojom::ProcessCoordinationUnitRequest> {
  public:
+  static std::vector<ProcessCoordinationUnitImpl*>
+  GetAllProcessCoordinationUnits();
+  static CoordinationUnitType Type() { return CoordinationUnitType::kProcess; }
+
   ProcessCoordinationUnitImpl(
       const CoordinationUnitID& id,
       std::unique_ptr<service_manager::ServiceContextRef> service_ref);
   ~ProcessCoordinationUnitImpl() override;
 
-  // CoordinationUnitImpl implementation.
-  std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
-      CoordinationUnitType type) const override;
+  // mojom::ProcessCoordinationUnit implementation.
+  void AddFrame(const CoordinationUnitID& cu_id) override;
+  void RemoveFrame(const CoordinationUnitID& cu_id) override;
+  void SetCPUUsage(double cpu_usage) override;
+  void SetExpectedTaskQueueingDuration(base::TimeDelta duration) override;
+  void SetLaunchTime(base::Time launch_time) override;
+  void SetMainThreadTaskLoadIsLow(bool main_thread_task_load_is_low) override;
+  void SetPID(int64_t pid) override;
+
+  std::set<FrameCoordinationUnitImpl*> GetFrameCoordinationUnits() const;
+  std::set<PageCoordinationUnitImpl*> GetAssociatedPageCoordinationUnits()
+      const;
 
  private:
-  // CoordinationUnitImpl implementation.
-  void PropagateProperty(mojom::PropertyType property_type,
+  friend class FrameCoordinationUnitImpl;
+
+  // CoordinationUnitInterface implementation.
+  void OnPropertyChanged(mojom::PropertyType property_type,
                          int64_t value) override;
+
+  bool AddFrame(FrameCoordinationUnitImpl* frame_cu);
+  bool RemoveFrame(FrameCoordinationUnitImpl* frame_cu);
+
+  std::set<FrameCoordinationUnitImpl*> frame_coordination_units_;
 
   DISALLOW_COPY_AND_ASSIGN(ProcessCoordinationUnitImpl);
 };

@@ -8,11 +8,12 @@
 
 #import "ios/chrome/app/main_controller_private.h"
 #include "ios/chrome/browser/chrome_switches.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_egtest_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_cell.h"
-#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/test/app/tab_test_util.h"
 #include "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -31,75 +32,15 @@
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::StaticTextWithAccessibilityLabelId;
+using chrome_test_util::TabletTabSwitcherCloseButton;
+using chrome_test_util::TabletTabSwitcherCloseTabButton;
+using chrome_test_util::TabletTabSwitcherIncognitoTabsPanelButton;
+using chrome_test_util::TabletTabSwitcherNewIncognitoTabButton;
+using chrome_test_util::TabletTabSwitcherNewTabButton;
+using chrome_test_util::TabletTabSwitcherOpenButton;
+using chrome_test_util::TabletTabSwitcherOpenTabsPanelButton;
+using chrome_test_util::TabletTabSwitcherOtherDevicesPanelButton;
 using web::test::HttpServer;
-
-namespace {
-
-// Returns the GREYMatcher for the button that opens the tab switcher.
-id<GREYMatcher> TabSwitcherOpenButton() {
-  return ButtonWithAccessibilityLabelId(IDS_IOS_TAB_STRIP_ENTER_TAB_SWITCHER);
-}
-// Returns the GREYMatcher for the button that closes the tab switcher.
-id<GREYMatcher> TabSwitcherCloseButton() {
-  return ButtonWithAccessibilityLabelId(IDS_IOS_TAB_STRIP_LEAVE_TAB_SWITCHER);
-}
-// Returns the GREYMatcher for the incognito tabs button in the tab switcher.
-id<GREYMatcher> TabSwitcherIncognitoButton() {
-  return ButtonWithAccessibilityLabelId(
-      IDS_IOS_TAB_SWITCHER_HEADER_INCOGNITO_TABS);
-}
-// Returns the GREYMatcher for the incognito tabs button in the tab switcher.
-id<GREYMatcher> TabSwitcherOtherDevicesButton() {
-  return ButtonWithAccessibilityLabelId(
-      IDS_IOS_TAB_SWITCHER_HEADER_OTHER_DEVICES_TABS);
-}
-
-// Returns the GREYMatcher for the button that creates new non incognito tabs
-// from within the tab switcher.
-id<GREYMatcher> TabSwitcherNewTabButton() {
-  return grey_allOf(
-      ButtonWithAccessibilityLabelId(IDS_IOS_TAB_SWITCHER_CREATE_NEW_TAB),
-      grey_sufficientlyVisible(), nil);
-}
-
-// Returns the GREYMatcher for the button that creates new incognito tabs from
-// within the tab switcher.
-id<GREYMatcher> TabSwitcherNewIncognitoTabButton() {
-  return grey_allOf(ButtonWithAccessibilityLabelId(
-                        IDS_IOS_TAB_SWITCHER_CREATE_NEW_INCOGNITO_TAB),
-                    grey_sufficientlyVisible(), nil);
-}
-
-// Returns the GREYMatcher for the button to go to the non incognito panel in
-// the tab switcher.
-id<GREYMatcher> TabSwitcherHeaderPanelButton() {
-  NSString* accessibility_label = l10n_util::GetNSStringWithFixup(
-      IDS_IOS_TAB_SWITCHER_HEADER_NON_INCOGNITO_TABS);
-  return grey_accessibilityLabel(accessibility_label);
-}
-
-// Returns the GREYMatcher for the button that closes tabs on iPad.
-id<GREYMatcher> CloseTabButton() {
-  return ButtonWithAccessibilityLabelId(IDS_IOS_TOOLS_MENU_CLOSE_TAB);
-}
-
-// Opens a new incognito tabs using the tools menu.
-void OpenNewIncognitoTabUsingUI() {
-  [ChromeEarlGreyUI openToolsMenu];
-  id<GREYMatcher> newIncognitoTabButtonMatcher =
-      grey_accessibilityID(kToolsMenuNewIncognitoTabId);
-  [[EarlGrey selectElementWithMatcher:newIncognitoTabButtonMatcher]
-      performAction:grey_tap()];
-}
-
-// Triggers the opening of the tab switcher by launching a command. Should be
-// called only when the tab switcher is not presented.
-void EnterTabSwitcherWithCommand() {
-  [[EarlGrey selectElementWithMatcher:TabSwitcherOpenButton()]
-      performAction:grey_tap()];
-}
-
-}  // namespace
 
 @interface TabSwitcherControllerTestCase : ChromeTestCase
 @end
@@ -147,7 +88,8 @@ void EnterTabSwitcherWithCommand() {
 
   [self assertTabSwitcherIsInactive];
 
-  EnterTabSwitcherWithCommand();
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
 
   // Check that the "No Open Tabs" message is not displayed.
@@ -155,7 +97,7 @@ void EnterTabSwitcherWithCommand() {
             IDS_IOS_TAB_SWITCHER_NO_LOCAL_NON_INCOGNITO_TABS_TITLE];
 
   // Press the :: icon to exit the tab switcher.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherCloseButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsInactive];
@@ -170,7 +112,7 @@ void EnterTabSwitcherWithCommand() {
   [self assertTabSwitcherIsInactive];
 
   // Close the tab.
-  [[EarlGrey selectElementWithMatcher:CloseTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseTabButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsActive];
@@ -180,7 +122,7 @@ void EnterTabSwitcherWithCommand() {
             IDS_IOS_TAB_SWITCHER_NO_LOCAL_NON_INCOGNITO_TABS_TITLE];
 
   // Create a new tab.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherNewTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewTabButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsInactive];
@@ -194,11 +136,11 @@ void EnterTabSwitcherWithCommand() {
   [self assertTabSwitcherIsInactive];
 
   // Create new incognito tab from tools menu.
-  OpenNewIncognitoTabUsingUI();
+  [ChromeEarlGreyUI openNewIncognitoTab];
 
   // Close the incognito tab and check that the we are entering the tab
   // switcher.
-  [[EarlGrey selectElementWithMatcher:CloseTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseTabButton()]
       performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
 
@@ -207,27 +149,66 @@ void EnterTabSwitcherWithCommand() {
             IDS_IOS_TAB_SWITCHER_NO_LOCAL_INCOGNITO_TABS_PROMO];
 
   // Create new incognito tab.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherNewIncognitoTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewIncognitoTabButton()]
       performAction:grey_tap()];
 
   // Verify that we've left the tab switcher.
   [self assertTabSwitcherIsInactive];
 
   // Close tab and verify we've entered the tab switcher again.
-  [[EarlGrey selectElementWithMatcher:CloseTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseTabButton()]
       performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
 
   // Switch to the non incognito panel.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherHeaderPanelButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenTabsPanelButton()]
       performAction:grey_tap()];
 
   // Press the :: icon to exit the tab switcher.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherCloseButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
       performAction:grey_tap()];
 
   // Verify that we've left the tab switcher.
   [self assertTabSwitcherIsInactive];
+}
+
+// Tests leaving the tab switcher while on the "Other Devices" panel.
+- (void)testLeavingSwitcherFromOtherDevices {
+  if (!IsIPadIdiom())
+    return;
+
+  [self assertTabSwitcherIsInactive];
+
+  // Enter the tab switcher and press the "Other Devices" button.
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
+  [self assertTabSwitcherIsActive];
+  [[EarlGrey
+      selectElementWithMatcher:TabletTabSwitcherOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+
+  // Leave the tab switcher and verify that the normal BVC is shown.
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
+      performAction:grey_tap()];
+  [self assertTabSwitcherIsInactive];
+  GREYAssertFalse(chrome_test_util::IsIncognitoMode(),
+                  @"Expected to be in normal mode");
+
+  // Open a new incognito tab and reopen the tab switcher.
+  [ChromeEarlGreyUI openNewIncognitoTab];
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
+  [self assertTabSwitcherIsActive];
+  [[EarlGrey
+      selectElementWithMatcher:TabletTabSwitcherOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+
+  // Leave the tab switcher and verify that the incognito BVC is shown.
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
+      performAction:grey_tap()];
+  [self assertTabSwitcherIsInactive];
+  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
+                 @"Expected to be in incognito mode");
 }
 
 // Tests that elements on iPad tab switcher are accessible.
@@ -237,7 +218,8 @@ void EnterTabSwitcherWithCommand() {
     return;
   [self assertTabSwitcherIsInactive];
 
-  EnterTabSwitcherWithCommand();
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
   // Check that the "No Open Tabs" message is not displayed.
   [self assertMessageIsNotVisible:
@@ -246,7 +228,7 @@ void EnterTabSwitcherWithCommand() {
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
 
   // Press the :: icon to exit the tab switcher.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherCloseButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsInactive];
@@ -259,20 +241,22 @@ void EnterTabSwitcherWithCommand() {
     return;
   [self assertTabSwitcherIsInactive];
 
-  EnterTabSwitcherWithCommand();
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
   // Check that the "No Open Tabs" message is not displayed.
   [self assertMessageIsNotVisible:
             IDS_IOS_TAB_SWITCHER_NO_LOCAL_NON_INCOGNITO_TABS_TITLE];
 
   // Press incognito tabs button.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherIncognitoButton()]
+  [[EarlGrey
+      selectElementWithMatcher:TabletTabSwitcherIncognitoTabsPanelButton()]
       performAction:grey_tap()];
 
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
 
   // Press the :: icon to exit the tab switcher.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherCloseButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherCloseButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsInactive];
@@ -285,20 +269,22 @@ void EnterTabSwitcherWithCommand() {
     return;
   [self assertTabSwitcherIsInactive];
 
-  EnterTabSwitcherWithCommand();
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
   [self assertTabSwitcherIsActive];
   // Check that the "No Open Tabs" message is not displayed.
   [self assertMessageIsNotVisible:
             IDS_IOS_TAB_SWITCHER_NO_LOCAL_NON_INCOGNITO_TABS_TITLE];
 
   // Press other devices button.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherOtherDevicesButton()]
+  [[EarlGrey
+      selectElementWithMatcher:TabletTabSwitcherOtherDevicesPanelButton()]
       performAction:grey_tap()];
 
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
 
   // Create new incognito tab to exit the tab switcher.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherNewIncognitoTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewIncognitoTabButton()]
       performAction:grey_tap()];
 
   [self assertTabSwitcherIsInactive];
@@ -318,22 +304,20 @@ void EnterTabSwitcherWithCommand() {
   [ChromeEarlGrey loadURL:kBlankPageURL];
 
   // Enter the tab switcher and show a dialog from the test page.
-  EnterTabSwitcherWithCommand();
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenButton()]
+      performAction:grey_tap()];
   NSString* const kCancelledMessageText = @"CANCELLED";
   NSString* const kAlertFormat = @"alert(\"%@\");";
   chrome_test_util::ExecuteJavaScript(
       [NSString stringWithFormat:kAlertFormat, kCancelledMessageText], nil);
 
-  // Close the Tab that is attempting to display a dialog.
-  id<GREYMatcher> closeButton = grey_allOf(
-      grey_accessibilityID(kTabSwicherPanelCellCloseButtonAccessibilityID),
-      grey_sufficientlyVisible(), nil);
-  [[EarlGrey selectElementWithMatcher:closeButton] performAction:grey_tap()];
+  // Close the tab so that the queued dialog is cancelled.
+  [[self class] closeAllTabs];
 
   // Open a new tab.  This will exit the stack view and will make the non-
   // incognito BrowserState active.  Attempt to present an alert with
   // kMessageText to verify that there aren't any alerts still in the queue.
-  [[EarlGrey selectElementWithMatcher:TabSwitcherNewTabButton()]
+  [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewTabButton()]
       performAction:grey_tap()];
   [ChromeEarlGrey loadURL:kBlankPageURL];
   NSString* const kMessageText = @"MESSAGE";

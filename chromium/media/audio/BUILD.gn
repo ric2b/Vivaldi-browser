@@ -65,6 +65,8 @@ source_set("audio") {
   ]
   sources = [
     "agc_audio_stream.h",
+    "alive_checker.cc",
+    "alive_checker.h",
     "audio_debug_file_writer.cc",
     "audio_debug_file_writer.h",
     "audio_debug_recording_helper.cc",
@@ -81,6 +83,8 @@ source_set("audio") {
     "audio_features.h",
     "audio_input_controller.cc",
     "audio_input_controller.h",
+    "audio_input_delegate.cc",
+    "audio_input_delegate.h",
     "audio_input_device.cc",
     "audio_input_device.h",
     "audio_input_ipc.cc",
@@ -113,6 +117,8 @@ source_set("audio") {
     "audio_source_diverter.h",
     "audio_system.cc",
     "audio_system.h",
+    "audio_system_helper.cc",
+    "audio_system_helper.h",
     "audio_system_impl.cc",
     "audio_system_impl.h",
     "audio_thread.h",
@@ -130,6 +136,8 @@ source_set("audio") {
     "fake_audio_output_stream.h",
     "null_audio_sink.cc",
     "null_audio_sink.h",
+    "power_observer_helper.cc",
+    "power_observer_helper.h",
     "scoped_task_runner_observer.cc",
     "scoped_task_runner_observer.h",
     "simple_sources.cc",
@@ -289,6 +297,16 @@ source_set("audio") {
     sources += [
       "fuchsia/audio_manager_fuchsia.cc",
       "fuchsia/audio_manager_fuchsia.h",
+      "fuchsia/audio_output_stream_fuchsia.cc",
+      "fuchsia/audio_output_stream_fuchsia.h",
+    ]
+    libs += [ "media_client" ]
+  }
+
+  if (enable_webrtc) {
+    sources += [
+      "audio_input_stream_data_interceptor.cc",
+      "audio_input_stream_data_interceptor.h",
     ]
   }
 
@@ -315,6 +333,8 @@ static_library("test_support") {
   sources = [
     "audio_device_info_accessor_for_tests.cc",
     "audio_device_info_accessor_for_tests.h",
+    "audio_system_test_util.cc",
+    "audio_system_test_util.h",
     "audio_unittest_util.cc",
     "audio_unittest_util.h",
     "mock_audio_manager.cc",
@@ -345,6 +365,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "alive_checker_unittest.cc",
     "audio_debug_file_writer_unittest.cc",
     "audio_debug_recording_helper_unittest.cc",
     "audio_debug_recording_manager_unittest.cc",
@@ -357,6 +378,7 @@ source_set("unit_tests") {
     "audio_output_proxy_unittest.cc",
     "audio_power_monitor_unittest.cc",
     "audio_system_impl_unittest.cc",
+    "power_observer_helper_unittest.cc",
     "simple_sources_unittest.cc",
     "virtual_audio_input_stream_unittest.cc",
     "virtual_audio_output_stream_unittest.cc",
@@ -376,6 +398,10 @@ source_set("unit_tests") {
     "//build/config/compiler:no_size_t_to_int_warning",
     "//media:media_config",
   ]
+
+  if (enable_webrtc) {
+    sources += [ "audio_input_stream_data_interceptor_unittest.cc" ]
+  }
 
   if (is_android) {
     sources += [ "android/audio_android_unittest.cc" ]

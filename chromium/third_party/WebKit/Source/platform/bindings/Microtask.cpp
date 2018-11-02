@@ -30,7 +30,7 @@
 
 #include "platform/bindings/Microtask.h"
 
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -44,7 +44,7 @@ void Microtask::PerformCheckpoint(v8::Isolate* isolate) {
 static void MicrotaskFunctionCallback(void* data) {
   std::unique_ptr<WTF::Closure> task =
       WTF::WrapUnique(static_cast<WTF::Closure*>(data));
-  (*task)();
+  std::move(*task).Run();
 }
 
 void Microtask::EnqueueMicrotask(WTF::Closure callback) {

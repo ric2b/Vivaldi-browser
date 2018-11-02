@@ -21,12 +21,13 @@
 
 #include "core/css/CSSStyleRule.h"
 
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -42,7 +43,7 @@ static SelectorTextCache& GetSelectorTextCache() {
 CSSStyleRule::CSSStyleRule(StyleRule* style_rule, CSSStyleSheet* parent)
     : CSSRule(parent), style_rule_(style_rule) {}
 
-CSSStyleRule::~CSSStyleRule() {}
+CSSStyleRule::~CSSStyleRule() = default;
 
 CSSStyleDeclaration* CSSStyleRule::style() const {
   if (!properties_cssom_wrapper_) {
@@ -65,9 +66,10 @@ String CSSStyleRule::selectorText() const {
   return text;
 }
 
-void CSSStyleRule::setSelectorText(const String& selector_text) {
-  const CSSParserContext* context =
-      CSSParserContext::Create(ParserContext(), nullptr);
+void CSSStyleRule::setSelectorText(const ExecutionContext* execution_context,
+                                   const String& selector_text) {
+  const CSSParserContext* context = CSSParserContext::Create(
+      ParserContext(execution_context->GetSecureContextMode()), nullptr);
   CSSSelectorList selector_list = CSSParser::ParseSelector(
       context, parentStyleSheet() ? parentStyleSheet()->Contents() : nullptr,
       selector_text);
@@ -103,7 +105,7 @@ void CSSStyleRule::Reattach(StyleRuleBase* rule) {
     properties_cssom_wrapper_->Reattach(style_rule_->MutableProperties());
 }
 
-DEFINE_TRACE(CSSStyleRule) {
+void CSSStyleRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(style_rule_);
   visitor->Trace(properties_cssom_wrapper_);
   CSSRule::Trace(visitor);

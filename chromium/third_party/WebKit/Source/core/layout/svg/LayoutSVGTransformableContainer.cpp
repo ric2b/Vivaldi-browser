@@ -45,7 +45,7 @@ bool LayoutSVGTransformableContainer::IsChildAllowed(
     LayoutObject* child,
     const ComputedStyle& style) const {
   DCHECK(GetElement());
-  if (isSVGSwitchElement(*GetElement())) {
+  if (IsSVGSwitchElement(*GetElement())) {
     Node* node = child->GetNode();
     // Reject non-SVG/non-valid elements.
     if (!node->IsSVGElement() || !ToSVGElement(node)->IsValid())
@@ -53,11 +53,11 @@ bool LayoutSVGTransformableContainer::IsChildAllowed(
     // Reject this child if it isn't the first valid node.
     if (HasValidPredecessor(node))
       return false;
-  } else if (isSVGAElement(*GetElement())) {
+  } else if (IsSVGAElement(*GetElement())) {
     // http://www.w3.org/2003/01/REC-SVG11-20030114-errata#linking-text-environment
     // The 'a' element may contain any element that its parent may contain,
     // except itself.
-    if (isSVGAElement(*child->GetNode()))
+    if (IsSVGAElement(*child->GetNode()))
       return false;
     if (Parent() && Parent()->IsSVG())
       return Parent()->IsChildAllowed(child, style);
@@ -74,22 +74,17 @@ void LayoutSVGTransformableContainer::SetNeedsTransformUpdate() {
 }
 
 SVGTransformChange LayoutSVGTransformableContainer::CalculateLocalTransform() {
-  SVGGraphicsElement* element = ToSVGGraphicsElement(this->GetElement());
+  SVGGraphicsElement* element = ToSVGGraphicsElement(GetElement());
   DCHECK(element);
 
   // If we're either the layoutObject for a <use> element, or for any <g>
   // element inside the shadow tree, that was created during the use/symbol/svg
   // expansion in SVGUseElement. These containers need to respect the
   // translations induced by their corresponding use elements x/y attributes.
-  SVGUseElement* use_element = nullptr;
-  if (isSVGUseElement(*element)) {
-    use_element = toSVGUseElement(element);
-  } else if (isSVGGElement(*element) &&
-             toSVGGElement(element)->InUseShadowTree()) {
-    SVGElement* corresponding_element = element->CorrespondingElement();
-    if (isSVGUseElement(corresponding_element))
-      use_element = toSVGUseElement(corresponding_element);
-  }
+  SVGUseElement* use_element = ToSVGUseElementOrNull(*element);
+  if (!use_element && IsSVGGElement(*element) &&
+      ToSVGGElement(element)->InUseShadowTree())
+    use_element = ToSVGUseElementOrNull(element->CorrespondingElement());
 
   if (use_element) {
     SVGLengthContext length_context(element);

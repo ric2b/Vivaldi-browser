@@ -12,6 +12,10 @@ declare_args() {
   # on Windows.
   is_multi_dll_chrome = is_win && !is_component_build
 
+  # Turn this on to generate order files. See
+  # https://chromium.googlesource.com/chromium/src/+/master/docs/win_order_files.md
+  generate_order_files = false
+
   is_vivaldi = false
 }
 

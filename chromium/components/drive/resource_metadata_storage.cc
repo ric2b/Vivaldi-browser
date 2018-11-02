@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
@@ -191,12 +190,259 @@ void RecordCheckValidityFailure(CheckValidityFailureReason reason) {
                             CHECK_VALIDITY_FAILURE_MAX_VALUE);
 }
 
+bool UpgradeOldDBVersions6To10(leveldb::DB* resource_map) {
+  // Cache entries can be reused.
+  leveldb::ReadOptions options;
+  options.verify_checksums = true;
+  std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
+
+  leveldb::WriteBatch batch;
+  // First, remove all entries.
+  for (it->SeekToFirst(); it->Valid(); it->Next())
+    batch.Delete(it->key());
+
+  // Put ID entries and cache entries.
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (!IsCacheEntryKey(it->key()))
+      continue;
+
+    FileCacheEntry cache_entry;
+    if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
+      return false;
+
+    // The resource ID might be in old WAPI format. We need to canonicalize
+    // to the format of API service currently in use.
+    const std::string& id = GetIdFromCacheEntryKey(it->key());
+    const std::string& id_new = util::CanonicalizeResourceId(id);
+
+    // Before v11, resource ID was directly used as local ID. Such entries
+    // can be migrated by adding an identity ID mapping.
+    batch.Put(GetIdEntryKey(id_new), id_new);
+
+    // Put cache state into a ResourceEntry.
+    ResourceEntry entry;
+    entry.set_local_id(id_new);
+    entry.set_resource_id(id_new);
+    *entry.mutable_file_specific_info()->mutable_cache_state() = cache_entry;
+
+    std::string serialized_entry;
+    if (!entry.SerializeToString(&serialized_entry)) {
+      DLOG(ERROR) << "Failed to serialize the entry: " << id;
+      return false;
+    }
+    batch.Put(id_new, serialized_entry);
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Put header with the latest version number. This also clears
+  // largest_changestamp and triggers refresh of metadata.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
+bool UpgradeOldDBVersion11(leveldb::DB* resource_map) {
+  // Cache and ID map entries are reusable.
+  leveldb::ReadOptions options;
+  options.verify_checksums = true;
+  std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
+
+  // First, get the set of local IDs associated with cache entries.
+  std::set<std::string> cached_entry_ids;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (IsCacheEntryKey(it->key()))
+      cached_entry_ids.insert(GetIdFromCacheEntryKey(it->key()));
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Remove all entries except used ID entries.
+  leveldb::WriteBatch batch;
+  std::map<std::string, std::string> local_id_to_resource_id;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    const bool is_used_id = IsIdEntryKey(it->key()) &&
+                            cached_entry_ids.count(it->value().ToString());
+    if (is_used_id) {
+      local_id_to_resource_id[it->value().ToString()] =
+          GetResourceIdFromIdEntryKey(it->key());
+    } else {
+      batch.Delete(it->key());
+    }
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Put cache entries.
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (!IsCacheEntryKey(it->key()))
+      continue;
+
+    const std::string& id = GetIdFromCacheEntryKey(it->key());
+    const auto iter_resource_id = local_id_to_resource_id.find(id);
+    if (iter_resource_id == local_id_to_resource_id.end())
+      continue;
+
+    FileCacheEntry cache_entry;
+    if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
+      return false;
+
+    // Put cache state into a ResourceEntry.
+    ResourceEntry entry;
+    entry.set_local_id(id);
+    entry.set_resource_id(iter_resource_id->second);
+    *entry.mutable_file_specific_info()->mutable_cache_state() = cache_entry;
+
+    std::string serialized_entry;
+    if (!entry.SerializeToString(&serialized_entry)) {
+      DLOG(ERROR) << "Failed to serialize the entry: " << id;
+      return false;
+    }
+    batch.Put(id, serialized_entry);
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Put header with the latest version number. This also clears
+  // largest_changestamp and triggers refresh of metadata.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
+bool UpgradeOldDBVersion12(leveldb::DB* resource_map) {
+  // Reuse all entries.
+  leveldb::ReadOptions options;
+  options.verify_checksums = true;
+  std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
+
+  // First, get local ID to resource ID map.
+  std::map<std::string, std::string> local_id_to_resource_id;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (IsIdEntryKey(it->key())) {
+      local_id_to_resource_id[it->value().ToString()] =
+          GetResourceIdFromIdEntryKey(it->key());
+    }
+  }
+  if (!it->status().ok())
+    return false;
+
+  leveldb::WriteBatch batch;
+  // Merge cache entries to ResourceEntry.
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (!IsCacheEntryKey(it->key()))
+      continue;
+
+    const std::string& id = GetIdFromCacheEntryKey(it->key());
+
+    FileCacheEntry cache_entry;
+    if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
+      return false;
+
+    std::string serialized_entry;
+    leveldb::Status status =
+        resource_map->Get(options, leveldb::Slice(id), &serialized_entry);
+
+    const auto iter_resource_id = local_id_to_resource_id.find(id);
+
+    // No need to keep cache-only entries without resource ID.
+    if (status.IsNotFound() &&
+        iter_resource_id == local_id_to_resource_id.end())
+      continue;
+
+    ResourceEntry entry;
+    if (status.ok()) {
+      if (!entry.ParseFromString(serialized_entry))
+        return false;
+    } else if (status.IsNotFound()) {
+      entry.set_local_id(id);
+      entry.set_resource_id(iter_resource_id->second);
+    } else {
+      DLOG(ERROR) << "Failed to get the entry: " << id;
+      return false;
+    }
+    *entry.mutable_file_specific_info()->mutable_cache_state() = cache_entry;
+
+    if (!entry.SerializeToString(&serialized_entry)) {
+      DLOG(ERROR) << "Failed to serialize the entry: " << id;
+      return false;
+    }
+    batch.Delete(it->key());
+    batch.Put(id, serialized_entry);
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Put header with the latest version number. This also clears
+  // largest_changestamp and triggers refresh of metadata.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
+bool UpgradeOldDBVersion13(leveldb::DB* resource_map) {
+  // Before r272134, UpgradeOldDB() was not deleting unused ID entries.
+  // Delete unused ID entries to fix crbug.com/374648.
+  std::set<std::string> used_ids;
+
+  std::unique_ptr<leveldb::Iterator> it(
+      resource_map->NewIterator(leveldb::ReadOptions()));
+  it->Seek(leveldb::Slice(GetHeaderDBKey()));
+  it->Next();
+  for (; it->Valid(); it->Next()) {
+    if (IsCacheEntryKey(it->key()))
+      used_ids.insert(GetIdFromCacheEntryKey(it->key()));
+    else if (!IsChildEntryKey(it->key()) && !IsIdEntryKey(it->key()))
+      used_ids.insert(it->key().ToString());
+  }
+  if (!it->status().ok())
+    return false;
+
+  leveldb::WriteBatch batch;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    if (IsIdEntryKey(it->key()) && !used_ids.count(it->value().ToString()))
+      batch.Delete(it->key());
+  }
+  if (!it->status().ok())
+    return false;
+
+  // Put header with the latest version number. This also clears
+  // largest_changestamp and triggers refresh of metadata.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
+bool UpgradeOldDBVersion14(leveldb::DB* resource_map) {
+  // Just need to clear largest_changestamp.
+  // Put header with the latest version number.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  leveldb::WriteBatch batch;
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
 }  // namespace
 
 ResourceMetadataStorage::Iterator::Iterator(
     std::unique_ptr<leveldb::Iterator> it)
     : it_(std::move(it)) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   DCHECK(it_);
 
   // Skip the header entry.
@@ -208,11 +454,11 @@ ResourceMetadataStorage::Iterator::Iterator(
 }
 
 ResourceMetadataStorage::Iterator::~Iterator() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 }
 
 bool ResourceMetadataStorage::Iterator::IsAtEnd() const {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   return !it_->Valid();
 }
 
@@ -221,13 +467,13 @@ std::string ResourceMetadataStorage::Iterator::GetID() const {
 }
 
 const ResourceEntry& ResourceMetadataStorage::Iterator::GetValue() const {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   DCHECK(!IsAtEnd());
   return entry_;
 }
 
 void ResourceMetadataStorage::Iterator::Advance() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   DCHECK(!IsAtEnd());
 
   for (it_->Next() ; it_->Valid(); it_->Next()) {
@@ -240,17 +486,14 @@ void ResourceMetadataStorage::Iterator::Advance() {
 }
 
 bool ResourceMetadataStorage::Iterator::HasError() const {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   return !it_->status().ok();
 }
 
 // static
 bool ResourceMetadataStorage::UpgradeOldDB(
     const base::FilePath& directory_path) {
-  base::ThreadRestrictions::AssertIOAllowed();
-  static_assert(
-      kDBVersion == 13,
-      "database version and this function must be updated at the same time");
+  base::AssertBlockingAllowed();
 
   const base::FilePath resource_map_path =
       directory_path.Append(kResourceMapDBName);
@@ -289,232 +532,36 @@ bool ResourceMetadataStorage::UpgradeOldDB(
   UMA_HISTOGRAM_SPARSE_SLOWLY("Drive.MetadataDBVersionBeforeUpgradeCheck",
                               header.version());
 
-  if (header.version() == kDBVersion) {
-    // Before r272134, UpgradeOldDB() was not deleting unused ID entries.
-    // Delete unused ID entries to fix crbug.com/374648.
-    std::set<std::string> used_ids;
-
-    std::unique_ptr<leveldb::Iterator> it(
-        resource_map->NewIterator(leveldb::ReadOptions()));
-    it->Seek(leveldb::Slice(GetHeaderDBKey()));
-    it->Next();
-    for (; it->Valid(); it->Next()) {
-      if (IsCacheEntryKey(it->key())) {
-        used_ids.insert(GetIdFromCacheEntryKey(it->key()));
-      } else if (!IsChildEntryKey(it->key()) && !IsIdEntryKey(it->key())) {
-        used_ids.insert(it->key().ToString());
-      }
-    }
-    if (!it->status().ok())
+  switch (header.version()) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+      return false;  // Too old, nothing can be done.
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+      return UpgradeOldDBVersions6To10(resource_map.get());
+    case 11:
+      return UpgradeOldDBVersion11(resource_map.get());
+    case 12:
+      return UpgradeOldDBVersion12(resource_map.get());
+    case 13:
+      return UpgradeOldDBVersion13(resource_map.get());
+    case 14:
+      return UpgradeOldDBVersion14(resource_map.get());
+    case kDBVersion:
+      static_assert(
+          kDBVersion == 15,
+          "database version and this function must be updated together");
+      return true;
+    default:
+      LOG(WARNING) << "Unexpected DB version: " << header.version();
       return false;
-
-    leveldb::WriteBatch batch;
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsIdEntryKey(it->key()) && !used_ids.count(it->value().ToString()))
-        batch.Delete(it->key());
-    }
-    if (!it->status().ok())
-      return false;
-
-    return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
-  } else if (header.version() < 6) {  // Too old, nothing can be done.
-    return false;
-  } else if (header.version() < 11) {  // Cache entries can be reused.
-    leveldb::ReadOptions options;
-    options.verify_checksums = true;
-    std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
-
-    leveldb::WriteBatch batch;
-    // First, remove all entries.
-    for (it->SeekToFirst(); it->Valid(); it->Next())
-      batch.Delete(it->key());
-
-    // Put ID entries and cache entries.
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsCacheEntryKey(it->key())) {
-        FileCacheEntry cache_entry;
-        if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
-          return false;
-
-        // The resource ID might be in old WAPI format. We need to canonicalize
-        // to the format of API service currently in use.
-        const std::string& id = GetIdFromCacheEntryKey(it->key());
-        const std::string& id_new = util::CanonicalizeResourceId(id);
-
-        // Before v11, resource ID was directly used as local ID. Such entries
-        // can be migrated by adding an identity ID mapping.
-        batch.Put(GetIdEntryKey(id_new), id_new);
-
-        // Put cache state into a ResourceEntry.
-        ResourceEntry entry;
-        entry.set_local_id(id_new);
-        entry.set_resource_id(id_new);
-        *entry.mutable_file_specific_info()->mutable_cache_state() =
-            cache_entry;
-
-        std::string serialized_entry;
-        if (!entry.SerializeToString(&serialized_entry)) {
-          DLOG(ERROR) << "Failed to serialize the entry: " << id;
-          return false;
-        }
-        batch.Put(id_new, serialized_entry);
-      }
-    }
-    if (!it->status().ok())
-      return false;
-
-    // Put header with the latest version number.
-    std::string serialized_header;
-    if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
-      return false;
-    batch.Put(GetHeaderDBKey(), serialized_header);
-
-    return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
-  } else if (header.version() < 12) {  // Cache and ID map entries are reusable.
-    leveldb::ReadOptions options;
-    options.verify_checksums = true;
-    std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
-
-    // First, get the set of local IDs associated with cache entries.
-    std::set<std::string> cached_entry_ids;
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsCacheEntryKey(it->key()))
-        cached_entry_ids.insert(GetIdFromCacheEntryKey(it->key()));
-    }
-    if (!it->status().ok())
-      return false;
-
-    // Remove all entries except used ID entries.
-    leveldb::WriteBatch batch;
-    std::map<std::string, std::string> local_id_to_resource_id;
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      const bool is_used_id = IsIdEntryKey(it->key()) &&
-          cached_entry_ids.count(it->value().ToString());
-      if (is_used_id) {
-        local_id_to_resource_id[it->value().ToString()] =
-            GetResourceIdFromIdEntryKey(it->key());
-      } else {
-        batch.Delete(it->key());
-      }
-    }
-    if (!it->status().ok())
-      return false;
-
-    // Put cache entries.
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsCacheEntryKey(it->key())) {
-        const std::string& id = GetIdFromCacheEntryKey(it->key());
-
-        std::map<std::string, std::string>::const_iterator iter_resource_id =
-            local_id_to_resource_id.find(id);
-        if (iter_resource_id == local_id_to_resource_id.end())
-          continue;
-
-        FileCacheEntry cache_entry;
-        if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
-          return false;
-
-        // Put cache state into a ResourceEntry.
-        ResourceEntry entry;
-        entry.set_local_id(id);
-        entry.set_resource_id(iter_resource_id->second);
-        *entry.mutable_file_specific_info()->mutable_cache_state() =
-            cache_entry;
-
-        std::string serialized_entry;
-        if (!entry.SerializeToString(&serialized_entry)) {
-          DLOG(ERROR) << "Failed to serialize the entry: " << id;
-          return false;
-        }
-        batch.Put(id, serialized_entry);
-      }
-    }
-    if (!it->status().ok())
-      return false;
-
-    // Put header with the latest version number.
-    std::string serialized_header;
-    if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
-      return false;
-    batch.Put(GetHeaderDBKey(), serialized_header);
-
-    return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
-  } else if (header.version() < 13) {  // Reuse all entries.
-    leveldb::ReadOptions options;
-    options.verify_checksums = true;
-    std::unique_ptr<leveldb::Iterator> it(resource_map->NewIterator(options));
-
-    // First, get local ID to resource ID map.
-    std::map<std::string, std::string> local_id_to_resource_id;
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsIdEntryKey(it->key())) {
-        local_id_to_resource_id[it->value().ToString()] =
-            GetResourceIdFromIdEntryKey(it->key());
-      }
-    }
-    if (!it->status().ok())
-      return false;
-
-    leveldb::WriteBatch batch;
-    // Merge cache entries to ResourceEntry.
-    for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      if (IsCacheEntryKey(it->key())) {
-        const std::string& id = GetIdFromCacheEntryKey(it->key());
-
-        FileCacheEntry cache_entry;
-        if (!cache_entry.ParseFromArray(it->value().data(), it->value().size()))
-          return false;
-
-        std::string serialized_entry;
-        leveldb::Status status = resource_map->Get(options,
-                                                   leveldb::Slice(id),
-                                                   &serialized_entry);
-
-        std::map<std::string, std::string>::const_iterator iter_resource_id =
-            local_id_to_resource_id.find(id);
-
-        // No need to keep cache-only entries without resource ID.
-        if (status.IsNotFound() &&
-            iter_resource_id == local_id_to_resource_id.end())
-          continue;
-
-        ResourceEntry entry;
-        if (status.ok()) {
-          if (!entry.ParseFromString(serialized_entry))
-            return false;
-        } else if (status.IsNotFound()) {
-          entry.set_local_id(id);
-          entry.set_resource_id(iter_resource_id->second);
-        } else {
-          DLOG(ERROR) << "Failed to get the entry: " << id;
-          return false;
-        }
-        *entry.mutable_file_specific_info()->mutable_cache_state() =
-            cache_entry;
-
-        if (!entry.SerializeToString(&serialized_entry)) {
-          DLOG(ERROR) << "Failed to serialize the entry: " << id;
-          return false;
-        }
-        batch.Delete(it->key());
-        batch.Put(id, serialized_entry);
-      }
-    }
-    if (!it->status().ok())
-      return false;
-
-    // Put header with the latest version number.
-    header.set_version(ResourceMetadataStorage::kDBVersion);
-    std::string serialized_header;
-    if (!header.SerializeToString(&serialized_header))
-      return false;
-    batch.Put(GetHeaderDBKey(), serialized_header);
-
-    return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
   }
-
-  LOG(WARNING) << "Unexpected DB version: " << header.version();
-  return false;
 }
 
 ResourceMetadataStorage::ResourceMetadataStorage(
@@ -525,15 +572,8 @@ ResourceMetadataStorage::ResourceMetadataStorage(
       blocking_task_runner_(blocking_task_runner) {
 }
 
-void ResourceMetadataStorage::Destroy() {
-  blocking_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&ResourceMetadataStorage::DestroyOnBlockingPool,
-                 base::Unretained(this)));
-}
-
 bool ResourceMetadataStorage::Initialize() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   resource_map_.reset();
 
@@ -626,28 +666,16 @@ bool ResourceMetadataStorage::Initialize() {
     }
   }
 
-  // Update local resouces if 'starred' property has not been initialized.
-  if (resource_map_) {
-    ResourceMetadataHeader header;
-    if (GetHeader(&header) != FILE_ERROR_OK)
-      return false;
-
-    if (!header.starred_property_initialized()) {
-      // largest changestamp == 0 means data in DB is obsolete.
-      // So data for all entries will be reloaded.
-      header.set_largest_changestamp(0);
-      header.set_starred_property_initialized(true);
-      FileError error = PutHeader(header);
-
-      if (error != FILE_ERROR_OK)
-        return false;
-    }
-  }
-
   UMA_HISTOGRAM_ENUMERATION("Drive.MetadataDBInitResult",
                             init_result,
                             DB_INIT_MAX_VALUE);
   return !!resource_map_;
+}
+
+void ResourceMetadataStorage::Destroy() {
+  blocking_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&ResourceMetadataStorage::DestroyOnBlockingPool,
+                            base::Unretained(this)));
 }
 
 void ResourceMetadataStorage::RecoverCacheInfoFromTrashedResourceMap(
@@ -713,7 +741,7 @@ void ResourceMetadataStorage::RecoverCacheInfoFromTrashedResourceMap(
 
 FileError ResourceMetadataStorage::SetLargestChangestamp(
     int64_t largest_changestamp) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   ResourceMetadataHeader header;
   FileError error = GetHeader(&header);
@@ -727,7 +755,7 @@ FileError ResourceMetadataStorage::SetLargestChangestamp(
 
 FileError ResourceMetadataStorage::GetLargestChangestamp(
     int64_t* largest_changestamp) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   ResourceMetadataHeader header;
   FileError error = GetHeader(&header);
   if (error != FILE_ERROR_OK) {
@@ -739,7 +767,7 @@ FileError ResourceMetadataStorage::GetLargestChangestamp(
 }
 
 FileError ResourceMetadataStorage::PutEntry(const ResourceEntry& entry) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   const std::string& id = entry.local_id();
   DCHECK(!id.empty());
@@ -792,7 +820,7 @@ FileError ResourceMetadataStorage::PutEntry(const ResourceEntry& entry) {
 
 FileError ResourceMetadataStorage::GetEntry(const std::string& id,
                                             ResourceEntry* out_entry) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   DCHECK(!id.empty());
 
   std::string serialized_entry;
@@ -807,7 +835,7 @@ FileError ResourceMetadataStorage::GetEntry(const std::string& id,
 }
 
 FileError ResourceMetadataStorage::RemoveEntry(const std::string& id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   DCHECK(!id.empty());
 
   ResourceEntry entry;
@@ -835,17 +863,17 @@ FileError ResourceMetadataStorage::RemoveEntry(const std::string& id) {
 
 std::unique_ptr<ResourceMetadataStorage::Iterator>
 ResourceMetadataStorage::GetIterator() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::unique_ptr<leveldb::Iterator> it(
       resource_map_->NewIterator(leveldb::ReadOptions()));
-  return base::MakeUnique<Iterator>(std::move(it));
+  return std::make_unique<Iterator>(std::move(it));
 }
 
 FileError ResourceMetadataStorage::GetChild(const std::string& parent_id,
                                             const std::string& child_name,
-                                            std::string* child_id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+                                            std::string* child_id) const {
+  base::AssertBlockingAllowed();
   DCHECK(!parent_id.empty());
   DCHECK(!child_name.empty());
 
@@ -859,8 +887,8 @@ FileError ResourceMetadataStorage::GetChild(const std::string& parent_id,
 
 FileError ResourceMetadataStorage::GetChildren(
     const std::string& parent_id,
-    std::vector<std::string>* children) {
-  base::ThreadRestrictions::AssertIOAllowed();
+    std::vector<std::string>* children) const {
+  base::AssertBlockingAllowed();
   DCHECK(!parent_id.empty());
 
   // Iterate over all entries with keys starting with |parent_id|.
@@ -875,15 +903,10 @@ FileError ResourceMetadataStorage::GetChildren(
   return LevelDBStatusToFileError(it->status());
 }
 
-ResourceMetadataStorage::RecoveredCacheInfo::RecoveredCacheInfo()
-    : is_dirty(false) {}
-
-ResourceMetadataStorage::RecoveredCacheInfo::~RecoveredCacheInfo() {}
-
 FileError ResourceMetadataStorage::GetIdByResourceId(
     const std::string& resource_id,
-    std::string* out_id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+    std::string* out_id) const {
+  base::AssertBlockingAllowed();
   DCHECK(!resource_id.empty());
 
   const leveldb::Status status = resource_map_->Get(
@@ -893,8 +916,13 @@ FileError ResourceMetadataStorage::GetIdByResourceId(
   return LevelDBStatusToFileError(status);
 }
 
+ResourceMetadataStorage::RecoveredCacheInfo::RecoveredCacheInfo()
+    : is_dirty(false) {}
+
+ResourceMetadataStorage::RecoveredCacheInfo::~RecoveredCacheInfo() {}
+
 ResourceMetadataStorage::~ResourceMetadataStorage() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 }
 
 void ResourceMetadataStorage::DestroyOnBlockingPool() {
@@ -917,7 +945,7 @@ std::string ResourceMetadataStorage::GetChildEntryKey(
 
 FileError ResourceMetadataStorage::PutHeader(
     const ResourceMetadataHeader& header) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::string serialized_header;
   if (!header.SerializeToString(&serialized_header)) {
@@ -932,8 +960,9 @@ FileError ResourceMetadataStorage::PutHeader(
   return LevelDBStatusToFileError(status);
 }
 
-FileError ResourceMetadataStorage::GetHeader(ResourceMetadataHeader* header) {
-  base::ThreadRestrictions::AssertIOAllowed();
+FileError ResourceMetadataStorage::GetHeader(
+    ResourceMetadataHeader* header) const {
+  base::AssertBlockingAllowed();
 
   std::string serialized_header;
   const leveldb::Status status = resource_map_->Get(
@@ -947,7 +976,7 @@ FileError ResourceMetadataStorage::GetHeader(ResourceMetadataHeader* header) {
 }
 
 bool ResourceMetadataStorage::CheckValidity() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Perform read with checksums verification enabled.
   leveldb::ReadOptions options;

@@ -31,9 +31,9 @@
 #include "public/platform/WebFileSystemCallbacks.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/AsyncFileSystemCallbacks.h"
 #include "platform/FileMetadata.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefCounted.h"
 #include "public/platform/WebFileInfo.h"
@@ -47,9 +47,10 @@ namespace blink {
 class WebFileSystemCallbacksPrivate
     : public RefCounted<WebFileSystemCallbacksPrivate> {
  public:
-  static PassRefPtr<WebFileSystemCallbacksPrivate> Create(
+  static scoped_refptr<WebFileSystemCallbacksPrivate> Create(
       std::unique_ptr<AsyncFileSystemCallbacks> callbacks) {
-    return AdoptRef(new WebFileSystemCallbacksPrivate(std::move(callbacks)));
+    return base::AdoptRef(
+        new WebFileSystemCallbacksPrivate(std::move(callbacks)));
   }
 
   AsyncFileSystemCallbacks* Callbacks() { return callbacks_.get(); }
@@ -100,7 +101,7 @@ void WebFileSystemCallbacks::DidCreateSnapshotFile(
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   blob_data->AppendFile(web_file_info.platform_path, 0, web_file_info.length,
                         InvalidFileTime());
-  RefPtr<BlobDataHandle> snapshot_blob =
+  scoped_refptr<BlobDataHandle> snapshot_blob =
       BlobDataHandle::Create(std::move(blob_data), web_file_info.length);
 
   FileMetadata file_metadata;

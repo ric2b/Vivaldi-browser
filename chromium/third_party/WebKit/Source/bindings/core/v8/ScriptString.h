@@ -31,9 +31,9 @@
 #ifndef ScriptString_h
 #define ScriptString_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/bindings/SharedPersistent.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
 
@@ -60,7 +60,7 @@ class ScriptString final {
 
  private:
   v8::Isolate* isolate_;
-  RefPtr<SharedPersistent<v8::String>> string_;
+  scoped_refptr<SharedPersistent<v8::String>> string_;
 };
 
 }  // namespace blink

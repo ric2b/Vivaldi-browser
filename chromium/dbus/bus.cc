@@ -151,8 +151,7 @@ Bus::Options::Options()
     connection_type(PRIVATE) {
 }
 
-Bus::Options::~Options() {
-}
+Bus::Options::~Options() = default;
 
 Bus::Bus(const Options& options)
     : bus_type_(options.bus_type),
@@ -806,7 +805,7 @@ void Bus::AssertOnOriginThread() {
 }
 
 void Bus::AssertOnDBusThread() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   if (dbus_task_runner_) {
     DCHECK(dbus_task_runner_->RunsTasksInCurrentSequence());

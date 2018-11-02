@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -42,8 +41,7 @@ HttpServer::HttpServer(std::unique_ptr<ServerSocket> server_socket,
       base::Bind(&HttpServer::DoAcceptLoop, weak_ptr_factory_.GetWeakPtr()));
 }
 
-HttpServer::~HttpServer() {
-}
+HttpServer::~HttpServer() = default;
 
 void HttpServer::AcceptWebSocket(
     int connection_id,

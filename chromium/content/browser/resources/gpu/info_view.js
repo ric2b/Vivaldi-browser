@@ -34,6 +34,11 @@ cr.define('gpu', function() {
     * Updates the view based on its currently known data
     */
     refresh: function(data) {
+      function createSourcePermalink(revisionIdentifier, filepath) {
+        return 'https://chromium.googlesource.com/chromium/src/+/' +
+          revisionIdentifier + '/' + filepath;
+      }
+
       // Client info
       if (browserBridge.clientInfo) {
         var clientInfo = browserBridge.clientInfo;
@@ -52,12 +57,14 @@ cr.define('gpu', function() {
             value: clientInfo.operating_system
           },
           {
-            description: 'Software rendering list version',
-            value: clientInfo.blacklist_version
+            description: 'Software rendering list URL',
+            value: createSourcePermalink(clientInfo.revision_identifier,
+              'gpu/config/software_rendering_list.json')
           },
           {
-            description: 'Driver bug list version',
-            value: clientInfo.driver_bug_list_version
+            description: 'Driver bug list URL',
+            value: createSourcePermalink(clientInfo.revision_identifier,
+              'gpu/config/gpu_driver_bug_list.json')
           },
           {
             description: 'ANGLE commit id',
@@ -86,8 +93,6 @@ cr.define('gpu', function() {
         'flash_stage3d_baseline': 'Flash Stage3D Baseline profile',
         'texture_sharing': 'Texture Sharing',
         'video_decode': 'Video Decode',
-        'video_encode': 'Video Encode',
-        'panel_fitting': 'Panel Fitting',
         'rasterization': 'Rasterization',
         'multiple_raster_threads': 'Multiple Raster Threads',
         'native_gpu_memory_buffers': 'Native GpuMemoryBuffers',
@@ -231,6 +236,18 @@ cr.define('gpu', function() {
           this.setTable_('gpu-memory-buffer-info', gpuInfo.gpuMemoryBufferInfo);
         else
           this.setTable_('gpu-memory-buffer-info', []);
+
+        if (gpuInfo.displayInfo)
+          this.setTable_('display-info', gpuInfo.displayInfo);
+        else
+          this.setTable_('display-info', []);
+
+        if (gpuInfo.videoAcceleratorsInfo) {
+          this.setTable_(
+              'video-acceleration-info', gpuInfo.videoAcceleratorsInfo);
+        } else {
+          this.setTable_('video-acceleration-info', []);
+        }
 
         if (gpuInfo.diagnostics) {
           diagnosticsDiv.hidden = false;

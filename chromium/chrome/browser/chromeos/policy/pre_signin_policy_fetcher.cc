@@ -43,27 +43,36 @@ PreSigninPolicyFetcher::PreSigninPolicyFetcher(
     chromeos::CryptohomeClient* cryptohome_client,
     chromeos::SessionManagerClient* session_manager_client,
     std::unique_ptr<CloudPolicyClient> cloud_policy_client,
+    bool is_active_directory_managed,
     const AccountId& account_id,
     const cryptohome::KeyDefinition& auth_key)
     : cryptohome_client_(cryptohome_client),
       session_manager_client_(session_manager_client),
       cloud_policy_client_(std::move(cloud_policy_client)),
+      is_active_directory_managed_(is_active_directory_managed),
       account_id_(account_id),
       auth_key_(auth_key),
       task_runner_(base::CreateSequencedTaskRunnerWithTraits(kTaskTraits)),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  DCHECK(account_id_.GetAccountType() != AccountType::ACTIVE_DIRECTORY ||
+         is_active_directory_managed_);
+}
 
 PreSigninPolicyFetcher ::~PreSigninPolicyFetcher() {}
 
 void PreSigninPolicyFetcher::FetchPolicy(PolicyFetchResultCallback callback) {
   DCHECK(callback_.is_null());
   callback_ = std::move(callback);
-
+  cryptohome::AuthorizationRequest auth;
+  cryptohome::Key* key = auth.mutable_key();
+  if (!auth_key_.label.empty()) {
+    key->mutable_data()->set_label(auth_key_.label);
+  }
+  key->set_secret(auth_key_.secret);
   cryptohome::MountRequest mount;
   mount.set_hidden_mount(true);
   cryptohome::HomedirMethods::GetInstance()->MountEx(
-      cryptohome::Identification(account_id_),
-      cryptohome::Authorization(auth_key_), mount,
+      cryptohome::Identification(account_id_), auth, mount,
       base::Bind(&PreSigninPolicyFetcher::OnMountTemporaryUserHome,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -95,39 +104,40 @@ void PreSigninPolicyFetcher::OnMountTemporaryUserHome(
 }
 
 void PreSigninPolicyFetcher::OnCachedPolicyRetrieved(
-    const std::string& policy_blob,
-    RetrievePolicyResponseType retrieve_policy_response) {
-  // We only need the cached policy key if there was policy.
-  if (!policy_blob.empty()) {
+    RetrievePolicyResponseType retrieve_policy_response,
+    const std::string& policy_blob) {
+  // We only need the cached policy key if there was policy and if the device is
+  // not joined to Active Directory (policy blobs from Active Directory servers
+  // are not signed).
+  if (!policy_blob.empty() && !is_active_directory_managed_) {
     base::FilePath policy_key_dir;
     CHECK(PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &policy_key_dir));
     cached_policy_key_loader_ = base::MakeUnique<CachedPolicyKeyLoaderChromeOS>(
         cryptohome_client_, task_runner_, account_id_, policy_key_dir);
     cached_policy_key_loader_->EnsurePolicyKeyLoaded(base::Bind(
         &PreSigninPolicyFetcher::OnPolicyKeyLoaded,
-        weak_ptr_factory_.GetWeakPtr(), policy_blob, retrieve_policy_response));
+        weak_ptr_factory_.GetWeakPtr(), retrieve_policy_response, policy_blob));
   } else {
     // Skip and pretend we've loaded policy key. We won't need it anyway,
-    // because there is no policy to validate.
-    OnPolicyKeyLoaded(policy_blob, retrieve_policy_response);
+    // because there is no policy to validate or because it's not signed (Active
+    // Directory).
+    OnPolicyKeyLoaded(retrieve_policy_response, policy_blob);
   }
 }
 
 void PreSigninPolicyFetcher::OnPolicyKeyLoaded(
-    const std::string& policy_blob,
-    RetrievePolicyResponseType retrieve_policy_response) {
-  cryptohome_client_->Unmount(base::Bind(
+    RetrievePolicyResponseType retrieve_policy_response,
+    const std::string& policy_blob) {
+  cryptohome_client_->Unmount(base::BindOnce(
       &PreSigninPolicyFetcher::OnUnmountTemporaryUserHome,
-      weak_ptr_factory_.GetWeakPtr(), policy_blob, retrieve_policy_response));
+      weak_ptr_factory_.GetWeakPtr(), retrieve_policy_response, policy_blob));
 }
 
 void PreSigninPolicyFetcher::OnUnmountTemporaryUserHome(
-    const std::string& policy_blob,
     RetrievePolicyResponseType retrieve_policy_response,
-    chromeos::DBusMethodCallStatus unmount_call_status,
-    bool unmount_success) {
-  if (unmount_call_status != chromeos::DBUS_METHOD_CALL_SUCCESS ||
-      !unmount_success) {
+    const std::string& policy_blob,
+    base::Optional<bool> unmount_success) {
+  if (!unmount_success.has_value() || !unmount_success.value()) {
     // The temporary userhome mount could not be unmounted. Log an error and
     // continue, and hope that the unmount will be successful on the next mount
     // (temporary user homes are automatically unmounted by cryptohomed on every
@@ -153,8 +163,10 @@ void PreSigninPolicyFetcher::OnUnmountTemporaryUserHome(
     return;
   }
 
-  // Before validating, check that we have a cached policy key.
-  if (cached_policy_key_loader_->cached_policy_key().empty()) {
+  // Before validating, check that we have a cached policy key. This does not
+  // apply to Active Directory joined devices (cached policy is unsigned there).
+  if (!is_active_directory_managed_ &&
+      cached_policy_key_loader_->cached_policy_key().empty()) {
     LOG(ERROR) << "No cached policy key loaded.";
     NotifyCallback(PolicyFetchResult::ERROR, nullptr);
     return;
@@ -177,7 +189,7 @@ void PreSigninPolicyFetcher::OnCachedPolicyValidated(
   policy_data_ = std::move(validator->policy_data());
   policy_payload_ = std::move(validator->payload());
 
-  if (account_id_.GetAccountType() == AccountType::ACTIVE_DIRECTORY) {
+  if (is_active_directory_managed_) {
     // For AD, we don't support fresh policy fetch at the moment. Simply exit
     // with cached policy.
     NotifyCallback(PolicyFetchResult::SUCCESS, std::move(policy_payload_));
@@ -286,7 +298,7 @@ PreSigninPolicyFetcher::CreateValidatorForCachedPolicy(
   validator->ValidatePolicyType(dm_protocol::kChromeUserPolicyType);
   validator->ValidatePayload();
 
-  if (account_id_.GetAccountType() != AccountType::ACTIVE_DIRECTORY) {
+  if (!is_active_directory_managed_) {
     // Also validate the user e-mail and the signature (except for authpolicy).
     validator->ValidateUsername(account_id_.GetUserEmail(), true);
     validator->ValidateSignature(
@@ -309,7 +321,7 @@ PreSigninPolicyFetcher::CreateValidatorForFetchedPolicy(
       CloudPolicyValidatorBase::DEVICE_ID_REQUIRED);
   validator->ValidatePayload();
 
-  if (account_id_.GetAccountType() != AccountType::ACTIVE_DIRECTORY) {
+  if (!is_active_directory_managed_) {
     // Also validate the signature.
     const std::string domain = gaia::ExtractDomainName(
         gaia::CanonicalizeEmail(account_id_.GetUserEmail()));

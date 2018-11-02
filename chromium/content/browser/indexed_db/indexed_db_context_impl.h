@@ -11,7 +11,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -48,7 +47,21 @@ class CONTENT_EXPORT IndexedDBContextImpl : public IndexedDBContext {
     FORCE_CLOSE_BACKING_STORE_FAILURE,
     FORCE_CLOSE_INTERNALS_PAGE,
     FORCE_CLOSE_COPY_ORIGIN,
+    // Append new values here and update IDBContextForcedCloseReason in
+    // enums.xml.
     FORCE_CLOSE_REASON_MAX
+  };
+
+  class Observer {
+   public:
+    virtual void OnIndexedDBListChanged(const url::Origin& origin) = 0;
+    virtual void OnIndexedDBContentChanged(
+        const url::Origin& origin,
+        const base::string16& database_name,
+        const base::string16& object_store_name) = 0;
+
+   protected:
+    virtual ~Observer() {};
   };
 
   // The indexed db directory.
@@ -128,6 +141,15 @@ class CONTENT_EXPORT IndexedDBContextImpl : public IndexedDBContext {
 
   bool is_incognito() const { return data_path_.empty(); }
 
+  // Only callable on the IDB task runner.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+  void NotifyIndexedDBListChanged(const url::Origin& origin);
+  void NotifyIndexedDBContentChanged(const url::Origin& origin,
+                                     const base::string16& database_name,
+                                     const base::string16& object_store_name);
+
  protected:
   ~IndexedDBContextImpl() override;
 
@@ -139,6 +161,10 @@ class CONTENT_EXPORT IndexedDBContextImpl : public IndexedDBContext {
   friend class IndexedDBQuotaClientTest;
 
   class IndexedDBGetUsageAndQuotaCallback;
+
+  static void ClearSessionOnlyOrigins(
+      const base::FilePath& indexeddb_path,
+      scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy);
 
   base::FilePath GetBlobStorePath(const url::Origin& origin) const;
   base::FilePath GetLevelDBPath(const url::Origin& origin) const;
@@ -165,6 +191,7 @@ class CONTENT_EXPORT IndexedDBContextImpl : public IndexedDBContext {
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   std::unique_ptr<std::set<url::Origin>> origin_set_;
   std::map<url::Origin, int64_t> origin_size_map_;
+  base::ObserverList<Observer> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBContextImpl);
 };

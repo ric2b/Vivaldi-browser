@@ -20,7 +20,7 @@ const char kFakeBlobUUID[] = "fakeBlob";
 void AddMemoryItem(size_t length, std::vector<DataElement>* out) {
   DataElement bytes;
   bytes.SetToBytesDescription(length);
-  out->push_back(bytes);
+  out->push_back(std::move(bytes));
 }
 
 void AddShortcutMemoryItem(size_t length, std::vector<DataElement>* out) {
@@ -29,13 +29,13 @@ void AddShortcutMemoryItem(size_t length, std::vector<DataElement>* out) {
   for (size_t i = 0; i < length; i++) {
     bytes.mutable_bytes()[i] = static_cast<char>(i);
   }
-  out->push_back(bytes);
+  out->push_back(std::move(bytes));
 }
 
 void AddBlobItem(std::vector<DataElement>* out) {
   DataElement blob;
   blob.SetToBlob(kFakeBlobUUID);
-  out->push_back(blob);
+  out->push_back(std::move(blob));
 }
 
 TEST(BlobAsyncTransportRequestBuilderTest, TestNoMemoryItems) {
@@ -49,7 +49,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestNoMemoryItems) {
   AddBlobItem(&infos);
   strategy.InitializeForIPCRequests(100,  // max_ipc_memory_size
                                     0,    // blob_total_size
-                                    infos, &builder);
+                                    infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());
   EXPECT_EQ(0u, strategy.file_sizes().size());
@@ -70,7 +70,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestLargeBlockToFile) {
   AddMemoryItem(305, &infos);
   strategy.InitializeForFileRequests(400,  // max_file_size
                                      305,  // blob_total_size
-                                     infos, &builder);
+                                     infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());
   EXPECT_EQ(1u, strategy.file_sizes().size());
@@ -97,7 +97,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestLargeBlockToFiles) {
   AddMemoryItem(1000, &infos);
   strategy.InitializeForFileRequests(400,   // max_file_size
                                      1000,  // blob_total_size
-                                     infos, &builder);
+                                     infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());
   EXPECT_EQ(3u, strategy.file_sizes().size());
@@ -152,7 +152,7 @@ TEST(BlobAsyncTransportRequestBuilderTest,
 
   strategy.InitializeForFileRequests(400,  // max_file_size
                                      800,  // blob_total_size
-                                     infos, &builder);
+                                     infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());
   EXPECT_EQ(2u, strategy.file_sizes().size());
@@ -192,7 +192,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestSharedMemorySegmentation) {
   AddMemoryItem(500, &infos);
   strategy.InitializeForSharedMemoryRequests(200,  // max_shared_memory_size
                                              500,  // total_blob_size
-                                             infos, &builder);
+                                             infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.file_sizes().size());
   EXPECT_EQ(3u, strategy.shared_memory_sizes().size());
@@ -249,7 +249,7 @@ TEST(BlobAsyncTransportRequestBuilderTest,
 
   strategy.InitializeForSharedMemoryRequests(200,  // max_shared_memory_size
                                              300,  // total_blob_size
-                                             infos, &builder);
+                                             infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.file_sizes().size());
   EXPECT_EQ(2u, strategy.shared_memory_sizes().size());
@@ -296,7 +296,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestSimpleIPC) {
 
   strategy.InitializeForIPCRequests(100,  // max_ipc_memory_size
                                     10,   // total_blob_size
-                                    infos, &builder);
+                                    infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.file_sizes().size());
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());
@@ -320,7 +320,7 @@ TEST(BlobAsyncTransportRequestBuilderTest, TestMultipleIPC) {
 
   strategy.InitializeForIPCRequests(100,  // max_ipc_memory_size
                                     90,   // total_blob_size
-                                    infos, &builder);
+                                    infos, nullptr, &builder);
 
   EXPECT_EQ(0u, strategy.file_sizes().size());
   EXPECT_EQ(0u, strategy.shared_memory_sizes().size());

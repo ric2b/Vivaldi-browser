@@ -25,14 +25,11 @@
 
 #include "platform/wtf/text/TextCodecUTF16.h"
 
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/CharacterNames.h"
 #include "platform/wtf/text/StringBuffer.h"
 #include "platform/wtf/text/WTFString.h"
 #include <memory>
-
-using namespace std;
 
 namespace WTF {
 
@@ -53,18 +50,18 @@ void TextCodecUTF16::RegisterEncodingNames(EncodingNameRegistrar registrar) {
 static std::unique_ptr<TextCodec> NewStreamingTextDecoderUTF16LE(
     const TextEncoding&,
     const void*) {
-  return WTF::MakeUnique<TextCodecUTF16>(true);
+  return std::make_unique<TextCodecUTF16>(true);
 }
 
 static std::unique_ptr<TextCodec> NewStreamingTextDecoderUTF16BE(
     const TextEncoding&,
     const void*) {
-  return WTF::MakeUnique<TextCodecUTF16>(false);
+  return std::make_unique<TextCodecUTF16>(false);
 }
 
 void TextCodecUTF16::RegisterCodecs(TextCodecRegistrar registrar) {
-  registrar("UTF-16LE", NewStreamingTextDecoderUTF16LE, 0);
-  registrar("UTF-16BE", NewStreamingTextDecoderUTF16BE, 0);
+  registrar("UTF-16LE", NewStreamingTextDecoderUTF16LE, nullptr);
+  registrar("UTF-16BE", NewStreamingTextDecoderUTF16BE, nullptr);
 }
 
 String TextCodecUTF16::Decode(const char* bytes,
@@ -160,7 +157,7 @@ CString TextCodecUTF16::Encode(const UChar* characters,
   // the buffer doesn't occupy the entire address space, we can
   // assert here that doubling the length does not overflow size_t
   // and there's no need for a runtime check.
-  DCHECK_LE(length, numeric_limits<size_t>::max() / 2);
+  DCHECK_LE(length, std::numeric_limits<size_t>::max() / 2);
 
   char* bytes;
   CString result = CString::CreateUninitialized(length * 2, bytes);
@@ -189,7 +186,7 @@ CString TextCodecUTF16::Encode(const LChar* characters,
                                size_t length,
                                UnencodableHandling) {
   // In the LChar case, we do actually need to perform this check in release. :)
-  CHECK_LE(length, numeric_limits<size_t>::max() / 2);
+  CHECK_LE(length, std::numeric_limits<size_t>::max() / 2);
 
   char* bytes;
   CString result = CString::CreateUninitialized(length * 2, bytes);

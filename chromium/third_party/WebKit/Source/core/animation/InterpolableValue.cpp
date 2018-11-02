@@ -84,19 +84,4 @@ void InterpolableList::ScaleAndAdd(double scale,
     values_[i]->ScaleAndAdd(scale, *other_list.values_[i]);
 }
 
-void InterpolableAnimatableValue::Interpolate(const InterpolableValue& to,
-                                              const double progress,
-                                              InterpolableValue& result) const {
-  const InterpolableAnimatableValue& to_value =
-      ToInterpolableAnimatableValue(to);
-  InterpolableAnimatableValue& result_value =
-      ToInterpolableAnimatableValue(result);
-  if (progress == 0)
-    result_value.value_ = value_;
-  if (progress == 1)
-    result_value.value_ = to_value.value_;
-  result_value.value_ = AnimatableValue::Interpolate(
-      value_.Get(), to_value.value_.Get(), progress);
-}
-
 }  // namespace blink

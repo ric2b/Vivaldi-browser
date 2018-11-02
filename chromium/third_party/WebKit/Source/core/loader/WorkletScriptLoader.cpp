@@ -6,8 +6,8 @@
 
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "core/loader/FrameFetchContext.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/wtf/WTF.h"
 
 namespace blink {
@@ -63,10 +63,10 @@ bool WorkletScriptLoader::WasScriptLoadSuccessful() const {
   return was_script_load_successful_;
 }
 
-DEFINE_TRACE(WorkletScriptLoader) {
+void WorkletScriptLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetcher_);
   visitor->Trace(client_);
-  ResourceOwner<ScriptResource, ScriptResourceClient>::Trace(visitor);
+  ResourceOwner<ScriptResource>::Trace(visitor);
 }
 
 }  // namespace blink

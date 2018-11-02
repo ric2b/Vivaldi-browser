@@ -4,6 +4,8 @@
 
 #include "ash/highlighter/highlighter_result_view.h"
 
+#include <memory>
+
 #include "ash/highlighter/highlighter_gesture_util.h"
 #include "ash/highlighter/highlighter_view.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -55,10 +57,9 @@ class ResultLayer : public ui::Layer, public ui::LayerDelegate {
   ResultLayer(const gfx::Rect& bounds);
 
  private:
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
-
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-
+  // ui::LayerDelegate:
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
   void OnPaintLayer(const ui::PaintContext& context) override;
 
   void DrawVerticalBar(gfx::Canvas& canvas,
@@ -163,7 +164,7 @@ void ResultLayer::DrawHorizontalBar(gfx::Canvas& canvas,
 }  // namespace
 
 HighlighterResultView::HighlighterResultView(aura::Window* root_window) {
-  widget_ = base::MakeUnique<views::Widget>();
+  widget_ = std::make_unique<views::Widget>();
 
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
@@ -183,7 +184,7 @@ HighlighterResultView::HighlighterResultView(aura::Window* root_window) {
   set_owned_by_client();
 }
 
-HighlighterResultView::~HighlighterResultView() {}
+HighlighterResultView::~HighlighterResultView() = default;
 
 void HighlighterResultView::Animate(const gfx::RectF& bounds,
                                     HighlighterGestureType gesture_type,
@@ -196,7 +197,7 @@ void HighlighterResultView::Animate(const gfx::RectF& bounds,
   if (gesture_type == HighlighterGestureType::kHorizontalStroke) {
     // The original stroke is fading out in place.
     // Fade in a solid transparent rectangle.
-    result_layer_ = base::MakeUnique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+    result_layer_ = std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
     result_layer_->set_name("HighlighterResultView:SOLID_LAYER");
     result_layer_->SetBounds(gfx::ToEnclosingRect(bounds));
     result_layer_->SetFillsBoundsOpaquely(false);
@@ -212,7 +213,7 @@ void HighlighterResultView::Animate(const gfx::RectF& bounds,
     DCHECK(gesture_type == HighlighterGestureType::kClosedShape);
     // The original stroke is fading out and inflating.
     // Fade in the deflating lens overlay.
-    result_layer_ = base::MakeUnique<ResultLayer>(gfx::ToEnclosingRect(bounds));
+    result_layer_ = std::make_unique<ResultLayer>(gfx::ToEnclosingRect(bounds));
     layer->Add(result_layer_.get());
 
     gfx::Transform transform;
@@ -228,7 +229,7 @@ void HighlighterResultView::Animate(const gfx::RectF& bounds,
 
   layer->SetOpacity(0);
 
-  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_ = std::make_unique<base::OneShotTimer>();
   animation_timer_->Start(FROM_HERE, delay,
                           base::Bind(&HighlighterResultView::FadeIn,
                                      base::Unretained(this), duration, done));
@@ -250,7 +251,7 @@ void HighlighterResultView::FadeIn(const base::TimeDelta& duration,
     layer->SetTransform(transform);
   }
 
-  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_ = std::make_unique<base::OneShotTimer>();
   animation_timer_->Start(
       FROM_HERE,
       duration + base::TimeDelta::FromMilliseconds(kResultFadeoutDelayMs),
@@ -269,7 +270,7 @@ void HighlighterResultView::FadeOut(const base::Closure& done) {
   settings.SetTweenType(gfx::Tween::LINEAR_OUT_SLOW_IN);
   layer->SetOpacity(0);
 
-  animation_timer_ = base::MakeUnique<base::OneShotTimer>();
+  animation_timer_ = std::make_unique<base::OneShotTimer>();
   animation_timer_->Start(FROM_HERE, duration, done);
 }
 

@@ -32,6 +32,7 @@
 #define EntryBase_h
 
 #include "modules/ModulesExport.h"
+#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -41,7 +42,7 @@ class DOMFileSystemBase;
 class EntrySync;
 
 // A common base class for Entry and EntrySync.
-class MODULES_EXPORT EntryBase : public GarbageCollectedFinalized<EntryBase> {
+class MODULES_EXPORT EntryBase : public ScriptWrappable {
  public:
   virtual ~EntryBase();
 
@@ -55,7 +56,7 @@ class MODULES_EXPORT EntryBase : public GarbageCollectedFinalized<EntryBase> {
 
   String toURL() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   EntryBase(DOMFileSystemBase*, const String& full_path);

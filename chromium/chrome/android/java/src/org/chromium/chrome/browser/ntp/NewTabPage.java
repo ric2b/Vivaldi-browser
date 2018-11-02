@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
@@ -48,6 +49,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
@@ -55,6 +57,8 @@ import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -148,10 +152,25 @@ public class NewTabPage
      * @return Whether the passed in URL is used to render the NTP.
      */
     public static boolean isNTPUrl(String url) {
-        // Also handle the legacy chrome://newtab URL since that will redirect to
+        // Also handle the legacy chrome://newtab and about:newtab URLs since they will redirect to
         // chrome-native://newtab natively.
-        return url != null
-                && (url.startsWith(UrlConstants.NTP_URL) || url.startsWith("chrome://newtab"));
+        if (url == null) return false;
+        try {
+            // URL().getProtocol() throws MalformedURLException if the scheme is "invalid",
+            // including common ones like "about:", so it's not usable for isInternalScheme().
+            URI uri = new URI(url);
+            if (!UrlUtilities.isInternalScheme(uri)) return false;
+
+            String host = uri.getHost();
+            if (host == null) {
+                // "about:newtab" would lead to null host.
+                uri = new URI(uri.getScheme() + "://" + uri.getSchemeSpecificPart());
+                host = uri.getHost();
+            }
+            return UrlConstants.NTP_HOST.equals(host);
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     private class NewTabPageManagerImpl
@@ -159,9 +178,10 @@ public class NewTabPage
         public NewTabPageManagerImpl(SuggestionsSource suggestionsSource,
                 SuggestionsEventReporter eventReporter,
                 SuggestionsNavigationDelegate navigationDelegate, Profile profile,
-                NativePageHost nativePageHost, DiscardableReferencePool referencePool) {
+                NativePageHost nativePageHost, DiscardableReferencePool referencePool,
+                SnackbarManager snackbarManager) {
             super(suggestionsSource, eventReporter, navigationDelegate, profile, nativePageHost,
-                    referencePool);
+                    referencePool, snackbarManager);
         }
 
         @Override
@@ -265,7 +285,8 @@ public class NewTabPage
                 new SuggestionsNavigationDelegateImpl(
                         activity, profile, nativePageHost, tabModelSelector);
         mNewTabPageManager = new NewTabPageManagerImpl(suggestionsSource, eventReporter,
-                navigationDelegate, profile, nativePageHost, activity.getReferencePool());
+                navigationDelegate, profile, nativePageHost, activity.getReferencePool(),
+                activity.getSnackbarManager());
         mTileGroupDelegate = new NewTabPageTileGroupDelegate(activity, profile, navigationDelegate);
 
         mTitle = activity.getResources().getString(R.string.button_new_tab);
@@ -324,7 +345,7 @@ public class NewTabPage
         eventReporter.onSurfaceOpened();
 
         DownloadManagerService.getDownloadManagerService().checkForExternallyRemovedDownloads(
-                /*isOffRecord=*/false);
+                /*isOffTheRecord=*/false);
 
         RecordHistogram.recordBooleanHistogram(
                 "NewTabPage.MobileIsUserOnline", NetworkChangeNotifier.isOnline());

@@ -103,10 +103,13 @@ class APP_LIST_EXPORT PaginationModel : public gfx::AnimationDelegate {
   // active animation, just returns selected_page().
   int SelectedTargetPage() const;
 
+  base::TimeDelta GetTransitionAnimationSlideDuration() const;
+
  private:
   void NotifySelectedPageChanged(int old_selected, int new_selected);
   void NotifyTransitionStarted();
   void NotifyTransitionChanged();
+  void NotifyTransitionEnded();
 
   void clear_transition() { SetTransition(Transition(-1, 0)); }
 
@@ -139,7 +142,6 @@ class APP_LIST_EXPORT PaginationModel : public gfx::AnimationDelegate {
   int transition_duration_ms_;  // Transition duration in millisecond.
   int overscroll_transition_duration_ms_;
 
-  int last_overscroll_target_page_;
   base::TimeTicks last_overscroll_animation_start_time_;
 
   base::ObserverList<PaginationModelObserver> observers_;

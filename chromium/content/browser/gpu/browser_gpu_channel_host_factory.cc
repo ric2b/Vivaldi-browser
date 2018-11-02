@@ -7,11 +7,11 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -19,25 +19,29 @@
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/gpu/shader_cache_factory.h"
+#include "content/browser/mus_util.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
-#include "gpu/ipc/common/gpu_messages.h"
-#include "ipc/ipc_channel_handle.h"
-#include "ipc/message_filter.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
-
-#if defined(USE_AURA)
-#include "ui/aura/env.h"
-#endif
+#include "ui/base/ui_base_switches_util.h"
 
 namespace content {
 
-BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = NULL;
+#if defined(OS_ANDROID)
+namespace {
+void TimedOut() {
+  LOG(FATAL) << "Timed out waiting for GPU channel.";
+}
+}  // namespace
+#endif  // OS_ANDROID
+
+BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = nullptr;
 
 class BrowserGpuChannelHostFactory::EstablishRequest
     : public base::RefCountedThreadSafe<EstablishRequest> {
@@ -47,16 +51,23 @@ class BrowserGpuChannelHostFactory::EstablishRequest
   void Wait();
   void Cancel();
 
-  IPC::ChannelHandle& channel_handle() { return channel_handle_; }
-  gpu::GPUInfo gpu_info() { return gpu_info_; }
+  mojo::ScopedMessagePipeHandle TakeChannelHandle() {
+    return std::move(channel_handle_);
+  }
+  const gpu::GPUInfo& gpu_info() const { return gpu_info_; }
+  const gpu::GpuFeatureInfo& gpu_feature_info() const {
+    return gpu_feature_info_;
+  }
 
  private:
   friend class base::RefCountedThreadSafe<EstablishRequest>;
-  explicit EstablishRequest(int gpu_client_id, uint64_t gpu_client_tracing_id);
+  EstablishRequest(int gpu_client_id, uint64_t gpu_client_tracing_id);
   ~EstablishRequest() {}
+  void RestartTimeout();
   void EstablishOnIO();
-  void OnEstablishedOnIO(const IPC::ChannelHandle& channel_handle,
+  void OnEstablishedOnIO(mojo::ScopedMessagePipeHandle channel_handle,
                          const gpu::GPUInfo& gpu_info,
+                         const gpu::GpuFeatureInfo& gpu_feature_info,
                          GpuProcessHost::EstablishChannelStatus status);
   void FinishOnIO();
   void FinishOnMain();
@@ -64,8 +75,9 @@ class BrowserGpuChannelHostFactory::EstablishRequest
   base::WaitableEvent event_;
   const int gpu_client_id_;
   const uint64_t gpu_client_tracing_id_;
-  IPC::ChannelHandle channel_handle_;
+  mojo::ScopedMessagePipeHandle channel_handle_;
   gpu::GPUInfo gpu_info_;
+  gpu::GpuFeatureInfo gpu_feature_info_;
   bool finished_;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 };
@@ -97,12 +109,13 @@ BrowserGpuChannelHostFactory::EstablishRequest::EstablishRequest(
       finished_(false),
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
+void BrowserGpuChannelHostFactory::EstablishRequest::RestartTimeout() {
+  BrowserGpuChannelHostFactory* factory =
+      BrowserGpuChannelHostFactory::instance();
+  factory->RestartTimeout();
+}
+
 void BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO() {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "477117 "
-          "BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO"));
   GpuProcessHost* host = GpuProcessHost::Get();
   if (!host) {
     LOG(ERROR) << "Failed to launch GPU process.";
@@ -122,18 +135,28 @@ void BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO() {
 }
 
 void BrowserGpuChannelHostFactory::EstablishRequest::OnEstablishedOnIO(
-    const IPC::ChannelHandle& channel_handle,
+    mojo::ScopedMessagePipeHandle channel_handle,
     const gpu::GPUInfo& gpu_info,
+    const gpu::GpuFeatureInfo& gpu_feature_info,
     GpuProcessHost::EstablishChannelStatus status) {
-  if (!channel_handle.mojo_handle.is_valid() &&
-      status == GpuProcessHost::EstablishChannelStatus::GPU_HOST_INVALID) {
+  if (!channel_handle.is_valid() &&
+      status == GpuProcessHost::EstablishChannelStatus::GPU_HOST_INVALID &&
+      // Ask client every time instead of passing this down from UI thread to
+      // avoid having the value be stale.
+      GetContentClient()->browser()->AllowGpuLaunchRetryOnIOThread()) {
     DVLOG(1) << "Failed to create channel on existing GPU process. Trying to "
                 "restart GPU process.";
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &BrowserGpuChannelHostFactory::EstablishRequest::RestartTimeout,
+            this));
     EstablishOnIO();
     return;
   }
-  channel_handle_ = channel_handle;
+  channel_handle_ = std::move(channel_handle);
   gpu_info_ = gpu_info;
+  gpu_feature_info_ = gpu_feature_info;
   FinishOnIO();
 }
 
@@ -157,11 +180,6 @@ void BrowserGpuChannelHostFactory::EstablishRequest::FinishOnMain() {
 void BrowserGpuChannelHostFactory::EstablishRequest::Wait() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   {
-    // TODO(vadimt): Remove ScopedTracker below once crbug.com/125248 is fixed.
-    tracked_objects::ScopedTracker tracking_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "125248 BrowserGpuChannelHostFactory::EstablishRequest::Wait"));
-
     // We're blocking the UI thread, which is generally undesirable.
     // In this case we need to wait for this before we can show any UI
     // /anyway/, so it won't cause additional jank.
@@ -198,16 +216,13 @@ void BrowserGpuChannelHostFactory::Initialize(bool establish_gpu_channel) {
 void BrowserGpuChannelHostFactory::Terminate() {
   DCHECK(instance_);
   delete instance_;
-  instance_ = NULL;
+  instance_ = nullptr;
 }
 
 BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
     : gpu_client_id_(ChildProcessHostImpl::GenerateChildProcessUniqueId()),
       gpu_client_tracing_id_(
           memory_instrumentation::mojom::kServiceTracingProcessId),
-      shutdown_event_(new base::WaitableEvent(
-          base::WaitableEvent::ResetPolicy::MANUAL,
-          base::WaitableEvent::InitialState::NOT_SIGNALED)),
       gpu_memory_buffer_manager_(
           new BrowserGpuMemoryBufferManager(gpu_client_id_,
                                             gpu_client_tracing_id_)) {
@@ -217,8 +232,8 @@ BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
     base::FilePath cache_dir =
         GetContentClient()->browser()->GetShaderDiskCacheDirectory();
     if (!cache_dir.empty()) {
-      GetIOThreadTaskRunner()->PostTask(
-          FROM_HERE,
+      BrowserThread::PostTask(
+          BrowserThread::IO, FROM_HERE,
           base::BindOnce(
               &BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO,
               gpu_client_id_, cache_dir));
@@ -227,50 +242,33 @@ BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
 }
 
 BrowserGpuChannelHostFactory::~BrowserGpuChannelHostFactory() {
-  DCHECK(IsMainThread());
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   if (pending_request_.get())
     pending_request_->Cancel();
-  shutdown_event_->Signal();
   if (gpu_channel_) {
     gpu_channel_->DestroyChannel();
-    gpu_channel_ = NULL;
+    gpu_channel_ = nullptr;
   }
-}
-
-bool BrowserGpuChannelHostFactory::IsMainThread() {
-  return BrowserThread::CurrentlyOn(BrowserThread::UI);
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-BrowserGpuChannelHostFactory::GetIOThreadTaskRunner() {
-  return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
-}
-
-std::unique_ptr<base::SharedMemory>
-BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
-  std::unique_ptr<base::SharedMemory> shm(new base::SharedMemory());
-  if (!shm->CreateAnonymous(size))
-    return std::unique_ptr<base::SharedMemory>();
-  return shm;
 }
 
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     const gpu::GpuChannelEstablishedCallback& callback) {
 #if defined(USE_AURA)
-  DCHECK_EQ(aura::Env::Mode::LOCAL, aura::Env::GetInstance()->mode());
+  DCHECK(!switches::IsMusHostingViz());
 #endif
-  DCHECK(IsMainThread());
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());
     // Recreate the channel if it has been lost.
     gpu_channel_->DestroyChannel();
-    gpu_channel_ = NULL;
+    gpu_channel_ = nullptr;
   }
 
   if (!gpu_channel_.get() && !pending_request_.get()) {
     // We should only get here if the context was lost.
     pending_request_ =
         EstablishRequest::Create(gpu_client_id_, gpu_client_tracing_id_);
+    RestartTimeout();
   }
 
   if (!callback.is_null()) {
@@ -285,11 +283,13 @@ void BrowserGpuChannelHostFactory::EstablishGpuChannel(
 // (Opening the initial channel to a child process involves handling a reply
 // task on the UI thread first, so we cannot block here.)
 scoped_refptr<gpu::GpuChannelHost>
-BrowserGpuChannelHostFactory::EstablishGpuChannelSync() {
+BrowserGpuChannelHostFactory::EstablishGpuChannelSync(bool* connection_error) {
 #if defined(OS_ANDROID)
   NOTREACHED();
   return nullptr;
 #endif
+  if (connection_error)
+    *connection_error = false;
   EstablishGpuChannel(gpu::GpuChannelEstablishedCallback());
 
   if (pending_request_.get())
@@ -307,38 +307,57 @@ gpu::GpuChannelHost* BrowserGpuChannelHostFactory::GetGpuChannel() {
   if (gpu_channel_.get() && !gpu_channel_->IsLost())
     return gpu_channel_.get();
 
-  return NULL;
+  return nullptr;
 }
 
 void BrowserGpuChannelHostFactory::GpuChannelEstablished() {
-  DCHECK(IsMainThread());
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   DCHECK(pending_request_.get());
-  if (!pending_request_->channel_handle().mojo_handle.is_valid()) {
+  mojo::ScopedMessagePipeHandle handle(pending_request_->TakeChannelHandle());
+  if (!handle.is_valid()) {
     DCHECK(!gpu_channel_.get());
   } else {
-    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/466866
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile1(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "466866 BrowserGpuChannelHostFactory::GpuChannelEstablished1"));
     GetContentClient()->SetGpuInfo(pending_request_->gpu_info());
-    gpu_channel_ = gpu::GpuChannelHost::Create(
-        this, gpu_client_id_, pending_request_->gpu_info(),
-        pending_request_->channel_handle(), shutdown_event_.get(),
+    gpu_channel_ = base::MakeRefCounted<gpu::GpuChannelHost>(
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+        gpu_client_id_, pending_request_->gpu_info(),
+        pending_request_->gpu_feature_info(), std::move(handle),
         gpu_memory_buffer_manager_.get());
   }
-  pending_request_ = NULL;
-
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/466866 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "466866 BrowserGpuChannelHostFactory::GpuChannelEstablished2"));
+  pending_request_ = nullptr;
+  timeout_.Stop();
 
   std::vector<gpu::GpuChannelEstablishedCallback> established_callbacks;
   established_callbacks_.swap(established_callbacks);
   for (auto& callback : established_callbacks)
     callback.Run(gpu_channel_);
+}
+
+void BrowserGpuChannelHostFactory::RestartTimeout() {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+// Only implement timeout on Android, which does not have a software fallback.
+#if defined(OS_ANDROID)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableTimeoutsForProfiling)) {
+    return;
+  }
+
+  if (!pending_request_)
+    return;
+
+#if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
+    defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
+  constexpr int64_t kGpuChannelTimeoutInSeconds = 40;
+#else
+  // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
+  // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
+  // chance to crash itself before crashing the browser.
+  constexpr int64_t kGpuChannelTimeoutInSeconds = 20;
+#endif
+  timeout_.Start(FROM_HERE,
+                 base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
+                 base::Bind(&TimedOut));
+#endif  // OS_ANDROID
 }
 
 // static

@@ -9,13 +9,10 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/tracked_objects.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
@@ -47,8 +44,8 @@ namespace net {
 
 // URLFetcherCore::Registry ---------------------------------------------------
 
-URLFetcherCore::Registry::Registry() {}
-URLFetcherCore::Registry::~Registry() {}
+URLFetcherCore::Registry::Registry() = default;
+URLFetcherCore::Registry::~Registry() = default;
 
 void URLFetcherCore::Registry::AddURLFetcherCore(URLFetcherCore* core) {
   DCHECK(!base::ContainsKey(fetchers_, core));
@@ -320,6 +317,10 @@ HostPortPair URLFetcherCore::GetSocketAddress() const {
   return socket_address_;
 }
 
+const ProxyServer& URLFetcherCore::ProxyServerUsed() const {
+  return proxy_server_;
+}
+
 bool URLFetcherCore::WasFetchedViaProxy() const {
   return was_fetched_via_proxy_;
 }
@@ -368,8 +369,6 @@ bool URLFetcherCore::GetResponseAsString(
     return false;
 
   *out_response_string = string_writer->data();
-  UMA_HISTOGRAM_MEMORY_KB("UrlFetcher.StringResponseSize",
-                          (string_writer->data().length() / 1024));
   return true;
 }
 
@@ -408,6 +407,7 @@ void URLFetcherCore::OnReceivedRedirect(URLRequest* request,
     stopped_on_redirect_ = true;
     url_ = redirect_info.new_url;
     response_code_ = request_->GetResponseCode();
+    proxy_server_ = request_->proxy_server();
     was_fetched_via_proxy_ = request_->was_fetched_via_proxy();
     was_cached_ = request_->was_cached();
     total_received_bytes_ += request_->GetTotalReceivedBytes();
@@ -425,6 +425,7 @@ void URLFetcherCore::OnResponseStarted(URLRequest* request, int net_error) {
     response_code_ = request_->GetResponseCode();
     response_headers_ = request_->response_headers();
     socket_address_ = request_->GetSocketAddress();
+    proxy_server_ = request_->proxy_server();
     was_fetched_via_proxy_ = request_->was_fetched_via_proxy();
     was_cached_ = request_->was_cached();
     total_response_bytes_ = request_->GetExpectedContentSize();
@@ -933,12 +934,6 @@ void URLFetcherCore::InformDelegateUploadProgressInDelegateSequence(
 
 void URLFetcherCore::InformDelegateDownloadProgress() {
   DCHECK(network_task_runner_->BelongsToCurrentThread());
-
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/455952 is fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "455952 delegate_task_runner_->PostTask()"));
-
   delegate_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(

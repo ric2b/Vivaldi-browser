@@ -25,8 +25,6 @@
 
 namespace content {
 
-int WebRTCEventLogHost::number_active_log_files_ = 0;
-
 namespace {
 
 // In addition to the limit to the number of files given below, the size of the
@@ -46,11 +44,11 @@ base::FilePath GetWebRtcEventLogPath(const base::FilePath& base_file,
 }
 
 // Opens a logfile to pass on to the renderer.
-IPC::PlatformFileForTransit CreateFileForProcess(
+IPC::PlatformFileForTransit CreateEventLogFileForChildProcess(
     const base::FilePath& base_path,
     int render_process_id,
     int connection_id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   base::FilePath file_path =
       GetWebRtcEventLogPath(base_path, render_process_id, connection_id);
   base::File event_log_file(
@@ -77,6 +75,9 @@ WebRTCEventLogHost::WebRTCEventLogHost(int render_process_id)
 
 WebRTCEventLogHost::~WebRTCEventLogHost() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  for (int lid : active_peer_connection_local_ids_) {
+    RtcEventLogRemoved(lid);
+  }
 }
 
 void WebRTCEventLogHost::PeerConnectionAdded(int peer_connection_local_id) {
@@ -87,7 +88,7 @@ void WebRTCEventLogHost::PeerConnectionAdded(int peer_connection_local_id) {
       active_peer_connection_local_ids_.end()) {
     active_peer_connection_local_ids_.push_back(peer_connection_local_id);
     if (rtc_event_logging_enabled_ &&
-        number_active_log_files_ < kMaxNumberLogFiles) {
+        ActivePeerConnectionsWithLogFiles().size() < kMaxNumberLogFiles) {
       StartEventLogForPeerConnection(peer_connection_local_id);
     }
   }
@@ -95,12 +96,13 @@ void WebRTCEventLogHost::PeerConnectionAdded(int peer_connection_local_id) {
 
 void WebRTCEventLogHost::PeerConnectionRemoved(int peer_connection_local_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  const auto found = std::find(active_peer_connection_local_ids_.begin(),
-                               active_peer_connection_local_ids_.end(),
-                               peer_connection_local_id);
-  if (found != active_peer_connection_local_ids_.end()) {
-    active_peer_connection_local_ids_.erase(found);
+  const auto lid = std::find(active_peer_connection_local_ids_.begin(),
+                             active_peer_connection_local_ids_.end(),
+                             peer_connection_local_id);
+  if (lid != active_peer_connection_local_ids_.end()) {
+    active_peer_connection_local_ids_.erase(lid);
   }
+  RtcEventLogRemoved(peer_connection_local_id);
 }
 
 bool WebRTCEventLogHost::StartWebRTCEventLog(const base::FilePath& file_path) {
@@ -116,15 +118,17 @@ bool WebRTCEventLogHost::StartWebRTCEventLog(const base::FilePath& file_path) {
 
 bool WebRTCEventLogHost::StopWebRTCEventLog() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!rtc_event_logging_enabled_)
+  if (!rtc_event_logging_enabled_) {
+    DCHECK(ActivePeerConnectionsWithLogFiles().empty());
     return false;
-  number_active_log_files_ = 0;
+  }
   rtc_event_logging_enabled_ = false;
   RenderProcessHost* host = RenderProcessHost::FromID(render_process_id_);
   if (host) {
     for (int local_id : active_peer_connection_local_ids_)
       host->Send(new PeerConnectionTracker_StopEventLog(local_id));
   }
+  ActivePeerConnectionsWithLogFiles().clear();
   return true;
 }
 
@@ -132,25 +136,34 @@ base::WeakPtr<WebRTCEventLogHost> WebRTCEventLogHost::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-bool WebRTCEventLogHost::StartEventLogForPeerConnection(
+std::vector<WebRTCEventLogHost::PeerConnectionKey>&
+WebRTCEventLogHost::ActivePeerConnectionsWithLogFiles() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  CR_DEFINE_STATIC_LOCAL(std::vector<WebRTCEventLogHost::PeerConnectionKey>,
+                         vector, ());
+  return vector;
+}
+
+void WebRTCEventLogHost::StartEventLogForPeerConnection(
     int peer_connection_local_id) {
-  if (number_active_log_files_ < kMaxNumberLogFiles) {
-    ++number_active_log_files_;
+  if (ActivePeerConnectionsWithLogFiles().size() < kMaxNumberLogFiles) {
+    RtcEventLogAdded(peer_connection_local_id);
     base::PostTaskWithTraitsAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-        base::Bind(&CreateFileForProcess, base_file_path_, render_process_id_,
-                   peer_connection_local_id),
+        base::Bind(&CreateEventLogFileForChildProcess, base_file_path_,
+                   render_process_id_, peer_connection_local_id),
         base::Bind(&WebRTCEventLogHost::SendEventLogFileToRenderer,
                    weak_ptr_factory_.GetWeakPtr(), peer_connection_local_id));
   }
-  return true;
 }
 
 void WebRTCEventLogHost::SendEventLogFileToRenderer(
     int peer_connection_local_id,
     IPC::PlatformFileForTransit file_for_transit) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (file_for_transit == IPC::InvalidPlatformFileForTransit()) {
-    --number_active_log_files_;
+    bool removed = RtcEventLogRemoved(peer_connection_local_id);
+    DCHECK(removed);
     return;
   }
   RenderProcessHost* rph = RenderProcessHost::FromID(render_process_id_);
@@ -158,9 +171,36 @@ void WebRTCEventLogHost::SendEventLogFileToRenderer(
     rph->Send(new PeerConnectionTracker_StartEventLog(peer_connection_local_id,
                                                       file_for_transit));
   } else {
-    --number_active_log_files_;
+    bool removed = RtcEventLogRemoved(peer_connection_local_id);
+    DCHECK(removed);
     IPC::PlatformFileForTransitToFile(file_for_transit).Close();
   }
+}
+
+void WebRTCEventLogHost::RtcEventLogAdded(int peer_connection_local_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto& active_peer_connections_with_log_files =
+      ActivePeerConnectionsWithLogFiles();
+  PeerConnectionKey pc_key = {render_process_id_, peer_connection_local_id};
+  DCHECK(std::find(active_peer_connections_with_log_files.begin(),
+                   active_peer_connections_with_log_files.end(),
+                   pc_key) == active_peer_connections_with_log_files.end());
+  active_peer_connections_with_log_files.push_back(pc_key);
+}
+
+bool WebRTCEventLogHost::RtcEventLogRemoved(int peer_connection_local_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto& active_peer_connections_with_log_files =
+      ActivePeerConnectionsWithLogFiles();
+  PeerConnectionKey pc_key = {render_process_id_, peer_connection_local_id};
+  const auto it =
+      std::find(active_peer_connections_with_log_files.begin(),
+                active_peer_connections_with_log_files.end(), pc_key);
+  if (it != active_peer_connections_with_log_files.end()) {
+    active_peer_connections_with_log_files.erase(it);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace content

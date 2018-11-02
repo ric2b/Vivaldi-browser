@@ -4,6 +4,9 @@
 
 #include "net/quic/chromium/quic_proxy_client_socket.h"
 
+#include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/dns/mock_host_resolver.h"
@@ -70,7 +73,8 @@ namespace {
 const QuicStreamId kClientDataStreamId1 = kHeadersStreamId + 2;
 }  // namespace
 
-class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
+class QuicProxyClientSocketTest
+    : public ::testing::TestWithParam<QuicTransportVersion> {
  protected:
   static const bool kFin = true;
   static const bool kIncludeVersion = true;
@@ -80,7 +84,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
 
   static size_t GetStreamFrameDataLengthFromPacketLength(
       QuicByteCount packet_length,
-      QuicVersion version,
+      QuicTransportVersion version,
       bool include_version,
       bool include_diversification_nonce,
       QuicConnectionIdLength connection_id_length,
@@ -128,7 +132,11 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
 
   void SetUp() override {}
 
-  void TearDown() override {}
+  void TearDown() override {
+    sock_.reset();
+    EXPECT_TRUE(mock_quic_data_.AllReadDataConsumed());
+    EXPECT_TRUE(mock_quic_data_.AllWriteDataConsumed());
+  }
 
   void Initialize() {
     std::unique_ptr<MockUDPClientSocket> socket(new MockUDPClientSocket(
@@ -140,13 +148,12 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
     EXPECT_CALL(*send_algorithm_, InRecovery()).WillRepeatedly(Return(false));
     EXPECT_CALL(*send_algorithm_, InSlowStart()).WillRepeatedly(Return(false));
     EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillRepeatedly(Return(true));
+        .Times(testing::AtLeast(1));
     EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
         .WillRepeatedly(Return(kMaxPacketSize));
     EXPECT_CALL(*send_algorithm_, PacingRate(_))
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
-    EXPECT_CALL(*send_algorithm_, TimeUntilSend(_, _))
-        .WillRepeatedly(Return(QuicTime::Delta::Zero()));
+    EXPECT_CALL(*send_algorithm_, CanSend(_)).WillRepeatedly(Return(true));
     EXPECT_CALL(*send_algorithm_, BandwidthEstimate())
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
     EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _)).Times(AnyNumber());
@@ -157,12 +164,12 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
         new QuicChromiumConnectionHelper(&clock_, &random_generator_));
     alarm_factory_.reset(new QuicChromiumAlarmFactory(runner_.get(), &clock_));
 
-    QuicChromiumPacketWriter* writer =
-        new QuicChromiumPacketWriter(socket.get());
+    QuicChromiumPacketWriter* writer = new QuicChromiumPacketWriter(
+        socket.get(), base::ThreadTaskRunnerHandle::Get().get());
     QuicConnection* connection = new QuicConnection(
         connection_id_, QuicSocketAddress(QuicSocketAddressImpl(peer_addr_)),
         helper_.get(), alarm_factory_.get(), writer, true /* owns_writer */,
-        Perspective::IS_CLIENT, SupportedVersions(GetParam()));
+        Perspective::IS_CLIENT, SupportedTransportVersions(GetParam()));
     connection->set_visitor(&visitor_);
     QuicConnectionPeer::SetSendAlgorithm(connection, send_algorithm_);
 
@@ -184,7 +191,11 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
         &transport_security_state_,
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicServerId("mail.example.org", 80, PRIVACY_MODE_DISABLED),
-        /*require_confirmation=*/false, kQuicYieldAfterPacketsRead,
+        /*require_confirmation=*/false, /*migrate_session_early*/ false,
+        /*migrate_session_on_network_change*/ false,
+        /*migrate_session_early_v2*/ false,
+        /*migrate_session_on_network_change_v2*/ false,
+        kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
         "CONNECTION_UNKNOWN", dns_start, dns_end, &push_promise_index_, nullptr,
@@ -465,7 +476,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<QuicVersion> {
     ASSERT_EQ(SpdyString(data, len), SpdyString(read_buf_->data(), len));
   }
 
-  QuicVersion version_;
+  QuicTransportVersion version_;
 
   // order of destruction of these members matter
   MockClock clock_;
@@ -1332,7 +1343,7 @@ TEST_P(QuicProxyClientSocketTest, RstWithReadAndWritePending) {
 
   mock_quic_data_.AddRead(
       ConstructServerRstPacket(2, QUIC_STREAM_CANCELLED, 0));
-  mock_quic_data_.AddRead(SYNCHRONOUS, 0);  // EOF
+  mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   mock_quic_data_.AddAsyncWrite(
       ConstructAckAndDataPacket(3, 1, 1, 1, 0, kMsg2, kLen2));
   mock_quic_data_.AddWrite(
@@ -1370,7 +1381,7 @@ TEST_P(QuicProxyClientSocketTest, NetLog) {
 
   mock_quic_data_.AddRead(ConstructServerDataPacket(2, 0, kMsg1, kLen1));
   mock_quic_data_.AddWrite(ConstructAckPacket(3, 2, 1, 1));
-  mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // EOF
+  mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   mock_quic_data_.AddWrite(ConstructRstPacket(4, QUIC_STREAM_CANCELLED, 0));
 
   Initialize();
@@ -1484,7 +1495,7 @@ TEST_P(QuicProxyClientSocketTest, RstWithReadAndWritePendingDelete) {
 
 INSTANTIATE_TEST_CASE_P(Version,
                         QuicProxyClientSocketTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
 
 }  // namespace test
 }  // namespace net

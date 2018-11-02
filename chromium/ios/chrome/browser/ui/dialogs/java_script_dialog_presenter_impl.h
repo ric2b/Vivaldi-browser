@@ -5,14 +5,17 @@
 #ifndef IOS_CHROME_BROWSER_UI_DIALOGS_JAVA_SCRIPT_DIALOG_PRESENTER_IMPL_H_
 #define IOS_CHROME_BROWSER_UI_DIALOGS_JAVA_SCRIPT_DIALOG_PRESENTER_IMPL_H_
 
-#import "base/ios/weak_nsobject.h"
 #import "base/mac/scoped_nsobject.h"
 #include "ios/web/public/java_script_dialog_presenter.h"
 
 @class AlertCoordinator;
 @class DialogPresenter;
 
-class JavaScriptDialogPresenterImpl : public web::JavaScriptDialogPresenter {
+// The maximum characters to use for the JavaScript dialog message text.
+extern const size_t kJavaScriptDialogMaxMessageLength;
+
+class JavaScriptDialogPresenterImpl final
+    : public web::JavaScriptDialogPresenter {
  public:
   explicit JavaScriptDialogPresenterImpl(DialogPresenter* dialogPresenter);
   ~JavaScriptDialogPresenterImpl();
@@ -25,6 +28,13 @@ class JavaScriptDialogPresenterImpl : public web::JavaScriptDialogPresenter {
                            const web::DialogClosedCallback& callback) override;
 
   void CancelDialogs(web::WebState* web_state) override;
+
+  // JavaScript dialogs presented by this class cap the message text length to
+  // kJavaScriptDialogMaxMessageLength.  This utility function performs that
+  // operation on an input NSString.
+  // TODO(crbug.com/674649): Remove this after switching to custom dialog
+  // implementation.
+  static NSString* GetTruncatedMessageText(NSString* message_text);
 
  private:
   // The underlying DialogPresenter handling the dialog UI.

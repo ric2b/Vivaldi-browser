@@ -60,18 +60,6 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxPopupContentsView, public:
 
-OmniboxPopupView* OmniboxPopupContentsView::Create(
-    const gfx::FontList& font_list,
-    OmniboxView* omnibox_view,
-    OmniboxEditModel* edit_model,
-    LocationBarView* location_bar_view) {
-  OmniboxPopupContentsView* view = nullptr;
-  view = new OmniboxPopupContentsView(
-      font_list, omnibox_view, edit_model, location_bar_view);
-  view->Init();
-  return view;
-}
-
 OmniboxPopupContentsView::OmniboxPopupContentsView(
     const gfx::FontList& font_list,
     OmniboxView* omnibox_view,
@@ -114,14 +102,9 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
     g_bottom_shadow.Get() =
         gfx::ImageSkiaOperations::CreateHorizontalShadow(shadows, true);
   }
-}
 
-void OmniboxPopupContentsView::Init() {
-  // This can't be done in the constructor as at that point we aren't
-  // necessarily our final class yet, and we may have subclasses
-  // overriding CreateResultView.
   for (size_t i = 0; i < AutocompleteResult::GetMaxMatches(); ++i) {
-    OmniboxResultView* result_view = CreateResultView(i, font_list_);
+    OmniboxResultView* result_view = new OmniboxResultView(this, i, font_list_);
     result_view->SetVisible(false);
     AddChildViewAt(result_view, static_cast<int>(i));
   }
@@ -149,21 +132,28 @@ gfx::Rect OmniboxPopupContentsView::GetPopupBounds() const {
   return current_frame_bounds;
 }
 
-void OmniboxPopupContentsView::LayoutChildren() {
-  gfx::Rect contents_rect = GetContentsBounds();
-  contents_rect.Inset(gfx::Insets(kPopupVerticalPadding, 0));
-  contents_rect.Inset(start_margin_, g_top_shadow.Get().height(), end_margin_,
-                      0);
+void OmniboxPopupContentsView::OpenMatch(size_t index,
+                                         WindowOpenDisposition disposition) {
+  DCHECK(HasMatchAt(index));
 
-  int top = contents_rect.y();
-  for (size_t i = 0; i < AutocompleteResult::GetMaxMatches(); ++i) {
-    View* v = child_at(i);
-    if (v->visible()) {
-      v->SetBounds(contents_rect.x(), top, contents_rect.width(),
-                   v->GetPreferredSize().height());
-      top = v->bounds().bottom();
-    }
-  }
+  omnibox_view_->OpenMatch(model_->result().match_at(index), disposition,
+                           GURL(), base::string16(), index);
+}
+
+gfx::Image OmniboxPopupContentsView::GetMatchIcon(
+    const AutocompleteMatch& match,
+    SkColor vector_icon_color) const {
+  return model_->GetMatchIcon(match, vector_icon_color);
+}
+
+void OmniboxPopupContentsView::SetSelectedLine(size_t index) {
+  DCHECK(HasMatchAt(index));
+
+  model_->SetSelectedLine(index, false, false);
+}
+
+bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
+  return index == model_->selected_line();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -318,10 +308,8 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   Layout();
 }
 
-void OmniboxPopupContentsView::SetMatchIcon(size_t match_index,
-                                            const gfx::Image& icon) {
-  OmniboxResultView* view = result_view_at(match_index);
-  view->SetCustomIcon(icon.AsImageSkia());
+void OmniboxPopupContentsView::OnMatchIconUpdated(size_t match_index) {
+  result_view_at(match_index)->OnMatchIconUpdated();
 }
 
 gfx::Rect OmniboxPopupContentsView::GetTargetBounds() {
@@ -334,25 +322,6 @@ void OmniboxPopupContentsView::PaintUpdatesNow() {
 
 void OmniboxPopupContentsView::OnDragCanceled() {
   SetMouseHandler(nullptr);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// OmniboxPopupContentsView, OmniboxResultViewModel implementation:
-
-bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
-  return index == model_->selected_line();
-}
-
-gfx::Image OmniboxPopupContentsView::GetIconIfExtensionMatch(
-    size_t index) const {
-  if (!HasMatchAt(index))
-    return gfx::Image();
-  return model_->GetIconIfExtensionMatch(GetMatchAtIndex(index));
-}
-
-bool OmniboxPopupContentsView::IsStarredMatch(
-    const AutocompleteMatch& match) const {
-  return model_->IsStarredMatch(match);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -382,36 +351,37 @@ views::View* OmniboxPopupContentsView::GetTooltipHandlerForPoint(
   return nullptr;
 }
 
-bool OmniboxPopupContentsView::OnMousePressed(const ui::MouseEvent& event) {
-  if (event.IsLeftMouseButton())
-    SetSelectedLine(event);
-  return true;
-}
-
 bool OmniboxPopupContentsView::OnMouseDragged(const ui::MouseEvent& event) {
-  if (event.IsLeftMouseButton())
-    SetSelectedLine(event);
-  return true;
-}
+  size_t index = GetIndexForPoint(event.location());
 
-void OmniboxPopupContentsView::OnMouseReleased(const ui::MouseEvent& event) {
-  if (event.IsOnlyMiddleMouseButton() || event.IsOnlyLeftMouseButton()) {
-    OpenSelectedLine(event, event.IsOnlyLeftMouseButton()
-                                ? WindowOpenDisposition::CURRENT_TAB
-                                : WindowOpenDisposition::NEW_BACKGROUND_TAB);
+  // If the drag event is over the bounds of one of the result views, pass
+  // control to that view.
+  if (HasMatchAt(index)) {
+    SetMouseHandler(result_view_at(index));
+    return false;
   }
+
+  // If the drag event is not over any of the result views, that means that it
+  // has passed outside the bounds of the popup view. Return true to keep
+  // receiving the drag events, as the drag may return in which case we will
+  // want to respond to it again.
+  return true;
 }
 
 void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
+  const size_t event_location_index = GetIndexForPoint(event->location());
+  if (!HasMatchAt(event_location_index))
+    return;
+
   switch (event->type()) {
     case ui::ET_GESTURE_TAP_DOWN:
     case ui::ET_GESTURE_SCROLL_BEGIN:
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      SetSelectedLine(*event);
+      SetSelectedLine(event_location_index);
       break;
     case ui::ET_GESTURE_TAP:
     case ui::ET_GESTURE_SCROLL_END:
-      OpenSelectedLine(*event, WindowOpenDisposition::CURRENT_TAB);
+      OpenMatch(event_location_index, WindowOpenDisposition::CURRENT_TAB);
       break;
     default:
       return;
@@ -420,7 +390,7 @@ void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// OmniboxPopupContentsView, protected:
+// OmniboxPopupContentsView, private:
 
 int OmniboxPopupContentsView::CalculatePopupHeight() {
   DCHECK_GE(static_cast<size_t>(child_count()), model_->result().size());
@@ -435,10 +405,50 @@ int OmniboxPopupContentsView::CalculatePopupHeight() {
          g_top_shadow.Get().height() + g_bottom_shadow.Get().height();
 }
 
-OmniboxResultView* OmniboxPopupContentsView::CreateResultView(
-    int model_index,
-    const gfx::FontList& font_list) {
-  return new OmniboxResultView(this, model_index, font_list);
+void OmniboxPopupContentsView::LayoutChildren() {
+  gfx::Rect contents_rect = GetContentsBounds();
+  contents_rect.Inset(gfx::Insets(kPopupVerticalPadding, 0));
+  contents_rect.Inset(start_margin_, g_top_shadow.Get().height(), end_margin_,
+                      0);
+
+  int top = contents_rect.y();
+  for (size_t i = 0; i < AutocompleteResult::GetMaxMatches(); ++i) {
+    View* v = child_at(i);
+    if (v->visible()) {
+      v->SetBounds(contents_rect.x(), top, contents_rect.width(),
+                   v->GetPreferredSize().height());
+      top = v->bounds().bottom();
+    }
+  }
+}
+
+bool OmniboxPopupContentsView::HasMatchAt(size_t index) const {
+  return index < model_->result().size();
+}
+
+const AutocompleteMatch& OmniboxPopupContentsView::GetMatchAtIndex(
+    size_t index) const {
+  return model_->result().match_at(index);
+}
+
+size_t OmniboxPopupContentsView::GetIndexForPoint(const gfx::Point& point) {
+  if (!HitTestPoint(point))
+    return OmniboxPopupModel::kNoMatch;
+
+  int nb_match = model_->result().size();
+  DCHECK(nb_match <= child_count());
+  for (int i = 0; i < nb_match; ++i) {
+    views::View* child = child_at(i);
+    gfx::Point point_in_child_coords(point);
+    View::ConvertPointToTarget(this, child, &point_in_child_coords);
+    if (child->visible() && child->HitTestPoint(point_in_child_coords))
+      return i;
+  }
+  return OmniboxPopupModel::kNoMatch;
+}
+
+OmniboxResultView* OmniboxPopupContentsView::result_view_at(size_t i) {
+  return static_cast<OmniboxResultView*>(child_at(static_cast<int>(i)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -483,53 +493,4 @@ void OmniboxPopupContentsView::PaintChildren(
     recorder.canvas()->DrawColor(background_color);
   }
   View::PaintChildren(paint_info);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// OmniboxPopupContentsView, private:
-
-bool OmniboxPopupContentsView::HasMatchAt(size_t index) const {
-  return index < model_->result().size();
-}
-
-const AutocompleteMatch& OmniboxPopupContentsView::GetMatchAtIndex(
-    size_t index) const {
-  return model_->result().match_at(index);
-}
-
-size_t OmniboxPopupContentsView::GetIndexForPoint(
-    const gfx::Point& point) {
-  if (!HitTestPoint(point))
-    return OmniboxPopupModel::kNoMatch;
-
-  int nb_match = model_->result().size();
-  DCHECK(nb_match <= child_count());
-  for (int i = 0; i < nb_match; ++i) {
-    views::View* child = child_at(i);
-    gfx::Point point_in_child_coords(point);
-    View::ConvertPointToTarget(this, child, &point_in_child_coords);
-    if (child->visible() && child->HitTestPoint(point_in_child_coords))
-      return i;
-  }
-  return OmniboxPopupModel::kNoMatch;
-}
-
-void OmniboxPopupContentsView::SetSelectedLine(const ui::LocatedEvent& event) {
-  size_t index = GetIndexForPoint(event.location());
-  if (HasMatchAt(index))
-    model_->SetSelectedLine(index, false, false);
-}
-
-void OmniboxPopupContentsView::OpenSelectedLine(
-    const ui::LocatedEvent& event,
-    WindowOpenDisposition disposition) {
-  size_t index = GetIndexForPoint(event.location());
-  if (!HasMatchAt(index))
-    return;
-  omnibox_view_->OpenMatch(model_->result().match_at(index), disposition,
-                           GURL(), base::string16(), index);
-}
-
-OmniboxResultView* OmniboxPopupContentsView::result_view_at(size_t i) {
-  return static_cast<OmniboxResultView*>(child_at(static_cast<int>(i)));
 }

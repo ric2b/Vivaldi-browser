@@ -24,8 +24,7 @@ NinjaActionTargetWriter::NinjaActionTargetWriter(const Target* target,
           ESCAPE_NONE) {
 }
 
-NinjaActionTargetWriter::~NinjaActionTargetWriter() {
-}
+NinjaActionTargetWriter::~NinjaActionTargetWriter() = default;
 
 void NinjaActionTargetWriter::Run() {
   if (target_->is_disabled())

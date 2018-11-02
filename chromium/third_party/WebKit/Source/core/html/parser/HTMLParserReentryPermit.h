@@ -6,8 +6,8 @@
 #define HTMLParserReentryPermit_h
 
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -38,7 +38,7 @@ namespace blink {
 class HTMLParserReentryPermit final
     : public RefCounted<HTMLParserReentryPermit> {
  public:
-  static RefPtr<HTMLParserReentryPermit> Create();
+  static scoped_refptr<HTMLParserReentryPermit> Create();
   ~HTMLParserReentryPermit() = default;
 
   unsigned ScriptNestingLevel() const { return script_nesting_level_; }

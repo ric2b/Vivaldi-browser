@@ -7,13 +7,11 @@
 
 #include <vector>
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_util.h"
-#include "content/public/browser/permission_type.h"
 
 namespace content {
 class WebContents;
@@ -34,14 +32,6 @@ enum class PermissionSourceUI {
 
   // Always keep this at the end.
   NUM,
-};
-
-// This should stay in sync with the PersistDecision enum in the permission
-// report message (src/chrome/common/safe_browsing/permission_report.proto).
-enum class PermissionPersistDecision {
-  UNSPECIFIED = 0,
-  PERSISTED = 1,
-  NOT_PERSISTED = 2,
 };
 
 // Any new values should be inserted immediately prior to NUM.
@@ -73,7 +63,6 @@ struct PermissionReportInfo {
       PermissionAction action,
       PermissionSourceUI source_ui,
       PermissionRequestGestureType gesture_type,
-      PermissionPersistDecision persist_decision,
       int num_prior_dismissals,
       int num_prior_ignores);
 
@@ -84,7 +73,6 @@ struct PermissionReportInfo {
   PermissionAction action;
   PermissionSourceUI source_ui;
   PermissionRequestGestureType gesture_type;
-  PermissionPersistDecision persist_decision;
   int num_prior_dismissals;
   int num_prior_ignores;
 };
@@ -101,10 +89,6 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptDenied[];
   static const char kPermissionsPromptDeniedGesture[];
   static const char kPermissionsPromptDeniedNoGesture[];
-  static const char kPermissionsPromptRequestsPerPrompt[];
-  static const char kPermissionsPromptMergedBubbleTypes[];
-  static const char kPermissionsPromptMergedBubbleAccepted[];
-  static const char kPermissionsPromptMergedBubbleDenied[];
   static const char kPermissionsPromptAcceptedPriorDismissCountPrefix[];
   static const char kPermissionsPromptAcceptedPriorIgnoreCountPrefix[];
   static const char kPermissionsPromptDeniedPriorDismissCountPrefix[];
@@ -115,9 +99,7 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptIgnoredPriorIgnoreCountPrefix[];
 
   static void PermissionRequested(ContentSettingsType permission,
-                                  const GURL& requesting_origin,
-                                  const GURL& embedding_origin,
-                                  Profile* profile);
+                                  const GURL& requesting_origin);
   static void PermissionGranted(ContentSettingsType permission,
                                 PermissionRequestGestureType gesture_type,
                                 const GURL& requesting_origin,
@@ -130,10 +112,6 @@ class PermissionUmaUtil {
                                   PermissionRequestGestureType gesture_type,
                                   const GURL& requesting_origin,
                                   Profile* profile);
-  static void PermissionIgnored(ContentSettingsType permission,
-                                PermissionRequestGestureType gesture_type,
-                                const GURL& requesting_origin,
-                                Profile* profile);
   static void PermissionRevoked(ContentSettingsType permission,
                                 PermissionSourceUI source_ui,
                                 const GURL& revoked_origin,
@@ -182,16 +160,7 @@ class PermissionUmaUtil {
       PermissionRequestType request_type,
       PermissionRequestGestureType gesture_type);
 
-  // A permission prompt was accepted or denied, and the prompt displayed a
-  // persistence toggle. Records whether the toggle was enabled (persist) or
-  // disabled (don't persist).
-  static void PermissionPromptAcceptedWithPersistenceToggle(
-      ContentSettingsType permission,
-      bool toggle_enabled);
-
-  static void PermissionPromptDeniedWithPersistenceToggle(
-      ContentSettingsType permission,
-      bool toggle_enabled);
+  static void RecordWithBatteryBucket(const std::string& histogram);
 
   // Permission Action Reporting data is only sent in official, Chrome branded
   // builds. This function allows this to be overridden for testing.
@@ -219,6 +188,9 @@ class PermissionUmaUtil {
   static void RecordPromptDecided(
       const std::vector<PermissionRequest*>& requests,
       bool accepted);
+
+  static void PermissionIgnored(const std::vector<PermissionRequest*>& requests,
+                                const content::WebContents* web_contents);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(PermissionUmaUtil);
 };

@@ -7,7 +7,7 @@
 
 #include <memory>
 #include "platform/heap/Persistent.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 
 namespace blink {
 
@@ -23,9 +23,7 @@ class FetchTestingPlatformSupport
 
   // Platform:
   WebURLLoaderMockFactory* GetURLLoaderMockFactory() override;
-  std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const blink::WebURLRequest&,
-      base::SingleThreadTaskRunner*) override;
+  std::unique_ptr<WebURLLoaderFactory> CreateDefaultURLLoaderFactory() override;
 
  private:
   class FetchTestingWebURLLoaderMockFactory;

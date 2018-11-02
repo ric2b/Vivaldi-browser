@@ -32,7 +32,7 @@
 #define WebLocalFrameImpl_h
 
 #include "core/CoreExport.h"
-#include "core/editing/VisiblePosition.h"
+#include "core/editing/Forward.h"
 #include "core/exported/WebInputMethodControllerImpl.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/LocalFrame.h"
@@ -55,8 +55,6 @@ class KURL;
 class LocalFrameClient;
 class ScrollableArea;
 class SharedWorkerRepositoryClientImpl;
-class TextCheckerClient;
-class TextCheckerClientImpl;
 class TextFinder;
 class WebAssociatedURLLoader;
 struct WebAssociatedURLLoaderOptions;
@@ -174,6 +172,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool ExecuteCommand(const WebString&) override;
   bool ExecuteCommand(const WebString&, const WebString& value) override;
   bool IsCommandEnabled(const WebString&) const override;
+  bool SelectionTextDirection(WebTextDirection& start,
+                              WebTextDirection& end) const override;
+  bool IsSelectionAnchorFirst() const override;
+  void SetTextDirection(WebTextDirection) override;
   void SetTextCheckClient(WebTextCheckClient*) override;
   void SetSpellCheckPanelHostClient(WebSpellCheckPanelHostClient*) override;
   void EnableSpellChecking(bool) override;
@@ -190,7 +192,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool SelectWordAroundCaret() override;
   void SelectRange(const WebPoint& base, const WebPoint& extent) override;
   void SelectRange(const WebRange&,
-                   HandleVisibilityBehavior = kHideSelectionHandle) override;
+                   HandleVisibilityBehavior,
+                   blink::mojom::SelectionMenuBehavior) override;
   WebString RangeAsText(const WebRange&) override;
   void MoveRangeSelectionExtent(const WebPoint&) override;
   void MoveRangeSelection(
@@ -207,11 +210,13 @@ class CORE_EXPORT WebLocalFrameImpl final
   void DeleteSurroundingText(int before, int after) override;
   void DeleteSurroundingTextInCodePoints(int before, int after) override;
   void SetCaretVisible(bool) override;
+  void DispatchBeforePrintEvent() override;
   int PrintBegin(const WebPrintParams&,
                  const WebNode& constrain_to_node) override;
   float PrintPage(int page_to_print, WebCanvas*) override;
   float GetPrintPageShrink(int page) override;
   void PrintEnd() override;
+  void DispatchAfterPrintEvent() override;
   bool IsPrintScalingDisabledForPlugin(const WebNode&) override;
   bool GetPrintPresetOptionsForPlugin(const WebNode&,
                                       WebPrintPresetOptions*) override;
@@ -249,14 +254,15 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SendPings(const WebURL& destination_url) override;
   bool DispatchBeforeUnloadEvent(bool) override;
   WebURLRequest RequestFromHistoryItem(const WebHistoryItem&,
-                                       WebCachePolicy) const override;
+                                       mojom::FetchCacheMode) const override;
   WebURLRequest RequestForReload(WebFrameLoadType,
                                  const WebURL&) const override;
   void Load(const WebURLRequest&,
-            WebFrameLoadType = WebFrameLoadType::kStandard,
-            const WebHistoryItem& = WebHistoryItem(),
-            WebHistoryLoadType = kWebHistoryDifferentDocumentLoad,
-            bool is_client_redirect = false) override;
+            WebFrameLoadType,
+            const WebHistoryItem&,
+            WebHistoryLoadType,
+            bool is_client_redirect,
+            const base::UnguessableToken& devtools_navigation_token) override;
   void LoadData(const WebData&,
                 const WebString& mime_type,
                 const WebString& text_encoding,
@@ -313,9 +319,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void ClearActiveFindMatch() override;
   void UsageCountChromeLoadTimes(const WebString& metric) override;
   WebFrameScheduler* Scheduler() const override;
-  SingleThreadTaskRunner* TimerTaskRunner() override;
-  SingleThreadTaskRunner* LoadingTaskRunner() override;
-  SingleThreadTaskRunner* UnthrottledTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
   WebInputMethodController* GetInputMethodController() override;
 
   void ExtractSmartClipData(WebRect rect_in_viewport,
@@ -344,7 +348,7 @@ class CORE_EXPORT WebLocalFrameImpl final
                                               InterfaceRegistry*,
                                               WebRemoteFrame*,
                                               WebSandboxFlags,
-                                              WebParsedFeaturePolicy);
+                                              ParsedFeaturePolicy);
 
   ~WebLocalFrameImpl() override;
 
@@ -362,7 +366,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebViewImpl* ViewImpl() const;
 
   LocalFrameView* GetFrameView() const {
-    return GetFrame() ? GetFrame()->View() : 0;
+    return GetFrame() ? GetFrame()->View() : nullptr;
   }
 
   WebDevToolsAgentImpl* DevToolsAgentImpl() const {
@@ -398,10 +402,9 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   void SetInputEventsScaleForEmulation(float);
 
-  static void SelectWordAroundPosition(LocalFrame*, VisiblePosition);
-
-  TextCheckerClient& GetTextCheckerClient() const;
-  WebTextCheckClient* TextCheckClient() const { return text_check_client_; }
+  WebTextCheckClient* GetTextCheckerClient() const {
+    return text_check_client_;
+  }
 
   WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override {
     return spell_check_panel_host_client_;
@@ -429,9 +432,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetContextMenuNode(Node* node) { context_menu_node_ = node; }
   void ClearContextMenuNode() { context_menu_node_.Clear(); }
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      SingleThreadTaskRunner*) override;
+  std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override;
 
   WebFrameWidgetBase* LocalRootFrameWidget();
 
@@ -440,7 +441,7 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   bool snapshotPage(SkBitmap&, bool, float, float) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   WebLocalFrameImpl(WebTreeScopeType,
@@ -466,6 +467,9 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   // Returns true if the frame is focused.
   bool IsFocused() const;
+
+  // A helper for DispatchBeforePrintEvent() and DispatchAfterPrintEvent().
+  void DispatchPrintEventRecursively(const AtomicString& event_type);
 
   Member<LocalFrameClient> local_frame_client_;
 
@@ -507,8 +511,6 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   WebInputMethodControllerImpl input_method_controller_;
 
-  // Stores the TextCheckerClient to bridge SpellChecker and WebTextCheckClient.
-  Member<TextCheckerClientImpl> text_checker_client_;
   WebTextCheckClient* text_check_client_;
 
   WebSpellCheckPanelHostClient* spell_check_panel_host_client_;
@@ -517,6 +519,12 @@ class CORE_EXPORT WebLocalFrameImpl final
   // Accomplish that by keeping a self-referential Persistent<>. It is
   // cleared upon close().
   SelfKeepAlive<WebLocalFrameImpl> self_keep_alive_;
+
+#if DCHECK_IS_ON()
+  // True if DispatchBeforePrintEvent() was called, and
+  // DispatchAfterPrintEvent() is not called yet.
+  bool is_in_printing_ = false;
+#endif
 };
 
 DEFINE_TYPE_CASTS(WebLocalFrameImpl,

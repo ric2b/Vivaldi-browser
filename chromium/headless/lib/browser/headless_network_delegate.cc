@@ -8,6 +8,8 @@
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
+#include "net/url_request/url_request_context.h"
+#include "url/url_constants.h"
 
 #include "net/url_request/url_request.h"
 
@@ -38,7 +40,12 @@ int HeadlessNetworkDelegate::OnBeforeURLRequest(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     GURL* new_url) {
-  request->RemoveRequestHeaderByName(kDevToolsEmulateNetworkConditionsClientId);
+  base::AutoLock lock(lock_);
+  if (headless_browser_context_ &&
+      headless_browser_context_->ShouldRemoveHeaders()) {
+    request->RemoveRequestHeaderByName(
+        kDevToolsEmulateNetworkConditionsClientId);
+  }
   return net::OK;
 }
 
@@ -75,34 +82,16 @@ void HeadlessNetworkDelegate::OnCompleted(net::URLRequest* request,
   if (!headless_browser_context_)
     return;
 
-  if (net_error != net::OK) {
-    headless_browser_context_->NotifyUrlRequestFailed(request, net_error);
-    return;
-  }
-
-  if (request->response_info().network_accessed || request->was_cached() ||
-      request->GetResponseCode() != 200 || request->GetRawBodyBytes() > 0) {
-    return;
-  }
-
   const content::ResourceRequestInfo* resource_request_info =
       content::ResourceRequestInfo::ForRequest(request);
   if (!resource_request_info)
     return;
 
-  content::ResourceType resource_type =
-      resource_request_info->GetResourceType();
-
-  if (resource_type != content::RESOURCE_TYPE_MAIN_FRAME &&
-      resource_type != content::RESOURCE_TYPE_SUB_FRAME) {
-    return;
+  bool canceled_by_devtools = resource_request_info->CanceledByDevTools();
+  if (canceled_by_devtools || net_error != net::OK) {
+    headless_browser_context_->NotifyUrlRequestFailed(request, net_error,
+                                                      canceled_by_devtools);
   }
-
-  // The |request| was for a navigation where an empty response was served but
-  // the network wasn't accessed and it wasn't cached, so we can be reasonably
-  // certain that DevTools canceled the associated navigation.  When it does so
-  // an empty resource is served.
-  headless_browser_context_->NotifyUrlRequestFailed(request, net::ERR_ABORTED);
 }
 
 void HeadlessNetworkDelegate::OnURLRequestDestroyed(net::URLRequest* request) {}
@@ -125,7 +114,7 @@ bool HeadlessNetworkDelegate::OnCanGetCookies(
 }
 
 bool HeadlessNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
-                                             const std::string& cookie_line,
+                                             const net::CanonicalCookie& cookie,
                                              net::CookieOptions* options) {
   return true;
 }

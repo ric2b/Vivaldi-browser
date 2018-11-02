@@ -1,26 +1,25 @@
-# libFuzzer in Chrome
+# libFuzzer in Chromium
 
-[go/libfuzzer-chrome](https://goto.google.com/libfuzzer-chrome)
+[go/libfuzzer-chromium](https://goto.google.com/libfuzzer-chromium) (Googler only)
 
 *** aside
 [Getting Started](getting_started.md)
-| [Buildbot](https://goto.google.com/libfuzzer-clusterfuzz-buildbot)
-| [ClusterFuzz Status](https://goto.google.com/libfuzzer-clusterfuzz-status)
+| [Buildbot](https://build.chromium.org/p/chromium.fyi/buildslaves/slave43-c1)
+| [ClusterFuzz Status](https://clusterfuzz.com/v2/fuzzer-stats)
 | [Cover Bug]
 ***
 
-This directory contains integration between [libFuzzer] and Chrome.
+This directory contains integration between [libFuzzer] and Chromium.
 libFuzzer is an in-process coverage-driven evolutionary fuzzer. It helps
 engineers to uncover potential security & stability problems earlier.
 
 *** note
-**Requirements:** libFuzzer in Chrome is supported with GN on Linux only. 
-Check [Reference] for experimental platform availability.
+**Requirements:** libFuzzer in Chromium is supported with Linux and Mac only.
 ***
 
 ## Integration Status
 
-Fuzzer tests are well-integrated with Chrome build system & distributed 
+Fuzzer tests are well-integrated with Chromium build system and distributed
 ClusterFuzz fuzzing system. Cover bug: [crbug.com/539572].
 
 ## Documentation
@@ -29,12 +28,14 @@ ClusterFuzz fuzzing system. Cover bug: [crbug.com/539572].
 your fuzzer and submit it to ClusterFuzz.
 * [Efficient Fuzzer Guide] explains how to measure fuzzer effectiveness and
 ways to improve it.
-* [ClusterFuzz Integration] describes integration between ClusterFuzz and 
+* [Guide to libprotobuf-mutator] walks through the steps necessary to create a
+fuzzer that libFuzzer gives mutated protobufs to as input (for developers
+already familiar with libFuzzer).
+* [ClusterFuzz Integration] describes integration between ClusterFuzz and
 libFuzzer.
 * [Reproducing] contains information on how to reproduce bugs reported by
   ClusterFuzz.
 * [Reference] contains detailed references for different integration parts.
-
 
 ## Trophies
 * [ClusterFuzz Bugs] - issues found and automatically filed by ClusterFuzz.
@@ -54,8 +55,9 @@ libFuzzer.
 [Cover Bug]: https://bugs.chromium.org/p/chromium/issues/detail?id=539572
 [Getting Started Guide]: getting_started.md
 [Efficient Fuzzer Guide]: efficient_fuzzer.md
+[Guide to libprotobuf-mutator]: libprotobuf-mutator.md
 [ClusterFuzz Integration]: clusterfuzz.md
-[Reproducing]: reproducing.md
+[Reproducing]: https://github.com/google/clusterfuzz-tools
 [Reference]: reference.md
 [ClusterFuzz Bugs]: https://bugs.chromium.org/p/chromium/issues/list?can=1&q=label:Stability-LibFuzzer%20label:ClusterFuzz&sort=-modified&colspec=ID%20Pri%20M%20Stars%20ReleaseBlock%20Component%20Status%20Owner%20Summary%20OS%20Modified
 [Pdfium Bugs]: https://bugs.chromium.org/p/pdfium/issues/list?can=1&q=libfuzzer&colspec=ID+Type+Status+Priority+Milestone+Owner+Summary&cells=tiles

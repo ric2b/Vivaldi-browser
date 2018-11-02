@@ -4,8 +4,9 @@
 
 #include "chromeos/network/device_state.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -26,8 +27,7 @@ DeviceState::DeviceState(const std::string& path)
       eap_authentication_completed_(false) {
 }
 
-DeviceState::~DeviceState() {
-}
+DeviceState::~DeviceState() = default;
 
 bool DeviceState::PropertyChanged(const std::string& key,
                                   const base::Value& value) {
@@ -47,8 +47,20 @@ bool DeviceState::PropertyChanged(const std::string& key,
   } else if (key == shill::kProviderRequiresRoamingProperty) {
     return GetBooleanValue(key, value, &provider_requires_roaming_);
   } else if (key == shill::kHomeProviderProperty) {
-    return shill_property_util::GetHomeProviderFromProperty(
-        value, &home_provider_id_);
+    if (!value.is_dict()) {
+      operator_name_.clear();
+      country_code_.clear();
+      return true;
+    }
+    const base::Value* operator_name = value.FindKey(shill::kOperatorNameKey);
+    if (operator_name)
+      operator_name_ = operator_name->GetString();
+    if (operator_name_.empty()) {
+      const base::Value* operator_code = value.FindKey(shill::kOperatorCodeKey);
+      operator_name_ = operator_code ? operator_code->GetString() : "";
+    }
+    const base::Value* country_code = value.FindKey(shill::kOperatorCountryKey);
+    country_code_ = country_code ? country_code->GetString() : "";
   } else if (key == shill::kTechnologyFamilyProperty) {
     return GetStringValue(key, value, &technology_family_);
   } else if (key == shill::kCarrierProperty) {
@@ -110,30 +122,17 @@ bool DeviceState::PropertyChanged(const std::string& key,
   return false;
 }
 
-bool DeviceState::InitialPropertiesReceived(
-    const base::DictionaryValue& properties) {
-  // Update UMA stats.
-  if (sim_present_) {
-    bool locked = !sim_lock_type_.empty();
-    UMA_HISTOGRAM_BOOLEAN("Cellular.SIMLocked", locked);
-  }
-  return false;
+void DeviceState::IPConfigPropertiesChanged(const std::string& ip_config_path,
+                                            const base::Value& properties) {
+  NET_LOG(EVENT) << "IPConfig for: " << path()
+                 << " Changed: " << ip_config_path;
+  ip_configs_.SetKey(ip_config_path, properties.Clone());
 }
 
-void DeviceState::IPConfigPropertiesChanged(
-    const std::string& ip_config_path,
-    const base::DictionaryValue& properties) {
-  base::DictionaryValue* ip_config = nullptr;
-  if (ip_configs_.GetDictionaryWithoutPathExpansion(
-          ip_config_path, &ip_config)) {
-    NET_LOG_EVENT("IPConfig Updated: " + ip_config_path, path());
-    ip_config->Clear();
-  } else {
-    NET_LOG_EVENT("IPConfig Added: " + ip_config_path, path());
-    ip_config = ip_configs_.SetDictionaryWithoutPathExpansion(
-        ip_config_path, base::MakeUnique<base::DictionaryValue>());
-  }
-  ip_config->MergeDictionary(&properties);
+std::string DeviceState::GetName() const {
+  if (!operator_name_.empty())
+    return operator_name_;
+  return name();
 }
 
 std::string DeviceState::GetIpAddressByType(const std::string& type) const {
@@ -158,7 +157,14 @@ std::string DeviceState::GetIpAddressByType(const std::string& type) const {
 }
 
 bool DeviceState::IsSimAbsent() const {
-  return technology_family_ == shill::kTechnologyFamilyGsm && !sim_present_;
+  return technology_family_ != shill::kTechnologyFamilyCdma && !sim_present_;
+}
+
+bool DeviceState::IsSimLocked() const {
+  if (technology_family_ == shill::kTechnologyFamilyCdma || !sim_present_)
+    return false;
+  return sim_lock_type_ == shill::kSIMLockPin ||
+         sim_lock_type_ == shill::kSIMLockPuk;
 }
 
 }  // namespace chromeos

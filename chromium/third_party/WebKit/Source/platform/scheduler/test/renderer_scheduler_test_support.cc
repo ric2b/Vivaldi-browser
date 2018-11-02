@@ -4,16 +4,29 @@
 
 #include "public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
-#include "platform/scheduler/test/lazy_scheduler_message_loop_delegate_for_tests.h"
+#include "platform/scheduler/test/lazy_thread_controller_for_test.h"
 
 namespace blink {
 namespace scheduler {
 
+namespace {
+
+class TaskQueueManagerForRendererSchedulerTest : public TaskQueueManager {
+ public:
+  explicit TaskQueueManagerForRendererSchedulerTest(
+      std::unique_ptr<internal::ThreadController> thread_controller)
+      : TaskQueueManager(std::move(thread_controller)) {}
+};
+
+}  // namespace
+
 std::unique_ptr<RendererScheduler> CreateRendererSchedulerForTests() {
-  return base::MakeUnique<scheduler::RendererSchedulerImpl>(
-      scheduler::LazySchedulerMessageLoopDelegateForTests::Create());
+  return std::make_unique<scheduler::RendererSchedulerImpl>(
+      std::make_unique<TaskQueueManagerForRendererSchedulerTest>(
+          std::make_unique<LazyThreadControllerForTest>()));
 }
 
 void RunIdleTasksForTesting(RendererScheduler* scheduler,

@@ -75,6 +75,10 @@ void MediaRouterBase::OnIncognitoProfileShutdown() {
     TerminateRoute(route_id);
 }
 
+IssueManager* MediaRouterBase::GetIssueManager() {
+  return &issue_manager_;
+}
+
 std::vector<MediaRoute> MediaRouterBase::GetCurrentRoutes() const {
   return internal_routes_observer_->current_routes;
 }
@@ -125,12 +129,14 @@ bool MediaRouterBase::HasJoinableRoute() const {
   return internal_routes_observer_->has_route;
 }
 
-bool MediaRouterBase::IsRouteKnown(const std::string& route_id) const {
+const MediaRoute* MediaRouterBase::GetRoute(
+    const MediaRoute::Id& route_id) const {
   const auto& routes = internal_routes_observer_->current_routes;
-  return std::find_if(routes.begin(), routes.end(),
-                      [&route_id](const MediaRoute& route) {
-                        return route.media_route_id() == route_id;
-                      }) != routes.end();
+  auto it = std::find_if(routes.begin(), routes.end(),
+                         [&route_id](const MediaRoute& route) {
+                           return route.media_route_id() == route_id;
+                         });
+  return it == routes.end() ? nullptr : &*it;
 }
 
 void MediaRouterBase::Initialize() {

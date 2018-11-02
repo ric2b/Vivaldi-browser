@@ -8,9 +8,10 @@
 #include "base/callback_forward.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
+#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/resource_type.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "ui/base/page_transition_types.h"
 
@@ -19,7 +20,6 @@ class URLRequest;
 }
 
 namespace content {
-class NavigationUIData;
 class ResourceContext;
 class WebContents;
 
@@ -40,17 +40,18 @@ class ResourceRequestInfo {
   // download is not associated with a frame, the IDs can be all -1.
   //
   // NOTE: Add more parameters if you need to initialize other fields.
-  CONTENT_EXPORT static void AllocateForTesting(net::URLRequest* request,
-                                                ResourceType resource_type,
-                                                ResourceContext* context,
-                                                int render_process_id,
-                                                int render_view_id,
-                                                int render_frame_id,
-                                                bool is_main_frame,
-                                                bool parent_is_main_frame,
-                                                bool allow_download,
-                                                bool is_async,
-                                                PreviewsState previews_state);
+  CONTENT_EXPORT static void AllocateForTesting(
+      net::URLRequest* request,
+      ResourceType resource_type,
+      ResourceContext* context,
+      int render_process_id,
+      int render_view_id,
+      int render_frame_id,
+      bool is_main_frame,
+      bool allow_download,
+      bool is_async,
+      PreviewsState previews_state,
+      std::unique_ptr<NavigationUIData> navigation_ui_data);
 
   // Returns the associated RenderFrame for a given process. Returns false, if
   // there is no associated RenderFrame. This method does not rely on the
@@ -109,9 +110,10 @@ class ResourceRequestInfo {
   // The globally unique identifier for this request.
   virtual GlobalRequestID GetGlobalRequestID() const = 0;
 
-  // The pid of the originating process, if the request is sent on behalf of a
-  // another process.  Otherwise it is 0.
-  virtual int GetOriginPID() const = 0;
+  // The child process unique ID of the originating process, if the request is
+  // was proxied through a renderer process on behalf of a pepper plugin
+  // process; -1 otherwise.
+  virtual int GetPluginChildID() const = 0;
 
   // Returns the FrameTreeNode ID for this frame. This ID is browser-global and
   // uniquely identifies a frame that hosts content.
@@ -128,9 +130,6 @@ class ResourceRequestInfo {
   // True if GetRenderFrameID() represents a main frame in the RenderView.
   virtual bool IsMainFrame() const = 0;
 
-  // True if the frame's parent represents a main frame in the RenderView.
-  virtual bool ParentIsMainFrame() const = 0;
-
   // Returns the associated resource type.
   virtual ResourceType GetResourceType() const = 0;
 
@@ -142,7 +141,7 @@ class ResourceRequestInfo {
 
   // Returns the associated visibility state at the time the request was started
   // in the renderer.
-  virtual blink::WebPageVisibilityState GetVisibilityState() const = 0;
+  virtual blink::mojom::PageVisibilityState GetVisibilityState() const = 0;
 
   // Returns the associated page transition type.
   virtual ui::PageTransition GetPageTransition() const = 0;
@@ -175,6 +174,9 @@ class ResourceRequestInfo {
   // Only used for navigations. Returns opaque data set by the embedder on the
   // UI thread at the beginning of navigation.
   virtual NavigationUIData* GetNavigationUIData() const = 0;
+
+  // Whether this request was canceled by DevTools.
+  virtual bool CanceledByDevTools() const = 0;
 
  protected:
   virtual ~ResourceRequestInfo() {}

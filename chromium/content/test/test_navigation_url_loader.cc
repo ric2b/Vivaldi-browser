@@ -7,8 +7,10 @@
 #include <utility>
 
 #include "content/browser/loader/navigation_url_loader_delegate.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_data.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/stream_handle.h"
@@ -37,6 +39,9 @@ void TestNavigationURLLoader::FollowRedirect() {
 void TestNavigationURLLoader::ProceedWithResponse() {
   response_proceeded_ = true;
 }
+
+void TestNavigationURLLoader::InterceptNavigation(
+    NavigationURLLoader::NavigationInterceptionCB callback) {}
 
 void TestNavigationURLLoader::SimulateServerRedirect(const GURL& redirect_url) {
   net::RedirectInfo redirect_info;
@@ -67,13 +72,14 @@ void TestNavigationURLLoader::CallOnResponseStarted(
   static int request_id = 1000;
   int child_id =
       WebContents::FromFrameTreeNodeId(request_info_->frame_tree_node_id)
-          ->GetRenderProcessHost()
+          ->GetMainFrame()
+          ->GetProcess()
           ->GetID();
   GlobalRequestID global_id(child_id, ++request_id);
-  delegate_->OnResponseStarted(
-      response, std::move(body), mojo::ScopedDataPipeConsumerHandle(),
-      SSLStatus(), std::move(navigation_data), global_id, false, false,
-      mojom::URLLoaderFactoryPtrInfo());
+  delegate_->OnResponseStarted(response, std::move(body),
+                               mojo::ScopedDataPipeConsumerHandle(),
+                               net::SSLInfo(), std::move(navigation_data),
+                               global_id, false, false, base::nullopt);
 }
 
 TestNavigationURLLoader::~TestNavigationURLLoader() {}

@@ -4,11 +4,11 @@
 
 
 /** @typedef {?{elements: !Array<BookmarkNode>, sameProfile: boolean}} */
-var NormalizedDragData;
+let NormalizedDragData;
 
 cr.define('bookmarks', function() {
   /** @const {number} */
-  var DRAG_THRESHOLD = 15;
+  const DRAG_THRESHOLD = 15;
 
   /**
    * @param {BookmarkElement} element
@@ -51,7 +51,7 @@ cr.define('bookmarks', function() {
     if (!path)
       return null;
 
-    for (var i = 0; i < path.length; i++) {
+    for (let i = 0; i < path.length; i++) {
       if (isBookmarkItem(path[i]) || isBookmarkFolderNode(path[i]) ||
           isBookmarkList(path[i])) {
         return path[i];
@@ -65,8 +65,8 @@ cr.define('bookmarks', function() {
    * @return {BookmarkElement}
    */
   function getDragElement(path) {
-    var dragElement = getBookmarkElement(path);
-    for (var i = 0; i < path.length; i++) {
+    const dragElement = getBookmarkElement(path);
+    for (let i = 0; i < path.length; i++) {
       if (path[i].tagName == 'BUTTON')
         return null;
     }
@@ -144,8 +144,8 @@ cr.define('bookmarks', function() {
       if (!this.isSameProfile())
         return false;
 
-      var parentId = nodes[itemId].parentId;
-      var parents = {};
+      let parentId = nodes[itemId].parentId;
+      const parents = {};
       while (parentId) {
         parents[parentId] = true;
         parentId = nodes[parentId].parentId;
@@ -166,14 +166,16 @@ cr.define('bookmarks', function() {
     /** @const {number} */
     this.EXPAND_FOLDER_DELAY = 400;
 
-    /** @private {number} */
-    this.lastTimestamp_ = 0;
-
-    /** @private {BookmarkElement|null} */
+    /** @private {?BookmarkElement} */
     this.lastElement_ = null;
 
-    /** @private {number} */
-    this.testTimestamp_ = 0;
+    /** @type {!bookmarks.Debouncer} */
+    this.debouncer_ = new bookmarks.Debouncer(() => {
+      const store = bookmarks.Store.getInstance();
+      store.dispatch(
+          bookmarks.actions.changeFolderOpen(this.lastElement_.itemId, true));
+      this.reset();
+    });
   }
 
   AutoExpander.prototype = {
@@ -182,32 +184,81 @@ cr.define('bookmarks', function() {
      * @param {?BookmarkElement} overElement
      */
     update: function(e, overElement) {
-      var eventTimestamp = this.testTimestamp_ || e.timeStamp;
-      var itemId = overElement ? overElement.itemId : null;
-      var store = bookmarks.Store.getInstance();
+      const itemId = overElement ? overElement.itemId : null;
+      const store = bookmarks.Store.getInstance();
 
-      // If hovering over the same folder as last update, open the folder after
-      // the delay has passed.
-      if (overElement && overElement == this.lastElement_) {
-        if (eventTimestamp - this.lastTimestamp_ < this.EXPAND_FOLDER_DELAY)
-          return;
-
-        var action = bookmarks.actions.changeFolderOpen(itemId, true);
-        store.dispatch(action);
-      } else if (
-          overElement && isClosedBookmarkFolderNode(overElement) &&
+      // If dragging over a new closed folder node with children reset the
+      // expander. Falls through to reset the expander delay.
+      if (overElement && overElement != this.lastElement_ &&
+          isClosedBookmarkFolderNode(overElement) &&
           bookmarks.util.hasChildFolders(itemId, store.data.nodes)) {
-        // Since this is a closed folder node that has children, set the auto
-        // expander to this element.
-        this.lastTimestamp_ = eventTimestamp;
+        this.reset();
         this.lastElement_ = overElement;
+      }
+
+      // If dragging over the same node, reset the expander delay.
+      if (overElement && overElement == this.lastElement_) {
+        this.debouncer_.restartTimeout(this.EXPAND_FOLDER_DELAY);
         return;
       }
 
-      // If the folder has been expanded or we have moved to a different
-      // element, reset the auto expander.
-      this.lastTimestamp_ = 0;
+      // Otherwise, cancel the expander.
+      this.reset();
+    },
+
+    reset: function() {
+      this.debouncer_.reset();
       this.lastElement_ = null;
+    },
+  };
+
+  /**
+   * Manages auto scrolling of elements on hover during internal drags. Native
+   * drags do this by themselves.
+   * @constructor
+   */
+  function AutoScroller() {
+    /** @const {number} */
+    this.SCROLL_ZONE_LENGTH = 20;
+    /** @const {number} */
+    this.SCROLL_DISTANCE = 10;
+    /** @const {number} */
+    this.SCROLL_INTERVAL = 100;
+    /** @private {?number} */
+    this.intervalId_ = null;
+  }
+
+  AutoScroller.prototype = {
+    /** @param {!Event} e */
+    update: function(e) {
+      this.reset();
+
+      const scrollParent = e.path.find((el) => {
+        return el.nodeType == Node.ELEMENT_NODE &&
+            window.getComputedStyle(el).overflowY == 'auto';
+      });
+
+      if (!scrollParent)
+        return;
+
+      const rect = scrollParent.getBoundingClientRect();
+      let yDelta = 0;
+      if (e.clientY < rect.top + this.SCROLL_ZONE_LENGTH)
+        yDelta = -this.SCROLL_DISTANCE;
+      else if (e.clientY > rect.bottom - this.SCROLL_ZONE_LENGTH)
+        yDelta = this.SCROLL_DISTANCE;
+
+      this.intervalId_ = window.setInterval(() => {
+        scrollParent.scrollTop += yDelta;
+      }, this.SCROLL_INTERVAL);
+    },
+
+    reset: function() {
+      if (this.intervalId_ == null)
+        return;
+
+      window.clearInterval(this.intervalId_);
+      this.intervalId_ = null;
     },
   };
 
@@ -237,9 +288,9 @@ cr.define('bookmarks', function() {
 
     /**
      * Used to instantly remove the indicator style in tests.
-     * @private {bookmarks.TimerProxy}
+     * @private {!Object}
      */
-    this.timerProxy = new bookmarks.TimerProxy();
+    this.timerProxy = window;
   }
 
   DropIndicator.prototype = {
@@ -250,7 +301,7 @@ cr.define('bookmarks', function() {
      * @param {DropPosition} position
      */
     addDropIndicatorStyle: function(indicatorElement, position) {
-      var indicatorStyleName = position == DropPosition.ABOVE ?
+      const indicatorStyleName = position == DropPosition.ABOVE ?
           'drag-above' :
           position == DropPosition.BELOW ? 'drag-below' : 'drag-on';
 
@@ -279,9 +330,10 @@ cr.define('bookmarks', function() {
      */
     update: function(dropDest) {
       this.timerProxy.clearTimeout(this.removeDropIndicatorTimeoutId_);
+      this.removeDropIndicatorTimeoutId_ = null;
 
-      var indicatorElement = dropDest.element.getDropTarget();
-      var position = dropDest.position;
+      const indicatorElement = dropDest.element.getDropTarget();
+      const position = dropDest.position;
 
       this.removeDropIndicatorStyle();
       this.addDropIndicatorStyle(indicatorElement, position);
@@ -291,9 +343,11 @@ cr.define('bookmarks', function() {
      * Stop displaying the drop indicator.
      */
     finish: function() {
+      if (this.removeDropIndicatorTimeoutId_)
+        return;
+
       // The use of a timeout is in order to reduce flickering as we move
       // between valid drop targets.
-      this.timerProxy.clearTimeout(this.removeDropIndicatorTimeoutId_);
       this.removeDropIndicatorTimeoutId_ = this.timerProxy.setTimeout(() => {
         this.removeDropIndicatorStyle();
       }, 100);
@@ -334,11 +388,17 @@ cr.define('bookmarks', function() {
     /** @private {Object<string, function(!Event)>} */
     this.documentListeners_ = null;
 
+    /** @private {?bookmarks.AutoScroller} */
+    this.autoScroller_ = null;
+
+    /** @private {?bookmarks.AutoExpander} */
+    this.autoExpander_ = null;
+
     /**
      * Used to instantly clearDragData in tests.
-     * @private {bookmarks.TimerProxy}
+     * @private {!Object}
      */
-    this.timerProxy_ = new bookmarks.TimerProxy();
+    this.timerProxy_ = window;
 
     /**
      * The bookmark drag and drop indicator chip.
@@ -365,6 +425,7 @@ cr.define('bookmarks', function() {
       this.dragInfo_ = new DragInfo();
       this.dropIndicator_ = new DropIndicator();
       this.autoExpander_ = new AutoExpander();
+      this.autoScroller_ = new AutoScroller();
 
       this.documentListeners_ = {
         'mousedown': this.onMousedown_.bind(this),
@@ -380,7 +441,7 @@ cr.define('bookmarks', function() {
         'dragend': this.clearDragData_.bind(this),
         // TODO(calamity): Add touch support.
       };
-      for (var event in this.documentListeners_)
+      for (const event in this.documentListeners_)
         document.addEventListener(event, this.documentListeners_[event]);
 
       chrome.bookmarkManagerPrivate.onDragEnter.addListener(
@@ -395,7 +456,7 @@ cr.define('bookmarks', function() {
       if (this.chip_ && this.chip_.parentElement)
         document.body.removeChild(this.chip_);
 
-      for (var event in this.documentListeners_)
+      for (const event in this.documentListeners_)
         document.removeEventListener(event, this.documentListeners_[event]);
     },
 
@@ -407,7 +468,7 @@ cr.define('bookmarks', function() {
      * @param {Event} e
      */
     onMousedown_: function(e) {
-      var dragElement = getDragElement(e.path);
+      const dragElement = getDragElement(e.path);
       if (e.button != 0 || !dragElement)
         return;
 
@@ -437,6 +498,8 @@ cr.define('bookmarks', function() {
       // Prevents a native drag from starting.
       e.preventDefault();
 
+      this.autoScroller_.update(e);
+
       // On the first mousemove after a mousedown, calculate the items to drag.
       // This can't be done in mousedown because the user may be shift-clicking
       // an item.
@@ -447,7 +510,7 @@ cr.define('bookmarks', function() {
           return;
         }
 
-        var dragData = this.calculateDragData_();
+        const dragData = this.calculateDragData_();
         if (!dragData) {
           this.clearDragData_();
           return;
@@ -456,8 +519,8 @@ cr.define('bookmarks', function() {
         this.dragInfo_.dragData = dragData;
       }
 
-      var state = bookmarks.Store.getInstance().data;
-      var items = this.dragInfo_.dragData.elements;
+      const state = bookmarks.Store.getInstance().data;
+      const items = this.dragInfo_.dragData.elements;
       this.dndChip.showForItems(
           e.clientX, e.clientY, items,
           this.internalDragElement_ ?
@@ -489,15 +552,17 @@ cr.define('bookmarks', function() {
       if (this.dropDestination_) {
         // Complete the drag by moving all dragged items to the drop
         // destination.
-        var dropInfo = this.calculateDropInfo_(this.dropDestination_);
-        var shouldHighlight = this.shouldHighlight_(this.dropDestination_);
+        const dropInfo = this.calculateDropInfo_(this.dropDestination_);
+        const shouldHighlight = this.shouldHighlight_(this.dropDestination_);
 
-        var movePromises = this.dragInfo_.dragData.elements.map((item) => {
+        const movePromises = this.dragInfo_.dragData.elements.map((item) => {
           return new Promise((resolve) => {
-            chrome.bookmarks.move(item.id, {
-              parentId: dropInfo.parentId,
-              index: dropInfo.index == -1 ? undefined : dropInfo.index
-            }, resolve);
+            chrome.bookmarks.move(
+                item.id, {
+                  parentId: dropInfo.parentId,
+                  index: dropInfo.index == -1 ? undefined : dropInfo.index
+                },
+                resolve);
           });
         });
 
@@ -523,7 +588,7 @@ cr.define('bookmarks', function() {
     onDragStart_: function(e) {
       // |e| will be for the originally dragged bookmark item which dragstart
       // was disabled for due to mousemove's preventDefault.
-      var dragElement = getDragElement(e.path);
+      const dragElement = getDragElement(e.path);
       if (!dragElement)
         return;
 
@@ -536,7 +601,7 @@ cr.define('bookmarks', function() {
       // If we are dragging a single link, we can do the *Link* effect.
       // Otherwise, we only allow copy and move.
       if (e.dataTransfer) {
-        var draggedNodes = this.dragInfo_.dragData.elements;
+        const draggedNodes = this.dragInfo_.dragData.elements;
         e.dataTransfer.effectAllowed =
             draggedNodes.length == 1 && draggedNodes[0].url ? 'copyLink' :
                                                               'copyMove';
@@ -556,9 +621,9 @@ cr.define('bookmarks', function() {
       if (this.dropDestination_) {
         e.preventDefault();
 
-        var dropInfo = this.calculateDropInfo_(this.dropDestination_);
-        var index = dropInfo.index != -1 ? dropInfo.index : undefined;
-        var shouldHighlight = this.shouldHighlight_(this.dropDestination_);
+        const dropInfo = this.calculateDropInfo_(this.dropDestination_);
+        const index = dropInfo.index != -1 ? dropInfo.index : undefined;
+        const shouldHighlight = this.shouldHighlight_(this.dropDestination_);
 
         if (shouldHighlight)
           bookmarks.ApiListener.trackUpdatedItems();
@@ -623,8 +688,10 @@ cr.define('bookmarks', function() {
     /** @private */
     clearDragData_: function() {
       this.dndChip.hide();
+      this.autoScroller_.reset();
       this.internalDragElement_ = null;
       this.mouseDownPos_ = null;
+      this.autoExpander_.reset();
 
       // Defer the clearing of the data so that the bookmark manager API's drop
       // event doesn't clear the drop data before the web drop event has a
@@ -642,12 +709,12 @@ cr.define('bookmarks', function() {
      * @return {boolean}
      */
     startNativeDrag_: function() {
-      var state = bookmarks.Store.getInstance().data;
+      const state = bookmarks.Store.getInstance().data;
 
       if (!this.dragInfo_.isDragValid())
         return false;
 
-      var draggedNodes =
+      const draggedNodes =
           this.dragInfo_.dragData.elements.map((item) => item.id);
 
       // Clear the drag data here so that the chip is hidden. The native drag
@@ -666,10 +733,10 @@ cr.define('bookmarks', function() {
      * @return {boolean}
      */
     onDragOverCommon_: function(e) {
-      var state = bookmarks.Store.getInstance().data;
-      var items = this.dragInfo_.dragData.elements;
+      const state = bookmarks.Store.getInstance().data;
+      const items = this.dragInfo_.dragData.elements;
 
-      var overElement = getBookmarkElement(e.path);
+      const overElement = getBookmarkElement(e.path);
       this.autoExpander_.update(e, overElement);
       if (!overElement) {
         this.dropIndicator_.finish();
@@ -705,13 +772,13 @@ cr.define('bookmarks', function() {
         };
       }
 
-      var node = getBookmarkNode(dropDestination.element);
-      var position = dropDestination.position;
-      var index = -1;
-      var parentId = node.id;
+      const node = getBookmarkNode(dropDestination.element);
+      const position = dropDestination.position;
+      let index = -1;
+      let parentId = node.id;
 
       if (position != DropPosition.ON) {
-        var state = bookmarks.Store.getInstance().data;
+        const state = bookmarks.Store.getInstance().data;
 
         // Drops between items in the normal list and the sidebar use the drop
         // destination node's parent.
@@ -734,12 +801,12 @@ cr.define('bookmarks', function() {
      * @private
      */
     calculateDragData_: function() {
-      var dragId = this.internalDragElement_.itemId;
-      var store = bookmarks.Store.getInstance();
-      var state = store.data;
+      const dragId = this.internalDragElement_.itemId;
+      const store = bookmarks.Store.getInstance();
+      const state = store.data;
 
       // Determine the selected bookmarks.
-      var draggedNodes = Array.from(state.selection.items);
+      let draggedNodes = Array.from(state.selection.items);
 
       // Change selection to the dragged node if the node is not part of the
       // existing selection.
@@ -757,7 +824,7 @@ cr.define('bookmarks', function() {
       }
 
       // If any node can't be dragged, end the drag.
-      var anyUnmodifiable = draggedNodes.some(
+      const anyUnmodifiable = draggedNodes.some(
           (itemId) => !bookmarks.util.canEditNode(state, itemId));
 
       if (anyUnmodifiable)
@@ -780,15 +847,15 @@ cr.define('bookmarks', function() {
      *       position - A |DropPosition| relative to the |element|.
      */
     calculateDropDestination_: function(elementClientY, overElement) {
-      var validDropPositions = this.calculateValidDropPositions_(overElement);
+      const validDropPositions = this.calculateValidDropPositions_(overElement);
       if (validDropPositions == DropPosition.NONE)
         return null;
 
-      var above = validDropPositions & DropPosition.ABOVE;
-      var below = validDropPositions & DropPosition.BELOW;
-      var on = validDropPositions & DropPosition.ON;
-      var rect = overElement.getDropTarget().getBoundingClientRect();
-      var yRatio = (elementClientY - rect.top) / rect.height;
+      const above = validDropPositions & DropPosition.ABOVE;
+      const below = validDropPositions & DropPosition.BELOW;
+      const on = validDropPositions & DropPosition.ON;
+      const rect = overElement.getDropTarget().getBoundingClientRect();
+      const yRatio = (elementClientY - rect.top) / rect.height;
 
       if (above && (yRatio <= .25 || yRatio <= .5 && (!below || !on)))
         return {element: overElement, position: DropPosition.ABOVE};
@@ -810,9 +877,9 @@ cr.define('bookmarks', function() {
      * @return {DropPosition} An bit field enumeration of valid drop locations.
      */
     calculateValidDropPositions_: function(overElement) {
-      var dragInfo = this.dragInfo_;
-      var state = bookmarks.Store.getInstance().data;
-      var itemId = overElement.itemId;
+      const dragInfo = this.dragInfo_;
+      const state = bookmarks.Store.getInstance().data;
+      let itemId = overElement.itemId;
 
       // Drags aren't allowed onto the search result list.
       if ((isBookmarkList(overElement) || isBookmarkItem(overElement)) &&
@@ -833,7 +900,7 @@ cr.define('bookmarks', function() {
         return DropPosition.NONE;
       }
 
-      var validDropPositions = this.calculateDropAboveBelow_(overElement);
+      let validDropPositions = this.calculateDropAboveBelow_(overElement);
       if (this.canDropOn_(overElement))
         validDropPositions |= DropPosition.ON;
 
@@ -846,8 +913,8 @@ cr.define('bookmarks', function() {
      * @return {DropPosition}
      */
     calculateDropAboveBelow_: function(overElement) {
-      var dragInfo = this.dragInfo_;
-      var state = bookmarks.Store.getInstance().data;
+      const dragInfo = this.dragInfo_;
+      const state = bookmarks.Store.getInstance().data;
 
       if (isBookmarkList(overElement))
         return DropPosition.NONE;
@@ -856,16 +923,16 @@ cr.define('bookmarks', function() {
       if (getBookmarkNode(overElement).parentId == ROOT_NODE_ID)
         return DropPosition.NONE;
 
-      var isOverFolderNode = isBookmarkFolderNode(overElement);
+      const isOverFolderNode = isBookmarkFolderNode(overElement);
 
       // We can only drop between items in the tree if we have any folders.
       if (isOverFolderNode && !dragInfo.isDraggingFolders())
         return DropPosition.NONE;
 
-      var validDropPositions = DropPosition.NONE;
+      let validDropPositions = DropPosition.NONE;
 
       // Cannot drop above if the item above is already in the drag source.
-      var previousElem = overElement.previousElementSibling;
+      const previousElem = overElement.previousElementSibling;
       if (!previousElem || !dragInfo.isDraggingBookmark(previousElem.itemId))
         validDropPositions |= DropPosition.ABOVE;
 
@@ -876,7 +943,7 @@ cr.define('bookmarks', function() {
         return validDropPositions;
       }
 
-      var nextElement = overElement.nextElementSibling;
+      const nextElement = overElement.nextElementSibling;
 
       // Cannot drop below if the item below is already in the drag source.
       if (!nextElement || !dragInfo.isDraggingBookmark(nextElement.itemId))
@@ -896,7 +963,7 @@ cr.define('bookmarks', function() {
     canDropOn_: function(overElement) {
       // Allow dragging onto empty bookmark lists.
       if (isBookmarkList(overElement)) {
-        var state = bookmarks.Store.getInstance().data;
+        const state = bookmarks.Store.getInstance().data;
         return state.selectedFolder &&
             state.nodes[state.selectedFolder].children.length == 0;
       }
@@ -917,7 +984,7 @@ cr.define('bookmarks', function() {
           isBookmarkList(dropDestination.element);
     },
 
-    /** @param {bookmarks.TimerProxy} timerProxy */
+    /** @param {!Object} timerProxy */
     setTimerProxyForTesting: function(timerProxy) {
       this.timerProxy_ = timerProxy;
       this.dropIndicator_.timerProxy = timerProxy;
@@ -937,6 +1004,8 @@ cr.define('bookmarks', function() {
   };
 
   return {
+    AutoExpander: AutoExpander,
+    AutoScroller: AutoScroller,
     DNDManager: DNDManager,
     DragInfo: DragInfo,
     DropIndicator: DropIndicator,

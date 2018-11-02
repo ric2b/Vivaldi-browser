@@ -13,7 +13,7 @@
 #include "base/mac/scoped_mach_port.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
+#include "mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace mojo {
 namespace edk {
@@ -65,36 +65,36 @@ void ReportChildError(ChildUMAError error) {
 }  // namespace
 
 // static
-bool MachPortRelay::ReceivePorts(PlatformHandleVector* handles) {
+void MachPortRelay::ReceivePorts(std::vector<ScopedPlatformHandle>* handles) {
   DCHECK(handles);
 
-  for (size_t i = 0; i < handles->size(); i++) {
-    PlatformHandle* handle = handles->data() + i;
-    DCHECK(handle->type != PlatformHandle::Type::MACH);
-    if (handle->type != PlatformHandle::Type::MACH_NAME)
+  for (auto& handle : *handles) {
+    DCHECK(handle.get().type != PlatformHandle::Type::MACH);
+    if (handle.get().type != PlatformHandle::Type::MACH_NAME)
       continue;
 
-    if (handle->port == MACH_PORT_NULL) {
-      handle->type = PlatformHandle::Type::MACH;
-      continue;
-    }
+    handle.get().type = PlatformHandle::Type::MACH;
 
-    base::mac::ScopedMachReceiveRight message_port(handle->port);
+    // MACH_PORT_NULL doesn't need translation.
+    if (handle.get().port == MACH_PORT_NULL)
+      continue;
+
+    // TODO(wez): Wrapping handle.get().port in this way causes it to be
+    // Free()d via mach_port_mod_refs() - should PlatformHandle also do
+    // that if the handle never reaches here, or should this code not be
+    // wrapping it?
+    base::mac::ScopedMachReceiveRight message_port(handle.get().port);
     base::mac::ScopedMachSendRight received_port(
         base::ReceiveMachPort(message_port.get()));
-    if (received_port.get() == MACH_PORT_NULL) {
+    handle.get().port = received_port.release();
+    if (!handle.is_valid()) {
       ReportChildError(ChildUMAError::ERROR_RECEIVE_MACH_MESSAGE);
-      handle->port = MACH_PORT_NULL;
-      LOG(ERROR) << "Error receiving mach port";
-      return false;
+      DLOG(ERROR) << "Error receiving mach port";
+      continue;
     }
 
     ReportChildError(ChildUMAError::SUCCESS);
-    handle->port = received_port.release();
-    handle->type = PlatformHandle::Type::MACH;
   }
-
-  return true;
 }
 
 MachPortRelay::MachPortRelay(base::PortProvider* port_provider)
@@ -107,40 +107,45 @@ MachPortRelay::~MachPortRelay() {
   port_provider_->RemoveObserver(this);
 }
 
-bool MachPortRelay::SendPortsToProcess(Channel::Message* message,
+void MachPortRelay::SendPortsToProcess(Channel::Message* message,
                                        base::ProcessHandle process) {
   DCHECK(message);
   mach_port_t task_port = port_provider_->TaskForPid(process);
-  if (task_port == MACH_PORT_NULL) {
-    // Callers check the port provider for the task port before calling this
-    // function, in order to queue pending messages. Therefore, if this fails,
-    // it should be considered a genuine, bona fide, electrified, six-car error.
-    ReportBrokerError(BrokerUMAError::ERROR_TASK_FOR_PID);
-    return false;
-  }
 
-  size_t num_sent = 0;
-  bool error = false;
-  ScopedPlatformHandleVectorPtr handles = message->TakeHandles();
+  std::vector<ScopedPlatformHandle> handles = message->TakeHandles();
   // Message should have handles, otherwise there's no point in calling this
   // function.
-  DCHECK(handles);
-  for (size_t i = 0; i < handles->size(); i++) {
-    PlatformHandle* handle = &(*handles)[i];
-    DCHECK(handle->type != PlatformHandle::Type::MACH_NAME);
-    if (handle->type != PlatformHandle::Type::MACH)
+  DCHECK(!handles.empty());
+  for (auto& handle : handles) {
+    DCHECK(handle.get().type != PlatformHandle::Type::MACH_NAME);
+    if (handle.get().type != PlatformHandle::Type::MACH)
       continue;
 
-    if (handle->port == MACH_PORT_NULL) {
-      handle->type = PlatformHandle::Type::MACH_NAME;
-      num_sent++;
+    if (!handle.is_valid()) {
+      handle.get().type = PlatformHandle::Type::MACH_NAME;
+      continue;
+    }
+
+    if (task_port == MACH_PORT_NULL) {
+      // Callers check the port provider for the task port before calling this
+      // function, in order to queue pending messages. Therefore, if this fails,
+      // it should be considered a genuine, bona fide, electrified, six-car
+      // error.
+      ReportBrokerError(BrokerUMAError::ERROR_TASK_FOR_PID);
+
+      // For MACH_PORT_NULL, use Type::MACH to indicate that no extraction is
+      // necessary.
+      // TODO(wez): But we're not setting Type::Mach... is the comment above
+      // out of date?
+      handle.get().port = MACH_PORT_NULL;
       continue;
     }
 
     mach_port_name_t intermediate_port;
     base::MachCreateError error_code;
     intermediate_port = base::CreateIntermediateMachPort(
-        task_port, base::mac::ScopedMachSendRight(handle->port), &error_code);
+        task_port, base::mac::ScopedMachSendRight(handle.get().port),
+        &error_code);
     if (intermediate_port == MACH_PORT_NULL) {
       BrokerUMAError uma_error;
       switch (error_code) {
@@ -158,73 +163,48 @@ bool MachPortRelay::SendPortsToProcess(Channel::Message* message,
           break;
       }
       ReportBrokerError(uma_error);
-      handle->port = MACH_PORT_NULL;
-      error = true;
-      break;
+      handle.get().port = MACH_PORT_NULL;
+      continue;
     }
 
     ReportBrokerError(BrokerUMAError::SUCCESS);
-    handle->port = intermediate_port;
-    handle->type = PlatformHandle::Type::MACH_NAME;
-    num_sent++;
+    handle.get().port = intermediate_port;
+    handle.get().type = PlatformHandle::Type::MACH_NAME;
   }
-  DCHECK(error || num_sent);
   message->SetHandles(std::move(handles));
-
-  return !error;
 }
 
-bool MachPortRelay::ExtractPortRights(Channel::Message* message,
-                                      base::ProcessHandle process) {
-  DCHECK(message);
+void MachPortRelay::ExtractPort(ScopedPlatformHandle* handle,
+                                base::ProcessHandle process) {
+  DCHECK_EQ(handle->get().type, PlatformHandle::Type::MACH_NAME);
+  handle->get().type = PlatformHandle::Type::MACH;
+
+  // No extraction necessary for MACH_PORT_NULL.
+  if (!handle->is_valid())
+    return;
 
   mach_port_t task_port = port_provider_->TaskForPid(process);
   if (task_port == MACH_PORT_NULL) {
     ReportBrokerError(BrokerUMAError::ERROR_TASK_FOR_PID);
-    return false;
+    handle->get().port = MACH_PORT_NULL;
+    return;
   }
 
-  size_t num_received = 0;
-  bool error = false;
-  ScopedPlatformHandleVectorPtr handles = message->TakeHandles();
-  // Message should have handles, otherwise there's no point in calling this
-  // function.
-  DCHECK(handles);
-  for (size_t i = 0; i < handles->size(); i++) {
-    PlatformHandle* handle = handles->data() + i;
-    DCHECK(handle->type != PlatformHandle::Type::MACH);
-    if (handle->type != PlatformHandle::Type::MACH_NAME)
-      continue;
-
-    if (handle->port == MACH_PORT_NULL) {
-      handle->type = PlatformHandle::Type::MACH;
-      num_received++;
-      continue;
-    }
-
-    mach_port_t extracted_right = MACH_PORT_NULL;
-    mach_msg_type_name_t extracted_right_type;
-    kern_return_t kr =
-        mach_port_extract_right(task_port, handle->port,
-                                MACH_MSG_TYPE_MOVE_SEND,
-                                &extracted_right, &extracted_right_type);
-    if (kr != KERN_SUCCESS) {
-      ReportBrokerError(BrokerUMAError::ERROR_EXTRACT_SOURCE_RIGHT);
-      error = true;
-      break;
-    }
-
-    ReportBrokerError(BrokerUMAError::SUCCESS);
-    DCHECK_EQ(static_cast<mach_msg_type_name_t>(MACH_MSG_TYPE_PORT_SEND),
-              extracted_right_type);
-    handle->port = extracted_right;
-    handle->type = PlatformHandle::Type::MACH;
-    num_received++;
+  mach_port_t extracted_right = MACH_PORT_NULL;
+  mach_msg_type_name_t extracted_right_type;
+  kern_return_t kr = mach_port_extract_right(
+      task_port, handle->get().port, MACH_MSG_TYPE_MOVE_SEND, &extracted_right,
+      &extracted_right_type);
+  if (kr != KERN_SUCCESS) {
+    ReportBrokerError(BrokerUMAError::ERROR_EXTRACT_SOURCE_RIGHT);
+    handle->get().port = MACH_PORT_NULL;
+    return;
   }
-  DCHECK(error || num_received);
-  message->SetHandles(std::move(handles));
 
-  return !error;
+  ReportBrokerError(BrokerUMAError::SUCCESS);
+  DCHECK_EQ(static_cast<mach_msg_type_name_t>(MACH_MSG_TYPE_PORT_SEND),
+            extracted_right_type);
+  handle->get().port = extracted_right;
 }
 
 void MachPortRelay::AddObserver(Observer* observer) {

@@ -33,16 +33,18 @@
 #include <string>
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "core/dom/Element.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "platform/SerializedResource.h"
+#include "platform/loader/fetch/ResourceError.h"
+#include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/Vector.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURL.h"
@@ -68,8 +70,7 @@ class FrameSerializerTest : public ::testing::Test,
   }
 
   void TearDown() override {
-    Platform::Current()
-        ->GetURLLoaderMockFactory()
+    platform_->GetURLLoaderMockFactory()
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 
@@ -92,15 +93,13 @@ class FrameSerializerTest : public ::testing::Test,
   }
 
   void RegisterErrorURL(const char* file, int status_code) {
-    WebURLError error;
-    error.reason = 0xdead + status_code;
-    error.domain = WebURLError::Domain::kTest;
+    ResourceError error = ResourceError::Failure(NullURL());
 
     WebURLResponse response;
     response.SetMIMEType("text/html");
     response.SetHTTPStatusCode(status_code);
 
-    Platform::Current()->GetURLLoaderMockFactory()->RegisterErrorURL(
+    platform_->GetURLLoaderMockFactory()->RegisterErrorURL(
         KURL(base_url_, file), response, error);
   }
 
@@ -143,11 +142,11 @@ class FrameSerializerTest : public ::testing::Test,
     return GetResource(url, mime_type);
   }
 
-  bool IsSerialized(const char* url, const char* mime_type = 0) {
+  bool IsSerialized(const char* url, const char* mime_type = nullptr) {
     return GetResource(url, mime_type);
   }
 
-  String GetSerializedData(const char* url, const char* mime_type = 0) {
+  String GetSerializedData(const char* url, const char* mime_type = nullptr) {
     const SerializedResource* resource = GetResource(url, mime_type);
     if (resource) {
       const Vector<char> data = resource->data->Copy();
@@ -195,6 +194,7 @@ class FrameSerializerTest : public ::testing::Test,
   HashMap<String, String> rewrite_urls_;
   Vector<String> skip_urls_;
   String rewrite_folder_;
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 };
 
 TEST_F(FrameSerializerTest, HTMLElements) {
@@ -539,26 +539,23 @@ TEST_F(FrameSerializerTest, NamespaceElementsDontCrash) {
 
 TEST_F(FrameSerializerTest, markOfTheWebDeclaration) {
   EXPECT_EQ("saved from url=(0015)http://foo.com/",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://foo.com")));
+            FrameSerializer::MarkOfTheWebDeclaration(KURL("http://foo.com")));
   EXPECT_EQ("saved from url=(0015)http://f-o.com/",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://f-o.com")));
+            FrameSerializer::MarkOfTheWebDeclaration(KURL("http://f-o.com")));
   EXPECT_EQ("saved from url=(0019)http://foo.com-%2D/",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://foo.com--")));
-  EXPECT_EQ("saved from url=(0024)http://f-%2D.com-%2D%3E/",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://f--.com-->")));
-  EXPECT_EQ("saved from url=(0020)http://foo.com/?-%2D",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://foo.com?--")));
-  EXPECT_EQ("saved from url=(0020)http://foo.com/#-%2D",
-            FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://foo.com#--")));
+            FrameSerializer::MarkOfTheWebDeclaration(KURL("http://foo.com--")));
+  EXPECT_EQ(
+      "saved from url=(0024)http://f-%2D.com-%2D%3E/",
+      FrameSerializer::MarkOfTheWebDeclaration(KURL("http://f--.com-->")));
+  EXPECT_EQ(
+      "saved from url=(0020)http://foo.com/?-%2D",
+      FrameSerializer::MarkOfTheWebDeclaration(KURL("http://foo.com?--")));
+  EXPECT_EQ(
+      "saved from url=(0020)http://foo.com/#-%2D",
+      FrameSerializer::MarkOfTheWebDeclaration(KURL("http://foo.com#--")));
   EXPECT_EQ("saved from url=(0026)http://foo.com/#bar-%2Dbaz",
             FrameSerializer::MarkOfTheWebDeclaration(
-                KURL(kParsedURLString, "http://foo.com#bar--baz")));
+                KURL("http://foo.com#bar--baz")));
 }
 
 }  // namespace blink

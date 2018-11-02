@@ -8,6 +8,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/ref_counted.h"
@@ -18,6 +19,8 @@
 #include "url/gurl.h"
 
 namespace predictors {
+
+struct PreconnectRequest;
 
 struct PreconnectedRequestStats {
   PreconnectedRequestStats(const GURL& origin,
@@ -63,14 +66,15 @@ struct PreresolveInfo {
 // preconnect for a |url|.
 struct PreresolveJob {
   PreresolveJob(const GURL& url,
-                bool need_preconnect,
+                int num_sockets,
                 bool allow_credentials,
                 PreresolveInfo* info);
   PreresolveJob(const PreresolveJob& other);
   ~PreresolveJob();
+  bool need_preconnect() const { return num_sockets > 0; }
 
   GURL url;
-  bool need_preconnect;
+  int num_sockets;
   bool allow_credentials;
   // Raw pointer usage is fine here because even though PreresolveJob can
   // outlive PreresolveInfo it's only accessed on PreconnectManager class
@@ -110,21 +114,23 @@ class PreconnectManager {
   virtual ~PreconnectManager();
 
   // Starts preconnect and preresolve jobs keyed by |url|.
-  void Start(const GURL& url,
-             const std::vector<GURL>& preconnect_origins,
-             const std::vector<GURL>& preresolve_hosts);
+  virtual void Start(const GURL& url,
+                     std::vector<PreconnectRequest>&& requests);
 
   // Starts special preconnect and preresolve jobs that are not cancellable and
-  // don't report about their completion.
-  void StartPreresolveHosts(const std::vector<std::string> hostnames);
-  void StartPreconnectUrl(const GURL& url, bool allow_credentials);
+  // don't report about their completion. They are considered more important
+  // than trackable requests thus they are put in the front of the jobs queue.
+  virtual void StartPreresolveHost(const GURL& url);
+  virtual void StartPreresolveHosts(const std::vector<std::string>& hostnames);
+  virtual void StartPreconnectUrl(const GURL& url, bool allow_credentials);
 
   // No additional jobs keyed by the |url| will be queued after this.
-  void Stop(const GURL& url);
+  virtual void Stop(const GURL& url);
 
   // Public for mocking in unit tests. Don't use, internal only.
   virtual void PreconnectUrl(const GURL& url,
                              const GURL& site_for_cookies,
+                             int num_sockets,
                              bool allow_credentials) const;
   virtual int PreresolveUrl(const GURL& url,
                             const net::CompletionCallback& callback) const;
@@ -134,11 +140,12 @@ class PreconnectManager {
   void OnPreresolveFinished(const PreresolveJob& job, int result);
   void FinishPreresolve(const PreresolveJob& job, bool found, bool cached);
   void AllPreresolvesForUrlFinished(PreresolveInfo* info);
+  GURL GetHSTSRedirect(const GURL& url) const;
 
   base::WeakPtr<Delegate> delegate_;
   scoped_refptr<net::URLRequestContextGetter> context_getter_;
   std::list<PreresolveJob> queued_jobs_;
-  std::map<GURL, std::unique_ptr<PreresolveInfo>> preresolve_info_;
+  std::map<std::string, std::unique_ptr<PreresolveInfo>> preresolve_info_;
   size_t inflight_preresolves_count_ = 0;
 
   base::WeakPtrFactory<PreconnectManager> weak_factory_;

@@ -3103,4 +3103,40 @@ TEST_F(GLES2ImplementationTest, EndRasterCHROMIUM) {
   gl_->EndRasterCHROMIUM();
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
+
+TEST_F(GLES2ImplementationTest, TexStorage2DImageCHROMIUM) {
+  struct Cmds {
+    cmds::TexStorage2DImageCHROMIUM cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(GL_TEXTURE_2D, GL_RGB565, 4, 5);
+
+  gl_->TexStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGB565, GL_SCANOUT_CHROMIUM,
+                                 4, 5);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, TexStorage2DImageCHROMIUMInvalidConstantArg2) {
+  gl_->TexStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGB565, GL_NONE, 4, 5);
+  EXPECT_TRUE(NoCommandsWritten());
+  EXPECT_EQ(GL_INVALID_ENUM, CheckError());
+}
+
+TEST_F(GLES2ImplementationTest, WindowRectanglesEXT) {
+  GLint data[2][4] = {{0}};
+  struct Cmds {
+    cmds::WindowRectanglesEXTImmediate cmd;
+    GLint data[2][4];
+  };
+
+  Cmds expected;
+  for (int ii = 0; ii < 2; ++ii) {
+    for (int jj = 0; jj < 4; ++jj) {
+      data[ii][jj] = static_cast<GLint>(ii * 4 + jj);
+    }
+  }
+  expected.cmd.Init(GL_INCLUSIVE_EXT, 2, &data[0][0]);
+  gl_->WindowRectanglesEXT(GL_INCLUSIVE_EXT, 2, &data[0][0]);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_UNITTEST_AUTOGEN_H_

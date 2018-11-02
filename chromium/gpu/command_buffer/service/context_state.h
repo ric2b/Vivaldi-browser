@@ -198,6 +198,9 @@ struct GPU_EXPORT ContextState {
                Logger* logger);
   ~ContextState();
 
+  void set_api(gl::GLApi* api) { api_ = api; }
+  gl::GLApi* api() const { return api_; }
+
   void Initialize();
 
   void SetLineWidthBounds(GLfloat min, GLfloat max);
@@ -228,7 +231,7 @@ struct GPU_EXPORT ContextState {
       GLuint unit, const ContextState* prev_state) const;
   void RestoreSamplerBinding(GLuint unit, const ContextState* prev_state) const;
 
-  void PushTextureDecompressionUnpackState() const;
+  void PushTextureUnpackState() const;
   void RestoreUnpackState() const;
   void DoLineWidth(GLfloat width) const;
 
@@ -251,14 +254,14 @@ struct GPU_EXPORT ContextState {
     cached_color_mask_green = green;
     cached_color_mask_blue = blue;
     cached_color_mask_alpha = alpha;
-    glColorMask(red, green, blue, alpha);
+    api()->glColorMaskFn(red, green, blue, alpha);
   }
 
   inline void SetDeviceDepthMask(GLboolean mask) {
     if (cached_depth_mask == mask && !ignore_cached_state)
       return;
     cached_depth_mask = mask;
-    glDepthMask(mask);
+    api()->glDepthMaskFn(mask);
   }
 
   inline void SetDeviceStencilMaskSeparate(GLenum op, GLuint mask) {
@@ -274,7 +277,7 @@ struct GPU_EXPORT ContextState {
       NOTREACHED();
       return;
     }
-    glStencilMaskSeparate(op, mask);
+    api()->glStencilMaskSeparateFn(op, mask);
   }
 
   ErrorState* GetErrorState();
@@ -317,6 +320,20 @@ struct GPU_EXPORT ContextState {
   // If a buffer object is bound to PIXEL_UNPACK_BUFFER, set all unpack
   // parameters user values; otherwise, set them to 0.
   void UpdateUnpackParameters() const;
+
+  void SetMaxWindowRectangles(size_t max);
+  size_t GetMaxWindowRectangles() const;
+  void SetWindowRectangles(GLenum mode,
+                           size_t count,
+                           const volatile GLint* box);
+  template <typename T>
+  void GetWindowRectangle(GLuint index, T* box) {
+    for (size_t i = 0; i < 4; ++i) {
+      box[i] = window_rectangles_[4 * index + i];
+    }
+  }
+  void UpdateWindowRectangles() const;
+  void UpdateWindowRectanglesForBoundDrawFramebufferClientID(GLuint client_id);
 
   void EnableDisableFramebufferSRGB(bool enable);
 
@@ -375,6 +392,8 @@ struct GPU_EXPORT ContextState {
 
   mutable bool fbo_binding_for_scissor_workaround_dirty;
 
+  GLuint current_draw_framebuffer_client_id = 0;
+
  private:
   void EnableDisable(GLenum pname, bool enable) const;
 
@@ -394,6 +413,11 @@ struct GPU_EXPORT ContextState {
   GLfloat line_width_min_ = 0.0f;
   GLfloat line_width_max_ = 1.0f;
 
+  // Stores the list of N window rectangles as N*4 GLints, like
+  // vector<[x,y,w,h]>. Always has space for MAX_WINDOW_RECTANGLES rectangles.
+  std::vector<GLint> window_rectangles_;
+
+  gl::GLApi* api_ = nullptr;
   FeatureInfo* feature_info_;
   std::unique_ptr<ErrorState> error_state_;
 };

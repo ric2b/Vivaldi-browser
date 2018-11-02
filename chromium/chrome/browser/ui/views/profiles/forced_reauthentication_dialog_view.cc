@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -55,7 +56,7 @@ bool IsMatchingBrowser(Browser* browser, Profile* profile) {
          BrowserView::GetBrowserViewForBrowser(browser)->frame()->IsVisible();
 }
 
-// Find a browser that is assoicated with |profile| to show the dialog for
+// Find a browser that is associated with |profile| to show the dialog for
 // Sign out warning.
 Browser* FindBrowserWithProfile(Profile* profile) {
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
@@ -77,7 +78,7 @@ class PromptLabel : public views::StyledLabel {
 
   gfx::Insets GetInsets() const override {
     return ChromeLayoutProvider::Get()->GetInsetsMetric(
-        views::INSETS_DIALOG_CONTENTS);
+        views::INSETS_DIALOG_SUBSECTION);
   }
 };
 
@@ -122,7 +123,7 @@ bool ForcedReauthenticationDialogView::Accept() {
   if (GetTimeRemaining() < base::TimeDelta::FromSeconds(kCloseDirectlyTimer)) {
     Signout(signin_manager_);
   } else {
-    browser_->signin_view_controller()->ShowModalSignin(
+    browser_->signin_view_controller()->ShowSignin(
         profiles::BubbleViewMode::BUBBLE_VIEW_MODE_GAIA_REAUTH, browser_,
         signin_metrics::AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING);
   }
@@ -174,7 +175,7 @@ void ForcedReauthenticationDialogView::AddedToWidget() {
   prompt_label->SetDisplayedOnBackgroundColor(prompt_bar_background_color);
 
   views::StyledLabel::RangeStyleInfo bold_style;
-  bold_style.weight = gfx::Font::Weight::BOLD;
+  bold_style.text_style = STYLE_EMPHASIZED;
   prompt_label->AddStyleRange(gfx::Range(offset, offset + domain.size()),
                               bold_style);
 
@@ -205,10 +206,10 @@ void ForcedReauthenticationDialogView::AddedToWidget() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   // Layout the components.
   const gfx::Insets dialog_insets =
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT);
   SetBorder(views::CreateEmptyBorder(dialog_insets.top(), 0,
                                      dialog_insets.bottom(), 0));
-  views::GridLayout* dialog_layout = new views::GridLayout(this);
+  views::GridLayout* dialog_layout = views::GridLayout::CreateAndInstall(this);
   SetLayoutManager(dialog_layout);
 
   // Use a column set with no padding.

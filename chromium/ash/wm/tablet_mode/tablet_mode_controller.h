@@ -16,11 +16,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
 #include "chromeos/dbus/power_manager_client.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
@@ -50,7 +51,7 @@ class TabletModeWindowManagerTest;
 class ASH_EXPORT TabletModeController
     : public chromeos::AccelerometerReader::Observer,
       public chromeos::PowerManagerClient::Observer,
-      public mojom::TabletModeManager,
+      public mojom::TabletModeController,
       public ShellObserver,
       public WindowTreeHostManager::Observer,
       public SessionObserver {
@@ -88,8 +89,8 @@ class ASH_EXPORT TabletModeController
   // If the tablet mode is not enabled no action will be performed.
   void AddWindow(aura::Window* window);
 
-  // Binds the mojom::TabletModeManager interface request to this object.
-  void BindRequest(mojom::TabletModeManagerRequest request);
+  // Binds the mojom::TabletModeController interface request to this object.
+  void BindRequest(mojom::TabletModeControllerRequest request);
 
   void AddObserver(TabletModeObserver* observer);
   void RemoveObserver(TabletModeObserver* observer);
@@ -99,6 +100,9 @@ class ASH_EXPORT TabletModeController
   bool ShouldAutoHideTitlebars() const;
 
   bool auto_hide_title_bars() const { return auto_hide_title_bars_; }
+
+  // Flushes the mojo message pipe to chrome.
+  void FlushForTesting();
 
   // ShellObserver:
   void OnShellInitialized() override;
@@ -118,7 +122,7 @@ class ASH_EXPORT TabletModeController
                         const base::TimeTicks& time) override;
   void TabletModeEventReceived(chromeos::PowerManagerClient::TabletMode mode,
                                const base::TimeTicks& time) override;
-  void SuspendImminent() override;
+  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
 
  private:
@@ -143,8 +147,8 @@ class ASH_EXPORT TabletModeController
   void HandleHingeRotation(
       scoped_refptr<const chromeos::AccelerometerUpdate> update);
 
-  void OnGetSwitchStates(chromeos::PowerManagerClient::LidState lid_state,
-                         chromeos::PowerManagerClient::TabletMode tablet_mode);
+  void OnGetSwitchStates(
+      base::Optional<chromeos::PowerManagerClient::SwitchStates> result);
 
   // Returns true if the lid was recently opened.
   bool WasLidOpenedRecently() const;
@@ -168,8 +172,8 @@ class ASH_EXPORT TabletModeController
   // otherwise returns TABLET_MODE_INTERNAL_INACTIVE.
   TabletModeIntervalType CurrentTabletModeIntervalType();
 
-  // mojom::TabletModeManager:
-  void AddObserver(mojom::TabletModeObserverPtr observer) override;
+  // mojom::TabletModeController:
+  void SetClient(mojom::TabletModeClientPtr client) override;
 
   // Checks whether we want to allow entering and exiting tablet mode. This
   // returns false if the user set a flag for the software to behave in a
@@ -209,7 +213,7 @@ class ASH_EXPORT TabletModeController
   bool lid_is_closed_;
 
   // Whether title bars should be shown be auto hidden in tablet mode.
-  const bool auto_hide_title_bars_ = false;
+  const bool auto_hide_title_bars_;
 
   // Tracks smoothed accelerometer data over time. This is done when the hinge
   // is approaching vertical to remove abrupt acceleration that can lead to
@@ -217,11 +221,11 @@ class ASH_EXPORT TabletModeController
   gfx::Vector3dF base_smoothed_;
   gfx::Vector3dF lid_smoothed_;
 
-  // Bindings for the TabletModeManager interface.
-  mojo::BindingSet<mojom::TabletModeManager> bindings_;
+  // Binding for the TabletModeController interface.
+  mojo::Binding<mojom::TabletModeController> binding_;
 
-  // The set of tabletmode observers to be notified about mode changes.
-  mojo::InterfacePtrSet<mojom::TabletModeObserver> observers_;
+  // Client interface (e.g. in chrome).
+  mojom::TabletModeClientPtr client_;
 
   // Tracks whether a flag is used to force ui mode.
   UiMode force_ui_mode_ = UiMode::NONE;

@@ -15,7 +15,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.metrics.OneShotImpressionListener;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
@@ -24,14 +24,16 @@ import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.AccountSigninActivity;
+import org.chromium.chrome.browser.signin.DisplayableProfileData;
+import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
-import org.chromium.chrome.browser.signin.SigninPromoView;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
+import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.util.FeatureUtilities;
@@ -45,7 +47,7 @@ import java.util.Collections;
  * Shows a card prompting the user to sign in. This item is also an {@link OptionalLeaf}, and sign
  * in state changes control its visibility.
  */
-public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Listener {
+public class SignInPromo extends OptionalLeaf {
     /**
      * Whether the promo had been previously dismissed, before creating an instance of the
      * {@link SignInPromo}.
@@ -68,7 +70,8 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
      */
     private boolean mCanShowPersonalizedSuggestions;
 
-    private final ImpressionTracker mImpressionTracker = new ImpressionTracker(null, this);
+    private final OneShotImpressionListener mOneShotImpressionTracker =
+            new OneShotImpressionListener(this::onImpression);
 
     private final @Nullable SigninObserver mSigninObserver;
 
@@ -85,8 +88,7 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
 
     public SignInPromo(SuggestionsUiDelegate uiDelegate) {
         Context context = ContextUtils.getApplicationContext();
-        mArePersonalizedPromosEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_SIGNIN_PROMOS);
+        mArePersonalizedPromosEnabled = SigninPromoController.arePersonalizedPromosEnabled();
 
         ChromePreferenceManager preferenceManager = ChromePreferenceManager.getInstance();
         if (mArePersonalizedPromosEnabled) {
@@ -116,8 +118,8 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
             int imageSize = context.getResources().getDimensionPixelSize(R.dimen.user_picture_size);
             mProfileDataCache =
                     new ProfileDataCache(context, Profile.getLastUsedProfile(), imageSize);
-            mSigninPromoController = new SigninPromoController(
-                    mProfileDataCache, SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
+            mSigninPromoController =
+                    new SigninPromoController(SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
             mGenericPromoData = null;
         } else {
             mProfileDataCache = null;
@@ -152,7 +154,7 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         assert !mWasDismissed;
         if (mArePersonalizedPromosEnabled) {
             return new PersonalizedPromoViewHolder(
-                    parent, contextMenuManager, config, mProfileDataCache, mSigninPromoController);
+                    parent, config, contextMenuManager, mProfileDataCache, mSigninPromoController);
         }
         return new GenericPromoViewHolder(parent, contextMenuManager, config);
     }
@@ -162,11 +164,11 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         assert !mWasDismissed;
         if (mArePersonalizedPromosEnabled) {
             ((PersonalizedPromoViewHolder) holder).onBindViewHolder();
-        } else {
-            ((GenericPromoViewHolder) holder).onBindViewHolder(mGenericPromoData);
+            return;
         }
 
-        mImpressionTracker.reset(mImpressionTracker.wasTriggered() ? null : holder.itemView);
+        ((GenericPromoViewHolder) holder)
+                .onBindViewHolder(mGenericPromoData, mOneShotImpressionTracker);
     }
 
     @Override
@@ -174,15 +176,9 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         visitor.visitSignInPromo();
     }
 
-    @Override
-    public void onImpression() {
+    private void onImpression() {
         assert !mWasDismissed;
-        if (mArePersonalizedPromosEnabled) {
-            mSigninPromoController.recordSigninPromoImpression();
-        } else {
-            RecordUserAction.record("Signin_Impression_FromNTPContentSuggestions");
-        }
-        mImpressionTracker.reset(null);
+        RecordUserAction.record("Signin_Impression_FromNTPContentSuggestions");
     }
 
     private void updateVisibility() {
@@ -259,14 +255,12 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         }
 
         // DestructionObserver implementation.
-
         @Override
         public void onDestroy() {
             unregister();
         }
 
         // SignInAllowedObserver implementation.
-
         @Override
         public void onSignInAllowedChanged() {
             // Listening to onSignInAllowedChanged is important for the FRE. Sign in is not allowed
@@ -277,7 +271,6 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         }
 
         // SignInStateObserver implementation.
-
         @Override
         public void onSignedIn() {
             mCanSignIn = false;
@@ -302,39 +295,38 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         }
 
         // AccountsChangeObserver implementation.
-
         @Override
         public void onAccountsChanged() {
             notifyPersonalizedPromoIfVisible();
         }
 
         // ProfileDataCache.Observer implementation.
-
         @Override
         public void onProfileDataUpdated(String accountId) {
             notifyPersonalizedPromoIfVisible();
         }
 
         private void notifyPersonalizedPromoIfVisible() {
-            if (isVisible()) notifyItemChanged(0, new UpdatePersonalizedSigninPromoCallback());
+            if (isVisible()) notifyItemChanged(0, PersonalizedPromoViewHolder::update);
         }
     }
 
     /**
      * View Holder for {@link SignInPromo} if the personalized promo is to be shown.
      */
-    private static class PersonalizedPromoViewHolder extends CardViewHolder {
+    @VisibleForTesting
+    public static class PersonalizedPromoViewHolder extends CardViewHolder {
         private final ProfileDataCache mProfileDataCache;
         private final SigninPromoController mSigninPromoController;
 
-        public PersonalizedPromoViewHolder(SuggestionsRecyclerView parent,
-                ContextMenuManager contextMenuManager, UiConfig config,
-                ProfileDataCache profileDataCache, SigninPromoController signinPromoController) {
-            super(FeatureUtilities.isChromeHomeModernEnabled()
+        public PersonalizedPromoViewHolder(SuggestionsRecyclerView parent, UiConfig config,
+                ContextMenuManager contextMenuManager, ProfileDataCache profileDataCache,
+                SigninPromoController signinPromoController) {
+            super(SuggestionsConfig.useModernLayout()
                             ? R.layout.personalized_signin_promo_view_modern_content_suggestions
                             : R.layout.personalized_signin_promo_view_ntp_content_suggestions,
                     parent, config, contextMenuManager);
-            if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+            if (!FeatureUtilities.isChromeHomeEnabled()) {
                 getParams().topMargin = parent.getResources().getDimensionPixelSize(
                         R.dimen.ntp_sign_in_promo_margin_top);
             }
@@ -344,31 +336,60 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         }
 
         @Override
-        protected void onBindViewHolder() {
+        public void onBindViewHolder() {
             super.onBindViewHolder();
-            updatePersonalizedSigninPromo();
+            bindPersonalizedSigninPromo();
+        }
+
+        @Override
+        public void recycle() {
+            mSigninPromoController.detach();
+            super.recycle();
         }
 
         @DrawableRes
         @Override
         protected int selectBackground(boolean hasCardAbove, boolean hasCardBelow) {
             // Modern does not update the card background.
-            assert !FeatureUtilities.isChromeHomeModernEnabled();
+            assert !SuggestionsConfig.useModernLayout();
             return R.drawable.ntp_signin_promo_card_single;
         }
 
+        /**
+         * Triggers an update of the personalized signin promo. Intended to be used as
+         * {@link NewTabPageViewHolder.PartialBindCallback}.
+         */
+        public static void update(NewTabPageViewHolder viewHolder) {
+            ((PersonalizedPromoViewHolder) viewHolder).updatePersonalizedSigninPromo();
+        }
+
         private void updatePersonalizedSigninPromo() {
+            mSigninPromoController.detach();
+            bindPersonalizedSigninPromo();
+        }
+
+        private void bindPersonalizedSigninPromo() {
+            DisplayableProfileData profileData = null;
             Account[] accounts = AccountManagerFacade.get().tryGetGoogleAccounts();
-            String defaultAccountName = accounts.length == 0 ? null : accounts[0].name;
-
-            if (defaultAccountName != null) {
+            if (accounts.length > 0) {
+                String defaultAccountName = accounts[0].name;
                 mProfileDataCache.update(Collections.singletonList(defaultAccountName));
+                profileData = mProfileDataCache.getProfileDataOrDefault(defaultAccountName);
             }
+            PersonalizedSigninPromoView view = (PersonalizedSigninPromoView) itemView;
+            mSigninPromoController.setupPromoView(view.getContext(), view, profileData, null);
+        }
 
-            mSigninPromoController.setAccountName(defaultAccountName);
-
-            SigninPromoView view = (SigninPromoView) itemView;
-            mSigninPromoController.setupSigninPromoView(view.getContext(), view, null);
+        /**
+         * Binds the view and sets the profile data directly. Used for testing purposes.
+         * @param profileData The profile data which will be used to configure the personalized
+         *         signin promo.
+         */
+        @VisibleForTesting
+        public void bindAndConfigureViewForTests(@Nullable DisplayableProfileData profileData) {
+            super.onBindViewHolder();
+            PersonalizedSigninPromoView view = (PersonalizedSigninPromoView) itemView;
+            mSigninPromoController.setupPromoView(view.getContext(), view, profileData, null);
         }
     }
 
@@ -407,7 +428,7 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         public GenericPromoViewHolder(SuggestionsRecyclerView parent,
                 ContextMenuManager contextMenuManager, UiConfig config) {
             super(parent, contextMenuManager, config);
-            if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+            if (!FeatureUtilities.isChromeHomeEnabled()) {
                 getParams().topMargin = parent.getResources().getDimensionPixelSize(
                         R.dimen.ntp_sign_in_promo_margin_top);
             }
@@ -417,19 +438,8 @@ public class SignInPromo extends OptionalLeaf implements ImpressionTracker.Liste
         @Override
         protected int selectBackground(boolean hasCardAbove, boolean hasCardBelow) {
             // Modern does not update the card background.
-            assert !FeatureUtilities.isChromeHomeModernEnabled();
+            assert !SuggestionsConfig.useModernLayout();
             return R.drawable.ntp_signin_promo_card_single;
-        }
-    }
-
-    /**
-     * Callback to update the personalized signin promo.
-     */
-    private static class UpdatePersonalizedSigninPromoCallback
-            extends NewTabPageViewHolder.PartialBindCallback {
-        @Override
-        public void onResult(NewTabPageViewHolder result) {
-            ((PersonalizedPromoViewHolder) result).updatePersonalizedSigninPromo();
         }
     }
 }

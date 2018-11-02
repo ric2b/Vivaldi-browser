@@ -45,7 +45,7 @@ class TextFieldInputType : public InputType,
   USING_GARBAGE_COLLECTED_MIXIN(TextFieldInputType);
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
   using InputType::GetElement;
 
  protected:
@@ -60,7 +60,6 @@ class TextFieldInputType : public InputType,
   void DisabledAttributeChanged() override;
   void ReadonlyAttributeChanged() override;
   bool SupportsReadOnly() const override;
-  void HandleFocusEvent(Element* old_focused_node, WebFocusType) final;
   void HandleBlurEvent() final;
   String SanitizeValue(const String&) const override;
   void SetValue(const String&,

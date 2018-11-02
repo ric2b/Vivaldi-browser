@@ -154,8 +154,8 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
                                     const WebString& name,
                                     const WebString& fallback_name,
                                     WebSandboxFlags,
-                                    const WebParsedFeaturePolicy&,
-                                    const WebFrameOwnerProperties&) {
+                                    const ParsedFeaturePolicy&,
+                                    const WebFrameOwnerProperties&) override {
       return CreateLocalChild(*parent, scope, &child_client_);
     }
 

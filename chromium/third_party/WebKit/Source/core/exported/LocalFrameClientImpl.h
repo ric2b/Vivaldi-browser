@@ -32,12 +32,13 @@
 #ifndef LocalFrameClientImpl_h
 #define LocalFrameClientImpl_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
+#include "public/platform/WebScopedVirtualTimePauser.h"
 
 #include <memory>
 
@@ -46,6 +47,7 @@ namespace blink {
 class WebDevToolsAgentImpl;
 class WebLocalFrameImpl;
 class WebSpellCheckPanelHostClient;
+struct WebRemoteScrollProperties;
 
 class LocalFrameClientImpl final : public LocalFrameClient {
  public:
@@ -53,7 +55,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   ~LocalFrameClientImpl() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   WebLocalFrameImpl* GetWebFrame() const override;
 
@@ -136,9 +138,11 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidDispatchPingLoader(const KURL&) override;
   void DidDisplayContentWithCertificateErrors(const KURL&) override;
   void DidRunContentWithCertificateErrors(const KURL&) override;
+  void ReportLegacySymantecCert(const KURL&, Time) override;
   void DidChangePerformanceTiming() override;
   void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
   void DidObserveNewFeatureUsage(mojom::WebFeature) override;
+  bool ShouldTrackUseCounter(const KURL&) override;
   void SelectorMatchChanged(const Vector<String>& added_selectors,
                             const Vector<String>& removed_selectors) override;
 
@@ -146,10 +150,12 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   // - storage to store an extra data that can be used by the content layer
   // - wrapper methods to expose DocumentLoader's variables to the content
   //   layer
-  DocumentLoader* CreateDocumentLoader(LocalFrame*,
-                                       const ResourceRequest&,
-                                       const SubstituteData&,
-                                       ClientRedirectPolicy) override;
+  DocumentLoader* CreateDocumentLoader(
+      LocalFrame*,
+      const ResourceRequest&,
+      const SubstituteData&,
+      ClientRedirectPolicy,
+      const base::UnguessableToken& devtools_navigation_token) override;
   WTF::String UserAgent() override;
   WTF::String DoNotTrackValue() override;
   void TransitionToCommittedForNewPage() override;
@@ -182,9 +188,10 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidUpdateToUniqueOrigin() override;
   void DidChangeFramePolicy(Frame* child_frame,
                             SandboxFlags,
-                            const WebParsedFeaturePolicy&) override;
-  void DidSetFeaturePolicyHeader(
-      const WebParsedFeaturePolicy& parsed_header) override;
+                            const ParsedFeaturePolicy&) override;
+  void DidSetFramePolicyHeaders(
+      SandboxFlags,
+      const ParsedFeaturePolicy& parsed_header) override;
   void DidAddContentSecurityPolicies(
       const blink::WebVector<WebContentSecurityPolicy>&) override;
   void DidChangeFrameOwnerProperties(HTMLFrameOwnerElement*) override;
@@ -192,7 +199,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DispatchWillStartUsingPeerConnectionHandler(
       WebRTCPeerConnectionHandler*) override;
 
-  bool AllowWebGL(bool enabled_per_settings) override;
+  bool ShouldBlockWebGL() override;
 
   void DispatchWillInsertBody() override;
 
@@ -216,6 +223,8 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   BlameContext* GetFrameBlameContext() override;
 
   WebEffectiveConnectionType GetEffectiveConnectionType() override;
+  void SetEffectiveConnectionTypeForTesting(
+      WebEffectiveConnectionType) override;
 
   bool IsClientLoFiActiveForFrame() override;
 
@@ -225,22 +234,29 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   void SetHasReceivedUserGesture(bool received_previously) override;
 
-  void SetDevToolsFrameId(const String& devtools_frame_id) override;
-
   void AbortClientNavigation() override;
 
   WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override;
 
-  TextCheckerClient& GetTextCheckerClient() const override;
+  WebTextCheckClient* GetTextCheckerClient() const override;
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
-                                                WebTaskRunner*) override;
+  std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override;
 
   service_manager::InterfaceProvider* GetInterfaceProvider() override;
+  AssociatedInterfaceProvider* GetRemoteNavigationAssociatedInterfaces()
+      override;
 
   void AnnotatedRegionsChanged() override;
 
   void DidBlockFramebust(const KURL&) override;
+
+  String GetInstrumentationToken() override;
+
+  void ScrollRectToVisibleInParentFrame(
+      const WebRect&,
+      const WebRemoteScrollProperties&) override;
+
+  void SetVirtualTimePauser(WebScopedVirtualTimePauser) override;
 
   // VB-6063:
   void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;
@@ -256,6 +272,14 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   Member<WebLocalFrameImpl> web_frame_;
 
   String user_agent_;
+
+  // Used to cap the number of console messages that are printed to warn about
+  // legacy certificates that will be distrusted in future.
+  uint32_t num_certificate_warning_messages_;
+  // The hosts for which a legacy certificate warning has been printed.
+  HashSet<String> certificate_warning_hosts_;
+
+  mutable WebScopedVirtualTimePauser virtual_time_pauser_;
 };
 
 DEFINE_TYPE_CASTS(LocalFrameClientImpl,

@@ -232,7 +232,7 @@ CreditCardEditorViewController::CreateHeaderView() {
     std::unique_ptr<views::ImageView> card_icon_view = CreateInstrumentIconView(
         autofill::data_util::GetPaymentRequestData(autofill_card_type)
             .icon_resource_id,
-        base::UTF8ToUTF16(supported_network), opacity);
+        /*img=*/nullptr, base::UTF8ToUTF16(supported_network), opacity);
     card_icon_view->SetImageSize(kCardIconSize);
 
     // Keep track of this card icon to later adjust opacity.
@@ -293,8 +293,8 @@ CreditCardEditorViewController::CreateCustomFieldView(
     view = std::move(exp_label);
   } else {
     // Two comboboxes, one for month and the other for year.
-    std::unique_ptr<views::GridLayout> combobox_layout =
-        base::MakeUnique<views::GridLayout>(view.get());
+    views::GridLayout* combobox_layout =
+        views::GridLayout::CreateAndInstall(view.get());
     views::ColumnSet* columns = combobox_layout->AddColumnSet(0);
     columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 1,
                        views::GridLayout::USE_PREF, 0, 0);
@@ -328,7 +328,6 @@ CreditCardEditorViewController::CreateCustomFieldView(
     combobox_layout->AddView(year_combobox.release(), 1, 1,
                              views::GridLayout::FILL, views::GridLayout::FILL,
                              0, kInputFieldHeight);
-    view->SetLayoutManager(combobox_layout.release());
   }
 
   // Set the initial validity of the custom view.
@@ -643,6 +642,9 @@ void CreditCardEditorViewController::AddAndSelectNewBillingAddress(
   // SetSelectedIndex doesn't trigger a perform action notification, which is
   // needed to update the valid state.
   address_combobox->SetSelectedRow(index);
+  // The combobox might be initially disabled in FillContentView, but we've
+  // added an item; check if we should re-enable it.
+  address_combobox->SetEnabled(address_combobox->GetRowCount() > 1);
   // But it needs to be blured at least once.
   address_combobox->OnBlur();
 }

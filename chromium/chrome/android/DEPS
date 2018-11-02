@@ -1,4 +1,6 @@
 include_rules = [
+  "+components/download",
+  "+components/favicon_base",
   "+components/invalidation",
   "+components/policy",
   "+components/signin/core/browser/android",

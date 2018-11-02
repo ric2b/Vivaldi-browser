@@ -25,7 +25,6 @@
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/browser/renderer_host/media/video_capture_gpu_jpeg_decoder.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
-#include "content/common/media/media_stream_options.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/base/video_frame_metadata.h"
@@ -48,7 +47,7 @@ namespace content {
 
 std::unique_ptr<media::VideoCaptureJpegDecoder> CreateGpuJpegDecoder(
     media::VideoCaptureJpegDecoder::DecodeDoneCB decode_done_cb) {
-  return base::MakeUnique<content::VideoCaptureGpuJpegDecoder>(
+  return std::make_unique<content::VideoCaptureGpuJpegDecoder>(
       std::move(decode_done_cb), base::Bind([](const std::string&) {}));
 }
 
@@ -139,13 +138,14 @@ class VideoCaptureControllerTest
     const MediaStreamType arbitrary_stream_type =
         content::MEDIA_DEVICE_VIDEO_CAPTURE;
     const media::VideoCaptureParams arbitrary_params;
-    auto device_launcher = base::MakeUnique<MockVideoCaptureDeviceLauncher>();
+    auto device_launcher = std::make_unique<MockVideoCaptureDeviceLauncher>();
     controller_ = new VideoCaptureController(
         arbitrary_device_id, arbitrary_stream_type, arbitrary_params,
-        std::move(device_launcher));
+        std::move(device_launcher),
+        base::BindRepeating([](const std::string&) {}));
     InitializeNewDeviceClientAndBufferPoolInstances();
     auto mock_launched_device =
-        base::MakeUnique<MockLaunchedVideoCaptureDevice>();
+        std::make_unique<MockLaunchedVideoCaptureDevice>();
     mock_launched_device_ = mock_launched_device.get();
     controller_->OnDeviceLaunched(std::move(mock_launched_device));
     client_a_.reset(
@@ -158,10 +158,10 @@ class VideoCaptureControllerTest
 
   void InitializeNewDeviceClientAndBufferPoolInstances() {
     buffer_pool_ = new media::VideoCaptureBufferPoolImpl(
-        base::MakeUnique<media::VideoCaptureBufferTrackerFactoryImpl>(),
+        std::make_unique<media::VideoCaptureBufferTrackerFactoryImpl>(),
         kPoolSize);
     device_client_.reset(new media::VideoCaptureDeviceClient(
-        base::MakeUnique<media::VideoFrameReceiverOnTaskRunner>(
+        std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
             controller_->GetWeakPtrForIOThread(),
             BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
         buffer_pool_,

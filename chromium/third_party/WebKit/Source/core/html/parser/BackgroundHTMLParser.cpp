@@ -26,17 +26,17 @@
 #include "core/html/parser/BackgroundHTMLParser.h"
 
 #include <memory>
-#include "core/HTMLNames.h"
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/parser/XSSAuditor.h"
+#include "core/html_names.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "public/platform/Platform.h"
 
@@ -88,7 +88,7 @@ static void CheckThatXSSInfosAreSafeToSendToAnotherThread(
 
 WeakPtr<BackgroundHTMLParser> BackgroundHTMLParser::Create(
     std::unique_ptr<Configuration> config,
-    RefPtr<WebTaskRunner> loading_task_runner) {
+    scoped_refptr<WebTaskRunner> loading_task_runner) {
   auto* background_parser = new BackgroundHTMLParser(
       std::move(config), std::move(loading_task_runner));
   return background_parser->weak_factory_.CreateWeakPtr();
@@ -111,7 +111,7 @@ BackgroundHTMLParser::Configuration::Configuration()
 
 BackgroundHTMLParser::BackgroundHTMLParser(
     std::unique_ptr<Configuration> config,
-    RefPtr<WebTaskRunner> loading_task_runner)
+    scoped_refptr<WebTaskRunner> loading_task_runner)
     : weak_factory_(this),
       token_(WTF::WrapUnique(new HTMLToken)),
       tokenizer_(HTMLTokenizer::Create(config->options)),
@@ -351,7 +351,7 @@ template <typename FunctionType, typename... Ps>
 void BackgroundHTMLParser::RunOnMainThread(FunctionType function,
                                            Ps&&... parameters) {
   if (IsMainThread()) {
-    WTF::Bind(std::move(function), std::forward<Ps>(parameters)...)();
+    WTF::Bind(std::move(function), std::forward<Ps>(parameters)...).Run();
   } else {
     loading_task_runner_->PostTask(
         BLINK_FROM_HERE,

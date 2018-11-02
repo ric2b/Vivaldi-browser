@@ -20,14 +20,14 @@ SkewedSingleThreadTaskRunner::SkewedSingleThreadTaskRunner(
     task_runner_(task_runner) {
 }
 
-SkewedSingleThreadTaskRunner::~SkewedSingleThreadTaskRunner() {}
+SkewedSingleThreadTaskRunner::~SkewedSingleThreadTaskRunner() = default;
 
 void SkewedSingleThreadTaskRunner::SetSkew(double skew) {
   skew_ = skew;
 }
 
 bool SkewedSingleThreadTaskRunner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   return task_runner_->PostDelayedTask(
@@ -40,7 +40,7 @@ bool SkewedSingleThreadTaskRunner::RunsTasksInCurrentSequence() const {
 }
 
 bool SkewedSingleThreadTaskRunner::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   return task_runner_->PostNonNestableDelayedTask(

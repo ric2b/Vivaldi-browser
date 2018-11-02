@@ -5,22 +5,18 @@
 #include "ios/chrome/browser/passwords/credential_manager_util.h"
 
 #include "components/security_state/core/security_state.h"
-#include "ios/chrome/browser/payments/origin_security_checker.h"
 #include "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
 #import "ios/web/public/origin_util.h"
 #include "url/origin.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using password_manager::CredentialManagerError;
 using password_manager::CredentialInfo;
 using password_manager::CredentialType;
 using password_manager::CredentialMediationRequirement;
-
-// TODO(crbug.com/435048): This file should not depend on payments. As soon as
-// https://chromium-review.googlesource.com/c/chromium/src/+/631881 is landed
-// make sure there are no payments dependencies.
-using payments::OriginSecurityChecker;
-
-namespace credential_manager {
 
 namespace {
 
@@ -40,20 +36,20 @@ security_state::SecurityLevel GetSecurityLevelForWebState(
 
 }  // namespace
 
-const char kCredentialIdKey[] = "id";
-const char kCredentialTypeKey[] = "type";
-const char kCredentialNameKey[] = "name";
-const char kCredentialIconKey[] = "iconURL";
-const char kPasswordCredentialPasswordKey[] = "password";
-const char kFederatedCredentialProviderKey[] = "provider";
+const char kCredentialIdKey[] = "_id";
+const char kCredentialTypeKey[] = "_type";
+const char kCredentialNameKey[] = "_name";
+const char kCredentialIconKey[] = "_iconURL";
+const char kPasswordCredentialPasswordKey[] = "_password";
+const char kFederatedCredentialProviderKey[] = "_provider";
 const char kCredentialRequestMediationKey[] = "mediation";
 const char kCredentialRequestPasswordKey[] = "password";
 const char kCredentialRequestProvidersKey[] = "providers";
 const char kMediationRequirementSilent[] = "silent";
 const char kMediationRequirementRequired[] = "required";
 const char kMediationRequirementOptional[] = "optional";
-const char kCredentialTypePassword[] = "PasswordCredential";
-const char kCredentialTypeFederated[] = "FederatedCredential";
+const char kCredentialTypePassword[] = "password";
+const char kCredentialTypeFederated[] = "federated";
 
 bool ParseMediationRequirement(const base::DictionaryValue& json,
                                CredentialMediationRequirement* mediation) {
@@ -140,9 +136,13 @@ bool ParseCredentialType(const base::DictionaryValue& json,
 }
 
 bool ParseCredentialDictionary(const base::DictionaryValue& json,
-                               CredentialInfo* credential) {
+                               CredentialInfo* credential,
+                               std::string* reason) {
   if (!json.GetString(kCredentialIdKey, &credential->id)) {
     // |id| is required.
+    if (reason) {
+      *reason = "no valid 'id' field";
+    }
     return false;
   }
   json.GetString(kCredentialNameKey, &credential->name);
@@ -152,11 +152,17 @@ bool ParseCredentialDictionary(const base::DictionaryValue& json,
     if (!credential->icon.is_valid() ||
         !web::IsOriginSecure(credential->icon)) {
       // |iconUrl| is either not a valid URL or not a secure URL.
+      if (reason) {
+        *reason = "iconURL is either invalid or insecure URL";
+      }
       return false;
     }
   }
   if (!ParseCredentialType(json, &credential->type)) {
     // Credential has invalid |type|
+    if (reason) {
+      *reason = "Credential has invalid type";
+    }
     return false;
   }
   if (credential->type == CredentialType::CREDENTIAL_TYPE_PASSWORD) {
@@ -164,6 +170,9 @@ bool ParseCredentialDictionary(const base::DictionaryValue& json,
                         &credential->password) ||
         credential->password.empty()) {
       // |password| field is required for PasswordCredential.
+      if (reason) {
+        *reason = "no valid 'password' field";
+      }
       return false;
     }
   }
@@ -173,9 +182,12 @@ bool ParseCredentialDictionary(const base::DictionaryValue& json,
     if (!GURL(federation).is_valid()) {
       // |provider| field must be a valid URL. See
       // https://w3c.github.io/webappsec-credential-management/#provider-identification
+      if (reason) {
+        *reason = "no valid 'provider' field";
+      }
       return false;
     }
-    credential->federation = url::Origin(GURL(federation));
+    credential->federation = url::Origin::Create(GURL(federation));
   }
   return true;
 }
@@ -191,20 +203,19 @@ bool WebStateContentIsSecureHtml(const web::WebState* web_state) {
 
   const GURL last_committed_url = web_state->GetLastCommittedURL();
 
-  if (!OriginSecurityChecker::IsContextSecure(last_committed_url)) {
+  if (!web::IsOriginSecure(last_committed_url) ||
+      last_committed_url.scheme() == url::kDataScheme) {
     return false;
   }
 
   // If scheme is not cryptographic, the origin must be either localhost or a
   // file.
-  if (!OriginSecurityChecker::IsSchemeCryptographic(last_committed_url)) {
-    return OriginSecurityChecker::IsOriginLocalhostOrFile(last_committed_url);
+  if (!security_state::IsSchemeCryptographic(last_committed_url)) {
+    return security_state::IsOriginLocalhostOrFile(last_committed_url);
   }
 
   // If scheme is cryptographic, valid SSL certificate is required.
   security_state::SecurityLevel security_level =
       GetSecurityLevelForWebState(web_state);
-  return OriginSecurityChecker::IsSSLCertificateValid(security_level);
+  return security_state::IsSslCertificateValid(security_level);
 }
-
-}  // namespace credential_manager

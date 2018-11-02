@@ -26,7 +26,7 @@ VideoColorSpace::MatrixID VideoColorSpace::GetMatrixID(int matrix) {
   return static_cast<MatrixID>(matrix);
 }
 
-VideoColorSpace::VideoColorSpace() {}
+VideoColorSpace::VideoColorSpace() = default;
 
 VideoColorSpace::VideoColorSpace(PrimaryID primaries,
                                  TransferID transfer,
@@ -51,6 +51,19 @@ bool VideoColorSpace::operator==(const VideoColorSpace& other) const {
 bool VideoColorSpace::operator!=(const VideoColorSpace& other) const {
   return primaries != other.primaries || transfer != other.transfer ||
          matrix != other.matrix || range != other.range;
+}
+
+bool VideoColorSpace::IsSpecified() const {
+  if (primaries != PrimaryID::INVALID && primaries != PrimaryID::UNSPECIFIED)
+    return true;
+  if (transfer != TransferID::INVALID && transfer != TransferID::UNSPECIFIED)
+    return true;
+  if (matrix != MatrixID::INVALID && matrix != MatrixID::UNSPECIFIED)
+    return true;
+  // Note that it's not enough to have a range for a video color space to
+  // be considered valid, because often the range is just specified with
+  // a bool, so there is no way to know if it was set specifically or not.
+  return false;
 }
 
 gfx::ColorSpace VideoColorSpace::ToGfxColorSpace() const {

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/notifications/non_persistent_notification_handler.h"
 
+#include "base/callback.h"
 #include "base/strings/nullable_string16.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "content/public/browser/notification_event_dispatcher.h"
@@ -20,35 +21,38 @@ void NonPersistentNotificationHandler::OnShow(
 
 void NonPersistentNotificationHandler::OnClose(
     Profile* profile,
-    const std::string& origin,
+    const GURL& origin,
     const std::string& notification_id,
-    bool by_user) {
+    bool by_user,
+    base::OnceClosure completed_closure) {
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNonPersistentCloseEvent(notification_id);
+
+  // TODO(crbug.com/787459): Implement event acknowledgements once
+  // non-persistent notifications have updated to use Mojo instead of IPC.
+  std::move(completed_closure).Run();
 }
 
 void NonPersistentNotificationHandler::OnClick(
     Profile* profile,
-    const std::string& origin,
+    const GURL& origin,
     const std::string& notification_id,
-    int action_index,
-    const base::NullableString16& reply) {
-  DCHECK(reply.is_null());
-
-  // Non persistent notifications don't allow buttons.
+    const base::Optional<int>& action_index,
+    const base::Optional<base::string16>& reply,
+    base::OnceClosure completed_closure) {
+  // Non persistent notifications don't allow buttons or replies.
   // https://notifications.spec.whatwg.org/#create-a-notification
-  DCHECK_EQ(-1, action_index);
+  DCHECK(!action_index.has_value());
+  DCHECK(!reply.has_value());
 
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNonPersistentClickEvent(notification_id);
+
+  // TODO(crbug.com/787459): Implement event acknowledgements once
+  // non-persistent notifications have updated to use Mojo instead of IPC.
+  std::move(completed_closure).Run();
 }
 
 void NonPersistentNotificationHandler::OpenSettings(Profile* profile) {
   NotificationCommon::OpenNotificationSettings(profile);
-}
-
-bool NonPersistentNotificationHandler::ShouldDisplayOnFullScreen(
-    Profile* profile,
-    const std::string& origin) {
-  return NotificationCommon::ShouldDisplayOnFullScreen(profile, GURL(origin));
 }

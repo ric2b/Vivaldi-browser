@@ -19,8 +19,7 @@ NinjaCopyTargetWriter::NinjaCopyTargetWriter(const Target* target,
     : NinjaTargetWriter(target, out) {
 }
 
-NinjaCopyTargetWriter::~NinjaCopyTargetWriter() {
-}
+NinjaCopyTargetWriter::~NinjaCopyTargetWriter() = default;
 
 void NinjaCopyTargetWriter::Run() {
   if (target_->is_disabled())

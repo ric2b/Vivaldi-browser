@@ -72,31 +72,36 @@ ScopedJavaLocalRef<jstring> CPPClass::ReturnAString(
 }
 
 // Static free functions declared and called directly from java.
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& caller,
-                  const JavaParamRef<jstring>& param) {
+static jlong JNI_SampleForTests_Init(JNIEnv* env,
+                                     const JavaParamRef<jobject>& caller,
+                                     const JavaParamRef<jstring>& param) {
   return 0;
 }
 
-static jdouble GetDoubleFunction(JNIEnv*, const JavaParamRef<jobject>&) {
+static jdouble JNI_SampleForTests_GetDoubleFunction(
+    JNIEnv*,
+    const JavaParamRef<jobject>&) {
   return 0;
 }
 
-static jfloat GetFloatFunction(JNIEnv*, const JavaParamRef<jclass>&) {
+static jfloat JNI_SampleForTests_GetFloatFunction(JNIEnv*,
+                                                  const JavaParamRef<jclass>&) {
   return 0;
 }
 
-static void SetNonPODDatatype(JNIEnv*,
-                              const JavaParamRef<jobject>&,
-                              const JavaParamRef<jobject>&) {}
+static void JNI_SampleForTests_SetNonPODDatatype(JNIEnv*,
+                                                 const JavaParamRef<jobject>&,
+                                                 const JavaParamRef<jobject>&) {
+}
 
-static ScopedJavaLocalRef<jobject> GetNonPODDatatype(
+static ScopedJavaLocalRef<jobject> JNI_SampleForTests_GetNonPODDatatype(
     JNIEnv*,
     const JavaParamRef<jobject>&) {
   return ScopedJavaLocalRef<jobject>();
 }
 
-static jint GetInnerIntFunction(JNIEnv*, const JavaParamRef<jclass>&) {
+static jint JNI_InnerClass_GetInnerIntFunction(JNIEnv*,
+                                               const JavaParamRef<jclass>&) {
   return 0;
 }
 
@@ -117,6 +122,13 @@ int main() {
   int bar = base::android::Java_SampleForTests_javaMethod(
       env, my_java_object, 1, 2);
 
+  base::android::Java_SampleForTests_methodWithGenericParams(
+      env, my_java_object, nullptr, nullptr);
+
+  // This is how you call a java constructor method from C++.
+  ScopedJavaLocalRef<jobject> my_created_object =
+      base::android::Java_SampleForTests_Constructor(env, 1, 2);
+
   std::cout << foo << bar;
 
   for (int i = 0; i < 10; ++i) {
@@ -134,5 +146,9 @@ int main() {
                                                                my_java_object);
   base::android::Java_SampleForTests_javaMethodWithAnnotatedParam(
       env, my_java_object, 42);
+
+  base::android::Java_SampleForTests_getInnerInterface(env);
+  base::android::Java_SampleForTests_getInnerEnum(env);
+
   return 0;
 }

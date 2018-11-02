@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 #include <memory>
-#include <queue>
 #include <tuple>
 
+#include "base/containers/queue.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -135,7 +135,7 @@ class ObfuscatedFileEnumerator final
     recurse_queue_.push(record);
   }
 
-  ~ObfuscatedFileEnumerator() override {}
+  ~ObfuscatedFileEnumerator() override = default;
 
   base::FilePath Next() override {
     FileInfo file_info;
@@ -200,7 +200,7 @@ class ObfuscatedFileEnumerator final
   FileSystemURL root_url_;
   bool recursive_;
 
-  std::queue<FileRecord> recurse_queue_;
+  base::queue<FileRecord> recurse_queue_;
   std::vector<FileId> display_stack_;
   base::FilePath current_parent_virtual_path_;
 
@@ -220,7 +220,7 @@ class ObfuscatedOriginEnumerator
       origin_database->ListAllOrigins(&origins_);
   }
 
-  ~ObfuscatedOriginEnumerator() override {}
+  ~ObfuscatedOriginEnumerator() override = default;
 
   // Returns the next origin.  Returns empty if there are no more origins.
   GURL Next() override {
@@ -862,6 +862,9 @@ bool ObfuscatedFileUtil::DeleteDirectoryForOriginAndType(
   DestroyDirectoryDatabase(origin, type_string);
 
   const base::FilePath origin_path = GetDirectoryForOrigin(origin, false, NULL);
+  if (origin_path.empty())
+    return true;
+
   if (!type_string.empty()) {
     // Delete the filesystem type directory.
     base::File::Error error = base::File::FILE_OK;

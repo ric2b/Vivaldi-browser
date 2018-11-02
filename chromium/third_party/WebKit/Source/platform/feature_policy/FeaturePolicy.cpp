@@ -3,22 +3,25 @@
 
 #include "platform/feature_policy/FeaturePolicy.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/json/JSONValues.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/BitVector.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/ParsingUtilities.h"
+#include "platform/wtf/text/StringUTF8Adaptor.h"
+#include "url/gurl.h"
 
 namespace blink {
 
 namespace {
+
 // TODO(loonybear): Deprecate the methods in this namesapce when deprecating old
 // allow syntax.
 bool IsValidOldAllowSyntax(const String& policy,
-                           RefPtr<SecurityOrigin> src_origin) {
+                           scoped_refptr<SecurityOrigin> src_origin) {
   // Old syntax enable all features on src_origin, If src_origin does not exist
   // (example, http header does not have a src_origin), then the syntax cannot
   // be valid.
@@ -52,12 +55,11 @@ bool IsValidOldAllowSyntax(const String& policy,
   return true;
 }
 
-Vector<WebParsedFeaturePolicyDeclaration> ParseOldAllowSyntax(
-    const String& policy,
-    RefPtr<SecurityOrigin> origin,
-    Vector<String>* messages,
-    const FeatureNameMap& feature_names) {
-  Vector<WebParsedFeaturePolicyDeclaration> whitelists;
+ParsedFeaturePolicy ParseOldAllowSyntax(const String& policy,
+                                        const url::Origin& origin,
+                                        Vector<String>* messages,
+                                        const FeatureNameMap& feature_names) {
+  ParsedFeaturePolicy whitelists;
   if (messages) {
     messages->push_back(
         "The old syntax (allow=\"feature1 feature2 feature3 ...\") will soon "
@@ -71,9 +73,9 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseOldAllowSyntax(
         messages->push_back("Unrecognized feature: '" + token + "'.");
       continue;
     }
-    WebParsedFeaturePolicyDeclaration whitelist;
+    ParsedFeaturePolicyDeclaration whitelist;
     whitelist.feature = feature_names.at(token);
-    whitelist.origins = Vector<WebSecurityOrigin>(1UL, {origin});
+    whitelist.origins = {origin};
     whitelists.push_back(whitelist);
   }
   return whitelists;
@@ -81,27 +83,28 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseOldAllowSyntax(
 
 }  // namespace
 
-WebParsedFeaturePolicy ParseFeaturePolicyHeader(const String& policy,
-                                                RefPtr<SecurityOrigin> origin,
-                                                Vector<String>* messages) {
-  return ParseFeaturePolicy(policy, origin, RefPtr<SecurityOrigin>(), messages,
+ParsedFeaturePolicy ParseFeaturePolicyHeader(
+    const String& policy,
+    scoped_refptr<SecurityOrigin> origin,
+    Vector<String>* messages) {
+  return ParseFeaturePolicy(policy, origin, nullptr, messages,
                             GetDefaultFeatureNameMap());
 }
 
-Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicyAttribute(
+ParsedFeaturePolicy ParseFeaturePolicyAttribute(
     const String& policy,
-    RefPtr<SecurityOrigin> self_origin,
-    RefPtr<SecurityOrigin> src_origin,
+    scoped_refptr<SecurityOrigin> self_origin,
+    scoped_refptr<SecurityOrigin> src_origin,
     Vector<String>* messages,
     bool* old_syntax) {
   return ParseFeaturePolicy(policy, self_origin, src_origin, messages,
                             GetDefaultFeatureNameMap(), old_syntax);
 }
 
-Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
+ParsedFeaturePolicy ParseFeaturePolicy(
     const String& policy,
-    RefPtr<SecurityOrigin> self_origin,
-    RefPtr<SecurityOrigin> src_origin,
+    scoped_refptr<SecurityOrigin> self_origin,
+    scoped_refptr<SecurityOrigin> src_origin,
     Vector<String>* messages,
     const FeatureNameMap& feature_names,
     bool* old_syntax) {
@@ -111,12 +114,13 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
   if (IsValidOldAllowSyntax(policy, src_origin)) {
     if (old_syntax)
       *old_syntax = true;
-    return ParseOldAllowSyntax(policy, src_origin, messages, feature_names);
+    return ParseOldAllowSyntax(policy, src_origin->ToUrlOrigin(), messages,
+                               feature_names);
   }
 
-  Vector<WebParsedFeaturePolicyDeclaration> whitelists;
+  ParsedFeaturePolicy whitelists;
   BitVector features_specified(
-      static_cast<int>(WebFeaturePolicyFeature::LAST_FEATURE));
+      static_cast<int>(FeaturePolicyFeature::LAST_FEATURE));
 
   // RFC2616, section 4.2 specifies that headers appearing multiple times can be
   // combined with a comma. Walk the header string, and parse each comma
@@ -142,42 +146,46 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
         continue;
       }
 
-      WebFeaturePolicyFeature feature = feature_names.at(tokens[0]);
+      FeaturePolicyFeature feature = feature_names.at(tokens[0]);
       // If a policy has already been specified for the current feature, drop
       // the new policy.
       if (features_specified.QuickGet(static_cast<int>(feature)))
         continue;
 
-      WebParsedFeaturePolicyDeclaration whitelist;
+      ParsedFeaturePolicyDeclaration whitelist;
       whitelist.feature = feature;
       features_specified.QuickSet(static_cast<int>(feature));
-      Vector<WebSecurityOrigin> origins;
+      std::vector<url::Origin> origins;
       // If a policy entry has no (optional) values (e,g,
       // allow="feature_name1; feature_name2 value"), enable the feature for:
       //     a. if header policy (i.e., src_origin does not exist), self_origin;
       //     or
       //     b. if allow attribute (i.e., src_origin exists), src_origin.
-      if (tokens.size() == 1)
-        origins.push_back(src_origin ? src_origin : self_origin);
+      if (tokens.size() == 1) {
+        origins.push_back(src_origin ? src_origin->ToUrlOrigin()
+                                     : self_origin->ToUrlOrigin());
+      }
 
       for (size_t i = 1; i < tokens.size(); i++) {
         if (EqualIgnoringASCIICase(tokens[i], "'self'")) {
-          origins.push_back(self_origin);
-        } else if (EqualIgnoringASCIICase(tokens[i], "'src'")) {
-          origins.push_back(src_origin);
+          origins.push_back(self_origin->ToUrlOrigin());
+        } else if (src_origin && EqualIgnoringASCIICase(tokens[i], "'src'")) {
+          // Only iframe allow attribute can define src origin.
+          // When parsing feature policy header, src is disallowed and
+          // src_origin = nullptr.
+          origins.push_back(src_origin->ToUrlOrigin());
         } else if (EqualIgnoringASCIICase(tokens[i], "'none'")) {
           continue;
         } else if (tokens[i] == "*") {
           whitelist.matches_all_origins = true;
           break;
         } else {
-          WebSecurityOrigin target_origin =
-              WebSecurityOrigin::CreateFromString(tokens[i]);
-          if (!target_origin.IsNull() && !target_origin.IsUnique()) {
+          url::Origin target_origin = url::Origin::Create(
+              GURL(StringUTF8Adaptor(tokens[i]).AsStringPiece()));
+          if (!target_origin.unique())
             origins.push_back(target_origin);
-          } else if (messages) {
+          else if (messages)
             messages->push_back("Unrecognized origin: '" + tokens[i] + "'.");
-          }
         }
       }
       whitelist.origins = origins;
@@ -187,16 +195,17 @@ Vector<WebParsedFeaturePolicyDeclaration> ParseFeaturePolicy(
   return whitelists;
 }
 
-bool IsSupportedInFeaturePolicy(WebFeaturePolicyFeature feature) {
+bool IsSupportedInFeaturePolicy(FeaturePolicyFeature feature) {
   if (!RuntimeEnabledFeatures::FeaturePolicyEnabled())
     return false;
   switch (feature) {
-    case WebFeaturePolicyFeature::kFullscreen:
-    case WebFeaturePolicyFeature::kPayment:
-    case WebFeaturePolicyFeature::kUsb:
-    case WebFeaturePolicyFeature::kWebVr:
+    case FeaturePolicyFeature::kFullscreen:
+    case FeaturePolicyFeature::kPayment:
+    case FeaturePolicyFeature::kUsb:
+    case FeaturePolicyFeature::kWebVr:
       return true;
-    case WebFeaturePolicyFeature::kVibrate:
+    case FeaturePolicyFeature::kSyncXHR:
+    case FeaturePolicyFeature::kVibrate:
       return RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled();
     default:
       return false;
@@ -207,32 +216,33 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
   DEFINE_STATIC_LOCAL(FeatureNameMap, default_feature_name_map, ());
   if (default_feature_name_map.IsEmpty()) {
     default_feature_name_map.Set("fullscreen",
-                                 WebFeaturePolicyFeature::kFullscreen);
-    default_feature_name_map.Set("payment", WebFeaturePolicyFeature::kPayment);
-    default_feature_name_map.Set("usb", WebFeaturePolicyFeature::kUsb);
-    default_feature_name_map.Set("camera", WebFeaturePolicyFeature::kCamera);
+                                 FeaturePolicyFeature::kFullscreen);
+    default_feature_name_map.Set("payment", FeaturePolicyFeature::kPayment);
+    default_feature_name_map.Set("usb", FeaturePolicyFeature::kUsb);
+    default_feature_name_map.Set("camera", FeaturePolicyFeature::kCamera);
     default_feature_name_map.Set("encrypted-media",
-                                 WebFeaturePolicyFeature::kEme);
+                                 FeaturePolicyFeature::kEncryptedMedia);
     default_feature_name_map.Set("microphone",
-                                 WebFeaturePolicyFeature::kMicrophone);
-    default_feature_name_map.Set("speaker", WebFeaturePolicyFeature::kSpeaker);
+                                 FeaturePolicyFeature::kMicrophone);
+    default_feature_name_map.Set("speaker", FeaturePolicyFeature::kSpeaker);
     default_feature_name_map.Set("geolocation",
-                                 WebFeaturePolicyFeature::kGeolocation);
-    default_feature_name_map.Set("midi", WebFeaturePolicyFeature::kMidiFeature);
-    default_feature_name_map.Set("vr", WebFeaturePolicyFeature::kWebVr);
+                                 FeaturePolicyFeature::kGeolocation);
+    default_feature_name_map.Set("midi", FeaturePolicyFeature::kMidiFeature);
+    default_feature_name_map.Set("vr", FeaturePolicyFeature::kWebVr);
     if (RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled()) {
-      default_feature_name_map.Set("vibrate",
-                                   WebFeaturePolicyFeature::kVibrate);
+      default_feature_name_map.Set("vibrate", FeaturePolicyFeature::kVibrate);
       default_feature_name_map.Set("cookie",
-                                   WebFeaturePolicyFeature::kDocumentCookie);
+                                   FeaturePolicyFeature::kDocumentCookie);
       default_feature_name_map.Set("domain",
-                                   WebFeaturePolicyFeature::kDocumentDomain);
+                                   FeaturePolicyFeature::kDocumentDomain);
       default_feature_name_map.Set("docwrite",
-                                   WebFeaturePolicyFeature::kDocumentWrite);
+                                   FeaturePolicyFeature::kDocumentWrite);
       default_feature_name_map.Set("sync-script",
-                                   WebFeaturePolicyFeature::kSyncScript);
-      default_feature_name_map.Set("sync-xhr",
-                                   WebFeaturePolicyFeature::kSyncXHR);
+                                   FeaturePolicyFeature::kSyncScript);
+      default_feature_name_map.Set("sync-xhr", FeaturePolicyFeature::kSyncXHR);
+    }
+    if (RuntimeEnabledFeatures::FeaturePolicyAutoplayFeatureEnabled()) {
+      default_feature_name_map.Set("autoplay", FeaturePolicyFeature::kAutoplay);
     }
   }
   return default_feature_name_map;

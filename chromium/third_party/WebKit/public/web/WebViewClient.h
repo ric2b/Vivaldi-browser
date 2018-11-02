@@ -31,13 +31,13 @@
 #ifndef WebViewClient_h
 #define WebViewClient_h
 
-#include "public/platform/WebPageVisibilityState.h"
-#include "public/platform/WebString.h"
 #include "WebAXEnums.h"
 #include "WebFrame.h"
 #include "WebPopupType.h"
 #include "WebTextDirection.h"
 #include "WebWidgetClient.h"
+#include "public/platform/WebString.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-shared.h"
 
 namespace blink {
 
@@ -45,7 +45,6 @@ class WebDateTimeChooserCompletion;
 class WebFileChooserCompletion;
 class WebNode;
 class WebSpeechRecognizer;
-class WebStorageNamespace;
 class WebURL;
 class WebURLRequest;
 class WebView;
@@ -78,14 +77,14 @@ class WebViewClient : protected WebWidgetClient {
                               WebNavigationPolicy policy,
                               bool suppress_opener,
                               WebSandboxFlags) {
-    return 0;
+    return nullptr;
   }
 
   // Create a new popup WebWidget.
-  virtual WebWidget* CreatePopupMenu(WebPopupType) { return 0; }
+  virtual WebWidget* CreatePopup(WebPopupType) { return nullptr; }
 
-  // Create a session storage namespace object associated with this WebView.
-  virtual WebStorageNamespace* CreateSessionStorageNamespace() { return 0; }
+  // Returns the session storage namespace id associated with this WebView.
+  virtual int64_t GetSessionStorageNamespaceId() { return 0; }
 
   // Misc ----------------------------------------------------------------
 
@@ -128,21 +127,6 @@ class WebViewClient : protected WebWidgetClient {
                                    WebDateTimeChooserCompletion*) {
     return false;
   }
-
-  // Show a notification popup for the specified form validation messages
-  // besides the anchor rectangle. An implementation of this function should
-  // not hide the popup until hideValidationMessage call.
-  virtual void ShowValidationMessage(const WebRect& anchor_in_viewport,
-                                     const WebString& main_text,
-                                     WebTextDirection main_text_dir,
-                                     const WebString& supplemental_text,
-                                     WebTextDirection supplemental_text_dir) {}
-
-  // Hide notifation popup for form validation messages.
-  virtual void HideValidationMessage() {}
-
-  // Move the existing notifation popup to the new anchor position.
-  virtual void MoveValidationMessage(const WebRect& anchor_in_viewport) {}
 
   // UI ------------------------------------------------------------------
 
@@ -217,7 +201,7 @@ class WebViewClient : protected WebWidgetClient {
   // Speech --------------------------------------------------------------
 
   // Access the embedder API for speech recognition services.
-  virtual WebSpeechRecognizer* SpeechRecognizer() { return 0; }
+  virtual WebSpeechRecognizer* SpeechRecognizer() { return nullptr; }
 
   // Zoom ----------------------------------------------------------------
 
@@ -244,7 +228,7 @@ class WebViewClient : protected WebWidgetClient {
                      const WebFloatSize& accumulated_overscroll,
                      const WebFloatPoint& position_in_viewport,
                      const WebFloatSize& velocity_in_viewport,
-                     const WebScrollBoundaryBehavior& behavior) override {}
+                     const WebOverscrollBehavior& behavior) override {}
   void HasTouchEventHandlers(bool) override {}
   WebLayerTreeView* InitializeLayerTreeView() override { return nullptr; }
   WebScreenInfo GetScreenInfo() override { return WebScreenInfo(); }

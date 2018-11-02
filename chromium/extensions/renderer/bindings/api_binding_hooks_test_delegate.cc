@@ -11,11 +11,10 @@ APIBindingHooksTestDelegate::~APIBindingHooksTestDelegate() {}
 
 bool APIBindingHooksTestDelegate::CreateCustomEvent(
     v8::Local<v8::Context> context,
-    const binding::RunJSFunctionSync& run_js_sync,
     const std::string& event_name,
     v8::Local<v8::Value>* event_out) {
   if (!custom_event_.is_null()) {
-    *event_out = custom_event_.Run(context, run_js_sync, event_name);
+    *event_out = custom_event_.Run(context, event_name);
     return true;
   }
   return false;
@@ -34,6 +33,11 @@ void APIBindingHooksTestDelegate::SetCustomEvent(
 void APIBindingHooksTestDelegate::SetTemplateInitializer(
     const TemplateInitializer& initializer) {
   template_initializer_ = initializer;
+}
+
+void APIBindingHooksTestDelegate::SetInstanceInitializer(
+    const InstanceInitializer& initializer) {
+  instance_initializer_ = initializer;
 }
 
 APIBindingHooks::RequestResult APIBindingHooksTestDelegate::HandleRequest(
@@ -56,6 +60,13 @@ void APIBindingHooksTestDelegate::InitializeTemplate(
     const APITypeReferenceMap& type_refs) {
   if (template_initializer_)
     template_initializer_.Run(isolate, object_template, type_refs);
+}
+
+void APIBindingHooksTestDelegate::InitializeInstance(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Object> instance) {
+  if (instance_initializer_)
+    instance_initializer_.Run(context, instance);
 }
 
 }  // namespace extensions

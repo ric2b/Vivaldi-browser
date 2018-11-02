@@ -126,6 +126,13 @@ FFmpegGlue::FFmpegGlue(FFmpegURLProtocol* protocol) {
   // Enable fast, but inaccurate seeks for MP3.
   format_context_->flags |= AVFMT_FLAG_FAST_SEEK;
 
+  // Ensures we can read out various metadata bits like vp8 alpha.
+  format_context_->flags |= AVFMT_FLAG_KEEP_SIDE_DATA;
+
+  // Ensures format parsing errors will bail out. From an audit on 11/2017, all
+  // instances were real failures. Solves bugs like http://crbug.com/710791.
+  format_context_->error_recognition |= AV_EF_EXPLODE;
+
   format_context_->pb = avio_context_.get();
 }
 
@@ -136,17 +143,10 @@ bool FFmpegGlue::OpenContext() {
   // destruction path to avoid double frees.
   open_called_ = true;
 
-  // Pass "advanced_editlist=0" in the demuxer options.
-  // TODO(jrummell): Remove this when we support post-decode discard.
-  // https://crbug.com/723537.
-  AVDictionary* dict = nullptr;
-  av_dict_set(&dict, "advanced_editlist", "0", 0);
-
   // By passing nullptr for the filename (second parameter) we are telling
   // FFmpeg to use the AVIO context we setup from the AVFormatContext structure.
   const int ret =
-      avformat_open_input(&format_context_, nullptr, nullptr, &dict);
-  av_dict_free(&dict);
+      avformat_open_input(&format_context_, nullptr, nullptr, nullptr);
 
   // If FFmpeg can't identify the file, read the first 8k and attempt to guess
   // at the container type ourselves. This way we can track emergent formats.

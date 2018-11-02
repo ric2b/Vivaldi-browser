@@ -29,7 +29,7 @@
 
 namespace blink {
 
-DEFINE_TRACE(FilterData) {
+void FilterData::Trace(blink::Visitor* visitor) {
   visitor->Trace(last_effect);
   visitor->Trace(node_map);
 }
@@ -96,7 +96,7 @@ void LayoutSVGResourceFilter::RemoveClientFromCache(
 
 FloatRect LayoutSVGResourceFilter::ResourceBoundingBox(
     const LayoutObject* object) {
-  if (SVGFilterElement* element = toSVGFilterElement(this->GetElement()))
+  if (SVGFilterElement* element = ToSVGFilterElement(GetElement()))
     return SVGLengthContext::ResolveRectangle<SVGFilterElement>(
         element, element->filterUnits()->CurrentValue()->EnumValue(),
         object->ObjectBoundingBox());
@@ -105,24 +105,23 @@ FloatRect LayoutSVGResourceFilter::ResourceBoundingBox(
 }
 
 SVGUnitTypes::SVGUnitType LayoutSVGResourceFilter::FilterUnits() const {
-  return toSVGFilterElement(GetElement())
+  return ToSVGFilterElement(GetElement())
       ->filterUnits()
       ->CurrentValue()
       ->EnumValue();
 }
 
 SVGUnitTypes::SVGUnitType LayoutSVGResourceFilter::PrimitiveUnits() const {
-  return toSVGFilterElement(GetElement())
+  return ToSVGFilterElement(GetElement())
       ->primitiveUnits()
       ->CurrentValue()
       ->EnumValue();
 }
 
 void LayoutSVGResourceFilter::PrimitiveAttributeChanged(
-    LayoutObject* object,
+    SVGFilterPrimitiveStandardAttributes& primitive,
     const QualifiedName& attribute) {
-  SVGFilterPrimitiveStandardAttributes* primitive =
-      static_cast<SVGFilterPrimitiveStandardAttributes*>(object->GetNode());
+  LayoutObject* object = primitive.GetLayoutObject();
 
   for (auto& filter : filter_) {
     FilterData* filter_data = filter.value.Get();
@@ -135,7 +134,7 @@ void LayoutSVGResourceFilter::PrimitiveAttributeChanged(
       continue;
     // Since all effects shares the same attribute value, all
     // or none of them will be changed.
-    if (!primitive->SetFilterEffectAttribute(effect, attribute))
+    if (!primitive.SetFilterEffectAttribute(effect, attribute))
       return;
     node_map->InvalidateDependentEffects(effect);
 

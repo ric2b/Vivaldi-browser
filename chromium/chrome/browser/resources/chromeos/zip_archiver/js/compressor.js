@@ -16,7 +16,7 @@
  */
 unpacker.Compressor = function(naclModule, items) {
   /**
-   * @private {!Object}
+   * @private {Object}
    * @const
    */
   this.naclModule_ = naclModule;
@@ -85,6 +85,18 @@ unpacker.Compressor = function(naclModule, items) {
    * @type {number}
    */
   this.offset_ = 0;
+
+  /**
+   * The total number of bytes of all items.
+   * @type {number}
+   */
+  this.totalSize_ = 0;
+
+  /**
+   * The total number of processed bytes.
+   * @type {number}
+   */
+  this.processedSize_ = 0;
 };
 
 /**
@@ -93,14 +105,6 @@ unpacker.Compressor = function(naclModule, items) {
  * @type {number}
  */
 unpacker.Compressor.compressorIdCounter = 1;
-
-/**
- * The queue containing compressor ids that wait for foreground page to be
- * loaded. Once this extension becomes a component extension, we don't need to
- * create an archive file on the foreground page and this also gets unnecessary.
- * @type {!Array}
- */
-unpacker.Compressor.CompressorIdQueue = [];
 
 /**
  * The default archive name.
@@ -117,7 +121,7 @@ unpacker.Compressor.prototype.getCompressorId = function() {
 };
 
 /**
- * Returns the archive file name.
+ * Returns the archive file name that depends on selected items.
  * @private
  * @return {string}
  */
@@ -137,41 +141,103 @@ unpacker.Compressor.prototype.getArchiveName_ = function() {
 };
 
 /**
+ * Returns the archive file name.
+ * @return {string}
+ */
+unpacker.Compressor.prototype.getArchiveName = function() {
+  return this.archiveName_;
+};
+
+/**
  * Starts actual compressing process.
  * Creates an archive file and requests minizip to create an archive object.
  * @param {function(!unpacker.types.CompressorId)} onSuccess
  * @param {function(!unpacker.types.CompressorId)} onError
+ * @param {function(!unpacker.types.CompressorId, number)} onProgress
+ * @param {function(!unpacker.types.CompressorId)} onCancel
  */
-unpacker.Compressor.prototype.compress = function(onSuccess, onError) {
+unpacker.Compressor.prototype.compress = function(
+    onSuccess, onError, onProgress, onCancel) {
   this.onSuccess_ = onSuccess;
   this.onError_ = onError;
+  this.onProgress_ = onProgress;
+  this.onCancel_ = onCancel;
 
   this.getArchiveFile_();
 };
 
 /**
- * Gets an archive file with write permission. Currently, this extension does
- * not have permission to create files from the background page. Thus, this
- * function first creates a foreground page and then creates an archive file in
- * it. Once this extension becomes a component extension, this process will be
- * simpler.
+ * Returns archive file entry.
+ * @return {FileEntry}
+ */
+unpacker.Compressor.prototype.archiveFileEntry = function() {
+  return this.archiveFileEntry_;
+};
+
+/**
+ * Gets an archive file with write permission.
  * @private
  */
 unpacker.Compressor.prototype.getArchiveFile_ = function() {
-  // If the foreground page already exists, create an archive file.
-  if (this.createArchiveFileForeground_) {
-    this.createArchiveFileForeground_(this.compressorId_);
-  } else {
-    // If the foreground page does not exist, push the id of this compressor to
-    // the queue so that we can resume later and create the foreground page.
-    // We need this queue because multiple compressors can wait for the
-    // foreground page to be loaded.
-    var queue = unpacker.Compressor.CompressorIdQueue;
-    queue.push(this.compressorId_);
-    if (queue.length === 1) {
-      chrome.app.window.create('../html/compressor.html', {hidden: true});
+  var compressor = this;
+  var suggestedName = compressor.archiveName_;
+
+  var saveZipFileInParentDir = function(rootEntry) {
+    // If parent directory of currently selected files is available then we
+    // deduplicate |suggestedName| and save the zip file.
+    if (!rootEntry) {
+      console.error('rootEntry of selected files is undefined');
+      compressor.onError_(compressor.compressorId_);
+      return;
     }
-  }
+
+    fileOperationUtils.deduplicateFileName(suggestedName, rootEntry)
+        .then(function(newName) {
+          compressor.archiveName_ = newName;
+          // Create an archive file.
+          return (new Promise(function(resolve, reject) {
+                   rootEntry.getFile(
+                       newName, {create: true, exclusive: true}, resolve,
+                       reject);
+                 }))
+              .then(function(zipEntry) {
+                compressor.archiveFileEntry_ = zipEntry;
+                compressor.sendCreateArchiveRequest_();
+              });
+        })
+        .catch(function(error) {
+          console.error(error);
+          compressor.onError_(compressor.compressorId_);
+        });
+  };
+
+  // Get all accessible volumes with their metadata
+  chrome.fileManagerPrivate.getVolumeMetadataList(function(volumeMetadataList) {
+
+    // Here we call chrome.fileSystem.requestFileSystem on each volume's
+    // metadata entry to be able to sucessfully execute
+    // resolveIsolatedEntries later.
+    Promise
+        .all(compressor.requestAccessPermissionForVolumes_(volumeMetadataList))
+        .then(function(result) {
+          chrome.fileManagerPrivate.resolveIsolatedEntries(
+              [compressor.items_[0].entry], function(result) {
+                if (result && result.length >= 1) {
+                  result[0].getParent(saveZipFileInParentDir);
+                } else {
+                  console.error('Failed to resolve isolated entries!');
+                  if (chrome.runtime.lastError)
+                    console.error(chrome.runtime.lastError.message);
+
+                  compressor.onError_(compressor.compressorId_);
+                }
+              });
+        })
+        .catch(function(error) {
+          console.error(error);
+          compressor.onError_(compressor.compressorId_);
+        });
+  });
 };
 
 /**
@@ -221,6 +287,7 @@ unpacker.Compressor.prototype.getSingleMetadata_ = function(entry) {
         this.metadataRequestsInProgress_.delete(entryId);
         this.pendingAddToArchiveRequests_.push(entryId);
         this.metadata_[entryId] = metadata;
+        this.totalSize_ += metadata.size;
         this.sendAddToArchiveRequest_();
       }.bind(this),
       function(error) {
@@ -302,6 +369,16 @@ unpacker.Compressor.prototype.sendAddToArchiveRequest_ = function() {
 };
 
 /**
+ * Sends a release compressor request to NaCl module. Zip Archiver releases
+ * objects obtainted in the packing process.
+ */
+unpacker.Compressor.prototype.sendReleaseCompressor = function() {
+  var request =
+      unpacker.request.createReleaseCompressorRequest(this.compressorId_);
+  this.naclModule_.postMessage(request);
+};
+
+/**
  * Sends a close archive request to minizip. minizip writes metadata of
  * the archive itself on the archive and releases objects obtainted in the
  * packing process.
@@ -309,6 +386,14 @@ unpacker.Compressor.prototype.sendAddToArchiveRequest_ = function() {
 unpacker.Compressor.prototype.sendCloseArchiveRequest = function(hasError) {
   var request =
       unpacker.request.createCloseArchiveRequest(this.compressorId_, hasError);
+  this.naclModule_.postMessage(request);
+};
+
+/**
+ * Sends a cancel archive request to minizip and interrupts zip process.
+ */
+unpacker.Compressor.prototype.sendCancelArchiveRequest = function() {
+  var request = unpacker.request.createCancelArchiveRequest(this.compressorId_);
   this.naclModule_.postMessage(request);
 };
 
@@ -431,18 +516,18 @@ unpacker.Compressor.prototype.writeChunk_ = function(
           // occurred in writing a chunk.
           callback(-1 /* length */);
           this.onError_(this.compressorId_);
-        };
+        }.bind(this);
 
         // Create a new Blob and append it to the archive file.
         var blob = new Blob([buffer], {});
         fileWriter.seek(offset);
         fileWriter.write(blob);
-      },
+      }.bind(this),
       function(event) {
         console.error(
             'Failed to create writer for ' + this.archiveFileEntry_ + '.');
         this.onError_(this.compressorId_);
-      });
+      }.bind(this));
 };
 
 /**
@@ -481,6 +566,16 @@ unpacker.Compressor.prototype.onCloseArchiveDone_ = function() {
 };
 
 /**
+ * A handler of cancel archive response. Receiving this response means that we
+ * do not expect new requests from Zip Archiver.
+ * @private
+ */
+unpacker.Compressor.prototype.onCancelArchiveDone_ = function() {
+  console.warn('Archive for "' + this.compressorId_ + '" has been canceled.');
+  this.onCancel_(this.compressorId_);
+};
+
+/**
  * Processes messages from NaCl module.
  * @param {!Object} data The data contained in the message from NaCl. Its
  *     types depend on the operation of the request.
@@ -494,10 +589,18 @@ unpacker.Compressor.prototype.processMessage = function(data, operation) {
 
     case unpacker.request.Operation.READ_FILE_CHUNK:
       this.onReadFileChunk_(data);
+      // We are updating progress in READ and WRITE part because in some cases
+      // when compression ratio is very high we will rarely get WRITE
+      // operation. Therefore we need to update in both operations.
+      this.onProgress_(
+          data.compressor_id, this.processedSize_ / this.totalSize_);
+      this.processedSize_ += parseInt(data.length);
       break;
 
     case unpacker.request.Operation.WRITE_CHUNK:
       this.onWriteChunk_(data);
+      this.onProgress_(
+          data.compressor_id, this.processedSize_ / this.totalSize_);
       break;
 
     case unpacker.request.Operation.ADD_TO_ARCHIVE_DONE:
@@ -505,7 +608,13 @@ unpacker.Compressor.prototype.processMessage = function(data, operation) {
       break;
 
     case unpacker.request.Operation.CLOSE_ARCHIVE_DONE:
+      this.sendReleaseCompressor();
       this.onCloseArchiveDone_();
+      break;
+
+    case unpacker.request.Operation.CANCEL_ARCHIVE_DONE:
+      this.sendReleaseCompressor();
+      this.onCancelArchiveDone_();
       break;
 
     case unpacker.request.Operation.COMPRESSOR_ERROR:
@@ -513,11 +622,45 @@ unpacker.Compressor.prototype.processMessage = function(data, operation) {
           'Compressor error for compressor id ' + this.compressorId_ + ': ' +
           data[unpacker.request.Key.ERROR]);  // The error contains
                                               // the '.' at the end.
+      this.sendReleaseCompressor();
       this.onError_(this.compressorId_);
       break;
 
     default:
       console.error('Invalid NaCl operation: ' + operation + '.');
+      this.sendReleaseCompressor();
       this.onError_(this.compressorId_);
   }
+};
+
+/**
+ * Requests access permissions for |volumeMetadataList| file systems.
+ * @param {!Array<!Object>} volumeMetadataList The metadata for each mounted
+ *     volume.
+ * @return {!Array<!Promise<!FileSystem>>}
+ * @private
+ */
+unpacker.Compressor.prototype.requestAccessPermissionForVolumes_ = function(
+    volumeMetadataList) {
+  var promises = [];
+  volumeMetadataList.forEach(function(volumeMetadata) {
+    if (volumeMetadata.isReadOnly)
+      return;
+
+    promises.push(new Promise(function(resolve, reject) {
+      chrome.fileSystem.requestFileSystem(
+          {
+            volumeId: volumeMetadata.volumeId,
+            writable: !volumeMetadata.isReadOnly
+          },
+          function(isolatedFileSystem) {
+            if (chrome.runtime.lastError)
+              reject(chrome.runtime.lastError.message);
+            else
+              resolve(isolatedFileSystem);
+          });
+    }));
+  });
+
+  return promises;
 };

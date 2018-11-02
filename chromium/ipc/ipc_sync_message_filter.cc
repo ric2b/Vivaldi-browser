@@ -147,7 +147,7 @@ SyncMessageFilter::SyncMessageFilter(base::WaitableEvent* shutdown_event)
       listener_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       shutdown_event_(shutdown_event) {}
 
-SyncMessageFilter::~SyncMessageFilter() {}
+SyncMessageFilter::~SyncMessageFilter() = default;
 
 void SyncMessageFilter::SendOnIOThread(Message* message) {
   if (channel_) {
@@ -185,7 +185,7 @@ void SyncMessageFilter::GetGenericRemoteAssociatedInterface(
     // Attach the associated interface to a disconnected pipe, so that the
     // associated interface pointer can be used to make calls (which are
     // dropped).
-    mojo::GetIsolatedInterface(std::move(handle));
+    mojo::AssociateWithDisconnectedPipe(std::move(handle));
     return;
   }
 

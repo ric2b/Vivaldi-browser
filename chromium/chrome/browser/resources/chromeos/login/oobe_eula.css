@@ -8,6 +8,13 @@ a {
   width: fit-content;
 }
 
+#crosEulaFrame {
+  /* Works around the problem that webview height is not calculated
+   * correctly in flex layout. 207px is derived from en-US locale under
+   * the default 640px height of #eulaDialog. */
+  height: 207px;
+}
+
 #crosEulaFrame,
 #installationSettings,
 #logging {
@@ -41,10 +48,6 @@ a {
 
 #usageStatsLabelContainer {
   -webkit-margin-start: 16px;
-}
-
-#usageStatsLabelContainer label {
-  color: rgba(0, 0, 0, .54);
   line-height: 20px;
 }
 

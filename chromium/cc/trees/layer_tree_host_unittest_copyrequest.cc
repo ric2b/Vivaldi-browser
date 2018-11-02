@@ -9,14 +9,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
-#include "cc/output/direct_renderer.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 
@@ -62,7 +62,8 @@ class LayerTreeHostCopyRequestTestMultipleRequests
     int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
-        child->RequestCopyOfOutput(viz::CopyOutputRequest::CreateBitmapRequest(
+        child->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
             base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::
                                CopyOutputCallback,
                            base::Unretained(this), 0)));
@@ -79,16 +80,19 @@ class LayerTreeHostCopyRequestTestMultipleRequests
         EXPECT_EQ(1u, callbacks_.size());
         EXPECT_EQ(gfx::Size(10, 10).ToString(), callbacks_[0].ToString());
 
-        child->RequestCopyOfOutput(viz::CopyOutputRequest::CreateBitmapRequest(
+        child->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
             base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::
                                CopyOutputCallback,
                            base::Unretained(this), 1)));
-        root->RequestCopyOfOutput(viz::CopyOutputRequest::CreateBitmapRequest(
+        root->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
             base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::
                                CopyOutputCallback,
                            base::Unretained(this), 2)));
         grand_child->RequestCopyOfOutput(
-            viz::CopyOutputRequest::CreateBitmapRequest(
+            std::make_unique<viz::CopyOutputRequest>(
+                viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
                 base::BindOnce(&LayerTreeHostCopyRequestTestMultipleRequests::
                                    CopyOutputCallback,
                                base::Unretained(this), 3)));
@@ -121,21 +125,21 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   void CopyOutputCallback(size_t id,
                           std::unique_ptr<viz::CopyOutputResult> result) {
     EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
-    EXPECT_TRUE(result->HasBitmap());
-    std::unique_ptr<SkBitmap> bitmap = result->TakeBitmap();
-    EXPECT_EQ(result->size().ToString(),
-              gfx::Size(bitmap->width(), bitmap->height()).ToString());
+    EXPECT_FALSE(result->IsEmpty());
+    const SkBitmap& bitmap = result->AsSkBitmap();
+    EXPECT_TRUE(bitmap.readyToDraw());
+    EXPECT_EQ(result->size(), gfx::Size(bitmap.width(), bitmap.height()));
     callbacks_[id] = result->size();
   }
 
   void AfterTest() override { EXPECT_EQ(4u, callbacks_.size()); }
 
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     if (!use_gl_renderer_) {
       return FakeOutputSurface::CreateSoftware(
-          base::WrapUnique(new SoftwareOutputDevice));
+          std::make_unique<viz::SoftwareOutputDevice>());
     }
 
     scoped_refptr<TestContextProvider> display_context_provider =
@@ -220,7 +224,8 @@ class LayerTreeHostCopyRequestCompletionCausesCommit
     int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
-        layer_->RequestCopyOfOutput(viz::CopyOutputRequest::CreateBitmapRequest(
+        layer_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
             base::BindOnce(&LayerTreeHostCopyRequestCompletionCausesCommit::
                                CopyOutputCallback)));
         break;
@@ -277,19 +282,23 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
     int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
-        main_destroyed_->RequestCopyOfOutput(
-            viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+        main_destroyed_->RequestCopyOfOutput(std::make_unique<
+                                             viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+            base::BindOnce(
                 &LayerTreeHostCopyRequestTestLayerDestroyed::CopyOutputCallback,
                 base::Unretained(this))));
-        impl_destroyed_->RequestCopyOfOutput(
-            viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+        impl_destroyed_->RequestCopyOfOutput(std::make_unique<
+                                             viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+            base::BindOnce(
                 &LayerTreeHostCopyRequestTestLayerDestroyed::CopyOutputCallback,
                 base::Unretained(this))));
         EXPECT_EQ(0, callback_count_);
 
         // Destroy the main thread layer right away.
         main_destroyed_->RemoveFromParent();
-        main_destroyed_ = NULL;
+        main_destroyed_ = nullptr;
 
         // Should callback with a NULL bitmap.
         EXPECT_EQ(1, callback_count_);
@@ -307,7 +316,7 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
 
         // Destroy the impl thread layer.
         impl_destroyed_->RemoveFromParent();
-        impl_destroyed_ = NULL;
+        impl_destroyed_ = nullptr;
 
         // No callback yet because it's on the impl side.
         EXPECT_EQ(1, callback_count_);
@@ -368,8 +377,9 @@ class LayerTreeHostCopyRequestTestInHiddenSubtree
   }
 
   void AddCopyRequest(Layer* layer) {
-    layer->RequestCopyOfOutput(
-        viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+    layer->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+        base::BindOnce(
             &LayerTreeHostCopyRequestTestInHiddenSubtree::CopyOutputCallback,
             base::Unretained(this))));
   }
@@ -482,8 +492,9 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
   void BeginTest() override {
     PostSetNeedsCommitToMainThread();
 
-    copy_layer_->RequestCopyOfOutput(
-        viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+    copy_layer_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+        base::BindOnce(
             &LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest::
                 CopyOutputCallback,
             base::Unretained(this))));
@@ -497,7 +508,7 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
 
   void DisplayWillDrawAndSwapOnThread(
       bool will_draw_and_swap,
-      const RenderPassList& render_passes) override {
+      const viz::RenderPassList& render_passes) override {
     EXPECT_TRUE(will_draw_and_swap) << did_swap_;
     if (did_swap_) {
       // TODO(crbug.com/564832): Ignore the extra frame that occurs due to copy
@@ -513,7 +524,8 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
   }
 
   void DisplayDidDrawAndSwapOnThread() override {
-    DirectRenderer* renderer = frame_sink_->display()->renderer_for_testing();
+    viz::DirectRenderer* renderer =
+        frame_sink_->display()->renderer_for_testing();
 
     // |parent| owns a surface, but it was hidden and not part of the copy
     // request so it should not allocate any resource.
@@ -537,8 +549,8 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
 
   void AfterTest() override { EXPECT_TRUE(did_swap_); }
 
-  RenderPassId parent_render_pass_id = 0;
-  RenderPassId copy_layer_render_pass_id = 0;
+  viz::RenderPassId parent_render_pass_id = 0;
+  viz::RenderPassId copy_layer_render_pass_id = 0;
   viz::TestLayerTreeFrameSink* frame_sink_ = nullptr;
   bool did_swap_ = false;
   FakeContentLayerClient client_;
@@ -576,8 +588,9 @@ class LayerTreeHostCopyRequestTestClippedOut
   void BeginTest() override {
     PostSetNeedsCommitToMainThread();
 
-    copy_layer_->RequestCopyOfOutput(
-        viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+    copy_layer_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+        base::BindOnce(
             &LayerTreeHostCopyRequestTestClippedOut::CopyOutputCallback,
             base::Unretained(this))));
   }
@@ -632,9 +645,11 @@ class LayerTreeHostCopyRequestTestScaledLayer
     PostSetNeedsCommitToMainThread();
 
     std::unique_ptr<viz::CopyOutputRequest> request =
-        viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
-            &LayerTreeHostCopyRequestTestScaledLayer::CopyOutputCallback,
-            base::Unretained(this)));
+        std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+            base::BindOnce(
+                &LayerTreeHostCopyRequestTestScaledLayer::CopyOutputCallback,
+                base::Unretained(this)));
     request->set_area(gfx::Rect(5, 5));
     copy_layer_->RequestCopyOfOutput(std::move(request));
   }
@@ -673,8 +688,9 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
   }
 
   void AddCopyRequest(Layer* layer) {
-    layer->RequestCopyOfOutput(
-        viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+    layer->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+        base::BindOnce(
             &LayerTreeHostTestAsyncTwoReadbacksWithoutDraw::CopyOutputCallback,
             base::Unretained(this))));
   }
@@ -742,7 +758,7 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestAsyncTwoReadbacksWithoutDraw);
 class LayerTreeHostCopyRequestTestDeleteTexture
     : public LayerTreeHostCopyRequestTest {
  protected:
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     display_context_provider_ = TestContextProvider::Create();
@@ -769,7 +785,8 @@ class LayerTreeHostCopyRequestTestDeleteTexture
       std::unique_ptr<viz::CopyOutputResult> result) {
     EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_EQ(gfx::Size(10, 10).ToString(), result->size().ToString());
-    EXPECT_TRUE(result->HasTexture());
+    EXPECT_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
+    EXPECT_NE(result->GetTextureResult(), nullptr);
 
     // Save the result for later.
     EXPECT_FALSE(result_);
@@ -780,7 +797,8 @@ class LayerTreeHostCopyRequestTestDeleteTexture
   }
 
   void InsertCopyRequest() {
-    copy_layer_->RequestCopyOfOutput(viz::CopyOutputRequest::CreateRequest(
+    copy_layer_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
         base::BindOnce(&LayerTreeHostCopyRequestTestDeleteTexture::
                            ReceiveCopyRequestOutputAndCommit,
                        base::Unretained(this))));
@@ -869,7 +887,7 @@ class LayerTreeHostCopyRequestTestCountTextures
     settings->resource_settings.texture_id_allocation_chunk_size = 1;
   }
 
-  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     // These tests expect the LayerTreeHostImpl to share a context with
@@ -970,18 +988,18 @@ class LayerTreeHostCopyRequestTestCreatesTexture
  protected:
   void RequestCopy(Layer* layer) override {
     // Request a normal texture copy. This should create a new texture.
-    copy_layer_->RequestCopyOfOutput(
-        viz::CopyOutputRequest::CreateRequest(base::BindOnce(
+    copy_layer_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
+        base::BindOnce(
             &LayerTreeHostCopyRequestTestCreatesTexture::CopyOutputCallback,
             base::Unretained(this))));
   }
 
   void CopyOutputCallback(std::unique_ptr<viz::CopyOutputResult> result) {
     EXPECT_FALSE(result->IsEmpty());
-    EXPECT_TRUE(result->HasTexture());
-
-    viz::TextureMailbox mailbox;
-    result->TakeTexture(&mailbox, &release_);
+    EXPECT_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
+    ASSERT_NE(nullptr, result->GetTextureResult());
+    release_ = result->TakeTextureOwnership();
     EXPECT_TRUE(release_);
   }
 
@@ -1004,27 +1022,31 @@ class LayerTreeHostCopyRequestTestProvideTexture
  protected:
   void BeginTest() override {
     external_context_provider_ = TestContextProvider::Create();
-    EXPECT_TRUE(external_context_provider_->BindToCurrentThread());
+    EXPECT_EQ(external_context_provider_->BindToCurrentThread(),
+              gpu::ContextResult::kSuccess);
     LayerTreeHostCopyRequestTestCountTextures::BeginTest();
   }
 
   void CopyOutputCallback(std::unique_ptr<viz::CopyOutputResult> result) {
     EXPECT_FALSE(result->IsEmpty());
-    EXPECT_TRUE(result->HasTexture());
+    EXPECT_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
+    ASSERT_NE(nullptr, result->GetTextureResult());
 
-    viz::TextureMailbox mailbox;
-    std::unique_ptr<viz::SingleReleaseCallback> release;
-    result->TakeTexture(&mailbox, &release);
-    EXPECT_FALSE(release);
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback =
+        result->TakeTextureOwnership();
+    ASSERT_TRUE(release_callback);
+    release_callback->Run(gpu::SyncToken(), false);
   }
 
   void RequestCopy(Layer* layer) override {
     // Request a copy to a provided texture. This should not create a new
     // texture.
     std::unique_ptr<viz::CopyOutputRequest> request =
-        viz::CopyOutputRequest::CreateRequest(base::BindOnce(
-            &LayerTreeHostCopyRequestTestProvideTexture::CopyOutputCallback,
-            base::Unretained(this)));
+        std::make_unique<viz::CopyOutputRequest>(
+            viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
+            base::BindOnce(
+                &LayerTreeHostCopyRequestTestProvideTexture::CopyOutputCallback,
+                base::Unretained(this)));
 
     gpu::gles2::GLES2Interface* gl = external_context_provider_->ContextGL();
     gpu::Mailbox mailbox;
@@ -1034,16 +1056,15 @@ class LayerTreeHostCopyRequestTestProvideTexture
     gl->ShallowFlushCHROMIUM();
     gl->GenSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
 
-    request->SetTextureMailbox(
-        viz::TextureMailbox(mailbox, sync_token_, GL_TEXTURE_2D));
-    EXPECT_TRUE(request->has_texture_mailbox());
+    request->SetMailbox(mailbox, sync_token_);
+    EXPECT_TRUE(request->has_mailbox());
 
     copy_layer_->RequestCopyOfOutput(std::move(request));
   }
 
   void AfterTest() override {
-    // Expect the compositor to have waited for the sync point in the provided
-    // viz::TextureMailbox.
+    // Expect the compositor to have waited for the sync point provided with the
+    // mailbox.
     EXPECT_EQ(sync_token_, waited_sync_token_after_readback_);
     // Except the copy to have *not* made another texture.
     EXPECT_EQ(num_textures_without_readback_, num_textures_with_readback_);
@@ -1096,7 +1117,8 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
         // Put a copy request on the layer, but then don't allow any
         // drawing to take place.
         std::unique_ptr<viz::CopyOutputRequest> request =
-            viz::CopyOutputRequest::CreateRequest(
+            std::make_unique<viz::CopyOutputRequest>(
+                viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
                 base::BindOnce(&LayerTreeHostCopyRequestTestDestroyBeforeCopy::
                                    CopyOutputCallback,
                                base::Unretained(this)));
@@ -1174,7 +1196,8 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
         // Put a copy request on the layer, but then don't allow any
         // drawing to take place.
         std::unique_ptr<viz::CopyOutputRequest> request =
-            viz::CopyOutputRequest::CreateRequest(
+            std::make_unique<viz::CopyOutputRequest>(
+                viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
                 base::BindOnce(&LayerTreeHostCopyRequestTestShutdownBeforeCopy::
                                    CopyOutputCallback,
                                base::Unretained(this)));
@@ -1233,8 +1256,9 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
   void DidCommit() override {
     // Send a copy request after the first commit.
     if (layer_tree_host()->SourceFrameNumber() == 1) {
-      child_->RequestCopyOfOutput(
-          viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+      child_->RequestCopyOfOutput(std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          base::BindOnce(
               &LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest::
                   CopyOutputCallback,
               base::Unretained(this))));

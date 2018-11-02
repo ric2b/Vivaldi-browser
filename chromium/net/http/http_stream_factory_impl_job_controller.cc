@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -560,17 +559,19 @@ void HttpStreamFactoryImpl::JobController::ResumeMainJobLater(
     const base::TimeDelta& delay) {
   net_log_.AddEvent(NetLogEventType::HTTP_STREAM_JOB_DELAYED,
                     NetLog::Int64Callback("delay", delay.InMilliseconds()));
+  resume_main_job_callback_.Reset(
+      base::BindOnce(&HttpStreamFactoryImpl::JobController::ResumeMainJob,
+                     ptr_factory_.GetWeakPtr()));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&HttpStreamFactoryImpl::JobController::ResumeMainJob,
-                 ptr_factory_.GetWeakPtr()),
-      delay);
+      FROM_HERE, resume_main_job_callback_.callback(), delay);
 }
 
 void HttpStreamFactoryImpl::JobController::ResumeMainJob() {
-  if (main_job_is_resumed_)
-    return;
+  DCHECK(main_job_);
 
+  if (main_job_is_resumed_) {
+    return;
+  }
   main_job_is_resumed_ = true;
   main_job_->net_log().AddEvent(
       NetLogEventType::HTTP_STREAM_JOB_RESUMED,
@@ -802,7 +803,7 @@ int HttpStreamFactoryImpl::JobController::DoCreateJobs() {
   // Create an alternative job if alternative service is set up for this domain.
   alternative_service_info_ =
       GetAlternativeServiceInfoFor(request_info_, delegate_, stream_type_);
-  QuicVersion quic_version = QUIC_VERSION_UNSUPPORTED;
+  QuicTransportVersion quic_version = QUIC_VERSION_UNSUPPORTED;
   if (alternative_service_info_.protocol() == kProtoQUIC) {
     quic_version =
         SelectQuicVersion(alternative_service_info_.advertised_versions());
@@ -984,7 +985,8 @@ void HttpStreamFactoryImpl::JobController::OnAlternativeProxyJobFailed(
 
   // Need to mark alt proxy as broken regardless of whether the job is bound.
   ProxyDelegate* proxy_delegate = session_->context().proxy_delegate;
-  if (proxy_delegate) {
+  if (proxy_delegate && net_error != ERR_NETWORK_CHANGED &&
+      net_error != ERR_INTERNET_DISCONNECTED) {
     proxy_delegate->OnAlternativeProxyBroken(
         alternative_job_->alternative_proxy_server());
   }
@@ -1000,7 +1002,7 @@ void HttpStreamFactoryImpl::JobController::ReportBrokenAlternativeService() {
 
   if (error_to_report == ERR_NETWORK_CHANGED ||
       error_to_report == ERR_INTERNET_DISCONNECTED) {
-    // No need to mark alternative service or proxy as broken.
+    // No need to mark alternative service as broken.
     return;
   }
 
@@ -1153,11 +1155,18 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceInfoInternal(
     QuicServerId server_id(mapped_origin, request_info.privacy_mode);
 
     HostPortPair destination(alternative_service_info.host_port_pair());
+    if (server_id.host() != destination.host() &&
+        !session_->params().quic_allow_remote_alt_svc) {
+      continue;
+    }
     ignore_result(ApplyHostMappingRules(original_url, &destination));
 
     if (session_->quic_stream_factory()->CanUseExistingSession(server_id,
                                                                destination))
       return alternative_service_info;
+
+    if (!IsQuicWhitelistedForHost(destination.host()))
+      continue;
 
     // Cache this entry if we don't have a non-broken Alt-Svc yet.
     if (first_alternative_service_info.protocol() == kProtoUnknown)
@@ -1171,15 +1180,15 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceInfoInternal(
   return first_alternative_service_info;
 }
 
-QuicVersion HttpStreamFactoryImpl::JobController::SelectQuicVersion(
-    const QuicVersionVector& advertised_versions) {
-  const QuicVersionVector& supported_versions =
+QuicTransportVersion HttpStreamFactoryImpl::JobController::SelectQuicVersion(
+    const QuicTransportVersionVector& advertised_versions) {
+  const QuicTransportVersionVector& supported_versions =
       session_->params().quic_supported_versions;
   if (advertised_versions.empty())
     return supported_versions[0];
 
-  for (const QuicVersion& supported : supported_versions) {
-    for (const QuicVersion& advertised : advertised_versions) {
+  for (const QuicTransportVersion& supported : supported_versions) {
+    for (const QuicTransportVersion& advertised : advertised_versions) {
       if (supported == advertised) {
         DCHECK_NE(QUIC_VERSION_UNSUPPORTED, supported);
         return supported;
@@ -1311,6 +1320,13 @@ int HttpStreamFactoryImpl::JobController::ReconsiderProxyAfterError(Job* job,
     bound_job_ = nullptr;
     alternative_job_.reset();
     main_job_.reset();
+    // Also resets states that related to the old main job. In particular,
+    // cancels |resume_main_job_callback_| so there won't be any delayed
+    // ResumeMainJob() left in the task queue.
+    resume_main_job_callback_.Cancel();
+    main_job_is_resumed_ = false;
+    main_job_is_blocked_ = false;
+
     next_state_ = STATE_RESOLVE_PROXY_COMPLETE;
   } else {
     // If ReconsiderProxyAfterError() failed synchronously, it means
@@ -1320,6 +1336,17 @@ int HttpStreamFactoryImpl::JobController::ReconsiderProxyAfterError(Job* job,
     rv = error;
   }
   return rv;
+}
+
+bool HttpStreamFactoryImpl::JobController::IsQuicWhitelistedForHost(
+    const std::string& host) {
+  const base::flat_set<std::string>& host_whitelist =
+      session_->params().quic_host_whitelist;
+  if (host_whitelist.empty())
+    return true;
+
+  std::string lowered_host = base::ToLowerASCII(host);
+  return base::ContainsKey(host_whitelist, lowered_host);
 }
 
 }  // namespace net

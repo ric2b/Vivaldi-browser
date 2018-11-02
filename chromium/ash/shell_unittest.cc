@@ -5,6 +5,7 @@
 #include "ash/shell.h"
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "ash/display/mouse_cursor_event_filter.h"
@@ -108,8 +109,8 @@ void ExpectAllContainers() {
 
 class ModalWindow : public views::WidgetDelegateView {
  public:
-  ModalWindow() {}
-  ~ModalWindow() override {}
+  ModalWindow() = default;
+  ~ModalWindow() override = default;
 
   // Overridden from views::WidgetDelegate:
   bool CanResize() const override { return true; }
@@ -124,8 +125,8 @@ class ModalWindow : public views::WidgetDelegateView {
 
 class SimpleMenuDelegate : public ui::SimpleMenuModel::Delegate {
  public:
-  SimpleMenuDelegate() {}
-  ~SimpleMenuDelegate() override {}
+  SimpleMenuDelegate() = default;
+  ~SimpleMenuDelegate() override = default;
 
   bool IsCommandIdChecked(int command_id) const override { return false; }
 
@@ -290,7 +291,7 @@ TEST_F(ShellTest, CreateModalWindow) {
 
 class TestModalDialogDelegate : public views::DialogDelegateView {
  public:
-  TestModalDialogDelegate() {}
+  TestModalDialogDelegate() = default;
 
   // Overridden from views::WidgetDelegate:
   ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_SYSTEM; }
@@ -538,8 +539,8 @@ TEST_F(ShellTest, KeyboardCreation) {
 // this will crash.
 class ShellTest2 : public AshTestBase {
  public:
-  ShellTest2() {}
-  ~ShellTest2() override {}
+  ShellTest2() = default;
+  ~ShellTest2() override = default;
 
  protected:
   std::unique_ptr<aura::Window> window_;
@@ -565,7 +566,7 @@ TEST_F(ShellLocalStateTest, LocalState) {
 
   // Prefs service wrapper code creates a PrefService.
   std::unique_ptr<TestingPrefServiceSimple> local_state =
-      base::MakeUnique<TestingPrefServiceSimple>();
+      std::make_unique<TestingPrefServiceSimple>();
   Shell::RegisterLocalStatePrefs(local_state->registry());
   TestingPrefServiceSimple* local_state_ptr = local_state.get();
   ShellTestApi().OnLocalStatePrefServiceInitialized(std::move(local_state));

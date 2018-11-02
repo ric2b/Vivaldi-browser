@@ -6,11 +6,9 @@
 #define SelectionForUndoStep_h
 
 #include "base/macros.h"
+#include "core/editing/Forward.h"
 #include "core/editing/Position.h"
-#include "core/editing/SelectionTemplate.h"
 #include "core/editing/TextAffinity.h"
-#include "core/editing/VisiblePosition.h"
-#include "core/editing/VisibleSelection.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -57,7 +55,7 @@ class SelectionForUndoStep final {
 
   bool IsValidFor(const Document&) const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // |base_| and |extent_| can be disconnected from document.
@@ -88,7 +86,7 @@ class SelectionForUndoStep::Builder final {
   Builder& SetBaseAndExtentAsForwardSelection(const Position& base,
                                               const Position& extent);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   SelectionForUndoStep selection_;

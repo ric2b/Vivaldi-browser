@@ -4,7 +4,6 @@
 
 #include "net/spdy/chromium/spdy_log_util.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "net/http/http_log_util.h"
@@ -19,7 +18,7 @@ SpdyString ElideGoAwayDebugDataForNetLog(NetLogCaptureMode capture_mode,
     return debug_data.as_string();
   }
 
-  return SpdyString("[") + base::SizeTToString(debug_data.size()) +
+  return SpdyString("[") + base::NumberToString(debug_data.size()) +
          SpdyString(" bytes were stripped]");
 }
 

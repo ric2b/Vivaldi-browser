@@ -23,7 +23,7 @@ namespace internal {
 class ComboboxModelAdapter;
 class PermissionCombobox;
 class PermissionMenuButton;
-}
+}  // namespace internal
 
 namespace test {
 class PageInfoBubbleViewTestApi;
@@ -34,7 +34,7 @@ class GridLayout;
 class ImageView;
 class Label;
 class View;
-}
+}  // namespace views
 
 // A |PermissionSelectorRow| is a row in the Page Info bubble that shows a
 // permission that a site can have ambient access to, and allows the user to
@@ -50,9 +50,19 @@ class PermissionSelectorRow {
                         views::GridLayout* layout);
   virtual ~PermissionSelectorRow();
 
+  // Retrieve the minimum height a |PermissionSelectorRow| can be.
+  static int MinHeightForPermissionRow();
+
   void AddObserver(PermissionSelectorRowObserver* observer);
 
   void PermissionChanged(const PageInfoUI::PermissionInfo& permission);
+
+  // Returns the preferred width for the currently selected combobox option
+  // (unchanged by any minimum width set using SetMinComboboxWidth()).
+  int GetComboboxWidth() const;
+
+  // Sets the minimum width for |combobox_|.
+  void SetMinComboboxWidth(int width);
 
  private:
   friend class test::PageInfoBubbleViewTestApi;

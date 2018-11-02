@@ -81,8 +81,7 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
 
 // Tests that chrome://version renders and contains correct version number and
 // user agent string.
-// TODO(crbug.com/734079): Re-enable this test.
-- (void)DISABLED_testVersion {
+- (void)testVersion {
   LoadWebUIUrl(kChromeUIVersionHost);
 
   // Verify that app version is present on the page.
@@ -96,7 +95,7 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
 }
 
 // Tests that chrome://physical-web renders and the page title is present.
-// TODO(crbug.com/734079): Re-enable this test.
+// TODO(crbug.com/760104): Re-enable this test once physical web is re-enabled.
 - (void)DISABLED_testPhysicalWeb {
   // Enable the Physical Web via Chrome variation.
   base::FieldTrialList::CreateFieldTrial("PhysicalWebEnabled", "Enabled");
@@ -109,9 +108,9 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
   [ChromeEarlGrey waitForWebViewContainingText:pageTitle];
 }
 
-// Tests that clicking on a link for a native page from chrome://chrome-urls
-// navigates to that page.
-- (void)testChromeURLNavigateToNativePage {
+// Tests that clicking on a chrome://terms link from chrome://chrome-urls
+// navigates to terms page.
+- (void)testChromeURLNavigateToTerms {
   LoadWebUIUrl(kChromeUIChromeURLsHost);
 
   // Tap on chrome://terms link on the page.
@@ -176,6 +175,8 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
     const char* host = kChromeHostURLs[i];
     // Exclude non-WebUI pages, as they do not go through a "loading" phase as
     // expected in LoadWebUIUrl.
+    // TODO(crbug.com/753599): Remove the checking of BookmarksHost when clean
+    // up.
     if (host == kChromeUIBookmarksHost || host == kChromeUINewTabHost) {
       continue;
     }

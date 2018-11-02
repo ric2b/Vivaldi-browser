@@ -31,6 +31,7 @@
 #include <memory>
 #include "modules/webdatabase/DatabaseBasicTypes.h"
 #include "modules/webdatabase/SQLStatement.h"
+#include "modules/webdatabase/SQLStatementBackend.h"
 #include "modules/webdatabase/SQLTransactionStateMachine.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Deque.h"
@@ -42,7 +43,6 @@ namespace blink {
 class Database;
 class SQLErrorData;
 class SQLiteTransaction;
-class SQLStatementBackend;
 class SQLTransaction;
 class SQLTransactionBackend;
 class SQLValue;
@@ -51,7 +51,7 @@ class SQLTransactionWrapper
     : public GarbageCollectedFinalized<SQLTransactionWrapper> {
  public:
   virtual ~SQLTransactionWrapper() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
   virtual bool PerformPreflight(SQLTransactionBackend*) = 0;
   virtual bool PerformPostflight(SQLTransactionBackend*) = 0;
   virtual SQLErrorData* SqlError() const = 0;
@@ -68,7 +68,7 @@ class SQLTransactionBackend final
                                        bool read_only);
 
   ~SQLTransactionBackend() override;
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void LockAcquired();
   void PerformNextStep();

@@ -42,10 +42,10 @@ struct CORE_EXPORT NGInlineItemResult {
 
   // ShapeResult for text items. Maybe different from NGInlineItem if re-shape
   // is needed in the line breaker.
-  RefPtr<const ShapeResult> shape_result;
+  scoped_refptr<const ShapeResult> shape_result;
 
   // NGLayoutResult for atomic inline items.
-  RefPtr<NGLayoutResult> layout_result;
+  scoped_refptr<NGLayoutResult> layout_result;
 
   // Margins for atomic inline items and open/close tags.
   NGBoxStrut margins;
@@ -53,6 +53,12 @@ struct CORE_EXPORT NGInlineItemResult {
   // Borders/padding for open tags.
   LayoutUnit borders_paddings_block_start;
   LayoutUnit borders_paddings_block_end;
+
+  // The amount of expansion for justification.
+  // Not used in NG paint, only to copy to InlineTextBox::SetExpansion().
+  // TODO(layout-dev): crbug.com/714962 Remove once fragment painting is enabled
+  // by default.
+  int expansion = 0;
 
   // Create a box when the box is empty, for open/close tags.
   bool needs_box_when_empty = false;
@@ -78,6 +84,10 @@ struct CORE_EXPORT NGInlineItemResult {
                      unsigned index,
                      unsigned start,
                      unsigned end);
+
+#if DCHECK_IS_ON()
+  void CheckConsistency() const;
+#endif
 };
 
 // Represents a set of NGInlineItemResult that form a line box.
@@ -123,21 +133,48 @@ class CORE_EXPORT NGLineInfo {
 
   LayoutUnit TextIndent() const { return text_indent_; }
 
-  LayoutUnit LineLeft() const { return line_left_; }
+  NGBfcOffset LineBfcOffset() const { return line_bfc_offset_; }
   LayoutUnit AvailableWidth() const { return available_width_; }
-  LayoutUnit LineTop() const { return line_top_; }
-  void SetLineLocation(LayoutUnit line_left,
-                       LayoutUnit available_width,
-                       LayoutUnit line_top);
+  LayoutUnit Width() const { return width_; }
+  void SetLineBfcOffset(NGBfcOffset line_bfc_offset,
+                        LayoutUnit available_width,
+                        LayoutUnit width);
+
+  // Start/end text offset of this line.
+  unsigned StartOffset() const { return start_offset_; }
+  unsigned EndOffset() const { return end_offset_; }
+  void SetStartOffset(unsigned offset) { start_offset_ = offset; }
+  void SetEndOffset(unsigned offset) { end_offset_ = offset; }
+
+  // The base direction of this line for the bidi algorithm.
+  TextDirection BaseDirection() const { return base_direction_; }
+  void SetBaseDirection(TextDirection direction) {
+    base_direction_ = direction;
+  }
+
+  // ShapeResult to append to the line end. Used by 'text-overflow: ellipsis'.
+  scoped_refptr<ShapeResult>& LineEndShapeResult() {
+    return line_end_shape_result_;
+  }
+  scoped_refptr<const ComputedStyle>& LineEndStyle() { return line_end_style_; }
+  void SetLineEndShapeResult(scoped_refptr<ShapeResult>,
+                             scoped_refptr<const ComputedStyle>);
 
  private:
   const ComputedStyle* line_style_ = nullptr;
   NGInlineItemResults results_;
+  scoped_refptr<ShapeResult> line_end_shape_result_;
+  scoped_refptr<const ComputedStyle> line_end_style_;
 
-  LayoutUnit line_left_;
+  NGBfcOffset line_bfc_offset_;
   LayoutUnit available_width_;
-  LayoutUnit line_top_;
+  LayoutUnit width_;
   LayoutUnit text_indent_;
+
+  unsigned start_offset_;
+  unsigned end_offset_;
+
+  TextDirection base_direction_ = TextDirection::kLtr;
 
   bool use_first_line_style_ = false;
   bool is_last_line_ = false;

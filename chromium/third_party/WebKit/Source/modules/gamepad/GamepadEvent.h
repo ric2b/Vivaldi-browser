@@ -31,7 +31,7 @@ class GamepadEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   GamepadEvent(const AtomicString& type,

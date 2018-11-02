@@ -8,7 +8,6 @@ import android.Manifest;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.AccountManagerCallback;
-import android.accounts.AccountManagerFuture;
 import android.accounts.AuthenticatorDescription;
 import android.accounts.AuthenticatorException;
 import android.accounts.OperationCanceledException;
@@ -95,12 +94,10 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
             return;
         }
 
-        if (GoogleApiAvailability.getInstance().isUserResolvableError(resultCode)) {
-            throw new GmsAvailabilityException(
-                    String.format("Can't use Google Play Services: %s",
-                            GoogleApiAvailability.getInstance().getErrorString(resultCode)),
-                    resultCode);
-        }
+        throw new GmsAvailabilityException(
+                String.format("Can't use Google Play Services: %s",
+                        GoogleApiAvailability.getInstance().getErrorString(resultCode)),
+                resultCode);
     }
 
     @Override
@@ -204,32 +201,24 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
         ThreadUtils.assertOnUiThread();
         if (!hasManageAccountsPermission()) {
             if (callback != null) {
-                ThreadUtils.postOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        callback.onResult(false);
-                    }
-                });
+                ThreadUtils.postOnUiThread(() -> callback.onResult(false));
             }
             return;
         }
 
-        AccountManagerCallback<Bundle> realCallback = new AccountManagerCallback<Bundle>() {
-            @Override
-            public void run(AccountManagerFuture<Bundle> future) {
-                Bundle bundle = null;
-                try {
-                    bundle = future.getResult();
-                } catch (AuthenticatorException | IOException e) {
-                    Log.e(TAG, "Error while update credentials: ", e);
-                } catch (OperationCanceledException e) {
-                    Log.w(TAG, "Updating credentials was cancelled.");
-                }
-                boolean success = bundle != null
-                        && bundle.getString(AccountManager.KEY_ACCOUNT_TYPE) != null;
-                if (callback != null) {
-                    callback.onResult(success);
-                }
+        AccountManagerCallback<Bundle> realCallback = future -> {
+            Bundle bundle = null;
+            try {
+                bundle = future.getResult();
+            } catch (AuthenticatorException | IOException e) {
+                Log.e(TAG, "Error while update credentials: ", e);
+            } catch (OperationCanceledException e) {
+                Log.w(TAG, "Updating credentials was cancelled.");
+            }
+            boolean success =
+                    bundle != null && bundle.getString(AccountManager.KEY_ACCOUNT_TYPE) != null;
+            if (callback != null) {
+                callback.onResult(success);
             }
         };
         // Android 4.4 throws NullPointerException if null is passed

@@ -5,8 +5,7 @@
 #ifndef MEDIA_CAPTURE_CONTENT_ANIMATED_CONTENT_SAMPLER_H_
 #define MEDIA_CAPTURE_CONTENT_ANIMATED_CONTENT_SAMPLER_H_
 
-#include <deque>
-
+#include "base/containers/circular_deque.h"
 #include "base/time/time.h"
 #include "media/capture/capture_export.h"
 #include "ui/gfx/geometry/rect.h"
@@ -26,6 +25,9 @@ class CAPTURE_EXPORT AnimatedContentSampler {
  public:
   explicit AnimatedContentSampler(base::TimeDelta min_capture_period);
   ~AnimatedContentSampler();
+
+  // Sets a new minimum capture period.
+  void SetMinCapturePeriod(base::TimeDelta period);
 
   // Get/Set the target sampling period.  This is used to determine whether to
   // subsample the frames of animated content.
@@ -77,7 +79,7 @@ class CAPTURE_EXPORT AnimatedContentSampler {
     Observation(const gfx::Rect& d, base::TimeTicks e)
         : damage_rect(d), event_time(e) {}
   };
-  typedef std::deque<Observation> ObservationFifo;
+  using ObservationFifo = base::circular_deque<Observation>;
 
   // Adds an observation to |observations_|, and prunes-out the old ones.
   void AddObservation(const gfx::Rect& damage_rect, base::TimeTicks event_time);
@@ -111,7 +113,7 @@ class CAPTURE_EXPORT AnimatedContentSampler {
       base::TimeDelta min_capture_period);
 
   // The client expects frame timestamps to be at least this far apart.
-  const base::TimeDelta min_capture_period_;
+  base::TimeDelta min_capture_period_;
 
   // A recent history of observations in chronological order, maintained by
   // AddObservation().

@@ -21,17 +21,39 @@ class KEYBOARD_EXPORT KeyboardControllerObserver {
   virtual ~KeyboardControllerObserver() {}
 
   // Called when the keyboard bounds or visibility are about to change.
-  virtual void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) = 0;
+  // DEPRECATED - please use one of the other more specific methods below. Once
+  // all callers of this method have been migrated, it will be removed.
+  virtual void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {}
+
+  // Called when the keyboard is shown or closed.
+  virtual void OnKeyboardAvailabilityChanging(const bool is_available) {}
+
+  // Called when the keyboard bounds are changing.
+  virtual void OnKeyboardVisibleBoundsChanging(const gfx::Rect& new_bounds) {}
+
+  // Called when the keyboard bounds have changed in a way that should affect
+  // the usable region of the workspace.
+  virtual void OnKeyboardWorkspaceOccludedBoundsChanging(
+      const gfx::Rect& new_bounds) {}
+
+  // Called when the keyboard bounds have changed in a way that affects how the
+  // workspace should change to not take up the screen space occupied by the
+  // keyboard.
+  virtual void OnKeyboardWorkspaceDisplacingBoundsChanging(
+      const gfx::Rect& new_bounds){};
 
   // Called when the keyboard was closed.
-  virtual void OnKeyboardClosed() = 0;
+  virtual void OnKeyboardClosed(){};
 
   // Called when the keyboard has been hidden and the hiding animation finished
   // successfully. This is same as |state| == HIDDEN on OnStateChanged.
   virtual void OnKeyboardHidden() {}
 
-  // When state changed.
+  // Called when the state changed.
   virtual void OnStateChanged(const KeyboardControllerState state) {}
+
+  // Called when the virtual keyboard IME config changed.
+  virtual void OnKeyboardConfigChanged() {}
 };
 
 }  // namespace keyboard

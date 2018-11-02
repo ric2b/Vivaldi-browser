@@ -26,7 +26,7 @@ cr.define('settings', function() {
     relaunch() {
       this.methodCalled('relaunch');
     }
-  };
+  }
 
   if (cr.isChromeOS) {
     /** @override */
@@ -35,8 +35,9 @@ cr.define('settings', function() {
     };
 
     /** @override */
-    TestLifetimeBrowserProxy.prototype.factoryReset = function() {
-      this.methodCalled('factoryReset');
+    TestLifetimeBrowserProxy.prototype.factoryReset = function(
+        requestTpmFirmwareUpdate) {
+      this.methodCalled('factoryReset', requestTpmFirmwareUpdate);
     };
   }
 

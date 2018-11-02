@@ -34,7 +34,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/associated_interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -185,9 +185,7 @@ void SiteEngagementService::HandleNotificationInteraction(const GURL& url) {
   AddPoints(url, SiteEngagementScore::GetNotificationInteractionPoints());
 
   RecordMetrics();
-  double score = GetScore(url);
-  for (SiteEngagementObserver& observer : observer_list_)
-    observer.OnEngagementIncreased(nullptr /* web_contents */, url, score);
+  OnEngagementIncreased(nullptr /* web_contents */, url);
 }
 
 bool SiteEngagementService::IsBootstrapped() const {
@@ -515,9 +513,7 @@ void SiteEngagementService::HandleMediaPlaying(
                            : SiteEngagementScore::GetVisibleMediaPoints());
 
   RecordMetrics();
-  double score = GetScore(url);
-  for (SiteEngagementObserver& observer : observer_list_)
-    observer.OnEngagementIncreased(web_contents, url, score);
+  OnEngagementIncreased(web_contents, url);
 }
 
 void SiteEngagementService::HandleNavigation(content::WebContents* web_contents,
@@ -531,9 +527,7 @@ void SiteEngagementService::HandleNavigation(content::WebContents* web_contents,
   AddPoints(url, SiteEngagementScore::GetNavigationPoints());
 
   RecordMetrics();
-  double score = GetScore(url);
-  for (SiteEngagementObserver& observer : observer_list_)
-    observer.OnEngagementIncreased(web_contents, url, score);
+  OnEngagementIncreased(web_contents, url);
 }
 
 void SiteEngagementService::HandleUserInput(
@@ -547,6 +541,12 @@ void SiteEngagementService::HandleUserInput(
   AddPoints(url, SiteEngagementScore::GetUserInputPoints());
 
   RecordMetrics();
+  OnEngagementIncreased(web_contents, url);
+}
+
+void SiteEngagementService::OnEngagementIncreased(
+    content::WebContents* web_contents,
+    const GURL& url) {
   double score = GetScore(url);
   for (SiteEngagementObserver& observer : observer_list_)
     observer.OnEngagementIncreased(web_contents, url, score);

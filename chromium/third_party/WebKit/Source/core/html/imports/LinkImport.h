@@ -31,10 +31,10 @@
 #ifndef LinkImport_h
 #define LinkImport_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/html/LinkResource.h"
 #include "core/html/imports/HTMLImportChildClient.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -57,7 +57,7 @@ class LinkImport final : public LinkResource, public HTMLImportChildClient {
   void Process() final;
   LinkResourceType GetType() const final { return kImport; }
   bool HasLoaded() const final;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
   void OwnerInserted() final;
   void OwnerRemoved() final;
 

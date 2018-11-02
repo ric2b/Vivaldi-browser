@@ -141,9 +141,10 @@ void MediaWebContentsObserver::RequestPersistentVideo(bool value) {
 
   // The message is sent to the renderer even though the video is already the
   // fullscreen element itself. It will eventually be handled by Blink.
-  Send(new MediaPlayerDelegateMsg_BecamePersistentVideo(
-      fullscreen_player_->first->GetRoutingID(), fullscreen_player_->second,
-      value));
+  RenderFrameHost* target_frame = fullscreen_player_->first;
+  int delegate_id = fullscreen_player_->second;
+  target_frame->Send(new MediaPlayerDelegateMsg_BecamePersistentVideo(
+      target_frame->GetRoutingID(), delegate_id, value));
 }
 
 void MediaWebContentsObserver::OnMediaDestroyed(
@@ -166,7 +167,10 @@ void MediaWebContentsObserver::OnMediaPaused(RenderFrameHost* render_frame_host,
     // Notify observers the player has been "paused".
     web_contents_impl()->MediaStoppedPlaying(
         WebContentsObserver::MediaPlayerInfo(removed_video, removed_audio),
-        player_id);
+        player_id,
+        reached_end_of_stream
+            ? WebContentsObserver::MediaStoppedReason::kReachedEndOfStream
+            : WebContentsObserver::MediaStoppedReason::kUnspecified);
   }
 
   if (reached_end_of_stream)
@@ -217,13 +221,15 @@ void MediaWebContentsObserver::OnMediaEffectivelyFullscreenChanged(
     bool is_fullscreen) {
   const MediaPlayerId id(render_frame_host, delegate_id);
 
-  if (!is_fullscreen) {
-    if (fullscreen_player_ && *fullscreen_player_ == id)
-      fullscreen_player_.reset();
-    return;
-  }
+  if (is_fullscreen) {
+    fullscreen_player_ = id;
+  } else {
+    if (!fullscreen_player_ || *fullscreen_player_ != id)
+      return;
 
-  fullscreen_player_ = id;
+    fullscreen_player_.reset();
+  }
+  web_contents_impl()->MediaEffectivelyFullscreenChanged(is_fullscreen);
 }
 
 void MediaWebContentsObserver::OnMediaSizeChanged(
@@ -256,7 +262,8 @@ void MediaWebContentsObserver::ClearWakeLocks(
     bool was_video = (it != video_players.end());
     bool was_audio = (audio_players.find(id) != audio_players.end());
     web_contents_impl()->MediaStoppedPlaying(
-        WebContentsObserver::MediaPlayerInfo(was_video, was_audio), id);
+        WebContentsObserver::MediaPlayerInfo(was_video, was_audio), id,
+        WebContentsObserver::MediaStoppedReason::kUnspecified);
   }
 }
 
@@ -269,8 +276,8 @@ device::mojom::WakeLock* MediaWebContentsObserver::GetAudioWakeLock() {
         web_contents()->GetWakeLockContext();
     if (wake_lock_context) {
       wake_lock_context->GetWakeLock(
-          device::mojom::WakeLockType::PreventAppSuspension,
-          device::mojom::WakeLockReason::ReasonAudioPlayback, "Playing audio",
+          device::mojom::WakeLockType::kPreventAppSuspension,
+          device::mojom::WakeLockReason::kAudioPlayback, "Playing audio",
           std::move(request));
     }
   }
@@ -286,8 +293,8 @@ device::mojom::WakeLock* MediaWebContentsObserver::GetVideoWakeLock() {
         web_contents()->GetWakeLockContext();
     if (wake_lock_context) {
       wake_lock_context->GetWakeLock(
-          device::mojom::WakeLockType::PreventDisplaySleep,
-          device::mojom::WakeLockReason::ReasonVideoPlayback, "Playing video",
+          device::mojom::WakeLockType::kPreventDisplaySleep,
+          device::mojom::WakeLockReason::kVideoPlayback, "Playing video",
           std::move(request));
     }
   }

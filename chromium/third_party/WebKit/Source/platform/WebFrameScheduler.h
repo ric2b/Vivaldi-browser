@@ -5,7 +5,9 @@
 #ifndef WebFrameScheduler_h
 #define WebFrameScheduler_h
 
-#include "platform/wtf/RefPtr.h"
+#include "base/memory/scoped_refptr.h"
+#include "public/platform/TaskType.h"
+#include "public/platform/WebScopedVirtualTimePauser.h"
 
 #include <memory>
 
@@ -25,6 +27,13 @@ class WebFrameScheduler {
   enum class ThrottlingState {
     kThrottled,
     kNotThrottled,
+    kStopped,
+  };
+
+  // Represents the type of frame: main (top-level) vs not.
+  enum class FrameType {
+    kMainFrame,
+    kSubframe,
   };
 
   class ActiveConnectionHandle {
@@ -52,21 +61,32 @@ class WebFrameScheduler {
   virtual void RemoveThrottlingObserver(ObserverType, Observer*) = 0;
 
   // The scheduler may throttle tasks associated with offscreen frames.
-  virtual void SetFrameVisible(bool) {}
+  virtual void SetFrameVisible(bool) = 0;
+  virtual bool IsFrameVisible() const = 0;
 
   // Tells the scheduler that the page this frame belongs to is not visible.
   // The scheduler may throttle tasks associated with pages that are not
   // visible.
-  virtual void SetPageVisible(bool) {}
+  virtual void SetPageVisible(bool) = 0;
+  virtual bool IsPageVisible() const = 0;
 
   // Set whether this frame is suspended. Only unthrottledTaskRunner tasks are
   // allowed to run on a suspended frame.
-  virtual void SetPaused(bool) {}
+  virtual void SetPaused(bool) = 0;
+
+  // Notifies observers of transitioning to and from STOPPED state in
+  // background.
+  virtual void SetPageStopped(bool) {}
 
   // Set whether this frame is cross origin w.r.t. the top level frame. Cross
   // origin frames may use a different scheduling policy from same origin
   // frames.
-  virtual void SetCrossOrigin(bool) {}
+  virtual void SetCrossOrigin(bool) = 0;
+  virtual bool IsCrossOrigin() const = 0;
+
+  // Returns the frame type, which currently determines whether this frame is
+  // the top level frame, i.e. a main frame.
+  virtual FrameType GetFrameType() const = 0;
 
   // The tasks runners below are listed in increasing QoS order.
   // - throttleable task queue. Designed for custom user-provided javascript
@@ -96,78 +116,48 @@ class WebFrameScheduler {
   // Note: old-style timer task runner corresponds to throttleable task runner
   // and unthrottled task runner corresponds to pausable task runner.
 
-  // Returns a WebTaskRunner for throtteable tasks, e.g. javascript timers.
-  // WebFrameScheduler owns the returned WebTaskRunner.
-  virtual RefPtr<WebTaskRunner> ThrottleableTaskRunner() = 0;
-
-  // Returns a WebTaskRunner for tasks which can be deferred for several
-  // seconds due to anticipated high-priority work like user gesture.
-  virtual RefPtr<WebTaskRunner> DeferrableTaskRunner() = 0;
-
-  // Returns a WebTaskRunner for high-priority javascript tasks. They run
-  // unrestricted in most cases except context pausing (e.g. alert dialog).
-  virtual RefPtr<WebTaskRunner> PausableTaskRunner() = 0;
-
-  // Returns a WebTaskRunner for tasks which should run during context pausing.
-  // The usage should be rare and limited to tasks controlling context pausing
-  // and unpausing.
-  virtual RefPtr<WebTaskRunner> UnpausableTaskRunner() = 0;
-
-  // Returns the WebTaskRunner for loading tasks.
-  // WebFrameScheduler owns the returned WebTaskRunner.
-  virtual RefPtr<WebTaskRunner> LoadingTaskRunner() = 0;
-
-  // Return a WebTaskRunner for very short control messages between loading
-  // tasks. Caution is needed when posting tasks to this WebTaskRunner because
-  // they could starve out other work.
-  // WebFrameScheduler owns the returned WebTaskRunner.
-  virtual RefPtr<WebTaskRunner> LoadingControlTaskRunner() = 0;
+  // Returns a WebTaskRunner that is suitable with the given task type.
+  virtual scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) = 0;
 
   // Returns the parent WebViewScheduler.
-  virtual WebViewScheduler* GetWebViewScheduler() { return nullptr; }
+  virtual WebViewScheduler* GetWebViewScheduler() const = 0;
 
-  // Tells the scheduler a resource load has started. The scheduler may make
-  // policy decisions based on this.
-  virtual void DidStartLoading(unsigned long identifier) {}
+  // Returns a WebScopedVirtualTimePauser which can be used to vote for pausing
+  // virtual time. Virtual time will be paused if any WebScopedVirtualTimePauser
+  // votes to pause it, and only unpaused only if all
+  // WebScopedVirtualTimePausers are either destroyed or vote to unpause.  Note
+  // the WebScopedVirtualTimePauser returned by this method is initially
+  // unpaused.
+  virtual WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser() = 0;
 
-  // Tells the scheduler a resource load has stopped. The scheduler may make
-  // policy decisions based on this.
-  virtual void DidStopLoading(unsigned long identifier) {}
+  // Tells the scheduler that a provisional load has started, the scheduler may
+  // reset the task cost estimators and the UserModel. Must be called from the
+  // main thread.
+  virtual void DidStartProvisionalLoad(bool is_main_frame) = 0;
 
-  // Tells the scheduler that a history navigation is expected soon, virtual
-  // time may be paused. Must be called from the main thread.
-  virtual void WillNavigateBackForwardSoon() {}
-
-  // Tells the scheduler that a provisional load has started, virtual time may
-  // be paused. Must be called from the main thread.
-  virtual void DidStartProvisionalLoad(bool is_main_frame) {}
-
-  // Tells the scheduler that a provisional load has failed, virtual time may be
-  // unpaused. Must be called from the main thread.
-  virtual void DidFailProvisionalLoad() {}
-
-  // Tells the scheduler that a provisional load has committed, virtual time ma
-  // be unpaused. In addition the scheduler may reset the task cost estimators
-  // and the UserModel. Must be called from the main thread.
+  // Tells the scheduler that a provisional load has committed, the scheduler
+  // may reset the task cost estimators and the UserModel. Must be called from
+  // the main thread.
   virtual void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
                                         bool is_reload,
-                                        bool is_main_frame){};
-
-  // Tells the scheduler if we are parsing a document on another thread. This
-  // tells the scheduler not to advance virtual time if it's using the
-  // DETERMINISTIC_LOADING policy.
-  virtual void SetDocumentParsingInBackground(bool) {}
+                                        bool is_main_frame) = 0;
 
   // Tells the scheduler that the first meaningful paint has occured for this
   // frame.
-  virtual void OnFirstMeaningfulPaint() {}
+  virtual void OnFirstMeaningfulPaint() = 0;
 
   // Notifies scheduler that this frame has established an active real time
   // connection (websocket, webrtc, etc). When connection is closed this handle
   // must be destroyed.
-  virtual std::unique_ptr<ActiveConnectionHandle> OnActiveConnectionCreated() {
-    return nullptr;
-  };
+  virtual std::unique_ptr<ActiveConnectionHandle>
+  OnActiveConnectionCreated() = 0;
+
+  // Returns true if this frame is should not throttled (e.g. due to an active
+  // connection).
+  // Note that this only applies to the current frame,
+  // use GetWebViewScheduler()->IsExemptFromBudgetBasedThrottling for
+  // the status of the page.
+  virtual bool IsExemptFromBudgetBasedThrottling() const = 0;
 };
 
 }  // namespace blink

@@ -26,20 +26,22 @@
 
 #include "core/editing/VisibleUnits.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/InlineBoxTraversal.h"
+#include "core/editing/InlineBoxPosition.h"
 #include "core/editing/Position.h"
 #include "core/editing/PositionIterator.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/RenderedPosition.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/iterators/BackwardsCharacterIterator.h"
 #include "core/editing/iterators/BackwardsTextBuffer.h"
 #include "core/editing/iterators/CharacterIterator.h"
@@ -49,11 +51,11 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLBRElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
+#include "core/html_names.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutInline.h"
-#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutItem.h"
@@ -145,7 +147,8 @@ static PositionType CanonicalPosition(const PositionType& position) {
     return PositionType();
 
   // The new position should be in the same block flow element. Favor that.
-  Element* const original_block = node ? EnclosingBlockFlowElement(*node) : 0;
+  Element* const original_block =
+      node ? EnclosingBlockFlowElement(*node) : nullptr;
   const bool next_is_outside_original_block =
       !next_node->IsDescendantOf(original_block) && next_node != original_block;
   const bool prev_is_outside_original_block =
@@ -233,10 +236,10 @@ VisiblePositionInFlatTree HonorEditingBoundaryAtOrBefore(
 }
 
 template <typename Strategy>
-static VisiblePositionTemplate<Strategy> HonorEditingBoundaryAtOrAfterTemplate(
-    const VisiblePositionTemplate<Strategy>& pos,
+static PositionWithAffinityTemplate<Strategy>
+HonorEditingBoundaryAtOrAfterTemplate(
+    const PositionWithAffinityTemplate<Strategy>& pos,
     const PositionTemplate<Strategy>& anchor) {
-  DCHECK(pos.IsValid()) << pos;
   if (pos.IsNull())
     return pos;
 
@@ -244,39 +247,54 @@ static VisiblePositionTemplate<Strategy> HonorEditingBoundaryAtOrAfterTemplate(
 
   // Return empty position if |pos| is not somewhere inside the editable
   // region containing this position
-  if (highest_root &&
-      !pos.DeepEquivalent().AnchorNode()->IsDescendantOf(highest_root))
-    return VisiblePositionTemplate<Strategy>();
+  if (highest_root && !pos.AnchorNode()->IsDescendantOf(highest_root))
+    return PositionWithAffinityTemplate<Strategy>();
 
   // Return |pos| itself if the two are from the very same editable region, or
   // both are non-editable
   // TODO(yosin) In the non-editable case, just because the new position is
   // non-editable doesn't mean movement to it is allowed.
   // |VisibleSelection::adjustForEditableContent()| has this problem too.
-  if (HighestEditableRoot(pos.DeepEquivalent()) == highest_root)
+  if (HighestEditableRoot(pos.GetPosition()) == highest_root)
     return pos;
 
   // Return empty position if this position is non-editable, but |pos| is
   // editable.
   // TODO(yosin) Move to the next non-editable region.
   if (!highest_root)
-    return VisiblePositionTemplate<Strategy>();
+    return PositionWithAffinityTemplate<Strategy>();
 
   // Return the next position after |pos| that is in the same editable region
   // as this position
-  return FirstEditableVisiblePositionAfterPositionInRoot(pos.DeepEquivalent(),
-                                                         *highest_root);
+  return FirstEditablePositionAfterPositionInRoot(pos.GetPosition(),
+                                                  *highest_root);
+}
+
+PositionWithAffinity HonorEditingBoundaryAtOrAfter(
+    const PositionWithAffinity& pos,
+    const Position& anchor) {
+  return HonorEditingBoundaryAtOrAfterTemplate(pos, anchor);
+}
+
+PositionInFlatTreeWithAffinity HonorEditingBoundaryAtOrAfter(
+    const PositionInFlatTreeWithAffinity& pos,
+    const PositionInFlatTree& anchor) {
+  return HonorEditingBoundaryAtOrAfterTemplate(pos, anchor);
 }
 
 VisiblePosition HonorEditingBoundaryAtOrAfter(const VisiblePosition& pos,
                                               const Position& anchor) {
-  return HonorEditingBoundaryAtOrAfterTemplate(pos, anchor);
+  DCHECK(pos.IsValid()) << pos;
+  return CreateVisiblePosition(
+      HonorEditingBoundaryAtOrAfter(pos.ToPositionWithAffinity(), anchor));
 }
 
 VisiblePositionInFlatTree HonorEditingBoundaryAtOrAfter(
     const VisiblePositionInFlatTree& pos,
     const PositionInFlatTree& anchor) {
-  return HonorEditingBoundaryAtOrAfterTemplate(pos, anchor);
+  DCHECK(pos.IsValid()) << pos;
+  return CreateVisiblePosition(
+      HonorEditingBoundaryAtOrAfter(pos.ToPositionWithAffinity(), anchor));
 }
 
 template <typename Strategy>
@@ -342,33 +360,27 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
   BackwardsTextBuffer string;
   string.PushRange(suffix_string.Data(), suffix_string.Size());
 
+  // Treat bullets used in the text security mode as regular characters when
+  // looking for boundaries.
   SimplifiedBackwardsTextIteratorAlgorithm<Strategy> it(
-      EphemeralRangeTemplate<Strategy>(start, end));
-  int remaining_length = 0;
+      EphemeralRangeTemplate<Strategy>(start, end),
+      TextIteratorBehavior::Builder()
+          .SetEmitsSmallXForTextSecurity(true)
+          .Build());
   unsigned next = 0;
   bool need_more_context = false;
   while (!it.AtEnd()) {
-    bool in_text_security_mode = it.IsInTextSecurityMode();
     // iterate to get chunks until the searchFunction returns a non-zero
     // value.
-    if (!in_text_security_mode) {
-      int run_offset = 0;
-      do {
-        run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
-        next = search_function(string.Data(), string.Size(),
-                               string.Size() - suffix_length,
-                               kMayHaveMoreContext, need_more_context);
-      } while (!next && run_offset < it.length());
-      if (next) {
-        remaining_length = it.length() - run_offset;
-        break;
-      }
-    } else {
-      // Treat bullets used in the text security mode as regular
-      // characters when looking for boundaries
-      string.PushCharacters('x', it.length());
-      next = 0;
-    }
+    int run_offset = 0;
+    do {
+      run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
+      next = search_function(string.Data(), string.Size(),
+                             string.Size() - suffix_length, kMayHaveMoreContext,
+                             need_more_context);
+    } while (!next && run_offset < it.length());
+    if (next)
+      break;
     it.Advance();
   }
   if (need_more_context) {
@@ -383,13 +395,6 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
 
   if (!next)
     return it.AtEnd() ? it.StartPosition() : pos;
-
-  Node* node = it.StartContainer();
-  int boundary_offset = remaining_length + next;
-  if (node->IsTextNode() && boundary_offset <= node->MaxCharacterOffset()) {
-    // The next variable contains a usable index into a text node
-    return PositionTemplate<Strategy>(node, boundary_offset);
-  }
 
   // Use the character iterator to translate the next value into a DOM
   // position.
@@ -439,10 +444,13 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
           start.AnchorNode(), start.OffsetInContainerNode());
   const PositionTemplate<Strategy> search_end =
       PositionTemplate<Strategy>::LastPositionInNode(*boundary);
+  // Treat bullets used in the text security mode as regular characters when
+  // looking for boundaries
   TextIteratorAlgorithm<Strategy> it(
       search_start, search_end,
       TextIteratorBehavior::Builder()
           .SetEmitsCharactersBetweenAllVisiblePositions(true)
+          .SetEmitsSmallXForTextSecurity(true)
           .Build());
   const unsigned kInvalidOffset = static_cast<unsigned>(-1);
   unsigned next = kInvalidOffset;
@@ -452,28 +460,20 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
     // Keep asking the iterator for chunks until the search function
     // returns an end value not equal to the length of the string passed to
     // it.
-    bool in_text_security_mode = it.IsInTextSecurityMode();
-    if (!in_text_security_mode) {
-      int run_offset = 0;
-      do {
-        run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
-        next = search_function(string.Data(), string.Size(), offset,
-                               kMayHaveMoreContext, need_more_context);
-        if (!need_more_context) {
-          // When the search does not need more context, skip all examined
-          // characters except the last one, in case it is a boundary.
-          offset = string.Size();
-          U16_BACK_1(string.Data(), 0, offset);
-        }
-      } while (next == string.Size() && run_offset < it.length());
-      if (next != string.Size())
-        break;
-    } else {
-      // Treat bullets used in the text security mode as regular
-      // characters when looking for boundaries
-      string.PushCharacters('x', it.length());
-      next = string.Size();
-    }
+    int run_offset = 0;
+    do {
+      run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
+      next = search_function(string.Data(), string.Size(), offset,
+                             kMayHaveMoreContext, need_more_context);
+      if (!need_more_context) {
+        // When the search does not need more context, skip all examined
+        // characters except the last one, in case it is a boundary.
+        offset = string.Size();
+        U16_BACK_1(string.Data(), 0, offset);
+      }
+    } while (next == string.Size() && run_offset < it.length());
+    if (next != string.Size())
+      break;
     it.Advance();
   }
   if (need_more_context) {
@@ -546,7 +546,7 @@ VisiblePosition StartOfBlock(const VisiblePosition& visible_position,
   Element* start_block =
       position.ComputeContainerNode()
           ? EnclosingBlock(position.ComputeContainerNode(), rule)
-          : 0;
+          : nullptr;
   return start_block ? VisiblePosition::FirstPositionInNode(*start_block)
                      : VisiblePosition();
 }
@@ -558,7 +558,7 @@ VisiblePosition EndOfBlock(const VisiblePosition& visible_position,
   Element* end_block =
       position.ComputeContainerNode()
           ? EnclosingBlock(position.ComputeContainerNode(), rule)
-          : 0;
+          : nullptr;
   return end_block ? VisiblePosition::LastPositionInNode(*end_block)
                    : VisiblePosition();
 }
@@ -677,324 +677,8 @@ bool IsEndOfEditableOrNonEditableContent(
   return IsTextControlElement(next_position.DeepEquivalent().AnchorNode());
 }
 
-static bool IsNonTextLeafChild(LayoutObject* object) {
-  if (object->SlowFirstChild())
-    return false;
-  if (object->IsText())
-    return false;
-  return true;
-}
-
-static InlineTextBox* SearchAheadForBetterMatch(LayoutObject* layout_object) {
-  LayoutBlock* container = layout_object->ContainingBlock();
-  for (LayoutObject* next = layout_object->NextInPreOrder(container); next;
-       next = next->NextInPreOrder(container)) {
-    if (next->IsLayoutBlock())
-      return 0;
-    if (next->IsBR())
-      return 0;
-    if (IsNonTextLeafChild(next))
-      return 0;
-    if (next->IsText()) {
-      InlineTextBox* match = 0;
-      int min_offset = INT_MAX;
-      for (InlineTextBox* box : InlineTextBoxesOf(*ToLayoutText(next))) {
-        int caret_min_offset = box->CaretMinOffset();
-        if (caret_min_offset < min_offset) {
-          match = box;
-          min_offset = caret_min_offset;
-        }
-      }
-      if (match)
-        return match;
-    }
-  }
-  return 0;
-}
-
-template <typename Strategy>
-PositionTemplate<Strategy> DownstreamIgnoringEditingBoundaries(
-    PositionTemplate<Strategy> position) {
-  PositionTemplate<Strategy> last_position;
-  while (!position.IsEquivalent(last_position)) {
-    last_position = position;
-    position = MostForwardCaretPosition(position, kCanCrossEditingBoundary);
-  }
-  return position;
-}
-
-template <typename Strategy>
-PositionTemplate<Strategy> UpstreamIgnoringEditingBoundaries(
-    PositionTemplate<Strategy> position) {
-  PositionTemplate<Strategy> last_position;
-  while (!position.IsEquivalent(last_position)) {
-    last_position = position;
-    position = MostBackwardCaretPosition(position, kCanCrossEditingBoundary);
-  }
-  return position;
-}
-
-// Returns true if |inlineBox| starts different direction of embedded text ru.
-// See [1] for details.
-// [1] UNICODE BIDIRECTIONAL ALGORITHM, http://unicode.org/reports/tr9/
-static bool IsStartOfDifferentDirection(const InlineBox* inline_box) {
-  InlineBox* prev_box = inline_box->PrevLeafChild();
-  if (!prev_box)
-    return true;
-  if (prev_box->Direction() == inline_box->Direction())
-    return true;
-  DCHECK_NE(prev_box->BidiLevel(), inline_box->BidiLevel());
-  return prev_box->BidiLevel() > inline_box->BidiLevel();
-}
-
-static InlineBoxPosition AdjustInlineBoxPositionForPrimaryDirection(
-    InlineBox* inline_box,
-    int caret_offset) {
-  if (caret_offset == inline_box->CaretRightmostOffset()) {
-    InlineBox* const next_box = inline_box->NextLeafChild();
-    if (!next_box || next_box->BidiLevel() >= inline_box->BidiLevel())
-      return InlineBoxPosition(inline_box, caret_offset);
-
-    const unsigned level = next_box->BidiLevel();
-    InlineBox* const prev_box =
-        InlineBoxTraversal::FindLeftBidiRun(*inline_box, level);
-
-    // For example, abc FED 123 ^ CBA
-    if (prev_box && prev_box->BidiLevel() == level)
-      return InlineBoxPosition(inline_box, caret_offset);
-
-    // For example, abc 123 ^ CBA
-    InlineBox* const result_box =
-        InlineBoxTraversal::FindRightBoundaryOfEntireBidiRun(*inline_box,
-                                                             level);
-    return InlineBoxPosition(result_box, result_box->CaretRightmostOffset());
-  }
-
-  if (IsStartOfDifferentDirection(inline_box))
-    return InlineBoxPosition(inline_box, caret_offset);
-
-  const unsigned level = inline_box->PrevLeafChild()->BidiLevel();
-  InlineBox* const next_box =
-      InlineBoxTraversal::FindRightBidiRun(*inline_box, level);
-
-  if (next_box && next_box->BidiLevel() == level)
-    return InlineBoxPosition(inline_box, caret_offset);
-
-  InlineBox* const result_box =
-      InlineBoxTraversal::FindLeftBoundaryOfEntireBidiRun(*inline_box, level);
-  return InlineBoxPosition(result_box, result_box->CaretLeftmostOffset());
-}
-
-static InlineBoxPosition AdjustInlineBoxPositionForTextDirection(
-    InlineBox* inline_box,
-    int caret_offset,
-    UnicodeBidi unicode_bidi,
-    TextDirection primary_direction) {
-  if (inline_box->Direction() == primary_direction)
-    return AdjustInlineBoxPositionForPrimaryDirection(inline_box, caret_offset);
-
-  const unsigned char level = inline_box->BidiLevel();
-  if (caret_offset == inline_box->CaretLeftmostOffset()) {
-    InlineBox* const prev_box = inline_box->PrevLeafChildIgnoringLineBreak();
-    if (!prev_box || prev_box->BidiLevel() < level) {
-      // Left edge of a secondary run. Set to the right edge of the entire
-      // run.
-      InlineBox* const result_box =
-          InlineBoxTraversal::FindRightBoundaryOfEntireBidiRunIgnoringLineBreak(
-              *inline_box, level);
-      return InlineBoxPosition(result_box, result_box->CaretRightmostOffset());
-    }
-
-    if (prev_box->BidiLevel() <= level)
-      return InlineBoxPosition(inline_box, caret_offset);
-    // Right edge of a "tertiary" run. Set to the left edge of that run.
-    InlineBox* const result_box =
-        InlineBoxTraversal::FindLeftBoundaryOfBidiRunIgnoringLineBreak(
-            *inline_box, level);
-    return InlineBoxPosition(result_box, result_box->CaretLeftmostOffset());
-  }
-
-  if (unicode_bidi == UnicodeBidi::kPlaintext) {
-    if (inline_box->BidiLevel() < level)
-      return InlineBoxPosition(inline_box, inline_box->CaretLeftmostOffset());
-    return InlineBoxPosition(inline_box, inline_box->CaretRightmostOffset());
-  }
-
-  InlineBox* const next_box = inline_box->NextLeafChildIgnoringLineBreak();
-  if (!next_box || next_box->BidiLevel() < level) {
-    // Right edge of a secondary run. Set to the left edge of the entire
-    // run.
-    InlineBox* const result_box =
-        InlineBoxTraversal::FindLeftBoundaryOfEntireBidiRunIgnoringLineBreak(
-            *inline_box, level);
-    return InlineBoxPosition(result_box, result_box->CaretLeftmostOffset());
-  }
-
-  if (next_box->BidiLevel() <= level)
-    return InlineBoxPosition(inline_box, caret_offset);
-
-  // Left edge of a "tertiary" run. Set to the right edge of that run.
-  InlineBox* const result_box =
-      InlineBoxTraversal::FindRightBoundaryOfBidiRunIgnoringLineBreak(
-          *inline_box, level);
-  return InlineBoxPosition(result_box, result_box->CaretRightmostOffset());
-}
-
-// Returns true if |caret_offset| is at edge of |box| based on |affinity|.
-// |caret_offset| must be either |box.CaretMinOffset()| or
-// |box.CaretMaxOffset()|.
-static bool IsCaretAtEdgeOfInlineTextBox(int caret_offset,
-                                         const InlineTextBox& box,
-                                         TextAffinity affinity) {
-  if (caret_offset == box.CaretMinOffset())
-    return affinity == TextAffinity::kDownstream;
-  DCHECK_EQ(caret_offset, box.CaretMaxOffset());
-  if (affinity == TextAffinity::kUpstream)
-    return true;
-  return box.NextLeafChild() && box.NextLeafChild()->IsLineBreak();
-}
-
-static InlineBoxPosition ComputeInlineBoxPositionForTextNode(
-    LayoutObject* layout_object,
-    int caret_offset,
-    TextAffinity affinity,
-    TextDirection primary_direction) {
-  InlineBox* inline_box = nullptr;
-  LayoutText* text_layout_object = ToLayoutText(layout_object);
-
-  InlineTextBox* candidate = nullptr;
-
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    int caret_min_offset = box->CaretMinOffset();
-    int caret_max_offset = box->CaretMaxOffset();
-
-    if (caret_offset < caret_min_offset || caret_offset > caret_max_offset ||
-        (caret_offset == caret_max_offset && box->IsLineBreak()))
-      continue;
-
-    if (caret_offset > caret_min_offset && caret_offset < caret_max_offset)
-      return InlineBoxPosition(box, caret_offset);
-
-    if (IsCaretAtEdgeOfInlineTextBox(caret_offset, *box, affinity)) {
-      inline_box = box;
-      break;
-    }
-
-    candidate = box;
-  }
-  if (candidate && candidate == text_layout_object->LastTextBox() &&
-      affinity == TextAffinity::kDownstream) {
-    inline_box = SearchAheadForBetterMatch(text_layout_object);
-    if (inline_box)
-      caret_offset = inline_box->CaretMinOffset();
-  }
-  if (!inline_box)
-    inline_box = candidate;
-
-  if (!inline_box)
-    return InlineBoxPosition();
-  return AdjustInlineBoxPositionForTextDirection(
-      inline_box, caret_offset, layout_object->Style()->GetUnicodeBidi(),
-      primary_direction);
-}
-
-template <typename Strategy>
-static InlineBoxPosition ComputeInlineBoxPositionTemplate(
-    const PositionTemplate<Strategy>& position,
-    TextAffinity affinity,
-    TextDirection primary_direction) {
-  int caret_offset = position.ComputeEditingOffset();
-  Node* const anchor_node = position.AnchorNode();
-  LayoutObject* layout_object =
-      anchor_node->IsShadowRoot()
-          ? ToShadowRoot(anchor_node)->host().GetLayoutObject()
-          : anchor_node->GetLayoutObject();
-
-  DCHECK(layout_object) << position;
-
-  if (layout_object->IsText()) {
-    return ComputeInlineBoxPositionForTextNode(layout_object, caret_offset,
-                                               affinity, primary_direction);
-  }
-  if (CanHaveChildrenForEditing(anchor_node) &&
-      layout_object->IsLayoutBlockFlow() &&
-      HasRenderedNonAnonymousDescendantsWithHeight(layout_object)) {
-    // Try a visually equivalent position with possibly opposite
-    // editability. This helps in case |this| is in an editable block
-    // but surrounded by non-editable positions. It acts to negate the
-    // logic at the beginning of
-    // |LayoutObject::createPositionWithAffinity()|.
-    const PositionTemplate<Strategy>& downstream_equivalent =
-        DownstreamIgnoringEditingBoundaries(position);
-    if (downstream_equivalent != position) {
-      return ComputeInlineBoxPosition(
-          downstream_equivalent, TextAffinity::kUpstream, primary_direction);
-    }
-    const PositionTemplate<Strategy>& upstream_equivalent =
-        UpstreamIgnoringEditingBoundaries(position);
-    if (upstream_equivalent == position ||
-        DownstreamIgnoringEditingBoundaries(upstream_equivalent) == position)
-      return InlineBoxPosition();
-
-    return ComputeInlineBoxPosition(upstream_equivalent,
-                                    TextAffinity::kUpstream, primary_direction);
-  }
-  if (!layout_object->IsBox())
-    return InlineBoxPosition();
-  InlineBox* const inline_box = ToLayoutBox(layout_object)->InlineBoxWrapper();
-  if (!inline_box)
-    return InlineBoxPosition();
-  if ((caret_offset > inline_box->CaretMinOffset() &&
-       caret_offset < inline_box->CaretMaxOffset()))
-    return InlineBoxPosition(inline_box, caret_offset);
-  return AdjustInlineBoxPositionForTextDirection(
-      inline_box, caret_offset, layout_object->Style()->GetUnicodeBidi(),
-      primary_direction);
-}
-
-template <typename Strategy>
-static InlineBoxPosition ComputeInlineBoxPositionTemplate(
-    const PositionTemplate<Strategy>& position,
-    TextAffinity affinity) {
-  return ComputeInlineBoxPositionTemplate<Strategy>(
-      position, affinity, PrimaryDirectionOf(*position.AnchorNode()));
-}
-
-InlineBoxPosition ComputeInlineBoxPosition(const Position& position,
-                                           TextAffinity affinity) {
-  return ComputeInlineBoxPositionTemplate<EditingStrategy>(position, affinity);
-}
-
-InlineBoxPosition ComputeInlineBoxPosition(const PositionInFlatTree& position,
-                                           TextAffinity affinity) {
-  return ComputeInlineBoxPositionTemplate<EditingInFlatTreeStrategy>(position,
-                                                                     affinity);
-}
-
-InlineBoxPosition ComputeInlineBoxPosition(const VisiblePosition& position) {
-  DCHECK(position.IsValid()) << position;
-  return ComputeInlineBoxPosition(position.DeepEquivalent(),
-                                  position.Affinity());
-}
-
-InlineBoxPosition ComputeInlineBoxPosition(const Position& position,
-                                           TextAffinity affinity,
-                                           TextDirection primary_direction) {
-  return ComputeInlineBoxPositionTemplate<EditingStrategy>(position, affinity,
-                                                           primary_direction);
-}
-
-InlineBoxPosition ComputeInlineBoxPosition(const PositionInFlatTree& position,
-                                           TextAffinity affinity,
-                                           TextDirection primary_direction) {
-  return ComputeInlineBoxPositionTemplate<EditingInFlatTreeStrategy>(
-      position, affinity, primary_direction);
-}
-
-// TODO(editing-dev): Once we mark |LayoutObject::LocalCaretRect()| |const|,
-// we should make this function to take |const LayoutObject&|.
 static LocalCaretRect ComputeLocalCaretRect(
-    LayoutObject* layout_object,
+    const LayoutObject* layout_object,
     const InlineBoxPosition box_position) {
   return LocalCaretRect(
       layout_object, layout_object->LocalCaretRect(box_position.inline_box,
@@ -1011,8 +695,7 @@ LocalCaretRect LocalCaretRectOfPositionTemplate(
   if (!layout_object)
     return LocalCaretRect();
 
-  const InlineBoxPosition& box_position =
-      ComputeInlineBoxPosition(position.GetPosition(), position.Affinity());
+  const InlineBoxPosition& box_position = ComputeInlineBoxPosition(position);
 
   if (box_position.inline_box) {
     return ComputeLocalCaretRect(
@@ -1038,8 +721,7 @@ LocalCaretRect LocalSelectionRectOfPositionTemplate(
   if (!node->GetLayoutObject())
     return LocalCaretRect();
 
-  const InlineBoxPosition& box_position =
-      ComputeInlineBoxPosition(position.GetPosition(), position.Affinity());
+  const InlineBoxPosition& box_position = ComputeInlineBoxPosition(position);
 
   if (!box_position.inline_box)
     return LocalCaretRect();
@@ -1053,7 +735,7 @@ LocalCaretRect LocalSelectionRectOfPositionTemplate(
   if (rect.IsEmpty())
     return LocalCaretRect();
 
-  InlineBox* const box = box_position.inline_box;
+  const InlineBox* const box = box_position.inline_box;
   if (layout_object->Style()->IsHorizontalWritingMode()) {
     return LocalCaretRect(
         layout_object,
@@ -1086,15 +768,22 @@ static LayoutUnit BoundingBoxLogicalHeight(LayoutObject* o,
   return o->Style()->IsHorizontalWritingMode() ? rect.Height() : rect.Width();
 }
 
-bool HasRenderedNonAnonymousDescendantsWithHeight(LayoutObject* layout_object) {
-  LayoutObject* stop = layout_object->NextInPreOrderAfterChildren();
+// TODO(editing-dev): The semantics seems wrong when we're in a one-letter block
+// with first-letter style, e.g., <div>F</div>, where the letter is laid-out in
+// an anonymous first-letter LayoutTextFragment instead of the LayoutObject of
+// the text node. It seems weird to return false in this case.
+bool HasRenderedNonAnonymousDescendantsWithHeight(
+    const LayoutObject* layout_object) {
+  const LayoutObject* stop = layout_object->NextInPreOrderAfterChildren();
+  // TODO(editing-dev): Avoid single-character parameter names.
   for (LayoutObject* o = layout_object->SlowFirstChild(); o && o != stop;
        o = o->NextInPreOrder()) {
     if (o->NonPseudoNode()) {
-      if ((o->IsText() &&
-           BoundingBoxLogicalHeight(o, ToLayoutText(o)->LinesBoundingBox())) ||
+      if ((o->IsText() && ToLayoutText(o)->HasNonCollapsedText()) ||
           (o->IsBox() && ToLayoutBox(o)->PixelSnappedLogicalHeight()) ||
           (o->IsLayoutInline() && IsEmptyInline(LineLayoutItem(o)) &&
+           // TODO(crbug.com/771398): Find alternative ways to check whether an
+           // empty LayoutInline is rendered, without checking InlineBox.
            BoundingBoxLogicalHeight(o, ToLayoutInline(o)->LinesBoundingBox())))
         return true;
     }
@@ -1145,24 +834,15 @@ static bool InRenderedText(const PositionTemplate<Strategy>& position) {
   const LayoutText* text_layout_object = ToLayoutText(layout_object);
   const int text_offset =
       offset_in_node - text_layout_object->TextStartOffset();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset < static_cast<int>(box->Start()) &&
-        !text_layout_object->ContainsReversedText()) {
-      // The offset we're looking for is before this node
-      // this means the offset must be in content that is
-      // not laid out. Return false.
-      return false;
-    }
-    if (box->ContainsCaretOffset(text_offset)) {
-      // Return false for offsets inside composed characters.
-      return text_offset == text_layout_object->CaretMinOffset() ||
-             text_offset == NextGraphemeBoundaryOf(
-                                anchor_node, PreviousGraphemeBoundaryOf(
-                                                 anchor_node, text_offset));
-    }
-  }
-
-  return false;
+  if (!text_layout_object->ContainsCaretOffset(text_offset))
+    return false;
+  // Return false for offsets inside composed characters.
+  // TODO(editing-dev): Previous/NextGraphemeBoundaryOf() work on DOM offsets,
+  // So they should use |offset_in_node| instead of |text_offset|.
+  return text_offset == text_layout_object->CaretMinOffset() ||
+         text_offset == NextGraphemeBoundaryOf(*anchor_node,
+                                               PreviousGraphemeBoundaryOf(
+                                                   *anchor_node, text_offset));
 }
 
 static FloatQuad LocalToAbsoluteQuadOf(const LocalCaretRect& caret_rect) {
@@ -1184,47 +864,32 @@ bool RendersInDifferentPosition(const Position& position1,
          LocalToAbsoluteQuadOf(caret_rect2);
 }
 
-static bool IsVisuallyEmpty(const LayoutObject* layout) {
-  for (LayoutObject* child = layout->SlowFirstChild(); child;
-       child = child->NextSibling()) {
-    if (child->IsBox()) {
-      if (!ToLayoutBox(child)->Size().IsEmpty())
-        return false;
-    } else if (child->IsLayoutInline()) {
-      if (ToLayoutInline(child)->FirstLineBoxIncludingCulling())
-        return false;
-    } else if (child->IsText()) {
-      if (ToLayoutText(child)->HasTextBoxes())
-        return false;
-    } else {
-      return false;
-    }
-  }
-  return true;
-}
-
-// FIXME: Share code with isCandidate, if possible.
+// TODO(editing-dev): Share code with IsVisuallyEquivalentCandidate if possible.
 bool EndsOfNodeAreVisuallyDistinctPositions(const Node* node) {
-  if (!node || !node->GetLayoutObject())
+  if (!node)
     return false;
 
-  if (!node->GetLayoutObject()->IsInline())
+  LayoutObject* layout_object = node->GetLayoutObject();
+  if (!layout_object)
+    return false;
+
+  if (!layout_object->IsInline())
     return true;
 
   // Don't include inline tables.
-  if (isHTMLTableElement(*node))
+  if (IsHTMLTableElement(*node))
     return false;
 
   // A Marquee elements are moving so we should assume their ends are always
   // visibily distinct.
-  if (isHTMLMarqueeElement(*node))
+  if (IsHTMLMarqueeElement(*node))
     return true;
 
   // There is a VisiblePosition inside an empty inline-block container.
-  return node->GetLayoutObject()->IsAtomicInlineLevel() &&
+  return layout_object->IsAtomicInlineLevel() &&
          CanHaveChildrenForEditing(node) &&
-         !ToLayoutBox(node->GetLayoutObject())->Size().IsEmpty() &&
-         IsVisuallyEmpty(node->GetLayoutObject());
+         !ToLayoutBox(layout_object)->Size().IsEmpty() &&
+         !HasRenderedNonAnonymousDescendantsWithHeight(layout_object);
 }
 
 template <typename Strategy>
@@ -1304,7 +969,8 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
 
     // skip position in non-laid out or invisible node
     const LayoutObject* const layout_object =
-        AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode());
+        AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode(),
+                                 LayoutObjectSide::kFirstLetterIfOnBoundary);
     if (!layout_object ||
         layout_object->Style()->Visibility() != EVisibility::kVisible)
       continue;
@@ -1338,7 +1004,7 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
     if (!layout_object->IsText())
       continue;
     const LayoutText* const text_layout_object = ToLayoutText(layout_object);
-    if (!text_layout_object->FirstTextBox())
+    if (!text_layout_object->HasNonCollapsedText())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();
     if (current_node != start_node) {
@@ -1352,97 +1018,14 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
           current_node, layout_object->CaretMaxOffset() + text_start_offset);
     }
 
-    if (CanBeBackwardCaretPosition(text_layout_object,
-                                   current_pos.OffsetInLeafNode())) {
+    DCHECK_GE(current_pos.OffsetInLeafNode(),
+              static_cast<int>(text_layout_object->TextStartOffset()));
+    if (text_layout_object->IsAfterNonCollapsedCharacter(
+            current_pos.OffsetInLeafNode() -
+            text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
-    }
   }
   return last_visible.DeprecatedComputePosition();
-}
-
-// Returns true if |box| at |text_offset| can not continue on next line.
-static bool CanNotContinueOnNextLine(const LayoutText& text_layout_object,
-                                     InlineBox* box,
-                                     unsigned text_offset) {
-  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
-  if (box == last_text_box)
-    return true;
-  return LineLayoutAPIShim::LayoutObjectFrom(box->GetLineLayoutItem()) ==
-             text_layout_object &&
-         ToInlineTextBox(box)->Start() >= text_offset;
-}
-
-// The text continues on the next line only if the last text box is not on this
-// line and none of the boxes on this line have a larger start offset.
-static bool DoesContinueOnNextLine(const LayoutText& text_layout_object,
-                                   InlineBox* box,
-                                   unsigned text_offset) {
-  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
-  DCHECK_NE(box, last_text_box);
-  for (InlineBox* runner = box->NextLeafChild(); runner;
-       runner = runner->NextLeafChild()) {
-    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
-      return false;
-  }
-
-  for (InlineBox* runner = box->PrevLeafChild(); runner;
-       runner = runner->PrevLeafChild()) {
-    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
-      return false;
-  }
-
-  return true;
-}
-
-// Returns true if |text_layout_object| has visible first-letter.
-bool HasVisibleFirstLetter(const LayoutText& text_layout_object) {
-  if (!text_layout_object.IsTextFragment())
-    return false;
-  const LayoutTextFragment& layout_text_fragment =
-      ToLayoutTextFragment(text_layout_object);
-  if (!layout_text_fragment.IsRemainingTextLayoutObject())
-    return false;
-  const LayoutObject* first_letter_layout_object =
-      layout_text_fragment.GetFirstLetterPseudoElement()->GetLayoutObject();
-  if (!first_letter_layout_object)
-    return false;
-  return first_letter_layout_object->Style()->Visibility() ==
-         EVisibility::kVisible;
-}
-
-// TODO(editing-dev): This function is just moved out from
-// |MostBackwardCaretPosition()|. We should study this function more and
-// name it appropriately. See https://trac.webkit.org/changeset/32438/
-// which introduce this.
-static bool CanBeBackwardCaretPosition(const LayoutText* text_layout_object,
-                                       int offset_in_node) {
-  const unsigned text_start_offset = text_layout_object->TextStartOffset();
-  DCHECK_GE(offset_in_node, static_cast<int>(text_start_offset));
-  const unsigned text_offset = offset_in_node - text_start_offset;
-  InlineTextBox* const last_text_box = text_layout_object->LastTextBox();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset == box->Start()) {
-      if (HasVisibleFirstLetter(*text_layout_object)) {
-        // |offset_in_node| is at start of remaining text of
-        // |Text| node with :first-letter.
-        DCHECK_GE(offset_in_node, 1);
-        return true;
-      }
-      continue;
-    }
-    if (text_offset <= box->Start() + box->Len()) {
-      if (text_offset > box->Start())
-        return true;
-      continue;
-    }
-
-    if (box == last_text_box || text_offset != box->Start() + box->Len() + 1)
-      continue;
-
-    if (DoesContinueOnNextLine(*text_layout_object, box, text_offset + 1))
-      return true;
-  }
-  return false;
 }
 
 Position MostBackwardCaretPosition(const Position& position,
@@ -1497,7 +1080,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
 
     // stop before going above the body, up into the head
     // return the last visible streamer position
-    if (isHTMLBodyElement(*current_node) && current_pos.AtEndOfNode())
+    if (IsHTMLBodyElement(*current_node) && current_pos.AtEndOfNode())
       break;
 
     // Do not move to a visually distinct position.
@@ -1539,7 +1122,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
     if (!layout_object->IsText())
       continue;
     const LayoutText* const text_layout_object = ToLayoutText(layout_object);
-    if (!text_layout_object->FirstTextBox())
+    if (!text_layout_object->HasNonCollapsedText())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();
     if (current_node != start_node) {
@@ -1548,38 +1131,14 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
           current_node, layout_object->CaretMinOffset() + text_start_offset);
     }
 
-    if (CanBeForwardCaretPosition(text_layout_object,
-                                  current_pos.OffsetInLeafNode())) {
+    DCHECK_GE(current_pos.OffsetInLeafNode(),
+              static_cast<int>(text_layout_object->TextStartOffset()));
+    if (text_layout_object->IsBeforeNonCollapsedCharacter(
+            current_pos.OffsetInLeafNode() -
+            text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
-    }
   }
   return last_visible.DeprecatedComputePosition();
-}
-
-// TODO(editing-dev): This function is just moved out from
-// |MostForwardCaretPosition()|. We should study this function more and
-// name it appropriately. See https://trac.webkit.org/changeset/32438/
-// which introduce this.
-static bool CanBeForwardCaretPosition(const LayoutText* text_layout_object,
-                                      int offset_in_node) {
-  const unsigned text_start_offset = text_layout_object->TextStartOffset();
-  DCHECK_GE(offset_in_node, static_cast<int>(text_start_offset));
-  const unsigned text_offset = offset_in_node - text_start_offset;
-  InlineTextBox* const last_text_box = text_layout_object->LastTextBox();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset <= box->end()) {
-      if (text_offset >= box->Start())
-        return true;
-      continue;
-    }
-
-    if (box == last_text_box || text_offset != box->Start() + box->Len())
-      continue;
-
-    if (DoesContinueOnNextLine(*text_layout_object, box, text_offset))
-      return true;
-  }
-  return false;
 }
 
 Position MostForwardCaretPosition(const Position& position,
@@ -1678,7 +1237,7 @@ static bool IsVisuallyEquivalentCandidateAlgorithm(
   if (layout_object->IsLayoutBlockFlow() || layout_object->IsFlexibleBox() ||
       layout_object->IsLayoutGrid()) {
     if (ToLayoutBlock(layout_object)->LogicalHeight() ||
-        isHTMLBodyElement(*anchor_node)) {
+        IsHTMLBodyElement(*anchor_node)) {
       if (!HasRenderedNonAnonymousDescendantsWithHeight(layout_object))
         return position.AtFirstEditingPositionForNode();
       return HasEditableStyle(*anchor_node) && AtEditingBoundary(position);

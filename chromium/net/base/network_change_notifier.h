@@ -265,6 +265,10 @@ class NET_EXPORT NetworkChangeNotifier {
   // which might try to use it.
   static NetworkChangeNotifier* Create();
 
+  // Returns whether the process-wide, platform-specific NetworkChangeNotifier
+  // has been created.
+  static bool HasNetworkChangeNotifier();
+
   // Returns the connection type.
   // A return value of |CONNECTION_NONE| is a pretty strong indicator that the
   // user won't be able to connect to remote sites. However, another return
@@ -300,8 +304,8 @@ class NET_EXPORT NetworkChangeNotifier {
   // Returns a theoretical upper limit (in Mbps) on download bandwidth given a
   // connection subtype. The mapping of connection type to maximum bandwidth is
   // provided in the NetInfo spec: http://w3c.github.io/netinfo/.
-  // TODO(jkarlin): Rename to GetMaxBandwidthMbpsForConnectionSubtype.
-  static double GetMaxBandwidthForConnectionSubtype(ConnectionSubtype subtype);
+  static double GetMaxBandwidthMbpsForConnectionSubtype(
+      ConnectionSubtype subtype);
 
   // Returns true if the platform supports use of APIs based on NetworkHandles.
   // Public methods that use NetworkHandles are GetNetworkConnectionType(),

@@ -31,9 +31,11 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/html_element_type_helpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/PtrUtil.h"
@@ -191,7 +193,7 @@ class PrerenderingTest : public ::testing::Test {
     Document* document =
         web_view_helper_.LocalMainFrame()->GetFrame()->GetDocument();
     Element* console = document->getElementById("console");
-    DCHECK(isHTMLUListElement(console));
+    DCHECK(IsHTMLUListElement(console));
     return *console;
   }
 
@@ -203,7 +205,7 @@ class PrerenderingTest : public ::testing::Test {
     Node* item = NodeTraversal::ChildAt(Console(), 1 + i);
 
     DCHECK(item);
-    DCHECK(isHTMLLIElement(item));
+    DCHECK(IsHTMLLIElement(item));
     DCHECK(item->hasChildren());
 
     return item->textContent();

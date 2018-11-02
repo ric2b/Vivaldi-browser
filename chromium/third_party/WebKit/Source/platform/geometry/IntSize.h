@@ -109,8 +109,8 @@ class PLATFORM_EXPORT IntSize {
   IntSize TransposedSize() const { return IntSize(height_, width_); }
 
 #if defined(OS_MACOSX)
-  explicit IntSize(const CGSize&);  // don't do this implicitly since it's lossy
-  operator CGSize() const;
+  explicit IntSize(const CGSize&);
+  explicit operator CGSize() const;
 #endif
 
   operator gfx::Size() const;
@@ -152,6 +152,8 @@ inline bool operator==(const IntSize& a, const IntSize& b) {
 inline bool operator!=(const IntSize& a, const IntSize& b) {
   return a.Width() != b.Width() || a.Height() != b.Height();
 }
+
+PLATFORM_EXPORT std::ostream& operator<<(std::ostream&, const IntSize&);
 
 // Redeclared here to avoid ODR issues.
 // See platform/testing/GeometryPrinters.h.

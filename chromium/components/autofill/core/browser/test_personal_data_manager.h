@@ -11,6 +11,10 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 
+namespace syncer {
+class SyncService;
+}
+
 namespace autofill {
 
 // A simplistic PersonalDataManager used for testing.
@@ -18,6 +22,9 @@ class TestPersonalDataManager : public PersonalDataManager {
  public:
   TestPersonalDataManager();
   ~TestPersonalDataManager() override;
+
+  // PersonalDataManager:
+  void OnSyncServiceInitialized(syncer::SyncService* sync_service) override {}
 
   // Sets which PrefService to use and observe. |pref_service| is not owned by
   // this class and must outlive |this|.
@@ -33,9 +40,8 @@ class TestPersonalDataManager : public PersonalDataManager {
   // Adds |credit_card| to |server_credit_cards_| by copying.
   void AddTestingServerCreditCard(const CreditCard& credit_card);
 
-  const std::vector<AutofillProfile*>& GetProfiles() const override;
-  std::vector<AutofillProfile*> web_profiles() const override;
-  const std::vector<CreditCard*>& GetCreditCards() const override;
+  std::vector<AutofillProfile*> GetProfiles() const override;
+  std::vector<CreditCard*> GetCreditCards() const override;
 
   std::string SaveImportedProfile(
       const AutofillProfile& imported_profile) override;
@@ -56,9 +62,6 @@ class TestPersonalDataManager : public PersonalDataManager {
   const CreditCard& imported_credit_card() { return imported_credit_card_; }
 
  private:
-  const std::vector<AutofillProfile*>& GetProfiles(
-      bool record_metrics) const override;
-
   std::vector<AutofillProfile*> profiles_;
   std::vector<CreditCard*> credit_cards_;
   AutofillProfile imported_profile_;

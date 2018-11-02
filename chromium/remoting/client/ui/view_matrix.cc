@@ -11,7 +11,7 @@ ViewMatrix::ViewMatrix() : ViewMatrix(0.f, {0.f, 0.f}) {}
 ViewMatrix::ViewMatrix(float scale, const Vector2D& offset)
     : scale_(scale), offset_(offset) {}
 
-ViewMatrix::~ViewMatrix() {}
+ViewMatrix::~ViewMatrix() = default;
 
 ViewMatrix::Point ViewMatrix::MapPoint(const Point& point) const {
   float x = scale_ * point.x + offset_.x;
@@ -35,6 +35,10 @@ float ViewMatrix::GetScale() const {
 
 void ViewMatrix::SetOffset(const Point& offset) {
   offset_ = offset;
+}
+
+const ViewMatrix::Vector2D& ViewMatrix::GetOffset() const {
+  return offset_;
 }
 
 void ViewMatrix::PostScale(const Point& pivot, float scale) {

@@ -14,6 +14,14 @@ common.parse_common_test_results.
   --isolated-script-test-chartjson-output=[FILE]
 stdout is written to this file containing chart results for the perf dashboard
 
+Optional argument:
+
+  --isolated-script-test-filter=[TEST_NAMES]
+
+is a double-colon-separated ("::") list of test names, to run just that subset
+of tests. This list is parsed by this harness and sent down via the
+--gtest_filter argument.
+
 This script is intended to be the base command invoked by the isolate,
 followed by a subsequent non-python executable.  It is modeled after
 run_gpu_integration_test_as_gtest.py
@@ -67,6 +75,8 @@ def main():
   parser.add_argument(
       '--isolated-script-test-perf-output', type=str,
       required=False)
+  parser.add_argument(
+      '--isolated-script-test-filter', type=str, required=False)
   parser.add_argument('--xvfb', help='Start xvfb.', action='store_true')
 
   args, rest_args = parser.parse_known_args()
@@ -97,6 +107,10 @@ def main():
         extra_flags.append('--verbose')
       if not '--test-launcher-print-test-stdio=always' in extra_flags:
         extra_flags.append('--test-launcher-print-test-stdio=always')
+      if args.isolated_script_test_filter:
+        filter_list = common.extract_filter_list(
+          args.isolated_script_test_filter)
+        extra_flags.append('--gtest_filter=' + ':'.join(filter_list))
 
       if IsWindows():
         executable = '.\%s.exe' % executable

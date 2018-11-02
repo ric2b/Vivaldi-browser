@@ -37,8 +37,8 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "public/web/WebSettings.h"
 
@@ -81,7 +81,7 @@ ProgressTracker::ProgressTracker(LocalFrame* frame)
 
 ProgressTracker::~ProgressTracker() {}
 
-DEFINE_TRACE(ProgressTracker) {
+void ProgressTracker::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
 }
 
@@ -157,9 +157,9 @@ void ProgressTracker::WillStartLoading(unsigned long identifier,
   // finishes.
   if (frame_->GetSettings()->GetProgressBarCompletion() !=
           ProgressBarCompletion::kLoadEvent &&
-      (HaveParsedAndPainted() || priority < kResourceLoadPriorityHigh))
+      (HaveParsedAndPainted() || priority < ResourceLoadPriority::kHigh))
     return;
-  progress_items_.Set(identifier, WTF::MakeUnique<ProgressItem>(
+  progress_items_.Set(identifier, std::make_unique<ProgressItem>(
                                       kProgressItemDefaultEstimatedLength));
 }
 

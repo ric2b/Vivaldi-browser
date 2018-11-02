@@ -27,6 +27,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
+#include "base/memory/shared_memory.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
@@ -664,8 +665,7 @@ class BASE_EXPORT ThreadActivityTracker {
   ActivityId PushActivity(const void* origin,
                           Activity::Type type,
                           const ActivityData& data) {
-    return PushActivity(::tracked_objects::GetProgramCounter(), origin, type,
-                        data);
+    return PushActivity(GetProgramCounter(), origin, type, data);
   }
 
   // Changes the activity |type| and |data| of the top-most entry on the stack.
@@ -713,6 +713,10 @@ class BASE_EXPORT ThreadActivityTracker {
 
   // Gets the base memory address used for storing data.
   const void* GetBaseAddress();
+
+  // Access the "data version" value so tests can determine if an activity
+  // was pushed and popped in a single call.
+  uint32_t GetDataVersionForTesting();
 
   // Explicitly sets the process ID.
   void SetOwningProcessIdForTesting(int64_t pid, int64_t stamp);
@@ -884,8 +888,8 @@ class BASE_EXPORT GlobalActivityTracker {
   // Like above but internally creates an allocator around a disk file with
   // the specified |size| at the given |file_path|. Any existing file will be
   // overwritten. The |id| and |name| are arbitrary and stored in the allocator
-  // for reference by whatever process reads it.
-  static void CreateWithFile(const FilePath& file_path,
+  // for reference by whatever process reads it. Returns true if successful.
+  static bool CreateWithFile(const FilePath& file_path,
                              size_t size,
                              uint64_t id,
                              StringPiece name,
@@ -895,11 +899,26 @@ class BASE_EXPORT GlobalActivityTracker {
   // Like above but internally creates an allocator using local heap memory of
   // the specified size. This is used primarily for unit tests. The |process_id|
   // can be zero to get it from the OS but is taken for testing purposes.
-  static void CreateWithLocalMemory(size_t size,
+  static bool CreateWithLocalMemory(size_t size,
                                     uint64_t id,
                                     StringPiece name,
                                     int stack_depth,
                                     int64_t process_id);
+
+  // Like above but internally creates an allocator using a shared-memory
+  // segment. The segment must already be mapped into the local memory space.
+  static bool CreateWithSharedMemory(std::unique_ptr<SharedMemory> shm,
+                                     uint64_t id,
+                                     StringPiece name,
+                                     int stack_depth);
+
+  // Like above but takes a handle to an existing shared memory segment and
+  // maps it before creating the tracker.
+  static bool CreateWithSharedMemoryHandle(const SharedMemoryHandle& handle,
+                                           size_t size,
+                                           uint64_t id,
+                                           StringPiece name,
+                                           int stack_depth);
 
   // Gets the global activity-tracker or null if none exists.
   static GlobalActivityTracker* Get() {
@@ -1024,8 +1043,7 @@ class BASE_EXPORT GlobalActivityTracker {
   // Record exception information for the current thread.
   ALWAYS_INLINE
   void RecordException(const void* origin, uint32_t code) {
-    return RecordExceptionImpl(::tracked_objects::GetProgramCounter(), origin,
-                               code);
+    return RecordExceptionImpl(GetProgramCounter(), origin, code);
   }
   void RecordException(const void* pc, const void* origin, uint32_t code);
 
@@ -1105,15 +1123,13 @@ class BASE_EXPORT GlobalActivityTracker {
     // Decodes/encodes storage structure from more generic info structure.
     bool DecodeTo(GlobalActivityTracker::ModuleInfo* info,
                   size_t record_size) const;
-    bool EncodeFrom(const GlobalActivityTracker::ModuleInfo& info,
-                    size_t record_size);
+    static ModuleInfoRecord* CreateFrom(
+        const GlobalActivityTracker::ModuleInfo& info,
+        PersistentMemoryAllocator* allocator);
 
     // Updates the core information without changing the encoded strings. This
     // is useful when a known module changes state (i.e. new load or unload).
     bool UpdateFrom(const GlobalActivityTracker::ModuleInfo& info);
-
-    // Determines the required memory size for the encoded storage.
-    static size_t EncodedSize(const GlobalActivityTracker::ModuleInfo& info);
 
    private:
     DISALLOW_COPY_AND_ASSIGN(ModuleInfoRecord);
@@ -1179,31 +1195,31 @@ class BASE_EXPORT GlobalActivityTracker {
   const int64_t process_id_;
 
   // The activity tracker for the currently executing thread.
-  base::ThreadLocalStorage::Slot this_thread_tracker_;
+  ThreadLocalStorage::Slot this_thread_tracker_;
 
   // The number of thread trackers currently active.
   std::atomic<int> thread_tracker_count_;
 
   // A caching memory allocator for thread-tracker objects.
   ActivityTrackerMemoryAllocator thread_tracker_allocator_;
-  base::Lock thread_tracker_allocator_lock_;
+  Lock thread_tracker_allocator_lock_;
 
   // A caching memory allocator for user data attached to activity data.
   ActivityTrackerMemoryAllocator user_data_allocator_;
-  base::Lock user_data_allocator_lock_;
+  Lock user_data_allocator_lock_;
 
   // An object for holding arbitrary key value pairs with thread-safe access.
   ThreadSafeUserData process_data_;
 
   // A map of global module information, keyed by module path.
   std::map<const std::string, ModuleInfoRecord*> modules_;
-  base::Lock modules_lock_;
+  Lock modules_lock_;
 
   // The active global activity tracker.
   static subtle::AtomicWord g_tracker_;
 
   // A lock that is used to protect access to the following fields.
-  base::Lock global_tracker_lock_;
+  Lock global_tracker_lock_;
 
   // The collection of processes being tracked and their command-lines.
   std::map<int64_t, std::string> known_processes_;
@@ -1242,10 +1258,7 @@ class BASE_EXPORT ScopedActivity
   //   }
   ALWAYS_INLINE
   ScopedActivity(uint8_t action, uint32_t id, int32_t info)
-      : ScopedActivity(::tracked_objects::GetProgramCounter(),
-                       action,
-                       id,
-                       info) {}
+      : ScopedActivity(GetProgramCounter(), action, id, info) {}
   ScopedActivity() : ScopedActivity(0, 0, 0) {}
 
   // Changes the |action| and/or |info| of this activity on the stack. This
@@ -1278,13 +1291,11 @@ class BASE_EXPORT ScopedTaskRunActivity
     : public GlobalActivityTracker::ScopedThreadActivity {
  public:
   ALWAYS_INLINE
-  explicit ScopedTaskRunActivity(const base::PendingTask& task)
-      : ScopedTaskRunActivity(::tracked_objects::GetProgramCounter(),
-                              task) {}
+  explicit ScopedTaskRunActivity(const PendingTask& task)
+      : ScopedTaskRunActivity(GetProgramCounter(), task) {}
 
  private:
-  ScopedTaskRunActivity(const void* program_counter,
-                        const base::PendingTask& task);
+  ScopedTaskRunActivity(const void* program_counter, const PendingTask& task);
   DISALLOW_COPY_AND_ASSIGN(ScopedTaskRunActivity);
 };
 
@@ -1293,8 +1304,7 @@ class BASE_EXPORT ScopedLockAcquireActivity
  public:
   ALWAYS_INLINE
   explicit ScopedLockAcquireActivity(const base::internal::LockImpl* lock)
-      : ScopedLockAcquireActivity(::tracked_objects::GetProgramCounter(),
-                                  lock) {}
+      : ScopedLockAcquireActivity(GetProgramCounter(), lock) {}
 
  private:
   ScopedLockAcquireActivity(const void* program_counter,
@@ -1306,13 +1316,12 @@ class BASE_EXPORT ScopedEventWaitActivity
     : public GlobalActivityTracker::ScopedThreadActivity {
  public:
   ALWAYS_INLINE
-  explicit ScopedEventWaitActivity(const base::WaitableEvent* event)
-      : ScopedEventWaitActivity(::tracked_objects::GetProgramCounter(),
-                                event) {}
+  explicit ScopedEventWaitActivity(const WaitableEvent* event)
+      : ScopedEventWaitActivity(GetProgramCounter(), event) {}
 
  private:
   ScopedEventWaitActivity(const void* program_counter,
-                          const base::WaitableEvent* event);
+                          const WaitableEvent* event);
   DISALLOW_COPY_AND_ASSIGN(ScopedEventWaitActivity);
 };
 
@@ -1320,13 +1329,12 @@ class BASE_EXPORT ScopedThreadJoinActivity
     : public GlobalActivityTracker::ScopedThreadActivity {
  public:
   ALWAYS_INLINE
-  explicit ScopedThreadJoinActivity(const base::PlatformThreadHandle* thread)
-      : ScopedThreadJoinActivity(::tracked_objects::GetProgramCounter(),
-                                 thread) {}
+  explicit ScopedThreadJoinActivity(const PlatformThreadHandle* thread)
+      : ScopedThreadJoinActivity(GetProgramCounter(), thread) {}
 
  private:
   ScopedThreadJoinActivity(const void* program_counter,
-                           const base::PlatformThreadHandle* thread);
+                           const PlatformThreadHandle* thread);
   DISALLOW_COPY_AND_ASSIGN(ScopedThreadJoinActivity);
 };
 
@@ -1336,13 +1344,12 @@ class BASE_EXPORT ScopedProcessWaitActivity
     : public GlobalActivityTracker::ScopedThreadActivity {
  public:
   ALWAYS_INLINE
-  explicit ScopedProcessWaitActivity(const base::Process* process)
-      : ScopedProcessWaitActivity(::tracked_objects::GetProgramCounter(),
-                                  process) {}
+  explicit ScopedProcessWaitActivity(const Process* process)
+      : ScopedProcessWaitActivity(GetProgramCounter(), process) {}
 
  private:
   ScopedProcessWaitActivity(const void* program_counter,
-                            const base::Process* process);
+                            const Process* process);
   DISALLOW_COPY_AND_ASSIGN(ScopedProcessWaitActivity);
 };
 #endif

@@ -8,7 +8,7 @@ import android.content.Context;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.omnibox.AutocompleteController;
@@ -143,7 +143,7 @@ public class OmniboxTestUtils {
         }
 
         @Override
-        public void start(Profile profile, String url, final String text,
+        public void start(Profile profile, String url, final String text, int cursorPosition,
                 boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
             mStartAutocompleteCalled = true;
             mSuggestionsDispatcher = new Runnable() {
@@ -165,7 +165,7 @@ public class OmniboxTestUtils {
         }
 
         @Override
-        public void startZeroSuggest(Profile profile, String omniboxText, String url,
+        public void startZeroSuggest(Profile profile, String omniboxText, String url, String title,
                 boolean focusedFromFakebox) {
             mZeroSuggestCalledCount++;
         }
@@ -212,15 +212,8 @@ public class OmniboxTestUtils {
                 boolean preventInlineAutocomplete, boolean focusedFromFakebox) {}
 
         @Override
-        public final void start(Profile profile, String url, final String text,
-                boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
-            start(profile, url, text, -1, preventInlineAutocomplete, focusedFromFakebox);
-        }
-
-        @Override
-        public void startZeroSuggest(Profile profile, String omniboxText, String url,
-                boolean focusedFromFakebox) {
-        }
+        public void startZeroSuggest(Profile profile, String omniboxText, String url, String title,
+                boolean focusedFromFakebox) {}
 
         @Override
         public void stop(boolean clear) {}

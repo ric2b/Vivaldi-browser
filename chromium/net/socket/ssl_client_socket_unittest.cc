@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -96,7 +97,7 @@ class WrappedStreamSocket : public StreamSocket {
  public:
   explicit WrappedStreamSocket(std::unique_ptr<StreamSocket> transport)
       : transport_(std::move(transport)) {}
-  ~WrappedStreamSocket() override {}
+  ~WrappedStreamSocket() override = default;
 
   // StreamSocket implementation:
   int Connect(const CompletionCallback& callback) override {
@@ -179,7 +180,7 @@ class WrappedStreamSocket : public StreamSocket {
 class ReadBufferingStreamSocket : public WrappedStreamSocket {
  public:
   explicit ReadBufferingStreamSocket(std::unique_ptr<StreamSocket> transport);
-  ~ReadBufferingStreamSocket() override {}
+  ~ReadBufferingStreamSocket() override = default;
 
   // Socket implementation:
   int Read(IOBuffer* buf,
@@ -337,7 +338,7 @@ class SynchronousErrorStreamSocket : public WrappedStreamSocket {
  public:
   explicit SynchronousErrorStreamSocket(std::unique_ptr<StreamSocket> transport)
       : WrappedStreamSocket(std::move(transport)) {}
-  ~SynchronousErrorStreamSocket() override {}
+  ~SynchronousErrorStreamSocket() override = default;
 
   // Socket implementation:
   int Read(IOBuffer* buf,
@@ -413,7 +414,7 @@ class FakeBlockingStreamSocket : public WrappedStreamSocket {
  public:
   explicit FakeBlockingStreamSocket(std::unique_ptr<StreamSocket> transport)
       : WrappedStreamSocket(std::move(transport)) {}
-  ~FakeBlockingStreamSocket() override {}
+  ~FakeBlockingStreamSocket() override = default;
 
   // Socket implementation:
   int Read(IOBuffer* buf,
@@ -701,7 +702,7 @@ class CountingStreamSocket : public WrappedStreamSocket {
       : WrappedStreamSocket(std::move(transport)),
         read_count_(0),
         write_count_(0) {}
-  ~CountingStreamSocket() override {}
+  ~CountingStreamSocket() override = default;
 
   // Socket implementation:
   int Read(IOBuffer* buf,
@@ -733,7 +734,7 @@ class DeleteSocketCallback : public TestCompletionCallbackBase {
       : socket_(socket),
         callback_(base::Bind(&DeleteSocketCallback::OnComplete,
                              base::Unretained(this))) {}
-  ~DeleteSocketCallback() override {}
+  ~DeleteSocketCallback() override = default;
 
   const CompletionCallback& callback() const { return callback_; }
 
@@ -810,7 +811,7 @@ class AsyncFailingChannelIDStore : public ChannelIDStore {
 class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
  public:
   MockExpectCTReporter() : num_failures_(0) {}
-  ~MockExpectCTReporter() override {}
+  ~MockExpectCTReporter() override = default;
 
   void OnExpectCTFailed(const HostPortPair& host_port_pair,
                         const GURL& report_uri,
@@ -866,10 +867,10 @@ class MockCTVerifier : public CTVerifier {
 // A mock CTPolicyEnforcer that returns a custom verification result.
 class MockCTPolicyEnforcer : public CTPolicyEnforcer {
  public:
-  MOCK_METHOD3(DoesConformToCertPolicy,
-               ct::CertPolicyCompliance(X509Certificate* cert,
-                                        const ct::SCTList&,
-                                        const NetLogWithSource&));
+  MOCK_METHOD3(CheckCompliance,
+               ct::CTPolicyCompliance(X509Certificate* cert,
+                                      const ct::SCTList&,
+                                      const NetLogWithSource&));
 };
 
 class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
@@ -894,9 +895,9 @@ class SSLClientSocketTest : public PlatformTest {
     // Set a dummy session cache shard to enable session caching.
     context_.ssl_session_cache_shard = "shard";
 
-    EXPECT_CALL(*ct_policy_enforcer_, DoesConformToCertPolicy(_, _, _))
+    EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(_, _, _))
         .WillRepeatedly(
-            Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
+            Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
   }
 
  protected:
@@ -1008,8 +1009,10 @@ class SSLClientSocketReadTest : public SSLClientSocketTest,
       : SSLClientSocketTest(), read_if_ready_enabled_(GetParam()) {}
 
   void SetUp() override {
-    if (read_if_ready_enabled())
-      scoped_feature_list_.InitAndEnableFeature(Socket::kReadIfReadyExperiment);
+    if (!read_if_ready_enabled()) {
+      scoped_feature_list_.InitAndDisableFeature(
+          Socket::kReadIfReadyExperiment);
+    }
   }
 
   // Convienient wrapper to call Read()/ReadIfReady() depending on whether
@@ -1343,17 +1346,7 @@ TEST_F(SSLClientSocketTest, ConnectBadValidity) {
   SSLConfig ssl_config;
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-
-#if defined(OS_WIN)
-  EXPECT_THAT(rv, IsError(ERR_SSL_SERVER_CERT_BAD_FORMAT));
-  EXPECT_FALSE(IsCertificateError(rv));
-#elif defined(OS_ANDROID)
-  // Android date handling behavior can vary depending on the platform.
-  EXPECT_THAT(rv, AnyOf(IsError(ERR_SSL_SERVER_CERT_BAD_FORMAT),
-                        IsError(ERR_CERT_DATE_INVALID)));
-#else  // !(defined(OS_WIN) || defined(OS_ANDROID))
   EXPECT_THAT(rv, IsError(ERR_CERT_DATE_INVALID));
-#endif
 }
 
 // Attempt to connect to a page which requests a client certificate. It should
@@ -2556,9 +2549,9 @@ TEST_F(SSLClientSocketTest, EVCertStatusMaintainedForCompliantCert) {
   // Emulate compliance of the certificate to the policy.
   MockCTPolicyEnforcer policy_enforcer;
   SetCTPolicyEnforcer(&policy_enforcer);
-  EXPECT_CALL(policy_enforcer, DoesConformToCertPolicy(_, _, _))
+  EXPECT_CALL(policy_enforcer, CheckCompliance(_, _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
@@ -2583,9 +2576,9 @@ TEST_F(SSLClientSocketTest, EVCertStatusRemovedForNonCompliantCert) {
   // Emulate non-compliance of the certificate to the policy.
   MockCTPolicyEnforcer policy_enforcer;
   SetCTPolicyEnforcer(&policy_enforcer);
-  EXPECT_CALL(policy_enforcer, DoesConformToCertPolicy(_, _, _))
+  EXPECT_CALL(policy_enforcer, CheckCompliance(_, _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
@@ -2596,6 +2589,86 @@ TEST_F(SSLClientSocketTest, EVCertStatusRemovedForNonCompliantCert) {
 
   EXPECT_FALSE(result.cert_status & CERT_STATUS_IS_EV);
   EXPECT_TRUE(result.cert_status & CERT_STATUS_CT_COMPLIANCE_FAILED);
+}
+
+// Test that when an EV certificate does not conform to the CT policy and its EV
+// status is removed, the corresponding histogram is recorded correctly.
+TEST_F(SSLClientSocketTest, NonCTCompliantEVHistogram) {
+  const char kHistogramName[] = "Net.CertificateTransparency.EVCompliance2.SSL";
+  base::HistogramTester histograms;
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.cert_status = CERT_STATUS_IS_EV;
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Emulate non-compliance of the certificate to the policy.
+  MockCTPolicyEnforcer policy_enforcer;
+  SetCTPolicyEnforcer(&policy_enforcer);
+  EXPECT_CALL(policy_enforcer, CheckCompliance(_, _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  EXPECT_THAT(rv, IsOk());
+
+  SSLInfo result;
+  ASSERT_TRUE(sock_->GetSSLInfo(&result));
+
+  EXPECT_FALSE(result.cert_status & CERT_STATUS_IS_EV);
+  // The histogram should have been recorded with the CT compliance status.
+  histograms.ExpectUniqueSample(
+      kHistogramName,
+      static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS), 1);
+}
+
+// Test that when an EV certificate does conform to the CT policy and its EV
+// status is not removed, the corresponding histogram is recorded correctly.
+TEST_F(SSLClientSocketTest, CTCompliantEVHistogram) {
+  const char kHistogramName[] = "Net.CertificateTransparency.EVCompliance2.SSL";
+  base::HistogramTester histograms;
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.cert_status = CERT_STATUS_IS_EV;
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Emulate non-compliance of the certificate to the policy.
+  MockCTPolicyEnforcer policy_enforcer;
+  SetCTPolicyEnforcer(&policy_enforcer);
+  EXPECT_CALL(policy_enforcer, CheckCompliance(_, _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  EXPECT_THAT(rv, IsOk());
+
+  SSLInfo result;
+  ASSERT_TRUE(sock_->GetSSLInfo(&result));
+
+  EXPECT_TRUE(result.cert_status & CERT_STATUS_IS_EV);
+  // The histogram should have been recorded with the CT compliance status.
+  histograms.ExpectUniqueSample(
+      kHistogramName,
+      static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS), 1);
 }
 
 // Test that enabling Signed Certificate Timestamps enables OCSP stapling.
@@ -3441,10 +3514,9 @@ TEST_F(SSLClientSocketTest, CTIsRequired) {
       IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::REQUIRED));
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
   SSLConfig ssl_config;
   int rv;
@@ -3456,6 +3528,317 @@ TEST_F(SSLClientSocketTest, CTIsRequired) {
   EXPECT_TRUE(ssl_info.cert_status &
               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
   EXPECT_TRUE(sock_->IsConnected());
+}
+
+// Test that the CT compliance status is recorded in a histogram.
+TEST_F(SSLClientSocketTest, CTComplianceStatusHistogram) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.ConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up CT.
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  // The histogram should have been recorded with the CT compliance status.
+  histograms.ExpectUniqueSample(
+      kHistogramName,
+      static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS), 1);
+}
+
+// Test that the CT compliance status histogram is not recorded for
+// locally-installed roots.
+TEST_F(SSLClientSocketTest, CTComplianceStatusHistogramLocalRoot) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.ConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted but chains to a local root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = false;
+  verify_result.verified_cert = server_cert;
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up CT.
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  histograms.ExpectTotalCount(kHistogramName, 0);
+}
+
+// Test that when CT is required (in this case, by an Expect-CT opt-in) and the
+// connection is compliant, the histogram for CT-required connections is
+// recorded properly.
+TEST_F(SSLClientSocketTest, CTRequiredHistogramCompliant) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.CTRequiredConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up the Expect-CT opt-in.
+  const base::Time current_time(base::Time::Now());
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
+  transport_security_state_->AddExpectCT(
+      spawned_test_server()->host_port_pair().host(), expiry,
+      true /* enforce */, GURL("https://example-report.test"));
+  MockExpectCTReporter reporter;
+  transport_security_state_->SetExpectCTReporter(&reporter);
+
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  // The histogram should have been recorded with the CT compliance status.
+  histograms.ExpectUniqueSample(
+      kHistogramName,
+      static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS), 1);
+}
+
+// Test that when CT is not required and the connection is compliant, the
+// histogram for CT-required connections is not recorded.
+TEST_F(SSLClientSocketTest, CTNotRequiredHistogram) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.CTRequiredConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a private root, so CT is not required.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = false;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  // The histogram should not have been recorded because CT was not required for
+  // the connection.
+  histograms.ExpectTotalCount(kHistogramName, 0);
+}
+
+// Test that when CT is required (in this case, by an Expect-CT opt-in), the
+// absence of CT information is recorded in the histogram for CT-required
+// connections.
+TEST_F(SSLClientSocketTest, CTRequiredHistogramNonCompliant) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.CTRequiredConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up the Expect-CT opt-in.
+  const base::Time current_time(base::Time::Now());
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
+  transport_security_state_->AddExpectCT(
+      spawned_test_server()->host_port_pair().host(), expiry,
+      true /* enforce */, GURL("https://example-report.test"));
+  MockExpectCTReporter reporter;
+  transport_security_state_->SetExpectCTReporter(&reporter);
+
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_THAT(rv, IsError(ERR_CERTIFICATE_TRANSPARENCY_REQUIRED));
+
+  // The histogram should have been recorded with the CT compliance status.
+  histograms.ExpectUniqueSample(
+      kHistogramName,
+      static_cast<int>(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS), 1);
+}
+
+// Test that when CT is required (in this case, by an Expect-CT opt-in) but the
+// connection is not compliant, the relevant flag is set on the SSLInfo.
+TEST_F(SSLClientSocketTest, CTRequirementsFlagNotMet) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up the Expect-CT opt-in.
+  const base::Time current_time(base::Time::Now());
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
+  transport_security_state_->AddExpectCT(
+      spawned_test_server()->host_port_pair().host(), expiry,
+      true /* enforce */, GURL());
+
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+  EXPECT_TRUE(ssl_info.ct_policy_compliance_required);
+}
+
+// Test that when CT is required (in this case, by an Expect-CT opt-in) and the
+// connection is compliant, the relevant flag is set on the SSLInfo.
+TEST_F(SSLClientSocketTest, CTRequirementsFlagMet) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up the Expect-CT opt-in.
+  const base::Time current_time(base::Time::Now());
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
+  transport_security_state_->AddExpectCT(
+      spawned_test_server()->host_port_pair().host(), expiry,
+      true /* enforce */, GURL());
+
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+  EXPECT_TRUE(ssl_info.ct_policy_compliance_required);
+}
+
+// Test that when CT is required (in this case, by a CT delegate), the CT
+// required histogram is not recorded for a locally installed root.
+TEST_F(SSLClientSocketTest, CTRequiredHistogramNonCompliantLocalRoot) {
+  const char kHistogramName[] =
+      "Net.CertificateTransparency.CTRequiredConnectionComplianceStatus2.SSL";
+  base::HistogramTester histograms;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = false;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up the CT requirement and failure to comply.
+  MockRequireCTDelegate require_ct_delegate;
+  transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::REQUIRED));
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_THAT(rv, IsError(ERR_CERTIFICATE_TRANSPARENCY_REQUIRED));
+
+  histograms.ExpectTotalCount(kHistogramName, 0);
 }
 
 // Test that when CT is required (in this case, by an Expect-CT opt-in), the
@@ -3486,10 +3869,9 @@ TEST_F(SSLClientSocketTest, CTIsRequiredByExpectCT) {
   MockExpectCTReporter reporter;
   transport_security_state_->SetExpectCTReporter(&reporter);
 
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
   SSLConfig ssl_config;
   int rv;
@@ -3510,10 +3892,9 @@ TEST_F(SSLClientSocketTest, CTIsRequiredByExpectCT) {
   EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
 
   transport_security_state_->ClearReportCachesForTesting();
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_DIVERSE_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
 
@@ -3531,10 +3912,9 @@ TEST_F(SSLClientSocketTest, CTIsRequiredByExpectCT) {
 
   // If the connection is CT compliant, then there should be no socket error nor
   // a report.
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
 
@@ -3544,10 +3924,9 @@ TEST_F(SSLClientSocketTest, CTIsRequiredByExpectCT) {
   EXPECT_TRUE(sock_->IsConnected());
   EXPECT_EQ(2u, reporter.num_failures());
 
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_BUILD_NOT_TIMELY));
+          Return(ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
 
@@ -3592,10 +3971,9 @@ TEST_F(SSLClientSocketTest, PKPMoreImportantThanCT) {
       IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
       .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
                                  CTRequirementLevel::REQUIRED));
-  EXPECT_CALL(*ct_policy_enforcer_,
-              DoesConformToCertPolicy(server_cert.get(), _, _))
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
-          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+          Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
   SSLConfig ssl_config;
   int rv;

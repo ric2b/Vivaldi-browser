@@ -14,40 +14,30 @@
 
 #include "client/crashpad_info.h"
 
+#include <type_traits>
+
 #include "util/misc/address_sanitizer.h"
 #include "util/misc/from_pointer_cast.h"
-#include "util/stdlib/cxx.h"
 
 #if defined(OS_MACOSX)
 #include <mach-o/loader.h>
 #endif
 
-#if CXX_LIBRARY_VERSION >= 2011
-#include <type_traits>
-#endif
-
 namespace {
 
+// Don’t change this when simply adding fields. Readers will size-check the
+// structure and ignore fields they’re aware of when not present, as well as
+// fields they’re not aware of. Only change this when introducing an
+// incompatible layout, with the understanding that existing readers will not
+// understand new versions.
 constexpr uint32_t kCrashpadInfoVersion = 1;
 
 }  // namespace
 
 namespace crashpad {
 
-#if CXX_LIBRARY_VERSION >= 2011 || DOXYGEN
-// In C++11, check that CrashpadInfo has standard layout, which is what is
-// actually important.
 static_assert(std::is_standard_layout<CrashpadInfo>::value,
               "CrashpadInfo must be standard layout");
-#else
-// In C++98 (ISO 14882), section 9.5.1 says that a union cannot have a member
-// with a non-trivial ctor, copy ctor, dtor, or assignment operator. Use this
-// property to ensure that CrashpadInfo remains POD. This doesn’t work for C++11
-// because the requirements for unions have been relaxed.
-union Compile_Assert {
-  CrashpadInfo Compile_Assert__CrashpadInfo_must_be_pod;
-};
-#endif
 
 // This structure needs to be stored somewhere that is easy to find without
 // external information.
@@ -68,11 +58,11 @@ __attribute__((
     // found without having to consult the symbol table.
 #if defined(OS_MACOSX)
     section(SEG_DATA ",crashpad_info"),
-#elif defined(OS_LINUX) || defined(OS_ANDROID)
+#elif defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
     section("crashpad_info"),
-#else  // !defined(OS_MACOSX) && !defined(OS_LINUX) && !defined(OS_ANDROID)
+#else
 #error Port
-#endif  // !defined(OS_MACOSX) && !defined(OS_LINUX) && !defined(OS_ANDROID)
+#endif
 
 #if defined(ADDRESS_SANITIZER)
     // AddressSanitizer would add a trailing red zone of at least 32 bytes,
@@ -120,13 +110,8 @@ CrashpadInfo::CrashpadInfo()
       padding_1_(0),
       extra_memory_ranges_(nullptr),
       simple_annotations_(nullptr),
-      user_data_minidump_stream_head_(nullptr)
-#if !defined(NDEBUG) && defined(OS_WIN)
-      ,
-      invalid_read_detection_(0xbadc0de)
-#endif
-{
-}
+      user_data_minidump_stream_head_(nullptr),
+      annotations_list_(nullptr) {}
 
 void CrashpadInfo::AddUserDataMinidumpStream(uint32_t stream_type,
                                              const void* data,

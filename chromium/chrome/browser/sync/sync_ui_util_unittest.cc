@@ -27,7 +27,6 @@
 #include "testing/gmock/include/gmock/gmock-actions.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 
 using ::testing::AtMost;
 using ::testing::NiceMock;
@@ -79,7 +78,8 @@ class FakeSigninManagerForSyncUIUtilTest : public FakeSigninManagerBase {
   explicit FakeSigninManagerForSyncUIUtilTest(Profile* profile)
       : FakeSigninManagerBase(
             ChromeSigninClientFactory::GetForProfile(profile),
-            AccountTrackerServiceFactory::GetForProfile(profile)),
+            AccountTrackerServiceFactory::GetForProfile(profile),
+            SigninErrorControllerFactory::GetForProfile(profile)),
         auth_in_progress_(false) {
     Initialize(nullptr);
   }

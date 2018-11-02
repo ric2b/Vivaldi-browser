@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind_helpers.h"
@@ -21,11 +22,14 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gtest_xml_util.h"
 #include "base/test/launcher/test_launcher.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_suite.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
@@ -38,6 +42,8 @@
 #include "content/public/test/browser_test.h"
 #include "net/base/escape.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_features.h"
 
 #if defined(OS_POSIX)
 #include "base/files/file_descriptor_watcher_posix.h"
@@ -45,10 +51,10 @@
 
 #if defined(OS_WIN)
 #include "base/base_switches.h"
-#include "content/common/sandbox_win.h"
 #include "content/public/app/sandbox_helper_win.h"
 #include "sandbox/win/src/sandbox_factory.h"
 #include "sandbox/win/src/sandbox_types.h"
+#include "services/service_manager/sandbox/win/sandbox_win.h"
 #elif defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
@@ -118,13 +124,6 @@ void PrintUsage() {
           "    Sets the shard index to run to N (from 0 to TOTAL - 1).\n");
 }
 
-void CallChildProcessLaunched(TestState* test_state,
-                              base::ProcessHandle handle,
-                              base::ProcessId pid) {
-  if (test_state)
-    test_state->ChildProcessLaunched(handle, pid);
-}
-
 // Implementation of base::TestLauncherDelegate. This is also a test launcher,
 // wrapping a lower-level test launcher with content-specific code.
 class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
@@ -145,6 +144,58 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
                     const std::vector<std::string>& test_names) override;
 
  private:
+  class ChildProcessLifetimeObserver : public base::ProcessLifetimeObserver {
+   public:
+    ChildProcessLifetimeObserver(
+        WrapperTestLauncherDelegate* test_launcher_delegate,
+        base::TestLauncher* test_launcher,
+        std::vector<std::string>&& next_test_names,
+        const std::string& test_name,
+        const base::FilePath& output_file,
+        std::unique_ptr<TestState> test_state)
+        : base::ProcessLifetimeObserver(),
+          test_launcher_delegate_(test_launcher_delegate),
+          test_launcher_(test_launcher),
+          next_test_names_(std::move(next_test_names)),
+          test_name_(test_name),
+          output_file_(output_file),
+          test_state_(std::move(test_state)) {}
+    ~ChildProcessLifetimeObserver() override {
+      DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    }
+
+   private:
+    // base::ProcessLifetimeObserver:
+    void OnLaunched(base::ProcessHandle handle, base::ProcessId id) override {
+      if (test_state_)
+        test_state_->ChildProcessLaunched(handle, id);
+    }
+
+    void OnTimedOut(const base::CommandLine& command_line) override {
+      test_launcher_delegate_->OnTestTimedOut(command_line);
+    }
+
+    void OnCompleted(int exit_code,
+                     base::TimeDelta elapsed_time,
+                     bool was_timeout,
+                     const std::string& output) override {
+      DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+      test_launcher_delegate_->GTestCallback(
+          test_launcher_, next_test_names_, test_name_, output_file_,
+          std::move(test_state_), exit_code, elapsed_time, was_timeout, output);
+    }
+
+    SEQUENCE_CHECKER(sequence_checker_);
+    WrapperTestLauncherDelegate* test_launcher_delegate_;
+    base::TestLauncher* test_launcher_;
+    std::vector<std::string> next_test_names_;
+    std::string test_name_;
+    base::FilePath output_file_;
+    std::unique_ptr<TestState> test_state_;
+
+    DISALLOW_COPY_AND_ASSIGN(ChildProcessLifetimeObserver);
+  };
+
   void DoRunTests(base::TestLauncher* test_launcher,
                   const std::vector<std::string>& test_names);
 
@@ -154,10 +205,20 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
                         const std::string test_name,
                         const base::TestResult& pre_test_result);
 
+  // Relays timeout notification from the TestLauncher (by way of a
+  // ProcessLifetimeObserver) to the caller's content::TestLauncherDelegate.
+  void OnTestTimedOut(const base::CommandLine& command_line);
+
   // Callback to receive result of a test.
+  // |output_file| is a path to xml file written by test-launcher
+  // child process. It contains information about test and failed
+  // EXPECT/ASSERT/DCHECK statements. Test launcher parses that
+  // file to get additional information about test run (status,
+  // error-messages, stack-traces and file/line for failures).
   void GTestCallback(base::TestLauncher* test_launcher,
                      const std::vector<std::string>& test_names,
                      const std::string& test_name,
+                     const base::FilePath& output_file,
                      std::unique_ptr<TestState> test_state,
                      int exit_code,
                      const base::TimeDelta& elapsed_time,
@@ -195,6 +256,11 @@ bool WrapperTestLauncherDelegate::GetTests(
   return true;
 }
 
+bool IsPreTestName(const std::string& test_name) {
+  return base::StartsWith(test_name, kPreTestPrefix,
+                          base::CompareCase::SENSITIVE);
+}
+
 bool WrapperTestLauncherDelegate::ShouldRunTest(
     const std::string& test_case_name,
     const std::string& test_name) {
@@ -206,8 +272,7 @@ bool WrapperTestLauncherDelegate::ShouldRunTest(
     return false;
   }
 
-  if (base::StartsWith(test_name, kPreTestPrefix,
-                       base::CompareCase::SENSITIVE)) {
+  if (IsPreTestName(test_name)) {
     // We will actually run PRE_ tests, but to ensure they run on the same shard
     // as dependent tests, handle all these details internally.
     return false;
@@ -235,8 +300,8 @@ size_t WrapperTestLauncherDelegate::RunTests(
   size_t additional_tests_to_run_count = 0;
 
   // Compute dependencies of tests to be run.
-  for (size_t i = 0; i < test_names.size(); i++) {
-    std::string full_name(test_names[i]);
+  for (const std::string& test_name : test_names) {
+    std::string full_name(test_name);
     std::string pre_test_name(GetPreTestName(full_name));
 
     while (base::ContainsKey(all_test_names_, pre_test_name)) {
@@ -253,9 +318,8 @@ size_t WrapperTestLauncherDelegate::RunTests(
     }
   }
 
-  for (size_t i = 0; i < test_names.size(); i++) {
-    std::string full_name(test_names[i]);
-
+  for (const std::string& test_name : test_names) {
+    std::string full_name(test_name);
     // Make sure no PRE_ tests were requested explicitly.
     DCHECK_EQ(full_name, RemoveAnyPrePrefixes(full_name));
 
@@ -289,31 +353,25 @@ size_t WrapperTestLauncherDelegate::RetryTests(
 
   // In the face of PRE_ tests, we need to retry the entire chain of tests,
   // from the very first one.
-  for (size_t i = 0; i < test_names.size(); i++) {
-    std::string test_name(test_names[i]);
-    while (base::ContainsKey(reverse_dependent_test_map_, test_name)) {
-      test_name = reverse_dependent_test_map_[test_name];
-      test_names_set.insert(test_name);
+  for (const std::string& test_name : test_names) {
+    std::string name(test_name);
+    while (base::ContainsKey(reverse_dependent_test_map_, name)) {
+      name = reverse_dependent_test_map_[name];
+      test_names_set.insert(name);
     }
   }
 
   // Discard user data directories from any previous runs. Start with
   // fresh state.
-  for (UserDataDirMap::const_iterator i = user_data_dir_map_.begin();
-       i != user_data_dir_map_.end();
-       ++i) {
+  for (const auto& it : user_data_dir_map_) {
     // Delete temporary directories now to avoid using too much space in /tmp.
-    if (!base::DeleteFile(i->second, true)) {
-      LOG(WARNING) << "Failed to delete " << i->second.value();
+    if (!base::DeleteFile(it.second, true)) {
+      LOG(WARNING) << "Failed to delete " << it.second.value();
     }
   }
   user_data_dir_map_.clear();
 
-  for (std::set<std::string>::const_iterator i = test_names_set.begin();
-       i != test_names_set.end();
-       ++i) {
-    std::string full_name(*i);
-
+  for (const std::string& full_name : test_names_set) {
     // Make sure PRE_ tests and tests that depend on them share the same
     // data directory - based it on the test name without prefixes.
     std::string test_name_no_pre(RemoveAnyPrePrefixes(full_name));
@@ -324,12 +382,7 @@ size_t WrapperTestLauncherDelegate::RetryTests(
       user_data_dir_map_[test_name_no_pre] = temp_dir;
     }
 
-    size_t dot_pos = full_name.find('.');
-    CHECK_NE(dot_pos, std::string::npos);
-    std::string test_case_name = full_name.substr(0, dot_pos);
-    std::string test_name = full_name.substr(dot_pos + 1);
-    std::string pre_test_name(
-        test_case_name + "." + kPreTestPrefix + test_name);
+    std::string pre_test_name = GetPreTestName(full_name);
     if (!base::ContainsKey(test_names_set, pre_test_name))
       tests_to_run_now.push_back(full_name);
   }
@@ -367,6 +420,16 @@ void WrapperTestLauncherDelegate::DoRunTests(
   // of the other tests.
   switches.erase(base::kGTestOutputFlag);
 
+  // Create a dedicated temporary directory to store the xml result data
+  // per run to ensure clean state and make it possible to launch multiple
+  // processes in parallel.
+  base::FilePath output_file;
+  CHECK(base::CreateTemporaryDirInDir(
+      temp_dir_.GetPath(), FILE_PATH_LITERAL("results"), &output_file));
+  output_file = output_file.AppendASCII("test_results.xml");
+
+  new_cmd_line.AppendSwitchPath(switches::kTestLauncherOutput, output_file);
+
   for (base::CommandLine::SwitchMap::const_iterator iter = switches.begin();
        iter != switches.end(); ++iter) {
     new_cmd_line.AppendSwitchNative(iter->first, iter->second);
@@ -380,14 +443,13 @@ void WrapperTestLauncherDelegate::DoRunTests(
 
   char* browser_wrapper = getenv("BROWSER_WRAPPER");
 
-  TestState* test_state = test_state_ptr.get();
+  auto observer = std::make_unique<ChildProcessLifetimeObserver>(
+      this, test_launcher, std::move(test_names_copy), test_name, output_file,
+      std::move(test_state_ptr));
   test_launcher->LaunchChildGTestProcess(
       new_cmd_line, browser_wrapper ? browser_wrapper : std::string(),
       TestTimeouts::action_max_timeout(), test_launch_options,
-      base::Bind(&WrapperTestLauncherDelegate::GTestCallback,
-                 base::Unretained(this), test_launcher, test_names_copy,
-                 test_name, base::Passed(&test_state_ptr)),
-      base::Bind(&CallChildProcessLaunched, base::Unretained(test_state)));
+      std::move(observer));
 }
 
 void WrapperTestLauncherDelegate::RunDependentTest(
@@ -414,10 +476,16 @@ void WrapperTestLauncherDelegate::RunDependentTest(
   }
 }
 
+void WrapperTestLauncherDelegate::OnTestTimedOut(
+    const base::CommandLine& command_line) {
+  launcher_delegate_->OnTestTimedOut(command_line);
+}
+
 void WrapperTestLauncherDelegate::GTestCallback(
     base::TestLauncher* test_launcher,
     const std::vector<std::string>& test_names,
     const std::string& test_name,
+    const base::FilePath& output_file,
     std::unique_ptr<TestState> test_state,
     int exit_code,
     const base::TimeDelta& elapsed_time,
@@ -426,13 +494,45 @@ void WrapperTestLauncherDelegate::GTestCallback(
   base::TestResult result;
   result.full_name = test_name;
 
-  // TODO(phajdan.jr): Recognize crashes.
-  if (exit_code == 0)
-    result.status = base::TestResult::TEST_SUCCESS;
-  else if (was_timeout)
-    result.status = base::TestResult::TEST_TIMEOUT;
-  else
-    result.status = base::TestResult::TEST_FAILURE;
+  bool crashed = false;
+  std::vector<base::TestResult> parsed_results;
+  bool have_test_results =
+      base::ProcessGTestOutput(output_file, &parsed_results, &crashed);
+
+  if (!base::DeleteFile(output_file.DirName(), true)) {
+    LOG(WARNING) << "Failed to delete output file: " << output_file.value();
+  }
+
+  // Use GTest XML to determine test status. Fallback to exit code if
+  // parsing failed.
+  if (have_test_results && !parsed_results.empty()) {
+    // We expect only one test result here.
+    DCHECK_EQ(1U, parsed_results.size());
+    DCHECK_EQ(test_name, parsed_results.front().full_name);
+
+    result = parsed_results.front();
+
+    if (was_timeout) {
+      // Fix up test status: we forcibly kill the child process
+      // after the timeout, so from XML results it looks like
+      // a crash.
+      result.status = base::TestResult::TEST_TIMEOUT;
+    } else if (result.status == base::TestResult::TEST_SUCCESS &&
+               exit_code != 0) {
+      // This is a bit surprising case: test is marked as successful,
+      // but the exit code was not zero. This can happen e.g. under
+      // memory tools that report leaks this way. Mark test as a
+      // failure on exit.
+      result.status = base::TestResult::TEST_FAILURE_ON_EXIT;
+    }
+  } else {
+    if (was_timeout)
+      result.status = base::TestResult::TEST_TIMEOUT;
+    else if (exit_code != 0)
+      result.status = base::TestResult::TEST_FAILURE;
+    else
+      result.status = base::TestResult::TEST_UNKNOWN;
+  }
 
   result.elapsed_time = elapsed_time;
 
@@ -458,6 +558,13 @@ void WrapperTestLauncherDelegate::GTestCallback(
   DoRunTests(test_launcher, test_names);
 }
 
+void PrepareToRunTestSuite(const base::CommandLine& command_line) {
+#if BUILDFLAG(ENABLE_MUS)
+  if (command_line.HasSwitch(switches::kMus))
+    g_params->env_mode = aura::Env::Mode::MUS;
+#endif
+}
+
 }  // namespace
 
 const char kHelpFlag[]   = "help";
@@ -473,11 +580,6 @@ std::unique_ptr<TestState> TestLauncherDelegate::PreRunTest(
     base::CommandLine* command_line,
     base::TestLauncher::LaunchOptions* test_launch_options) {
   return nullptr;
-}
-
-void TestLauncherDelegate::OnDoneRunningTests() {}
-
-TestLauncherDelegate::~TestLauncherDelegate() {
 }
 
 int LaunchTests(TestLauncherDelegate* launcher_delegate,
@@ -511,21 +613,24 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
   params.argv = const_cast<const char**>(argv);
 #endif  // defined(OS_WIN)
 
+#if !defined(OS_ANDROID)
+  // This needs to be before trying to run tests as otherwise utility processes
+  // end up being launched as a test, which leads to rerunning the test.
+  if (command_line->HasSwitch(switches::kProcessType) ||
+      command_line->HasSwitch(kLaunchAsBrowser)) {
+    return ContentMain(params);
+  }
+#endif
+
   if (command_line->HasSwitch(kSingleProcessTestsFlag) ||
       (command_line->HasSwitch(switches::kSingleProcess) &&
        command_line->HasSwitch(base::kGTestFilterFlag)) ||
       command_line->HasSwitch(base::kGTestListTestsFlag) ||
       command_line->HasSwitch(base::kGTestHelpFlag)) {
     g_params = &params;
+    PrepareToRunTestSuite(*command_line);
     return launcher_delegate->RunTestSuite(argc, argv);
   }
-
-#if !defined(OS_ANDROID)
-  if (command_line->HasSwitch(switches::kProcessType) ||
-      command_line->HasSwitch(kLaunchAsBrowser)) {
-    return ContentMain(params);
-  }
-#endif
 
   base::AtExitManager at_exit;
   testing::InitGoogleTest(&argc, argv);
@@ -539,9 +644,12 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
       "--single-process (to do the above, and also run Chrome in single-"
           "process mode).\n");
 
-  base::MessageLoopForIO message_loop;
+  base::test::ScopedTaskEnvironment task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
 #if defined(OS_POSIX)
-  base::FileDescriptorWatcher file_descriptor_watcher(&message_loop);
+  base::FileDescriptorWatcher file_descriptor_watcher(
+      base::MessageLoopForIO::current());
 #endif
 
   launcher_delegate->PreSharding();
@@ -559,6 +667,11 @@ TestLauncherDelegate* GetCurrentTestLauncherDelegate() {
 
 ContentMainParams* GetContentMainParams() {
   return g_params;
+}
+
+bool IsPreTest() {
+  auto* test = testing::UnitTest::GetInstance();
+  return IsPreTestName(test->current_test_info()->name());
 }
 
 }  // namespace content

@@ -56,6 +56,10 @@
 
 namespace shell_integration {
 
+// Allows LaunchXdgUtility to join a process.
+class LaunchXdgUtilityScopedAllowBaseSyncPrimitives
+    : public base::ScopedAllowBaseSyncPrimitives {};
+
 namespace {
 
 // Helper to launch xdg scripts. We don't want them to ask any questions on the
@@ -79,6 +83,7 @@ bool LaunchXdgUtility(const std::vector<std::string>& argv, int* exit_code) {
   close(devnull);
   if (!process.IsValid())
     return false;
+  LaunchXdgUtilityScopedAllowBaseSyncPrimitives allow_base_sync_primitives;
   return process.WaitForExit(exit_code);
 }
 
@@ -166,7 +171,7 @@ DefaultWebClientState GetIsDefaultWebClient(const std::string& protocol) {
 #if defined(OS_CHROMEOS)
   return UNKNOWN_DEFAULT;
 #else
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 
@@ -564,7 +569,7 @@ base::FilePath GetDataWriteLocation(base::Environment* env) {
 }
 
 std::vector<base::FilePath> GetDataSearchLocations(base::Environment* env) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::vector<base::FilePath> search_paths;
   base::FilePath write_location = GetDataWriteLocation(env);
@@ -641,12 +646,13 @@ std::string GetDesktopName(base::Environment* env) {
       return "google-chrome.desktop";
   }
 #elif defined(VIVALDI_BUILD)
-  version_info::Channel product_channel(
-      chrome::GetChannel());
-  switch (product_channel) {
-    case version_info::Channel::DEV:
+  std::string modifier;
+  env->GetVar("CHROME_VERSION_EXTRA", &modifier);
+  if (modifier == "snapshot") {
       return "vivaldi-snapshot.desktop";
-    default:
+  } else if (modifier == "beta") {
+      return "vivaldi-beta.desktop";
+  } else {
       return "vivaldi-stable.desktop";
   }
 #else  // CHROMIUM_BUILD
@@ -684,7 +690,7 @@ web_app::ShortcutLocations GetExistingShortcutLocations(
     const base::FilePath& profile_path,
     const std::string& extension_id,
     const base::FilePath& desktop_path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath shortcut_filename = GetExtensionShortcutFilename(
       profile_path, extension_id);
@@ -715,7 +721,7 @@ web_app::ShortcutLocations GetExistingShortcutLocations(
 bool GetExistingShortcutContents(base::Environment* env,
                                  const base::FilePath& desktop_filename,
                                  std::string* output) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::vector<base::FilePath> search_paths = GetDataSearchLocations(env);
 
@@ -747,7 +753,7 @@ base::FilePath GetWebShortcutFilename(const GURL& url) {
   for (size_t i = 1; i < 100; ++i) {
     if (base::PathExists(base::FilePath(alternative_filepath))) {
       alternative_filepath = base::FilePath(
-          filepath.value() + "_" + base::SizeTToString(i) + ".desktop");
+          filepath.value() + "_" + base::NumberToString(i) + ".desktop");
     } else {
       return base::FilePath(alternative_filepath).BaseName();
     }
@@ -776,7 +782,7 @@ base::FilePath GetExtensionShortcutFilename(const base::FilePath& profile_path,
 std::vector<base::FilePath> GetExistingProfileShortcutFilenames(
     const base::FilePath& profile_path,
     const base::FilePath& directory) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Use a prefix, because xdg-desktop-menu requires it.
   std::string prefix(chrome::kBrowserProcessExecutableName);
@@ -941,7 +947,7 @@ std::string GetDirectoryFileContents(const base::string16& title,
 bool CreateDesktopShortcut(
     const web_app::ShortcutInfo& shortcut_info,
     const web_app::ShortcutLocations& creation_locations) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath shortcut_filename;
   if (!shortcut_info.extension_id.empty()) {
@@ -1034,7 +1040,7 @@ bool CreateDesktopShortcut(
 bool CreateAppListDesktopShortcut(
     const std::string& wm_class,
     const std::string& title) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath desktop_name(kAppListDesktopName);
   base::FilePath shortcut_filename = desktop_name.AddExtension("desktop");
@@ -1050,7 +1056,7 @@ bool CreateAppListDesktopShortcut(
   }
 
   gfx::ImageFamily icon_images;
-  ResourceBundle& resource_bundle = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& resource_bundle = ui::ResourceBundle::GetSharedInstance();
   icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_16));
   icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_32));
   icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_48));
@@ -1074,7 +1080,7 @@ bool CreateAppListDesktopShortcut(
 
 void DeleteDesktopShortcuts(const base::FilePath& profile_path,
                             const std::string& extension_id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath shortcut_filename = GetExtensionShortcutFilename(
       profile_path, extension_id);
@@ -1090,7 +1096,7 @@ void DeleteDesktopShortcuts(const base::FilePath& profile_path,
 }
 
 void DeleteAllDesktopShortcuts(const base::FilePath& profile_path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 

@@ -13,9 +13,12 @@
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Functional.h"
+#include "platform/wtf/Optional.h"
+#include "v8/include/v8.h"
 
 namespace v8 {
 class Function;
@@ -36,6 +39,7 @@ class Element;
 class Event;
 class ExecutionContext;
 struct FetchInitiatorInfo;
+class FloatRect;
 class GraphicsLayer;
 class HitTestLocation;
 class HitTestRequest;
@@ -80,7 +84,8 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
                        DocumentLoader*,
                        ResourceRequest&,
                        const ResourceResponse& redirect_response,
-                       const FetchInitiatorInfo&);
+                       const FetchInitiatorInfo&,
+                       Resource::Type);
   void DidReceiveResourceResponse(unsigned long identifier,
                                   DocumentLoader*,
                                   const ResourceResponse&,
@@ -109,7 +114,7 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
 
   void PaintTiming(Document*, const char* name, double timestamp);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   Member<CoreProbeSink> instrumenting_agents_;
@@ -172,7 +177,7 @@ std::unique_ptr<TracedValue> SelectorPart(Element&,
                                           const String&);
 std::unique_ptr<TracedValue> InvalidationList(
     ContainerNode&,
-    const Vector<RefPtr<InvalidationSet>>&);
+    const Vector<scoped_refptr<InvalidationSet>>&);
 }  // namespace InspectorStyleInvalidatorInvalidateEvent
 
 #define TRACE_STYLE_INVALIDATOR_INVALIDATION(element, reason)              \
@@ -284,7 +289,7 @@ std::unique_ptr<TracedValue> Data(unsigned long identifier,
 namespace InspectorTimerInstallEvent {
 std::unique_ptr<TracedValue> Data(ExecutionContext*,
                                   int timer_id,
-                                  int timeout,
+                                  TimeDelta timeout,
                                   bool single_shot);
 }
 
@@ -389,7 +394,33 @@ std::unique_ptr<TracedValue> Data(unsigned long identifier, const String& url);
 }
 
 namespace InspectorCompileScriptEvent {
-std::unique_ptr<TracedValue> Data(const String& url, const WTF::TextPosition&);
+
+struct V8CacheResult {
+  struct ProduceResult {
+    ProduceResult(v8::ScriptCompiler::CompileOptions produce_options,
+                  int cache_size);
+    v8::ScriptCompiler::CompileOptions produce_options;
+    int cache_size;
+  };
+  struct ConsumeResult {
+    ConsumeResult(v8::ScriptCompiler::CompileOptions consume_options,
+                  int cache_size,
+                  bool rejected);
+    v8::ScriptCompiler::CompileOptions consume_options;
+    int cache_size;
+    bool rejected;
+  };
+  V8CacheResult() {}
+  V8CacheResult(Optional<ProduceResult>, Optional<ConsumeResult>);
+
+  Optional<ProduceResult> produce_result;
+  Optional<ConsumeResult> consume_result;
+};
+
+std::unique_ptr<TracedValue> Data(const String& url,
+                                  const WTF::TextPosition&,
+                                  const V8CacheResult&,
+                                  bool streamed);
 }
 
 namespace InspectorFunctionCallEvent {

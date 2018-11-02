@@ -31,16 +31,14 @@ class EmbeddedWorkerDevToolsAgent : public IPC::Listener {
   void SendMessage(IPC::Sender* sender,
                    int session_id,
                    int call_id,
-                   const std::string& message,
-                   const std::string& state_cookie);
+                   std::string message,
+                   std::string state_cookie);
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
  private:
-  void OnAttach(const std::string& host_id, int session_id);
-  void OnReattach(const std::string& host_id,
-                  int session_id,
-                  const std::string& state);
+  void OnAttach(int session_id);
+  void OnReattach(int session_id, const std::string& state);
   void OnDetach(int session_id);
   void OnDispatchOnInspectorBackend(int session_id,
                                     int call_id,

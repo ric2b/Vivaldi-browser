@@ -4,8 +4,8 @@
 
 #include "content/browser/compositor/gpu_output_surface_mac.h"
 
-#include "cc/output/output_surface_client.h"
-#include "cc/output/output_surface_frame.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/ipc/client/gpu_process_hosted_ca_layer_tree_params.h"
@@ -70,7 +70,7 @@ GpuOutputSurfaceMac::GpuOutputSurfaceMac(
 
 GpuOutputSurfaceMac::~GpuOutputSurfaceMac() {}
 
-void GpuOutputSurfaceMac::SwapBuffers(cc::OutputSurfaceFrame frame) {
+void GpuOutputSurfaceMac::SwapBuffers(viz::OutputSurfaceFrame frame) {
   GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(std::move(frame));
 
   if (should_show_frames_state_ ==
@@ -80,8 +80,7 @@ void GpuOutputSurfaceMac::SwapBuffers(cc::OutputSurfaceFrame frame) {
 }
 
 void GpuOutputSurfaceMac::OnGpuSwapBuffersCompleted(
-    const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result,
+    const gfx::SwapResponse& response,
     const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
   remote_layers_->UpdateLayers(params_mac->ca_context_id,
                                params_mac->fullscreen_low_power_ca_context_id);
@@ -106,7 +105,7 @@ void GpuOutputSurfaceMac::OnGpuSwapBuffersCompleted(
   }
   client_->DidReceiveTextureInUseResponses(params_mac->responses);
   GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
-      latency_info, result, params_mac);
+      response, params_mac);
 }
 
 void GpuOutputSurfaceMac::SetSurfaceSuspendedForRecycle(bool suspended) {

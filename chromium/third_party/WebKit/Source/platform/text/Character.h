@@ -122,6 +122,7 @@ class PLATFORM_EXPORT Character {
            c == kZeroWidthNoBreakSpaceCharacter ||
            c == kObjectReplacementCharacter;
   }
+  static bool CanTextDecorationSkipInk(UChar32);
   static bool CanReceiveTextEmphasis(UChar32);
 
   static bool IsGraphemeExtended(UChar32 c) {
@@ -140,6 +141,8 @@ class PLATFORM_EXPORT Character {
   static bool IsEmojiKeycapBase(UChar32);
   static bool IsRegionalIndicator(UChar32);
   static bool IsModifier(UChar32 c) { return c >= 0x1F3FB && c <= 0x1F3FF; }
+  // http://www.unicode.org/reports/tr51/proposed.html#flag-emoji-tag-sequences
+  static bool IsEmojiFlagSequenceTag(UChar32);
 
   static inline UChar NormalizeSpaces(UChar character) {
     if (TreatAsSpace(character))
@@ -169,6 +172,7 @@ class PLATFORM_EXPORT Character {
   static String NormalizeSpaces(const UChar*, unsigned length);
 
   static bool IsCommonOrInheritedScript(UChar32);
+  static bool IsUnassignedOrPrivateUse(UChar32);
 };
 
 }  // namespace blink

@@ -4,10 +4,12 @@
 
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -28,6 +30,7 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/driver/fake_sync_service.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,8 +87,23 @@ class TestPasswordManagerClient : public StubPasswordManagerClient {
   GURL main_frame_url_;
 };
 
+class MockSyncService : public syncer::FakeSyncService {
+ public:
+  MockSyncService() {}
+  virtual ~MockSyncService() {}
+  MOCK_CONST_METHOD0(IsFirstSetupComplete, bool());
+  MOCK_CONST_METHOD0(IsSyncActive, bool());
+  MOCK_CONST_METHOD0(IsUsingSecondaryPassphrase, bool());
+  MOCK_CONST_METHOD0(GetActiveDataTypes, syncer::ModelTypeSet());
+};
+
 class MockAutofillClient : public autofill::TestAutofillClient {
  public:
+  MockAutofillClient() : sync_service_(nullptr) {}
+  MockAutofillClient(MockSyncService* sync_service)
+      : sync_service_(sync_service) {
+    LOG(ERROR) << "init mpck client";
+  }
   MOCK_METHOD4(ShowAutofillPopup,
                void(const gfx::RectF& element_bounds,
                     base::i18n::TextDirection text_direction,
@@ -93,6 +111,11 @@ class MockAutofillClient : public autofill::TestAutofillClient {
                     base::WeakPtr<autofill::AutofillPopupDelegate> delegate));
   MOCK_METHOD0(HideAutofillPopup, void());
   MOCK_METHOD1(ExecuteCommand, void(int));
+
+  syncer::SyncService* GetSyncService() override { return sync_service_; }
+
+ private:
+  MockSyncService* sync_service_;
 };
 
 bool IsPreLollipopAndroid() {
@@ -154,10 +177,93 @@ class PasswordAutofillManagerTest : public testing::Test {
     }
   }
 
+  void SetManualFallbacksForFillingStandalone(bool enabled) {
+    if (enabled) {
+      scoped_feature_list_.InitAndEnableFeature(
+          password_manager::features::kEnableManualFallbacksFillingStandalone);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          password_manager::features::kEnableManualFallbacksFillingStandalone);
+    }
+  }
+
   static bool IsManualFallbackForFillingEnabled() {
     return base::FeatureList::IsEnabled(
                password_manager::features::kEnableManualFallbacksFilling) &&
            !IsPreLollipopAndroid();
+  }
+
+  void SetManualFallbacks(bool enabled) {
+    std::vector<std::string> features = {
+        password_manager::features::kEnableManualFallbacksFilling.name,
+        password_manager::features::kEnableManualFallbacksFillingStandalone
+            .name,
+        password_manager::features::kEnableManualFallbacksGeneration.name};
+    if (enabled) {
+      scoped_feature_list_.InitFromCommandLine(base::JoinString(features, ","),
+                                               std::string());
+    } else {
+      scoped_feature_list_.InitFromCommandLine(std::string(),
+                                               base::JoinString(features, ","));
+    }
+  }
+
+  void TestGenerationFallback(bool custom_passphrase_enabled) {
+    MockSyncService mock_sync_service;
+    EXPECT_CALL(mock_sync_service, IsFirstSetupComplete())
+        .WillRepeatedly(::testing::Return(true));
+    EXPECT_CALL(mock_sync_service, IsSyncActive())
+        .WillRepeatedly(::testing::Return(true));
+    EXPECT_CALL(mock_sync_service, GetActiveDataTypes())
+        .Times(::testing::AnyNumber())
+        .WillRepeatedly(
+            ::testing::Return(syncer::ModelTypeSet(syncer::PASSWORDS)));
+    EXPECT_CALL(mock_sync_service, IsUsingSecondaryPassphrase())
+        .WillRepeatedly(::testing::Return(custom_passphrase_enabled));
+    std::unique_ptr<TestPasswordManagerClient> client(
+        new TestPasswordManagerClient);
+    std::unique_ptr<MockAutofillClient> autofill_client(
+        new MockAutofillClient(&mock_sync_service));
+    InitializePasswordAutofillManager(client.get(), autofill_client.get());
+
+    gfx::RectF element_bounds;
+    autofill::PasswordFormFillData data;
+    data.username_field.value = test_username_;
+    data.password_field.value = test_password_;
+    data.origin = GURL("https://foo.test");
+
+    int dummy_key = 0;
+    password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
+    SetManualFallbacks(true);
+
+    std::vector<base::string16> elements = {
+        l10n_util::GetStringUTF16(
+            IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE),
+        test_username_};
+    if (!IsPreLollipopAndroid() || !custom_passphrase_enabled) {
+#if !defined(OS_ANDROID)
+      elements.push_back(base::string16());
+#endif
+      elements.push_back(
+          l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK));
+      if (!custom_passphrase_enabled) {
+#if !defined(OS_ANDROID)
+        elements.push_back(base::string16());
+#endif
+        elements.push_back(
+            l10n_util::GetStringUTF16(IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK));
+      }
+    }
+
+    EXPECT_CALL(
+        *autofill_client,
+        ShowAutofillPopup(
+            element_bounds, _,
+            SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
+
+    password_autofill_manager_->OnShowPasswordSuggestions(
+        dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
+        autofill::IS_PASSWORD_FIELD, element_bounds);
   }
 
   std::unique_ptr<PasswordAutofillManager> password_autofill_manager_;
@@ -661,8 +767,8 @@ TEST_F(PasswordAutofillManagerTest, PreviewAndFillEmptyUsernameSuggestion) {
 // autofill popup when PasswordAutofillManager::OnShowNotSecureWarning()
 // is called.
 TEST_F(PasswordAutofillManagerTest, ShowStandaloneNotSecureWarning) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -701,8 +807,8 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneNotSecureWarning) {
 }
 
 TEST_F(PasswordAutofillManagerTest, NonSecurePasswordFieldHttpWarningMessage) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -787,8 +893,8 @@ TEST_F(PasswordAutofillManagerTest, NonSecurePasswordFieldHttpWarningMessage) {
 // Tests that the "Login not secure" warning shows up in non-password
 // fields of login forms.
 TEST_F(PasswordAutofillManagerTest, NonSecureUsernameFieldHttpWarningMessage) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -843,8 +949,8 @@ TEST_F(PasswordAutofillManagerTest, NonSecureUsernameFieldHttpWarningMessage) {
 }
 
 TEST_F(PasswordAutofillManagerTest, SecurePasswordFieldHttpWarningMessage) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -904,8 +1010,8 @@ TEST_F(PasswordAutofillManagerTest, ShowedFormNotSecureHistogram) {
   base::HistogramTester histograms;
   SetHttpWarningEnabled();
 
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   // Test that the standalone warning (with no autofill suggestions) records the
@@ -927,8 +1033,8 @@ TEST_F(PasswordAutofillManagerTest, ShowedFormNotSecureHistogram) {
   data.username_field.value = test_username_;
   data.password_field.value = test_password_;
   data.origin = GURL("http://foo.test");
-  password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
 
+  password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
   EXPECT_CALL(*autofill_client, ShowAutofillPopup(element_bounds, _, _, _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
@@ -947,8 +1053,8 @@ TEST_F(PasswordAutofillManagerTest, ShowedFormNotSecureHistogram) {
 // appearance is disabled.
 TEST_F(PasswordAutofillManagerTest,
        NotShowAllPasswordsOptionOnPasswordFieldWhenFeatureDisabled) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -978,6 +1084,21 @@ TEST_F(PasswordAutofillManagerTest,
       autofill::IS_PASSWORD_FIELD, element_bounds);
 }
 
+// Tests that the "Generate Password Suggestion" suggestion isn't shown in the
+// Suggestion popup when the user is sync user with custom passphrase and manual
+// fallbacks experiment is enabled.
+TEST_F(PasswordAutofillManagerTest,
+       NotShowGeneratePasswordOptionOnPasswordFieldWhenCustomPassphraseUser) {
+  TestGenerationFallback(true /* custom_passphrase_enabled */);
+}
+
+// Tests that the "Generate Password Suggestion" suggestion is shown along
+// with "Use password for" and "Show all passwords" in the popup for the user
+// with custom passphrase.
+TEST_F(PasswordAutofillManagerTest, ShowGeneratePasswordOptionOnPasswordField) {
+  TestGenerationFallback(false /* custom_passphrase_enabled */);
+}
+
 // Tests that the "Show all passwords" suggestion is shown along with
 // "Use password for" in the popup when the feature which controls its
 // appearance is enabled.
@@ -989,10 +1110,10 @@ TEST_F(PasswordAutofillManagerTest, ShowAllPasswordsOptionOnPasswordField) {
   base::HistogramTester histograms;
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
 
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   auto manager =
-      base::MakeUnique<password_manager::PasswordManager>(client.get());
+      std::make_unique<password_manager::PasswordManager>(client.get());
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   ON_CALL(*(client->mock_driver()), GetPasswordManager())
@@ -1060,16 +1181,18 @@ TEST_F(PasswordAutofillManagerTest, ShowAllPasswordsOptionOnPasswordField) {
     manager.reset();
     autofill_client.reset();
     client.reset();
-    const ukm::UkmSource* source =
-        test_ukm_recorder.GetSourceForUrl(kMainFrameUrl);
-    ASSERT_TRUE(source);
 
-    test_ukm_recorder.ExpectMetric(
-        *source, "PageWithPassword", password_manager::kUkmPageLevelUserAction,
-        static_cast<int64_t>(
-            password_manager::PasswordManagerMetricsRecorder::
-                PageLevelUserAction::kShowAllPasswordsWhileSomeAreSuggested));
-
+    const auto& entries =
+        test_ukm_recorder.GetEntriesByName("PageWithPassword");
+    EXPECT_EQ(1u, entries.size());
+    for (const auto* entry : entries) {
+      test_ukm_recorder.ExpectEntrySourceHasUrl(entry, GURL(kMainFrameUrl));
+      test_ukm_recorder.ExpectEntryMetric(
+          entry, password_manager::kUkmPageLevelUserAction,
+          static_cast<int64_t>(
+              password_manager::PasswordManagerMetricsRecorder::
+                  PageLevelUserAction::kShowAllPasswordsWhileSomeAreSuggested));
+    }
   } else {
     EXPECT_THAT(histograms.GetAllSamples(kShownContextHistogram),
                 testing::IsEmpty());
@@ -1086,10 +1209,10 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneShowAllPasswords) {
   base::HistogramTester histograms;
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
 
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   auto manager =
-      base::MakeUnique<password_manager::PasswordManager>(client.get());
+      std::make_unique<password_manager::PasswordManager>(client.get());
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   ON_CALL(*(client->mock_driver()), GetPasswordManager())
@@ -1105,7 +1228,7 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneShowAllPasswords) {
   base::string16 show_all_saved_row_text =
       l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK);
 
-  SetManualFallbacksForFilling(true);
+  SetManualFallbacksForFillingStandalone(true);
 
   EXPECT_CALL(
       *autofill_client,
@@ -1147,15 +1270,18 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneShowAllPasswords) {
     manager.reset();
     autofill_client.reset();
     client.reset();
-    const ukm::UkmSource* source =
-        test_ukm_recorder.GetSourceForUrl(kMainFrameUrl);
-    ASSERT_TRUE(source);
 
-    test_ukm_recorder.ExpectMetric(
-        *source, "PageWithPassword", password_manager::kUkmPageLevelUserAction,
-        static_cast<int64_t>(
-            password_manager::PasswordManagerMetricsRecorder::
-                PageLevelUserAction::kShowAllPasswordsWhileNoneAreSuggested));
+    const auto& entries =
+        test_ukm_recorder.GetEntriesByName("PageWithPassword");
+    EXPECT_EQ(1u, entries.size());
+    for (const auto* entry : entries) {
+      test_ukm_recorder.ExpectEntrySourceHasUrl(entry, GURL(kMainFrameUrl));
+      test_ukm_recorder.ExpectEntryMetric(
+          entry, password_manager::kUkmPageLevelUserAction,
+          static_cast<int64_t>(
+              password_manager::PasswordManagerMetricsRecorder::
+                  PageLevelUserAction::kShowAllPasswordsWhileNoneAreSuggested));
+    }
   } else {
     EXPECT_THAT(histograms.GetAllSamples(kShownContextHistogram),
                 testing::IsEmpty());
@@ -1168,8 +1294,8 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneShowAllPasswords) {
 // fields of login forms.
 TEST_F(PasswordAutofillManagerTest,
        NotShowAllPasswordsOptionOnNonPasswordField) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
-  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
+  auto autofill_client = std::make_unique<MockAutofillClient>();
   InitializePasswordAutofillManager(client.get(), autofill_client.get());
 
   gfx::RectF element_bounds;
@@ -1195,10 +1321,10 @@ TEST_F(PasswordAutofillManagerTest,
 // SimpleWebviewDialog doesn't have an autofill client. Nothing should crash if
 // the filling fallback is invoked.
 TEST_F(PasswordAutofillManagerTest, ShowAllPasswordsWithoutAutofillClient) {
-  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  auto client = std::make_unique<TestPasswordManagerClient>();
   InitializePasswordAutofillManager(client.get(), nullptr);
 
-  SetManualFallbacksForFilling(true);
+  SetManualFallbacksForFillingStandalone(true);
 
   password_autofill_manager_->OnShowManualFallbackSuggestion(
       base::i18n::RIGHT_TO_LEFT, gfx::RectF());

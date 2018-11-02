@@ -75,7 +75,7 @@ FT_BEGIN_HEADER
   /*************************************************************************/
 
 
-  /*************************************************************************/
+  /*#***********************************************************************/
   /*                                                                       */
   /* If you enable this configuration option, FreeType recognizes an       */
   /* environment variable called `FREETYPE_PROPERTIES', which can be used  */
@@ -107,20 +107,17 @@ FT_BEGIN_HEADER
 
   /*************************************************************************/
   /*                                                                       */
-  /* Uncomment the line below if you want to activate sub-pixel rendering  */
-  /* (a.k.a. LCD rendering, or ClearType) in this build of the library.    */
+  /* Uncomment the line below if you want to activate LCD rendering        */
+  /* technology similar to ClearType in this build of the library.  This   */
+  /* technology triples the resolution in the direction color subpixels.   */
+  /* To mitigate color fringes inherent to this technology, you also need  */
+  /* to explicitly set up LCD filtering.                                   */
   /*                                                                       */
   /* Note that this feature is covered by several Microsoft patents        */
   /* and should not be activated in any default build of the library.      */
-  /*                                                                       */
-  /* This macro has no impact on the FreeType API, only on its             */
-  /* _implementation_.  For example, using FT_RENDER_MODE_LCD when calling */
-  /* FT_Render_Glyph still generates a bitmap that is 3 times wider than   */
-  /* the original size in case this macro isn't defined; however, each     */
-  /* triplet of subpixels has R=G=B.                                       */
-  /*                                                                       */
-  /* This is done to allow FreeType clients to run unmodified, forcing     */
-  /* them to display normal gray-level anti-aliased glyphs.                */
+  /* When this macro is not defined, FreeType offers alternative LCD       */
+  /* rendering technology that produces excellent output without LCD       */
+  /* filtering.                                                            */
   /*                                                                       */
 #define FT_CONFIG_OPTION_SUBPIXEL_RENDERING
 
@@ -272,67 +269,6 @@ FT_BEGIN_HEADER
 #define FT_CONFIG_OPTION_USE_HARFBUZZ
 #endif
 
-
-  /*************************************************************************/
-  /*                                                                       */
-  /* DLL export compilation                                                */
-  /*                                                                       */
-  /*   When compiling FreeType as a DLL, some systems/compilers need a     */
-  /*   special keyword in front OR after the return type of function       */
-  /*   declarations.                                                       */
-  /*                                                                       */
-  /*   Two macros are used within the FreeType source code to define       */
-  /*   exported library functions: FT_EXPORT and FT_EXPORT_DEF.            */
-  /*                                                                       */
-  /*     FT_EXPORT( return_type )                                          */
-  /*                                                                       */
-  /*       is used in a function declaration, as in                        */
-  /*                                                                       */
-  /*         FT_EXPORT( FT_Error )                                         */
-  /*         FT_Init_FreeType( FT_Library*  alibrary );                    */
-  /*                                                                       */
-  /*                                                                       */
-  /*     FT_EXPORT_DEF( return_type )                                      */
-  /*                                                                       */
-  /*       is used in a function definition, as in                         */
-  /*                                                                       */
-  /*         FT_EXPORT_DEF( FT_Error )                                     */
-  /*         FT_Init_FreeType( FT_Library*  alibrary )                     */
-  /*         {                                                             */
-  /*           ... some code ...                                           */
-  /*           return FT_Err_Ok;                                           */
-  /*         }                                                             */
-  /*                                                                       */
-  /*   You can provide your own implementation of FT_EXPORT and            */
-  /*   FT_EXPORT_DEF here if you want.  If you leave them undefined, they  */
-  /*   will be later automatically defined as `extern return_type' to      */
-  /*   allow normal compilation.                                           */
-  /*                                                                       */
-  /*   Do not #undef these macros here since the build system might define */
-  /*   them for certain configurations only.                               */
-  /*                                                                       */
-
-#if defined(_WIN32)
-
-#if defined(FT2_BUILD_DLL)
-#if defined(FT2_BUILD_LIBRARY)
-#define FT_EXPORT(x)     __declspec(dllexport) x
-#define FT_EXPORT_DEF(x) __declspec(dllexport) x
-#else
-#define FT_EXPORT(x)     __declspec(dllimport) x
-#define FT_EXPORT_DEF(x) __declspec(dllimport) x
-#endif
-#endif
-
-#else
-#if !defined(MAC_RESTRICT_VISIBILITY)
-#define FT_EXPORT(x)     __attribute__((visibility ("default"))) x
-#define FT_EXPORT_DEF(x) __attribute__((visibility ("default"))) x
-#else
-#define FT_EXPORT(x)     x
-#define FT_EXPORT_DEF(x) x
-#endif
-#endif
 
   /*************************************************************************/
   /*                                                                       */
@@ -817,6 +753,16 @@ FT_BEGIN_HEADER
   /* driver.                                                               */
   /*                                                                       */
 #undef T1_CONFIG_OPTION_NO_MM_SUPPORT
+
+
+  /*************************************************************************/
+  /*                                                                       */
+  /* T1_CONFIG_OPTION_OLD_ENGINE controls whether the pre-Adobe Type 1     */
+  /* engine gets compiled into FreeType.  If defined, it is possible to    */
+  /* switch between the two engines using the `hinting-engine' property of */
+  /* the type1 driver module.                                              */
+  /*                                                                       */
+/* #define T1_CONFIG_OPTION_OLD_ENGINE */
 
 
   /*************************************************************************/

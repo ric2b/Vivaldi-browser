@@ -11,9 +11,12 @@
 #include "base/macros.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/layers/texture_layer_client.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/khronos/GLES2/gl2.h"
@@ -32,6 +35,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace viz {
+struct TransferableResource;
 }
 
 namespace test_runner {
@@ -53,7 +60,8 @@ class WebTestDelegate;
 class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
  public:
   static TestPlugin* Create(const blink::WebPluginParams& params,
-                            WebTestDelegate* delegate);
+                            WebTestDelegate* delegate,
+                            blink::WebLocalFrame* frame);
   ~TestPlugin() override;
 
   static const blink::WebString& MimeType();
@@ -78,11 +86,12 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   blink::WebInputEventResult HandleInputEvent(
       const blink::WebCoalescedInputEvent& event,
       blink::WebCursorInfo& info) override;
-  bool HandleDragStatusUpdate(blink::WebDragStatus drag_status,
-                              const blink::WebDragData& data,
-                              blink::WebDragOperationsMask mask,
-                              const blink::WebPoint& position,
-                              const blink::WebPoint& screen_position) override;
+  bool HandleDragStatusUpdate(
+      blink::WebDragStatus drag_status,
+      const blink::WebDragData& data,
+      blink::WebDragOperationsMask mask,
+      const blink::WebFloatPoint& position,
+      const blink::WebFloatPoint& screen_position) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override {}
   void DidReceiveData(const char* data, int data_length) override {}
   void DidFinishLoading() override {}
@@ -90,12 +99,14 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   bool IsPlaceholder() override;
 
   // cc::TextureLayerClient methods:
-  bool PrepareTextureMailbox(
-      viz::TextureMailbox* mailbox,
+  bool PrepareTransferableResource(
+      viz::TransferableResource* resource,
       std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
  private:
-  TestPlugin(const blink::WebPluginParams& params, WebTestDelegate* delegate);
+  TestPlugin(const blink::WebPluginParams& params,
+             WebTestDelegate* delegate,
+             blink::WebLocalFrame* frame);
 
   enum Primitive { PrimitiveNone, PrimitiveTriangle };
 
@@ -145,14 +156,16 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
 
   WebTestDelegate* delegate_;
   blink::WebPluginContainer* container_;
+  blink::WebLocalFrame* web_local_frame_;
 
   blink::WebRect rect_;
   std::unique_ptr<blink::WebGraphicsContext3DProvider> context_provider_;
   gpu::gles2::GLES2Interface* gl_;
   GLuint color_texture_;
-  viz::TextureMailbox texture_mailbox_;
+  gpu::Mailbox mailbox_;
+  gpu::SyncToken sync_token_;
   std::unique_ptr<viz::SharedBitmap> shared_bitmap_;
-  bool mailbox_changed_;
+  bool content_changed_;
   GLuint framebuffer_;
   Scene scene_;
   scoped_refptr<cc::TextureLayer> layer_;

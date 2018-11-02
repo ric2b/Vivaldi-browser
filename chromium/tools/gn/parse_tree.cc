@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <tuple>
 
@@ -79,22 +80,18 @@ base::StringPiece GetStringRepresentation(const ParseNode* node) {
 
 }  // namespace
 
-Comments::Comments() {
-}
+Comments::Comments() = default;
 
-Comments::~Comments() {
-}
+Comments::~Comments() = default;
 
 void Comments::ReverseSuffix() {
   for (int i = 0, j = static_cast<int>(suffix_.size() - 1); i < j; ++i, --j)
     std::swap(suffix_[i], suffix_[j]);
 }
 
-ParseNode::ParseNode() {
-}
+ParseNode::ParseNode() = default;
 
-ParseNode::~ParseNode() {
-}
+ParseNode::~ParseNode() = default;
 
 const AccessorNode* ParseNode::AsAccessor() const { return nullptr; }
 const BinaryOpNode* ParseNode::AsBinaryOp() const { return nullptr; }
@@ -110,7 +107,7 @@ const UnaryOpNode* ParseNode::AsUnaryOp() const { return nullptr; }
 
 Comments* ParseNode::comments_mutable() {
   if (!comments_)
-    comments_.reset(new Comments);
+    comments_ = std::make_unique<Comments>();
   return comments_.get();
 }
 
@@ -128,11 +125,9 @@ void ParseNode::PrintComments(std::ostream& out, int indent) const {
 
 // AccessorNode ---------------------------------------------------------------
 
-AccessorNode::AccessorNode() {
-}
+AccessorNode::AccessorNode() = default;
 
-AccessorNode::~AccessorNode() {
-}
+AccessorNode::~AccessorNode() = default;
 
 const AccessorNode* AccessorNode::AsAccessor() const {
   return this;
@@ -255,9 +250,9 @@ bool AccessorNode::ComputeAndValidateListIndex(Scope* scope,
   size_t index_sizet = static_cast<size_t>(index_int);
   if (index_sizet >= max_len) {
     *err = Err(index_->GetRange(), "Array subscript out of range.",
-        "You gave me " + base::Int64ToString(index_int) +
-        " but I was expecting something from 0 to " +
-        base::SizeTToString(max_len) + ", inclusive.");
+               "You gave me " + base::Int64ToString(index_int) +
+                   " but I was expecting something from 0 to " +
+                   base::NumberToString(max_len) + ", inclusive.");
     return false;
   }
 
@@ -267,11 +262,9 @@ bool AccessorNode::ComputeAndValidateListIndex(Scope* scope,
 
 // BinaryOpNode ---------------------------------------------------------------
 
-BinaryOpNode::BinaryOpNode() {
-}
+BinaryOpNode::BinaryOpNode() = default;
 
-BinaryOpNode::~BinaryOpNode() {
-}
+BinaryOpNode::~BinaryOpNode() = default;
 
 const BinaryOpNode* BinaryOpNode::AsBinaryOp() const {
   return this;
@@ -302,8 +295,7 @@ void BinaryOpNode::Print(std::ostream& out, int indent) const {
 BlockNode::BlockNode(ResultMode result_mode) : result_mode_(result_mode) {
 }
 
-BlockNode::~BlockNode() {
-}
+BlockNode::~BlockNode() = default;
 
 const BlockNode* BlockNode::AsBlock() const {
   return this;
@@ -315,7 +307,7 @@ Value BlockNode::Execute(Scope* enclosing_scope, Err* err) const {
   Scope* execution_scope;  // Either the enclosing_scope or nested_scope.
   if (result_mode_ == RETURNS_SCOPE) {
     // Create a nested scope to save the values for returning.
-    nested_scope.reset(new Scope(enclosing_scope));
+    nested_scope = std::make_unique<Scope>(enclosing_scope);
     execution_scope = nested_scope.get();
   } else {
     // Use the enclosing scope. Modifications will go into this also (for
@@ -380,11 +372,9 @@ void BlockNode::Print(std::ostream& out, int indent) const {
 
 // ConditionNode --------------------------------------------------------------
 
-ConditionNode::ConditionNode() {
-}
+ConditionNode::ConditionNode() = default;
 
-ConditionNode::~ConditionNode() {
-}
+ConditionNode::~ConditionNode() = default;
 
 const ConditionNode* ConditionNode::AsConditionNode() const {
   return this;
@@ -436,11 +426,9 @@ void ConditionNode::Print(std::ostream& out, int indent) const {
 
 // FunctionCallNode -----------------------------------------------------------
 
-FunctionCallNode::FunctionCallNode() {
-}
+FunctionCallNode::FunctionCallNode() = default;
 
-FunctionCallNode::~FunctionCallNode() {
-}
+FunctionCallNode::~FunctionCallNode() = default;
 
 const FunctionCallNode* FunctionCallNode::AsFunctionCall() const {
   return this;
@@ -473,14 +461,12 @@ void FunctionCallNode::Print(std::ostream& out, int indent) const {
 
 // IdentifierNode --------------------------------------------------------------
 
-IdentifierNode::IdentifierNode() {
-}
+IdentifierNode::IdentifierNode() = default;
 
 IdentifierNode::IdentifierNode(const Token& token) : value_(token) {
 }
 
-IdentifierNode::~IdentifierNode() {
-}
+IdentifierNode::~IdentifierNode() = default;
 
 const IdentifierNode* IdentifierNode::AsIdentifier() const {
   return this;
@@ -529,8 +515,7 @@ void IdentifierNode::SetNewLocation(int line_number) {
 ListNode::ListNode() : prefer_multiline_(false) {
 }
 
-ListNode::~ListNode() {
-}
+ListNode::~ListNode() = default;
 
 const ListNode* ListNode::AsList() const {
   return this;
@@ -720,14 +705,12 @@ std::vector<ListNode::SortRange> ListNode::GetSortRanges() const {
 
 // LiteralNode -----------------------------------------------------------------
 
-LiteralNode::LiteralNode() {
-}
+LiteralNode::LiteralNode() = default;
 
 LiteralNode::LiteralNode(const Token& token) : value_(token) {
 }
 
-LiteralNode::~LiteralNode() {
-}
+LiteralNode::~LiteralNode() = default;
 
 const LiteralNode* LiteralNode::AsLiteral() const {
   return this;
@@ -788,11 +771,9 @@ void LiteralNode::SetNewLocation(int line_number) {
 
 // UnaryOpNode ----------------------------------------------------------------
 
-UnaryOpNode::UnaryOpNode() {
-}
+UnaryOpNode::UnaryOpNode() = default;
 
-UnaryOpNode::~UnaryOpNode() {
-}
+UnaryOpNode::~UnaryOpNode() = default;
 
 const UnaryOpNode* UnaryOpNode::AsUnaryOp() const {
   return this;
@@ -822,11 +803,9 @@ void UnaryOpNode::Print(std::ostream& out, int indent) const {
 
 // BlockCommentNode ------------------------------------------------------------
 
-BlockCommentNode::BlockCommentNode() {
-}
+BlockCommentNode::BlockCommentNode() = default;
 
-BlockCommentNode::~BlockCommentNode() {
-}
+BlockCommentNode::~BlockCommentNode() = default;
 
 const BlockCommentNode* BlockCommentNode::AsBlockComment() const {
   return this;
@@ -855,8 +834,7 @@ void BlockCommentNode::Print(std::ostream& out, int indent) const {
 EndNode::EndNode(const Token& token) : value_(token) {
 }
 
-EndNode::~EndNode() {
-}
+EndNode::~EndNode() = default;
 
 const EndNode* EndNode::AsEnd() const {
   return this;

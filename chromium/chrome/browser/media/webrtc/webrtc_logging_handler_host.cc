@@ -25,6 +25,11 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#include "content/public/browser/child_process_security_policy.h"
+#include "storage/browser/fileapi/isolated_context.h"
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
+
 using content::BrowserThread;
 
 // Key used to attach the handler to the RenderProcessHost.
@@ -262,6 +267,54 @@ void WebRtcLoggingHandlerHost::StopWebRtcEventLogging(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   event_log_handler_->StopWebRtcEventLogging(callback, error_callback);
 }
+
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+void WebRtcLoggingHandlerHost::GetLogsDirectory(
+    const LogsDirectoryCallback& callback,
+    const LogsDirectoryErrorCallback& error_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(!callback.is_null());
+  base::PostTaskAndReplyWithResult(
+      log_uploader_->background_task_runner().get(), FROM_HERE,
+      base::Bind(&WebRtcLoggingHandlerHost::GetLogDirectoryAndEnsureExists,
+                 this),
+      base::Bind(&WebRtcLoggingHandlerHost::GrantLogsDirectoryAccess, this,
+                 callback, error_callback));
+}
+
+void WebRtcLoggingHandlerHost::GrantLogsDirectoryAccess(
+    const LogsDirectoryCallback& callback,
+    const LogsDirectoryErrorCallback& error_callback,
+    const base::FilePath& logs_path) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (logs_path.empty()) {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(error_callback, "Logs directory not available"));
+    return;
+  }
+
+  storage::IsolatedContext* isolated_context =
+      storage::IsolatedContext::GetInstance();
+  DCHECK(isolated_context);
+
+  std::string registered_name;
+  std::string filesystem_id = isolated_context->RegisterFileSystemForPath(
+      storage::kFileSystemTypeNativeLocal, std::string(), logs_path,
+      &registered_name);
+
+  // Only granting read and delete access to reduce contention with
+  // webrtcLogging APIs that modify files in that folder.
+  content::ChildProcessSecurityPolicy* policy =
+      content::ChildProcessSecurityPolicy::GetInstance();
+  policy->GrantReadFileSystem(render_process_id_, filesystem_id);
+  // Delete is needed to prevent accumulation of files.
+  policy->GrantDeleteFromFileSystem(render_process_id_, filesystem_id);
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(callback, filesystem_id, registered_name));
+}
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 void WebRtcLoggingHandlerHost::OnRtpPacket(
     std::unique_ptr<uint8_t[]> packet_header,

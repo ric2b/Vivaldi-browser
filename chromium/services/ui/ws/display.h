@@ -69,6 +69,9 @@ class Display : public PlatformDisplayDelegate,
   void Init(const display::ViewportMetrics& metrics,
             std::unique_ptr<DisplayBinding> binding);
 
+  // Initialize the display's root window to host window manager content.
+  void InitWindowManagerDisplayRoots();
+
   // Returns the ID for this display. In internal mode this is the
   // display::Display ID. In external mode this hasn't been defined yet.
   int64_t GetId() const;
@@ -78,6 +81,8 @@ class Display : public PlatformDisplayDelegate,
 
   // PlatformDisplayDelegate:
   const display::Display& GetDisplay() override;
+
+  const display::ViewportMetrics& GetViewportMetrics() const;
 
   DisplayManager* display_manager();
   const DisplayManager* display_manager() const;
@@ -166,9 +171,6 @@ class Display : public PlatformDisplayDelegate,
 
   class CursorState;
 
-  // Inits the necessary state once the display is ready.
-  void InitWindowManagerDisplayRoots();
-
   // Creates the set of WindowManagerDisplayRoots from the
   // WindowManagerWindowTreeFactorySet.
   void CreateWindowManagerDisplayRootsFromFactories();
@@ -189,6 +191,7 @@ class Display : public PlatformDisplayDelegate,
   void OnAcceleratedWidgetAvailable() override;
   void OnNativeCaptureLost() override;
   OzonePlatform* GetOzonePlatform() override;
+  bool IsHostingViz() const override;
 
   // FocusControllerObserver:
   void OnActivationChanged(ServerWindow* old_active_window,

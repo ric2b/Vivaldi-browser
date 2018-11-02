@@ -103,7 +103,7 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   ~EventRewriterChromeOS() override;
 
   // Calls KeyboardDeviceAddedInternal.
-  DeviceType KeyboardDeviceAddedForTesting(
+  void KeyboardDeviceAddedForTesting(
       int device_id,
       const std::string& device_name,
       KeyboardTopRowLayout layout = kKbdTopRowLayoutDefault);
@@ -138,8 +138,9 @@ class EventRewriterChromeOS : public ui::EventRewriter {
 
   // Given the file path of a keyboard device, returns the layout type of the
   // top row keys.
-  static KeyboardTopRowLayout GetKeyboardTopRowLayout(
-      const base::FilePath& device_path);
+  static bool GetKeyboardTopRowLayout(const base::FilePath& device_path,
+                                      KeyboardTopRowLayout* out_layout)
+      WARN_UNUSED_RESULT;
 
  private:
   struct DeviceInfo {
@@ -149,16 +150,15 @@ class EventRewriterChromeOS : public ui::EventRewriter {
 
   void DeviceKeyPressedOrReleased(int device_id);
 
-  // Adds a device to |device_id_to_type_|.
+  // Adds a device to |device_id_to_info_| only if no failure occurs in
+  // retrieving the top row layout from udev, and returns the device type of
+  // this keyboard even if it wasn't stored in |device_id_to_info_|.
   DeviceType KeyboardDeviceAdded(int device_id);
 
-  // Checks the type of the |device_name|, |vendor_id| and |product_id|, and
-  // inserts a new entry to |device_id_to_type_|.
-  DeviceType KeyboardDeviceAddedInternal(int device_id,
-                                         const std::string& device_name,
-                                         int vendor_id,
-                                         int product_id,
-                                         KeyboardTopRowLayout layout);
+  // Inserts a new entry to |device_id_to_info_|.
+  void KeyboardDeviceAddedInternal(int device_id,
+                                   DeviceType type,
+                                   KeyboardTopRowLayout layout);
 
   // Returns true if |last_keyboard_device_id_| is Apple's.
   bool IsAppleKeyboard() const;
@@ -223,8 +223,8 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   // layout model requires this to be handled explicitly. See crbug.com/518237
   // Pragmatically this, like the Diamond key, is handled here in
   // EventRewriterChromeOS, but modifier state management is scattered between
-  // here, sticky keys, and the system layer (X11 or Ozone), and could
-  // do with refactoring.
+  // here, sticky keys, and the system layer (Ozone), and could do with
+  // refactoring.
   // - |pressed_modifier_latches_| records the latching keys currently pressed.
   //   It also records the active modifier flags for non-modifier keys that are
   //   remapped to modifiers, e.g. Diamond/F15.

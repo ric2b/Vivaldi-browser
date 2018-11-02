@@ -62,13 +62,17 @@ class TestLauncherDelegate {
   // jobs.
   virtual void PreSharding() {}
 
+  // Invoked when a child process times out immediately before it is terminated.
+  // |command_line| is the command line of the child process.
+  virtual void OnTestTimedOut(const base::CommandLine& command_line) {}
+
   // Called prior to returning from LaunchTests(). Gives the delegate a chance
   // to do cleanup before state created by TestLauncher has been destroyed (such
   // as the AtExitManager).
-  virtual void OnDoneRunningTests();
+  virtual void OnDoneRunningTests() {}
 
  protected:
-  virtual ~TestLauncherDelegate();
+  virtual ~TestLauncherDelegate() = default;
 };
 
 // Launches tests using |launcher_delegate|. |parallel_jobs| is the number
@@ -80,6 +84,10 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
 
 TestLauncherDelegate* GetCurrentTestLauncherDelegate();
 ContentMainParams* GetContentMainParams();
+
+// Returns true if the currently running test has a prefix that indicates it
+// should run before a test of the same name without the prefix.
+bool IsPreTest();
 
 }  // namespace content
 

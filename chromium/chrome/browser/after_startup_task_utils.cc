@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/circular_deque.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -16,7 +17,6 @@
 #include "base/sequence_checker.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/task_runner.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -25,6 +25,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 
 using content::BrowserThread;
 using content::WebContents;
@@ -33,13 +34,13 @@ using content::WebContentsObserver;
 namespace {
 
 struct AfterStartupTask {
-  AfterStartupTask(const tracked_objects::Location& from_here,
+  AfterStartupTask(const base::Location& from_here,
                    const scoped_refptr<base::TaskRunner>& task_runner,
                    base::OnceClosure task)
       : from_here(from_here), task_runner(task_runner), task(std::move(task)) {}
   ~AfterStartupTask() {}
 
-  const tracked_objects::Location from_here;
+  const base::Location from_here;
   const scoped_refptr<base::TaskRunner> task_runner;
   base::OnceClosure task;
 };
@@ -48,7 +49,8 @@ struct AfterStartupTask {
 base::LazyInstance<base::AtomicFlag>::Leaky g_startup_complete_flag;
 
 // The queue may only be accessed on the UI thread.
-base::LazyInstance<std::deque<AfterStartupTask*>>::Leaky g_after_startup_tasks;
+base::LazyInstance<base::circular_deque<AfterStartupTask*>>::Leaky
+    g_after_startup_tasks;
 
 bool IsBrowserStartupComplete() {
   // Be sure to initialize the LazyInstance on the main thread since the flag
@@ -69,7 +71,7 @@ void ScheduleTask(std::unique_ptr<AfterStartupTask> queued_task) {
   const int kMinDelaySec = 0;
   const int kMaxDelaySec = 10;
   scoped_refptr<base::TaskRunner> target_runner = queued_task->task_runner;
-  tracked_objects::Location from_here = queued_task->from_here;
+  base::Location from_here = queued_task->from_here;
   target_runner->PostDelayedTask(
       from_here, base::BindOnce(&RunTask, base::Passed(std::move(queued_task))),
       base::TimeDelta::FromSeconds(base::RandInt(kMinDelaySec, kMaxDelaySec)));
@@ -117,7 +119,7 @@ void SetBrowserStartupIsComplete() {
   g_after_startup_tasks.Get().clear();
 
   // The shrink_to_fit() method is not available for all of our build targets.
-  std::deque<AfterStartupTask*>(g_after_startup_tasks.Get())
+  base::circular_deque<AfterStartupTask*>(g_after_startup_tasks.Get())
       .swap(g_after_startup_tasks.Get());
 }
 
@@ -177,7 +179,7 @@ void StartupObserver::Start() {
     contents = browser->tab_strip_model()->GetActiveWebContents();
     if (contents && contents->GetMainFrame() &&
         contents->GetMainFrame()->GetVisibilityState() ==
-            blink::kWebPageVisibilityStateVisible) {
+            blink::mojom::PageVisibilityState::kVisible) {
       break;
     }
   }
@@ -213,7 +215,7 @@ AfterStartupTaskUtils::Runner::Runner(
 AfterStartupTaskUtils::Runner::~Runner() = default;
 
 bool AfterStartupTaskUtils::Runner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   DCHECK(delay.is_zero());
@@ -232,7 +234,7 @@ void AfterStartupTaskUtils::StartMonitoringStartup() {
 }
 
 void AfterStartupTaskUtils::PostTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const scoped_refptr<base::TaskRunner>& destination_runner,
     base::OnceClosure task) {
   if (IsBrowserStartupComplete()) {

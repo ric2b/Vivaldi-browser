@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_UI_TEST_TEST_BROWSER_DIALOG_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/native_widget_types.h"
@@ -61,6 +63,10 @@ class TestBrowserDialog {
   // Runs the dialog whose name corresponds to the current test case.
   void RunDialog();
 
+  // Convenience method to force-enable features::kSecondaryUiMd for this test
+  // on all platforms. This should be called in an override of SetUp().
+  void UseMdOnly();
+
   // Show the dialog corresponding to |name| and leave it open.
   virtual void ShowDialog(const std::string& name) = 0;
 
@@ -72,6 +78,8 @@ class TestBrowserDialog {
   virtual bool AlwaysCloseAsynchronously();
 
  private:
+  base::test::ScopedFeatureList maybe_enable_md_;
+
   DISALLOW_COPY_AND_ASSIGN(TestBrowserDialog);
 };
 
@@ -80,7 +88,9 @@ class TestBrowserDialog {
 template <class Base>
 class SupportsTestDialog : public Base, public TestBrowserDialog {
  protected:
-  SupportsTestDialog() {}
+  template <class... Args>
+  explicit SupportsTestDialog(Args&&... args)
+      : Base(std::forward<Args>(args)...) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SupportsTestDialog);

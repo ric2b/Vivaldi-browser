@@ -9,10 +9,16 @@
 namespace blink {
 namespace scheduler {
 
-TestTaskQueue::TestTaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl)
-    : TaskQueue(std::move(impl)) {}
+TestTaskQueue::TestTaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
+                             const TaskQueue::Spec& spec)
+    : TaskQueue(std::move(impl), spec),
+      weak_factory_(this) {}
 
 TestTaskQueue::~TestTaskQueue() {}
+
+base::WeakPtr<TestTaskQueue> TestTaskQueue::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
 
 }  // namespace scheduler
 }  // namespace blink

@@ -45,11 +45,6 @@
 //     // Generate destructors.
 //     #include "ipc/struct_destructor_macros.h"
 //     #include "path/to/YYY_message_generator.h"
-//     // Generate param traits size methods.
-//     #include "ipc/param_traits_size_macros.h"
-//     namespace IPC {
-//     #include "path/to/YYY_message_generator.h"
-//     }  // namespace IPC
 //     // Generate param traits write methods.
 //     #include "ipc/param_traits_write_macros.h"
 //     namespace IPC {
@@ -206,8 +201,7 @@
 
 #include <tuple>
 
-#include "base/profiler/scoped_profile.h"
-#include "ipc/export_template.h"
+#include "base/export_template.h"
 #include "ipc/ipc_message_templates.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/param_traits_macros.h"
@@ -351,7 +345,6 @@
 
 #define IPC_MESSAGE_FORWARD(msg_class, obj, member_func)                       \
     case msg_class::ID: {                                                      \
-        TRACK_RUN_IN_THIS_SCOPED_REGION(member_func);                          \
         if (!msg_class::Dispatch(&ipc_message__, obj, this, param__,           \
                                  &member_func))                                \
           ipc_message__.set_dispatch_error();                                  \
@@ -363,7 +356,6 @@
 
 #define IPC_MESSAGE_FORWARD_DELAY_REPLY(msg_class, obj, member_func)           \
     case msg_class::ID: {                                                      \
-        TRACK_RUN_IN_THIS_SCOPED_REGION(member_func);                          \
         if (!msg_class::DispatchDelayReply(&ipc_message__, obj, param__,       \
                                            &member_func))                      \
           ipc_message__.set_dispatch_error();                                  \
@@ -377,7 +369,6 @@
 #define IPC_MESSAGE_FORWARD_WITH_PARAM_DELAY_REPLY(msg_class, obj,             \
                                                    member_func)                \
   case msg_class::ID: {                                                        \
-    TRACK_RUN_IN_THIS_SCOPED_REGION(member_func);                              \
     if (!msg_class::DispatchWithParamDelayReply(&ipc_message__, obj, param__,  \
                                                 &member_func))                 \
       ipc_message__.set_dispatch_error();                                      \
@@ -390,14 +381,12 @@
 
 #define IPC_MESSAGE_HANDLER_GENERIC(msg_class, code)                           \
     case msg_class::ID: {                                                      \
-        TRACK_RUN_IN_THIS_SCOPED_REGION(code);                                 \
         code;                                                                  \
       }                                                                        \
       break;
 
 #define IPC_REPLY_HANDLER(func)                                                \
     case IPC_REPLY_ID: {                                                       \
-        TRACK_RUN_IN_THIS_SCOPED_REGION(func);                                 \
         func(ipc_message__);                                                   \
       }                                                                        \
       break;

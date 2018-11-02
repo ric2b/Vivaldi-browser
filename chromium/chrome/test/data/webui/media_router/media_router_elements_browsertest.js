@@ -83,12 +83,27 @@ MediaRouterElementsBrowserTest.prototype = {
         document.dispatchEvent(event);
       }
 
+      function setHangoutsLocalPresent(localPresent) {
+        const event = new CustomEvent(
+            'mock-set-hangouts-local-present',
+            {detail: {localPresent: localPresent}});
+        document.dispatchEvent(event);
+      }
+
+      function setMediaRemotingEnabled(enabled) {
+        const event = new CustomEvent(
+            'mock-set-media-remoting-enabled', {detail: {enabled: enabled}});
+        document.dispatchEvent(event);
+      }
+
       return {
         pauseCurrentMedia: pauseCurrentMedia,
         playCurrentMedia: playCurrentMedia,
         seekCurrentMedia: seekCurrentMedia,
         setCurrentMediaMute: setCurrentMediaMute,
         setCurrentMediaVolume: setCurrentMediaVolume,
+        setHangoutsLocalPresent: setHangoutsLocalPresent,
+        setMediaRemotingEnabled: setMediaRemotingEnabled
       };
     });
   },
@@ -145,9 +160,16 @@ TEST_F('MediaRouterElementsBrowserTest',
 });
 
 TEST_F('MediaRouterElementsBrowserTest',
-    'MediaRouterContainerSearch',
+    'MediaRouterContainerSearchPart1',
     function() {
-  media_router_container_search.registerTests();
+  media_router_container_search.registerTestsPart1();
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterContainerSearchPart2',
+    function() {
+  media_router_container_search.registerTestsPart2();
   mocha.run();
 });
 
@@ -159,9 +181,16 @@ TEST_F('MediaRouterElementsBrowserTest',
 });
 
 TEST_F('MediaRouterElementsBrowserTest',
-    'DISABLED_MediaRouterContainerFilter',
+    'MediaRouterContainerFilterPart1',
     function() {
-  media_router_container_filter.registerTests();
+  media_router_container_filter.registerTestsPart1();
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterContainerFilterPart2',
+    function() {
+  media_router_container_filter.registerTestsPart2();
   mocha.run();
 });
 

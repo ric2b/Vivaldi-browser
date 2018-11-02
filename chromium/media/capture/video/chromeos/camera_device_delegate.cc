@@ -20,9 +20,9 @@
 
 namespace media {
 
-StreamCaptureInterface::Plane::Plane() {}
+StreamCaptureInterface::Plane::Plane() = default;
 
-StreamCaptureInterface::Plane::~Plane() {}
+StreamCaptureInterface::Plane::~Plane() = default;
 
 class CameraDeviceDelegate::StreamCaptureInterfaceImpl final
     : public StreamCaptureInterface {
@@ -68,15 +68,15 @@ CameraDeviceDelegate::CameraDeviceDelegate(
       ipc_task_runner_(std::move(ipc_task_runner)),
       weak_ptr_factory_(this) {}
 
-CameraDeviceDelegate::~CameraDeviceDelegate() {}
+CameraDeviceDelegate::~CameraDeviceDelegate() = default;
 
 void CameraDeviceDelegate::AllocateAndStart(
     const VideoCaptureParams& params,
-    std::unique_ptr<VideoCaptureDevice::Client> client) {
+    CameraDeviceContext* device_context) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
 
   chrome_capture_params_ = params;
-  device_context_.reset(new CameraDeviceContext(std::move(client)));
+  device_context_ = device_context;
   device_context_->SetState(CameraDeviceContext::State::kStarting);
 
   // We need to get the static camera metadata of the camera device first.
@@ -92,9 +92,11 @@ void CameraDeviceDelegate::StopAndDeAllocate(
   // CameraDeviceContext::State::kStopping.
   DCHECK_NE(device_context_->GetState(), CameraDeviceContext::State::kStopping);
 
-  if (device_context_->GetState() == CameraDeviceContext::State::kStopped) {
+  if (device_context_->GetState() == CameraDeviceContext::State::kStopped ||
+      !stream_buffer_manager_) {
     // In case of Mojo connection error the device may be stopped before
-    // StopAndDeAllocate is called.
+    // StopAndDeAllocate is called; in case of device open failure, the state
+    // is set to kError and |stream_buffer_manager_| is uninitialized.
     std::move(device_close_callback).Run();
     return;
   }
@@ -151,7 +153,9 @@ void CameraDeviceDelegate::OnMojoConnectionError() {
     OnClosed(0);
   } else {
     // The Mojo channel terminated unexpectedly.
-    stream_buffer_manager_->StopCapture();
+    if (stream_buffer_manager_) {
+      stream_buffer_manager_->StopCapture();
+    }
     device_context_->SetState(CameraDeviceContext::State::kStopped);
     device_context_->SetErrorState(FROM_HERE, "Mojo connection error");
     ResetMojoInterface();
@@ -171,7 +175,7 @@ void CameraDeviceDelegate::OnClosed(int32_t result) {
                                  std::string(strerror(result)));
   }
   ResetMojoInterface();
-  device_context_.reset();
+  device_context_ = nullptr;
   std::move(device_close_callback_).Run();
 }
 
@@ -214,6 +218,11 @@ void CameraDeviceDelegate::OnOpenedDevice(int32_t result) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
 
   if (device_context_->GetState() != CameraDeviceContext::State::kStarting) {
+    if (device_context_->GetState() == CameraDeviceContext::State::kError) {
+      // In case of camera open failed, the HAL can terminate the Mojo channel
+      // before we do and set the state to kError in OnMojoConnectionError.
+      return;
+    }
     DCHECK_EQ(device_context_->GetState(),
               CameraDeviceContext::State::kStopping);
     OnClosed(0);
@@ -237,7 +246,7 @@ void CameraDeviceDelegate::Initialize() {
   stream_buffer_manager_ = base::MakeUnique<StreamBufferManager>(
       std::move(callback_ops_request),
       base::MakeUnique<StreamCaptureInterfaceImpl>(GetWeakPtr()),
-      device_context_.get(), base::MakeUnique<CameraBufferFactory>(),
+      device_context_, base::MakeUnique<CameraBufferFactory>(),
       ipc_task_runner_);
   device_ops_->Initialize(
       std::move(callback_ops_ptr),

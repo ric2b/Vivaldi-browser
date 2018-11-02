@@ -9,15 +9,15 @@
 #include <mfidl.h>
 #include <stdint.h>
 #include <strmif.h>
+#include <wrl/client.h>
 
-#include <deque>
 #include <memory>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
-#include "base/win/scoped_comptr.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 
@@ -34,7 +34,10 @@ namespace media {
 class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
     : public VideoEncodeAccelerator {
  public:
-  MediaFoundationVideoEncodeAccelerator();
+  // If |compatible_with_win7| is true, MediaFoundationVideoEncoderAccelerator
+  // works on Windows 7. Some attributes of the encoder are not supported on old
+  // systems, which may impact the performance or quality of the output.
+  explicit MediaFoundationVideoEncodeAccelerator(bool compatible_with_win7);
 
   // VideoEncodeAccelerator implementation.
   VideoEncodeAccelerator::SupportedProfiles GetSupportedProfiles() override;
@@ -54,8 +57,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
       const scoped_refptr<base::SingleThreadTaskRunner>& encode_task_runner)
       override;
 
-  // Preload dlls required for encoding.
-  static void PreSandboxInitialization();
+  // Preload dlls required for encoding. Returns true if all required dlls are
+  // correctly loaded.
+  static bool PreSandboxInitialization();
 
  protected:
   ~MediaFoundationVideoEncodeAccelerator() override;
@@ -71,7 +75,7 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   bool CreateHardwareEncoderMFT();
 
   // Initializes and allocates memory for input and output samples.
-  bool InitializeInputOutputSamples();
+  bool InitializeInputOutputSamples(VideoCodecProfile output_profile);
 
   // Initializes encoder parameters for real-time use.
   bool SetEncoderModes();
@@ -111,11 +115,14 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Releases resources encoder holds.
   void ReleaseEncoderResources();
 
+  const bool compatible_with_win7_;
+
   // Bitstream buffers ready to be used to return encoded output as a FIFO.
-  std::deque<std::unique_ptr<BitstreamBufferRef>> bitstream_buffer_queue_;
+  base::circular_deque<std::unique_ptr<BitstreamBufferRef>>
+      bitstream_buffer_queue_;
 
   // EncodeOutput needs to be copied into a BitstreamBufferRef as a FIFO.
-  std::deque<std::unique_ptr<EncodeOutput>> encoder_output_queue_;
+  base::circular_deque<std::unique_ptr<EncodeOutput>> encoder_output_queue_;
 
   gfx::Size input_visible_size_;
   size_t bitstream_buffer_size_;
@@ -127,17 +134,17 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   size_t u_stride_;
   size_t v_stride_;
 
-  base::win::ScopedComPtr<IMFTransform> encoder_;
-  base::win::ScopedComPtr<ICodecAPI> codec_api_;
+  Microsoft::WRL::ComPtr<IMFTransform> encoder_;
+  Microsoft::WRL::ComPtr<ICodecAPI> codec_api_;
 
   DWORD input_stream_id_;
   DWORD output_stream_id_;
 
-  base::win::ScopedComPtr<IMFMediaType> imf_input_media_type_;
-  base::win::ScopedComPtr<IMFMediaType> imf_output_media_type_;
+  Microsoft::WRL::ComPtr<IMFMediaType> imf_input_media_type_;
+  Microsoft::WRL::ComPtr<IMFMediaType> imf_output_media_type_;
 
-  base::win::ScopedComPtr<IMFSample> input_sample_;
-  base::win::ScopedComPtr<IMFSample> output_sample_;
+  Microsoft::WRL::ComPtr<IMFSample> input_sample_;
+  Microsoft::WRL::ComPtr<IMFSample> output_sample_;
 
   // To expose client callbacks from VideoEncodeAccelerator.
   // NOTE: all calls to this object *MUST* be executed on

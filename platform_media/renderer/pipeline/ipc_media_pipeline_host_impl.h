@@ -1,22 +1,28 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_RENDERER_MEDIA_IPC_MEDIA_PIPELINE_HOST_IMPL_H_
-#define CONTENT_RENDERER_MEDIA_IPC_MEDIA_PIPELINE_HOST_IMPL_H_
+#ifndef PLATFORM_MEDIA_RENDERER_PIPELINE_IPC_MEDIA_PIPELINE_HOST_IMPL_H_
+#define PLATFORM_MEDIA_RENDERER_PIPELINE_IPC_MEDIA_PIPELINE_HOST_IMPL_H_
 
-#include <string>
-#include <vector>
+#include "platform_media/common/feature_toggles.h"
+
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
+#include "platform_media/renderer/pipeline/ipc_pipeline_data.h"
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_listener.h"
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
+#include "media/base/video_decoder_config.h"
+
+#include <string>
+#include <vector>
 
 struct MediaPipelineMsg_DecodedDataReady_Params;
 
@@ -29,40 +35,49 @@ class DataSource;
 class GpuVideoAcceleratorFactories;
 }  // namespace media
 
-namespace content {
+namespace media {
 class GpuChannelHost;
 
-class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
+class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
                                  public IPC::Listener {
  public:
+
   IPCMediaPipelineHostImpl(
       gpu::GpuChannelHost* channel,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-      media::GpuVideoAcceleratorFactories* factories,
-      media::DataSource* data_source);
+      GpuVideoAcceleratorFactories* factories,
+      DataSource* data_source);
   ~IPCMediaPipelineHostImpl() override;
 
-  // media::IPCMediaPipelineHost implementation.
+  // IPCMediaPipelineHost implementation.
   void Initialize(const std::string& mimetype,
                   const InitializeCB& callback) override;
   void StartWaitingForSeek() override;
   void Seek(base::TimeDelta time,
-            const media::PipelineStatusCB& status_cb) override;
+            const PipelineStatusCB& status_cb) override;
   void Stop() override;
   void ReadDecodedData(
-      media::PlatformMediaDataType type,
-      const media::DemuxerStream::ReadCB& read_cb) override;
-  media::PlatformAudioConfig audio_config() const override;
-  media::PlatformVideoConfig video_config() const override;
+      PlatformMediaDataType type,
+      const DemuxerStream::ReadCB& read_cb) override;
+
+  void AppendBuffer(const scoped_refptr<DecoderBuffer>& buffer,
+                    const VideoDecoder::DecodeCB& decode_cb) override;
+  bool DecodeVideo(const VideoDecoderConfig& config,
+                   const DecodeVideoCB& read_cb) override;
+  bool HasEnoughData() override;
+  int GetMaxDecodeBuffers() override;
+  PlatformAudioConfig audio_config() const override;
+  PlatformVideoConfig video_config() const override;
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
 
  private:
+#if defined(PLATFORM_MEDIA_HWA)
   class PictureBufferManager;
-  class SharedData;
+#endif
 
-  typedef base::Callback<void(media::MediaDataStatus status,
+  typedef base::Callback<void(MediaDataStatus status,
                               const uint8_t* data,
                               int data_size,
                               base::TimeDelta timestamp,
@@ -73,9 +88,9 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
   // Calls the Closure callback when the media pipeline initializes.
   void OnInitialized(bool success,
                      int bitrate,
-                     const media::PlatformMediaTimeInfo& time_info,
-                     const media::PlatformAudioConfig& audio_config,
-                     const media::PlatformVideoConfig& video_config);
+                     const PlatformMediaTimeInfo& time_info,
+                     const PlatformAudioConfig& audio_config,
+                     const PlatformVideoConfig& video_config);
 
   // Calls the PipelineStatusCB callback after the seek is finished.
   void OnSought(bool success);
@@ -83,7 +98,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
   // Creates and passes to GPU process buffer for transferring raw data.
   void OnRequestBufferForRawData(size_t requested_size);
   // Creates and passes to GPU process buffer for transferring decoded data.
-  void OnRequestBufferForDecodedData(media::PlatformMediaDataType type,
+  void OnRequestBufferForDecodedData(PlatformMediaDataType type,
                                      size_t requested_size);
 
   // Performs an actual read operation on the data source and
@@ -91,19 +106,24 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
   void OnReadRawData(int64_t position, int size);
   void OnReadRawDataFinished(int size);
 
+  void DecodedVideoReady(DemuxerStream::Status status,
+                         const scoped_refptr<DecoderBuffer>& buffer);
+
   void OnDecodedDataReady(
       const MediaPipelineMsg_DecodedDataReady_Params& params);
-  void OnAudioConfigChanged(const media::PlatformAudioConfig& new_audio_config);
-  void OnVideoConfigChanged(const media::PlatformVideoConfig& new_video_config);
+  void OnAudioConfigChanged(const PlatformAudioConfig& new_audio_config);
+  void OnVideoConfigChanged(const PlatformVideoConfig& new_video_config);
 
+#if defined(PLATFORM_MEDIA_HWA)
   bool is_handling_accelerated_video_decode(
-      media::PlatformMediaDataType type) const {
-    return type == media::PLATFORM_MEDIA_VIDEO &&
+      PlatformMediaDataType type) const {
+    return type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO &&
            video_config_.decoding_mode ==
-               media::PlatformMediaDecodingMode::HARDWARE;
+               PlatformMediaDecodingMode::HARDWARE;
   }
+#endif
 
-  bool is_read_in_progress(media::PlatformMediaDataType type) const {
+  bool is_read_in_progress(PlatformMediaDataType type) const {
     return !decoded_data_read_callbacks_[type].is_null();
   }
 
@@ -111,34 +131,27 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
-  media::DataSource* data_source_;
+  IPCPipelineData pipeline_data_;
   scoped_refptr<gpu::GpuChannelHost> channel_;
   int32_t routing_id_;
 
   InitializeCB init_callback_;
-  media::PipelineStatusCB seek_callback_;
-  media::DemuxerStream::ReadCB
-      decoded_data_read_callbacks_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  PipelineStatusCB seek_callback_;
+  DemuxerStream::ReadCB
+      decoded_data_read_callbacks_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  IPCMediaPipelineHost::DecodeVideoCB decoded_video_frame_callback_;
 
-  // A buffer for raw media data, shared with the GPU process. Filled in the
-  // renderer process, consumed in the GPU process.
-  std::unique_ptr<SharedData> shared_raw_data_;
+  PlatformAudioConfig audio_config_;
+  PlatformVideoConfig video_config_;
+  VideoDecoderConfig config_;
 
-  // Buffers for decoded media data, shared with the GPU process. Filled in
-  // the GPU process, consumed in the renderer process.
-  std::unique_ptr<SharedData>
-      shared_decoded_data_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
-
-  media::PlatformAudioConfig audio_config_;
-  media::PlatformVideoConfig video_config_;
-
-  media::GpuVideoAcceleratorFactories* factories_;
-
+  GpuVideoAcceleratorFactories* factories_;
+#if defined(PLATFORM_MEDIA_HWA)
   std::unique_ptr<PictureBufferManager> picture_buffer_manager_;
-
+#endif
   base::WeakPtrFactory<IPCMediaPipelineHostImpl> weak_ptr_factory_;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_RENDERER_MEDIA_IPC_MEDIA_PIPELINE_HOST_IMPL_H_
+#endif  // PLATFORM_MEDIA_RENDERER_PIPELINE_IPC_MEDIA_PIPELINE_HOST_IMPL_H_

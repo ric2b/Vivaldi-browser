@@ -52,7 +52,7 @@ class CategorizedWorkerPool::CategorizedWorkerPoolSequencedTaskRunner
         namespace_token_(task_graph_runner->GenerateNamespaceToken()) {}
 
   // Overridden from base::TaskRunner:
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     return PostNonNestableDelayedTask(from_here, std::move(task), delay);
@@ -60,7 +60,7 @@ class CategorizedWorkerPool::CategorizedWorkerPoolSequencedTaskRunner
   bool RunsTasksInCurrentSequence() const override { return true; }
 
   // Overridden from base::SequencedTaskRunner:
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
                                   base::OnceClosure task,
                                   base::TimeDelta delay) override {
     // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
@@ -75,7 +75,7 @@ class CategorizedWorkerPool::CategorizedWorkerPoolSequencedTaskRunner
 
     tasks_.erase(tasks_.begin(), tasks_.begin() + completed_tasks_.size());
 
-    tasks_.push_back(make_scoped_refptr(new ClosureTask(std::move(task))));
+    tasks_.push_back(base::MakeRefCounted<ClosureTask>(std::move(task)));
     graph_.Reset();
     for (const auto& graph_task : tasks_) {
       int dependencies = 0;
@@ -187,10 +187,9 @@ void CategorizedWorkerPool::Shutdown() {
 }
 
 // Overridden from base::TaskRunner:
-bool CategorizedWorkerPool::PostDelayedTask(
-    const tracked_objects::Location& from_here,
-    base::OnceClosure task,
-    base::TimeDelta delay) {
+bool CategorizedWorkerPool::PostDelayedTask(const base::Location& from_here,
+                                            base::OnceClosure task,
+                                            base::TimeDelta delay) {
   base::AutoLock lock(lock_);
 
   // Remove completed tasks.
@@ -205,7 +204,7 @@ bool CategorizedWorkerPool::PostDelayedTask(
       });
   tasks_.erase(end, tasks_.end());
 
-  tasks_.push_back(make_scoped_refptr(new ClosureTask(std::move(task))));
+  tasks_.push_back(base::MakeRefCounted<ClosureTask>(std::move(task)));
   graph_.Reset();
   for (const auto& graph_task : tasks_) {
     // Delayed tasks are assigned FOREGROUND category, ensuring that they run as

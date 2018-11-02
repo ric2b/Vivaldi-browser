@@ -29,12 +29,10 @@
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
-#include "core/MathMLNames.h"
-#include "core/XMLNames.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSMarkup.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
@@ -43,7 +41,6 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/Text.h"
 #include "core/dom/events/EventListener.h"
 #include "core/editing/EditingUtilities.h"
@@ -55,15 +52,19 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDimension.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTemplateElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
+#include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
+#include "core/mathml_names.h"
 #include "core/page/SpatialNavigation.h"
 #include "core/svg/SVGSVGElement.h"
+#include "core/xml_names.h"
 #include "platform/Language.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/BidiTextRun.h"
@@ -114,7 +115,7 @@ bool IsEditable(const Node& node) {
     return false;
   if (node.IsHTMLElement())
     return true;
-  if (isSVGSVGElement(node))
+  if (IsSVGSVGElement(node))
     return true;
   if (node.IsElementNode() && ToElement(node).HasTagName(MathMLNames::mathTag))
     return true;
@@ -182,8 +183,9 @@ unsigned HTMLElement::ParseBorderWidthAttribute(
   return border_width;
 }
 
-void HTMLElement::ApplyBorderAttributeToStyle(const AtomicString& value,
-                                              MutableStylePropertySet* style) {
+void HTMLElement::ApplyBorderAttributeToStyle(
+    const AtomicString& value,
+    MutableCSSPropertyValueSet* style) {
   AddPropertyToPresentationAttributeStyle(style, CSSPropertyBorderWidth,
                                           ParseBorderWidthAttribute(value),
                                           CSSPrimitiveValue::UnitType::kPixels);
@@ -191,8 +193,9 @@ void HTMLElement::ApplyBorderAttributeToStyle(const AtomicString& value,
                                           CSSValueSolid);
 }
 
-void HTMLElement::MapLanguageAttributeToLocale(const AtomicString& value,
-                                               MutableStylePropertySet* style) {
+void HTMLElement::MapLanguageAttributeToLocale(
+    const AtomicString& value,
+    MutableCSSPropertyValueSet* style) {
   if (!value.IsEmpty()) {
     // Have to quote so the locale id is treated as a string instead of as a CSS
     // keyword.
@@ -202,9 +205,9 @@ void HTMLElement::MapLanguageAttributeToLocale(const AtomicString& value,
     // FIXME: Remove the following UseCounter code when we collect enough
     // data.
     UseCounter::Count(GetDocument(), WebFeature::kLangAttribute);
-    if (isHTMLHtmlElement(*this))
+    if (IsHTMLHtmlElement(*this))
       UseCounter::Count(GetDocument(), WebFeature::kLangAttributeOnHTML);
-    else if (isHTMLBodyElement(*this))
+    else if (IsHTMLBodyElement(*this))
       UseCounter::Count(GetDocument(), WebFeature::kLangAttributeOnBody);
     String html_language = value.GetString();
     size_t first_separator = html_language.find('-');
@@ -245,7 +248,7 @@ static inline bool IsValidDirAttribute(const AtomicString& value) {
 void HTMLElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == alignAttr) {
     if (DeprecatedEqualIgnoringCase(value, "middle"))
       AddPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign,
@@ -301,7 +304,7 @@ void HTMLElement::CollectStyleForPresentationAttribute(
       if (IsValidDirAttribute(value))
         AddPropertyToPresentationAttributeStyle(style, CSSPropertyDirection,
                                                 value);
-      else if (isHTMLBodyElement(*this))
+      else if (IsHTMLBodyElement(*this))
         AddPropertyToPresentationAttributeStyle(style, CSSPropertyDirection,
                                                 "ltr");
       if (!HasTagName(bdiTag) && !HasTagName(bdoTag) && !HasTagName(outputTag))
@@ -718,7 +721,7 @@ void HTMLElement::setOuterText(const String& text,
 
 void HTMLElement::ApplyAlignmentAttributeToStyle(
     const AtomicString& alignment,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   // Vertical alignment with respect to the current baseline of the text
   // right or left means floating images.
   CSSValueID float_value = CSSValueInvalid;
@@ -812,13 +815,13 @@ void HTMLElement::setSpellcheck(bool enable) {
 }
 
 void HTMLElement::click() {
-  DispatchSimulatedClick(0, kSendNoEvents,
+  DispatchSimulatedClick(nullptr, kSendNoEvents,
                          SimulatedClickCreationScope::kFromScript);
 }
 
 void HTMLElement::AccessKeyAction(bool send_mouse_events) {
   DispatchSimulatedClick(
-      0, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
+      nullptr, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
 }
 
 String HTMLElement::title() const {
@@ -896,7 +899,7 @@ HTMLFormElement* HTMLElement::FindFormAncestor() const {
 }
 
 static inline bool ElementAffectsDirectionality(const Node* node) {
-  return node->IsHTMLElement() && (isHTMLBDIElement(ToHTMLElement(*node)) ||
+  return node->IsHTMLElement() && (IsHTMLBDIElement(ToHTMLElement(*node)) ||
                                    ToHTMLElement(*node).hasAttribute(dirAttr));
 }
 
@@ -909,7 +912,7 @@ bool HTMLElement::HasDirectionAuto() const {
   // <bdi> defaults to dir="auto"
   // https://html.spec.whatwg.org/multipage/semantics.html#the-bdi-element
   const AtomicString& direction = FastGetAttribute(dirAttr);
-  return (isHTMLBDIElement(*this) && direction == g_null_atom) ||
+  return (IsHTMLBDIElement(*this) && direction == g_null_atom) ||
          DeprecatedEqualIgnoringCase(direction, "auto");
 }
 
@@ -923,15 +926,16 @@ TextDirection HTMLElement::DirectionalityIfhasDirAutoAttribute(
 
 TextDirection HTMLElement::Directionality(
     Node** strong_directionality_text_node) const {
-  if (isHTMLInputElement(*this)) {
-    HTMLInputElement* input_element =
-        toHTMLInputElement(const_cast<HTMLElement*>(this));
+  if (auto* input_element = ToHTMLInputElementOrNull(*this)) {
     bool has_strong_directionality;
     TextDirection text_direction = DetermineDirectionality(
         input_element->value(), &has_strong_directionality);
-    if (strong_directionality_text_node)
+    if (strong_directionality_text_node) {
       *strong_directionality_text_node =
-          has_strong_directionality ? input_element : 0;
+          has_strong_directionality
+              ? const_cast<HTMLInputElement*>(input_element)
+              : nullptr;
+    }
     return text_direction;
   }
 
@@ -939,7 +943,7 @@ TextDirection HTMLElement::Directionality(
   while (node) {
     // Skip bdi, script, style and text form controls.
     if (DeprecatedEqualIgnoringCase(node->nodeName(), "bdi") ||
-        isHTMLScriptElement(*node) || isHTMLStyleElement(*node) ||
+        IsHTMLScriptElement(*node) || IsHTMLStyleElement(*node) ||
         (node->IsElementNode() && ToElement(node)->IsTextControl()) ||
         (node->IsElementNode() &&
          ToElement(node)->ShadowPseudoId() == "-webkit-input-placeholder")) {
@@ -970,7 +974,7 @@ TextDirection HTMLElement::Directionality(
     node = FlatTreeTraversal::Next(*node, this);
   }
   if (strong_directionality_text_node)
-    *strong_directionality_text_node = 0;
+    *strong_directionality_text_node = nullptr;
   return TextDirection::kLtr;
 }
 
@@ -1033,17 +1037,15 @@ Node::InsertionNotificationRequest HTMLElement::InsertedInto(
   // updated.
   Element::InsertedInto(insertion_point);
 
-  if (RuntimeEnabledFeatures::HideNonceContentAttributeEnabled() &&
-      FastHasAttribute(nonceAttr) &&
-      GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy() &&
-      InActiveDocument()) {
+  if (GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy() &&
+      InActiveDocument() && FastHasAttribute(nonceAttr)) {
     setAttribute(nonceAttr, g_empty_atom);
   }
 
   return kInsertionDone;
 }
 
-void HTMLElement::AddHTMLLengthToStyle(MutableStylePropertySet* style,
+void HTMLElement::AddHTMLLengthToStyle(MutableCSSPropertyValueSet* style,
                                        CSSPropertyID property_id,
                                        const String& value,
                                        AllowPercentage allow_percentage) {
@@ -1165,7 +1167,7 @@ bool HTMLElement::ParseColorWithLegacyRules(const String& attribute_value,
   return success;
 }
 
-void HTMLElement::AddHTMLColorToStyle(MutableStylePropertySet* style,
+void HTMLElement::AddHTMLColorToStyle(MutableCSSPropertyValueSet* style,
                                       CSSPropertyID property_id,
                                       const String& attribute_value) {
   Color parsed_color;
@@ -1234,7 +1236,7 @@ int HTMLElement::offsetLeftForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustLayoutUnitForAbsoluteZoom(
+    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                LayoutUnit(layout_object->PixelSnappedOffsetLeft(offset_parent)),
                layout_object->StyleRef())
         .Round();
@@ -1245,7 +1247,7 @@ int HTMLElement::offsetTopForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustLayoutUnitForAbsoluteZoom(
+    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                LayoutUnit(layout_object->PixelSnappedOffsetTop(offset_parent)),
                layout_object->StyleRef())
         .Round();
@@ -1256,7 +1258,7 @@ int HTMLElement::offsetWidthForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustLayoutUnitForAbsoluteZoom(
+    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                LayoutUnit(
                    layout_object->PixelSnappedOffsetWidth(offset_parent)),
                layout_object->StyleRef())
@@ -1269,7 +1271,7 @@ int HTMLElement::offsetHeightForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(this);
   Element* offset_parent = unclosedOffsetParent();
   if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustLayoutUnitForAbsoluteZoom(
+    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                LayoutUnit(
                    layout_object->PixelSnappedOffsetHeight(offset_parent)),
                layout_object->StyleRef())
@@ -1341,6 +1343,6 @@ void HTMLElement::OnXMLLangAttrChanged(
 void dumpInnerHTML(blink::HTMLElement*);
 
 void dumpInnerHTML(blink::HTMLElement* element) {
-  printf("%s\n", element->innerHTML().Ascii().data());
+  printf("%s\n", element->InnerHTMLAsString().Ascii().data());
 }
 #endif

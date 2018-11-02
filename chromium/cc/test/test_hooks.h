@@ -10,9 +10,12 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_impl.h"
 
-namespace cc {
-
+namespace viz {
 class CompositorFrame;
+class OutputSurface;
+}
+
+namespace cc {
 
 // Used by test stubs to notify the test when something interesting happens.
 class TestHooks : public AnimationDelegate {
@@ -78,10 +81,10 @@ class TestHooks : public AnimationDelegate {
   virtual void DisplayReceivedLocalSurfaceIdOnThread(
       const viz::LocalSurfaceId& local_surface_id) {}
   virtual void DisplayReceivedCompositorFrameOnThread(
-      const CompositorFrame& frame) {}
+      const viz::CompositorFrame& frame) {}
   virtual void DisplayWillDrawAndSwapOnThread(
       bool will_draw_and_swap,
-      const RenderPassList& render_passes) {}
+      const viz::RenderPassList& render_passes) {}
   virtual void DisplayDidDrawAndSwapOnThread() {}
 
   // Main thread hooks.
@@ -125,7 +128,8 @@ class TestHooks : public AnimationDelegate {
   // OutputSurface indirections to the LayerTreeTest, that can be further
   // overridden.
   virtual void RequestNewLayerTreeFrameSink() = 0;
-  virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+  virtual std::unique_ptr<viz::OutputSurface>
+  CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider) = 0;
 };
 

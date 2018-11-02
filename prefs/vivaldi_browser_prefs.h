@@ -37,11 +37,14 @@ struct PrefProperties {
 };
 typedef std::unordered_map<std::string, PrefProperties> PrefsProperties;
 
-// Vivaldi: Register platform specific preferences
-void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
-
 PrefsProperties RegisterBrowserPrefs(
     user_prefs::PrefRegistrySyncable* registry);
+
+void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry);
+
+void MigrateOldPrefs(PrefService* prefs);
 
 // Vivaldi: Register preferences to the local state
 void RegisterLocalState(PrefRegistrySimple* registry);

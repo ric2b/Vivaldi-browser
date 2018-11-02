@@ -1,0 +1,13 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+#ifndef INSTALLER_VIVALDI_CRASH_URLS_H_
+#define INSTALLER_VIVALDI_CRASH_URLS_H_
+
+#define CRASH_REPORT_HOSTNAME "crashreport.vivaldi.com"
+
+#define CRASH_REPORT_URL_SCHEME "https://"
+#define CRASH_REPORT_SERVERNAME CRASH_REPORT_HOSTNAME
+
+#define CRASH_REPORT_URL(path) CRASH_REPORT_URL_SCHEME CRASH_REPORT_SERVERNAME path
+
+#endif  // INSTALLER_VIVALDI_CRASH_URLS_H_

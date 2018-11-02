@@ -18,6 +18,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
+#include "content/browser/service_worker/service_worker_fetch_dispatcher.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_response_type.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
@@ -53,12 +54,12 @@ class ResourceContext;
 class ResourceRequestBody;
 class ServiceWorkerBlobReader;
 class ServiceWorkerDataPipeReader;
-class ServiceWorkerFetchDispatcher;
 class ServiceWorkerVersion;
 
 class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
  public:
   using Delegate = ServiceWorkerURLJobWrapper::Delegate;
+  using ResponseType = ServiceWorkerResponseType;
 
   ServiceWorkerURLRequestJob(
       net::URLRequest* request,
@@ -66,10 +67,11 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
       const std::string& client_id,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
       const ResourceContext* resource_context,
-      FetchRequestMode request_mode,
-      FetchCredentialsMode credentials_mode,
+      network::mojom::FetchRequestMode request_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
       const std::string& integrity,
+      bool keepalive,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -96,11 +98,9 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // When an in-flight request possibly needs CORS check, use
   // FallbackToNetworkOrRenderer. This method will decide whether the request
   // can directly go to the network or should fallback to a renderer to send
-  // CORS preflight. You can use FallbackToNetwork only when, like main resource
-  // or foreign fetch cases, it's apparent that the request should go to the
-  // network directly.
-  // TODO(shimazu): Update the comment when what should we do at foreign fetch
-  // fallback is determined: crbug.com/604084
+  // CORS preflight. You can use FallbackToNetwork only when it's apparent that
+  // the request can go to the network directly (e.g., main resource requests or
+  // same-origin requests).
   void FallbackToNetwork();
   void FallbackToNetworkOrRenderer();
   void ForwardToServiceWorker();
@@ -110,10 +110,10 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void FailDueToLostController();
 
   bool ShouldFallbackToNetwork() const {
-    return response_type_ == FALLBACK_TO_NETWORK;
+    return response_type_ == ResponseType::FALLBACK_TO_NETWORK;
   }
   bool ShouldForwardToServiceWorker() const {
-    return response_type_ == FORWARD_TO_SERVICE_WORKER;
+    return response_type_ == ResponseType::FORWARD_TO_SERVICE_WORKER;
   }
 
   // net::URLRequestJob overrides:
@@ -175,11 +175,11 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version);
   void DidDispatchFetchEvent(
       ServiceWorkerStatusCode status,
-      ServiceWorkerFetchEventResult fetch_result,
+      ServiceWorkerFetchDispatcher::FetchEventResult fetch_result,
       const ServiceWorkerResponse& response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      storage::mojom::BlobPtr body_as_blob,
-      const scoped_refptr<ServiceWorkerVersion>& version);
+      blink::mojom::BlobPtr body_as_blob,
+      scoped_refptr<ServiceWorkerVersion> version);
   void SetResponse(const ServiceWorkerResponse& response);
 
   // Populates |http_response_headers_|.
@@ -211,7 +211,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void SetResponseBodyType(ResponseBodyType type);
   bool ShouldRecordResult();
   void RecordStatusZeroResponseError(
-      blink::WebServiceWorkerResponseError error);
+      blink::mojom::ServiceWorkerResponseError error);
 
   const net::HttpResponseInfo* http_info() const;
 
@@ -276,7 +276,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
 
   std::unique_ptr<NavigationPreloadMetrics> nav_preload_metrics_;
 
-  ServiceWorkerResponseType response_type_;
+  ResponseType response_type_;
 
   // True if URLRequestJob::Start() has been called.
   bool is_started_;
@@ -298,10 +298,11 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   std::unique_ptr<ServiceWorkerBlobReader> blob_reader_;
   std::unique_ptr<ServiceWorkerDataPipeReader> data_pipe_reader_;
 
-  FetchRequestMode request_mode_;
-  FetchCredentialsMode credentials_mode_;
+  network::mojom::FetchRequestMode request_mode_;
+  network::mojom::FetchCredentialsMode credentials_mode_;
   FetchRedirectMode redirect_mode_;
   std::string integrity_;
+  const bool keepalive_;
   const ResourceType resource_type_;
   RequestContextType request_context_type_;
   RequestContextFrameType frame_type_;

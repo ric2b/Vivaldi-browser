@@ -4,7 +4,9 @@
 
 #include "content/test/test_web_contents.h"
 
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
@@ -24,6 +26,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
+#include "content/public/common/url_utils.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
@@ -34,16 +37,21 @@ namespace content {
 
 TestWebContents::TestWebContents(BrowserContext* browser_context)
     : WebContentsImpl(browser_context),
-      delegate_view_override_(NULL),
+      delegate_view_override_(nullptr),
       expect_set_history_offset_and_length_(false),
-      expect_set_history_offset_and_length_history_length_(0) {
-}
+      expect_set_history_offset_and_length_history_length_(0) {}
 
 TestWebContents* TestWebContents::Create(BrowserContext* browser_context,
                                          scoped_refptr<SiteInstance> instance) {
   TestWebContents* test_web_contents = new TestWebContents(browser_context);
-  test_web_contents->Init(
-      WebContents::CreateParams(browser_context, std::move(instance)));
+  test_web_contents->Init(CreateParams(browser_context, std::move(instance)));
+  return test_web_contents;
+}
+
+TestWebContents* TestWebContents::Create(const CreateParams& params) {
+  TestWebContents* test_web_contents =
+      new TestWebContents(params.browser_context);
+  test_web_contents->Init(params);
   return test_web_contents;
 }
 
@@ -51,7 +59,7 @@ TestWebContents::~TestWebContents() {
   EXPECT_FALSE(expect_set_history_offset_and_length_);
 }
 
-TestRenderFrameHost* TestWebContents::GetMainFrame() {
+TestRenderFrameHost* TestWebContents::GetMainFrame() const {
   return static_cast<TestRenderFrameHost*>(WebContentsImpl::GetMainFrame());
 }
 
@@ -60,13 +68,9 @@ TestRenderViewHost* TestWebContents::GetRenderViewHost() const {
         WebContentsImpl::GetRenderViewHost());
 }
 
-TestRenderFrameHost* TestWebContents::GetPendingMainFrame() const {
-  if (IsBrowserSideNavigationEnabled()) {
-    return static_cast<TestRenderFrameHost*>(
-        GetRenderManager()->speculative_render_frame_host_.get());
-  }
+TestRenderFrameHost* TestWebContents::GetPendingMainFrame() {
   return static_cast<TestRenderFrameHost*>(
-      GetRenderManager()->pending_frame_host());
+      WebContentsImpl::GetPendingMainFrame());
 }
 
 int TestWebContents::DownloadImage(const GURL& url,
@@ -93,23 +97,8 @@ void TestWebContents::TestDidNavigate(RenderFrameHost* render_frame_host,
                                       bool did_create_new_entry,
                                       const GURL& url,
                                       ui::PageTransition transition) {
-  TestDidNavigateWithReferrer(render_frame_host,
-                              nav_entry_id,
-                              did_create_new_entry,
-                              url,
-                              Referrer(),
-                              transition);
-}
-
-void TestWebContents::TestDidNavigateWithReferrer(
-    RenderFrameHost* render_frame_host,
-    int nav_entry_id,
-    bool did_create_new_entry,
-    const GURL& url,
-    const Referrer& referrer,
-    ui::PageTransition transition) {
   TestDidNavigateWithSequenceNumber(render_frame_host, nav_entry_id,
-                                    did_create_new_entry, url, referrer,
+                                    did_create_new_entry, url, Referrer(),
                                     transition, false, -1, -1);
 }
 
@@ -133,7 +122,6 @@ void TestWebContents::TestDidNavigateWithSequenceNumber(
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
 
   params.nav_entry_id = nav_entry_id;
-  params.frame_unique_name = std::string();
   params.item_sequence_number = item_sequence_number;
   params.document_sequence_number = document_sequence_number;
   params.url = url;
@@ -211,11 +199,12 @@ bool TestWebContents::CreateRenderViewForRenderManager(
     RenderViewHost* render_view_host,
     int opener_frame_routing_id,
     int proxy_routing_id,
+    const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_frame_state) {
   // This will go to a TestRenderViewHost.
   static_cast<RenderViewHostImpl*>(render_view_host)
       ->CreateRenderView(opener_frame_routing_id, proxy_routing_id,
-                         replicated_frame_state, false);
+                         devtools_frame_token, replicated_frame_state, false);
   return true;
 }
 
@@ -299,12 +288,6 @@ void TestWebContents::CommitPendingNavigation() {
   // happens.
   if (old_rfh != rfh)
     old_rfh->OnSwappedOut();
-}
-
-void TestWebContents::ProceedWithCrossSiteNavigation() {
-  if (!GetPendingMainFrame())
-    return;
-  GetMainFrame()->SendBeforeUnloadACK(true);
 }
 
 RenderViewHostDelegateView* TestWebContents::GetDelegateView() {
@@ -410,6 +393,10 @@ void TestWebContents::SaveFrameWithHeaders(const GURL& url,
 
 void TestWebContents::SetWasRecentlyAudible(bool audible) {
   audio_stream_monitor()->set_was_recently_audible_for_testing(audible);
+}
+
+void TestWebContents::SetIsCurrentlyAudible(bool audible) {
+  audio_stream_monitor()->set_is_currently_audible_for_testing(audible);
 }
 
 }  // namespace content

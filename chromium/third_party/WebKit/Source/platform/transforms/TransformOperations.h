@@ -25,10 +25,10 @@
 #ifndef TransformOperations_h
 #define TransformOperations_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/transforms/TransformOperation.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -74,14 +74,16 @@ class PLATFORM_EXPORT TransformOperations {
 
   void clear() { operations_.clear(); }
 
-  Vector<RefPtr<TransformOperation>>& Operations() { return operations_; }
-  const Vector<RefPtr<TransformOperation>>& Operations() const {
+  Vector<scoped_refptr<TransformOperation>>& Operations() {
+    return operations_;
+  }
+  const Vector<scoped_refptr<TransformOperation>>& Operations() const {
     return operations_;
   }
 
   size_t size() const { return operations_.size(); }
   const TransformOperation* at(size_t index) const {
-    return index < operations_.size() ? operations_.at(index).Get() : 0;
+    return index < operations_.size() ? operations_.at(index).get() : nullptr;
   }
 
   bool BlendedBoundsForBox(const FloatBox&,
@@ -91,7 +93,7 @@ class PLATFORM_EXPORT TransformOperations {
                            FloatBox* bounds) const;
   TransformOperations BlendByMatchingOperations(const TransformOperations& from,
                                                 const double& progress) const;
-  PassRefPtr<TransformOperation> BlendByUsingMatrixInterpolation(
+  scoped_refptr<TransformOperation> BlendByUsingMatrixInterpolation(
       const TransformOperations& from,
       double progress) const;
   TransformOperations Blend(const TransformOperations& from,
@@ -100,7 +102,7 @@ class PLATFORM_EXPORT TransformOperations {
   TransformOperations Zoom(double factor) const;
 
  private:
-  Vector<RefPtr<TransformOperation>> operations_;
+  Vector<scoped_refptr<TransformOperation>> operations_;
 };
 
 }  // namespace blink

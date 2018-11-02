@@ -1,8 +1,6 @@
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import multiprocessing
-
 from core import perf_benchmark
 
 from benchmarks import silk_flags
@@ -50,18 +48,6 @@ class SmoothnessTop25(_Smoothness):
   def Name(cls):
     return 'smoothness.top_25_smooth'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/597656
-    if (possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
-      return True
-    # http://crbug.com/650762
-    if (possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetOSName() == 'win'):
-      return True
-    return False
-
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
@@ -73,6 +59,22 @@ class SmoothnessTop25(_Smoothness):
         self.DisableStory('https://mail.google.com/mail/',
                           [story_module.expectations.ALL_WIN],
                           'crbug.com/750147')
+        self.DisableStory('Docs  (1 open document tab)',
+                          [story_module.expectations.ALL_WIN],
+                          'crbug.com/762165')
+        self.DisableStory('http://www.youtube.com',
+                          [story_module.expectations.ALL_WIN],
+                          'crbug.com/762165')
+        self.DisableStory('https://plus.google.com/110031535020051778989/posts',
+                          [story_module.expectations.ALL_WIN],
+                          'crbug.com/762165')
+        self.DisableStory('https://www.google.com/calendar/',
+                          [story_module.expectations.ALL_WIN],
+                          'crbug.com/762165')
+        self.DisableStory('https://www.google.com/search?q=cats&tbm=isch',
+                          [story_module.expectations.ALL_WIN],
+                          'crbug.com/762165')
+
     return StoryExpectations()
 
 
@@ -87,23 +89,6 @@ class SmoothnessToughFiltersCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.tough_filters_cases'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/616520
-    if (cls.IsSvelte(possible_browser) and
-        possible_browser.browser_type == 'reference'):
-      return True
-    # http://crbug.com/624032
-    if possible_browser.platform.GetDeviceTypeName() == 'Nexus 6':
-      return True
-    return False
-
-  def GetExpectations(self):
-    class StoryExpectations(story_module.expectations.StoryExpectations):
-      def SetExpectations(self):
-        pass # Nothing.
-    return StoryExpectations()
 
 
 @benchmark.Owner(emails=['senorblanco@chromium.org'])
@@ -155,6 +140,16 @@ class SmoothnessToughCanvasCases(_Smoothness):
         self.DisableStory('tough_canvas_cases/canvas_toBlob.html',
                           [story_module.expectations.ANDROID_ONE],
                           'crbug.com/755657')
+        self.DisableStory('http://www.kevs3d.co.uk/dev/canvask3d/k3d_test.html',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785485')
+        self.DisableStory('http://www.effectgames.com/demos/canvascycle/',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785286')
+        self.DisableStory('http://www.smashcat.org/av/canvas_test/',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785286')
+
     return StoryExpectations()
 
 
@@ -174,7 +169,7 @@ class SmoothnessToughWebGLCases(_Smoothness):
 
 
 @benchmark.Owner(emails=['kbr@chromium.org', 'zmo@chromium.org'])
-class SmoothnessMaps(perf_benchmark.PerfBenchmark):
+class SmoothnessMaps(_Smoothness):
   page_set = page_sets.MapsPageSet
 
   @classmethod
@@ -206,6 +201,9 @@ class SmoothnessKeyDesktopMoveCases(_Smoothness):
         self.DisableStory('https://mail.google.com/mail/',
                           [story_module.expectations.ALL_WIN],
                           'crbug.com/750131')
+        self.DisableStory('https://mail.google.com/mail/',
+                          [story_module.expectations.ALL_MAC],
+                          'crbug.com/770904')
     return StoryExpectations()
 
 
@@ -221,11 +219,6 @@ class SmoothnessKeyMobileSites(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.key_mobile_sites_smooth'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-      return (possible_browser.browser_type == 'reference' and
-              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
 
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
@@ -244,12 +237,6 @@ class SmoothnessToughAnimationCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.tough_animation_cases'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/595737
-    # This test is flaky on low-end windows machine.
-    return (possible_browser.platform.GetOSName() == 'win' and
-            multiprocessing.cpu_count() <= 2)
 
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
@@ -296,12 +283,14 @@ class SmoothnessKeySilkCases(_Smoothness):
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        self.DisableStory('https://polymer-topeka.appspot.com/',
-                          [story_module.expectations.ALL], 'crbug.com/507865')
-        self.DisableStory('http://plus.google.com/app/basic/stream',
-                          [story_module.expectations.ALL], 'crbug.com/338838')
-        self.DisableStory('inbox_app.html?slide_drawer',
-                          [story_module.expectations.ALL], 'crbug.com/446332')
+        self.DisableStory(
+            'inbox_app.html?slide_drawer', [story_module.expectations.ALL],
+            'Story contains multiple interaction records. Not supported in '
+            'smoothness benchmarks.')
+        self.DisableStory(
+            'https://polymer-topeka.appspot.com/',
+            [story_module.expectations.ALL],
+            'crbug.com/780525')
     return StoryExpectations()
 
 
@@ -311,7 +300,8 @@ class SmoothnessGpuRasterizationTop25(_Smoothness):
   """
   tag = 'gpu_rasterization'
   page_set = page_sets.Top25SmoothPageSet
-  SUPPORTED_PLATFORMS = [story_module.expectations.ALL_MOBILE]
+  SUPPORTED_PLATFORMS = [story_module.expectations.ALL_MOBILE,
+                         story_module.expectations.ALL_CHROMEOS]
 
   def SetExtraBrowserOptions(self, options):
     silk_flags.CustomizeBrowserOptionsForGpuRasterization(options)
@@ -319,11 +309,6 @@ class SmoothnessGpuRasterizationTop25(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.gpu_rasterization.top_25_smooth'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-      return (possible_browser.browser_type == 'reference' and
-              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
 
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
@@ -386,11 +371,6 @@ class SmoothnessGpuRasterizationFiltersCases(_Smoothness):
   def Name(cls):
     return 'smoothness.gpu_rasterization.tough_filters_cases'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/616540
-    return (cls.IsSvelte(possible_browser) and
-            possible_browser.browser_type == 'reference')
-
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
@@ -413,11 +393,6 @@ class SmoothnessSyncScrollKeyMobileSites(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.sync_scroll.key_mobile_sites_smooth'
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-      return (possible_browser.browser_type == 'reference' and
-              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
 
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
@@ -488,9 +463,6 @@ class SmoothnessToughPinchZoomCases(_Smoothness):
         self.DisableStory('LinkedIn',
                           [story_module.expectations.ALL_ANDROID],
                           'crbug.com/631015')
-        self.DisableStory('Wikipedia (1 tab)',
-                          [story_module.expectations.ALL_ANDROID],
-                          'crbug.com/631015')
         self.DisableStory('Twitter',
                           [story_module.expectations.ALL_ANDROID],
                           'crbug.com/631015')
@@ -530,7 +502,7 @@ class SmoothnessDesktopToughPinchZoomCases(_Smoothness):
   cases. Uses lower zoom levels customized for desktop limits.
   """
   page_set = page_sets.DesktopToughPinchZoomCasesPageSet
-  SUPPORTED_PLATFORMS = [story_module.expectations.ALL_DESKTOP]
+  SUPPORTED_PLATFORMS = [story_module.expectations.ALL_MAC]
 
   @classmethod
   def Name(cls):
@@ -539,7 +511,7 @@ class SmoothnessDesktopToughPinchZoomCases(_Smoothness):
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass
+        pass  # Nothing disabled.
     return StoryExpectations()
 
 
@@ -585,9 +557,6 @@ class SmoothnessGpuRasterizationToughPinchZoomCases(_Smoothness):
         self.DisableStory('Facebook', [story_module.expectations.ALL_ANDROID],
                           'crbug.com/610021')
         self.DisableStory('LinkedIn', [story_module.expectations.ALL_ANDROID],
-                          'crbug.com/610021')
-        self.DisableStory('Wikipedia (1 tab)',
-                          [story_module.expectations.ALL_ANDROID],
                           'crbug.com/610021')
         self.DisableStory('Twitter', [story_module.expectations.ALL_ANDROID],
                           'crbug.com/610021')
@@ -663,7 +632,36 @@ class SmoothnessToughScrollingCases(_Smoothness):
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing.
+        self.DisableStory('canvas_05000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_10000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_15000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_20000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_30000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_40000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_50000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_60000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_75000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
+        self.DisableStory('canvas_90000_pixels_per_second',
+                          [story_module.expectations.ANDROID_WEBVIEW],
+                          'crbug.com/785473')
     return StoryExpectations()
 
 
@@ -756,17 +754,11 @@ class SmoothnessPathologicalMobileSites(_Smoothness):
   def Name(cls):
     return 'smoothness.pathological_mobile_sites'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/685342
-    if possible_browser.platform.GetDeviceTypeName() == 'Nexus 7':
-      return True
-    return False
-
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass
+        self.DisableBenchmark([story_module.expectations.ANDROID_NEXUS7],
+                              'crbug.com/685342')
     return StoryExpectations()
 
 
@@ -794,10 +786,6 @@ class SmoothnessToughAdCases(_Smoothness):
     return 'smoothness.tough_ad_cases'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return cls.IsSvelte(possible_browser)  # http://crbug.com/555089
-
-  @classmethod
   def ValueCanBeAddedPredicate(cls, value, is_first_result):
     del is_first_result  # unused
     # These pages don't scroll so it's not necessary to measure input latency.
@@ -806,7 +794,8 @@ class SmoothnessToughAdCases(_Smoothness):
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing.
+        self.DisableBenchmark([story_module.expectations.ANDROID_SVELTE],
+                              'www.crbug.com/555089')
     return StoryExpectations()
 
 
@@ -819,14 +808,11 @@ class SmoothnessToughWebGLAdCases(_Smoothness):
   def Name(cls):
     return 'smoothness.tough_webgl_ad_cases'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return cls.IsSvelte(possible_browser)  # http://crbug.com/574485
-
   def GetExpectations(self):
     class StoryExpectations(story_module.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing.
+        self.DisableBenchmark([story_module.expectations.ANDROID_SVELTE],
+                              'crbug.com/574485')
     return StoryExpectations()
 
 

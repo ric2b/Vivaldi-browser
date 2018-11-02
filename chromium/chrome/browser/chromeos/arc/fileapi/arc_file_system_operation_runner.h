@@ -19,7 +19,7 @@
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_bridge.h"
 #include "components/arc/common/file_system.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "storage/browser/fileapi/watcher_manager.h"
 
@@ -65,7 +65,7 @@ class ArcFileSystemOperationRunner
     : public KeyedService,
       public ArcFileSystemBridge::Observer,
       public ArcSessionManager::Observer,
-      public InstanceHolder<mojom::FileSystemInstance>::Observer {
+      public ConnectionObserver<mojom::FileSystemInstance> {
  public:
   using GetFileSizeCallback = mojom::FileSystemInstance::GetFileSizeCallback;
   using GetMimeTypeCallback = mojom::FileSystemInstance::GetMimeTypeCallback;
@@ -76,10 +76,10 @@ class ArcFileSystemOperationRunner
       mojom::FileSystemInstance::GetChildDocumentsCallback;
   using GetRecentDocumentsCallback =
       mojom::FileSystemInstance::GetRecentDocumentsCallback;
-  using AddWatcherCallback = base::Callback<void(int64_t watcher_id)>;
-  using RemoveWatcherCallback = base::Callback<void(bool success)>;
+  using AddWatcherCallback = base::OnceCallback<void(int64_t watcher_id)>;
+  using RemoveWatcherCallback = base::OnceCallback<void(bool success)>;
   using ChangeType = storage::WatcherManager::ChangeType;
-  using WatcherCallback = base::Callback<void(ChangeType type)>;
+  using WatcherCallback = base::RepeatingCallback<void(ChangeType type)>;
 
   class Observer {
    public:
@@ -118,23 +118,23 @@ class ArcFileSystemOperationRunner
   void RemoveObserver(Observer* observer);
 
   // Runs file system operations. See file_system.mojom for documentation.
-  void GetFileSize(const GURL& url, const GetFileSizeCallback& callback);
-  void GetMimeType(const GURL& url, const GetMimeTypeCallback& callback);
-  void OpenFileToRead(const GURL& url, const OpenFileToReadCallback& callback);
+  void GetFileSize(const GURL& url, GetFileSizeCallback callback);
+  void GetMimeType(const GURL& url, GetMimeTypeCallback callback);
+  void OpenFileToRead(const GURL& url, OpenFileToReadCallback callback);
   void GetDocument(const std::string& authority,
                    const std::string& document_id,
-                   const GetDocumentCallback& callback);
+                   GetDocumentCallback callback);
   void GetChildDocuments(const std::string& authority,
                          const std::string& parent_document_id,
-                         const GetChildDocumentsCallback& callback);
+                         GetChildDocumentsCallback callback);
   void GetRecentDocuments(const std::string& authority,
                           const std::string& root_id,
-                          const GetRecentDocumentsCallback& callback);
+                          GetRecentDocumentsCallback callback);
   void AddWatcher(const std::string& authority,
                   const std::string& document_id,
                   const WatcherCallback& watcher_callback,
-                  const AddWatcherCallback& callback);
-  void RemoveWatcher(int64_t watcher_id, const RemoveWatcherCallback& callback);
+                  AddWatcherCallback callback);
+  void RemoveWatcher(int64_t watcher_id, RemoveWatcherCallback callback);
 
   // KeyedService overrides:
   void Shutdown() override;
@@ -145,9 +145,9 @@ class ArcFileSystemOperationRunner
   // ArcSessionManager::Observer overrides:
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
-  // InstanceHolder<mojom::FileSystemInstance>::Observer overrides:
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::FileSystemInstance> overrides:
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // Returns true if operations will be deferred.
   bool WillDefer() const { return should_defer_; }
@@ -161,7 +161,7 @@ class ArcFileSystemOperationRunner
                                bool set_should_defer_by_events);
 
   void OnWatcherAdded(const WatcherCallback& watcher_callback,
-                      const AddWatcherCallback& callback,
+                      AddWatcherCallback callback,
                       int64_t watcher_id);
 
   // Called whenever ARC states related to |should_defer_| are changed.
@@ -186,7 +186,7 @@ class ArcFileSystemOperationRunner
   bool should_defer_ = false;
 
   // List of deferred operations.
-  std::vector<base::Closure> deferred_operations_;
+  std::vector<base::OnceClosure> deferred_operations_;
 
   // Map from a watcher ID to a watcher callback.
   std::map<int64_t, WatcherCallback> watcher_callbacks_;

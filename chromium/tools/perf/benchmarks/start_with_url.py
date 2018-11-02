@@ -44,21 +44,8 @@ class StartWithUrlColdTBM(_StartupPerfBenchmark):
     super(StartWithUrlColdTBM, self).SetExtraBrowserOptions(options)
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/667470
-    return (possible_browser.platform.GetDeviceTypeName() in
-            ['Nexus 7v2', 'Nexus 9'])
-
-  @classmethod
   def Name(cls):
     return 'start_with_url.cold.startup_pages'
-
-  # TODO(rnephew): Test if kapook.com fails on both or just one of the configs.
-  def GetExpectations(self):
-    class StoryExpectations(story.expectations.StoryExpectations):
-      def SetExpectations(self):
-        self.DisableStory(
-            'http://kapook.com', [story.expectations.ALL], 'crbug.com/667470')
-    return StoryExpectations()
 
 
 @benchmark.Owner(emails=['pasko@chromium.org'])
@@ -80,11 +67,33 @@ class StartWithUrlWarmTBM(_StartupPerfBenchmark):
     # we are loading the profile for the first time.
     return not is_first_result
 
-  # TODO(rnephew): Test if kapook.com fails on both or just one of the configs.
-  def GetExpectations(self):
-    class StoryExpectations(story.expectations.StoryExpectations):
-      def SetExpectations(self):
-        self.DisableStory(
-            'http://kapook.com', [story.expectations.ALL], 'crbug.com/667470')
-    return StoryExpectations()
 
+@benchmark.Owner(emails=['pasko@chromium.org'])
+class ExperimentalStartWithUrlCold(perf_benchmark.PerfBenchmark):
+  """Measures time to start Chrome cold with startup URLs (TBMv2 version)."""
+  # TODO(pasko): also add the .warm version of the TBMv2 benchmark after the
+  # cold one graduates from experimental.
+
+  page_set = page_sets.ExperimentalStartupPagesPageSet
+  options = {'pageset_repeat': 11}
+  SUPPORTED_PLATFORMS = [story.expectations.ANDROID_NOT_WEBVIEW]
+
+  @classmethod
+  def Name(cls):
+    # TODO(pasko): Actually make it 'coldish', that is, purge the OS page cache
+    # only for files of the Chrome application, its profile and disk caches.
+    return 'experimental.startup.android.coldish'
+
+  def SetExtraBrowserOptions(self, options):
+    options.clear_sytem_cache_for_browser_and_profile_on_start = True
+    super(ExperimentalStartWithUrlCold, self).SetExtraBrowserOptions(options)
+
+  def CreateCoreTimelineBasedMeasurementOptions(self):
+    startup_category_filter = (
+        chrome_trace_category_filter.ChromeTraceCategoryFilter(
+            filter_string='startup,toplevel'))
+    options = timeline_based_measurement.Options(
+        overhead_level=startup_category_filter)
+    options.config.enable_chrome_trace = True
+    options.SetTimelineBasedMetrics(['androidStartupMetric'])
+    return options

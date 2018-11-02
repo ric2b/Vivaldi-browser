@@ -271,17 +271,23 @@ VideoPixelFormat VideoFormat(
   return PIXEL_FORMAT_UNKNOWN;
 }
 
-VideoPixelFormat FinalVideoFormat(
-    GpuVideoAcceleratorFactories::OutputFormat format) {
-  // Consumers should sample from NV12 textures as if they're XRGB.
-  if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB)
-    return PIXEL_FORMAT_XRGB;
-  return VideoFormat(format);
-}
-
 // The number of output planes to be copied in each iteration.
 size_t NumGpuMemoryBuffers(GpuVideoAcceleratorFactories::OutputFormat format) {
-  return VideoFrame::NumPlanes(FinalVideoFormat(format));
+  switch (format) {
+    case GpuVideoAcceleratorFactories::OutputFormat::I420:
+      return 3;
+    case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
+      return 1;
+    case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
+      return 2;
+    case GpuVideoAcceleratorFactories::OutputFormat::UYVY:
+      return 1;
+    case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
+      NOTREACHED();
+      break;
+  }
+  NOTREACHED();
+  return 0;
 }
 
 // The number of output rows to be copied in each iteration.
@@ -524,7 +530,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDone(
   for (const auto& plane_resource : frame_resources->plane_resources) {
     if (plane_resource.gpu_memory_buffer) {
       plane_resource.gpu_memory_buffer->Unmap();
-      plane_resource.gpu_memory_buffer->SetColorSpaceForScanout(
+      plane_resource.gpu_memory_buffer->SetColorSpace(
           video_frame->ColorSpace());
     }
   }
@@ -688,7 +694,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   auto release_mailbox_callback = BindToCurrentLoop(
       base::Bind(&PoolImpl::MailboxHoldersReleased, this, frame_resources));
 
-  VideoPixelFormat frame_format = FinalVideoFormat(output_format_);
+  VideoPixelFormat frame_format = VideoFormat(output_format_);
 
   // Create the VideoFrame backed by native textures.
   gfx::Size visible_size = video_frame->visible_rect().size();
@@ -880,7 +886,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::MailboxHoldersReleased(
   }
 }
 
-GpuMemoryBufferVideoFramePool::GpuMemoryBufferVideoFramePool() {}
+GpuMemoryBufferVideoFramePool::GpuMemoryBufferVideoFramePool() = default;
 
 GpuMemoryBufferVideoFramePool::GpuMemoryBufferVideoFramePool(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,

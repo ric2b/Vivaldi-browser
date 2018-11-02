@@ -5,6 +5,9 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/markers/SpellCheckMarker.h"
 #include "core/editing/spellcheck/SpellCheckRequester.h"
@@ -12,7 +15,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 
 namespace blink {
 
@@ -75,12 +78,10 @@ TEST_F(SpellCheckerTest, AdvancedToNextMisspellingWrapSearchNoCrash) {
 TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   SetBodyContent("<input>");
   HTMLInputElement* input =
-      toHTMLInputElement(GetDocument().QuerySelector("input"));
+      ToHTMLInputElement(GetDocument().QuerySelector("input"));
   input->focus();
   input->setValue("Hello, input field");
   GetDocument().UpdateStyleAndLayout();
-  VisibleSelection old_selection =
-      GetDocument().GetFrame()->Selection().ComputeVisibleSelectionInDOMTree();
 
   Position new_position(input->InnerEditorElement()->firstChild(), 3);
   GetDocument().GetFrame()->Selection().SetSelection(
@@ -90,8 +91,7 @@ TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   EXPECT_TRUE(GetSpellChecker().IsSpellCheckingEnabled());
   ForceLayout();
   int start_count = LayoutCount();
-  GetSpellChecker().RespondToChangedSelection(old_selection.Start(),
-                                              TypingContinuation::kEnd);
+  GetSpellChecker().RespondToChangedSelection();
   EXPECT_EQ(start_count, LayoutCount());
 }
 

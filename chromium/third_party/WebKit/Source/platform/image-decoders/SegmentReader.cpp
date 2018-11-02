@@ -4,11 +4,10 @@
 
 #include "platform/image-decoders/SegmentReader.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/SharedBuffer.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkRWBuffer.h"
@@ -22,17 +21,17 @@ class SharedBufferSegmentReader final : public SegmentReader {
   WTF_MAKE_NONCOPYABLE(SharedBufferSegmentReader);
 
  public:
-  SharedBufferSegmentReader(PassRefPtr<SharedBuffer>);
+  SharedBufferSegmentReader(scoped_refptr<SharedBuffer>);
   size_t size() const override;
   size_t GetSomeData(const char*& data, size_t position) const override;
   sk_sp<SkData> GetAsSkData() const override;
 
  private:
-  RefPtr<SharedBuffer> shared_buffer_;
+  scoped_refptr<SharedBuffer> shared_buffer_;
 };
 
 SharedBufferSegmentReader::SharedBufferSegmentReader(
-    PassRefPtr<SharedBuffer> buffer)
+    scoped_refptr<SharedBuffer> buffer)
     : shared_buffer_(std::move(buffer)) {}
 
 size_t SharedBufferSegmentReader::size() const {
@@ -182,18 +181,19 @@ sk_sp<SkData> ROBufferSegmentReader::GetAsSkData() const {
 
 // SegmentReader ---------------------------------------------------------------
 
-PassRefPtr<SegmentReader> SegmentReader::CreateFromSharedBuffer(
-    PassRefPtr<SharedBuffer> buffer) {
-  return AdoptRef(new SharedBufferSegmentReader(std::move(buffer)));
+scoped_refptr<SegmentReader> SegmentReader::CreateFromSharedBuffer(
+    scoped_refptr<SharedBuffer> buffer) {
+  return base::AdoptRef(new SharedBufferSegmentReader(std::move(buffer)));
 }
 
-PassRefPtr<SegmentReader> SegmentReader::CreateFromSkData(sk_sp<SkData> data) {
-  return AdoptRef(new DataSegmentReader(std::move(data)));
+scoped_refptr<SegmentReader> SegmentReader::CreateFromSkData(
+    sk_sp<SkData> data) {
+  return base::AdoptRef(new DataSegmentReader(std::move(data)));
 }
 
-PassRefPtr<SegmentReader> SegmentReader::CreateFromSkROBuffer(
+scoped_refptr<SegmentReader> SegmentReader::CreateFromSkROBuffer(
     sk_sp<SkROBuffer> buffer) {
-  return AdoptRef(new ROBufferSegmentReader(std::move(buffer)));
+  return base::AdoptRef(new ROBufferSegmentReader(std::move(buffer)));
 }
 
 }  // namespace blink

@@ -37,7 +37,7 @@ class CONTENT_EXPORT AppCacheService {
   // acquires a reference to the 'collection' until completion.
   // This method always completes asynchronously.
   virtual void GetAllAppCacheInfo(AppCacheInfoCollection* collection,
-                                  const net::CompletionCallback& callback) = 0;
+                                  OnceCompletionCallback callback) = 0;
 
   // Deletes the group identified by 'manifest_url', 'callback' is
   // invoked upon completion. Upon completion, the cache group and

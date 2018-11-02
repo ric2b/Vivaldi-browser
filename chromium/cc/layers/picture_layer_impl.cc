@@ -20,15 +20,16 @@
 #include "cc/debug/debug_colors.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/solid_color_layer_impl.h"
-#include "cc/quads/debug_border_draw_quad.h"
-#include "cc/quads/picture_draw_quad.h"
-#include "cc/quads/solid_color_draw_quad.h"
-#include "cc/quads/tile_draw_quad.h"
+#include "cc/paint/display_item_list.h"
 #include "cc/tiles/tile_manager.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/quads/debug_border_draw_quad.h"
+#include "components/viz/common/quads/picture_draw_quad.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
+#include "components/viz/common/quads/tile_draw_quad.h"
 #include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -119,6 +120,9 @@ PictureLayerImpl::~PictureLayerImpl() {
   if (twin_layer_)
     twin_layer_->twin_layer_ = nullptr;
   layer_tree_impl()->UnregisterPictureLayerImpl(this);
+
+  // Unregister for all images on the current raster source.
+  UnregisterAnimatedImages();
 }
 
 void PictureLayerImpl::SetLayerMaskType(Layer::LayerMaskType mask_type) {
@@ -194,7 +198,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_tree_impl()->AddLayerShouldPushProperties(this);
 }
 
-void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
+void PictureLayerImpl::AppendQuads(viz::RenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   // The bounds and the pile size may differ if the pile wasn't updated (ie.
   // PictureLayer::Update didn't happen). In that case the pile will be empty.
@@ -207,23 +211,38 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       render_pass->CreateAndAppendSharedQuadState();
 
   if (raster_source_->IsSolidColor()) {
-    PopulateSharedQuadState(shared_quad_state);
+    float max_contents_scale = CanHaveTilings()
+                                   ? ideal_contents_scale_
+                                   : std::min(kMaxIdealContentsScale,
+                                              std::max(GetIdealContentsScale(),
+                                                       MinimumContentsScale()));
 
-    AppendDebugBorderQuad(
-        render_pass, bounds(), shared_quad_state, append_quads_data);
+    // The downstream CA layers use shared_quad_state to generate resources of
+    // the right size even if it is a solid color picture layer.
+    PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
+                                  max_contents_scale, contents_opaque());
 
+    AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
+                          append_quads_data);
+
+    gfx::Rect scaled_visible_layer_rect =
+        shared_quad_state->visible_quad_layer_rect;
+    Occlusion scaled_occlusion =
+        draw_properties()
+            .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
+                shared_quad_state->quad_to_target_transform);
     SolidColorLayerImpl::AppendSolidQuads(
-        render_pass, draw_properties().occlusion_in_content_space,
-        shared_quad_state, visible_layer_rect(),
-        raster_source_->GetSolidColor(), append_quads_data);
+        render_pass, scaled_occlusion, shared_quad_state,
+        scaled_visible_layer_rect, raster_source_->GetSolidColor(),
+        !layer_tree_impl()->settings().enable_edge_anti_aliasing,
+        append_quads_data);
     return;
   }
 
-  float device_scale_factor =
-      layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
+  float device_scale_factor = layer_tree_impl()->device_scale_factor();
   float max_contents_scale = MaximumTilingContentsScale();
   PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
-                                max_contents_scale);
+                                max_contents_scale, contents_opaque());
   Occlusion scaled_occlusion;
   if (mask_type_ == Layer::LayerMaskType::NOT_MASK) {
     scaled_occlusion =
@@ -233,10 +252,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   }
 
   if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
+    DCHECK(shared_quad_state->quad_layer_rect.origin() == gfx::Point(0, 0));
     AppendDebugBorderQuad(
-        render_pass, shared_quad_state->quad_layer_rect.size(),
-        shared_quad_state, append_quads_data,
-        DebugColors::DirectPictureBorderColor(),
+        render_pass, shared_quad_state->quad_layer_rect, shared_quad_state,
+        append_quads_data, DebugColors::DirectPictureBorderColor(),
         DebugColors::DirectPictureBorderWidth(device_scale_factor));
 
     gfx::Rect geometry_rect = shared_quad_state->visible_quad_layer_rect;
@@ -259,18 +278,32 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     gfx::Size texture_size = quad_content_rect.size();
     gfx::RectF texture_rect = gfx::RectF(gfx::SizeF(texture_size));
 
-    PictureDrawQuad* quad =
-        render_pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
+    auto* quad = render_pass->CreateAndAppendDrawQuad<viz::PictureDrawQuad>();
     quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
                  needs_blending, texture_rect, texture_size, nearest_neighbor_,
                  viz::RGBA_8888, quad_content_rect, max_contents_scale,
-                 raster_source_);
+                 raster_source_->GetDisplayItemList());
     ValidateQuadResources(quad);
     return;
   }
 
-  AppendDebugBorderQuad(render_pass, shared_quad_state->quad_layer_rect.size(),
-                        shared_quad_state, append_quads_data);
+  // If we're doing a regular AppendQuads (ie, not solid color or resourceless
+  // software draw, and if the visible rect is scrolled far enough away, then we
+  // may run into a floating point precision in AA calculations in the renderer.
+  // See crbug.com/765297. In order to avoid this, we shift the quads up from
+  // where they logically reside and adjust the shared_quad_state's transform
+  // instead. We only do this in a scale/translate matrices to ensure the math
+  // is correct.
+  gfx::Vector2d quad_offset;
+  if (shared_quad_state->quad_to_target_transform.IsScaleOrTranslation()) {
+    const auto& visible_rect = shared_quad_state->visible_quad_layer_rect;
+    quad_offset = gfx::Vector2d(-visible_rect.x(), -visible_rect.y());
+  }
+
+  gfx::Rect debug_border_rect(shared_quad_state->quad_layer_rect);
+  debug_border_rect.Offset(quad_offset);
+  AppendDebugBorderQuad(render_pass, debug_border_rect, shared_quad_state,
+                        append_quads_data);
 
   if (ShowDebugBorders(DebugBorderType::LAYER)) {
     for (PictureLayerTilingSet::CoverageIterator iter(
@@ -308,9 +341,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         width = DebugColors::MissingTileBorderWidth(device_scale_factor);
       }
 
-      DebugBorderDrawQuad* debug_border_quad =
-          render_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
+      auto* debug_border_quad =
+          render_pass->CreateAndAppendDrawQuad<viz::DebugBorderDrawQuad>();
       gfx::Rect geometry_rect = iter.geometry_rect();
+      geometry_rect.Offset(quad_offset);
       gfx::Rect visible_geometry_rect = geometry_rect;
       debug_border_quad->SetNew(shared_quad_state,
                                 geometry_rect,
@@ -342,6 +376,12 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     gfx::Rect geometry_rect = iter.geometry_rect();
     gfx::Rect visible_geometry_rect =
         scaled_occlusion.GetUnoccludedContentRect(geometry_rect);
+
+    gfx::Rect offset_geometry_rect = geometry_rect;
+    offset_geometry_rect.Offset(quad_offset);
+    gfx::Rect offset_visible_geometry_rect = visible_geometry_rect;
+    offset_visible_geometry_rect.Offset(quad_offset);
+
     bool needs_blending = !contents_opaque();
     if (visible_geometry_rect.IsEmpty())
       continue;
@@ -354,6 +394,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     bool has_draw_quad = false;
     if (*iter && iter->draw_info().IsReadyToDraw()) {
       const TileDrawInfo& draw_info = iter->draw_info();
+
       switch (draw_info.mode()) {
         case TileDrawInfo::RESOURCE_MODE: {
           gfx::RectF texture_rect = iter.texture_rect();
@@ -370,12 +411,14 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
             append_quads_data->num_incomplete_tiles++;
           }
 
-          TileDrawQuad* quad =
-              render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
-          quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
-                       needs_blending, draw_info.resource_id(), texture_rect,
-                       draw_info.resource_size(), draw_info.contents_swizzled(),
-                       nearest_neighbor_);
+          auto* quad =
+              render_pass->CreateAndAppendDrawQuad<viz::TileDrawQuad>();
+          quad->SetNew(
+              shared_quad_state, offset_geometry_rect,
+              offset_visible_geometry_rect, needs_blending,
+              draw_info.resource_id(), texture_rect, draw_info.resource_size(),
+              draw_info.contents_swizzled(), nearest_neighbor_,
+              !layer_tree_impl()->settings().enable_edge_anti_aliasing);
           ValidateQuadResources(quad);
           has_draw_quad = true;
           break;
@@ -386,10 +429,12 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
               shared_quad_state->opacity;
           if (mask_type_ == Layer::LayerMaskType::MULTI_TEXTURE_MASK ||
               alpha >= std::numeric_limits<float>::epsilon()) {
-            SolidColorDrawQuad* quad =
-                render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
-            quad->SetNew(shared_quad_state, geometry_rect,
-                         visible_geometry_rect, draw_info.solid_color(), false);
+            auto* quad =
+                render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+            quad->SetNew(
+                shared_quad_state, offset_geometry_rect,
+                offset_visible_geometry_rect, draw_info.solid_color(),
+                !layer_tree_impl()->settings().enable_edge_anti_aliasing);
             ValidateQuadResources(quad);
           }
           has_draw_quad = true;
@@ -407,10 +452,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         // Fill the whole tile with the missing tile color.
         color = DebugColors::OOMTileBorderColor();
       }
-      SolidColorDrawQuad* quad =
-          render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
-      quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
-                   color, false);
+      auto* quad =
+          render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+      quad->SetNew(shared_quad_state, offset_geometry_rect,
+                   offset_visible_geometry_rect, color, false);
       ValidateQuadResources(quad);
 
       if (geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
@@ -450,6 +495,12 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       last_append_quads_tilings_.push_back(iter.CurrentTiling());
     }
   }
+
+  // Adjust shared_quad_state with the quad_offset, since we've adjusted each
+  // quad we've appended by it.
+  shared_quad_state->quad_to_target_transform.Translate(-quad_offset);
+  shared_quad_state->quad_layer_rect.Offset(quad_offset);
+  shared_quad_state->visible_quad_layer_rect.Offset(quad_offset);
 
   if (missing_tile_count) {
     TRACE_EVENT_INSTANT2("cc",
@@ -599,10 +650,26 @@ void PictureLayerImpl::UpdateRasterSource(
       << " bounds " << bounds().ToString() << " pile "
       << raster_source->GetSize().ToString();
 
+  // We have an updated recording if the DisplayItemList in the new RasterSource
+  // is different.
+  const bool recording_updated =
+      !raster_source_ || raster_source_->GetDisplayItemList() !=
+                             raster_source->GetDisplayItemList();
+
+  // Unregister for all images on the current raster source, if the recording
+  // was updated.
+  if (recording_updated)
+    UnregisterAnimatedImages();
+
   // The |raster_source_| is initially null, so have to check for that for the
   // first frame.
   bool could_have_tilings = raster_source_.get() && CanHaveTilings();
   raster_source_.swap(raster_source);
+
+  // Register images from the new raster source, if the recording was updated.
+  // TODO(khushalsagar): UMA the number of animated images in layer?
+  if (recording_updated)
+    RegisterAnimatedImages();
 
   // The |new_invalidation| must be cleared before updating tilings since they
   // access the invalidation through the PictureLayerTilingClient interface.
@@ -633,6 +700,10 @@ void PictureLayerImpl::UpdateRasterSource(
     tilings_->UpdateTilingsToCurrentRasterSourceForCommit(
         raster_source_, invalidation_, MinimumContentsScale(),
         MaximumContentsScale());
+    // We're in a commit, make sure to update the state of the checker image
+    // tracker with the new async attribute data.
+    layer_tree_impl()->UpdateImageDecodingHints(
+        raster_source_->TakeDecodingModeMap());
   }
 }
 
@@ -745,6 +816,39 @@ bool PictureLayerImpl::RequiresHighResToDraw() const {
 
 gfx::Rect PictureLayerImpl::GetEnclosingRectInTargetSpace() const {
   return GetScaledEnclosingRectInTargetSpace(MaximumTilingContentsScale());
+}
+
+bool PictureLayerImpl::ShouldAnimate(PaintImage::Id paint_image_id) const {
+  // If we are registered with the animation controller, which queries whether
+  // the image should be animated, then we must have recordings with this image.
+  DCHECK(raster_source_);
+  DCHECK(raster_source_->GetDisplayItemList());
+  DCHECK(
+      !raster_source_->GetDisplayItemList()->discardable_image_map().empty());
+
+  // Only animate images for layers which HasValidTilePriorities. This check is
+  // important for 2 reasons:
+  // 1) It avoids doing additional work for layers we don't plan to rasterize
+  //    and/or draw. The updated state will be pulled by the animation system
+  //    if the draw properties change.
+  // 2) It eliminates considering layers on the recycle tree. Once the pending
+  //    tree is activated, the layers on the recycle tree remain registered as
+  //    animation drivers, but should not drive animations since they don't have
+  //    updated draw properties.
+  //
+  //  Additionally only animate images which are on-screen, animations are
+  //  paused once they are not visible.
+  if (!HasValidTilePriorities())
+    return false;
+
+  const auto& rects = raster_source_->GetDisplayItemList()
+                          ->discardable_image_map()
+                          .GetRectsForImage(paint_image_id);
+  for (const auto& r : rects.container()) {
+    if (r.Intersects(visible_layer_rect()))
+      return true;
+  }
+  return false;
 }
 
 gfx::Size PictureLayerImpl::CalculateTileSize(
@@ -1134,9 +1238,16 @@ void PictureLayerImpl::RecalculateRasterScales() {
           static_cast<int64_t>(bounds_at_maximum_scale.width()) *
           static_cast<int64_t>(bounds_at_maximum_scale.height());
       gfx::Size viewport = layer_tree_impl()->device_viewport_size();
-      int64_t viewport_area = static_cast<int64_t>(viewport.width()) *
-                              static_cast<int64_t>(viewport.height());
-      if (maximum_area <= viewport_area)
+
+      // Use the square of the maximum viewport dimension direction, to
+      // compensate for viewports with different aspect ratios.
+      int64_t max_viewport_dimension =
+          std::max(static_cast<int64_t>(viewport.width()),
+                   static_cast<int64_t>(viewport.height()));
+      int64_t squared_viewport_area =
+          max_viewport_dimension * max_viewport_dimension;
+
+      if (maximum_area <= squared_viewport_area)
         can_raster_at_maximum_scale = true;
     }
     if (starting_scale && starting_scale > maximum_scale) {
@@ -1475,25 +1586,79 @@ bool PictureLayerImpl::HasValidTilePriorities() const {
 
 void PictureLayerImpl::InvalidateRegionForImages(
     const PaintImageIdFlatSet& images_to_invalidate) {
-  TRACE_EVENT_BEGIN0("cc", "PictureLayerImpl::InvalidateRegionForImages");
+  TRACE_EVENT0("cc", "PictureLayerImpl::InvalidateRegionForImages");
+
+  if (!raster_source_ || !raster_source_->GetDisplayItemList() ||
+      raster_source_->GetDisplayItemList()->discardable_image_map().empty()) {
+    TRACE_EVENT0("cc", "PictureLayerImpl::InvalidateRegionForImages NoImages");
+    return;
+  }
 
   InvalidationRegion image_invalidation;
-  for (auto image_id : images_to_invalidate)
-    image_invalidation.Union(raster_source_->GetRectForImage(image_id));
+  for (auto image_id : images_to_invalidate) {
+    const auto& rects = raster_source_->GetDisplayItemList()
+                            ->discardable_image_map()
+                            .GetRectsForImage(image_id);
+    for (const auto& r : rects.container())
+      image_invalidation.Union(r);
+  }
   Region invalidation;
   image_invalidation.Swap(&invalidation);
 
   if (invalidation.IsEmpty()) {
-    TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
-                     "Invalidation", invalidation.ToString());
+    TRACE_EVENT0("cc",
+                 "PictureLayerImpl::InvalidateRegionForImages NoInvalidation");
     return;
   }
+
+  // Make sure to union the rect from this invalidation with the update_rect
+  // instead of over-writing it. We don't want to reset the update that came
+  // from the main thread.
+  // Note: We can use a rect here since this is only used to track damage for a
+  // frame and not raster invalidation.
+  gfx::Rect new_update_rect = invalidation.bounds();
+  new_update_rect.Union(update_rect());
+  SetUpdateRect(new_update_rect);
 
   invalidation_.Union(invalidation);
   tilings_->Invalidate(invalidation);
   SetNeedsPushProperties();
-  TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
-                   "Invalidation", invalidation.ToString());
+  TRACE_EVENT1("cc", "PictureLayerImpl::InvalidateRegionForImages Invalidation",
+               "Invalidation", invalidation.ToString());
+}
+
+void PictureLayerImpl::RegisterAnimatedImages() {
+  if (!raster_source_ || !raster_source_->GetDisplayItemList())
+    return;
+
+  auto* controller = layer_tree_impl()->image_animation_controller();
+  if (!controller)
+    return;
+
+  const auto& metadata = raster_source_->GetDisplayItemList()
+                             ->discardable_image_map()
+                             .animated_images_metadata();
+  for (const auto& data : metadata) {
+    // Only update the metadata from updated recordings received from a commit.
+    if (layer_tree_impl()->IsSyncTree())
+      controller->UpdateAnimatedImage(data);
+    controller->RegisterAnimationDriver(data.paint_image_id, this);
+  }
+}
+
+void PictureLayerImpl::UnregisterAnimatedImages() {
+  if (!raster_source_ || !raster_source_->GetDisplayItemList())
+    return;
+
+  auto* controller = layer_tree_impl()->image_animation_controller();
+  if (!controller)
+    return;
+
+  const auto& metadata = raster_source_->GetDisplayItemList()
+                             ->discardable_image_map()
+                             .animated_images_metadata();
+  for (const auto& data : metadata)
+    controller->UnregisterAnimationDriver(data.paint_image_id, this);
 }
 
 }  // namespace cc

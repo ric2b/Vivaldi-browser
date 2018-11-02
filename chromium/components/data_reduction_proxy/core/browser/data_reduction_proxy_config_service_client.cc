@@ -239,10 +239,15 @@ void DataReductionProxyConfigServiceClient::RetrieveConfig() {
   RetrieveRemoteConfig();
 }
 
+bool DataReductionProxyConfigServiceClient::RemoteConfigApplied() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return remote_config_applied_;
+}
+
 void DataReductionProxyConfigServiceClient::ApplySerializedConfig(
     const std::string& config_value) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (remote_config_applied_)
+  if (RemoteConfigApplied())
     return;
 
   std::string decoded_config;
@@ -410,7 +415,7 @@ void DataReductionProxyConfigServiceClient::InvalidateConfig() {
   request_options_->Invalidate();
   config_values_->Invalidate();
   io_data_->SetPingbackReportingFraction(0.0f);
-  config_->ReloadConfig();
+  config_->OnNewClientConfigFetched();
 }
 
 std::unique_ptr<net::URLFetcher>
@@ -538,7 +543,7 @@ bool DataReductionProxyConfigServiceClient::ParseAndApplyProxyConfig(
 
   request_options_->SetSecureSession(config.session_key());
   config_values_->UpdateValues(proxies);
-  config_->ReloadConfig();
+  config_->OnNewClientConfigFetched();
   remote_config_applied_ = true;
   return true;
 }

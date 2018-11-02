@@ -11,8 +11,7 @@
 
 namespace blink {
 
-class CORE_EXPORT IdleDeadline : public GarbageCollected<IdleDeadline>,
-                                 public ScriptWrappable {
+class CORE_EXPORT IdleDeadline : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -22,8 +21,6 @@ class CORE_EXPORT IdleDeadline : public GarbageCollected<IdleDeadline>,
                               CallbackType callback_type) {
     return new IdleDeadline(deadline_seconds, callback_type);
   }
-
-  DEFINE_INLINE_TRACE() {}
 
   double timeRemaining() const;
 

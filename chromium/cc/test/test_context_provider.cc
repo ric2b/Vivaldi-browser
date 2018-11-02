@@ -30,7 +30,10 @@ namespace {
 // strings.
 const char* const kExtensions[] = {"GL_EXT_stencil_wrap",
                                    "GL_EXT_texture_format_BGRA8888",
-                                   "GL_OES_rgb8_rgba8"};
+                                   "GL_OES_rgb8_rgba8",
+                                   "GL_EXT_texture_norm16",
+                                   "GL_CHROMIUM_framebuffer_multisample",
+                                   "GL_CHROMIUM_renderbuffer_format_BGRA8888"};
 
 class TestGLES2InterfaceForContextProvider : public TestGLES2Interface {
  public:
@@ -89,21 +92,24 @@ class TestGLES2InterfaceForContextProvider : public TestGLES2Interface {
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create() {
+  constexpr bool support_locking = false;
   return new TestContextProvider(
       std::make_unique<TestContextSupport>(),
       std::make_unique<TestGLES2InterfaceForContextProvider>(),
-      TestWebGraphicsContext3D::Create());
+      TestWebGraphicsContext3D::Create(), support_locking);
 }
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
+  constexpr bool support_locking = true;
   scoped_refptr<TestContextProvider> worker_context_provider(
       new TestContextProvider(
           std::make_unique<TestContextSupport>(),
           std::make_unique<TestGLES2InterfaceForContextProvider>(),
-          TestWebGraphicsContext3D::Create()));
+          TestWebGraphicsContext3D::Create(), support_locking));
   // Worker contexts are bound to the thread they are created on.
-  if (!worker_context_provider->BindToCurrentThread())
+  auto result = worker_context_provider->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
     return nullptr;
   return worker_context_provider;
 }
@@ -112,19 +118,21 @@ scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
 scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestWebGraphicsContext3D> context) {
   DCHECK(context);
+  constexpr bool support_locking = false;
   return new TestContextProvider(
       std::make_unique<TestContextSupport>(),
       std::make_unique<TestGLES2InterfaceForContextProvider>(),
-      std::move(context));
+      std::move(context), support_locking);
 }
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestGLES2Interface> gl) {
   DCHECK(gl);
-  return new TestContextProvider(std::make_unique<TestContextSupport>(),
-                                 std::move(gl),
-                                 TestWebGraphicsContext3D::Create());
+  constexpr bool support_locking = false;
+  return new TestContextProvider(
+      std::make_unique<TestContextSupport>(), std::move(gl),
+      TestWebGraphicsContext3D::Create(), support_locking);
 }
 
 // static
@@ -133,19 +141,41 @@ scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestContextSupport> support) {
   DCHECK(context);
   DCHECK(support);
+  constexpr bool support_locking = false;
   return new TestContextProvider(
       std::move(support),
       std::make_unique<TestGLES2InterfaceForContextProvider>(),
-      std::move(context));
+      std::move(context), support_locking);
+}
+
+// static
+scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker(
+    std::unique_ptr<TestWebGraphicsContext3D> context,
+    std::unique_ptr<TestContextSupport> support) {
+  DCHECK(context);
+  DCHECK(support);
+  constexpr bool support_locking = true;
+  scoped_refptr<TestContextProvider> worker_context_provider(
+      new TestContextProvider(
+          std::move(support),
+          std::make_unique<TestGLES2InterfaceForContextProvider>(),
+          std::move(context), support_locking));
+  // Worker contexts are bound to the thread they are created on.
+  auto result = worker_context_provider->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
+    return nullptr;
+  return worker_context_provider;
 }
 
 TestContextProvider::TestContextProvider(
     std::unique_ptr<TestContextSupport> support,
     std::unique_ptr<TestGLES2Interface> gl,
-    std::unique_ptr<TestWebGraphicsContext3D> context)
+    std::unique_ptr<TestWebGraphicsContext3D> context,
+    bool support_locking)
     : support_(std::move(support)),
       context3d_(std::move(context)),
       context_gl_(std::move(gl)),
+      support_locking_(support_locking),
       weak_ptr_factory_(this) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DCHECK(context3d_);
@@ -165,39 +195,37 @@ TestContextProvider::~TestContextProvider() {
          context_thread_checker_.CalledOnValidThread());
 }
 
-bool TestContextProvider::BindToCurrentThread() {
+gpu::ContextResult TestContextProvider::BindToCurrentThread() {
   // This is called on the thread the context will be used.
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
-  if (bound_)
-    return true;
+  if (!bound_) {
+    if (context_gl_->GetGraphicsResetStatusKHR() != GL_NO_ERROR)
+      return gpu::ContextResult::kTransientFailure;
 
-  if (context_gl_->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
-    return false;
+    context3d_->set_context_lost_callback(base::Bind(
+        &TestContextProvider::OnLostContext, base::Unretained(this)));
   }
   bound_ = true;
-
-  context3d_->set_context_lost_callback(
-      base::Bind(&TestContextProvider::OnLostContext,
-                 base::Unretained(this)));
-
-  return true;
+  return gpu::ContextResult::kSuccess;
 }
 
-void TestContextProvider::DetachFromThread() {
-  context_thread_checker_.DetachFromThread();
-}
-
-gpu::Capabilities TestContextProvider::ContextCapabilities() {
+const gpu::Capabilities& TestContextProvider::ContextCapabilities() const {
   DCHECK(bound_);
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
   return context3d_->test_capabilities();
+}
+
+const gpu::GpuFeatureInfo& TestContextProvider::GetGpuFeatureInfo() const {
+  DCHECK(bound_);
+  CheckValidThreadOrLockAcquired();
+  return gpu_feature_info_;
 }
 
 gpu::gles2::GLES2Interface* TestContextProvider::ContextGL() {
   DCHECK(context3d_);
   DCHECK(bound_);
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
 
   return context_gl_.get();
 }
@@ -208,7 +236,7 @@ gpu::ContextSupport* TestContextProvider::ContextSupport() {
 
 class GrContext* TestContextProvider::GrContext() {
   DCHECK(bound_);
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
 
   if (gr_context_)
     return gr_context_->get();
@@ -225,13 +253,13 @@ class GrContext* TestContextProvider::GrContext() {
 }
 
 viz::ContextCacheController* TestContextProvider::CacheController() {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
   return cache_controller_.get();
 }
 
 void TestContextProvider::InvalidateGrContext(uint32_t state) {
   DCHECK(bound_);
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
 
   if (gr_context_)
     gr_context_->get()->resetContext(state);
@@ -242,16 +270,16 @@ base::Lock* TestContextProvider::GetLock() {
 }
 
 void TestContextProvider::OnLostContext() {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
-  if (!lost_context_callback_.is_null())
-    lost_context_callback_.Run();
+  CheckValidThreadOrLockAcquired();
+  for (auto& observer : observers_)
+    observer.OnContextLost();
   if (gr_context_)
     gr_context_->get()->abandonContext();
 }
 
 TestWebGraphicsContext3D* TestContextProvider::TestContext3d() {
   DCHECK(bound_);
-  DCHECK(context_thread_checker_.CalledOnValidThread());
+  CheckValidThreadOrLockAcquired();
 
   return context3d_.get();
 }
@@ -260,11 +288,12 @@ TestWebGraphicsContext3D* TestContextProvider::UnboundTestContext3d() {
   return context3d_.get();
 }
 
-void TestContextProvider::SetLostContextCallback(
-    const LostContextCallback& cb) {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
-  DCHECK(lost_context_callback_.is_null() || cb.is_null());
-  lost_context_callback_ = cb;
+void TestContextProvider::AddObserver(viz::ContextLostObserver* obs) {
+  observers_.AddObserver(obs);
+}
+
+void TestContextProvider::RemoveObserver(viz::ContextLostObserver* obs) {
+  observers_.RemoveObserver(obs);
 }
 
 }  // namespace cc

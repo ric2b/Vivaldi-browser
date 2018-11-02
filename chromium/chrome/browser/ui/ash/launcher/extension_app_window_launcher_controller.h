@@ -24,7 +24,6 @@ class AppWindow;
 }
 
 class ChromeLauncherController;
-class Profile;
 class ExtensionAppWindowLauncherItemController;
 
 // AppWindowLauncherController observes the app window registry and the
@@ -40,9 +39,9 @@ class ExtensionAppWindowLauncherController
   ~ExtensionAppWindowLauncherController() override;
 
   // AppWindowLauncherController:
-  void AdditionalUserAddedToSession(Profile* profile) override;
   AppWindowLauncherItemController* ControllerForWindow(
       aura::Window* window) override;
+  void OnItemDelegateDiscarded(ash::ShelfItemDelegate* delegate) override;
 
   // Overridden from AppWindowRegistry::Observer:
   void OnAppWindowAdded(extensions::AppWindow* app_window) override;
@@ -67,10 +66,8 @@ class ExtensionAppWindowLauncherController
   using AppControllerMap =
       std::map<ash::ShelfID, ExtensionAppWindowLauncherItemController*>;
 
-  // A set of unowned AppWindowRegistry pointers for loaded users.
-  // Note that this will only be used with multiple users in the side by side
-  // mode.
-  std::set<extensions::AppWindowRegistry*> registry_;
+  // The AppWindowRegistry for the active user (represented by |owner()|).
+  extensions::AppWindowRegistry* registry_;
 
   // Map of shelf id to controller.
   AppControllerMap app_controller_map_;

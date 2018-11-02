@@ -6,8 +6,8 @@
 #define IOS_CHROME_BROWSER_PAYMENTS_TEST_PAYMENT_REQUEST_H_
 
 #include "base/macros.h"
-#include "components/payments/core/address_normalization_manager.h"
-#include "components/payments/core/test_address_normalizer.h"
+#include "components/autofill/core/browser/address_normalization_manager.h"
+#include "components/autofill/core/browser/test_address_normalizer.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 
 namespace autofill {
@@ -25,7 +25,6 @@ class PaymentsProfileComparator;
 }  // namespace payments
 
 namespace web {
-class PaymentRequest;
 class WebState;
 }  // namespace web
 
@@ -38,7 +37,7 @@ class TestPaymentRequest : public PaymentRequest {
  public:
   // |browser_state|, |web_state|, and |personal_data_manager| should not be
   // null and should outlive this object.
-  TestPaymentRequest(const web::PaymentRequest& web_payment_request,
+  TestPaymentRequest(const payments::WebPaymentRequest& web_payment_request,
                      ios::ChromeBrowserState* browser_state,
                      web::WebState* web_state,
                      autofill::PersonalDataManager* personal_data_manager,
@@ -48,12 +47,12 @@ class TestPaymentRequest : public PaymentRequest {
                        web_state,
                        personal_data_manager,
                        payment_request_ui_delegate),
-        address_normalization_manager_(&address_normalizer_, "US"),
+        address_normalization_manager_(&address_normalizer_, "en-US"),
         region_data_loader_(nullptr),
         pref_service_(nullptr),
         profile_comparator_(nullptr) {}
 
-  TestPaymentRequest(const web::PaymentRequest& web_payment_request,
+  TestPaymentRequest(const payments::WebPaymentRequest& web_payment_request,
                      ios::ChromeBrowserState* browser_state,
                      web::WebState* web_state,
                      autofill::PersonalDataManager* personal_data_manager)
@@ -77,9 +76,11 @@ class TestPaymentRequest : public PaymentRequest {
     profile_comparator_ = profile_comparator;
   }
 
-  // Returns the web::PaymentRequest instance that was used to build this
-  // object.
-  web::PaymentRequest& web_payment_request() { return web_payment_request_; }
+  // Returns the payments::WebPaymentRequest instance that was used to build
+  // this object.
+  payments::WebPaymentRequest& web_payment_request() {
+    return web_payment_request_;
+  }
 
   // Removes all the shipping profiles.
   void ClearShippingProfiles();
@@ -101,15 +102,16 @@ class TestPaymentRequest : public PaymentRequest {
   }
 
   // PaymentRequest
-  AddressNormalizer* GetAddressNormalizer() override;
-  AddressNormalizationManager* GetAddressNormalizationManager() override;
+  autofill::AddressNormalizer* GetAddressNormalizer() override;
+  autofill::AddressNormalizationManager* GetAddressNormalizationManager()
+      override;
   autofill::RegionDataLoader* GetRegionDataLoader() override;
   PrefService* GetPrefService() override;
   PaymentsProfileComparator* profile_comparator() override;
 
  private:
-  TestAddressNormalizer address_normalizer_;
-  AddressNormalizationManager address_normalization_manager_;
+  autofill::TestAddressNormalizer address_normalizer_;
+  autofill::AddressNormalizationManager address_normalization_manager_;
 
   // Not owned and must outlive this object.
   autofill::RegionDataLoader* region_data_loader_;

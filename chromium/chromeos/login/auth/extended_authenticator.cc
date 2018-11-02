@@ -11,19 +11,17 @@ namespace chromeos {
 // static
 scoped_refptr<ExtendedAuthenticator> ExtendedAuthenticator::Create(
     NewAuthStatusConsumer* consumer) {
-  return make_scoped_refptr(new ExtendedAuthenticatorImpl(consumer));
+  return base::MakeRefCounted<ExtendedAuthenticatorImpl>(consumer);
 }
 
 // static
 scoped_refptr<ExtendedAuthenticator> ExtendedAuthenticator::Create(
       AuthStatusConsumer* consumer) {
-  return make_scoped_refptr(new ExtendedAuthenticatorImpl(consumer));
+  return base::MakeRefCounted<ExtendedAuthenticatorImpl>(consumer);
 }
 
-ExtendedAuthenticator::ExtendedAuthenticator() {
-}
+ExtendedAuthenticator::ExtendedAuthenticator() = default;
 
-ExtendedAuthenticator::~ExtendedAuthenticator() {
-}
+ExtendedAuthenticator::~ExtendedAuthenticator() = default;
 
 }  // namespace chromeos

@@ -36,6 +36,12 @@ if (use_goma) {
   goma_prefix = ""
 }
 
+if (disable_goma) {
+  goma_disabled = "true"
+} else {
+  goma_disabled = "false"
+}
+
 pool("huge_pool") {
   depth = huge_concurrent_links
   if (is_vivaldi) {
@@ -131,6 +137,10 @@ template("msvc_toolchain") {
       # archives and understands bitcode (for lto builds).
       lib = "$prefix/$lld_link /lib /llvmlibthin"
       link = "$prefix/$lld_link"
+      if (host_os != "win") {
+        # See comment adding --rsp-quoting to $cl above for more information.
+        link = "$link --rsp-quoting=posix"
+      }
     } else {
       lib = "lib.exe"
       link = "link.exe"
@@ -141,7 +151,13 @@ template("msvc_toolchain") {
     # %PATH%) -- e.g. 32-bit MSVS builds require %PATH% to be set and just
     # passing in a list of include directories isn't enough.
     if (defined(invoker.sys_include_flags)) {
-      env_wrapper = ""
+      if (disable_goma) {
+        # If disable_goma = true, need to pass GOMA_DISABLED env to
+        # gomacc.exe via environment.{x86,x64}.
+        env_wrapper = "ninja -t msvc -e $env -- "  # Note trailing space.
+      } else {
+        env_wrapper = ""
+      }
       sys_include_flags = "${invoker.sys_include_flags} "  # Note trailing space.
     } else {
       # clang-cl doesn't need this env hoop, so omit it there.
@@ -193,6 +209,7 @@ template("msvc_toolchain") {
 
     tool("rc") {
       command = "$python_path $tool_wrapper_path rc-wrapper $env rc.exe {{defines}} {{include_dirs}} /fo{{output}} {{source}}"
+      depsformat = "msvc"
       outputs = [
         "$object_subdir/{{source_name_part}}.res",
       ]
@@ -359,6 +376,7 @@ if (target_cpu == "x86") {
                                      windows_sdk_path,
                                      visual_studio_runtime_dirs,
                                      "x86",
+                                     goma_disabled,
                                    ],
                                    "scope")
 
@@ -374,7 +392,7 @@ if (target_cpu == "x86") {
   msvc_toolchain("win_clang_x86") {
     environment = "environment.x86"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
-    cl = "$prefix/${clang_cl}"
+    cl = "${goma_prefix}$prefix/${clang_cl}"
     sys_include_flags = "${x86_toolchain_data.include_flags_imsvc}"
 
     toolchain_args = {
@@ -391,6 +409,7 @@ x64_toolchain_data = exec_script("setup_toolchain.py",
                                    windows_sdk_path,
                                    visual_studio_runtime_dirs,
                                    "x64",
+                                   goma_disabled,
                                  ],
                                  "scope")
 
@@ -411,7 +430,7 @@ template("win_x64_toolchains") {
   msvc_toolchain("win_clang_" + target_name) {
     environment = "environment.x64"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
-    cl = "$prefix/${clang_cl}"
+    cl = "${goma_prefix}$prefix/${clang_cl}"
     sys_include_flags = "${x64_toolchain_data.include_flags_imsvc}"
 
     toolchain_args = {

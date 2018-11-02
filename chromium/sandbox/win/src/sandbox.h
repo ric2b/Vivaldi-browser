@@ -19,7 +19,11 @@
 #ifndef SANDBOX_WIN_SRC_SANDBOX_H_
 #define SANDBOX_WIN_SRC_SANDBOX_H_
 
+#if !defined(SANDBOX_FUZZ_TARGET)
 #include <windows.h>
+#else
+#include "sandbox/win/fuzzer/fuzzer_types.h"
+#endif
 
 #include "base/memory/ref_counted.h"
 #include "sandbox/win/src/sandbox_policy.h"
@@ -91,6 +95,9 @@ class BrokerServices {
   //   If the return is ERROR_GENERIC, you can call ::GetLastError() to get
   //   more information.
   virtual ResultCode WaitForAllTargets() = 0;
+
+ protected:
+  ~BrokerServices() {}
 };
 
 // TargetServices models the current process from the perspective
@@ -106,7 +113,7 @@ class BrokerServices {
 // The typical usage is as follows:
 //
 //   TargetServices* target_services = Sandbox::GetTargetServices();
-//   if (NULL != target_services) {
+//   if (target_services) {
 //     // We are the target.
 //     target_services->Init();
 //     // Do work that requires high privileges here.
@@ -133,9 +140,11 @@ class TargetServices {
   // information about the current state of the process, such as whether
   // LowerToken has been called or not.
   virtual ProcessState* GetState() = 0;
+
+ protected:
+  ~TargetServices() {}
 };
 
 }  // namespace sandbox
-
 
 #endif  // SANDBOX_WIN_SRC_SANDBOX_H_

@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
@@ -10,13 +11,13 @@
 #include <wmcodecdsp.h>
 #include <algorithm>
 #include <string>
+#include <wrl/client.h>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/channel_layout.h"
@@ -60,11 +61,11 @@ SampleFormat ConvertToSampleFormat(uint32_t sample_size) {
   // MFAudioFormat_PCM.
   switch (sample_size) {
     case 1:
-      return kSampleFormatU8;
+      return SampleFormat::kSampleFormatU8;
     case 2:
-      return kSampleFormatS16;
+      return SampleFormat::kSampleFormatS16;
     case 4:
-      return kSampleFormatS32;
+      return SampleFormat::kSampleFormatS32;
     default:
       return kUnknownSampleFormat;
   }
@@ -76,9 +77,9 @@ int CalculateBufferAlignment(DWORD alignment) {
 
 GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
   switch (codec) {
-    case kCodecAAC:
+    case AudioCodec::kCodecAAC:
       return MFAudioFormat_AAC;
-    case kCodecMP3:
+    case AudioCodec::kCodecMP3:
       return MFAudioFormat_MP3;
     default:
       NOTREACHED();
@@ -150,7 +151,7 @@ void WMFDecoderImpl<StreamType>::Decode(
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(decode_cb,
-                   drained_ok ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR));
+                   drained_ok ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR));
     return;
   }
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -161,10 +162,10 @@ void WMFDecoderImpl<StreamType>::Decode(
       << "The transform is neither producing output "
          "nor accepting input? This must not happen, see ProcessOutputLoop()";
   typename media::DecodeStatus status = SUCCEEDED(hr) && ProcessOutputLoop()
-                                            ? media::DecodeStatus::OK
-                                            : media::DecodeStatus::DECODE_ERROR;
+                                            ? DecodeStatus::OK
+                                            : DecodeStatus::DECODE_ERROR;
 
-  LOG_IF(WARNING, (status == media::DecodeStatus::DECODE_ERROR))
+  LOG_IF(WARNING, (status == DecodeStatus::DECODE_ERROR))
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " processing buffer failed, returning DECODE_ERROR";
 
@@ -188,7 +189,7 @@ template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
 
-  if (config.codec() != kCodecMP3 && config.codec() != kCodecAAC) {
+  if (config.codec() != AudioCodec::kCodecMP3 && config.codec() != AudioCodec::kCodecAAC) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Unsupported Audio codec : " << GetCodecName(config.codec());
     return false;
@@ -214,22 +215,22 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     return false;
   }
 
-  LOG_IF(WARNING, !(config.codec() == kCodecH264))
+  LOG_IF(WARNING, !(config.codec() == VideoCodec::kCodecH264))
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " Unsupported Video codec : " << GetCodecName(config.codec());
 
-  if (config.codec() == kCodecH264) {
-    LOG_IF(WARNING, !(config.profile() >= H264PROFILE_MIN))
+  if (config.codec() == VideoCodec::kCodecH264) {
+    LOG_IF(WARNING, !(config.profile() >= VideoCodecProfile::H264PROFILE_MIN))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too low) : " << config.profile();
 
-    LOG_IF(WARNING, !(config.profile() <= H264PROFILE_MAX))
+    LOG_IF(WARNING, !(config.profile() <= VideoCodecProfile::H264PROFILE_MAX))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too high) : " << config.profile();
   }
 
-  return config.codec() == kCodecH264 && config.profile() >= H264PROFILE_MIN &&
-         config.profile() <= H264PROFILE_MAX;
+  return config.codec() == VideoCodec::kCodecH264 && config.profile() >= VideoCodecProfile::H264PROFILE_MIN &&
+         config.profile() <= VideoCodecProfile::H264PROFILE_MAX;
 }
 
 // static
@@ -251,9 +252,9 @@ template <>
 GUID WMFDecoderImpl<DemuxerStream::AUDIO>::GetMediaObjectGUID(
     const DecoderConfig& config) {
   switch (config.codec()) {
-    case kCodecAAC:
+    case AudioCodec::kCodecAAC:
       return __uuidof(CMSAACDecMFT);
-    case kCodecMP3:
+    case AudioCodec::kCodecMP3:
       return __uuidof(CMP3DecMediaObject);
     default:
       NOTREACHED();
@@ -270,9 +271,9 @@ GUID WMFDecoderImpl<DemuxerStream::VIDEO>::GetMediaObjectGUID(
 
 // static
 template <DemuxerStream::Type StreamType>
-base::win::ScopedComPtr<IMFTransform>
+Microsoft::WRL::ComPtr<IMFTransform>
 WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
-  base::win::ScopedComPtr<IMFTransform> decoder;
+  Microsoft::WRL::ComPtr<IMFTransform> decoder;
 
   // CoCreateInstance() is not avaliable in the sandbox, must "reimplement it".
   decltype(DllGetClassObject)* const get_class_object =
@@ -284,7 +285,7 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
     return decoder;
   }
 
-  base::win::ScopedComPtr<IClassFactory> factory;
+  Microsoft::WRL::ComPtr<IClassFactory> factory;
   HRESULT hr =
       get_class_object(GetMediaObjectGUID(config), __uuidof(IClassFactory),
                        reinterpret_cast<void**>(factory.GetAddressOf()));
@@ -299,7 +300,7 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while creating decoder instance.";
-    return base::win::ScopedComPtr<IMFTransform>();
+    return Microsoft::WRL::ComPtr<IMFTransform>();
   }
 
   return decoder;
@@ -329,7 +330,7 @@ bool WMFDecoderImpl<StreamType>::ConfigureDecoder() {
 
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
-  base::win::ScopedComPtr<IMFMediaType> media_type;
+  Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -369,7 +370,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
     return false;
   }
 
-  if (config_.codec() == kCodecAAC) {
+  if (config_.codec() == AudioCodec::kCodecAAC) {
     hr = media_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0x1);
     if (FAILED(hr)) {
       LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -405,7 +406,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
 
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::SetInputMediaType() {
-  base::win::ScopedComPtr<IMFMediaType> media_type;
+  Microsoft::WRL::ComPtr<IMFMediaType> media_type;
   HRESULT hr = MFCreateMediaType(media_type.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -458,7 +459,7 @@ template <DemuxerStream::Type StreamType>
 bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
-  base::win::ScopedComPtr<IMFMediaType> out_media_type;
+  Microsoft::WRL::ComPtr<IMFMediaType> out_media_type;
 
   HRESULT hr = S_OK;
   for (uint32_t i = 0; SUCCEEDED(
@@ -562,7 +563,7 @@ size_t WMFDecoderImpl<DemuxerStream::AUDIO>::CalculateOutputBufferSize(
   // output more than the MP3 frame size at a time.  This makes us behave more
   // like FFmpeg and allows us to handle timestamp calculations and buffer
   // discards using AudioDiscardHelper.
-  if (config_.codec() == kCodecMP3) {
+  if (config_.codec() == AudioCodec::kCodecMP3) {
     // http://teslabs.com/openplayer/docs/docs/specs/mp3_structure2.pdf
     static const size_t kMaxOutputSampleCount = 1152;
     buffer_size = std::min(
@@ -598,7 +599,7 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(input.get());
 
-  const base::win::ScopedComPtr<IMFSample> sample =
+  const Microsoft::WRL::ComPtr<IMFSample> sample =
       PrepareInputSample(input.get());
   if (!sample) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -751,16 +752,16 @@ bool WMFDecoderImpl<StreamType>::Drain() {
 }
 
 template <DemuxerStream::Type StreamType>
-base::win::ScopedComPtr<IMFSample>
+Microsoft::WRL::ComPtr<IMFSample>
 WMFDecoderImpl<StreamType>::PrepareInputSample(
     const scoped_refptr<DecoderBuffer>& input) const {
-  base::win::ScopedComPtr<IMFSample> sample =
+  Microsoft::WRL::ComPtr<IMFSample> sample =
       CreateSample(input->data_size(),
                    CalculateBufferAlignment(input_stream_info_.cbAlignment));
   if (!sample) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while creating sample.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   IMFMediaBuffer* buffer = nullptr;
@@ -768,7 +769,7 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while getting buffer.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   uint8_t* buff_ptr = nullptr;
@@ -776,7 +777,7 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while locking buffer.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   memcpy(buff_ptr, input->data(), input->data_size());
@@ -785,21 +786,21 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while unlocking buffer.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   hr = buffer->SetCurrentLength(input->data_size());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while setting buffer length.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
   // IMFSample's timestamp is expressed in hundreds of nanoseconds.
   hr = sample->SetSampleTime(input->timestamp().InMicroseconds() * 10);
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while setting sample timestamp.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   return sample;
@@ -809,7 +810,7 @@ template <DemuxerStream::Type StreamType>
 scoped_refptr<typename WMFDecoderImpl<StreamType>::OutputType>
 WMFDecoderImpl<StreamType>::CreateOutputBuffer(
     const MFT_OUTPUT_DATA_BUFFER& output_data_buffer) {
-  base::win::ScopedComPtr<IMFMediaBuffer> media_buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> media_buffer;
   HRESULT hr = output_data_buffer.pSample->ConvertToContiguousBuffer(
       media_buffer.GetAddressOf());
   if (FAILED(hr)) {
@@ -886,7 +887,7 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
   LONG rows = ((config_.coded_size().height() + 15) & ~15);
 
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
-      PIXEL_FORMAT_YV12, config_.coded_size(), config_.visible_rect(),
+      VideoPixelFormat::PIXEL_FORMAT_YV12, config_.coded_size(), config_.visible_rect(),
       config_.natural_size(), stride, stride / 2, stride / 2,
       const_cast<uint8_t*>(data_buffer->data()),
       const_cast<uint8_t*>(data_buffer->data() +
@@ -897,31 +898,31 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
 }
 
 template <DemuxerStream::Type StreamType>
-base::win::ScopedComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
+Microsoft::WRL::ComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
     DWORD buffer_size,
     int buffer_alignment) const {
-  base::win::ScopedComPtr<IMFSample> sample;
+  Microsoft::WRL::ComPtr<IMFSample> sample;
   HRESULT hr = MFCreateSample(sample.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while creating sample.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
-  base::win::ScopedComPtr<IMFMediaBuffer> buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
   hr = MFCreateAlignedMemoryBuffer(buffer_size, buffer_alignment,
                                    buffer.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while creating buffer.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   hr = sample->AddBuffer(buffer.Get());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while adding buffer.";
-    return base::win::ScopedComPtr<IMFSample>();
+    return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
   return sample;

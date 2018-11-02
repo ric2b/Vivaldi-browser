@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/views/user_board_view.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
+#include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -35,7 +37,6 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
-#include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
@@ -96,8 +97,8 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
 
   std::vector<std::string> kEmptyRecommendedLocales;
   const std::vector<std::string>& recommended_locales =
-      public_session_recommended_locales ?
-          *public_session_recommended_locales : kEmptyRecommendedLocales;
+      public_session_recommended_locales ? *public_session_recommended_locales
+                                         : kEmptyRecommendedLocales;
 
   // Construct the list of available locales. This list consists of the
   // recommended locales, followed by all others.
@@ -106,10 +107,9 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
 
   // Select the the first recommended locale that is actually available or the
   // current UI locale if none of them are available.
-  const std::string selected_locale = FindMostRelevantLocale(
-      recommended_locales,
-      *available_locales.get(),
-      g_browser_process->GetApplicationLocale());
+  const std::string selected_locale =
+      FindMostRelevantLocale(recommended_locales, *available_locales.get(),
+                             g_browser_process->GetApplicationLocale());
 
   // Set |kKeyInitialLocales| to the list of available locales.
   user_dict->Set(kKeyInitialLocales, std::move(available_locales));
@@ -270,17 +270,16 @@ class UserSelectionScreen::DircryptoMigrationChecker {
     const cryptohome::Identification cryptohome_id(account_id);
     DBusThreadManager::Get()->GetCryptohomeClient()->NeedsDircryptoMigration(
         cryptohome_id,
-        base::Bind(&DircryptoMigrationChecker::
-                       OnCryptohomeNeedsDircryptoMigrationCallback,
-                   weak_ptr_factory_.GetWeakPtr(), account_id));
+        base::BindOnce(&DircryptoMigrationChecker::
+                           OnCryptohomeNeedsDircryptoMigrationCallback,
+                       weak_ptr_factory_.GetWeakPtr(), account_id));
   }
 
   // Callback invoked when NeedsDircryptoMigration call is finished.
   void OnCryptohomeNeedsDircryptoMigrationCallback(
       const AccountId& account_id,
-      DBusMethodCallStatus call_status,
-      bool needs_migration) {
-    if (call_status != DBUS_METHOD_CALL_SUCCESS) {
+      base::Optional<bool> needs_migration) {
+    if (!needs_migration.has_value()) {
       LOG(ERROR) << "Failed to call cryptohome NeedsDircryptoMigration.";
       // Hide the banner to avoid confusion in http://crbug.com/721948.
       // Cache is not updated so that cryptohome call will still be attempted.
@@ -288,8 +287,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
       return;
     }
 
-    needs_dircrypto_migration_cache_[account_id] = needs_migration;
-    UpdateUI(account_id, needs_migration);
+    needs_dircrypto_migration_cache_[account_id] = needs_migration.value();
+    UpdateUI(account_id, needs_migration.value());
   }
 
   // Update UI for the given user when the check result is available.
@@ -454,12 +453,36 @@ void UserSelectionScreen::FillUserMojoStruct(
   user_info->basic_user_info->display_name =
       base::UTF16ToUTF8(user->GetDisplayName());
   user_info->basic_user_info->display_email = user->display_email();
-  user_info->basic_user_info->avatar = user->GetImage();
-  if (user_info->basic_user_info->avatar.isNull()) {
+
+  if (!user->GetImage().isNull()) {
+    user_info->basic_user_info->avatar = user->GetImage();
+  } else {
     user_info->basic_user_info->avatar =
-        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_LOGIN_DEFAULT_USER);
   }
+
+  // TODO(jdufault): Unify image handling between this code and
+  // user_image_source::GetUserImageInternal.
+  auto load_image_from_resource = [&](int resource_id) {
+    auto& rb = ui::ResourceBundle::GetSharedInstance();
+    base::StringPiece avatar =
+        rb.GetRawDataResourceForScale(resource_id, rb.GetMaxScaleFactor());
+    user_info->basic_user_info->avatar_bytes.assign(avatar.begin(),
+                                                    avatar.end());
+  };
+  if (user->has_image_bytes()) {
+    user_info->basic_user_info->avatar_bytes.assign(
+        user->image_bytes()->front(),
+        user->image_bytes()->front() + user->image_bytes()->size());
+  } else if (user->HasDefaultImage()) {
+    int resource_id = chromeos::default_user_image::kDefaultImageResourceIDs
+        [user->image_index()];
+    load_image_from_resource(resource_id);
+  } else if (user->image_is_stub()) {
+    load_image_from_resource(IDR_LOGIN_DEFAULT_USER);
+  }
+
   user_info->auth_type = auth_type;
   user_info->is_signed_in = user->is_logged_in();
   user_info->is_device_owner = is_owner;
@@ -528,9 +551,7 @@ void UserSelectionScreen::OnPasswordClearTimerExpired() {
 void UserSelectionScreen::OnUserActivity(const ui::Event* event) {
   if (!password_clear_timer_.IsRunning()) {
     password_clear_timer_.Start(
-        FROM_HERE,
-        base::TimeDelta::FromSeconds(kPasswordClearTimeoutSec),
-        this,
+        FROM_HERE, base::TimeDelta::FromSeconds(kPasswordClearTimeoutSec), this,
         &UserSelectionScreen::OnPasswordClearTimerExpired);
   }
   password_clear_timer_.Reset();
@@ -547,15 +568,13 @@ const user_manager::UserList UserSelectionScreen::PrepareUserListForSending(
   size_t non_owner_count = 0;
 
   for (user_manager::UserList::const_iterator it = users.begin();
-       it != users.end();
-       ++it) {
+       it != users.end(); ++it) {
     bool is_owner = ((*it)->GetAccountId() == owner);
     bool is_public_account =
         ((*it)->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT);
 
     if ((is_public_account && !is_signin_to_add) || is_owner ||
         (!is_public_account && non_owner_count < max_non_owner_users)) {
-
       if (!is_owner)
         ++non_owner_count;
       if (is_owner && users_to_send.size() > kMaxUsers) {

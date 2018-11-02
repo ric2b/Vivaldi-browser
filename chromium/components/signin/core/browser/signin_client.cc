@@ -7,7 +7,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 
 namespace {
 const char kEphemeralUserDeviceIDPrefix[] = "t_";
@@ -36,6 +36,10 @@ void SigninClient::PreSignOut(
     const base::Callback<void()>& sign_out,
     signin_metrics::ProfileSignout signout_source_metric) {
   sign_out.Run();
+}
+
+void SigninClient::PreGaiaLogout(base::OnceClosure callback) {
+  std::move(callback).Run();
 }
 
 void SigninClient::SignOut() {

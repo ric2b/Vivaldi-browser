@@ -5,23 +5,53 @@
 #include "core/animation/CSSFilterListInterpolationType.h"
 
 #include <memory>
+#include "core/CSSPropertyNames.h"
 #include "core/animation/FilterInterpolationFunctions.h"
-#include "core/animation/FilterListPropertyFunctions.h"
 #include "core/animation/ListInterpolationFunctions.h"
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
 namespace {
 
+const FilterOperations& GetFilterList(CSSPropertyID property,
+                                      const ComputedStyle& style) {
+  switch (property) {
+    default:
+      NOTREACHED();
+    // Fall through.
+    case CSSPropertyBackdropFilter:
+      return style.BackdropFilter();
+    case CSSPropertyFilter:
+      return style.Filter();
+  }
+}
+
+void SetFilterList(CSSPropertyID property,
+                   ComputedStyle& style,
+                   const FilterOperations& filter_operations) {
+  switch (property) {
+    case CSSPropertyBackdropFilter:
+      style.SetBackdropFilter(filter_operations);
+      break;
+    case CSSPropertyFilter:
+      style.SetFilter(filter_operations);
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
 class UnderlyingFilterListChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
   static std::unique_ptr<UnderlyingFilterListChecker> Create(
-      RefPtr<NonInterpolableList> non_interpolable_list) {
+      scoped_refptr<NonInterpolableList> non_interpolable_list) {
     return WTF::WrapUnique(
         new UnderlyingFilterListChecker(std::move(non_interpolable_list)));
   }
@@ -43,10 +73,11 @@ class UnderlyingFilterListChecker
   }
 
  private:
-  UnderlyingFilterListChecker(RefPtr<NonInterpolableList> non_interpolable_list)
+  UnderlyingFilterListChecker(
+      scoped_refptr<NonInterpolableList> non_interpolable_list)
       : non_interpolable_list_(std::move(non_interpolable_list)) {}
 
-  RefPtr<NonInterpolableList> non_interpolable_list_;
+  scoped_refptr<NonInterpolableList> non_interpolable_list_;
 };
 
 class InheritedFilterListChecker
@@ -63,8 +94,7 @@ class InheritedFilterListChecker
                const InterpolationValue&) const final {
     const FilterOperations& filter_operations =
         filter_operations_wrapper_->Operations();
-    return filter_operations == FilterListPropertyFunctions::GetFilterList(
-                                    property_, *state.ParentStyle());
+    return filter_operations == GetFilterList(property_, *state.ParentStyle());
   }
 
  private:
@@ -83,7 +113,7 @@ InterpolationValue ConvertFilterList(const FilterOperations& filter_operations,
   size_t length = filter_operations.size();
   std::unique_ptr<InterpolableList> interpolable_list =
       InterpolableList::Create(length);
-  Vector<RefPtr<NonInterpolableValue>> non_interpolable_values(length);
+  Vector<scoped_refptr<NonInterpolableValue>> non_interpolable_values(length);
   for (size_t i = 0; i < length; i++) {
     InterpolationValue filter_result =
         FilterInterpolationFunctions::MaybeConvertFilter(
@@ -117,15 +147,14 @@ InterpolationValue CSSFilterListInterpolationType::MaybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers& conversion_checkers) const {
   return ConvertFilterList(
-      FilterListPropertyFunctions::GetInitialFilterList(CssProperty()), 1);
+      GetFilterList(CssProperty(), ComputedStyle::InitialStyle()), 1);
 }
 
 InterpolationValue CSSFilterListInterpolationType::MaybeConvertInherit(
     const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
   const FilterOperations& inherited_filter_operations =
-      FilterListPropertyFunctions::GetFilterList(CssProperty(),
-                                                 *state.ParentStyle());
+      GetFilterList(CssProperty(), *state.ParentStyle());
   conversion_checkers.push_back(InheritedFilterListChecker::Create(
       CssProperty(), inherited_filter_operations));
   return ConvertFilterList(inherited_filter_operations,
@@ -148,7 +177,7 @@ InterpolationValue CSSFilterListInterpolationType::MaybeConvertValue(
   size_t length = list.length();
   std::unique_ptr<InterpolableList> interpolable_list =
       InterpolableList::Create(length);
-  Vector<RefPtr<NonInterpolableValue>> non_interpolable_values(length);
+  Vector<scoped_refptr<NonInterpolableValue>> non_interpolable_values(length);
   for (size_t i = 0; i < length; i++) {
     InterpolationValue item_result =
         FilterInterpolationFunctions::MaybeConvertCSSFilter(list.Item(i));
@@ -165,9 +194,8 @@ InterpolationValue CSSFilterListInterpolationType::MaybeConvertValue(
 InterpolationValue
 CSSFilterListInterpolationType::MaybeConvertStandardPropertyUnderlyingValue(
     const ComputedStyle& style) const {
-  return ConvertFilterList(
-      FilterListPropertyFunctions::GetFilterList(CssProperty(), style),
-      style.EffectiveZoom());
+  return ConvertFilterList(GetFilterList(CssProperty(), style),
+                           style.EffectiveZoom());
 }
 
 PairwiseInterpolationValue CSSFilterListInterpolationType::MaybeMergeSingles(
@@ -272,7 +300,7 @@ void CSSFilterListInterpolationType::Composite(
       std::move(extended_interpolable_list);
   // const_cast to take a ref.
   underlying_value_owner.MutableValue().non_interpolable_value =
-      const_cast<NonInterpolableValue*>(value.non_interpolable_value.Get());
+      const_cast<NonInterpolableValue*>(value.non_interpolable_value.get());
 }
 
 void CSSFilterListInterpolationType::ApplyStandardPropertyValue(
@@ -293,8 +321,7 @@ void CSSFilterListInterpolationType::ApplyStandardPropertyValue(
         FilterInterpolationFunctions::CreateFilter(
             *interpolable_list.Get(i), *non_interpolable_list.Get(i), state));
   }
-  FilterListPropertyFunctions::SetFilterList(CssProperty(), *state.Style(),
-                                             std::move(filter_operations));
+  SetFilterList(CssProperty(), *state.Style(), std::move(filter_operations));
 }
 
 }  // namespace blink

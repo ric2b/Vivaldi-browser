@@ -13,9 +13,12 @@ namespace aura {
 
 ClientSurfaceEmbedder::ClientSurfaceEmbedder(
     Window* window,
+    bool inject_gutter,
     const gfx::Insets& client_area_insets)
-    : window_(window), client_area_insets_(client_area_insets) {
-  surface_layer_ = base::MakeUnique<ui::Layer>(ui::LAYER_TEXTURED);
+    : window_(window),
+      inject_gutter_(inject_gutter),
+      client_area_insets_(client_area_insets) {
+  surface_layer_ = std::make_unique<ui::Layer>(ui::LAYER_TEXTURED);
   surface_layer_->SetMasksToBounds(true);
   // The frame provided by the parent window->layer() needs to show through
   // the surface layer.
@@ -32,33 +35,35 @@ ClientSurfaceEmbedder::ClientSurfaceEmbedder(
 
 ClientSurfaceEmbedder::~ClientSurfaceEmbedder() = default;
 
-void ClientSurfaceEmbedder::SetPrimarySurfaceInfo(
-    const viz::SurfaceInfo& surface_info) {
-  surface_layer_->SetShowPrimarySurface(surface_info, ref_factory_);
-  surface_layer_->SetBounds(gfx::Rect(window_->bounds().size()));
+void ClientSurfaceEmbedder::SetPrimarySurfaceId(
+    const viz::SurfaceId& surface_id) {
+  surface_layer_->SetShowPrimarySurface(surface_id, window_->bounds().size(),
+                                        ref_factory_);
 }
 
 void ClientSurfaceEmbedder::SetFallbackSurfaceInfo(
     const viz::SurfaceInfo& surface_info) {
-  surface_layer_->SetFallbackSurface(surface_info);
+  fallback_surface_info_ = surface_info;
+  surface_layer_->SetFallbackSurfaceId(surface_info.id());
   UpdateSizeAndGutters();
 }
 
 void ClientSurfaceEmbedder::UpdateSizeAndGutters() {
   surface_layer_->SetBounds(gfx::Rect(window_->bounds().size()));
+  if (!inject_gutter_)
+    return;
+
   gfx::Size fallback_surface_size_in_dip;
-  const viz::SurfaceInfo* fallback_surface_info =
-      surface_layer_->GetFallbackSurfaceInfo();
-  if (fallback_surface_info) {
+  if (fallback_surface_info_.is_valid()) {
     float fallback_device_scale_factor =
-        fallback_surface_info->device_scale_factor();
+        fallback_surface_info_.device_scale_factor();
     fallback_surface_size_in_dip = gfx::ConvertSizeToDIP(
-        fallback_device_scale_factor, fallback_surface_info->size_in_pixels());
+        fallback_device_scale_factor, fallback_surface_info_.size_in_pixels());
   }
   gfx::Rect window_bounds(window_->bounds());
   if (!window_->transparent() &&
       fallback_surface_size_in_dip.width() < window_bounds.width()) {
-    right_gutter_ = base::MakeUnique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+    right_gutter_ = std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
     // TODO(fsamuel): Use the embedded client's background color.
     right_gutter_->SetColor(SK_ColorWHITE);
     int width = window_bounds.width() - fallback_surface_size_in_dip.width();
@@ -76,7 +81,7 @@ void ClientSurfaceEmbedder::UpdateSizeAndGutters() {
   // the right gutter will fill the whole window until a fallback is available.
   if (!window_->transparent() && !fallback_surface_size_in_dip.IsEmpty() &&
       fallback_surface_size_in_dip.height() < window_bounds.height()) {
-    bottom_gutter_ = base::MakeUnique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+    bottom_gutter_ = std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
     // TODO(fsamuel): Use the embedded client's background color.
     bottom_gutter_->SetColor(SK_ColorWHITE);
     int width = fallback_surface_size_in_dip.width();

@@ -19,11 +19,6 @@
 #include "net/base/hash_value.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_status_flags.h"
-#include "net/net_features.h"
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-#include <Security/x509defs.h>
-#endif
 
 namespace base {
 class Time;
@@ -37,8 +32,6 @@ struct NET_EXPORT CertPrincipal {
   explicit CertPrincipal(const std::string& name);
   ~CertPrincipal();
 
-#if BUILDFLAG(USE_BYTE_CERTS) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    defined(OS_WIN)
   // Configures handling of PrintableString values in the DistinguishedName. Do
   // not use non-default handling without consulting //net owners. With
   // kAsUTF8Hack, PrintableStrings are interpreted as UTF-8 strings.
@@ -51,7 +44,6 @@ struct NET_EXPORT CertPrincipal {
       size_t length,
       PrintableStringHandling printable_string_handling =
           PrintableStringHandling::kDefault);
-#endif
 
   // Returns a name that can be used to represent the issuer.  It tries in this
   // order: CN, O and OU and returns the first non-empty one found.
@@ -70,14 +62,6 @@ struct NET_EXPORT CertPrincipal {
   std::vector<std::string> organization_unit_names;
   std::vector<std::string> domain_components;
 };
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-// Compares two OIDs by value.
-inline bool CSSMOIDEqual(const CSSM_OID* oid1, const CSSM_OID* oid2) {
-  return oid1->Length == oid2->Length &&
-  (memcmp(oid1->Data, oid2->Data, oid1->Length) == 0);
-}
-#endif
 
 // A list of ASN.1 date/time formats that ParseCertificateDate() supports,
 // encoded in the canonical forms specified in RFC 2459/3280/5280.

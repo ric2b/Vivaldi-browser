@@ -4,57 +4,88 @@
 
 package org.chromium.chrome.browser.ntp;
 
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertThat;
+
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
-import android.support.test.uiautomator.UiDevice;
 import android.view.View;
 
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
+import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
+import org.chromium.base.test.params.ParameterSet;
+import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.base.test.util.ScreenShooter;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.browser.test.ScreenShooter;
+import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
+import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.browser.compositor.layouts.DisableChromeAnimations;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Capture the New Tab Page UI for UX review.
  */
-@RunWith(ChromeJUnit4ClassRunner.class)
+@RunWith(ParameterizedRunner.class)
+@UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
 })
-@RetryOnFailure
 public class NewTabPageUiCaptureTest {
-    private static final int MAX_WINDOW_UPDATE_TIME_MS = 1000;
+    @ClassParameter
+    private static List<ParameterSet> sClassParams =
+            Arrays.asList(new ParameterSet().value(false).name("DisableNTPModernLayout"),
+                    new ParameterSet().value(true).name("EnableNTPModernLayout"));
+    @Rule
+    public TestRule mFeaturesProcessor = new Features.InstrumentationProcessor();
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
     @Rule
     public ScreenShooter mScreenShooter = new ScreenShooter();
     @Rule
-    public SuggestionsDependenciesRule createSuggestions() {
-        return new SuggestionsDependenciesRule(NtpUiCaptureTestData.createFactory());
-    }
+    public TestRule mCreateSuggestions =
+            new SuggestionsDependenciesRule(NtpUiCaptureTestData.createFactory());
+    @Rule
+    public TestRule mDisableChromeAnimations = new DisableChromeAnimations();
+
     private NewTabPage mNtp;
+
+    private final boolean mEnableNTPModernLayout;
+
+    public NewTabPageUiCaptureTest(boolean enableNTPModernLayout) {
+        mEnableNTPModernLayout = enableNTPModernLayout;
+    }
 
     @Before
     public void setUp() throws Exception {
+        if (mEnableNTPModernLayout) {
+            Features.getInstance().enable(ChromeFeatureList.NTP_MODERN_LAYOUT);
+        } else {
+            Features.getInstance().disable(ChromeFeatureList.NTP_MODERN_LAYOUT);
+        }
         mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
-        // TODO (aberent) this sequence or similar is used in a number of tests, extract to common
+        // TODO(aberent): this sequence or similar is used in a number of tests, extract to common
         // test method?
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(tab);
@@ -62,49 +93,60 @@ public class NewTabPageUiCaptureTest {
         mNtp = (NewTabPage) tab.getNativePage();
     }
 
-    private void waitForWindowUpdates() {
-        // Wait for update to start and finish.
-        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-        device.waitForWindowUpdate(null, MAX_WINDOW_UPDATE_TIME_MS);
-        device.waitForIdle(MAX_WINDOW_UPDATE_TIME_MS);
-    }
-
     @Test
     @MediumTest
-    @Feature({"NewTabPageTest", "UiCatalogue"})
+    @Feature({"NewTabPage", "UiCatalogue"})
+    @DisableFeatures({ChromeFeatureList.CHROME_HOME_PROMO})
     @ScreenShooter.Directory("New Tab Page")
     public void testCaptureNewTabPage() {
-        waitForWindowUpdates();
-        mScreenShooter.shoot("New Tab Page");
+        assertThat(ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_MODERN_LAYOUT),
+                is(mEnableNTPModernLayout));
+        shoot("New Tab Page");
+
         // Scroll to search bar
         final NewTabPageRecyclerView recyclerView = mNtp.getNewTabPageView().getRecyclerView();
 
         final View fakebox = mNtp.getView().findViewById(org.chromium.chrome.R.id.search_box);
-        final int scrollHeight = fakebox.getTop();
+        final int firstScrollHeight = fakebox.getTop() + fakebox.getPaddingTop();
+        final int subsequentScrollHeight = mNtp.getView().getHeight()
+                - mActivityTestRule.getActivity().getToolbarManager().getToolbar().getHeight();
 
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                recyclerView.smoothScrollBy(0, scrollHeight);
-            }
-        });
-        waitForWindowUpdates();
-        mScreenShooter.shoot("New Tab Page scrolled");
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                recyclerView.smoothScrollBy(0, scrollHeight);
-            }
-        });
-        waitForWindowUpdates();
-        mScreenShooter.shoot("New Tab Page scrolled twice");
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                recyclerView.smoothScrollBy(0, scrollHeight);
-            }
-        });
-        waitForWindowUpdates();
-        mScreenShooter.shoot("New Tab Page scrolled thrice");
+        ThreadUtils.runOnUiThreadBlocking(() -> { recyclerView.scrollBy(0, firstScrollHeight); });
+        RecyclerViewTestUtils.waitForStableRecyclerView(recyclerView);
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        shoot("New Tab Page scrolled");
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { recyclerView.scrollBy(0, subsequentScrollHeight); });
+        RecyclerViewTestUtils.waitForStableRecyclerView(recyclerView);
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        shoot("New Tab Page scrolled twice");
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { recyclerView.scrollBy(0, subsequentScrollHeight); });
+        RecyclerViewTestUtils.waitForStableRecyclerView(recyclerView);
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        shoot("New Tab Page scrolled thrice");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"NewTabPage", "UiCatalogue"})
+    @EnableFeatures({ChromeFeatureList.CHROME_HOME_PROMO})
+    @ScreenShooter.Directory("New Tab Page")
+    public void testCaptureNewTabPageWithChromeHomePromo() {
+        assertThat(ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_MODERN_LAYOUT),
+                is(mEnableNTPModernLayout));
+        Assert.assertTrue(ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO));
+        shoot("New Tab Page with Chrome Home Promo");
+    }
+
+    /**
+     * Takes a screenshot with the given name. Applies a suffix to the name to differentiate
+     * parameterized features.
+     * @param shotName The shot name.
+     */
+    private void shoot(String shotName) {
+        mScreenShooter.shoot(shotName + (mEnableNTPModernLayout ? "_modern" : ""));
     }
 }

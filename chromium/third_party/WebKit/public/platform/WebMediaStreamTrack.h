@@ -26,7 +26,6 @@
 #define WebMediaStreamTrack_h
 
 #include "WebCommon.h"
-#include "WebNonCopyable.h"
 #include "WebPrivatePtr.h"
 #include "WebString.h"
 
@@ -35,6 +34,7 @@ namespace blink {
 class MediaStreamComponent;
 class MediaStreamTrack;
 class WebAudioSourceProvider;
+class WebMediaConstraints;
 class WebMediaStream;
 class WebMediaStreamSource;
 class WebString;
@@ -113,6 +113,8 @@ class WebMediaStreamTrack {
   BLINK_PLATFORM_EXPORT bool IsEnabled() const;
   BLINK_PLATFORM_EXPORT bool IsMuted() const;
   BLINK_PLATFORM_EXPORT ContentHintType ContentHint() const;
+  BLINK_PLATFORM_EXPORT WebMediaConstraints Constraints() const;
+  BLINK_PLATFORM_EXPORT void SetConstraints(const WebMediaConstraints&);
 
   // Extra data associated with this WebMediaStream.
   // If non-null, the extra data pointer will be deleted when the object is
@@ -129,7 +131,7 @@ class WebMediaStreamTrack {
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT WebMediaStreamTrack(MediaStreamComponent*);
   BLINK_PLATFORM_EXPORT WebMediaStreamTrack& operator=(MediaStreamComponent*);
-  BLINK_PLATFORM_EXPORT operator WTF::PassRefPtr<MediaStreamComponent>() const;
+  BLINK_PLATFORM_EXPORT operator scoped_refptr<MediaStreamComponent>() const;
   BLINK_PLATFORM_EXPORT operator MediaStreamComponent*() const;
 #endif
 

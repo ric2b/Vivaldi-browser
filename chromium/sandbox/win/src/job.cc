@@ -12,11 +12,9 @@
 
 namespace sandbox {
 
-Job::Job() : job_handle_(NULL) {
-};
+Job::Job() : job_handle_(nullptr){};
 
-Job::~Job() {
-};
+Job::~Job(){};
 
 DWORD Job::Init(JobLevel security_level,
                 const wchar_t* job_name,
@@ -25,7 +23,7 @@ DWORD Job::Init(JobLevel security_level,
   if (job_handle_.IsValid())
     return ERROR_ALREADY_INITIALIZED;
 
-  job_handle_.Set(::CreateJobObject(NULL,   // No security attribute
+  job_handle_.Set(::CreateJobObject(nullptr,  // No security attribute
                                     job_name));
   if (!job_handle_.IsValid())
     return ::GetLastError();
@@ -67,23 +65,19 @@ DWORD Job::Init(JobLevel security_level,
           JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
       break;
     }
-    default: {
-      return ERROR_BAD_ARGUMENTS;
-    }
+    default: { return ERROR_BAD_ARGUMENTS; }
   }
 
-  if (FALSE == ::SetInformationJobObject(job_handle_.Get(),
-                                         JobObjectExtendedLimitInformation,
-                                         &jeli,
-                                         sizeof(jeli))) {
+  if (!::SetInformationJobObject(job_handle_.Get(),
+                                 JobObjectExtendedLimitInformation, &jeli,
+                                 sizeof(jeli))) {
     return ::GetLastError();
   }
 
   jbur.UIRestrictionsClass = jbur.UIRestrictionsClass & (~ui_exceptions);
-  if (FALSE == ::SetInformationJobObject(job_handle_.Get(),
-                                         JobObjectBasicUIRestrictions,
-                                         &jbur,
-                                         sizeof(jbur))) {
+  if (!::SetInformationJobObject(job_handle_.Get(),
+                                 JobObjectBasicUIRestrictions, &jbur,
+                                 sizeof(jbur))) {
     return ::GetLastError();
   }
 
@@ -94,9 +88,8 @@ DWORD Job::UserHandleGrantAccess(HANDLE handle) {
   if (!job_handle_.IsValid())
     return ERROR_NO_DATA;
 
-  if (!::UserHandleGrantAccess(handle,
-                               job_handle_.Get(),
-                               TRUE)) {  // Access allowed.
+  if (!::UserHandleGrantAccess(handle, job_handle_.Get(),
+                               true)) {  // Access allowed.
     return ::GetLastError();
   }
 
@@ -111,7 +104,7 @@ DWORD Job::AssignProcessToJob(HANDLE process_handle) {
   if (!job_handle_.IsValid())
     return ERROR_NO_DATA;
 
-  if (FALSE == ::AssignProcessToJobObject(job_handle_.Get(), process_handle))
+  if (!::AssignProcessToJobObject(job_handle_.Get(), process_handle))
     return ::GetLastError();
 
   return ERROR_SUCCESS;

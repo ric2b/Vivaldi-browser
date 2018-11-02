@@ -31,7 +31,8 @@ using base::android::ScopedJavaLocalRef;
 namespace {
 
 // static
-static base::android::ScopedJavaLocalRef<jobject> CreateJavaNavigationEntry(
+static base::android::ScopedJavaLocalRef<jobject>
+JNI_NavigationControllerImpl_CreateJavaNavigationEntry(
     JNIEnv* env,
     content::NavigationEntry* entry,
     int index) {
@@ -48,7 +49,7 @@ static base::android::ScopedJavaLocalRef<jobject> CreateJavaNavigationEntry(
       ConvertUTF16ToJavaString(env, entry->GetTitle()));
   ScopedJavaLocalRef<jobject> j_bitmap;
   const content::FaviconStatus& status = entry->GetFavicon();
-  if (status.valid && status.image.ToSkBitmap()->getSize() > 0)
+  if (status.valid && status.image.ToSkBitmap()->computeByteSize() > 0)
     j_bitmap = gfx::ConvertToJavaBitmap(status.image.ToSkBitmap());
 
   return content::Java_NavigationControllerImpl_createNavigationEntry(
@@ -56,12 +57,15 @@ static base::android::ScopedJavaLocalRef<jobject> CreateJavaNavigationEntry(
       entry->GetTransitionType());
 }
 
-static void AddNavigationEntryToHistory(JNIEnv* env,
-                                        const JavaRef<jobject>& history,
-                                        content::NavigationEntry* entry,
-                                        int index) {
+static void JNI_NavigationControllerImpl_AddNavigationEntryToHistory(
+    JNIEnv* env,
+    const JavaRef<jobject>& history,
+    content::NavigationEntry* entry,
+    int index) {
   content::Java_NavigationControllerImpl_addToNavigationHistory(
-      env, history, CreateJavaNavigationEntry(env, entry, index));
+      env, history,
+      JNI_NavigationControllerImpl_CreateJavaNavigationEntry(env, entry,
+                                                             index));
 }
 
 }  // namespace
@@ -259,7 +263,7 @@ jint NavigationControllerAndroid::GetNavigationHistory(
   // Iterate through navigation entries to populate the list
   int count = navigation_controller_->GetEntryCount();
   for (int i = 0; i < count; ++i) {
-    AddNavigationEntryToHistory(
+    JNI_NavigationControllerImpl_AddNavigationEntryToHistory(
         env, history, navigation_controller_->GetEntryAtIndex(i), i);
   }
 
@@ -282,7 +286,7 @@ void NavigationControllerAndroid::GetDirectedNavigationHistory(
     if (num_added >= max_entries)
       break;
 
-    AddNavigationEntryToHistory(
+    JNI_NavigationControllerImpl_AddNavigationEntryToHistory(
         env, history, navigation_controller_->GetEntryAtIndex(i), i);
     num_added++;
   }
@@ -348,7 +352,8 @@ NavigationControllerAndroid::GetEntryAtIndex(JNIEnv* env,
 
   content::NavigationEntry* entry =
       navigation_controller_->GetEntryAtIndex(index);
-  return CreateJavaNavigationEntry(env, entry, index);
+  return JNI_NavigationControllerImpl_CreateJavaNavigationEntry(env, entry,
+                                                                index);
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -359,7 +364,7 @@ NavigationControllerAndroid::GetPendingEntry(JNIEnv* env,
   if (!entry)
     return base::android::ScopedJavaLocalRef<jobject>();
 
-  return CreateJavaNavigationEntry(
+  return JNI_NavigationControllerImpl_CreateJavaNavigationEntry(
       env, entry, navigation_controller_->GetPendingEntryIndex());
 }
 

@@ -7,27 +7,24 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "device/vr/vr_device.h"
-#include "device/vr/vr_device_manager.h"
-#include "device/vr/vr_service_impl.h"
+#include "device/vr/vr_device_base.h"
 
 namespace device {
 
-VRDisplayImpl::VRDisplayImpl(device::VRDevice* device,
-                             int render_frame_process_id,
-                             int render_frame_routing_id,
+VRDisplayImpl::VRDisplayImpl(VRDevice* device,
                              mojom::VRServiceClient* service_client,
-                             mojom::VRDisplayInfoPtr display_info)
+                             mojom::VRDisplayInfoPtr display_info,
+                             mojom::VRDisplayHostPtr display_host,
+                             bool in_focused_frame)
     : binding_(this),
-      device_(device),
-      render_frame_process_id_(render_frame_process_id),
-      render_frame_routing_id_(render_frame_routing_id),
-      weak_ptr_factory_(this) {
+      device_(static_cast<VRDeviceBase*>(device)),
+      in_focused_frame_(in_focused_frame) {
   device_->AddDisplay(this);
-  mojom::VRDisplayPtr display;
-  binding_.Bind(mojo::MakeRequest(&display));
+  mojom::VRMagicWindowProviderPtr magic_window_provider;
+  binding_.Bind(mojo::MakeRequest(&magic_window_provider));
   service_client->OnDisplayConnected(
-      std::move(display), mojo::MakeRequest(&client_), std::move(display_info));
+      std::move(magic_window_provider), std::move(display_host),
+      mojo::MakeRequest(&client_), std::move(display_info));
 }
 
 VRDisplayImpl::~VRDisplayImpl() {
@@ -51,33 +48,25 @@ void VRDisplayImpl::OnFocus() {
 }
 
 void VRDisplayImpl::OnActivate(mojom::VRDisplayEventReason reason,
-                               const base::Callback<void(bool)>& on_handled) {
-  client_->OnActivate(reason, on_handled);
+                               base::Callback<void(bool)> on_handled) {
+  client_->OnActivate(reason, std::move(on_handled));
 }
 
 void VRDisplayImpl::OnDeactivate(mojom::VRDisplayEventReason reason) {
   client_->OnDeactivate(reason);
 }
 
-void VRDisplayImpl::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
-                                   mojom::VRPresentationProviderRequest request,
-                                   RequestPresentCallback callback) {
-  if (!device_->IsAccessAllowed(this)) {
+void VRDisplayImpl::RequestPresent(
+    mojom::VRSubmitFrameClientPtr submit_client,
+    mojom::VRPresentationProviderRequest request,
+    mojom::VRDisplayHost::RequestPresentCallback callback) {
+  if (!device_->IsAccessAllowed(this) || !InFocusedFrame()) {
     std::move(callback).Run(false);
     return;
   }
 
-  device_->RequestPresent(
-      std::move(submit_client), std::move(request),
-      base::Bind(&VRDisplayImpl::RequestPresentResult,
-                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
-}
-
-void VRDisplayImpl::RequestPresentResult(RequestPresentCallback callback,
-                                         bool success) {
-  if (success)
-    device_->SetPresentingDisplay(this);
-  std::move(callback).Run(success);
+  device_->RequestPresent(this, std::move(submit_client), std::move(request),
+                          std::move(callback));
 }
 
 void VRDisplayImpl::ExitPresent() {
@@ -85,18 +74,31 @@ void VRDisplayImpl::ExitPresent() {
     device_->ExitPresent();
 }
 
-void VRDisplayImpl::GetNextMagicWindowPose(
-    GetNextMagicWindowPoseCallback callback) {
+// Gets a pose for magic window sessions.
+void VRDisplayImpl::GetPose(GetPoseCallback callback) {
   if (!device_->IsAccessAllowed(this)) {
     std::move(callback).Run(nullptr);
     return;
   }
-  device_->GetNextMagicWindowPose(this, std::move(callback));
+  device_->GetMagicWindowPose(std::move(callback));
 }
 
 void VRDisplayImpl::SetListeningForActivate(bool listening) {
   listening_for_activate_ = listening;
   device_->OnListeningForActivateChanged(this);
+}
+
+void VRDisplayImpl::SetInFocusedFrame(bool in_focused_frame) {
+  in_focused_frame_ = in_focused_frame;
+  device_->OnFrameFocusChanged(this);
+}
+
+bool VRDisplayImpl::ListeningForActivate() {
+  return listening_for_activate_;
+}
+
+bool VRDisplayImpl::InFocusedFrame() {
+  return in_focused_frame_;
 }
 
 }  // namespace device

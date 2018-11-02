@@ -59,8 +59,6 @@
 namespace keys = extensions::preference_api_constants;
 namespace helpers = extensions::preference_helpers;
 
-using base::DictionaryValue;
-
 namespace extensions {
 
 namespace {
@@ -88,7 +86,7 @@ const char kConversionErrorMessage[] =
     "Internal error: Stored value for preference '*' cannot be converted "
     "properly.";
 
-PrefMappingEntry kPrefMapping[] = {
+const PrefMappingEntry kPrefMapping[] = {
     {"spdy_proxy.enabled", prefs::kDataSaverEnabled,
      APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"data_reduction.daily_original_length",
@@ -105,8 +103,6 @@ PrefMappingEntry kPrefMapping[] = {
     {"autofillEnabled", autofill::prefs::kAutofillEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"hyperlinkAuditingEnabled", prefs::kEnableHyperlinkAuditing,
-     APIPermission::kPrivacy, APIPermission::kPrivacy},
-    {"hotwordSearchEnabled", prefs::kHotwordSearchEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"networkPredictionEnabled", prefs::kNetworkPredictionOptions,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
@@ -130,7 +126,7 @@ PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"thirdPartyCookiesAllowed", prefs::kBlockThirdPartyCookies,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
-    {"translationServiceEnabled", prefs::kEnableTranslate,
+    {"translationServiceEnabled", prefs::kOfferTranslateEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
 #if BUILDFLAG(ENABLE_WEBRTC)
     // webRTCMultipleRoutesEnabled and webRTCNonProxiedUdpEnabled have been
@@ -227,10 +223,9 @@ class NetworkPredictionTransformer : public PrefTransformerInterface {
     if (bool_value) {
       return base::MakeUnique<base::Value>(
           chrome_browser_net::NETWORK_PREDICTION_DEFAULT);
-    } else {
-      return base::MakeUnique<base::Value>(
-          chrome_browser_net::NETWORK_PREDICTION_NEVER);
     }
+    return base::MakeUnique<base::Value>(
+        chrome_browser_net::NETWORK_PREDICTION_NEVER);
   }
 
   std::unique_ptr<base::Value> BrowserToExtensionPref(
@@ -280,27 +275,21 @@ class PrefMapping {
     auto it = transformers_.find(browser_pref);
     if (it != transformers_.end())
       return it->second.get();
-    else
-      return identity_transformer_.get();
+    return identity_transformer_.get();
   }
 
  private:
   friend struct base::DefaultSingletonTraits<PrefMapping>;
 
   PrefMapping() {
-    identity_transformer_.reset(new IdentityPrefTransformer());
-    for (size_t i = 0; i < arraysize(kPrefMapping); ++i) {
-      mapping_[kPrefMapping[i].extension_pref] =
-          PrefMapData(kPrefMapping[i].browser_pref,
-                      kPrefMapping[i].read_permission,
-                      kPrefMapping[i].write_permission);
+    identity_transformer_ = std::make_unique<IdentityPrefTransformer>();
+    for (const auto& pref : kPrefMapping) {
+      mapping_[pref.extension_pref] = PrefMapData(
+          pref.browser_pref, pref.read_permission, pref.write_permission);
       std::string event_name =
-          base::StringPrintf(kOnPrefChangeFormat,
-                             kPrefMapping[i].extension_pref);
-      event_mapping_[kPrefMapping[i].browser_pref] =
-          PrefMapData(event_name,
-                      kPrefMapping[i].read_permission,
-                      kPrefMapping[i].write_permission);
+          base::StringPrintf(kOnPrefChangeFormat, pref.extension_pref);
+      event_mapping_[pref.browser_pref] =
+          PrefMapData(event_name, pref.read_permission, pref.write_permission);
     }
     DCHECK_EQ(arraysize(kPrefMapping), mapping_.size());
     DCHECK_EQ(arraysize(kPrefMapping), event_mapping_.size());
@@ -318,8 +307,9 @@ class PrefMapping {
   void RegisterPrefTransformer(
       const std::string& browser_pref,
       std::unique_ptr<PrefTransformerInterface> transformer) {
-    DCHECK_EQ(0u, transformers_.count(browser_pref)) <<
-        "Trying to register pref transformer for " << browser_pref << " twice";
+    DCHECK(!base::ContainsKey(transformers_, browser_pref))
+        << "Trying to register pref transformer for " << browser_pref
+        << " twice";
     transformers_[browser_pref] = std::move(transformer);
   }
 
@@ -345,7 +335,7 @@ class PrefMapping {
     APIPermission::ID write_permission;
   };
 
-  typedef std::map<std::string, PrefMapData> PrefMap;
+  using PrefMap = std::map<std::string, PrefMapData>;
 
   // Mapping from extension pref keys to browser pref keys and permissions.
   PrefMap mapping_;
@@ -367,11 +357,10 @@ class PrefMapping {
 PreferenceEventRouter::PreferenceEventRouter(Profile* profile)
     : profile_(profile) {
   registrar_.Init(profile_->GetPrefs());
-  for (size_t i = 0; i < arraysize(kPrefMapping); ++i) {
-    registrar_.Add(kPrefMapping[i].browser_pref,
+  for (const auto& pref : kPrefMapping) {
+    registrar_.Add(pref.browser_pref,
                    base::Bind(&PreferenceEventRouter::OnPrefChanged,
-                              base::Unretained(this),
-                              registrar_.prefs()));
+                              base::Unretained(this), registrar_.prefs()));
   }
   notification_registrar_.Add(this, chrome::NOTIFICATION_PROFILE_CREATED,
                               content::NotificationService::AllSources());
@@ -406,7 +395,7 @@ void PreferenceEventRouter::OnPrefChanged(PrefService* pref_service,
     return;
   }
 
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = std::make_unique<base::DictionaryValue>();
   dict->Set(keys::kValue, std::move(transformed_value));
   if (incognito) {
     ExtensionPrefs* ep = ExtensionPrefs::Get(profile_);
@@ -458,11 +447,11 @@ void PreferenceEventRouter::Observe(
 }
 
 void PreferenceEventRouter::OnIncognitoProfileCreated(PrefService* prefs) {
-  incognito_registrar_.reset(new PrefChangeRegistrar());
+  incognito_registrar_ = std::make_unique<PrefChangeRegistrar>();
   incognito_registrar_->Init(prefs);
-  for (size_t i = 0; i < arraysize(kPrefMapping); ++i) {
+  for (const auto& pref : kPrefMapping) {
     incognito_registrar_->Add(
-        kPrefMapping[i].browser_pref,
+        pref.browser_pref,
         base::Bind(&PreferenceEventRouter::OnPrefChanged,
                    base::Unretained(this), incognito_registrar_->prefs()));
   }
@@ -478,7 +467,7 @@ void PreferenceAPIBase::SetExtensionControlledPref(
       extension_prefs()->pref_service()->FindPreference(pref_key);
   DCHECK(pref) << "Extension controlled preference key " << pref_key
                << " not registered.";
-  DCHECK_EQ(pref->GetType(), value->GetType())
+  DCHECK_EQ(pref->GetType(), value->type())
       << "Extension controlled preference " << pref_key << " has wrong type.";
 #endif
 
@@ -512,7 +501,7 @@ void PreferenceAPIBase::RemoveExtensionControlledPref(
                                                   scope_string);
     auto preference = update.Get();
     if (preference)
-      preference->RemoveWithoutPathExpansion(pref_key, NULL);
+      preference->RemoveWithoutPathExpansion(pref_key, nullptr);
   }
   extension_pref_value_map()->RemoveExtensionPref(
       extension_id, pref_key, scope);
@@ -544,11 +533,11 @@ bool PreferenceAPIBase::DoesExtensionControlPref(
 
 PreferenceAPI::PreferenceAPI(content::BrowserContext* context)
     : profile_(Profile::FromBrowserContext(context)) {
-  for (size_t i = 0; i < arraysize(kPrefMapping); ++i) {
+  for (const auto& pref : kPrefMapping) {
     std::string event_name;
     APIPermission::ID permission = APIPermission::kInvalid;
     bool rv = PrefMapping::GetInstance()->FindEventForBrowserPref(
-        kPrefMapping[i].browser_pref, &event_name, &permission);
+        pref.browser_pref, &event_name, &permission);
     DCHECK(rv);
     EventRouter::Get(profile_)->RegisterObserver(this, event_name);
   }
@@ -565,14 +554,13 @@ void PreferenceAPI::Shutdown() {
   content_settings_store()->RemoveObserver(this);
 }
 
-static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<PreferenceAPI>>::DestructorAtExit g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<PreferenceAPI>>::
+    DestructorAtExit g_preference_api_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<PreferenceAPI>*
 PreferenceAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_preference_api_factory.Pointer();
 }
 
 // static
@@ -581,7 +569,7 @@ PreferenceAPI* PreferenceAPI::Get(content::BrowserContext* context) {
 }
 
 void PreferenceAPI::OnListenerAdded(const EventListenerInfo& details) {
-  preference_event_router_.reset(new PreferenceEventRouter(profile_));
+  preference_event_router_ = std::make_unique<PreferenceEventRouter>(profile_);
   EventRouter::Get(profile_)->UnregisterObserver(this);
 }
 
@@ -605,10 +593,9 @@ void PreferenceAPI::OnContentSettingChanged(const std::string& extension_id,
 void PreferenceAPI::ClearIncognitoSessionOnlyContentSettings() {
   ExtensionIdList extension_ids;
   extension_prefs()->GetExtensions(&extension_ids);
-  for (ExtensionIdList::iterator extension_id = extension_ids.begin();
-       extension_id != extension_ids.end(); ++extension_id) {
+  for (const auto& id : extension_ids) {
     content_settings_store()->ClearContentSettingsForExtension(
-        *extension_id, kExtensionPrefsScopeIncognitoSessionOnly);
+        id, kExtensionPrefsScopeIncognitoSessionOnly);
   }
 }
 
@@ -640,7 +627,7 @@ GetPreferenceFunction::~GetPreferenceFunction() { }
 ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
   std::string pref_key;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &pref_key));
-  base::DictionaryValue* details = NULL;
+  base::DictionaryValue* details = nullptr;
   EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(1, &details));
 
   bool incognito = false;
@@ -668,7 +655,7 @@ ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
   const PrefService::Preference* pref = prefs->FindPreference(browser_pref);
   CHECK(pref);
 
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
+  auto result = std::make_unique<base::DictionaryValue>();
 
   // Retrieve level of control.
   std::string level_of_control = helpers::GetLevelOfControl(
@@ -683,9 +670,8 @@ ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
   if (!transformed_value) {
     // TODO(devlin): Can this happen?  When?  Should it be an error, or a bad
     // message?
-    LOG(ERROR) <<
-        ErrorUtils::FormatErrorMessage(kConversionErrorMessage,
-                                                pref->name());
+    LOG(ERROR) << ErrorUtils::FormatErrorMessage(kConversionErrorMessage,
+                                                 pref->name());
     return RespondNow(Error(kUnknownErrorDoNotUse));
   }
   result->Set(keys::kValue, std::move(transformed_value));
@@ -700,15 +686,15 @@ ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
   return RespondNow(OneArgument(std::move(result)));
 }
 
-SetPreferenceFunction::~SetPreferenceFunction() { }
+SetPreferenceFunction::~SetPreferenceFunction() {}
 
 ExtensionFunction::ResponseAction SetPreferenceFunction::Run() {
   std::string pref_key;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &pref_key));
-  base::DictionaryValue* details = NULL;
+  base::DictionaryValue* details = nullptr;
   EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(1, &details));
 
-  base::Value* value = NULL;
+  base::Value* value = nullptr;
   EXTENSION_FUNCTION_VALIDATE(details->Get(keys::kValue, &value));
 
   ExtensionPrefsScope scope = kExtensionPrefsScopeRegular;
@@ -769,7 +755,7 @@ ExtensionFunction::ResponseAction SetPreferenceFunction::Run() {
     EXTENSION_FUNCTION_VALIDATE(!bad_message);
     return RespondNow(Error(error));
   }
-  EXTENSION_FUNCTION_VALIDATE(browser_pref_value->GetType() == pref->GetType());
+  EXTENSION_FUNCTION_VALIDATE(browser_pref_value->type() == pref->GetType());
 
   // Validate also that the stored value can be converted back by the
   // transformer.
@@ -788,7 +774,7 @@ ClearPreferenceFunction::~ClearPreferenceFunction() { }
 ExtensionFunction::ResponseAction ClearPreferenceFunction::Run() {
   std::string pref_key;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &pref_key));
-  base::DictionaryValue* details = NULL;
+  base::DictionaryValue* details = nullptr;
   EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(1, &details));
 
   ExtensionPrefsScope scope = kExtensionPrefsScopeRegular;

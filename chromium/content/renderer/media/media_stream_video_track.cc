@@ -155,7 +155,7 @@ void MediaStreamVideoTrack::FrameDeliverer::SetEnabledOnIO(bool enabled) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   enabled_ = enabled;
   if (enabled_)
-    black_frame_ = NULL;
+    black_frame_ = nullptr;
 }
 
 void MediaStreamVideoTrack::FrameDeliverer::DeliverFrameOnIO(
@@ -213,6 +213,18 @@ blink::WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
 
 // static
 blink::WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
+    const blink::WebString& id,
+    MediaStreamVideoSource* source,
+    const MediaStreamVideoSource::ConstraintsCallback& callback,
+    bool enabled) {
+  blink::WebMediaStreamTrack track;
+  track.Initialize(id, source->Owner());
+  track.SetTrackData(new MediaStreamVideoTrack(source, callback, enabled));
+  return track;
+}
+
+// static
+blink::WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
     MediaStreamVideoSource* source,
     const VideoTrackAdapterSettings& adapter_settings,
     const base::Optional<bool>& noise_reduction,
@@ -246,7 +258,7 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
       frame_deliverer_(
           new MediaStreamVideoTrack::FrameDeliverer(source->io_task_runner(),
                                                     enabled)),
-      adapter_settings_(base::MakeUnique<VideoTrackAdapterSettings>(
+      adapter_settings_(std::make_unique<VideoTrackAdapterSettings>(
           VideoTrackAdapterSettings())),
       is_screencast_(false),
       source_(source->GetWeakPtr()) {
@@ -270,7 +282,7 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
           new MediaStreamVideoTrack::FrameDeliverer(source->io_task_runner(),
                                                     enabled)),
       adapter_settings_(
-          base::MakeUnique<VideoTrackAdapterSettings>(adapter_settings)),
+          std::make_unique<VideoTrackAdapterSettings>(adapter_settings)),
       noise_reduction_(noise_reduction),
       is_screencast_(is_screen_cast),
       min_frame_rate_(min_frame_rate),
@@ -336,11 +348,13 @@ void MediaStreamVideoTrack::SetContentHint(
     sink->OnContentHintChanged(content_hint);
 }
 
-void MediaStreamVideoTrack::Stop() {
+void MediaStreamVideoTrack::StopAndNotify(base::OnceClosure callback) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   if (source_) {
-    source_->RemoveTrack(this);
-    source_ = NULL;
+    source_->RemoveTrack(this, std::move(callback));
+    source_ = nullptr;
+  } else if (callback) {
+    std::move(callback).Run();
   }
   OnReadyStateChanged(blink::WebMediaStreamSource::kReadyStateEnded);
 }
@@ -369,41 +383,44 @@ void MediaStreamVideoTrack::GetSettings(
       settings.frame_rate = format->frame_rate;
     settings.video_kind = GetVideoKindForFormat(*format);
   }
-  switch (source_->device_info().device.video_facing) {
-    case media::MEDIA_VIDEO_FACING_NONE:
-      settings.facing_mode = blink::WebMediaStreamTrack::FacingMode::kNone;
-      break;
-    case media::MEDIA_VIDEO_FACING_USER:
-      settings.facing_mode = blink::WebMediaStreamTrack::FacingMode::kUser;
-      break;
-    case media::MEDIA_VIDEO_FACING_ENVIRONMENT:
-      settings.facing_mode =
-          blink::WebMediaStreamTrack::FacingMode::kEnvironment;
-      break;
-    default:
-      settings.facing_mode = blink::WebMediaStreamTrack::FacingMode::kNone;
-      break;
-  }
-#if defined(OS_ANDROID)
-  // On Android, the facing mode is not available in the |video_facing| field,
-  // but is available as part of the label.
-  // TODO(guidou): Remove this code once the |video_facing| field is supported
-  // on Android. See http://crbug.com/672856.
-  if (source_->device_info().device.name.find("front") != std::string::npos) {
-    settings.facing_mode = blink::WebMediaStreamTrack::FacingMode::kUser;
-  } else if (source_->device_info().device.name.find("back") !=
-             std::string::npos) {
-    settings.facing_mode = blink::WebMediaStreamTrack::FacingMode::kEnvironment;
-  }
-#endif
-
+  settings.facing_mode = FacingMode();
   const base::Optional<CameraCalibration> calibration =
-      source_->device_info().device.camera_calibration;
+      source_->device().camera_calibration;
   if (calibration) {
     settings.depth_near = calibration->depth_near;
     settings.depth_far = calibration->depth_far;
     settings.focal_length_x = calibration->focal_length_x;
     settings.focal_length_y = calibration->focal_length_y;
+  }
+}
+
+blink::WebMediaStreamTrack::FacingMode MediaStreamVideoTrack::FacingMode()
+    const {
+  if (!source_)
+    return blink::WebMediaStreamTrack::FacingMode::kNone;
+
+  const MediaStreamDevice& device = source_->device();
+#if defined(OS_ANDROID)
+  // On Android, the facing mode is not available in the |video_facing| field,
+  // but is available as part of the label.
+  // TODO(guidou): Remove this code once the |video_facing| field is supported
+  // on Android. See http://crbug.com/672856.
+  if (device.name.find("front") != std::string::npos) {
+    return blink::WebMediaStreamTrack::FacingMode::kUser;
+  } else if (device.name.find("back") != std::string::npos) {
+    return blink::WebMediaStreamTrack::FacingMode::kEnvironment;
+  }
+#endif
+
+  switch (device.video_facing) {
+    case media::MEDIA_VIDEO_FACING_NONE:
+      return blink::WebMediaStreamTrack::FacingMode::kNone;
+    case media::MEDIA_VIDEO_FACING_USER:
+      return blink::WebMediaStreamTrack::FacingMode::kUser;
+    case media::MEDIA_VIDEO_FACING_ENVIRONMENT:
+      return blink::WebMediaStreamTrack::FacingMode::kEnvironment;
+    default:
+      return blink::WebMediaStreamTrack::FacingMode::kNone;
   }
 }
 

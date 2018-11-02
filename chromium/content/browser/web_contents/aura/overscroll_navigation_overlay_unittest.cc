@@ -250,10 +250,10 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
 
     // Receive a paint update. This is necessary to make sure the size is set
     // correctly in RenderWidgetHostImpl.
-    ViewHostMsg_UpdateRect_Params params;
+    ViewHostMsg_ResizeOrRepaint_ACK_Params params;
     memset(&params, 0, sizeof(params));
     params.view_size = gfx::Size(10, 10);
-    ViewHostMsg_UpdateRect rect(test_rvh()->GetRoutingID(), params);
+    ViewHostMsg_ResizeOrRepaint_ACK rect(test_rvh()->GetRoutingID(), params);
     RenderViewHostTester::TestOnMessageReceived(test_rvh(), rect);
 
     // Reset pending flags for size/paint.
@@ -496,9 +496,10 @@ TEST_F(OverscrollNavigationOverlayTest, OverlayWindowSwap) {
   int overscroll_complete_distance =
       root_window()->bounds().size().width() *
           content::GetOverscrollConfig(
-              content::OVERSCROLL_CONFIG_HORIZ_THRESHOLD_COMPLETE) +
+              content::OverscrollConfig::THRESHOLD_COMPLETE_TOUCHSCREEN) +
       ui::GestureConfiguration::GetInstance()
-          ->max_touch_move_in_pixels_for_click() + 1;
+          ->max_touch_move_in_pixels_for_click() +
+      1;
 
   // Start and complete a back navigation via a gesture.
   ui::test::EventGenerator generator(root_window());

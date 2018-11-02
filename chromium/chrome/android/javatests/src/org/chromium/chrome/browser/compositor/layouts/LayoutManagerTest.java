@@ -113,8 +113,7 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     private void initializeLayoutManagerPhone(int standardTabCount, int incognitoTabCount,
             int standardIndexSelected, int incognitoIndexSelected, boolean incognitoSelected) {
-        Context context =
-                new MockContextForLayout(InstrumentationRegistry.getInstrumentation().getContext());
+        Context context = new MockContextForLayout(InstrumentationRegistry.getContext());
 
         mDpToPx = context.getResources().getDisplayMetrics().density;
 
@@ -507,9 +506,7 @@ public class LayoutManagerTest implements MockTabModelDelegate {
             @Override
             public void run() {
                 try {
-                    ChromeBrowserInitializer
-                            .getInstance(
-                                    InstrumentationRegistry.getInstrumentation().getTargetContext())
+                    ChromeBrowserInitializer.getInstance(InstrumentationRegistry.getTargetContext())
                             .handleSynchronousStartup();
                 } catch (ProcessInitException e) {
                     Assert.fail("Failed to load browser");
@@ -549,6 +546,9 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         final float deltaX = MathUtils.flipSignIf(layoutWidth / 2.f, scrollLeft);
 
         eventHandler.swipeStarted(direction, layoutWidth, 0);
+        // Call swipeUpdated twice since the handler computes direction in that method.
+        // TODO(mdjones): Update implementation of EdgeSwipeHandler to work this way by default.
+        eventHandler.swipeUpdated(deltaX, 0.f, deltaX, 0.f, deltaX, 0.f);
         eventHandler.swipeUpdated(deltaX, 0.f, deltaX, 0.f, deltaX, 0.f);
         eventHandler.swipeFinished();
 

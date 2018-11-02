@@ -18,7 +18,7 @@ using device::BluetoothAdapterFactory;
 FakeBluetooth::FakeBluetooth()
     : global_factory_values_(
           BluetoothAdapterFactory::Get().InitGlobalValuesForTesting()) {}
-FakeBluetooth::~FakeBluetooth() {}
+FakeBluetooth::~FakeBluetooth() = default;
 
 // static
 void FakeBluetooth::Create(mojom::FakeBluetoothRequest request) {
@@ -39,6 +39,11 @@ void FakeBluetooth::SimulateCentral(mojom::CentralState state,
       state, mojo::MakeRequest(&fake_central_ptr));
   device::BluetoothAdapterFactory::SetAdapterForTesting(fake_central_);
   std::move(callback).Run(std::move(fake_central_ptr));
+}
+
+void FakeBluetooth::AllResponsesConsumed(
+    AllResponsesConsumedCallback callback) {
+  std::move(callback).Run(fake_central_->AllResponsesConsumed());
 }
 
 }  // namespace bluetooth

@@ -117,11 +117,9 @@ def parse_args(args):
         ('Results Options', [
             optparse.make_option(
                 '--add-platform-exceptions',
-                action='store_true',
-                default=False,
-                help=('For --reset-results and --new-flag-specific-baseline, save generated '
-                      'results into the *most-specific-platform* directory rather than the '
-                      'current baseline directory or *generic-platform* directory')),
+                action='callback',
+                callback=deprecate,
+                help=('Deprecated. Use "webkit-patch rebaseline*" instead.')),
             optparse.make_option(
                 '--additional-driver-flag',
                 '--additional-drt-flag',
@@ -159,6 +157,14 @@ def parse_args(args):
                 default=None,
                 help="Use the specified port's baselines first"),
             optparse.make_option(
+                '--copy-baselines',
+                action='store_true',
+                default=False,
+                help=('If the actual result is different from the current baseline, '
+                      'copy the current baseline into the *most-specific-platform* '
+                      'directory, or the flag-specific generic-platform directory if '
+                      '--additional-driver-flag is specified. See --reset-results.')),
+            optparse.make_option(
                 '--driver-name',
                 type='string',
                 help='Alternative driver binary to use'),
@@ -175,16 +181,12 @@ def parse_args(args):
                 '--new-baseline',
                 action='callback',
                 callback=deprecate,
-                help=('Deprecated. Use "webkit-patch rebaseline-cl" instead, or '
-                      '"--reset-results --add-platform-exceptions" if you do want to create '
-                      'new baselines for the *most-specific-platform* locally.')),
+                help=('Deprecated. Use "webkit-patch rebaseline*" instead.')),
             optparse.make_option(
                 '--new-flag-specific-baseline',
-                action='store_true',
-                default=False,
-                help=('Together with --additional-driver-flag, if actual results are '
-                      'different from expected, save actual results as new baselines '
-                      'into the flag-specific generic-platform directory.')),
+                action='callback',
+                callback=deprecate,
+                help='Deprecated. Use --copy-baselines --reset-results instead.'),
             optparse.make_option(
                 '--new-test-results',
                 action='callback',
@@ -228,16 +230,13 @@ def parse_args(args):
                 '--reset-results',
                 action='store_true',
                 default=False,
-                help='Reset expectations to the generated results in their existing location.'),
+                help=('Reset baselines to the generated results in their existing location or the default '
+                      'location if no baseline exists. For virtual tests, reset the virtual baselines. '
+                      'If --additional-driver-flag is specified, reset the flag-specific baselines. '
+                      'If --copy-baselines is specified, the copied baselines will be reset.')),
             optparse.make_option(
                 '--results-directory',
                 help='Location of test results'),
-            optparse.make_option(
-                '--skip-failing-tests',
-                action='store_true',
-                default=False,
-                help=('Skip tests that are expected to fail. Note: When using this option, '
-                      'you might miss new crashes in these tests.')),
             optparse.make_option(
                 '--smoke',
                 action='store_true',
@@ -417,6 +416,18 @@ def parse_args(args):
                       '"only" == only run the SKIP tests, '
                       '"always" == always skip, even if listed on the command line.')),
             optparse.make_option(
+                '--skip-failing-tests',
+                action='store_true',
+                default=False,
+                help=('Skip tests that are expected to fail. Note: When using this option, '
+                      'you might miss new crashes in these tests.')),
+            optparse.make_option(
+                '--skip-timeouts',
+                action='store_true',
+                default=False,
+                help=('Skip tests marked TIMEOUT. Use it to speed up running the entire '
+                      'test suite.')),
+            optparse.make_option(
                 '--fastest',
                 action='store',
                 type='float',
@@ -449,6 +460,10 @@ def parse_args(args):
                 action='store_true',
                 default=False,
                 help='Do everything but actually run the tests or upload results.'),
+            optparse.make_option(
+                '-w', '--watch',
+                action='store_true',
+                help='Re-run tests quickly (e.g. avoid restarting the server)'),
         ]))
 
     # FIXME: Move these into json_results_generator.py.
@@ -492,9 +507,6 @@ def parse_args(args):
 
     (options, args) = option_parser.parse_args(args)
 
-    if options.new_flag_specific_baseline and not options.additional_driver_flag:
-        option_parser.error('--new-flag-specific-baseline requires --additional-driver-flag')
-
     return (options, args)
 
 
@@ -523,9 +535,6 @@ def _set_up_derived_options(port, options, args):
         for path in options.additional_platform_directory:
             additional_platform_directories.append(port.host.filesystem.abspath(path))
         options.additional_platform_directory = additional_platform_directories
-
-    if options.new_flag_specific_baseline:
-        options.reset_results = True
 
     if options.pixel_test_directories:
         options.pixel_tests = True

@@ -7,16 +7,17 @@
 
 #include <string>
 
+#include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/search_box_model_observer.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/search_box_model_observer.h"
 #include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget_delegate.h"
 
 namespace views {
 class BoxLayout;
@@ -48,7 +49,7 @@ class SearchBoxImageButton;
 // model that controls what icon to display, what placeholder text to use for
 // Textfield. The text and selection model part could be set to change the
 // contents and selection model of the Textfield.
-class APP_LIST_EXPORT SearchBoxView : public views::View,
+class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
                                       public views::TextfieldController,
                                       public views::ButtonListener,
                                       public SearchBoxModelObserver,
@@ -63,9 +64,6 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void ModelChanged();
   bool HasSearch() const;
   void ClearSearch();
-
-  // Sets the shadow border of the search box.
-  void SetShadow(const gfx::ShadowValue& shadow);
 
   // Returns the bounds to use for the view (including the shadow) given the
   // desired bounds of the search box contents.
@@ -117,6 +115,11 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnKeyEvent(ui::KeyEvent* evetn) override;
+
+  // Overridden from views::WidgetDelegate:
+  ui::AXRole GetAccessibleWindowRole() const override;
+  bool ShouldAdvanceFocusToTopLevelWidget() const override;
 
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -136,7 +139,7 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   void OnTabletModeChanged(bool started);
 
   // Returns background border corner radius in the given state.
-  static int GetSearchBoxBorderCornerRadiusForState(AppListModel::State state);
+  int GetSearchBoxBorderCornerRadiusForState(AppListModel::State state) const;
 
   // Returns background color for the given state.
   SkColor GetBackgroundColorForState(AppListModel::State state) const;
@@ -159,6 +162,9 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
 
   // Returns selected view in contents view.
   views::View* GetSelectedViewInContentsView() const;
+
+  bool selected() { return selected_; }
+  void SetSelected(bool selected);
 
  private:
   // Updates model text and selection model with current Textfield info.
@@ -215,10 +221,8 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Overridden from AppListViewDelegateObserver:
   void OnWallpaperColorsChanged() override;
 
-  void SetDefaultBorder();
-
-  bool selected() { return selected_; }
-  void SetSelected(bool selected);
+  // Update search box border based on whether the search box is activated.
+  void UpdateSearchBoxBorder();
 
   SearchBoxViewDelegate* delegate_;     // Not owned.
   AppListViewDelegate* view_delegate_;  // Not owned.
@@ -238,8 +242,8 @@ class APP_LIST_EXPORT SearchBoxView : public views::View,
   // Owned by |content_container_|. It is deleted when the view is deleted.
   views::BoxLayout* box_layout_ = nullptr;
 
-  // Whether the fullscreen app list feature is enabled.
-  const bool is_fullscreen_app_list_enabled_;
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
 
   SearchBoxFocus focused_view_;  // Which element has TAB'd focus.
 

@@ -49,6 +49,7 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   bool IsOffTheRecord() const override;
   bool SearchSuggestEnabled() const override;
   bool TabSyncEnabledAndUnencrypted() const override;
+  bool IsAuthenticated() const override;
   void Classify(
       const base::string16& text,
       bool prefer_keyword,
@@ -62,6 +63,7 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   void PrefetchImage(const GURL& url) override;
   void OnAutocompleteControllerResultReady(
       AutocompleteController* controller) override;
+  bool IsTabOpenWithURL(const GURL& url) override;
 
  private:
   ios::ChromeBrowserState* browser_state_;

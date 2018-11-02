@@ -52,7 +52,7 @@ bool CanBeAnchorNode<EditingInFlatTreeStrategy>(Node* node) {
 #endif
 
 template <typename Strategy>
-DEFINE_TRACE(PositionTemplate<Strategy>) {
+void PositionTemplate<Strategy>::Trace(blink::Visitor* visitor) {
   visitor->Trace(anchor_node_);
 }
 
@@ -68,7 +68,7 @@ const TreeScope* PositionTemplate<Strategy>::CommonAncestorTreeScope(
 
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::EditingPositionOf(
-    Node* anchor_node,
+    const Node* anchor_node,
     int offset) {
   if (!anchor_node || anchor_node->IsTextNode())
     return PositionTemplate<Strategy>(anchor_node, offset);
@@ -151,7 +151,7 @@ PositionTemplate<Strategy>::PositionTemplate(const PositionTemplate& other)
 template <typename Strategy>
 Node* PositionTemplate<Strategy>::ComputeContainerNode() const {
   if (!anchor_node_)
-    return 0;
+    return nullptr;
 
   switch (AnchorType()) {
     case PositionAnchorType::kBeforeChildren:
@@ -163,7 +163,7 @@ Node* PositionTemplate<Strategy>::ComputeContainerNode() const {
       return Strategy::Parent(*anchor_node_);
   }
   NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 template <typename Strategy>
@@ -250,33 +250,33 @@ int PositionTemplate<Strategy>::ComputeEditingOffset() const {
 template <typename Strategy>
 Node* PositionTemplate<Strategy>::ComputeNodeBeforePosition() const {
   if (!anchor_node_)
-    return 0;
+    return nullptr;
   switch (AnchorType()) {
     case PositionAnchorType::kBeforeChildren:
-      return 0;
+      return nullptr;
     case PositionAnchorType::kAfterChildren:
       return Strategy::LastChild(*anchor_node_);
     case PositionAnchorType::kOffsetInAnchor:
-      return offset_ ? Strategy::ChildAt(*anchor_node_, offset_ - 1) : 0;
+      return offset_ ? Strategy::ChildAt(*anchor_node_, offset_ - 1) : nullptr;
     case PositionAnchorType::kBeforeAnchor:
       return Strategy::PreviousSibling(*anchor_node_);
     case PositionAnchorType::kAfterAnchor:
       return anchor_node_.Get();
   }
   NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 template <typename Strategy>
 Node* PositionTemplate<Strategy>::ComputeNodeAfterPosition() const {
   if (!anchor_node_)
-    return 0;
+    return nullptr;
 
   switch (AnchorType()) {
     case PositionAnchorType::kBeforeChildren:
       return Strategy::FirstChild(*anchor_node_);
     case PositionAnchorType::kAfterChildren:
-      return 0;
+      return nullptr;
     case PositionAnchorType::kOffsetInAnchor:
       return Strategy::ChildAt(*anchor_node_, offset_);
     case PositionAnchorType::kBeforeAnchor:
@@ -285,7 +285,7 @@ Node* PositionTemplate<Strategy>::ComputeNodeAfterPosition() const {
       return Strategy::NextSibling(*anchor_node_);
   }
   NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 // An implementation of |Range::firstNode()|.
@@ -332,6 +332,34 @@ Node* PositionTemplate<Strategy>::CommonAncestorContainer(
     const PositionTemplate<Strategy>& other) const {
   return Strategy::CommonAncestor(*ComputeContainerNode(),
                                   *other.ComputeContainerNode());
+}
+
+static bool IsPositionConnected(const Position& position) {
+  return position.AnchorNode() && position.AnchorNode()->isConnected();
+}
+
+static bool IsPositionConnected(const PositionInFlatTree& position) {
+  if (position.IsNull())
+    return false;
+  return FlatTreeTraversal::Contains(*position.GetDocument(),
+                                     *position.AnchorNode());
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::IsConnected() const {
+  return IsPositionConnected(*this);
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::IsValidFor(const Document& document) const {
+  if (IsNull())
+    return true;
+  if (GetDocument() != document)
+    return false;
+  if (!IsConnected())
+    return false;
+  return !IsOffsetInAnchor() ||
+         OffsetInContainerNode() <= LastOffsetInNode(*AnchorNode());
 }
 
 int ComparePositions(const PositionInFlatTree& position_a,
@@ -512,21 +540,17 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::LastPositionInNode(
 // static
 template <typename Strategy>
 PositionTemplate<Strategy>
-PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(Node* node) {
-  if (!node)
-    return PositionTemplate<Strategy>();
-  return EditingIgnoresContent(*node) ? BeforeNode(*node)
-                                      : FirstPositionInNode(*node);
+PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(const Node& node) {
+  return EditingIgnoresContent(node) ? BeforeNode(node)
+                                     : FirstPositionInNode(node);
 }
 
 // static
 template <typename Strategy>
 PositionTemplate<Strategy>
-PositionTemplate<Strategy>::LastPositionInOrAfterNode(Node* node) {
-  if (!node)
-    return PositionTemplate<Strategy>();
-  return EditingIgnoresContent(*node) ? AfterNode(*node)
-                                      : LastPositionInNode(*node);
+PositionTemplate<Strategy>::LastPositionInOrAfterNode(const Node& node) {
+  return EditingIgnoresContent(node) ? AfterNode(node)
+                                     : LastPositionInNode(node);
 }
 
 PositionInFlatTree ToPositionInFlatTree(const Position& pos) {

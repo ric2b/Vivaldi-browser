@@ -45,10 +45,10 @@ class ResourceLoaderBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(PathService::Get(base::DIR_MODULE, &resources_pack_path));
     resources_pack_path =
         resources_pack_path.AppendASCII("gen/ui/login/login_resources.pak");
-    ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+    ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         resources_pack_path, ui::SCALE_FACTOR_NONE);
     const base::StringPiece resource_loader_js =
-        ResourceBundle::GetSharedInstance().GetRawDataResource(
+        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
             IDR_OOBE_RESOURCE_LOADER_JS);
     EXPECT_FALSE(resource_loader_js.empty());
 
@@ -123,12 +123,14 @@ IN_PROC_BROWSER_TEST_F(ResourceLoaderBrowserTest, LoadAssetsTest) {
   std::string js_url = CreateResource("stuff.loaded = true;").spec();
 
   // Register the asset bundle.
+  // clang-format off
   JSEval("ResourceLoader.registerAssets({"
          "  id: 'test-bundle',"
          "  html: [ { url: '" + html_url + "', targetID: 'root' } ]," +
          "  css: [ '" + css_url + "' ]," +
          "  js: [ '" + js_url + "' ]," +
          "});");
+  // clang-format on
   JSExpect("!ResourceLoader.alreadyLoadedAssets('test-bundle')");
 
   // Load the assets and make sure everything is properly added to the page.

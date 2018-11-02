@@ -4,6 +4,7 @@
 
 #include "ash/test/ash_test_base.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,9 +12,6 @@
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/mus/top_level_window_factory.h"
-#include "ash/mus/window_manager.h"
-#include "ash/mus/window_manager_application.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
@@ -23,8 +21,14 @@
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/test_screenshot_delegate.h"
 #include "ash/test_shell_delegate.h"
+#include "ash/utility/screenshot_controller.h"
+#include "ash/window_manager.h"
+#include "ash/window_manager_service.h"
+#include "ash/wm/top_level_window_factory.h"
 #include "ash/wm/window_positioner.h"
+#include "base/memory/ptr_util.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -58,8 +62,8 @@ namespace {
 class AshEventGeneratorDelegate
     : public aura::test::EventGeneratorDelegateAura {
  public:
-  AshEventGeneratorDelegate() {}
-  ~AshEventGeneratorDelegate() override {}
+  AshEventGeneratorDelegate() = default;
+  ~AshEventGeneratorDelegate() override = default;
 
   // aura::test::EventGeneratorDelegateAura overrides:
   aura::WindowTreeHost* GetHostAt(
@@ -266,9 +270,9 @@ std::unique_ptr<aura::Window> AshTestBase::CreateTestWindow(
 
   const ui::mojom::WindowType mus_window_type =
       MusWindowTypeFromWindowType(type);
-  mus::WindowManager* window_manager =
-      ash_test_helper_->window_manager_app()->window_manager();
-  aura::Window* window = mus::CreateAndParentTopLevelWindow(
+  WindowManager* window_manager =
+      ash_test_helper_->window_manager_service()->window_manager();
+  aura::Window* window = CreateAndParentTopLevelWindow(
       window_manager, mus_window_type, &properties);
   window->set_id(shell_window_id);
   window->Show();
@@ -312,7 +316,7 @@ std::unique_ptr<aura::Window> AshTestBase::CreateChildWindow(
     const gfx::Rect& bounds,
     int shell_window_id) {
   std::unique_ptr<aura::Window> window =
-      base::MakeUnique<aura::Window>(nullptr, aura::client::WINDOW_TYPE_NORMAL);
+      std::make_unique<aura::Window>(nullptr, aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_NOT_DRAWN);
   window->SetBounds(bounds);
   window->set_id(shell_window_id);
@@ -372,7 +376,8 @@ void AshTestBase::RunAllPendingInMessageLoop() {
 }
 
 TestScreenshotDelegate* AshTestBase::GetScreenshotDelegate() {
-  return ash_test_helper_->test_screenshot_delegate();
+  return static_cast<TestScreenshotDelegate*>(
+      Shell::Get()->screenshot_controller()->screenshot_delegate_.get());
 }
 
 TestSessionControllerClient* AshTestBase::GetSessionControllerClient() {

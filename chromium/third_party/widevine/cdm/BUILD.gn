@@ -111,14 +111,6 @@ if (widevine_cdm_binary_files != []) {
     ]
 
     if (is_mac) {
-      # Vivaldi disabled. Looks to be something that should not have been here
-      #ldflags = [
-      #  # Not to strip important symbols by -Wl,-dead_strip.
-      #  "-Wl,-exported_symbol,_PPP_GetInterface",
-      #  "-Wl,-exported_symbol,_PPP_InitializeModule",
-      #  "-Wl,-exported_symbol,_PPP_ShutdownModule",
-      #]
-      #TODO(jrummell) Mac: 'DYLIB_INSTALL_NAME_BASE': '@loader_path',
       ldflags = [
         "-install_name",
         "@loader_path/libwidevinecdm.dylib",

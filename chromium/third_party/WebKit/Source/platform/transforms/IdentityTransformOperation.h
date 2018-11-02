@@ -32,8 +32,8 @@ namespace blink {
 class PLATFORM_EXPORT IdentityTransformOperation final
     : public TransformOperation {
  public:
-  static PassRefPtr<IdentityTransformOperation> Create() {
-    return AdoptRef(new IdentityTransformOperation());
+  static scoped_refptr<IdentityTransformOperation> Create() {
+    return base::AdoptRef(new IdentityTransformOperation());
   }
 
   virtual bool CanBlendWith(const TransformOperation& other) const {
@@ -49,13 +49,14 @@ class PLATFORM_EXPORT IdentityTransformOperation final
 
   void Apply(TransformationMatrix&, const FloatSize&) const override {}
 
-  PassRefPtr<TransformOperation> Blend(const TransformOperation*,
-                                       double,
-                                       bool = false) override {
+  scoped_refptr<TransformOperation> Blend(
+      const TransformOperation*,
+      double progress,
+      bool blend_to_identity = false) override {
     return this;
   }
 
-  PassRefPtr<TransformOperation> Zoom(double factor) final { return this; }
+  scoped_refptr<TransformOperation> Zoom(double factor) final { return this; }
 
   IdentityTransformOperation() {}
 };

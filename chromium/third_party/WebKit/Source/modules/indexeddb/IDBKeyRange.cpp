@@ -68,16 +68,17 @@ IDBKeyRange::IDBKeyRange(IDBKey* lower,
       lower_type_(lower_type),
       upper_type_(upper_type) {}
 
-DEFINE_TRACE(IDBKeyRange) {
+void IDBKeyRange::Trace(blink::Visitor* visitor) {
   visitor->Trace(lower_);
   visitor->Trace(upper_);
+  ScriptWrappable::Trace(visitor);
 }
 
-ScriptValue IDBKeyRange::lowerValue(ScriptState* script_state) const {
+ScriptValue IDBKeyRange::LowerValue(ScriptState* script_state) const {
   return ScriptValue::From(script_state, lower_);
 }
 
-ScriptValue IDBKeyRange::upperValue(ScriptState* script_state) const {
+ScriptValue IDBKeyRange::UpperValue(ScriptState* script_state) const {
   return ScriptValue::From(script_state, upper_);
 }
 

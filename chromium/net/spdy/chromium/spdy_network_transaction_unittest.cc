@@ -3,15 +3,14 @@
 // found in the LICENSE file.
 
 #include <cmath>
-#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/compiler_specific.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -79,16 +78,15 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
         host_port_pair_(HostPortPair::FromURL(default_url_)) {}
 
   ~SpdyNetworkTransactionTest() override {
-    // UploadDataStream may post a deletion tasks back to the message loop on
+    // UploadDataStream may post a deletion task back to the message loop on
     // destruction.
     upload_data_stream_.reset();
     base::RunLoop().RunUntilIdle();
   }
 
   void SetUp() override {
-    get_request_initialized_ = false;
-    post_request_initialized_ = false;
-    chunked_post_request_initialized_ = false;
+    request_.method = "GET";
+    request_.url = GURL(kDefaultUrl);
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   }
 
@@ -224,7 +222,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
     void AddData(SocketDataProvider* data) {
       auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-      ssl_provider->cert =
+      ssl_provider->ssl_info.cert =
           ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
       AddDataWithSSLSocketDataProvider(data, std::move(ssl_provider));
     }
@@ -246,7 +244,6 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     HttpNetworkTransaction* trans() { return trans_.get(); }
     void ResetTrans() { trans_.reset(); }
     const TransactionHelperResult& output() { return output_; }
-    const HttpRequestInfo& request() const { return request_; }
     HttpNetworkSession* session() const { return session_.get(); }
     SpdySessionDependencies* session_deps() { return session_deps_.get(); }
 
@@ -254,8 +251,8 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     typedef std::vector<SocketDataProvider*> DataVector;
     typedef std::vector<std::unique_ptr<SSLSocketDataProvider>> SSLVector;
     typedef std::vector<std::unique_ptr<SocketDataProvider>> AlternateVector;
-    HttpRequestInfo request_;
-    RequestPriority priority_;
+    const HttpRequestInfo request_;
+    const RequestPriority priority_;
     std::unique_ptr<SpdySessionDependencies> session_deps_;
     std::unique_ptr<HttpNetworkSession> session_;
     TransactionHelperResult output_;
@@ -271,76 +268,45 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
   void ConnectStatusHelper(const MockRead& status);
 
-  const HttpRequestInfo& CreateGetPushRequest() {
-    get_push_request_.method = "GET";
-    get_push_request_.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
-    get_push_request_.load_flags = 0;
-    return get_push_request_;
+  HttpRequestInfo CreateGetPushRequest() const WARN_UNUSED_RESULT {
+    HttpRequestInfo request;
+    request.method = "GET";
+    request.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
+    return request;
   }
 
-  const HttpRequestInfo& CreateGetRequest() {
-    if (!get_request_initialized_) {
-      get_request_.method = "GET";
-      get_request_.url = default_url_;
-      get_request_.load_flags = 0;
-      get_request_initialized_ = true;
-    }
-    return get_request_;
+  void UsePostRequest() {
+    ASSERT_FALSE(upload_data_stream_);
+    std::vector<std::unique_ptr<UploadElementReader>> element_readers;
+    element_readers.push_back(std::make_unique<UploadBytesElementReader>(
+        kUploadData, kUploadDataSize));
+    upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
+        std::move(element_readers), 0);
+
+    request_.method = "POST";
+    request_.upload_data_stream = upload_data_stream_.get();
   }
 
-  const HttpRequestInfo& CreateGetRequestWithUserAgent() {
-    if (!get_request_initialized_) {
-      get_request_.method = "GET";
-      get_request_.url = default_url_;
-      get_request_.load_flags = 0;
-      get_request_.extra_headers.SetHeader("User-Agent", "Chrome");
-      get_request_initialized_ = true;
-    }
-    return get_request_;
+  void UseFilePostRequest() {
+    ASSERT_FALSE(upload_data_stream_);
+    base::FilePath file_path;
+    CHECK(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &file_path));
+    CHECK_EQ(static_cast<int>(kUploadDataSize),
+             base::WriteFile(file_path, kUploadData, kUploadDataSize));
+
+    std::vector<std::unique_ptr<UploadElementReader>> element_readers;
+    element_readers.push_back(std::make_unique<UploadFileElementReader>(
+        base::ThreadTaskRunnerHandle::Get().get(), file_path, 0,
+        kUploadDataSize, base::Time()));
+    upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
+        std::move(element_readers), 0);
+
+    request_.method = "POST";
+    request_.upload_data_stream = upload_data_stream_.get();
   }
 
-  const HttpRequestInfo& CreatePostRequest() {
-    if (!post_request_initialized_) {
-      std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
-          kUploadData, kUploadDataSize));
-      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
-          std::move(element_readers), 0);
-
-      post_request_.method = "POST";
-      post_request_.url = default_url_;
-      post_request_.upload_data_stream = upload_data_stream_.get();
-      post_request_initialized_ = true;
-    }
-    return post_request_;
-  }
-
-  const HttpRequestInfo& CreateFilePostRequest() {
-    if (!post_request_initialized_) {
-      base::FilePath file_path;
-      CHECK(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &file_path));
-      CHECK_EQ(static_cast<int>(kUploadDataSize),
-               base::WriteFile(file_path, kUploadData, kUploadDataSize));
-
-      std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(std::make_unique<UploadFileElementReader>(
-          base::ThreadTaskRunnerHandle::Get().get(), file_path, 0,
-          kUploadDataSize, base::Time()));
-      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
-          std::move(element_readers), 0);
-
-      post_request_.method = "POST";
-      post_request_.url = default_url_;
-      post_request_.upload_data_stream = upload_data_stream_.get();
-      post_request_initialized_ = true;
-    }
-    return post_request_;
-  }
-
-  const HttpRequestInfo& CreateUnreadableFilePostRequest() {
-    if (post_request_initialized_)
-      return post_request_;
-
+  void UseUnreadableFilePostRequest() {
+    ASSERT_FALSE(upload_data_stream_);
     base::FilePath file_path;
     CHECK(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &file_path));
     CHECK_EQ(static_cast<int>(kUploadDataSize),
@@ -354,55 +320,42 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
         std::move(element_readers), 0);
 
-    post_request_.method = "POST";
-    post_request_.url = default_url_;
-    post_request_.upload_data_stream = upload_data_stream_.get();
-    post_request_initialized_ = true;
-    return post_request_;
+    request_.method = "POST";
+    request_.upload_data_stream = upload_data_stream_.get();
   }
 
-  const HttpRequestInfo& CreateComplexPostRequest() {
-    if (!post_request_initialized_) {
-      const int kFileRangeOffset = 1;
-      const int kFileRangeLength = 3;
-      CHECK_LT(kFileRangeOffset + kFileRangeLength, kUploadDataSize);
+  void UseComplexPostRequest() {
+    ASSERT_FALSE(upload_data_stream_);
+    const int kFileRangeOffset = 1;
+    const int kFileRangeLength = 3;
+    CHECK_LT(kFileRangeOffset + kFileRangeLength, kUploadDataSize);
 
-      base::FilePath file_path;
-      CHECK(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &file_path));
-      CHECK_EQ(static_cast<int>(kUploadDataSize),
-               base::WriteFile(file_path, kUploadData, kUploadDataSize));
+    base::FilePath file_path;
+    CHECK(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &file_path));
+    CHECK_EQ(static_cast<int>(kUploadDataSize),
+             base::WriteFile(file_path, kUploadData, kUploadDataSize));
 
-      std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
-          kUploadData, kFileRangeOffset));
-      element_readers.push_back(std::make_unique<UploadFileElementReader>(
-          base::ThreadTaskRunnerHandle::Get().get(), file_path,
-          kFileRangeOffset, kFileRangeLength, base::Time()));
-      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
-          kUploadData + kFileRangeOffset + kFileRangeLength,
-          kUploadDataSize - (kFileRangeOffset + kFileRangeLength)));
-      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
-          std::move(element_readers), 0);
+    std::vector<std::unique_ptr<UploadElementReader>> element_readers;
+    element_readers.push_back(std::make_unique<UploadBytesElementReader>(
+        kUploadData, kFileRangeOffset));
+    element_readers.push_back(std::make_unique<UploadFileElementReader>(
+        base::ThreadTaskRunnerHandle::Get().get(), file_path, kFileRangeOffset,
+        kFileRangeLength, base::Time()));
+    element_readers.push_back(std::make_unique<UploadBytesElementReader>(
+        kUploadData + kFileRangeOffset + kFileRangeLength,
+        kUploadDataSize - (kFileRangeOffset + kFileRangeLength)));
+    upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
+        std::move(element_readers), 0);
 
-      post_request_.method = "POST";
-      post_request_.url = default_url_;
-      post_request_.upload_data_stream = upload_data_stream_.get();
-      post_request_initialized_ = true;
-    }
-    return post_request_;
+    request_.method = "POST";
+    request_.upload_data_stream = upload_data_stream_.get();
   }
 
-  const HttpRequestInfo& CreateChunkedPostRequest() {
-    if (!chunked_post_request_initialized_) {
-      upload_chunked_data_stream_ =
-          std::make_unique<ChunkedUploadDataStream>(0);
-      chunked_post_request_.method = "POST";
-      chunked_post_request_.url = default_url_;
-      chunked_post_request_.upload_data_stream =
-          upload_chunked_data_stream_.get();
-      chunked_post_request_initialized_ = true;
-    }
-    return chunked_post_request_;
+  void UseChunkedPostRequest() {
+    ASSERT_FALSE(upload_chunked_data_stream_);
+    upload_chunked_data_stream_ = std::make_unique<ChunkedUploadDataStream>(0);
+    request_.method = "POST";
+    request_.upload_data_stream = upload_chunked_data_stream_.get();
   }
 
   // Read the result of a particular transaction, knowing that we've got
@@ -432,15 +385,12 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     // This lengthy block is reaching into the pool to dig out the active
     // session.  Once we have the session, we verify that the streams are
     // all closed and not leaked at this point.
-    const GURL& url = helper.request().url;
-    SpdySessionKey key(HostPortPair::FromURL(url), ProxyServer::Direct(),
-                       PRIVACY_MODE_DISABLED);
-    NetLogWithSource log;
+    SpdySessionKey key(HostPortPair::FromURL(request_.url),
+                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
     HttpNetworkSession* session = helper.session();
     base::WeakPtr<SpdySession> spdy_session =
         session->spdy_session_pool()->FindAvailableSession(
-            key, url,
-            /* enable_ip_based_pooling = */ true, log);
+            key, /* enable_ip_based_pooling = */ true, log_);
     ASSERT_TRUE(spdy_session);
     EXPECT_EQ(0u, spdy_session->num_active_streams());
     EXPECT_EQ(0u, spdy_session->num_unclaimed_pushed_streams());
@@ -450,8 +400,8 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
                          HttpResponseInfo* response,
                          HttpResponseInfo* push_response,
                          const SpdyString& expected) {
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunPreTestSetup();
     helper.AddData(data);
 
@@ -459,8 +409,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
     // Start the transaction with basic parameters.
     TestCompletionCallback callback;
-    int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                          NetLogWithSource());
+    int rv = trans->Start(&request_, callback.callback(), log_);
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
     rv = callback.WaitForResult();
 
@@ -469,8 +418,8 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
     // Request the pushed path.
     HttpNetworkTransaction trans2(DEFAULT_PRIORITY, helper.session());
-    rv = trans2.Start(&CreateGetPushRequest(), callback.callback(),
-                      NetLogWithSource());
+    HttpRequestInfo request = CreateGetPushRequest();
+    rv = trans2.Start(&request, callback.callback(), log_);
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
     base::RunLoop().RunUntilIdle();
 
@@ -513,8 +462,8 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
   }
 
   void RunBrokenPushTest(SequencedSocketData* data, int expected_rv) {
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunPreTestSetup();
     helper.AddData(data);
 
@@ -522,8 +471,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
     // Start the transaction with basic parameters.
     TestCompletionCallback callback;
-    int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                          NetLogWithSource());
+    int rv = trans->Start(&request_, callback.callback(), log_);
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
     rv = callback.WaitForResult();
     EXPECT_EQ(expected_rv, rv);
@@ -550,40 +498,35 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
   static void StartTransactionCallback(HttpNetworkSession* session,
                                        GURL url,
+                                       NetLogWithSource log,
                                        int result) {
     HttpRequestInfo request;
     HttpNetworkTransaction trans(DEFAULT_PRIORITY, session);
     TestCompletionCallback callback;
     request.method = "GET";
     request.url = url;
-    request.load_flags = 0;
-    int rv = trans.Start(&request, callback.callback(), NetLogWithSource());
+    int rv = trans.Start(&request, callback.callback(), log);
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
     callback.WaitForResult();
   }
 
-  ChunkedUploadDataStream* upload_chunked_data_stream() const {
+  ChunkedUploadDataStream* upload_chunked_data_stream() {
     return upload_chunked_data_stream_.get();
   }
 
-  SpdyString GetDefaultUrlWithPath(const char* path) {
+  SpdyString GetDefaultUrlWithPath(const char* path) const {
     return SpdyString(kDefaultUrl) + path;
   }
 
   const GURL default_url_;
   const HostPortPair host_port_pair_;
+  HttpRequestInfo request_;
   SpdyTestUtil spdy_util_;
+  const NetLogWithSource log_;
 
  private:
   std::unique_ptr<ChunkedUploadDataStream> upload_chunked_data_stream_;
   std::unique_ptr<UploadDataStream> upload_data_stream_;
-  bool get_request_initialized_;
-  bool post_request_initialized_;
-  bool chunked_post_request_initialized_;
-  HttpRequestInfo get_request_;
-  HttpRequestInfo post_request_;
-  HttpRequestInfo chunked_post_request_;
-  HttpRequestInfo get_push_request_;
   base::ScopedTempDir temp_dir_;
 };
 
@@ -610,8 +553,7 @@ TEST_F(SpdyNetworkTransactionTest, Get) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -667,10 +609,8 @@ TEST_F(SpdyNetworkTransactionTest, GetAtEachPriority) {
 
     SequencedSocketData data(reads, arraysize(reads), writes,
                              arraysize(writes));
-    HttpRequestInfo http_req = CreateGetRequest();
 
-    NormalSpdyTransactionHelper helper(http_req, p, NetLogWithSource(),
-                                       nullptr);
+    NormalSpdyTransactionHelper helper(request_, p, log_, nullptr);
     helper.RunToCompletion(&data);
     TransactionHelperResult out = helper.output();
     EXPECT_THAT(out.rv, IsOk());
@@ -726,10 +666,8 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGets) {
   SequencedSocketData data_placeholder1(nullptr, 0, nullptr, 0);
   SequencedSocketData data_placeholder2(nullptr, 0, nullptr, 0);
 
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   // We require placeholder data because three get requests are sent out at
@@ -741,19 +679,15 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGets) {
   TestCompletionCallback callback2;
   TestCompletionCallback callback3;
 
-  HttpRequestInfo httpreq1 = CreateGetRequest();
-  HttpRequestInfo httpreq2 = CreateGetRequest();
-  HttpRequestInfo httpreq3 = CreateGetRequest();
-
   HttpNetworkTransaction trans1(DEFAULT_PRIORITY, helper.session());
   HttpNetworkTransaction trans2(DEFAULT_PRIORITY, helper.session());
   HttpNetworkTransaction trans3(DEFAULT_PRIORITY, helper.session());
 
-  out.rv = trans1.Start(&httpreq1, callback1.callback(), log);
+  out.rv = trans1.Start(&request_, callback1.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans2.Start(&httpreq2, callback2.callback(), log);
+  out.rv = trans2.Start(&request_, callback2.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans3.Start(&httpreq3, callback3.callback(), log);
+  out.rv = trans3.Start(&request_, callback3.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
 
   out.rv = callback1.WaitForResult();
@@ -806,10 +740,8 @@ TEST_F(SpdyNetworkTransactionTest, TwoGetsLateBinding) {
   SequencedSocketData data_placeholder(nullptr, 0, nullptr, 0);
   data_placeholder.set_connect_data(never_finishing_connect);
 
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   // We require placeholder data because two requests are sent out at
@@ -822,12 +754,9 @@ TEST_F(SpdyNetworkTransactionTest, TwoGetsLateBinding) {
   TestCompletionCallback callback1;
   TestCompletionCallback callback2;
 
-  HttpRequestInfo httpreq1 = CreateGetRequest();
-  HttpRequestInfo httpreq2 = CreateGetRequest();
-
-  out.rv = trans1.Start(&httpreq1, callback1.callback(), log);
+  out.rv = trans1.Start(&request_, callback1.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans2.Start(&httpreq2, callback2.callback(), log);
+  out.rv = trans2.Start(&request_, callback2.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
 
   out.rv = callback1.WaitForResult();
@@ -888,10 +817,8 @@ TEST_F(SpdyNetworkTransactionTest, TwoGetsLateBindingFromPreconnect) {
   SequencedSocketData data_placeholder(nullptr, 0, nullptr, 0);
   data_placeholder.set_connect_data(never_finishing_connect);
 
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&preconnect_data);
   // We require placeholder data because 3 connections are attempted (first is
@@ -905,17 +832,15 @@ TEST_F(SpdyNetworkTransactionTest, TwoGetsLateBindingFromPreconnect) {
   TestCompletionCallback callback1;
   TestCompletionCallback callback2;
 
-  HttpRequestInfo httpreq = CreateGetRequest();
-
   // Preconnect the first.
   HttpStreamFactory* http_stream_factory =
       helper.session()->http_stream_factory();
 
-  http_stream_factory->PreconnectStreams(1, httpreq);
+  http_stream_factory->PreconnectStreams(1, request_);
 
-  out.rv = trans1.Start(&httpreq, callback1.callback(), log);
+  out.rv = trans1.Start(&request_, callback1.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans2.Start(&httpreq, callback2.callback(), log);
+  out.rv = trans2.Start(&request_, callback2.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
 
   out.rv = callback1.WaitForResult();
@@ -1003,11 +928,10 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrent) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NetLogWithSource log;
   TransactionHelperResult out;
   {
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunPreTestSetup();
     helper.AddData(&data);
     HttpNetworkTransaction trans1(DEFAULT_PRIORITY, helper.session());
@@ -1018,20 +942,16 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrent) {
     TestCompletionCallback callback2;
     TestCompletionCallback callback3;
 
-    HttpRequestInfo httpreq1 = CreateGetRequest();
-    HttpRequestInfo httpreq2 = CreateGetRequest();
-    HttpRequestInfo httpreq3 = CreateGetRequest();
-
-    out.rv = trans1.Start(&httpreq1, callback1.callback(), log);
+    out.rv = trans1.Start(&request_, callback1.callback(), log_);
     ASSERT_EQ(out.rv, ERR_IO_PENDING);
     // Run transaction 1 through quickly to force a read of our SETTINGS
     // frame.
     out.rv = callback1.WaitForResult();
     ASSERT_THAT(out.rv, IsOk());
 
-    out.rv = trans2.Start(&httpreq2, callback2.callback(), log);
+    out.rv = trans2.Start(&request_, callback2.callback(), log_);
     ASSERT_EQ(out.rv, ERR_IO_PENDING);
-    out.rv = trans3.Start(&httpreq3, callback3.callback(), log);
+    out.rv = trans3.Start(&request_, callback3.callback(), log_);
     ASSERT_EQ(out.rv, ERR_IO_PENDING);
     out.rv = callback2.WaitForResult();
     ASSERT_THAT(out.rv, IsOk());
@@ -1136,10 +1056,8 @@ TEST_F(SpdyNetworkTransactionTest, FourGetsWithMaxConcurrentPriority) {
       MockRead(ASYNC, 0, 17),  // EOF
   };
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
@@ -1153,12 +1071,7 @@ TEST_F(SpdyNetworkTransactionTest, FourGetsWithMaxConcurrentPriority) {
   TestCompletionCallback callback3;
   TestCompletionCallback callback4;
 
-  HttpRequestInfo httpreq1 = CreateGetRequest();
-  HttpRequestInfo httpreq2 = CreateGetRequest();
-  HttpRequestInfo httpreq3 = CreateGetRequest();
-  HttpRequestInfo httpreq4 = CreateGetRequest();
-
-  out.rv = trans1.Start(&httpreq1, callback1.callback(), log);
+  out.rv = trans1.Start(&request_, callback1.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
   // Run transaction 1 through quickly to force a read of our SETTINGS frame.
   out.rv = callback1.WaitForResult();
@@ -1167,11 +1080,11 @@ TEST_F(SpdyNetworkTransactionTest, FourGetsWithMaxConcurrentPriority) {
   // Finish async network reads and writes associated with |trans1|.
   base::RunLoop().RunUntilIdle();
 
-  out.rv = trans2.Start(&httpreq2, callback2.callback(), log);
+  out.rv = trans2.Start(&request_, callback2.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans3.Start(&httpreq3, callback3.callback(), log);
+  out.rv = trans3.Start(&request_, callback3.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
-  out.rv = trans4.Start(&httpreq4, callback4.callback(), log);
+  out.rv = trans4.Start(&request_, callback4.callback(), log_);
   ASSERT_THAT(out.rv, IsError(ERR_IO_PENDING));
 
   out.rv = callback2.WaitForResult();
@@ -1260,10 +1173,8 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentDelete) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   auto trans1 = std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
@@ -1277,19 +1188,15 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentDelete) {
   TestCompletionCallback callback2;
   TestCompletionCallback callback3;
 
-  HttpRequestInfo httpreq1 = CreateGetRequest();
-  HttpRequestInfo httpreq2 = CreateGetRequest();
-  HttpRequestInfo httpreq3 = CreateGetRequest();
-
-  out.rv = trans1->Start(&httpreq1, callback1.callback(), log);
+  out.rv = trans1->Start(&request_, callback1.callback(), log_);
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
   // Run transaction 1 through quickly to force a read of our SETTINGS frame.
   out.rv = callback1.WaitForResult();
   ASSERT_THAT(out.rv, IsOk());
 
-  out.rv = trans2->Start(&httpreq2, callback2.callback(), log);
+  out.rv = trans2->Start(&request_, callback2.callback(), log_);
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
-  out.rv = trans3->Start(&httpreq3, callback3.callback(), log);
+  out.rv = trans3->Start(&request_, callback3.callback(), log_);
   trans3.reset();
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
   out.rv = callback2.WaitForResult();
@@ -1387,10 +1294,8 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentSocketClose) {
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
   SequencedSocketData data_placeholder(nullptr, 0, nullptr, 0);
 
-  NetLogWithSource log;
   TransactionHelperResult out;
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   // We require placeholder data because three get requests are sent out, so
@@ -1406,19 +1311,15 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentSocketClose) {
   TestCompletionCallback callback2;
   KillerCallback callback3(trans3);
 
-  HttpRequestInfo httpreq1 = CreateGetRequest();
-  HttpRequestInfo httpreq2 = CreateGetRequest();
-  HttpRequestInfo httpreq3 = CreateGetRequest();
-
-  out.rv = trans1.Start(&httpreq1, callback1.callback(), log);
+  out.rv = trans1.Start(&request_, callback1.callback(), log_);
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
   // Run transaction 1 through quickly to force a read of our SETTINGS frame.
   out.rv = callback1.WaitForResult();
   ASSERT_THAT(out.rv, IsOk());
 
-  out.rv = trans2.Start(&httpreq2, callback2.callback(), log);
+  out.rv = trans2.Start(&request_, callback2.callback(), log_);
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
-  out.rv = trans3->Start(&httpreq3, callback3.callback(), log);
+  out.rv = trans3->Start(&request_, callback3.callback(), log_);
   ASSERT_EQ(out.rv, ERR_IO_PENDING);
   out.rv = callback3.WaitForResult();
   ASSERT_THAT(out.rv, IsError(ERR_ABORTED));
@@ -1444,10 +1345,8 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentSocketClose) {
 
 // Test that a simple PUT request works.
 TEST_F(SpdyNetworkTransactionTest, Put) {
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "PUT";
-  request.url = default_url_;
+  // Setup the request.
+  request_.method = "PUT";
 
   SpdyHeaderBlock put_headers(
       spdy_util_.ConstructPutHeaderBlock(kDefaultUrl, 0));
@@ -1465,8 +1364,7 @@ TEST_F(SpdyNetworkTransactionTest, Put) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
 
@@ -1476,10 +1374,8 @@ TEST_F(SpdyNetworkTransactionTest, Put) {
 
 // Test that a simple HEAD request works.
 TEST_F(SpdyNetworkTransactionTest, Head) {
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "HEAD";
-  request.url = default_url_;
+  // Setup the request.
+  request_.method = "HEAD";
 
   SpdyHeaderBlock head_headers(
       spdy_util_.ConstructHeadHeaderBlock(kDefaultUrl, 0));
@@ -1497,8 +1393,7 @@ TEST_F(SpdyNetworkTransactionTest, Head) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
 
@@ -1522,8 +1417,8 @@ TEST_F(SpdyNetworkTransactionTest, Post) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreatePostRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  UsePostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -1547,8 +1442,8 @@ TEST_F(SpdyNetworkTransactionTest, FilePost) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateFilePostRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  UseFilePostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -1566,9 +1461,8 @@ TEST_F(SpdyNetworkTransactionTest, UnreadableFilePost) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateUnreadableFilePostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseUnreadableFilePostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.RunDefaultTest();
@@ -1594,9 +1488,8 @@ TEST_F(SpdyNetworkTransactionTest, ComplexPost) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateComplexPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseComplexPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -1619,9 +1512,8 @@ TEST_F(SpdyNetworkTransactionTest, ChunkedPost) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   // These chunks get merged into a single frame when being sent.
   const int kFirstChunkSize = kUploadDataSize/2;
@@ -1655,9 +1547,8 @@ TEST_F(SpdyNetworkTransactionTest, DelayedChunkedPost) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   upload_chunked_data_stream()->AppendData(kUploadData, kUploadDataSize, false);
 
@@ -1686,12 +1577,10 @@ TEST_F(SpdyNetworkTransactionTest, DelayedChunkedPost) {
 
 // Test that a POST without any post data works.
 TEST_F(SpdyNetworkTransactionTest, NullPost) {
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
+  // Setup the request.
+  request_.method = "POST";
   // Create an empty UploadData.
-  request.upload_data_stream = nullptr;
+  request_.upload_data_stream = nullptr;
 
   // When request.upload_data_stream is NULL for post, content-length is
   // expected to be 0.
@@ -1713,8 +1602,7 @@ TEST_F(SpdyNetworkTransactionTest, NullPost) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -1728,11 +1616,9 @@ TEST_F(SpdyNetworkTransactionTest, EmptyPost) {
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   ElementsUploadDataStream stream(std::move(element_readers), 0);
 
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &stream;
+  // Setup the request.
+  request_.method = "POST";
+  request_.upload_data_stream = &stream;
 
   const uint64_t kContentLength = 0;
 
@@ -1754,8 +1640,7 @@ TEST_F(SpdyNetworkTransactionTest, EmptyPost) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -1779,9 +1664,8 @@ TEST_F(SpdyNetworkTransactionTest, ResponseBeforePostCompletes) {
   // Write the request headers, and read the complete response
   // while still waiting for chunked request data.
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
@@ -1827,8 +1711,7 @@ TEST_F(SpdyNetworkTransactionTest, SocketWriteReturnsZero) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.StartDefaultTest();
@@ -1858,8 +1741,7 @@ TEST_F(SpdyNetworkTransactionTest, ResponseWithoutHeaders) {
       CreateMockWrite(req, 0), CreateMockWrite(rst, 2),
   };
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -1886,16 +1768,14 @@ TEST_F(SpdyNetworkTransactionTest, ResponseWithTwoSynReplies) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -1932,8 +1812,7 @@ TEST_F(SpdyNetworkTransactionTest, ResetReplyWithTransferEncoding) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -1969,8 +1848,7 @@ TEST_F(SpdyNetworkTransactionTest, ResetPushWithTransferEncoding) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -2002,15 +1880,13 @@ TEST_F(SpdyNetworkTransactionTest, CancelledTransaction) {
   StaticSocketDataProvider data(reads, arraysize(reads),
                                 writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   helper.ResetTrans();  // Cancel the transaction.
 
@@ -2038,16 +1914,14 @@ TEST_F(SpdyNetworkTransactionTest, CancelledTransactionSendRst) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
 
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(callback.GetResult(rv), IsOk());
 
   helper.ResetTrans();
@@ -2091,8 +1965,7 @@ TEST_F(SpdyNetworkTransactionTest, StartTransactionOnReadCallback) {
   SequencedSocketData data2(reads2, arraysize(reads2), writes2,
                             arraysize(writes2));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.AddData(&data2);
@@ -2100,8 +1973,7 @@ TEST_F(SpdyNetworkTransactionTest, StartTransactionOnReadCallback) {
 
   // Start the transaction with basic parameters.
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
 
@@ -2110,7 +1982,7 @@ TEST_F(SpdyNetworkTransactionTest, StartTransactionOnReadCallback) {
   rv = trans->Read(
       buf.get(), kSize,
       base::Bind(&SpdyNetworkTransactionTest::StartTransactionCallback,
-                 helper.session(), default_url_));
+                 helper.session(), default_url_, log_));
   ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
   // This forces an err_IO_pending, which sets the callback.
   data.Resume();
@@ -2140,16 +2012,14 @@ TEST_F(SpdyNetworkTransactionTest, DeleteSessionOnReadCallback) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   // Start the transaction with basic parameters.
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
 
@@ -2311,13 +2181,15 @@ TEST_F(SpdyNetworkTransactionTest, RedirectGetRequest) {
 
   SpdySerializedFrame req0(
       spdy_util_.ConstructSpdyHeaders(1, std::move(headers0), LOWEST, true));
-  MockWrite writes0[] = {CreateMockWrite(req0, 0)};
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
+  MockWrite writes0[] = {CreateMockWrite(req0, 0), CreateMockWrite(rst, 2)};
 
   const char* const kExtraHeaders[] = {"location",
                                        "https://www.foo.com/index.php"};
   SpdySerializedFrame resp0(spdy_util_.ConstructSpdyReplyError(
       "301", kExtraHeaders, arraysize(kExtraHeaders) / 2, 1));
-  MockRead reads0[] = {CreateMockRead(resp0, 1), MockRead(ASYNC, 0, 2)};
+  MockRead reads0[] = {CreateMockRead(resp0, 1), MockRead(ASYNC, 0, 3)};
 
   SequencedSocketData data0(reads0, arraysize(reads0), writes0,
                             arraysize(writes0));
@@ -2377,8 +2249,9 @@ TEST_F(SpdyNetworkTransactionTest, RedirectServerPush) {
 
   SSLSocketDataProvider ssl_provider0(ASYNC, OK);
   ssl_provider0.next_proto = kProtoHTTP2;
-  ssl_provider0.cert =
+  ssl_provider0.ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl_provider0.ssl_info.cert);
   spdy_url_request_context.socket_factory().AddSSLSocketDataProvider(
       &ssl_provider0);
 
@@ -2650,8 +2523,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushUpdatesPriority) {
   SequencedSocketData data_placeholder2(nullptr, 0, nullptr, 0);
   SequencedSocketData data_placeholder3(nullptr, 0, nullptr, 0);
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), LOWEST,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, LOWEST, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.AddData(&data_placeholder1);  // other requests reuse the same socket
@@ -2666,22 +2538,20 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushUpdatesPriority) {
   TestCompletionCallback callback5;
 
   // Start the ordinary requests.
-  NetLogWithSource log;
-  ASSERT_THAT(trans1.Start(&CreateGetRequest(), callback1.callback(), log),
+  ASSERT_THAT(trans1.Start(&request_, callback1.callback(), log_),
               IsError(ERR_IO_PENDING));
-  ASSERT_THAT(trans3.Start(&CreateGetRequest(), callback3.callback(), log),
+  ASSERT_THAT(trans3.Start(&request_, callback3.callback(), log_),
               IsError(ERR_IO_PENDING));
-  ASSERT_THAT(trans5.Start(&CreateGetRequest(), callback5.callback(), log),
+  ASSERT_THAT(trans5.Start(&request_, callback5.callback(), log_),
               IsError(ERR_IO_PENDING));
   data.RunUntilPaused();
 
   // Start a request that matches the push.
-  HttpRequestInfo push_req = CreateGetRequest();
-  push_req.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
+  HttpRequestInfo push_req = CreateGetPushRequest();
 
   HttpNetworkTransaction trans2(HIGHEST, helper.session());
   TestCompletionCallback callback2;
-  ASSERT_THAT(trans2.Start(&push_req, callback2.callback(), log),
+  ASSERT_THAT(trans2.Start(&push_req, callback2.callback(), log_),
               IsError(ERR_IO_PENDING));
   data.Resume();
 
@@ -2718,8 +2588,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushServerAborted) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   helper.RunPreTestSetup();
   helper.AddData(&data);
@@ -2728,8 +2597,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushServerAborted) {
 
   // Start the transaction with basic parameters.
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -2914,9 +2782,9 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushInvalidUrl) {
   // those pieces in.
   SpdyFramer response_spdy_framer(SpdyFramer::ENABLE_COMPRESSION);
   SpdyHeaderBlock push_promise_header_block;
-  push_promise_header_block[spdy_util_.GetHostKey()] = "";
-  push_promise_header_block[spdy_util_.GetSchemeKey()] = "";
-  push_promise_header_block[spdy_util_.GetPathKey()] = "/index.html";
+  push_promise_header_block[kHttp2AuthorityHeader] = "";
+  push_promise_header_block[kHttp2SchemeHeader] = "";
+  push_promise_header_block[kHttp2PathHeader] = "/index.html";
 
   SpdyPushPromiseIR push_promise(1, 2, std::move(push_promise_header_block));
   SpdySerializedFrame push_promise_frame(
@@ -2991,7 +2859,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushNoURL) {
   SpdySerializedFrame stream1_reply(
       spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
   SpdyHeaderBlock incomplete_headers;
-  incomplete_headers[spdy_util_.GetStatusKey()] = "200 OK";
+  incomplete_headers[kHttp2StatusHeader] = "200 OK";
   incomplete_headers["hello"] = "bye";
   SpdySerializedFrame stream2_syn(spdy_util_.ConstructInitialSpdyPushFrame(
       std::move(incomplete_headers), 2, 1));
@@ -3031,8 +2899,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnPushedStream) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
 }
 
@@ -3057,16 +2924,14 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedStream) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   rv = callback.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
@@ -3115,15 +2980,13 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedPushedStream) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans1 = helper.trans();
   TestCompletionCallback callback1;
-  int rv = trans1->Start(&CreateGetRequest(), callback1.callback(),
-                         NetLogWithSource());
+  int rv = trans1->Start(&request_, callback1.callback(), log_);
   rv = callback1.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
   HttpResponseInfo response = *trans1->GetResponseInfo();
@@ -3132,8 +2995,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedPushedStream) {
 
   HttpNetworkTransaction trans2(DEFAULT_PRIORITY, helper.session());
   TestCompletionCallback callback2;
-  rv = trans2.Start(&CreateGetPushRequest(), callback2.callback(),
-                    NetLogWithSource());
+  HttpRequestInfo request = CreateGetPushRequest();
+  rv = trans2.Start(&request, callback2.callback(), log_);
   rv = callback2.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
   response = *trans2.GetResponseInfo();
@@ -3173,8 +3036,7 @@ TEST_F(SpdyNetworkTransactionTest, RejectServerPushWithNoMethod) {
       CreateMockRead(body, 4), MockRead(SYNCHRONOUS, ERR_IO_PENDING, 5)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
 }
 
@@ -3202,43 +3064,41 @@ TEST_F(SpdyNetworkTransactionTest, RejectServerPushWithInvalidMethod) {
       CreateMockRead(body, 4), MockRead(SYNCHRONOUS, ERR_IO_PENDING, 5)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
 }
 
 // Verify that various response headers parse correctly through the HTTP layer.
 TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
   struct ResponseHeadersTests {
-    int num_headers;
-    const char* extra_headers[5];
-    SpdyHeaderBlock expected_headers;
-  } test_cases[] = {// This uses a multi-valued cookie header.
-                    {
-                        2,
-                        {"cookie", "val1", "cookie",
-                         "val2",  // will get appended separated by nullptr
-                         nullptr},
-                    },
-                    // This is the minimalist set of headers.
-                    {
-                        0, {nullptr},
-                    },
-                    // Headers with a comma separated list.
-                    {
-                        1, {"cookie", "val1,val2", nullptr},
-                    }};
-
-  test_cases[0].expected_headers["status"] = "200";
-  test_cases[1].expected_headers["status"] = "200";
-  test_cases[2].expected_headers["status"] = "200";
-
-  test_cases[0].expected_headers["hello"] = "bye";
-  test_cases[1].expected_headers["hello"] = "bye";
-  test_cases[2].expected_headers["hello"] = "bye";
-
-  test_cases[0].expected_headers["cookie"] = SpdyStringPiece("val1\0val2", 9);
-  test_cases[2].expected_headers["cookie"] = "val1,val2";
+    int extra_header_count;
+    const char* extra_headers[4];
+    size_t expected_header_count;
+    SpdyStringPiece expected_headers[8];
+  } test_cases[] = {
+      // No extra headers.
+      {0, {}, 2, {"status", "200", "hello", "bye"}},
+      // Comma-separated header value.
+      {1,
+       {"cookie", "val1, val2"},
+       3,
+       {"status", "200", "hello", "bye", "cookie", "val1, val2"}},
+      // Multiple headers are preserved: they are joined with \0 separator in
+      // SpdyHeaderBlock.AppendValueOrAddHeader(), then split up in
+      // HpackEncoder, then joined with \0 separator when
+      // HpackDecoderAdapter::ListenerAdapter::OnHeader() calls
+      // SpdyHeaderBlock.AppendValueOrAddHeader(), then split up again in
+      // HttpResponseHeaders.
+      {2,
+       {"content-encoding", "val1", "content-encoding", "val2"},
+       4,
+       {"status", "200", "hello", "bye", "content-encoding", "val1",
+        "content-encoding", "val2"}},
+      // Cookie header is not split up by HttpResponseHeaders.
+      {2,
+       {"cookie", "val1", "cookie", "val2"},
+       3,
+       {"status", "200", "hello", "bye", "cookie", "val1; val2"}}};
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
     SpdyTestUtil spdy_test_util;
@@ -3247,7 +3107,7 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
     MockWrite writes[] = {CreateMockWrite(req, 0)};
 
     SpdySerializedFrame resp(spdy_test_util.ConstructSpdyGetReply(
-        test_cases[i].extra_headers, test_cases[i].num_headers, 1));
+        test_cases[i].extra_headers, test_cases[i].extra_header_count, 1));
     SpdySerializedFrame body(spdy_test_util.ConstructSpdyDataFrame(1, true));
     MockRead reads[] = {
         CreateMockRead(resp, 1), CreateMockRead(body, 2),
@@ -3256,8 +3116,8 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
 
     SequencedSocketData data(reads, arraysize(reads), writes,
                              arraysize(writes));
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunToCompletion(&data);
     TransactionHelperResult out = helper.output();
 
@@ -3269,19 +3129,18 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
     EXPECT_TRUE(headers);
     size_t iter = 0;
     SpdyString name, value;
-    SpdyHeaderBlock header_block;
+    size_t expected_header_index = 0;
     while (headers->EnumerateHeaderLines(&iter, &name, &value)) {
-      auto value_it = header_block.find(name);
-      if (value_it == header_block.end() || value_it->second.empty()) {
-        header_block[name] = value;
-      } else {
-        SpdyString joint_value = value_it->second.as_string();
-        joint_value.append(1, '\0');
-        joint_value.append(value);
-        header_block[name] = joint_value;
-      }
+      ASSERT_LT(expected_header_index, test_cases[i].expected_header_count)
+          << i;
+      EXPECT_EQ(name, test_cases[i].expected_headers[2 * expected_header_index])
+          << i;
+      EXPECT_EQ(value,
+                test_cases[i].expected_headers[2 * expected_header_index + 1])
+          << i;
+      ++expected_header_index;
     }
-    EXPECT_EQ(test_cases[i].expected_headers, header_block);
+    EXPECT_EQ(expected_header_index, test_cases[i].expected_header_count) << i;
   }
 }
 
@@ -3299,26 +3158,32 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeadersVary) {
       {true,
        {1, 3},
        {{"cookie", "val1,val2", nullptr},
-        {spdy_util_.GetStatusKey(), "200", spdy_util_.GetPathKey(),
-         "/index.php", "vary", "cookie", nullptr}}},
+        {kHttp2StatusHeader, "200", kHttp2PathHeader, "/index.php", "vary",
+         "cookie", nullptr}}},
       {// Multiple vary fields.
        true,
        {2, 4},
        {{"friend", "barney", "enemy", "snaggletooth", nullptr},
-        {spdy_util_.GetStatusKey(), "200", spdy_util_.GetPathKey(),
-         "/index.php", "vary", "friend", "vary", "enemy", nullptr}}},
+        {kHttp2StatusHeader, "200", kHttp2PathHeader, "/index.php", "vary",
+         "friend", "vary", "enemy", nullptr}}},
       {// Test a '*' vary field.
-       false,
+       true,
        {1, 3},
        {{"cookie", "val1,val2", nullptr},
-        {spdy_util_.GetStatusKey(), "200", spdy_util_.GetPathKey(),
-         "/index.php", "vary", "*", nullptr}}},
+        {kHttp2StatusHeader, "200", kHttp2PathHeader, "/index.php", "vary", "*",
+         nullptr}}},
+      {// Test w/o a vary field.
+       false,
+       {1, 2},
+       {{"cookie", "val1,val2", nullptr},
+        {kHttp2StatusHeader, "200", kHttp2PathHeader, "/index.php", nullptr}}},
+
       {// Multiple comma-separated vary fields.
        true,
        {2, 3},
        {{"friend", "barney", "enemy", "snaggletooth", nullptr},
-        {spdy_util_.GetStatusKey(), "200", spdy_util_.GetPathKey(),
-         "/index.php", "vary", "friend,enemy", nullptr}}}};
+        {kHttp2StatusHeader, "200", kHttp2PathHeader, "/index.php", "vary",
+         "friend,enemy", nullptr}}}};
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
     SpdyTestUtil spdy_test_util;
@@ -3353,7 +3218,9 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeadersVary) {
     // Attach the headers to the request.
     int header_count = test_cases[i].num_headers[0];
 
-    HttpRequestInfo request = CreateGetRequest();
+    HttpRequestInfo request;
+    request.method = "GET";
+    request.url = GURL(kDefaultUrl);
     for (int ct = 0; ct < header_count; ct++) {
       const char* header_key = test_cases[i].extra_headers[0][ct * 2];
       const char* header_value = test_cases[i].extra_headers[0][ct * 2 + 1];
@@ -3362,8 +3229,10 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeadersVary) {
 
     SequencedSocketData data(reads, arraysize(reads), writes,
                              arraysize(writes));
-    NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+
+    NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY, log_,
+                                       nullptr);
+
     helper.RunToCompletion(&data);
     TransactionHelperResult out = helper.output();
 
@@ -3400,12 +3269,12 @@ TEST_F(SpdyNetworkTransactionTest, InvalidResponseHeaders) {
       // Response headers missing status header
       {
           3,
-          {spdy_util_.GetPathKey(), "/index.php", "cookie", "val1", "cookie",
-           "val2", nullptr},
+          {kHttp2PathHeader, "/index.php", "cookie", "val1", "cookie", "val2",
+           nullptr},
       },
       // Response headers missing version header
       {
-          1, {spdy_util_.GetPathKey(), "/index.php", "status", "200", nullptr},
+          1, {kHttp2PathHeader, "/index.php", "status", "200", nullptr},
       },
       // Response headers with no headers
       {
@@ -3436,8 +3305,8 @@ TEST_F(SpdyNetworkTransactionTest, InvalidResponseHeaders) {
 
     SequencedSocketData data(reads, arraysize(reads), writes,
                              arraysize(writes));
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunToCompletion(&data);
     TransactionHelperResult out = helper.output();
     EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -3465,8 +3334,7 @@ TEST_F(SpdyNetworkTransactionTest, CorruptFrameSessionError) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_COMPRESSION_ERROR));
@@ -3486,8 +3354,7 @@ TEST_F(SpdyNetworkTransactionTest, GoAwayOnDecompressionFailure) {
   MockRead reads[] = {CreateMockRead(resp, 1)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_COMPRESSION_ERROR));
@@ -3508,8 +3375,7 @@ TEST_F(SpdyNetworkTransactionTest, GoAwayOnFrameSizeError) {
   MockRead reads[] = {CreateMockRead(bad_window_update, 1)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_FRAME_SIZE_ERROR));
@@ -3532,8 +3398,7 @@ TEST_F(SpdyNetworkTransactionTest, WriteError) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   EXPECT_TRUE(helper.StartDefaultTest());
@@ -3563,8 +3428,7 @@ TEST_F(SpdyNetworkTransactionTest, PartialWrite) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes.get(), kChunks);
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -3591,8 +3455,9 @@ TEST_F(SpdyNetworkTransactionTest, NetLog) {
   BoundTestNetLog log;
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequestWithUserAgent(),
-                                     DEFAULT_PRIORITY, log.bound(), nullptr);
+  request_.extra_headers.SetHeader("User-Agent", "Chrome");
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log.bound(),
+                                     nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -3637,11 +3502,11 @@ TEST_F(SpdyNetworkTransactionTest, NetLog) {
   ASSERT_TRUE(entries[pos].params->GetList("headers", &header_list));
 
   std::vector<SpdyString> expected;
-  expected.push_back(SpdyString(spdy_util_.GetHostKey()) + ": www.example.org");
-  expected.push_back(SpdyString(spdy_util_.GetPathKey()) + ": /");
-  expected.push_back(SpdyString(spdy_util_.GetSchemeKey()) + ": " +
+  expected.push_back(SpdyString(kHttp2AuthorityHeader) + ": www.example.org");
+  expected.push_back(SpdyString(kHttp2PathHeader) + ": /");
+  expected.push_back(SpdyString(kHttp2SchemeHeader) + ": " +
                      default_url_.scheme());
-  expected.push_back(SpdyString(spdy_util_.GetMethodKey()) + ": GET");
+  expected.push_back(SpdyString(kHttp2MethodHeader) + ": GET");
   expected.push_back("user-agent: Chrome");
   EXPECT_EQ(expected.size(), header_list->GetSize());
   for (std::vector<SpdyString>::const_iterator it = expected.begin();
@@ -3686,13 +3551,11 @@ TEST_F(SpdyNetworkTransactionTest, BufferFull) {
 
   TestCompletionCallback callback;
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   TransactionHelperResult out = helper.output();
@@ -3764,15 +3627,13 @@ TEST_F(SpdyNetworkTransactionTest, Buffering) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   TransactionHelperResult out = helper.output();
@@ -3845,15 +3706,13 @@ TEST_F(SpdyNetworkTransactionTest, BufferedAll) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   TransactionHelperResult out = helper.output();
@@ -3922,16 +3781,14 @@ TEST_F(SpdyNetworkTransactionTest, BufferedClosed) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
 
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   TransactionHelperResult out = helper.output();
@@ -4001,15 +3858,13 @@ TEST_F(SpdyNetworkTransactionTest, BufferedCancelled) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
   TestCompletionCallback callback;
 
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   TransactionHelperResult out = helper.output();
@@ -4060,8 +3915,7 @@ TEST_F(SpdyNetworkTransactionTest, FailOnGoAway) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_ABORTED));
@@ -4071,8 +3925,7 @@ TEST_F(SpdyNetworkTransactionTest, FailOnGoAway) {
 // with Last-Stream-ID lower than the stream id corresponding to the request
 // and with error code NO_ERROR.
 TEST_F(SpdyNetworkTransactionTest, RetryOnGoAway) {
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   // First connection.
   SpdySerializedFrame req(
@@ -4128,8 +3981,7 @@ TEST_F(SpdyNetworkTransactionTest, GracefulGoaway) {
 
   // Run first transaction.
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.RunDefaultTest();
@@ -4144,11 +3996,9 @@ TEST_F(SpdyNetworkTransactionTest, GracefulGoaway) {
   SpdySessionPool* spdy_session_pool = helper.session()->spdy_session_pool();
   SpdySessionKey key(host_port_pair_, ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED);
-  NetLogWithSource log;
   base::WeakPtr<SpdySession> spdy_session =
       spdy_session_pool->FindAvailableSession(
-          key, GURL(),
-          /* enable_ip_based_pooling = */ true, log);
+          key, /* enable_ip_based_pooling = */ true, log_);
   EXPECT_TRUE(spdy_session);
 
   // Start second transaction.
@@ -4157,7 +4007,7 @@ TEST_F(SpdyNetworkTransactionTest, GracefulGoaway) {
   HttpRequestInfo request2;
   request2.method = "GET";
   request2.url = GURL("https://www.example.org/foo");
-  int rv = trans2.Start(&request2, callback.callback(), log);
+  int rv = trans2.Start(&request2, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -4179,8 +4029,7 @@ TEST_F(SpdyNetworkTransactionTest, GracefulGoaway) {
 
   // Graceful GOAWAY was received, SpdySession should be unavailable.
   spdy_session = spdy_session_pool->FindAvailableSession(
-      key, GURL(),
-      /* enable_ip_based_pooling = */ true, log);
+      key, /* enable_ip_based_pooling = */ true, log_);
   EXPECT_FALSE(spdy_session);
 
   helper.VerifyDataConsumed();
@@ -4198,8 +4047,7 @@ TEST_F(SpdyNetworkTransactionTest, CloseWithActiveStream) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.StartDefaultTest();
@@ -4216,25 +4064,44 @@ TEST_F(SpdyNetworkTransactionTest, CloseWithActiveStream) {
   helper.VerifyDataConsumed();
 }
 
+TEST_F(SpdyNetworkTransactionTest, GoAwayImmediately) {
+  SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(1));
+  MockRead reads[] = {CreateMockRead(goaway, 0, SYNCHRONOUS)};
+  SequencedSocketData data(reads, arraysize(reads), nullptr, 0);
+
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+  helper.RunPreTestSetup();
+  helper.AddData(&data);
+  helper.StartDefaultTest();
+  EXPECT_THAT(helper.output().rv, IsError(ERR_IO_PENDING));
+
+  helper.WaitForCallbackToComplete();
+  EXPECT_THAT(helper.output().rv, IsError(ERR_CONNECTION_CLOSED));
+
+  const HttpResponseInfo* response = helper.trans()->GetResponseInfo();
+  EXPECT_FALSE(response->headers);
+  EXPECT_TRUE(response->was_fetched_via_spdy);
+
+  // Verify that we consumed all test data.
+  helper.VerifyDataConsumed();
+}
+
 // Retry with HTTP/1.1 when receiving HTTP_1_1_REQUIRED.  Note that no actual
 // protocol negotiation happens, instead this test forces protocols for both
 // sockets.
 TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredRetry) {
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = default_url_;
+  request_.method = "GET";
   // Do not force SPDY so that second socket can negotiate HTTP/1.1.
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   // First socket: HTTP/2 request rejected with HTTP_1_1_REQUIRED.
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   SpdySerializedFrame req(
       spdy_util_.ConstructSpdyHeaders(1, std::move(headers), LOWEST, true));
   MockWrite writes0[] = {CreateMockWrite(req, 0)};
-  SpdySerializedFrame go_away(spdy_util_.ConstructSpdyGoAway(
-      0, ERROR_CODE_HTTP_1_1_REQUIRED, "Try again using HTTP/1.1 please."));
-  MockRead reads0[] = {CreateMockRead(go_away, 1)};
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_HTTP_1_1_REQUIRED));
+  MockRead reads0[] = {CreateMockRead(rst, 1)};
   SequencedSocketData data0(reads0, arraysize(reads0), writes0,
                             arraysize(writes0));
 
@@ -4283,7 +4150,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredRetry) {
   EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
             response->connection_info);
   EXPECT_TRUE(response->was_alpn_negotiated);
-  EXPECT_TRUE(request.url.SchemeIs("https"));
+  EXPECT_TRUE(request_.url.SchemeIs("https"));
   EXPECT_EQ("127.0.0.1", response->socket_address.host());
   EXPECT_EQ(443, response->socket_address.port());
   SpdyString response_data;
@@ -4295,22 +4162,20 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredRetry) {
 // proxy.  Note that no actual protocol negotiation happens, instead this test
 // forces protocols for both sockets.
 TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = default_url_;
+  request_.method = "GET";
   auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("HTTPS myproxy:70"));
   // Do not force SPDY so that second socket can negotiate HTTP/1.1.
-  NormalSpdyTransactionHelper helper(
-      request, DEFAULT_PRIORITY, NetLogWithSource(), std::move(session_deps));
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                     std::move(session_deps));
 
   // First socket: HTTP/2 CONNECT rejected with HTTP_1_1_REQUIRED.
   SpdySerializedFrame req(spdy_util_.ConstructSpdyConnect(
       nullptr, 0, 1, LOWEST, HostPortPair("www.example.org", 443)));
   MockWrite writes0[] = {CreateMockWrite(req, 0)};
-  SpdySerializedFrame go_away(spdy_util_.ConstructSpdyGoAway(
-      0, ERROR_CODE_HTTP_1_1_REQUIRED, "Try again using HTTP/1.1 please."));
-  MockRead reads0[] = {CreateMockRead(go_away, 1)};
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_HTTP_1_1_REQUIRED));
+  MockRead reads0[] = {CreateMockRead(rst, 1)};
   SequencedSocketData data0(reads0, arraysize(reads0), writes0,
                             arraysize(writes0));
 
@@ -4375,7 +4240,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
   EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
             response->connection_info);
   EXPECT_FALSE(response->was_alpn_negotiated);
-  EXPECT_TRUE(request.url.SchemeIs("https"));
+  EXPECT_TRUE(request_.url.SchemeIs("https"));
   EXPECT_EQ("127.0.0.1", response->socket_address.host());
   EXPECT_EQ(70, response->socket_address.port());
   SpdyString response_data;
@@ -4387,8 +4252,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
 TEST_F(SpdyNetworkTransactionTest, ProxyConnect) {
   auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("PROXY myproxy:70"));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(),
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
                                      std::move(session_deps));
   helper.RunPreTestSetup();
   HttpNetworkTransaction* trans = helper.trans();
@@ -4418,8 +4282,7 @@ TEST_F(SpdyNetworkTransactionTest, ProxyConnect) {
   helper.AddData(data.get());
   TestCompletionCallback callback;
 
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   rv = callback.WaitForResult();
@@ -4448,8 +4311,7 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
       ProxyService::CreateFixedFromPacResult("DIRECT; PROXY myproxy:70"));
   // When setting up the first transaction, we store the SpdySessionPool so that
   // we can use the same pool in the second transaction.
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(),
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
                                      std::move(session_deps));
 
   SpdySessionPool* spdy_session_pool = helper.session()->spdy_session_pool();
@@ -4474,8 +4336,7 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
 
   TestCompletionCallback callback;
   TransactionHelperResult out;
-  out.rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  out.rv = trans->Start(&request_, callback.callback(), log_);
 
   EXPECT_EQ(out.rv, ERR_IO_PENDING);
   out.rv = callback.WaitForResult();
@@ -4529,22 +4390,19 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
       reads2, arraysize(reads2), writes2, arraysize(writes2));
 
   // Create another request to www.example.org, but this time through a proxy.
-  HttpRequestInfo request_proxy;
-  request_proxy.method = "GET";
-  request_proxy.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
-  request_proxy.load_flags = 0;
+  request_.method = "GET";
+  request_.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
   auto session_deps_proxy = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("PROXY myproxy:70"));
-  NormalSpdyTransactionHelper helper_proxy(request_proxy, DEFAULT_PRIORITY,
-                                           NetLogWithSource(),
+  NormalSpdyTransactionHelper helper_proxy(request_, DEFAULT_PRIORITY, log_,
                                            std::move(session_deps_proxy));
+
   helper_proxy.RunPreTestSetup();
   helper_proxy.AddData(data_proxy.get());
 
   HttpNetworkTransaction* trans_proxy = helper_proxy.trans();
   TestCompletionCallback callback_proxy;
-  int rv = trans_proxy->Start(&request_proxy, callback_proxy.callback(),
-                              NetLogWithSource());
+  int rv = trans_proxy->Start(&request_, callback_proxy.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback_proxy.WaitForResult();
   EXPECT_EQ(0, rv);
@@ -4605,8 +4463,8 @@ TEST_F(SpdyNetworkTransactionTest, VerifyRetryOnConnectionReset) {
     SequencedSocketData data2(reads2, arraysize(reads2), writes2,
                               arraysize(writes2));
 
-    NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.AddData(&data1);
     helper.AddData(&data2);
     helper.RunPreTestSetup();
@@ -4615,8 +4473,7 @@ TEST_F(SpdyNetworkTransactionTest, VerifyRetryOnConnectionReset) {
       HttpNetworkTransaction trans(DEFAULT_PRIORITY, helper.session());
 
       TestCompletionCallback callback;
-      int rv = trans.Start(&helper.request(), callback.callback(),
-                           NetLogWithSource());
+      int rv = trans.Start(&request_, callback.callback(), log_);
       EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
       // On the second transaction, we trigger the RST.
       if (i == 1) {
@@ -4693,9 +4550,7 @@ TEST_F(SpdyNetworkTransactionTest, SpdyBasicAuth) {
 
   SequencedSocketData data(spdy_reads, arraysize(spdy_reads), spdy_writes,
                            arraysize(spdy_writes));
-  HttpRequestInfo request(CreateGetRequest());
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   helper.RunPreTestSetup();
   helper.AddData(&data);
@@ -4756,7 +4611,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushWithHeaders) {
       std::move(initial_headers), 2, 1));
 
   SpdyHeaderBlock late_headers;
-  late_headers[spdy_util_.GetStatusKey()] = "200";
+  late_headers[kHttp2StatusHeader] = "200";
   late_headers["hello"] = "bye";
   SpdySerializedFrame stream2_headers(spdy_util_.ConstructSpdyResponseHeaders(
       2, std::move(late_headers), false));
@@ -4815,7 +4670,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushClaimBeforeHeaders) {
       std::move(initial_headers), 2, 1));
   SpdySerializedFrame stream1_body(spdy_util_.ConstructSpdyDataFrame(1, true));
   SpdyHeaderBlock late_headers;
-  late_headers[spdy_util_.GetStatusKey()] = "200";
+  late_headers[kHttp2StatusHeader] = "200";
   late_headers["hello"] = "bye";
   SpdySerializedFrame stream2_headers(spdy_util_.ConstructSpdyResponseHeaders(
       2, std::move(late_headers), false));
@@ -4834,8 +4689,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushClaimBeforeHeaders) {
   SpdyString expected_push_result("pushed");
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.AddData(&data);
   helper.RunPreTestSetup();
 
@@ -4843,8 +4697,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushClaimBeforeHeaders) {
 
   // Start the transaction.
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   // Run until we've received the primary HEADERS, the pushed HEADERS,
   // and the body of the primary stream, but before we've received the HEADERS
@@ -4855,8 +4708,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushClaimBeforeHeaders) {
   // Request the pushed path.  At this point, we've received the push, but the
   // headers are not yet complete.
   HttpNetworkTransaction trans2(DEFAULT_PRIORITY, helper.session());
-  rv = trans2.Start(&CreateGetPushRequest(), callback.callback(),
-                    NetLogWithSource());
+  HttpRequestInfo request = CreateGetPushRequest();
+  rv = trans2.Start(&request, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   data.Resume();
   data.RunUntilPaused();
@@ -4923,8 +4776,7 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeadersTwice) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -4958,8 +4810,7 @@ TEST_F(SpdyNetworkTransactionTest, SyncReplyDataAfterTrailers) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -5024,10 +4875,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushCrossOriginCorrectness) {
     SequencedSocketData data(reads, arraysize(reads), writes,
                              arraysize(writes));
 
-    HttpRequestInfo request;
-    request.method = "GET";
-    request.url = GURL(url_to_fetch);
-    request.load_flags = 0;
+    request_.url = GURL(url_to_fetch);
 
     // Enable cross-origin push. Since we are not using a proxy, this should
     // not actually enable cross-origin SPDY push.
@@ -5036,8 +4884,9 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushCrossOriginCorrectness) {
     proxy_delegate->set_trusted_spdy_proxy(net::ProxyServer::FromURI(
         "https://123.45.67.89:443", net::ProxyServer::SCHEME_HTTP));
     session_deps->proxy_delegate = std::move(proxy_delegate);
-    NormalSpdyTransactionHelper helper(
-        request, DEFAULT_PRIORITY, NetLogWithSource(), std::move(session_deps));
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       std::move(session_deps));
+
     helper.RunPreTestSetup();
     helper.AddData(&data);
 
@@ -5046,7 +4895,7 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushCrossOriginCorrectness) {
     // Start the transaction with basic parameters.
     TestCompletionCallback callback;
 
-    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
+    int rv = trans->Start(&request_, callback.callback(), log_);
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
     rv = callback.WaitForResult();
 
@@ -5105,19 +4954,15 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOrigin) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = GURL(url_to_fetch);
-  request.load_flags = 0;
+  request_.url = GURL(url_to_fetch);
 
-  NetLogWithSource log;
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY, log, nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans0 = helper.trans();
   TestCompletionCallback callback0;
-  int rv = trans0->Start(&request, callback0.callback(), log);
+  int rv = trans0->Start(&request_, callback0.callback(), log_);
   rv = callback0.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
@@ -5126,10 +4971,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOrigin) {
                      PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> spdy_session =
       spdy_session_pool->FindAvailableSession(
-          key, GURL(),
-          /* enable_ip_based_pooling = */ true, log);
+          key, /* enable_ip_based_pooling = */ true, log_);
 
-  EXPECT_FALSE(spdy_session->unclaimed_pushed_streams_.empty());
   EXPECT_EQ(1u, spdy_session->unclaimed_pushed_streams_.size());
   EXPECT_EQ(1u,
             spdy_session->unclaimed_pushed_streams_.count(GURL(url_to_push)));
@@ -5138,14 +4981,12 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOrigin) {
   HttpRequestInfo push_request;
   push_request.method = "GET";
   push_request.url = GURL(url_to_push);
-  push_request.load_flags = 0;
   TestCompletionCallback callback1;
-  rv = trans1.Start(&push_request, callback1.callback(), log);
+  rv = trans1.Start(&push_request, callback1.callback(), log_);
   rv = callback1.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
   EXPECT_TRUE(spdy_session->unclaimed_pushed_streams_.empty());
-  EXPECT_EQ(0u, spdy_session->unclaimed_pushed_streams_.size());
 
   HttpResponseInfo response = *trans0->GetResponseInfo();
   EXPECT_TRUE(response.headers);
@@ -5226,31 +5067,29 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
                             arraysize(writes1));
 
   // Request |url_to_fetch0| to open connection to mail.example.org.
-  HttpRequestInfo request0;
-  request0.method = "GET";
-  request0.url = GURL(url_to_fetch0);
-  request0.load_flags = 0;
+  request_.url = GURL(url_to_fetch0);
 
-  NetLogWithSource log;
-  NormalSpdyTransactionHelper helper(request0, DEFAULT_PRIORITY, log, nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
 
   // "spdy_pooling.pem" is valid for www.example.org, but not for
   // docs.example.org.
   auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-  ssl_provider0->cert =
+  ssl_provider0->ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl_provider0->ssl_info.cert);
   helper.AddDataWithSSLSocketDataProvider(&data0, std::move(ssl_provider0));
 
   // "wildcard.pem" is valid for both www.example.org and docs.example.org.
   auto ssl_provider1 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-  ssl_provider1->cert =
+  ssl_provider1->ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl_provider1->ssl_info.cert);
   helper.AddDataWithSSLSocketDataProvider(&data1, std::move(ssl_provider1));
 
   HttpNetworkTransaction* trans0 = helper.trans();
   TestCompletionCallback callback0;
-  int rv = trans0->Start(&request0, callback0.callback(), log);
+  int rv = trans0->Start(&request_, callback0.callback(), log_);
   rv = callback0.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
@@ -5261,9 +5100,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
   HttpRequestInfo request1;
   request1.method = "GET";
   request1.url = GURL(url_to_fetch1);
-  request1.load_flags = 0;
   TestCompletionCallback callback1;
-  rv = trans1.Start(&request1, callback1.callback(), log);
+  rv = trans1.Start(&request1, callback1.callback(), log_);
   rv = callback1.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
@@ -5273,21 +5111,17 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
                       PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> spdy_session0 =
       spdy_session_pool->FindAvailableSession(
-          key0, GURL(),
-          /* enable_ip_based_pooling = */ true, log);
+          key0, /* enable_ip_based_pooling = */ true, log_);
 
   EXPECT_TRUE(spdy_session0->unclaimed_pushed_streams_.empty());
-  EXPECT_EQ(0u, spdy_session0->unclaimed_pushed_streams_.size());
 
   HostPortPair host_port_pair1("docs.example.org", 443);
   SpdySessionKey key1(host_port_pair1, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED);
   base::WeakPtr<SpdySession> spdy_session1 =
       spdy_session_pool->FindAvailableSession(
-          key1, GURL(),
-          /* enable_ip_based_pooling = */ true, log);
+          key1, /* enable_ip_based_pooling = */ true, log_);
 
-  EXPECT_FALSE(spdy_session1->unclaimed_pushed_streams_.empty());
   EXPECT_EQ(1u, spdy_session1->unclaimed_pushed_streams_.size());
   EXPECT_EQ(1u,
             spdy_session1->unclaimed_pushed_streams_.count(GURL(url_to_push)));
@@ -5297,17 +5131,13 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
   HttpRequestInfo push_request;
   push_request.method = "GET";
   push_request.url = GURL(url_to_push);
-  push_request.load_flags = 0;
   TestCompletionCallback callback2;
-  rv = trans2.Start(&push_request, callback2.callback(), log);
+  rv = trans2.Start(&push_request, callback2.callback(), log_);
   rv = callback2.GetResult(rv);
   EXPECT_THAT(rv, IsOk());
 
   EXPECT_TRUE(spdy_session0->unclaimed_pushed_streams_.empty());
-  EXPECT_EQ(0u, spdy_session0->unclaimed_pushed_streams_.size());
-
   EXPECT_TRUE(spdy_session1->unclaimed_pushed_streams_.empty());
-  EXPECT_EQ(0u, spdy_session1->unclaimed_pushed_streams_.size());
 
   HttpResponseInfo response0 = *trans0->GetResponseInfo();
   EXPECT_TRUE(response0.headers);
@@ -5369,13 +5199,9 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushInvalidCrossOrigin) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = GURL(url_to_fetch);
-  request.load_flags = 0;
+  request_.url = GURL(url_to_fetch);
 
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_EQ("HTTP/1.1 200", out.status_line);
@@ -5404,8 +5230,7 @@ TEST_F(SpdyNetworkTransactionTest, RetryAfterRefused) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   helper.RunPreTestSetup();
   helper.AddData(&data);
@@ -5414,8 +5239,7 @@ TEST_F(SpdyNetworkTransactionTest, RetryAfterRefused) {
 
   // Start the transaction with basic parameters.
   TestCompletionCallback callback;
-  int rv = trans->Start(&CreateGetRequest(), callback.callback(),
-                        NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -5476,16 +5300,14 @@ TEST_F(SpdyNetworkTransactionTest, OutOfOrderHeaders) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), LOWEST,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, LOWEST, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   // Start the first transaction to set up the SpdySession
   HttpNetworkTransaction* trans = helper.trans();
   TestCompletionCallback callback;
-  HttpRequestInfo info1 = CreateGetRequest();
-  int rv = trans->Start(&info1, callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   // Run the message loop, but do not allow the write to complete.
@@ -5494,17 +5316,15 @@ TEST_F(SpdyNetworkTransactionTest, OutOfOrderHeaders) {
   base::RunLoop().RunUntilIdle();
 
   // Now, start both new transactions
-  HttpRequestInfo info2 = CreateGetRequest();
   TestCompletionCallback callback2;
   HttpNetworkTransaction trans2(MEDIUM, helper.session());
-  rv = trans2.Start(&info2, callback2.callback(), NetLogWithSource());
+  rv = trans2.Start(&request_, callback2.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   base::RunLoop().RunUntilIdle();
 
-  HttpRequestInfo info3 = CreateGetRequest();
   TestCompletionCallback callback3;
   HttpNetworkTransaction trans3(HIGHEST, helper.session());
-  rv = trans3.Start(&info3, callback3.callback(), NetLogWithSource());
+  rv = trans3.Start(&request_, callback3.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   base::RunLoop().RunUntilIdle();
 
@@ -5598,22 +5418,18 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateReceived) {
   }
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &upload_data_stream;
+  // Setup the request.
+  request_.method = "POST";
+  request_.upload_data_stream = &upload_data_stream;
 
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.AddData(&data);
   helper.RunPreTestSetup();
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
 
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
@@ -5729,8 +5545,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateSent) {
   session_deps->http2_settings[SETTINGS_INITIAL_WINDOW_SIZE] =
       stream_max_recv_window_size;
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(),
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
                                      std::move(session_deps));
   helper.AddData(&data);
   helper.RunPreTestSetup();
@@ -5741,8 +5556,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateSent) {
 
   HttpNetworkTransaction* trans = helper.trans();
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
 
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
@@ -5818,27 +5632,54 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateOverflow) {
   }
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
-  // Setup the request
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &upload_data_stream;
+  // Setup the request.
+  request_.method = "POST";
+  request_.upload_data_stream = &upload_data_stream;
 
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
 
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(callback.have_result());
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_SPDY_PROTOCOL_ERROR));
   helper.VerifyDataConsumed();
+}
+
+// Regression test for https://crbug.com/732019.
+// RFC7540 Section 6.9.2: A SETTINGS_INITIAL_WINDOW_SIZE change that causes any
+// stream flow control window to overflow MUST be treated as a connection error.
+TEST_F(SpdyNetworkTransactionTest, InitialWindowSizeOverflow) {
+  SpdySerializedFrame window_update(
+      spdy_util_.ConstructSpdyWindowUpdate(1, 0x60000000));
+  SettingsMap settings;
+  settings[SETTINGS_INITIAL_WINDOW_SIZE] = 0x60000000;
+  SpdySerializedFrame settings_frame(
+      spdy_util_.ConstructSpdySettings(settings));
+  MockRead reads[] = {CreateMockRead(window_update, 1),
+                      CreateMockRead(settings_frame, 2)};
+
+  SpdySerializedFrame req(
+      spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST, true));
+  SpdySerializedFrame settings_ack(spdy_util_.ConstructSpdySettingsAck());
+  SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
+      0, ERROR_CODE_FLOW_CONTROL_ERROR,
+      "New SETTINGS_INITIAL_WINDOW_SIZE value overflows flow control window of "
+      "stream 1."));
+  MockWrite writes[] = {CreateMockWrite(req, 0),
+                        CreateMockWrite(settings_ack, 3),
+                        CreateMockWrite(goaway, 4)};
+
+  SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+  helper.RunToCompletion(&data);
+  TransactionHelperResult out = helper.output();
+  EXPECT_THAT(out.rv, IsError(ERR_SPDY_FLOW_CONTROL_ERROR));
 }
 
 // Test that after hitting a send window size of 0, the write process
@@ -5958,20 +5799,17 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlStallResume) {
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &upload_data_stream;
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  request_.method = "POST";
+  request_.upload_data_stream = &upload_data_stream;
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+
   helper.AddData(&data);
   helper.RunPreTestSetup();
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   base::RunLoop().RunUntilIdle();  // Write as much as we can.
@@ -6117,20 +5955,17 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlStallResumeAfterSettings) {
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &upload_data_stream;
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  request_.method = "POST";
+  request_.upload_data_stream = &upload_data_stream;
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   data.RunUntilPaused();  // Write as much as we can.
@@ -6281,20 +6116,17 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlNegativeSendWindowSize) {
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
-  HttpRequestInfo request;
-  request.method = "POST";
-  request.url = default_url_;
-  request.upload_data_stream = &upload_data_stream;
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  request_.method = "POST";
+  request_.upload_data_stream = &upload_data_stream;
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+
   helper.RunPreTestSetup();
   helper.AddData(&data);
 
   HttpNetworkTransaction* trans = helper.trans();
 
   TestCompletionCallback callback;
-  int rv =
-      trans->Start(&helper.request(), callback.callback(), NetLogWithSource());
+  int rv = trans->Start(&request_, callback.callback(), log_);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   data.RunUntilPaused();  // Write as much as we can.
@@ -6341,8 +6173,7 @@ TEST_F(SpdyNetworkTransactionTest, GoAwayOnOddPushStreamId) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -6374,8 +6205,7 @@ TEST_F(SpdyNetworkTransactionTest,
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -6387,10 +6217,7 @@ TEST_F(SpdyNetworkTransactionTest, LargeRequest) {
   const SpdyString kKey("foo");
   const SpdyString kValue(1 << 15, 'z');
 
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = default_url_;
-  request.extra_headers.SetHeader(kKey, kValue);
+  request_.extra_headers.SetHeader(kKey, kValue);
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   headers[kKey] = kValue;
@@ -6408,8 +6235,7 @@ TEST_F(SpdyNetworkTransactionTest, LargeRequest) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
 
@@ -6442,11 +6268,7 @@ TEST_F(SpdyNetworkTransactionTest, LargeResponseHeader) {
       MockRead(ASYNC, 0, 3)  // EOF
   };
 
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = default_url_;
-  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
   helper.RunToCompletion(&data);
@@ -6473,8 +6295,7 @@ TEST_F(SpdyNetworkTransactionTest, CRLFInHeaderValue) {
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
 
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
 
@@ -6492,9 +6313,8 @@ TEST_F(SpdyNetworkTransactionTest, RstStreamNoError) {
   MockRead reads[] = {CreateMockRead(rst, 1), MockRead(ASYNC, 0, 2)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -6515,9 +6335,8 @@ TEST_F(SpdyNetworkTransactionTest, RstStreamNoErrorAfterResponse) {
                       CreateMockRead(rst, 3), MockRead(ASYNC, 0, 4)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -6531,7 +6350,7 @@ TEST_F(SpdyNetworkTransactionTest, 100Continue) {
   MockWrite writes[] = {CreateMockWrite(req, 0)};
 
   SpdyHeaderBlock informational_headers;
-  informational_headers[spdy_util_.GetStatusKey()] = "100";
+  informational_headers[kHttp2StatusHeader] = "100";
   SpdySerializedFrame informational_response(
       spdy_util_.ConstructSpdyReply(1, std::move(informational_headers)));
   SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
@@ -6542,8 +6361,7 @@ TEST_F(SpdyNetworkTransactionTest, 100Continue) {
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -6567,9 +6385,8 @@ TEST_F(SpdyNetworkTransactionTest, ResponseBeforePostDataSent) {
                       MockRead(ASYNC, 0, 3)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   helper.RunPreTestSetup();
   helper.AddData(&data);
@@ -6593,9 +6410,8 @@ TEST_F(SpdyNetworkTransactionTest, ResponseAndRstStreamBeforePostDataSent) {
                       CreateMockRead(rst, 3), MockRead(ASYNC, 0, 4)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
-                                     DEFAULT_PRIORITY, NetLogWithSource(),
-                                     nullptr);
+  UseChunkedPostRequest();
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
 
   helper.RunToCompletion(&data);
 
@@ -6642,8 +6458,7 @@ TEST_F(SpdyNetworkTransactionTest, IgnoreUnsupportedOriginFrame) {
                       CreateMockRead(body, 4), MockRead(ASYNC, 0, 5)};
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
@@ -6661,11 +6476,8 @@ class SpdyNetworkTransactionTLSUsageCheckTest
     MockWrite writes[] = {CreateMockWrite(goaway)};
 
     StaticSocketDataProvider data(nullptr, 0, writes, arraysize(writes));
-    HttpRequestInfo request;
-    request.method = "GET";
-    request.url = default_url_;
-    NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY,
-                                       NetLogWithSource(), nullptr);
+    NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                       nullptr);
     helper.RunToCompletionWithSSLData(&data, std::move(ssl_provider));
     TransactionHelperResult out = helper.output();
     EXPECT_THAT(out.rv, IsError(ERR_SPDY_INADEQUATE_TRANSPORT_SECURITY));
@@ -6675,7 +6487,7 @@ class SpdyNetworkTransactionTLSUsageCheckTest
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
-                                &ssl_provider->connection_status);
+                                &ssl_provider->ssl_info.connection_status);
 
   RunTLSUsageCheckTest(std::move(ssl_provider));
 }
@@ -6683,7 +6495,8 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Set to TLS_RSA_WITH_NULL_MD5
-  SSLConnectionStatusSetCipherSuite(0x1, &ssl_provider->connection_status);
+  SSLConnectionStatusSetCipherSuite(0x1,
+                                    &ssl_provider->ssl_info.connection_status);
 
   RunTLSUsageCheckTest(std::move(ssl_provider));
 }
@@ -6695,27 +6508,25 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
 TEST_F(SpdyNetworkTransactionTest, InsecureUrlCreatesSecureSpdySession) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
-                                &ssl_provider->connection_status);
+                                &ssl_provider->ssl_info.connection_status);
 
   SpdySerializedFrame goaway(
       spdy_util_.ConstructSpdyGoAway(0, ERROR_CODE_INADEQUATE_SECURITY, ""));
   MockWrite writes[] = {CreateMockWrite(goaway)};
   StaticSocketDataProvider data(nullptr, 0, writes, arraysize(writes));
 
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = GURL("http://www.example.org/");
+  request_.url = GURL("http://www.example.org/");
 
   // Need secure proxy so that insecure URL can use HTTP/2.
   auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("HTTPS myproxy:70"));
-  NormalSpdyTransactionHelper helper(
-      request, DEFAULT_PRIORITY, NetLogWithSource(), std::move(session_deps));
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                     std::move(session_deps));
 
   helper.RunToCompletionWithSSLData(&data, std::move(ssl_provider));
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_INADEQUATE_TRANSPORT_SECURITY));
-};
+}
 
 TEST_F(SpdyNetworkTransactionTest, RequestHeadersCallback) {
   SpdySerializedFrame req(
@@ -6732,9 +6543,7 @@ TEST_F(SpdyNetworkTransactionTest, RequestHeadersCallback) {
   HttpRawRequestHeaders raw_headers;
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
-  HttpRequestInfo request_info(CreateGetRequest());
-  NormalSpdyTransactionHelper helper(request_info, DEFAULT_PRIORITY,
-                                     NetLogWithSource(), nullptr);
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
   helper.trans()->SetRequestHeadersCallback(base::Bind(

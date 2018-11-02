@@ -44,7 +44,7 @@ base::FilePath::StringType FindRemovableStorageLocationById(
 
 void FilterAttachedDevicesOnBackgroundSequence(
     MediaStorageUtil::DeviceIdSet* devices) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   MediaStorageUtil::DeviceIdSet missing_devices;
 
   for (MediaStorageUtil::DeviceIdSet::const_iterator it = devices->begin();
@@ -57,9 +57,7 @@ void FilterAttachedDevicesOnBackgroundSequence(
       continue;
     }
 
-    if (type == StorageInfo::FIXED_MASS_STORAGE ||
-        type == StorageInfo::ITUNES ||
-        type == StorageInfo::PICASA) {
+    if (type == StorageInfo::FIXED_MASS_STORAGE) {
       if (!base::PathExists(base::FilePath::FromUTF8Unsafe(unique_id)))
         missing_devices.insert(*it);
       continue;
@@ -81,7 +79,7 @@ void FilterAttachedDevicesOnBackgroundSequence(
 
 // static
 bool MediaStorageUtil::HasDcim(const base::FilePath& mount_point) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   base::FilePath::StringType dcim_dir(kDCIMDirectoryName);
   if (!base::DirectoryExists(mount_point.Append(dcim_dir))) {
     // Check for lowercase 'dcim' as well.
@@ -97,7 +95,7 @@ bool MediaStorageUtil::HasDcim(const base::FilePath& mount_point) {
 bool MediaStorageUtil::CanCreateFileSystem(const std::string& device_id,
                                            const base::FilePath& path) {
   StorageInfo::Type type;
-  if (!StorageInfo::CrackDeviceId(device_id, &type, NULL))
+  if (!StorageInfo::CrackDeviceId(device_id, &type, nullptr))
     return false;
 
   if (type == StorageInfo::MAC_IMAGE_CAPTURE)
@@ -174,9 +172,7 @@ base::FilePath MediaStorageUtil::FindDevicePathById(
   if (!StorageInfo::CrackDeviceId(device_id, &type, &unique_id))
     return base::FilePath();
 
-  if (type == StorageInfo::FIXED_MASS_STORAGE ||
-      type == StorageInfo::ITUNES ||
-      type == StorageInfo::PICASA) {
+  if (type == StorageInfo::FIXED_MASS_STORAGE) {
     // For this type, the unique_id is the path.
     return base::FilePath::FromUTF8Unsafe(unique_id);
   }

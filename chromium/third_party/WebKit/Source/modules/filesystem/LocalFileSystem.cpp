@@ -33,7 +33,6 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/FileError.h"
 #include "core/frame/LocalFrame.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -42,6 +41,7 @@
 #include "platform/ContentSettingCallbacks.h"
 #include "platform/wtf/Functional.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebFileSystem.h"
 
 namespace blink {
@@ -65,7 +65,7 @@ class CallbackWrapper final
     return std::move(callbacks_);
   }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  private:
   std::unique_ptr<AsyncFileSystemCallbacks> callbacks_;
@@ -117,10 +117,10 @@ void LocalFileSystem::RequestFileSystemAccessInternal(ExecutionContext* context,
                                                       WTF::Closure denied) {
   if (!context->IsDocument()) {
     if (!Client().RequestFileSystemAccessSync(context)) {
-      denied();
+      std::move(denied).Run();
       return;
     }
-    allowed();
+    std::move(allowed).Run();
     return;
   }
   Client().RequestFileSystemAccessAsync(
@@ -130,7 +130,7 @@ void LocalFileSystem::RequestFileSystemAccessInternal(ExecutionContext* context,
 
 void LocalFileSystem::FileSystemNotAvailable(ExecutionContext* context,
                                              CallbackWrapper* callbacks) {
-  TaskRunnerHelper::Get(TaskType::kFileReading, context)
+  context->GetTaskRunner(TaskType::kFileReading)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&ReportFailure, WTF::Passed(callbacks->Release()),
                            FileError::kAbortErr));
@@ -138,7 +138,7 @@ void LocalFileSystem::FileSystemNotAvailable(ExecutionContext* context,
 
 void LocalFileSystem::FileSystemNotAllowedInternal(ExecutionContext* context,
                                                    CallbackWrapper* callbacks) {
-  TaskRunnerHelper::Get(TaskType::kFileReading, context)
+  context->GetTaskRunner(TaskType::kFileReading)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&ReportFailure, WTF::Passed(callbacks->Release()),
                            FileError::kAbortErr));
@@ -182,7 +182,7 @@ LocalFileSystem::LocalFileSystem(WorkerClients& worker_clients,
   DCHECK(client_);
 }
 
-DEFINE_TRACE(LocalFileSystem) {
+void LocalFileSystem::Trace(blink::Visitor* visitor) {
   Supplement<LocalFrame>::Trace(visitor);
   Supplement<WorkerClients>::Trace(visitor);
 }

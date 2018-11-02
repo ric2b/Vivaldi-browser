@@ -7,9 +7,8 @@
 
 #include "base/macros.h"
 #include "components/arc/common/video.mojom.h"
-#include "components/arc/instance_holder.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace content {
 class BrowserContext;
@@ -26,10 +25,8 @@ class ArcBridgeService;
 // VideoDecodeAccelerator or VideoEncodeAccelerator run in the GPU process.
 //
 // Lives on the UI thread.
-class GpuArcVideoServiceHost
-    : public KeyedService,
-      public InstanceHolder<mojom::VideoInstance>::Observer,
-      public mojom::VideoHost {
+class GpuArcVideoServiceHost : public KeyedService,
+                               public mojom::VideoHost {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -40,16 +37,15 @@ class GpuArcVideoServiceHost
                          ArcBridgeService* bridge_service);
   ~GpuArcVideoServiceHost() override;
 
-  // arc::InstanceHolder<mojom::VideoInstance>::Observer implementation.
-  void OnInstanceReady() override;
-
   // arc::mojom::VideoHost implementation.
   void OnBootstrapVideoAcceleratorFactory(
-      const OnBootstrapVideoAcceleratorFactoryCallback& callback) override;
+      OnBootstrapVideoAcceleratorFactoryCallback callback) override;
 
  private:
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
-  mojo::Binding<mojom::VideoHost> binding_;
+  std::unique_ptr<mojom::VideoAcceleratorFactory> video_accelerator_factory_;
+  mojo::BindingSet<mojom::VideoAcceleratorFactory>
+      video_accelerator_factory_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuArcVideoServiceHost);
 };

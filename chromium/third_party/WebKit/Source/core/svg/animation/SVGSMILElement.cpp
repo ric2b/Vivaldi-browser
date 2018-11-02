@@ -27,20 +27,20 @@
 
 #include <algorithm>
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "core/XLinkNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/IdTargetObserver.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/dom/events/EventListener.h"
 #include "core/frame/UseCounter.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/SVGURIReference.h"
 #include "core/svg/animation/SMILTimeContainer.h"
+#include "core/xlink_names.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/Vector.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -54,7 +54,7 @@ class RepeatEvent final : public Event {
 
   int Repeat() const { return repeat_; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { Event::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { Event::Trace(visitor); }
 
  protected:
   RepeatEvent(const AtomicString& type,
@@ -92,7 +92,7 @@ class ConditionEventListener final : public EventListener {
 
   void DisconnectAnimation() { animation_ = nullptr; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(animation_);
     visitor->Trace(condition_);
     EventListener::Trace(visitor);
@@ -144,7 +144,7 @@ SVGSMILElement::Condition::Condition(Type type,
 
 SVGSMILElement::Condition::~Condition() = default;
 
-DEFINE_TRACE(SVGSMILElement::Condition) {
+void SVGSMILElement::Condition::Trace(blink::Visitor* visitor) {
   visitor->Trace(base_element_);
   visitor->Trace(base_id_observer_);
   visitor->Trace(event_listener_);
@@ -281,7 +281,7 @@ static inline void ClearTimesWithDynamicOrigins(
     Vector<SMILTimeWithOrigin>& time_list) {
   for (int i = time_list.size() - 1; i >= 0; --i) {
     if (time_list[i].OriginIsScript())
-      time_list.erase(i);
+      time_list.EraseAt(i);
   }
 }
 
@@ -1057,7 +1057,7 @@ SMILTime SVGSMILElement::CalculateNextProgressTime(double elapsed) const {
     // If duration is indefinite the value does not actually change over time.
     // Same is true for <set>.
     SMILTime simple_duration = this->SimpleDuration();
-    if (simple_duration.IsIndefinite() || isSVGSetElement(*this)) {
+    if (simple_duration.IsIndefinite() || IsSVGSetElement(*this)) {
       SMILTime repeating_duration_end = interval_.begin + RepeatingDuration();
       // We are supposed to do freeze semantics when repeating ends, even if the
       // element is still active.
@@ -1246,7 +1246,8 @@ void SVGSMILElement::ScheduleRepeatEvents(unsigned count) {
 }
 
 void SVGSMILElement::ScheduleEvent(const AtomicString& event_type) {
-  TaskRunnerHelper::Get(TaskType::kDOMManipulation, &GetDocument())
+  GetDocument()
+      .GetTaskRunner(TaskType::kDOMManipulation)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&SVGSMILElement::DispatchPendingEvent,
                            WrapPersistent(this), event_type));
@@ -1258,7 +1259,7 @@ void SVGSMILElement::DispatchPendingEvent(const AtomicString& event_type) {
          event_type == EventTypeNames::repeatEvent || event_type == "repeatn");
   if (event_type == "repeatn") {
     unsigned repeat_event_count = repeat_event_count_list_.front();
-    repeat_event_count_list_.erase(0);
+    repeat_event_count_list_.EraseAt(0);
     DispatchEvent(RepeatEvent::Create(event_type, repeat_event_count));
   } else {
     DispatchEvent(Event::Create(event_type));
@@ -1286,7 +1287,7 @@ void SVGSMILElement::DidChangeAnimationTarget() {
   is_scheduled_ = true;
 }
 
-DEFINE_TRACE(SVGSMILElement) {
+void SVGSMILElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(target_element_);
   visitor->Trace(target_id_observer_);
   visitor->Trace(time_container_);

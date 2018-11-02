@@ -17,9 +17,7 @@ namespace blink {
 
 enum CSSPropertyID {
     CSSPropertyInvalid = 0,
-    // This isn't a property, but we need to know the position of @apply rules in style rules
-    CSSPropertyApplyAtRule = 1,
-    CSSPropertyVariable = 2,
+    CSSPropertyVariable = 1,
 {{property_enums}}
 };
 
@@ -27,10 +25,10 @@ const CSSPropertyID kCSSPropertyAliasList[] = {
 {{property_aliases}}
 };
 
-const int firstCSSProperty = {{first_property_id}};
+const CSSPropertyID firstCSSProperty = static_cast<CSSPropertyID>({{first_property_id}});
 const int numCSSProperties = {{properties_count}};
-const int lastCSSProperty = {{last_property_id}};
-const int lastUnresolvedCSSProperty = {{last_unresolved_property_id}};
+const CSSPropertyID lastCSSProperty = static_cast<CSSPropertyID>({{last_property_id}});
+const CSSPropertyID lastUnresolvedCSSProperty = static_cast<CSSPropertyID>({{last_unresolved_property_id}});
 const int numCSSPropertyIDs = lastUnresolvedCSSProperty + 1;
 const size_t maxCSSPropertyNameLength = {{max_name_length}};
 

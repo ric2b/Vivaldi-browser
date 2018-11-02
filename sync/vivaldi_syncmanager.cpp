@@ -8,29 +8,24 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/invalidation/public/object_id_invalidation_map.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync/base/invalidation_helper.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "content/public/browser/browser_thread.h"
+#if !defined(OS_ANDROID)
+#include "extensions/api/runtime/runtime_api.h"
+#endif
+#include "prefs/vivaldi_gen_pref_enums.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_profile_oauth2_token_service.h"
 #include "sync/vivaldi_profile_oauth2_token_service_factory.h"
 #include "sync/vivaldi_sync_urls.h"
 
+using syncer::JsBackend;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
-using syncer::JsBackend;
 using syncer::SyncCredentials;
 using syncer::WeakHandle;
-
-namespace {
-// TODO(julienp): We need to switch away from polling and use notifications as
-// our primary way of refreshing sync data. When that is done, we might still
-// want to do some occasional polling, but it won't be on a fixed interval.
-const int kPollingInterval = 5;  // minutes
-}  // anonymous namespace
 
 namespace vivaldi {
 
@@ -38,7 +33,6 @@ VivaldiSyncManager::VivaldiSyncManager(
     ProfileSyncService::InitParams* init_params,
     std::shared_ptr<VivaldiInvalidationService> invalidation_service)
     : ProfileSyncService(std::move(*init_params)),
-      polling_posted_(false),
       invalidation_service_(invalidation_service),
       weak_factory_(this) {}
 
@@ -90,42 +84,6 @@ void VivaldiSyncManager::ConfigureTypes(bool sync_everything,
   OnUserChoseDatatypes(sync_everything, chosen_types);
 }
 
-void VivaldiSyncManager::StartPollingServer() {
-  if (polling_posted_)
-    return;
-
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&VivaldiSyncManager::PerformPollServer,
-                 weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMinutes(kPollingInterval));
-
-  polling_posted_ = true;
-}
-
-void VivaldiSyncManager::PerformPollServer() {
-  polling_posted_ = false;
-
-  PollServer();
-  StartPollingServer();
-}
-
-void VivaldiSyncManager::PollServer() {
-  if (engine_) {
-    // Extra paranoia, except for non-official builds where we might need
-    // encyption off for debugging.
-    if (!IsEncryptEverythingEnabled() && version_info::IsOfficialBuild()) {
-      Logout();
-      return;
-    }
-    syncer::ObjectIdInvalidationMap invalidation_map =
-        syncer::ObjectIdInvalidationMap::InvalidateAll(
-            syncer::ModelTypeSetToObjectIdSet(syncer::ProtocolTypes()));
-    invalidation_service_->PerformInvalidation(invalidation_map);
-    NotifySyncStarted();
-  }
-}
-
 void VivaldiSyncManager::NotifyLoginDone() {
   for (auto& observer : vivaldi_observers_) {
     observer.OnLoginDone();
@@ -172,8 +130,6 @@ void VivaldiSyncManager::OnSyncCycleCompleted(
     const syncer::SyncCycleSnapshot& snapshot) {
   ProfileSyncService::OnSyncCycleCompleted(snapshot);
   NotifySyncCompleted();
-
-  StartPollingServer();
 }
 
 void VivaldiSyncManager::OnConfigureDone(
@@ -185,7 +141,6 @@ void VivaldiSyncManager::OnConfigureDone(
       Logout();
       return;
     }
-    PollServer();
     ProfileSyncService::OnConfigureDone(result);
   }
 }
@@ -218,6 +173,8 @@ void VivaldiSyncManager::RequestAccessToken() {
 
 void VivaldiSyncManager::ShutdownImpl(syncer::ShutdownReason reason) {
   if (reason == syncer::DISABLE_SYNC) {
+    sync_client_->GetPrefService()->ClearPref(
+        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword);
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
         base::Bind(&VivaldiSyncManager::NotifyLogoutDone,
@@ -236,7 +193,14 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
                                   std::string token,
                                   std::string expire,
                                   std::string account_id) {
-  if (token.empty()) {
+  if (token.empty()
+// TODO(jarle): Remove the !Android check when we have extensions running
+// on Android.
+#if !defined(OS_ANDROID)
+    || !extensions::VivaldiRuntimeFeatures::IsEnabled(
+            sync_client_->GetProfile(), "sync")
+#endif
+) {
     Logout();
     return;
   }
@@ -287,7 +251,8 @@ bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {
   }
 
   std::string password_used = password;
-  if (password_used.empty()) {
+  bool separate_password = !password_used.empty();
+  if (!separate_password) {
     password_used = password_;
   }
   password_.clear();
@@ -300,6 +265,15 @@ bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {
     SetEncryptionPassphrase(password_used, ProfileSyncService::EXPLICIT);
     result = true;
   }
+
+  if (result)
+    sync_client_->GetPrefService()->SetInteger(
+        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
+        static_cast<int>(
+            separate_password
+                ? vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::AYE
+                : vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::
+                      NAY));
 
   return result;
 }
@@ -327,6 +301,11 @@ void VivaldiSyncManager::SetupConfiguration() {
   if (IsPassphraseRequiredForDecryption()) {
     if (password_.empty() || !SetDecryptionPassphrase(password_))
       NotifyEncryptionPasswordRequested();
+    else
+      sync_client_->GetPrefService()->SetInteger(
+          vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
+          static_cast<int>(
+              vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::NAY));
     password_.clear();
   }
 

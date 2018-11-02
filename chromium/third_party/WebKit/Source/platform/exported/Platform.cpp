@@ -34,12 +34,12 @@
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
-#include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
 #include "platform/InstanceCountersMemoryDumpProvider.h"
 #include "platform/Language.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/PartitionAllocMemoryDumpProvider.h"
+#include "platform/font_family_names.h"
 #include "platform/fonts/FontCacheMemoryDumpProvider.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/GCTaskRunner.h"
@@ -49,7 +49,6 @@
 #include "platform/wtf/HashMap.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/WebCanvasCaptureHandler.h"
-#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebGestureCurve.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebImageCaptureFrameGrabber.h"
@@ -61,9 +60,11 @@
 #include "public/platform/WebSocketHandshakeThrottle.h"
 #include "public/platform/WebStorageNamespace.h"
 #include "public/platform/WebThread.h"
+#include "public/platform/WebTrialTokenValidator.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 #include "public/platform/modules/webmidi/WebMIDIAccessor.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/WebKit/common/origin_trials/trial_policy.h"
 
 namespace blink {
 
@@ -107,7 +108,7 @@ static void CallOnMainThreadFunction(WTF::MainThreadFunction function,
       CrossThreadBind(function, CrossThreadUnretained(context)));
 }
 
-Platform::Platform() : main_thread_(0) {
+Platform::Platform() : main_thread_(nullptr) {
   WTF::Partitions::Initialize(MaxObservedSizeFunction);
 }
 
@@ -123,10 +124,13 @@ void Platform::Initialize(Platform* platform) {
 
   ProcessHeap::Init();
   MemoryCoordinator::Initialize();
-  if (base::ThreadTaskRunnerHandle::IsSet())
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpProvider::Options options;
+    options.supports_heap_profiling = true;
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         BlinkGCMemoryDumpProvider::Instance(), "BlinkGC",
-        base::ThreadTaskRunnerHandle::Get());
+        base::ThreadTaskRunnerHandle::Get(), options);
+  }
 
   ThreadState::AttachMainThread();
 
@@ -140,9 +144,11 @@ void Platform::Initialize(Platform* platform) {
   if (g_platform->main_thread_) {
     DCHECK(!g_gc_task_runner);
     g_gc_task_runner = new GCTaskRunner(g_platform->main_thread_);
+    base::trace_event::MemoryDumpProvider::Options heap_profiling_options;
+    heap_profiling_options.supports_heap_profiling = true;
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         PartitionAllocMemoryDumpProvider::Instance(), "PartitionAlloc",
-        base::ThreadTaskRunnerHandle::Get());
+        base::ThreadTaskRunnerHandle::Get(), heap_profiling_options);
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         FontCacheMemoryDumpProvider::Instance(), "FontCaches",
         base::ThreadTaskRunnerHandle::Get());
@@ -180,7 +186,8 @@ WebTaskRunner* Platform::FileTaskRunner() const {
   return file_thread_ ? file_thread_->GetWebTaskRunner() : nullptr;
 }
 
-base::TaskRunner* Platform::BaseFileTaskRunner() const {
+scoped_refptr<base::SingleThreadTaskRunner> Platform::BaseFileTaskRunner()
+    const {
   return file_thread_ ? file_thread_->GetSingleThreadTaskRunner() : nullptr;
 }
 
@@ -199,6 +206,11 @@ std::unique_ptr<WebMIDIAccessor> Platform::CreateMIDIAccessor(
 }
 
 std::unique_ptr<WebStorageNamespace> Platform::CreateLocalStorageNamespace() {
+  return nullptr;
+}
+
+std::unique_ptr<WebStorageNamespace> Platform::CreateSessionStorageNamespace(
+    int64_t namespace_id) {
   return nullptr;
 }
 
@@ -273,17 +285,7 @@ Platform::CreateImageCaptureFrameGrabber() {
   return nullptr;
 }
 
-std::unique_ptr<WebFeaturePolicy> Platform::CreateFeaturePolicy(
-    const WebFeaturePolicy* parent_policy,
-    const WebParsedFeaturePolicy& container_policy,
-    const WebParsedFeaturePolicy& policy_header,
-    const WebSecurityOrigin&) {
-  return nullptr;
-}
-
-std::unique_ptr<WebFeaturePolicy> Platform::DuplicateFeaturePolicyWithOrigin(
-    const WebFeaturePolicy&,
-    const WebSecurityOrigin&) {
+std::unique_ptr<WebTrialTokenValidator> Platform::CreateTrialTokenValidator() {
   return nullptr;
 }
 

@@ -19,11 +19,11 @@
 
 #include "core/svg/SVGFEDropShadowElement.h"
 
-#include "core/SVGNames.h"
 #include "core/layout/LayoutObject.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/SVGComputedStyle.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/FEDropShadow.h"
 
 namespace blink {
@@ -48,7 +48,7 @@ inline SVGFEDropShadowElement::SVGFEDropShadowElement(Document& document)
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFEDropShadowElement) {
+void SVGFEDropShadowElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(dx_);
   visitor->Trace(dy_);
   visitor->Trace(std_deviation_);

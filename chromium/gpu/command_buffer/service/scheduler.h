@@ -9,11 +9,15 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/scheduling_priority.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/sequence_id.h"
@@ -63,6 +67,15 @@ class GPU_EXPORT Scheduler {
   // Disables the sequence.
   void DisableSequence(SequenceId sequence_id);
 
+  // Raise priority of sequence for client wait (WaitForGetOffset/TokenInRange)
+  // on given command buffer.
+  void RaisePriorityForClientWait(SequenceId sequence_id,
+                                  CommandBufferId command_buffer_id);
+
+  // Reset priority of sequence if it was increased for a client wait.
+  void ResetPriorityForClientWait(SequenceId sequence_id,
+                                  CommandBufferId command_buffer_id);
+
   // Schedules task (closure) to run on the sequence. The task is blocked until
   // the sync token fences are released or determined to be invalid. Tasks are
   // run in the order in which they are submitted.
@@ -78,7 +91,6 @@ class GPU_EXPORT Scheduler {
   bool ShouldYield(SequenceId sequence_id);
 
  private:
-  class Sequence;
 
   struct SchedulingState {
     static bool Comparator(const SchedulingState& lhs,
@@ -99,8 +111,190 @@ class GPU_EXPORT Scheduler {
         const;
 
     SequenceId sequence_id;
-    SchedulingPriority priority = SchedulingPriority::kLowest;
+    SchedulingPriority priority = SchedulingPriority::kLow;
     uint32_t order_num = 0;
+  };
+
+  class GPU_EXPORT Sequence {
+   public:
+    Sequence(Scheduler* scheduler,
+             SequenceId sequence_id,
+             SchedulingPriority priority,
+             scoped_refptr<SyncPointOrderData> order_data);
+
+    ~Sequence();
+
+    SequenceId sequence_id() const { return sequence_id_; }
+
+    const scoped_refptr<SyncPointOrderData>& order_data() const {
+      return order_data_;
+    }
+
+    bool enabled() const { return enabled_; }
+
+    bool scheduled() const { return running_state_ == SCHEDULED; }
+
+    bool running() const { return running_state_ == RUNNING; }
+
+    // The sequence is runnable if its enabled and has tasks which are not
+    // blocked by wait fences.
+    bool IsRunnable() const;
+
+    // Returns true if this sequence's scheduling state changed and it needs to
+    // be reinserted into the scheduling queue.
+    bool NeedsRescheduling() const;
+
+    // Returns true if this sequence should yield to another sequence. Uses the
+    // cached scheduling state for comparison.
+    bool ShouldYieldTo(const Sequence* other) const;
+
+    // Enables or disables the sequence.
+    void SetEnabled(bool enabled);
+
+    // Sets running state to SCHEDULED. Returns scheduling state for this
+    // sequence used for inserting in the scheduling queue.
+    SchedulingState SetScheduled();
+
+    // Update cached scheduling priority while running.
+    void UpdateRunningPriority();
+
+    // Returns the next order number and closure. Sets running state to RUNNING.
+    uint32_t BeginTask(base::OnceClosure* closure);
+
+    // Called after running the closure returned by BeginTask. Sets running
+    // state to IDLE.
+    void FinishTask();
+
+    // Enqueues a task in the sequence and returns the generated order number.
+    uint32_t ScheduleTask(base::OnceClosure closure);
+
+    // Continue running the current task with the given closure. Must be called
+    // in between |BeginTask| and |FinishTask|.
+    void ContinueTask(base::OnceClosure closure);
+
+    // Add a sync token fence that this sequence should wait on.
+    void AddWaitFence(const SyncToken& sync_token,
+                      uint32_t order_num,
+                      SequenceId release_sequence_id,
+                      Sequence* release_sequence);
+
+    // Remove a waiting sync token fence.
+    void RemoveWaitFence(const SyncToken& sync_token,
+                         uint32_t order_num,
+                         SequenceId release_sequence_id);
+
+    void AddClientWait(CommandBufferId command_buffer_id);
+
+    void RemoveClientWait(CommandBufferId command_buffer_id);
+
+    SchedulingPriority current_priority() const { return current_priority_; }
+
+   private:
+    enum RunningState { IDLE, SCHEDULED, RUNNING };
+
+    struct WaitFence {
+      WaitFence(WaitFence&& other);
+      WaitFence(const SyncToken& sync_token,
+                uint32_t order_num,
+                SequenceId release_sequence_id);
+      ~WaitFence();
+      WaitFence& operator=(WaitFence&& other);
+
+      SyncToken sync_token;
+      uint32_t order_num;
+      SequenceId release_sequence_id;
+
+      bool operator==(const WaitFence& other) const {
+        return std::tie(order_num, release_sequence_id, sync_token) ==
+               std::tie(other.order_num, release_sequence_id, other.sync_token);
+      }
+
+      bool operator<(const WaitFence& other) const {
+        return std::tie(order_num, release_sequence_id, sync_token) <
+               std::tie(other.order_num, release_sequence_id, other.sync_token);
+      }
+    };
+
+    struct Task {
+      Task(Task&& other);
+      Task(base::OnceClosure closure, uint32_t order_num);
+      ~Task();
+      Task& operator=(Task&& other);
+
+      base::OnceClosure closure;
+      uint32_t order_num;
+    };
+
+    // Description of Stream priority propagation: Each Stream has an initial
+    // priority ('default_priority_').  When a Stream has other Streams waiting
+    // on it via a 'WaitFence', it computes it's own priority based on those
+    // fences, by keeping count of the priority of each incoming WaitFence's
+    // priority in 'waiting_priority_counts_'.
+    //
+    // 'wait_fences_' maps each 'WaitFence' to it's current priority.  Initially
+    // WaitFences take the priority of the waiting Stream, and propagate their
+    // priority to the releasing Stream via AddWaitingPriority().
+    //
+    // A higher priority waiting stream or ClientWait, can recursively pass on
+    // it's priority to existing 'ClientWaits' via PropagatePriority(), which
+    // updates the releasing stream via ChangeWaitingPriority().
+    //
+    // When a 'WaitFence' is removed either by the SyncToken being released,
+    // or when the waiting Stream is Destroyed, it removes it's priority from
+    // the releasing stream via RemoveWaitingPriority().
+
+    // Propagate a priority to all wait fences.
+    void PropagatePriority(SchedulingPriority priority);
+
+    // Add a waiting priority.
+    void AddWaitingPriority(SchedulingPriority priority);
+
+    // Remove a waiting priority.
+    void RemoveWaitingPriority(SchedulingPriority priority);
+
+    // Change a waiting priority.
+    void ChangeWaitingPriority(SchedulingPriority old_priority,
+                               SchedulingPriority new_priority);
+
+    // Re-compute current priority.
+    void UpdateSchedulingPriority();
+
+    // If the sequence is enabled. Sequences are disabled/enabled based on when
+    // the command buffer is descheduled/scheduled.
+    bool enabled_ = true;
+
+    RunningState running_state_ = IDLE;
+
+    // Cached scheduling state used for comparison with other sequences while
+    // running. Updated in |SetScheduled| and |UpdateRunningPriority|.
+    SchedulingState scheduling_state_;
+
+    Scheduler* const scheduler_;
+    const SequenceId sequence_id_;
+
+    const SchedulingPriority default_priority_;
+    SchedulingPriority current_priority_;
+
+    scoped_refptr<SyncPointOrderData> order_data_;
+
+    // Deque of tasks. Tasks are inserted at the back with increasing order
+    // number generated from SyncPointOrderData. If a running task needs to be
+    // continued, it is inserted at the front with the same order number.
+    base::circular_deque<Task> tasks_;
+
+    // Map of fences that this sequence is waiting on. Fences are ordered in
+    // increasing order number but may be removed out of order. Tasks are
+    // blocked if there's a wait fence with order number less than or equal to
+    // the task's order number.
+    base::flat_map<WaitFence, SchedulingPriority> wait_fences_;
+
+    // Counts of pending releases bucketed by scheduling priority.
+    int waiting_priority_counts_[static_cast<int>(SchedulingPriority::kLast) +
+                                 1] = {};
+
+    base::flat_set<CommandBufferId> client_waits_;
+
+    DISALLOW_COPY_AND_ASSIGN(Sequence);
   };
 
   void SyncTokenFenceReleased(const SyncToken& sync_token,
@@ -141,6 +335,11 @@ class GPU_EXPORT Scheduler {
 
   base::WeakPtrFactory<Scheduler> weak_factory_;
 
+ private:
+  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, StreamPriorities);
+  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, StreamDestroyRemovesPriorities);
+  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, StreamPriorityChangeWhileReleasing);
+  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, CircularPriorities);
   DISALLOW_COPY_AND_ASSIGN(Scheduler);
 };
 

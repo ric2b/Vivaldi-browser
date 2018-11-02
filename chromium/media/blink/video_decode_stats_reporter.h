@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_BLINK_MEDIA_CAPABILITIES_REPORTER_H_
-#define MEDIA_BLINK_MEDIA_CAPABILITIES_REPORTER_H_
+#ifndef MEDIA_BLINK_VIDEO_DECODE_STATS_REPORTER_H_
+#define MEDIA_BLINK_VIDEO_DECODE_STATS_REPORTER_H_
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -85,29 +85,18 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // called when ShouldBeReporting() == true.
   void UpdateStats();
 
-  // Round |raw_fps| to the nearest (smaller or larger) "bucket". FrameRates in
-  // the same bucket should have nearly identical decode performance
-  // characteristics. Bucketing helps avoid fragmentation of recorded stats.
-  int GetFpsBucket(double raw_fps) const;
-
-  // Find the nearest "bucket" with dimensions >= |raw_size|. While smaller
-  // buckets may more closely describe |raw_size|, the next largest bucket is
-  // chosen to surface cutoff resolutions in HW-accelerated decoders. Exceeding
-  // the HW cutoff will invoke the software fallback, giving potentially very
-  // different decode performance at larger resolutions. Will return an empty
-  // size if |raw_size| is too small to be bucketed.
-  gfx::Size GetSizeBucket(const gfx::Size& raw_size) const;
-
   // Run |stats_cb_timer_| at the specified |interval|. If the timer is already
   // running, any existing callbacks will be canceled/delayed until
   // |interval| has elapsed.
   void RunStatsTimerAtInterval(base::TimeDelta interval);
 
   // Called to begin a new report following changes to stream metadata (e.g.
-  // natural size). Arguments used to update |freames_decoded_offset_| and
-  // |frames_dropped_offset_| so that frame counts for this report begin at 0.
+  // natural size). Arguments used to update |frames_decoded_offset_|,
+  // |frames_dropped_offset_|, and |frames_decoded_power_efficient_offset| so
+  // that frame counts for this report begin at 0.
   void StartNewRecord(uint32_t frames_decoded_offset,
-                      uint32_t frames_dropped_offset);
+                      uint32_t frames_dropped_offset,
+                      uint32_t frames_decoded_power_efficient_offset);
 
   // Reset frame rate tracking state to force a fresh attempt at detection. When
   // a stable frame rate is successfully detected, UpdateStats() will begin a
@@ -131,6 +120,9 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // after any state change (e.g. |is_playing_|) as a check on whether to start
   // the the timer.
   bool ShouldBeReporting() const;
+
+  // Error handler callback when IPC hits an error.
+  void OnIpcConnectionError();
 
   // TimeDelta wrappers around |kRecordingIntervalMs| and |kTimyFpsWindowMs|.
   // Defined as a class member to avoid static initialization.
@@ -208,6 +200,11 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // pipeline frames dropped stats before sending to recorder.
   uint32_t frames_dropped_offset_ = 0;
 
+  // Notes the number of power efficiently decoded frames at the start of the
+  // current video configuration (profile, resolution, fps). Should be
+  // subtracted from pipeline frames decoded stats before sending to recorder.
+  uint32_t frames_decoded_power_efficient_offset_ = 0;
+
   // Set true by OnPlaying(), false by OnPaused(). We should not run the
   // |stats_cb_timer_| when not playing.
   bool is_playing_ = false;
@@ -216,9 +213,13 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // |stats_cb_timer_| when player is backgrounded.
   bool is_backgrounded_ = false;
 
+  // Set false by UpdateStats() if an IPC error is encountered. Assumed true
+  // until an error is found.
+  bool is_ipc_connected_ = true;
+
   DISALLOW_COPY_AND_ASSIGN(VideoDecodeStatsReporter);
 };
 
 }  // namespace media
 
-#endif  // MEDIA_BLINK_MEDIA_CAPABILITIES_REPORTER_H_
+#endif  // MEDIA_BLINK_VIDEO_DECODE_STATS_REPORTER_H_

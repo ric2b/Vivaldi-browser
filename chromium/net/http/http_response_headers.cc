@@ -10,12 +10,12 @@
 #include "net/http/http_response_headers.h"
 
 #include <algorithm>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
 #include "base/strings/string_number_conversions.h"
@@ -582,8 +582,7 @@ bool HttpResponseHeaders::HasHeader(const base::StringPiece& name) const {
   return FindHeader(0, name) != std::string::npos;
 }
 
-HttpResponseHeaders::~HttpResponseHeaders() {
-}
+HttpResponseHeaders::~HttpResponseHeaders() = default;
 
 // Note: this implementation implicitly assumes that line_end points at a valid
 // sentinel character (such as '\0').
@@ -954,9 +953,7 @@ HttpResponseHeaders::GetFreshnessLifetimes(const Time& response_time) const {
   // no-cache" even though RFC 2616 does not specify it.
   if (HasHeaderValue("cache-control", "no-cache") ||
       HasHeaderValue("cache-control", "no-store") ||
-      HasHeaderValue("pragma", "no-cache") ||
-      // Vary: * is never usable: see RFC 2616 section 13.6.
-      HasHeaderValue("vary", "*")) {
+      HasHeaderValue("pragma", "no-cache")) {
     return lifetimes;
   }
 

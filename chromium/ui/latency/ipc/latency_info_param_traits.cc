@@ -5,13 +5,6 @@
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/latency/ipc/latency_info_param_traits_macros.h"
 
-// Generate param traits size methods.
-#include "ipc/param_traits_size_macros.h"
-namespace IPC {
-#undef UI_LATENCY_IPC_LATENCY_INFO_PARAM_TRAITS_MACROS_H_
-#include "ui/latency/ipc/latency_info_param_traits_macros.h"
-}
-
 // Generate param traits write methods.
 #include "ipc/param_traits_write_macros.h"
 namespace IPC {
@@ -38,21 +31,12 @@ namespace IPC {
 
 namespace IPC {
 
-void ParamTraits<ui::LatencyInfo>::GetSize(base::PickleSizer* s,
-                                           const param_type& p) {
-  GetParamSize(s, p.trace_name_);
-  GetParamSize(s, p.latency_components_);
-  GetParamSize(s, p.trace_id_);
-  GetParamSize(s, p.began_);
-  GetParamSize(s, p.terminated_);
-  GetParamSize(s, p.source_event_type_);
-  GetParamSize(s, p.expected_queueing_time_on_dispatch_);
-}
-
 void ParamTraits<ui::LatencyInfo>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.trace_name_);
   WriteParam(m, p.latency_components_);
   WriteParam(m, p.trace_id_);
+  WriteParam(m, p.ukm_source_id_);
+  WriteParam(m, p.coalesced_);
   WriteParam(m, p.began_);
   WriteParam(m, p.terminated_);
   WriteParam(m, p.source_event_type_);
@@ -68,6 +52,10 @@ bool ParamTraits<ui::LatencyInfo>::Read(const base::Pickle* m,
     return false;
 
   if (!ReadParam(m, iter, &p->trace_id_))
+    return false;
+  if (!ReadParam(m, iter, &p->ukm_source_id_))
+    return false;
+  if (!ReadParam(m, iter, &p->coalesced_))
     return false;
   if (!ReadParam(m, iter, &p->began_))
     return false;
@@ -87,6 +75,10 @@ void ParamTraits<ui::LatencyInfo>::Log(const param_type& p, std::string* l) {
   LogParam(p.latency_components_, l);
   l->append(" ");
   LogParam(p.trace_id_, l);
+  l->append(" ");
+  LogParam(p.ukm_source_id_, l);
+  l->append(" ");
+  LogParam(p.coalesced_, l);
   l->append(" ");
   LogParam(p.began_, l);
   l->append(" ");

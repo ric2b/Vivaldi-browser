@@ -135,6 +135,9 @@ used when committed.
     features in Chromium
 *   [Adding a new feature flag in chrome://flags](how_to_add_your_feature_flag.md) - Quick
     guide to add a new feature flag to experiment your feature.
+*   [Guidelines for considering branch dates in project planning](release_branch_guidance.md) -
+    What to do (and not to do) around branch dates when scheduling your project
+    work.
 
 ### Testing
 *   [Running and Debugging Layout Tests](testing/layout_tests.md)
@@ -234,8 +237,6 @@ used when committed.
     Setting up profiling for `content_shell` on Android
 *   [Working Remotely with Android](working_remotely_with_android.md) - Building
     on a remote machine for an Android device connected to your local machine
-*   [Using FindBugs for Android](use_find_bugs_for_android.md) - Using the open
-    source static analysis tool findbugs on the Java code.
 *   [Android Test Instructions](android_test_instructions.md) - Running a build
     on an Android device or emulator.
 *   [Android Debugging](android_debugging_instructions.md) - Tools and tips for
@@ -251,6 +252,7 @@ used when committed.
     iOS app open links in Chrome.
 *   [User Agent in Chrome for iOS](ios/user_agent.md) - Notes on User Agent
     strings using Chrome for iOS.
+*   [Running iOS test suites locally](ios/testing.md)
 
 ### Media
 *   [Audio Focus Handling](media/audio_focus.md) - How multiple MediaSession

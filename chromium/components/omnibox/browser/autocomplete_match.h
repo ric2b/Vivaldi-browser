@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings/utf_offset_string_conversions.h"
@@ -68,12 +69,15 @@ struct AutocompleteMatch {
     // A Java counterpart will be generated for this enum.
     // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.omnibox
     // GENERATED_JAVA_CLASS_NAME_OVERRIDE: MatchClassificationStyle
+    // clang-format off
     enum Style {
-      NONE  = 0,
-      URL   = 1 << 0,  // A URL
-      MATCH = 1 << 1,  // A match for the user's search term
-      DIM   = 1 << 2,  // "Helper text"
+      NONE      = 0,
+      URL       = 1 << 0,  // A URL
+      MATCH     = 1 << 1,  // A match for the user's search term
+      DIM       = 1 << 2,  // "Helper text"
+      INVISIBLE = 1 << 3,  // "Prefix" text we don't want to see
     };
+    // clang-format on
 
     ACMatchClassification(size_t offset, int style)
         : offset(offset),
@@ -208,6 +212,18 @@ struct AutocompleteMatch {
                                  const AutocompleteInput& input,
                                  TemplateURLService* template_url_service,
                                  const base::string16& keyword);
+
+  // Sets the |match_in_scheme|, |match_in_subdomain|, and |match_after_host|
+  // flags based on the provided |url| and list of substring |match_positions|.
+  // |match_positions| is the [begin, end) positions of a match within the
+  // unstripped URL spec.
+  using MatchPosition = std::pair<size_t, size_t>;
+  static void GetMatchComponents(
+      const GURL& url,
+      const std::vector<MatchPosition>& match_positions,
+      bool* match_in_scheme,
+      bool* match_in_subdomain,
+      bool* match_after_host);
 
   // Gets the formatting flags used for display of suggestions. This method
   // encapsulates the return of experimental flags too, so any URLs displayed

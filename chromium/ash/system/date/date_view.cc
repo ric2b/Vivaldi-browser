@@ -142,7 +142,7 @@ DateView::DateView(SystemTrayItem* owner)
   AddChildView(date_label_);
 }
 
-DateView::~DateView() {}
+DateView::~DateView() = default;
 
 void DateView::SetAction(DateAction action) {
   if (action == action_)
@@ -195,7 +195,7 @@ TimeView::TimeView(ClockLayout clock_layout) : BaseDateTimeView(nullptr) {
   UpdateClockLayout(clock_layout);
 }
 
-TimeView::~TimeView() {}
+TimeView::~TimeView() = default;
 
 void TimeView::UpdateTimeFormat() {
   hour_type_ = Shell::Get()->system_tray_controller()->hour_clock_type();
@@ -262,8 +262,7 @@ void TimeView::UpdateClockLayout(ClockLayout clock_layout) {
     AddChildView(horizontal_label_.get());
   } else {
     RemoveChildView(horizontal_label_.get());
-    views::GridLayout* layout = new views::GridLayout(this);
-    SetLayoutManager(layout);
+    views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
     const int kColumnId = 0;
     views::ColumnSet* columns = layout->AddColumnSet(kColumnId);
     columns->AddPaddingColumn(0, kVerticalClockLeftPadding);

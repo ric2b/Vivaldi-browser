@@ -7,14 +7,12 @@ package org.chromium.android_webview;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.webkit.ValueCallback;
+import android.support.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.JNINamespace;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * Helper class for getting the configuration settings related to safebrowsing in WebView.
@@ -28,42 +26,46 @@ public class AwSafeBrowsingConfigHelper {
     private static Boolean sSafeBrowsingUserOptIn;
 
     @SuppressWarnings("unchecked")
-    public static void maybeInitSafeBrowsingFromSettings(final Context appContext) {
+    public static void maybeEnableSafeBrowsingFromManifest(final Context appContext) {
+        Boolean appOptIn = getAppOptInPreference(appContext);
+
+        // If the app specifies something, fallback to the app's preference, otherwise check for the
+        // existence of the CLI switch.
         AwContentsStatics.setSafeBrowsingEnabledByManifest(
-                CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
-                || appHasOptedIn(appContext));
-        // If GMS is available, we will figure out if the user has opted-in to Safe Browsing and set
-        // the correct value for sSafeBrowsingUserOptIn.
-        final String getUserOptInPreferenceMethodName = "getUserOptInPreference";
-        try {
-            Class awSafeBrowsingApiHelperClass =
-                    Class.forName("com.android.webview.chromium.AwSafeBrowsingApiHandler");
-            Method getUserOptInPreference = awSafeBrowsingApiHelperClass.getDeclaredMethod(
-                    getUserOptInPreferenceMethodName, Context.class, ValueCallback.class);
-            getUserOptInPreference.invoke(null, appContext,
-                    (ValueCallback<Boolean>) optin -> setSafeBrowsingUserOptIn(
-                            optin == null ? false : optin));
-        } catch (ClassNotFoundException e) {
-            // This is not an error; it just means this device doesn't have specialized services.
-        } catch (IllegalAccessException | IllegalArgumentException | NoSuchMethodException e) {
-            Log.e(TAG, "Failed to invoke " + getUserOptInPreferenceMethodName + ": " + e);
-        } catch (InvocationTargetException e) {
-            Log.e(TAG, "Failed invocation for " + getUserOptInPreferenceMethodName + ": ",
-                    e.getCause());
-        }
+                appOptIn == null ? getCommandLineOptIn() : appOptIn);
+
+        Callback<Boolean> cb = optin -> setSafeBrowsingUserOptIn(optin == null ? false : optin);
+        PlatformServiceBridge.getInstance().querySafeBrowsingUserConsent(appContext, cb);
     }
 
-    private static boolean appHasOptedIn(Context appContext) {
+    private static boolean getCommandLineOptIn() {
+        CommandLine cli = CommandLine.getInstance();
+        // Disable flag has higher precedence than the enable flag
+        if (cli.hasSwitch(AwSwitches.WEBVIEW_DISABLE_SAFEBROWSING_SUPPORT)) {
+            return false;
+        }
+        return cli.hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
+                || cli.hasSwitch(AwSwitches.WEBVIEW_SAFEBROWSING_BLOCK_ALL_RESOURCES);
+    }
+
+    /**
+     * Checks the application manifest for Safe Browsing opt-in preference.
+     *
+     * @param appContext application context.
+     * @return true if app has opted in, false if opted out, and null if no preference specified.
+     */
+    @Nullable
+    private static Boolean getAppOptInPreference(Context appContext) {
         try {
             ApplicationInfo info = appContext.getPackageManager().getApplicationInfo(
                     appContext.getPackageName(), PackageManager.GET_META_DATA);
             if (info.metaData == null) {
-                // null means no such tag was found.
-                return false;
+                // No <meta-data> tag was found.
+                return null;
             }
             return info.metaData.containsKey(OPT_IN_META_DATA_STR)
                     ? info.metaData.getBoolean(OPT_IN_META_DATA_STR)
-                    : false;
+                    : null;
         } catch (PackageManager.NameNotFoundException e) {
             // This should never happen.
             Log.e(TAG, "App could not find itself by package name!");

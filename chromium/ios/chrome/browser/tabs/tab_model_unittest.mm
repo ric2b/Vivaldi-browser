@@ -34,7 +34,7 @@
 #include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "ios/web/public/web_thread.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
+#import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
@@ -127,6 +127,7 @@ class TabModelTest : public PlatformTest {
     NSMutableArray<CRWSessionStorage*>* sessions = [NSMutableArray array];
     for (int i = 0; i < 3; i++) {
       CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
+      session_storage.lastCommittedItemIndex = -1;
       [sessions addObject:session_storage];
     }
     return base::scoped_nsobject<SessionWindowIOS>(

@@ -96,11 +96,9 @@ Args::ValueWithOverride::ValueWithOverride(const Value& def_val)
       override_value() {
 }
 
-Args::ValueWithOverride::~ValueWithOverride() {
-}
+Args::ValueWithOverride::~ValueWithOverride() = default;
 
-Args::Args() {
-}
+Args::Args() = default;
 
 Args::Args(const Args& other)
     : overrides_(other.overrides_),
@@ -110,8 +108,7 @@ Args::Args(const Args& other)
       toolchain_overrides_(other.toolchain_overrides_) {
 }
 
-Args::~Args() {
-}
+Args::~Args() = default;
 
 void Args::AddArgOverride(const char* name, const Value& value) {
   base::AutoLock lock(lock_);
@@ -256,7 +253,7 @@ bool Args::VerifyAllOverridesUsed(Err* err) const {
   std::string err_help(
       "The variable \"" + name + "\" was set as a build argument\n"
       "but never appeared in a declare_args() block in any buildfile.\n\n"
-      "To view all possible args, run \"gn args --list <builddir>\"");
+      "To view all possible args, run \"gn args --list <out_dir>\"");
 
   // Use all declare_args for a spelling suggestion.
   std::vector<base::StringPiece> candidates;
@@ -312,6 +309,8 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   os = "netbsd";
 #elif defined(OS_AIX)
   os = "aix";
+#elif defined(OS_FUCHSIA)
+  os = "fuchsia";
 #else
   #error Unknown OS type.
 #endif

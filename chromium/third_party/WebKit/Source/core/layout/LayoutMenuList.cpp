@@ -30,8 +30,8 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTheme.h"
 #include "platform/text/PlatformLocale.h"
@@ -47,7 +47,7 @@ LayoutMenuList::LayoutMenuList(Element* element)
       inner_block_height_(LayoutUnit()),
       options_width_(0),
       last_active_index_(-1) {
-  DCHECK(isHTMLSelectElement(element));
+  DCHECK(IsHTMLSelectElement(element));
 }
 
 LayoutMenuList::~LayoutMenuList() {}
@@ -131,7 +131,7 @@ void LayoutMenuList::AdjustInnerStyle() {
 }
 
 HTMLSelectElement* LayoutMenuList::SelectElement() const {
-  return toHTMLSelectElement(GetNode());
+  return ToHTMLSelectElement(GetNode());
 }
 
 void LayoutMenuList::AddChild(LayoutObject* new_child,
@@ -177,7 +177,7 @@ void LayoutMenuList::UpdateInnerBlockHeight() {
 void LayoutMenuList::UpdateOptionsWidth() const {
   float max_option_width = 0;
 
-  for (const auto& option : SelectElement()->GetOptionList()) {
+  for (auto* const option : SelectElement()->GetOptionList()) {
     String text = option->TextIndentedToRespectGroupLabel();
     const ComputedStyle* item_style =
         option->GetComputedStyle() ? option->GetComputedStyle() : Style();
@@ -195,12 +195,12 @@ void LayoutMenuList::UpdateFromElement() {
   HTMLSelectElement* select = SelectElement();
   HTMLOptionElement* option = select->OptionToBeShown();
   String text = g_empty_string;
-  option_style_.Clear();
+  option_style_ = nullptr;
 
   if (select->IsMultiple()) {
     unsigned selected_count = 0;
     HTMLOptionElement* selected_option_element = nullptr;
-    for (const auto& option : select->GetOptionList()) {
+    for (auto* const option : select->GetOptionList()) {
       if (option->Selected()) {
         if (++selected_count == 1)
           selected_option_element = option;

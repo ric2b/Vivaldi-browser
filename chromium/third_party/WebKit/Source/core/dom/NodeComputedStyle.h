@@ -29,7 +29,6 @@
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/Node.h"
 #include "core/dom/V0InsertionPoint.h"
-#include "core/html/HTMLOptGroupElement.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
@@ -39,20 +38,20 @@ inline const ComputedStyle* Node::GetComputedStyle() const {
 }
 
 inline ComputedStyle* Node::MutableComputedStyle() const {
-  if (LayoutObject* layout_object = this->GetLayoutObject())
+  if (LayoutObject* layout_object = GetLayoutObject())
     return layout_object->MutableStyle();
 
   if (IsElementNode())
     return ToElement(this)->MutableNonLayoutObjectComputedStyle();
 
-  return 0;
+  return nullptr;
 }
 
 inline const ComputedStyle* Node::ParentComputedStyle() const {
   if (IsActiveSlotOrActiveV0InsertionPoint())
-    return 0;
+    return nullptr;
   ContainerNode* parent = LayoutTreeBuilderTraversal::Parent(*this);
-  return parent ? parent->GetComputedStyle() : 0;
+  return parent ? parent->GetComputedStyle() : nullptr;
 }
 
 inline const ComputedStyle& Node::ComputedStyleRef() const {

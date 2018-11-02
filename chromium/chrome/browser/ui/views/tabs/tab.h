@@ -18,7 +18,6 @@
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_throbber.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
@@ -27,7 +26,9 @@
 #include "ui/views/view.h"
 
 class AlertIndicatorButton;
+class TabCloseButton;
 class TabController;
+class TabIcon;
 
 namespace gfx {
 class Animation;
@@ -36,7 +37,6 @@ class LinearAnimation;
 class ThrobAnimation;
 }
 namespace views {
-class ImageButton;
 class Label;
 }
 
@@ -90,9 +90,9 @@ class Tab : public gfx::AnimationDelegate,
   // Returns true if the tab is selected.
   bool IsSelected() const;
 
-  // Sets the data this tabs displays. Invokes DataChanged. Should only be
-  // called after Tab is added to widget hierarchy.
-  void SetData(const TabRendererData& data);
+  // Sets the data this tabs displays. Should only be called after Tab is added
+  // to widget hierarchy.
+  void SetData(TabRendererData data);
   const TabRendererData& data() const { return data_; }
 
   // Redraws the loading animation if one is visible. Otherwise, no-op.
@@ -102,9 +102,12 @@ class Tab : public gfx::AnimationDelegate,
   void StartPulse();
   void StopPulse();
 
+  // Notifies the tab that its title changed outside of loading.
+  void TabTitleChangedNotLoading();
+
   // Sets the visibility of the indicator shown when the tab needs to indicate
   // to the user that it needs their attention.
-  void SetTabNeedsAttention(bool value);
+  void SetTabNeedsAttention(bool attention);
 
   // Set the background offset used to match the image in the inactive tab
   // to the frame image.
@@ -167,12 +170,6 @@ class Tab : public gfx::AnimationDelegate,
   friend class TabStripTest;
   FRIEND_TEST_ALL_PREFIXES(TabStripTest, TabCloseButtonVisibilityWhenStacked);
 
-  // The animation object used to swap the favicon with the sad tab icon.
-  class FaviconCrashAnimation;
-
-  class TabCloseButton;
-  class ThrobberView;
-
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
@@ -213,11 +210,9 @@ class Tab : public gfx::AnimationDelegate,
   void OnGestureEvent(ui::GestureEvent* event) override;
 
   // Invoked from Layout to adjust the position of the favicon or alert
-  // indicator for pinned tabs.
-  void MaybeAdjustLeftForPinnedTab(gfx::Rect* bounds) const;
-
-  // Invoked from SetData after |data_| has been updated to the new data.
-  void DataChanged(const TabRendererData& old);
+  // indicator for pinned tabs. The visual_width parameter is how wide the
+  // icon looks (rather than how wide the bounds are).
+  void MaybeAdjustLeftForPinnedTab(gfx::Rect* bounds, int visual_width) const;
 
   // Paints with the normal tab style.  If |clip| is non-empty, the tab border
   // should be clipped against it.
@@ -250,26 +245,12 @@ class Tab : public gfx::AnimationDelegate,
                                 bool active,
                                 SkColor color);
 
-  // Paints the attention indicator and |favicon_|. |favicon_| may be null.
-  // |favicon_draw_bounds| is |favicon_bounds_| adjusted for rtl and clipped to
-  // the bounds of the tab.
-  void PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
-                                      const gfx::Rect& favicon_draw_bounds);
-
-  // Paints the favicon, mirrored for RTL if needed.
-  void PaintIcon(gfx::Canvas* canvas);
-
-  // Updates the throbber.
-  void UpdateThrobber(const TabRendererData& old);
-
-  // Sets the throbber visibility according to the state in |data_|.
-  void RefreshThrobber();
-
   // Returns the number of favicon-size elements that can fit in the tab's
   // current size.
   int IconCapacity() const;
 
-  // Returns whether the Tab should display a favicon.
+  // Returns whether the Tab should display the icon view, which includes the
+  // favicon and loading animation.
   bool ShouldShowIcon() const;
 
   // Returns whether the Tab should display the alert indicator.
@@ -287,19 +268,10 @@ class Tab : public gfx::AnimationDelegate,
   // mini tab title change and pulsing.
   double GetThrobValue();
 
-  // Set the temporary offset for the favicon. This is used during the crash
-  // animation.
-  void SetFaviconHidingOffset(int offset);
-
-  void SetShouldDisplayCrashedFavicon(bool value);
-
   // Recalculates the correct |button_color_| and resets the title, alert
   // indicator, and close button colors if necessary.  This should be called any
   // time the theme or active state may have changed.
   void OnButtonColorMaybeChanged();
-
-  // Schedules repaint task for icon.
-  void ScheduleIconPaint();
 
   // The controller, never NULL.
   TabController* const controller_;
@@ -307,33 +279,22 @@ class Tab : public gfx::AnimationDelegate,
   TabRendererData data_;
 
   // True if the tab is being animated closed.
-  bool closing_;
+  bool closing_ = false;
 
   // True if the tab is being dragged.
-  bool dragging_;
+  bool dragging_ = false;
 
   // True if the tab has been detached.
-  bool detached_;
-
-  // The offset used to animate the favicon location. This is used when the tab
-  // crashes.
-  int favicon_hiding_offset_;
-
-  bool should_display_crashed_favicon_;
-
-  bool showing_attention_indicator_ = false;
+  bool detached_ = false;
 
   // Whole-tab throbbing "pulse" animation.
   gfx::ThrobAnimation pulse_animation_;
 
-  // Crash icon animation (in place of favicon).
-  std::unique_ptr<FaviconCrashAnimation> crash_icon_animation_;
-
   scoped_refptr<gfx::AnimationContainer> animation_container_;
 
-  ThrobberView* throbber_;
-  AlertIndicatorButton* alert_indicator_button_;
-  views::ImageButton* close_button_;
+  TabIcon* icon_ = nullptr;
+  AlertIndicatorButton* alert_indicator_button_ = nullptr;
+  TabCloseButton* close_button_ = nullptr;
 
   views::Label* title_;
   // The title's bounds are animated when switching between showing and hiding
@@ -342,35 +303,27 @@ class Tab : public gfx::AnimationDelegate,
   gfx::Rect target_title_bounds_;
   gfx::LinearAnimation title_animation_;
 
-  bool tab_activated_with_last_tap_down_;
+  bool tab_activated_with_last_tap_down_ = false;
 
   views::GlowHoverController hover_controller_;
-
-  // The bounds of various sections of the display.
-  gfx::Rect favicon_bounds_;
 
   // The offset used to paint the inactive background image.
   gfx::Point background_offset_;
 
   // Whether we're showing the icon. It is cached so that we can detect when it
   // changes and layout appropriately.
-  bool showing_icon_;
+  bool showing_icon_ = false;
 
   // Whether we're showing the alert indicator. It is cached so that we can
   // detect when it changes and layout appropriately.
-  bool showing_alert_indicator_;
+  bool showing_alert_indicator_ = false;
 
   // Whether we are showing the close button. It is cached so that we can
   // detect when it changes and layout appropriately.
-  bool showing_close_button_;
+  bool showing_close_button_ = false;
 
   // The current color of the alert indicator and close button icons.
-  SkColor button_color_;
-
-  // The favicon for the tab. This might be the sad tab icon or a copy of
-  // data().favicon and may be modified for theming. It is created on demand
-  // and thus may be null.
-  gfx::ImageSkia favicon_;
+  SkColor button_color_ = SK_ColorTRANSPARENT;
 
   class BackgroundCache {
    public:

@@ -5,12 +5,14 @@
 #include "chromeos/dbus/fake_shill_device_client.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -66,8 +68,7 @@ FakeShillDeviceClient::FakeShillDeviceClient()
       tdls_busy_count_(0),
       weak_ptr_factory_(this) {}
 
-FakeShillDeviceClient::~FakeShillDeviceClient() {
-}
+FakeShillDeviceClient::~FakeShillDeviceClient() = default;
 
 // ShillDeviceClient overrides.
 
@@ -92,11 +93,6 @@ void FakeShillDeviceClient::GetProperties(
       FROM_HERE,
       base::Bind(&FakeShillDeviceClient::PassStubDeviceProperties,
                  weak_ptr_factory_.GetWeakPtr(), device_path, callback));
-}
-
-void FakeShillDeviceClient::ProposeScan(const dbus::ObjectPath& device_path,
-                                        VoidDBusMethodCallback callback) {
-  PostVoidCallback(std::move(callback), DBUS_METHOD_CALL_SUCCESS);
 }
 
 void FakeShillDeviceClient::SetProperty(const dbus::ObjectPath& device_path,
@@ -135,20 +131,11 @@ void FakeShillDeviceClient::ClearProperty(const dbus::ObjectPath& device_path,
   base::DictionaryValue* device_properties = NULL;
   if (!stub_devices_.GetDictionaryWithoutPathExpansion(device_path.value(),
                                                        &device_properties)) {
-    PostVoidCallback(std::move(callback), DBUS_METHOD_CALL_FAILURE);
+    PostVoidCallback(std::move(callback), false);
     return;
   }
   device_properties->RemoveWithoutPathExpansion(name, NULL);
-  PostVoidCallback(std::move(callback), DBUS_METHOD_CALL_SUCCESS);
-}
-
-void FakeShillDeviceClient::AddIPConfig(
-    const dbus::ObjectPath& device_path,
-    const std::string& method,
-    const ObjectPathDBusMethodCallback& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(callback, DBUS_METHOD_CALL_SUCCESS, dbus::ObjectPath()));
+  PostVoidCallback(std::move(callback), true);
 }
 
 void FakeShillDeviceClient::RequirePin(const dbus::ObjectPath& device_path,
@@ -253,9 +240,21 @@ void FakeShillDeviceClient::Register(const dbus::ObjectPath& device_path,
                                      const std::string& network_id,
                                      const base::Closure& callback,
                                      const ErrorCallback& error_callback) {
-  if (!stub_devices_.HasKey(device_path.value())) {
+  base::Value* device_properties = stub_devices_.FindKey(device_path.value());
+  if (!device_properties || !device_properties->is_dict()) {
     PostNotFoundError(error_callback);
     return;
+  }
+  base::Value* scan_results =
+      device_properties->FindKey(shill::kFoundNetworksProperty);
+  if (!scan_results) {
+    PostError("No Cellular scan results", error_callback);
+    return;
+  }
+  for (auto& network : scan_results->GetList()) {
+    std::string id = network.FindKey(shill::kNetworkIdProperty)->GetString();
+    std::string status = id == network_id ? "current" : "available";
+    network.SetKey(shill::kStatusProperty, base::Value(status));
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
 }
@@ -389,7 +388,7 @@ void FakeShillDeviceClient::AddDevice(const std::string& device_path,
   DBusThreadManager::Get()->GetShillManagerClient()->GetTestInterface()->
       AddDevice(device_path);
 
-  base::DictionaryValue* properties = GetDeviceProperties(device_path);
+  base::Value* properties = GetDeviceProperties(device_path);
   properties->SetKey(shill::kTypeProperty, base::Value(type));
   properties->SetKey(shill::kNameProperty, base::Value(name));
   properties->SetKey(shill::kDBusObjectProperty, base::Value(device_path));
@@ -458,6 +457,44 @@ void FakeShillDeviceClient::SetSimLocked(const std::string& device_path,
   SetSimLockStatus(device_path, status);
 }
 
+void FakeShillDeviceClient::AddCellularFoundNetwork(
+    const std::string& device_path) {
+  base::Value* device_properties = stub_devices_.FindKey(device_path);
+  if (!device_properties || !device_properties->is_dict()) {
+    LOG(ERROR) << "Device path not found: " << device_path;
+    return;
+  }
+  std::string type =
+      device_properties->FindKey(shill::kTypeProperty)->GetString();
+  if (type != shill::kTypeCellular) {
+    LOG(ERROR) << "AddCellularNetwork called for non Cellular network: "
+               << device_path;
+    return;
+  }
+
+  // Add a new scan result entry
+  base::Value* scan_results =
+      device_properties->FindKey(shill::kFoundNetworksProperty);
+  if (!scan_results) {
+    scan_results = device_properties->SetKey(shill::kFoundNetworksProperty,
+                                             base::ListValue());
+  }
+  base::DictionaryValue new_result;
+  int idx = static_cast<int>(scan_results->GetList().size());
+  new_result.SetKey(shill::kNetworkIdProperty,
+                    base::Value(base::StringPrintf("network%d", idx)));
+  new_result.SetKey(shill::kLongNameProperty,
+                    base::Value(base::StringPrintf("Network %d", idx)));
+  new_result.SetKey(shill::kTechnologyProperty, base::Value("GSM"));
+  new_result.SetKey(shill::kStatusProperty, base::Value("available"));
+  scan_results->GetList().push_back(std::move(new_result));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&FakeShillDeviceClient::NotifyObserversPropertyChanged,
+                 weak_ptr_factory_.GetWeakPtr(), dbus::ObjectPath(device_path),
+                 shill::kFoundNetworksProperty));
+}
+
 // Private Methods -------------------------------------------------------------
 
 FakeShillDeviceClient::SimLockStatus FakeShillDeviceClient::GetSimLockStatus(
@@ -483,21 +520,18 @@ FakeShillDeviceClient::SimLockStatus FakeShillDeviceClient::GetSimLockStatus(
 
 void FakeShillDeviceClient::SetSimLockStatus(const std::string& device_path,
                                              const SimLockStatus& status) {
-  base::DictionaryValue* device_properties = NULL;
-  if (!stub_devices_.GetDictionaryWithoutPathExpansion(device_path,
-                                                       &device_properties)) {
+  base::Value* device_properties =
+      stub_devices_.FindKeyOfType(device_path, base::Value::Type::DICTIONARY);
+
+  if (!device_properties) {
     NOTREACHED() << "Device not found: " << device_path;
     return;
   }
 
-  base::DictionaryValue* simlock_dict = nullptr;
-  if (!device_properties->GetDictionaryWithoutPathExpansion(
-          shill::kSIMLockStatusProperty, &simlock_dict)) {
-    simlock_dict = device_properties->SetDictionaryWithoutPathExpansion(
-        shill::kSIMLockStatusProperty,
-        base::MakeUnique<base::DictionaryValue>());
-  }
-  simlock_dict->Clear();
+  base::Value* simlock_dict =
+      device_properties->SetKey(shill::kSIMLockStatusProperty,
+                                base::Value(base::Value::Type::DICTIONARY));
+
   simlock_dict->SetKey(shill::kSIMLockTypeProperty, base::Value(status.type));
   simlock_dict->SetKey(shill::kSIMLockRetriesLeftProperty,
                        base::Value(status.retries_left));
@@ -580,9 +614,9 @@ void FakeShillDeviceClient::PassStubDeviceProperties(
 
 // Posts a task to run a void callback with status code |status|.
 void FakeShillDeviceClient::PostVoidCallback(VoidDBusMethodCallback callback,
-                                             DBusMethodCallStatus status) {
+                                             bool result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), status));
+      FROM_HERE, base::BindOnce(std::move(callback), result));
 }
 
 void FakeShillDeviceClient::NotifyObserversPropertyChanged(
@@ -591,7 +625,7 @@ void FakeShillDeviceClient::NotifyObserversPropertyChanged(
   base::DictionaryValue* dict = NULL;
   std::string path = device_path.value();
   if (!stub_devices_.GetDictionaryWithoutPathExpansion(path, &dict)) {
-    LOG(ERROR) << "Notify for unknown service: " << path;
+    LOG(ERROR) << "Notify for unknown device: " << path;
     return;
   }
   base::Value* value = NULL;
@@ -604,15 +638,14 @@ void FakeShillDeviceClient::NotifyObserversPropertyChanged(
     observer.OnPropertyChanged(property, *value);
 }
 
-base::DictionaryValue* FakeShillDeviceClient::GetDeviceProperties(
+base::Value* FakeShillDeviceClient::GetDeviceProperties(
     const std::string& device_path) {
-  base::DictionaryValue* properties = NULL;
-  if (!stub_devices_.GetDictionaryWithoutPathExpansion(
-      device_path, &properties)) {
-    properties = stub_devices_.SetDictionaryWithoutPathExpansion(
-        device_path, base::MakeUnique<base::DictionaryValue>());
-  }
-  return properties;
+  base::Value* properties =
+      stub_devices_.FindKeyOfType(device_path, base::Value::Type::DICTIONARY);
+  if (properties)
+    return properties;
+  return stub_devices_.SetKey(device_path,
+                              base::Value(base::Value::Type::DICTIONARY));
 }
 
 FakeShillDeviceClient::PropertyObserverList&

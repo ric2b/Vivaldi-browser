@@ -34,9 +34,9 @@
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
-#include "platform/HTTPNames.h"
 #include "platform/Histogram.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
+#include "platform/network/http_names.h"
 #include "platform/text/SegmentedString.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -282,10 +282,14 @@ void CSSPreloaderResourceClient::SetCSSStyleSheet(
 
 // Only attach for one appendData call, as that's where most imports will likely
 // be (according to spec).
-void CSSPreloaderResourceClient::DidAppendFirstData(
-    const CSSStyleSheetResource* resource) {
+void CSSPreloaderResourceClient::DataReceived(Resource* resource,
+                                              const char*,
+                                              size_t) {
+  if (received_first_data_)
+    return;
+  received_first_data_ = true;
   if (preloader_)
-    ScanCSS(resource);
+    ScanCSS(ToCSSStyleSheetResource(resource));
   ClearResource();
 }
 
@@ -304,7 +308,7 @@ void CSSPreloaderResourceClient::ScanCSS(
   // augmented to take care of this case without performing an additional
   // copy.
   double start_time = MonotonicallyIncreasingTimeMS();
-  const String& chunk = resource->SheetText();
+  const String& chunk = resource->SheetText(nullptr);
   if (chunk.IsNull())
     return;
   CSSPreloadScanner css_preload_scanner;
@@ -363,7 +367,7 @@ void CSSPreloaderResourceClient::ClearResource() {
   resource_.Clear();
 }
 
-DEFINE_TRACE(CSSPreloaderResourceClient) {
+void CSSPreloaderResourceClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(preloader_);
   visitor->Trace(resource_);
   StyleSheetResourceClient::Trace(visitor);

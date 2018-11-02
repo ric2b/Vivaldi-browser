@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_footer_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_header_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_text_item.h"
@@ -162,6 +163,7 @@ NSString* const kContentSuggestionsCollectionUpdaterSnackbarCategory =
 @synthesize promoAdded = _promoAdded;
 @synthesize sectionIdentifiersFromContentSuggestions =
     _sectionIdentifiersFromContentSuggestions;
+@synthesize dispatcher = _dispatcher;
 
 - (instancetype)init {
   self = [super init];
@@ -202,12 +204,21 @@ NSString* const kContentSuggestionsCollectionUpdaterSnackbarCategory =
 
   if (forceReload && [model hasSectionForSectionIdentifier:sectionIdentifier]) {
     NSInteger section = [model sectionForSectionIdentifier:sectionIdentifier];
-    NSInteger numberOfItem = [model numberOfItemsInSection:section];
-    for (NSInteger i = 0; i < numberOfItem; i++) {
-      [self.collectionViewController
-          dismissEntryAtIndexPath:[NSIndexPath indexPathForItem:0
-                                                      inSection:section]];
+    NSInteger numberOfItems = [model numberOfItemsInSection:section];
+    NSMutableArray<NSIndexPath*>* indexesToDelete = [NSMutableArray array];
+    for (NSInteger i = 0; i < numberOfItems; i++) {
+      [indexesToDelete
+          addObject:[NSIndexPath indexPathForItem:i inSection:section]];
     }
+
+    UICollectionView* collection = self.collectionViewController.collectionView;
+    // Delete all the items manually to avoid adding an empty item.
+    [collection performBatchUpdates:^{
+      [self.collectionViewController collectionView:collection
+                        willDeleteItemsAtIndexPaths:indexesToDelete];
+      [collection deleteItemsAtIndexPaths:indexesToDelete];
+    }
+                         completion:nil];
   }
 
   if ([model hasSectionForSectionIdentifier:sectionIdentifier]) {
@@ -361,6 +372,9 @@ NSString* const kContentSuggestionsCollectionUpdaterSnackbarCategory =
   CSCollectionViewModel* model =
       self.collectionViewController.collectionViewModel;
   NSInteger sectionIdentifier = SectionIdentifierForInfo(sectionInfo);
+
+  if (![model hasSectionForSectionIdentifier:sectionIdentifier])
+    return nil;
 
   NSArray<CSCollectionViewItem*>* existingItems =
       [model itemsInSectionWithIdentifier:sectionIdentifier];
@@ -775,7 +789,7 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
     MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
     message.accessibilityLabel = text;
     message.category = kContentSuggestionsCollectionUpdaterSnackbarCategory;
-    [MDCSnackbarManager showMessage:message];
+    [self.dispatcher showSnackbarMessage:message];
   }
 }
 

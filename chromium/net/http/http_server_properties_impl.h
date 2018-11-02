@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -62,10 +61,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   void SetQuicServerInfoMap(
       std::unique_ptr<QuicServerInfoMap> quic_server_info_map);
 
-  // Get the list of servers (host/port) that support SPDY. The max_size is the
-  // number of MRU servers that support SPDY that are to be returned.
-  void GetSpdyServerList(std::vector<std::string>* spdy_servers,
-                         size_t max_size) const;
+  const SpdyServersMap& spdy_servers_map() const;
 
   void SetBrokenAndRecentlyBrokenAlternativeServices(
       std::unique_ptr<BrokenAlternativeServiceList>
@@ -108,7 +104,7 @@ class NET_EXPORT HttpServerPropertiesImpl
       const url::SchemeHostPort& origin,
       const AlternativeService& alternative_service,
       base::Time expiration,
-      const QuicVersionVector& advertised_versions) override;
+      const QuicTransportVersionVector& advertised_versions) override;
   bool SetAlternativeServices(const url::SchemeHostPort& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -151,7 +147,9 @@ class NET_EXPORT HttpServerPropertiesImpl
   // friendness is no longer required.
   friend class HttpServerPropertiesImplPeer;
 
-  typedef std::map<url::SchemeHostPort, url::SchemeHostPort> CanonicalHostMap;
+  typedef base::flat_map<url::SchemeHostPort, url::SchemeHostPort>
+      CanonicalAltSvcMap;
+  typedef base::flat_map<HostPortPair, QuicServerId> CanonicalServerInfoMap;
   typedef std::vector<std::string> CanonicalSufficList;
   typedef std::set<HostPortPair> Http11ServerHostPortSet;
 
@@ -160,11 +158,23 @@ class NET_EXPORT HttpServerPropertiesImpl
       const url::SchemeHostPort& server);
 
   // Return the canonical host for |server|, or end if none exists.
-  CanonicalHostMap::const_iterator GetCanonicalHost(
+  CanonicalAltSvcMap::const_iterator GetCanonicalAltSvcHost(
       const url::SchemeHostPort& server) const;
 
-  // Remove the cononical host for |server|.
-  void RemoveCanonicalHost(const url::SchemeHostPort& server);
+  // Return the canonical host with the same canonical suffix as |server|.
+  // The returned canonical host can be used to search for server info in
+  // |quic_server_info_map_|. Return 'end' the host doesn't exist.
+  CanonicalServerInfoMap::const_iterator GetCanonicalServerInfoHost(
+      const QuicServerId& server) const;
+
+  // Remove the canonical alt-svc host for |server|.
+  void RemoveAltSvcCanonicalHost(const url::SchemeHostPort& server);
+
+  // Update |canonical_server_info_map_| with the new canonical host.
+  // The |server| should have the corresponding server info associated with it
+  // in |quic_server_info_map_|. If |canonical_server_info_map_| doesn't
+  // have an entry associated with |server|, the method will add one.
+  void UpdateCanonicalServerInfoMap(const QuicServerId& server);
 
   base::DefaultTickClock default_clock_;
 
@@ -180,12 +190,23 @@ class NET_EXPORT HttpServerPropertiesImpl
   // Contains a map of servers which could share the same alternate protocol.
   // Map from a Canonical scheme/host/port (host is some postfix of host names)
   // to an actual origin, which has a plausible alternate protocol mapping.
-  CanonicalHostMap canonical_host_to_origin_map_;
+  CanonicalAltSvcMap canonical_alt_svc_map_;
+
   // Contains list of suffixes (for exmaple ".c.youtube.com",
   // ".googlevideo.com", ".googleusercontent.com") of canonical hostnames.
   CanonicalSufficList canonical_suffixes_;
 
   QuicServerInfoMap quic_server_info_map_;
+
+  // Maps canonical suffixes to host names that have the same canonical suffix
+  // and have a corresponding entry in |quic_server_info_map_|. The map can be
+  // used to quickly look for server info for hosts that share the same
+  // canonical suffix but don't have exact match in |quic_server_info_map_|. The
+  // map exists solely to improve the search performance. It only contais
+  // derived data that can be recalculated by traversing
+  // |quic_server_info_map_|.
+  CanonicalServerInfoMap canonical_server_info_map_;
+
   size_t max_server_configs_stored_in_properties_;
 
   THREAD_CHECKER(thread_checker_);

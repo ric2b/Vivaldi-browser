@@ -13,11 +13,11 @@
 #include "chrome/browser/chromeos/arc/accessibility/ax_tree_source_arc.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/arc/common/accessibility_helper.mojom.h"
-#include "components/arc/instance_holder.h"
-#include "components/exo/wm_helper.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/accessibility/ax_host_delegate.h"
+#include "ui/arc/notification/arc_notification_surface_manager.h"
+#include "ui/wm/public/activation_change_observer.h"
 
 class Profile;
 
@@ -36,10 +36,11 @@ class ArcBridgeService;
 class ArcAccessibilityHelperBridge
     : public KeyedService,
       public mojom::AccessibilityHelperHost,
-      public InstanceHolder<mojom::AccessibilityHelperInstance>::Observer,
-      public exo::WMHelper::ActivationObserver,
+      public ConnectionObserver<mojom::AccessibilityHelperInstance>,
+      public wm::ActivationChangeObserver,
       public AXTreeSourceArc::Delegate,
-      public ArcAppListPrefs::Observer {
+      public ArcAppListPrefs::Observer,
+      public ArcNotificationSurfaceManager::Observer {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -50,11 +51,17 @@ class ArcAccessibilityHelperBridge
                                ArcBridgeService* arc_bridge_service);
   ~ArcAccessibilityHelperBridge() override;
 
+  // Sets ChromeVox or TalkBack active for the current task.
+  void SetNativeChromeVoxArcSupport(bool enabled);
+
+  // Receives the result of setting native ChromeVox Arc support.
+  void OnSetNativeChromeVoxArcSupportProcessed(bool enabled, bool processed);
+
   // KeyedService overrides.
   void Shutdown() override;
 
-  // InstanceHolder<mojom::AccessibilityHelperInstance>::Observer overrides.
-  void OnInstanceReady() override;
+  // ConnectionObserver<mojom::AccessibilityHelperInstance> overrides.
+  void OnConnectionReady() override;
 
   // mojom::AccessibilityHelperHost overrides.
   void OnAccessibilityEventDeprecated(
@@ -67,36 +74,40 @@ class ArcAccessibilityHelperBridge
   void OnAction(const ui::AXActionData& data) const override;
 
   // ArcAppListPrefs::Observer overrides.
-  void OnTaskCreated(int task_id,
-                     const std::string& package_name,
-                     const std::string& activity,
-                     const std::string& intent) override;
   void OnTaskDestroyed(int32_t task_id) override;
-  void OnTaskSetActive(int32_t task_id) override;
 
-  const std::map<std::string, std::unique_ptr<AXTreeSourceArc>>&
-  package_name_to_tree_for_test() {
-    return package_name_to_tree_;
+  // ArcNotificationSurfaceManager::Observer overrides.
+  void OnNotificationSurfaceAdded(ArcNotificationSurface* surface) override;
+  void OnNotificationSurfaceRemoved(ArcNotificationSurface* surface) override;
+
+  const std::map<int32_t, std::unique_ptr<AXTreeSourceArc>>&
+  task_id_to_tree_for_test() {
+    return task_id_to_tree_;
   }
-  const std::map<std::string, std::set<int32_t>>&
-  package_name_to_task_ids_for_test() {
-    return package_name_to_task_ids_;
-  }
+
+ protected:
+  virtual aura::Window* GetActiveWindow();
 
  private:
-  // exo::WMHelper::ActivationObserver overrides.
-  void OnWindowActivated(aura::Window* gained_active,
+  // wm::ActivationChangeObserver overrides.
+  void OnWindowActivated(ActivationReason reason,
+                         aura::Window* gained_active,
                          aura::Window* lost_active) override;
 
   void OnActionResult(const ui::AXActionData& data, bool result) const;
 
+  AXTreeSourceArc* GetOrCreateFromTaskId(int32_t task_id);
+  AXTreeSourceArc* CreateFromNotificationKey(
+      const std::string& notification_key);
+  AXTreeSourceArc* GetFromNotificationKey(
+      const std::string& notification_key) const;
+  AXTreeSourceArc* GetFromTreeId(int32_t tree_id) const;
+
   Profile* const profile_;
   ArcBridgeService* const arc_bridge_service_;
-  mojo::Binding<mojom::AccessibilityHelperHost> binding_;
-  std::map<std::string, std::unique_ptr<AXTreeSourceArc>> package_name_to_tree_;
-  std::map<std::string, std::set<int32_t>> package_name_to_task_ids_;
-  int32_t current_task_id_;
-  std::unique_ptr<AXTreeSourceArc> fallback_tree_;
+  std::map<int32_t, std::unique_ptr<AXTreeSourceArc>> task_id_to_tree_;
+  std::map<std::string, std::unique_ptr<AXTreeSourceArc>>
+      notification_key_to_tree_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAccessibilityHelperBridge);
 };

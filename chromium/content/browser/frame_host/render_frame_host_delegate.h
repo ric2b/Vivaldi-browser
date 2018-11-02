@@ -18,6 +18,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
+#include "device/geolocation/public/interfaces/geolocation_context.mojom.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
 #include "services/device/public/interfaces/wake_lock.mojom.h"
@@ -36,10 +37,6 @@ class GURL;
 
 namespace IPC {
 class Message;
-}
-
-namespace device {
-class GeolocationContext;
 }
 
 namespace gfx {
@@ -87,6 +84,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) {}
 
+  // Notification from the renderer host that a suspicious navigation of the
+  // main frame has been blocked. Allows the delegate to provide some UI to let
+  // the user know about the blocked navigation and give them the option to
+  // recover from it. The given URL is the blocked navigation target.
+  virtual void OnDidBlockFramebust(const GURL& url) {}
+
   // Gets the last committed URL. See WebContents::GetLastCommittedURL for a
   // description of the semantics.
   virtual const GURL& GetMainFrameLastCommittedURL() const;
@@ -123,6 +126,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Called when a file selection is to be done.
   virtual void RunFileChooser(RenderFrameHost* render_frame_host,
                               const FileChooserParams& params) {}
+
+  // The pending page load was canceled, so the address bar should be updated.
+  virtual void DidCancelLoading() {}
 
   // Another page accessed the top-level initial empty document, which means it
   // is no longer safe to display a pending URL without risking a URL spoof.
@@ -169,8 +175,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Checks if we have permission to access the microphone or camera. Note that
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
-  // TODO(guidou): use url::Origin for |security_origin|. See crbug.com/683115.
-  virtual bool CheckMediaAccessPermission(const GURL& security_origin,
+  virtual bool CheckMediaAccessPermission(const url::Origin& security_origin,
                                           MediaStreamType type);
 
   // Returns the ID of the default device for the given media device |type|.
@@ -196,7 +201,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       int browser_plugin_instance_id);
 
   // Gets the GeolocationContext associated with this delegate.
-  virtual device::GeolocationContext* GetGeolocationContext();
+  virtual device::mojom::GeolocationContext* GetGeolocationContext();
 
   // Gets the WakeLock that serves wake lock requests from the renderer.
   virtual device::mojom::WakeLock* GetRendererWakeLock();
@@ -319,6 +324,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                                  bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
+
+  // Opens a new view-source tab for the last committed document in |frame|.
+  virtual void ViewSource(RenderFrameHostImpl* frame) {}
 
 #if defined(OS_ANDROID)
   virtual base::android::ScopedJavaLocalRef<jobject>

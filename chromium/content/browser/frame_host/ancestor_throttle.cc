@@ -107,7 +107,7 @@ AncestorThrottle::WillProcessResponse() {
 
   // Downloads should be exempt from checking for X-Frame-Options, so
   // proceed if this is a download.
-  if (handle->is_download())
+  if (handle->IsDownload())
     return NavigationThrottle::PROCEED;
 
   std::string header_value;
@@ -134,7 +134,8 @@ AncestorThrottle::WillProcessResponse() {
     case HeaderDisposition::SAMEORIGIN: {
       // Block the request when any ancestor is not same-origin.
       FrameTreeNode* parent = handle->frame_tree_node()->parent();
-      url::Origin current_origin(navigation_handle()->GetURL());
+      url::Origin current_origin =
+          url::Origin::Create(navigation_handle()->GetURL());
       while (parent) {
         if (!parent->current_origin().IsSameOriginWith(current_origin)) {
           RecordXFrameOptionsUsage(SAMEORIGIN_BLOCKED);

@@ -5,6 +5,7 @@
 #ifndef CSSUnsupportedStyleValue_h
 #define CSSUnsupportedStyleValue_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSStyleValue.h"
 
 namespace blink {
@@ -13,8 +14,6 @@ namespace blink {
 // CSSStyleValue that is returned when we do not yet support a CSS Typed OM type
 // for a given CSS Value.
 class CORE_EXPORT CSSUnsupportedStyleValue final : public CSSStyleValue {
-  WTF_MAKE_NONCOPYABLE(CSSUnsupportedStyleValue);
-
  public:
   static CSSUnsupportedStyleValue* Create(const String& css_text) {
     return new CSSUnsupportedStyleValue(css_text);
@@ -23,14 +22,16 @@ class CORE_EXPORT CSSUnsupportedStyleValue final : public CSSStyleValue {
   StyleValueType GetType() const override {
     return StyleValueType::kUnknownType;
   }
-  const CSSValue* ToCSSValue() const override;
-  const CSSValue* ToCSSValueWithProperty(CSSPropertyID) const override;
-  String toString() const override { return css_text_; }
+  const CSSValue* ToCSSValue(SecureContextMode) const override;
+  const CSSValue* ToCSSValueWithProperty(CSSPropertyID,
+                                         SecureContextMode) const override;
+  String toString(const ExecutionContext*) const override { return css_text_; }
 
  private:
   CSSUnsupportedStyleValue(const String& css_text) : css_text_(css_text) {}
 
   String css_text_;
+  DISALLOW_COPY_AND_ASSIGN(CSSUnsupportedStyleValue);
 };
 
 }  // namespace blink

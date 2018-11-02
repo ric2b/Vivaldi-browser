@@ -93,7 +93,7 @@ class RasterTaskImpl : public TileTask {
                  std::unique_ptr<RasterBuffer> raster_buffer,
                  TileTask::Vector* dependencies,
                  bool is_gpu_rasterization,
-                 base::Optional<PlaybackImageProvider> image_provider)
+                 PlaybackImageProvider image_provider)
       : TileTask(!is_gpu_rasterization, dependencies),
         tile_manager_(tile_manager),
         tile_id_(tile->id()),
@@ -113,9 +113,7 @@ class RasterTaskImpl : public TileTask {
         raster_buffer_(std::move(raster_buffer)),
         image_provider_(std::move(image_provider)) {
     DCHECK(origin_thread_checker_.CalledOnValidThread());
-
-    if (image_provider_.has_value())
-      playback_settings_.image_provider = &image_provider_.value();
+    playback_settings_.image_provider = &image_provider_;
   }
 
   // Overridden from Task:
@@ -145,8 +143,9 @@ class RasterTaskImpl : public TileTask {
     // Here calling state().IsCanceled() is thread-safe, because this task is
     // already concluded as FINISHED or CANCELLED and no longer will be worked
     // upon by task graph runner.
-    tile_manager_->OnRasterTaskCompleted(std::move(raster_buffer_), tile_id_,
-                                         resource_, state().IsCanceled());
+    raster_buffer_ = nullptr;
+    tile_manager_->OnRasterTaskCompleted(tile_id_, resource_,
+                                         state().IsCanceled());
   }
 
  protected:
@@ -179,7 +178,7 @@ class RasterTaskImpl : public TileTask {
   int source_frame_number_;
   bool is_gpu_rasterization_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
-  base::Optional<PlaybackImageProvider> image_provider_;
+  PlaybackImageProvider image_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(RasterTaskImpl);
 };
@@ -242,7 +241,7 @@ void InsertNodeForDecodeTask(TaskGraph* graph,
     if (!dependency->HasCompleted()) {
       InsertNodeForDecodeTask(graph, dependency, use_foreground_category,
                               priority);
-      graph->edges.push_back(TaskGraph::Edge(dependency, task));
+      graph->edges.emplace_back(dependency, task);
       dependency_count = 1u;
     }
   }
@@ -293,7 +292,7 @@ void InsertNodesForRasterTask(TaskGraph* graph,
                               priority);
     }
 
-    graph->edges.push_back(TaskGraph::Edge(decode_task, raster_task));
+    graph->edges.emplace_back(decode_task, raster_task);
   }
 
   InsertNodeForTask(
@@ -883,18 +882,33 @@ void TileManager::PartitionImagesForCheckering(
     const PrioritizedTile& prioritized_tile,
     const gfx::ColorSpace& raster_color_space,
     std::vector<DrawImage>* sync_decoded_images,
-    std::vector<PaintImage>* checkered_images) {
+    std::vector<PaintImage>* checkered_images,
+    const gfx::Rect* invalidated_rect,
+    base::flat_map<PaintImage::Id, size_t>* image_to_frame_index) {
   Tile* tile = prioritized_tile.tile();
   std::vector<const DrawImage*> images_in_tile;
-  prioritized_tile.raster_source()->GetDiscardableImagesInRect(
-      tile->enclosing_layer_rect(), &images_in_tile);
+  gfx::Rect enclosing_rect = tile->enclosing_layer_rect();
+  if (invalidated_rect) {
+    enclosing_rect = ToEnclosingRect(
+        tile->raster_transform().InverseMapRect(gfx::RectF(*invalidated_rect)));
+  }
+  prioritized_tile.raster_source()->GetDiscardableImagesInRect(enclosing_rect,
+                                                               &images_in_tile);
   WhichTree tree = tile->tiling()->tree();
 
   for (const auto* original_draw_image : images_in_tile) {
+    size_t frame_index = original_draw_image->paint_image().frame_index();
+    if (tile_manager_settings_.enable_image_animations) {
+      const auto& image = original_draw_image->paint_image();
+      frame_index = client_->GetFrameIndexForImage(image, tree);
+      if (image_to_frame_index) {
+        (*image_to_frame_index)[image.stable_id()] = frame_index;
+      }
+    }
+
     DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
-                         raster_color_space);
-    if (checker_image_tracker_.ShouldCheckerImage(
-            draw_image, tree, tile->required_for_activation()))
+                         frame_index, raster_color_space);
+    if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree))
       checkered_images->push_back(draw_image.paint_image());
     else
       sync_decoded_images->push_back(std::move(draw_image));
@@ -913,12 +927,15 @@ void TileManager::AddCheckeredImagesToDecodeQueue(
   WhichTree tree = tile->tiling()->tree();
 
   for (const auto* original_draw_image : images_in_tile) {
+    size_t frame_index = original_draw_image->paint_image().frame_index();
+    if (tile_manager_settings_.enable_image_animations) {
+      frame_index = client_->GetFrameIndexForImage(
+          original_draw_image->paint_image(), tree);
+    }
     DrawImage draw_image(*original_draw_image, tile->raster_transform().scale(),
-                         raster_color_space);
-    if (checker_image_tracker_.ShouldCheckerImage(
-            draw_image, tree, tile->required_for_activation())) {
-      image_decode_queue->push_back(CheckerImageTracker::ImageDecodeRequest(
-          draw_image.paint_image(), decode_type));
+                         frame_index, raster_color_space);
+    if (checker_image_tracker_.ShouldCheckerImage(draw_image, tree)) {
+      image_decode_queue->emplace_back(draw_image.paint_image(), decode_type);
     }
   }
 }
@@ -978,16 +995,14 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
 
     if (tile->required_for_activation()) {
       required_for_activate_count++;
-      graph_.edges.push_back(
-          TaskGraph::Edge(task, required_for_activation_done_task.get()));
+      graph_.edges.emplace_back(task, required_for_activation_done_task.get());
     }
     if (tile->required_for_draw()) {
       required_for_draw_count++;
-      graph_.edges.push_back(
-          TaskGraph::Edge(task, required_for_draw_done_task.get()));
+      graph_.edges.emplace_back(task, required_for_draw_done_task.get());
     }
     all_count++;
-    graph_.edges.push_back(TaskGraph::Edge(task, all_done_task.get()));
+    graph_.edges.emplace_back(task, all_done_task.get());
 
     // A tile should use a foreground task cateogry if it is either blocking
     // future compositing (required for draw or required for activation), or if
@@ -1006,7 +1021,8 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
     std::vector<DrawImage> sync_decoded_images;
     std::vector<PaintImage> checkered_images;
     PartitionImagesForCheckering(prioritized_tile, raster_color_space,
-                                 &sync_decoded_images, &checkered_images);
+                                 &sync_decoded_images, &checkered_images,
+                                 nullptr);
 
     // Add the sync decoded images to |new_locked_images| so they can be added
     // to the task graph.
@@ -1017,9 +1033,8 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
 
     // For checkered-images, send them to the decode service.
     for (auto& image : checkered_images) {
-      work_to_schedule.checker_image_decode_queue.push_back(
-          CheckerImageTracker::ImageDecodeRequest(
-              std::move(image), CheckerImageTracker::DecodeType::kPreDecode));
+      work_to_schedule.checker_image_decode_queue.emplace_back(
+          std::move(image), CheckerImageTracker::DecodeType::kPreDecode);
     }
   }
 
@@ -1043,7 +1058,7 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
 
     InsertNodeForDecodeTask(&graph_, task.get(), false, priority++);
     all_count++;
-    graph_.edges.push_back(TaskGraph::Edge(task.get(), all_done_task.get()));
+    graph_.edges.emplace_back(task.get(), all_done_task.get());
   }
 
   // The old locked images tasks have to stay around until past the
@@ -1112,9 +1127,11 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
         &invalidated_rect);
   }
 
+  bool partial_tile_decode = false;
   if (resource) {
     resource_content_id = tile->invalidated_id();
     DCHECK_EQ(DetermineResourceFormat(tile), resource->format());
+    partial_tile_decode = true;
   } else {
     resource = resource_pool_->AcquireResource(tile->desired_texture_size(),
                                                DetermineResourceFormat(tile),
@@ -1136,11 +1153,16 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
       scheduled_draw_images_[tile->id()];
   sync_decoded_images.clear();
   PaintImageIdFlatSet images_to_skip;
+  base::flat_map<PaintImage::Id, size_t> image_id_to_current_frame_index;
   if (!skip_images) {
     std::vector<PaintImage> checkered_images;
-    PartitionImagesForCheckering(prioritized_tile, color_space,
-                                 &sync_decoded_images, &checkered_images);
+    PartitionImagesForCheckering(
+        prioritized_tile, color_space, &sync_decoded_images, &checkered_images,
+        partial_tile_decode ? &invalidated_rect : nullptr,
+        &image_id_to_current_frame_index);
     for (const auto& image : checkered_images) {
+      DCHECK(!image.ShouldAnimate());
+
       images_to_skip.insert(image.stable_id());
 
       // This can be the case for tiles on the active tree that will be replaced
@@ -1148,9 +1170,8 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
       // skipping images for these tiles, we don't need to decode them since
       // they will not be required on the next active tree.
       if (prioritized_tile.should_decode_checkered_images_for_tile()) {
-        checker_image_decode_queue->push_back(
-            CheckerImageTracker::ImageDecodeRequest(
-                image, CheckerImageTracker::DecodeType::kRaster));
+        checker_image_decode_queue->emplace_back(
+            image, CheckerImageTracker::DecodeType::kRaster);
       }
     }
   }
@@ -1164,25 +1185,31 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
   ImageDecodeCache::TracingInfo tracing_info(
       prepare_tiles_count_, prioritized_tile.priority().priority_bin,
       ImageDecodeCache::TaskType::kInRaster);
-  image_controller_.GetTasksForImagesAndRef(&sync_decoded_images, &decode_tasks,
-                                            tracing_info);
+  std::vector<DrawImage> at_raster_images;
+  image_controller_.GetTasksForImagesAndRef(
+      &sync_decoded_images, &at_raster_images, &decode_tasks, tracing_info);
 
   std::unique_ptr<RasterBuffer> raster_buffer =
       raster_buffer_provider_->AcquireBufferForRaster(
           resource, resource_content_id, tile->invalidated_id());
 
-  base::Optional<PlaybackImageProvider> image_provider;
-  const bool has_predecoded_images = !sync_decoded_images.empty();
-  if (skip_images || has_checker_images || has_predecoded_images) {
-    image_provider.emplace(skip_images, std::move(images_to_skip),
-                           image_controller_.cache(), color_space);
+  base::Optional<PlaybackImageProvider::Settings> settings;
+  if (!skip_images) {
+    settings.emplace();
+    settings->images_to_skip = std::move(images_to_skip);
+    settings->at_raster_images = std::move(at_raster_images);
+    settings->image_to_current_frame_index =
+        std::move(image_id_to_current_frame_index);
   }
 
-  return make_scoped_refptr(new RasterTaskImpl(
+  PlaybackImageProvider image_provider(image_controller_.cache(), color_space,
+                                       std::move(settings));
+
+  return base::MakeRefCounted<RasterTaskImpl>(
       this, tile, resource, prioritized_tile.raster_source(), playback_settings,
       prioritized_tile.priority().resolution, invalidated_rect,
       prepare_tiles_count_, std::move(raster_buffer), &decode_tasks,
-      use_gpu_rasterization_, std::move(image_provider)));
+      use_gpu_rasterization_, std::move(image_provider));
 }
 
 void TileManager::ResetSignalsForTesting() {
@@ -1190,12 +1217,9 @@ void TileManager::ResetSignalsForTesting() {
 }
 
 void TileManager::OnRasterTaskCompleted(
-    std::unique_ptr<RasterBuffer> raster_buffer,
     Tile::Id tile_id,
     Resource* resource,
     bool was_canceled) {
-  raster_buffer_provider_->ReleaseBufferForRaster(std::move(raster_buffer));
-
   auto found = tiles_.find(tile_id);
   Tile* tile = nullptr;
   bool raster_task_was_scheduled_with_checker_images = false;
@@ -1211,6 +1235,11 @@ void TileManager::OnRasterTaskCompleted(
 
   // Unref all the images.
   auto images_it = scheduled_draw_images_.find(tile_id);
+  // Every raster task unconditionally creates sync_decoded_images_ entry in
+  // CreateRasterTask. This is the only place it's cleared. So we should have
+  // the images_it here that doesn't point to end. This check is here to debug
+  // crbug.com/757049.
+  CHECK(images_it != scheduled_draw_images_.end());
   image_controller_.UnrefImages(images_it->second);
   scheduled_draw_images_.erase(images_it);
 
@@ -1582,9 +1611,9 @@ void TileManager::CheckPendingGpuWorkTiles(bool issue_signals, bool flush) {
 // posts |callback| to |task_runner| when run.
 scoped_refptr<TileTask> TileManager::CreateTaskSetFinishedTask(
     void (TileManager::*callback)()) {
-  return make_scoped_refptr(new TaskSetFinishedTaskImpl(
+  return base::MakeRefCounted<TaskSetFinishedTaskImpl>(
       task_runner_,
-      base::Bind(callback, task_set_finished_weak_ptr_factory_.GetWeakPtr())));
+      base::Bind(callback, task_set_finished_weak_ptr_factory_.GetWeakPtr()));
 }
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>

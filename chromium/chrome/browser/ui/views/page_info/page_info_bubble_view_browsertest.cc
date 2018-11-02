@@ -4,13 +4,15 @@
 
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 
+#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/page_info/page_info.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -20,18 +22,20 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing/features.h"
-#include "components/safe_browsing/password_protection/password_protection_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/events/event_constants.h"
 
 namespace {
-
-typedef InProcessBrowserTest PageInfoBubbleViewBrowserTest;
 
 const char kSyncPasswordPageInfoHistogramName[] =
     "PasswordProtection.PageInfoAction.SyncPasswordEntry";
@@ -87,25 +91,148 @@ void ClickAndWaitForSettingsPageToOpen(views::View* site_settings_button) {
 
 // Returns the URL of the new tab that's opened on clicking the "Site settings"
 // button from Page Info.
-const GURL OpenSiteSettingsForUrl(Browser* browser,
-                                  const GURL& url,
-                                  bool enable_site_details) {
+const GURL OpenSiteSettingsForUrl(Browser* browser, const GURL& url) {
   ui_test_utils::NavigateToURL(browser, url);
   OpenPageInfoBubble(browser);
   // Get site settings button.
   views::View* site_settings_button = GetView(
-      browser, PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS);
-  base::test::ScopedFeatureList feature_list;
-  if (enable_site_details)
-    feature_list.InitAndEnableFeature(features::kSiteDetails);
-  else
-    feature_list.InitAndDisableFeature(features::kSiteDetails);
+      browser,
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SITE_SETTINGS);
   ClickAndWaitForSettingsPageToOpen(site_settings_button);
 
   return browser->tab_strip_model()
       ->GetActiveWebContents()
       ->GetLastCommittedURL();
 }
+
+}  // namespace
+
+class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
+ public:
+  PageInfoBubbleViewBrowserTest() {}
+
+  // DialogBrowserTest:
+  void ShowDialog(const std::string& name) override {
+    // All the possible test names.
+    constexpr char kInsecure[] = "Insecure";
+    constexpr char kInternal[] = "Internal";
+    constexpr char kInternalExtension[] = "InternalExtension";
+    constexpr char kInternalViewSource[] = "InternalViewSource";
+    constexpr char kSecure[] = "Secure";
+    constexpr char kMalware[] = "Malware";
+    constexpr char kDeceptive[] = "Deceptive";
+    constexpr char kUnwantedSoftware[] = "UnwantedSoftware";
+    constexpr char kPasswordReuseSoft[] = "PasswordReuseSoft";
+    constexpr char kPasswordReuse[] = "PasswordReuse";
+    constexpr char kMixedContentForm[] = "MixedContentForm";
+    constexpr char kMixedContent[] = "MixedContent";
+    constexpr char kAllowAllPermissions[] = "AllowAllPermissions";
+    constexpr char kBlockAllPermissions[] = "BlockAllPermissions";
+
+    const GURL internal_url("chrome://settings");
+    const GURL internal_extension_url("chrome-extension://example");
+    // Note the following two URLs are not really necessary to get the different
+    // versions of Page Info to appear, but are here to indicate the type of
+    // URL each IdentityInfo type would normally be associated with.
+    const GURL https_url("https://example.com");
+    const GURL http_url("http://example.com");
+
+    GURL url = http_url;
+    if (name == kSecure || name == kMixedContentForm || name == kMixedContent ||
+        name == kAllowAllPermissions || name == kBlockAllPermissions) {
+      url = https_url;
+    }
+    if (name == kInternal) {
+      url = internal_url;
+    } else if (name == kInternalExtension) {
+      url = internal_extension_url;
+    } else if (name == kInternalViewSource) {
+      constexpr char kTestHtml[] = "/viewsource/test.html";
+      ASSERT_TRUE(embedded_test_server()->Start());
+      url = GURL(content::kViewSourceScheme +
+                 std::string(url::kStandardSchemeSeparator) +
+                 embedded_test_server()->GetURL(kTestHtml).spec());
+    }
+
+    ui_test_utils::NavigateToURL(browser(), url);
+    OpenPageInfoBubble(browser());
+
+    PageInfoUI::IdentityInfo identity;
+    if (name == kInsecure) {
+      identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_NO_CERT;
+    } else if (name == kSecure || name == kAllowAllPermissions ||
+               name == kBlockAllPermissions) {
+      // Generate a valid mock HTTPS identity, with a certificate.
+      identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_CERT;
+      constexpr char kGoodCertificateFile[] = "ok_cert.pem";
+      identity.certificate = net::ImportCertFromFile(
+          net::GetTestCertsDirectory(), kGoodCertificateFile);
+    } else if (name == kMalware) {
+      identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_MALWARE;
+    } else if (name == kDeceptive) {
+      identity.identity_status =
+          PageInfo::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING;
+    } else if (name == kUnwantedSoftware) {
+      identity.identity_status =
+          PageInfo::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE;
+    } else if (name == kPasswordReuseSoft) {
+      softer_warning_feature_.InitAndEnableFeatureWithParameters(
+          safe_browsing::kGoogleBrandedPhishingWarning,
+          {{"softer_warning", "true"}});
+      identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_PASSWORD_REUSE;
+    } else if (name == kPasswordReuse) {
+      softer_warning_feature_.InitAndEnableFeatureWithParameters(
+          safe_browsing::kGoogleBrandedPhishingWarning,
+          {{"softer_warning", "false"}});
+      identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_PASSWORD_REUSE;
+    } else if (name == kMixedContentForm) {
+      identity.identity_status =
+          PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
+      identity.connection_status =
+          PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION;
+    } else if (name == kMixedContent) {
+      identity.identity_status =
+          PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
+      identity.connection_status =
+          PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE;
+    }
+
+    if (name == kAllowAllPermissions || name == kBlockAllPermissions) {
+      // Generate a |PermissionInfoList| with every permission allowed/blocked.
+      PermissionInfoList permissions_list;
+      for (ContentSettingsType content_type :
+           PageInfo::GetAllPermissionsForTesting()) {
+        PageInfoUI::PermissionInfo info;
+        info.type = content_type;
+        info.setting = (name == kAllowAllPermissions) ? CONTENT_SETTING_ALLOW
+                                                      : CONTENT_SETTING_BLOCK;
+        info.default_setting =
+            content_settings::ContentSettingsRegistry::GetInstance()
+                ->Get(info.type)
+                ->GetInitialDefaultSetting();
+        info.source = content_settings::SettingSource::SETTING_SOURCE_USER;
+        info.is_incognito = false;
+        permissions_list.push_back(info);
+      }
+
+      ChosenObjectInfoList chosen_object_list;
+      static_cast<PageInfoBubbleView*>(PageInfoBubbleView::GetPageInfoBubble())
+          ->SetPermissionInfo(permissions_list, std::move(chosen_object_list));
+    }
+
+    if (name != kInsecure && name.find(kInternal) == std::string::npos) {
+      // The bubble may be PageInfoBubbleView or InternalPageInfoBubbleView. The
+      // latter is only used for |kInternal|, so it is safe to static_cast here.
+      static_cast<PageInfoBubbleView*>(PageInfoBubbleView::GetPageInfoBubble())
+          ->SetIdentityInfo(identity);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList softer_warning_feature_;
+
+  DISALLOW_COPY_AND_ASSIGN(PageInfoBubbleViewBrowserTest);
+};
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, ShowBubble) {
   OpenPageInfoBubble(browser());
@@ -140,65 +267,60 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, ViewSourceURL) {
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
-  chrome::ViewSelectedSource(browser());
+  browser()
+      ->tab_strip_model()
+      ->GetActiveWebContents()
+      ->GetMainFrame()
+      ->ViewSource();
   OpenPageInfoBubble(browser());
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
 }
 
-// Test opening "Content Settings" via Page Info from an ASCII origin works.
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, SiteSettingsLink) {
-  GURL url = GURL("https://www.google.com/");
-  EXPECT_EQ(GURL(chrome::kChromeUIContentSettingsURL),
-            OpenSiteSettingsForUrl(browser(), url, false));
-}
-
 // Test opening "Site Details" via Page Info from an ASCII origin does the
 // correct URL canonicalization.
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
-                       SiteSettingsLinkWithSiteDetailsEnabled) {
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, SiteSettingsLink) {
   GURL url = GURL("https://www.google.com/");
   std::string expected_origin = "https%3A%2F%2Fwww.google.com";
   EXPECT_EQ(GURL(chrome::kChromeUISiteDetailsPrefixURL + expected_origin),
-            OpenSiteSettingsForUrl(browser(), url, true));
+            OpenSiteSettingsForUrl(browser(), url));
 }
 
 // Test opening "Site Details" via Page Info from a non-ASCII URL converts it to
 // an origin and does punycode conversion as well as URL canonicalization.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
-                       SiteSettingsLinkWithSiteDetailsEnabledAndNonAsciiUrl) {
+                       SiteSettingsLinkWithNonAsciiUrl) {
   GURL url = GURL("http://🥄.ws/other/stuff.htm");
   std::string expected_origin = "http%3A%2F%2Fxn--9q9h.ws";
   EXPECT_EQ(GURL(chrome::kChromeUISiteDetailsPrefixURL + expected_origin),
-            OpenSiteSettingsForUrl(browser(), url, true));
+            OpenSiteSettingsForUrl(browser(), url));
 }
 
 // Test opening "Site Details" via Page Info from an origin with a non-default
 // (scheme, port) pair will specify port # in the origin passed to query params.
-IN_PROC_BROWSER_TEST_F(
-    PageInfoBubbleViewBrowserTest,
-    SiteSettingsLinkWithSiteDetailsEnabledAndNonDefaultPort) {
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       SiteSettingsLinkWithNonDefaultPort) {
   GURL url = GURL("https://www.example.com:8372");
   std::string expected_origin = "https%3A%2F%2Fwww.example.com%3A8372";
   EXPECT_EQ(GURL(chrome::kChromeUISiteDetailsPrefixURL + expected_origin),
-            OpenSiteSettingsForUrl(browser(), url, true));
+            OpenSiteSettingsForUrl(browser(), url));
 }
 
 // Test opening "Site Details" via Page Info from about:blank goes to "Content
 // Settings" (the alternative is a blank origin being sent to "Site Details").
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
-                       SiteSettingsLinkAboutBlankWithSiteDetailsEnabled) {
+                       SiteSettingsLinkWithAboutBlankURL) {
   EXPECT_EQ(GURL(chrome::kChromeUIContentSettingsURL),
-            OpenSiteSettingsForUrl(browser(), GURL(url::kAboutBlankURL), true));
+            OpenSiteSettingsForUrl(browser(), GURL(url::kAboutBlankURL)));
 }
 
 // Test opening "Site Details" via Page Info from a file:// URL goes to "Content
 // Settings".
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
-                       SiteSettingsLinkWithSiteDetailsEnabledAndFileUrl) {
+                       SiteSettingsLinkWithFileUrl) {
   GURL url = GURL("file:///Users/homedirname/folder/file.pdf");
   EXPECT_EQ(GURL(chrome::kChromeUIContentSettingsURL),
-            OpenSiteSettingsForUrl(browser(), url, true));
+            OpenSiteSettingsForUrl(browser(), url));
 }
 
 // Test opening page info bubble that matches SB_THREAT_TYPE_PASSWORD_REUSE
@@ -215,14 +337,13 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
       safe_browsing::kGoogleBrandedPhishingWarning);
   // Update security state of the current page to match
   // SB_THREAT_TYPE_PASSWORD_REUSE.
-  safe_browsing::PasswordProtectionService* service =
-      g_browser_process->safe_browsing_service()->GetPasswordProtectionService(
-          browser()->profile());
+  safe_browsing::ChromePasswordProtectionService* service =
+      safe_browsing::ChromePasswordProtectionService::
+          GetPasswordProtectionService(browser()->profile());
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  service->UpdateSecurityState(
-      safe_browsing::SB_THREAT_TYPE_PASSWORD_REUSE,
-      browser()->tab_strip_model()->GetActiveWebContents());
+  service->ShowModalWarning(contents, "token");
+  base::RunLoop().RunUntilIdle();
 
   OpenPageInfoBubble(browser());
   views::View* change_password_button = GetView(
@@ -238,7 +359,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   ASSERT_EQ(security_state::MALICIOUS_CONTENT_STATUS_PASSWORD_REUSE,
             security_info.malicious_content_status);
 
-  // Verify these two buttons are showning.
+  // Verify these two buttons are showing.
   EXPECT_TRUE(change_password_button->visible());
   EXPECT_TRUE(whitelist_password_reuse_button->visible());
 
@@ -260,4 +381,89 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
             security_info.malicious_content_status);
 }
 
-}  // namespace
+// Shows the Page Info bubble for a HTTP page (specifically, about:blank).
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeDialog_Insecure) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for a HTTPS page.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeDialog_Secure) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for an internal page, e.g. chrome://settings.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeDialog_Internal) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for an extensions page.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_InternalExtension) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for a chrome page that displays the source HTML.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_InternalViewSource) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for a site flagged for malware by Safe Browsing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeDialog_Malware) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for a site flagged for social engineering by Safe
+// Browsing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeDialog_Deceptive) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for a site flagged for distributing unwanted
+// software by Safe Browsing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_UnwantedSoftware) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble Safe Browsing soft warning after detecting the
+// user has re-used an existing password on a site, e.g. due to phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_PasswordReuseSoft) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble Safe Browsing warning after detecting the user has
+// re-used an existing password on a site, e.g. due to phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_PasswordReuse) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for an admin-provided cert when the page is
+// secure, but has a form that submits to an insecure url.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_MixedContentForm) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble for an admin-provided cert when the page is
+// secure, but it uses insecure resources (e.g. images).
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_MixedContent) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble with all the permissions displayed with 'Allow'
+// set. All permissions will show regardless of its factory default value.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_AllowAllPermissions) {
+  RunDialog();
+}
+
+// Shows the Page Info bubble with all the permissions displayed with 'Block'
+// set. All permissions will show regardless of its factory default value.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeDialog_BlockAllPermissions) {
+  RunDialog();
+}

@@ -4,8 +4,12 @@
 
 #include "chrome/browser/net/system_network_context_manager.h"
 
+#include <string>
+
 #include "base/feature_list.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/process/process_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -20,6 +24,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "net/net_features.h"
 
 namespace {
 
@@ -27,6 +32,8 @@ content::mojom::NetworkContextParamsPtr CreateNetworkContextParams() {
   // TODO(mmenke): Set up parameters here (in memory cookie store, etc).
   content::mojom::NetworkContextParamsPtr network_context_params =
       CreateDefaultNetworkContextParams();
+
+  network_context_params->context_name = std::string("system");
 
   network_context_params->http_cache_enabled = false;
 
@@ -78,6 +85,15 @@ content::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
         CreateNetworkContextParams());
   }
   return network_service_network_context_.get();
+}
+
+content::mojom::URLLoaderFactory*
+SystemNetworkContextManager::GetURLLoaderFactory() {
+  if (!url_loader_factory_) {
+    GetContext()->CreateURLLoaderFactory(
+        mojo::MakeRequest(&url_loader_factory_), 0);
+  }
+  return url_loader_factory_.get();
 }
 
 void SystemNetworkContextManager::SetUp(

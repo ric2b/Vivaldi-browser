@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">बाएं से दाएं</translation>
 <translation id="1546280085599573572">इस एक्सटेंशन ने यह बदल दिया है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पेज दिखाया जाए.</translation>
 <translation id="1588438908519853928">सामान्य</translation>
-<translation id="1616206807336925449">इस एक्‍सटेंशन को किसी विशेष अनुमति की आवश्‍यकता नहीं है.</translation>
 <translation id="1635033183663317347">आपके संरक्षक द्वारा इंस्‍टॉल किया गया.</translation>
 <translation id="1723824996674794290">&amp;नई विंडो</translation>
 <translation id="1729533290416704613">इससे यह भी नियंत्रित होता है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पेज दिखाया जाए.</translation>
@@ -102,7 +101,6 @@
 <translation id="4394049700291259645">अक्षम करें</translation>
 <translation id="4423482519432579560">&amp;वर्तनीजांच</translation>
 <translation id="4522570452068850558">विवरण</translation>
-<translation id="4552089082226364758">फ़्लैश</translation>
 <translation id="4557136421275541763">चेतावनी:</translation>
 <translation id="4593021220803146968"><ph name="URL" /> पर &amp;जाएं</translation>
 <translation id="4595560905247879544">ऐप्स और एक्सटेंशन केवल प्रबंधक (<ph name="CUSTODIAN_NAME" />) के द्वारा बदले जा सकते हैं.</translation>
@@ -138,7 +136,6 @@
 <translation id="5556459405103347317">पुन: लोड करें</translation>
 <translation id="5575473780076478375">गुप्‍त एक्सटेंशन: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">इससे यह भी नियंत्रित होता है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
-<translation id="5646376287012673985">स्थान</translation>
 <translation id="5715711091495208045">प्‍लग इन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">इस रूप में ऑडियो स&amp;हेजें...</translation>
 <translation id="5780973441651030252">प्राथमिकता संसाधित करें</translation>
@@ -177,7 +174,6 @@
 <translation id="6900284862687837908">पृष्ठभूमि ऐप: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">फ़ाइल एक्सेस निरस्त करें</translation>
 <translation id="6974053822202609517">दाएं से बाएं</translation>
-<translation id="7013485839273047434">और अधिक एक्सटेंशन प्राप्त करें</translation>
 <translation id="708060913198414444">ऑडियो के पते को कॉ&amp;पी करें</translation>
 <translation id="7144878232160441200">पुन: प्रयास करें</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> डाउनलोड हो रहा है...</translation>
@@ -187,7 +183,6 @@
 <translation id="7401543881546089382">शॉर्टकट हटाएं</translation>
 <translation id="7421925624202799674">पृष्ठ का स्रोत &amp;देखें</translation>
 <translation id="7427348830195639090">पेजभूमि पेज: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">नया टैब</translation>
 <translation id="7564847347806291057">प्रक्रिया समाप्त करें</translation>
 <translation id="7629827748548208700">टैब: <ph name="TAB_NAME" /></translation>
@@ -235,7 +230,6 @@
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> एंटरप्राइज़ नीति द्वारा अवरोधित है</translation>
 <translation id="9170848237812810038">&amp;पूर्ववत् करें</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" जोड़ा गया</translation>
-<translation id="9219103736887031265">चित्र</translation>
 <translation id="93766956588638423">एक्‍सटेंशन को ठीक करें</translation>
 <translation id="994289308992179865">&amp;लूप</translation>
 <translation id="998747458861718449">नि&amp;रीक्षण करें</translation>

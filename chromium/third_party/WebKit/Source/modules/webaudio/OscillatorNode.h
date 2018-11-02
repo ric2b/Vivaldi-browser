@@ -26,12 +26,11 @@
 #ifndef OscillatorNode_h
 #define OscillatorNode_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioParam.h"
 #include "modules/webaudio/AudioScheduledSourceNode.h"
 #include "modules/webaudio/OscillatorOptions.h"
 #include "platform/audio/AudioBus.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Threading.h"
 
 namespace blink {
@@ -49,12 +48,12 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
   // These must be defined as in the .idl file.
   enum { SINE = 0, SQUARE = 1, SAWTOOTH = 2, TRIANGLE = 3, CUSTOM = 4 };
 
-  static PassRefPtr<OscillatorHandler> Create(AudioNode&,
-                                              float sample_rate,
-                                              const String& oscillator_type,
-                                              PeriodicWave* wave_table,
-                                              AudioParamHandler& frequency,
-                                              AudioParamHandler& detune);
+  static scoped_refptr<OscillatorHandler> Create(AudioNode&,
+                                                 float sample_rate,
+                                                 const String& oscillator_type,
+                                                 PeriodicWave* wave_table,
+                                                 AudioParamHandler& frequency,
+                                                 AudioParamHandler& detune);
   ~OscillatorHandler() override;
 
   // AudioHandler
@@ -83,10 +82,10 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
   unsigned short type_;
 
   // Frequency value in Hertz.
-  RefPtr<AudioParamHandler> frequency_;
+  scoped_refptr<AudioParamHandler> frequency_;
 
   // Detune value (deviating from the frequency) in Cents.
-  RefPtr<AudioParamHandler> detune_;
+  scoped_refptr<AudioParamHandler> detune_;
 
   bool first_render_;
 
@@ -116,7 +115,7 @@ class OscillatorNode final : public AudioScheduledSourceNode {
   static OscillatorNode* Create(BaseAudioContext*,
                                 const OscillatorOptions&,
                                 ExceptionState&);
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   String type() const;
   void setType(const String&, ExceptionState&);

@@ -59,6 +59,18 @@ using content::WebUIMessageHandler;
 
 namespace {
 
+std::unique_ptr<net::test_server::HttpResponse> HandleExpectCTReportPreflight(
+    const net::test_server::HttpRequest& request) {
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
+      new net::test_server::BasicHttpResponse());
+  http_response->set_code(net::HTTP_OK);
+  http_response->AddCustomHeader("Access-Control-Allow-Origin", "*");
+  http_response->AddCustomHeader("Access-Control-Allow-Methods", "POST");
+  http_response->AddCustomHeader("Access-Control-Allow-Headers",
+                                 "Content-Type");
+  return http_response;
+}
+
 // Called on IO thread.  Adds an entry to the cache for the specified hostname.
 // Either |net_error| must be net::OK, or |address| must be NULL.
 void AddCacheEntryOnIOThread(net::URLRequestContextGetter* context_getter,
@@ -86,9 +98,9 @@ void AddCacheEntryOnIOThread(net::URLRequestContextGetter* context_getter,
 
   // Add entry to the cache.
   cache->Set(net::HostCache::Key(hostname, net::ADDRESS_FAMILY_UNSPECIFIED, 0),
-             net::HostCache::Entry(net_error, address_list),
-             base::TimeTicks::Now(),
-             ttl);
+             net::HostCache::Entry(net_error, address_list,
+                                   net::HostCache::Entry::SOURCE_UNKNOWN),
+             base::TimeTicks::Now(), ttl);
 }
 
 struct WriteNetLogState {
@@ -148,6 +160,10 @@ class NetInternalsTest::MessageHandler : public content::WebUIMessageHandler {
   // Creates a simple NetLog and returns it to the Javascript callback.
   void GetNetLogFileContents(const base::ListValue* list_value);
 
+  // Sets up the test server to receive test Expect-CT reports. Calls the
+  // Javascript callback to return the test server URI.
+  void SetUpTestReportURI(const base::ListValue* list_value);
+
   // Changes the data reduction proxy mode. A boolean is assumed to exist at
   // index 0 which enables the proxy is set to true.
   void EnableDataReductionProxy(const base::ListValue* list_value);
@@ -200,6 +216,10 @@ void NetInternalsTest::MessageHandler::RegisterMessages() {
       base::Bind(
           &NetInternalsTest::MessageHandler::GetNetLogFileContents,
           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setUpTestReportURI",
+      base::Bind(&NetInternalsTest::MessageHandler::SetUpTestReportURI,
+                 base::Unretained(this)));
   web_ui()->RegisterMessageCallback("enableDataReductionProxy",
       base::Bind(
           &NetInternalsTest::MessageHandler::EnableDataReductionProxy,
@@ -299,7 +319,7 @@ void NetInternalsTest::MessageHandler::CloseIncognitoBrowser(
 
 void NetInternalsTest::MessageHandler::GetNetLogFileContents(
     const base::ListValue* list_value) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
 
   std::unique_ptr<WriteNetLogState> state =
       base::MakeUnique<WriteNetLogState>();
@@ -333,6 +353,16 @@ void NetInternalsTest::MessageHandler::GetNetLogFileContents(
                  base::Unretained(this), base::Passed(std::move(state))));
 }
 
+void NetInternalsTest::MessageHandler::SetUpTestReportURI(
+    const base::ListValue* list_value) {
+  net_internals_test_->embedded_test_server()->RegisterRequestHandler(
+      base::Bind(&HandleExpectCTReportPreflight));
+  ASSERT_TRUE(net_internals_test_->embedded_test_server()->Start());
+  base::Value report_uri_value(
+      net_internals_test_->embedded_test_server()->GetURL("/").spec());
+  RunJavascriptCallback(&report_uri_value);
+}
+
 void NetInternalsTest::MessageHandler::EnableDataReductionProxy(
     const base::ListValue* list_value) {
   bool enable;
@@ -343,7 +373,7 @@ void NetInternalsTest::MessageHandler::EnableDataReductionProxy(
 
 void NetInternalsTest::MessageHandler::OnFinishedWritingNetLog(
     std::unique_ptr<WriteNetLogState> state) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
 
   std::string log_contents;
   ASSERT_TRUE(base::ReadFileToString(state->log_path, &log_contents));
@@ -379,11 +409,6 @@ void NetInternalsTest::SetUpOnMainThread() {
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
   prerender_manager->mutable_config().max_bytes = 1000 * 1024 * 1024;
-
-  // Sample domain for SDCH-view test. Dictionaries for localhost/127.0.0.1
-  // are forbidden.
-  host_resolver()->AddRule("testdomain.com", "127.0.0.1");
-  host_resolver()->AddRule("sub.testdomain.com", "127.0.0.1");
 }
 
 content::WebUIMessageHandler* NetInternalsTest::GetMockMessageHandler() {

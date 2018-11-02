@@ -9,12 +9,12 @@
 
 #include "base/logging.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_devices.mojom.h"
 #include "content/renderer/media/media_stream_audio_processor_options.h"
 #include "content/renderer/media/video_track_adapter.h"
 #include "media/capture/video_capture_types.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
-#include "third_party/webrtc/rtc_base/optional.h"
+#include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/webrtc/api/optional.h"
 
 namespace content {
 
@@ -355,8 +355,7 @@ VideoTrackAdapterSettings CONTENT_EXPORT SelectVideoTrackAdapterSettings(
     const blink::WebMediaTrackConstraintSet& basic_constraint_set,
     const ResolutionSet& resolution_set,
     const NumericRangeSet<double>& frame_rate_set,
-    const media::VideoCaptureFormat& source_format,
-    bool expect_source_native_size);
+    const media::VideoCaptureFormat& source_format);
 
 // Generic distance function between two values for numeric constraints. Based
 // on the fitness-distance function described in

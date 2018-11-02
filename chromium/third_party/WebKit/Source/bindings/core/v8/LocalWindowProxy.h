@@ -31,12 +31,12 @@
 #ifndef LocalWindowProxy_h
 #define LocalWindowProxy_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8.h"
 
@@ -50,7 +50,7 @@ class LocalWindowProxy final : public WindowProxy {
  public:
   static LocalWindowProxy* Create(v8::Isolate* isolate,
                                   LocalFrame& frame,
-                                  RefPtr<DOMWrapperWorld> world) {
+                                  scoped_refptr<DOMWrapperWorld> world) {
     return new LocalWindowProxy(isolate, frame, std::move(world));
   }
 
@@ -70,7 +70,7 @@ class LocalWindowProxy final : public WindowProxy {
   void UpdateSecurityOrigin(SecurityOrigin*);
 
  private:
-  LocalWindowProxy(v8::Isolate*, LocalFrame&, RefPtr<DOMWrapperWorld>);
+  LocalWindowProxy(v8::Isolate*, LocalFrame&, scoped_refptr<DOMWrapperWorld>);
 
   bool IsLocal() const override { return true; }
   void Initialize() override;
@@ -81,6 +81,9 @@ class LocalWindowProxy final : public WindowProxy {
   // prototype chain do not get fully initialized yet, e.g. the window
   // wrapper is not yet associated with the native DOMWindow object.
   void CreateContext();
+
+  // Installs conditionally enabled features, if necessary.
+  void InstallConditionalFeatures();
 
   // Associates the window wrapper and its prototype chain with the native
   // DOMWindow object. Also does some more Window-specific initialization.
@@ -104,7 +107,7 @@ class LocalWindowProxy final : public WindowProxy {
 
   LocalFrame* GetFrame() const { return ToLocalFrame(WindowProxy::GetFrame()); }
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
 };
 
 DEFINE_TYPE_CASTS(LocalWindowProxy,

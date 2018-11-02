@@ -7,8 +7,10 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/owned_mailbox.h"
+#include "third_party/khronos/GLES2/gl2.h"
 #include "ui/compositor/layer.h"
 
 namespace content {
@@ -74,7 +76,7 @@ void ReflectorImpl::AddMirroringLayer(ui::Layer* layer) {
   DCHECK(layer->GetCompositor());
   DCHECK(mirroring_layers_.end() == FindLayerData(layer));
 
-  mirroring_layers_.push_back(base::MakeUnique<LayerData>(layer));
+  mirroring_layers_.push_back(std::make_unique<LayerData>(layer));
   if (mailbox_)
     mirroring_layers_.back()->needs_set_mailbox = true;
   mirrored_compositor_->ScheduleFullRedraw();
@@ -157,8 +159,10 @@ void ReflectorImpl::UpdateTexture(ReflectorImpl::LayerData* layer_data,
                                   const gfx::Size& source_size,
                                   const gfx::Rect& redraw_rect) {
   if (layer_data->needs_set_mailbox) {
-    layer_data->layer->SetTextureMailbox(
-        viz::TextureMailbox(mailbox_->holder()),
+    layer_data->layer->SetTransferableResource(
+        viz::TransferableResource::MakeGL(mailbox_->holder().mailbox, GL_LINEAR,
+                                          mailbox_->holder().texture_target,
+                                          mailbox_->holder().sync_token),
         viz::SingleReleaseCallback::Create(
             base::Bind(ReleaseMailbox, mailbox_)),
         source_size);

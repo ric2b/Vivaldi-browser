@@ -75,7 +75,7 @@
     // draw canvas in software.
     {
       name: "minimumAccelerated2dCanvasSize",
-      initial: "257*256",
+      initial: "129*128",
       type: "int",
     },
 
@@ -178,10 +178,14 @@
       invalidate: "AcceleratedCompositing",
     },
 
-    // 3D canvas (WebGL) support.
     {
-      name: "webGLEnabled",
-      initial: false,
+      name: "webGL1Enabled",
+      initial: true,
+    },
+
+    {
+      name: "webGL2Enabled",
+      initial: true,
     },
 
     {
@@ -476,13 +480,6 @@
       initial: false,
     },
 
-    // Setting to have all APIs reflect the layout viewport.
-    // crbug.com/489206 tracks the reason for this flag's existence.
-    {
-      name: "inertVisualViewport",
-      initial: true,
-    },
-
     // The rubber-band overscroll effect is implemented in Blink and is being moved
     // to the compositor thread. This will be set to true and eventually removed.
     // crbug.com/133097
@@ -568,11 +565,6 @@
     },
 
     {
-      name: "encryptedMediaEnabled",
-      initial: true,
-    },
-
-    {
       name: "viewportEnabled",
       initial: false,
       invalidate: "ViewportDescription",
@@ -589,16 +581,17 @@
       invalidate: "DNSPrefetching",
     },
 
-    {
-      name: "dataSaverEnabled",
-      initial: false,
-    },
-
     // Clients that execute script should call ExecutionContext::canExecuteScripts()
     // instead of this function. ExecutionContext::canExecuteScripts() checks the
     // HTML sandbox, plugin sandboxing, and other important details.
     {
       name: "scriptEnabled",
+      initial: false,
+    },
+
+    // Forces Android Overlay Scrollbar for mobile emulator.
+    {
+      name: "forceAndroidOverlayScrollbar",
       initial: false,
     },
 
@@ -655,13 +648,6 @@
       name: "v8CacheOptions",
       initial: "kV8CacheOptionsDefault",
       type: "V8CacheOptions",
-    },
-
-    // V8 code cache for CacheStorage supports three types of strategies (none, normal and aggressive).
-    {
-      name: "v8CacheStrategiesForCacheStorage",
-      initial: "V8CacheStrategiesForCacheStorage::kDefault",
-      type: "V8CacheStrategiesForCacheStorage",
     },
 
     // These values are bit fields for the properties of available pointing devices
@@ -816,6 +802,12 @@
       name: "textTrackMarginPercentage",
       initial: 0,
       type: "double",
+    },
+
+    {
+      name: "savePreviousDocumentResources",
+      initial: "SavePreviousDocumentResources::kNever",
+      type: "SavePreviousDocumentResources",
     },
 
     {
@@ -979,6 +971,10 @@
     {
       name: "forceDisplayList2dCanvasEnabled",
       initial: false,
+    },
+    {
+      name: "navigatorPlatformOverride",
+      type: "String",
     },
   ],
 }

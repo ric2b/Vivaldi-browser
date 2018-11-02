@@ -5,7 +5,7 @@
 #include "chrome/browser/vr/elements/exit_warning_texture.h"
 
 #include "cc/paint/skia_paint_canvas.h"
-#include "components/strings/grit/components_strings.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
@@ -20,9 +20,9 @@ namespace vr {
 
 namespace {
 
-constexpr float kBorderFactor = 0.045;
-constexpr float kFontSizeFactor = 0.048;
-constexpr float kTextWidthFactor = 1.0 - 3 * kBorderFactor;
+constexpr float kBorderFactor = 0.045f;
+constexpr float kFontSizeFactor = 0.048f;
+constexpr float kTextWidthFactor = 1.0f - 3 * kBorderFactor;
 
 }  // namespace
 
@@ -39,16 +39,15 @@ void ExitWarningTexture::Draw(SkCanvas* sk_canvas,
   size_.set_width(texture_size.width());
   SkPaint paint;
 
-  paint.setColor(color_scheme().exit_warning_background);
-  auto text =
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_VR_BROWSER_UNSUPPORTED_MODE);
+  paint.setColor(background_color());
+  auto text = l10n_util::GetStringUTF16(IDS_VR_BROWSER_UNSUPPORTED_PAGE);
   gfx::FontList fonts;
-  GetFontList(size_.width() * kFontSizeFactor, text, &fonts);
+  GetDefaultFontList(size_.width() * kFontSizeFactor, text, &fonts);
   gfx::Rect text_size(size_.width() * kTextWidthFactor, 0);
 
-  std::vector<std::unique_ptr<gfx::RenderText>> lines = PrepareDrawStringRect(
-      text, fonts, color_scheme().exit_warning_foreground, &text_size,
-      kTextAlignmentCenter, kWrappingBehaviorWrap);
+  std::vector<std::unique_ptr<gfx::RenderText>> lines =
+      PrepareDrawStringRect(text, fonts, foreground_color(), &text_size,
+                            kTextAlignmentCenter, kWrappingBehaviorWrap);
 
   DCHECK_LE(text_size.height(),
             static_cast<int>((1.0 - 2 * kBorderFactor) * size_.width()));

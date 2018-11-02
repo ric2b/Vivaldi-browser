@@ -30,13 +30,14 @@
 #ifndef Document_h
 #define Document_h
 
-#include <memory>
 #include <string>
 #include <utility>
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
+#include "core/animation/WorkletAnimationController.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/DocumentEncodingData.h"
 #include "core/dom/DocumentInit.h"
@@ -45,7 +46,10 @@
 #include "core/dom/DocumentShutdownObserver.h"
 #include "core/dom/DocumentTiming.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/FrameRequestCallbackCollection.h"
+#include "core/dom/LiveNodeListRegistry.h"
 #include "core/dom/MutationObserver.h"
+#include "core/dom/ScriptedIdleTaskController.h"
 #include "core/dom/SynchronousMutationNotifier.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/dom/Text.h"
@@ -67,15 +71,18 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
+
+namespace ukm {
+class UkmRecorder;
+}  // namespace ukm
 
 namespace blink {
 
 namespace mojom {
 enum class EngagementLevel : int32_t;
-}
+}  // namespace mojom
 
 class AnimationClock;
 class AXObjectCache;
@@ -113,7 +120,6 @@ class ExceptionState;
 class FloatQuad;
 class FloatRect;
 class FormController;
-class FrameRequestCallback;
 class HTMLAllCollection;
 class HTMLBodyElement;
 class HTMLCollection;
@@ -126,7 +132,6 @@ class HTMLImportsController;
 class HTMLLinkElement;
 class HTMLScriptElementOrSVGScriptElement;
 class HitTestRequest;
-class IdleRequestCallback;
 class IdleRequestOptions;
 class IntersectionObserverController;
 class LayoutPoint;
@@ -145,6 +150,7 @@ class NthIndexCache;
 class OriginAccessEntry;
 class Page;
 class PendingAnimations;
+class Policy;
 class ProcessingInstruction;
 class PropertyRegistry;
 class QualifiedName;
@@ -154,13 +160,12 @@ class ResourceFetcher;
 class RootScrollerController;
 class SVGDocumentExtensions;
 class SVGUseElement;
+class TrustedHTML;
 class ScriptElementBase;
 class ScriptRunner;
 class ScriptableDocumentParser;
 class ScriptedAnimationController;
-class ScriptedIdleTaskController;
 class SecurityOrigin;
-class SegmentedString;
 class SelectorQueryCache;
 class SerializedScriptValue;
 class Settings;
@@ -184,7 +189,7 @@ struct IconURL;
 using MouseEventWithHitTestResults = EventWithHitTestResults<WebMouseEvent>;
 using ExceptionCode = int;
 
-enum NodeListInvalidationType {
+enum NodeListInvalidationType : int {
   kDoNotInvalidateOnAttributeChanges = 0,
   kInvalidateOnClassAttrChange,
   kInvalidateOnIdNameAttrChange,
@@ -252,6 +257,8 @@ enum class WouldLoadReason {
   kCount,
 };
 
+enum class SecureContextState { kUnknown, kNonSecure, kSecure };
+
 using DocumentClassFlags = unsigned char;
 
 class CORE_EXPORT Document : public ContainerNode,
@@ -278,11 +285,15 @@ class CORE_EXPORT Document : public ContainerNode,
   static Document* Create(const Document&);
   ~Document() override;
 
+  // Support JS introspection of frame policy (e.g. feature policy).
+  Policy* policy();
+
   MediaQueryMatcher& GetMediaQueryMatcher();
 
   void MediaQueryAffectingValueChanged();
 
   using SecurityContext::GetSecurityOrigin;
+  using SecurityContext::GetMutableSecurityOrigin;
   using SecurityContext::GetContentSecurityPolicy;
   using TreeScope::getElementById;
 
@@ -350,8 +361,8 @@ class CORE_EXPORT Document : public ContainerNode,
                            ExceptionState&);
   Element* createElement(const QualifiedName&, CreateElementFlags);
 
-  Element* ElementFromPoint(int x, int y) const;
-  HeapVector<Member<Element>> ElementsFromPoint(int x, int y) const;
+  Element* ElementFromPoint(double x, double y) const;
+  HeapVector<Member<Element>> ElementsFromPoint(double x, double y) const;
   Range* caretRangeFromPoint(int x, int y);
   Element* scrollingElement();
   // When calling from C++ code, use this method. scrollingElement() is
@@ -395,7 +406,7 @@ class CORE_EXPORT Document : public ContainerNode,
   String suborigin() const;
 
   String visibilityState() const;
-  PageVisibilityState GetPageVisibilityState() const;
+  mojom::PageVisibilityState GetPageVisibilityState() const;
   bool hidden() const;
   void DidChangeVisibilityState();
 
@@ -526,8 +537,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void UpdateStyleAndLayoutIgnorePendingStylesheets(
       RunPostLayoutTasks = kRunPostLayoutTasksAsyhnchronously);
   void UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(Node*);
-  RefPtr<ComputedStyle> StyleForElementIgnoringPendingStylesheets(Element*);
-  RefPtr<ComputedStyle> StyleForPage(int page_index);
+  scoped_refptr<ComputedStyle> StyleForElementIgnoringPendingStylesheets(
+      Element*);
+  scoped_refptr<ComputedStyle> StyleForPage(int page_index);
 
   // Ensures that location-based data will be valid for a given node.
   //
@@ -553,7 +565,7 @@ class CORE_EXPORT Document : public ContainerNode,
                                   int& margin_bottom,
                                   int& margin_left);
 
-  ResourceFetcher* Fetcher() const { return fetcher_.Get(); }
+  ResourceFetcher* Fetcher() const override { return fetcher_.Get(); }
 
   void Initialize();
   virtual void Shutdown();
@@ -569,9 +581,9 @@ class CORE_EXPORT Document : public ContainerNode,
   LayoutView* GetLayoutView() const { return layout_view_; }
   LayoutViewItem GetLayoutViewItem() const;
 
-  Document& AxObjectCacheOwner() const;
+  Document& AXObjectCacheOwner() const;
   AXObjectCache* ExistingAXObjectCache() const;
-  AXObjectCache* AxObjectCache() const;
+  AXObjectCache* GetOrCreateAXObjectCache() const;
   void ClearAXObjectCache();
 
   // to get visually ordered hebrew and arabic pages right
@@ -589,7 +601,19 @@ class CORE_EXPORT Document : public ContainerNode,
                                     const AtomicString& encoding);
   DocumentParser* ImplicitOpen(ParserSynchronizationPolicy);
 
-  // This is the DOM API document.close()
+  // This is the DOM API document.open() implementation.
+  // document.open() opens a new window when called with three arguments.
+  Document* open(LocalDOMWindow* entered_window,
+                 const AtomicString& type,
+                 const AtomicString& replace,
+                 ExceptionState&);
+  DOMWindow* open(LocalDOMWindow* current_window,
+                  LocalDOMWindow* entered_window,
+                  const AtomicString& url,
+                  const AtomicString& name,
+                  const AtomicString& features,
+                  ExceptionState&);
+  // This is the DOM API document.close().
   void close(ExceptionState&);
   // This is used internally and does not handle exceptions.
   void close();
@@ -612,9 +636,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void CancelParsing();
 
-  void write(const SegmentedString& text,
-             Document* entered_document = nullptr,
-             ExceptionState& = ASSERT_NO_EXCEPTION);
   void write(const String& text,
              Document* entered_document = nullptr,
              ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -624,11 +645,16 @@ class CORE_EXPORT Document : public ContainerNode,
   void write(LocalDOMWindow*, const Vector<String>& text, ExceptionState&);
   void writeln(LocalDOMWindow*, const Vector<String>& text, ExceptionState&);
 
+  // TrustedHTML variants of the above.
+  // TODO(mkwst): Write a spec for this.
+  void write(LocalDOMWindow*, TrustedHTML*, ExceptionState&);
+  void writeln(LocalDOMWindow*, TrustedHTML*, ExceptionState&);
+
   bool WellFormed() const { return well_formed_; }
 
   // Return the document URL, or an empty URL if it's unavailable.
   // This is not an implementation of web-exposed Document.prototype.URL.
-  const KURL& Url() const { return url_; }
+  const KURL& Url() const final { return url_; }
   void SetURL(const KURL&);
 
   // Bind the url to document.url, if unavailable bind to about:blank.
@@ -639,7 +665,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // Document base URL.
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url
-  const KURL& BaseURL() const;
+  const KURL& BaseURL() const final;
   void SetBaseURLOverride(const KURL&);
   const KURL& BaseURLOverride() const { return base_url_override_; }
   KURL ValidBaseElementURL() const;
@@ -653,7 +679,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // Creates URL based on passed relative url and this documents base URL.
   // Depending on base URL value it is possible that parent document
   // base URL will be used instead. Uses CompleteURLWithOverride internally.
-  KURL CompleteURL(const String&) const;
+  KURL CompleteURL(const String&) const final;
   // Creates URL based on passed relative url and passed base URL override.
   KURL CompleteURLWithOverride(const String&,
                                const KURL& base_url_override) const;
@@ -697,6 +723,7 @@ class CORE_EXPORT Document : public ContainerNode,
     return compatibility_mode_ == kLimitedQuirksMode;
   }
   bool InNoQuirksMode() const { return compatibility_mode_ == kNoQuirksMode; }
+  bool InLineHeightQuirksMode() const { return !InNoQuirksMode(); }
 
   // https://html.spec.whatwg.org/multipage/dom.html#documentreadystate
   enum DocumentReadyState { kLoading, kInteractive, kComplete };
@@ -1011,15 +1038,19 @@ class CORE_EXPORT Document : public ContainerNode,
   // Returns null if there is no such element.
   HTMLLinkElement* LinkManifest() const;
 
+  // Returns the HTMLLinkElement holding the canonical URL. Returns null if
+  // there is no such element.
+  HTMLLinkElement* LinkCanonical() const;
+
   void UpdateFocusAppearanceLater();
   void CancelFocusAppearanceUpdate();
 
   bool IsDNSPrefetchEnabled() const { return is_dns_prefetch_enabled_; }
   void ParseDNSPrefetchControlHeader(const String&);
 
-  void TasksWereSuspended() final;
-  void TasksWereResumed() final;
-  bool TasksNeedSuspension() final;
+  void TasksWerePaused() final;
+  void TasksWereUnpaused() final;
+  bool TasksNeedPause() final;
 
   void FinishedParsing();
 
@@ -1062,7 +1093,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void EnforceSandboxFlags(SandboxFlags mask) override;
 
-  void StatePopped(PassRefPtr<SerializedScriptValue>);
+  void StatePopped(scoped_refptr<SerializedScriptValue>);
 
   enum LoadEventProgress {
     kLoadEventNotRun,
@@ -1147,11 +1178,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   const DocumentTiming& GetTiming() const { return document_timing_; }
 
-  int RequestAnimationFrame(FrameRequestCallback*);
+  int RequestAnimationFrame(FrameRequestCallbackCollection::FrameCallback*);
   void CancelAnimationFrame(int id);
   void ServiceScriptedAnimations(double monotonic_animation_start_time);
 
-  int RequestIdleCallback(IdleRequestCallback*, const IdleRequestOptions&);
+  int RequestIdleCallback(ScriptedIdleTaskController::IdleTask*,
+                          const IdleRequestOptions&);
   void CancelIdleCallback(int id);
 
   EventTarget* ErrorEventTarget() final;
@@ -1221,6 +1253,9 @@ class CORE_EXPORT Document : public ContainerNode,
   AnimationClock& GetAnimationClock();
   DocumentTimeline& Timeline() const { return *timeline_; }
   PendingAnimations& GetPendingAnimations() { return *pending_animations_; }
+  WorkletAnimationController& GetWorkletAnimationController() {
+    return *worklet_animation_controller_;
+  }
 
   void AddToTopLayer(Element*, const Element* before = nullptr);
   void RemoveFromTopLayer(Element*);
@@ -1268,7 +1303,7 @@ class CORE_EXPORT Document : public ContainerNode,
   enum HttpRefreshType { kHttpRefreshFromHeader, kHttpRefreshFromMetaTag };
   void MaybeHandleHttpRefresh(const String&, HttpRefreshType);
 
-  void UpdateSecurityOrigin(RefPtr<SecurityOrigin>);
+  void UpdateSecurityOrigin(scoped_refptr<SecurityOrigin>);
 
   void SetHasViewportUnits() { has_viewport_units_ = true; }
   bool HasViewportUnits() const { return has_viewport_units_; }
@@ -1277,9 +1312,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void UpdateActiveStyle();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   AtomicString ConvertLocalName(const AtomicString&);
 
@@ -1295,6 +1330,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsSecureContext(String& error_message) const override;
   bool IsSecureContext() const override;
+  void SetSecureContextStateForTesting(SecureContextState state) {
+    secure_context_state_ = state;
+  }
 
   ClientHintsPreferences& GetClientHintsPreferences() {
     return client_hints_preferences_;
@@ -1354,8 +1392,33 @@ class CORE_EXPORT Document : public ContainerNode,
   void MaybeQueueSendDidEditFieldInInsecureContext();
 
   CoreProbeSink* GetProbeSink() final;
+  service_manager::InterfaceProvider* GetInterfaceProvider() final;
 
-  void SetFeaturePolicy(const String& feature_policy_header);
+  // Set an explicit feature policy on this document in response to an HTTP
+  // Feature Policy header. This will be relayed to the embedder through the
+  // LocalFrameClient.
+  void ApplyFeaturePolicyFromHeader(const String& feature_policy_header);
+
+  const AtomicString& bgColor() const;
+  void setBgColor(const AtomicString&);
+  const AtomicString& fgColor() const;
+  void setFgColor(const AtomicString&);
+  const AtomicString& alinkColor() const;
+  void setAlinkColor(const AtomicString&);
+  const AtomicString& linkColor() const;
+  void setLinkColor(const AtomicString&);
+  const AtomicString& vlinkColor() const;
+  void setVlinkColor(const AtomicString&);
+
+  void clear() {}
+
+  void captureEvents() {}
+  void releaseEvents() {}
+
+  ukm::UkmRecorder* UkmRecorder();
+  int64_t UkmSourceID() const;
+
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) override;
 
  protected:
   Document(const DocumentInit&, DocumentClassFlags = kDefaultDocumentClass);
@@ -1390,6 +1453,7 @@ class CORE_EXPORT Document : public ContainerNode,
   ScriptedAnimationController& EnsureScriptedAnimationController();
   ScriptedIdleTaskController& EnsureScriptedIdleTaskController();
   void InitSecurityContext(const DocumentInit&);
+  void InitSecureContextState();
   SecurityContext& GetSecurityContext() final { return *this; }
   EventQueue* GetEventQueue() const final;
 
@@ -1402,7 +1466,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool NeedsFullLayoutTreeUpdate() const;
 
-  void PropagateStyleToViewport(StyleRecalcChange);
+  void PropagateStyleToViewport();
 
   void UpdateUseShadowTreesIfNeeded();
   void EvaluateMediaQueryListIfNeeded();
@@ -1428,17 +1492,11 @@ class CORE_EXPORT Document : public ContainerNode,
   bool ChildTypeAllowed(NodeType) const final;
   Node* cloneNode(bool deep, ExceptionState&) final;
   void CloneDataFromDocument(const Document&);
-  bool IsSecureContextImpl() const;
 
   ShadowCascadeOrder shadow_cascade_order_ = kShadowCascadeNone;
 
-  // Same as url(), but needed for ExecutionContext to implement it without a
-  // performance loss for direct calls.
-  const KURL& VirtualURL() const final;
-  // Same as completeURL() for the same reason as above.
-  KURL VirtualCompleteURL(const String&) const final;
-
   void UpdateTitle(const String&);
+  void DispatchDidReceiveTitle();
   void UpdateFocusAppearanceTimerFired(TimerBase*);
   void UpdateBaseURL();
 
@@ -1483,6 +1541,15 @@ class CORE_EXPORT Document : public ContainerNode,
   void UpdateActiveState(const HitTestRequest&, Element*);
   void UpdateHoverState(const HitTestRequest&, Element*);
 
+  const AtomicString& BodyAttributeValue(const QualifiedName&) const;
+  void SetBodyAttribute(const QualifiedName&, const AtomicString&);
+
+  // Set the feature policy on this document, inheriting as necessary from the
+  // parent document and frame owner (if they exist). The caller must ensure
+  // that any changes to the declared policy are relayed to the embedder through
+  // the LocalFrameClient.
+  void ApplyFeaturePolicy(const ParsedFeaturePolicy& declared_policy);
+
   DocumentLifecycle lifecycle_;
 
   bool has_nodes_with_placeholder_style_;
@@ -1496,6 +1563,10 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<LocalFrame> frame_;
   Member<LocalDOMWindow> dom_window_;
   TraceWrapperMember<HTMLImportsController> imports_controller_;
+
+  // The document of creator browsing context for frame-less documents such as
+  // documents created by DOMParser and DOMImplementation.
+  WeakMember<Document> context_document_;
 
   Member<ResourceFetcher> fetcher_;
   TraceWrapperMember<DocumentParser> parser_;
@@ -1615,11 +1686,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   HeapHashSet<WeakMember<const LiveNodeListBase>>
       lists_invalidated_at_document_;
-  // Oilpan keeps track of all registered NodeLists.
-  // TODO(Oilpan): improve - only need to know if a NodeList
-  // is currently alive or not for the different types.
-  HeapHashSet<WeakMember<const LiveNodeListBase>>
-      node_lists_[kNumNodeListInvalidationTypes];
+  LiveNodeListRegistry node_lists_;
 
   Member<SVGDocumentExtensions> svg_extensions_;
 
@@ -1646,10 +1713,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   LayoutView* layout_view_;
 
-  // The document of creator browsing context for frame-less documents such as
-  // documents created by DOMParser and DOMImplementation.
-  WeakMember<Document> context_document_;
-
   // For early return in Fullscreen::fromIfExists()
   bool has_fullscreen_supplement_;
 
@@ -1668,8 +1731,9 @@ class CORE_EXPORT Document : public ContainerNode,
   bool write_recursion_is_too_deep_;
   unsigned write_recursion_depth_;
 
-  Member<ScriptedAnimationController> scripted_animation_controller_;
-  Member<ScriptedIdleTaskController> scripted_idle_task_controller_;
+  TraceWrapperMember<ScriptedAnimationController>
+      scripted_animation_controller_;
+  TraceWrapperMember<ScriptedIdleTaskController> scripted_idle_task_controller_;
   Member<TextAutosizer> text_autosizer_;
 
   Member<V0CustomElementRegistrationContext> registration_context_;
@@ -1686,6 +1750,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Member<DocumentTimeline> timeline_;
   Member<PendingAnimations> pending_animations_;
+  Member<WorkletAnimationController> worklet_animation_controller_;
 
   Member<Document> template_document_;
   Member<Document> template_document_host_;
@@ -1706,7 +1771,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Member<CanvasFontCache> canvas_font_cache_;
 
-  Member<IntersectionObserverController> intersection_observer_controller_;
+  TraceWrapperMember<IntersectionObserverController>
+      intersection_observer_controller_;
   Member<ResizeObserverController> resize_observer_controller_;
 
   int node_count_;
@@ -1729,11 +1795,19 @@ class CORE_EXPORT Document : public ContainerNode,
 
   mojom::EngagementLevel engagement_level_;
 
+  SecureContextState secure_context_state_;
+
   Member<NetworkStateObserver> network_state_observer_;
 
   bool has_high_media_engagement_;
 
   std::unique_ptr<DocumentOutliveTimeReporter> document_outlive_time_reporter_;
+
+  // |mojo_ukm_recorder_| and |source_id_| will allow objects that are part of
+  // the |ukm_recorder_| and |source_id_| will allow objects that are part of
+  // the document to recorde UKM.
+  std::unique_ptr<ukm::UkmRecorder> ukm_recorder_;
+  int64_t ukm_source_id_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

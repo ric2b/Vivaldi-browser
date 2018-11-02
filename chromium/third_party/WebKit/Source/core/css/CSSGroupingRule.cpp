@@ -35,6 +35,7 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -46,9 +47,10 @@ CSSGroupingRule::CSSGroupingRule(StyleRuleGroup* group_rule,
       group_rule_(group_rule),
       child_rule_cssom_wrappers_(group_rule->ChildRules().size()) {}
 
-CSSGroupingRule::~CSSGroupingRule() {}
+CSSGroupingRule::~CSSGroupingRule() = default;
 
-unsigned CSSGroupingRule::insertRule(const String& rule_string,
+unsigned CSSGroupingRule::insertRule(const ExecutionContext* execution_context,
+                                     const String& rule_string,
                                      unsigned index,
                                      ExceptionState& exception_state) {
   DCHECK_EQ(child_rule_cssom_wrappers_.size(),
@@ -63,8 +65,8 @@ unsigned CSSGroupingRule::insertRule(const String& rule_string,
   }
 
   CSSStyleSheet* style_sheet = parentStyleSheet();
-  CSSParserContext* context =
-      CSSParserContext::CreateWithStyleSheet(ParserContext(), style_sheet);
+  CSSParserContext* context = CSSParserContext::CreateWithStyleSheet(
+      ParserContext(execution_context->GetSecureContextMode()), style_sheet);
   StyleRuleBase* new_rule = CSSParser::ParseRule(
       context, style_sheet ? style_sheet->Contents() : nullptr, rule_string);
   if (!new_rule) {
@@ -115,8 +117,8 @@ void CSSGroupingRule::deleteRule(unsigned index,
   group_rule_->WrapperRemoveRule(index);
 
   if (child_rule_cssom_wrappers_[index])
-    child_rule_cssom_wrappers_[index]->SetParentRule(0);
-  child_rule_cssom_wrappers_.erase(index);
+    child_rule_cssom_wrappers_[index]->SetParentRule(nullptr);
+  child_rule_cssom_wrappers_.EraseAt(index);
 }
 
 void CSSGroupingRule::AppendCSSTextForItems(StringBuilder& result) const {
@@ -161,7 +163,7 @@ void CSSGroupingRule::Reattach(StyleRuleBase* rule) {
   }
 }
 
-DEFINE_TRACE(CSSGroupingRule) {
+void CSSGroupingRule::Trace(blink::Visitor* visitor) {
   CSSRule::Trace(visitor);
   visitor->Trace(child_rule_cssom_wrappers_);
   visitor->Trace(group_rule_);

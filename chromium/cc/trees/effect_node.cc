@@ -21,12 +21,14 @@ EffectNode::EffectNode()
       has_copy_request(false),
       hidden_by_backface_visibility(false),
       double_sided(false),
+      trilinear_filtering(false),
       is_drawn(true),
       subtree_hidden(false),
       has_potential_filter_animation(false),
       has_potential_opacity_animation(false),
       is_currently_animating_filter(false),
       is_currently_animating_opacity(false),
+      has_masking_child(false),
       effect_changed(false),
       subtree_has_copy_request(false),
       transform_id(0),
@@ -52,8 +54,9 @@ bool EffectNode::operator==(const EffectNode& other) const {
          surface_contents_scale == other.surface_contents_scale &&
          unscaled_mask_target_size == other.unscaled_mask_target_size &&
          hidden_by_backface_visibility == other.hidden_by_backface_visibility &&
-         double_sided == other.double_sided && is_drawn == other.is_drawn &&
-         subtree_hidden == other.subtree_hidden &&
+         double_sided == other.double_sided &&
+         trilinear_filtering == other.trilinear_filtering &&
+         is_drawn == other.is_drawn && subtree_hidden == other.subtree_hidden &&
          has_potential_filter_animation ==
              other.has_potential_filter_animation &&
          has_potential_opacity_animation ==
@@ -61,6 +64,7 @@ bool EffectNode::operator==(const EffectNode& other) const {
          is_currently_animating_filter == other.is_currently_animating_filter &&
          is_currently_animating_opacity ==
              other.is_currently_animating_opacity &&
+         has_masking_child == other.has_masking_child &&
          effect_changed == other.effect_changed &&
          subtree_has_copy_request == other.subtree_has_copy_request &&
          transform_id == other.transform_id && clip_id == other.clip_id &&
@@ -80,6 +84,7 @@ void EffectNode::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetBoolean("cache_render_surface", cache_render_surface);
   value->SetBoolean("has_copy_request", has_copy_request);
   value->SetBoolean("double_sided", double_sided);
+  value->SetBoolean("trilinear_filtering", trilinear_filtering);
   value->SetBoolean("is_drawn", is_drawn);
   value->SetBoolean("has_potential_filter_animation",
                     has_potential_filter_animation);

@@ -47,8 +47,9 @@ DOMRect* DOMRectList::item(unsigned index) {
   return list_[index].Get();
 }
 
-DEFINE_TRACE(DOMRectList) {
+void DOMRectList::Trace(blink::Visitor* visitor) {
   visitor->Trace(list_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

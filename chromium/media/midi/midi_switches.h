@@ -15,18 +15,12 @@ namespace midi {
 namespace features {
 
 #if defined(OS_ANDROID)
-MIDI_EXPORT extern const base::Feature kMidiManagerAndroid;
+MIDI_EXPORT extern const base::Feature kMidiManagerDynamicInstantiation;
 #endif
 
 #if defined(OS_WIN)
 MIDI_EXPORT extern const base::Feature kMidiManagerWinrt;
 #endif
-
-#if defined(OS_CHROMEOS)
-MIDI_EXPORT extern const base::Feature kMidiManagerCros;
-#endif
-
-MIDI_EXPORT extern const base::Feature kMidiManagerDynamicInstantiation;
 
 }  // namespace features
 }  // namespace midi

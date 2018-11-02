@@ -31,7 +31,7 @@ class MockMediaDevicesEventSubscriber {
 };
 
 class MockMediaDevicesDispatcherHost
-    : public ::mojom::MediaDevicesDispatcherHost {
+    : public blink::mojom::MediaDevicesDispatcherHost {
  public:
   MockMediaDevicesDispatcherHost() : binding_(this) {}
 
@@ -57,14 +57,26 @@ class MockMediaDevicesDispatcherHost
     NOTREACHED();
   }
 
-  ::mojom::MediaDevicesDispatcherHostPtr CreateInterfacePtrAndBind() {
-    ::mojom::MediaDevicesDispatcherHostPtr ptr;
+  void GetAllVideoInputDeviceFormats(
+      const std::string&,
+      GetAllVideoInputDeviceFormatsCallback) override {
+    NOTREACHED();
+  }
+
+  void GetAvailableVideoInputDeviceFormats(
+      const std::string&,
+      GetAvailableVideoInputDeviceFormatsCallback) override {
+    NOTREACHED();
+  }
+
+  blink::mojom::MediaDevicesDispatcherHostPtr CreateInterfacePtrAndBind() {
+    blink::mojom::MediaDevicesDispatcherHostPtr ptr;
     binding_.Bind(mojo::MakeRequest(&ptr));
     return ptr;
   }
 
  private:
-  mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_;
+  mojo::Binding<blink::mojom::MediaDevicesDispatcherHost> binding_;
 };
 
 class MediaDevicesEventDispatcherTest : public ::testing::Test {
@@ -73,7 +85,7 @@ class MediaDevicesEventDispatcherTest : public ::testing::Test {
 
   void SetUp() override {
     event_dispatcher_ = MediaDevicesEventDispatcher::GetForRenderFrame(nullptr);
-    ::mojom::MediaDevicesDispatcherHostPtr ptr =
+    blink::mojom::MediaDevicesDispatcherHostPtr ptr =
         media_devices_dispatcher_.CreateInterfacePtrAndBind();
     event_dispatcher_->SetMediaDevicesDispatcherForTesting(std::move(ptr));
   }

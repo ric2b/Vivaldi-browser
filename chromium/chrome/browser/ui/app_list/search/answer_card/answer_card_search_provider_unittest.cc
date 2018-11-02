@@ -4,10 +4,13 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 
+#include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/search_result.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
@@ -22,8 +25,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
-#include "ui/app_list/search_result.h"
 #include "ui/views/view.h"
 
 using ::testing::_;
@@ -146,7 +147,7 @@ class AnswerCardSearchProviderTest : public AppListTestBase {
     std::unique_ptr<base::FeatureList> feature_list =
         base::MakeUnique<base::FeatureList>();
     feature_list->RegisterFieldTrialOverride(
-        features::kEnableAnswerCardDefaultOff.name,
+        features::kEnableAnswerCard.name,
         base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
     scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
 

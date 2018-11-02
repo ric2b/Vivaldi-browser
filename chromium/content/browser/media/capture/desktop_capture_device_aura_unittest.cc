@@ -56,7 +56,7 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
   MOCK_METHOD0(DoResurrectLastOutputBuffer, void(void));
   MOCK_METHOD2(OnError,
-               void(const tracked_objects::Location& from_here,
+               void(const base::Location& from_here,
                     const std::string& reason));
   MOCK_METHOD0(OnStarted, void(void));
 
@@ -106,7 +106,7 @@ class DesktopCaptureDeviceAuraTest : public testing::Test {
  protected:
   void SetUp() override {
     // The ContextFactory must exist before any Compositors are created.
-    ImageTransportFactory::InitializeForUnitTests(
+    ImageTransportFactory::SetFactory(
         std::make_unique<NoTransportImageTransportFactory>());
     helper_.reset(new aura::test::AuraTestHelper());
     helper_->SetUp(

@@ -1,8 +1,11 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "base/memory/shared_memory.h"
 #include "base/time/time.h"
@@ -13,16 +16,14 @@
 #define IPC_MESSAGE_START MediaPipelineMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
-                          media::PLATFORM_MEDIA_DATA_TYPE_COUNT - 1)
+                          media::PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
-                          media::kMediaDataStatusCount - 1)
+                          media::MediaDataStatus::kCount - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(
     media::PlatformMediaDecodingMode,
     static_cast<int>(media::PlatformMediaDecodingMode::COUNT) - 1)
-
-IPC_ENUM_TRAITS_MAX_VALUE(media::VideoRotation, media::VIDEO_ROTATION_MAX)
 
 IPC_STRUCT_TRAITS_BEGIN(media::PlatformMediaTimeInfo)
   IPC_STRUCT_TRAITS_MEMBER(duration)

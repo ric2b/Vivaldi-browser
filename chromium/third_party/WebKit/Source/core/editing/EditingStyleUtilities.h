@@ -33,15 +33,18 @@
 #define EditingStyleUtilities_h
 
 #include "core/CSSValueKeywords.h"
-#include "core/editing/VisibleSelection.h"
+#include "core/css/CSSValue.h"
+#include "core/dom/ContainerNode.h"
+#include "core/editing/Forward.h"
+#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
 class CSSStyleDeclaration;
 class EditingStyle;
-class MutableStylePropertySet;
+class MutableCSSPropertyValueSet;
 class Node;
-class StylePropertySet;
+class CSSPropertyValueSet;
 
 class EditingStyleUtilities {
   STATIC_ONLY(EditingStyleUtilities);
@@ -54,7 +57,7 @@ class EditingStyleUtilities {
   static EditingStyle* CreateStyleAtSelectionStart(
       const VisibleSelection&,
       bool should_use_background_color_in_effect = false,
-      MutableStylePropertySet* style_to_check = nullptr);
+      MutableCSSPropertyValueSet* style_to_check = nullptr);
   static bool IsEmbedOrIsolate(CSSValueID unicode_bidi) {
     return unicode_bidi == CSSValueIsolate ||
            unicode_bidi == CSSValueWebkitIsolate ||
@@ -63,7 +66,7 @@ class EditingStyleUtilities {
 
   static bool IsTransparentColorValue(const CSSValue*);
   static bool HasTransparentBackgroundColor(CSSStyleDeclaration*);
-  static bool HasTransparentBackgroundColor(StylePropertySet*);
+  static bool HasTransparentBackgroundColor(CSSPropertyValueSet*);
   static const CSSValue* BackgroundColorValueInEffect(Node*);
   static bool HasAncestorVerticalAlignStyle(Node&, CSSValueID);
 };

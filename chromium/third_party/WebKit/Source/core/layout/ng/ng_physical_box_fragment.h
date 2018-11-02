@@ -7,36 +7,43 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ng/inline/ng_baseline.h"
-#include "core/layout/ng/ng_physical_fragment.h"
+#include "core/layout/ng/ng_physical_container_fragment.h"
 
 namespace blink {
 
-class CORE_EXPORT NGPhysicalBoxFragment final : public NGPhysicalFragment {
+class CORE_EXPORT NGPhysicalBoxFragment final
+    : public NGPhysicalContainerFragment {
  public:
   // This modifies the passed-in children vector.
   NGPhysicalBoxFragment(LayoutObject* layout_object,
                         const ComputedStyle& style,
                         NGPhysicalSize size,
-                        NGPhysicalSize overflow,
-                        Vector<RefPtr<NGPhysicalFragment>>& children,
+                        Vector<scoped_refptr<NGPhysicalFragment>>& children,
+                        const NGPhysicalOffsetRect& contents_visual_rect,
                         Vector<NGBaseline>& baselines,
+                        NGBoxType box_type,
                         unsigned,  // NGBorderEdges::Physical
-                        RefPtr<NGBreakToken> break_token = nullptr);
-
-  // Returns the total size, including the contents outside of the border-box.
-  NGPhysicalSize OverflowSize() const { return overflow_; }
-
-  const Vector<RefPtr<NGPhysicalFragment>>& Children() const {
-    return children_;
-  }
+                        scoped_refptr<NGBreakToken> break_token = nullptr);
 
   const NGBaseline* Baseline(const NGBaselineRequest&) const;
 
-  RefPtr<NGPhysicalFragment> CloneWithoutOffset() const;
+  bool HasSelfPaintingLayer() const;
+
+  // True if overflow != 'visible', except for certain boxes that do not allow
+  // overflow clip; i.e., AllowOverflowClip() returns false.
+  bool HasOverflowClip() const;
+  bool ShouldClipOverflow() const;
+
+  // Visual rect of this box in the local coordinate. Does not include children
+  // even if they overflow this box.
+  NGPhysicalOffsetRect SelfVisualRect() const;
+
+  // VisualRect of itself including contents, in the local coordinate.
+  NGPhysicalOffsetRect VisualRectWithContents() const;
+
+  scoped_refptr<NGPhysicalFragment> CloneWithoutOffset() const;
 
  private:
-  NGPhysicalSize overflow_;
-  Vector<RefPtr<NGPhysicalFragment>> children_;
   Vector<NGBaseline> baselines_;
 };
 

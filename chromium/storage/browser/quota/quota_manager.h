@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <list>
 #include <map>
 #include <memory>
@@ -415,7 +414,7 @@ class STORAGE_EXPORT QuotaManager
   void DeleteOnCorrectThread() const;
 
   void PostTaskAndReplyWithResultForDBThread(
-      const tracked_objects::Location& from_here,
+      const base::Location& from_here,
       base::Callback<bool(QuotaDatabase*)> task,
       base::Callback<void(bool)> reply);
 

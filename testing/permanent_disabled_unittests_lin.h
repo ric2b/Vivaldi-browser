@@ -23,10 +23,6 @@ DISABLE_MULTI(FirstRunMasterPrefsWithTrackedPreferences,
 DISABLE(HelpPageWebUITest, testUpdateState)
 DISABLE(HelpPageWebUITest, testUpdateStateIcon)
 
-// Disabled video tests on linux, until the tests can be fixed
-DISABLE(MediaSourceTest, Playback_AudioOnly_AAC_ADTS)
-DISABLE(MediaSourceTest, Playback_Video_MP4_Audio_WEBM)
-
 // Disabled because the Widevine lib is not included in the package build,
 // as it crashes vivaldi
 DISABLE(PepperContentSettingsSpecialCasesPluginsBlockedTest, WidevineCdm)

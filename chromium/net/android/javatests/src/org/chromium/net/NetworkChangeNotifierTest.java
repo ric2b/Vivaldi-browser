@@ -40,6 +40,7 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.ConnectivityManagerDelegate;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.NetworkState;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.WifiManagerDelegate;
@@ -591,43 +592,36 @@ public class NetworkChangeNotifierTest {
         mReceiver.register();
         // Initialize the NetworkChangeNotifier with a connection.
         Intent connectivityIntent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
 
         // We shouldn't be re-notified if the connection hasn't actually changed.
         NetworkChangeNotifierTestObserver observer = new NetworkChangeNotifierTestObserver();
         NetworkChangeNotifier.addConnectionTypeObserver(observer);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertFalse(observer.hasReceivedNotification());
 
         // We shouldn't be notified if we're connected to non-Wifi and the Wifi SSID changes.
         mWifiDelegate.setWifiSSID("bar");
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertFalse(observer.hasReceivedNotification());
         // We should be notified when we change to Wifi.
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(observer.hasReceivedNotification());
         observer.resetHasReceivedNotification();
         // We should be notified when the Wifi SSID changes.
         mWifiDelegate.setWifiSSID("foo");
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(observer.hasReceivedNotification());
         observer.resetHasReceivedNotification();
         // We shouldn't be re-notified if the Wifi SSID hasn't actually changed.
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertFalse(observer.hasReceivedNotification());
 
         // Mimic that connectivity has been lost and ensure that Chrome notifies our observer.
         mConnectivityDelegate.setActiveNetworkExists(false);
         Intent noConnectivityIntent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                noConnectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), noConnectivityIntent);
         Assert.assertTrue(observer.hasReceivedNotification());
 
         observer.resetHasReceivedNotification();
@@ -659,22 +653,19 @@ public class NetworkChangeNotifierTest {
         mConnectivityDelegate.setActiveNetworkExists(true);
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
         Intent connectivityIntent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(mNotifier.hasReceivedConnectionSubtypeNotification());
         mNotifier.resetHasReceivedConnectionSubtypeNotification();
 
         // We shouldn't be re-notified if the connection hasn't actually changed.
         NetworkChangeNotifierTestObserver observer = new NetworkChangeNotifierTestObserver();
         NetworkChangeNotifier.addConnectionTypeObserver(observer);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertFalse(mNotifier.hasReceivedConnectionSubtypeNotification());
 
         // We should be notified if bandwidth and connection type changed.
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_ETHERNET);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(mNotifier.hasReceivedConnectionSubtypeNotification());
         mNotifier.resetHasReceivedConnectionSubtypeNotification();
 
@@ -682,8 +673,7 @@ public class NetworkChangeNotifierTest {
         // Note that TYPE_ETHERNET and TYPE_BLUETOOTH have the same +INFINITY max bandwidth.
         // This test will fail if that changes.
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_BLUETOOTH);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(mNotifier.hasReceivedConnectionSubtypeNotification());
     }
 
@@ -703,8 +693,7 @@ public class NetworkChangeNotifierTest {
         NetworkChangeNotifierTestObserver observer = new NetworkChangeNotifierTestObserver();
         NetworkChangeNotifier.addConnectionTypeObserver(observer);
         Intent connectivityIntent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
-        mReceiver.onReceive(InstrumentationRegistry.getInstrumentation().getTargetContext(),
-                connectivityIntent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), connectivityIntent);
         Assert.assertTrue(observer.hasReceivedNotification());
     }
 
@@ -718,10 +707,10 @@ public class NetworkChangeNotifierTest {
     @MediumTest
     @Feature({"Android-AppBase"})
     public void testConnectivityManagerDelegateDoesNotCrash() {
-        ConnectivityManagerDelegate delegate = new ConnectivityManagerDelegate(
-                InstrumentationRegistry.getInstrumentation().getTargetContext());
-        delegate.getNetworkState(new WifiManagerDelegate(
-                InstrumentationRegistry.getInstrumentation().getTargetContext()));
+        ConnectivityManagerDelegate delegate =
+                new ConnectivityManagerDelegate(InstrumentationRegistry.getTargetContext());
+        delegate.getNetworkState(
+                new WifiManagerDelegate(InstrumentationRegistry.getTargetContext()));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             // getConnectionType(Network) doesn't crash upon invalid Network argument.
             Network invalidNetwork = Helper.netIdToNetwork(NetId.INVALID);
@@ -832,10 +821,8 @@ public class NetworkChangeNotifierTest {
     @Test
     @MediumTest
     @Feature({"Android-AppBase"})
+    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testNetworkCallbacks() throws Exception {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            return;
-        }
         // Setup NetworkChangeNotifierAutoDetect
         final TestNetworkChangeNotifierAutoDetectObserver observer =
                 new TestNetworkChangeNotifierAutoDetectObserver();
@@ -958,13 +945,32 @@ public class NetworkChangeNotifierTest {
         for (int i = ConnectivityManager.TYPE_MOBILE; i < ConnectivityManager.TYPE_VPN; i++) {
             mConnectivityDelegate.setActiveNetworkExists(true);
             mConnectivityDelegate.setNetworkType(i);
-            mReceiver.onReceive(
-                    InstrumentationRegistry.getInstrumentation().getTargetContext(), intent);
+            mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), intent);
             Assert.assertTrue(NetworkChangeNotifier.isOnline());
         }
         mConnectivityDelegate.setActiveNetworkExists(false);
-        mReceiver.onReceive(
-                InstrumentationRegistry.getInstrumentation().getTargetContext(), intent);
+        mReceiver.onReceive(InstrumentationRegistry.getTargetContext(), intent);
         Assert.assertFalse(NetworkChangeNotifier.isOnline());
+    }
+
+    /**
+     * Tests NetworkChangeNotifier.isProcessBoundToNetwork().
+     */
+    @Test
+    @MediumTest
+    @Feature({"Android-AppBase"})
+    @MinAndroidSdkLevel(Build.VERSION_CODES.M)
+    public void testIsProcessBoundToNetwork() throws Exception {
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) InstrumentationRegistry.getTargetContext().getSystemService(
+                        Context.CONNECTIVITY_SERVICE);
+        Network network = connectivityManager.getActiveNetwork();
+        Assert.assertFalse(NetworkChangeNotifier.isProcessBoundToNetwork());
+        if (network != null) {
+            ConnectivityManager.setProcessDefaultNetwork(network);
+            Assert.assertTrue(NetworkChangeNotifier.isProcessBoundToNetwork());
+        }
+        ConnectivityManager.setProcessDefaultNetwork(null);
+        Assert.assertFalse(NetworkChangeNotifier.isProcessBoundToNetwork());
     }
 }

@@ -26,7 +26,7 @@
 #include "core/dom/PendingScript.h"
 
 #include "core/dom/ScriptElementBase.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -87,7 +87,7 @@ void PendingScript::MarkParserBlockingLoadStartTime() {
   parser_blocking_load_start_time_ = MonotonicallyIncreasingTime();
 }
 
-DEFINE_TRACE(PendingScript) {
+void PendingScript::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
   visitor->Trace(client_);
 }

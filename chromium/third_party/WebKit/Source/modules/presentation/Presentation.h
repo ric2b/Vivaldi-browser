@@ -20,16 +20,14 @@ class PresentationRequest;
 // Presentation.idl
 // See https://w3c.github.io/presentation-api/#navigatorpresentation for
 // details.
-class Presentation final : public GarbageCollected<Presentation>,
-                           public ScriptWrappable,
-                           public ContextClient {
+class Presentation final : public ScriptWrappable, public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(Presentation);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static Presentation* Create(LocalFrame*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   PresentationRequest* defaultRequest() const;
   void setDefaultRequest(PresentationRequest*);

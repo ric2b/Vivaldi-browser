@@ -25,7 +25,7 @@
 
 #include "modules/accessibility/AXMenuList.h"
 
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/layout/LayoutMenuList.h"
 #include "modules/accessibility/AXMenuListPopup.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
@@ -76,7 +76,7 @@ void AXMenuList::AddChildren() {
   DCHECK(!IsDetached());
   have_children_ = true;
 
-  AXObjectCacheImpl& cache = AxObjectCache();
+  AXObjectCacheImpl& cache = AXObjectCache();
 
   AXObject* list = cache.GetOrCreate(kMenuListPopupRole);
   if (!list)
@@ -84,7 +84,7 @@ void AXMenuList::AddChildren() {
 
   ToAXMockObject(list)->SetParent(this);
   if (list->AccessibilityIsIgnored()) {
-    cache.Remove(list->AxObjectID());
+    cache.Remove(list->AXObjectID());
     return;
   }
 
@@ -112,18 +112,21 @@ AccessibilityExpanded AXMenuList::IsExpanded() const {
 void AXMenuList::DidUpdateActiveOption(int option_index) {
   bool suppress_notifications =
       (GetNode() && !GetNode()->IsFinishedParsingChildren());
-  const auto& child_objects = Children();
-  if (!child_objects.IsEmpty()) {
-    DCHECK(child_objects.size() == 1);
-    DCHECK(child_objects[0]->IsMenuListPopup());
 
-    if (child_objects[0]->IsMenuListPopup()) {
-      if (AXMenuListPopup* popup = ToAXMenuListPopup(child_objects[0].Get()))
-        popup->DidUpdateActiveOption(option_index, !suppress_notifications);
+  if (HasChildren()) {
+    const auto& child_objects = Children();
+    if (!child_objects.IsEmpty()) {
+      DCHECK_EQ(child_objects.size(), 1ul);
+      DCHECK(child_objects[0]->IsMenuListPopup());
+
+      if (child_objects[0]->IsMenuListPopup()) {
+        if (AXMenuListPopup* popup = ToAXMenuListPopup(child_objects[0].Get()))
+          popup->DidUpdateActiveOption(option_index, !suppress_notifications);
+      }
     }
   }
 
-  AxObjectCache().PostNotification(this,
+  AXObjectCache().PostNotification(this,
                                    AXObjectCacheImpl::kAXMenuListValueChanged);
 }
 
@@ -143,7 +146,7 @@ void AXMenuList::DidHidePopup() {
   popup->DidHide();
 
   if (GetNode() && GetNode()->IsFocused())
-    AxObjectCache().PostNotification(
+    AXObjectCache().PostNotification(
         this, AXObjectCacheImpl::kAXFocusedUIElementChanged);
 }
 

@@ -15,12 +15,14 @@ namespace ash {
 
 namespace {
 
-// The number of non-Search-based accelerators as of 2017-07-13.
-constexpr int kNonSearchAcceleratorsNum = 94;
-// The hash of non-Search-based accelerators as of 2017-07-19.
+// The number of non-Search-based accelerators as of 2017-10-26.
+constexpr int kNonSearchAcceleratorsNum = 93;
+// The hash of non-Search-based accelerators as of 2017-10-26.
 // See HashAcceleratorData().
+// TODO: adding Search-based accelerators should not update this hash
+// (crbug.com/778432).
 constexpr char kNonSearchAcceleratorsHash[] =
-    "d36dd12d75b39fe7175858af6077f13b";
+    "ccfca1c73d60f4837cef74800374a1c9";
 
 struct Cmp {
   bool operator()(const AcceleratorData& lhs, const AcceleratorData& rhs) {

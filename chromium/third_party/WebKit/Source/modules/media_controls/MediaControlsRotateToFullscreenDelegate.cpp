@@ -9,7 +9,7 @@
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/fullscreen/Fullscreen.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/page/ChromeClient.h"
 #include "modules/device_orientation/DeviceOrientationData.h"
 #include "modules/device_orientation/DeviceOrientationEvent.h"
@@ -218,7 +218,7 @@ void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
 
   {
     std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::CreateUserGesture(video_element_->GetDocument().GetFrame());
+        Frame::NotifyUserActivation(video_element_->GetDocument().GetFrame());
 
     bool should_be_fullscreen =
         current_screen_orientation_ == video_orientation;
@@ -271,7 +271,7 @@ MediaControlsRotateToFullscreenDelegate::ComputeScreenOrientation() const {
   return SimpleOrientation::kUnknown;
 }
 
-DEFINE_TRACE(MediaControlsRotateToFullscreenDelegate) {
+void MediaControlsRotateToFullscreenDelegate::Trace(blink::Visitor* visitor) {
   EventListener::Trace(visitor);
   visitor->Trace(video_element_);
   visitor->Trace(visibility_observer_);

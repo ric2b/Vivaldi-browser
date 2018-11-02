@@ -266,12 +266,14 @@ void WebSettingsImpl::SetProgressBarCompletion(
       static_cast<blink::ProgressBarCompletion>(progress_bar_completion));
 }
 
-void WebSettingsImpl::SetPluginsEnabled(bool enabled) {
-  dev_tools_emulator_->SetPluginsEnabled(enabled);
+void WebSettingsImpl::SetSavePreviousDocumentResources(
+    SavePreviousDocumentResources save_resources) {
+  settings_->SetSavePreviousDocumentResources(
+      static_cast<blink::SavePreviousDocumentResources>(save_resources));
 }
 
-void WebSettingsImpl::SetEncryptedMediaEnabled(bool enabled) {
-  settings_->SetEncryptedMediaEnabled(enabled);
+void WebSettingsImpl::SetPluginsEnabled(bool enabled) {
+  dev_tools_emulator_->SetPluginsEnabled(enabled);
 }
 
 void WebSettingsImpl::SetAvailablePointerTypes(int pointers) {
@@ -394,10 +396,6 @@ void WebSettingsImpl::SetDNSPrefetchingEnabled(bool enabled) {
   settings_->SetDNSPrefetchingEnabled(enabled);
 }
 
-void WebSettingsImpl::SetDataSaverEnabled(bool enabled) {
-  settings_->SetDataSaverEnabled(enabled);
-}
-
 void WebSettingsImpl::SetLocalStorageEnabled(bool enabled) {
   settings_->SetLocalStorageEnabled(enabled);
 }
@@ -438,8 +436,12 @@ void WebSettingsImpl::SetOfflineWebApplicationCacheEnabled(bool enabled) {
   settings_->SetOfflineWebApplicationCacheEnabled(enabled);
 }
 
-void WebSettingsImpl::SetExperimentalWebGLEnabled(bool enabled) {
-  settings_->SetWebGLEnabled(enabled);
+void WebSettingsImpl::SetWebGL1Enabled(bool enabled) {
+  settings_->SetWebGL1Enabled(enabled);
+}
+
+void WebSettingsImpl::SetWebGL2Enabled(bool enabled) {
+  settings_->SetWebGL2Enabled(enabled);
 }
 
 void WebSettingsImpl::SetRenderVSyncNotificationEnabled(bool enabled) {
@@ -684,12 +686,6 @@ void WebSettingsImpl::SetMainFrameResizesAreOrientationChanges(bool enabled) {
 
 void WebSettingsImpl::SetV8CacheOptions(V8CacheOptions options) {
   settings_->SetV8CacheOptions(static_cast<blink::V8CacheOptions>(options));
-}
-
-void WebSettingsImpl::SetV8CacheStrategiesForCacheStorage(
-    V8CacheStrategiesForCacheStorage strategies) {
-  settings_->SetV8CacheStrategiesForCacheStorage(
-      static_cast<blink::V8CacheStrategiesForCacheStorage>(strategies));
 }
 
 void WebSettingsImpl::SetViewportStyle(WebViewportStyle style) {

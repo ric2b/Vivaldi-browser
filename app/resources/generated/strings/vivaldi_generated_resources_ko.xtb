@@ -20,7 +20,7 @@
 <translation id="119944043368869598">모두 삭제</translation>
 <translation id="1221825588892235038">선택 영역만</translation>
 <translation id="1244303850296295656">확장 프로그램 오류</translation>
-<translation id="1278049586634282054">뷰 검사:</translation>
+<translation id="1278049586634282054">검사:</translation>
 <translation id="1297175357211070620">대상</translation>
 <translation id="1303101771013849280">HTML 파일 북마크하기</translation>
 <translation id="1317502925920562130">설정한 홈페이지가 맞습니까?</translation>
@@ -38,10 +38,8 @@
 <translation id="159359590073980872">이미지 캐시</translation>
 <translation id="1601560923496285236">적용</translation>
 <translation id="1603914832182249871">(사생활 보호 모드)</translation>
-<translation id="1616206807336925449">이 확장 프로그램은 특별한 권한이 필요하지 않습니다.</translation>
 <translation id="1627276047960621195">파일 서술자</translation>
 <translation id="1635033183663317347">관리자가 설치함.</translation>
-<translation id="1681120471812444678">프린터 추가 설정…</translation>
 <translation id="1682548588986054654">새 사생활 보호 창</translation>
 <translation id="1708338024780164500">(비활성)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
@@ -54,7 +52,6 @@
 <translation id="1769104665586091481">새 창에서 링크 열기 (&amp;W)</translation>
 <translation id="1815083418640426271">일반 텍스트로 붙여넣기</translation>
 <translation id="1828901632669367785">시스템 대화상자를 사용하여 인쇄...</translation>
-<translation id="1838288018605456492">여기를 클릭하여 설정</translation>
 <translation id="1846308012215045257"><ph name="PLUGIN_NAME" />을(를) 실행하려면 Ctrl을 누르고 클릭하세요</translation>
 <translation id="1850508293116537636">시계 방향으로 회전(&amp;C)</translation>
 <translation id="1859234291848436338">쓰기 방향</translation>
@@ -124,11 +121,9 @@
 <translation id="2889064240420137087">다음으로 링크 열기...</translation>
 <translation id="2890678560483811744">쪽 범위를 벗어난 경우 참고사항</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />이(가) 이 프린터와 통신할 수 없습니다. 프린터가 연결되어 있는지 확인한 후 다시 시도해 주세요.</translation>
-<translation id="2914303854539667666">비밀번호 생성</translation>
 <translation id="2916745397441987255">확장 프로그램 검색</translation>
 <translation id="2932883381142163287">악용사례 신고</translation>
 <translation id="2941112035454246133">낮음</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">다시 실행(&amp;R)</translation>
 <translation id="299483336428448530">부모님이 설치함.</translation>
 <translation id="3003623123441819449">CSS 캐시</translation>
@@ -145,7 +140,6 @@
 <translation id="3124111068741548686">사용자 핸들</translation>
 <translation id="3129173833825111527">왼쪽 여백</translation>
 <translation id="3144647712221361880">다음으로 링크 열기</translation>
-<translation id="3149510190863420837">Chrome 앱</translation>
 <translation id="3154429428035006212">1달 이상 오프라인 상태</translation>
 <translation id="3222066309010235055">사전 렌더링: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="32279126412636473">새로고침 (⌘R)</translation>
@@ -170,7 +164,6 @@
 <translation id="3378572629723696641">확장 프로그램이 손상되었을 수도 있습니다.</translation>
 <translation id="3396331542604645348">선택한 프린터가 사용할 수 없거나 올바르게 설치되어 있지 않습니다. 프린터를 확인하거나 다른 프린터를 선택해 보세요.</translation>
 <translation id="3435896845095436175">사용</translation>
-<translation id="3439970425423980614">기본 응용 프로그램에서 PDF 보기</translation>
 <translation id="345693547134384690">새 탭에서 이미지 열기(&amp;I)</translation>
 <translation id="3467267818798281173">Google에 추천 단어 요청</translation>
 <translation id="3468745736289470383">화면 공유하기</translation>
@@ -181,13 +174,11 @@
 <translation id="3587482841069643663">전체</translation>
 <translation id="3618849550573277856"><ph name="LOOKUP_STRING" />을(를) 찾아보기</translation>
 <translation id="3627588569887975815">시크릿 창에서 링크 열기(&amp;G)</translation>
-<translation id="3640006360782160348">프린터 설정 취소</translation>
 <translation id="3678156199662914018">확장 프로그램: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 화면 공유 요청</translation>
 <translation id="370665806235115550">로드 중...</translation>
 <translation id="3725367690636977613">쪽</translation>
 <translation id="3727187387656390258">팝업 검사</translation>
-<translation id="3730639321086573427">로컬 대상</translation>
 <translation id="3760460896538743390">백그라운드 페이지 검사 (&amp;B)</translation>
 <translation id="3763401818161139108"><ph name="ORIGIN" />에서는 항상 실행</translation>
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />에서 '<ph name="SEARCH_TERMS" />' 검색 (&amp;S)</translation>
@@ -242,14 +233,12 @@
 <translation id="4478664379124702289">다른 이름으로 링크 저장... (&amp;K)</translation>
 <translation id="4481249487722541506">압축 풀린 확장 프로그램 불러오기...</translation>
 <translation id="4522570452068850558">세부 정보</translation>
-<translation id="4552089082226364758">플래시</translation>
 <translation id="4552495056028768700">페이지 접근</translation>
 <translation id="4557136421275541763">경고:</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" />을(를) 전송할 수 없습니다.</translation>
 <translation id="4593021220803146968"><ph name="URL" />(으)로 이동(&amp;G)</translation>
 <translation id="4595560905247879544">앱 및 확장 프로그램은 관리자(<ph name="CUSTODIAN_NAME" />)만 수정할 수 있습니다.</translation>
 <translation id="4613271546271159013">새 탭을 열면 표시되는 페이지가 확장 프로그램에 의해 변경되었습니다.</translation>
-<translation id="4624768044135598934">성공적으로 완료하였습니다!</translation>
 <translation id="4628314759732363424">변경...</translation>
 <translation id="4643612240819915418">새 탭에서 동영상 열기 (&amp;O)</translation>
 <translation id="4677772697204437347">GPU 메모리</translation>
@@ -314,7 +303,6 @@
 <translation id="5581700288664681403"><ph name="CLOUD_PRINT_NAME" /> 불러오는 중</translation>
 <translation id="5623842676595125836">로그</translation>
 <translation id="5627086634964711283">또한 홈 버튼을 클릭할 때 표시되는 페이지를 설정합니다.</translation>
-<translation id="5646376287012673985">위치</translation>
 <translation id="5707185214361380026">확장 프로그램을 불러오는 데 실패했습니다:</translation>
 <translation id="5715711091495208045">플러그인 중개인: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">유감스럽게도, 이 오류에 해당하는 코드를 표시할 수 없습니다.</translation>
@@ -326,7 +314,6 @@
 <translation id="5828633471261496623">인쇄 중...</translation>
 <translation id="5829401023154985950">관리...</translation>
 <translation id="583281660410589416">알 수 없음</translation>
-<translation id="5848934677402291689">PDF로 저장하는 중</translation>
 <translation id="5849869942539715694">확장 프로그램 압축...</translation>
 <translation id="5910363049092958439">다른 이름으로 이미지 저장... (&amp;V)</translation>
 <translation id="59174027418879706">사용 설정됨</translation>
@@ -363,7 +350,6 @@
 <translation id="6308937455967653460">다른 이름으로 링크 저장(&amp;K)...</translation>
 <translation id="6314335155547195432">비밀번호 생성</translation>
 <translation id="6326855256003666642">프로그램 사용 수</translation>
-<translation id="6348109281845364640">프린터 설정에 실패했습니다</translation>
 <translation id="6370021412472292592">확장 프로그램 정보를 불러올 수 없습니다.</translation>
 <translation id="6398765197997659313">전체화면 닫기</translation>
 <translation id="6406303162637086258">브라우저 다시 시작 시뮬레이션</translation>
@@ -374,7 +360,6 @@
 <translation id="6452181791372256707">거부</translation>
 <translation id="6498249116389603658">모든 언어(&amp;A)</translation>
 <translation id="6503077044568424649">자주 방문한 페이지</translation>
-<translation id="650584126816009598">프린터가 준비되었습니다.</translation>
 <translation id="6508261954199872201">애플리케이션:<ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">이미지 복사(&amp;Y)</translation>
 <translation id="6550675742724504774">옵션</translation>
@@ -402,7 +387,6 @@
 <translation id="6955446738988643816">팝업 검사</translation>
 <translation id="6970856801391541997">특정 쪽 인쇄</translation>
 <translation id="6974053822202609517">오른쪽에서 왼쪽으로</translation>
-<translation id="6982896539684144327"><ph name="VENDOR_NAME" />의 프린터를 감지했습니다</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">대상 선택</translation>
 <translation id="7005848115657603926">잘못된 쪽 범위입니다. <ph name="EXAMPLE_PAGE_RANGE" />을(를) 사용하세요</translation>
@@ -427,11 +411,9 @@
 <translation id="7412226954991670867">GPU 메모리</translation>
 <translation id="7421925624202799674">페이지 소스 보기 (&amp;V)</translation>
 <translation id="7427348830195639090">백그라운드 페이지: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">프린터 설정 중...</translation>
 <translation id="7453008956351770337">이 프린터를 선택하면 다음 확장 프로그램에게 내 프린터에 액세스할 수 있는 권한을 부여하게 됩니다:</translation>
 <translation id="7473891865547856676">아니요, 괜찮습니다</translation>
 <translation id="749028671485790643">사용자 <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">자바스크립트</translation>
 <translation id="7551643184018910560">선반에 고정</translation>
 <translation id="7554791636758816595">새 탭</translation>
 <translation id="7564847347806291057">프로세스 종료</translation>
@@ -456,7 +438,6 @@
 <translation id="7814458197256864873">복사 (&amp;C)</translation>
 <translation id="7818135753970109980">새 테마가 추가됨(<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">동영상 주소 복사(&amp;O)</translation>
-<translation id="7831493768366098287">Google Print</translation>
 <translation id="7849264908733290972">새 탭에서 이미지 열기 (&amp;I)</translation>
 <translation id="7857949311770343000">설정한 새 탭 페이지가 맞습니까?</translation>
 <translation id="786073089922909430">서비스: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -468,7 +449,6 @@
 <translation id="7947962633355574091">동영상 주소 복사 (&amp;O)</translation>
 <translation id="7965010376480416255">공유 메모리</translation>
 <translation id="7966241909927244760">이미지 주소 복사 (&amp;O)</translation>
-<translation id="7967437925638594022">확장 프로그램</translation>
 <translation id="7978412674231730200">비공개 키</translation>
 <translation id="7982789257301363584">네트워크</translation>
 <translation id="7997826902155442747">프로세스 우선순위</translation>
@@ -481,13 +461,11 @@
 <translation id="8004582292198964060">브라우저</translation>
 <translation id="8023801379949507775">지금 확장 프로그램 업데이트</translation>
 <translation id="8032244173881942855">탭을 전송할 수 없습니다.</translation>
-<translation id="8069615408251337349">Google 클라우드 프린트</translation>
 <translation id="8071432093239591881">이미지로 인쇄</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">확장 프로그램 관리</translation>
 <translation id="8180239481735238521">쪽</translation>
 <translation id="8188120771410500975">입력란 맞춤법 확인(&amp;C)</translation>
-<translation id="8259581864063078725">이 프린터를 사용하기 위한 인쇄 응용 프로그램을 찾으려면 클릭하세요.</translation>
 <translation id="8261378640211443080">이 확장 프로그램은 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />에 표시되지 않으며 사용자 모르게 추가되었을 수 있습니다.</translation>
 <translation id="8294431847097064396">출처</translation>
 <translation id="8335587457941836791">선반에서 고정 해제</translation>
@@ -538,7 +516,6 @@
 <translation id="8916476537757519021">시크릿 모드 서브프레임: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">개발자 모드 확장 프로그램 비활성화</translation>
 <translation id="8938356204940892126">불러오기 포기</translation>
-<translation id="8944779739948852228">프린터 감지</translation>
 <translation id="895944840846194039">JavaScript 메모리</translation>
 <translation id="8962083179518285172">세부정보 숨기기</translation>
 <translation id="8996526648899750015">계정 추가...</translation>
@@ -550,7 +527,6 @@
 <translation id="9153341767479566106">기타 불러오기에 실패한 확장 프로그램:</translation>
 <translation id="9170848237812810038">실행 취소(&amp;U)</translation>
 <translation id="9215293857209265904">'<ph name="EXTENSION_NAME" />'이(가) 추가됨</translation>
-<translation id="9219103736887031265">이미지</translation>
 <translation id="93766956588638423">확장 프로그램 복구</translation>
 <translation id="98515147261107953">가로 방향</translation>
 <translation id="994289308992179865">루프(&amp;L)</translation>

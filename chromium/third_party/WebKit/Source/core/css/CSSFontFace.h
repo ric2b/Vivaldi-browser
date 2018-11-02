@@ -26,6 +26,8 @@
 #ifndef CSSFontFace_h
 #define CSSFontFace_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSFontFaceSource.h"
 #include "core/css/CSSSegmentedFontFace.h"
@@ -34,7 +36,6 @@
 #include "platform/fonts/UnicodeRangeSet.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -45,11 +46,10 @@ class SimpleFontData;
 
 class CORE_EXPORT CSSFontFace final
     : public GarbageCollectedFinalized<CSSFontFace> {
-  WTF_MAKE_NONCOPYABLE(CSSFontFace);
 
  public:
   CSSFontFace(FontFace* font_face, Vector<UnicodeRange>& ranges)
-      : ranges_(AdoptRef(new UnicodeRangeSet(ranges))),
+      : ranges_(base::AdoptRef(new UnicodeRangeSet(ranges))),
         segmented_font_face_(nullptr),
         font_face_(font_face) {
     DCHECK(font_face_);
@@ -57,7 +57,7 @@ class CORE_EXPORT CSSFontFace final
 
   FontFace* GetFontFace() const { return font_face_; }
 
-  RefPtr<UnicodeRangeSet> Ranges() { return ranges_; }
+  scoped_refptr<UnicodeRangeSet> Ranges() { return ranges_; }
 
   void SetSegmentedFontFace(CSSSegmentedFontFace*);
   void ClearSegmentedFontFace() { segmented_font_face_ = nullptr; }
@@ -68,10 +68,10 @@ class CORE_EXPORT CSSFontFace final
   void AddSource(CSSFontFaceSource*);
 
   void DidBeginLoad();
-  void FontLoaded(RemoteFontFaceSource*);
-  void DidBecomeVisibleFallback(RemoteFontFaceSource*);
+  bool FontLoaded(RemoteFontFaceSource*);
+  bool DidBecomeVisibleFallback(RemoteFontFaceSource*);
 
-  RefPtr<SimpleFontData> GetFontData(const FontDescription&);
+  scoped_refptr<SimpleFontData> GetFontData(const FontDescription&);
 
   FontFace::LoadStatusType LoadStatus() const {
     return font_face_->LoadStatus();
@@ -83,15 +83,16 @@ class CORE_EXPORT CSSFontFace final
 
   bool HadBlankText() { return IsValid() && sources_.front()->HadBlankText(); }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   void SetLoadStatus(FontFace::LoadStatusType);
 
-  RefPtr<UnicodeRangeSet> ranges_;
+  scoped_refptr<UnicodeRangeSet> ranges_;
   Member<CSSSegmentedFontFace> segmented_font_face_;
   HeapDeque<Member<CSSFontFaceSource>> sources_;
   Member<FontFace> font_face_;
+  DISALLOW_COPY_AND_ASSIGN(CSSFontFace);
 };
 
 }  // namespace blink

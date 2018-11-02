@@ -45,28 +45,30 @@ class CORE_EXPORT ModuleScriptLoader final
 
  public:
   static ModuleScriptLoader* Create(Modulator* modulator,
+                                    const ScriptFetchOptions& options,
                                     ModuleScriptLoaderRegistry* registry,
                                     ModuleScriptLoaderClient* client) {
-    return new ModuleScriptLoader(modulator, registry, client);
+    return new ModuleScriptLoader(modulator, options, registry, client);
   }
 
   ~ModuleScriptLoader();
 
   void Fetch(const ModuleScriptFetchRequest&,
-             ResourceFetcher*,
              ModuleGraphLevel);
 
   // Implements ModuleScriptFetcher::Client.
-  void NotifyFetchFinished(const WTF::Optional<ModuleScriptCreationParams>&,
-                           ConsoleMessage* error_message) override;
+  void NotifyFetchFinished(
+      const WTF::Optional<ModuleScriptCreationParams>&,
+      const HeapVector<Member<ConsoleMessage>>& error_messages) override;
 
   bool IsInitialState() const { return state_ == State::kInitial; }
   bool HasFinished() const { return state_ == State::kFinished; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   ModuleScriptLoader(Modulator*,
+                     const ScriptFetchOptions&,
                      ModuleScriptLoaderRegistry*,
                      ModuleScriptLoaderClient*);
 
@@ -77,8 +79,7 @@ class CORE_EXPORT ModuleScriptLoader final
 
   Member<Modulator> modulator_;
   State state_ = State::kInitial;
-  String nonce_;
-  ParserDisposition parser_state_;
+  const ScriptFetchOptions options_;
   Member<ModuleScript> module_script_;
   Member<ModuleScriptLoaderRegistry> registry_;
   Member<ModuleScriptLoaderClient> client_;

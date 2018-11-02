@@ -28,6 +28,8 @@ class MockAppCacheStorage;
 
 static const int kUnkownResponseDataSize = -1;
 
+typedef base::OnceCallback<void(int)> OnceCompletionCallback;
+
 // Response info for a particular response id. Instances are tracked in
 // the working set.
 class CONTENT_EXPORT AppCacheResponseInfo
@@ -143,7 +145,7 @@ class CONTENT_EXPORT AppCacheResponseIO {
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer_;
   scoped_refptr<net::IOBuffer> buffer_;
   int buffer_len_;
-  net::CompletionCallback callback_;
+  OnceCompletionCallback callback_;
   net::CompletionCallback open_callback_;
   base::WeakPtrFactory<AppCacheResponseIO> weak_factory_;
 
@@ -172,7 +174,7 @@ class CONTENT_EXPORT AppCacheResponseReader
   // Should only be called where there is no Read operation in progress.
   // (virtual for testing)
   virtual void ReadInfo(HttpResponseInfoIOBuffer* info_buf,
-                        const net::CompletionCallback& callback);
+                        OnceCompletionCallback callback);
 
   // Reads data from storage. Always returns the result of the read
   // asynchronously through the 'callback'. Returns the number of bytes read
@@ -182,8 +184,9 @@ class CONTENT_EXPORT AppCacheResponseReader
   // or the number of bytes read. The 'callback' is a required parameter.
   // Should only be called where there is no Read operation in progress.
   // (virtual for testing)
-  virtual void ReadData(net::IOBuffer* buf, int buf_len,
-                        const net::CompletionCallback& callback);
+  virtual void ReadData(net::IOBuffer* buf,
+                        int buf_len,
+                        OnceCompletionCallback callback);
 
   // Returns true if there is a read operation, for data or info, pending.
   bool IsReadPending() { return IsIOPending(); }
@@ -232,7 +235,7 @@ class CONTENT_EXPORT AppCacheResponseWriter
   // Should only be called where there is no Write operation in progress.
   // (virtual for testing)
   virtual void WriteInfo(HttpResponseInfoIOBuffer* info_buf,
-                         const net::CompletionCallback& callback);
+                         OnceCompletionCallback callback);
 
   // Writes data to storage. Always returns the result of the write
   // asynchronously through the 'callback'. Returns the number of bytes written
@@ -245,7 +248,7 @@ class CONTENT_EXPORT AppCacheResponseWriter
   // (virtual for testing)
   virtual void WriteData(net::IOBuffer* buf,
                          int buf_len,
-                         const net::CompletionCallback& callback);
+                         OnceCompletionCallback callback);
 
   // Returns true if there is a write pending.
   bool IsWritePending() { return IsIOPending(); }

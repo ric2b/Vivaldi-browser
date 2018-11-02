@@ -38,7 +38,7 @@ class CORE_EXPORT ScriptStreamer final
   enum Type { kParsingBlocking, kDeferred, kAsync };
 
   ~ScriptStreamer();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Launches a task (on a background thread) which will stream the given
   // ClassicPendingScript into V8 as it loads.
@@ -46,15 +46,7 @@ class CORE_EXPORT ScriptStreamer final
                              Type,
                              Settings*,
                              ScriptState*,
-                             RefPtr<WebTaskRunner>);
-
-  // Like StartStreaming, but assume that the resource has already been
-  // fully loaded.
-  static void StartStreamingLoadedScript(ClassicPendingScript*,
-                                         Type,
-                                         Settings*,
-                                         ScriptState*,
-                                         RefPtr<WebTaskRunner>);
+                             scoped_refptr<WebTaskRunner>);
 
   // Returns false if we cannot stream the given encoding.
   static bool ConvertEncoding(const char* encoding_name,
@@ -103,29 +95,14 @@ class CORE_EXPORT ScriptStreamer final
   // streamed. Non-const for testing.
   static size_t small_script_threshold_;
 
-  static ScriptStreamer* Create(
-      ClassicPendingScript* script,
-      Type script_type,
-      ScriptState* script_state,
-      v8::ScriptCompiler::CompileOptions compile_options,
-      RefPtr<WebTaskRunner> loading_task_runner) {
-    return new ScriptStreamer(script, script_type, script_state,
-                              compile_options, std::move(loading_task_runner));
-  }
   ScriptStreamer(ClassicPendingScript*,
                  Type,
                  ScriptState*,
                  v8::ScriptCompiler::CompileOptions,
-                 RefPtr<WebTaskRunner>);
+                 scoped_refptr<WebTaskRunner>);
 
   void StreamingComplete();
   void NotifyFinishedToClient();
-
-  static bool StartStreamingInternal(ClassicPendingScript*,
-                                     Type,
-                                     Settings*,
-                                     ScriptState*,
-                                     RefPtr<WebTaskRunner>);
 
   Member<ClassicPendingScript> pending_script_;
   // This pointer is weak. If ClassicPendingScript and its Resource are deleted
@@ -151,7 +128,7 @@ class CORE_EXPORT ScriptStreamer final
   // What kind of cached data V8 produces during streaming.
   v8::ScriptCompiler::CompileOptions compile_options_;
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
 
   // For recording metrics for different types of scripts separately.
   Type script_type_;
@@ -165,7 +142,7 @@ class CORE_EXPORT ScriptStreamer final
   // Encoding of the streamed script. Saved for sanity checking purposes.
   v8::ScriptCompiler::StreamedSource::Encoding encoding_;
 
-  RefPtr<WebTaskRunner> loading_task_runner_;
+  scoped_refptr<WebTaskRunner> loading_task_runner_;
 };
 
 }  // namespace blink

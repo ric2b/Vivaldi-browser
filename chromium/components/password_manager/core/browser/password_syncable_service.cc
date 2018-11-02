@@ -6,11 +6,11 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/string_util.h"
@@ -58,8 +58,8 @@ bool AreLocalAndSyncPasswordsNonSyncTagEqual(
           base::UTF16ToUTF8(password_form.display_name) ==
               password_specifics.display_name() &&
           password_form.icon_url.spec() == password_specifics.avatar_url() &&
-          url::Origin(GURL(password_specifics.federation_url())).Serialize() ==
-              password_form.federation_origin.Serialize());
+          url::Origin::Create(GURL(password_specifics.federation_url()))
+                  .Serialize() == password_form.federation_origin.Serialize());
 }
 
 // Returns true iff |password_specifics| and |password_specifics| are equal
@@ -114,7 +114,7 @@ void AppendPasswordFromSpecifics(
     const sync_pb::PasswordSpecificsData& specifics,
     base::Time sync_time,
     std::vector<std::unique_ptr<autofill::PasswordForm>>* entries) {
-  entries->push_back(base::MakeUnique<autofill::PasswordForm>(
+  entries->push_back(std::make_unique<autofill::PasswordForm>(
       PasswordFromSpecifics(specifics)));
   entries->back()->date_synced = sync_time;
 }
@@ -438,7 +438,7 @@ syncer::SyncDataList PasswordSyncableService::GetAllSyncData(
 }
 
 syncer::SyncError PasswordSyncableService::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::AutoReset<bool> processing_changes(&is_processing_sync_changes_, true);
@@ -609,7 +609,7 @@ void PasswordSyncableService::MergeSyncDataWithLocalData(
               it_local_data_correct == unmatched_data_from_password_db->end()
                   ? syncer::SyncChange::ACTION_ADD
                   : syncer::SyncChange::ACTION_UPDATE);
-          local_changes->push_back(base::MakeUnique<autofill::PasswordForm>(
+          local_changes->push_back(std::make_unique<autofill::PasswordForm>(
               result.new_local_correct.value()));
           local_changes->back()->date_synced = clock_->Now();
         }
@@ -619,7 +619,7 @@ void PasswordSyncableService::MergeSyncDataWithLocalData(
               it_local_data_incorrect == unmatched_data_from_password_db->end()
                   ? syncer::SyncChange::ACTION_ADD
                   : syncer::SyncChange::ACTION_UPDATE);
-          local_changes->push_back(base::MakeUnique<autofill::PasswordForm>(
+          local_changes->push_back(std::make_unique<autofill::PasswordForm>(
               result.new_local_incorrect.value()));
           local_changes->back()->date_synced = clock_->Now();
         }
@@ -755,7 +755,8 @@ autofill::PasswordForm PasswordFromSpecifics(
   new_password.times_used = password.times_used();
   new_password.display_name = base::UTF8ToUTF16(password.display_name());
   new_password.icon_url = GURL(password.avatar_url());
-  new_password.federation_origin = url::Origin(GURL(password.federation_url()));
+  new_password.federation_origin =
+      url::Origin::Create(GURL(password.federation_url()));
   return new_password;
 }
 

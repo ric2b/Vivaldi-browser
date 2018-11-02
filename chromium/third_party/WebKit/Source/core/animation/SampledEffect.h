@@ -5,6 +5,7 @@
 #ifndef SampledEffect_h
 #define SampledEffect_h
 
+#include "base/macros.h"
 #include "core/animation/Animation.h"
 #include "core/animation/Interpolation.h"
 #include "core/animation/KeyframeEffectReadOnly.h"
@@ -16,8 +17,6 @@ namespace blink {
 // Associates the results of sampling an EffectModel with metadata used for
 // effect ordering and managing composited animations.
 class SampledEffect : public GarbageCollectedFinalized<SampledEffect> {
-  WTF_MAKE_NONCOPYABLE(SampledEffect);
-
  public:
   static SampledEffect* Create(KeyframeEffectReadOnly* animation) {
     return new SampledEffect(animation);
@@ -25,10 +24,10 @@ class SampledEffect : public GarbageCollectedFinalized<SampledEffect> {
 
   void Clear();
 
-  const Vector<RefPtr<Interpolation>>& Interpolations() const {
+  const Vector<scoped_refptr<Interpolation>>& Interpolations() const {
     return interpolations_;
   }
-  Vector<RefPtr<Interpolation>>& MutableInterpolations() {
+  Vector<scoped_refptr<Interpolation>>& MutableInterpolations() {
     return interpolations_;
   }
 
@@ -39,15 +38,16 @@ class SampledEffect : public GarbageCollectedFinalized<SampledEffect> {
   void RemoveReplacedInterpolations(const HashSet<PropertyHandle>&);
   void UpdateReplacedProperties(HashSet<PropertyHandle>&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   SampledEffect(KeyframeEffectReadOnly*);
 
   WeakMember<KeyframeEffectReadOnly> effect_;
-  Vector<RefPtr<Interpolation>> interpolations_;
+  Vector<scoped_refptr<Interpolation>> interpolations_;
   const unsigned sequence_number_;
   KeyframeEffectReadOnly::Priority priority_;
+  DISALLOW_COPY_AND_ASSIGN(SampledEffect);
 };
 
 }  // namespace blink

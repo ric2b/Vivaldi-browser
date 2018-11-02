@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/strings/string16.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -26,19 +25,28 @@ namespace autofill {
 
 struct Suggestion;
 
+extern const base::Feature kAutofillAlwaysFillAddresses;
+extern const base::Feature kAutofillCreateDataForTest;
 extern const base::Feature kAutofillCreditCardAssist;
 extern const base::Feature kAutofillScanCardholderName;
+extern const base::Feature kAutofillCreditCardAblationExperiment;
 extern const base::Feature kAutofillCreditCardBankNameDisplay;
 extern const base::Feature kAutofillCreditCardPopupLayout;
 extern const base::Feature kAutofillCreditCardLastUsedDateDisplay;
+extern const base::Feature kAutofillDeleteDisusedAddresses;
+extern const base::Feature kAutofillDeleteDisusedCreditCards;
+extern const base::Feature kAutofillExpandedPopupViews;
 extern const base::Feature kAutofillOfferLocalSaveIfServerCardManuallyEntered;
 extern const base::Feature kAutofillRationalizeFieldTypePredictions;
+extern const base::Feature kAutofillSendBillingCustomerNumber;
 extern const base::Feature kAutofillSuppressDisusedAddresses;
+extern const base::Feature kAutofillSuppressDisusedCreditCards;
+extern const base::Feature kAutofillToolkitViewsCreditCardDialogsMac;
+extern const base::Feature kAutofillUpstreamAllowAllEmailDomains;
 extern const base::Feature kAutofillUpstreamRequestCvcIfMissing;
 extern const base::Feature kAutofillUpstreamShowGoogleLogo;
 extern const base::Feature kAutofillUpstreamShowNewUi;
 extern const base::Feature kAutofillUpstreamUseAutofillProfileComparator;
-extern const base::Feature kAutofillUpstreamUseNotRecentlyUsedAutofillProfile;
 extern const char kCreditCardSigninPromoImpressionLimitParamKey[];
 extern const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[];
 extern const char kAutofillUpstreamMaxMinutesSinceAutofillProfileUseKey[];
@@ -124,6 +132,11 @@ unsigned int GetPopupMargin();
 // offered.
 bool IsAutofillOfferLocalSaveIfServerCardManuallyEnteredExperimentEnabled();
 
+// Returns whether the experiment is enabled where Chrome reads billing customer
+// number from priority preference and sends it along with UploadCardRequest and
+// FullCardRequest.
+bool IsAutofillSendBillingCustomerNumberExperimentEnabled();
+
 // Returns whether the experiment is enabled where Chrome Upstream requests CVC
 // in the offer to save bubble if it was not detected during the checkout flow.
 bool IsAutofillUpstreamRequestCvcIfMissingExperimentEnabled();
@@ -135,11 +148,6 @@ bool IsAutofillUpstreamShowGoogleLogoExperimentEnabled();
 // Returns whether the experiment is enabled where Chrome Upstream displays a
 // new save card bubble/infobar design.
 bool IsAutofillUpstreamShowNewUiExperimentEnabled();
-
-// Returns the maximum time that could have elapsed since an address profile's
-// most recent use for the adress profile to be included in the candidate set
-// for card upload. Returns 0 if the experiment is not enabled.
-base::TimeDelta GetMaxTimeSinceAutofillProfileUseForCardUpload();
 
 #if defined(OS_MACOSX)
 // Returns whether the Credit Card Autofill Touch Bar experiment is enabled.

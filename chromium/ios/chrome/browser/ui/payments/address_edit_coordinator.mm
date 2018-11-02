@@ -11,14 +11,13 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/payments/core/payments_profile_comparator.h"
-#include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
 #import "ios/chrome/browser/ui/payments/address_edit_mediator.h"
 #import "ios/chrome/browser/ui/payments/payment_request_editor_field.h"
+#import "ios/chrome/browser/ui/payments/payment_request_navigation_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -35,7 +34,7 @@ using ::AutofillTypeFromAutofillUIType;
 @property(nonatomic, strong)
     CountrySelectionCoordinator* countrySelectionCoordinator;
 
-@property(nonatomic, strong) UINavigationController* viewController;
+@property(nonatomic, strong) PaymentRequestNavigationController* viewController;
 
 @property(nonatomic, strong)
     PaymentRequestEditViewController* editViewController;
@@ -57,20 +56,20 @@ using ::AutofillTypeFromAutofillUIType;
 - (void)start {
   self.editViewController = [[PaymentRequestEditViewController alloc] init];
   [self.editViewController setDelegate:self];
-  [self.editViewController setValidatorDelegate:self];
   self.mediator =
       [[AddressEditMediator alloc] initWithPaymentRequest:self.paymentRequest
                                                   address:self.address];
   [self.mediator setConsumer:self.editViewController];
   [self.editViewController setDataSource:self.mediator];
+  [self.editViewController setValidatorDelegate:self.mediator];
   [self.editViewController loadModel];
 
-  self.viewController = [[UINavigationController alloc]
+  self.viewController = [[PaymentRequestNavigationController alloc]
       initWithRootViewController:self.editViewController];
-  [self.viewController setModalPresentationStyle:UIModalPresentationFormSheet];
-  [self.viewController
-      setModalTransitionStyle:UIModalTransitionStyleCoverVertical];
-  [self.viewController setNavigationBarHidden:YES];
+  self.viewController.modalPresentationStyle = UIModalPresentationFormSheet;
+  self.viewController.modalTransitionStyle =
+      UIModalTransitionStyleCoverVertical;
+  self.viewController.navigationBarHidden = YES;
 
   [[self baseViewController] presentViewController:self.viewController
                                           animated:YES
@@ -85,33 +84,6 @@ using ::AutofillTypeFromAutofillUIType;
   self.countrySelectionCoordinator = nil;
   self.editViewController = nil;
   self.viewController = nil;
-}
-
-#pragma mark - PaymentRequestEditViewControllerValidator
-
-- (NSString*)paymentRequestEditViewController:
-                 (PaymentRequestEditViewController*)controller
-                                validateField:(EditorField*)field {
-  if (field.value.length) {
-    switch (field.autofillUIType) {
-      case AutofillUITypeProfileHomePhoneWholeNumber: {
-        const std::string selectedCountryCode =
-            base::SysNSStringToUTF8(self.mediator.selectedCountryCode);
-        if (!autofill::IsValidPhoneNumber(base::SysNSStringToUTF16(field.value),
-                                          selectedCountryCode)) {
-          return l10n_util::GetNSString(
-              IDS_PAYMENTS_PHONE_INVALID_VALIDATION_MESSAGE);
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  } else if (field.isRequired) {
-    return l10n_util::GetNSString(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
-  }
-  return nil;
 }
 
 #pragma mark - PaymentRequestEditViewControllerDelegate
@@ -182,6 +154,12 @@ using ::AutofillTypeFromAutofillUIType;
     [self.editViewController loadModel];
     [self.editViewController.collectionView reloadData];
   }
+  [self.countrySelectionCoordinator stop];
+  self.countrySelectionCoordinator = nil;
+}
+
+- (void)countrySelectionCoordinatorDidReturn:
+    (CountrySelectionCoordinator*)coordinator {
   [self.countrySelectionCoordinator stop];
   self.countrySelectionCoordinator = nil;
 }

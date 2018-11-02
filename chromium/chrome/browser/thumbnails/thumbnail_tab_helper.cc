@@ -56,34 +56,26 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(ThumbnailTabHelper);
 // --------
 // This class provides a service for updating thumbnails to be used in the
 // "Most visited" section of the New Tab page. The process is started by
-// UpdateThumbnailIfNecessary(), which updates the thumbnail for the current
-// tab if needed. The heuristics to judge whether to update the thumbnail are
-// implemented in ThumbnailService::ShouldAcquirePageThumbnail().
+// StartThumbnailCaptureIfNecessary(), which updates the thumbnail for the
+// current tab if needed. The heuristics to judge whether to update the
+// thumbnail are implemented in ThumbnailService::ShouldAcquirePageThumbnail().
 // There are several triggers that can start the process:
 // - When a renderer is about to be hidden (this usually occurs when the current
 //   tab is closed or another tab is clicked).
-// - If features::kCaptureThumbnailOnLoadFinished is enabled: When a page load
-//   finishes.
 // - If features::kCaptureThumbnailOnNavigatingAway is enabled: Just before
 //   navigating away from the current page.
 
 ThumbnailTabHelper::ThumbnailTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents),
-      capture_on_load_finished_(base::FeatureList::IsEnabled(
-          features::kCaptureThumbnailOnLoadFinished)),
       capture_on_navigating_away_(base::FeatureList::IsEnabled(
           features::kCaptureThumbnailOnNavigatingAway)),
+      did_navigation_finish_(false),
+      has_received_document_since_navigation_finished_(false),
+      has_painted_since_document_received_(false),
       page_transition_(ui::PAGE_TRANSITION_LINK),
       load_interrupted_(false),
-      weak_factory_(this) {
-  // Even though we deal in RenderWidgetHosts, we only care about its
-  // subclass, RenderViewHost when it is in a tab. We don't make thumbnails
-  // for RenderViewHosts that aren't in tabs, or RenderWidgetHosts that
-  // aren't views like select popups.
-  registrar_.Add(this,
-                 content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
-                 content::Source<content::WebContents>(contents));
-}
+      waiting_for_capture_(false),
+      weak_factory_(this) {}
 
 ThumbnailTabHelper::~ThumbnailTabHelper() = default;
 
@@ -91,14 +83,10 @@ void ThumbnailTabHelper::Observe(int type,
                                  const content::NotificationSource& source,
                                  const content::NotificationDetails& details) {
   switch (type) {
-    case content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED:
-      RenderViewHostCreated(
-          content::Details<content::RenderViewHost>(details).ptr());
-      break;
-
     case content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED:
+      // |details| is the new visibility state.
       if (!*content::Details<bool>(details).ptr())
-        WidgetHidden(content::Source<content::RenderWidgetHost>(source).ptr());
+        TabHidden();
       break;
 
     default:
@@ -106,18 +94,21 @@ void ThumbnailTabHelper::Observe(int type,
   }
 }
 
+void ThumbnailTabHelper::RenderViewCreated(
+    content::RenderViewHost* render_view_host) {
+  StartWatchingRenderViewHost(render_view_host);
+}
+
+void ThumbnailTabHelper::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {
+  StopWatchingRenderViewHost(old_host);
+  StartWatchingRenderViewHost(new_host);
+}
+
 void ThumbnailTabHelper::RenderViewDeleted(
     content::RenderViewHost* render_view_host) {
-  bool registered = registrar_.IsRegistered(
-      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<content::RenderWidgetHost>(
-          render_view_host->GetWidget()));
-  if (registered) {
-    registrar_.Remove(this,
-                      content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-                      content::Source<content::RenderWidgetHost>(
-                          render_view_host->GetWidget()));
-  }
+  StopWatchingRenderViewHost(render_view_host);
 }
 
 void ThumbnailTabHelper::DidStartNavigation(
@@ -126,12 +117,19 @@ void ThumbnailTabHelper::DidStartNavigation(
       navigation_handle->IsSameDocument()) {
     return;
   }
+
   if (capture_on_navigating_away_) {
     // At this point, the new navigation has just been started, but the
     // WebContents still shows the previous page. Grab a thumbnail before it
     // goes away.
-    UpdateThumbnailIfNecessary();
+    StartThumbnailCaptureIfNecessary(TriggerReason::NAVIGATING_AWAY);
   }
+
+  // Now reset navigation-related state. It's important that this happens after
+  // calling StartThumbnailCaptureIfNecessary.
+  did_navigation_finish_ = false;
+  has_received_document_since_navigation_finished_ = false;
+  has_painted_since_document_received_ = false;
   // Reset the page transition to some uninteresting type, since the actual
   // type isn't available at this point. We'll get it in DidFinishNavigation
   // (if that happens, which isn't guaranteed).
@@ -145,19 +143,44 @@ void ThumbnailTabHelper::DidFinishNavigation(
       navigation_handle->IsSameDocument()) {
     return;
   }
+  did_navigation_finish_ = true;
   page_transition_ = navigation_handle->GetPageTransition();
 }
 
-void ThumbnailTabHelper::DidStartLoading() {
-  // TODO(treib): We should probably track whether the load *finished* - as it
-  // is, an in-progress load will count as not interrupted.
-  load_interrupted_ = false;
+void ThumbnailTabHelper::DocumentAvailableInMainFrame() {
+  // If there's currently a screen capture going on, ignore its result.
+  // Otherwise there's a risk that we'll get a picture of the wrong page.
+  // Note: It *looks* like WebContentsObserver::DidFirstVisuallyNonEmptyPaint
+  // would be a better signal for this, but it uses a weird heuristic to detect
+  // "visually non empty" paints, so it might not be entirely safe.
+  waiting_for_capture_ = false;
+
+  // Mark that we got the document, unless we're in the middle of a navigation.
+  // In that case, this refers to the previous document, but we're tracking the
+  // state of the new one.
+  if (did_navigation_finish_) {
+    // From now on, we'll start watching for paint events.
+    has_received_document_since_navigation_finished_ = true;
+  }
 }
 
-void ThumbnailTabHelper::DidStopLoading() {
-  if (capture_on_load_finished_) {
-    UpdateThumbnailIfNecessary();
+void ThumbnailTabHelper::DocumentOnLoadCompletedInMainFrame() {
+  // Usually, DocumentAvailableInMainFrame always gets called first, so this one
+  // shouldn't be necessary. However, DocumentAvailableInMainFrame is not fired
+  // for empty documents (i.e. about:blank), which are thus handled here.
+  DocumentAvailableInMainFrame();
+}
+
+void ThumbnailTabHelper::DidFirstVisuallyNonEmptyPaint() {
+  // If we haven't gotten the current document since navigating, then this paint
+  // refers to the *previous* document, so ignore it.
+  if (has_received_document_since_navigation_finished_) {
+    has_painted_since_document_received_ = true;
   }
+}
+
+void ThumbnailTabHelper::DidStartLoading() {
+  load_interrupted_ = false;
 }
 
 void ThumbnailTabHelper::NavigationStopped() {
@@ -166,10 +189,55 @@ void ThumbnailTabHelper::NavigationStopped() {
   load_interrupted_ = true;
 }
 
-void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
+void ThumbnailTabHelper::StartWatchingRenderViewHost(
+    content::RenderViewHost* render_view_host) {
+  // We get notified whenever a new RenderView is created, which does not
+  // necessarily come with a new RenderViewHost, and there is no good way to get
+  // notifications of new RenderViewHosts only. So just be tolerant of
+  // re-registrations.
+  bool registered = registrar_.IsRegistered(
+      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+      content::Source<content::RenderWidgetHost>(
+          render_view_host->GetWidget()));
+  if (!registered) {
+    registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+                   content::Source<content::RenderWidgetHost>(
+                       render_view_host->GetWidget()));
+  }
+}
+
+void ThumbnailTabHelper::StopWatchingRenderViewHost(
+    content::RenderViewHost* render_view_host) {
+  if (!render_view_host) {
+    return;
+  }
+
+  bool registered = registrar_.IsRegistered(
+      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+      content::Source<content::RenderWidgetHost>(
+          render_view_host->GetWidget()));
+  if (registered) {
+    registrar_.Remove(this,
+                      content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+                      content::Source<content::RenderWidgetHost>(
+                          render_view_host->GetWidget()));
+  }
+}
+
+void ThumbnailTabHelper::StartThumbnailCaptureIfNecessary(
+    TriggerReason trigger) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Don't take a screenshot if we haven't painted anything since the last
+  // navigation. This can happen when navigating away again very quickly.
+  if (!has_painted_since_document_received_) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_NO_PAINT_YET);
+    return;
+  }
+
   // Ignore thumbnail update requests if one is already in progress.
   if (thumbnailing_context_) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_IN_PROGRESS);
     return;
   }
 
@@ -177,6 +245,7 @@ void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
   // which would be unwise to attempt <http://crbug.com/130097>. If the
   // WebContents is in the middle of destruction, do not risk it.
   if (!web_contents() || web_contents()->IsBeingDestroyed()) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_NO_WEBCONTENTS);
     return;
   }
 
@@ -185,30 +254,25 @@ void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
   // to the currently visible content.
   const GURL& url = web_contents()->GetLastCommittedURL();
   if (!url.is_valid()) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_NO_URL);
     return;
   }
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
   scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      ThumbnailServiceFactory::GetForProfile(profile);
+      GetThumbnailService();
 
   // Skip if we don't need to update the thumbnail.
   if (!thumbnail_service ||
       !thumbnail_service->ShouldAcquirePageThumbnail(url, page_transition_)) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_SHOULD_NOT_ACQUIRE);
     return;
   }
 
-  AsyncProcessThumbnail(thumbnail_service);
-}
-
-void ThumbnailTabHelper::AsyncProcessThumbnail(
-    scoped_refptr<thumbnails::ThumbnailService> thumbnail_service) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::RenderWidgetHost* render_widget_host =
       web_contents()->GetRenderViewHost()->GetWidget();
   content::RenderWidgetHostView* view = render_widget_host->GetView();
   if (!view || !view->IsSurfaceAvailableForCopy()) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_VIEW_NOT_AVAILABLE);
     return;
   }
 
@@ -222,12 +286,13 @@ void ThumbnailTabHelper::AsyncProcessThumbnail(
   copy_rect.Inset(0, 0, scrollbar_size, scrollbar_size);
 
   if (copy_rect.IsEmpty()) {
+    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_EMPTY_RECT);
     return;
   }
 
-  thumbnailing_context_ = new ThumbnailingContext(web_contents(),
-                                                  thumbnail_service.get(),
-                                                  load_interrupted_);
+  bool at_top = (view->GetLastScrollOffset().y() == 0);
+  bool load_completed = !web_contents()->IsLoading() && !load_interrupted_;
+  thumbnailing_context_ = new ThumbnailingContext(url, at_top, load_completed);
 
   ui::ScaleFactor scale_factor =
       ui::GetSupportedScaleFactor(
@@ -237,32 +302,45 @@ void ThumbnailTabHelper::AsyncProcessThumbnail(
       gfx::Size(kThumbnailWidth, kThumbnailHeight), &copy_rect,
       &thumbnailing_context_->requested_copy_size);
   copy_from_surface_start_time_ = base::TimeTicks::Now();
+  waiting_for_capture_ = true;
   view->CopyFromSurface(copy_rect, thumbnailing_context_->requested_copy_size,
                         base::Bind(&ThumbnailTabHelper::ProcessCapturedBitmap,
-                                   weak_factory_.GetWeakPtr()),
+                                   weak_factory_.GetWeakPtr(), trigger),
                         kN32_SkColorType);
 }
 
 void ThumbnailTabHelper::ProcessCapturedBitmap(
+    TriggerReason trigger,
     const SkBitmap& bitmap,
     content::ReadbackResponse response) {
+  // If |waiting_for_capture_| is false, that means something happened in the
+  // meantime which makes the captured image unsafe to use.
+  bool was_canceled = !waiting_for_capture_;
+  waiting_for_capture_ = false;
+
   base::TimeDelta copy_from_surface_time =
       base::TimeTicks::Now() - copy_from_surface_start_time_;
   UMA_HISTOGRAM_TIMES("Thumbnails.CopyFromSurfaceTime", copy_from_surface_time);
 
-  if (response == content::READBACK_SUCCESS) {
+  if (response == content::READBACK_SUCCESS && !was_canceled) {
     // On success, we must be on the UI thread.
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    // From here on, nothing can fail, so log success.
+    LogThumbnailingOutcome(trigger, Outcome::SUCCESS);
     base::PostTaskWithTraitsAndReply(
         FROM_HERE,
         {base::TaskPriority::BACKGROUND,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::Bind(&ComputeThumbnailScore, bitmap, thumbnailing_context_),
-        base::Bind(&ThumbnailTabHelper::UpdateThumbnail,
+        base::Bind(&ThumbnailTabHelper::StoreThumbnail,
                    weak_factory_.GetWeakPtr(), bitmap));
   } else {
+    LogThumbnailingOutcome(
+        trigger, was_canceled ? Outcome::CANCELED : Outcome::READBACK_FAILED);
     // On failure because of shutdown we are not on the UI thread, so ensure
     // that cleanup happens on that thread.
+    // TODO(treib): Figure out whether it actually happen that we get called
+    // back on something other than the UI thread.
     content::BrowserThread::PostTask(
         content::BrowserThread::UI,
         FROM_HERE,
@@ -271,15 +349,18 @@ void ThumbnailTabHelper::ProcessCapturedBitmap(
   }
 }
 
-void ThumbnailTabHelper::UpdateThumbnail(const SkBitmap& thumbnail) {
+void ThumbnailTabHelper::StoreThumbnail(const SkBitmap& thumbnail) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // Feed the constructed thumbnail to the thumbnail service.
-  gfx::Image image = gfx::Image::CreateFrom1xBitmap(thumbnail);
-  thumbnailing_context_->service->SetPageThumbnail(*thumbnailing_context_,
-                                                   image);
-  DVLOG(1) << "Thumbnail taken for " << thumbnailing_context_->url << ": "
-           << thumbnailing_context_->score.ToString();
+  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
+      GetThumbnailService();
+  if (thumbnail_service) {
+    // Feed the constructed thumbnail to the thumbnail service.
+    gfx::Image image = gfx::Image::CreateFrom1xBitmap(thumbnail);
+    thumbnail_service->SetPageThumbnail(*thumbnailing_context_, image);
+    DVLOG(1) << "Thumbnail taken for " << thumbnailing_context_->url << ": "
+             << thumbnailing_context_->score.ToString();
+  }
 
   CleanUpFromThumbnailGeneration();
 }
@@ -289,26 +370,38 @@ void ThumbnailTabHelper::CleanUpFromThumbnailGeneration() {
   thumbnailing_context_ = nullptr;
 }
 
-void ThumbnailTabHelper::RenderViewHostCreated(
-    content::RenderViewHost* renderer) {
-  // NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED is really a new
-  // RenderView, not RenderViewHost, and there is no good way to get
-  // notifications of RenderViewHosts. So just be tolerant of re-registrations.
-  bool registered = registrar_.IsRegistered(
-      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
-  if (!registered) {
-    registrar_.Add(
-        this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-        content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
-  }
-}
-
-void ThumbnailTabHelper::WidgetHidden(content::RenderWidgetHost* widget) {
-  // Skip if a pending entry exists. WidgetHidden can be called while navigating
+void ThumbnailTabHelper::TabHidden() {
+  // Skip if a pending entry exists. TabHidden can be called while navigating
   // pages and this is not a time when thumbnails should be generated.
   if (!web_contents() || web_contents()->GetController().GetPendingEntry()) {
+    LogThumbnailingOutcome(TriggerReason::TAB_HIDDEN,
+                           Outcome::NOT_ATTEMPTED_PENDING_NAVIGATION);
     return;
   }
-  UpdateThumbnailIfNecessary();
+  StartThumbnailCaptureIfNecessary(TriggerReason::TAB_HIDDEN);
+}
+
+scoped_refptr<thumbnails::ThumbnailService>
+ThumbnailTabHelper::GetThumbnailService() {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  return ThumbnailServiceFactory::GetForProfile(profile);
+}
+
+// static
+void ThumbnailTabHelper::LogThumbnailingOutcome(TriggerReason trigger,
+                                                Outcome outcome) {
+  UMA_HISTOGRAM_ENUMERATION("Thumbnails.CaptureOutcome", outcome,
+                            Outcome::COUNT);
+
+  switch (trigger) {
+    case TriggerReason::TAB_HIDDEN:
+      UMA_HISTOGRAM_ENUMERATION("Thumbnails.CaptureOutcome.TabHidden", outcome,
+                                Outcome::COUNT);
+      break;
+    case TriggerReason::NAVIGATING_AWAY:
+      UMA_HISTOGRAM_ENUMERATION("Thumbnails.CaptureOutcome.NavigatingAway",
+                                outcome, Outcome::COUNT);
+      break;
+  }
 }

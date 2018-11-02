@@ -48,6 +48,25 @@ class PasswordsPrivateRemovePasswordExceptionFunction :
   DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateRemovePasswordExceptionFunction);
 };
 
+class PasswordsPrivateUndoRemoveSavedPasswordOrExceptionFunction
+    : public UIThreadExtensionFunction {
+ public:
+  PasswordsPrivateUndoRemoveSavedPasswordOrExceptionFunction() {}
+  DECLARE_EXTENSION_FUNCTION(
+      "passwordsPrivate.undoRemoveSavedPasswordOrException",
+      PASSWORDSPRIVATE_UNDOREMOVESAVEDPASSWORDOREXCEPTION);
+
+ protected:
+  ~PasswordsPrivateUndoRemoveSavedPasswordOrExceptionFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(
+      PasswordsPrivateUndoRemoveSavedPasswordOrExceptionFunction);
+};
+
 class PasswordsPrivateRequestPlaintextPasswordFunction :
     public UIThreadExtensionFunction {
  public:
@@ -103,6 +122,40 @@ class PasswordsPrivateGetPasswordExceptionListFunction
   void GotList(const PasswordsPrivateDelegate::ExceptionEntries& entries);
 
   DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateGetPasswordExceptionListFunction);
+};
+
+class PasswordsPrivateImportPasswordsFunction
+    : public UIThreadExtensionFunction {
+ public:
+  PasswordsPrivateImportPasswordsFunction() {}
+  DECLARE_EXTENSION_FUNCTION("passwordsPrivate.importPasswords",
+                             PASSWORDSPRIVATE_IMPORTPASSWORDS);
+
+ protected:
+  ~PasswordsPrivateImportPasswordsFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateImportPasswordsFunction);
+};
+
+class PasswordsPrivateExportPasswordsFunction
+    : public UIThreadExtensionFunction {
+ public:
+  PasswordsPrivateExportPasswordsFunction() {}
+  DECLARE_EXTENSION_FUNCTION("passwordsPrivate.exportPasswords",
+                             PASSWORDSPRIVATE_EXPORTPASSWORDS);
+
+ protected:
+  ~PasswordsPrivateExportPasswordsFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateExportPasswordsFunction);
 };
 
 }  // namespace extensions

@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -23,10 +24,12 @@
 #include "base/win/windows_version.h"
 #endif
 
+namespace media {
+
 #if defined(OS_WIN)
 namespace {
-media::DemuxerStream* GetStream(std::unique_ptr<media::Demuxer> & demuxer, media::DemuxerStream::Type type) {
-    std::vector<media::DemuxerStream*> streams = demuxer->GetAllStreams();
+DemuxerStream* GetStream(std::unique_ptr<Demuxer> & demuxer, DemuxerStream::Type type) {
+    std::vector<DemuxerStream*> streams = demuxer->GetAllStreams();
     for (auto* stream : streams) {
       if (stream->type() == type)
         return stream;
@@ -36,11 +39,9 @@ media::DemuxerStream* GetStream(std::unique_ptr<media::Demuxer> & demuxer, media
 }
 #endif  // defined(OS_WIN)
 
-namespace content {
-
 class PlatformMediaPipelineIntegrationTest
     : public testing::Test,
-      public media::PipelineIntegrationTestBase {
+      public PipelineIntegrationTestBase {
  public:
   static bool IsEnabled() {
 #if defined(OS_MACOSX)
@@ -60,7 +61,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4", kHashed));
 
   Play();
 
@@ -86,7 +87,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
 
   Play();
 
@@ -111,7 +112,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
 
@@ -132,7 +133,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MP3) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("sfx.mp3", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("sfx.mp3", kHashed));
 
   Play();
 
@@ -163,7 +164,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("sfx.m4a", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("sfx.m4a", kHashed));
 
   Play();
 
@@ -186,7 +187,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePaused) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
   base::TimeDelta start_seek_time(duration / 4);
@@ -212,7 +213,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
   base::TimeDelta start_seek_time(duration / 4);
@@ -234,7 +235,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
   ASSERT_TRUE(Seek(pipeline_->GetMediaDuration() / 2));
@@ -246,7 +247,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   const base::TimeDelta duration = pipeline_->GetMediaDuration();
   const base::TimeDelta play_time = duration / 4;
@@ -265,11 +266,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("vivaldi-bear_truncated.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-bear_truncated.mp4"));
 
   Play();
   WaitUntilCurrentTimeIsAfter(base::TimeDelta::FromMicroseconds(1066666));
-  ASSERT_TRUE(ended_ || pipeline_status_ != media::PIPELINE_OK);
+  ASSERT_TRUE(ended_ || pipeline_status_ != PipelineStatus::PIPELINE_OK);
 }
 
 // TODO(wdzierzanowski): Fix and enable again (DNA-30573).
@@ -286,9 +287,9 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DISABLED_DecodingError) {
   // TODO(wdzierzanowski): WMFMediaPipeline (Windows) doesn't detect the error?
   // (DNA-30324).
 #if !defined(OS_WIN)
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_corrupt.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_corrupt.mp4"));
   Play();
-  EXPECT_EQ(media::PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(PipelineStatus::PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
 #endif
 }
 
@@ -302,8 +303,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
     return;
 #endif
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_rotate_0.mp4"));
-  ASSERT_EQ(media::VIDEO_ROTATION_0, metadata_.video_rotation);
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_0.mp4"));
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0, metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
@@ -316,8 +317,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
     return;
 #endif
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_rotate_90.mp4"));
-  ASSERT_EQ(media::VIDEO_ROTATION_90, metadata_.video_rotation);
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_90.mp4"));
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90, metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
@@ -330,8 +331,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
     return;
 #endif
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_rotate_180.mp4"));
-  ASSERT_EQ(media::VIDEO_ROTATION_180, metadata_.video_rotation);
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_180.mp4"));
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180, metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
@@ -344,8 +345,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
     return;
 #endif
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("bear_rotate_270.mp4"));
-  ASSERT_EQ(media::VIDEO_ROTATION_270, metadata_.video_rotation);
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_270.mp4"));
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270, metadata_.video_decoder_config.video_rotation());
 }
 
 // Configuration change happens only on Windows.
@@ -354,19 +355,19 @@ TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("vivaldi-config_change_audio.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-config_change_audio.mp4"));
 
   Play();
 
-  media::AudioDecoderConfig audio_config =
-      GetStream(demuxer_, media::DemuxerStream::AUDIO)->audio_decoder_config();
+  AudioDecoderConfig audio_config =
+      GetStream(demuxer_, DemuxerStream::AUDIO)->audio_decoder_config();
 
   EXPECT_EQ(audio_config.samples_per_second(), 24000);
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
   audio_config =
-      GetStream(demuxer_, media::DemuxerStream::AUDIO)->audio_decoder_config();
+      GetStream(demuxer_, DemuxerStream::AUDIO)->audio_decoder_config();
   EXPECT_EQ(audio_config.samples_per_second(), 48000);
 }
 
@@ -374,18 +375,18 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("vivaldi-config_change_video.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-config_change_video.mp4"));
 
   Play();
 
-  media::VideoDecoderConfig video_config =
-      GetStream(demuxer_, media::DemuxerStream::VIDEO)->video_decoder_config();
+  VideoDecoderConfig video_config =
+      GetStream(demuxer_, DemuxerStream::VIDEO)->video_decoder_config();
   EXPECT_EQ(video_config.coded_size().height(), 270);
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
   video_config =
-      GetStream(demuxer_, media::DemuxerStream::VIDEO)->video_decoder_config();
+      GetStream(demuxer_, DemuxerStream::VIDEO)->video_decoder_config();
   EXPECT_EQ(video_config.coded_size().height(), 272);
 }
 #endif  // defined(OS_WIN)
@@ -398,7 +399,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest,
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
 #endif
 
-  ASSERT_EQ(media::PIPELINE_OK, Start("vivaldi-nonzero-start-time.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   ASSERT_EQ(base::TimeDelta::FromMicroseconds(390000),
@@ -407,4 +408,4 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
 
 #endif  // defined(OS_MACOSX) || defined(OS_WIN)
 
-}  // namespace content
+}  // namespace media

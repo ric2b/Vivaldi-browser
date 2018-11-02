@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "apps/launcher.h"
-#include "ash/system/palette/palette_utils.h"
+#include "ash/public/cpp/stylus_utils.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -23,6 +23,7 @@
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/note_taking_controller_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
@@ -204,9 +205,6 @@ NoteTakingAppInfos NoteTakingHelper::GetAvailableApps(Profile* profile) {
 
 std::unique_ptr<NoteTakingAppInfo> NoteTakingHelper::GetPreferredChromeAppInfo(
     Profile* profile) {
-  if (!ash::palette_utils::HasStylusInput())
-    return nullptr;
-
   std::string preferred_app_id =
       profile->GetPrefs()->GetString(prefs::kNoteTakingAppId);
   if (LooksLikeAndroidPackageName(preferred_app_id))
@@ -285,7 +283,7 @@ bool NoteTakingHelper::SetPreferredAppEnabledOnLockScreen(Profile* profile,
 bool NoteTakingHelper::IsAppAvailable(Profile* profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile);
-  return ash::palette_utils::HasStylusInput() &&
+  return ash::stylus_utils::HasStylusInput() &&
          !GetAvailableApps(profile).empty();
 }
 
@@ -350,6 +348,8 @@ NoteTakingHelper::NoteTakingHelper()
     : launch_chrome_app_callback_(
           base::Bind(&apps::LaunchPlatformAppWithAction)),
       extension_registry_observer_(this),
+      note_taking_controller_client_(
+          std::make_unique<NoteTakingControllerClient>(this)),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -395,7 +395,7 @@ NoteTakingHelper::NoteTakingHelper()
   if (play_store_enabled_ && arc::ArcServiceManager::Get()
                                  ->arc_bridge_service()
                                  ->intent_helper()
-                                 ->has_instance()) {
+                                 ->IsConnected()) {
     UpdateAndroidApps();
   }
 }

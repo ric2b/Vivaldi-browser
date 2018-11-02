@@ -28,6 +28,18 @@ unpacker.app = {
   MOUNTING_NOTIFICATION_DELAY: 1000,
 
   /**
+   * Time in milliseconds before the notification about packing is shown.
+   * @const {number}
+   */
+  PACKING_NOTIFICATION_DELAY: 1000,
+
+  /**
+   * Time in milliseconds before the notification is cleared.
+   * @const {number}
+   */
+  PACKING_NOTIFICATION_CLEAR_DELAY: 1000,
+
+  /**
    * The default filename for .nmf file.
    * This value must not be constant because it is overwritten in tests.
    * Since .nmf file is not available in .grd, we use .txt instead.
@@ -53,6 +65,12 @@ unpacker.app = {
    * @type {!Object<!unpacker.types.CompressorId, !unpacker.Compressor>}
    */
   compressors: {},
+
+  /**
+   * A promise used to postpone all calls to access string assets.
+   * @type {?Promise<!Object>}
+   */
+  stringDataLoadedPromise: null,
 
   /**
    * A map with promises of loading a volume's metadata from NaCl.
@@ -149,11 +167,17 @@ unpacker.app = {
   },
 
   /**
-   * Saves state in case of restarts, event page suspend, crashes, etc.
+   * Saves state in case of restarts, event page suspend, crashes, etc. This
+   * method does nothing when context is in incognito mode.
    * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
    * @private
    */
   saveState_: function(fileSystemIdsArray) {
+    // If current context is in incognito mode, then skip save state because
+    // retainEntry is not available in incognito mode.
+    if (chrome.extension.inIncognitoContext)
+      return;
+
     chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
       if (!result[unpacker.app.STORAGE_KEY])  // First save state call.
         result[unpacker.app.STORAGE_KEY] = {};
@@ -176,10 +200,14 @@ unpacker.app = {
   },
 
   /**
-   * Removes state from local storage for a single volume.
+   * Removes state from local storage for a single volume. This method does
+   * nothing when context is in incognito mode.
    * @param {!unpacker.types.FileSystemId} fileSystemId
    */
   removeState_: function(fileSystemId) {
+    if (chrome.extension.inIncognitoContext)
+      return;
+
     chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
       console.assert(
           result[unpacker.app.STORAGE_KEY] &&
@@ -235,7 +263,7 @@ unpacker.app = {
    * @param {!Object<!unpacker.types.RequestId,
    *                 !unpacker.types.OpenFileRequestedOptions>}
    *     openedFiles Previously opened files before a suspend.
-   * @param {string} passphrase Previously used passphrase before a suspend.
+   * @param {?string} passphrase Previously used passphrase before a suspend.
    * @return {!Promise} Promise fulfilled on success and rejected on failure.
    * @private
    */
@@ -358,9 +386,10 @@ unpacker.app = {
     // the mounting process ends.
     unpacker.app.mountProcessCounter++;
     // Create a promise to load the NaCL module.
-    if (!unpacker.app.moduleLoadedPromise)
+    if (!unpacker.app.moduleLoadedPromise) {
       unpacker.app.loadNaclModule(
           unpacker.app.DEFAULT_MODULE_NMF, unpacker.app.DEFAULT_MODULE_TYPE);
+    }
 
     return unpacker.app.moduleLoadedPromise.then(function() {
       // In case there is no volume promise for fileSystemId then we
@@ -390,6 +419,17 @@ unpacker.app = {
    */
   naclModuleIsLoaded: function() {
     return !!unpacker.app.naclModule;
+  },
+
+  /**
+   * Loads string assets.
+   */
+  loadStringData: function() {
+    unpacker.app.stringDataLoadedPromise = new Promise(function(fulfill) {
+      chrome.fileManagerPrivate.getStrings(function(strings) {
+        fulfill(strings);
+      });
+    });
   },
 
   /**
@@ -475,11 +515,12 @@ unpacker.app = {
    * Cleans up the resources for a compressor.
    * @param {!unpacker.types.CompressorId} compressorId
    * @param {boolean} hasError
+   * @param {boolean} canceled
    */
-  cleanupCompressor: function(compressorId, hasError) {
+  cleanupCompressor: function(compressorId, hasError, canceled) {
     var compressor = unpacker.app.compressors[compressorId];
     if (!compressor) {
-      console.error('No compressor for: compressor id' + compressorId + '.');
+      console.error('No compressor for: compressor id: ' + compressorId + '.');
       return;
     }
 
@@ -495,10 +536,20 @@ unpacker.app = {
     }
 
     // Delete the archive file if it exists.
-    if (compressor.archiveFileEntry)
-      compressor.archiveFileEntry.remove();
+    if (compressor.archiveFileEntry() && (hasError || canceled))
+      compressor.archiveFileEntry().remove(function() {});
 
     delete unpacker.app.compressors[compressorId];
+  },
+
+  /**
+   * Updates the state in case of restarts, event page suspend, crashes, etc.
+   * Use this method to update or save the state out side of the object in case
+   * when password changes, etc.
+   * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
+   */
+  updateState: function(fileSystemIdsArray) {
+    unpacker.app.saveState_(fileSystemIdsArray);
   },
 
   /**
@@ -659,49 +710,122 @@ unpacker.app = {
           unpacker.app.DEFAULT_MODULE_NMF, unpacker.app.DEFAULT_MODULE_TYPE);
     }
 
-    unpacker.app.moduleLoadedPromise.then(function() {
-      var compressor = new unpacker.Compressor(
-          /** @type {!Object} */ (unpacker.app.naclModule), launchData.items);
+    unpacker.app.moduleLoadedPromise
+        .then(function() {
+          return unpacker.app.stringDataLoadedPromise;
+        })
+        .then(function(stringData) {
+          var compressor = new unpacker.Compressor(
+              /** @type {!Object} */ (unpacker.app.naclModule),
+              launchData.items);
 
-      var compressorId = compressor.getCompressorId();
+          var compressorId = compressor.getCompressorId();
+          unpacker.app.compressors[compressorId] = compressor;
 
-      unpacker.app.compressors[compressorId] = compressor;
+          // If packing takes significant amount of time, then show a
+          // notification about packing in progress.
+          var deferredNotificationTimer = setTimeout(function() {
+            chrome.notifications.create(
+                compressorId.toString(), {
+                  type: 'basic',
+                  iconUrl: chrome.runtime.getManifest().icons[128],
+                  title: compressor.getArchiveName(),
+                  message: stringData['ZIP_ARCHIVER_PACKING_DEFERRED_MESSAGE'],
+                },
+                function() {});
+          }, unpacker.app.PACKING_NOTIFICATION_DELAY);
 
-      // TODO(takise): Error messages have not been prepared yet for timer
-      // and error processing.
+          var onError = function(compressorId) {
+            clearTimeout(deferredNotificationTimer);
+            chrome.notifications.create(
+                compressorId.toString(), {
+                  type: 'basic',
+                  iconUrl: chrome.runtime.getManifest().icons[128],
+                  title: compressor.getArchiveName(),
+                  message: stringData['ZIP_ARCHIVER_PACKING_ERROR_MESSAGE']
+                },
+                function() {});
+            unpacker.app.cleanupCompressor(
+                compressorId, true /* hasError */, false /* canceled */);
+          };
 
-      // If packing takes significant amount of time, then show a
-      // notification about packing in progress.
-      // var deferredNotificationTimer = setTimeout(function() {
-      //   chrome.notifications.create(compressorId.toString(), {
-      //     type: 'basic',
-      //     iconUrl: chrome.runtime.getManifest().icons[128],
-      //     title: entry.name,
-      //     message: chrome.i18n.getMessage('packingMessage'),
-      //   }, function() {});
-      // }, unpacker.app.PACKING_NOTIFICATION_DELAY);
+          var onSuccess = function(compressorId) {
+            clearTimeout(deferredNotificationTimer);
 
-      var onError = function(compressorId) {
-        // clearTimeout(deferredNotificationTimer);
-        // console.error('Packing error: ' + error.message + '.');
-        // chrome.notifications.create(compressorId.toString(), {
-        //   type: 'basic',
-        //   iconUrl: chrome.runtime.getManifest().icons[128],
-        //   title: entry.name,
-        //   message: chrome.i18n.getMessage('packingErrorMessage')
-        // }, function() {});
-        unpacker.app.cleanupCompressor(compressorId, true /* hasError */);
-      };
+            // Hide cancel button and message
+            chrome.notifications.update(
+                compressorId.toString(), {message: '', buttons: []});
 
-      var onSuccess = function(compressorId) {
-        // clearTimeout(deferredNotificationTimer);
-        // chrome.notifications.clear(compressorId.toString(),
-        //     function() {});
-        unpacker.app.cleanupCompressor(compressorId, false /* hasError */);
-      };
+            // Here we clear the notification with a delay because in case when
+            // content of a zip file is small it will flash the notification.
+            // Thus we clear the notification with a delay to avoid flashing.
+            setTimeout(function() {
+              chrome.notifications.clear(
+                  compressorId.toString(), function() {});
+            }, unpacker.app.PACKING_NOTIFICATION_CLEAR_DELAY);
+            unpacker.app.cleanupCompressor(
+                compressorId, false /* hasError */, false /* canceled */);
+          };
 
-      compressor.compress(onSuccess, onError);
-    });
+          var onCancel = function(compressorId) {
+            clearTimeout(deferredNotificationTimer);
+            chrome.notifications.clear(compressorId.toString(), function() {});
+            unpacker.app.cleanupCompressor(
+                compressorId, false /* hasError */, true /* canceled */);
+          };
+
+          var progressNotificationCreated = false;
+          var progressValue = -1;
+          var onProgress = function(compressorId, progress) {
+            clearTimeout(deferredNotificationTimer);
+            progress = Math.round(progress * 100);
+
+            // Check if value has changed at leats for 1 to not update the
+            // notification for no reason.
+            if (progressValue === progress)
+              return;
+
+            // TODO(tetsui): Check if icon on progress notification message is
+            // visisble when bug related to the progress notification gets
+            // resolved.
+            if (!progressNotificationCreated) {
+              chrome.notifications.create(
+                  compressorId.toString(), {
+                    type: 'progress',
+                    iconUrl: chrome.runtime.getManifest().icons[128],
+                    title: compressor.getArchiveName(),
+                    message:
+                        stringData['ZIP_ARCHIVER_PACKING_PROGRESS_MESSAGE'],
+                    progress: progress,
+                    buttons: [{
+                      title:
+                          stringData['ZIP_ARCHIVER_PACKING_CANCEL_BUTTON_LABEL']
+                    }]
+
+                  },
+                  function() {});
+              progressNotificationCreated = true;
+            } else {
+              chrome.notifications.update(
+                  compressorId.toString(), {progress: progress});
+            }
+
+            progressValue = progress;
+          };
+
+          compressor.compress(onSuccess, onError, onProgress, onCancel);
+
+          // If notification is closed while packing is in progress, flag to
+          // create/update is reset.
+          chrome.notifications.onClosed.addListener(function() {
+            progressNotificationCreated = false;
+          });
+          chrome.notifications.onButtonClicked.addListener(function(
+              notificationId, buttonIndex) {
+            if (notificationId === compressorId.toString())
+              compressor.sendCancelArchiveRequest();
+          });
+        });
   },
 
   /**
@@ -729,6 +853,9 @@ unpacker.app = {
 
     unpacker.app.moduleLoadedPromise
         .then(function() {
+          return unpacker.app.stringDataLoadedPromise;
+        })
+        .then(function(stringData) {
           unpacker.app.mountProcessCounter--;
           launchData.items.forEach(function(item) {
             unpacker.app.mountProcessCounter++;
@@ -742,7 +869,7 @@ unpacker.app = {
                           type: 'basic',
                           iconUrl: chrome.runtime.getManifest().icons[128],
                           title: entry.name,
-                          message: chrome.i18n.getMessage('mountingMessage'),
+                          message: stringData['ZIP_ARCHIVER_MOUNTING_MESSAGE'],
                         },
                         function() {});
                   }, unpacker.app.MOUNTING_NOTIFICATION_DELAY);
@@ -763,7 +890,8 @@ unpacker.app = {
                           type: 'basic',
                           iconUrl: chrome.runtime.getManifest().icons[128],
                           title: entry.name,
-                          message: chrome.i18n.getMessage('otherErrorMessage')
+                          message:
+                              stringData['ZIP_ARCHIVER_OTHER_ERROR_MESSAGE'],
                         },
                         function() {});
                     if (opt_onError)
@@ -786,7 +914,7 @@ unpacker.app = {
                   };
 
                   var loadPromise = unpacker.app.loadVolume_(
-                      fileSystemId, entry, {}, '' /* passphrase */);
+                      fileSystemId, entry, {}, null /* passphrase */);
                   loadPromise
                       .then(function() {
                         // Mount the volume and save its information in local
@@ -796,7 +924,8 @@ unpacker.app = {
                             {
                               fileSystemId: fileSystemId,
                               displayName: entry.name,
-                              openedFilesLimit: 1
+                              openedFilesLimit: 1,
+                              persistent: false
                             },
                             function() {
                               if (chrome.runtime.lastError) {

@@ -4,13 +4,10 @@
 
 #include "media/gpu/d3d11_h264_accelerator.h"
 
-#include <d3d11.h>
-#include <dxva.h>
 #include <windows.h>
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "base/win/scoped_comptr.h"
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/h264_dpb.h"
 #include "third_party/angle/include/EGL/egl.h"
@@ -36,11 +33,22 @@ D3D11PictureBuffer::D3D11PictureBuffer(PictureBuffer picture_buffer,
                                        size_t level)
     : picture_buffer_(picture_buffer), level_(level) {}
 
+D3D11PictureBuffer::D3D11PictureBuffer(
+    PictureBuffer picture_buffer,
+    size_t level,
+    const std::vector<scoped_refptr<gpu::gles2::TextureRef>>& texture_refs,
+    const MailboxHolderArray& mailbox_holders)
+    : picture_buffer_(picture_buffer),
+      level_(level),
+      texture_refs_(texture_refs) {
+  memcpy(&mailbox_holders_, mailbox_holders, sizeof(mailbox_holders_));
+}
+
 D3D11PictureBuffer::~D3D11PictureBuffer() {}
 
 bool D3D11PictureBuffer::Init(
-    base::win::ScopedComPtr<ID3D11VideoDevice> video_device,
-    base::win::ScopedComPtr<ID3D11Texture2D> texture,
+    Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device,
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture,
     const GUID& decoder_guid) {
   texture_ = texture;
   D3D11_VIDEO_DECODER_OUTPUT_VIEW_DESC view_desc = {};
@@ -63,7 +71,7 @@ bool D3D11PictureBuffer::Init(
   stream_ = eglCreateStreamKHR(egl_display, stream_attributes);
   RETURN_ON_FAILURE(!!stream_, "Could not create stream", false);
   gl_image_ =
-      make_scoped_refptr(new gl::GLImageDXGI(picture_buffer_.size(), stream_));
+      base::MakeRefCounted<gl::GLImageDXGI>(picture_buffer_.size(), stream_);
   gl::ScopedActiveTexture texture0(GL_TEXTURE0);
   gl::ScopedTextureBinder texture0_binder(
       GL_TEXTURE_EXTERNAL_OES, picture_buffer_.service_texture_ids()[0]);
@@ -127,9 +135,9 @@ class D3D11H264Picture : public H264Picture {
 
 D3D11H264Accelerator::D3D11H264Accelerator(
     D3D11VideoDecoderClient* client,
-    base::win::ScopedComPtr<ID3D11VideoDecoder> video_decoder,
-    base::win::ScopedComPtr<ID3D11VideoDevice> video_device,
-    base::win::ScopedComPtr<ID3D11VideoContext> video_context)
+    Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder,
+    Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device,
+    Microsoft::WRL::ComPtr<ID3D11VideoContext> video_context)
     : client_(client),
       video_decoder_(video_decoder),
       video_device_(video_device),
@@ -143,8 +151,8 @@ scoped_refptr<H264Picture> D3D11H264Accelerator::CreateH264Picture() {
     return nullptr;
   }
   picture->set_in_picture_use(true);
-  return make_scoped_refptr(
-      new D3D11H264Picture(picture, client_->input_buffer_id()));
+  return base::MakeRefCounted<D3D11H264Picture>(picture,
+                                                client_->input_buffer_id());
 }
 
 bool D3D11H264Accelerator::SubmitFrameMetadata(
@@ -159,9 +167,19 @@ bool D3D11H264Accelerator::SubmitFrameMetadata(
       static_cast<D3D11H264Picture*>(pic.get()));
 
   HRESULT hr;
-  hr = video_context_->DecoderBeginFrame(
-      video_decoder_.Get(), our_pic->picture->output_view_.Get(), 0, nullptr);
-  CHECK(SUCCEEDED(hr));
+  for (;;) {
+    hr = video_context_->DecoderBeginFrame(
+        video_decoder_.Get(), our_pic->picture->output_view_.Get(), 0, nullptr);
+
+    if (hr == E_PENDING || hr == D3DERR_WASSTILLDRAWING) {
+      // Hardware is busy.  We should make the call again.
+      // TODO(liberato): For now, just busy wait.
+      ;
+    } else {
+      CHECK(SUCCEEDED(hr));
+      break;
+    }
+  }
 
   sps_ = *sps;
   for (size_t i = 0; i < 16; i++) {
@@ -174,6 +192,8 @@ bool D3D11H264Accelerator::SubmitFrameMetadata(
   non_existing_frame_flags_ = 0;
 
   int i = 0;
+
+  // TODO(liberato): this is similar to H264Accelerator.  can they share code?
 
   for (auto it = dpb.begin(); it != dpb.end(); it++) {
     scoped_refptr<D3D11H264Picture> our_ref_pic(
@@ -188,7 +208,7 @@ bool D3D11H264Accelerator::SubmitFrameMetadata(
     field_order_cnt_list_[i][1] = our_ref_pic->bottom_field_order_cnt;
     frame_num_list_[i] = ref_frame_list_[i].AssociatedFlag
                              ? our_ref_pic->long_term_pic_num
-                             : our_ref_pic->pic_num;
+                             : our_ref_pic->frame_num;
     int ref = 3;
     used_for_reference_flags_ |= ref << (2 * i);
     non_existing_frame_flags_ |= (our_ref_pic->nonexisting) << i;
@@ -220,9 +240,7 @@ bool D3D11H264Accelerator::SubmitSlice(const H264PPS* pps,
                                        size_t size) {
   scoped_refptr<D3D11H264Picture> our_pic(
       static_cast<D3D11H264Picture*>(pic.get()));
-
   DXVA_PicParams_H264 pic_param = {};
-
 #define FROM_SPS_TO_PP(a) pic_param.a = sps_.a
 #define FROM_SPS_TO_PP2(a, b) pic_param.a = sps_.b
 #define FROM_PPS_TO_PP(a) pic_param.a = pps->a
@@ -232,7 +250,7 @@ bool D3D11H264Accelerator::SubmitSlice(const H264PPS* pps,
   FROM_SPS_TO_PP2(wFrameWidthInMbsMinus1, pic_width_in_mbs_minus1);
   FROM_SPS_TO_PP2(wFrameHeightInMbsMinus1, pic_height_in_map_units_minus1);
   pic_param.CurrPic.Index7Bits = our_pic->level_;
-  // UNUSED: pic_param.CurrPic.AssociatedFlag = slide_hdr->field_pic_flag
+  pic_param.CurrPic.AssociatedFlag = slice_hdr->bottom_field_flag;
   FROM_SPS_TO_PP2(num_ref_frames, max_num_ref_frames);
 
   FROM_SLICE_TO_PP(field_pic_flag);
@@ -248,10 +266,15 @@ bool D3D11H264Accelerator::SubmitSlice(const H264PPS* pps,
   pic_param.MbsConsecutiveFlag = 1;
   FROM_SPS_TO_PP(frame_mbs_only_flag);
   FROM_PPS_TO_PP(transform_8x8_mode_flag);
-  // UNUSED: Minlumabipredsize
-  // UNUSED: pic_param.IntraPicFlag = slice_hdr->IsISlice();
+  // TODO(liberato): sandersd@ believes that this should only be set for level
+  // >= 3.1 .  verify this and fix as needed.
+  pic_param.MinLumaBipredSize8x8Flag = 1;
+  pic_param.IntraPicFlag = slice_hdr->IsISlice();
   FROM_SPS_TO_PP(bit_depth_luma_minus8);
   FROM_SPS_TO_PP(bit_depth_chroma_minus8);
+  // The latest DXVA decoding guide says to set this to 3 if the software
+  // decoder (this class) is following the guide.
+  pic_param.Reserved16Bits = 3;
   memcpy(pic_param.RefFrameList, ref_frame_list_,
          sizeof pic_param.RefFrameList);
   if (pic_param.field_pic_flag && pic_param.CurrPic.AssociatedFlag) {
@@ -436,6 +459,8 @@ void D3D11H264Accelerator::SubmitSliceData() {
   hr = video_context_->SubmitDecoderBuffers(video_decoder_.Get(), 4, buffers);
   current_offset_ = 0;
   slice_info_.clear();
+  bitstream_buffer_bytes_ = nullptr;
+  bitstream_buffer_size_ = 0;
 }
 
 bool D3D11H264Accelerator::SubmitDecode(const scoped_refptr<H264Picture>& pic) {
@@ -445,6 +470,18 @@ bool D3D11H264Accelerator::SubmitDecode(const scoped_refptr<H264Picture>& pic) {
   CHECK(SUCCEEDED(hr));
 
   return true;
+}
+
+void D3D11H264Accelerator::Reset() {
+  if (bitstream_buffer_bytes_) {
+    HRESULT hr = video_context_->ReleaseDecoderBuffer(
+        video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_BITSTREAM);
+
+    bitstream_buffer_bytes_ = nullptr;
+    bitstream_buffer_size_ = 0;
+    current_offset_ = 0;
+    CHECK(SUCCEEDED(hr));
+  }
 }
 
 bool D3D11H264Accelerator::OutputPicture(

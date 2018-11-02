@@ -7,14 +7,10 @@
 
 #include <vector>
 
-#include "content/public/common/cdm_info.h"
-
-namespace chrome {
+#include "media/cdm/cdm_host_file.h"
 
 // Gets a list of CDM host file paths and put them in |cdm_host_file_paths|.
 void AddCdmHostFilePaths(
-    std::vector<content::CdmHostFilePath>* cdm_host_file_paths);
-
-}  // namespace chrome
+    std::vector<media::CdmHostFilePath>* cdm_host_file_paths);
 
 #endif  // CHROME_COMMON_MEDIA_CDM_HOST_FILE_PATH_H_

@@ -697,8 +697,8 @@ static int ParseNonListElement(ElementType type,
   return result;
 }
 
-WebMParserClient::WebMParserClient() {}
-WebMParserClient::~WebMParserClient() {}
+WebMParserClient::WebMParserClient() = default;
+WebMParserClient::~WebMParserClient() = default;
 
 WebMParserClient* WebMParserClient::OnListStart(int id) {
   DVLOG(1) << "Unexpected list element start with ID " << std::hex << id;
@@ -739,7 +739,7 @@ WebMListParser::WebMListParser(int id, WebMParserClient* client)
   DCHECK(client);
 }
 
-WebMListParser::~WebMListParser() {}
+WebMListParser::~WebMListParser() = default;
 
 void WebMListParser::Reset() {
   ChangeState(NEED_LIST_HEADER);
@@ -985,17 +985,17 @@ bool WebMListParser::OnListEnd() {
 }
 
 bool WebMListParser::IsSiblingOrAncestor(int id_a, int id_b) const {
-  DCHECK((id_a == kWebMIdSegment) || (id_a == kWebMIdCluster));
-
   if (id_a == kWebMIdCluster) {
     // kWebMIdCluster siblings.
     for (size_t i = 0; i < arraysize(kSegmentIds); i++) {
       if (kSegmentIds[i].id_ == id_b)
         return true;
     }
+  } else if (id_a != kWebMIdSegment) {
+    return false;
   }
 
-  // kWebMIdSegment siblings.
+  // kWebMIdSegment sibling or ancestor, respectively; kWebMIdCluster ancestors.
   return ((id_b == kWebMIdSegment) || (id_b == kWebMIdEBMLHeader));
 }
 

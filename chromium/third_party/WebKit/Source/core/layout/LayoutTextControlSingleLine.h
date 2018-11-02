@@ -24,7 +24,7 @@
 #ifndef LayoutTextControlSingleLine_h
 #define LayoutTextControlSingleLine_h
 
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutTextControl.h"
 
 namespace blink {
@@ -36,7 +36,7 @@ class LayoutTextControlSingleLine : public LayoutTextControl {
   LayoutTextControlSingleLine(HTMLInputElement*);
   ~LayoutTextControlSingleLine() override;
   // FIXME: Move createInnerEditorStyle() to TextControlInnerEditorElement.
-  RefPtr<ComputedStyle> CreateInnerEditorStyle(
+  scoped_refptr<ComputedStyle> CreateInnerEditorStyle(
       const ComputedStyle& start_style) const final;
 
   void CapsLockStateMayHaveChanged();

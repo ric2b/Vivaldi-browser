@@ -4,6 +4,7 @@
 
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 
+#include "ash/ash_constants.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -20,9 +21,6 @@ const int kSwapImagesAnimationDurationMs = 200;
 // The duration of the fade out animation of the old icon during a crossfade
 // animation as a ratio of |kSwapImagesAnimationDurationMs|.
 const float kFadeOutRatio = 0.5f;
-
-// The alpha to draw inactive icons with.
-const float kInactiveIconAlpha = 0.2f;
 
 // The colors and alpha values used for the button background hovered and
 // pressed states.
@@ -51,14 +49,18 @@ FrameCaptionButton::FrameCaptionButton(views::ButtonListener* listener,
   // horizontally symmetrical.
 }
 
-FrameCaptionButton::~FrameCaptionButton() {}
+FrameCaptionButton::~FrameCaptionButton() = default;
+
+// static
+SkColor FrameCaptionButton::GetButtonColor(bool use_light_images) {
+  return use_light_images ? SK_ColorWHITE : gfx::kChromeIconGrey;
+}
 
 void FrameCaptionButton::SetImage(CaptionButtonIcon icon,
                                   Animate animate,
                                   const gfx::VectorIcon& icon_definition) {
-  gfx::ImageSkia new_icon_image = gfx::CreateVectorIcon(
-      icon_definition,
-      use_light_images_ ? SK_ColorWHITE : gfx::kChromeIconGrey);
+  gfx::ImageSkia new_icon_image =
+      gfx::CreateVectorIcon(icon_definition, GetButtonColor(use_light_images_));
 
   // The early return is dependent on |animate| because callers use SetImage()
   // with ANIMATE_NO to progress the crossfade animation to the end.
@@ -177,7 +179,7 @@ int FrameCaptionButton::GetAlphaForIcon(int base_alpha) const {
     return base_alpha;
 
   // Paint icons as active when they are hovered over or pressed.
-  double inactive_alpha = kInactiveIconAlpha;
+  double inactive_alpha = kInactiveFrameButtonIconAlphaRatio;
   if (hover_animation().is_animating()) {
     inactive_alpha =
         hover_animation().CurrentValueBetween(inactive_alpha, 1.0f);

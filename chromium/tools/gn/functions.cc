@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <iostream>
+#include <memory>
 #include <utility>
 
 #include "base/environment.h"
@@ -337,7 +338,8 @@ Value RunConfig(const FunctionCallNode* function,
     g_scheduler->Log("Defining config", label.GetUserVisibleName(true));
 
   // Create the new config.
-  std::unique_ptr<Config> config(new Config(scope->settings(), label));
+  std::unique_ptr<Config> config =
+      std::make_unique<Config>(scope->settings(), label);
   config->set_defined_from(function);
   if (!Visibility::FillItemVisibility(config.get(), scope, err))
     return Value();
@@ -668,7 +670,7 @@ Value RunNotNeeded(Scope* scope,
                    const ListNode* args_list,
                    Err* err) {
   const auto& args_vector = args_list->contents();
-  if (args_vector.size() < 1 && args_vector.size() > 3) {
+  if (args_vector.size() < 1 || args_vector.size() > 3) {
     *err = Err(function, "Wrong number of arguments.",
                "Expecting one, two or three arguments.");
     return Value();
@@ -825,7 +827,7 @@ Value RunSetSourcesAssignmentFilter(Scope* scope,
   if (args.size() != 1) {
     *err = Err(function, "set_sources_assignment_filter takes one argument.");
   } else {
-    std::unique_ptr<PatternList> f(new PatternList);
+    std::unique_ptr<PatternList> f = std::make_unique<PatternList>();
     f->SetFromValue(args[0], err);
     if (!err->has_error())
       scope->set_sources_assignment_filter(std::move(f));
@@ -908,7 +910,7 @@ Value RunPool(const FunctionCallNode* function,
   }
 
   // Create the new pool.
-  std::unique_ptr<Pool> pool(new Pool(scope->settings(), label));
+  std::unique_ptr<Pool> pool = std::make_unique<Pool>(scope->settings(), label);
   pool->set_depth(depth->int_value());
 
   const Value* is_global = scope->GetValue("global", true);

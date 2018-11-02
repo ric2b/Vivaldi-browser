@@ -2,46 +2,36 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H
-#define DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H
+#ifndef DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H_
+#define DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H_
 
+#include "base/macros.h"
 #include "device/vr/android/gvr/gvr_device_provider.h"
 #include "device/vr/vr_export.h"
 #include "device/vr/vr_service.mojom.h"
 
 namespace device {
 
-class VRDisplayImpl;
-
+// TODO(mthiesse, crbug.com/769373): Remove this interface and replace with a
+// mojo interface.
 class DEVICE_VR_EXPORT GvrDelegateProvider {
  public:
-  static void SetInstance(
-      const base::Callback<GvrDelegateProvider*()>& provider_callback);
-  static GvrDelegateProvider* GetInstance();
-
+  GvrDelegateProvider() = default;
   virtual void SetDeviceId(unsigned int device_id) = 0;
-  virtual void RequestWebVRPresent(
-      mojom::VRSubmitFrameClientPtr submit_client,
-      mojom::VRPresentationProviderRequest request,
-      const base::Callback<void(bool)>& callback) = 0;
+  virtual void RequestWebVRPresent(mojom::VRSubmitFrameClientPtr submit_client,
+                                   mojom::VRPresentationProviderRequest request,
+                                   mojom::VRDisplayInfoPtr display_info,
+                                   base::Callback<void(bool)> callback) = 0;
   virtual void ExitWebVRPresent() = 0;
-  virtual void OnDisplayAdded(VRDisplayImpl* display) = 0;
-  virtual void OnDisplayRemoved(VRDisplayImpl* display) = 0;
-  virtual void OnListeningForActivateChanged(VRDisplayImpl* display) = 0;
-  virtual void CreateVRDisplayInfo(
-      const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback,
-      uint32_t device_id) = 0;
-  virtual void GetNextMagicWindowPose(
-      VRDisplayImpl* display,
-      mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) = 0;
+  virtual void OnListeningForActivateChanged(bool listening) = 0;
 
  protected:
   virtual ~GvrDelegateProvider() {}
 
  private:
-  static base::Callback<GvrDelegateProvider*()> delegate_provider_;
+  DISALLOW_COPY_AND_ASSIGN(GvrDelegateProvider);
 };
 
 }  // namespace device
 
-#endif  // DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H
+#endif  // DEVICE_VR_ANDROID_GVR_DELEGATE_PROVIDER_H_

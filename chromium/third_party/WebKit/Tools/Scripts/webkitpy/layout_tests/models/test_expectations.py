@@ -278,7 +278,7 @@ class TestExpectationLine(object):
 
     # FIXME: Update the original specifiers and remove this once the old syntax is gone.
     _configuration_tokens_list = [
-        'Mac', 'Mac10.9', 'Mac10.10', 'Mac10.11', 'Retina', 'Mac10.12',
+        'Mac', 'Mac10.10', 'Mac10.11', 'Retina', 'Mac10.12', 'Mac10.13',
         'Win', 'Win7', 'Win10',
         'Linux',
         'Android',
@@ -536,6 +536,8 @@ class TestExpectationLine(object):
             return ['Skip']
         if set(expectations) == set(['Pass', 'Slow']):
             return ['Slow']
+        if set(expectations) == set(['WontFix', 'Skip']):
+            return ['WontFix']
         return expectations
 
     @classmethod
@@ -586,6 +588,17 @@ class TestExpectationsModel(object):
         self._result_type_to_tests = self._dict_of_sets(TestExpectations.RESULT_TYPES)
 
         self._shorten_filename = shorten_filename or (lambda x: x)
+
+    def all_lines(self):
+        return sorted(self._test_to_expectation_line.values(),
+                      cmp=self._compare_lines)
+
+    def _compare_lines(self, line_a, line_b):
+        if line_a.name == line_b.name:
+            return 0
+        if line_a.name < line_b.name:
+            return -1
+        return 1
 
     def _merge_test_map(self, self_map, other_map):
         for test in other_map:
@@ -736,6 +749,8 @@ class TestExpectationsModel(object):
 
         if SKIP in expectation_line.parsed_expectations:
             self._result_type_to_tests[SKIP].add(test)
+        elif TIMEOUT in expectation_line.parsed_expectations:
+            self._result_type_to_tests[TIMEOUT].add(test)
         elif expectation_line.parsed_expectations == set([PASS]):
             self._result_type_to_tests[PASS].add(test)
         elif expectation_line.is_flaky():
@@ -915,6 +930,7 @@ class TestExpectations(object):
         'pass': PASS,
         'fail': FAIL,
         'flaky': FLAKY,
+        'timeout': TIMEOUT,
     }
 
     @classmethod

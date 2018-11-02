@@ -371,14 +371,14 @@ gfx::NativeWindow VivaldiNativeAppWindowViews::GetNativeWindow() const {
 }
 
 gfx::Rect VivaldiNativeAppWindowViews::GetRestoredBounds() const {
-  return widget_->GetRestoredBounds();
+  return widget_ ? widget_->GetRestoredBounds() : gfx::Rect();
 }
 
 ui::WindowShowState VivaldiNativeAppWindowViews::GetRestoredState() const {
-  if (IsMaximized())
-    return ui::SHOW_STATE_MAXIMIZED;
   if (IsFullscreen())
     return ui::SHOW_STATE_FULLSCREEN;
+  if (IsMaximized())
+    return ui::SHOW_STATE_MAXIMIZED;
 
   return ui::SHOW_STATE_NORMAL;
 }
@@ -612,11 +612,15 @@ bool VivaldiNativeAppWindowViews::ShouldShowWindowIcon() const {
 void VivaldiNativeAppWindowViews::SaveWindowPlacement(
     const gfx::Rect& bounds,
     ui::WindowShowState show_state) {
-  // If IsFullscreen() is true, we've just changed into fullscreen mode, and
-  // we're catching the going-into-fullscreen sizing and positioning calls,
-  // which we want to ignore.
-  if (window_->browser() && !IsFullscreen() &&
-      chrome::ShouldSaveWindowPlacement(window_->browser())) {
+  if (window_->browser() &&
+      chrome::ShouldSaveWindowPlacement(window_->browser()) &&
+      // If IsFullscreen() is true, we've just changed into fullscreen mode,
+      // and we're catching the going-into-fullscreen sizing and positioning
+      // calls, which we want to ignore.
+      !IsFullscreen() &&
+      // VB-35145: Don't save placement after browser_window_->Hide() in
+      // VivaldiAppWindowClientView::CanClose() unmaximizes.
+      !window_->is_hidden()) {
     WidgetDelegate::SaveWindowPlacement(bounds, show_state);
     chrome::SaveWindowPlacement(window_->browser(), bounds, show_state);
   }

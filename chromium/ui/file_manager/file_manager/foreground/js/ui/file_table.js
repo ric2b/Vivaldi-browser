@@ -390,6 +390,9 @@ FileTable.decorate = function(
    */
   self.importStatusVisible_ = true;
 
+  /** @private {boolean} */
+  self.useModificationByMeTime_ = false;
+
   var nameColumn = new cr.ui.table.TableColumn(
       'name', str('NAME_COLUMN_LABEL'), fullPage ? 386 : 324);
   nameColumn.renderFunction = self.renderName_.bind(self);
@@ -522,6 +525,25 @@ FileTable.prototype.setListThumbnailLoader = function(listThumbnailLoader) {
 };
 
 /**
+ * Returns the element containing the thumbnail of a certain list item as
+ * background image.
+ * @param {number} index The index of the item containing the desired thumbnail.
+ * @return {?Element} The element containing the thumbnail, or null, if an error
+ *     occurred.
+ */
+FileTable.prototype.getThumbnail = function(index) {
+  var listItem = this.getListItemByIndex(index);
+  if (!listItem) {
+    return null;
+  }
+  var container = listItem.querySelector('.detail-thumbnail');
+  if (!container) {
+    return null;
+  }
+  return container.querySelector('.thumbnail');
+};
+
+/**
  * Handles thumbnail loaded event.
  * @param {!Event} event An event.
  * @private
@@ -601,6 +623,15 @@ FileTable.prototype.setImportStatusVisible = function(visible) {
  */
 FileTable.prototype.setDateTimeFormat = function(use12hourClock) {
   this.formatter_.setDateTimeFormat(use12hourClock);
+};
+
+/**
+ * Sets whether to use modificationByMeTime as "Last Modified" time.
+ * @param {boolean} useModificationByMeTime
+ */
+FileTable.prototype.setUseModificationByMeTime = function(
+    useModificationByMeTime) {
+  this.useModificationByMeTime_ = useModificationByMeTime;
 };
 
 /**
@@ -851,8 +882,11 @@ FileTable.prototype.renderDate_ = function(entry, columnId, table) {
  * @private
  */
 FileTable.prototype.updateDate_ = function(div, entry) {
-  var modTime = this.metadataModel_.getCache(
-      [entry], ['modificationTime'])[0].modificationTime;
+  var item = this.metadataModel_.getCache(
+      [entry], ['modificationTime', 'modificationByMeTime'])[0];
+  var modTime = this.useModificationByMeTime_ ?
+      item.modificationByMeTime || item.modificationTime :
+      item.modificationTime;
 
   div.textContent = this.formatter_.formatModDate(modTime);
 };

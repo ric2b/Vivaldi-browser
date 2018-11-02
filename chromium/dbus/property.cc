@@ -23,7 +23,7 @@ namespace dbus {
 
 PropertyBase::PropertyBase() : property_set_(nullptr), is_valid_(false) {}
 
-PropertyBase::~PropertyBase() {}
+PropertyBase::~PropertyBase() = default;
 
 void PropertyBase::Init(PropertySet* property_set, const std::string& name) {
   DCHECK(!property_set_);
@@ -45,8 +45,7 @@ PropertySet::PropertySet(
       property_changed_callback_(property_changed_callback),
       weak_ptr_factory_(this) {}
 
-PropertySet::~PropertySet() {
-}
+PropertySet::~PropertySet() = default;
 
 void PropertySet::RegisterProperty(const std::string& name,
                                    PropertyBase* property) {
@@ -230,12 +229,12 @@ void PropertySet::OnSet(PropertyBase* property,
 
 bool PropertySet::UpdatePropertiesFromReader(MessageReader* reader) {
   DCHECK(reader);
-  MessageReader array_reader(NULL);
+  MessageReader array_reader(nullptr);
   if (!reader->PopArray(&array_reader))
     return false;
 
   while (array_reader.HasMoreData()) {
-    MessageReader dict_entry_reader(NULL);
+    MessageReader dict_entry_reader(nullptr);
     if (array_reader.PopDictEntry(&dict_entry_reader))
       UpdatePropertyFromReader(&dict_entry_reader);
   }
@@ -270,7 +269,7 @@ bool PropertySet::UpdatePropertyFromReader(MessageReader* reader) {
 
 bool PropertySet::InvalidatePropertiesFromReader(MessageReader* reader) {
   DCHECK(reader);
-  MessageReader array_reader(NULL);
+  MessageReader array_reader(nullptr);
   if (!reader->PopArray(&array_reader))
     return false;
 
@@ -489,13 +488,13 @@ void Property<ObjectPath>::AppendSetValueToWriter(MessageWriter* writer) {
 }
 
 //
-// Property<std::vector<std::string> > specialization.
+// Property<std::vector<std::string>> specialization.
 //
 
 template <>
-bool Property<std::vector<std::string> >::PopValueFromReader(
+bool Property<std::vector<std::string>>::PopValueFromReader(
     MessageReader* reader) {
-  MessageReader variant_reader(NULL);
+  MessageReader variant_reader(nullptr);
   if (!reader->PopVariant(&variant_reader))
     return false;
 
@@ -504,22 +503,22 @@ bool Property<std::vector<std::string> >::PopValueFromReader(
 }
 
 template <>
-void Property<std::vector<std::string> >::AppendSetValueToWriter(
+void Property<std::vector<std::string>>::AppendSetValueToWriter(
     MessageWriter* writer) {
-  MessageWriter variant_writer(NULL);
+  MessageWriter variant_writer(nullptr);
   writer->OpenVariant("as", &variant_writer);
   variant_writer.AppendArrayOfStrings(set_value_);
   writer->CloseContainer(&variant_writer);
 }
 
 //
-// Property<std::vector<ObjectPath> > specialization.
+// Property<std::vector<ObjectPath>> specialization.
 //
 
 template <>
-bool Property<std::vector<ObjectPath> >::PopValueFromReader(
+bool Property<std::vector<ObjectPath>>::PopValueFromReader(
     MessageReader* reader) {
-  MessageReader variant_reader(NULL);
+  MessageReader variant_reader(nullptr);
   if (!reader->PopVariant(&variant_reader))
     return false;
 
@@ -528,26 +527,26 @@ bool Property<std::vector<ObjectPath> >::PopValueFromReader(
 }
 
 template <>
-void Property<std::vector<ObjectPath> >::AppendSetValueToWriter(
+void Property<std::vector<ObjectPath>>::AppendSetValueToWriter(
     MessageWriter* writer) {
-  MessageWriter variant_writer(NULL);
+  MessageWriter variant_writer(nullptr);
   writer->OpenVariant("ao", &variant_writer);
   variant_writer.AppendArrayOfObjectPaths(set_value_);
   writer->CloseContainer(&variant_writer);
 }
 
 //
-// Property<std::vector<uint8_t> > specialization.
+// Property<std::vector<uint8_t>> specialization.
 //
 
 template <>
 bool Property<std::vector<uint8_t>>::PopValueFromReader(MessageReader* reader) {
-  MessageReader variant_reader(NULL);
+  MessageReader variant_reader(nullptr);
   if (!reader->PopVariant(&variant_reader))
     return false;
 
   value_.clear();
-  const uint8_t* bytes = NULL;
+  const uint8_t* bytes = nullptr;
   size_t length = 0;
   if (!variant_reader.PopArrayOfBytes(&bytes, &length))
     return false;
@@ -558,7 +557,7 @@ bool Property<std::vector<uint8_t>>::PopValueFromReader(MessageReader* reader) {
 template <>
 void Property<std::vector<uint8_t>>::AppendSetValueToWriter(
     MessageWriter* writer) {
-  MessageWriter variant_writer(NULL);
+  MessageWriter variant_writer(nullptr);
   writer->OpenVariant("ay", &variant_writer);
   variant_writer.AppendArrayOfBytes(set_value_.data(), set_value_.size());
   writer->CloseContainer(&variant_writer);
@@ -571,14 +570,14 @@ void Property<std::vector<uint8_t>>::AppendSetValueToWriter(
 template <>
 bool Property<std::map<std::string, std::string>>::PopValueFromReader(
     MessageReader* reader) {
-  MessageReader variant_reader(NULL);
-  MessageReader array_reader(NULL);
+  MessageReader variant_reader(nullptr);
+  MessageReader array_reader(nullptr);
   if (!reader->PopVariant(&variant_reader) ||
       !variant_reader.PopArray(&array_reader))
     return false;
   value_.clear();
   while (array_reader.HasMoreData()) {
-    dbus::MessageReader dict_entry_reader(NULL);
+    dbus::MessageReader dict_entry_reader(nullptr);
     if (!array_reader.PopDictEntry(&dict_entry_reader))
       return false;
     std::string key;
@@ -594,12 +593,12 @@ bool Property<std::map<std::string, std::string>>::PopValueFromReader(
 template <>
 void Property<std::map<std::string, std::string>>::AppendSetValueToWriter(
     MessageWriter* writer) {
-  MessageWriter variant_writer(NULL);
-  MessageWriter dict_writer(NULL);
+  MessageWriter variant_writer(nullptr);
+  MessageWriter dict_writer(nullptr);
   writer->OpenVariant("a{ss}", &variant_writer);
   variant_writer.OpenArray("{ss}", &dict_writer);
   for (const auto& pair : set_value_) {
-    dbus::MessageWriter entry_writer(NULL);
+    dbus::MessageWriter entry_writer(nullptr);
     dict_writer.OpenDictEntry(&entry_writer);
     entry_writer.AppendString(pair.first);
     entry_writer.AppendString(pair.second);
@@ -617,20 +616,20 @@ void Property<std::map<std::string, std::string>>::AppendSetValueToWriter(
 template <>
 bool Property<std::vector<std::pair<std::vector<uint8_t>, uint16_t>>>::
     PopValueFromReader(MessageReader* reader) {
-  MessageReader variant_reader(NULL);
-  MessageReader array_reader(NULL);
+  MessageReader variant_reader(nullptr);
+  MessageReader array_reader(nullptr);
   if (!reader->PopVariant(&variant_reader) ||
       !variant_reader.PopArray(&array_reader))
     return false;
 
   value_.clear();
   while (array_reader.HasMoreData()) {
-    dbus::MessageReader struct_reader(NULL);
+    dbus::MessageReader struct_reader(nullptr);
     if (!array_reader.PopStruct(&struct_reader))
       return false;
 
     std::pair<std::vector<uint8_t>, uint16_t> entry;
-    const uint8_t* bytes = NULL;
+    const uint8_t* bytes = nullptr;
     size_t length = 0;
     if (!struct_reader.PopArrayOfBytes(&bytes, &length))
       return false;
@@ -645,8 +644,8 @@ bool Property<std::vector<std::pair<std::vector<uint8_t>, uint16_t>>>::
 template <>
 void Property<std::vector<std::pair<std::vector<uint8_t>, uint16_t>>>::
     AppendSetValueToWriter(MessageWriter* writer) {
-  MessageWriter variant_writer(NULL);
-  MessageWriter array_writer(NULL);
+  MessageWriter variant_writer(nullptr);
+  MessageWriter array_writer(nullptr);
   writer->OpenVariant("a(ayq)", &variant_writer);
   variant_writer.OpenArray("(ayq)", &array_writer);
   for (const auto& pair : set_value_) {
@@ -800,8 +799,8 @@ template class Property<uint64_t>;
 template class Property<double>;
 template class Property<std::string>;
 template class Property<ObjectPath>;
-template class Property<std::vector<std::string> >;
-template class Property<std::vector<ObjectPath> >;
+template class Property<std::vector<std::string>>;
+template class Property<std::vector<ObjectPath>>;
 template class Property<std::vector<uint8_t>>;
 template class Property<std::map<std::string, std::string>>;
 template class Property<std::vector<std::pair<std::vector<uint8_t>, uint16_t>>>;

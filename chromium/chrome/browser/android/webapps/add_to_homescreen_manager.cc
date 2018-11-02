@@ -11,11 +11,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/android/webapk/webapk_metrics.h"
+#include "chrome/browser/banners/app_banner_manager_android.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -39,9 +39,10 @@ const int kDataTimeoutInMilliseconds = 4000;
 
 }  // namespace
 
-jlong InitializeAndStart(JNIEnv* env,
-                         const JavaParamRef<jobject>& obj,
-                         const JavaParamRef<jobject>& java_web_contents) {
+jlong JNI_AddToHomescreenManager_InitializeAndStart(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
   AddToHomescreenManager* manager = new AddToHomescreenManager(env, obj);
@@ -83,10 +84,11 @@ void AddToHomescreenManager::AddShortcut(
                                               data_fetcher_->primary_icon());
   }
 
-  // Fire the appinstalled event.
+  // Fire the appinstalled event and do install time logging.
   banners::AppBannerManagerAndroid* app_banner_manager =
       banners::AppBannerManagerAndroid::FromWebContents(web_contents);
-  app_banner_manager->OnInstall();
+  app_banner_manager->OnInstall(false /* is_native */,
+                                data_fetcher_->shortcut_info().display);
 }
 
 void AddToHomescreenManager::Start(content::WebContents* web_contents) {
@@ -103,12 +105,7 @@ void AddToHomescreenManager::Start(content::WebContents* web_contents) {
   Java_AddToHomescreenManager_showDialog(env, java_ref_);
 
   data_fetcher_ = base::MakeUnique<AddToHomescreenDataFetcher>(
-      web_contents, ShortcutHelper::GetIdealHomescreenIconSizeInPx(),
-      ShortcutHelper::GetMinimumHomescreenIconSizeInPx(),
-      ShortcutHelper::GetIdealSplashImageSizeInPx(),
-      ShortcutHelper::GetMinimumSplashImageSizeInPx(),
-      ShortcutHelper::GetIdealBadgeIconSizeInPx(), kDataTimeoutInMilliseconds,
-      check_webapk_compatible, this);
+      web_contents, kDataTimeoutInMilliseconds, check_webapk_compatible, this);
 }
 
 AddToHomescreenManager::~AddToHomescreenManager() {}

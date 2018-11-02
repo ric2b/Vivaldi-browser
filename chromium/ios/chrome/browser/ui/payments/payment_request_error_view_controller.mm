@@ -59,7 +59,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _okButton =
         [[UIBarButtonItem alloc] initWithTitle:l10n_util::GetNSString(IDS_OK)
                                          style:UIBarButtonItemStylePlain
-                                        target:nil
+                                        target:self
                                         action:@selector(onOk)];
     [_okButton setTitleTextAttributes:@{
       NSForegroundColorAttributeName : [UIColor lightGrayColor]
@@ -137,6 +137,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
       cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds) -
                                  inset.left - inset.right
                          forItem:item];
+}
+
+#pragma mark - UIAccessibilityAction
+
+- (BOOL)accessibilityPerformEscape {
+  [self onOk];
+  return YES;
 }
 
 @end

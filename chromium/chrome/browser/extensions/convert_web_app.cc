@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <cmath>
 #include <limits>
 #include <memory>
 #include <string>
@@ -22,12 +21,14 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
+#include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "chrome/common/web_application_info.h"
 #include "crypto/sha2.h"
 #include "extensions/common/constants.h"
@@ -37,6 +38,8 @@
 #include "extensions/common/manifest_constants.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -128,21 +131,18 @@ std::string ConvertTimeToExtensionVersion(const Time& create_time) {
       (create_time_exploded.minute * Time::kMicrosecondsPerMinute) +
       (create_time_exploded.hour * Time::kMicrosecondsPerHour));
   double day_fraction = micros / Time::kMicrosecondsPerDay;
-  double stamp = day_fraction * std::numeric_limits<uint16_t>::max();
+  int stamp =
+      gfx::ToRoundedInt(day_fraction * std::numeric_limits<uint16_t>::max());
 
-  // Ghetto-round, since VC++ doesn't have round().
-  stamp = stamp >= (floor(stamp) + 0.5) ? (stamp + 1) : stamp;
-
-  return base::StringPrintf(
-      "%i.%i.%i.%i", create_time_exploded.year, create_time_exploded.month,
-      create_time_exploded.day_of_month, static_cast<uint16_t>(stamp));
+  return base::StringPrintf("%i.%i.%i.%i", create_time_exploded.year,
+                            create_time_exploded.month,
+                            create_time_exploded.day_of_month, stamp);
 }
 
 scoped_refptr<Extension> ConvertWebAppToExtension(
     const WebApplicationInfo& web_app,
     const Time& create_time,
     const base::FilePath& extensions_dir) {
-  VLOG(1) << "Converting web app to extension";
   base::FilePath install_temp_dir =
       file_util::GetInstallTempDir(extensions_dir);
   if (install_temp_dir.empty()) {
@@ -156,8 +156,6 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     return NULL;
   }
 
-  VLOG(1) << "App URL " << web_app.app_url.spec();
-
   // Create the manifest
   std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
   root->SetString(keys::kPublicKey, GenerateKey(web_app.app_url));
@@ -168,6 +166,11 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   if (web_app.generated_icon_color != SK_ColorTRANSPARENT) {
     root->SetString(keys::kAppIconColor, image_util::GenerateHexColorString(
                                              web_app.generated_icon_color));
+  }
+
+  if (web_app.theme_color) {
+    root->SetString(keys::kAppThemeColor, color_utils::SkColorToRgbaString(
+                                              web_app.theme_color.value()));
   }
 
   if (!web_app.scope.is_empty()) {
@@ -184,17 +187,12 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
                                                size.c_str());
     icons->SetString(size, icon_path);
 
-    VLOG(1) << "Adding icon of size " << size << ": " << icon_path;
-
     if (icon.url.is_valid()) {
-      VLOG(1) << "Adding linked icon URL " << icon.url.spec();
       std::unique_ptr<base::DictionaryValue> linked_icon(
           new base::DictionaryValue());
       linked_icon->SetString(keys::kLinkedAppIconURL, icon.url.spec());
       linked_icon->SetInteger(keys::kLinkedAppIconSize, icon.width);
       linked_icons->Append(std::move(linked_icon));
-    } else {
-      VLOG(1) << "Icon URL wasn't valid: " << icon.url.spec();
     }
   }
   root->Set(keys::kIcons, std::move(icons));

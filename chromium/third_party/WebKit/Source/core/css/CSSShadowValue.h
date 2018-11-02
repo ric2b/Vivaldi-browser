@@ -21,9 +21,9 @@
 #ifndef CSSShadowValue_h
 #define CSSShadowValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSValue.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -53,7 +53,7 @@ class CORE_EXPORT CSSShadowValue : public CSSValue {
   Member<CSSIdentifierValue> style;
   Member<CSSValue> color;
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
  private:
   CSSShadowValue(CSSPrimitiveValue* x,

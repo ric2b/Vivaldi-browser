@@ -14,7 +14,6 @@
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/table/table_view_observer.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -154,7 +153,7 @@ const views::Widget* ChooserBubbleUiViewDelegate::GetWidget() const {
 }
 
 void ChooserBubbleUiViewDelegate::OnSelectionChanged() {
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void ChooserBubbleUiViewDelegate::UpdateAnchor(Browser* browser) {
@@ -167,7 +166,6 @@ void ChooserBubbleUiViewDelegate::UpdateAnchor(Browser* browser) {
 void ChooserBubbleUiViewDelegate::set_bubble_reference(
     BubbleReference bubble_reference) {
   bubble_reference_ = bubble_reference;
-  DCHECK(bubble_reference_);
 }
 
 void ChooserBubbleUiViewDelegate::UpdateTableView() const {

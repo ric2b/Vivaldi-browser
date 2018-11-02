@@ -248,6 +248,12 @@ void PromiseWriterHelper(const DropData& drop_data,
 
   contents_->SystemDragEnded(dragStartRWH_.get());
 
+  if (dragImage_) {
+    screenPoint.x += imageOffset_.x;
+    // Deal with Cocoa's flipped coordinate system.
+    screenPoint.y += [dragImage_.get() size].height - imageOffset_.y;
+  }
+
   // Convert |screenPoint| to view coordinates and flip it.
   NSPoint localPoint = NSZeroPoint;
   if ([contentsView_ window])
@@ -266,8 +272,9 @@ void PromiseWriterHelper(const DropData& drop_data,
 
   // |localPoint| and |screenPoint| are in the root coordinate space, for
   // non-root RenderWidgetHosts they need to be transformed.
-  gfx::Point transformedPoint = gfx::Point(localPoint.x, localPoint.y);
-  gfx::Point transformedScreenPoint = gfx::Point(screenPoint.x, screenPoint.y);
+  gfx::PointF transformedPoint = gfx::PointF(localPoint.x, localPoint.y);
+  gfx::PointF transformedScreenPoint =
+      gfx::PointF(screenPoint.x, screenPoint.y);
   if (dragStartRWH_ && contents_->GetRenderWidgetHostView()) {
     content::RenderWidgetHostViewBase* contentsViewBase =
         static_cast<content::RenderWidgetHostViewBase*>(
@@ -276,10 +283,10 @@ void PromiseWriterHelper(const DropData& drop_data,
         static_cast<content::RenderWidgetHostViewBase*>(
             dragStartRWH_->GetView());
     contentsViewBase->TransformPointToCoordSpaceForView(
-        gfx::Point(localPoint.x, localPoint.y), dragStartViewBase,
+        gfx::PointF(localPoint.x, localPoint.y), dragStartViewBase,
         &transformedPoint);
     contentsViewBase->TransformPointToCoordSpaceForView(
-        gfx::Point(screenPoint.x, screenPoint.y), dragStartViewBase,
+        gfx::PointF(screenPoint.x, screenPoint.y), dragStartViewBase,
         &transformedScreenPoint);
   }
 

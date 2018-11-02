@@ -14,12 +14,15 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/sync_status.h"
 #include "components/sync/engine/sync_string_conversions.h"
 #include "components/sync/model/time.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/time_format.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -86,10 +89,10 @@ base::ListValue* AddSection(base::ListValue* parent_list,
   section->SetBoolean("is_sensitive", false);
   // If the following |Append| results in a reallocation, pointers to the
   // members of |parent_list| will be invalidated. This would result in
-  // use-after-free in |*SyncStat::SetValue|. This is why the following CHECK is
-  // necessary to ensure no reallocation takes place.
+  // use-after-free in |*SyncStat::SetValue|. This is why the following DCHECK
+  // is necessary to ensure no reallocation takes place.
   // TODO(crbug.com/702230): Remove the usages of raw pointers in this file.
-  CHECK_LT(parent_list->GetSize(), parent_list->capacity());
+  DCHECK_LT(parent_list->GetSize(), parent_list->GetList().capacity());
   parent_list->Append(std::move(section));
   return section_contents;
 }
@@ -105,9 +108,9 @@ base::ListValue* AddSensitiveSection(base::ListValue* parent_list,
   section->SetBoolean("is_sensitive", true);
   // If the following |Append| results in a reallocation, pointers to
   // |parent_list| and its members will be invalidated. This would result in
-  // use-after-free in |*SyncStat::SetValue|. This is why the following CHECK is
-  // necessary to ensure no reallocation takes place.
-  CHECK_LT(parent_list->GetSize(), parent_list->capacity());
+  // use-after-free in |*SyncStat::SetValue|. This is why the following DCHECK
+  // is necessary to ensure no reallocation takes place.
+  DCHECK_LT(parent_list->GetSize(), parent_list->GetList().capacity());
   // TODO(crbug.com/702230): Remove the usages of raw pointers in this file.
   parent_list->Append(std::move(section));
   return section_contents;
@@ -139,10 +142,10 @@ StringSyncStat::StringSyncStat(base::ListValue* section,
   stat_->SetBoolean("is_valid", false);
   // |stat_| will be invalidated by |Append|, so it needs to be reset.
   // Furthermore, if |Append| results in a reallocation, |stat_| members of
-  // other SyncStats will be invalidated. This is why the following check is
+  // other SyncStats will be invalidated. This is why the following dcheck is
   // necessary, so that it is guaranteed that a reallocation will not happen.
   // TODO(crbug.com/702230): Remove the usages of raw pointers in this file.
-  CHECK_LT(section->GetSize(), section->capacity());
+  DCHECK_LT(section->GetSize(), section->GetList().capacity());
   section->Append(base::WrapUnique(stat_));
   section->GetDictionary(section->GetSize() - 1, &stat_);
 }
@@ -174,10 +177,10 @@ BoolSyncStat::BoolSyncStat(base::ListValue* section, const std::string& key) {
   stat_->SetBoolean("is_valid", false);
   // |stat_| will be invalidated by |Append|, so it needs to be reset.
   // Furthermore, if |Append| results in a reallocation, |stat_| members of
-  // other SyncStats will be invalidated. This is why the following check is
+  // other SyncStats will be invalidated. This is why the following dcheck is
   // necessary, so that it is guaranteed that a reallocation will not happen.
   // TODO(crbug.com/702230): Remove the usages of raw pointers in this file.
-  CHECK_LT(section->GetSize(), section->capacity());
+  DCHECK_LT(section->GetSize(), section->GetList().capacity());
   section->Append(base::WrapUnique(stat_));
   section->GetDictionary(section->GetSize() - 1, &stat_);
 }
@@ -204,10 +207,10 @@ IntSyncStat::IntSyncStat(base::ListValue* section, const std::string& key) {
   stat_->SetBoolean("is_valid", false);
   // |stat_| will be invalidated by |Append|, so it needs to be reset.
   // Furthermore, if |Append| results in a reallocation, |stat_| members of
-  // other SyncStats will be invalidated. This is why the following check is
+  // other SyncStats will be invalidated. This is why the following dcheck is
   // necessary, so that it is guaranteed that a reallocation will not happen.
   // TODO(crbug.com/702230): Remove the usages of raw pointers in this file.
-  CHECK_LT(section->GetSize(), section->capacity());
+  DCHECK_LT(section->GetSize(), section->GetList().capacity());
   section->Append(base::WrapUnique(stat_));
   section->GetDictionary(section->GetSize() - 1, &stat_);
 }
@@ -250,6 +253,20 @@ std::string GetTimeStr(base::Time time, const std::string& default_msg) {
   return time_str;
 }
 
+base::string16 GetLastSyncedTimeString(base::Time last_synced_time) {
+  if (last_synced_time.is_null())
+    return l10n_util::GetStringUTF16(IDS_SYNC_TIME_NEVER);
+
+  base::TimeDelta time_since_last_sync = base::Time::Now() - last_synced_time;
+
+  if (time_since_last_sync < base::TimeDelta::FromMinutes(1))
+    return l10n_util::GetStringUTF16(IDS_SYNC_TIME_JUST_NOW);
+
+  return ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
+                                ui::TimeFormat::LENGTH_SHORT,
+                                time_since_last_sync);
+}
+
 std::string GetConnectionStatus(const SyncService::SyncTokenStatus& status) {
   std::string message;
   switch (status.connection_status) {
@@ -279,12 +296,23 @@ std::string GetConnectionStatus(const SyncService::SyncTokenStatus& status) {
 
 }  // namespace
 
+std::unique_ptr<base::DictionaryValue> ConstructAboutInformation_DEPRECATED(
+    SyncService* service,
+    version_info::Channel channel) {
+  AccountInfo primary_account_info;
+  if (service->signin())
+    primary_account_info = service->signin()->GetAuthenticatedAccountInfo();
+
+  return ConstructAboutInformation(service, primary_account_info, channel);
+}
+
 // This function both defines the structure of the message to be returned and
 // its contents.  Most of the message consists of simple fields in about:sync
 // which are grouped into sections and populated with the help of the SyncStat
 // classes defined above.
 std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     SyncService* service,
+    AccountInfo primary_account_info,
     version_info::Channel channel) {
   auto about_info = std::make_unique<base::DictionaryValue>();
 
@@ -445,8 +473,8 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     sync_id.SetValue(full_status.sync_id);
   if (is_status_valid && !full_status.invalidator_client_id.empty())
     invalidator_id.SetValue(full_status.invalidator_client_id);
-  if (service->signin())
-    username.SetValue(service->signin()->GetAuthenticatedAccountInfo().email);
+
+  username.SetValue(primary_account_info.email);
 
   const SyncService::SyncTokenStatus& token_status =
       service->GetSyncTokenStatus();
@@ -460,7 +488,7 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
   next_token_request.SetValue(
       GetTimeStr(token_status.next_token_request_time, "not scheduled"));
 
-  last_synced.SetValue(service->GetLastSyncedTimeString());
+  last_synced.SetValue(GetLastSyncedTimeString(service->GetLastSyncedTime()));
   is_setup_complete.SetValue(service->IsFirstSetupComplete());
   is_local_sync_enabled.SetValue(service->IsLocalSyncEnabled());
   if (service->IsLocalSyncEnabled() && is_status_valid) {
@@ -584,11 +612,9 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
                          service->HasUnrecoverableError());
 
   if (service->HasUnrecoverableError()) {
-    tracked_objects::Location loc(service->unrecoverable_error_location());
-    std::string location_str;
-    loc.Write(true, true, &location_str);
     std::string unrecoverable_error_message =
-        "Unrecoverable error detected at " + location_str + ": " +
+        "Unrecoverable error detected at " +
+        service->unrecoverable_error_location().ToString() + ": " +
         service->unrecoverable_error_message();
     about_info->SetString("unrecoverable_error_message",
                           unrecoverable_error_message);

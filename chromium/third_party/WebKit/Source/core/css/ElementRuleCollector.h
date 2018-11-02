@@ -23,13 +23,14 @@
 #ifndef ElementRuleCollector_h
 #define ElementRuleCollector_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/css/PseudoStyleRequest.h"
 #include "core/css/SelectorChecker.h"
 #include "core/css/resolver/ElementResolveContext.h"
 #include "core/css/resolver/MatchRequest.h"
 #include "core/css/resolver/MatchResult.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -74,7 +75,7 @@ class MatchedRule {
     return GetRuleData()->Specificity() + specificity_;
   }
   const CSSStyleSheet* ParentStyleSheet() const { return parent_style_sheet_; }
-  DEFINE_INLINE_TRACE() { visitor->Trace(parent_style_sheet_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(parent_style_sheet_); }
 
  private:
   // TODO(Oilpan): RuleData is in the oilpan heap and this pointer
@@ -101,7 +102,6 @@ using StyleRuleList = HeapVector<Member<StyleRule>>;
 // FIXME: Currently it modifies the ComputedStyle but should not!
 class ElementRuleCollector {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(ElementRuleCollector);
 
  public:
   ElementRuleCollector(const ElementResolveContext&,
@@ -130,9 +130,12 @@ class ElementRuleCollector {
                                       CascadeOrder = kIgnoreCascadeOrder);
   void SortAndTransferMatchedRules();
   void ClearMatchedRules();
-  void AddElementStyleProperties(const StylePropertySet*,
+  void AddElementStyleProperties(const CSSPropertyValueSet*,
                                  bool is_cacheable = true);
   void FinishAddingUARules() { result_.FinishAddingUARules(); }
+  void FinishAddingUserRules() {
+    result_.FinishAddingUserRules();
+  }
   void FinishAddingAuthorRulesForTreeScope() {
     result_.FinishAddingAuthorRulesForTreeScope();
   }
@@ -167,7 +170,8 @@ class ElementRuleCollector {
  private:
   const ElementResolveContext& context_;
   const SelectorFilter& selector_filter_;
-  RefPtr<ComputedStyle> style_;  // FIXME: This can be mutated during matching!
+  scoped_refptr<ComputedStyle>
+      style_;  // FIXME: This can be mutated during matching!
 
   PseudoStyleRequest pseudo_style_request_;
   SelectorChecker::Mode mode_;
@@ -182,6 +186,7 @@ class ElementRuleCollector {
   Member<StaticCSSRuleList> css_rule_list_;
   Member<StyleRuleList> style_rule_list_;
   MatchResult result_;
+  DISALLOW_COPY_AND_ASSIGN(ElementRuleCollector);
 };
 
 }  // namespace blink

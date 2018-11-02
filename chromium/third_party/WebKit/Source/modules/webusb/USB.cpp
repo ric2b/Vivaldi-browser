@@ -9,7 +9,7 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/UserGestureIndicator.h"
+#include "core/frame/Frame.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/webusb/USBConnectionEvent.h"
@@ -82,8 +82,8 @@ ScriptPromise USB::getDevices(ScriptState* script_state) {
         script_state, DOMException::Create(kNotSupportedError));
   }
 
-  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
-    if (!frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb)) {
+  if (IsSupportedInFeaturePolicy(FeaturePolicyFeature::kUsb)) {
+    if (!frame->IsFeatureEnabled(FeaturePolicyFeature::kUsb)) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
           DOMException::Create(kSecurityError, kFeaturePolicyBlocked));
@@ -111,8 +111,8 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
         script_state, DOMException::Create(kNotSupportedError));
   }
 
-  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
-    if (!frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb)) {
+  if (IsSupportedInFeaturePolicy(FeaturePolicyFeature::kUsb)) {
+    if (!frame->IsFeatureEnabled(FeaturePolicyFeature::kUsb)) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
           DOMException::Create(kSecurityError, kFeaturePolicyBlocked));
@@ -130,7 +130,7 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
                                         WrapWeakPersistent(this))));
   }
 
-  if (!UserGestureIndicator::ConsumeUserGesture()) {
+  if (!Frame::ConsumeTransientUserActivation(frame)) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(
@@ -257,8 +257,8 @@ void USB::AddedEventListener(const AtomicString& event_type,
   if (!frame)
     return;
 
-  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
-    if (frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb))
+  if (IsSupportedInFeaturePolicy(FeaturePolicyFeature::kUsb)) {
+    if (frame->IsFeatureEnabled(FeaturePolicyFeature::kUsb))
       EnsureDeviceManagerConnection();
   } else if (frame->IsMainFrame()) {
     EnsureDeviceManagerConnection();
@@ -282,7 +282,7 @@ void USB::EnsureDeviceManagerConnection() {
   device_manager_->SetClient(std::move(client));
 }
 
-DEFINE_TRACE(USB) {
+void USB::Trace(blink::Visitor* visitor) {
   visitor->Trace(device_manager_requests_);
   visitor->Trace(chooser_service_requests_);
   visitor->Trace(device_cache_);

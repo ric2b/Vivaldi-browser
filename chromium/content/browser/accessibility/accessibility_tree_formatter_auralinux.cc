@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/browser/accessibility/accessibility_tree_formatter.h"
-
-#include <atk/atk.h>
+#include "content/browser/accessibility/accessibility_tree_formatter_browser.h"
 
 #include <utility>
 
@@ -16,10 +14,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
+#include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 
 namespace content {
 
-class AccessibilityTreeFormatterAuraLinux : public AccessibilityTreeFormatter {
+class AccessibilityTreeFormatterAuraLinux
+    : public AccessibilityTreeFormatterBrowser {
  public:
   explicit AccessibilityTreeFormatterAuraLinux();
   ~AccessibilityTreeFormatterAuraLinux() override;
@@ -31,7 +31,9 @@ class AccessibilityTreeFormatterAuraLinux : public AccessibilityTreeFormatter {
   const std::string GetDenyString() override;
   void AddProperties(const BrowserAccessibility& node,
                      base::DictionaryValue* dict) override;
-  base::string16 ToString(const base::DictionaryValue& node) override;
+  base::string16 ProcessTreeForOutput(
+      const base::DictionaryValue& node,
+      base::DictionaryValue* filtered_dict_result = nullptr) override;
 };
 
 // static
@@ -52,29 +54,16 @@ void AccessibilityTreeFormatterAuraLinux::AddProperties(
   BrowserAccessibilityAuraLinux* acc_obj =
       ToBrowserAccessibilityAuraLinux(const_cast<BrowserAccessibility*>(&node));
 
-  AtkObject* atk_object = acc_obj->GetAtkObject();
-  AtkRole role = acc_obj->atk_role();
-  if (role != ATK_ROLE_UNKNOWN)
-    dict->SetString("role", std::string(atk_role_get_name(role)));
-  const gchar* name = atk_object_get_name(atk_object);
-  if (name)
-    dict->SetString("name", std::string(name));
-  const gchar* description = atk_object_get_description(atk_object);
-  if (description)
-    dict->SetString("description", std::string(description));
-
-  AtkStateSet* state_set = atk_object_ref_state_set(atk_object);
-  auto states = base::MakeUnique<base::ListValue>();
-  for (int i = ATK_STATE_INVALID; i < ATK_STATE_LAST_DEFINED; i++) {
-    AtkStateType state_type = static_cast<AtkStateType>(i);
-    if (atk_state_set_contains_state(state_set, state_type))
-      states->AppendString(atk_state_type_get_name(state_type));
-  }
-  dict->Set("states", std::move(states));
+  acc_obj->GetNode()->AddAccessibilityTreeProperties(dict);
 }
 
-base::string16 AccessibilityTreeFormatterAuraLinux::ToString(
-    const base::DictionaryValue& node) {
+base::string16 AccessibilityTreeFormatterAuraLinux::ProcessTreeForOutput(
+    const base::DictionaryValue& node,
+    base::DictionaryValue* filtered_dict_result) {
+  base::string16 error_value;
+  if (node.GetString("error", &error_value))
+    return error_value;
+
   base::string16 line;
   std::string role_value;
   node.GetString("role", &role_value);

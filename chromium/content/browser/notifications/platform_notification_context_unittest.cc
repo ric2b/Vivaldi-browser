@@ -21,6 +21,7 @@
 #include "content/test/mock_platform_notification_service.h"
 #include "content/test/test_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -31,7 +32,8 @@ const int64_t kFakeServiceWorkerRegistrationId = 42;
 class NotificationBrowserClient : public TestContentBrowserClient {
  public:
   NotificationBrowserClient()
-      : platform_notification_service_(new MockPlatformNotificationService()) {}
+      : platform_notification_service_(
+            std::make_unique<MockPlatformNotificationService>()) {}
 
   PlatformNotificationService* GetPlatformNotificationService() override {
     return platform_notification_service_.get();
@@ -324,18 +326,19 @@ TEST_F(PlatformNotificationContextTest, ServiceWorkerUnregistered) {
   GURL origin("https://example.com");
   GURL script_url("https://example.com/worker.js");
 
-  int64_t service_worker_registration_id = kInvalidServiceWorkerRegistrationId;
+  int64_t service_worker_registration_id =
+      blink::mojom::kInvalidServiceWorkerRegistrationId;
 
   // Register a Service Worker to get a valid registration id.
   embedded_worker_test_helper->context()->RegisterServiceWorker(
-      script_url, ServiceWorkerRegistrationOptions(origin),
+      script_url, blink::mojom::ServiceWorkerRegistrationOptions(origin),
       nullptr /* provider_host */,
       base::Bind(&PlatformNotificationContextTest::DidRegisterServiceWorker,
                  base::Unretained(this), &service_worker_registration_id));
 
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(service_worker_registration_id,
-            kInvalidServiceWorkerRegistrationId);
+            blink::mojom::kInvalidServiceWorkerRegistrationId);
 
   NotificationDatabaseData notification_database_data;
 

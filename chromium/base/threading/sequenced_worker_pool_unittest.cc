@@ -25,7 +25,6 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "base/tracked_objects.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -211,7 +210,7 @@ class TestTracker : public base::RefCountedThreadSafe<TestTracker> {
 
  private:
   friend class base::RefCountedThreadSafe<TestTracker>;
-  ~TestTracker() {}
+  ~TestTracker() = default;
 
   void SignalWorkerDone(int id) {
     {
@@ -394,7 +393,7 @@ TEST_P(SequencedWorkerPoolTest, DelayedTaskDuringShutdown) {
   EXPECT_TRUE(pool()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ShouldNotRun,
-                     make_scoped_refptr(new DeletionHelper(deleted_flag))),
+                     MakeRefCounted<DeletionHelper>(deleted_flag)),
       TestTimeouts::action_timeout()));
 
   std::vector<int> completion_sequence = tracker()->WaitUntilTasksComplete(1);
@@ -1106,9 +1105,9 @@ INSTANTIATE_TEST_CASE_P(
 
 class SequencedWorkerPoolTaskRunnerTestDelegate {
  public:
-  SequencedWorkerPoolTaskRunnerTestDelegate() {}
+  SequencedWorkerPoolTaskRunnerTestDelegate() = default;
 
-  ~SequencedWorkerPoolTaskRunnerTestDelegate() {}
+  ~SequencedWorkerPoolTaskRunnerTestDelegate() = default;
 
   void StartTaskRunner() {
     pool_owner_.reset(
@@ -1141,10 +1140,9 @@ INSTANTIATE_TYPED_TEST_CASE_P(SequencedWorkerPool, TaskRunnerAffinityTest,
 
 class SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate {
  public:
-  SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate() {}
+  SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate() = default;
 
-  ~SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate() {
-  }
+  ~SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate() = default;
 
   void StartTaskRunner() {
     pool_owner_.reset(
@@ -1181,10 +1179,9 @@ INSTANTIATE_TYPED_TEST_CASE_P(
 
 class SequencedWorkerPoolSequencedTaskRunnerTestDelegate {
  public:
-  SequencedWorkerPoolSequencedTaskRunnerTestDelegate() {}
+  SequencedWorkerPoolSequencedTaskRunnerTestDelegate() = default;
 
-  ~SequencedWorkerPoolSequencedTaskRunnerTestDelegate() {
-  }
+  ~SequencedWorkerPoolSequencedTaskRunnerTestDelegate() = default;
 
   void StartTaskRunner() {
     pool_owner_.reset(new SequencedWorkerPoolOwner(

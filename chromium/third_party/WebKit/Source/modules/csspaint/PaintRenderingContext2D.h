@@ -7,7 +7,8 @@
 
 #include <memory>
 #include "modules/ModulesExport.h"
-#include "modules/canvas2d/BaseRenderingContext2D.h"
+#include "modules/canvas/canvas2d/BaseRenderingContext2D.h"
+#include "modules/csspaint/PaintRenderingContext2DSettings.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/graphics/ImageBuffer.h"
 
@@ -16,10 +17,8 @@ namespace blink {
 class CanvasImageSource;
 class Color;
 
-class MODULES_EXPORT PaintRenderingContext2D
-    : public BaseRenderingContext2D,
-      public GarbageCollectedFinalized<PaintRenderingContext2D>,
-      public ScriptWrappable {
+class MODULES_EXPORT PaintRenderingContext2D : public ScriptWrappable,
+                                               public BaseRenderingContext2D {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(PaintRenderingContext2D);
   WTF_MAKE_NONCOPYABLE(PaintRenderingContext2D);
@@ -27,10 +26,15 @@ class MODULES_EXPORT PaintRenderingContext2D
  public:
   static PaintRenderingContext2D* Create(
       std::unique_ptr<ImageBuffer> image_buffer,
-      bool has_alpha,
+      const PaintRenderingContext2DSettings& context_settings,
       float zoom) {
-    return new PaintRenderingContext2D(std::move(image_buffer), has_alpha,
-                                       zoom);
+    return new PaintRenderingContext2D(std::move(image_buffer),
+                                       context_settings, zoom);
+  }
+
+  void Trace(blink::Visitor* visitor) override {
+    ScriptWrappable::Trace(visitor);
+    BaseRenderingContext2D::Trace(visitor);
   }
 
   // BaseRenderingContext2D
@@ -55,28 +59,26 @@ class MODULES_EXPORT PaintRenderingContext2D
   PaintCanvas* ExistingDrawingCanvas() const final;
   void DisableDeferral(DisableDeferralReason) final {}
 
-  AffineTransform BaseTransform() const final;
-
   void DidDraw(const SkIRect& dirty_rect) final;
 
   bool StateHasFilter() final;
-  sk_sp<SkImageFilter> StateGetFilter() final;
+  sk_sp<PaintFilter> StateGetFilter() final;
   void SnapshotStateForFilter() final {}
 
   void ValidateStateStack() const final;
 
-  bool HasAlpha() const final { return has_alpha_; }
+  bool HasAlpha() const final { return context_settings_.alpha(); }
 
   // PaintRenderingContext2D cannot lose it's context.
   bool isContextLost() const final { return false; }
 
  private:
   PaintRenderingContext2D(std::unique_ptr<ImageBuffer>,
-                          bool has_alpha,
+                          const PaintRenderingContext2DSettings&,
                           float zoom);
 
   std::unique_ptr<ImageBuffer> image_buffer_;
-  bool has_alpha_;
+  PaintRenderingContext2DSettings context_settings_;
 };
 
 }  // namespace blink

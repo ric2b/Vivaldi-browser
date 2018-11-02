@@ -15,6 +15,7 @@ import android.graphics.Bitmap;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
@@ -25,7 +26,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.webapps.WebappDataStorage.Clock;
 import org.chromium.testing.local.BackgroundShadowAsyncTask;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
@@ -38,6 +38,8 @@ import java.util.concurrent.TimeUnit;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, shadows = {BackgroundShadowAsyncTask.class})
 public class WebappDataStorageTest {
+    @Rule
+    public MockWebappDataStorageClockRule mClockRule = new MockWebappDataStorageClockRule();
 
     private SharedPreferences mSharedPreferences;
     private boolean mCallbackCalled;
@@ -56,27 +58,6 @@ public class WebappDataStorageTest {
         }
     }
 
-    private static class TestClock extends WebappDataStorage.Clock {
-        private long mCurrentTime;
-
-        public TestClock(long currentTime) {
-            updateTime(currentTime);
-        }
-
-        public void advance(long millis) {
-            mCurrentTime += millis;
-        }
-
-        public void updateTime(long currentTime) {
-            mCurrentTime = currentTime;
-        }
-
-        @Override
-        public long currentTimeMillis() {
-            return mCurrentTime;
-        }
-    }
-
     @Before
     public void setUp() throws Exception {
         ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
@@ -92,7 +73,6 @@ public class WebappDataStorageTest {
     @After
     public void tearDown() {
         mSharedPreferences.edit().clear().apply();
-        WebappDataStorage.setClockForTests(new Clock());
     }
 
     @Test
@@ -109,6 +89,7 @@ public class WebappDataStorageTest {
         assertEquals("orientation", WebappDataStorage.KEY_ORIENTATION);
         assertEquals("theme_color", WebappDataStorage.KEY_THEME_COLOR);
         assertEquals("background_color", WebappDataStorage.KEY_BACKGROUND_COLOR);
+        assertEquals("splash_screen_url", WebappDataStorage.KEY_SPLASH_SCREEN_URL);
         assertEquals("source", WebappDataStorage.KEY_SOURCE);
         assertEquals("action", WebappDataStorage.KEY_ACTION);
         assertEquals("is_icon_generated", WebappDataStorage.KEY_IS_ICON_GENERATED);
@@ -181,9 +162,6 @@ public class WebappDataStorageTest {
     @Test
     @Feature({"Webapp"})
     public void testWasLaunchedRecently() throws Exception {
-        final TestClock clock = new TestClock(System.currentTimeMillis());
-        WebappDataStorage.setClockForTests(clock);
-
         // Opening a data storage doesn't count as a launch.
         WebappDataStorage storage = WebappDataStorage.open("test");
         assertTrue(!storage.wasUsedRecently());
@@ -236,14 +214,15 @@ public class WebappDataStorageTest {
         final String name = "name";
         final String shortName = "shortName";
         final String encodedIcon = ShortcutHelper.encodeBitmapAsString(createBitmap());
-        final int displayMode = WebDisplayMode.STANDALONE;
+        final @WebDisplayMode int displayMode = WebDisplayMode.STANDALONE;
         final int orientation = 1;
         final long themeColor = 2;
         final long backgroundColor = 3;
+        final String splashScreenUrl = "splashy";
         final boolean isIconGenerated = false;
         Intent shortcutIntent = ShortcutHelper.createWebappShortcutIntent(id, action, url, scope,
                 name, shortName, encodedIcon, ShortcutHelper.WEBAPP_SHORTCUT_VERSION, displayMode,
-                orientation, themeColor, backgroundColor, isIconGenerated);
+                orientation, themeColor, backgroundColor, splashScreenUrl, isIconGenerated);
 
         WebappDataStorage storage = WebappDataStorage.open("test");
         storage.updateFromShortcutIntent(shortcutIntent);
@@ -261,11 +240,14 @@ public class WebappDataStorageTest {
         assertEquals(themeColor, mSharedPreferences.getLong(WebappDataStorage.KEY_THEME_COLOR, 0));
         assertEquals(backgroundColor,
                 mSharedPreferences.getLong(WebappDataStorage.KEY_BACKGROUND_COLOR, 0));
+        assertEquals(splashScreenUrl,
+                mSharedPreferences.getString(WebappDataStorage.KEY_SPLASH_SCREEN_URL, null));
         assertEquals(isIconGenerated,
                 mSharedPreferences.getBoolean(WebappDataStorage.KEY_IS_ICON_GENERATED, true));
 
         // Wipe out the data and ensure that it is all gone.
-        mSharedPreferences.edit().remove(WebappDataStorage.KEY_ACTION)
+        mSharedPreferences.edit()
+                .remove(WebappDataStorage.KEY_ACTION)
                 .remove(WebappDataStorage.KEY_URL)
                 .remove(WebappDataStorage.KEY_SCOPE)
                 .remove(WebappDataStorage.KEY_NAME)
@@ -275,6 +257,7 @@ public class WebappDataStorageTest {
                 .remove(WebappDataStorage.KEY_ORIENTATION)
                 .remove(WebappDataStorage.KEY_THEME_COLOR)
                 .remove(WebappDataStorage.KEY_BACKGROUND_COLOR)
+                .remove(WebappDataStorage.KEY_SPLASH_SCREEN_URL)
                 .remove(WebappDataStorage.KEY_IS_ICON_GENERATED)
                 .apply();
 
@@ -288,6 +271,8 @@ public class WebappDataStorageTest {
         assertEquals(0, mSharedPreferences.getInt(WebappDataStorage.KEY_ORIENTATION, 0));
         assertEquals(0, mSharedPreferences.getLong(WebappDataStorage.KEY_THEME_COLOR, 0));
         assertEquals(0, mSharedPreferences.getLong(WebappDataStorage.KEY_BACKGROUND_COLOR, 0));
+        assertEquals(
+                null, mSharedPreferences.getString(WebappDataStorage.KEY_SPLASH_SCREEN_URL, null));
         assertEquals(true,
                 mSharedPreferences.getBoolean(WebappDataStorage.KEY_IS_ICON_GENERATED, true));
 
@@ -307,6 +292,8 @@ public class WebappDataStorageTest {
         assertEquals(themeColor, mSharedPreferences.getLong(WebappDataStorage.KEY_THEME_COLOR, 0));
         assertEquals(backgroundColor,
                 mSharedPreferences.getLong(WebappDataStorage.KEY_BACKGROUND_COLOR, 0));
+        assertEquals(splashScreenUrl,
+                mSharedPreferences.getString(WebappDataStorage.KEY_SPLASH_SCREEN_URL, null));
         assertEquals(isIconGenerated,
                 mSharedPreferences.getBoolean(WebappDataStorage.KEY_IS_ICON_GENERATED, true));
     }
@@ -320,14 +307,13 @@ public class WebappDataStorageTest {
     public void testCheckUpdateMoreFrequentlyIfUpdateFails() {
         assertTrue(WebappDataStorage.UPDATE_INTERVAL > WebappDataStorage.RETRY_UPDATE_DURATION);
 
-        final TestClock clock = new TestClock(System.currentTimeMillis());
-        WebappDataStorage storage = getStorage(clock);
+        WebappDataStorage storage = getStorage();
 
         storage.updateTimeOfLastWebApkUpdateRequestCompletion();
         storage.updateDidLastWebApkUpdateRequestSucceed(true);
 
         assertFalse(storage.shouldCheckForUpdate());
-        clock.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
+        mClockRule.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
         assertFalse(storage.shouldCheckForUpdate());
 
         // Advance all of the time stamps.
@@ -336,7 +322,7 @@ public class WebappDataStorageTest {
         storage.updateDidLastWebApkUpdateRequestSucceed(false);
 
         assertFalse(storage.shouldCheckForUpdate());
-        clock.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
+        mClockRule.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
         assertTrue(storage.shouldCheckForUpdate());
 
         // Verifies that {@link WebappDataStorage#shouldCheckForUpdate()} returns true because the
@@ -354,13 +340,13 @@ public class WebappDataStorageTest {
     public void testRegularCheckIntervalIfNoPriorWebApkUpdate() {
         assertTrue(WebappDataStorage.UPDATE_INTERVAL > WebappDataStorage.RETRY_UPDATE_DURATION);
 
-        final TestClock clock = new TestClock(System.currentTimeMillis());
-        WebappDataStorage storage = getStorage(clock);
+        WebappDataStorage storage = getStorage();
 
         assertFalse(storage.shouldCheckForUpdate());
-        clock.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
+        mClockRule.advance(WebappDataStorage.RETRY_UPDATE_DURATION);
         assertFalse(storage.shouldCheckForUpdate());
-        clock.advance(WebappDataStorage.UPDATE_INTERVAL - WebappDataStorage.RETRY_UPDATE_DURATION);
+        mClockRule.advance(
+                WebappDataStorage.UPDATE_INTERVAL - WebappDataStorage.RETRY_UPDATE_DURATION);
         assertTrue(storage.shouldCheckForUpdate());
     }
 
@@ -373,20 +359,18 @@ public class WebappDataStorageTest {
     public void testRelaxedUpdates() {
         assertTrue(WebappDataStorage.RELAXED_UPDATE_INTERVAL > WebappDataStorage.UPDATE_INTERVAL);
 
-        final TestClock clock = new TestClock(System.currentTimeMillis());
-        WebappDataStorage storage = getStorage(clock);
+        WebappDataStorage storage = getStorage();
 
         storage.setRelaxedUpdates(true);
 
-        clock.advance(WebappDataStorage.UPDATE_INTERVAL);
+        mClockRule.advance(WebappDataStorage.UPDATE_INTERVAL);
         assertFalse(storage.shouldCheckForUpdate());
-        clock.advance(
+        mClockRule.advance(
                 WebappDataStorage.RELAXED_UPDATE_INTERVAL - WebappDataStorage.UPDATE_INTERVAL);
         assertTrue(storage.shouldCheckForUpdate());
     }
 
-    private WebappDataStorage getStorage(TestClock clock) {
-        WebappDataStorage.setClockForTests(clock);
+    private WebappDataStorage getStorage() {
         WebappDataStorage storage = WebappDataStorage.open("test");
 
         // Done when WebAPK is registered in {@link WebApkActivity}.

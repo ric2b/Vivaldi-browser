@@ -1,22 +1,25 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2013 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef READ_STREAM_H
-#define READ_STREAM_H
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_WIN_READ_STREAM_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_WIN_READ_STREAM_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "media/base/data_source.h"
 
-namespace content {
+namespace media {
 
 class ReadStreamListener;
 
 class ReadStream {
 public:
-  explicit ReadStream(media::DataSource* data_source);
-  ~ReadStream() {}
+  explicit ReadStream(DataSource* data_source);
+  ~ReadStream();
 
   void Initialize(ReadStreamListener * listener);
   void Stop();
@@ -118,12 +121,11 @@ private:
 
   StreamState stream_;
   CurrentRead current_read_;
-  media::DataSource* data_source_;
+  DataSource* data_source_;
   ReadStreamListener * listener_;
-  media::DataSource::ReadCB read_cb_;
-  const size_t max_read_size_ = (64 * 1024);
+  DataSource::ReadCB read_cb_;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif // READ_STREAM_H
+#endif // PLATFORM_MEDIA_GPU_DECODERS_WIN_READ_STREAM_H_

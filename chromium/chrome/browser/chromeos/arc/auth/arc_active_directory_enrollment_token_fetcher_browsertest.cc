@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
@@ -88,9 +87,7 @@ class SimulateAuthSucceedsObserver : public FakeArcSupportObserverBase {
   explicit SimulateAuthSucceedsObserver(FakeArcSupport* fake_arc_support)
       : FakeArcSupportObserverBase(fake_arc_support) {}
 
-  void OnAuthPageShown() override {
-    fake_arc_support_->EmulateAuthSuccess("" /* auth_code unused */);
-  }
+  void OnAuthPageShown() override { fake_arc_support_->EmulateAuthSuccess(); }
 };
 
 // Simulates pressing the Cancel button or closing the window.
@@ -148,7 +145,7 @@ class SimulateAuthRetryObserver : public FakeArcSupportObserverBase {
       fake_arc_support_->ClickRetryButton();
     } else if (saml_auth_count_ == 2) {
       // Second saml auth attempt, trigger success.
-      fake_arc_support_->EmulateAuthSuccess("" /* auth_code unused */);
+      fake_arc_support_->EmulateAuthSuccess();
     } else {
       ADD_FAILURE() << "Auth page should only be shown twice";
       run_loop_->Quit();
@@ -295,21 +292,21 @@ class ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest
 
   void SetUpInProcessBrowserTestFixture() override {
     // Set fake cryptohome, because we want to fail DMToken retrieval
-    auto cryptohome_client = base::MakeUnique<chromeos::FakeCryptohomeClient>();
+    auto cryptohome_client = std::make_unique<chromeos::FakeCryptohomeClient>();
     fake_cryptohome_client_ = cryptohome_client.get();
     chromeos::DBusThreadManager::GetSetterForTesting()->SetCryptohomeClient(
         std::move(cryptohome_client));
   }
 
   void SetUpOnMainThread() override {
-    interceptor_ = base::MakeUnique<policy::TestRequestInterceptor>(
+    interceptor_ = std::make_unique<policy::TestRequestInterceptor>(
         "localhost", content::BrowserThread::GetTaskRunnerForThread(
                          content::BrowserThread::IO));
 
-    support_host_ = base::MakeUnique<ArcSupportHost>(browser()->profile());
+    support_host_ = std::make_unique<ArcSupportHost>(browser()->profile());
     support_host_->SetErrorDelegate(this);
-    fake_arc_support_ = base::MakeUnique<FakeArcSupport>(support_host_.get());
-    token_fetcher_ = base::MakeUnique<ArcActiveDirectoryEnrollmentTokenFetcher>(
+    fake_arc_support_ = std::make_unique<FakeArcSupport>(support_host_.get());
+    token_fetcher_ = std::make_unique<ArcActiveDirectoryEnrollmentTokenFetcher>(
         support_host_.get());
   }
 
@@ -330,7 +327,7 @@ class ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest
     fake_cryptohome_client_->SetServiceIsAvailable(true);
     // Store a fake DM token.
     base::RunLoop run_loop;
-    auto dm_token_storage = base::MakeUnique<policy::DMTokenStorage>(
+    auto dm_token_storage = std::make_unique<policy::DMTokenStorage>(
         g_browser_process->local_state());
     dm_token_storage->StoreDMToken(
         kFakeDmToken, base::BindOnce(

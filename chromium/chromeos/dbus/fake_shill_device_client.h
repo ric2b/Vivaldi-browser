@@ -6,6 +6,7 @@
 #define CHROMEOS_DBUS_FAKE_SHILL_DEVICE_CLIENT_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -34,8 +35,6 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
       ShillPropertyChangedObserver* observer) override;
   void GetProperties(const dbus::ObjectPath& device_path,
                      const DictionaryValueCallback& callback) override;
-  void ProposeScan(const dbus::ObjectPath& device_path,
-                   VoidDBusMethodCallback callback) override;
   void SetProperty(const dbus::ObjectPath& device_path,
                    const std::string& name,
                    const base::Value& value,
@@ -44,9 +43,6 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
   void ClearProperty(const dbus::ObjectPath& device_path,
                      const std::string& name,
                      VoidDBusMethodCallback callback) override;
-  void AddIPConfig(const dbus::ObjectPath& device_path,
-                   const std::string& method,
-                   const ObjectPathDBusMethodCallback& callback) override;
   void RequirePin(const dbus::ObjectPath& device_path,
                   const std::string& pin,
                   bool require,
@@ -112,6 +108,7 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
   void SetTDLSBusyCount(int count) override;
   void SetTDLSState(const std::string& state) override;
   void SetSimLocked(const std::string& device_path, bool locked) override;
+  void AddCellularFoundNetwork(const std::string& device_path) override;
 
   static const char kDefaultSimPin[];
   static const int kSimPinRetryCount;
@@ -132,9 +129,8 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
   void PassStubDeviceProperties(const dbus::ObjectPath& device_path,
                                 const DictionaryValueCallback& callback) const;
 
-  // Posts a task to run a void callback with status code |status|.
-  void PostVoidCallback(VoidDBusMethodCallback callback,
-                        DBusMethodCallStatus status);
+  // Posts a task to run a void callback with status code |result|.
+  void PostVoidCallback(VoidDBusMethodCallback callback, bool result);
 
   void SetPropertyInternal(const dbus::ObjectPath& device_path,
                            const std::string& name,
@@ -144,7 +140,7 @@ class CHROMEOS_EXPORT FakeShillDeviceClient
 
   void NotifyObserversPropertyChanged(const dbus::ObjectPath& device_path,
                                       const std::string& property);
-  base::DictionaryValue* GetDeviceProperties(const std::string& device_path);
+  base::Value* GetDeviceProperties(const std::string& device_path);
   PropertyObserverList& GetObserverList(const dbus::ObjectPath& device_path);
 
   // Dictionary of <device_name, Dictionary>.

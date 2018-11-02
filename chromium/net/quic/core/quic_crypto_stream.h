@@ -38,7 +38,8 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
 
   // Returns the per-packet framing overhead associated with sending a
   // handshake message for |version|.
-  static QuicByteCount CryptoMessageFramingOverhead(QuicVersion version);
+  static QuicByteCount CryptoMessageFramingOverhead(
+      QuicTransportVersion version);
 
   // QuicStream implementation
   void OnDataAvailable() override;
@@ -61,6 +62,9 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   // repurposed by an attacker who obtains the client's or server's DH private
   // value.
   bool ExportTokenBindingKeyingMaterial(std::string* result) const;
+
+  // Writes |data| to the QuicStream.
+  virtual void WriteCryptoData(const QuicStringPiece& data);
 
   // Returns true once an encrypter has been set for the connection.
   virtual bool encryption_established() const = 0;

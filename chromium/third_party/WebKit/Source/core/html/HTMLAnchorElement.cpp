@@ -24,9 +24,11 @@
 
 #include "core/html/HTMLAnchorElement.h"
 
+#include "core/dom/UserGestureIndicator.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -49,8 +51,8 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
                                      Document& document)
     : HTMLElement(tag_name, document),
       link_relations_(0),
-      cached_visited_link_hash_(0),
-      was_focused_by_mouse_(false) {}
+      was_focused_by_mouse_(false),
+      cached_visited_link_hash_(0) {}
 
 HTMLAnchorElement* HTMLAnchorElement::Create(Document& document) {
   return new HTMLAnchorElement(aTag, document);
@@ -119,10 +121,10 @@ static void AppendServerMapMousePosition(StringBuilder& url, Event* event) {
   DCHECK(event->target());
   Node* target = event->target()->ToNode();
   DCHECK(target);
-  if (!isHTMLImageElement(*target))
+  if (!IsHTMLImageElement(*target))
     return;
 
-  HTMLImageElement& image_element = toHTMLImageElement(*target);
+  HTMLImageElement& image_element = ToHTMLImageElement(*target);
   if (!image_element.IsServerMap())
     return;
 
@@ -224,7 +226,7 @@ void HTMLAnchorElement::ParseAttribute(
 
 void HTMLAnchorElement::AccessKeyAction(bool send_mouse_events) {
   DispatchSimulatedClick(
-      0, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
+      nullptr, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
 }
 
 bool HTMLAnchorElement::IsURLAttribute(const Attribute& attribute) const {
@@ -307,20 +309,31 @@ bool HTMLAnchorElement::IsLiveLink() const {
 void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
   const AtomicString& ping_value = getAttribute(pingAttr);
   if (ping_value.IsNull() || !GetDocument().GetSettings() ||
-      !GetDocument().GetSettings()->GetHyperlinkAuditingEnabled())
+      !GetDocument().GetSettings()->GetHyperlinkAuditingEnabled()) {
     return;
+  }
 
   // Pings should not be sent if MHTML page is loaded.
   if (GetDocument().Fetcher()->Archive())
     return;
 
+  if ((ping_value.Contains('\n') || ping_value.Contains('\r') ||
+       ping_value.Contains('\t')) &&
+      ping_value.Contains('<')) {
+    Deprecation::CountDeprecation(
+        GetDocument(), WebFeature::kCanRequestURLHTTPContainingNewline);
+    if (RuntimeEnabledFeatures::RestrictCanRequestURLCharacterSetEnabled())
+      return;
+  }
+
   UseCounter::Count(GetDocument(), WebFeature::kHTMLAnchorElementPingAttribute);
 
   SpaceSplitString ping_urls(ping_value);
-  for (unsigned i = 0; i < ping_urls.size(); i++)
+  for (unsigned i = 0; i < ping_urls.size(); i++) {
     PingLoader::SendLinkAuditPing(GetDocument().GetFrame(),
                                   GetDocument().CompleteURL(ping_urls[i]),
                                   destination_url);
+  }
 }
 
 void HTMLAnchorElement::HandleClick(Event* event) {
@@ -363,6 +376,15 @@ void HTMLAnchorElement::HandleClick(Event* event) {
   }
 
   if (hasAttribute(downloadAttr)) {
+    if (GetDocument().IsSandboxed(kSandboxDownloads)) {
+      // TODO(jochen): Also measure navigations resulting in downloads.
+      UseCounter::Count(
+          GetDocument(),
+          UserGestureIndicator::ProcessingUserGesture()
+              ? WebFeature::kHTMLAnchorElementDownloadInSandboxWithUserGesture
+              : WebFeature::
+                    kHTMLAnchorElementDownloadInSandboxWithoutUserGesture);
+    }
     request.SetRequestContext(WebURLRequest::kRequestContextDownload);
     request.SetRequestorOrigin(SecurityOrigin::Create(GetDocument().Url()));
     frame->Client()->DownloadURL(request, FastGetAttribute(downloadAttr));

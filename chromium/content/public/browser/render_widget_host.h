@@ -11,18 +11,23 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/drop_data.h"
+#include "content/public/common/input_event_ack_source.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
-#include "ui/gfx/geometry/size.h"
 #include "ui/surface/transport_dib.h"
 
 namespace blink {
 class WebMouseEvent;
 class WebMouseWheelEvent;
+}
+
+namespace gfx {
+class Point;
 }
 
 namespace ui {
@@ -197,6 +202,9 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // warning too soon.
   virtual void RestartHangMonitorTimeoutIfNecessary() = 0;
 
+  // Returns true if the renderer is considered unresponsive.
+  virtual bool IsCurrentlyUnresponsive() const = 0;
+
   virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
 
   // Called to notify the RenderWidget that it has been resized.
@@ -224,7 +232,9 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
     virtual ~InputEventObserver() {}
 
     virtual void OnInputEvent(const blink::WebInputEvent&) {}
-    virtual void OnInputEventAck(const blink::WebInputEvent&) {}
+    virtual void OnInputEventAck(InputEventAckSource source,
+                                 InputEventAckState state,
+                                 const blink::WebInputEvent&) {}
   };
 
   // Add/remove an input event observer.
@@ -237,33 +247,33 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // Drag-and-drop drop target messages that get sent to Blink.
   virtual void DragTargetDragEnter(
       const DropData& drop_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) {}
   virtual void DragTargetDragEnterWithMetaData(
       const std::vector<DropData::Metadata>& metadata,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) {};
+      int key_modifiers){};
   virtual void DragTargetDragOver(
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) {}
-  virtual void DragTargetDragLeave(const gfx::Point& client_point,
-                                   const gfx::Point& screen_point) {}
+  virtual void DragTargetDragLeave(const gfx::PointF& client_point,
+                                   const gfx::PointF& screen_point) {}
   virtual void DragTargetDrop(const DropData& drop_data,
-                              const gfx::Point& client_pt,
-                              const gfx::Point& screen_pt,
+                              const gfx::PointF& client_pt,
+                              const gfx::PointF& screen_pt,
                               int key_modifiers) {}
 
   // Notifies the renderer that a drag operation that it started has ended,
   // either in a drop or by being cancelled.
-  virtual void DragSourceEndedAt(const gfx::Point& client_pt,
-                                 const gfx::Point& screen_pt,
-                                 blink::WebDragOperation operation) {};
+  virtual void DragSourceEndedAt(const gfx::PointF& client_pt,
+                                 const gfx::PointF& screen_pt,
+                                 blink::WebDragOperation operation){};
 
   // Notifies the renderer that we're done with the drag and drop operation.
   // This allows the renderer to reset some state.

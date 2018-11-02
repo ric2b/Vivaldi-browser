@@ -32,7 +32,7 @@ class LocalWPT(object):
         if self.host.filesystem.exists(self.path):
             _log.info('WPT checkout exists at %s, fetching latest', self.path)
             self.run(['git', 'fetch', 'origin'])
-            self.run(['git', 'checkout', 'origin/master'])
+            self.run(['git', 'reset', '--hard', 'origin/master'])
             return
 
         _log.info('Cloning GitHub w3c/web-platform-tests into %s', self.path)
@@ -46,6 +46,7 @@ class LocalWPT(object):
 
     def run(self, command, **kwargs):
         """Runs a command in the local WPT directory."""
+        # TODO(robertma): Migrate to webkitpy.common.checkout.Git. (crbug.com/676399)
         return self.host.executive.run_command(command, cwd=self.path, **kwargs)
 
     def clean(self):
@@ -148,3 +149,36 @@ class LocalWPT(object):
         return len(self.run([
             'git', 'rev-list', '{}..origin/master'.format(commit)
         ]).splitlines())
+
+    def _most_recent_log_matching(self, grep_str):
+        """Finds the most recent commit whose message contains the given pattern.
+
+        Args:
+            grep_str: A regular expression. (git uses basic regexp by default!)
+
+        Returns:
+            A string containing the commit log of the first matched commit
+            (empty if not found).
+        """
+        return self.run(['git', 'log', '-1', '--grep', grep_str])
+
+    # Note: the regexes in the two following methods use the start-of-line
+    # anchor ^ to prevent matching quoted text in commit messages. The end-of-
+    # line anchor $ is omitted to accommodate trailing whitespaces and non-
+    # standard line endings caused by manual editing.
+
+    def seek_change_id(self, change_id):
+        """Finds the most recent commit with the given Chromium change ID.
+
+        Returns:
+            A string of the matched commit log, empty if not found.
+        """
+        return self._most_recent_log_matching('^Change-Id: %s' % change_id)
+
+    def seek_commit_position(self, commit_position):
+        """Finds the most recent commit with the given Chromium commit position.
+
+        Returns:
+            A string of the matched commit log, empty if not found.
+        """
+        return self._most_recent_log_matching('^Cr-Commit-Position: %s' % commit_position)

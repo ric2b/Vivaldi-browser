@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "cc/output/output_surface.h"
+#include "components/viz/service/display/output_surface.h"
 #include "content/common/content_export.h"
 
 namespace cc {
@@ -26,15 +26,15 @@ namespace content {
 class ReflectorImpl;
 
 class CONTENT_EXPORT BrowserCompositorOutputSurface
-    : public cc::OutputSurface {
+    : public viz::OutputSurface {
  public:
   using UpdateVSyncParametersCallback =
       base::Callback<void(base::TimeTicks timebase, base::TimeDelta interval)>;
 
   ~BrowserCompositorOutputSurface() override;
 
-  // cc::OutputSurface implementation.
-  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
+  // viz::OutputSurface implementation.
+  viz::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
 
@@ -57,7 +57,7 @@ class CONTENT_EXPORT BrowserCompositorOutputSurface
 
   // Constructor used by the software implementation.
   BrowserCompositorOutputSurface(
-      std::unique_ptr<cc::SoftwareOutputDevice> software_device,
+      std::unique_ptr<viz::SoftwareOutputDevice> software_device,
       const UpdateVSyncParametersCallback& update_vsync_parameters_callback);
 
   // Constructor used by the Vulkan implementation.

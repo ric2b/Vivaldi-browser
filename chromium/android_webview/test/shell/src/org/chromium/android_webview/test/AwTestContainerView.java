@@ -24,6 +24,7 @@ import android.widget.FrameLayout;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.shell.DrawGL;
 import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content_public.browser.WebContents;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -273,6 +274,10 @@ public class AwTestContainerView extends FrameLayout {
         return mAwContents.getContentViewCore();
     }
 
+    public WebContents getWebContents() {
+        return mAwContents.getWebContents();
+    }
+
     public AwContents getAwContents() {
         return mAwContents;
     }
@@ -437,6 +442,7 @@ public class AwTestContainerView extends FrameLayout {
     }
 
     private class NativeDrawGLFunctorFactory implements AwContents.NativeDrawGLFunctorFactory {
+        @Override
         public NativeDrawGLFunctor createFunctor(long context) {
             return new NativeDrawGLFunctor(context);
         }

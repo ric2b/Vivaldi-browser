@@ -41,7 +41,7 @@ void GestureManager::Clear() {
   last_show_press_timestamp_.reset();
 }
 
-DEFINE_TRACE(GestureManager) {
+void GestureManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(scroll_manager_);
   visitor->Trace(mouse_event_manager_);
@@ -193,7 +193,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
   Node* tapped_node = current_hit_test.InnerNode();
   Element* tapped_element = current_hit_test.InnerElement();
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(
+      Frame::NotifyUserActivation(
           tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr);
 
   mouse_event_manager_->SetClickElement(tapped_element);

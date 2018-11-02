@@ -67,6 +67,7 @@ class ContextMenuJsTest : public web::WebTestWithWebState {
     for (size_t i = 0; i < arraysize(test_data); i++) {
       const TestCoordinatesAndExpectedValue& data = test_data[i];
       LoadHtml(page_content);
+      ExecuteJavaScript(@"document.getElementsByTagName('p')");  // Force layout
       id result = ExecuteGetElementFromPointJavaScript(data.x, data.y);
       EXPECT_NSEQ(data.expected_value, result)
           << " in test " << i << ": (" << data.x << ", " << data.y << ")";
@@ -150,6 +151,7 @@ TEST_F(ContextMenuJsTest, TextAreaStopsProximity) {
   for (size_t i = 0; i < arraysize(test_data); i++) {
     const TestCoordinatesAndExpectedValue& data = test_data[i];
     LoadHtml(html);
+    ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout
     id result = ExecuteGetElementFromPointJavaScript(data.x, data.y);
     EXPECT_NSEQ(data.expected_value, result)
         << " in test " << i << ": (" << data.x << ", " << data.y << ")";
@@ -158,16 +160,14 @@ TEST_F(ContextMenuJsTest, TextAreaStopsProximity) {
 
 // Tests the javascript of the url of the an image present in the DOM.
 TEST_F(ContextMenuJsTest, LinkOfImage) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
   // A page with a large image surrounded by a link.
   static const char image[] =
       "<a href='%s'><img width=400 height=400 src='foo'></img></a>";
 
   // A page with a link to a destination URL.
   LoadHtml(base::StringPrintf(image, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(20, 20);
   NSDictionary* expected_result = @{
     kContextMenuElementSource :
@@ -220,6 +220,7 @@ TEST_F(ContextMenuJsTest, LinkOfImageWithCalloutNone) {
 
   // A page with a link to a destination URL.
   LoadHtml(base::StringPrintf(image_html, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout.
   id result = ExecuteGetElementFromPointJavaScript(5, 5);
   NSDictionary* expected_result = @{
     kContextMenuElementInnerText : @"",
@@ -239,22 +240,51 @@ TEST_F(ContextMenuJsTest, UnsupportedReferrerPolicy) {
 
   // Load the invalid meta tag
   LoadHtml(kInvalidReferrerTag);
+  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout
   id result = ExecuteGetElementFromPointJavaScript(20, 20);
   ASSERT_TRUE([result isKindOfClass:[NSDictionary class]]);
   EXPECT_NSEQ(@"never", result[kContextMenuElementReferrerPolicy]);
+}
+
+// Tests that getElementFromPoint finds an element at the bottom of a very long
+// page.
+TEST_F(ContextMenuJsTest, FLAKY_LinkOfTextFromTallPage) {
+  const char kHtml[] =
+      "<html><body>"
+      " <div style='height:4000px'></div>"
+      " <div><a href='http://destination'>link</a></div>"
+      "</body></html>";
+  LoadHtml(kHtml);
+
+  // Scroll the webView to the bottom to make the link accessible.
+  CGFloat content_height = GetWebViewContentSize().height;
+  CGFloat scroll_view_height =
+      CGRectGetHeight(web_state()->GetWebViewProxy().scrollViewProxy.frame);
+  CGFloat offset = content_height - scroll_view_height;
+  web_state()->GetWebViewProxy().scrollViewProxy.contentOffset =
+      CGPointMake(0.0, offset);
+
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
+  // Link is at bottom of the page content.
+  id result = ExecuteGetElementFromPointJavaScript(1, content_height - 5.0);
+  NSDictionary* expected_result = @{
+    kContextMenuElementInnerText : @"link",
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementHyperlink : @"http://destination/",
+  };
+  EXPECT_NSEQ(expected_result, result);
 }
 
 // Tests that a callout information about a link is displayed when
 // -webkit-touch-callout property is not specified. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsTest, LinkOfTextWithoutCalloutProperty) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
-  const char kLink_html[] = "<a href='%s'>link</a>";
+  const char kLinkHtml[] = "<a href='%s'>link</a>";
 
-  LoadHtml(base::StringPrintf(kLink_html, "http://destination"));
+  LoadHtml(base::StringPrintf(kLinkHtml, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(1, 1);
   NSDictionary* expected_result = @{
     kContextMenuElementInnerText : @"link",
@@ -268,14 +298,12 @@ TEST_F(ContextMenuJsTest, LinkOfTextWithoutCalloutProperty) {
 // -webkit-touch-callout property is set to default. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutDefault) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
-  const char kLink_html[] =
+  const char kLinkHtml[] =
       "<a href='%s' style='-webkit-touch-callout:default;'>link</a>";
 
-  LoadHtml(base::StringPrintf(kLink_html, "http://destination"));
+  LoadHtml(base::StringPrintf(kLinkHtml, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(1, 1);
   NSDictionary* expected_result = @{
     kContextMenuElementInnerText : @"link",
@@ -289,14 +317,12 @@ TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutDefault) {
 // -webkit-touch-callout property is set to none. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutNone) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
-  const char kLink_html[] =
+  const char kLinkHtml[] =
       "<a href='%s' style='-webkit-touch-callout:none;'>link</a>";
 
-  LoadHtml(base::StringPrintf(kLink_html, "http://destination"));
+  LoadHtml(base::StringPrintf(kLinkHtml, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(1, 1);
   EXPECT_NSEQ(@{}, result);
 }
@@ -305,16 +331,14 @@ TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutNone) {
 // it's not specified. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutFromAncester) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
-  const char kLink_html[] =
+  const char kLinkHtml[] =
       "<body style='-webkit-touch-callout: none'>"
       " <a href='%s'>link</a>"
       "</body>";
 
-  LoadHtml(base::StringPrintf(kLink_html, "http://destination"));
+  LoadHtml(base::StringPrintf(kLinkHtml, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(1, 1);
   EXPECT_NSEQ(@{}, result);
 }
@@ -323,16 +347,14 @@ TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutFromAncester) {
 // inherited from ancester. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutOverride) {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    // TODO(crbug.com/758735): enable this test on iPad.
-    return;
-  }
-  const char kLink_html[] =
+  const char kLinkHtml[] =
       "<body style='-webkit-touch-callout: none'>"
       " <a href='%s' style='-webkit-touch-callout: default'>link</a>"
       "</body>";
 
-  LoadHtml(base::StringPrintf(kLink_html, "http://destination"));
+  LoadHtml(base::StringPrintf(kLinkHtml, "http://destination"));
+  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
+
   id result = ExecuteGetElementFromPointJavaScript(1, 1);
   NSDictionary* expected_result = @{
     kContextMenuElementInnerText : @"link",

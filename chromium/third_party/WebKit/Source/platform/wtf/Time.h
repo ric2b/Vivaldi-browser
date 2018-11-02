@@ -6,7 +6,7 @@
 #define WTF_Time_h
 
 #include "base/time/time.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/WTFExport.h"
 
 namespace WTF {
 // Provides thin wrappers around the following basic time types from
@@ -23,19 +23,52 @@ namespace WTF {
 using TimeDelta = base::TimeDelta;
 using Time = base::Time;
 
-namespace internal {
+// Returns the current UTC time in seconds, counted from January 1, 1970.
+// Precision varies depending on platform but is usually as good or better
+// than a millisecond.
+WTF_EXPORT double CurrentTime();
 
-template <class WrappedTimeType>
-class TimeWrapper {
+// Same thing, in milliseconds.
+inline double CurrentTimeMS() {
+  return CurrentTime() * 1000.0;
+}
+
+// Provides a monotonically increasing time in seconds since an arbitrary point
+// in the past.  On unsupported platforms, this function only guarantees the
+// result will be non-decreasing.
+WTF_EXPORT double MonotonicallyIncreasingTime();
+
+// Same thing, in milliseconds.
+inline double MonotonicallyIncreasingTimeMS() {
+  return MonotonicallyIncreasingTime() * 1000.0;
+}
+
+using TimeFunction = double (*)();
+
+// Make all the time functions (currentTime(), monotonicallyIncreasingTime(),
+// systemTraceTime()) return the result of the supplied function. Returns the
+// pointer to the old time function. For both setting and getting, nullptr
+// means using the default timing function returning the actual time.
+WTF_EXPORT TimeFunction SetTimeFunctionsForTesting(TimeFunction);
+
+// Allows wtf/Time.h to use the same mock time function
+WTF_EXPORT TimeFunction GetTimeFunctionForTesting();
+
+class TimeTicks {
  public:
-  TimeWrapper() {}
+  TimeTicks() {}
+  TimeTicks(base::TimeTicks value) : value_(value) {}
 
-  static TimeWrapper Now() {
+  static TimeTicks Now() {
     if (WTF::GetTimeFunctionForTesting()) {
       double seconds = (WTF::GetTimeFunctionForTesting())();
-      return TimeWrapper() + TimeDelta::FromSecondsD(seconds);
+      return TimeTicks() + TimeDelta::FromSecondsD(seconds);
     }
-    return TimeWrapper(WrappedTimeType::Now());
+    return TimeTicks(base::TimeTicks::Now());
+  }
+
+  static TimeTicks UnixEpoch() {
+    return TimeTicks(base::TimeTicks::UnixEpoch());
   }
 
   int64_t ToInternalValueForTesting() const { return value_.ToInternalValue(); }
@@ -43,55 +76,60 @@ class TimeWrapper {
   // Only use this conversion when interfacing with legacy code that represents
   // time in double. Converting to double can lead to losing information for
   // large time values.
-  double InSeconds() const { return (value_ - WrappedTimeType()).InSecondsF(); }
+  double InSeconds() const { return (value_ - base::TimeTicks()).InSecondsF(); }
 
-  static TimeWrapper FromSeconds(double seconds) {
-    return WrappedTimeType() + TimeDelta::FromSecondsD(seconds);
+  static TimeTicks FromSeconds(double seconds) {
+    return TimeTicks() + TimeDelta::FromSecondsD(seconds);
   }
 
-  TimeWrapper& operator=(TimeWrapper other) {
+  bool is_null() const { return value_.is_null(); }
+
+  operator base::TimeTicks() const { return value_; }
+
+  TimeTicks& operator=(TimeTicks other) {
     value_ = other.value_;
     return *this;
   }
 
-  TimeDelta operator-(TimeWrapper other) const { return value_ - other.value_; }
+  TimeDelta operator-(TimeTicks other) const { return value_ - other.value_; }
 
-  TimeWrapper operator+(TimeDelta delta) const {
-    return TimeWrapper(value_ + delta);
+  TimeTicks operator+(TimeDelta delta) const {
+    return TimeTicks(value_ + delta);
   }
-  TimeWrapper operator-(TimeDelta delta) const {
-    return TimeWrapper(value_ - delta);
+  TimeTicks operator-(TimeDelta delta) const {
+    return TimeTicks(value_ - delta);
   }
 
-  TimeWrapper& operator+=(TimeDelta delta) {
+  TimeTicks& operator+=(TimeDelta delta) {
     value_ += delta;
     return *this;
   }
-  TimeWrapper& operator-=(TimeDelta delta) {
+  TimeTicks& operator-=(TimeDelta delta) {
     value_ -= delta;
     return *this;
   }
 
-  bool operator==(TimeWrapper other) const { return value_ == other.value_; }
-  bool operator!=(TimeWrapper other) const { return value_ != other.value_; }
-  bool operator<(TimeWrapper other) const { return value_ < other.value_; }
-  bool operator<=(TimeWrapper other) const { return value_ <= other.value_; }
-  bool operator>(TimeWrapper other) const { return value_ > other.value_; }
-  bool operator>=(TimeWrapper other) const { return value_ >= other.value_; }
+  bool operator==(TimeTicks other) const { return value_ == other.value_; }
+  bool operator!=(TimeTicks other) const { return value_ != other.value_; }
+  bool operator<(TimeTicks other) const { return value_ < other.value_; }
+  bool operator<=(TimeTicks other) const { return value_ <= other.value_; }
+  bool operator>(TimeTicks other) const { return value_ > other.value_; }
+  bool operator>=(TimeTicks other) const { return value_ >= other.value_; }
 
  private:
-  WrappedTimeType value_;
-  TimeWrapper(WrappedTimeType value) : value_(value) {}
+  base::TimeTicks value_;
 };
-
-}  // namespace internal
-
-using TimeTicks = internal::TimeWrapper<base::TimeTicks>;
 
 }  // namespace WTF
 
+using WTF::CurrentTime;
+using WTF::CurrentTimeMS;
+using WTF::MonotonicallyIncreasingTime;
+using WTF::MonotonicallyIncreasingTimeMS;
+using WTF::SetTimeFunctionsForTesting;
 using WTF::Time;
 using WTF::TimeDelta;
+using WTF::TimeFunction;
 using WTF::TimeTicks;
 
 #endif  // Time_h

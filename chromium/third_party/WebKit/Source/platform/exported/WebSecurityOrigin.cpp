@@ -124,16 +124,16 @@ bool WebSecurityOrigin::CanAccessPasswordManager() const {
   return private_->CanAccessPasswordManager();
 }
 
-WebSecurityOrigin::WebSecurityOrigin(WTF::RefPtr<SecurityOrigin> origin)
+WebSecurityOrigin::WebSecurityOrigin(scoped_refptr<SecurityOrigin> origin)
     : private_(std::move(origin)) {}
 
 WebSecurityOrigin& WebSecurityOrigin::operator=(
-    WTF::RefPtr<SecurityOrigin> origin) {
+    scoped_refptr<SecurityOrigin> origin) {
   private_ = std::move(origin);
   return *this;
 }
 
-WebSecurityOrigin::operator WTF::RefPtr<SecurityOrigin>() const {
+WebSecurityOrigin::operator scoped_refptr<SecurityOrigin>() const {
   return private_.Get();
 }
 
@@ -141,8 +141,12 @@ SecurityOrigin* WebSecurityOrigin::Get() const {
   return private_.Get();
 }
 
-void WebSecurityOrigin::GrantLoadLocalResources() const {
-  Get()->GrantLoadLocalResources();
+WebSecurityOrigin::WebSecurityOrigin(const url::Origin& origin) {
+  *this = SecurityOrigin::CreateFromUrlOrigin(origin);
+}
+
+WebSecurityOrigin::operator url::Origin() const {
+  return Get()->ToUrlOrigin();
 }
 
 }  // namespace blink

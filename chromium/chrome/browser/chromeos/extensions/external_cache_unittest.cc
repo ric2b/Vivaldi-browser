@@ -40,6 +40,27 @@ const char kNonWebstoreUpdateUrl[] = "https://localhost/service/update2/crx";
 
 namespace chromeos {
 
+class TestExternalCache : public ExternalCache {
+ public:
+  TestExternalCache(const base::FilePath& cache_dir,
+                    net::URLRequestContextGetter* request_context,
+                const scoped_refptr<base::SequencedTaskRunner>&
+                    backend_task_runner,
+                Delegate* delegate,
+                bool always_check_updates,
+                bool wait_for_cache_initialization)
+    : ExternalCache(cache_dir, request_context, backend_task_runner, delegate,
+                    always_check_updates, wait_for_cache_initialization) {}
+
+ protected:
+  service_manager::Connector* GetConnector() override {
+    return nullptr;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestExternalCache);
+};
+
 class ExternalCacheTest : public testing::Test,
                           public ExternalCache::Delegate {
  public:
@@ -141,7 +162,7 @@ class ExternalCacheTest : public testing::Test,
 
 TEST_F(ExternalCacheTest, Basic) {
   base::FilePath cache_dir(CreateCacheDir(false));
-  ExternalCache external_cache(
+  TestExternalCache external_cache(
       cache_dir, request_context_getter(),
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}), this, true,
       false);
@@ -155,7 +176,7 @@ TEST_F(ExternalCacheTest, Basic) {
   prefs->Set(kTestExtensionId4, CreateEntryWithUpdateUrl(false));
 
   external_cache.UpdateExtensionsList(std::move(prefs));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(provided_prefs());
   EXPECT_EQ(provided_prefs()->size(), 2ul);
@@ -195,7 +216,7 @@ TEST_F(ExternalCacheTest, Basic) {
       extensions::ExtensionDownloaderDelegate::PingResult(), std::set<int>(),
       extensions::ExtensionDownloaderDelegate::InstallCallback());
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(provided_prefs()->size(), 3ul);
 
   const base::DictionaryValue* entry2 = NULL;
@@ -221,7 +242,7 @@ TEST_F(ExternalCacheTest, Basic) {
       extensions::ExtensionDownloaderDelegate::PingResult(), std::set<int>(),
       extensions::ExtensionDownloaderDelegate::InstallCallback());
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(provided_prefs()->size(), 4ul);
 
   const base::DictionaryValue* entry4 = NULL;
@@ -240,7 +261,7 @@ TEST_F(ExternalCacheTest, Basic) {
   // Damaged file should be removed from disk.
   external_cache.OnDamagedFileDetected(
       GetExtensionFile(cache_dir, kTestExtensionId2, "2"));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(provided_prefs()->size(), 3ul);
   EXPECT_FALSE(base::PathExists(
       GetExtensionFile(cache_dir, kTestExtensionId2, "2")));
@@ -251,20 +272,20 @@ TEST_F(ExternalCacheTest, Basic) {
         base::Bind(&ExternalCacheTest::OnExtensionListsUpdated,
                    base::Unretained(this),
                    base::Unretained(empty.get())));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(provided_prefs()->size(), 0ul);
 
   // After Shutdown directory shouldn't be touched.
   external_cache.OnDamagedFileDetected(
       GetExtensionFile(cache_dir, kTestExtensionId4, "4"));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(base::PathExists(
       GetExtensionFile(cache_dir, kTestExtensionId4, "4")));
 }
 
 TEST_F(ExternalCacheTest, PreserveInstalled) {
   base::FilePath cache_dir(CreateCacheDir(false));
-  ExternalCache external_cache(
+  TestExternalCache external_cache(
       cache_dir, request_context_getter(),
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}), this, true,
       false);
@@ -276,7 +297,7 @@ TEST_F(ExternalCacheTest, PreserveInstalled) {
   AddInstalledExtension(kTestExtensionId1, "1");
 
   external_cache.UpdateExtensionsList(std::move(prefs));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(provided_prefs());
   EXPECT_EQ(provided_prefs()->size(), 1ul);

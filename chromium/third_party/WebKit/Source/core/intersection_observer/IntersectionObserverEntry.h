@@ -15,9 +15,7 @@ namespace blink {
 
 class Element;
 
-class IntersectionObserverEntry final
-    : public GarbageCollected<IntersectionObserverEntry>,
-      public ScriptWrappable {
+class IntersectionObserverEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -37,7 +35,7 @@ class IntersectionObserverEntry final
   bool isIntersecting() const { return is_intersecting_; }
   Element* target() const { return target_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   DOMHighResTimeStamp time_;

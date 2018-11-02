@@ -27,12 +27,12 @@
 
 #include <memory>
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "platform/HTTPNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoader.h"
+#include "platform/network/http_names.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
@@ -125,14 +125,11 @@ RawResource::RawResource(const ResourceRequest& resource_request,
     : Resource(resource_request, type, options) {}
 
 void RawResource::AppendData(const char* data, size_t length) {
-  Resource::AppendData(data, length);
-
   if (data_pipe_writer_) {
+    DCHECK_EQ(kDoNotBufferData, GetDataBufferingPolicy());
     data_pipe_writer_->Write(data, length);
   } else {
-    ResourceClientWalker<RawResourceClient> w(Clients());
-    while (RawResourceClient* c = w.Next())
-      c->DataReceived(this, data, length);
+    Resource::AppendData(data, length);
   }
 }
 
@@ -155,18 +152,6 @@ void RawResource::DidAddClient(ResourceClient* c) {
   if (!GetResponse().IsNull()) {
     client->ResponseReceived(this, GetResponse(),
                              std::move(data_consumer_handle_));
-  }
-  if (!HasClient(c))
-    return;
-  if (RefPtr<SharedBuffer> data = Data()) {
-    data->ForEachSegment([this, &client](const char* segment,
-                                         size_t segment_size,
-                                         size_t segment_offset) -> bool {
-      client->DataReceived(this, segment, segment_size);
-
-      // Stop pushing data if the client removed itself.
-      return HasClient(client);
-    });
   }
   if (!HasClient(c))
     return;
@@ -206,11 +191,10 @@ void RawResource::ResponseReceived(
     // not be reused.
     // Note: This logic is needed here because DocumentThreadableLoader handles
     // CORS independently from ResourceLoader. Fix it.
-    GetMemoryCache()->Remove(this);
+    if (IsMainThread())
+      GetMemoryCache()->Remove(this);
   }
 
-  bool is_successful_revalidation =
-      IsCacheValidator() && response.HttpStatusCode() == 304;
   Resource::ResponseReceived(response, nullptr);
 
   DCHECK(!handle || !data_consumer_handle_);
@@ -222,15 +206,6 @@ void RawResource::ResponseReceived(
     // |handle| is cleared when passed, but it's not a problem because |handle|
     // is null when there are two or more clients, as asserted.
     c->ResponseReceived(this, this->GetResponse(), std::move(handle));
-  }
-
-  // If we successfully revalidated, we won't get appendData() calls. Forward
-  // the data to clients now instead. Note: |m_data| can be null when no data is
-  // appended to the original resource.
-  if (is_successful_revalidation && Data()) {
-    ResourceClientWalker<RawResourceClient> w(Clients());
-    while (RawResourceClient* c = w.Next())
-      c->DataReceived(this, Data()->Data(), Data()->size());
   }
 }
 
@@ -261,8 +236,9 @@ void RawResource::ReportResourceTimingToClients(
     c->DidReceiveResourceTiming(this, info);
 }
 
-bool RawResource::MatchPreload(const FetchParameters& params) {
-  if (!Resource::MatchPreload(params))
+bool RawResource::MatchPreload(const FetchParameters& params,
+                               WebTaskRunner* task_runner) {
+  if (!Resource::MatchPreload(params, task_runner))
     return false;
 
   // This is needed to call Platform::Current() below. Remove this branch
@@ -281,7 +257,7 @@ bool RawResource::MatchPreload(const FetchParameters& params) {
   DCHECK_EQ(GetDataBufferingPolicy(), kBufferData);
 
   // Preloading for raw resources are not cached.
-  DCHECK(!GetMemoryCache()->Contains(this));
+  DCHECK(!IsMainThread() || !GetMemoryCache()->Contains(this));
 
   constexpr auto kCapacity = 32 * 1024;
   mojo::ScopedDataPipeProducerHandle producer;
@@ -298,13 +274,7 @@ bool RawResource::MatchPreload(const FetchParameters& params) {
 
   data_consumer_handle_ =
       Platform::Current()->CreateDataConsumerHandle(std::move(consumer));
-  // We use the global loading task runner here because it's difficult to get
-  // the frame-local loading task runner. It is not so harmful because the
-  // task runner is used for just copying chunks.
-  // TODO(yhirano): Use the correct task runner.
-  WebTaskRunner* task_runner =
-      Platform::Current()->CurrentThread()->Scheduler()->LoadingTaskRunner();
-  data_pipe_writer_ = WTF::MakeUnique<BufferingDataPipeWriter>(
+  data_pipe_writer_ = std::make_unique<BufferingDataPipeWriter>(
       std::move(producer), task_runner);
 
   if (Data()) {
@@ -345,7 +315,8 @@ static bool ShouldIgnoreHeaderForCacheReuse(AtomicString header_name) {
 static bool IsCacheableHTTPMethod(const AtomicString& method) {
   // Per http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.10,
   // these methods always invalidate the cache entry.
-  return method != "POST" && method != "PUT" && method != "DELETE";
+  return method != HTTPNames::POST && method != HTTPNames::PUT &&
+         method != "DELETE";
 }
 
 bool RawResource::CanReuse(const FetchParameters& new_fetch_parameters) const {

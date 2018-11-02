@@ -224,6 +224,7 @@ base::Optional<VideoCodec> ToMediaVideoCodec(
     CASE_RETURN_OTHER(kCodecVP9);
     CASE_RETURN_OTHER(kCodecHEVC);
     CASE_RETURN_OTHER(kCodecDolbyVision);
+    CASE_RETURN_OTHER(kCodecAV1);
   }
   return base::nullopt;  // Not a 'default' to ensure compile-time checks.
 }
@@ -243,6 +244,7 @@ base::Optional<pb::VideoDecoderConfig::Codec> ToProtoVideoDecoderConfigCodec(
     CASE_RETURN_OTHER(kCodecVP9);
     CASE_RETURN_OTHER(kCodecHEVC);
     CASE_RETURN_OTHER(kCodecDolbyVision);
+    CASE_RETURN_OTHER(kCodecAV1);
   }
   return base::nullopt;  // Not a 'default' to ensure compile-time checks.
 }
@@ -276,6 +278,8 @@ base::Optional<VideoCodecProfile> ToMediaVideoCodecProfile(
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE4);
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE5);
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE7);
+    CASE_RETURN_OTHER(THEORAPROFILE_ANY);
+    CASE_RETURN_OTHER(AV1PROFILE_PROFILE0);
   }
   return base::nullopt;  // Not a 'default' to ensure compile-time checks.
 }
@@ -309,6 +313,8 @@ ToProtoVideoDecoderConfigProfile(VideoCodecProfile value) {
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE4);
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE5);
     CASE_RETURN_OTHER(DOLBYVISION_PROFILE7);
+    CASE_RETURN_OTHER(THEORAPROFILE_ANY);
+    CASE_RETURN_OTHER(AV1PROFILE_PROFILE0);
   }
   return base::nullopt;  // Not a 'default' to ensure compile-time checks.
 }

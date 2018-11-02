@@ -209,7 +209,7 @@ int main(int argc, char* const argv[]) {
 	  case 'B':
         vivaldi_build_num = optarg;
         break;
- 	  case 'V':
+    case 'V':
         vivaldi_version_file_path = optarg;
         break;
       default:

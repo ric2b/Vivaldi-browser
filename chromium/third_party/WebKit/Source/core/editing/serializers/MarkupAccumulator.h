@@ -27,11 +27,11 @@
 #ifndef MarkupAccumulator_h
 #define MarkupAccumulator_h
 
+#include "base/macros.h"
 #include "core/editing/EditingStrategy.h"
 #include "core/editing/serializers/MarkupFormatter.h"
 #include "core/editing/serializers/Serialization.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -41,7 +41,6 @@ class Element;
 class Node;
 
 class MarkupAccumulator {
-  WTF_MAKE_NONCOPYABLE(MarkupAccumulator);
   STACK_ALLOCATED();
 
  public:
@@ -87,6 +86,8 @@ class MarkupAccumulator {
  private:
   MarkupFormatter formatter_;
   StringBuilder markup_;
+
+  DISALLOW_COPY_AND_ASSIGN(MarkupAccumulator);
 };
 
 template <typename Strategy>

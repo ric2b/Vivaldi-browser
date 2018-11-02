@@ -10,12 +10,12 @@
 #include "core/layout/svg/SVGMarkerData.h"
 #include "core/layout/svg/SVGResources.h"
 #include "core/layout/svg/SVGResourcesCache.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/SVGContainerPainter.h"
 #include "core/paint/SVGPaintContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/wtf/Optional.h"
@@ -41,7 +41,7 @@ static SkPath::FillType FillRuleFromStyle(const PaintInfo& paint_info,
 }
 
 void SVGShapePainter::Paint(const PaintInfo& paint_info) {
-  if (paint_info.phase != kPaintPhaseForeground ||
+  if (paint_info.phase != PaintPhase::kForeground ||
       layout_svg_shape_.Style()->Visibility() != EVisibility::kVisible ||
       layout_svg_shape_.IsShapeEmpty())
     return;
@@ -60,12 +60,12 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
     SVGPaintContext paint_context(layout_svg_shape_,
                                   paint_info_before_filtering);
     if (paint_context.ApplyClipMaskAndFilterIfNecessary() &&
-        !LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+        !DrawingRecorder::UseCachedDrawingIfPossible(
             paint_context.GetPaintInfo().context, layout_svg_shape_,
             paint_context.GetPaintInfo().phase)) {
-      LayoutObjectDrawingRecorder recorder(
-          paint_context.GetPaintInfo().context, layout_svg_shape_,
-          paint_context.GetPaintInfo().phase, bounding_box);
+      DrawingRecorder recorder(paint_context.GetPaintInfo().context,
+                               layout_svg_shape_,
+                               paint_context.GetPaintInfo().phase);
       const SVGComputedStyle& svg_style = layout_svg_shape_.Style()->SvgStyle();
 
       bool should_anti_alias = svg_style.ShapeRendering() != SR_CRISPEDGES &&
@@ -90,7 +90,8 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
               GraphicsContextStateSaver state_saver(
                   paint_context.GetPaintInfo().context, false);
               AffineTransform non_scaling_transform;
-              const AffineTransform* additional_paint_server_transform = 0;
+              const AffineTransform* additional_paint_server_transform =
+                  nullptr;
 
               if (layout_svg_shape_.HasNonScalingStroke()) {
                 non_scaling_transform =
@@ -135,7 +136,7 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
 
   if (layout_svg_shape_.Style()->OutlineWidth()) {
     PaintInfo outline_paint_info(paint_info_before_filtering);
-    outline_paint_info.phase = kPaintPhaseSelfOutlineOnly;
+    outline_paint_info.phase = PaintPhase::kSelfOutlineOnly;
     ObjectPainter(layout_svg_shape_)
         .PaintOutline(outline_paint_info, LayoutPoint(bounding_box.Location()));
   }
@@ -242,13 +243,12 @@ void SVGShapePainter::PaintMarker(const PaintInfo& paint_info,
   if (SVGLayoutSupport::IsOverflowHidden(&marker))
     canvas->clipRect(marker.Viewport());
 
+  PaintRecordBuilder builder(nullptr, &paint_info.context);
+  PaintInfo marker_paint_info(builder.Context(), paint_info);
   // It's expensive to track the transformed paint cull rect for each
   // marker so just disable culling. The shape paint call will already
   // be culled if it is outside the paint info cull rect.
-  IntRect bounds(LayoutRect::InfiniteIntRect());
-  PaintRecordBuilder builder(FloatRect(bounds), nullptr, &paint_info.context);
-  PaintInfo marker_paint_info(builder.Context(), paint_info);
-  marker_paint_info.cull_rect_.rect_ = bounds;
+  marker_paint_info.cull_rect_.rect_ = LayoutRect::InfiniteIntRect();
 
   SVGContainerPainter(marker).Paint(marker_paint_info);
   builder.EndRecording(*canvas);

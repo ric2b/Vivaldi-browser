@@ -61,18 +61,20 @@ void VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(
     views::Widget::InitParams* init_params,
     views::Widget* widget) {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
-      window()->extension()->id());
-  // Set up a custom WM_CLASS for app windows. This allows task switchers in
-  // X11 environments to distinguish them from main browser windows.
-  init_params->wm_class_name = web_app::GetWMClassFromAppName(app_name);
-  init_params->wm_class_class = shell_integration_linux::GetProgramClassClass();
-  const char kX11WindowRoleApp[] = "app";
-  init_params->wm_role_name = std::string(kX11WindowRoleApp);
+  init_params->wm_class_name =
+      shell_integration_linux::GetProgramClassName();
+  init_params->wm_class_class =
+      shell_integration_linux::GetProgramClassClass();
+  const char kX11WindowRoleBrowser[] = "browser";
+  const char kX11WindowRolePopup[] = "pop-up";
+  init_params->wm_role_name =
+      window()->type() == VivaldiBrowserWindow::WindowType::SETTINGS
+                            ? std::string(kX11WindowRolePopup)
+                            : std::string(kX11WindowRoleBrowser);
 #endif
 
   VivaldiNativeAppWindowViews::OnBeforeWidgetInit(create_params, init_params,
-                                                 widget);
+                                                  widget);
 }
 
 views::NonClientFrameView*
@@ -97,11 +99,10 @@ VivaldiNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
 
 ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestoredState() const {
   // First normal states are checked.
+  if (IsFullscreen())
+    return ui::SHOW_STATE_FULLSCREEN;
   if (IsMaximized())
     return ui::SHOW_STATE_MAXIMIZED;
-  if (IsFullscreen()) {
-    return ui::SHOW_STATE_FULLSCREEN;
-  }
 
   // Use kPreMinimizedShowStateKey in case a window is minimized/hidden.
   ui::WindowShowState restore_state = widget()->GetNativeWindow()->GetProperty(

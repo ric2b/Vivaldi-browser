@@ -12,7 +12,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 
 @interface StatusItemController : NSObject {
   StatusIconMac* statusIcon_; // weak
@@ -109,13 +109,13 @@ void StatusIconMac::CreateMenu(ui::MenuModel* model, NSString* toolTip) {
   DCHECK(model);
 
   if (!toolTip) {
-    menu_.reset([[MenuController alloc] initWithModel:model
-                               useWithPopUpButtonCell:NO]);
+    menu_.reset([[MenuControllerCocoa alloc] initWithModel:model
+                                    useWithPopUpButtonCell:NO]);
   } else {
     // When using a popup button cell menu controller, an extra blank item is
     // added at index 0. Use this item for the tooltip.
-    menu_.reset([[MenuController alloc] initWithModel:model
-                               useWithPopUpButtonCell:YES]);
+    menu_.reset([[MenuControllerCocoa alloc] initWithModel:model
+                                    useWithPopUpButtonCell:YES]);
     NSMenuItem* toolTipItem = [[menu_ menu] itemAtIndex:0];
     [toolTipItem setTitle:toolTip];
   }

@@ -9,11 +9,11 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/metrics/net/network_metrics_provider.h"
-#include "components/metrics/proto/system_profile.pb.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/metrics_proto/system_profile.pb.h"
 
 namespace internal {
 
@@ -35,6 +35,8 @@ const char kUkmEffectiveConnectionType[] =
 const char kUkmHttpRttEstimate[] = "Net.HttpRttEstimate.OnNavigationStart";
 const char kUkmTransportRttEstimate[] =
     "Net.TransportRttEstimate.OnNavigationStart";
+const char kUkmDownstreamKbpsEstimate[] =
+    "Net.DownstreamKbpsEstimate.OnNavigationStart";
 const char kUkmNetErrorCode[] = "Net.ErrorCode.OnFailedProvisionalLoad";
 const char kUkmPageTransition[] = "Navigation.PageTransition";
 
@@ -56,7 +58,7 @@ UINetworkQualityEstimatorService* GetNQEService(
 // static
 std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
 UkmPageLoadMetricsObserver::CreateIfNeeded(content::WebContents* web_contents) {
-  if (!g_browser_process->ukm_recorder()) {
+  if (!ukm::UkmRecorder::Get()) {
     return nullptr;
   }
   return base::MakeUnique<UkmPageLoadMetricsObserver>(
@@ -89,6 +91,8 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
         network_quality_provider_->GetEffectiveConnectionType();
     http_rtt_estimate_ = network_quality_provider_->GetHttpRTT();
     transport_rtt_estimate_ = network_quality_provider_->GetTransportRTT();
+    downstream_kbps_estimate_ =
+        network_quality_provider_->GetDownstreamThroughputKbps();
   }
   page_transition_ = navigation_handle->GetPageTransition();
   return CONTINUE_OBSERVING;
@@ -135,7 +139,7 @@ void UkmPageLoadMetricsObserver::OnFailedProvisionalLoad(
       .SetNet_ErrorCode_OnFailedProvisionalLoad(net_error_code)
       .SetPageTiming_NavigationToFailedProvisionalLoad(
           failed_load_info.time_to_failed_provisional_load.InMilliseconds())
-      .Record(g_browser_process->ukm_recorder());
+      .Record(ukm::UkmRecorder::Get());
 }
 
 void UkmPageLoadMetricsObserver::OnComplete(
@@ -175,13 +179,13 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     builder.SetExperimental_PaintTiming_NavigationToFirstMeaningfulPaint(
         timing.paint_timing->first_meaningful_paint.value().InMilliseconds());
   }
-  builder.Record(g_browser_process->ukm_recorder());
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 void UkmPageLoadMetricsObserver::RecordPageLoadExtraInfoMetrics(
     const page_load_metrics::PageLoadExtraInfo& info,
     base::TimeTicks app_background_time) {
-  ukm::UkmRecorder* ukm_recorder = g_browser_process->ukm_recorder();
+  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
   std::unique_ptr<ukm::UkmEntryBuilder> builder = ukm_recorder->GetEntryBuilder(
       info.source_id, internal::kUkmPageLoadEventName);
   base::Optional<base::TimeDelta> foreground_duration =
@@ -212,6 +216,10 @@ void UkmPageLoadMetricsObserver::RecordPageLoadExtraInfoMetrics(
     builder->AddMetric(
         internal::kUkmTransportRttEstimate,
         static_cast<int64_t>(transport_rtt_estimate_.value().InMilliseconds()));
+  }
+  if (downstream_kbps_estimate_) {
+    builder->AddMetric(internal::kUkmDownstreamKbpsEstimate,
+                       static_cast<int64_t>(downstream_kbps_estimate_.value()));
   }
   // page_transition_ fits in a uint32_t, so we can safely cast to int64_t.
   builder->AddMetric(internal::kUkmPageTransition,

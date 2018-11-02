@@ -182,6 +182,19 @@ InlineFlowBox* LayoutBlockFlow::CreateLineBoxes(LineLayoutItem line_layout_item,
   InlineFlowBox* parent_box = nullptr;
   InlineFlowBox* result = nullptr;
   do {
+    if (line_depth++ >= kCMaxLineDepth ||
+        (IsLayoutNGBlockFlow() && line_layout_item.IsLayoutBlockFlow())) {
+      // If we've exceeded our line depth, then jump straight to the root and
+      // skip all the remaining intermediate inline flows. Additionally, if
+      // we're in LayoutNG, abort once we find a block in the ancestry. It may
+      // be that it's not |this|. This happens in multicol, because LayoutNG
+      // doesn't see the flow thread, and treats DOM children of the multicol
+      // container as actual children of the multicol container, without any
+      // intervening flow thread block (although that block does exist in the
+      // layout tree).
+      line_layout_item = LineLayoutItem(this);
+    }
+
     SECURITY_DCHECK(line_layout_item.IsLayoutInline() ||
                     line_layout_item.IsEqual(this));
 
@@ -232,12 +245,7 @@ InlineFlowBox* LayoutBlockFlow::CreateLineBoxes(LineLayoutItem line_layout_item,
       child_box = parent_box;
     }
 
-    // If we've exceeded our line depth, then jump straight to the root and skip
-    // all the remaining intermediate inline flows.
-    line_layout_item = (++line_depth >= kCMaxLineDepth)
-                           ? LineLayoutItem(this)
-                           : line_layout_item.Parent();
-
+    line_layout_item = line_layout_item.Parent();
   } while (true);
 
   return result;
@@ -611,13 +619,8 @@ static inline void SetLogicalWidthForTextRun(
 
   // Negative word-spacing and/or letter-spacing may cause some glyphs to
   // overflow the left boundary and result negative measured width. Reset
-  // measured width to 0 and adjust glyph bounds accordingly to cover the
-  // overflow.
+  // measured width to 0.
   if (measured_width < 0) {
-    if (measured_width < glyph_bounds.X()) {
-      glyph_bounds.Expand(glyph_bounds.X() - measured_width, 0);
-      glyph_bounds.SetX(measured_width);
-    }
     measured_width = 0;
   }
 
@@ -724,6 +727,18 @@ void LayoutBlockFlow::UpdateLogicalWidthForAlignment(
     logical_left += VerticalScrollbarWidthClampedToContentBox();
 }
 
+bool LayoutBlockFlow::CanContainFirstFormattedLine() const {
+  // The 'text-indent' only affects a line if it is the first formatted
+  // line of an element. For example, the first line of an anonymous block
+  // box is only affected if it is the first child of its parent element.
+  // https://drafts.csswg.org/css-text-3/#text-indent-property
+
+  // TODO(kojii): In LayoutNG, leading OOF creates a block box.
+  // text-indent-first-line-002.html fails for this reason.
+  // crbug.com/734554
+  return !(IsAnonymousBlock() && PreviousSibling());
+}
+
 static void UpdateLogicalInlinePositions(LayoutBlockFlow* block,
                                          LayoutUnit& line_logical_left,
                                          LayoutUnit& line_logical_right,
@@ -749,15 +764,8 @@ void LayoutBlockFlow::ComputeInlineDirectionPositionsForLine(
     GlyphOverflowAndFallbackFontsMap& text_box_data_map,
     VerticalPositionCache& vertical_position_cache,
     const WordMeasurements& word_measurements) {
-  // CSS 2.1: "'Text-indent' only affects a line if it is the first formatted
-  // line of an element. For example, the first line of an anonymous block
-  // box is only affected if it is the first child of its parent element."
-  // CSS3 "text-indent", "each-line" affects the first line of the block
-  // container as well as each line after a forced line break, but does not
-  // affect lines after a soft wrap break.
   bool is_first_line =
-      line_info.IsFirstLine() &&
-      !(IsAnonymousBlock() && Parent()->SlowFirstChild() != this);
+      line_info.IsFirstLine() && CanContainFirstFormattedLine();
   bool is_after_hard_line_break =
       line_box->PrevRootBox() && line_box->PrevRootBox()->EndsWithBreak();
   IndentTextOrNot indent_text =
@@ -965,7 +973,7 @@ RootInlineBox* LayoutBlockFlow::CreateLineBoxesFromBidiRuns(
 
 static void DeleteLineRange(LineLayoutState& layout_state,
                             RootInlineBox* start_line,
-                            RootInlineBox* stop_line = 0) {
+                            RootInlineBox* stop_line = nullptr) {
   RootInlineBox* box_to_delete = start_line;
   while (box_to_delete && box_to_delete != stop_line) {
     // Note: deleteLineRange(firstRootBox()) is not identical to
@@ -1060,8 +1068,9 @@ void LayoutBlockFlow::AppendFloatsToLastLine(
     }
     layout_state.SetFloatIndex(layout_state.FloatIndex() + 1);
   }
-  layout_state.SetLastFloat(
-      !floating_object_set.IsEmpty() ? floating_object_set.back().get() : 0);
+  layout_state.SetLastFloat(!floating_object_set.IsEmpty()
+                                ? floating_object_set.back().get()
+                                : nullptr);
 }
 
 void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
@@ -1099,7 +1108,7 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
                                                     clean_line_bidi_status));
       if (layout_state.EndLineMatched()) {
         resolver.SetPosition(
-            InlineIterator(resolver.GetPosition().Root(), 0, 0), 0);
+            InlineIterator(resolver.GetPosition().Root(), nullptr, 0), 0);
         break;
       }
     }
@@ -1113,7 +1122,7 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
     bool is_new_uba_paragraph =
         layout_state.GetLineInfo().PreviousLineBrokeCleanly();
     FloatingObject* last_float_from_previous_line =
-        (ContainsFloats()) ? floating_objects_->Set().back().get() : 0;
+        (ContainsFloats()) ? floating_objects_->Set().back().get() : nullptr;
 
     WordMeasurements word_measurements;
     end_of_line =
@@ -1127,8 +1136,8 @@ void LayoutBlockFlow::LayoutRunsAndFloatsInRange(
       resolver.Runs().DeleteRuns();
       resolver.MarkCurrentRunEmpty();  // FIXME: This can probably be replaced
                                        // by an ASSERT (or just removed).
-      resolver.SetPosition(InlineIterator(resolver.GetPosition().Root(), 0, 0),
-                           0);
+      resolver.SetPosition(
+          InlineIterator(resolver.GetPosition().Root(), nullptr, 0), 0);
       break;
     }
 
@@ -1588,7 +1597,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
   LayoutUnit inline_min;
 
   const ComputedStyle& style_to_use = StyleRef();
-  LayoutBlock* containing_block = this->ContainingBlock();
+  LayoutBlock* containing_block = ContainingBlock();
   LayoutUnit cw =
       containing_block ? containing_block->ContentLogicalWidth() : LayoutUnit();
 
@@ -1904,10 +1913,10 @@ static bool IsInlineWithOutlineAndContinuation(const LayoutObject& o) {
          !o.IsElementContinuation() && ToLayoutInline(o).Continuation();
 }
 
-bool LayoutBlockFlow::ShouldTruncateOverflowingText(const LayoutBlockFlow* block) const {
-  const LayoutObject* object_to_check = block;
-  if (block->IsAnonymousBlock()) {
-    const LayoutObject* parent = block->Parent();
+bool LayoutBlockFlow::ShouldTruncateOverflowingText() const {
+  const LayoutObject* object_to_check = this;
+  if (IsAnonymousBlock()) {
+    const LayoutObject* parent = Parent();
     if (!parent || !parent->BehavesLikeBlockContainer())
       return false;
     object_to_check = parent;
@@ -1941,6 +1950,11 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
     for (InlineWalker walker(LineLayoutBlockFlow(this)); !walker.AtEnd();
          walker.Advance()) {
       LayoutObject* o = walker.Current().GetLayoutObject();
+
+      // Layout may change LayoutInline's LinesBoundingBox() which affects
+      // MaskClip.
+      if (o->IsLayoutInline() && o->HasMask())
+        o->SetNeedsPaintPropertyUpdate();
 
       if (!layout_state.HasInlineChild() && o->IsInline())
         layout_state.SetHasInlineChild(true);
@@ -2013,7 +2027,7 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
                    IsHorizontalWritingMode() ? kHorizontalLine : kVerticalLine,
                    kPositionOfInteriorLineBoxes));
 
-  if (ShouldTruncateOverflowingText(this))
+  if (ShouldTruncateOverflowingText())
     CheckLinesForTextOverflow();
 
   // Ensure the new line boxes will be painted.
@@ -2026,7 +2040,7 @@ RootInlineBox* LayoutBlockFlow::DetermineStartPosition(
     InlineBidiResolver& resolver) {
   RootInlineBox* curr = nullptr;
   RootInlineBox* last = nullptr;
-  RootInlineBox* first_line_box_with_break_and_clearance = 0;
+  RootInlineBox* first_line_box_with_break_and_clearance = nullptr;
 
   // FIXME: This entire float-checking block needs to be broken into a new
   // function.
@@ -2358,13 +2372,30 @@ void LayoutBlockFlow::DeleteEllipsisLineBoxes() {
           LogicalRightOffsetForLine(curr->LineTop(), kDoNotIndentText) -
           logical_left;
       LayoutUnit total_logical_width = curr->LogicalWidth();
-      UpdateLogicalWidthForAlignment(text_align, curr, 0, logical_left,
+      UpdateLogicalWidthForAlignment(text_align, curr, nullptr, logical_left,
                                      total_logical_width,
                                      available_logical_width, 0);
 
       curr->MoveInInlineDirection(logical_left - curr->LogicalLeft());
     }
+    ClearTruncationOnAtomicInlines(curr);
     indent_text = kDoNotIndentText;
+  }
+}
+
+void LayoutBlockFlow::ClearTruncationOnAtomicInlines(RootInlineBox* root) {
+  bool ltr = Style()->IsLeftToRightDirection();
+  InlineBox* first_child = ltr ? root->LastChild() : root->FirstChild();
+  for (InlineBox* box = first_child; box;
+       box = ltr ? box->PrevOnLine() : box->NextOnLine()) {
+    if (!box->GetLineLayoutItem().IsAtomicInlineLevel() ||
+        !box->GetLineLayoutItem().IsLayoutBlockFlow()) {
+      continue;
+    }
+
+    if (!box->GetLineLayoutItem().IsTruncated())
+      return;
+    box->GetLineLayoutItem().SetIsTruncated(false);
   }
 }
 
@@ -2453,7 +2484,7 @@ void LayoutBlockFlow::CheckLinesForTextOverflow() {
         // We are only interested in the delta from the base position.
         LayoutUnit logical_left;
         LayoutUnit available_logical_width = block_right_edge - block_left_edge;
-        UpdateLogicalWidthForAlignment(text_align, curr, 0, logical_left,
+        UpdateLogicalWidthForAlignment(text_align, curr, nullptr, logical_left,
                                        total_logical_width,
                                        available_logical_width, 0);
         if (ltr)
@@ -2466,6 +2497,7 @@ void LayoutBlockFlow::CheckLinesForTextOverflow() {
           curr, LogicalRightOffsetForContent(), LogicalLeftOffsetForContent(),
           width, selected_ellipsis_str, box_truncation_starts_at);
     }
+
     indent_text = kDoNotIndentText;
   }
 }
@@ -2608,7 +2640,7 @@ LayoutUnit LayoutBlockFlow::StartAlignedOffsetForLine(
   LayoutUnit available_logical_width =
       LogicalRightOffsetForLine(LogicalHeight(), kDoNotIndentText) -
       logical_left;
-  UpdateLogicalWidthForAlignment(text_align, 0, 0, logical_left,
+  UpdateLogicalWidthForAlignment(text_align, nullptr, nullptr, logical_left,
                                  total_logical_width, available_logical_width,
                                  0);
 
@@ -2619,7 +2651,7 @@ LayoutUnit LayoutBlockFlow::StartAlignedOffsetForLine(
 
 void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
   DCHECK(ChildrenInline());
-  if (RootInlineBox* first_root_box = this->FirstRootBox())
+  if (RootInlineBox* first_root_box = FirstRootBox())
     first_root_box->SetShouldDoFullPaintInvalidationRecursively();
 }
 

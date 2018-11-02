@@ -64,120 +64,100 @@ const CGFloat kExpansionDurationSeconds = 0.125;
 
 }  // namespace
 
-@interface StatusBubbleAnimationDelegate : NSObject <CAAnimationDelegate> {
- @private
-  base::mac::ScopedBlock<void (^)(void)> completionHandler_;
-}
+// StatusBubbleWindow becomes a child of |statusBubbleParentWindow|, but waits
+// until |statusBubbleParentWindow| is visible. This works around macOS
+// bugs/features which make unexpected things happen when adding a child window
+// to a window that's in another space, miniaturized, or hidden
+// (https://crbug.com/783521, https://crbug.com/798792).
+@interface StatusBubbleWindow : NSWindow
 
-- (id)initWithCompletionHandler:(void (^)(void))completionHandler;
+// The window which this window should become a child of. May be changed or
+// nilled out at any time.
+@property(assign, nonatomic) NSWindow* statusBubbleParentWindow;
 
-// CAAnimation delegate methods
-- (void)animationDidStart:(CAAnimation*)animation;
-- (void)animationDidStop:(CAAnimation*)animation finished:(BOOL)finished;
 @end
 
-@implementation StatusBubbleAnimationDelegate
+@implementation StatusBubbleWindow {
+  BOOL observingParentWindowVisibility_;
+}
+@synthesize statusBubbleParentWindow = statusBubbleParentWindow_;
 
-- (id)initWithCompletionHandler:(void (^)(void))completionHandler {
-  if ((self = [super init])) {
-    completionHandler_.reset(completionHandler, base::scoped_policy::RETAIN);
+- (void)dealloc {
+  // StatusBubbleMac is expected to always clear statusBubbleParentWindow
+  // before releasing StatusBubbleWindow. If that changes, it's OK to remove
+  // this DCHECK as long as StatusBubbleWindow will never outlive its parent.
+  DCHECK(!statusBubbleParentWindow_);
+
+  [self stopObserving];
+  [super dealloc];
+}
+
+- (void)setStatusBubbleParentWindow:(NSWindow*)statusBubbleParentWindow {
+  if (statusBubbleParentWindow_ == statusBubbleParentWindow)
+    return;
+
+  // First, detach from the current parent window, if any.
+  if (statusBubbleParentWindow_) {
+    [self stopObserving];
+    [self orderOut:nil];  // Also removes |self| from its parent window.
   }
 
-  return self;
-}
+  // Assign the new parent window.
+  statusBubbleParentWindow_ = statusBubbleParentWindow;
 
-- (void)animationDidStart:(CAAnimation*)theAnimation {
-  // CAAnimationDelegate method added on OSX 10.12.
-}
-- (void)animationDidStop:(CAAnimation*)animation finished:(BOOL)finished {
-  completionHandler_.get()();
-}
+  if (statusBubbleParentWindow_) {
+    // Attach to the new parent window if it's visible and on the active space.
+    [self maybeAttach];
 
-@end
-
-@interface StatusBubbleWindow : NSWindow {
- @private
-  void (^completionHandler_)(void);
-}
-
-- (id)animationForKey:(NSString *)key;
-- (void)runAnimationGroup:(void (^)(NSAnimationContext *context))changes
-        completionHandler:(void (^)(void))completionHandler;
-@end
-
-@implementation StatusBubbleWindow
-
-- (id)animationForKey:(NSString *)key {
-  CAAnimation* animation = [super animationForKey:key];
-  // If completionHandler_ isn't nil, then this is the first of (potentially)
-  // multiple animations in a grouping; give it the completion handler. If
-  // completionHandler_ is nil, then some other animation was tagged with the
-  // completion handler.
-  if (completionHandler_) {
-    DCHECK(![NSAnimationContext respondsToSelector:
-               @selector(runAnimationGroup:completionHandler:)]);
-    StatusBubbleAnimationDelegate* animation_delegate =
-        [[StatusBubbleAnimationDelegate alloc]
-             initWithCompletionHandler:completionHandler_];
-    [animation setDelegate:animation_delegate];
-    completionHandler_ = nil;
-  }
-  return animation;
-}
-
-- (void)runAnimationGroup:(void (^)(NSAnimationContext *context))changes
-        completionHandler:(void (^)(void))completionHandler {
-  if ([NSAnimationContext respondsToSelector:
-          @selector(runAnimationGroup:completionHandler:)]) {
-    [NSAnimationContext runAnimationGroup:changes
-                        completionHandler:completionHandler];
-  } else {
-    // Mac OS 10.6 does not have completion handler callbacks at the Cocoa
-    // level, only at the CoreAnimation level. So intercept calls made to
-    // -animationForKey: and tag one of the animations with a delegate that will
-    // execute the completion handler.
-    completionHandler_ = completionHandler;
-    [NSAnimationContext beginGrouping];
-    changes([NSAnimationContext currentContext]);
-    // At this point, -animationForKey should have been called by CoreAnimation
-    // to set up the animation to run. Verify this.
-    DCHECK(completionHandler_ == nil);
-    [NSAnimationContext endGrouping];
+    if (!self.parentWindow) {
+      // If maybeAttach bailed, start observing the window's visibility and the
+      // active space, and try again when they change.
+      observingParentWindowVisibility_ = YES;
+      [statusBubbleParentWindow_ addObserver:self
+                                  forKeyPath:@"visible"
+                                     options:0
+                                     context:nil];
+      [[NSWorkspace sharedWorkspace].notificationCenter
+          addObserver:self
+             selector:@selector(maybeAttach)
+                 name:NSWorkspaceActiveSpaceDidChangeNotification
+               object:[NSWorkspace sharedWorkspace]];
+    }
   }
 }
 
-@end
+- (void)stopObserving {
+  if (!observingParentWindowVisibility_)
+    return;
+  observingParentWindowVisibility_ = NO;
+  [statusBubbleParentWindow_ removeObserver:self
+                                 forKeyPath:@"visible"
+                                    context:nil];
+  [[NSWorkspace sharedWorkspace].notificationCenter removeObserver:self];
+}
 
-// Mac implementation of the status bubble.
-//
-// Child windows interact with Spaces in interesting ways, so this code has to
-// follow these rules:
-//
-// 1) NSWindows cannot have zero size.  At times when the status bubble window
-//    has no specific size (for example, when hidden), its size is set to
-//    ui::kWindowSizeDeterminedLater.
-//
-// 2) Child window frames are in the coordinate space of the screen, not of the
-//    parent window.  If a child window has its origin at (0, 0), Spaces will
-//    position it in the corner of the screen but group it with the parent
-//    window in Spaces.  This causes Chrome windows to have a large (mostly
-//    blank) area in Spaces.  To avoid this, child windows always have their
-//    origin set to the lower-left corner of the window.
-//
-// 3) Detached child windows may show up as top-level windows in Spaces.  To
-//    avoid this, once the status bubble is Attach()ed to the parent, it is
-//    never detached (except in rare cases when reparenting to a fullscreen
-//    window).
-//
-// 4) To avoid unnecessary redraws, if a bubble is in the kBubbleHidden state,
-//    its size is always set to ui::kWindowSizeDeterminedLater.  The proper
-//    width for the current URL or status text is not calculated until the
-//    bubble leaves the kBubbleHidden state.
+- (void)maybeAttach {
+  if (![statusBubbleParentWindow_ isVisible])
+    return;
+  if (![statusBubbleParentWindow_ isOnActiveSpace])
+    return;
+  [self stopObserving];
+  // Adding |self| as a child window also orders it in.
+  [statusBubbleParentWindow_ addChildWindow:self ordered:NSWindowAbove];
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id>*)change
+                       context:(void*)context {
+  [self maybeAttach];
+}
+
+@end
 
 StatusBubbleMac::StatusBubbleMac(NSWindow* parent, id delegate)
     : parent_(parent),
       delegate_(delegate),
-      window_(nil),
       status_text_(nil),
       url_text_(nil),
       state_(kBubbleHidden),
@@ -187,7 +167,6 @@ StatusBubbleMac::StatusBubbleMac(NSWindow* parent, id delegate)
       expand_timer_factory_(this),
       completion_handler_factory_(this) {
   Create();
-  Attach();
 }
 
 StatusBubbleMac::~StatusBubbleMac() {
@@ -197,8 +176,6 @@ StatusBubbleMac::~StatusBubbleMac() {
 
   completion_handler_factory_.InvalidateWeakPtrs();
   Detach();
-  [window_ release];
-  window_ = nil;
 }
 
 void StatusBubbleMac::SetStatus(const base::string16& status) {
@@ -209,23 +186,8 @@ void StatusBubbleMac::SetURL(const GURL& url) {
   url_ = url;
 
   CGFloat bubble_width = NSWidth([window_ frame]);
-  if (state_ == kBubbleHidden) {
-    // TODO(rohitrao): The window size is expected to be (1,1) whenever the
-    // window is hidden, but the GPU bots are hitting cases where this is not
-    // true.  Instead of enforcing this invariant with a DCHECK, add temporary
-    // logging to try and debug it and fix up the window size if needed.
-    // This logging is temporary and should be removed: crbug.com/467998
-    NSRect frame = [window_ frame];
-    if (!CGSizeEqualToSize(frame.size, ui::kWindowSizeDeterminedLater.size)) {
-      LOG(ERROR) << "Window size should be (1,1), but is instead ("
-                 << frame.size.width << "," << frame.size.height << ")";
-      LOG(ERROR) << base::debug::StackTrace().ToString();
-      frame.size = ui::kWindowSizeDeterminedLater.size;
-      [window_ setFrame:frame display:NO];
-    }
+  if (state_ == kBubbleHidden)
     bubble_width = NSWidth(CalculateWindowFrame(/*expand=*/false));
-  }
-
   int text_width = static_cast<int>(bubble_width -
                                     kBubbleViewTextPositionX -
                                     kTextPadding);
@@ -435,7 +397,11 @@ void StatusBubbleMac::SetFrameAvoidingMouse(
   [window_ setFrame:window_frame display:YES];
 }
 
-void StatusBubbleMac::MouseMoved(
+void StatusBubbleMac::MouseMoved(bool left_content) {
+  MouseMovedAt(gfx::Point([NSEvent mouseLocation]), left_content);
+}
+
+void StatusBubbleMac::MouseMovedAt(
     const gfx::Point& location, bool left_content) {
   if (!left_content)
     SetFrameAvoidingMouse([window_ frame], location);
@@ -448,23 +414,20 @@ void StatusBubbleMac::UpdateDownloadShelfVisibility(bool visible) {
 void StatusBubbleMac::Create() {
   DCHECK(!window_);
 
-  window_ = [[StatusBubbleWindow alloc]
+  window_.reset([[StatusBubbleWindow alloc]
       initWithContentRect:ui::kWindowSizeDeterminedLater
                 styleMask:NSBorderlessWindowMask
                   backing:NSBackingStoreBuffered
-                    defer:NO];
+                    defer:NO]);
+  [window_ setCollectionBehavior:[window_ collectionBehavior] |
+                                 NSWindowCollectionBehaviorTransient];
   [window_ setMovableByWindowBackground:NO];
   [window_ setBackgroundColor:[NSColor clearColor]];
-  [window_ setLevel:NSNormalWindowLevel];
   [window_ setOpaque:NO];
   [window_ setHasShadow:NO];
 
-  // We do not need to worry about the bubble outliving |parent_| because our
-  // teardown sequence in BWC guarantees that |parent_| outlives the status
-  // bubble and that the StatusBubble is torn down completely prior to the
-  // window going away.
   base::scoped_nsobject<BubbleView> view(
-      [[BubbleView alloc] initWithFrame:NSZeroRect themeProvider:parent_]);
+      [[BubbleView alloc] initWithFrame:NSZeroRect]);
   [window_ setContentView:view];
 
   [window_ setAlphaValue:0.0];
@@ -474,20 +437,19 @@ void StatusBubbleMac::Create() {
                             forAttribute:NSAccessibilityRoleAttribute];
 
   [view setCornerFlags:kRoundedTopRightCorner];
-  MouseMoved(gfx::Point(), false);
+  MouseMovedAt(gfx::Point(), false);
 }
 
 void StatusBubbleMac::Attach() {
-  DCHECK(!is_attached());
-
-  [window_ orderFront:nil];
-  [parent_ addChildWindow:window_ ordered:NSWindowAbove];
-
+  if (is_attached())
+    return;
+  [window_ setStatusBubbleParentWindow:parent_];
   [[window_ contentView] setThemeProvider:parent_];
 }
 
 void StatusBubbleMac::Detach() {
-  DCHECK(is_attached());
+  if (!is_attached())
+    return;
 
   // Magic setFrame: See http://crbug.com/58506 and http://crrev.com/3564021 .
   // TODO(rohitrao): Does the frame size actually matter here?  Can we always
@@ -497,11 +459,15 @@ void StatusBubbleMac::Detach() {
   if (state_ != kBubbleHidden) {
     frame = CalculateWindowFrame(/*expand=*/false);
   }
+  // See https://crbug.com/28107 and https://crbug.com/29054.
   [window_ setFrame:frame display:NO];
-  [parent_ removeChildWindow:window_];  // See crbug.com/28107 ...
-  [window_ orderOut:nil];               // ... and crbug.com/29054.
+  [window_ setStatusBubbleParentWindow:nil];
 
   [[window_ contentView] setThemeProvider:nil];
+}
+
+bool StatusBubbleMac::is_attached() {
+  return [window_ statusBubbleParentWindow] != nil;
 }
 
 void StatusBubbleMac::AnimationDidStop() {
@@ -524,17 +490,9 @@ void StatusBubbleMac::SetState(StatusBubbleState state) {
 
   if (state == kBubbleHidden) {
     is_expanded_ = false;
-
-    // When hidden (with alpha of 0), make the window have the minimum size,
-    // while still keeping the same origin. It's important to not set the
-    // origin to 0,0 as that will cause the window to use more space in
-    // Expose/Mission Control. See http://crbug.com/81969.
-    //
-    // Also, doing it this way instead of detaching the window avoids bugs with
-    // Spaces and Cmd-`. See http://crbug.com/31821 and http://crbug.com/61629.
-    NSRect frame = [window_ frame];
-    frame.size = ui::kWindowSizeDeterminedLater.size;
-    [window_ setFrame:frame display:YES];
+    Detach();
+  } else {
+    Attach();
   }
 
   if ([delegate_ respondsToSelector:@selector(statusBubbleWillEnterState:)])
@@ -588,14 +546,13 @@ void StatusBubbleMac::AnimateWindowAlpha(CGFloat alpha,
   completion_handler_factory_.InvalidateWeakPtrs();
   base::WeakPtr<StatusBubbleMac> weak_ptr(
       completion_handler_factory_.GetWeakPtr());
-  [window_
-      runAnimationGroup:^(NSAnimationContext* context) {
-          [context setDuration:duration];
-          [[window_ animator] setAlphaValue:alpha];
-      }
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
+    [context setDuration:duration];
+    [[window_ animator] setAlphaValue:alpha];
+  }
       completionHandler:^{
-          if (weak_ptr)
-            weak_ptr->AnimationDidStop();
+        if (weak_ptr)
+          weak_ptr->AnimationDidStop();
       }];
 }
 
@@ -771,29 +728,8 @@ void StatusBubbleMac::UpdateSizeAndPosition() {
     return;
 
   // There is no need to update the size if the bubble is hidden.
-  if (state_ == kBubbleHidden) {
-    // Verify that hidden bubbles always have size equal to
-    // ui::kWindowSizeDeterminedLater.
-
-    // TODO(rohitrao): The GPU bots are hitting cases where this is not true.
-    // Instead of enforcing this invariant with a DCHECK, add temporary logging
-    // to try and debug it and fix up the window size if needed.
-    // This logging is temporary and should be removed: crbug.com/467998
-    NSRect frame = [window_ frame];
-    if (!CGSizeEqualToSize(frame.size, ui::kWindowSizeDeterminedLater.size)) {
-      LOG(ERROR) << "Window size should be (1,1), but is instead ("
-                 << frame.size.width << "," << frame.size.height << ")";
-      LOG(ERROR) << base::debug::StackTrace().ToString();
-      frame.size = ui::kWindowSizeDeterminedLater.size;
-    }
-
-    // During the fullscreen animation, the parent window's origin may change
-    // without updating the status bubble.  To avoid animation glitches, always
-    // update the bubble's origin to match the parent's, even when hidden.
-    frame.origin = [parent_ frame].origin;
-    [window_ setFrame:frame display:NO];
+  if (state_ == kBubbleHidden)
     return;
-  }
 
   SetFrameAvoidingMouse(CalculateWindowFrame(/*expand=*/false),
                         GetMouseLocation());
@@ -801,8 +737,6 @@ void StatusBubbleMac::UpdateSizeAndPosition() {
 
 void StatusBubbleMac::SwitchParentWindow(NSWindow* parent) {
   DCHECK(parent);
-  DCHECK(is_attached());
-
   Detach();
   parent_ = parent;
   Attach();
@@ -857,4 +791,8 @@ unsigned long StatusBubbleMac::OSDependentCornerFlags(NSRect window_frame) {
   }
 
   return corner_flags;
+}
+
+NSWindow* StatusBubbleMac::GetWindow() {
+  return window_;
 }

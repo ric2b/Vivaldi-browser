@@ -27,10 +27,13 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/BindingSecurity.h"
+#include "bindings/core/v8/ReferrerScriptInfo.h"
 #include "bindings/core/v8/RejectedPromises.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/UseCounterCallback.h"
@@ -44,25 +47,26 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/Modulator.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/bindings/V8PerContextData.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
+#include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/AddressSanitizer.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "platform/wtf/typed_arrays/ArrayBufferContents.h"
 #include "public/platform/Platform.h"
@@ -94,7 +98,7 @@ static String ExtractMessageForConsole(v8::Isolate* isolate,
     v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(data);
     const WrapperTypeInfo* type = ToWrapperTypeInfo(obj);
     if (V8DOMException::wrapperTypeInfo.IsSubclass(type)) {
-      DOMException* exception = V8DOMException::toImpl(obj);
+      DOMException* exception = V8DOMException::ToImpl(obj);
       if (exception && !exception->MessageForConsole().IsEmpty())
         return exception->ToStringForConsole();
     }
@@ -176,11 +180,61 @@ void V8Initializer::MessageHandlerInMainThread(v8::Local<v8::Message> message,
   context->DispatchErrorEvent(event, access_control_status);
 }
 
+void V8Initializer::MessageHandlerInWorker(v8::Local<v8::Message> message,
+                                           v8::Local<v8::Value> data) {
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  V8PerIsolateData* per_isolate_data = V8PerIsolateData::From(isolate);
+
+  // During the frame teardown, there may not be a valid context.
+  ScriptState* script_state = ScriptState::Current(isolate);
+  if (!script_state->ContextIsValid())
+    return;
+
+  // Exceptions that occur in error handler should be ignored since in that case
+  // WorkerGlobalScope::dispatchErrorEvent will send the exception to the worker
+  // object.
+  if (per_isolate_data->IsReportingException())
+    return;
+
+  per_isolate_data->SetReportingException(true);
+
+  ExecutionContext* context = ExecutionContext::From(script_state);
+  std::unique_ptr<SourceLocation> location =
+      SourceLocation::FromMessage(isolate, message, context);
+
+  if (message->ErrorLevel() != v8::Isolate::kMessageError) {
+    context->AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource,
+        MessageLevelFromNonFatalErrorLevel(message->ErrorLevel()),
+        ToCoreStringWithNullCheck(message->Get()), std::move(location)));
+    return;
+  }
+
+  ErrorEvent* event =
+      ErrorEvent::Create(ToCoreStringWithNullCheck(message->Get()),
+                         std::move(location), &script_state->World());
+
+  AccessControlStatus cors_status = message->IsSharedCrossOrigin()
+                                        ? kSharableCrossOrigin
+                                        : kNotSharableCrossOrigin;
+
+  // If execution termination has been triggered as part of constructing
+  // the error event from the v8::Message, quietly leave.
+  if (!isolate->IsExecutionTerminating()) {
+    V8ErrorHandler::StoreExceptionOnErrorEventWrapper(
+        script_state, event, data, script_state->GetContext()->Global());
+    ExecutionContext::From(script_state)
+        ->DispatchErrorEvent(event, cors_status);
+  }
+
+  per_isolate_data->SetReportingException(false);
+}
+
 namespace {
 
 static RejectedPromises& RejectedPromisesOnMainThread() {
   DCHECK(IsMainThread());
-  DEFINE_STATIC_LOCAL(RefPtr<RejectedPromises>, rejected_promises,
+  DEFINE_STATIC_LOCAL(scoped_refptr<RejectedPromises>, rejected_promises,
                       (RejectedPromises::Create()));
   return *rejected_promises;
 }
@@ -299,8 +353,10 @@ static bool CodeGenerationCheckCallbackInMainThread(
     v8::Local<v8::Context> context,
     v8::Local<v8::String> source) {
   if (ExecutionContext* execution_context = ToExecutionContext(context)) {
+    DCHECK(execution_context->IsDocument() ||
+           execution_context->IsPaintWorkletGlobalScope());
     if (ContentSecurityPolicy* policy =
-            ToDocument(execution_context)->GetContentSecurityPolicy()) {
+            execution_context->GetContentSecurityPolicy()) {
       v8::String::Value source_str(source);
       UChar snippet[ContentSecurityPolicy::kMaxSampleLength + 1];
       size_t len = std::min((sizeof(snippet) / sizeof(UChar)) - 1,
@@ -310,6 +366,34 @@ static bool CodeGenerationCheckCallbackInMainThread(
       return policy->AllowEval(
           ScriptState::From(context), SecurityViolationReportingPolicy::kReport,
           ContentSecurityPolicy::kWillThrowException, snippet);
+    }
+  }
+  return false;
+}
+
+static bool WasmCodeGenerationCheckCallbackInMainThread(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::String> source) {
+  if (ExecutionContext* execution_context = ToExecutionContext(context)) {
+    if (ContentSecurityPolicy* policy =
+            ToDocument(execution_context)->GetContentSecurityPolicy()) {
+      v8::String::Value source_str(source);
+      UChar snippet[ContentSecurityPolicy::kMaxSampleLength + 1];
+      size_t len = std::min((sizeof(snippet) / sizeof(UChar)) - 1,
+                            static_cast<size_t>(source_str.length()));
+      memcpy(snippet, *source_str, len * sizeof(UChar));
+      snippet[len] = 0;
+      // Wasm code generation is allowed if we have either the wasm-eval
+      // directive or the unsafe-eval directive. However, we only recognize
+      // wasm-eval for certain schemes
+      return policy->AllowWasmEval(ScriptState::From(context),
+                                   SecurityViolationReportingPolicy::kReport,
+                                   ContentSecurityPolicy::kWillThrowException,
+                                   snippet) ||
+             policy->AllowEval(ScriptState::From(context),
+                               SecurityViolationReportingPolicy::kReport,
+                               ContentSecurityPolicy::kWillThrowException,
+                               snippet);
     }
   }
   return false;
@@ -374,6 +458,59 @@ static bool WasmInstanceOverride(
   return false;
 }
 
+static v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::ScriptOrModule> v8_referrer,
+    v8::Local<v8::String> v8_specifier) {
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsDynamicImportEnabled());
+  ScriptState* script_state = ScriptState::From(context);
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
+
+  Modulator* modulator = Modulator::From(script_state);
+  if (!modulator) {
+    resolver->Reject();
+    return v8::Local<v8::Promise>::Cast(promise.V8Value());
+  }
+
+  String specifier = ToCoreStringWithNullCheck(v8_specifier);
+  v8::Local<v8::Value> v8_referrer_url = v8_referrer->GetResourceName();
+  KURL referrer_url;
+  if (v8_referrer_url->IsString()) {
+    String referrer_url_str =
+        ToCoreString(v8::Local<v8::String>::Cast(v8_referrer_url));
+    referrer_url = KURL(NullURL(), referrer_url_str);
+  }
+  ReferrerScriptInfo referrer_info =
+      ReferrerScriptInfo::FromV8HostDefinedOptions(
+          context, v8_referrer->GetHostDefinedOptions());
+  modulator->ResolveDynamically(specifier, referrer_url, referrer_info,
+                                resolver);
+  return v8::Local<v8::Promise>::Cast(promise.V8Value());
+}
+
+// https://html.spec.whatwg.org/#hostgetimportmetaproperties
+static void HostGetImportMetaProperties(v8::Local<v8::Context> context,
+                                        v8::Local<v8::Module> module,
+                                        v8::Local<v8::Object> meta) {
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsImportMetaUrlEnabled());
+  ScriptState* script_state = ScriptState::From(context);
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  Modulator* modulator = Modulator::From(script_state);
+  if (!modulator)
+    return;
+
+  ModuleImportMeta host_meta =
+      modulator->HostGetImportMetaProperties(ScriptModule(isolate, module));
+
+  // 3. Return <<Record { [[Key]]: "url", [[Value]]: urlString }>>. [spec text]
+  v8::Local<v8::String> url_key = V8String(isolate, "url");
+  v8::Local<v8::String> url_value = V8String(isolate, host_meta.Url());
+  meta->CreateDataProperty(context, url_key, url_value).ToChecked();
+}
+
 static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->AddGCPrologueCallback(V8GCController::GcPrologue);
   isolate->AddGCEpilogueCallback(V8GCController::GcEpilogue);
@@ -389,6 +526,14 @@ static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->SetUseCounterCallback(&UseCounterCallback);
   isolate->SetWasmModuleCallback(WasmModuleOverride);
   isolate->SetWasmInstanceCallback(WasmInstanceOverride);
+  if (RuntimeEnabledFeatures::ModuleScriptsDynamicImportEnabled()) {
+    isolate->SetHostImportModuleDynamicallyCallback(
+        HostImportModuleDynamically);
+  }
+  if (RuntimeEnabledFeatures::ModuleScriptsImportMetaUrlEnabled()) {
+    isolate->SetHostInitializeImportMetaObjectCallback(
+        HostGetImportMetaProperties);
+  }
 
   V8ContextSnapshot::EnsureInterfaceTemplates(isolate);
 }
@@ -435,10 +580,10 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
                      Protection protection) override {
     switch (protection) {
       case Protection::kNoAccess:
-        WTF::SetSystemPagesInaccessible(data, length);
+        CHECK(WTF::SetSystemPagesAccess(data, length, WTF::PageInaccessible));
         return;
       case Protection::kReadWrite:
-        (void)WTF::SetSystemPagesAccessible(data, length);
+        CHECK(WTF::SetSystemPagesAccess(data, length, WTF::PageReadWrite));
         return;
       default:
         NOTREACHED();
@@ -464,7 +609,7 @@ static void AdjustAmountOfExternalAllocatedMemory(int64_t diff) {
   v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(diff);
 }
 
-void V8Initializer::InitializeMainThread(intptr_t* reference_table) {
+void V8Initializer::InitializeMainThread(const intptr_t* reference_table) {
   DCHECK(IsMainThread());
 
   WTF::ArrayBufferContents::Initialize(AdjustAmountOfExternalAllocatedMemory);
@@ -474,11 +619,13 @@ void V8Initializer::InitializeMainThread(intptr_t* reference_table) {
                             ? gin::IsolateHolder::kStableAndExperimentalV8Extras
                             : gin::IsolateHolder::kStableV8Extras;
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode,
-                                 v8_extras_mode, &array_buffer_allocator);
+                                 v8_extras_mode, &array_buffer_allocator,
+                                 reference_table);
 
   // NOTE: Some threads (namely utility threads) don't have a scheduler.
   WebScheduler* scheduler = Platform::Current()->CurrentThread()->Scheduler();
 
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
   V8PerIsolateData::V8ContextSnapshotMode v8_context_snapshot_mode =
       Platform::Current()->IsTakingV8ContextSnapshot()
           ? V8PerIsolateData::V8ContextSnapshotMode::kTakeSnapshot
@@ -488,18 +635,16 @@ void V8Initializer::InitializeMainThread(intptr_t* reference_table) {
       !RuntimeEnabledFeatures::V8ContextSnapshotEnabled()) {
     v8_context_snapshot_mode =
         V8PerIsolateData::V8ContextSnapshotMode::kDontUseSnapshot;
-    reference_table = nullptr;
   }
-  V8ContextSnapshot::SetReferenceTable(reference_table);
+#else
+  V8PerIsolateData::V8ContextSnapshotMode v8_context_snapshot_mode =
+      V8PerIsolateData::V8ContextSnapshotMode::kDontUseSnapshot;
+#endif  // USE_V8_CONTEXT_SNAPSHOT
 
-  // When timer task runner is used for PerIsolateData, GC tasks are getting
-  // throttled and memory usage goes up. For now we're using loading task queue
-  // to prevent this.
-  // TODO(altimin): Consider switching to timerTaskRunner here.
   v8::Isolate* isolate = V8PerIsolateData::Initialize(
-      scheduler ? scheduler->LoadingTaskRunner()
+      scheduler ? scheduler->V8TaskRunner()
                 : Platform::Current()->CurrentThread()->GetWebTaskRunner(),
-      reference_table, v8_context_snapshot_mode);
+      v8_context_snapshot_mode);
 
   InitializeV8Common(isolate);
 
@@ -514,9 +659,11 @@ void V8Initializer::InitializeMainThread(intptr_t* reference_table) {
       FailedAccessCheckCallbackInMainThread);
   isolate->SetAllowCodeGenerationFromStringsCallback(
       CodeGenerationCheckCallbackInMainThread);
+  isolate->SetAllowWasmCodeGenerationCallback(
+      WasmCodeGenerationCheckCallbackInMainThread);
   if (RuntimeEnabledFeatures::V8IdleTasksEnabled()) {
     V8PerIsolateData::EnableIdleTasks(
-        isolate, WTF::MakeUnique<V8IdleTaskRunner>(scheduler));
+        isolate, std::make_unique<V8IdleTaskRunner>(scheduler));
   }
 
   isolate->SetPromiseRejectCallback(PromiseRejectHandlerInMainThread);
@@ -534,7 +681,7 @@ void V8Initializer::InitializeMainThread(intptr_t* reference_table) {
       ScriptWrappableVisitor::PerformCleanup);
 
   V8PerIsolateData::From(isolate)->SetThreadDebugger(
-      WTF::MakeUnique<MainThreadDebugger>(isolate));
+      std::make_unique<MainThreadDebugger>(isolate));
 
   BindingSecurity::InitWrapperCreationSecurityCheck();
 }
@@ -544,56 +691,6 @@ static void ReportFatalErrorInWorker(const char* location,
   // FIXME: We temporarily deal with V8 internal error situations such as
   // out-of-memory by crashing the worker.
   LOG(FATAL);
-}
-
-static void MessageHandlerInWorker(v8::Local<v8::Message> message,
-                                   v8::Local<v8::Value> data) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  V8PerIsolateData* per_isolate_data = V8PerIsolateData::From(isolate);
-
-  // During the frame teardown, there may not be a valid context.
-  ScriptState* script_state = ScriptState::Current(isolate);
-  if (!script_state->ContextIsValid())
-    return;
-
-  // Exceptions that occur in error handler should be ignored since in that case
-  // WorkerGlobalScope::dispatchErrorEvent will send the exception to the worker
-  // object.
-  if (per_isolate_data->IsReportingException())
-    return;
-
-  per_isolate_data->SetReportingException(true);
-
-  ExecutionContext* context = ExecutionContext::From(script_state);
-  std::unique_ptr<SourceLocation> location =
-      SourceLocation::FromMessage(isolate, message, context);
-
-  if (message->ErrorLevel() != v8::Isolate::kMessageError) {
-    context->AddConsoleMessage(ConsoleMessage::Create(
-        kJSMessageSource,
-        MessageLevelFromNonFatalErrorLevel(message->ErrorLevel()),
-        ToCoreStringWithNullCheck(message->Get()), std::move(location)));
-    return;
-  }
-
-  ErrorEvent* event =
-      ErrorEvent::Create(ToCoreStringWithNullCheck(message->Get()),
-                         std::move(location), &script_state->World());
-
-  AccessControlStatus cors_status = message->IsSharedCrossOrigin()
-                                        ? kSharableCrossOrigin
-                                        : kNotSharableCrossOrigin;
-
-  // If execution termination has been triggered as part of constructing
-  // the error event from the v8::Message, quietly leave.
-  if (!isolate->IsExecutionTerminating()) {
-    V8ErrorHandler::StoreExceptionOnErrorEventWrapper(
-        script_state, event, data, script_state->GetContext()->Global());
-    ExecutionContext::From(script_state)
-        ->DispatchErrorEvent(event, cors_status);
-  }
-
-  per_isolate_data->SetReportingException(false);
 }
 
 // Stack size for workers is limited to 500KB because default stack size for

@@ -38,6 +38,8 @@
 
 #include "platform/image-decoders/png/PNGImageDecoder.h"
 
+#include <memory>
+
 namespace blink {
 
 PNGImageDecoder::PNGImageDecoder(AlphaOption alpha_option,
@@ -99,7 +101,7 @@ void PNGImageDecoder::Parse(ParseQuery query) {
     return;
 
   if (!reader_)
-    reader_ = WTF::MakeUnique<PNGImageReader>(this, offset_);
+    reader_ = std::make_unique<PNGImageReader>(this, offset_);
 
   if (!reader_->Parse(*data_, query))
     SetFailed();
@@ -132,7 +134,7 @@ void PNGImageDecoder::InitializeNewFrame(size_t index) {
   DCHECK(IntRect(IntPoint(), Size()).Contains(frame_info.frame_rect));
   buffer.SetOriginalFrameRect(frame_info.frame_rect);
 
-  buffer.SetDuration(frame_info.duration);
+  buffer.SetDuration(TimeDelta::FromMilliseconds(frame_info.duration));
   buffer.SetDisposalMethod(frame_info.disposal_method);
   buffer.SetAlphaBlendSource(frame_info.alpha_blend);
 
@@ -382,8 +384,10 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
     if (SkColorSpaceXform* xform = ColorTransform()) {
       SkColorSpaceXform::ColorFormat color_format =
           SkColorSpaceXform::kRGBA_8888_ColorFormat;
-      xform->apply(color_format, dst_row, color_format, src_ptr, width,
-                   kUnpremul_SkAlphaType);
+      bool color_converison_successful =
+          xform->apply(color_format, dst_row, color_format, src_ptr, width,
+                       kUnpremul_SkAlphaType);
+      DCHECK(color_converison_successful);
       src_ptr = png_bytep(dst_row);
     }
 
@@ -441,8 +445,10 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
     // written to the ImageFrame, purely because SkColorSpaceXform supports
     // RGBA (and not RGB).
     if (SkColorSpaceXform* xform = ColorTransform()) {
-      xform->apply(XformColorFormat(), dst_row, XformColorFormat(), dst_row,
-                   width, kOpaque_SkAlphaType);
+      bool color_converison_successful =
+          xform->apply(XformColorFormat(), dst_row, XformColorFormat(), dst_row,
+                       width, kOpaque_SkAlphaType);
+      DCHECK(color_converison_successful);
     }
   }
 
@@ -482,10 +488,10 @@ bool PNGImageDecoder::FrameIsReceivedAtIndex(size_t index) const {
   return reader_->FrameIsReceivedAtIndex(index);
 }
 
-float PNGImageDecoder::FrameDurationAtIndex(size_t index) const {
+TimeDelta PNGImageDecoder::FrameDurationAtIndex(size_t index) const {
   if (index < frame_buffer_cache_.size())
     return frame_buffer_cache_[index].Duration();
-  return 0;
+  return TimeDelta();
 }
 
 }  // namespace blink

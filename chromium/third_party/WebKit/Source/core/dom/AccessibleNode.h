@@ -18,6 +18,7 @@ namespace blink {
 
 class AccessibleNodeList;
 class AXObjectCache;
+class Document;
 class Element;
 class QualifiedName;
 
@@ -109,14 +110,24 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  explicit AccessibleNode(Document&);
   explicit AccessibleNode(Element*);
   virtual ~AccessibleNode();
+
+  static AccessibleNode* Create(Document&);
 
   // Gets the associated element, if any.
   Element* element() const { return element_; }
 
-  // Returns the given string property if the Element has an AccessibleNode.
-  static const AtomicString& GetProperty(Element*, AOMStringProperty);
+  // Gets the associated document.
+  Document* GetDocument() const;
+
+  // Children. These are only virtual AccessibleNodes that were added
+  // explicitly, never AccessibleNodes from DOM Elements.
+  HeapVector<Member<AccessibleNode>> GetChildren() { return children_; }
+
+  // Returns the given string property.
+  const AtomicString& GetProperty(AOMStringProperty) const;
 
   // Returns the given relation property if the Element has an AccessibleNode.
   static AccessibleNode* GetProperty(Element*, AOMRelationProperty);
@@ -128,10 +139,12 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
                           AOMRelationListProperty,
                           HeapVector<Member<Element>>&);
 
+  // Returns the given boolean property.
+  bool GetProperty(AOMBooleanProperty, bool& is_null) const;
+
   // Returns the value of the given property if the
   // Element has an AccessibleNode. Sets |isNull| if the property and
   // attribute are not present.
-  static bool GetProperty(Element*, AOMBooleanProperty, bool& is_null);
   static float GetProperty(Element*, AOMFloatProperty, bool& is_null);
   static int32_t GetProperty(Element*, AOMIntProperty, bool& is_null);
   static uint32_t GetProperty(Element*, AOMUIntProperty, bool& is_null);
@@ -181,10 +194,8 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   // with the value of the AOM property if set. Updates
   // |shadowed_aria_attributes| to contain a list of the ARIA attributes that
   // would be shadowed by these AOM properties.
-  static void GetAllAOMProperties(
-      Element*,
-      AOMPropertyClient*,
-      HashSet<QualifiedName>& shadowed_aria_attributes);
+  void GetAllAOMProperties(AOMPropertyClient*,
+                           HashSet<QualifiedName>& shadowed_aria_attributes);
 
   AccessibleNode* activeDescendant() const;
   void setActiveDescendant(AccessibleNode*);
@@ -327,6 +338,8 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   AtomicString valueText() const;
   void setValueText(const AtomicString&);
 
+  void appendChild(AccessibleNode*, ExceptionState&);
+
   // EventTarget
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
@@ -338,7 +351,7 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(accessibleincrement);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(accessiblescrollintoview);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   friend class AccessibleNodeList;
@@ -366,8 +379,15 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   HeapVector<std::pair<AOMRelationListProperty, Member<AccessibleNodeList>>>
       relation_list_properties_;
 
-  // This object's owner Element.
+  // This object's owner Element, if it corresponds to an Element.
   Member<Element> element_;
+
+  // The object's owner Document. Only set if |element_| is nullptr.
+  Member<Document> document_;
+
+  // This object's AccessibleNode children, which must be only virtual
+  // AccessibleNodes (with no associated Element).
+  HeapVector<Member<AccessibleNode>> children_;
 };
 
 }  // namespace blink

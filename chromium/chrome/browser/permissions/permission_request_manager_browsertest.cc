@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
@@ -34,39 +35,6 @@
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-namespace test {
-class MediaStreamDevicesControllerTestApi
-    : public MediaStreamDevicesController::PermissionPromptDelegate {
- public:
-  static void AddRequestToManager(
-      PermissionRequestManager* manager,
-      content::WebContents* web_contents,
-      const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) {
-    MediaStreamDevicesControllerTestApi delegate(manager);
-    MediaStreamDevicesController::RequestPermissionsWithDelegate(
-        request, callback, &delegate);
-  }
-
- private:
-  // MediaStreamDevicesController::PermissionPromptDelegate:
-  void ShowPrompt(
-      bool user_gesture,
-      content::WebContents* web_contents,
-      std::unique_ptr<MediaStreamDevicesController::Request> request) override {
-    manager_->AddRequest(request.release());
-  }
-
-  explicit MediaStreamDevicesControllerTestApi(
-      PermissionRequestManager* manager)
-      : manager_(manager) {}
-
-  PermissionRequestManager* manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaStreamDevicesControllerTestApi);
-};
-}  // namespace test
-
 namespace {
 
 const char* kPermissionsKillSwitchFieldStudy =
@@ -84,7 +52,6 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
     PermissionRequestManager* manager = GetPermissionRequestManager();
     mock_permission_prompt_factory_.reset(
         new MockPermissionPromptFactory(manager));
-    manager->DisplayPendingRequests();
   }
 
   void TearDownOnMainThread() override {
@@ -140,8 +107,6 @@ class PermissionDialogTest
   GURL GetUrl() { return GURL("https://example.com"); }
 
   PermissionRequest* MakeRegisterProtocolHandlerRequest();
-  void AddMediaRequest(PermissionRequestManager* manager,
-                       ContentSettingsType permission);
   PermissionRequest* MakePermissionRequest(ContentSettingsType permission);
 
   // TestBrowserDialog:
@@ -167,51 +132,14 @@ PermissionRequest* PermissionDialogTest::MakeRegisterProtocolHandlerRequest() {
                                                       GetUrl(), user_gesture);
 }
 
-void PermissionDialogTest::AddMediaRequest(PermissionRequestManager* manager,
-                                           ContentSettingsType permission) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  content::MediaStreamRequestType request_type = content::MEDIA_DEVICE_ACCESS;
-  content::MediaStreamType audio_type = content::MEDIA_NO_SERVICE;
-  content::MediaStreamType video_type = content::MEDIA_NO_SERVICE;
-  std::string audio_id = "audio_id";
-  std::string video_id = "video_id";
-
-  if (permission == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC)
-    audio_type = content::MEDIA_DEVICE_AUDIO_CAPTURE;
-  else
-    video_type = content::MEDIA_DEVICE_VIDEO_CAPTURE;
-  int render_process_id = web_contents->GetRenderProcessHost()->GetID();
-  int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
-  content::MediaStreamRequest request(render_process_id, render_frame_id, 0,
-                                      GetUrl(), false, request_type, audio_id,
-                                      video_id, audio_type, video_type, false);
-
-  // Add fake devices, otherwise the request will auto-block.
-  MediaCaptureDevicesDispatcher::GetInstance()->SetTestAudioCaptureDevices(
-      content::MediaStreamDevices(
-          1, content::MediaStreamDevice(content::MEDIA_DEVICE_AUDIO_CAPTURE,
-                                        audio_id, "Fake Audio")));
-  MediaCaptureDevicesDispatcher::GetInstance()->SetTestVideoCaptureDevices(
-      content::MediaStreamDevices(
-          1, content::MediaStreamDevice(content::MEDIA_DEVICE_VIDEO_CAPTURE,
-                                        video_id, "Fake Video")));
-
-  auto response = [](const content::MediaStreamDevices& devices,
-                     content::MediaStreamRequestResult result,
-                     std::unique_ptr<content::MediaStreamUI> ui) {};
-  test::MediaStreamDevicesControllerTestApi::AddRequestToManager(
-      manager, web_contents, request, base::Bind(response));
-}
-
 PermissionRequest* PermissionDialogTest::MakePermissionRequest(
     ContentSettingsType permission) {
   bool user_gesture = true;
-  auto decided = [](bool, ContentSetting) {};
+  auto decided = [](ContentSetting) {};
   auto cleanup = [] {};  // Leave cleanup to test harness destructor.
   owned_requests_.push_back(base::MakeUnique<PermissionRequestImpl>(
-      GetUrl(), permission, browser()->profile(), user_gesture,
-      base::Bind(decided), base::Bind(cleanup)));
+      GetUrl(), permission, user_gesture, base::Bind(decided),
+      base::Bind(cleanup)));
   return owned_requests_.back().get();
 }
 
@@ -252,16 +180,7 @@ void PermissionDialogTest::ShowDialog(const std::string& name) {
       break;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      if (base::FeatureList::IsEnabled(
-              features::kUsePermissionManagerForMediaRequests)) {
-        manager->AddRequest(MakePermissionRequest(it->type));
-      } else {
-        AddMediaRequest(manager, it->type);
-      }
-      break;
-    // Regular permissions requests.
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:  // Same as notifications.
     case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
     case CONTENT_SETTINGS_TYPE_GEOLOCATION:
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:  // ChromeOS only.
@@ -283,7 +202,7 @@ void PermissionDialogTest::ShowDialog(const std::string& name) {
       ADD_FAILURE() << "Not a permission type, or one that doesn't prompt.";
       return;
   }
-  manager->DisplayPendingRequests();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Requests before the load event should be bundled into one bubble.
@@ -592,25 +511,11 @@ IN_PROC_BROWSER_TEST_F(PermissionDialogTest, InvokeDialog_notifications) {
 // Host wants to use your microphone.
 IN_PROC_BROWSER_TEST_F(PermissionDialogTest, InvokeDialog_mic) {
   RunDialog();
-
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kUsePermissionManagerForMediaRequests);
-    RunDialog();
-  }
 }
 
 // Host wants to use your camera.
 IN_PROC_BROWSER_TEST_F(PermissionDialogTest, InvokeDialog_camera) {
   RunDialog();
-
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kUsePermissionManagerForMediaRequests);
-    RunDialog();
-  }
 }
 
 // Host wants to open email links.

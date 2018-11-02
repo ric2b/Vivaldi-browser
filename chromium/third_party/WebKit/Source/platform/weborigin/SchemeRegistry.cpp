@@ -84,6 +84,7 @@ class URLSchemesRegistry final {
       content_security_policy_bypassing_schemes;
   URLSchemesSet secure_context_bypassing_schemes;
   URLSchemesSet allowed_in_referrer_schemes;
+  URLSchemesSet wasm_eval_csp_schemes;
 
  private:
   friend const URLSchemesRegistry& GetURLSchemesRegistry();
@@ -208,6 +209,12 @@ void SchemeRegistry::RegisterURLSchemeAsNotAllowingJavascriptURLs(
       scheme);
 }
 
+void SchemeRegistry::RemoveURLSchemeAsNotAllowingJavascriptURLs(
+    const String& scheme) {
+  GetMutableURLSchemesRegistry().not_allowing_javascript_urls_schemes.erase(
+      scheme);
+}
+
 bool SchemeRegistry::ShouldTreatURLSchemeAsNotAllowingJavascriptURLs(
     const String& scheme) {
   DCHECK_EQ(scheme, scheme.DeprecatedLower());
@@ -215,6 +222,11 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsNotAllowingJavascriptURLs(
     return false;
   return GetURLSchemesRegistry().not_allowing_javascript_urls_schemes.Contains(
       scheme);
+}
+
+void SchemeRegistry::RegisterURLSchemeAsCORSEnabled(const String& scheme) {
+  DCHECK_EQ(scheme, scheme.DeprecatedLower());
+  GetMutableURLSchemesRegistry().cors_enabled_schemes.insert(scheme);
 }
 
 bool SchemeRegistry::ShouldTreatURLSchemeAsCORSEnabled(const String& scheme) {
@@ -243,15 +255,19 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsLegacy(const String& scheme) {
 }
 
 bool SchemeRegistry::ShouldTrackUsageMetricsForScheme(const String& scheme) {
+  // This SchemeRegistry is primarily used by Blink UseCounter, which aims to
+  // match the tracking policy of page_load_metrics (see
+  // pageTrackDecider::ShouldTrack() for more details).
   // The scheme represents content which likely cannot be easily updated.
   // Specifically this includes internal pages such as about, chrome-devtools,
   // etc.
   // "chrome-extension" is not included because they have a single deployment
   // point (the webstore) and are designed specifically for Chrome.
   // "data" is not included because real sites shouldn't be using it for
-  // top-level
-  // pages and Chrome does use it internally (eg. PluginPlaceholder).
-  return scheme == "http" || scheme == "https" || scheme == "file";
+  // top-level pages and Chrome does use it internally (eg. PluginPlaceholder).
+  // "file" is not included because file:// navigations have different loading
+  // behaviors.
+  return scheme == "http" || scheme == "https";
 }
 
 void SchemeRegistry::RegisterURLSchemeAsAllowingServiceWorkers(
@@ -366,6 +382,19 @@ bool SchemeRegistry::SchemeShouldBypassSecureContextCheck(
   DCHECK_EQ(scheme, scheme.DeprecatedLower());
   return GetURLSchemesRegistry().secure_context_bypassing_schemes.Contains(
       scheme);
+}
+
+void SchemeRegistry::RegisterURLSchemeAsAllowingWasmEvalCSP(
+    const String& scheme) {
+  DCHECK_EQ(scheme, scheme.DeprecatedLower());
+  GetMutableURLSchemesRegistry().wasm_eval_csp_schemes.insert(scheme);
+}
+
+bool SchemeRegistry::SchemeSupportsWasmEvalCSP(const String& scheme) {
+  if (scheme.IsEmpty())
+    return false;
+  DCHECK_EQ(scheme, scheme.DeprecatedLower());
+  return GetURLSchemesRegistry().wasm_eval_csp_schemes.Contains(scheme);
 }
 
 }  // namespace blink

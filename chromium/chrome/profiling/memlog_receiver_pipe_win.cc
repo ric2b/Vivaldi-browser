@@ -10,25 +10,18 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "chrome/common/profiling/memlog_sender_pipe.h"
 #include "chrome/profiling/memlog_receiver_pipe.h"
 #include "chrome/profiling/memlog_stream_receiver.h"
 
 namespace profiling {
 
-namespace {
-
-// Use a large buffer for our pipe. We don't want the sender to block
-// if at all possible since it will slow the app down quite a bit. Windows
-// seems to max out a 64K per read so we use that (larger would be better if it
-// worked).
-const int kReadBufferSize = 1024 * 64;
-
-}  // namespace
-
-MemlogReceiverPipe::MemlogReceiverPipe(base::ScopedPlatformFile handle)
-    : handle_(std::move(handle)), read_buffer_(new char[kReadBufferSize]) {
+MemlogReceiverPipe::MemlogReceiverPipe(mojo::edk::ScopedPlatformHandle handle)
+    : MemlogReceiverPipeBase(std::move(handle)),
+      read_buffer_(new char[MemlogSenderPipe::kPipeSize]) {
   ZeroOverlapped();
-  base::MessageLoopForIO::current()->RegisterIOHandler(handle_.Get(), this);
+  base::MessageLoopForIO::current()->RegisterIOHandler(handle_.get().handle,
+                                                       this);
 }
 
 MemlogReceiverPipe::~MemlogReceiverPipe() {
@@ -36,17 +29,6 @@ MemlogReceiverPipe::~MemlogReceiverPipe() {
 
 void MemlogReceiverPipe::StartReadingOnIOThread() {
   ReadUntilBlocking();
-}
-
-void MemlogReceiverPipe::SetReceiver(
-    scoped_refptr<base::TaskRunner> task_runner,
-    scoped_refptr<MemlogStreamReceiver> receiver) {
-  receiver_task_runner_ = task_runner;
-  receiver_ = receiver;
-}
-
-void MemlogReceiverPipe::ReportError() {
-  handle_.Close();
 }
 
 void MemlogReceiverPipe::ReadUntilBlocking() {
@@ -60,8 +42,9 @@ void MemlogReceiverPipe::ReadUntilBlocking() {
 
   DCHECK(!read_outstanding_);
   read_outstanding_ = true;
-  if (!::ReadFile(handle_.Get(), read_buffer_.get(), kReadBufferSize,
-                  &bytes_read, &context_.overlapped)) {
+  if (!::ReadFile(handle_.get().handle, read_buffer_.get(),
+                  MemlogSenderPipe::kPipeSize, &bytes_read,
+                  &context_.overlapped)) {
     if (GetLastError() == ERROR_IO_PENDING) {
       return;
     } else {
@@ -90,12 +73,11 @@ void MemlogReceiverPipe::OnIOCompleted(
 
   if (bytes_transfered && receiver_) {
     receiver_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&ReceiverPipeStreamDataThunk,
+        FROM_HERE, base::BindOnce(&MemlogReceiverPipe::OnStreamDataThunk, this,
                                   base::MessageLoop::current()->task_runner(),
-                                  scoped_refptr<MemlogReceiverPipe>(this),
-                                  receiver_, std::move(read_buffer_),
+                                  std::move(read_buffer_),
                                   static_cast<size_t>(bytes_transfered)));
-    read_buffer_.reset(new char[kReadBufferSize]);
+    read_buffer_.reset(new char[MemlogSenderPipe::kPipeSize]);
   }
   ReadUntilBlocking();
 }

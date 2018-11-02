@@ -116,7 +116,7 @@ class NetInfoBrowserTest : public content::ContentBrowserTest {
       net::NetworkChangeNotifier::ConnectionType type,
       net::NetworkChangeNotifier::ConnectionSubtype subtype) {
     net::NetworkChangeNotifier::NotifyObserversOfMaxBandwidthChangeForTests(
-        net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+        net::NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
             subtype),
         type);
     base::RunLoop().RunUntilIdle();
@@ -154,7 +154,7 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, VerifyNetworkStateInitialized) {
   NavigateToURL(shell(), content::GetTestUrl("", "net_info.html"));
   EXPECT_TRUE(RunScriptExtractBool("getOnLine()"));
   EXPECT_EQ("ethernet", RunScriptExtractString("getType()"));
-  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
                 net::NetworkChangeNotifier::SUBTYPE_GIGABIT_ETHERNET),
             RunScriptExtractDouble("getDownlinkMax()"));
 }
@@ -166,14 +166,14 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkChangePlumbsToNavigator) {
   SetConnectionType(net::NetworkChangeNotifier::CONNECTION_WIFI,
                     net::NetworkChangeNotifier::SUBTYPE_WIFI_N);
   EXPECT_EQ("wifi", RunScriptExtractString("getType()"));
-  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
                 net::NetworkChangeNotifier::SUBTYPE_WIFI_N),
             RunScriptExtractDouble("getDownlinkMax()"));
 
   SetConnectionType(net::NetworkChangeNotifier::CONNECTION_ETHERNET,
                     net::NetworkChangeNotifier::SUBTYPE_GIGABIT_ETHERNET);
   EXPECT_EQ("ethernet", RunScriptExtractString("getType()"));
-  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+  EXPECT_EQ(net::NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
                 net::NetworkChangeNotifier::SUBTYPE_GIGABIT_ETHERNET),
             RunScriptExtractDouble("getDownlinkMax()"));
 }
@@ -220,8 +220,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest,
                        NetworkQualityEstimatorNotInitialized) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
-      nullptr, std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      nullptr, std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   EXPECT_TRUE(embedded_test_server()->Start());
@@ -240,8 +240,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest,
                        EffectiveConnectionTypeChangeNotfied) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
-      nullptr, std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      nullptr, std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   net::nqe::internal::NetworkQuality network_quality_1(
@@ -282,8 +282,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest,
 IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityChangeNotified) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
-      nullptr, std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      nullptr, std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   net::nqe::internal::NetworkQuality network_quality_1(
@@ -320,8 +320,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityChangeRounded) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
       std::unique_ptr<net::ExternalEstimateProvider>(),
-      std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   // Verify that the network quality is rounded properly.
@@ -365,8 +365,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityChangeUpperLimit) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
       std::unique_ptr<net::ExternalEstimateProvider>(),
-      std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   net::nqe::internal::NetworkQuality network_quality(
@@ -387,8 +387,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityRandomized) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
       std::unique_ptr<net::ExternalEstimateProvider>(),
-      std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   net::nqe::internal::NetworkQuality network_quality(
@@ -448,8 +448,8 @@ IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityRandomized) {
 IN_PROC_BROWSER_TEST_F(NetInfoBrowserTest, NetworkQualityChangeNotNotified) {
   base::HistogramTester histogram_tester;
   net::TestNetworkQualityEstimator estimator(
-      nullptr, std::map<std::string, std::string>(), false, false, true, true,
-      base::MakeUnique<net::BoundTestNetLog>());
+      nullptr, std::map<std::string, std::string>(), false, false, true,
+      std::make_unique<net::BoundTestNetLog>());
   NetworkQualityObserverImpl impl(&estimator);
 
   // Verify that the network quality is rounded properly.

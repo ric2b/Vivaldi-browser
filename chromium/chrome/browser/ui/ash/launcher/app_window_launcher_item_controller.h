@@ -54,17 +54,18 @@ class AppWindowLauncherItemController : public ash::ShelfItemDelegate,
                                const void* key,
                                intptr_t old) override;
 
-  // Get the number of running applications/incarnations of this.
-  size_t window_count() const { return windows_.size(); }
-
   // Activates the window at position |index|.
   void ActivateIndexedApp(size_t index);
+
+  // Get the number of running applications/incarnations of this.
+  size_t window_count() const { return windows_.size(); }
 
   const WindowList& windows() const { return windows_; }
 
  protected:
   explicit AppWindowLauncherItemController(const ash::ShelfID& shelf_id);
 
+ private:
   // Returns the action performed. Should be one of SHELF_ACTION_NONE,
   // SHELF_ACTION_WINDOW_ACTIVATED, or SHELF_ACTION_WINDOW_MINIMIZED.
   ash::ShelfAction ShowAndActivateOrMinimize(ui::BaseWindow* window);
@@ -79,7 +80,6 @@ class AppWindowLauncherItemController : public ash::ShelfItemDelegate,
   // Returns last active window in the controller or first window.
   ui::BaseWindow* GetLastActiveWindow();
 
- private:
   WindowList::iterator GetFromNativeWindow(aura::Window* window);
 
   // Handles the case when the app window in this controller has been changed,

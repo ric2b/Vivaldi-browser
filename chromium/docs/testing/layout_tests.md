@@ -399,8 +399,26 @@ machine?
 * If none of that helps, and you have access to the bot itself, you may have to
   log in there and see if you can reproduce the problem manually.
 
-### Debugging Inspector Tests
+### Debugging DevTools Tests
 
+* Add `debug_devtools=true` to args.gn and compile: `ninja -C out/Default devtools_frontend_resources`
+  > Debug DevTools lets you avoid having to recompile after every change to the DevTools front-end.
+* Do one of the following:
+    * Option A) Run from the chromium/src folder:
+      `blink/tools/run_layout_tests.sh
+      --additional-driver-flag='--debug-devtools'
+      --additional-driver-flag='--remote-debugging-port=9222'
+      --time-out-ms=6000000`
+    * Option B) If you need to debug an http/tests/inspector test, start httpd
+      as described above. Then, run content_shell:
+      `out/Default/content_shell --debug-devtools --remote-debugging-port=9222 --run-layout-test
+      http://127.0.0.1:8000/path/to/test.html`
+* Open `http://localhost:9222` in a stable/beta/canary Chrome, click the single
+  link to open the devtools with the test loaded.
+* In the loaded devtools, set any required breakpoints and execute `test()` in
+  the console to actually start the test.
+
+NOTE: If the test is an html file, this means it's a legacy test so you need to add:
 * Add `window.debugTest = true;` to your test code as follows:
 
   ```javascript
@@ -408,24 +426,7 @@ machine?
   function test() {
     /* TEST CODE */
   }
-  ```
-
-* Do one of the following:
-    * Option A) Run from the chromium/src folder:
-      `blink/tools/run_layout_tests.sh
-      --additional_driver_flag='--remote-debugging-port=9222'
-      --time-out-ms=6000000`
-    * Option B) If you need to debug an http/tests/inspector test, start httpd
-      as described above. Then, run content_shell:
-      `out/Default/content_shell --remote-debugging-port=9222 --run-layout-test
-      http://127.0.0.1:8000/path/to/test.html`
-* Open `http://localhost:9222` in a stable/beta/canary Chrome, click the single
-  link to open the devtools with the test loaded.
-* You may need to replace devtools.html with inspector.html in your URL (or you
-  can use local chrome inspection of content_shell from `chrome://inspect`
-  instead)
-* In the loaded devtools, set any required breakpoints and execute `test()` in
-  the console to actually start the test.
+  ```  
 
 ## Bisecting Regressions
 
@@ -498,7 +499,7 @@ doesn't support rebaselining flag-specific expectations.
 
 ```bash
 cd src/third_party/WebKit
-Tools/Script/run-webkit-tests --additional-driver-flag=--enable-flag --new-flag-specific-baseline foo/bar/test.html
+Tools/Script/run-webkit-tests --additional-driver-flag=--enable-flag --reset-results foo/bar/test.html
 ```
 
 New baselines will be created in the flag-specific baselines directory, e.g.
@@ -507,25 +508,24 @@ New baselines will be created in the flag-specific baselines directory, e.g.
 Then you can commit the new baselines and upload the patch for review.
 
 However, it's difficult for reviewers to review the patch containing only new
-files. You can follow the steps below for easier review. The steps require a
-try bot already setup for the flag-specific tests (e.g.
-`linux_layout_tests_slimming_paint_v2` for `--enable-slimming-paint-v2`).
+files. You can follow the steps below for easier review.
 
-1. Before the rebaseline, upload a patch for which the tests to be rebaselined
-   will fail. If the tests are expected to fail in
-   `LayoutTests/FlagExpectations/<flag>`, remove the failure expectation lines
-   in the patch.
+1. Copy existing baselines to the flag-specific baselines directory for the
+   tests to be rebaselined:
+   ```bash
+   Tools/Script/run-webkit-tests --additional-driver-flag=--enable-flag --copy-baselines foo/bar/test.html
+   ```
+   Then add the newly created baseline files, commit and upload the patch.
+   Note that the above command won't copy baselines for passing tests.
 
-2. Schedule a try job on the try bot for the flag.
+2. Rebaseline the test locally:
+   ```bash
+   Tools/Script/run-webkit-tests --additional-driver-flag=--enable-flag --reset-results foo/bar/test.html
+   ```
+   Commit the changes and upload the patch.
 
-3. Rebaseline locally, and upload a new version of patch containing the new
-   baselines to the same CL.
-
-4. After the try job finishes, request review of the CL and tell the reviewer
-   the URL of the `layout_test_result` link under the `archive_webkit_tests_results`
-   step of the try job. The reviewer should review the layout test result
-   assuming that the new baselines in the latest version of the CL are the same
-   as the actual results in the linked page.
+3. Request review of the CL and tell the reviewer to compare the patch sets that
+   were uploaded in step 1 and step 2 to see the differences of the rebaselines.
 
 ## web-platform-tests
 
@@ -538,9 +538,6 @@ See
 [bugs with the component Blink>Infra](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=component%3ABlink%3EInfra)
 for issues related to Blink tools, include the layout test runner.
 
-* Windows and Linux: Do not copy and paste while the layout tests are running,
-  as it may interfere with the editing/pasteboard and other clipboard-related
-  tests. (Mac tests swizzle NSClipboard to avoid any conflicts).
 * If QuickTime is not installed, the plugin tests
   `fast/dom/object-embed-plugin-scripting.html` and
   `plugins/embed-attributes-setting.html` are expected to fail.

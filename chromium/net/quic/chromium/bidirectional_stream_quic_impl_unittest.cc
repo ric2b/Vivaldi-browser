@@ -379,7 +379,7 @@ class DeleteStreamDelegate : public TestDelegateBase {
 }  // namespace
 
 class BidirectionalStreamQuicImplTest
-    : public ::testing::TestWithParam<QuicVersion> {
+    : public ::testing::TestWithParam<QuicTransportVersion> {
  protected:
   static const bool kFin = true;
   static const bool kIncludeVersion = true;
@@ -473,8 +473,9 @@ class BidirectionalStreamQuicImplTest
     connection_ = new QuicConnection(
         connection_id_, QuicSocketAddress(QuicSocketAddressImpl(peer_addr_)),
         helper_.get(), alarm_factory_.get(),
-        new QuicChromiumPacketWriter(socket.get()), true /* owns_writer */,
-        Perspective::IS_CLIENT, SupportedVersions(GetParam()));
+        new QuicChromiumPacketWriter(socket.get(), runner_.get()),
+        true /* owns_writer */, Perspective::IS_CLIENT,
+        SupportedTransportVersions(GetParam()));
     base::TimeTicks dns_end = base::TimeTicks::Now();
     base::TimeTicks dns_start = dns_end - base::TimeDelta::FromMilliseconds(1);
 
@@ -485,7 +486,11 @@ class BidirectionalStreamQuicImplTest
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicServerId(kDefaultServerHostName, kDefaultServerPort,
                      PRIVACY_MODE_DISABLED),
-        /*require_confirmation=*/false, kQuicYieldAfterPacketsRead,
+        /*require_confirmation=*/false, /*migrate_session_early*/ false,
+        /*migrate_session_on_network_change*/ false,
+        /*migrate_session_early*/ false,
+        /*migrate_session_on_network_change_v2*/ false,
+        kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
         "CONNECTION_UNKNOWN", dns_start, dns_end, &push_promise_index_, nullptr,
@@ -772,7 +777,7 @@ class BidirectionalStreamQuicImplTest
 
 INSTANTIATE_TEST_CASE_P(Version,
                         BidirectionalStreamQuicImplTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
 
 TEST_P(BidirectionalStreamQuicImplTest, GetRequest) {
   SetRequest("GET", "/", DEFAULT_PRIORITY);
@@ -952,17 +957,28 @@ TEST_P(BidirectionalStreamQuicImplTest, CoalesceDataBuffersNotHeadersFrame) {
   AddWrite(ConstructRequestHeadersPacketInner(
       2, GetNthClientInitiatedStreamId(0), !kFin, DEFAULT_PRIORITY,
       &spdy_request_headers_frame_length, &header_stream_offset));
-  AddWrite(ConstructClientMultipleDataFramesPacket(3, kIncludeVersion, !kFin, 0,
-                                                   {kBody1, kBody2}));
+  if (FLAGS_quic_reloadable_flag_quic_use_mem_slices) {
+    AddWrite(ConstructDataPacket(3, kIncludeVersion, !kFin, 0,
+                                 "here are some datadata keep coming",
+                                 &client_maker_));
+  } else {
+    AddWrite(ConstructClientMultipleDataFramesPacket(3, kIncludeVersion, !kFin,
+                                                     0, {kBody1, kBody2}));
+  }
   // Ack server's data packet.
   AddWrite(ConstructClientAckPacket(4, 3, 1, 1));
   const char kBody3[] = "hello there";
   const char kBody4[] = "another piece of small data";
   const char kBody5[] = "really small";
   QuicStreamOffset data_offset = strlen(kBody1) + strlen(kBody2);
-  AddWrite(ConstructClientMultipleDataFramesPacket(
-      5, !kIncludeVersion, kFin, data_offset, {kBody3, kBody4, kBody5}));
-
+  if (FLAGS_quic_reloadable_flag_quic_use_mem_slices) {
+    AddWrite(ConstructDataPacket(
+        5, !kIncludeVersion, kFin, data_offset,
+        "hello thereanother piece of small datareally small", &client_maker_));
+  } else {
+    AddWrite(ConstructClientMultipleDataFramesPacket(
+        5, !kIncludeVersion, kFin, data_offset, {kBody3, kBody4, kBody5}));
+  }
   Initialize();
 
   BidirectionalStreamRequestInfo request;
@@ -1156,19 +1172,27 @@ TEST_P(BidirectionalStreamQuicImplTest,
   AddWrite(ConstructInitialSettingsPacket(1, &header_stream_offset));
   const char kBody1[] = "here are some data";
   const char kBody2[] = "data keep coming";
+  const char kBody1And2[] = "here are some datadata keep coming";
   std::vector<std::string> two_writes = {kBody1, kBody2};
+  std::vector<std::string> one_write = {kBody1And2};
   AddWrite(ConstructRequestHeadersAndMultipleDataFramesPacket(
       2, !kFin, DEFAULT_PRIORITY, &header_stream_offset,
-      &spdy_request_headers_frame_length, two_writes));
+      &spdy_request_headers_frame_length,
+      FLAGS_quic_reloadable_flag_quic_use_mem_slices ? one_write : two_writes));
   // Ack server's data packet.
   AddWrite(ConstructClientAckPacket(3, 3, 1, 1));
   const char kBody3[] = "hello there";
   const char kBody4[] = "another piece of small data";
   const char kBody5[] = "really small";
   QuicStreamOffset data_offset = strlen(kBody1) + strlen(kBody2);
-  AddWrite(ConstructClientMultipleDataFramesPacket(
-      4, !kIncludeVersion, kFin, data_offset, {kBody3, kBody4, kBody5}));
-
+  if (FLAGS_quic_reloadable_flag_quic_use_mem_slices) {
+    AddWrite(ConstructDataPacket(
+        4, !kIncludeVersion, kFin, data_offset,
+        "hello thereanother piece of small datareally small", &client_maker_));
+  } else {
+    AddWrite(ConstructClientMultipleDataFramesPacket(
+        4, !kIncludeVersion, kFin, data_offset, {kBody3, kBody4, kBody5}));
+  }
   Initialize();
 
   BidirectionalStreamRequestInfo request;

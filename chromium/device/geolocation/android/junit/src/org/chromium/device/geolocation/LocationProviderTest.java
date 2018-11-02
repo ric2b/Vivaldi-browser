@@ -27,7 +27,7 @@ import org.robolectric.ParameterizedRobolectricTestRunner;
 import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
-import org.robolectric.internal.Shadow;
+import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowLocationManager;
 import org.robolectric.shadows.ShadowLog; // remove me ?
 
@@ -148,6 +148,7 @@ public class LocationProviderTest {
         mGoogleApiClient = Mockito.mock(GoogleApiClient.class);
         mGoogleApiClientIsConnected = false;
         doAnswer(new Answer<Boolean>() {
+            @Override
             public Boolean answer(InvocationOnMock invocation) {
                 return mGoogleApiClientIsConnected;
             }
@@ -156,6 +157,7 @@ public class LocationProviderTest {
                 .isConnected();
 
         doAnswer(new Answer<Void>() {
+            @Override
             public Void answer(InvocationOnMock invocation) {
                 mGoogleApiClientIsConnected = true;
                 return null;
@@ -165,6 +167,7 @@ public class LocationProviderTest {
                 .connect();
 
         doAnswer(new Answer<Void>() {
+            @Override
             public Void answer(InvocationOnMock invocation) {
                 mGoogleApiClientIsConnected = false;
                 return null;

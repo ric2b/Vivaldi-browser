@@ -30,11 +30,12 @@
 
 #include "core/editing/RenderedPosition.h"
 
+#include "core/editing/InlineBoxPosition.h"
 #include "core/editing/InlineBoxTraversal.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/compositing/CompositedSelectionBound.h"
@@ -75,16 +76,15 @@ RenderedPosition::RenderedPosition(const VisiblePosition& position)
 RenderedPosition::RenderedPosition(const VisiblePositionInFlatTree& position)
     : RenderedPosition(position.DeepEquivalent(), position.Affinity()) {}
 
+// TODO(editing-dev): Stop duplicating code in the two constructors
+
 RenderedPosition::RenderedPosition(const Position& position,
                                    TextAffinity affinity)
-    : layout_object_(nullptr),
-      inline_box_(nullptr),
-      offset_(0),
-      prev_leaf_child_(UncachedInlineBox()),
-      next_leaf_child_(UncachedInlineBox()) {
+    : layout_object_(nullptr), inline_box_(nullptr), offset_(0) {
   if (position.IsNull())
     return;
-  InlineBoxPosition box_position = ComputeInlineBoxPosition(position, affinity);
+  InlineBoxPosition box_position =
+      ComputeInlineBoxPosition(PositionWithAffinity(position, affinity));
   inline_box_ = box_position.inline_box;
   offset_ = box_position.offset_in_box;
   if (inline_box_)
@@ -96,14 +96,11 @@ RenderedPosition::RenderedPosition(const Position& position,
 
 RenderedPosition::RenderedPosition(const PositionInFlatTree& position,
                                    TextAffinity affinity)
-    : layout_object_(nullptr),
-      inline_box_(nullptr),
-      offset_(0),
-      prev_leaf_child_(UncachedInlineBox()),
-      next_leaf_child_(UncachedInlineBox()) {
+    : layout_object_(nullptr), inline_box_(nullptr), offset_(0) {
   if (position.IsNull())
     return;
-  InlineBoxPosition box_position = ComputeInlineBoxPosition(position, affinity);
+  InlineBoxPosition box_position = ComputeInlineBoxPosition(
+      PositionInFlatTreeWithAffinity(position, affinity));
   inline_box_ = box_position.inline_box;
   offset_ = box_position.offset_in_box;
   if (inline_box_)
@@ -113,16 +110,16 @@ RenderedPosition::RenderedPosition(const PositionInFlatTree& position,
     layout_object_ = LayoutObjectFromPosition(position);
 }
 
-InlineBox* RenderedPosition::PrevLeafChild() const {
-  if (prev_leaf_child_ == UncachedInlineBox())
+const InlineBox* RenderedPosition::PrevLeafChild() const {
+  if (!prev_leaf_child_.has_value())
     prev_leaf_child_ = inline_box_->PrevLeafChildIgnoringLineBreak();
-  return prev_leaf_child_;
+  return prev_leaf_child_.value();
 }
 
-InlineBox* RenderedPosition::NextLeafChild() const {
-  if (next_leaf_child_ == UncachedInlineBox())
+const InlineBox* RenderedPosition::NextLeafChild() const {
+  if (!next_leaf_child_.has_value())
     next_leaf_child_ = inline_box_->NextLeafChildIgnoringLineBreak();
-  return next_leaf_child_;
+  return next_leaf_child_.value();
 }
 
 bool RenderedPosition::IsEquivalent(const RenderedPosition& other) const {
@@ -135,12 +132,14 @@ bool RenderedPosition::IsEquivalent(const RenderedPosition& other) const {
 }
 
 unsigned char RenderedPosition::BidiLevelOnLeft() const {
-  InlineBox* box = AtLeftmostOffsetInBox() ? PrevLeafChild() : inline_box_;
+  const InlineBox* box =
+      AtLeftmostOffsetInBox() ? PrevLeafChild() : inline_box_;
   return box ? box->BidiLevel() : 0;
 }
 
 unsigned char RenderedPosition::BidiLevelOnRight() const {
-  InlineBox* box = AtRightmostOffsetInBox() ? NextLeafChild() : inline_box_;
+  const InlineBox* box =
+      AtRightmostOffsetInBox() ? NextLeafChild() : inline_box_;
   return box ? box->BidiLevel() : 0;
 }
 
@@ -149,7 +148,7 @@ RenderedPosition RenderedPosition::LeftBoundaryOfBidiRun(
   if (!inline_box_ || bidi_level_of_run > inline_box_->BidiLevel())
     return RenderedPosition();
 
-  InlineBox* const box =
+  const InlineBox* const box =
       InlineBoxTraversal::FindLeftBoundaryOfEntireBidiRunIgnoringLineBreak(
           *inline_box_, bidi_level_of_run);
   return RenderedPosition(
@@ -162,7 +161,7 @@ RenderedPosition RenderedPosition::RightBoundaryOfBidiRun(
   if (!inline_box_ || bidi_level_of_run > inline_box_->BidiLevel())
     return RenderedPosition();
 
-  InlineBox* const box =
+  const InlineBox* const box =
       InlineBoxTraversal::FindRightBoundaryOfEntireBidiRunIgnoringLineBreak(
           *inline_box_, bidi_level_of_run);
   return RenderedPosition(
@@ -362,7 +361,7 @@ bool RenderedPosition::IsVisible(bool selection_start) {
   TextControlElement* text_control = EnclosingTextControl(node);
   if (!text_control)
     return true;
-  if (!isHTMLInputElement(text_control))
+  if (!IsHTMLInputElement(text_control))
     return true;
 
   LayoutObject* layout_object = text_control->GetLayoutObject();

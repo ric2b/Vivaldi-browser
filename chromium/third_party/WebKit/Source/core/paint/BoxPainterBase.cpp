@@ -17,6 +17,7 @@
 #include "core/style/ShadowList.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/ScopedInterpolationQuality.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -238,7 +239,7 @@ bool BoxPainterBase::CalculateFillLayerOcclusionCulling(
     FillLayerOcclusionOutputList& reversed_paint_list,
     const FillLayer& fill_layer) {
   bool is_non_associative = false;
-  for (auto current_layer = &fill_layer; current_layer;
+  for (auto* current_layer = &fill_layer; current_layer;
        current_layer = current_layer->Next()) {
     reversed_paint_list.push_back(current_layer);
     // Stop traversal when an opaque layer is encountered.
@@ -362,28 +363,6 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
 
 namespace {
 
-class InterpolationQualityContext {
- public:
-  InterpolationQualityContext(const ComputedStyle& style,
-                              GraphicsContext& context)
-      : context_(context),
-        previous_interpolation_quality_(context.ImageInterpolationQuality()) {
-    interpolation_quality_ = style.GetInterpolationQuality();
-    if (interpolation_quality_ != previous_interpolation_quality_)
-      context.SetImageInterpolationQuality(interpolation_quality_);
-  }
-
-  ~InterpolationQualityContext() {
-    if (interpolation_quality_ != previous_interpolation_quality_)
-      context_.SetImageInterpolationQuality(previous_interpolation_quality_);
-  }
-
- private:
-  GraphicsContext& context_;
-  InterpolationQuality interpolation_quality_;
-  InterpolationQuality previous_interpolation_quality_;
-};
-
 inline bool PaintFastBottomLayer(const DisplayItemClient& image_client,
                                  Node* node,
                                  const PaintInfo& paint_info,
@@ -465,7 +444,10 @@ inline bool PaintFastBottomLayer(const DisplayItemClient& image_client,
                "data",
                InspectorPaintImageEvent::Data(node, *info.image, image->Rect(),
                                               FloatRect(rect)));
-  context.DrawImageRRect(image, border, src_rect, composite_op);
+  // Since there is no way for the developer to specify decode behavior, use
+  // kSync by default.
+  context.DrawImageRRect(image, Image::kSyncDecode, border, src_rect,
+                         composite_op);
 
   return true;
 }
@@ -490,7 +472,9 @@ void BoxPainterBase::PaintFillLayerBackground(
   }
 
   // No progressive loading of the background image.
-  if (info.should_paint_image && !geometry.DestRect().IsEmpty()) {
+  // NOTE: This method can be called with no image in situations when a bad
+  // resource locator is given such as "//:0", so still check for image.
+  if (info.should_paint_image && !geometry.DestRect().IsEmpty() && image) {
     TRACE_EVENT1(
         TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data",
         InspectorPaintImageEvent::Data(node_, *info.image, image->Rect(),
@@ -548,9 +532,9 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
   LayoutRect scrolled_paint_rect =
       AdjustForScrolledContent(paint_info, info, rect);
 
-  RefPtr<Image> image;
+  scoped_refptr<Image> image;
   SkBlendMode composite_op = op;
-  Optional<InterpolationQualityContext> interpolation_quality_context;
+  Optional<ScopedInterpolationQuality> interpolation_quality_context;
   if (info.should_paint_image) {
     geometry.Calculate(paint_info.PaintContainer(),
                        paint_info.GetGlobalPaintFlags(), bg_layer,
@@ -558,7 +542,8 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
     image = info.image->GetImage(
         geometry.ImageClient(), geometry.ImageDocument(), geometry.ImageStyle(),
         FlooredIntSize(geometry.TileSize()));
-    interpolation_quality_context.emplace(geometry.ImageStyle(), context);
+    interpolation_quality_context.emplace(
+        context, geometry.ImageStyle().GetInterpolationQuality());
 
     if (bg_layer.MaskSourceType() == kMaskLuminance)
       context.SetColorFilter(kColorFilterLuminanceToAlpha);
@@ -575,7 +560,7 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
 
   // Fast path for drawing simple color backgrounds.
   if (PaintFastBottomLayer(display_item_, node_, paint_info, info, rect,
-                           border_rect, geometry, image.Get(), composite_op)) {
+                           border_rect, geometry, image.get(), composite_op)) {
     return;
   }
 
@@ -585,7 +570,7 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
                            kApplyToContext);
   }
   if (bg_layer.Clip() == kTextFillBox) {
-    PaintFillLayerTextFillBox(context, info, image.Get(), composite_op,
+    PaintFillLayerTextFillBox(context, info, image.get(), composite_op,
                               geometry, rect, scrolled_paint_rect);
     return;
   }
@@ -615,7 +600,7 @@ void BoxPainterBase::PaintFillLayer(const PaintInfo& paint_info,
       break;
   }
 
-  PaintFillLayerBackground(context, info, image.Get(), composite_op, geometry,
+  PaintFillLayerBackground(context, info, image.get(), composite_op, geometry,
                            scrolled_paint_rect);
 }
 

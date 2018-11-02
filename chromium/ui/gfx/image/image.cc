@@ -338,33 +338,30 @@ Image::Image(const std::vector<ImagePNGRep>& image_reps) {
     return;
 
   storage_ = new internal::ImageStorage(Image::kImageRepPNG);
-  AddRepresentation(base::MakeUnique<internal::ImageRepPNG>(filtered));
+  AddRepresentation(std::make_unique<internal::ImageRepPNG>(filtered));
 }
 
 Image::Image(const ImageSkia& image) {
   if (!image.isNull()) {
     storage_ = new internal::ImageStorage(Image::kImageRepSkia);
     AddRepresentation(
-        base::MakeUnique<internal::ImageRepSkia>(new ImageSkia(image)));
+        std::make_unique<internal::ImageRepSkia>(new ImageSkia(image)));
   }
 }
 
 #if defined(OS_IOS)
-Image::Image(UIImage* image) : Image(image, base::scoped_policy::RETAIN) {}
-
-Image::Image(UIImage* image, base::scoped_policy::OwnershipPolicy policy)
-    : storage_(new internal::ImageStorage(Image::kImageRepCocoaTouch)) {
+Image::Image(UIImage* image) {
   if (image) {
-    if (policy == base::scoped_policy::RETAIN)
-      base::mac::NSObjectRetain(image);
-    AddRepresentation(base::MakeUnique<internal::ImageRepCocoaTouch>(image));
+    base::mac::NSObjectRetain(image);
+    storage_ = new internal::ImageStorage(Image::kImageRepCocoaTouch);
+    AddRepresentation(std::make_unique<internal::ImageRepCocoaTouch>(image));
   }
 }
 #elif defined(OS_MACOSX)
 Image::Image(NSImage* image) {
   if (image) {
     storage_ = new internal::ImageStorage(Image::kImageRepCocoa);
-    AddRepresentation(base::MakeUnique<internal::ImageRepCocoa>(image));
+    AddRepresentation(std::make_unique<internal::ImageRepCocoa>(image));
   }
 }
 #endif
@@ -585,7 +582,11 @@ ImageSkia Image::AsImageSkia() const {
   return IsEmpty() ? ImageSkia() : *ToImageSkia();
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_IOS)
+UIImage* Image::AsUIImage() const {
+  return IsEmpty() ? nil : ToUIImage();
+}
+#elif defined(OS_MACOSX)
 NSImage* Image::AsNSImage() const {
   return IsEmpty() ? nil : ToNSImage();
 }
@@ -606,13 +607,7 @@ SkBitmap* Image::CopySkBitmap() const {
   return new SkBitmap(*ToSkBitmap());
 }
 
-#if defined(OS_IOS)
-UIImage* Image::CopyUIImage() const {
-  UIImage* image = ToUIImage();
-  base::mac::NSObjectRetain(image);
-  return image;
-}
-#elif defined(OS_MACOSX)
+#if defined(OS_MACOSX) && !defined(OS_IOS)
 NSImage* Image::CopyNSImage() const {
   NSImage* image = ToNSImage();
   base::mac::NSObjectRetain(image);

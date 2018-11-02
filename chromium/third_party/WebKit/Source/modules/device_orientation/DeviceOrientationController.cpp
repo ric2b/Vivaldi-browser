@@ -4,7 +4,6 @@
 
 #include "modules/device_orientation/DeviceOrientationController.h"
 
-#include "core/dom/Document.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/Settings.h"
@@ -136,7 +135,7 @@ DeviceOrientationDispatcher& DeviceOrientationController::DispatcherInstance()
   return DeviceOrientationDispatcher::Instance(false);
 }
 
-DEFINE_TRACE(DeviceOrientationController) {
+void DeviceOrientationController::Trace(blink::Visitor* visitor) {
   visitor->Trace(override_orientation_data_);
   DeviceSingleWindowEventController::Trace(visitor);
   Supplement<Document>::Trace(visitor);

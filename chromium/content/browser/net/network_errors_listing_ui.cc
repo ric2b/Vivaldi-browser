@@ -17,7 +17,7 @@
 #include "net/base/net_errors.h"
 #include "net/log/net_log_util.h"
 
-static const char kDataFile[] = "network-error-data.json";
+static const char kNetworkErrorDataFile[] = "network-error-data.json";
 static const char kErrorCodeField[]  = "errorCode";
 static const char kErrorCodesDataName[] = "errorCodes";
 static const char kErrorIdField[]  = "errorId";
@@ -57,10 +57,11 @@ std::unique_ptr<base::ListValue> GetNetworkErrorData() {
   return error_list;
 }
 
-bool HandleRequestCallback(BrowserContext* current_context,
-                           const std::string& path,
-                           const WebUIDataSource::GotDataCallback& callback) {
-  if (path != kDataFile)
+bool HandleWebUIRequestCallback(
+    BrowserContext* current_context,
+    const std::string& path,
+    const WebUIDataSource::GotDataCallback& callback) {
+  if (path != kNetworkErrorDataFile)
     return false;
 
   base::DictionaryValue data;
@@ -87,7 +88,7 @@ NetworkErrorsListingUI::NetworkErrorsListingUI(WebUI* web_ui)
                                IDR_NETWORK_ERROR_LISTING_JS);
   html_source->SetDefaultResource(IDR_NETWORK_ERROR_LISTING_HTML);
   html_source->SetRequestFilter(
-      base::Bind(&HandleRequestCallback,
+      base::Bind(&HandleWebUIRequestCallback,
                  web_ui->GetWebContents()->GetBrowserContext()));
 
   BrowserContext* browser_context =

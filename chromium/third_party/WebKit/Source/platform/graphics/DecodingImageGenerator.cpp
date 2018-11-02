@@ -39,14 +39,14 @@ namespace blink {
 // static
 std::unique_ptr<SkImageGenerator>
 DecodingImageGenerator::CreateAsSkImageGenerator(sk_sp<SkData> data) {
-  RefPtr<SegmentReader> segment_reader =
+  scoped_refptr<SegmentReader> segment_reader =
       SegmentReader::CreateFromSkData(std::move(data));
   // We just need the size of the image, so we have to temporarily create an
   // ImageDecoder. Since we only need the size, the premul and gamma settings
   // don't really matter.
   std::unique_ptr<ImageDecoder> decoder = ImageDecoder::Create(
       segment_reader, true, ImageDecoder::kAlphaPremultiplied,
-      ColorBehavior::TransformToGlobalTarget());
+      ColorBehavior::TransformToSRGB());
   if (!decoder || !decoder->IsSizeAvailable())
     return nullptr;
 
@@ -55,7 +55,7 @@ DecodingImageGenerator::CreateAsSkImageGenerator(sk_sp<SkData> data) {
       SkImageInfo::MakeN32(size.Width(), size.Height(), kPremul_SkAlphaType,
                            decoder->ColorSpaceForSkImages());
 
-  RefPtr<ImageFrameGenerator> frame = ImageFrameGenerator::Create(
+  scoped_refptr<ImageFrameGenerator> frame = ImageFrameGenerator::Create(
       SkISize::Make(size.Width(), size.Height()), false,
       decoder->GetColorBehavior(), decoder->GetSupportedDecodeSizes());
   if (!frame)
@@ -71,9 +71,9 @@ DecodingImageGenerator::CreateAsSkImageGenerator(sk_sp<SkData> data) {
 
 // static
 sk_sp<DecodingImageGenerator> DecodingImageGenerator::Create(
-    PassRefPtr<ImageFrameGenerator> frame_generator,
+    scoped_refptr<ImageFrameGenerator> frame_generator,
     const SkImageInfo& info,
-    PassRefPtr<SegmentReader> data,
+    scoped_refptr<SegmentReader> data,
     std::vector<FrameMetadata> frames,
     PaintImage::ContentId content_id,
     bool all_data_received) {
@@ -83,9 +83,9 @@ sk_sp<DecodingImageGenerator> DecodingImageGenerator::Create(
 }
 
 DecodingImageGenerator::DecodingImageGenerator(
-    PassRefPtr<ImageFrameGenerator> frame_generator,
+    scoped_refptr<ImageFrameGenerator> frame_generator,
     const SkImageInfo& info,
-    PassRefPtr<SegmentReader> data,
+    scoped_refptr<SegmentReader> data,
     std::vector<FrameMetadata> frames,
     PaintImage::ContentId complete_frame_content_id,
     bool all_data_received)
@@ -116,13 +116,13 @@ bool DecodingImageGenerator::GetPixels(const SkImageInfo& dst_info,
   TRACE_EVENT1("blink", "DecodingImageGenerator::getPixels", "frame index",
                static_cast<int>(frame_index));
 
-  // Implementation doesn't support scaling yet, so make sure we're not given a
-  // different size.
-  // TODO(vmpstr): Implement support for supported sizes.
-  if (dst_info.dimensions() != GetSkImageInfo().dimensions()) {
+  // Implementation only supports decoding to a supported size.
+  if (dst_info.dimensions() != GetSupportedDecodeSize(dst_info.dimensions())) {
     return false;
   }
 
+  // TODO(vmpstr): We could do the color type conversion here by getting N32
+  // colortype decode first, and then converting to whatever was requested.
   if (dst_info.colorType() != kN32_SkColorType) {
     return false;
   }
@@ -149,7 +149,7 @@ bool DecodingImageGenerator::GetPixels(const SkImageInfo& dst_info,
 
   PlatformInstrumentation::WillDecodeLazyPixelRef(lazy_pixel_ref);
   const bool decoded = frame_generator_->DecodeAndScale(
-      data_.Get(), all_data_received_, frame_index, decode_info, pixels,
+      data_.get(), all_data_received_, frame_index, decode_info, pixels,
       row_bytes, alpha_option);
   PlatformInstrumentation::DidDecodeLazyPixelRef();
 
@@ -179,7 +179,7 @@ bool DecodingImageGenerator::QueryYUV8(SkYUVSizeInfo* size_info,
   if (color_space)
     *color_space = kJPEG_SkYUVColorSpace;
 
-  return frame_generator_->GetYUVComponentSizes(data_.Get(), size_info);
+  return frame_generator_->GetYUVComponentSizes(data_.get(), size_info);
 }
 
 bool DecodingImageGenerator::GetYUV8Planes(const SkYUVSizeInfo& size_info,
@@ -195,7 +195,7 @@ bool DecodingImageGenerator::GetYUV8Planes(const SkYUVSizeInfo& size_info,
 
   PlatformInstrumentation::WillDecodeLazyPixelRef(lazy_pixel_ref);
   bool decoded =
-      frame_generator_->DecodeToYUV(data_.Get(), frame_index, size_info.fSizes,
+      frame_generator_->DecodeToYUV(data_.get(), frame_index, size_info.fSizes,
                                     planes, size_info.fWidthBytes);
   PlatformInstrumentation::DidDecodeLazyPixelRef();
 
@@ -209,9 +209,11 @@ SkISize DecodingImageGenerator::GetSupportedDecodeSize(
 
 PaintImage::ContentId DecodingImageGenerator::GetContentIdForFrame(
     size_t frame_index) const {
+  DCHECK_LT(frame_index, GetFrameMetadata().size());
+
   // If we have all the data for the image, or this particular frame, we can
   // consider the decoded frame constant.
-  if (all_data_received_ || GetFrameMetadata()[frame_index].complete)
+  if (all_data_received_ || GetFrameMetadata().at(frame_index).complete)
     return complete_frame_content_id_;
 
   return PaintImageGenerator::GetContentIdForFrame(frame_index);

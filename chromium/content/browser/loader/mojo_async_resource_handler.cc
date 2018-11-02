@@ -9,27 +9,24 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/loader/downloaded_temp_file_impl.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/loader/resource_scheduler.h"
-#include "content/browser/loader/upload_progress_tracker.h"
 #include "content/public/browser/global_request_id.h"
-#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/base/mime_sniffer.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/redirect_info.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 
 namespace content {
 namespace {
@@ -42,22 +39,6 @@ int g_allocation_size = MojoAsyncResourceHandler::kDefaultAllocationSize;
 constexpr size_t kMinAllocationSize = 2 * net::kMaxBytesToSniff;
 
 constexpr size_t kMaxChunkSize = 32 * 1024;
-
-void GetNumericArg(const std::string& name, int* result) {
-  const std::string& value =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(name);
-  if (!value.empty())
-    base::StringToInt(value, result);
-}
-
-void InitializeResourceBufferConstants() {
-  static bool did_init = false;
-  if (did_init)
-    return;
-  did_init = true;
-
-  GetNumericArg("resource-buffer-size", &g_allocation_size);
-}
 
 void NotReached(mojom::URLLoaderRequest mojo_request,
                 mojom::URLLoaderClientPtr url_loader_client) {
@@ -141,6 +122,15 @@ MojoAsyncResourceHandler::MojoAsyncResourceHandler(
 MojoAsyncResourceHandler::~MojoAsyncResourceHandler() {
   if (has_checked_for_sufficient_resources_)
     rdh_->FinishedWithResourcesForRequest(request());
+}
+
+void MojoAsyncResourceHandler::InitializeResourceBufferConstants() {
+  static bool did_init = false;
+  if (did_init)
+    return;
+  did_init = true;
+
+  GetNumericArg("resource-buffer-size", &g_allocation_size);
 }
 
 void MojoAsyncResourceHandler::OnRequestRedirected(
@@ -382,6 +372,14 @@ void MojoAsyncResourceHandler::SetPriority(net::RequestPriority priority,
       request(), priority, intra_priority_value);
 }
 
+void MojoAsyncResourceHandler::PauseReadingBodyFromNet() {
+  NOTREACHED();
+}
+
+void MojoAsyncResourceHandler::ResumeReadingBodyFromNet() {
+  NOTREACHED();
+}
+
 void MojoAsyncResourceHandler::OnWritableForTesting() {
   OnWritable(MOJO_RESULT_OK);
 }
@@ -416,7 +414,7 @@ net::IOBufferWithSize* MojoAsyncResourceHandler::GetResponseMetadata(
 }
 
 void MojoAsyncResourceHandler::OnResponseCompleted(
-    const net::URLRequestStatus& status,
+    const net::URLRequestStatus& request_status,
     std::unique_ptr<ResourceController> controller) {
   // Ensure sending the final upload progress message here, since
   // OnResponseCompleted can be called without OnResponseStarted on cancellation
@@ -435,23 +433,22 @@ void MojoAsyncResourceHandler::OnResponseCompleted(
   // WebURLLoaderImpl::OnCompletedRequest that routes this message to a WebCore
   // ResourceHandleInternal which asserts on its state and crashes. By crashing
   // when the message is sent, we should get better crash reports.
-  CHECK(status.status() != net::URLRequestStatus::SUCCESS ||
+  CHECK(request_status.status() != net::URLRequestStatus::SUCCESS ||
         sent_received_response_message_);
 
-  int error_code = status.error();
+  int error_code = request_status.error();
 
-  DCHECK_NE(status.status(), net::URLRequestStatus::IO_PENDING);
+  DCHECK_NE(request_status.status(), net::URLRequestStatus::IO_PENDING);
 
-  ResourceRequestCompletionStatus request_complete_data;
-  request_complete_data.error_code = error_code;
-  request_complete_data.exists_in_cache = request()->response_info().was_cached;
-  request_complete_data.completion_time = base::TimeTicks::Now();
-  request_complete_data.encoded_data_length =
-      request()->GetTotalReceivedBytes();
-  request_complete_data.encoded_body_length = request()->GetRawBodyBytes();
-  request_complete_data.decoded_body_length = total_written_bytes_;
+  network::URLLoaderCompletionStatus loader_status;
+  loader_status.error_code = error_code;
+  loader_status.exists_in_cache = request()->response_info().was_cached;
+  loader_status.completion_time = base::TimeTicks::Now();
+  loader_status.encoded_data_length = request()->GetTotalReceivedBytes();
+  loader_status.encoded_body_length = request()->GetRawBodyBytes();
+  loader_status.decoded_body_length = total_written_bytes_;
 
-  url_loader_client_->OnComplete(request_complete_data);
+  url_loader_client_->OnComplete(loader_status);
   controller->Resume();
 }
 
@@ -569,9 +566,9 @@ void MojoAsyncResourceHandler::ReportBadMessage(const std::string& error) {
 
 std::unique_ptr<UploadProgressTracker>
 MojoAsyncResourceHandler::CreateUploadProgressTracker(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     UploadProgressTracker::UploadProgressReportCallback callback) {
-  return base::MakeUnique<UploadProgressTracker>(from_here, std::move(callback),
+  return std::make_unique<UploadProgressTracker>(from_here, std::move(callback),
                                                  request());
 }
 

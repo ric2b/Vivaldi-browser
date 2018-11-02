@@ -7,6 +7,10 @@
 namespace autofill {
 namespace prefs {
 
+// Integer that is set to the billing customer number fetched from priority
+// preference.
+const char kAutofillBillingCustomerNumber[] = "billing_customer_number";
+
 // Number of times the credit card signin promo has been shown.
 const char kAutofillCreditCardSigninPromoImpressionCount[] =
     "autofill.credit_card_signin_promo_impression_count";
@@ -26,6 +30,16 @@ const char kAutofillWalletImportEnabled[] = "autofill.wallet_import_enabled";
 // was run. This routine will be run once per version.
 const char kAutofillLastVersionDeduped[] = "autofill.last_version_deduped";
 
+// Integer that is set to the last version where disused addresses were
+// deleted. This deletion will be run once per version.
+const char kAutofillLastVersionDisusedAddressesDeleted[] =
+    "autofill.last_version_disused_addresses_deleted";
+
+// Integer that is set to the last version where disused credit cards were
+// deleted. This deletion will be run once per version.
+const char kAutofillLastVersionDisusedCreditCardsDeleted[] =
+    "autofill.last_version_disused_credit_cards_deleted";
+
 // Boolean that is set to the last choice user made when prompted for saving an
 // unmasked server card locally.
 const char kAutofillWalletImportStorageCheckboxState[] =
@@ -37,6 +51,10 @@ const char kAutofillWalletImportStorageCheckboxState[] =
 // users.
 const char kAutofillAcceptSaveCreditCardPromptState[] =
     "autofill.accept_save_credit_card_prompt_state";
+
+// Boolean that is true if Autofill is enabled and allowed to save credit card
+// data.
+const char kAutofillCreditCardEnabled[] = "autofill.credit_card_enabled";
 
 }  // namespace prefs
 }  // namespace autofill

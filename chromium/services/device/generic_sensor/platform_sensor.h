@@ -41,9 +41,6 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
 
   virtual mojom::ReportingMode GetReportingMode() = 0;
   virtual PlatformSensorConfiguration GetDefaultConfiguration() = 0;
-  virtual bool StartSensor(
-      const PlatformSensorConfiguration& configuration) = 0;
-  virtual void StopSensor() = 0;
   virtual bool CheckSensorConfiguration(
       const PlatformSensorConfiguration& configuration) = 0;
 
@@ -63,6 +60,9 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
   bool StartListening(Client* client,
                       const PlatformSensorConfiguration& config);
   bool StopListening(Client* client, const PlatformSensorConfiguration& config);
+  // Stops all the configurations tied to the |client|, but the |client| still
+  // gets notification.
+  bool StopListening(Client* client);
 
   void UpdateSensor();
 
@@ -70,6 +70,10 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
   void RemoveClient(Client*);
 
   bool GetLatestReading(SensorReading* result);
+  // Returns 'true' if the sensor is started; returns 'false' otherwise.
+  bool IsActiveForTesting() const;
+  using ConfigMap = std::map<Client*, std::list<PlatformSensorConfiguration>>;
+  const ConfigMap& GetConfigMapForTesting() const;
 
  protected:
   virtual ~PlatformSensor();
@@ -77,20 +81,22 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
                  mojo::ScopedSharedBufferMapping mapping,
                  PlatformSensorProvider* provider);
 
-  using ConfigMap = std::map<Client*, std::list<PlatformSensorConfiguration>>;
   using ReadingBuffer = SensorReadingSharedBuffer;
 
   virtual bool UpdateSensorInternal(const ConfigMap& configurations);
-
-  // Updates shared buffer with new sensor reading data.
+  virtual bool StartSensor(
+      const PlatformSensorConfiguration& configuration) = 0;
+  virtual void StopSensor() = 0;
+  // Updates shared buffer with new sensor reading data and schedules
+  // NotifySensorReadingChanged invocation on IPC thread.
   // Note: this method is thread-safe.
-  void UpdateSensorReading(const SensorReading& reading);
+  void UpdateSharedBufferAndNotifyClients(const SensorReading& reading);
+
+  // Updates shared buffer with provided SensorReading
+  void UpdateSharedBuffer(const SensorReading& reading);
 
   void NotifySensorReadingChanged();
   void NotifySensorError();
-
-  // For testing purposes.
-  const ConfigMap& config_map() const { return config_map_; }
 
   // Task runner that is used by mojo objects for the IPC.
   // If platfrom sensor events are processed on a different
@@ -105,6 +111,7 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
   mojom::SensorType type_;
   ConfigMap config_map_;
   PlatformSensorProvider* provider_;
+  bool is_active_ = false;
   base::WeakPtrFactory<PlatformSensor> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(PlatformSensor);
 };

@@ -85,7 +85,6 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     private String mStoragePath;
     private boolean mQuicEnabled;
     private boolean mHttp2Enabled;
-    private boolean mSdchEnabled;
     private boolean mBrotiEnabled;
     private boolean mDisableCache;
     private int mHttpCacheMode;
@@ -104,7 +103,6 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
         mApplicationContext = context.getApplicationContext();
         enableQuic(false);
         enableHttp2(true);
-        enableSdch(false);
         enableBrotli(false);
         enableHttpCache(HTTP_CACHE_DISABLED, 0);
         enableNetworkQualityEstimator(false);
@@ -189,12 +187,7 @@ public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
 
     @Override
     public CronetEngineBuilderImpl enableSdch(boolean value) {
-        mSdchEnabled = value;
         return this;
-    }
-
-    boolean sdchEnabled() {
-        return mSdchEnabled;
     }
 
     @Override

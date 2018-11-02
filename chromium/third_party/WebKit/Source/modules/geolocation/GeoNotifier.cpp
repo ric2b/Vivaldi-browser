@@ -9,18 +9,22 @@
 #include "modules/geolocation/PositionOptions.h"
 #include "platform/Histogram.h"
 #include "platform/wtf/Assertions.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
 GeoNotifier::GeoNotifier(Geolocation* geolocation,
-                         PositionCallback* success_callback,
-                         PositionErrorCallback* error_callback,
+                         V8PositionCallback* success_callback,
+                         V8PositionErrorCallback* error_callback,
                          const PositionOptions& options)
     : geolocation_(geolocation),
       success_callback_(success_callback),
       error_callback_(error_callback),
       options_(options),
-      timer_(this, &GeoNotifier::TimerFired),
+      timer_(
+          geolocation->GetDocument()->GetTaskRunner(TaskType::kMiscPlatformAPI),
+          this,
+          &GeoNotifier::TimerFired),
       use_cached_position_(false) {
   DCHECK(geolocation_);
   DCHECK(success_callback_);
@@ -31,11 +35,16 @@ GeoNotifier::GeoNotifier(Geolocation* geolocation,
   timeout_histogram.Count(options_.timeout());
 }
 
-DEFINE_TRACE(GeoNotifier) {
+void GeoNotifier::Trace(blink::Visitor* visitor) {
   visitor->Trace(geolocation_);
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);
   visitor->Trace(fatal_error_);
+}
+
+void GeoNotifier::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+  visitor->TraceWrappers(success_callback_);
+  visitor->TraceWrappers(error_callback_);
 }
 
 void GeoNotifier::SetFatalError(PositionError* error) {
@@ -48,21 +57,21 @@ void GeoNotifier::SetFatalError(PositionError* error) {
   fatal_error_ = error;
   // An existing timer may not have a zero timeout.
   timer_.Stop();
-  timer_.StartOneShot(0, BLINK_FROM_HERE);
+  timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void GeoNotifier::SetUseCachedPosition() {
   use_cached_position_ = true;
-  timer_.StartOneShot(0, BLINK_FROM_HERE);
+  timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void GeoNotifier::RunSuccessCallback(Geoposition* position) {
-  success_callback_->handleEvent(position);
+  success_callback_->InvokeAndReportException(nullptr, position);
 }
 
 void GeoNotifier::RunErrorCallback(PositionError* error) {
   if (error_callback_)
-    error_callback_->handleEvent(error);
+    error_callback_->InvokeAndReportException(nullptr, error);
 }
 
 void GeoNotifier::StartTimer() {
@@ -75,6 +84,21 @@ void GeoNotifier::StopTimer() {
 
 void GeoNotifier::TimerFired(TimerBase*) {
   timer_.Stop();
+
+  // As the timer fires asynchronously, it's possible that the execution context
+  // has already gone.  Check it first.
+  if (!geolocation_->GetExecutionContext()) {
+    return;  // Do not invoke anything because of no execution context.
+  }
+  // TODO(yukishiino): Remove this check once we understand the cause.
+  // https://crbug.com/792604
+  CHECK(!geolocation_->GetExecutionContext()->IsContextDestroyed());
+  // As the timer fires asynchronously, it's possible that |geolocation_|
+  // no longer owns this notifier, i.e. |geolocation_| is no longer performing
+  // wrapper-tracing. In that case, the underlying V8 function may not be alive.
+  if (!geolocation_->DoesOwnNotifier(this)) {
+    return;  // Do not invoke anything because of no owner geolocation.
+  }
 
   // Test for fatal error first. This is required for the case where the
   // LocalFrame is disconnected and requests are cancelled.
@@ -93,9 +117,11 @@ void GeoNotifier::TimerFired(TimerBase*) {
     return;
   }
 
-  if (error_callback_)
-    error_callback_->handleEvent(
+  if (error_callback_) {
+    error_callback_->InvokeAndReportException(
+        nullptr,
         PositionError::Create(PositionError::kTimeout, "Timeout expired"));
+  }
 
   DEFINE_STATIC_LOCAL(CustomCountHistogram, timeout_expired_histogram,
                       ("Geolocation.TimeoutExpired", 0,

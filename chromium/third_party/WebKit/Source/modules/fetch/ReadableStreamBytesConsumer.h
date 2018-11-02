@@ -6,13 +6,13 @@
 #define ReadableStreamBytesConsumer_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/ModulesExport.h"
 #include "modules/fetch/BytesConsumer.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ class MODULES_EXPORT ReadableStreamBytesConsumer final : public BytesConsumer {
   Error GetError() const override;
   String DebugName() const override { return "ReadableStreamBytesConsumer"; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   class OnFulfilled;
@@ -61,7 +61,7 @@ class MODULES_EXPORT ReadableStreamBytesConsumer final : public BytesConsumer {
   // Holding a ScopedPersistent here is safe in terms of cross-world wrapper
   // leakage because we read only Uint8Array chunks from the reader.
   ScopedPersistent<v8::Value> reader_;
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   Member<BytesConsumer::Client> client_;
   Member<DOMUint8Array> pending_buffer_;
   size_t pending_offset_ = 0;

@@ -4,9 +4,9 @@
 
 #include "platform/graphics/compositing/PaintChunksToCcLayer.h"
 
-#include "cc/base/render_surface_filters.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/paint_op_buffer.h"
+#include "cc/paint/render_surface_filters.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DisplayItemList.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
@@ -275,8 +275,20 @@ void ConversionContext::SwitchToEffect(
     DCHECK_EQ(current_effect_, sub_effect->Parent());
 
     // Step 3a: Before each effect can be applied, we must enter its output
-    // clip first.
-    SwitchToClip(sub_effect->OutputClip());
+    // clip first, or exit all clips if it doesn't have one.
+    if (sub_effect->OutputClip()) {
+      SwitchToClip(sub_effect->OutputClip());
+    } else {
+      while (state_stack_.size() &&
+             state_stack_.back().type == StateEntry::PairedType::kClip) {
+        StateEntry& previous_state = state_stack_.back();
+        current_transform_ = previous_state.transform;
+        current_clip_ = previous_state.clip;
+        DCHECK_EQ(previous_state.effect, current_effect_);
+        state_stack_.pop_back();
+        AppendRestore(cc_list_, 1);
+      }
+    }
 
     // Step 3b: Apply non-spatial effects first, adjust CTM, then apply spatial
     // effects. Strictly speaking the CTM shall be appled first, it is done
@@ -303,9 +315,9 @@ void ConversionContext::SwitchToEffect(
                   target_transform, current_transform_))));
     }
 
-    // TODO(chrishtr): specify origin of the filter.
-    FloatPoint filter_origin;
-    cc_list_.push<cc::TranslateOp>(filter_origin.X(), filter_origin.Y());
+    FloatPoint filter_origin = sub_effect->PaintOffset();
+    if (filter_origin != FloatPoint())
+      cc_list_.push<cc::TranslateOp>(filter_origin.X(), filter_origin.Y());
     // The size parameter is only used to computed the origin of zoom
     // operation, which we never generate.
     gfx::SizeF empty;
@@ -313,7 +325,8 @@ void ConversionContext::SwitchToEffect(
     filter_flags.setImageFilter(cc::RenderSurfaceFilters::BuildImageFilter(
         sub_effect->Filter().AsCcFilterOperations(), empty));
     cc_list_.push<cc::SaveLayerOp>(nullptr, &filter_flags);
-    cc_list_.push<cc::TranslateOp>(-filter_origin.X(), -filter_origin.Y());
+    if (filter_origin != FloatPoint())
+      cc_list_.push<cc::TranslateOp>(-filter_origin.X(), -filter_origin.Y());
 
     cc_list_.EndPaintOfPairedBegin();
 
@@ -356,6 +369,26 @@ void ConversionContext::Convert(const Vector<const PaintChunk*>& paint_chunks,
 
 }  // unnamed namespace
 
+void PaintChunksToCcLayer::ConvertInto(
+    const Vector<const PaintChunk*>& paint_chunks,
+    const PropertyTreeState& layer_state,
+    const gfx::Vector2dF& layer_offset,
+    const DisplayItemList& display_items,
+    cc::DisplayItemList& cc_list) {
+  bool need_translate = !layer_offset.IsZero();
+  if (need_translate) {
+    cc_list.StartPaint();
+    cc_list.push<cc::SaveOp>();
+    cc_list.push<cc::TranslateOp>(-layer_offset.x(), -layer_offset.y());
+    cc_list.EndPaintOfPairedBegin();
+  }
+
+  ConversionContext(layer_state, cc_list).Convert(paint_chunks, display_items);
+
+  if (need_translate)
+    AppendRestore(cc_list, 1);
+}
+
 scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     const Vector<const PaintChunk*>& paint_chunks,
     const PropertyTreeState& layer_state,
@@ -364,18 +397,7 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     cc::DisplayItemList::UsageHint hint,
     RasterUnderInvalidationCheckingParams* under_invalidation_checking_params) {
   auto cc_list = base::MakeRefCounted<cc::DisplayItemList>(hint);
-  bool need_translate = !layer_offset.IsZero();
-  if (need_translate) {
-    cc_list->StartPaint();
-    cc_list->push<cc::SaveOp>();
-    cc_list->push<cc::TranslateOp>(-layer_offset.x(), -layer_offset.y());
-    cc_list->EndPaintOfPairedBegin();
-  }
-
-  ConversionContext(layer_state, *cc_list).Convert(paint_chunks, display_items);
-
-  if (need_translate)
-    AppendRestore(*cc_list, 1);
+  ConvertInto(paint_chunks, layer_state, layer_offset, display_items, *cc_list);
 
   if (under_invalidation_checking_params) {
     auto& params = *under_invalidation_checking_params;
@@ -383,16 +405,17 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
     recorder.beginRecording(params.interest_rect);
     // Create a complete cloned list for under-invalidation checking. We can't
     // use cc_list because it is not finalized yet.
-    auto list_clone =
-        Convert(paint_chunks, layer_state, layer_offset, display_items,
-                cc::DisplayItemList::kToBeReleasedAsPaintOpBuffer);
+    auto list_clone = base::MakeRefCounted<cc::DisplayItemList>(
+        cc::DisplayItemList::kToBeReleasedAsPaintOpBuffer);
+    ConvertInto(paint_chunks, layer_state, layer_offset, display_items,
+                *list_clone);
     recorder.getRecordingCanvas()->drawPicture(list_clone->ReleaseAsRecord());
     params.tracking.CheckUnderInvalidations(params.debug_name,
                                             recorder.finishRecordingAsPicture(),
-                                            params.interest_rect);
-    if (auto record = params.tracking.under_invalidation_record) {
+                                            params.interest_rect, IntPoint());
+    if (auto record = params.tracking.UnderInvalidationRecord()) {
       cc_list->StartPaint();
-      cc_list->push<cc::DrawRecordOp>(record);
+      cc_list->push<cc::DrawRecordOp>(std::move(record));
       cc_list->EndPaintOfUnpaired(g_large_rect);
     }
   }

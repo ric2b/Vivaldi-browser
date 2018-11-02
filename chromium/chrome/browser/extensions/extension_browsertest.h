@@ -14,6 +14,7 @@
 #include "base/test/scoped_path_override.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_extension_test_notification_observer.h"
+#include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -21,6 +22,7 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/scoped_ignore_content_verifier_for_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/features/feature_channel.h"
@@ -28,6 +30,7 @@
 
 class ExtensionService;
 class Profile;
+struct WebApplicationInfo;
 
 namespace extensions {
 class ExtensionCacheFake;
@@ -73,6 +76,18 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
   // Get the profile to use.
   virtual Profile* profile();
 
+  // Extensions used in tests are typically not from the web store and will have
+  // missing content verification hashes. The default implementation disables
+  // content verification; this should be overridden by derived tests which care
+  // about content verification.
+  virtual bool ShouldEnableContentVerification();
+
+  // Extensions used in tests are typically not from the web store and will fail
+  // install verification. The default implementation disables install
+  // verification; this should be overridden by derived tests which care
+  // about install verification.
+  virtual bool ShouldEnableInstallVerification();
+
   static const extensions::Extension* GetExtensionByPath(
       const extensions::ExtensionSet& extensions,
       const base::FilePath& path);
@@ -116,6 +131,9 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
 
   // Loads and launches the app from |path|, and returns it.
   const extensions::Extension* LoadAndLaunchApp(const base::FilePath& path);
+
+  // Launches |extension| as a window and returns the browser.
+  Browser* LaunchAppBrowser(const extensions::Extension* extension);
 
   // Pack the extension in |dir_path| into a crx file and return its path.
   // Return an empty FilePath if there were errors.
@@ -164,6 +182,9 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
         extensions::Manifest::INTERNAL, browser(),
         extensions::Extension::NO_FLAGS, false, true);
   }
+
+  // Installs bookmark app for |info|.
+  const extensions::Extension* InstallBookmarkApp(WebApplicationInfo info);
 
   // Installs extension as if it came from the Chrome Webstore.
   const extensions::Extension* InstallExtensionFromWebstore(
@@ -392,6 +413,14 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
   // An override so that chrome-extensions://<extension_id>/_test_resources/foo
   // maps to chrome/test/data/extensions/foo.
   extensions::ExtensionProtocolTestHandler test_protocol_handler_;
+
+  // Conditionally disable content verification.
+  std::unique_ptr<extensions::ScopedIgnoreContentVerifierForTest>
+      ignore_content_verification_;
+
+  // Conditionally disable install verification.
+  std::unique_ptr<extensions::ScopedInstallVerifierBypassForTest>
+      ignore_install_verification_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionBrowserTest);
 };

@@ -193,6 +193,8 @@ def _ComputeTraceEventsThreadTimeForBlinkPerf(
 
     curr_test_runs_bound_index = 0
     for b in merged_event_boundaries:
+      if b.bounds.bounds == 0:
+        continue
       # Fast forward (if needed) to the first relevant test.
       while (curr_test_runs_bound_index < len(test_runs_bounds) and
              b.bounds.min > test_runs_bounds[curr_test_runs_bound_index].max):
@@ -246,9 +248,7 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
         # reference builds.
         # --disable-gesture-requirement-for-media-playback is the old one and
         # can be removed after M60 goes to stable.
-        '--enable-experimental-canvas-features',
-        # TODO(qinmin): After fixing crbug.com/592017, remove this command line.
-        '--reduce-security-for-testing'
+        '--enable-experimental-canvas-features'
     ])
 
   def SetOptions(self, options):
@@ -274,7 +274,17 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
     tab.browser.platform.tracing_controller.StartTracing(config)
     tab.EvaluateJavaScript('testRunner.scheduleTestRun()')
     tab.WaitForJavaScriptCondition('testRunner.isDone')
-    return tab.browser.platform.tracing_controller.StopTracing()
+
+    trace_data = tab.browser.platform.tracing_controller.StopTracing()
+
+    # TODO(charliea): This is part of a three-sided Chromium/Telemetry patch
+    # where we're changing the return type of StopTracing from a TraceValue to a
+    # (TraceValue, nonfatal_exception_list) tuple. Once the tuple return value
+    # lands in Chromium, the non-tuple logic should be deleted.
+    if isinstance(trace_data, tuple):
+      trace_data = trace_data[0]
+
+    return trace_data
 
 
   def PrintAndCollectTraceEventMetrics(self, trace_cpu_time_metrics, results):
@@ -300,7 +310,14 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
     trace_cpu_time_metrics = {}
     if tab.EvaluateJavaScript('testRunner.isWaitingForTracingStart'):
       trace_data = self._ContinueTestRunWithTracing(tab)
-      trace_value = trace.TraceValue(page, trace_data)
+      # TODO(#763375): Rely on results.telemetry_info.trace_local_path/etc.
+      kwargs = {}
+      if hasattr(results.telemetry_info, 'trace_local_path'):
+        kwargs['file_path'] = results.telemetry_info.trace_local_path
+        kwargs['remote_path'] = results.telemetry_info.trace_remote_path
+        kwargs['upload_bucket'] = results.telemetry_info.upload_bucket
+        kwargs['cloud_url'] = results.telemetry_info.trace_remote_url
+      trace_value = trace.TraceValue(page, trace_data, **kwargs)
       results.AddValue(trace_value)
 
       trace_events_to_measure = tab.EvaluateJavaScript(
@@ -358,7 +375,22 @@ class BlinkPerfBindings(_BlinkPerfBenchmark):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing disabled.
+        self.DisableStory(
+            'structured-clone-long-string-serialize.html',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/764868')
+        self.DisableStory(
+            'structured-clone-json-serialize.html',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/764868')
+        self.DisableStory(
+            'structured-clone-long-string-deserialize.html',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/764868')
+        self.DisableStory(
+            'structured-clone-json-deserialize.html',
+            [story.expectations.ANDROID_ONE],
+            'crbug.com/764868')
     return StoryExpectations()
 
 
@@ -398,12 +430,20 @@ class BlinkPerfCanvas(_BlinkPerfBenchmark):
                               'crbug.com/593973')
         self.DisableStory('putImageData.html',
             [story.expectations.ANDROID_NEXUS6], 'crbug.com/738453')
+        # pylint: disable=line-too-long
+        self.DisableStory('draw-static-canvas-2d-to-hw-accelerated-canvas-2d.html',
+            [story.expectations.ANDROID_NEXUS6], 'crbug.com/765799')
+        self.DisableStory(
+            'draw-static-canvas-2d-to-hw-accelerated-canvas-2d.html',
+            [story.expectations.ANDROID_NEXUS5,
+             story.expectations.ANDROID_NEXUS5X],
+            'crbug.com/784540')
+        self.DisableStory(
+            'draw-dynamic-canvas-2d-to-hw-accelerated-canvas-2d.html',
+            [story.expectations.ANDROID_NEXUS5,
+             story.expectations.ANDROID_NEXUS5X],
+            'crbug.com/784540')
     return StoryExpectations()
-
-  def SetExtraBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs([
-        '--enable-color-correct-rendering',
-    ])
 
 @benchmark.Owner(emails=['jbroman@chromium.org',
                          'yukishiino@chromium.org',
@@ -423,6 +463,23 @@ class BlinkPerfDOM(_BlinkPerfBenchmark):
 class BlinkPerfEvents(_BlinkPerfBenchmark):
   tag = 'events'
   subdir = 'Events'
+
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        pass # Nothing disabled.
+    return StoryExpectations()
+
+
+@benchmark.Owner(emails=['cblume@chromium.org'])
+class BlinkPerfImageDecoder(_BlinkPerfBenchmark):
+  tag = 'image_decoder'
+  subdir = 'ImageDecoder'
+
+  def SetExtraBrowserOptions(self, options):
+    options.AppendExtraBrowserArgs([
+        '--enable-blink-features=JSImageDecode',
+    ])
 
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
@@ -523,17 +580,4 @@ class BlinkPerfShadowDOM(_BlinkPerfBenchmark):
       def SetExpectations(self):
         self.DisableBenchmark([story.expectations.ANDROID_NEXUS5X],
                               'crbug.com/702319')
-        self.DisableStory(
-            'v1-large-deep-layout.html',
-            [story.expectations.ANDROID_ONE],
-            'crbug.com/736512')
-        self.DisableStory(
-            'v1-large-deep-distribution.html',
-            [story.expectations.ANDROID_ONE],
-            'crbug.com/736512')
-        self.DisableStory(
-            'v1-distribution-disconnected-and-reconnected.html',
-            [story.expectations.ANDROID_ONE],
-            'crbug.com/736512')
     return StoryExpectations()
-

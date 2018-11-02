@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_metrics.h"
-#include "build/build_config.h"
 #include "content/public/common/process_type.h"
 
 #if defined(OS_MACOSX)
@@ -80,6 +79,12 @@ void ProcessMetricsHistory::Initialize(
 
 void ProcessMetricsHistory::SampleMetrics() {
   cpu_usage_ = process_metrics_->GetPlatformIndependentCPUUsage();
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+  idle_wakeups_ = process_metrics_->GetIdleWakeupsPerSecond();
+#endif
+#if defined(OS_MACOSX)
+  package_idle_wakeups_ = process_metrics_->GetPackageIdleWakeupsPerSecond();
+#endif
 }
 
 void ProcessMetricsHistory::RunPerformanceTriggers() {
@@ -102,6 +107,15 @@ void ProcessMetricsHistory::RunPerformanceTriggers() {
         UMA_HISTOGRAM_BOOLEAN("PerformanceMonitor.HighCPU.BrowserProcess",
                               true);
       }
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+      UMA_HISTOGRAM_COUNTS_10000(
+          "PerformanceMonitor.IdleWakeups.BrowserProcess", idle_wakeups_);
+#endif
+#if defined(OS_MACOSX)
+      UMA_HISTOGRAM_COUNTS_1000(
+          "PerformanceMonitor.PackageExitIdleWakeups.BrowserProcess",
+          package_idle_wakeups_);
+#endif
       break;
     case content::PROCESS_TYPE_RENDERER:
       UMA_HISTOGRAM_CUSTOM_COUNTS(
@@ -111,6 +125,16 @@ void ProcessMetricsHistory::RunPerformanceTriggers() {
         UMA_HISTOGRAM_BOOLEAN("PerformanceMonitor.HighCPU.RendererProcess",
                               true);
       }
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+      UMA_HISTOGRAM_COUNTS_10000(
+          "PerformanceMonitor.IdleWakeups.RendererProcess", idle_wakeups_);
+#endif
+#if defined(OS_MACOSX)
+      UMA_HISTOGRAM_COUNTS_1000(
+          "PerformanceMonitor.PackageExitIdleWakeups.RendererProcess",
+          package_idle_wakeups_);
+#endif
+
       break;
     case content::PROCESS_TYPE_GPU:
       UMA_HISTOGRAM_CUSTOM_COUNTS("PerformanceMonitor.AverageCPU.GPUProcess",
@@ -118,6 +142,16 @@ void ProcessMetricsHistory::RunPerformanceTriggers() {
                                   kHistogramBucketCount);
       if (cpu_usage_ > kHighCPUUtilizationThreshold)
         UMA_HISTOGRAM_BOOLEAN("PerformanceMonitor.HighCPU.GPUProcess", true);
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+      UMA_HISTOGRAM_COUNTS_10000("PerformanceMonitor.IdleWakeups.GPUProcess",
+                                 idle_wakeups_);
+#endif
+#if defined(OS_MACOSX)
+      UMA_HISTOGRAM_COUNTS_1000(
+          "PerformanceMonitor.PackageExitIdleWakeups.GPUProcess",
+          package_idle_wakeups_);
+#endif
+
       break;
     case content::PROCESS_TYPE_PPAPI_PLUGIN:
       UMA_HISTOGRAM_CUSTOM_COUNTS("PerformanceMonitor.AverageCPU.PPAPIProcess",

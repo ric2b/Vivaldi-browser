@@ -5,6 +5,7 @@
       <if expr="vivaldi_release_final">
         <include name="IDR_PRODUCT_LOGO_64" file="vivaldi_final/product_logo_64.png" type="BINDATA" />
         <include name="IDR_PRODUCT_LOGO_128" file="vivaldi_final/product_logo_128.png" type="BINDATA" />
+        <include name="IDR_PRODUCT_LOGO_256" file="vivaldi_final/product_logo_256.png" type="BINDATA" />
         <if expr="is_macosx">
           <include name="IDR_STATUS_TRAY_ICON" file="vivaldi_final/product_logo_22_mono.png" type="BINDATA" />
         </if>
@@ -15,6 +16,7 @@
       <if expr="vivaldi_release_snapshot">
         <include name="IDR_PRODUCT_LOGO_64" file="vivaldi_snapshot/product_logo_64.png" type="BINDATA" />
         <include name="IDR_PRODUCT_LOGO_128" file="vivaldi_snapshot/product_logo_128.png" type="BINDATA" />
+        <include name="IDR_PRODUCT_LOGO_256" file="vivaldi_snapshot/product_logo_256.png" type="BINDATA" />
         <if expr="is_macosx">
           <include name="IDR_STATUS_TRAY_ICON" file="vivaldi_snapshot/product_logo_22_mono.png" type="BINDATA" />
         </if>
@@ -25,6 +27,7 @@
       <if expr="vivaldi_release_sopranos">
         <include name="IDR_PRODUCT_LOGO_64" file="vivaldi_sopranos/product_logo_64.png" type="BINDATA" />
         <include name="IDR_PRODUCT_LOGO_128" file="vivaldi_sopranos/product_logo_128.png" type="BINDATA" />
+        <include name="IDR_PRODUCT_LOGO_256" file="vivaldi_sopranos/product_logo_256.png" type="BINDATA" />
         <if expr="is_macosx">
           <include name="IDR_STATUS_TRAY_ICON" file="vivaldi_sopranos/product_logo_22_mono.png" type="BINDATA" />
         </if>

@@ -5,6 +5,7 @@
 #include "content/browser/devtools/devtools_io_context.h"
 
 #include "base/base64.h"
+#include "base/containers/queue.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
@@ -83,7 +84,7 @@ TempFileStream::~TempFileStream() {
 
 bool TempFileStream::InitOnFileSequenceIfNeeded() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   if (had_errors_)
     return false;
   if (file_.IsValid())
@@ -205,7 +206,6 @@ class BlobStream : public DevToolsIOContext::ROStream {
   ~BlobStream() override = default;
 
   void OpenOnIO(scoped_refptr<ChromeBlobStorageContext> blob_context,
-                scoped_refptr<storage::FileSystemContext> fs_context,
                 const std::string& uuid,
                 OpenCallback callback);
   void ReadOnIO(std::unique_ptr<ReadRequest> request);
@@ -230,9 +230,8 @@ class BlobStream : public DevToolsIOContext::ROStream {
 
   std::unique_ptr<storage::BlobDataHandle> blob_handle_;
   OpenCallback open_callback_;
-  scoped_refptr<storage::FileSystemContext> fs_context_;
   std::unique_ptr<BlobReader> blob_reader_;
-  std::queue<std::unique_ptr<ReadRequest>> pending_reads_;
+  base::queue<std::unique_ptr<ReadRequest>> pending_reads_;
   scoped_refptr<net::IOBufferWithSize> io_buf_;
   off_t last_read_pos_;
   bool failed_;
@@ -264,12 +263,9 @@ void BlobStream::Open(scoped_refptr<ChromeBlobStorageContext> context,
                       StoragePartition* partition,
                       const std::string& handle,
                       OpenCallback callback) {
-  scoped_refptr<storage::FileSystemContext> fs_context =
-      partition->GetFileSystemContext();
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&BlobStream::OpenOnIO, this, context, fs_context, handle,
-                     std::move(callback)));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(&BlobStream::OpenOnIO, this, context,
+                                         handle, std::move(callback)));
 }
 
 void BlobStream::Read(off_t position, size_t max_size, ReadCallback callback) {
@@ -287,7 +283,6 @@ void BlobStream::Close(bool invoke_pending_callbacks) {
 }
 
 void BlobStream::OpenOnIO(scoped_refptr<ChromeBlobStorageContext> blob_context,
-                          scoped_refptr<storage::FileSystemContext> fs_context,
                           const std::string& uuid,
                           OpenCallback callback) {
   DCHECK(!blob_handle_);
@@ -301,7 +296,6 @@ void BlobStream::OpenOnIO(scoped_refptr<ChromeBlobStorageContext> blob_context,
   }
   is_binary_ = !IsTextMimeType(blob_handle_->content_type());
   open_callback_ = std::move(callback);
-  fs_context_ = std::move(fs_context);
   blob_handle_->RunOnConstructionComplete(
       base::Bind(&BlobStream::OnBlobConstructionComplete, this));
 }
@@ -350,7 +344,7 @@ void BlobStream::CloseOnIO(bool invoke_pending_callbacks) {
     return;
   }
   failed_ = true;
-  pending_reads_ = std::queue<std::unique_ptr<ReadRequest>>();
+  pending_reads_ = base::queue<std::unique_ptr<ReadRequest>>();
   open_callback_ = OpenCallback();
 }
 
@@ -425,7 +419,7 @@ void BlobStream::OnReadComplete(int bytes_read) {
 
 void BlobStream::CreateReader() {
   DCHECK(!blob_reader_);
-  blob_reader_ = blob_handle_->CreateReader(fs_context_.get());
+  blob_reader_ = blob_handle_->CreateReader();
   BlobReader::Status status = blob_reader_->CalculateSize(
       base::Bind(&BlobStream::OnCalculateSizeComplete, this));
   if (status != BlobReader::Status::IO_PENDING) {

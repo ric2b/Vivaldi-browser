@@ -22,7 +22,7 @@
 #include "content/public/test/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "content/public/test/test_utils.cc"
+#include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -159,7 +159,7 @@ class DownloadMetadataManagerTestBase : public ::testing::Test {
   }
 
   // Runs all tasks posted to the test thread's message loop.
-  void RunAllTasks() { content::RunAllBlockingPoolTasksUntilIdle(); }
+  void RunAllTasks() { content::RunAllTasksUntilIdle(); }
 
   // Adds a DownloadManager for the test profile. The DownloadMetadataManager's
   // observer is stashed for later use. Only call once per call to

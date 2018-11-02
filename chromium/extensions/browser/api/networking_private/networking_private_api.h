@@ -25,6 +25,7 @@ extern const char kErrorNotReady[];
 extern const char kErrorNotSupported[];
 extern const char kErrorPolicyControlled[];
 extern const char kErrorSimLocked[];
+extern const char kErrorUnconfiguredNetwork[];
 
 }  // namespace networking_private
 
@@ -510,6 +511,27 @@ class NetworkingPrivateSetCellularSimStateFunction
   void Failure(const std::string& error);
 
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateSetCellularSimStateFunction);
+};
+
+class NetworkingPrivateSelectCellularMobileNetworkFunction
+    : public UIThreadExtensionFunction {
+ public:
+  NetworkingPrivateSelectCellularMobileNetworkFunction() {}
+  DECLARE_EXTENSION_FUNCTION("networkingPrivate.selectCellularMobileNetwork",
+                             NETWORKINGPRIVATE_SELECTCELLULARMOBILENETWORK);
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ protected:
+  ~NetworkingPrivateSelectCellularMobileNetworkFunction() override;
+
+ private:
+  void Success();
+  void Failure(const std::string& error);
+
+  DISALLOW_COPY_AND_ASSIGN(
+      NetworkingPrivateSelectCellularMobileNetworkFunction);
 };
 
 class NetworkingPrivateGetGlobalPolicyFunction

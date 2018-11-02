@@ -148,46 +148,13 @@ class Manager(object):
         else:
             should_retry_failures = self._options.retry_failures
 
-        enabled_pixel_tests_in_retry = False
         try:
             self._start_servers(tests_to_run)
-
-            num_workers = self._port.num_workers(int(self._options.child_processes))
-
-            initial_results = self._run_tests(
-                tests_to_run, tests_to_skip, self._options.repeat_each, self._options.iterations,
-                num_workers)
-
-            # Don't retry failures when interrupted by user or failures limit exception.
-            should_retry_failures = should_retry_failures and not (
-                initial_results.interrupted or initial_results.keyboard_interrupted)
-
-            tests_to_retry = self._tests_to_retry(initial_results)
-            all_retry_results = []
-            if should_retry_failures and tests_to_retry:
-                enabled_pixel_tests_in_retry = self._force_pixel_tests_if_needed()
-
-                for retry_attempt in xrange(1, self._options.num_retries + 1):
-                    if not tests_to_retry:
-                        break
-
-                    _log.info('')
-                    _log.info('Retrying %s, attempt %d of %d...',
-                              grammar.pluralize('unexpected failure', len(tests_to_retry)),
-                              retry_attempt, self._options.num_retries)
-
-                    retry_results = self._run_tests(tests_to_retry,
-                                                    tests_to_skip=set(),
-                                                    repeat_each=1,
-                                                    iterations=1,
-                                                    num_workers=num_workers,
-                                                    retry_attempt=retry_attempt)
-                    all_retry_results.append(retry_results)
-
-                    tests_to_retry = self._tests_to_retry(retry_results)
-
-                if enabled_pixel_tests_in_retry:
-                    self._options.pixel_tests = False
+            if self._options.watch:
+                run_results = self._run_test_loop(tests_to_run, tests_to_skip)
+            else:
+                run_results = self._run_test_once(tests_to_run, tests_to_skip, should_retry_failures)
+            initial_results, all_retry_results, enabled_pixel_tests_in_retry = run_results
         finally:
             self._stop_servers()
             self._clean_up_run()
@@ -218,22 +185,86 @@ class Manager(object):
 
             self._upload_json_files()
 
-            results_path = self._filesystem.join(self._results_directory, 'results.html')
-            self._copy_results_html_file(results_path)
-            expectations_path = self._filesystem.join(self._results_directory, 'test-expectations.html')
-            self._copy_testexpectations_html_file(expectations_path)
+            self._copy_results_html_file(self._results_directory, 'results.html')
+            self._copy_results_html_file(self._results_directory, 'legacy-results.html')
             if initial_results.keyboard_interrupted:
                 exit_code = exit_codes.INTERRUPTED_EXIT_STATUS
             else:
                 if initial_results.interrupted:
                     exit_code = exit_codes.EARLY_EXIT_STATUS
                 if self._options.show_results and (exit_code or initial_results.total_failures):
-                    self._port.show_results_html_file(results_path)
+                    self._port.show_results_html_file(
+                        self._filesystem.join(self._results_directory, 'results.html'))
                 self._printer.print_results(time.time() - start_time, initial_results)
 
         return test_run_results.RunDetails(
             exit_code, summarized_full_results, summarized_failing_results,
             initial_results, all_retry_results, enabled_pixel_tests_in_retry)
+
+    def _run_test_loop(self, tests_to_run, tests_to_skip):
+        # Don't show results in a new browser window because we're already
+        # printing the link to diffs in the loop
+        self._options.show_results = False
+
+        while True:
+            initial_results, all_retry_results, enabled_pixel_tests_in_retry = self._run_test_once(
+                tests_to_run, tests_to_skip, should_retry_failures=False)
+            for name in initial_results.failures_by_name:
+                failure = initial_results.failures_by_name[name][0]
+                if isinstance(failure, test_failures.FailureTextMismatch):
+                    full_test_path = self._filesystem.join(self._results_directory, name)
+                    filename, _ = self._filesystem.splitext(full_test_path)
+                    pretty_diff_path = 'file://' + filename + '-pretty-diff.html'
+                    self._printer.writeln('Link to pretty diff:')
+                    self._printer.writeln(pretty_diff_path + '\n')
+            self._printer.writeln('Finished running tests')
+
+            user_input = self._port.host.user.prompt(
+                'Interactive watch mode: (q)uit (r)etry\n').lower()
+
+            if user_input == 'q' or user_input == 'quit':
+                return (initial_results, all_retry_results, enabled_pixel_tests_in_retry)
+
+    def _run_test_once(self, tests_to_run, tests_to_skip, should_retry_failures):
+        enabled_pixel_tests_in_retry = False
+
+        num_workers = self._port.num_workers(int(self._options.child_processes))
+
+        initial_results = self._run_tests(
+            tests_to_run, tests_to_skip, self._options.repeat_each, self._options.iterations,
+            num_workers)
+
+        # Don't retry failures when interrupted by user or failures limit exception.
+        should_retry_failures = should_retry_failures and not (
+            initial_results.interrupted or initial_results.keyboard_interrupted)
+
+        tests_to_retry = self._tests_to_retry(initial_results)
+        all_retry_results = []
+        if should_retry_failures and tests_to_retry:
+            enabled_pixel_tests_in_retry = self._force_pixel_tests_if_needed()
+
+            for retry_attempt in xrange(1, self._options.num_retries + 1):
+                if not tests_to_retry:
+                    break
+
+                _log.info('')
+                _log.info('Retrying %s, attempt %d of %d...',
+                          grammar.pluralize('unexpected failure', len(tests_to_retry)),
+                          retry_attempt, self._options.num_retries)
+
+                retry_results = self._run_tests(tests_to_retry,
+                                                tests_to_skip=set(),
+                                                repeat_each=1,
+                                                iterations=1,
+                                                num_workers=num_workers,
+                                                retry_attempt=retry_attempt)
+                all_retry_results.append(retry_results)
+
+                tests_to_retry = self._tests_to_retry(retry_results)
+
+            if enabled_pixel_tests_in_retry:
+                self._options.pixel_tests = False
+        return (initial_results, all_retry_results, enabled_pixel_tests_in_retry)
 
     def _collect_tests(self, args):
         return self._finder.find_tests(args, test_list=self._options.test_list,
@@ -540,19 +571,16 @@ class Manager(object):
         except IOError as err:
             _log.error('Upload failed: %s', err)
 
-    def _copy_results_html_file(self, destination_path):
-        base_dir = self._path_finder.path_from_layout_tests('fast', 'harness')
-        results_file = self._filesystem.join(base_dir, 'results.html')
-        # Note that the results.html template file won't exist when we're using a MockFileSystem during unit tests,
-        # so make sure it exists before we try to copy it.
-        if self._filesystem.exists(results_file):
-            self._filesystem.copyfile(results_file, destination_path)
-
-    def _copy_testexpectations_html_file(self, destination_path):
-        base_dir = self._path_finder.path_from_layout_tests('fast', 'harness')
-        expectations_file = self._filesystem.join(base_dir, 'test-expectations.html')
-        if self._filesystem.exists(expectations_file):
-            self._filesystem.copyfile(expectations_file, destination_path)
+    def _copy_results_html_file(self, destination_dir, filename):
+        """Copies a file from the template directory to the results directory."""
+        template_dir = self._path_finder.path_from_layout_tests('fast', 'harness')
+        source_path = self._filesystem.join(template_dir, filename)
+        destination_path = self._filesystem.join(destination_dir, filename)
+        # Note that the results.html template file won't exist when
+        # we're using a MockFileSystem during unit tests, so make sure
+        # it exists before we try to copy it.
+        if self._filesystem.exists(source_path):
+            self._filesystem.copyfile(source_path, destination_path)
 
     def _stats_trie(self, initial_results):
         def _worker_number(worker_name):

@@ -98,7 +98,7 @@ void DeferredTaskHandler::MarkSummingJunctionDirty(
 void DeferredTaskHandler::RemoveMarkedSummingJunction(
     AudioSummingJunction* summing_junction) {
   DCHECK(IsMainThread());
-  AutoLocker locker(*this);
+  GraphAutoLocker locker(*this);
   dirty_summing_junctions_.erase(summing_junction);
 }
 
@@ -213,8 +213,8 @@ void DeferredTaskHandler::UpdateChangedChannelInterpretation() {
 DeferredTaskHandler::DeferredTaskHandler()
     : automatic_pull_nodes_need_updating_(false), audio_thread_(0) {}
 
-PassRefPtr<DeferredTaskHandler> DeferredTaskHandler::Create() {
-  return AdoptRef(new DeferredTaskHandler());
+scoped_refptr<DeferredTaskHandler> DeferredTaskHandler::Create() {
+  return base::AdoptRef(new DeferredTaskHandler());
 }
 
 DeferredTaskHandler::~DeferredTaskHandler() {
@@ -241,7 +241,7 @@ void DeferredTaskHandler::ContextWillBeDestroyed() {
   // Some handlers might live because of their cross thread tasks.
 }
 
-DeferredTaskHandler::AutoLocker::AutoLocker(BaseAudioContext* context)
+DeferredTaskHandler::GraphAutoLocker::GraphAutoLocker(BaseAudioContext* context)
     : handler_(context->GetDeferredTaskHandler()) {
   handler_.lock();
 }
@@ -253,7 +253,7 @@ DeferredTaskHandler::OfflineGraphAutoLocker::OfflineGraphAutoLocker(
 }
 
 void DeferredTaskHandler::AddRenderingOrphanHandler(
-    PassRefPtr<AudioHandler> handler) {
+    scoped_refptr<AudioHandler> handler) {
   DCHECK(handler);
   DCHECK(!rendering_orphan_handlers_.Contains(handler));
   rendering_orphan_handlers_.push_back(std::move(handler));
@@ -269,18 +269,18 @@ void DeferredTaskHandler::RequestToDeleteHandlersOnMainThread() {
   Platform::Current()->MainThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&DeferredTaskHandler::DeleteHandlersOnMainThread,
-                      PassRefPtr<DeferredTaskHandler>(this)));
+                      scoped_refptr<DeferredTaskHandler>(this)));
 }
 
 void DeferredTaskHandler::DeleteHandlersOnMainThread() {
   DCHECK(IsMainThread());
-  AutoLocker locker(*this);
+  GraphAutoLocker locker(*this);
   deletable_orphan_handlers_.clear();
 }
 
 void DeferredTaskHandler::ClearHandlersToBeDeleted() {
   DCHECK(IsMainThread());
-  AutoLocker locker(*this);
+  GraphAutoLocker locker(*this);
   rendering_orphan_handlers_.clear();
   deletable_orphan_handlers_.clear();
 }

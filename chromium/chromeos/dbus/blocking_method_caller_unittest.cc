@@ -5,6 +5,8 @@
 #include "chromeos/dbus/blocking_method_caller.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/logging.h"
@@ -27,7 +29,7 @@ namespace {
 
 class FakeTaskRunner : public base::TaskRunner {
  public:
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     std::move(task).Run();
@@ -36,7 +38,7 @@ class FakeTaskRunner : public base::TaskRunner {
   bool RunsTasksInCurrentSequence() const override { return true; }
 
  protected:
-  ~FakeTaskRunner() override {}
+  ~FakeTaskRunner() override = default;
 };
 
 }  // namespace

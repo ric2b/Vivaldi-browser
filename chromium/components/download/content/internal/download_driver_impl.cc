@@ -15,6 +15,7 @@
 #include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 
 namespace download {
 
@@ -53,6 +54,7 @@ FailureType FailureTypeFromInterruptReason(
     case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
     case content::DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
     case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
+    case content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
       return FailureType::NOT_RECOVERABLE;
     default:
       return FailureType::RECOVERABLE;
@@ -75,6 +77,7 @@ DriverEntry DownloadDriverImpl::CreateDriverEntry(
   entry.guid = item->GetGuid();
   entry.state = ToDriverEntryState(item->GetState());
   entry.paused = item->IsPaused();
+  entry.done = item->IsDone();
   entry.bytes_downloaded = item->GetReceivedBytes();
   entry.expected_total_size = item->GetTotalBytes();
   entry.current_file_path =
@@ -83,6 +86,18 @@ DriverEntry DownloadDriverImpl::CreateDriverEntry(
           : item->GetFullPath();
   entry.completion_time = item->GetEndTime();
   entry.response_headers = item->GetResponseHeaders();
+  if (entry.response_headers.get()) {
+    entry.can_resume =
+        entry.response_headers->HasHeaderValue("Accept-Ranges", "bytes") ||
+        (entry.response_headers->HasHeader("Content-Range") &&
+         entry.response_headers->response_code() == net::HTTP_PARTIAL_CONTENT);
+    entry.can_resume &= entry.response_headers->HasStrongValidators();
+  } else {
+    // If we haven't issued the request yet, treat this like a resume based on
+    // the etag and last modified time.
+    entry.can_resume =
+        !item->GetETag().empty() || !item->GetLastModifiedTime().empty();
+  }
   entry.url_chain = item->GetUrlChain();
   return entry;
 }
@@ -151,6 +166,8 @@ void DownloadDriverImpl::Start(
   download_url_params->set_transient(true);
   download_url_params->set_method(request_params.method);
   download_url_params->set_file_path(file_path);
+  if (request_params.fetch_error_body)
+    download_url_params->set_fetch_error_body(true);
 
   download_manager_->DownloadUrl(std::move(download_url_params));
 }
@@ -235,7 +252,8 @@ void DownloadDriverImpl::OnDownloadUpdated(content::DownloadManager* manager,
     client_->OnDownloadUpdated(entry);
   } else if (reason !=
              content::DownloadInterruptReason::DOWNLOAD_INTERRUPT_REASON_NONE) {
-    LogDownloadInterruptReason(reason);
+    if (client_->IsTrackingDownload(item->GetGuid()))
+      LogDownloadInterruptReason(reason);
     client_->OnDownloadFailed(entry, FailureTypeFromInterruptReason(reason));
   }
 }
@@ -248,6 +266,15 @@ void DownloadDriverImpl::OnDownloadRemoved(content::DownloadManager* manager,
 
 void DownloadDriverImpl::OnDownloadCreated(content::DownloadManager* manager,
                                            content::DownloadItem* item) {
+  if (guid_to_remove_.find(item->GetGuid()) != guid_to_remove_.end()) {
+    // Client has removed the download before content persistence layer created
+    // the record, remove the download immediately.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&DownloadDriverImpl::DoRemoveDownload,
+                              weak_ptr_factory_.GetWeakPtr(), item->GetGuid()));
+    return;
+  }
+
   // Listens to all downloads.
   DCHECK(client_);
   DriverEntry entry = CreateDriverEntry(item);

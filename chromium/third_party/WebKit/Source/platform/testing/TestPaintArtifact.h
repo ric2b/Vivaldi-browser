@@ -6,13 +6,12 @@
 #define TestPaintArtifact_h
 
 #include <memory>
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/paint/DisplayItemList.h"
 #include "platform/graphics/paint/PaintArtifact.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace cc {
@@ -47,19 +46,43 @@ class TestPaintArtifact {
   ~TestPaintArtifact();
 
   // Add to the artifact.
-  TestPaintArtifact& Chunk(PassRefPtr<const TransformPaintPropertyNode>,
-                           PassRefPtr<const ClipPaintPropertyNode>,
-                           PassRefPtr<const EffectPaintPropertyNode>);
+  TestPaintArtifact& Chunk(scoped_refptr<const TransformPaintPropertyNode>,
+                           scoped_refptr<const ClipPaintPropertyNode>,
+                           scoped_refptr<const EffectPaintPropertyNode>);
   TestPaintArtifact& Chunk(const PaintChunkProperties&);
   TestPaintArtifact& RectDrawing(const FloatRect& bounds, Color);
   TestPaintArtifact& ForeignLayer(const FloatPoint&,
                                   const IntSize&,
                                   scoped_refptr<cc::Layer>);
   TestPaintArtifact& ScrollHitTest(
-      PassRefPtr<const TransformPaintPropertyNode> scroll_offset);
+      scoped_refptr<const TransformPaintPropertyNode> scroll_offset);
+  TestPaintArtifact& KnownToBeOpaque();
+
+  // Add to the artifact, with specified display item client. These are used
+  // to test incremental paint artifact updates.
+  TestPaintArtifact& Chunk(DisplayItemClient&,
+                           scoped_refptr<const TransformPaintPropertyNode>,
+                           scoped_refptr<const ClipPaintPropertyNode>,
+                           scoped_refptr<const EffectPaintPropertyNode>);
+  TestPaintArtifact& Chunk(DisplayItemClient&, const PaintChunkProperties&);
+  TestPaintArtifact& RectDrawing(DisplayItemClient&,
+                                 const FloatRect& bounds,
+                                 Color);
+  TestPaintArtifact& ForeignLayer(DisplayItemClient&,
+                                  const FloatPoint&,
+                                  const IntSize&,
+                                  scoped_refptr<cc::Layer>);
+  TestPaintArtifact& ScrollHitTest(
+      DisplayItemClient&,
+      scoped_refptr<const TransformPaintPropertyNode> scroll_offset);
 
   // Can't add more things once this is called.
   const PaintArtifact& Build();
+
+  // Create a new display item client which is owned by this TestPaintArtifact.
+  DisplayItemClient& NewClient();
+
+  DisplayItemClient& Client(size_t) const;
 
  private:
   class DummyRectClient;

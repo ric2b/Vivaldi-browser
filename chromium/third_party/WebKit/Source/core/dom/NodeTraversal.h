@@ -85,29 +85,32 @@ class NodeTraversal {
 
   // Does a reverse pre-order traversal to find the node that comes before the
   // current one in document order
-  static Node* Previous(const Node&, const Node* stay_within = 0);
+  static Node* Previous(const Node&, const Node* stay_within = nullptr);
 
   // Like previous, but skips children and starts with the next sibling.
   static Node* PreviousSkippingChildren(const Node&,
-                                        const Node* stay_within = 0);
+                                        const Node* stay_within = nullptr);
 
   // Like next, but visits parents after their children.
-  static Node* NextPostOrder(const Node&, const Node* stay_within = 0);
+  static Node* NextPostOrder(const Node&, const Node* stay_within = nullptr);
 
   // Like previous, but visits parents before their children.
-  static Node* PreviousPostOrder(const Node&, const Node* stay_within = 0);
+  static Node* PreviousPostOrder(const Node&,
+                                 const Node* stay_within = nullptr);
 
   // Pre-order traversal including the pseudo-elements.
   static Node* PreviousIncludingPseudo(const Node&,
-                                       const Node* stay_within = 0);
-  static Node* NextIncludingPseudo(const Node&, const Node* stay_within = 0);
-  static Node* NextIncludingPseudoSkippingChildren(const Node&,
-                                                   const Node* stay_within = 0);
+                                       const Node* stay_within = nullptr);
+  static Node* NextIncludingPseudo(const Node&,
+                                   const Node* stay_within = nullptr);
+  static Node* NextIncludingPseudoSkippingChildren(
+      const Node&,
+      const Node* stay_within = nullptr);
 
   CORE_EXPORT static Node* NextAncestorSibling(const Node&);
   CORE_EXPORT static Node* NextAncestorSibling(const Node&,
                                                const Node* stay_within);
-  static Node& HighestAncestorOrSelf(Node&);
+  static Node& HighestAncestorOrSelf(const Node&);
 
   // Children traversal.
   static Node* ChildAt(const Node& parent, unsigned index) {
@@ -244,7 +247,7 @@ class TraversalChildrenIterator : public TraversalIteratorBase<TraversalNext> {
   using TraversalIteratorBase<TraversalNext>::current_;
   explicit TraversalChildrenIterator(const StartNodeType* start)
       : TraversalIteratorBase<TraversalNext>(
-            TraversalNext::FirstWithin(*start)) {}
+            TraversalNext::FirstChild(*start)) {}
   void operator++() { current_ = TraversalNext::NextSibling(*current_); }
   static TraversalChildrenIterator End() { return TraversalChildrenIterator(); }
 
@@ -384,8 +387,8 @@ inline Node* NodeTraversal::NextSkippingChildren(const Node& current,
   return NextAncestorSibling(current, stay_within);
 }
 
-inline Node& NodeTraversal::HighestAncestorOrSelf(Node& current) {
-  Node* highest = &current;
+inline Node& NodeTraversal::HighestAncestorOrSelf(const Node& current) {
+  Node* highest = const_cast<Node*>(&current);
   while (highest->parentNode())
     highest = highest->parentNode();
   return *highest;

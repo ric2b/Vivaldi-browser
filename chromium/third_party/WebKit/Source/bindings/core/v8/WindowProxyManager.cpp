@@ -5,10 +5,11 @@
 #include "bindings/core/v8/WindowProxyManager.h"
 
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/V8PerIsolateData.h"
 
 namespace blink {
 
-DEFINE_TRACE(WindowProxyManager) {
+void WindowProxyManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(window_proxy_);
   visitor->Trace(isolated_worlds_);
@@ -53,10 +54,15 @@ void WindowProxyManager::SetGlobalProxies(
 }
 
 WindowProxyManager::WindowProxyManager(Frame& frame, FrameType frame_type)
-    : isolate_(v8::Isolate::GetCurrent()),
+    : isolate_(V8PerIsolateData::MainThreadIsolate()),
       frame_(&frame),
       frame_type_(frame_type),
-      window_proxy_(CreateWindowProxy(DOMWrapperWorld::MainWorld())) {}
+      window_proxy_(CreateWindowProxy(DOMWrapperWorld::MainWorld())) {
+  // All WindowProxyManagers must be created in the main thread.
+  // Note that |isolate_| is initialized with
+  // V8PerIsolateData::MainThreadIsolate().
+  CHECK(IsMainThread());
+}
 
 WindowProxy* WindowProxyManager::CreateWindowProxy(DOMWrapperWorld& world) {
   switch (frame_type_) {

@@ -41,6 +41,7 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/mouse_constants.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -96,10 +97,10 @@ bool UseMd() {
   return ui::MaterialDesignController::IsSecondaryUiMaterial();
 }
 
-SkColor GetTextColorForEnableState(bool enabled, ui::NativeTheme* theme) {
-  return style::GetColor(style::CONTEXT_TEXTFIELD,
-                         enabled ? style::STYLE_PRIMARY : style::STYLE_DISABLED,
-                         theme);
+SkColor GetTextColorForEnableState(const Combobox& combobox, bool enabled) {
+  return style::GetColor(
+      combobox, style::CONTEXT_TEXTFIELD,
+      enabled ? style::STYLE_PRIMARY : style::STYLE_DISABLED);
 }
 
 gfx::Rect PositionArrowWithinContainer(const gfx::Rect& container_bounds,
@@ -487,6 +488,7 @@ void Combobox::ModelChanged() {
 
   content_size_ = GetContentSize();
   PreferredSizeChanged();
+  SchedulePaint();
 }
 
 void Combobox::SetSelectedIndex(int index) {
@@ -513,6 +515,12 @@ bool Combobox::SelectValue(const base::string16& value) {
     }
   }
   return false;
+}
+
+void Combobox::SetTooltipText(const base::string16& tooltip_text) {
+  arrow_button_->SetTooltipText(tooltip_text);
+  if (accessible_name_.empty())
+    accessible_name_ = tooltip_text;
 }
 
 void Combobox::SetAccessibleName(const base::string16& name) {
@@ -595,10 +603,10 @@ gfx::Size Combobox::CalculatePreferredSize() const {
   // The preferred size will drive the local bounds which in turn is used to set
   // the minimum width for the dropdown list.
   gfx::Insets insets = GetInsets();
-  insets += gfx::Insets(Textfield::kTextPadding,
-                        Textfield::kTextPadding,
-                        Textfield::kTextPadding,
-                        Textfield::kTextPadding);
+  const LayoutProvider* provider = LayoutProvider::Get();
+  insets += gfx::Insets(
+      provider->GetDistanceMetric(DISTANCE_CONTROL_VERTICAL_TEXT_PADDING),
+      provider->GetDistanceMetric(DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
   int total_width = std::max(kMinComboboxWidth, content_size_.width()) +
                     insets.width() + GetArrowContainerWidth();
   return gfx::Size(total_width, content_size_.height() + insets.height());
@@ -828,7 +836,8 @@ void Combobox::AdjustBoundsForRTLUI(gfx::Rect* rect) const {
 
 void Combobox::PaintText(gfx::Canvas* canvas) {
   gfx::Insets insets = GetInsets();
-  insets += gfx::Insets(0, Textfield::kTextPadding, 0, Textfield::kTextPadding);
+  insets += gfx::Insets(0, LayoutProvider::Get()->GetDistanceMetric(
+                               DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
 
   gfx::ScopedCanvas scoped_canvas(canvas);
   canvas->ClipRect(GetContentsBounds());
@@ -836,7 +845,7 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
   int x = insets.left();
   int y = insets.top();
   int text_height = height() - insets.height();
-  SkColor text_color = GetTextColorForEnableState(enabled(), GetNativeTheme());
+  SkColor text_color = GetTextColorForEnableState(*this, enabled());
   DCHECK_GE(selected_index_, 0);
   DCHECK_LT(selected_index_, model()->GetItemCount());
   if (selected_index_ < 0 || selected_index_ > model()->GetItemCount())
@@ -879,7 +888,7 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
     path.rLineTo(height, -height);
     path.close();
     cc::PaintFlags flags;
-    SkColor arrow_color = GetTextColorForEnableState(true, GetNativeTheme());
+    SkColor arrow_color = GetTextColorForEnableState(*this, true);
     if (!enabled())
       arrow_color = SkColorSetA(arrow_color, gfx::kDisabledControlAlpha);
     flags.setColor(arrow_color);

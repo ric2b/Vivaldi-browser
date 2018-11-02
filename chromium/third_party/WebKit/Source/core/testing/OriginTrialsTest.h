@@ -5,6 +5,8 @@
 #ifndef OriginTrialsTest_h
 #define OriginTrialsTest_h
 
+#include "bindings/core/v8/IDLDictionaryBase.h"
+#include "core/testing/OriginTrialsTestDictionary.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
@@ -16,8 +18,7 @@ class ScriptState;
 // OriginTrialsTest is a very simple interface used for testing
 // origin-trial-enabled features which are attached directly to interfaces at
 // run-time.
-class OriginTrialsTest : public GarbageCollectedFinalized<OriginTrialsTest>,
-                         public ScriptWrappable {
+class OriginTrialsTest : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -31,10 +32,13 @@ class OriginTrialsTest : public GarbageCollectedFinalized<OriginTrialsTest>,
   static const unsigned short kConstant = 1;
 
   bool throwingAttribute(ScriptState*, ExceptionState&);
+  void getDictionaryMethod(OriginTrialsTestDictionary&) {}
+  void checkDictionaryMethod(const OriginTrialsTestDictionary&) {}
 
   bool unconditionalAttribute() { return true; }
   static bool staticUnconditionalAttribute() { return true; }
   bool unconditionalMethod() { return true; }
+  void unconditionalDictionaryMethod(const OriginTrialsTestDictionary& dict) {}
   static bool staticUnconditionalMethod() { return true; }
   static const unsigned short kUnconditionalConstant = 99;
 
@@ -47,8 +51,6 @@ class OriginTrialsTest : public GarbageCollectedFinalized<OriginTrialsTest>,
   static bool secureStaticAttribute() { return true; }
   bool secureMethod() { return true; }
   static bool secureStaticMethod() { return true; }
-
-  DECLARE_TRACE();
 
  private:
   OriginTrialsTest() = default;

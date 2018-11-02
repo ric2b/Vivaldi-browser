@@ -153,6 +153,7 @@ class circular_deque_const_iterator {
     parent_deque_->CheckValidIndex(index_);
     return &parent_deque_->buffer_[index_];
   }
+  const value_type& operator[](difference_type i) const { return *(*this + i); }
 
   // Increment and decrement.
   circular_deque_const_iterator& operator++() {
@@ -341,6 +342,9 @@ class circular_deque_iterator : public circular_deque_const_iterator<T> {
   // Dereferencing.
   T& operator*() const { return const_cast<T&>(base::operator*()); }
   T* operator->() const { return const_cast<T*>(base::operator->()); }
+  T& operator[](difference_type i) {
+    return const_cast<T&>(base::operator[](i));
+  }
 
   // Random access mutation.
   friend circular_deque_iterator operator+(const circular_deque_iterator& iter,
@@ -447,11 +451,17 @@ class circular_deque {
   // All of these may invalidate iterators and references.
 
   circular_deque& operator=(const circular_deque& other) {
+    if (&other == this)
+      return *this;
+
     reserve(other.size());
     assign(other.begin(), other.end());
     return *this;
   }
   circular_deque& operator=(circular_deque&& other) noexcept {
+    if (&other == this)
+      return *this;
+
     // We're about to overwrite the buffer, so don't free it in clear to
     // avoid doing it twice.
     ClearRetainCapacity();
@@ -789,7 +799,7 @@ class circular_deque {
       buffer_.DestructRange(&buffer_[0], &buffer_[last.index_]);
     }
 
-    if (last.index_ == begin_) {
+    if (first.index_ == begin_) {
       // This deletion is from the beginning. Nothing needs to be copied, only
       // begin_ needs to be updated.
       begin_ = last.index_;

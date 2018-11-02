@@ -30,7 +30,7 @@
 
 namespace blink {
 
-ArchiveResource::ArchiveResource(PassRefPtr<SharedBuffer> data,
+ArchiveResource::ArchiveResource(scoped_refptr<SharedBuffer> data,
                                  const KURL& url,
                                  const String& content_id,
                                  const AtomicString& mime_type,
@@ -45,7 +45,7 @@ ArchiveResource::ArchiveResource(PassRefPtr<SharedBuffer> data,
 
 ArchiveResource::~ArchiveResource() {}
 
-ArchiveResource* ArchiveResource::Create(PassRefPtr<SharedBuffer> data,
+ArchiveResource* ArchiveResource::Create(scoped_refptr<SharedBuffer> data,
                                          const KURL& url,
                                          const String& content_id,
                                          const AtomicString& mime_type,

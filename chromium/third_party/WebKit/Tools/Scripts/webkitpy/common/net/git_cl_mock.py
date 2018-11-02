@@ -10,7 +10,7 @@ class MockGitCL(object):
 
     def __init__(self, host, results=None, issue_number='1234'):
         self._host = host
-        self._results = results or {}
+        self._results = results
         self._issue_number = issue_number
         self.calls = []
 
@@ -18,9 +18,11 @@ class MockGitCL(object):
         self.calls.append(['git', 'cl'] + args)
         return 'mock output'
 
-    def trigger_try_jobs(self, builders=None):
+    def trigger_try_jobs(self, builders=None, master=None):
         builders = builders or self._host.builders.all_try_builder_names()
-        command = ['try', '-m', 'tryserver.blink']
+        if not master:
+            master = 'tryserver.blink'
+        command = ['try', '-m', master]
         for builder in sorted(builders):
             command.extend(['-b', builder])
         self.run(command)
@@ -33,6 +35,9 @@ class MockGitCL(object):
 
     def wait_for_try_jobs(self, **_):
         return self._results
+
+    def wait_for_closed_status(self, **_):
+        return 'closed'
 
     def latest_try_jobs(self, builder_names=None):
         return self.filter_latest(self._results)

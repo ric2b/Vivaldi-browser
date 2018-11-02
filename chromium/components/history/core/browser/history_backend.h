@@ -15,8 +15,10 @@
 #include <vector>
 
 #include "base/cancelable_callback.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/mru_cache.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -59,13 +61,11 @@ class TypedUrlSyncableService;
 class HistoryBackendHelper;
 class URLDatabase;
 
-// The maximum number of icons URLs per page which can be stored in the
-// thumbnail database.
-static const size_t kMaxFaviconsPerPage = 8;
-
 // The maximum number of bitmaps for a single icon URL which can be stored in
 // the thumbnail database.
 static const size_t kMaxFaviconBitmapsPerIconURL = 8;
+
+extern const base::Feature kAvoidStrippingRefFromFaviconPageUrls;
 
 // Keeps track of a queued HistoryDBTask. This class lives solely on the
 // DB thread.
@@ -305,13 +305,13 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   void GetLargestFaviconForURL(
       const GURL& page_url,
-      const std::vector<int>& icon_types,
+      const std::vector<favicon_base::IconTypeSet>& icon_types_list,
       int minimum_size_in_pixels,
       favicon_base::FaviconRawBitmapResult* bitmap_result);
 
   void GetFaviconsForURL(
       const GURL& page_url,
-      int icon_types,
+      const favicon_base::IconTypeSet& icon_types,
       const std::vector<int>& desired_sizes,
       std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results);
 
@@ -321,11 +321,14 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results);
 
   void UpdateFaviconMappingsAndFetch(
-      const std::set<GURL>& page_urls,
+      const base::flat_set<GURL>& page_urls,
       const GURL& icon_url,
       favicon_base::IconType icon_type,
       const std::vector<int>& desired_sizes,
       std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results);
+
+  void DeleteFaviconMappings(const base::flat_set<GURL>& page_urls,
+                             favicon_base::IconType icon_type);
 
   void MergeFavicon(const GURL& page_url,
                     const GURL& icon_url,
@@ -333,10 +336,16 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                     scoped_refptr<base::RefCountedMemory> bitmap_data,
                     const gfx::Size& pixel_size);
 
-  void SetFavicons(const GURL& page_url,
+  // |page_urls| must not be empty.
+  void SetFavicons(const base::flat_set<GURL>& page_urls,
                    favicon_base::IconType icon_type,
                    const GURL& icon_url,
                    const std::vector<SkBitmap>& bitmaps);
+
+  void CloneFaviconMappingsForPages(
+      const GURL& page_url_to_read,
+      const favicon_base::IconTypeSet& icon_types,
+      const base::flat_set<GURL>& page_urls_to_write);
 
   bool SetOnDemandFavicons(const GURL& page_url,
                            favicon_base::IconType icon_type,
@@ -549,6 +558,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetFaviconsReplaceBitmapData);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
                            SetFaviconsSameFaviconURLForTwoPages);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetFaviconsWithTwoPageURLs);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetOnDemandFaviconsForEmptyDB);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetOnDemandFaviconsForPageInDB);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, SetOnDemandFaviconsForIconInDB);
@@ -577,6 +587,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, NoFaviconChangedNotifications);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
                            UpdateFaviconMappingsAndFetchMultipleIconTypes);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, CloneFaviconMappingsForPages);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, GetFaviconsFromDBEmpty);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest,
                            GetFaviconsFromDBNoFaviconBitmaps);
@@ -632,6 +643,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                                          base::Time time,
                                          VisitID referring_visit,
                                          ui::PageTransition transition,
+                                         bool hidden,
                                          VisitSource visit_source);
 
   // Returns a redirect chain in |redirects| for the VisitID
@@ -700,8 +712,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // If |bitmaps_are_expired| is true, the icon for |icon_url| will be modified
   // only if it's not present in the database. In that case, it will be
   // initially set as expired. Returns whether the new bitmaps were actually
-  // written.
-  bool SetFaviconsImpl(const GURL& page_url,
+  // written. |page_urls| must not be empty.
+  bool SetFaviconsImpl(const base::flat_set<GURL>& page_urls,
                        favicon_base::IconType icon_type,
                        const GURL& icon_url,
                        const std::vector<SkBitmap>& bitmaps,
@@ -712,7 +724,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // added to the database from each element in |page_urls| (and all redirects)
   // to |icon_url|.
   void UpdateFaviconMappingsAndFetchImpl(
-      const std::set<GURL>& page_urls,
+      const base::flat_set<GURL>& page_urls,
       const GURL& icon_url,
       favicon_base::IconType icon_type,
       const std::vector<int>& desired_sizes,
@@ -744,12 +756,12 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // largest favicon bitmap with one of the icon types in |icon_types| is
   // returned. If |icon_types| contains multiple icon types and there are
   // several matched icon types in the database, results will only be returned
-  // for a single icon type in the priority of TOUCH_PRECOMPOSED_ICON,
-  // TOUCH_ICON, and FAVICON. See the comment for
+  // for a single icon type in the priority of kTouchPrecomposedIcon,
+  // kTouchIcon, and kFavicon. See the comment for
   // GetFaviconResultsForBestMatch() for more details on how
   // |favicon_bitmap_results| is constructed.
   bool GetFaviconsFromDB(const GURL& page_url,
-                         int icon_types,
+                         const favicon_base::IconTypeSet& icon_types,
                          const std::vector<int>& desired_sizes,
                          std::vector<favicon_base::FaviconRawBitmapResult>*
                              favicon_bitmap_results);
@@ -769,34 +781,33 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       std::vector<favicon_base::FaviconRawBitmapResult>*
           favicon_bitmap_results);
 
-  // Maps the favicon ids in |icon_ids| to |page_url| (and all redirects)
-  // for |icon_type|.
+  // Maps the favicon ID |icon_id| to |page_url| (and all redirects) for
+  // |icon_type|. |icon_id| == 0 deletes previously existing mappings.
   // Returns true if the mappings for the page or any of its redirects were
   // changed.
-  bool SetFaviconMappingsForPageAndRedirects(
-      const GURL& page_url,
-      favicon_base::IconType icon_type,
-      const std::vector<favicon_base::FaviconID>& icon_ids);
+  bool SetFaviconMappingsForPageAndRedirects(const GURL& page_url,
+                                             favicon_base::IconType icon_type,
+                                             favicon_base::FaviconID icon_id);
 
-  // Maps the favicon ids in |icon_ids| to URLs in |page_urls| for |icon_type|.
-  // Returns true if the function changed at least one of the |page_urls|
-  // mappings.
-  bool SetFaviconMappingsForPages(
-      const std::vector<GURL>& page_urls,
+  // Maps the favicon ID |icon_id| to URLs in |page_urls| for |icon_type|.
+  // |icon_id| == 0 deletes previously existing mappings.
+  // Returns page URLs among |page_urls| whose mappings were changed (might be
+  // empty).
+  std::vector<GURL> SetFaviconMappingsForPages(
+      const base::flat_set<GURL>& page_urls,
       favicon_base::IconType icon_type,
-      const std::vector<favicon_base::FaviconID>& icon_ids);
+      favicon_base::FaviconID icon_id);
 
-  // Maps the favicon ids in |icon_ids| to |page_url| for |icon_type|.
+  // Maps the favicon ID |icon_ids| to |page_url| for |icon_type|.
+  // |icon_id| == 0 deletes previously existing mappings.
   // Returns true if the function changed at least one of |page_url|'s mappings.
-  bool SetFaviconMappingsForPage(
-      const GURL& page_url,
-      favicon_base::IconType icon_type,
-      const std::vector<favicon_base::FaviconID>& icon_ids);
+  bool SetFaviconMappingsForPage(const GURL& page_url,
+                                 favicon_base::IconType icon_type,
+                                 favicon_base::FaviconID icon_id);
 
   // Returns all the page URLs in the redirect chain for |page_url|. If there
   // are no known redirects for |page_url|, returns a vector with |page_url|.
-  void GetCachedRecentRedirects(const GURL& page_url,
-                                RedirectList* redirect_list);
+  RedirectList GetCachedRecentRedirects(const GURL& page_url);
 
   // Send notification that the favicon has changed for |page_url| and all its
   // redirects. This should be called if the mapping between the page URL

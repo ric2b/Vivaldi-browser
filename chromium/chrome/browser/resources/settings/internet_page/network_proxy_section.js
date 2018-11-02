@@ -67,6 +67,17 @@ Polymer({
   },
 
   /**
+   * @param {boolean} allowShared
+   * @param {string} enableStr
+   * @param {string} disableStr
+   * @return {string}
+   * @private
+   */
+  getAllowSharedDialogTitle_: function(allowShared, enableStr, disableStr) {
+    return allowShared ? disableStr : enableStr;
+  },
+
+  /**
    * @return {boolean}
    * @private
    */
@@ -91,7 +102,8 @@ Polymer({
    * @private
    */
   shouldShowAllowShared_: function(property) {
-    return !this.isControlled(property) && this.isShared_();
+    return this.isShared_() && !this.isNetworkPolicyEnforced(property) &&
+        !this.isExtensionControlled(property);
   },
 
   /**

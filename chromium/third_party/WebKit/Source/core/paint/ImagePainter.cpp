@@ -15,10 +15,12 @@
 #include "core/layout/TextRunConstructor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/Path.h"
+#include "platform/graphics/ScopedInterpolationQuality.h"
+#include "platform/graphics/paint/DisplayItemCacheSkipper.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 
 namespace blink {
 
@@ -26,7 +28,7 @@ void ImagePainter::Paint(const PaintInfo& paint_info,
                          const LayoutPoint& paint_offset) {
   layout_image_.LayoutReplaced::Paint(paint_info, paint_offset);
 
-  if (paint_info.phase == kPaintPhaseOutline)
+  if (paint_info.phase == PaintPhase::kOutline)
     PaintAreaElementFocusRing(paint_info, paint_offset);
 }
 
@@ -39,10 +41,10 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info,
     return;
 
   Element* focused_element = document.FocusedElement();
-  if (!isHTMLAreaElement(focused_element))
+  if (!IsHTMLAreaElement(focused_element))
     return;
 
-  HTMLAreaElement& area_element = toHTMLAreaElement(*focused_element);
+  HTMLAreaElement& area_element = ToHTMLAreaElement(*focused_element);
   if (area_element.ImageElement() != layout_image_.GetNode())
     return;
 
@@ -65,20 +67,19 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info,
   path.Translate(
       FloatSize(adjusted_paint_offset.X(), adjusted_paint_offset.Y()));
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_image_, DisplayItem::kImageAreaFocusRing))
     return;
 
-  LayoutRect focus_rect = layout_image_.ContentBoxRect();
-  focus_rect.MoveBy(adjusted_paint_offset);
-  LayoutObjectDrawingRecorder drawing_recorder(
-      paint_info.context, layout_image_, DisplayItem::kImageAreaFocusRing,
-      focus_rect);
+  DrawingRecorder recorder(paint_info.context, layout_image_,
+                           DisplayItem::kImageAreaFocusRing);
 
   // FIXME: Clip path instead of context when Skia pathops is ready.
   // https://crbug.com/251206
 
   paint_info.context.Save();
+  LayoutRect focus_rect = layout_image_.ContentBoxRect();
+  focus_rect.MoveBy(adjusted_paint_offset);
   paint_info.context.Clip(PixelSnappedIntRect(focus_rect));
   paint_info.context.DrawFocusRing(
       path, area_element_style.GetOutlineStrokeWidthForFocusRing(),
@@ -89,46 +90,51 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info,
 
 void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
                                  const LayoutPoint& paint_offset) {
-  LayoutUnit c_width = layout_image_.ContentWidth();
-  LayoutUnit c_height = layout_image_.ContentHeight();
+  LayoutSize content_size = layout_image_.ContentSize();
+  bool has_image = layout_image_.ImageResource()->HasImage();
+
+  if (has_image) {
+    if (content_size.IsEmpty())
+      return;
+  } else {
+    if (paint_info.phase == PaintPhase::kSelection)
+      return;
+    if (content_size.Width() <= 2 || content_size.Height() <= 2)
+      return;
+  }
 
   GraphicsContext& context = paint_info.context;
+  if (DrawingRecorder::UseCachedDrawingIfPossible(context, layout_image_,
+                                                  paint_info.phase))
+    return;
 
-  if (!layout_image_.ImageResource()->HasImage()) {
-    if (paint_info.phase == kPaintPhaseSelection)
-      return;
-    if (c_width > 2 && c_height > 2) {
-      if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-              context, layout_image_, paint_info.phase))
-        return;
-      // Draw an outline rect where the image should be.
-      IntRect paint_rect = PixelSnappedIntRect(
-          LayoutRect(paint_offset.X() + layout_image_.BorderLeft() +
-                         layout_image_.PaddingLeft(),
-                     paint_offset.Y() + layout_image_.BorderTop() +
-                         layout_image_.PaddingTop(),
-                     c_width, c_height));
-      LayoutObjectDrawingRecorder drawing_recorder(
-          context, layout_image_, paint_info.phase, paint_rect);
-      context.SetStrokeStyle(kSolidStroke);
-      context.SetStrokeColor(Color::kLightGray);
-      context.SetFillColor(Color::kTransparent);
-      context.DrawRect(paint_rect);
-    }
-  } else if (c_width > 0 && c_height > 0) {
-    if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-            context, layout_image_, paint_info.phase))
-      return;
+  // Disable cache in under-invalidation checking mode for delayed-invalidation
+  // image because it may change before it's actually invalidated.
+  Optional<DisplayItemCacheSkipper> cache_skipper;
+  if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
+      layout_image_.FullPaintInvalidationReason() ==
+          PaintInvalidationReason::kDelayedFull)
+    cache_skipper.emplace(context);
 
-    LayoutRect content_rect = layout_image_.ContentBoxRect();
-    content_rect.MoveBy(paint_offset);
-    LayoutRect paint_rect = layout_image_.ReplacedContentRect();
-    paint_rect.MoveBy(paint_offset);
+  LayoutRect content_rect(paint_offset + layout_image_.ContentBoxOffset(),
+                          content_size);
 
-    LayoutObjectDrawingRecorder drawing_recorder(
-        context, layout_image_, paint_info.phase, content_rect);
-    PaintIntoRect(context, paint_rect, content_rect);
+  if (!has_image) {
+    // Draw an outline rect where the image should be.
+    IntRect paint_rect = PixelSnappedIntRect(content_rect);
+    DrawingRecorder recorder(context, layout_image_, paint_info.phase);
+    context.SetStrokeStyle(kSolidStroke);
+    context.SetStrokeColor(Color::kLightGray);
+    context.SetFillColor(Color::kTransparent);
+    context.DrawRect(paint_rect);
+    return;
   }
+
+  LayoutRect paint_rect = layout_image_.ReplacedContentRect();
+  paint_rect.MoveBy(paint_offset);
+
+  DrawingRecorder recorder(context, layout_image_, paint_info.phase);
+  PaintIntoRect(context, paint_rect, content_rect);
 }
 
 void ImagePainter::PaintIntoRect(GraphicsContext& context,
@@ -143,13 +149,10 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
   if (pixel_snapped_dest_rect.IsEmpty())
     return;
 
-  RefPtr<Image> image =
+  scoped_refptr<Image> image =
       layout_image_.ImageResource()->GetImage(pixel_snapped_dest_rect.Size());
   if (!image || image->IsNull())
     return;
-
-  InterpolationQuality interpolation_quality =
-      layout_image_.StyleRef().GetInterpolationQuality();
 
   FloatRect src_rect = image->Rect();
   // If the content rect requires clipping, adjust |srcRect| and
@@ -169,13 +172,19 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
                InspectorPaintImageEvent::Data(layout_image_, src_rect,
                                               FloatRect(dest_rect)));
 
-  InterpolationQuality previous_interpolation_quality =
-      context.ImageInterpolationQuality();
-  context.SetImageInterpolationQuality(interpolation_quality);
+  ScopedInterpolationQuality interpolation_quality_scope(
+      context, layout_image_.StyleRef().GetInterpolationQuality());
+
+  Node* node = layout_image_.GetNode();
+  Image::ImageDecodingMode decode_mode =
+      IsHTMLImageElement(node)
+          ? ToHTMLImageElement(node)->GetDecodingModeForPainting(
+                image->paint_image_id())
+          : Image::kUnspecifiedDecode;
   context.DrawImage(
-      image.Get(), pixel_snapped_dest_rect, &src_rect, SkBlendMode::kSrcOver,
+      image.get(), decode_mode, pixel_snapped_dest_rect, &src_rect,
+      SkBlendMode::kSrcOver,
       LayoutObject::ShouldRespectImageOrientation(&layout_image_));
-  context.SetImageInterpolationQuality(previous_interpolation_quality);
 }
 
 }  // namespace blink

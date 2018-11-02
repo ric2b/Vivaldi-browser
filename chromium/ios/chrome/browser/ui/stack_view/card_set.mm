@@ -7,6 +7,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include "base/logging.h"
+#include "components/favicon/ios/web_favicon_driver.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -26,7 +27,7 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 
 @interface CardSet ()<StackCardViewProvider, TabModelObserver> {
   TabModel* tabModel_;
-  UIView* view_;
+  UIView* displayView_;
   CardStackLayoutManager* stackModel_;
   UIImageView* stackShadow_;
 }
@@ -56,6 +57,7 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 
 @implementation CardSet
 
+@synthesize displayView = displayView_;
 @synthesize observer = observer_;
 @synthesize ignoresTabModelChanges = ignoresTabModelChanges_;
 @synthesize defersCardHiding = defersCardHiding_;
@@ -126,13 +128,8 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
   DCHECK(cardIndex != NSNotFound);
   [tabModel_ setCurrentTab:[tabModel_ tabAtIndex:cardIndex]];
 }
-
-- (UIView*)displayView {
-  return view_;
-}
-
-- (void)setDisplayView:(UIView*)view {
-  if (view == view_)
+- (void)setDisplayView:(UIView*)displayView {
+  if (displayView == displayView_)
     return;
   for (StackCard* card in self.cards) {
     if (card.viewIsLive) {
@@ -141,7 +138,7 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
     }
   }
   [stackShadow_ removeFromSuperview];
-  view_ = view;
+  displayView_ = displayView;
   // Add the stack shadow view to the new display view.
   if (!stackShadow_) {
     UIImage* shadowImage = [UIImage imageNamed:kCardShadowImageName];
@@ -154,13 +151,13 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
     stackShadow_ = [[UIImageView alloc] initWithImage:shadowImage];
     [stackShadow_ setHidden:!self.cards.count];
   }
-  [view_ addSubview:stackShadow_];
+  [self.displayView addSubview:stackShadow_];
   // Don't set the stack's end limit when the view is set to nil in order to
   // avoid losing existing card positions; these positions will be needed
   // if/when the view is restored (e.g., if the view was purged due to a memory
   // warning while in a modal view and then restored when exiting the modal
   // view).
-  if (view_)
+  if (self.displayView)
     [self displayViewSizeWasChanged];
 }
 
@@ -239,7 +236,7 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 #pragma mark Public Methods
 
 - (void)configureLayoutParametersWithMargin:(CGFloat)margin {
-  DCHECK(view_);
+  DCHECK(self.displayView);
 
   [stackModel_ setStartLimit:margin];
 
@@ -250,13 +247,16 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 }
 
 - (void)displayViewSizeWasChanged {
+  CGRect displayBounds = self.displayView.bounds;
+  CGFloat displayWidth = CGRectGetWidth(displayBounds);
   for (StackCard* card in self.cards) {
     LayoutRect layout = card.layout;
-    layout.boundingWidth = CGRectGetWidth(self.displayView.bounds);
+    layout.boundingWidth = displayWidth;
     card.layout = layout;
   }
-  CGFloat endLimit = [stackModel_ layoutIsVertical] ? [view_ bounds].size.height
-                                                    : [view_ bounds].size.width;
+  CGFloat endLimit = [stackModel_ layoutIsVertical]
+                         ? CGRectGetHeight(displayBounds)
+                         : displayWidth;
   [stackModel_ setEndLimit:endLimit];
 }
 
@@ -439,7 +439,7 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 }
 
 - (void)displayCard:(StackCard*)card {
-  DCHECK(view_);
+  DCHECK(self.displayView);
   card.view.hidden = [stackModel_ cardIsCovered:card];
 
   if (card.view.superview)
@@ -456,13 +456,15 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
       break;
     }
   }
-  if (cardAboveNewCard)
-    [view_ insertSubview:card.view belowSubview:cardAboveNewCard.view];
-  else
-    [view_ addSubview:card.view];
+  if (cardAboveNewCard) {
+    [self.displayView insertSubview:card.view
+                       belowSubview:cardAboveNewCard.view];
+  } else {
+    [self.displayView addSubview:card.view];
+  }
 
   LayoutRect layout = card.layout;
-  layout.boundingWidth = CGRectGetWidth([view_ bounds]);
+  layout.boundingWidth = CGRectGetWidth(self.displayView.bounds);
   card.layout = layout;
 
   [self.observer cardSet:self displayedCard:card];
@@ -493,7 +495,16 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
   CardView* view = [[CardView alloc] initWithFrame:frame
                                        isIncognito:[tabModel_ isOffTheRecord]];
   [view setTitle:title];
-  [view setFavicon:[tab favicon]];
+  [view setFavicon:nil];
+
+  favicon::FaviconDriver* faviconDriver =
+      favicon::WebFaviconDriver::FromWebState(tab.webState);
+  if (faviconDriver && faviconDriver->FaviconIsValid()) {
+    gfx::Image favicon = faviconDriver->GetFavicon();
+    if (!favicon.IsEmpty())
+      [view setFavicon:favicon.ToUIImage()];
+  }
+
   [tab retrieveSnapshot:^(UIImage* image) {
     [view setImage:image];
   }];

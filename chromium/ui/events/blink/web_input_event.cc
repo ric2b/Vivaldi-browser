@@ -17,20 +17,20 @@
 #endif
 
 #if defined(USE_X11)
-#include <X11/Xlib.h>
+#include "ui/gfx/x/x11.h"
 #endif
 
 namespace ui {
 
 namespace {
 
-gfx::Point GetScreenLocationFromEvent(
+gfx::PointF GetScreenLocationFromEvent(
     const LocatedEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
   DCHECK(!screen_location_callback.is_null());
   return event.target() ? screen_location_callback.Run(event)
-                        : event.root_location();
+                        : event.root_location_f();
 }
 
 blink::WebPointerProperties::PointerType EventPointerTypeToWebPointerType(
@@ -83,14 +83,6 @@ blink::WebMouseWheelEvent MakeUntranslatedWebMouseWheelEventFromNativeEvent(
   return WebMouseWheelEventBuilder::Build(
       native_event.hwnd, native_event.message, native_event.wParam,
       native_event.lParam, EventTimeStampToSeconds(time_stamp), pointer_type);
-}
-
-blink::WebKeyboardEvent MakeWebKeyboardEventFromNativeEvent(
-    const base::NativeEvent& native_event,
-    const base::TimeTicks& time_stamp) {
-  return WebKeyboardEventBuilder::Build(
-      native_event.hwnd, native_event.message, native_event.wParam,
-      native_event.lParam, EventTimeStampToSeconds(time_stamp));
 }
 #endif  // defined(OS_WIN)
 
@@ -219,7 +211,7 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromUiEvent(
 
 blink::WebMouseEvent MakeWebMouseEvent(
     const MouseEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
   // Construct an untranslated event from the platform event data.
   blink::WebMouseEvent webkit_event =
@@ -244,7 +236,7 @@ blink::WebMouseEvent MakeWebMouseEvent(
     return webkit_event;
 #endif
 
-  const gfx::Point screen_point =
+  const gfx::PointF screen_point =
       GetScreenLocationFromEvent(event, screen_location_callback);
   webkit_event.SetPositionInScreen(screen_point.x(), screen_point.y());
 
@@ -253,7 +245,7 @@ blink::WebMouseEvent MakeWebMouseEvent(
 
 blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
     const MouseWheelEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
 #if defined(OS_WIN)
   // Construct an untranslated event from the platform event data.
@@ -273,7 +265,7 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
   // |event|.
   webkit_event.SetPositionInWidget(event.x(), event.y());
 
-  const gfx::Point screen_point =
+  const gfx::PointF screen_point =
       GetScreenLocationFromEvent(event, screen_location_callback);
   webkit_event.SetPositionInScreen(screen_point.x(), screen_point.y());
 
@@ -282,7 +274,7 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
 
 blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
     const ScrollEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
 #if defined(OS_WIN)
   // Construct an untranslated event from the platform event data.
@@ -302,7 +294,7 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
   // |event|.
   webkit_event.SetPositionInWidget(event.x(), event.y());
 
-  const gfx::Point screen_point =
+  const gfx::PointF screen_point =
       GetScreenLocationFromEvent(event, screen_location_callback);
   webkit_event.SetPositionInScreen(screen_point.x(), screen_point.y());
 
@@ -310,37 +302,40 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
 }
 
 blink::WebKeyboardEvent MakeWebKeyboardEvent(const KeyEvent& event) {
-// Windows can figure out whether or not to construct a RawKeyDown or a Char
-// WebInputEvent based on the type of message carried in
-// event.native_event(). X11 is not so fortunate, there is no separate
-// translated event type, so DesktopHostLinux sends an extra KeyEvent with
-// is_char() == true. We need to pass the KeyEvent to the X11 function
-// to detect this case so the right event type can be constructed.
+  // TODO(wez): Work out how this comment relates to the code below.
+  // Windows can figure out whether or not to construct a RawKeyDown or a Char
+  // WebInputEvent based on the type of message carried in
+  // event.native_event(). X11 is not so fortunate, there is no separate
+  // translated event type, so DesktopHostLinux sends an extra KeyEvent with
+  // is_char() == true. We need to pass the KeyEvent to the X11 function
+  // to detect this case so the right event type can be constructed.
+  blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEventFromUiEvent(event);
 #if defined(OS_WIN)
   if (event.HasNativeEvent()) {
-    // Key events require no translation.
-    blink::WebKeyboardEvent webkit_event(MakeWebKeyboardEventFromNativeEvent(
-        event.native_event(), event.time_stamp()));
-    webkit_event.SetModifiers(webkit_event.GetModifiers() |
-                              DomCodeToWebInputEventModifiers(event.code()));
-    webkit_event.dom_code = static_cast<int>(event.code());
-    webkit_event.dom_key = static_cast<int>(event.GetDomKey());
-    return webkit_event;
+    const base::NativeEvent& native_event = event.native_event();
+
+    // System key events are explicitly distinguished, under Windows.
+    webkit_event.is_system_key = native_event.message == WM_SYSCHAR ||
+                                 native_event.message == WM_SYSKEYDOWN ||
+                                 native_event.message == WM_SYSKEYUP;
+
+    // Copy the OEM scancode, including flag bits, directly from the event.
+    webkit_event.native_key_code = static_cast<int>(native_event.lParam);
   }
 #endif
-  return MakeWebKeyboardEventFromUiEvent(event);
+  return webkit_event;
 }
 
 blink::WebGestureEvent MakeWebGestureEvent(
     const GestureEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
   blink::WebGestureEvent gesture_event = MakeWebGestureEventFromUIEvent(event);
 
   gesture_event.x = event.x();
   gesture_event.y = event.y();
 
-  const gfx::Point screen_point =
+  const gfx::PointF screen_point =
       GetScreenLocationFromEvent(event, screen_location_callback);
   gesture_event.global_x = screen_point.x();
   gesture_event.global_y = screen_point.y();
@@ -350,13 +345,13 @@ blink::WebGestureEvent MakeWebGestureEvent(
 
 blink::WebGestureEvent MakeWebGestureEvent(
     const ScrollEvent& event,
-    const base::Callback<gfx::Point(const LocatedEvent& event)>&
+    const base::Callback<gfx::PointF(const LocatedEvent& event)>&
         screen_location_callback) {
   blink::WebGestureEvent gesture_event = MakeWebGestureEventFromUiEvent(event);
   gesture_event.x = event.x();
   gesture_event.y = event.y();
 
-  const gfx::Point screen_point =
+  const gfx::PointF screen_point =
       GetScreenLocationFromEvent(event, screen_location_callback);
   gesture_event.global_x = screen_point.x();
   gesture_event.global_y = screen_point.y();

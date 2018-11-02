@@ -5,23 +5,25 @@
 #ifndef CHROME_BROWSER_PRERENDER_PRERENDER_TEST_UTILS_H_
 #define CHROME_BROWSER_PRERENDER_PRERENDER_TEST_UTILS_H_
 
-#include <deque>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/synchronization/lock.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/safe_browsing_db/test_database_manager.h"
+#include "components/safe_browsing/db/test_database_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -291,7 +293,7 @@ class TestPrerenderContentsFactory : public PrerenderContents::Factory {
     base::WeakPtr<TestPrerender> handle;
   };
 
-  std::deque<ExpectedContents> expected_contents_queue_;
+  base::circular_deque<ExpectedContents> expected_contents_queue_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPrerenderContentsFactory);
 };
@@ -380,7 +382,11 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
                       const GURL& url_to_prerender,
                       const std::string& loader_query);
 
+  uint32_t GetRequestCount(const GURL& url);
+  void WaitForRequestCount(const GURL& url, uint32_t expected_count);
+
  private:
+  void MonitorResourceRequest(const net::test_server::HttpRequest& request);
   std::unique_ptr<ExternalProtocolHandler::Delegate>
       external_protocol_handler_delegate_;
   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
@@ -391,6 +397,13 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
   base::HistogramTester histogram_tester_;
   std::unique_ptr<net::EmbeddedTestServer> https_src_server_;
 
+  // The following are guarded by |lock_| as they're used on multiple threads.
+  std::map<GURL, uint32_t> requests_;
+  GURL waiting_url_;
+  uint32_t waiting_count_ = 0;
+  base::Closure waiting_closure_;
+  base::Lock lock_;
+
   DISALLOW_COPY_AND_ASSIGN(PrerenderInProcessBrowserTest);
 };
 
@@ -399,19 +412,16 @@ class RestorePrerenderMode {
  public:
   RestorePrerenderMode()
       : prev_mode_(PrerenderManager::GetMode(ORIGIN_NONE)),
-        prev_omnibox_mode_(PrerenderManager::GetMode(ORIGIN_OMNIBOX)),
-        prev_instant_mode_(PrerenderManager::GetMode(ORIGIN_INSTANT)) {}
+        prev_omnibox_mode_(PrerenderManager::GetMode(ORIGIN_OMNIBOX)) {}
 
   ~RestorePrerenderMode() {
     PrerenderManager::SetMode(prev_mode_);
     PrerenderManager::SetOmniboxMode(prev_omnibox_mode_);
-    PrerenderManager::SetInstantMode(prev_instant_mode_);
   }
 
  private:
   PrerenderManager::PrerenderManagerMode prev_mode_;
   PrerenderManager::PrerenderManagerMode prev_omnibox_mode_;
-  PrerenderManager::PrerenderManagerMode prev_instant_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(RestorePrerenderMode);
 };

@@ -5,12 +5,10 @@
 // https://webaudio.github.io/web-audio-api/#AudioWorkletProcessor
 
 [
+    Constructor,
+    ConstructorCallWith=ExecutionContext,
     Exposed=AudioWorklet,
-    Global=(Worklet,AudioWorklet),
-    RuntimeEnabled=AudioWorklet
+    Global=(Worklet,AudioWorklet)
 ] interface AudioWorkletProcessor {
-    // TODO(hongchan): implement spec features.
-    // readonly attribute AudioContextInfo contextInfo;
-    // attribute EventHandler onnodedata;
-    // void sendData(any data);
+  readonly attribute MessagePort port;
 };

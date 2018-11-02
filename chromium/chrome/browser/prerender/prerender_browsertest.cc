@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
-#include <deque>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -31,7 +30,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -40,7 +38,9 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/net/prediction_options.h"
+#include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 #include "chrome/browser/page_load_metrics/observers/prerender_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
@@ -75,14 +75,15 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
+#include "components/nacl/common/features.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/util.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -221,6 +222,61 @@ class MockNetworkChangeNotifier4G : public NetworkChangeNotifier {
   ConnectionType GetCurrentConnectionType() const override {
     return NetworkChangeNotifier::CONNECTION_4G;
   }
+};
+
+// Wait for PageLoadMetrics parse start metrics to be flushed out.
+class ParseStartMetricsWaiter
+    : public page_load_metrics::MetricsWebContentsObserver::TestingObserver {
+ public:
+  explicit ParseStartMetricsWaiter(content::WebContents* web_contents)
+      : TestingObserver(web_contents), weak_factory_(this) {}
+
+  ~ParseStartMetricsWaiter() override { CHECK_EQ(nullptr, run_loop_.get()); }
+
+  // MetricsWebContentsObserver::TestingObserver implementation.
+  void OnTrackerCreated(page_load_metrics::PageLoadTracker* tracker) override {
+    tracker->AddObserver(
+        base::MakeUnique<WaiterObserver>(weak_factory_.GetWeakPtr()));
+  }
+
+  void Wait() {
+    if (saw_metrics_)
+      return;
+
+    run_loop_ = base::MakeUnique<base::RunLoop>();
+    run_loop_->Run();
+    run_loop_ = nullptr;
+    EXPECT_TRUE(saw_metrics_);
+  }
+
+  void MarkMetricsSeen() {
+    saw_metrics_ = true;
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+ private:
+  class WaiterObserver : public page_load_metrics::PageLoadMetricsObserver {
+   public:
+    explicit WaiterObserver(base::WeakPtr<ParseStartMetricsWaiter> waiter)
+        : waiter_(waiter) {}
+
+    void OnTimingUpdate(
+        bool is_subframe,
+        const page_load_metrics::mojom::PageLoadTiming& timing,
+        const page_load_metrics::PageLoadExtraInfo& extra_info) override {
+      if (timing.parse_timing->parse_start && waiter_) {
+        waiter_->MarkMetricsSeen();
+      }
+    }
+
+   private:
+    const base::WeakPtr<ParseStartMetricsWaiter> waiter_;
+  };
+
+  bool saw_metrics_ = false;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  base::WeakPtrFactory<ParseStartMetricsWaiter> weak_factory_;
 };
 
 // Constants used in the test HTML files.
@@ -470,9 +526,8 @@ class NewTabNavigationOrSwapObserver {
     if (swap_observer_)
       return true;
     WebContents* new_tab = content::Details<WebContents>(details).ptr();
-    // Get the TabStripModel. Assume this is attached to a Browser.
     TabStripModel* tab_strip_model =
-        Browser::FromWebContents(new_tab)->tab_strip_model();
+        chrome::FindBrowserWithWebContents(new_tab)->tab_strip_model();
     swap_observer_.reset(new NavigationOrSwapObserver(tab_strip_model,
                                                       new_tab));
     swap_observer_->set_did_start_loading();
@@ -490,7 +545,7 @@ class FakeDevToolsClient : public content::DevToolsAgentHostClient {
   ~FakeDevToolsClient() override {}
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {}
-  void AgentHostClosed(DevToolsAgentHost* agent_host, bool replaced) override {}
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override {}
 };
 
 // A ContentBrowserClient that cancels all prerenderers on OpenURL.
@@ -598,8 +653,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
   void SetUpOnMainThread() override {
     test_utils::PrerenderInProcessBrowserTest::SetUpOnMainThread();
     prerender::PrerenderManager::SetMode(
-        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
-    prerender::PrerenderManager::SetInstantMode(
         prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
     prerender::PrerenderManager::SetOmniboxMode(
         prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
@@ -1057,7 +1110,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPage) {
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
   fcp_waiter->Wait();
@@ -1100,14 +1153,18 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PageLoadMetricsPrerender) {
   test_utils::FirstContentfulPaintManagerWaiter* prerender_fcp_waiter =
       test_utils::FirstContentfulPaintManagerWaiter::Create(
           GetPrerenderManager());
+  std::unique_ptr<ParseStartMetricsWaiter> metrics_waiter =
+      std::make_unique<ParseStartMetricsWaiter>(
+          browser()->tab_strip_model()->GetActiveWebContents());
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
   NavigateToDestURL();
   prerender_fcp_waiter->Wait();
+  metrics_waiter->Wait();
 
   histogram_tester().ExpectTotalCount(
       "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
 
-  // Histogram logged during the prefetch_loader.html load, but not during the
+  // Histogram logged during the prerender_loader.html load, but not during the
   // prerender.
   histogram_tester().ExpectTotalCount(
       "PageLoad.ParseTiming.NavigationToParseStart", 1);
@@ -1175,7 +1232,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPageRemovesPending) {
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -1292,7 +1349,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ChannelDestructionWatcher channel_close_watcher;
   channel_close_watcher.WatchChannel(
-      GetActiveWebContents()->GetRenderProcessHost());
+      GetActiveWebContents()->GetMainFrame()->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -1528,56 +1585,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   PrerenderTestURL("/prerender/prerender_location_replace.html",
                    FINAL_STATUS_USED, 2);
   NavigateToURL("/prerender/prerender_page.html");
-}
-
-// Checks that the PrefetchTTFCP histogram is recorded across the client
-// redirect when the referring page is Google.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderLocationReplaceGWSHistograms) {
-  DisableJavascriptCalls();
-
-  // The loader page should look like Google.
-  static const char kGoogleDotCom[] = "www.google.com";
-  SetLoaderHostOverride(kGoogleDotCom);
-  set_loader_path("/prerender/prerender_loader_with_replace_state.html");
-
-  GURL dest_url =
-      GetCrossDomainTestUrl("prerender/prerender_deferred_image.html");
-
-  GURL prerender_url = embedded_test_server()->GetURL(
-      "/prerender/prerender_location_replace.html?" +
-      net::EscapeQueryParamValue(dest_url.spec(), false) + "#prerender");
-  GURL::Replacements replacements;
-  replacements.SetHostStr(kGoogleDotCom);
-  prerender_url = prerender_url.ReplaceComponents(replacements);
-
-  // The prerender will not completely load until after the swap, so wait for a
-  // title change before calling DidPrerenderPass.
-  std::unique_ptr<TestPrerender> prerender =
-      PrerenderTestURL(prerender_url, FINAL_STATUS_USED, 1);
-  WaitForASCIITitle(prerender->contents()->prerender_contents(), kReadyTitle);
-  EXPECT_TRUE(DidPrerenderPass(prerender->contents()->prerender_contents()));
-  EXPECT_EQ(1, prerender->number_of_loads());
-
-  GURL navigate_url = embedded_test_server()->GetURL(
-      "/prerender/prerender_location_replace.html?" +
-      net::EscapeQueryParamValue(dest_url.spec(), false) + "#navigate");
-  navigate_url = navigate_url.ReplaceComponents(replacements);
-
-  // Open the URL and wait for the FCP.
-  test_utils::FirstContentfulPaintManagerWaiter* fcp_waiter =
-      test_utils::FirstContentfulPaintManagerWaiter::Create(
-          GetPrerenderManager());
-  current_browser()->OpenURL(OpenURLParams(navigate_url, Referrer(),
-                                           WindowOpenDisposition::CURRENT_TAB,
-                                           ui::PAGE_TRANSITION_TYPED, false));
-  fcp_waiter->Wait();
-
-  // The client redirect changes the PageLoadExtraInfo.start_url and hence the
-  // past navigation cannot be found for the histogram to be recorded as
-  // PrefetchTTFCP.Warm.
-  histogram_tester().ExpectTotalCount(
-      "Prerender.gws_PrefetchTTFCP.Reference.Cacheable.Visible", 1);
 }
 
 // Checks that client-issued redirects work with prerendering.
@@ -1868,8 +1875,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderAbortPendingOnCancel) {
   EXPECT_TRUE(IsEmptyPrerenderLinkManager());
 }
 
-#if !defined(OS_ANDROID)
-
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, OpenTaskManagerBeforePrerender) {
   const base::string16 any_prerender = MatchTaskManagerPrerender("*");
   const base::string16 any_tab = MatchTaskManagerTab("*");
@@ -1959,8 +1964,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, OpenTaskManagerAfterSwapIn) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, any_prerender));
 }
 
-#endif  // !defined(OS_ANDROID)
-
 // Checks that audio loads are deferred on prerendering.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderHTML5Audio) {
   PrerenderTestURL("/prerender/prerender_html5_audio.html", FINAL_STATUS_USED,
@@ -2048,8 +2051,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                    1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2063,8 +2069,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
       FINAL_STATUS_USED, 2);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2760,8 +2769,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithExtensions, WebNavigation) {
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2781,8 +2793,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithExtensions, TabsApi) {
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
 
   ChannelDestructionWatcher channel_close_watcher;
-  channel_close_watcher.WatchChannel(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost());
+  channel_close_watcher.WatchChannel(browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetMainFrame()
+                                         ->GetProcess());
   NavigateToDestURL();
   channel_close_watcher.WaitForChannelClose();
 
@@ -2830,39 +2845,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
       "/prerender/prerender_with_image.html", replacement_text,
       &replacement_path);
   PrerenderTestURL(replacement_path, FINAL_STATUS_UNSUPPORTED_SCHEME, 0);
-}
-
-// Checks that non-http/https/chrome-extension subresource does not cancel the
-// prerender.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderSubresourceUnsupportedSchemeForOffline) {
-  // Set up a page with unsupported subresource.
-  GURL image_url = GURL("invalidscheme://www.google.com/test.jpg");
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      std::make_pair("REPLACE_WITH_IMAGE_URL", image_url.spec()));
-  std::string replacement_path;
-  net::test_server::GetFilePathWithReplacements(
-      "/prerender/prerender_with_image.html", replacement_text,
-      &replacement_path);
-  const GURL url = src_server()->GetURL(MakeAbsolute(replacement_path));
-
-  // Navigate to about:blank to get the session storage namespace.
-  ui_test_utils::NavigateToURL(current_browser(), GURL(url::kAboutBlankURL));
-  content::SessionStorageNamespace* storage_namespace =
-      GetActiveWebContents()
-          ->GetController()
-          .GetDefaultSessionStorageNamespace();
-
-  std::unique_ptr<TestPrerender> test_prerender =
-      prerender_contents_factory()->ExpectPrerenderContents(
-          FINAL_STATUS_APP_TERMINATING);
-
-  std::unique_ptr<PrerenderHandle> prerender_handle(
-      GetPrerenderManager()->AddPrerenderForOffline(url, storage_namespace,
-                                                    gfx::Size(640, 480)));
-  ASSERT_EQ(prerender_handle->contents(), test_prerender->contents());
-  test_prerender->WaitForLoads(1);
 }
 
 // Ensure that about:blank is permitted for any subresource.
@@ -3145,31 +3127,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderNewNavigationEntry) {
                    FINAL_STATUS_NEW_NAVIGATION_ENTRY, 1);
 }
 
-// Checks that the prerendering of a page for ORIGIN_OFFLINE is not canceled
-// when the prerendered page tries to make a second navigation entry.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderNewNavigationEntryForOffline) {
-  // Navigate to about:blank to get the session storage namespace.
-  ui_test_utils::NavigateToURL(current_browser(), GURL(url::kAboutBlankURL));
-  content::SessionStorageNamespace* storage_namespace =
-      GetActiveWebContents()
-          ->GetController()
-          .GetDefaultSessionStorageNamespace();
-
-  std::unique_ptr<TestPrerender> test_prerender =
-      prerender_contents_factory()->ExpectPrerenderContents(
-          FINAL_STATUS_APP_TERMINATING);
-
-  const GURL url =
-      src_server()->GetURL(MakeAbsolute("/prerender/prerender_new_entry.html"));
-  std::unique_ptr<PrerenderHandle> prerender_handle(
-      GetPrerenderManager()->AddPrerenderForOffline(url, storage_namespace,
-                                                    gfx::Size(640, 480)));
-  ASSERT_EQ(prerender_handle->contents(), test_prerender->contents());
-  test_prerender->WaitForLoads(2);
-  ASSERT_EQ(1, GetActiveWebContents()->GetController().GetEntryCount());
-}
-
 // Attempt a swap-in in a new tab. The session storage doesn't match, so it
 // should not swap.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPageNewTab) {
@@ -3279,7 +3236,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, HttpPost) {
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
   // Set up a credential in the password store.
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     PasswordStoreFactory::GetInstance()->SetTestingFactory(
         current_browser()->profile(),
         password_manager::BuildPasswordStore<
@@ -3909,8 +3866,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxBrowserTest,
       GetAutocompleteActionPredictor()->IsPrerenderAbandonedForTesting());
 }
 
-// Can't run tests with NaCl plugins if built with DISABLE_NACL.
-#if !defined(DISABLE_NACL)
+// Can't run tests with NaCl plugins if built without ENABLE_NACL.
+#if BUILDFLAG(ENABLE_NACL)
 class PrerenderBrowserTestWithNaCl : public PrerenderBrowserTest {
  public:
   PrerenderBrowserTestWithNaCl() {}
@@ -3945,7 +3902,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithNaCl,
                                                    &display_test_result));
   ASSERT_TRUE(display_test_result);
 }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 }  // namespace prerender
 

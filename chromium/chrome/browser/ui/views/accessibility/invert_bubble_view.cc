@@ -70,6 +70,7 @@ InvertBubbleView::InvertBubbleView(Browser* browser, views::View* anchor_view)
       dark_theme_(NULL),
       learn_more_(NULL),
       close_(NULL) {
+  set_margins(gfx::Insets());
   chrome::RecordDialogCreation(chrome::DialogIdentifier::INVERT);
 }
 
@@ -81,6 +82,10 @@ int InvertBubbleView::GetDialogButtons() const {
 }
 
 void InvertBubbleView::Init() {
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  SetBorder(views::CreateEmptyBorder(
+      provider->GetInsetsMetric(views::INSETS_DIALOG)));
+
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   const gfx::FontList& original_font_list =
       rb.GetFontList(ui::ResourceBundle::MediumFont);
@@ -108,7 +113,7 @@ void InvertBubbleView::Init() {
   close_->SetFontList(original_font_list);
   close_->set_listener(this);
 
-  views::GridLayout* layout = views::GridLayout::CreatePanel(this);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
   for (int i = 0; i < 4; i++) {
@@ -119,9 +124,9 @@ void InvertBubbleView::Init() {
 
   layout->StartRow(0, 0);
   layout->AddView(title, 4, 1);
-  layout->StartRowWithPadding(0, 0, 0,
-                              ChromeLayoutProvider::Get()->GetDistanceMetric(
-                                  DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
+  layout->StartRowWithPadding(
+      0, 0, 0,
+      provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
   layout->AddView(high_contrast_);
   layout->AddView(dark_theme_);
   layout->AddView(learn_more_);

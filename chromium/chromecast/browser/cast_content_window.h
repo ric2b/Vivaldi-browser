@@ -38,13 +38,10 @@ class CastContentWindow {
   // Creates the platform specific CastContentWindow. |delegate| should outlive
   // the created CastContentWindow.
   static std::unique_ptr<CastContentWindow> Create(
-      CastContentWindow::Delegate* delegate);
+      CastContentWindow::Delegate* delegate,
+      bool is_headless);
 
   virtual ~CastContentWindow() {}
-
-  // Sets the window's background to be transparent (call before
-  // CreateWindowTree).
-  virtual void SetTransparent() = 0;
 
   // Creates a full-screen window for |web_contents| and display it.
   // |web_contents| should outlive this CastContentWindow.

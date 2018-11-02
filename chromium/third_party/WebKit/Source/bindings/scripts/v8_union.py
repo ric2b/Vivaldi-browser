@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from utilities import to_snake_case
 import v8_types
 import v8_utilities
 
@@ -16,16 +17,6 @@ UNION_H_INCLUDES = frozenset([
     'bindings/core/v8/NativeValueTraits.h',
     'bindings/core/v8/V8BindingForCore.h',
     'platform/heap/Handle.h',
-])
-
-UNION_CPP_INCLUDES_BLACKLIST = frozenset([
-    # This header defines static functions needed to implement event handler
-    # attributes in interfaces that implement GlobalEventHandlers. They are not
-    # needed or used by UnionTypes*.cpp, so including the header causes
-    # compilation errors.
-    # FIXME: We should solve this problem in a way that doesn't involve special-
-    # casing a header like this.
-    'core/dom/GlobalEventHandlers.h',
 ])
 
 
@@ -107,7 +98,7 @@ def container_context(union_type, info_provider):
         'array_or_sequence_type': array_or_sequence_type,
         'boolean_type': boolean_type,
         'cpp_class': cpp_class,
-        'cpp_includes': sorted(cpp_includes - UNION_CPP_INCLUDES_BLACKLIST),
+        'cpp_includes': sorted(cpp_includes),
         'dictionary_type': dictionary_type,
         'header_includes': sorted(header_includes),
         'header_forward_decls': sorted(header_forward_decls),
@@ -153,18 +144,18 @@ def member_context(member, info_provider):
     if member.is_nullable:
         member = member.inner_type
     return {
-        'cpp_name': v8_utilities.uncapitalize(member.name),
+        'cpp_name': to_snake_case(v8_utilities.cpp_name(member)),
         'cpp_type': member.cpp_type_args(used_in_cpp_sequence=True),
         'cpp_local_type': member.cpp_type,
         'cpp_value_to_v8_value': member.cpp_value_to_v8_value(
-            cpp_value='impl.getAs%s()' % member.name, isolate='isolate',
+            cpp_value='impl.GetAs%s()' % member.name, isolate='isolate',
             creation_context='creationContext'),
         'enum_values': member.enum_values,
         'is_array_buffer_or_view_type': member.is_array_buffer_or_view,
         'is_array_buffer_view_or_typed_array': member.is_array_buffer_view_or_typed_array,
         'is_traceable': member.is_traceable,
         'rvalue_cpp_type': member.cpp_type_args(used_as_rvalue_type=True),
-        'specific_type_enum': 'SpecificType' + member.name,
+        'specific_type_enum': 'k' + member.name,
         'type_name': member.name,
         'v8_value_to_local_cpp_value': member.v8_value_to_local_cpp_value(
             {}, 'v8Value', 'cppValue', isolate='isolate',

@@ -13,6 +13,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/hash.h"
 #include "base/strings/stringprintf.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "services/ui/common/types.h"
 #include "services/ui/common/util.h"
 
@@ -22,6 +23,11 @@ namespace ws {
 // A client id used to indicate no client. That is, no WindowTree ever gets this
 // id.
 const ClientSpecificId kInvalidClientId = 0;
+
+const Id kInvalidTransportId = 0;
+
+// A client id used to indicate WindowServer.
+const ClientSpecificId kWindowServerClientId = 1;
 
 // Every window has a unique id associated with it (WindowId). The id is a
 // combination of the id assigned to the client (the high order bits) and
@@ -37,6 +43,10 @@ const ClientSpecificId kInvalidClientId = 0;
 // multiple windows having the same ClientWindowId. WindowTree enforces
 // that embed roots use the client id in creating the window id to avoid
 // possible conflicts.
+
+// Used for ids assigned by the client.
+using ClientWindowId = viz::FrameSinkId;
+
 struct WindowId {
   constexpr WindowId(ClientSpecificId client_id, ClientSpecificId window_id)
       : client_id(client_id), window_id(window_id) {}
@@ -61,24 +71,6 @@ struct WindowId {
   ClientSpecificId window_id;
 };
 
-// Used for ids assigned by the client.
-struct ClientWindowId {
-  explicit ClientWindowId(Id id) : id(id) {}
-  ClientWindowId(ClientSpecificId client_id, ClientSpecificId window_id)
-      : ClientWindowId((client_id << 16) | window_id) {}
-  ClientWindowId() : id(0u) {}
-
-  bool operator==(const ClientWindowId& other) const { return other.id == id; }
-
-  bool operator!=(const ClientWindowId& other) const {
-    return !(*this == other);
-  }
-
-  bool operator<(const ClientWindowId& other) const { return id < other.id; }
-
-  Id id;
-};
-
 inline WindowId WindowIdFromTransportId(Id id) {
   return WindowId(HiWord(id), LoWord(id));
 }
@@ -91,12 +83,10 @@ inline WindowId InvalidWindowId() {
 
 // Returns a root window id with a given index offset.
 inline WindowId RootWindowId(uint16_t index) {
-  return WindowId(kInvalidClientId, 2 + index);
+  return WindowId(kWindowServerClientId, 2 + index);
 }
 
-struct ClientWindowIdHash {
-  size_t operator()(const ClientWindowId& id) const { return id.id; }
-};
+using ClientWindowIdHash = viz::FrameSinkIdHash;
 
 struct WindowIdHash {
   size_t operator()(const WindowId& id) const {

@@ -5,10 +5,10 @@
 #include "chrome/browser/android/compositor/layer/content_layer.h"
 
 #include "base/lazy_instance.h"
-#include "cc/base/filter_operations.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/surface_layer.h"
+#include "cc/paint/filter_operations.h"
 #include "chrome/browser/android/compositor/layer/thumbnail_layer.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 #include "content/public/browser/android/compositor.h"
@@ -19,7 +19,7 @@ namespace android {
 // static
 scoped_refptr<ContentLayer> ContentLayer::Create(
     TabContentManager* tab_content_manager) {
-  return make_scoped_refptr(new ContentLayer(tab_content_manager));
+  return base::WrapRefCounted(new ContentLayer(tab_content_manager));
 }
 
 static void SetOpacityOnLeaf(scoped_refptr<cc::Layer> layer, float alpha) {
@@ -116,7 +116,7 @@ gfx::Size ContentLayer::ComputeSize(int id) const {
   cc::SurfaceLayer* surface_layer =
       static_cast<cc::SurfaceLayer*>(GetDrawsContentLeaf(live_layer));
   if (surface_layer)
-    size.SetToMax(surface_layer->primary_surface_info().size_in_pixels());
+    size.SetToMax(surface_layer->bounds());
 
   scoped_refptr<ThumbnailLayer> static_layer =
       tab_content_manager_->GetStaticLayer(id);

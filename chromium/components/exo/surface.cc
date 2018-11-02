@@ -13,19 +13,20 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/output/layer_tree_frame_sink.h"
-#include "cc/quads/render_pass.h"
-#include "cc/quads/solid_color_draw_quad.h"
-#include "cc/quads/texture_draw_quad.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/buffer.h"
 #include "components/exo/pointer.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
+#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/shared_quad_state.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/common/surfaces/sequence_surface_reference_factory.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -42,7 +43,6 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/views/widget/widget.h"
 
@@ -129,11 +129,12 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   bool CanFocus() override { return true; }
   void OnCaptureLost() override {}
   void OnPaint(const ui::PaintContext& context) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {}
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
-  bool HasHitTestMask() const override { return surface_->HasHitTestMask(); }
+  bool HasHitTestMask() const override { return true; }
   void GetHitTestMask(gfx::Path* mask) const override {
     surface_->GetHitTestMask(mask);
   }
@@ -159,35 +160,26 @@ class CustomWindowTargeter : public aura::WindowTargeter {
   ~CustomWindowTargeter() override {}
 
   // Overridden from aura::WindowTargeter:
-  bool SubtreeCanAcceptEvent(aura::Window* window,
-                             const ui::LocatedEvent& event) const override {
-    Surface* surface = Surface::AsSurface(window);
-    if (!surface)
-      return false;
-
-    if (surface->IsStylusOnly()) {
-      ui::EventPointerType type = ui::EventPointerType::POINTER_TYPE_UNKNOWN;
-      if (event.IsTouchEvent()) {
-        auto* touch_event = static_cast<const ui::TouchEvent*>(&event);
-        type = touch_event->pointer_details().pointer_type;
-      }
-      if (type != ui::EventPointerType::POINTER_TYPE_PEN)
-        return false;
-    }
-    return aura::WindowTargeter::SubtreeCanAcceptEvent(window, event);
-  }
-
   bool EventLocationInsideBounds(aura::Window* window,
                                  const ui::LocatedEvent& event) const override {
     Surface* surface = Surface::AsSurface(window);
     if (!surface)
       return false;
 
+    if (event.IsTouchEvent() && !surface->IsTouchEnabled(surface))
+      return false;
+
     gfx::Point local_point = event.location();
     if (window->parent())
       aura::Window::ConvertPointToTarget(window->parent(), window,
                                          &local_point);
-    return surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1)));
+    return surface->HitTest(local_point);
+  }
+
+  std::unique_ptr<HitTestRects> GetExtraHitTestShapeRects(
+      aura::Window* window) const override {
+    Surface* surface = Surface::AsSurface(window);
+    return surface ? surface->GetHitTestShapeRects() : nullptr;
   }
 
  private:
@@ -214,13 +206,16 @@ Surface::~Surface() {
 
   // Call all frame callbacks with a null frame time to indicate that they
   // have been cancelled.
-  for (const auto& frame_callback : pending_frame_callbacks_)
+  frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
+  for (const auto& frame_callback : frame_callbacks_)
     frame_callback.Run(base::TimeTicks());
 
   // Call all presentation callbacks with a null presentation time to indicate
   // that they have been cancelled.
-  for (const auto& presentation_callback : pending_presentation_callbacks_)
-    presentation_callback.Run(base::TimeTicks(), base::TimeDelta());
+  presentation_callbacks_.splice(presentation_callbacks_.end(),
+                                 pending_presentation_callbacks_);
+  for (const auto& presentation_callback : presentation_callbacks_)
+    presentation_callback.Run(base::TimeTicks(), base::TimeDelta(), 0);
 
   WMHelper::GetInstance()->ResetDragDropDelegate(window_.get());
 }
@@ -241,7 +236,7 @@ void Surface::Attach(Buffer* buffer) {
 void Surface::Damage(const gfx::Rect& damage) {
   TRACE_EVENT1("exo", "Surface::Damage", "damage", damage.ToString());
 
-  pending_damage_.op(gfx::RectToSkIRect(damage), SkRegion::kUnion_Op);
+  pending_damage_.Union(damage);
 }
 
 void Surface::RequestFrameCallback(const FrameCallback& callback) {
@@ -257,18 +252,22 @@ void Surface::RequestPresentationCallback(
   pending_presentation_callbacks_.push_back(callback);
 }
 
-void Surface::SetOpaqueRegion(const SkRegion& region) {
-  TRACE_EVENT1("exo", "Surface::SetOpaqueRegion", "region",
-               gfx::SkIRectToRect(region.getBounds()).ToString());
+void Surface::SetOpaqueRegion(const cc::Region& region) {
+  TRACE_EVENT1("exo", "Surface::SetOpaqueRegion", "region", region.ToString());
 
   pending_state_.opaque_region = region;
 }
 
-void Surface::SetInputRegion(const SkRegion& region) {
-  TRACE_EVENT1("exo", "Surface::SetInputRegion", "region",
-               gfx::SkIRectToRect(region.getBounds()).ToString());
+void Surface::SetInputRegion(const cc::Region& region) {
+  TRACE_EVENT1("exo", "Surface::SetInputRegion", "region", region.ToString());
 
   pending_state_.input_region = region;
+}
+
+void Surface::SetInputOutset(int outset) {
+  TRACE_EVENT1("exo", "Surface::SetInputOutset", "outset", outset);
+
+  pending_state_.input_outset = outset;
 }
 
 void Surface::SetBufferScale(float scale) {
@@ -297,6 +296,7 @@ void Surface::AddSubSurface(Surface* sub_surface) {
   DCHECK(!ListContainsEntry(pending_sub_surfaces_, sub_surface));
   pending_sub_surfaces_.push_back(std::make_pair(sub_surface, gfx::Point()));
   sub_surfaces_.push_back(std::make_pair(sub_surface, gfx::Point()));
+  sub_surfaces_changed_ = true;
 }
 
 void Surface::RemoveSubSurface(Surface* sub_surface) {
@@ -313,13 +313,10 @@ void Surface::RemoveSubSurface(Surface* sub_surface) {
 
   DCHECK(ListContainsEntry(sub_surfaces_, sub_surface));
   auto it = FindListEntry(sub_surfaces_, sub_surface);
-  pending_damage_.op(SkIRect::MakeXYWH(it->second.x(), it->second.y(),
-                                       sub_surface->content_size().width(),
-                                       sub_surface->content_size().height()),
-                     SkRegion::kUnion_Op);
   sub_surfaces_.erase(it);
   // Force recreating resources when the surface is added to a tree again.
   sub_surface->SurfaceHierarchyResourcesLost();
+  sub_surfaces_changed_ = true;
 }
 
 void Surface::SetSubSurfacePosition(Surface* sub_surface,
@@ -392,6 +389,11 @@ void Surface::PlaceSubSurfaceBelow(Surface* sub_surface, Surface* sibling) {
   sub_surfaces_changed_ = true;
 }
 
+void Surface::OnSubSurfaceCommit() {
+  if (delegate_)
+    delegate_->OnSurfaceCommit();
+}
+
 void Surface::SetViewport(const gfx::Size& viewport) {
   TRACE_EVENT1("exo", "Surface::SetViewport", "viewport", viewport.ToString());
 
@@ -424,21 +426,40 @@ void Surface::SetAlpha(float alpha) {
   pending_state_.alpha = alpha;
 }
 
+void Surface::SetFrame(SurfaceFrameType type) {
+  TRACE_EVENT1("exo", "Surface::SetFrame", "type", static_cast<uint32_t>(type));
+
+  if (delegate_)
+    delegate_->OnSetFrame(type);
+}
+
+void Surface::SetParent(Surface* parent, const gfx::Point& position) {
+  TRACE_EVENT2("exo", "Surface::SetParent", "parent", !!parent, "position",
+               position.ToString());
+
+  if (delegate_)
+    delegate_->OnSetParent(parent, position);
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
   needs_commit_surface_ = true;
   if (delegate_)
     delegate_->OnSurfaceCommit();
+  else
+    CommitSurfaceHierarchy(false);
 }
 
-gfx::Rect Surface::CommitSurfaceHierarchy(
-    std::list<FrameCallback>* frame_callbacks,
-    std::list<PresentationCallback>* presentation_callbacks) {
-  if (needs_commit_surface_) {
+void Surface::CommitSurfaceHierarchy(bool synchronized) {
+  if (needs_commit_surface_ && (synchronized || !IsSynchronized())) {
     needs_commit_surface_ = false;
+    synchronized = true;
 
+    // TODO(penghuang): Make the damage more precise for sub surface changes.
+    // https://crbug.com/779704
     bool needs_full_damage =
+        sub_surfaces_changed_ ||
         pending_state_.opaque_region != state_.opaque_region ||
         pending_state_.buffer_scale != state_.buffer_scale ||
         pending_state_.buffer_transform != state_.buffer_transform ||
@@ -453,24 +474,37 @@ gfx::Rect Surface::CommitSurfaceHierarchy(
         pending_state_.buffer_scale != state_.buffer_scale ||
         pending_state_.buffer_transform != state_.buffer_transform;
 
+    // If the current state is fully transparent, the last submitted frame will
+    // not include the TextureDrawQuad for the resource, so the resource might
+    // have been released and needs to be updated again.
+    if (!state_.alpha && pending_state_.alpha)
+      needs_update_resource_ = true;
+
     state_ = pending_state_;
     pending_state_.only_visible_on_secure_output = false;
+
+    window_->SetEventTargetingPolicy(
+        state_.input_region.IsEmpty()
+            ? ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY
+            : ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
 
     // We update contents if Attach() has been called since last commit.
     if (has_pending_contents_) {
       has_pending_contents_ = false;
       current_buffer_ = std::move(pending_buffer_);
-      needs_update_resource_ = true;
+      if (state_.alpha)
+        needs_update_resource_ = true;
     }
 
     if (needs_update_buffer_transform)
       UpdateBufferTransform();
 
-    // Move pending frame callbacks to the end of frame_callbacks.
-    frame_callbacks->splice(frame_callbacks->end(), pending_frame_callbacks_);
+    // Move pending frame callbacks to the end of |frame_callbacks_|.
+    frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
 
-    // Move pending presentation callbacks to the end of presentation_callbacks.
-    presentation_callbacks->splice(presentation_callbacks->end(),
+    // Move pending presentation callbacks to the end of
+    // |presentation_callbacks_|.
+    presentation_callbacks_.splice(presentation_callbacks_.end(),
                                    pending_presentation_callbacks_);
 
     UpdateContentSize();
@@ -498,40 +532,61 @@ gfx::Rect Surface::CommitSurfaceHierarchy(
       sub_surfaces_changed_ = false;
     }
 
-    SkIRect output_rect =
-        SkIRect::MakeWH(content_size_.width(), content_size_.height());
+    gfx::Rect output_rect(content_size_);
     if (needs_full_damage) {
-      damage_.setRect(output_rect);
+      damage_ = output_rect;
     } else {
       // pending_damage_ is in Surface coordinates.
-      damage_.set(pending_damage_);
-      damage_.intersects(output_rect);
+      damage_.Swap(&pending_damage_);
+      damage_.Intersect(output_rect);
     }
-    pending_damage_.setEmpty();
+    pending_damage_.Clear();
   }
 
-  gfx::Rect bounds(content_size_);
+  surface_hierarchy_content_bounds_ = gfx::Rect(content_size_);
+  hit_test_region_ = state_.input_region;
+  hit_test_region_.Intersect(surface_hierarchy_content_bounds_);
 
-  // The top most sub-surface is at the front of the RenderPass's quad_list,
-  // so we need composite sub-surface in reversed order.
+  int outset = state_.input_outset;
+  if (outset > 0) {
+    gfx::Rect input_rect = surface_hierarchy_content_bounds_;
+    input_rect.Inset(-outset, -outset);
+    hit_test_region_ = input_rect;
+  }
+
   for (const auto& sub_surface_entry : base::Reversed(sub_surfaces_)) {
     auto* sub_surface = sub_surface_entry.first;
-    gfx::Point origin = sub_surface_entry.second;
+    gfx::Vector2d offset = sub_surface_entry.second.OffsetFromOrigin();
     // Synchronously commit all pending state of the sub-surface and its
     // descendants.
-    bounds.Union(sub_surface->CommitSurfaceHierarchy(frame_callbacks,
-                                                     presentation_callbacks) +
-                 origin.OffsetFromOrigin());
+    sub_surface->CommitSurfaceHierarchy(synchronized);
+    surface_hierarchy_content_bounds_.Union(
+        sub_surface->surface_hierarchy_content_bounds() + offset);
+    hit_test_region_.Union(sub_surface->hit_test_region_ + offset);
   }
+}
 
-  return bounds;
+void Surface::AppendSurfaceHierarchyCallbacks(
+    std::list<FrameCallback>* frame_callbacks,
+    std::list<PresentationCallback>* presentation_callbacks) {
+  // Move frame callbacks to the end of |frame_callbacks|.
+  frame_callbacks->splice(frame_callbacks->end(), frame_callbacks_);
+  // Move presentation callbacks to the end of |presentation_callbacks|.
+  presentation_callbacks->splice(presentation_callbacks->end(),
+                                 presentation_callbacks_);
+
+  for (const auto& sub_surface_entry : base::Reversed(sub_surfaces_)) {
+    auto* sub_surface = sub_surface_entry.first;
+    sub_surface->AppendSurfaceHierarchyCallbacks(frame_callbacks,
+                                                 presentation_callbacks);
+  }
 }
 
 void Surface::AppendSurfaceHierarchyContentsToFrame(
     const gfx::Point& origin,
     float device_scale_factor,
     LayerTreeFrameSinkHolder* frame_sink_holder,
-    cc::CompositorFrame* frame) {
+    viz::CompositorFrame* frame) {
   // The top most sub-surface is at the front of the RenderPass's quad_list,
   // so we need composite sub-surface in reversed order.
   for (const auto& sub_surface_entry : base::Reversed(sub_surfaces_)) {
@@ -554,30 +609,34 @@ void Surface::AppendSurfaceHierarchyContentsToFrame(
 }
 
 bool Surface::IsSynchronized() const {
-  return delegate_ ? delegate_->IsSurfaceSynchronized() : false;
+  return delegate_ && delegate_->IsSurfaceSynchronized();
 }
 
-gfx::Rect Surface::GetHitTestBounds() const {
-  SkIRect bounds = state_.input_region.getBounds();
-  if (!bounds.intersect(gfx::RectToSkIRect(gfx::Rect(content_size_))))
-    return gfx::Rect();
-  return gfx::SkIRectToRect(bounds);
+bool Surface::IsTouchEnabled(Surface* surface) const {
+  return !delegate_ || delegate_->IsTouchEnabled(surface);
 }
 
-bool Surface::HitTestRect(const gfx::Rect& rect) const {
-  if (HasHitTestMask())
-    return state_.input_region.intersects(gfx::RectToSkIRect(rect));
-
-  return rect.Intersects(gfx::Rect(content_size_));
+bool Surface::HasHitTestRegion() const {
+  return !hit_test_region_.IsEmpty();
 }
 
-bool Surface::HasHitTestMask() const {
-  return !state_.input_region.contains(
-      gfx::RectToSkIRect(gfx::Rect(content_size_)));
+bool Surface::HitTest(const gfx::Point& point) const {
+  return hit_test_region_.Contains(point);
 }
 
 void Surface::GetHitTestMask(gfx::Path* mask) const {
-  state_.input_region.getBoundaryPath(mask);
+  hit_test_region_.GetBoundaryPath(mask);
+}
+
+std::unique_ptr<aura::WindowTargeter::HitTestRects>
+Surface::GetHitTestShapeRects() const {
+  if (hit_test_region_.IsEmpty())
+    return nullptr;
+
+  auto rects = std::make_unique<aura::WindowTargeter::HitTestRects>();
+  for (cc::Region::Iterator it(hit_test_region_); it.has_rect(); it.next())
+    rects->push_back(it.rect());
+  return rects;
 }
 
 void Surface::RegisterCursorProvider(Pointer* provider) {
@@ -638,8 +697,6 @@ void Surface::SetStylusOnly() {
 void Surface::SurfaceHierarchyResourcesLost() {
   // Update resource and full damage are needed for next frame.
   needs_update_resource_ = true;
-  damage_.setRect(
-      SkIRect::MakeWH(content_size_.width(), content_size_.height()));
   for (const auto& sub_surface : sub_surfaces_)
     sub_surface.first->SurfaceHierarchyResourcesLost();
 }
@@ -647,14 +704,13 @@ void Surface::SurfaceHierarchyResourcesLost() {
 bool Surface::FillsBoundsOpaquely() const {
   return !current_resource_has_alpha_ ||
          state_.blend_mode == SkBlendMode::kSrc ||
-         state_.opaque_region.contains(
-             gfx::RectToSkIRect(gfx::Rect(content_size_)));
+         state_.opaque_region.Contains(gfx::Rect(content_size_));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Buffer, private:
 
-Surface::State::State() : input_region(SkIRect::MakeLargest()) {}
+Surface::State::State() : input_region(SkRegion(SkIRect::MakeLargest())) {}
 
 Surface::State::~State() = default;
 
@@ -680,7 +736,9 @@ Surface::BufferAttachment& Surface::BufferAttachment::operator=(
   if (buffer_)
     buffer_->OnDetach();
   buffer_ = other.buffer_;
+  size_ = other.size_;
   other.buffer_ = base::WeakPtr<Buffer>();
+  other.size_ = gfx::Size();
   return *this;
 }
 
@@ -692,9 +750,16 @@ const base::WeakPtr<Buffer>& Surface::BufferAttachment::buffer() const {
   return buffer_;
 }
 
+const gfx::Size& Surface::BufferAttachment::size() const {
+  return size_;
+}
+
 void Surface::BufferAttachment::Reset(base::WeakPtr<Buffer> buffer) {
-  if (buffer)
+  size_ = gfx::Size();
+  if (buffer) {
     buffer->OnAttach();
+    size_ = buffer->GetSize();
+  }
   if (buffer_)
     buffer_->OnDetach();
   buffer_ = buffer;
@@ -713,7 +778,7 @@ void Surface::UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder) {
       current_resource_.id = 0;
       // Use the buffer's size, so the AppendContentsToFrame() will append
       // a SolidColorDrawQuad with the buffer's size.
-      current_resource_.size = current_buffer_.buffer()->GetSize();
+      current_resource_.size = current_buffer_.size();
       current_resource_has_alpha_ = false;
     }
   } else {
@@ -745,18 +810,26 @@ void Surface::UpdateBufferTransform() {
 
 void Surface::AppendContentsToFrame(const gfx::Point& origin,
                                     float device_scale_factor,
-                                    cc::CompositorFrame* frame) {
-  const std::unique_ptr<cc::RenderPass>& render_pass =
+                                    viz::CompositorFrame* frame) {
+  const std::unique_ptr<viz::RenderPass>& render_pass =
       frame->render_pass_list.back();
   gfx::Rect output_rect(origin, content_size_);
   gfx::Rect quad_rect(0, 0, 1, 1);
 
   // Surface bounds are in DIPs, but |damage_rect| and |output_rect| are in
   // pixels, so we need to scale by the |device_scale_factor|.
-  gfx::Rect damage_rect = gfx::SkIRectToRect(damage_.getBounds());
-  damage_rect.set_origin(origin);
-  render_pass->damage_rect.Union(
-      gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
+  gfx::Rect damage_rect = damage_.bounds();
+  if (!damage_rect.IsEmpty()) {
+    // Outset damage by 1 DIP to as damage is in surface coordinate space and
+    // client might not be aware of |device_scale_factor| and the
+    // scaling/filtering it requires.
+    damage_rect.Inset(-1, -1);
+    damage_rect += origin.OffsetFromOrigin();
+    damage_rect.Intersect(output_rect);
+    render_pass->damage_rect.Union(
+        gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
+  }
+
   render_pass->output_rect.Union(
       gfx::ConvertRectToPixel(device_scale_factor, output_rect));
 
@@ -775,12 +848,16 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
   quad_to_target_transform.ConcatTransform(
       gfx::Transform(viewport_to_target_matrix));
 
+  bool are_contents_opaque = !current_resource_has_alpha_ ||
+                             state_.blend_mode == SkBlendMode::kSrc ||
+                             state_.opaque_region.Contains(output_rect);
+
   viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->SetAll(
       quad_to_target_transform, quad_rect /* quad_layer_rect */,
       quad_rect /* visible_quad_layer_rect */, gfx::Rect() /* clip_rect */,
-      false /* is_clipped */, state_.alpha /* opacity */,
+      false /* is_clipped */, are_contents_opaque, state_.alpha /* opacity */,
       SkBlendMode::kSrcOver /* blend_mode */, 0 /* sorting_context_id */);
 
   if (current_resource_.id) {
@@ -801,16 +878,12 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
 
     // Texture quad is only needed if buffer is not fully transparent.
     if (state_.alpha) {
-      cc::TextureDrawQuad* texture_quad =
-          render_pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
+      viz::TextureDrawQuad* texture_quad =
+          render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
       float vertex_opacity[4] = {1.0, 1.0, 1.0, 1.0};
-      bool needs_blending =
-          current_resource_has_alpha_ &&
-          state_.blend_mode != SkBlendMode::kSrc &&
-          !state_.opaque_region.contains(gfx::RectToSkIRect(output_rect));
 
       texture_quad->SetNew(
-          quad_state, quad_rect, quad_rect, needs_blending,
+          quad_state, quad_rect, quad_rect, !are_contents_opaque,
           current_resource_.id, true /* premultiplied_alpha */,
           uv_crop.origin(), uv_crop.bottom_right(),
           SK_ColorTRANSPARENT /* background_color */, vertex_opacity,
@@ -821,8 +894,8 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
       frame->resource_list.push_back(current_resource_);
     }
   } else {
-    cc::SolidColorDrawQuad* solid_quad =
-        render_pass->CreateAndAppendDrawQuad<cc::SolidColorDrawQuad>();
+    viz::SolidColorDrawQuad* solid_quad =
+        render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
     solid_quad->SetNew(quad_state, quad_rect, quad_rect, SK_ColorBLACK,
                        false /* force_anti_aliasing_off */);
   }
@@ -839,11 +912,10 @@ void Surface::UpdateContentSize() {
         << ") most be expressible using integers when viewport is not set";
     content_size = gfx::ToCeiledSize(state_.crop.size());
   } else {
-    auto size = current_buffer_.buffer() ? current_buffer_.buffer()->GetSize()
-                                         : gfx::Size();
-    content_size = gfx::ToCeiledSize(gfx::ScaleSize(
-        gfx::SizeF(ToTransformedSize(size, state_.buffer_transform)),
-        1.0f / state_.buffer_scale));
+    content_size = gfx::ToCeiledSize(
+        gfx::ScaleSize(gfx::SizeF(ToTransformedSize(current_buffer_.size(),
+                                                    state_.buffer_transform)),
+                       1.0f / state_.buffer_scale));
   }
 
   // Enable/disable sub-surface based on if it has contents.

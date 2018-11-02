@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "device/geolocation/geoposition.h"
 #include "device/geolocation/location_api_adapter_android.h"
 
 namespace device {
@@ -22,7 +21,7 @@ LocationProviderAndroid::~LocationProviderAndroid() {
 }
 
 void LocationProviderAndroid::NotifyNewGeoposition(
-    const Geoposition& position) {
+    const mojom::Geoposition& position) {
   DCHECK(thread_checker_.CalledOnValidThread());
   last_position_ = position;
   if (!callback_.is_null())
@@ -35,9 +34,9 @@ void LocationProviderAndroid::SetUpdateCallback(
   callback_ = callback;
 }
 
-bool LocationProviderAndroid::StartProvider(bool high_accuracy) {
+void LocationProviderAndroid::StartProvider(bool high_accuracy) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return LocationApiAdapterAndroid::GetInstance()->Start(
+  LocationApiAdapterAndroid::GetInstance()->Start(
       base::Bind(&LocationProviderAndroid::NotifyNewGeoposition,
                  weak_ptr_factory_.GetWeakPtr()),
       high_accuracy);
@@ -48,7 +47,7 @@ void LocationProviderAndroid::StopProvider() {
   LocationApiAdapterAndroid::GetInstance()->Stop();
 }
 
-const Geoposition& LocationProviderAndroid::GetPosition() {
+const mojom::Geoposition& LocationProviderAndroid::GetPosition() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return last_position_;
 }

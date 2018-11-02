@@ -5,7 +5,8 @@
 #ifndef CSSUnparsedValue_h
 #define CSSUnparsedValue_h
 
-#include "bindings/core/v8/StringOrCSSVariableReferenceValue.h"
+#include "base/macros.h"
+#include "bindings/core/v8/string_or_css_variable_reference_value.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/cssom/CSSStyleValue.h"
 #include "platform/wtf/Vector.h"
@@ -13,51 +14,50 @@
 namespace blink {
 
 class CORE_EXPORT CSSUnparsedValue final : public CSSStyleValue {
-  WTF_MAKE_NONCOPYABLE(CSSUnparsedValue);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static CSSUnparsedValue* Create(
-      const HeapVector<StringOrCSSVariableReferenceValue>& fragments) {
-    return new CSSUnparsedValue(fragments);
+      const HeapVector<StringOrCSSVariableReferenceValue>& tokens) {
+    return new CSSUnparsedValue(tokens);
   }
 
   static CSSUnparsedValue* FromCSSValue(const CSSVariableReferenceValue&);
 
-  const CSSValue* ToCSSValue() const override;
+  const CSSValue* ToCSSValue(SecureContextMode) const override;
 
   StyleValueType GetType() const override { return kUnparsedType; }
 
-  StringOrCSSVariableReferenceValue fragmentAtIndex(uint32_t index) const {
-    return fragments_.at(index);
+  StringOrCSSVariableReferenceValue AnonymousIndexedGetter(
+      unsigned index,
+      ExceptionState& exception_state) const {
+    if (index < tokens_.size())
+      return tokens_[index];
+    return {};
   }
 
-  size_t length() const { return fragments_.size(); }
+  size_t length() const { return tokens_.size(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->Trace(fragments_);
+  virtual void Trace(Visitor* visitor) {
+    visitor->Trace(tokens_);
     CSSStyleValue::Trace(visitor);
   }
 
  protected:
-  CSSUnparsedValue(
-      const HeapVector<StringOrCSSVariableReferenceValue>& fragments)
-      : CSSStyleValue(), fragments_(fragments) {}
+  CSSUnparsedValue(const HeapVector<StringOrCSSVariableReferenceValue>& tokens)
+      : CSSStyleValue(), tokens_(tokens) {}
 
  private:
-  static CSSUnparsedValue* FromString(String string) {
-    HeapVector<StringOrCSSVariableReferenceValue> fragments;
-    fragments.push_back(StringOrCSSVariableReferenceValue::fromString(string));
-    return Create(fragments);
+  static CSSUnparsedValue* FromString(const String& string) {
+    HeapVector<StringOrCSSVariableReferenceValue> tokens;
+    tokens.push_back(StringOrCSSVariableReferenceValue::FromString(string));
+    return Create(tokens);
   }
 
-  FRIEND_TEST_ALL_PREFIXES(CSSUnparsedValueTest, ListOfStrings);
-  FRIEND_TEST_ALL_PREFIXES(CSSUnparsedValueTest,
-                           ListOfCSSVariableReferenceValues);
-  FRIEND_TEST_ALL_PREFIXES(CSSUnparsedValueTest, MixedList);
   FRIEND_TEST_ALL_PREFIXES(CSSVariableReferenceValueTest, MixedList);
 
-  HeapVector<StringOrCSSVariableReferenceValue> fragments_;
+  HeapVector<StringOrCSSVariableReferenceValue> tokens_;
+  DISALLOW_COPY_AND_ASSIGN(CSSUnparsedValue);
 };
 
 }  // namespace blink

@@ -5,11 +5,11 @@
 #ifndef MojoInterfaceInterceptor_h
 #define MojoInterfaceInterceptor_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventListener.h"
 #include "core/dom/events/EventTarget.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -21,7 +21,6 @@ namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
-class ScriptState;
 
 // A MojoInterfaceInterceptor can be constructed by test scripts in order to
 // intercept all outgoing requests for a specific named interface from the
@@ -37,8 +36,10 @@ class MojoInterfaceInterceptor final
   USING_GARBAGE_COLLECTED_MIXIN(MojoInterfaceInterceptor);
 
  public:
-  static MojoInterfaceInterceptor* Create(ScriptState*,
-                                          const String& interface_name);
+  static MojoInterfaceInterceptor* Create(ExecutionContext*,
+                                          const String& interface_name,
+                                          const String& scope,
+                                          ExceptionState&);
   ~MojoInterfaceInterceptor();
 
   void start(ExceptionState&);
@@ -46,7 +47,7 @@ class MojoInterfaceInterceptor final
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(interfacerequest);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   // EventTargetWithInlineData
   const AtomicString& InterfaceName() const override;
@@ -59,9 +60,9 @@ class MojoInterfaceInterceptor final
   void ContextDestroyed(ExecutionContext*) final;
 
  private:
-  friend class V8MojoInterfaceInterceptor;
-
-  MojoInterfaceInterceptor(ScriptState*, const String& interface_name);
+  MojoInterfaceInterceptor(ExecutionContext*,
+                           const String& interface_name,
+                           bool process_scope);
 
   service_manager::InterfaceProvider* GetInterfaceProvider() const;
   void OnInterfaceRequest(mojo::ScopedMessagePipeHandle);
@@ -69,6 +70,7 @@ class MojoInterfaceInterceptor final
 
   const String interface_name_;
   bool started_ = false;
+  bool process_scope_ = false;
 };
 
 }  // namespace blink

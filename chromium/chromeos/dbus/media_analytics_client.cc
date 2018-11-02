@@ -5,6 +5,7 @@
 #include "chromeos/dbus/media_analytics_client.h"
 
 #include <cstdint>
+#include <string>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -22,7 +23,7 @@ class MediaAnalyticsClientImpl : public MediaAnalyticsClient {
  public:
   MediaAnalyticsClientImpl() : dbus_proxy_(nullptr), weak_ptr_factory_(this) {}
 
-  ~MediaAnalyticsClientImpl() override {}
+  ~MediaAnalyticsClientImpl() override = default;
 
   void SetMediaPerceptionSignalHandler(
       const MediaPerceptionSignalHandler& handler) override {
@@ -40,8 +41,8 @@ class MediaAnalyticsClientImpl : public MediaAnalyticsClient {
                                  media_perception::kStateFunction);
     dbus_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&MediaAnalyticsClientImpl::OnState,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&MediaAnalyticsClientImpl::OnState,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void SetState(const mri::State& state,
@@ -50,16 +51,14 @@ class MediaAnalyticsClientImpl : public MediaAnalyticsClient {
 
     dbus::MethodCall method_call(media_perception::kMediaPerceptionServiceName,
                                  media_perception::kStateFunction);
-    int length = state.ByteSize();
-    uint8_t bytes[length];
-    state.SerializeToArray(bytes, length);
+
     dbus::MessageWriter writer(&method_call);
-    writer.AppendArrayOfBytes(bytes, length);
+    writer.AppendProtoAsArrayOfBytes(state);
 
     dbus_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&MediaAnalyticsClientImpl::OnState,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&MediaAnalyticsClientImpl::OnState,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void GetDiagnostics(const DiagnosticsCallback& callback) override {
@@ -68,8 +67,8 @@ class MediaAnalyticsClientImpl : public MediaAnalyticsClient {
     // TODO(lasoren): Verify that this timeout setting is sufficient.
     dbus_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&MediaAnalyticsClientImpl::OnGetDiagnostics,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&MediaAnalyticsClientImpl::OnGetDiagnostics,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
  protected:
@@ -187,12 +186,12 @@ class MediaAnalyticsClientImpl : public MediaAnalyticsClient {
   DISALLOW_COPY_AND_ASSIGN(MediaAnalyticsClientImpl);
 };
 
-MediaAnalyticsClient::~MediaAnalyticsClient() {}
+MediaAnalyticsClient::~MediaAnalyticsClient() = default;
 
 MediaAnalyticsClient* MediaAnalyticsClient::Create() {
   return new MediaAnalyticsClientImpl;
 }
 
-MediaAnalyticsClient::MediaAnalyticsClient() {}
+MediaAnalyticsClient::MediaAnalyticsClient() = default;
 
 }  // namespace chromeos

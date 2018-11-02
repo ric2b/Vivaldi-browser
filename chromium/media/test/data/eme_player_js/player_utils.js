@@ -67,22 +67,24 @@ PlayerUtils.registerEMEEventListeners = function(player) {
     }
 
     function getStatusForHdcpPolicy(mediaKeys, hdcpVersion, expectedResult) {
-      var policy = new MediaKeysPolicy({minHdcpVersion: hdcpVersion});
-
-      return mediaKeys.getStatusForPolicy(policy).then(function(keyStatus) {
-        if (keyStatus == expectedResult) {
-          return Promise.resolve();
-        } else {
-          return Promise.reject(
-              "keyStatus " + keyStatus + " does not match " + expectedResult);
-        }
-      }, function(error) {
-        if (expectedResult == "rejected") {
-          return Promise.resolve();
-        } else {
-          return Promise.reject("Promise rejected unexpectedly.");
-        }
-      });
+      return mediaKeys.getStatusForPolicy({minHdcpVersion: hdcpVersion})
+          .then(
+              keyStatus => {
+                if (keyStatus == expectedResult) {
+                  return Promise.resolve();
+                } else {
+                  return Promise.reject(
+                      'keyStatus ' + keyStatus + ' does not match ' +
+                      expectedResult);
+                }
+              },
+              error => {
+                if (expectedResult == 'rejected') {
+                  return Promise.resolve();
+                } else {
+                  return Promise.reject("Promise rejected unexpectedly.");
+                }
+              });
     }
 
     function testGetStatusForHdcpPolicy(mediaKeys) {
@@ -231,10 +233,11 @@ PlayerUtils.registerEMEEventListeners = function(player) {
   }
 
   // The File IO test requires persistent state support.
-  if (player.testConfig.keySystem ==
-      'org.chromium.externalclearkey.fileiotest') {
+  if (player.testConfig.keySystem == FILE_IO_TEST_KEYSYSTEM) {
     config.persistentState = 'required';
-  } else if (player.testConfig.sessionToLoad) {
+  } else if (
+      player.testConfig.sessionToLoad ||
+      player.testConfig.keySystem == STORAGE_ID_TEST_KEYSYSTEM) {
     config.persistentState = 'required';
     config.sessionTypes = ['temporary', 'persistent-license'];
   }

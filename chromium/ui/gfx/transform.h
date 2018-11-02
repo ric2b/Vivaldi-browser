@@ -18,6 +18,7 @@ namespace gfx {
 class BoxF;
 class RectF;
 class Point;
+class PointF;
 class Point3F;
 class Quaternion;
 class Vector3dF;
@@ -122,6 +123,7 @@ class GFX_EXPORT Transform {
   void ConcatTransform(const Transform& transform);
 
   // Returns true if this is the identity matrix.
+  // This function modifies a mutable variable in |matrix_|.
   bool IsIdentity() const { return matrix_.isIdentity(); }
 
   // Returns true if the matrix is either identity or pure translation.
@@ -203,6 +205,9 @@ class GFX_EXPORT Transform {
   void TransformPoint(Point3F* point) const;
 
   // Applies the transformation to the point.
+  void TransformPoint(PointF* point) const;
+
+  // Applies the transformation to the point.
   void TransformPoint(Point* point) const;
 
   // Applies the transformation to the vector.
@@ -272,6 +277,8 @@ class GFX_EXPORT Transform {
  private:
   void TransformPointInternal(const SkMatrix44& xform,
                               Point* point) const;
+
+  void TransformPointInternal(const SkMatrix44& xform, PointF* point) const;
 
   void TransformPointInternal(const SkMatrix44& xform,
                               Point3F* point) const;

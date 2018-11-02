@@ -12,11 +12,14 @@
 #include "chrome/common/chrome_constants.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/optimization_guide/optimization_guide_service.h"
+#include "components/previews/content/previews_io_data.h"
+#include "components/previews/content/previews_optimization_guide.h"
+#include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_experiments.h"
-#include "components/previews/core/previews_io_data.h"
+#include "components/previews/core/previews_logger.h"
 #include "components/previews/core/previews_opt_out_store.h"
 #include "components/previews/core/previews_opt_out_store_sql.h"
-#include "components/previews/core/previews_ui_service.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
@@ -36,6 +39,10 @@ bool IsPreviewsTypeEnabled(previews::PreviewsType type) {
       return server_previews_enabled ||
              (data_reduction_proxy::params::IsLoFiOnViaFlags() &&
               data_reduction_proxy::params::AreLitePagesEnabledViaFlags());
+    case previews::PreviewsType::AMP_REDIRECTION:
+      return previews::params::IsAMPRedirectionPreviewEnabled();
+    case previews::PreviewsType::NOSCRIPT:
+      return previews::params::IsNoScriptPreviewsEnabled();
     case previews::PreviewsType::NONE:
     case previews::PreviewsType::LAST:
       break;
@@ -54,6 +61,10 @@ int GetPreviewsTypeVersion(previews::PreviewsType type) {
       return previews::params::ClientLoFiVersion();
     case previews::PreviewsType::LITE_PAGE:
       return data_reduction_proxy::params::LitePageVersion();
+    case previews::PreviewsType::AMP_REDIRECTION:
+      return previews::params::AMPRedirectionPreviewsVersion();
+    case previews::PreviewsType::NOSCRIPT:
+      return previews::params::NoScriptPreviewsVersion();
     case previews::PreviewsType::NONE:
     case previews::PreviewsType::LAST:
       break;
@@ -89,6 +100,7 @@ PreviewsService::~PreviewsService() {
 
 void PreviewsService::Initialize(
     previews::PreviewsIOData* previews_io_data,
+    optimization_guide::OptimizationGuideService* optimization_guide_service,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
     const base::FilePath& profile_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -104,5 +116,10 @@ void PreviewsService::Initialize(
           io_task_runner, background_task_runner,
           profile_path.Append(chrome::kPreviewsOptOutDBFilename),
           GetEnabledPreviews()),
-      base::Bind(&IsPreviewsTypeEnabled));
+      optimization_guide_service
+          ? base::MakeUnique<previews::PreviewsOptimizationGuide>(
+                optimization_guide_service, io_task_runner)
+          : nullptr,
+      base::Bind(&IsPreviewsTypeEnabled),
+      base::MakeUnique<previews::PreviewsLogger>());
 }

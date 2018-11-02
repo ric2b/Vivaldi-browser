@@ -19,7 +19,6 @@
 #include "extensions/browser/component_extension_resource_manager.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/info_map.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/common/file_util.h"
 #include "net/base/mime_util.h"
@@ -60,13 +59,13 @@ class URLRequestResourceBundleJob : public net::URLRequestSimpleJob {
       std::string* charset,
       scoped_refptr<base::RefCountedMemory>* data,
       const net::CompletionCallback& callback) const override {
-    const ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+    const ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     *data = rb.LoadDataResourceBytes(resource_id_);
 
     // Add the Content-Length header now that we know the resource length.
     response_info_.headers->AddHeader(
         base::StringPrintf("%s: %s", net::HttpRequestHeaders::kContentLength,
-                           base::SizeTToString((*data)->size()).c_str()));
+                           base::NumberToString((*data)->size()).c_str()));
 
     std::string* read_mime_type = new std::string;
     base::PostTaskWithTraitsAndReplyWithResult(
@@ -122,13 +121,18 @@ class URLRequestResourceBundleJob : public net::URLRequestSimpleJob {
 namespace extensions {
 namespace chrome_url_request_util {
 
-bool AllowCrossRendererResourceLoad(net::URLRequest* request,
+bool AllowCrossRendererResourceLoad(const GURL& url,
+                                    content::ResourceType resource_type,
+                                    ui::PageTransition page_transition,
+                                    int child_id,
                                     bool is_incognito,
                                     const Extension* extension,
-                                    InfoMap* extension_info_map,
+                                    const ExtensionSet& extensions,
+                                    const ProcessMap& process_map,
                                     bool* allowed) {
   if (url_request_util::AllowCrossRendererResourceLoad(
-          request, is_incognito, extension, extension_info_map, allowed)) {
+          url, resource_type, page_transition, child_id, is_incognito,
+          extension, extensions, process_map, allowed)) {
     return true;
   }
 

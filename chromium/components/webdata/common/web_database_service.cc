@@ -82,16 +82,15 @@ void WebDatabaseService::ShutdownDatabase() {
 
 WebDatabase* WebDatabaseService::GetDatabaseOnDB() const {
   DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
-  return web_db_backend_.get() ? web_db_backend_->database() : NULL;
+  return web_db_backend_.get() ? web_db_backend_->database() : nullptr;
 }
 
 scoped_refptr<WebDatabaseBackend> WebDatabaseService::GetBackend() const {
   return web_db_backend_;
 }
 
-void WebDatabaseService::ScheduleDBTask(
-    const tracked_objects::Location& from_here,
-    const WriteTask& task) {
+void WebDatabaseService::ScheduleDBTask(const base::Location& from_here,
+                                        const WriteTask& task) {
   DCHECK(web_db_backend_.get());
   std::unique_ptr<WebDataRequest> request =
       web_db_backend_->request_manager()->NewRequest(nullptr);
@@ -101,7 +100,7 @@ void WebDatabaseService::ScheduleDBTask(
 }
 
 WebDataServiceBase::Handle WebDatabaseService::ScheduleDBTaskWithResult(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const ReadTask& task,
     WebDataServiceConsumer* consumer) {
   DCHECK(consumer);

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -28,8 +29,6 @@ class BrowserContext;
 class NavigationData;
 class NavigationHandle;
 class RenderFrameHost;
-class WebContents;
-struct Referrer;
 
 // This interface allows embedders of content/ to write tests that depend on a
 // test version of WebContents.  This interface can be retrieved from any
@@ -68,15 +67,13 @@ class WebContentsTester {
       BrowserContext* browser_context,
       scoped_refptr<SiteInstance> instance);
 
+  // Creates a WebContents enabled for testing with the given params.
+  static WebContents* CreateTestWebContents(
+      const WebContents::CreateParams& params);
+
   // Simulates the appropriate RenderView (pending if any, current otherwise)
   // sending a navigate notification for the NavigationController pending entry.
   virtual void CommitPendingNavigation() = 0;
-
-  // Gets the pending RenderFrameHost, if any, for the main frame. For the
-  // current RenderFrameHost of the main frame, use WebContents::GetMainFrame().
-  // PlzNavigate: When browser side navigation is enabled it returns the
-  // speculative RenderFrameHost for the main frame if one exists.
-  virtual RenderFrameHost* GetPendingMainFrame() const = 0;
 
   // Creates a pending navigation to the given URL with the default parameters
   // and then commits the load with a page ID one larger than any seen. This
@@ -85,11 +82,6 @@ class WebContentsTester {
 
   // Sets the loading state to the given value.
   virtual void TestSetIsLoading(bool value) = 0;
-
-  // Simulates the current RVH notifying that it has unloaded so that the
-  // pending RVH navigation can proceed.
-  // Does nothing if no cross-navigation is pending.
-  virtual void ProceedWithCrossSiteNavigation() = 0;
 
   // Simulates a navigation with the given information.
   //
@@ -105,12 +97,6 @@ class WebContentsTester {
                                bool did_create_new_entry,
                                const GURL& url,
                                ui::PageTransition transition) = 0;
-  virtual void TestDidNavigateWithReferrer(RenderFrameHost* render_frame_host,
-                                           int nav_entry_id,
-                                           bool did_create_new_entry,
-                                           const GURL& url,
-                                           const Referrer& referrer,
-                                           ui::PageTransition transition) = 0;
 
   // Sets NavgationData on |navigation_handle|.
   virtual void SetNavigationData(
@@ -143,6 +129,9 @@ class WebContentsTester {
 
   // Override WasRecentlyAudible for testing.
   virtual void SetWasRecentlyAudible(bool audible) = 0;
+
+  // Override IsCurrentlyAudible for testing.
+  virtual void SetIsCurrentlyAudible(bool audible) = 0;
 };
 
 }  // namespace content

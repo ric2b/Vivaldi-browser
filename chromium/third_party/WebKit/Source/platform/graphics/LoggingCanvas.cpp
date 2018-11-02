@@ -223,7 +223,7 @@ std::unique_ptr<JSONObject> ObjectForSkPath(const SkPath& path) {
   std::unique_ptr<JSONObject> path_item = JSONObject::Create();
   path_item->SetString("fillType", FillTypeName(path.getFillType()));
   path_item->SetString("convexity", ConvexityName(path.getConvexity()));
-  path_item->SetBoolean("isRect", path.isRect(0));
+  path_item->SetBoolean("isRect", path.isRect(nullptr));
   SkPath::Iter iter(path, false);
   SkPoint points[4];
   std::unique_ptr<JSONArray> path_points_array = JSONArray::Create();
@@ -590,8 +590,8 @@ JSONObject* AutoLogger::LogItemWithParams(const String& name) {
   return item->GetJSONObject("params");
 }
 
-LoggingCanvas::LoggingCanvas(int width, int height)
-    : InterceptingCanvasBase(width, height), log_(JSONArray::Create()) {}
+LoggingCanvas::LoggingCanvas()
+    : InterceptingCanvasBase(0, 0), log_(JSONArray::Create()) {}
 
 void LoggingCanvas::onDrawPaint(const SkPaint& paint) {
   AutoLogger logger(this);
@@ -914,18 +914,18 @@ std::unique_ptr<JSONArray> LoggingCanvas::Log() {
 }
 
 #ifndef NDEBUG
-String RecordAsDebugString(const PaintRecord* record, const SkRect& bounds) {
-  const SkIRect enclosing_bounds = bounds.roundOut();
-  LoggingCanvas canvas(enclosing_bounds.width(), enclosing_bounds.height());
-  record->Playback(&canvas);
-  std::unique_ptr<JSONObject> record_as_json = JSONObject::Create();
-  record_as_json->SetObject("cullRect", ObjectForSkRect(bounds));
-  record_as_json->SetArray("operations", canvas.Log());
-  return record_as_json->ToPrettyJSONString();
+std::unique_ptr<JSONArray> RecordAsJSON(const PaintRecord& record) {
+  LoggingCanvas canvas;
+  record.Playback(&canvas);
+  return canvas.Log();
 }
 
-void ShowPaintRecord(const PaintRecord* record, const SkRect& bounds) {
-  WTFLogAlways("%s\n", RecordAsDebugString(record, bounds).Utf8().data());
+String RecordAsDebugString(const PaintRecord& record) {
+  return RecordAsJSON(record)->ToPrettyJSONString();
+}
+
+void ShowPaintRecord(const PaintRecord& record) {
+  DLOG(INFO) << RecordAsDebugString(record).Utf8().data();
 }
 #endif
 

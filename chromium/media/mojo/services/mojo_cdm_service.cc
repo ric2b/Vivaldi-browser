@@ -19,7 +19,6 @@
 #include "media/cdm/cdm_manager.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
-#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace media {
@@ -35,7 +34,7 @@ using NewSessionMojoCdmPromise =
 
 int MojoCdmService::next_cdm_id_ = CdmContext::kInvalidCdmId + 1;
 
-MojoCdmService::MojoCdmService(base::WeakPtr<MojoCdmServiceContext> context,
+MojoCdmService::MojoCdmService(MojoCdmServiceContext* context,
                                CdmFactory* cdm_factory)
     : context_(context),
       cdm_factory_(cdm_factory),
@@ -51,8 +50,7 @@ MojoCdmService::~MojoCdmService() {
 
   CdmManager::GetInstance()->UnregisterCdm(cdm_id_);
 
-  if (context_)
-    context_->UnregisterCdm(cdm_id_);
+  context_->UnregisterCdm(cdm_id_);
 }
 
 void MojoCdmService::SetClient(mojom::ContentDecryptionModuleClientPtr client) {
@@ -60,16 +58,15 @@ void MojoCdmService::SetClient(mojom::ContentDecryptionModuleClientPtr client) {
 }
 
 void MojoCdmService::Initialize(const std::string& key_system,
-                                const std::string& security_origin,
-                                mojom::CdmConfigPtr cdm_config,
+                                const url::Origin& security_origin,
+                                const CdmConfig& cdm_config,
                                 InitializeCallback callback) {
   DVLOG(1) << __func__ << ": " << key_system;
   DCHECK(!cdm_);
 
   auto weak_this = weak_factory_.GetWeakPtr();
   cdm_factory_->Create(
-      key_system, url::Origin(GURL(security_origin)),
-      cdm_config.To<CdmConfig>(),
+      key_system, security_origin, cdm_config,
       base::Bind(&MojoCdmService::OnSessionMessage, weak_this),
       base::Bind(&MojoCdmService::OnSessionClosed, weak_this),
       base::Bind(&MojoCdmService::OnSessionKeysChange, weak_this),
@@ -150,7 +147,7 @@ void MojoCdmService::OnCdmCreated(
 
   // TODO(xhwang): This should not happen when KeySystemInfo is properly
   // populated. See http://crbug.com/469366
-  if (!cdm || !context_) {
+  if (!cdm) {
     cdm_promise_result->success = false;
     cdm_promise_result->exception = CdmPromise::Exception::NOT_SUPPORTED_ERROR;
     cdm_promise_result->system_code = 0;

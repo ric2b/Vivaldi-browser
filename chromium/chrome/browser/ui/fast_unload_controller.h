@@ -26,7 +26,6 @@ class NotificationDetails;
 class WebContents;
 }
 
-namespace chrome {
 // FastUnloadController manages closing tabs and windows -- especially in
 // regards to beforeunload handlers (have proceed/cancel dialogs) and
 // unload handlers (have no user interaction).
@@ -164,7 +163,7 @@ class FastUnloadController : public content::NotificationObserver,
     return !on_close_confirmed_.is_null();
   }
 
-  Browser* browser_;
+  Browser* const browser_;
 
   content::NotificationRegistrar registrar_;
 
@@ -204,7 +203,5 @@ class FastUnloadController : public content::NotificationObserver,
 
   DISALLOW_COPY_AND_ASSIGN(FastUnloadController);
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_UI_FAST_UNLOAD_CONTROLLER_H_

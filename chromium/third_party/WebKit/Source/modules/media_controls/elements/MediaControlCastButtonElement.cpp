@@ -4,10 +4,10 @@
 
 #include "modules/media_controls/elements/MediaControlCastButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
 #include "core/geometry/DOMRect.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/input_type_names.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
@@ -35,7 +35,6 @@ MediaControlCastButtonElement::MediaControlCastButtonElement(
     bool is_overlay_button)
     : MediaControlInputElement(media_controls, kMediaCastOnButton),
       is_overlay_button_(is_overlay_button) {
-  EnsureUserAgentShadowRoot();
   SetShadowPseudoId(is_overlay_button
                         ? "-internal-media-controls-overlay-cast-button"
                         : "-internal-media-controls-cast-button");
@@ -68,6 +67,9 @@ void MediaControlCastButtonElement::UpdateDisplayType() {
     }
   }
   UpdateOverflowString();
+  SetClass("on", IsPlayingRemotely());
+
+  MediaControlInputElement::UpdateDisplayType();
 }
 
 bool MediaControlCastButtonElement::WillRespondToMouseClickEvents() {

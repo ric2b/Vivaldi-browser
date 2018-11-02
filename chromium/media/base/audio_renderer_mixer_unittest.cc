@@ -2,14 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// MSVC++ requires this to be set before any other includes to get M_PI.
-#define _USE_MATH_DEFINES
-
 #include "media/base/audio_renderer_mixer.h"
 
 #include <stddef.h>
 
-#include <cmath>
 #include <memory>
 
 #include "base/bind.h"
@@ -101,7 +97,9 @@ class AudioRendererMixerTest
     return mixer_.get();
   };
 
-  MOCK_METHOD1(ReturnMixer, void(AudioRendererMixer*));
+  void ReturnMixer(AudioRendererMixer* mixer) {
+    EXPECT_EQ(mixer_.get(), mixer);
+  }
 
   MOCK_METHOD4(
       GetOutputDeviceInfo,
@@ -343,7 +341,7 @@ class AudioRendererMixerTest
   }
 
  protected:
-  virtual ~AudioRendererMixerTest() {}
+  virtual ~AudioRendererMixerTest() = default;
 
   scoped_refptr<MockAudioRendererSink> sink_;
   std::unique_ptr<AudioRendererMixer> mixer_;
@@ -519,7 +517,7 @@ TEST_P(AudioRendererMixerBehavioralTest, MixerPausesStream) {
 }
 
 INSTANTIATE_TEST_CASE_P(
-    AudioRendererMixerTest,
+    /* no prefix */,
     AudioRendererMixerTest,
     testing::Values(
         // No resampling, 1 input sample rate.

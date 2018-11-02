@@ -135,7 +135,7 @@ AudioBus* AudioNodeOutput::Pull(AudioBus* in_place_bus,
       in_place_bus && in_place_bus->NumberOfChannels() == NumberOfChannels() &&
       (rendering_fan_out_count_ + rendering_param_fan_out_count_) == 1;
 
-  in_place_bus_ = is_in_place_ ? in_place_bus : 0;
+  in_place_bus_ = is_in_place_ ? in_place_bus : nullptr;
 
   Handler().ProcessIfNecessary(frames_to_process);
   return Bus();
@@ -143,7 +143,7 @@ AudioBus* AudioNodeOutput::Pull(AudioBus* in_place_bus,
 
 AudioBus* AudioNodeOutput::Bus() const {
   DCHECK(GetDeferredTaskHandler().IsAudioThread());
-  return is_in_place_ ? in_place_bus_.Get() : internal_bus_.Get();
+  return is_in_place_ ? in_place_bus_.get() : internal_bus_.get();
 }
 
 unsigned AudioNodeOutput::FanOutCount() {

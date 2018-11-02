@@ -51,6 +51,7 @@ class DummyGLImage : public gl::GLImage {
                             const gfx::RectF& crop_rect) override {
     return false;
   }
+  void SetColorSpace(const gfx::ColorSpace& color_space) override {}
   void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
@@ -181,7 +182,7 @@ DXVAPictureBuffer::DXVAPictureBuffer(const PictureBuffer& buffer)
 
 bool DXVAPictureBuffer::BindSampleToTexture(
     DXVAVideoDecodeAccelerator* decoder,
-    base::win::ScopedComPtr<IMFSample> sample) {
+    Microsoft::WRL::ComPtr<IMFSample> sample) {
   NOTREACHED();
   return false;
 }
@@ -216,7 +217,7 @@ bool PbufferPictureBuffer::Initialize(const DXVAVideoDecodeAccelerator& decoder,
       egl_display, EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE, texture_share_handle_,
       egl_config, attrib_list);
   RETURN_ON_FAILURE(decoding_surface_, "Failed to create surface", false);
-  gl_image_ = make_scoped_refptr(new GLImagePbuffer(size(), decoding_surface_));
+  gl_image_ = base::MakeRefCounted<GLImagePbuffer>(size(), decoding_surface_);
   if (decoder.d3d11_device_ && decoder.use_keyed_mutex_) {
     void* keyed_mutex = nullptr;
     EGLBoolean ret =
@@ -224,7 +225,7 @@ bool PbufferPictureBuffer::Initialize(const DXVAVideoDecodeAccelerator& decoder,
                                     EGL_DXGI_KEYED_MUTEX_ANGLE, &keyed_mutex);
     RETURN_ON_FAILURE(keyed_mutex && ret == EGL_TRUE,
                       "Failed to query ANGLE keyed mutex", false);
-    egl_keyed_mutex_ = base::win::ScopedComPtr<IDXGIKeyedMutex>(
+    egl_keyed_mutex_ = Microsoft::WRL::ComPtr<IDXGIKeyedMutex>(
         static_cast<IDXGIKeyedMutex*>(keyed_mutex));
   }
   use_rgb_ = !!use_rgb;
@@ -264,7 +265,7 @@ bool PbufferPictureBuffer::InitializeTexture(
       RETURN_ON_HR_FAILURE(hr, "Failed to get keyed mutex", false);
     }
 
-    base::win::ScopedComPtr<IDXGIResource> resource;
+    Microsoft::WRL::ComPtr<IDXGIResource> resource;
     hr = dx11_decoding_texture_.CopyTo(resource.GetAddressOf());
     DCHECK(SUCCEEDED(hr));
     hr = resource->GetSharedHandle(&texture_share_handle_);
@@ -448,7 +449,7 @@ bool EGLStreamPictureBuffer::Initialize() {
   };
   stream_ = eglCreateStreamKHR(egl_display, stream_attributes);
   RETURN_ON_FAILURE(!!stream_, "Could not create stream", false);
-  gl_image_ = make_scoped_refptr(new gl::GLImageDXGI(size(), stream_));
+  gl_image_ = base::MakeRefCounted<gl::GLImageDXGI>(size(), stream_);
   gl::ScopedActiveTexture texture0(GL_TEXTURE0);
   gl::ScopedTextureBinder texture0_binder(
       GL_TEXTURE_EXTERNAL_OES, picture_buffer_.service_texture_ids()[0]);
@@ -499,19 +500,19 @@ bool EGLStreamPictureBuffer::ReusePictureBuffer() {
 
 bool EGLStreamPictureBuffer::BindSampleToTexture(
     DXVAVideoDecodeAccelerator* decoder,
-    base::win::ScopedComPtr<IMFSample> sample) {
+    Microsoft::WRL::ComPtr<IMFSample> sample) {
   DCHECK_EQ(BOUND, state_);
   state_ = IN_CLIENT;
 
   current_d3d_sample_ = sample;
   EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
-  base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
   HRESULT hr =
       current_d3d_sample_->GetBufferByIndex(0, output_buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from output sample", false);
 
-  base::win::ScopedComPtr<IMFDXGIBuffer> dxgi_buffer;
+  Microsoft::WRL::ComPtr<IMFDXGIBuffer> dxgi_buffer;
   hr = output_buffer.CopyTo(dxgi_buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get DXGIBuffer from output sample",
                        false);
@@ -600,9 +601,9 @@ bool EGLStreamDelayedCopyPictureBuffer::Initialize(
                                                       producer_attributes);
   RETURN_ON_FAILURE(result, "Could not create stream producer", false);
   scoped_refptr<gl::CopyingGLImageDXGI> copying_image_ =
-      make_scoped_refptr(new gl::CopyingGLImageDXGI(
-          base::win::ScopedComPtr<ID3D11Device>(decoder.D3D11Device()), size(),
-          stream_));
+      base::MakeRefCounted<gl::CopyingGLImageDXGI>(
+          Microsoft::WRL::ComPtr<ID3D11Device>(decoder.D3D11Device()), size(),
+          stream_);
   gl_image_ = copying_image_;
   return copying_image_->Initialize();
 }
@@ -621,18 +622,18 @@ bool EGLStreamDelayedCopyPictureBuffer::ReusePictureBuffer() {
 
 bool EGLStreamDelayedCopyPictureBuffer::BindSampleToTexture(
     DXVAVideoDecodeAccelerator* decoder,
-    base::win::ScopedComPtr<IMFSample> sample) {
+    Microsoft::WRL::ComPtr<IMFSample> sample) {
   DCHECK_EQ(BOUND, state_);
   state_ = IN_CLIENT;
 
   current_d3d_sample_ = sample;
 
-  base::win::ScopedComPtr<IMFMediaBuffer> output_buffer;
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
   HRESULT hr =
       current_d3d_sample_->GetBufferByIndex(0, output_buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from output sample", false);
 
-  base::win::ScopedComPtr<IMFDXGIBuffer> dxgi_buffer;
+  Microsoft::WRL::ComPtr<IMFDXGIBuffer> dxgi_buffer;
   hr = output_buffer.CopyTo(dxgi_buffer.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get DXGIBuffer from output sample",
                        false);
@@ -688,7 +689,7 @@ bool EGLStreamCopyPictureBuffer::Initialize(
   };
   stream_ = eglCreateStreamKHR(egl_display, stream_attributes);
   RETURN_ON_FAILURE(!!stream_, "Could not create stream", false);
-  gl_image_ = make_scoped_refptr(new gl::GLImageDXGI(size(), stream_));
+  gl_image_ = base::MakeRefCounted<gl::GLImageDXGI>(size(), stream_);
   gl::ScopedActiveTexture texture0(GL_TEXTURE0);
   gl::ScopedTextureBinder texture0_binder(
       GL_TEXTURE_EXTERNAL_OES, picture_buffer_.service_texture_ids()[0]);
@@ -740,7 +741,7 @@ bool EGLStreamCopyPictureBuffer::Initialize(
   hr = decoder_copy_texture_.CopyTo(dx11_keyed_mutex_.GetAddressOf());
   RETURN_ON_HR_FAILURE(hr, "Failed to get keyed mutex", false);
 
-  base::win::ScopedComPtr<IDXGIResource> resource;
+  Microsoft::WRL::ComPtr<IDXGIResource> resource;
   hr = decoder_copy_texture_.CopyTo(resource.GetAddressOf());
   DCHECK(SUCCEEDED(hr));
   hr = resource->GetSharedHandle(&texture_share_handle_);

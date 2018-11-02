@@ -34,10 +34,8 @@ ShelfApplicationMenuModel::ShelfApplicationMenuModel(
   for (size_t i = 0; i < items_.size(); i++) {
     mojom::MenuItem* item = items_[i].get();
     AddItem(i, item->label);
-    if (!item->image.isNull()) {
-      SetIcon(GetIndexOfCommandId(i),
-              gfx::Image::CreateFrom1xBitmap(item->image));
-    }
+    if (!item->image.isNull())
+      SetIcon(GetIndexOfCommandId(i), gfx::Image(item->image));
   }
 
   // SimpleMenuModel does not allow two consecutive spacing separator items.
@@ -46,7 +44,7 @@ ShelfApplicationMenuModel::ShelfApplicationMenuModel(
     AddSeparator(ui::SPACING_SEPARATOR);
 }
 
-ShelfApplicationMenuModel::~ShelfApplicationMenuModel() {}
+ShelfApplicationMenuModel::~ShelfApplicationMenuModel() = default;
 
 bool ShelfApplicationMenuModel::IsCommandIdChecked(int command_id) const {
   return false;

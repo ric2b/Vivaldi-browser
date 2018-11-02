@@ -11,16 +11,15 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/common/thumbnail_capturer.mojom.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -36,7 +35,7 @@
 #include "content/public/common/context_menu_params.h"
 #include "net/base/load_states.h"
 #include "net/http/http_request_headers.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(OS_ANDROID)
@@ -113,28 +112,24 @@ void CoreTabHelper::UpdateContentRestrictions(int content_restrictions) {
 void CoreTabHelper::SearchByImageInNewTab(
     content::RenderFrameHost* render_frame_host,
     const GURL& src_url) {
-  chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(&thumbnail_capturer);
+  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
+      &chrome_render_frame);
   // Bind the InterfacePtr into the callback so that it's kept alive until
   // there's either a connection error or a response.
-  auto* thumbnail_capturer_proxy = thumbnail_capturer.get();
+  auto* thumbnail_capturer_proxy = chrome_render_frame.get();
   thumbnail_capturer_proxy->RequestThumbnailForContextNode(
       kImageSearchThumbnailMinSize,
       gfx::Size(kImageSearchThumbnailMaxWidth, kImageSearchThumbnailMaxHeight),
       chrome::mojom::ImageFormat::JPEG,
       base::Bind(&CoreTabHelper::DoSearchByImageInNewTab,
-                 weak_factory_.GetWeakPtr(), base::Passed(&thumbnail_capturer),
+                 weak_factory_.GetWeakPtr(), base::Passed(&chrome_render_frame),
                  src_url));
 }
 
 // static
 bool CoreTabHelper::GetStatusTextForWebContents(
     base::string16* status_text, content::WebContents* source) {
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467185 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "467185 CoreTabHelper::GetStatusTextForWebContents1"));
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   auto* guest_manager = guest_view::GuestViewManager::FromBrowserContext(
       source->GetBrowserContext());
@@ -142,11 +137,6 @@ bool CoreTabHelper::GetStatusTextForWebContents(
   if (!source->IsLoading() ||
       source->GetLoadState().state == net::LOAD_STATE_IDLE) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467185
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile2(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "467185 CoreTabHelper::GetStatusTextForWebContents2"));
     if (!guest_manager)
       return false;
     return guest_manager->ForEachGuest(
@@ -156,12 +146,6 @@ bool CoreTabHelper::GetStatusTextForWebContents(
     return false;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   }
-
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467185
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile3(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "467185 CoreTabHelper::GetStatusTextForWebContents3"));
 
   switch (source->GetLoadState().state) {
     case net::LOAD_STATE_WAITING_FOR_STALLED_SOCKET_POOL:
@@ -242,11 +226,6 @@ bool CoreTabHelper::GetStatusTextForWebContents(
   if (!guest_manager)
     return false;
 
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/467185 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile4(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "467185 CoreTabHelper::GetStatusTextForWebContents4"));
   return guest_manager->ForEachGuest(
       source, base::Bind(&CoreTabHelper::GetStatusTextForWebContents,
                          status_text));
@@ -264,7 +243,7 @@ void CoreTabHelper::DidStartLoading() {
 
 void CoreTabHelper::WasShown() {
   web_cache::WebCacheManager::GetInstance()->ObserveActivity(
-      web_contents()->GetRenderProcessHost()->GetID());
+      web_contents()->GetMainFrame()->GetProcess()->GetID());
 }
 
 void CoreTabHelper::WebContentsDestroyed() {
@@ -309,7 +288,7 @@ void CoreTabHelper::BeforeUnloadDialogCancelled() {
 // Handles the image thumbnail for the context node, composes a image search
 // request based on the received thumbnail and opens the request in a new tab.
 void CoreTabHelper::DoSearchByImageInNewTab(
-    chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer,
+    chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,
     const GURL& src_url,
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size) {

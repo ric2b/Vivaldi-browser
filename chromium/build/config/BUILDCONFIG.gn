@@ -138,6 +138,7 @@ declare_args() {
   is_clang =
       current_os == "mac" || current_os == "ios" || current_os == "chromeos" ||
       current_os == "fuchsia" || current_os == "android" ||
+      current_os == "win" ||
       (current_os == "linux" && current_cpu != "s390x" &&
        current_cpu != "s390" && current_cpu != "ppc64" &&
        current_cpu != "ppc" && current_cpu != "mips" && current_cpu != "mips64")
@@ -224,11 +225,7 @@ _default_toolchain = ""
 if (target_os == "android") {
   assert(host_os == "linux" || host_os == "mac",
          "Android builds are only supported on Linux and Mac hosts.")
-  if (is_clang) {
-    _default_toolchain = "//build/toolchain/android:android_clang_$target_cpu"
-  } else {
-    _default_toolchain = "//build/toolchain/android:android_$target_cpu"
-  }
+  _default_toolchain = "//build/toolchain/android:android_clang_$target_cpu"
 } else if (target_os == "chromeos" || target_os == "linux") {
   # See comments in build/toolchain/cros/BUILD.gn about board compiles.
   if (is_clang) {
@@ -245,7 +242,9 @@ if (target_os == "android") {
   _default_toolchain = host_toolchain
 } else if (target_os == "win") {
   # On Windows we use the same toolchain for host and target by default.
-  assert(target_os == host_os, "Win cross-compiles only work on win hosts.")
+  # Beware, win cross builds mostly don't work yet, see docs/win_cross.md
+  # TODO(thakis): Allow on Mac as well soon.
+  assert(host_os != "mac", "https://crbug.com/774209")
   if (is_clang) {
     _default_toolchain = "//build/toolchain/win:win_clang_$target_cpu"
   } else {
@@ -503,6 +502,14 @@ set_sources_assignment_filter(sources_assignment_filter)
 # The values configured here will be automatically set on the scope of the
 # corresponding target. Target definitions can add or remove to the settings
 # here as needed.
+#
+# WHAT GOES HERE?
+#
+# Other than the main compiler and linker configs, the only reason for a config
+# to be in this list is if some targets need to explicitly override that config
+# by removing it. This is how targets opt-out of flags. If you don't have that
+# requirement and just need to add a config everywhere, reference it as a
+# sub-config of an existing one, most commonly the main "compiler" one.
 
 # Holds all configs used for running the compiler.
 default_compiler_configs = [
@@ -517,8 +524,10 @@ default_compiler_configs = [
   "//build/config/compiler:default_optimization",
   "//build/config/compiler:default_stack_frames",
   "//build/config/compiler:default_symbols",
+  "//build/config/compiler:no_exceptions",
   "//build/config/compiler:no_rtti",
   "//build/config/compiler:runtime_library",
+  "//build/config/coverage:default_coverage",
   "//build/config/sanitizers:default_sanitizer_flags",
 ]
 if (is_win) {
@@ -537,7 +546,6 @@ if (current_os == "winrt_81" || current_os == "winrt_81_phone" ||
 }
 
 if (is_posix) {
-  default_compiler_configs += [ "//build/config/gcc:no_exceptions" ]
   if (current_os != "aix") {
     default_compiler_configs +=
         [ "//build/config/gcc:symbol_visibility_hidden" ]
@@ -547,6 +555,11 @@ if (is_posix) {
 if (is_android) {
   default_compiler_configs +=
       [ "//build/config/android:default_cygprofile_instrumentation" ]
+}
+
+if (is_win) {
+  default_compiler_configs +=
+      [ "//build/config/win:default_cygprofile_instrumentation" ]
 }
 
 if (is_clang && !is_nacl) {

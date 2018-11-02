@@ -19,12 +19,9 @@
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
-#import "ios/chrome/browser/ui/authentication/signin_promo_view_earlgrey_utils.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
@@ -49,6 +46,7 @@
 #error "This file requires ARC support."
 #endif
 
+using chrome_test_util::BookmarksMenuButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::PrimarySignInButton;
@@ -142,15 +140,7 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 - (void)setUp {
   [super setUp];
-  // Wait for bookmark model to be loaded.
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout,
-                 ^{
-                   return chrome_test_util::BookmarksLoaded();
-                 }),
-             @"Bookmark model did not load");
-  GREYAssert(chrome_test_util::ClearBookmarks(),
-             @"Not all bookmarks were removed.");
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
 }
 
 // Tear down called once per test.
@@ -165,6 +155,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Verifies that adding a bookmark and removing a bookmark via the UI properly
 // updates the BookmarkModel.
 - (void)testAddRemoveBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   const GURL bookmarkedURL = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/pony.html");
   std::string expectedURLContent = bookmarkedURL.GetContent();
@@ -224,6 +217,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that tapping a bookmark on the NTP navigates to the proper URL.
 - (void)testTapBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   const GURL bookmarkURL = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/destination.html");
   NSString* bookmarkTitle = @"smokeTapBookmark";
@@ -251,6 +247,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Test to set bookmarks in multiple tabs.
 - (void)testBookmarkMultipleTabs {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   const GURL firstURL = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/pony.html");
   const GURL secondURL = web::test::HttpServer::MakeUrl(
@@ -265,6 +264,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try navigating to the bookmark screen, and selecting a bookmark.
 - (void)testSelectBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -284,6 +286,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try deleting a bookmark, then undoing that delete.
 - (void)testUndoDeleteBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -309,6 +314,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try deleting a bookmark from the edit screen, then undoing that delete.
 - (void)testUndoDeleteBookmarkFromEditScreen {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -346,6 +354,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Try moving bookmarks, then undoing that move.
 - (void)testUndoMoveBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -398,6 +409,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 }
 
 - (void)testLabelUpdatedUponMove {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -431,6 +445,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Test the creation of a bookmark and new folder.
 - (void)testAddBookmarkInNewFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   const GURL bookmarkedURL = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/pony.html");
   std::string expectedURLContent = bookmarkedURL.GetContent();
@@ -481,6 +498,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that changing a folder's title in edit mode works as expected.
 - (void)testChangeFolderTitle {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   NSString* existingFolderTitle = @"Folder 1";
   NSString* newFolderTitle = @"New Folder Title";
 
@@ -507,6 +527,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that the default folder bookmarks are saved in is updated to the last
 // used folder.
 - (void)testStickyDefaultFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -582,6 +605,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that changes to the parent folder from the Single Bookmark Controller
 // are saved to the bookmark only when saving the results.
 - (void)testMoveDoesSaveOnSave {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -631,6 +657,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Test thats editing a single bookmark correctly persists data.
 - (void)testSingleBookmarkEdit {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -665,6 +694,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that cancelling editing a single bookmark correctly doesn't persist
 // data.
 - (void)testSingleBookmarkCancelEdit {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -698,6 +730,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that long pressing a bookmark selects it and gives access to editing,
 // as does the Info menu.
 - (void)testLongPressBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -728,6 +763,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests the editing of a folder.
 - (void)testEditFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
 
@@ -764,6 +802,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests the deletion of a folder.
 - (void)testDeleteFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
 
@@ -777,6 +818,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, deletes it and makes sure the UI is
 // consistent.
 - (void)testDeleteCurrentSubfolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Folder 2")]
@@ -799,6 +843,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, delete its parent programatically.
 // Verifies that the UI is as expected.
 - (void)testDeleteParentFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Folder 2")]
@@ -842,6 +889,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that the menu button changes to a back button as expected when browsing
 // nested folders.
 - (void)testBrowseNestedFolders {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -882,6 +932,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests moving a bookmark into a new folder created in the moving process.
 - (void)testCreateNewFolderWhileMovingBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -961,6 +1014,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Navigates to a deeply nested folder, deletes its root ancestor and checks
 // that the UI is on the top level folder.
 - (void)testDeleteRootFolder {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openBookmarkFolder:@"Folder 1"];
   [[EarlGrey selectElementWithMatcher:grey_text(@"Folder 2")]
@@ -1014,6 +1070,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that keyboard commands are registered when a bookmark is added with the
 // new bookmark UI as it shows only a snackbar.
 - (void)testKeyboardCommandsRegistered_AddBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   // Add the bookmark.
   [BookmarksTestCase starCurrentTab];
   GREYAssertTrue(chrome_test_util::GetRegisteredKeyCommandsCount() > 0,
@@ -1023,6 +1082,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that keyboard commands are not registered when a bookmark is edited, as
 // the edit screen is presented modally.
 - (void)testKeyboardCommandsNotRegistered_EditBookmark {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openMobileBookmarks];
 
@@ -1044,6 +1106,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that tapping No thanks on the promo make it disappear.
 - (void)testPromoNoThanksMakeItDisappear {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
@@ -1054,7 +1119,7 @@ id<GREYMatcher> ActionSheet(Action action) {
   }];
   // Check that sign-in promo view is visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
 
   // Tap the dismiss button.
@@ -1063,7 +1128,7 @@ id<GREYMatcher> ActionSheet(Action action) {
       performAction:grey_tap()];
 
   // Wait until promo is gone.
-  [SignPromoViewEarlgreyUtils checkSigninPromoNotVisible];
+  [SigninEarlGreyUtils checkSigninPromoNotVisible];
 
   // Check that the promo already seen state is updated.
   [BookmarksTestCase verifyPromoAlreadySeen:YES];
@@ -1073,11 +1138,14 @@ id<GREYMatcher> ActionSheet(Action action) {
 // state makes the sign-in sheet appear, and the promo still appears after
 // dismissing the sheet.
 - (void)testSignInPromoWithColdStateUsingPrimaryButton {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openBookmarks];
 
   // Check that sign-in promo view are visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
 
   // Tap the primary button.
@@ -1090,7 +1158,7 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Check that the bookmarks UI reappeared and the cell is still here.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
 }
 
@@ -1098,20 +1166,20 @@ id<GREYMatcher> ActionSheet(Action action) {
 // state makes the confirmaiton sheet appear, and the promo still appears after
 // dismissing the sheet.
 - (void)testSignInPromoWithWarmStateUsingPrimaryButton {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
 
   // Set up a fake identity.
-  ChromeIdentity* identity =
-      [FakeChromeIdentity identityWithEmail:@"fakefoo@gmail.com"
-                                     gaiaID:@"fakefoopassword"
-                                       name:@"Fake Foo"];
+  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
   // Check that sign-in promo view are visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
 
   // Tap the secondary button.
@@ -1126,7 +1194,7 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Check that the bookmarks UI reappeared and the cell is still here.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
 }
 
@@ -1134,19 +1202,19 @@ id<GREYMatcher> ActionSheet(Action action) {
 // state makes the sign-in sheet appear, and the promo still appears after
 // dismissing the sheet.
 - (void)testSignInPromoWithWarmStateUsingSecondaryButton {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
   // Set up a fake identity.
-  ChromeIdentity* identity =
-      [FakeChromeIdentity identityWithEmail:@"fakefoo@egmail.com"
-                                     gaiaID:@"fakefoopassword"
-                                       name:@"Fake Foo"];
+  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
   // Check that sign-in promo view are visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
 
   // Tap the secondary button.
@@ -1163,22 +1231,25 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Check that the bookmarks UI reappeared and the cell is still here.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
 }
 
 // Tests that the sign-in promo should not be shown after been shown 19 times.
 - (void)testAutomaticSigninPromoDismiss {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   PrefService* prefs = browser_state->GetPrefs();
   prefs->SetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount, 19);
   [BookmarksTestCase openBookmarks];
   // Check the sign-in promo view is visible.
-  [SignPromoViewEarlgreyUtils
+  [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
-  // Check the sign-in promo will not be shown anymore.
-  [BookmarksTestCase verifyPromoAlreadySeen:YES];
+  // Check the sign-in promo already-seen state didn't change.
+  [BookmarksTestCase verifyPromoAlreadySeen:NO];
   GREYAssertEqual(
       20, prefs->GetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount),
       @"Should have incremented the display count");
@@ -1193,11 +1264,14 @@ id<GREYMatcher> ActionSheet(Action action) {
   }
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   // Check that the sign-in promo is not visible anymore.
-  [SignPromoViewEarlgreyUtils checkSigninPromoNotVisible];
+  [SigninEarlGreyUtils checkSigninPromoNotVisible];
 }
 
 // Tests that all elements on the bookmarks landing page are accessible.
 - (void)testAccessibilityOnBookmarksLandingPage {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
@@ -1210,6 +1284,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Edit page are accessible.
 - (void)testAccessibilityOnBookmarksEditPage {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1231,6 +1308,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Move page are accessible.
 - (void)testAccessibilityOnBookmarksMovePage {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1253,6 +1333,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Tests that all elements on the bookmarks Move to New Folder page are
 // accessible.
 - (void)testAccessibilityOnBookmarksMoveToNewFolderPage {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1278,6 +1361,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on bookmarks Delete and Undo are accessible.
 - (void)testAccessibilityOnBookmarksDeleteUndo {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1297,6 +1383,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Tests that all elements on the bookmarks Select page are accessible.
 - (void)testAccessibilityOnBookmarksSelect {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   [BookmarksTestCase openMobileBookmarksPrepopulatedWithOneBookmark];
 
   // Load the menu for a bookmark.
@@ -1316,16 +1405,12 @@ id<GREYMatcher> ActionSheet(Action action) {
 
 // Navigates to the bookmark manager UI.
 + (void)openBookmarks {
-  [ChromeEarlGreyUI openToolsMenu];
-
   // Opens the bookmark manager.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
-      performAction:grey_tap()];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI tapToolsMenuButton:BookmarksMenuButton()];
 
-  // Wait for it to load, and the menu to go away.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
+  // Assert the menu is gone.
+  [[EarlGrey selectElementWithMatcher:BookmarksMenuButton()]
       assertWithMatcher:grey_nil()];
 }
 

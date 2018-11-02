@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/public/cpp/voice_interaction_state.h"
 #include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
+#include "ash/voice_interaction/voice_interaction_observer.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/controls/button/image_button.h"
@@ -23,12 +23,13 @@ namespace ash {
 class InkDropButtonListener;
 class Shelf;
 class ShelfView;
-class VoiceInteractionOverlay;
+class AssistantOverlay;
 
 // Button used for the AppList icon on the shelf.
 class ASH_EXPORT AppListButton : public views::ImageButton,
                                  public ShellObserver,
-                                 public SessionObserver {
+                                 public SessionObserver,
+                                 public VoiceInteractionObserver {
  public:
   AppListButton(InkDropButtonListener* listener,
                 ShelfView* shelf_view,
@@ -77,10 +78,12 @@ class ASH_EXPORT AppListButton : public views::ImageButton,
   // ShellObserver:
   void OnAppListVisibilityChanged(bool shown,
                                   aura::Window* root_window) override;
+
+  // VoiceInteractionObserver:
   void OnVoiceInteractionStatusChanged(
-      ash::VoiceInteractionState state) override;
-  void OnVoiceInteractionEnabled(bool enabled) override;
-  void OnVoiceInteractionSetupCompleted() override;
+      mojom::VoiceInteractionState state) override;
+  void OnVoiceInteractionSettingsEnabled(bool enabled) override;
+  void OnVoiceInteractionSetupCompleted(bool completed) override;
 
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
@@ -102,9 +105,6 @@ class ASH_EXPORT AppListButton : public views::ImageButton,
   // Initialize the voice interaction overlay.
   void InitializeVoiceInteractionOverlay();
 
-  // Whether the active user is the primary user.
-  bool IsUserPrimary();
-
   // True if the app list is currently showing for this display.
   // This is useful because other IsApplistVisible functions aren't per-display.
   bool is_showing_app_list_;
@@ -117,10 +117,10 @@ class ASH_EXPORT AppListButton : public views::ImageButton,
   Shelf* shelf_;
 
   // Owned by the view hierarchy. Null if the voice interaction is not enabled.
-  VoiceInteractionOverlay* voice_interaction_overlay_ = nullptr;
-  std::unique_ptr<base::OneShotTimer> voice_interaction_animation_delay_timer_;
-  std::unique_ptr<base::OneShotTimer>
-      voice_interaction_animation_hide_delay_timer_;
+  AssistantOverlay* assistant_overlay_ = nullptr;
+  std::unique_ptr<base::OneShotTimer> assistant_animation_delay_timer_;
+  std::unique_ptr<base::OneShotTimer> assistant_animation_hide_delay_timer_;
+  base::TimeTicks voice_interaction_start_timestamp_;
 
   // Flag that gets set each time we receive a mouse or gesture event. It is
   // then used to render the ink drop in the right location.

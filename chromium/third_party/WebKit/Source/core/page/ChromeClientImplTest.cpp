@@ -31,14 +31,14 @@
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameImpl.h"
-#include "core/html/HTMLSelectElement.h"
 #include "core/html/forms/ColorChooserClient.h"
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/DateTimeChooserClient.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClientImpl.h"
 #include "core/page/Page.h"
-#include "core/page/ScopedPageSuspender.h"
+#include "core/page/ScopedPagePauser.h"
 #include "platform/Language.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/web/WebFrameClient.h"
@@ -96,8 +96,8 @@ class CreateWindowTest : public ::testing::Test {
   Persistent<ChromeClientImpl> chrome_client_impl_;
 };
 
-TEST_F(CreateWindowTest, CreateWindowFromSuspendedPage) {
-  ScopedPageSuspender suspender;
+TEST_F(CreateWindowTest, CreateWindowFromPausedPage) {
+  ScopedPagePauser pauser;
   LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
   FrameLoadRequest request(frame->GetDocument());
   WebWindowFeatures features;
@@ -114,7 +114,7 @@ class FakeColorChooserClient
       : owner_element_(owner_element) {}
   ~FakeColorChooserClient() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(owner_element_);
     ColorChooserClient::Trace(visitor);
   }
@@ -144,7 +144,7 @@ class FakeDateTimeChooserClient
       : owner_element_(owner_element) {}
   ~FakeDateTimeChooserClient() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(owner_element_);
     DateTimeChooserClient::Trace(visitor);
   }

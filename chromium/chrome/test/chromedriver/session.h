@@ -11,11 +11,13 @@
 #include <vector>
 
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/test/chromedriver/basic_types.h"
 #include "chrome/test/chromedriver/chrome/device_metrics.h"
 #include "chrome/test/chromedriver/chrome/geoposition.h"
 #include "chrome/test/chromedriver/chrome/network_conditions.h"
 #include "chrome/test/chromedriver/chrome/scoped_temp_dir_with_retry.h"
+#include "chrome/test/chromedriver/chrome/ui_events.h"
 #include "chrome/test/chromedriver/command_listener.h"
 
 static const char kAccept[] = "accept";
@@ -67,11 +69,18 @@ struct Session {
   std::unique_ptr<Chrome> chrome;
   std::string window;
   int sticky_modifiers;
+  // List of input sources for each active input. Everytime a new input source
+  // is added, there must be a corresponding entry made in input_state_table.
+  std::unique_ptr<base::ListValue> active_input_sources;
+  // Map between input id and input source state for the corresponding input
+  // source. One entry for each item in active_input_sources
+  std::unique_ptr<base::DictionaryValue> input_state_table;
   // List of |FrameInfo|s for each frame to the current target frame from the
   // first frame element in the root document. If target frame is window.top,
   // this list will be empty.
   std::list<FrameInfo> frames;
   WebPoint mouse_position;
+  MouseButton pressed_mouse_button;
   base::TimeDelta implicit_wait;
   base::TimeDelta page_load_timeout;
   base::TimeDelta script_timeout;

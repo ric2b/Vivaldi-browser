@@ -20,6 +20,13 @@
 #include "net/base/net_export.h"
 #include "net/cert/x509_certificate.h"
 
+#if defined(USE_NSS_CERTS) || defined(OS_WIN) || defined(OS_MACOSX) || \
+    defined(OS_FUCHSIA)
+// When not defined, the EVRootCAMetadata singleton is a dumb placeholder
+// implementation that will fail all EV lookup operations.
+#define PLATFORM_USES_CHROMIUM_EV_METADATA
+#endif
+
 namespace base {
 template <typename T>
 struct LazyInstanceTraitsBase;
@@ -39,25 +46,32 @@ class NET_EXPORT_PRIVATE EVRootCAMetadata {
   typedef SECOidTag PolicyOID;
 #elif defined(OS_WIN)
   typedef const char* PolicyOID;
-#elif defined(OS_MACOSX)
+#else
   // DER-encoded OID value (no tag or length).
   typedef der::Input PolicyOID;
 #endif
 
   static EVRootCAMetadata* GetInstance();
 
-#if defined(USE_NSS_CERTS) || defined(OS_WIN) || defined(OS_MACOSX)
   // Returns true if policy_oid is an EV policy OID of some root CA.
   bool IsEVPolicyOID(PolicyOID policy_oid) const;
+
+  // Same as above but using the the DER-encoded OID (no tag or length).
+  bool IsEVPolicyOIDGivenBytes(const der::Input& policy_oid) const;
 
   // Returns true if the root CA with the given certificate fingerprint has
   // the EV policy OID policy_oid.
   bool HasEVPolicyOID(const SHA256HashValue& fingerprint,
                       PolicyOID policy_oid) const;
 
+  // Same as above but using the the DER-encoded OID (no tag or length).
+  bool HasEVPolicyOIDGivenBytes(const SHA256HashValue& fingerprint,
+                                const der::Input& policy_oid) const;
+
+#if defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
   // Returns true if |policy_oid| is for 2.23.140.1.1 (CA/Browser Forum's
-  // Extended Validation Policy).
-  // TODO(eroman): Remove this and instead test each candidate OID.
+  // Extended Validation Policy). This is used as a hack by the
+  // platform-specific CertVerifyProcs when doing EV verification.
   static bool IsCaBrowserForumEvOid(PolicyOID policy_oid);
 #endif
 
@@ -92,7 +106,7 @@ class NET_EXPORT_PRIVATE EVRootCAMetadata {
 
   // extra_cas_ contains any EV CA metadata that was added at runtime.
   ExtraEVCAMap extra_cas_;
-#elif defined(OS_MACOSX)
+#elif defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
   using PolicyOIDMap = std::
       map<SHA256HashValue, std::vector<std::string>, SHA256HashValueLessThan>;
 

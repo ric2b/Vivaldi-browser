@@ -47,6 +47,7 @@ DomDistillerStore::DomDistillerStore(
       attachment_store_(syncer::AttachmentStore::CreateInMemoryStore()),
       weak_ptr_factory_(this) {
   database_->Init(kDatabaseUMAClientName, database_dir,
+                  leveldb_proto::CreateSimpleOptions(),
                   base::Bind(&DomDistillerStore::OnDatabaseInit,
                              weak_ptr_factory_.GetWeakPtr()));
 }
@@ -61,6 +62,7 @@ DomDistillerStore::DomDistillerStore(
       model_(initial_data),
       weak_ptr_factory_(this) {
   database_->Init(kDatabaseUMAClientName, database_dir,
+                  leveldb_proto::CreateSimpleOptions(),
                   base::Bind(&DomDistillerStore::OnDatabaseInit,
                              weak_ptr_factory_.GetWeakPtr()));
 }
@@ -231,7 +233,7 @@ bool DomDistillerStore::ChangeEntry(const ArticleEntry& entry,
     return false;
   }
 
-  bool hasEntry = model_.GetEntryById(entry.entry_id(), NULL);
+  bool hasEntry = model_.GetEntryById(entry.entry_id(), nullptr);
   if (hasEntry) {
     if (changeType == SyncChange::ACTION_ADD) {
       DVLOG(1) << "Already have entry with id " << entry.entry_id() << ".";
@@ -310,7 +312,7 @@ SyncDataList DomDistillerStore::GetAllSyncData(ModelType type) const {
 }
 
 SyncError DomDistillerStore::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const SyncChangeList& change_list) {
   DCHECK(database_loaded_);
   SyncChangeList database_changes;
@@ -400,9 +402,8 @@ void DomDistillerStore::OnDatabaseSave(bool success) {
   }
 }
 
-bool DomDistillerStore::ApplyChangesToSync(
-    const tracked_objects::Location& from_here,
-    const SyncChangeList& change_list) {
+bool DomDistillerStore::ApplyChangesToSync(const base::Location& from_here,
+                                           const SyncChangeList& change_list) {
   if (!sync_processor_) {
     return false;
   }

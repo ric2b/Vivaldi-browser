@@ -4,9 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(mmoss) This currently only works with official builds, since non-official
-# builds don't add the "${BUILDDIR}/installer/" files needed for packaging.
-
 set -e
 set -o pipefail
 if [ "$VERBOSE" ]; then
@@ -54,9 +51,8 @@ stage_install_debian() {
   # use update-alternatives for /usr/bin/vivaldi.
   local USR_BIN_SYMLINK_NAME="${PACKAGE}-${CHANNEL}"
 
-  if [ "$CHANNEL" == "preview" ]; then
-    local MENUNAME="${MENUNAME} (Beta)"
-  elif [ "$CHANNEL" != "stable" ]; then
+  local PACKAGE_ORIG="${PACKAGE}"
+  if [ "$CHANNEL" != "stable" ]; then
     # Avoid file collisions between channels.
     local INSTALLDIR="${INSTALLDIR}-${CHANNEL}"
 
@@ -67,15 +63,16 @@ stage_install_debian() {
     local MENUNAME="${MENUNAME} (${CHANNEL})"
   fi
   prep_staging_debian
+  SHLIB_PERMS=644
   stage_install_common
-  echo "Staging Debian install files in '${STAGEDIR}'..."
+  log_cmd echo "Staging Debian install files in '${STAGEDIR}'..."
   install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/cron"
   process_template "${BUILDDIR}/installer/common/repo.cron" \
       "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
-  pushd "${STAGEDIR}/etc/cron.daily/"
+  pushd "${STAGEDIR}/etc/cron.daily/" > /dev/null
   ln -snf "${INSTALLDIR}/cron/${PACKAGE}" "${PACKAGE}"
-  popd
+  popd > /dev/null
   process_template "${BUILDDIR}/installer/debian/debian.menu" \
     "${STAGEDIR}/usr/share/menu/${PACKAGE}.menu"
   chmod 644 "${STAGEDIR}/usr/share/menu/${PACKAGE}.menu"
@@ -92,13 +89,15 @@ stage_install_debian() {
 
 verify_package() {
   local DEPENDS="$1"
-  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > expected_deb_depends
+  local EXPECTED_DEPENDS="${TMPFILEDIR}/expected_deb_depends"
+  local ACTUAL_DEPENDS="${TMPFILEDIR}/actual_deb_depends"
+  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > "${EXPECTED_DEPENDS}"
   dpkg -I "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${ARCHITECTURE}.deb" | \
       grep '^ Depends: ' | sed 's/^ Depends: //' | sed 's/, /\n/g' | \
-      LANG=C sort > actual_deb_depends
+      LANG=C sort > "${ACTUAL_DEPENDS}"
   BAD_DIFF=0
-  diff -u expected_deb_depends actual_deb_depends || BAD_DIFF=1
-  if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
+  diff -u "${EXPECTED_DEPENDS}" "${ACTUAL_DEPENDS}" || BAD_DIFF=1
+  if [ $BAD_DIFF -ne 0 ]; then
     echo
     echo "ERROR: bad dpkg dependencies!"
     echo
@@ -108,29 +107,18 @@ verify_package() {
 
 # Actually generate the package file.
 do_package() {
-  echo "Packaging ${ARCHITECTURE}..."
+  log_cmd echo "Packaging ${ARCHITECTURE}..."
   PREDEPENDS="$COMMON_PREDEPS"
   DEPENDS="${COMMON_DEPS}"
-  if [ "$CHANNEL" == "stable" ]; then
-    REPLACES="vivaldi-preview, vivaldi-beta"
-    CONFLICTS="vivaldi-preview, vivaldi-beta"
-    PROVIDES="www-browser"
-  elif [ "$CHANNEL" == "snapshot" ]; then
-    REPLACES="vivaldi-unstable (<= 1.0.94.2-1)"
-    CONFLICTS="vivaldi-unstable (<= 1.0.94.2-1)"
-    PROVIDES="www-browser, vivaldi-unstable"
-  else
-    REPLACES=""
-    CONFLICTS=""
-    PROVIDES="www-browser"
-  fi
+  PROVIDES="www-browser"
   gen_changelog
   process_template "${SCRIPTDIR}/control.template" "${DEB_CONTROL}"
   export DEB_HOST_ARCH="${ARCHITECTURE}"
   if [ -f "${DEB_CONTROL}" ]; then
     gen_control
   fi
-  fakeroot dpkg-deb -Zxz -z9 -b "${STAGEDIR}" .
+  local COMPRESSION_OPTS="-Zxz -z9"
+  log_cmd fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
   verify_package "$DEPENDS"
 
   if [ "${VIVALDI_SIGNING_KEY:-}" ] ; then
@@ -140,21 +128,22 @@ do_package() {
 
 # Remove temporary files and unwanted packaging output.
 cleanup() {
-  echo "Cleaning..."
+  log_cmd echo "Cleaning..."
   rm -rf "${STAGEDIR}"
   rm -rf "${TMPFILEDIR}"
 }
 
 usage() {
-  echo "usage: $(basename $0) [-c channel] [-a target_arch] [-o 'dir'] "
-  echo "                      [-b 'dir'] -d branding"
-  echo "-c channel the package channel (trunk, asan, unstable, beta, stable)"
-  echo "-a arch    package architecture (ia32 or x64)"
-  echo "-o dir     package output directory [${OUTPUTDIR}]"
-  echo "-b dir     build input directory    [${BUILDDIR}]"
-  echo "-d brand   either chromium or google_chrome"
-  echo "-s dir     /path/to/sysroot"
-  echo "-h         this help message"
+  echo "usage: $(basename $0) [-a target_arch] [-b 'dir'] -c channel"
+  echo "                      -d branding [-f] [-o 'dir'] -s 'dir'"
+  echo "-a arch     package architecture (ia32 or x64)"
+  echo "-b dir      build input directory    [${BUILDDIR}]"
+  echo "-c channel  the package channel (unstable, beta, stable)"
+  echo "-d brand    either chromium or google_chrome"
+  echo "-f          indicates that this is an official build"
+  echo "-h          this help message"
+  echo "-o dir      package output directory [${OUTPUTDIR}]"
+  echo "-s dir      /path/to/sysroot"
 }
 
 # Check that the channel name is one of the allowable ones.
@@ -176,12 +165,6 @@ verify_channel() {
       CHANNEL=beta
       RELEASENOTES="https://www.vivaldi.com/search/label/Beta%20updates"
       ;;
-    trunk|asan )
-      # Setting this to empty will prevent it from updating any existing configs
-      # from release packages.
-      REPOCONFIG=""
-      RELEASENOTES="https://www.vivaldi.com/"
-      ;;
     * )
       echo
       echo "ERROR: '$CHANNEL' is not a valid channel type."
@@ -192,12 +175,11 @@ verify_channel() {
 }
 
 process_opts() {
-  while getopts ":s:o:b:c:a:d:h" OPTNAME
+  while getopts ":a:b:c:d:fho:s:" OPTNAME
   do
     case $OPTNAME in
-      o )
-        OUTPUTDIR=$(readlink -f "${OPTARG}")
-        mkdir -p "${OUTPUTDIR}"
+      a )
+        TARGETARCH="$OPTARG"
         ;;
       b )
         BUILDDIR=$(readlink -f "${OPTARG}")
@@ -205,20 +187,24 @@ process_opts() {
       c )
         CHANNEL="$OPTARG"
         ;;
-      a )
-        TARGETARCH="$OPTARG"
-        ;;
       d )
         BRANDING="$OPTARG"
         ;;
-      s )
-        SYSROOT="$OPTARG"
+      f )
+        IS_OFFICIAL_BUILD=1
         ;;
       h )
         usage
         exit 0
         ;;
-      \: )
+      o )
+        OUTPUTDIR=$(readlink -f "${OPTARG}")
+        mkdir -p "${OUTPUTDIR}"
+        ;;
+      s )
+        SYSROOT="$OPTARG"
+        ;;
+     \: )
         echo "'-$OPTARG' needs an argument."
         usage
         exit 1
@@ -238,7 +224,6 @@ process_opts() {
 
 SCRIPTDIR=$(readlink -f "$(dirname "$0")")
 OUTPUTDIR="${PWD}"
-CHANNEL="trunk"
 # Default target architecture to same as build host.
 if [ "$(uname -m)" = "x86_64" ]; then
   TARGETARCH="x64"
@@ -250,9 +235,11 @@ fi
 trap cleanup 0
 process_opts "$@"
 BUILDDIR=${BUILDDIR:=$(readlink -f "${SCRIPTDIR}/../../../../../out/Release")}
+IS_OFFICIAL_BUILD=${IS_OFFICIAL_BUILD:=0}
 
 STAGEDIR="${BUILDDIR}/deb-staging-${CHANNEL}"
 mkdir -p "${STAGEDIR}"
+chmod 755 "${STAGEDIR}"
 TMPFILEDIR="${BUILDDIR}/deb-tmp-${CHANNEL}"
 mkdir -p "${TMPFILEDIR}"
 DEB_CHANGELOG="${TMPFILEDIR}/changelog"
@@ -282,102 +269,8 @@ verify_channel
 export DEBFULLNAME="${MAINTNAME}"
 export DEBEMAIL="${MAINTMAIL}"
 
-# We'd like to eliminate more of these deps by relying on the 'lsb' package, but
-# that brings in tons of unnecessary stuff, like an mta and rpm. Until that full
-# 'lsb' package is installed by default on DEB distros, we'll have to stick with
-# the LSB sub-packages, to avoid pulling in all that stuff that's not installed
-# by default.
-
-# Generate the dependencies,
-# TODO(mmoss): This is a workaround for a problem where dpkg-shlibdeps was
-# resolving deps using some of our build output shlibs (i.e.
-# out/Release/lib.target/libfreetype.so.6), and was then failing with:
-#   dpkg-shlibdeps: error: no dependency information found for ...
-# It's not clear if we ever want to look in LD_LIBRARY_PATH to resolve deps,
-# but it seems that we don't currently, so this is the most expediant fix.
-SAVE_LDLP=${LD_LIBRARY_PATH:-}
-unset LD_LIBRARY_PATH
-if [ ${TARGETARCH} = "x64" ]; then
-  SHLIB_ARGS="-l${SYSROOT}/usr/lib/x86_64-linux-gnu"
-  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/x86_64-linux-gnu"
-elif [ ${TARGETARCH} = "arm" ]; then
-  SHLIB_ARGS="-l${SYSROOT}/usr/lib/arm-linux-gnueabihf"
-  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/arm-linux-gnueabihf"
-  export PATH=/usr/arm-linux-gnueabihf/bin:$PATH
-elif [ ${TARGETARCH} = "arm64" ]; then
-  SHLIB_ARGS="-l${SYSROOT}/usr/lib/aarch64-linux-gnu"
-  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/aarch64-linux-gnu"
-  export PATH=/usr/aarch64-linux-gnu/bin:$PATH
-else
-  SHLIB_ARGS="-l${SYSROOT}/usr/lib/i386-linux-gnu"
-  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/i386-linux-gnu"
-fi
-SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/usr/lib"
-DPKG_SHLIB_DEPS=$(cd ${SYSROOT} && dpkg-shlibdeps ${SHLIB_ARGS:-} -O \
-                  -e"$BUILDDIR/vivaldi" | sed 's/^shlibs:Depends=//')
-if [ -n "$SAVE_LDLP" ]; then
-  LD_LIBRARY_PATH=$SAVE_LDLP
-fi
-
-# Format it nicely and save it for comparison.
-echo "$DPKG_SHLIB_DEPS" | sed 's/, /\n/g' | LANG=C sort > actual
-
-# Compare the expected dependency list to the generated list.
-BAD_DIFF=0
-if [ -r "$SCRIPTDIR/expected_deps_${TARGETARCH}" ]; then
-  diff -u "$SCRIPTDIR/expected_deps_${TARGETARCH}" actual || \
-    BAD_DIFF=1
-fi
-if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
-  echo
-  echo "ERROR: Shared library dependencies changed!"
-  echo "If this is intentional, please update:"
-  echo "chrome/installer/linux/debian/expected_deps_x64"
-  echo
-  exit $BAD_DIFF
-fi
-
-# Additional dependencies not in the dpkg-shlibdeps output.
-# ca-certificates: Make sure users have SSL certificates.
-# fonts-liberation: Make sure users have compatible fonts for viewing PDFs.
-# libnss3: Pull a more recent version of NSS than required by runtime linking,
-#          for security and stability updates in NSS.
-# lsb-release: For lsb_release.
-# xdg-utils: For OS integration.
-# wget: For uploading crash reports with Breakpad.
-ADDITIONAL_DEPS="ca-certificates, fonts-liberation, \
-  libnss3 (>= 3.26), xdg-utils (>= 1.0.2), wget"
-
-# Fix-up libnspr dependency due to renaming in Ubuntu (the old package still
-# exists, but it was moved to "universe" repository, which isn't installed by
-# default).
-# TODO(thestig): This is probably no longer needed. Verify and remove.
-DPKG_SHLIB_DEPS=$(sed \
-    's/\(libnspr4-0d ([^)]*)\), /\1 | libnspr4 (>= 4.9.5-0ubuntu0), /g' \
-    <<< $DPKG_SHLIB_DEPS)
-
-# Remove libnss dependency so the one in $ADDITIONAL_DEPS can supercede it.
-DPKG_SHLIB_DEPS=$(sed 's/\(libnss3 ([^)]*)\), //g' <<< $DPKG_SHLIB_DEPS)
-
-# VB-23524 fix too new libfontconfig dependency on Ubuntu 12.04
-DPKG_SHLIB_DEPS=$(sed 's/\(libfontconfig1 ([^)]*)\), /libfontconfig1 (>= 2.8.0), /g' \
-                  <<< $DPKG_SHLIB_DEPS)
-
-# Fix-up libudev dependency because Ubuntu 13.04 has libudev1 instead of
-# libudev0.
-DPKG_SHLIB_DEPS=$(sed 's/\(libudev0 ([^)]*)\), /\1 | libudev1 (>= 198), /g' \
-                  <<< $DPKG_SHLIB_DEPS)
-
-# Fix-up 32-bit package names when building 32-bit Vivaldi on 64-bit Ubuntu
-# with multiarch.
-DPKG_SHLIB_DEPS=$(sed 's/\(lib32gcc1 (\([^)]*\))\), /\1 | libgcc1 (\2), /g' \
-                  <<< $DPKG_SHLIB_DEPS)
-DPKG_SHLIB_DEPS=$(sed 's/\(lib32stdc++6 (\([^)]*\))\), /\1 | libstdc++6 (\2), /g' \
-                  <<< $DPKG_SHLIB_DEPS)
-DPKG_SHLIB_DEPS=$(sed 's/\(libc6-i386 (\([^)]*\))\), /\1 | libc6 (\2), /g' \
-                  <<< $DPKG_SHLIB_DEPS)
-
-COMMON_DEPS="${DPKG_SHLIB_DEPS}, ${ADDITIONAL_DEPS}"
+DEB_COMMON_DEPS="${BUILDDIR}/deb_common.deps"
+COMMON_DEPS=$(sed ':a;N;$!ba;s/\n/, /g' "${DEB_COMMON_DEPS}")
 COMMON_PREDEPS="dpkg (>= 1.14.0)"
 
 
@@ -390,6 +283,9 @@ case "$TARGETARCH" in
     ;;
   x64 )
     export ARCHITECTURE="amd64"
+    ;;
+  mipsel )
+    export ARCHITECTURE="mipsel"
     ;;
   arm )
     export ARCHITECTURE="armhf"

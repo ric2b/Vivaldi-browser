@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/queue.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
@@ -31,15 +32,6 @@
 #include "device/bluetooth/bluetooth_rfcomm_channel_mac.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-
-#if !defined(MAC_OS_X_VERSION_10_7) || \
-    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7
-
-@interface IOBluetoothDevice (LionSDKDeclarations)
-- (IOReturn)performSDPQuery:(id)target uuids:(NSArray*)uuids;
-@end
-
-#endif  // MAC_OS_X_VERSION_10_7
 
 using device::BluetoothSocket;
 
@@ -232,8 +224,8 @@ const char kSocketNotConnected[] = "The socket is not connected";
 const char kReceivePending[] = "A Receive operation is pending";
 
 template <class T>
-void empty_queue(std::queue<T>& queue) {
-  std::queue<T> empty;
+void empty_queue(base::queue<T>& queue) {
+  base::queue<T> empty;
   std::swap(queue, empty);
 }
 
@@ -433,7 +425,7 @@ IOBluetoothSDPServiceRecord* RegisterL2capService(
 
 // static
 scoped_refptr<BluetoothSocketMac> BluetoothSocketMac::CreateSocket() {
-  return make_scoped_refptr(new BluetoothSocketMac());
+  return base::WrapRefCounted(new BluetoothSocketMac());
 }
 
 void BluetoothSocketMac::Connect(

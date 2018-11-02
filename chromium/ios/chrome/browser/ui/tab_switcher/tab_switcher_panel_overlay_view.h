@@ -7,7 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol ApplicationCommands;
 @protocol BrowserCommands;
+@protocol SigninPresenter;
+@protocol SyncPresenter;
 
 namespace ios {
 class ChromeBrowserState;
@@ -31,11 +34,22 @@ TabSwitcherPanelOverlayType PanelOverlayTypeFromSignInPanelsType(
 @interface TabSwitcherPanelOverlayView : UIView
 
 @property(nonatomic, assign) TabSwitcherPanelOverlayType overlayType;
-@property(nonatomic, readonly, weak) id<BrowserCommands> dispatcher;
+@property(nonatomic, readonly, weak) id<SigninPresenter, SyncPresenter>
+    presenter;
+@property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
+    dispatcher;
 
 - (instancetype)initWithFrame:(CGRect)frame
                  browserState:(ios::ChromeBrowserState*)browserState
-                   dispatcher:(id<BrowserCommands>)dispatcher;
+                    presenter:(id<SigninPresenter, SyncPresenter>)presenter
+                   dispatcher:
+                       (id<ApplicationCommands, BrowserCommands>)dispatcher;
+
+// Should be called when the tab switcher was shown.
+- (void)wasShown;
+// Should be called when the tab switcher was hidden.
+- (void)wasHidden;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_SWITCHER_PANEL_OVERLAY_VIEW_H_

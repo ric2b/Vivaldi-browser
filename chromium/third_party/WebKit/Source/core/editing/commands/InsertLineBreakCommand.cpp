@@ -25,18 +25,19 @@
 
 #include "core/editing/commands/InsertLineBreakCommand.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 
@@ -63,8 +64,7 @@ bool InsertLineBreakCommand::ShouldUseBreakElement(
 }
 
 void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
-  DeleteSelection(editing_state);
-  if (editing_state->IsAborted())
+  if (!DeleteSelection(editing_state))
     return;
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -103,8 +103,8 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
 
   if (IsEndOfParagraph(CreateVisiblePosition(caret.ToPositionWithAffinity())) &&
       !LineBreakExistsAtVisiblePosition(caret)) {
-    bool need_extra_line_break = !isHTMLHRElement(*pos.AnchorNode()) &&
-                                 !isHTMLTableElement(*pos.AnchorNode());
+    bool need_extra_line_break = !IsHTMLHRElement(*pos.AnchorNode()) &&
+                                 !IsHTMLTableElement(*pos.AnchorNode());
 
     InsertNodeAt(node_to_insert, pos, editing_state);
     if (editing_state->IsAborted())
@@ -176,8 +176,6 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
 
     // Handle whitespace that occurs after the split
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-    // TODO(yosin) |isRenderedCharacter()| should be removed, and we should
-    // use |VisiblePosition::characterAfter()|.
     if (!IsRenderedCharacter(ending_position)) {
       Position position_before_text_node(
           Position::InParentBeforeNode(*text_node));
@@ -210,13 +208,14 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
       GetDocument().GetFrame()->GetEditor().TypingStyle();
 
   if (typing_style && !typing_style->IsEmpty()) {
+    DCHECK(node_to_insert);
     // Apply the typing style to the inserted line break, so that if the
     // selection leaves and then comes back, new input will have the right
     // style.
     // FIXME: We shouldn't always apply the typing style to the line break here,
     // see <rdar://problem/5794462>.
-    ApplyStyle(typing_style, FirstPositionInOrBeforeNode(node_to_insert),
-               LastPositionInOrAfterNode(node_to_insert), editing_state);
+    ApplyStyle(typing_style, FirstPositionInOrBeforeNode(*node_to_insert),
+               LastPositionInOrAfterNode(*node_to_insert), editing_state);
     if (editing_state->IsAborted())
       return;
     // Even though this applyStyle operates on a Range, it still sets an

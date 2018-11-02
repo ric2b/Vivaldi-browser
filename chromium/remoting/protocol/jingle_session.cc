@@ -28,7 +28,7 @@
 #include "remoting/signaling/iq_sender.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 #include "third_party/libjingle_xmpp/xmpp/constants.h"
-#include "third_party/webrtc/p2p/base/candidate.h"
+#include "third_party/webrtc/api/candidate.h"
 
 using buzz::XmlElement;
 
@@ -107,8 +107,8 @@ int GetSequentialId(const std::string& id) {
 // session due to an unexpected request.
 class JingleSession::OrderedMessageQueue {
  public:
-  OrderedMessageQueue() {}
-  ~OrderedMessageQueue() {}
+  OrderedMessageQueue() = default;
+  ~OrderedMessageQueue() = default;
 
   // Returns the list of messages ordered by their sequential IDs.
   std::vector<PendingMessage> OnIncomingMessage(

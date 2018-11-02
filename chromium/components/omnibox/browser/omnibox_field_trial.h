@@ -10,26 +10,35 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+
+class PrefService;
 
 namespace base {
 struct Feature;
 class TimeDelta;
 }
 
+#if defined(OS_ANDROID)
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+#endif
+
 namespace omnibox {
 
-extern const base::Feature kNewOmniboxAnswerTypes;
 extern const base::Feature kOmniboxEntitySuggestions;
 extern const base::Feature kOmniboxTailSuggestions;
+extern const base::Feature kOmniboxTabSwitchSuggestions;
 extern const base::Feature kEnableClipboardProvider;
-extern const base::Feature kAndroidFakeboxDemotion;
-extern const base::Feature kAndroidFakeboxDemotionOnPhones;
+extern const base::Feature kAndroidChromeHomePersonalizedSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kSearchProviderContextAllowHttpsUrls;
 extern const base::Feature kZeroSuggestRedirectToChrome;
@@ -38,13 +47,19 @@ extern const base::Feature kDisplayTitleForCurrentUrl;
 extern const base::Feature kUIExperimentElideSuggestionUrlAfterHost;
 extern const base::Feature kUIExperimentHideSuggestionUrlScheme;
 extern const base::Feature kUIExperimentHideSuggestionUrlTrivialSubdomains;
-extern const base::Feature kUIExperimentShowSuggestionFavicons;
 extern const base::Feature kUIExperimentMaxAutocompleteMatches;
 extern const base::Feature kUIExperimentNarrowDropdown;
+extern const base::Feature kUIExperimentShowSuggestionFavicons;
+extern const base::Feature kUIExperimentSwapTitleAndUrl;
 extern const base::Feature kUIExperimentVerticalLayout;
 extern const base::Feature kUIExperimentVerticalMargin;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
-}
+extern const base::Feature kBreakWordsAtUnderscores;
+
+#if defined(OS_IOS)
+extern const base::Feature kZeroSuggestProviderIOS;
+#endif
+}  // namespace omnibox
 
 // The set of parameters customizing the HUP scoring.
 struct HUPScoringParams {
@@ -144,6 +159,10 @@ class OmniboxFieldTrial {
     EMPHASIZE_NEVER = 3
   };
 
+#if defined(OS_ANDROID)
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+#endif
+
   // ---------------------------------------------------------
   // For any experiment that's part of the bundled omnibox field trial.
 
@@ -175,28 +194,19 @@ class OmniboxFieldTrial {
   // ---------------------------------------------------------
   // For the ZeroSuggestProvider field trial.
 
-  // Returns whether the user is in any field trial where the
-  // ZeroSuggestProvider should be used to get suggestions when the
-  // user clicks on the omnibox but has not typed anything yet.
-  static bool InZeroSuggestFieldTrial();
-
   // Returns whether the user is in a ZeroSuggest field trial, which shows
   // most visited URLs. This is true for both "MostVisited" and
   // "MostVisitedWithoutSERP" trials.
-  static bool InZeroSuggestMostVisitedFieldTrial();
+  static bool InZeroSuggestMostVisitedFieldTrial(PrefService* prefs);
 
   // Returns whether the user is in ZeroSuggest field trial showing most
   // visited URLs except it doesn't show suggestions on Google search result
   // pages.
-  static bool InZeroSuggestMostVisitedWithoutSerpFieldTrial();
-
-  // Returns whether the user is in a ZeroSuggest field trial and URL-based
-  // suggestions can continue to appear after the user has started typing.
-  static bool InZeroSuggestAfterTypingFieldTrial();
+  static bool InZeroSuggestMostVisitedWithoutSerpFieldTrial(PrefService* prefs);
 
   // Returns whether the user is in a ZeroSuggest field trial, but should
   // show recently searched-for queries instead.
-  static bool InZeroSuggestPersonalizedFieldTrial();
+  static bool InZeroSuggestPersonalizedFieldTrial(PrefService* prefs);
 
   // ---------------------------------------------------------
   // For the Zero Suggest Redirect to Chrome field trial.
@@ -204,6 +214,9 @@ class OmniboxFieldTrial {
   // Returns the server-side experiment ID to use for contextual suggestions.
   // Returns -1 if there is no associated experiment ID.
   static int GetZeroSuggestRedirectToChromeExperimentId();
+
+  // Returns the server address associated with the current field trial.
+  static std::string GetZeroSuggestRedirectToChromeServerAddress();
 
   // ---------------------------------------------------------
   // For the ShortcutsScoringMaxRelevance experiment that's part of the
@@ -446,9 +459,7 @@ class OmniboxFieldTrial {
   static const char kHQPTypedValueRule[];
   static const char kHQPAllowMatchInTLDRule[];
   static const char kHQPAllowMatchInSchemeRule[];
-  static const char kZeroSuggestRule[];
   static const char kZeroSuggestVariantRule[];
-  static const char kSuggestVariantRule[];
   static const char kDisableResultsCachingRule[];
   static const char kMeasureSuggestPollingDelayFromLastKeystrokeRule[];
   static const char kSuggestPollingDelayMsRule[];
@@ -495,6 +506,7 @@ class OmniboxFieldTrial {
 
   // Parameter names used by Zero Suggest Redirect to Chrome.
   static const char kZeroSuggestRedirectToChromeExperimentIdParam[];
+  static const char kZeroSuggestRedirectToChromeServerAddressParam[];
 
   // The amount of time to wait before sending a new suggest request after the
   // previous one unless overridden by a field trial parameter.
@@ -522,6 +534,12 @@ class OmniboxFieldTrial {
   static std::string GetValueForRuleInContext(
       const std::string& rule,
       metrics::OmniboxEventProto::PageClassification page_classification);
+
+#if defined(OS_ANDROID)
+  // Checks whether Chrome Home personalized omnibox suggestions on focus are
+  // enabled.
+  static bool InChromeHomePersonalizedZeroSuggest(PrefService* pref);
+#endif
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(OmniboxFieldTrial);
 };

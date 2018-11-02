@@ -13,13 +13,13 @@
 #include "components/version_info/version_info.h"
 #import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #include "ios/chrome/browser/ui/icons/chrome_icon.h"
+#include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #include "ios/chrome/browser/ui/qr_scanner/camera_controller.h"
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view.h"
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view_controller.h"
 #include "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
+#import "ios/chrome/browser/ui/toolbar/web_toolbar_controller_private.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -28,7 +28,6 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#include "ios/shared/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -100,11 +99,6 @@ id<GREYMatcher> QrScannerViewportCaption() {
       IDS_IOS_QR_SCANNER_VIEWPORT_CAPTION);
 }
 
-// Returns the GREYMatcher for the back button in the web toolbar.
-id<GREYMatcher> WebToolbarBackButton() {
-  return ButtonWithAccessibilityLabelId(IDS_ACCNAME_BACK);
-}
-
 // Returns the GREYMatcher for the Cancel button to dismiss a UIAlertController.
 id<GREYMatcher> DialogCancelButton() {
   return grey_allOf(
@@ -118,8 +112,6 @@ void ShowQRScanner() {
   id<GREYMatcher> locationbarButton = grey_allOf(
       grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
       grey_minimumVisiblePercent(0.2), nil);
-  [[EarlGrey selectElementWithMatcher:locationbarButton]
-      assertWithMatcher:grey_text(@"Search or type URL")];
   [[EarlGrey selectElementWithMatcher:locationbarButton]
       performAction:grey_tap()];
 
@@ -387,6 +379,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
     case CAMERA_PERMISSION_DENIED:
       return l10n_util::GetNSString(
           IDS_IOS_QR_SCANNER_CAMERA_PERMISSIONS_HELP_TITLE_GO_TO_SETTINGS);
+    case CAMERA_UNAVAILABLE_DUE_TO_SYSTEM_PRESSURE:
     case CAMERA_UNAVAILABLE:
       return l10n_util::GetNSString(
           IDS_IOS_QR_SCANNER_CAMERA_UNAVAILABLE_ALERT_TITLE);
@@ -774,7 +767,8 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
   [ChromeEarlGrey waitForWebViewContainingText:response];
 
   // Press the back button to get back to the NTP.
-  TapButton(WebToolbarBackButton());
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
+      performAction:grey_tap()];
   [self assertModalOfClass:[QRScannerViewController class]
           isNotPresentedBy:[self currentBVC]];
 }

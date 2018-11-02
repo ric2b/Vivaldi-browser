@@ -74,7 +74,7 @@ void ContentServiceManagerMainDelegate::OverrideMojoConfiguration(
 
 std::unique_ptr<base::Value>
 ContentServiceManagerMainDelegate::CreateServiceCatalog() {
-  return content_main_params_.delegate->CreateServiceCatalog();
+  return nullptr;
 }
 
 bool ContentServiceManagerMainDelegate::ShouldLaunchAsServiceProcess(
@@ -109,14 +109,6 @@ void ContentServiceManagerMainDelegate::AdjustServiceProcessCommandLine(
     command_line->AppendArgNative(arg);
 }
 
-bool ContentServiceManagerMainDelegate::
-    ShouldTerminateServiceManagerOnInstanceQuit(
-        const service_manager::Identity& identity,
-        int* exit_code) {
-  return content_main_params_.delegate
-      ->ShouldTerminateServiceManagerOnInstanceQuit(identity, exit_code);
-}
-
 void ContentServiceManagerMainDelegate::OnServiceManagerInitialized(
     const base::Closure& quit_closure,
     service_manager::BackgroundServiceManager* service_manager) {
@@ -129,7 +121,7 @@ ContentServiceManagerMainDelegate::CreateEmbeddedService(
     const std::string& service_name) {
   // TODO
 
-  return content_main_params_.delegate->CreateEmbeddedService(service_name);
+  return nullptr;
 }
 
 }  // namespace content

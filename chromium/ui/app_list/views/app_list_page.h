@@ -5,9 +5,9 @@
 #ifndef UI_APP_LIST_VIEWS_APP_LIST_PAGE_H_
 #define UI_APP_LIST_VIEWS_APP_LIST_PAGE_H_
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_export.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/views/view.h"
 
 namespace app_list {
@@ -46,9 +46,6 @@ class APP_LIST_EXPORT AppListPage : public views::View {
   // Returns the bounds of the page during dragging.
   virtual gfx::Rect GetPageBoundsDuringDragging(
       AppListModel::State state) const;
-
-  // Returns the z height of the search box for this page.
-  virtual int GetSearchBoxZHeight() const;
 
   const ContentsView* contents_view() const { return contents_view_; }
   void set_contents_view(ContentsView* contents_view) {

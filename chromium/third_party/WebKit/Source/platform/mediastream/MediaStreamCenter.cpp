@@ -68,15 +68,6 @@ void MediaStreamCenter::DidSetMediaStreamTrackEnabled(
   }
 }
 
-void MediaStreamCenter::DidStopLocalMediaStream(MediaStreamDescriptor* stream) {
-  if (private_)
-    private_->DidStopLocalMediaStream(stream);
-}
-
-bool MediaStreamCenter::DidStopMediaStreamTrack(MediaStreamComponent* track) {
-  return private_ && private_->DidStopMediaStreamTrack(track);
-}
-
 void MediaStreamCenter::DidCreateMediaStreamAndTracks(
     MediaStreamDescriptor* stream) {
   if (!private_)

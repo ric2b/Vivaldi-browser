@@ -43,29 +43,56 @@ something meaningful--as it is in this example--that is generally a good sign.
 However, the total count does not have to be meaningful for an enum histogram
 to still be the right choice.
 
+If few buckets will be emitted to, consider using a [sparse
+histogram](#When-To-Use-Sparse-Histograms).
+
 You may append to your enum if the possible states/actions grows.  However, you
 should not reorder, renumber, or otherwise reuse existing values.  As such,
 please put this warning by the enum definition:
 ```
-// These values are written to logs.  New enum values can be added, but existing
-// enums must never be renumbered or deleted and reused.
-enum NEW_TAB_PAGE_ACTION {
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class NEW_TAB_PAGE_ACTION {
   USE_OMNIBOX = 0,
   CLICK_TILE = 1,
   OPEN_BOOKMARK = 2,
-  NEW_TAB_PAGE_ACTION_COUNT
+  COUNT
 };
 ```
 
 Also, please explicitly set enum values `= 0`, `= 1`, `= 2`, etc.  This makes
 clearer that the actual values are important.  In addition, it helps confirm
 the values align between the enum definition and
-[histograms.xml](./histograms.xml).  If a "count" value is included it
-should not include an explicit value.
+[histograms.xml](./histograms.xml).  The COUNT value should not include an
+explicit value--this lets the compiler keep the COUNT up-to-date.
 
 If your enum histogram has a catch-all / miscellaneous bucket, put that bucket
 first (`= 0`).  This will make the bucket easy to find on the dashboard if
 later you add additional buckets to your histogram.
+
+### Flag Histograms
+
+When adding a new flag in
+[about_flags.cc](../../../chrome/browser/about_flags.cc), you need to add a
+corresponding entry to [enums.xml](./enums.xml). This will be automatically
+verified by the `AboutFlagsHistogramTest` unit test.
+
+To add a new entry:
+
+1. Edit [enums.xml](./enums.xml), adding the feature to the `LoginCustomFlags`
+   enum section, with any unique value (just make one up, although whatever it
+   is needs to appear in sorted order; `pretty-print.py` will do this for you).
+2. Build `unit_tests`, then run `unit_tests
+   --gtest_filter='AboutFlagsHistogramTest.*'` to compute the correct value.
+3. Update the entry in [enums.xml](./enums.xml) with the correct value, and move
+   it so the list is sorted by value (`pretty_print.py` will do this for you).
+4. Re-run the test to ensure the value and ordering are correct.
+
+You can also use `tools/metrics/histograms/validate_format.py` to check the
+ordering (but not that the value is correct).
+
+Don't remove entries when removing a flag; they are still used to decode data
+from previous Chrome versions.
 
 ### Count Histograms
 
@@ -216,7 +243,8 @@ suffixes can be applied recursively.
 ## When To Use Sparse Histograms
 
 Sparse histograms are well suited for recording counts of exact sample values
-that are sparsely distributed over a large range.
+that are sparsely distributed over a large range.  They can be used with enums
+as well as regular integer values.
 
 The implementation uses a lock and a map, whereas other histogram types use a
 vector and no lock. It is thus more costly to add values to, and each value

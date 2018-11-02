@@ -8,23 +8,21 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "modules/ModulesExport.h"
-#include "modules/canvas2d/CanvasRenderingContext2D.h"
+#include "modules/canvas/canvas2d/CanvasRenderingContext2D.h"
 #include "modules/shapedetection/ShapeDetector.h"
-#include "platform/bindings/ScriptWrappable.h"
 #include "services/shape_detection/public/interfaces/textdetection.mojom-blink.h"
 
 namespace blink {
 
 class ExecutionContext;
 
-class MODULES_EXPORT TextDetector final : public ShapeDetector,
-                                          public ScriptWrappable {
+class MODULES_EXPORT TextDetector final : public ShapeDetector {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static TextDetector* Create(ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit TextDetector(ExecutionContext*);

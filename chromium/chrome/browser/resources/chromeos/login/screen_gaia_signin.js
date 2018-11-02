@@ -621,6 +621,52 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
     },
 
     /**
+     * Copies attributes between nodes.
+     * @param {!Object} fromNode source to copy attributes from
+     * @param {!Object} toNode target to copy attributes to
+     * @param {!Set<string>} skipAttributes specifies attributes to be skipped
+     * @private
+     */
+    copyAttributes_: function(fromNode, toNode, skipAttributes) {
+      for (var i = 0; i < fromNode.attributes.length; ++i) {
+        var attribute = fromNode.attributes[i];
+        if (!skipAttributes.has(attribute.nodeName))
+          toNode.setAttribute(attribute.nodeName, attribute.nodeValue);
+      }
+    },
+
+    /**
+     * Changes the 'partition' attribute of the sign-in frame. If the sign-in
+     * frame has already navigated, this function re-creates it.
+     * @param {string} newWebviewPartitionName the new partition
+     * @private
+     */
+    setSigninFramePartition_: function(newWebviewPartitionName) {
+      var signinFrame = $('signin-frame');
+
+      if (!signinFrame.src) {
+        // We have not navigated anywhere yet. Note that a webview's src
+        // attribute does not allow a change back to "".
+        signinFrame.partition = newWebviewPartitionName;
+      } else if (signinFrame.partition != newWebviewPartitionName) {
+        // The webview has already navigated. We have to re-create it.
+        var signinFrameParent = signinFrame.parentElement;
+
+        // Copy all attributes except for partition and src from the previous
+        // webview. Use the specified |newWebviewPartitionName|.
+        var newSigninFrame = document.createElement('webview');
+        this.copyAttributes_(
+            signinFrame, newSigninFrame, new Set(['src', 'partition']));
+        newSigninFrame.partition = newWebviewPartitionName;
+
+        signinFrameParent.replaceChild(newSigninFrame, signinFrame);
+
+        // Make sure the auth host uses the new webview from now on.
+        this.gaiaAuthHost_.rebindWebview($('signin-frame'));
+      }
+    },
+
+    /**
      * Loads the authentication extension into the iframe.
      * @param {Object} data Extension parameters bag.
      * @private
@@ -632,6 +678,8 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
           data.screenMode != ScreenMode.DEFAULT) {
         this.gaiaAuthHost_.resetWebview();
       }
+
+      this.setSigninFramePartition_(data.webviewPartitionName);
 
       this.screenMode = data.screenMode;
       this.email = '';
@@ -681,6 +729,8 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       params.menuKeyboardOptions = false;
       params.menuEnterpriseEnrollment =
           !(data.enterpriseManagedDevice || data.hasDeviceOwner);
+      params.isFirstUser =
+          !(data.enterpriseManagedDevice || data.hasDeviceOwner);
 
       this.gaiaAuthParams_ = params;
 
@@ -713,7 +763,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
      * Displays correct screen container for given mode and APi version.
      */
     updateSigninFrameContainers_: function() {
-      let old_state = this.classList.contains('v2');
+      let oldState = this.classList.contains('v2');
       this.classList.toggle('v2', false);
       if ((this.screenMode_ == ScreenMode.DEFAULT ||
            this.screenMode_ == ScreenMode.OFFLINE) &&
@@ -724,7 +774,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
         return;
       // Switching between signin-frame-dialog and gaia-step-contents
       // updates screen size.
-      if (old_state != this.classList.contains('v2'))
+      if (oldState != this.classList.contains('v2'))
         Oobe.getInstance().updateScreenSize(this);
     },
 
@@ -1005,16 +1055,10 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
             'authenticateUser',
             [credentials.email, credentials.password, false]);
       } else if (credentials.authCode) {
-        if (credentials.hasOwnProperty('authCodeOnly') &&
-            credentials.authCodeOnly) {
-          chrome.send(
-              'completeAuthenticationAuthCodeOnly', [credentials.authCode]);
-        } else {
-          chrome.send('completeAuthentication', [
-            credentials.gaiaId, credentials.email, credentials.password,
-            credentials.authCode, credentials.usingSAML, credentials.gapsCookie
-          ]);
-        }
+        chrome.send('completeAuthentication', [
+          credentials.gaiaId, credentials.email, credentials.password,
+          credentials.authCode, credentials.usingSAML, credentials.gapsCookie
+        ]);
       } else {
         chrome.send('completeLogin', [
           credentials.gaiaId, credentials.email, credentials.password,
@@ -1023,6 +1067,10 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       }
 
       this.loading = true;
+      // Hide the back button and the border line as they are not useful
+      // when the loading screen is shown.
+      $('signin-back-button').hidden = true;
+      $('signin-frame-dialog').setAttribute('hide-shadow', true);
 
       // Now that we're in logged in state header should be hidden.
       Oobe.getInstance().headerHidden = true;

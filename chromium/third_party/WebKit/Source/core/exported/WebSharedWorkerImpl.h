@@ -34,18 +34,19 @@
 #include "public/web/WebSharedWorker.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/exported/WorkerShadowPage.h"
 #include "core/workers/SharedWorkerReportingProxy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebSharedWorkerClient.h"
 #include "public/web/worker_content_settings_proxy.mojom-blink.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
 
 namespace blink {
 
@@ -80,6 +81,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   void ResumeStartup() override;
   WebDevToolsAgentClient::WebKitClientMessageLoop* CreateClientMessageLoop()
       override;
+  const WebString& GetInstrumentationToken() override;
 
   // WebSharedWorker methods:
   void StartWorkerContext(
@@ -88,16 +90,15 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
       const WebString& content_security_policy,
       WebContentSecurityPolicyType,
       WebAddressSpace,
-      bool data_saver_enabled,
-      mojo::ScopedMessagePipeHandle content_settings_handle) override;
-  void Connect(std::unique_ptr<WebMessagePortChannel>) override;
+      const WebString& instrumentation_token,
+      mojo::ScopedMessagePipeHandle content_settings_handle,
+      mojo::ScopedMessagePipeHandle interface_provider) override;
+  void Connect(MessagePortChannel) override;
   void TerminateWorkerContext() override;
 
   void PauseWorkerContextOnStart() override;
-  void AttachDevTools(const WebString& host_id, int session_id) override;
-  void ReattachDevTools(const WebString& host_id,
-                        int sesion_id,
-                        const WebString& saved_state) override;
+  void AttachDevTools(int session_id) override;
+  void ReattachDevTools(int sesion_id, const WebString& saved_state) override;
   void DetachDevTools(int session_id) override;
   void DispatchDevToolsMessage(int session_id,
                                int call_id,
@@ -121,9 +122,12 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   void DidReceiveScriptLoaderResponse();
   void OnScriptLoaderFinished();
 
-  void ConnectTaskOnWorkerThread(std::unique_ptr<WebMessagePortChannel>);
+  void ConnectTaskOnWorkerThread(MessagePortChannel);
 
   std::unique_ptr<WorkerShadowPage> shadow_page_;
+  // Unique worker token used by DevTools to attribute different instrumentation
+  // to the same worker.
+  WebString instrumentation_token_;
 
   std::unique_ptr<WebServiceWorkerNetworkProvider> network_provider_;
 
@@ -140,11 +144,14 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   bool is_paused_on_start_ = false;
 
   // Kept around only while main script loading is ongoing.
-  RefPtr<WorkerScriptLoader> main_script_loader_;
+  scoped_refptr<WorkerScriptLoader> main_script_loader_;
 
   WebURL url_;
   WebString name_;
   WebAddressSpace creation_address_space_;
+
+  service_manager::mojom::blink::InterfaceProviderPtrInfo
+      pending_interface_provider_;
 };
 
 }  // namespace blink

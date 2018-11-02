@@ -32,15 +32,15 @@
 #define RTCPeerConnection_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "core/dom/SuspendableObject.h"
+#include "core/dom/PausableObject.h"
 #include "modules/EventTargetModules.h"
 #include "modules/crypto/NormalizeAlgorithm.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/peerconnection/RTCIceCandidate.h"
 #include "platform/AsyncMethodRunner.h"
 #include "platform/WebFrameScheduler.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/HeapAllocator.h"
 #include "public/platform/WebMediaConstraints.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
@@ -72,7 +72,7 @@ class MODULES_EXPORT RTCPeerConnection final
     : public EventTargetWithInlineData,
       public WebRTCPeerConnectionHandlerClient,
       public ActiveScriptWrappable<RTCPeerConnection>,
-      public SuspendableObject,
+      public PausableObject,
       public MediaStreamObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(RTCPeerConnection);
@@ -139,6 +139,11 @@ class MODULES_EXPORT RTCPeerConnection final
   MediaStreamVector getLocalStreams() const;
 
   MediaStreamVector getRemoteStreams() const;
+  // Returns the remote stream for the descriptor, if one exists.
+  MediaStream* getRemoteStream(MediaStreamDescriptor*) const;
+  // Counts the number of receivers that have a remote stream for the descriptor
+  // in its set of associated remote streams.
+  size_t getRemoteStreamUsageCount(MediaStreamDescriptor*) const;
 
   void addStream(ScriptState*,
                  MediaStream*,
@@ -186,14 +191,12 @@ class MODULES_EXPORT RTCPeerConnection final
 
   // WebRTCPeerConnectionHandlerClient
   void NegotiationNeeded() override;
-  void DidGenerateICECandidate(const WebRTCICECandidate&) override;
+  void DidGenerateICECandidate(scoped_refptr<WebRTCICECandidate>) override;
   void DidChangeSignalingState(SignalingState) override;
   void DidChangeICEGatheringState(ICEGatheringState) override;
   void DidChangeICEConnectionState(ICEConnectionState) override;
-  void DidAddRemoteStream(
-      const WebMediaStream&,
-      WebVector<std::unique_ptr<WebRTCRtpReceiver>>*) override;
-  void DidRemoveRemoteStream(const WebMediaStream&) override;
+  void DidAddRemoteTrack(std::unique_ptr<WebRTCRtpReceiver>) override;
+  void DidRemoveRemoteTrack(std::unique_ptr<WebRTCRtpReceiver>) override;
   void DidAddRemoteDataChannel(WebRTCDataChannelHandler*) override;
   void ReleasePeerConnectionHandler() override;
   void ClosePeerConnection() override;
@@ -202,16 +205,16 @@ class MODULES_EXPORT RTCPeerConnection final
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  // SuspendableObject
-  void Suspend() override;
-  void Resume() override;
+  // PausableObject
+  void Pause() override;
+  void Unpause() override;
   void ContextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   // We keep the this object alive until either stopped or closed.
   bool HasPendingActivity() const final { return !closed_ && !stopped_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(RTCPeerConnectionTest, GetAudioTrack);
@@ -231,7 +234,7 @@ class MODULES_EXPORT RTCPeerConnection final
     // |m_event| will only be fired if setup() returns true;
     bool Setup();
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
     Member<Event> event_;
 
@@ -249,8 +252,8 @@ class MODULES_EXPORT RTCPeerConnection final
   void ScheduleDispatchEvent(Event*, BoolFunction);
   void DispatchScheduledEvent();
   MediaStreamTrack* GetTrack(const WebMediaStreamTrack&) const;
-  RTCRtpReceiver* GetOrCreateRTCRtpReceiver(
-      std::unique_ptr<WebRTCRtpReceiver> web_rtp_receiver);
+  HeapVector<Member<RTCRtpReceiver>>::iterator FindReceiver(
+      const WebRTCRtpReceiver& web_receiver);
 
   // The "Change" methods set the state asynchronously and fire the
   // corresponding event immediately after changing the state (if it was really
@@ -293,14 +296,13 @@ class MODULES_EXPORT RTCPeerConnection final
   ICEConnectionState ice_connection_state_;
 
   MediaStreamVector local_streams_;
-  MediaStreamVector remote_streams_;
   // A map containing any track that is in use by the peer connection. This
   // includes tracks of |local_streams_|, |remote_streams_|, |rtp_senders_| and
   // |rtp_receivers_|.
   HeapHashMap<WeakMember<MediaStreamComponent>, WeakMember<MediaStreamTrack>>
       tracks_;
   HeapHashMap<uintptr_t, Member<RTCRtpSender>> rtp_senders_;
-  HeapHashMap<uintptr_t, Member<RTCRtpReceiver>> rtp_receivers_;
+  HeapVector<Member<RTCRtpReceiver>> rtp_receivers_;
 
   std::unique_ptr<WebRTCPeerConnectionHandler> peer_handler_;
 

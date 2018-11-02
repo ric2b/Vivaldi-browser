@@ -124,7 +124,8 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
 
   _addOrigin(securityOrigin) {
     this._loadCacheNames(securityOrigin);
-    this._storageAgent.trackCacheStorageForOrigin(securityOrigin);
+    if (this._isValidSecurityOrigin(securityOrigin))
+      this._storageAgent.trackCacheStorageForOrigin(securityOrigin);
   }
 
   /**
@@ -138,7 +139,17 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
         this._cacheRemoved(cache);
       }
     }
-    this._storageAgent.untrackCacheStorageForOrigin(securityOrigin);
+    if (this._isValidSecurityOrigin(securityOrigin))
+      this._storageAgent.untrackCacheStorageForOrigin(securityOrigin);
+  }
+
+  /**
+   * @param {string} securityOrigin
+   * @return {boolean}
+   */
+  _isValidSecurityOrigin(securityOrigin) {
+    var parsedURL = securityOrigin.asParsedURL();
+    return !!parsedURL && parsedURL.scheme.startsWith('http');
   }
 
   /**
@@ -255,6 +266,22 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
   cacheStorageContentUpdated(origin, cacheName) {
     this.dispatchEventToListeners(
         SDK.ServiceWorkerCacheModel.Events.CacheStorageContentUpdated, {origin: origin, cacheName: cacheName});
+  }
+
+  /**
+   * @param {string} origin
+   * @override
+   */
+  indexedDBListUpdated(origin) {
+  }
+
+  /**
+   * @param {string} origin
+   * @param {string} databaseName
+   * @param {string} objectStoreName
+   * @override
+   */
+  indexedDBContentUpdated(origin, databaseName, objectStoreName) {
   }
 };
 

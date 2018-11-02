@@ -6,15 +6,34 @@
 
 #include "media/base/video_decoder_config.h"
 #include "media/formats/webm/webm_constants.h"
+#include "third_party/libaom/av1_features.h"
 
 namespace media {
+
+namespace {
+
+// Tries to parse |data| to extract the VP9 Profile ID, or returns Profile 0.
+media::VideoCodecProfile GetVP9CodecProfile(const std::vector<uint8_t>& data) {
+  // VP9 CodecPrivate (http://wiki.webmproject.org/vp9-codecprivate) might have
+  // Profile information in the first field, if present.
+  constexpr uint8_t kVP9ProfileFieldId = 0x01;
+  constexpr uint8_t kVP9ProfileFieldLength = 1;
+  if (data.size() < 3 || data[0] != kVP9ProfileFieldId ||
+      data[1] != kVP9ProfileFieldLength || data[2] > 3) {
+    return VP9PROFILE_PROFILE0;
+  }
+
+  return static_cast<VideoCodecProfile>(
+      static_cast<size_t>(VP9PROFILE_PROFILE0) + data[2]);
+}
+
+}  // namespace
 
 WebMVideoClient::WebMVideoClient(MediaLog* media_log) : media_log_(media_log) {
   Reset();
 }
 
-WebMVideoClient::~WebMVideoClient() {
-}
+WebMVideoClient::~WebMVideoClient() = default;
 
 void WebMVideoClient::Reset() {
   pixel_width_ = -1;
@@ -44,9 +63,15 @@ bool WebMVideoClient::InitializeConfig(
     profile = VP8PROFILE_ANY;
   } else if (codec_id == "V_VP9") {
     video_codec = kCodecVP9;
-    // TODO(servolk): Find a way to read actual VP9 profile from WebM.
-    // crbug.com/592074
-    profile = VP9PROFILE_PROFILE0;
+    profile = GetVP9CodecProfile(codec_private);
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  } else if (codec_id == "V_AV1") {
+    // TODO(dalecurtis): AV1 profiles are not finalized, this needs updating
+    // to read the actual profile and configuration before enabling for
+    // release. http://crbug.com/784993
+    video_codec = kCodecAV1;
+    profile = AV1PROFILE_PROFILE0;
+#endif
   } else {
     MEDIA_LOG(ERROR, media_log_) << "Unsupported video codec_id " << codec_id;
     return false;
@@ -78,7 +103,10 @@ bool WebMVideoClient::InitializeConfig(
   gfx::Rect visible_rect(crop_top_, crop_left_,
                          pixel_width_ - (crop_left_ + crop_right_),
                          pixel_height_ - (crop_top_ + crop_bottom_));
-  if (display_unit_ == 0) {
+  // TODO(dalecurtis): This is not correct, but it's what's muxed in webm
+  // containers with AV1 right now. So accept it. We won't get here unless the
+  // build and runtime flags are enabled for AV1.
+  if (display_unit_ == 0 || (video_codec == kCodecAV1 && display_unit_ == 4)) {
     if (display_width_ <= 0)
       display_width_ = visible_rect.width();
     if (display_height_ <= 0)
@@ -87,15 +115,15 @@ bool WebMVideoClient::InitializeConfig(
     if (display_width_ <= 0 || display_height_ <= 0)
       return false;
   } else {
-    MEDIA_LOG(ERROR, media_log_) << "Unsupported display unit type "
-                                 << display_unit_;
+    MEDIA_LOG(ERROR, media_log_)
+        << "Unsupported display unit type " << display_unit_;
     return false;
   }
   gfx::Size natural_size = gfx::Size(display_width_, display_height_);
 
   config->Initialize(video_codec, profile, format, COLOR_SPACE_HD_REC709,
-                     coded_size, visible_rect, natural_size, codec_private,
-                     encryption_scheme);
+                     VIDEO_ROTATION_0, coded_size, visible_rect, natural_size,
+                     codec_private, encryption_scheme);
   if (colour_parsed_) {
     WebMColorMetadata color_metadata = colour_parser_.GetWebMColorMetadata();
     config->set_color_space_info(color_metadata.color_space);

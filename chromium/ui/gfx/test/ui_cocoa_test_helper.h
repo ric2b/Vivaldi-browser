@@ -23,6 +23,12 @@
   BOOL useDefaultConstraints_;
 }
 
+// Value to return for -isOnActiveSpace. Posts
+// NSWorkspaceActiveSpaceDidChangeNotification when set.
+@property(nonatomic) BOOL pretendIsOnActiveSpace;
+
+#include "ui/gfx/test/ui_cocoa_test_helper.h"
+
 // Init a borderless non-deferred window with a backing store.
 - (id)initWithContentRect:(NSRect)contentRect;
 

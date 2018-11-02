@@ -41,6 +41,10 @@ namespace storage {
 class ExternalMountPoints;
 }
 
+namespace media {
+class VideoDecodePerfHistory;
+}
+
 namespace net {
 class URLRequestContextGetter;
 }
@@ -55,6 +59,7 @@ namespace mojom {
 enum class PushDeliveryStatus;
 }
 
+class BackgroundFetchDelegate;
 class BackgroundSyncController;
 class BlobHandle;
 class BrowserPluginGuestManager;
@@ -97,11 +102,16 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // for this |context|.
   static BrowsingDataRemover* GetBrowsingDataRemover(BrowserContext* context);
 
+  // Returns a StoragePartition for the given SiteInstance. By default this will
+  // create a new StoragePartition if it doesn't exist, unless |can_create| is
+  // false.
   static StoragePartition* GetStoragePartition(BrowserContext* browser_context,
-                                               SiteInstance* site_instance);
+                                               SiteInstance* site_instance,
+                                               bool can_create = true);
   static StoragePartition* GetStoragePartitionForSite(
       BrowserContext* browser_context,
-      const GURL& site);
+      const GURL& site,
+      bool can_create = true);
   using StoragePartitionCallback = base::Callback<void(StoragePartition*)>;
   static void ForEachStoragePartition(
       BrowserContext* browser_context,
@@ -121,12 +131,14 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   static StoragePartition* GetDefaultStoragePartition(
       BrowserContext* browser_context);
 
-  using BlobCallback = base::Callback<void(std::unique_ptr<BlobHandle>)>;
+  using BlobCallback = base::OnceCallback<void(std::unique_ptr<BlobHandle>)>;
 
   // |callback| returns a nullptr scoped_ptr on failure.
   static void CreateMemoryBackedBlob(BrowserContext* browser_context,
-                                     const char* data, size_t length,
-                                     const BlobCallback& callback);
+                                     const char* data,
+                                     size_t length,
+                                     const std::string& content_type,
+                                     BlobCallback callback);
 
   // |callback| returns a nullptr scoped_ptr on failure.
   static void CreateFileBackedBlob(BrowserContext* browser_context,
@@ -134,7 +146,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
                                    int64_t offset,
                                    int64_t size,
                                    const base::Time& expected_modification_time,
-                                   const BlobCallback& callback);
+                                   BlobCallback callback);
 
   // Delivers a push message with |data| to the Service Worker identified by
   // |origin| and |service_worker_registration_id|.
@@ -240,6 +252,10 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // otherwise.
   virtual PermissionManager* GetPermissionManager() = 0;
 
+  // Returns the BackgroundFetchDelegate associated with that context if any,
+  // nullptr otherwise.
+  virtual BackgroundFetchDelegate* GetBackgroundFetchDelegate() = 0;
+
   // Returns the BackgroundSyncController associated with that context if any,
   // nullptr otherwise.
   virtual BackgroundSyncController* GetBackgroundSyncController() = 0;
@@ -287,6 +303,12 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // 1) The embedder needs to use a new salt, and
   // 2) The embedder saves its salt across restarts.
   static std::string CreateRandomMediaDeviceIDSalt();
+
+  // Media service for storing/retrieving video decoding performance stats.
+  // Exposed here rather than StoragePartition because all SiteInstances should
+  // have similar decode performance and stats are not exposed to the web
+  // directly, so privacy is not compromised.
+  virtual media::VideoDecodePerfHistory* GetVideoDecodePerfHistory();
 
  private:
   const std::string media_device_id_salt_;

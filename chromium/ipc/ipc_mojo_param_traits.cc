@@ -10,13 +10,6 @@
 
 namespace IPC {
 
-void ParamTraits<mojo::MessagePipeHandle>::GetSize(base::PickleSizer* sizer,
-                                                   const param_type& p) {
-  GetParamSize(sizer, p.is_valid());
-  if (p.is_valid())
-    sizer->AddAttachment();
-}
-
 void ParamTraits<mojo::MessagePipeHandle>::Write(base::Pickle* m,
                                                  const param_type& p) {
   WriteParam(m, p.is_valid());
@@ -48,14 +41,6 @@ void ParamTraits<mojo::MessagePipeHandle>::Log(const param_type& p,
   l->append(")");
 }
 
-void ParamTraits<mojo::DataPipeConsumerHandle>::GetSize(
-    base::PickleSizer* sizer,
-    const param_type& p) {
-  GetParamSize(sizer, p.is_valid());
-  if (p.is_valid())
-    sizer->AddAttachment();
-}
-
 void ParamTraits<mojo::DataPipeConsumerHandle>::Write(base::Pickle* m,
                                                       const param_type& p) {
   WriteParam(m, p.is_valid());
@@ -84,7 +69,7 @@ bool ParamTraits<mojo::DataPipeConsumerHandle>::Read(const base::Pickle* m,
   MessageAttachment::Type type =
       static_cast<MessageAttachment*>(attachment.get())->GetType();
   if (type != MessageAttachment::Type::MOJO_HANDLE) {
-    DLOG(ERROR) << "Unexpected attachment type:" << type;
+    DLOG(ERROR) << "Unexpected attachment type:" << static_cast<int>(type);
     return false;
   }
 

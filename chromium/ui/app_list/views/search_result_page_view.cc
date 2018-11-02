@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
+#include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/views/app_list_main_view.h"
 #include "ui/app_list/views/contents_view.h"
@@ -23,6 +24,8 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
+#include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/shadow_border.h"
@@ -31,13 +34,8 @@ namespace app_list {
 
 namespace {
 
-constexpr int kGroupSpacing = 6;
-constexpr int kTopPadding = 8;
-constexpr int kFullscreenHeight = 440;
-constexpr int kFullscreenWidth = 640;
-
-// The z-height of the search box and cards in this view.
-constexpr int kSearchResultZHeight = 1;
+constexpr int kHeight = 440;
+constexpr int kWidth = 640;
 
 // The horizontal padding of the separator.
 constexpr int kSeparatorPadding = 12;
@@ -53,12 +51,6 @@ constexpr SkColor kSeparatorColor = SkColorSetARGBMacro(0x1F, 0x00, 0x00, 0x00);
 class SearchCardView : public views::View {
  public:
   explicit SearchCardView(views::View* content_view) {
-    if (!features::IsFullscreenAppListEnabled()) {
-      SetBorder(base::MakeUnique<views::ShadowBorder>(
-          GetShadowForZHeight(kSearchResultZHeight)));
-      content_view->SetBackground(
-          views::CreateSolidBackground(kCardBackgroundColor));
-    }
     SetLayoutManager(new views::FillLayout());
     AddChildView(content_view);
   }
@@ -75,6 +67,15 @@ class ZeroWidthVerticalScrollBar : public views::OverlayScrollBar {
 
   // OverlayScrollBar overrides:
   int GetThickness() const override { return 0; }
+
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (!features::IsAppListFocusEnabled())
+      return OverlayScrollBar::OnKeyPressed(event);
+
+    // Arrow keys should be handled by FocusManager to move focus. When a search
+    // result is focued, it will be set visible in scroll view.
+    return false;
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ZeroWidthVerticalScrollBar);
@@ -142,41 +143,23 @@ class SearchResultPageView::HorizontalSeparator : public views::View {
 
 SearchResultPageView::SearchResultPageView()
     : selected_index_(0),
-      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
+      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()),
       contents_view_(new views::View) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
+  contents_view_->SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
 
-  if (is_fullscreen_app_list_enabled_) {
-    contents_view_->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
-
-    // Hides this view behind the search box by using the same color and
-    // background border corner radius. All child views' background should be
-    // set transparent so that the rounded corner is not overwritten.
-    SetBackground(base::MakeUnique<SearchResultPageBackground>(
-        kCardBackgroundColorFullscreen,
-        kSearchBoxBorderCornerRadiusFullscreen));
-  } else {
-    gfx::ShadowValue shadow = GetShadowForZHeight(kSearchResultZHeight);
-    std::unique_ptr<views::Border> border(new views::ShadowBorder(shadow));
-
-    gfx::Insets insets =
-        gfx::Insets(kTopPadding, kSearchBoxPadding, 0, kSearchBoxPadding);
-    insets += -border->GetInsets();
-
-    views::BoxLayout* layout = new views::BoxLayout(
-        views::BoxLayout::kVertical, gfx::Insets(), kGroupSpacing);
-    layout->set_inside_border_insets(insets);
-    contents_view_->SetLayoutManager(layout);
-  }
-
+  // Hides this view behind the search box by using the same color and
+  // background border corner radius. All child views' background should be
+  // set transparent so that the rounded corner is not overwritten.
+  SetBackground(std::make_unique<SearchResultPageBackground>(
+      kCardBackgroundColor, kSearchBoxBorderCornerRadius));
   views::ScrollView* const scroller = new views::ScrollView;
-  if (is_fullscreen_app_list_enabled_) {
-    // Leaves a placeholder area for the search box and the separator below it.
-    scroller->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(kSearchBoxHeight + kSeparatorThickness, 0, 0, 0)));
-  }
+  // Leaves a placeholder area for the search box and the separator below it.
+  scroller->SetBorder(views::CreateEmptyBorder(
+      gfx::Insets(kSearchBoxHeight + kSeparatorThickness, 0, 0, 0)));
+  scroller->set_draw_overflow_indicator(false);
   scroller->SetContents(contents_view_);
   // Setting clip height is necessary to make ScrollView take into account its
   // contents' size. Using zeroes doesn't prevent it from scrolling and sizing
@@ -201,7 +184,7 @@ void SearchResultPageView::SetSelection(bool select) {
 void SearchResultPageView::AddSearchResultContainerView(
     AppListModel::SearchResults* results_model,
     SearchResultContainerView* result_container) {
-  if (is_fullscreen_app_list_enabled_ && !result_container_views_.empty()) {
+  if (!result_container_views_.empty()) {
     HorizontalSeparator* separator = new HorizontalSeparator(bounds().width());
     contents_view_->AddChildView(separator);
     separators_.push_back(separator);
@@ -213,6 +196,38 @@ void SearchResultPageView::AddSearchResultContainerView(
 }
 
 bool SearchResultPageView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (is_app_list_focus_enabled_) {
+    // Let the FocusManager handle Left/Right keys.
+    if (!CanProcessUpDownKeyTraversal(event))
+      return false;
+
+    views::View* next_focusable_view = nullptr;
+    if (event.key_code() == ui::VKEY_UP) {
+      next_focusable_view = GetFocusManager()->GetNextFocusableView(
+          GetFocusManager()->GetFocusedView(), GetWidget(), true, false);
+    } else {
+      DCHECK_EQ(event.key_code(), ui::VKEY_DOWN);
+      next_focusable_view = GetFocusManager()->GetNextFocusableView(
+          GetFocusManager()->GetFocusedView(), GetWidget(), false, false);
+    }
+
+    if (next_focusable_view && !Contains(next_focusable_view)) {
+      // Hitting up key when focus is on first search result or hitting down
+      // key when focus is on last search result should move focus onto search
+      // box and select all text.
+      views::Textfield* search_box =
+          AppListPage::contents_view()->GetSearchBoxView()->search_box();
+      search_box->RequestFocus();
+      search_box->SelectAll(false);
+      return true;
+    }
+
+    // Return false to let FocusManager to handle default focus move by key
+    // events.
+    return false;
+  }
+  // TODO(weidongg/766807) Remove everything below when the flag is enabled by
+  // default.
   if (HasSelection() &&
       result_container_views_.at(selected_index_)->OnKeyPressed(event)) {
     return true;
@@ -234,13 +249,9 @@ bool SearchResultPageView::OnKeyPressed(const ui::KeyEvent& event) {
       directional_movement = true;
       break;
     case ui::VKEY_LEFT:
-      if (!is_fullscreen_app_list_enabled_)
-        return false;
       dir = -forward_dir;
       break;
     case ui::VKEY_RIGHT:
-      if (!is_fullscreen_app_list_enabled_)
-        return false;
       dir = forward_dir;
       break;
     default:
@@ -259,9 +270,6 @@ bool SearchResultPageView::OnKeyPressed(const ui::KeyEvent& event) {
     return true;
   }
 
-  if (!is_fullscreen_app_list_enabled_)
-    return false;
-
   if (dir == -1) {
     // Shift+tab/up/left key could move focus back to search box.
     ClearSelectedIndex();
@@ -274,9 +282,7 @@ const char* SearchResultPageView::GetClassName() const {
 }
 
 gfx::Size SearchResultPageView::CalculatePreferredSize() const {
-  if (!is_fullscreen_app_list_enabled_)
-    return GetDefaultContentsBounds().size();
-  return gfx::Size(kFullscreenWidth, kFullscreenHeight);
+  return gfx::Size(kWidth, kHeight);
 }
 
 void SearchResultPageView::ClearSelectedIndex() {
@@ -303,28 +309,7 @@ bool SearchResultPageView::IsValidSelectionIndex(int index) {
   return index >= 0 && index < static_cast<int>(result_container_views_.size());
 }
 
-void SearchResultPageView::OnSearchResultContainerResultsChanged() {
-  DCHECK(!result_container_views_.empty());
-  if (is_fullscreen_app_list_enabled_)
-    DCHECK(result_container_views_.size() == separators_.size() + 1);
-
-  // Only sort and layout the containers when they have all updated.
-  for (SearchResultContainerView* view : result_container_views_) {
-    if (view->UpdateScheduled()) {
-      return;
-    }
-  }
-
-  SearchResultContainerView* old_selection =
-      HasSelection() ? result_container_views_[selected_index_] : nullptr;
-
-  // Truncate the currently selected container's selection if necessary. If
-  // there are no results, the selection will be cleared below.
-  if (old_selection && old_selection->num_results() > 0 &&
-      old_selection->selected_index() >= old_selection->num_results()) {
-    old_selection->SetSelectedIndex(old_selection->num_results() - 1);
-  }
-
+void SearchResultPageView::ReorderSearchResultContainers() {
   // Sort the result container views by their score.
   std::sort(result_container_views_.begin(), result_container_views_.end(),
             [](const SearchResultContainerView* a,
@@ -336,7 +321,7 @@ void SearchResultPageView::OnSearchResultContainerResultsChanged() {
   for (size_t i = 0; i < result_container_views_.size(); ++i) {
     SearchResultContainerView* view = result_container_views_[i];
 
-    if (is_fullscreen_app_list_enabled_ && i > 0) {
+    if (i > 0) {
       HorizontalSeparator* separator = separators_[i - 1];
       // Hides the separator above the container that has no results.
       if (!view->container_score())
@@ -358,6 +343,46 @@ void SearchResultPageView::OnSearchResultContainerResultsChanged() {
   }
 
   Layout();
+}
+
+void SearchResultPageView::OnSearchResultContainerResultsChanged() {
+  DCHECK(!result_container_views_.empty());
+  DCHECK(result_container_views_.size() == separators_.size() + 1);
+
+  // Only sort and layout the containers when they have all updated.
+  for (SearchResultContainerView* view : result_container_views_) {
+    if (view->UpdateScheduled()) {
+      return;
+    }
+  }
+
+  if (is_app_list_focus_enabled_) {
+    if (result_container_views_.empty())
+      return;
+    // Set the first result (if it exists) selected when search results are
+    // updated. Note that the focus is not set on the first result to prevent
+    // frequent focus switch between search box and first result during typing
+    // query.
+    SearchResultContainerView* old_first_container_view =
+        result_container_views_[0];
+    ReorderSearchResultContainers();
+    old_first_container_view->SetFirstResultSelected(false);
+    first_result_view_ =
+        result_container_views_[0]->SetFirstResultSelected(true);
+    return;
+  }
+
+  SearchResultContainerView* old_selection =
+      HasSelection() ? result_container_views_[selected_index_] : nullptr;
+
+  // Truncate the currently selected container's selection if necessary. If
+  // there are no results, the selection will be cleared below.
+  if (old_selection && old_selection->num_results() > 0 &&
+      old_selection->selected_index() >= old_selection->num_results()) {
+    old_selection->SetSelectedIndex(old_selection->num_results() - 1);
+  }
+
+  ReorderSearchResultContainers();
 
   SearchResultContainerView* new_selection = nullptr;
   if (HasSelection() &&
@@ -381,20 +406,13 @@ void SearchResultPageView::OnSearchResultContainerResultsChanged() {
 
 gfx::Rect SearchResultPageView::GetPageBoundsForState(
     AppListModel::State state) const {
-  if (!is_fullscreen_app_list_enabled_) {
-    return (state == AppListModel::STATE_SEARCH_RESULTS
-                ? GetDefaultContentsBounds()
-                : GetAboveContentsOffscreenBounds(
-                      GetDefaultContentsBounds().size()));
-  }
-
   if (state != AppListModel::STATE_SEARCH_RESULTS) {
     // Hides this view behind the search box by using the same bounds.
     return AppListPage::contents_view()->GetSearchBoxBoundsForState(state);
   }
 
   gfx::Rect onscreen_bounds(AppListPage::GetSearchBoxBounds());
-  onscreen_bounds.Offset((onscreen_bounds.width() - kFullscreenWidth) / 2, 0);
+  onscreen_bounds.Offset((onscreen_bounds.width() - kWidth) / 2, 0);
   onscreen_bounds.set_size(GetPreferredSize());
   return onscreen_bounds;
 }
@@ -406,23 +424,20 @@ void SearchResultPageView::OnAnimationUpdated(double progress,
       to_state != AppListModel::STATE_SEARCH_RESULTS) {
     return;
   }
+  const SearchBoxView* search_box =
+      AppListPage::contents_view()->GetSearchBoxView();
+  const SkColor color = gfx::Tween::ColorValueBetween(
+      progress, search_box->GetBackgroundColorForState(from_state),
+      search_box->GetBackgroundColorForState(to_state));
 
-  if (is_fullscreen_app_list_enabled_) {
-    const SearchBoxView* search_box =
-        AppListPage::contents_view()->GetSearchBoxView();
-    const SkColor color = gfx::Tween::ColorValueBetween(
-        progress, search_box->GetBackgroundColorForState(from_state),
-        search_box->GetBackgroundColorForState(to_state));
-
-    // Grows this view in the same pace as the search box to make them look
-    // like a single view.
-    SetBackground(base::MakeUnique<SearchResultPageBackground>(
-        color,
-        gfx::Tween::LinearIntValueBetween(
-            progress,
-            SearchBoxView::GetSearchBoxBorderCornerRadiusForState(from_state),
-            SearchBoxView::GetSearchBoxBorderCornerRadiusForState(to_state))));
-  }
+  // Grows this view in the same pace as the search box to make them look
+  // like a single view.
+  SetBackground(std::make_unique<SearchResultPageBackground>(
+      color,
+      gfx::Tween::LinearIntValueBetween(
+          progress,
+          search_box->GetSearchBoxBorderCornerRadiusForState(from_state),
+          search_box->GetSearchBoxBorderCornerRadiusForState(to_state))));
 
   gfx::Rect onscreen_bounds(
       GetPageBoundsForState(AppListModel::STATE_SEARCH_RESULTS));
@@ -432,20 +447,16 @@ void SearchResultPageView::OnAnimationUpdated(double progress,
   set_clip_path(path);
 }
 
-int SearchResultPageView::GetSearchBoxZHeight() const {
-  return kSearchResultZHeight;
-}
-
 void SearchResultPageView::OnHidden() {
   ClearSelectedIndex();
 }
 
 gfx::Rect SearchResultPageView::GetSearchBoxBounds() const {
   gfx::Rect rect(AppListPage::GetSearchBoxBounds());
-  if (is_fullscreen_app_list_enabled_) {
-    rect.Offset((rect.width() - kFullscreenWidth) / 2, 0);
-    rect.set_size(gfx::Size(kFullscreenWidth, kSearchBoxHeight));
-  }
+
+  rect.Offset((rect.width() - kWidth) / 2, 0);
+  rect.set_size(gfx::Size(kWidth, kSearchBoxHeight));
+
   return rect;
 }
 

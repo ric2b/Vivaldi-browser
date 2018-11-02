@@ -100,6 +100,7 @@ class IdlDefinitions(object):
         self.enumerations = {}
         self.implements = []
         self.interfaces = {}
+        self.first_name = None
         self.typedefs = {}
 
         node_class = node.GetClass()
@@ -112,6 +113,8 @@ class IdlDefinitions(object):
             if child_class == 'Interface':
                 interface = IdlInterface(child)
                 self.interfaces[interface.name] = interface
+                if not self.first_name:
+                    self.first_name = interface.name
             elif child_class == 'Typedef':
                 typedef = IdlTypedef(child)
                 self.typedefs[typedef.name] = typedef
@@ -126,6 +129,8 @@ class IdlDefinitions(object):
             elif child_class == 'Dictionary':
                 dictionary = IdlDictionary(child)
                 self.dictionaries[dictionary.name] = dictionary
+                if not self.first_name:
+                    self.first_name = dictionary.name
             else:
                 raise ValueError('Unrecognized node class: %s' % child_class)
 
@@ -204,7 +209,7 @@ class IdlCallbackFunction(TypedObject):
 class IdlDictionary(object):
     def __init__(self, node):
         self.extended_attributes = {}
-        self.is_partial = bool(node.GetProperty('Partial'))
+        self.is_partial = bool(node.GetProperty('PARTIAL'))
         self.name = node.GetName()
         self.members = []
         self.parent = None
@@ -303,8 +308,7 @@ class IdlInterface(object):
         self.partial_interfaces = []
 
         self.is_callback = bool(node.GetProperty('CALLBACK'))
-        # FIXME: uppercase 'Partial' => 'PARTIAL' in base IDL parser
-        self.is_partial = bool(node.GetProperty('Partial'))
+        self.is_partial = bool(node.GetProperty('PARTIAL'))
         self.name = node.GetName()
         self.idl_type = IdlType(self.name)
 
@@ -551,10 +555,7 @@ class IdlOperation(TypedObject):
         if not node:
             return
 
-        self.name = node.GetName()  # FIXME: should just be: or ''
-        # FIXME: AST should use None internally
-        if self.name == '_unnamed_':
-            self.name = ''
+        self.name = node.GetName()
 
         self.is_static = bool(node.GetProperty('STATIC'))
         property_dictionary = node.GetProperties()
@@ -935,10 +936,13 @@ def clear_constructor_attributes(extended_attributes):
 
 def type_node_to_type(node):
     children = node.GetChildren()
-    if len(children) != 1:
-        raise ValueError('Type node expects 1 child, got %d.' % len(children))
+    if len(children) != 1 and len(children) != 2:
+        raise ValueError('Type node expects 1 or 2 child(ren), got %d.' % len(children))
 
     base_type = type_node_inner_to_type(children[0])
+    if len(children) == 2:
+        extended_attributes = ext_attributes_node_to_extended_attributes(children[1])
+        base_type.set_extended_attributes(extended_attributes)
 
     if node.GetProperty('NULLABLE'):
         base_type = IdlNullableType(base_type)

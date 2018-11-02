@@ -22,11 +22,12 @@ void PreviewModeClient::Scroll(const pp::Point& point) {
   NOTREACHED();
 }
 
-void PreviewModeClient::ScrollToX(int position) {
+void PreviewModeClient::ScrollToX(int x_in_screen_coords) {
   NOTREACHED();
 }
 
-void PreviewModeClient::ScrollToY(int position) {
+void PreviewModeClient::ScrollToY(int y_in_screen_coords,
+                                  bool compensate_for_toolbar) {
   NOTREACHED();
 }
 
@@ -57,6 +58,9 @@ void PreviewModeClient::NotifySelectedFindResultChanged(
     int current_find_index) {
   NOTREACHED();
 }
+
+void PreviewModeClient::NotifyPageBecameVisible(
+    const PDFEngine::PageFeatures* page_features) {}
 
 void PreviewModeClient::GetDocumentPassword(
     pp::CompletionCallbackWithOutput<pp::Var> callback) {
@@ -101,36 +105,34 @@ void PreviewModeClient::SubmitForm(const std::string& url,
   NOTREACHED();
 }
 
-std::string PreviewModeClient::ShowFileSelectionDialog() {
-  NOTREACHED();
-  return std::string();
-}
-
 pp::URLLoader PreviewModeClient::CreateURLLoader() {
   NOTREACHED();
   return pp::URLLoader();
 }
 
-void PreviewModeClient::ScheduleCallback(int id, int delay_in_ms) {
+void PreviewModeClient::ScheduleCallback(int id, base::TimeDelta delay) {
   NOTREACHED();
 }
 
-void PreviewModeClient::ScheduleTouchTimerCallback(int id, int delay_in_ms) {
+void PreviewModeClient::ScheduleTouchTimerCallback(int id,
+                                                   base::TimeDelta delay) {
   NOTREACHED();
 }
 
-void PreviewModeClient::SearchString(const base::char16* string,
-                                     const base::char16* term,
-                                     bool case_sensitive,
-                                     std::vector<SearchStringResult>* results) {
+std::vector<PDFEngine::Client::SearchStringResult>
+PreviewModeClient::SearchString(const base::char16* string,
+                                const base::char16* term,
+                                bool case_sensitive) {
   NOTREACHED();
+  return std::vector<SearchStringResult>();
 }
 
 void PreviewModeClient::DocumentPaintOccurred() {
   NOTREACHED();
 }
 
-void PreviewModeClient::DocumentLoadComplete(int page_count) {
+void PreviewModeClient::DocumentLoadComplete(
+    const PDFEngine::DocumentFeatures& document_features) {
   client_->PreviewDocumentLoadComplete();
 }
 
@@ -162,6 +164,8 @@ bool PreviewModeClient::IsPrintPreview() {
   NOTREACHED();
   return false;
 }
+
+void PreviewModeClient::CancelBrowserDownload() {}
 
 uint32_t PreviewModeClient::GetBackgroundColor() {
   NOTREACHED();

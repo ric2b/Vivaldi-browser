@@ -15,13 +15,13 @@ namespace {
 
 class DataView final : public ArrayBufferView {
  public:
-  static RefPtr<DataView> Create(ArrayBuffer* buffer,
-                                 unsigned byte_offset,
-                                 unsigned byte_length) {
+  static scoped_refptr<DataView> Create(ArrayBuffer* buffer,
+                                        unsigned byte_offset,
+                                        unsigned byte_length) {
     CheckedNumeric<uint32_t> checked_max = byte_offset;
     checked_max += byte_length;
     CHECK_LE(checked_max.ValueOrDie(), buffer->ByteLength());
-    return AdoptRef(new DataView(buffer, byte_offset, byte_length));
+    return base::AdoptRef(new DataView(buffer, byte_offset, byte_length));
   }
 
   unsigned ByteLength() const override { return byte_length_; }
@@ -46,7 +46,7 @@ class DataView final : public ArrayBufferView {
 DOMDataView* DOMDataView::Create(DOMArrayBufferBase* buffer,
                                  unsigned byte_offset,
                                  unsigned byte_length) {
-  RefPtr<DataView> data_view =
+  scoped_refptr<DataView> data_view =
       DataView::Create(buffer->Buffer(), byte_offset, byte_length);
   return new DOMDataView(data_view, buffer);
 }

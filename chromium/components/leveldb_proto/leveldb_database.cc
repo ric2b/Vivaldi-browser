@@ -13,10 +13,9 @@
 #include "base/strings/string_split.h"
 #include "base/threading/thread_checker.h"
 #include "third_party/leveldatabase/env_chromium.h"
-#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/cache.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
@@ -25,18 +24,16 @@
 
 namespace leveldb_proto {
 
-// static
-bool LevelDB::Destroy(const base::FilePath& database_dir) {
-  const leveldb::Status s =
-      leveldb::DestroyDB(database_dir.AsUTF8Unsafe(), leveldb_env::Options());
-  return s.ok();
-}
-
-LevelDB::LevelDB(const char* client_name) : open_histogram_(nullptr) {
+LevelDB::LevelDB(const char* client_name)
+    : open_histogram_(nullptr), destroy_histogram_(nullptr) {
   // Used in lieu of UMA_HISTOGRAM_ENUMERATION because the histogram name is
   // not a constant.
   open_histogram_ = base::LinearHistogram::FactoryGet(
       std::string("LevelDB.Open.") + client_name, 1,
+      leveldb_env::LEVELDB_STATUS_MAX, leveldb_env::LEVELDB_STATUS_MAX + 1,
+      base::Histogram::kUmaTargetedHistogramFlag);
+  destroy_histogram_ = base::LinearHistogram::FactoryGet(
+      std::string("LevelDB.Destroy.") + client_name, 1,
       leveldb_env::LEVELDB_STATUS_MAX, leveldb_env::LEVELDB_STATUS_MAX + 1,
       base::Histogram::kUmaTargetedHistogramFlag);
 }
@@ -45,18 +42,28 @@ LevelDB::~LevelDB() {
   DFAKE_SCOPED_LOCK(thread_checker_);
 }
 
-bool LevelDB::InitWithOptions(const base::FilePath& database_dir,
-                              const leveldb_env::Options& options) {
+bool LevelDB::Init(const base::FilePath& database_dir,
+                   const leveldb_env::Options& options) {
   DFAKE_SCOPED_LOCK(thread_checker_);
+  database_dir_ = database_dir;
+  open_options_ = options;
 
-  std::string path = database_dir.AsUTF8Unsafe();
+  if (database_dir.empty()) {
+    env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    open_options_.env = env_.get();
+  }
 
-  leveldb::Status status = leveldb_env::OpenDB(options, path, &db_);
+  const std::string path = database_dir.AsUTF8Unsafe();
+
+  leveldb::Status status = leveldb_env::OpenDB(open_options_, path, &db_);
   if (open_histogram_)
     open_histogram_->Add(leveldb_env::GetLevelDBStatusUMAValue(status));
   if (status.IsCorruption()) {
-    base::DeleteFile(database_dir, true);
-    status = leveldb_env::OpenDB(options, path, &db_);
+    if (!Destroy())
+      return false;
+    status = leveldb_env::OpenDB(open_options_, path, &db_);
+    // Intentionally do not log the status of the second open. Doing so destroys
+    // the meaning of corruptions/open which is an important statistic.
   }
 
   if (status.ok())
@@ -65,29 +72,6 @@ bool LevelDB::InitWithOptions(const base::FilePath& database_dir,
   LOG(WARNING) << "Unable to open " << database_dir.value() << ": "
                << status.ToString();
   return false;
-}
-
-bool LevelDB::Init(const leveldb_proto::Options& options) {
-  leveldb_env::Options leveldb_options;
-  leveldb_options.create_if_missing = true;
-  leveldb_options.max_open_files = 0;  // Use minimum.
-
-  if (options.write_buffer_size != 0)
-    leveldb_options.write_buffer_size = options.write_buffer_size;
-  switch (options.shared_cache) {
-    case leveldb_env::SharedReadCache::Web:
-      leveldb_options.block_cache = leveldb_env::SharedWebBlockCache();
-      break;
-    case leveldb_env::SharedReadCache::Default:
-      // fallthrough
-      break;
-  }
-  if (options.database_dir.empty()) {
-    env_.reset(leveldb::NewMemEnv(leveldb::Env::Default()));
-    leveldb_options.env = env_.get();
-  }
-
-  return InitWithOptions(options.database_dir, leveldb_options);
 }
 
 bool LevelDB::Save(const base::StringPairs& entries_to_save,
@@ -164,6 +148,17 @@ bool LevelDB::Get(const std::string& key, bool* found, std::string* entry) {
   DLOG(WARNING) << "Failed loading leveldb_proto entry with key \"" << key
                 << "\": " << status.ToString();
   return false;
+}
+
+bool LevelDB::Destroy() {
+  db_.reset();
+  const std::string path = database_dir_.AsUTF8Unsafe();
+  const leveldb::Status s = leveldb::DestroyDB(path, open_options_);
+  if (!s.ok())
+    LOG(WARNING) << "Unable to destroy " << path << ": " << s.ToString();
+  if (destroy_histogram_)
+    destroy_histogram_->Add(leveldb_env::GetLevelDBStatusUMAValue(s));
+  return s.ok();
 }
 
 }  // namespace leveldb_proto

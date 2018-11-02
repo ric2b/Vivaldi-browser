@@ -4,7 +4,8 @@
 
 #include "ui/message_center/views/notification_header_view.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -13,7 +14,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/vector_icons.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -56,7 +57,7 @@ constexpr int kExpandIconSize = 8;
 // Paddings of the expand buttons.
 // Top: 13px = 15px (from the mock) - 2px (outer padding)
 // Bottom: 9px from the mock
-constexpr gfx::Insets kExpandIconViewPadding(13, 0, 9, 0);
+constexpr gfx::Insets kExpandIconViewPadding(13, 2, 9, 0);
 
 // Bullet character. The divider symbol between different parts of the header.
 constexpr wchar_t kNotificationHeaderDivider[] = L" \u2022 ";
@@ -90,7 +91,7 @@ class ExpandButton : public views::ImageView {
 
 ExpandButton::ExpandButton() {
   focus_painter_ = views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 2, 2, 2));
+      kFocusBorderColor, gfx::Insets(0, 0, 1, 1));
   SetFocusBehavior(FocusBehavior::ALWAYS);
 }
 
@@ -98,7 +99,9 @@ ExpandButton::~ExpandButton() = default;
 
 void ExpandButton::OnPaint(gfx::Canvas* canvas) {
   views::ImageView::OnPaint(canvas);
-  views::Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
+  if (HasFocus())
+    views::Painter::PaintPainterAt(canvas, focus_painter_.get(),
+                                   GetContentsBounds());
 }
 
 void ExpandButton::OnFocus() {
@@ -186,14 +189,16 @@ NotificationHeaderView::NotificationHeaderView(
   DCHECK_EQ(kInnerHeaderHeight, app_icon_view_->GetPreferredSize().height());
   app_info_container->AddChildView(app_icon_view_);
 
-  // Font list for text views.
-  const gfx::FontList& font_list = GetHeaderTextFontList();
-  // The height must be 15px to match with the mock.
+  // Font list for text views. The height must be 15px to match with the mock.
+  gfx::FontList font_list = GetHeaderTextFontList();
   DCHECK_EQ(15, font_list.GetHeight());
+
+  const int font_list_height = font_list.GetHeight();
 
   // App name view
   app_name_view_ = new views::Label(base::string16());
   app_name_view_->SetFontList(font_list);
+  app_name_view_->SetLineHeight(font_list_height);
   app_name_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   app_name_view_->SetEnabledColor(accent_color_);
   app_name_view_->SetBorder(views::CreateEmptyBorder(kTextViewPadding));
@@ -204,6 +209,7 @@ NotificationHeaderView::NotificationHeaderView(
   summary_text_divider_ =
       new views::Label(base::WideToUTF16(kNotificationHeaderDivider));
   summary_text_divider_->SetFontList(font_list);
+  summary_text_divider_->SetLineHeight(font_list_height);
   summary_text_divider_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   summary_text_divider_->SetBorder(views::CreateEmptyBorder(kTextViewPadding));
   summary_text_divider_->SetVisible(false);
@@ -214,6 +220,7 @@ NotificationHeaderView::NotificationHeaderView(
   // Summary text view
   summary_text_view_ = new views::Label(base::string16());
   summary_text_view_->SetFontList(font_list);
+  summary_text_view_->SetLineHeight(font_list_height);
   summary_text_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   summary_text_view_->SetBorder(views::CreateEmptyBorder(kTextViewPadding));
   summary_text_view_->SetVisible(false);
@@ -225,6 +232,7 @@ NotificationHeaderView::NotificationHeaderView(
   timestamp_divider_ =
       new views::Label(base::WideToUTF16(kNotificationHeaderDivider));
   timestamp_divider_->SetFontList(font_list);
+  timestamp_divider_->SetLineHeight(font_list_height);
   timestamp_divider_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   timestamp_divider_->SetBorder(views::CreateEmptyBorder(kTextViewPadding));
   timestamp_divider_->SetVisible(false);
@@ -235,6 +243,7 @@ NotificationHeaderView::NotificationHeaderView(
   // Timestamp view
   timestamp_view_ = new views::Label(base::string16());
   timestamp_view_->SetFontList(font_list);
+  timestamp_view_->SetLineHeight(font_list_height);
   timestamp_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   timestamp_view_->SetBorder(views::CreateEmptyBorder(kTextViewPadding));
   timestamp_view_->SetVisible(false);
@@ -268,7 +277,8 @@ void NotificationHeaderView::SetAppIcon(const gfx::ImageSkia& img) {
 }
 
 void NotificationHeaderView::ClearAppIcon() {
-  app_icon_view_->SetImage(gfx::CreateVectorIcon(kProductIcon, accent_color_));
+  app_icon_view_->SetImage(
+      gfx::CreateVectorIcon(kProductIcon, kSmallImageSizeMD, accent_color_));
 }
 
 void NotificationHeaderView::SetAppName(const base::string16& name) {
@@ -344,7 +354,7 @@ bool NotificationHeaderView::IsExpandButtonEnabled() {
 }
 
 std::unique_ptr<views::InkDrop> NotificationHeaderView::CreateInkDrop() {
-  return base::MakeUnique<views::InkDropStub>();
+  return std::make_unique<views::InkDropStub>();
 }
 
 void NotificationHeaderView::UpdateSummaryTextVisibility() {

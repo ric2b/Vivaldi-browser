@@ -27,7 +27,6 @@ typedef unsigned long long Milliseconds;
 
 [
     ActiveScriptWrappable,
-    DependentLifetime,
     Exposed=(Window,Worker)
 ] interface NetworkInformation : EventTarget {
     [RuntimeEnabled=NetInfoDownlinkMax, MeasureAs=NetInfoType] readonly attribute ConnectionType type;
@@ -37,4 +36,5 @@ typedef unsigned long long Milliseconds;
     [RuntimeEnabled=NetInfoEffectiveType, MeasureAs=NetInfoEffectiveType] readonly attribute EffectiveConnectionType effectiveType;
     [RuntimeEnabled=NetInfoRtt, MeasureAs=NetInfoRtt] readonly attribute Milliseconds rtt;
     [RuntimeEnabled=NetInfoDownlink, MeasureAs=NetInfoDownlink] readonly attribute Megabit downlink;
+    [RuntimeEnabled=NetInfoSaveData, MeasureAs=NetInfoSaveData] readonly attribute boolean saveData;
 };

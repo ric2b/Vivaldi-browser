@@ -36,17 +36,6 @@ import name_utilities
 import template_expander
 
 
-HEADER_TEMPLATE = """%(license)s
-
-#ifndef %(namespace)s%(suffix)sHeaders_h
-#define %(namespace)s%(suffix)sHeaders_h
-%(base_header_for_suffix)s
-%(includes)s
-
-#endif // %(namespace)s%(suffix)sHeaders_h
-"""
-
-
 # All events on the following whitelist are matched case-insensitively
 # in createEvent.
 #
@@ -121,23 +110,25 @@ class EventFactoryWriter(json5_generator.Writer):
     def __init__(self, json5_file_path):
         super(EventFactoryWriter, self).__init__(json5_file_path)
         self.namespace = self.json5_file.metadata['namespace'].strip('"')
+        assert self.namespace == 'Event', 'namespace field should be "Event".'
         self.suffix = self.json5_file.metadata['suffix'].strip('"')
-        self._outputs = {(self.namespace + self.suffix + "Headers.h"): self.generate_headers_header,
-                         (self.namespace + self.suffix + ".cpp"): self.generate_implementation,
-                        }
+        snake_suffix = (self.suffix.lower() + '_') if self.suffix else ''
+        self._outputs = {
+            ('event_%sfactory.cc' % snake_suffix): self.generate_implementation,
+        }
 
     def _fatal(self, message):
         print 'FATAL ERROR: ' + message
         exit(1)
 
     def _headers_header_include_path(self, entry):
+        path = os.path.dirname(entry['name'])
+        if len(path):
+            path += '/'
         if entry['ImplementedAs']:
-            path = os.path.dirname(entry['name'])
-            if len(path):
-                path += '/'
-            path += entry['ImplementedAs']
+            path += self.get_file_basename(entry['ImplementedAs'])
         else:
-            path = entry['name']
+            path += self.get_file_basename(os.path.basename(entry['name']))
         return path + '.h'
 
     def _headers_header_includes(self, entries):
@@ -147,35 +138,15 @@ class EventFactoryWriter(json5_generator.Writer):
             # Avoid duplicate includes.
             if cpp_name in includes:
                 continue
-            if self.suffix == 'Modules':
-                subdir_name = 'modules'
-            else:
-                subdir_name = 'core'
-            includes[cpp_name] = '#include "%(path)s"\n#include "bindings/%(subdir_name)s/v8/V8%(script_name)s.h"' % {
-                'path': self._headers_header_include_path(entry),
-                'script_name': name_utilities.script_name(entry),
-                'subdir_name': subdir_name,
-            }
-        return includes.values()
-
-    def generate_headers_header(self):
-        base_header_for_suffix = ''
-        if self.suffix:
-            base_header_for_suffix = '\n#include "core/%(namespace)sHeaders.h"\n' % {'namespace': self.namespace}
-        return HEADER_TEMPLATE % {
-            'input_files': self._input_files,
-            'license': license.license_for_generated_cpp(),
-            'namespace': self.namespace,
-            'suffix': self.suffix,
-            'base_header_for_suffix': base_header_for_suffix,
-            'includes': '\n'.join(self._headers_header_includes(self.json5_file.name_dictionaries)),
-        }
+            includes[cpp_name] = self._headers_header_include_path(entry)
+        return sorted(includes.values())
 
     @template_expander.use_jinja('templates/EventFactory.cpp.tmpl', filters=filters)
     def generate_implementation(self):
         return {
+            'include_header_paths': self._headers_header_includes(
+                self.json5_file.name_dictionaries),
             'input_files': self._input_files,
-            'namespace': self.namespace,
             'suffix': self.suffix,
             'events': self.json5_file.name_dictionaries,
         }

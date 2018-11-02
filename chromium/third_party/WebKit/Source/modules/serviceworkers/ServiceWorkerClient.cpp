@@ -6,6 +6,7 @@
 #include "modules/serviceworkers/ServiceWorkerWindowClient.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
@@ -13,8 +14,8 @@
 #include "core/frame/UseCounter.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebString.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom-blink.h"
 
 namespace blink {
 
@@ -25,12 +26,11 @@ ServiceWorkerClient* ServiceWorkerClient::Take(
     return nullptr;
 
   switch (web_client->client_type) {
-    case kWebServiceWorkerClientTypeWindow:
+    case mojom::ServiceWorkerClientType::kWindow:
       return ServiceWorkerWindowClient::Create(*web_client);
-    case kWebServiceWorkerClientTypeWorker:
-    case kWebServiceWorkerClientTypeSharedWorker:
+    case mojom::ServiceWorkerClientType::kSharedWorker:
       return ServiceWorkerClient::Create(*web_client);
-    case kWebServiceWorkerClientTypeLast:
+    case mojom::ServiceWorkerClientType::kAll:
       NOTREACHED();
       return nullptr;
   }
@@ -53,13 +53,11 @@ ServiceWorkerClient::~ServiceWorkerClient() {}
 
 String ServiceWorkerClient::type() const {
   switch (type_) {
-    case kWebServiceWorkerClientTypeWindow:
+    case mojom::ServiceWorkerClientType::kWindow:
       return "window";
-    case kWebServiceWorkerClientTypeWorker:
-      return "worker";
-    case kWebServiceWorkerClientTypeSharedWorker:
+    case mojom::ServiceWorkerClientType::kSharedWorker:
       return "sharedworker";
-    case kWebServiceWorkerClientTypeAll:
+    case mojom::ServiceWorkerClientType::kAll:
       NOTREACHED();
       return String();
   }
@@ -86,22 +84,21 @@ String ServiceWorkerClient::frameType(ScriptState* script_state) const {
   return String();
 }
 
-void ServiceWorkerClient::postMessage(ScriptState* script_state,
-                                      PassRefPtr<SerializedScriptValue> message,
-                                      const MessagePortArray& ports,
-                                      ExceptionState& exception_state) {
+void ServiceWorkerClient::postMessage(
+    ScriptState* script_state,
+    scoped_refptr<SerializedScriptValue> message,
+    const MessagePortArray& ports,
+    ExceptionState& exception_state) {
   ExecutionContext* context = ExecutionContext::From(script_state);
   // Disentangle the port in preparation for sending it to the remote context.
-  MessagePortChannelArray channels =
+  auto channels =
       MessagePort::DisentanglePorts(context, ports, exception_state);
   if (exception_state.HadException())
     return;
 
   WebString message_string = message->ToWireString();
-  WebMessagePortChannelArray web_channels =
-      MessagePort::ToWebMessagePortChannelArray(std::move(channels));
   ServiceWorkerGlobalScopeClient::From(context)->PostMessageToClient(
-      uuid_, message_string, std::move(web_channels));
+      uuid_, message_string, std::move(channels));
 }
 
 }  // namespace blink

@@ -56,14 +56,14 @@ QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source,
     : QuicServer(std::move(proof_source),
                  QuicConfig(),
                  QuicCryptoServerConfig::ConfigOptions(),
-                 AllSupportedVersions(),
+                 AllSupportedTransportVersions(),
                  response_cache) {}
 
 QuicServer::QuicServer(
     std::unique_ptr<ProofSource> proof_source,
     const QuicConfig& config,
     const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
-    const QuicVersionVector& supported_versions,
+    const QuicTransportVersionVector& supported_versions,
     QuicHttpResponseCache* response_cache)
     : port_(0),
       fd_(-1),
@@ -109,7 +109,7 @@ void QuicServer::Initialize() {
       QuicRandom::GetInstance(), &clock, crypto_config_options_));
 }
 
-QuicServer::~QuicServer() {}
+QuicServer::~QuicServer() = default;
 
 bool QuicServer::CreateUDPSocketAndListen(const QuicSocketAddress& address) {
   fd_ = QuicSocketUtils::CreateUDPSocket(address, &overflow_supported_);

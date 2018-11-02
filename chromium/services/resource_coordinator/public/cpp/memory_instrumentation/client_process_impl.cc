@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/pattern.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -21,46 +20,6 @@
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace memory_instrumentation {
-
-namespace {
-
-uint32_t GetDumpsSumKb(const std::string& pattern,
-                       const base::trace_event::ProcessMemoryDump& pmd) {
-  uint64_t sum = 0;
-  for (const auto& kv : pmd.allocator_dumps()) {
-    auto name = base::StringPiece(kv.first);
-    if (base::MatchPattern(name, pattern)) {
-      sum += kv.second->GetSizeInternal();
-    }
-  }
-  return sum / 1024;
-}
-
-mojom::ChromeMemDumpPtr CreateDumpSummary(
-    const base::trace_event::ProcessMemoryDump& process_memory_dump) {
-  mojom::ChromeMemDumpPtr result = mojom::ChromeMemDump::New();
-  // TODO(hjd): Transitional until we send the full PMD. See crbug.com/704203
-  result->malloc_total_kb = GetDumpsSumKb("malloc", process_memory_dump);
-  result->v8_total_kb = GetDumpsSumKb("v8/*", process_memory_dump);
-
-  result->command_buffer_total_kb =
-      GetDumpsSumKb("gpu/gl/textures/*", process_memory_dump);
-  result->command_buffer_total_kb +=
-      GetDumpsSumKb("gpu/gl/buffers/*", process_memory_dump);
-  result->command_buffer_total_kb +=
-      GetDumpsSumKb("gpu/gl/renderbuffers/*", process_memory_dump);
-
-  // partition_alloc reports sizes for both allocated_objects and
-  // partitions. The memory allocated_objects uses is a subset of
-  // the partitions memory so to avoid double counting we only
-  // count partitions memory.
-  result->partition_alloc_total_kb =
-      GetDumpsSumKb("partition_alloc/partitions/*", process_memory_dump);
-  result->blink_gc_total_kb = GetDumpsSumKb("blink_gc", process_memory_dump);
-  return result;
-}
-
-}  // namespace
 
 // static
 void ClientProcessImpl::CreateInstance(const Config& config) {
@@ -105,7 +64,7 @@ ClientProcessImpl::ClientProcessImpl(const Config& config)
           base::Unretained(this)),
       is_coordinator_process);
 
-  tracing_observer_ = base::MakeUnique<TracingObserver>(
+  tracing_observer_ = std::make_unique<TracingObserver>(
       base::trace_event::TraceLog::GetInstance(),
       base::trace_event::MemoryDumpManager::GetInstance());
 }
@@ -116,47 +75,35 @@ void ClientProcessImpl::RequestChromeMemoryDump(
     const base::trace_event::MemoryDumpRequestArgs& args,
     const RequestChromeMemoryDumpCallback& callback) {
   DCHECK(!callback.is_null());
+  auto it_and_inserted =
+      pending_chrome_callbacks_.emplace(args.dump_guid, std::move(callback));
+  DCHECK(it_and_inserted.second) << "Duplicated request id " << args.dump_guid;
   base::trace_event::MemoryDumpManager::GetInstance()->CreateProcessDump(
       args, base::Bind(&ClientProcessImpl::OnChromeMemoryDumpDone,
-                       base::Unretained(this), callback, args));
+                       base::Unretained(this)));
 }
 
 void ClientProcessImpl::OnChromeMemoryDumpDone(
-    const RequestChromeMemoryDumpCallback& callback,
-    const base::trace_event::MemoryDumpRequestArgs& req_args,
     bool success,
     uint64_t dump_guid,
     std::unique_ptr<base::trace_event::ProcessMemoryDump> process_memory_dump) {
   DCHECK(success || !process_memory_dump);
+
+  auto callback_it = pending_chrome_callbacks_.find(dump_guid);
+  DCHECK(callback_it != pending_chrome_callbacks_.end());
+
+  auto callback = std::move(callback_it->second);
+  pending_chrome_callbacks_.erase(callback_it);
+
   if (!process_memory_dump) {
     callback.Run(false, dump_guid, nullptr);
     return;
   }
-  // SUMMARY_ONLY dumps should just return the summarized result in the
-  // ProcessMemoryDumpCallback. These shouldn't be added to the trace to
-  // avoid confusing trace consumers.
-  if (req_args.dump_type != base::trace_event::MemoryDumpType::SUMMARY_ONLY) {
-    bool added_to_trace = tracing_observer_->AddChromeDumpToTraceIfEnabled(
-        req_args, process_memory_dump.get());
-    success = success && added_to_trace;
-  }
-
-  mojom::ChromeMemDumpPtr chrome_memory_dump;
-
-  // TODO(hjd): Transitional until we send the full PMD. See crbug.com/704203
-  // Don't try to fill the struct in detailed mode since it is hard to avoid
-  // double counting.
-  if (req_args.level_of_detail ==
-      base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {
-    chrome_memory_dump = mojom::ChromeMemDump::New();
-  } else {
-    chrome_memory_dump = CreateDumpSummary(*process_memory_dump.get());
-  }
-  callback.Run(success, dump_guid, std::move(chrome_memory_dump));
+  callback.Run(success, dump_guid, std::move(process_memory_dump));
 }
 
 void ClientProcessImpl::RequestGlobalMemoryDump_NoCallback(
-    const base::trace_event::MemoryDumpRequestArgs& args) {
+    const base::trace_event::GlobalMemoryDumpRequestArgs& args) {
   if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
@@ -165,8 +112,16 @@ void ClientProcessImpl::RequestGlobalMemoryDump_NoCallback(
     return;
   }
 
-  coordinator_->RequestGlobalMemoryDump(
-      args, mojom::Coordinator::RequestGlobalMemoryDumpCallback());
+  coordinator_->RequestGlobalMemoryDumpAndAppendToTrace(
+      args,
+      mojom::Coordinator::RequestGlobalMemoryDumpAndAppendToTraceCallback());
+}
+
+void ClientProcessImpl::EnableHeapProfiling(
+    base::trace_event::HeapProfilingMode mode,
+    const EnableHeapProfilingCallback& callback) {
+  callback.Run(base::trace_event::MemoryDumpManager::GetInstance()->
+                   EnableHeapProfiling(mode));
 }
 
 void ClientProcessImpl::RequestOSMemoryDump(

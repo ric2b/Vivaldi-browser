@@ -15,6 +15,17 @@ import argparse
 import cStringIO
 import os
 
+# Files that appear in sources lists but have no effect and are
+# ignored by the build system. We warn for unexpected files in the
+# sources list, but these are ok.
+NOOP_FILE_SUFFIXES = (
+  ".g",
+  ".idl",
+  ".inc",
+  ".json",
+  ".py",
+)
+
 
 def write_jumbo_files(inputs, outputs, written_input_set, written_output_set):
   output_count = len(outputs)
@@ -65,7 +76,7 @@ def main():
 
   written_output_set = set()  # Just for double checking
   written_input_set = set()  # Just for double checking
-  for language_ext in (".cc", ".c", ".mm"):
+  for language_ext in (".cc", ".c", ".mm", ".S"):
     if language_ext == ".cc":
       ext_pattern = (".cc", ".cpp")
     else:
@@ -82,7 +93,11 @@ def main():
 
   header_files = set([x for x in all_inputs if x.endswith(".h")])
   assert set(args.outputs) == written_output_set, "Did not fill all outputs"
-  files_not_included = set(all_inputs) - written_input_set - header_files
+  random_files_to_ignore = set([x for x in all_inputs
+                                if x.endswith(NOOP_FILE_SUFFIXES)])
+  files_not_included = set(all_inputs) - (written_input_set |
+                                          header_files |
+                                          random_files_to_ignore)
   assert not files_not_included, ("Jumbo build left out files: %s" %
                                   files_not_included)
   if args.verbose:

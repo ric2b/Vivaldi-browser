@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/resources/returned_resource.h"
@@ -14,6 +14,21 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
+
+FakeLayerTreeFrameSink::Builder::Builder()
+    : compositor_context_provider_(TestContextProvider::Create()),
+      worker_context_provider_(TestContextProvider::CreateWorker()) {}
+
+FakeLayerTreeFrameSink::Builder::~Builder() = default;
+
+std::unique_ptr<FakeLayerTreeFrameSink>
+FakeLayerTreeFrameSink::Builder::Build() {
+  DCHECK(compositor_context_provider_);
+  DCHECK(worker_context_provider_);
+  return FakeLayerTreeFrameSink::Create3d(
+      std::move(compositor_context_provider_),
+      std::move(worker_context_provider_));
+}
 
 FakeLayerTreeFrameSink::FakeLayerTreeFrameSink(
     scoped_refptr<viz::ContextProvider> context_provider,
@@ -46,10 +61,10 @@ void FakeLayerTreeFrameSink::DetachFromClient() {
   LayerTreeFrameSink::DetachFromClient();
 }
 
-void FakeLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
+void FakeLayerTreeFrameSink::SubmitCompositorFrame(viz::CompositorFrame frame) {
   ReturnResourcesHeldByParent();
 
-  last_sent_frame_.reset(new CompositorFrame(std::move(frame)));
+  last_sent_frame_ = std::make_unique<viz::CompositorFrame>(std::move(frame));
   ++num_sent_frames_;
 
   last_swap_rect_ = last_sent_frame_->render_pass_list.back()->damage_rect;

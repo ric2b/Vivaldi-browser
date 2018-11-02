@@ -16,10 +16,10 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
-#include "content/common/sandbox_init_mac.h"
-#include "content/common/sandbox_mac.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/sandbox_init.h"
 #include "sandbox/mac/seatbelt.h"
+#include "services/service_manager/sandbox/mac/sandbox_mac.h"
 
 extern "C" {
 void CGSSetDenyWindowServerConnections(bool);
@@ -163,8 +163,8 @@ bool RendererMainPlatformDelegate::EnableSandbox() {
   if (sandbox_initialized) {
     DisconnectWindowServer();
   } else {
-    sandbox_initialized = InitializeSandboxWithPostWarmupHook(
-        base::BindOnce(&DisconnectWindowServer));
+    sandbox_initialized =
+        InitializeSandbox(base::BindOnce(&DisconnectWindowServer));
   }
 
   // The sandbox is now engaged. Make sure that the renderer has not connected

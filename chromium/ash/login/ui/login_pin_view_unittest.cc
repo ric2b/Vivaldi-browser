@@ -4,10 +4,13 @@
 
 #include "ash/login/ui/login_password_view.h"
 
+#include <memory>
+
 #include "ash/login/ui/login_pin_view.h"
 #include "ash/login/ui/login_test_base.h"
 #include "base/timer/mock_timer.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -26,7 +29,7 @@ class LoginPinViewTest : public LoginTestBase {
         base::Bind(&LoginPinViewTest::OnPinKey, base::Unretained(this)),
         base::Bind(&LoginPinViewTest::OnPinBackspace, base::Unretained(this)));
 
-    ShowWidgetWithContent(view_);
+    SetWidget(CreateWidgetWithContent(view_));
   }
 
   // Called when a password is submitted.
@@ -60,6 +63,7 @@ TEST_F(LoginPinViewTest, ButtonsFireEvents) {
 
   // Verify backspace events are emitted.
   EXPECT_EQ(0, backspace_);
+  test_api.GetBackspaceButton()->SetEnabled(true);
   test_api.GetBackspaceButton()->RequestFocus();
   generator.PressKey(ui::KeyboardCode::VKEY_RETURN, ui::EF_NONE);
   EXPECT_EQ(1, backspace_);
@@ -124,9 +128,9 @@ TEST_F(LoginPinViewTest, BackspaceAutoSubmitsAndRepeats) {
   LoginPinView::TestApi test_api(view_);
 
   // Install mock timers into the PIN view.
-  auto delay_timer0 = base::MakeUnique<base::MockTimer>(
+  auto delay_timer0 = std::make_unique<base::MockTimer>(
       true /*retain_user_task*/, false /*is_repeating*/);
-  auto repeat_timer0 = base::MakeUnique<base::MockTimer>(
+  auto repeat_timer0 = std::make_unique<base::MockTimer>(
       true /*retain_user_task*/, true /*is_repeating*/);
   base::MockTimer* delay_timer = delay_timer0.get();
   base::MockTimer* repeat_timer = repeat_timer0.get();
@@ -135,6 +139,7 @@ TEST_F(LoginPinViewTest, BackspaceAutoSubmitsAndRepeats) {
 
   // Verify backspace events are emitted.
   EXPECT_EQ(0, backspace_);
+  test_api.GetBackspaceButton()->SetEnabled(true);
   generator.MoveMouseTo(
       test_api.GetBackspaceButton()->GetBoundsInScreen().CenterPoint());
   generator.PressLeftButton();

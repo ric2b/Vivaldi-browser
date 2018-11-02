@@ -5,12 +5,12 @@
 #include "tools/gn/xcode_object.h"
 
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "tools/gn/filesystem_utils.h"
 
@@ -273,15 +273,15 @@ const char* ToString(PBXObjectClass cls) {
 
 // PBXObjectVisitor -----------------------------------------------------------
 
-PBXObjectVisitor::PBXObjectVisitor() {}
+PBXObjectVisitor::PBXObjectVisitor() = default;
 
-PBXObjectVisitor::~PBXObjectVisitor() {}
+PBXObjectVisitor::~PBXObjectVisitor() = default;
 
 // PBXObject ------------------------------------------------------------------
 
-PBXObject::PBXObject() {}
+PBXObject::PBXObject() = default;
 
-PBXObject::~PBXObject() {}
+PBXObject::~PBXObject() = default;
 
 void PBXObject::SetId(const std::string& id) {
   DCHECK(id_.empty());
@@ -307,9 +307,9 @@ void PBXObject::Visit(PBXObjectVisitor& visitor) {
 
 // PBXBuildPhase --------------------------------------------------------------
 
-PBXBuildPhase::PBXBuildPhase() {}
+PBXBuildPhase::PBXBuildPhase() = default;
 
-PBXBuildPhase::~PBXBuildPhase() {}
+PBXBuildPhase::~PBXBuildPhase() = default;
 
 // PBXTarget ------------------------------------------------------------------
 
@@ -321,11 +321,11 @@ PBXTarget::PBXTarget(const std::string& name,
       name_(name) {
   if (!shell_script.empty()) {
     build_phases_.push_back(
-        base::MakeUnique<PBXShellScriptBuildPhase>(name, shell_script));
+        std::make_unique<PBXShellScriptBuildPhase>(name, shell_script));
   }
 }
 
-PBXTarget::~PBXTarget() {}
+PBXTarget::~PBXTarget() = default;
 
 void PBXTarget::AddDependency(std::unique_ptr<PBXTargetDependency> dependency) {
   DCHECK(dependency);
@@ -353,7 +353,7 @@ PBXAggregateTarget::PBXAggregateTarget(const std::string& name,
                                        const PBXAttributes& attributes)
     : PBXTarget(name, shell_script, config_name, attributes) {}
 
-PBXAggregateTarget::~PBXAggregateTarget() {}
+PBXAggregateTarget::~PBXAggregateTarget() = default;
 
 PBXObjectClass PBXAggregateTarget::Class() const {
   return PBXAggregateTargetClass;
@@ -384,7 +384,7 @@ PBXBuildFile::PBXBuildFile(const PBXFileReference* file_reference,
   DCHECK(build_phase_);
 }
 
-PBXBuildFile::~PBXBuildFile() {}
+PBXBuildFile::~PBXBuildFile() = default;
 
 PBXObjectClass PBXBuildFile::Class() const {
   return PBXBuildFileClass;
@@ -414,7 +414,7 @@ PBXContainerItemProxy::PBXContainerItemProxy(const PBXProject* project,
                                              const PBXTarget* target)
     : project_(project), target_(target) {}
 
-PBXContainerItemProxy::~PBXContainerItemProxy() {}
+PBXContainerItemProxy::~PBXContainerItemProxy() = default;
 
 PBXObjectClass PBXContainerItemProxy::Class() const {
   return PBXContainerItemProxyClass;
@@ -447,7 +447,7 @@ PBXFileReference::PBXFileReference(const std::string& name,
                                    const std::string& type)
     : name_(name), path_(path), type_(type) {}
 
-PBXFileReference::~PBXFileReference() {}
+PBXFileReference::~PBXFileReference() = default;
 
 PBXObjectClass PBXFileReference::Class() const {
   return PBXFileReferenceClass;
@@ -486,9 +486,9 @@ void PBXFileReference::Print(std::ostream& out, unsigned indent) const {
 
 // PBXFrameworksBuildPhase ----------------------------------------------------
 
-PBXFrameworksBuildPhase::PBXFrameworksBuildPhase() {}
+PBXFrameworksBuildPhase::PBXFrameworksBuildPhase() = default;
 
-PBXFrameworksBuildPhase::~PBXFrameworksBuildPhase() {}
+PBXFrameworksBuildPhase::~PBXFrameworksBuildPhase() = default;
 
 PBXObjectClass PBXFrameworksBuildPhase::Class() const {
   return PBXFrameworksBuildPhaseClass;
@@ -514,7 +514,7 @@ void PBXFrameworksBuildPhase::Print(std::ostream& out, unsigned indent) const {
 PBXGroup::PBXGroup(const std::string& path, const std::string& name)
     : name_(name), path_(path) {}
 
-PBXGroup::~PBXGroup() {}
+PBXGroup::~PBXGroup() = default;
 
 PBXObject* PBXGroup::AddChild(std::unique_ptr<PBXObject> child) {
   DCHECK(child);
@@ -541,7 +541,7 @@ PBXFileReference* PBXGroup::AddSourceFile(const std::string& navigator_path,
       }
     }
 
-    children_.push_back(base::MakeUnique<PBXFileReference>(
+    children_.push_back(std::make_unique<PBXFileReference>(
         navigator_path, source_path, std::string()));
     return static_cast<PBXFileReference*>(children_.back().get());
   }
@@ -560,7 +560,7 @@ PBXFileReference* PBXGroup::AddSourceFile(const std::string& navigator_path,
   }
 
   if (!group) {
-    children_.push_back(base::MakeUnique<PBXGroup>(component.as_string(),
+    children_.push_back(std::make_unique<PBXGroup>(component.as_string(),
                                                    component.as_string()));
     group = static_cast<PBXGroup*>(children_.back().get());
   }
@@ -617,19 +617,19 @@ PBXNativeTarget::PBXNativeTarget(const std::string& name,
       product_type_(product_type),
       product_name_(product_name) {
   DCHECK(product_reference_);
-  build_phases_.push_back(base::MakeUnique<PBXSourcesBuildPhase>());
+  build_phases_.push_back(std::make_unique<PBXSourcesBuildPhase>());
   source_build_phase_ =
       static_cast<PBXSourcesBuildPhase*>(build_phases_.back().get());
 
-  build_phases_.push_back(base::MakeUnique<PBXFrameworksBuildPhase>());
+  build_phases_.push_back(std::make_unique<PBXFrameworksBuildPhase>());
 }
 
-PBXNativeTarget::~PBXNativeTarget() {}
+PBXNativeTarget::~PBXNativeTarget() = default;
 
 void PBXNativeTarget::AddFileForIndexing(const PBXFileReference* file_reference,
                                          const CompilerFlags compiler_flag) {
   DCHECK(file_reference);
-  source_build_phase_->AddBuildFile(base::MakeUnique<PBXBuildFile>(
+  source_build_phase_->AddBuildFile(std::make_unique<PBXBuildFile>(
       file_reference, source_build_phase_, compiler_flag));
 }
 
@@ -664,16 +664,16 @@ PBXProject::PBXProject(const std::string& name,
 
   main_group_.reset(new PBXGroup);
   sources_ = static_cast<PBXGroup*>(
-      main_group_->AddChild(base::MakeUnique<PBXGroup>(source_path, "Source")));
+      main_group_->AddChild(std::make_unique<PBXGroup>(source_path, "Source")));
   sources_->set_is_source(true);
   products_ = static_cast<PBXGroup*>(main_group_->AddChild(
-      base::MakeUnique<PBXGroup>(std::string(), "Product")));
-  main_group_->AddChild(base::MakeUnique<PBXGroup>(std::string(), "Build"));
+      std::make_unique<PBXGroup>(std::string(), "Product")));
+  main_group_->AddChild(std::make_unique<PBXGroup>(std::string(), "Build"));
 
   configurations_.reset(new XCConfigurationList(config_name, attributes, this));
 }
 
-PBXProject::~PBXProject() {}
+PBXProject::~PBXProject() = default;
 
 void PBXProject::AddSourceFileToIndexingTarget(
     const std::string& navigator_path,
@@ -707,7 +707,7 @@ void PBXProject::AddAggregateTarget(const std::string& name,
   attributes["CONFIGURATION_BUILD_DIR"] = ".";
   attributes["PRODUCT_NAME"] = name;
 
-  targets_.push_back(base::MakeUnique<PBXAggregateTarget>(
+  targets_.push_back(std::make_unique<PBXAggregateTarget>(
       name, shell_script, config_name_, attributes));
 }
 
@@ -719,11 +719,11 @@ void PBXProject::AddIndexingTarget() {
   attributes["PRODUCT_NAME"] = "sources";
 
   PBXFileReference* product_reference = static_cast<PBXFileReference*>(
-      products_->AddChild(base::MakeUnique<PBXFileReference>(
+      products_->AddChild(std::make_unique<PBXFileReference>(
           std::string(), "sources", "compiled.mach-o.executable")));
 
   const char product_type[] = "com.apple.product-type.tool";
-  targets_.push_back(base::MakeUnique<PBXNativeTarget>(
+  targets_.push_back(std::make_unique<PBXNativeTarget>(
       "sources", std::string(), config_name_, attributes, product_type,
       "sources", product_reference));
   target_for_indexing_ = static_cast<PBXNativeTarget*>(targets_.back().get());
@@ -738,21 +738,29 @@ PBXNativeTarget* PBXProject::AddNativeTarget(
     const PBXAttributes& extra_attributes) {
   base::StringPiece ext = FindExtension(&output_name);
   PBXFileReference* product = static_cast<PBXFileReference*>(
-      products_->AddChild(base::MakeUnique<PBXFileReference>(
+      products_->AddChild(std::make_unique<PBXFileReference>(
           std::string(), output_name,
           type.empty() ? GetSourceType(ext) : type)));
 
-  size_t ext_offset = FindExtensionOffset(output_name);
+  // Per Xcode build settings documentation: Product Name (PRODUCT_NAME) should
+  // the basename of the product generated by the target.
+  // Therefore, take the basename of output name without file extension as the
+  // "PRODUCT_NAME".
+  size_t basename_offset = FindFilenameOffset(output_name);
+  std::string output_basename = basename_offset != std::string::npos
+                                    ? output_name.substr(basename_offset)
+                                    : output_name;
+  size_t ext_offset = FindExtensionOffset(output_basename);
   std::string product_name = ext_offset != std::string::npos
-                                 ? output_name.substr(0, ext_offset - 1)
-                                 : output_name;
+                                 ? output_basename.substr(0, ext_offset - 1)
+                                 : output_basename;
 
   PBXAttributes attributes = extra_attributes;
   attributes["CODE_SIGNING_REQUIRED"] = "NO";
   attributes["CONFIGURATION_BUILD_DIR"] = ".";
   attributes["PRODUCT_NAME"] = product_name;
 
-  targets_.push_back(base::MakeUnique<PBXNativeTarget>(
+  targets_.push_back(std::make_unique<PBXNativeTarget>(
       name, shell_script, config_name_, attributes, output_type, product_name,
       product));
   return static_cast<PBXNativeTarget*>(targets_.back().get());
@@ -820,7 +828,7 @@ PBXShellScriptBuildPhase::PBXShellScriptBuildPhase(
     : name_("Action \"Compile and copy " + name + " via ninja\""),
       shell_script_(shell_script) {}
 
-PBXShellScriptBuildPhase::~PBXShellScriptBuildPhase() {}
+PBXShellScriptBuildPhase::~PBXShellScriptBuildPhase() = default;
 
 PBXObjectClass PBXShellScriptBuildPhase::Class() const {
   return PBXShellScriptBuildPhaseClass;
@@ -849,9 +857,9 @@ void PBXShellScriptBuildPhase::Print(std::ostream& out, unsigned indent) const {
 
 // PBXSourcesBuildPhase -------------------------------------------------------
 
-PBXSourcesBuildPhase::PBXSourcesBuildPhase() {}
+PBXSourcesBuildPhase::PBXSourcesBuildPhase() = default;
 
-PBXSourcesBuildPhase::~PBXSourcesBuildPhase() {}
+PBXSourcesBuildPhase::~PBXSourcesBuildPhase() = default;
 
 void PBXSourcesBuildPhase::AddBuildFile(
     std::unique_ptr<PBXBuildFile> build_file) {
@@ -889,7 +897,7 @@ PBXTargetDependency::PBXTargetDependency(
     std::unique_ptr<PBXContainerItemProxy> container_item_proxy)
     : target_(target), container_item_proxy_(std::move(container_item_proxy)) {}
 
-PBXTargetDependency::~PBXTargetDependency() {}
+PBXTargetDependency::~PBXTargetDependency() = default;
 
 PBXObjectClass PBXTargetDependency::Class() const {
   return PBXTargetDependencyClass;
@@ -917,7 +925,7 @@ XCBuildConfiguration::XCBuildConfiguration(const std::string& name,
                                            const PBXAttributes& attributes)
     : attributes_(attributes), name_(name) {}
 
-XCBuildConfiguration::~XCBuildConfiguration() {}
+XCBuildConfiguration::~XCBuildConfiguration() = default;
 
 PBXObjectClass XCBuildConfiguration::Class() const {
   return XCBuildConfigurationClass;
@@ -945,10 +953,10 @@ XCConfigurationList::XCConfigurationList(const std::string& name,
     : owner_reference_(owner_reference) {
   DCHECK(owner_reference_);
   configurations_.push_back(
-      base::MakeUnique<XCBuildConfiguration>(name, attributes));
+      std::make_unique<XCBuildConfiguration>(name, attributes));
 }
 
-XCConfigurationList::~XCConfigurationList() {}
+XCConfigurationList::~XCConfigurationList() = default;
 
 PBXObjectClass XCConfigurationList::Class() const {
   return XCConfigurationListClass;

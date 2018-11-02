@@ -33,12 +33,9 @@ class Document;
 class DocumentInit;
 class DocumentType;
 class ExceptionState;
-class HTMLDocument;
 class XMLDocument;
 
-class CORE_EXPORT DOMImplementation final
-    : public GarbageCollected<DOMImplementation>,
-      public ScriptWrappable {
+class CORE_EXPORT DOMImplementation final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -58,7 +55,7 @@ class CORE_EXPORT DOMImplementation final
                               ExceptionState&);
 
   // From the HTMLDOMImplementation interface
-  HTMLDocument* createHTMLDocument(const String& title);
+  Document* createHTMLDocument(const String& title = String());
 
   // Other methods (not part of DOM)
   static Document* createDocument(const String& mime_type,
@@ -69,7 +66,7 @@ class CORE_EXPORT DOMImplementation final
   static bool IsTextMIMEType(const String&);
   static bool IsJSONMIMEType(const String&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit DOMImplementation(Document&);

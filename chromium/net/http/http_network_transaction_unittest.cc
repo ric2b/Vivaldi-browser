@@ -103,6 +103,11 @@
 #include "testing/platform_test.h"
 #include "url/gurl.h"
 
+#if defined(NTLM_PORTABLE)
+#include "base/base64.h"
+#include "net/ntlm/ntlm_test_data.h"
+#endif
+
 using net::test::IsError;
 using net::test::IsOk;
 
@@ -223,7 +228,6 @@ const base::string16 kFoo2(ASCIIToUTF16("foo2"));
 const base::string16 kFoo3(ASCIIToUTF16("foo3"));
 const base::string16 kFou(ASCIIToUTF16("fou"));
 const base::string16 kSecond(ASCIIToUTF16("second"));
-const base::string16 kTestingNTLM(ASCIIToUTF16("testing-ntlm"));
 const base::string16 kWrongPassword(ASCIIToUTF16("wrongpassword"));
 
 const char kAlternativeServiceHttpHeader[] =
@@ -565,8 +569,9 @@ class HttpNetworkTransactionTest : public PlatformTest {
 
   void AddSSLSocketData() {
     ssl_.next_proto = kProtoHTTP2;
-    ssl_.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-    ASSERT_TRUE(ssl_.cert);
+    ssl_.ssl_info.cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+    ASSERT_TRUE(ssl_.ssl_info.cert);
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_);
   }
 
@@ -644,31 +649,21 @@ void FillLargeHeadersString(std::string* str, int size) {
 }
 
 #if defined(NTLM_PORTABLE)
-// Alternative functions that eliminate randomness and dependency on the local
-// host name so that the generated NTLM messages are reproducible.
-void MockGenerateRandom1(uint8_t* output, size_t n) {
-  static const uint8_t bytes[] = {0x55, 0x29, 0x66, 0x26,
-                                  0x6b, 0x9c, 0x73, 0x54};
-  static size_t current_byte = 0;
-  for (size_t i = 0; i < n; ++i) {
-    output[i] = bytes[current_byte++];
-    current_byte %= arraysize(bytes);
-  }
+uint64_t MockGetMSTime() {
+  // Tue, 23 May 2017 20:13:07 +0000
+  return 131400439870000000;
 }
 
-void MockGenerateRandom2(uint8_t* output, size_t n) {
-  static const uint8_t bytes[] = {0x96, 0x79, 0x85, 0xe7, 0x49, 0x93,
-                                  0x70, 0xa1, 0x4e, 0xe7, 0x87, 0x45,
-                                  0x31, 0x5b, 0xd3, 0x1f};
-  static size_t current_byte = 0;
-  for (size_t i = 0; i < n; ++i) {
-    output[i] = bytes[current_byte++];
-    current_byte %= arraysize(bytes);
-  }
+// Alternative functions that eliminate randomness and dependency on the local
+// host name so that the generated NTLM messages are reproducible.
+void MockGenerateRandom(uint8_t* output, size_t n) {
+  // This is set to 0xaa because the client challenge for testing in
+  // [MS-NLMP] Section 4.2.1 is 8 bytes of 0xaa.
+  memset(output, 0xaa, n);
 }
 
 std::string MockGetHostName() {
-  return "WTC-WIN7";
+  return ntlm::test::kHostnameAscii;
 }
 #endif  // defined(NTLM_PORTABLE)
 
@@ -805,7 +800,7 @@ bool CheckNTLMServerAuth(const AuthChallengeInfo* auth_challenge) {
   if (!auth_challenge)
     return false;
   EXPECT_FALSE(auth_challenge->is_proxy);
-  EXPECT_EQ("http://172.22.68.17", auth_challenge->challenger.Serialize());
+  EXPECT_EQ("https://172.22.68.17", auth_challenge->challenger.Serialize());
   EXPECT_EQ(std::string(), auth_challenge->realm);
   EXPECT_EQ(kNtlmAuthScheme, auth_challenge->scheme);
   return true;
@@ -872,6 +867,35 @@ TEST_F(HttpNetworkTransactionTest, SimpleGETNoHeadersWeirdPort) {
   TestCompletionCallback callback;
   int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   EXPECT_THAT(callback.GetResult(rv), IsError(ERR_INVALID_HTTP_RESPONSE));
+}
+
+// Tests that request info can be destroyed after the headers phase is complete.
+TEST_F(HttpNetworkTransactionTest, SimpleGETNoReadDestroyRequestInfo) {
+  std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
+  auto trans =
+      std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
+
+  MockRead data_reads[] = {
+      MockRead("HTTP/1.0 200 OK\r\n"), MockRead("Connection: keep-alive\r\n"),
+      MockRead("Content-Length: 100\r\n\r\n"), MockRead(SYNCHRONOUS, 0),
+  };
+  StaticSocketDataProvider data(data_reads, arraysize(data_reads), NULL, 0);
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+
+  TestCompletionCallback callback;
+
+  {
+    auto request = std::make_unique<HttpRequestInfo>();
+    request->method = "GET";
+    request->url = GURL("http://www.example.org/");
+
+    int rv =
+        trans->Start(request.get(), callback.callback(), NetLogWithSource());
+
+    EXPECT_THAT(callback.GetResult(rv), IsOk());
+  }  // Let request info be destroyed.
+
+  trans.reset();
 }
 
 // Response with no status line, and a weird port.  Option to allow weird ports
@@ -5201,8 +5225,8 @@ TEST_F(HttpNetworkTransactionTest,
 
   // CONNECT to mail.example.org:443 via SPDY.
   SpdyHeaderBlock connect2_block;
-  connect2_block[spdy_util_.GetMethodKey()] = "CONNECT";
-  connect2_block[spdy_util_.GetHostKey()] = "mail.example.org:443";
+  connect2_block[kHttp2MethodHeader] = "CONNECT";
+  connect2_block[kHttp2AuthorityHeader] = "mail.example.org:443";
   SpdySerializedFrame connect2(spdy_util_.ConstructSpdyHeaders(
       3, std::move(connect2_block), LOWEST, false));
 
@@ -5942,23 +5966,46 @@ TEST_F(HttpNetworkTransactionTest, BasicAuthProxyThenServer) {
 // can't hook into its internals to cause it to generate predictable NTLM
 // authorization headers.
 #if defined(NTLM_PORTABLE)
-// The NTLM authentication unit tests were generated by capturing the HTTP
-// requests and responses using Fiddler 2 and inspecting the generated random
-// bytes in the debugger.
+// The NTLM authentication unit tests are based on known test data from the
+// [MS-NLMP] Specification [1]. These tests are primarily of the authentication
+// flow rather than the implementation of the NTLM protocol. See net/ntlm
+// for the implementation and testing of the protocol.
+//
+// [1] https://msdn.microsoft.com/en-us/library/cc236621.aspx
 
 // Enter the correct password and authenticate successfully.
-TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
+TEST_F(HttpNetworkTransactionTest, NTLMAuthV1) {
   HttpRequestInfo request;
   request.method = "GET";
-  request.url = GURL("http://172.22.68.17/kids/login.aspx");
+  request.url = GURL("https://172.22.68.17/kids/login.aspx");
 
   // Ensure load is not disrupted by flags which suppress behaviour specific
   // to other auth schemes.
   request.load_flags = LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
 
-  HttpAuthHandlerNTLM::ScopedProcSetter proc_setter(MockGenerateRandom1,
-                                                    MockGetHostName);
+  HttpAuthHandlerNTLM::ScopedProcSetter proc_setter(
+      MockGetMSTime, MockGenerateRandom, MockGetHostName);
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
+
+  // Generate the NTLM messages based on known test data.
+  std::string negotiate_msg;
+  std::string challenge_msg;
+  std::string authenticate_msg;
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(ntlm::test::kExpectedNegotiateMsg),
+          arraysize(ntlm::test::kExpectedNegotiateMsg)),
+      &negotiate_msg);
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(
+                                           ntlm::test::kChallengeMsgV1),
+                                       arraysize(ntlm::test::kChallengeMsgV1)),
+                     &challenge_msg);
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(
+              ntlm::test::kExpectedAuthenticateMsgSpecResponseV1),
+          arraysize(ntlm::test::kExpectedAuthenticateMsgSpecResponseV1)),
+      &authenticate_msg);
 
   MockWrite data_writes1[] = {
     MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
@@ -5976,7 +6023,6 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
     MockRead("Content-Length: 42\r\n"),
     MockRead("Content-Type: text/html\r\n\r\n"),
     // Missing content -- won't matter, as connection will be reset.
-    MockRead(SYNCHRONOUS, ERR_UNEXPECTED),
   };
 
   MockWrite data_writes2[] = {
@@ -5986,43 +6032,31 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM "
-                "TlRMTVNTUAABAAAAB4IIAAAAAAAAAAAAAAAAAAAAAAA=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(negotiate_msg.c_str()), MockWrite("\r\n\r\n"),
 
       // After calling trans.RestartWithAuth(), we should send a Type 3 message
-      // (the credentials for the origin server).  The second request continues
-      // on the same connection.
+      // (using correct credentials).  The second request continues on the
+      // same connection.
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM TlRMTVNTUAADAAAAGAAYAGgAAAAYABgAgA"
-                "AAAAAAAABAAAAAGAAYAEAAAAAQABAAWAAAAAAAAAAAAAAABYIIAHQA"
-                "ZQBzAHQAaQBuAGcALQBuAHQAbABtAFcAVABDAC0AVwBJAE4ANwBVKW"
-                "Yma5xzVAAAAAAAAAAAAAAAAAAAAACH+gWcm+YsP9Tqb9zCR3WAeZZX"
-                "ahlhx5I=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(authenticate_msg.c_str()), MockWrite("\r\n\r\n"),
   };
 
   MockRead data_reads2[] = {
-    // The origin server responds with a Type 2 message.
-    MockRead("HTTP/1.1 401 Access Denied\r\n"),
-    MockRead("WWW-Authenticate: NTLM "
-             "TlRMTVNTUAACAAAADAAMADgAAAAFgokCjGpMpPGlYKkAAAAAAAAAALo"
-             "AugBEAAAABQEoCgAAAA9HAE8ATwBHAEwARQACAAwARwBPAE8ARwBMAE"
-             "UAAQAaAEEASwBFAEUAUwBBAFIAQQAtAEMATwBSAFAABAAeAGMAbwByA"
-             "HAALgBnAG8AbwBnAGwAZQAuAGMAbwBtAAMAQABhAGsAZQBlAHMAYQBy"
-             "AGEALQBjAG8AcgBwAC4AYQBkAC4AYwBvAHIAcAAuAGcAbwBvAGcAbAB"
-             "lAC4AYwBvAG0ABQAeAGMAbwByAHAALgBnAG8AbwBnAGwAZQAuAGMAbw"
-             "BtAAAAAAA=\r\n"),
-    MockRead("Content-Length: 42\r\n"),
-    MockRead("Content-Type: text/html\r\n\r\n"),
-    MockRead("You are not authorized to view this page\r\n"),
+      // The origin server responds with a Type 2 message.
+      MockRead("HTTP/1.1 401 Access Denied\r\n"),
+      MockRead("WWW-Authenticate: NTLM "), MockRead(challenge_msg.c_str()),
+      MockRead("\r\n"), MockRead("Content-Length: 42\r\n"),
+      MockRead("Content-Type: text/html\r\n\r\n"),
+      MockRead("You are not authorized to view this page\r\n"),
 
-    // Lastly we get the desired content.
-    MockRead("HTTP/1.1 200 OK\r\n"),
-    MockRead("Content-Type: text/html; charset=utf-8\r\n"),
-    MockRead("Content-Length: 13\r\n\r\n"),
-    MockRead("Please Login\r\n"),
-    MockRead(SYNCHRONOUS, OK),
+      // Lastly we get the desired content.
+      MockRead("HTTP/1.1 200 OK\r\n"),
+      MockRead("Content-Type: text/html; charset=utf-8\r\n"),
+      MockRead("Content-Length: 14\r\n\r\n"), MockRead("Please Login\r\n"),
   };
 
   StaticSocketDataProvider data1(data_reads1, arraysize(data_reads1),
@@ -6031,6 +6065,11 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
                                  data_writes2, arraysize(data_writes2));
   session_deps_.socket_factory->AddSocketDataProvider(&data1);
   session_deps_.socket_factory->AddSocketDataProvider(&data2);
+
+  SSLSocketDataProvider ssl1(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl1);
+  SSLSocketDataProvider ssl2(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl2);
 
   TestCompletionCallback callback1;
 
@@ -6050,8 +6089,9 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
 
   TestCompletionCallback callback2;
 
-  rv = trans.RestartWithAuth(AuthCredentials(kTestingNTLM, kTestingNTLM),
-                             callback2.callback());
+  rv = trans.RestartWithAuth(
+      AuthCredentials(ntlm::test::kDomainUserCombined, ntlm::test::kPassword),
+      callback2.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   rv = callback2.WaitForResult();
@@ -6074,18 +6114,65 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth1) {
   response = trans.GetResponseInfo();
   ASSERT_TRUE(response);
   EXPECT_FALSE(response->auth_challenge);
-  EXPECT_EQ(13, response->headers->GetContentLength());
+  EXPECT_EQ(14, response->headers->GetContentLength());
+
+  std::string response_data;
+  rv = ReadTransaction(&trans, &response_data);
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_EQ("Please Login\r\n", response_data);
+
+  EXPECT_TRUE(data1.AllReadDataConsumed());
+  EXPECT_TRUE(data1.AllWriteDataConsumed());
+  EXPECT_TRUE(data2.AllReadDataConsumed());
+  EXPECT_TRUE(data2.AllWriteDataConsumed());
 }
 
 // Enter a wrong password, and then the correct one.
-TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
+TEST_F(HttpNetworkTransactionTest, NTLMAuthV1WrongThenRightPassword) {
   HttpRequestInfo request;
   request.method = "GET";
-  request.url = GURL("http://172.22.68.17/kids/login.aspx");
+  request.url = GURL("https://172.22.68.17/kids/login.aspx");
 
-  HttpAuthHandlerNTLM::ScopedProcSetter proc_setter(MockGenerateRandom2,
-                                                    MockGetHostName);
+  HttpAuthHandlerNTLM::ScopedProcSetter proc_setter(
+      MockGetMSTime, MockGenerateRandom, MockGetHostName);
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
+
+  // Generate the NTLM messages based on known test data.
+  std::string negotiate_msg;
+  std::string challenge_msg;
+  std::string authenticate_msg;
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(ntlm::test::kExpectedNegotiateMsg),
+          arraysize(ntlm::test::kExpectedNegotiateMsg)),
+      &negotiate_msg);
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(
+                                           ntlm::test::kChallengeMsgV1),
+                                       arraysize(ntlm::test::kChallengeMsgV1)),
+                     &challenge_msg);
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(
+              ntlm::test::kExpectedAuthenticateMsgSpecResponseV1),
+          arraysize(ntlm::test::kExpectedAuthenticateMsgSpecResponseV1)),
+      &authenticate_msg);
+
+  // The authenticate message when |kWrongPassword| is sent.
+  std::string wrong_password_authenticate_msg(
+      "TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAwADABwAAAACAAIAHwAAAAQABAAhAAAAAAA"
+      "AABAAAAAA4IIAKqqqqqqqqqqAAAAAAAAAAAAAAAAAAAAAF2npafgDxlql9qxEIhLlsuuJIEd"
+      "NQHk7kQAbwBtAGEAaQBuAFUAcwBlAHIAQwBPAE0AUABVAFQARQBSAA==");
+
+  // Sanity check that this is the same as |authenticate_msg| except for the
+  // 24 bytes (32 encoded chars) of the NTLM Response.
+  ASSERT_EQ(authenticate_msg.length(),
+            wrong_password_authenticate_msg.length());
+  ASSERT_EQ(authenticate_msg.length(), 200u);
+  ASSERT_EQ(base::StringPiece(authenticate_msg.data(), 117),
+            base::StringPiece(wrong_password_authenticate_msg.data(), 117));
+  ASSERT_EQ(
+      base::StringPiece(authenticate_msg.data() + 149, 51),
+      base::StringPiece(wrong_password_authenticate_msg.data() + 149, 51));
 
   MockWrite data_writes1[] = {
     MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
@@ -6103,7 +6190,6 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
     MockRead("Content-Length: 42\r\n"),
     MockRead("Content-Type: text/html\r\n\r\n"),
     // Missing content -- won't matter, as connection will be reset.
-    MockRead(SYNCHRONOUS, ERR_UNEXPECTED),
   };
 
   MockWrite data_writes2[] = {
@@ -6113,45 +6199,33 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM "
-                "TlRMTVNTUAABAAAAB4IIAAAAAAAAAAAAAAAAAAAAAAA=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(negotiate_msg.c_str()), MockWrite("\r\n\r\n"),
 
       // After calling trans.RestartWithAuth(), we should send a Type 3 message
-      // (the credentials for the origin server).  The second request continues
-      // on the same connection.
+      // (using incorrect credentials).  The second request continues on the
+      // same connection.
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM TlRMTVNTUAADAAAAGAAYAGgAAAAYABgAgA"
-                "AAAAAAAABAAAAAGAAYAEAAAAAQABAAWAAAAAAAAAAAAAAABYIIAHQA"
-                "ZQBzAHQAaQBuAGcALQBuAHQAbABtAFcAVABDAC0AVwBJAE4ANwCWeY"
-                "XnSZNwoQAAAAAAAAAAAAAAAAAAAADLa34/phTTKzNTWdub+uyFleOj"
-                "4Ww7b7E=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(wrong_password_authenticate_msg.c_str()), MockWrite("\r\n\r\n"),
   };
 
   MockRead data_reads2[] = {
-    // The origin server responds with a Type 2 message.
-    MockRead("HTTP/1.1 401 Access Denied\r\n"),
-    MockRead("WWW-Authenticate: NTLM "
-             "TlRMTVNTUAACAAAADAAMADgAAAAFgokCbVWUZezVGpAAAAAAAAAAALo"
-             "AugBEAAAABQEoCgAAAA9HAE8ATwBHAEwARQACAAwARwBPAE8ARwBMAE"
-             "UAAQAaAEEASwBFAEUAUwBBAFIAQQAtAEMATwBSAFAABAAeAGMAbwByA"
-             "HAALgBnAG8AbwBnAGwAZQAuAGMAbwBtAAMAQABhAGsAZQBlAHMAYQBy"
-             "AGEALQBjAG8AcgBwAC4AYQBkAC4AYwBvAHIAcAAuAGcAbwBvAGcAbAB"
-             "lAC4AYwBvAG0ABQAeAGMAbwByAHAALgBnAG8AbwBnAGwAZQAuAGMAbw"
-             "BtAAAAAAA=\r\n"),
-    MockRead("Content-Length: 42\r\n"),
-    MockRead("Content-Type: text/html\r\n\r\n"),
-    MockRead("You are not authorized to view this page\r\n"),
+      // The origin server responds with a Type 2 message.
+      MockRead("HTTP/1.1 401 Access Denied\r\n"),
+      MockRead("WWW-Authenticate: NTLM "), MockRead(challenge_msg.c_str()),
+      MockRead("\r\n"), MockRead("Content-Length: 42\r\n"),
+      MockRead("Content-Type: text/html\r\n\r\n"),
+      MockRead("You are not authorized to view this page\r\n"),
 
-    // Wrong password.
-    MockRead("HTTP/1.1 401 Access Denied\r\n"),
-    MockRead("WWW-Authenticate: NTLM\r\n"),
-    MockRead("Connection: close\r\n"),
-    MockRead("Content-Length: 42\r\n"),
-    MockRead("Content-Type: text/html\r\n\r\n"),
-    // Missing content -- won't matter, as connection will be reset.
-    MockRead(SYNCHRONOUS, ERR_UNEXPECTED),
+      // Wrong password.
+      MockRead("HTTP/1.1 401 Access Denied\r\n"),
+      MockRead("WWW-Authenticate: NTLM\r\n"), MockRead("Connection: close\r\n"),
+      MockRead("Content-Length: 42\r\n"),
+      MockRead("Content-Type: text/html\r\n\r\n"),
+      // Missing content -- won't matter, as connection will be reset.
   };
 
   MockWrite data_writes3[] = {
@@ -6161,8 +6235,8 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM "
-                "TlRMTVNTUAABAAAAB4IIAAAAAAAAAAAAAAAAAAAAAAA=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(negotiate_msg.c_str()), MockWrite("\r\n\r\n"),
 
       // After calling trans.RestartWithAuth(), we should send a Type 3 message
       // (the credentials for the origin server).  The second request continues
@@ -6170,34 +6244,22 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
       MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
                 "Host: 172.22.68.17\r\n"
                 "Connection: keep-alive\r\n"
-                "Authorization: NTLM TlRMTVNTUAADAAAAGAAYAGgAAAAYABgAgA"
-                "AAAAAAAABAAAAAGAAYAEAAAAAQABAAWAAAAAAAAAAAAAAABYIIAHQA"
-                "ZQBzAHQAaQBuAGcALQBuAHQAbABtAFcAVABDAC0AVwBJAE4ANwBO54"
-                "dFMVvTHwAAAAAAAAAAAAAAAAAAAACS7sT6Uzw7L0L//WUqlIaVWpbI"
-                "+4MUm7c=\r\n\r\n"),
+                "Authorization: NTLM "),
+      MockWrite(authenticate_msg.c_str()), MockWrite("\r\n\r\n"),
   };
 
   MockRead data_reads3[] = {
-    // The origin server responds with a Type 2 message.
-    MockRead("HTTP/1.1 401 Access Denied\r\n"),
-    MockRead("WWW-Authenticate: NTLM "
-             "TlRMTVNTUAACAAAADAAMADgAAAAFgokCL24VN8dgOR8AAAAAAAAAALo"
-             "AugBEAAAABQEoCgAAAA9HAE8ATwBHAEwARQACAAwARwBPAE8ARwBMAE"
-             "UAAQAaAEEASwBFAEUAUwBBAFIAQQAtAEMATwBSAFAABAAeAGMAbwByA"
-             "HAALgBnAG8AbwBnAGwAZQAuAGMAbwBtAAMAQABhAGsAZQBlAHMAYQBy"
-             "AGEALQBjAG8AcgBwAC4AYQBkAC4AYwBvAHIAcAAuAGcAbwBvAGcAbAB"
-             "lAC4AYwBvAG0ABQAeAGMAbwByAHAALgBnAG8AbwBnAGwAZQAuAGMAbw"
-             "BtAAAAAAA=\r\n"),
-    MockRead("Content-Length: 42\r\n"),
-    MockRead("Content-Type: text/html\r\n\r\n"),
-    MockRead("You are not authorized to view this page\r\n"),
+      // The origin server responds with a Type 2 message.
+      MockRead("HTTP/1.1 401 Access Denied\r\n"),
+      MockRead("WWW-Authenticate: NTLM "), MockRead(challenge_msg.c_str()),
+      MockRead("\r\n"), MockRead("Content-Length: 42\r\n"),
+      MockRead("Content-Type: text/html\r\n\r\n"),
+      MockRead("You are not authorized to view this page\r\n"),
 
-    // Lastly we get the desired content.
-    MockRead("HTTP/1.1 200 OK\r\n"),
-    MockRead("Content-Type: text/html; charset=utf-8\r\n"),
-    MockRead("Content-Length: 13\r\n\r\n"),
-    MockRead("Please Login\r\n"),
-    MockRead(SYNCHRONOUS, OK),
+      // Lastly we get the desired content.
+      MockRead("HTTP/1.1 200 OK\r\n"),
+      MockRead("Content-Type: text/html; charset=utf-8\r\n"),
+      MockRead("Content-Length: 14\r\n\r\n"), MockRead("Please Login\r\n"),
   };
 
   StaticSocketDataProvider data1(data_reads1, arraysize(data_reads1),
@@ -6209,6 +6271,13 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
   session_deps_.socket_factory->AddSocketDataProvider(&data1);
   session_deps_.socket_factory->AddSocketDataProvider(&data2);
   session_deps_.socket_factory->AddSocketDataProvider(&data3);
+
+  SSLSocketDataProvider ssl1(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl1);
+  SSLSocketDataProvider ssl2(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl2);
+  SSLSocketDataProvider ssl3(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl3);
 
   TestCompletionCallback callback1;
 
@@ -6229,8 +6298,9 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
   TestCompletionCallback callback2;
 
   // Enter the wrong password.
-  rv = trans.RestartWithAuth(AuthCredentials(kTestingNTLM, kWrongPassword),
-                             callback2.callback());
+  rv = trans.RestartWithAuth(
+      AuthCredentials(ntlm::test::kDomainUserCombined, kWrongPassword),
+      callback2.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   rv = callback2.WaitForResult();
@@ -6251,8 +6321,9 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
   TestCompletionCallback callback4;
 
   // Now enter the right password.
-  rv = trans.RestartWithAuth(AuthCredentials(kTestingNTLM, kTestingNTLM),
-                             callback4.callback());
+  rv = trans.RestartWithAuth(
+      AuthCredentials(ntlm::test::kDomainUserCombined, ntlm::test::kPassword),
+      callback4.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   rv = callback4.WaitForResult();
@@ -6271,7 +6342,180 @@ TEST_F(HttpNetworkTransactionTest, NTLMAuth2) {
 
   response = trans.GetResponseInfo();
   EXPECT_FALSE(response->auth_challenge);
-  EXPECT_EQ(13, response->headers->GetContentLength());
+  EXPECT_EQ(14, response->headers->GetContentLength());
+
+  std::string response_data;
+  rv = ReadTransaction(&trans, &response_data);
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_EQ("Please Login\r\n", response_data);
+
+  EXPECT_TRUE(data1.AllReadDataConsumed());
+  EXPECT_TRUE(data1.AllWriteDataConsumed());
+  EXPECT_TRUE(data2.AllReadDataConsumed());
+  EXPECT_TRUE(data2.AllWriteDataConsumed());
+  EXPECT_TRUE(data3.AllReadDataConsumed());
+  EXPECT_TRUE(data3.AllWriteDataConsumed());
+}
+
+// Server requests NTLM authentication, which is not supported over HTTP/2.
+// Subsequent request with authorization header should be sent over HTTP/1.1.
+TEST_F(HttpNetworkTransactionTest, NTLMOverHttp2) {
+  HttpAuthHandlerNTLM::ScopedProcSetter proc_setter(
+      MockGetMSTime, MockGenerateRandom, MockGetHostName);
+
+  const char* kUrl = "https://172.22.68.17/kids/login.aspx";
+
+  HttpRequestInfo request;
+  request.method = "GET";
+  request.url = GURL(kUrl);
+
+  // First request without credentials.
+  SpdyHeaderBlock request_headers0(spdy_util_.ConstructGetHeaderBlock(kUrl));
+  SpdySerializedFrame request0(spdy_util_.ConstructSpdyHeaders(
+      1, std::move(request_headers0), LOWEST, true));
+
+  SpdyHeaderBlock response_headers0;
+  response_headers0[kHttp2StatusHeader] = "401";
+  response_headers0["www-authenticate"] = "NTLM";
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyResponseHeaders(
+      1, std::move(response_headers0), true));
+
+  // Stream 1 is closed.
+  spdy_util_.UpdateWithStreamDestruction(1);
+
+  // Generate the NTLM messages based on known test data.
+  std::string negotiate_msg;
+  std::string challenge_msg;
+  std::string authenticate_msg;
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(ntlm::test::kExpectedNegotiateMsg),
+          arraysize(ntlm::test::kExpectedNegotiateMsg)),
+      &negotiate_msg);
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(
+                                           ntlm::test::kChallengeMsgV1),
+                                       arraysize(ntlm::test::kChallengeMsgV1)),
+                     &challenge_msg);
+  base::Base64Encode(
+      base::StringPiece(
+          reinterpret_cast<const char*>(
+              ntlm::test::kExpectedAuthenticateMsgSpecResponseV1),
+          arraysize(ntlm::test::kExpectedAuthenticateMsgSpecResponseV1)),
+      &authenticate_msg);
+
+  // Retry with authorization header.
+  SpdyHeaderBlock request_headers1(spdy_util_.ConstructGetHeaderBlock(kUrl));
+  request_headers1["authorization"] = std::string("NTLM ") + negotiate_msg;
+  SpdySerializedFrame request1(spdy_util_.ConstructSpdyHeaders(
+      3, std::move(request_headers1), LOWEST, true));
+
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(3, ERROR_CODE_HTTP_1_1_REQUIRED));
+
+  MockWrite writes0[] = {CreateMockWrite(request0, 0)};
+  MockRead reads0[] = {CreateMockRead(resp, 1), MockRead(ASYNC, 0, 2)};
+
+  // Retry yet again using HTTP/1.1.
+  MockWrite writes1[] = {
+      // After restarting with a null identity, this is the
+      // request we should be issuing -- the final header line contains a Type
+      // 1 message.
+      MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
+                "Host: 172.22.68.17\r\n"
+                "Connection: keep-alive\r\n"
+                "Authorization: NTLM "),
+      MockWrite(negotiate_msg.c_str()), MockWrite("\r\n\r\n"),
+
+      // After calling trans.RestartWithAuth(), we should send a Type 3 message
+      // (the credentials for the origin server).  The second request continues
+      // on the same connection.
+      MockWrite("GET /kids/login.aspx HTTP/1.1\r\n"
+                "Host: 172.22.68.17\r\n"
+                "Connection: keep-alive\r\n"
+                "Authorization: NTLM "),
+      MockWrite(authenticate_msg.c_str()), MockWrite("\r\n\r\n"),
+  };
+
+  MockRead reads1[] = {
+      // The origin server responds with a Type 2 message.
+      MockRead("HTTP/1.1 401 Access Denied\r\n"),
+      MockRead("WWW-Authenticate: NTLM "), MockRead(challenge_msg.c_str()),
+      MockRead("\r\n"), MockRead("Content-Length: 42\r\n"),
+      MockRead("Content-Type: text/html\r\n\r\n"),
+      MockRead("You are not authorized to view this page\r\n"),
+
+      // Lastly we get the desired content.
+      MockRead("HTTP/1.1 200 OK\r\n"),
+      MockRead("Content-Type: text/html; charset=utf-8\r\n"),
+      MockRead("Content-Length: 14\r\n\r\n"), MockRead("Please Login\r\n"),
+  };
+  SequencedSocketData data0(reads0, arraysize(reads0), writes0,
+                            arraysize(writes0));
+  StaticSocketDataProvider data1(reads1, arraysize(reads1), writes1,
+                                 arraysize(writes1));
+  session_deps_.socket_factory->AddSocketDataProvider(&data0);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
+
+  SSLSocketDataProvider ssl0(ASYNC, OK);
+  ssl0.next_proto = kProtoHTTP2;
+  SSLSocketDataProvider ssl1(ASYNC, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl0);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl1);
+
+  std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session.get());
+
+  TestCompletionCallback callback1;
+  int rv = trans.Start(&request, callback1.callback(), NetLogWithSource());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  rv = callback1.WaitForResult();
+  EXPECT_THAT(rv, IsOk());
+
+  EXPECT_FALSE(trans.IsReadyToRestartForAuth());
+
+  const HttpResponseInfo* response = trans.GetResponseInfo();
+  ASSERT_TRUE(response);
+  EXPECT_TRUE(CheckNTLMServerAuth(response->auth_challenge.get()));
+
+  TestCompletionCallback callback2;
+
+  rv = trans.RestartWithAuth(
+      AuthCredentials(ntlm::test::kDomainUserCombined, ntlm::test::kPassword),
+      callback2.callback());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  rv = callback2.WaitForResult();
+  EXPECT_THAT(rv, IsOk());
+
+  EXPECT_TRUE(trans.IsReadyToRestartForAuth());
+
+  response = trans.GetResponseInfo();
+  ASSERT_TRUE(response);
+  EXPECT_FALSE(response->auth_challenge);
+
+  TestCompletionCallback callback3;
+
+  rv = trans.RestartWithAuth(AuthCredentials(), callback3.callback());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  rv = callback3.WaitForResult();
+  EXPECT_THAT(rv, IsOk());
+
+  response = trans.GetResponseInfo();
+  ASSERT_TRUE(response);
+  EXPECT_FALSE(response->auth_challenge);
+  EXPECT_EQ(14, response->headers->GetContentLength());
+
+  std::string response_data;
+  rv = ReadTransaction(&trans, &response_data);
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_EQ("Please Login\r\n", response_data);
+
+  EXPECT_TRUE(data0.AllReadDataConsumed());
+  EXPECT_TRUE(data0.AllWriteDataConsumed());
+  EXPECT_TRUE(data1.AllReadDataConsumed());
+  EXPECT_TRUE(data1.AllWriteDataConsumed());
 }
 #endif  // NTLM_PORTABLE
 
@@ -9939,8 +10183,8 @@ TEST_F(HttpNetworkTransactionTest, UploadUnreadableFile) {
 TEST_F(HttpNetworkTransactionTest, CancelDuringInitRequestBody) {
   class FakeUploadElementReader : public UploadElementReader {
    public:
-    FakeUploadElementReader() {}
-    ~FakeUploadElementReader() override {}
+    FakeUploadElementReader() = default;
+    ~FakeUploadElementReader() override = default;
 
     const CompletionCallback& callback() const { return callback_; }
 
@@ -10163,9 +10407,10 @@ TEST_F(HttpNetworkTransactionTest, IgnoreAltSvcWithInvalidCert) {
   session_deps_.socket_factory->AddSocketDataProvider(&data);
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl.cert);
-  ssl.cert_status = CERT_STATUS_COMMON_NAME_INVALID;
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
+  ssl.ssl_info.cert_status = CERT_STATUS_COMMON_NAME_INVALID;
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   TestCompletionCallback callback;
@@ -10216,8 +10461,9 @@ TEST_F(HttpNetworkTransactionTest, HonorAlternativeServiceHeader) {
   session_deps_.socket_factory->AddSocketDataProvider(&data);
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl.cert);
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   TestCompletionCallback callback;
@@ -10415,8 +10661,9 @@ TEST_F(HttpNetworkTransactionTest, ClearAlternativeServices) {
   session_deps_.socket_factory->AddSocketDataProvider(&data);
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl.cert);
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   HttpRequestInfo request;
@@ -10462,8 +10709,9 @@ TEST_F(HttpNetworkTransactionTest, HonorMultipleAlternativeServiceHeaders) {
   session_deps_.socket_factory->AddSocketDataProvider(&data);
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl.cert);
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   TestCompletionCallback callback;
@@ -11093,8 +11341,9 @@ TEST_F(HttpNetworkTransactionTest, AlternateProtocolWithSpdyLateBinding) {
   session_deps_.socket_factory->AddSocketDataProvider(&http11_data);
 
   SSLSocketDataProvider ssl_http11(ASYNC, OK);
-  ssl_http11.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl_http11.cert);
+  ssl_http11.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl_http11.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_http11);
 
   // Second transaction starts an alternative and a non-alternative Job.
@@ -11206,8 +11455,9 @@ TEST_F(HttpNetworkTransactionTest, StallAlternativeServiceForNpnSpdy) {
   session_deps_.socket_factory->AddSocketDataProvider(&first_transaction);
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-  ASSERT_TRUE(ssl.cert);
+  ssl.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
   MockConnect never_finishing_connect(SYNCHRONOUS, ERR_IO_PENDING);
@@ -11263,8 +11513,8 @@ TEST_F(HttpNetworkTransactionTest, StallAlternativeServiceForNpnSpdy) {
 
 class CapturingProxyResolver : public ProxyResolver {
  public:
-  CapturingProxyResolver() {}
-  ~CapturingProxyResolver() override {}
+  CapturingProxyResolver() = default;
+  ~CapturingProxyResolver() override = default;
 
   int GetProxyForURL(const GURL& url,
                      ProxyInfo* results,
@@ -12811,7 +13061,7 @@ class UrlRecordingHttpAuthHandlerMock : public HttpAuthHandlerMock {
  public:
   explicit UrlRecordingHttpAuthHandlerMock(GURL* url) : url_(url) {}
 
-  ~UrlRecordingHttpAuthHandlerMock() override {}
+  ~UrlRecordingHttpAuthHandlerMock() override = default;
 
  protected:
   int GenerateAuthTokenImpl(const AuthCredentials* credentials,
@@ -13787,7 +14037,7 @@ TEST_F(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
   SpdySerializedFrame resp1(spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
   SpdySerializedFrame body1(spdy_util_.ConstructSpdyDataFrame(1, true));
   SpdyHeaderBlock response_headers;
-  response_headers[SpdyTestUtil::GetStatusKey()] = "421";
+  response_headers[kHttp2StatusHeader] = "421";
   SpdySerializedFrame resp2(
       spdy_util_.ConstructSpdyReply(3, std::move(response_headers)));
   MockRead reads1[] = {CreateMockRead(resp1, 1), CreateMockRead(body1, 2),
@@ -13915,7 +14165,7 @@ TEST_F(HttpNetworkTransactionTest, ReturnHTTP421OnRetry) {
   SpdySerializedFrame resp1(spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
   SpdySerializedFrame body1(spdy_util_.ConstructSpdyDataFrame(1, true));
   SpdyHeaderBlock response_headers;
-  response_headers[SpdyTestUtil::GetStatusKey()] = "421";
+  response_headers[kHttp2StatusHeader] = "421";
   SpdySerializedFrame resp2(
       spdy_util_.ConstructSpdyReply(3, response_headers.Clone()));
   MockRead reads1[] = {CreateMockRead(resp1, 1), CreateMockRead(body1, 2),
@@ -14013,7 +14263,7 @@ class OneTimeCachingHostResolver : public MockHostResolverBase {
  public:
   explicit OneTimeCachingHostResolver(const HostPortPair& host_port)
       : MockHostResolverBase(/* use_caching = */ true), host_port_(host_port) {}
-  ~OneTimeCachingHostResolver() override {}
+  ~OneTimeCachingHostResolver() override = default;
 
   int ResolveFromCache(const RequestInfo& info,
                        AddressList* addresses,
@@ -14471,10 +14721,10 @@ TEST_F(HttpNetworkTransactionTest, DoNotUseSpdySessionForHttpOverTunnel) {
 
   // SPDY GET for HTTP URL (through the proxy, but not the tunnel).
   SpdyHeaderBlock req2_block;
-  req2_block[spdy_util_.GetMethodKey()] = "GET";
-  req2_block[spdy_util_.GetHostKey()] = "www.example.org:8080";
-  req2_block[spdy_util_.GetSchemeKey()] = "http";
-  req2_block[spdy_util_.GetPathKey()] = "/";
+  req2_block[kHttp2MethodHeader] = "GET";
+  req2_block[kHttp2AuthorityHeader] = "www.example.org:8080";
+  req2_block[kHttp2SchemeHeader] = "http";
+  req2_block[kHttp2PathHeader] = "/";
   SpdySerializedFrame req2(
       spdy_util_.ConstructSpdyHeaders(3, std::move(req2_block), MEDIUM, true));
 
@@ -14640,8 +14890,9 @@ TEST_F(HttpNetworkTransactionTest, DoNotUseSpdySessionIfCertDoesNotMatch) {
   // be valid for proxy because the MockSSLClientSocket does
   // not actually verify it.  But SpdySession will use this
   // to see if it is valid for the new origin
-  ssl1.cert = ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
-  ASSERT_TRUE(ssl1.cert);
+  ssl1.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  ASSERT_TRUE(ssl1.ssl_info.cert);
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl1);
   session_deps_.socket_factory->AddSocketDataProvider(&data1);
 
@@ -15174,7 +15425,7 @@ class FakeStream : public HttpStream,
                    public base::SupportsWeakPtr<FakeStream> {
  public:
   explicit FakeStream(RequestPriority priority) : priority_(priority) {}
-  ~FakeStream() override {}
+  ~FakeStream() override = default;
 
   RequestPriority priority() const { return priority_; }
 
@@ -15290,7 +15541,7 @@ class FakeStreamRequest : public HttpStreamRequest,
         delegate_(delegate),
         websocket_stream_create_helper_(create_helper) {}
 
-  ~FakeStreamRequest() override {}
+  ~FakeStreamRequest() override = default;
 
   RequestPriority priority() const { return priority_; }
 
@@ -15344,8 +15595,8 @@ class FakeStreamRequest : public HttpStreamRequest,
 // Fake HttpStreamFactory that vends FakeStreamRequests.
 class FakeStreamFactory : public HttpStreamFactory {
  public:
-  FakeStreamFactory() {}
-  ~FakeStreamFactory() override {}
+  FakeStreamFactory() = default;
+  ~FakeStreamFactory() override = default;
 
   // Returns a WeakPtr<> to the last HttpStreamRequest returned by
   // RequestStream() (which may be NULL if it was destroyed already).
@@ -15547,7 +15798,7 @@ class FakeWebSocketStreamCreateHelper :
         std::move(connection), using_proxy);
   }
 
-  ~FakeWebSocketStreamCreateHelper() override {}
+  ~FakeWebSocketStreamCreateHelper() override = default;
 
   virtual std::unique_ptr<WebSocketStream> Upgrade() {
     NOTREACHED();
@@ -16902,8 +17153,8 @@ TEST_F(HttpNetworkTransactionTest, TokenBindingSpdy) {
   request.method = "GET";
 
   SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.token_binding_negotiated = true;
-  ssl.token_binding_key_param = TB_PARAM_ECDSAP256;
+  ssl.ssl_info.token_binding_negotiated = true;
+  ssl.ssl_info.token_binding_key_param = TB_PARAM_ECDSAP256;
   ssl.next_proto = kProtoHTTP2;
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
 
@@ -17011,7 +17262,7 @@ TEST_F(HttpNetworkTransactionTest, ProxyResolutionFailsSync) {
   MockAsyncProxyResolver resolver;
   session_deps_.proxy_service.reset(new ProxyService(
       std::make_unique<ProxyConfigServiceFixed>(proxy_config),
-      base::WrapUnique(new FailingProxyResolverFactory), nullptr));
+      std::make_unique<FailingProxyResolverFactory>(), nullptr));
 
   HttpRequestInfo request;
   request.method = "GET";

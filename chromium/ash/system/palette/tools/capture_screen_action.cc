@@ -4,11 +4,11 @@
 
 #include "ash/system/palette/tools/capture_screen_action.h"
 
-#include "ash/palette_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/palette/palette_ids.h"
+#include "ash/utility/screenshot_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
@@ -16,7 +16,7 @@ namespace ash {
 CaptureScreenAction::CaptureScreenAction(Delegate* delegate)
     : CommonPaletteTool(delegate) {}
 
-CaptureScreenAction::~CaptureScreenAction() {}
+CaptureScreenAction::~CaptureScreenAction() = default;
 
 PaletteGroup CaptureScreenAction::GetGroup() const {
   return PaletteGroup::ACTION;
@@ -31,7 +31,8 @@ void CaptureScreenAction::OnEnable() {
 
   delegate()->DisableTool(GetToolId());
   delegate()->HidePaletteImmediately();
-  Shell::Get()->palette_delegate()->TakeScreenshot();
+
+  Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
 }
 
 views::View* CaptureScreenAction::CreateView() {

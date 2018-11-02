@@ -8,7 +8,6 @@
 #include <resolv.h>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -260,7 +259,7 @@ void NetworkChangeNotifierMac::ReachabilityCallback(
   if (old_type != new_type) {
     NotifyObserversOfConnectionTypeChange();
     double max_bandwidth_mbps =
-        NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+        NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
             new_type == CONNECTION_NONE ? SUBTYPE_NONE : SUBTYPE_UNKNOWN);
     NotifyObserversOfMaxBandwidthChange(max_bandwidth_mbps, new_type);
   }

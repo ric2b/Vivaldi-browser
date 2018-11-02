@@ -46,7 +46,7 @@ class TokenBindingSSLConfigService : public SSLConfigService {
   void GetSSLConfig(SSLConfig* config) override { *config = ssl_config_; }
 
  private:
-  ~TokenBindingSSLConfigService() override {}
+  ~TokenBindingSSLConfigService() override = default;
 
   SSLConfig ssl_config_;
 };
@@ -105,8 +105,8 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
   session_context_.channel_id_service = &channel_id_service;
 
   SSLSocketDataProvider ssl_data(ASYNC, OK);
-  ssl_data.token_binding_negotiated = true;
-  ssl_data.token_binding_key_param = TB_PARAM_ECDSAP256;
+  ssl_data.ssl_info.token_binding_negotiated = true;
+  ssl_data.ssl_info.token_binding_key_param = TB_PARAM_ECDSAP256;
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
   MockRead mock_reads[] = {MockRead("HTTP/1.1 200 OK\r\n\r\n"),
                            MockRead(SYNCHRONOUS, OK)};
@@ -154,8 +154,8 @@ TEST_F(HttpNetworkTransactionSSLTest, NoTokenBindingOverHttp) {
   session_context_.channel_id_service = &channel_id_service;
 
   SSLSocketDataProvider ssl_data(ASYNC, OK);
-  ssl_data.token_binding_negotiated = true;
-  ssl_data.token_binding_key_param = TB_PARAM_ECDSAP256;
+  ssl_data.ssl_info.token_binding_negotiated = true;
+  ssl_data.ssl_info.token_binding_key_param = TB_PARAM_ECDSAP256;
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
   MockRead mock_reads[] = {MockRead("HTTP/1.1 200 OK\r\n\r\n"),
                            MockRead(SYNCHRONOUS, OK)};
@@ -191,8 +191,8 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBindingAsync) {
   session_context_.channel_id_service = &channel_id_service;
 
   SSLSocketDataProvider ssl_data(ASYNC, OK);
-  ssl_data.token_binding_negotiated = true;
-  ssl_data.token_binding_key_param = TB_PARAM_ECDSAP256;
+  ssl_data.ssl_info.token_binding_negotiated = true;
+  ssl_data.ssl_info.token_binding_key_param = TB_PARAM_ECDSAP256;
   ssl_data.next_proto = kProtoHTTP2;
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
 

@@ -55,7 +55,7 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
         volume_(-1.0f) {
     // SpeechRecognizer takes ownership of sr_engine.
     SpeechRecognitionEngine* sr_engine =
-        new SpeechRecognitionEngine(NULL /* URLRequestContextGetter */);
+        new SpeechRecognitionEngine(nullptr /* URLRequestContextGetter */);
     SpeechRecognitionEngine::Config config;
     config.audio_num_bits_per_sample =
         SpeechRecognizerImpl::kNumBitsPerAudioSample;
@@ -66,10 +66,11 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
     const int kTestingSessionId = 1;
 
     audio_manager_.reset(new media::MockAudioManager(
-        base::MakeUnique<media::TestAudioThread>(true)));
+        std::make_unique<media::TestAudioThread>(true)));
     audio_manager_->SetInputStreamParameters(
         media::AudioParameters::UnavailableDeviceParams());
-    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    audio_system_ =
+        std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
     recognizer_ = new SpeechRecognizerImpl(
         this, audio_system_.get(), audio_manager_.get(), kTestingSessionId,
         false, false, sr_engine);
@@ -168,7 +169,7 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
   }
 
   void TearDown() override {
-    AudioInputController::set_factory_for_testing(NULL);
+    AudioInputController::set_factory_for_testing(nullptr);
   }
 
   void CopyPacketToAudioBus() {
@@ -203,7 +204,7 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
   void WaitForAudioThreadToPostDeviceInfo() {
     media::WaitableMessageLoopEvent event;
     audio_manager_->GetTaskRunner()->PostTaskAndReply(
-        FROM_HERE, base::Bind(&base::DoNothing), event.GetClosure());
+        FROM_HERE, base::BindOnce(&base::DoNothing), event.GetClosure());
     // Runs the loop and waits for the audio thread to call event's closure,
     // which means AudioSystem reply containing device parameters is already
     // queued on the main thread.
@@ -256,7 +257,7 @@ TEST_F(SpeechRecognizerImplTest, StopBeforeDeviceInfoReceived) {
   // Block audio thread.
   audio_manager_->GetTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&base::WaitableEvent::Wait, base::Unretained(&event)));
+      base::BindOnce(&base::WaitableEvent::Wait, base::Unretained(&event)));
 
   recognizer_->StartRecognition(
       media::AudioDeviceDescription::kDefaultDeviceId);
@@ -284,7 +285,7 @@ TEST_F(SpeechRecognizerImplTest, CancelBeforeDeviceInfoReceived) {
   // Block audio thread.
   audio_manager_->GetTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&base::WaitableEvent::Wait, base::Unretained(&event)));
+      base::BindOnce(&base::WaitableEvent::Wait, base::Unretained(&event)));
 
   recognizer_->StartRecognition(
       media::AudioDeviceDescription::kDefaultDeviceId);
@@ -506,8 +507,7 @@ TEST_F(SpeechRecognizerImplTest, AudioControllerErrorNoData) {
   TestAudioInputController* controller =
       audio_input_controller_factory_.controller();
   ASSERT_TRUE(controller);
-  controller->event_handler()->OnError(controller,
-      AudioInputController::UNKNOWN_ERROR);
+  controller->event_handler()->OnError(AudioInputController::UNKNOWN_ERROR);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
@@ -528,8 +528,7 @@ TEST_F(SpeechRecognizerImplTest, AudioControllerErrorWithData) {
       audio_input_controller_factory_.controller();
   ASSERT_TRUE(controller);
   OnData(audio_bus_.get());
-  controller->event_handler()->OnError(controller,
-      AudioInputController::UNKNOWN_ERROR);
+  controller->event_handler()->OnError(AudioInputController::UNKNOWN_ERROR);
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(url_fetcher_factory_.GetFetcherByID(0));
   EXPECT_TRUE(recognition_started_);

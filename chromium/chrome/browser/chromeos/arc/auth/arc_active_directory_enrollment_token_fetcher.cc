@@ -5,11 +5,10 @@
 #include "chrome/browser/chromeos/arc/auth/arc_active_directory_enrollment_token_fetcher.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -62,7 +61,7 @@ void ArcActiveDirectoryEnrollmentTokenFetcher::Fetch(FetchCallback callback) {
   DCHECK(callback_.is_null());
   DCHECK(auth_session_id_.empty());
   callback_ = std::move(callback);
-  dm_token_storage_ = base::MakeUnique<policy::DMTokenStorage>(
+  dm_token_storage_ = std::make_unique<policy::DMTokenStorage>(
       g_browser_process->local_state());
   dm_token_storage_->RetrieveDMToken(base::BindOnce(
       &ArcActiveDirectoryEnrollmentTokenFetcher::OnDMTokenAvailable,
@@ -148,7 +147,10 @@ void ArcActiveDirectoryEnrollmentTokenFetcher::
       user_id = enroll_response.user_id();
       break;
     }
-    case policy::DM_STATUS_SERVICE_ARC_DISABLED: {
+    case policy::DM_STATUS_SERVICE_ARC_DISABLED:
+    case policy::DM_STATUS_SERVICE_POLICY_NOT_FOUND: {
+      // POLICY_NOT_FOUND is the first error encountered when the domain is not
+      // set up yet in CPanel, so just treat it the same as ARC_DISABLED.
       fetch_status = Status::ARC_DISABLED;
       break;
     }
@@ -160,7 +162,8 @@ void ArcActiveDirectoryEnrollmentTokenFetcher::
     }
   }
 
-  VLOG(1) << "Enrollment token fetch finished. Status: " << (int)fetch_status;
+  VLOG(1) << "Enrollment token fetch finished. Status: "
+          << static_cast<int>(fetch_status);
   dm_token_.clear();
   auth_session_id_.clear();
   std::move(callback_).Run(fetch_status, enrollment_token, user_id);
@@ -195,12 +198,10 @@ void ArcActiveDirectoryEnrollmentTokenFetcher::CancelSamlFlow() {
   dm_token_.clear();
   auth_session_id_.clear();
   DCHECK(!callback_.is_null());
-  base::ResetAndReturn(&callback_)
-      .Run(Status::FAILURE, std::string(), std::string());
+  std::move(callback_).Run(Status::FAILURE, std::string(), std::string());
 }
 
-void ArcActiveDirectoryEnrollmentTokenFetcher::OnAuthSucceeded(
-    const std::string& unused_auth_code) {
+void ArcActiveDirectoryEnrollmentTokenFetcher::OnAuthSucceeded() {
   VLOG(1) << "SAML auth succeeded.";
   DCHECK(!auth_session_id_.empty());
   DoFetchEnrollmentToken();

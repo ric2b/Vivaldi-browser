@@ -17,6 +17,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/values.h"
 #include "components/version_info/version_info.h"
 #include "extensions/common/extension.h"
@@ -24,16 +25,10 @@
 #include "extensions/common/features/feature_session_type.h"
 #include "extensions/common/manifest.h"
 
-namespace base {
-class CommandLine;
-}
-
 namespace extensions {
 
 class FeatureProviderTest;
 class ExtensionAPITest;
-class ManifestUnitTest;
-class SimpleFeatureTest;
 
 class SimpleFeature : public Feature {
  public:
@@ -96,7 +91,6 @@ class SimpleFeature : public Feature {
   // supported in feature files. These should only be used in this class and in
   // generated files.
   enum Location {
-    UNSPECIFIED_LOCATION,
     COMPONENT_LOCATION,
     EXTERNAL_COMPONENT_LOCATION,
     POLICY_LOCATION,
@@ -108,9 +102,7 @@ class SimpleFeature : public Feature {
   // directly in the header means that code that doesn't already have that exact
   // type ends up triggering many implicit conversions which are all inlined.
   void set_blacklist(std::initializer_list<const char* const> blacklist);
-  void set_channel(version_info::Channel channel) {
-    channel_.reset(new version_info::Channel(channel));
-  }
+  void set_channel(version_info::Channel channel) { channel_ = channel; }
   void set_command_line_switch(base::StringPiece command_line_switch);
   void set_component_extensions_auto_granted(bool granted) {
     component_extensions_auto_granted_ = granted;
@@ -145,12 +137,17 @@ class SimpleFeature : public Feature {
   const std::vector<Platform>& platforms() const { return platforms_; }
   const std::vector<Context>& contexts() const { return contexts_; }
   const std::vector<std::string>& dependencies() const { return dependencies_; }
-  bool has_channel() const { return channel_.get() != nullptr; }
-  version_info::Channel channel() const { return *channel_; }
-  Location location() const { return location_; }
-  int min_manifest_version() const { return min_manifest_version_; }
-  int max_manifest_version() const { return max_manifest_version_; }
-  const std::string& command_line_switch() const {
+  const base::Optional<version_info::Channel> channel() const {
+    return channel_;
+  }
+  const base::Optional<Location> location() const { return location_; }
+  const base::Optional<int> min_manifest_version() const {
+    return min_manifest_version_;
+  }
+  const base::Optional<int> max_manifest_version() const {
+    return max_manifest_version_;
+  }
+  const base::Optional<std::string>& command_line_switch() const {
     return command_line_switch_;
   }
   bool component_extensions_auto_granted() const {
@@ -180,34 +177,10 @@ class SimpleFeature : public Feature {
 
  private:
   friend struct FeatureComparator;
-  friend class SimpleFeatureTest;
   FRIEND_TEST_ALL_PREFIXES(FeatureProviderTest, ManifestFeatureTypes);
   FRIEND_TEST_ALL_PREFIXES(FeatureProviderTest, PermissionFeatureTypes);
   FRIEND_TEST_ALL_PREFIXES(ExtensionAPITest, DefaultConfigurationFeatures);
   FRIEND_TEST_ALL_PREFIXES(FeaturesGenerationTest, FeaturesTest);
-  FRIEND_TEST_ALL_PREFIXES(ManifestUnitTest, Extension);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Blacklist);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, CommandLineSwitch);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ComplexFeatureAvailability);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Context);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, SessionType);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, FeatureValidation);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, HashedIdBlacklist);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, HashedIdWhitelist);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Inheritance);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Location);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ManifestVersion);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, PackageType);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseContexts);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseLocation);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseManifestVersion);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseNull);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParsePackageTypes);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParsePlatforms);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseWhitelist);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Platform);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, SimpleFeatureAvailability);
-  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Whitelist);
 
   // Holds String to Enum value mappings.
   struct Mappings;
@@ -232,8 +205,7 @@ class SimpleFeature : public Feature {
   Availability GetEnvironmentAvailability(
       Platform platform,
       version_info::Channel channel,
-      FeatureSessionType session_type,
-      base::CommandLine* command_line) const;
+      FeatureSessionType session_type) const;
 
   // Returns the availability of the feature with respect to a given extension's
   // properties.
@@ -257,13 +229,19 @@ class SimpleFeature : public Feature {
   std::vector<Context> contexts_;
   std::vector<Platform> platforms_;
   URLPatternSet matches_;
-  Location location_;
-  int min_manifest_version_;
-  int max_manifest_version_;
+
+  base::Optional<Location> location_;
+  base::Optional<int> min_manifest_version_;
+  base::Optional<int> max_manifest_version_;
+  base::Optional<std::string> command_line_switch_;
+  base::Optional<version_info::Channel> channel_;
+  // Whether to ignore channel-based restrictions (such as because the user has
+  // enabled experimental extension APIs). Note: this is lazily calculated, and
+  // then cached.
+  mutable base::Optional<bool> ignore_channel_;
+
   bool component_extensions_auto_granted_;
   bool is_internal_;
-  std::string command_line_switch_;
-  std::unique_ptr<version_info::Channel> channel_;
   bool is_vivaldi_feature_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SimpleFeature);

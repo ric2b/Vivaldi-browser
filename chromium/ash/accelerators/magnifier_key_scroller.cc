@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "ash/accelerators/key_hold_detector.h"
-#include "ash/ash_switches.h"
 #include "ash/magnifier/magnification_controller.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "ui/events/event.h"
@@ -83,8 +83,8 @@ void MagnifierKeyScroller::OnKeyUnhold(const ui::KeyEvent* event) {
   controller->SetScrollDirection(MagnificationController::SCROLL_NONE);
 }
 
-MagnifierKeyScroller::MagnifierKeyScroller() {}
+MagnifierKeyScroller::MagnifierKeyScroller() = default;
 
-MagnifierKeyScroller::~MagnifierKeyScroller() {}
+MagnifierKeyScroller::~MagnifierKeyScroller() = default;
 
 }  // namespace ash

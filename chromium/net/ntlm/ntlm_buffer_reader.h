@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <string>
+#include <vector>
 
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
@@ -46,6 +47,8 @@ namespace ntlm {
 // [2] http://davenport.sourceforge.net/ntlm.html
 class NET_EXPORT_PRIVATE NtlmBufferReader {
  public:
+  NtlmBufferReader();
+  // |buffer| is not copied and must outlive the |NtlmBufferReader|.
   explicit NtlmBufferReader(const Buffer& buffer);
   explicit NtlmBufferReader(base::StringPiece buffer);
 
@@ -98,6 +101,14 @@ class NET_EXPORT_PRIVATE NtlmBufferReader {
   bool ReadBytesFrom(const SecurityBuffer& sec_buf,
                      uint8_t* buffer) WARN_UNUSED_RESULT;
 
+  // Reads |sec_buf.length| bytes from offset |sec_buf.offset| and assigns
+  // |reader| an |NtlmBufferReader| representing the payload. If the security
+  //  buffer specifies a payload outside the buffer, then the call fails, and
+  // the state of |reader| is undefined. Unlike the other Read* methods, this
+  // does not move the cursor.
+  bool ReadPayloadAsBufferReader(const SecurityBuffer& sec_buf,
+                                 NtlmBufferReader* reader) WARN_UNUSED_RESULT;
+
   // A security buffer is an 8 byte structure that defines the offset and
   // length of a payload (string, struct or byte array) that appears after the
   // fixed part of the message.
@@ -108,12 +119,42 @@ class NET_EXPORT_PRIVATE NtlmBufferReader {
   //     uint32 - |offset| Offset from start of message
   bool ReadSecurityBuffer(SecurityBuffer* sec_buf) WARN_UNUSED_RESULT;
 
+  // Reads an AvPair header. AvPairs appear sequentially, terminated by a
+  // special EOL AvPair, in the target info payload of the Challenge message.
+  // See [MS-NLMP] Section 2.2.2.1.
+  //
+  // An AvPair contains an inline payload, and has the structure below (
+  // little endian fields):
+  //    uint16      - AvID: Identifies the type of the payload.
+  //    uint16      - AvLen: The length of the following payload.
+  //    (variable)  - Payload: Variable length payload. The content and
+  //                  format are determined by the AvId.
+  bool ReadAvPairHeader(TargetInfoAvId* avid,
+                        uint16_t* avlen) WARN_UNUSED_RESULT;
+
   // There are 3 message types Negotiate (sent by client), Challenge (sent by
   // server), and Authenticate (sent by client).
   //
   // This reads the message type from the header and will return false if the
   // value is invalid.
   bool ReadMessageType(MessageType* message_type) WARN_UNUSED_RESULT;
+
+  // Reads |target_info_len| bytes and parses them as a sequence of Av Pairs.
+  // |av_pairs| should be empty on entry to this function. If |ReadTargetInfo|
+  // returns false, the content of |av_pairs| is in an undefined state and
+  // should be discarded.
+  bool ReadTargetInfo(size_t target_info_len,
+                      std::vector<AvPair>* av_pairs) WARN_UNUSED_RESULT;
+
+  // Reads a security buffer, then parses the security buffer payload as a
+  // target info. The target info is returned as a sequence of AvPairs, with
+  // the terminating AvPair omitted. A zero length payload is valid and will
+  // result in an empty list in |av_pairs|. Any non-zero length payload must
+  // have a terminating AvPair.
+  // |av_pairs| should be empty on entry to this function. If |ReadTargetInfo|
+  // returns false, the content of |av_pairs| is in an undefined state and
+  // should be discarded.
+  bool ReadTargetInfoPayload(std::vector<AvPair>* av_pairs) WARN_UNUSED_RESULT;
 
   // Skips over a security buffer field without reading the fields. This is
   // the equivalent of advancing the cursor 8 bytes. Returns false if there
@@ -166,7 +207,9 @@ class NET_EXPORT_PRIVATE NtlmBufferReader {
   void AdvanceCursor(size_t count) { SetCursor(GetCursor() + count); }
 
   // Returns a constant pointer to the start of the buffer.
-  const uint8_t* GetBufferPtr() const { return buffer_.data(); }
+  const uint8_t* GetBufferPtr() const {
+    return reinterpret_cast<const uint8_t*>(buffer_.data());
+  }
 
   // Returns a pointer to the underlying buffer at the current cursor
   // position.
@@ -178,10 +221,8 @@ class NET_EXPORT_PRIVATE NtlmBufferReader {
     return *(GetBufferAtCursor());
   }
 
-  const Buffer buffer_;
+  base::StringPiece buffer_;
   size_t cursor_;
-
-  DISALLOW_COPY_AND_ASSIGN(NtlmBufferReader);
 };
 
 }  // namespace ntlm

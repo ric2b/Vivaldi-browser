@@ -42,7 +42,7 @@ struct PatternData {
   USING_FAST_MALLOC(PatternData);
 
  public:
-  RefPtr<Pattern> pattern;
+  scoped_refptr<Pattern> pattern;
   AffineTransform transform;
 };
 
@@ -87,7 +87,7 @@ PatternData* LayoutSVGResourcePattern::PatternForLayoutObject(
 std::unique_ptr<PatternData> LayoutSVGResourcePattern::BuildPatternData(
     const LayoutObject& object) {
   // If we couldn't determine the pattern content element root, stop here.
-  const PatternAttributes& attributes = this->Attributes();
+  const PatternAttributes& attributes = Attributes();
   if (!attributes.PatternContentElement())
     return nullptr;
 
@@ -136,7 +136,7 @@ SVGPaintServer LayoutSVGResourcePattern::PreparePaintServer(
     const LayoutObject& object) {
   ClearInvalidationMask();
 
-  SVGPatternElement* pattern_element = toSVGPatternElement(GetElement());
+  SVGPatternElement* pattern_element = ToSVGPatternElement(GetElement());
   if (!pattern_element)
     return SVGPaintServer::Invalid();
 
@@ -214,7 +214,7 @@ sk_sp<PaintRecord> LayoutSVGResourcePattern::AsPaintRecord(
 
   SubtreeContentTransformScope content_transform_scope(content_transform);
 
-  PaintRecordBuilder builder(bounds);
+  PaintRecordBuilder builder;
   for (LayoutObject* child = pattern_layout_object->FirstChild(); child;
        child = child->NextSibling())
     SVGPaintContext::PaintResourceSubtree(builder.Context(), child);

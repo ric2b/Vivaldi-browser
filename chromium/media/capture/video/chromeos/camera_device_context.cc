@@ -10,9 +10,10 @@ CameraDeviceContext::CameraDeviceContext(
     std::unique_ptr<VideoCaptureDevice::Client> client)
     : state_(State::kStopped), rotation_(0), client_(std::move(client)) {
   DCHECK(client_);
+  DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
-CameraDeviceContext::~CameraDeviceContext() {}
+CameraDeviceContext::~CameraDeviceContext() = default;
 
 void CameraDeviceContext::SetState(State state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -26,9 +27,8 @@ CameraDeviceContext::State CameraDeviceContext::GetState() {
   return state_;
 }
 
-void CameraDeviceContext::SetErrorState(
-    const tracked_objects::Location& from_here,
-    const std::string& reason) {
+void CameraDeviceContext::SetErrorState(const base::Location& from_here,
+                                        const std::string& reason) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   state_ = State::kError;
   LOG(ERROR) << reason;

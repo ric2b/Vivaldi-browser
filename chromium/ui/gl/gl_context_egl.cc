@@ -10,17 +10,19 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+
+#if defined(USE_X11)
+// Must be included before khronos headers or they will pollute the
+// global scope with X11 macros.
+#include "ui/gfx/x/x11.h"
+#endif
+
 #include "third_party/khronos/EGL/egl.h"
 #include "third_party/khronos/EGL/eglext.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_surface_egl.h"
 
-#if defined(USE_X11)
-extern "C" {
-#include <X11/Xlib.h>
-}
-#endif
 
 #ifndef EGL_CHROMIUM_create_context_bind_generates_resource
 #define EGL_CHROMIUM_create_context_bind_generates_resource 1
@@ -41,6 +43,11 @@ extern "C" {
 #define EGL_ANGLE_create_context_client_arrays 1
 #define EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE 0x3452
 #endif /* EGL_ANGLE_create_context_client_arrays */
+
+#ifndef EGL_ANGLE_robust_resource_initialization
+#define EGL_ANGLE_robust_resource_initialization 1
+#define EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE 0x3453
+#endif /* EGL_ANGLE_display_robust_resource_initialization */
 
 #ifndef EGL_CONTEXT_PRIORITY_LEVEL_IMG
 #define EGL_CONTEXT_PRIORITY_LEVEL_IMG 0x3100
@@ -109,6 +116,9 @@ bool GLContextEGL::Initialize(GLSurface* compatible_surface,
 
   if (GLSurfaceEGL::IsCreateContextRobustnessSupported()) {
     DVLOG(1) << "EGL_EXT_create_context_robustness supported.";
+    context_attributes.push_back(EGL_CONTEXT_OPENGL_ROBUST_ACCESS_EXT);
+    context_attributes.push_back(attribs.robust_buffer_access ? EGL_TRUE
+                                                              : EGL_FALSE);
     context_attributes.push_back(
         EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_EXT);
     context_attributes.push_back(EGL_LOSE_CONTEXT_ON_RESET_EXT);
@@ -166,6 +176,14 @@ bool GLContextEGL::Initialize(GLSurface* compatible_surface,
     // Disable client arrays if the context supports it
     context_attributes.push_back(EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE);
     context_attributes.push_back(EGL_FALSE);
+  }
+
+  if (GLSurfaceEGL::IsRobustResourceInitSupported()) {
+    context_attributes.push_back(EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
+    context_attributes.push_back(
+        attribs.robust_resource_initialization ? EGL_TRUE : EGL_FALSE);
+  } else {
+    DCHECK(!attribs.robust_resource_initialization);
   }
 
   // Append final EGL_NONE to signal the context attributes are finished

@@ -33,6 +33,7 @@
 #include "core/animation/AnimationClock.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/PendingAnimations.h"
+#include "core/animation/WorkletAnimationController.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -74,6 +75,22 @@ void DocumentAnimations::UpdateAnimations(
     DCHECK(document.View());
     document.View()->ScheduleAnimation();
   }
+  if (document.View()) {
+    if (CompositorAnimationHost* host =
+            document.View()->GetCompositorAnimationHost()) {
+      int total_animations_count = 0;
+      int main_thread_compositable_animations_count = 0;
+      if (document.Timeline().HasAnimations()) {
+        total_animations_count = document.Timeline().PendingAnimationsCount();
+        main_thread_compositable_animations_count =
+            document.Timeline().MainThreadCompositableAnimationsCount();
+      }
+      host->SetAnimationCounts(total_animations_count,
+                               main_thread_compositable_animations_count);
+    }
+  }
+
+  document.GetWorkletAnimationController().Update();
 
   document.Timeline().ScheduleNextService();
 }

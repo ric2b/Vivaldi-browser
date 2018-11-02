@@ -17,7 +17,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -56,7 +55,6 @@ public class AutofillTest {
     private MockAutofillCallback mMockAutofillCallback;
 
     @Before
-    @SuppressFBWarnings("URF_UNREAD_FIELD")
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
 
@@ -68,7 +66,7 @@ public class AutofillTest {
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
             View anchorView = viewDelegate.acquireView();
-            viewDelegate.setViewPosition(anchorView, 50f, 500f, 500f, 500f, 1f, 10, 10);
+            viewDelegate.setViewPosition(anchorView, 50f, 500f, 500f, 500f, 10, 10);
 
             mWindowAndroid = new ActivityWindowAndroid(activity);
             mAutofillPopup = new AutofillPopup(activity, anchorView, mMockAutofillCallback);

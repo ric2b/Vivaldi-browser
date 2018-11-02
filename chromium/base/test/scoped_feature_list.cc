@@ -81,7 +81,7 @@ void OverrideFeatures(const std::string& features,
 
 }  // namespace
 
-ScopedFeatureList::ScopedFeatureList() {}
+ScopedFeatureList::ScopedFeatureList() = default;
 
 ScopedFeatureList::~ScopedFeatureList() {
   if (field_trial_override_)
@@ -89,10 +89,9 @@ ScopedFeatureList::~ScopedFeatureList() {
         field_trial_override_->trial_name(),
         field_trial_override_->group_name());
 
-  if (original_feature_list_) {
-    FeatureList::ClearInstanceForTesting();
+  FeatureList::ClearInstanceForTesting();
+  if (original_feature_list_)
     FeatureList::RestoreInstanceForTesting(std::move(original_feature_list_));
-  }
 }
 
 void ScopedFeatureList::Init() {

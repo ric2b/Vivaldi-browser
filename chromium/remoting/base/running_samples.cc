@@ -26,7 +26,7 @@ void RunningSamples::Record(int64_t value) {
   sum_ += value;
 
   if (data_points_.size() > window_size_) {
-    sum_ -= data_points_[0];
+    sum_ -= data_points_.front();
     data_points_.pop_front();
   }
 }
@@ -46,6 +46,10 @@ int64_t RunningSamples::Max() const {
     return 0;
 
   return *std::max_element(data_points_.begin(), data_points_.end());
+}
+
+bool RunningSamples::IsEmpty() const {
+  return data_points_.empty();
 }
 
 }  // namespace remoting

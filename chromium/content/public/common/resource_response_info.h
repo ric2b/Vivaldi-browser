@@ -54,6 +54,13 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // True if the resource was loaded in spite of certificate errors.
   bool has_major_certificate_errors;
 
+  // True if the resource was loaded with an otherwise-valid legacy Symantec
+  // certificate which will be distrusted in future.
+  bool is_legacy_symantec_cert;
+
+  // The time at which the certificate (if any) of the resource expires.
+  base::Time cert_validity_start;
+
   // Content length if available. -1 if not available
   int64_t content_length;
 
@@ -108,9 +115,6 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // True if the response was fetched by a ServiceWorker.
   bool was_fetched_via_service_worker;
 
-  // True if the response was fetched by a foreign fetch ServiceWorker;
-  bool was_fetched_via_foreign_fetch;
-
   // True when the request whoes mode is |CORS| or |CORS-with-forced-preflight|
   // is sent to a ServiceWorker but FetchEvent.respondWith is not called. So the
   // renderer have to resend the request with skip service worker flag
@@ -155,8 +159,7 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   std::vector<std::string> certificate;
 
   // Bitmask of status info of the SSL certificate. See cert_status_flags.h for
-  // values. Only present if the renderer process set report_raw_headers to
-  // true.
+  // values.
   net::CertStatus cert_status;
 
   // Information about the SSL connection itself. See

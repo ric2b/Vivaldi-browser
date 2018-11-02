@@ -35,7 +35,6 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -59,6 +58,7 @@
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/embedder/switches.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -73,7 +73,6 @@
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "content/browser/mach_broker_mac.h"
-#include "content/common/sandbox_init_mac.h"
 #endif  // OS_WIN
 
 #if defined(OS_POSIX)
@@ -110,10 +109,6 @@
 #include "content/gpu/in_process_gpu_thread.h"
 #include "content/renderer/in_process_renderer_thread.h"
 #include "content/utility/in_process_utility_thread.h"
-#endif
-
-#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-#include "content/common/media/cdm_host_files.h"
 #endif
 
 namespace content {
@@ -174,6 +169,7 @@ void InitializeFieldTrialAndFeatureList(
   base::FeatureList::SetInstance(std::move(feature_list));
 }
 
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 void LoadV8ContextSnapshotFile() {
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   base::FileDescriptorStore& file_descriptor_store =
@@ -186,48 +182,59 @@ void LoadV8ContextSnapshotFile() {
                                                     region.size);
     return;
   }
-#endif  // OS
+#endif  // OS_POSIX && !OS_MACOSX
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
   gin::V8Initializer::LoadV8ContextSnapshot();
 #endif  // !CHROME_MULTIPLE_DLL_BROWSER
 }
 
-void InitializeV8IfNeeded(
-    const base::CommandLine& command_line,
-    const std::string& process_type) {
-  if (process_type == switches::kGpuProcess)
-    return;
-
-#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+void LoadV8SnapshotFile() {
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   base::FileDescriptorStore& file_descriptor_store =
       base::FileDescriptorStore::GetInstance();
   base::MemoryMappedFile::Region region;
-  base::ScopedFD v8_snapshot_fd =
+  base::ScopedFD fd =
       file_descriptor_store.MaybeTakeFD(kV8SnapshotDataDescriptor, &region);
-  if (v8_snapshot_fd.is_valid()) {
-    gin::V8Initializer::LoadV8SnapshotFromFD(v8_snapshot_fd.get(),
-                                             region.offset, region.size);
-  } else {
-    gin::V8Initializer::LoadV8Snapshot();
+  if (fd.is_valid()) {
+    gin::V8Initializer::LoadV8SnapshotFromFD(fd.get(), region.offset,
+                                             region.size);
+    return;
   }
-  base::ScopedFD v8_natives_fd =
-      file_descriptor_store.MaybeTakeFD(kV8NativesDataDescriptor, &region);
-  if (v8_natives_fd.is_valid()) {
-    gin::V8Initializer::LoadV8NativesFromFD(v8_natives_fd.get(), region.offset,
-                                            region.size);
-  } else {
-    gin::V8Initializer::LoadV8Natives();
-  }
-#else
+#endif  // OS_POSIX && !OS_MACOSX
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
   gin::V8Initializer::LoadV8Snapshot();
+#endif  // !CHROME_MULTIPLE_DLL_BROWSER
+}
+
+void LoadV8NativesFile() {
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
+  base::FileDescriptorStore& file_descriptor_store =
+      base::FileDescriptorStore::GetInstance();
+  base::MemoryMappedFile::Region region;
+  base::ScopedFD fd =
+      file_descriptor_store.MaybeTakeFD(kV8NativesDataDescriptor, &region);
+  if (fd.is_valid()) {
+    gin::V8Initializer::LoadV8NativesFromFD(fd.get(), region.offset,
+                                            region.size);
+    return;
+  }
+#endif  // OS_POSIX && !OS_MACOSX
+#if !defined(CHROME_MULTIPLE_DLL_BROWSER)
   gin::V8Initializer::LoadV8Natives();
 #endif  // !CHROME_MULTIPLE_DLL_BROWSER
-#endif  // OS_POSIX && !OS_MACOSX
+}
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
+void InitializeV8IfNeeded(const base::CommandLine& command_line,
+                          const std::string& process_type) {
+  if (process_type == switches::kGpuProcess)
+    return;
+
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+  LoadV8SnapshotFile();
+  LoadV8NativesFile();
   LoadV8ContextSnapshotFile();
+#endif  // V8_USE_EXTERNAL_STARTUP_DATA
 }
 
 }  // namespace
@@ -298,8 +305,7 @@ struct MainFunction {
   int (*function)(const MainFunctionParams&);
 };
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
-    !defined(OS_FUCHSIA)
+#if defined(OS_LINUX)
 // On platforms that use the zygote, we have a special subset of
 // subprocesses that are launched via the zygote.  This function
 // fills in some process-launching bits around ZygoteMain().
@@ -334,20 +340,16 @@ int RunZygote(const MainFunctionParams& main_function_params,
       command_line.GetSwitchValueASCII(switches::kProcessType);
   ContentClientInitializer::Set(process_type, delegate);
 
-#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-  if (process_type != switches::kPpapiPluginProcess) {
-    DVLOG(1) << "Closing CDM files for non-ppapi process.";
-    CdmHostFiles::TakeGlobalInstance().reset();
-  } else {
-    DVLOG(1) << "Not closing CDM files for ppapi process.";
-  }
-#endif
-
   MainFunctionParams main_params(command_line);
   main_params.zygote_child = true;
 
   std::unique_ptr<base::FieldTrialList> field_trial_list;
   InitializeFieldTrialAndFeatureList(&field_trial_list);
+
+  service_manager::SandboxType sandbox_type =
+      service_manager::SandboxTypeFromCommandLine(command_line);
+  if (sandbox_type == service_manager::SANDBOX_TYPE_PROFILING)
+    content::DisableLocaltimeOverride();
 
   for (size_t i = 0; i < arraysize(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name)
@@ -360,8 +362,7 @@ int RunZygote(const MainFunctionParams& main_function_params,
   NOTREACHED() << "Unknown zygote process type: " << process_type;
   return 1;
 }
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
-//         !defined(OS_FUCHSIA)
+#endif  // defined(OS_LINUX)
 
 static void RegisterMainThreadFactories() {
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER) && !defined(CHROME_MULTIPLE_DLL_CHILD)
@@ -449,8 +450,8 @@ class ContentMainRunnerImpl : public ContentMainRunner {
       : is_initialized_(false),
         is_shutdown_(false),
         completed_basic_startup_(false),
-        delegate_(NULL),
-        ui_task_(NULL) {
+        delegate_(nullptr),
+        ui_task_(nullptr) {
 #if defined(OS_WIN)
     memset(&sandbox_info_, 0, sizeof(sandbox_info_));
 #endif
@@ -519,11 +520,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
       // called are destructed when it returns.
       exit_manager_.reset(new base::AtExitManager);
     }
-#endif  // !OS_ANDROID
-
-#if !defined(OS_ANDROID)
-    if (delegate_ && delegate_->ShouldEnableProfilerRecording())
-      tracked_objects::ScopedTracker::Enable();
 #endif  // !OS_ANDROID
 
     int exit_code = 0;
@@ -659,7 +655,9 @@ class ContentMainRunnerImpl : public ContentMainRunner {
       delegate_->PreSandboxStartup();
 
 #if defined(OS_WIN)
-    CHECK(InitializeSandbox(params.sandbox_info));
+    CHECK(InitializeSandbox(
+        service_manager::SandboxTypeFromCommandLine(command_line),
+        params.sandbox_info));
 #elif defined(OS_MACOSX)
     if (process_type == switches::kRendererProcess ||
         process_type == switches::kPpapiPluginProcess ||
@@ -691,8 +689,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     std::unique_ptr<base::FieldTrialList> field_trial_list;
     if (!process_type.empty() && process_type != switches::kZygoteProcess)
       InitializeFieldTrialAndFeatureList(&field_trial_list);
-
-    base::HistogramBase::EnableActivityReportHistogram(process_type);
 
     MainFunctionParams main_params(command_line);
     main_params.ui_task = ui_task_;
@@ -728,9 +724,9 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #endif  // _CRTDBG_MAP_ALLOC
 #endif  // OS_WIN
 
-    exit_manager_.reset(NULL);
+    exit_manager_.reset(nullptr);
 
-    delegate_ = NULL;
+    delegate_ = nullptr;
     is_shutdown_ = true;
   }
 

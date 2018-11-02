@@ -4,8 +4,9 @@
 
 #include "ash/display/display_color_manager_chromeos.h"
 
+#include <memory>
+
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
@@ -16,9 +17,9 @@
 #include "components/quirks/quirks_manager.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/fake_display_snapshot.h"
 #include "ui/display/manager/chromeos/test/action_logger_util.h"
 #include "ui/display/manager/chromeos/test/test_native_display_delegate.h"
+#include "ui/display/manager/fake_display_snapshot.h"
 
 namespace ash {
 
@@ -114,7 +115,7 @@ class DisplayColorManagerTest : public testing::Test {
             native_display_delegate_));
 
     color_manager_ =
-        base::MakeUnique<DisplayColorManagerForTest>(&configurator_);
+        std::make_unique<DisplayColorManagerForTest>(&configurator_);
 
     EXPECT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &color_path_));
 
@@ -142,7 +143,7 @@ class DisplayColorManagerTest : public testing::Test {
   }
 
   DisplayColorManagerTest() : test_api_(&configurator_) {}
-  ~DisplayColorManagerTest() override {}
+  ~DisplayColorManagerTest() override = default;
 
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;

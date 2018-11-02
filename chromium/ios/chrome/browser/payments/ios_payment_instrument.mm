@@ -35,8 +35,7 @@ IOSPaymentInstrument::IOSPaymentInstrument(
     const std::string& app_name,
     UIImage* icon_image,
     id<PaymentRequestUIDelegate> payment_request_ui_delegate)
-    : PaymentInstrument(method_name,
-                        -1 /* resource id not used */,
+    : PaymentInstrument(-1 /* resource id not used */,
                         PaymentInstrument::Type::NATIVE_MOBILE_APP),
       method_name_(method_name),
       universal_link_(universal_link),
@@ -91,14 +90,14 @@ base::string16 IOSPaymentInstrument::GetSublabel() const {
 }
 
 bool IOSPaymentInstrument::IsValidForModifier(
-    const std::vector<std::string>& supported_methods,
-    const std::vector<std::string>& supported_networks,
-    const std::set<autofill::CreditCard::CardType>& supported_types,
-    bool supported_types_specified) const {
+    const std::vector<std::string>& methods,
+    bool supported_networks_specified,
+    const std::set<std::string>& supported_networks,
+    bool supported_types_specified,
+    const std::set<autofill::CreditCard::CardType>& supported_types) const {
   // This instrument only matches url-based payment method identifiers that
   // are equal to the instrument's method name.
-  if (std::find(supported_methods.begin(), supported_methods.end(),
-                method_name_) == supported_methods.end())
+  if (std::find(methods.begin(), methods.end(), method_name_) == methods.end())
     return false;
 
   // TODO(crbug.com/602666): Determine if the native payment app supports

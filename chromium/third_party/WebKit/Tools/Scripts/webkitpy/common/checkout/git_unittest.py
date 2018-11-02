@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import sys
 import unittest
 
 from webkitpy.common.system.executive import Executive, ScriptError
@@ -11,11 +12,14 @@ from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.checkout.git import Git
 
 
+# These tests could likely be run on Windows if we first used Git.find_executable_name.
+@unittest.skipIf(sys.platform == 'win32', 'fails on Windows')
 class GitTestWithRealFilesystemAndExecutive(unittest.TestCase):
 
     def setUp(self):
         self.executive = Executive()
         self.filesystem = FileSystem()
+
         self.original_cwd = self.filesystem.getcwd()
 
         # Set up fresh git repository with one commit.
@@ -139,7 +143,6 @@ class GitTestWithRealFilesystemAndExecutive(unittest.TestCase):
         self._write_text_file('test_file_commit1', 'contents')
         self._run(['git', 'add', 'test_file_commit1'])
         git.commit_locally_with_message('message')
-        git._patch_order = lambda: ''  # pylint: disable=protected-access
         patch = git.create_patch()
         self.assertNotRegexpMatches(patch, r'Subversion Revision:')
 
@@ -152,7 +155,6 @@ class GitTestWithRealFilesystemAndExecutive(unittest.TestCase):
 
         # Even if diff.noprefix is enabled, create_patch() produces diffs with prefixes.
         self._run(['git', 'config', 'diff.noprefix', 'true'])
-        git._patch_order = lambda: ''  # pylint: disable=protected-access
         patch = git.create_patch()
         self.assertRegexpMatches(patch, r'^diff --git a/test_file_commit1 b/test_file_commit1')
 

@@ -38,8 +38,7 @@ DelayedCookieMonster::DelayedCookieMonster()
       did_run_(false),
       result_(false) {}
 
-DelayedCookieMonster::~DelayedCookieMonster() {
-}
+DelayedCookieMonster::~DelayedCookieMonster() = default;
 
 void DelayedCookieMonster::SetCookiesInternalCallback(bool result) {
   result_ = result;
@@ -76,29 +75,22 @@ void DelayedCookieMonster::SetCookieWithOptionsAsync(
       base::TimeDelta::FromMilliseconds(kDelayedTime));
 }
 
-void DelayedCookieMonster::SetCookieWithDetailsAsync(
-    const GURL& url,
-    const std::string& name,
-    const std::string& value,
-    const std::string& domain,
-    const std::string& path,
-    base::Time creation_time,
-    base::Time expiration_time,
-    base::Time last_access_time,
-    bool secure,
-    bool http_only,
-    CookieSameSite same_site,
-    CookiePriority priority,
-    SetCookiesCallback callback) {
-  NOTREACHED();
-}
-
 void DelayedCookieMonster::SetCanonicalCookieAsync(
     std::unique_ptr<CanonicalCookie> cookie,
     bool secure_source,
     bool modify_http_only,
     SetCookiesCallback callback) {
-  NOTREACHED();
+  did_run_ = false;
+  cookie_monster_->SetCanonicalCookieAsync(
+      std::move(cookie), secure_source, modify_http_only,
+      base::Bind(&DelayedCookieMonster::SetCookiesInternalCallback,
+                 base::Unretained(this)));
+  DCHECK_EQ(did_run_, true);
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&DelayedCookieMonster::InvokeSetCookiesCallback,
+                     base::Unretained(this), std::move(callback)),
+      base::TimeDelta::FromMilliseconds(kDelayedTime));
 }
 
 void DelayedCookieMonster::GetCookiesWithOptionsAsync(

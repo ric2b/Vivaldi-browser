@@ -47,23 +47,15 @@ bool ContentRendererClient::ShouldSuppressErrorPage(RenderFrame* render_frame,
   return false;
 }
 
+bool ContentRendererClient::ShouldTrackUseCounter(const GURL& url) {
+  return true;
+}
+
 void ContentRendererClient::DeferMediaLoad(
     RenderFrame* render_frame,
     bool has_played_media_before,
     const base::Closure& closure) {
   closure.Run();
-}
-
-std::unique_ptr<blink::WebMediaStreamCenter>
-ContentRendererClient::OverrideCreateWebMediaStreamCenter(
-    blink::WebMediaStreamCenterClient* client) {
-  return nullptr;
-}
-
-std::unique_ptr<blink::WebRTCPeerConnectionHandler>
-ContentRendererClient::OverrideCreateWebRTCPeerConnectionHandler(
-    blink::WebRTCPeerConnectionHandlerClient* client) {
-  return nullptr;
 }
 
 std::unique_ptr<blink::WebMIDIAccessor>
@@ -101,7 +93,7 @@ bool ContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return true;
 }
 
-bool ContentRendererClient::AllowStoppingTimersWhenProcessBackgrounded() {
+bool ContentRendererClient::AllowStoppingWhenProcessBackgrounded() {
   return false;
 }
 
@@ -167,7 +159,7 @@ ContentRendererClient::GetPrescientNetworking() {
 
 bool ContentRendererClient::ShouldOverridePageVisibilityState(
     const RenderFrame* render_frame,
-    blink::WebPageVisibilityState* override_state) {
+    blink::mojom::PageVisibilityState* override_state) {
   return false;
 }
 
@@ -259,6 +251,13 @@ ContentRendererClient::GetTaskSchedulerInitParams() {
 
 bool ContentRendererClient::AllowIdleMediaSuspend() {
   return true;
+}
+
+bool ContentRendererClient::OverrideLegacySymantecCertConsoleMessage(
+    const GURL& url,
+    base::Time cert_expiration,
+    std::string* console_messsage) {
+  return false;
 }
 
 }  // namespace content

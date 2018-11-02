@@ -30,14 +30,16 @@
 
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/V8DOMActivityLogger.h"
+#include "bindings/core/v8/string_or_trusted_url.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/trustedtypes/TrustedURL.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/FrameLoader.h"
 #include "core/url/DOMURLUtilsReadOnly.h"
+#include "platform/bindings/V8DOMActivityLogger.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
@@ -45,8 +47,9 @@ namespace blink {
 
 Location::Location(DOMWindow* dom_window) : dom_window_(dom_window) {}
 
-DEFINE_TRACE(Location) {
+void Location::Trace(blink::Visitor* visitor) {
   visitor->Trace(dom_window_);
+  ScriptWrappable::Trace(visitor);
 }
 
 inline const KURL& Location::Url() const {
@@ -60,8 +63,8 @@ inline const KURL& Location::Url() const {
   return url;
 }
 
-String Location::href() const {
-  return Url().StrippedForUseAsHref();
+void Location::href(StringOrTrustedURL& result) const {
+  result.SetString(Url().StrippedForUseAsHref());
 }
 
 String Location::protocol() const {
@@ -104,14 +107,34 @@ DOMStringList* Location::ancestorOrigins() const {
   return origins;
 }
 
+String Location::toString() const {
+  StringOrTrustedURL result;
+  href(result);
+  DCHECK(result.IsString());
+  return result.GetAsString();
+}
+
 String Location::hash() const {
   return DOMURLUtilsReadOnly::hash(Url());
 }
 
 void Location::setHref(LocalDOMWindow* current_window,
                        LocalDOMWindow* entered_window,
-                       const String& url,
+                       const StringOrTrustedURL& stringOrUrl,
                        ExceptionState& exception_state) {
+  DCHECK(stringOrUrl.IsString() ||
+         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
+
+  if (stringOrUrl.IsString() &&
+      current_window->document()->RequireTrustedTypes()) {
+    exception_state.ThrowTypeError(
+        "This document requires `TrustedURL` assignment.");
+    return;
+  }
+
+  String url = stringOrUrl.IsString()
+                   ? stringOrUrl.GetAsString()
+                   : stringOrUrl.GetAsTrustedURL()->toString();
   SetLocation(url, current_window, entered_window, &exception_state);
 }
 

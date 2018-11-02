@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -45,8 +44,7 @@ const char HttpRequestHeaders::kTransferEncoding[] = "Transfer-Encoding";
 const char HttpRequestHeaders::kTokenBinding[] = "Sec-Token-Binding";
 const char HttpRequestHeaders::kUserAgent[] = "User-Agent";
 
-HttpRequestHeaders::HeaderKeyValuePair::HeaderKeyValuePair() {
-}
+HttpRequestHeaders::HeaderKeyValuePair::HeaderKeyValuePair() = default;
 
 HttpRequestHeaders::HeaderKeyValuePair::HeaderKeyValuePair(
     const base::StringPiece& key, const base::StringPiece& value)
@@ -59,7 +57,7 @@ HttpRequestHeaders::Iterator::Iterator(const HttpRequestHeaders& headers)
       curr_(headers.headers_.begin()),
       end_(headers.headers_.end()) {}
 
-HttpRequestHeaders::Iterator::~Iterator() {}
+HttpRequestHeaders::Iterator::~Iterator() = default;
 
 bool HttpRequestHeaders::Iterator::GetNext() {
   if (!started_) {
@@ -74,10 +72,10 @@ bool HttpRequestHeaders::Iterator::GetNext() {
   return curr_ != end_;
 }
 
-HttpRequestHeaders::HttpRequestHeaders() {}
+HttpRequestHeaders::HttpRequestHeaders() = default;
 HttpRequestHeaders::HttpRequestHeaders(const HttpRequestHeaders& other) =
     default;
-HttpRequestHeaders::~HttpRequestHeaders() {}
+HttpRequestHeaders::~HttpRequestHeaders() = default;
 
 bool HttpRequestHeaders::GetHeader(const base::StringPiece& key,
                                    std::string* out) const {
@@ -94,13 +92,9 @@ void HttpRequestHeaders::Clear() {
 
 void HttpRequestHeaders::SetHeader(const base::StringPiece& key,
                                    const base::StringPiece& value) {
-  DCHECK(HttpUtil::IsValidHeaderName(key));
-  DCHECK(HttpUtil::IsValidHeaderValue(value));
-  HeaderVector::iterator it = FindHeader(key);
-  if (it != headers_.end())
-    it->value.assign(value.data(), value.size());
-  else
-    headers_.push_back(HeaderKeyValuePair(key, value));
+  DCHECK(HttpUtil::IsValidHeaderName(key)) << key;
+  DCHECK(HttpUtil::IsValidHeaderValue(value)) << key << ":" << value;
+  SetHeaderInternal(key, value);
 }
 
 void HttpRequestHeaders::SetHeaderIfMissing(const base::StringPiece& key,
@@ -227,6 +221,15 @@ HttpRequestHeaders::FindHeader(const base::StringPiece& key) const {
   }
 
   return headers_.end();
+}
+
+void HttpRequestHeaders::SetHeaderInternal(const base::StringPiece& key,
+                                           const base::StringPiece& value) {
+  HeaderVector::iterator it = FindHeader(key);
+  if (it != headers_.end())
+    it->value.assign(value.data(), value.size());
+  else
+    headers_.push_back(HeaderKeyValuePair(key, value));
 }
 
 }  // namespace net

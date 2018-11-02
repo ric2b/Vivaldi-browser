@@ -5,11 +5,45 @@
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 
 #include "base/memory/singleton.h"
+#include "base/sys_info.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 
 namespace gpu {
+namespace {
+size_t CacheSizeLimit() {
+// Cache size values are designed to roughly correspond to existing image cache
+// sizes for 1-1.5 renderers. These will be updated as more types of data are
+// moved to this cache.
+#if defined(OS_ANDROID)
+  const size_t kLowEndCacheSizeBytes = 512 * 1024;
+  const size_t kNormalCacheSizeBytes = 128 * 1024 * 1024;
+#else
+  const size_t kNormalCacheSizeBytes = 192 * 1024 * 1024;
+  const size_t kLargeCacheSizeBytes = 256 * 1024 * 1024;
+  // Device ram threshold at which we move from a normal cache to a large cache.
+  // While this is a GPU memory cache, we can't read GPU memory reliably, so we
+  // use system ram as a proxy.
+  const int kLargeCacheSizeMemoryThresholdMB = 4 * 1024;
+#endif  // defined(OS_ANDROID)
 
-const size_t ServiceDiscardableManager::kMaxSize;
+#if defined(OS_ANDROID)
+  if (base::SysInfo::IsLowEndDevice()) {
+    return kLowEndCacheSizeBytes;
+  } else {
+    return kNormalCacheSizeBytes;
+  }
+#else
+  if (base::SysInfo::AmountOfPhysicalMemoryMB() <
+      kLargeCacheSizeMemoryThresholdMB) {
+    return kNormalCacheSizeBytes;
+  } else {
+    return kLargeCacheSizeBytes;
+  }
+#endif
+}
+
+}  // namespace
 
 ServiceDiscardableManager::GpuDiscardableEntry::GpuDiscardableEntry(
     ServiceDiscardableHandle handle,
@@ -23,7 +57,9 @@ ServiceDiscardableManager::GpuDiscardableEntry::~GpuDiscardableEntry() =
     default;
 
 ServiceDiscardableManager::ServiceDiscardableManager()
-    : entries_(EntryCache::NO_AUTO_EVICT) {}
+    : entries_(EntryCache::NO_AUTO_EVICT),
+      cache_size_limit_(CacheSizeLimit()) {}
+
 ServiceDiscardableManager::~ServiceDiscardableManager() {
 #if DCHECK_IS_ON()
   for (const auto& entry : entries_) {
@@ -53,7 +89,7 @@ void ServiceDiscardableManager::InsertLockedTexture(
   total_size_ += texture_size;
   entries_.Put({texture_id, texture_manager},
                GpuDiscardableEntry{handle, texture_size});
-  EnforceLimits();
+  EnforceCacheSizeLimit(cache_size_limit_);
 }
 
 bool ServiceDiscardableManager::UnlockTexture(
@@ -127,12 +163,33 @@ void ServiceDiscardableManager::OnTextureSizeChanged(
   found->second.size = new_size;
   total_size_ += found->second.size;
 
-  EnforceLimits();
+  EnforceCacheSizeLimit(cache_size_limit_);
 }
 
-void ServiceDiscardableManager::EnforceLimits() {
+void ServiceDiscardableManager::HandleMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  size_t limit = 0;
+  switch (memory_pressure_level) {
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
+      // This function is only called with moderate or critical pressure.
+      NOTREACHED();
+      return;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+      // With moderate pressure, shrink to 1/4 our normal size.
+      limit = cache_size_limit_ / 4;
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      // With critical pressure, purge as much as possible.
+      limit = 0;
+      break;
+  }
+
+  EnforceCacheSizeLimit(limit);
+}
+
+void ServiceDiscardableManager::EnforceCacheSizeLimit(size_t limit) {
   for (auto it = entries_.rbegin(); it != entries_.rend();) {
-    if (total_size_ <= kMaxSize) {
+    if (total_size_ <= limit) {
       return;
     }
     if (!it->second.handle.Delete()) {

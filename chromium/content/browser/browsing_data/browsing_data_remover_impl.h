@@ -7,9 +7,9 @@
 
 #include <stdint.h>
 
-#include <queue>
 #include <set>
 
+#include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -134,6 +134,7 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
                 int origin_type_mask,
                 std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
                 Observer* observer);
+    RemovalTask(RemovalTask&& other) noexcept;
     ~RemovalTask();
 
     base::Time delete_begin;
@@ -201,7 +202,7 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
   bool is_removing_;
 
   // Removal tasks to be processed.
-  std::queue<RemovalTask> task_queue_;
+  base::queue<RemovalTask> task_queue_;
 
   // If non-null, the |would_complete_callback_| is called each time an instance
   // is about to complete a browsing data removal process, and has the ability
@@ -217,6 +218,7 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
   SubTask synchronous_clear_operations_;
   SubTask clear_embedder_data_;
   SubTask clear_cache_;
+  SubTask clear_networking_history_;
   SubTask clear_channel_ids_;
   SubTask clear_http_auth_cache_;
   SubTask clear_storage_partition_data_;

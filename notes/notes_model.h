@@ -119,8 +119,6 @@ class Notes_Model : public KeyedService {
   // notification for individual node removals.
   void RemoveAllUserNotes();
 
-  void RemoveAndDeleteNode(Notes_Node* delete_me);
-
   // Moves |node| to |new_parent| and inserts it at the given |index|.
   bool Move(const Notes_Node* node, const Notes_Node* new_parent, int index);
 
@@ -189,12 +187,6 @@ class Notes_Model : public KeyedService {
   // Removes the node from internal maps and recurses through all children. If
   // the node is a url, its url is added to removed_urls.
   //
-  // This does NOT delete the node.
-  void RemoveNode(Notes_Node* node);
-
-  // Remove |node| from |nodes_ordered_by_url_set_|.
-  void RemoveNodeFromURLSet(Notes_Node* node);
-
   // Returns the set of nodes with the |url|.
   void GetNodesByURL(const GURL& url, std::vector<const Notes_Node*>* nodes);
 
@@ -212,7 +204,13 @@ class Notes_Model : public KeyedService {
     }
   };
 
- private:
+  // Remove |node| from |nodes_ordered_by_url_set_|.
+  void RemoveNodeFromURLSet(Notes_Node* node);
+  // Remove |node| and all its children from |nodes_ordered_by_url_set_|.
+  void RemoveNodeTreeFromURLSet(Notes_Node* node);
+
+  void RemoveAndDeleteNode(Notes_Node* parent, int index, Notes_Node* node_ptr);
+
   content::BrowserContext* context_;
   Notes_Node root_;
   Notes_Node* main_node_;

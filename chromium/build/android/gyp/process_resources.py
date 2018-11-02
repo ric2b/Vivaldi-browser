@@ -18,6 +18,7 @@ import re
 import shutil
 import sys
 import xml.etree.ElementTree
+import zipfile
 
 import generate_v14_compatible_resources
 
@@ -106,6 +107,8 @@ def _ParseArgs(args):
       '--all-resources-zip-out',
       help='Path for output of all resources. This includes resources in '
       'dependencies.')
+  parser.add_option('--support-zh-hk', action='store_true',
+                    help='Use zh-rTW resources for zh-rHK.')
 
   parser.add_option('--stamp', help='File to touch on success')
 
@@ -121,7 +124,6 @@ def _ParseArgs(args):
       'android_manifest',
       'dependencies_res_zips',
       'resource_dirs',
-      'resource_zip_out',
       )
   build_utils.CheckOptions(options, parser, required=required_options)
 
@@ -146,7 +148,7 @@ def _ParseArgs(args):
 
 
 def CreateRJavaFiles(srcjar_dir, main_r_txt_file, packages, r_txt_files,
-                     shared_resources):
+                     shared_resources, non_constant_id):
   assert len(packages) == len(r_txt_files), 'Need one R.txt file per package'
 
   # Map of (resource_type, name) -> Entry.
@@ -194,7 +196,7 @@ def CreateRJavaFiles(srcjar_dir, main_r_txt_file, packages, r_txt_files,
     build_utils.MakeDirectory(package_r_java_dir)
     package_r_java_path = os.path.join(package_r_java_dir, 'R.java')
     java_file_contents = _CreateRJavaFile(
-        package, resources_by_type, shared_resources)
+        package, resources_by_type, shared_resources, non_constant_id)
     with open(package_r_java_path, 'w') as f:
       f.write(java_file_contents)
 
@@ -212,7 +214,8 @@ def _ParseTextSymbolsFile(path):
   return ret
 
 
-def _CreateRJavaFile(package, resources_by_type, shared_resources):
+def _CreateRJavaFile(package, resources_by_type, shared_resources,
+                     non_constant_id):
   """Generates the contents of a R.java file."""
   # Keep these assignments all on one line to make diffing against regular
   # aapt-generated files easier.
@@ -232,11 +235,7 @@ public final class R {
     {% for resource_type in resource_types %}
     public static final class {{ resource_type }} {
         {% for e in resources[resource_type] %}
-        {% if shared_resources %}
-        public static {{ e.java_type }} {{ e.name }} = {{ e.value }};
-        {% else %}
-        public static final {{ e.java_type }} {{ e.name }} = {{ e.value }};
-        {% endif %}
+        public static {{ final }}{{ e.java_type }} {{ e.name }} = {{ e.value }};
         {% endfor %}
     }
     {% endfor %}
@@ -270,10 +269,12 @@ public final class R {
 }
 """, trim_blocks=True, lstrip_blocks=True)
 
+  final = '' if shared_resources or non_constant_id else 'final '
   return template.render(package=package,
                          resources=resources_by_type,
                          resource_types=sorted(resources_by_type),
-                         shared_resources=shared_resources)
+                         shared_resources=shared_resources,
+                         final=final)
 
 
 def CrunchDirectory(aapt, input_dir, output_dir):
@@ -345,7 +346,7 @@ def ZipResources(resource_dirs, zip_path):
   build_utils.DoZip(files_to_zip.iteritems(), zip_path)
 
 
-def CombineZips(zip_files, output_path):
+def CombineZips(zip_files, output_path, support_zh_hk):
   # When packaging resources, if the top-level directories in the zip file are
   # of the form 0, 1, ..., then each subdirectory will be passed to aapt as a
   # resources directory. While some resources just clobber others (image files,
@@ -354,7 +355,48 @@ def CombineZips(zip_files, output_path):
   def path_transform(name, src_zip):
     return '%d/%s' % (zip_files.index(src_zip), name)
 
-  build_utils.MergeZips(output_path, zip_files, path_transform=path_transform)
+  # We don't currently support zh-HK on Chrome for Android, but on the
+  # native side we resolve zh-HK resources to zh-TW. This logic is
+  # duplicated here by just copying the zh-TW res folders to zh-HK.
+  # See https://crbug.com/780847.
+  with build_utils.TempDir() as temp_dir:
+    if support_zh_hk:
+      zip_files = _DuplicateZhResources(zip_files, temp_dir)
+    build_utils.MergeZips(output_path, zip_files, path_transform=path_transform)
+
+
+def _DuplicateZhResources(zip_files, temp_dir):
+  new_zip_files = []
+  for i, zip_path in enumerate(zip_files):
+    # We use zh-TW resources for zh-HK (if we have zh-TW resources). If no
+    # zh-TW resources exists (ex. api specific resources), then just use the
+    # original zip.
+    if not _ZipContains(zip_path, r'zh-r(HK|TW)'):
+      new_zip_files.append(zip_path)
+      continue
+
+    resource_dir = os.path.join(temp_dir, str(i))
+    new_zip_path = os.path.join(temp_dir, str(i) + '.zip')
+
+    # Exclude existing zh-HK resources so that we don't mess up any resource
+    # IDs. This can happen if the type IDs in the existing resources don't
+    # align with ours (since they've already been generated at this point).
+    build_utils.ExtractAll(
+        zip_path, path=resource_dir, predicate=lambda x: not 'zh-rHK' in x)
+    for path in build_utils.IterFiles(resource_dir):
+      if 'zh-rTW' in path:
+        hk_path = path.replace('zh-rTW', 'zh-rHK')
+        build_utils.Touch(hk_path)
+        shutil.copyfile(path, hk_path)
+
+    build_utils.ZipDir(new_zip_path, resource_dir)
+    new_zip_files.append(new_zip_path)
+  return new_zip_files
+
+
+def _ZipContains(path, pattern):
+  with zipfile.ZipFile(path, 'r') as z:
+    return any(re.search(pattern, f) for f in z.namelist())
 
 
 def _ExtractPackageFromManifest(manifest_path):
@@ -478,7 +520,7 @@ def _OnStaleMd5(options):
       if packages:
         shared_resources = options.shared_resources or options.app_as_shared_lib
         CreateRJavaFiles(srcjar_dir, r_txt_path, packages, r_txt_files,
-                         shared_resources)
+                         shared_resources, options.non_constant_id)
 
     # This is the list of directories with resources to put in the final .zip
     # file. The order of these is important so that crunched/v14 resources
@@ -496,11 +538,14 @@ def _OnStaleMd5(options):
       zip_resource_dirs.append(crunch_dir)
       CrunchDirectory(aapt, input_dir, crunch_dir)
 
-    ZipResources(zip_resource_dirs, options.resource_zip_out)
+    if options.resource_zip_out:
+      ZipResources(zip_resource_dirs, options.resource_zip_out)
 
     if options.all_resources_zip_out:
-      CombineZips([options.resource_zip_out] + dep_zips,
-                  options.all_resources_zip_out)
+      all_zips = [options.resource_zip_out] if options.resource_zip_out else []
+      all_zips += dep_zips
+      CombineZips(all_zips,
+                  options.all_resources_zip_out, options.support_zh_hk)
 
     if options.srcjar_out:
       build_utils.ZipDir(options.srcjar_out, srcjar_dir)
@@ -513,13 +558,15 @@ def main(args):
   args = build_utils.ExpandFileArgs(args)
   options = _ParseArgs(args)
 
+  # Order of these must match order specified in GN so that the correct one
+  # appears first in the depfile.
   possible_output_paths = [
     options.resource_zip_out,
     options.all_resources_zip_out,
-    options.proguard_file,
-    options.proguard_file_main_dex,
     options.r_text_out,
     options.srcjar_out,
+    options.proguard_file,
+    options.proguard_file_main_dex,
   ]
   output_paths = [x for x in possible_output_paths if x]
 
@@ -533,6 +580,8 @@ def main(args):
     options.shared_resources,
     options.v14_skip,
   ]
+  if options.support_zh_hk:
+    input_strings.append('support_zh_hk')
 
   input_paths = [
     options.aapt_path,
@@ -548,8 +597,12 @@ def main(args):
   resource_names = []
   for resource_dir in options.resource_dirs:
     for resource_file in build_utils.FindInDirectory(resource_dir, '*'):
-      input_paths.append(resource_file)
-      depfile_deps.append(resource_file)
+      # Don't list the empty .keep file in depfile. Since it doesn't end up
+      # included in the .zip, it can lead to -w 'dupbuild=err' ninja errors
+      # if ever moved.
+      if not resource_file.endswith(os.path.join('empty', '.keep')):
+        input_paths.append(resource_file)
+        depfile_deps.append(resource_file)
       resource_names.append(os.path.relpath(resource_file, resource_dir))
 
   # Resource filenames matter to the output, so add them to strings as well.

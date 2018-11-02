@@ -5,6 +5,7 @@
 #include "ash/wm/overview/scoped_transform_overview_window.h"
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
@@ -14,17 +15,18 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -164,22 +166,50 @@ TransientDescendantIteratorRange GetTransientTreeIterator(
 
 }  // namespace
 
+class ScopedTransformOverviewWindow::LayerCachingAndFilteringObserver
+    : public ui::LayerObserver {
+ public:
+  LayerCachingAndFilteringObserver(ui::Layer* layer) : layer_(layer) {
+    layer_->AddObserver(this);
+    layer_->AddCacheRenderSurfaceRequest();
+    layer_->AddTrilinearFilteringRequest();
+  }
+  ~LayerCachingAndFilteringObserver() override {
+    if (layer_) {
+      layer_->RemoveTrilinearFilteringRequest();
+      layer_->RemoveCacheRenderSurfaceRequest();
+      layer_->RemoveObserver(this);
+    }
+  }
+
+  // ui::LayerObserver overrides:
+  void LayerDestroyed(ui::Layer* layer) override {
+    layer_->RemoveObserver(this);
+    layer_ = nullptr;
+  }
+
+ private:
+  ui::Layer* layer_;
+
+  DISALLOW_COPY_AND_ASSIGN(LayerCachingAndFilteringObserver);
+};
+
 ScopedTransformOverviewWindow::ScopedTransformOverviewWindow(
     WindowSelectorItem* selector_item,
     aura::Window* window)
     : selector_item_(selector_item),
       window_(window),
-      determined_original_window_shape_(false),
       ignored_by_shelf_(wm::GetWindowState(window)->ignored_by_shelf()),
       overview_started_(false),
       original_transform_(window->layer()->GetTargetTransform()),
       original_opacity_(window->layer()->GetTargetOpacity()),
       weak_ptr_factory_(this) {}
 
-ScopedTransformOverviewWindow::~ScopedTransformOverviewWindow() {}
+ScopedTransformOverviewWindow::~ScopedTransformOverviewWindow() = default;
 
 void ScopedTransformOverviewWindow::RestoreWindow() {
-  ShowHeader();
+  ::wm::SetShadowElevation(window_, original_shadow_elevation_);
+
   wm::GetWindowState(window_)->set_ignored_by_shelf(ignored_by_shelf_);
   if (minimized_widget_) {
     // TODO(oshima): Use unminimize animation instead of hiding animation.
@@ -191,6 +221,14 @@ void ScopedTransformOverviewWindow::RestoreWindow() {
   BeginScopedAnimation(OverviewAnimationType::OVERVIEW_ANIMATION_RESTORE_WINDOW,
                        &animation_settings_list);
   SetTransform(window()->GetRootWindow(), original_transform_);
+  // Add requests to cache render surface and perform trilinear filtering for
+  // the exit animation of overview mode. The requests will be removed when the
+  // exit animation finishes.
+  for (auto& settings : animation_settings_list) {
+    settings->CacheRenderSurface();
+    settings->TrilinearFiltering();
+  }
+
   ScopedOverviewAnimationSettings animation_settings(
       OverviewAnimationType::OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS,
       window_);
@@ -201,9 +239,10 @@ void ScopedTransformOverviewWindow::BeginScopedAnimation(
     OverviewAnimationType animation_type,
     ScopedAnimationSettings* animation_settings) {
   for (auto* window : GetTransientTreeIterator(GetOverviewWindow())) {
-    animation_settings->push_back(
-        base::MakeUnique<ScopedOverviewAnimationSettings>(animation_type,
-                                                          window));
+    auto settings = std::make_unique<ScopedOverviewAnimationSettings>(
+        animation_type, window);
+    settings->DeferPaint();
+    animation_settings->push_back(std::move(settings));
   }
 }
 
@@ -345,14 +384,6 @@ void ScopedTransformOverviewWindow::SetTransform(
     const gfx::Transform& transform) {
   DCHECK(overview_started_);
 
-  if (&transform != &original_transform_ &&
-      !determined_original_window_shape_) {
-    determined_original_window_shape_ = true;
-    const ShapeRects* window_shape = window()->layer()->alpha_shape();
-    if (!original_window_shape_ && window_shape)
-      original_window_shape_ = base::MakeUnique<ShapeRects>(*window_shape);
-  }
-
   gfx::Point target_origin(GetTargetBoundsInScreen().origin());
   for (auto* window : GetTransientTreeIterator(GetOverviewWindow())) {
     aura::Window* parent_window = window->parent();
@@ -369,39 +400,6 @@ void ScopedTransformOverviewWindow::SetTransform(
 void ScopedTransformOverviewWindow::SetOpacity(float opacity) {
   for (auto* window : GetTransientTreeIterator(GetOverviewWindow()))
     window->layer()->SetOpacity(opacity);
-}
-
-void ScopedTransformOverviewWindow::HideHeader() {
-  // Mirrored Window does not have a header.
-  if (minimized_widget_)
-    return;
-  gfx::Rect bounds(GetTargetBoundsInScreen().size());
-  const int inset = GetTopInset();
-  if (inset > 0) {
-    // Use alpha shape to hide the window header.
-    bounds.Inset(0, inset, 0, 0);
-    std::unique_ptr<ShapeRects> shape;
-    if (original_window_shape_) {
-      // When the |window| has a shape, use the new bounds to clip that shape.
-      shape = base::MakeUnique<ShapeRects>(*original_window_shape_);
-      for (auto& rect : *shape)
-        rect.Intersect(bounds);
-    } else {
-      shape = base::MakeUnique<ShapeRects>();
-      shape->push_back(bounds);
-    }
-    aura::Window* window = GetOverviewWindow();
-    window->layer()->SetAlphaShape(std::move(shape));
-    window->layer()->SetMasksToBounds(true);
-  }
-}
-
-void ScopedTransformOverviewWindow::ShowHeader() {
-  ui::Layer* layer = window()->layer();
-  layer->SetAlphaShape(original_window_shape_ ? base::MakeUnique<ShapeRects>(
-                                                    *original_window_shape_)
-                                              : nullptr);
-  layer->SetMasksToBounds(false);
 }
 
 void ScopedTransformOverviewWindow::UpdateMirrorWindowForMinimizedState() {
@@ -431,12 +429,23 @@ void ScopedTransformOverviewWindow::Close() {
 }
 
 void ScopedTransformOverviewWindow::PrepareForOverview() {
+  original_shadow_elevation_ = window_->GetProperty(::wm::kShadowElevationKey);
+  ::wm::SetShadowElevation(window_, ::wm::ShadowElevation::NONE);
+
   DCHECK(!overview_started_);
   overview_started_ = true;
   wm::GetWindowState(window_)->set_ignored_by_shelf(true);
   if (window_->GetProperty(aura::client::kShowStateKey) ==
       ui::SHOW_STATE_MINIMIZED) {
     CreateMirrorWindowForMinimizedState();
+  }
+  // Add requests to cache render surface and perform trilinear filtering. The
+  // requests will be removed in dctor. So the requests will be valid during the
+  // enter animation and the whole time during overview mode. For the exit
+  // animation of overview mode, we need to add those requests again.
+  for (auto* window : GetTransientTreeIterator(GetOverviewWindow())) {
+    cached_and_filtered_layer_observers_.push_back(
+        std::make_unique<LayerCachingAndFilteringObserver>(window->layer()));
   }
 }
 
@@ -466,15 +475,21 @@ void ScopedTransformOverviewWindow::OnGestureEvent(ui::GestureEvent* event) {
     gfx::Point location(event->location());
     ::wm::ConvertPointToScreen(minimized_widget_->GetNativeWindow(), &location);
     switch (event->type()) {
-      case ui::ET_GESTURE_SCROLL_BEGIN:
       case ui::ET_GESTURE_TAP_DOWN:
         selector_item_->HandlePressEvent(location);
         break;
       case ui::ET_GESTURE_SCROLL_UPDATE:
         selector_item_->HandleDragEvent(location);
         break;
-      case ui::ET_GESTURE_END:
+      case ui::ET_SCROLL_FLING_START:
+      case ui::ET_GESTURE_SCROLL_END:
         selector_item_->HandleReleaseEvent(location);
+        break;
+      case ui::ET_GESTURE_TAP:
+        selector_item_->ActivateDraggedWindow();
+        break;
+      case ui::ET_GESTURE_END:
+        selector_item_->ResetDraggedWindowGesture();
         break;
       default:
         break;
@@ -528,11 +543,14 @@ void ScopedTransformOverviewWindow::CreateMirrorWindowForMinimizedState() {
   params.activatable = views::Widget::InitParams::Activatable::ACTIVATABLE_NO;
   params.accept_events = true;
   params.parent = window_->parent();
-  minimized_widget_ = base::MakeUnique<views::Widget>();
+  minimized_widget_ = std::make_unique<views::Widget>();
   minimized_widget_->set_focus_on_creation(false);
   minimized_widget_->Init(params);
 
-  views::View* mirror_view = new wm::WindowMirrorView(window_);
+  // Trilinear filtering will be applied on the |minimized_widget_| in
+  // PrepareForOverview() and RestoreWindow().
+  views::View* mirror_view =
+      new wm::WindowMirrorView(window_, /*trilinear_filtering_on_init=*/false);
   mirror_view->SetVisible(true);
   mirror_view->SetTargetHandler(this);
   minimized_widget_->SetContentsView(mirror_view);

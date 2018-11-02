@@ -14,18 +14,44 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
+
+void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
+void MigrateOldPlatformPrefs(PrefService* prefs);
+std::string GetPlatformDefaultKey();
+std::unique_ptr<base::Value> GetPlatformComputedDefault(
+    const std::string& path);
 
 const base::FilePath::CharType kVivaldiResourcesFolder[] =
     FILE_PATH_LITERAL("vivaldi");
 const base::FilePath::CharType kPrefsDefinitionFileName[] =
     FILE_PATH_LITERAL("prefs_definitions.json");
+
+const char kVivaldiKeyName[] = "vivaldi";
+const char kChromiumKeyName[] = "chromium";
+
+const char kTypeKeyName[] = "type";
+const char kDefaultKeyName[] = "default";
+const char kSyncableKeyName[] = "syncable";
+const char kEnumValuesKey[] = "enum_values";
+
+const char kTypeEnumName[] = "enum";
+const char kTypeStringName[] = "string";
+const char kTypeFilePathName[] = "file_path";
+const char kTypeBooleanName[] = "boolean";
+const char kTypeIntegerName[] = "integer";
+const char kTypeDoubleName[] = "double";
+const char kTypeListName[] = "list";
+const char kTypeDictionaryName[] = "dictionary";
 
 PrefProperties::PrefProperties(
     std::unordered_map<std::string, int> string_to_value,
@@ -47,11 +73,21 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(vivaldiprefs::kVivaldiUniqueUserId, "");
 }
 
+std::unique_ptr<base::Value> GetComputedDefault(const std::string& path) {
+  if (path == vivaldiprefs::kWebpagesCaptureDirectory) {
+    base::FilePath path;
+    PathService::Get(chrome::DIR_USER_PICTURES, &path);
+    path = path.AppendASCII("Vivaldi Captures");
+    return std::make_unique<base::Value>(path.value());
+  }
+  return GetPlatformComputedDefault(path);
+}
+
 void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
                                  const std::string& current_path,
                                  user_prefs::PrefRegistrySyncable* registry,
                                  PrefsProperties* prefs_properties) {
-  if (!definition->HasKey("type")) {
+  if (!definition->HasKey(kTypeKeyName)) {
     for (const auto& child : *definition) {
       base::DictionaryValue* child_dict;
       if (!child.second->GetAsDictionary(&child_dict)) {
@@ -65,44 +101,62 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
     return;
   }
 
-  bool syncable;
-  if (!definition->GetBoolean("syncable", &syncable)) {
-    LOG(DFATAL) << "Expected a boolean at '" << current_path << ".syncable'";
+  const base::Value* syncable =
+      definition->FindKeyOfType(kSyncableKeyName, base::Value::Type::BOOLEAN);
+  if (!syncable) {
+    LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
+                << kSyncableKeyName << "'";
   }
 
-  int flags = syncable ? user_prefs::PrefRegistrySyncable::SYNCABLE_PREF : 0;
+  int flags =
+      syncable->GetBool() ? user_prefs::PrefRegistrySyncable::SYNCABLE_PREF : 0;
 
-  std::string type;
-  if (!definition->GetString("type", &type)) {
-    LOG(DFATAL) << "Expected a string or a list at '" << current_path
-                << ".type'";
+  const base::Value* type_value =
+      definition->FindKeyOfType(kTypeKeyName, base::Value::Type::STRING);
+  if (!type_value) {
+    LOG(DFATAL) << "Expected a string or a list at '" << current_path << "."
+                << kTypeKeyName << "'";
+  }
+  std::string type = type_value->GetString();
+
+  const base::Value* default_value;
+  std::unique_ptr<base::Value> computed_default;
+  default_value = definition->FindKey(GetPlatformDefaultKey());
+  if (!default_value)
+    default_value = definition->FindKey(kDefaultKeyName);
+  if (!default_value) {
+    computed_default = GetComputedDefault(current_path);
+    if (computed_default->is_none())
+      return;
+    default_value = const_cast<const base::Value*>(computed_default.get());
   }
 
-  if (type.compare("enum") == 0) {
+  if (type.compare(kTypeEnumName) == 0) {
     const base::DictionaryValue* enum_values;
-    if (!definition->GetDictionary("enum_values", &enum_values))
-      LOG(DFATAL) << "Expected a dictionary at '" << current_path
-                  << ".enum_values'";
+    if (!definition->GetDictionary(kEnumValuesKey, &enum_values))
+      LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
+                  << kEnumValuesKey << "'";
 
-    std::string default_string;
-    if (!definition->GetString("default", &default_string))
-      LOG(DFATAL) << "Expected a string at '" << current_path << ".default'";
+    if (!default_value->is_string())
+      LOG(DFATAL) << "Expected a string at '" << current_path << "."
+                  << kDefaultKeyName << "'";
+    std::string default_string = default_value->GetString();
 
     std::unordered_map<std::string, int> string_to_value;
     std::unordered_map<int, std::string> value_to_string;
     bool found_default = false;
-    int default_value = 0;
+    int default_index = 0;
     for (const auto& enum_value : *enum_values) {
       if (!enum_value.second->is_int())
-        LOG(DFATAL) << "Expected an integer at '" << current_path
-                    << ".enum_values." << enum_value.first << "'";
+        LOG(DFATAL) << "Expected an integer at '" << current_path << "."
+                    << kEnumValuesKey << "." << enum_value.first << "'";
       string_to_value.insert(
           std::make_pair(enum_value.first, enum_value.second->GetInt()));
       value_to_string.insert(
           std::make_pair(enum_value.second->GetInt(), enum_value.first));
 
       if (default_string == enum_value.first) {
-        default_value = enum_value.second->GetInt();
+        default_index = enum_value.second->GetInt();
         found_default = true;
       }
     }
@@ -114,56 +168,59 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
     prefs_properties->insert(std::make_pair(
         current_path, PrefProperties(std::move(string_to_value),
                                      std::move(value_to_string))));
-    registry->RegisterIntegerPref(current_path, default_value, flags);
+    registry->RegisterIntegerPref(current_path, default_index, flags);
     return;
   }
 
-  if (type.compare("string") == 0) {
-    std::string default_value;
-    if (!definition->GetString("default", &default_value))
-      LOG(DFATAL) << "Expected a string at '" << current_path << ".default'";
+  if (type.compare(kTypeStringName) == 0) {
+    if (!default_value->is_string())
+      LOG(DFATAL) << "Expected a string at '" << current_path << "."
+                  << kDefaultKeyName << "'";
 
     prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
-    registry->RegisterStringPref(current_path, default_value, flags);
+    registry->RegisterStringPref(current_path, default_value->GetString(),
+                                 flags);
 
-  } else if (type.compare("file_path") == 0) {
-    base::FilePath::StringType default_value;
-    if (!definition->GetString("default", &default_value))
-      LOG(DFATAL) << "Expected a string at '" << current_path << ".default'";
-
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
-    registry->RegisterFilePathPref(current_path, base::FilePath(default_value),
-                                   flags);
-
-  } else if (type.compare("boolean") == 0) {
-    bool default_value;
-    if (!definition->GetBoolean("default", &default_value))
-      LOG(DFATAL) << "Expected a boolean at '" << current_path << ".default'";
+  } else if (type.compare(kTypeFilePathName) == 0) {
+    if (!default_value->is_string())
+      LOG(DFATAL) << "Expected a string at '" << current_path << "."
+                  << kDefaultKeyName << "'";
 
     prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
-    registry->RegisterBooleanPref(current_path, default_value, flags);
+    registry->RegisterFilePathPref(
+        current_path,
+        base::FilePath::FromUTF8Unsafe(default_value->GetString()), flags);
 
-  } else if (type.compare("integer") == 0) {
-    int default_value;
-    if (!definition->GetInteger("default", &default_value))
-      LOG(DFATAL) << "Expected an integer at '" << current_path << ".default'";
-
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
-    registry->RegisterIntegerPref(current_path, default_value, flags);
-
-  } else if (type.compare("double") == 0) {
-    double default_value;
-    if (!definition->GetDouble("default", &default_value))
-      LOG(DFATAL) << "Expected a double at '" << current_path << ".default'";
+  } else if (type.compare(kTypeBooleanName) == 0) {
+    if (!default_value->is_bool())
+      LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
+                  << kDefaultKeyName << "'";
 
     prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
-    registry->RegisterDoublePref(current_path, default_value, flags);
+    registry->RegisterBooleanPref(current_path, default_value->GetBool(),
+                                  flags);
 
-  } else if (type.compare("list") == 0) {
-    const base::Value* default_value =
-        definition->FindKeyOfType("default", base::Value::Type::LIST);
-    if (!default_value)
-      LOG(DFATAL) << "Expected a list at '" << current_path << ".default'";
+  } else if (type.compare(kTypeIntegerName) == 0) {
+    if (!default_value->is_int())
+      LOG(DFATAL) << "Expected an integer at '" << current_path << "."
+                  << kDefaultKeyName << "'";
+
+    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    registry->RegisterIntegerPref(current_path, default_value->GetInt(), flags);
+
+  } else if (type.compare(kTypeDoubleName) == 0) {
+    if (!default_value->is_double())
+      LOG(DFATAL) << "Expected a double at '" << current_path << "."
+                  << kDefaultKeyName << "'";
+
+    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    registry->RegisterDoublePref(current_path, default_value->GetDouble(),
+                                 flags);
+
+  } else if (type.compare(kTypeListName) == 0) {
+    if (!default_value->is_list())
+      LOG(DFATAL) << "Expected a list at '" << current_path << "."
+                  << kDefaultKeyName << "'";
 
     prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
     registry->RegisterListPref(
@@ -172,12 +229,10 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
             std::make_unique<base::Value>(default_value->Clone())),
         flags);
 
-  } else if (type.compare("dictionary") == 0) {
-    const base::Value* default_value =
-        definition->FindKeyOfType("default", base::Value::Type::DICTIONARY);
-    if (!default_value)
-      LOG(DFATAL) << "Expected a dictionary at '" << current_path
-                  << ".default'";
+  } else if (type.compare(kTypeDictionaryName) == 0) {
+    if (!default_value->is_dict())
+      LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
+                  << kDefaultKeyName << "'";
 
     prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
     registry->RegisterDictionaryPref(
@@ -233,7 +288,7 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
           prefs_definition_file_from_switch.Append(kPrefsDefinitionFileName);
     }
   }
-#endif // !OS_ANDROID
+#endif  // !OS_ANDROID
   if (prefs_definition_file.empty() ||
       !base::PathExists(prefs_definition_file)) {
     base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);
@@ -257,19 +312,21 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
   }
 
   base::DictionaryValue* vivaldi_pref_definition = nullptr;
-  if (!prefs_definitions->GetDictionary("vivaldi", &vivaldi_pref_definition)) {
-    LOG(DFATAL) << "Expected a dictionary at 'vivaldi'";
+  if (!prefs_definitions->GetDictionary(kVivaldiKeyName,
+                                        &vivaldi_pref_definition)) {
+    LOG(DFATAL) << "Expected a dictionary at '" << kVivaldiKeyName << "'";
   }
 
   base::DictionaryValue* chromium_prefs_list = nullptr;
-  if (!prefs_definitions->GetDictionary("chromium", &chromium_prefs_list)) {
-    LOG(DFATAL) << "Expected a dictionary at 'chromium'";
+  if (!prefs_definitions->GetDictionary(kChromiumKeyName,
+                                        &chromium_prefs_list)) {
+    LOG(DFATAL) << "Expected a dictionary at '" << kChromiumKeyName << "'";
   }
 
   PrefsProperties prefs_properties;
 
-  RegisterPrefsFromDefinition(vivaldi_pref_definition, "vivaldi", registry,
-                              &prefs_properties);
+  RegisterPrefsFromDefinition(vivaldi_pref_definition, kVivaldiKeyName,
+                              registry, &prefs_properties);
 
   for (const auto& pref : *chromium_prefs_list) {
     std::string pref_path;
@@ -280,6 +337,204 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
   }
 
   return prefs_properties;
+}
+
+void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
+  // Note: We don't really care about default values for the following prefs
+  // because these prefs are only registered in order to migrate them and then
+  // we only migrate those prefs for which the value was explicitly set by the
+  // user. So these defaults are never used in practice.
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldMousegesturesEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldRockerGesturesEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldSmoothScrollingEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterStringPref(vivaldiprefs::kOldVivaldiCaptureDirectory, "",
+                               0);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldVivaldiTabZoom, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+#if !defined(OS_ANDROID)
+  registry->RegisterIntegerPref(
+      vivaldiprefs::kOldVivaldiNumberOfDaysToKeepVisits, 90,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif
+
+  registry->RegisterBooleanPref(vivaldiprefs::kOldPluginsWidevideEnabled, true);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldVivaldiTabsToLinks, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldDeferredTabLoadingAfterRestore, true);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldAlwaysLoadPinnedTabAfterRestore, true);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kOldVivaldiUseNativeWindowDecoration, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterStringPref(
+      vivaldiprefs::kOldVivaldiHomepage, "",
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  RegisterOldPlatformPrefs(registry);
+}
+
+void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+  // This pref is obsolete.
+  registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
+
+  registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
+
+#if !defined(OS_ANDROID)
+  registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
+#endif
+}
+
+void MigrateOldPrefs(PrefService* prefs) {
+  {
+    const base::Value* old_mouse_gestures_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldMousegesturesEnabled);
+    if (old_mouse_gestures_pref)
+      prefs->Set(vivaldiprefs::kMouseGesturesEnabled, *old_mouse_gestures_pref);
+    prefs->ClearPref(vivaldiprefs::kOldMousegesturesEnabled);
+  }
+
+  {
+    const base::Value* old_rocker_gestures_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldRockerGesturesEnabled);
+    if (old_rocker_gestures_pref)
+      prefs->Set(vivaldiprefs::kMouseGesturesRockerGesturesEnabled,
+                 *old_rocker_gestures_pref);
+    prefs->ClearPref(vivaldiprefs::kOldRockerGesturesEnabled);
+  }
+
+  {
+    const base::Value* old_smooth_scrolling_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldSmoothScrollingEnabled);
+    if (old_smooth_scrolling_pref)
+      prefs->Set(vivaldiprefs::kWebpagesSmoothScrollingEnabled,
+                 *old_smooth_scrolling_pref);
+    prefs->ClearPref(vivaldiprefs::kOldSmoothScrollingEnabled);
+  }
+
+  {
+    const base::Value* old_capture_directory_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldVivaldiCaptureDirectory);
+    if (old_capture_directory_pref)
+      prefs->Set(vivaldiprefs::kWebpagesCaptureDirectory,
+                 *old_capture_directory_pref);
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiCaptureDirectory);
+  }
+
+  {
+    const base::Value* old_tab_zoom_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldVivaldiTabZoom);
+    if (old_tab_zoom_pref)
+      prefs->Set(vivaldiprefs::kWebpagesTabZoomEnabled, *old_tab_zoom_pref);
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiTabZoom);
+  }
+
+#if !defined(OS_ANDROID)
+  {
+    const base::Value* old_number_of_days_to_keep_visits_pref =
+        prefs->GetUserPrefValue(
+            vivaldiprefs::kOldVivaldiNumberOfDaysToKeepVisits);
+    if (old_number_of_days_to_keep_visits_pref) {
+      int days = old_number_of_days_to_keep_visits_pref->GetInt();
+      // The UI used to set incorrect number of days for all options
+      // from 3 months and up. Taking the opportunity of this migration
+      // to fix that as well.
+      switch (days) {
+        case 90:
+          days = 91;
+          break;
+        case 178:
+          days = 182;
+          break;
+        case 356:
+          days = 365;
+          break;
+        case 3560:
+          days = 3650;
+          break;
+        default:
+          // Do nothing for other values.
+          break;
+      }
+      prefs->SetInteger(vivaldiprefs::kHistoryDaysToKeepVisits, days);
+    }
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiNumberOfDaysToKeepVisits);
+  }
+#endif
+
+  {
+    const base::Value* old_widevine_enabled_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldPluginsWidevideEnabled);
+    if (old_widevine_enabled_pref)
+      prefs->Set(vivaldiprefs::kPluginsWidevineEnabled,
+                 *old_widevine_enabled_pref);
+    prefs->ClearPref(vivaldiprefs::kOldPluginsWidevideEnabled);
+  }
+
+  {
+    const base::Value* old_tabs_to_link_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldVivaldiTabsToLinks);
+    if (old_tabs_to_link_pref)
+      prefs->Set(vivaldiprefs::kWebpagesTabFocusesLinks,
+                 *old_tabs_to_link_pref);
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiTabsToLinks);
+  }
+
+  {
+    const base::Value* old_deferred_tab_loading_pref = prefs->GetUserPrefValue(
+        vivaldiprefs::kOldDeferredTabLoadingAfterRestore);
+    if (old_deferred_tab_loading_pref)
+      prefs->Set(vivaldiprefs::kTabsDeferLoadingAfterRestore,
+                 *old_deferred_tab_loading_pref);
+    prefs->ClearPref(vivaldiprefs::kOldDeferredTabLoadingAfterRestore);
+  }
+
+  {
+    const base::Value* old_always_load_pinned_tab = prefs->GetUserPrefValue(
+        vivaldiprefs::kOldAlwaysLoadPinnedTabAfterRestore);
+    if (old_always_load_pinned_tab)
+      prefs->Set(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore,
+                 *old_always_load_pinned_tab);
+    prefs->ClearPref(vivaldiprefs::kOldAlwaysLoadPinnedTabAfterRestore);
+  }
+
+  {
+    const base::Value* old_use_native_decoration = prefs->GetUserPrefValue(
+        vivaldiprefs::kOldVivaldiUseNativeWindowDecoration);
+    if (old_use_native_decoration)
+      prefs->Set(vivaldiprefs::kWindowsUseNativeDecoration,
+                 *old_use_native_decoration);
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiUseNativeWindowDecoration);
+  }
+
+  {
+    const base::Value* old_home_page_pref =
+        prefs->GetUserPrefValue(vivaldiprefs::kOldVivaldiHomepage);
+    if (old_home_page_pref)
+      prefs->Set(vivaldiprefs::kHomepage, *old_home_page_pref);
+    prefs->ClearPref(vivaldiprefs::kOldVivaldiHomepage);
+  }
+
+  MigrateOldPlatformPrefs(prefs);
 }
 
 }  // namespace vivaldi

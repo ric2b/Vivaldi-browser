@@ -77,7 +77,8 @@ void LockLayoutManager::OnWindowDestroying(aura::Window* window) {
 
 void LockLayoutManager::OnWindowBoundsChanged(aura::Window* window,
                                               const gfx::Rect& old_bounds,
-                                              const gfx::Rect& new_bounds) {
+                                              const gfx::Rect& new_bounds,
+                                              ui::PropertyChangeReason reason) {
   if (root_window_ == window) {
     const wm::WMEvent wm_event(wm::WM_EVENT_DISPLAY_BOUNDS_CHANGED);
     AdjustWindowsForWorkAreaChange(&wm_event);
@@ -105,8 +106,8 @@ void LockLayoutManager::WillChangeVisibilityState(
   AdjustWindowsForWorkAreaChange(&event);
 }
 
-void LockLayoutManager::OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {
-  keyboard_bounds_ = new_bounds;
+void LockLayoutManager::OnKeyboardWorkspaceOccludedBoundsChanging(
+    const gfx::Rect& new_bounds) {
   OnWindowResized();
 }
 

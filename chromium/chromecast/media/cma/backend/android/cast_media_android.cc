@@ -6,7 +6,6 @@
 #include "base/at_exit.h"
 #include "base/logging.h"
 #include "chromecast/chromecast_features.h"
-#include "chromecast/media/cma/backend/android/loopback_audio_manager.h"
 #include "chromecast/media/cma/backend/android/media_pipeline_backend_android.h"
 #include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/graphics_types.h"
@@ -92,19 +91,6 @@ bool CastMediaShlib::SupportsMediaClockRateChange() {
   LOG(INFO) << __func__ << ":";
   return false;
 }
-
-#if BUILDFLAG(ENABLE_ATHINGS_LOOPBACK)
-void CastMediaShlib::AddLoopbackAudioObserver(LoopbackAudioObserver* observer) {
-  LOG(INFO) << __func__ << ":";
-  LoopbackAudioManager::Get()->AddLoopbackAudioObserver(observer);
-}
-
-void CastMediaShlib::RemoveLoopbackAudioObserver(
-    LoopbackAudioObserver* observer) {
-  LOG(INFO) << __func__ << ":";
-  LoopbackAudioManager::Get()->RemoveLoopbackAudioObserver(observer);
-}
-#endif
 
 }  // namespace media
 }  // namespace chromecast

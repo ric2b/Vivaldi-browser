@@ -279,7 +279,7 @@ public class CustomTabTabPersistencePolicyTest {
             public byte[] call() throws Exception {
                 TabModelSelectorImpl selectorImpl =
                         buildTestTabModelSelector(new int[] {111, 222, 333}, null);
-                return TabPersistentStore.serializeTabModelSelector(selectorImpl, null);
+                return TabPersistentStore.serializeTabModelSelector(selectorImpl, null).listData;
             }
         });
         FileOutputStream fos = null;
@@ -403,7 +403,7 @@ public class CustomTabTabPersistencePolicyTest {
 
             @Override
             @Nullable
-            public String getStateToBeMergedFileName() {
+            public List<String> getStateToBeMergedFileNames() {
                 return null;
             }
 

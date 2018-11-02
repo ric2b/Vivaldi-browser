@@ -23,7 +23,6 @@
 
 #include "core/svg/SVGPath.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "core/svg/SVGPathBlender.h"
 #include "core/svg/SVGPathByteStream.h"
@@ -182,7 +181,7 @@ float SVGPath::CalculateDistance(SVGPropertyBase* to, SVGElement*) {
   return -1;
 }
 
-DEFINE_TRACE(SVGPath) {
+void SVGPath::Trace(blink::Visitor* visitor) {
   visitor->Trace(path_value_);
   SVGPropertyBase::Trace(visitor);
 }

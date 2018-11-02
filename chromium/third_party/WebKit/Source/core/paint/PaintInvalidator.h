@@ -48,8 +48,7 @@ struct CORE_EXPORT PaintInvalidatorContext {
     kSubtreeFullInvalidationForStackedContents = 1 << 3,
     kSubtreeSVGResourceChange = 1 << 4,
 
-    // TODO(crbug.com/637313): This is temporary before we support filters in
-    // paint property tree.
+    // For repeated objects inside multicolumn.
     kSubtreeSlowPathRect = 1 << 5,
 
     // When this flag is set, no paint or raster invalidation will be issued
@@ -87,17 +86,21 @@ struct CORE_EXPORT PaintInvalidatorContext {
 
   // Store the old visual rect in the paint invalidation backing's coordinates.
   // It does *not* account for composited scrolling.
-  // See LayoutObject::adjustVisualRectForCompositedScrolling().
+  // See LayoutObject::AdjustVisualRectForCompositedScrolling().
   LayoutRect old_visual_rect;
-  // Use LayoutObject::visualRect() to get the new visual rect.
+  // Use LayoutObject::VisualRect() to get the new visual rect.
 
-  // Store the origin of the object's local coordinates in the paint
-  // invalidation backing's coordinates. They are used to detect layoutObject
-  // shifts that force a full invalidation and invalidation check in subtree.
+  // This field and LayoutObject::LocationInBacking() store the old and new
+  // origins of the object's local coordinates in the paint invalidation
+  // backing's coordinates. They are used to detect layoutObject shifts that
+  // force a full invalidation and invalidation check in subtree.
   // The points do *not* account for composited scrolling. See
   // LayoutObject::adjustVisualRectForCompositedScrolling().
+  // This field will be removed for SPv2.
   LayoutPoint old_location;
-  LayoutPoint new_location;
+  // Use LayoutObject::LocationInBacking() to get the new location.
+
+  const FragmentData* fragment_data;
 
  private:
   friend class PaintInvalidator;
@@ -144,11 +147,8 @@ class PaintInvalidator {
                                                       PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdateEmptyVisualRectFlag(const LayoutObject&,
                                                PaintInvalidatorContext&);
-  ALWAYS_INLINE void UpdateVisualRectIfNeeded(
-      const LayoutObject&,
-      const PaintPropertyTreeBuilderContext*,
-      PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdateVisualRect(const LayoutObject&,
+                                      FragmentData&,
                                       PaintInvalidatorContext&);
 
   Vector<const LayoutObject*> pending_delayed_paint_invalidations_;

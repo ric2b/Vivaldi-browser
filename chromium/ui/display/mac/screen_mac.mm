@@ -11,16 +11,15 @@
 #include <map>
 #include <memory>
 
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
+#include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/display/display.h"
 #include "ui/display/display_change_notifier.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 
@@ -74,27 +73,37 @@ Display BuildDisplayForScreen(NSScreen* screen) {
     display.set_bounds(gfx::ScreenRectFromNSRect(frame));
     display.set_work_area(gfx::ScreenRectFromNSRect(visible_frame));
   }
-  CGFloat scale = [screen backingScaleFactor];
 
+  // Compute device scale factor
+  CGFloat scale = [screen backingScaleFactor];
   if (Display::HasForceDeviceScaleFactor())
     scale = Display::GetForcedDeviceScaleFactor();
-
   display.set_device_scale_factor(scale);
 
-  if (!Display::HasForceColorProfile()) {
-    // On Sierra, we need to operate in a single screen's color space because
-    // IOSurfaces do not opt-out of color correction.
-    // https://crbug.com/654488
-    CGColorSpaceRef color_space = [[screen colorSpace] CGColorSpace];
-    static bool color_correct_rendering_enabled =
-        base::FeatureList::IsEnabled(features::kColorCorrectRendering);
-    if (base::mac::IsAtLeastOS10_12() && !color_correct_rendering_enabled)
-      color_space = base::mac::GetSystemColorSpace();
-    gfx::ICCProfile icc_profile =
-        gfx::ICCProfile::FromCGColorSpace(color_space);
-    icc_profile.HistogramDisplay(display.id());
-    display.set_color_space(icc_profile.GetColorSpace());
+  // Compute the color profile.
+  gfx::ICCProfile icc_profile;
+  CGColorSpaceRef cg_color_space = [[screen colorSpace] CGColorSpace];
+  if (cg_color_space) {
+    base::ScopedCFTypeRef<CFDataRef> cf_icc_profile(
+        CGColorSpaceCopyICCProfile(cg_color_space));
+    if (cf_icc_profile) {
+      icc_profile = gfx::ICCProfile::FromData(CFDataGetBytePtr(cf_icc_profile),
+                                              CFDataGetLength(cf_icc_profile));
+    }
   }
+  icc_profile.HistogramDisplay(display.id());
+  gfx::ColorSpace screen_color_space = icc_profile.GetColorSpace();
+  if (Display::HasForceColorProfile()) {
+    if (Display::HasEnsureForcedColorProfile()) {
+      CHECK_EQ(screen_color_space, display.color_space())
+          << "The display's color space does not match the color space that "
+             "was forced by the command line. This will cause pixel tests to "
+             "fail.";
+    }
+  } else {
+    display.set_color_space(screen_color_space);
+  }
+
   display.set_color_depth(NSBitsPerPixelFromDepth([screen depth]));
   display.set_depth_per_component(NSBitsPerSampleFromDepth([screen depth]));
   display.set_is_monochrome(CGDisplayUsesForceToGray());

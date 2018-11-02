@@ -29,6 +29,7 @@
 #include "ui/display/screen_base.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_rewriter.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 #if defined(OS_CHROMEOS)
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
@@ -50,7 +51,7 @@ DisplayManager::DisplayManager(WindowServer* window_server,
   // TODO: http://crbug.com/701468 fix function key preferences and sticky keys.
   ui::EventRewriterChromeOS::Delegate* delegate = nullptr;
   ui::EventRewriter* sticky_keys_controller = nullptr;
-  event_rewriter_ = base::MakeUnique<ui::EventRewriterChromeOS>(
+  event_rewriter_ = std::make_unique<ui::EventRewriterChromeOS>(
       delegate, sticky_keys_controller);
 #endif
   user_id_tracker_->AddObserver(this);
@@ -76,20 +77,44 @@ bool DisplayManager::SetDisplayConfiguration(
     const std::vector<display::Display>& displays,
     const std::vector<display::ViewportMetrics>& viewport_metrics,
     int64_t primary_display_id,
-    int64_t internal_display_id) {
+    int64_t internal_display_id,
+    const std::vector<display::Display>& mirrors) {
+  DCHECK_NE(display::kUnifiedDisplayId, internal_display_id);
   if (window_server_->display_creation_config() !=
       DisplayCreationConfig::MANUAL) {
     LOG(ERROR) << "SetDisplayConfiguration is only valid when roots manually "
                   "created";
     return false;
   }
-  if (displays.size() != viewport_metrics.size()) {
+  if (displays.size() + mirrors.size() != viewport_metrics.size()) {
     LOG(ERROR) << "SetDisplayConfiguration called with mismatch in sizes";
     return false;
   }
-  size_t primary_display_index = displays.size();
+
   std::set<int64_t> display_ids;
-  size_t internal_display_index = displays.size();
+  size_t primary_display_index = std::numeric_limits<size_t>::max();
+  bool found_internal_display = false;
+
+  // Check the mirrors before potentially passing them to a unified display.
+  for (const auto& mirror : mirrors) {
+    if (mirror.id() == display::kInvalidDisplayId) {
+      LOG(ERROR) << "SetDisplayConfiguration passed invalid display id";
+      return false;
+    }
+    if (mirror.id() == display::kUnifiedDisplayId) {
+      LOG(ERROR) << "SetDisplayConfiguration passed unified display in mirrors";
+      return false;
+    }
+    if (!display_ids.insert(mirror.id()).second) {
+      LOG(ERROR) << "SetDisplayConfiguration passed duplicate display id";
+      return false;
+    }
+    if (mirror.id() == primary_display_id) {
+      LOG(ERROR) << "SetDisplayConfiguration passed primary display in mirrors";
+      return false;
+    }
+    found_internal_display |= mirror.id() == internal_display_id;
+  }
   for (size_t i = 0; i < displays.size(); ++i) {
     const display::Display& display = displays[i];
     if (display.id() == display::kInvalidDisplayId) {
@@ -102,24 +127,37 @@ bool DisplayManager::SetDisplayConfiguration(
     }
     if (display.id() == primary_display_id)
       primary_display_index = i;
-    if (display.id() == internal_display_id)
-      internal_display_index = i;
+    found_internal_display |= display.id() == internal_display_id;
     Display* ws_display = GetDisplayById(display.id());
     if (!ws_display) {
-      LOG(ERROR) << "SetDisplayConfiguration passed unknown display id "
-                 << display.id();
-      return false;
+      if (display.id() == display::kUnifiedDisplayId) {
+        if (displays.size() != 1u) {
+          LOG(ERROR) << "SetDisplayConfiguration passed 2+ displays in unified";
+          return false;
+        }
+        if (mirrors.size() <= 1u) {
+          LOG(ERROR) << "SetDisplayConfiguration passed <2 mirrors in unified";
+          return false;
+        }
+        NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus unified mode.";
+        return false;
+      } else {
+        LOG(ERROR) << "SetDisplayConfiguration passed unknown display id "
+                   << display.id();
+        return false;
+      }
     }
   }
-  if (primary_display_index == displays.size()) {
+  if (primary_display_index == std::numeric_limits<size_t>::max()) {
     LOG(ERROR) << "SetDisplayConfiguration primary id not in displays";
     return false;
   }
-  if (internal_display_index == displays.size() &&
+  if (!found_internal_display &&
       internal_display_id != display::kInvalidDisplayId) {
     LOG(ERROR) << "SetDisplayConfiguration internal display id not in displays";
     return false;
   }
+
   // See comment in header as to why this doesn't use Display::SetInternalId().
   internal_display_id_ = internal_display_id;
 
@@ -137,6 +175,21 @@ bool DisplayManager::SetDisplayConfiguration(
                                       display::DisplayList::Type::NOT_PRIMARY);
     }
   }
+  for (size_t i = 0; i < mirrors.size(); ++i) {
+    NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus mirroring/unified mode.";
+    Display* ws_mirror = GetDisplayById(mirrors[i].id());
+    const auto& metrics = viewport_metrics[displays.size() + i];
+    if (!ws_mirror) {
+      // Create a mirror destination display on startup or on display connected.
+      CreateDisplay(mirrors[i], metrics);
+    } else {
+      // Reuse an existing display for mirroring that was previously extended.
+      ws_mirror->SetDisplay(mirrors[i]);
+      ws_mirror->OnViewportMetricsChanged(metrics);
+      display_list.AddOrUpdateDisplay(mirrors[i],
+                                      display::DisplayList::Type::NOT_PRIMARY);
+    }
+  }
 
   std::set<int64_t> existing_display_ids;
   for (const display::Display& display : display_list.displays())
@@ -144,8 +197,12 @@ bool DisplayManager::SetDisplayConfiguration(
   std::set<int64_t> removed_display_ids =
       base::STLSetDifference<std::set<int64_t>>(existing_display_ids,
                                                 display_ids);
-  for (int64_t display_id : removed_display_ids)
+  for (int64_t display_id : removed_display_ids) {
     display_list.RemoveDisplay(display_id);
+    // If the destroyed display still has a root window, it is orphaned here.
+    // Root windows are destroyed by explicit window manager instruction.
+    DestroyDisplay(GetDisplayById(display_id));
+  }
 
   for (auto& pair : user_display_managers_)
     pair.second->CallOnDisplaysChanged();
@@ -162,7 +219,7 @@ UserDisplayManager* DisplayManager::GetUserDisplayManager(
     const UserId& user_id) {
   if (!user_display_managers_.count(user_id)) {
     user_display_managers_[user_id] =
-        base::MakeUnique<UserDisplayManager>(window_server_, user_id);
+        std::make_unique<UserDisplayManager>(window_server_, user_id);
     if (window_server_->display_creation_config() ==
         DisplayCreationConfig::MANUAL) {
       user_display_managers_[user_id]->DisableAutomaticNotification();
@@ -175,7 +232,7 @@ CursorLocationManager* DisplayManager::GetCursorLocationManager(
     const UserId& user_id) {
   if (!cursor_location_managers_.count(user_id)) {
     cursor_location_managers_[user_id] =
-        base::MakeUnique<CursorLocationManager>();
+        std::make_unique<CursorLocationManager>();
   }
   return cursor_location_managers_[user_id].get();
 }
@@ -335,8 +392,8 @@ void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
   int64_t mouse_display_id = 0;
   if (previous_window_manager_state) {
     mouse_location_on_display =
-        previous_window_manager_state->event_dispatcher()
-            ->mouse_pointer_last_location();
+        gfx::ToFlooredPoint(previous_window_manager_state->event_dispatcher()
+                                ->mouse_pointer_last_location());
     mouse_display_id = previous_window_manager_state->event_dispatcher()
                            ->mouse_pointer_display_id();
     previous_window_manager_state->Deactivate();

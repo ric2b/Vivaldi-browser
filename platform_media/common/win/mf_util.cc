@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
@@ -95,10 +96,10 @@ PrimaryLoader::PrimaryLoader()
       video_decoder_available_(
           LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
           LoadMFLibrary("evr.dll")) {
-  audio_decoder_available_[kCodecMP3] =
-      LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecMP3).c_str());
-  audio_decoder_available_[kCodecAAC] =
-      LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecAAC).c_str());
+  audio_decoder_available_[AudioCodec::kCodecMP3] =
+      LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecMP3).c_str());
+  audio_decoder_available_[AudioCodec::kCodecAAC] =
+      LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecAAC).c_str());
 
   ReportLoadResults();
 }
@@ -115,7 +116,7 @@ void PrimaryLoader::ReportLoadResults() {
                                           : MF_VIDEO_DECODER_NOT_AVAILABLE);
   // TODO(wdzierzanowski): Start reporting MP3 decoder status once the feature
   // is stable.
-  ReportMFStatus(audio_decoder_available_[kCodecAAC]
+  ReportMFStatus(audio_decoder_available_[AudioCodec::kCodecAAC]
                      ? MF_AAC_DECODER_AVAILABLE
                      : MF_AAC_DECODER_NOT_AVAILABLE);
 }
@@ -161,7 +162,7 @@ bool LoadMFVideoDecoderLibraries() {
 }
 
 std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
-  if (codec == kCodecMP3)
+  if (codec == AudioCodec::kCodecMP3)
     return "mp3dmod.dll";
 
   std::string name;

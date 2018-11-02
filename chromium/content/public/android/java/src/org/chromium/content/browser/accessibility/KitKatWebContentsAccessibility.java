@@ -13,7 +13,6 @@ import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.content.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -25,17 +24,17 @@ public class KitKatWebContentsAccessibility extends WebContentsAccessibility {
     private String mSupportedHtmlElementTypes;
 
     KitKatWebContentsAccessibility(Context context, ViewGroup containerView,
-            WebContents webContents, RenderCoordinates renderCoordinates,
-            boolean shouldFocusOnPageLoad) {
-        super(context, containerView, webContents, renderCoordinates, shouldFocusOnPageLoad);
+            WebContents webContents, boolean shouldFocusOnPageLoad) {
+        super(context, containerView, webContents, shouldFocusOnPageLoad);
         mSupportedHtmlElementTypes = nativeGetSupportedHtmlElementTypes(mNativeObj);
     }
 
     @Override
     protected void setAccessibilityNodeInfoKitKatAttributes(AccessibilityNodeInfo node,
-            boolean isRoot, boolean isEditableText, String roleDescription, String hint,
-            int selectionStartIndex, int selectionEndIndex) {
+            boolean isRoot, boolean isEditableText, String role, String roleDescription,
+            String hint, int selectionStartIndex, int selectionEndIndex) {
         Bundle bundle = node.getExtras();
+        bundle.putCharSequence("AccessibilityNodeInfo.chromeRole", role);
         bundle.putCharSequence("AccessibilityNodeInfo.roleDescription", roleDescription);
         bundle.putCharSequence("AccessibilityNodeInfo.hint", hint);
         if (isRoot) {

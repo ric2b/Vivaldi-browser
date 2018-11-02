@@ -114,10 +114,10 @@ TEST(WebRequestConditionAttributeTest, ResourceType) {
       -1,     // render_view_id
       -1,     // render_frame_id
       false,  // is_main_frame
-      false,  // parent_is_main_frame
       true,   // allow_download
       false,  // is_async
-      content::PREVIEWS_OFF);
+      content::PREVIEWS_OFF,
+      nullptr);  // navigation_ui_data
   EXPECT_TRUE(attribute->IsFulfilled(
       WebRequestData(url_request_ok.get(), ON_BEFORE_REQUEST)));
 
@@ -131,10 +131,10 @@ TEST(WebRequestConditionAttributeTest, ResourceType) {
       -1,     // render_view_id
       -1,     // render_frame_id
       true,   // is_main_frame
-      false,  // parent_is_main_frame
       true,   // allow_download
       false,  // is_async
-      content::PREVIEWS_OFF);
+      content::PREVIEWS_OFF,
+      nullptr);  // navigation_ui_data
   EXPECT_FALSE(attribute->IsFulfilled(WebRequestData(url_request_fail.get(),
                                                      ON_BEFORE_REQUEST)));
 }
@@ -389,7 +389,7 @@ std::unique_ptr<base::DictionaryValue> GetDictionaryFromArray(
       std::unique_ptr<base::Value> entry_owned;
       if (!dictionary->GetWithoutPathExpansion(*name, &entry))
         return std::unique_ptr<base::DictionaryValue>();
-      switch (entry->GetType()) {
+      switch (entry->type()) {
         case base::Value::Type::STRING: {
           // Replace the present string with a list.
           auto list = std::make_unique<base::ListValue>();

@@ -13,9 +13,12 @@ namespace blink {
 class MODULES_EXPORT ModulesInitializer : public CoreInitializer {
  public:
   void Initialize() override;
+  void RegisterInterfaces(InterfaceRegistry&) override;
+
+ protected:
+  void InitLocalFrame(LocalFrame&) const override;
 
  private:
-  void InitLocalFrame(LocalFrame&) const override;
   void InstallSupplements(LocalFrame&) const override;
   void ProvideLocalFileSystemToWorker(WorkerClients&) const override;
   void ProvideIndexedDBClientToWorker(WorkerClients&) const override;
@@ -26,8 +29,6 @@ class MODULES_EXPORT ModulesInitializer : public CoreInitializer {
                                  InspectorDOMAgent*,
                                  InspectedFrames*,
                                  Page*) const override;
-  LinkResource* CreateServiceWorkerLinkResource(
-      HTMLLinkElement*) const override;
   void OnClearWindowObjectInMainWorld(Document&,
                                       const Settings&) const override;
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(

@@ -44,7 +44,7 @@ class PpapiBlinkPlatformImpl::SandboxSupport : public WebSandboxSupport {
   virtual ~SandboxSupport() {}
 
 #if defined(OS_MACOSX)
-  bool LoadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID) override;
+  bool LoadFont(CTFontRef srcFont, CGFontRef* out, uint32_t* fontID) override;
 #elif defined(OS_POSIX)
   SandboxSupport();
   void GetFallbackFontForCharacter(
@@ -67,7 +67,7 @@ class PpapiBlinkPlatformImpl::SandboxSupport : public WebSandboxSupport {
 
 #if defined(OS_MACOSX)
 
-bool PpapiBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
+bool PpapiBlinkPlatformImpl::SandboxSupport::LoadFont(CTFontRef src_font,
                                                       CGFontRef* out,
                                                       uint32_t* font_id) {
   // TODO(brettw) this should do the something similar to what
@@ -144,12 +144,12 @@ blink::WebThread* PpapiBlinkPlatformImpl::CurrentThread() {
 
 blink::WebClipboard* PpapiBlinkPlatformImpl::Clipboard() {
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 blink::WebFileUtilities* PpapiBlinkPlatformImpl::GetFileUtilities() {
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 blink::WebSandboxSupport* PpapiBlinkPlatformImpl::GetSandboxSupport() {
@@ -176,14 +176,6 @@ bool PpapiBlinkPlatformImpl::IsLinkVisited(unsigned long long link_hash) {
   return false;
 }
 
-void PpapiBlinkPlatformImpl::CreateMessageChannel(
-    std::unique_ptr<blink::WebMessagePortChannel>* channel1,
-    std::unique_ptr<blink::WebMessagePortChannel>* channel2) {
-  NOTREACHED();
-  *channel1 = nullptr;
-  *channel2 = nullptr;
-}
-
 void PpapiBlinkPlatformImpl::setCookies(const blink::WebURL& url,
                                         const blink::WebURL& site_for_cookies,
                                         const blink::WebString& value) {
@@ -203,14 +195,7 @@ blink::WebString PpapiBlinkPlatformImpl::DefaultLocale() {
 
 blink::WebThemeEngine* PpapiBlinkPlatformImpl::ThemeEngine() {
   NOTREACHED();
-  return NULL;
-}
-
-std::unique_ptr<blink::WebURLLoader> PpapiBlinkPlatformImpl::CreateURLLoader(
-    const blink::WebURLRequest& request,
-    base::SingleThreadTaskRunner* task_runner) {
-  NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 void PpapiBlinkPlatformImpl::GetPluginList(

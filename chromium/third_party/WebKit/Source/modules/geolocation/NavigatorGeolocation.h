@@ -22,6 +22,7 @@
 
 #include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -31,7 +32,8 @@ class Navigator;
 
 class NavigatorGeolocation final
     : public GarbageCollected<NavigatorGeolocation>,
-      public Supplement<Navigator> {
+      public Supplement<Navigator>,
+      public TraceWrapperBase {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorGeolocation);
 
  public:
@@ -39,14 +41,15 @@ class NavigatorGeolocation final
   static Geolocation* geolocation(Navigator&);
   Geolocation* geolocation();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit NavigatorGeolocation(Navigator&);
 
   static const char* SupplementName();
 
-  Member<Geolocation> geolocation_;
+  TraceWrapperMember<Geolocation> geolocation_;
 };
 
 }  // namespace blink

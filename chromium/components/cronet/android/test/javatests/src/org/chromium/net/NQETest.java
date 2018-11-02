@@ -4,14 +4,25 @@
 
 package org.chromium.net;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import static org.chromium.net.CronetTestRule.getContext;
+import static org.chromium.net.CronetTestRule.getTestStorage;
+
 import android.os.StrictMode;
 import android.support.test.filters.SmallTest;
 
 import org.json.JSONObject;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import org.chromium.base.Log;
-import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
@@ -29,9 +40,12 @@ import java.util.concurrent.ThreadFactory;
 /**
  * Test Network Quality Estimator.
  */
-@JNINamespace("cronet")
-public class NQETest extends CronetTestBase {
+@RunWith(BaseJUnit4ClassRunner.class)
+public class NQETest {
     private static final String TAG = NQETest.class.getSimpleName();
+
+    @Rule
+    public final CronetTestRule mTestRule = new CronetTestRule();
 
     private EmbeddedTestServer mTestServer;
     private String mUrl;
@@ -39,14 +53,19 @@ public class NQETest extends CronetTestBase {
     // Thread on which network quality listeners should be notified.
     private Thread mNetworkQualityThread;
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
+    @Before
+    public void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(getContext());
         mUrl = mTestServer.getURL("/echo?status=200");
     }
 
+    @After
+    public void tearDown() throws Exception {
+        mTestServer.stopAndDestroyServer();
+    }
+
     private class ExecutorThreadFactory implements ThreadFactory {
+        @Override
         public Thread newThread(final Runnable r) {
             mNetworkQualityThread = new Thread(new Runnable() {
                 @Override
@@ -68,8 +87,10 @@ public class NQETest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testNotEnabled() throws Exception {
         ExperimentalCronetEngine.Builder cronetEngineBuilder =
                 new ExperimentalCronetEngine.Builder(getContext());
@@ -101,8 +122,10 @@ public class NQETest extends CronetTestBase {
         cronetEngine.shutdown();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testListenerRemoved() throws Exception {
         ExperimentalCronetEngine.Builder cronetEngineBuilder =
                 new ExperimentalCronetEngine.Builder(getContext());
@@ -127,7 +150,6 @@ public class NQETest extends CronetTestBase {
     }
 
     // Returns whether a file contains a particular string.
-    @SuppressFBWarnings("OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE")
     private boolean prefsFileContainsString(String content) throws IOException {
         File file = new File(getTestStorage(getContext()) + "/prefs/local_prefs.json");
         FileInputStream fileInputStream = new FileInputStream(file);
@@ -137,8 +159,10 @@ public class NQETest extends CronetTestBase {
         return new String(data, "UTF-8").contains(content);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testQuicDisabled() throws Exception {
         ExperimentalCronetEngine.Builder cronetEngineBuilder =
                 new ExperimentalCronetEngine.Builder(getContext());
@@ -149,6 +173,16 @@ public class NQETest extends CronetTestBase {
         TestNetworkQualityThroughputListener throughputListener =
                 new TestNetworkQualityThroughputListener(listenersExecutor);
         cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(false);
+
+        // The pref may not be written if the computed Effective Connection Type (ECT) matches the
+        // default ECT for the current connection type. Force the ECT to "Slow-2G". Since "Slow-2G"
+        // is not the default ECT for any connection type, this ensures that the pref is written to.
+        JSONObject nqeOptions = new JSONObject().put("force_effective_connection_type", "Slow-2G");
+        JSONObject experimentalOptions =
+                new JSONObject().put("NetworkQualityEstimator", nqeOptions);
+
+        cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
+
         cronetEngineBuilder.setStoragePath(getTestStorage(getContext()));
         final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
         cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
@@ -229,6 +263,7 @@ public class NQETest extends CronetTestBase {
         assertTrue(writeCountHistogram.getDelta() > 0);
     }
 
+    @Test
     @SmallTest
     @OnlyRunNativeCronet
     @Feature({"Cronet"})
@@ -245,13 +280,20 @@ public class NQETest extends CronetTestBase {
                     new TestNetworkQualityRttListener(listenersExecutor);
             cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(
                     false);
-            cronetEngineBuilder.setStoragePath(getTestStorage(getContext()));
 
-            JSONObject nqeOptions = new JSONObject().put("persistent_cache_reading_enabled", true);
+            // The pref may not be written if the computed Effective Connection Type (ECT) matches
+            // the default ECT for the current connection type. Force the ECT to "Slow-2G". Since
+            // "Slow-2G" is not the default ECT for any connection type, this ensures that the pref
+            // is written to.
+            JSONObject nqeOptions =
+                    new JSONObject().put("force_effective_connection_type", "Slow-2G");
             JSONObject experimentalOptions =
                     new JSONObject().put("NetworkQualityEstimator", nqeOptions);
 
             cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
+
+            cronetEngineBuilder.setStoragePath(getTestStorage(getContext()));
+
             final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
             cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
             cronetEngine.addRttListener(rttListener);
@@ -301,12 +343,16 @@ public class NQETest extends CronetTestBase {
 
             // Stored network quality in the pref should be read in the second iteration.
             assertEquals(readPrefsSizeHistogram.getDelta() > 0, i > 0);
-            assertEquals(cachedRttHistogram.getDelta() > 0, i > 0);
+            if (i > 0) {
+                assertTrue(cachedRttHistogram.getDelta() > 0);
+            }
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testQuicDisabledWithParams() throws Exception {
         ExperimentalCronetEngine.Builder cronetEngineBuilder =
                 new ExperimentalCronetEngine.Builder(getContext());

@@ -18,8 +18,6 @@
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -39,7 +37,6 @@
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/window/frame_background.h"
-#include "ui/views/window/nav_button_provider.h"
 #include "ui/views/window/window_shape.h"
 
 #if defined(OS_LINUX)
@@ -63,18 +60,21 @@ const int kResizeAreaCornerSize = 16;
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, public:
 
-OpaqueBrowserFrameView::OpaqueBrowserFrameView(BrowserFrame* frame,
-                                               BrowserView* browser_view)
+OpaqueBrowserFrameView::OpaqueBrowserFrameView(
+    BrowserFrame* frame,
+    BrowserView* browser_view,
+    OpaqueBrowserFrameViewLayout* layout)
     : BrowserNonClientFrameView(frame, browser_view),
-      layout_(new OpaqueBrowserFrameViewLayout(this)),
+      profile_switcher_(this),
+      layout_(layout),
       minimize_button_(nullptr),
       maximize_button_(nullptr),
       restore_button_(nullptr),
       close_button_(nullptr),
       window_icon_(nullptr),
       window_title_(nullptr),
-      profile_switcher_(this),
       frame_background_(new views::FrameBackground()) {
+  layout_->set_delegate(this);
   SetLayoutManager(layout_);
 
   minimize_button_ = InitWindowCaptionButton(IDR_MINIMIZE,
@@ -124,13 +124,6 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(BrowserFrame* frame,
   platform_observer_.reset(OpaqueBrowserFrameViewPlatformSpecific::Create(
       this, layout_,
       ThemeServiceFactory::GetForProfile(browser_view->browser()->profile())));
-
-#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
-  if (views::LinuxUI::instance()) {
-    nav_button_provider_ =
-        views::LinuxUI::instance()->CreateNavButtonProvider();
-  }
-#endif
 }
 
 OpaqueBrowserFrameView::~OpaqueBrowserFrameView() {}
@@ -432,20 +425,6 @@ gfx::Size OpaqueBrowserFrameView::GetTabstripPreferredSize() const {
   return s;
 }
 
-bool OpaqueBrowserFrameView::ShouldRenderNativeNavButtons() const {
-#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
-  if (!nav_button_provider_)
-    return false;
-  if (!base::FeatureList::IsEnabled(features::kNativeWindowNavButtons))
-    return false;
-  return ThemeServiceFactory::GetForProfile(
-             browser_view()->browser()->profile())
-      ->UsingSystemTheme();
-#else
-  return false;
-#endif
-}
-
 int OpaqueBrowserFrameView::GetTopAreaHeight() const {
   const gfx::ImageSkia frame_image = GetFrameImage();
   int top_area_height =
@@ -456,11 +435,6 @@ int OpaqueBrowserFrameView::GetTopAreaHeight() const {
                  GetBoundsForTabStrip(browser_view()->tabstrip()).bottom());
   }
   return top_area_height;
-}
-
-const views::NavButtonProvider* OpaqueBrowserFrameView::GetNavButtonProvider()
-    const {
-  return nav_button_provider_.get();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -510,6 +484,8 @@ void OpaqueBrowserFrameView::UpdateProfileIcons() {
   else
     UpdateProfileIndicatorIcon();
 }
+
+void OpaqueBrowserFrameView::MaybeRedrawFrameButtons() {}
 
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, private:
@@ -676,41 +652,4 @@ void OpaqueBrowserFrameView::FillClientEdgeRects(int x,
   }
   side.Offset(w + kClientEdgeThickness, 0);
   canvas->FillRect(side, color);
-}
-
-views::ImageButton* OpaqueBrowserFrameView::GetButtonFromDisplayType(
-    chrome::FrameButtonDisplayType type) {
-  switch (type) {
-    case chrome::FrameButtonDisplayType::kMinimize:
-      return minimize_button_;
-    case chrome::FrameButtonDisplayType::kMaximize:
-      return maximize_button_;
-    case chrome::FrameButtonDisplayType::kRestore:
-      return restore_button_;
-    case chrome::FrameButtonDisplayType::kClose:
-      return close_button_;
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
-}
-
-void OpaqueBrowserFrameView::MaybeRedrawFrameButtons() {
-  if (ShouldRenderNativeNavButtons()) {
-    nav_button_provider_->RedrawImages(GetTopAreaHeight(), IsMaximized(),
-                                       ShouldPaintAsActive());
-    for (auto type : {
-             chrome::FrameButtonDisplayType::kMinimize,
-             IsMaximized() ? chrome::FrameButtonDisplayType::kRestore
-                           : chrome::FrameButtonDisplayType::kMaximize,
-             chrome::FrameButtonDisplayType::kClose,
-         }) {
-      for (size_t state = 0; state < views::Button::STATE_COUNT; state++) {
-        views::Button::ButtonState button_state =
-            static_cast<views::Button::ButtonState>(state);
-        GetButtonFromDisplayType(type)->SetImage(
-            button_state, nav_button_provider_->GetImage(type, button_state));
-      }
-    }
-  }
 }

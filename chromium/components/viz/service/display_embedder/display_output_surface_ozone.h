@@ -8,10 +8,10 @@
 #include <memory>
 
 #include "base/memory/weak_ptr.h"
-#include "cc/output/output_surface.h"
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/in_process_context_provider.h"
+#include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display_embedder/display_output_surface.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -46,21 +46,22 @@ class DisplayOutputSurfaceOzone : public DisplayOutputSurface {
   // TODO(rjkroege): Implement the equivalent of Reflector.
 
  private:
-  // cc::OutputSurface implementation.
+  // OutputSurface implementation.
   void BindFramebuffer() override;
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override;
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
+  void SwapBuffers(OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
 
   // DisplayOutputSurface:
-  void DidReceiveSwapBuffersAck(gfx::SwapResult result) override;
+  void DidReceiveSwapBuffersAck(gfx::SwapResult result,
+                                uint64_t swap_id) override;
 
   GLHelper gl_helper_;
   std::unique_ptr<BufferQueue> buffer_queue_;

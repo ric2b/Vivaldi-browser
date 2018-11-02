@@ -215,7 +215,7 @@ class RequestCoordinatorTest : public testing::Test {
 
   void CallConnectionTypeObserver() {
     if (coordinator()->connection_notifier_) {
-      coordinator()->connection_notifier_->OnConnectionTypeChanged(
+      coordinator()->connection_notifier_->OnNetworkChanged(
           GetConnectionType());
     }
   }
@@ -1011,7 +1011,8 @@ TEST_F(RequestCoordinatorTest,
   EXPECT_FALSE(OfflinerWasCanceled());
 }
 
-// This tests a StopProcessing call after the prerenderer has been started.
+// This tests a StopProcessing call after the background loading has been
+// started.
 TEST_F(RequestCoordinatorTest,
        StartScheduledProcessingThenStopProcessingLater) {
   // Add a request to the queue, wait for callbacks to finish.
@@ -1040,7 +1041,7 @@ TEST_F(RequestCoordinatorTest,
   EXPECT_TRUE(state() == RequestCoordinatorState::OFFLINING);
   EXPECT_FALSE(state() == RequestCoordinatorState::PICKING);
 
-  // Now we cancel it while the prerenderer is busy.
+  // Now we cancel it while the background loader is busy.
   coordinator()->StopProcessing(Offliner::REQUEST_COORDINATOR_CANCELED);
 
   // Let the async callbacks in the cancel run.

@@ -6,6 +6,7 @@
 #define UI_APP_LIST_PRESENTER_APP_LIST_H_
 
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/presenter/app_list_presenter.mojom.h"
 #include "ui/app_list/presenter/app_list_presenter_export.h"
 
@@ -30,14 +31,14 @@ class APP_LIST_PRESENTER_EXPORT AppList : public mojom::AppList {
   mojom::AppListPresenter* GetAppListPresenter();
 
   // Helper functions to call the underlying functionality on the presenter.
-  void Show(int64_t display_id);
+  void Show(int64_t display_id, AppListShowSource show_source);
   void UpdateYPositionAndOpacity(int y_position_in_screen,
                                  float background_opacity);
   void EndDragFromShelf(mojom::AppListState app_list_state);
   void ProcessMouseWheelEvent(const ui::MouseWheelEvent& event);
 
   void Dismiss();
-  void ToggleAppList(int64_t display_id);
+  void ToggleAppList(int64_t display_id, AppListShowSource show_source);
   void StartVoiceInteractionSession();
   void ToggleVoiceInteractionSession();
 
@@ -51,6 +52,8 @@ class APP_LIST_PRESENTER_EXPORT AppList : public mojom::AppList {
   void OnVisibilityChanged(bool visible, int64_t display_id) override;
 
   void set_delegate(AppListDelegate* delegate) { delegate_ = delegate; }
+
+  void FlushForTesting();
 
  private:
   // Bindings for the mojom::AppList interface.

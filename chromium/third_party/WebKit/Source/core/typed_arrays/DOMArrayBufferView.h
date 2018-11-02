@@ -13,9 +13,7 @@
 
 namespace blink {
 
-class CORE_EXPORT DOMArrayBufferView
-    : public GarbageCollectedFinalized<DOMArrayBufferView>,
-      public ScriptWrappable {
+class CORE_EXPORT DOMArrayBufferView : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -57,8 +55,8 @@ class CORE_EXPORT DOMArrayBufferView
     return buffer();
   }
 
-  const WTF::ArrayBufferView* View() const { return buffer_view_.Get(); }
-  WTF::ArrayBufferView* View() { return buffer_view_.Get(); }
+  const WTF::ArrayBufferView* View() const { return buffer_view_.get(); }
+  WTF::ArrayBufferView* View() { return buffer_view_.get(); }
 
   ViewType GetType() const { return View()->GetType(); }
   const char* TypeName() { return View()->TypeName(); }
@@ -79,14 +77,17 @@ class CORE_EXPORT DOMArrayBufferView
     return v8::Local<v8::Object>();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(dom_array_buffer_); }
+  virtual void Trace(blink::Visitor* visitor) {
+    visitor->Trace(dom_array_buffer_);
+    ScriptWrappable::Trace(visitor);
+  }
 
  protected:
-  explicit DOMArrayBufferView(RefPtr<WTF::ArrayBufferView> buffer_view)
+  explicit DOMArrayBufferView(scoped_refptr<WTF::ArrayBufferView> buffer_view)
       : buffer_view_(std::move(buffer_view)) {
     DCHECK(buffer_view_);
   }
-  DOMArrayBufferView(RefPtr<WTF::ArrayBufferView> buffer_view,
+  DOMArrayBufferView(scoped_refptr<WTF::ArrayBufferView> buffer_view,
                      DOMArrayBufferBase* dom_array_buffer)
       : buffer_view_(std::move(buffer_view)),
         dom_array_buffer_(dom_array_buffer) {
@@ -96,7 +97,7 @@ class CORE_EXPORT DOMArrayBufferView
   }
 
  private:
-  RefPtr<WTF::ArrayBufferView> buffer_view_;
+  scoped_refptr<WTF::ArrayBufferView> buffer_view_;
   mutable Member<DOMArrayBufferBase> dom_array_buffer_;
 };
 

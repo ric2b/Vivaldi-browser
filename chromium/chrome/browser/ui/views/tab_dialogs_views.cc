@@ -9,7 +9,6 @@
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 #include "chrome/browser/ui/views/hung_renderer_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
-#include "chrome/browser/ui/views/validation_message_bubble_view.h"
 #include "content/public/browser/web_contents.h"
 
 #if !defined(OS_CHROMEOS)
@@ -51,6 +50,10 @@ void TabDialogsViews::HideHungRendererDialog() {
   HungRendererDialogView::Hide(web_contents_);
 }
 
+bool TabDialogsViews::IsShowingHungRendererDialog() {
+  return HungRendererDialogView::GetInstance();
+}
+
 void TabDialogsViews::ShowProfileSigninConfirmation(
     Browser* browser,
     Profile* profile,
@@ -82,12 +85,4 @@ void TabDialogsViews::HideManagePasswordsBubble() {
       ManagePasswordsBubbleView::manage_password_bubble()->web_contents();
   if (web_contents_ == bubble_web_contents)
     ManagePasswordsBubbleView::CloseCurrentBubble();
-}
-
-base::WeakPtr<ValidationMessageBubble> TabDialogsViews::ShowValidationMessage(
-    const gfx::Rect& anchor_in_root_view,
-    const base::string16& main_text,
-    const base::string16& sub_text) {
-  return (new ValidationMessageBubbleView(
-      web_contents_, anchor_in_root_view, main_text, sub_text))->AsWeakPtr();
 }

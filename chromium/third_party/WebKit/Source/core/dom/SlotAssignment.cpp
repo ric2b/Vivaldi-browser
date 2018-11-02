@@ -4,7 +4,6 @@
 
 #include "core/dom/SlotAssignment.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/Node.h"
@@ -12,6 +11,7 @@
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -189,7 +189,27 @@ SlotAssignment::SlotAssignment(ShadowRoot& owner)
   DCHECK(owner.IsV1());
 }
 
+void SlotAssignment::ResolveAssignmentNg() {
+  DCHECK(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
+
+  if (!needs_assignment_recalc_)
+    return;
+  needs_assignment_recalc_ = false;
+
+  for (Member<HTMLSlotElement> slot : Slots())
+    slot->ClearAssignedNodes();
+
+  for (Node& child : NodeTraversal::ChildrenOf(owner_->host())) {
+    if (!child.IsSlotable())
+      continue;
+    if (HTMLSlotElement* slot = FindSlotByName(child.SlotName()))
+      slot->AppendAssignedNode(child);
+  }
+}
+
 void SlotAssignment::ResolveAssignment() {
+  DCHECK(!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
+
   for (Member<HTMLSlotElement> slot : Slots())
     slot->SaveAndClearDistribution();
 
@@ -207,8 +227,10 @@ void SlotAssignment::ResolveAssignment() {
 }
 
 void SlotAssignment::ResolveDistribution() {
+  DCHECK(!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
+
   ResolveAssignment();
-  const HeapVector<Member<HTMLSlotElement>>& slots = this->Slots();
+  const HeapVector<Member<HTMLSlotElement>>& slots = Slots();
 
   for (auto slot : slots)
     slot->ResolveDistributedNodes();
@@ -252,12 +274,12 @@ HTMLSlotElement* SlotAssignment::GetCachedFirstSlotWithoutAccessingNodeTree(
     const AtomicString& slot_name) {
   if (Element* slot =
           slot_map_->GetCachedFirstElementWithoutAccessingNodeTree(slot_name)) {
-    return toHTMLSlotElement(slot);
+    return ToHTMLSlotElement(slot);
   }
   return nullptr;
 }
 
-DEFINE_TRACE(SlotAssignment) {
+void SlotAssignment::Trace(blink::Visitor* visitor) {
   visitor->Trace(slots_);
   visitor->Trace(slot_map_);
   visitor->Trace(owner_);

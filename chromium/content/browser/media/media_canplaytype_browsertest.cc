@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_browsertest.h"
 #include "content/public/test/browser_test_utils.h"
@@ -14,6 +15,7 @@
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
+#include "third_party/libaom/av1_features.h"
 #include "ui/display/display_switches.h"
 
 #if defined(OS_ANDROID)
@@ -70,9 +72,11 @@ namespace content {
 
 class MediaCanPlayTypeTest : public MediaBrowserTest {
  public:
-  MediaCanPlayTypeTest() : url_("about:blank") { }
+  MediaCanPlayTypeTest() : url_("about:blank") {}
 
-  void SetUpOnMainThread() override { NavigateToURL(shell(), url_); }
+  void SetUpOnMainThread() override {
+    NavigateToURL(shell(), url_);
+  }
 
   std::string CanPlay(const std::string& type) {
     std::string command("document.createElement('video').canPlayType(");
@@ -575,6 +579,37 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
   GURL url_;
   DISALLOW_COPY_AND_ASSIGN(MediaCanPlayTypeTest);
 };
+
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+class AV1MediaCanPlayTypeTest : public MediaCanPlayTypeTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    scoped_feature_list_.InitAndEnableFeature(media::kAv1Decoder);
+    MediaCanPlayTypeTest::SetUpCommandLine(command_line);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Note: This must be a separate test since features can not be changed after
+// the initial navigation.
+IN_PROC_BROWSER_TEST_F(AV1MediaCanPlayTypeTest, CodecSupportTest_av1) {
+  // TODO(dalecurtis): This is not the correct final string. Fix before enabling
+  // by default. This test needs to be merged into the existing mp4 and webm
+  // before release as well. http://crbug.com/784607
+  EXPECT_EQ(kProbably, CanPlay("'video/webm; codecs=\"av1\"'"));
+  EXPECT_EQ(kPropProbably, CanPlay("'video/mp4; codecs=\"av1\"'"));
+}
+#endif  // BUILDFLAG(ENABLE_AV1_DECODER)
+
+IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_av1_unsupported) {
+  // TODO(dalecurtis): This is not the correct final string. Fix before enabling
+  // by default. This test needs to be merged into the existing mp4 and webm
+  // before release as well. http://crbug.com/784607
+  EXPECT_EQ(kNot, CanPlay("'video/webm; codecs=\"av1\"'"));
+  EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"av1\"'"));
+}
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_wav) {
   EXPECT_EQ(kMaybe, CanPlay("'audio/wav'"));

@@ -10,8 +10,10 @@
 <translation id="1054153489933238809">在新分頁中開啟原始圖片(&amp;I)</translation>
 <translation id="1056898198331236512">警告</translation>
 <translation id="1084824384139382525">複製連結地址(&amp;E)</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD,plural, =1{繼續執行一項下載作業}other{繼續執行多項下載作業}}</translation>
 <translation id="1128109161498068552">禁止任何網站使用系統專用訊息存取 MIDI 裝置</translation>
 <translation id="114140604515785785">擴充功能根目錄：</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD,plural, =1{目前正在執行一項下載作業。您要取消下載並結束無痕模式嗎？}other{目前正在執行 # 項下載作業。您要取消下載並結束無痕模式嗎？}}</translation>
 <translation id="1163931534039071049">檢視頁框原始碼(&amp;V)</translation>
 <translation id="1165039591588034296">錯誤</translation>
 <translation id="1175364870820465910">列印(&amp;P)...</translation>
@@ -20,7 +22,6 @@
 <translation id="1187722533808055681">閒置喚醒</translation>
 <translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">僅限選取的內容</translation>
-<translation id="1238150413700645698">受保護內容</translation>
 <translation id="1244303850296295656">擴充功能錯誤</translation>
 <translation id="1274977772557788323">Adobe Flash Player 儲存設定</translation>
 <translation id="1278049586634282054">檢查視圖：</translation>
@@ -41,13 +42,12 @@
 <translation id="1588438908519853928">一般</translation>
 <translation id="1588870296199743671">使用其他程式開啟連結...</translation>
 <translation id="159359590073980872">圖片快取</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD,plural, =1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
 <translation id="1601560923496285236">套用</translation>
 <translation id="1603914832182249871">（無痕模式）</translation>
-<translation id="1616206807336925449">這個擴充功能不需要特別權限。</translation>
 <translation id="1620510694547887537">攝影機</translation>
 <translation id="1627276047960621195">檔案描述元</translation>
 <translation id="1635033183663317347">由您的監護人安裝。</translation>
-<translation id="1681120471812444678">設定新增印表機…</translation>
 <translation id="1682548588986054654">新增無痕視窗</translation>
 <translation id="1698122934742150150">僅適用於目前的無痕模式工作階段</translation>
 <translation id="1706625117072057435">縮放等級</translation>
@@ -61,13 +61,14 @@
 <translation id="176587472219019965">新增視窗(&amp;N)</translation>
 <translation id="1769104665586091481">在新視窗開啟連結(&amp;W)</translation>
 <translation id="1789575671122666129">跳出式視窗</translation>
+<translation id="1805822111539868586">審查視圖</translation>
 <translation id="1815083418640426271">以純文字貼上</translation>
 <translation id="1828901632669367785">列印使用系統對話方塊...</translation>
-<translation id="1838288018605456492">點擊以設定</translation>
 <translation id="1846308012215045257">按住 Ctrl 鍵並點擊後執行<ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">順時針旋轉(&amp;C)</translation>
 <translation id="1859234291848436338">文字方向</translation>
 <translation id="1886996562706621347">允許網站要求成為通訊協定的預設處理常式 (建議)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID：&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">選取全部(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">全部移除</translation>
@@ -146,11 +147,9 @@
 <translation id="2902127500170292085">「<ph name="EXTENSION_NAME" />」無法與這部印表機進行通訊，請確認您已插上印表機，然後再試一次。</translation>
 <translation id="2904456025988372123">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我</translation>
 <translation id="2913331724188855103">允許網站儲存及讀取 Cookie 資料 (建議)</translation>
-<translation id="2914303854539667666">產生密碼</translation>
 <translation id="2916745397441987255">搜尋擴充功能</translation>
 <translation id="2932883381142163287">檢舉濫用情形</translation>
 <translation id="2941112035454246133">低</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID：&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
 <translation id="299483336428448530">由您的家長安裝。</translation>
 <translation id="3003623123441819449">CSS 快取</translation>
@@ -170,7 +169,6 @@
 <translation id="3127156390846601284">這會將顯示的所有網站儲存在你裝置上的資料全部刪除。你要繼續操作嗎？</translation>
 <translation id="3129173833825111527">左邊界</translation>
 <translation id="3144647712221361880">以其他身分開啟連結</translation>
-<translation id="3149510190863420837">Chrome 應用程式</translation>
 <translation id="3154429428035006212">離線超過一個月</translation>
 <translation id="3222066309010235055">預先轉譯：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">麥克風</translation>
@@ -198,7 +196,6 @@
 <translation id="3396331542604645348">選取的印表機無法使用或未正確安裝。請檢查您的印表機，或改選其他印表機。</translation>
 <translation id="3432227430032737297">將顯示的項目全部移除</translation>
 <translation id="3435896845095436175">啟用</translation>
-<translation id="3439970425423980614">在預覽中開啟 PDF</translation>
 <translation id="3440761377721825626">當網站要使用外掛程式存取您的電腦時，必須先詢問您</translation>
 <translation id="345693547134384690">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="3467267818798281173">啟用 Google 拼字建議</translation>
@@ -207,19 +204,18 @@
 <translation id="3494769164076977169">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我 (建議使用)</translation>
 <translation id="3505030558724226696">撤銷裝置存取權限</translation>
 <translation id="3511307672085573050">複製連結地址(&amp;E)</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD,plural, =1{取消一項下載作業}other{取消多項下載作業}}</translation>
 <translation id="3523642406908660543">在網站要使用外掛程式存取您的電腦時，必須先詢問您 (建議使用)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; 想要與您的群組 (&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;) 共用印表機 &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;。您接受之後，所有群組成員即可使用這台印表機進行列印工作。</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3618849550573277856">查找「<ph name="LOOKUP_STRING" />」</translation>
 <translation id="3627588569887975815">在無痕視窗開啟連結(&amp;G)</translation>
-<translation id="3640006360782160348">取消印表機設定</translation>
 <translation id="3668823961463113931">處理常式</translation>
 <translation id="3678156199662914018">擴充功能：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 要求共用畫面</translation>
 <translation id="370665806235115550">正在載入...</translation>
 <translation id="3725367690636977613">頁數</translation>
 <translation id="3727187387656390258">檢查彈出視窗</translation>
-<translation id="3730639321086573427">本機端的印表機</translation>
 <translation id="3744111561329211289">背景同步</translation>
 <translation id="3760460896538743390">檢查背景頁面(&amp;B)</translation>
 <translation id="3763401818161139108">總是執行於<ph name="ORIGIN" /></translation>
@@ -256,6 +252,7 @@
 <translation id="4091434297613116013">張紙</translation>
 <translation id="4096508467498758490">停用開發人員模式擴充功能</translation>
 <translation id="4100839878934973028">電腦中其他程式所新增的應用程式可能會變更 Vivaldi 的運作方式。</translation>
+<translation id="4109898769411476438">在匯入前關閉瀏覽器</translation>
 <translation id="4115080753528843955">一些內容服務使用唯一標識符來授權訪問受保護的內容</translation>
 <translation id="411666854932687641">專用記憶體</translation>
 <translation id="4130207949184424187">這個擴充功能已變更您使用網址列搜尋時所顯示的網頁。</translation>
@@ -268,6 +265,7 @@
 <translation id="4256316378292851214">另存影片(&amp;V)...</translation>
 <translation id="4278390842282768270">允許</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> 千位元組 (<ph name="NUM_KILOBYTES_LIVE" /> 千位元組作用中)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD,plural, =1{繼續執行一項下載作業}other{繼續執行多項下載作業}}</translation>
 <translation id="4345587454538109430">設定...</translation>
 <translation id="4348766275249686434">收集錯誤信息</translation>
 <translation id="4363771538994847871">找不到投放裝置。需要協助嗎？</translation>
@@ -287,7 +285,6 @@
 <translation id="4593021220803146968">前往 <ph name="URL" /> (&amp;G)</translation>
 <translation id="4595560905247879544">只有管理員 (<ph name="CUSTODIAN_NAME" />) 可以修改應用程式和擴充功能。</translation>
 <translation id="4613271546271159013">擴充功能已變更開啟新分頁時所顯示的頁面。</translation>
-<translation id="4624768044135598934">已成功匯入！</translation>
 <translation id="4628314759732363424">更改...</translation>
 <translation id="4643612240819915418">在新分頁開啟影片(&amp;O)</translation>
 <translation id="4677772697204437347">GPU 記憶體</translation>
@@ -359,13 +356,14 @@
 <translation id="5623842676595125836">日誌</translation>
 <translation id="5627086634964711283">這個擴充功能也會控制您點選首頁按鈕時所顯示的網頁。</translation>
 <translation id="563535393368633106">存取前詢問我 (建議)</translation>
-<translation id="5646376287012673985">位置</translation>
 <translation id="5649053991847567735">自動下載</translation>
 <translation id="5677928146339483299">已封鎖</translation>
+<translation id="5689516760719285838">位置</translation>
 <translation id="5707185214361380026">擴充功能載入失敗：</translation>
 <translation id="5715711091495208045">外掛程式代理元件：<ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">抱歉，我們無法顯示這個錯誤的相關程式碼。</translation>
 <translation id="5746169159649715125">另存為 PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD,plural, =1{取消一項下載作業}other{取消多項下載作業}}</translation>
 <translation id="5759728514498647443">「<ph name="APP_NAME" />」可以讀取您透過「<ph name="APP_NAME" />」傳送的待列印文件。</translation>
 <translation id="5764483294734785780">另存音訊(&amp;V)...</translation>
 <translation id="577624874850706961">搜尋 Cookie</translation>
@@ -375,7 +373,6 @@
 <translation id="5829401023154985950">管理...</translation>
 <translation id="583281660410589416">未知</translation>
 <translation id="5838456317242088717">目前的無痕模式工作階段</translation>
-<translation id="5848934677402291689">正在儲存為 PDF</translation>
 <translation id="5849869942539715694">封裝擴充功能...</translation>
 <translation id="5908769186679515905">禁止網站執行 Flash</translation>
 <translation id="5910363049092958439">另存圖片(&amp;V)...</translation>
@@ -418,8 +415,8 @@
 <translation id="6308937455967653460">另存連結(&amp;K)...</translation>
 <translation id="6314335155547195432">產生密碼</translation>
 <translation id="6326855256003666642">Keepalive 數量</translation>
-<translation id="6348109281845364640">印表機設定失敗</translation>
 <translation id="6370021412472292592">無法載入元數據檔案。</translation>
+<translation id="6374469231428023295">再試一次</translation>
 <translation id="6385543213911723544">網站可以儲存及讀取 Cookie 資料</translation>
 <translation id="6398765197997659313">退出全螢幕模式</translation>
 <translation id="6406303162637086258">模擬瀏覽器重新啟動</translation>
@@ -430,11 +427,11 @@
 <translation id="6452181791372256707">拒絕</translation>
 <translation id="6498249116389603658">所選全部語言(&amp;A)</translation>
 <translation id="6503077044568424649">最常造訪</translation>
-<translation id="650584126816009598">您的印表機已經準備完成。</translation>
 <translation id="6508261954199872201">應用程式：<ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">複製圖片(&amp;Y)</translation>
 <translation id="6550675742724504774">選項</translation>
 <translation id="6596092346130528198">這是您想要的新分頁嗎？</translation>
+<translation id="6612358246767739896">受保護內容</translation>
 <translation id="6639554308659482635">SQLite 記憶體</translation>
 <translation id="6655190889273724601">開發者模式</translation>
 <translation id="6691936601825168937">下一頁(&amp;F)</translation>
@@ -461,7 +458,6 @@
 <translation id="6955446738988643816">檢查彈出視窗</translation>
 <translation id="6970856801391541997">列印特定網頁</translation>
 <translation id="6974053822202609517">由右至左</translation>
-<translation id="6982896539684144327">已偵測到來自 <ph name="VENDOR_NAME" /> 的印表機</translation>
 <translation id="6985276906761169321">ID：</translation>
 <translation id="6991665348624301627">選取印表機</translation>
 <translation id="7005848115657603926">頁面範圍無效，請使用 <ph name="EXAMPLE_PAGE_RANGE" /></translation>
@@ -472,6 +468,7 @@
 <translation id="708060913198414444">複製音訊網址(&amp;O)</translation>
 <translation id="7084192839369222683">僅執行重要內容</translation>
 <translation id="7144878232160441200">重試</translation>
+<translation id="7152478047064750137">這個擴充功能不需要特殊權限</translation>
 <translation id="7175353351958621980">載入自：</translation>
 <translation id="7186088072322679094">放置於工具列</translation>
 <translation id="7206693748120342859">正在下載 <ph name="PLUGIN_NAME" />...</translation>
@@ -491,7 +488,6 @@
 <translation id="7421925624202799674">檢視網頁原始碼(&amp;V)</translation>
 <translation id="7423098979219808738">先詢問我</translation>
 <translation id="7427348830195639090">背景頁面：<ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">設定印表機...</translation>
 <translation id="7453008956351770337">選取這部印表機，即表示您同意授權下列擴充功能存取您的印表機：</translation>
 <translation id="7473891865547856676">不用了，謝謝</translation>
 <translation id="749028671485790643">人員 <ph name="VALUE" /></translation>
@@ -522,7 +518,6 @@
 <translation id="7814458197256864873">複製(&amp;C)</translation>
 <translation id="7818135753970109980">已新增主題：<ph name="EXTENSION_NAME" /></translation>
 <translation id="782057141565633384">複製影片網址(&amp;O)</translation>
-<translation id="7831493768366098287">Google 列印</translation>
 <translation id="7849264908733290972">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="7857949311770343000">這是您想要的新分頁嗎？</translation>
 <translation id="786073089922909430">服務：<ph name="ARC_PROCESS_NAME" /></translation>
@@ -534,7 +529,6 @@
 <translation id="7947962633355574091">複製影片網址(&amp;O)</translation>
 <translation id="7965010376480416255">共用記憶體</translation>
 <translation id="7966241909927244760">複製圖片網址(&amp;O)</translation>
-<translation id="7967437925638594022">擴充功能及應用程式</translation>
 <translation id="7978412674231730200">私鑰</translation>
 <translation id="7982789257301363584">網路</translation>
 <translation id="7997826902155442747">處理優先順序</translation>
@@ -548,13 +542,11 @@
 <translation id="8018313076035239964">控制網站可使用的資訊，以及可對你顯示的內容</translation>
 <translation id="8023801379949507775">立即更新擴充功能</translation>
 <translation id="8032244173881942855">無法投放分頁。</translation>
-<translation id="8069615408251337349">Google 雲端列印</translation>
 <translation id="8071432093239591881">以圖片形式列印</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> 千位元組</translation>
 <translation id="8137559199583651773">管理擴充功能</translation>
 <translation id="8180239481735238521">個頁面</translation>
 <translation id="8188120771410500975">檢查文字欄位的拼字(&amp;C)</translation>
-<translation id="8259581864063078725">點擊以查詢此印表機的列印應用程式。</translation>
 <translation id="8261378640211443080">這個擴充功能未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> 中，可能在您不知情的情況下加入瀏覽器。</translation>
 <translation id="8261506727792406068">刪除</translation>
 <translation id="8270242299912238708">PDF 檔案</translation>
@@ -591,6 +583,7 @@
 <translation id="8708000541097332489">退出時清除</translation>
 <translation id="8714838604780058252">背景圖形</translation>
 <translation id="8719653885894320876">「<ph name="PLUGIN_NAME" />」下載失敗</translation>
+<translation id="8725066075913043281">再試一次</translation>
 <translation id="873545264931343897">「<ph name="PLUGIN_NAME" />」更新完成後，重新載入網頁即可啟用</translation>
 <translation id="8757090071857742562">無法投放桌面，請檢查您是否已確認要開始分享您的螢幕畫面。</translation>
 <translation id="8770406935328356739">擴充功能根目錄</translation>
@@ -604,6 +597,7 @@
 <translation id="8823514049557262177">複製連結文字(&amp;X)</translation>
 <translation id="8845001906332463065">取得幫助</translation>
 <translation id="8859174528519900719">子頁框：<ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">產生密碼...</translation>
 <translation id="8899285681604219177">已停用不支援的擴充功能</translation>
 <translation id="8899851313684471736">在新視窗開啟連結(&amp;W)</translation>
 <translation id="8910146161325739742">分享螢幕畫面</translation>
@@ -611,7 +605,6 @@
 <translation id="8916476537757519021">無痕模式子頁框：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">停用開發者模式擴充功能</translation>
 <translation id="8938356204940892126">放棄</translation>
-<translation id="8944779739948852228">已偵測到印表機</translation>
 <translation id="895944840846194039">JavaScript 記憶體</translation>
 <translation id="8962083179518285172">隱藏詳細資訊</translation>
 <translation id="8973557916016709913">重設為預設縮放比例</translation>
@@ -620,6 +613,7 @@
 <translation id="9027459031423301635">在新分頁開啟連結(&amp;T)</translation>
 <translation id="9056810968620647706">找不到相符項目。</translation>
 <translation id="9088234649737575428">依照企業策略封鎖「<ph name="PLUGIN_NAME" />」</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD,plural, =1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
 <translation id="9137916601698928395">以 <ph name="USER" /> 身分開啟連結</translation>
 <translation id="9153341767479566106">其他載入失敗的擴充功能：</translation>
 <translation id="9170848237812810038">撤銷(&amp;U)</translation>

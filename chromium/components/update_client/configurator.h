@@ -22,9 +22,13 @@ namespace net {
 class URLRequestContextGetter;
 }
 
+namespace service_manager {
+class Connector;
+}
+
 namespace update_client {
 
-class OutOfProcessPatcher;
+class ActivityDataService;
 
 // Controls the component updater behavior.
 // TODO(sorin): this class will be split soon in two. One class controls
@@ -94,10 +98,10 @@ class Configurator : public base::RefCountedThreadSafe<Configurator> {
   // The source of contexts for all the url requests.
   virtual net::URLRequestContextGetter* RequestContext() const = 0;
 
-  // Returns a new out of process patcher. May be NULL for implementations
-  // that patch in-process.
-  virtual scoped_refptr<update_client::OutOfProcessPatcher>
-  CreateOutOfProcessPatcher() const = 0;
+  // Returns a new connector to the service manager. That connector is not bound
+  // to any thread yet.
+  virtual std::unique_ptr<service_manager::Connector>
+  CreateServiceManagerConnector() const = 0;
 
   // True means that this client can handle delta updates.
   virtual bool EnabledDeltas() const = 0;
@@ -122,6 +126,16 @@ class Configurator : public base::RefCountedThreadSafe<Configurator> {
   // Returning null is safe and will disable any functionality that requires
   // persistent storage.
   virtual PrefService* GetPrefService() const = 0;
+
+  // Returns an ActivityDataService that the update_client can use to access
+  // to update information (namely active bit, last active/rollcall days)
+  // normally stored in the user extension profile.
+  // Similar to PrefService, ActivityDataService must outlive the entire
+  // update_client, and be safe to access from the thread the update_client
+  // is constructed on.
+  // Returning null is safe and will disable any functionality that requires
+  // accessing to the information provided by ActivityDataService.
+  virtual ActivityDataService* GetActivityDataService() const = 0;
 
   // Returns true if the Chrome is installed for the current user only, or false
   // if Chrome is installed for all users on the machine. This function must be

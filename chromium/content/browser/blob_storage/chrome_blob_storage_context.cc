@@ -35,8 +35,6 @@ using storage::BlobStorageContext;
 namespace content {
 
 namespace {
-const FilePath::CharType kBlobStorageContextKeyName[] =
-    FILE_PATH_LITERAL("content_blob_storage_context");
 const FilePath::CharType kBlobStorageParentDirectory[] =
     FILE_PATH_LITERAL("blob_storage");
 
@@ -87,7 +85,7 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
         new ChromeBlobStorageContext();
     context->SetUserData(
         kBlobStorageContextKeyName,
-        base::MakeUnique<UserDataAdapter<ChromeBlobStorageContext>>(
+        std::make_unique<UserDataAdapter<ChromeBlobStorageContext>>(
             blob.get()));
 
     // Check first to avoid memory leak in unittests.
@@ -145,11 +143,13 @@ void ChromeBlobStorageContext::InitializeOnIOThread(
 
 std::unique_ptr<BlobHandle> ChromeBlobStorageContext::CreateMemoryBackedBlob(
     const char* data,
-    size_t length) {
+    size_t length,
+    const std::string& content_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   std::string uuid(base::GenerateGUID());
   storage::BlobDataBuilder blob_data_builder(uuid);
+  blob_data_builder.set_content_type(content_type);
   blob_data_builder.AppendData(data, length);
 
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
@@ -197,7 +197,7 @@ void ChromeBlobStorageContext::DeleteOnCorrectThread() const {
 storage::BlobStorageContext* GetBlobStorageContext(
     ChromeBlobStorageContext* blob_storage_context) {
   if (!blob_storage_context)
-    return NULL;
+    return nullptr;
   return blob_storage_context->context();
 }
 
@@ -222,5 +222,7 @@ bool GetBodyBlobDataHandles(ResourceRequestBody* body,
   }
   return true;
 }
+
+const char kBlobStorageContextKeyName[] = "content_blob_storage_context";
 
 }  // namespace content

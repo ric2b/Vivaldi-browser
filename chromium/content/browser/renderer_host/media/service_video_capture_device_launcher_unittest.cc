@@ -37,11 +37,23 @@ class MockDeviceFactory : public video_capture::mojom::DeviceFactory {
     DoGetDeviceInfos(callback);
   }
 
+  void AddVirtualDevice(const media::VideoCaptureDeviceInfo& device_info,
+                        video_capture::mojom::ProducerPtr producer,
+                        video_capture::mojom::VirtualDeviceRequest
+                            virtual_device_request) override {
+    DoAddVirtualDevice(device_info, producer.get(), &virtual_device_request);
+  }
+
   MOCK_METHOD1(DoGetDeviceInfos, void(GetDeviceInfosCallback& callback));
   MOCK_METHOD3(DoCreateDevice,
                void(const std::string& device_id,
                     video_capture::mojom::DeviceRequest* device_request,
                     CreateDeviceCallback& callback));
+  MOCK_METHOD3(
+      DoAddVirtualDevice,
+      void(const media::VideoCaptureDeviceInfo& device_info,
+           video_capture::mojom::ProducerProxy* producer,
+           video_capture::mojom::VirtualDeviceRequest* virtual_device_request));
 };
 
 class MockVideoCaptureDeviceLauncherCallbacks
@@ -66,9 +78,9 @@ class ServiceVideoCaptureDeviceLauncherTest : public testing::Test {
  protected:
   void SetUp() override {
     factory_binding_ =
-        base::MakeUnique<mojo::Binding<video_capture::mojom::DeviceFactory>>(
+        std::make_unique<mojo::Binding<video_capture::mojom::DeviceFactory>>(
             &mock_device_factory_, mojo::MakeRequest(&device_factory_));
-    launcher_ = base::MakeUnique<ServiceVideoCaptureDeviceLauncher>(
+    launcher_ = std::make_unique<ServiceVideoCaptureDeviceLauncher>(
         connect_to_device_factory_cb_.Get());
     launcher_has_connected_to_device_factory_ = false;
     launcher_has_released_device_factory_ = false;
@@ -77,7 +89,7 @@ class ServiceVideoCaptureDeviceLauncherTest : public testing::Test {
         .WillByDefault(Invoke(
             [this](std::unique_ptr<VideoCaptureFactoryDelegate>* out_factory) {
               launcher_has_connected_to_device_factory_ = true;
-              *out_factory = base::MakeUnique<VideoCaptureFactoryDelegate>(
+              *out_factory = std::make_unique<VideoCaptureFactoryDelegate>(
                   &device_factory_, release_connection_cb_.Get());
             }));
 

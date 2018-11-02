@@ -38,9 +38,10 @@
 
 namespace blink {
 
-class SVGAnimatedAngle final : public SVGAnimatedProperty<SVGAngle>,
-                               public ScriptWrappable {
+class SVGAnimatedAngle final : public ScriptWrappable,
+                               public SVGAnimatedProperty<SVGAngle> {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(SVGAnimatedAngle);
 
  public:
   static SVGAnimatedAngle* Create(SVGElement* context_element) {
@@ -60,9 +61,9 @@ class SVGAnimatedAngle final : public SVGAnimatedProperty<SVGAngle>,
   void SetAnimatedValue(SVGPropertyBase*) override;
   void AnimationEnded() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  protected:
   explicit SVGAnimatedAngle(SVGElement* context_element);

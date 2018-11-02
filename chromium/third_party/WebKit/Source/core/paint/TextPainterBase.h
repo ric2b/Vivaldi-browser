@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/paint/DecorationInfo.h"
+#include "core/paint/TextPaintStyle.h"
 #include "core/style/AppliedTextDecoration.h"
 #include "platform/fonts/Font.h"
 #include "platform/geometry/LayoutRect.h"
@@ -21,8 +22,8 @@ class ComputedStyle;
 class Document;
 class GraphicsContext;
 class GraphicsContextStateSaver;
+class TextDecorationOffsetBase;
 struct PaintInfo;
-class ShadowList;
 
 // Base class for text painting. Has no dependencies on the layout tree and thus
 // provides functionality and definitions that can be shared between both legacy
@@ -31,8 +32,6 @@ class CORE_EXPORT TextPainterBase {
   STACK_ALLOCATED();
 
  public:
-  struct Style;
-
   TextPainterBase(GraphicsContext&,
                   const Font&,
                   const LayoutPoint& text_origin,
@@ -48,13 +47,20 @@ class CORE_EXPORT TextPainterBase {
   void SetEllipsisOffset(int offset) { ellipsis_offset_ = offset; }
 
   static void UpdateGraphicsContext(GraphicsContext&,
-                                    const Style&,
+                                    const TextPaintStyle&,
                                     bool horizontal,
                                     GraphicsContextStateSaver&);
 
+  void PaintDecorationsExceptLineThrough(const TextDecorationOffsetBase&,
+                                         const DecorationInfo&,
+                                         const PaintInfo&,
+                                         const Vector<AppliedTextDecoration>&,
+                                         const TextPaintStyle& text_style,
+                                         bool* has_line_through_decoration);
   void PaintDecorationsOnlyLineThrough(const DecorationInfo&,
                                        const PaintInfo&,
-                                       const Vector<AppliedTextDecoration>&);
+                                       const Vector<AppliedTextDecoration>&,
+                                       const TextPaintStyle&);
   void PaintDecorationUnderOrOverLine(GraphicsContext&,
                                       const DecorationInfo&,
                                       const AppliedTextDecoration&,
@@ -69,36 +75,24 @@ class CORE_EXPORT TextPainterBase {
                              const ComputedStyle&,
                              const ComputedStyle* decorating_box_style);
 
-  struct Style {
-    STACK_ALLOCATED();
-    Color current_color;
-    Color fill_color;
-    Color stroke_color;
-    Color emphasis_mark_color;
-    float stroke_width;
-    const ShadowList* shadow;
-
-    bool operator==(const Style& other) {
-      return current_color == other.current_color &&
-             fill_color == other.fill_color &&
-             stroke_color == other.stroke_color &&
-             emphasis_mark_color == other.emphasis_mark_color &&
-             stroke_width == other.stroke_width && shadow == other.shadow;
-    }
-    bool operator!=(const Style& other) { return !(*this == other); }
-  };
-
   static Color TextColorForWhiteBackground(Color);
-  static Style TextPaintingStyle(const Document&,
-                                 const ComputedStyle&,
-                                 const PaintInfo&);
+  static TextPaintStyle TextPaintingStyle(const Document&,
+                                          const ComputedStyle&,
+                                          const PaintInfo&);
+  static TextPaintStyle SelectionPaintingStyle(
+      const Document&,
+      const ComputedStyle&,
+      Node*,
+      bool have_selection,
+      const PaintInfo&,
+      const TextPaintStyle& text_style);
 
   enum RotationDirection { kCounterclockwise, kClockwise };
   static AffineTransform Rotation(const LayoutRect& box_rect,
                                   RotationDirection);
 
  protected:
-  void UpdateGraphicsContext(const Style& style,
+  void UpdateGraphicsContext(const TextPaintStyle& style,
                              GraphicsContextStateSaver& saver) {
     UpdateGraphicsContext(graphics_context_, style, horizontal_, saver);
   }
@@ -115,6 +109,7 @@ class CORE_EXPORT TextPainterBase {
   LayoutPoint text_origin_;
   LayoutRect text_bounds_;
   bool horizontal_;
+  bool has_combined_text_;
   AtomicString emphasis_mark_;
   int emphasis_mark_offset_;
   int ellipsis_offset_;

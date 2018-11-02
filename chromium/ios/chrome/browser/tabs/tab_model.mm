@@ -16,6 +16,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "components/favicon/ios/web_favicon_driver.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -36,6 +37,7 @@
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model_closing_web_state_observer.h"
+#import "ios/chrome/browser/tabs/tab_model_favicon_driver_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
 #import "ios/chrome/browser/tabs/tab_model_notification_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_observers.h"
@@ -59,7 +61,6 @@
 #import "ios/web/public/serializable_user_data_manager.h"
 #include "ios/web/public/web_state/session_certificate_policy_cache.h"
 #include "ios/web/public/web_thread.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -312,6 +313,9 @@ void CleanCertificatePolicyCache(
     _webStateListObservers.push_back(
         base::MakeUnique<WebStateListObserverBridge>(tabModelObserversBridge));
 
+    _webStateListObservers.push_back(
+        std::make_unique<TabModelFaviconDriverObserver>(self, _observers));
+
     auto webStateListMetricsObserver =
         base::MakeUnique<WebStateListMetricsObserver>();
     _webStateListMetricsObserver = webStateListMetricsObserver.get();
@@ -351,7 +355,7 @@ void CleanCertificatePolicyCache(
              object:nil];
 
     // Associate with ios::ChromeBrowserState.
-    RegisterTabModelWithChromeBrowserState(_browserState, self);
+    TabModelList::RegisterTabModelWithChromeBrowserState(_browserState, self);
   }
   return self;
 }
@@ -469,7 +473,8 @@ void CleanCertificatePolicyCache(
 
 - (void)closeTabAtIndex:(NSUInteger)index {
   DCHECK_LE(index, static_cast<NSUInteger>(INT_MAX));
-  _webStateList->CloseWebStateAt(static_cast<int>(index));
+  _webStateList->CloseWebStateAt(static_cast<int>(index),
+                                 WebStateList::CLOSE_USER_ACTION);
 }
 
 - (void)closeTab:(Tab*)tab {
@@ -477,7 +482,7 @@ void CleanCertificatePolicyCache(
 }
 
 - (void)closeAllTabs {
-  _webStateList->CloseAllWebStates();
+  _webStateList->CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kTabModelAllTabsDidCloseNotification
                     object:self];
@@ -539,7 +544,7 @@ void CleanCertificatePolicyCache(
     return referencedFiles;
   // Check the currently open tabs for external files.
   for (Tab* tab in self) {
-    const GURL& lastCommittedURL = tab.lastCommittedURL;
+    const GURL& lastCommittedURL = tab.webState->GetLastCommittedURL();
     if (UrlIsExternalFileReference(lastCommittedURL)) {
       [referencedFiles addObject:base::SysUTF8ToNSString(
                                      lastCommittedURL.ExtractFileName())];
@@ -576,7 +581,7 @@ void CleanCertificatePolicyCache(
     return;
 
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-  UnregisterTabModelFromChromeBrowserState(_browserState, self);
+  TabModelList::UnregisterTabModelFromChromeBrowserState(_browserState, self);
   _browserState = nullptr;
 
   // Clear weak pointer to observers before destroying them.
@@ -589,7 +594,7 @@ void CleanCertificatePolicyCache(
   // method, ensure they -autorelease introduced by ARC are processed before
   // the WebStateList destructor is called.
   @autoreleasepool {
-    [self closeAllTabs];
+    _webStateList->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
   }
 
   // Unregister all observers after closing all the tabs as some of them are
@@ -698,6 +703,11 @@ void CleanCertificatePolicyCache(
           ->AddPlaceholderForNextNavigation();
     }
 
+    if (visible_item && visible_item->GetVirtualURL().is_valid()) {
+      favicon::WebFaviconDriver::FromWebState(webState)->FetchFavicon(
+          visible_item->GetVirtualURL(), /*is_same_document=*/false);
+    }
+
     // Restore the CertificatePolicyCache (note that webState is invalid after
     // passing it via move semantic to -initWithWebState:model:).
     UpdateCertificatePolicyCacheFromWebState(policyCache, webState);
@@ -712,7 +722,8 @@ void CleanCertificatePolicyCache(
     Tab* tab = [self tabAtIndex:0];
     BOOL hasPendingLoad =
         tab.webState->GetNavigationManager()->GetPendingItem() != nullptr;
-    if (!hasPendingLoad && tab.lastCommittedURL == GURL(kChromeUINewTabURL)) {
+    if (!hasPendingLoad &&
+        tab.webState->GetLastCommittedURL() == kChromeUINewTabURL) {
       [self closeTab:tab];
       closedNTPTab = YES;
       oldCount = 0;

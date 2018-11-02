@@ -11,12 +11,13 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_delegate.h"
-#include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/notifications/notification_common.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -30,6 +31,10 @@
 #include "dbus/message.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 
 namespace {
 
@@ -51,27 +56,23 @@ constexpr char kKrb5ConfEnvName[] = "KRB5_CONFIG";
 constexpr char kKrb5ConfFile[] = "krb5.conf";
 
 // A notification delegate for the sign-out button.
-class SigninNotificationDelegate : public NotificationDelegate {
+// TODO(estade): Can this be a HandleNotificationButtonClickDelegate?
+class SigninNotificationDelegate : public message_center::NotificationDelegate {
  public:
-  explicit SigninNotificationDelegate(const std::string& id);
+  SigninNotificationDelegate();
 
   // NotificationDelegate:
   void Click() override;
   void ButtonClick(int button_index) override;
-  std::string id() const override;
 
  protected:
   ~SigninNotificationDelegate() override = default;
 
  private:
-  // Unique id of the notification.
-  const std::string id_;
-
   DISALLOW_COPY_AND_ASSIGN(SigninNotificationDelegate);
 };
 
-SigninNotificationDelegate::SigninNotificationDelegate(const std::string& id)
-    : id_(id) {}
+SigninNotificationDelegate::SigninNotificationDelegate() {}
 
 void SigninNotificationDelegate::Click() {
   chrome::AttemptUserExit();
@@ -79,10 +80,6 @@ void SigninNotificationDelegate::Click() {
 
 void SigninNotificationDelegate::ButtonClick(int button_index) {
   chrome::AttemptUserExit();
-}
-
-std::string SigninNotificationDelegate::id() const {
-  return id_;
 }
 
 // Writes |blob| into file <UserPath>/kerberos/|file_name|. First writes into
@@ -313,10 +310,6 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
   const std::string notification_id = kProfileSigninNotificationId +
                                       profile_->GetProfileUserName() +
                                       std::to_string(message_id);
-  // Set the delegate for the notification's sign-out button.
-  SigninNotificationDelegate* delegate =
-      new SigninNotificationDelegate(notification_id);
-
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT,
       kProfileSigninNotificationId);
@@ -324,21 +317,30 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
   // Set |profile_id| for multi-user notification blocker.
   notifier_id.profile_id = profile_->GetProfileUserName();
 
-  Notification notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
+  message_center::Notification notification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
       l10n_util::GetStringUTF16(message_id),
-      ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-          IDR_NOTIFICATION_ALERT),
-      notifier_id,
-      base::string16(),  // display_source
-      GURL(notification_id), notification_id, data, delegate);
+      message_center::IsNewStyleNotificationEnabled()
+          ? gfx::Image()
+          : ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+                IDR_NOTIFICATION_ALERT),
+      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
+      GURL(notification_id), notifier_id, data,
+      new SigninNotificationDelegate());
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    notification.set_accent_color(
+        message_center::kSystemNotificationColorCriticalWarning);
+    notification.set_small_image(gfx::Image(gfx::CreateVectorIcon(
+        kNotificationWarningIcon, message_center::kSmallImageSizeMD,
+        message_center::kSystemNotificationColorWarning)));
+    notification.set_vector_small_image(kNotificationWarningIcon);
+  }
   notification.SetSystemPriority();
 
-  NotificationUIManager* notification_ui_manager =
-      g_browser_process->notification_ui_manager();
   // Add the notification.
-  notification_ui_manager->Add(notification, profile_);
+  NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
+      NotificationHandler::Type::TRANSIENT, notification);
   shown_notifications_.insert(message_id);
 }
 

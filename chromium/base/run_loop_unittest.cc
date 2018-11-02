@@ -4,11 +4,11 @@
 
 #include "base/run_loop.h"
 
-#include <queue>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -67,7 +67,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
  public:
   SimpleSingleThreadTaskRunner() = default;
 
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
                        base::TimeDelta delay) override {
     if (delay > base::TimeDelta())
@@ -77,7 +77,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
     return true;
   }
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   base::TimeDelta delay) override {
     return PostDelayedTask(from_here, std::move(task), delay);
@@ -106,7 +106,7 @@ class SimpleSingleThreadTaskRunner : public SingleThreadTaskRunner {
   ~SimpleSingleThreadTaskRunner() override = default;
 
   Lock tasks_lock_;
-  std::queue<OnceClosure> pending_tasks_;
+  base::queue<OnceClosure> pending_tasks_;
 
   // RunLoop relies on RunsTasksInCurrentSequence() signal. Use a
   // ThreadCheckerImpl to be able to reliably provide that signal even in
@@ -136,20 +136,18 @@ class TestDelegate final : public RunLoop::Delegate {
   }
 
  private:
-  void Run() override {
+  void Run(bool application_tasks_allowed) override {
     if (nested_run_allowing_tasks_incoming_) {
       EXPECT_TRUE(run_loop_client_->IsNested());
-      EXPECT_TRUE(run_loop_client_->ProcessingTasksAllowed());
+      EXPECT_TRUE(application_tasks_allowed);
     } else if (run_loop_client_->IsNested()) {
-      EXPECT_FALSE(run_loop_client_->ProcessingTasksAllowed());
+      EXPECT_FALSE(application_tasks_allowed);
     }
     nested_run_allowing_tasks_incoming_ = false;
 
     while (!should_quit_) {
-      if (run_loop_client_->ProcessingTasksAllowed() &&
-          simple_task_runner_->ProcessTask()) {
+      if (application_tasks_allowed && simple_task_runner_->ProcessTask())
         continue;
-      }
 
       if (run_loop_client_->ShouldQuitWhenIdle())
         break;

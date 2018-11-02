@@ -10,16 +10,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
-#include <queue>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -157,19 +156,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void SetCookieWithOptionsAsync(const GURL& url,
                                  const std::string& cookie_line,
                                  const CookieOptions& options,
-                                 SetCookiesCallback callback) override;
-  void SetCookieWithDetailsAsync(const GURL& url,
-                                 const std::string& name,
-                                 const std::string& value,
-                                 const std::string& domain,
-                                 const std::string& path,
-                                 base::Time creation_time,
-                                 base::Time expiration_time,
-                                 base::Time last_access_time,
-                                 bool secure,
-                                 bool http_only,
-                                 CookieSameSite same_site,
-                                 CookiePriority priority,
                                  SetCookiesCallback callback) override;
   void SetCanonicalCookieAsync(std::unique_ptr<CanonicalCookie> cookie,
                                bool secure_source,
@@ -406,23 +392,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Record statistics every kRecordStatisticsIntervalSeconds of uptime.
   static const int kRecordStatisticsIntervalSeconds = 10 * 60;
 
-  // The following are synchronous calls to which the asynchronous methods
-  // delegate either immediately (if the store is loaded) or through a deferred
-  // task (if the store is not yet loaded).
-  void SetCookieWithDetails(const GURL& url,
-                            const std::string& name,
-                            const std::string& value,
-                            const std::string& domain,
-                            const std::string& path,
-                            base::Time creation_time,
-                            base::Time expiration_time,
-                            base::Time last_access_time,
-                            bool secure,
-                            bool http_only,
-                            CookieSameSite same_site,
-                            CookiePriority priority,
-                            SetCookiesCallback callback);
-
   // Sets a canonical cookie, deletes equivalents and performs garbage
   // collection.  |source_secure| indicates if the cookie is being set
   // from a secure source (e.g. a cryptographic scheme).
@@ -529,17 +498,23 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Delete any cookies that are equivalent to |ecc| (same path, domain, etc).
   // |source_secure| indicates if the source may override existing secure
   // cookies.
+  //
   // If |skip_httponly| is true, httponly cookies will not be deleted.  The
   // return value will be true if |skip_httponly| skipped an httponly cookie or
   // the cookie to delete was Secure and the scheme of |ecc| is insecure.  |key|
   // is the key to find the cookie in cookies_; see the comment before the
   // CookieMap typedef for details.
+  //
+  // If a cookie is deleted, and its value matches |ecc|'s value, then
+  // |creation_date_to_inherit| will be set to that cookie's creation date.
+  //
   // NOTE: There should never be more than a single matching equivalent cookie.
   bool DeleteAnyEquivalentCookie(const std::string& key,
                                  const CanonicalCookie& ecc,
                                  bool source_secure,
                                  bool skip_httponly,
-                                 bool already_expired);
+                                 bool already_expired,
+                                 base::Time* creation_date_to_inherit);
 
   // Inserts |cc| into cookies_. Returns an iterator that points to the inserted
   // cookie in cookies_. Guarantee: all iterators to cookies_ remain valid.
@@ -685,11 +660,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Map of domain keys to their associated task queues. These tasks are blocked
   // until all cookies for the associated domain key eTLD+1 are loaded from the
   // backend store.
-  std::map<std::string, std::deque<base::OnceClosure>> tasks_pending_for_key_;
+  std::map<std::string, base::circular_deque<base::OnceClosure>>
+      tasks_pending_for_key_;
 
   // Queues tasks that are blocked until all cookies are loaded from the backend
   // store.
-  std::deque<base::OnceClosure> tasks_pending_;
+  base::circular_deque<base::OnceClosure> tasks_pending_;
 
   // Once a global cookie task has been seen, all per-key tasks must be put in
   // |tasks_pending_| instead of |tasks_pending_for_key_| to ensure a reasonable

@@ -14,7 +14,6 @@ class SharedBitmapManager;
 }  // namespace viz
 
 namespace cc {
-class BlockingTaskRunner;
 
 // This class is not thread-safe and can only be called from the thread it was
 // created on.
@@ -24,9 +23,6 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
       viz::ContextProvider* compositor_context_provider,
       viz::SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      BlockingTaskRunner* blocking_main_thread_task_runner,
-      bool delegated_sync_points_required,
-      bool enable_color_correct_rasterization,
       const viz::ResourceSettings& resource_settings);
   ~DisplayResourceProvider() override;
 
@@ -143,6 +139,13 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
     DISALLOW_COPY_AND_ASSIGN(ScopedBatchReturnResources);
   };
 
+  // Sets the current read fence. If a resource is locked for read
+  // and has read fences enabled, the resource will not allow writes
+  // until this fence has passed.
+  void SetReadLockFence(viz::ResourceFence* fence) {
+    current_read_lock_fence_ = fence;
+  }
+
   // Creates accounting for a child. Returns a child ID.
   int CreateChild(const ReturnCallback& return_callback);
 
@@ -156,7 +159,7 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
   // Gets the child->parent resource ID map.
   const ResourceIdMap& GetChildToParentMap(int child) const;
 
-  // Receives resources from a child, moving them from mailboxes. Resource IDs
+  // Receives resources from a child, moving them from mailboxes. ResourceIds
   // passed are in the child namespace, and will be translated to the parent
   // namespace, added to the child->parent map.
   // This adds the resources to the working set in the ResourceProvider without
@@ -179,8 +182,30 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
  private:
   friend class ScopedBatchReturnResources;
 
+  const viz::internal::Resource* LockForRead(viz::ResourceId id);
+  void UnlockForRead(viz::ResourceId id);
+
+  struct Child {
+    Child();
+    Child(const Child& other);
+    ~Child();
+
+    ResourceIdMap child_to_parent_map;
+    ReturnCallback return_callback;
+    bool marked_for_deletion;
+    bool needs_sync_tokens;
+  };
+  using ChildMap = std::unordered_map<int, Child>;
+
+  void DeleteAndReturnUnusedResourcesToChild(ChildMap::iterator child_it,
+                                             DeleteStyle style,
+                                             const ResourceIdArray& unused);
+  void DestroyChildInternal(ChildMap::iterator it, DeleteStyle style);
+
   void SetBatchReturnResources(bool aggregate);
 
+  scoped_refptr<viz::ResourceFence> current_read_lock_fence_;
+  ChildMap children_;
   base::flat_map<viz::ResourceId, sk_sp<SkImage>> resource_sk_image_;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayResourceProvider);

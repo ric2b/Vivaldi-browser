@@ -293,6 +293,13 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
 // Brings this controller's window to the front.
 - (void)activate;
 
+// Called by FrameBrowserWindow when |makeFirstResponder:| is called.
+// This method checks to see if a view in TopChrome has the first responder
+// status. If it does, it will lock the fullscreen toolbar so that the toolbar
+// will remain dropped down when the user is still interacting with it via
+// keyboard access. Otherwise, it will release the toolbar.
+- (void)firstResponderUpdated:(NSResponder*)responder;
+
 // Make the location bar the first responder, if possible.
 - (void)focusLocationBar:(BOOL)selectAll;
 
@@ -628,6 +635,9 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
 
 // Sets the fullscreen toolbar controller.
 - (void)setFullscreenToolbarController:(FullscreenToolbarController*)controller;
+
+// Sets |browserWindowTouchbar_|.
+- (void)setBrowserWindowTouchBar:(BrowserWindowTouchBar*)touchBar;
 
 @end  // @interface BrowserWindowController (TestingAPI)
 

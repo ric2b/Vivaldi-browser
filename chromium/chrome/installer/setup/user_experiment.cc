@@ -24,6 +24,7 @@
 #include "base/win/scoped_process_information.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/chrome_version.h"
 #include "chrome/install_static/install_modes.h"
@@ -395,7 +396,9 @@ void RunUserExperiment(const base::CommandLine& command_line,
     return;
   }
 
-  if (base::win::IsTabletDevice(nullptr)) {
+  // Note that the following call will not detect Win10 Tablet mode when
+  // run under a debugger - GetForegroundWindow gets confused.
+  if (base::win::IsTabletDevice(nullptr, ::GetForegroundWindow())) {
     VLOG(1) << "Aborting experiment due to tablet device.";
     experiment.SetState(ExperimentMetrics::kIsTabletDevice);
     storage_lock->StoreExperiment(experiment);
@@ -525,8 +528,10 @@ void LaunchChrome(const InstallerState& installer_state,
   const base::FilePath chrome_exe =
       installer_state.target_path().Append(kChromeExe);
   base::CommandLine command_line(chrome_exe);
+#if defined(OS_WIN)
   command_line.AppendSwitchNative(::switches::kTryChromeAgain,
                                   base::IntToString16(experiment.group()));
+#endif  // defined(OS_WIN)
 
   STARTUPINFOW startup_info = {sizeof(startup_info)};
   PROCESS_INFORMATION temp_process_info = {};

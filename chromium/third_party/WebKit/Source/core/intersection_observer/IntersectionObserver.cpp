@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/IntersectionObserverCallback.h"
 #include "bindings/core/v8/V8IntersectionObserverDelegate.h"
+#include "bindings/core/v8/v8_intersection_observer_callback.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/css/parser/CSSTokenizer.h"
 #include "core/dom/Element.h"
@@ -44,12 +44,12 @@ class IntersectionObserverDelegateImpl final
 
   void Deliver(const HeapVector<Member<IntersectionObserverEntry>>& entries,
                IntersectionObserver&) override {
-    callback_(entries);
+    callback_.Run(entries);
   }
 
   ExecutionContext* GetExecutionContext() const override { return context_; }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     IntersectionObserverDelegate::Trace(visitor);
     visitor->Trace(context_);
   }
@@ -72,7 +72,8 @@ void ParseRootMargin(String root_margin_parameter,
   // "1px 2px 3px" = top left/right bottom
   // "1px 2px 3px 4px" = top left right bottom
   CSSTokenizer tokenizer(root_margin_parameter);
-  CSSParserTokenRange token_range = tokenizer.TokenRange();
+  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenRange token_range(tokens);
   while (token_range.Peek().GetType() != kEOFToken &&
          !exception_state.HadException()) {
     if (root_margin.size() == 4) {
@@ -110,10 +111,10 @@ void ParseRootMargin(String root_margin_parameter,
 void ParseThresholds(const DoubleOrDoubleSequence& threshold_parameter,
                      Vector<float>& thresholds,
                      ExceptionState& exception_state) {
-  if (threshold_parameter.isDouble()) {
-    thresholds.push_back(static_cast<float>(threshold_parameter.getAsDouble()));
+  if (threshold_parameter.IsDouble()) {
+    thresholds.push_back(static_cast<float>(threshold_parameter.GetAsDouble()));
   } else {
-    for (auto threshold_value : threshold_parameter.getAsDoubleSequence())
+    for (auto threshold_value : threshold_parameter.GetAsDoubleSequence())
       thresholds.push_back(static_cast<float>(threshold_value));
   }
 
@@ -152,7 +153,7 @@ IntersectionObserver* IntersectionObserver::Create(
 
 IntersectionObserver* IntersectionObserver::Create(
     ScriptState* script_state,
-    IntersectionObserverCallback* callback,
+    V8IntersectionObserverCallback* callback,
     const IntersectionObserverInit& observer_init,
     ExceptionState& exception_state) {
   V8IntersectionObserverDelegate* delegate =
@@ -213,8 +214,8 @@ IntersectionObserver::IntersectionObserver(
   }
   if (root)
     root->EnsureIntersectionObserverData().AddObserver(*this);
-  TrackingDocument().EnsureIntersectionObserverController().AddTrackedObserver(
-      *this);
+  if (Document* document = TrackingDocument())
+    document->EnsureIntersectionObserverController().AddTrackedObserver(*this);
 }
 
 void IntersectionObserver::ClearWeakMembers(Visitor* visitor) {
@@ -229,13 +230,14 @@ bool IntersectionObserver::RootIsValid() const {
   return RootIsImplicit() || root();
 }
 
-Document& IntersectionObserver::TrackingDocument() const {
+Document* IntersectionObserver::TrackingDocument() const {
   if (RootIsImplicit()) {
-    DCHECK(delegate_->GetExecutionContext());
-    return *ToDocument(delegate_->GetExecutionContext());
+    if (!delegate_->GetExecutionContext())
+      return nullptr;
+    return ToDocument(delegate_->GetExecutionContext());
   }
   DCHECK(root());
-  return root()->GetDocument();
+  return &root()->GetDocument();
 }
 
 void IntersectionObserver::observe(Element* target,
@@ -281,7 +283,7 @@ void IntersectionObserver::ComputeIntersectionObservations() {
   if (!RootIsValid())
     return;
   Document* delegate_document = ToDocument(delegate_->GetExecutionContext());
-  if (!delegate_document)
+  if (!delegate_document || delegate_document->IsStopped())
     return;
   LocalDOMWindow* delegate_dom_window = delegate_document->domWindow();
   if (!delegate_dom_window)
@@ -328,6 +330,7 @@ String IntersectionObserver::rootMargin() const {
 
 void IntersectionObserver::EnqueueIntersectionObserverEntry(
     IntersectionObserverEntry& entry) {
+  DCHECK(delegate_->GetExecutionContext());
   entries_.push_back(&entry);
   ToDocument(delegate_->GetExecutionContext())
       ->EnsureIntersectionObserverController()
@@ -350,15 +353,17 @@ void IntersectionObserver::Deliver() {
   delegate_->Deliver(entries, *this);
 }
 
-DEFINE_TRACE(IntersectionObserver) {
+void IntersectionObserver::Trace(blink::Visitor* visitor) {
   visitor->template RegisterWeakMembers<
       IntersectionObserver, &IntersectionObserver::ClearWeakMembers>(this);
   visitor->Trace(delegate_);
   visitor->Trace(observations_);
   visitor->Trace(entries_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(IntersectionObserver) {
+void IntersectionObserver::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(delegate_);
 }
 

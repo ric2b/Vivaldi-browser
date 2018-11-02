@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_stream_options.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
@@ -45,11 +44,6 @@ class CONTENT_EXPORT MediaStreamCenter : public blink::WebMediaStreamCenter {
       const blink::WebMediaStreamTrack& track) override;
 
   void DidDisableMediaStreamTrack(
-      const blink::WebMediaStreamTrack& track) override;
-
-  void DidStopLocalMediaStream(const blink::WebMediaStream& stream) override;
-
-  bool DidStopMediaStreamTrack(
       const blink::WebMediaStreamTrack& track) override;
 
   blink::WebAudioSourceProvider* CreateWebAudioSourceFromMediaStreamTrack(

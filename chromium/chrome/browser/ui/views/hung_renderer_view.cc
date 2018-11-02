@@ -4,8 +4,12 @@
 
 #include "chrome/browser/ui/views/hung_renderer_view.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -25,6 +29,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -69,8 +74,9 @@ HungPagesTableModel::~HungPagesTableModel() {
 }
 
 content::RenderProcessHost* HungPagesTableModel::GetRenderProcessHost() {
-  return tab_observers_.empty() ? NULL :
-      tab_observers_[0]->web_contents()->GetRenderProcessHost();
+  return tab_observers_.empty()
+             ? NULL
+             : tab_observers_[0]->web_contents()->GetMainFrame()->GetProcess();
 }
 
 content::RenderViewHost* HungPagesTableModel::GetRenderViewHost() {
@@ -88,7 +94,8 @@ void HungPagesTableModel::InitForWebContents(WebContents* hung_contents) {
     }
     for (TabContentsIterator it; !it.done(); it.Next()) {
       if (*it != hung_contents &&
-          it->GetRenderProcessHost() == hung_contents->GetRenderProcessHost())
+          it->GetMainFrame()->GetProcess() ==
+              hung_contents->GetMainFrame()->GetProcess())
         tab_observers_.push_back(
             base::MakeUnique<WebContentsObserverImpl>(this, *it));
     }
@@ -146,6 +153,10 @@ void HungPagesTableModel::TabDestroyed(WebContentsObserverImpl* tab) {
   // WARNING: we've likely been deleted.
 }
 
+void HungPagesTableModel::TabUpdated(WebContentsObserverImpl* tab) {
+  delegate_->TabUpdated();
+}
+
 HungPagesTableModel::WebContentsObserverImpl::WebContentsObserverImpl(
     HungPagesTableModel* model, WebContents* tab)
     : content::WebContentsObserver(tab),
@@ -155,6 +166,19 @@ HungPagesTableModel::WebContentsObserverImpl::WebContentsObserverImpl(
 void HungPagesTableModel::WebContentsObserverImpl::RenderProcessGone(
     base::TerminationStatus status) {
   model_->TabDestroyed(this);
+}
+
+void HungPagesTableModel::WebContentsObserverImpl::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {
+  // If |new_host| is currently responsive dismiss this dialog, otherwise
+  // let the model know the tab has been updated. Updating the tab will
+  // dismiss the current dialog but restart the hung renderer timeout.
+  if (!new_host->GetWidget()->IsCurrentlyUnresponsive()) {
+    model_->TabDestroyed(this);
+    return;
+  }
+  model_->TabUpdated(this);
 }
 
 void HungPagesTableModel::WebContentsObserverImpl::WebContentsDestroyed() {
@@ -223,6 +247,8 @@ bool HungRendererDialogView::IsFrameActive(WebContents* contents) {
 
 HungRendererDialogView::HungRendererDialogView()
     : info_label_(nullptr), hung_pages_table_(nullptr), initialized_(false) {
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::TEXT, views::CONTROL));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::HUNG_RENDERER);
 }
 
@@ -293,7 +319,7 @@ void HungRendererDialogView::EndForWebContents(WebContents* contents) {
   DCHECK(contents);
   if (hung_pages_table_model_->RowCount() == 0 ||
       hung_pages_table_model_->GetRenderProcessHost() ==
-      contents->GetRenderProcessHost()) {
+          contents->GetMainFrame()->GetProcess()) {
     GetWidget()->Close();
     // Close is async, make sure we drop our references to the tab immediately
     // (it may be going away).
@@ -334,6 +360,13 @@ base::string16 HungRendererDialogView::GetDialogButtonLabel(
 }
 
 bool HungRendererDialogView::Cancel() {
+  auto* render_view_host = hung_pages_table_model_->GetRenderViewHost();
+  bool currently_unresponsive =
+      render_view_host &&
+      render_view_host->GetWidget()->IsCurrentlyUnresponsive();
+  UMA_HISTOGRAM_BOOLEAN("Stability.RendererUnresponsiveBeforeTermination",
+                        currently_unresponsive);
+
   content::RenderProcessHost* rph =
       hung_pages_table_model_->GetRenderProcessHost();
   if (rph) {
@@ -360,10 +393,7 @@ bool HungRendererDialogView::Cancel() {
 }
 
 bool HungRendererDialogView::Accept() {
-  // Start waiting again for responsiveness.
-  auto* render_view_host = hung_pages_table_model_->GetRenderViewHost();
-  if (render_view_host)
-    render_view_host->GetWidget()->RestartHangMonitorTimeoutIfNecessary();
+  RestartHangTimer();
   return true;
 }
 
@@ -383,6 +413,10 @@ bool HungRendererDialogView::ShouldUseCustomFrame() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 // HungRendererDialogView, HungPagesTableModel::Delegate overrides:
+
+void HungRendererDialogView::TabUpdated() {
+  RestartHangTimer();
+}
 
 void HungRendererDialogView::TabDestroyed() {
   GetWidget()->Close();
@@ -415,7 +449,7 @@ void HungRendererDialogView::Init() {
 
   using views::GridLayout;
 
-  GridLayout* layout = GridLayout::CreatePanel(this);
+  GridLayout* layout = GridLayout::CreateAndInstall(this);
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   constexpr int kColumnSetId = 0;
@@ -435,4 +469,11 @@ void HungRendererDialogView::Init() {
                   kTableViewWidth, kTableViewHeight);
 
   initialized_ = true;
+}
+
+void HungRendererDialogView::RestartHangTimer() {
+  // Start waiting again for responsiveness.
+  auto* render_view_host = hung_pages_table_model_->GetRenderViewHost();
+  if (render_view_host)
+    render_view_host->GetWidget()->RestartHangMonitorTimeoutIfNecessary();
 }

@@ -5,7 +5,6 @@
 #include "extensions/shell/browser/shell_device_client.h"
 
 #include "content/public/browser/browser_thread.h"
-#include "device/hid/hid_service.h"
 #include "device/usb/usb_service.h"
 
 using content::BrowserThread;
@@ -21,13 +20,6 @@ device::UsbService* ShellDeviceClient::GetUsbService() {
   if (!usb_service_)
     usb_service_ = device::UsbService::Create();
   return usb_service_.get();
-}
-
-device::HidService* ShellDeviceClient::GetHidService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!hid_service_)
-    hid_service_ = device::HidService::Create();
-  return hid_service_.get();
 }
 
 }  // namespace extensions

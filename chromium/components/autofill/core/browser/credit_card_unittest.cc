@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -185,6 +186,50 @@ TEST(CreditCardTest, BankNameAndLastFourDigitsStrings) {
   base::string16 obfuscated3 = credit_card3.BankNameAndLastFourDigits();
   EXPECT_FALSE(credit_card3.bank_name().empty());
   EXPECT_EQ(UTF8ToUTF16(std::string("Chase")), obfuscated3);
+}
+
+// Tests function NetworkOrBankNameAndLastFourDigits.
+TEST(CreditCardTest, NetworkOrBankNameAndLastFourDigitsStrings) {
+  // Case 1: Experiment off -> show network name.
+  CreditCard credit_card1(base::GenerateGUID(), "https://www.example.com/");
+  test::SetCreditCardInfo(&credit_card1, "John Dillinger",
+                          "5105 1051 0510 5100" /* Mastercard */, "01", "2010",
+                          "1");
+  credit_card1.set_bank_name("Chase");
+  base::string16 obfuscated1 =
+      credit_card1.NetworkOrBankNameAndLastFourDigits();
+  EXPECT_FALSE(credit_card1.bank_name().empty());
+  EXPECT_EQ(
+      UTF8ToUTF16(std::string("Mastercard") + kUTF8MidlineEllipsis + "5100"),
+      obfuscated1);
+
+  // Turn on feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(kAutofillCreditCardBankNameDisplay);
+
+  // Case 2: Bank name is empty -> show network name.
+  CreditCard credit_card2(base::GenerateGUID(), "https://www.example.com/");
+  test::SetCreditCardInfo(&credit_card2, "John Dillinger",
+                          "5105 1051 0510 5100" /* Mastercard */, "01", "2010",
+                          "1");
+  EXPECT_TRUE(credit_card2.bank_name().empty());
+  base::string16 obfuscated2 =
+      credit_card2.NetworkOrBankNameAndLastFourDigits();
+  EXPECT_EQ(
+      UTF8ToUTF16(std::string("Mastercard") + kUTF8MidlineEllipsis + "5100"),
+      obfuscated2);
+
+  // Case 3: Experiment on && bank name not empty -> show bank name.
+  CreditCard credit_card3(base::GenerateGUID(), "https://www.example.com/");
+  test::SetCreditCardInfo(&credit_card3, "John Dillinger",
+                          "5105 1051 0510 5100" /* Mastercard */, "01", "2010",
+                          "1");
+  credit_card3.set_bank_name("Chase");
+  base::string16 obfuscated3 =
+      credit_card3.NetworkOrBankNameAndLastFourDigits();
+  EXPECT_FALSE(credit_card3.bank_name().empty());
+  EXPECT_EQ(UTF8ToUTF16(std::string("Chase") + kUTF8MidlineEllipsis + "5100"),
+            obfuscated3);
 }
 
 TEST(CreditCardTest, AssignmentOperator) {
@@ -436,8 +481,8 @@ TEST(CreditCardTest, Compare) {
   EXPECT_EQ(0, a.Compare(b));
 
   // Different values produce non-zero results.
-  test::SetCreditCardInfo(&a, "Jimmy", NULL, NULL, NULL, "");
-  test::SetCreditCardInfo(&b, "Ringo", NULL, NULL, NULL, "");
+  test::SetCreditCardInfo(&a, "Jimmy", nullptr, nullptr, nullptr, "");
+  test::SetCreditCardInfo(&b, "Ringo", nullptr, nullptr, nullptr, "");
   EXPECT_GT(0, a.Compare(b));
   EXPECT_LT(0, b.Compare(a));
 }
@@ -1228,6 +1273,7 @@ INSTANTIATE_TEST_CASE_P(
 // Test that credit card last used date suggestion can be generated correctly
 // in different variations.
 TEST(CreditCardTest, GetLastUsedDateForDisplay) {
+  TestAutofillClock test_clock;
   const base::Time::Exploded kTestDateTimeExploded = {
       2016, 12, 6, 10,  // Sat, Dec 10, 2016
       15,   42, 7, 0    // 15:42:07.000
@@ -1235,6 +1281,7 @@ TEST(CreditCardTest, GetLastUsedDateForDisplay) {
   base::Time kArbitraryTime;
   EXPECT_TRUE(
       base::Time::FromLocalExploded(kTestDateTimeExploded, &kArbitraryTime));
+  test_clock.SetNow(kArbitraryTime);
 
   // Test for added to chrome/chromium.
   CreditCard credit_card0(base::GenerateGUID(), "https://www.example.com");

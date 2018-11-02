@@ -12,6 +12,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/chromeos/policy/off_hours/device_off_hours_controller.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user_manager.h"
@@ -39,7 +40,8 @@ class SessionControllerClient
       public user_manager::UserManager::Observer,
       public session_manager::SessionManagerObserver,
       public SupervisedUserServiceObserver,
-      public content::NotificationObserver {
+      public content::NotificationObserver,
+      public policy::off_hours::DeviceOffHoursController::Observer {
  public:
   SessionControllerClient();
   ~SessionControllerClient() override;
@@ -65,18 +67,24 @@ class SessionControllerClient
   // |animation_finished_callback| will be invoked when the animation finishes.
   void RunUnlockAnimation(base::Closure animation_finished_callback);
 
+  // Asks the session controller to show the window teleportation dialog.
+  void ShowTeleportWarningDialog(
+      base::OnceCallback<void(bool, bool)> on_accept);
+
   // ash::mojom::SessionControllerClient:
   void RequestLockScreen() override;
+  void RequestSignOut() override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void CycleActiveUser(ash::CycleUserDirection direction) override;
   void ShowMultiProfileLogin() override;
 
-  static bool IsMultiProfileEnabled();
+  // Returns true if a multi-profile user can be added to the session or if
+  // multiple users are already signed in.
+  static bool IsMultiProfileAvailable();
 
   // user_manager::UserManager::UserSessionStateObserver:
   void ActiveUserChanged(const user_manager::User* active_user) override;
   void UserAddedToSession(const user_manager::User* added_user) override;
-  void UserChangedChildStatus(user_manager::User* user) override;
 
   // user_manager::UserManager::Observer
   void OnUserImageChanged(const user_manager::User& user) override;
@@ -92,6 +100,9 @@ class SessionControllerClient
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
+  // DeviceOffHoursController::Observer:
+  void OnOffHoursEndTimeChanged() override;
+
   // TODO(xiyuan): Remove after SessionStateDelegateChromeOS is gone.
   static bool CanLockScreen();
   static bool ShouldLockScreenAutomatically();
@@ -104,6 +115,7 @@ class SessionControllerClient
   static void FlushForTesting();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, CyclingThreeUsers);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, SendUserSession);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, SupervisedUser);
   FRIEND_TEST_ALL_PREFIXES(SessionControllerClientTest, UserPrefsChange);
@@ -127,13 +139,20 @@ class SessionControllerClient
   // Sends the order of user sessions to ash.
   void SendUserSessionOrder();
 
-  // Sends the session length time limit to ash.
+  // Sends the session length time limit to ash considering two policies which
+  // restrict session length: "SessionLengthLimit" and "OffHours". Send limit
+  // from "SessionLengthLimit" policy if "OffHours" mode is off now or if
+  // "SessionLengthLimit" policy will be ended earlier than "OffHours" mode.
+  // Send limit from "OffHours" policy if "SessionLengthLimit" policy is unset
+  // or if "OffHours" mode will be ended earlier than "SessionLengthLimit"
+  // policy.
   void SendSessionLengthLimit();
 
   // Binds to the client interface.
   mojo::Binding<ash::mojom::SessionControllerClient> binding_;
 
-  // SessionController interface in ash.
+  // SessionController interface in ash. Holding the interface pointer keeps the
+  // pipe alive to receive mojo return values.
   ash::mojom::SessionControllerPtr session_controller_;
 
   // Whether the primary user session info is sent to ash.

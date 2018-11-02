@@ -15,7 +15,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "remoting/base/session_options.h"
 #include "remoting/codec/webrtc_video_encoder.h"
+#include "remoting/codec/webrtc_video_encoder_selector.h"
 #include "remoting/protocol/host_video_stats_dispatcher.h"
 #include "remoting/protocol/video_stream.h"
 #include "third_party/webrtc/common_types.h"
@@ -37,7 +39,7 @@ class WebrtcVideoStream : public VideoStream,
                           public webrtc::DesktopCapturer::Callback,
                           public HostVideoStatsDispatcher::EventHandler {
  public:
-  WebrtcVideoStream();
+  explicit WebrtcVideoStream(const SessionOptions& options);
   ~WebrtcVideoStream() override;
 
   void Start(std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer,
@@ -66,7 +68,8 @@ class WebrtcVideoStream : public VideoStream,
   // Called by the |scheduler_|.
   void CaptureNextFrame();
 
-  void OnFrameEncoded(std::unique_ptr<WebrtcVideoEncoder::EncodedFrame> frame);
+  void OnFrameEncoded(WebrtcVideoEncoder::EncodeResult encode_result,
+                      std::unique_ptr<WebrtcVideoEncoder::EncodedFrame> frame);
 
   void OnEncoderCreated(webrtc::VideoCodecType codec_type);
 
@@ -95,7 +98,11 @@ class WebrtcVideoStream : public VideoStream,
   webrtc::DesktopVector frame_dpi_;
   Observer* observer_ = nullptr;
 
+  WebrtcVideoEncoderSelector encoder_selector_;
+
   base::ThreadChecker thread_checker_;
+
+  const SessionOptions session_options_;
 
   base::WeakPtrFactory<WebrtcVideoStream> weak_factory_;
 

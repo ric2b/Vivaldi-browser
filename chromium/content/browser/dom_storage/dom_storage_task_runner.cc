@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/tracked_objects.h"
 
 namespace content {
 
@@ -30,14 +29,14 @@ bool DOMStorageWorkerPoolTaskRunner::RunsTasksInCurrentSequence() const {
 }
 
 bool DOMStorageWorkerPoolTaskRunner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   return primary_sequence_->PostDelayedTask(from_here, std::move(task), delay);
 }
 
 bool DOMStorageWorkerPoolTaskRunner::PostShutdownBlockingTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     SequenceID sequence_id,
     base::OnceClosure task) {
   return GetSequencedTaskRunner(sequence_id)
@@ -72,15 +71,14 @@ bool MockDOMStorageTaskRunner::RunsTasksInCurrentSequence() const {
   return task_runner_->RunsTasksInCurrentSequence();
 }
 
-bool MockDOMStorageTaskRunner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
-    base::OnceClosure task,
-    base::TimeDelta delay) {
+bool MockDOMStorageTaskRunner::PostDelayedTask(const base::Location& from_here,
+                                               base::OnceClosure task,
+                                               base::TimeDelta delay) {
   return task_runner_->PostTask(from_here, std::move(task));
 }
 
 bool MockDOMStorageTaskRunner::PostShutdownBlockingTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     SequenceID sequence_id,
     base::OnceClosure task) {
   return task_runner_->PostTask(from_here, std::move(task));

@@ -195,7 +195,7 @@ void ResourcePrefetcher::SendRequest(const GURL& url) {
 
   url_request->set_method("GET");
   url_request->set_site_for_cookies(main_frame_url_);
-  url_request->set_initiator(url::Origin(main_frame_url_));
+  url_request->set_initiator(url::Origin::Create(main_frame_url_));
 
   content::Referrer referrer(main_frame_url_, blink::kWebReferrerPolicyDefault);
   content::Referrer sanitized_referrer =
@@ -233,8 +233,7 @@ void ResourcePrefetcher::FinishRequest(net::URLRequest* request) {
 void ResourcePrefetcher::ReadFullResponse(net::URLRequest* request) {
   int bytes_read = 0;
   do {
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(
-        kResourceBufferSizeBytes));
+    auto buffer = base::MakeRefCounted<net::IOBuffer>(kResourceBufferSizeBytes);
     bytes_read = request->Read(buffer.get(), kResourceBufferSizeBytes);
     if (bytes_read == net::ERR_IO_PENDING) {
       return;

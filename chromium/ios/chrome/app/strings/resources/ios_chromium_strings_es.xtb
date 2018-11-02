@@ -20,7 +20,6 @@
 <translation id="3605252743693911722">Inicia sesión en Chromium para sincronizar los marcadores, las contraseñas y mucho más en todos tus dispositivos.</translation>
 <translation id="3805899903892079518">Chromium no puede acceder a tus fotos y vídeos (para permitirlo, ve a Ajustes de iOS &gt; Privacidad &gt; Fotos).</translation>
 <translation id="4024541897090868497">Inicia sesión en Chromium para ver tus pestañas en todos tus dispositivos.</translation>
-<translation id="418271229036116702">Inicia sesión en Chromium para ver las pestañas de tus otros dispositivos.</translation>
 <translation id="4241912885070669028">Estás cerrando sesión en una cuenta gestionada por <ph name="SIGNOUT_MANAGED_DOMAIN" />. Tus datos de Chromium se eliminarán de este dispositivo, pero permanecerán en tu cuenta de Google.</translation>
 <translation id="4555020257205549924">Si esta función está activada, Chromium ofrecerá la posibilidad de traducir páginas escritas en otros idiomas con el Traductor de Google. <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="4787850887676698916">Aquí aparecerán las pestañas que hayas abierto en Chromium en otros dispositivos.</translation>
@@ -47,7 +46,7 @@
 <translation id="8252885722420466166">Disfruta de una mejor experiencia en Chromium según tu ubicación.</translation>
 <translation id="8353224596138547809">¿Quieres que Chromium guarde tu contraseña para este sitio?</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Los creadores de Chromium. Todos los derechos reservados.</translation>
-<translation id="8809780021347235332">Para guardar imágenes, toca Ajustes y permite que Chromium use tus fotos</translation>
+<translation id="8809780021347235332">Para guardar imágenes, toca Configuración y permite que Chromium use tus fotos</translation>
 <translation id="9022552996538154597">Iniciar sesión en Chromium</translation>
 <translation id="985602178874221306">Los creadores de Chromium</translation>
 </translationbundle>

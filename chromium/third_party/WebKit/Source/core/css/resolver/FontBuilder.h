@@ -24,13 +24,14 @@
 #ifndef FontBuilder_h
 #define FontBuilder_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
-#include "core/css/FontSize.h"
+#include "core/css/FontSizeFunctions.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontVariantNumeric.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -39,7 +40,6 @@ class ComputedStyle;
 
 class CORE_EXPORT FontBuilder {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(FontBuilder);
 
  public:
   FontBuilder(const Document*);
@@ -64,15 +64,16 @@ class CORE_EXPORT FontBuilder {
   void SetWeight(FontSelectionValue);
 
   void SetFamilyDescription(const FontDescription::FamilyDescription&);
-  void SetFeatureSettings(RefPtr<FontFeatureSettings>);
-  void SetLocale(RefPtr<const LayoutLocale>);
+  void SetFeatureSettings(scoped_refptr<FontFeatureSettings>);
+  void SetLocale(scoped_refptr<const LayoutLocale>);
   void SetVariantCaps(FontDescription::FontVariantCaps);
+  void SetVariantEastAsian(const FontVariantEastAsian);
   void SetVariantLigatures(const FontDescription::VariantLigatures&);
   void SetVariantNumeric(const FontVariantNumeric&);
   void SetTextRendering(TextRenderingMode);
   void SetKerning(FontDescription::Kerning);
   void SetFontSmoothing(FontSmoothingMode);
-  void SetVariationSettings(RefPtr<FontVariationSettings>);
+  void SetVariationSettings(scoped_refptr<FontVariationSettings>);
 
   // FIXME: These need to just vend a Font object eventually.
   void UpdateFontDescription(FontDescription&,
@@ -92,13 +93,17 @@ class CORE_EXPORT FontBuilder {
     return FontDescription::kStandardFamily;
   }
   static FontDescription::Size InitialSize() {
-    return FontDescription::Size(FontSize::InitialKeywordSize(), 0.0f, false);
+    return FontDescription::Size(FontSizeFunctions::InitialKeywordSize(), 0.0f,
+                                 false);
   }
   static float InitialSizeAdjust() { return kFontSizeAdjustNone; }
   static TextRenderingMode InitialTextRendering() { return kAutoTextRendering; }
   static FontDescription::FontVariantCaps InitialVariantCaps() {
     return FontDescription::kCapsNormal;
   }
+  static FontVariantEastAsian InitialVariantEastAsian() {
+    return FontVariantEastAsian();
+  };
   static FontDescription::VariantLigatures InitialVariantLigatures() {
     return FontDescription::VariantLigatures();
   }
@@ -145,6 +150,7 @@ class CORE_EXPORT FontBuilder {
     kStyle,
     kSizeAdjust,
     kVariantCaps,
+    kVariantEastAsian,
     kVariantLigatures,
     kVariantNumeric,
     kVariationSettings,
@@ -163,6 +169,7 @@ class CORE_EXPORT FontBuilder {
   }
 
   unsigned flags_;
+  DISALLOW_COPY_AND_ASSIGN(FontBuilder);
 };
 
 }  // namespace blink

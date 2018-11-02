@@ -14,9 +14,7 @@ namespace blink {
 class PerformanceEntry;
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 
-class PerformanceObserverEntryList
-    : public GarbageCollectedFinalized<PerformanceObserverEntryList>,
-      public ScriptWrappable {
+class PerformanceObserverEntryList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -29,7 +27,7 @@ class PerformanceObserverEntryList
   PerformanceEntryVector getEntriesByName(const String& name,
                                           const String& entry_type);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
   PerformanceEntryVector performance_entries_;

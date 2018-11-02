@@ -7,9 +7,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "cc/base/math_util.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -49,18 +49,26 @@ void NinePatchLayerImpl::SetLayout(const gfx::Rect& aperture,
   NoteLayerPropertyChanged();
 }
 
-void NinePatchLayerImpl::AppendQuads(
-    RenderPass* render_pass,
-    AppendQuadsData* append_quads_data) {
+void NinePatchLayerImpl::AppendQuads(viz::RenderPass* render_pass,
+                                     AppendQuadsData* append_quads_data) {
+  DCHECK(!bounds().IsEmpty());
   quad_generator_.CheckGeometryLimitations();
+
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  PopulateSharedQuadState(shared_quad_state);
-
-  AppendDebugBorderQuad(render_pass, bounds(), shared_quad_state,
+  bool is_resource =
+      ui_resource_id_ &&
+      layer_tree_impl()->ResourceIdForUIResource(ui_resource_id_);
+  bool are_contents_opaque =
+      is_resource ? layer_tree_impl()->IsUIResourceOpaque(ui_resource_id_) ||
+                        contents_opaque()
+                  : false;
+  PopulateSharedQuadState(shared_quad_state, are_contents_opaque);
+  AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
                         append_quads_data);
 
-  DCHECK(!bounds().IsEmpty());
+  if (!is_resource)
+    return;
 
   std::vector<NinePatchGenerator::Patch> patches =
       quad_generator_.GeneratePatches();
@@ -77,8 +85,8 @@ const char* NinePatchLayerImpl::LayerTypeAsString() const {
   return "cc::NinePatchLayerImpl";
 }
 
-std::unique_ptr<base::DictionaryValue> NinePatchLayerImpl::LayerTreeAsJson() {
-  std::unique_ptr<base::DictionaryValue> result = LayerImpl::LayerTreeAsJson();
+std::unique_ptr<base::DictionaryValue> NinePatchLayerImpl::LayerAsJson() {
+  std::unique_ptr<base::DictionaryValue> result = LayerImpl::LayerAsJson();
   quad_generator_.AsJson(result.get());
   return result;
 }

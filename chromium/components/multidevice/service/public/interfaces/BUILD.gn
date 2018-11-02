@@ -2,10 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/tools/bindings/mojom.gni")
+if (!is_ios && !is_android) {
+  import("//mojo/public/tools/bindings/mojom.gni")
 
-mojom("interfaces") {
-  sources = [
-    "device_sync.mojom",
-  ]
+  mojom("interfaces") {
+    sources = [
+      "constants.mojom",
+      "device_sync.mojom",
+    ]
+
+    public_deps = [
+      "//mojo/common:common_custom_types",
+    ]
+  }
 }

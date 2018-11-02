@@ -7,7 +7,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
-#include "content/browser/bootstrap_sandbox_manager_mac.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
@@ -21,9 +20,8 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "sandbox/mac/bootstrap_sandbox.h"
-#include "sandbox/mac/pre_exec_delegate.h"
 #include "sandbox/mac/seatbelt_exec.h"
+#include "services/service_manager/sandbox/mac/renderer_v2.sb.h"
 
 namespace content {
 namespace internal {
@@ -47,7 +45,7 @@ ChildProcessLauncherHelper::GetFilesToMap() {
       command_line());
 }
 
-void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
+bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     const FileMappedForLaunch& files_to_register,
     base::LaunchOptions* options) {
   // Convert FD mapping to FileHandleMappingVector.
@@ -60,16 +58,21 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
 
   if (base::FeatureList::IsEnabled(features::kMacV2Sandbox) &&
       GetProcessType() == switches::kRendererProcess && !no_sandbox) {
-    seatbelt_exec_client_ = base::MakeUnique<sandbox::SeatbeltExecClient>();
-    base::StringPiece renderer_sb = GetContentClient()->GetDataResource(
-        IDR_RENDERER_SANDBOX_V2_PROFILE, ui::SCALE_FACTOR_NONE);
-    std::string profile = renderer_sb.as_string();
+    // Disable os logging to com.apple.diagnosticd which is a performance
+    // problem.
+    options->environ.insert(std::make_pair("OS_ACTIVITY_MODE", "disable"));
 
-    seatbelt_exec_client_->SetProfile(profile);
+    seatbelt_exec_client_ = std::make_unique<sandbox::SeatbeltExecClient>();
+    seatbelt_exec_client_->SetProfile(
+        service_manager::kSeatbeltPolicyString_renderer_v2);
 
     SetupRendererSandboxParameters(seatbelt_exec_client_.get());
 
     int pipe = seatbelt_exec_client_->SendProfileAndGetFD();
+    if (pipe < 0) {
+      LOG(ERROR) << "pipe for sending sandbox profile is an invalid FD";
+      return false;
+    }
 
     base::FilePath helper_executable;
     CHECK(PathService::Get(content::CHILD_PROCESS_EXE, &helper_executable));
@@ -96,18 +99,7 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
   // from the new process.
   broker->EnsureRunning();
 
-  const SandboxType sandbox_type = delegate_->GetSandboxType();
-  std::unique_ptr<sandbox::PreExecDelegate> pre_exec_delegate;
-  if (BootstrapSandboxManager::ShouldEnable()) {
-    BootstrapSandboxManager* sandbox_manager =
-        BootstrapSandboxManager::GetInstance();
-    if (sandbox_manager->EnabledForSandbox(sandbox_type)) {
-      pre_exec_delegate = sandbox_manager->sandbox()->NewClient(sandbox_type);
-    }
-  }
-  // options now owns the pre_exec_delegate which will be delete on
-  // AfterLaunchOnLauncherThread below.
-  options->pre_exec_delegate = pre_exec_delegate.release();
+  return true;
 }
 
 ChildProcessLauncherHelper::Process
@@ -127,18 +119,9 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
 void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
     const ChildProcessLauncherHelper::Process& process,
     const base::LaunchOptions& options) {
-  std::unique_ptr<sandbox::PreExecDelegate> pre_exec_delegate =
-    base::WrapUnique(static_cast<sandbox::PreExecDelegate*>(
-        options.pre_exec_delegate));
-
   MachBroker* broker = MachBroker::GetInstance();
   if (process.process.IsValid()) {
     broker->AddPlaceholderForPid(process.process.Pid(), child_process_id());
-  } else {
-    if (pre_exec_delegate) {
-      BootstrapSandboxManager::GetInstance()->sandbox()->RevokeToken(
-          pre_exec_delegate->sandbox_token());
-    }
   }
 
   // After updating the broker, release the lock and let the child's message be

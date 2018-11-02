@@ -4,6 +4,8 @@
 
 #include "chrome/browser/net/profile_network_context_service.h"
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -24,6 +26,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "net/net_features.h"
 
 namespace {
 
@@ -32,14 +35,17 @@ content::mojom::NetworkContextParamsPtr CreateMainNetworkContextParams(
   // TODO(mmenke): Set up parameters here.
   content::mojom::NetworkContextParamsPtr network_context_params =
       CreateDefaultNetworkContextParams();
-  PrefService* prefs = profile->GetPrefs();
+
+  network_context_params->context_name = std::string("main");
 
   // Always enable the HTTP cache.
   network_context_params->http_cache_enabled = true;
 
-  // Configure the HTTP cache path and size for non-OTR profiles. OTR profiles
-  // just use an in-memory cache with the default size.
+  // Configure on-disk storage for non-OTR profiles. OTR profiles just use
+  // default behavior (in memory storage, default sizes).
+  PrefService* prefs = profile->GetPrefs();
   if (!profile->IsOffTheRecord()) {
+    // Configure the HTTP cache path and size.
     base::FilePath base_cache_path;
     chrome::GetUserCacheDirectory(profile->GetPath(), &base_cache_path);
     base::FilePath disk_cache_dir = prefs->GetFilePath(prefs::kDiskCacheDir);
@@ -49,6 +55,11 @@ content::mojom::NetworkContextParamsPtr CreateMainNetworkContextParams(
         base_cache_path.Append(chrome::kCacheDirname);
     network_context_params->http_cache_max_size =
         prefs->GetInteger(prefs::kDiskCacheSize);
+
+    // Currently this just contains HttpServerProperties, but that will likely
+    // change.
+    network_context_params->http_server_properties_path =
+        profile->GetPath().Append(chrome::kNetworkPersistentStateFilename);
   }
 
   // NOTE(mmenke): Keep these protocol handlers and

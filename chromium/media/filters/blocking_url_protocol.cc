@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/threading/thread_restrictions.h"
 #include "media/base/data_source.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 
@@ -28,7 +29,7 @@ BlockingUrlProtocol::BlockingUrlProtocol(DataSource* data_source,
       last_read_bytes_(0),
       read_position_(0) {}
 
-BlockingUrlProtocol::~BlockingUrlProtocol() {}
+BlockingUrlProtocol::~BlockingUrlProtocol() = default;
 
 void BlockingUrlProtocol::Abort() {
   aborted_.Signal();
@@ -60,7 +61,11 @@ int BlockingUrlProtocol::Read(int size, uint8_t* data) {
   }
 
   base::WaitableEvent* events[] = { &aborted_, &read_complete_ };
-  size_t index = base::WaitableEvent::WaitMany(events, arraysize(events));
+  size_t index;
+  {
+    base::ScopedAllowBaseSyncPrimitives allow_base_sync_primitives;
+    index = base::WaitableEvent::WaitMany(events, arraysize(events));
+  }
 
   if (events[index] == &aborted_)
     return AVERROR(EIO);

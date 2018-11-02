@@ -39,6 +39,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_renderer.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/origin.h"
 
 namespace media {
 
@@ -167,8 +168,6 @@ class MockDemuxerStream : public DemuxerStream {
   void set_audio_decoder_config(const AudioDecoderConfig& config);
   void set_video_decoder_config(const VideoDecoderConfig& config);
   void set_liveness(Liveness liveness);
-
-  VideoRotation video_rotation() override;
 
  private:
   Type type_;
@@ -459,7 +458,9 @@ class MockCdmSessionPromise : public NewSessionCdmPromise {
 
 class MockCdm : public ContentDecryptionModule {
  public:
-  MockCdm(const SessionMessageCB& session_message_cb,
+  MockCdm(const std::string& key_system,
+          const url::Origin& security_origin,
+          const SessionMessageCB& session_message_cb,
           const SessionClosedCB& session_closed_cb,
           const SessionKeysChangeCB& session_keys_change_cb,
           const SessionExpirationUpdateCB& session_expiration_update_cb);
@@ -524,10 +525,16 @@ class MockCdm : public ContentDecryptionModule {
   void CallSessionExpirationUpdateCB(const std::string& session_id,
                                      base::Time new_expiry_time);
 
+  const std::string& GetKeySystem() const { return key_system_; }
+  const url::Origin& GetSecurityOrigin() const { return security_origin_; }
+
  protected:
   ~MockCdm() override;
 
  private:
+  std::string key_system_;
+  url::Origin security_origin_;
+
   // Callbacks.
   SessionMessageCB session_message_cb_;
   SessionClosedCB session_closed_cb_;

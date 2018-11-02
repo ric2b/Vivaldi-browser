@@ -37,13 +37,13 @@ enum class OverscrollSource {
 // overscroll gesture. This controller receives the events that are dispatched
 // to the renderer, and the ACKs of events, and updates the overscroll gesture
 // status accordingly.
-class OverscrollController {
+class CONTENT_EXPORT OverscrollController {
  public:
   // Exported for testing.
   // TODO(mcnee): Tests needing CONTENT_EXPORT are BrowserPlugin specific.
   // Remove after removing BrowserPlugin (crbug.com/533069).
-  CONTENT_EXPORT OverscrollController();
-  CONTENT_EXPORT virtual ~OverscrollController();
+  OverscrollController();
+  virtual ~OverscrollController();
 
   // This must be called when dispatching any event from the
   // RenderWidgetHostView so that the state of the overscroll gesture can be
@@ -56,13 +56,8 @@ class OverscrollController {
   // Virtual and exported for testing.
   // TODO(mcnee): Tests needing CONTENT_EXPORT and virtual are BrowserPlugin
   // specific. Remove after removing BrowserPlugin (crbug.com/533069).
-  CONTENT_EXPORT virtual void ReceivedEventACK(
-      const blink::WebInputEvent& event,
-      bool processed);
-
-  // This must be called when a gesture event is filtered out and not sent to
-  // the renderer.
-  void DiscardingGestureEvent(const blink::WebGestureEvent& event);
+  virtual void ReceivedEventACK(const blink::WebInputEvent& event,
+                                bool processed);
 
   OverscrollMode overscroll_mode() const { return overscroll_mode_; }
 
@@ -118,6 +113,9 @@ class OverscrollController {
 
   // Whether this event should be processed or not handled by the controller.
   bool ShouldProcessEvent(const blink::WebInputEvent& event);
+
+  // Helper function to reset |scroll_state_| and |locked_mode_|.
+  void ResetScrollState();
 
   // The current state of overscroll gesture.
   OverscrollMode overscroll_mode_ = OVERSCROLL_NONE;

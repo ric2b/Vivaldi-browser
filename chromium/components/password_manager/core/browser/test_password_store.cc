@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
+#include "base/logging.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
@@ -104,7 +106,7 @@ TestPasswordStore::FillMatchingLogins(const FormDigest& form) {
              password_manager::IsFederatedRealm(stored_form.signon_realm,
                                                 form.origin))) {
           matched_forms.push_back(
-              base::MakeUnique<autofill::PasswordForm>(stored_form));
+              std::make_unique<autofill::PasswordForm>(stored_form));
           matched_forms.back()->is_public_suffix_match = is_psl;
         }
       }
@@ -113,54 +115,12 @@ TestPasswordStore::FillMatchingLogins(const FormDigest& form) {
   return matched_forms;
 }
 
-std::vector<std::unique_ptr<autofill::PasswordForm>>
-TestPasswordStore::FillLoginsForSameOrganizationName(
-    const std::string& signon_realm) {
-  // TODO: Implement when needed.
-  return std::vector<std::unique_ptr<autofill::PasswordForm>>();
-}
-
-void TestPasswordStore::ReportMetricsImpl(const std::string& sync_username,
-                                          bool custom_passphrase_sync_enabled) {
-}
-
-PasswordStoreChangeList TestPasswordStore::RemoveLoginsByURLAndTimeImpl(
-    const base::Callback<bool(const GURL&)>& url_filter,
-    base::Time begin,
-    base::Time end) {
-  return PasswordStoreChangeList();
-}
-
-PasswordStoreChangeList TestPasswordStore::RemoveLoginsCreatedBetweenImpl(
-    base::Time begin,
-    base::Time end) {
-  return PasswordStoreChangeList();
-}
-
-PasswordStoreChangeList TestPasswordStore::RemoveLoginsSyncedBetweenImpl(
-    base::Time begin,
-    base::Time end) {
-  return PasswordStoreChangeList();
-}
-
-PasswordStoreChangeList TestPasswordStore::DisableAutoSignInForOriginsImpl(
-    const base::Callback<bool(const GURL&)>& origin_filter) {
-  return PasswordStoreChangeList();
-}
-
-bool TestPasswordStore::RemoveStatisticsByOriginAndTimeImpl(
-    const base::Callback<bool(const GURL&)>& origin_filter,
-    base::Time delete_begin,
-    base::Time delete_end) {
-  return false;
-}
-
 bool TestPasswordStore::FillAutofillableLogins(
     std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) {
   for (const auto& forms_for_realm : stored_passwords_) {
     for (const autofill::PasswordForm& form : forms_for_realm.second) {
       if (!form.blacklisted_by_user)
-        forms->push_back(base::MakeUnique<autofill::PasswordForm>(form));
+        forms->push_back(std::make_unique<autofill::PasswordForm>(form));
     }
   }
   return true;
@@ -171,24 +131,76 @@ bool TestPasswordStore::FillBlacklistLogins(
   for (const auto& forms_for_realm : stored_passwords_) {
     for (const autofill::PasswordForm& form : forms_for_realm.second) {
       if (form.blacklisted_by_user)
-        forms->push_back(base::MakeUnique<autofill::PasswordForm>(form));
+        forms->push_back(std::make_unique<autofill::PasswordForm>(form));
     }
   }
   return true;
 }
 
+std::vector<std::unique_ptr<autofill::PasswordForm>>
+TestPasswordStore::FillLoginsForSameOrganizationName(
+    const std::string& signon_realm) {
+  NOTIMPLEMENTED();
+  return {};
+}
+
+void TestPasswordStore::ReportMetricsImpl(const std::string& sync_username,
+                                          bool custom_passphrase_sync_enabled) {
+  NOTIMPLEMENTED();
+}
+
+PasswordStoreChangeList TestPasswordStore::RemoveLoginsByURLAndTimeImpl(
+    const base::Callback<bool(const GURL&)>& url_filter,
+    base::Time begin,
+    base::Time end) {
+  NOTIMPLEMENTED();
+  return PasswordStoreChangeList();
+}
+
+PasswordStoreChangeList TestPasswordStore::RemoveLoginsCreatedBetweenImpl(
+    base::Time begin,
+    base::Time end) {
+  NOTIMPLEMENTED();
+  return PasswordStoreChangeList();
+}
+
+PasswordStoreChangeList TestPasswordStore::RemoveLoginsSyncedBetweenImpl(
+    base::Time begin,
+    base::Time end) {
+  NOTIMPLEMENTED();
+  return PasswordStoreChangeList();
+}
+
+PasswordStoreChangeList TestPasswordStore::DisableAutoSignInForOriginsImpl(
+    const base::Callback<bool(const GURL&)>& origin_filter) {
+  NOTIMPLEMENTED();
+  return PasswordStoreChangeList();
+}
+
+bool TestPasswordStore::RemoveStatisticsByOriginAndTimeImpl(
+    const base::Callback<bool(const GURL&)>& origin_filter,
+    base::Time delete_begin,
+    base::Time delete_end) {
+  NOTIMPLEMENTED();
+  return false;
+}
+
 void TestPasswordStore::AddSiteStatsImpl(const InteractionsStats& stats) {
+  NOTIMPLEMENTED();
 }
 
 void TestPasswordStore::RemoveSiteStatsImpl(const GURL& origin_domain) {
+  NOTIMPLEMENTED();
 }
 
 std::vector<InteractionsStats> TestPasswordStore::GetAllSiteStatsImpl() {
+  NOTIMPLEMENTED();
   return std::vector<InteractionsStats>();
 }
 
 std::vector<InteractionsStats> TestPasswordStore::GetSiteStatsImpl(
     const GURL& origin_domain) {
+  NOTIMPLEMENTED();
   return std::vector<InteractionsStats>();
 }
 

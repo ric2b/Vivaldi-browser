@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 
-#include <deque>
 #include <unordered_map>
 
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -75,26 +75,12 @@ class PermissionRequestManager
   // at which time the caller is free to delete the request.
   void CancelRequest(PermissionRequest* request);
 
-  // Temporarily hides the bubble, and destroys the prompt UI surface. Any
-  // existing requests will be reshown when DisplayPendingRequests is called
-  // (e.g. when switching tabs away and back to a page with a prompt).
-  // TODO(timloh): Rename this to something more fitting (e.g. TabSwitchedAway).
-  void HideBubble();
-
-  // Will show a permission bubble if there is a pending permission request on
-  // the web contents that the PermissionRequestManager belongs to.
-  void DisplayPendingRequests();
-
   // Will reposition the bubble (may change parent if necessary).
   void UpdateAnchorPosition();
 
   // True if a permission bubble is currently visible.
   // TODO(hcarmona): Remove this as part of the bubble API work.
   bool IsBubbleVisible();
-
-  // Whether PermissionRequestManager is reused on Android, instead of
-  // PermissionQueueController.
-  static bool IsEnabled();
 
   // Get the native window of the bubble.
   // TODO(hcarmona): Remove this as part of the bubble API work.
@@ -135,10 +121,12 @@ class PermissionRequestManager
   void DocumentLoadedInFrame(
       content::RenderFrameHost* render_frame_host) override;
   void WebContentsDestroyed() override;
+  void WasShown() override;
+  void WasHidden() override;
 
   // PermissionPrompt::Delegate:
   const std::vector<PermissionRequest*>& Requests() override;
-  void TogglePersist(bool new_value) override;
+  PermissionPrompt::DisplayNameOrOrigin GetDisplayNameOrOrigin() override;
   void Accept() override;
   void Deny() override;
   void Closing() override;
@@ -151,7 +139,7 @@ class PermissionRequestManager
 
   // Shows the bubble for a request that has just been dequeued, or re-show a
   // bubble after switching tabs away and back.
-  void ShowBubble();
+  void ShowBubble(bool is_reshow);
 
   // Delete the view object
   void DeleteBubble();
@@ -188,22 +176,20 @@ class PermissionRequestManager
   PermissionPrompt::Factory view_factory_;
 
   // The UI surface for an active permission prompt if we're displaying one.
+  // On Desktop, we destroy this upon tab switching, while on Android we keep
+  // the object alive. The infobar system hides the actual infobar UI and modals
+  // prevent tab switching.
   std::unique_ptr<PermissionPrompt> view_;
-  // We only show prompts when both of these are true. On Desktop, we hide any
-  // active prompt on tab switching, while on Android we let the infobar system
-  // handle it.
+  // We only show new prompts when both of these are true.
   bool main_frame_has_fully_loaded_;
-  bool tab_can_show_prompts_;
+  bool tab_is_visible_;
 
   std::vector<PermissionRequest*> requests_;
-  std::deque<PermissionRequest*> queued_requests_;
+  base::circular_deque<PermissionRequest*> queued_requests_;
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>
       duplicate_requests_;
-
-  // Whether the response to each request should be persisted.
-  bool persist_;
 
   base::ObserverList<Observer> observer_list_;
   AutoResponseType auto_response_for_test_;

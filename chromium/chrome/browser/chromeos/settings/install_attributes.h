@@ -14,8 +14,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "chromeos/dbus/cryptohome_client.h"
-#include "chromeos/dbus/dbus_method_call_status.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 
 namespace chromeos {
@@ -49,11 +49,6 @@ class InstallAttributes {
   static std::string GetEnterpriseOwnedInstallAttributesBlobForTesting(
       const std::string& user_name);
 
-  // Return serialized InstallAttributes of an enterprise-owned configuration.
-  static std::string
-  GetActiveDirectoryEnterpriseOwnedInstallAttributesBlobForTesting(
-      const std::string& realm);
-
   explicit InstallAttributes(CryptohomeClient* cryptohome_client);
   ~InstallAttributes();
 
@@ -73,9 +68,8 @@ class InstallAttributes {
   // Updates the firmware management parameters from TPM, storing the devmode
   // flag according to |block_devmode|. Invokes |callback| when done. Must be
   // called before LockDevice is done. Used to update TPM on enrollment.
-  void SetBlockDevmodeInTpm(
-      bool block_devmode,
-      const CryptohomeClient::ProtobufMethodCallback& callback);
+  void SetBlockDevmodeInTpm(bool block_devmode,
+                            DBusMethodCallback<cryptohome::BaseReply> callback);
 
   // Locks the device into |device_mode|.  Depending on |device_mode|, a
   // specific subset of |domain|, |realm| and |device_id| must be set.  Can also
@@ -184,8 +178,7 @@ class InstallAttributes {
 
   // Helper for ReadImmutableAttributes.
   void ReadAttributesIfReady(const base::Closure& callback,
-                             DBusMethodCallStatus call_status,
-                             bool result);
+                             base::Optional<bool> response);
 
   // Helper for LockDevice(). Handles the result of InstallAttributesIsReady()
   // and continue processing LockDevice if the result is true.
@@ -194,8 +187,7 @@ class InstallAttributes {
                                      const std::string& realm,
                                      const std::string& device_id,
                                      const LockResultCallback& callback,
-                                     DBusMethodCallStatus call_status,
-                                     bool result);
+                                     base::Optional<bool> response);
 
   // Confirms the registered user and invoke the callback.
   void OnReadImmutableAttributes(policy::DeviceMode mode,
@@ -209,11 +201,10 @@ class InstallAttributes {
   // errors (cryptohomed startup is slow).
   void TriggerConsistencyCheck(int dbus_retries);
 
-  // Callback for TpmIsOwned() DBUS call.  Generates UMA or schedules retry in
-  // case of DBUS error.
-  void OnTpmOwnerCheckCompleted(int dbus_retries_remaining,
-                                DBusMethodCallStatus call_status,
-                                bool result);
+  // Callback for TpmGetPassword() DBUS call.  Generates UMA or schedules retry
+  // in case of DBUS error.
+  void OnTpmGetPasswordCompleted(int dbus_retries_remaining,
+                                 base::Optional<std::string> result);
 
   CryptohomeClient* cryptohome_client_;
 

@@ -9,7 +9,6 @@ import static org.junit.Assert.assertArrayEquals;
 import android.os.ParcelFileDescriptor;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.test.MoreAsserts;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -17,7 +16,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 
@@ -67,7 +65,6 @@ public class CrashFileManagerTest {
     private File mLogfile;
 
     @Before
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     public void setUp() throws Exception {
         mInitialModificationTimestamp = new Date().getTime();
         mModificationTimestamp = mInitialModificationTimestamp;
@@ -174,20 +171,19 @@ public class CrashFileManagerTest {
         Pattern testPattern = Pattern.compile("^123");
         File[] actualFiles = crashFileManager.listCrashFiles(testPattern);
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals("Failed to match file by pattern", expectedFiles, actualFiles);
+        assertArrayEquals("Failed to match file by pattern", expectedFiles, actualFiles);
     }
 
     @Test
     @MediumTest
     @Feature({"Android-AppBase"})
-    public void testFileComparator() throws IOException {
-        CrashFileManager crashFileManager = new CrashFileManager(mTestRule.getCacheDir());
+    public void testFileComparator() {
         File[] expectedFiles = new File[] {mTmpFile3, mTmpFile2, mTmpFile1};
         File[] originalFiles = new File[] {mTmpFile1, mTmpFile2, mTmpFile3};
-        Arrays.sort(originalFiles, crashFileManager.sFileComparator);
+        Arrays.sort(originalFiles, CrashFileManager.sFileComparator);
         Assert.assertNotNull(originalFiles);
-        MoreAsserts.assertEquals("File comparator failed to prioritize last modified file",
-                expectedFiles, originalFiles);
+        assertArrayEquals("File comparator failed to prioritize last modified file", expectedFiles,
+                originalFiles);
     }
 
     @Test
@@ -201,7 +197,7 @@ public class CrashFileManagerTest {
                 mTmpFile1};
         File[] actualFiles = crashFileManager.listCrashFiles(null);
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals(
+        assertArrayEquals(
                 "Failed to sort all files by modification time", expectedFiles, actualFiles);
     }
 
@@ -246,7 +242,6 @@ public class CrashFileManagerTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     public void testSetReadyForUpload_MinidumpWithoutPid() throws IOException {
         File minidumpWithoutLogcat = new File(mTestRule.getCrashDir(), "foo.dmp");
         minidumpWithoutLogcat.createNewFile();
@@ -259,7 +254,6 @@ public class CrashFileManagerTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     public void testSetReadyForUpload_MinidumpWithPid() throws IOException {
         File minidumpWithoutLogcat = new File(mTestRule.getCrashDir(), "foo.dmp" + TEST_PID);
         minidumpWithoutLogcat.createNewFile();
@@ -272,19 +266,18 @@ public class CrashFileManagerTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
-    public void testGetMinidumpsSansLogcat() throws IOException {
+    public void testGetMinidumpsSansLogcat() {
         CrashFileManager crashFileManager = new CrashFileManager(mTestRule.getCacheDir());
         File[] expectedFiles = new File[] {mDmpSansLogcatFile2, mDmpSansLogcatFile1};
         File[] actualFiles = crashFileManager.getMinidumpsSansLogcat();
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals("Failed to get the correct minidump files in directory",
-                expectedFiles, actualFiles);
+        assertArrayEquals("Failed to get the correct minidump files in directory", expectedFiles,
+                actualFiles);
     }
 
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     public void testGetMinidumpsReadyForUpload() throws IOException {
         File forcedFile = new File(mTestRule.getCrashDir(), "456_def.forced" + TEST_PID + ".try2");
         forcedFile.createNewFile();
@@ -295,8 +288,8 @@ public class CrashFileManagerTest {
         File[] expectedFiles = new File[] {forcedFile, mOneBelowMaxTriesFile, mDmpFile2, mDmpFile1};
         File[] actualFiles = crashFileManager.getMinidumpsReadyForUpload(MAX_TRIES_ALLOWED);
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals("Failed to get the correct minidump files in directory",
-                expectedFiles, actualFiles);
+        assertArrayEquals("Failed to get the correct minidump files in directory", expectedFiles,
+                actualFiles);
     }
 
     @Test
@@ -309,8 +302,8 @@ public class CrashFileManagerTest {
         File[] actualFiles =
                 crashFileManager.getMinidumpsReadyForUpload(MULTI_DIGIT_MAX_TRIES_ALLOWED);
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals("Failed to get the correct minidump files in directory",
-                expectedFiles, actualFiles);
+        assertArrayEquals("Failed to get the correct minidump files in directory", expectedFiles,
+                actualFiles);
     }
 
     @Test
@@ -318,14 +311,14 @@ public class CrashFileManagerTest {
     @Feature({"Android-AppBase"})
     public void testGetFilesBelowMaxTries() {
         // No files in input -> return empty
-        MoreAsserts.assertEquals(new File[0],
+        assertArrayEquals(new File[0],
                 CrashFileManager.getFilesBelowMaxTries(new File[0], MAX_TRIES_ALLOWED));
         // Only files above MAX_TRIES -> return empty
-        MoreAsserts.assertEquals(
-                new File[0], CrashFileManager.getFilesBelowMaxTries(
-                                     new File[] {mMaxTriesFile}, MAX_TRIES_ALLOWED));
+        assertArrayEquals(new File[0],
+                CrashFileManager.getFilesBelowMaxTries(
+                        new File[] {mMaxTriesFile}, MAX_TRIES_ALLOWED));
         // Keep only files below MAX_TRIES
-        MoreAsserts.assertEquals(new File[] {mDmpFile1, mDmpFile2, mOneBelowMaxTriesFile},
+        assertArrayEquals(new File[] {mDmpFile1, mDmpFile2, mOneBelowMaxTriesFile},
                 CrashFileManager.getFilesBelowMaxTries(
                         new File[] {mDmpFile1, mDmpFile2, mOneBelowMaxTriesFile, mMaxTriesFile},
                         MAX_TRIES_ALLOWED));
@@ -339,8 +332,8 @@ public class CrashFileManagerTest {
         File[] expectedFiles = new File[] { mUpFile2, mUpFile1 };
         File[] actualFiles = crashFileManager.getAllUploadedFiles();
         Assert.assertNotNull(actualFiles);
-        MoreAsserts.assertEquals("Failed to get the correct uploaded files in directory",
-                expectedFiles, actualFiles);
+        assertArrayEquals("Failed to get the correct uploaded files in directory", expectedFiles,
+                actualFiles);
     }
 
     @Test
@@ -477,7 +470,6 @@ public class CrashFileManagerTest {
     }
 
     @Test
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testMarkUploadSuccess_ForcedUpload() throws IOException {
@@ -705,7 +697,6 @@ public class CrashFileManagerTest {
     }
 
     @Test
-    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testCleanOutAllNonFreshMinidumpFiles() throws IOException {

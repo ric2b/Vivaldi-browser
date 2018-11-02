@@ -45,7 +45,10 @@ class AppListPresenterDelegateTest : public AppListPresenterDelegate {
             int current_apps_page) override {
     init_called_ = true;
     view_ = view;
-    view->Initialize(container_, current_apps_page, false, false);
+    AppListView::InitParams params;
+    params.parent = container_;
+    params.initial_apps_page = current_apps_page;
+    view->Initialize(params);
   }
   void OnShown(int64_t display_id) override { on_shown_called_ = true; }
   void OnDismissed() override { on_dismissed_called_ = true; }
@@ -83,7 +86,7 @@ class AppListPresenterDelegateFactoryTest
   // AppListPresenterDelegateFactory:
   std::unique_ptr<AppListPresenterDelegate> GetDelegate(
       AppListPresenterImpl* presenter) override {
-    return base::MakeUnique<AppListPresenterDelegateTest>(
+    return std::make_unique<AppListPresenterDelegateTest>(
         container_, &app_list_view_delegate_);
   }
 
@@ -132,10 +135,10 @@ void AppListPresenterImplTest::SetUp() {
   AuraTestBase::SetUp();
   new wm::DefaultActivationClient(root_window());
   container_.reset(CreateNormalWindow(0, root_window(), nullptr));
-  presenter_ = base::MakeUnique<AppListPresenterImpl>(
-      base::MakeUnique<AppListPresenterDelegateFactoryTest>(container_.get()));
+  presenter_ = std::make_unique<AppListPresenterImpl>(
+      std::make_unique<AppListPresenterDelegateFactoryTest>(container_.get()));
   presenter_test_api_ =
-      base::MakeUnique<test::AppListPresenterImplTestApi>(presenter());
+      std::make_unique<test::AppListPresenterImplTestApi>(presenter());
 }
 
 void AppListPresenterImplTest::TearDown() {

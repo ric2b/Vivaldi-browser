@@ -15,12 +15,18 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/test_suite.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
+#include "third_party/leveldatabase/src/include/leveldb/cache.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 
 #define FPL FILE_PATH_LITERAL
 
+using base::trace_event::MemoryDumpArgs;
+using base::trace_event::MemoryDumpLevelOfDetail;
+using base::trace_event::ProcessMemoryDump;
 using leveldb::DB;
 using leveldb::Env;
 using leveldb::ReadOptions;
@@ -32,6 +38,10 @@ using leveldb_env::ChromiumEnv;
 using leveldb_env::DBTracker;
 using leveldb_env::MethodID;
 using leveldb_env::Options;
+
+namespace leveldb_env {
+
+static const int kReadOnlyFileLimit = 4;
 
 TEST(ErrorEncoding, OnlyAMethod) {
   const MethodID in_method = leveldb_env::kSequentialFileRead;
@@ -215,6 +225,40 @@ TEST(ChromiumEnv, LockFile) {
   EXPECT_TRUE(env->UnlockFile(lock).ok());
 }
 
+TEST(ChromiumEnvTest, TestOpenOnRead) {
+  // Write some test data to a single file that will be opened |n| times.
+  base::FilePath tmp_file_path;
+  ASSERT_TRUE(base::CreateTemporaryFile(&tmp_file_path));
+
+  FILE* f = fopen(tmp_file_path.AsUTF8Unsafe().c_str(), "w");
+  ASSERT_TRUE(f != NULL);
+  const char kFileData[] = "abcdefghijklmnopqrstuvwxyz";
+  fputs(kFileData, f);
+  fclose(f);
+
+  std::unique_ptr<ChromiumEnv> env(new ChromiumEnv());
+  env->SetReadOnlyFileLimitForTesting(kReadOnlyFileLimit);
+
+  // Open test file some number greater than kReadOnlyFileLimit to force the
+  // open-on-read behavior of POSIX Env leveldb::RandomAccessFile.
+  const int kNumFiles = kReadOnlyFileLimit + 5;
+  leveldb::RandomAccessFile* files[kNumFiles] = {0};
+  for (int i = 0; i < kNumFiles; i++) {
+    ASSERT_TRUE(
+        env->NewRandomAccessFile(tmp_file_path.AsUTF8Unsafe(), &files[i]).ok());
+  }
+  char scratch;
+  Slice read_result;
+  for (int i = 0; i < kNumFiles; i++) {
+    ASSERT_TRUE(files[i]->Read(i, 1, &read_result, &scratch).ok());
+    ASSERT_EQ(kFileData[i], read_result[0]);
+  }
+  for (int i = 0; i < kNumFiles; i++) {
+    delete files[i];
+  }
+  ASSERT_TRUE(env->DeleteFile(tmp_file_path.AsUTF8Unsafe()).ok());
+}
+
 class ChromiumEnvDBTrackerTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -344,5 +388,98 @@ TEST_F(ChromiumEnvDBTrackerTest, OpenDBTracking) {
   ASSERT_EQ(1u, visited_dbs.size());
   ASSERT_EQ(db.get(), *visited_dbs.begin());
 }
+
+TEST_F(ChromiumEnvDBTrackerTest, IsTrackedDB) {
+  leveldb_env::Options options;
+  options.create_if_missing = true;
+  leveldb::DB* untracked_db;
+  base::ScopedTempDir untracked_temp_dir;
+  ASSERT_TRUE(untracked_temp_dir.CreateUniqueTempDir());
+  leveldb::Status s = leveldb::DB::Open(
+      options, untracked_temp_dir.GetPath().AsUTF8Unsafe(), &untracked_db);
+  ASSERT_TRUE(s.ok());
+  EXPECT_FALSE(DBTracker::GetInstance()->IsTrackedDB(untracked_db));
+
+  // Now a tracked db.
+  std::unique_ptr<leveldb::DB> tracked_db;
+  base::ScopedTempDir tracked_temp_dir;
+  ASSERT_TRUE(tracked_temp_dir.CreateUniqueTempDir());
+  s = leveldb_env::OpenDB(options, tracked_temp_dir.GetPath().AsUTF8Unsafe(),
+                          &tracked_db);
+  ASSERT_TRUE(s.ok());
+  EXPECT_TRUE(DBTracker::GetInstance()->IsTrackedDB(tracked_db.get()));
+
+  delete untracked_db;
+}
+
+TEST_F(ChromiumEnvDBTrackerTest, CheckMemEnv) {
+  Env* env = leveldb::Env::Default();
+  ASSERT_TRUE(env != nullptr);
+  EXPECT_FALSE(leveldb_chrome::IsMemEnv(env));
+
+  std::unique_ptr<leveldb::Env> memenv(leveldb_chrome::NewMemEnv(env));
+  EXPECT_TRUE(leveldb_chrome::IsMemEnv(memenv.get()));
+}
+
+TEST_F(ChromiumEnvDBTrackerTest, MemoryDumpCreation) {
+  Options options;
+  options.create_if_missing = true;
+  leveldb::Cache* web_cache = leveldb_chrome::GetSharedWebBlockCache();
+  leveldb::Cache* browser_cache = leveldb_chrome::GetSharedBrowserBlockCache();
+  options.block_cache = web_cache;
+  std::unique_ptr<leveldb::DB> db1;
+  base::ScopedTempDir temp_dir1;
+  ASSERT_TRUE(temp_dir1.CreateUniqueTempDir());
+  base::ScopedTempDir temp_dir2;
+  ASSERT_TRUE(temp_dir2.CreateUniqueTempDir());
+  base::ScopedTempDir temp_dir3;
+  ASSERT_TRUE(temp_dir3.CreateUniqueTempDir());
+
+  auto status =
+      leveldb_env::OpenDB(options, temp_dir1.GetPath().AsUTF8Unsafe(), &db1);
+  ASSERT_TRUE(status.ok()) << status.ToString();
+
+  std::unique_ptr<leveldb::DB> db2;
+  status =
+      leveldb_env::OpenDB(options, temp_dir2.GetPath().AsUTF8Unsafe(), &db2);
+  ASSERT_TRUE(status.ok()) << status.ToString();
+
+  std::unique_ptr<leveldb::DB> db3;
+  options.block_cache = browser_cache;
+  status =
+      leveldb_env::OpenDB(options, temp_dir3.GetPath().AsUTF8Unsafe(), &db3);
+  ASSERT_TRUE(status.ok()) << status.ToString();
+
+  auto db_visitor = [](DBTracker::TrackedDB* db) {
+    leveldb::Cache* db_cache =
+        (db->block_cache_type() == DBTracker::SharedReadCacheUse_Browser)
+            ? leveldb_chrome::GetSharedBrowserBlockCache()
+            : leveldb_chrome::GetSharedWebBlockCache();
+    size_t initial_cache_size = db_cache->TotalCharge();
+    auto status = db->Put(WriteOptions(), "key", "value");
+    EXPECT_TRUE(status.ok()) << status.ToString();
+    db->CompactRange(nullptr, nullptr);
+    std::string value;
+    status = db->Get(ReadOptions(), "key", &value);
+    ASSERT_TRUE(status.ok()) << status.ToString();
+    EXPECT_GT(db_cache->TotalCharge(), initial_cache_size);
+  };
+  DBTracker::GetInstance()->VisitDatabases(base::BindRepeating(db_visitor));
+  ASSERT_EQ(browser_cache->TotalCharge() * 2, web_cache->TotalCharge());
+
+  MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::BACKGROUND};
+  base::trace_event::ProcessMemoryDump pmd(nullptr, dump_args);
+  auto* mad1 = DBTracker::GetOrCreateAllocatorDump(&pmd, db1.get());
+  auto* mad2 = DBTracker::GetOrCreateAllocatorDump(&pmd, db2.get());
+  auto* mad3 = DBTracker::GetOrCreateAllocatorDump(&pmd, db3.get());
+
+  // All databases should have the same size since we made the same changes.
+  size_t db_size = mad1->GetSizeInternal();
+  EXPECT_GT(db_size, 0ul);
+  EXPECT_EQ(db_size, mad2->GetSizeInternal());
+  EXPECT_EQ(db_size, mad3->GetSizeInternal());
+}
+
+}  // namespace leveldb_env
 
 int main(int argc, char** argv) { return base::TestSuite(argc, argv).Run(); }

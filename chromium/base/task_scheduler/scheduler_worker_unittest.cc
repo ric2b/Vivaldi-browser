@@ -50,6 +50,9 @@ class SchedulerWorkerDefaultDelegate : public SchedulerWorker::Delegate {
   SchedulerWorkerDefaultDelegate() = default;
 
   // SchedulerWorker::Delegate:
+  void OnCanScheduleSequence(scoped_refptr<Sequence> sequence) override {
+    ADD_FAILURE() << "Unexpected call to OnCanScheduleSequence().";
+  }
   void OnMainEntry(SchedulerWorker* worker) override {}
   scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) override {
     return nullptr;
@@ -77,9 +80,9 @@ class TaskSchedulerWorkerTest : public testing::TestWithParam<size_t> {
                     WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void SetUp() override {
-    worker_ = make_scoped_refptr(new SchedulerWorker(
+    worker_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL,
-        std::make_unique<TestSchedulerWorkerDelegate>(this), &task_tracker_));
+        std::make_unique<TestSchedulerWorkerDelegate>(this), &task_tracker_);
     ASSERT_TRUE(worker_);
     worker_->Start();
     worker_set_.Signal();
@@ -190,6 +193,9 @@ class TaskSchedulerWorkerTest : public testing::TestWithParam<size_t> {
         outer_->created_sequences_.push_back(sequence);
       }
 
+      sequence = outer_->task_tracker_.WillScheduleSequence(std::move(sequence),
+                                                            nullptr);
+      EXPECT_TRUE(sequence);
       return sequence;
     }
 
@@ -453,6 +459,9 @@ class ControllableCleanupDelegate : public SchedulerWorkerDefaultDelegate {
         TimeDelta()));
     EXPECT_TRUE(task_tracker_->WillPostTask(task.get()));
     sequence->PushTask(std::move(task));
+    sequence =
+        task_tracker_->WillScheduleSequence(std::move(sequence), nullptr);
+    EXPECT_TRUE(sequence);
     return sequence;
   }
 
@@ -512,8 +521,8 @@ TEST(TaskSchedulerWorkerTest, WorkerCleanupFromGetWork) {
       delegate->controls();
   controls->set_can_cleanup(true);
   EXPECT_CALL(*delegate, OnMainEntry(_));
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, WrapUnique(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, WrapUnique(delegate), &task_tracker);
   worker->Start();
   worker->WakeUp();
   controls->WaitForWorkToRun();
@@ -533,8 +542,8 @@ TEST(TaskSchedulerWorkerTest, WorkerCleanupDuringWork) {
 
   controls->HaveWorkBlock();
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker);
   worker->Start();
   worker->WakeUp();
 
@@ -555,8 +564,8 @@ TEST(TaskSchedulerWorkerTest, WorkerCleanupDuringWait) {
   scoped_refptr<ControllableCleanupDelegate::Controls> controls =
       delegate->controls();
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker);
   worker->Start();
   worker->WakeUp();
 
@@ -578,8 +587,8 @@ TEST(TaskSchedulerWorkerTest, WorkerCleanupDuringShutdown) {
 
   controls->HaveWorkBlock();
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker);
   worker->Start();
   worker->WakeUp();
 
@@ -603,8 +612,8 @@ TEST(TaskSchedulerWorkerTest, CleanupBeforeStart) {
       delegate->controls();
   controls->set_expect_get_work(false);
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker);
 
   worker->Cleanup();
   worker->Start();
@@ -652,8 +661,8 @@ TEST(TaskSchedulerWorkerTest, WorkerCleanupDuringJoin) {
 
   controls->HaveWorkBlock();
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker);
   worker->Start();
   worker->WakeUp();
 
@@ -731,8 +740,8 @@ TEST(TaskSchedulerWorkerTest, BumpPriorityOfAliveThreadDuringShutdown) {
           ? ThreadPriority::BACKGROUND
           : ThreadPriority::NORMAL);
 
-  auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::BACKGROUND, std::move(delegate), &task_tracker));
+  auto worker = MakeRefCounted<SchedulerWorker>(
+      ThreadPriority::BACKGROUND, std::move(delegate), &task_tracker);
   worker->Start();
 
   // Verify that the initial thread priority is BACKGROUND (or NORMAL if thread
@@ -791,9 +800,9 @@ TEST(TaskSchedulerWorkerTest, BackwardCompatibilityEnabled) {
 
   // Create a worker with backward compatibility ENABLED. Wake it up and wait
   // until GetWork() returns.
-  auto worker = make_scoped_refptr(new SchedulerWorker(
+  auto worker = MakeRefCounted<SchedulerWorker>(
       ThreadPriority::NORMAL, std::move(delegate), &task_tracker, nullptr,
-      SchedulerBackwardCompatibility::INIT_COM_STA));
+      SchedulerBackwardCompatibility::INIT_COM_STA);
   worker->Start();
   worker->WakeUp();
   delegate_raw->WaitUntilGetWorkReturned();
@@ -818,9 +827,9 @@ TEST(TaskSchedulerWorkerTest, BackwardCompatibilityDisabled) {
 
   // Create a worker with backward compatibility DISABLED. Wake it up and wait
   // until GetWork() returns.
-  auto worker = make_scoped_refptr(new SchedulerWorker(
+  auto worker = MakeRefCounted<SchedulerWorker>(
       ThreadPriority::NORMAL, std::move(delegate), &task_tracker, nullptr,
-      SchedulerBackwardCompatibility::DISABLED));
+      SchedulerBackwardCompatibility::DISABLED);
   worker->Start();
   worker->WakeUp();
   delegate_raw->WaitUntilGetWorkReturned();

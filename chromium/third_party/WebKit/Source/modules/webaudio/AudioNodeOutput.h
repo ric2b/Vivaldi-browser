@@ -27,11 +27,11 @@
 #define AudioNodeOutput_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/AudioParam.h"
 #include "platform/audio/AudioBus.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -155,8 +155,8 @@ class AudioNodeOutput final {
 
   // m_internalBus and m_inPlaceBus must only be changed in the audio thread
   // with the context's graph lock (or constructor).
-  RefPtr<AudioBus> internal_bus_;
-  RefPtr<AudioBus> in_place_bus_;
+  scoped_refptr<AudioBus> internal_bus_;
+  scoped_refptr<AudioBus> in_place_bus_;
   // If m_isInPlace is true, use m_inPlaceBus as the valid AudioBus; If false,
   // use the default m_internalBus.
   bool is_in_place_;

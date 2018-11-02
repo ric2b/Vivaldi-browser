@@ -15,6 +15,7 @@ struct Feature;
 
 namespace feature_engagement {
 class AvailabilityModel;
+class DisplayLockController;
 class EventModel;
 
 // An ConditionValidator that never acknowledges that a feature has met its
@@ -30,8 +31,12 @@ class NeverConditionValidator : public ConditionValidator {
       const FeatureConfig& config,
       const EventModel& event_model,
       const AvailabilityModel& availability_model,
+      const DisplayLockController& display_lock_controller,
       uint32_t current_day) const override;
-  void NotifyIsShowing(const base::Feature& feature) override;
+  void NotifyIsShowing(
+      const base::Feature& feature,
+      const FeatureConfig& config,
+      const std::vector<std::string>& all_feature_names) override;
   void NotifyDismissed(const base::Feature& feature) override;
 
  private:

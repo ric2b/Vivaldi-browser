@@ -18,9 +18,7 @@ class ExceptionState;
 class ScriptPromise;
 class ScriptState;
 
-class MODULES_EXPORT CredentialsContainer final
-    : public GarbageCollected<CredentialsContainer>,
-      public ScriptWrappable {
+class MODULES_EXPORT CredentialsContainer final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -28,14 +26,11 @@ class MODULES_EXPORT CredentialsContainer final
 
   // CredentialsContainer.idl
   ScriptPromise get(ScriptState*, const CredentialRequestOptions&);
-  ScriptPromise store(ScriptState*, Credential* = 0);
+  ScriptPromise store(ScriptState*, Credential* = nullptr);
   ScriptPromise create(ScriptState*,
                        const CredentialCreationOptions&,
                        ExceptionState&);
   ScriptPromise preventSilentAccess(ScriptState*);
-  ScriptPromise requireUserMediation(ScriptState*);
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  private:
   CredentialsContainer();

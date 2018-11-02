@@ -53,9 +53,11 @@ class ShillManagerClient;
 class ShillProfileClient;
 class ShillServiceClient;
 class ShillThirdPartyVpnDriverClient;
+class SmbProviderClient;
 class SystemClockClient;
 class UpdateEngineClient;
 class UpstartClient;
+class VirtualFileProviderClient;
 
 // DBusThreadManager manages the D-Bus thread, the thread dedicated to
 // handling asynchronous D-Bus operations.
@@ -147,10 +149,12 @@ class CHROMEOS_EXPORT DBusThreadManager {
   ShillServiceClient* GetShillServiceClient();
   ShillProfileClient* GetShillProfileClient();
   ShillThirdPartyVpnDriverClient* GetShillThirdPartyVpnDriverClient();
+  SmbProviderClient* GetSmbProviderClient();
   SMSClient* GetSMSClient();
   SystemClockClient* GetSystemClockClient();
   UpdateEngineClient* GetUpdateEngineClient();
   UpstartClient* GetUpstartClient();
+  VirtualFileProviderClient* GetVirtualFileProviderClient();
 
  private:
   friend class DBusThreadManagerSetter;
@@ -204,6 +208,8 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
       std::unique_ptr<PermissionBrokerClient> client);
   void SetPowerManagerClient(std::unique_ptr<PowerManagerClient> client);
   void SetSessionManagerClient(std::unique_ptr<SessionManagerClient> client);
+  void SetSmbProviderClient(std::unique_ptr<SmbProviderClient> client);
+  void SetSystemClockClient(std::unique_ptr<SystemClockClient> client);
   void SetUpdateEngineClient(std::unique_ptr<UpdateEngineClient> client);
   void SetUpstartClient(std::unique_ptr<UpstartClient> client);
 

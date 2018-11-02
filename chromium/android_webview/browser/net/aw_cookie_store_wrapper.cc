@@ -20,6 +20,21 @@ void PostTaskToCookieStoreTaskRunner(base::OnceClosure task) {
   GetCookieStoreTaskRunner()->PostTask(FROM_HERE, std::move(task));
 }
 
+class AwCookieChangedSubscription
+    : public net::CookieStore::CookieChangedSubscription {
+ public:
+  explicit AwCookieChangedSubscription(
+      std::unique_ptr<net::CookieStore::CookieChangedCallbackList::Subscription>
+          subscription)
+      : subscription_(std::move(subscription)) {}
+
+ private:
+  std::unique_ptr<net::CookieStore::CookieChangedCallbackList::Subscription>
+      subscription_;
+
+  DISALLOW_COPY_AND_ASSIGN(AwCookieChangedSubscription);
+};
+
 // Wraps a subscription to cookie change notifications for the global
 // CookieStore for a consumer that lives on another thread. Handles passing
 // messages between thread, and destroys itself when the consumer unsubscribes.
@@ -38,7 +53,8 @@ class SubscriptionWrapper {
 
     nested_subscription_ =
         new NestedSubscription(url, name, weak_factory_.GetWeakPtr());
-    return callback_list_.Add(callback);
+    return std::make_unique<AwCookieChangedSubscription>(
+        callback_list_.Add(callback));
   }
 
  private:
@@ -107,26 +123,6 @@ void SetCookieWithOptionsAsyncOnCookieThread(
     net::CookieStore::SetCookiesCallback callback) {
   GetCookieStore()->SetCookieWithOptionsAsync(url, cookie_line, options,
                                               std::move(callback));
-}
-
-void SetCookieWithDetailsAsyncOnCookieThread(
-    const GURL& url,
-    const std::string& name,
-    const std::string& value,
-    const std::string& domain,
-    const std::string& path,
-    base::Time creation_time,
-    base::Time expiration_time,
-    base::Time last_access_time,
-    bool secure,
-    bool http_only,
-    net::CookieSameSite same_site,
-    net::CookiePriority priority,
-    net::CookieStore::SetCookiesCallback callback) {
-  GetCookieStore()->SetCookieWithDetailsAsync(
-      url, name, value, domain, path, creation_time, expiration_time,
-      last_access_time, secure, http_only, same_site, priority,
-      std::move(callback));
 }
 
 void SetCanonicalCookieAsyncOnCookieThread(
@@ -218,27 +214,6 @@ void AwCookieStoreWrapper::SetCookieWithOptionsAsync(
   PostTaskToCookieStoreTaskRunner(base::BindOnce(
       &SetCookieWithOptionsAsyncOnCookieThread, url, cookie_line, options,
       CreateWrappedCallback<bool>(std::move(callback))));
-}
-
-void AwCookieStoreWrapper::SetCookieWithDetailsAsync(
-    const GURL& url,
-    const std::string& name,
-    const std::string& value,
-    const std::string& domain,
-    const std::string& path,
-    base::Time creation_time,
-    base::Time expiration_time,
-    base::Time last_access_time,
-    bool secure,
-    bool http_only,
-    net::CookieSameSite same_site,
-    net::CookiePriority priority,
-    SetCookiesCallback callback) {
-  DCHECK(client_task_runner_->RunsTasksInCurrentSequence());
-  PostTaskToCookieStoreTaskRunner(base::BindOnce(
-      &SetCookieWithDetailsAsyncOnCookieThread, url, name, value, domain, path,
-      creation_time, expiration_time, last_access_time, secure, http_only,
-      same_site, priority, CreateWrappedCallback<bool>(std::move(callback))));
 }
 
 void AwCookieStoreWrapper::SetCanonicalCookieAsync(

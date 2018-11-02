@@ -26,13 +26,13 @@
 #ifndef HitTestingTransformState_h
 #define HitTestingTransformState_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -44,15 +44,15 @@ namespace blink {
 // to be taken when this is done.
 class HitTestingTransformState : public RefCounted<HitTestingTransformState> {
  public:
-  static RefPtr<HitTestingTransformState> Create(const FloatPoint& p,
-                                                 const FloatQuad& quad,
-                                                 const FloatQuad& area) {
-    return AdoptRef(new HitTestingTransformState(p, quad, area));
+  static scoped_refptr<HitTestingTransformState> Create(const FloatPoint& p,
+                                                        const FloatQuad& quad,
+                                                        const FloatQuad& area) {
+    return base::AdoptRef(new HitTestingTransformState(p, quad, area));
   }
 
-  static RefPtr<HitTestingTransformState> Create(
+  static scoped_refptr<HitTestingTransformState> Create(
       const HitTestingTransformState& other) {
-    return AdoptRef(new HitTestingTransformState(other));
+    return base::AdoptRef(new HitTestingTransformState(other));
   }
 
   enum TransformAccumulation { kFlattenTransform, kAccumulateTransform };

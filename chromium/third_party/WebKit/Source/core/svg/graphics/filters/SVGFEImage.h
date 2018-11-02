@@ -36,7 +36,7 @@ class LayoutObject;
 class FEImage final : public FilterEffect {
  public:
   static FEImage* CreateWithImage(Filter*,
-                                  RefPtr<Image>,
+                                  scoped_refptr<Image>,
                                   SVGPreserveAspectRatio*);
   static FEImage* CreateWithIRIReference(Filter*,
                                          TreeScope&,
@@ -49,11 +49,11 @@ class FEImage final : public FilterEffect {
 
   TextStream& ExternalRepresentation(TextStream&, int indention) const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   ~FEImage() override {}
-  FEImage(Filter*, RefPtr<Image>, SVGPreserveAspectRatio*);
+  FEImage(Filter*, scoped_refptr<Image>, SVGPreserveAspectRatio*);
   FEImage(Filter*, TreeScope&, const String&, SVGPreserveAspectRatio*);
   LayoutObject* ReferencedLayoutObject() const;
 
@@ -63,10 +63,10 @@ class FEImage final : public FilterEffect {
 
   FloatRect MapInputs(const FloatRect&) const override;
 
-  sk_sp<SkImageFilter> CreateImageFilter() override;
-  sk_sp<SkImageFilter> CreateImageFilterForLayoutObject(const LayoutObject&);
+  sk_sp<PaintFilter> CreateImageFilter() override;
+  sk_sp<PaintFilter> CreateImageFilterForLayoutObject(const LayoutObject&);
 
-  RefPtr<Image> image_;
+  scoped_refptr<Image> image_;
 
   // m_treeScope will never be a dangling reference. See
   // https://bugs.webkit.org/show_bug.cgi?id=99243

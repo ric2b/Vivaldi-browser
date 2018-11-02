@@ -5,6 +5,7 @@
 #ifndef CSSAnimationUpdate_h
 #define CSSAnimationUpdate_h
 
+#include "base/macros.h"
 #include "core/animation/EffectStack.h"
 #include "core/animation/InertEffect.h"
 #include "core/animation/Interpolation.h"
@@ -12,7 +13,6 @@
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/CSSPropertyEquality.h"
-#include "core/style/ComputedStyle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Vector.h"
@@ -21,6 +21,7 @@
 namespace blink {
 
 class Animation;
+class ComputedStyle;
 
 class NewCSSAnimation {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -38,7 +39,7 @@ class NewCSSAnimation {
         style_rule(style_rule),
         style_rule_version(this->style_rule->Version()) {}
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(effect);
     visitor->Trace(style_rule);
   }
@@ -67,7 +68,7 @@ class UpdatedCSSAnimation {
         style_rule(style_rule),
         style_rule_version(this->style_rule->Version()) {}
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(animation);
     visitor->Trace(effect);
     visitor->Trace(style_rule);
@@ -93,48 +94,13 @@ namespace blink {
 // Interpolations to be applied.
 class CSSAnimationUpdate final {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(CSSAnimationUpdate);
 
  public:
-  CSSAnimationUpdate() {}
+  CSSAnimationUpdate();
+  ~CSSAnimationUpdate();
 
-  ~CSSAnimationUpdate() {}
-
-  void Copy(const CSSAnimationUpdate& update) {
-    DCHECK(IsEmpty());
-    new_animations_ = update.NewAnimations();
-    animations_with_updates_ = update.AnimationsWithUpdates();
-    new_transitions_ = update.NewTransitions();
-    active_interpolations_for_custom_animations_ =
-        update.ActiveInterpolationsForCustomAnimations();
-    active_interpolations_for_standard_animations_ =
-        update.ActiveInterpolationsForStandardAnimations();
-    active_interpolations_for_custom_transitions_ =
-        update.ActiveInterpolationsForCustomTransitions();
-    active_interpolations_for_standard_transitions_ =
-        update.ActiveInterpolationsForStandardTransitions();
-    cancelled_animation_indices_ = update.CancelledAnimationIndices();
-    animation_indices_with_pause_toggled_ =
-        update.AnimationIndicesWithPauseToggled();
-    cancelled_transitions_ = update.CancelledTransitions();
-    finished_transitions_ = update.FinishedTransitions();
-    updated_compositor_keyframes_ = update.UpdatedCompositorKeyframes();
-  }
-
-  void Clear() {
-    new_animations_.clear();
-    animations_with_updates_.clear();
-    new_transitions_.clear();
-    active_interpolations_for_custom_animations_.clear();
-    active_interpolations_for_standard_animations_.clear();
-    active_interpolations_for_custom_transitions_.clear();
-    active_interpolations_for_standard_transitions_.clear();
-    cancelled_animation_indices_.clear();
-    animation_indices_with_pause_toggled_.clear();
-    cancelled_transitions_.clear();
-    finished_transitions_.clear();
-    updated_compositor_keyframes_.clear();
-  }
+  void Copy(const CSSAnimationUpdate&);
+  void Clear();
 
   void StartAnimation(const AtomicString& animation_name,
                       size_t name_index,
@@ -143,11 +109,6 @@ class CSSAnimationUpdate final {
                       StyleRuleKeyframes* style_rule) {
     new_animations_.push_back(NewCSSAnimation(animation_name, name_index,
                                               effect, timing, style_rule));
-  }
-  // Returns whether animation has been suppressed and should be filtered during
-  // style application.
-  bool IsSuppressedAnimation(const Animation* animation) const {
-    return suppressed_animations_.Contains(animation);
   }
   void CancelAnimation(size_t index, const Animation& animation) {
     cancelled_animation_indices_.push_back(index);
@@ -170,28 +131,13 @@ class CSSAnimationUpdate final {
   }
 
   void StartTransition(
-      const PropertyHandle& property,
-      RefPtr<const ComputedStyle> from,
-      RefPtr<const ComputedStyle> to,
-      RefPtr<const ComputedStyle> reversing_adjusted_start_value,
+      const PropertyHandle&,
+      scoped_refptr<const ComputedStyle> from,
+      scoped_refptr<const ComputedStyle> to,
+      scoped_refptr<const ComputedStyle> reversing_adjusted_start_value,
       double reversing_shortening_factor,
-      const InertEffect& effect) {
-    NewTransition new_transition;
-    new_transition.property = property;
-    new_transition.from = std::move(from);
-    new_transition.to = std::move(to);
-    new_transition.reversing_adjusted_start_value =
-        std::move(reversing_adjusted_start_value);
-    new_transition.reversing_shortening_factor = reversing_shortening_factor;
-    new_transition.effect = &effect;
-    new_transitions_.Set(property, new_transition);
-  }
-  void UnstartTransition(const PropertyHandle& property) {
-    new_transitions_.erase(property);
-  }
-  bool IsCancelledTransition(const PropertyHandle& property) const {
-    return cancelled_transitions_.Contains(property);
-  }
+      const InertEffect&);
+  void UnstartTransition(const PropertyHandle&);
   void CancelTransition(const PropertyHandle& property) {
     cancelled_transitions_.insert(property);
   }
@@ -222,12 +168,14 @@ class CSSAnimationUpdate final {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
    public:
-    DEFINE_INLINE_TRACE() { visitor->Trace(effect); }
+    NewTransition();
+    ~NewTransition();
+    void Trace(blink::Visitor* visitor) { visitor->Trace(effect); }
 
     PropertyHandle property = HashTraits<blink::PropertyHandle>::EmptyValue();
-    RefPtr<const ComputedStyle> from;
-    RefPtr<const ComputedStyle> to;
-    RefPtr<const ComputedStyle> reversing_adjusted_start_value;
+    scoped_refptr<const ComputedStyle> from;
+    scoped_refptr<const ComputedStyle> to;
+    scoped_refptr<const ComputedStyle> reversing_adjusted_start_value;
     double reversing_shortening_factor;
     Member<const InertEffect> effect;
   };
@@ -294,7 +242,7 @@ class CSSAnimationUpdate final {
            updated_compositor_keyframes_.IsEmpty();
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(new_transitions_);
     visitor->Trace(new_animations_);
     visitor->Trace(suppressed_animations_);
@@ -324,6 +272,7 @@ class CSSAnimationUpdate final {
   ActiveInterpolationsMap active_interpolations_for_standard_transitions_;
 
   friend class PendingAnimationUpdate;
+  DISALLOW_COPY_AND_ASSIGN(CSSAnimationUpdate);
 };
 
 }  // namespace blink

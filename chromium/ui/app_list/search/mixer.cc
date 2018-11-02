@@ -10,11 +10,11 @@
 #include <string>
 #include <vector>
 
+#include "ash/app_list/model/search_result.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/search_provider.h"
-#include "ui/app_list/search_result.h"
 
 namespace app_list {
 
@@ -140,7 +140,7 @@ Mixer::~Mixer() {
 }
 
 size_t Mixer::AddGroup(size_t max_results, double multiplier, double boost) {
-  groups_.push_back(base::MakeUnique<Group>(max_results, multiplier, boost));
+  groups_.push_back(std::make_unique<Group>(max_results, multiplier, boost));
   return groups_.size() - 1;
 }
 

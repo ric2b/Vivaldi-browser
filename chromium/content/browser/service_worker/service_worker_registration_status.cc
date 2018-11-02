@@ -14,16 +14,16 @@ namespace content {
 
 using blink::WebServiceWorkerError;
 
-void GetServiceWorkerRegistrationStatusResponse(
+void GetServiceWorkerErrorTypeForRegistration(
     ServiceWorkerStatusCode status,
     const std::string& status_message,
-    blink::mojom::ServiceWorkerErrorType* error_type,
-    base::string16* message) {
-  *error_type = blink::mojom::ServiceWorkerErrorType::kUnknown;
+    blink::mojom::ServiceWorkerErrorType* out_error,
+    std::string* out_message) {
+  *out_error = blink::mojom::ServiceWorkerErrorType::kUnknown;
   if (!status_message.empty())
-    *message = base::UTF8ToUTF16(status_message);
+    *out_message = status_message;
   else
-    *message = base::ASCIIToUTF16(ServiceWorkerStatusToString(status));
+    *out_message = ServiceWorkerStatusToString(status);
   switch (status) {
     case SERVICE_WORKER_OK:
       NOTREACHED() << "Calling this when status == OK is not allowed";
@@ -34,31 +34,31 @@ void GetServiceWorkerRegistrationStatusResponse(
     case SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND:
     case SERVICE_WORKER_ERROR_REDUNDANT:
     case SERVICE_WORKER_ERROR_DISALLOWED:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kInstall;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kInstall;
       return;
 
     case SERVICE_WORKER_ERROR_NOT_FOUND:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kNotFound;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kNotFound;
       return;
 
     case SERVICE_WORKER_ERROR_NETWORK:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kNetwork;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kNetwork;
       return;
 
     case SERVICE_WORKER_ERROR_SCRIPT_EVALUATE_FAILED:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kScriptEvaluateFailed;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kScriptEvaluateFailed;
       return;
 
     case SERVICE_WORKER_ERROR_SECURITY:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kSecurity;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kSecurity;
       return;
 
     case SERVICE_WORKER_ERROR_TIMEOUT:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kTimeout;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kTimeout;
       return;
 
     case SERVICE_WORKER_ERROR_ABORT:
-      *error_type = blink::mojom::ServiceWorkerErrorType::kAbort;
+      *out_error = blink::mojom::ServiceWorkerErrorType::kAbort;
       return;
 
     case SERVICE_WORKER_ERROR_ACTIVATE_WORKER_FAILED:
@@ -73,8 +73,8 @@ void GetServiceWorkerRegistrationStatusResponse(
       // have a corresponding blink error code yet.
       break;  // Fall through to NOTREACHED().
   }
-  NOTREACHED() << "Got unexpected error code: "
-               << status << " " << ServiceWorkerStatusToString(status);
+  NOTREACHED() << "Got unexpected error code: " << status << " "
+               << ServiceWorkerStatusToString(status);
 }
 
 }  // namespace content

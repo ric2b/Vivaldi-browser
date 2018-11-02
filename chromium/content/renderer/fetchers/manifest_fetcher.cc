@@ -35,9 +35,9 @@ void ManifestFetcher::Start(blink::WebLocalFrame* frame,
   // true, and "omit" otherwise.
   fetcher_->Start(
       frame, blink::WebURLRequest::kRequestContextManifest,
-      blink::WebURLRequest::kFetchRequestModeCORS,
-      use_credentials ? blink::WebURLRequest::kFetchCredentialsModeInclude
-                      : blink::WebURLRequest::kFetchCredentialsModeOmit,
+      network::mojom::FetchRequestMode::kCORS,
+      use_credentials ? network::mojom::FetchCredentialsMode::kInclude
+                      : network::mojom::FetchCredentialsMode::kOmit,
       blink::WebURLRequest::kFrameTypeNone,
       base::Bind(&ManifestFetcher::OnLoadComplete, base::Unretained(this)));
 }

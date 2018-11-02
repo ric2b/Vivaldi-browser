@@ -16,7 +16,6 @@
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
 
 namespace blink {
 
@@ -27,8 +26,7 @@ class ScriptState;
 
 typedef RequestOrUSVString RequestInfo;
 
-class MODULES_EXPORT Cache final : public GarbageCollectedFinalized<Cache>,
-                                   public ScriptWrappable {
+class MODULES_EXPORT Cache final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(Cache);
 
@@ -50,10 +48,10 @@ class MODULES_EXPORT Cache final : public GarbageCollectedFinalized<Cache>,
   ScriptPromise addAll(ScriptState*,
                        const HeapVector<RequestInfo>&,
                        ExceptionState&);
-  ScriptPromise deleteFunction(ScriptState*,
-                               const RequestInfo&,
-                               const CacheQueryOptions&,
-                               ExceptionState&);
+  ScriptPromise Delete(ScriptState*,
+                       const RequestInfo&,
+                       const CacheQueryOptions&,
+                       ExceptionState&);
   ScriptPromise put(ScriptState*,
                     const RequestInfo&,
                     Response*,
@@ -67,11 +65,12 @@ class MODULES_EXPORT Cache final : public GarbageCollectedFinalized<Cache>,
   static WebServiceWorkerCache::QueryParams ToWebQueryParams(
       const CacheQueryOptions&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   class BarrierCallbackForPut;
   class BlobHandleCallbackForPut;
+  class CodeCacheHandleCallbackForPut;
   class FetchResolvedForAdd;
   friend class FetchResolvedForAdd;
   Cache(GlobalFetch::ScopedFetcher*, std::unique_ptr<WebServiceWorkerCache>);

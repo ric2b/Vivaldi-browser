@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "base/test/scoped_command_line.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 #include "components/ntp_snippets/content_suggestion.h"
@@ -25,8 +26,10 @@
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory_util.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
+#import "ios/chrome/browser/ui/ntp/modal_ntp.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -47,6 +50,9 @@
 #endif
 
 using namespace ntp_snippets;
+using testing::_;
+using testing::Invoke;
+using testing::WithArg;
 
 namespace {
 
@@ -60,9 +66,7 @@ void ScrollUp() {
       selectElementWithMatcher:grey_allOf(chrome_test_util::ToolsMenuButton(),
                                           grey_sufficientlyVisible(), nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 150)
-      onElementWithMatcher:grey_accessibilityID(
-                               [ContentSuggestionsViewController
-                                   collectionAccessibilityIdentifier])]
+      onElementWithMatcher:chrome_test_util::ContentSuggestionCollectionView()]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -100,9 +104,7 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       selectElementWithMatcher:grey_allOf(matcher, grey_sufficientlyVisible(),
                                           nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
-      onElementWithMatcher:grey_accessibilityID(
-                               [ContentSuggestionsViewController
-                                   collectionAccessibilityIdentifier])];
+      onElementWithMatcher:chrome_test_util::ContentSuggestionCollectionView()];
 }
 
 }  // namespace
@@ -110,9 +112,7 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 #pragma mark - TestCase
 
 // Test case for the ContentSuggestion UI.
-@interface ContentSuggestionsTestCase : ChromeTestCase {
-  std::unique_ptr<base::test::ScopedCommandLine> _scopedCommandLine;
-}
+@interface ContentSuggestionsTestCase : ChromeTestCase
 
 // Current non-incognito browser state.
 @property(nonatomic, assign, readonly) ios::ChromeBrowserState* browserState;
@@ -129,6 +129,15 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 + (void)setUp {
   [super setUp];
+  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
+  // be shown modally.  Clean up the non-modal code below.
+  if (!PresentNTPPanelModally()) {
+    // Make sure we are on the Home panel on iPad when NTP is shown modally.
+    chrome_test_util::OpenNewTab();
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_typeText(@"chrome://newtab/#most_visited\n")];
+  }
+
   [self closeAllTabs];
   ios::ChromeBrowserState* browserState =
       chrome_test_util::GetOriginalBrowserState();
@@ -161,11 +170,6 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 }
 
 - (void)setUp {
-  // The command line is set up before [super setUp] in order to have the NTP
-  // opened with the command line already setup.
-  _scopedCommandLine = base::MakeUnique<base::test::ScopedCommandLine>();
-  base::CommandLine* commandLine = _scopedCommandLine->GetProcessCommandLine();
-  commandLine->AppendSwitch(switches::kEnableSuggestionsUI);
   self.provider->FireCategoryStatusChanged(self.category,
                                            CategoryStatus::AVAILABLE);
 
@@ -173,7 +177,9 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   readingListModel->DeleteAllEntries();
   [super setUp];
-  if (IsIPadIdiom()) {
+  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
+  // be shown modally.  Clean up the non-modal code below.
+  if (!PresentNTPPanelModally()) {
     [[EarlGrey selectElementWithMatcher:
                    chrome_test_util::ButtonWithAccessibilityLabelId(
                        IDS_IOS_NEW_TAB_HOME)] performAction:grey_tap()];
@@ -183,13 +189,57 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 - (void)tearDown {
   self.provider->FireCategoryStatusChanged(
       self.category, CategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED);
-  _scopedCommandLine.reset();
   chrome_test_util::ClearBrowsingHistory();
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [super tearDown];
 }
 
 #pragma mark - Tests
+
+// Tests that the additional items (when more is pressed) are kept when
+// switching tabs.
+- (void)testAdditionalItemsKept {
+  // Set server up.
+  self.testServer->RegisterRequestHandler(base::Bind(&StandardResponse));
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL pageURL = self.testServer->GetURL(kPageURL);
+
+  // Add 3 suggestions, persisted accross page loads.
+  std::vector<ContentSuggestion> suggestions;
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium1", GURL("http://chromium.org/1")));
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium3", GURL("http://chromium.org/3")));
+  self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
+
+  // Set up the action when "More" is tapped.
+  AdditionalSuggestionsHelper helper(pageURL);
+  EXPECT_CALL(*self.provider, FetchMock(_, _, _))
+      .WillOnce(WithArg<2>(Invoke(
+          &helper, &AdditionalSuggestionsHelper::SendAdditionalSuggestions)));
+
+  // Tap on more, which adds 10 elements.
+  [CellWithMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
+      IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE)) performAction:grey_tap()];
+
+  // Make sure some items are loaded.
+  [CellWithMatcher(grey_accessibilityID(@"AdditionalSuggestion2"))
+      assertWithMatcher:grey_notNil()];
+
+  // Open a new Tab.
+  ScrollUp();
+  [ChromeEarlGreyUI openNewTab];
+  [ChromeEarlGrey waitForMainTabCount:2];
+
+  // Go back to the previous tab.
+  chrome_test_util::SelectTabAtIndexInCurrentMode(0);
+
+  // Make sure the additional items are still displayed.
+  [CellWithMatcher(grey_accessibilityID(@"AdditionalSuggestion2"))
+      assertWithMatcher:grey_notNil()];
+}
 
 // Tests that after dismissing a ReadingList item, it is not displayed on the
 // NTP. But it is still unread in the Reading List surface.
@@ -263,8 +313,7 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       selectElementWithMatcher:
           grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(title2),
                      grey_not(grey_ancestor(
-                         grey_accessibilityID([ContentSuggestionsViewController
-                             collectionAccessibilityIdentifier]))),
+                         chrome_test_util::ContentSuggestionCollectionView())),
                      nil)] assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close Reading List.
@@ -377,13 +426,81 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
+// Tests that when tapping a suggestion, it is opened. When going back, the
+// disposition of the collection takes into account the previous scroll, even
+// when more is tapped.
+- (void)testOpenPageAndGoBackWithMoreContent {
+  // Set server up.
+  self.testServer->RegisterRequestHandler(base::Bind(&StandardResponse));
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL pageURL = self.testServer->GetURL(kPageURL);
+
+  // Add 3 suggestions, persisted accross page loads.
+  std::vector<ContentSuggestion> suggestions;
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium1", GURL("http://chromium.org/1")));
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
+  suggestions.emplace_back(
+      Suggestion(self.category, "chromium3", GURL("http://chromium.org/3")));
+  self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
+
+  // Set up the action when "More" is tapped.
+  AdditionalSuggestionsHelper helper(pageURL);
+  EXPECT_CALL(*self.provider, FetchMock(_, _, _))
+      .WillOnce(WithArg<2>(Invoke(
+          &helper, &AdditionalSuggestionsHelper::SendAdditionalSuggestions)));
+
+  // Tap on more, which adds 10 elements.
+  [CellWithMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
+      IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE)) performAction:grey_tap()];
+
+  // Make sure to scroll to the bottom.
+  [CellWithMatcher(grey_accessibilityID(
+      [ContentSuggestionsLearnMoreItem accessibilityIdentifier]))
+      assertWithMatcher:grey_notNil()];
+
+  // Open the last item.
+  [CellWithMatcher(grey_accessibilityID(@"AdditionalSuggestion9"))
+      performAction:grey_tap()];
+
+  // Check that the page has been opened.
+  [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          pageURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForMainTabCount:1];
+  [ChromeEarlGrey waitForIncognitoTabCount:0];
+
+  // Go back.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
+      performAction:grey_tap()];
+
+  // Test that the omnibox is visible and taking full width, before any scroll
+  // happen on iPhone.
+  if (!IsIPadIdiom()) {
+    CGFloat collectionWidth = ntp_home::CollectionView().bounds.size.width;
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityID(
+                                     ntp_home::FakeOmniboxAccessibilityID())]
+        assertWithMatcher:grey_allOf(grey_sufficientlyVisible(),
+                                     ntp_home::OmniboxWidthBetween(
+                                         collectionWidth + 1, 1),
+                                     nil)];
+  }
+
+  // Check that the first items are visible as the collection should be
+  // scrolled.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(@"http://chromium.org/3")]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
 // Tests that the "Learn More" cell is present only if there is a suggestion in
 // the section.
 - (void)testLearnMore {
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   [ContentSuggestionsViewController
-                                       collectionAccessibilityIdentifier])]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ContentSuggestionCollectionView()]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           [ContentSuggestionsLearnMoreItem
@@ -440,13 +557,16 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForIncognitoTabCount:0];
 
+  // Wait for the end of the new tab opening in background. This is needed as
+  // the iOS 11 devices cannot complete this animations while checking if the
+  // collection is present.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(1));
+
   // Check that the tab has been opened in background.
   ConditionBlock condition = ^{
     NSError* error = nil;
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(
-                                     [ContentSuggestionsViewController
-                                         collectionAccessibilityIdentifier])]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                            ContentSuggestionCollectionView()]
         assertWithMatcher:grey_sufficientlyVisible()
                     error:&error];
     return error == nil;
@@ -534,11 +654,9 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   // Check that the tab has been opened in background.
   ConditionBlock condition = ^{
     NSError* error = nil;
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(
-                                     [ContentSuggestionsViewController
-                                         collectionAccessibilityIdentifier])]
-        assertWithMatcher:grey_sufficientlyVisible()
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                            ContentSuggestionCollectionView()]
+        assertWithMatcher:grey_notNil()
                     error:&error];
     return error == nil;
   };
@@ -687,8 +805,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   [ChromeEarlGrey goBack];
 
   [[self class] closeAllTabs];
-
   chrome_test_util::OpenNewTab();
+  // TODO(crbug.com/783192): ChromeEarlGrey should have a method to open a new
+  // tab and synchronize with the UI.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::StaticTextWithAccessibilityLabel(pageTitle)]
       performAction:grey_longPress()];

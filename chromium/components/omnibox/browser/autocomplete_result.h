@@ -11,8 +11,8 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
 class AutocompleteInput;
@@ -27,37 +27,6 @@ class AutocompleteResult {
   typedef ACMatches::const_iterator const_iterator;
   typedef ACMatches::iterator iterator;
 
-  // The "Selection" struct is the information we need to select the same match
-  // in one result set that was selected in another.
-  struct Selection {
-    Selection()
-        : provider_affinity(NULL),
-          is_history_what_you_typed_match(false) {
-    }
-
-    // Clear the selection entirely.
-    void Clear();
-
-    // True when the selection is empty.
-    bool empty() const {
-      return destination_url.is_empty() && !provider_affinity &&
-          !is_history_what_you_typed_match;
-    }
-
-    // The desired destination URL.
-    GURL destination_url;
-
-    // The desired provider.  If we can't find a match with the specified
-    // |destination_url|, we'll use the best match from this provider.
-    const AutocompleteProvider* provider_affinity;
-
-    // True when this is the HistoryURLProvider's "what you typed" match.  This
-    // can't be tracked using |destination_url| because its URL changes on every
-    // keystroke, so if this is set, we'll preserve the selection by simply
-    // choosing the new "what you typed" entry and ignoring |destination_url|.
-    bool is_history_what_you_typed_match;
-  };
-
   // Max number of matches we'll show from the various providers.
   static size_t GetMaxMatches();
 
@@ -65,9 +34,10 @@ class AutocompleteResult {
   ~AutocompleteResult();
 
   // Copies matches from |old_matches| to provide a consistant result set. See
-  // comments in code for specifics.
+  // comments in code for specifics. Will clear |old_matches| if this result is
+  // empty().
   void CopyOldMatches(const AutocompleteInput& input,
-                      const AutocompleteResult& old_matches,
+                      AutocompleteResult* old_matches,
                       TemplateURLService* template_url_service);
 
   // Adds a new set of matches to the result set.  Does not re-sort.  Calls
@@ -77,8 +47,10 @@ class AutocompleteResult {
                      const ACMatches& matches);
 
   // Removes duplicates, puts the list in sorted order and culls to leave only
-  // the best GetMaxMatches() matches.  Sets the default match to the best match
-  // and updates the alternate nav URL.
+  // the best GetMaxMatches() matches. Sets the default match to the best match
+  // and updates the alternate nav URL. On desktop, it filters the matches to be
+  // either all tail suggestions (except for the first match) or no tail
+  // suggestions.
   void SortAndCull(const AutocompleteInput& input,
                    TemplateURLService* template_url_service);
 
@@ -116,6 +88,9 @@ class AutocompleteResult {
   void Reset();
 
   void Swap(AutocompleteResult* other);
+
+  // operator=() by another name.
+  void CopyFrom(const AutocompleteResult& rhs);
 
 #ifndef NDEBUG
   // Does a data integrity check on this result.
@@ -158,8 +133,10 @@ class AutocompleteResult {
   static bool HasMatchByDestination(const AutocompleteMatch& match,
                                     const ACMatches& matches);
 
-  // operator=() by another name.
-  void CopyFrom(const AutocompleteResult& rhs);
+  // If there are both tail and non-tail suggestions (ignoring one default
+  // match), remove the tail suggestions.  If the only default matches are tail
+  // suggestions, remove the non-tail suggestions.
+  static void MaybeCullTailSuggestions(ACMatches* matches);
 
   // Populates |provider_to_matches| from |matches_|.
   void BuildProviderToMatches(ProviderToMatches* provider_to_matches) const;

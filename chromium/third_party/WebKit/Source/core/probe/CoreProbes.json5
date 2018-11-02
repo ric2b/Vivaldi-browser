@@ -1,8 +1,10 @@
 {
   settings: {
+    export_header: "core/CoreExport.h",
     export_symbol: "CORE_EXPORT",
     include_path: "core/inspector",
     includes: [
+      "core/CoreProbeSink.h",
       "core/probe/CoreProbes.h",
     ],
   },
@@ -113,6 +115,7 @@
         "markResourceAsCached",
         "scriptImported",
         "shouldBlockRequest",
+        "shouldBypassServiceWorker",
         "shouldForceCORSPreflight",
         "willDispatchEventSourceEvent",
         "willLoadXHR",
@@ -143,6 +146,7 @@
         "UpdateLayout",
         "willRunJavaScriptDialog",
         "windowCreated",
+        "windowOpen",
       ]
     },
     Performance: {
@@ -155,11 +159,7 @@
         "UpdateLayout",
         "UserCallback",
         "V8Compile",
-        "didFailLoading",
-        "didFinishLoading",
         "documentWriteFetchScript",
-        "domContentLoadedEventFired",
-        "willSendRequest",
       ]
     },
     PerformanceMetrics: {

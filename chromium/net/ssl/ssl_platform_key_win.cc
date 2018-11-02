@@ -5,13 +5,13 @@
 #include "net/ssl/ssl_platform_key_win.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_capi_types.h"
 #include "net/base/net_errors.h"
@@ -22,6 +22,7 @@
 #include "third_party/boringssl/src/include/openssl/bn.h"
 #include "third_party/boringssl/src/include/openssl/ecdsa.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace net {
 
@@ -35,38 +36,49 @@ class SSLPlatformKeyCAPI : public ThreadedSSLPrivateKey::Delegate {
 
   ~SSLPlatformKeyCAPI() override {}
 
-  std::vector<SSLPrivateKey::Hash> GetDigestPreferences() override {
+  std::vector<uint16_t> GetAlgorithmPreferences() override {
     // If the key is in CAPI, assume conservatively that the CAPI service
     // provider may only be able to sign pre-TLS-1.2 and SHA-1 hashes.
-    static const SSLPrivateKey::Hash kHashes[] = {
-        SSLPrivateKey::Hash::SHA1, SSLPrivateKey::Hash::SHA512,
-        SSLPrivateKey::Hash::SHA384, SSLPrivateKey::Hash::SHA256};
-    return std::vector<SSLPrivateKey::Hash>(kHashes,
-                                            kHashes + arraysize(kHashes));
+    // Prioritize SHA-1, but if the server doesn't advertise it, leave the other
+    // algorithms enabled to try.
+    return {
+        SSL_SIGN_RSA_PKCS1_SHA1, SSL_SIGN_RSA_PKCS1_SHA512,
+        SSL_SIGN_RSA_PKCS1_SHA384, SSL_SIGN_RSA_PKCS1_SHA256,
+    };
   }
 
-  Error SignDigest(SSLPrivateKey::Hash hash,
-                   const base::StringPiece& input,
-                   std::vector<uint8_t>* signature) override {
-    ALG_ID hash_alg = 0;
-    switch (hash) {
-      case SSLPrivateKey::Hash::MD5_SHA1:
+  Error Sign(uint16_t algorithm,
+             base::span<const uint8_t> input,
+             std::vector<uint8_t>* signature) override {
+    const EVP_MD* md = SSL_get_signature_algorithm_digest(algorithm);
+    uint8_t digest[EVP_MAX_MD_SIZE];
+    unsigned digest_len;
+    if (!md || !EVP_Digest(input.data(), input.size(), digest, &digest_len, md,
+                           nullptr)) {
+      return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
+    }
+
+    ALG_ID hash_alg;
+    switch (EVP_MD_type(md)) {
+      case NID_md5_sha1:
         hash_alg = CALG_SSL3_SHAMD5;
         break;
-      case SSLPrivateKey::Hash::SHA1:
+      case NID_sha1:
         hash_alg = CALG_SHA1;
         break;
-      case SSLPrivateKey::Hash::SHA256:
+      case NID_sha256:
         hash_alg = CALG_SHA_256;
         break;
-      case SSLPrivateKey::Hash::SHA384:
+      case NID_sha384:
         hash_alg = CALG_SHA_384;
         break;
-      case SSLPrivateKey::Hash::SHA512:
+      case NID_sha512:
         hash_alg = CALG_SHA_512;
         break;
+      default:
+        NOTREACHED();
+        return ERR_FAILED;
     }
-    DCHECK_NE(static_cast<ALG_ID>(0), hash_alg);
 
     crypto::ScopedHCRYPTHASH hash_handle;
     if (!CryptCreateHash(provider_, hash_alg, 0, 0, hash_handle.receive())) {
@@ -80,12 +92,10 @@ class SSLPlatformKeyCAPI : public ThreadedSSLPrivateKey::Delegate {
       PLOG(ERROR) << "CryptGetHashParam HP_HASHSIZE failed";
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
     }
-    if (hash_len != input.size())
+    if (hash_len != digest_len)
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
-    if (!CryptSetHashParam(
-            hash_handle.get(), HP_HASHVAL,
-            const_cast<BYTE*>(reinterpret_cast<const BYTE*>(input.data())),
-            0)) {
+    if (!CryptSetHashParam(hash_handle.get(), HP_HASHVAL,
+                           const_cast<BYTE*>(digest), 0)) {
       PLOG(ERROR) << "CryptSetHashParam HP_HASHVAL failed";
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
     }
@@ -123,69 +133,86 @@ class SSLPlatformKeyCNG : public ThreadedSSLPrivateKey::Delegate {
 
   ~SSLPlatformKeyCNG() override { NCryptFreeObject(key_); }
 
-  std::vector<SSLPrivateKey::Hash> GetDigestPreferences() override {
-    // If this is an under 1024-bit RSA key, conservatively prefer to sign
-    // SHA-1 hashes. Older Estonian ID cards can only sign SHA-1 hashes.
-    // However, if the server doesn't advertise SHA-1, the remaining hashes
-    // might still be supported.
+  std::vector<uint16_t> GetAlgorithmPreferences() override {
+    // If this is an under 1024-bit RSA key, conservatively prefer to sign SHA-1
+    // hashes. Older Estonian ID cards can only sign SHA-1 hashes.  Prioritize
+    // SHA-1, but if the server doesn't advertise it, leave the other algorithms
+    // enabled to try.
     if (type_ == EVP_PKEY_RSA && max_length_ <= 1024 / 8) {
-      static const SSLPrivateKey::Hash kHashesSpecial[] = {
-          SSLPrivateKey::Hash::SHA1, SSLPrivateKey::Hash::SHA512,
-          SSLPrivateKey::Hash::SHA384, SSLPrivateKey::Hash::SHA256};
-      return std::vector<SSLPrivateKey::Hash>(
-          kHashesSpecial, kHashesSpecial + arraysize(kHashesSpecial));
+      return {
+          SSL_SIGN_RSA_PKCS1_SHA1, SSL_SIGN_RSA_PKCS1_SHA512,
+          SSL_SIGN_RSA_PKCS1_SHA384, SSL_SIGN_RSA_PKCS1_SHA256,
+          // 1024-bit keys are too small for SSL_SIGN_RSA_PSS_SHA512.
+          SSL_SIGN_RSA_PSS_SHA384, SSL_SIGN_RSA_PSS_SHA256,
+      };
     }
-    static const SSLPrivateKey::Hash kHashes[] = {
-        SSLPrivateKey::Hash::SHA512, SSLPrivateKey::Hash::SHA384,
-        SSLPrivateKey::Hash::SHA256, SSLPrivateKey::Hash::SHA1};
-    return std::vector<SSLPrivateKey::Hash>(kHashes,
-                                            kHashes + arraysize(kHashes));
+    return SSLPrivateKey::DefaultAlgorithmPreferences(type_,
+                                                      true /* supports PSS */);
   }
 
-  Error SignDigest(SSLPrivateKey::Hash hash,
-                   const base::StringPiece& input,
-                   std::vector<uint8_t>* signature) override {
+  Error Sign(uint16_t algorithm,
+             base::span<const uint8_t> input,
+             std::vector<uint8_t>* signature) override {
     crypto::OpenSSLErrStackTracer tracer(FROM_HERE);
 
-    BCRYPT_PKCS1_PADDING_INFO rsa_padding_info = {0};
+    const EVP_MD* md = SSL_get_signature_algorithm_digest(algorithm);
+    uint8_t digest[EVP_MAX_MD_SIZE];
+    unsigned digest_len;
+    if (!md || !EVP_Digest(input.data(), input.size(), digest, &digest_len, md,
+                           nullptr)) {
+      return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
+    }
+
+    BCRYPT_PKCS1_PADDING_INFO pkcs1_padding_info = {0};
+    BCRYPT_PSS_PADDING_INFO pss_padding_info = {0};
     void* padding_info = nullptr;
     DWORD flags = 0;
-    if (type_ == EVP_PKEY_RSA) {
-      switch (hash) {
-        case SSLPrivateKey::Hash::MD5_SHA1:
-          rsa_padding_info.pszAlgId = nullptr;
+    if (SSL_get_signature_algorithm_key_type(algorithm) == EVP_PKEY_RSA) {
+      const WCHAR* hash_alg;
+      switch (EVP_MD_type(md)) {
+        case NID_md5_sha1:
+          hash_alg = nullptr;
           break;
-        case SSLPrivateKey::Hash::SHA1:
-          rsa_padding_info.pszAlgId = BCRYPT_SHA1_ALGORITHM;
+        case NID_sha1:
+          hash_alg = BCRYPT_SHA1_ALGORITHM;
           break;
-        case SSLPrivateKey::Hash::SHA256:
-          rsa_padding_info.pszAlgId = BCRYPT_SHA256_ALGORITHM;
+        case NID_sha256:
+          hash_alg = BCRYPT_SHA256_ALGORITHM;
           break;
-        case SSLPrivateKey::Hash::SHA384:
-          rsa_padding_info.pszAlgId = BCRYPT_SHA384_ALGORITHM;
+        case NID_sha384:
+          hash_alg = BCRYPT_SHA384_ALGORITHM;
           break;
-        case SSLPrivateKey::Hash::SHA512:
-          rsa_padding_info.pszAlgId = BCRYPT_SHA512_ALGORITHM;
+        case NID_sha512:
+          hash_alg = BCRYPT_SHA512_ALGORITHM;
           break;
+        default:
+          NOTREACHED();
+          return ERR_FAILED;
       }
-      padding_info = &rsa_padding_info;
-      flags |= BCRYPT_PAD_PKCS1;
+      if (SSL_is_signature_algorithm_rsa_pss(algorithm)) {
+        pss_padding_info.pszAlgId = hash_alg;
+        pss_padding_info.cbSalt = EVP_MD_size(md);
+        padding_info = &pss_padding_info;
+        flags |= BCRYPT_PAD_PSS;
+      } else {
+        pkcs1_padding_info.pszAlgId = hash_alg;
+        padding_info = &pkcs1_padding_info;
+        flags |= BCRYPT_PAD_PKCS1;
+      }
     }
 
     DWORD signature_len;
-    SECURITY_STATUS status = NCryptSignHash(
-        key_, padding_info,
-        const_cast<BYTE*>(reinterpret_cast<const BYTE*>(input.data())),
-        input.size(), nullptr, 0, &signature_len, flags);
+    SECURITY_STATUS status =
+        NCryptSignHash(key_, padding_info, const_cast<BYTE*>(digest),
+                       digest_len, nullptr, 0, &signature_len, flags);
     if (FAILED(status)) {
       LOG(ERROR) << "NCryptSignHash failed: " << status;
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
     }
     signature->resize(signature_len);
-    status = NCryptSignHash(
-        key_, padding_info,
-        const_cast<BYTE*>(reinterpret_cast<const BYTE*>(input.data())),
-        input.size(), signature->data(), signature_len, &signature_len, flags);
+    status = NCryptSignHash(key_, padding_info, const_cast<BYTE*>(digest),
+                            digest_len, signature->data(), signature_len,
+                            &signature_len, flags);
     if (FAILED(status)) {
       LOG(ERROR) << "NCryptSignHash failed: " << status;
       return ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED;
@@ -236,9 +263,9 @@ scoped_refptr<SSLPrivateKey> WrapCAPIPrivateKey(
     const X509Certificate* certificate,
     HCRYPTPROV prov,
     DWORD key_spec) {
-  return make_scoped_refptr(new ThreadedSSLPrivateKey(
+  return base::MakeRefCounted<ThreadedSSLPrivateKey>(
       std::make_unique<SSLPlatformKeyCAPI>(prov, key_spec),
-      GetSSLPlatformKeyTaskRunner()));
+      GetSSLPlatformKeyTaskRunner());
 }
 
 scoped_refptr<SSLPrivateKey> WrapCNGPrivateKey(
@@ -254,9 +281,9 @@ scoped_refptr<SSLPrivateKey> WrapCNGPrivateKey(
     return nullptr;
   }
 
-  return make_scoped_refptr(new ThreadedSSLPrivateKey(
+  return base::MakeRefCounted<ThreadedSSLPrivateKey>(
       std::make_unique<SSLPlatformKeyCNG>(key, key_type, max_length),
-      GetSSLPlatformKeyTaskRunner()));
+      GetSSLPlatformKeyTaskRunner());
 }
 
 scoped_refptr<SSLPrivateKey> FetchClientCertPrivateKey(

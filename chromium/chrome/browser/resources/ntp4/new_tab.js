@@ -57,12 +57,10 @@ cr.define('ntp', function() {
   function NewTabView() {
     var pageSwitcherStart;
     var pageSwitcherEnd;
-    if (loadTimeData.getValue('showApps')) {
-      pageSwitcherStart = /** @type {!ntp.PageSwitcher} */ (
-          getRequiredElement('page-switcher-start'));
-      pageSwitcherEnd = /** @type {!ntp.PageSwitcher} */ (
-          getRequiredElement('page-switcher-end'));
-    }
+    pageSwitcherStart = /** @type {!ntp.PageSwitcher} */ (
+        getRequiredElement('page-switcher-start'));
+    pageSwitcherEnd = /** @type {!ntp.PageSwitcher} */ (
+        getRequiredElement('page-switcher-end'));
     this.initialize(
         getRequiredElement('page-list'), getRequiredElement('dot-list'),
         getRequiredElement('card-slider-frame'), getRequiredElement('trash'),
@@ -77,19 +75,7 @@ cr.define('ntp', function() {
    * Invoked at startup once the DOM is available to initialize the app.
    */
   function onLoad() {
-    sectionsToWaitFor = 0;
-    if (loadTimeData.getBoolean('showApps')) {
-      sectionsToWaitFor++;
-      if (loadTimeData.getBoolean('showAppLauncherPromo')) {
-        $('app-launcher-promo-close-button')
-            .addEventListener('click', function() {
-              chrome.send('stopShowingAppLauncherPromo');
-            });
-        $('apps-promo-learn-more').addEventListener('click', function() {
-          chrome.send('onLearnMore');
-        });
-      }
-    }
+    sectionsToWaitFor = 1;
     measureNavDots();
 
     newTabView = new NewTabView();

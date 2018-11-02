@@ -14,6 +14,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/ssl_status.h"
+#include "content/public/common/resource_type.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
 #include "url/gurl.h"
@@ -43,7 +44,8 @@ class CONTENT_EXPORT SSLManager {
   // will adjust the security UI and either call |CancelSSLRequest| or
   // |ContinueSSLRequest| of |delegate|.
   //
-  // Called on the IO thread.
+  // This can be called on the UI or IO thread. It will call |delegate| on the
+  // same thread.
   static void OnSSLCertificateError(
       const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
       ResourceType resource_type,
@@ -74,7 +76,8 @@ class CONTENT_EXPORT SSLManager {
   void DidCommitProvisionalLoad(const LoadCommittedDetails& details);
   void DidStartResourceResponse(const GURL& url,
                                 bool has_certificate,
-                                net::CertStatus ssl_cert_status);
+                                net::CertStatus ssl_cert_status,
+                                ResourceType resource_type);
 
   // The following methods are called when a page includes insecure
   // content. These methods update the SSLStatus on the NavigationEntry
@@ -84,9 +87,6 @@ class CONTENT_EXPORT SSLManager {
   void DidDisplayMixedContent();
   void DidContainInsecureFormAction();
   void DidDisplayContentWithCertErrors();
-  void DidShowPasswordInputOnHttp();
-  void DidHideAllPasswordInputsOnHttp();
-  void DidShowCreditCardInputOnHttp();
   void DidRunMixedContent(const GURL& security_origin);
   void DidRunContentWithCertErrors(const GURL& security_origin);
 
@@ -94,24 +94,12 @@ class CONTENT_EXPORT SSLManager {
   void OnCertError(std::unique_ptr<SSLErrorHandler> handler);
 
  private:
-  enum OnCertErrorInternalOptionsMask {
-    OVERRIDABLE = 1 << 0,
-    STRICT_ENFORCEMENT = 1 << 1,
-    EXPIRED_PREVIOUS_DECISION = 1 << 2
-  };
-
   // Helper method for handling certificate errors.
   //
-  // Options should be a bitmask combination of OnCertErrorInternalOptionsMask.
-  // OVERRIDABLE indicates whether or not the user could (assuming perfect
-  // knowledge) successfully override the error and still get the security
-  // guarantees of TLS. STRICT_ENFORCEMENT indicates whether or not the site the
-  // user is trying to connect to has requested strict enforcement of
-  // certificate validation (e.g. with HTTP Strict-Transport-Security).
-  // EXPIRED_PREVIOUS_DECISION indicates whether a user decision had been
+  // |expired_previous_decision| indicates whether a user decision had been
   // previously made but the decision has expired.
   void OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
-                           int options_mask);
+                           bool expired_previous_decision);
 
   // Updates the NavigationEntry's |content_status| flags according to state in
   // |ssl_host_state_delegate|. |add_content_status_flags| and

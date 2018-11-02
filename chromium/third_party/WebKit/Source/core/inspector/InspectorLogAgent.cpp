@@ -9,6 +9,9 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
+#include "core/inspector/InspectorDOMAgent.h"
+#include "core/inspector/ResolveNode.h"
+#include "third_party/WebKit/Source/platform/bindings/ScriptForbiddenScope.h"
 
 namespace blink {
 
@@ -48,6 +51,8 @@ String MessageSourceValue(MessageSource source) {
       return protocol::Log::LogEntry::SourceEnum::Violation;
     case kInterventionMessageSource:
       return protocol::Log::LogEntry::SourceEnum::Intervention;
+    case kRecommendationMessageSource:
+      return protocol::Log::LogEntry::SourceEnum::Recommendation;
     default:
       return protocol::Log::LogEntry::SourceEnum::Other;
   }
@@ -71,15 +76,18 @@ String MessageLevelValue(MessageLevel level) {
 
 using protocol::Log::ViolationSetting;
 
-InspectorLogAgent::InspectorLogAgent(ConsoleMessageStorage* storage,
-                                     PerformanceMonitor* performance_monitor)
+InspectorLogAgent::InspectorLogAgent(
+    ConsoleMessageStorage* storage,
+    PerformanceMonitor* performance_monitor,
+    v8_inspector::V8InspectorSession* v8_session)
     : enabled_(false),
       storage_(storage),
-      performance_monitor_(performance_monitor) {}
+      performance_monitor_(performance_monitor),
+      v8_session_(v8_session) {}
 
 InspectorLogAgent::~InspectorLogAgent() {}
 
-DEFINE_TRACE(InspectorLogAgent) {
+void InspectorLogAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(storage_);
   visitor->Trace(performance_monitor_);
   InspectorBaseAgent::Trace(visitor);
@@ -124,6 +132,33 @@ void InspectorLogAgent::ConsoleMessageAdded(ConsoleMessage* message) {
     entry->setNetworkRequestId(
         IdentifiersFactory::RequestId(message->RequestIdentifier()));
 
+  if (v8_session_ && message->Frame() && !message->Nodes().IsEmpty()) {
+    ScriptForbiddenScope::AllowUserAgentScript allow_script;
+    std::unique_ptr<
+        protocol::Array<v8_inspector::protocol::Runtime::API::RemoteObject>>
+        remote_objects = protocol::Array<
+            v8_inspector::protocol::Runtime::API::RemoteObject>::create();
+    for (DOMNodeId node_id : message->Nodes()) {
+      std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>
+          remote_object = nullptr;
+      Node* node = DOMNodeIds::NodeForId(node_id);
+      if (node)
+        remote_object = ResolveNode(v8_session_, node, "console");
+      if (!remote_object) {
+        remote_object =
+            NullRemoteObject(v8_session_, message->Frame(), "console");
+      }
+      if (remote_object) {
+        remote_objects->addItem(std::move(remote_object));
+      } else {
+        // If a null object could not be referenced, we do not send the message
+        // at all, to avoid situations in which the arguments are misleading.
+        return;
+      }
+    }
+    entry->setArgs(std::move(remote_objects));
+  }
+
   GetFrontend()->entryAdded(std::move(entry));
   GetFrontend()->flush();
 }
@@ -141,7 +176,7 @@ Response InspectorLogAgent::enable() {
             .setSource(protocol::Log::LogEntry::SourceEnum::Other)
             .setLevel(protocol::Log::LogEntry::LevelEnum::Warning)
             .setText(String::Number(storage_->ExpiredCount()) +
-                     String(" log entires are not shown."))
+                     String(" log entries are not shown."))
             .setTimestamp(0)
             .build();
     GetFrontend()->entryAdded(std::move(expired));

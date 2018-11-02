@@ -10,7 +10,7 @@
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -26,17 +26,18 @@ namespace chromeos {
 
 namespace {
 
-const char kTestUser1[] = "test-user1@gmail.com";
+constexpr char kTestUser1[] = "test-user1@gmail.com";
+constexpr char kTestUser1GaiaId[] = "test-user1@gmail.com";
 
 }  // namespace
 
 class ResetTest : public LoginManagerTest {
  public:
-  ResetTest() : LoginManagerTest(false),
-      update_engine_client_(NULL),
-      session_manager_client_(NULL),
-      power_manager_client_(NULL) {
-  }
+  ResetTest()
+      : LoginManagerTest(false),
+        update_engine_client_(NULL),
+        session_manager_client_(NULL),
+        power_manager_client_(NULL) {}
   ~ResetTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -61,7 +62,7 @@ class ResetTest : public LoginManagerTest {
   }
 
   void RegisterSomeUser() {
-    RegisterUser(kTestUser1);
+    RegisterUser(AccountId::FromUserEmailGaiaId(kTestUser1, kTestUser1GaiaId));
     StartupUtils::MarkOobeCompleted();
   }
 
@@ -204,7 +205,6 @@ IN_PROC_BROWSER_TEST_F(ResetFirstAfterBootTest, ShowAfterBootIfRequested) {
   JSExpect("document.querySelector('#reset').hidden");
 }
 
-
 IN_PROC_BROWSER_TEST_F(ResetFirstAfterBootTest, PRE_RollbackUnavailable) {
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(prefs::kFactoryResetRequested, true);
@@ -308,8 +308,7 @@ IN_PROC_BROWSER_TEST_F(ResetFirstAfterBootTest, ErrorOnRollbackRequested) {
   JSExpect("$('reset').classList.contains('revert-promise-view')");
   UpdateEngineClient::Status error_update_status;
   error_update_status.status = UpdateEngineClient::UPDATE_STATUS_ERROR;
-  update_engine_client_->NotifyObserversThatStatusChanged(
-      error_update_status);
+  update_engine_client_->NotifyObserversThatStatusChanged(error_update_status);
   OobeScreenWaiter(OobeScreen::SCREEN_ERROR_MESSAGE).Wait();
 }
 

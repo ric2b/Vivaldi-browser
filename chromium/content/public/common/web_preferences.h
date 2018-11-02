@@ -66,6 +66,13 @@ enum class ProgressBarCompletion {
   LAST = RESOURCES_BEFORE_DCL_AND_SAME_ORIGIN_IFRAMES
 };
 
+enum class SavePreviousDocumentResources {
+  NEVER,
+  UNTIL_ON_DOM_CONTENT_LOADED,
+  UNTIL_ON_LOAD,
+  LAST = UNTIL_ON_LOAD
+};
+
 // Defines the autoplay policy to be used. Should match the class in
 // WebSettings.h.
 enum class AutoplayPolicy {
@@ -105,7 +112,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool loads_images_automatically;
   bool images_enabled;
   bool plugins_enabled;
-  bool encrypted_media_enabled;
   bool dom_paste_enabled;
   bool shrinks_standalone_images_to_fit;
   bool text_areas_are_resizable;
@@ -129,7 +135,8 @@ struct CONTENT_EXPORT WebPreferences {
   bool hyperlink_auditing_enabled;
   bool allow_universal_access_from_file_urls;
   bool allow_file_access_from_file_urls;
-  bool experimental_webgl_enabled;
+  bool webgl1_enabled;
+  bool webgl2_enabled;
   bool pepper_3d_enabled;
   bool flash_3d_enabled;
   bool flash_stage3d_enabled;
@@ -175,7 +182,6 @@ struct CONTENT_EXPORT WebPreferences {
   ui::HoverType primary_hover_type;
   bool barrel_button_for_drag_enabled = false;
   bool sync_xhr_in_documents_enabled;
-  bool color_correct_rendering_enabled = false;
   bool should_respect_image_orientation;
   int number_of_cpu_cores;
   EditingBehavior editing_behavior;
@@ -193,6 +199,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool navigate_on_drag_drop;
   V8CacheOptions v8_cache_options;
   bool record_whole_document;
+  SavePreviousDocumentResources save_previous_document_resources;
   bool serve_resources_only_from_cache;
 
   // This flags corresponds to a Page's Settings' setCookieEnabled state. It

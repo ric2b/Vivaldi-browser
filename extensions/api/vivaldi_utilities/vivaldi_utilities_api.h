@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/lazy_instance.h"
+#include "base/power_monitor/power_observer.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -37,7 +38,8 @@ class VivaldiUtilitiesEventRouter {
 };
 
 class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
-                            public EventRouter::Observer {
+                            public EventRouter::Observer,
+                            public base::PowerObserver {
  public:
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);
   ~VivaldiUtilitiesAPI() override;
@@ -63,6 +65,11 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // Looks up an existing key/value pair, returns nullptr if the key does not
   // exist.
   const base::Value* GetSharedData(const std::string& key);
+
+  // PowerObserver implementation
+  void OnPowerStateChange(bool on_battery_power) override;
+  void OnSuspend() override;
+  void OnResume() override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;

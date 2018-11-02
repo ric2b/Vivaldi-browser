@@ -40,16 +40,16 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_checker.h"
-#include "breakpad/src/client/linux/crash_generation/crash_generation_client.h"
-#include "breakpad/src/client/linux/handler/exception_handler.h"
-#include "breakpad/src/client/linux/minidump_writer/directory_reader.h"
-#include "breakpad/src/common/linux/linux_libc_support.h"
-#include "breakpad/src/common/memory.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/breakpad_linux_impl.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "components/crash/core/common/crash_keys.h"
 #include "content/public/common/content_descriptors.h"
+#include "third_party/breakpad/breakpad/src/client/linux/crash_generation/crash_generation_client.h"
+#include "third_party/breakpad/breakpad/src/client/linux/handler/exception_handler.h"
+#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/directory_reader.h"
+#include "third_party/breakpad/breakpad/src/common/linux/linux_libc_support.h"
+#include "third_party/breakpad/breakpad/src/common/memory_allocator.h"
 
 #if defined(OS_ANDROID)
 #include <android/log.h>
@@ -60,6 +60,8 @@
 #include "base/debug/leak_annotations.h"
 #endif
 #include "third_party/lss/linux_syscall_support.h"
+
+#include "installer/vivaldi_crash_urls.h"
 
 #if defined(ADDRESS_SANITIZER)
 #include <ucontext.h>  // for getcontext().
@@ -88,7 +90,7 @@ namespace breakpad {
 namespace {
 
 #if !defined(OS_CHROMEOS)
-const char kUploadURL[] = "https://clients2.google.com/cr/report";
+const char kUploadURL[] = CRASH_REPORT_URL("/report");
 #endif
 
 bool g_is_crash_reporter_enabled = false;
@@ -148,8 +150,6 @@ base::LazyInstance<MicrodumpInfo>::DestructorAtExit g_microdump_info =
 
 #endif
 
-CrashKeyStorage* g_crash_keys = nullptr;
-
 // Writes the value |v| as 16 hex characters to the memory pointed at by
 // |output|.
 void write_uint64_hex(char* output, uint64_t v) {
@@ -192,8 +192,8 @@ void SetProcessStartTime() {
 }
 
 // uint64_t version of my_int_len() from
-// breakpad/src/common/linux/linux_libc_support.h. Return the length of the
-// given, non-negative integer when expressed in base 10.
+// third_party/breakpad/breakpad/src/common/linux/linux_libc_support.h. Return
+// the length of the given, non-negative integer when expressed in base 10.
 unsigned my_uint64_len(uint64_t i) {
   if (!i)
     return 1;
@@ -208,8 +208,8 @@ unsigned my_uint64_len(uint64_t i) {
 }
 
 // uint64_t version of my_uitos() from
-// breakpad/src/common/linux/linux_libc_support.h. Convert a non-negative
-// integer to a string (not null-terminated).
+// third_party/breakpad/breakpad/src/common/linux/linux_libc_support.h. Convert
+// a non-negative integer to a string (not null-terminated).
 void my_uint64tos(char* output, uint64_t i, unsigned i_len) {
   for (unsigned index = i_len; index; --index, i /= 10)
     output[index - 1] = '0' + (i % 10);
@@ -692,7 +692,7 @@ bool CrashDone(const MinidumpDescriptor& minidump,
   info.process_start_time = g_process_start_time;
   info.oom_size = base::g_oom_size;
   info.pid = g_pid;
-  info.crash_keys = g_crash_keys;
+  info.crash_keys = crash_reporter::internal::GetCrashKeyStorage();
   HandleCrashDump(info);
 #if defined(OS_ANDROID)
   return !should_finalize ||
@@ -871,7 +871,7 @@ bool CrashDoneInProcessNoUpload(
   info.upload = false;
   info.process_start_time = g_process_start_time;
   info.pid = g_pid;
-  info.crash_keys = g_crash_keys;
+  info.crash_keys = crash_reporter::internal::GetCrashKeyStorage();
   HandleCrashDump(info);
   return FinalizeCrashDoneAndroid(false /* is_browser_process */);
 }
@@ -1033,7 +1033,7 @@ class NonBrowserCrashHandler : public google_breakpad::CrashGenerationClient {
     iov[4].iov_base = &base::g_oom_size;
     iov[4].iov_len = sizeof(base::g_oom_size);
     google_breakpad::SerializedNonAllocatingMap* serialized_map;
-    iov[5].iov_len = g_crash_keys->Serialize(
+    iov[5].iov_len = crash_reporter::internal::GetCrashKeyStorage()->Serialize(
         const_cast<const google_breakpad::SerializedNonAllocatingMap**>(
             &serialized_map));
     iov[5].iov_base = serialized_map;
@@ -1112,18 +1112,19 @@ bool IsInWhiteList(const base::StringPiece& key) {
 void SetCrashKeyValue(const base::StringPiece& key,
                       const base::StringPiece& value) {
   if (!g_use_crash_key_white_list || IsInWhiteList(key)) {
-    g_crash_keys->SetKeyValue(key.data(), value.data());
+    crash_reporter::internal::GetCrashKeyStorage()->SetKeyValue(key.data(),
+                                                                value.data());
   }
 }
 
 void ClearCrashKey(const base::StringPiece& key) {
-  g_crash_keys->RemoveKey(key.data());
+  crash_reporter::internal::GetCrashKeyStorage()->RemoveKey(key.data());
 }
 
 // GetCrashReporterClient() cannot call any Set methods until after
 // InitCrashKeys().
 void InitCrashKeys() {
-  g_crash_keys = new CrashKeyStorage;
+  crash_reporter::InitializeCrashKeys();
   GetCrashReporterClient()->RegisterCrashKeys();
   g_use_crash_key_white_list =
       GetCrashReporterClient()->UseCrashKeysWhiteList();
@@ -1391,7 +1392,8 @@ size_t WaitForCrashReportUploadProcess(int fd, size_t bytes_to_read,
     if (ret < 0) {
       // Error
       break;
-    } else if (ret > 0) {
+    }
+    if (ret > 0) {
       // There is data to read.
       ssize_t len = HANDLE_EINTR(
           sys_read(fd, buf + bytes_read, bytes_to_read - bytes_read));
@@ -1711,6 +1713,8 @@ void HandleCrashDump(const BreakpadInfo& info) {
     }
 #if defined(OS_ANDROID)
     // Addtional MIME blocks are added for logging on Android devices.
+    // When make changes to the name, please sync it with
+    // PureJavaExceptionReporter.java if needed.
     static const char android_build_id[] = "android_build_id";
     static const char android_build_fp[] = "android_build_fp";
     static const char device[] = "device";
@@ -1798,9 +1802,13 @@ void HandleCrashDump(const BreakpadInfo& info) {
   }
 
   if (info.crash_keys) {
+    using CrashKeyStorage =
+        crash_reporter::internal::TransitionalCrashKeyStorage;
     CrashKeyStorage::Iterator crash_key_iterator(*info.crash_keys);
     const CrashKeyStorage::Entry* entry;
     while ((entry = crash_key_iterator.Next())) {
+      if (g_use_crash_key_white_list && !IsInWhiteList(entry->key))
+        continue;
       writer.AddPairString(entry->key, entry->value);
       writer.AddBoundary();
       writer.Flush();
@@ -1818,7 +1826,8 @@ void HandleCrashDump(const BreakpadInfo& info) {
 
   IGNORE_RET(sys_close(temp_file_fd));
 
-#if defined(OS_ANDROID)
+// For now save the file in tmp (patricia@vivaldi.com)
+#if defined(OS_ANDROID) || defined(VIVALDI_BUILD)
   if (info.filename) {
     size_t filename_length = my_strlen(info.filename);
 

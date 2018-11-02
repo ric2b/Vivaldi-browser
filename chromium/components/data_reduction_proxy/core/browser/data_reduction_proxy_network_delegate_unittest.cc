@@ -259,6 +259,13 @@ class TestLoFiDecider : public LoFiDecider {
     return false;
   }
 
+  void MaybeApplyAMPPreview(
+      net::URLRequest* request,
+      GURL* new_url,
+      previews::PreviewsDecider* previews_decider) const override {
+    return;
+  }
+
   void RemoveAcceptTransformHeader(
       net::HttpRequestHeaders* headers) const override {
     if (ignore_is_using_data_reduction_proxy_check_)
@@ -338,7 +345,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
         lofi_ui_service_(nullptr),
         ssl_socket_data_provider_(net::ASYNC, net::OK) {
     ssl_socket_data_provider_.next_proto = net::kProtoHTTP11;
-    ssl_socket_data_provider_.cert = net::ImportCertFromFile(
+    ssl_socket_data_provider_.ssl_info.cert = net::ImportCertFromFile(
         net::GetTestCertsDirectory(), "unittest.selfsigned.der");
   }
 
@@ -392,6 +399,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
     context_->set_network_quality_estimator(&test_network_quality_estimator_);
     context_->Init();
 
+    test_context_->DisableWarmupURLFetch();
     test_context_->EnableDataReductionProxyWithSecureProxyCheckSuccess();
   }
 
@@ -910,6 +918,10 @@ TEST_F(DataReductionProxyNetworkDelegateTest, AuthenticationTest) {
 
 TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
   Init(USE_INSECURE_PROXY, false);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kDataReductionProxyDecidesTransform);
+
   // Enable Lo-Fi.
   const struct {
     bool lofi_switch_enabled;
@@ -946,7 +958,6 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
                                              "Enabled");
     }
-    io_data()->SetLoFiModeActiveOnMainFrame(false);
 
     net::ProxyInfo data_reduction_proxy_info;
     std::string proxy;
@@ -1172,7 +1183,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
       data_reduction_proxy_info.UseDirect();
     else
       data_reduction_proxy_info.UseNamedProxy("some.other.proxy");
-    config()->UpdateConfigForTesting(test.data_reduction_proxy_enabled, true);
+    config()->UpdateConfigForTesting(test.data_reduction_proxy_enabled, true,
+                                     true);
     std::unique_ptr<net::URLRequest> request =
         context()->CreateRequest(GURL(kTestURL), net::RequestPriority::IDLE,
                                  nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -1337,7 +1349,6 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
   };
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
-    config()->ResetLoFiStatusForTest();
 
     base::test::ScopedFeatureList scoped_feature_list;
     if (tests[i].lofi_enabled) {
@@ -1736,6 +1747,14 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
 
 TEST_F(DataReductionProxyNetworkDelegateTest,
        TestLoFiTransformationTypeHistogram) {
+  const std::string regular_response_headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 140\r\n"
+      "Via: 1.1 Chrome-Compression-Proxy\r\n"
+      "x-original-content-length: 200\r\n"
+      "Cache-Control: max-age=0\r\n"
+      "Vary: accept-encoding\r\n\r\n";
+
   Init(USE_INSECURE_PROXY, false);
   const char kLoFiTransformationTypeHistogram[] =
       "DataReductionProxy.LoFi.TransformationType";
@@ -1744,7 +1763,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
   net::HttpRequestHeaders request_headers;
   request_headers.SetHeader("chrome-proxy-accept-transform", "lite-page");
   lofi_decider()->ignore_is_using_data_reduction_proxy_check();
-  FetchURLRequest(GURL(kTestURL), &request_headers, std::string(), 140, 0);
+  FetchURLRequest(GURL(kTestURL), &request_headers, regular_response_headers,
+                  140, 0);
   histogram_tester.ExpectBucketCount(kLoFiTransformationTypeHistogram,
                                      NO_TRANSFORMATION_LITE_PAGE_REQUESTED, 1);
 
@@ -2198,6 +2218,7 @@ TEST_F(DataReductionProxyNetworkDelegateClientLoFiTest, DataSavingsNonDRP) {
 
 TEST_F(DataReductionProxyNetworkDelegateClientLoFiTest, DataSavingsThroughDRP) {
   Reset();
+  drp_test_context()->DisableWarmupURLFetch();
   drp_test_context()->EnableDataReductionProxyWithSecureProxyCheckSuccess();
   SetUpLoFiDecider(true, false);
 
@@ -2236,6 +2257,14 @@ TEST_F(DataReductionProxyNetworkDelegateTest, TestAcceptTransformHistogram) {
   Init(USE_INSECURE_PROXY, false);
   base::HistogramTester histogram_tester;
 
+  const std::string regular_response_headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 140\r\n"
+      "Via: 1.1 Chrome-Compression-Proxy\r\n"
+      "x-original-content-length: 200\r\n"
+      "Cache-Control: max-age=0\r\n"
+      "Vary: accept-encoding\r\n\r\n";
+
   const char kResponseHeadersWithCPCTFormat[] =
       "HTTP/1.1 200 OK\r\n"
       "Chrome-Proxy-Content-Transform: %s\r\n"
@@ -2248,7 +2277,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, TestAcceptTransformHistogram) {
   // Verify lite page request.
   net::HttpRequestHeaders request_headers;
   request_headers.SetHeader("chrome-proxy-accept-transform", "lite-page");
-  FetchURLRequest(GURL(kTestURL), &request_headers, std::string(), 140, 0);
+  FetchURLRequest(GURL(kTestURL), &request_headers, regular_response_headers,
+                  140, 0);
   histogram_tester.ExpectTotalCount(
       "DataReductionProxy.Protocol.AcceptTransform", 1);
   histogram_tester.ExpectBucketCount(
@@ -2261,7 +2291,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, TestAcceptTransformHistogram) {
 
   // Verify empty image request.
   request_headers.SetHeader("chrome-proxy-accept-transform", "empty-image");
-  FetchURLRequest(GURL(kTestURL), &request_headers, std::string(), 140, 0);
+  FetchURLRequest(GURL(kTestURL), &request_headers, regular_response_headers,
+                  140, 0);
   histogram_tester.ExpectTotalCount(
       "DataReductionProxy.Protocol.AcceptTransform", 2);
   histogram_tester.ExpectBucketCount(

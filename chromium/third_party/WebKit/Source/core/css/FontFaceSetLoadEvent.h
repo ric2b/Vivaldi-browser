@@ -31,10 +31,10 @@
 #ifndef FontFaceSetLoadEvent_h
 #define FontFaceSetLoadEvent_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/css/FontFace.h"
 #include "core/css/FontFaceSetLoadEventInit.h"
 #include "core/dom/events/Event.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -60,7 +60,7 @@ class FontFaceSetLoadEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   FontFaceSetLoadEvent(const AtomicString&, const FontFaceArray&);

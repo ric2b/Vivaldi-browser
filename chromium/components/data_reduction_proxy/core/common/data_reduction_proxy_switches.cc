@@ -20,7 +20,16 @@ const char kDataReductionProxyExperiment[] = "data-reduction-proxy-experiment";
 
 // The Chrome-Proxy "exp" directive value used by data reduction proxy to
 // receive an alternative back end implementation.
-const char kDataReductionProxyServerAlternative[] = "alternative";
+const char kDataReductionProxyServerAlternative1[] = "alt1";
+const char kDataReductionProxyServerAlternative2[] = "alt2";
+const char kDataReductionProxyServerAlternative3[] = "alt3";
+const char kDataReductionProxyServerAlternative4[] = "alt4";
+const char kDataReductionProxyServerAlternative5[] = "alt5";
+const char kDataReductionProxyServerAlternative6[] = "alt6";
+const char kDataReductionProxyServerAlternative7[] = "alt7";
+const char kDataReductionProxyServerAlternative8[] = "alt8";
+const char kDataReductionProxyServerAlternative9[] = "alt9";
+const char kDataReductionProxyServerAlternative10[] = "alt10";
 
 // The origin of the data reduction proxy fallback.
 const char kDataReductionProxyFallback[] = "spdy-proxy-auth-fallback";
@@ -79,6 +88,10 @@ const char kEnableDataReductionProxyForcePingback[] =
 // Enables a 1 MB savings promo for the data reduction proxy.
 const char kEnableDataReductionProxySavingsPromo[] =
     "enable-data-reduction-proxy-savings-promo";
+
+// Disables fetching of the warmup URL.
+const char kDisableDataReductionProxyWarmupURLFetch[] =
+    "disable-data-reduction-proxy-warmup-url-fetch";
 
 }  // namespace switches
 }  // namespace data_reduction_proxy

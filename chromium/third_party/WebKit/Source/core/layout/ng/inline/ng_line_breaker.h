@@ -19,7 +19,8 @@ namespace blink {
 class Hyphenation;
 class NGInlineBreakToken;
 class NGInlineItem;
-class NGFragmentBuilder;
+class NGInlineLayoutStateStack;
+struct NGPositionedFloat;
 
 // Represents a line breaker.
 //
@@ -31,21 +32,20 @@ class CORE_EXPORT NGLineBreaker {
  public:
   NGLineBreaker(NGInlineNode,
                 const NGConstraintSpace&,
-                NGFragmentBuilder*,
-                Vector<RefPtr<NGUnpositionedFloat>>*,
+                Vector<NGPositionedFloat>*,
+                Vector<scoped_refptr<NGUnpositionedFloat>>*,
+                NGExclusionSpace*,
+                unsigned handled_float_index,
                 const NGInlineBreakToken* = nullptr);
   ~NGLineBreaker() {}
 
   // Compute the next line break point and produces NGInlineItemResults for
   // the line.
-  bool NextLine(const NGLogicalOffset& content_offset,
-                const NGExclusionSpace&,
-                NGLineInfo*);
+  bool NextLine(const NGLayoutOpportunity&, NGLineInfo*);
 
   // Create an NGInlineBreakToken for the last line returned by NextLine().
-  RefPtr<NGInlineBreakToken> CreateBreakToken() const;
-
-  NGExclusionSpace* ExclusionSpace() { return line_.exclusion_space.get(); }
+  scoped_refptr<NGInlineBreakToken> CreateBreakToken(
+      std::unique_ptr<const NGInlineLayoutStateStack>) const;
 
  private:
   // This struct holds information for the current line.
@@ -57,9 +57,10 @@ class CORE_EXPORT NGLineBreaker {
     LayoutUnit position;
 
     // The current opportunity.
-    WTF::Optional<NGLayoutOpportunity> opportunity;
+    NGLayoutOpportunity opportunity;
 
-    std::unique_ptr<NGExclusionSpace> exclusion_space;
+    LayoutUnit line_left_bfc_offset;
+    LayoutUnit line_right_bfc_offset;
 
     // We don't create "certain zero-height line boxes".
     // https://drafts.csswg.org/css2/visuren.html#phantom-line-box
@@ -72,8 +73,10 @@ class CORE_EXPORT NGLineBreaker {
     // the next line.
     bool is_after_forced_break = false;
 
-    bool HasAvailableWidth() const { return opportunity.has_value(); }
-    LayoutUnit AvailableWidth() const { return opportunity->InlineSize(); }
+    LayoutUnit AvailableWidth() const {
+      DCHECK_GE(line_right_bfc_offset, line_left_bfc_offset);
+      return line_right_bfc_offset - line_left_bfc_offset;
+    }
     bool CanFit() const { return position <= AvailableWidth(); }
     bool CanFit(LayoutUnit extra) const {
       return position + extra <= AvailableWidth();
@@ -82,12 +85,9 @@ class CORE_EXPORT NGLineBreaker {
 
   void BreakLine(NGLineInfo*);
 
-  void PrepareNextLine(const NGExclusionSpace&, NGLineInfo*);
+  void PrepareNextLine(const NGLayoutOpportunity&, NGLineInfo*);
 
-  bool HasFloatsAffectingCurrentLine() const;
-  void FindNextLayoutOpportunity();
-  void FindNextLayoutOpportunityWithMinimumInlineSize(LayoutUnit);
-
+  void UpdatePosition(const NGInlineItemResults&);
   void ComputeLineLocation(NGLineInfo*) const;
 
   enum class LineBreakState {
@@ -101,13 +101,14 @@ class CORE_EXPORT NGLineBreaker {
     kForcedBreak
   };
 
-  LineBreakState HandleText(const NGInlineItemResults&,
+  LineBreakState HandleText(NGLineInfo*,
                             const NGInlineItem&,
                             NGInlineItemResult*);
   void BreakText(NGInlineItemResult*,
                  const NGInlineItem&,
-                 LayoutUnit available_width);
-  static void AppendHyphen(const ComputedStyle&, ShapeResult*);
+                 LayoutUnit available_width,
+                 NGLineInfo*);
+  static void AppendHyphen(const ComputedStyle&, NGLineInfo*);
 
   LineBreakState HandleControlItem(const NGInlineItem&, NGInlineItemResult*);
   LineBreakState HandleAtomicInline(const NGInlineItem&,
@@ -119,10 +120,15 @@ class CORE_EXPORT NGLineBreaker {
   LineBreakState HandleCloseTag(const NGInlineItem&, NGInlineItemResults*);
 
   void HandleOverflow(NGLineInfo*);
+  void HandleOverflow(NGLineInfo*,
+                      LayoutUnit available_width,
+                      bool force_break_anywhere);
   void Rewind(NGLineInfo*, unsigned new_end);
 
+  void TruncateOverflowingText(NGLineInfo*);
+
   void SetCurrentStyle(const ComputedStyle&);
-  bool IsFirstBreakOpportunity(unsigned, const NGInlineItemResults&) const;
+  bool IsFirstBreakOpportunity(unsigned, const NGLineInfo&) const;
   LineBreakState ComputeIsBreakableAfter(NGInlineItemResult*) const;
 
   void MoveToNextOf(const NGInlineItem&);
@@ -130,28 +136,46 @@ class CORE_EXPORT NGLineBreaker {
   void SkipCollapsibleWhitespaces();
 
   bool IsFirstFormattedLine() const;
+  void ComputeBaseDirection();
 
   LineData line_;
   NGInlineNode node_;
   const NGConstraintSpace& constraint_space_;
-  NGFragmentBuilder* container_builder_;
-  Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats_;
+  Vector<NGPositionedFloat>* positioned_floats_;
+  Vector<scoped_refptr<NGUnpositionedFloat>>* unpositioned_floats_;
+  NGExclusionSpace* exclusion_space_;
+
   unsigned item_index_ = 0;
   unsigned offset_ = 0;
-  NGLogicalOffset content_offset_;
+  bool previous_line_had_forced_break_ = false;
+  LayoutUnit bfc_line_offset_;
+  LayoutUnit bfc_block_offset_;
   LazyLineBreakIterator break_iterator_;
   HarfBuzzShaper shaper_;
   ShapeResultSpacing<String> spacing_;
   const Hyphenation* hyphenation_ = nullptr;
 
   // Keep track of handled float items. See HandleFloat().
-  unsigned handled_floats_end_item_index_ = 0;
+  unsigned handled_floats_end_item_index_;
+
+  // The current base direction for the bidi algorithm.
+  // This is copied from NGInlineNode, then updated after each forced line break
+  // if 'unicode-bidi: plaintext'.
+  TextDirection base_direction_;
 
   // True when current box allows line wrapping.
   bool auto_wrap_ = false;
 
   // True when current box has 'word-break/word-wrap: break-word'.
   bool break_if_overflow_ = false;
+
+  // True when breaking at soft hyphens (U+00AD) is allowed.
+  bool enable_soft_hyphen_ = true;
+
+  // True in quirks mode or limited-quirks mode, which require line-height
+  // quirks.
+  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
+  bool in_line_height_quirks_mode_ = false;
 };
 
 }  // namespace blink

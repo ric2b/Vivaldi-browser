@@ -60,7 +60,6 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -105,6 +104,7 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -699,7 +699,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
   // handles the response on the main thread. This method flushes both the
   // thread pool backing the background task runner and the main thread.
   void WaitForGetKeyboardLayoutsForLocaleToFinish() {
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
 
     // Verify that the construction of the keyboard layout list did not affect
     // the current ICU locale.
@@ -2356,7 +2356,8 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   // Wait for the Terms of Service to finish downloading, then get the status of
   // the screen's UI elements.
   std::string json;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(contents_,
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      contents_,
       "var screenElement = document.getElementById('terms-of-service');"
       "function SendReplyIfDownloadDone() {"
       "  if (screenElement.classList.contains('tos-loading'))"
@@ -2367,12 +2368,26 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
       "      document.getElementById('tos-subheading').textContent;"
       "  status.contentHeading ="
       "      document.getElementById('tos-content-heading').textContent;"
-      "  status.content ="
-      "      document.getElementById('tos-content-main').textContent;"
       "  status.error = screenElement.classList.contains('error');"
       "  status.acceptEnabled ="
       "      !document.getElementById('tos-accept-button').disabled;"
-      "  domAutomationController.send(JSON.stringify(status));"
+      "  var tosWebview = document.getElementById('tos-content-main');"
+      "  if (status.error) {"
+      "    status.content = tosWebview.src;"
+      "    domAutomationController.send(JSON.stringify(status));"
+      "  } else {"
+      "    var extractTos = function() {"
+      "      tosWebview.executeScript("
+      "          {code:'document.body.textContent'},"
+      "          (results) => {"
+      "            status.content = results[0];"
+      "            domAutomationController.send(JSON.stringify(status));"
+      "            tosWebview.removeEventListener('contentload', extractTos);"
+      "          });"
+      "    };"
+      "    tosWebview.addEventListener('contentload', extractTos);"
+      "    extractTos();"
+      "  }"
       "  observer.disconnect();"
       "  return true;"
       "}"

@@ -4,6 +4,7 @@
 <translation id="100812568230599391">表示スタイルを交互に変更する。</translation>
 <translation id="1012173283529841972">リスト項目</translation>
 <translation id="1013742170491673792">検索用語を編集</translation>
+<translation id="1022586497894531524">ChromeVox の音声フィードバックを初めてご利用になる場合は、このクイック チュートリアルで、ChromeVox の利用を開始するための基本事項をご確認ください。</translation>
 <translation id="1023866615269196768">拡張されました。</translation>
 <translation id="1025074108959230262">スティッキー モードは無効</translation>
 <translation id="1031961866430398710">この場合</translation>
@@ -29,12 +30,12 @@
 <translation id="1201402288615127009">次へ</translation>
 <translation id="1206619573307042055">マーキー</translation>
 <translation id="1213216066620407844">ChromeVox - Chrome を音声で読み上げ</translation>
-<translation id="1226487719524433143">新しくなった ChromeVox について、ぜひご意見をお聞かせください。検索+a キーを押して i キーを押すと、フィードバックが送信できます。利用方法については、[次へ] ボタンを押してチュートリアルにお進みください。</translation>
+<translation id="1225437811932752266">以上が ChromeVox を使用するための基本事項です。ChromeVox のコマンド メニューは、検索+ピリオド（.）キーを押していつでも開くことができます。ChromeVox と Chrome OS について詳しくは、以下の記事をご覧ください。
+チュートリアルを終了するには、ChromeVox を使って閉じるボタンまで移動し、クリックしてください。</translation>
 <translation id="1229276918471378188">前のジャンプ</translation>
 <translation id="1237866625126425153">ラジオグループ</translation>
 <translation id="1251750620252348585">次のレベル 6 見出し</translation>
 <translation id="1275718070701477396">選択されています</translation>
-<translation id="1310230882256010289">処理の向上。ChromeVox の動作方法を見直し、パフォーマンス、安定性、ウェブサポートとコンプライアンスを向上させるための変更を行いました。</translation>
 <translation id="1319608975892113573">前の引用箇所はありません。</translation>
 <translation id="1321576897702511272">ChromeVox ヘルプを表示しない</translation>
 <translation id="1331702245475014624"><ph name="INDEX" />/<ph name="TOTAL" /></translation>
@@ -42,6 +43,7 @@
 <translation id="1339428534620983148">表の前の列</translation>
 <translation id="1342835525016946179">記事</translation>
 <translation id="1346748346194534595">右</translation>
+<translation id="135978014023467274">ChromeVox 63 にアップデートしました。</translation>
 <translation id="136718599399906424">表の次の行</translation>
 <translation id="1377925789329510816">これは最後の見出しです。このページの最初の見出しに移動するには検索+H キーを押します。2 番目の見出しに移動するには検索+Shift+H キーを押します。</translation>
 <translation id="1383876407941801731">検索</translation>
@@ -169,6 +171,7 @@
 <translation id="2770781857296573485">グループ検索を入力</translation>
 <translation id="2777845298774924149">終了しました</translation>
 <translation id="2781264313200109999">リンクの開始</translation>
+<translation id="2784959586797362050">フィードバックを送信するには、検索+a キーを押した後 i キーを押してください。ご意見をお待ちしています。</translation>
 <translation id="2800204403141299078">この他に異なる要素はありません。</translation>
 <translation id="2800780099804980316">前のレベル 1 見出しはありません。</translation>
 <translation id="280499067616661124">ChromeVox でページ内を検索します</translation>
@@ -225,8 +228,6 @@
 <translation id="3163593631834463955">列見出しが空です</translation>
 <translation id="316542773973815724">ナビゲーション</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{スペース}other{# 個のスペース}}</translation>
-<translation id="3183233191569362040">ChromeVox Next（ベータ版）の基本事項の学習はここまでです。ChromeVox のコマンド メニューは、検索+ピリオド（.）キーを押していつでも開くことができます。ChromeVox と Chrome OS についてさらに詳しくは、以下の記事をご覧ください。
-チュートリアルを終えるには、ChromeVox を使って閉じるボタンまで移動し、ボタンをクリックします。</translation>
 <translation id="320961988183078793"><ph name="TYPE" />を入力しました</translation>
 <translation id="3223701887221307104"><ph name="NAME" />、タブ</translation>
 <translation id="3226035351387556942">チェックボックス</translation>
@@ -236,6 +237,7 @@
 <translation id="3241638166094654466">各行のセル数:</translation>
 <translation id="3286390186030710347">スライダ</translation>
 <translation id="3299925995433437805">次にアクセスしたリンクはありません。</translation>
+<translation id="3300348286427369683">リッチテキストのサポート。リッチテキスト フィールド（ジャンプ コマンド、点字ディスプレイでのカーソル移動、選択など）が ChromeVox でサポートされるようになりました。</translation>
 <translation id="3307886118343381874">表の末尾に移動</translation>
 <translation id="3311969765485641742">アラートを確認するには Alt+Shift+A を押してください</translation>
 <translation id="3312997241656799641">次にアクセスしたリンク</translation>
@@ -300,6 +302,7 @@
 <translation id="3458865416877308321"><ph name="NAME" />、オフ</translation>
 <translation id="3462439746547587373"><ph name="NAME" />、ボタン</translation>
 <translation id="3466530247399808663">キーの押下が無効</translation>
+<translation id="3468959318854349468">タイトルなし</translation>
 <translation id="3473644018603298796"><ph name="COUNT" /> 件選択</translation>
 <translation id="3486232535569802404"><ph name="V1" />～<ph name="V2" /></translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{右角かっこ}other{# 個の右角かっこ}}</translation>
@@ -338,7 +341,7 @@
 <translation id="3897092660631435901">メニュー</translation>
 <translation id="3909320334364316587">前のレベル 6 見出し</translation>
 <translation id="3914173277599553213">必須</translation>
-<translation id="3951424903203718058">このクイック チュートリアルでは、ChromeVox Next の音声フィードバックを初めてご利用になる方を対象に、利用開始にあたっての基本事項を説明しています。</translation>
+<translation id="3914732343065571127">ChromeVox コマンド リファレンス</translation>
 <translation id="3962990492275676168">現在の場所から読み上げを開始</translation>
 <translation id="4004802134384979325">オン</translation>
 <translation id="4006140876663370126">画像</translation>
@@ -409,7 +412,9 @@
 <translation id="4601367666219428522">表「<ph name="TABLENAME" />」（<ph name="TABLEROWS" />x<ph name="TABLECOLS" />）</translation>
 <translation id="4615592953348396470">次に押すキーを無視します</translation>
 <translation id="461613135510474570">文</translation>
+<translation id="463135993322337640">ChromeVox+o+n キーを押すと新機能を確認できます</translation>
 <translation id="4647836961514597010">色の選択</translation>
+<translation id="4660783501463101648">クラシックの削除。ChromeVox クラシックに戻るキーボード切り替えは削除されました。</translation>
 <translation id="4661075872484491155">ツリー</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4688873778442829762">グリッド</translation>
@@ -429,10 +434,10 @@
 <translation id="4827410568042294688">選択していません</translation>
 <translation id="4842108708071771135">次の引用箇所はありません。</translation>
 <translation id="4844625982113518938">キーを押すとその名前が読み上げられます。学習モードを終了するには Ctrl+W キーを押します。</translation>
+<translation id="4846428657345567687">ChromeVox へようこそ</translation>
 <translation id="4846487886195635104">取り消し線の末尾</translation>
 <translation id="4848993367330139335">タイマー</translation>
 <translation id="4850023505158945298">前の類似の要素。</translation>
-<translation id="485011152882364255">ChromeVox Next では、検索キーは修飾キーとなります。ChromeVox のショートカットのほとんどは検索キーで始まります。また、移動には矢印キーを使用します。</translation>
 <translation id="4866956062845190338">メニュー項目のラジオボタン</translation>
 <translation id="4867316986324544967">TTS ログを有効にする</translation>
 <translation id="4877261390094455813">検索キーワードを入力してください。</translation>
@@ -467,6 +472,7 @@
 <translation id="5098541983634824365">グリッドから離れます。</translation>
 <translation id="5102981729317424850">ツールバー</translation>
 <translation id="5105050547967751155">必須</translation>
+<translation id="5106547198195128110">この新しいリリースでの変更内容は以下のとおりです。</translation>
 <translation id="5110983769041734144">前のフォーム フィールドはありません。</translation>
 <translation id="5111640677200759579">列見出し</translation>
 <translation id="5136967254288895616">前のリンクはありません。</translation>
@@ -501,7 +507,6 @@
 <translation id="5444587279251314700">（有効）</translation>
 <translation id="5451268436205074266">点 <ph name="DOT" /></translation>
 <translation id="5455441614648621694">補足的情報</translation>
-<translation id="5458780372341732962">ChromeVox Next（ベータ版）を使用する</translation>
 <translation id="5485036206801896268">前の図はありません。</translation>
 <translation id="5486947920110100234">次のジャンプ ポイントはありません。</translation>
 <translation id="549602578321198708">単語</translation>
@@ -510,7 +515,6 @@
 <translation id="5507663321906818013">デバッグ ベンチマーク</translation>
 <translation id="5518443085409638729">テキスト編集時のカーソルは文字の間に置く（Mac OS X と同様）。</translation>
 <translation id="552195134157544755">ラジオボタン</translation>
-<translation id="5531530875187439488">新しいイアコン。より迅速に閲覧できるように、読み上げの音声を更新しました。</translation>
 <translation id="5534303576632885660">ヘッダー</translation>
 <translation id="5546092960038624944">前のレベル 5 見出しはありません。</translation>
 <translation id="556042886152191864">ボタン</translation>
@@ -537,7 +541,6 @@
 <translation id="5682113568322255809">ランドマーク</translation>
 <translation id="5683155931978483559">前のチェックボックス</translation>
 <translation id="5684277895745049190">リスト</translation>
-<translation id="5684905390246898631">ChromeVox Next へようこそ</translation>
 <translation id="5695831708991916435">次に紹介するいくつかのショートカットは ChromeVox のコマンドではありませんが、Chrome を活用する際に役立ちます。
 ボタンやリンクなどの操作可能な項目間を移動するには、順方向の場合は Tab キー、逆方向の場合は Shift+Tab キーを押します。
 Chrome ブラウザのアドレスバー（オムニボックスとも呼ばれます）に移動するには、Ctrl+L キーを押します。
@@ -572,7 +575,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="5937336320314038555">{COUNT,plural, =1{等号}other{# 個の等号}}</translation>
 <translation id="5939518447894949180">リセット</translation>
 <translation id="5948123859135882163">数式の解釈を、構文と意味の間で切り替えます</translation>
-<translation id="5948485979596965684">ChromeVox を最新のメジャー リリース版に更新しました。</translation>
 <translation id="5955304353782037793">アプリ</translation>
 <translation id="5956928062748260866">ダイアログ</translation>
 <translation id="5963413905009737549">セクション</translation>
@@ -587,6 +589,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="6065293622157674001">文法ミスの先頭</translation>
 <translation id="6082768461603900813">基本的な操作</translation>
 <translation id="6092707270915298410">リンクの終了</translation>
+<translation id="6118126368611144850">Chrome 用 Android アプリ。お使いの端末に Play ストアがインストールされている場合は、Android アプリで ChromeVox をお試しいただけます。Play ストアから Google Chrome Canary をダウンロードして、試験的にサポートされている機能をご利用ください。</translation>
 <translation id="611827076493383239">アクセス済み</translation>
 <translation id="6119955456199054975">ここでセルは終わりです。</translation>
 <translation id="6122013438240733403">ボタン</translation>
@@ -627,6 +630,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="6493991254603208962">明るさを下げる</translation>
 <translation id="6508059270146105198">ブライユ点字表示をページ下部に移動</translation>
 <translation id="6536864053412760904">MathML トークン</translation>
+<translation id="6540201937398578274">ChromeVox では、検索キーは修飾キーとなります。ChromeVox のショートカットのほとんどは検索キーで始まります。また、移動には矢印キーを使用します。</translation>
 <translation id="6550720799683018100">下のリストからオプションを選択して、現在のキーマップを変更できます。</translation>
 <translation id="6561818612645211875">現在の行の先頭に移動</translation>
 <translation id="6587021927234520429">次のレベル 4 見出しはありません。</translation>
@@ -651,7 +655,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="6786800275320335305">記事</translation>
 <translation id="6787839852456839824">キーボード ショートカット</translation>
 <translation id="6793101435925451627">リスト ボックス</translation>
-<translation id="6818172019016005152">Google は ChromeVox 環境の更新と改善に取り組んでいます。その一環として、このたび次の新機能をリリースしました。</translation>
 <translation id="6833103209700200188">フッター</translation>
 <translation id="6871161210040114857">大文字と小文字を区別しません。</translation>
 <translation id="6877435256196695200">次の図はありません。</translation>
@@ -669,7 +672,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7037042857287298941">前のリスト</translation>
 <translation id="7041173719775863268">選択を終了</translation>
 <translation id="7086377898680121060">明るさを上げる</translation>
-<translation id="7094527465295945904">新しいキーの組み合わせ。ChromeVox では、検索キーをキーボード ショートカットの修飾キーにして、キーの組み合わせを大幅に簡素化しました。</translation>
 <translation id="7095834689119144465">数字のみのテキスト編集</translation>
 <translation id="7096001299300236431">前のメディア</translation>
 <translation id="7116595520562830928">複数行</translation>
@@ -773,7 +775,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8066678206530322333">バナー</translation>
 <translation id="8076492880354921740">タブ</translation>
 <translation id="8091452896542422286">スペース</translation>
-<translation id="8104178626892949749">ChromeVox Next の詳細を確認するには、ChromeVox の o+n キーを押します。</translation>
 <translation id="8110647606445335195">ARIA ランドマークはありません。</translation>
 <translation id="8153880621934657047">表の中ではありません。</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{アンダースコア}other{# 個のアンダースコア}}</translation>
@@ -783,7 +784,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8199231515320852133">現在のセルの見出しを読み上げる</translation>
 <translation id="820417203470636242">セルは空欄です。</translation>
 <translation id="8215202828671303819">複数選択可</translation>
-<translation id="8224171046658870249">ChromeVox Next に切り替えました</translation>
 <translation id="826991282343985864">行$1列$2</translation>
 <translation id="8276439074553447000">前のフォーカス可能項目にジャンプ</translation>
 <translation id="8278417001922463147">前の記事はありません。</translation>
@@ -828,7 +828,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8664519043722036194">秒</translation>
 <translation id="867187640362843212">見出し 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{パイプ}other{# 個のパイプ}}</translation>
-<translation id="8721861170709424373">ChromeVox Next のコマンド リファレンス</translation>
 <translation id="8735450637152821465">選択を開始</translation>
 <translation id="8743786158317878347">表などの構造化コンテンツに入ります</translation>
 <translation id="8747966237988593539">番号付きリスト</translation>
@@ -881,7 +880,6 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="923331726185079994">ChromeVox が更新されました</translation>
 <translation id="930275611743429116">選択を開始または終了します。</translation>
 <translation id="948171205378458592">読み上げの速度を下げる</translation>
-<translation id="955917170449423694">クラシック ChromeVox に切り替えました</translation>
 <translation id="962913030769097253">次のレベル 1 見出し</translation>
 <translation id="973955474346881951">スティッキー モードを有効または無効にする</translation>
 <translation id="976849232629612000">アイテムなし</translation>

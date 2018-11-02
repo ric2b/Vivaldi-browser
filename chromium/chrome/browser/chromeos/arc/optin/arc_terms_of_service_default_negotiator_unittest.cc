@@ -7,19 +7,18 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/chromeos/arc/extensions/fake_arc_support.h"
 #include "chrome/browser/chromeos/arc/optin/arc_terms_of_service_default_negotiator.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,15 +30,14 @@ class ArcTermsOfServiceDefaultNegotiatorTest : public testing::Test {
   ~ArcTermsOfServiceDefaultNegotiatorTest() override = default;
 
   void SetUp() override {
-    user_manager_enabler_ =
-        base::MakeUnique<chromeos::ScopedUserManagerEnabler>(
-            new chromeos::FakeChromeUserManager());
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::make_unique<chromeos::FakeChromeUserManager>());
 
-    profile_ = base::MakeUnique<TestingProfile>();
+    profile_ = std::make_unique<TestingProfile>();
 
-    support_host_ = base::MakeUnique<ArcSupportHost>(profile_.get());
-    fake_arc_support_ = base::MakeUnique<FakeArcSupport>(support_host_.get());
-    negotiator_ = base::MakeUnique<ArcTermsOfServiceDefaultNegotiator>(
+    support_host_ = std::make_unique<ArcSupportHost>(profile_.get());
+    fake_arc_support_ = std::make_unique<FakeArcSupport>(support_host_.get());
+    negotiator_ = std::make_unique<ArcTermsOfServiceDefaultNegotiator>(
         profile_->GetPrefs(), support_host());
   }
 
@@ -61,7 +59,7 @@ class ArcTermsOfServiceDefaultNegotiatorTest : public testing::Test {
   content::TestBrowserThreadBundle bundle_;
 
   std::unique_ptr<TestingProfile> profile_;
-  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   std::unique_ptr<ArcSupportHost> support_host_;
   std::unique_ptr<FakeArcSupport> fake_arc_support_;
   std::unique_ptr<ArcTermsOfServiceNegotiator> negotiator_;
@@ -124,10 +122,10 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Accept) {
   // The preferences are assigned to the managed false value, and the
   // corresponding checkboxes are unchecked.
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcBackupRestoreEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   EXPECT_FALSE(fake_arc_support()->backup_and_restore_mode());
   profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kArcLocationServiceEnabled, base::MakeUnique<base::Value>(false));
+      prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
   EXPECT_FALSE(fake_arc_support()->location_service_mode());
 
   // The managed preference values are removed, and the corresponding checkboxes

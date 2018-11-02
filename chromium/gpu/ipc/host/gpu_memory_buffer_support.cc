@@ -35,20 +35,16 @@ bool AreNativeGpuMemoryBuffersEnabled() {
 GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
   GpuMemoryBufferConfigurationSet configurations;
 
-#if defined(USE_OZONE) || defined(OS_MACOSX)
+#if defined(USE_OZONE) || defined(OS_MACOSX) || defined(OS_WIN) || \
+    defined(OS_ANDROID)
   if (AreNativeGpuMemoryBuffersEnabled()) {
     const gfx::BufferFormat kNativeFormats[] = {
-        gfx::BufferFormat::R_8,
-        gfx::BufferFormat::RG_88,
-        gfx::BufferFormat::R_16,
-        gfx::BufferFormat::BGR_565,
-        gfx::BufferFormat::RGBA_4444,
-        gfx::BufferFormat::RGBA_8888,
-        gfx::BufferFormat::BGRA_8888,
-        gfx::BufferFormat::RGBA_F16,
-        gfx::BufferFormat::UYVY_422,
-        gfx::BufferFormat::YVU_420,
-        gfx::BufferFormat::YUV_420_BIPLANAR};
+        gfx::BufferFormat::R_8,       gfx::BufferFormat::RG_88,
+        gfx::BufferFormat::R_16,      gfx::BufferFormat::BGR_565,
+        gfx::BufferFormat::RGBA_4444, gfx::BufferFormat::RGBA_8888,
+        gfx::BufferFormat::BGRA_8888, gfx::BufferFormat::BGRX_1010102,
+        gfx::BufferFormat::RGBA_F16,  gfx::BufferFormat::UYVY_422,
+        gfx::BufferFormat::YVU_420,   gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kNativeUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
         gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
@@ -75,6 +71,7 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
         gfx::BufferFormat::YVU_420,   gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kGPUReadWriteUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
+        gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
         gfx::BufferUsage::SCANOUT_CPU_READ_WRITE,
         gfx::BufferUsage::SCANOUT_VDA_WRITE};
     for (auto format : kGPUReadWriteFormats) {
@@ -84,14 +81,15 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
       }
     }
   }
-#endif  // defined(USE_OZONE) || defined(OS_MACOSX)
+#endif  // defined(USE_OZONE) || defined(OS_MACOSX) || defined(OS_WIN)
 
   return configurations;
 }
 
 uint32_t GetImageTextureTarget(gfx::BufferFormat format,
                                gfx::BufferUsage usage) {
-#if defined(USE_OZONE) || defined(OS_MACOSX)
+#if defined(USE_OZONE) || defined(OS_MACOSX) || defined(OS_WIN) || \
+    defined(OS_ANDROID)
   GpuMemoryBufferConfigurationSet native_configurations =
       GetNativeGpuMemoryBufferConfigurations();
   if (native_configurations.find(std::make_pair(format, usage)) ==
@@ -101,6 +99,7 @@ uint32_t GetImageTextureTarget(gfx::BufferFormat format,
 
   switch (GetNativeGpuMemoryBufferType()) {
     case gfx::NATIVE_PIXMAP:
+    case gfx::ANDROID_HARDWARE_BUFFER:
       // GPU memory buffers that are shared with the GL using EGLImages
       // require TEXTURE_EXTERNAL_OES.
       return GL_TEXTURE_EXTERNAL_OES;
@@ -110,6 +109,8 @@ uint32_t GetImageTextureTarget(gfx::BufferFormat format,
     case gfx::SHARED_MEMORY_BUFFER:
     case gfx::EMPTY_BUFFER:
       break;
+    case gfx::DXGI_SHARED_HANDLE:
+      return GL_TEXTURE_2D;
   }
   NOTREACHED();
   return GL_TEXTURE_2D;

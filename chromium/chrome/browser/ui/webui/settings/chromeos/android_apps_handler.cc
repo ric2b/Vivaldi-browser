@@ -25,6 +25,7 @@ AndroidAppsHandler::AndroidAppsHandler(Profile* profile)
 AndroidAppsHandler::~AndroidAppsHandler() {}
 
 void AndroidAppsHandler::RegisterMessages() {
+  // Note: requestAndroidAppsInfo must be called before observers will be added.
   web_ui()->RegisterMessageCallback(
       "requestAndroidAppsInfo",
       base::Bind(&AndroidAppsHandler::HandleRequestAndroidAppsInfo,
@@ -33,13 +34,17 @@ void AndroidAppsHandler::RegisterMessages() {
       "showAndroidAppsSettings",
       base::Bind(&AndroidAppsHandler::ShowAndroidAppsSettings,
                  weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "showAndroidManageAppLinks",
+      base::Bind(&AndroidAppsHandler::ShowAndroidManageAppLinks,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AndroidAppsHandler::OnJavascriptAllowed() {
   ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile_);
   if (arc_prefs) {
     arc_prefs_observer_.Add(arc_prefs);
-    // arc::ArcSessionManager is assosiated with primary profile.
+    // arc::ArcSessionManager is associated with primary profile.
     arc_session_manager_observer_.Add(arc::ArcSessionManager::Get());
   }
 }
@@ -85,11 +90,11 @@ AndroidAppsHandler::BuildAndroidAppsInfo() {
 
 void AndroidAppsHandler::HandleRequestAndroidAppsInfo(
     const base::ListValue* args) {
+  AllowJavascript();
   SendAndroidAppsInfo();
 }
 
 void AndroidAppsHandler::SendAndroidAppsInfo() {
-  AllowJavascript();
   std::unique_ptr<base::DictionaryValue> info = BuildAndroidAppsInfo();
   FireWebUIListener("android-apps-info-update", *info);
 }
@@ -100,13 +105,25 @@ void AndroidAppsHandler::ShowAndroidAppsSettings(const base::ListValue* args) {
   args->GetBoolean(0, &activated_from_keyboard);
   int flags = activated_from_keyboard ? ui::EF_NONE : ui::EF_LEFT_MOUSE_BUTTON;
 
+  arc::LaunchAndroidSettingsApp(profile_, flags,
+                                GetDisplayIdForCurrentProfile());
+}
+
+void AndroidAppsHandler::ShowAndroidManageAppLinks(
+    const base::ListValue* args) {
+  DCHECK_EQ(0U, args->GetSize());
+
+  arc::LaunchSettingsAppActivity(profile_, arc::kSettingsAppDomainUrlActivity,
+                                 ui::EF_NONE /* flags */,
+                                 GetDisplayIdForCurrentProfile());
+}
+
+int64_t AndroidAppsHandler::GetDisplayIdForCurrentProfile() {
   // Settings in secondary profile cannot access ARC.
-  CHECK(arc::IsArcAllowedForProfile(profile_));
-  const int64_t display_id =
-      display::Screen::GetScreen()
-          ->GetDisplayNearestView(web_ui()->GetWebContents()->GetNativeView())
-          .id();
-  arc::LaunchAndroidSettingsApp(profile_, flags, display_id);
+  DCHECK(arc::IsArcAllowedForProfile(profile_));
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestView(web_ui()->GetWebContents()->GetNativeView())
+      .id();
 }
 
 }  // namespace settings

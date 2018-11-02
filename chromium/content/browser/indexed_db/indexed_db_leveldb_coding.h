@@ -91,6 +91,12 @@ CONTENT_EXPORT int Compare(const base::StringPiece& a,
                            const base::StringPiece& b,
                            bool index_keys);
 
+CONTENT_EXPORT int CompareKeys(const base::StringPiece& a,
+                               const base::StringPiece& b);
+
+CONTENT_EXPORT int CompareIndexKeys(const base::StringPiece& a,
+                                    const base::StringPiece& b);
+
 class KeyPrefix {
  public:
   // These are serialized to disk; any new items must be appended, and none can
@@ -200,6 +206,11 @@ class LiveBlobJournalKey {
   static std::string Encode();
 };
 
+class EarliestSweepKey {
+ public:
+  static std::string Encode();
+};
+
 class DatabaseFreeListKey {
  public:
   DatabaseFreeListKey();
@@ -266,6 +277,9 @@ class ObjectStoreMetaDataKey {
     HAS_KEY_PATH = 6,
     KEY_GENERATOR_CURRENT_NUMBER = 7
   };
+
+  // From the IndexedDB specification.
+  static const int64_t kKeyGeneratorInitialNumber;
 
   ObjectStoreMetaDataKey();
   static bool Decode(base::StringPiece* slice, ObjectStoreMetaDataKey* result);

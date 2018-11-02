@@ -34,12 +34,8 @@ static const uint32_t kuint32max = 0xFFFFFFFFu;
 std::map<const std::wstring, const std::wstring> kLanguages = {
     // please keep this map alphabetically sorted by language name!
     {L"sq", L"Albanian"},
-    {L"ar", L"Arabic"},
     {L"hy", L"Armenian"},
-    {L"eu", L"Basque"},
-    {L"be", L"Belarusian"},
     {L"bg", L"Bulgarian"},
-    {L"ca", L"Catalan"},
     {L"zh_CN", L"Chinese (Simplified)"},
     {L"zh_TW", L"Chinese (Traditional)"},
     {L"hr", L"Croatian"},
@@ -49,26 +45,18 @@ std::map<const std::wstring, const std::wstring> kLanguages = {
     {L"en-us", L"English"},
     {L"en-AU", L"English (Australia)"},
     {L"et", L"Estonian"},
-    {L"eo", L"Esperanto"},
     {L"fi", L"Finnish"},
     {L"fr", L"French"},
     {L"fy", L"Frisian"},
-    {L"gl", L"Galician"},
-    {L"ka", L"Georgian"},
     {L"de", L"German"},
     {L"el", L"Greek"},
     {L"hu", L"Hungarian"},
     {L"id", L"Indonesian"},
-    {L"io", L"Ido"},
     {L"is", L"Icelandic"},
     {L"it", L"Italian"},
     {L"ja", L"Japanese"},
     {L"ko", L"Korean"},
-    {L"ku", L"Kurdish"},
-    {L"lv", L"Latvian"},
     {L"lt", L"Lithuanian"},
-    {L"jbo", L"Lojban"},
-    {L"mk", L"Macedonian"},
     {L"no", L"Norwegian (Bokm\U000000E5l)"},
     {L"nn", L"Norwegian (Nynorsk)"},
     {L"fa", L"Persian"},
@@ -77,13 +65,10 @@ std::map<const std::wstring, const std::wstring> kLanguages = {
     {L"pt_PT", L"Portuguese (Portugal)"},
     {L"ro", L"Romanian"},
     {L"ru", L"Russian"},
-    {L"sc", L"Sardinian"},
     {L"gd", L"Scots Gaelic"},
     {L"sr", L"Serbian"},
     {L"sk", L"Slovak"},
-    {L"sl", L"Slovenian"},
     {L"es", L"Spanish"},
-    {L"es_PE", L"Spanish (Peru)"},
     {L"sv", L"Swedish"},
     {L"tr", L"Turkish"},
     {L"uk", L"Ukrainian"},
@@ -218,6 +203,8 @@ void VivaldiInstallDialog::SetDefaultDestinationFolder() {
     case INSTALL_STANDALONE:
       destination_folder_ = last_standalone_folder_;
       break;
+    default:
+      NOTREACHED();
   }
 
   if (csidl && (SUCCEEDED(SHGetFolderPath(NULL, csidl, NULL, 0, szPath)))) {
@@ -383,7 +370,7 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
     return;
 
   std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
-  if (!SHGetPathFromIDList(pIDL, buffer.get()) != 0) {
+  if (!SHGetPathFromIDList(pIDL, buffer.get())) {
     CoTaskMemFree(pIDL);
     return;
   }
@@ -438,7 +425,7 @@ void VivaldiInstallDialog::OnLanguageSelection() {
   }
 }
 
-const bool VivaldiInstallDialog::GetRegisterBrowser() const {
+bool VivaldiInstallDialog::GetRegisterBrowser() const {
   return register_browser_ ||
          (set_as_default_browser_ &&
           base::win::GetVersion() < base::win::VERSION_WIN10);
@@ -594,7 +581,7 @@ void VivaldiInstallDialog::UpdateRegisterCheckboxVisibility() {
              (enable_register_browser_checkbox_) ? SW_SHOW : SW_HIDE);
 }
 
-const bool VivaldiInstallDialog::IsRegisterBrowserValid() const {
+bool VivaldiInstallDialog::IsRegisterBrowserValid() const {
   return (install_type_ == INSTALL_STANDALONE &&
           base::win::GetVersion() >= base::win::VERSION_WIN10);
 }

@@ -31,7 +31,7 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
   using MemoryDumpLevelOfDetail = base::trace_event::MemoryDumpLevelOfDetail;
   using RequestGlobalDumpCallback =
       base::Callback<void(bool success, mojom::GlobalMemoryDumpPtr)>;
-  using RequestGlobalDumpAndAppendToTraceCallback =
+  using RequestGlobalMemoryDumpAndAppendToTraceCallback =
       base::Callback<void(bool success, uint64_t dump_id)>;
 
   static void CreateInstance(service_manager::Connector*,
@@ -57,7 +57,7 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
   void RequestGlobalDumpAndAppendToTrace(
       MemoryDumpType,
       MemoryDumpLevelOfDetail,
-      RequestGlobalDumpAndAppendToTraceCallback);
+      RequestGlobalMemoryDumpAndAppendToTraceCallback);
 
   // Requests a global dump retrieving only the memory maps for all the client
   // processes registered. Does not add anything to the trace. The returned
@@ -67,11 +67,6 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
   //  (false, nullptr) if failed.
   // The callback will be posted on the same thread of the caller.
   void GetVmRegionsForHeapProfiler(RequestGlobalDumpCallback);
-
-  // TODO(hjd): Add a RequestGlobalDump() helper, not bound to tracing.
-  // here. The mojom interface is about to change soon and right now there is
-  // only one client of this API (process_memory_metrics_emitter.cc). Delay this
-  // API and change that only once the cleaned up interface is ready.
 
  private:
   MemoryInstrumentation(service_manager::Connector* connector,

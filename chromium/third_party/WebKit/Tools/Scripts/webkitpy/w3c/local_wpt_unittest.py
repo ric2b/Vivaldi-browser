@@ -24,7 +24,7 @@ class LocalWPTTest(unittest.TestCase):
 
         self.assertEqual(host.executive.calls, [
             ['git', 'fetch', 'origin'],
-            ['git', 'checkout', 'origin/master'],
+            ['git', 'reset', '--hard', 'origin/master'],
         ])
 
     def test_fetch_when_wpt_dir_does_not_exist(self):
@@ -104,3 +104,17 @@ class LocalWPTTest(unittest.TestCase):
         local_wpt = LocalWPT(host, 'token')
 
         self.assertEqual(local_wpt.test_patch('dummy patch'), (False, 'MOCK failed applying patch'))
+
+    def test_seek_change_id(self):
+        host = MockHost()
+        local_wpt = LocalWPT(host, 'token')
+
+        local_wpt.seek_change_id('Ifake-change-id')
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--grep', '^Change-Id: Ifake-change-id']])
+
+    def test_seek_commit_position(self):
+        host = MockHost()
+        local_wpt = LocalWPT(host, 'token')
+
+        local_wpt.seek_commit_position('refs/heads/master@{12345}')
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--grep', '^Cr-Commit-Position: refs/heads/master@{12345}']])

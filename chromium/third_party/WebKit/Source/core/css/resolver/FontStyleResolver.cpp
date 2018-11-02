@@ -7,46 +7,61 @@
 #include "core/css/CSSToLengthConversionData.h"
 #include "core/css/resolver/FontBuilder.h"
 #include "core/css/resolver/StyleBuilderConverter.h"
+#include "platform/fonts/Font.h"
 #include "platform/fonts/FontDescription.h"
 
 namespace blink {
 
 FontDescription FontStyleResolver::ComputeFont(
-    const StylePropertySet& property_set) {
+    const CSSPropertyValueSet& property_set,
+    FontSelector* font_selector) {
   FontBuilder builder(nullptr);
 
   FontDescription fontDescription;
   Font font(fontDescription);
+  font.Update(font_selector);
   CSSToLengthConversionData::FontSizes fontSizes(16, 16, &font);
   CSSToLengthConversionData::ViewportSize viewportSize(0, 0);
   CSSToLengthConversionData conversionData(nullptr, fontSizes, viewportSize, 1);
 
   // CSSPropertyFontSize
-  builder.SetSize(StyleBuilderConverterBase::ConvertFontSize(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontSize), conversionData,
-      FontDescription::Size(0, 0.0f, false)));
+  if (property_set.HasProperty(CSSPropertyFontSize)) {
+    builder.SetSize(StyleBuilderConverterBase::ConvertFontSize(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontSize), conversionData,
+        FontDescription::Size(0, 0.0f, false)));
+  }
 
   // CSSPropertyFontFamily
-  builder.SetFamilyDescription(StyleBuilderConverterBase::ConvertFontFamily(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontFamily), &builder,
-      nullptr));
+  if (property_set.HasProperty(CSSPropertyFontFamily)) {
+    builder.SetFamilyDescription(StyleBuilderConverterBase::ConvertFontFamily(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontFamily), &builder,
+        nullptr));
+  }
 
   // CSSPropertyFontStretch
-  builder.SetStretch(StyleBuilderConverterBase::ConvertFontStretch(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontStretch)));
+  if (property_set.HasProperty(CSSPropertyFontStretch)) {
+    builder.SetStretch(StyleBuilderConverterBase::ConvertFontStretch(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontStretch)));
+  }
 
   // CSSPropertyFontStyle
-  builder.SetStyle(StyleBuilderConverterBase::ConvertFontStyle(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontStyle)));
+  if (property_set.HasProperty(CSSPropertyFontStyle)) {
+    builder.SetStyle(StyleBuilderConverterBase::ConvertFontStyle(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontStyle)));
+  }
 
   // CSSPropertyFontVariantCaps
-  builder.SetVariantCaps(StyleBuilderConverterBase::ConvertFontVariantCaps(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontVariantCaps)));
+  if (property_set.HasProperty(CSSPropertyFontVariantCaps)) {
+    builder.SetVariantCaps(StyleBuilderConverterBase::ConvertFontVariantCaps(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontVariantCaps)));
+  }
 
   // CSSPropertyFontWeight
-  builder.SetWeight(StyleBuilderConverterBase::ConvertFontWeight(
-      *property_set.GetPropertyCSSValue(CSSPropertyFontWeight),
-      FontBuilder::InitialWeight()));
+  if (property_set.HasProperty(CSSPropertyFontWeight)) {
+    builder.SetWeight(StyleBuilderConverterBase::ConvertFontWeight(
+        *property_set.GetPropertyCSSValue(CSSPropertyFontWeight),
+        FontBuilder::InitialWeight()));
+  }
 
   builder.UpdateFontDescription(fontDescription);
 

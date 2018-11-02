@@ -4,13 +4,9 @@
 
 #include "chrome/browser/ui/input_method/input_method_engine_base.h"
 
-#include <memory>
-
-#undef FocusIn
-#undef FocusOut
-#undef RootWindow
 #include <algorithm>
 #include <map>
+#include <memory>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -335,12 +331,13 @@ void InputMethodEngineBase::Enable(const std::string& component_id) {
 }
 
 void InputMethodEngineBase::Disable() {
+  std::string last_component_id{active_component_id_};
   active_component_id_.clear();
   if (ui::IMEBridge::Get()->GetInputContextHandler())
     ui::IMEBridge::Get()->GetInputContextHandler()->CommitText(
         base::UTF16ToUTF8(composition_text_->text));
   composition_text_.reset(new ui::CompositionText());
-  observer_->OnDeactivated(active_component_id_);
+  observer_->OnDeactivated(last_component_id);
 }
 
 void InputMethodEngineBase::Reset() {

@@ -7,6 +7,7 @@
 #include "core/dom/events/Event.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "public/platform/Platform.h"
 
 namespace blink {
 
@@ -24,7 +25,7 @@ class NullEventQueue final : public EventQueue {
 }  // namespace
 
 NullExecutionContext::NullExecutionContext()
-    : tasks_need_suspension_(false),
+    : tasks_need_pause_(false),
       is_secure_context_(true),
       queue_(new NullEventQueue()) {}
 
@@ -43,6 +44,10 @@ void NullExecutionContext::SetUpSecurityContext() {
   SecurityContext::SetSecurityOrigin(SecurityOrigin::Create(url_));
   policy->BindToExecutionContext(this);
   SecurityContext::SetContentSecurityPolicy(policy);
+}
+
+scoped_refptr<WebTaskRunner> NullExecutionContext::GetTaskRunner(TaskType) {
+  return Platform::Current()->CurrentThread()->GetWebTaskRunner();
 }
 
 }  // namespace blink

@@ -40,7 +40,7 @@ class TestCloudPolicyStore : public MockCloudPolicyStore {
 class PolicyHeaderServiceTest : public testing::Test {
  public:
   PolicyHeaderServiceTest() {
-    task_runner_ = make_scoped_refptr(new base::TestSimpleTaskRunner());
+    task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
   }
   ~PolicyHeaderServiceTest() override {}
 
@@ -112,7 +112,7 @@ TEST_F(PolicyHeaderServiceTest, TestWithAndWithoutPolicyHeader) {
 
   net::TestURLRequestContext context;
   std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(GURL(kDMServerURL), net::DEFAULT_PRIORITY, NULL,
+      context.CreateRequest(GURL(kDMServerURL), net::DEFAULT_PRIORITY, nullptr,
                             TRAFFIC_ANNOTATION_FOR_TESTS));
   helper_->AddPolicyHeaders(request->url(), request.get());
   ValidateHeader(request->extra_request_headers(), expected_dmtoken,
@@ -123,7 +123,7 @@ TEST_F(PolicyHeaderServiceTest, TestWithAndWithoutPolicyHeader) {
   task_runner_->RunUntilIdle();
 
   std::unique_ptr<net::URLRequest> request2(
-      context.CreateRequest(GURL(kDMServerURL), net::DEFAULT_PRIORITY, NULL,
+      context.CreateRequest(GURL(kDMServerURL), net::DEFAULT_PRIORITY, nullptr,
                             TRAFFIC_ANNOTATION_FOR_TESTS));
   helper_->AddPolicyHeaders(request2->url(), request2.get());
   ValidateHeader(request2->extra_request_headers(), "", "");

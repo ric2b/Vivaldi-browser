@@ -25,14 +25,17 @@
 
 #include "core/editing/commands/IndentOutdentCommand.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/InsertListCommand.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
@@ -50,7 +53,7 @@ static bool IsHTMLListOrBlockquoteElement(const Node* node) {
   const HTMLElement& element = ToHTMLElement(*node);
   // TODO(yosin): We should check OL/UL element has "list-style-type" CSS
   // property to make sure they layout contents as list.
-  return isHTMLUListElement(element) || isHTMLOListElement(element) ||
+  return IsHTMLUListElement(element) || IsHTMLOListElement(element) ||
          element.HasTagName(blockquoteTag);
 }
 
@@ -76,7 +79,7 @@ bool IndentOutdentCommand::TryIndentingAsListItem(const Position& start,
   Element* selected_list_item = EnclosingBlock(last_node_in_selected_paragraph);
 
   // FIXME: we need to deal with the case where there is no li (malformed HTML)
-  if (!isHTMLLIElement(selected_list_item))
+  if (!IsHTMLLIElement(selected_list_item))
     return false;
 
   // FIXME: previousElementSibling does not ignore non-rendered content like
@@ -131,14 +134,15 @@ bool IndentOutdentCommand::TryIndentingAsListItem(const Position& start,
   }
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-  if (CanMergeLists(previous_list, new_list)) {
+  DCHECK(new_list);
+  if (previous_list && CanMergeLists(*previous_list, *new_list)) {
     MergeIdenticalElements(previous_list, new_list, editing_state);
     if (editing_state->IsAborted())
       return false;
   }
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-  if (CanMergeLists(new_list, next_list)) {
+  if (next_list && CanMergeLists(*new_list, *next_list)) {
     MergeIdenticalElements(new_list, next_list, editing_state);
     if (editing_state->IsAborted())
       return false;
@@ -211,13 +215,13 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
     return;
 
   // Use InsertListCommand to remove the selection from the list
-  if (isHTMLOListElement(*enclosing_element)) {
+  if (IsHTMLOListElement(*enclosing_element)) {
     ApplyCommandToComposite(InsertListCommand::Create(
                                 GetDocument(), InsertListCommand::kOrderedList),
                             editing_state);
     return;
   }
-  if (isHTMLUListElement(*enclosing_element)) {
+  if (IsHTMLUListElement(*enclosing_element)) {
     ApplyCommandToComposite(
         InsertListCommand::Create(GetDocument(),
                                   InsertListCommand::kUnorderedList),

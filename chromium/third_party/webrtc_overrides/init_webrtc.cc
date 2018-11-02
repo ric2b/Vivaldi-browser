@@ -14,7 +14,7 @@
 #include "base/trace_event/trace_event.h"
 #include "third_party/webrtc/rtc_base/event_tracer.h"
 #include "third_party/webrtc/system_wrappers/include/cpu_info.h"
-#include "third_party/webrtc_overrides/webrtc/rtc_base/logging.h"
+#include "third_party/webrtc_overrides/rtc_base/logging.h"
 
 const unsigned char* GetCategoryGroupEnabled(const char* category_group) {
   return TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(category_group);
@@ -65,7 +65,7 @@ Histogram* HistogramFactoryGetEnumeration(
           base::HistogramBase::kUmaTargetedHistogramFlag));
 }
 
-const std::string& GetHistogramName(Histogram* histogram_pointer) {
+const char* GetHistogramName(Histogram* histogram_pointer) {
   base::HistogramBase* ptr =
       reinterpret_cast<base::HistogramBase*>(histogram_pointer);
   return ptr->histogram_name();

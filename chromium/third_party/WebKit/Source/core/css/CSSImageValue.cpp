@@ -27,10 +27,10 @@
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleInvalidImage.h"
 #include "platform/CrossOriginAttributeValue.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -51,7 +51,7 @@ CSSImageValue::CSSImageValue(const AtomicString& absolute_url)
       relative_url_(absolute_url),
       absolute_url_(absolute_url) {}
 
-CSSImageValue::~CSSImageValue() {}
+CSSImageValue::~CSSImageValue() = default;
 
 StyleImage* CSSImageValue::CacheImage(
     const Document& document,
@@ -100,7 +100,7 @@ void CSSImageValue::RestoreCachedResourceIfNeeded(
     return;
 
   resource->EmulateLoadStartedForInspector(
-      document.Fetcher(), KURL(kParsedURLString, absolute_url_),
+      document.Fetcher(), KURL(absolute_url_),
       initiator_name_.IsEmpty() ? FetchInitiatorTypeNames::css
                                 : initiator_name_);
 }
@@ -129,7 +129,7 @@ bool CSSImageValue::KnownToBeOpaque(const Document& document,
                        : false;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSImageValue) {
+void CSSImageValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(cached_image_);
   CSSValue::TraceAfterDispatch(visitor);
 }

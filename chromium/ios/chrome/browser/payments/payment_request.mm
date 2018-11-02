@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -22,8 +21,10 @@
 #include "components/payments/core/currency_formatter.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/payment_details.h"
+#include "components/payments/core/payment_item.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payment_shipping_option.h"
+#include "components/payments/core/web_payment_request.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "ios/chrome/browser/application_context.h"
@@ -32,7 +33,6 @@
 #import "ios/chrome/browser/payments/ios_payment_instrument.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/web/public/payments/payment_request.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/source.h"
@@ -42,6 +42,7 @@
 #error "This file requires ARC support."
 #endif
 
+namespace payments {
 namespace {
 
 std::unique_ptr<::i18n::addressinput::Source> GetAddressInputSource(
@@ -55,12 +56,28 @@ std::unique_ptr<::i18n::addressinput::Storage> GetAddressInputStorage() {
   return autofill::ValidationRulesStorageFactory::CreateStorage();
 }
 
+// Validates the |method_data| and fills the output parameters.
+void PopulateValidatedMethodData(
+    const std::vector<PaymentMethodData>& method_data,
+    std::vector<std::string>* supported_card_networks,
+    std::set<std::string>* basic_card_specified_networks,
+    std::set<std::string>* supported_card_networks_set,
+    std::set<autofill::CreditCard::CardType>* supported_card_types,
+    std::vector<GURL>* url_payment_method_identifiers,
+    std::set<std::string>* payment_method_identifiers) {
+  data_util::ParseSupportedMethods(
+      method_data, supported_card_networks, basic_card_specified_networks,
+      url_payment_method_identifiers, payment_method_identifiers);
+  supported_card_networks_set->insert(supported_card_networks->begin(),
+                                      supported_card_networks->end());
+
+  data_util::ParseSupportedCardTypes(method_data, supported_card_types);
+}
+
 }  // namespace
 
-namespace payments {
-
 PaymentRequest::PaymentRequest(
-    const web::PaymentRequest& web_payment_request,
+    const payments::WebPaymentRequest& web_payment_request,
     ios::ChromeBrowserState* browser_state,
     web::WebState* web_state,
     autofill::PersonalDataManager* personal_data_manager,
@@ -72,14 +89,15 @@ PaymentRequest::PaymentRequest(
       web_state_(web_state),
       personal_data_manager_(personal_data_manager),
       payment_request_ui_delegate_(payment_request_ui_delegate),
+      // TODO(crbug.com/788229): Use a factory for the AddressNormalizer.
       address_normalizer_(
           GetAddressInputSource(
-              personal_data_manager_->GetURLRequestContextGetter()),
-          GetAddressInputStorage()),
+              GetApplicationContext()->GetSystemURLRequestContext()),
+          GetAddressInputStorage(),
+          GetApplicationContext()->GetApplicationLocale()),
       address_normalization_manager_(
           &address_normalizer_,
-          autofill::AutofillCountry::CountryCodeForLocale(
-              GetApplicationContext()->GetApplicationLocale())),
+          GetApplicationContext()->GetApplicationLocale()),
       selected_shipping_profile_(nullptr),
       selected_contact_profile_(nullptr),
       selected_payment_method_(nullptr),
@@ -88,7 +106,7 @@ PaymentRequest::PaymentRequest(
       journey_logger_(IsIncognito(), GetLastCommittedURL(), GetUkmRecorder()),
       payment_instruments_ready_(false),
       ios_instrument_finder_(
-          personal_data_manager_->GetURLRequestContextGetter(),
+          GetApplicationContext()->GetSystemURLRequestContext(),
           payment_request_ui_delegate_) {
   PopulateAvailableShippingOptions();
   PopulateProfileCache();
@@ -114,17 +132,6 @@ PaymentRequest::PaymentRequest(
     if (!contact_profiles_.empty() &&
         profile_comparator_.IsContactInfoComplete(contact_profiles_[0])) {
       selected_contact_profile_ = contact_profiles_[0];
-    }
-  }
-
-  // Kickoff the process of loading the rules (which is asynchronous) for each
-  // profile's country, to get faster address normalization later.
-  for (const autofill::AutofillProfile* profile :
-       personal_data_manager_->GetProfilesToSuggest()) {
-    std::string countryCode =
-        base::UTF16ToUTF8(profile->GetRawInfo(autofill::ADDRESS_HOME_COUNTRY));
-    if (autofill::data_util::IsValidCountryCode(countryCode)) {
-      address_normalizer_.LoadRulesForRegion(countryCode);
     }
   }
 
@@ -171,14 +178,14 @@ void PaymentRequest::DoFullCardRequest(
                                 resultDelegate:result_delegate];
 }
 
-AddressNormalizer* PaymentRequest::GetAddressNormalizer() {
+autofill::AddressNormalizer* PaymentRequest::GetAddressNormalizer() {
   return &address_normalizer_;
 }
 
 autofill::RegionDataLoader* PaymentRequest::GetRegionDataLoader() {
   return new autofill::RegionDataLoaderImpl(
       GetAddressInputSource(
-          personal_data_manager_->GetURLRequestContextGetter())
+          GetApplicationContext()->GetSystemURLRequestContext())
           .release(),
       GetAddressInputStorage().release(), GetApplicationLocale());
 }
@@ -198,6 +205,33 @@ std::string PaymentRequest::GetAuthenticatedEmail() const {
 
 PrefService* PaymentRequest::GetPrefService() {
   return browser_state_->GetPrefs();
+}
+
+const PaymentItem& PaymentRequest::GetTotal(
+    PaymentInstrument* selected_instrument) const {
+  const PaymentDetailsModifier* modifier =
+      GetApplicableModifier(selected_instrument);
+  if (modifier && modifier->total) {
+    return *modifier->total;
+  } else {
+    DCHECK(web_payment_request_.details.total);
+    return *web_payment_request_.details.total;
+  }
+}
+
+std::vector<PaymentItem> PaymentRequest::GetDisplayItems(
+    PaymentInstrument* selected_instrument) const {
+  std::vector<PaymentItem> display_items =
+      web_payment_request_.details.display_items;
+
+  const PaymentDetailsModifier* modifier =
+      GetApplicableModifier(selected_instrument);
+  if (modifier) {
+    display_items.insert(display_items.end(),
+                         modifier->additional_display_items.begin(),
+                         modifier->additional_display_items.end());
+  }
+  return display_items;
 }
 
 void PaymentRequest::UpdatePaymentDetails(const PaymentDetails& details) {
@@ -245,7 +279,8 @@ CurrencyFormatter* PaymentRequest::GetOrCreateCurrencyFormatter() {
   return currency_formatter_.get();
 }
 
-AddressNormalizationManager* PaymentRequest::GetAddressNormalizationManager() {
+autofill::AddressNormalizationManager*
+PaymentRequest::GetAddressNormalizationManager() {
   return &address_normalization_manager_;
 }
 
@@ -258,6 +293,39 @@ autofill::AutofillProfile* PaymentRequest::AddAutofillProfile(
   shipping_profiles_.push_back(profile_cache_.back().get());
 
   return profile_cache_.back().get();
+}
+
+const PaymentDetailsModifier* PaymentRequest::GetApplicableModifier(
+    PaymentInstrument* selected_instrument) const {
+  if (!selected_instrument ||
+      !base::FeatureList::IsEnabled(features::kWebPaymentsModifiers)) {
+    return nullptr;
+  }
+
+  for (const auto& modifier : web_payment_request_.details.modifiers) {
+    std::set<std::string> supported_card_networks_set;
+    std::set<autofill::CreditCard::CardType> supported_card_types_set;
+    // The following 4 variables are unused.
+    std::set<std::string> unused_basic_card_specified_networks;
+    std::vector<std::string> unused_supported_card_networks;
+    std::vector<GURL> unused_url_payment_method_identifiers;
+    std::set<std::string> unused_payment_method_identifiers;
+    PopulateValidatedMethodData(
+        {modifier.method_data}, &unused_supported_card_networks,
+        &unused_basic_card_specified_networks, &supported_card_networks_set,
+        &supported_card_types_set, &unused_url_payment_method_identifiers,
+        &unused_payment_method_identifiers);
+
+    if (selected_instrument->IsValidForModifier(
+            modifier.method_data.supported_methods,
+            !modifier.method_data.supported_networks.empty(),
+            supported_card_networks_set,
+            !modifier.method_data.supported_types.empty(),
+            supported_card_types_set)) {
+      return &modifier;
+    }
+  }
+  return nullptr;
 }
 
 void PaymentRequest::PopulateProfileCache() {
@@ -356,6 +424,17 @@ bool PaymentRequest::CanMakePayment() const {
   return false;
 }
 
+bool PaymentRequest::IsAbleToPay() {
+  return selected_payment_method() != nullptr &&
+         (selected_shipping_option() != nullptr || !request_shipping()) &&
+         (selected_shipping_profile() != nullptr || !request_shipping()) &&
+         (selected_contact_profile() != nullptr || !RequestContactInfo());
+}
+
+bool PaymentRequest::RequestContactInfo() {
+  return request_payer_name() || request_payer_email() || request_payer_phone();
+}
+
 void PaymentRequest::InvokePaymentApp(
     id<PaymentResponseHelperConsumer> consumer) {
   DCHECK(selected_payment_method());
@@ -394,15 +473,12 @@ void PaymentRequest::ParsePaymentMethodData() {
     }
   }
 
-  // TODO(crbug.com/709036): Validate method data.
-  data_util::ParseSupportedMethods(
+  std::set<std::string> unused_payment_method_identifiers;
+  PopulateValidatedMethodData(
       web_payment_request_.method_data, &supported_card_networks_,
-      &basic_card_specified_networks_, &url_payment_method_identifiers_);
-  supported_card_networks_set_.insert(supported_card_networks_.begin(),
-                                      supported_card_networks_.end());
-
-  data_util::ParseSupportedCardTypes(web_payment_request_.method_data,
-                                     &supported_card_types_set_);
+      &basic_card_specified_networks_, &supported_card_networks_set_,
+      &supported_card_types_set_, &url_payment_method_identifiers_,
+      &unused_payment_method_identifiers);
 }
 
 void PaymentRequest::CreateNativeAppPaymentMethods() {

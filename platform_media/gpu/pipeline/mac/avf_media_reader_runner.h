@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_RUNNER_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_RUNNER_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_READER_RUNNER_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_READER_RUNNER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <string>
 
@@ -14,7 +17,7 @@
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 
-namespace content {
+namespace media {
 
 class AVFMediaReader;
 
@@ -45,9 +48,9 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
 
  private:
-  void DataReady(media::PlatformMediaDataType type,
+  void DataReady(PlatformMediaDataType type,
                  const ReadDataCB& read_data_cb,
-                 const scoped_refptr<media::DataBuffer>& data);
+                 const scoped_refptr<DataBuffer>& data);
 
   IPCDataSource* const data_source_;
 
@@ -56,8 +59,8 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
 
   bool will_seek_;
 
-  scoped_refptr<media::DataBuffer>
-      last_data_buffer_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  scoped_refptr<DataBuffer>
+      last_data_buffer_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   base::ThreadChecker thread_checker_;
 
@@ -66,6 +69,6 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   DISALLOW_COPY_AND_ASSIGN(AVFMediaReaderRunner);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_RUNNER_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_MAC_AVF_MEDIA_READER_RUNNER_H_

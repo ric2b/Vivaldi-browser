@@ -27,7 +27,7 @@
 #include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/views/constants.h"
-#include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/message_view_factory.h"
 #include "ui/message_center/views/notification_button.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
@@ -45,19 +45,10 @@
 
 namespace message_center {
 
-// A test delegate used for tests that deal with the notification settings
-// button.
-class NotificationSettingsDelegate : public NotificationDelegate {
-  bool ShouldDisplaySettingsButton() override { return true; }
-
- private:
-  ~NotificationSettingsDelegate() override {}
-};
-
 /* Test fixture ***************************************************************/
 
 class NotificationViewTest : public views::ViewsTestBase,
-                             public MessageCenterController {
+                             public MessageViewDelegate {
  public:
   NotificationViewTest();
   ~NotificationViewTest() override;
@@ -72,16 +63,15 @@ class NotificationViewTest : public views::ViewsTestBase,
   Notification* notification() { return notification_.get(); }
   RichNotificationData* data() { return data_.get(); }
 
-  // Overridden from MessageCenterController:
+  // Overridden from MessageViewDelegate:
   void ClickOnNotification(const std::string& notification_id) override;
   void RemoveNotification(const std::string& notification_id,
                           bool by_user) override;
-  std::unique_ptr<ui::MenuModel> CreateMenuModel(
-      const NotifierId& notifier_id,
-      const base::string16& display_source) override;
-  bool HasClickedListener(const std::string& notification_id) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
+  void ClickOnNotificationButtonWithReply(const std::string& notification_id,
+                                          int button_index,
+                                          const base::string16& reply) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
   void UpdateNotificationSize(const std::string& notification_id) override;
 
@@ -287,22 +277,17 @@ void NotificationViewTest::RemoveNotification(
   removed_ids_.insert(notification_id);
 }
 
-std::unique_ptr<ui::MenuModel> NotificationViewTest::CreateMenuModel(
-    const NotifierId& notifier_id,
-    const base::string16& display_source) {
-  // For this test, this method should not be invoked.
-  NOTREACHED();
-  return nullptr;
-}
-
-bool NotificationViewTest::HasClickedListener(
-    const std::string& notification_id) {
-  return true;
-}
-
 void NotificationViewTest::ClickOnNotificationButton(
     const std::string& notification_id,
     int button_index) {
+  // For this test, this method should not be invoked.
+  NOTREACHED();
+}
+
+void NotificationViewTest::ClickOnNotificationButtonWithReply(
+    const std::string& notification_id,
+    int button_index,
+    const base::string16& reply) {
   // For this test, this method should not be invoked.
   NOTREACHED();
 }
@@ -347,15 +332,13 @@ TEST_F(NotificationViewTest, CreateOrUpdateTest) {
 }
 
 TEST_F(NotificationViewTest, CreateOrUpdateTestSettingsButton) {
-  scoped_refptr<NotificationSettingsDelegate> delegate =
-      new NotificationSettingsDelegate();
-  Notification notf(NOTIFICATION_TYPE_BASE_FORMAT,
-                    std::string("notification id"), base::UTF8ToUTF16("title"),
-                    base::UTF8ToUTF16("message"), CreateTestImage(80, 80),
-                    base::UTF8ToUTF16("display source"),
-                    GURL("https://hello.com"),
-                    NotifierId(NotifierId::APPLICATION, "extension_id"),
-                    *data(), delegate.get());
+  data()->settings_button_handler = SettingsButtonHandler::TRAY;
+  Notification notf(
+      NOTIFICATION_TYPE_BASE_FORMAT, std::string("notification id"),
+      base::UTF8ToUTF16("title"), base::UTF8ToUTF16("message"),
+      CreateTestImage(80, 80), base::UTF8ToUTF16("display source"),
+      GURL("https://hello.com"),
+      NotifierId(NotifierId::APPLICATION, "extension_id"), *data(), nullptr);
 
   notification_view()->UpdateWithNotification(notf);
   EXPECT_TRUE(NULL != notification_view()->title_view_);
@@ -557,15 +540,13 @@ TEST_F(NotificationViewTest, UpdateButtonCountTest) {
 }
 
 TEST_F(NotificationViewTest, SettingsButtonTest) {
-  scoped_refptr<NotificationSettingsDelegate> delegate =
-      new NotificationSettingsDelegate();
-  Notification notf(NOTIFICATION_TYPE_BASE_FORMAT,
-                    std::string("notification id"), base::UTF8ToUTF16("title"),
-                    base::UTF8ToUTF16("message"), CreateTestImage(80, 80),
-                    base::UTF8ToUTF16("display source"),
-                    GURL("https://hello.com"),
-                    NotifierId(NotifierId::APPLICATION, "extension_id"),
-                    *data(), delegate.get());
+  data()->settings_button_handler = SettingsButtonHandler::TRAY;
+  Notification notf(
+      NOTIFICATION_TYPE_BASE_FORMAT, std::string("notification id"),
+      base::UTF8ToUTF16("title"), base::UTF8ToUTF16("message"),
+      CreateTestImage(80, 80), base::UTF8ToUTF16("display source"),
+      GURL("https://hello.com"),
+      NotifierId(NotifierId::APPLICATION, "extension_id"), *data(), nullptr);
   notification_view()->UpdateWithNotification(notf);
   widget()->Show();
 

@@ -4,7 +4,8 @@
 
 #include "ash/login/ui/pin_keyboard_animation.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/interpolated_transform.h"
@@ -22,25 +23,11 @@ PinKeyboardAnimation::PinKeyboardAnimation(bool grow,
   if (!grow)
     std::swap(start_opacity_, end_opacity_);
 
-  gfx::Transform to_center;
-  to_center.Translate(0, height / 2.f);
-  auto move_to_center =
-      base::MakeUnique<ui::InterpolatedConstantTransform>(to_center);
-
-  auto scale = base::MakeUnique<ui::InterpolatedScale>(
+  transform_ = std::make_unique<ui::InterpolatedScale>(
       gfx::Point3F(1, start_opacity_, 1), gfx::Point3F(1, end_opacity_, 1));
-
-  gfx::Transform from_center;
-  from_center.Translate(0, -height / 2.f);
-  auto move_from_center =
-      base::MakeUnique<ui::InterpolatedConstantTransform>(from_center);
-
-  scale->SetChild(std::move(move_to_center));
-  move_from_center->SetChild(std::move(scale));
-  transform_ = std::move(move_from_center);
 }
 
-PinKeyboardAnimation::~PinKeyboardAnimation() {}
+PinKeyboardAnimation::~PinKeyboardAnimation() = default;
 
 void PinKeyboardAnimation::OnStart(ui::LayerAnimationDelegate* delegate) {}
 
@@ -48,8 +35,10 @@ bool PinKeyboardAnimation::OnProgress(double current,
                                       ui::LayerAnimationDelegate* delegate) {
   const double tweened = gfx::Tween::CalculateValue(tween_type_, current);
   delegate->SetOpacityFromAnimation(
-      gfx::Tween::FloatValueBetween(tweened, start_opacity_, end_opacity_));
-  delegate->SetTransformFromAnimation(transform_->Interpolate(tweened));
+      gfx::Tween::FloatValueBetween(tweened, start_opacity_, end_opacity_),
+      ui::PropertyChangeReason::FROM_ANIMATION);
+  delegate->SetTransformFromAnimation(transform_->Interpolate(tweened),
+                                      ui::PropertyChangeReason::FROM_ANIMATION);
   return true;
 }
 

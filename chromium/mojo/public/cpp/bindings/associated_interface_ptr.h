@@ -32,6 +32,7 @@ class AssociatedInterfacePtr {
  public:
   using InterfaceType = Interface;
   using PtrInfoType = AssociatedInterfacePtrInfo<Interface>;
+  using Proxy = typename Interface::Proxy_;
 
   // Constructs an unbound AssociatedInterfacePtr.
   AssociatedInterfacePtr() {}
@@ -79,11 +80,11 @@ class AssociatedInterfacePtr {
 
   bool is_bound() const { return internal_state_.is_bound(); }
 
-  Interface* get() const { return internal_state_.instance(); }
+  Proxy* get() const { return internal_state_.instance(); }
 
   // Functions like a pointer to Interface. Must already be bound.
-  Interface* operator->() const { return get(); }
-  Interface& operator*() const { return *get(); }
+  Proxy* operator->() const { return get(); }
+  Proxy& operator*() const { return *get(); }
 
   // Returns the version number of the interface that the remote side supports.
   uint32_t version() const { return internal_state_.version(); }
@@ -224,7 +225,7 @@ AssociatedInterfaceRequest<Interface> MakeRequest(
 //  * When discarding messages sent on an interface, which can be done by
 //    discarding the returned request.
 template <typename Interface>
-AssociatedInterfaceRequest<Interface> MakeIsolatedRequest(
+AssociatedInterfaceRequest<Interface> MakeRequestAssociatedWithDedicatedPipe(
     AssociatedInterfacePtr<Interface>* ptr) {
   MessagePipe pipe;
   scoped_refptr<internal::MultiplexRouter> router0 =
@@ -251,7 +252,7 @@ AssociatedInterfaceRequest<Interface> MakeIsolatedRequest(
 // method associates the interface with a dedicated, disconnected message pipe.
 // That way, the corresponding associated interface pointer of |handle| can
 // safely make calls (although those calls are silently dropped).
-MOJO_CPP_BINDINGS_EXPORT void GetIsolatedInterface(
+MOJO_CPP_BINDINGS_EXPORT void AssociateWithDisconnectedPipe(
     ScopedInterfaceEndpointHandle handle);
 
 }  // namespace mojo

@@ -26,10 +26,20 @@ constexpr int kTranslucentColorDarkenAlpha = 128;
 // The blur sigma for login/lock screen.
 constexpr float kBlurSigma = 30.0f;
 
+// The sigma to clear the blur from login/lock screen.
+constexpr float kClearBlurSigma = 0.0f;
+
 // How long should animations that change the layout of the user run for? For
 // example, this includes the user switch animation as well as the PIN keyboard
 // show/hide animation.
 constexpr int kChangeUserAnimationDurationMs = 300;
+
+// Color of enabled buttons.
+constexpr SkColor kButtonEnabledColor = SK_ColorWHITE;
+
+// An alpha value for disabled buttons.
+// In specs this is listed as 34% = 0x57 / 0xFF.
+constexpr SkAlpha kButtonDisabledAlpha = 0x57;
 
 }  // namespace login_constants
 }  // namespace ash

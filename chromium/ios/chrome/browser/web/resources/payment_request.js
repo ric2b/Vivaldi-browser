@@ -180,10 +180,9 @@ var SerializedPaymentResponse;
    */
   __gCrWeb['paymentRequestManager'].validatePaymentCurrencyAmount = function(
       amount, amountName) {
-    if (typeof amount.value !== 'string')
-      throw new TypeError(amountName + ' value must be a string');
-    if (amount.value.length >
-        __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+    // Convert the value to String if it isn't already one.
+    amount.value = String(amount.value);
+    if (amount.value > __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
       throw new TypeError(
           amountName + ' value cannot be longer than ' +
           __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH + ' characters');
@@ -255,7 +254,8 @@ var SerializedPaymentResponse;
       var invalidIdentifier =
           (url.protocol != 'https:' || url.username || url.password);
     } catch (error) {
-      invalidIdentifier = !/^[a-z0-9-]+$/.test(identifier);
+      invalidIdentifier =
+          !/^[a-z]+[0-9a-z]*(-[a-z]+[0-9a-z]*)*$/.test(identifier);
     } finally {
       if (invalidIdentifier) {
         throw new RangeError(
@@ -401,7 +401,7 @@ var SerializedPaymentResponse;
       if (typeof modifiers[i].total !== 'undefined') {
         __gCrWeb['paymentRequestManager'].validatePaymentItem(
             modifiers[i].total, 'Modifier total');
-        if (modifiers[i].total.amount.value[0] == '-')
+        if (String(modifiers[i].total.amount.value)[0] == '-')
           throw new TypeError('Modifier total value should be non-negative');
       }
 
@@ -429,11 +429,12 @@ var SerializedPaymentResponse;
    * Validates the shipping options passed to the PaymentRequest constructor and
    * returns the validate values.
    * @param {(Array<!window.PaymentShippingOption>|undefined)} shippingOptions
+   * @param {window.PaymentOptions=} opt_options payment request options.
    * @return {!Array<!window.PaymentShippingOption>} Validated shipping options.
    * @throws {TypeError|RangeError}
    */
   __gCrWeb['paymentRequestManager'].validateShippingOptions = function(
-      shippingOptions) {
+      shippingOptions, opt_options) {
     if (!shippingOptions || !(shippingOptions instanceof Array)) {
       return [];
     }
@@ -457,9 +458,9 @@ var SerializedPaymentResponse;
             __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH +
             ' characters');
       }
-      if (uniqueIDS[shippingOptions[i].id]) {
-        // Return an empty array instead of throwing an error.
-        return [];
+      if (opt_options && opt_options.requestShipping &&
+          uniqueIDS[shippingOptions[i].id]) {
+        throw new TypeError('Shipping option IDs mus tbe unique');
       }
       uniqueIDS[shippingOptions[i].id] = true;
 
@@ -479,12 +480,13 @@ var SerializedPaymentResponse;
    * Validates an instance of PaymentDetailsBase and returns the validated
    * shipping options.
    * @param {!window.PaymentDetails} details
+   * @param {window.PaymentOptions=} opt_options payment request options.
    * @return {!Array<!window.PaymentShippingOption>} The validated shipping
    *     options.
    * @throws {TypeError|RangeError}
    */
   __gCrWeb['paymentRequestManager'].validatePaymentDetailsBase = function(
-      details) {
+      details, opt_options) {
     // Validate the details.displayItems.
     if (typeof details.displayItems !== 'undefined') {
       if (!(details.displayItems instanceof Array))
@@ -509,29 +511,30 @@ var SerializedPaymentResponse;
 
     // Validate the details.shippingOptions.
     return __gCrWeb['paymentRequestManager'].validateShippingOptions(
-        details.shippingOptions);
+        details.shippingOptions, opt_options);
   };
 
   /**
    * Validates an instance of PaymentDetailsInit and returns the validated
    * shipping options.
    * @param {!window.PaymentDetails} details
+   * @param {window.PaymentOptions=} opt_options payment request options.
    * @return {!Array<!window.PaymentShippingOption>} The validated shipping
    *     options.
    * @throws {TypeError|RangeError}
    */
   __gCrWeb['paymentRequestManager'].validatePaymentDetailsInit = function(
-      details) {
+      details, opt_options) {
     // Validate details.total.
     if (!details.total)
       throw new TypeError('Total is missing.');
     __gCrWeb['paymentRequestManager'].validatePaymentItem(
         details.total, 'Total');
-    if (details.total.amount.value[0] == '-')
+    if (String(details.total.amount.value)[0] == '-')
       throw new TypeError('Total value should be non-negative');
 
     return __gCrWeb['paymentRequestManager'].validatePaymentDetailsBase(
-        details);
+        details, opt_options);
   };
 
   /**
@@ -548,7 +551,7 @@ var SerializedPaymentResponse;
     if (details.total) {
       __gCrWeb['paymentRequestManager'].validatePaymentItem(
           details.total, 'Total');
-      if (details.total.amount.value[0] == '-')
+      if (String(details.total.amount.value)[0] == '-')
         throw new TypeError('Total value should be non-negative');
     }
 
@@ -1042,7 +1045,8 @@ function PaymentRequest(methodData, details, opt_options) {
 
   // Validate details and update the shipping options.
   var validatedShippingOptions =
-      __gCrWeb['paymentRequestManager'].validatePaymentDetailsInit(details);
+      __gCrWeb['paymentRequestManager'].validatePaymentDetailsInit(
+          details, opt_options);
   details.shippingOptions = validatedShippingOptions;
 
   this.id = details.id ? details.id : __gCrWeb['paymentRequestManager'].guid();
@@ -1054,9 +1058,11 @@ function PaymentRequest(methodData, details, opt_options) {
   this.details = details;
 
   // Pick the last selected shipping option as the selected shipping option.
-  for (var i = 0; i < validatedShippingOptions.length; i++) {
-    if (validatedShippingOptions[i].selected)
-      this.shippingOption = validatedShippingOptions[i].id;
+  if (opt_options && opt_options.requestShipping) {
+    for (var i = 0; i < validatedShippingOptions.length; i++) {
+      if (validatedShippingOptions[i].selected)
+        this.shippingOption = validatedShippingOptions[i].id;
+    }
   }
 
   // Validate the opt_options.shippingType.
@@ -1417,8 +1423,8 @@ PaymentResponse.prototype.payerPhone = null;
  * @enum {string}
  */
 var PaymentComplete = {
-  SUCCESS: 'success',
   FAIL: 'fail',
+  SUCCESS: 'success',
   UNKNOWN: 'unknown'
 };
 

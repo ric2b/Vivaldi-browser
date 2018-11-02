@@ -4,6 +4,7 @@
 
 #include "storage/browser/test/mock_bytes_provider.h"
 
+#include "base/threading/thread_restrictions.h"
 #include "mojo/common/data_pipe_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -21,7 +22,7 @@ MockBytesProvider::MockBytesProvider(
       file_request_count_(file_request_count),
       file_modification_time_(file_modification_time) {}
 
-MockBytesProvider::~MockBytesProvider() {}
+MockBytesProvider::~MockBytesProvider() = default;
 
 void MockBytesProvider::RequestAsReply(RequestAsReplyCallback callback) {
   if (reply_request_count_)
@@ -33,6 +34,7 @@ void MockBytesProvider::RequestAsStream(
     mojo::ScopedDataPipeProducerHandle pipe) {
   if (stream_request_count_)
     ++*stream_request_count_;
+  base::ScopedAllowBaseSyncPrimitivesForTesting allow_base_sync_primitives;
   mojo::common::BlockingCopyFromString(
       std::string(reinterpret_cast<const char*>(data_.data()), data_.size()),
       pipe);

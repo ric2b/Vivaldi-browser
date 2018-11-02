@@ -227,7 +227,7 @@ void Directory::Close() {
 }
 
 void Directory::OnUnrecoverableError(const BaseTransaction* trans,
-                                     const tracked_objects::Location& location,
+                                     const base::Location& location,
                                      const std::string& message) {
   DCHECK(trans != nullptr);
   unrecoverable_error_set_ = true;
@@ -1602,7 +1602,7 @@ void Directory::AppendChildHandles(const ScopedKernelLock& lock,
 }
 
 void Directory::UnmarkDirtyEntry(WriteTransaction* trans, Entry* entry) {
-  CHECK(trans);
+  DCHECK(trans);
   entry->kernel_->clear_dirty(&kernel_->dirty_metahandles);
 }
 

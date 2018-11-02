@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "sandbox/linux/bpf_dsl/policy.h"
 #include "sandbox/linux/seccomp-bpf/die.h"
 #include "sandbox/linux/seccomp-bpf/sandbox_bpf.h"
@@ -35,7 +36,7 @@ void SandboxBPFTestRunner::Run() {
   if (sandbox::SandboxBPF::SupportsSeccompSandbox(
           SandboxBPF::SeccompLevel::SINGLE_THREADED)) {
     // Initialize and then start the sandbox with our custom policy
-    sandbox::SandboxBPF sandbox(policy.release());
+    sandbox::SandboxBPF sandbox(std::move(policy));
     SANDBOX_ASSERT(sandbox.StartSandbox(
         sandbox::SandboxBPF::SeccompLevel::SINGLE_THREADED));
 
@@ -45,13 +46,13 @@ void SandboxBPFTestRunner::Run() {
     printf("This BPF test is not fully running in this configuration!\n");
     // Android and Valgrind are the only configurations where we accept not
     // having kernel BPF support.
-    if (!IsAndroid() && !IsRunningOnValgrind()) {
+    if (!IsAndroid() && !RunningOnValgrind()) {
       const bool seccomp_bpf_is_supported = false;
       SANDBOX_ASSERT(seccomp_bpf_is_supported);
     }
     // Call the compiler and verify the policy. That's the least we can do,
     // if we don't have kernel support.
-    sandbox::SandboxBPF sandbox(policy.release());
+    sandbox::SandboxBPF sandbox(std::move(policy));
     sandbox.AssembleFilter();
     sandbox::UnitTests::IgnoreThisTest();
   }

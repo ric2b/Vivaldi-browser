@@ -8,11 +8,12 @@
 
 namespace media {
 
-CdmAuxiliaryHelper::CdmAuxiliaryHelper() {}
-CdmAuxiliaryHelper::~CdmAuxiliaryHelper() {}
+CdmAuxiliaryHelper::CdmAuxiliaryHelper() = default;
+CdmAuxiliaryHelper::~CdmAuxiliaryHelper() = default;
 
-std::unique_ptr<CdmFileIO> CdmAuxiliaryHelper::CreateCdmFileIO(
-    cdm::FileIOClient* client) {
+void CdmAuxiliaryHelper::SetFileReadCB(FileReadCB file_read_cb) {}
+
+cdm::FileIO* CdmAuxiliaryHelper::CreateCdmFileIO(cdm::FileIOClient* client) {
   return nullptr;
 }
 
@@ -39,8 +40,8 @@ void CdmAuxiliaryHelper::ChallengePlatform(const std::string& service_id,
   std::move(callback).Run(false, "", "", "");
 }
 
-void CdmAuxiliaryHelper::GetStorageId(StorageIdCB callback) {
-  std::move(callback).Run(std::vector<uint8_t>());
+void CdmAuxiliaryHelper::GetStorageId(uint32_t version, StorageIdCB callback) {
+  std::move(callback).Run(version, std::vector<uint8_t>());
 }
 
 }  // namespace media

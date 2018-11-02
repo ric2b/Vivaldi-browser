@@ -111,21 +111,20 @@ Main.Main = class {
     // Keep this sorted alphabetically: both keys and values.
     Runtime.experiments.register('accessibilityInspection', 'Accessibility Inspection');
     Runtime.experiments.register('applyCustomStylesheet', 'Allow custom UI themes');
-    Runtime.experiments.register('audits2', 'Audits 2.0');
     Runtime.experiments.register('autoAttachToCrossProcessSubframes', 'Auto-attach to cross-process subframes', true);
     Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
-    Runtime.experiments.register('changesDrawer', 'Changes drawer', true);
     Runtime.experiments.register('colorContrastRatio', 'Color contrast ratio line in color picker', true);
     Runtime.experiments.register('continueToLocationMarkers', 'Continue to location markers', true);
     Runtime.experiments.register('emptySourceMapAutoStepping', 'Empty sourcemap auto-stepping');
     Runtime.experiments.register('inputEventsOnTimelineOverview', 'Input events on Timeline overview', true);
     Runtime.experiments.register('logManagement', 'Log management', true);
-    Runtime.experiments.register('liveSASS', 'Live SASS');
     Runtime.experiments.register('networkGroupingRequests', 'Network request groups support', true);
+    Runtime.experiments.register('networkPersistence', 'Override requests with workspace project');
     Runtime.experiments.register('objectPreviews', 'Object previews', true);
     Runtime.experiments.register('performanceMonitor', 'Performance Monitor', true);
     Runtime.experiments.register('persistence2', 'Persistence 2.0');
     Runtime.experiments.register('sourceDiff', 'Source diff');
+    Runtime.experiments.register('stepIntoAsync', 'Step into async action');
     Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
 
     // Timeline
@@ -145,23 +144,20 @@ Main.Main = class {
     Runtime.experiments.cleanUpStaleExperiments();
 
     if (Host.isUnderTest(prefs)) {
-      var testPath = JSON.parse(prefs['testPath'] || '""');
+      var testPath = Runtime.queryParam('test') || JSON.parse(prefs['testPath'] || '""');
       // Enable experiments for testing.
       if (testPath.indexOf('accessibility/') !== -1)
         Runtime.experiments.enableForTest('accessibilityInspection');
-      if (testPath.indexOf('audits2/') !== -1)
-        Runtime.experiments.enableForTest('audits2');
-      if (testPath.indexOf('coverage/') !== -1)
-        Runtime.experiments.enableForTest('cssTrackerPanel');
-      if (testPath.indexOf('changes/') !== -1)
-        Runtime.experiments.enableForTest('changesDrawer');
-      if (testPath.indexOf('sass/') !== -1)
-        Runtime.experiments.enableForTest('liveSASS');
+      if (testPath.indexOf('console-sidebar/') !== -1)
+        Runtime.experiments.enableForTest('logManagement');
+      if (testPath.indexOf('overrides/') !== -1)
+        Runtime.experiments.enableForTest('networkPersistence');
     }
 
     Runtime.experiments.setDefaultExperiments([
-      'continueToLocationMarkers', 'autoAttachToCrossProcessSubframes', 'objectPreviews', 'audits2',
-      'networkGroupingRequests', 'timelineColorByProduct'
+      'continueToLocationMarkers', 'autoAttachToCrossProcessSubframes', 'objectPreviews', 'persistence2',
+      'networkGroupingRequests', 'timelineColorByProduct', 'accessibilityInspection', 'logManagement',
+      'performanceMonitor'
     ]);
   }
 
@@ -221,6 +217,7 @@ Main.Main = class {
     new Persistence.FileSystemWorkspaceBinding(Persistence.isolatedFileSystemManager, Workspace.workspace);
     Persistence.persistence =
         new Persistence.Persistence(Workspace.workspace, Bindings.breakpointManager, Persistence.fileSystemMapping);
+    Persistence.networkPersistenceManager = new Persistence.NetworkPersistenceManager(Workspace.workspace);
 
     new Main.ExecutionContextSelector(SDK.targetManager, UI.context);
     Bindings.blackboxManager = new Bindings.BlackboxManager(Bindings.debuggerWorkspaceBinding);
@@ -644,8 +641,7 @@ Main.Main.MainMenuItem = class {
       dockItemToolbar.appendToolbarItem(left);
       dockItemToolbar.appendToolbarItem(bottom);
       dockItemToolbar.appendToolbarItem(right);
-      contextMenu.appendCustomItem(dockItemElement);
-      contextMenu.appendSeparator();
+      contextMenu.headerSection().appendCustomItem(dockItemElement);
     }
 
     /**
@@ -656,11 +652,12 @@ Main.Main.MainMenuItem = class {
       contextMenu.discard();
     }
 
-    contextMenu.appendAction(
-        'main.toggle-drawer', UI.inspectorView.drawerVisible() ? Common.UIString('Hide console drawer') :
-                                                                 Common.UIString('Show console drawer'));
+    contextMenu.defaultSection().appendAction(
+        'main.toggle-drawer',
+        UI.inspectorView.drawerVisible() ? Common.UIString('Hide console drawer') :
+                                           Common.UIString('Show console drawer'));
     contextMenu.appendItemsAtLocation('mainMenu');
-    var moreTools = contextMenu.namedSubMenu('mainMenuMoreTools');
+    var moreTools = contextMenu.defaultSection().appendSubMenuItem(Common.UIString('More tools'));
     var extensions = self.runtime.extensions('view', undefined, true);
     for (var extension of extensions) {
       var descriptor = extension.descriptor();
@@ -668,12 +665,14 @@ Main.Main.MainMenuItem = class {
         continue;
       if (descriptor['location'] !== 'drawer-view' && descriptor['location'] !== 'panel')
         continue;
-      moreTools.appendItem(extension.title(), UI.viewManager.showView.bind(UI.viewManager, descriptor['id']));
+      moreTools.defaultSection().appendItem(
+          extension.title(), UI.viewManager.showView.bind(UI.viewManager, descriptor['id']));
     }
 
-    var helpSubMenu = contextMenu.namedSubMenu('mainMenuHelp');
-    helpSubMenu.appendAction('settings.documentation');
-    helpSubMenu.appendItem('Release Notes', () => InspectorFrontendHost.openInNewTab(Help.latestReleaseNote().link));
+    var helpSubMenu = contextMenu.footerSection().appendSubMenuItem(Common.UIString('Help'));
+    helpSubMenu.defaultSection().appendAction('settings.documentation');
+    helpSubMenu.defaultSection().appendItem(
+        'Release Notes', () => InspectorFrontendHost.openInNewTab(Help.latestReleaseNote().link));
   }
 };
 
@@ -716,6 +715,7 @@ Main.NetworkPanelIndicator = class {
     var manager = SDK.multitargetNetworkManager;
     manager.addEventListener(SDK.MultitargetNetworkManager.Events.ConditionsChanged, updateVisibility);
     manager.addEventListener(SDK.MultitargetNetworkManager.Events.BlockedPatternsChanged, updateVisibility);
+    manager.addEventListener(SDK.MultitargetNetworkManager.Events.InterceptorsChanged, updateVisibility);
     updateVisibility();
 
     function updateVisibility() {
@@ -723,6 +723,9 @@ Main.NetworkPanelIndicator = class {
       if (manager.isThrottling()) {
         icon = UI.Icon.create('smallicon-warning');
         icon.title = Common.UIString('Network throttling is enabled');
+      } else if (SDK.multitargetNetworkManager.isIntercepting()) {
+        icon = UI.Icon.create('smallicon-warning');
+        icon.title = Common.UIString('Requests may be rewritten');
       } else if (manager.isBlocking()) {
         icon = UI.Icon.create('smallicon-warning');
         icon.title = Common.UIString('Requests may be blocked');

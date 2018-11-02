@@ -85,16 +85,15 @@ class ChromeResourceDispatcherHostDelegate
                            content::ResourceResponse* response) override;
   void RequestComplete(net::URLRequest* url_request) override;
   // Returns a bitmask of potentially several Previews optimizations.
-  content::PreviewsState GetPreviewsState(
-      const net::URLRequest& url_request,
+  content::PreviewsState DeterminePreviewsState(
+      net::URLRequest* url_request,
       content::ResourceContext* resource_context,
       content::PreviewsState previews_to_allow) override;
   content::NavigationData* GetNavigationData(
       net::URLRequest* request) const override;
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
       content::ResourceContext* resource_context) override;
-  void OnAbortedFrameLoad(const GURL& url,
-                          base::TimeDelta request_loading_time) override;
+  bool AllowRenderingMhtmlOverHttp(net::URLRequest* request) const override;
 
   // Called on the UI thread. Allows switching out the
   // ExternalProtocolHandler::Delegate for testing code.

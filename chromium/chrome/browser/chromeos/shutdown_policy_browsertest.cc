@@ -6,6 +6,7 @@
 #include <string>
 
 #include "ash/login_status.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tiles/tiles_default_view.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
@@ -35,6 +35,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -214,6 +215,12 @@ class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
   ShutdownPolicyLockerTest() : fake_session_manager_client_(nullptr) {}
   ~ShutdownPolicyLockerTest() override {}
 
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ash::switches::kShowWebUiLock);
+    ShutdownPolicyBaseTest::SetUp();
+  }
+
   void SetUpInProcessBrowserTestFixture() override {
     fake_session_manager_client_ = new FakeSessionManagerClient;
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
@@ -249,6 +256,11 @@ class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
 
     // Wait for the login UI to be ready.
     WaitUntilOobeUIIsReady(web_ui_screen_locker->GetOobeUI());
+  }
+
+  void TearDownOnMainThread() override {
+    ScreenLocker::Hide();
+    ShutdownPolicyBaseTest::TearDownOnMainThread();
   }
 
  private:

@@ -84,6 +84,8 @@ MEDIA_EXPORT extern const char kMSEVideoBufferSizeLimit[];
 
 MEDIA_EXPORT extern const char kIgnoreAutoplayRestrictionsForTests[];
 
+MEDIA_EXPORT extern const char kClearKeyCdmPathForTesting[];
+
 #if !defined(OS_ANDROID)
 MEDIA_EXPORT extern const char kEnableInternalMediaSession[];
 #endif  // !defined(OS_ANDROID)
@@ -104,6 +106,7 @@ namespace media {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+MEDIA_EXPORT extern const base::Feature kAv1Decoder;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoPauseOptimization;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoTrackOptimization;
 MEDIA_EXPORT extern const base::Feature kComplexityBasedVideoBuffering;
@@ -114,19 +117,23 @@ MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kMediaEngagementBypassAutoplayPolicies;
 MEDIA_EXPORT extern const base::Feature kMemoryPressureBasedSourceBufferGC;
 MEDIA_EXPORT extern const base::Feature kMojoCdm;
+MEDIA_EXPORT extern const base::Feature kMseBufferByPts;
 MEDIA_EXPORT extern const base::Feature kMseFlacInIsobmff;
 MEDIA_EXPORT extern const base::Feature kNewAudioRenderingMixingStrategy;
 MEDIA_EXPORT extern const base::Feature kNewRemotePlaybackPipeline;
+MEDIA_EXPORT extern const base::Feature kOverflowIconsForMediaControls;
 MEDIA_EXPORT extern const base::Feature kOverlayFullscreenVideo;
-MEDIA_EXPORT extern const base::Feature kPreloadDefaultIsMetadata;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
 MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
 MEDIA_EXPORT extern const base::Feature kSupportExperimentalCdmInterface;
 MEDIA_EXPORT extern const base::Feature kUseAndroidOverlay;
+MEDIA_EXPORT extern const base::Feature kUseAndroidOverlayAggressively;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
+MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
-MEDIA_EXPORT extern const base::Feature kVideoColorManagement;
+MEDIA_EXPORT extern const base::Feature kUnifiedAutoplay;
 MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideo;
+MEDIA_EXPORT extern const base::Feature kUseModernMediaControls;
 
 #if defined(OS_ANDROID)
 MEDIA_EXPORT extern const base::Feature kVideoFullscreenOrientationLock;
@@ -140,10 +147,6 @@ MEDIA_EXPORT extern const base::Feature kDelayCopyNV12Textures;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationH264Encoding;
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
-MEDIA_EXPORT extern const base::Feature kSerializeCoreAudioPauseResume;
-#endif  // defined(OS_MACOSX)
-
 // Based on a |command_line| and the current platform, returns the effective
 // autoplay policy. In other words, it will take into account the default policy
 // if none is specified via the command line and options passed for testing.
@@ -151,6 +154,12 @@ MEDIA_EXPORT extern const base::Feature kSerializeCoreAudioPauseResume;
 // switches::autoplay namespace.
 MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
     const base::CommandLine& command_line);
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+// Based on the command line of the current process, determine if
+// audio focus duck flash should be enabled.
+MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled();
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace media
 

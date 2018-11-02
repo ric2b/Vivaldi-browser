@@ -22,6 +22,7 @@ extern const char kVivaldiAppIdHex[];
 
 extern const char kVivaldiAppURLDomain[];
 extern const char kVivaldiNewTabURL[];
+extern const char kVivaldiIncognitoURL[];
 
 extern const char kVivaldiReservedApiError[];
 

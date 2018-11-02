@@ -17,8 +17,7 @@ namespace blink {
 
 class ScriptState;
 
-class IDBObserverChanges final : public GarbageCollected<IDBObserverChanges>,
-                                 public ScriptWrappable {
+class IDBObserverChanges final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -34,7 +33,7 @@ class IDBObserverChanges final : public GarbageCollected<IDBObserverChanges>,
       const WebVector<int32_t>& observation_indices,
       v8::Isolate*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Implement IDL
   IDBTransaction* transaction() const { return transaction_.Get(); }

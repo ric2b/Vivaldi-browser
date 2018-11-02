@@ -21,8 +21,8 @@ void AppCacheUpdateJob::UpdateURLLoaderRequest::Start() {
   mojom::URLLoaderClientPtr client;
   client_binding_.Bind(mojo::MakeRequest(&client));
 
-  DCHECK(loader_factory_getter_->GetNetworkFactory()->get());
-  loader_factory_getter_->GetNetworkFactory()->get()->CreateLoaderAndStart(
+  DCHECK(loader_factory_getter_->GetNetworkFactory());
+  loader_factory_getter_->GetNetworkFactory()->CreateLoaderAndStart(
       mojo::MakeRequest(&url_loader_), -1, -1, mojom::kURLLoadOptionNone,
       request_, std::move(client),
       net::MutableNetworkTrafficAnnotationTag(GetTrafficAnnotation()));
@@ -30,7 +30,7 @@ void AppCacheUpdateJob::UpdateURLLoaderRequest::Start() {
 
 void AppCacheUpdateJob::UpdateURLLoaderRequest::SetExtraRequestHeaders(
     const net::HttpRequestHeaders& headers) {
-  request_.headers = headers.ToString();
+  request_.headers = headers;
 }
 
 GURL AppCacheUpdateJob::UpdateURLLoaderRequest::GetURL() const {
@@ -161,7 +161,7 @@ void AppCacheUpdateJob::UpdateURLLoaderRequest::OnStartLoadingResponseBody(
 }
 
 void AppCacheUpdateJob::UpdateURLLoaderRequest::OnComplete(
-    const ResourceRequestCompletionStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   response_status_ = status;
   // We inform the URLFetcher about a failure only here. For the success case
   // OnResponseCompleted() is invoked by URLFetcher::OnReadCompleted().

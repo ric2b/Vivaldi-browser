@@ -37,9 +37,13 @@
 #include "core/dom/Range.h"
 #include "core/dom/TreeScope.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/Position.h"
 #include "core/editing/SelectionModifier.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/SetSelectionOptions.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
@@ -55,10 +59,10 @@ static Node* SelectionShadowAncestor(LocalFrame* frame) {
                    .Base()
                    .AnchorNode();
   if (!node)
-    return 0;
+    return nullptr;
 
   if (!node->IsInShadowTree())
-    return 0;
+    return nullptr;
 
   return frame->GetDocument()->AncestorInThisScope(node);
 }
@@ -100,7 +104,7 @@ void DOMSelection::UpdateFrameSelection(const SelectionInDOMTree& selection,
     UseCounter::Count(GetFrame(), WebFeature::kSelectionFuncionsChangeFocus);
 }
 
-const VisibleSelection& DOMSelection::GetVisibleSelection() const {
+VisibleSelection DOMSelection::GetVisibleSelection() const {
   DCHECK(GetFrame());
   return GetFrame()->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
 }
@@ -172,7 +176,7 @@ unsigned DOMSelection::focusOffset() const {
 
 Node* DOMSelection::baseNode() const {
   if (!IsAvailable())
-    return 0;
+    return nullptr;
 
   return ShadowAdjustedNode(BasePosition(GetVisibleSelection()));
 }
@@ -186,7 +190,7 @@ unsigned DOMSelection::baseOffset() const {
 
 Node* DOMSelection::extentNode() const {
   if (!IsAvailable())
-    return 0;
+    return nullptr;
 
   return ShadowAdjustedNode(ExtentPosition(GetVisibleSelection()));
 }
@@ -807,13 +811,13 @@ String DOMSelection::toString() {
 
 Node* DOMSelection::ShadowAdjustedNode(const Position& position) const {
   if (position.IsNull())
-    return 0;
+    return nullptr;
 
   Node* container_node = position.ComputeContainerNode();
   Node* adjusted_node = tree_scope_->AncestorInThisScope(container_node);
 
   if (!adjusted_node)
-    return 0;
+    return nullptr;
 
   if (container_node == adjusted_node)
     return container_node;
@@ -852,8 +856,9 @@ void DOMSelection::AddConsoleError(const String& message) {
         ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
 }
 
-DEFINE_TRACE(DOMSelection) {
+void DOMSelection::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_scope_);
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 

@@ -9,7 +9,6 @@
 #include "components/dom_distiller/core/distiller.h"
 #include "components/dom_distiller/core/distiller_url_fetcher.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
@@ -39,7 +38,6 @@ ReadingListDownloadServiceFactory::ReadingListDownloadServiceFactory()
   DependsOn(ReadingListModelFactory::GetInstance());
   DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
-  DependsOn(ios::BookmarkModelFactory::GetInstance());
 }
 
 ReadingListDownloadServiceFactory::~ReadingListDownloadServiceFactory() {}
@@ -64,15 +62,11 @@ ReadingListDownloadServiceFactory::BuildServiceInstanceFor(
       base::MakeUnique<dom_distiller::DistillerFactoryImpl>(
           std::move(distiller_url_fetcher_factory), options);
 
-  auto reading_list_download_service =
-      base::MakeUnique<ReadingListDownloadService>(
-          ReadingListModelFactory::GetForBrowserState(chrome_browser_state),
-          chrome_browser_state->GetPrefs(),
-          chrome_browser_state->GetStatePath(),
-          chrome_browser_state->GetRequestContext(),
-          std::move(distiller_factory), std::move(distiller_page_factory));
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-  return std::move(reading_list_download_service);
+  return base::MakeUnique<ReadingListDownloadService>(
+      ReadingListModelFactory::GetForBrowserState(chrome_browser_state),
+      chrome_browser_state->GetPrefs(), chrome_browser_state->GetStatePath(),
+      chrome_browser_state->GetRequestContext(), std::move(distiller_factory),
+      std::move(distiller_page_factory));
 }
 
 web::BrowserState* ReadingListDownloadServiceFactory::GetBrowserStateToUse(

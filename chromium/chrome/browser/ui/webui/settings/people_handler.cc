@@ -42,11 +42,11 @@
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/passphrase_type.h"
 #include "components/sync/base/sync_prefs.h"
@@ -297,7 +297,7 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
           BrowserWindow::AVATAR_BUBBLE_MODE_REAUTH,
           signin::ManageAccountsParams(), access_point, false);
     } else {
-      url = signin::GetReauthURL(
+      url = signin::GetReauthURLForTab(
           access_point, signin_metrics::Reason::REASON_REAUTHENTICATION,
           browser->profile(), error_controller->error_account_id());
     }
@@ -307,7 +307,7 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
           BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
           signin::ManageAccountsParams(), access_point, false);
     } else {
-      url = signin::GetPromoURL(
+      url = signin::GetPromoURLForTab(
           access_point, signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT,
           true);
     }

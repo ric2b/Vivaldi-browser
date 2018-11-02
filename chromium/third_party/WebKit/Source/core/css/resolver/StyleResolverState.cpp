@@ -23,10 +23,11 @@
 #include "core/css/resolver/StyleResolverState.h"
 
 #include "core/animation/css/CSSAnimations.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/Node.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -78,12 +79,16 @@ StyleResolverState::~StyleResolverState() {
   animation_update_.Clear();
 }
 
-void StyleResolverState::SetStyle(RefPtr<ComputedStyle> style) {
+void StyleResolverState::SetStyle(scoped_refptr<ComputedStyle> style) {
   // FIXME: Improve RAII of StyleResolverState to remove this function.
   style_ = std::move(style);
   css_to_length_conversion_data_ = CSSToLengthConversionData(
-      style_.Get(), RootElementStyle(), GetDocument().GetLayoutViewItem(),
+      style_.get(), RootElementStyle(), GetDocument().GetLayoutViewItem(),
       style_->EffectiveZoom());
+}
+
+scoped_refptr<ComputedStyle> StyleResolverState::TakeStyle() {
+  return std::move(style_);
 }
 
 CSSToLengthConversionData StyleResolverState::FontSizeConversionData() const {
@@ -97,19 +102,56 @@ CSSToLengthConversionData StyleResolverState::FontSizeConversionData() const {
   return CSSToLengthConversionData(Style(), font_sizes, viewport_size, 1);
 }
 
+void StyleResolverState::SetParentStyle(
+    scoped_refptr<const ComputedStyle> parent_style) {
+  parent_style_ = std::move(parent_style);
+}
+
+void StyleResolverState::SetLayoutParentStyle(
+    scoped_refptr<const ComputedStyle> parent_style) {
+  layout_parent_style_ = std::move(parent_style);
+}
+
+void StyleResolverState::CacheUserAgentBorderAndBackground() {
+  // LayoutTheme only needs the cached style if it has an appearance,
+  // and constructing it is expensive so we avoid it if possible.
+  if (!Style()->HasAppearance())
+    return;
+
+  cached_ua_style_ = CachedUAStyle::Create(Style());
+}
+
 void StyleResolverState::LoadPendingResources() {
   element_style_resources_.LoadPendingResources(Style());
 }
 
-void StyleResolverState::SetCustomPropertySetForApplyAtRule(
-    const String& string,
-    StylePropertySet* custom_property_set) {
-  custom_property_sets_for_apply_at_rule_.Set(string, custom_property_set);
+const FontDescription& StyleResolverState::ParentFontDescription() const {
+  return parent_style_->GetFontDescription();
 }
 
-StylePropertySet* StyleResolverState::CustomPropertySetForApplyAtRule(
-    const String& string) {
-  return custom_property_sets_for_apply_at_rule_.at(string);
+void StyleResolverState::SetZoom(float f) {
+  if (style_->SetZoom(f))
+    font_builder_.DidChangeEffectiveZoom();
+}
+
+void StyleResolverState::SetEffectiveZoom(float f) {
+  if (style_->SetEffectiveZoom(f))
+    font_builder_.DidChangeEffectiveZoom();
+}
+
+void StyleResolverState::SetWritingMode(WritingMode new_writing_mode) {
+  if (style_->GetWritingMode() == new_writing_mode) {
+    return;
+  }
+  style_->SetWritingMode(new_writing_mode);
+  font_builder_.DidChangeWritingMode();
+}
+
+void StyleResolverState::SetTextOrientation(ETextOrientation text_orientation) {
+  if (style_->GetTextOrientation() != text_orientation) {
+    style_->SetTextOrientation(text_orientation);
+    font_builder_.DidChangeTextOrientation();
+  }
 }
 
 HeapHashMap<CSSPropertyID, Member<const CSSValue>>&

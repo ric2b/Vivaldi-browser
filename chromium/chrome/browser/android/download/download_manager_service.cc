@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/download/download_manager_service.h"
 
+#include <memory>
+
 #include "base/android/jni_string.h"
 #include "base/location.h"
 #include "base/metrics/field_trial_params.h"
@@ -23,8 +25,6 @@
 #include "jni/DownloadManagerService_jni.h"
 #include "third_party/WebKit/common/mime_util/mime_util.h"
 
-#include "ui/base/l10n/l10n_util.h"
-
 using base::android::JavaParamRef;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -33,7 +33,7 @@ using base::android::ScopedJavaLocalRef;
 namespace {
 
 // The remaining time for a download item if it cannot be calculated.
-long kUnknownRemainingTime = -1;
+constexpr int64_t kUnknownRemainingTime = -1;
 
 // Finch flag for controlling auto resumption limit.
 int kDefaultAutoResumptionLimit = 5;
@@ -43,20 +43,9 @@ bool ShouldShowDownloadItem(content::DownloadItem* item) {
   return !item->IsTemporary() && !item->IsTransient();
 }
 
-void UpdateNotifier(
-    DownloadManagerService* service,
-    content::DownloadManager* manager,
-    std::unique_ptr<download::AllDownloadItemNotifier>& notifier) {
-  if (manager) {
-    if (!notifier || notifier->GetManager() != manager)
-      notifier.reset(new download::AllDownloadItemNotifier(manager, service));
-  } else {
-    notifier.reset(nullptr);
-  }
-}
-
-ScopedJavaLocalRef<jobject> CreateJavaDownloadItem(
-    JNIEnv* env, content::DownloadItem* item) {
+ScopedJavaLocalRef<jobject> JNI_DownloadManagerService_CreateJavaDownloadItem(
+    JNIEnv* env,
+    content::DownloadItem* item) {
   DCHECK(!item->IsTransient());
   return Java_DownloadItem_createDownloadItem(
       env, DownloadManagerService::CreateJavaDownloadInfo(env, item),
@@ -69,6 +58,12 @@ ScopedJavaLocalRef<jobject> CreateJavaDownloadItem(
 void DownloadManagerService::OnDownloadCanceled(
     content::DownloadItem* download,
     DownloadController::DownloadCancelReason reason) {
+  if (download->IsTransient()) {
+    LOG(WARNING) << "Transient download should not have user interaction!";
+    return;
+  }
+
+  // Inform the user in Java UI about file writing failures.
   bool has_no_external_storage =
       (reason == DownloadController::CANCEL_REASON_NO_EXTERNAL_STORAGE);
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -121,7 +116,9 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
       item->GetLastAccessTime().ToJavaTime());
 }
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
+static jlong JNI_DownloadManagerService_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jobj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   DownloadManagerService* service = DownloadManagerService::GetInstance();
   service->Init(env, jobj);
@@ -211,7 +208,8 @@ void DownloadManagerService::GetAllDownloadsInternal(bool is_off_the_record) {
     if (!ShouldShowDownloadItem(item))
       continue;
 
-    ScopedJavaLocalRef<jobject> j_item = CreateJavaDownloadItem(env, item);
+    ScopedJavaLocalRef<jobject> j_item =
+        JNI_DownloadManagerService_CreateJavaDownloadItem(env, item);
     Java_DownloadManagerService_addDownloadItemToList(
         env, java_ref_, j_download_item_list, j_item);
   }
@@ -301,7 +299,8 @@ void DownloadManagerService::OnDownloadCreated(
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> j_item = CreateJavaDownloadItem(env, item);
+  ScopedJavaLocalRef<jobject> j_item =
+      JNI_DownloadManagerService_CreateJavaDownloadItem(env, item);
   Java_DownloadManagerService_onDownloadItemCreated(env, java_ref_, j_item);
 }
 
@@ -314,7 +313,8 @@ void DownloadManagerService::OnDownloadUpdated(
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> j_item = CreateJavaDownloadItem(env, item);
+  ScopedJavaLocalRef<jobject> j_item =
+      JNI_DownloadManagerService_CreateJavaDownloadItem(env, item);
   Java_DownloadManagerService_onDownloadItemUpdated(env, java_ref_, j_item);
 }
 
@@ -441,19 +441,26 @@ content::DownloadManager* DownloadManagerService::GetDownloadManager(
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (is_off_the_record)
     profile = profile->GetOffTheRecordProfile();
+
+  auto& notifier =
+      is_off_the_record ? off_the_record_notifier_ : original_notifier_;
   content::DownloadManager* manager =
       content::BrowserContext::GetDownloadManager(profile);
+  if (!manager) {
+    notifier.reset();
+    return nullptr;
+  }
 
   // Update notifiers to monitor any newly created DownloadManagers.
-  UpdateNotifier(
-      this, manager,
-      is_off_the_record ? off_the_record_notifier_ : original_notifier_);
-
+  if (!notifier || notifier->GetManager() != manager) {
+    notifier =
+        std::make_unique<download::AllDownloadItemNotifier>(manager, this);
+  }
   return manager;
 }
 
 // static
-jboolean IsSupportedMimeType(
+jboolean JNI_DownloadManagerService_IsSupportedMimeType(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& jmime_type) {
@@ -462,8 +469,9 @@ jboolean IsSupportedMimeType(
 }
 
 // static
-jint GetAutoResumptionLimit(JNIEnv* env,
-                            const JavaParamRef<jclass>& clazz) {
+jint JNI_DownloadManagerService_GetAutoResumptionLimit(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   std::string value  = base::GetFieldTrialParamValueByFeature(
       chrome::android::kDownloadAutoResumptionThrottling,
       kAutoResumptionLimitParamName);

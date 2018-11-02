@@ -12,9 +12,12 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/DOMException.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "modules/payments/BasicCardHelper.h"
 #include "modules/payments/PaymentInstrument.h"
 #include "modules/payments/PaymentManager.h"
 #include "platform/wtf/Vector.h"
+#include "public/platform/WebIconSizesParser.h"
+#include "public/platform/modules/manifest/manifest.mojom-blink.h"
 
 namespace blink {
 namespace {
@@ -31,8 +34,7 @@ bool rejectError(ScriptPromiseResolver* resolver,
           DOMException::Create(kNotSupportedError, "Not implemented yet"));
       return true;
     case payments::mojom::blink::PaymentHandlerStatus::NOT_FOUND:
-      resolver->Reject(DOMException::Create(kNotFoundError,
-                                            "There is no stored instrument"));
+      resolver->Resolve();
       return true;
     case payments::mojom::blink::PaymentHandlerStatus::NO_ACTIVE_WORKER:
       resolver->Reject(
@@ -53,14 +55,8 @@ bool rejectError(ScriptPromiseResolver* resolver,
       // fetching payment handler's name and/or icon from its web app manifest.
       // The origin or name will be used to label this payment handler in
       // UI in this case, so only show warnning message instead of reject the
-      // promise.
-      ExecutionContext* context =
-          ExecutionContext::From(resolver->GetScriptState());
-      context->AddConsoleMessage(ConsoleMessage::Create(
-          kJSMessageSource, kWarningMessageLevel,
-          "Unable to fetch payment handler's name and/or icon from its web app "
-          "manifest. User may not recognize this payment handler in UI, "
-          "because it will be labeled only by its origin."));
+      // promise. The warning message was printed by
+      // payment_app_info_fetcher.cc.
       return false;
   }
   NOTREACHED();
@@ -171,8 +167,16 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
         return promise;
       }
 
-      instrument->icons.push_back(payments::mojom::blink::ImageObject::New());
-      instrument->icons.back()->src = parsed_url;
+      mojom::blink::ManifestIconPtr icon = mojom::blink::ManifestIcon::New();
+      icon->src = parsed_url;
+      icon->type = image_object.type();
+      icon->purpose.push_back(blink::mojom::ManifestIcon_Purpose::ANY);
+      WebVector<WebSize> web_sizes =
+          WebIconSizesParser::ParseIconSizes(image_object.sizes());
+      for (const auto& web_size : web_sizes) {
+        icon->sizes.push_back(web_size);
+      }
+      instrument->icons.push_back(std::move(icon));
     }
   }
 
@@ -190,6 +194,11 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
       return exception_state.Reject(script_state);
     }
     instrument->stringified_capabilities = ToCoreString(value);
+    if (instrument->enabled_methods.Contains("basic-card")) {
+      BasicCardHelper::ParseBasiccardData(
+          details.capabilities(), instrument->supported_networks,
+          instrument->supported_types, exception_state);
+    }
   } else {
     instrument->stringified_capabilities = WTF::g_empty_string;
   }
@@ -218,8 +227,6 @@ ScriptPromise PaymentInstruments::clear(ScriptState* script_state) {
   return promise;
 }
 
-DEFINE_TRACE(PaymentInstruments) {}
-
 void PaymentInstruments::onDeletePaymentInstrument(
     ScriptPromiseResolver* resolver,
     payments::mojom::blink::PaymentHandlerStatus status) {
@@ -242,6 +249,12 @@ void PaymentInstruments::onGetPaymentInstrument(
   for (const auto& icon : stored_instrument->icons) {
     ImageObject image_object;
     image_object.setSrc(icon->src.GetString());
+    image_object.setType(icon->type);
+    String sizes = WTF::g_empty_string;
+    for (const auto& size : icon->sizes) {
+      sizes = sizes + String::Format("%dx%d ", size.width, size.height);
+    }
+    image_object.setSizes(sizes.StripWhiteSpace());
     icons.emplace_back(image_object);
   }
   instrument.setIcons(icons);

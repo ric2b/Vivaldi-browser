@@ -51,9 +51,11 @@ const CGFloat widgetCompactHeightIOS9 = 110;
 #pragma mark - properties
 
 - (BOOL)isCompact {
-  return base::ios::IsRunningOnIOS10OrLater() &&
-         [self.extensionContext widgetActiveDisplayMode] ==
-             NCWidgetDisplayModeCompact;
+  if (@available(iOS 10, *)) {
+    return [self.extensionContext widgetActiveDisplayMode] ==
+           NCWidgetDisplayModeCompact;
+  }
+  return NO;
 }
 
 #pragma mark - UIViewController
@@ -61,32 +63,35 @@ const CGFloat widgetCompactHeightIOS9 = 110;
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  CGFloat height =
-      self.extensionContext && base::ios::IsRunningOnIOS10OrLater()
-          ? [self.extensionContext
-                widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
-                .height
-          : widgetCompactHeightIOS9;
+  CGFloat height = widgetCompactHeightIOS9;
+  if (@available(iOS 10, *)) {
+    if (self.extensionContext) {
+      height = [self.extensionContext
+                   widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
+                   .height;
+    }
+  }
 
-  CGFloat width =
-      self.extensionContext && base::ios::IsRunningOnIOS10OrLater()
-          ? [self.extensionContext
-                widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
-                .width
-          // On the today view <iOS10, the full screen size is useable.
-          : [UIScreen mainScreen].bounds.size.width;
+  // On the today view <iOS10, the full screen size is useable.
+  CGFloat width = [UIScreen mainScreen].bounds.size.width;
+  if (@available(iOS 10, *)) {
+    if (self.extensionContext) {
+      width = [self.extensionContext
+                  widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
+                  .width;
+    }
+  }
 
   // A local variable is necessary here as the property is declared weak and the
   // object would be deallocated before being retained by the addSubview call.
   ContentWidgetView* widgetView =
       [[ContentWidgetView alloc] initWithDelegate:self
                                     compactHeight:height
-                                            width:width
-                                 initiallyCompact:self.isCompact];
+                                            width:width];
   self.widgetView = widgetView;
   [self.view addSubview:self.widgetView];
 
-  if (base::ios::IsRunningOnIOS10OrLater()) {
+  if (@available(iOS 10, *)) {
     self.extensionContext.widgetLargestAvailableDisplayMode =
         NCWidgetDisplayModeExpanded;
   } else {
@@ -100,6 +105,10 @@ const CGFloat widgetCompactHeightIOS9 = 110;
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   [self registerWidgetDisplay];
+
+  // |widgetActiveDisplayMode| does not contain a valid value in viewDidLoad. By
+  // the time viewWillAppear is called, it is correct, so set the mode here.
+  [self.widgetView showMode:self.isCompact];
 }
 
 - (void)widgetPerformUpdateWithCompletionHandler:
@@ -117,6 +126,7 @@ const CGFloat widgetCompactHeightIOS9 = 110;
       animateAlongsideTransition:^(
           id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
         [self.widgetView showMode:self.isCompact];
+        [self.widgetView layoutIfNeeded];
       }
                       completion:nil];
 }
@@ -124,7 +134,8 @@ const CGFloat widgetCompactHeightIOS9 = 110;
 #pragma mark - NCWidgetProviding
 
 - (void)widgetActiveDisplayModeDidChange:(NCWidgetDisplayMode)activeDisplayMode
-                         withMaximumSize:(CGSize)maxSize {
+                         withMaximumSize:(CGSize)maxSize
+    API_AVAILABLE(ios(10.0)) {
   switch (activeDisplayMode) {
     case NCWidgetDisplayModeCompact:
       self.preferredContentSize = maxSize;
@@ -187,6 +198,8 @@ const CGFloat widgetCompactHeightIOS9 = 110;
       app_group::kChromeAppGroupCommandCommandPreference);
   NSString* URLPrefKey =
       base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandURLPreference);
+  NSString* indexKey =
+      base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandIndexPreference);
 
   NSDictionary* commandDict = @{
     timePrefKey : [NSDate date],
@@ -194,6 +207,7 @@ const CGFloat widgetCompactHeightIOS9 = 110;
     commandPrefKey :
         base::SysUTF8ToNSString(app_group::kChromeAppGroupOpenURLCommand),
     URLPrefKey : URL.absoluteString,
+    indexKey : [NSNumber numberWithInt:[self.sites objectForKey:URL].position]
   };
 
   [sharedDefaults setObject:commandDict forKey:defaultsKey];

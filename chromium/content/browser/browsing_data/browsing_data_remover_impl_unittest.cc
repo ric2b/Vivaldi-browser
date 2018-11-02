@@ -118,7 +118,7 @@ struct StoragePartitionRemovalData {
 
 net::CanonicalCookie CreateCookieWithHost(const GURL& source) {
   std::unique_ptr<net::CanonicalCookie> cookie(
-      base::MakeUnique<net::CanonicalCookie>(
+      std::make_unique<net::CanonicalCookie>(
           "A", "1", source.host(), "/", base::Time::Now(), base::Time::Now(),
           base::Time(), false, false, net::CookieSameSite::DEFAULT_MODE,
           net::COOKIE_PRIORITY_MEDIUM));
@@ -135,14 +135,7 @@ class StoragePartitionRemovalTestStoragePartition
   void ClearDataForOrigin(uint32_t remove_mask,
                           uint32_t quota_storage_remove_mask,
                           const GURL& storage_origin,
-                          net::URLRequestContextGetter* rq_context,
-                          const base::Closure& callback) override {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(
-            &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
-            base::Unretained(this), callback));
-  }
+                          net::URLRequestContextGetter* rq_context) override {}
 
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
@@ -150,7 +143,7 @@ class StoragePartitionRemovalTestStoragePartition
                  const OriginMatcherFunction& origin_matcher,
                  const base::Time begin,
                  const base::Time end,
-                 const base::Closure& callback) override {
+                 base::OnceClosure callback) override {
     // Store stuff to verify parameters' correctness later.
     storage_partition_removal_data_.remove_mask = remove_mask;
     storage_partition_removal_data_.quota_storage_remove_mask =
@@ -163,7 +156,7 @@ class StoragePartitionRemovalTestStoragePartition
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(
             &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
-            base::Unretained(this), callback));
+            base::Unretained(this), std::move(callback)));
   }
 
   void ClearData(uint32_t remove_mask,
@@ -172,7 +165,7 @@ class StoragePartitionRemovalTestStoragePartition
                  const CookieMatcherFunction& cookie_matcher,
                  const base::Time begin,
                  const base::Time end,
-                 const base::Closure& callback) override {
+                 base::OnceClosure callback) override {
     // Store stuff to verify parameters' correctness later.
     storage_partition_removal_data_.remove_mask = remove_mask;
     storage_partition_removal_data_.quota_storage_remove_mask =
@@ -186,7 +179,7 @@ class StoragePartitionRemovalTestStoragePartition
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(
             &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
-            base::Unretained(this), callback));
+            base::Unretained(this), std::move(callback)));
   }
 
   StoragePartitionRemovalData GetStoragePartitionRemovalData() {
@@ -194,7 +187,9 @@ class StoragePartitionRemovalTestStoragePartition
   }
 
  private:
-  void AsyncRunCallback(const base::Closure& callback) { callback.Run(); }
+  void AsyncRunCallback(base::OnceClosure callback) {
+    std::move(callback).Run();
+  }
 
   StoragePartitionRemovalData storage_partition_removal_data_;
 
@@ -345,7 +340,7 @@ class RemoveChannelIDTester : public net::SSLConfigService::Observer {
   void AddChannelIDWithTimes(const std::string& server_identifier,
                              base::Time creation_time) {
     GetChannelIDStore()->SetChannelID(
-        base::MakeUnique<net::ChannelIDStore::ChannelID>(
+        std::make_unique<net::ChannelIDStore::ChannelID>(
             server_identifier, creation_time, crypto::ECPrivateKey::Create()));
   }
 
@@ -497,7 +492,7 @@ class BrowsingDataRemoverImplTest : public testing::Test {
     // destroyed, and that the message loop is cleared out, before destroying
     // the threads and loop. Otherwise we leak memory.
     browser_context_.reset();
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
   }
 
   void BlockUntilBrowsingDataRemoved(const base::Time& delete_begin,
@@ -1368,7 +1363,7 @@ TEST_F(BrowsingDataRemoverImplTest, CompletionInhibition) {
   // sure we do not complete asynchronously before ContinueToCompletion() is
   // called.
   completion_inhibitor.BlockUntilNearCompletion();
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   // Verify that the removal has not yet been completed and the observer has
   // not been called.
@@ -1577,7 +1572,7 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleTasks) {
   EXPECT_FALSE(remover->is_removing());
 
   // Run clean up tasks.
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 // The previous test, BrowsingDataRemoverTest.MultipleTasks, tests that the

@@ -8,9 +8,7 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_folder_item.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/views/app_list_folder_view.h"
 #include "ui/app_list/views/app_list_item_view.h"
@@ -24,6 +22,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/controls/textfield/textfield.h"
 
 namespace app_list {
 
@@ -38,11 +37,12 @@ constexpr int kSearchBoxMinimumTopPadding = 24;
 
 AppsContainerView::AppsContainerView(AppListMainView* app_list_main_view,
                                      AppListModel* model)
-    : is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
-  apps_grid_view_ = new AppsGridView(app_list_main_view->contents_view());
+    : is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
+      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()) {
+  apps_grid_view_ =
+      new AppsGridView(app_list_main_view->contents_view(), nullptr);
   if (is_fullscreen_app_list_enabled_) {
-    apps_grid_view_->SetLayout(kPreferredColsFullscreen,
-                               kPreferredRowsFullscreen);
+    apps_grid_view_->SetLayout(kPreferredCols, kPreferredRows);
   } else {
     apps_grid_view_->SetLayout(kPreferredCols, kPreferredRows);
   }
@@ -75,7 +75,10 @@ void AppsContainerView::ShowActiveFolder(AppListFolderItem* folder_item) {
 
   CreateViewsForFolderTopItemsAnimation(folder_item, true);
 
-  apps_grid_view_->ClearAnySelectedView();
+  if (is_app_list_focus_enabled_)
+    contents_view()->GetSearchBoxView()->search_box()->RequestFocus();
+  else
+    apps_grid_view_->ClearAnySelectedView();
 }
 
 void AppsContainerView::ShowApps(AppListFolderItem* folder_item) {
@@ -197,7 +200,7 @@ gfx::Rect AppsContainerView::GetPageBoundsForState(
   if (state == AppListModel::STATE_APPS || state == AppListModel::STATE_START) {
     int y = GetSearchBoxBoundsForState(state).bottom();
     if (state == AppListModel::STATE_START)
-      y -= (kSearchBoxFullscreenBottomPadding - kSearchBoxPeekingBottomPadding);
+      y -= (kSearchBoxBottomPadding - kSearchBoxPeekingBottomPadding);
     onscreen_bounds.set_y(y);
     return onscreen_bounds;
   }
@@ -209,25 +212,23 @@ gfx::Rect AppsContainerView::GetPageBoundsDuringDragging(
     AppListModel::State state) const {
   float app_list_y_position_in_screen =
       contents_view()->app_list_view()->app_list_y_position_in_screen();
-  float work_area_bottom =
-      contents_view()->app_list_view()->GetWorkAreaBottom();
   float drag_amount =
-      std::max(0.f, work_area_bottom - app_list_y_position_in_screen);
+      std::max(0.f, contents_view()->app_list_view()->GetScreenBottom() -
+                        kShelfSize - app_list_y_position_in_screen);
 
   float y = 0;
   float peeking_final_y =
       kSearchBoxPeekingTopPadding + kSearchBoxPreferredHeight +
-      kSearchBoxPeekingBottomPadding - kSearchBoxFullscreenBottomPadding;
+      kSearchBoxPeekingBottomPadding - kSearchBoxBottomPadding;
   if (drag_amount <= (kPeekingAppListHeight - kShelfSize)) {
     // App list is dragged from collapsed to peeking, which moved up at most
     // |kPeekingAppListHeight - kShelfSize| (272px). The top padding of apps
     // container view changes from |-kSearchBoxFullscreenBottomPadding| to
     // |kSearchBoxPeekingTopPadding + kSearchBoxPreferredHeight +
     // kSearchBoxPeekingBottomPadding - kSearchBoxFullscreenBottomPadding|.
-    y = std::ceil(
-        ((peeking_final_y + kSearchBoxFullscreenBottomPadding) * drag_amount) /
-            (kPeekingAppListHeight - kShelfSize) -
-        kSearchBoxFullscreenBottomPadding);
+    y = std::ceil(((peeking_final_y + kSearchBoxBottomPadding) * drag_amount) /
+                      (kPeekingAppListHeight - kShelfSize) -
+                  kSearchBoxBottomPadding);
   } else {
     // App list is dragged from peeking to fullscreen, which moved up at most
     // |peeking_to_fullscreen_height|. The top padding of apps container view
@@ -327,7 +328,8 @@ void AppsContainerView::CreateViewsForFolderTopItemsAnimation(
   std::vector<gfx::Rect> top_items_bounds =
       GetTopItemIconBoundsInActiveFolder();
   top_icon_animation_pending_count_ =
-      std::min(kNumFolderTopItems, active_folder->item_list()->item_count());
+      std::min(FolderImage::kNumFolderTopItems,
+               active_folder->item_list()->item_count());
   for (size_t i = 0; i < top_icon_animation_pending_count_; ++i) {
     if (active_folder->GetTopIcon(i).isNull())
       continue;
@@ -375,7 +377,7 @@ int AppsContainerView::GetSearchBoxTopPaddingDuringDragging() const {
   float peeking_to_fullscreen_height =
       contents_view()->GetDisplayHeight() - kPeekingAppListHeight;
   float drag_amount = std::max(
-      0, contents_view()->app_list_view()->GetWorkAreaBottom() -
+      0, contents_view()->app_list_view()->GetScreenBottom() - kShelfSize -
              contents_view()->app_list_view()->app_list_y_position_in_screen());
 
   if (drag_amount <= (kPeekingAppListHeight - kShelfSize)) {

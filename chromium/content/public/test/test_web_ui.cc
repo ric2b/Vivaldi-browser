@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/public/test/test_web_ui.h"
+
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "content/public/test/test_web_ui.h"
 
 namespace content {
 
@@ -25,7 +27,11 @@ WebContents* TestWebUI::GetWebContents() const {
 }
 
 WebUIController* TestWebUI::GetController() const {
-  return nullptr;
+  return controller_.get();
+}
+
+void TestWebUI::SetController(WebUIController* controller) {
+  controller_.reset(controller);
 }
 
 float TestWebUI::GetDeviceScaleFactor() const {
@@ -38,10 +44,6 @@ const base::string16& TestWebUI::GetOverriddenTitle() const {
 
 int TestWebUI::GetBindings() const {
   return 0;
-}
-
-bool TestWebUI::HasRenderFrame() {
-  return false;
 }
 
 void TestWebUI::AddMessageHandler(

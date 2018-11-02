@@ -82,7 +82,8 @@ std::unique_ptr<VideoStream> WebrtcConnectionToClient::StartVideoStream(
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(transport_);
 
-  std::unique_ptr<WebrtcVideoStream> stream(new WebrtcVideoStream());
+  std::unique_ptr<WebrtcVideoStream> stream(
+      new WebrtcVideoStream(session_options_));
   stream->Start(std::move(desktop_capturer), transport_.get(),
                 video_encode_task_runner_);
   stream->SetEventTimestampsSource(
@@ -120,6 +121,13 @@ void WebrtcConnectionToClient::set_host_stub(protocol::HostStub* host_stub) {
 void WebrtcConnectionToClient::set_input_stub(protocol::InputStub* input_stub) {
   DCHECK(thread_checker_.CalledOnValidThread());
   event_dispatcher_->set_input_stub(input_stub);
+}
+
+void WebrtcConnectionToClient::ApplySessionOptions(
+    const SessionOptions& options) {
+  session_options_ = options;
+  DCHECK(transport_);
+  transport_->ApplySessionOptions(options);
 }
 
 void WebrtcConnectionToClient::OnSessionStateChange(Session::State state) {

@@ -12,6 +12,66 @@ var commandMenuShortcut = Host.isMac() ? 'Command + Shift + P' : 'Control + Shif
 /** @type {!Array<!Help.ReleaseNote>} */
 Help.releaseNoteText = [
   {
+    version: 7,
+    header: 'Highlights from the Chrome 64 update',
+    highlights: [
+      {
+        title: 'Local overrides',
+        subtitle: 'Persist your HTML, CSS, and JS changes across page loads.',
+        link: 'https://developers.google.com/web/updates/2017/11/devtools-release-notes#overrides',
+      },
+      {
+        title: 'Performance monitor',
+        subtitle: 'Get a real-time view of various performance metrics.',
+        link: 'https://developers.google.com/web/updates/2017/11/devtools-release-notes#perf-monitor',
+      },
+      {
+        title: 'Console sidebar',
+        subtitle: 'Reduce console noise and focus on the messages that are important to you.',
+        link: 'https://developers.google.com/web/updates/2017/11/devtools-release-notes#console-sidebar',
+      },
+      {
+        title: 'Group similar console messages',
+        subtitle: 'The Console now groups similar messages by default.',
+        link: 'https://developers.google.com/web/updates/2017/11/devtools-release-notes#group-similar',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2017/11/devtools-release-notes',
+  },
+  {
+    version: 6,
+    header: 'Highlights from the Chrome 63 update',
+    highlights: [
+      {
+        title: 'Multi-client remote debugging',
+        subtitle: 'Use DevTools while debugging your app from an IDE or testing framework.',
+        link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes#multi-client',
+      },
+      {
+        title: 'Workspaces 2.0',
+        subtitle: 'Save changes made in DevTools to disk, now with more helpful UI and better auto-mapping.',
+        link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes#workspaces',
+      },
+      {
+        title: 'Four new audits',
+        subtitle:
+            'Including "Appropriate aspect ratios for images", "Avoid JS libraries with known vulnerabilities", and more.',
+        link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes#audits',
+      },
+      {
+        title: 'Custom push notifications',
+        subtitle: 'Simulate push notifications with custom data.',
+        link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes#push',
+      },
+      {
+        title: 'Custom background sync events',
+        subtitle: 'Trigger background sync events with custom tags.',
+        link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes#sync',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2017/10/devtools-release-notes',
+  },
+  {
     version: 5,
     header: 'Highlights from the Chrome 62 update',
     highlights: [

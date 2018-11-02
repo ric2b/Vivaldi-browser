@@ -5,7 +5,11 @@
 import("//chromecast/chromecast.gni")
 import("//testing/test.gni")
 
-source_set("crash") {
+# Crash reporting is not support on Fuchsia yet
+# TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
+assert(!is_fuchsia)
+
+cast_source_set("crash") {
   sources = [
     "app_state_tracker.cc",
     "app_state_tracker.h",
@@ -32,13 +36,13 @@ source_set("crash") {
 
   deps = [
     "//base",
-    "//breakpad:client",
     "//chromecast/base",
     "//chromecast/base:cast_version",
     "//components/crash/core/common",
     "//components/metrics",
     "//components/prefs",
     "//gpu/config:crash_keys",
+    "//third_party/breakpad:client",
   ]
 
   if (chromecast_branding == "public") {
@@ -67,7 +71,7 @@ cast_executable("crash_uploader") {
   }
 }
 
-source_set("test_support") {
+cast_source_set("test_support") {
   sources = [
     "linux/crash_testing_utils.cc",
     "linux/crash_testing_utils.h",
@@ -97,13 +101,13 @@ if (is_linux) {
       "//base",
       "//base/test:run_all_unittests",
       "//base/test:test_support",
-      "//breakpad:client",
       "//chromecast/base:cast_sys_info",
       "//chromecast/base:test_support",
       "//components/metrics",
       "//components/prefs:test_support",
       "//testing/gmock",
       "//testing/gtest",
+      "//third_party/breakpad:client",
     ]
   }
 }

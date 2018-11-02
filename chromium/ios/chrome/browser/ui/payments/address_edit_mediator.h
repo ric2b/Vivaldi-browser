@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_UI_PAYMENTS_ADDRESS_EDIT_MEDIATOR_H_
 
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller_data_source.h"
+#import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller_validator.h"
 #import "ios/chrome/browser/ui/payments/region_data_loader.h"
 
 @protocol PaymentRequestEditConsumer;
@@ -21,6 +22,7 @@ class PaymentRequest;
 // Serves as data source for AddressEditViewController.
 @interface AddressEditMediator
     : NSObject<PaymentRequestEditViewControllerDataSource,
+               PaymentRequestEditViewControllerValidator,
                RegionDataLoaderConsumer>
 
 // The consumer for this object. This can change during the lifetime of this
@@ -34,8 +36,8 @@ class PaymentRequest;
 @property(nonatomic, strong) NSString* selectedCountryCode;
 
 // Initializes this object with an instance of PaymentRequest which has a copy
-// of web::PaymentRequest as provided by the page invoking the Payment Request
-// API as well as |address| which is the address to be edited, if any.
+// of payments::WebPaymentRequest as provided by the page invoking the Payment
+// Request API as well as |address| which is the address to be edited, if any.
 // This object will not take ownership of |paymentRequest| or |address|.
 - (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                                address:(autofill::AutofillProfile*)address

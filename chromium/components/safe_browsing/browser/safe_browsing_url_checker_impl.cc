@@ -7,7 +7,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/browser/url_checker_delegate.h"
-#include "components/safe_browsing/net_event_logger.h"
 #include "components/safe_browsing/web_ui/constants.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
@@ -27,17 +26,64 @@ const int kCheckUrlTimeoutMs = 5000;
 
 }  // namespace
 
+SafeBrowsingUrlCheckerImpl::Notifier::Notifier(CheckUrlCallback callback)
+    : callback_(std::move(callback)) {}
+
+SafeBrowsingUrlCheckerImpl::Notifier::Notifier(
+    NativeCheckUrlCallback native_callback)
+    : native_callback_(std::move(native_callback)) {}
+
+SafeBrowsingUrlCheckerImpl::Notifier::~Notifier() = default;
+
+SafeBrowsingUrlCheckerImpl::Notifier::Notifier(Notifier&& other) = default;
+
+SafeBrowsingUrlCheckerImpl::Notifier& SafeBrowsingUrlCheckerImpl::Notifier::
+operator=(Notifier&& other) = default;
+
+void SafeBrowsingUrlCheckerImpl::Notifier::OnStartSlowCheck() {
+  if (callback_) {
+    std::move(callback_).Run(mojo::MakeRequest(&slow_check_notifier_), false,
+                             false);
+    return;
+  }
+
+  DCHECK(native_callback_);
+  std::move(native_callback_).Run(&native_slow_check_notifier_, false, false);
+}
+
+void SafeBrowsingUrlCheckerImpl::Notifier::OnCompleteCheck(
+    bool proceed,
+    bool showed_interstitial) {
+  if (callback_) {
+    std::move(callback_).Run(nullptr, proceed, showed_interstitial);
+    return;
+  }
+
+  if (native_callback_) {
+    std::move(native_callback_).Run(nullptr, proceed, showed_interstitial);
+    return;
+  }
+
+  if (slow_check_notifier_) {
+    slow_check_notifier_->OnCompleteCheck(proceed, showed_interstitial);
+    slow_check_notifier_.reset();
+    return;
+  }
+
+  std::move(native_slow_check_notifier_).Run(proceed, showed_interstitial);
+}
+
 SafeBrowsingUrlCheckerImpl::UrlInfo::UrlInfo(const GURL& in_url,
                                              const std::string& in_method,
-                                             CheckUrlCallback in_callback)
-    : url(in_url), method(in_method), callback(std::move(in_callback)) {}
+                                             Notifier in_notifier)
+    : url(in_url), method(in_method), notifier(std::move(in_notifier)) {}
 
 SafeBrowsingUrlCheckerImpl::UrlInfo::UrlInfo(UrlInfo&& other) = default;
 
 SafeBrowsingUrlCheckerImpl::UrlInfo::~UrlInfo() = default;
 
 SafeBrowsingUrlCheckerImpl::SafeBrowsingUrlCheckerImpl(
-    const std::string& headers,
+    const net::HttpRequestHeaders& headers,
     int load_flags,
     content::ResourceType resource_type,
     bool has_user_gesture,
@@ -57,28 +103,22 @@ SafeBrowsingUrlCheckerImpl::~SafeBrowsingUrlCheckerImpl() {
 
   if (state_ == STATE_CHECKING_URL) {
     database_manager_->CancelCheck(this);
-    if (net_event_logger_) {
-      net_event_logger_->EndNetLogEvent(
-          net::NetLogEventType::SAFE_BROWSING_CHECKING_URL, "result",
-          "request_canceled");
-    }
+
+    TRACE_EVENT_ASYNC_END1("safe_browsing", "CheckUrl", this, "result",
+                           "request_canceled");
   }
 }
 
 void SafeBrowsingUrlCheckerImpl::CheckUrl(const GURL& url,
                                           const std::string& method,
                                           CheckUrlCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-
-  DVLOG(1) << "SafeBrowsingUrlCheckerImpl checks URL: " << url;
-  urls_.emplace_back(url, method, std::move(callback));
-
-  ProcessUrls();
+  CheckUrlImpl(url, method, Notifier(std::move(callback)));
 }
 
-const GURL& SafeBrowsingUrlCheckerImpl::GetCurrentlyCheckingUrl() const {
-  return next_index_ < urls_.size() ? urls_[next_index_].url
-                                    : GURL::EmptyGURL();
+void SafeBrowsingUrlCheckerImpl::CheckUrl(const GURL& url,
+                                          const std::string& method,
+                                          NativeCheckUrlCallback callback) {
+  CheckUrlImpl(url, method, Notifier(std::move(callback)));
 }
 
 void SafeBrowsingUrlCheckerImpl::OnCheckBrowseUrlResult(
@@ -91,11 +131,9 @@ void SafeBrowsingUrlCheckerImpl::OnCheckBrowseUrlResult(
 
   timer_.Stop();
 
-  if (net_event_logger_) {
-    net_event_logger_->EndNetLogEvent(
-        net::NetLogEventType::SAFE_BROWSING_CHECKING_URL, "result",
-        threat_type == SB_THREAT_TYPE_SAFE ? "safe" : "unsafe");
-  }
+  TRACE_EVENT_ASYNC_END1(
+      "safe_browsing", "CheckUrl", this, "result",
+      threat_type == SB_THREAT_TYPE_SAFE ? "safe" : "unsafe");
 
   if (threat_type == SB_THREAT_TYPE_SAFE) {
     state_ = STATE_NONE;
@@ -142,12 +180,9 @@ void SafeBrowsingUrlCheckerImpl::OnCheckBrowseUrlResult(
   resource.web_contents_getter = web_contents_getter_;
   resource.threat_source = database_manager_->GetThreatSource();
 
-  net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(headers_);
-
   state_ = STATE_DISPLAYING_BLOCKING_PAGE;
   url_checker_delegate_->StartDisplayingBlockingPageHelper(
-      resource, urls_[next_index_].method, headers,
+      resource, urls_[next_index_].method, headers_,
       resource_type_ == content::RESOURCE_TYPE_MAIN_FRAME, has_user_gesture_);
 }
 
@@ -156,6 +191,17 @@ void SafeBrowsingUrlCheckerImpl::OnCheckUrlTimeout() {
 
   OnCheckBrowseUrlResult(urls_[next_index_].url,
                          safe_browsing::SB_THREAT_TYPE_SAFE, ThreatMetadata());
+}
+
+void SafeBrowsingUrlCheckerImpl::CheckUrlImpl(const GURL& url,
+                                              const std::string& method,
+                                              Notifier notifier) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  DVLOG(1) << "SafeBrowsingUrlCheckerImpl checks URL: " << url;
+  urls_.emplace_back(url, method, std::move(notifier));
+
+  ProcessUrls();
 }
 
 void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
@@ -170,9 +216,6 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
     DCHECK_EQ(STATE_NONE, state_);
 
     const GURL& url = urls_[next_index_].url;
-
-    TRACE_EVENT1("loader", "SafeBrowsingUrlCheckerImpl::ProcessUrls", "url",
-                 url.spec());
 
     if (url_checker_delegate_->IsUrlWhitelisted(url)) {
       if (!RunNextCallback(true, false))
@@ -205,11 +248,8 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
     SBThreatType threat_type = CheckWebUIUrls(url);
     if (threat_type != safe_browsing::SB_THREAT_TYPE_SAFE) {
       state_ = STATE_CHECKING_URL;
-      if (net_event_logger_) {
-        net_event_logger_->BeginNetLogEvent(
-            net::NetLogEventType::SAFE_BROWSING_CHECKING_URL, url, nullptr,
-            nullptr);
-      }
+      TRACE_EVENT_ASYNC_BEGIN1("safe_browsing", "CheckUrl", this, "url",
+                               url.spec());
 
       content::BrowserThread::PostTask(
           content::BrowserThread::IO, FROM_HERE,
@@ -228,11 +268,17 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
     }
 
     state_ = STATE_CHECKING_URL;
-    if (net_event_logger_) {
-      net_event_logger_->BeginNetLogEvent(
-          net::NetLogEventType::SAFE_BROWSING_CHECKING_URL, url, nullptr,
-          nullptr);
-    }
+
+    // Only send out notification of starting a slow check if the database
+    // manager actually supports fast checks (i.e., synchronous checks) but is
+    // not able to complete the check synchronously in this case.
+    // Don't send out notification if the database manager doesn't support
+    // synchronous checks at all (e.g., on mobile).
+    if (!database_manager_->ChecksAreAlwaysAsync())
+      urls_[next_index_].notifier.OnStartSlowCheck();
+
+    TRACE_EVENT_ASYNC_BEGIN1("safe_browsing", "CheckUrl", this, "url",
+                             url.spec());
 
     // Start a timer to abort the check if it takes too long.
     timer_.Start(FROM_HERE,
@@ -288,7 +334,7 @@ bool SafeBrowsingUrlCheckerImpl::RunNextCallback(bool proceed,
   DCHECK_LT(next_index_, urls_.size());
 
   auto weak_self = weak_factory_.GetWeakPtr();
-  std::move(urls_[next_index_++].callback).Run(proceed, showed_interstitial);
+  urls_[next_index_++].notifier.OnCompleteCheck(proceed, showed_interstitial);
   return !!weak_self;
 }
 

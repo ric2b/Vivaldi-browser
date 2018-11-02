@@ -4,6 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/util/branding.gni")
@@ -52,6 +53,7 @@ buildflag_header("ui_features") {
   header = "ui_features.h"
   flags = [
     "ENABLE_HIDPI=$enable_hidpi",
+    "ENABLE_MUS=$enable_mus",
     "USE_XKBCOMMON=$use_xkbcommon",
     "MAC_VIEWS_BROWSER=$mac_views_browser",
     "HAS_NATIVE_ACCESSIBILITY=$has_native_accessibility",
@@ -106,6 +108,8 @@ component("base") {
     "cocoa/controls/hyperlink_button_cell.mm",
     "cocoa/controls/hyperlink_text_view.h",
     "cocoa/controls/hyperlink_text_view.mm",
+    "cocoa/controls/imageview_utils.h",
+    "cocoa/controls/imageview_utils.mm",
     "cocoa/controls/textfield_utils.h",
     "cocoa/controls/textfield_utils.mm",
     "cocoa/defaults_utils.h",
@@ -263,6 +267,8 @@ component("base") {
     "touch/touch_editing_controller.h",
     "ui_base_export.h",
     "ui_base_exports.cc",
+    "ui_base_features.cc",
+    "ui_base_features.h",
     "ui_base_paths.cc",
     "ui_base_paths.h",
     "ui_base_switches.cc",
@@ -276,6 +282,8 @@ component("base") {
     "user_activity/user_activity_observer.h",
     "view_prop.cc",
     "view_prop.h",
+    "webui/i18n_source_stream.cc",
+    "webui/i18n_source_stream.h",
     "webui/jstemplate_builder.cc",
     "webui/jstemplate_builder.h",
     "webui/web_ui_util.cc",
@@ -337,12 +345,10 @@ component("base") {
       "clipboard/custom_data_helper.h",
       "clipboard/scoped_clipboard_writer.cc",
       "clipboard/scoped_clipboard_writer.h",
+      "cocoa/bubble_closer.h",
+      "cocoa/bubble_closer.mm",
       "cursor/cursor_util.cc",
       "cursor/cursor_util.h",
-      "cursor/cursors_aura.cc",
-      "cursor/cursors_aura.h",
-      "cursor/image_cursors.cc",
-      "cursor/image_cursors.h",
       "default_theme_provider.cc",
       "default_theme_provider.h",
       "dragdrop/cocoa_dnd_util.h",
@@ -351,7 +357,6 @@ component("base") {
       "dragdrop/file_info.h",
       "idle/idle.cc",
       "idle/idle.h",
-      "idle/idle_android.cc",
       "idle/idle_chromeos.cc",
       "idle/idle_linux.cc",
       "idle/idle_mac.mm",
@@ -507,7 +512,7 @@ component("base") {
     sources -= [ "idle/idle_linux.cc" ]
   }
 
-  if (is_chromeos || (use_aura && ((is_linux && !use_x11) || is_android))) {
+  if (is_chromeos || (use_aura && is_linux && !use_x11)) {
     sources += [
       "dragdrop/os_exchange_data_provider_aura.cc",
       "dragdrop/os_exchange_data_provider_aura.h",
@@ -549,11 +554,6 @@ component("base") {
   if (is_mac) {
     deps += [ "//third_party/mozilla" ]
 
-    sources -= [
-      "cursor/image_cursors.cc",
-      "cursor/image_cursors.h",
-    ]
-
     libs += [
       "Accelerate.framework",
       "AppKit.framework",
@@ -564,11 +564,6 @@ component("base") {
     ]
   }
 
-  if (use_aura) {
-    if (is_android) {
-      sources += [ "cursor/cursor_loader_android.cc" ]
-    }
-  }
   if (use_ozone) {
     sources += [
       "cursor/cursor_loader_ozone.cc",
@@ -606,19 +601,13 @@ component("base") {
 
   if (is_android) {
     deps += [ ":ui_base_jni_headers" ]
-
     libs += [ "jnigraphics" ]
-  }
 
-  if (is_android && !use_aura) {
     sources -= [
       "cursor/cursor_android.cc",
-      "cursor/image_cursors.cc",
-      "cursor/image_cursors.h",
       "default_theme_provider.cc",
       "idle/idle.cc",
       "idle/idle.h",
-      "idle/idle_android.cc",
       "l10n/l10n_font_util.cc",
       "models/button_menu_item_model.cc",
       "models/dialog_model.cc",
@@ -628,20 +617,28 @@ component("base") {
     ]
   }
 
-  # Aura clipboard.
   if (use_aura) {
+    # Aura clipboard.
     if (use_x11 && is_desktop_linux) {
       sources += [
         "clipboard/clipboard_aurax11.cc",
         "clipboard/clipboard_aurax11.h",
       ]
-    } else if (!is_win && !is_android) {
-      # This file is used for all non-X11, non-Windows, non-Android aura Builds.
+    } else if (!is_win) {
+      # This file is used for all non-X11, non-Windows aura Builds.
       sources += [
         "clipboard/clipboard_aura.cc",
         "clipboard/clipboard_aura.h",
       ]
     }
+
+    # Cursor
+    sources += [
+      "cursor/cursors_aura.cc",
+      "cursor/cursors_aura.h",
+      "cursor/image_cursors.cc",
+      "cursor/image_cursors.h",
+    ]
   }
 
   if (is_android || is_ios) {
@@ -661,11 +658,12 @@ static_library("test_support") {
     "test/ui_controls_internal_win.h",
     "test/ui_controls_mac.mm",
     "test/ui_controls_win.cc",
-    "test/user_interactive_test_case.h",
   ]
 
   if (!is_ios) {
     sources += [
+      "test/menu_test_observer.h",
+      "test/menu_test_observer.mm",
       "test/nswindow_fullscreen_notification_waiter.h",
       "test/nswindow_fullscreen_notification_waiter.mm",
       "test/scoped_fake_full_keyboard_access.h",
@@ -678,6 +676,8 @@ static_library("test_support") {
       "test/scoped_preferred_scroller_style_mac.mm",
       "test/test_clipboard.cc",
       "test/test_clipboard.h",
+      "test/view_tree_validator.h",
+      "test/view_tree_validator.mm",
       "test/windowed_nsnotification_observer.h",
       "test/windowed_nsnotification_observer.mm",
     ]
@@ -692,12 +692,6 @@ static_library("test_support") {
     ]
   }
 
-  if (is_mac) {
-    sources += [ "test/user_interactive_test_case_mac.mm" ]
-  } else {
-    sources += [ "test/user_interactive_test_case.cc" ]
-  }
-
   public_deps = [
     ":base",
   ]
@@ -707,6 +701,7 @@ static_library("test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/base:ui_data_pack",
+    "//ui/display:test_support",
     "//ui/events:events_base",
     "//ui/events:test_support",
     "//ui/gfx",
@@ -796,11 +791,13 @@ test("ui_base_unittests") {
     "test/page_transition_types_unittest.cc",
     "test/run_all_unittests.cc",
     "user_activity/user_activity_detector_unittest.cc",
+    "webui/i18n_source_stream_unittest.cc",
   ]
   if (!is_ios) {
     sources += [
       "test/scoped_fake_nswindow_fullscreen_unittest.mm",
       "test/test_clipboard_unittest.cc",
+      "test/view_tree_validator_unittest.mm",
     ]
   }
 
@@ -827,6 +824,7 @@ test("ui_base_unittests") {
       "accelerators/menu_label_accelerator_util_linux_unittest.cc",
       "clipboard/custom_data_helper_unittest.cc",
       "cocoa/base_view_unittest.mm",
+      "cocoa/bubble_closer_unittest.mm",
       "cocoa/cocoa_base_utils_unittest.mm",
       "cocoa/constrained_window/constrained_window_animation_unittest.mm",
       "cocoa/controls/blue_label_button_unittest.mm",
@@ -885,6 +883,7 @@ test("ui_base_unittests") {
     "//base/test:test_support",
     "//mojo/edk/system",
     "//net",
+    "//net:test_support",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -943,7 +942,7 @@ test("ui_base_unittests") {
     ]
   }
 
-  if (use_pango) {
+  if (use_pangocairo) {
     configs += [ "//build/config/linux/pangocairo" ]
   }
 

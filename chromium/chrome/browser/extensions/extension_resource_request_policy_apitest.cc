@@ -83,7 +83,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, OriginPrivileges) {
   // resources.
   std::string file_source;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(
         test_data_dir_.AppendASCII("extension_resource_request_policy")
             .AppendASCII("index.html"),
@@ -388,7 +388,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
                                http_redirect_to_target_url);
 
   // That should not have been allowed.
-  EXPECT_NE(url::Origin(target_url).GetURL(),
+  EXPECT_NE(url::Origin::Create(target_url).GetURL(),
             ChildFrameAt(web_contents->GetMainFrame(), 0)
                 ->GetLastCommittedOrigin()
                 .GetURL());

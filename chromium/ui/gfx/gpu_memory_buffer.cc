@@ -15,8 +15,7 @@ GpuMemoryBufferHandle::GpuMemoryBufferHandle(
 
 GpuMemoryBufferHandle::~GpuMemoryBufferHandle() {}
 
-void GpuMemoryBuffer::SetColorSpaceForScanout(
-    const gfx::ColorSpace& color_space) {}
+void GpuMemoryBuffer::SetColorSpace(const gfx::ColorSpace& color_space) {}
 
 GpuMemoryBufferHandle CloneHandleForIPC(
     const GpuMemoryBufferHandle& source_handle) {
@@ -43,8 +42,21 @@ GpuMemoryBufferHandle CloneHandleForIPC(
 #endif
       return handle;
     }
+    case gfx::ANDROID_HARDWARE_BUFFER: {
+      gfx::GpuMemoryBufferHandle handle;
+      handle.type = gfx::ANDROID_HARDWARE_BUFFER;
+      handle.id = source_handle.id;
+      handle.handle = base::SharedMemory::DuplicateHandle(source_handle.handle);
+      return handle;
+    }
     case gfx::IO_SURFACE_BUFFER:
       return source_handle;
+    case gfx::DXGI_SHARED_HANDLE:
+      gfx::GpuMemoryBufferHandle handle;
+      handle.type = gfx::DXGI_SHARED_HANDLE;
+      handle.id = source_handle.id;
+      handle.handle = base::SharedMemory::DuplicateHandle(source_handle.handle);
+      return handle;
   }
   return gfx::GpuMemoryBufferHandle();
 }

@@ -20,8 +20,8 @@ class PLATFORM_EXPORT RendererWebSchedulerImpl : public WebSchedulerImpl {
 
   // WebScheduler implementation:
   WebTaskRunner* CompositorTaskRunner() override;
-  void PauseTimerQueue() override;
-  void ResumeTimerQueue() override;
+  std::unique_ptr<RendererPauseHandle> PauseScheduler() override
+      WARN_UNUSED_RESULT;
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter* intervention_reporter,
       WebViewScheduler::WebViewSchedulerDelegate* delegate) override;
@@ -30,7 +30,7 @@ class PLATFORM_EXPORT RendererWebSchedulerImpl : public WebSchedulerImpl {
 
  private:
   RendererSchedulerImpl* renderer_scheduler_;  // NOT OWNED
-  RefPtr<WebTaskRunnerImpl> compositor_task_runner_;
+  scoped_refptr<WebTaskRunnerImpl> compositor_task_runner_;
 };
 
 }  // namespace scheduler

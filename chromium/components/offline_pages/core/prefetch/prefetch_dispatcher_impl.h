@@ -5,7 +5,9 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_DISPATCHER_IMPL_H_
 #define COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_DISPATCHER_IMPL_H_
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -35,7 +37,7 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
   void RemoveAllUnprocessedPrefetchURLs(const std::string& name_space) override;
   void RemovePrefetchURLsByClientId(const ClientId& client_id) override;
   void BeginBackgroundTask(
-      std::unique_ptr<ScopedBackgroundTask> background_task) override;
+      std::unique_ptr<PrefetchBackgroundTask> background_task) override;
   void StopBackgroundTask() override;
   void GCMOperationCompletedMessageReceived(
       const std::string& operation_name) override;
@@ -45,8 +47,7 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
           success_downloads) override;
   void DownloadCompleted(
       const PrefetchDownloadResult& download_result) override;
-  void ImportCompleted(int64_t offline_id, bool success) override;
-  void RequestFinishBackgroundTaskForTest() override;
+  void ArchiveImported(int64_t offline_id, bool success) override;
 
   // TaskQueue::Delegate implementation:
   void OnTaskQueueIsIdle() override;
@@ -57,34 +58,34 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
   void DisposeTask();
 
   // Callbacks for network requests.
-  void DidGenerateBundleRequest(PrefetchRequestStatus status,
-                                const std::string& operation_name,
-                                const std::vector<RenderPageInfo>& pages);
-  void DidGetOperationRequest(PrefetchRequestStatus status,
-                              const std::string& operation_name,
-                              const std::vector<RenderPageInfo>& pages);
+  void DidGenerateBundleOrGetOperationRequest(
+      const std::string& request_name_for_logging,
+      PrefetchRequestStatus status,
+      const std::string& operation_name,
+      const std::vector<RenderPageInfo>& pages);
   void LogRequestResult(const std::string& request_name_for_logging,
                         PrefetchRequestStatus status,
                         const std::string& operation_name,
                         const std::vector<RenderPageInfo>& pages);
 
-   // Adds the Reconcile tasks to the TaskQueue. These look for error/stuck
-   // processing conditions that happen as result of Chrome being evicted
-   // or network failures of certain kind. They are run on periodic wakeup
-   // (BeginBackgroundTask()). See PrefetchDispatcher interface
-   // declaration for Reconcile tasks definition.
-   void QueueReconcileTasks();
-   // Adds the Action tasks to the queue. See PrefetchDispatcher interface
-   // declaration for Action tasks definition.
-   // Action tasks can be added to the queue either in response to periodic
-   // wakeup (when BeginBackgroundTask() is called) or any time TaskQueue is
-   // becomes idle and any task called SchedulePipelineProcessing() before.
-   void QueueActionTasks();
+  // Adds the Reconcile tasks to the TaskQueue. These look for error/stuck
+  // processing conditions that happen as result of Chrome being evicted
+  // or network failures of certain kind. They are run on periodic wakeup
+  // (BeginBackgroundTask()). See PrefetchDispatcher interface
+  // declaration for Reconcile tasks definition.
+  void QueueReconcileTasks();
+  // Adds the Action tasks to the queue. See PrefetchDispatcher interface
+  // declaration for Action tasks definition.
+  // Action tasks can be added to the queue either in response to periodic
+  // wakeup (when BeginBackgroundTask() is called) or any time TaskQueue
+  // becomes idle and any task called SchedulePipelineProcessing() before.
+  void QueueActionTasks();
 
   PrefetchService* service_;
   TaskQueue task_queue_;
   bool needs_pipeline_processing_ = false;
-  std::unique_ptr<ScopedBackgroundTask> background_task_;
+  bool suspended_ = false;
+  std::unique_ptr<PrefetchBackgroundTask> background_task_;
 
   base::WeakPtrFactory<PrefetchDispatcherImpl> weak_factory_;
 

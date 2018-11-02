@@ -69,10 +69,10 @@ MediaStreamAudioDestinationHandler::MediaStreamAudioDestinationHandler(
   Initialize();
 }
 
-PassRefPtr<MediaStreamAudioDestinationHandler>
+scoped_refptr<MediaStreamAudioDestinationHandler>
 MediaStreamAudioDestinationHandler::Create(AudioNode& node,
                                            size_t number_of_channels) {
-  return AdoptRef(
+  return base::AdoptRef(
       new MediaStreamAudioDestinationHandler(node, number_of_channels));
 }
 
@@ -105,7 +105,7 @@ void MediaStreamAudioDestinationHandler::Process(size_t number_of_frames) {
 
   // consumeAudio has an internal lock (also used by setAudioFormat).
   // This can cause audio to glitch.  This is outside of our control.
-  source_->ConsumeAudio(mix_bus_.Get(), number_of_frames);
+  source_->ConsumeAudio(mix_bus_.get(), number_of_frames);
 }
 
 void MediaStreamAudioDestinationHandler::SetChannelCount(

@@ -32,6 +32,10 @@ const char kTestCrosGaiaIdMigrationStarted[] = "started";
 const base::Feature kVoiceInteractionFeature{"ChromeOSVoiceInteraction",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether enable assistant for locale.
+const base::Feature kAssistantFeatureForLocale{
+    "ChromeOSAssistantForLocale", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 // Please keep the order of these switches synchronized with the header file
@@ -238,12 +242,6 @@ const char kDisableVolumeAdjustSound[] = "disable-volume-adjust-sound";
 // Disables wake on wifi features.
 const char kDisableWakeOnWifi[] = "disable-wake-on-wifi";
 
-// EAFE path to use for Easy bootstrapping.
-const char kEafePath[] = "eafe-path";
-
-// EAFE URL to use for Easy bootstrapping.
-const char kEafeUrl[] = "eafe-url";
-
 // Enables the Android Wallpapers App as the default app on Chrome OS.
 const char kEnableAndroidWallpapersApp[] = "enable-android-wallpapers-app";
 
@@ -284,9 +282,6 @@ const char kEnableFileManagerTouchMode[] = "enable-file-manager-touch-mode";
 // Enables animated transitions during first-run tutorial.
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
-// Enables Instant Tethering.
-const char kEnableInstantTethering[] = "enable-instant-tethering";
-
 // Enables action handler apps (e.g. creating new notes) on lock screen.
 const char kDisableLockScreenApps[] = "disable-lock-screen-apps";
 
@@ -299,6 +294,9 @@ const char kDisableMdOobe[] = "disable-md-oobe";
 
 // Disables material design Error screen.
 const char kDisableMdErrorScreen[] = "disable-md-error-screen";
+
+// Enables using a random url for captive portal detection.
+const char kEnableCaptivePortalRandomUrl[] = "enable-captive-portal-random-url";
 
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
@@ -331,9 +329,14 @@ const char kEnableVideoPlayerChromecastSupport[] =
 // Enables the VoiceInteraction support.
 const char kEnableVoiceInteraction[] = "enable-voice-interaction";
 
-// Enables zip archiver.
-const char kEnableZipArchiverOnFileManager[] =
-    "enable-zip-archiver-on-file-manager";
+// Enables zip archiver - packer.
+const char kEnableZipArchiverPacker[] = "enable-zip-archiver-packer";
+
+// Enables zip archiver - unpacker.
+const char kEnableZipArchiverUnpacker[] = "enable-zip-archiver-unpacker";
+
+// Disables zip archiver - unpacker.
+const char kDisableZipArchiverUnpacker[] = "disable-zip-archiver-unpacker";
 
 // Disables ARC for managed accounts.
 const char kEnterpriseDisableArc[] = "enterprise-disable-arc";
@@ -482,9 +485,6 @@ const char kShillStub[] = "shill-stub";
 // This makes it easier to test layout logic.
 const char kShowLoginDevOverlay[] = "show-login-dev-overlay";
 
-// If true, the views-based md login and lock screens will be shown.
-const char kShowMdLogin[] = "show-md-login";
-
 // If true, the non-md login and lock screens will be shown.
 const char kShowNonMdLogin[] = "show-non-md-login";
 
@@ -524,15 +524,16 @@ const char kCrosGaiaApiV1[] = "cros-gaia-api-v1";
 // List of locales supported by voice interaction.
 const char kVoiceInteractionLocales[] = "voice-interaction-supported-locales";
 
-// Enables license type selection by user during enrollment.
-const char kEnterpriseEnableLicenseTypeSelection[] =
-    "enterprise-enable-license-type-selection";
+// Disable license type selection by user during enrollment.
+const char kEnterpriseDisableLicenseTypeSelection[] =
+    "enterprise-disable-license-type-selection";
 
 // Disables per-user timezone.
 const char kDisablePerUserTimezone[] = "disable-per-user-timezone";
 
-// Enables a rename action for external drive such as USB and SD.
-const char kEnableExternalDriveRename[] = "enable-external-drive-rename";
+// Enables fine grained time zone detection.
+const char kEnableFineGrainedTimeZoneDetection[] =
+    "enable-fine-grained-time-zone-detection";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);
@@ -594,6 +595,12 @@ bool IsCellularFirstDevice() {
 }
 
 bool IsVoiceInteractionLocalesSupported() {
+  // We use Chromium variations to control locales for which assistant should
+  // be enabled. But we still keep checking the previously hard-coded locales
+  // for compatibility.
+  if (base::FeatureList::IsEnabled(kAssistantFeatureForLocale))
+    return true;
+
   // TODO(updowndota): Add DCHECK here to make sure the value never changes
   // after all the use case for this method has been moved into user session.
 
@@ -618,6 +625,12 @@ bool IsVoiceInteractionFlagsEnabled() {
 bool IsVoiceInteractionEnabled() {
   return IsVoiceInteractionLocalesSupported() &&
          IsVoiceInteractionFlagsEnabled();
+}
+
+bool IsZipArchiverUnpackerEnabled() {
+  // Disabled by default.
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kEnableZipArchiverUnpacker);
 }
 
 }  // namespace switches

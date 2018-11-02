@@ -18,8 +18,6 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.webkit.GeolocationPermissions;
-import android.webkit.WebChromeClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -30,10 +28,10 @@ import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwDevToolsServer;
+import org.chromium.android_webview.AwGeolocationPermissions;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.AwTestContainerView;
 import org.chromium.android_webview.test.NullContentsClient;
-import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -69,7 +67,6 @@ public class AwShellActivity extends Activity {
         AwShellResourceProvider.registerResources(this);
 
         ContentApplication.initCommandLine(this);
-        waitForDebuggerIfNeeded();
 
         ContextUtils.initApplicationContext(getApplicationContext());
         AwBrowserProcess.loadLibrary();
@@ -127,7 +124,7 @@ public class AwShellActivity extends Activity {
             }
 
             @Override
-            public void onShowCustomView(View view, WebChromeClient.CustomViewCallback callback) {
+            public void onShowCustomView(View view, AwContentsClient.CustomViewCallback callback) {
                 getWindow().setFlags(
                         WindowManager.LayoutParams.FLAG_FULLSCREEN,
                         WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -157,8 +154,8 @@ public class AwShellActivity extends Activity {
             }
 
             @Override
-            public void onGeolocationPermissionsShowPrompt(String origin,
-                    GeolocationPermissions.Callback callback) {
+            public void onGeolocationPermissionsShowPrompt(
+                    String origin, AwGeolocationPermissions.Callback callback) {
                 callback.invoke(origin, false, false);
             }
         };
@@ -180,7 +177,7 @@ public class AwShellActivity extends Activity {
         awSettings.setDisplayZoomControls(false);
         awSettings.setUseWideViewPort(true);
         awSettings.setLoadWithOverviewMode(true);
-        awSettings.setLayoutAlgorithm(android.webkit.WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+        awSettings.setLayoutAlgorithm(AwSettings.LAYOUT_ALGORITHM_TEXT_AUTOSIZING);
 
         testContainerView.initialize(new AwContents(mBrowserContext, testContainerView,
                 testContainerView.getContext(), testContainerView.getInternalAccessDelegate(),
@@ -269,13 +266,5 @@ public class AwShellActivity extends Activity {
         }
 
         return super.onKeyUp(keyCode, event);
-    }
-
-    private void waitForDebuggerIfNeeded() {
-        if (CommandLine.getInstance().hasSwitch(BaseSwitches.WAIT_FOR_JAVA_DEBUGGER)) {
-            Log.e(TAG, "Waiting for Java debugger to connect...");
-            android.os.Debug.waitForDebugger();
-            Log.e(TAG, "Java debugger connected. Resuming execution.");
-        }
     }
 }

@@ -55,9 +55,7 @@ class TestNavigationObserver::TestWebContentsObserver
     if (!navigation_handle->HasCommitted())
       return;
 
-    parent_->OnDidFinishNavigation(navigation_handle->IsErrorPage(),
-                                   navigation_handle->GetURL(),
-                                   navigation_handle->GetNetErrorCode());
+    parent_->OnDidFinishNavigation(navigation_handle);
   }
 
   TestNavigationObserver* parent_;
@@ -69,29 +67,34 @@ TestNavigationObserver::TestNavigationObserver(
     WebContents* web_contents,
     int number_of_navigations,
     MessageLoopRunner::QuitMode quit_mode)
-    : navigation_started_(false),
-      navigations_completed_(0),
-      number_of_navigations_(number_of_navigations),
-      last_navigation_succeeded_(false),
-      last_net_error_code_(net::OK),
-      message_loop_runner_(new MessageLoopRunner(quit_mode)),
-      web_contents_created_callback_(
-          base::Bind(&TestNavigationObserver::OnWebContentsCreated,
-                     base::Unretained(this))) {
-  if (web_contents)
-    RegisterAsObserver(web_contents);
-}
+    : TestNavigationObserver(web_contents,
+                             number_of_navigations,
+                             GURL(),
+                             quit_mode) {}
 
 TestNavigationObserver::TestNavigationObserver(
     WebContents* web_contents,
     MessageLoopRunner::QuitMode quit_mode)
     : TestNavigationObserver(web_contents, 1, quit_mode) {}
 
+TestNavigationObserver::TestNavigationObserver(
+    const GURL& target_url,
+    MessageLoopRunner::QuitMode quit_mode)
+    : TestNavigationObserver(nullptr,
+                             -1 /* num_of_navigations */,
+                             target_url,
+                             quit_mode) {}
+
 TestNavigationObserver::~TestNavigationObserver() {
   StopWatchingNewWebContents();
 }
 
 void TestNavigationObserver::Wait() {
+  message_loop_runner_->Run();
+}
+
+void TestNavigationObserver::WaitForNavigationFinished() {
+  wait_event_ = WaitEvent::kNavigationFinished;
   message_loop_runner_->Run();
 }
 
@@ -105,9 +108,34 @@ void TestNavigationObserver::StopWatchingNewWebContents() {
       web_contents_created_callback_);
 }
 
+void TestNavigationObserver::WatchExistingWebContents() {
+  for (auto* web_contents : WebContentsImpl::GetAllWebContents())
+    RegisterAsObserver(web_contents);
+}
+
 void TestNavigationObserver::RegisterAsObserver(WebContents* web_contents) {
   web_contents_observers_.insert(
-      base::MakeUnique<TestWebContentsObserver>(this, web_contents));
+      std::make_unique<TestWebContentsObserver>(this, web_contents));
+}
+
+TestNavigationObserver::TestNavigationObserver(
+    WebContents* web_contents,
+    int number_of_navigations,
+    const GURL& target_url,
+    MessageLoopRunner::QuitMode quit_mode)
+    : wait_event_(WaitEvent::kLoadStopped),
+      navigation_started_(false),
+      navigations_completed_(0),
+      number_of_navigations_(number_of_navigations),
+      target_url_(target_url),
+      last_navigation_succeeded_(false),
+      last_net_error_code_(net::OK),
+      message_loop_runner_(new MessageLoopRunner(quit_mode)),
+      web_contents_created_callback_(
+          base::Bind(&TestNavigationObserver::OnWebContentsCreated,
+                     base::Unretained(this))) {
+  if (web_contents)
+    RegisterAsObserver(web_contents);
 }
 
 void TestNavigationObserver::OnWebContentsCreated(WebContents* web_contents) {
@@ -146,23 +174,38 @@ void TestNavigationObserver::OnDidStopLoading(WebContents* web_contents) {
   if (!navigation_started_)
     return;
 
-  ++navigations_completed_;
-  if (navigations_completed_ == number_of_navigations_) {
-    navigation_started_ = false;
-    message_loop_runner_->Quit();
-  }
+  if (wait_event_ == WaitEvent::kLoadStopped)
+    EventTriggered();
 }
 
 void TestNavigationObserver::OnDidStartNavigation() {
   last_navigation_succeeded_ = false;
 }
 
-void TestNavigationObserver::OnDidFinishNavigation(bool is_error_page,
-                                                   const GURL& url,
-                                                   net::Error error_code) {
-  last_navigation_url_ = url;
-  last_navigation_succeeded_ = !is_error_page;
-  last_net_error_code_ = error_code;
+void TestNavigationObserver::OnDidFinishNavigation(
+    NavigationHandle* navigation_handle) {
+  last_navigation_url_ = navigation_handle->GetURL();
+  last_navigation_succeeded_ = !navigation_handle->IsErrorPage();
+  last_net_error_code_ = navigation_handle->GetNetErrorCode();
+
+  if (wait_event_ == WaitEvent::kNavigationFinished)
+    EventTriggered();
+}
+
+void TestNavigationObserver::EventTriggered() {
+  if (target_url_ == GURL()) {
+    DCHECK_GE(navigations_completed_, 0);
+
+    ++navigations_completed_;
+    if (navigations_completed_ != number_of_navigations_) {
+      return;
+    }
+  } else if (target_url_ != last_navigation_url_) {
+    return;
+  }
+
+  navigation_started_ = false;
+  message_loop_runner_->Quit();
 }
 
 }  // namespace content

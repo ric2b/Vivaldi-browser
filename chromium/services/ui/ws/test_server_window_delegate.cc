@@ -9,16 +9,25 @@
 namespace ui {
 namespace ws {
 
-TestServerWindowDelegate::TestServerWindowDelegate() {}
+TestServerWindowDelegate::TestServerWindowDelegate(VizHostProxy* viz_host_proxy)
+    : viz_host_proxy_(viz_host_proxy) {}
 
 TestServerWindowDelegate::~TestServerWindowDelegate() {}
 
-viz::HostFrameSinkManager* TestServerWindowDelegate::GetHostFrameSinkManager() {
-  return nullptr;
+void TestServerWindowDelegate::AddRootWindow(ServerWindow* window) {
+  roots_.insert(window);
+}
+
+VizHostProxy* TestServerWindowDelegate::GetVizHostProxy() {
+  return viz_host_proxy_;
 }
 
 ServerWindow* TestServerWindowDelegate::GetRootWindowForDrawn(
     const ServerWindow* window) {
+  for (ServerWindow* root : roots_) {
+    if (root->Contains(window))
+      return root;
+  }
   return root_window_;
 }
 

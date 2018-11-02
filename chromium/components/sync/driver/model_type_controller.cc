@@ -52,11 +52,10 @@ base::WeakPtr<ModelTypeSyncBridge> ReturnCapturedBridge(
   return arg;
 }
 
-void RunBridgeTask(const BridgeProvider& bridge_provider,
-                   const BridgeTask& task) {
-  if (base::WeakPtr<ModelTypeSyncBridge> bridge = bridge_provider.Run()) {
-    task.Run(bridge.get());
-  }
+void RunBridgeTask(BridgeProvider bridge_provider, BridgeTask task) {
+  base::WeakPtr<ModelTypeSyncBridge> bridge = std::move(bridge_provider).Run();
+  if (bridge.get())
+    std::move(task).Run(bridge.get());
 }
 
 }  // namespace
@@ -70,7 +69,6 @@ ModelTypeController::ModelTypeController(
       model_thread_(model_thread),
       sync_prefs_(sync_client->GetPrefService()),
       state_(NOT_RUNNING) {
-  DCHECK(model_thread_);
 }
 
 ModelTypeController::~ModelTypeController() {}
@@ -263,10 +261,12 @@ BridgeProvider ModelTypeController::GetBridgeProvider() {
   return base::Bind(&ReturnCapturedBridge, bridge);
 }
 
-void ModelTypeController::PostBridgeTask(
-    const tracked_objects::Location& location,
-    const BridgeTask& task) {
+void ModelTypeController::PostBridgeTask(const base::Location& location,
+                                         BridgeTask task) {
+  DCHECK(model_thread_);
   model_thread_->PostTask(
-      location, base::Bind(&RunBridgeTask, GetBridgeProvider(), task));
+      location, base::Bind(&RunBridgeTask, base::Passed(GetBridgeProvider()),
+                           base::Passed(std::move(task))));
 }
+
 }  // namespace syncer

@@ -200,7 +200,7 @@ class TemplateURLParsingContext {
 
 // static
 TemplateURLParsingContext::ElementNameToElementTypeMap*
-    TemplateURLParsingContext::kElementNameToElementTypeMap = NULL;
+    TemplateURLParsingContext::kElementNameToElementTypeMap = nullptr;
 
 TemplateURLParsingContext::TemplateURLParsingContext(
     TemplateURLParser::ParameterFilter* parameter_filter)
@@ -211,7 +211,7 @@ TemplateURLParsingContext::TemplateURLParsingContext(
       is_suggest_url_(false),
       has_custom_keyword_(false),
       derive_image_from_url_(false) {
-  if (kElementNameToElementTypeMap == NULL)
+  if (kElementNameToElementTypeMap == nullptr)
     InitMapping();
 }
 
@@ -438,7 +438,7 @@ void TemplateURLParsingContext::ProcessURLParams() {
     return;
 
   GURL url(is_suggest_url_ ? data_.suggestions_url : data_.url());
-  if (url.is_empty())
+  if (!url.is_valid())
     return;
 
   // If there is a parameter filter, parse the existing URL and remove any

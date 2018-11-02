@@ -36,13 +36,14 @@ void ModulePendingScriptTreeClient::NotifyModuleTreeLoadFinished(
     pending_script_->NotifyModuleTreeLoadFinished();
 }
 
-DEFINE_TRACE(ModulePendingScriptTreeClient) {
+void ModulePendingScriptTreeClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_script_);
   visitor->Trace(pending_script_);
   ModuleTreeClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ModulePendingScriptTreeClient) {
+void ModulePendingScriptTreeClient::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(module_script_);
   visitor->TraceWrappers(pending_script_);
   ModuleTreeClient::TraceWrappers(visitor);
@@ -54,7 +55,7 @@ ModulePendingScript::ModulePendingScript(ScriptElementBase* element,
     : PendingScript(element, TextPosition()),
       module_tree_client_(client),
       is_external_(is_external) {
-  CHECK(this->GetElement());
+  CHECK(GetElement());
   DCHECK(module_tree_client_);
   client->SetPendingScript(this);
 }
@@ -65,12 +66,13 @@ void ModulePendingScript::DisposeInternal() {
   module_tree_client_ = nullptr;
 }
 
-DEFINE_TRACE(ModulePendingScript) {
+void ModulePendingScript::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_tree_client_);
   PendingScript::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ModulePendingScript) {
+void ModulePendingScript::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(module_tree_client_);
   PendingScript::TraceWrappers(visitor);
 }

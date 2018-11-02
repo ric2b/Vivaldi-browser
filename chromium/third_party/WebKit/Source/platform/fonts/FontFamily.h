@@ -26,9 +26,10 @@
 #ifndef FontFamily_h
 #define FontFamily_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
@@ -39,7 +40,7 @@ class PLATFORM_EXPORT FontFamily {
   DISALLOW_NEW();
 
  public:
-  FontFamily() {}
+  FontFamily() = default;
   ~FontFamily();
 
   void SetFamily(const AtomicString& family) { family_ = family; }
@@ -48,26 +49,30 @@ class PLATFORM_EXPORT FontFamily {
 
   const FontFamily* Next() const;
 
-  void AppendFamily(PassRefPtr<SharedFontFamily>);
-  PassRefPtr<SharedFontFamily> ReleaseNext();
+  void AppendFamily(scoped_refptr<SharedFontFamily>);
+  scoped_refptr<SharedFontFamily> ReleaseNext();
+
+  // Returns this font family's name followed by all subsequent linked
+  // families delimited by commas.
+  String ToString() const;
 
  private:
   AtomicString family_;
-  RefPtr<SharedFontFamily> next_;
+  scoped_refptr<SharedFontFamily> next_;
 };
 
 class PLATFORM_EXPORT SharedFontFamily : public FontFamily,
                                          public RefCounted<SharedFontFamily> {
   USING_FAST_MALLOC(SharedFontFamily);
-  WTF_MAKE_NONCOPYABLE(SharedFontFamily);
-
  public:
-  static PassRefPtr<SharedFontFamily> Create() {
-    return AdoptRef(new SharedFontFamily);
+  static scoped_refptr<SharedFontFamily> Create() {
+    return base::AdoptRef(new SharedFontFamily);
   }
 
  private:
-  SharedFontFamily() {}
+  SharedFontFamily() = default;
+
+  DISALLOW_COPY_AND_ASSIGN(SharedFontFamily);
 };
 
 PLATFORM_EXPORT bool operator==(const FontFamily&, const FontFamily&);
@@ -76,7 +81,7 @@ inline bool operator!=(const FontFamily& a, const FontFamily& b) {
 }
 
 inline FontFamily::~FontFamily() {
-  RefPtr<SharedFontFamily> reaper = std::move(next_);
+  scoped_refptr<SharedFontFamily> reaper = std::move(next_);
   while (reaper && reaper->HasOneRef()) {
     // implicitly protects reaper->next, then derefs reaper
     reaper = reaper->ReleaseNext();
@@ -84,14 +89,14 @@ inline FontFamily::~FontFamily() {
 }
 
 inline const FontFamily* FontFamily::Next() const {
-  return next_.Get();
+  return next_.get();
 }
 
-inline void FontFamily::AppendFamily(PassRefPtr<SharedFontFamily> family) {
+inline void FontFamily::AppendFamily(scoped_refptr<SharedFontFamily> family) {
   next_ = std::move(family);
 }
 
-inline PassRefPtr<SharedFontFamily> FontFamily::ReleaseNext() {
+inline scoped_refptr<SharedFontFamily> FontFamily::ReleaseNext() {
   return std::move(next_);
 }
 

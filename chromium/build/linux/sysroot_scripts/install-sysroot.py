@@ -38,7 +38,7 @@ import gn_chromium
 URL_PREFIX = 'https://commondatastorage.googleapis.com'
 URL_PATH = 'chrome-linux-sysroot/toolchain'
 
-VALID_ARCHS = ('arm', 'arm64', 'i386', 'amd64', 'mips')
+VALID_ARCHS = ('arm', 'arm64', 'i386', 'amd64', 'mips', 'mips64el')
 
 
 class Error(Exception):
@@ -71,6 +71,8 @@ def DetectHostArch():
     return 'arm64'
   if detected_host_arch == 'mips':
     return 'mips'
+  if detected_host_arch == 'mips64':
+    return 'mips64el'
   if detected_host_arch == 'ppc':
     return 'ppc'
   if detected_host_arch == 's390':
@@ -99,6 +101,12 @@ def DetectTargetArch():
     return 'arm64'
   if target_arch == 'mipsel':
     return 'mips'
+  if target_arch == 'mips64el':
+    return 'mips64el'
+
+  # Checking for enable android since that works better in vivaldi's environment
+  if "ANDROID_ENABLED" in os.environ or os.access(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".enable_android"), os.F_OK):
+    return "arm"
 
   return None
 
@@ -163,11 +171,12 @@ def main(args):
 def InstallDefaultSysrootForArch(target_arch):
   if target_arch not in VALID_ARCHS:
     raise Error('Unknown architecture: %s' % target_arch)
-  InstallSysroot('Jessie', target_arch)
+  InstallSysroot('Stretch', target_arch)
 
 
 def InstallSysroot(target_platform, target_arch):
-  # The sysroot directory should match the one specified in build/common.gypi.
+  # The sysroot directory should match the one specified in
+  # build/config/sysroot.gni.
   # TODO(thestig) Consider putting this elsewhere to avoid having to recreate
   # it on every build.
   linux_dir = os.path.dirname(SCRIPT_DIR)
@@ -189,8 +198,6 @@ def InstallSysroot(target_platform, target_arch):
   if os.path.exists(stamp):
     with open(stamp) as s:
       if s.read() == url:
-        print '%s %s sysroot image already up to date: %s' % \
-            (target_platform, target_arch, sysroot)
         return
 
   print 'Installing Debian %s %s root image: %s' % \

@@ -33,9 +33,7 @@
 
 namespace blink {
 
-class MODULES_EXPORT SpeechRecognitionResult final
-    : public GarbageCollected<SpeechRecognitionResult>,
-      public ScriptWrappable {
+class MODULES_EXPORT SpeechRecognitionResult final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -47,7 +45,7 @@ class MODULES_EXPORT SpeechRecognitionResult final
   SpeechRecognitionAlternative* item(unsigned index);
   bool isFinal() { return final_; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   SpeechRecognitionResult(

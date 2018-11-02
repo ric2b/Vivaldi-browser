@@ -8,7 +8,7 @@
 #include <memory>
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/TaskTypeTraits.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
@@ -42,13 +42,13 @@ class CORE_EXPORT ParentFrameTaskRunners final
 
   // Might return nullptr for unsupported task types. This can be called from
   // any threads.
-  RefPtr<WebTaskRunner> Get(TaskType);
+  scoped_refptr<WebTaskRunner> Get(TaskType);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   using TaskRunnerHashMap = HashMap<TaskType,
-                                    RefPtr<WebTaskRunner>,
+                                    scoped_refptr<WebTaskRunner>,
                                     WTF::IntHash<TaskType>,
                                     TaskTypeTraits>;
 

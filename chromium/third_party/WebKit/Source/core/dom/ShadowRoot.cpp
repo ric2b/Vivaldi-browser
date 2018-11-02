@@ -27,16 +27,18 @@
 #include "core/dom/ShadowRoot.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/string_or_trusted_html.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ShadowRootRareDataV0.h"
 #include "core/dom/SlotAssignment.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/dom/WhitespaceAttacher.h"
+#include "core/dom/trustedtypes/TrustedHTML.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/html/HTMLShadowElement.h"
 #include "core/html/HTMLSlotElement.h"
@@ -55,7 +57,7 @@ static_assert(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot),
               "ShadowRoot should stay small");
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
-    : DocumentFragment(0, kCreateShadowRoot),
+    : DocumentFragment(nullptr, kCreateShadowRoot),
       TreeScope(*this, document),
       style_sheet_list_(nullptr),
       child_shadow_root_count_(0),
@@ -76,14 +78,6 @@ ShadowRoot* ShadowRoot::OlderShadowRoot() const {
   if (GetType() == ShadowRootType::V0 && shadow_root_rare_data_v0_)
     return shadow_root_rare_data_v0_->OlderShadowRoot();
   return nullptr;
-}
-
-ShadowRoot* ShadowRoot::olderShadowRootForBindings() const {
-  ShadowRoot* older = OlderShadowRoot();
-  while (older && !older->IsOpenOrV0())
-    older = older->OlderShadowRoot();
-  DCHECK(!older || older->IsOpenOrV0());
-  return older;
 }
 
 void ShadowRoot::SetYoungerShadowRoot(ShadowRoot& root) {
@@ -126,16 +120,38 @@ Node* ShadowRoot::cloneNode(bool, ExceptionState& exception_state) {
   return nullptr;
 }
 
-String ShadowRoot::innerHTML() const {
+String ShadowRoot::InnerHTMLAsString() const {
   return CreateMarkup(this, kChildrenOnly);
 }
 
-void ShadowRoot::setInnerHTML(const String& markup,
-                              ExceptionState& exception_state) {
+void ShadowRoot::innerHTML(StringOrTrustedHTML& result) const {
+  result.SetString(InnerHTMLAsString());
+}
+
+void ShadowRoot::SetInnerHTMLFromString(const String& markup,
+                                        ExceptionState& exception_state) {
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           markup, &host(), kAllowScriptingContent, "innerHTML",
           exception_state))
     ReplaceChildrenWithFragment(this, fragment, exception_state);
+}
+
+void ShadowRoot::setInnerHTML(const StringOrTrustedHTML& stringOrHtml,
+                              ExceptionState& exception_state) {
+  DCHECK(stringOrHtml.IsString() ||
+         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
+
+  if (stringOrHtml.IsString() && GetDocument().RequireTrustedTypes()) {
+    exception_state.ThrowTypeError(
+        "This document requires `TrustedHTML` assignment.");
+    return;
+  }
+
+  String html = stringOrHtml.IsString()
+                    ? stringOrHtml.GetAsString()
+                    : stringOrHtml.GetAsTrustedHTML()->toString();
+
+  SetInnerHTMLFromString(html, exception_state);
 }
 
 void ShadowRoot::RecalcStyle(StyleRecalcChange change) {
@@ -156,43 +172,9 @@ void ShadowRoot::RecalcStyle(StyleRecalcChange change) {
 }
 
 void ShadowRoot::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
-  if (!NeedsReattachLayoutTree() && !ChildNeedsReattachLayoutTree()) {
-    SkipRebuildLayoutTree(whitespace_attacher);
-    return;
-  }
-
   ClearNeedsReattachLayoutTree();
   RebuildChildrenLayoutTrees(whitespace_attacher);
   ClearChildNeedsReattachLayoutTree();
-}
-
-void ShadowRoot::SkipRebuildLayoutTree(
-    WhitespaceAttacher& whitespace_attacher) const {
-  // We call this method when neither this, nor our child nodes are marked
-  // for re-attachment, but the host has been marked with
-  // childNeedsReattachLayoutTree. That happens when ::before or ::after needs
-  // re-attachment. In that case, we update nextTextSibling with the first text
-  // node sibling not preceeded by any in-flow children to allow for correct
-  // whitespace re-attachment if the ::before element display changes.
-  DCHECK(GetDocument().InStyleRecalc());
-  DCHECK(!GetDocument().ChildNeedsDistributionRecalc());
-  DCHECK(!NeedsStyleRecalc());
-  DCHECK(!ChildNeedsStyleRecalc());
-  DCHECK(!NeedsReattachLayoutTree());
-  DCHECK(!ChildNeedsReattachLayoutTree());
-
-  for (Node* sibling = firstChild(); sibling;
-       sibling = sibling->nextSibling()) {
-    if (sibling->IsTextNode()) {
-      whitespace_attacher.DidVisitText(ToText(sibling));
-      return;
-    }
-    LayoutObject* layout_object = sibling->GetLayoutObject();
-    if (layout_object && !layout_object->IsFloatingOrOutOfFlowPositioned()) {
-      whitespace_attacher.DidVisitElement(ToElement(sibling));
-      return;
-    }
-  }
 }
 
 void ShadowRoot::AttachLayoutTree(AttachContext& context) {
@@ -248,6 +230,14 @@ void ShadowRoot::RemovedFrom(ContainerNode* insertion_point) {
   }
 
   DocumentFragment::RemovedFrom(insertion_point);
+}
+
+void ShadowRoot::SetNeedsAssignmentRecalc() {
+  DCHECK(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
+  DCHECK(IsV1());
+  if (!slot_assignment_)
+    return;
+  return slot_assignment_->SetNeedsAssignmentRecalc();
 }
 
 void ShadowRoot::ChildrenChanged(const ChildrenChange& change) {
@@ -355,7 +345,7 @@ void ShadowRoot::DistributeV1() {
   EnsureSlotAssignment().ResolveDistribution();
 }
 
-DEFINE_TRACE(ShadowRoot) {
+void ShadowRoot::Trace(blink::Visitor* visitor) {
   visitor->Trace(shadow_root_rare_data_v0_);
   visitor->Trace(slot_assignment_);
   visitor->Trace(style_sheet_list_);
@@ -363,7 +353,7 @@ DEFINE_TRACE(ShadowRoot) {
   DocumentFragment::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ShadowRoot) {
+void ShadowRoot::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(style_sheet_list_);
   DocumentFragment::TraceWrappers(visitor);
 }
@@ -371,16 +361,16 @@ DEFINE_TRACE_WRAPPERS(ShadowRoot) {
 std::ostream& operator<<(std::ostream& ostream, const ShadowRootType& type) {
   switch (type) {
     case ShadowRootType::kUserAgent:
-      ostream << "ShadowRootType::UserAgent";
+      ostream << "UserAgent";
       break;
     case ShadowRootType::V0:
-      ostream << "ShadowRootType::V0";
+      ostream << "V0";
       break;
     case ShadowRootType::kOpen:
-      ostream << "ShadowRootType::Open";
+      ostream << "Open";
       break;
     case ShadowRootType::kClosed:
-      ostream << "ShadowRootType::Closed";
+      ostream << "Closed";
       break;
   }
   return ostream;

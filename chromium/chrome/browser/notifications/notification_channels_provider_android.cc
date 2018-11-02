@@ -162,8 +162,8 @@ NotificationChannel::NotificationChannel(const NotificationChannel& other) =
 
 NotificationChannelsProviderAndroid::NotificationChannelsProviderAndroid()
     : NotificationChannelsProviderAndroid(
-          base::MakeUnique<NotificationChannelsBridgeImpl>(),
-          base::MakeUnique<base::DefaultClock>()) {}
+          std::make_unique<NotificationChannelsBridgeImpl>(),
+          std::make_unique<base::DefaultClock>()) {}
 
 NotificationChannelsProviderAndroid::NotificationChannelsProviderAndroid(
     std::unique_ptr<NotificationChannelsBridge> bridge,
@@ -185,11 +185,31 @@ void NotificationChannelsProviderAndroid::MigrateToChannelsIfNecessary(
     return;
   }
   InitCachedChannels();
-  std::unique_ptr<content_settings::RuleIterator> it(
-      pref_provider->GetRuleIterator(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-                                     std::string(), false /* incognito */));
-  while (it && it->HasNext())
-    CreateChannelForRule(it->Next());
+
+  std::vector<content_settings::Rule> rules;
+
+  // Collect the existing rules and create channels for them.
+  {
+    std::unique_ptr<content_settings::RuleIterator> it(
+        pref_provider->GetRuleIterator(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                                       std::string(), false /* incognito */));
+
+    while (it && it->HasNext()) {
+      content_settings::Rule rule = it->Next();
+      rules.push_back(rule);
+
+      CreateChannelForRule(rule);
+    }
+  }
+
+  // Remove the existing |rules| from the preference provider.
+  for (const auto& rule : rules) {
+    pref_provider->SetWebsiteSetting(
+        rule.primary_pattern, rule.secondary_pattern,
+        CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+        content_settings::ResourceIdentifier(), nullptr);
+  }
+
   prefs->SetBoolean(prefs::kMigratedToSiteNotificationChannels, true);
 }
 
@@ -230,7 +250,7 @@ NotificationChannelsProviderAndroid::GetRuleIterator(
   std::vector<NotificationChannel> channels = UpdateCachedChannels();
   return channels.empty()
              ? nullptr
-             : base::MakeUnique<ChannelsRuleIterator>(std::move(channels));
+             : std::make_unique<ChannelsRuleIterator>(std::move(channels));
 }
 
 std::vector<NotificationChannel>
@@ -276,7 +296,7 @@ bool NotificationChannelsProviderAndroid::SetWebsiteSetting(
 
   InitCachedChannels();
 
-  url::Origin origin = url::Origin(GURL(primary_pattern.ToString()));
+  url::Origin origin = url::Origin::Create(GURL(primary_pattern.ToString()));
   DCHECK(!origin.unique());
   const std::string origin_string = origin.Serialize();
 
@@ -296,7 +316,7 @@ bool NotificationChannelsProviderAndroid::SetWebsiteSetting(
         bridge_->DeleteChannel(channel_to_delete->second.id);
         cached_channels_.erase(channel_to_delete);
       }
-      break;
+      return false;
     }
     default:
       // We rely on notification settings being one of ALLOW/BLOCK/DEFAULT.
@@ -315,6 +335,7 @@ void NotificationChannelsProviderAndroid::ClearAllContentSettingsRules(
   std::vector<NotificationChannel> channels = bridge_->GetChannels();
   for (auto channel : channels)
     bridge_->DeleteChannel(channel.id);
+  cached_channels_.clear();
 
   if (channels.size() > 0) {
     NotifyObservers(ContentSettingsPattern(), ContentSettingsPattern(),
@@ -335,7 +356,7 @@ base::Time NotificationChannelsProviderAndroid::GetWebsiteSettingLastModified(
       !platform_supports_channels_) {
     return base::Time();
   }
-  url::Origin origin = url::Origin(GURL(primary_pattern.ToString()));
+  url::Origin origin = url::Origin::Create(GURL(primary_pattern.ToString()));
   if (origin.unique())
     return base::Time();
   const std::string origin_string = origin.Serialize();
@@ -368,8 +389,6 @@ void NotificationChannelsProviderAndroid::CreateChannelIfRequired(
   } else {
     auto old_channel_status =
         bridge_->GetChannelStatus(channel_entry->second.id);
-    // TODO(awdf): Maybe remove this DCHECK - channel status could change any
-    // time so this may be vulnerable to a race condition.
     DCHECK_EQ(old_channel_status, new_channel_status);
   }
 }
@@ -377,7 +396,8 @@ void NotificationChannelsProviderAndroid::CreateChannelIfRequired(
 // InitCachedChannels() must be called prior to calling this method.
 void NotificationChannelsProviderAndroid::CreateChannelForRule(
     const content_settings::Rule& rule) {
-  url::Origin origin = url::Origin(GURL(rule.primary_pattern.ToString()));
+  url::Origin origin =
+      url::Origin::Create(GURL(rule.primary_pattern.ToString()));
   DCHECK(!origin.unique());
   const std::string origin_string = origin.Serialize();
   ContentSetting content_setting =

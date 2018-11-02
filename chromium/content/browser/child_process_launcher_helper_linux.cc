@@ -7,16 +7,18 @@
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
-#include "content/browser/renderer_host/render_sandbox_host_linux.h"
+#include "content/browser/sandbox_host_linux.h"
 #include "content/browser/zygote_host/zygote_communication_linux.h"
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
-#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/zygote_handle_linux.h"
+#include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "gpu/config/gpu_switches.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
 
 namespace content {
 namespace internal {
@@ -39,20 +41,24 @@ ChildProcessLauncherHelper::GetFilesToMap() {
                                       GetProcessType(), command_line());
 }
 
-void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
+bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     const PosixFileDescriptorInfo& files_to_register,
     base::LaunchOptions* options) {
   // Convert FD mapping to FileHandleMappingVector
   options->fds_to_remap = files_to_register.GetMappingWithIDAdjustment(
       base::GlobalDescriptors::kBaseDescriptor);
 
-  if (GetProcessType() == switches::kRendererProcess) {
-    const int sandbox_fd =
-        RenderSandboxHostLinux::GetInstance()->GetRendererSocket();
+  if (GetProcessType() == switches::kRendererProcess ||
+      (GetProcessType() == switches::kGpuProcess &&
+       base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kEnableOOPRasterization))) {
+    const int sandbox_fd = SandboxHostLinux::GetInstance()->GetChildSocket();
     options->fds_to_remap.push_back(std::make_pair(sandbox_fd, GetSandboxFD()));
   }
 
   options->environ = delegate_->GetEnvironment();
+
+  return true;
 }
 
 ChildProcessLauncherHelper::Process

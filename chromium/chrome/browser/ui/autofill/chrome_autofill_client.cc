@@ -8,9 +8,11 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/autofill/address_normalizer_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
 #include "chrome/browser/browser_process.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo_util.h"
+#include "chrome/browser/ssl/insecure_sensitive_input_driver_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
@@ -35,6 +38,7 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -151,7 +155,13 @@ IdentityProvider* ChromeAutofillClient::GetIdentityProvider() {
 }
 
 ukm::UkmRecorder* ChromeAutofillClient::GetUkmRecorder() {
-  return g_browser_process->ukm_recorder();
+  return ukm::UkmRecorder::Get();
+}
+
+AddressNormalizer* ChromeAutofillClient::GetAddressNormalizer() {
+  if (base::FeatureList::IsEnabled(features::kAutofillAddressNormalizer))
+    return AddressNormalizerFactory::GetInstance();
+  return nullptr;
 }
 
 SaveCardBubbleController* ChromeAutofillClient::GetSaveCardBubbleController() {
@@ -373,6 +383,13 @@ void ChromeAutofillClient::DidFillOrPreviewField(
   AutofillLoggerAndroid::DidFillOrPreviewField(autofilled_value,
                                                profile_full_name);
 #endif  // defined(OS_ANDROID)
+}
+
+void ChromeAutofillClient::DidInteractWithNonsecureCreditCardInput() {
+  InsecureSensitiveInputDriverFactory* factory =
+      InsecureSensitiveInputDriverFactory::GetOrCreateForWebContents(
+          web_contents());
+  factory->DidInteractWithNonsecureCreditCardInput();
 }
 
 bool ChromeAutofillClient::IsContextSecure() {

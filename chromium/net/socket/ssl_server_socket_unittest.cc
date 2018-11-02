@@ -17,11 +17,11 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <queue>
 #include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/containers/queue.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -71,7 +71,6 @@
 #include "testing/platform_test.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
-#include "third_party/boringssl/src/include/openssl/x509.h"
 
 using net::test::IsError;
 using net::test::IsOk;
@@ -84,17 +83,16 @@ const char kClientCertFileName[] = "client_1.pem";
 const char kClientPrivateKeyFileName[] = "client_1.pk8";
 const char kWrongClientCertFileName[] = "client_2.pem";
 const char kWrongClientPrivateKeyFileName[] = "client_2.pk8";
-const char kClientCertCAFileName[] = "client_1_ca.pem";
 
 class MockCTPolicyEnforcer : public CTPolicyEnforcer {
  public:
   MockCTPolicyEnforcer() = default;
   ~MockCTPolicyEnforcer() override = default;
-  ct::CertPolicyCompliance DoesConformToCertPolicy(
+  ct::CTPolicyCompliance CheckCompliance(
       X509Certificate* cert,
       const SCTList& verified_scts,
       const NetLogWithSource& net_log) override {
-    return ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+    return ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
   }
 };
 
@@ -203,7 +201,7 @@ class FakeDataChannel {
 
   CompletionCallback write_callback_;
 
-  std::queue<scoped_refptr<DrainableIOBuffer> > data_;
+  base::queue<scoped_refptr<DrainableIOBuffer>> data_;
 
   // True if Close() has been called.
   bool closed_;
@@ -224,7 +222,7 @@ class FakeSocket : public StreamSocket {
              FakeDataChannel* outgoing_channel)
       : incoming_(incoming_channel), outgoing_(outgoing_channel) {}
 
-  ~FakeSocket() override {}
+  ~FakeSocket() override = default;
 
   int Read(IOBuffer* buf,
            int buf_len,
@@ -435,22 +433,12 @@ class SSLServerSocketTest : public PlatformTest {
     server_ssl_config_.client_cert_type =
         SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
 
-    bssl::UniquePtr<STACK_OF(X509_NAME)> cert_names(
-        SSL_load_client_CA_file(GetTestCertsDirectory()
-                                    .AppendASCII(kClientCertCAFileName)
-                                    .MaybeAsASCII()
-                                    .c_str()));
-    ASSERT_TRUE(cert_names);
-
-    for (size_t i = 0; i < sk_X509_NAME_num(cert_names.get()); ++i) {
-      uint8_t* str = nullptr;
-      int length = i2d_X509_NAME(sk_X509_NAME_value(cert_names.get(), i), &str);
-      ASSERT_LT(0, length);
-
-      server_ssl_config_.cert_authorities_.push_back(std::string(
-          reinterpret_cast<const char*>(str), static_cast<size_t>(length)));
-      OPENSSL_free(str);
-    }
+    // "CN=B CA" - DER encoded DN of the issuer of client_1.pem
+    static const uint8_t kClientCertCAName[] = {
+        0x30, 0x0f, 0x31, 0x0d, 0x30, 0x0b, 0x06, 0x03, 0x55,
+        0x04, 0x03, 0x0c, 0x04, 0x42, 0x20, 0x43, 0x41};
+    server_ssl_config_.cert_authorities_.push_back(std::string(
+        std::begin(kClientCertCAName), std::end(kClientCertCAName)));
 
     scoped_refptr<X509Certificate> expected_client_cert(
         ImportCertFromFile(GetTestCertsDirectory(), kClientCertFileName));

@@ -4,9 +4,9 @@
 
 #include "ash/system/palette/tools/laser_pointer_mode.h"
 
-#include "ash/palette_delegate.h"
+#include "ash/laser/laser_pointer_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/shell_port.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/palette/palette_ids.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -17,7 +17,7 @@ LaserPointerMode::LaserPointerMode(Delegate* delegate)
     : CommonPaletteTool(delegate) {
 }
 
-LaserPointerMode::~LaserPointerMode() {}
+LaserPointerMode::~LaserPointerMode() = default;
 
 PaletteGroup LaserPointerMode::GetGroup() const {
   return PaletteGroup::MODE;
@@ -30,14 +30,14 @@ PaletteToolId LaserPointerMode::GetToolId() const {
 void LaserPointerMode::OnEnable() {
   CommonPaletteTool::OnEnable();
 
-  ShellPort::Get()->SetLaserPointerEnabled(true);
+  Shell::Get()->laser_pointer_controller()->SetEnabled(true);
   delegate()->HidePalette();
 }
 
 void LaserPointerMode::OnDisable() {
   CommonPaletteTool::OnDisable();
 
-  ShellPort::Get()->SetLaserPointerEnabled(false);
+  Shell::Get()->laser_pointer_controller()->SetEnabled(false);
 }
 
 const gfx::VectorIcon& LaserPointerMode::GetActiveTrayIcon() const {

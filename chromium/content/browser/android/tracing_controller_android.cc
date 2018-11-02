@@ -4,6 +4,8 @@
 
 #include "content/browser/android/tracing_controller_android.h"
 
+#include <string>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/json/json_writer.h"
@@ -17,7 +19,9 @@ using base::android::ScopedJavaLocalRef;
 
 namespace content {
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_TracingControllerAndroid_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   TracingControllerAndroid* profiler = new TracingControllerAndroid(env, obj);
   return reinterpret_cast<intptr_t>(profiler);
 }
@@ -58,10 +62,9 @@ void TracingControllerAndroid::StopTracing(
   base::FilePath file_path(
       base::android::ConvertJavaStringToUTF8(env, jfilepath));
   if (!TracingController::GetInstance()->StopTracing(
-          TracingController::CreateFileSink(
-              file_path,
-              base::Bind(&TracingControllerAndroid::OnTracingStopped,
-                         weak_factory_.GetWeakPtr())))) {
+          TracingController::CreateFileEndpoint(
+              file_path, base::Bind(&TracingControllerAndroid::OnTracingStopped,
+                                    weak_factory_.GetWeakPtr())))) {
     LOG(ERROR) << "EndTracingAsync failed, forcing an immediate stop";
     OnTracingStopped();
   }
@@ -109,7 +112,8 @@ void TracingControllerAndroid::OnKnownCategoriesReceived(
   LOG(WARNING) << "{\"traceCategoriesList\": " << received_category_list << "}";
 }
 
-static ScopedJavaLocalRef<jstring> GetDefaultCategories(
+static ScopedJavaLocalRef<jstring>
+JNI_TracingControllerAndroid_GetDefaultCategories(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   base::trace_event::TraceConfig trace_config;

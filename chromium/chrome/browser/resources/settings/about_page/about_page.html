@@ -22,6 +22,7 @@
 <link rel="import" href="detailed_build_info.html">
 <link rel="import" href="update_warning_dialog.html">
 <link rel="import" href="../settings_page/settings_subpage.html">
+<link rel="import" href="../reset_page/powerwash_dialog.html">
 </if>
 
 <if expr="_google_chrome and is_macosx">
@@ -103,7 +104,8 @@
                   src="[[getIconSrc_(obsoleteSystemInfo_, currentUpdateStatusEvent_)]]">
               </iron-icon>
               <div class="start padded">
-                <div id="updateStatusMessage" hidden="[[!showUpdateStatus_]]"
+                <div id="updateStatusMessage" hidden="[[!showUpdateStatus_]]">
+                  <div
 <if expr="not chromeos">
                     inner-h-t-m-l="[[getUpdateStatusMessage_(
                         currentUpdateStatusEvent_)]]">
@@ -112,6 +114,12 @@
                     inner-h-t-m-l="[[getUpdateStatusMessage_(
                         currentUpdateStatusEvent_, targetChannel_)]]">
 </if>
+                  </div>
+                  <a hidden$="[[!shouldShowLearnMoreLink_(
+                      currentUpdateStatusEvent_)]]" target="_blank"
+                      href="https://support.google.com/chrome?p=update_error">
+                    $i18n{learnMore}
+                  </a>
                 </div>
                 <span id="deprecationWarning"
                     hidden="[[!obsoleteSystemInfo_.obsolete]]">
@@ -142,6 +150,25 @@
 </if>
               </span>
             </div>
+<if expr="chromeos">
+            <div id="aboutTPMFirmwareUpdate" class="settings-box two-line"
+                hidden$="[[!showTPMFirmwareUpdateLineItem_]]"
+                on-tap="onTPMFirmwareUpdateTap_" actionable>
+              <div class="start">
+                <div>$i18n{aboutTPMFirmwareUpdateTitle}</div>
+                <div class="secondary">
+                  $i18n{aboutTPMFirmwareUpdateDescription}
+                  <a href="$i18n{aboutTPMFirmwareUpdateLearnMoreURL}"
+                      target="_blank" on-tap="onLearnMoreTap_">
+                    $i18n{learnMore}
+                  </a>
+                </div>
+              </div>
+              <button class="subpage-arrow" is="paper-icon-button-light"
+                  aria-labelledby="aboutTPMFirmwareUpdate">
+              </button>
+            </div>
+</if>
 <if expr="_google_chrome and is_macosx">
             <template is="dom-if" if="[[!promoteUpdaterStatus_.hidden]]">
               <div id="promoteUpdater" class="settings-box"
@@ -228,6 +255,12 @@
       <settings-update-warning-dialog update-info="[[updateInfo_]]"
           on-close="onUpdateWarningDialogClose_">
       </settings-update-warning-dialog>
+    </template>
+    <template is="dom-if" if="[[showTPMFirmwareUpdateDialog_]]"
+        restamp>
+      <settings-powerwash-dialog request-tpm-firmware-update
+          on-close="onPowerwashDialogClose_">
+      </settings-powerwash-dialog>
     </template>
 </if>
   </template>

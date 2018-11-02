@@ -89,7 +89,7 @@ void LayoutSVGForeignObject::ComputeLogicalHeight(
 void LayoutSVGForeignObject::UpdateLayout() {
   DCHECK(NeedsLayout());
 
-  SVGForeignObjectElement* foreign = toSVGForeignObjectElement(GetNode());
+  SVGForeignObjectElement* foreign = ToSVGForeignObjectElement(GetNode());
 
   bool update_cached_boundaries_in_parents = false;
   if (needs_transform_update_) {
@@ -131,7 +131,7 @@ bool LayoutSVGForeignObject::NodeAtFloatPoint(HitTestResult& result,
   if (hit_test_action != kHitTestForeground)
     return false;
 
-  AffineTransform local_transform = this->LocalSVGTransform();
+  AffineTransform local_transform = LocalSVGTransform();
   if (!local_transform.IsInvertible())
     return false;
 

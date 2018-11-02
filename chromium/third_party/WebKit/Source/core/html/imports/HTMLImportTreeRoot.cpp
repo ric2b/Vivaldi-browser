@@ -4,8 +4,8 @@
 
 #include "core/html/imports/HTMLImportTreeRoot.h"
 
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleEngine.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/imports/HTMLImportChild.h"
 
@@ -19,7 +19,7 @@ HTMLImportTreeRoot::HTMLImportTreeRoot(Document* document)
     : HTMLImport(HTMLImport::kSync),
       document_(document),
       recalc_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, document->GetFrame()),
+          document->GetFrame()->GetTaskRunner(TaskType::kUnspecedTimer),
           this,
           &HTMLImportTreeRoot::RecalcTimerFired) {
   ScheduleRecalcState();  // This recomputes initial state.
@@ -59,7 +59,7 @@ void HTMLImportTreeRoot::ScheduleRecalcState() {
   DCHECK(document_);
   if (recalc_timer_.IsActive() || !document_->IsActive())
     return;
-  recalc_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  recalc_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 HTMLImportChild* HTMLImportTreeRoot::Add(HTMLImportChild* child) {
@@ -81,13 +81,14 @@ void HTMLImportTreeRoot::RecalcTimerFired(TimerBase*) {
   HTMLImport::RecalcTreeState(this);
 }
 
-DEFINE_TRACE(HTMLImportTreeRoot) {
+void HTMLImportTreeRoot::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(imports_);
   HTMLImport::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLImportTreeRoot) {
+void HTMLImportTreeRoot::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(document_);
 }
 

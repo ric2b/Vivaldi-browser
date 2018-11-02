@@ -5,10 +5,10 @@
 #ifndef PerformanceObserver_h
 #define PerformanceObserver_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/timing/PerformanceEntry.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
@@ -19,14 +19,13 @@ class ExecutionContext;
 class ExceptionState;
 class PerformanceBase;
 class PerformanceObserver;
-class PerformanceObserverCallback;
 class PerformanceObserverInit;
+class V8PerformanceObserverCallback;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 
 class CORE_EXPORT PerformanceObserver final
-    : public GarbageCollected<PerformanceObserver>,
-      public ScriptWrappable,
+    : public ScriptWrappable,
       public ActiveScriptWrappable<PerformanceObserver>,
       public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -37,7 +36,7 @@ class CORE_EXPORT PerformanceObserver final
 
  public:
   static PerformanceObserver* Create(ScriptState*,
-                                     PerformanceObserverCallback*);
+                                     V8PerformanceObserverCallback*);
   static void ResumeSuspendedObservers();
 
   void observe(const PerformanceObserverInit&, ExceptionState&);
@@ -48,18 +47,18 @@ class CORE_EXPORT PerformanceObserver final
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   PerformanceObserver(ExecutionContext*,
                       PerformanceBase*,
-                      PerformanceObserverCallback*);
+                      V8PerformanceObserverCallback*);
   void Deliver();
   bool ShouldBeSuspended() const;
 
   Member<ExecutionContext> execution_context_;
-  TraceWrapperMember<PerformanceObserverCallback> callback_;
+  TraceWrapperMember<V8PerformanceObserverCallback> callback_;
   WeakMember<PerformanceBase> performance_;
   PerformanceEntryVector performance_entries_;
   PerformanceEntryTypeMask filter_options_;

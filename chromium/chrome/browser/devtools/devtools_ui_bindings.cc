@@ -118,6 +118,7 @@ base::LazyInstance<DevToolsUIBindingsList>::Leaky g_instances =
 std::unique_ptr<base::DictionaryValue> CreateFileSystemValue(
     DevToolsFileHelper::FileSystem file_system) {
   auto file_system_value = base::MakeUnique<base::DictionaryValue>();
+  file_system_value->SetString("type", file_system.type);
   file_system_value->SetString("fileSystemName", file_system.file_system_name);
   file_system_value->SetString("rootURL", file_system.root_url);
   file_system_value->SetString("fileSystemPath", file_system.file_system_path);
@@ -429,7 +430,7 @@ GURL SanitizeFrontendURL(const GURL& url,
             base::StringPrintf("%s=%s", it.GetKey().c_str(), value.c_str()));
       }
     }
-    if (url.has_ref())
+    if (url.has_ref() && url.ref_piece().find('\'') == base::StringPiece::npos)
       fragment = '#' + url.ref();
   }
   std::string query =
@@ -483,6 +484,7 @@ GURL DevToolsUIBindings::SanitizeFrontendURL(const GURL& url) {
       chrome::kChromeUIDevToolsHost, SanitizeFrontendPath(url.path()), true);
 }
 
+// static
 bool DevToolsUIBindings::IsValidFrontendURL(const GURL& url) {
   if (url.SchemeIs(content::kChromeUIScheme) &&
       url.host() == content::kChromeUITracingHost &&
@@ -491,6 +493,12 @@ bool DevToolsUIBindings::IsValidFrontendURL(const GURL& url) {
   }
 
   return SanitizeFrontendURL(url).spec() == url.spec();
+}
+
+bool DevToolsUIBindings::IsValidRemoteFrontendURL(const GURL& url) {
+  return ::SanitizeFrontendURL(url, url::kHttpsScheme, kRemoteFrontendDomain,
+                               url.path(), true)
+             .spec() == url.spec();
 }
 
 void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
@@ -649,8 +657,7 @@ void DevToolsUIBindings::DispatchProtocolMessage(
 }
 
 void DevToolsUIBindings::AgentHostClosed(
-    content::DevToolsAgentHost* agent_host,
-    bool replaced_with_another_client) {
+    content::DevToolsAgentHost* agent_host) {
   DCHECK(agent_host == agent_host_.get());
   agent_host_ = NULL;
   delegate_->InspectedContentsClosing();
@@ -787,12 +794,11 @@ void DevToolsUIBindings::RequestFileSystems() {
                      &file_systems_value, NULL, NULL);
 }
 
-void DevToolsUIBindings::AddFileSystem(const std::string& file_system_path) {
+void DevToolsUIBindings::AddFileSystem(const std::string& type) {
   CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   file_helper_->AddFileSystem(
-      file_system_path,
-      base::Bind(&DevToolsUIBindings::ShowDevToolsConfirmInfoBar,
-                 weak_factory_.GetWeakPtr()));
+      type, base::Bind(&DevToolsUIBindings::ShowDevToolsConfirmInfoBar,
+                       weak_factory_.GetWeakPtr()));
 }
 
 void DevToolsUIBindings::RemoveFileSystem(const std::string& file_system_path) {
@@ -1148,9 +1154,12 @@ void DevToolsUIBindings::DevicesUpdated(
                      NULL);
 }
 
-void DevToolsUIBindings::FileSavedAs(const std::string& url) {
+void DevToolsUIBindings::FileSavedAs(const std::string& url,
+                                     const std::string& file_system_path) {
   base::Value url_value(url);
-  CallClientFunction("DevToolsAPI.savedURL", &url_value, NULL, NULL);
+  base::Value file_system_path_value(file_system_path);
+  CallClientFunction("DevToolsAPI.savedURL", &url_value,
+                     &file_system_path_value, NULL);
 }
 
 void DevToolsUIBindings::CanceledFileSaveAs(const std::string& url) {
@@ -1166,11 +1175,13 @@ void DevToolsUIBindings::AppendedTo(const std::string& url) {
 }
 
 void DevToolsUIBindings::FileSystemAdded(
-    const DevToolsFileHelper::FileSystem& file_system) {
+    const std::string& error,
+    const DevToolsFileHelper::FileSystem* file_system) {
+  base::Value error_value(error);
   std::unique_ptr<base::DictionaryValue> file_system_value(
-      CreateFileSystemValue(file_system));
-  CallClientFunction("DevToolsAPI.fileSystemAdded",
-                     file_system_value.get(), NULL, NULL);
+      file_system ? CreateFileSystemValue(*file_system) : nullptr);
+  CallClientFunction("DevToolsAPI.fileSystemAdded", &error_value,
+                     file_system_value.get(), NULL);
 }
 
 void DevToolsUIBindings::FileSystemRemoved(
@@ -1273,7 +1284,7 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
     // documents.
     content::ChildProcessSecurityPolicy::GetInstance()->GrantOrigin(
         web_contents_->GetMainFrame()->GetProcess()->GetID(),
-        url::Origin(extension->url()));
+        url::Origin::Create(extension->url()));
 
     std::unique_ptr<base::DictionaryValue> extension_info(
         new base::DictionaryValue());
@@ -1360,6 +1371,19 @@ void DevToolsUIBindings::ReadyToCommitNavigation(
                  << navigation_handle->GetURL().spec();
       frontend_host_.reset();
       return;
+    }
+    if (navigation_handle->GetRenderFrameHost() ==
+            web_contents_->GetMainFrame() &&
+        frontend_host_) {
+      return;
+    }
+    if (content::RenderFrameHost* opener = web_contents_->GetOpener()) {
+      content::WebContents* opener_wc =
+          content::WebContents::FromRenderFrameHost(opener);
+      DevToolsUIBindings* opener_bindings =
+          opener_wc ? DevToolsUIBindings::ForWebContents(opener_wc) : nullptr;
+      if (!opener_bindings || !opener_bindings->frontend_host_)
+        return;
     }
     frontend_host_.reset(content::DevToolsFrontendHost::Create(
         navigation_handle->GetRenderFrameHost(),

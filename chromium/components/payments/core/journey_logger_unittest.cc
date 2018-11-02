@@ -7,9 +7,10 @@
 #include "base/metrics/metrics_hashes.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/metrics/proto/ukm/entry.pb.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -926,6 +927,8 @@ TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_TwoPaymentRequests) {
 // the Payment Request.
 TEST(JourneyLoggerTest,
      RecordJourneyStatsHistograms_CheckoutFunnelUkm_UserAborted) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  using UkmEntry = ukm::builders::PaymentRequest_CheckoutEvents;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   char test_url[] = "http://www.google.com/";
 
@@ -941,41 +944,41 @@ TEST(JourneyLoggerTest,
 
   // Simulate that the user aborts after being shown the Payment Request and
   // clicking pay.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/true);
   logger.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
   logger.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
+  int64_t expected_step_metric =
+      JourneyLogger::EVENT_SHOWN | JourneyLogger::EVENT_PAY_CLICKED |
+      JourneyLogger::EVENT_REQUEST_SHIPPING |
+      JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
+      JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD |
+      JourneyLogger::EVENT_USER_ABORTED |
+      JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT |
+      JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS;
+
   // Make sure the UKM was logged correctly.
-  ASSERT_EQ(1U, ukm_recorder.sources_count());
-  const ukm::UkmSource* source = ukm_recorder.GetSourceForUrl(test_url);
-  ASSERT_NE(nullptr, source);
-
-  ASSERT_EQ(1U, ukm_recorder.entries_count());
-  const ukm::mojom::UkmEntry* entry = ukm_recorder.GetEntry(0);
-  EXPECT_EQ(source->id(), entry->source_id);
-  EXPECT_EQ(base::HashMetricName(internal::kUKMCheckoutEventsEntryName),
-            entry->event_hash);
-
-  const ukm::mojom::UkmMetric* status_metric = ukm::TestUkmRecorder::FindMetric(
-      entry, internal::kUKMCompletionStatusMetricName);
-  ASSERT_NE(nullptr, status_metric);
-  EXPECT_EQ(JourneyLogger::COMPLETION_STATUS_USER_ABORTED,
-            status_metric->value);
-
-  const ukm::mojom::UkmMetric* step_metric =
-      ukm::TestUkmRecorder::FindMetric(entry, internal::kUKMEventsMetricName);
-  ASSERT_NE(nullptr, step_metric);
-  EXPECT_EQ(JourneyLogger::EVENT_SHOWN | JourneyLogger::EVENT_PAY_CLICKED |
-                JourneyLogger::EVENT_REQUEST_SHIPPING |
-                JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
-                JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD,
-            step_metric->value);
+  auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* const entry : entries) {
+    ukm_recorder.ExpectEntrySourceHasUrl(entry, GURL(test_url));
+    EXPECT_EQ(2U, entry->metrics.size());
+    ukm_recorder.ExpectEntryMetric(
+        entry, UkmEntry::kCompletionStatusName,
+        JourneyLogger::COMPLETION_STATUS_USER_ABORTED);
+    ukm_recorder.ExpectEntryMetric(entry, UkmEntry::kEventsName,
+                                   expected_step_metric);
+  }
 }
 
 // Tests that the Payment Request UKMs are logged correctly when the user
 // completes the Payment Request.
 TEST(JourneyLoggerTest,
      RecordJourneyStatsHistograms_CheckoutFunnelUkm_Completed) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  using UkmEntry = ukm::builders::PaymentRequest_CheckoutEvents;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   char test_url[] = "http://www.google.com/";
 
@@ -990,32 +993,30 @@ TEST(JourneyLoggerTest,
       /*requested_method_other=*/false);
 
   // Simulate that the user aborts after being shown the Payment Request.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/true);
   logger.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
   logger.SetCompleted();
 
+  int64_t expected_step_metric =
+      JourneyLogger::EVENT_SHOWN | JourneyLogger::EVENT_REQUEST_SHIPPING |
+      JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
+      JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD |
+      JourneyLogger::EVENT_COMPLETED |
+      JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT |
+      JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS;
+
   // Make sure the UKM was logged correctly.
-  ASSERT_EQ(1U, ukm_recorder.sources_count());
-  const ukm::UkmSource* source = ukm_recorder.GetSourceForUrl(test_url);
-  ASSERT_NE(nullptr, source);
-
-  ASSERT_EQ(1U, ukm_recorder.entries_count());
-  const ukm::mojom::UkmEntry* entry = ukm_recorder.GetEntry(0);
-  EXPECT_EQ(source->id(), entry->source_id);
-  EXPECT_EQ(base::HashMetricName(internal::kUKMCheckoutEventsEntryName),
-            entry->event_hash);
-
-  const ukm::mojom::UkmMetric* status_metric = ukm::TestUkmRecorder::FindMetric(
-      entry, internal::kUKMCompletionStatusMetricName);
-  ASSERT_NE(nullptr, status_metric);
-  EXPECT_EQ(JourneyLogger::COMPLETION_STATUS_COMPLETED, status_metric->value);
-
-  const ukm::mojom::UkmMetric* step_metric =
-      ukm::TestUkmRecorder::FindMetric(entry, internal::kUKMEventsMetricName);
-  ASSERT_NE(nullptr, step_metric);
-  EXPECT_EQ(JourneyLogger::EVENT_SHOWN | JourneyLogger::EVENT_REQUEST_SHIPPING |
-                JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
-                JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD,
-            step_metric->value);
+  auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* const entry : entries) {
+    ukm_recorder.ExpectEntrySourceHasUrl(entry, GURL(test_url));
+    EXPECT_EQ(2U, entry->metrics.size());
+    ukm_recorder.ExpectEntryMetric(entry, UkmEntry::kCompletionStatusName,
+                                   JourneyLogger::COMPLETION_STATUS_COMPLETED);
+    ukm_recorder.ExpectEntryMetric(entry, UkmEntry::kEventsName,
+                                   expected_step_metric);
+  }
 }
 
 }  // namespace payments

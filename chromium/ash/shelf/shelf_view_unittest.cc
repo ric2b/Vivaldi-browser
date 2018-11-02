@@ -10,12 +10,13 @@
 #include <vector>
 
 #include "ash/app_list/test_app_list_presenter_impl.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller.h"
 #include "ash/shelf/app_list_button.h"
 #include "ash/shelf/overflow_bubble.h"
 #include "ash/shelf/overflow_bubble_view.h"
@@ -46,7 +47,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/user_action_tester.h"
 #include "base/time/time.h"
@@ -125,8 +126,8 @@ class TestShelfObserver : public ShelfObserver {
 
 class ShelfObserverIconTest : public AshTestBase {
  public:
-  ShelfObserverIconTest() {}
-  ~ShelfObserverIconTest() override {}
+  ShelfObserverIconTest() = default;
+  ~ShelfObserverIconTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -156,7 +157,7 @@ class ShelfObserverIconTest : public AshTestBase {
 class ShelfItemSelectionTracker : public ShelfItemDelegate {
  public:
   ShelfItemSelectionTracker() : ShelfItemDelegate(ShelfID()) {}
-  ~ShelfItemSelectionTracker() override {}
+  ~ShelfItemSelectionTracker() override = default;
 
   size_t item_selected_count() const { return item_selected_count_; }
   void set_item_selected_action(ShelfAction item_selected_action) {
@@ -201,10 +202,6 @@ TEST_F(ShelfObserverIconTest, AddRemove) {
 // Make sure creating/deleting an window on one displays notifies a
 // shelf on external display as well as one on primary.
 TEST_F(ShelfObserverIconTest, AddRemoveWithMultipleDisplays) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("400x400,400x400");
   observer()->Reset();
 
@@ -254,8 +251,8 @@ class ShelfViewTest : public AshTestBase {
   static const char*
       kTimeBetweenWindowMinimizedAndActivatedActionsHistogramName;
 
-  ShelfViewTest() {}
-  ~ShelfViewTest() override {}
+  ShelfViewTest() = default;
+  ~ShelfViewTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -269,6 +266,9 @@ class ShelfViewTest : public AshTestBase {
 
     test_api_.reset(new ShelfViewTestAPI(shelf_view_));
     test_api_->SetAnimationDuration(1);  // Speeds up animation for test.
+
+    // Add a browser shortcut shelf item, as chrome does, for testing.
+    AddItem(TYPE_BROWSER_SHORTCUT, true);
   }
 
   void TearDown() override {
@@ -290,7 +290,7 @@ class ShelfViewTest : public AshTestBase {
     model_->Add(item);
     // Set a delegate; some tests require one to select the item.
     model_->SetShelfItemDelegate(item.id,
-                                 base::MakeUnique<ShelfItemSelectionTracker>());
+                                 std::make_unique<ShelfItemSelectionTracker>());
     if (wait_for_animations)
       test_api_->RunMessageLoopUntilAnimationsDone();
     return item.id;
@@ -323,6 +323,10 @@ class ShelfViewTest : public AshTestBase {
   }
 
   ShelfItem GetItemByID(const ShelfID& id) { return *model_->ItemByID(id); }
+
+  void PinAppWithID(const ShelfID& id) { model_->PinAppWithID(id.app_id); }
+
+  bool IsAppPinned(const ShelfID& id) { return model_->IsAppPinned(id.app_id); }
 
   void CheckModelIDs(
       const std::vector<std::pair<ShelfID, views::View*>>& id_map) {
@@ -443,8 +447,6 @@ class ShelfViewTest : public AshTestBase {
                             int destination_index,
                             bool progressively) {
     views::View* button = SimulateViewPressed(pointer, button_index);
-    if (pointer == ShelfView::TOUCH && reach_touch_time_threshold_)
-      base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(300));
 
     if (!progressively) {
       ContinueDrag(button, pointer, button_index, destination_index, false);
@@ -652,7 +654,6 @@ class ShelfViewTest : public AshTestBase {
 
   ShelfModel* model_ = nullptr;
   ShelfView* shelf_view_ = nullptr;
-  bool reach_touch_time_threshold_ = true;
 
   std::unique_ptr<ShelfViewTestAPI> test_api_;
 
@@ -665,37 +666,15 @@ const char*
         ShelfButtonPressedMetricTracker::
             kTimeBetweenWindowMinimizedAndActivatedActionsHistogramName;
 
-class ScopedTextDirectionChange {
- public:
-  explicit ScopedTextDirectionChange(bool is_rtl) : is_rtl_(is_rtl) {
-    original_locale_ = base::i18n::GetConfiguredLocale();
-    if (is_rtl_)
-      base::i18n::SetICUDefaultLocale("he");
-    CheckTextDirectionIsCorrect();
-  }
-
-  ~ScopedTextDirectionChange() {
-    if (is_rtl_)
-      base::i18n::SetICUDefaultLocale(original_locale_);
-  }
-
- private:
-  void CheckTextDirectionIsCorrect() {
-    ASSERT_EQ(is_rtl_, base::i18n::IsRTL());
-  }
-
-  bool is_rtl_;
-  std::string original_locale_;
-};
-
 class ShelfViewTextDirectionTest : public ShelfViewTest,
                                    public testing::WithParamInterface<bool> {
  public:
-  ShelfViewTextDirectionTest() : text_direction_change_(GetParam()) {}
-  virtual ~ShelfViewTextDirectionTest() {}
+  ShelfViewTextDirectionTest() : scoped_locale_(GetParam() ? "he" : "") {}
+  virtual ~ShelfViewTextDirectionTest() = default;
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfViewTextDirectionTest);
 };
@@ -1102,46 +1081,6 @@ TEST_F(ShelfViewTest, SimultaneousDrag) {
   ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
 }
 
-TEST_F(ShelfViewTest, DragWithTimeThreshold) {
-  std::vector<std::pair<ShelfID, views::View*>> id_map;
-  SetupForDragTest(&id_map);
-
-  // Start a touch drag that does not reach the touch time threshold.
-  reach_touch_time_threshold_ = false;
-  views::View* dragged_button_touch =
-      SimulateDrag(ShelfView::TOUCH, 4, 2, false);
-  // Nothing changes since the drag didn't reach the touch time threshold.
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
-                                       false);
-
-  // Start a touch drag that does reach the touch time threshold.
-  reach_touch_time_threshold_ = true;
-  dragged_button_touch = SimulateDrag(ShelfView::TOUCH, 1, 3, false);
-  std::rotate(id_map.begin() + 1, id_map.begin() + 2, id_map.begin() + 4);
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
-                                       false);
-
-  // Start a mouse drag that does not reach the touch time threshold.
-  reach_touch_time_threshold_ = false;
-  views::View* dragged_button_mouse =
-      SimulateDrag(ShelfView::MOUSE, 1, 3, false);
-  std::rotate(id_map.begin() + 1, id_map.begin() + 2, id_map.begin() + 4);
-  // The ordering changes since there is no time threshold for mouse drags.
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_mouse, ShelfView::MOUSE,
-                                       false);
-
-  // Start a mouse drag that does reach the touch time threshold.
-  reach_touch_time_threshold_ = true;
-  dragged_button_mouse = SimulateDrag(ShelfView::MOUSE, 4, 2, false);
-  std::rotate(id_map.begin() + 3, id_map.begin() + 4, id_map.begin() + 5);
-  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
-  shelf_view_->PointerReleasedOnButton(dragged_button_mouse, ShelfView::MOUSE,
-                                       false);
-}
-
 // Ensure the app list button cannot be dragged and other items cannot be
 // dragged in front of the app list button.
 TEST_F(ShelfViewTest, DragWithNotDraggableItemInFront) {
@@ -1188,9 +1127,8 @@ TEST_F(ShelfViewTest, ClickOneDragAnother) {
 TEST_F(ShelfViewTest, ClickingTwiceActivatesOnce) {
   // Watch for selection of the browser shortcut.
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
-  model_->SetShelfItemDelegate(
-      model_->items()[1].id,
-      base::WrapUnique<ShelfItemSelectionTracker>(selection_tracker));
+  model_->SetShelfItemDelegate(model_->items()[1].id,
+                               base::WrapUnique(selection_tracker));
 
   // A single click selects the item, but a double-click does not.
   EXPECT_EQ(0u, selection_tracker->item_selected_count());
@@ -1255,9 +1193,6 @@ TEST_F(ShelfViewTest, ShelfItemStatus) {
   int index = model_->ItemIndexByID(last_added);
   ShelfButton* button = GetButtonByID(last_added);
   ASSERT_EQ(ShelfButton::STATE_RUNNING, button->state());
-  item.status = STATUS_ACTIVE;
-  model_->Set(index, item);
-  ASSERT_EQ(ShelfButton::STATE_ACTIVE, button->state());
   item.status = STATUS_ATTENTION;
   model_->Set(index, item);
   ASSERT_EQ(ShelfButton::STATE_ATTENTION, button->state());
@@ -1330,6 +1265,37 @@ TEST_F(ShelfViewTest, ShelfRipOff) {
   EXPECT_FALSE(test_api_for_overflow.IsRippedOffFromShelf());
 }
 
+// Tests that drag and drop a pinned running app will unpin it.
+TEST_F(ShelfViewTest, DragAndDropPinnedRunningApp) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+
+  // The test makes some assumptions that the shelf is bottom aligned.
+  ASSERT_EQ(test_api_->shelf_view()->shelf()->alignment(),
+            SHELF_ALIGNMENT_BOTTOM);
+
+  // The rip off threshold. Taken from |kRipOffDistance| in shelf_view.cc.
+  constexpr int kRipOffDistance = 48;
+
+  const ShelfID id = AddApp();
+  // Added only one app here, the index of the app will not change after drag
+  // and drop.
+  int index = model_->ItemIndexByID(id);
+  ShelfItem item = GetItemByID(id);
+  EXPECT_EQ(STATUS_RUNNING, item.status);
+  PinAppWithID(id);
+  EXPECT_TRUE(IsAppPinned(GetItemId(index)));
+
+  gfx::Point app_location = GetButtonCenter(GetButtonByID(id));
+  generator.set_current_location(app_location);
+  generator.PressLeftButton();
+  generator.MoveMouseBy(0, -kShelfSize / 2 - 1);
+  EXPECT_FALSE(test_api_->IsRippedOffFromShelf());
+  generator.MoveMouseBy(0, -kRipOffDistance);
+  EXPECT_TRUE(test_api_->IsRippedOffFromShelf());
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(IsAppPinned(GetItemId(index)));
+}
+
 // Confirm that item status changes are reflected in the buttons
 // for platform apps.
 TEST_F(ShelfViewTest, ShelfItemStatusPlatformApp) {
@@ -1342,9 +1308,6 @@ TEST_F(ShelfViewTest, ShelfItemStatusPlatformApp) {
   int index = model_->ItemIndexByID(last_added);
   ShelfButton* button = GetButtonByID(last_added);
   ASSERT_EQ(ShelfButton::STATE_RUNNING, button->state());
-  item.status = STATUS_ACTIVE;
-  model_->Set(index, item);
-  ASSERT_EQ(ShelfButton::STATE_ACTIVE, button->state());
   item.status = STATUS_ATTENTION;
   model_->Set(index, item);
   ASSERT_EQ(ShelfButton::STATE_ATTENTION, button->state());
@@ -1840,10 +1803,6 @@ TEST_F(ShelfViewTest, CheckOverflowStatusPinOpenedAppToShelf) {
 // item is selected.
 TEST_F(ShelfViewTest,
        Launcher_ButtonPressedUserActionsRecordedWhenItemSelected) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   base::UserActionTester user_action_tester;
 
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
@@ -1859,10 +1818,6 @@ TEST_F(ShelfViewTest,
 // Verifies that Launcher_*Task UMA user actions are recorded when an item is
 // selected.
 TEST_F(ShelfViewTest, Launcher_TaskUserActionsRecordedWhenItemSelected) {
-  // TODO: investigate failure in mash, http://crbug.com/695751.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   base::UserActionTester user_action_tester;
 
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
@@ -1968,6 +1923,21 @@ TEST_F(ShelfViewTest, TestHideOverflow) {
   EXPECT_TRUE(test_api_->IsShowingOverflowBubble());
 }
 
+TEST_F(ShelfViewTest, UnpinningCancelsOverflow) {
+  // Add just enough items for overflow; one fewer would not require overflow.
+  const ShelfID first_shelf_id = AddAppShortcut();
+  AddButtonsUntilOverflow();
+  test_api_->ShowOverflowBubble();
+  EXPECT_TRUE(test_api_->IsOverflowButtonVisible());
+  EXPECT_TRUE(test_api_->IsShowingOverflowBubble());
+
+  // Unpinning an item should hide the overflow button and close the bubble.
+  model_->UnpinAppWithID(first_shelf_id.app_id);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  EXPECT_FALSE(test_api_->IsOverflowButtonVisible());
+  EXPECT_FALSE(test_api_->IsShowingOverflowBubble());
+}
+
 // Verify the animations of the shelf items are as long as expected.
 TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   TestShelfObserver observer(shelf_view_->shelf());
@@ -1995,7 +1965,13 @@ TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   test_api_->RunMessageLoopUntilAnimationsDone();
   EXPECT_EQ(1, observer.icon_positions_animation_duration());
 
-  // The shelf items should animate if we are entering or exiting tablet mode.
+  // The shelf items should animate if we are entering or exiting tablet mode,
+  // and the shelf alignment is bottom aligned.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  const int64_t id = GetPrimaryDisplay().id();
+  shelf_view_->shelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignmentPref(prefs, id, SHELF_ALIGNMENT_BOTTOM);
   observer.Reset();
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   test_api_->RunMessageLoopUntilAnimationsDone();
@@ -2005,6 +1981,20 @@ TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   test_api_->RunMessageLoopUntilAnimationsDone();
   EXPECT_EQ(animation_duration, observer.icon_positions_animation_duration());
+
+  // The shelf items should not animate if we are entering or exiting tablet
+  // mode, and the shelf alignment is not bottom aligned.
+  shelf_view_->shelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignmentPref(prefs, id, SHELF_ALIGNMENT_LEFT);
+  observer.Reset();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  EXPECT_EQ(1, observer.icon_positions_animation_duration());
+
+  observer.Reset();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  EXPECT_EQ(1, observer.icon_positions_animation_duration());
 }
 
 // Tests that the blank shelf view area shows a context menu on right click.
@@ -2030,7 +2020,7 @@ TEST_F(ShelfViewTest, ShelfWindowWatcherButtonShowsContextMenu) {
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
   widget->Show();
   aura::Window* window = widget->GetNativeWindow();
-  ShelfID shelf_id(std::to_string(123));
+  ShelfID shelf_id("123");
   window->SetProperty(kShelfIDKey, new std::string(shelf_id.Serialize()));
   window->SetProperty(kShelfItemTypeKey, static_cast<int32_t>(TYPE_DIALOG));
   ShelfButton* button = GetButtonByID(shelf_id);
@@ -2040,11 +2030,36 @@ TEST_F(ShelfViewTest, ShelfWindowWatcherButtonShowsContextMenu) {
   EXPECT_TRUE(test_api_->CloseMenu());
 }
 
+// Tests that the drag view is set on left click and not set on right click.
+TEST_F(ShelfViewTest, ShelfDragViewAndContextMenu) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  widget->Show();
+  aura::Window* window = widget->GetNativeWindow();
+  ShelfID shelf_id("123");
+  window->SetProperty(kShelfIDKey, new std::string(shelf_id.Serialize()));
+  window->SetProperty(kShelfItemTypeKey, static_cast<int32_t>(TYPE_DIALOG));
+  ShelfButton* button = GetButtonByID(shelf_id);
+  ASSERT_TRUE(button);
+
+  // Context menu is shown on right button press and no drag view is set.
+  EXPECT_FALSE(shelf_view_->IsShowingMenu());
+  EXPECT_FALSE(shelf_view_->drag_view());
+  generator.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator.PressRightButton();
+  EXPECT_TRUE(shelf_view_->IsShowingMenu());
+  EXPECT_FALSE(shelf_view_->drag_view());
+
+  // Press left button. Menu should close and drag view is set to |button|.
+  generator.PressLeftButton();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(shelf_view_->IsShowingMenu());
+  EXPECT_EQ(shelf_view_->drag_view(), button);
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(shelf_view_->drag_view());
+}
+
 TEST_F(ShelfViewTest, MouseWheelScrollOnShelfTransitionsAppList) {
-  // Enable the Fullscreen AppList.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      app_list::features::kEnableFullscreenAppList);
   TestAppListPresenterImpl app_list_presenter_impl;
   app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::test::TestAppListPresenter test_app_list_presenter;
@@ -2062,10 +2077,6 @@ TEST_F(ShelfViewTest, MouseWheelScrollOnShelfTransitionsAppList) {
 }
 
 TEST_F(ShelfViewTest, MouseWheelScrollOnApplistButtonTransitionsAppList) {
-  // Enable the fullscreen app list.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      app_list::features::kEnableFullscreenAppList);
   TestAppListPresenterImpl app_list_presenter_impl;
   app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::test::TestAppListPresenter test_app_list_presenter;
@@ -2084,10 +2095,6 @@ TEST_F(ShelfViewTest, MouseWheelScrollOnApplistButtonTransitionsAppList) {
 }
 
 TEST_F(ShelfViewTest, MouseWheelScrollOnAppIconTransitionsAppList) {
-  // Enable the Fullscreen AppList.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      app_list::features::kEnableFullscreenAppList);
   TestAppListPresenterImpl app_list_presenter_impl;
   app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplayId());
   app_list::test::TestAppListPresenter test_app_list_presenter;
@@ -2110,7 +2117,7 @@ TEST_F(ShelfViewTest, MouseWheelScrollOnAppIconTransitionsAppList) {
 class ShelfViewVisibleBoundsTest : public ShelfViewTest,
                                    public testing::WithParamInterface<bool> {
  public:
-  ShelfViewVisibleBoundsTest() : text_direction_change_(GetParam()) {}
+  ShelfViewVisibleBoundsTest() : scoped_locale_(GetParam() ? "he" : "") {}
 
   void CheckAllItemsAreInBounds() {
     gfx::Rect visible_bounds = shelf_view_->GetVisibleItemsBoundsInScreen();
@@ -2132,7 +2139,8 @@ class ShelfViewVisibleBoundsTest : public ShelfViewTest,
   }
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfViewVisibleBoundsTest);
 };
@@ -2168,7 +2176,7 @@ class InkDropSpy : public views::InkDrop {
  public:
   explicit InkDropSpy(std::unique_ptr<views::InkDrop> ink_drop)
       : ink_drop_(std::move(ink_drop)) {}
-  ~InkDropSpy() override {}
+  ~InkDropSpy() override = default;
 
   std::vector<views::InkDropState> GetAndResetRequestedStates() {
     std::vector<views::InkDropState> requested_states;
@@ -2218,7 +2226,7 @@ class InkDropSpy : public views::InkDrop {
 class ListMenuShelfItemDelegate : public ShelfItemDelegate {
  public:
   ListMenuShelfItemDelegate() : ShelfItemDelegate(ShelfID()) {}
-  ~ListMenuShelfItemDelegate() override {}
+  ~ListMenuShelfItemDelegate() override = default;
 
  private:
   // ShelfItemDelegate:
@@ -2243,8 +2251,8 @@ class ListMenuShelfItemDelegate : public ShelfItemDelegate {
 // Test fixture for testing material design ink drop ripples on shelf.
 class ShelfViewInkDropTest : public ShelfViewTest {
  public:
-  ShelfViewInkDropTest() {}
-  ~ShelfViewInkDropTest() override {}
+  ShelfViewInkDropTest() = default;
+  ~ShelfViewInkDropTest() override = default;
 
   void SetUp() override {
     ash_test_helper()->set_test_shell_delegate(new TestShellDelegate());
@@ -2256,7 +2264,7 @@ class ShelfViewInkDropTest : public ShelfViewTest {
     app_list_button_ = shelf_view_->GetAppListButton();
 
     auto app_list_button_ink_drop =
-        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+        std::make_unique<InkDropSpy>(std::make_unique<views::InkDropImpl>(
             app_list_button_, app_list_button_->size()));
     app_list_button_ink_drop_ = app_list_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(app_list_button_)
@@ -2267,7 +2275,7 @@ class ShelfViewInkDropTest : public ShelfViewTest {
     browser_button_ = test_api_->GetButton(1);
 
     auto browser_button_ink_drop =
-        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+        std::make_unique<InkDropSpy>(std::make_unique<views::InkDropImpl>(
             browser_button_, browser_button_->size()));
     browser_button_ink_drop_ = browser_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(browser_button_)
@@ -2612,7 +2620,7 @@ TEST_F(ShelfViewInkDropTest, ShelfButtonWithMenuPressRelease) {
 
   // Set a delegate for the shelf item that returns an app list menu.
   model_->SetShelfItemDelegate(model_->items()[1].id,
-                               base::MakeUnique<ListMenuShelfItemDelegate>());
+                               std::make_unique<ListMenuShelfItemDelegate>());
 
   views::Button* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();
@@ -2683,7 +2691,7 @@ class AppListButtonInkDropTest
  public:
   AppListButtonInkDropTest() : pointer_type_(GetParam()) {}
 
-  ~AppListButtonInkDropTest() override {}
+  ~AppListButtonInkDropTest() override = default;
 
   void MovePointerTo(const gfx::Point& point) {
     if (pointer_type_ == ui::EventPointerType::POINTER_TYPE_MOUSE)
@@ -2817,8 +2825,8 @@ std::string ToString(ShelfAlignment shelf_alignment) {
 // Test fixture for testing material design ink drop on overflow button.
 class OverflowButtonInkDropTest : public ShelfViewInkDropTest {
  public:
-  OverflowButtonInkDropTest() {}
-  ~OverflowButtonInkDropTest() override {}
+  OverflowButtonInkDropTest() = default;
+  ~OverflowButtonInkDropTest() override = default;
 
   void SetUp() override {
     ShelfViewInkDropTest::SetUp();
@@ -2826,7 +2834,7 @@ class OverflowButtonInkDropTest : public ShelfViewInkDropTest {
     overflow_button_ = test_api_->overflow_button();
 
     auto overflow_button_ink_drop =
-        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+        std::make_unique<InkDropSpy>(std::make_unique<views::InkDropImpl>(
             overflow_button_, overflow_button_->size()));
     overflow_button_ink_drop_ = overflow_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(overflow_button_)
@@ -3092,21 +3100,22 @@ class OverflowButtonTextDirectionTest
     : public OverflowButtonInkDropTest,
       public testing::WithParamInterface<bool> {
  public:
-  OverflowButtonTextDirectionTest() : text_direction_change_(GetParam()) {}
-  ~OverflowButtonTextDirectionTest() override {}
+  OverflowButtonTextDirectionTest() : scoped_locale_(GetParam() ? "he" : "") {}
+  ~OverflowButtonTextDirectionTest() override = default;
 
   void SetUp() override {
     OverflowButtonInkDropTest::SetUp();
 
     overflow_button_test_api_ =
-        base::MakeUnique<OverflowButtonTestApi>(overflow_button_);
+        std::make_unique<OverflowButtonTestApi>(overflow_button_);
   }
 
  protected:
   std::unique_ptr<OverflowButtonTestApi> overflow_button_test_api_;
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(OverflowButtonTextDirectionTest);
 };
@@ -3165,8 +3174,8 @@ TEST_P(OverflowButtonTextDirectionTest, ChevronDirection) {
 // it is active.
 class OverflowButtonActiveInkDropTest : public OverflowButtonInkDropTest {
  public:
-  OverflowButtonActiveInkDropTest() {}
-  ~OverflowButtonActiveInkDropTest() override {}
+  OverflowButtonActiveInkDropTest() = default;
+  ~OverflowButtonActiveInkDropTest() override = default;
 
   void SetUp() override {
     OverflowButtonInkDropTest::SetUp();

@@ -23,14 +23,13 @@
 #include "components/toolbar/toolbar_model.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/prerender/preload_provider.h"
 #include "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
-#include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
+#import "ios/chrome/browser/ui/omnibox/location_bar_view.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_text_field_paste_delegate.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
+#include "ios/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
-#include "ios/shared/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
 #include "skia/ext/skia_utils_ios.h"
@@ -162,20 +161,19 @@ UIColor* IncognitoSecureTextColor() {
 
 OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
                                WebOmniboxEditController* controller,
-                               ios::ChromeBrowserState* browser_state,
-                               id<PreloadProvider> preloader,
-                               id<OmniboxPopupPositioner> positioner)
+                               LeftImageProvider* left_image_provider,
+                               ios::ChromeBrowserState* browser_state)
     : OmniboxView(
           controller,
           base::MakeUnique<ChromeOmniboxClientIOS>(controller, browser_state)),
       browser_state_(browser_state),
       field_(field),
       controller_(controller),
+      left_image_provider_(left_image_provider),
       ignore_popup_updates_(false),
-      attributing_display_string_(nil) {
+      attributing_display_string_(nil),
+      popup_provider_(nullptr) {
   DCHECK(field_);
-  popup_view_ = base::MakeUnique<OmniboxPopupViewIOS>(
-      this->browser_state(), model(), this, positioner);
   field_delegate_.reset(
       [[AutocompleteTextFieldDelegate alloc] initWithEditView:this]);
 
@@ -198,9 +196,6 @@ OmniboxViewIOS::~OmniboxViewIOS() {
   [field_ removeTarget:field_delegate_
                 action:@selector(textFieldDidChange:)
       forControlEvents:UIControlEventEditingChanged];
-
-  // Destroy the model, in case it tries to call back into us when destroyed.
-  popup_view_.reset();
 }
 
 void OmniboxViewIOS::OpenMatch(const AutocompleteMatch& match,
@@ -264,11 +259,13 @@ void OmniboxViewIOS::UpdatePopup() {
       NSMaxRange(current_selection_) != [[field_ text] length];
   model()->StartAutocomplete(current_selection_.length != 0,
                              prevent_inline_autocomplete);
-  popup_view_->SetTextAlignment([field_ bestTextAlignment]);
+  DCHECK(popup_provider_);
+  popup_provider_->SetTextAlignment([field_ bestTextAlignment]);
 }
 
 void OmniboxViewIOS::OnTemporaryTextMaybeChanged(
     const base::string16& display_text,
+    const AutocompleteMatch& match,
     bool save_original_selection,
     bool notify_text_changed) {
   SetWindowTextAndCaretPos(display_text, display_text.size(), false, false);
@@ -332,7 +329,13 @@ bool OmniboxViewIOS::DeleteAtEndPressed() {
 
 void OmniboxViewIOS::GetSelectionBounds(base::string16::size_type* start,
                                         base::string16::size_type* end) const {
-  *start = *end = 0;
+  if ([field_ isFirstResponder]) {
+    NSRange selected_range = [field_ selectedNSRange];
+    *start = selected_range.location;
+    *end = selected_range.location + selected_range.length;
+  } else {
+    *start = *end = 0;
+  }
 }
 
 gfx::NativeView OmniboxViewIOS::GetNativeView() const {
@@ -356,12 +359,12 @@ void OmniboxViewIOS::OnDidBeginEditing() {
   // If Open from Clipboard offers a suggestion, the popup may be opened when
   // |OnSetFocus| is called on the model. The state of the popup is saved early
   // to ignore that case.
-  bool popup_was_open_before_editing_began = popup_view_->IsOpen();
+  DCHECK(popup_provider_);
+  bool popup_was_open_before_editing_began = popup_provider_->IsPopupOpen();
 
   // Text attributes (e.g. text color) should not be shown while editing, so
   // strip them out by calling setText (as opposed to setAttributedText).
   [field_ setText:[field_ text]];
-  [field_ enableLeftViewButton:NO];
   OnBeforePossibleChange();
   // In the case where the user taps the fakebox on the Google landing page,
   // the WebToolbarController invokes OnSetFocus before calling
@@ -390,7 +393,6 @@ void OmniboxViewIOS::OnDidBeginEditing() {
 
 void OmniboxViewIOS::OnDidEndEditing() {
   CloseOmniboxPopup();
-  [field_ enableLeftViewButton:YES];
   model()->OnWillKillFocus();
   model()->OnKillFocus();
   if ([field_ isPreEditing])
@@ -701,9 +703,11 @@ NSAttributedString* OmniboxViewIOS::ApplyTextAttributes(
 }
 
 void OmniboxViewIOS::UpdateAppearance() {
+  base::string16 text =
+      controller_->GetToolbarModel()->GetFormattedURL(nullptr);
   // If Siri is thinking, treat that as user input being in progress.  It is
   // unsafe to modify the text field while voice entry is pending.
-  if (model()->UpdatePermanentText()) {
+  if (model()->SetPermanentText(text)) {
     // Revert everything to the baseline look.
     RevertAll();
   } else if (!model()->has_focus() &&
@@ -711,8 +715,6 @@ void OmniboxViewIOS::UpdateAppearance() {
     // Even if the change wasn't "user visible" to the model, it still may be
     // necessary to re-color to the URL string.  Only do this if the omnibox is
     // not currently focused.
-    base::string16 text =
-        controller_->GetToolbarModel()->GetFormattedURL(nullptr);
     NSAttributedString* as = ApplyTextAttributes(text);
     [field_ setText:as userTextLength:[as length]];
   }
@@ -782,7 +784,7 @@ bool OmniboxViewIOS::ShouldIgnoreUserInputDueToPendingVoiceSearch() {
 }
 
 void OmniboxViewIOS::SetLeftImage(int imageId) {
-  [field_ setPlaceholderImage:imageId];
+  left_image_provider_->SetLeftImage(imageId);
 }
 
 void OmniboxViewIOS::HideKeyboardAndEndEditing() {
@@ -806,7 +808,8 @@ void OmniboxViewIOS::FocusOmnibox() {
 }
 
 BOOL OmniboxViewIOS::IsPopupOpen() {
-  return popup_view_->IsOpen();
+  DCHECK(popup_provider_);
+  return popup_provider_->IsPopupOpen();
 }
 
 int OmniboxViewIOS::GetIcon(bool offlinePage) const {

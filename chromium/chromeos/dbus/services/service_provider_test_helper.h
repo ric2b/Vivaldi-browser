@@ -5,6 +5,7 @@
 #ifndef CHROMEOS_DBUS_SERVICES_SERVICE_PROVIDER_TEST_HELPER_H_
 #define CHROMEOS_DBUS_SERVICES_SERVICE_PROVIDER_TEST_HELPER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/message_loop/message_loop.h"
@@ -79,7 +80,7 @@ class ServiceProviderTestHelper {
       const std::string& interface_name,
       const std::string& signal_name,
       dbus::ObjectProxy::SignalCallback signal_callback,
-      dbus::ObjectProxy::OnConnectedCallback connected_callback);
+      dbus::ObjectProxy::OnConnectedCallback* connected_callback);
 
   // Behaves as |mock_exported_object_|'s SendSignal().
   void MockSendSignal(dbus::Signal* signal);

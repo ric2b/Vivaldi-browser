@@ -305,8 +305,8 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   // the struct will be filled with default data.
   virtual bool QueryDetailedSyncStatus(SyncStatus* result) = 0;
 
-  // Returns a user-friendly string form of last synced time (in minutes).
-  virtual base::string16 GetLastSyncedTimeString() const = 0;
+  // Returns the last synced time.
+  virtual base::Time GetLastSyncedTime() const = 0;
 
   // Returns a human readable string describing engine initialization state.
   virtual std::string GetEngineInitializationStateString() const = 0;
@@ -329,7 +329,7 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   virtual const GURL& sync_service_url() const = 0;
 
   virtual std::string unrecoverable_error_message() const = 0;
-  virtual tracked_objects::Location unrecoverable_error_location() const = 0;
+  virtual base::Location unrecoverable_error_location() const = 0;
 
   virtual void AddProtocolEventObserver(ProtocolEventObserver* observer) = 0;
   virtual void RemoveProtocolEventObserver(ProtocolEventObserver* observer) = 0;

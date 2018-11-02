@@ -24,11 +24,11 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/containers/mru_cache.h"
+#include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -341,12 +341,12 @@ class Predictor {
 
    private:
     // The names in the queue that should be serviced (popped) ASAP.
-    std::queue<GURL> rush_queue_;
+    base::queue<GURL> rush_queue_;
     // The names in the queue that should only be serviced when rush_queue is
     // empty.
-    std::queue<GURL> background_queue_;
+    base::queue<GURL> background_queue_;
 
-  DISALLOW_COPY_AND_ASSIGN(HostNameQueue);
+    DISALLOW_COPY_AND_ASSIGN(HostNameQueue);
   };
 
   // A map that is keyed with the host/port that we've learned were the cause
@@ -423,7 +423,8 @@ class Predictor {
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
   // Status of speculative DNS resolution and speculative TCP/IP connection
-  // feature. This is false if and only if disabled by a command line switch.
+  // feature. This is true if features::kNetworkPredicton is enabled and
+  // LoadingPredictor's preconnect is disabled.
   // Protected by |preconnect_enabled_lock_|, which is used by tests to bypass
   // the command line flags.
   bool predictor_enabled_;

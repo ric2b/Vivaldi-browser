@@ -24,15 +24,18 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/SVGNames.h"
-#include "core/XMLNames.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/svg/SVGTextQuery.h"
 #include "core/svg/SVGPointTearOff.h"
 #include "core/svg/SVGRectTearOff.h"
+#include "core/svg_names.h"
+#include "core/xml_names.h"
 
 namespace blink {
 
@@ -88,7 +91,7 @@ SVGTextContentElement::SVGTextContentElement(const QualifiedName& tag_name,
   AddToPropertyMap(length_adjust_);
 }
 
-DEFINE_TRACE(SVGTextContentElement) {
+void SVGTextContentElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(text_length_);
   visitor->Trace(length_adjust_);
   SVGGraphicsElement::Trace(visitor);
@@ -248,7 +251,7 @@ bool SVGTextContentElement::IsPresentationAttribute(
 void SVGTextContentElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name.Matches(XMLNames::spaceAttr)) {
     DEFINE_STATIC_LOCAL(const AtomicString, preserve_string, ("preserve"));
 
@@ -303,7 +306,7 @@ SVGTextContentElement* SVGTextContentElement::ElementFromLineLayoutItem(
   SVGElement* element = ToSVGElement(line_layout_item.GetNode());
   DCHECK(element);
   return IsSVGTextContentElement(*element) ? ToSVGTextContentElement(element)
-                                           : 0;
+                                           : nullptr;
 }
 
 }  // namespace blink

@@ -26,9 +26,10 @@ class CSSPaintImageGeneratorImpl final : public CSSPaintImageGenerator {
                                         Observer*);
   ~CSSPaintImageGeneratorImpl() override;
 
-  RefPtr<Image> Paint(const ImageResourceObserver&,
-                      const IntSize&,
-                      const CSSStyleValueVector*) final;
+  // The |container_size| is the container size with subpixel snapping.
+  scoped_refptr<Image> Paint(const ImageResourceObserver&,
+                             const IntSize& container_size,
+                             const CSSStyleValueVector*) final;
   const Vector<CSSPropertyID>& NativeInvalidationProperties() const final;
   const Vector<AtomicString>& CustomInvalidationProperties() const final;
   bool HasAlpha() const final;
@@ -39,7 +40,7 @@ class CSSPaintImageGeneratorImpl final : public CSSPaintImageGenerator {
   // is registered with the same name.
   void NotifyGeneratorReady();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   CSSPaintImageGeneratorImpl(Observer*, PaintWorklet*, const String&);

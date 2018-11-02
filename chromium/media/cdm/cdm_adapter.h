@@ -140,7 +140,7 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
   void OnDeferredInitializationDone(cdm::StreamType stream_type,
                                     cdm::Status decoder_status) override;
   cdm::FileIO* CreateFileIO(cdm::FileIOClient* client) override;
-  void RequestStorageId() override;
+  void RequestStorageId(uint32_t version) override;
 
   // cdm::Host_8 specific implementation.
   void OnRejectPromise(uint32_t promise_id,
@@ -195,26 +195,38 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
                                const std::string& signed_data,
                                const std::string& signed_data_signature,
                                const std::string& platform_key_certificate);
-  void OnStorageIdObtained(const std::vector<uint8_t>& storage_id);
+  void OnStorageIdObtained(uint32_t version,
+                           const std::vector<uint8_t>& storage_id);
 
   // Callbacks for OutputProtection.
-  void OnOutputProtectionRequestMade(bool success);
-  void OnOutputProtectionStatus(bool success,
-                                uint32_t link_mask,
-                                uint32_t protection_mask);
+  void OnEnableOutputProtectionDone(bool success);
+  void OnQueryOutputProtectionStatusDone(bool success,
+                                         uint32_t link_mask,
+                                         uint32_t protection_mask);
 
-  // Used to keep track of promises while the CDM is processing the request.
-  CdmPromiseAdapter cdm_promise_adapter_;
+  // Helper methods to report output protection UMAs.
+  void ReportOutputProtectionQuery();
+  void ReportOutputProtectionQueryResult(uint32_t link_mask,
+                                         uint32_t protection_mask);
 
-  std::unique_ptr<CdmWrapper> cdm_;
-  std::string key_system_;
-  CdmConfig cdm_config_;
+  // Callback to report |file_size_bytes| of the file successfully read by
+  // cdm::FileIO.
+  void OnFileRead(int file_size_bytes);
+
+  const std::string key_system_;
+  const CdmConfig cdm_config_;
 
   // Callbacks for firing session events.
   SessionMessageCB session_message_cb_;
   SessionClosedCB session_closed_cb_;
   SessionKeysChangeCB session_keys_change_cb_;
   SessionExpirationUpdateCB session_expiration_update_cb_;
+
+  // Helper that provides additional functionality for the CDM.
+  std::unique_ptr<CdmAuxiliaryHelper> helper_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<AudioBufferMemoryPool> pool_;
 
   // Callbacks for deferred initialization.
   DecoderInitCB audio_init_cb_;
@@ -224,20 +236,29 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
   NewKeyCB new_audio_key_cb_;
   NewKeyCB new_video_key_cb_;
 
+  // Keep track of audio parameters.
+  int audio_samples_per_second_ = 0;
+  ChannelLayout audio_channel_layout_ = CHANNEL_LAYOUT_NONE;
+
   // Keep track of video frame natural size from the latest configuration
   // as the CDM doesn't provide it.
   gfx::Size natural_size_;
 
-  // Keep track of audio parameters.
-  int audio_samples_per_second_;
-  ChannelLayout audio_channel_layout_;
+  // Tracks whether an output protection query and a positive query result (no
+  // unprotected external link) have been reported to UMA.
+  bool uma_for_output_protection_query_reported_ = false;
+  bool uma_for_output_protection_positive_result_reported_ = false;
 
-  // Helper that provides additional functionality for the CDM.
-  std::unique_ptr<CdmAuxiliaryHelper> helper_;
+  // Tracks CDM file IO related states.
+  int last_read_file_size_kb_ = 0;
+  bool file_size_uma_reported_ = false;
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  // Used to keep track of promises while the CDM is processing the request.
+  CdmPromiseAdapter cdm_promise_adapter_;
 
-  scoped_refptr<AudioBufferMemoryPool> pool_;
+  // Declare |cdm_| after other member variables to avoid the CDM accessing
+  // deleted objects (e.g. |helper_|) during destruction.
+  std::unique_ptr<CdmWrapper> cdm_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<CdmAdapter> weak_factory_;

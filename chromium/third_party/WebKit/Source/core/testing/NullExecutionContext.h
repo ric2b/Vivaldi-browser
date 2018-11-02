@@ -27,14 +27,18 @@ class NullExecutionContext
 
   void SetURL(const KURL& url) { url_ = url; }
 
+  const KURL& Url() const override { return url_; }
+  const KURL& BaseURL() const override { return url_; }
+  KURL CompleteURL(const String&) const override { return url_; }
+
   void DisableEval(const String&) override {}
   String UserAgent() const override { return String(); }
 
   EventTarget* ErrorEventTarget() override { return nullptr; }
   EventQueue* GetEventQueue() const override { return queue_.Get(); }
 
-  bool TasksNeedSuspension() override { return tasks_need_suspension_; }
-  void SetTasksNeedSuspension(bool flag) { tasks_need_suspension_ = flag; }
+  bool TasksNeedPause() override { return tasks_need_pause_; }
+  void SetTasksNeedPause(bool flag) { tasks_need_pause_ = flag; }
 
   void DidUpdateSecurityOrigin() override {}
   SecurityContext& GetSecurityContext() override { return *this; }
@@ -48,21 +52,21 @@ class NullExecutionContext
 
   void SetUpSecurityContext();
 
+  ResourceFetcher* Fetcher() const override { return nullptr; }
+
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) override;
+
   using SecurityContext::GetSecurityOrigin;
   using SecurityContext::GetContentSecurityPolicy;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(queue_);
     SecurityContext::Trace(visitor);
     ExecutionContext::Trace(visitor);
   }
 
- protected:
-  const KURL& VirtualURL() const override { return url_; }
-  KURL VirtualCompleteURL(const String&) const override { return url_; }
-
  private:
-  bool tasks_need_suspension_;
+  bool tasks_need_pause_;
   bool is_secure_context_;
   Member<EventQueue> queue_;
 

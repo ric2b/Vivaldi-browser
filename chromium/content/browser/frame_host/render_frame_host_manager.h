@@ -124,6 +124,7 @@ class CONTENT_EXPORT RenderFrameHostManager
         RenderViewHost* render_view_host,
         int opener_frame_routing_id,
         int proxy_routing_id,
+        const base::UnguessableToken& devtools_frame_token,
         const FrameReplicationState& replicated_frame_state) = 0;
     virtual void CreateRenderWidgetHostViewForRenderManager(
         RenderViewHost* render_view_host) = 0;
@@ -428,6 +429,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   // skipping the parent process.
   void OnDidUpdateFrameOwnerProperties(const FrameOwnerProperties& properties);
 
+  // Notify the proxies that the active sandbox flags on the frame have been
+  // changed during page load. This happens when a CSP header sets sandbox
+  // flags.
+  void OnDidSetActiveSandboxFlags();
+
   // Send updated origin to all frame proxies when the frame navigates to a new
   // origin.
   void OnDidUpdateOrigin(const url::Origin& origin,
@@ -514,6 +520,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
       const NavigationRequest& navigation_request);
 
+  // Helper to initialize the RenderFrame if it's not initialized.
+  void InitializeRenderFrameIfNecessary(RenderFrameHostImpl* render_frame_host);
+
  private:
   friend class NavigatorTestWithBrowserSideNavigation;
   friend class RenderFrameHostManagerTest;
@@ -545,8 +554,12 @@ class CONTENT_EXPORT RenderFrameHostManager
     // Set with an existing SiteInstance to be reused.
     content::SiteInstance* existing_site_instance;
 
-    // In case |existing_site_instance| is null, specify a new site URL.
-    GURL new_site_url;
+    // In case |existing_site_instance| is null, specify a destination URL.
+    GURL dest_url;
+
+    // In case |existing_site_instance| is null, specify a BrowsingContext, to
+    // be used with |dest_url| to resolve the site URL.
+    BrowserContext* browser_context;
 
     // In case |existing_site_instance| is null, specify how the new site is
     // related to the current BrowsingInstance.
@@ -702,7 +715,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Helper to call CommitPending() in all necessary cases.
   void CommitPendingIfNecessary(RenderFrameHostImpl* render_frame_host,
                                 bool was_caused_by_user_gesture);
-
   // Commits any pending sandbox flag or feature policy updates when the
   // renderer's frame navigates.
   void CommitPendingFramePolicy();

@@ -17,11 +17,15 @@ class MediaClient : public ash::mojom::MediaClient,
   MediaClient();
   ~MediaClient() override;
 
-  // ash::MediaClient:
+  // Returns a pointer to the singleton MediaClient, or nullptr if none exists.
+  static MediaClient* Get();
+
+  // ash::mojom::MediaClient:
   void HandleMediaNextTrack() override;
   void HandleMediaPlayPause() override;
   void HandleMediaPrevTrack() override;
   void RequestCaptureState() override;
+  void SuspendMediaSessions() override;
 
   // MediaCaptureDevicesDispatcher::Observer:
   void OnRequestUpdate(int render_process_id,

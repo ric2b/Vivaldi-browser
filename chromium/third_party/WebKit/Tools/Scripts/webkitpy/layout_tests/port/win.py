@@ -30,6 +30,7 @@
 
 import errno
 import logging
+import tempfile
 
 # The _winreg library is only available on Windows.
 # https://docs.python.org/2/library/_winreg.html
@@ -42,7 +43,6 @@ from webkitpy.common import exit_codes
 from webkitpy.layout_tests.breakpad.dump_reader_win import DumpReaderWin
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port import base
-from webkitpy.layout_tests.servers import crash_service
 
 
 _log = logging.getLogger(__name__)
@@ -81,8 +81,6 @@ class WinPort(base.Port):
             self._dump_reader = None
         else:
             self._dump_reader = DumpReaderWin(host, self._build_path())
-        self._crash_service = None
-        self._crash_service_available = None
 
     def additional_driver_flags(self):
         flags = super(WinPort, self).additional_driver_flags()
@@ -134,28 +132,14 @@ class WinPort(base.Port):
         _winreg.CloseKey(hkey)
         return True
 
-    def setup_test_run(self):
-        super(WinPort, self).setup_test_run()
-
-        if not self.get_option('disable_breakpad'):
-            assert not self._crash_service, 'Already running a crash service'
-            if self._crash_service_available is None:
-                self._crash_service_available = self._check_crash_service_available()
-            if not self._crash_service_available:
-                return
-            service = crash_service.CrashService(self, self._dump_reader.crash_dumps_directory())
-            service.start()
-            self._crash_service = service
-
-    def clean_up_test_run(self):
-        super(WinPort, self).clean_up_test_run()
-
-        if self._crash_service:
-            self._crash_service.stop()
-            self._crash_service = None
-
     def setup_environ_for_server(self):
         # A few extra environment variables are required for Apache on Windows.
+        if 'TEMP' not in self.host.environ:
+            self.host.environ['TEMP'] = tempfile.gettempdir()
+        # CGIs are run directory-relative so they need an absolute TEMP
+        self.host.environ['TEMP'] = self._filesystem.abspath(self.host.environ['TEMP'])
+        # Make TMP an alias for TEMP
+        self.host.environ['TMP'] = self.host.environ['TEMP']
         env = super(WinPort, self).setup_environ_for_server()
         apache_envvars = ['SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'TMP']
         for key, value in self.host.environ.copy().items():
@@ -165,10 +149,6 @@ class WinPort(base.Port):
 
     def check_build(self, needs_http, printer):
         result = super(WinPort, self).check_build(needs_http, printer)
-
-        self._crash_service_available = self._check_crash_service_available()
-        if not self._crash_service_available:
-            result = exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
         if result:
             _log.error('For complete Windows build requirements, please see:')
@@ -204,22 +184,9 @@ class WinPort(base.Port):
         binary_name = '%s.exe' % self.driver_name()
         return self._build_path_with_target(target, binary_name)
 
-    def _path_to_crash_service(self):
-        binary_name = 'content_shell_crash_service.exe'
-        return self._build_path(binary_name)
-
     def _path_to_image_diff(self):
         binary_name = 'image_diff.exe'
         return self._build_path(binary_name)
-
-    def _check_crash_service_available(self):
-        """Checks whether the crash service binary is present."""
-        result = self._check_file_exists(self._path_to_crash_service(), 'content_shell_crash_service.exe')
-        if not result:
-            _log.error("    Could not find crash service, unexpected crashes won't be symbolized.")
-            _log.error('    Did you build the target blink_tests?')
-            _log.error('')
-        return result
 
     def look_for_new_crash_logs(self, crashed_processes, start_time):
         if self.get_option('disable_breakpad'):

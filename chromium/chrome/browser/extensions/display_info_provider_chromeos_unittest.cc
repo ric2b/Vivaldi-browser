@@ -8,21 +8,28 @@
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/display_info_provider_chromeos.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "extensions/common/api/system_display.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/manager/chromeos/test/touch_transform_controller_test_api.h"
+#include "ui/display/manager/chromeos/touch_transform_setter.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/events/devices/input_device_manager.h"
+#include "ui/events/devices/touch_device_transform.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace extensions {
@@ -31,9 +38,22 @@ namespace {
 using DisplayUnitInfoList = DisplayInfoProvider::DisplayUnitInfoList;
 using DisplayLayoutList = DisplayInfoProvider::DisplayLayoutList;
 
-void EnableTabletMode(bool enable) {
-  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
-      enable);
+void InitExternalTouchDevices(int64_t display_id) {
+  ui::TouchscreenDevice touchdevice(
+      123, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL,
+      std::string("test external touch device"), gfx::Size(1000, 1000), 1);
+  ui::InputDeviceManager::GetInstance()->SetTouchscreenDevicesForTesting(
+      {touchdevice});
+
+  std::vector<ui::TouchDeviceTransform> transforms;
+  ui::TouchDeviceTransform touch_device_transform;
+  touch_device_transform.display_id = display_id;
+  touch_device_transform.device_id = touchdevice.id;
+  transforms.push_back(touch_device_transform);
+  display::test::TouchTransformControllerTestApi(
+      ash::Shell::Get()->touch_transformer_controller())
+      .touch_transform_setter()
+      ->ConfigureTouchDevices(transforms);
 }
 
 class DisplayInfoProviderChromeosTest : public ash::AshTestBase {
@@ -45,7 +65,18 @@ class DisplayInfoProviderChromeosTest : public ash::AshTestBase {
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kUseFirstDisplayAsInternal);
+
     ash::AshTestBase::SetUp();
+
+    tablet_mode_client_ = std::make_unique<TabletModeClient>();
+    ash::mojom::TabletModeControllerPtr controller;
+    ash::Shell::Get()->tablet_mode_controller()->BindRequest(
+        mojo::MakeRequest(&controller));
+    tablet_mode_client_->InitForTesting(std::move(controller));
+    // We must flush the TabletModeClient as we are waiting for the initial
+    // value to be set, as the TabletModeController sends an initial message on
+    // startup when it observes the PowerManagerClient.
+    tablet_mode_client_->FlushForTesting();
   }
 
  protected:
@@ -63,6 +94,13 @@ class DisplayInfoProviderChromeosTest : public ash::AshTestBase {
     const display::Display& display =
         GetDisplayManager()->GetDisplayForId(display_id);
     return display.id() != display::kInvalidDisplayId;
+  }
+
+  void EnableTabletMode(bool enable) {
+    ash::TabletModeController* controller =
+        ash::Shell::Get()->tablet_mode_controller();
+    controller->EnableTabletModeWindowManager(enable);
+    tablet_mode_client_->FlushForTesting();
   }
 
   display::DisplayManager* GetDisplayManager() const {
@@ -89,6 +127,8 @@ class DisplayInfoProviderChromeosTest : public ash::AshTestBase {
   }
 
  private:
+  std::unique_ptr<TabletModeClient> tablet_mode_client_;
+
   DISALLOW_COPY_AND_ASSIGN(DisplayInfoProviderChromeosTest);
 };
 
@@ -514,7 +554,7 @@ TEST_F(DisplayInfoProviderChromeosTest, GetMirroring) {
 
   ASSERT_EQ(1u, result.size());
   EXPECT_EQ(base::Int64ToString(display_id_primary), result[0].id);
-  EXPECT_EQ(base::Int64ToString(display_id_secondary),
+  EXPECT_EQ(base::Int64ToString(display_id_primary),
             result[0].mirroring_source_id);
 
   GetDisplayManager()->SetMirrorMode(false);
@@ -593,7 +633,8 @@ TEST_F(DisplayInfoProviderChromeosTest, Layout) {
   layout[1].offset = -100;
 
   // Update with modified layout.
-  ASSERT_TRUE(DisplayInfoProvider::Get()->SetDisplayLayout(layout));
+  std::string error;
+  ASSERT_TRUE(DisplayInfoProvider::Get()->SetDisplayLayout(layout, &error));
 
   // Get updated layout.
   layout = DisplayInfoProvider::Get()->GetDisplayLayout();
@@ -614,7 +655,81 @@ TEST_F(DisplayInfoProviderChromeosTest, Layout) {
   // Test setting invalid layout fails.
   layout[0].parent_id = displays[2].id;
   layout[1].parent_id = displays[1].id;
-  EXPECT_FALSE(DisplayInfoProvider::Get()->SetDisplayLayout(layout));
+  EXPECT_FALSE(DisplayInfoProvider::Get()->SetDisplayLayout(layout, &error));
+}
+
+TEST_F(DisplayInfoProviderChromeosTest, UnifiedModeLayout) {
+  UpdateDisplay("500x300,400x500,300x600,200x300");
+  GetDisplayManager()->SetUnifiedDesktopEnabled(true);
+  EXPECT_TRUE(GetDisplayManager()->IsInUnifiedMode());
+
+  DisplayUnitInfoList displays = GetAllDisplaysInfo();
+  ASSERT_EQ(4u, displays.size());
+
+  // Get the default layout, which should be a horizontal layout.
+  DisplayLayoutList default_layout =
+      DisplayInfoProvider::Get()->GetDisplayLayout();
+
+  // There is no placement for the primary display.
+  ASSERT_EQ(3u, default_layout.size());
+
+  // Confirm the horizontal layout.
+  EXPECT_EQ(displays[1].id, default_layout[0].id);
+  EXPECT_EQ(displays[0].id, default_layout[0].parent_id);
+  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+            default_layout[0].position);
+  EXPECT_EQ(0, default_layout[0].offset);
+  EXPECT_EQ(displays[2].id, default_layout[1].id);
+  EXPECT_EQ(displays[1].id, default_layout[1].parent_id);
+  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+            default_layout[1].position);
+  EXPECT_EQ(0, default_layout[1].offset);
+  EXPECT_EQ(displays[3].id, default_layout[2].id);
+  EXPECT_EQ(displays[2].id, default_layout[2].parent_id);
+  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+            default_layout[2].position);
+  EXPECT_EQ(0, default_layout[2].offset);
+
+  // Create a 2x2 matrix layout.
+  // [3][200 x 300] [1][400 x 500]
+  // [2][300 x 600] [0][500 x 300]
+  DisplayLayoutList layout;
+  layout.resize(3u);
+  layout[0].id = displays[1].id;
+  layout[0].parent_id = displays[3].id;
+  layout[0].position = api::system_display::LAYOUT_POSITION_RIGHT;
+  layout[1].id = displays[2].id;
+  layout[1].parent_id = displays[3].id;
+  layout[1].position = api::system_display::LAYOUT_POSITION_BOTTOM;
+  layout[2].id = displays[0].id;
+  layout[2].parent_id = displays[2].id;
+  layout[2].position = api::system_display::LAYOUT_POSITION_RIGHT;
+
+  std::string error;
+  ASSERT_TRUE(DisplayInfoProvider::Get()->SetDisplayLayout(layout, &error));
+  EXPECT_EQ(gfx::Size(650, 743),
+            display::Screen::GetScreen()->GetPrimaryDisplay().size());
+  EXPECT_EQ(displays[3].id,
+            std::to_string(GetDisplayManager()
+                               ->GetPrimaryMirroringDisplayForUnifiedDesktop()
+                               ->id()));
+
+  // Confirm the new layout.
+  DisplayLayoutList new_layout = DisplayInfoProvider::Get()->GetDisplayLayout();
+  ASSERT_EQ(3u, new_layout.size());
+
+  EXPECT_EQ(layout[0].id, new_layout[0].id);
+  EXPECT_EQ(layout[0].parent_id, new_layout[0].parent_id);
+  EXPECT_EQ(layout[0].position, new_layout[0].position);
+  EXPECT_EQ(0, new_layout[0].offset);
+  EXPECT_EQ(layout[1].id, new_layout[1].id);
+  EXPECT_EQ(layout[1].parent_id, new_layout[1].parent_id);
+  EXPECT_EQ(layout[1].position, new_layout[1].position);
+  EXPECT_EQ(0, new_layout[1].offset);
+  EXPECT_EQ(layout[2].id, new_layout[2].id);
+  EXPECT_EQ(layout[2].parent_id, new_layout[2].parent_id);
+  EXPECT_EQ(layout[2].position, new_layout[2].position);
+  EXPECT_EQ(0, new_layout[2].offset);
 }
 
 TEST_F(DisplayInfoProviderChromeosTest, SetBoundsOriginLeftExact) {
@@ -1276,8 +1391,8 @@ TEST_F(DisplayInfoProviderChromeosTest, DisplayMode) {
   // Get the currently active mode and one other mode to switch to.
   int64_t id;
   base::StringToInt64(primary_info.id, &id);
-  scoped_refptr<display::ManagedDisplayMode> active_mode =
-      GetDisplayManager()->GetActiveModeForDisplayId(id);
+  display::ManagedDisplayMode active_mode;
+  EXPECT_TRUE(GetDisplayManager()->GetActiveModeForDisplayId(id, &active_mode));
   const api::system_display::DisplayMode* cur_mode = nullptr;
   const api::system_display::DisplayMode* other_mode = nullptr;
   for (const auto& mode : primary_info.modes) {
@@ -1293,14 +1408,13 @@ TEST_F(DisplayInfoProviderChromeosTest, DisplayMode) {
   ASSERT_NE(other_mode, cur_mode);
 
   // Verify that other_mode differs from the active mode.
-  scoped_refptr<display::ManagedDisplayMode> other_mode_ash(
-      new display::ManagedDisplayMode(
-          gfx::Size(other_mode->width_in_native_pixels,
-                    other_mode->height_in_native_pixels),
-          active_mode->refresh_rate(), active_mode->is_interlaced(),
-          active_mode->native(), other_mode->ui_scale,
-          other_mode->device_scale_factor));
-  EXPECT_FALSE(active_mode->IsEquivalent(other_mode_ash));
+  display::ManagedDisplayMode other_mode_ash(
+      gfx::Size(other_mode->width_in_native_pixels,
+                other_mode->height_in_native_pixels),
+      active_mode.refresh_rate(), active_mode.is_interlaced(),
+      active_mode.native(), other_mode->ui_scale,
+      other_mode->device_scale_factor);
+  EXPECT_FALSE(active_mode.IsEquivalent(other_mode_ash));
 
   // Switch modes.
   api::system_display::DisplayProperties info;
@@ -1313,8 +1427,8 @@ TEST_F(DisplayInfoProviderChromeosTest, DisplayMode) {
   ASSERT_TRUE(success);
 
   // Verify that other_mode now matches the active mode.
-  active_mode = GetDisplayManager()->GetActiveModeForDisplayId(id);
-  EXPECT_TRUE(active_mode->IsEquivalent(other_mode_ash));
+  EXPECT_TRUE(GetDisplayManager()->GetActiveModeForDisplayId(id, &active_mode));
+  EXPECT_TRUE(active_mode.IsEquivalent(other_mode_ash));
 }
 
 TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationInternal) {
@@ -1322,6 +1436,8 @@ TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationInternal) {
   const int64_t internal_display_id =
       display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
           .SetFirstDisplayAsInternalDisplay();
+
+  InitExternalTouchDevices(internal_display_id);
 
   std::string id = base::Int64ToString(internal_display_id);
 
@@ -1368,19 +1484,25 @@ TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationNonTouchDisplay) {
                                  ? display_id_list[1]
                                  : display_id_list[0];
 
-  display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
-      .SetTouchSupport(display_id, display::Display::TOUCH_SUPPORT_UNAVAILABLE);
-
+  ui::InputDeviceManager::GetInstance()->SetTouchscreenDevicesForTesting({});
   std::string id = base::Int64ToString(display_id);
 
   std::string error;
-  std::string expected_err = "Display Id(" + id + ") does not support touch.";
-
+  std::string expected_err =
+      DisplayInfoProviderChromeOS::kNoExternalTouchDevicePresent;
   bool success = DisplayInfoProvider::Get()->StartCustomTouchCalibration(
       id, &error);
 
-  ASSERT_FALSE(success);
-  EXPECT_EQ(expected_err, error);
+  // Since no external touch devices are present, the calibration would fail.
+  EXPECT_FALSE(success);
+  EXPECT_EQ(error, expected_err);
+
+  InitExternalTouchDevices(display_id);
+  error.clear();
+
+  success = DisplayInfoProvider::Get()->StartCustomTouchCalibration(id, &error);
+  // If an external touch device is present, the calibration should proceed.
+  EXPECT_TRUE(success);
 }
 
 TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationNegativeBounds) {
@@ -1398,8 +1520,7 @@ TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationNegativeBounds) {
                                  ? display_id_list[1]
                                  : display_id_list[0];
 
-  display::test::DisplayManagerTestApi(display_manager())
-      .SetTouchSupport(display_id, display::Display::TOUCH_SUPPORT_AVAILABLE);
+  InitExternalTouchDevices(display_id);
 
   std::string id = base::Int64ToString(display_id);
 
@@ -1446,8 +1567,7 @@ TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationInvalidPoints) {
                                  ? display_id_list[1]
                                  : display_id_list[0];
 
-  display::test::DisplayManagerTestApi(display_manager())
-      .SetTouchSupport(display_id, display::Display::TOUCH_SUPPORT_AVAILABLE);
+  InitExternalTouchDevices(display_id);
 
   std::string id = base::Int64ToString(display_id);
 
@@ -1496,72 +1616,54 @@ TEST_F(DisplayInfoProviderChromeosTest, CustomTouchCalibrationSuccess) {
                                  ? display_id_list[1]
                                  : display_id_list[0];
 
-  display::test::DisplayManagerTestApi(display_manager())
-      .SetTouchSupport(display_id, display::Display::TOUCH_SUPPORT_AVAILABLE);
-
-  std::string id = base::Int64ToString(display_id);
-
-  api::system_display::TouchCalibrationPairQuad pairs;
-  api::system_display::Bounds bounds;
-
-  pairs.pair1.display_point.x = 10;
-  pairs.pair1.display_point.y = 11;
-  pairs.pair2.display_point.x = 12;
-  pairs.pair2.display_point.y = 13;
-  pairs.pair3.display_point.x = 14;
-  pairs.pair3.display_point.y = 15;
-  pairs.pair4.display_point.x = 16;
-  pairs.pair4.display_point.y = 17;
-
-  pairs.pair1.touch_point.x = 20;
-  pairs.pair1.touch_point.y = 21;
-  pairs.pair2.touch_point.x = 22;
-  pairs.pair2.touch_point.y = 23;
-  pairs.pair3.touch_point.x = 24;
-  pairs.pair3.touch_point.y = 25;
-  pairs.pair4.touch_point.x = 26;
-  pairs.pair4.touch_point.y = 27;
-
-  bounds.width = 600;
-  bounds.height = 1000;
+  InitExternalTouchDevices(display_id);
 
   std::string error;
-  DisplayInfoProvider::Get()->StartCustomTouchCalibration(id, &error);
-  error.clear();
-  bool success = DisplayInfoProvider::Get()->CompleteCustomTouchCalibration(
-      pairs, bounds, &error);
+  bool success = DisplayInfoProvider::Get()->StartCustomTouchCalibration(
+      base::Int64ToString(display_id), &error);
 
-  ASSERT_TRUE(success);
-  EXPECT_EQ(error, "");
-
-  const display::ManagedDisplayInfo& info =
-      display_manager()->GetDisplayInfo(display_id);
-
-  ASSERT_TRUE(info.has_touch_calibration_data());
-  const display::TouchCalibrationData& data = info.GetTouchCalibrationData();
-
-  EXPECT_EQ(pairs.pair1.display_point.x, data.point_pairs[0].first.x());
-  EXPECT_EQ(pairs.pair2.display_point.x, data.point_pairs[1].first.x());
-  EXPECT_EQ(pairs.pair3.display_point.x, data.point_pairs[2].first.x());
-  EXPECT_EQ(pairs.pair4.display_point.x, data.point_pairs[3].first.x());
-
-  EXPECT_EQ(pairs.pair1.display_point.y, data.point_pairs[0].first.y());
-  EXPECT_EQ(pairs.pair2.display_point.y, data.point_pairs[1].first.y());
-  EXPECT_EQ(pairs.pair3.display_point.y, data.point_pairs[2].first.y());
-  EXPECT_EQ(pairs.pair4.display_point.y, data.point_pairs[3].first.y());
-
-  EXPECT_EQ(pairs.pair1.touch_point.x, data.point_pairs[0].second.x());
-  EXPECT_EQ(pairs.pair2.touch_point.x, data.point_pairs[1].second.x());
-  EXPECT_EQ(pairs.pair3.touch_point.x, data.point_pairs[2].second.x());
-  EXPECT_EQ(pairs.pair4.touch_point.x, data.point_pairs[3].second.x());
-
-  EXPECT_EQ(pairs.pair1.touch_point.y, data.point_pairs[0].second.y());
-  EXPECT_EQ(pairs.pair2.touch_point.y, data.point_pairs[1].second.y());
-  EXPECT_EQ(pairs.pair3.touch_point.y, data.point_pairs[2].second.y());
-  EXPECT_EQ(pairs.pair4.touch_point.y, data.point_pairs[3].second.y());
-
-  EXPECT_EQ(bounds.width, data.bounds.width());
-  EXPECT_EQ(bounds.height, data.bounds.height());
+  EXPECT_TRUE(success);
 }
+
+class DisplayInfoProviderChromeosTouchviewTest
+    : public DisplayInfoProviderChromeosTest {
+ public:
+  DisplayInfoProviderChromeosTouchviewTest() {}
+
+  ~DisplayInfoProviderChromeosTouchviewTest() override {}
+
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kUseFirstDisplayAsInternal);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ash::switches::kAshEnableTabletMode);
+    DisplayInfoProviderChromeosTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DisplayInfoProviderChromeosTouchviewTest);
+};
+
+TEST_F(DisplayInfoProviderChromeosTouchviewTest, GetTabletMode) {
+  UpdateDisplay("500x600,400x520");
+
+  // Check initial state.
+  DisplayUnitInfoList result = GetAllDisplaysInfo();
+  ASSERT_EQ(2u, result.size());
+  EXPECT_TRUE(result[0].has_accelerometer_support);
+  EXPECT_FALSE(result[0].is_tablet_mode);
+  EXPECT_FALSE(result[1].has_accelerometer_support);
+  EXPECT_FALSE(result[1].is_tablet_mode);
+
+  EnableTabletMode(true);
+  result = GetAllDisplaysInfo();
+  ASSERT_EQ(2u, result.size());
+  EXPECT_TRUE(result[0].has_accelerometer_support);
+  ASSERT_TRUE(result[0].is_tablet_mode);
+  EXPECT_TRUE(*result[0].is_tablet_mode);
+  EXPECT_FALSE(result[1].has_accelerometer_support);
+  EXPECT_FALSE(result[1].is_tablet_mode);
+}
+
 }  // namespace
 }  // namespace extensions

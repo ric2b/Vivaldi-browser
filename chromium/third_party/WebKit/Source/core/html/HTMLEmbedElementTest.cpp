@@ -35,7 +35,8 @@ void HTMLEmbedElementTest::SetUp() {
 }
 
 void HTMLEmbedElementTest::SetHtmlInnerHTML(const char* html_content) {
-  GetDocument().documentElement()->setInnerHTML(String::FromUTF8(html_content));
+  GetDocument().documentElement()->SetInnerHTMLFromString(
+      String::FromUTF8(html_content));
   GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
@@ -43,20 +44,20 @@ TEST_F(HTMLEmbedElementTest, FallbackState) {
   // Load <object> element with a <embed> child.
   // This can be seen on sites with Flash cookies,
   // for example on www.yandex.ru
-  SetHtmlInnerHTML(
-      "<div>"
-      "<object classid='clsid:D27CDB6E-AE6D-11cf-96B8-444553540000' width='1' "
-      "height='1' id='fco'>"
-      "<param name='movie' value='//site.com/flash-cookie.swf'>"
-      "<param name='allowScriptAccess' value='Always'>"
-      "<embed src='//site.com/flash-cookie.swf' allowscriptaccess='Always' "
-      "width='1' height='1' id='fce'>"
-      "</object></div>");
+  SetHtmlInnerHTML(R"HTML(
+    <div>
+    <object classid='clsid:D27CDB6E-AE6D-11cf-96B8-444553540000' width='1'
+    height='1' id='fco'>
+    <param name='movie' value='//site.com/flash-cookie.swf'>
+    <param name='allowScriptAccess' value='Always'>
+    <embed src='//site.com/flash-cookie.swf' allowscriptaccess='Always'
+    width='1' height='1' id='fce'>
+    </object></div>
+  )HTML");
 
   auto* object_element = GetDocument().getElementById("fco");
   ASSERT_TRUE(object_element);
-  ASSERT_TRUE(isHTMLObjectElement(object_element));
-  HTMLObjectElement* object = toHTMLObjectElement(object_element);
+  HTMLObjectElement* object = ToHTMLObjectElement(object_element);
 
   // At this moment updatePlugin() function is not called, so
   // useFallbackContent() will return false.
@@ -67,8 +68,7 @@ TEST_F(HTMLEmbedElementTest, FallbackState) {
 
   auto* embed_element = GetDocument().getElementById("fce");
   ASSERT_TRUE(embed_element);
-  ASSERT_TRUE(isHTMLEmbedElement(embed_element));
-  HTMLEmbedElement* embed = toHTMLEmbedElement(embed_element);
+  HTMLEmbedElement* embed = ToHTMLEmbedElement(embed_element);
 
   GetDocument().View()->UpdateAllLifecyclePhases();
 

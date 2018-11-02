@@ -37,9 +37,9 @@ class MODULES_EXPORT BodyStreamBuffer final : public UnderlyingSourceBase,
   ScriptValue Stream();
 
   // Callable only when neither locked nor disturbed.
-  PassRefPtr<BlobDataHandle> DrainAsBlobDataHandle(
+  scoped_refptr<BlobDataHandle> DrainAsBlobDataHandle(
       BytesConsumer::BlobSizePolicy);
-  PassRefPtr<EncodedFormData> DrainAsFormData();
+  scoped_refptr<EncodedFormData> DrainAsFormData();
   void StartLoading(FetchDataLoader*, FetchDataLoader::Client* /* client */);
   void Tee(BodyStreamBuffer**, BodyStreamBuffer**);
 
@@ -51,6 +51,7 @@ class MODULES_EXPORT BodyStreamBuffer final : public UnderlyingSourceBase,
 
   // BytesConsumer::Client
   void OnStateChange() override;
+  String DebugName() const override { return "BodyStreamBuffer"; }
 
   bool IsStreamReadable();
   bool IsStreamClosed();
@@ -58,9 +59,9 @@ class MODULES_EXPORT BodyStreamBuffer final : public UnderlyingSourceBase,
   bool IsStreamLocked();
   bool IsStreamDisturbed();
   void CloseAndLockAndDisturb();
-  ScriptState* GetScriptState() { return script_state_.Get(); }
+  ScriptState* GetScriptState() { return script_state_.get(); }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(loader_);
     UnderlyingSourceBase::Trace(visitor);
@@ -77,7 +78,7 @@ class MODULES_EXPORT BodyStreamBuffer final : public UnderlyingSourceBase,
   void EndLoading();
   void StopLoading();
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   Member<BytesConsumer> consumer_;
   // We need this member to keep it alive while loading.
   Member<FetchDataLoader> loader_;

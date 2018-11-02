@@ -23,23 +23,23 @@
 
 namespace blink {
 
-PassRefPtr<AcceleratedStaticBitmapImage>
+scoped_refptr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromSkImage(
     sk_sp<SkImage> image,
     WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper) {
   DCHECK(image->isTextureBacked());
-  return AdoptRef(new AcceleratedStaticBitmapImage(
+  return base::AdoptRef(new AcceleratedStaticBitmapImage(
       std::move(image), std::move(context_provider_wrapper)));
 }
 
-PassRefPtr<AcceleratedStaticBitmapImage>
+scoped_refptr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromWebGLContextImage(
     const gpu::Mailbox& mailbox,
     const gpu::SyncToken& sync_token,
     unsigned texture_id,
     WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper,
     IntSize mailbox_size) {
-  return AdoptRef(new AcceleratedStaticBitmapImage(
+  return base::AdoptRef(new AcceleratedStaticBitmapImage(
       mailbox, sync_token, texture_id, std::move(context_provider_wrapper),
       mailbox_size));
 }
@@ -126,7 +126,8 @@ IntSize AcceleratedStaticBitmapImage::Size() const {
   return texture_holder_->Size();
 }
 
-RefPtr<StaticBitmapImage> AcceleratedStaticBitmapImage::MakeUnaccelerated() {
+scoped_refptr<StaticBitmapImage>
+AcceleratedStaticBitmapImage::MakeUnaccelerated() {
   CreateImageFromMailboxIfNeeded();
   return StaticBitmapImage::Create(
       texture_holder_->GetSkImage()->makeNonTextureImage());
@@ -172,15 +173,14 @@ PaintImage AcceleratedStaticBitmapImage::PaintImageForCurrentFrame() {
   // TODO(ccameron): This function should not ignore |colorBehavior|.
   // https://crbug.com/672306
   CheckThread();
-  if (!IsValid()) {
+  if (!IsValid())
     return PaintImage();
-  }
   CreateImageFromMailboxIfNeeded();
 
-  PaintImageBuilder builder;
-  InitPaintImageBuilder(builder);
-  builder.set_image(texture_holder_->GetSkImage());
-  return builder.TakePaintImage();
+  return CreatePaintImageBuilder()
+      .set_image(texture_holder_->GetSkImage())
+      .set_completion_state(PaintImage::CompletionState::DONE)
+      .TakePaintImage();
 }
 
 void AcceleratedStaticBitmapImage::Draw(PaintCanvas* canvas,
@@ -188,10 +188,17 @@ void AcceleratedStaticBitmapImage::Draw(PaintCanvas* canvas,
                                         const FloatRect& dst_rect,
                                         const FloatRect& src_rect,
                                         RespectImageOrientationEnum,
-                                        ImageClampingMode image_clamping_mode) {
-  const auto& paint_image = PaintImageForCurrentFrame();
+                                        ImageClampingMode image_clamping_mode,
+                                        ImageDecodingMode decode_mode) {
+  auto paint_image = PaintImageForCurrentFrame();
   if (!paint_image)
     return;
+  auto paint_image_decoding_mode = ToPaintImageDecodingMode(decode_mode);
+  if (paint_image.decoding_mode() != paint_image_decoding_mode) {
+    paint_image = PaintImageBuilder::WithCopy(std::move(paint_image))
+                      .set_decoding_mode(paint_image_decoding_mode)
+                      .TakePaintImage();
+  }
   StaticBitmapImage::DrawHelper(canvas, flags, dst_rect, src_rect,
                                 image_clamping_mode, paint_image);
 }

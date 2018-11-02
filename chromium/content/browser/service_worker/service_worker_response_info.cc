@@ -10,21 +10,18 @@
 
 namespace content {
 
-namespace {
-
-int kUserDataKey;  // Only address is used, value is not important.
-
-}  // namespace
+// static
+int ServiceWorkerResponseInfo::user_data_key_;
 
 // static
 ServiceWorkerResponseInfo* ServiceWorkerResponseInfo::ForRequest(
     net::URLRequest* request,
     bool create) {
   ServiceWorkerResponseInfo* info = static_cast<ServiceWorkerResponseInfo*>(
-      request->GetUserData(&kUserDataKey));
+      request->GetUserData(&user_data_key_));
   if (!info && create) {
     info = new ServiceWorkerResponseInfo();
-    request->SetUserData(&kUserDataKey, base::WrapUnique(info));
+    request->SetUserData(&user_data_key_, base::WrapUnique(info));
   }
   return info;
 }
@@ -42,7 +39,6 @@ void ServiceWorkerResponseInfo::GetExtraResponseInfo(
     ResourceResponseInfo* response_info) const {
   response_info->was_fetched_via_service_worker =
       was_fetched_via_service_worker_;
-  response_info->was_fetched_via_foreign_fetch = was_fetched_via_foreign_fetch_;
   response_info->was_fallback_required_by_service_worker =
       was_fallback_required_;
   response_info->url_list_via_service_worker = url_list_via_service_worker_;
@@ -77,7 +73,6 @@ void ServiceWorkerResponseInfo::OnPrepareToRestart(
 
 void ServiceWorkerResponseInfo::OnStartCompleted(
     bool was_fetched_via_service_worker,
-    bool was_fetched_via_foreign_fetch,
     bool was_fallback_required,
     const std::vector<GURL>& url_list_via_service_worker,
     network::mojom::FetchResponseType response_type_via_service_worker,
@@ -88,7 +83,6 @@ void ServiceWorkerResponseInfo::OnStartCompleted(
     const ServiceWorkerHeaderList& cors_exposed_header_names,
     bool did_navigation_preload) {
   was_fetched_via_service_worker_ = was_fetched_via_service_worker;
-  was_fetched_via_foreign_fetch_ = was_fetched_via_foreign_fetch;
   was_fallback_required_ = was_fallback_required;
   url_list_via_service_worker_ = url_list_via_service_worker;
   response_type_via_service_worker_ = response_type_via_service_worker;
@@ -107,7 +101,6 @@ void ServiceWorkerResponseInfo::OnStartCompleted(
 
 void ServiceWorkerResponseInfo::ResetData() {
   was_fetched_via_service_worker_ = false;
-  was_fetched_via_foreign_fetch_ = false;
   was_fallback_required_ = false;
   url_list_via_service_worker_.clear();
   response_type_via_service_worker_ =

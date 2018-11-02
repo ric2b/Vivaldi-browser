@@ -55,7 +55,8 @@ thunk::PPB_PDF_API* PDFResource::AsPPB_PDF_API() {
 void PDFResource::SearchString(const unsigned short* input_string,
                                const unsigned short* input_term,
                                bool case_sensitive,
-                               PP_PrivateFindResult** results, int* count) {
+                               PP_PrivateFindResult** results,
+                               uint32_t* count) {
   if (locale_.empty())
     locale_ = GetLocale();
   const base::char16* string =
@@ -205,6 +206,10 @@ void PDFResource::SelectionChanged(const PP_FloatPoint& left,
                                    int32_t right_height) {
   Post(RENDERER, PpapiHostMsg_PDF_SelectionChanged(left, left_height, right,
                                                    right_height));
+}
+
+void PDFResource::DidScroll() {
+  Post(RENDERER, PpapiHostMsg_PDF_DidScroll());
 }
 
 }  // namespace proxy

@@ -18,6 +18,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/icu_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "cc/paint/display_item_list.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -192,18 +194,6 @@ void ScrambleTree(views::View* view) {
     view->SetVisible(!view->visible());
 }
 
-class ScopedRTL {
- public:
-  ScopedRTL() {
-    locale_ = base::i18n::GetConfiguredLocale();
-    base::i18n::SetICUDefaultLocale("he");
-  }
-  ~ScopedRTL() { base::i18n::SetICUDefaultLocale(locale_); }
-
- private:
-  std::string locale_;
-};
-
 }  // namespace
 
 namespace views {
@@ -272,6 +262,8 @@ class TestView : public View {
 
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
 
+  void OnAccessibilityEvent(ui::AXEvent event_type) override;
+
   // OnBoundsChanged.
   bool did_change_bounds_;
   gfx::Rect new_bounds_;
@@ -298,6 +290,9 @@ class TestView : public View {
 
   // Value to return from CanProcessEventsWithinSubtree().
   bool can_process_events_within_subtree_;
+
+  // Accessibility events
+  ui::AXEvent last_a11y_event_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,6 +327,31 @@ TEST_F(ViewTest, LayoutCalledInvalidateAndOriginChanges) {
 ////////////////////////////////////////////////////////////////////////////////
 // OnBoundsChanged
 ////////////////////////////////////////////////////////////////////////////////
+
+void TestView::OnAccessibilityEvent(ui::AXEvent event_type) {
+  last_a11y_event_ = event_type;
+}
+
+TEST_F(ViewTest, OnBoundsChangedFiresA11yEvent) {
+  TestView v;
+
+  // Should change when scaled or moved.
+  gfx::Rect initial(0, 0, 200, 200);
+  gfx::Rect scaled(0, 0, 250, 250);
+  gfx::Rect moved(100, 100, 250, 250);
+
+  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.SetBoundsRect(initial);
+  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+
+  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.SetBoundsRect(scaled);
+  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+
+  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.SetBoundsRect(moved);
+  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+}
 
 void TestView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   did_change_bounds_ = true;
@@ -619,7 +639,7 @@ TEST_F(ViewTest, PaintWithMovedViewUsesCache) {
 }
 
 TEST_F(ViewTest, PaintWithMovedViewUsesCacheInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
   TestView* v1 = new TestView;
@@ -774,7 +794,7 @@ TEST_F(ViewTest, PaintContainsChildren) {
 }
 
 TEST_F(ViewTest, PaintContainsChildrenInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
 
@@ -854,7 +874,7 @@ TEST_F(ViewTest, PaintIntersectsChildren) {
 }
 
 TEST_F(ViewTest, PaintIntersectsChildrenInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
 
@@ -934,7 +954,7 @@ TEST_F(ViewTest, PaintIntersectsChildButNotGrandChild) {
 }
 
 TEST_F(ViewTest, PaintIntersectsChildButNotGrandChildInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
 
@@ -1014,7 +1034,7 @@ TEST_F(ViewTest, PaintIntersectsNoChildren) {
 }
 
 TEST_F(ViewTest, PaintIntersectsNoChildrenInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
 
@@ -1107,7 +1127,7 @@ TEST_F(ViewTest, PaintIntersectsOneChild) {
 }
 
 TEST_F(ViewTest, PaintIntersectsOneChildInRTL) {
-  ScopedRTL rtl;
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
   View* root_view = widget->GetRootView();
 
@@ -3774,6 +3794,7 @@ class ViewLayerTest : public ViewsTestBase {
   }
 
   void SetUp() override {
+    SetUpPixelCanvas();
     ViewTest::SetUp();
     widget_ = new Widget;
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
@@ -3790,12 +3811,18 @@ class ViewLayerTest : public ViewsTestBase {
 
   Widget* widget() { return widget_; }
 
+  virtual void SetUpPixelCanvas() {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kEnablePixelCanvasRecording);
+  }
+
  protected:
   // Accessors to View internals.
   void SchedulePaintOnParent(View* view) { view->SchedulePaintOnParent(); }
 
  private:
   Widget* widget_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 
@@ -3931,8 +3958,7 @@ TEST_F(ViewLayerTest, BoundsChangeWithLayer) {
 
 // Make sure layers are positioned correctly in RTL.
 TEST_F(ViewLayerTest, BoundInRTL) {
-  ScopedRTL rtl;
-
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   View* view = new View;
   widget()->SetContentsView(view);
 
@@ -3986,8 +4012,7 @@ TEST_F(ViewLayerTest, BoundInRTL) {
 
 // Make sure that resizing a parent in RTL correctly repositions its children.
 TEST_F(ViewLayerTest, ResizeParentInRTL) {
-  ScopedRTL rtl;
-
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_("he");
   View* view = new View;
   widget()->SetContentsView(view);
 
@@ -4433,7 +4458,10 @@ TEST_F(ViewLayerTest, RecreateLayerMovesNonViewChildren) {
 namespace {
 
 std::string ToString(const gfx::Vector2dF& vector) {
-  return base::StringPrintf("%.2f %0.2f", vector.x(), vector.y());
+  // Explicitly round it because linux uses banker's rounding
+  // while Windows is using "away-from-zero" in printf.
+  return base::StringPrintf("%0.2f %0.2f", std::round(vector.x() * 100) / 100.f,
+                            std::round(vector.y() * 100) / 100.f);
 }
 
 }  // namespace
@@ -4478,25 +4506,65 @@ TEST_F(ViewLayerTest, SnapLayerToPixel) {
   EXPECT_EQ("0.00 0.00", ToString(v11->layer()->subpixel_position_offset()));
 }
 
+namespace {
+
+class PaintLayerView : public View {
+ public:
+  PaintLayerView() = default;
+
+  void PaintChildren(const PaintInfo& info) override {
+    last_paint_info_ = base::MakeUnique<PaintInfo>(info);
+    View::PaintChildren(info);
+  }
+
+  std::unique_ptr<PaintInfo> GetLastPaintInfo() {
+    return std::move(last_paint_info_);
+  }
+
+ private:
+  std::unique_ptr<PaintInfo> last_paint_info_;
+
+  DISALLOW_COPY_AND_ASSIGN(PaintLayerView);
+};
+
+}  // namespace
+
 class ViewLayerPixelCanvasTest : public ViewLayerTest {
  public:
   ViewLayerPixelCanvasTest() {}
 
   ~ViewLayerPixelCanvasTest() override {}
 
-  void SetUp() override {
-    // Enable pixel canvas
-    base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-    cmd_line->AppendSwitch(switches::kEnablePixelCanvasRecording);
-
-    ViewLayerTest::SetUp();
+  void SetUpPixelCanvas() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kEnablePixelCanvasRecording);
   }
+
+  // Test if the recording rects are same with and without layer.
+  void PaintRecordingSizeTest(PaintLayerView* v3,
+                              const gfx::Size& expected_size) {
+    v3->DestroyLayer();
+    ui::Compositor* compositor = widget()->GetCompositor();
+    auto list = base::MakeRefCounted<cc::DisplayItemList>();
+    ui::PaintContext context(list.get(), compositor->device_scale_factor(),
+                             gfx::Rect(compositor->size()), true);
+    widget()->GetRootView()->PaintFromPaintRoot(context);
+    EXPECT_EQ(expected_size, v3->GetLastPaintInfo()->paint_recording_size());
+    v3->SetPaintToLayer();
+    v3->OnPaintLayer(context);
+    EXPECT_EQ(expected_size, v3->GetLastPaintInfo()->paint_recording_size());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewLayerPixelCanvasTest);
 };
 
 TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
   View* v1 = new View;
   View* v2 = new View;
-  View* v3 = new View;
+  PaintLayerView* v3 = new PaintLayerView;
   v1->AddChildView(v2);
   v2->AddChildView(v3);
 
@@ -4505,34 +4573,42 @@ TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
   const gfx::Size& size = GetRootLayer()->GetCompositor()->size();
   GetRootLayer()->GetCompositor()->SetScaleAndSize(1.6f, size);
 
-  v3->SetBoundsRect(gfx::Rect(4, 4, 20, 20));
+  v3->SetBoundsRect(gfx::Rect(14, 13, 13, 5));
   v2->SetBoundsRect(gfx::Rect(7, 7, 50, 50));
   v1->SetBoundsRect(gfx::Rect(9, 9, 100, 100));
-  v3->SetPaintToLayer();
 
-  EXPECT_EQ("-0.63 -0.63", ToString(v3->layer()->subpixel_position_offset()));
+  PaintRecordingSizeTest(v3, gfx::Size(21, 8));  // Enclosing Rect = (21, 8)
+  EXPECT_EQ("-0.63 -0.25", ToString(v3->layer()->subpixel_position_offset()));
 
   // Creating a layer in parent should update the child view's layer offset.
   v1->SetPaintToLayer();
   EXPECT_EQ("-0.25 -0.25", ToString(v1->layer()->subpixel_position_offset()));
-  EXPECT_EQ("-0.37 -0.37", ToString(v3->layer()->subpixel_position_offset()));
+  EXPECT_EQ("-0.37 -0.00", ToString(v3->layer()->subpixel_position_offset()));
 
   // DSF change should get propagated and update offsets.
   GetRootLayer()->GetCompositor()->SetScaleAndSize(1.5f, size);
+
   EXPECT_EQ("0.33 0.33", ToString(v1->layer()->subpixel_position_offset()));
-  EXPECT_EQ("0.33 0.33", ToString(v3->layer()->subpixel_position_offset()));
+  EXPECT_EQ("0.33 0.67", ToString(v3->layer()->subpixel_position_offset()));
+
+  v1->DestroyLayer();
+  PaintRecordingSizeTest(v3, gfx::Size(20, 7));  // Enclosing Rect = (20, 8)
+  v1->SetPaintToLayer();
 
   GetRootLayer()->GetCompositor()->SetScaleAndSize(1.33f, size);
+
   EXPECT_EQ("0.02 0.02", ToString(v1->layer()->subpixel_position_offset()));
-  EXPECT_EQ("-0.47 -0.47", ToString(v3->layer()->subpixel_position_offset()));
+  EXPECT_EQ("0.05 -0.45", ToString(v3->layer()->subpixel_position_offset()));
+
+  v1->DestroyLayer();
+  PaintRecordingSizeTest(v3, gfx::Size(17, 7));  // Enclosing Rect = (18, 7)
 
   // Deleting parent's layer should update the child view's layer's offset.
-  v1->DestroyLayer();
-  EXPECT_EQ("-0.45 -0.45", ToString(v3->layer()->subpixel_position_offset()));
+  EXPECT_EQ("0.08 -0.43", ToString(v3->layer()->subpixel_position_offset()));
 
   // Setting parent view should update the child view's layer's offset.
   v1->SetBoundsRect(gfx::Rect(3, 3, 10, 10));
-  EXPECT_EQ("-0.47 -0.47", ToString(v3->layer()->subpixel_position_offset()));
+  EXPECT_EQ("0.06 -0.44", ToString(v3->layer()->subpixel_position_offset()));
 
   // Setting integral DSF should reset the offset.
   GetRootLayer()->GetCompositor()->SetScaleAndSize(2.0f, size);
@@ -4920,7 +4996,7 @@ class ViewObserverTest : public ViewTest, public ViewObserver {
   }
 
   std::unique_ptr<View> NewView() {
-    auto view = base::MakeUnique<View>();
+    auto view = std::make_unique<View>();
     view->AddObserver(this);
     return view;
   }

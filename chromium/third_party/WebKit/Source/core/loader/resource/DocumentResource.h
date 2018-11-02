@@ -42,7 +42,7 @@ class CORE_EXPORT DocumentResource final : public TextResource {
 
   static DocumentResource* FetchSVGDocument(FetchParameters&, ResourceFetcher*);
   ~DocumentResource() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   Document* GetDocument() const { return document_.Get(); }
 
@@ -79,17 +79,6 @@ DEFINE_TYPE_CASTS(DocumentResource,
                   resource,
                   resource->GetType() == Resource::kSVGDocument,
                   resource.GetType() == Resource::kSVGDocument);
-
-class CORE_EXPORT DocumentResourceClient : public ResourceClient {
- public:
-  ~DocumentResourceClient() override {}
-  static bool IsExpectedType(ResourceClient* client) {
-    return client->GetResourceClientType() == kDocumentType;
-  }
-  ResourceClientType GetResourceClientType() const final {
-    return kDocumentType;
-  }
-};
 
 }  // namespace blink
 

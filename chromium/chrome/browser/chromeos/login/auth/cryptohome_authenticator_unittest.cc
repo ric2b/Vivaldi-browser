@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 #include <stdint.h>
 
 #include <memory>
@@ -20,7 +19,6 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/auth/chrome_cryptohome_authenticator.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -46,7 +44,9 @@
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login/login_state.h"
 #include "components/ownership/mock_owner_key_util.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "crypto/nss_key_util.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_test_nss_chromeos_user.h"
@@ -149,7 +149,7 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
   void MountEx(const cryptohome::Identification& cryptohome_id,
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
-               const ProtobufMethodCallback& callback) override {
+               DBusMethodCallback<cryptohome::BaseReply> callback) override {
     EXPECT_EQ(is_create_attempt_expected_, request.has_create());
     if (is_create_attempt_expected_) {
       EXPECT_EQ(expected_authorization_secret_,
@@ -165,7 +165,7 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
         ->set_sanitized_username(
             cryptohome::MockAsyncMethodCaller::kFakeSanitizedUsername);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, DBUS_METHOD_CALL_SUCCESS, true, reply));
+        FROM_HERE, base::BindOnce(std::move(callback), reply));
   }
 
  private:
@@ -183,7 +183,7 @@ class CryptohomeAuthenticatorTest : public testing::Test {
   CryptohomeAuthenticatorTest()
       : user_context_(AccountId::FromUserEmail("me@nowhere.org")),
         user_manager_(new chromeos::FakeChromeUserManager()),
-        user_manager_enabler_(user_manager_),
+        user_manager_enabler_(base::WrapUnique(user_manager_)),
         mock_caller_(NULL),
         owner_key_util_(new ownership::MockOwnerKeyUtil()) {
     // Testing profile must be initialized after user_manager_ +
@@ -268,8 +268,9 @@ class CryptohomeAuthenticatorTest : public testing::Test {
   // Allow test to fail and exit gracefully, even if
   // OnOffTheRecordAuthSuccess() wasn't supposed to happen.
   void FailOnGuestLoginSuccess() {
-    ON_CALL(consumer_, OnOffTheRecordAuthSuccess()).WillByDefault(
-        Invoke(MockAuthStatusConsumer::OnGuestSuccessQuitAndFail));
+    ON_CALL(consumer_, OnOffTheRecordAuthSuccess())
+        .WillByDefault(
+            Invoke(MockAuthStatusConsumer::OnGuestSuccessQuitAndFail));
   }
 
   void ExpectLoginFailure(const AuthFailure& failure) {
@@ -319,9 +320,9 @@ class CryptohomeAuthenticatorTest : public testing::Test {
     fake_cryptohome_client_->AddKeyEx(
         cryptohome::Identification(user_context_.GetAccountId()),
         cryptohome::AuthorizationRequest(), request,
-        base::Bind(
-            [](DBusMethodCallStatus call_status, bool result,
-               const cryptohome::BaseReply& reply) { EXPECT_TRUE(result); }));
+        base::BindOnce([](base::Optional<cryptohome::BaseReply> reply) {
+          EXPECT_TRUE(reply.has_value());
+        }));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -366,7 +367,7 @@ class CryptohomeAuthenticatorTest : public testing::Test {
   chromeos::FakeChromeUserManager* user_manager_;
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
 
   cryptohome::MockAsyncMethodCaller* mock_caller_;
 
@@ -479,7 +480,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededFailedMount) {
 
   // Flush all the pending operations. The operations should induce an owner
   // verification.
-  device_settings_test_helper_.Flush();
+  content::RunAllTasksUntilIdle();
 
   state_.reset(new TestAttemptState(user_context_, false));
   state_->PresetCryptohomeStatus(true, cryptohome::MOUNT_ERROR_NONE);
@@ -529,7 +530,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededSuccess) {
 
   // Flush all the pending operations. The operations should induce an owner
   // verification.
-  device_settings_test_helper_.Flush();
+  content::RunAllTasksUntilIdle();
 
   state_.reset(new TestAttemptState(user_context_, false));
   state_->PresetCryptohomeStatus(true, cryptohome::MOUNT_ERROR_NONE);

@@ -14,10 +14,8 @@
 
 #include "base/files/file_path.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "ui/base/work_area_watcher_observer.h"
 
 class AppControllerProfileObserver;
 @class AppShimMenuController;
@@ -31,10 +29,7 @@ class Profile;
 @class ProfileMenuController;
 class QuitWithAppsController;
 class ScopedKeepAlive;
-
-namespace ui {
-class WorkAreaWatcherObserver;
-}
+@class ShareMenuController;
 
 // The application controller object, created by loading the MainMenu nib.
 // This handles things like responding to menus when there are no windows
@@ -73,6 +68,9 @@ class WorkAreaWatcherObserver;
   // available when multiple profiles is enabled.
   base::scoped_nsobject<ProfileMenuController> profileMenuController_;
 
+  // Controller for the macOS system share menu.
+  base::scoped_nsobject<ShareMenuController> shareMenuController_;
+
   // If we're told to open URLs (in particular, via |-application:openFiles:| by
   // Launch Services) before we've launched the browser, we queue them up in
   // |startupUrls_| so that they can go in the first browser window/tab.
@@ -92,9 +90,6 @@ class WorkAreaWatcherObserver;
   // If we are expecting a workspace change in response to a reopen
   // event, the time we got the event. A null time otherwise.
   base::TimeTicks reopenTime_;
-
-  // Observers that listen to the work area changes.
-  base::ObserverList<ui::WorkAreaWatcherObserver> workAreaChangeObservers_;
 
   std::unique_ptr<PrefChangeRegistrar> profilePrefRegistrar_;
   PrefChangeRegistrar localPrefRegistrar_;
@@ -163,10 +158,6 @@ class WorkAreaWatcherObserver;
 
 - (BookmarkMenuBridge*)bookmarkMenuBridge;
 - (HistoryMenuBridge*)historyMenuBridge;
-
-// Subscribes/unsubscribes from the work area change notification.
-- (void)addObserverForWorkAreaChange:(ui::WorkAreaWatcherObserver*)observer;
-- (void)removeObserverForWorkAreaChange:(ui::WorkAreaWatcherObserver*)observer;
 
 // Initializes the AppShimMenuController. This enables changing the menu bar for
 // apps.

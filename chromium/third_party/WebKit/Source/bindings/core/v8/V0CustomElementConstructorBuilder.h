@@ -31,12 +31,11 @@
 #ifndef V0CustomElementConstructorBuilder_h
 #define V0CustomElementConstructorBuilder_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8V0CustomElementLifecycleCallbacks.h"
 #include "core/dom/QualifiedName.h"
 #include "core/html/custom/V0CustomElementLifecycleCallbacks.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8.h"
 
@@ -85,7 +84,7 @@ class V0CustomElementConstructorBuilder {
   bool PrototypeIsValid(const AtomicString& type, ExceptionState&) const;
   v8::MaybeLocal<v8::Function> RetrieveCallback(const char* name);
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   const ElementRegistrationOptions& options_;
   v8::Local<v8::Object> prototype_;
   v8::Local<v8::Function> constructor_;

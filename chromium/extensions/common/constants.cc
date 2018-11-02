@@ -22,6 +22,8 @@ const base::FilePath::CharType kVerifiedContentsFilename[] =
     FILE_PATH_LITERAL("verified_contents.json");
 const base::FilePath::CharType kComputedHashesFilename[] =
     FILE_PATH_LITERAL("computed_hashes.json");
+const base::FilePath::CharType kIndexedRulesetFilename[] =
+    FILE_PATH_LITERAL("generated_indexed_ruleset");
 
 const char kInstallDirectoryName[] = "Extensions";
 
@@ -83,7 +85,7 @@ const uint8_t kWebstoreSignaturesPublicKey[] = {
 const size_t kWebstoreSignaturesPublicKeySize =
     arraysize(kWebstoreSignaturesPublicKey);
 
-const int kNonWorkerThreadId = 0;
+const int kMainThreadId = 0;
 
 const char kMimeTypeJpeg[] = "image/jpeg";
 const char kMimeTypePng[] = "image/png";

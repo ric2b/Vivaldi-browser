@@ -28,7 +28,7 @@
 
 #include "platform/fonts/FontFallbackList.h"
 
-#include "platform/FontFamilyNames.h"
+#include "platform/font_family_names.h"
 #include "platform/fonts/AlternateFontFamily.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontCacheKey.h"
@@ -40,7 +40,7 @@
 namespace blink {
 
 FontFallbackList::FontFallbackList()
-    : cached_primary_simple_font_data_(0),
+    : cached_primary_simple_font_data_(nullptr),
       font_selector_(nullptr),
       font_selector_version_(0),
       family_index_(0),
@@ -50,7 +50,7 @@ FontFallbackList::FontFallbackList()
 void FontFallbackList::Invalidate(FontSelector* font_selector) {
   ReleaseFontData();
   font_list_.clear();
-  cached_primary_simple_font_data_ = 0;
+  cached_primary_simple_font_data_ = nullptr;
   family_index_ = 0;
   has_loading_fallback_ = false;
   if (font_selector_ != font_selector)
@@ -107,10 +107,9 @@ const SimpleFontData* FontFallbackList::DeterminePrimarySimpleFontData(
       if (font_data)
         return font_data->FontDataForCharacter(kSpaceCharacter);
 
+      FontCache* cache = FontCache::GetFontCache();
       SimpleFontData* last_resort_fallback =
-          FontCache::GetFontCache()
-              ->GetLastResortFallbackFont(font_description)
-              .Get();
+          cache->GetLastResortFallbackFont(font_description).get();
       DCHECK(last_resort_fallback);
       return last_resort_fallback;
     }
@@ -149,7 +148,7 @@ const SimpleFontData* FontFallbackList::DeterminePrimarySimpleFontData(
   }
 }
 
-PassRefPtr<FontData> FontFallbackList::GetFontData(
+scoped_refptr<FontData> FontFallbackList::GetFontData(
     const FontDescription& font_description,
     int& family_index) const {
   const FontFamily* curr_family = &font_description.Family();
@@ -159,7 +158,7 @@ PassRefPtr<FontData> FontFallbackList::GetFontData(
   for (; curr_family; curr_family = curr_family->Next()) {
     family_index++;
     if (curr_family->Family().length()) {
-      RefPtr<FontData> result;
+      scoped_refptr<FontData> result;
       if (font_selector_)
         result = font_selector_->GetFontData(font_description,
                                              curr_family->Family());
@@ -174,7 +173,7 @@ PassRefPtr<FontData> FontFallbackList::GetFontData(
 
   if (font_selector_) {
     // Try the user's preferred standard font.
-    if (RefPtr<FontData> data = font_selector_->GetFontData(
+    if (scoped_refptr<FontData> data = font_selector_->GetFontData(
             font_description, FontFamilyNames::webkit_standard))
       return data;
   }
@@ -191,7 +190,7 @@ FallbackListCompositeKey FontFallbackList::CompositeKey(
     if (current_family->Family().length()) {
       FontFaceCreationParams params(
           AdjustFamilyNameToAvoidUnsupportedFonts(current_family->Family()));
-      RefPtr<FontData> result;
+      scoped_refptr<FontData> result;
       if (font_selector_)
         result = font_selector_->GetFontData(font_description,
                                              current_family->Family());
@@ -217,15 +216,15 @@ FallbackListCompositeKey FontFallbackList::CompositeKey(
 const FontData* FontFallbackList::FontDataAt(
     const FontDescription& font_description,
     unsigned realized_font_index) const {
+  // This fallback font is already in our list.
   if (realized_font_index < font_list_.size())
-    return font_list_[realized_font_index]
-        .Get();  // This fallback font is already in our list.
+    return font_list_[realized_font_index].get();
 
   // Make sure we're not passing in some crazy value here.
   DCHECK_EQ(realized_font_index, font_list_.size());
 
   if (family_index_ == kCAllFamiliesScanned)
-    return 0;
+    return nullptr;
 
   // Ask the font cache for the font data.
   // We are obtaining this font for the first time.  We keep track of the
@@ -233,13 +232,13 @@ const FontData* FontFallbackList::FontDataAt(
   // the same spot in the list twice.  getFontData will adjust our
   // |m_familyIndex| as it scans for the right font to make.
   DCHECK_EQ(FontCache::GetFontCache()->Generation(), generation_);
-  RefPtr<FontData> result = GetFontData(font_description, family_index_);
+  scoped_refptr<FontData> result = GetFontData(font_description, family_index_);
   if (result) {
     font_list_.push_back(result);
     if (result->IsLoadingFallback())
       has_loading_fallback_ = true;
   }
-  return result.Get();
+  return result.get();
 }
 
 bool FontFallbackList::IsValid() const {

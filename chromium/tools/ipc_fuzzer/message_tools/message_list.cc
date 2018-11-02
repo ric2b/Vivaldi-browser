@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/stl_util.h"
 #include "build/build_config.h"
 
 // Include once to get the type definitions
@@ -55,10 +56,11 @@ static bool check_msgtable() {
   exemptions.push_back(CastChannelMsgStart);  // Reserved for chromecast.
   exemptions.push_back(CastMediaMsgStart);    // Reserved for chromecast.
   exemptions.push_back(IPCTestMsgStart);
+  exemptions.push_back(WorkerMsgStart);  // Now only used by tests.
 
-#if defined(DISABLE_NACL)
+#if !BUILDFLAG(ENABLE_NACL)
   exemptions.push_back(NaClMsgStart);
-#endif  // defined(DISABLE_NACL)
+#endif  // !BUILDFLAG(ENABLE_NACL)
 
 #if !BUILDFLAG(ENABLE_WEBRTC)
   exemptions.push_back(WebRtcLoggingMsgStart);
@@ -83,10 +85,6 @@ static bool check_msgtable() {
   exemptions.push_back(OzoneGpuMsgStart);
 #endif  // !defined(USE_OZONE)
 
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
-  exemptions.push_back(ChromeUtilityExtensionsMsgStart);
-#endif
-
 #if !defined(OS_WIN)
   exemptions.push_back(DWriteFontProxyMsgStart);
 #endif
@@ -106,9 +104,7 @@ static bool check_msgtable() {
       result = false;
     }
     while (class_id > previous_class_id + 1) {
-      std::vector<int>::iterator iter;
-      iter = find(exemptions.begin(), exemptions.end(), previous_class_id + 1);
-      if (iter == exemptions.end()) {
+      if (!base::ContainsValue(exemptions, previous_class_id + 1)) {
         std::cout << "Missing message file for enum "
                   << class_id - (previous_class_id + 1)
                   <<  " before enum used by " << file_name << "\n";
@@ -123,9 +119,7 @@ static bool check_msgtable() {
   }
 
   while (LastIPCMsgStart > highest_class_id + 1) {
-    std::vector<int>::iterator iter;
-    iter = find(exemptions.begin(), exemptions.end(), highest_class_id+1);
-    if (iter == exemptions.end()) {
+    if (!base::ContainsValue(exemptions, highest_class_id + 1)) {
       std::cout << "Missing message file for enum "
                 << LastIPCMsgStart - (highest_class_id + 1)
                 << " before enum LastIPCMsgStart\n";
@@ -168,7 +162,7 @@ int main(int argc, char **argv) {
   bool show_ids  = false;
   bool skip_check = false;
   bool show_comma = false;
-  const char *filter = NULL;
+  const char* filter = NULL;
 
   while (--argc > 0) {
     ++argv;

@@ -9,11 +9,9 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/Settings.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
@@ -25,19 +23,25 @@
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/mime/ContentType.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebEncryptedMediaClient.h"
 #include "public/platform/WebEncryptedMediaRequest.h"
-#include "public/platform/WebFeaturePolicyFeature.h"
 #include "public/platform/WebMediaKeySystemConfiguration.h"
 #include "public/platform/WebMediaKeySystemMediaCapability.h"
 #include "public/platform/WebVector.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
 
 namespace blink {
 
 namespace {
+
+const char kEncryptedMediaFeaturePolicyConsoleWarning[] =
+    "Encrypted Media access has been blocked because of a Feature Policy "
+    "applied to the current document. See https://goo.gl/EuHzyv for more "
+    "details.";
 
 static WebVector<WebEncryptedMediaInitDataType> ConvertInitDataTypes(
     const Vector<String>& init_data_types) {
@@ -53,8 +57,8 @@ static WebVector<WebMediaKeySystemMediaCapability> ConvertCapabilities(
   for (size_t i = 0; i < capabilities.size(); ++i) {
     const WebString& content_type = capabilities[i].contentType();
     result[i].content_type = content_type;
-    ParsedContentType type(content_type, ParsedContentType::Mode::kStrict);
-    if (type.IsValid()) {
+    ParsedContentType type(content_type);
+    if (type.IsValid() && !type.GetParameters().HasDuplicatedNames()) {
       // From
       // http://w3c.github.io/encrypted-media/#get-supported-capabilities-for-audio-video-type
       // "If the user agent does not recognize one or more parameters,
@@ -63,7 +67,7 @@ static WebVector<WebMediaKeySystemMediaCapability> ConvertCapabilities(
       // present. Chromium expects "codecs" to be provided, so this capability
       // will be skipped if codecs is not the only parameter specified.
       result[i].mime_type = type.MimeType();
-      if (type.ParameterCount() == 1u)
+      if (type.GetParameters().ParameterCount() == 1u)
         result[i].codecs = type.ParameterValueForName("codecs");
     }
     result[i].robustness = capabilities[i].robustness();
@@ -117,7 +121,7 @@ class MediaKeySystemAccessInitializer final : public EncryptedMediaRequest {
 
   ScriptPromise Promise() { return resolver_->Promise(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(resolver_);
     EncryptedMediaRequest::Trace(visitor);
   }
@@ -250,11 +254,14 @@ void MediaKeySystemAccessInitializer::CheckVideoCapabilityRobustness() const {
   }
 
   if (has_empty_robustness) {
+    // TODO(xhwang): Write a best practice doc explaining details about risks of
+    // using an empty robustness here, and provide the link to the doc in this
+    // message. See http://crbug.com/720013
     resolver_->GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
         kJSMessageSource, kWarningMessageLevel,
         "It is recommended that a robustness level be specified. Not "
-        "specifying the robustness level could result in unexpected behavior, "
-        "potentially including failure to play."));
+        "specifying the robustness level could result in unexpected "
+        "behavior."));
   }
 }
 
@@ -270,32 +277,23 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   Document* document = ToDocument(execution_context);
 
-  // From https://w3c.github.io/encrypted-media/#common-key-systems
-  // All user agents MUST support the common key systems described in this
-  // section.
-  // 9.1 Clear Key: The "org.w3.clearkey" Key System uses plain-text clear
-  //                (unencrypted) key(s) to decrypt the source.
-  //
-  // Do not check settings for Clear Key.
-  if (key_system != "org.w3.clearkey") {
-    // For other key systems, check settings and report UMA.
-    bool encypted_media_enabled =
-        document->GetSettings() &&
-        document->GetSettings()->GetEncryptedMediaEnabled();
-
-    static bool has_reported_uma = false;
-    if (!has_reported_uma) {
-      has_reported_uma = true;
-      DEFINE_STATIC_LOCAL(BooleanHistogram, histogram,
-                          ("Media.EME.EncryptedMediaEnabled"));
-      histogram.Count(encypted_media_enabled);
-    }
-
-    if (!encypted_media_enabled) {
+  if (RuntimeEnabledFeatures::FeaturePolicyForPermissionsEnabled()) {
+    if (!document->GetFrame() || !document->GetFrame()->IsFeatureEnabled(
+                                     FeaturePolicyFeature::kEncryptedMedia)) {
+      UseCounter::Count(document,
+                        WebFeature::kEncryptedMediaDisabledByFeaturePolicy);
+      document->AddConsoleMessage(
+          ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel,
+                                 kEncryptedMediaFeaturePolicyConsoleWarning));
       return ScriptPromise::RejectWithDOMException(
           script_state,
-          DOMException::Create(kNotSupportedError, "Unsupported keySystem"));
+          DOMException::Create(
+              kSecurityError,
+              "requestMediaKeySystemAccess is disabled by feature policy."));
     }
+  } else {
+    Deprecation::CountDeprecationFeaturePolicy(
+        *document, FeaturePolicyFeature::kEncryptedMedia);
   }
 
   // From https://w3c.github.io/encrypted-media/#requestMediaKeySystemAccess
@@ -331,8 +329,6 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
   UseCounter::Count(*document, WebFeature::kEncryptedMediaSecureOrigin);
   UseCounter::CountCrossOriginIframe(
       *document, WebFeature::kEncryptedMediaCrossOriginIframe);
-  Deprecation::CountDeprecationFeaturePolicy(*document,
-                                             WebFeaturePolicyFeature::kEme);
 
   // 4. Let origin be the origin of document.
   //    (Passed with the execution context.)

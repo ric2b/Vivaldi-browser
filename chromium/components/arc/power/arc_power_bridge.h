@@ -6,18 +6,24 @@
 #define COMPONENTS_ARC_POWER_ARC_POWER_BRIDGE_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "components/arc/common/power.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
 
 namespace content {
 class BrowserContext;
 }  // namespace content
+
+namespace service_manager {
+class Connector;
+}  // namespace service_manager
 
 namespace arc {
 
@@ -26,7 +32,7 @@ class ArcBridgeService;
 // ARC Power Client sets power management policy based on requests from
 // ARC instances.
 class ArcPowerBridge : public KeyedService,
-                       public InstanceHolder<mojom::PowerInstance>::Observer,
+                       public ConnectionObserver<mojom::PowerInstance>,
                        public chromeos::PowerManagerClient::Observer,
                        public display::DisplayConfigurator::Observer,
                        public mojom::PowerHost {
@@ -39,12 +45,24 @@ class ArcPowerBridge : public KeyedService,
                  ArcBridgeService* bridge_service);
   ~ArcPowerBridge() override;
 
-  // InstanceHolder<mojom::PowerInstance>::Observer overrides.
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  void set_connector_for_test(service_manager::Connector* connector) {
+    connector_for_test_ = connector;
+  }
+
+  // If |notify_brightness_timer_| is set, runs it and returns true. Returns
+  // false otherwise.
+  bool TriggerNotifyBrightnessTimerForTesting() WARN_UNUSED_RESULT;
+
+  // Runs the message loop until replies have been received for all pending
+  // device service requests in |wake_lock_requestors_|.
+  void FlushWakeLocksForTesting();
+
+  // ConnectionObserver<mojom::PowerInstance> overrides.
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // chromeos::PowerManagerClient::Observer overrides.
-  void SuspendImminent() override;
+  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
   void BrightnessChanged(int level, bool user_initiated) override;
 
@@ -54,19 +72,29 @@ class ArcPowerBridge : public KeyedService,
   // mojom::PowerHost overrides.
   void OnAcquireDisplayWakeLock(mojom::DisplayWakeLockType type) override;
   void OnReleaseDisplayWakeLock(mojom::DisplayWakeLockType type) override;
-  void IsDisplayOn(const IsDisplayOnCallback& callback) override;
+  void IsDisplayOn(IsDisplayOnCallback callback) override;
   void OnScreenBrightnessUpdateRequest(double percent) override;
 
  private:
-  void ReleaseAllDisplayWakeLocks();
+  class WakeLockRequestor;
+
+  // Returns the WakeLockRequestor for |type|, creating one if needed.
+  WakeLockRequestor* GetWakeLockRequestor(device::mojom::WakeLockType type);
+
+  // Called on PowerManagerClient::GetScreenBrightnessPercent() completion.
+  void OnGetScreenBrightnessPercent(base::Optional<double> percent);
+
   void UpdateAndroidScreenBrightness(double percent);
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
-  mojo::Binding<mojom::PowerHost> binding_;
 
-  // Stores a mapping of type -> wake lock ID for all wake locks
-  // held by ARC.
-  std::multimap<mojom::DisplayWakeLockType, int> wake_locks_;
+  // If non-null, used instead of the process-wide connector to fetch services.
+  service_manager::Connector* connector_for_test_ = nullptr;
+
+  // Used to track Android wake lock requests and acquire and release device
+  // service wake locks as needed.
+  std::map<device::mojom::WakeLockType, std::unique_ptr<WakeLockRequestor>>
+      wake_lock_requestors_;
 
   // Last time that the power manager notified about a brightness change.
   base::TimeTicks last_brightness_changed_time_;

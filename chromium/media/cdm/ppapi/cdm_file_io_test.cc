@@ -115,6 +115,30 @@ void FileIOTestRunner::AddTests() {
     EXPECT_FILE_OPENED(kError)
   END_TEST_CASE
 
+  START_TEST_CASE("FileNameContains Space")
+  OPEN_FILE
+  EXPECT_FILE_OPENED(kError)
+  END_TEST_CASE
+
+  START_TEST_CASE("FileNameContains?QuestionMark")
+  OPEN_FILE
+  EXPECT_FILE_OPENED(kError)
+  END_TEST_CASE
+
+  START_TEST_CASE("FileNameContains\xeeNonASCII")
+  OPEN_FILE
+  EXPECT_FILE_OPENED(kError)
+  END_TEST_CASE
+
+  START_TEST_CASE(
+      "FileNameLongThan256Characters1234567890123456789012345678901234567890123"
+      "456789012345678901234567890123456789012345678901234567890123456789012345"
+      "678901234567890123456789012345678901234567890123456789012345678901234567"
+      "890123456789012345678901234567890123456789012345678901234567890")
+  OPEN_FILE
+  EXPECT_FILE_OPENED(kError)
+  END_TEST_CASE
+
   START_TEST_CASE("_FileNameStartsWithUnderscore")
     OPEN_FILE
     EXPECT_FILE_OPENED(kError)
@@ -293,6 +317,38 @@ void FileIOTestRunner::AddTests() {
     EXPECT_FILE_READ(kSuccess, kData, kDataSize)
   END_TEST_CASE
 
+  START_TEST_CASE("WriteExistingFile")
+    OPEN_FILE
+    EXPECT_FILE_OPENED(kSuccess)
+    // Write big data first
+    WRITE_FILE(kBigData, kBigDataSize)
+    EXPECT_FILE_WRITTEN(kSuccess)
+    CLOSE_FILE
+    CREATE_FILE_IO
+    OPEN_FILE
+    EXPECT_FILE_OPENED(kSuccess)
+    READ_FILE
+    EXPECT_FILE_READ(kSuccess, kBigData, kBigDataSize)
+    // Now overwrite the file with normal data
+    WRITE_FILE(kData, kDataSize)
+    EXPECT_FILE_WRITTEN(kSuccess)
+    CLOSE_FILE
+    CREATE_FILE_IO
+    OPEN_FILE
+    EXPECT_FILE_OPENED(kSuccess)
+    READ_FILE
+    EXPECT_FILE_READ(kSuccess, kData, kDataSize)
+    // Now overwrite the file with big data again
+    WRITE_FILE(kBigData, kBigDataSize)
+    EXPECT_FILE_WRITTEN(kSuccess)
+    CLOSE_FILE
+    CREATE_FILE_IO
+    OPEN_FILE
+    EXPECT_FILE_OPENED(kSuccess)
+    READ_FILE
+    EXPECT_FILE_READ(kSuccess, kBigData, kBigDataSize)
+  END_TEST_CASE
+
   START_TEST_CASE("MultipleReadsAndWrites")
     OPEN_FILE
     EXPECT_FILE_OPENED(kSuccess)
@@ -364,8 +420,7 @@ void FileIOTestRunner::AddTests() {
   START_TEST_CASE("CloseDuringPendingWrite")
     OPEN_FILE
     EXPECT_FILE_OPENED(kSuccess)
-    // TODO(xhwang): Reenable this after http:://crbug.com/415401 is fixed.
-    // WRITE_FILE(kData, kDataSize)
+    WRITE_FILE(kData, kDataSize)
     CLOSE_FILE
   END_TEST_CASE
 
@@ -374,8 +429,7 @@ void FileIOTestRunner::AddTests() {
     EXPECT_FILE_OPENED(kSuccess)
     WRITE_FILE(kData, kDataSize)
     EXPECT_FILE_WRITTEN(kSuccess)
-    // TODO(xhwang): Reenable this after http:://crbug.com/415401 is fixed.
-    // WRITE_FILE(kBigData, kBigDataSize)
+    WRITE_FILE(kBigData, kBigDataSize)
     CLOSE_FILE
     // Write() didn't finish and the content of the file is not modified.
     CREATE_FILE_IO
@@ -390,8 +444,7 @@ void FileIOTestRunner::AddTests() {
     EXPECT_FILE_OPENED(kSuccess)
     WRITE_FILE(kBigData, kBigDataSize)
     EXPECT_FILE_WRITTEN(kSuccess)
-    // TODO(xhwang): Reenable this after http:://crbug.com/415401 is fixed.
-    // WRITE_FILE(kData, kDataSize)
+    WRITE_FILE(kData, kDataSize)
     CLOSE_FILE
     // Write() didn't finish and the content of the file is not modified.
     CREATE_FILE_IO
@@ -406,8 +459,7 @@ void FileIOTestRunner::AddTests() {
     EXPECT_FILE_OPENED(kSuccess)
     WRITE_FILE(kData, kDataSize)
     EXPECT_FILE_WRITTEN(kSuccess)
-    // TODO(xhwang): Reenable this after http:://crbug.com/415401 is fixed.
-    // READ_FILE
+    READ_FILE
     CLOSE_FILE
     // Make sure the file is not modified.
     CREATE_FILE_IO
@@ -424,8 +476,7 @@ void FileIOTestRunner::AddTests() {
       EXPECT_FILE_OPENED(kSuccess)
       WRITE_FILE(kData, kDataSize)
       EXPECT_FILE_WRITTEN(kSuccess)
-      // TODO(xhwang): Reenable this after http:://crbug.com/415401 is fixed.
-      // WRITE_FILE(kBigData, kBigDataSize)
+      WRITE_FILE(kBigData, kBigDataSize)
       CLOSE_FILE
       // Make sure the file is not modified.
       CREATE_FILE_IO
@@ -472,7 +523,7 @@ FileIOTest::FileIOTest(const CreateFileIOCB& create_file_io_cb,
     : create_file_io_cb_(create_file_io_cb),
       test_name_(test_name) {}
 
-FileIOTest::~FileIOTest() {}
+FileIOTest::~FileIOTest() = default;
 
 void FileIOTest::AddTestStep(StepType type,
                              Status status,
@@ -611,6 +662,7 @@ void FileIOTest::OnTestComplete(bool success) {
     file_io_stack_.pop();
   }
   FILE_IO_DVLOG(3) << test_name_ << (success ? " PASSED" : " FAILED");
+  DLOG_IF(WARNING, !success) << test_name_ << " FAILED";
   base::ResetAndReturn(&completion_cb_).Run(success);
 }
 

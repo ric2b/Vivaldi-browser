@@ -4,17 +4,20 @@
 
 #include "content/public/test/content_browser_test.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/launcher/test_launcher.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -43,30 +46,26 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MANUAL_ShouldntRun) {
   ASSERT_TRUE(false);
 }
 
-class CrashObserver : public RenderProcessHostObserver {
- public:
-  CrashObserver(const base::Closure& quit_closure)
-      : quit_closure_(quit_closure) {}
-  void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override {
-    ASSERT_TRUE(status == base::TERMINATION_STATUS_PROCESS_CRASHED ||
-                status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION);
-    quit_closure_.Run();
-  }
-
- private:
-  base::Closure quit_closure_;
-};
-
 IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MANUAL_RendererCrash) {
-  scoped_refptr<MessageLoopRunner> message_loop_runner = new MessageLoopRunner;
-  CrashObserver crash_observer(message_loop_runner->QuitClosure());
-  shell()->web_contents()->GetRenderProcessHost()->AddObserver(&crash_observer);
+  content::RenderProcessHostWatcher renderer_shutdown_observer(
+      shell()->web_contents()->GetMainFrame()->GetProcess(),
+      content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
 
   NavigateToURL(shell(), GURL("chrome:crash"));
-  message_loop_runner->Run();
+  renderer_shutdown_observer.Wait();
+
+  EXPECT_FALSE(renderer_shutdown_observer.did_exit_normally());
 }
+
+// Non-Windows sanitizer builds do not symbolize stack traces internally, so use
+// this macro to avoid looking for symbols from the stack trace.
+#if !defined(OS_WIN) &&                                       \
+    (defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || \
+     defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER))
+#define USE_EXTERNAL_SYMBOLIZER 1
+#else
+#define USE_EXTERNAL_SYMBOLIZER 0
+#endif
 
 // Tests that browser tests print the callstack when a child process crashes.
 IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RendererCrashCallStack) {
@@ -80,6 +79,12 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RendererCrashCallStack) {
   new_test.AppendSwitch(kRunManualTestsFlag);
   new_test.AppendSwitch(kSingleProcessTestsFlag);
 
+#if defined(THREAD_SANITIZER)
+  // TSan appears to not be able to report intentional crashes from sandboxed
+  // renderer processes.
+  new_test.AppendSwitch(switches::kNoSandbox);
+#endif
+
   std::string output;
   base::GetAppOutputAndError(new_test, &output);
 
@@ -87,9 +92,8 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RendererCrashCallStack) {
   // so the stack that the tests sees here looks like:
   // "#0 0x0000007ea911 (...content_browsertests+0x7ea910)"
   std::string crash_string =
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && \
-    !defined(MEMORY_SANITIZER) && !defined(THREAD_SANITIZER)
-      "content::RenderFrameImpl::PrepareRenderViewForNavigation";
+#if !USE_EXTERNAL_SYMBOLIZER
+      "content::RenderFrameImpl::NavigateInternal";
 #else
       "#0 ";
 #endif
@@ -122,8 +126,7 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, BrowserCrashCallStack) {
   // so the stack that the test sees here looks like:
   // "#0 0x0000007ea911 (...content_browsertests+0x7ea910)"
   std::string crash_string =
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && \
-    !defined(MEMORY_SANITIZER) && !defined(THREAD_SANITIZER)
+#if !USE_EXTERNAL_SYMBOLIZER
       "content::ContentBrowserTest_MANUAL_BrowserCrash_Test::"
       "RunTestOnMainThread";
 #else
@@ -164,6 +167,42 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTestSanityTest, Basic) {
 
 IN_PROC_BROWSER_TEST_F(ContentBrowserTestSanityTest, SingleProcess) {
   Test();
+}
+
+namespace {
+
+const base::Feature kTestFeatureForBrowserTest1{
+    "TestFeatureForBrowserTest1", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kTestFeatureForBrowserTest2{
+    "TestFeatureForBrowserTest2", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kTestFeatureForBrowserTest3{
+    "TestFeatureForBrowserTest3", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kTestFeatureForBrowserTest4{
+    "TestFeatureForBrowserTest4", base::FEATURE_ENABLED_BY_DEFAULT};
+
+}  // namespace
+
+class ContentBrowserTestScopedFeatureListTest : public ContentBrowserTest {
+ public:
+  ContentBrowserTestScopedFeatureListTest() {
+    scoped_feature_list_.InitWithFeatures({kTestFeatureForBrowserTest3},
+                                          {kTestFeatureForBrowserTest4});
+  }
+
+  ~ContentBrowserTestScopedFeatureListTest() override {}
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ContentBrowserTestScopedFeatureListTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ContentBrowserTestScopedFeatureListTest,
+                       FeatureListTest) {
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTestFeatureForBrowserTest1));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTestFeatureForBrowserTest2));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTestFeatureForBrowserTest3));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTestFeatureForBrowserTest4));
 }
 
 namespace {

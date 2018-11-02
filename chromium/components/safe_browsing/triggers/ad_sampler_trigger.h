@@ -11,10 +11,6 @@
 
 class PrefService;
 
-namespace content {
-class NavigationHandle;
-}
-
 namespace history {
 class HistoryService;
 }
@@ -32,6 +28,28 @@ extern const char kAdSamplerFrequencyDenominatorParam[];
 // A frequency denominator with this value indicates sampling is disabled.
 extern const size_t kSamplerFrequencyDisabled;
 
+// Metric for tracking what the Ad Sampler trigger does on each navigation.
+extern const char kAdSamplerTriggerActionMetricName[];
+
+// Actions performed by this trigger. These values are written to logs. New enum
+// values can be added, but existing enums must never be renumbered or deleted
+// and reused.
+enum AdSamplerTriggerAction {
+  // An event occurred that caused the trigger to perform its checks.
+  TRIGGER_CHECK = 0,
+  // An ad was detected and a sample was collected.
+  AD_SAMPLED = 1,
+  // An ad was detected but no sample was taken to honour sampling frequency.
+  NO_SAMPLE_AD_SKIPPED_FOR_FREQUENCY = 2,
+  // No ad was detected.
+  NO_SAMPLE_NO_AD = 3,
+  // An ad was detected and could have been sampled, but the trigger manager
+  // rejected the report (eg: because a report was already in progress).
+  NO_SAMPLE_COULD_NOT_START_REPORT = 4,
+  // New actions must be added before MAX_ACTIONS.
+  MAX_ACTIONS
+};
+
 // This class periodically checks for Google ads on the page and may decide to
 // send a report to Google with the ad's structure for further analysis.
 class AdSamplerTrigger : public content::WebContentsObserver,
@@ -47,8 +65,8 @@ class AdSamplerTrigger : public content::WebContentsObserver,
       history::HistoryService* history_service);
 
   // content::WebContentsObserver implementation.
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
 
  private:
   friend class AdSamplerTriggerTest;
@@ -65,6 +83,10 @@ class AdSamplerTrigger : public content::WebContentsObserver,
   // Ad samples will be collected with frequency
   // 1/|sampler_frequency_denominator_|
   size_t sampler_frequency_denominator_;
+
+  // The delay (in milliseconds) to wait before finishing a report. Can be
+  // overwritten for tests.
+  int64_t finish_report_delay_ms_;
 
   // TriggerManager gets called if this trigger detects an ad and wants to
   // collect some data about it. Not owned.

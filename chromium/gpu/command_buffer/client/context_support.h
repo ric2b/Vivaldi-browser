@@ -16,10 +16,6 @@ class Rect;
 class RectF;
 }
 
-namespace ui {
-class LatencyInfo;
-}
-
 namespace gpu {
 
 struct SyncToken;
@@ -32,7 +28,7 @@ class ContextSupport {
   // Runs |callback| when the given sync token is signalled. The sync token may
   // belong to any context.
   virtual void SignalSyncToken(const SyncToken& sync_token,
-                               const base::Closure& callback) = 0;
+                               base::OnceClosure callback) = 0;
 
   // Returns true if the given sync token has been signaled. The sync token must
   // belong to this context. This may be called from any thread.
@@ -40,7 +36,7 @@ class ContextSupport {
 
   // Runs |callback| when a query created via glCreateQueryEXT() has cleared
   // passed the glEndQueryEXT() point.
-  virtual void SignalQuery(uint32_t query, const base::Closure& callback) = 0;
+  virtual void SignalQuery(uint32_t query, base::OnceClosure callback) = 0;
 
   // Indicates whether the context should aggressively free allocated resources.
   // If set to true, the context will purge all temporary resources when
@@ -68,12 +64,10 @@ class ContextSupport {
 
   // Sets a callback to be run when an error occurs.
   virtual void SetErrorMessageCallback(
-      const base::Callback<void(const char*, int32_t)>& callback) = 0;
+      base::RepeatingCallback<void(const char*, int32_t)> callback) = 0;
 
-  // Add |latency_info| to be reported and augumented with GPU latency
-  // components next time there is a GPU buffer swap.
-  virtual void AddLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) = 0;
+  // Indicates whether a snapshot is associated with the next swap.
+  virtual void SetSnapshotRequested() = 0;
 
   // Allows locking a GPU discardable texture from any thread. Any successful
   // call to ThreadSafeShallowLockDiscardableTexture must be paired with a

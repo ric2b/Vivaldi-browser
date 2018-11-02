@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/app_list/model/app_list_view_state.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
@@ -29,6 +30,10 @@ class ElapsedTimer;
 
 namespace display {
 class Screen;
+}
+
+namespace ui {
+class AnimationMetricsReporter;
 }
 
 namespace app_list {
@@ -73,21 +78,19 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // its state.
   static constexpr int kScrollIgnoreTimeMs = 500;
 
-  enum AppListState {
-    // Closes |app_list_main_view_| and dismisses the delegate.
-    CLOSED = 0,
-    // The initial state for the app list when neither maximize or side shelf
-    // modes are active. If set, the widget will peek over the shelf by
-    // kPeekingAppListHeight DIPs.
-    PEEKING = 1,
-    // Entered when text is entered into the search box from peeking mode.
-    HALF = 2,
-    // Default app list state in maximize and side shelf modes. Entered from an
-    // upward swipe from |PEEKING| or from clicking the chevron.
-    FULLSCREEN_ALL_APPS = 3,
-    // Entered from an upward swipe from |HALF| or by entering text in the
-    // search box from |FULLSCREEN_ALL_APPS|.
-    FULLSCREEN_SEARCH = 4,
+  struct InitParams {
+    // Used in classic ash for both bubble and fullscreen style.
+    gfx::NativeView parent = nullptr;
+    // Window container id. Used in mash for both bubble and fullscreen style.
+    // TODO(jamescook): Remove when the app list moves into the ash process.
+    int parent_container_id = -1;
+    // Used for both bubble and fullscreen style.
+    int initial_apps_page = 0;
+    // Used for fullscreen style.
+    bool is_tablet_mode = false;
+    // Whether the shelf alignment is on the side of the display. Used for
+    // fullscreen style.
+    bool is_side_shelf = false;
   };
 
   // Does not take ownership of |delegate|.
@@ -99,15 +102,8 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   static void ExcludeWindowFromEventHandling(aura::Window* window);
 
   // Initializes the widget as a bubble or fullscreen view depending on if the
-  // fullscreen app list feature is set. |parent| and |initial_apps_page| are
-  // used for both the bubble and fullscreen initialization. |is_tablet_mode|
-  // is whether the display is in tablet mode and |is_side_shelf| is whether
-  // the shelf is oriented on the side, and both are used for fullscreen
-  // app list initialization.
-  void Initialize(gfx::NativeView parent,
-                  int initial_apps_page,
-                  bool is_tablet_mode,
-                  bool is_side_shelf);
+  // fullscreen app list feature is set.
+  void Initialize(const InitParams& params);
 
   void SetBubbleArrow(views::BubbleBorder::Arrow arrow);
 
@@ -124,6 +120,9 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // timer to show the UI when a maximum allowed wait time has expired.
   void ShowWhenReady();
 
+  // Dismisses the UI, cleans up and sets the state to CLOSED.
+  void Dismiss();
+
   void UpdateBounds();
 
   // Enables/disables a semi-transparent overlay over the app list (good for
@@ -137,14 +136,14 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // WidgetDelegate overrides:
   bool ShouldHandleSystemCommands() const override;
-  bool ShouldDescendIntoChildForEventHandling(
-      gfx::NativeView child,
-      const gfx::Point& location) override;
+  ui::AXRole GetAccessibleWindowRole() const override;
 
   // Overridden from views::View:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void Layout() override;
   void SchedulePaintInRect(const gfx::Rect& rect) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void OnKeyEvent(ui::KeyEvent* event) override;
 
   // Overridden from ui::EventHandler:
   void OnScrollEvent(ui::ScrollEvent* event) override;
@@ -158,11 +157,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   bool HandleScroll(int offset, ui::EventType type);
 
   // Changes the app list state.
-  void SetState(AppListState new_state);
-
-  // Kicks off the proper animation for the state change. If an animation is
-  // in progress it will be interrupted.
-  void StartAnimationForState(AppListState new_state);
+  void SetState(AppListViewState new_state);
 
   // Starts the close animation.
   void StartCloseAnimation(base::TimeDelta animation_duration);
@@ -175,6 +170,21 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   void UpdateYPositionAndOpacity(int y_position_in_screen,
                                  float background_opacity);
 
+  // Layouts the app list during dragging.
+  void DraggingLayout();
+
+  // The search box cannot actively listen to all key events. To control and
+  // input into the search box when it does not have focus, we need to redirect
+  // necessary key events to the search box.
+  void RedirectKeyEventToSearchBox(ui::KeyEvent* event);
+
+  // Sets |is_in_drag_| and updates the visibility of app list items.
+  void SetIsInDrag(bool is_in_drag);
+
+  void set_short_animation_for_testing() {
+    short_animations_for_testing_ = true;
+  }
+
   // Gets the PaginationModel owned by this view's apps grid.
   PaginationModel* GetAppsPaginationModel() const;
 
@@ -182,20 +192,14 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // screen coordinates.
   gfx::Rect GetAppInfoDialogBounds() const;
 
-  // Sets |is_in_drag_| and updates the visibility of app list items.
-  void SetIsInDrag(bool is_in_drag);
-
-  // Gets current work area bottom.
-  int GetWorkAreaBottom();
-
-  // Layouts the app list during dragging.
-  void DraggingLayout();
+  // Gets current screen bottom.
+  int GetScreenBottom();
 
   views::Widget* get_fullscreen_widget_for_test() const {
     return fullscreen_widget_;
   }
 
-  AppListState app_list_state() const { return app_list_state_; }
+  AppListViewState app_list_state() const { return app_list_state_; }
 
   views::Widget* search_box_widget() const { return search_box_widget_; }
 
@@ -204,8 +208,8 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   AppListMainView* app_list_main_view() const { return app_list_main_view_; }
 
   bool is_fullscreen() const {
-    return app_list_state_ == FULLSCREEN_ALL_APPS ||
-           app_list_state_ == FULLSCREEN_SEARCH;
+    return app_list_state_ == AppListViewState::FULLSCREEN_ALL_APPS ||
+           app_list_state_ == AppListViewState::FULLSCREEN_SEARCH;
   }
 
   bool is_tablet_mode() const { return is_tablet_mode_; }
@@ -214,10 +218,6 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   int app_list_y_position_in_screen() const {
     return app_list_y_position_in_screen_;
-  }
-
-  void set_short_animation_for_testing() {
-    short_animations_for_testing_ = true;
   }
 
   bool drag_started_from_peeking() const { return drag_started_from_peeking_; }
@@ -230,15 +230,15 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   class FullscreenWidgetObserver;
   friend class test::AppListViewTestApi;
 
-  void InitContents(gfx::NativeView parent, int initial_apps_page);
+  void InitContents(int initial_apps_page);
 
   void InitChildWidgets();
 
   // Initializes the widget for fullscreen mode.
-  void InitializeFullscreen(gfx::NativeView parent, int initial_apps_page);
+  void InitializeFullscreen(gfx::NativeView parent, int parent_container_id);
 
   // Initializes the widget as a bubble.
-  void InitializeBubble(gfx::NativeView parent, int initial_apps_page);
+  void InitializeBubble();
 
   // Closes the AppListView when a click or tap event propogates to the
   // AppListView.
@@ -261,8 +261,21 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // release position and snap to the next state.
   void EndDrag(const gfx::Point& location);
 
+  // Set child views for FULLSCREEN_ALL_APPS and PEEKING.
+  void SetChildViewsForStateTransition(AppListViewState new_state);
+
+  // Converts |state| to the fullscreen equivalent.
+  void ConvertAppListStateToFullscreenEquivalent(AppListViewState* state);
+
+  // Kicks off the proper animation for the state change. If an animation is
+  // in progress it will be interrupted.
+  void StartAnimationForState(AppListViewState new_state);
+
   // Records the state transition for UMA.
-  void RecordStateTransitionForUma(AppListState new_state);
+  void RecordStateTransitionForUma(AppListViewState new_state);
+
+  // Creates an Accessibility Event if the state transition warrants one.
+  void MaybeCreateAccessibilityEvent(AppListViewState new_state);
 
   // Gets the display nearest to the parent window.
   display::Display GetDisplayNearestView() const;
@@ -275,7 +288,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   // (ie. PEEKING->PEEKING) then return kMaxAppListStateTransition. If this is
   // modified, histograms will be affected.
   AppListStateTransitionSource GetAppListStateTransitionSource(
-      AppListState target_state) const;
+      AppListViewState target_state) const;
 
   // Overridden from views::BubbleDialogDelegateView:
   void OnBeforeBubbleWidgetInit(views::Widget::InitParams* params,
@@ -307,6 +320,10 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   void GetWallpaperProminentColors(std::vector<SkColor>* colors);
   void SetBackgroundShieldColor();
+
+  // Records the number of folders, and the number of items in folders for UMA
+  // histograms.
+  void RecordFolderMetrics();
 
   AppListViewDelegate* delegate_;  // Weak. Owned by AppListService.
   AppListModel* const model_;      // Not Owned.
@@ -353,8 +370,10 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   const bool is_fullscreen_app_list_enabled_;
   // Whether the background blur is enabled.
   const bool is_background_blur_enabled_;
+  // Whether the app list focus is enabled.
+  const bool is_app_list_focus_enabled_;
   // The state of the app list, controlled via SetState().
-  AppListState app_list_state_ = PEEKING;
+  AppListViewState app_list_state_ = AppListViewState::PEEKING;
   // An observer that notifies AppListView when the display has changed.
   ScopedObserver<display::Screen, display::DisplayObserver> display_observer_;
 
@@ -376,6 +395,16 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // Timer to ignore scroll events which would close the view by accident.
   std::unique_ptr<base::ElapsedTimer> scroll_ignore_timer_;
+
+  // Accessibility announcement dialogue.
+  base::string16 state_announcement_;
+
+  // Whether FocusManager can handle arrow key before this class is constructed.
+  const bool previous_arrow_key_traversal_enabled_;
+
+  // Metric reporter for state change animations.
+  const std::unique_ptr<ui::AnimationMetricsReporter>
+      state_animation_metrics_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListView);
 };

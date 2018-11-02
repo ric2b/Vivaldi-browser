@@ -26,8 +26,8 @@
 #ifndef PlatformSpeechSynthesisVoice_h
 #define PlatformSpeechSynthesisVoice_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -36,13 +36,13 @@ namespace blink {
 class PLATFORM_EXPORT PlatformSpeechSynthesisVoice final
     : public RefCounted<PlatformSpeechSynthesisVoice> {
  public:
-  static PassRefPtr<PlatformSpeechSynthesisVoice> Create(
+  static scoped_refptr<PlatformSpeechSynthesisVoice> Create(
       const String& voice_uri,
       const String& name,
       const String& lang,
       bool local_service,
       bool is_default);
-  static PassRefPtr<PlatformSpeechSynthesisVoice> Create();
+  static scoped_refptr<PlatformSpeechSynthesisVoice> Create();
 
   const String& VoiceURI() const { return voice_uri_; }
   void SetVoiceURI(const String& voice_uri) { voice_uri_ = voice_uri; }

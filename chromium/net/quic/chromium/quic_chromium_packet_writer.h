@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_export.h"
 #include "net/quic/core/quic_connection.h"
@@ -63,8 +64,9 @@ class NET_EXPORT_PRIVATE QuicChromiumPacketWriter : public QuicPacketWriter {
   };
 
   QuicChromiumPacketWriter();
-  // |socket| must outlive writer.
-  explicit QuicChromiumPacketWriter(DatagramClientSocket* socket);
+  // |socket| and |task_runner| must outlive writer.
+  QuicChromiumPacketWriter(DatagramClientSocket* socket,
+                           base::SequencedTaskRunner* task_runner);
   ~QuicChromiumPacketWriter() override;
 
   // |delegate| must outlive writer.
@@ -91,6 +93,8 @@ class NET_EXPORT_PRIVATE QuicChromiumPacketWriter : public QuicPacketWriter {
 
  private:
   void SetPacket(const char* buffer, size_t buf_len);
+  bool MaybeRetryAfterWriteError(int rv);
+  void RetryPacketAfterNoBuffers();
   WriteResult WritePacketToSocketImpl();
   DatagramClientSocket* socket_;  // Unowned.
   Delegate* delegate_;  // Unowned.
@@ -100,6 +104,10 @@ class NET_EXPORT_PRIVATE QuicChromiumPacketWriter : public QuicPacketWriter {
 
   // Whether a write is currently in flight.
   bool write_blocked_;
+
+  int retry_count_;
+  // Timer set when a packet should be retried after ENOBUFS.
+  base::OneShotTimer retry_timer_;
 
   CompletionCallback write_callback_;
   base::WeakPtrFactory<QuicChromiumPacketWriter> weak_factory_;

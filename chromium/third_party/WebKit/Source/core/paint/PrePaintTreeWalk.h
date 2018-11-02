@@ -26,22 +26,25 @@ class CORE_EXPORT PrePaintTreeWalk {
 
  private:
   void Walk(LocalFrameView&, const PrePaintTreeWalkContext&);
+
+  // This is to minimize stack frame usage during recursion. Modern compilers
+  // (MSVC in particular) can inline across compilation units, resulting in
+  // very big stack frames. Splitting the heavy lifting to a separate function
+  // makes sure the stack frame is freed prior to making a recursive call.
+  // See https://crbug.com/781301 .
+  NOINLINE void WalkInternal(const LayoutObject&, PrePaintTreeWalkContext&);
   void Walk(const LayoutObject&, const PrePaintTreeWalkContext&);
 
   // Invalidates paint-layer painting optimizations, such as subsequence caching
   // and empty paint phase optimizations if clips from the context have changed.
-  ALWAYS_INLINE void InvalidatePaintLayerOptimizationsIfNeeded(
-      const LayoutObject&,
-      PrePaintTreeWalkContext&);
+  void InvalidatePaintLayerOptimizationsIfNeeded(const LayoutObject&,
+                                                 PrePaintTreeWalkContext&);
 
-  bool ALWAYS_INLINE
-  NeedsTreeBuilderContextUpdate(const LocalFrameView&,
-                                const PrePaintTreeWalkContext&);
-  bool ALWAYS_INLINE
-  NeedsTreeBuilderContextUpdate(const LayoutObject&,
-                                const PrePaintTreeWalkContext&);
+  bool NeedsTreeBuilderContextUpdate(const LocalFrameView&,
+                                     const PrePaintTreeWalkContext&);
+  bool NeedsTreeBuilderContextUpdate(const LayoutObject&,
+                                     const PrePaintTreeWalkContext&);
 
-  PaintPropertyTreeBuilder property_tree_builder_;
   PaintInvalidator paint_invalidator_;
 
   FRIEND_TEST_ALL_PREFIXES(PrePaintTreeWalkTest, ClipRects);

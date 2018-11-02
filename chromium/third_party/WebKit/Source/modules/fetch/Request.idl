@@ -28,21 +28,21 @@ enum ReferrerPolicy {
     Constructor(RequestInfo input, optional Dictionary requestInitDict),
     ConstructorCallWith=ScriptState,
     Exposed=(Window,Worker),
-    RaisesException=Constructor,
-    DependentLifetime
+    RaisesException=Constructor
 ] interface Request {
     readonly attribute ByteString method;
     readonly attribute USVString url;
-    [ImplementedAs=getHeaders] readonly attribute Headers headers;
+    [ImplementedAs=getHeaders, SameObject] readonly attribute Headers headers;
     readonly attribute DOMString referrer;
     [ImplementedAs=getReferrerPolicy] readonly attribute ReferrerPolicy referrerPolicy;
     readonly attribute RequestMode mode;
     readonly attribute RequestCredentials credentials;
-    [RuntimeEnabled=FetchRequestCache]readonly attribute RequestCache cache;
+    [RuntimeEnabled=FetchRequestCache] readonly attribute RequestCache cache;
     readonly attribute RequestRedirect redirect;
     readonly attribute DOMString integrity;
+    [RuntimeEnabled=FetchRequestKeepalive] readonly attribute boolean keepalive;
 
-    [RaisesException, CallWith=ScriptState] Request clone();
+    [RaisesException, CallWith=ScriptState, DoNotTestNewObject, NewObject] Request clone();
 };
 
 Request implements Body;

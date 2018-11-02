@@ -205,12 +205,13 @@ bool VRFrameData::Update(const device::mojom::blink::VRPosePtr& pose,
   return true;
 }
 
-DEFINE_TRACE(VRFrameData) {
+void VRFrameData::Trace(blink::Visitor* visitor) {
   visitor->Trace(left_projection_matrix_);
   visitor->Trace(left_view_matrix_);
   visitor->Trace(right_projection_matrix_);
   visitor->Trace(right_view_matrix_);
   visitor->Trace(pose_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "platform/PlatformExport.h"
 #include "platform/scheduler/base/task_queue.h"
@@ -27,7 +27,8 @@ class PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
   WebSchedulerImpl(ChildScheduler* child_scheduler,
                    scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner,
                    scoped_refptr<TaskQueue> loading_task_runner,
-                   scoped_refptr<TaskQueue> timer_task_runner);
+                   scoped_refptr<TaskQueue> timer_task_runner,
+                   scoped_refptr<TaskQueue> v8_task_runner);
   ~WebSchedulerImpl() override;
 
   // WebScheduler implementation:
@@ -40,12 +41,13 @@ class PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
                                WebThread::IdleTask* task) override;
   WebTaskRunner* LoadingTaskRunner() override;
   WebTaskRunner* TimerTaskRunner() override;
+  WebTaskRunner* V8TaskRunner() override;
   WebTaskRunner* CompositorTaskRunner() override;
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
       WebViewScheduler::WebViewSchedulerDelegate*) override;
-  void PauseTimerQueue() override {}
-  void ResumeTimerQueue() override {}
+  std::unique_ptr<RendererPauseHandle> PauseScheduler() override
+      WARN_UNUSED_RESULT;
   void AddPendingNavigation(
       scheduler::RendererScheduler::NavigatingFrameType type) override {}
   void RemovePendingNavigation(
@@ -57,8 +59,9 @@ class PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
 
   ChildScheduler* child_scheduler_;  // NOT OWNED
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
-  RefPtr<WebTaskRunnerImpl> loading_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> timer_web_task_runner_;
+  scoped_refptr<WebTaskRunnerImpl> loading_web_task_runner_;
+  scoped_refptr<WebTaskRunnerImpl> timer_web_task_runner_;
+  scoped_refptr<WebTaskRunnerImpl> v8_web_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(WebSchedulerImpl);
 };

@@ -36,20 +36,28 @@ BiquadFilterNode::BiquadFilterNode(BaseAudioContext& context)
     : AudioNode(context),
       frequency_(AudioParam::Create(context,
                                     kParamTypeBiquadFilterFrequency,
+                                    "BiquadFilter.frequency",
                                     350.0,
                                     0,
                                     context.sampleRate() / 2)),
-      q_(AudioParam::Create(context, kParamTypeBiquadFilterQ, 1.0)),
-      gain_(AudioParam::Create(context, kParamTypeBiquadFilterGain, 0.0)),
-      detune_(AudioParam::Create(context, kParamTypeBiquadFilterDetune, 0.0)) {
+      q_(AudioParam::Create(context,
+                            kParamTypeBiquadFilterQ,
+                            "BiquadFilter.Q",
+                            1.0)),
+      gain_(AudioParam::Create(context,
+                               kParamTypeBiquadFilterGain,
+                               "BiquadFilter.gain",
+                               0.0)),
+      detune_(AudioParam::Create(context,
+                                 kParamTypeBiquadFilterDetune,
+                                 "BiquadFilter.detune",
+                                 0.0)) {
   SetHandler(AudioBasicProcessorHandler::Create(
       AudioHandler::kNodeTypeBiquadFilter, *this, context.sampleRate(),
       WTF::WrapUnique(new BiquadProcessor(
           context.sampleRate(), 1, frequency_->Handler(), q_->Handler(),
           gain_->Handler(), detune_->Handler()))));
 
-  // Explicitly set the filter type so that any histograms get updated with the
-  // default value.  Otherwise, the histogram won't ever show it.
   setType("lowpass");
 
   // Initialize the handler so that AudioParams can be processed.
@@ -79,15 +87,15 @@ BiquadFilterNode* BiquadFilterNode::Create(BaseAudioContext* context,
   node->HandleChannelOptions(options, exception_state);
 
   node->setType(options.type());
-  node->q()->setValue(options.Q());
-  node->detune()->setValue(options.detune());
-  node->frequency()->setValue(options.frequency());
-  node->gain()->setValue(options.gain());
+  node->q()->setInitialValue(options.Q());
+  node->detune()->setInitialValue(options.detune());
+  node->frequency()->setInitialValue(options.frequency());
+  node->gain()->setInitialValue(options.gain());
 
   return node;
 }
 
-DEFINE_TRACE(BiquadFilterNode) {
+void BiquadFilterNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(frequency_);
   visitor->Trace(q_);
   visitor->Trace(gain_);
@@ -133,12 +141,8 @@ void BiquadFilterNode::setType(const String& type) {
 
   if (type == "lowpass") {
     setType(BiquadProcessor::kLowPass);
-    q_->SetParamType(kParamTypeBiquadFilterQLowpass);
-    q_->setValue(q_->value());
   } else if (type == "highpass") {
     setType(BiquadProcessor::kHighPass);
-    q_->SetParamType(kParamTypeBiquadFilterQHighpass);
-    q_->setValue(q_->value());
   } else if (type == "bandpass") {
     setType(BiquadProcessor::kBandPass);
   } else if (type == "lowshelf") {

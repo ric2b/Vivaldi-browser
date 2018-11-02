@@ -16,10 +16,9 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_piece.h"
-#include "base/task_runner_util.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "crypto/nss_crypto_module_delegate.h"
 #include "net/cert/scoped_nss_types.h"
 #include "net/cert/x509_util_nss.h"
@@ -50,17 +49,12 @@ class ClientCertIdentityNSS : public ClientCertIdentity {
           private_key_callback) override {
     // Caller is responsible for keeping the ClientCertIdentity alive until
     // the |private_key_callback| is run, so it's safe to use Unretained here.
-    if (base::PostTaskAndReplyWithResult(
-            base::WorkerPool::GetTaskRunner(true /* task_is_slow */).get(),
-            FROM_HERE,
-            base::Bind(&FetchClientCertPrivateKey,
-                       base::Unretained(certificate()), cert_certificate_.get(),
-                       base::Unretained(password_delegate_.get())),
-            private_key_callback)) {
-      return;
-    }
-    // If the task could not be posted, behave as if there was no key.
-    private_key_callback.Run(nullptr);
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+        base::Bind(&FetchClientCertPrivateKey, base::Unretained(certificate()),
+                   cert_certificate_.get(), password_delegate_),
+        private_key_callback);
   }
 
  private:
@@ -75,7 +69,7 @@ ClientCertStoreNSS::ClientCertStoreNSS(
     const PasswordDelegateFactory& password_delegate_factory)
     : password_delegate_factory_(password_delegate_factory) {}
 
-ClientCertStoreNSS::~ClientCertStoreNSS() {}
+ClientCertStoreNSS::~ClientCertStoreNSS() = default;
 
 void ClientCertStoreNSS::GetClientCerts(
     const SSLCertRequestInfo& request,
@@ -83,19 +77,15 @@ void ClientCertStoreNSS::GetClientCerts(
   scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate> password_delegate;
   if (!password_delegate_factory_.is_null())
     password_delegate = password_delegate_factory_.Run(request.host_and_port);
-  if (base::PostTaskAndReplyWithResult(
-          base::WorkerPool::GetTaskRunner(true /* task_is_slow */).get(),
-          FROM_HERE,
-          base::Bind(&ClientCertStoreNSS::GetAndFilterCertsOnWorkerThread,
-                     // Caller is responsible for keeping the ClientCertStore
-                     // alive until the callback is run.
-                     base::Unretained(this), std::move(password_delegate),
-                     base::Unretained(&request)),
-          callback)) {
-    return;
-  }
-  // If the task could not be posted, behave as if there were no certificates.
-  callback.Run(ClientCertIdentityList());
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::Bind(&ClientCertStoreNSS::GetAndFilterCertsOnWorkerThread,
+                 // Caller is responsible for keeping the ClientCertStore
+                 // alive until the callback is run.
+                 base::Unretained(this), std::move(password_delegate),
+                 base::Unretained(&request)),
+      callback);
 }
 
 // static
@@ -127,7 +117,6 @@ void ClientCertStoreNSS::FilterCertsOnWorkerThread(
 
     X509Certificate::OSCertHandles intermediates_raw;
     intermediates_raw.reserve(nss_intermediates.size());
-#if BUILDFLAG(USE_BYTE_CERTS)
     std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediates;
     intermediates.reserve(nss_intermediates.size());
     for (const ScopedCERTCertificate& nss_intermediate : nss_intermediates) {
@@ -140,10 +129,6 @@ void ClientCertStoreNSS::FilterCertsOnWorkerThread(
       intermediates_raw.push_back(intermediate_cert_handle.get());
       intermediates.push_back(std::move(intermediate_cert_handle));
     }
-#else
-    for (const ScopedCERTCertificate& nss_intermediate : nss_intermediates)
-      intermediates_raw.push_back(nss_intermediate.get());
-#endif
 
     // Retain a copy of the intermediates. Some deployments expect the client to
     // supply intermediates out of the local store. See
@@ -166,8 +151,13 @@ ClientCertIdentityList ClientCertStoreNSS::GetAndFilterCertsOnWorkerThread(
     scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate>
         password_delegate,
     const SSLCertRequestInfo* request) {
+  // This method may acquire the NSS lock or reenter this code via extension
+  // hooks (such as smart card UI). To ensure threads are not starved or
+  // deadlocked, the base::ScopedBlockingCall below increments the thread pool
+  // capacity if this method takes too much time to run.
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
   ClientCertIdentityList selected_identities;
-  GetPlatformCertsOnWorkerThread(std::move(password_delegate),
+  GetPlatformCertsOnWorkerThread(std::move(password_delegate), CertFilter(),
                                  &selected_identities);
   FilterCertsOnWorkerThread(&selected_identities, *request);
   return selected_identities;
@@ -177,6 +167,7 @@ ClientCertIdentityList ClientCertStoreNSS::GetAndFilterCertsOnWorkerThread(
 void ClientCertStoreNSS::GetPlatformCertsOnWorkerThread(
     scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate>
         password_delegate,
+    const CertFilter& cert_filter,
     ClientCertIdentityList* identities) {
   CERTCertList* found_certs =
       CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), certUsageSSLClient,
@@ -187,6 +178,8 @@ void ClientCertStoreNSS::GetPlatformCertsOnWorkerThread(
   }
   for (CERTCertListNode* node = CERT_LIST_HEAD(found_certs);
        !CERT_LIST_END(node, found_certs); node = CERT_LIST_NEXT(node)) {
+    if (!cert_filter.is_null() && !cert_filter.Run(node->cert))
+      continue;
     // Allow UTF-8 inside PrintableStrings in client certificates. See
     // crbug.com/770323.
     X509Certificate::UnsafeCreateOptions options;

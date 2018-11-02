@@ -64,7 +64,7 @@
 #include "build/build_config.h"
 
 #if defined(OS_FUCHSIA)
-#include <magenta/types.h>
+#include <zircon/types.h>
 #endif
 
 #if defined(OS_MACOSX)
@@ -106,8 +106,7 @@ BASE_EXPORT int64_t SaturatedSub(TimeDelta delta, int64_t value);
 
 class BASE_EXPORT TimeDelta {
  public:
-  TimeDelta() : delta_(0) {
-  }
+  constexpr TimeDelta() : delta_(0) {}
 
   // Converts units of time to TimeDeltas.
   static constexpr TimeDelta FromDays(int days);
@@ -460,6 +459,33 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   static constexpr int64_t kQPCOverflowThreshold = INT64_C(0x8637BD05AF7);
 #endif
 
+// kExplodedMinYear and kExplodedMaxYear define the platform-specific limits
+// for values passed to FromUTCExploded() and FromLocalExploded(). Those
+// functions will return false if passed values outside these limits. The limits
+// are inclusive, meaning that the API should support all dates within a given
+// limit year.
+#if defined(OS_WIN)
+  static constexpr int kExplodedMinYear = 1601;
+  static constexpr int kExplodedMaxYear = 30827;
+#elif defined(OS_IOS)
+  static constexpr int kExplodedMinYear = std::numeric_limits<int>::min();
+  static constexpr int kExplodedMaxYear = std::numeric_limits<int>::max();
+#elif defined(OS_MACOSX)
+  static constexpr int kExplodedMinYear = 1902;
+  static constexpr int kExplodedMaxYear = std::numeric_limits<int>::max();
+#elif defined(OS_ANDROID)
+  // Though we use 64-bit time APIs on both 32 and 64 bit Android, some OS
+  // versions like KitKat (ARM but not x86 emulator) can't handle some early
+  // dates (e.g. before 1170). So we set min conservatively here.
+  static constexpr int kExplodedMinYear = 1902;
+  static constexpr int kExplodedMaxYear = std::numeric_limits<int>::max();
+#else
+  static constexpr int kExplodedMinYear =
+      (sizeof(time_t) == 4 ? 1902 : std::numeric_limits<int>::min());
+  static constexpr int kExplodedMaxYear =
+      (sizeof(time_t) == 4 ? 2037 : std::numeric_limits<int>::max());
+#endif
+
   // Represents an exploded time that can be formatted nicely. This is kind of
   // like the Win32 SYSTEMTIME structure or the Unix "struct tm" with a few
   // additions and changes to prevent errors.
@@ -724,18 +750,12 @@ constexpr TimeDelta TimeDelta::FromDouble(double value) {
 // static
 constexpr TimeDelta TimeDelta::FromProduct(int64_t value,
                                            int64_t positive_value) {
-  return (
-#if !defined(_PREFAST_) || !defined(OS_WIN)
-      // Avoid internal compiler errors in /analyze builds with VS 2015
-      // update 3.
-      // https://connect.microsoft.com/VisualStudio/feedback/details/2870865
-      DCHECK(positive_value > 0),
-#endif
-      value > std::numeric_limits<int64_t>::max() / positive_value
-          ? Max()
-          : value < std::numeric_limits<int64_t>::min() / positive_value
-                ? Min()
-                : TimeDelta(value * positive_value));
+  DCHECK(positive_value > 0);
+  return value > std::numeric_limits<int64_t>::max() / positive_value
+             ? Max()
+             : value < std::numeric_limits<int64_t>::min() / positive_value
+                   ? Min()
+                   : TimeDelta(value * positive_value);
 }
 
 // For logging use only.
@@ -748,7 +768,7 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
  public:
   // The underlying clock used to generate new TimeTicks.
   enum class Clock {
-    FUCHSIA_MX_CLOCK_MONOTONIC,
+    FUCHSIA_ZX_CLOCK_MONOTONIC,
     LINUX_CLOCK_MONOTONIC,
     IOS_CF_ABSOLUTE_TIME_MINUS_KERN_BOOTTIME,
     MAC_MACH_ABSOLUTE_TIME,
@@ -778,9 +798,9 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   static bool IsConsistentAcrossProcesses() WARN_UNUSED_RESULT;
 
 #if defined(OS_FUCHSIA)
-  // Converts between TimeTicks and an MX_CLOCK_MONOTONIC mx_time_t value.
-  static TimeTicks FromMXTime(mx_time_t nanos_since_boot);
-  mx_time_t ToMXTime() const;
+  // Converts between TimeTicks and an ZX_CLOCK_MONOTONIC zx_time_t value.
+  static TimeTicks FromZxTime(zx_time_t nanos_since_boot);
+  zx_time_t ToZxTime() const;
 #endif
 
 #if defined(OS_WIN)

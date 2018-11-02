@@ -61,6 +61,7 @@ public final class AwBrowserProcess {
      */
     public static void loadLibrary() {
         PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
             LibraryLoader libraryLoader = LibraryLoader.get(LibraryProcessType.PROCESS_WEBVIEW);
             libraryLoader.loadNow();
@@ -70,6 +71,8 @@ public final class AwBrowserProcess {
             libraryLoader.switchCommandLineForWebView();
         } catch (ProcessInitException e) {
             throw new RuntimeException("Cannot load WebView", e);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
         }
     }
 
@@ -109,7 +112,7 @@ public final class AwBrowserProcess {
             CombinedPolicyProvider.get().registerProvider(new AwPolicyProvider(appContext));
 
             // Check android settings but only when safebrowsing is enabled.
-            AwSafeBrowsingConfigHelper.maybeInitSafeBrowsingFromSettings(appContext);
+            AwSafeBrowsingConfigHelper.maybeEnableSafeBrowsingFromManifest(appContext);
 
             try {
                 BrowserStartupController.get(LibraryProcessType.PROCESS_WEBVIEW)

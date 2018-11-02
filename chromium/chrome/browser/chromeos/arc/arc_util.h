@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "base/callback_forward.h"
 
 // Most utility should be put in components/arc/arc_util.{h,cc}, rather than
@@ -79,6 +80,9 @@ bool IsArcCompatibleFileSystemUsedForProfile(const Profile* profile);
 // case.
 void DisallowArcForTesting();
 
+// Resets check if ARC allowed for the given |profile|.
+void ResetArcAllowedCheckForTesting(const Profile* profile);
+
 // Returns whether the user has opted in (or is opting in now) to use Google
 // Play Store on ARC.
 // This is almost equivalent to the value of "arc.enabled" preference. However,
@@ -115,6 +119,9 @@ bool AreArcAllOptInPreferencesIgnorableForProfile(const Profile* profile);
 // Active Directory user.
 bool IsActiveDirectoryUserForProfile(const Profile* profile);
 
+// Returns true if ChromeOS OOBE opt-in window is currently showing.
+bool IsArcOobeOptInActive();
+
 // Checks and updates the preference value whether the underlying filesystem
 // for the profile is compatible with ARC, when necessary. After it's done (or
 // skipped), |callback| is run either synchronously or asynchronously.
@@ -122,6 +129,10 @@ void UpdateArcFileSystemCompatibilityPrefIfNeeded(
     const AccountId& account_id,
     const base::FilePath& profile_path,
     const base::Closure& callback);
+
+// Returns whether Google Assistant feature is allowed for given |profile|.
+ash::mojom::AssistantAllowedState IsAssistantAllowedForProfile(
+    const Profile* profile);
 
 }  // namespace arc
 

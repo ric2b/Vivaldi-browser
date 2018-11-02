@@ -58,7 +58,7 @@ void LayoutImageResourceStyleImage::Shutdown() {
   cached_image_ = nullptr;
 }
 
-RefPtr<Image> LayoutImageResourceStyleImage::GetImage(
+scoped_refptr<Image> LayoutImageResourceStyleImage::GetImage(
     const IntSize& size) const {
   // Generated content may trigger calls to image() while we're still pending,
   // don't assert but gracefully exit.
@@ -75,7 +75,7 @@ LayoutSize LayoutImageResourceStyleImage::ImageSize(float multiplier) const {
                                             LayoutReplaced::kDefaultHeight));
 }
 
-DEFINE_TRACE(LayoutImageResourceStyleImage) {
+void LayoutImageResourceStyleImage::Trace(blink::Visitor* visitor) {
   visitor->Trace(style_image_);
   LayoutImageResource::Trace(visitor);
 }

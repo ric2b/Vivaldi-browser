@@ -25,11 +25,9 @@
 #ifndef ContainerNode_h
 #define ContainerNode_h
 
-#include "bindings/core/v8/ExceptionState.h"
 #include "core/CoreExport.h"
 #include "core/dom/Node.h"
 #include "core/html/CollectionType.h"
-#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebFocusType.h"
@@ -106,19 +104,20 @@ class CORE_EXPORT ContainerNode : public Node {
 
   unsigned CountChildren() const;
 
-  Element* QuerySelector(const AtomicString& selectors,
-                         ExceptionState& = ASSERT_NO_EXCEPTION);
+  Element* QuerySelector(const AtomicString& selectors, ExceptionState&);
+  Element* QuerySelector(const AtomicString& selectors);
   StaticElementList* QuerySelectorAll(const AtomicString& selectors,
-                                      ExceptionState& = ASSERT_NO_EXCEPTION);
+                                      ExceptionState&);
+  StaticElementList* QuerySelectorAll(const AtomicString& selectors);
 
-  Node* InsertBefore(Node* new_child,
-                     Node* ref_child,
-                     ExceptionState& = ASSERT_NO_EXCEPTION);
-  Node* ReplaceChild(Node* new_child,
-                     Node* old_child,
-                     ExceptionState& = ASSERT_NO_EXCEPTION);
-  Node* RemoveChild(Node* child, ExceptionState& = ASSERT_NO_EXCEPTION);
-  Node* AppendChild(Node* new_child, ExceptionState& = ASSERT_NO_EXCEPTION);
+  Node* InsertBefore(Node* new_child, Node* ref_child, ExceptionState&);
+  Node* InsertBefore(Node* new_child, Node* ref_child);
+  Node* ReplaceChild(Node* new_child, Node* old_child, ExceptionState&);
+  Node* ReplaceChild(Node* new_child, Node* old_child);
+  Node* RemoveChild(Node* child, ExceptionState&);
+  Node* RemoveChild(Node* child);
+  Node* AppendChild(Node* new_child, ExceptionState&);
+  Node* AppendChild(Node* new_child);
   bool EnsurePreInsertionValidity(const Node& new_child,
                                   const Node* next,
                                   const Node* old_child,
@@ -264,6 +263,7 @@ class CORE_EXPORT ContainerNode : public Node {
   void RecalcDescendantStyles(StyleRecalcChange);
   void RebuildChildrenLayoutTrees(WhitespaceAttacher&);
   void RebuildLayoutTreeForChild(Node* child, WhitespaceAttacher&);
+  void RebuildNonDistributedChildren();
 
   // -----------------------------------------------------------------------------
   // Notification of document structure changes (see core/dom/Node.h for more
@@ -336,16 +336,20 @@ class CORE_EXPORT ContainerNode : public Node {
   // CDATA_SECTION_NODE, TEXT_NODE or COMMENT_NODE has changed its value.
   virtual void ChildrenChanged(const ChildrenChange&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  protected:
   ContainerNode(TreeScope*, ConstructionType = kCreateContainer);
 
-  void InvalidateNodeListCachesInAncestors(
-      const QualifiedName* attr_name = nullptr,
-      Element* attribute_owner_element = nullptr);
+  // |attr_name| and |owner_element| are only used for element attribute
+  // modifications. |ChildrenChange| is either nullptr or points to a
+  // ChildNode::ChildrenChange structure that describes the changes in the tree.
+  // If non-null, blink may preserve caches that aren't affected by the change.
+  void InvalidateNodeListCachesInAncestors(const QualifiedName* attr_name,
+                                           Element* attribute_owner_element,
+                                           const ChildrenChange*);
 
   void SetFirstChild(Node* child) {
     first_child_ = child;

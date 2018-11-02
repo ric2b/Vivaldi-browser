@@ -82,6 +82,8 @@ CONTENT_EXPORT bool IsScreenCaptureMediaType(MediaStreamType type);
 // TODO(xians): Change the structs to classes.
 // Represents one device in a request for media stream(s).
 struct CONTENT_EXPORT MediaStreamDevice {
+  static const int kNoId;
+
   MediaStreamDevice();
 
   MediaStreamDevice(MediaStreamType type,
@@ -104,7 +106,7 @@ struct CONTENT_EXPORT MediaStreamDevice {
 
   ~MediaStreamDevice();
 
-  bool IsEqual(const MediaStreamDevice& second) const;
+  bool IsSameDevice(const MediaStreamDevice& other_device) const;
 
   // The device's type.
   MediaStreamType type;
@@ -136,26 +138,16 @@ struct CONTENT_EXPORT MediaStreamDevice {
   media::AudioParameters matched_output =
       media::AudioParameters::UnavailableDeviceParams();
 
+  // Id for this capture session. Unique for all sessions of the same type.
+  int session_id = kNoId;
+
   // This field is optional and available only for some camera models.
   base::Optional<CameraCalibration> camera_calibration;
 };
 
-class CONTENT_EXPORT MediaStreamDevices
-    : public std::vector<MediaStreamDevice> {
- public:
-  MediaStreamDevices();
-  MediaStreamDevices(size_t count, const MediaStreamDevice& value);
-
-  // Looks for a MediaStreamDevice based on its ID.
-  // Returns NULL if not found.
-  const MediaStreamDevice* FindById(const std::string& device_id) const;
-};
-
-typedef std::map<MediaStreamType, MediaStreamDevices> MediaStreamDeviceMap;
+using MediaStreamDevices = std::vector<MediaStreamDevice>;
 
 // Represents a request for media streams (audio/video).
-// TODO(vrk): Decouple MediaStreamDevice from this header file so that
-// media_stream_options.h no longer depends on this file.
 // TODO(vrk,justinlin,wjia): Figure out a way to share this code cleanly between
 // vanilla WebRTC, Tab Capture, and Pepper Video Capture. Right now there is
 // Tab-only stuff and Pepper-only stuff being passed around to all clients,
@@ -235,11 +227,10 @@ class MediaStreamUI {
 };
 
 // Callback used return results of media access requests.
-typedef base::Callback<void(const MediaStreamDevices& devices,
-                            content::MediaStreamRequestResult result,
-                            std::unique_ptr<MediaStreamUI> ui)>
-    MediaResponseCallback;
-
+using MediaResponseCallback =
+    base::Callback<void(const MediaStreamDevices& devices,
+                        MediaStreamRequestResult result,
+                        std::unique_ptr<MediaStreamUI> ui)>;
 }  // namespace content
 
 #endif  // CONTENT_PUBLIC_COMMON_MEDIA_STREAM_REQUEST_H_

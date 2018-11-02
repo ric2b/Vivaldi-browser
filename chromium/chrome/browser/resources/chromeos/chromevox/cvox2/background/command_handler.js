@@ -202,19 +202,12 @@ CommandHandler.onCommand = function(command) {
           localStorage[brailleTableType]);
       new Output().format(output).go();
       return false;
-    case 'toggleChromeVoxVersion':
-      if (!ChromeVoxState.instance.toggleNext())
-        return false;
-      if (ChromeVoxState.instance.currentRange) {
-        ChromeVoxState.instance.navigateToRange(
-            ChromeVoxState.instance.currentRange);
-      }
-      break;
     case 'help':
       (new PanelCommand(PanelCommandType.TUTORIAL)).send();
       return false;
     case 'showNextUpdatePage':
       (new PanelCommand(PanelCommandType.UPDATE_NOTES)).send();
+      localStorage['notifications_update_notification_shown'] = true;
       return false;
     case 'darkenScreen':
       chrome.accessibilityPrivate.darkenScreen(true);
@@ -228,6 +221,14 @@ CommandHandler.onCommand = function(command) {
       var state = cvox.ChromeVox.tts.toggleSpeechOnOrOff();
       new Output().format(state ? '@speech_on' : '@speech_off').go();
       return false;
+    case 'enableChromeVoxArcSupportForCurrentApp':
+      chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp(
+          true);
+      break;
+    case 'disableChromeVoxArcSupportForCurrentApp':
+      chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp(
+          false);
+      break;
     default:
       break;
   }
@@ -278,7 +279,7 @@ CommandHandler.onCommand = function(command) {
     case 'previousLine':
       dir = Dir.BACKWARD;
       didNavigate = true;
-      current = current.move(cursors.Unit.LINE);
+      current = current.move(cursors.Unit.LINE, dir);
       break;
     case 'nextButton':
       dir = Dir.FORWARD;
@@ -456,13 +457,13 @@ CommandHandler.onCommand = function(command) {
       break;
     case 'jumpToTop':
       var node = AutomationUtil.findNodePost(
-          current.start.node.root, Dir.FORWARD, AutomationPredicate.leaf);
+          current.start.node.root, Dir.FORWARD, AutomationPredicate.object);
       if (node)
         current = cursors.Range.fromNode(node);
       break;
     case 'jumpToBottom':
-      var node = AutomationUtil.findNodePost(
-          current.start.node.root, Dir.BACKWARD, AutomationPredicate.leaf);
+      var node = AutomationUtil.findLastNode(
+          current.start.node.root, AutomationPredicate.object);
       if (node)
         current = cursors.Range.fromNode(node);
       break;
@@ -476,7 +477,11 @@ CommandHandler.onCommand = function(command) {
           ChromeVoxState.instance.navigateToRange(
               cursors.Range.fromNode(actionNode.inPageLinkTarget));
         } else {
-          actionNode.doDefault();
+          // Scan for a clickable, which overrides the |actionNode|.
+          var clickable = actionNode;
+          while (clickable && !clickable.clickable)
+            clickable = clickable.parent;
+          clickable ? clickable.doDefault() : actionNode.doDefault();
         }
       }
       // Skip all other processing; if focus changes, we should get an event
@@ -552,18 +557,18 @@ CommandHandler.onCommand = function(command) {
     case 'readCurrentTitle':
       var target = ChromeVoxState.instance.currentRange_.start.node;
       var output = new Output();
+      target = AutomationUtil.getTopLevelRoot(target) || target.parent;
 
-      if (target.root.role == RoleType.ROOT_WEB_AREA) {
-        // Web.
-        target = target.root;
+      // Search for a container (e.g. rootWebArea, window) with a title-like
+      // string.
+      while (target && !target.name && !target.docUrl)
+        target = target.parent;
+
+      if (!target)
+        output.format('@no_title');
+      else
         output.withString(target.name || target.docUrl);
-      } else {
-        // Views.
-        while (target.role != RoleType.WINDOW)
-          target = target.parent;
-        if (target)
-          output.withString(target.name || '');
-      }
+
       output.go();
       return false;
     case 'readCurrentURL':
@@ -776,12 +781,13 @@ CommandHandler.onCommand = function(command) {
     if (scrollable) {
       var callback = function(result) {
         if (result) {
-          var innerCallback = function(evt) {
+          var innerCallback = function(currentNode, evt) {
             scrollable.removeEventListener(
                 EventType.SCROLL_POSITION_CHANGED, innerCallback);
 
-            // Jump.
-            if (pred) {
+            if (pred || (currentNode && currentNode.root)) {
+              // Jump or if there is a valid current range, then move from it
+              // since we have refreshed node data.
               CommandHandler.onCommand(command);
               return;
             }
@@ -797,11 +803,12 @@ CommandHandler.onCommand = function(command) {
             }
             ChromeVoxState.instance.navigateToRange(
                 cursors.Range.fromNode(sync), false, speechProps);
-          };
+          }.bind(this, current.start.node);
           scrollable.addEventListener(
               EventType.SCROLL_POSITION_CHANGED, innerCallback, true);
+        } else {
+          ChromeVoxState.instance.navigateToRange(current, false, speechProps);
         }
-        ChromeVoxState.instance.navigateToRange(current, false, speechProps);
       };
 
       if (dir == Dir.FORWARD)

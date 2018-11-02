@@ -12,9 +12,9 @@ cr.define('extension_view_manager_tests', function() {
 
   var viewManager;
   var views;
+  var suiteName = 'ExtensionViewManagerTest';
 
-  suite('ExtensionViewManagerTest', function() {
-
+  suite(suiteName, function() {
     // Initialize an extension item before each test.
     setup(function() {
       PolymerTest.clearBody();
@@ -45,7 +45,7 @@ cr.define('extension_view_manager_tests', function() {
             assertViewVisible('viewTwo', false);
             assertViewVisible('viewThree', false);
 
-            return viewManager.switchView('viewThree')
+            return viewManager.switchView('viewThree');
           })
           .then(() => {
             assertViewVisible('viewOne', false);
@@ -71,7 +71,7 @@ cr.define('extension_view_manager_tests', function() {
       ].forEach(type => {
         viewOne.addEventListener(type, () => {
           fired[type] = true;
-        })
+        });
       });
 
       // Setup the switch promise first.
@@ -102,6 +102,7 @@ cr.define('extension_view_manager_tests', function() {
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -19,7 +18,6 @@
 #include "net/base/cache_type.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate_impl.h"
-#include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_known_logs.h"
 #include "net/cert/ct_log_verifier.h"
@@ -61,8 +59,10 @@
 #endif
 
 #if BUILDFLAG(ENABLE_REPORTING)
+#include "net/network_error_logging/network_error_logging_service.h"
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_service.h"
+#include "net/url_request/network_error_logging_delegate.h"
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
 namespace net {
@@ -71,8 +71,8 @@ namespace {
 
 class BasicNetworkDelegate : public NetworkDelegateImpl {
  public:
-  BasicNetworkDelegate() {}
-  ~BasicNetworkDelegate() override {}
+  BasicNetworkDelegate() = default;
+  ~BasicNetworkDelegate() override = default;
 
  private:
   int OnBeforeURLRequest(URLRequest* request,
@@ -125,7 +125,7 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
   }
 
   bool OnCanSetCookie(const URLRequest& request,
-                      const std::string& cookie_line,
+                      const net::CanonicalCookie& cookie,
                       CookieOptions* options) override {
     return true;
   }
@@ -186,11 +186,10 @@ class ContainerURLRequestContext final : public URLRequestContext {
 URLRequestContextBuilder::HttpCacheParams::HttpCacheParams()
     : type(IN_MEMORY),
       max_size(0) {}
-URLRequestContextBuilder::HttpCacheParams::~HttpCacheParams() {}
+URLRequestContextBuilder::HttpCacheParams::~HttpCacheParams() = default;
 
 URLRequestContextBuilder::URLRequestContextBuilder()
-    : name_(nullptr),
-      enable_brotli_(false),
+    : enable_brotli_(false),
       network_quality_estimator_(nullptr),
       shared_http_user_agent_settings_(nullptr),
       data_enabled_(false),
@@ -202,19 +201,21 @@ URLRequestContextBuilder::URLRequestContextBuilder()
 #endif
       http_cache_enabled_(true),
       throttling_enabled_(false),
-      sdch_enabled_(false),
       cookie_store_set_by_client_(false),
-      transport_security_persister_readonly_(false),
       net_log_(nullptr),
       shared_host_resolver_(nullptr),
       pac_quick_check_enabled_(true),
       pac_sanitize_url_policy_(ProxyService::SanitizeUrlPolicy::SAFE),
       shared_proxy_delegate_(nullptr),
+#if BUILDFLAG(ENABLE_REPORTING)
       shared_http_auth_handler_factory_(nullptr),
-      shared_cert_verifier_(nullptr) {
+      network_error_logging_enabled_(false) {
+#else   // !BUILDFLAG(ENABLE_REPORTING)
+      shared_http_auth_handler_factory_(nullptr){
+#endif  // !BUILDFLAG(ENABLE_REPORTING)
 }
 
-URLRequestContextBuilder::~URLRequestContextBuilder() {}
+URLRequestContextBuilder::~URLRequestContextBuilder() = default;
 
 void URLRequestContextBuilder::SetHttpNetworkSessionComponents(
     const URLRequestContext* request_context,
@@ -287,14 +288,7 @@ void URLRequestContextBuilder::set_ct_policy_enforcer(
 
 void URLRequestContextBuilder::SetCertVerifier(
     std::unique_ptr<CertVerifier> cert_verifier) {
-  DCHECK(!shared_cert_verifier_);
   cert_verifier_ = std::move(cert_verifier);
-}
-
-void URLRequestContextBuilder::set_shared_cert_verifier(
-    CertVerifier* shared_cert_verifier) {
-  DCHECK(!cert_verifier_);
-  shared_cert_verifier_ = shared_cert_verifier;
 }
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -389,7 +383,8 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       new ContainerURLRequestContext());
   URLRequestContextStorage* storage = context->storage();
 
-  context->set_name(name_);
+  if (!name_.empty())
+    context->set_name(name_);
   context->set_enable_brotli(enable_brotli_);
   context->set_network_quality_estimator(network_quality_estimator_);
 
@@ -410,7 +405,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     // builder or resulting context.
     context->set_net_log(net_log_);
   } else {
-    storage->set_net_log(base::WrapUnique(new NetLog));
+    storage->set_net_log(std::make_unique<NetLog>());
   }
 
   if (host_resolver_) {
@@ -455,11 +450,6 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     storage->set_channel_id_service(std::move(channel_id_service));
   }
 
-  if (sdch_enabled_) {
-    storage->set_sdch_manager(
-        std::unique_ptr<net::SdchManager>(new SdchManager()));
-  }
-
   storage->set_transport_security_state(
       std::make_unique<TransportSecurityState>());
   if (!transport_security_persister_path_.empty()) {
@@ -472,11 +462,9 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
              base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
 
     context->set_transport_security_persister(
-        base::WrapUnique<TransportSecurityPersister>(
-            new TransportSecurityPersister(
-                context->transport_security_state(),
-                transport_security_persister_path_, task_runner,
-                transport_security_persister_readonly_)));
+        std::make_unique<TransportSecurityPersister>(
+            context->transport_security_state(),
+            transport_security_persister_path_, task_runner));
   }
 
   if (http_server_properties_) {
@@ -487,10 +475,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   }
 
   if (cert_verifier_) {
-    DCHECK(!shared_cert_verifier_);
     storage->set_cert_verifier(std::move(cert_verifier_));
-  } else if (shared_cert_verifier_) {
-    context->set_cert_verifier(shared_cert_verifier_);
   } else {
     storage->set_cert_verifier(CertVerifier::CreateDefault());
   }
@@ -601,7 +586,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
 
   if (data_enabled_)
     job_factory->SetProtocolHandler(url::kDataScheme,
-                                    base::WrapUnique(new DataProtocolHandler));
+                                    std::make_unique<DataProtocolHandler>());
 
 #if !BUILDFLAG(DISABLE_FILE_SUPPORT)
   if (file_enabled_) {
@@ -638,9 +623,26 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   storage->set_job_factory(std::move(top_job_factory));
 
 #if BUILDFLAG(ENABLE_REPORTING)
+  // Note: ReportingService::Create and NetworkErrorLoggingService::Create can
+  // both return nullptr if the corresponding base::Feature is disabled.
+
   if (reporting_policy_) {
     storage->set_reporting_service(
         ReportingService::Create(*reporting_policy_, context.get()));
+  }
+
+  if (network_error_logging_enabled_) {
+    storage->set_network_error_logging_delegate(
+        NetworkErrorLoggingService::Create());
+  }
+
+  // If both Reporting and Network Error Logging are actually enabled, then
+  // connect them so Network Error Logging can use Reporting to deliver error
+  // reports.
+  if (context->reporting_service() &&
+      context->network_error_logging_delegate()) {
+    context->network_error_logging_delegate()->SetReportingService(
+        context->reporting_service());
   }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 

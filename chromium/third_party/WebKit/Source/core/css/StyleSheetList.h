@@ -33,9 +33,7 @@ namespace blink {
 class HTMLStyleElement;
 class StyleSheet;
 
-class CORE_EXPORT StyleSheetList final
-    : public GarbageCollected<StyleSheetList>,
-      public ScriptWrappable {
+class CORE_EXPORT StyleSheetList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -54,7 +52,7 @@ class CORE_EXPORT StyleSheetList final
 
   CSSStyleSheet* AnonymousNamedGetter(const AtomicString&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit StyleSheetList(TreeScope*);

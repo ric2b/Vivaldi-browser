@@ -4,94 +4,93 @@
 
 #include <memory>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "base/command_line.h"
 #include "base/i18n/base_i18n_switches.h"
-#include "base/memory/ptr_util.h"
-#include "base/optional.h"
+#include "base/metrics/statistics_recorder.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_restrictions.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_fetcher.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_service.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_data.h"
-#include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
-#include "content/public/test/test_utils.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
-#include "ui/base/resource/resource_bundle.h"
-
-namespace {
-
-content::WebContents* OpenNewTab(Browser* browser, const GURL& url) {
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser, url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
-          ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
-  return browser->tab_strip_model()->GetActiveWebContents();
-}
-
-// Switches the browser language to French, and returns true iff successful.
-bool SwitchToFrench() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  // Make sure the default language is not French.
-  std::string default_locale = g_browser_process->GetApplicationLocale();
-  EXPECT_NE("fr", default_locale);
-
-  // Switch browser language to French.
-  g_browser_process->SetApplicationLocale("fr");
-  PrefService* prefs = g_browser_process->local_state();
-  prefs->SetString(prefs::kApplicationLocale, "fr");
-
-  std::string loaded_locale =
-      ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources("fr");
-
-  return loaded_locale == "fr";
-}
-
-}  // namespace
+#include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/WebKit/public/platform/web_feature.mojom.h"
+#include "url/gurl.h"
 
 class LocalNTPTest : public InProcessBrowserTest {
  public:
   LocalNTPTest() {}
 
-  void SetUserSelectedDefaultSearchProvider(const std::string& base_url,
-                                            const std::string& ntp_url) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-    TemplateURLData data;
-    data.SetShortName(base::UTF8ToUTF16(base_url));
-    data.SetKeyword(base::UTF8ToUTF16(base_url));
-    data.SetURL(base_url + "url?bar={searchTerms}");
-    data.new_tab_url = ntp_url;
+  // Navigates the active tab to chrome://newtab and waits until the NTP is
+  // fully loaded. Note that simply waiting for a navigation is not enough,
+  // since the MV iframe receives the tiles asynchronously.
+  void NavigateToNTPAndWaitUntilLoaded() {
+    content::WebContents* active_tab =
+        browser()->tab_strip_model()->GetActiveWebContents();
 
-    TemplateURLService* template_url_service =
-        TemplateURLServiceFactory::GetForProfile(browser()->profile());
-    TemplateURL* template_url =
-        template_url_service->Add(base::MakeUnique<TemplateURL>(data));
-    template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
+    // Attach a message queue *before* navigating to the NTP, to make sure we
+    // don't miss the 'loaded' message due to some race condition.
+    content::DOMMessageQueue msg_queue(active_tab);
+
+    // Navigate to the NTP.
+    ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+    ASSERT_TRUE(search::IsInstantNTP(active_tab));
+    ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
+              active_tab->GetController().GetVisibleEntry()->GetURL());
+
+    // At this point, the MV iframe may or may not have been fully loaded. Once
+    // it loads, it sends a 'loaded' postMessage to the page. Check if the page
+    // has already received that, and if not start listening for it. It's
+    // important that these two things happen in the same JS invocation, since
+    // otherwise we might miss the message.
+    bool mv_tiles_loaded = false;
+    ASSERT_TRUE(instant_test_utils::GetBoolFromJS(active_tab,
+                                                  R"js(
+        (function() {
+          if (tilesAreLoaded) {
+            return true;
+          }
+          window.addEventListener('message', function(event) {
+            if (event.data.cmd == 'loaded') {
+              domAutomationController.send('NavigateToNTPAndWaitUntilLoaded');
+            }
+          });
+          return false;
+        })()
+                                                  )js",
+                                                  &mv_tiles_loaded));
+
+    std::string message;
+    // Get rid of the message that the GetBoolFromJS call produces.
+    ASSERT_TRUE(msg_queue.PopMessage(&message));
+
+    if (mv_tiles_loaded) {
+      // The tiles are already loaded, i.e. we missed the 'loaded' message. All
+      // is well.
+      return;
+    }
+
+    // Not loaded yet. Wait for the "NavigateToNTPAndWaitUntilLoaded" message.
+    ASSERT_TRUE(msg_queue.WaitForMessage(&message));
+    ASSERT_EQ("\"NavigateToNTPAndWaitUntilLoaded\"", message);
+    // There shouldn't be any other messages.
+    ASSERT_FALSE(msg_queue.PopMessage(&message));
   }
 
  private:
@@ -111,8 +110,8 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIOnlyAvailableOnNTP) {
   const GURL other_url = test_server.GetURL("/simple.html");
 
   // Open an NTP.
-  content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+  content::WebContents* active_tab = local_ntp_test_utils::OpenNewTab(
+      browser(), GURL(chrome::kChromeUINewTabURL));
   ASSERT_TRUE(search::IsInstantNTP(active_tab));
   // Check that the embeddedSearch API is available.
   bool result = false;
@@ -164,18 +163,70 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIOnlyAvailableOnNTP) {
   EXPECT_TRUE(result);
 }
 
+// Regression test for crbug.com/776660 and crbug.com/776655.
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIExposesStaticFunctions) {
+  // Open an NTP.
+  content::WebContents* active_tab = local_ntp_test_utils::OpenNewTab(
+      browser(), GURL(chrome::kChromeUINewTabURL));
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+
+  struct TestCase {
+    const char* function_name;
+    const char* args;
+  } test_cases[] = {
+      {"window.chrome.embeddedSearch.searchBox.paste", "\"text\""},
+      {"window.chrome.embeddedSearch.searchBox.startCapturingKeyStrokes", ""},
+      {"window.chrome.embeddedSearch.searchBox.stopCapturingKeyStrokes", ""},
+      {"window.chrome.embeddedSearch.newTabPage.checkIsUserSignedIntoChromeAs",
+       "\"user@email.com\""},
+      {"window.chrome.embeddedSearch.newTabPage.checkIsUserSyncingHistory",
+       "\"user@email.com\""},
+      {"window.chrome.embeddedSearch.newTabPage.deleteMostVisitedItem", "1"},
+      {"window.chrome.embeddedSearch.newTabPage.deleteMostVisitedItem",
+       "\"1\""},
+      {"window.chrome.embeddedSearch.newTabPage.getMostVisitedItemData", "1"},
+      {"window.chrome.embeddedSearch.newTabPage.logEvent", "1"},
+      {"window.chrome.embeddedSearch.newTabPage.undoAllMostVisitedDeletions",
+       ""},
+      {"window.chrome.embeddedSearch.newTabPage.undoMostVisitedDeletion", "1"},
+      {"window.chrome.embeddedSearch.newTabPage.undoMostVisitedDeletion",
+       "\"1\""},
+  };
+
+  for (const TestCase& test_case : test_cases) {
+    // Make sure that the API function exists.
+    bool result = false;
+    ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
+        active_tab, base::StringPrintf("!!%s", test_case.function_name),
+        &result));
+    ASSERT_TRUE(result);
+
+    // Check that it can be called normally.
+    EXPECT_TRUE(content::ExecuteScript(
+        active_tab,
+        base::StringPrintf("%s(%s)", test_case.function_name, test_case.args)));
+
+    // Check that it can be called even after it's assigned to a var, i.e.
+    // without a "this" binding.
+    EXPECT_TRUE(content::ExecuteScript(
+        active_tab,
+        base::StringPrintf("var f = %s; f(%s)", test_case.function_name,
+                           test_case.args)));
+  }
+}
+
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, NTPRespectsBrowserLanguageSetting) {
   // If the platform cannot load the French locale (GetApplicationLocale() is
   // platform specific, and has been observed to fail on a small number of
   // platforms), abort the test.
-  if (!SwitchToFrench()) {
+  if (!local_ntp_test_utils::SwitchBrowserLanguageToFrench()) {
     LOG(ERROR) << "Failed switching to French language, aborting test.";
     return;
   }
 
   // Open a new tab.
-  content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+  content::WebContents* active_tab = local_ntp_test_utils::OpenNewTab(
+      browser(), GURL(chrome::kChromeUINewTabURL));
 
   // Verify that the NTP is in French.
   EXPECT_EQ(base::ASCIIToUTF16("Nouvel onglet"), active_tab->GetTitle());
@@ -183,18 +234,18 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, NTPRespectsBrowserLanguageSetting) {
 
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, GoogleNTPLoadsWithoutError) {
   // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
 
   // Attach a console observer, listening for any message ("*" pattern).
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
 
+  base::HistogramTester histograms;
+
   // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
+  NavigateToNTPAndWaitUntilLoaded();
 
   bool is_google = false;
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
@@ -204,25 +255,49 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, GoogleNTPLoadsWithoutError) {
 
   // We shouldn't have gotten any console error messages.
   EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
+
+  // Make sure load time metrics were recorded.
+  histograms.ExpectTotalCount("NewTabPage.LoadTime", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.LocalNTP", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.LocalNTP.Google", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.MostVisited", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime.LocalNTP", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime.MostVisited", 1);
+
+  // Make sure impression metrics were recorded. There should be 2 tiles, the
+  // default prepopulated TopSites (see history::PrepopulatedPage).
+  histograms.ExpectTotalCount("NewTabPage.NumberOfTiles", 1);
+  histograms.ExpectBucketCount("NewTabPage.NumberOfTiles", 2, 1);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression", 2);
+  histograms.ExpectBucketCount("NewTabPage.SuggestionsImpression", 0, 1);
+  histograms.ExpectBucketCount("NewTabPage.SuggestionsImpression", 1, 1);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression.client", 2);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression.Thumbnail", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileTitle", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileTitle.client", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileType", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileType.client", 2);
 }
 
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, NonGoogleNTPLoadsWithoutError) {
-  SetUserSelectedDefaultSearchProvider("https://www.example.com",
-                                       /*ntp_url=*/"");
+  local_ntp_test_utils::SetUserSelectedDefaultSearchProvider(
+      browser()->profile(), "https://www.example.com",
+      /*ntp_url=*/"");
 
   // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
 
   // Attach a console observer, listening for any message ("*" pattern).
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
 
+  base::HistogramTester histograms;
+
   // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
+  NavigateToNTPAndWaitUntilLoaded();
 
   bool is_google = false;
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
@@ -232,16 +307,40 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, NonGoogleNTPLoadsWithoutError) {
 
   // We shouldn't have gotten any console error messages.
   EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
+
+  // Make sure load time metrics were recorded.
+  histograms.ExpectTotalCount("NewTabPage.LoadTime", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.LocalNTP", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.LocalNTP.Other", 1);
+  histograms.ExpectTotalCount("NewTabPage.LoadTime.MostVisited", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime.LocalNTP", 1);
+  histograms.ExpectTotalCount("NewTabPage.TilesReceivedTime.MostVisited", 1);
+
+  // Make sure impression metrics were recorded. There should be 2 tiles, the
+  // default prepopulated TopSites (see history::PrepopulatedPage).
+  histograms.ExpectTotalCount("NewTabPage.NumberOfTiles", 1);
+  histograms.ExpectBucketCount("NewTabPage.NumberOfTiles", 2, 1);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression", 2);
+  histograms.ExpectBucketCount("NewTabPage.SuggestionsImpression", 0, 1);
+  histograms.ExpectBucketCount("NewTabPage.SuggestionsImpression", 1, 1);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression.client", 2);
+  histograms.ExpectTotalCount("NewTabPage.SuggestionsImpression.Thumbnail", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileTitle", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileTitle.client", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileType", 2);
+  histograms.ExpectTotalCount("NewTabPage.TileType.client", 2);
 }
 
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, FrenchGoogleNTPLoadsWithoutError) {
-  if (!SwitchToFrench()) {
+  if (!local_ntp_test_utils::SwitchBrowserLanguageToFrench()) {
     LOG(ERROR) << "Failed switching to French language, aborting test.";
     return;
   }
 
   // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
 
   // Attach a console observer, listening for any message ("*" pattern).
@@ -260,6 +359,56 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, FrenchGoogleNTPLoadsWithoutError) {
   EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
 }
 
+// Tests that blink::UseCounter do not track feature usage for NTP activities.
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, ShouldNotTrackBlinkUseCounterForNTP) {
+  base::HistogramTester histogram_tester;
+  const char kFeaturesHistogramName[] = "Blink.UseCounter.Features";
+
+  // Set up a test server, so we have some arbitrary non-NTP URL to navigate to.
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(test_server.Start());
+  const GURL other_url = test_server.GetURL("/simple.html");
+
+  // Open an NTP.
+  content::WebContents* active_tab = local_ntp_test_utils::OpenNewTab(
+      browser(), GURL(chrome::kChromeUINewTabURL));
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+  // Expect no PageVisits count.
+  EXPECT_EQ(nullptr,
+            base::StatisticsRecorder::FindHistogram(kFeaturesHistogramName));
+  // Navigate somewhere else in the same tab.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), other_url, WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ASSERT_FALSE(search::IsInstantNTP(active_tab));
+  // Navigate back to NTP.
+  content::TestNavigationObserver back_observer(active_tab);
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+  back_observer.Wait();
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+  // There should be exactly 1 count of PageVisits.
+  histogram_tester.ExpectBucketCount(
+      kFeaturesHistogramName,
+      static_cast<int32_t>(blink::mojom::WebFeature::kPageVisits), 1);
+
+  // Navigate forward to the non-NTP page.
+  content::TestNavigationObserver fwd_observer(active_tab);
+  chrome::GoForward(browser(), WindowOpenDisposition::CURRENT_TAB);
+  fwd_observer.Wait();
+  ASSERT_FALSE(search::IsInstantNTP(active_tab));
+  // Navigate to a new NTP instance.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(chrome::kChromeUINewTabURL),
+      WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+  // There should be 2 counts of PageVisits.
+  histogram_tester.ExpectBucketCount(
+      kFeaturesHistogramName,
+      static_cast<int32_t>(blink::mojom::WebFeature::kPageVisits), 2);
+}
+
 class LocalNTPRTLTest : public LocalNTPTest {
  public:
   LocalNTPRTLTest() {}
@@ -273,8 +422,8 @@ class LocalNTPRTLTest : public LocalNTPTest {
 
 IN_PROC_BROWSER_TEST_F(LocalNTPRTLTest, RightToLeft) {
   // Open an NTP.
-  content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
+  content::WebContents* active_tab = local_ntp_test_utils::OpenNewTab(
+      browser(), GURL(chrome::kChromeUINewTabURL));
   ASSERT_TRUE(search::IsInstantNTP(active_tab));
   // Check that the "dir" attribute on the main "html" element says "rtl".
   std::string dir;
@@ -283,116 +432,25 @@ IN_PROC_BROWSER_TEST_F(LocalNTPRTLTest, RightToLeft) {
   EXPECT_EQ("rtl", dir);
 }
 
-// A test class that sets up a local HTML file as the NTP URL.
-class CustomNTPUrlTest : public LocalNTPTest {
- public:
-  explicit CustomNTPUrlTest(const std::string& ntp_file_path)
-      : https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS),
-        ntp_file_path_(ntp_file_path) {
-    https_test_server_.ServeFilesFromSourceDirectory(
-        "chrome/test/data/local_ntp");
-  }
-
- private:
-  void SetUpOnMainThread() override {
-    ASSERT_TRUE(https_test_server_.Start());
-    GURL ntp_url = https_test_server_.GetURL(ntp_file_path_);
-    SetUserSelectedDefaultSearchProvider(https_test_server_.base_url().spec(),
-                                         ntp_url.spec());
-  }
-
-  net::EmbeddedTestServer https_test_server_;
-  const std::string ntp_file_path_;
-};
-
-// A test class that sets up local_ntp_browsertest.html as the NTP URL. It's
-// mostly a copy of the real local_ntp.html, but it adds some testing JS.
-class LocalNTPJavascriptTest : public CustomNTPUrlTest {
- public:
-  LocalNTPJavascriptTest() : CustomNTPUrlTest("/local_ntp_browsertest.html") {}
-};
-
-// This runs a bunch of pure JS-side tests, i.e. those that don't require any
-// interaction from the native side.
-IN_PROC_BROWSER_TEST_F(LocalNTPJavascriptTest, SimpleJavascriptTests) {
-  if (content::AreAllSitesIsolatedForTesting()) {
-    LOG(ERROR) << "LocalNTPJavascriptTest.SimpleJavascriptTests doesn't work "
-                  "in --site-per-process mode yet, see crbug.com/695221.";
-    return;
-  }
-
-  content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-
-  // Run the tests.
-  bool success = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab, "!!runSimpleTests('localNtp')", &success));
-  EXPECT_TRUE(success);
-}
-
-// A test class that sets up voice_browsertest.html as the NTP URL. It's
-// mostly a copy of the real local_ntp.html, but it adds some testing JS.
-class LocalNTPVoiceJavascriptTest : public CustomNTPUrlTest {
- public:
-  LocalNTPVoiceJavascriptTest() : CustomNTPUrlTest("/voice_browsertest.html") {}
-};
-
-IN_PROC_BROWSER_TEST_F(LocalNTPVoiceJavascriptTest, MicrophoneTests) {
-  content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
-
-  // Run the tests.
-  bool success = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab, "!!runSimpleTests('microphone')", &success));
-  EXPECT_TRUE(success);
-}
-
 namespace {
 
 // Returns the RenderFrameHost corresponding to the most visited iframe in the
 // given |tab|. |tab| must correspond to an NTP.
 content::RenderFrameHost* GetMostVisitedIframe(content::WebContents* tab) {
-  CHECK_EQ(2u, tab->GetAllFrames().size());
   for (content::RenderFrameHost* frame : tab->GetAllFrames()) {
-    if (frame != tab->GetMainFrame()) {
+    if (frame->GetFrameName() == "mv-single") {
       return frame;
     }
   }
-  NOTREACHED();
   return nullptr;
 }
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(LocalNTPJavascriptTest, LoadsIframe) {
-  if (content::AreAllSitesIsolatedForTesting()) {
-    LOG(ERROR) << "LocalNTPJavascriptTest.LoadsIframe doesn't work in "
-                  "--site-per-process mode yet, see crbug.com/695221.";
-    return;
-  }
-
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, LoadsIframe) {
   content::WebContents* active_tab =
-      OpenNewTab(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-
-  content::DOMMessageQueue msg_queue;
-
-  bool result = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab, "!!setupAdvancedTest(true)", &result));
-  ASSERT_TRUE(result);
-
-  // Wait for the MV iframe to load.
-  std::string message;
-  // First get rid of the "true" message from the GetBoolFromJS call above.
-  ASSERT_TRUE(msg_queue.PopMessage(&message));
-  ASSERT_EQ("true", message);
-  // Now wait for the "loaded" message.
-  ASSERT_TRUE(msg_queue.WaitForMessage(&message));
-  ASSERT_EQ("\"loaded\"", message);
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
+  NavigateToNTPAndWaitUntilLoaded();
 
   // Get the iframe and check that the tiles loaded correctly.
   content::RenderFrameHost* iframe = GetMostVisitedIframe(active_tab);
@@ -423,169 +481,4 @@ IN_PROC_BROWSER_TEST_F(LocalNTPJavascriptTest, LoadsIframe) {
   EXPECT_GT(total_thumbs, 0);
   EXPECT_EQ(total_thumbs, succeeded_imgs);
   EXPECT_EQ(0, failed_imgs);
-}
-
-// A simple fake implementation of OneGoogleBarFetcher that immediately returns
-// a pre-configured OneGoogleBarData, which is null by default.
-class FakeOneGoogleBarFetcher : public OneGoogleBarFetcher {
- public:
-  void Fetch(OneGoogleCallback callback) override {
-    std::move(callback).Run(Status::OK, one_google_bar_data_);
-  }
-
-  void set_one_google_bar_data(
-      const base::Optional<OneGoogleBarData>& one_google_bar_data) {
-    one_google_bar_data_ = one_google_bar_data;
-  }
-
- private:
-  base::Optional<OneGoogleBarData> one_google_bar_data_;
-};
-
-class LocalNTPOneGoogleBarSmokeTest : public InProcessBrowserTest {
- public:
-  LocalNTPOneGoogleBarSmokeTest() {}
-
-  FakeOneGoogleBarFetcher* one_google_bar_fetcher() {
-    return static_cast<FakeOneGoogleBarFetcher*>(
-        OneGoogleBarServiceFactory::GetForProfile(browser()->profile())
-            ->fetcher_for_testing());
-  }
-
- private:
-  void SetUp() override {
-    feature_list_.InitWithFeatures(
-        {features::kUseGoogleLocalNtp, features::kOneGoogleBarOnLocalNtp}, {});
-    InProcessBrowserTest::SetUp();
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    will_create_browser_context_services_subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                base::Bind(&LocalNTPOneGoogleBarSmokeTest::
-                               OnWillCreateBrowserContextServices,
-                           base::Unretained(this)));
-  }
-
-  static std::unique_ptr<KeyedService> CreateOneGoogleBarService(
-      content::BrowserContext* context) {
-    GaiaCookieManagerService* cookie_service =
-        GaiaCookieManagerServiceFactory::GetForProfile(
-            Profile::FromBrowserContext(context));
-    return base::MakeUnique<OneGoogleBarService>(
-        cookie_service, base::MakeUnique<FakeOneGoogleBarFetcher>());
-  }
-
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    OneGoogleBarServiceFactory::GetInstance()->SetTestingFactory(
-        context, &LocalNTPOneGoogleBarSmokeTest::CreateOneGoogleBarService);
-  }
-
-  base::test::ScopedFeatureList feature_list_;
-
-  std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
-};
-
-IN_PROC_BROWSER_TEST_F(LocalNTPOneGoogleBarSmokeTest,
-                       NTPLoadsWithoutErrorOnNetworkFailure) {
-  // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
-  ASSERT_FALSE(search::IsInstantNTP(active_tab));
-
-  // Attach a console observer, listening for any message ("*" pattern).
-  content::ConsoleObserverDelegate console_observer(active_tab, "*");
-  active_tab->SetDelegate(&console_observer);
-
-  // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
-
-  // We shouldn't have gotten any console error messages.
-  EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
-}
-
-IN_PROC_BROWSER_TEST_F(LocalNTPOneGoogleBarSmokeTest,
-                       NTPLoadsWithOneGoogleBar) {
-  OneGoogleBarData data;
-  data.bar_html = "<div id='thebar'></div>";
-  data.in_head_script = "window.inHeadRan = true;";
-  data.after_bar_script = "window.afterBarRan = true;";
-  data.end_of_body_script = "console.log('ogb-done');";
-  one_google_bar_fetcher()->set_one_google_bar_data(data);
-
-  // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
-  ASSERT_FALSE(search::IsInstantNTP(active_tab));
-
-  // Attach a console observer, listening for the "ogb-done" message, which
-  // indicates that the OGB has finished loading.
-  content::ConsoleObserverDelegate console_observer(active_tab, "ogb-done");
-  active_tab->SetDelegate(&console_observer);
-
-  // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
-  // Make sure the OGB is finished loading.
-  console_observer.Wait();
-
-  EXPECT_EQ("ogb-done", console_observer.message());
-
-  bool in_head_ran = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab, "!!window.inHeadRan", &in_head_ran));
-  EXPECT_TRUE(in_head_ran);
-  bool after_bar_ran = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab, "!!window.afterBarRan", &after_bar_ran));
-  EXPECT_TRUE(after_bar_ran);
-}
-
-class LocalNTPVoiceSearchSmokeTest : public InProcessBrowserTest {
- public:
-  LocalNTPVoiceSearchSmokeTest() {}
-
- private:
-  void SetUp() override {
-    feature_list_.InitWithFeatures(
-        {features::kUseGoogleLocalNtp, features::kVoiceSearchOnLocalNtp}, {});
-    InProcessBrowserTest::SetUp();
-  }
-
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(LocalNTPVoiceSearchSmokeTest,
-                       GoogleNTPWithVoiceLoadsWithoutError) {
-  // Open a new blank tab.
-  content::WebContents* active_tab = OpenNewTab(browser(), GURL("about:blank"));
-  ASSERT_FALSE(search::IsInstantNTP(active_tab));
-
-  // Attach a console observer, listening for any message ("*" pattern).
-  content::ConsoleObserverDelegate console_observer(active_tab, "*");
-  active_tab->SetDelegate(&console_observer);
-
-  // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
-
-  // Make sure the microphone icon in the fakebox is present and visible.
-  bool fakebox_speech_is_visible = false;
-  ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
-      active_tab,
-      "!!document.getElementById('fakebox-speech') && "
-      "!document.getElementById('fakebox-speech').hidden",
-      &fakebox_speech_is_visible));
-  EXPECT_TRUE(fakebox_speech_is_visible);
-
-  // We shouldn't have gotten any console error messages.
-  EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
 }

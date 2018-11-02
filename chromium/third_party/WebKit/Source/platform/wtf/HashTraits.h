@@ -22,16 +22,17 @@
 #ifndef WTF_HashTraits_h
 #define WTF_HashTraits_h
 
+#include <string.h>  // For memset.
+#include <limits>
+#include <memory>
+#include <type_traits>
+#include <utility>
+#include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashFunctions.h"
 #include "platform/wtf/HashTableDeletedValueType.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/TypeTraits.h"
-#include <limits>
-#include <memory>
-#include <string.h>  // For memset.
-#include <type_traits>
-#include <utility>
 
 namespace WTF {
 
@@ -214,18 +215,45 @@ struct SimpleClassHashTraits : GenericHashTraits<T> {
 };
 
 template <typename P>
-struct HashTraits<RefPtr<P>> : SimpleClassHashTraits<RefPtr<P>> {
+struct HashTraits<scoped_refptr<P>> : SimpleClassHashTraits<scoped_refptr<P>> {
+  static_assert(sizeof(void*) == sizeof(scoped_refptr<P>),
+                "Unexpected RefPtr size."
+                " RefPtr needs to be single pointer to support deleted value.");
+
+  class RefPtrValuePeeker {
+    DISALLOW_NEW();
+
+   public:
+    ALWAYS_INLINE RefPtrValuePeeker(P* p) : ptr_(p) {}
+    template <typename U>
+    RefPtrValuePeeker(const scoped_refptr<U>& p) : ptr_(p.get()) {}
+
+    ALWAYS_INLINE operator P*() const { return ptr_; }
+
+   private:
+    P* ptr_;
+  };
+
   typedef std::nullptr_t EmptyValueType;
   static EmptyValueType EmptyValue() { return nullptr; }
 
   static const bool kHasIsEmptyValueFunction = true;
-  static bool IsEmptyValue(const RefPtr<P>& value) { return !value; }
+  static bool IsEmptyValue(const scoped_refptr<P>& value) { return !value; }
 
-  typedef RefPtrValuePeeker<P> PeekInType;
-  typedef RefPtr<P>* IteratorGetType;
-  typedef const RefPtr<P>* IteratorConstGetType;
-  typedef RefPtr<P>& IteratorReferenceType;
-  typedef const RefPtr<P>& IteratorConstReferenceType;
+  static bool IsDeletedValue(const scoped_refptr<P>& value) {
+    return *reinterpret_cast<void* const*>(&value) ==
+           reinterpret_cast<const void*>(-1);
+  }
+
+  static void ConstructDeletedValue(scoped_refptr<P>& slot, bool zero_value) {
+    *reinterpret_cast<void**>(&slot) = reinterpret_cast<void*>(-1);
+  }
+
+  typedef RefPtrValuePeeker PeekInType;
+  typedef scoped_refptr<P>* IteratorGetType;
+  typedef const scoped_refptr<P>* IteratorConstGetType;
+  typedef scoped_refptr<P>& IteratorReferenceType;
+  typedef const scoped_refptr<P>& IteratorConstReferenceType;
   static IteratorReferenceType GetToReferenceConversion(IteratorGetType x) {
     return *x;
   }
@@ -234,12 +262,12 @@ struct HashTraits<RefPtr<P>> : SimpleClassHashTraits<RefPtr<P>> {
     return *x;
   }
 
-  static void Store(PassRefPtr<P> value, RefPtr<P>& storage) {
+  static void Store(scoped_refptr<P> value, scoped_refptr<P>& storage) {
     storage = std::move(value);
   }
 
   typedef P* PeekOutType;
-  static PeekOutType Peek(const RefPtr<P>& value) { return value.Get(); }
+  static PeekOutType Peek(const scoped_refptr<P>& value) { return value.get(); }
 };
 
 template <typename T>
@@ -276,6 +304,8 @@ template <>
 struct HashTraits<String> : SimpleClassHashTraits<String> {
   static const bool kHasIsEmptyValueFunction = true;
   static bool IsEmptyValue(const String&);
+  static bool IsDeletedValue(const String& value);
+  static void ConstructDeletedValue(String& slot, bool zero_value);
 };
 
 // This struct template is an implementation detail of the

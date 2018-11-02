@@ -84,12 +84,24 @@ DeviceChooserContentView::DeviceChooserContentView(
       views::StyledLabel::RangeStyleInfo::CreateForLink());
   turn_adapter_off_help_->SetVisible(false);
   AddChildView(turn_adapter_off_help_);
+
+  if (chooser_controller_->ShouldShowFootnoteView()) {
+    footnote_link_ = base::MakeUnique<views::StyledLabel>(help_text_, this);
+    footnote_link_->set_owned_by_client();
+    footnote_link_->AddStyleRange(
+        help_text_range_, views::StyledLabel::RangeStyleInfo::CreateForLink());
+  }
 }
 
 DeviceChooserContentView::~DeviceChooserContentView() {
   chooser_controller_->set_view(nullptr);
   table_view_->set_observer(nullptr);
   table_view_->SetModel(nullptr);
+}
+
+gfx::Size DeviceChooserContentView::GetMinimumSize() const {
+  // Let the dialog shrink when its parent is smaller than the preferred size.
+  return gfx::Size();
 }
 
 void DeviceChooserContentView::Layout() {
@@ -165,7 +177,7 @@ gfx::ImageSkia DeviceChooserContentView::GetIcon(int row) {
   DCHECK_GE(level, 0);
   DCHECK_LT(level, static_cast<int>(arraysize(kSignalStrengthLevelImageIds)));
 
-  return *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       kSignalStrengthLevelImageIds[level]);
 }
 
@@ -282,17 +294,6 @@ bool DeviceChooserContentView::IsDialogButtonEnabled(
     ui::DialogButton button) const {
   return button != ui::DIALOG_BUTTON_OK ||
          !table_view_->selection_model().empty();
-}
-
-views::StyledLabel* DeviceChooserContentView::footnote_link() {
-  if (chooser_controller_->ShouldShowFootnoteView()) {
-    footnote_link_ = base::MakeUnique<views::StyledLabel>(help_text_, this);
-    footnote_link_->set_owned_by_client();
-    footnote_link_->AddStyleRange(
-        help_text_range_, views::StyledLabel::RangeStyleInfo::CreateForLink());
-  }
-
-  return footnote_link_.get();
 }
 
 void DeviceChooserContentView::Accept() {

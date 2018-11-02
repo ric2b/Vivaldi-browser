@@ -11,6 +11,8 @@
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/PaintPropertyTreePrinter.h"
+#include "core/paint/compositing/CompositingLayerPropertyUpdater.h"
 #include "platform/graphics/paint/GeometryMapper.h"
 
 namespace blink {
@@ -63,8 +65,24 @@ void PrePaintTreeWalk::Walk(LocalFrameView& root_frame) {
   if (NeedsTreeBuilderContextUpdate(root_frame, initial_context))
     GeometryMapper::ClearCache();
 
+#if DCHECK_IS_ON()
+  bool needed_paint_property_update = root_frame.NeedsPaintPropertyUpdate();
+#endif
+
   Walk(root_frame, initial_context);
   paint_invalidator_.ProcessPendingDelayedPaintInvalidations();
+
+#if DCHECK_IS_ON()
+  if (!needed_paint_property_update)
+    return;
+  if (VLOG_IS_ON(2) && root_frame.GetLayoutView()) {
+    LOG(ERROR) << "PrePaintTreeWalk::Walk(root_frame_view=" << &root_frame
+               << ")\nPaintLayer tree:";
+    showLayerTree(root_frame.GetLayoutView()->Layer());
+  }
+  if (VLOG_IS_ON(1))
+    showAllPropertyTrees(root_frame);
+#endif
 }
 
 void PrePaintTreeWalk::Walk(LocalFrameView& frame_view,
@@ -75,26 +93,36 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view,
   }
 
   bool needs_tree_builder_context_update =
-      this->NeedsTreeBuilderContextUpdate(frame_view, parent_context);
+      NeedsTreeBuilderContextUpdate(frame_view, parent_context);
   PrePaintTreeWalkContext context(parent_context,
                                   needs_tree_builder_context_update);
   // ancestorOverflowLayer does not cross frame boundaries.
   context.ancestor_overflow_paint_layer = nullptr;
   if (context.tree_builder_context) {
-    property_tree_builder_.UpdateProperties(frame_view,
-                                            *context.tree_builder_context);
+    FrameViewPaintPropertyTreeBuilder::Update(frame_view,
+                                              *context.tree_builder_context);
   }
   paint_invalidator_.InvalidatePaint(frame_view,
                                      context.tree_builder_context.get(),
                                      *context.paint_invalidator_context);
 
   if (LayoutView* view = frame_view.GetLayoutView()) {
+#ifndef NDEBUG
+    if (VLOG_IS_ON(3) && needs_tree_builder_context_update) {
+      LOG(ERROR) << "PrePaintTreeWalk::Walk(frame_view=" << &frame_view
+                 << ")\nLayout tree:";
+      showLayoutTree(view);
+    }
+#endif
+
     Walk(*view, context);
 #if DCHECK_IS_ON()
     view->AssertSubtreeClearedPaintInvalidationFlags();
 #endif
   }
+
   frame_view.ClearNeedsPaintPropertyUpdate();
+  CompositingLayerPropertyUpdater::Update(frame_view);
 }
 
 static void UpdateAuxiliaryObjectProperties(const LayoutObject& object,
@@ -130,15 +158,7 @@ void PrePaintTreeWalk::InvalidatePaintLayerOptimizationsIfNeeded(
 
   PaintLayer& paint_layer = *ToLayoutBoxModelObject(object).Layer();
 
-  // Ignore clips across paint invalidation container or transform
-  // boundaries.
-  if (object ==
-          context.paint_invalidator_context->paint_invalidation_container ||
-      object.StyleRef().HasTransform())
-    context.tree_builder_context->clip_changed = false;
-
-  if (!paint_layer.SupportsSubsequenceCaching() ||
-      !context.tree_builder_context->clip_changed)
+  if (!context.tree_builder_context->clip_changed)
     return;
 
   paint_layer.SetNeedsRepaint();
@@ -170,25 +190,16 @@ bool PrePaintTreeWalk::NeedsTreeBuilderContextUpdate(
              object);
 }
 
-void PrePaintTreeWalk::Walk(const LayoutObject& object,
-                            const PrePaintTreeWalkContext& parent_context) {
-  // Early out from the tree walk if possible.
-  bool needs_tree_builder_context_update =
-      this->NeedsTreeBuilderContextUpdate(object, parent_context);
-  if (!needs_tree_builder_context_update &&
-      !object.ShouldCheckForPaintInvalidation())
-    return;
-
-  PrePaintTreeWalkContext context(parent_context,
-                                  needs_tree_builder_context_update);
-
+void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
+                                    PrePaintTreeWalkContext& context) {
   // This must happen before updatePropertiesForSelf, because the latter reads
   // some of the state computed here.
   UpdateAuxiliaryObjectProperties(object, context);
 
+  Optional<ObjectPaintPropertyTreeBuilder> property_tree_builder;
   if (context.tree_builder_context) {
-    property_tree_builder_.UpdatePropertiesForSelf(
-        object, *context.tree_builder_context);
+    property_tree_builder.emplace(object, *context.tree_builder_context);
+    property_tree_builder->UpdateForSelf();
 
     if (context.tree_builder_context->clip_changed) {
       context.paint_invalidator_context->subtree_flags |=
@@ -200,11 +211,30 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
                                      *context.paint_invalidator_context);
 
   if (context.tree_builder_context) {
-    property_tree_builder_.UpdatePropertiesForChildren(
-        object, *context.tree_builder_context);
-
+    property_tree_builder->UpdateForChildren();
     InvalidatePaintLayerOptimizationsIfNeeded(object, context);
   }
+
+  CompositingLayerPropertyUpdater::Update(object);
+}
+
+void PrePaintTreeWalk::Walk(const LayoutObject& object,
+                            const PrePaintTreeWalkContext& parent_context) {
+  // Early out from the tree walk if possible.
+  bool needs_tree_builder_context_update =
+      NeedsTreeBuilderContextUpdate(object, parent_context);
+  if (!needs_tree_builder_context_update &&
+      !object.ShouldCheckForPaintInvalidation())
+    return;
+
+  PrePaintTreeWalkContext context(parent_context,
+                                  needs_tree_builder_context_update);
+
+  // Ignore clip changes from ancestor across transform boundaries.
+  if (context.tree_builder_context && object.StyleRef().HasTransform())
+    context.tree_builder_context->clip_changed = false;
+
+  WalkInternal(object, context);
 
   for (const LayoutObject* child = object.SlowFirstChild(); child;
        child = child->NextSibling()) {

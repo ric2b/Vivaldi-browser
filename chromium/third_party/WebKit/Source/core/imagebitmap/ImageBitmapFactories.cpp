@@ -40,8 +40,8 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
@@ -80,42 +80,42 @@ static inline ImageBitmapSource* ToImageBitmapSourceInternal(
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, image_bitmap_source_histogram,
       ("Canvas.CreateImageBitmapSource", kCreateImageBitmapSourceCount));
-  if (value.isHTMLVideoElement()) {
+  if (value.IsHTMLVideoElement()) {
     image_bitmap_source_histogram.Count(
         kCreateImageBitmapSourceHTMLVideoElement);
-    return value.getAsHTMLVideoElement();
+    return value.GetAsHTMLVideoElement();
   }
-  if (value.isHTMLImageElement()) {
+  if (value.IsHTMLImageElement()) {
     image_bitmap_source_histogram.Count(
         kCreateImageBitmapSourceHTMLImageElement);
-    return value.getAsHTMLImageElement();
+    return value.GetAsHTMLImageElement();
   }
-  if (value.isSVGImageElement()) {
+  if (value.IsSVGImageElement()) {
     image_bitmap_source_histogram.Count(
         kCreateImageBitmapSourceSVGImageElement);
-    return value.getAsSVGImageElement();
+    return value.GetAsSVGImageElement();
   }
-  if (value.isHTMLCanvasElement()) {
+  if (value.IsHTMLCanvasElement()) {
     image_bitmap_source_histogram.Count(
         kCreateImageBitmapSourceHTMLCanvasElement);
-    return value.getAsHTMLCanvasElement();
+    return value.GetAsHTMLCanvasElement();
   }
-  if (value.isBlob()) {
+  if (value.IsBlob()) {
     image_bitmap_source_histogram.Count(kCreateImageBitmapSourceBlob);
-    return value.getAsBlob();
+    return value.GetAsBlob();
   }
-  if (value.isImageData()) {
+  if (value.IsImageData()) {
     image_bitmap_source_histogram.Count(kCreateImageBitmapSourceImageData);
-    return value.getAsImageData();
+    return value.GetAsImageData();
   }
-  if (value.isImageBitmap()) {
+  if (value.IsImageBitmap()) {
     image_bitmap_source_histogram.Count(kCreateImageBitmapSourceImageBitmap);
-    return value.getAsImageBitmap();
+    return value.GetAsImageBitmap();
   }
-  if (value.isOffscreenCanvas()) {
+  if (value.IsOffscreenCanvas()) {
     image_bitmap_source_histogram.Count(
         kCreateImageBitmapSourceOffscreenCanvas);
-    return value.getAsOffscreenCanvas();
+    return value.GetAsOffscreenCanvas();
   }
   NOTREACHED();
   return nullptr;
@@ -258,7 +258,7 @@ void ImageBitmapFactories::ImageBitmapLoader::LoadBlobAsync(
   loader_->Start(context, blob->GetBlobDataHandle());
 }
 
-DEFINE_TRACE(ImageBitmapFactories) {
+void ImageBitmapFactories::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_loaders_);
   Supplement<LocalDOMWindow>::Trace(visitor);
   Supplement<WorkerGlobalScope>::Trace(visitor);
@@ -296,7 +296,7 @@ void ImageBitmapFactories::ImageBitmapLoader::DidFail(FileError::ErrorCode) {
 
 void ImageBitmapFactories::ImageBitmapLoader::ScheduleAsyncImageBitmapDecoding(
     DOMArrayBuffer* array_buffer) {
-  RefPtr<WebTaskRunner> task_runner =
+  scoped_refptr<WebTaskRunner> task_runner =
       Platform::Current()->CurrentThread()->GetWebTaskRunner();
   BackgroundTaskRunner::PostOnBackgroundThread(
       BLINK_FROM_HERE,
@@ -308,7 +308,7 @@ void ImageBitmapFactories::ImageBitmapLoader::ScheduleAsyncImageBitmapDecoding(
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::DecodeImageOnDecoderThread(
-    RefPtr<WebTaskRunner> task_runner,
+    scoped_refptr<WebTaskRunner> task_runner,
     DOMArrayBuffer* array_buffer,
     const String& premultiply_alpha_option,
     const String& color_space_conversion_option) {
@@ -324,8 +324,7 @@ void ImageBitmapFactories::ImageBitmapLoader::DecodeImageOnDecoderThread(
       SegmentReader::CreateFromSkData(SkData::MakeWithoutCopy(
           array_buffer->Data(), array_buffer->ByteLength())),
       true, alpha_op,
-      ignore_color_space ? ColorBehavior::Ignore()
-                         : ColorBehavior::TransformToGlobalTarget()));
+      ignore_color_space ? ColorBehavior::Ignore() : ColorBehavior::Tag()));
   sk_sp<SkImage> frame;
   if (decoder) {
     frame = ImageBitmap::GetSkImageFromDecoder(std::move(decoder));
@@ -346,7 +345,8 @@ void ImageBitmapFactories::ImageBitmapLoader::ResolvePromiseOnOriginalThread(
   DCHECK(frame->width());
   DCHECK(frame->height());
 
-  RefPtr<StaticBitmapImage> image = StaticBitmapImage::Create(std::move(frame));
+  scoped_refptr<StaticBitmapImage> image =
+      StaticBitmapImage::Create(std::move(frame));
   image->SetOriginClean(true);
   ImageBitmap* image_bitmap = ImageBitmap::Create(image, crop_rect_, options_);
   if (image_bitmap && image_bitmap->BitmapImage()) {
@@ -358,7 +358,7 @@ void ImageBitmapFactories::ImageBitmapLoader::ResolvePromiseOnOriginalThread(
   factory_->DidFinishLoading(this);
 }
 
-DEFINE_TRACE(ImageBitmapFactories::ImageBitmapLoader) {
+void ImageBitmapFactories::ImageBitmapLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(factory_);
   visitor->Trace(resolver_);
 }

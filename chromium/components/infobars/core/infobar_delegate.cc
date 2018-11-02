@@ -54,8 +54,10 @@ gfx::Image InfoBarDelegate::GetIcon() const {
 #endif
 
   int icon_id = GetIconId();
-  return icon_id == kNoIconID ? gfx::Image() :
-      ResourceBundle::GetSharedInstance().GetNativeImageNamed(icon_id);
+  return icon_id == kNoIconID
+             ? gfx::Image()
+             : ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
+                   icon_id);
 }
 
 bool InfoBarDelegate::EqualsDelegate(InfoBarDelegate* delegate) const {
@@ -93,10 +95,6 @@ NativeAppInfoBarDelegate* InfoBarDelegate::AsNativeAppInfoBarDelegate() {
   return nullptr;
 }
 
-PermissionInfoBarDelegate* InfoBarDelegate::AsPermissionInfoBarDelegate() {
-  return nullptr;
-}
-
 PopupBlockedInfoBarDelegate* InfoBarDelegate::AsPopupBlockedInfoBarDelegate() {
   return nullptr;
 }
@@ -126,11 +124,6 @@ translate::TranslateInfoBarDelegate*
 }
 
 #if defined(OS_ANDROID)
-MediaStreamInfoBarDelegateAndroid*
-InfoBarDelegate::AsMediaStreamInfoBarDelegateAndroid() {
-  return nullptr;
-}
-
 offline_pages::OfflinePageInfoBarDelegate*
 InfoBarDelegate::AsOfflinePageInfoBarDelegate() {
   return nullptr;

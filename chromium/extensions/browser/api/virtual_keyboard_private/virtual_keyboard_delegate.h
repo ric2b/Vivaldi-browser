@@ -13,6 +13,8 @@
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/common/api/virtual_keyboard.h"
+#include "extensions/common/api/virtual_keyboard_private.h"
 
 namespace extensions {
 
@@ -28,6 +30,10 @@ class VirtualKeyboardDelegate {
   // is successful, otherwise it's set to nullptr.
   virtual void GetKeyboardConfig(
       OnKeyboardSettingsCallback on_settings_callback) = 0;
+
+  // Notify keyboard config change through
+  // |chrome.virtualKeyboard.onKeyboardConfigChanged| event.
+  virtual void OnKeyboardConfigChanged() = 0;
 
   // Dismiss the virtual keyboard without changing input focus. Returns true if
   // successful.
@@ -46,10 +52,6 @@ class VirtualKeyboardDelegate {
 
   // Sets the state of the hotrod virtual keyboad.
   virtual void SetHotrodKeyboard(bool enable) = 0;
-
-  // Sets the virtual keyboard in restricted state - i.e. state where advanced
-  // features like auto-correct, auto-complete, voice input are disabled.
-  virtual void SetKeyboardRestricted(bool restricted) = 0;
 
   // Activate and lock the virtual keyboad on screen or dismiss the keyboard
   // regardless of the state of text focus. Used in a11y mode to allow typing
@@ -74,8 +76,18 @@ class VirtualKeyboardDelegate {
   // Sets virtual keyboard window mode.
   virtual bool SetVirtualKeyboardMode(int mode_enum) = 0;
 
+  // Sets virtual keyboard draggable area bounds.
+  // Returns whether the draggable area is set successful.
+  virtual bool SetDraggableArea(
+      const api::virtual_keyboard_private::Bounds& bounds) = 0;
+
   // Sets requested virtual keyboard state.
   virtual bool SetRequestedKeyboardState(int state_enum) = 0;
+
+  // Restricts the virtual keyboard IME features.
+  // Returns the values which were updated.
+  virtual api::virtual_keyboard::FeatureRestrictions RestrictFeatures(
+      const api::virtual_keyboard::RestrictFeatures::Params& params) = 0;
 };
 
 }  // namespace extensions

@@ -21,6 +21,7 @@
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/shell/browser/shell_network_delegate.h"
+#include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_content_client.h"
 #include "content/shell/common/shell_switches.h"
 #include "net/cert/cert_verifier.h"
@@ -33,6 +34,9 @@
 #include "net/http/http_network_session.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_service.h"
+#include "net/reporting/reporting_feature.h"
+#include "net/reporting/reporting_policy.h"
+#include "net/reporting/reporting_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_context.h"
@@ -50,11 +54,11 @@ class IgnoresCTPolicyEnforcer : public net::CTPolicyEnforcer {
   IgnoresCTPolicyEnforcer() = default;
   ~IgnoresCTPolicyEnforcer() override = default;
 
-  net::ct::CertPolicyCompliance DoesConformToCertPolicy(
+  net::ct::CTPolicyCompliance CheckCompliance(
       net::X509Certificate* cert,
       const net::SCTList& verified_scts,
       const net::NetLogWithSource& net_log) override {
-    return net::ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+    return net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
   }
 };
 
@@ -132,7 +136,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     std::unique_ptr<net::CookieStore> cookie_store =
         CreateCookieStore(CookieStoreConfig());
     std::unique_ptr<net::ChannelIDService> channel_id_service =
-        base::MakeUnique<net::ChannelIDService>(
+        std::make_unique<net::ChannelIDService>(
             new net::DefaultChannelIDStore(nullptr));
     cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
     builder.SetCookieAndChannelIdStores(std::move(cookie_store),
@@ -197,6 +201,17 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
 
     // Set up interceptors in the reverse order.
     builder.SetInterceptors(std::move(request_interceptors_));
+
+#if BUILDFLAG(ENABLE_REPORTING)
+    if (base::FeatureList::IsEnabled(features::kReporting)) {
+      std::unique_ptr<net::ReportingPolicy> reporting_policy =
+          std::make_unique<net::ReportingPolicy>();
+      if (command_line.HasSwitch(switches::kRunLayoutTest))
+        reporting_policy->delivery_interval =
+            base::TimeDelta::FromMilliseconds(100);
+      builder.set_reporting_policy(std::move(reporting_policy));
+    }
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
     url_request_context_ = builder.Build();
   }

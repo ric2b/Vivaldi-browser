@@ -487,8 +487,10 @@ bool GuestViewManager::CanEmbedderAccessInstanceID(
   // TODO (gisli@vivaldi.com):  Should add check (below check or both embedders
   // are vivaldi windows).
   return vivaldi::IsVivaldiRunning() ||
-      embedder_render_process_id ==
-      guest_view->owner_web_contents()->GetRenderProcessHost()->GetID();
+         embedder_render_process_id == guest_view->owner_web_contents()
+                                       ->GetMainFrame()
+                                       ->GetProcess()
+                                       ->GetID();
 }
 
 GuestViewManager::ElementInstanceKey::ElementInstanceKey()

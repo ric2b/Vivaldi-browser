@@ -58,9 +58,7 @@ static inline double NullValue() {
 
 // Represents the content of an Animation and its fractional timing state.
 // http://w3c.github.io/web-animations/#animation-effect
-class CORE_EXPORT AnimationEffectReadOnly
-    : public GarbageCollectedFinalized<AnimationEffectReadOnly>,
-      public ScriptWrappable {
+class CORE_EXPORT AnimationEffectReadOnly : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   friend class Animation;  // Calls attach/detach, updateInheritedTime.
  public:
@@ -77,7 +75,7 @@ class CORE_EXPORT AnimationEffectReadOnly
     virtual ~EventDelegate() {}
     virtual bool RequiresIterationEvents(const AnimationEffectReadOnly&) = 0;
     virtual void OnEventCondition(const AnimationEffectReadOnly&) = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
 
   virtual ~AnimationEffectReadOnly() {}
@@ -117,7 +115,7 @@ class CORE_EXPORT AnimationEffectReadOnly
   void getComputedTiming(ComputedTimingProperties&);
   ComputedTimingProperties getComputedTiming();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   explicit AnimationEffectReadOnly(const Timing&, EventDelegate* = nullptr);

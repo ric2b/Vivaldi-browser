@@ -29,7 +29,7 @@
 #ifndef ImageData_h
 #define ImageData_h
 
-#include "bindings/core/v8/Uint8ClampedArrayOrUint16ArrayOrFloat32Array.h"
+#include "bindings/core/v8/uint8_clamped_array_or_uint16_array_or_float32_array.h"
 #include "core/CoreExport.h"
 #include "core/html/ImageDataColorSettings.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
@@ -60,18 +60,11 @@ enum ConstructorParams {
   kParamData = 1 << 3,
 };
 
-enum ImageDataStorageFormat {
-  kUint8ClampedArrayStorageFormat,
-  kUint16ArrayStorageFormat,
-  kFloat32ArrayStorageFormat,
-};
-
 constexpr const char* kUint8ClampedArrayStorageFormatName = "uint8";
 constexpr const char* kUint16ArrayStorageFormatName = "uint16";
 constexpr const char* kFloat32ArrayStorageFormatName = "float32";
 
-class CORE_EXPORT ImageData final : public GarbageCollectedFinalized<ImageData>,
-                                    public ScriptWrappable,
+class CORE_EXPORT ImageData final : public ScriptWrappable,
                                     public ImageBitmapSource {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -113,7 +106,7 @@ class CORE_EXPORT ImageData final : public GarbageCollectedFinalized<ImageData>,
                                   DOMArrayBufferView*,
                                   const ImageDataColorSettings* = nullptr);
 
-  ImageData* CropRect(const IntRect&, bool = false);
+  ImageData* CropRect(const IntRect&, bool flip_y = false);
 
   ImageDataStorageFormat GetImageDataStorageFormat();
   static CanvasColorSpace GetCanvasColorSpace(const String&);
@@ -139,11 +132,17 @@ class CORE_EXPORT ImageData final : public GarbageCollectedFinalized<ImageData>,
 
   DOMArrayBufferBase* BufferBase() const;
   CanvasColorParams GetCanvasColorParams();
+
+  // DataU8ColorType param specifies if the converted pixels in 8-8-8-8 pixel
+  // format should respect the "native" 32bit ARGB format of Skia's blitters.
+  // For example, if ImageDataInCanvasColorSettings() is called to fill an
+  // ImageBuffer, kRGBAColorType should be used. If the converted pixels are
+  // used to create an ImageBitmap, kN32ColorType should be used.
   bool ImageDataInCanvasColorSettings(CanvasColorSpace,
                                       CanvasPixelFormat,
-                                      std::unique_ptr<uint8_t[]>&);
-  bool ImageDataInCanvasColorSettings(const CanvasColorParams&,
-                                      std::unique_ptr<uint8_t[]>&);
+                                      unsigned char* converted_pixels,
+                                      DataU8ColorType,
+                                      const IntRect* = nullptr);
 
   // ImageBitmapSource implementation
   IntSize BitmapSourceSize() const override { return size_; }
@@ -152,7 +151,7 @@ class CORE_EXPORT ImageData final : public GarbageCollectedFinalized<ImageData>,
                                   Optional<IntRect> crop_rect,
                                   const ImageBitmapOptions&) override;
 
-  void Trace(Visitor*);
+  void Trace(blink::Visitor*) override;
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
       v8::Isolate*,
@@ -199,6 +198,9 @@ class CORE_EXPORT ImageData final : public GarbageCollectedFinalized<ImageData>,
 
   static DOMFloat32Array* ConvertFloat16ArrayToFloat32Array(const uint16_t*,
                                                             unsigned);
+
+  void SwapU16EndiannessForSkColorSpaceXform(const IntRect* = nullptr);
+  void SwizzleIfNeeded(DataU8ColorType, const IntRect*);
 };
 
 }  // namespace blink

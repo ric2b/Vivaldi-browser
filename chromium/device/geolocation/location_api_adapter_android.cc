@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "device/geolocation/location_provider_android.h"
 #include "jni/LocationProviderAdapter_jni.h"
 
@@ -16,33 +17,35 @@ using base::android::AttachCurrentThread;
 using base::android::JavaParamRef;
 using device::LocationApiAdapterAndroid;
 
-static void NewLocationAvailable(JNIEnv* env,
-                                 const JavaParamRef<jclass>&,
-                                 jdouble latitude,
-                                 jdouble longitude,
-                                 jdouble time_stamp,
-                                 jboolean has_altitude,
-                                 jdouble altitude,
-                                 jboolean has_accuracy,
-                                 jdouble accuracy,
-                                 jboolean has_heading,
-                                 jdouble heading,
-                                 jboolean has_speed,
-                                 jdouble speed) {
+static void JNI_LocationProviderAdapter_NewLocationAvailable(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&,
+    jdouble latitude,
+    jdouble longitude,
+    jdouble time_stamp,
+    jboolean has_altitude,
+    jdouble altitude,
+    jboolean has_accuracy,
+    jdouble accuracy,
+    jboolean has_heading,
+    jdouble heading,
+    jboolean has_speed,
+    jdouble speed) {
   LocationApiAdapterAndroid::OnNewLocationAvailable(
       latitude, longitude, time_stamp, has_altitude, altitude, has_accuracy,
       accuracy, has_heading, heading, has_speed, speed);
 }
 
-static void NewErrorAvailable(JNIEnv* env,
-                              const JavaParamRef<jclass>&,
-                              const JavaParamRef<jstring>& message) {
+static void JNI_LocationProviderAdapter_NewErrorAvailable(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&,
+    const JavaParamRef<jstring>& message) {
   LocationApiAdapterAndroid::OnNewErrorAvailable(env, message);
 }
 
 namespace device {
 
-bool LocationApiAdapterAndroid::Start(OnGeopositionCB on_geoposition_callback,
+void LocationApiAdapterAndroid::Start(OnGeopositionCB on_geoposition_callback,
                                       bool high_accuracy) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(on_geoposition_callback);
@@ -62,8 +65,8 @@ bool LocationApiAdapterAndroid::Start(OnGeopositionCB on_geoposition_callback,
   // start receiving notifications from java in the main thread looper until
   // Stop() is called.
   DCHECK(!java_location_provider_adapter_.is_null());
-  return Java_LocationProviderAdapter_start(
-      env, java_location_provider_adapter_, high_accuracy);
+  Java_LocationProviderAdapter_start(env, java_location_provider_adapter_,
+                                     high_accuracy);
 }
 
 void LocationApiAdapterAndroid::Stop() {
@@ -90,7 +93,7 @@ void LocationApiAdapterAndroid::OnNewLocationAvailable(double latitude,
                                                        double heading,
                                                        bool has_speed,
                                                        double speed) {
-  Geoposition position;
+  mojom::Geoposition position;
   position.latitude = latitude;
   position.longitude = longitude;
   position.timestamp = base::Time::FromDoubleT(time_stamp);
@@ -112,8 +115,9 @@ void LocationApiAdapterAndroid::OnNewLocationAvailable(double latitude,
 // static
 void LocationApiAdapterAndroid::OnNewErrorAvailable(JNIEnv* env,
                                                     jstring message) {
-  Geoposition position_error;
-  position_error.error_code = Geoposition::ERROR_CODE_POSITION_UNAVAILABLE;
+  mojom::Geoposition position_error;
+  position_error.error_code =
+      mojom::Geoposition::ErrorCode::POSITION_UNAVAILABLE;
   position_error.error_message =
       base::android::ConvertJavaStringToUTF8(env, message);
 
@@ -136,7 +140,7 @@ LocationApiAdapterAndroid::~LocationApiAdapterAndroid() {
 }
 
 void LocationApiAdapterAndroid::NotifyNewGeoposition(
-    const Geoposition& geoposition) {
+    const mojom::Geoposition& geoposition) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (on_geoposition_callback_)
     on_geoposition_callback_.Run(geoposition);

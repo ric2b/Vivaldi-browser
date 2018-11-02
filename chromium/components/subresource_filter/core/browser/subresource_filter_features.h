@@ -6,6 +6,7 @@
 #define COMPONENTS_SUBRESOURCE_FILTER_CORE_BROWSER_SUBRESOURCE_FILTER_FEATURES_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/feature_list.h"
@@ -62,9 +63,6 @@ struct Configuration {
     // otherwise satisfied. A greater value indicates higher priority.
     int priority = 0;
 
-    // Whether to activate on SafeBrowsing lists with experimental metadata.
-    bool experimental = false;
-
     // This boolean is set to true for a navigation which has forced activation,
     // despite other conditions not matching. It should never be possible to set
     // this via variation params.
@@ -93,13 +91,6 @@ struct Configuration {
     // Whether to whitelist a site when a page loaded from that site is
     // reloaded.
     bool should_whitelist_site_on_reload = false;
-
-    // Whether to apply a more powerful popup blocker on pages with activation.
-    bool should_strengthen_popup_blocker = false;
-
-    // Whether to disable rules from the ruleset. In practice this might be used
-    // if e.g. only popup blocking behavior is desired.
-    bool should_disable_ruleset_rules = false;
   };
 
   // General settings that apply outside of the scope of a navigation.
@@ -136,6 +127,7 @@ struct Configuration {
   //  4.) Update unittests to cover the new preset.
   static Configuration MakePresetForLiveRunOnPhishingSites();
   static Configuration MakePresetForPerformanceTestingDryRunOnAllSites();
+  static Configuration MakePresetForLiveRunForBetterAds();
 
   // Not really a preset, but used as the configuration for forcing activation
   // (e.g. via devtools).
@@ -218,11 +210,8 @@ extern const char kActivationListSocialEngineeringAdsInterstitial[];
 extern const char kActivationListPhishingInterstitial[];
 extern const char kActivationListSubresourceFilter[];
 extern const char kActivationListBetterAds[];
-extern const char kActivationListAbusiveAds[];
-extern const char kActivationListAllAds[];
 
 extern const char kActivationPriorityParameterName[];
-extern const char kActivationExperimentalParameterName[];
 
 extern const char kPerformanceMeasurementRateParameterName[];
 
@@ -230,16 +219,13 @@ extern const char kSuppressNotificationsParameterName[];
 
 extern const char kWhitelistSiteOnReloadParameterName[];
 
-extern const char kStrengthenPopupBlockerParameterName[];
-
-extern const char kDisableRulesetRules[];
-
 extern const char kRulesetFlavorParameterName[];
 
 extern const char kEnablePresetsParameterName[];
 extern const char kDisablePresetsParameterName[];
 extern const char kPresetLiveRunOnPhishingSites[];
 extern const char kPresetPerformanceTestingDryRunOnAllSites[];
+extern const char kPresetLiveRunForBetterAds[];
 
 }  // namespace subresource_filter
 

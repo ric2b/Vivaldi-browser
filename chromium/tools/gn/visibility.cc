@@ -4,7 +4,8 @@
 
 #include "tools/gn/visibility.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -16,11 +17,9 @@
 #include "tools/gn/value.h"
 #include "tools/gn/variables.h"
 
-Visibility::Visibility() {
-}
+Visibility::Visibility() = default;
 
-Visibility::~Visibility() {
-}
+Visibility::~Visibility() = default;
 
 bool Visibility::Set(const SourceDir& current_dir,
                      const Value& value,
@@ -86,11 +85,10 @@ std::string Visibility::Describe(int indent, bool include_brackets) const {
 }
 
 std::unique_ptr<base::Value> Visibility::AsValue() const {
-  auto* res = new base::ListValue();
+  auto res = std::make_unique<base::ListValue>();
   for (const auto& pattern : patterns_)
     res->AppendString(pattern.Describe());
-
-  return WrapUnique(res);
+  return std::move(res);
 }
 
 // static

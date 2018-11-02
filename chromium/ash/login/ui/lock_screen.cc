@@ -4,6 +4,9 @@
 
 #include "ash/login/ui/lock_screen.h"
 
+#include <memory>
+#include <utility>
+
 #include "ash/login/ui/lock_contents_view.h"
 #include "ash/login/ui/lock_debug_view.h"
 #include "ash/login/ui/lock_window.h"
@@ -13,9 +16,9 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/tray_action/tray_action.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "chromeos/chromeos_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
@@ -24,12 +27,13 @@
 namespace ash {
 namespace {
 
-views::View* BuildContentsView(LoginDataDispatcher* data_dispatcher) {
+views::View* BuildContentsView(mojom::TrayActionState initial_note_action_state,
+                               LoginDataDispatcher* data_dispatcher) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kShowLoginDevOverlay)) {
-    return new LockDebugView(data_dispatcher);
+    return new LockDebugView(initial_note_action_state, data_dispatcher);
   }
-  return new LockContentsView(data_dispatcher);
+  return new LockContentsView(initial_note_action_state, data_dispatcher);
 }
 
 ui::Layer* GetWallpaperLayerForWindow(aura::Window* window) {
@@ -45,7 +49,10 @@ LockScreen* instance_ = nullptr;
 
 }  // namespace
 
-LockScreen::LockScreen() = default;
+LockScreen::LockScreen()
+    : tray_action_observer_(this), session_observer_(this) {
+  tray_action_observer_.Add(ash::Shell::Get()->tray_action());
+}
 
 LockScreen::~LockScreen() = default;
 
@@ -60,23 +67,21 @@ void LockScreen::Show() {
   CHECK(!instance_);
   instance_ = new LockScreen();
 
-  auto data_dispatcher = base::MakeUnique<LoginDataDispatcher>();
-  auto* contents = BuildContentsView(data_dispatcher.get());
-
-  // TODO(jdufault|crbug.com/731191): Call NotifyUsers via
-  // LockScreenController::LoadUsers once it uses a mojom specific type.
-  std::vector<mojom::UserInfoPtr> users;
-  for (const mojom::UserSessionPtr& session :
-       Shell::Get()->session_controller()->GetUserSessions()) {
-    users.push_back(session->user_info->Clone());
-  }
-  data_dispatcher->NotifyUsers(users);
+  auto data_dispatcher = std::make_unique<LoginDataDispatcher>();
+  auto* contents = BuildContentsView(
+      ash::Shell::Get()->tray_action()->GetLockScreenNoteState(),
+      data_dispatcher.get());
 
   auto* window = instance_->window_ = new LockWindow(Shell::GetAshConfig());
   window->SetBounds(display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
   window->SetContentsView(contents);
   window->set_data_dispatcher(std::move(data_dispatcher));
   window->Show();
+}
+
+// static
+bool LockScreen::IsShown() {
+  return !!instance_;
 }
 
 void LockScreen::Destroy() {
@@ -108,9 +113,19 @@ void LockScreen::ToggleBlurForDebug() {
   }
 }
 
-void LockScreen::SetPinEnabledForUser(const AccountId& account_id,
-                                      bool is_enabled) {
-  window_->data_dispatcher()->SetPinEnabledForUser(account_id, is_enabled);
+LoginDataDispatcher* LockScreen::data_dispatcher() {
+  return window_->data_dispatcher();
+}
+
+void LockScreen::OnLockScreenNoteStateChanged(mojom::TrayActionState state) {
+  if (data_dispatcher())
+    data_dispatcher()->SetLockScreenNoteState(state);
+}
+
+void LockScreen::OnLockStateChanged(bool locked) {
+  if (!locked)
+    Destroy();
+  Shell::Get()->metrics()->login_metrics_recorder()->Reset();
 }
 
 }  // namespace ash

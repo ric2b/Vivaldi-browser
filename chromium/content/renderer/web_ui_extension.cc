@@ -9,14 +9,14 @@
 
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "content/common/view_messages.h"
-#include "content/public/child/v8_value_converter.h"
+#include "content/common/frame_messages.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "content/renderer/web_ui_extension_data.h"
 #include "gin/arguments.h"
 #include "gin/function_template.h"
@@ -33,13 +33,9 @@ namespace content {
 namespace {
 
 bool ShouldRespondToRequest(blink::WebLocalFrame** frame_ptr,
-                            RenderView** render_view_ptr) {
+                            RenderFrame** render_frame_ptr) {
   blink::WebLocalFrame* frame = blink::WebLocalFrame::FrameForCurrentContext();
   if (!frame || !frame->View())
-    return false;
-
-  RenderView* render_view = RenderView::FromWebView(frame->View());
-  if (!render_view)
     return false;
 
   GURL frame_url = frame->GetDocument().Url();
@@ -57,7 +53,7 @@ bool ShouldRespondToRequest(blink::WebLocalFrame** frame_ptr,
     return false;
 
   *frame_ptr = frame;
-  *render_view_ptr = render_view;
+  *render_frame_ptr = render_frame;
   return true;
 }
 
@@ -92,8 +88,8 @@ void WebUIExtension::Install(blink::WebLocalFrame* frame) {
 // static
 void WebUIExtension::Send(gin::Arguments* args) {
   blink::WebLocalFrame* frame;
-  RenderView* render_view;
-  if (!ShouldRespondToRequest(&frame, &render_view))
+  RenderFrame* render_frame;
+  if (!ShouldRespondToRequest(&frame, &render_frame))
     return;
 
   std::string message;
@@ -104,7 +100,7 @@ void WebUIExtension::Send(gin::Arguments* args) {
 
   if (base::EndsWith(message, "RequiringGesture",
                      base::CompareCase::SENSITIVE) &&
-      !blink::WebUserGestureIndicator::IsProcessingUserGesture()) {
+      !blink::WebUserGestureIndicator::IsProcessingUserGesture(frame)) {
     NOTREACHED();
     return;
   }
@@ -124,22 +120,29 @@ void WebUIExtension::Send(gin::Arguments* args) {
     content = base::ListValue::From(V8ValueConverter::Create()->FromV8Value(
         obj, frame->MainWorldScriptContext()));
     DCHECK(content);
+    // The conversion of |obj| could have triggered arbitrary JavaScript code,
+    // so check that the frame is still valid to avoid dereferencing a stale
+    // pointer.
+    if (frame != blink::WebLocalFrame::FrameForCurrentContext()) {
+      NOTREACHED();
+      return;
+    }
   }
 
   // Send the message up to the browser.
-  render_view->Send(new ViewHostMsg_WebUISend(render_view->GetRoutingID(),
-                                              frame->GetDocument().Url(),
-                                              message, *content));
+  render_frame->Send(new FrameHostMsg_WebUISend(render_frame->GetRoutingID(),
+                                                frame->GetDocument().Url(),
+                                                message, *content));
 }
 
 // static
 std::string WebUIExtension::GetVariableValue(const std::string& name) {
   blink::WebLocalFrame* frame;
-  RenderView* render_view;
-  if (!ShouldRespondToRequest(&frame, &render_view))
+  RenderFrame* render_frame;
+  if (!ShouldRespondToRequest(&frame, &render_frame))
     return std::string();
 
-  return WebUIExtensionData::Get(render_view)->GetValue(name);
+  return WebUIExtensionData::Get(render_frame->GetRenderView())->GetValue(name);
 }
 
 }  // namespace content

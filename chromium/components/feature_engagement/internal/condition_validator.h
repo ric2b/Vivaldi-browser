@@ -9,6 +9,7 @@
 
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "components/feature_engagement/public/feature_list.h"
@@ -20,6 +21,7 @@ struct Feature;
 namespace feature_engagement {
 struct FeatureConfig;
 class AvailabilityModel;
+class DisplayLockController;
 class EventModel;
 
 // A ConditionValidator checks the requred conditions for a given feature,
@@ -64,6 +66,9 @@ class ConditionValidator {
     // Whether the availability precondition was met.
     bool availability_ok;
 
+    // Whether there are currently held display locks.
+    bool display_lock_ok;
+
     // Returns true if this result object has no errors, i.e. no values that
     // are false.
     bool NoErrors() const;
@@ -72,14 +77,19 @@ class ConditionValidator {
   virtual ~ConditionValidator() = default;
 
   // Returns a Result object that describes whether each condition has been met.
-  virtual Result MeetsConditions(const base::Feature& feature,
-                                 const FeatureConfig& config,
-                                 const EventModel& event_model,
-                                 const AvailabilityModel& availability_model,
-                                 uint32_t current_day) const = 0;
+  virtual Result MeetsConditions(
+      const base::Feature& feature,
+      const FeatureConfig& config,
+      const EventModel& event_model,
+      const AvailabilityModel& availability_model,
+      const DisplayLockController& display_lock_controller,
+      uint32_t current_day) const = 0;
 
   // Must be called to notify that the |feature| is currently showing.
-  virtual void NotifyIsShowing(const base::Feature& feature) = 0;
+  virtual void NotifyIsShowing(
+      const base::Feature& feature,
+      const FeatureConfig& config,
+      const std::vector<std::string>& all_feature_names) = 0;
 
   // Must be called to notify that the |feature| is no longer showing.
   virtual void NotifyDismissed(const base::Feature& feature) = 0;

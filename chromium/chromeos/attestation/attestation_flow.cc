@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
@@ -36,38 +37,34 @@ constexpr uint16_t kRetryDelayInMilliseconds = 300;
 //   on_true - Called when status=success and value=true.
 //   on_false - Called when status=success and value=false.
 //   on_fail - Called when status=failure.
-//   status - The D-Bus operation status.
-//   value - The value returned by the D-Bus operation.
+//   result - The result returned by the D-Bus operation.
 void DBusBoolRedirectCallback(const base::Closure& on_true,
                               const base::Closure& on_false,
                               const base::Closure& on_fail,
                               const std::string& on_fail_message,
-                              DBusMethodCallStatus status,
-                              bool value) {
-  if (status != DBUS_METHOD_CALL_SUCCESS) {
+                              base::Optional<bool> result) {
+  if (!result.has_value()) {
     LOG(ERROR) << "Attestation: Failed to " << on_fail_message << ".";
     if (!on_fail.is_null())
       on_fail.Run();
     return;
   }
-  const base::Closure& task = value ? on_true : on_false;
+  const base::Closure& task = result.value() ? on_true : on_false;
   if (!task.is_null())
     task.Run();
 }
 
 void DBusDataMethodCallback(
     const AttestationFlow::CertificateCallback& callback,
-    DBusMethodCallStatus status,
-    bool result,
-    const std::string& data) {
-  if (status != DBUS_METHOD_CALL_SUCCESS) {
+    base::Optional<CryptohomeClient::TpmAttestationDataResult> result) {
+  if (!result.has_value()) {
     LOG(ERROR) << "Attestation: DBus data operation failed.";
     if (!callback.is_null())
       callback.Run(false, "");
     return;
   }
   if (!callback.is_null())
-    callback.Run(result, data);
+    callback.Run(result->success, result->data);
 }
 
 }  // namespace
@@ -113,8 +110,7 @@ AttestationFlow::AttestationFlow(cryptohome::AsyncMethodCaller* async_caller,
           base::TimeDelta::FromMilliseconds(kRetryDelayInMilliseconds)),
       weak_factory_(this) {}
 
-AttestationFlow::~AttestationFlow() {
-}
+AttestationFlow::~AttestationFlow() = default;
 
 void AttestationFlow::GetCertificate(
     AttestationCertificateProfile certificate_profile,
@@ -134,11 +130,11 @@ void AttestationFlow::GetCertificate(
       on_failure,
       base::Bind(&AttestationFlow::StartEnroll, weak_factory_.GetWeakPtr(),
                  on_failure, do_cert_request));
-  cryptohome_client_->TpmAttestationIsEnrolled(
-      base::Bind(&DBusBoolRedirectCallback,
-                 do_cert_request,  // If enrolled, proceed with cert request.
-                 initiate_enroll,  // If not enrolled, initiate enrollment.
-                 on_failure, "check enrollment state"));
+  cryptohome_client_->TpmAttestationIsEnrolled(base::BindOnce(
+      &DBusBoolRedirectCallback,
+      do_cert_request,  // If enrolled, proceed with cert request.
+      initiate_enroll,  // If not enrolled, initiate enrollment.
+      on_failure, "check enrollment state"));
 }
 
 void AttestationFlow::WaitForAttestationReadyAndStartEnroll(
@@ -148,9 +144,9 @@ void AttestationFlow::WaitForAttestationReadyAndStartEnroll(
   const base::Closure retry_initiate_enroll =
       base::Bind(&AttestationFlow::CheckAttestationReadyAndReschedule,
                  weak_factory_.GetWeakPtr(), end_time, on_failure, next_task);
-  cryptohome_client_->TpmAttestationIsPrepared(
-      base::Bind(&DBusBoolRedirectCallback, next_task, retry_initiate_enroll,
-                 on_failure, "check for attestation readiness"));
+  cryptohome_client_->TpmAttestationIsPrepared(base::BindOnce(
+      &DBusBoolRedirectCallback, next_task, retry_initiate_enroll, on_failure,
+      "check for attestation readiness"));
 }
 
 void AttestationFlow::StartEnroll(const base::Closure& on_failure,
@@ -327,7 +323,7 @@ void AttestationFlow::CheckAttestationReadyAndReschedule(
   }
 }
 
-ServerProxy::~ServerProxy() {}
+ServerProxy::~ServerProxy() = default;
 
 PrivacyCAType ServerProxy::GetType() {
   return DEFAULT_PCA;

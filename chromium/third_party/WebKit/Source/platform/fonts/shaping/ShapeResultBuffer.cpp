@@ -17,18 +17,18 @@ namespace blink {
 // logic should move into ShapeResult itself and then the ShapeResultBuffer
 // implementation may wrap that.
 CharacterRange ShapeResultBuffer::GetCharacterRange(
-    RefPtr<const ShapeResult> result,
+    scoped_refptr<const ShapeResult> result,
     TextDirection direction,
     float total_width,
     unsigned from,
     unsigned to) {
-  Vector<RefPtr<const ShapeResult>, 64> results;
+  Vector<scoped_refptr<const ShapeResult>, 64> results;
   results.push_back(result);
   return GetCharacterRangeInternal(results, direction, total_width, from, to);
 }
 
 CharacterRange ShapeResultBuffer::GetCharacterRangeInternal(
-    const Vector<RefPtr<const ShapeResult>, 64>& results,
+    const Vector<scoped_refptr<const ShapeResult>, 64>& results,
     TextDirection direction,
     float total_width,
     unsigned absolute_from,
@@ -38,6 +38,8 @@ CharacterRange ShapeResultBuffer::GetCharacterRangeInternal(
   float to_x = 0;
   bool found_from_x = false;
   bool found_to_x = false;
+  float min_y = 0;
+  float max_y = 0;
 
   if (direction == TextDirection::kRtl)
     current_x = total_width;
@@ -50,7 +52,7 @@ CharacterRange ShapeResultBuffer::GetCharacterRangeInternal(
 
   unsigned total_num_characters = 0;
   for (unsigned j = 0; j < results.size(); j++) {
-    const RefPtr<const ShapeResult> result = results[j];
+    const scoped_refptr<const ShapeResult> result = results[j];
     if (direction == TextDirection::kRtl) {
       // Convert logical offsets to visual offsets, because results are in
       // logical order while runs are in visual order.
@@ -84,6 +86,11 @@ CharacterRange ShapeResultBuffer::GetCharacterRangeInternal(
         to -= num_characters;
       }
 
+      if (found_from_x || found_to_x) {
+        min_y = std::min(min_y, result->Bounds().Y());
+        max_y = std::max(max_y, result->Bounds().MaxY());
+      }
+
       if (found_from_x && found_to_x)
         break;
       current_x += result->runs_[i]->width_;
@@ -111,8 +118,8 @@ CharacterRange ShapeResultBuffer::GetCharacterRangeInternal(
   if (!found_to_x && !found_from_x)
     from_x = to_x = 0;
   if (from_x < to_x)
-    return CharacterRange(from_x, to_x);
-  return CharacterRange(to_x, from_x);
+    return CharacterRange(from_x, to_x, -min_y, max_y);
+  return CharacterRange(to_x, from_x, -min_y, max_y);
 }
 
 CharacterRange ShapeResultBuffer::GetCharacterRange(TextDirection direction,
@@ -137,9 +144,9 @@ void ShapeResultBuffer::AddRunInfoRanges(const ShapeResult::RunInfo& run_info,
 
     // To match getCharacterRange we flip ranges to ensure start <= end.
     if (end < start)
-      ranges.push_back(CharacterRange(end, start));
+      ranges.push_back(CharacterRange(end, start, 0, 0));
     else
-      ranges.push_back(CharacterRange(start, end));
+      ranges.push_back(CharacterRange(start, end, 0, 0));
   }
 }
 
@@ -148,7 +155,7 @@ Vector<CharacterRange> ShapeResultBuffer::IndividualCharacterRanges(
     float total_width) const {
   Vector<CharacterRange> ranges;
   float current_x = direction == TextDirection::kRtl ? total_width : 0;
-  for (const RefPtr<const ShapeResult> result : results_) {
+  for (const scoped_refptr<const ShapeResult> result : results_) {
     if (direction == TextDirection::kRtl)
       current_x -= result->Width();
     unsigned run_count = result->runs_.size();
@@ -171,7 +178,7 @@ int ShapeResultBuffer::OffsetForPosition(const TextRun& run,
   if (run.Rtl()) {
     total_offset = run.length();
     for (unsigned i = results_.size(); i; --i) {
-      const RefPtr<const ShapeResult>& word_result = results_[i - 1];
+      const scoped_refptr<const ShapeResult>& word_result = results_[i - 1];
       if (!word_result)
         continue;
       total_offset -= word_result->NumCharacters();
@@ -206,7 +213,7 @@ Vector<ShapeResultBuffer::RunFontData> ShapeResultBuffer::GetRunFontData()
   for (const auto& result : results_) {
     for (const auto& run : result->runs_) {
       font_data.push_back(
-          RunFontData({run->font_data_.Get(), run->glyph_data_.size()}));
+          RunFontData({run->font_data_.get(), run->glyph_data_.size()}));
     }
   }
   return font_data;
@@ -222,7 +229,8 @@ GlyphData ShapeResultBuffer::EmphasisMarkGlyphData(
 
       return GlyphData(
           run->glyph_data_[0].glyph,
-          run->font_data_->EmphasisMarkFontData(font_description).Get());
+          run->font_data_->EmphasisMarkFontData(font_description).get(),
+          run->CanvasRotation());
     }
   }
 

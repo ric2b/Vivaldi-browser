@@ -12,10 +12,11 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "third_party/harfbuzz-ng/src/hb.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/gfx/render_text.h"
+
+#include <hb.h>
 
 namespace base {
 namespace i18n {
@@ -53,12 +54,15 @@ struct GFX_EXPORT TextRunHarfBuzz {
   void GetClusterAt(size_t pos, Range* chars, Range* glyphs) const;
 
   // Returns the grapheme bounds at |text_index|. Handles multi-grapheme glyphs.
+  // Returned value is the horizontal pixel span in text-space (assumes all runs
+  // are on the same line). The returned range is never reversed.
   RangeF GetGraphemeBounds(RenderTextHarfBuzz* render_text,
                            size_t text_index) const;
 
-  // Returns the width of the given |char_range| handling grapheme boundaries
-  // within glyphs.
-  float GetGraphemeWidthForCharRange(RenderTextHarfBuzz* render_text,
+  // Returns the horizontal span of the given |char_range| handling grapheme
+  // boundaries within glyphs. This is a wrapper around one or more calls to
+  // GetGraphemeBounds(), returning a range in the same coordinate space.
+  RangeF GetGraphemeSpanForCharRange(RenderTextHarfBuzz* render_text,
                                      const Range& char_range) const;
 
   // Returns the glyph width for the given character range. |char_range| is in
@@ -162,7 +166,7 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
   SelectionModel FindCursorPosition(const Point& point) override;
   bool IsSelectionSupported() const override;
   std::vector<FontSpan> GetFontSpansForTesting() override;
-  Range GetGlyphBounds(size_t index) override;
+  Range GetCursorSpan(const Range& text_range) override;
 
   // ICU grapheme iterator for the layout text. Can be null in case of an error.
   base::i18n::BreakIterator* GetGraphemeIterator();

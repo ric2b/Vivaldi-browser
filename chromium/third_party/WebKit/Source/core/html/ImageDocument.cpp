@@ -26,7 +26,6 @@
 
 #include <limits>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/dom/events/EventListener.h"
 #include "core/events/MouseEvent.h"
@@ -45,6 +44,7 @@
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLMetaElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -73,12 +73,12 @@ class ImageEventListener : public EventListener {
   static const ImageEventListener* Cast(const EventListener* listener) {
     return listener->GetType() == kImageEventListenerType
                ? static_cast<const ImageEventListener*>(listener)
-               : 0;
+               : nullptr;
   }
 
   bool operator==(const EventListener& other) const override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(doc_);
     EventListener::Trace(visitor);
   }
@@ -112,11 +112,6 @@ class ImageDocumentParser : public RawDataDocumentParser {
 
 // --------
 
-static float PageZoomFactor(const Document* document) {
-  LocalFrame* frame = document->GetFrame();
-  return frame ? frame->PageZoomFactor() : 1;
-}
-
 static String ImageTitle(const String& filename, const IntSize& size) {
   StringBuilder result;
   result.Append(filename);
@@ -128,13 +123,6 @@ static String ImageTitle(const String& filename, const IntSize& size) {
   result.AppendNumber(size.Height());
   result.Append(')');
   return result.ToString();
-}
-
-static LayoutSize CachedImageSize(HTMLImageElement* element) {
-  DCHECK(element->CachedImage());
-  return element->CachedImage()->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(element->GetLayoutObject()),
-      1.0f);
 }
 
 void ImageDocumentParser::AppendBytes(const char* data, size_t length) {
@@ -168,13 +156,14 @@ void ImageDocumentParser::Finish() {
         GetDocument()->CachedImageResourceDeprecated();
     DocumentLoader* loader = GetDocument()->Loader();
     cached_image->SetResponse(loader->GetResponse());
-    cached_image->Finish(loader->GetTiming().ResponseEnd());
+    cached_image->Finish(
+        loader->GetTiming().ResponseEnd(),
+        GetDocument()->GetTaskRunner(TaskType::kUnspecedLoading).get());
 
     // Report the natural image size in the page title, regardless of zoom
     // level.  At a zoom level of 1 the image is guaranteed to have an integer
     // size.
-    IntSize size =
-        FlooredIntSize(CachedImageSize(GetDocument()->ImageElement()));
+    IntSize size = GetDocument()->ImageSize();
     if (size.Width()) {
       // Compute the title, we use the decoded filename of the resource, falling
       // back on the (decoded) hostname if there is no path.
@@ -219,6 +208,14 @@ ImageDocument::ImageDocument(const DocumentInit& initializer)
 
 DocumentParser* ImageDocument::CreateParser() {
   return ImageDocumentParser::Create(this);
+}
+
+IntSize ImageDocument::ImageSize() const {
+  DCHECK(image_element_);
+  DCHECK(image_element_->CachedImage());
+  return image_element_->CachedImage()->IntrinsicSize(
+      LayoutObject::ShouldRespectImageOrientation(
+          image_element_->GetLayoutObject()));
 }
 
 void ImageDocument::CreateDocumentStructure() {
@@ -303,21 +300,16 @@ float ImageDocument::Scale() const {
   if (!view)
     return 1.0f;
 
-  DCHECK(image_element_->CachedImage());
-  const float zoom = PageZoomFactor(this);
-  LayoutSize image_size = image_element_->CachedImage()->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(
-          image_element_->GetLayoutObject()),
-      zoom);
+  IntSize image_size = ImageSize();
+  if (image_size.IsEmpty())
+    return 1.0f;
 
   // We want to pretend the viewport is larger when the user has zoomed the
   // page in (but not when the zoom is coming from device scale).
-  const float manual_zoom =
-      zoom / view->GetChromeClient()->WindowToViewportScalar(1.f);
-  float width_scale =
-      view->Width() * manual_zoom / image_size.Width().ToFloat();
-  float height_scale =
-      view->Height() * manual_zoom / image_size.Height().ToFloat();
+  const float viewport_zoom =
+      view->GetChromeClient()->WindowToViewportScalar(1.f);
+  float width_scale = view->Width() / (viewport_zoom * image_size.Width());
+  float height_scale = view->Height() / (viewport_zoom * image_size.Height());
 
   return std::min(width_scale, height_scale);
 }
@@ -327,11 +319,11 @@ void ImageDocument::ResizeImageToFit() {
   if (!image_element_ || image_element_->GetDocument() != this)
     return;
 
-  LayoutSize image_size = CachedImageSize(image_element_);
+  IntSize image_size = ImageSize();
+  image_size.Scale(Scale());
 
-  const float scale = this->Scale();
-  image_element_->setWidth(static_cast<int>(image_size.Width() * scale));
-  image_element_->setHeight(static_cast<int>(image_size.Height() * scale));
+  image_element_->setWidth(image_size.Width());
+  image_element_->setHeight(image_size.Height());
 
   UpdateImageStyle();
 }
@@ -357,11 +349,13 @@ void ImageDocument::ImageClicked(int x, int y) {
     UpdateStyleAndLayout();
 
     double scale = this->Scale();
+    double device_scale_factor =
+        GetFrame()->View()->GetChromeClient()->WindowToViewportScalar(1.f);
 
-    float scroll_x =
-        image_x / scale - static_cast<float>(GetFrame()->View()->Width()) / 2;
-    float scroll_y =
-        image_y / scale - static_cast<float>(GetFrame()->View()->Height()) / 2;
+    float scroll_x = (image_x * device_scale_factor) / scale -
+                     static_cast<float>(GetFrame()->View()->Width()) / 2;
+    float scroll_y = (image_y * device_scale_factor) / scale -
+                     static_cast<float>(GetFrame()->View()->Height()) / 2;
 
     GetFrame()->View()->LayoutViewportScrollableArea()->SetScrollOffset(
         ScrollOffset(scroll_x, scroll_y), kProgrammaticScroll);
@@ -470,12 +464,7 @@ void ImageDocument::ImageUpdated() {
     return;
 
   UpdateStyleAndLayoutTree();
-  if (!image_element_->CachedImage() ||
-      image_element_->CachedImage()
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                          image_element_->GetLayoutObject()),
-                      PageZoomFactor(this))
-          .IsEmpty())
+  if (!image_element_->CachedImage() || ImageSize().IsEmpty())
     return;
 
   image_size_is_known_ = true;
@@ -493,10 +482,9 @@ void ImageDocument::RestoreImageSize() {
       image_element_->GetDocument() != this)
     return;
 
-  DCHECK(image_element_->CachedImage());
-  LayoutSize image_size = CachedImageSize(image_element_);
-  image_element_->setWidth(image_size.Width().ToInt());
-  image_element_->setHeight(image_size.Height().ToInt());
+  IntSize image_size = ImageSize();
+  image_element_->setWidth(image_size.Width());
+  image_element_->setHeight(image_size.Height());
   UpdateImageStyle();
 
   did_shrink_image_ = false;
@@ -515,14 +503,13 @@ int ImageDocument::CalculateDivWidth() {
   // * Images taller than the viewport are initially aligned with the top of
   //   of the frame.
   // * Images smaller in either dimension are centered along that axis.
-  LayoutSize image_size = CachedImageSize(image_element_);
   int viewport_width =
       GetFrame()->GetPage()->GetVisualViewport().Size().Width();
 
   // For huge images, minimum-scale=0.1 is still too big on small screens.
   // Set the <div> width so that the image will shrink to fit the width of the
   // screen when the scale is minimum.
-  int max_width = std::min(image_size.Width().ToInt(), viewport_width * 10);
+  int max_width = std::min(ImageSize().Width(), viewport_width * 10);
   return std::max(viewport_width, max_width);
 }
 
@@ -532,19 +519,21 @@ void ImageDocument::WindowSizeChanged() {
     return;
 
   if (shrink_to_fit_mode_ == kViewport) {
-    LayoutSize image_size = CachedImageSize(image_element_);
     int div_width = CalculateDivWidth();
     div_element_->SetInlineStyleProperty(CSSPropertyWidth, div_width,
                                          CSSPrimitiveValue::UnitType::kPixels);
 
     // Explicitly set the height of the <div> containing the <img> so that it
     // can display the full image without shrinking it, allowing a full-width
-    // reading mode for normal-width-huge-height images.
-    float viewport_aspect_ratio =
-        GetFrame()->GetPage()->GetVisualViewport().Size().AspectRatio();
-    int div_height =
-        std::max(image_size.Height().ToInt(),
-                 static_cast<int>(div_width / viewport_aspect_ratio));
+    // reading mode for normal-width-huge-height images. Use the LayoutSize
+    // for height rather than viewport since that doesn't change based on the
+    // URL bar coming in and out - thus preventing the image from jumping
+    // around. i.e. The div should fill the viewport when minimally zoomed and
+    // the URL bar is showing, but won't fill the new space when the URL bar
+    // hides.
+    float aspect_ratio = View()->GetLayoutSize().AspectRatio();
+    int div_height = std::max(ImageSize().Height(),
+                              static_cast<int>(div_width / aspect_ratio));
     div_element_->SetInlineStyleProperty(CSSPropertyHeight, div_height,
                                          CSSPrimitiveValue::UnitType::kPixels);
     return;
@@ -608,7 +597,7 @@ bool ImageDocument::ShouldShrinkToFit() const {
   return GetFrame()->IsMainFrame() && !is_wrap_content_web_view;
 }
 
-DEFINE_TRACE(ImageDocument) {
+void ImageDocument::Trace(blink::Visitor* visitor) {
   visitor->Trace(div_element_);
   visitor->Trace(image_element_);
   HTMLDocument::Trace(visitor);

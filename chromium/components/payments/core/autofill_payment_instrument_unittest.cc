@@ -7,15 +7,16 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/address_normalizer.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/test_address_normalizer.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
-#include "components/payments/core/address_normalizer.h"
 #include "components/payments/core/test_payment_request_delegate.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
@@ -53,40 +54,9 @@ class FakePaymentInstrumentDelegate : public PaymentInstrument::Delegate {
   bool on_instrument_details_error_called_ = false;
 };
 
-class FakeAddressNormalizer : public AddressNormalizer {
- public:
-  FakeAddressNormalizer() {}
-
-  void LoadRulesForRegion(const std::string& region_code) override {}
-
-  bool AreRulesLoadedForRegion(const std::string& region_code) override {
-    return true;
-  }
-
-  void StartAddressNormalization(
-      const autofill::AutofillProfile& profile,
-      const std::string& region_code,
-      int timeout_seconds,
-      AddressNormalizer::Delegate* requester) override {
-    profile_ = profile;
-    requester_ = requester;
-  }
-
-  void OnAddressValidationRulesLoaded(const std::string& region_code,
-                                      bool success) override {}
-
-  void CompleteAddressNormalization() {
-    requester_->OnAddressNormalized(profile_);
-  }
-
- private:
-  autofill::AutofillProfile profile_;
-  AddressNormalizer::Delegate* requester_;
-};
-
 class FakePaymentRequestDelegate
     : public PaymentRequestDelegate,
-      public autofill::payments::PaymentsClientDelegate {
+      public autofill::payments::PaymentsClientUnmaskDelegate {
  public:
   FakePaymentRequestDelegate()
       : locale_("en-US"),
@@ -94,7 +64,11 @@ class FakePaymentRequestDelegate
         personal_data_("en-US"),
         request_context_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get())),
-        payments_client_(request_context_.get(), this),
+        payments_client_(request_context_.get(),
+                         nullptr,
+                         nullptr,
+                         this,
+                         nullptr),
         full_card_request_(&autofill_client_,
                            &payments_client_,
                            &personal_data_) {}
@@ -126,11 +100,7 @@ class FakePaymentRequestDelegate
     full_card_result_delegate_ = result_delegate;
   }
 
-  AddressNormalizer* GetAddressNormalizer() override {
-    return &address_normalizer_;
-  }
-
-  FakeAddressNormalizer* GetTestAddressNormalizer() {
+  autofill::AddressNormalizer* GetAddressNormalizer() override {
     return &address_normalizer_;
   }
 
@@ -146,7 +116,7 @@ class FakePaymentRequestDelegate
  private:
   std::string locale_;
   const GURL last_committed_url_;
-  FakeAddressNormalizer address_normalizer_;
+  autofill::TestAddressNormalizer address_normalizer_;
   autofill::PersonalDataManager personal_data_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_;
   autofill::TestAutofillClient autofill_client_;

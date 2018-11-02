@@ -48,7 +48,7 @@ typedef base::Callback<void(NavigationThrottle::ThrottleCheckResult)>
 void SendCheckResultToIOThread(UIChecksPerformedCallback callback,
                                NavigationThrottle::ThrottleCheckResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_NE(result, NavigationThrottle::DEFER);
+  DCHECK_NE(result.action(), NavigationThrottle::DEFER);
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::BindOnce(callback, result));
 }
@@ -144,7 +144,8 @@ void WillProcessResponseOnUIThread(
     int render_frame_host_id,
     scoped_refptr<net::HttpResponseHeaders> headers,
     net::HttpResponseInfo::ConnectionInfo connection_info,
-    const SSLStatus& ssl_status,
+    const net::HostPortPair& socket_address,
+    const net::SSLInfo& ssl_info,
     const GlobalRequestID& request_id,
     bool should_replace_current_entry,
     bool is_download,
@@ -169,9 +170,9 @@ void WillProcessResponseOnUIThread(
       RenderFrameHostImpl::FromID(render_process_id, render_frame_host_id);
   DCHECK(render_frame_host);
   navigation_handle->WillProcessResponse(
-      render_frame_host, headers, connection_info, ssl_status, request_id,
-      should_replace_current_entry, is_download, is_stream, transfer_callback,
-      base::Bind(&SendCheckResultToIOThread, callback));
+      render_frame_host, headers, connection_info, socket_address, ssl_info,
+      request_id, should_replace_current_entry, is_download, is_stream,
+      transfer_callback, base::Bind(&SendCheckResultToIOThread, callback));
 }
 
 }  // namespace
@@ -309,18 +310,13 @@ void NavigationResourceThrottle::WillProcessResponse(bool* defer) {
       base::Bind(&NavigationResourceThrottle::InitiateTransfer,
                  weak_ptr_factory_.GetWeakPtr());
 
-  SSLStatus ssl_status;
-  if (request_->ssl_info().cert.get()) {
-    NavigationResourceHandler::GetSSLStatusForRequest(request_->ssl_info(),
-                                                      &ssl_status);
-  }
-
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&WillProcessResponseOnUIThread, callback,
                      render_process_id, render_frame_id, response_headers,
-                     request_->response_info().connection_info, ssl_status,
-                     info->GetGlobalRequestID(),
+                     request_->response_info().connection_info,
+                     request_->response_info().socket_address,
+                     request_->ssl_info(), info->GetGlobalRequestID(),
                      info->should_replace_current_entry(), info->IsDownload(),
                      info->is_stream(), transfer_callback,
                      base::Passed(&cloned_data)));
@@ -344,19 +340,20 @@ void NavigationResourceThrottle::set_force_transfer_for_testing(
 void NavigationResourceThrottle::OnUIChecksPerformed(
     NavigationThrottle::ThrottleCheckResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK_NE(NavigationThrottle::DEFER, result);
+  DCHECK_NE(NavigationThrottle::DEFER, result.action());
   if (in_cross_site_transition_) {
     on_transfer_done_result_ = result;
     return;
   }
 
-  if (result == NavigationThrottle::CANCEL_AND_IGNORE ||
-      result == NavigationThrottle::CANCEL) {
+  if (result.action() == NavigationThrottle::CANCEL_AND_IGNORE ||
+      result.action() == NavigationThrottle::CANCEL) {
     Cancel();
-  } else if (result == NavigationThrottle::BLOCK_REQUEST ||
-             result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
+  } else if (result.action() == NavigationThrottle::BLOCK_REQUEST ||
+             result.action() ==
+                 NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
     CancelWithError(net::ERR_BLOCKED_BY_CLIENT);
-  } else if (result == NavigationThrottle::BLOCK_RESPONSE) {
+  } else if (result.action() == NavigationThrottle::BLOCK_RESPONSE) {
     // TODO(mkwst): If we cancel the main frame request with anything other than
     // 'net::ERR_ABORTED', we'll trigger some special behavior that might not be
     // desirable here (non-POSTs will reload the page, while POST has some logic
@@ -389,7 +386,7 @@ void NavigationResourceThrottle::OnTransferComplete() {
 
   // If the results of the checks on the UI thread are known, unblock the
   // navigation. Otherwise, wait until the callback has executed.
-  if (on_transfer_done_result_ != NavigationThrottle::DEFER) {
+  if (on_transfer_done_result_.action() != NavigationThrottle::DEFER) {
     OnUIChecksPerformed(on_transfer_done_result_);
     on_transfer_done_result_ = NavigationThrottle::DEFER;
   }

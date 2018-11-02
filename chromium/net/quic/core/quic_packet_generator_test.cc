@@ -19,6 +19,7 @@
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/mock_random.h"
+#include "net/quic/test_tools/quic_framer_peer.h"
 #include "net/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/quic/test_tools/quic_packet_generator_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -107,51 +108,39 @@ class TestPacketGenerator : public QuicPacketGenerator {
   TestPacketGenerator(QuicConnectionId connection_id,
                       QuicFramer* framer,
                       QuicRandom* random_generator,
-                      QuicBufferAllocator* buffer_allocator,
                       DelegateInterface* delegate,
                       SimpleDataProducer* producer)
       : QuicPacketGenerator(connection_id,
                             framer,
                             random_generator,
-                            buffer_allocator,
                             delegate),
         producer_(producer) {}
 
-  QuicConsumedData ConsumeDataFastPath(
-      QuicStreamId id,
-      const QuicIOVector& iov,
-      QuicStreamOffset offset,
-      bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-    if (QuicPacketCreatorPeer::framer(
-            QuicPacketGeneratorPeer::GetPacketCreator(this))
-            ->HasDataProducer()) {
-      // Save data before data is consumed.
-      if (iov.total_length > 0) {
-        producer_->SaveStreamData(id, iov, 0, offset, iov.total_length);
-      }
+  QuicConsumedData ConsumeDataFastPath(QuicStreamId id,
+                                       const struct iovec* iov,
+                                       int iov_count,
+                                       size_t total_length,
+                                       QuicStreamOffset offset,
+                                       bool fin) {
+    // Save data before data is consumed.
+    if (total_length > 0) {
+      producer_->SaveStreamData(id, iov, iov_count, 0, offset, total_length);
     }
-    return QuicPacketGenerator::ConsumeDataFastPath(id, iov, offset, fin, 0,
-                                                    std::move(ack_listener));
+    return QuicPacketGenerator::ConsumeDataFastPath(id, total_length, offset,
+                                                    fin, 0);
   }
 
-  QuicConsumedData ConsumeData(
-      QuicStreamId id,
-      QuicIOVector iov,
-      QuicStreamOffset offset,
-      StreamSendingState state,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-    if (QuicPacketCreatorPeer::framer(
-            QuicPacketGeneratorPeer::GetPacketCreator(this))
-            ->HasDataProducer()) {
-      // Save data before data is consumed.
-      if (iov.total_length > 0) {
-        producer_->SaveStreamData(id, iov, 0, offset, iov.total_length);
-      }
+  QuicConsumedData ConsumeData(QuicStreamId id,
+                               const struct iovec* iov,
+                               int iov_count,
+                               size_t total_length,
+                               QuicStreamOffset offset,
+                               StreamSendingState state) {
+    // Save data before data is consumed.
+    if (total_length > 0) {
+      producer_->SaveStreamData(id, iov, iov_count, 0, offset, total_length);
     }
-    return QuicPacketGenerator::ConsumeData(
-        id, iov, offset, state, std::move(ack_listener),
-        FLAGS_quic_reloadable_flag_quic_consuming_data_faster);
+    return QuicPacketGenerator::ConsumeData(id, total_length, offset, state);
   }
 
   SimpleDataProducer* producer_;
@@ -160,22 +149,20 @@ class TestPacketGenerator : public QuicPacketGenerator {
 class QuicPacketGeneratorTest : public QuicTest {
  public:
   QuicPacketGeneratorTest()
-      : framer_(AllSupportedVersions(),
+      : framer_(AllSupportedTransportVersions(),
                 QuicTime::Zero(),
                 Perspective::IS_CLIENT),
         generator_(42,
                    &framer_,
                    &random_generator_,
-                   &buffer_allocator_,
                    &delegate_,
                    &producer_),
         creator_(QuicPacketGeneratorPeer::GetPacketCreator(&generator_)) {
     creator_->SetEncrypter(ENCRYPTION_FORWARD_SECURE,
                            new NullEncrypter(Perspective::IS_CLIENT));
     creator_->set_encryption_level(ENCRYPTION_FORWARD_SECURE);
-    if (FLAGS_quic_reloadable_flag_quic_save_data_before_consumption2) {
-      framer_.set_data_producer(&producer_);
-    }
+    framer_.set_data_producer(&producer_);
+    generator_.AttachPacketFlusher();
   }
 
   ~QuicPacketGeneratorTest() override {
@@ -194,11 +181,11 @@ class QuicPacketGeneratorTest : public QuicTest {
 
  protected:
   QuicRstStreamFrame* CreateRstStreamFrame() {
-    return new QuicRstStreamFrame(1, QUIC_STREAM_NO_ERROR, 0);
+    return new QuicRstStreamFrame(1, 1, QUIC_STREAM_NO_ERROR, 0);
   }
 
   QuicGoAwayFrame* CreateGoAwayFrame() {
-    return new QuicGoAwayFrame(QUIC_NO_ERROR, 1, string());
+    return new QuicGoAwayFrame(2, QUIC_NO_ERROR, 1, string());
   }
 
   void CheckPacketContains(const PacketContents& contents,
@@ -263,31 +250,25 @@ class QuicPacketGeneratorTest : public QuicTest {
     }
   }
 
-  QuicIOVector CreateData(size_t len) {
+  void CreateData(size_t len) {
     data_array_.reset(new char[len]);
     memset(data_array_.get(), '?', len);
     iov_.iov_base = data_array_.get();
     iov_.iov_len = len;
-    return QuicIOVector(&iov_, 1, len);
-  }
-
-  QuicIOVector MakeIOVectorFromStringPiece(QuicStringPiece s) {
-    return MakeIOVector(s, &iov_);
   }
 
   QuicFramer framer_;
   MockRandom random_generator_;
-  SimpleBufferAllocator buffer_allocator_;
   StrictMock<MockDelegate> delegate_;
   TestPacketGenerator generator_;
   QuicPacketCreator* creator_;
   SimpleQuicFramer simple_framer_;
   std::vector<SerializedPacket> packets_;
   QuicAckFrame ack_frame_;
+  struct iovec iov_;
 
  private:
   std::unique_ptr<char[]> data_array_;
-  struct iovec iov_;
   SimpleDataProducer producer_;
 };
 
@@ -309,7 +290,6 @@ TEST_F(QuicPacketGeneratorTest, ShouldSendAck_WritableAndShouldNotFlush) {
 
   generator_.set_debug_delegate(&debug_delegate);
   delegate_.SetCanWriteOnlyNonRetransmittable();
-  generator_.StartBatchOperations();
 
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
       .WillOnce(Return(QuicFrame(&ack_frame_)));
@@ -329,6 +309,7 @@ TEST_F(QuicPacketGeneratorTest, ShouldSendAck_WritableAndShouldFlush) {
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
   generator_.SetShouldSendAck(false);
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
@@ -351,10 +332,9 @@ TEST_F(QuicPacketGeneratorTest, ShouldSendAck_MultipleCalls) {
       .Times(1)
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
-  generator_.StartBatchOperations();
   generator_.SetShouldSendAck(false);
   generator_.SetShouldSendAck(false);
-  generator_.FinishBatchOperations();
+  generator_.Flush();
 }
 
 TEST_F(QuicPacketGeneratorTest, AddControlFrame_NotWritable) {
@@ -375,7 +355,6 @@ TEST_F(QuicPacketGeneratorTest, AddControlFrame_OnlyAckWritable) {
 
 TEST_F(QuicPacketGeneratorTest, AddControlFrame_WritableAndShouldNotFlush) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
   generator_.AddControlFrame(QuicFrame(CreateRstStreamFrame()));
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -384,17 +363,17 @@ TEST_F(QuicPacketGeneratorTest, AddControlFrame_WritableAndShouldNotFlush) {
 
 TEST_F(QuicPacketGeneratorTest, AddControlFrame_NotWritableBatchThenFlush) {
   delegate_.SetCanNotWrite();
-  generator_.StartBatchOperations();
 
   generator_.AddControlFrame(QuicFrame(CreateRstStreamFrame()));
   EXPECT_TRUE(generator_.HasQueuedFrames());
   EXPECT_TRUE(generator_.HasRetransmittableFrames());
-  generator_.FinishBatchOperations();
+  generator_.Flush();
   EXPECT_TRUE(generator_.HasQueuedFrames());
   EXPECT_TRUE(generator_.HasRetransmittableFrames());
 
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
+  generator_.AttachPacketFlusher();
   generator_.FlushAllQueuedFrames();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
@@ -411,6 +390,7 @@ TEST_F(QuicPacketGeneratorTest, AddControlFrame_WritableAndShouldFlush) {
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
   generator_.AddControlFrame(QuicFrame(CreateRstStreamFrame()));
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
@@ -422,8 +402,9 @@ TEST_F(QuicPacketGeneratorTest, AddControlFrame_WritableAndShouldFlush) {
 TEST_F(QuicPacketGeneratorTest, ConsumeData_NotWritable) {
   delegate_.SetCanNotWrite();
 
-  QuicConsumedData consumed = generator_.ConsumeData(
-      kHeadersStreamId, MakeIOVectorFromStringPiece("foo"), 0, FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  QuicConsumedData consumed =
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
   EXPECT_EQ(0u, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -432,10 +413,10 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_NotWritable) {
 
 TEST_F(QuicPacketGeneratorTest, ConsumeData_WritableAndShouldNotFlush) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
-  QuicConsumedData consumed = generator_.ConsumeData(
-      kHeadersStreamId, MakeIOVectorFromStringPiece("foo"), 0, FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  QuicConsumedData consumed =
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
   EXPECT_EQ(3u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -447,8 +428,10 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_WritableAndShouldFlush) {
 
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed = generator_.ConsumeData(
-      kHeadersStreamId, MakeIOVectorFromStringPiece("foo"), 0, FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  QuicConsumedData consumed =
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
+  generator_.Flush();
   EXPECT_EQ(3u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -464,12 +447,12 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_WritableAndShouldFlush) {
 // the generator operates in batch mode.
 TEST_F(QuicPacketGeneratorTest, ConsumeData_Handshake) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed = generator_.ConsumeData(
-      kCryptoStreamId, MakeIOVectorFromStringPiece("foo"), 0, NO_FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  QuicConsumedData consumed = generator_.ConsumeData(kCryptoStreamId, &iov_, 1u,
+                                                     iov_.iov_len, 0, NO_FIN);
   EXPECT_EQ(3u, consumed.bytes_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
@@ -486,20 +469,19 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_Handshake) {
 
 TEST_F(QuicPacketGeneratorTest, ConsumeData_EmptyData) {
   EXPECT_QUIC_BUG(
-      generator_.ConsumeData(kHeadersStreamId, MakeIOVectorFromStringPiece(""),
-                             0, NO_FIN, nullptr),
+      generator_.ConsumeData(kHeadersStreamId, nullptr, 0, 0, 0, NO_FIN),
       "Attempt to consume empty data without FIN.");
 }
 
 TEST_F(QuicPacketGeneratorTest,
        ConsumeDataMultipleTimes_WritableAndShouldNotFlush) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
-  generator_.ConsumeData(kHeadersStreamId, MakeIOVectorFromStringPiece("foo"),
-                         0, FIN, nullptr);
-  QuicConsumedData consumed = generator_.ConsumeData(
-      3, MakeIOVectorFromStringPiece("quux"), 3, NO_FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
+  MakeIOVector("quux", &iov_);
+  QuicConsumedData consumed =
+      generator_.ConsumeData(3, &iov_, 1u, iov_.iov_len, 3, NO_FIN);
   EXPECT_EQ(4u, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -508,12 +490,12 @@ TEST_F(QuicPacketGeneratorTest,
 
 TEST_F(QuicPacketGeneratorTest, ConsumeData_BatchOperations) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
-  generator_.ConsumeData(kHeadersStreamId, MakeIOVectorFromStringPiece("foo"),
-                         0, FIN, nullptr);
-  QuicConsumedData consumed = generator_.ConsumeData(
-      3, MakeIOVectorFromStringPiece("quux"), 3, NO_FIN, nullptr);
+  MakeIOVector("foo", &iov_);
+  generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
+  MakeIOVector("quux", &iov_);
+  QuicConsumedData consumed =
+      generator_.ConsumeData(3, &iov_, 1u, iov_.iov_len, 3, NO_FIN);
   EXPECT_EQ(4u, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -522,7 +504,7 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_BatchOperations) {
   // Now both frames will be flushed out.
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  generator_.FinishBatchOperations();
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
@@ -537,13 +519,17 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_FramesPreviouslyQueued) {
   size_t length =
       NullEncrypter(Perspective::IS_CLIENT).GetCiphertextSize(0) +
       GetPacketHeaderSize(
-          framer_.version(), creator_->connection_id_length(), kIncludeVersion,
-          !kIncludeDiversificationNonce,
+          framer_.transport_version(), creator_->connection_id_length(),
+          kIncludeVersion, !kIncludeDiversificationNonce,
           QuicPacketCreatorPeer::GetPacketNumberLength(creator_)) +
       // Add an extra 3 bytes for the payload and 1 byte so BytesFree is larger
       // than the GetMinStreamFrameSize.
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), 1, 0, false) + 3 +
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), 1, 0, true) + 1;
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(), 1, 0,
+                                        false) +
+      3 +
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(), 1, 0,
+                                        true) +
+      1;
   generator_.SetMaxPacketLength(length);
   delegate_.SetCanWriteAnything();
   {
@@ -553,11 +539,11 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_FramesPreviouslyQueued) {
     EXPECT_CALL(delegate_, OnSerializedPacket(_))
         .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
   }
-  generator_.StartBatchOperations();
   // Queue enough data to prevent a stream frame with a non-zero offset from
   // fitting.
+  MakeIOVector("foo", &iov_);
   QuicConsumedData consumed = generator_.ConsumeData(
-      kHeadersStreamId, MakeIOVectorFromStringPiece("foo"), 0, NO_FIN, nullptr);
+      kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, NO_FIN);
   EXPECT_EQ(3u, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -565,8 +551,9 @@ TEST_F(QuicPacketGeneratorTest, ConsumeData_FramesPreviouslyQueued) {
 
   // This frame will not fit with the existing frame, causing the queued frame
   // to be serialized, and it will be added to a new open packet.
-  consumed = generator_.ConsumeData(
-      kHeadersStreamId, MakeIOVectorFromStringPiece("bar"), 3, FIN, nullptr);
+  MakeIOVector("bar", &iov_);
+  consumed =
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 3, FIN);
   EXPECT_EQ(3u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -586,11 +573,11 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataFastPath) {
   delegate_.SetCanWriteAnything();
 
   // Create a 10000 byte IOVector.
-  QuicIOVector iov(CreateData(10000));
+  CreateData(10000);
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed =
-      generator_.ConsumeDataFastPath(kHeadersStreamId, iov, 0, true, nullptr);
+  QuicConsumedData consumed = generator_.ConsumeDataFastPath(
+      kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, true);
   EXPECT_EQ(10000u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -612,11 +599,11 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLarge) {
   delegate_.SetCanWriteAnything();
 
   // Create a 10000 byte IOVector.
-  QuicIOVector iov(CreateData(10000));
+  CreateData(10000);
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, iov, 0, FIN, nullptr);
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
   EXPECT_EQ(10000u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -644,18 +631,16 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckFalse) {
 
   delegate_.SetCanWriteAnything();
 
-  generator_.StartBatchOperations();
-
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
       .WillOnce(Return(QuicFrame(&ack_frame_)));
 
   // Create a 10000 byte IOVector.
-  QuicIOVector iov(CreateData(10000));
+  CreateData(10000);
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, iov, 0, FIN, nullptr);
-  generator_.FinishBatchOperations();
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
+  generator_.Flush();
 
   EXPECT_EQ(10000u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
@@ -675,7 +660,6 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckTrue) {
   delegate_.SetCanNotWrite();
   generator_.SetShouldSendAck(true);
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
   // Set up frames to write into the creator when control frames are written.
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
@@ -687,12 +671,12 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckTrue) {
   EXPECT_FALSE(creator_->HasPendingFrames());
 
   // Create a 10000 byte IOVector.
-  QuicIOVector iov(CreateData(10000));
+  CreateData(10000);
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, iov, 0, FIN, nullptr);
-  generator_.FinishBatchOperations();
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len, 0, FIN);
+  generator_.Flush();
 
   EXPECT_EQ(10000u, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
@@ -715,26 +699,27 @@ TEST_F(QuicPacketGeneratorTest, NotWritableThenBatchOperations) {
   generator_.AddControlFrame(QuicFrame(CreateRstStreamFrame()));
   EXPECT_TRUE(generator_.HasQueuedFrames());
   EXPECT_TRUE(generator_.HasRetransmittableFrames());
+  EXPECT_FALSE(generator_.HasPendingStreamFramesOfStream(3));
 
   delegate_.SetCanWriteAnything();
-
-  generator_.StartBatchOperations();
 
   // When the first write operation is invoked, the ack frame will be returned.
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
       .WillOnce(Return(QuicFrame(&ack_frame_)));
 
   // Send some data and a control frame
-  generator_.ConsumeData(3, MakeIOVectorFromStringPiece("quux"), 0, NO_FIN,
-                         nullptr);
+  MakeIOVector("quux", &iov_);
+  generator_.ConsumeData(3, &iov_, 1u, iov_.iov_len, 0, NO_FIN);
   generator_.AddControlFrame(QuicFrame(CreateGoAwayFrame()));
+  EXPECT_TRUE(generator_.HasPendingStreamFramesOfStream(3));
 
   // All five frames will be flushed out in a single packet.
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  generator_.FinishBatchOperations();
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
+  EXPECT_FALSE(generator_.HasPendingStreamFramesOfStream(3));
 
   PacketContents contents;
   contents.num_ack_frames = 1;
@@ -754,8 +739,6 @@ TEST_F(QuicPacketGeneratorTest, NotWritableThenBatchOperations2) {
 
   delegate_.SetCanWriteAnything();
 
-  generator_.StartBatchOperations();
-
   // When the first write operation is invoked, the ack frame will be returned.
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
       .WillOnce(Return(QuicFrame(&ack_frame_)));
@@ -771,13 +754,14 @@ TEST_F(QuicPacketGeneratorTest, NotWritableThenBatchOperations2) {
 
   // Send enough data to exceed one packet
   size_t data_len = kDefaultMaxPacketSize + 100;
+  CreateData(data_len);
   QuicConsumedData consumed =
-      generator_.ConsumeData(3, CreateData(data_len), 0, FIN, nullptr);
+      generator_.ConsumeData(3, &iov_, 1u, iov_.iov_len, 0, FIN);
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   generator_.AddControlFrame(QuicFrame(CreateGoAwayFrame()));
 
-  generator_.FinishBatchOperations();
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
@@ -796,6 +780,7 @@ TEST_F(QuicPacketGeneratorTest, NotWritableThenBatchOperations2) {
 }
 
 TEST_F(QuicPacketGeneratorTest, TestConnectionIdLength) {
+  QuicFramerPeer::SetPerspective(&framer_, Perspective::IS_SERVER);
   generator_.SetConnectionIdLength(0);
   EXPECT_EQ(PACKET_0BYTE_CONNECTION_ID, creator_->connection_id_length());
 
@@ -820,9 +805,10 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_Initial) {
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .Times(3)
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
+  CreateData(data_len);
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, CreateData(data_len),
-                             /*offset=*/0, FIN, nullptr);
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                             /*offset=*/0, FIN);
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -855,9 +841,11 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_Middle) {
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
   // Send two packets before packet size change.
+  CreateData(data_len);
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, CreateData(data_len),
-                             /*offset=*/0, NO_FIN, nullptr);
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                             /*offset=*/0, NO_FIN);
+  generator_.Flush();
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -871,8 +859,11 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_Middle) {
   EXPECT_EQ(packet_len, generator_.GetCurrentMaxPacketLength());
 
   // Send a packet after packet size change.
-  consumed = generator_.ConsumeData(kHeadersStreamId, CreateData(data_len),
-                                    data_len, FIN, nullptr);
+  CreateData(data_len);
+  generator_.AttachPacketFlusher();
+  consumed = generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                                    data_len, FIN);
+  generator_.Flush();
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -890,7 +881,6 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_Middle) {
 // the packet size in the middle of the batched packet.
 TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_MidpacketFlush) {
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
   size_t first_write_len = kDefaultMaxPacketSize / 2;
   size_t packet_len = kDefaultMaxPacketSize + 100;
@@ -899,9 +889,10 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_MidpacketFlush) {
 
   // First send half of the packet worth of data.  We are in the batch mode, so
   // should not cause packet serialization.
+  CreateData(first_write_len);
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, CreateData(first_write_len),
-                             /*offset=*/0, NO_FIN, nullptr);
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                             /*offset=*/0, NO_FIN);
   EXPECT_EQ(first_write_len, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -930,9 +921,9 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_MidpacketFlush) {
 
   // Send a more than a packet worth of data to the same stream.  This should
   // trigger serialization of one packet, and queue another one.
-  consumed =
-      generator_.ConsumeData(kHeadersStreamId, CreateData(second_write_len),
-                             /*offset=*/first_write_len, FIN, nullptr);
+  CreateData(second_write_len);
+  consumed = generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                                    /*offset=*/first_write_len, FIN);
   EXPECT_EQ(second_write_len, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_TRUE(generator_.HasQueuedFrames());
@@ -947,6 +938,20 @@ TEST_F(QuicPacketGeneratorTest, SetMaxPacketLength_MidpacketFlush) {
   CheckAllPacketsHaveSingleStreamFrame();
 }
 
+// Test sending a connectivity probing packet.
+TEST_F(QuicPacketGeneratorTest, GenerateConnectivityProbingPacket) {
+  delegate_.SetCanWriteAnything();
+
+  std::unique_ptr<QuicEncryptedPacket> probing_packet(
+      generator_.SerializeConnectivityProbingPacket());
+
+  ASSERT_TRUE(simple_framer_.ProcessPacket(*probing_packet));
+
+  EXPECT_EQ(2u, simple_framer_.num_frames());
+  EXPECT_EQ(1u, simple_framer_.ping_frames().size());
+  EXPECT_EQ(1u, simple_framer_.padding_frames().size());
+}
+
 // Test sending an MTU probe, without any surrounding data.
 TEST_F(QuicPacketGeneratorTest, GenerateMtuDiscoveryPacket_Simple) {
   delegate_.SetCanWriteAnything();
@@ -958,7 +963,7 @@ TEST_F(QuicPacketGeneratorTest, GenerateMtuDiscoveryPacket_Simple) {
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
-  generator_.GenerateMtuDiscoveryPacket(target_mtu, nullptr);
+  generator_.GenerateMtuDiscoveryPacket(target_mtu);
 
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
@@ -990,22 +995,27 @@ TEST_F(QuicPacketGeneratorTest, GenerateMtuDiscoveryPacket_SurroundedByData) {
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
 
   // Send data before the MTU probe.
+  CreateData(data_len);
   QuicConsumedData consumed =
-      generator_.ConsumeData(kHeadersStreamId, CreateData(data_len),
-                             /*offset=*/0, NO_FIN, nullptr);
+      generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                             /*offset=*/0, NO_FIN);
+  generator_.Flush();
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
   // Send the MTU probe.
-  generator_.GenerateMtuDiscoveryPacket(target_mtu, nullptr);
+  generator_.GenerateMtuDiscoveryPacket(target_mtu);
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 
   // Send data after the MTU probe.
-  consumed = generator_.ConsumeData(kHeadersStreamId, CreateData(data_len),
-                                    /*offset=*/data_len, FIN, nullptr);
+  CreateData(data_len);
+  generator_.AttachPacketFlusher();
+  consumed = generator_.ConsumeData(kHeadersStreamId, &iov_, 1u, iov_.iov_len,
+                                    /*offset=*/data_len, FIN);
+  generator_.Flush();
   EXPECT_EQ(data_len, consumed.bytes_consumed);
   EXPECT_TRUE(consumed.fin_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
@@ -1037,7 +1047,6 @@ TEST_F(QuicPacketGeneratorTest, DontCrashOnInvalidStopWaiting) {
   delegate_.SetCanNotWrite();
   generator_.SetShouldSendAck(true);
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
 
   // Set up frames to write into the creator when control frames are written.
   EXPECT_CALL(delegate_, GetUpdatedAckFrame())
@@ -1052,7 +1061,7 @@ TEST_F(QuicPacketGeneratorTest, DontCrashOnInvalidStopWaiting) {
   EXPECT_CALL(delegate_,
               OnUnrecoverableError(QUIC_FAILED_TO_SERIALIZE_PACKET, _,
                                    ConnectionCloseSource::FROM_SELF));
-  EXPECT_QUIC_BUG(generator_.FinishBatchOperations(),
+  EXPECT_QUIC_BUG(generator_.Flush(),
                   "packet_number_length 1 is too small "
                   "for least_unacked_delta: 1001");
 }
@@ -1065,10 +1074,14 @@ TEST_F(QuicPacketGeneratorTest, ConnectionCloseFrameLargerThanPacketSize) {
   char buf[2000] = {};
   QuicStringPiece error_details(buf, 2000);
   frame->error_details = error_details.as_string();
-  EXPECT_CALL(delegate_,
-              OnUnrecoverableError(QUIC_FAILED_TO_SERIALIZE_PACKET,
-                                   "Single frame cannot fit into a packet", _));
-  EXPECT_QUIC_BUG(generator_.AddControlFrame(QuicFrame(frame)), "");
+  if (FLAGS_quic_reloadable_flag_quic_truncate_long_details) {
+    generator_.AddControlFrame(QuicFrame(frame));
+  } else {
+    EXPECT_CALL(delegate_, OnUnrecoverableError(
+                               QUIC_FAILED_TO_SERIALIZE_PACKET,
+                               "Single frame cannot fit into a packet", _));
+    EXPECT_QUIC_BUG(generator_.AddControlFrame(QuicFrame(frame)), "");
+  }
   EXPECT_TRUE(generator_.HasQueuedFrames());
   EXPECT_TRUE(generator_.HasRetransmittableFrames());
 }
@@ -1082,23 +1095,21 @@ TEST_F(QuicPacketGeneratorTest, RandomPaddingAfterFinSingleStreamSinglePacket) {
   size_t length =
       NullEncrypter(Perspective::IS_CLIENT).GetCiphertextSize(0) +
       GetPacketHeaderSize(
-          framer_.version(), creator_->connection_id_length(), kIncludeVersion,
-          !kIncludeDiversificationNonce,
+          framer_.transport_version(), creator_->connection_id_length(),
+          kIncludeVersion, !kIncludeDiversificationNonce,
           QuicPacketCreatorPeer::GetPacketNumberLength(creator_)) +
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), kDataStreamId, 0,
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(),
+                                        kDataStreamId, 0,
                                         /*last_frame_in_packet=*/false) +
       kStreamFramePayloadSize + kMaxNumRandomPaddingBytes;
   generator_.SetMaxPacketLength(length);
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed =
-      generator_.ConsumeData(kDataStreamId,
-                             MakeIOVectorFromStringPiece(
-                                 QuicStringPiece(buf, kStreamFramePayloadSize)),
-                             0, FIN_AND_PADDING, nullptr);
-  generator_.FinishBatchOperations();
+  MakeIOVector(QuicStringPiece(buf, kStreamFramePayloadSize), &iov_);
+  QuicConsumedData consumed = generator_.ConsumeData(
+      kDataStreamId, &iov_, 1u, iov_.iov_len, 0, FIN_AND_PADDING);
+  generator_.Flush();
   EXPECT_EQ(kStreamFramePayloadSize, consumed.bytes_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
@@ -1121,23 +1132,21 @@ TEST_F(QuicPacketGeneratorTest,
   size_t length =
       NullEncrypter(Perspective::IS_CLIENT).GetCiphertextSize(0) +
       GetPacketHeaderSize(
-          framer_.version(), creator_->connection_id_length(), kIncludeVersion,
-          !kIncludeDiversificationNonce,
+          framer_.transport_version(), creator_->connection_id_length(),
+          kIncludeVersion, !kIncludeDiversificationNonce,
           QuicPacketCreatorPeer::GetPacketNumberLength(creator_)) +
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), kDataStreamId, 0,
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(),
+                                        kDataStreamId, 0,
                                         /*last_frame_in_packet=*/false) +
       kStreamFramePayloadSize + 1;
   generator_.SetMaxPacketLength(length);
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed =
-      generator_.ConsumeData(kDataStreamId,
-                             MakeIOVectorFromStringPiece(
-                                 QuicStringPiece(buf, kStreamFramePayloadSize)),
-                             0, FIN_AND_PADDING, nullptr);
-  generator_.FinishBatchOperations();
+  MakeIOVector(QuicStringPiece(buf, kStreamFramePayloadSize), &iov_);
+  QuicConsumedData consumed = generator_.ConsumeData(
+      kDataStreamId, &iov_, 1u, iov_.iov_len, 0, FIN_AND_PADDING);
+  generator_.Flush();
   EXPECT_EQ(kStreamFramePayloadSize, consumed.bytes_consumed);
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
@@ -1168,32 +1177,30 @@ TEST_F(QuicPacketGeneratorTest,
   size_t length =
       NullEncrypter(Perspective::IS_CLIENT).GetCiphertextSize(0) +
       GetPacketHeaderSize(
-          framer_.version(), creator_->connection_id_length(), kIncludeVersion,
-          !kIncludeDiversificationNonce,
+          framer_.transport_version(), creator_->connection_id_length(),
+          kIncludeVersion, !kIncludeDiversificationNonce,
           QuicPacketCreatorPeer::GetPacketNumberLength(creator_)) +
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), kDataStreamId1, 0,
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(),
+                                        kDataStreamId1, 0,
                                         /*last_frame_in_packet=*/false) +
       kStreamFramePayloadSize +
-      QuicFramer::GetMinStreamFrameSize(framer_.version(), kDataStreamId1, 0,
+      QuicFramer::GetMinStreamFrameSize(framer_.transport_version(),
+                                        kDataStreamId1, 0,
                                         /*last_frame_in_packet=*/false) +
       1;
   generator_.SetMaxPacketLength(length);
   delegate_.SetCanWriteAnything();
-  generator_.StartBatchOperations();
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
       .WillRepeatedly(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-  QuicConsumedData consumed =
-      generator_.ConsumeData(kDataStreamId1,
-                             MakeIOVectorFromStringPiece(
-                                 QuicStringPiece(buf, kStreamFramePayloadSize)),
-                             0, FIN_AND_PADDING, nullptr);
+  MakeIOVector(QuicStringPiece(buf, kStreamFramePayloadSize), &iov_);
+  QuicConsumedData consumed = generator_.ConsumeData(
+      kDataStreamId1, &iov_, 1u, iov_.iov_len, 0, FIN_AND_PADDING);
   EXPECT_EQ(kStreamFramePayloadSize, consumed.bytes_consumed);
-  consumed = generator_.ConsumeData(kDataStreamId2,
-                                    MakeIOVectorFromStringPiece(QuicStringPiece(
-                                        buf, kStreamFramePayloadSize)),
-                                    0, FIN_AND_PADDING, nullptr);
+  MakeIOVector(QuicStringPiece(buf, kStreamFramePayloadSize), &iov_);
+  consumed = generator_.ConsumeData(kDataStreamId2, &iov_, 1u, iov_.iov_len, 0,
+                                    FIN_AND_PADDING);
   EXPECT_EQ(kStreamFramePayloadSize, consumed.bytes_consumed);
-  generator_.FinishBatchOperations();
+  generator_.Flush();
   EXPECT_FALSE(generator_.HasQueuedFrames());
   EXPECT_FALSE(generator_.HasRetransmittableFrames());
 

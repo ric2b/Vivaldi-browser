@@ -82,6 +82,11 @@ NetworkTypePattern NetworkTypePattern::Ethernet() {
 }
 
 // static
+NetworkTypePattern NetworkTypePattern::EthernetOrEthernetEAP() {
+  return NetworkTypePattern(kNetworkTypeEthernet | kNetworkTypeEthernetEap);
+}
+
+// static
 NetworkTypePattern NetworkTypePattern::WiFi() {
   return NetworkTypePattern(kNetworkTypeWifi);
 }
@@ -118,6 +123,11 @@ bool NetworkTypePattern::Equals(const NetworkTypePattern& other) const {
 
 bool NetworkTypePattern::MatchesType(
     const std::string& shill_network_type) const {
+  if (shill_network_type.empty()) {
+    LOG(ERROR) << "NetworkTypePattern: " << ToDebugString()
+               << ": Can not match empty type.";
+    return false;
+  }
   return MatchesPattern(Primitive(shill_network_type));
 }
 

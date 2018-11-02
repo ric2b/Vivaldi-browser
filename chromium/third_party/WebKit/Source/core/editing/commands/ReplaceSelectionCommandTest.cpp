@@ -5,16 +5,19 @@
 #include "core/editing/commands/ReplaceSelectionCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ParserContentPolicy.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/Position.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisibleSelection.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/frame/Settings.h"
+#include "core/html_names.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,7 +52,8 @@ TEST_F(ReplaceSelectionCommandTest, pastingEmptySpan) {
       ReplaceSelectionCommand::Create(GetDocument(), fragment, options);
 
   EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
-  EXPECT_EQ("foo", GetDocument().body()->innerHTML()) << "no DOM tree mutation";
+  EXPECT_EQ("foo", GetDocument().body()->InnerHTMLAsString())
+      << "no DOM tree mutation";
 }
 
 // This is a regression test for https://crbug.com/668808
@@ -72,7 +76,7 @@ TEST_F(ReplaceSelectionCommandTest, pasteSpanInText) {
       ReplaceSelectionCommand::Create(GetDocument(), fragment, options);
 
   EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
-  EXPECT_EQ("<b>t</b>bar<b>ext</b>", GetDocument().body()->innerHTML())
+  EXPECT_EQ("<b>t</b>bar<b>ext</b>", GetDocument().body()->InnerHTMLAsString())
       << "'bar' should have been inserted";
 }
 
@@ -99,9 +103,72 @@ TEST_F(ReplaceSelectionCommandTest, styleTagsInPastedHeadIncludedInContent) {
   EXPECT_EQ(
       "<head><style>foo { bar: baz; }</style></head>"
       "<body><p>Text</p></body>",
-      GetDocument().body()->innerHTML())
+      GetDocument().body()->InnerHTMLAsString())
       << "the STYLE and P elements should have been pasted into the body "
       << "of the document";
+}
+
+// Helper function to set autosizing multipliers on a document.
+bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
+  bool multiplier_set = false;
+  for (LayoutItem layout_item = document->GetLayoutViewItem();
+       !layout_item.IsNull(); layout_item = layout_item.NextInPreOrder()) {
+    if (layout_item.Style()) {
+      layout_item.MutableStyleRef().SetTextAutosizingMultiplier(multiplier);
+
+      EXPECT_EQ(multiplier, layout_item.Style()->TextAutosizingMultiplier());
+      multiplier_set = true;
+    }
+  }
+  return multiplier_set;
+}
+
+// This is a regression test for https://crbug.com/768261
+TEST_F(ReplaceSelectionCommandTest, TextAutosizingDoesntInflateText) {
+  GetDocument().GetSettings()->SetTextAutosizingEnabled(true);
+  GetDocument().setDesignMode("on");
+  SetBodyContent("<div><span style='font-size: 12px;'>foo bar</span></div>");
+  SetTextAutosizingMultiplier(&GetDocument(), 2.0);
+
+  Element* div = GetDocument().QuerySelector("div");
+  Element* span = GetDocument().QuerySelector("span");
+
+  // Select "bar".
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(span->firstChild(), 4))
+          .Extend(Position(span->firstChild(), 7))
+          .Build());
+
+  DocumentFragment* fragment = GetDocument().createDocumentFragment();
+  fragment->ParseHTML("baz", span);
+
+  ReplaceSelectionCommand::CommandOptions options =
+      ReplaceSelectionCommand::kMatchStyle;
+
+  ReplaceSelectionCommand* command =
+      ReplaceSelectionCommand::Create(GetDocument(), fragment, options);
+
+  EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
+  // The span element should not have been split to increase the font size.
+  EXPECT_EQ(1u, div->CountChildren());
+}
+
+// This is a regression test for https://crbug.com/781282
+TEST_F(ReplaceSelectionCommandTest, TrailingNonVisibleTextCrash) {
+  GetDocument().setDesignMode("on");
+  Selection().SetSelection(SetSelectionTextToBody("<div>^foo|</div>"));
+
+  DocumentFragment* fragment = GetDocument().createDocumentFragment();
+  fragment->ParseHTML("<div>bar</div> ", GetDocument().QuerySelector("div"));
+  ReplaceSelectionCommand::CommandOptions options = 0;
+  ReplaceSelectionCommand* command =
+      ReplaceSelectionCommand::Create(GetDocument(), fragment, options);
+
+  // Crash should not occur on applying ReplaceSelectionCommand
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ("<div>bar</div>|<br>",
+            GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
 }
 
 }  // namespace blink

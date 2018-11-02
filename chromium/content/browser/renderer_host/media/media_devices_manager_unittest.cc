@@ -38,12 +38,13 @@ namespace {
 // is performed when cache is enabled, regardless of the number of client calls.
 const int kNumCalls = 3;
 
+const auto kIgnoreLogMessageCB = base::BindRepeating([](const std::string&) {});
 // This class mocks the audio manager and overrides some methods to ensure that
 // we can run simulate device changes.
 class MockAudioManager : public media::FakeAudioManager {
  public:
   MockAudioManager()
-      : FakeAudioManager(base::MakeUnique<media::TestAudioThread>(),
+      : FakeAudioManager(std::make_unique<media::TestAudioThread>(),
                          &fake_audio_log_factory_),
         num_output_devices_(2),
         num_input_devices_(2) {}
@@ -57,8 +58,8 @@ class MockAudioManager : public media::FakeAudioManager {
     DCHECK(device_names->empty());
     for (size_t i = 0; i < num_input_devices_; i++) {
       device_names->push_back(media::AudioDeviceName(
-          std::string("fake_device_name_") + base::SizeTToString(i),
-          std::string("fake_device_id_") + base::SizeTToString(i)));
+          std::string("fake_device_name_") + base::NumberToString(i),
+          std::string("fake_device_id_") + base::NumberToString(i)));
     }
     MockGetAudioInputDeviceNames(device_names);
   }
@@ -68,8 +69,8 @@ class MockAudioManager : public media::FakeAudioManager {
     DCHECK(device_names->empty());
     for (size_t i = 0; i < num_output_devices_; i++) {
       device_names->push_back(media::AudioDeviceName(
-          std::string("fake_device_name_") + base::SizeTToString(i),
-          std::string("fake_device_id_") + base::SizeTToString(i)));
+          std::string("fake_device_name_") + base::NumberToString(i),
+          std::string("fake_device_id_") + base::NumberToString(i)));
     }
     MockGetAudioOutputDeviceNames(device_names);
   }
@@ -142,19 +143,20 @@ class MediaDevicesManagerTest : public ::testing::Test {
 
  protected:
   void SetUp() override {
-    audio_manager_.reset(new MockAudioManager());
-    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
+    audio_manager_ = std::make_unique<MockAudioManager>();
+    audio_system_ =
+        std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
     auto video_capture_device_factory =
-        base::MakeUnique<MockVideoCaptureDeviceFactory>();
+        std::make_unique<MockVideoCaptureDeviceFactory>();
     video_capture_device_factory_ = video_capture_device_factory.get();
-    auto video_capture_system = base::MakeUnique<media::VideoCaptureSystemImpl>(
+    auto video_capture_system = std::make_unique<media::VideoCaptureSystemImpl>(
         std::move(video_capture_device_factory));
     auto video_capture_provider =
-        base::MakeUnique<InProcessVideoCaptureProvider>(
+        std::make_unique<InProcessVideoCaptureProvider>(
             std::move(video_capture_system),
-            base::ThreadTaskRunnerHandle::Get());
-    video_capture_manager_ =
-        new VideoCaptureManager(std::move(video_capture_provider));
+            base::ThreadTaskRunnerHandle::Get(), kIgnoreLogMessageCB);
+    video_capture_manager_ = new VideoCaptureManager(
+        std::move(video_capture_provider), kIgnoreLogMessageCB);
     media_devices_manager_.reset(new MediaDevicesManager(
         audio_system_.get(), video_capture_manager_, nullptr));
   }

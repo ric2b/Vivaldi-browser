@@ -15,14 +15,14 @@ namespace base {
 
 namespace {
 
-class PostTaskAndReplyTaskRunner : public internal::PostTaskAndReplyImpl {
+class PostTaskAndReplyWithTraitsTaskRunner
+    : public internal::PostTaskAndReplyImpl {
  public:
-  explicit PostTaskAndReplyTaskRunner(const TaskTraits& traits)
+  explicit PostTaskAndReplyWithTraitsTaskRunner(const TaskTraits& traits)
       : traits_(traits) {}
 
  private:
-  bool PostTask(const tracked_objects::Location& from_here,
-                OnceClosure task) override {
+  bool PostTask(const Location& from_here, OnceClosure task) override {
     PostTaskWithTraits(from_here, traits_, std::move(task));
     return true;
   }
@@ -42,30 +42,30 @@ TaskTraits GetTaskTraitsWithExplicitPriority(const TaskTraits& traits) {
 
 }  // namespace
 
-void PostTask(const tracked_objects::Location& from_here, OnceClosure task) {
+void PostTask(const Location& from_here, OnceClosure task) {
   PostDelayedTask(from_here, std::move(task), TimeDelta());
 }
 
-void PostDelayedTask(const tracked_objects::Location& from_here,
+void PostDelayedTask(const Location& from_here,
                      OnceClosure task,
                      TimeDelta delay) {
   PostDelayedTaskWithTraits(from_here, TaskTraits(), std::move(task), delay);
 }
 
-void PostTaskAndReply(const tracked_objects::Location& from_here,
+void PostTaskAndReply(const Location& from_here,
                       OnceClosure task,
                       OnceClosure reply) {
   PostTaskWithTraitsAndReply(from_here, TaskTraits(), std::move(task),
                              std::move(reply));
 }
 
-void PostTaskWithTraits(const tracked_objects::Location& from_here,
+void PostTaskWithTraits(const Location& from_here,
                         const TaskTraits& traits,
                         OnceClosure task) {
   PostDelayedTaskWithTraits(from_here, traits, std::move(task), TimeDelta());
 }
 
-void PostDelayedTaskWithTraits(const tracked_objects::Location& from_here,
+void PostDelayedTaskWithTraits(const Location& from_here,
                                const TaskTraits& traits,
                                OnceClosure task,
                                TimeDelta delay) {
@@ -78,11 +78,11 @@ void PostDelayedTaskWithTraits(const tracked_objects::Location& from_here,
       std::move(delay));
 }
 
-void PostTaskWithTraitsAndReply(const tracked_objects::Location& from_here,
+void PostTaskWithTraitsAndReply(const Location& from_here,
                                 const TaskTraits& traits,
                                 OnceClosure task,
                                 OnceClosure reply) {
-  PostTaskAndReplyTaskRunner(traits).PostTaskAndReply(
+  PostTaskAndReplyWithTraitsTaskRunner(traits).PostTaskAndReply(
       from_here, std::move(task), std::move(reply));
 }
 

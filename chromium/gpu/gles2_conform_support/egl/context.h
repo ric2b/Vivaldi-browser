@@ -15,6 +15,7 @@
 #include "gpu/command_buffer/service/command_buffer_direct.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
@@ -39,7 +40,7 @@ class Surface;
 class Config;
 
 class Context : public base::RefCountedThreadSafe<Context>,
-                private gpu::GpuControl {
+                public gpu::GpuControl {
  public:
   Context(Display* display, const Config* config);
   bool is_current_in_some_thread() const { return is_current_in_some_thread_; }
@@ -58,7 +59,7 @@ class Context : public base::RefCountedThreadSafe<Context>,
 
   // GpuControl implementation.
   void SetGpuControlClient(gpu::GpuControlClient*) override;
-  gpu::Capabilities GetCapabilities() override;
+  const gpu::Capabilities& GetCapabilities() const override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
                       size_t height,
@@ -79,8 +80,7 @@ class Context : public base::RefCountedThreadSafe<Context>,
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  void AddLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) override;
+  void SetSnapshotRequested() override;
 
   // Called by ThreadState to set the needed global variables when this context
   // is current.
@@ -115,6 +115,7 @@ class Context : public base::RefCountedThreadSafe<Context>,
   std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_cmd_helper_;
 
   gpu::gles2::MailboxManagerImpl mailbox_manager_;
+  gpu::gles2::TraceOutputter outputter_;
   gpu::gles2::ImageManager image_manager_;
   gpu::ServiceDiscardableManager discardable_manager_;
   gpu::gles2::ShaderTranslatorCache translator_cache_;
@@ -125,6 +126,8 @@ class Context : public base::RefCountedThreadSafe<Context>,
   scoped_refptr<gl::GLContext> gl_context_;
 
   std::unique_ptr<gpu::gles2::GLES2Interface> client_gl_context_;
+
+  gpu::Capabilities capabilities_;
 
   DISALLOW_COPY_AND_ASSIGN(Context);
 };

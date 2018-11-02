@@ -27,12 +27,14 @@
 #define HTMLResourcePreloader_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/html/parser/CSSPreloadScanner.h"
 #include "core/html/parser/PreloadRequest.h"
 #include "core/html/parser/ResourcePreloader.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "platform/heap/Heap.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/TextPosition.h"
 
 namespace blink {
@@ -42,14 +44,13 @@ class Document;
 class CORE_EXPORT HTMLResourcePreloader
     : public GarbageCollected<HTMLResourcePreloader>,
       public ResourcePreloader {
-  WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader);
   friend class HTMLResourcePreloaderTest;
 
  public:
   static HTMLResourcePreloader* Create(Document&);
   int CountPreloads();
   Document* GetDocument() { return document_.Get(); }
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
   void Preload(std::unique_ptr<PreloadRequest>,
@@ -59,6 +60,8 @@ class CORE_EXPORT HTMLResourcePreloader
  private:
   Member<Document> document_;
   HeapHashSet<Member<CSSPreloaderResourceClient>> css_preloaders_;
+
+  DISALLOW_COPY_AND_ASSIGN(HTMLResourcePreloader);
 };
 
 }  // namespace blink

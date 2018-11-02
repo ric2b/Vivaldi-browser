@@ -4,10 +4,10 @@
 
 #include "cc/layers/layer_impl.h"
 
-#include "cc/base/filter_operation.h"
-#include "cc/base/filter_operations.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
+#include "cc/paint/filter_operation.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
@@ -15,7 +15,6 @@
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "cc/trees/mutable_properties.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/tree_synchronizer.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -191,9 +190,6 @@ TEST(LayerImplTest, VerifyPendingLayerChangesAreTrackedProperly) {
   // but does cause the layer to need to push properties.
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetElementId(ElementId(2)));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetMutableProperties(MutableProperty::kOpacity);
-      root->SetNeedsPushProperties());
 
   // After setting all these properties already, setting to the exact same
   // values again should not cause any change.
@@ -392,8 +388,6 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(ElementId(2)));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetMutableProperties(MutableProperty::kTransform));
 }
 
 TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
@@ -480,13 +474,24 @@ TEST(LayerImplTest, PerspectiveTransformHasReasonableScale) {
     ASSERT_TRUE(layer->ScreenSpaceTransform().HasPerspective());
     EXPECT_FLOAT_EQ(127.f, layer->GetIdealContentsScale());
   }
+  // Test case from crbug.com/766021.
+  {
+    gfx::Transform transform(-0.9397f, -0.7019f, 0.2796f, 2383.4521f,   // row 1
+                             -0.0038f, 0.0785f, 1.0613f, 1876.4553f,    // row 2
+                             -0.0835f, 0.9081f, -0.4105f, -2208.3035f,  // row 3
+                             0.0001f, -0.0008f, 0.0003f, 2.8435f);      // row 4
+    layer->draw_properties().screen_space_transform = transform;
+
+    ASSERT_TRUE(layer->ScreenSpaceTransform().HasPerspective());
+    EXPECT_FLOAT_EQ(1.f, layer->GetIdealContentsScale());
+  }
 }
 
 class LayerImplScrollTest : public testing::Test {
  public:
   LayerImplScrollTest() : LayerImplScrollTest(LayerTreeSettings()) {}
 
-  LayerImplScrollTest(const LayerTreeSettings& settings)
+  explicit LayerImplScrollTest(const LayerTreeSettings& settings)
       : host_impl_(settings, &task_runner_provider_, &task_graph_runner_),
         root_id_(7) {
     host_impl_.active_tree()->SetRootLayerForTesting(

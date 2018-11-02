@@ -78,7 +78,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, GetReceivers) {
   VerifyRtpReceivers(right_tab_, 6);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, AddAndRemoveTracksWithoutStream) {
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
+                       DISABLED_AddAndRemoveTracksWithoutStream) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -274,7 +275,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       AddAndRemoveTracksWithIndividualStreams) {
+                       DISABLED_AddAndRemoveTracksWithIndividualStreams) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -388,4 +389,14 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   EXPECT_EQ("ok", ExecuteJavascript(
                       "switchRemoteStreamWithoutWaitingForPromisesToResolve()",
                       left_tab_));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, TrackSwitchingStream) {
+  StartServerAndOpenTabs();
+  EXPECT_EQ("ok", ExecuteJavascript("trackSwitchingStream()", left_tab_));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, TrackAddedToSecondStream) {
+  StartServerAndOpenTabs();
+  EXPECT_EQ("ok", ExecuteJavascript("trackAddedToSecondStream()", left_tab_));
 }

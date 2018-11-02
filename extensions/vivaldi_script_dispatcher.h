@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "extensions/renderer/dispatcher.h"
+
 namespace extensions {
 class ModuleSystem;
 class ScriptContext;
@@ -15,7 +17,7 @@ class ScriptContext;
 
 namespace vivaldi {
 void VivaldiAddScriptResources(
-    std::vector<std::pair<const char*, int> >* resources);
+    std::vector<extensions::Dispatcher::JsResourceInfo>* resources);
 void VivaldiAddRequiredModules(extensions::ScriptContext* context,
                                extensions::ModuleSystem* module_system);
 }  // namespace vivaldi

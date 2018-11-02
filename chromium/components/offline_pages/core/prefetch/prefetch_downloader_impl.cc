@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "base/time/default_clock.h"
+#include "base/time/time.h"
 #include "components/download/public/download_params.h"
 #include "components/download/public/download_service.h"
 #include "components/offline_pages/core/offline_event_logger.h"
@@ -32,12 +34,11 @@ void NotifyDispatcher(PrefetchService* service, PrefetchDownloadResult result) {
 PrefetchDownloaderImpl::PrefetchDownloaderImpl(
     download::DownloadService* download_service,
     version_info::Channel channel)
-    : download_service_(download_service),
+    : clock_(new base::DefaultClock()),
+      download_service_(download_service),
       channel_(channel),
       weak_ptr_factory_(this) {
   DCHECK(download_service);
-  service_started_ = download_service->GetStatus() ==
-                     download::DownloadService::ServiceStatus::READY;
 }
 
 PrefetchDownloaderImpl::PrefetchDownloaderImpl(version_info::Channel channel)
@@ -49,15 +50,29 @@ void PrefetchDownloaderImpl::SetPrefetchService(PrefetchService* service) {
   prefetch_service_ = service;
 }
 
-void PrefetchDownloaderImpl::StartDownload(
-    const std::string& download_id,
-    const std::string& download_location) {
-  if (!service_started_) {
-    pending_downloads_.push_back(
-        std::make_pair(download_id, download_location));
+bool PrefetchDownloaderImpl::IsDownloadServiceUnavailable() const {
+  return download_service_status_ == DownloadServiceStatus::UNAVAILABLE;
+}
+
+void PrefetchDownloaderImpl::CleanupDownloadsWhenReady() {
+  // Do nothing if downloads were already cleaned up.
+  if (did_download_cleanup_)
+    return;
+
+  // Trigger the download cleanup if the download service has already started.
+  if (download_service_status_ == DownloadServiceStatus::STARTED) {
+    CleanupDownloads(outstanding_download_ids_, success_downloads_);
     return;
   }
 
+  // If the download service has not started, remember that we already were
+  // asked to cleanup downloads.
+  cleanup_downloads_when_service_starts_ = true;
+}
+
+void PrefetchDownloaderImpl::StartDownload(
+    const std::string& download_id,
+    const std::string& download_location) {
   prefetch_service_->GetLogger()->RecordActivity(
       "Downloader: Start download of '" + download_location +
       "', download_id=" + download_id);
@@ -100,57 +115,51 @@ void PrefetchDownloaderImpl::StartDownload(
       download::SchedulingParams::NetworkRequirements::UNMETERED;
   params.scheduling_params.battery_requirements =
       download::SchedulingParams::BatteryRequirements::BATTERY_SENSITIVE;
+  params.scheduling_params.cancel_time =
+      clock_->Now() + kPrefetchDownloadLifetime;
   params.request_params.url = PrefetchDownloadURL(download_location, channel_);
-  download_service_->StartDownload(params);
-}
 
-void PrefetchDownloaderImpl::CancelDownload(const std::string& download_id) {
-  if (service_started_) {
-    download_service_->CancelDownload(download_id);
-    return;
+  std::string experiment_header = PrefetchExperimentHeader();
+  if (!experiment_header.empty()) {
+    params.request_params.request_headers.AddHeaderFromString(
+        experiment_header);
   }
-  for (auto iter = pending_downloads_.begin(); iter != pending_downloads_.end();
-       ++iter) {
-    if (iter->first == download_id) {
-      pending_downloads_.erase(iter);
-      return;
-    }
-  }
-  pending_cancellations_.push_back(download_id);
+
+  // The download service can queue the download even if it is not fully up yet.
+  download_service_->StartDownload(params);
 }
 
 void PrefetchDownloaderImpl::OnDownloadServiceReady(
     const std::set<std::string>& outstanding_download_ids,
     const std::map<std::string, std::pair<base::FilePath, int64_t>>&
         success_downloads) {
+  DCHECK_EQ(DownloadServiceStatus::INITIALIZING, download_service_status_);
+  download_service_status_ = DownloadServiceStatus::STARTED;
+
   prefetch_service_->GetLogger()->RecordActivity("Downloader: Service ready.");
-  DCHECK_EQ(download::DownloadService::ServiceStatus::READY,
-            download_service_->GetStatus());
-  service_started_ = true;
 
-  PrefetchDispatcher* dispatcher = prefetch_service_->GetPrefetchDispatcher();
-  if (dispatcher)
-    dispatcher->CleanupDownloads(outstanding_download_ids, success_downloads);
+  // If the prefetch service has requested the download cleanup, do it now.
+  if (cleanup_downloads_when_service_starts_) {
+    CleanupDownloads(outstanding_download_ids, success_downloads);
+    return;
+  }
 
-  for (const auto& entry : pending_downloads_)
-    StartDownload(entry.first, entry.second);
-  pending_downloads_.clear();
-
-  for (const auto& entry : pending_cancellations_)
-    download_service_->CancelDownload(entry);
-  pending_cancellations_.clear();
+  // Otherwise, cache the download cleanup data until told by the prefetch
+  // service.
+  outstanding_download_ids_ = outstanding_download_ids;
+  success_downloads_ = success_downloads;
 }
 
 void PrefetchDownloaderImpl::OnDownloadServiceUnavailable() {
+  DCHECK_EQ(DownloadServiceStatus::INITIALIZING, download_service_status_);
+  download_service_status_ = DownloadServiceStatus::UNAVAILABLE;
+
   prefetch_service_->GetLogger()->RecordActivity(
       "Downloader: Service unavailable.");
-  // TODO(jianli): Report UMA.
-}
 
-void PrefetchDownloaderImpl::OnDownloadServiceShutdown() {
-  prefetch_service_->GetLogger()->RecordActivity(
-      "Downloader: Service shutdown.");
-  service_started_ = false;
+  // The download service is unavailable to use for the whole lifetime of
+  // Chrome. PrefetchService can't schedule any downloads. Next time when Chrome
+  // restarts, the download service might be back to operational.
 }
 
 void PrefetchDownloaderImpl::OnDownloadSucceeded(
@@ -171,14 +180,36 @@ void PrefetchDownloaderImpl::OnDownloadFailed(const std::string& download_id) {
   NotifyDispatcher(prefetch_service_, result);
 }
 
+void PrefetchDownloaderImpl::SetClockForTesting(
+    std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
+}
+
 void PrefetchDownloaderImpl::OnStartDownload(
     const std::string& download_id,
     download::DownloadParams::StartResult result) {
   prefetch_service_->GetLogger()->RecordActivity(
       "Downloader: Download started, download_id=" + download_id +
       ", result=" + std::to_string(static_cast<int>(result)));
+  // Treat the non-accepted request to start a download as an ordinary failure
+  // to simplify the control flow since this situation should rarely happen. The
+  // Download.Service.Request.StartResult.OfflinePage histogram tracks these
+  // cases and would signal the need to revisit this decision.
   if (result != download::DownloadParams::StartResult::ACCEPTED)
     OnDownloadFailed(download_id);
+}
+
+void PrefetchDownloaderImpl::CleanupDownloads(
+    const std::set<std::string>& outstanding_download_ids,
+    const std::map<std::string, std::pair<base::FilePath, int64_t>>&
+        success_downloads) {
+  // Prevent future cleanup by marking |did_download_cleanup_|.
+  did_download_cleanup_ = true;
+  cleanup_downloads_when_service_starts_ = false;
+
+  PrefetchDispatcher* dispatcher = prefetch_service_->GetPrefetchDispatcher();
+  if (dispatcher)
+    dispatcher->CleanupDownloads(outstanding_download_ids, success_downloads);
 }
 
 }  // namespace offline_pages

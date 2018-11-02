@@ -11,8 +11,8 @@
 #include "base/memory/ptr_util.h"
 #include "cc/cc_export.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/nine_patch_generator.h"
 #include "cc/layers/ui_resource_layer_impl.h"
-#include "cc/quads/nine_patch_generator.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/ui_resource_client.h"
 #include "ui/gfx/geometry/rect.h"
@@ -42,10 +42,10 @@ class CC_EXPORT NinePatchLayerImpl : public UIResourceLayerImpl {
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
   void PushPropertiesTo(LayerImpl* layer) override;
 
-  void AppendQuads(RenderPass* render_pass,
+  void AppendQuads(viz::RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
 
-  std::unique_ptr<base::DictionaryValue> LayerTreeAsJson() override;
+  std::unique_ptr<base::DictionaryValue> LayerAsJson() override;
 
  protected:
   NinePatchLayerImpl(LayerTreeImpl* tree_impl, int id);

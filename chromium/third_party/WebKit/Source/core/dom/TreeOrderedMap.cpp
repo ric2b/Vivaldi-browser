@@ -31,12 +31,12 @@
 
 #include "core/dom/TreeOrderedMap.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/TreeScope.h"
 #include "core/html/HTMLMapElement.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -66,14 +66,14 @@ inline bool KeyMatchesId(const AtomicString& key, const Element& element) {
 }
 
 inline bool KeyMatchesMapName(const AtomicString& key, const Element& element) {
-  return isHTMLMapElement(element) &&
-         toHTMLMapElement(element).GetName() == key;
+  return IsHTMLMapElement(element) &&
+         ToHTMLMapElement(element).GetName() == key;
 }
 
 inline bool KeyMatchesSlotName(const AtomicString& key,
                                const Element& element) {
-  return isHTMLSlotElement(element) &&
-         toHTMLSlotElement(element).GetName() == key;
+  return IsHTMLSlotElement(element) &&
+         ToHTMLSlotElement(element).GetName() == key;
 }
 
 void TreeOrderedMap::Add(const AtomicString& key, Element* element) {
@@ -194,7 +194,7 @@ Element* TreeOrderedMap::GetElementByMapName(const AtomicString& key,
 HTMLSlotElement* TreeOrderedMap::GetSlotByName(const AtomicString& key,
                                                const TreeScope& scope) const {
   if (Element* slot = Get<KeyMatchesSlotName>(key, scope))
-    return toHTMLSlotElement(slot);
+    return ToHTMLSlotElement(slot);
   return nullptr;
 }
 
@@ -207,11 +207,11 @@ Element* TreeOrderedMap::GetCachedFirstElementWithoutAccessingNodeTree(
   return entry->element;
 }
 
-DEFINE_TRACE(TreeOrderedMap) {
+void TreeOrderedMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(map_);
 }
 
-DEFINE_TRACE(TreeOrderedMap::MapEntry) {
+void TreeOrderedMap::MapEntry::Trace(blink::Visitor* visitor) {
   visitor->Trace(element);
   visitor->Trace(ordered_list);
 }

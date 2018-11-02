@@ -329,18 +329,45 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         updater = WPTExpectationsUpdater(host)
         self.assertEqual(updater.skipped_specifiers('external/wpt/test.html'), ['Precise', 'Trusty'])
 
+    def test_specifiers_can_extend_to_all_platforms(self):
+        host = self.mock_host()
+        expectations_path = '/test.checkout/LayoutTests/NeverFixTests'
+        host.filesystem.write_text_file(
+            expectations_path,
+            'crbug.com/111 [ Linux ] external/wpt/test.html [ WontFix ]\n')
+        host.filesystem.write_text_file('/test.checkout/LayoutTests/external/wpt/test.html', '')
+        updater = WPTExpectationsUpdater(host)
+        self.assertTrue(updater.specifiers_can_extend_to_all_platforms(
+            ['Mac10.10', 'Mac10.11', 'Win7', 'Win10'], 'external/wpt/test.html'))
+        self.assertFalse(updater.specifiers_can_extend_to_all_platforms(
+            ['Mac10.10', 'Win7', 'Win10'], 'external/wpt/test.html'))
+
     def test_simplify_specifiers(self):
+        host = self.mock_host()
+        updater = WPTExpectationsUpdater(host)
         macros = {
             'mac': ['Mac10.10', 'mac10.11'],
             'win': ['Win7', 'win10'],
             'Linux': ['Trusty'],
         }
-        self.assertEqual(WPTExpectationsUpdater.simplify_specifiers(['mac10.10', 'mac10.11'], macros), ['Mac'])
-        self.assertEqual(WPTExpectationsUpdater.simplify_specifiers(['Mac10.10', 'Mac10.11', 'Trusty'], macros), ['Linux', 'Mac'])
-        self.assertEqual(
-            WPTExpectationsUpdater.simplify_specifiers(['Mac10.10', 'Mac10.11', 'Trusty', 'Win7', 'Win10'], macros), [])
-        self.assertEqual(WPTExpectationsUpdater.simplify_specifiers(['a', 'b', 'c'], {}), ['A', 'B', 'C'])
-        self.assertEqual(WPTExpectationsUpdater.simplify_specifiers(['Mac', 'Win', 'Linux'], macros), [])
+        self.assertEqual(updater.simplify_specifiers(['mac10.10', 'mac10.11'], macros), ['Mac'])
+        self.assertEqual(updater.simplify_specifiers(['Mac10.10', 'Mac10.11', 'Trusty'], macros), ['Linux', 'Mac'])
+        self.assertEqual(updater.simplify_specifiers(['Mac10.10', 'Mac10.11', 'Trusty', 'Win7', 'Win10'], macros), [])
+        self.assertEqual(updater.simplify_specifiers(['Mac', 'Win', 'Linux'], macros), [])
+
+    def test_simplify_specifiers_uses_specifiers_in_builder_list(self):
+        # Even if there are extra specifiers in the macro dictionary, we can simplify specifier
+        # lists if they contain all of the specifiers the are represented in the builder list.
+        # This way specifier simplification can still be done while a new platform is being added.
+        host = self.mock_host()
+        updater = WPTExpectationsUpdater(host)
+        macros = {
+            'mac': ['Mac10.10', 'mac10.11', 'mac10.14'],
+            'win': ['Win7', 'win10'],
+            'Linux': ['Trusty'],
+        }
+        self.assertEqual(updater.simplify_specifiers(['mac10.10', 'mac10.11'], macros), ['Mac'])
+        self.assertEqual(updater.simplify_specifiers(['Mac10.10', 'Mac10.11', 'Trusty', 'Win7', 'Win10'], macros), [])
 
     def test_specifier_part_with_skipped_test(self):
         host = self.mock_host()
@@ -352,6 +379,8 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
         updater = WPTExpectationsUpdater(host)
         self.assertEqual(
             updater.specifier_part(['test-mac-mac10.10', 'test-win-win7', 'test-win-win10'], 'external/wpt/test.html'), '')
+        self.assertEqual(
+            updater.specifier_part(['test-win-win7', 'test-win-win10'], 'external/wpt/test.html'), '[ Win ]')
         self.assertEqual(
             updater.specifier_part(['test-win-win7', 'test-win-win10'], 'external/wpt/another.html'), '[ Win ]')
 
@@ -450,25 +479,6 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             ('crbug.com/111 [ Trusty ] foo/bar.html [ Failure ]\n'
              '\n' + MARKER_COMMENT + '\n'
              'crbug.com/123 [ Trusty ] fake/file/path.html [ Pass ]'))
-
-    def test_write_to_test_expectations_skips_existing_lines(self):
-        host = self.mock_host()
-        expectations_path = host.port_factory.get().path_to_generic_test_expectations_file()
-        host.filesystem.write_text_file(
-            expectations_path,
-            'crbug.com/111 dont/copy/me.html [ Failure ]\n')
-        updater = WPTExpectationsUpdater(host)
-        line_list = [
-            'crbug.com/111 dont/copy/me.html [ Failure ]',
-            'crbug.com/222 do/copy/me.html [ Failure ]'
-        ]
-        updater.write_to_test_expectations(line_list)
-        value = host.filesystem.read_text_file(expectations_path)
-        self.assertEqual(
-            value,
-            ('crbug.com/111 dont/copy/me.html [ Failure ]\n'
-             '\n' + MARKER_COMMENT + '\n'
-             'crbug.com/222 do/copy/me.html [ Failure ]'))
 
     def test_write_to_test_expectations_with_marker_and_no_lines(self):
         host = self.mock_host()

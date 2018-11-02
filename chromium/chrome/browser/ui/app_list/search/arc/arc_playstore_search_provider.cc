@@ -21,7 +21,8 @@ namespace {
 constexpr int kHistogramBuckets = 13;
 constexpr char kAppListPlayStoreQueryStateHistogram[] =
     "Apps.AppListPlayStoreQueryState";
-constexpr int kAppListPlayStoreQueryStateNum = 3;
+// TODO(crbug.com/742517): Use the mojo generated constants.
+constexpr int kAppListPlayStoreQueryStateNum = 17;
 
 // Skips Play Store apps that have equivalent extensions installed.
 // Do not skip recent instant apps since they should be treated like
@@ -82,8 +83,6 @@ void ArcPlayStoreSearchProvider::Start(bool is_voice_query,
       base::Bind(&ArcPlayStoreSearchProvider::OnResults,
                  weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
-
-void ArcPlayStoreSearchProvider::Stop() {}
 
 void ArcPlayStoreSearchProvider::OnResults(
     base::TimeTicks query_start_time,

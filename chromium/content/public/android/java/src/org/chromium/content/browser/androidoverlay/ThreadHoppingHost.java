@@ -7,13 +7,22 @@ package org.chromium.content.browser.androidoverlay;
 import android.os.Handler;
 import android.view.Surface;
 
+import org.chromium.base.Log;
+
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * DialogOverlayCore::Host implementation that transfers messages to the thread on which it was
- * constructed.  Due to threading concerns, waitForCleanup is not forwarded.
+ * constructed.  Due to threading concerns, waitForClose is not forwarded.
  */
 class ThreadHoppingHost implements DialogOverlayCore.Host {
+    private static final String TAG = "ThreadHoppingHost";
+
+    // Number of seconds we'll wait for client cleanup before we give up.  We don't want to keep
+    // onSurfaceDestroyed waiting forever.
+    private static final int CLEANUP_TIMEOUT_SECONDS = 2;
+
     // Handler for the host we're proxying to.  Typically Browser::UI.
     private Handler mHandler;
 
@@ -53,18 +62,31 @@ class ThreadHoppingHost implements DialogOverlayCore.Host {
     // thread would block.  Instead, we wait here and somebody must call onCleanup() to let us know
     // that cleanup has started, and that we may return.
     @Override
-    public void waitForCleanup() {
+    public void waitForClose() {
         while (true) {
             try {
-                mSemaphore.acquire();
+                // TODO(liberato): in case of InterruptedException, we really should adjust the
+                // timeout to reflect remaining time.
+                if (!mSemaphore.tryAcquire(CLEANUP_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    Log.d(TAG, "Wait for semaphore timed out.");
                 break;
             } catch (InterruptedException e) {
             }
         }
     }
 
+    @Override
+    public void enforceClose() {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                mHost.enforceClose();
+            }
+        });
+    }
+
     // Notify us that cleanup has started.  This is called on |mHandler|'s thread.
-    public void onCleanup() {
+    public void onClose() {
         mSemaphore.release(1);
     }
 }

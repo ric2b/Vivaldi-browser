@@ -9,14 +9,18 @@
 #include <stdint.h>
 
 #include <limits>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/time/time.h"
+#include "mojo/public/cpp/system/data_pipe.h"
+#include "services/network/public/interfaces/data_pipe_getter.mojom.h"
 #include "storage/common/storage_common_export.h"
 #include "url/gurl.h"
 
@@ -30,24 +34,42 @@ class STORAGE_COMMON_EXPORT DataElement {
 
   enum Type {
     TYPE_UNKNOWN = -1,
-    TYPE_BYTES,
-    // Only used with BlobStorageMsg_StartBuildingBlob
+
+    // Only used for Upload with Network Service as of now:
+    TYPE_DATA_PIPE,
+    TYPE_RAW_FILE,
+
+    // Only used for Blob:
     TYPE_BYTES_DESCRIPTION,
-    TYPE_FILE,
-    TYPE_BLOB,
+    TYPE_DISK_CACHE_ENTRY,  // Only used by CacheStorage
     TYPE_FILE_FILESYSTEM,
-    TYPE_DISK_CACHE_ENTRY,
+
+    // Commonly used for Blob, and also for Upload when Network Service is
+    // disabled:
+    TYPE_BLOB,  // Used old IPC codepath only.
+    TYPE_FILE,
+
+    // Commonly used in every case:
+    TYPE_BYTES,
   };
 
   DataElement();
-  DataElement(const DataElement& other);
   ~DataElement();
+
+  DataElement(const DataElement&) = delete;
+  void operator=(const DataElement&) = delete;
+  DataElement(DataElement&& other);
+  DataElement& operator=(DataElement&& other);
 
   Type type() const { return type_; }
   const char* bytes() const { return bytes_ ? bytes_ : buf_.data(); }
   const base::FilePath& path() const { return path_; }
+  const base::File& file() const { return file_; }
   const GURL& filesystem_url() const { return filesystem_url_; }
   const std::string& blob_uuid() const { return blob_uuid_; }
+  const network::mojom::DataPipeGetterPtr& data_pipe() const {
+    return data_pipe_getter_;
+  }
   uint64_t offset() const { return offset_; }
   uint64_t length() const { return length_; }
   const base::Time& expected_modification_time() const {
@@ -127,6 +149,16 @@ class STORAGE_COMMON_EXPORT DataElement {
                           uint64_t length,
                           const base::Time& expected_modification_time);
 
+  // Sets TYPE_RAW_FILE data with range. |file| must be open for asynchronous
+  // reading on Windows. It's recommended it also be opened with
+  // File::FLAG_DELETE_ON_CLOSE, since there's often no way to wait on the
+  // consumer to close the file.
+  void SetToFileRange(base::File file,
+                      const base::FilePath& path,
+                      uint64_t offset,
+                      uint64_t length,
+                      const base::Time& expected_modification_time);
+
   // Sets TYPE_BLOB data with range.
   void SetToBlobRange(const std::string& blob_uuid,
                       uint64_t offset,
@@ -141,6 +173,16 @@ class STORAGE_COMMON_EXPORT DataElement {
   // Sets to TYPE_DISK_CACHE_ENTRY with range.
   void SetToDiskCacheEntryRange(uint64_t offset, uint64_t length);
 
+  // Sets TYPE_DATA_PIPE data.
+  void SetToDataPipe(network::mojom::DataPipeGetterPtr data_pipe_getter);
+
+  // Takes ownership of the File, if this is of TYPE_RAW_FILE. The file is open
+  // for reading (asynchronous reading on Windows).
+  base::File ReleaseFile();
+
+  // Takes ownership of the DataPipeGetter, if this is of TYPE_DATA_PIPE.
+  network::mojom::DataPipeGetterPtr ReleaseDataPipeGetter();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(BlobAsyncTransportStrategyTest, TestInvalidParams);
   friend STORAGE_COMMON_EXPORT void PrintTo(const DataElement& x,
@@ -148,9 +190,11 @@ class STORAGE_COMMON_EXPORT DataElement {
   Type type_;
   std::vector<char> buf_;  // For TYPE_BYTES.
   const char* bytes_;  // For TYPE_BYTES.
-  base::FilePath path_;  // For TYPE_FILE.
+  base::FilePath path_;  // For TYPE_FILE and TYPE_RAW_FILE.
+  base::File file_;      // For TYPE_RAW_FILE.
   GURL filesystem_url_;  // For TYPE_FILE_FILESYSTEM.
-  std::string blob_uuid_;
+  std::string blob_uuid_;                               // For TYPE_BLOB.
+  network::mojom::DataPipeGetterPtr data_pipe_getter_;  // For TYPE_DATA_PIPE.
   uint64_t offset_;
   uint64_t length_;
   base::Time expected_modification_time_;

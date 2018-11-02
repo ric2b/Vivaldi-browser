@@ -6,7 +6,6 @@
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
@@ -15,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/mock_entropy_provider.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -43,11 +43,17 @@
 #include "net/disk_cache/simple/simple_test_util.h"
 #include "net/disk_cache/simple/simple_util.h"
 #include "net/test/gtest_util.h"
+#include "net/test/net_test_suite.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using net::test::IsError;
 using net::test::IsOk;
+using testing::Contains;
+using testing::Eq;
+using testing::Field;
+using testing::Contains;
+using testing::ByRef;
 
 #if defined(OS_WIN)
 #include "base/win/scoped_handle.h"
@@ -472,9 +478,6 @@ TEST_F(DiskCacheTest, CreateBackend) {
 
   {
     ASSERT_TRUE(CleanupCacheDir());
-    base::Thread cache_thread("CacheThread");
-    ASSERT_TRUE(cache_thread.StartWithOptions(
-        base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
 
     // Test the private factory method(s).
     std::unique_ptr<disk_cache::Backend> cache;
@@ -484,31 +487,15 @@ TEST_F(DiskCacheTest, CreateBackend) {
 
     // Now test the public API.
     int rv = disk_cache::CreateCacheBackend(net::DISK_CACHE,
-                                            net::CACHE_BACKEND_DEFAULT,
-                                            cache_path_,
-                                            0,
-                                            false,
-                                            cache_thread.task_runner(),
-                                            NULL,
-                                            &cache,
-                                            cb.callback());
-    ASSERT_THAT(cb.GetResult(rv), IsOk());
-    ASSERT_TRUE(cache.get());
-    cache.reset();
-
-    // Variant without the explicit thread, too!
-    rv = disk_cache::CreateCacheBackend(net::DISK_CACHE,
                                         net::CACHE_BACKEND_DEFAULT, cache_path_,
                                         0, false, NULL, &cache, cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     cache.reset();
 
-    rv = disk_cache::CreateCacheBackend(net::MEMORY_CACHE,
-                                        net::CACHE_BACKEND_DEFAULT,
-                                        base::FilePath(), 0,
-                                        false, NULL, NULL, &cache,
-                                        cb.callback());
+    rv = disk_cache::CreateCacheBackend(
+        net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT, base::FilePath(), 0,
+        false, NULL, &cache, cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     ASSERT_TRUE(cache.get());
     cache.reset();
@@ -690,17 +677,16 @@ TEST_F(DiskCacheBackendTest, MemCacheMemoryDump) {
       pmd.GetAllocatorDump(parent->absolute_name() + "/memory_backend");
   ASSERT_NE(nullptr, sub_dump);
 
-  // Verify that the appropriate attributes were set.
-  std::unique_ptr<base::Value> raw_attrs =
-      sub_dump->attributes_for_testing()->ToBaseValue();
-  base::DictionaryValue* attrs;
-  ASSERT_TRUE(raw_attrs->GetAsDictionary(&attrs));
-  EXPECT_EQ(3u, attrs->size());
-  base::DictionaryValue* size_attrs;
-  ASSERT_TRUE(attrs->GetDictionary(
-      base::trace_event::MemoryAllocatorDump::kNameSize, &size_attrs));
-  ASSERT_TRUE(attrs->GetDictionary("mem_backend_size", &size_attrs));
-  ASSERT_TRUE(attrs->GetDictionary("mem_backend_max_size", &size_attrs));
+  using MADEntry = base::trace_event::MemoryAllocatorDump::Entry;
+  const std::vector<MADEntry>& entries = sub_dump->entries();
+  ASSERT_THAT(
+      entries,
+      Contains(Field(&MADEntry::name,
+                     Eq(base::trace_event::MemoryAllocatorDump::kNameSize))));
+  ASSERT_THAT(entries,
+              Contains(Field(&MADEntry::name, Eq("mem_backend_max_size"))));
+  ASSERT_THAT(entries,
+              Contains(Field(&MADEntry::name, Eq("mem_backend_size"))));
 }
 
 TEST_F(DiskCacheBackendTest, SimpleCacheMemoryDump) {
@@ -718,15 +704,12 @@ TEST_F(DiskCacheBackendTest, SimpleCacheMemoryDump) {
       pmd.GetAllocatorDump(parent->absolute_name() + "/simple_backend");
   ASSERT_NE(nullptr, sub_dump);
 
-  // Verify that the appropriate attributes were set.
-  std::unique_ptr<base::Value> raw_attrs =
-      sub_dump->attributes_for_testing()->ToBaseValue();
-  base::DictionaryValue* attrs;
-  ASSERT_TRUE(raw_attrs->GetAsDictionary(&attrs));
-  EXPECT_EQ(1u, attrs->size());
-  base::DictionaryValue* size_attrs;
-  ASSERT_TRUE(attrs->GetDictionary(
-      base::trace_event::MemoryAllocatorDump::kNameSize, &size_attrs));
+  using MADEntry = base::trace_event::MemoryAllocatorDump::Entry;
+  const std::vector<MADEntry>& entries = sub_dump->entries();
+  ASSERT_THAT(entries,
+              ElementsAre(Field(
+                  &MADEntry::name,
+                  Eq(base::trace_event::MemoryAllocatorDump::kNameSize))));
 }
 
 TEST_F(DiskCacheBackendTest, BlockFileCacheMemoryDump) {
@@ -829,7 +812,7 @@ TEST_F(DiskCacheBackendTest, MultipleInstancesWithPendingFileIO) {
   std::unique_ptr<disk_cache::Backend> extra_cache;
   int rv = disk_cache::CreateCacheBackend(
       net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, store.GetPath(), 0, false,
-      base::ThreadTaskRunnerHandle::Get(), NULL, &extra_cache, cb.callback());
+      /* net_log = */ nullptr, &extra_cache, cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(extra_cache.get() != NULL);
 
@@ -846,6 +829,7 @@ TEST_F(DiskCacheBackendTest, MultipleInstancesWithPendingFileIO) {
   if (rv == net::ERR_IO_PENDING)
     EXPECT_FALSE(cb.have_result());
 
+  disk_cache::FlushCacheThreadForTesting();
   base::RunLoop().RunUntilIdle();
 
   // Wait for the actual operation to complete, or we'll keep a file handle that
@@ -3274,8 +3258,9 @@ TEST_F(DiskCacheBackendTest, MemoryOnlyBackendEviction) {
   BackendEviction();
 }
 
-// TODO(gavinp): Enable BackendEviction test for simple cache after performance
-// problems are addressed. See crbug.com/588184 for more information.
+// TODO(morlovich): Enable BackendEviction test for simple cache after
+// performance problems are addressed. See crbug.com/588184 for more
+// information.
 
 // This overly specific looking test is a regression test aimed at
 // crbug.com/589186.
@@ -3864,7 +3849,7 @@ TEST_F(DiskCacheBackendTest, SimpleCacheOpenMissingFile) {
   ASSERT_THAT(OpenEntry(key, &entry), IsError(net::ERR_FAILED));
 
   // Confirm the rest of the files are gone.
-  for (int i = 1; i < disk_cache::kSimpleEntryFileCount; ++i) {
+  for (int i = 1; i < disk_cache::kSimpleEntryNormalFileCount; ++i) {
     base::FilePath should_be_gone_file(cache_path_.AppendASCII(
         disk_cache::simple_util::GetFilenameFromKeyAndFileIndex(key, i)));
     EXPECT_FALSE(base::PathExists(should_be_gone_file));
@@ -3923,7 +3908,7 @@ TEST_F(DiskCacheBackendTest, SimpleCacheOverBlockfileCache) {
 
   // Check that the |SimpleBackendImpl| does not favor this structure.
   disk_cache::SimpleBackendImpl* simple_cache =
-      new disk_cache::SimpleBackendImpl(cache_path_, nullptr, 0,
+      new disk_cache::SimpleBackendImpl(cache_path_, nullptr, nullptr, 0,
                                         net::DISK_CACHE, nullptr, nullptr);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());
@@ -4031,15 +4016,11 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationWhileDoomed) {
   EXPECT_TRUE(keys_to_match.empty());
 }
 
-// This test is flaky on Android Marshmallow crbug.com/638891.
-#if !defined(OS_ANDROID)
 // Tests that enumerations are not affected by corrupt files.
 TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
   SetSimpleCacheMode();
   InitCache();
-  // Create a corrupt entry. The write/read sequence ensures that the entry will
-  // have been created before corrupting the platform files, in the case of
-  // optimistic operations.
+  // Create a corrupt entry.
   const std::string key = "the key";
   disk_cache::Entry* corrupted_entry;
 
@@ -4052,6 +4033,8 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
             WriteData(corrupted_entry, 0, 0, buffer.get(), kSize, false));
   ASSERT_EQ(kSize, ReadData(corrupted_entry, 0, 0, buffer.get(), kSize));
   corrupted_entry->Close();
+  // Let all I/O finish so it doesn't race with corrupting the file below.
+  NetTestSuite::GetScopedTaskEnvironment()->RunUntilIdle();
 
   std::set<std::string> key_pool;
   ASSERT_TRUE(CreateSetOfRandomEntries(&key_pool));
@@ -4070,7 +4053,6 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
   EXPECT_EQ(key_pool.size(), count);
   EXPECT_TRUE(keys_to_match.empty());
 }
-#endif
 
 // Tests that enumerations don't leak memory when the backend is destructed
 // mid-enumeration.

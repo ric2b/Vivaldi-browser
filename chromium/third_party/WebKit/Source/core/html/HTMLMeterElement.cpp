@@ -22,13 +22,13 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
@@ -223,7 +223,7 @@ bool HTMLMeterElement::CanContainRangeEndPoint() const {
   return GetComputedStyle() && !GetComputedStyle()->HasAppearance();
 }
 
-DEFINE_TRACE(HTMLMeterElement) {
+void HTMLMeterElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(value_);
   LabelableElement::Trace(visitor);
 }

@@ -4,6 +4,7 @@ include_rules = [
   "+components/infobars/core",
   "+components/keyed_service/core",
   "+components/metrics",
+  "+components/policy",
   "+components/security_state",
   "+components/signin/core/browser",
   "+components/signin/core/common",
@@ -32,6 +33,9 @@ specific_include_rules = {
     "+components/ukm",
   ],
   "autofill_metrics_unittest\.cc": [
+    "+components/ukm",
+  ],
+  "credit_card_save_manager_unittest\.cc": [
     "+components/ukm",
   ],
   "test_autofill_client\.h": [

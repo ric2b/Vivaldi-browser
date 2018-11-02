@@ -46,9 +46,6 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
 
-// TODO(ellyjones): Remove this when the deployment target is 10.9 or later.
-extern NSString* const NSAccessibilityPriorityKey;
-
 using content::WebContents;
 
 // Focus-handling between |field_| and model() is a bit subtle.
@@ -218,7 +215,9 @@ void OmniboxViewMac::SaveStateToTab(WebContents* tab) {
 
 void OmniboxViewMac::OnTabChanged(const WebContents* web_contents) {
   const OmniboxViewMacState* state = GetStateFromTab(web_contents);
-  model()->RestoreState(state ? &state->model_state : NULL);
+  model()->RestoreState(
+      controller()->GetToolbarModel()->GetFormattedURL(nullptr),
+      state ? &state->model_state : NULL);
   // Restore focus and selection if they were present when the tab
   // was switched away.
   if (state && state->has_focus) {
@@ -239,7 +238,8 @@ void OmniboxViewMac::ResetTabState(WebContents* web_contents) {
 }
 
 void OmniboxViewMac::Update() {
-  if (model()->UpdatePermanentText()) {
+  if (model()->SetPermanentText(
+          controller()->GetToolbarModel()->GetFormattedURL(nullptr))) {
     // Restore everything to the baseline look.
     RevertAll();
 
@@ -601,6 +601,7 @@ void OmniboxViewMac::ApplyTextAttributes(
 
 void OmniboxViewMac::OnTemporaryTextMaybeChanged(
     const base::string16& display_text,
+    const AutocompleteMatch& match,
     bool save_original_selection,
     bool notify_text_changed) {
   if (save_original_selection)
@@ -610,6 +611,10 @@ void OmniboxViewMac::OnTemporaryTextMaybeChanged(
   if (notify_text_changed)
     model()->OnChanged();
   [field_ clearUndoChain];
+
+  AnnounceAutocompleteForScreenReader(
+      AutocompleteMatchType::ToAccessibilityLabel(match.type, display_text,
+                                                  match.description));
 }
 
 bool OmniboxViewMac::OnInlineAutocompleteTextMaybeChanged(
@@ -1081,13 +1086,11 @@ bool OmniboxViewMac::IsCaretAtEnd() const {
 
 void OmniboxViewMac::AnnounceAutocompleteForScreenReader(
     const base::string16& display_text) {
-  NSString* announcement =
-      l10n_util::GetNSStringF(IDS_ANNOUNCEMENT_COMPLETION_AVAILABLE_MAC,
-                              display_text);
   NSDictionary* notification_info = @{
-      NSAccessibilityAnnouncementKey : announcement,
-      NSAccessibilityPriorityKey :     @(NSAccessibilityPriorityHigh)
+    NSAccessibilityAnnouncementKey : base::SysUTF16ToNSString(display_text),
+    NSAccessibilityPriorityKey : @(NSAccessibilityPriorityHigh)
   };
+  // We direct the screen reader to announce the friendly text.
   NSAccessibilityPostNotificationWithUserInfo(
       [field_ window],
       NSAccessibilityAnnouncementRequestedNotification,

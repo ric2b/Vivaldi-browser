@@ -46,7 +46,7 @@ Scrollbar::Scrollbar(ScrollableArea* scrollable_area,
     : scrollable_area_(scrollable_area),
       orientation_(orientation),
       control_size_(control_size),
-      theme_(theme ? *theme : ScrollbarTheme::GetTheme()),
+      theme_(theme ? *theme : scrollable_area->GetPageScrollbarTheme()),
       chrome_client_(chrome_client),
       visible_size_(0),
       total_size_(0),
@@ -84,7 +84,7 @@ Scrollbar::~Scrollbar() {
   theme_.UnregisterScrollbar(*this);
 }
 
-DEFINE_TRACE(Scrollbar) {
+void Scrollbar::Trace(blink::Visitor* visitor) {
   visitor->Trace(scrollable_area_);
   visitor->Trace(chrome_client_);
 }

@@ -39,11 +39,12 @@
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_pai_starter.h"
+#include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_app_instance.h"
@@ -55,7 +56,6 @@
 #include "extensions/common/manifest_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -118,7 +118,7 @@ void WaitForIconCreation(ArcAppListPrefs* prefs,
   // Process pending tasks. This performs multiple thread hops, so we need
   // to run it continuously until it is resolved.
   do {
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   } while (!base::PathExists(icon_path));
 }
 
@@ -165,6 +165,10 @@ constexpr ArcState kUnmanagedArcStatesWithPlayStore[] = {
     ArcState::ARC_PLAY_STORE_UNMANAGED,
     ArcState::ARC_PERSISTENT_PLAY_STORE_UNMANAGED,
 };
+
+void OnPaiStartedCallback(bool* started_flag) {
+  *started_flag = true;
+}
 
 }  // namespace
 
@@ -217,23 +221,23 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
   void CreateBuilder() {
     ResetBuilder();  // Destroy any existing builder in the correct order.
 
-    model_.reset(new app_list::AppListModel);
-    controller_.reset(new test::TestAppListControllerDelegate);
-    builder_.reset(new ArcAppModelBuilder(controller_.get()));
-    builder_->InitializeWithProfile(profile_.get(), model_.get());
+    model_updater_ = std::make_unique<app_list::FakeAppListModelUpdater>();
+    controller_ = std::make_unique<test::TestAppListControllerDelegate>();
+    builder_ = std::make_unique<ArcAppModelBuilder>(controller_.get());
+    builder_->Initialize(nullptr, profile_.get(), model_updater_.get());
   }
 
   void ResetBuilder() {
     builder_.reset();
     controller_.reset();
-    model_.reset();
+    model_updater_.reset();
   }
 
   size_t GetArcItemCount() const {
     size_t arc_count = 0;
-    const size_t count = model_->top_level_item_list()->item_count();
+    const size_t count = model_updater_->ItemCount();
     for (size_t i = 0; i < count; ++i) {
-      app_list::AppListItem* item = model_->top_level_item_list()->item_at(i);
+      app_list::AppListItem* item = model_updater_->ItemAt(i);
       if (item->GetItemType() == ArcAppItem::kItemType)
         ++arc_count;
     }
@@ -242,10 +246,10 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
   ArcAppItem* GetArcItem(size_t index) const {
     size_t arc_count = 0;
-    const size_t count = model_->top_level_item_list()->item_count();
+    const size_t count = model_updater_->ItemCount();
     ArcAppItem* arc_item = nullptr;
     for (size_t i = 0; i < count; ++i) {
-      app_list::AppListItem* item = model_->top_level_item_list()->item_at(i);
+      app_list::AppListItem* item = model_updater_->ItemAt(i);
       if (item->GetItemType() == ArcAppItem::kItemType) {
         if (arc_count++ == index) {
           arc_item = reinterpret_cast<ArcAppItem*>(item);
@@ -459,7 +463,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
  private:
   ArcAppTest arc_test_;
-  std::unique_ptr<app_list::AppListModel> model_;
+  std::unique_ptr<app_list::FakeAppListModelUpdater> model_updater_;
   std::unique_ptr<test::TestAppListControllerDelegate> controller_;
   std::unique_ptr<ArcAppModelBuilder> builder_;
 
@@ -597,7 +601,8 @@ class ArcDefaulAppForManagedUserTest : public ArcPlayStoreAppTest {
         policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile());
     connector->OverrideIsManagedForTesting(true);
     profile()->GetTestingPrefService()->SetManagedPref(
-        prefs::kArcEnabled, base::MakeUnique<base::Value>(IsEnabledByPolicy()));
+        arc::prefs::kArcEnabled,
+        base::MakeUnique<base::Value>(IsEnabledByPolicy()));
 
     ArcPlayStoreAppTest::OnBeforeArcTestSetup();
   }
@@ -633,8 +638,8 @@ class ArcVoiceInteractionTest : public ArcPlayStoreAppTest {
   }
 
   void TearDown() override {
-    voice_service_.reset();
     ArcPlayStoreAppTest::TearDown();
+    voice_service_.reset();
   }
 
  protected:
@@ -969,7 +974,7 @@ TEST_P(ArcAppModelBuilderTest, RequestIcons) {
 
       // This does not result in an icon being loaded, so WaitForIconUpdates
       // cannot be used.
-      content::RunAllBlockingPoolTasksUntilIdle();
+      content::RunAllTasksUntilIdle();
     }
   }
 
@@ -1125,7 +1130,7 @@ TEST_P(ArcAppModelBuilderTest, RemoveAppCleanUpFolder) {
   // Process pending tasks. This performs multiple thread hops, so we need
   // to run it continuously until it is resolved.
   do {
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   } while (IsIconCreated(prefs, app_id, scale_factor));
 }
 
@@ -1257,11 +1262,17 @@ TEST_P(ArcPlayStoreAppTest, PaiStarter) {
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
   ASSERT_TRUE(prefs);
 
+  bool pai_started = false;
+
   arc::ArcPaiStarter starter1(profile_.get(), profile_->GetPrefs());
   arc::ArcPaiStarter starter2(profile_.get(), profile_->GetPrefs());
   EXPECT_FALSE(starter1.started());
   EXPECT_FALSE(starter2.started());
   EXPECT_EQ(app_instance()->start_pai_request_count(), 0);
+
+  starter1.AddOnStartCallback(
+      base::BindOnce(&OnPaiStartedCallback, &pai_started));
+  EXPECT_FALSE(pai_started);
 
   arc::ArcSessionManager* session_manager = arc::ArcSessionManager::Get();
   ASSERT_TRUE(session_manager);
@@ -1280,6 +1291,14 @@ TEST_P(ArcPlayStoreAppTest, PaiStarter) {
   SendPlayStoreApp();
 
   EXPECT_TRUE(starter1.started());
+  EXPECT_TRUE(pai_started);
+
+  // Test that callback is called immediately in case PAI was already started.
+  pai_started = false;
+  starter1.AddOnStartCallback(
+      base::BindOnce(&OnPaiStartedCallback, &pai_started));
+  EXPECT_TRUE(pai_started);
+
   EXPECT_FALSE(starter2.started());
   EXPECT_TRUE(session_manager->pai_starter()->started());
   EXPECT_EQ(app_instance()->start_pai_request_count(), 2);
@@ -1382,7 +1401,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>(
       fake_apps().begin(), fake_apps().begin() + 1));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Store number of requests generated during the App List item creation. Same
   // request will not be re-sent without clearing the request record in
@@ -1397,7 +1416,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
       ";S.org.chromium.arc.shelf_group_id=arc_test_shelf_group;end";
   app_instance()->SendInstallShortcuts(shortcuts);
   const std::string shortcut_id = ArcAppTest::GetAppId(shortcuts[0]);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   const std::string id_shortcut_exist =
       arc::ArcAppShelfId("arc_test_shelf_group", app_id).ToString();
@@ -1414,7 +1433,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   delegate.WaitForIconUpdates(ui::GetSupportedScaleFactors().size());
   EXPECT_EQ(id_shortcut_exist, delegate.app_id());
 
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   const size_t shortcut_request_cnt =
       app_instance()->shortcut_icon_requests().size();
   EXPECT_NE(0U, shortcut_request_cnt);
@@ -1430,7 +1449,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderForShelfGroup) {
   icon_loader.FetchImage(id_shortcut_absent);
   // Expected default update.
   EXPECT_EQ(update_image_count_before + 1, delegate.update_image_cnt());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_TRUE(app_instance()->icon_requests().size() >
               initial_icon_request_count);
   EXPECT_EQ(shortcut_request_cnt,
@@ -1454,7 +1473,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderWithBadIcon) {
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>(
       fake_apps().begin(), fake_apps().begin() + 1));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Store number of requests generated during the App List item creation. Same
   // request will not be re-sent without clearing the request record in
@@ -1953,12 +1972,46 @@ TEST_P(ArcDefaulAppTest, DefaultAppsNotAvailable) {
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(empty_app_list);
 
-  ValidateHaveApps(fake_default_apps());
+  std::vector<arc::mojom::AppInfo> expected_apps(fake_default_apps());
+  ValidateHaveApps(expected_apps);
+
+  if (GetParam() == ArcState::ARC_PERSISTENT_WITHOUT_PLAY_STORE) {
+    prefs->SimulateDefaultAppAvailabilityTimeoutForTesting();
+    ValidateHaveApps(std::vector<arc::mojom::AppInfo>());
+    return;
+  }
+
+  // PAI was not started and we should not have any active timer for default
+  // apps.
+  prefs->SimulateDefaultAppAvailabilityTimeoutForTesting();
+  ValidateHaveApps(expected_apps);
+
+  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+  ASSERT_TRUE(arc_session_manager);
+
+  arc::ArcPaiStarter* pai_starter = arc_session_manager->pai_starter();
+  ASSERT_TRUE(pai_starter);
+
+  EXPECT_FALSE(pai_starter->started());
+
+  // Play store app triggers PAI.
+  arc::mojom::AppInfo app;
+  app.name = "Play Store";
+  app.package_name = arc::kPlayStorePackage;
+  app.activity = arc::kPlayStoreActivity;
+  app_instance()->RefreshAppList();
+
+  std::vector<arc::mojom::AppInfo> only_play_store({app});
+  app_instance()->SendRefreshAppList(only_play_store);
+  expected_apps.push_back(app);
+
+  // Timer was set to detect not available default apps.
+  ValidateHaveApps(expected_apps);
 
   prefs->SimulateDefaultAppAvailabilityTimeoutForTesting();
 
   // No default app installation and already installed packages.
-  ValidateHaveApps(empty_app_list);
+  ValidateHaveApps(only_play_store);
 }
 
 TEST_P(ArcDefaulAppTest, DefaultAppsInstallation) {

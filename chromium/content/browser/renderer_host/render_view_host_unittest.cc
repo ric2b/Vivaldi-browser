@@ -47,7 +47,7 @@ class RenderViewHostTestBrowserClient : public TestContentBrowserClient {
 
 class RenderViewHostTest : public RenderViewHostImplTestHarness {
  public:
-  RenderViewHostTest() : old_browser_client_(NULL) {}
+  RenderViewHostTest() : old_browser_client_(nullptr) {}
   ~RenderViewHostTest() override {}
 
   void SetUp() override {
@@ -83,7 +83,7 @@ TEST_F(RenderViewHostTest, CreateFullscreenWidget) {
 
   mojom::WidgetPtr widget;
   std::unique_ptr<MockWidgetImpl> widget_impl =
-      base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+      std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
   test_rvh()->CreateNewFullscreenWidget(routing_id, std::move(widget));
 }
 
@@ -161,8 +161,8 @@ TEST_F(RenderViewHostTest, StartDragging) {
 
 TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
   DropData dropped_data;
-  gfx::Point client_point;
-  gfx::Point screen_point;
+  gfx::PointF client_point;
+  gfx::PointF screen_point;
   // We use "//foo/bar" path (rather than "/foo/bar") since dragged paths are
   // expected to be absolute on any platforms.
   base::FilePath highlighted_file_path(FILE_PATH_LITERAL("//tmp/foo.html"));

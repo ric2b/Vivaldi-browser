@@ -4,6 +4,7 @@
 <translation id="100812568230599391">Schimbă stilul de afișare la intercalat.</translation>
 <translation id="1012173283529841972">Element din listă</translation>
 <translation id="1013742170491673792">căutare</translation>
+<translation id="1022586497894531524">Folosești feedbackul rostit ChromeVox pentru prima dată? Acest tutorial rapid explică noțiunile de bază pentru a începe să folosești ChromeVox.</translation>
 <translation id="1023866615269196768">Extinsă.</translation>
 <translation id="1025074108959230262">Modul persistent este dezactivat</translation>
 <translation id="1031961866430398710">apoi</translation>
@@ -29,12 +30,12 @@
 <translation id="1201402288615127009">Înainte</translation>
 <translation id="1206619573307042055">text derulant</translation>
 <translation id="1213216066620407844">ChromeVox - Voce pentru Chrome</translation>
-<translation id="1226487719524433143">Suntem încântați să auzim părerea ta despre această experiență nouă. Trimite-ne feedback direct apăsând pe tasta de căutare + a, apoi pe i. Apasă pe butonul Înainte pentru a continua tutorialul, ca să afli tot ce trebuie să știi ca să începi.</translation>
+<translation id="1225437811932752266">Felicitări! Ai învățat noțiunile de bază cu privire la folosirea ChromeVox. Reține că poți deschide oricând meniul de comenzi ChromeVox apăsând pe tasta de căutare + tasta punct. Pentru a afla mai multe despre ChromeVox și sistemul de operare Chrome, accesează următoarele articole.
+Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Închide și dă clic pe el.</translation>
 <translation id="1229276918471378188">Saltul anterior</translation>
 <translation id="1237866625126425153">grup radio</translation>
 <translation id="1251750620252348585">Titlul de nivel 6 următor</translation>
 <translation id="1275718070701477396">Selectat</translation>
-<translation id="1310230882256010289">Upgrade-uri în culise. Am renovat complet modul în care funcționează ChromeVox. Așteaptă-te la îmbunătățiri privind performanța, stabilitatea și compatibilitatea/adaptabilitatea pe web.</translation>
 <translation id="1319608975892113573">Nu există un blockquote anterior.</translation>
 <translation id="1321576897702511272">Ascundeți ajutorul pentru ChromeVox</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> din <ph name="TOTAL" /></translation>
@@ -42,6 +43,7 @@
 <translation id="1339428534620983148">Coloana anterioară din tabel</translation>
 <translation id="1342835525016946179">articol</translation>
 <translation id="1346748346194534595">Dreapta</translation>
+<translation id="135978014023467274">ChromeVox a fost actualizat la versiunea 63!</translation>
 <translation id="136718599399906424">Rândul următor din tabel</translation>
 <translation id="1377925789329510816">Acesta este ultimul titlu. Apasă pe tasta de căutare + H pentru a reveni la primul titlu sau pe tasta de căutare + Shift + H pentru a accesa cel de-al doilea titlu de pe pagină.</translation>
 <translation id="1383876407941801731">Caută</translation>
@@ -169,6 +171,7 @@
 <translation id="2770781857296573485">Trece la explorarea grupului</translation>
 <translation id="2777845298774924149">S-a ieșit</translation>
 <translation id="2781264313200109999">Începutul linkului</translation>
+<translation id="2784959586797362050">Ca de obicei, ne poți trimite feedback direct apăsând pe tasta de căutare + a, apoi pe i. Ne-ar face plăcere să ne contactezi.</translation>
 <translation id="2800204403141299078">Nu mai există elemente diferite.</translation>
 <translation id="2800780099804980316">Nu există un titlu de nivel 1 anterior.</translation>
 <translation id="280499067616661124">Găsește în pagină cu ChromeVox</translation>
@@ -225,8 +228,6 @@
 <translation id="3163593631834463955">Antet de coloană gol</translation>
 <translation id="316542773973815724">Navigare</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{spațiu}few{# spații}other{# de spații}}</translation>
-<translation id="3183233191569362040">Felicitări! Ai învățat noțiunile de bază cu privire la folosirea ChromeVox Next (beta). Reține că poți deschide oricând meniul de comenzi ChromeVox apăsând pe tasta de căutare + tasta punct. Pentru a afla mai multe despre ChromeVox și sistemul de operare Chrome, accesează următoarele articole.
-Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Închide și dă clic pe acesta.</translation>
 <translation id="320961988183078793">s-a accesat <ph name="TYPE" /></translation>
 <translation id="3223701887221307104"><ph name="NAME" />, filă</translation>
 <translation id="3226035351387556942">casetă de selectare</translation>
@@ -236,6 +237,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="3241638166094654466">Celule pe fiecare rând:</translation>
 <translation id="3286390186030710347">Glisor</translation>
 <translation id="3299925995433437805">Nu există un link accesat următor.</translation>
+<translation id="3300348286427369683">Compatibilitate cu textul îmbogățit. ChromeVox acceptă acum câmpuri de text îmbogățit, inclusiv comenzi de accesare, orientarea cursorului pentru textul braille, selectarea și altele.</translation>
 <translation id="3307886118343381874">Accesați finalul tabelului</translation>
 <translation id="3311969765485641742">Apăsați pe Alt+Shift+A pentru a examina alertele</translation>
 <translation id="3312997241656799641">Următorul link accesat</translation>
@@ -300,6 +302,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="3458865416877308321"><ph name="NAME" />, dezactivează</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, buton</translation>
 <translation id="3466530247399808663">O apăsare de tastă nevalidă</translation>
+<translation id="3468959318854349468">Fără titlu</translation>
 <translation id="3473644018603298796"><ph name="COUNT" /> selectate</translation>
 <translation id="3486232535569802404">De la <ph name="V1" /> la <ph name="V2" /></translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{paranteză pătrată dreapta}few{# paranteze pătrate dreapta}other{# de paranteze pătrate dreapta}}</translation>
@@ -338,7 +341,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="3897092660631435901">Meniu</translation>
 <translation id="3909320334364316587">Titlul de nivel 6 anterior</translation>
 <translation id="3914173277599553213">Solicitate</translation>
-<translation id="3951424903203718058">Folosești feedbackul rostit ChromeVox Next pentru prima dată? Acest tutorial rapid explică noțiunile de bază pentru a începe să folosești ChromeVox Next.</translation>
+<translation id="3914732343065571127">Referințe pentru comenzile ChromeVox</translation>
 <translation id="3962990492275676168">Începeți să citiți din poziția curentă</translation>
 <translation id="4004802134384979325">bifată</translation>
 <translation id="4006140876663370126">imagine</translation>
@@ -409,7 +412,9 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="4601367666219428522">tab <ph name="TABLENAME" /> <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">Se ignoră următoarea apăsare de tastă</translation>
 <translation id="461613135510474570">Propoziție</translation>
+<translation id="463135993322337640">Apasă pe ChromeVox o, n pentru a afla noutățile</translation>
 <translation id="4647836961514597010">Selector de culoare</translation>
+<translation id="4660783501463101648">Versiunea clasică a fost eliminată. Comanda de comutare de la tastatură pentru revenirea la versiunea clasică ChromeVox a fost eliminată.</translation>
 <translation id="4661075872484491155">arbore</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4688873778442829762">grilă</translation>
@@ -429,10 +434,10 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="4827410568042294688">neselectat</translation>
 <translation id="4842108708071771135">Nu există un blockquote următor.</translation>
 <translation id="4844625982113518938">Apasă pe orice tastă pentru a afla numele acesteia. Combinația Ctrl + W va închide modul de învățare.</translation>
+<translation id="4846428657345567687">Bun venit la ChromeVox!</translation>
 <translation id="4846487886195635104">Finalul textului tăiat cu o linie</translation>
 <translation id="4848993367330139335">temporizator</translation>
 <translation id="4850023505158945298">Elementul similar anterior.</translation>
-<translation id="485011152882364255">În ChromeVox Next, tasta de căutare este tasta de modificare. Majoritatea comenzilor rapide ChromeVox încep cu tasta de căutare. Vei folosi și tastele săgeată pentru navigare.</translation>
 <translation id="4866956062845190338">buton radio element meniu</translation>
 <translation id="4867316986324544967">Activați înregistrarea TTS</translation>
 <translation id="4877261390094455813">Introduceți o interogare de căutare.</translation>
@@ -467,6 +472,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="5098541983634824365">Se iese din grilă.</translation>
 <translation id="5102981729317424850">Bară de instrumente</translation>
 <translation id="5105050547967751155">obligatoriu</translation>
+<translation id="5106547198195128110">Avem câteva modificări interesante în noua versiune, iată noutățile:</translation>
 <translation id="5110983769041734144">Nu există un câmp de formular anterior.</translation>
 <translation id="5111640677200759579">Antet de coloană</translation>
 <translation id="5136967254288895616">Nu există un link anterior.</translation>
@@ -501,7 +507,6 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="5444587279251314700">(activă)</translation>
 <translation id="5451268436205074266">punctele <ph name="DOT" /></translation>
 <translation id="5455441614648621694">Complementar</translation>
-<translation id="5458780372341732962">Folosește ChromeVox Next (beta)</translation>
 <translation id="5485036206801896268">Nu există un grafic anterior.</translation>
 <translation id="5486947920110100234">Nu există un punct de accesare directă următor.</translation>
 <translation id="549602578321198708">Cuvânt</translation>
@@ -510,7 +515,6 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="5507663321906818013">Testare pentru depanare</translation>
 <translation id="5518443085409638729">La editarea textului plasați cursorul între caractere (ca în Mac OS X).</translation>
 <translation id="552195134157544755">Buton radio</translation>
-<translation id="5531530875187439488">Semnale audio noi. Am actualizat setul de pictograme audio pe care le auzi pentru ca navigarea să fie mai rapidă.</translation>
 <translation id="5534303576632885660">antet</translation>
 <translation id="5546092960038624944">Nu există un titlu de nivel 5 anterior.</translation>
 <translation id="556042886152191864">Buton</translation>
@@ -537,7 +541,6 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="5682113568322255809">Reper</translation>
 <translation id="5683155931978483559">Caseta de selectare anterioară</translation>
 <translation id="5684277895745049190">Listă</translation>
-<translation id="5684905390246898631">Bun venit la ChromeVox Next!</translation>
 <translation id="5695831708991916435">Următoarele câteva comenzi rapide nu sunt comenzi ChromeVox, dar sunt foarte utile pentru a folosi Chrome la potențial maxim.
 Pentru a naviga înainte de la un element acționabil la altul, cum ar fi butoane și linkuri, apasă pe tasta Tab. Pentru a naviga înapoi, apasă pe Shift + Tab.
 Pentru a accesa caseta de adrese a browserului Chrome, numită și casetă polivalentă, apasă pe Ctrl + L.
@@ -572,7 +575,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{egal}few{# semne egal}other{# de semne egal}}</translation>
 <translation id="5939518447894949180">Resetează</translation>
 <translation id="5948123859135882163">Comutați interpretarea expresiilor matematice între structurală și semantică</translation>
-<translation id="5948485979596965684">ChromeVox a fost actualizat la o nouă versiune importantă!</translation>
 <translation id="5955304353782037793">aplicație</translation>
 <translation id="5956928062748260866">Dialog</translation>
 <translation id="5963413905009737549">Secțiune</translation>
@@ -587,6 +589,7 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="6065293622157674001">Începutul erorii gramaticale</translation>
 <translation id="6082768461603900813">Navigarea de bază</translation>
 <translation id="6092707270915298410">Finalul linkului</translation>
+<translation id="6118126368611144850">Aplicații Android pentru Chrome. Dacă ai Magazinul Play pe dispozitiv, încearcă în avans ChromeVox cu aplicații Android. Testează compatibilitatea experimentală descărcând Google Chrome Canary din Magazinul Play.</translation>
 <translation id="611827076493383239">accesat</translation>
 <translation id="6119955456199054975">Sfârșitul celulei.</translation>
 <translation id="6122013438240733403">buton</translation>
@@ -627,6 +630,7 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="6493991254603208962">reduce luminozitatea</translation>
 <translation id="6508059270146105198">Deplasează afișajul Braille în partea de jos a paginii</translation>
 <translation id="6536864053412760904">Indicativ Math ML</translation>
+<translation id="6540201937398578274">În ChromeVox, tasta de căutare este tasta de modificare. Majoritatea comenzilor rapide ChromeVox încep cu tasta de căutare. Vei folosi și tastele săgeată pentru navigare.</translation>
 <translation id="6550720799683018100">Schimbați harta tastelor actuală selectând o opțiune din lista de mai jos.</translation>
 <translation id="6561818612645211875">Accesați începutul rândului curent</translation>
 <translation id="6587021927234520429">Nu există un titlu de nivel 4 următor.</translation>
@@ -651,7 +655,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="6786800275320335305">Articol</translation>
 <translation id="6787839852456839824">Comenzi rapide de la tastatură</translation>
 <translation id="6793101435925451627">casetă listă</translation>
-<translation id="6818172019016005152">Ne-am străduit să creăm o nouă experiență ChromeVox îmbunătățită. Iată ce este nou.</translation>
 <translation id="6833103209700200188">Notă de subsol</translation>
 <translation id="6871161210040114857">Se ignoră scrierea cu minuscule/majuscule.</translation>
 <translation id="6877435256196695200">Nu există un grafic următor.</translation>
@@ -669,7 +672,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="7037042857287298941">Lista anterioară</translation>
 <translation id="7041173719775863268">Încheiați selectarea</translation>
 <translation id="7086377898680121060">mărește luminozitatea</translation>
-<translation id="7094527465295945904">Asocieri noi de taste. Am setat tasta de căutare ca modificator pentru ChromeVox și am simplificat complet combinațiile de taste.</translation>
 <translation id="7095834689119144465">Câmp text de editare exclusiv numeric</translation>
 <translation id="7096001299300236431">Conținut media anterior</translation>
 <translation id="7116595520562830928">linii multiple</translation>
@@ -773,7 +775,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="8066678206530322333">Banner</translation>
 <translation id="8076492880354921740">File</translation>
 <translation id="8091452896542422286">Spațiu</translation>
-<translation id="8104178626892949749">Apasă pe ChromeVox o, n pentru a afla mai multe despre ChromeVox Next.</translation>
 <translation id="8110647606445335195">Nu există repere ARIA.</translation>
 <translation id="8153880621934657047">Nu vă aflați în interiorul tabelului.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{caracter de subliniere}few{# caractere de subliniere}other{# de caractere de subliniere}}</translation>
@@ -783,7 +784,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="8199231515320852133">Anunță anteturile celulei curente</translation>
 <translation id="820417203470636242">Celulă goală.</translation>
 <translation id="8215202828671303819">Selectare multiplă</translation>
-<translation id="8224171046658870249">Ai trecut la ChromeVox Next</translation>
 <translation id="826991282343985864">r$1c$2</translation>
 <translation id="8276439074553447000">Salt la elementul focalizabil anterior</translation>
 <translation id="8278417001922463147">Nu există niciun articol anterior.</translation>
@@ -828,7 +828,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="8664519043722036194">secunde</translation>
 <translation id="867187640362843212">Titlu 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{bară verticală}few{# bare verticale}other{# de bare verticale}}</translation>
-<translation id="8721861170709424373">Referințe pentru comenzile ChromeVox Next</translation>
 <translation id="8735450637152821465">S-a început selectarea</translation>
 <translation id="8743786158317878347">intrați în conținut structurat, cum ar fi tabelele</translation>
 <translation id="8747966237988593539">Listă ordonată</translation>
@@ -881,7 +880,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="923331726185079994">ChromeVox a fost actualizat</translation>
 <translation id="930275611743429116">Începe sau încheie selecția.</translation>
 <translation id="948171205378458592">Scădeți viteza de vorbire</translation>
-<translation id="955917170449423694">Ai trecut la ChromeVox Clasic</translation>
 <translation id="962913030769097253">Titlul de nivel 1 următor</translation>
 <translation id="973955474346881951">Activează/dezactivează modul taste persistente</translation>
 <translation id="976849232629612000">Niciun element.</translation>

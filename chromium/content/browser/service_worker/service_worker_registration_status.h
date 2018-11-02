@@ -12,11 +12,11 @@
 namespace content {
 
 // This should only be called for errors, where status != OK.
-void GetServiceWorkerRegistrationStatusResponse(
+void GetServiceWorkerErrorTypeForRegistration(
     ServiceWorkerStatusCode status,
     const std::string& status_message,
-    blink::mojom::ServiceWorkerErrorType* error_type,
-    base::string16* message);
+    blink::mojom::ServiceWorkerErrorType* out_error,
+    std::string* out_message);
 
 }  // namespace content
 

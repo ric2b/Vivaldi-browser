@@ -5,7 +5,7 @@ found in the LICENSE file.
 -->
 <!DOCTYPE html>
 <meta charset="utf-8">
-<if expr="is_android or is_ios">
+<if expr="is_android">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </if>
 <title>Snippets Internals</title>
@@ -92,8 +92,18 @@ found in the LICENSE file.
   <div id="snippets">
     <h2>NTPSnippetsService</h2>
     <div class="forms">
-      <button id="submit-download" type="button">Add snippets</button>
-      <span id="remote-status" class="detail"></span>
+      <div>
+        <button id="submit-download" type="button">Add snippets</button>
+        <span id="remote-status" class="detail"></span>
+      </div>
+      <div>
+        <button id="debug-log-dump" type="button">Dump the debug log</button>
+      </div>
+      <div>
+        <button type="button" class="submit-clear-cached-suggestions">
+          Clear cached suggestions
+        </button>
+      </div>
     </div>
   </div>
 
@@ -144,10 +154,6 @@ found in the LICENSE file.
         </h3>
       </div>
       <div class="vertical-buttons">
-        <button jsvalues="category-id:categoryId" type="button"
-            class="submit-clear-cached-suggestions">
-          Clear cached suggestions
-        </button>
         <button jsvalues="category-id:categoryId" type="button"
             class="toggle-dismissed-suggestions">
           Show dismissed suggestions

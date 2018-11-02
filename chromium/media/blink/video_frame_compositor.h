@@ -18,6 +18,7 @@
 #include "cc/layers/video_frame_provider.h"
 #include "media/base/video_renderer_sink.h"
 #include "media/blink/media_blink_export.h"
+#include "media/blink/webmediaplayer_params.h"
 #include "third_party/WebKit/public/platform/WebVideoFrameSubmitter.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -67,8 +68,11 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
 
   // |task_runner| is the task runner on which this class will live,
   // though it may be constructed on any thread.
-  explicit VideoFrameCompositor(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  // |media_context_provider_callback| requires being called on the media
+  // thread.
+  VideoFrameCompositor(
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+      std::unique_ptr<blink::WebVideoFrameSubmitter> submitter);
 
   // Destruction must happen on the compositor thread; Stop() must have been
   // called before destruction starts.
@@ -76,7 +80,7 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
 
   // Signals the VideoFrameSubmitter to prepare to receive BeginFrames and
   // submit video frames given by VideoFrameCompositor.
-  void EnableSubmission(const viz::FrameSinkId& id);
+  virtual void EnableSubmission(const viz::FrameSinkId& id);
 
   // cc::VideoFrameProvider implementation. These methods must be called on the
   // |task_runner_|.
@@ -88,6 +92,12 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   scoped_refptr<VideoFrame> GetCurrentFrame() override;
   void PutCurrentFrame() override;
 
+  // Returns |current_frame_|, without offering a guarantee as to how recently
+  // it was updated. In certain applications, one might need to periodically
+  // call UpdateCurrentFrameIfStale on |task_runner_| to drive the updates.
+  // Can be called from any thread.
+  scoped_refptr<VideoFrame> GetCurrentFrameOnAnyThread();
+
   // VideoRendererSink implementation. These methods must be called from the
   // same thread (typically the media thread).
   void Start(RenderCallback* callback) override;
@@ -95,29 +105,23 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   void PaintSingleFrame(const scoped_refptr<VideoFrame>& frame,
                         bool repaint_duplicate_frame = false) override;
 
-  // Returns |current_frame_| if |client_| is set.  If no |client_| is set,
-  // |is_background_rendering_| is true, and |callback_| is set, it requests a
-  // new frame from |callback_|, using the elapsed time between calls to this
-  // function as the render interval; defaulting to 16.6ms if no prior calls
-  // have been made.  A cap of 250Hz (4ms) is in place to prevent clients from
-  // accidentally (or intentionally) spamming the rendering pipeline.
+  // If |client_| is not set, |callback_| is set, and |is_background_rendering_|
+  // is true, it requests a new frame from |callback_|. Uses the elapsed time
+  // between calls to this function as the render interval, defaulting to 16.6ms
+  // if no prior calls have been made. A cap of 250Hz (4ms) is in place to
+  // prevent clients from accidentally (or intentionally) spamming the rendering
+  // pipeline.
   //
   // This method is primarily to facilitate canvas and WebGL based applications
   // where the <video> tag is invisible (possibly not even in the DOM) and thus
   // does not receive a |client_|.  In this case, frame acquisition is driven by
   // the frequency of canvas or WebGL paints requested via JavaScript.
-  scoped_refptr<VideoFrame> GetCurrentFrameAndUpdateIfStale();
-
-  // Returns the timestamp of the current (possibly stale) frame, or
-  // base::TimeDelta() if there is no current frame. This method may be called
-  // from the media thread as long as the VFC is stopped. (Assuming that
-  // PaintSingleFrame() is not also called while stopped.)
-  base::TimeDelta GetCurrentFrameTimestamp() const;
+  void UpdateCurrentFrameIfStale();
 
   // Sets the callback to be run when the new frame has been processed. The
   // callback is only run once and then reset.
   // Must be called on the compositor thread.
-  void SetOnNewProcessedFrameCallback(const OnNewProcessedFrameCB& cb);
+  virtual void SetOnNewProcessedFrameCallback(const OnNewProcessedFrameCB& cb);
 
   void set_tick_clock_for_testing(std::unique_ptr<base::TickClock> tick_clock) {
     tick_clock_ = std::move(tick_clock);
@@ -139,6 +143,9 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   }
 
  private:
+  // Ran on the |task_runner_| to initalize |submitter_|;
+  void InitializeSubmitter();
+
   // Indicates whether the endpoint for the VideoFrame exists.
   // TODO(lethalantidote): Update this function to read creation/destruction
   // signals of the SurfaceLayerImpl.
@@ -151,6 +158,8 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // Handles setting of |current_frame_|.
   bool ProcessNewFrame(const scoped_refptr<VideoFrame>& frame,
                        bool repaint_duplicate_frame);
+
+  void SetCurrentFrame(const scoped_refptr<VideoFrame>& frame);
 
   // Called by |background_rendering_timer_| when enough time elapses where we
   // haven't seen a Render() call.
@@ -189,8 +198,8 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   base::TimeTicks last_background_render_;
   OnNewProcessedFrameCB new_processed_frame_cb_;
 
-  // These values are set on the compositor thread, but also read on the media
-  // thread when the VFC is stopped.
+  // Set on the compositor thread, but also read on the media thread.
+  base::Lock current_frame_lock_;
   scoped_refptr<VideoFrame> current_frame_;
 
   // These values are updated and read from the media and compositor threads.
@@ -203,6 +212,8 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
 
   // Whether the use of a surface layer instead of a video layer is enabled.
   bool surface_layer_for_video_enabled_ = false;
+
+  base::WeakPtrFactory<VideoFrameCompositor> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoFrameCompositor);
 };

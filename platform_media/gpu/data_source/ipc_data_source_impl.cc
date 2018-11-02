@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -12,7 +13,7 @@
 #include "platform_media/common/media_pipeline_messages.h"
 #include "ipc/ipc_sender.h"
 
-namespace content {
+namespace media {
 
 class IPCDataSourceImpl::ReadOperation {
  public:
@@ -57,6 +58,7 @@ IPCDataSourceImpl::IPCDataSourceImpl(IPC::Sender* channel,
       suspended_(false),
       should_discard_next_buffer_(false) {
   DCHECK(channel_);
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 }
 
 IPCDataSourceImpl::~IPCDataSourceImpl() = default;
@@ -80,6 +82,9 @@ void IPCDataSourceImpl::Read(int64_t position,
                              int size,
                              uint8_t* data,
                              const ReadCB& read_cb) {
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " Requesting read of size " << size
+          << " from position " << position;
   DCHECK_GE(size, 0);
   {
     base::AutoLock auto_lock(lock_);
@@ -95,9 +100,13 @@ void IPCDataSourceImpl::Read(int64_t position,
 
   if (shared_data_ &&
       shared_data_->mapped_size() >= base::saturated_cast<size_t>(size)) {
+    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " MediaPipelineMsg_ReadRawData";
     channel_->Send(
         new MediaPipelineMsg_ReadRawData(routing_id_, position, size));
   } else {
+    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " MediaPipelineMsg_RequestBufferForRawData";
     channel_->Send(
         new MediaPipelineMsg_RequestBufferForRawData(routing_id_, size));
   }
@@ -206,4 +215,4 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
   }
 }
 
-}  // namespace content
+}  // namespace media

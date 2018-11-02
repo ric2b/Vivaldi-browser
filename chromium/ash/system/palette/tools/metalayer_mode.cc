@@ -4,7 +4,7 @@
 
 #include "ash/system/palette/tools/metalayer_mode.h"
 
-#include "ash/palette_delegate.h"
+#include "ash/highlighter/highlighter_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -14,6 +14,7 @@
 #include "ash/system/toast/toast_manager.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -37,11 +38,11 @@ const int kMaxStrokeGapWhenWritingMs = 1000;
 MetalayerMode::MetalayerMode(Delegate* delegate)
     : CommonPaletteTool(delegate), weak_factory_(this) {
   Shell::Get()->AddPreTargetHandler(this);
-  Shell::Get()->AddShellObserver(this);
+  Shell::Get()->voice_interaction_controller()->AddObserver(this);
 }
 
 MetalayerMode::~MetalayerMode() {
-  Shell::Get()->RemoveShellObserver(this);
+  Shell::Get()->voice_interaction_controller()->RemoveObserver(this);
   Shell::Get()->RemovePreTargetHandler(this);
 }
 
@@ -56,17 +57,18 @@ PaletteToolId MetalayerMode::GetToolId() const {
 void MetalayerMode::OnEnable() {
   CommonPaletteTool::OnEnable();
 
-  Shell::Get()->palette_delegate()->ShowMetalayer(
+  Shell::Get()->highlighter_controller()->SetExitCallback(
       base::BindOnce(&MetalayerMode::OnMetalayerSessionComplete,
                      weak_factory_.GetWeakPtr()),
-      activated_via_button_);
+      !activated_via_button_ /* no retries if activated via button */);
+  Shell::Get()->highlighter_controller()->SetEnabled(true);
   delegate()->HidePalette();
 }
 
 void MetalayerMode::OnDisable() {
   CommonPaletteTool::OnDisable();
 
-  Shell::Get()->palette_delegate()->HideMetalayer();
+  Shell::Get()->highlighter_controller()->SetEnabled(false);
   activated_via_button_ = false;
 }
 
@@ -140,12 +142,12 @@ void MetalayerMode::OnTouchEvent(ui::TouchEvent* event) {
 }
 
 void MetalayerMode::OnVoiceInteractionStatusChanged(
-    VoiceInteractionState state) {
+    mojom::VoiceInteractionState state) {
   voice_interaction_state_ = state;
   UpdateState();
 }
 
-void MetalayerMode::OnVoiceInteractionEnabled(bool enabled) {
+void MetalayerMode::OnVoiceInteractionSettingsEnabled(bool enabled) {
   voice_interaction_enabled_ = enabled;
   UpdateState();
 }

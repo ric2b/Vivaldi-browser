@@ -43,7 +43,7 @@ const size_t* QueryResults::MatchesForURL(const GURL& url,
   if (found == url_to_results_.end()) {
     if (num_matches)
       *num_matches = 0;
-    return NULL;
+    return nullptr;
   }
 
   // All entries in the map should have at least one index, otherwise it
@@ -72,7 +72,7 @@ void QueryResults::SetURLResults(std::vector<URLResult>&& results) {
 void QueryResults::DeleteURL(const GURL& url) {
   // Delete all instances of this URL. We re-query each time since each
   // mutation will cause the indices to change.
-  while (const size_t* match_indices = MatchesForURL(url, NULL))
+  while (const size_t* match_indices = MatchesForURL(url, nullptr))
     DeleteRange(*match_indices, *match_indices);
 }
 
@@ -181,6 +181,13 @@ MostVisitedURL::MostVisitedURL(const GURL& url,
                                base::Time last_forced_time)
     : url(url), title(title), last_forced_time(last_forced_time) {}
 
+MostVisitedURL::MostVisitedURL(const GURL& url,
+                               const base::string16& title,
+                               const RedirectList& preceding_redirects)
+    : url(url), title(title) {
+  InitRedirects(preceding_redirects);
+}
+
 MostVisitedURL::MostVisitedURL(const MostVisitedURL& other) = default;
 
 // TODO(bug 706963) this should be implemented as "= default" when Android
@@ -192,6 +199,21 @@ MostVisitedURL::MostVisitedURL(MostVisitedURL&& other) noexcept
       redirects(std::move(other.redirects)) {}
 
 MostVisitedURL::~MostVisitedURL() {}
+
+void MostVisitedURL::InitRedirects(const RedirectList& redirects_from) {
+  redirects.clear();
+
+  if (redirects_from.empty()) {
+    // Redirects must contain at least the target URL.
+    redirects.push_back(url);
+  } else {
+    redirects = redirects_from;
+    if (redirects.back() != url) {
+      // The last url must be the target URL.
+      redirects.push_back(url);
+    }
+  }
+}
 
 MostVisitedURL& MostVisitedURL::operator=(const MostVisitedURL&) = default;
 
@@ -239,10 +261,10 @@ HistoryAddPageArgs::HistoryAddPageArgs()
                          GURL(),
                          RedirectList(),
                          ui::PAGE_TRANSITION_LINK,
+                         false,
                          SOURCE_BROWSED,
                          false,
-                         true) {
-}
+                         true) {}
 
 HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
                                        base::Time time,
@@ -251,6 +273,7 @@ HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
                                        const GURL& referrer,
                                        const RedirectList& redirects,
                                        ui::PageTransition transition,
+                                       bool hidden,
                                        VisitSource source,
                                        bool did_replace_entry,
                                        bool consider_for_ntp_most_visited)
@@ -261,10 +284,10 @@ HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
       referrer(referrer),
       redirects(redirects),
       transition(transition),
+      hidden(hidden),
       visit_source(source),
       did_replace_entry(did_replace_entry),
-      consider_for_ntp_most_visited(consider_for_ntp_most_visited) {
-}
+      consider_for_ntp_most_visited(consider_for_ntp_most_visited) {}
 
 HistoryAddPageArgs::HistoryAddPageArgs(const HistoryAddPageArgs& other) =
     default;

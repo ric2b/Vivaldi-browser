@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/wayland/wayland_connection.h"
 
 #include <xdg-shell-unstable-v5-client-protocol.h>
+#include <xdg-shell-unstable-v6-client-protocol.h>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -61,7 +62,7 @@ bool WaylandConnection::Initialize() {
     LOG(ERROR) << "No wl_seat object";
     return false;
   }
-  if (!shell_) {
+  if (!shell_v6_ && !shell_) {
     LOG(ERROR) << "No xdg_shell object";
     return false;
   }
@@ -115,6 +116,20 @@ WaylandOutput* WaylandConnection::PrimaryOutput() const {
   return output_list_.front().get();
 }
 
+void WaylandConnection::SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
+                                        const gfx::Point& location) {
+  if (!pointer_ || !pointer_->cursor())
+    return;
+  pointer_->cursor()->UpdateBitmap(bitmaps, location, serial_);
+}
+
+int WaylandConnection::GetKeyboardModifiers() {
+  int modifiers = 0;
+  if (keyboard_)
+    modifiers = keyboard_->modifiers();
+  return modifiers;
+}
+
 void WaylandConnection::OnDispatcherListChanged() {
   StartProcessingEvents();
 }
@@ -153,6 +168,9 @@ void WaylandConnection::Global(void* data,
   static const xdg_shell_listener shell_listener = {
       &WaylandConnection::Ping,
   };
+  static const zxdg_shell_v6_listener shell_v6_listener = {
+      &WaylandConnection::PingV6,
+  };
 
   WaylandConnection* connection = static_cast<WaylandConnection*>(data);
   if (!connection->compositor_ && strcmp(interface, "wl_compositor") == 0) {
@@ -173,7 +191,19 @@ void WaylandConnection::Global(void* data,
       return;
     }
     wl_seat_add_listener(connection->seat_.get(), &seat_listener, connection);
-  } else if (!connection->shell_ && strcmp(interface, "xdg_shell") == 0) {
+  } else if (!connection->shell_v6_ &&
+             strcmp(interface, "zxdg_shell_v6") == 0) {
+    // Check for zxdg_shell_v6 first.
+    connection->shell_v6_ = wl::Bind<zxdg_shell_v6>(
+        registry, name, std::min(version, kMaxXdgShellVersion));
+    if (!connection->shell_v6_) {
+      LOG(ERROR) << "Failed to  bind to zxdg_shell_v6 global";
+      return;
+    }
+    zxdg_shell_v6_add_listener(connection->shell_v6_.get(), &shell_v6_listener,
+                               connection);
+  } else if (!connection->shell_v6_ && !connection->shell_ &&
+             strcmp(interface, "xdg_shell") == 0) {
     connection->shell_ = wl::Bind<xdg_shell>(
         registry, name, std::min(version, kMaxXdgShellVersion));
     if (!connection->shell_) {
@@ -220,9 +250,10 @@ void WaylandConnection::Capabilities(void* data,
         LOG(ERROR) << "Failed to get wl_pointer from seat";
         return;
       }
-      connection->pointer_ = base::MakeUnique<WaylandPointer>(
+      connection->pointer_ = std::make_unique<WaylandPointer>(
           pointer, base::Bind(&WaylandConnection::DispatchUiEvent,
                               base::Unretained(connection)));
+      connection->pointer_->set_connection(connection);
     }
   } else if (connection->pointer_) {
     connection->pointer_.reset();
@@ -234,9 +265,10 @@ void WaylandConnection::Capabilities(void* data,
         LOG(ERROR) << "Failed to get wl_keyboard from seat";
         return;
       }
-      connection->keyboard_ = base::MakeUnique<WaylandKeyboard>(
+      connection->keyboard_ = std::make_unique<WaylandKeyboard>(
           keyboard, base::Bind(&WaylandConnection::DispatchUiEvent,
                                base::Unretained(connection)));
+      connection->keyboard_->set_connection(connection);
     }
   } else if (connection->keyboard_) {
     connection->keyboard_.reset();
@@ -246,6 +278,15 @@ void WaylandConnection::Capabilities(void* data,
 
 // static
 void WaylandConnection::Name(void* data, wl_seat* seat, const char* name) {}
+
+// static
+void WaylandConnection::PingV6(void* data,
+                               zxdg_shell_v6* shell_v6,
+                               uint32_t serial) {
+  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
+  zxdg_shell_v6_pong(shell_v6, serial);
+  connection->ScheduleFlush();
+}
 
 // static
 void WaylandConnection::Ping(void* data, xdg_shell* shell, uint32_t serial) {

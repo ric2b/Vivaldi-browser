@@ -10,23 +10,17 @@
 #include <memory>
 #include <vector>
 
-#import "components/signin/ios/browser/manage_accounts_delegate.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper_delegate.h"
-#import "ios/chrome/browser/web/sad_tab_tab_helper_delegate.h"
 #include "ios/net/request_tracker.h"
 #include "ios/web/public/user_agent.h"
 #include "ui/base/page_transition_types.h"
 
-@protocol ApplicationCommands;
 @class AutofillController;
-@class AutoReloadBridge;
-@protocol BrowserCommands;
-@protocol IOSCaptivePortalBlockingPageDelegate;
 @class CastController;
 @class ExternalAppLauncher;
 @class FormInputAccessoryViewController;
-@class FullScreenController;
-@protocol FullScreenControllerDelegate;
+@class LegacyFullscreenController;
+@protocol LegacyFullscreenControllerDelegate;
 class GURL;
 @class OpenInController;
 @class OverscrollActionsController;
@@ -86,27 +80,16 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Chrome's WebContents in that it encapsulates rendering. Acts as the
 // delegate for the WebState in order to process info about pages having
 // loaded.
-@interface Tab : NSObject<ManageAccountsDelegate,
-                          PagePlaceholderTabHelperDelegate,
-                          SadTabTabHelperDelegate>
+@interface Tab : NSObject<PagePlaceholderTabHelperDelegate>
 
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
-
-// Returns the URL of the last committed NavigationItem for this Tab.
-@property(nonatomic, readonly) const GURL& lastCommittedURL;
-
-// Returns the URL of the visible NavigationItem for this Tab.
-@property(nonatomic, readonly) const GURL& visibleURL;
 
 // The Passkit Dialog provider used to show the UI to download a passkit object.
 @property(nonatomic, weak) id<PassKitDialogProvider> passKitDialogProvider;
 
 // The current title of the tab.
 @property(nonatomic, readonly) NSString* title;
-
-// Original page title or nil if the page did not provide one.
-@property(nonatomic, readonly) NSString* originalTitle;
 
 @property(nonatomic, readonly) NSString* urlDisplayString;
 
@@ -119,8 +102,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // The Webstate associated with this Tab.
 @property(nonatomic, readonly) web::WebState* webState;
 
-// Handles saving and autofill of passwords.
-@property(nonatomic, readonly) PasswordController* passwordController;
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
 @property(nonatomic, weak) id<TabDelegate> delegate;
@@ -132,10 +113,12 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Whether or not desktop user agent is used for the currently visible page.
 @property(nonatomic, readonly) BOOL usesDesktopUserAgent;
 
-@property(nonatomic, weak) id<IOSCaptivePortalBlockingPageDelegate>
-    iOSCaptivePortalBlockingPageDelegate;
-@property(nonatomic, weak) id<FullScreenControllerDelegate>
-    fullScreenControllerDelegate;
+// The delegate to use for the legacy fullscreen controller.  It should not be
+// set if the new fullscreen is enabled.
+// TODO(crbug.com/778823): Remove this property.
+@property(nonatomic, weak) id<LegacyFullscreenControllerDelegate>
+    legacyFullscreenControllerDelegate;
+
 @property(nonatomic, readonly)
     OverscrollActionsController* overscrollActionsController;
 @property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
@@ -145,18 +128,11 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Delegate used to show HTTP Authentication dialogs.
 @property(nonatomic, weak) id<TabDialogDelegate> dialogDelegate;
 
-// TODO(crbug.com/661663): Should this property abstract away the concept of
-// prerendering?  Maybe this can move to the TabDelegate interface.
-@property(nonatomic, assign) BOOL isPrerenderTab;
-@property(nonatomic, assign) BOOL isLinkLoadingPrerenderTab;
-@property(nonatomic, assign) BOOL isVoiceSearchResultsTab;
+// Whether this tab is displaying a voice search result.
+@property(nonatomic, readonly) BOOL isVoiceSearchResultsTab;
 
 // |YES| if the tab has finished loading.
 @property(nonatomic, readonly) BOOL loadFinished;
-
-// Dispatcher that the tab can use to send commands. This should be set
-// when other delegates are set.
-@property(nonatomic, weak) id<ApplicationCommands, BrowserCommands> dispatcher;
 
 // Creates a new Tab with the given WebState.
 - (instancetype)initWithWebState:(web::WebState*)webState;
@@ -167,15 +143,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // not already have a parent tab model set.
 // TODO(crbug.com/228575): Create a delegate interface and remove this.
 - (void)setParentTabModel:(TabModel*)model;
-
-// Triggers the asynchronous loading of the tab's favicon. This will be done
-// automatically when a page loads, but this can be used to trigger favicon
-// fetch earlier (e.g., for a tab that will be shown without loading).
-- (void)fetchFavicon;
-
-// Returns the favicon for the page currently being shown in this Tab, or |nil|
-// if the current page has no favicon.
-- (UIImage*)favicon;
 
 // The view to display in the view hierarchy based on the current URL. Won't be
 // nil. It is up to the caller to size the view and confirm |webUsageEnabled|.
@@ -218,6 +185,7 @@ extern NSString* const kProxyPassthroughHeaderValue;
 - (void)reloadWithUserAgentType:(web::UserAgentType)userAgentType;
 
 // Ensures the toolbar visibility matches |visible|.
+// TODO(crbug.com/778823): Remove this code.
 - (void)updateFullscreenWithToolbarVisible:(BOOL)visible;
 
 // Returns a snapshot of the current page, backed by disk so it can be purged
@@ -258,6 +226,9 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Called when the snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
 
+// Requests deletion of the Tab snapshot.
+- (void)removeSnapshot;
+
 // Called when this tab is shown.
 - (void)wasShown;
 
@@ -266,10 +237,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Evaluates U2F result.
 - (void)evaluateU2FResultFromURL:(const GURL&)url;
-
-// Cancels prerendering. It is an error to call this on anything except a
-// prerender tab (where |isPrerenderTab| is set to YES).
-- (void)discardPrerender;
 
 @end
 

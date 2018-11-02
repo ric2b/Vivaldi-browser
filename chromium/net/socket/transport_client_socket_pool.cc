@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -61,16 +60,9 @@ TransportSocketParams::TransportSocketParams(
       combine_connect_and_write_(combine_connect_and_write_if_supported) {
   if (disable_resolver_cache)
     destination_.set_allow_cached_response(false);
-  // combine_connect_and_write currently translates to TCP FastOpen.
-  // Enable TCP FastOpen if user wants it.
-  if (combine_connect_and_write_ == COMBINE_CONNECT_AND_WRITE_DEFAULT) {
-    IsTCPFastOpenUserEnabled() ? combine_connect_and_write_ =
-        COMBINE_CONNECT_AND_WRITE_DESIRED :
-        COMBINE_CONNECT_AND_WRITE_PROHIBITED;
-  }
 }
 
-TransportSocketParams::~TransportSocketParams() {}
+TransportSocketParams::~TransportSocketParams() = default;
 
 // TODO(eroman): The use of this constant needs to be re-evaluated. The time
 // needed for TCPClientSocketXXX::Connect() can be arbitrarily long, since
@@ -491,7 +483,7 @@ TransportClientSocketPool::TransportClientSocketPool(
   base_.EnableConnectBackupJobs();
 }
 
-TransportClientSocketPool::~TransportClientSocketPool() {}
+TransportClientSocketPool::~TransportClientSocketPool() = default;
 
 int TransportClientSocketPool::RequestSocket(const std::string& group_name,
                                              const void* params,
@@ -525,7 +517,8 @@ void TransportClientSocketPool::RequestSockets(
     const std::string& group_name,
     const void* params,
     int num_sockets,
-    const NetLogWithSource& net_log) {
+    const NetLogWithSource& net_log,
+    HttpRequestInfo::RequestMotivation motivation) {
   const scoped_refptr<TransportSocketParams>* casted_params =
       static_cast<const scoped_refptr<TransportSocketParams>*>(params);
 
@@ -537,7 +530,8 @@ void TransportClientSocketPool::RequestSockets(
             &casted_params->get()->destination().host_port_pair()));
   }
 
-  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log);
+  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log,
+                       motivation);
 }
 
 void TransportClientSocketPool::SetPriority(const std::string& group_name,

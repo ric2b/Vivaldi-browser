@@ -8,10 +8,12 @@
 #include "core/layout/LayoutTestHelper.h"
 
 #include "core/layout/ng/geometry/ng_logical_size.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_layout_test.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
-#include "core/layout/ng/ng_writing_mode.h"
 #include "platform/text/TextDirection.h"
+#include "platform/text/WritingMode.h"
 #include "platform/wtf/Allocator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,16 +25,16 @@ class Element;
 typedef bool TestParamLayoutNG;
 class NGBaseLayoutAlgorithmTest
     : public ::testing::WithParamInterface<TestParamLayoutNG>,
-      public RenderingTest {
- public:
-  NGBaseLayoutAlgorithmTest();
-  ~NGBaseLayoutAlgorithmTest();
-
+      public NGLayoutTest {
  protected:
   void SetUp() override;
 
-  std::pair<RefPtr<NGPhysicalBoxFragment>, RefPtr<NGConstraintSpace>>
+  std::pair<scoped_refptr<NGPhysicalBoxFragment>,
+            scoped_refptr<NGConstraintSpace>>
   RunBlockLayoutAlgorithmForElement(Element* element);
+
+  static const NGPhysicalBoxFragment* CurrentFragmentFor(
+      const LayoutNGBlockFlow*);
 };
 
 class FragmentChildIterator {
@@ -54,8 +56,8 @@ class FragmentChildIterator {
   unsigned index_;
 };
 
-RefPtr<NGConstraintSpace> ConstructBlockLayoutTestConstraintSpace(
-    NGWritingMode writing_mode,
+scoped_refptr<NGConstraintSpace> ConstructBlockLayoutTestConstraintSpace(
+    WritingMode writing_mode,
     TextDirection direction,
     NGLogicalSize size,
     bool shrink_to_fit = false,

@@ -9,11 +9,10 @@ import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 import android.content.Context;
 import android.util.Pair;
 
-import junit.framework.Assert;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.invalidation.InvalidationServiceFactory;
@@ -189,7 +188,12 @@ public final class SyncTestUtil {
             bookmarkSpecifics.put("parent_id", node.getString("PARENT_ID"));
             return bookmarkSpecifics;
         }
-        return specifics.getJSONObject(key);
+
+        JSONObject model_type_info = specifics.getJSONObject(key);
+        if (node.has("metadata")) {
+            model_type_info.put("metadata", node.getJSONObject("metadata"));
+        }
+        return model_type_info;
     }
 
     /**
@@ -247,7 +251,8 @@ public final class SyncTestUtil {
                 new ArrayList<Pair<String, JSONObject>>(datatypeNodes.length());
         for (int i = 0; i < datatypeNodes.length(); i++) {
             JSONObject entity = datatypeNodes.getJSONObject(i);
-            if (!entity.getString("UNIQUE_SERVER_TAG").isEmpty()) {
+            if (entity.has("UNIQUE_SERVER_TAG")
+                    && !entity.getString("UNIQUE_SERVER_TAG").isEmpty()) {
                 // Ignore permanent items (e.g., root datatype folders).
                 continue;
             }

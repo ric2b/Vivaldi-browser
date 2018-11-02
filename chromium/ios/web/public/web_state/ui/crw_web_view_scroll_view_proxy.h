@@ -26,6 +26,7 @@
 @property(nonatomic, assign) UIEdgeInsets contentInset;
 @property(nonatomic, readonly, getter=isDecelerating) BOOL decelerating;
 @property(nonatomic, readonly, getter=isDragging) BOOL dragging;
+@property(nonatomic, readonly, getter=isTracking) BOOL tracking;
 @property(nonatomic, readonly) BOOL isZooming;
 @property(nonatomic, readonly) CGFloat zoomScale;
 @property(nonatomic, assign) UIEdgeInsets scrollIndicatorInsets;
@@ -34,10 +35,14 @@
 @property(nonatomic, getter=isScrollEnabled) BOOL scrollEnabled;
 @property(nonatomic, assign) BOOL bounces;
 @property(nonatomic, assign) BOOL scrollsToTop;
+@property(nonatomic, assign)
+    UIScrollViewContentInsetAdjustmentBehavior contentInsetAdjustmentBehavior
+        API_AVAILABLE(ios(11.0));
 @property(weak, nonatomic, readonly)
     UIPanGestureRecognizer* panGestureRecognizer;
 // Returns the scrollview's gesture recognizers.
 @property(weak, nonatomic, readonly) NSArray* gestureRecognizers;
+@property(nonatomic, readonly, copy) NSArray<__kindof UIView*>* subviews;
 
 - (void)addGestureRecognizer:(UIGestureRecognizer*)gestureRecognizer;
 - (void)removeGestureRecognizer:(UIGestureRecognizer*)gestureRecognizer;

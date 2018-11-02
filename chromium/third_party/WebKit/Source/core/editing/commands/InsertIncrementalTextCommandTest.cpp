@@ -4,8 +4,9 @@
 
 #include "core/editing/commands/InsertIncrementalTextCommand.h"
 
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/testing/EditingTestBase.h"
 
 namespace blink {
 

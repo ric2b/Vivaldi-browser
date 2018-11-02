@@ -3,18 +3,16 @@
 <translationbundle lang="et">
 <translation id="1018656279737460067">Tühistatud</translation>
 <translation id="1031362278801463162">Eelvaate laadimine...</translation>
-<translation id="1049795001945932310">&amp;Keeleseaded</translation>
+<translation id="1049795001945932310">&amp;Keeleseaded...</translation>
 <translation id="1056898198331236512">Hoiatus</translation>
 <translation id="1084824384139382525">Kopeeri lingi aadr&amp;ess</translation>
 <translation id="114140604515785785">Laienduse juurkaust:</translation>
 <translation id="1163931534039071049">&amp;Vaata paneeli lähtekoodi</translation>
-<translation id="1165039591588034296">Viga</translation>
 <translation id="1175364870820465910">&amp;Prindi...</translation>
 <translation id="1181037720776840403">Eemalda</translation>
 <translation id="1187722533808055681">Jõuderežiimist äratamine</translation>
 <translation id="119944043368869598">Tühjenda kõik</translation>
 <translation id="1221825588892235038">Ainult valitud ala</translation>
-<translation id="1238150413700645698">Kaitstud sisu</translation>
 <translation id="1244303850296295656">Laienduse viga</translation>
 <translation id="1278049586634282054">Inspekteerimisvaade:</translation>
 <translation id="1297175357211070620">Printer</translation>
@@ -26,7 +24,6 @@
 <translation id="1546280085599573572">See laiendus muutis seda, milline leht kuvatakse avalehe nupul klõpsamisel.</translation>
 <translation id="1588438908519853928">Tavaline</translation>
 <translation id="159359590073980872">Kujutise vahemälu</translation>
-<translation id="1616206807336925449">Selle laienduse jaoks pole erilube vaja.</translation>
 <translation id="1620510694547887537">Kaamera</translation>
 <translation id="1627276047960621195">Faili deskriptorid</translation>
 <translation id="1635033183663317347">Selle installis teie järelevaataja.</translation>
@@ -100,7 +97,6 @@
 <translation id="2916745397441987255">Laiendi parandamine</translation>
 <translation id="2932883381142163287">Teata väärkasutusest</translation>
 <translation id="2941112035454246133">Madal</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Tee uuesti</translation>
 <translation id="299483336428448530">Selle installis teie vanem.</translation>
 <translation id="3003623123441819449">CSS-i vahemälu</translation>
@@ -135,7 +131,6 @@
 <translation id="3678156199662914018">Laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3725367690636977613">lehekülge</translation>
 <translation id="3727187387656390258">I&amp;nspekteeri</translation>
-<translation id="3730639321086573427">Kohalikud</translation>
 <translation id="3744111561329211289">Taustal sünkroonimine</translation>
 <translation id="3760460896538743390">Uuri &amp;taustalehte</translation>
 <translation id="3763401818161139108">Avage <ph name="ORIGIN" /></translation>
@@ -226,7 +221,6 @@
 <translation id="5575473780076478375">Inkognito laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Madal</translation>
 <translation id="5627086634964711283">Lisaks juhib see seda, mis lehte kuvatakse avalehe nupul klõpsamisel.</translation>
-<translation id="5646376287012673985">Asukoht</translation>
 <translation id="5649053991847567735">Automaatne allalaadimine</translation>
 <translation id="5715711091495208045">Pistikprogrammi vahendaja: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF-ina salvestamine</translation>
@@ -235,7 +229,6 @@
 <translation id="5804241973901381774">Load</translation>
 <translation id="5828633471261496623">Printimine...</translation>
 <translation id="5829401023154985950">Halda...</translation>
-<translation id="5848934677402291689">PDF-ina salvestamine käib...</translation>
 <translation id="5849869942539715694">Paki laiendus...</translation>
 <translation id="5910363049092958439">Sa&amp;lvesta pilt nimega...</translation>
 <translation id="5956585768868398362">Kas see on otsinguleht, mida ootasite?</translation>
@@ -268,7 +261,7 @@
 <translation id="6412931879992742813">Ava link inko&amp;gnito aknas</translation>
 <translation id="6445450263907939268">Kui need on soovimatud muudatused, saate taastada eelmised seaded.</translation>
 <translation id="6447842834002726250">Küpsised</translation>
-<translation id="6498249116389603658">&amp;Kõik teie keeled</translation>
+<translation id="6498249116389603658">&amp;Kõik allolevad keeled</translation>
 <translation id="6503077044568424649">Populaarsed</translation>
 <translation id="6508261954199872201">Rakendus: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kop&amp;eeri pilt</translation>
@@ -290,7 +283,6 @@
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Printeri valimine</translation>
 <translation id="7006634003215061422">Allveeris</translation>
-<translation id="7013485839273047434">Hangi rohkem laiendusi</translation>
 <translation id="708060913198414444">K&amp;opeeri heli aadress</translation>
 <translation id="7144878232160441200">Proovi uuesti</translation>
 <translation id="7206693748120342859">Pistikprogrammi <ph name="PLUGIN_NAME" /> allalaadimine ...</translation>
@@ -327,7 +319,6 @@
 <translation id="7947962633355574091">K&amp;opeeri video aadress</translation>
 <translation id="7965010376480416255">Ühismälu</translation>
 <translation id="7966241909927244760">K&amp;opeeri kujutise aadress</translation>
-<translation id="7967437925638594022">Laiendused</translation>
 <translation id="7978412674231730200">Privaatvõti</translation>
 <translation id="7997826902155442747">Protsessi prioriteet</translation>
 <translation id="7999229196265990314">Loodi järgmised failid:
@@ -338,7 +329,6 @@ Võtmefail: <ph name="KEY_FILE" />
 Hoidke oma võtmefail kindlas kohas. Teil läheb seda oma laiendi uute versioonide loomiseks vaja.</translation>
 <translation id="8004582292198964060">Brauser</translation>
 <translation id="8023801379949507775">Värskenda laiendusi</translation>
-<translation id="8069615408251337349">Google pilvprintimine</translation>
 <translation id="8071432093239591881">Prinditakse pildina</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Luba laiendus</translation>

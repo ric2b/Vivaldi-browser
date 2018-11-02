@@ -8,7 +8,7 @@
 #include <memory>
 #include "core/page/Page.h"
 #include "modules/ModulesExport.h"
-#include "modules/credentialmanager/MakeCredentialOptions.h"
+#include "modules/credentialmanager/MakePublicKeyCredentialOptions.h"
 #include "modules/credentialmanager/WebAuthenticationClient.h"
 #include "platform/Supplementable.h"
 #include "public/platform/WebCredentialManagerClient.h"
@@ -33,7 +33,7 @@ class MODULES_EXPORT CredentialManagerClient final
  public:
   explicit CredentialManagerClient(WebCredentialManagerClient*);
   virtual ~CredentialManagerClient();
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static const char* SupplementName();
   static CredentialManagerClient* From(Page*);
@@ -55,7 +55,7 @@ class MODULES_EXPORT CredentialManagerClient final
                            WebCredentialManagerClient::RequestCallbacks*);
   virtual void DispatchMakeCredential(
       LocalFrame&,
-      const MakeCredentialOptions&,
+      const MakePublicKeyCredentialOptions&,
       std::unique_ptr<WebAuthenticationClient::PublicKeyCallbacks>);
 
  private:

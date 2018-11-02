@@ -25,7 +25,7 @@ PrintQueriesQueue::~PrintQueriesQueue() {
 void PrintQueriesQueue::QueuePrinterQuery(PrinterQuery* job) {
   base::AutoLock lock(lock_);
   DCHECK(job);
-  queued_queries_.push_back(make_scoped_refptr(job));
+  queued_queries_.push_back(base::WrapRefCounted(job));
   DCHECK(job->is_valid());
 }
 
@@ -47,8 +47,7 @@ scoped_refptr<PrinterQuery> PrintQueriesQueue::PopPrinterQuery(
 scoped_refptr<PrinterQuery> PrintQueriesQueue::CreatePrinterQuery(
     int render_process_id,
     int render_frame_id) {
-  return make_scoped_refptr(
-      new PrinterQuery(render_process_id, render_frame_id));
+  return base::MakeRefCounted<PrinterQuery>(render_process_id, render_frame_id);
 }
 
 void PrintQueriesQueue::Shutdown() {

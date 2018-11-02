@@ -32,6 +32,8 @@
 #define SelectorFilter_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/dom/Element.h"
 #include "platform/wtf/BloomFilter.h"
 #include "platform/wtf/Vector.h"
@@ -41,7 +43,6 @@ namespace blink {
 class CSSSelector;
 
 class CORE_EXPORT SelectorFilter {
-  WTF_MAKE_NONCOPYABLE(SelectorFilter);
   DISALLOW_NEW();
 
  public:
@@ -52,13 +53,13 @@ class CORE_EXPORT SelectorFilter {
     ParentStackFrame() : element(nullptr) {}
     explicit ParentStackFrame(Element& element) : element(&element) {}
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
     Member<Element> element;
     Vector<unsigned, 4> identifier_hashes;
   };
 
-  SelectorFilter() {}
+  SelectorFilter() = default;
 
   void PushParent(Element& parent);
   void PopParent(Element& parent);
@@ -74,7 +75,7 @@ class CORE_EXPORT SelectorFilter {
                                       unsigned* identifier_hashes,
                                       unsigned maximum_identifier_count);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   void PushParentStackFrame(Element& parent);
@@ -86,6 +87,7 @@ class CORE_EXPORT SelectorFilter {
   // rate of ~0.2%.
   using IdentifierFilter = BloomFilter<12>;
   std::unique_ptr<IdentifierFilter> ancestor_identifier_filter_;
+  DISALLOW_COPY_AND_ASSIGN(SelectorFilter);
 };
 
 template <unsigned maximumIdentifierCount>

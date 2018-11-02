@@ -15,7 +15,7 @@ namespace views {
 // static
 std::unique_ptr<NativeViewAccessibility> NativeViewAccessibility::Create(
     View* view) {
-  return base::MakeUnique<NativeViewAccessibilityMac>(view);
+  return std::make_unique<NativeViewAccessibilityMac>(view);
 }
 
 NativeViewAccessibilityMac::NativeViewAccessibilityMac(View* view)
@@ -27,9 +27,6 @@ gfx::NativeViewAccessible NativeViewAccessibilityMac::GetParent() {
 
   if (view_->GetWidget())
     return view_->GetWidget()->GetNativeView();
-
-  if (parent_widget_)
-    return parent_widget_->GetRootView()->GetNativeViewAccessible();
 
   return nullptr;
 }

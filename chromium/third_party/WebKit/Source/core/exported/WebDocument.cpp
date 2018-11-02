@@ -30,32 +30,32 @@
 
 #include "public/web/WebDocument.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8ElementRegistrationOptions.h"
+#include "core/css/CSSSelectorWatch.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StyleSheetContents.h"
-#include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentStatisticsCollector.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebDistillability.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebDOMEvent.h"
@@ -74,6 +74,11 @@ WebSecurityOrigin WebDocument::GetSecurityOrigin() const {
   if (!ConstUnwrap<Document>())
     return WebSecurityOrigin();
   return WebSecurityOrigin(ConstUnwrap<Document>()->GetSecurityOrigin());
+}
+
+void WebDocument::GrantLoadLocalResources() {
+  if (Document* document = Unwrap<Document>())
+    document->GetMutableSecurityOrigin()->GrantLoadLocalResources();
 }
 
 bool WebDocument::IsSecureContext() const {
@@ -162,7 +167,7 @@ void WebDocument::Forms(WebVector<WebFormElement>& results) const {
     Element* element = forms->item(i);
     // Strange but true, sometimes node can be 0.
     if (element && element->IsHTMLElement())
-      temp.push_back(WebFormElement(toHTMLFormElement(element)));
+      temp.push_back(WebFormElement(ToHTMLFormElement(element)));
   }
   results.Assign(temp);
 }
@@ -179,17 +184,18 @@ WebElement WebDocument::FocusedElement() const {
   return WebElement(ConstUnwrap<Document>()->FocusedElement());
 }
 
-WebStyleSheetId WebDocument::InsertStyleSheet(const WebString& source_code) {
+WebStyleSheetId WebDocument::InsertStyleSheet(const WebString& source_code,
+                                              CSSOrigin origin) {
   Document* document = Unwrap<Document>();
   DCHECK(document);
   StyleSheetContents* parsed_sheet =
       StyleSheetContents::Create(CSSParserContext::Create(*document));
   parsed_sheet->ParseString(source_code);
-  return document->GetStyleEngine().InjectAuthorSheet(parsed_sheet);
+  return document->GetStyleEngine().InjectSheet(parsed_sheet, origin);
 }
 
 void WebDocument::RemoveInsertedStyleSheet(WebStyleSheetId stylesheet_id) {
-  Unwrap<Document>()->GetStyleEngine().RemoveInjectedAuthorSheet(stylesheet_id);
+  Unwrap<Document>()->GetStyleEngine().RemoveInjectedSheet(stylesheet_id);
 }
 
 void WebDocument::WatchCSSSelectors(const WebVector<WebString>& web_selectors) {
@@ -228,20 +234,18 @@ WebVector<WebDraggableRegion> WebDocument::DraggableRegions() const {
 
 v8::Local<v8::Value> WebDocument::RegisterEmbedderCustomElement(
     const WebString& name,
-    v8::Local<v8::Value> options,
-    WebExceptionCode& ec) {
+    v8::Local<v8::Value> options) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   Document* document = Unwrap<Document>();
   DummyExceptionStateForTesting exception_state;
   ElementRegistrationOptions registration_options;
-  V8ElementRegistrationOptions::toImpl(isolate, options, registration_options,
+  V8ElementRegistrationOptions::ToImpl(isolate, options, registration_options,
                                        exception_state);
   if (exception_state.HadException())
     return v8::Local<v8::Value>();
   ScriptValue constructor = document->registerElement(
       ScriptState::Current(isolate), name, registration_options,
       exception_state, V0CustomElement::kEmbedderNames);
-  ec = exception_state.Code();
   if (exception_state.HadException())
     return v8::Local<v8::Value>();
   return constructor.V8Value();
@@ -263,6 +267,14 @@ bool WebDocument::ManifestUseCredentials() const {
   return EqualIgnoringASCIICase(
       link_element->FastGetAttribute(HTMLNames::crossoriginAttr),
       "use-credentials");
+}
+
+WebURL WebDocument::CanonicalUrlForSharing() const {
+  const Document* document = ConstUnwrap<Document>();
+  HTMLLinkElement* link_element = document->LinkCanonical();
+  if (!link_element)
+    return WebURL();
+  return link_element->Href();
 }
 
 WebDistillabilityFeatures WebDocument::DistillabilityFeatures() {

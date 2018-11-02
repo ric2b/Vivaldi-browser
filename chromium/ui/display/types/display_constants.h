@@ -13,15 +13,16 @@ namespace display {
 // before display IDs are known.
 constexpr int64_t kInvalidDisplayId = -1;
 
+// Display ID for a virtual display assigned to a unified desktop.
+constexpr int64_t kUnifiedDisplayId = -10;
+
 // Used to describe the state of a multi-display configuration.
 enum MultipleDisplayState {
   MULTIPLE_DISPLAY_STATE_INVALID,
   MULTIPLE_DISPLAY_STATE_HEADLESS,
   MULTIPLE_DISPLAY_STATE_SINGLE,
   MULTIPLE_DISPLAY_STATE_DUAL_MIRROR,
-  MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED,
-  // TODO(oshima): consolidate DUAL_EXTENDED and MULTI_EXTENDED.
-  MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
+  MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,  // 2+ displays in extended mode.
 };
 
 // Video output types.

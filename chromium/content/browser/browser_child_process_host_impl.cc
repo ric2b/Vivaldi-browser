@@ -7,7 +7,7 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -26,9 +26,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/tracing/common/tracing_switches.h"
-#include "content/browser/histogram_message_filter.h"
+#include "content/browser/histogram_controller.h"
 #include "content/browser/loader/resource_message_filter.h"
-#include "content/browser/profiler_message_filter.h"
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/tracing/trace_message_filter.h"
 #include "content/common/child_process_host_impl.h"
@@ -48,6 +47,7 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "services/service_manager/embedder/switches.h"
 
 #if defined(OS_MACOSX)
@@ -62,30 +62,31 @@ static base::LazyInstance<
     g_child_process_list = LAZY_INSTANCE_INITIALIZER;
 
 base::LazyInstance<base::ObserverList<BrowserChildProcessObserver>>::
-    DestructorAtExit g_observers = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_browser_child_process_observers =
+        LAZY_INSTANCE_INITIALIZER;
 
 void NotifyProcessLaunchedAndConnected(const ChildProcessData& data) {
-  for (auto& observer : g_observers.Get())
+  for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessLaunchedAndConnected(data);
 }
 
 void NotifyProcessHostConnected(const ChildProcessData& data) {
-  for (auto& observer : g_observers.Get())
+  for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessHostConnected(data);
 }
 
 void NotifyProcessHostDisconnected(const ChildProcessData& data) {
-  for (auto& observer : g_observers.Get())
+  for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessHostDisconnected(data);
 }
 
 void NotifyProcessCrashed(const ChildProcessData& data, int exit_code) {
-  for (auto& observer : g_observers.Get())
+  for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessCrashed(data, exit_code);
 }
 
 void NotifyProcessKilled(const ChildProcessData& data, int exit_code) {
-  for (auto& observer : g_observers.Get())
+  for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessKilled(data, exit_code);
 }
 
@@ -131,14 +132,14 @@ BrowserChildProcessHostImpl::BrowserChildProcessList*
 void BrowserChildProcessHostImpl::AddObserver(
     BrowserChildProcessObserver* observer) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  g_observers.Get().AddObserver(observer);
+  g_browser_child_process_observers.Get().AddObserver(observer);
 }
 
 // static
 void BrowserChildProcessHostImpl::RemoveObserver(
     BrowserChildProcessObserver* observer) {
   // TODO(phajdan.jr): Check thread after fixing http://crbug.com/167126.
-  g_observers.Get().RemoveObserver(observer);
+  g_browser_child_process_observers.Get().RemoveObserver(observer);
 }
 
 BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
@@ -156,8 +157,6 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
 
   child_process_host_.reset(ChildProcessHost::Create(this));
   AddFilter(new TraceMessageFilter(data_.id));
-  AddFilter(new ProfilerMessageFilter(process_type));
-  AddFilter(new HistogramMessageFilter);
 
   g_child_process_list.Get().push_back(this);
   GetContentClient()->browser()->BrowserChildProcessHostCreated(this);
@@ -524,10 +523,14 @@ void BrowserChildProcessHostImpl::CreateMetricsAllocator() {
 
 void BrowserChildProcessHostImpl::ShareMetricsAllocatorToProcess() {
   if (metrics_allocator_) {
-    base::SharedMemoryHandle shm_handle =
-        metrics_allocator_->shared_memory()->handle().Duplicate();
-    Send(new ChildProcessMsg_SetHistogramMemory(
-        shm_handle, metrics_allocator_->shared_memory()->mapped_size()));
+    HistogramController::GetInstance()->SetHistogramMemory<ChildProcessHost>(
+        GetHost(),
+        mojo::WrapSharedMemoryHandle(
+            metrics_allocator_->shared_memory()->handle().Duplicate(),
+            metrics_allocator_->shared_memory()->mapped_size(), false));
+  } else {
+    HistogramController::GetInstance()->SetHistogramMemory<ChildProcessHost>(
+        GetHost(), mojo::ScopedSharedBufferHandle());
   }
 }
 
@@ -594,9 +597,10 @@ void BrowserChildProcessHostImpl::OnMojoError(
   }
   LOG(ERROR) << "Terminating child process for bad Mojo message: " << error;
 
-  // Create a memory dump with the error message aliased. This will make it easy
-  // to determine details about what interface call failed.
-  base::debug::Alias(&error);
+  // Create a memory dump with the error message captured in a crash key value.
+  // This will make it easy to determine details about what interface call
+  // failed.
+  base::debug::ScopedCrashKey error_key_value("mojo-message-error", error);
   base::debug::DumpWithoutCrashing();
   process->child_process_->GetProcess().Terminate(
       RESULT_CODE_KILLED_BAD_MESSAGE, false);

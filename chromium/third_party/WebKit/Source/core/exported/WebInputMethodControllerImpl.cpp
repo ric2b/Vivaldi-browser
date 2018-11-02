@@ -4,19 +4,19 @@
 
 #include "core/exported/WebInputMethodControllerImpl.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/ImeTextSpanVectorBuilder.h"
-#include "core/editing/InputMethodController.h"
 #include "core/editing/PlainTextRange.h"
+#include "core/editing/ime/ImeTextSpanVectorBuilder.h"
+#include "core/editing/ime/InputMethodController.h"
 #include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/WebLocalFrameImpl.h"
+#include "core/input_type_names.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "public/platform/WebString.h"
@@ -31,7 +31,7 @@ WebInputMethodControllerImpl::WebInputMethodControllerImpl(
 
 WebInputMethodControllerImpl::~WebInputMethodControllerImpl() {}
 
-DEFINE_TRACE(WebInputMethodControllerImpl) {
+void WebInputMethodControllerImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_frame_);
 }
 
@@ -53,8 +53,11 @@ bool WebInputMethodControllerImpl::SetComposition(
     return false;
 
   // Select the range to be replaced with the composition later.
-  if (!replacement_range.IsNull())
-    web_frame_->SelectRange(replacement_range);
+  if (!replacement_range.IsNull()) {
+    web_frame_->SelectRange(replacement_range,
+                            WebLocalFrame::kHideSelectionHandle,
+                            blink::mojom::SelectionMenuBehavior::kHide);
+  }
 
   // We should verify the parent node of this IME composition node are
   // editable because JavaScript may delete a parent node of the composition
@@ -70,7 +73,7 @@ bool WebInputMethodControllerImpl::SetComposition(
   }
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
 
   GetInputMethodController().SetComposition(
       String(text), ImeTextSpanVectorBuilder::Build(ime_text_spans),
@@ -107,7 +110,7 @@ bool WebInputMethodControllerImpl::CommitText(
     const WebRange& replacement_range,
     int relative_caret_position) {
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
 
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported()) {
     return plugin->CommitText(text, ime_text_spans, replacement_range,
@@ -115,8 +118,11 @@ bool WebInputMethodControllerImpl::CommitText(
   }
 
   // Select the range to be replaced with the composition later.
-  if (!replacement_range.IsNull())
-    web_frame_->SelectRange(replacement_range);
+  if (!replacement_range.IsNull()) {
+    web_frame_->SelectRange(replacement_range,
+                            WebLocalFrame::kHideSelectionHandle,
+                            blink::mojom::SelectionMenuBehavior::kHide);
+  }
 
   // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
@@ -139,6 +145,21 @@ int WebInputMethodControllerImpl::ComputeWebTextInputNextPreviousFlags() {
 
 WebTextInputType WebInputMethodControllerImpl::TextInputType() {
   return GetFrame()->GetInputMethodController().TextInputType();
+}
+
+WebRange WebInputMethodControllerImpl::CompositionRange() {
+  EphemeralRange range =
+      GetFrame()->GetInputMethodController().CompositionEphemeralRange();
+
+  if (range.IsNull())
+    return WebRange();
+
+  Element* editable =
+      GetFrame()->Selection().RootEditableElementOrDocumentElement();
+
+  editable->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
+  return PlainTextRange::Create(*editable, range);
 }
 
 WebRange WebInputMethodControllerImpl::GetSelectionOffsets() const {

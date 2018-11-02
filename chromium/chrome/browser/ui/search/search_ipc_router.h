@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_SEARCH_SEARCH_IPC_ROUTER_H_
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -14,8 +15,7 @@
 #include "chrome/common/search.mojom.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
-#include "components/ntp_tiles/tile_source.h"
-#include "components/ntp_tiles/tile_visual_type.h"
+#include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -57,33 +57,23 @@ class SearchIPCRouter : public content::WebContentsObserver,
 
     // Called to log an impression from a given provider on the New Tab Page.
     virtual void OnLogMostVisitedImpression(
-        int position,
-        ntp_tiles::TileSource tile_source,
-        ntp_tiles::TileVisualType tile_type) = 0;
+        const ntp_tiles::NTPTileImpression& impression) = 0;
 
     // Called to log a navigation from a given provider on the New Tab Page.
     virtual void OnLogMostVisitedNavigation(
-        int position,
-        ntp_tiles::TileSource tile_source,
-        ntp_tiles::TileVisualType tile_type) = 0;
+        const ntp_tiles::NTPTileImpression& impression) = 0;
 
     // Called when the page wants to paste the |text| (or the clipboard contents
     // if the |text| is empty) into the omnibox.
     virtual void PasteIntoOmnibox(const base::string16& text) = 0;
 
     // Called when the EmbeddedSearch wants to verify the signed-in Chrome
-    // identity against the provided |identity|. Will make a round-trip to the
-    // browser and eventually return the result through
-    // SendChromeIdentityCheckResult. Calls SendChromeIdentityCheckResult with
-    // true if the identity matches.
-    virtual void OnChromeIdentityCheck(const base::string16& identity) = 0;
+    // identity against the provided |identity|.
+    virtual bool ChromeIdentityCheck(const base::string16& identity) = 0;
 
-    // Called when the EmbeddedSearch wants to verify the signed-in Chrome
-    // identity against the provided |identity|. Will make a round-trip to the
-    // browser and eventually return the result through
-    // SendHistorySyncCheckResult. Calls SendHistorySyncCheckResult with true if
-    // the user syncs their history.
-    virtual void OnHistorySyncCheck() = 0;
+    // Called when the EmbeddedSearch wants to verify that history sync is
+    // enabled.
+    virtual bool HistorySyncCheck() = 0;
   };
 
   // An interface to be implemented by consumers of SearchIPCRouter objects to
@@ -103,12 +93,10 @@ class SearchIPCRouter : public content::WebContentsObserver,
     virtual bool ShouldProcessPasteIntoOmnibox(bool is_active_tab) = 0;
     virtual bool ShouldProcessChromeIdentityCheck() = 0;
     virtual bool ShouldProcessHistorySyncCheck() = 0;
-    virtual bool ShouldSendSetSuggestionToPrefetch() = 0;
     virtual bool ShouldSendSetInputInProgress(bool is_active_tab) = 0;
     virtual bool ShouldSendOmniboxFocusChanged() = 0;
     virtual bool ShouldSendMostVisitedItems() = 0;
     virtual bool ShouldSendThemeBackgroundInfo() = 0;
-    virtual bool ShouldSubmitQuery() = 0;
   };
 
   // Creates chrome::mojom::EmbeddedSearchClient connections on request.
@@ -132,16 +120,6 @@ class SearchIPCRouter : public content::WebContentsObserver,
   // Tells the SearchIPCRouter that a new page in an Instant process committed.
   void OnNavigationEntryCommitted();
 
-  // Tells the renderer about the result of the Chrome identity check.
-  void SendChromeIdentityCheckResult(const base::string16& identity,
-                                     bool identity_match);
-
-  // Tells the renderer whether the user syncs history.
-  void SendHistorySyncCheckResult(bool sync_history);
-
-  // Tells the page the suggestion to be prefetched if any.
-  void SetSuggestionToPrefetch(const InstantSuggestion& suggestion);
-
   // Tells the page that user input started or stopped.
   void SetInputInProgress(bool input_in_progress);
 
@@ -154,9 +132,6 @@ class SearchIPCRouter : public content::WebContentsObserver,
 
   // Tells the renderer about the current theme background.
   void SendThemeBackgroundInfo(const ThemeBackgroundInfo& theme_info);
-
-  // Tells the page that the user pressed Enter in the omnibox.
-  void Submit(const EmbeddedSearchRequestParams& params);
 
   // Called when the tab corresponding to |this| instance is activated.
   void OnTabActivated();
@@ -172,19 +147,19 @@ class SearchIPCRouter : public content::WebContentsObserver,
   void LogEvent(int page_seq_no,
                 NTPLoggingEventType event,
                 base::TimeDelta time) override;
-  void LogMostVisitedImpression(int page_seq_no,
-                                int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type) override;
-  void LogMostVisitedNavigation(int page_seq_no,
-                                int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type) override;
+  void LogMostVisitedImpression(
+      int page_seq_no,
+      const ntp_tiles::NTPTileImpression& impression) override;
+  void LogMostVisitedNavigation(
+      int page_seq_no,
+      const ntp_tiles::NTPTileImpression& impression) override;
   void PasteAndOpenDropdown(int page_seq_no,
                             const base::string16& text) override;
   void ChromeIdentityCheck(int page_seq_no,
-                           const base::string16& identity) override;
-  void HistorySyncCheck(int page_seq_no) override;
+                           const base::string16& identity,
+                           ChromeIdentityCheckCallback callback) override;
+  void HistorySyncCheck(int page_seq_no,
+                        HistorySyncCheckCallback callback) override;
 
   void set_embedded_search_client_factory_for_testing(
       std::unique_ptr<EmbeddedSearchClientFactory> factory) {

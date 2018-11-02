@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -69,9 +70,10 @@ void GetTpmVersion(GetTpmVersionCallback callback) {
   chromeos::DBusThreadManager::Get()->GetCryptohomeClient()->TpmGetVersion(
       base::BindOnce(
           [](GetTpmVersionCallback callback,
-             chromeos::DBusMethodCallStatus call_status,
-             const CryptohomeClient::TpmVersionInfo& tpm_version_info) {
-            std::move(callback).Run(tpm_version_info);
+             base::Optional<CryptohomeClient::TpmVersionInfo>
+                 tpm_version_info) {
+            std::move(callback).Run(
+                tpm_version_info.value_or(CryptohomeClient::TpmVersionInfo()));
           },
           std::move(callback)));
 }

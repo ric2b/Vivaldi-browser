@@ -4,6 +4,9 @@
 
 #include "chrome/browser/guest_view/web_view/chrome_web_view_permission_helper_delegate.h"
 
+#include <map>
+#include <utility>
+
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -37,8 +40,8 @@ void CallbackWrapper(const base::Callback<void(bool)>& callback,
 ChromeWebViewPermissionHelperDelegate::ChromeWebViewPermissionHelperDelegate(
     WebViewPermissionHelper* web_view_permission_helper)
     : WebViewPermissionHelperDelegate(web_view_permission_helper),
-      weak_factory_(this) {
-}
+      plugin_auth_host_bindings_(web_contents(), this),
+      weak_factory_(this) {}
 
 ChromeWebViewPermissionHelperDelegate::~ChromeWebViewPermissionHelperDelegate()
 {}
@@ -48,14 +51,6 @@ bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
   IPC_BEGIN_MESSAGE_MAP(ChromeWebViewPermissionHelperDelegate, message)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_BlockedOutdatedPlugin,
-                        OnBlockedOutdatedPlugin)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_BlockedUnauthorizedPlugin,
-                        OnBlockedUnauthorizedPlugin)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_CouldNotLoadPlugin,
-                        OnCouldNotLoadPlugin)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_RemovePluginPlaceholderHost,
-                        OnRemovePluginPlaceholderHost)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_OpenPDF, OnOpenPDF)
     IPC_MESSAGE_UNHANDLED(return false)
   IPC_END_MESSAGE_MAP()
@@ -63,7 +58,7 @@ bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
   return true;
 }
 
-void ChromeWebViewPermissionHelperDelegate::OnBlockedUnauthorizedPlugin(
+void ChromeWebViewPermissionHelperDelegate::BlockedUnauthorizedPlugin(
     const base::string16& name,
     const std::string& identifier) {
   const char kPluginName[] = "name";
@@ -81,19 +76,6 @@ void ChromeWebViewPermissionHelperDelegate::OnBlockedUnauthorizedPlugin(
       true /* allowed_by_default */);
   base::RecordAction(
       base::UserMetricsAction("WebView.Guest.PluginLoadRequest"));
-}
-
-void ChromeWebViewPermissionHelperDelegate::OnCouldNotLoadPlugin(
-    const base::FilePath& plugin_path) {
-}
-
-void ChromeWebViewPermissionHelperDelegate::OnBlockedOutdatedPlugin(
-    int placeholder_id,
-    const std::string& identifier) {
-}
-
-void ChromeWebViewPermissionHelperDelegate::OnRemovePluginPlaceholderHost(
-    int placeholder_id) {
 }
 
 void ChromeWebViewPermissionHelperDelegate::OnPermissionResponse(
@@ -184,17 +166,14 @@ void ChromeWebViewPermissionHelperDelegate::RequestGeolocationPermission(
   // It is safe to hold an unretained pointer to
   // ChromeWebViewPermissionHelperDelegate because this callback is called from
   // ChromeWebViewPermissionHelperDelegate::SetPermission.
-  const WebViewPermissionHelper::PermissionResponseCallback
-      permission_callback =
-          base::Bind(&ChromeWebViewPermissionHelperDelegate::
+  WebViewPermissionHelper::PermissionResponseCallback permission_callback =
+      base::BindOnce(&ChromeWebViewPermissionHelperDelegate::
                          OnGeolocationPermissionResponse,
                      weak_factory_.GetWeakPtr(), bridge_id, user_gesture,
                      base::Bind(&CallbackWrapper, callback));
   int request_id = web_view_permission_helper()->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_GEOLOCATION,
-      request_info,
-      permission_callback,
-      false /* allowed_by_default */);
+      WEB_VIEW_PERMISSION_TYPE_GEOLOCATION, request_info,
+      std::move(permission_callback), false /* allowed_by_default */);
   bridge_id_to_request_id_map_[bridge_id] = request_id;
 }
 
@@ -215,7 +194,7 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
 
   content::WebContents* web_contents =
       web_view_guest()->embedder_web_contents();
-  int render_process_id = web_contents->GetRenderProcessHost()->GetID();
+  int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
   int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
 
   const PermissionRequestID request_id(
@@ -257,16 +236,15 @@ void ChromeWebViewPermissionHelperDelegate::RequestNotificationPermission(
   // It is safe to hold an unretained pointer to
   // ChromeWebViewPermissionHelperDelegate because this callback is called from
   // ChromeWebViewPermissionHelperDelegate::SetPermission.
-  const WebViewPermissionHelper::PermissionResponseCallback
-      permission_callback =
-          base::Bind(&ChromeWebViewPermissionHelperDelegate::
+  WebViewPermissionHelper::PermissionResponseCallback permission_callback =
+          base::BindOnce(&ChromeWebViewPermissionHelperDelegate::
                          OnNotificationPermissionResponse,
                      weak_factory_.GetWeakPtr(), bridge_id, user_gesture,
                      base::Bind(&CallbackWrapper, callback));
   int request_id = web_view_permission_helper()->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_NOTIFICATION,
       request_info,
-      permission_callback,
+      std::move(permission_callback),
       false /* allowed_by_default */);
   bridge_id_to_request_id_map_[bridge_id] = request_id;
 }
@@ -288,7 +266,7 @@ void ChromeWebViewPermissionHelperDelegate::OnNotificationPermissionResponse(
 
   content::WebContents* web_contents =
       web_view_guest()->embedder_web_contents();
-  int render_process_id = web_contents->GetRenderProcessHost()->GetID();
+  int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
   int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
 
   const PermissionRequestID request_id(
@@ -377,8 +355,12 @@ void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedAsyncResponse(
     bool allowed) {
   TabSpecificContentSettings::FileSystemAccessed(
       render_process_id, render_frame_id, url, !allowed);
-  Send(new ChromeViewMsg_RequestFileSystemAccessAsyncResponse(
-      render_frame_id, request_id, allowed));
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+  if (rfh) {
+    rfh->Send(new ChromeViewMsg_RequestFileSystemAccessAsyncResponse(
+        render_frame_id, request_id, allowed));
+  }
 }
 
 }  // namespace extensions

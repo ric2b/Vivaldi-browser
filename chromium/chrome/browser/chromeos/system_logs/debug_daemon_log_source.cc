@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -65,9 +65,6 @@ void DebugDaemonLogSource::Fetch(const SysLogsSourceCallback& callback) {
   client->GetWiMaxStatus(base::Bind(&DebugDaemonLogSource::OnGetWiMaxStatus,
                                     weak_ptr_factory_.GetWeakPtr()));
   ++num_pending_requests_;
-  client->GetUserLogFiles(base::Bind(&DebugDaemonLogSource::OnGetUserLogFiles,
-                                     weak_ptr_factory_.GetWeakPtr()));
-  ++num_pending_requests_;
 
   if (scrub_) {
     client->GetScrubbedBigLogs(base::Bind(&DebugDaemonLogSource::OnGetLogs,
@@ -79,44 +76,38 @@ void DebugDaemonLogSource::Fetch(const SysLogsSourceCallback& callback) {
   ++num_pending_requests_;
 }
 
-void DebugDaemonLogSource::OnGetRoutes(bool succeeded,
-                                       const std::vector<std::string>& routes) {
+void DebugDaemonLogSource::OnGetRoutes(
+    base::Optional<std::vector<std::string>> routes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (succeeded)
-    (*response_)[kRoutesKeyName] = base::JoinString(routes, "\n");
-  else
-    (*response_)[kRoutesKeyName] = kNotAvailable;
+  (*response_)[kRoutesKeyName] = routes.has_value()
+                                     ? base::JoinString(routes.value(), "\n")
+                                     : kNotAvailable;
   RequestCompleted();
 }
 
-void DebugDaemonLogSource::OnGetNetworkStatus(bool succeeded,
-                                              const std::string& status) {
+void DebugDaemonLogSource::OnGetNetworkStatus(
+    base::Optional<std::string> status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (succeeded)
-    (*response_)[kNetworkStatusKeyName] = status;
-  else
-    (*response_)[kNetworkStatusKeyName] = kNotAvailable;
+  (*response_)[kNetworkStatusKeyName] =
+      std::move(status).value_or(kNotAvailable);
   RequestCompleted();
 }
 
-void DebugDaemonLogSource::OnGetModemStatus(bool succeeded,
-                                            const std::string& status) {
+void DebugDaemonLogSource::OnGetModemStatus(
+    base::Optional<std::string> status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (succeeded)
-    (*response_)[kModemStatusKeyName] = status;
-  else
-    (*response_)[kModemStatusKeyName] = kNotAvailable;
+  (*response_)[kModemStatusKeyName] = std::move(status).value_or(kNotAvailable);
   RequestCompleted();
 }
 
-void DebugDaemonLogSource::OnGetWiMaxStatus(bool succeeded,
-                                            const std::string& status) {
+void DebugDaemonLogSource::OnGetWiMaxStatus(
+    base::Optional<std::string> status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  (*response_)[kWiMaxStatusKeyName] = succeeded ? status : kNotAvailable;
+  (*response_)[kWiMaxStatusKeyName] = std::move(status).value_or(kNotAvailable);
   RequestCompleted();
 }
 
@@ -136,7 +127,8 @@ void DebugDaemonLogSource::OnGetUserLogFiles(
     const KeyValueMap& user_log_files) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (succeeded) {
-    SystemLogsResponse* response = new SystemLogsResponse;
+    auto response = std::make_unique<SystemLogsResponse>();
+    SystemLogsResponse* response_ptr = response.get();
 
     const user_manager::UserList& users =
         user_manager::UserManager::Get()->GetLoggedInUsers();
@@ -153,13 +145,15 @@ void DebugDaemonLogSource::OnGetUserLogFiles(
 
     base::PostTaskWithTraitsAndReply(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-        base::Bind(&DebugDaemonLogSource::ReadUserLogFiles, user_log_files,
-                   profile_dirs, response),
-        base::Bind(&DebugDaemonLogSource::MergeResponse,
-                   weak_ptr_factory_.GetWeakPtr(), base::Owned(response)));
+        base::BindOnce(&DebugDaemonLogSource::ReadUserLogFiles, user_log_files,
+                       profile_dirs, response_ptr),
+        base::BindOnce(&DebugDaemonLogSource::MergeUserLogFilesResponse,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(response)));
   } else {
     (*response_)[kUserLogFileKeyName] = kNotAvailable;
-    RequestCompleted();
+    auto response = std::make_unique<SystemLogsResponse>();
+    std::swap(response, response_);
+    callback_.Run(std::move(response));
   }
 }
 
@@ -187,11 +181,12 @@ void DebugDaemonLogSource::ReadUserLogFiles(
   }
 }
 
-void DebugDaemonLogSource::MergeResponse(SystemLogsResponse* response) {
-  for (SystemLogsResponse::const_iterator it = response->begin();
-       it != response->end(); ++it)
-    response_->insert(*it);
-  RequestCompleted();
+void DebugDaemonLogSource::MergeUserLogFilesResponse(
+    std::unique_ptr<SystemLogsResponse> response) {
+  response_->insert(response->begin(), response->end());
+  auto response_to_return = std::make_unique<SystemLogsResponse>();
+  std::swap(response_to_return, response_);
+  callback_.Run(std::move(response_to_return));
 }
 
 void DebugDaemonLogSource::RequestCompleted() {
@@ -201,7 +196,12 @@ void DebugDaemonLogSource::RequestCompleted() {
   --num_pending_requests_;
   if (num_pending_requests_ > 0)
     return;
-  callback_.Run(response_.get());
+  // When all other logs are collected, fetch the user logs, because any errors
+  // fetching the other logs is reported in the user logs.
+  chromeos::DebugDaemonClient* client =
+      chromeos::DBusThreadManager::Get()->GetDebugDaemonClient();
+  client->GetUserLogFiles(base::Bind(&DebugDaemonLogSource::OnGetUserLogFiles,
+                                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 }  // namespace system_logs

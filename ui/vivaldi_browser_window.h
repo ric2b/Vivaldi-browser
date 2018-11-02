@@ -49,9 +49,8 @@ struct DraggableRegion;
 
 class VivaldiWindowEventDelegate {
  public:
-  virtual void OnMinimized() = 0;
-  virtual void OnMaximized() = 0;
-  virtual void OnRestored() = 0;
+  virtual void OnMinimizedChanged(bool minimized) = 0;
+  virtual void OnMaximizedChanged(bool maximized) = 0;
   virtual void OnFullscreenChanged(bool fullscreen) = 0;
   virtual void OnDocumentLoaded() = 0;
 };
@@ -74,7 +73,7 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
                   const GURL& url) override;
   void LoadContents(int32_t creator_process_id) override;
   void NativeWindowChanged(NativeAppWindow* native_app_window) override;
-  void NativeWindowClosed() override;
+  void NativeWindowClosed(bool send_onclosed) override;
   void OnWindowReady() override;
   content::WebContents* GetWebContents() const override;
   WindowController* GetWindowController() const override;
@@ -363,9 +362,8 @@ class VivaldiBrowserWindow
   void OnNativeWindowActivated();
 
   // VivaldiWindowEventDelegate implementation
-  void OnMinimized() override;
-  void OnMaximized() override;
-  void OnRestored() override;
+  void OnMinimizedChanged(bool minimized) override;
+  void OnMaximizedChanged(bool maximized) override;
   void OnFullscreenChanged(bool fullscreen) override;
   void OnDocumentLoaded() override;
 

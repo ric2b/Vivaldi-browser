@@ -6,6 +6,7 @@
 #define ImageBitmap_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/html/canvas/ImageElementBase.h"
@@ -17,7 +18,6 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace blink {
@@ -32,20 +32,15 @@ enum AlphaDisposition {
   kPremultiplyAlpha,
   kDontPremultiplyAlpha,
 };
-enum DataColorFormat {
-  kRGBAColorType,
-  kN32ColorType,
-};
+
 enum ColorSpaceInfoUpdate {
   kUpdateColorSpaceInformation,
   kDontUpdateColorSpaceInformation,
 };
 
-class CORE_EXPORT ImageBitmap final
-    : public GarbageCollectedFinalized<ImageBitmap>,
-      public ScriptWrappable,
-      public CanvasImageSource,
-      public ImageBitmapSource {
+class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
+                                      public CanvasImageSource,
+                                      public ImageBitmapSource {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -69,8 +64,8 @@ class CORE_EXPORT ImageBitmap final
   static ImageBitmap* Create(ImageBitmap*,
                              Optional<IntRect>,
                              const ImageBitmapOptions& = ImageBitmapOptions());
-  static ImageBitmap* Create(RefPtr<StaticBitmapImage>);
-  static ImageBitmap* Create(RefPtr<StaticBitmapImage>,
+  static ImageBitmap* Create(scoped_refptr<StaticBitmapImage>);
+  static ImageBitmap* Create(scoped_refptr<StaticBitmapImage>,
                              Optional<IntRect>,
                              const ImageBitmapOptions& = ImageBitmapOptions());
   // This function is called by structured-cloning an ImageBitmap.
@@ -96,10 +91,10 @@ class CORE_EXPORT ImageBitmap final
   using WebType = sk_sp<SkImage>;
   static ImageBitmap* Take(ScriptPromiseResolver*, sk_sp<SkImage>);
 
-  RefPtr<StaticBitmapImage> BitmapImage() const { return image_; }
-  RefPtr<Uint8Array> CopyBitmapData();
-  RefPtr<Uint8Array> CopyBitmapData(AlphaDisposition,
-                                    DataColorFormat = kRGBAColorType);
+  scoped_refptr<StaticBitmapImage> BitmapImage() const { return image_; }
+  scoped_refptr<Uint8Array> CopyBitmapData();
+  scoped_refptr<Uint8Array> CopyBitmapData(AlphaDisposition,
+                                           DataU8ColorType = kRGBAColorType);
   unsigned long width() const;
   unsigned long height() const;
   IntSize Size() const;
@@ -107,7 +102,7 @@ class CORE_EXPORT ImageBitmap final
   bool IsNeutered() const { return is_neutered_; }
   bool OriginClean() const { return image_->OriginClean(); }
   bool IsPremultiplied() const { return image_->IsPremultiplied(); }
-  RefPtr<StaticBitmapImage> Transfer();
+  scoped_refptr<StaticBitmapImage> Transfer();
   void close();
 
   ~ImageBitmap() override;
@@ -115,18 +110,16 @@ class CORE_EXPORT ImageBitmap final
   CanvasColorParams GetCanvasColorParams();
 
   // CanvasImageSource implementation
-  RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                        AccelerationHint,
-                                        SnapshotReason,
-                                        const FloatSize&) override;
+  scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                               AccelerationHint,
+                                               SnapshotReason,
+                                               const FloatSize&) override;
   bool WouldTaintOrigin(SecurityOrigin*) const override {
     return !image_->OriginClean();
   }
   void AdjustDrawRects(FloatRect* src_rect, FloatRect* dst_rect) const override;
   FloatSize ElementSize(const FloatSize&) const override;
   bool IsImageBitmap() const override { return true; }
-  int SourceWidth() override { return image_ ? image_->width() : 0; }
-  int SourceHeight() override { return image_ ? image_->height() : 0; }
   bool IsAccelerated() const override;
 
   // ImageBitmapSource implementation
@@ -140,14 +133,14 @@ class CORE_EXPORT ImageBitmap final
     bool flip_y = false;
     bool premultiply_alpha = true;
     bool should_scale_input = false;
+    bool has_color_space_conversion = false;
+    bool source_is_unpremul = false;
     unsigned resize_width = 0;
     unsigned resize_height = 0;
     IntRect crop_rect;
     SkFilterQuality resize_quality = kLow_SkFilterQuality;
     CanvasColorParams color_params;
   };
-
-  DECLARE_VIRTUAL_TRACE();
 
  private:
   ImageBitmap(ImageElementBase*,
@@ -162,8 +155,8 @@ class CORE_EXPORT ImageBitmap final
   ImageBitmap(OffscreenCanvas*, Optional<IntRect>, const ImageBitmapOptions&);
   ImageBitmap(ImageData*, Optional<IntRect>, const ImageBitmapOptions&);
   ImageBitmap(ImageBitmap*, Optional<IntRect>, const ImageBitmapOptions&);
-  ImageBitmap(RefPtr<StaticBitmapImage>);
-  ImageBitmap(RefPtr<StaticBitmapImage>,
+  ImageBitmap(scoped_refptr<StaticBitmapImage>);
+  ImageBitmap(scoped_refptr<StaticBitmapImage>,
               Optional<IntRect>,
               const ImageBitmapOptions&);
   ImageBitmap(const void* pixel_data,
@@ -181,7 +174,7 @@ class CORE_EXPORT ImageBitmap final
                                                const IntRect&,
                                                bool origin_clean,
                                                std::unique_ptr<ParsedOptions>);
-  RefPtr<StaticBitmapImage> image_;
+  scoped_refptr<StaticBitmapImage> image_;
   bool is_neutered_ = false;
 };
 

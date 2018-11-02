@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
+#include "content/public/common/child_process_host.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
@@ -18,8 +19,10 @@
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
 #include "net/base/request_priority.h"
+#include "net/http/http_request_headers.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
@@ -57,26 +60,24 @@ struct CONTENT_EXPORT ResourceRequest {
   blink::WebReferrerPolicy referrer_policy = blink::kWebReferrerPolicyAlways;
 
   // The frame's visibility state.
-  blink::WebPageVisibilityState visibility_state =
-      blink::kWebPageVisibilityStateVisible;
+  blink::mojom::PageVisibilityState visibility_state =
+      blink::mojom::PageVisibilityState::kVisible;
 
   // Additional HTTP request headers.
-  //
-  // For HTTP(S) requests, the headers parameter can be a \r\n-delimited and
-  // \r\n-terminated list of MIME headers.  They should be ASCII-encoded using
-  // the standard MIME header encoding rules.  The headers parameter can also
-  // be null if no extra request headers need to be set.
-  std::string headers;
+  net::HttpRequestHeaders headers;
 
   // net::URLRequest load flags (0 by default).
   int load_flags = 0;
 
-  // Process ID from which this request originated, or zero if it originated
-  // in the renderer itself.
-  int origin_pid = 0;
+  // If this request originated from a pepper plugin running in a child
+  // process, this identifies which process it came from. Otherwise, it
+  // is zero.
+  int plugin_child_id = ChildProcessHost::kInvalidUniqueID;
 
   // What this resource load is for (main frame, sub-frame, sub-resource,
   // object).
+  // TODO(qinmin): this is used for legacy code path. With network service, it
+  // shouldn't know about resource type.
   ResourceType resource_type = RESOURCE_TYPE_MAIN_FRAME;
 
   // The priority of this request determined by Blink.
@@ -92,6 +93,16 @@ struct CONTENT_EXPORT ResourceRequest {
   // True if corresponding AppCache group should be resetted.
   bool should_reset_appcache = false;
 
+  // https://wicg.github.io/cors-rfc1918/#external-request
+  // TODO(toyoshim): The browser should know better than renderers do.
+  // This is used to plumb Blink decided information for legacy code path, but
+  // eventually we should remove this.
+  bool is_external_request = false;
+
+  // A policy to decide if CORS-preflight fetch should be performed.
+  network::mojom::CORSPreflightPolicy cors_preflight_policy =
+      network::mojom::CORSPreflightPolicy::kConsiderPreflight;
+
   // Indicates which frame (or worker context) the request is being loaded into,
   // or kInvalidServiceWorkerProviderId.
   int service_worker_provider_id = kInvalidServiceWorkerProviderId;
@@ -105,10 +116,12 @@ struct CONTENT_EXPORT ResourceRequest {
   ServiceWorkerMode service_worker_mode = ServiceWorkerMode::ALL;
 
   // The request mode passed to the ServiceWorker.
-  FetchRequestMode fetch_request_mode = FETCH_REQUEST_MODE_SAME_ORIGIN;
+  network::mojom::FetchRequestMode fetch_request_mode =
+      network::mojom::FetchRequestMode::kSameOrigin;
 
   // The credentials mode passed to the ServiceWorker.
-  FetchCredentialsMode fetch_credentials_mode = FETCH_CREDENTIALS_MODE_OMIT;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode =
+      network::mojom::FetchCredentialsMode::kOmit;
 
   // The redirect mode used in Fetch API.
   FetchRedirectMode fetch_redirect_mode = FetchRedirectMode::FOLLOW_MODE;
@@ -135,6 +148,10 @@ struct CONTENT_EXPORT ResourceRequest {
   // to that file will be provided in ResponseInfo::download_file_path.
   bool download_to_file = false;
 
+  // True if the request can work after the fetch group is terminated.
+  // https://fetch.spec.whatwg.org/#request-keepalive-flag
+  bool keepalive = false;
+
   // True if the request was user initiated.
   bool has_user_gesture = false;
 
@@ -155,13 +172,6 @@ struct CONTENT_EXPORT ResourceRequest {
 
   // True if |frame_id| is the main frame of a RenderView.
   bool is_main_frame = false;
-
-  // True if |parent_render_frame_id| is the main frame of a RenderView.
-  bool parent_is_main_frame = false;
-
-  // Identifies the parent frame of the frame that sent the request.
-  // -1 if unknown / invalid.
-  int parent_render_frame_id = -1;
 
   ui::PageTransition transition_type = ui::PAGE_TRANSITION_LINK;
 

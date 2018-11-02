@@ -104,9 +104,9 @@ class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
       const std::vector<InputMethodManager::MenuItem>& items) override;
   void MaybeNotifyImeMenuActivationChanged() override;
   void OverrideKeyboardUrlRef(const std::string& keyset) override;
-  bool IsEmojiHandwritingVoiceOnImeMenuEnabled() override;
   void SetImeMenuFeatureEnabled(ImeMenuFeature feature, bool enabled) override;
   bool GetImeMenuFeatureEnabled(ImeMenuFeature feature) const override;
+  void NotifyObserversImeExtraInputStateChange() override;
 
  private:
   uint32_t features_enabled_state_;

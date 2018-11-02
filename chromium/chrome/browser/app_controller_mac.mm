@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
 #include "base/auto_reset.h"
@@ -34,14 +36,12 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/command_updater.h"
+#include "chrome/browser/command_updater_impl.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -74,6 +74,7 @@
 #import "chrome/browser/ui/cocoa/history_menu_bridge.h"
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
+#import "chrome/browser/ui/cocoa/share_menu_controller.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
@@ -93,6 +94,8 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/handoff/handoff_manager.h"
 #include "components/handoff/handoff_utility.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -183,7 +186,7 @@ void RecordLastRunAppBundlePath() {
   // real, user-visible app bundle directory. (The alternatives give either the
   // framework's path or the initial app's path, which may be an app mode shim
   // or a unit test.)
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath app_bundle_path =
       chrome::GetVersionedDirectory().DirName().DirName().DirName();
@@ -422,6 +425,25 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     NSMenuItem* customizeItem = [viewMenu itemWithTag:IDC_CUSTOMIZE_TOUCH_BAR];
     if (customizeItem)
       [viewMenu removeItem:customizeItem];
+  }
+
+  // In |applicationWillFinishLaunching| because FeatureList isn't
+  // available at init time.
+  if (base::FeatureList::IsEnabled(features::kMacSystemShareMenu)) {
+    // Initialize the share menu.
+    [self initShareMenu];
+  }
+
+  // Remove "Enable Javascript in Apple Events" if the feature is disabled.
+  if (!base::FeatureList::IsEnabled(
+          features::kAppleScriptExecuteJavaScriptMenuItem)) {
+    NSMenu* mainMenu = [NSApp mainMenu];
+    NSMenu* viewMenu = [[mainMenu itemWithTag:IDC_VIEW_MENU] submenu];
+    NSMenu* devMenu = [[viewMenu itemWithTag:IDC_DEVELOPER_MENU] submenu];
+    NSMenuItem* javascriptAppleEventItem =
+        [devMenu itemWithTag:IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS];
+    if (javascriptAppleEventItem)
+      [devMenu removeItem:javascriptAppleEventItem];
   }
 }
 
@@ -1041,6 +1063,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return;
   }
 
+  // If not between -applicationDidFinishLaunching: and
+  // -applicationWillTerminate:, ignore. This can happen when events are sitting
+  // in the event queue while the browser is shutting down.
+  if (!keep_alive_)
+    return;
+
   NSInteger tag = [sender tag];
 
   // If there are no browser windows, and we are trying to open a browser
@@ -1355,7 +1383,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (void)initMenuState {
-  menuState_.reset(new CommandUpdater(NULL));
+  menuState_ = std::make_unique<CommandUpdaterImpl>(nullptr);
 
   if (vivaldi::IsVivaldiRunning())
     return;
@@ -1484,6 +1512,28 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   profileMenuController_.reset(
       [[ProfileMenuController alloc] initWithMainMenuItem:profileMenu]);
+}
+
+- (void)initShareMenu {
+  shareMenuController_.reset([[ShareMenuController alloc] init]);
+  NSMenu* mainMenu = [NSApp mainMenu];
+  NSMenu* fileMenu = [[mainMenu itemWithTag:IDC_FILE_MENU] submenu];
+  NSString* shareMenuTitle = l10n_util::GetNSString(IDS_SHARE_MAC);
+  base::scoped_nsobject<NSMenuItem> shareMenuItem([[NSMenuItem alloc]
+      initWithTitle:shareMenuTitle
+             action:NULL
+      keyEquivalent:@""]);
+  base::scoped_nsobject<NSMenu> shareSubmenu(
+      [[NSMenu alloc] initWithTitle:shareMenuTitle]);
+  [shareSubmenu setDelegate:shareMenuController_];
+  [shareMenuItem setSubmenu:shareSubmenu];
+  // Replace "Email Page Location" with Share.
+  // TODO(crbug.com/770804): Remove this code and update the XIB when
+  // the share menu launches.
+  NSInteger index = [fileMenu indexOfItemWithTag:IDC_EMAIL_PAGE_LOCATION];
+  DCHECK(index != -1);
+  [fileMenu removeItemAtIndex:index];
+  [fileMenu insertItem:shareMenuItem atIndex:index];
 }
 
 // The Confirm to Quit preference is atypical in that the preference lives in
@@ -1739,14 +1789,6 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   return historyMenuBridge_.get();
 }
 
-- (void)addObserverForWorkAreaChange:(ui::WorkAreaWatcherObserver*)observer {
-  workAreaChangeObservers_.AddObserver(observer);
-}
-
-- (void)removeObserverForWorkAreaChange:(ui::WorkAreaWatcherObserver*)observer {
-  workAreaChangeObservers_.RemoveObserver(observer);
-}
-
 - (void)initAppShimMenuController {
   if (!appShimMenuController_)
     appShimMenuController_.reset([[AppShimMenuController alloc] init]);
@@ -1770,18 +1812,32 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // See https://crbug.com/497813 for more details.
   NSMenuItem* bookmarkItem = [[NSApp mainMenu] itemWithTag:IDC_BOOKMARKS_MENU];
   BOOL hidden = [bookmarkItem isHidden];
+  // NOTE(espen@vivaldi.com) From ch64 we have to add the toplevel bookmark
+  // menu in our xib file (VivaldiMainMenu.xib) to prevent a crash on startup.
+  // It will however not be made visible until we have support on all
+  // platforms with the desired feature set.
+  if (vivaldi::IsVivaldiRunning()) {
+    hidden = TRUE;
+  }
+
+
   [bookmarkItem setHidden:NO];
   lastProfile_ = profile;
 
-  auto it = profileBookmarkMenuBridgeMap_.find(profile->GetPath());
-  if (it == profileBookmarkMenuBridgeMap_.end()) {
+  auto& entry = profileBookmarkMenuBridgeMap_[profile->GetPath()];
+  if (!entry) {
+    // This creates a deep copy, but only the first 3 items in the root menu
+    // are really wanted. This can probably be optimized, but lazy-loading of
+    // the menu should reduce the impact in most flows.
     base::scoped_nsobject<NSMenu> submenu([[bookmarkItem submenu] copy]);
-    bookmarkMenuBridge_ = new BookmarkMenuBridge(profile, submenu);
-    profileBookmarkMenuBridgeMap_[profile->GetPath()] =
-        base::WrapUnique(bookmarkMenuBridge_);
-  } else {
-    bookmarkMenuBridge_ = it->second.get();
+    [submenu setDelegate:nil];  // The delegate is also copied. Remove it.
+
+    entry = std::make_unique<BookmarkMenuBridge>(profile, submenu);
+
+    // Clear bookmarks from the old profile.
+    entry->ClearBookmarkMenu();
   }
+  bookmarkMenuBridge_ = entry.get();
 
   // No need to |BuildMenu| here.  It is done lazily upon menu access.
   [bookmarkItem setSubmenu:bookmarkMenuBridge_->BookmarkMenu()];
@@ -1801,18 +1857,6 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                      UpdateSharedCommandsForIncognitoAvailability,
                  menuState_.get(),
                  lastProfile_));
-}
-
-- (void)applicationDidChangeScreenParameters:(NSNotification*)notification {
-  // During this callback the working area is not always already updated. Defer.
-  [self performSelector:@selector(delayedScreenParametersUpdate)
-             withObject:nil
-             afterDelay:0];
-}
-
-- (void)delayedScreenParametersUpdate {
-  for (auto& observer : workAreaChangeObservers_)
-    observer.WorkAreaChanged();
 }
 
 - (BOOL)application:(NSApplication*)application

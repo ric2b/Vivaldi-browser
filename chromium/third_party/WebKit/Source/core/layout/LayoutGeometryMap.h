@@ -26,6 +26,7 @@
 #ifndef LayoutGeometryMap_h
 #define LayoutGeometryMap_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/layout/LayoutGeometryMapStep.h"
 #include "core/layout/MapCoordinatesFlags.h"
@@ -34,6 +35,7 @@
 #include "platform/geometry/IntSize.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/wtf/Allocator.h"
+#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -47,7 +49,6 @@ class TransformState;
 // transforms.
 class CORE_EXPORT LayoutGeometryMap {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(LayoutGeometryMap);
 
  public:
   LayoutGeometryMap(MapCoordinatesFlags = kUseTransforms);
@@ -58,7 +59,7 @@ class CORE_EXPORT LayoutGeometryMap {
   }
 
   FloatRect AbsoluteRect(const FloatRect& rect) const {
-    return MapToAncestor(rect, 0).BoundingBox();
+    return MapToAncestor(rect, nullptr).BoundingBox();
   }
 
   // Map to an ancestor. Will assert that the ancestor has been pushed onto this
@@ -119,6 +120,8 @@ class CORE_EXPORT LayoutGeometryMap {
   LayoutGeometryMapSteps mapping_;
   LayoutSize accumulated_offset_;
   MapCoordinatesFlags map_coordinates_flags_;
+
+  DISALLOW_COPY_AND_ASSIGN(LayoutGeometryMap);
 };
 
 }  // namespace blink

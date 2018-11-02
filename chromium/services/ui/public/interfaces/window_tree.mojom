@@ -4,16 +4,17 @@
 
 module ui.mojom;
 
-import "cc/ipc/frame_sink_id.mojom";
-import "cc/ipc/local_surface_id.mojom";
-import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
-import "services/viz/public/interfaces/compositing/surface_info.mojom";
+import "mojo/common/unguessable_token.mojom";
 import "services/ui/public/interfaces/cursor/cursor.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
 import "services/ui/public/interfaces/mus_constants.mojom";
 import "services/ui/public/interfaces/window_manager.mojom";
 import "services/ui/public/interfaces/window_manager_constants.mojom";
 import "services/ui/public/interfaces/window_tree_constants.mojom";
+import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_info.mojom";
 import "skia/public/interfaces/bitmap.mojom";
 import "ui/base/mojo/ui_base_types.mojom";
 import "ui/events/mojo/event.mojom";
@@ -112,7 +113,7 @@ interface WindowTree {
   // Sets the specified bounds of the specified window. The window will paint
   // the frame in the provided |local_frame_id|, if any.
   SetWindowBounds(uint32 change_id, uint32 window_id, gfx.mojom.Rect bounds,
-                  cc.mojom.LocalSurfaceId? local_surface_id);
+                  viz.mojom.LocalSurfaceId? local_surface_id);
 
   SetWindowTransform(uint32 change_id,
                      uint32 window_id,
@@ -247,6 +248,24 @@ interface WindowTree {
   Embed(uint32 window_id, WindowTreeClient client, uint32 embed_flags)
       => (bool success);
 
+  // Schedules a future call to Embed() using the returned token. This is used
+  // when two clients need to work together to complete an embedding without
+  // passing the WindowTreeClient between the two. This ensures a client isn't
+  // able to spoof another client (say by directly passing events to the
+  // client).
+  //
+  // For example, client A embeds client B in a window. Client A wants client B
+  // to embed a WindowTreeClient in a window created by client B. This can be
+  // accomplished by client A calling ScheduleEmbed() and then passing the
+  // token returned from ScheduleEmbed() to client B (using a separate pipe) so
+  // that client B may call EmbedUsingToken().
+  ScheduleEmbed(WindowTreeClient client)
+      => (mojo.common.mojom.UnguessableToken token);
+  EmbedUsingToken(uint32 window_id,
+                  mojo.common.mojom.UnguessableToken token,
+                  uint32 embed_flags)
+      => (bool success);
+
   // Sets focus to the specified window, use 0 to clear focus. For a window to
   // get focus the following has to happen: the window is drawn, the window has
   // been marked as focusable (see SetCanFocus()) and the window is in a
@@ -263,12 +282,12 @@ interface WindowTree {
   // TODO(erg): Additional cursor methods. Visibility, and cursor locking.
 
   // Set text input state for the given window.
-  SetWindowTextInputState(uint32 window_id, mojo.TextInputState state);
+  SetWindowTextInputState(uint32 window_id, TextInputState state);
 
   // Set the input method editor UI (software keyboard, etc) visibility.
   // If state is non-null, the specified window's text input state is updated.
   // Otherwise the existing state is used.
-  SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
+  SetImeVisibility(uint32 window_id, bool visible, TextInputState? state);
 
   // Sets the EventTargetingPolicy. See EventTargetingPolicy for details.
   SetEventTargetingPolicy(uint32 window_id, EventTargetingPolicy policy);
@@ -286,6 +305,9 @@ interface WindowTree {
 
   // Stacks the window above all sibling windows.
   StackAtTop(uint32 change_id, uint32 window_id);
+
+  // Tells the window manager to perform |string_action| for |window_id|.
+  PerformWmAction(uint32 window_id, string action);
 
   // See description of WindowManager for details.
   GetWindowManagerClient(associated WindowManagerClient& internal);
@@ -347,7 +369,7 @@ interface WindowTreeClient {
           int64 display_id,
           uint32 focused_window,
           bool parent_drawn,
-          cc.mojom.LocalSurfaceId? local_surface_id);
+          viz.mojom.LocalSurfaceId? local_surface_id);
 
   // Invoked when the application embedded at |window| is disconnected. In other
   // words the embedded app closes the connection to the server. This is called
@@ -366,7 +388,7 @@ interface WindowTreeClient {
   // This is called on the owner of a window when it embeds a client in it,
   // which includes the window manager creating a new window at the request of
   // another client.
-  OnFrameSinkIdAllocated(uint32 window, cc.mojom.FrameSinkId frame_sink_id);
+  OnFrameSinkIdAllocated(uint32 window, viz.mojom.FrameSinkId frame_sink_id);
 
   // Called in response to NewTopLevelWindow() successfully completing.
   // |parent_drawn| is true if the parent of the window is drawn, see
@@ -377,14 +399,14 @@ interface WindowTreeClient {
                     WindowData data,
                     int64 display_id,
                     bool parent_drawn,
-                    cc.mojom.LocalSurfaceId? local_surface_id);
+                    viz.mojom.LocalSurfaceId? local_surface_id);
 
   // Invoked when a window's bounds have changed. Only the client embedded in
   // |window| gets a non_empty |local_surface_id|.
   OnWindowBoundsChanged(uint32 window,
                         gfx.mojom.Rect old_bounds,
                         gfx.mojom.Rect new_bounds,
-                        cc.mojom.LocalSurfaceId? local_surface_id);
+                        viz.mojom.LocalSurfaceId? local_surface_id);
 
   OnWindowTransformChanged(uint32 window,
                            gfx.mojom.Transform old_transform,
@@ -455,9 +477,12 @@ interface WindowTreeClient {
   // specified by StartPointerWatcher(). The client will not receive farther
   // events until the event is ack'ed, regardless of the value of
   // |matches_pointer_watcher|.
+  // TODO(sky): remove |event_location_in_screen_pixel_layout| temporary until
+  // http://crbug.com/747465 is fixed.
   OnWindowInputEvent(uint32 event_id,
                      uint32 window,
                      int64 display_id,
+                     gfx.mojom.PointF event_location_in_screen_pixel_layout,
                      ui.mojom.Event event,
                      bool matches_pointer_watcher);
 

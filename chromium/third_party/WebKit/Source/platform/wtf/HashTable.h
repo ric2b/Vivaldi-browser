@@ -147,14 +147,14 @@ class HashTableStatsPtr<Allocator, false> final {
 
  public:
   static std::unique_ptr<HashTableStats> Create() {
-    return base::MakeUnique<HashTableStats>();
+    return std::make_unique<HashTableStats>();
   }
 
   static std::unique_ptr<HashTableStats> copy(
       const std::unique_ptr<HashTableStats>& other) {
     if (!other)
       return nullptr;
-    return base::MakeUnique<HashTableStats>(*other);
+    return std::make_unique<HashTableStats>(*other);
   }
 
   static void swap(std::unique_ptr<HashTableStats>& stats,
@@ -842,8 +842,8 @@ class HashTable final
            !Allocator::IsObjectResurrectionForbidden() &&
            Allocator::IsAllocationAllowed();
   }
-  ValueType* Expand(ValueType* entry = 0);
-  void Shrink() { Rehash(table_size_ / 2, 0); }
+  ValueType* Expand(ValueType* entry = nullptr);
+  void Shrink() { Rehash(table_size_ / 2, nullptr); }
 
   ValueType* ExpandBuffer(unsigned new_table_size, ValueType* entry, bool&);
   ValueType* RehashTo(ValueType* new_table,
@@ -1003,7 +1003,7 @@ void HashTable<Key,
     CHECK(!static_cast<int>(
         new_capacity >>
         31));  // HashTable capacity should not overflow 32bit int.
-    Rehash(new_capacity, 0);
+    Rehash(new_capacity, nullptr);
   }
 }
 

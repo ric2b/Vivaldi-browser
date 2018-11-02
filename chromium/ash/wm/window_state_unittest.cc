@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/public/cpp/window_properties.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_util.h"
@@ -17,6 +18,8 @@
 #include "ui/aura/window.h"
 #include "ui/display/screen.h"
 
+using ash::mojom::WindowStateType;
+
 namespace ash {
 namespace wm {
 namespace {
@@ -25,7 +28,7 @@ class AlwaysMaximizeTestState : public WindowState::State {
  public:
   explicit AlwaysMaximizeTestState(WindowStateType initial_state_type)
       : state_type_(initial_state_type) {}
-  ~AlwaysMaximizeTestState() override {}
+  ~AlwaysMaximizeTestState() override = default;
 
   // WindowState::State overrides:
   void OnWMEvent(WindowState* window_state, const WMEvent* event) override {
@@ -35,9 +38,9 @@ class AlwaysMaximizeTestState : public WindowState::State {
   void AttachState(WindowState* window_state,
                    WindowState::State* previous_state) override {
     // We always maximize.
-    if (state_type_ != WINDOW_STATE_TYPE_MAXIMIZED) {
+    if (state_type_ != mojom::WindowStateType::MAXIMIZED) {
       window_state->Maximize();
-      state_type_ = WINDOW_STATE_TYPE_MAXIMIZED;
+      state_type_ = mojom::WindowStateType::MAXIMIZED;
     }
   }
   void DetachState(WindowState* window_state) override {}
@@ -193,7 +196,7 @@ TEST_F(WindowStateTest, SnapWindowSetBounds) {
   WindowState* window_state = GetWindowState(window.get());
   const WMEvent snap_left(WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&snap_left);
-  EXPECT_EQ(WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());
   gfx::Rect expected =
       gfx::Rect(kWorkAreaBounds.x(), kWorkAreaBounds.y(),
                 kWorkAreaBounds.width() / 2, kWorkAreaBounds.height());
@@ -203,7 +206,7 @@ TEST_F(WindowStateTest, SnapWindowSetBounds) {
   expected.set_width(500);
   window->SetBounds(gfx::Rect(10, 10, 500, 300));
   EXPECT_EQ(expected.ToString(), window->GetBoundsInScreen().ToString());
-  EXPECT_EQ(WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());
 }
 
 // Test that snapping left/right preserves the restore bounds.
@@ -251,7 +254,7 @@ TEST_F(WindowStateTest, RestoreBounds) {
 TEST_F(WindowStateTest, AutoManaged) {
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
   WindowState* window_state = GetWindowState(window.get());
-  window_state->set_window_position_managed(true);
+  window_state->SetWindowPositionManaged(true);
   window->Hide();
   window->SetBounds(gfx::Rect(100, 100, 100, 100));
   window->Show();
@@ -269,7 +272,7 @@ TEST_F(WindowStateTest, AutoManaged) {
             window->GetBoundsInScreen().ToString());
 
   // The window should still be auto managed despite being right maximized.
-  EXPECT_TRUE(window_state->window_position_managed());
+  EXPECT_TRUE(window_state->GetWindowPositionManaged());
 }
 
 // Test that the replacement of a State object works as expected.
@@ -454,6 +457,17 @@ TEST_F(WindowStateTest, FullscreenMinimizedSwitching) {
   // return to the state before minimizing and fullscreen.
   ash::wm::ToggleFullScreen(window_state, nullptr);
   ASSERT_TRUE(window_state->IsMaximized());
+}
+
+TEST_F(WindowStateTest, CanConsumeSystemKeys) {
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(100, 100, 100, 100)));
+  WindowState* window_state = GetWindowState(window.get());
+
+  EXPECT_FALSE(window_state->CanConsumeSystemKeys());
+
+  window->SetProperty(kCanConsumeSystemKeysKey, true);
+  EXPECT_TRUE(window_state->CanConsumeSystemKeys());
 }
 
 // TODO(skuhne): Add more unit test to verify the correctness for the restore

@@ -16,14 +16,14 @@ void DoAdd(int a, int b, int c, int* res) {
 }
 
 struct Addy {
-  Addy() { }
+  Addy() = default;
   void DoAdd(int a, int b, int c, int d, int* res) {
     *res = a + b + c + d;
   }
 };
 
 struct Addz {
-  Addz() { }
+  Addz() = default;
   void DoAdd(int a, int b, int c, int d, int e, int* res) {
     *res = a + b + c + d + e;
   }
@@ -39,6 +39,7 @@ TEST(TupleTest, Basic) {
       std::make_tuple(1, static_cast<const char*>("wee"));
   ALLOW_UNUSED_LOCAL(t2);
   std::tuple<int, int, int> t3(1, 2, 3);
+  ALLOW_UNUSED_LOCAL(t3);
   std::tuple<int, int, int, int*> t4(1, 2, 3, &std::get<0>(t1));
   std::tuple<int, int, int, int, int*> t5(1, 2, 3, 4, &std::get<0>(t4));
   std::tuple<int, int, int, int, int, int*> t6(1, 2, 3, 4, 5, &std::get<0>(t4));
@@ -67,7 +68,7 @@ namespace {
 struct CopyLogger {
   CopyLogger() { ++TimesConstructed; }
   CopyLogger(const CopyLogger& tocopy) { ++TimesConstructed; ++TimesCopied; }
-  ~CopyLogger() { }
+  ~CopyLogger() = default;
 
   static int TimesCopied;
   static int TimesConstructed;

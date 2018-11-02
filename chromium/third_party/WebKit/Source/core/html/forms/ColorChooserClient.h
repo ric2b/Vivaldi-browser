@@ -44,7 +44,7 @@ class Element;
 class CORE_EXPORT ColorChooserClient : public GarbageCollectedMixin {
  public:
   virtual ~ColorChooserClient();
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  void Trace(blink::Visitor* visitor) override {}
 
   virtual void DidChooseColor(const Color&) = 0;
   virtual void DidEndChooser() = 0;

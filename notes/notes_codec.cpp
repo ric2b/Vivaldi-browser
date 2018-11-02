@@ -142,7 +142,7 @@ bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
                               Notes_Node* other_notes_node,
                               Notes_Node* trash_node,
                               const base::Value& value) {
-  if (value.GetType() != base::Value::Type::DICTIONARY)
+  if (value.type() != base::Value::Type::DICTIONARY)
     return false;  // Unexpected type.
 
   const base::DictionaryValue& d_value =
@@ -155,7 +155,7 @@ bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
 
   const base::Value* checksum_value;
   if (version && d_value.Get(kChecksumKey, &checksum_value)) {
-    if (checksum_value->GetType() != base::Value::Type::STRING)
+    if (checksum_value->type() != base::Value::Type::STRING)
       return false;
     if (!checksum_value->GetAsString(&stored_checksum_))
       return false;

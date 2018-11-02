@@ -40,9 +40,8 @@
 namespace blink {
 
 ImageBufferSurface::ImageBufferSurface(const IntSize& size,
-                                       OpacityMode opacity_mode,
                                        const CanvasColorParams& color_params)
-    : opacity_mode_(opacity_mode), size_(size), color_params_(color_params) {
+    : size_(size), color_params_(color_params) {
   SetIsHidden(false);
 }
 
@@ -57,12 +56,12 @@ void ImageBufferSurface::Clear() {
   // if this wasn't required, but the canvas is currently filled with the magic
   // transparency color. Can we have another way to manage this?
   if (IsValid()) {
-    if (opacity_mode_ == kOpaque) {
+    if (color_params_.GetOpacityMode() == kOpaque) {
       Canvas()->clear(SK_ColorBLACK);
     } else {
       Canvas()->clear(SK_ColorTRANSPARENT);
     }
-    DidDraw(FloatRect(FloatPoint(0, 0), FloatSize(size())));
+    DidDraw(FloatRect(FloatPoint(0, 0), FloatSize(Size())));
   }
 }
 
@@ -70,7 +69,7 @@ void ImageBufferSurface::Draw(GraphicsContext& context,
                               const FloatRect& dest_rect,
                               const FloatRect& src_rect,
                               SkBlendMode op) {
-  RefPtr<StaticBitmapImage> snapshot =
+  scoped_refptr<StaticBitmapImage> snapshot =
       NewImageSnapshot(kPreferAcceleration, kSnapshotReasonPaint);
   if (!snapshot)
     return;
@@ -79,11 +78,8 @@ void ImageBufferSurface::Draw(GraphicsContext& context,
   snapshot = snapshot->MakeUnaccelerated();
 
   DCHECK(!snapshot->IsTextureBacked());
-  context.DrawImage(snapshot.Get(), dest_rect, &src_rect, op);
-}
-
-void ImageBufferSurface::Flush(FlushReason) {
-  Canvas()->flush();
+  context.DrawImage(snapshot.get(), Image::kSyncDecode, dest_rect, &src_rect,
+                    op);
 }
 
 }  // namespace blink

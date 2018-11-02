@@ -78,6 +78,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [self setCollectionViewAccessibilityIdentifier:
               kAutofillCreditCardEditCollectionViewId];
     [self setTitle:l10n_util::GetNSString(IDS_IOS_AUTOFILL_EDIT_CREDIT_CARD)];
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
     [self loadModel];
   }
 
@@ -161,7 +163,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   cardNumberItem.textFieldValue =
       autofill::IsCreditCardLocal(_creditCard)
           ? base::SysUTF16ToNSString(_creditCard.number())
-          : base::SysUTF16ToNSString(_creditCard.NetworkAndLastFourDigits());
+          : base::SysUTF16ToNSString(
+                _creditCard.NetworkOrBankNameAndLastFourDigits());
   cardNumberItem.textFieldEnabled = isEditing;
   cardNumberItem.autofillUIType = AutofillUITypeCreditCardNumber;
   cardNumberItem.keyboardType = UIKeyboardTypeNumberPad;

@@ -19,17 +19,12 @@ using content::WebContents;
 
 LocationIconView::LocationIconView(const gfx::FontList& font_list,
                                    LocationBarView* location_bar)
-    : IconLabelBubbleView(font_list, true),
+    : IconLabelBubbleView(font_list),
       location_bar_(location_bar),
       animation_(this) {
+  label()->SetElideBehavior(gfx::ELIDE_MIDDLE);
   set_id(VIEW_ID_LOCATION_ICON);
-  SetInkDropMode(InkDropMode::ON);
-
-#if defined(OS_MACOSX)
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-#else
-  SetFocusBehavior(FocusBehavior::ALWAYS);
-#endif
+  Update();
 
   animation_.SetSlideDuration(kOpenTimeMS);
 }
@@ -78,6 +73,11 @@ bool LocationIconView::ShowBubble(const ui::Event& event) {
 }
 
 void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  if (location_bar_->GetOmniboxView()->IsEditingOrEmpty()) {
+    node_data->role = ui::AX_ROLE_NONE;
+    return;
+  }
+
   IconLabelBubbleView::GetAccessibleNodeData(node_data);
   node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
 }
@@ -105,6 +105,27 @@ void LocationIconView::SetTextVisibility(bool should_show,
   }
   // The label text color may have changed.
   OnNativeThemeChanged(GetNativeTheme());
+}
+
+void LocationIconView::Update() {
+  // If the omnibox is empty or editing, the user should not be able to left
+  // click on the icon. As such, the icon should not show a highlight or be
+  // focusable. Note: using the middle mouse to copy-and-paste should still
+  // work on the icon.
+  if (location_bar_->GetOmniboxView() &&
+      location_bar_->GetOmniboxView()->IsEditingOrEmpty()) {
+    SetInkDropMode(InkDropMode::OFF);
+    SetFocusBehavior(FocusBehavior::NEVER);
+    return;
+  }
+
+  SetInkDropMode(InkDropMode::ON);
+
+#if defined(OS_MACOSX)
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+#else
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+#endif
 }
 
 bool LocationIconView::IsTriggerableEvent(const ui::Event& event) {

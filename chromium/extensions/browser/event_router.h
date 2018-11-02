@@ -30,6 +30,7 @@
 #include "url/gurl.h"
 
 class GURL;
+struct ServiceWorkerIdentifier;
 
 namespace content {
 class BrowserContext;
@@ -172,19 +173,23 @@ class EventRouter : public KeyedService,
                                             const GURL& service_worker_scope);
 
   // If |add_lazy_listener| is true also add the lazy version of this listener.
-  void AddFilteredEventListener(const std::string& event_name,
-                                content::RenderProcessHost* process,
-                                const std::string& extension_id,
-                                const base::DictionaryValue& filter,
-                                bool add_lazy_listener);
+  void AddFilteredEventListener(
+      const std::string& event_name,
+      content::RenderProcessHost* process,
+      const std::string& extension_id,
+      base::Optional<ServiceWorkerIdentifier> sw_identifier,
+      const base::DictionaryValue& filter,
+      bool add_lazy_listener);
 
   // If |remove_lazy_listener| is true also remove the lazy version of this
   // listener.
-  void RemoveFilteredEventListener(const std::string& event_name,
-                                   content::RenderProcessHost* process,
-                                   const std::string& extension_id,
-                                   const base::DictionaryValue& filter,
-                                   bool remove_lazy_listener);
+  void RemoveFilteredEventListener(
+      const std::string& event_name,
+      content::RenderProcessHost* process,
+      const std::string& extension_id,
+      base::Optional<ServiceWorkerIdentifier> sw_identifier,
+      const base::DictionaryValue& filter,
+      bool remove_lazy_listener);
 
   // Returns true if there is at least one listener for the given event.
   bool HasEventListener(const std::string& event_name) const;
@@ -213,10 +218,7 @@ class EventRouter : public KeyedService,
                   const std::string& extension_id);
 
   // Returns whether or not the given extension has any registered events.
-  bool HasRegisteredEvents(const ExtensionId& extension_id) const {
-    return !GetRegisteredEvents(extension_id, RegisteredEventType::kLazy)
-                .empty();
-  }
+  bool HasRegisteredEvents(const ExtensionId& extension_id) const;
 
   // Clears registered events for testing purposes.
   void ClearRegisteredEventsForTest(const ExtensionId& extension_id);
@@ -234,9 +236,10 @@ class EventRouter : public KeyedService,
     return &lazy_event_dispatch_util_;
   }
 
-  // Returns true if there is a registered lazy listener for the given
+  // Returns true if there is a registered lazy/non-lazy listener for the given
   // |event_name|.
   bool HasLazyEventListenerForTesting(const std::string& event_name);
+  bool HasNonLazyEventListenerForTesting(const std::string& event_name);
 
  private:
   friend class EventRouterFilterTest;
@@ -298,17 +301,20 @@ class EventRouter : public KeyedService,
   // Adds a filter to an event.
   void AddFilterToEvent(const std::string& event_name,
                         const std::string& extension_id,
+                        bool is_for_service_worker,
                         const base::DictionaryValue* filter);
 
   // Removes a filter from an event.
   void RemoveFilterFromEvent(const std::string& event_name,
                              const std::string& extension_id,
+                             bool is_for_service_worker,
                              const base::DictionaryValue* filter);
 
   // Returns the dictionary of event filters that the given extension has
   // registered.
   const base::DictionaryValue* GetFilteredEvents(
-      const std::string& extension_id);
+      const std::string& extension_id,
+      RegisteredEventType type);
 
   // Track the dispatched events that have not yet sent an ACK from the
   // renderer.

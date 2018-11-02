@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/metrics/statistics_recorder.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media.h"
@@ -23,11 +24,78 @@ namespace {
 // Keep these aligned with BUILD.gn's pipeline_integration_fuzzer_variants
 enum FuzzerVariant {
   SRC,
-  MP4_FLAC,
-  MP4_AVC1,
+  WEBM_OPUS,
+  WEBM_VORBIS,
+  WEBM_VP8,
   WEBM_VP9,
+  WEBM_OPUS_VP9,
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  ADTS,
   MP3,
+  MP4_AACLC,
+  MP4_AACSBR,
+  MP4_AVC1,
+  MP4_FLAC,
+  MP4_AACLC_AVC,
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+  MP2T_AACLC,
+  MP2T_AACSBR,
+  MP2T_AVC,
+  MP2T_MP3,
+  MP2T_AACLC_AVC,
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
+
+std::string MseFuzzerVariantEnumToMimeTypeString(FuzzerVariant variant) {
+  switch (variant) {
+    case WEBM_OPUS:
+      return "audio/webm; codecs=\"opus\"";
+    case WEBM_VORBIS:
+      return "audio/webm; codecs=\"vorbis\"";
+    case WEBM_VP8:
+      return "video/webm; codecs=\"vp8\"";
+    case WEBM_VP9:
+      return "video/webm; codecs=\"vp9\"";
+    case WEBM_OPUS_VP9:
+      return "video/webm; codecs=\"opus,vp9\"";
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+    case ADTS:
+      return "audio/aac";
+    case MP3:
+      return "audio/mpeg";
+    case MP4_AACLC:
+      return "audio/mp4; codecs=\"mp4a.40.2\"";
+    case MP4_AACSBR:
+      return "audio/mp4; codecs=\"mp4a.40.5\"";
+    case MP4_AVC1:
+      return "video/mp4; codecs=\"avc1.42E01E\"";
+    case MP4_FLAC:
+      return "audio/mp4; codecs=\"flac\"";
+    case MP4_AACLC_AVC:
+      return "video/mp4; codecs=\"mp4a.40.2,avc1.42E01E\"";
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+    case MP2T_AACLC:
+      return "video/mp2t; codecs=\"mp4a.67\"";
+    case MP2T_AACSBR:
+      return "video/mp2t; codecs=\"mp4a.40.5\"";
+    case MP2T_AVC:
+      return "video/mp2t; codecs=\"avc1.42E01E\"";
+    case MP2T_MP3:
+      // Note, "mp4a.6B" appears to be an equivalent codec substring.
+      return "video/mp2t; codecs=\"mp4a.69\"";
+    case MP2T_AACLC_AVC:
+      return "video/mp2t; codecs=\"mp4a.40.2,avc1.42E01E\"";
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+
+    case SRC:
+      NOTREACHED() << "SRC is an invalid MSE fuzzer variant";
+      break;
+  }
+
+  return "";
+}
 
 }  // namespace
 
@@ -65,7 +133,8 @@ class ProgressivePipelineIntegrationFuzzerTest
         BindToCurrentLoop(base::BindRepeating(&OnAudioPlayDelay, this)));
   }
 
-  ~ProgressivePipelineIntegrationFuzzerTest() override{};
+  ~ProgressivePipelineIntegrationFuzzerTest() override = default;
+  ;
 
   void RunTest(const uint8_t* data, size_t size) {
     if (PIPELINE_OK != Start(data, size, kUnreliableDuration))
@@ -89,7 +158,8 @@ class MediaSourcePipelineIntegrationFuzzerTest
         BindToCurrentLoop(base::BindRepeating(&OnAudioPlayDelay, this)));
   }
 
-  ~MediaSourcePipelineIntegrationFuzzerTest() override{};
+  ~MediaSourcePipelineIntegrationFuzzerTest() override = default;
+  ;
 
   void RunTest(const uint8_t* data, size_t size, const std::string& mimetype) {
     if (size == 0)
@@ -137,6 +207,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Media pipeline starts new threads, which needs AtExitManager.
   base::AtExitManager at_exit;
 
+  // Required to avoid leaking histogram memory over long fuzzing runs. Must be
+  // installed before any histograms are acquired. This is safe to call multiple
+  // times.
+  base::StatisticsRecorder::Initialize();
+
   // Media pipeline checks command line arguments internally.
   base::CommandLine::Init(0, nullptr);
 
@@ -147,31 +222,25 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   FuzzerVariant variant = PIPELINE_FUZZER_VARIANT;
 
-  switch (variant) {
-    case SRC: {
-      media::ProgressivePipelineIntegrationFuzzerTest test;
-      test.RunTest(data, size);
-      break;
-    }
-    case MP4_FLAC: {
+  if (variant == SRC) {
+    media::ProgressivePipelineIntegrationFuzzerTest test;
+    test.RunTest(data, size);
+  } else {
+    // Sequentially fuzz with new and old MSE buffering APIs.  See
+    // https://crbug.com/718641.
+    {
+      base::test::ScopedFeatureList features_with_buffering_api_forced;
+      features_with_buffering_api_forced.InitAndEnableFeature(
+          media::kMseBufferByPts);
       media::MediaSourcePipelineIntegrationFuzzerTest test;
-      test.RunTest(data, size, "audio/mp4; codecs=\"flac\"");
-      break;
+      test.RunTest(data, size, MseFuzzerVariantEnumToMimeTypeString(variant));
     }
-    case MP4_AVC1: {
+    {
+      base::test::ScopedFeatureList features_with_buffering_api_forced;
+      features_with_buffering_api_forced.InitAndDisableFeature(
+          media::kMseBufferByPts);
       media::MediaSourcePipelineIntegrationFuzzerTest test;
-      test.RunTest(data, size, "video/mp4; codecs=\"avc1.42E01E\"");
-      break;
-    }
-    case WEBM_VP9: {
-      media::MediaSourcePipelineIntegrationFuzzerTest test;
-      test.RunTest(data, size, "video/webm; codecs=\"vp9\"");
-      break;
-    }
-    case MP3: {
-      media::MediaSourcePipelineIntegrationFuzzerTest test;
-      test.RunTest(data, size, "audio/mpeg");
-      break;
+      test.RunTest(data, size, MseFuzzerVariantEnumToMimeTypeString(variant));
     }
   }
 

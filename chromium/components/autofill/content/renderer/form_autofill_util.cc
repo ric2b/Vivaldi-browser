@@ -189,9 +189,8 @@ const base::string16 CombineAndCollapseWhitespace(
   if (prefix_trailing_whitespace || suffix_leading_whitespace ||
       force_whitespace) {
     return prefix_trimmed + base::ASCIIToUTF16(" ") + suffix_trimmed;
-  } else {
-    return prefix_trimmed + suffix_trimmed;
   }
+  return prefix_trimmed + suffix_trimmed;
 }
 
 // This is a helper function for the FindChildText() function (see below).
@@ -259,16 +258,6 @@ base::string16 FindChildTextWithIgnoreList(
       FindChildTextInner(child, kChildSearchDepth, divs_to_skip);
   base::TrimWhitespace(node_text, base::TRIM_ALL, &node_text);
   return node_text;
-}
-
-// Returns the aggregated values of the descendants of |element| that are
-// non-empty text nodes.  This is a faster alternative to |innerText()| for
-// performance critical operations.  It does a full depth-first search so can be
-// used when the structure is not directly known.  However, unlike with
-// |innerText()|, the search depth and breadth are limited to a fixed threshold.
-// Whitespace is trimmed from text accumulated at descendant nodes.
-base::string16 FindChildText(const WebNode& node) {
-  return FindChildTextWithIgnoreList(node, std::set<WebNode>());
 }
 
 // Shared function for InferLabelFromPrevious() and InferLabelFromNext().
@@ -725,8 +714,7 @@ base::string16 InferLabelForElement(const WebFormControlElement& element,
   inferred_label = InferLabelFromValueAttr(element);
   if (IsLabelValid(inferred_label, stop_words))
     return inferred_label;
-  else
-    return base::string16();
+  return base::string16();
 }
 
 // Fills |option_strings| with the values of the <option> elements present in
@@ -1014,9 +1002,8 @@ void MatchLabelsAndFields(
           if (field_data) {
             field_data = nullptr;
             break;
-          } else {
-            field_data = iter.second;
           }
+          field_data = iter.second;
         }
       }
     } else if (control.IsFormControlElement()) {
@@ -1155,6 +1142,13 @@ bool UnownedFormElementsAndFieldSetsToFormData(
     FormData* form,
     FormFieldData* field) {
   form->origin = GetCanonicalOriginForDocument(document);
+  if (document.GetFrame() && document.GetFrame()->Top()) {
+    form->main_frame_origin = document.GetFrame()->Top()->GetSecurityOrigin();
+  } else {
+    form->main_frame_origin = url::Origin();
+    NOTREACHED();
+  }
+
   form->is_form_tag = false;
 
   return FormOrFieldsetsToFormData(
@@ -1191,7 +1185,7 @@ bool ExtractFormData(const WebFormElement& form_element, FormData* data) {
       static_cast<form_util::ExtractMask>(form_util::EXTRACT_VALUE |
                                           form_util::EXTRACT_OPTION_TEXT |
                                           form_util::EXTRACT_OPTIONS),
-      data, NULL);
+      data, nullptr);
 }
 
 bool IsFormVisible(blink::WebLocalFrame* frame,
@@ -1473,14 +1467,19 @@ bool WebFormElementToFormData(
     ExtractMask extract_mask,
     FormData* form,
     FormFieldData* field) {
-  const WebLocalFrame* frame = form_element.GetDocument().GetFrame();
+  WebLocalFrame* frame = form_element.GetDocument().GetFrame();
   if (!frame)
     return false;
 
   form->name = GetFormIdentifier(form_element);
   form->origin = GetCanonicalOriginForDocument(frame->GetDocument());
   form->action = frame->GetDocument().CompleteURL(form_element.Action());
-
+  if (frame->Top()) {
+    form->main_frame_origin = frame->Top()->GetSecurityOrigin();
+  } else {
+    form->main_frame_origin = url::Origin();
+    NOTREACHED();
+  }
   // If the completed URL is not valid, just use the action we get from
   // WebKit.
   if (!form->action.is_valid())
@@ -1806,6 +1805,10 @@ void PreviewSuggestion(const base::string16& suggestion,
   }
 
   input_element->SetSelectionRange(selection_start, suggestion.length());
+}
+
+base::string16 FindChildText(const WebNode& node) {
+  return FindChildTextWithIgnoreList(node, std::set<WebNode>());
 }
 
 }  // namespace form_util

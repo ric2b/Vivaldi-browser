@@ -80,6 +80,7 @@ BaseBlockingPage::CreateDefaultDisplayOptions(
       false,                 // is_scout
       false,                 // kSafeBrowsingProceedAnywayDisabled
       false,                 // should_open_links_in_new_tab
+      true,                  // always_show_back_to_safety
       "cpn_safe_browsing");  // help_center_article_link
 }
 
@@ -199,7 +200,7 @@ void BaseBlockingPage::CommandReceived(
   DCHECK(retval) << page_cmd;
 
   sb_error_ui_->HandleCommand(
-      static_cast<security_interstitials::SecurityInterstitialCommands>(
+      static_cast<security_interstitials::SecurityInterstitialCommand>(
           command));
 }
 
@@ -291,8 +292,7 @@ BaseBlockingPage::GetInterstitialReason(
       harmful = true;
     } else {
       DCHECK(threat_type == SB_THREAT_TYPE_URL_PHISHING ||
-             threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
-             threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING);
+             threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING);
     }
   }
 
@@ -370,8 +370,7 @@ bool BaseBlockingPage::ShouldReportThreatDetails(SBThreatType threat_type) {
          threat_type == SB_THREAT_TYPE_URL_MALWARE ||
          threat_type == SB_THREAT_TYPE_URL_UNWANTED ||
          threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
-         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE ||
-         threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING;
+         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE;
 }
 
 }  // namespace safe_browsing

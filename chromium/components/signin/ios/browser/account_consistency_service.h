@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 
+#include "base/callback.h"
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -18,8 +19,8 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/signin/ios/browser/active_state_manager.h"
 #import "components/signin/ios/browser/manage_accounts_delegate.h"
-#include "ios/web/public/active_state_manager.h"
 
 namespace web {
 class BrowserState;
@@ -41,7 +42,7 @@ class SigninClient;
 class AccountConsistencyService : public KeyedService,
                                   public GaiaCookieManagerService::Observer,
                                   public SigninManagerBase::Observer,
-                                  public web::ActiveStateManager::Observer {
+                                  public ActiveStateManager::Observer {
  public:
   // Name of the preference property that persists the domains that have a
   // CHROME_CONNECTED cookie set by this service.
@@ -66,6 +67,10 @@ class AccountConsistencyService : public KeyedService,
   // Removes the handler associated with |web_state|.
   void RemoveWebStateHandler(web::WebState* web_state);
 
+  // Removes CHROME_CONNECTED cookies on all the Google domains where it was
+  // set. Calls callback once all cookies were removed.
+  void RemoveChromeConnectedCookies(base::OnceClosure callback);
+
   // Enqueues a request to add the CHROME_CONNECTED cookie to |domain|. If the
   // cookie is already on |domain|, this function will do nothing unless
   // |force_update_if_too_old| is true. In this case, the cookie will be
@@ -75,7 +80,8 @@ class AccountConsistencyService : public KeyedService,
 
   // Enqueues a request to remove the CHROME_CONNECTED cookie to |domain|.
   // Does nothing if the cookie is not set on |domain|.
-  void RemoveChromeConnectedCookieFromDomain(const std::string& domain);
+  void RemoveChromeConnectedCookieFromDomain(const std::string& domain,
+                                             base::OnceClosure callback);
 
   // Notifies the AccountConsistencyService that browsing data has been removed
   // for any time period.
@@ -94,9 +100,20 @@ class AccountConsistencyService : public KeyedService,
   // AccountConsistencyService.
   struct CookieRequest {
     static CookieRequest CreateAddCookieRequest(const std::string& domain);
-    static CookieRequest CreateRemoveCookieRequest(const std::string& domain);
+    static CookieRequest CreateRemoveCookieRequest(const std::string& domain,
+                                                   base::OnceClosure callback);
+    CookieRequest();
+    ~CookieRequest();
+
+    // Movable, not copyable.
+    CookieRequest(CookieRequest&&);
+    CookieRequest& operator=(CookieRequest&&) = default;
+    CookieRequest(const CookieRequest&) = delete;
+    CookieRequest& operator=(const CookieRequest&) = delete;
+
     CookieRequestType request_type;
     std::string domain;
+    base::OnceClosure callback;
   };
 
   // Loads the domains with a CHROME_CONNECTED cookie from the prefs.
@@ -128,9 +145,6 @@ class AccountConsistencyService : public KeyedService,
 
   // Adds CHROME_CONNECTED cookies on all the main Google domains.
   void AddChromeConnectedCookies();
-  // Removes CHROME_CONNECTED cookies on all the Google domains where it was
-  // set.
-  void RemoveChromeConnectedCookies();
 
   // GaiaCookieManagerService::Observer implementation.
   void OnAddAccountToCookieCompleted(

@@ -55,6 +55,14 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Connector {
       connector_->OverrideBinderForTesting(service_name, interface_name,
                                            binder);
     }
+    bool HasBinderOverride(const std::string& service_name,
+                           const std::string& interface_name) {
+      return connector_->HasBinderOverride(service_name, interface_name);
+    }
+    void ClearBinderOverride(const std::string& service_name,
+                             const std::string& interface_name) {
+      connector_->ClearBinderOverride(service_name, interface_name);
+    }
     void ClearBinderOverrides() { connector_->ClearBinderOverrides(); }
 
     // Register a callback to be run with the result of an attempt to start a
@@ -88,6 +96,11 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Connector {
   void StartService(const Identity& identity,
                     mojom::ServicePtr service,
                     mojom::PIDReceiverRequest pid_receiver_request);
+
+  // Determines if the service for |Identity| is known, and returns information
+  // about it from the catalog.
+  void QueryService(const Identity& identity,
+                    mojom::Connector::QueryServiceCallback callback);
 
   // Connect to |target| & request to bind |Interface|.
   template <typename Interface>
@@ -136,6 +149,10 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Connector {
   void OverrideBinderForTesting(const std::string& service_name,
                                 const std::string& interface_name,
                                 const TestApi::Binder& binder);
+  bool HasBinderOverride(const std::string& service_name,
+                         const std::string& interface_name);
+  void ClearBinderOverride(const std::string& service_name,
+                           const std::string& interface_name);
   void ClearBinderOverrides();
   void SetStartServiceCallback(const StartServiceCallback& callback);
   void ResetStartServiceCallback();

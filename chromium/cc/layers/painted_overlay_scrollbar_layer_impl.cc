@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "cc/layers/painted_overlay_scrollbar_layer_impl.h"
+#include "cc/trees/layer_tree_impl.h"
 
 namespace cc {
 
@@ -58,15 +59,32 @@ void PaintedOverlayScrollbarLayerImpl::PushPropertiesTo(LayerImpl* layer) {
 
 bool PaintedOverlayScrollbarLayerImpl::WillDraw(
     DrawMode draw_mode,
-    ResourceProvider* resource_provider) {
+    LayerTreeResourceProvider* resource_provider) {
   DCHECK(draw_mode != DRAW_MODE_RESOURCELESS_SOFTWARE);
   return LayerImpl::WillDraw(draw_mode, resource_provider);
 }
 
 void PaintedOverlayScrollbarLayerImpl::AppendQuads(
-    RenderPass* render_pass,
+    viz::RenderPass* render_pass,
     AppendQuadsData* append_quads_data) {
   if (aperture_.IsEmpty())
+    return;
+
+  viz::SharedQuadState* shared_quad_state =
+      render_pass->CreateAndAppendSharedQuadState();
+  bool is_resource =
+      thumb_ui_resource_id_ &&
+      layer_tree_impl()->ResourceIdForUIResource(thumb_ui_resource_id_);
+  bool are_contents_opaque =
+      is_resource
+          ? layer_tree_impl()->IsUIResourceOpaque(thumb_ui_resource_id_) ||
+                contents_opaque()
+          : false;
+  PopulateSharedQuadState(shared_quad_state, are_contents_opaque);
+  AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
+                        append_quads_data);
+
+  if (!is_resource)
     return;
 
   // For overlay scrollbars, the border should match the inset of the aperture
@@ -88,13 +106,6 @@ void PaintedOverlayScrollbarLayerImpl::AppendQuads(
                             border, layer_occlusion, fill_center,
                             nearest_neighbor);
   quad_generator_.CheckGeometryLimitations();
-
-  viz::SharedQuadState* shared_quad_state =
-      render_pass->CreateAndAppendSharedQuadState();
-  PopulateSharedQuadState(shared_quad_state);
-
-  AppendDebugBorderQuad(render_pass, bounds(), shared_quad_state,
-                        append_quads_data);
 
   std::vector<NinePatchGenerator::Patch> patches =
       quad_generator_.GeneratePatches();

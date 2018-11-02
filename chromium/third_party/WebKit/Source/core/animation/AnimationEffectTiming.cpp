@@ -5,7 +5,7 @@
 #include "core/animation/AnimationEffectTiming.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/UnrestrictedDoubleOrString.h"
+#include "bindings/core/v8/unrestricted_double_or_string.h"
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/AnimationEffectTimingReadOnly.h"
 #include "core/animation/KeyframeEffect.h"
@@ -77,16 +77,11 @@ void AnimationEffectTiming::setDirection(String direction) {
 void AnimationEffectTiming::setEasing(String easing,
                                       ExceptionState& exception_state) {
   Timing timing = parent_->SpecifiedTiming();
-  // The AnimationEffectTiming might not be attached to a document at this
-  // point, so we pass nullptr in to setTimingFunction. This means that these
-  // calls are not considered in the WebAnimationsEasingAsFunction*
-  // UseCounters, but the bug we are tracking there does not come through
-  // this interface.
   if (TimingInput::SetTimingFunction(timing, easing, nullptr, exception_state))
     parent_->UpdateSpecifiedTiming(timing);
 }
 
-DEFINE_TRACE(AnimationEffectTiming) {
+void AnimationEffectTiming::Trace(blink::Visitor* visitor) {
   AnimationEffectTimingReadOnly::Trace(visitor);
 }
 

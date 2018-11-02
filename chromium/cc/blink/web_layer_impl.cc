@@ -40,7 +40,7 @@ using blink::WebVector;
 using blink::WebRect;
 using blink::WebSize;
 using blink::WebColor;
-using blink::WebScrollBoundaryBehavior;
+using blink::WebOverscrollBehavior;
 
 namespace cc_blink {
 
@@ -107,7 +107,7 @@ bool WebLayerImpl::MasksToBounds() const {
 
 void WebLayerImpl::SetMaskLayer(WebLayer* maskLayer) {
   layer_->SetMaskLayer(
-      maskLayer ? static_cast<WebLayerImpl*>(maskLayer)->layer() : 0);
+      maskLayer ? static_cast<WebLayerImpl*>(maskLayer)->layer() : nullptr);
 }
 
 void WebLayerImpl::SetOpacity(float opacity) {
@@ -134,12 +134,8 @@ bool WebLayerImpl::IsRootForIsolatedGroup() {
   return layer_->is_root_for_isolated_group();
 }
 
-void WebLayerImpl::SetShouldHitTest(bool should_hit_test) {
-  layer_->SetShouldHitTest(should_hit_test);
-}
-
-bool WebLayerImpl::ShouldHitTest() {
-  return layer_->should_hit_test();
+void WebLayerImpl::SetHitTestableWithoutDrawsContent(bool should_hit_test) {
+  layer_->SetHitTestableWithoutDrawsContent(should_hit_test);
 }
 
 void WebLayerImpl::SetOpaque(bool opaque) {
@@ -487,14 +483,6 @@ cc::ElementId WebLayerImpl::GetElementId() const {
   return layer_->element_id();
 }
 
-void WebLayerImpl::SetCompositorMutableProperties(uint32_t properties) {
-  layer_->SetMutableProperties(properties);
-}
-
-uint32_t WebLayerImpl::CompositorMutableProperties() const {
-  return layer_->mutable_properties();
-}
-
 void WebLayerImpl::SetScrollParent(blink::WebLayer* parent) {
   cc::Layer* scroll_parent = nullptr;
   if (parent)
@@ -525,10 +513,9 @@ void WebLayerImpl::ShowScrollbars() {
   layer_->ShowScrollbars();
 }
 
-void WebLayerImpl::SetScrollBoundaryBehavior(
-    const blink::WebScrollBoundaryBehavior& behavior) {
-  layer_->SetScrollBoundaryBehavior(
-      static_cast<cc::ScrollBoundaryBehavior>(behavior));
+void WebLayerImpl::SetOverscrollBehavior(
+    const blink::WebOverscrollBehavior& behavior) {
+  layer_->SetOverscrollBehavior(static_cast<cc::OverscrollBehavior>(behavior));
 }
 
 }  // namespace cc_blink

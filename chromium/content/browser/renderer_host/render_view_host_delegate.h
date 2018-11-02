@@ -33,6 +33,7 @@ namespace content {
 
 class BrowserContext;
 class FrameTree;
+class RenderFrameHost;
 class RenderViewHost;
 class RenderViewHostImpl;
 class RenderViewHostDelegateView;
@@ -94,9 +95,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
 
   // The page is trying to move the RenderView's representation in the client.
   virtual void RequestMove(const gfx::Rect& new_bounds) {}
-
-  // The pending page load was canceled.
-  virtual void DidCancelLoading() {}
 
   // The RenderView's main frame document element is ready. This happens when
   // the document has finished parsing.
@@ -172,13 +170,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // created by the RenderViewHost.
   virtual FrameTree* GetFrameTree();
 
-  // Optional state storage for if the Virtual Keyboard has been requested by
-  // this page or not. If it has, this can be used to suppress things like the
-  // link disambiguation dialog, which doesn't interact well with the virtual
-  // keyboard.
-  virtual void SetIsVirtualKeyboardRequested(bool requested) {}
-  virtual bool IsVirtualKeyboardRequested();
-
   // Whether the user agent is overridden using the Chrome for Android "Request
   // Desktop Site" feature.
   virtual bool IsOverridingUserAgent();
@@ -194,6 +185,10 @@ class CONTENT_EXPORT RenderViewHostDelegate {
 
   // Whether the WebContents as a persistent video.
   virtual bool HasPersistentVideo() const;
+
+  // Returns the RenderFrameHost for a pending or speculative main frame
+  // navigation for the page.  Returns nullptr if there is no such navigation.
+  virtual RenderFrameHost* GetPendingMainFrame();
 
  protected:
   virtual ~RenderViewHostDelegate() {}

@@ -128,6 +128,7 @@ const char kRoamingHome[] = "Home";
 const char kRoamingRequired[] = "Required";
 const char kRoamingRoaming[] = "Roaming";
 const char kRoamingState[] = "RoamingState";
+const char kScanning[] = "Scanning";
 const char kServingOperator[] = "ServingOperator";
 const char kSignalStrength[] = "SignalStrength";
 const char kSIMLockStatus[] = "SIMLockStatus";
@@ -209,6 +210,8 @@ const char kIPv6[] = "IPv6";
 const char kNameServers[] = "NameServers";
 const char kRoutingPrefix[] = "RoutingPrefix";
 const char kSearchDomains[] = "SearchDomains";
+const char kIncludedRoutes[] = "IncludedRoutes";
+const char kExcludedRoutes[] = "ExcludedRoutes";
 const char kType[] = "Type";
 const char kWebProxyAutoDiscoveryUrl[] = "WebProxyAutoDiscoveryUrl";
 }  // namespace ipconfig
@@ -312,6 +315,7 @@ const char kServerCAPEMs[] = "ServerCAPEMs";
 const char kServerCARef[] = "ServerCARef";
 const char kServerCARefs[] = "ServerCARefs";
 const char kSubjectMatch[] = "SubjectMatch";
+const char kTLSVersionMax[] = "TLSVersionMax";
 const char kUseSystemCAs[] = "UseSystemCAs";
 const char kUseProactiveKeyCaching[] = "UseProactiveKeyCaching";
 }  // namespace eap
@@ -325,6 +329,7 @@ const char kOpenVPN[] = "OpenVPN";
 const char kPassword[] = "Password";
 const char kSaveCredentials[] = "SaveCredentials";
 const char kThirdPartyVpn[] = "ThirdPartyVPN";
+const char kArcVpn[] = "ARCVPN";
 const char kTypeL2TP_IPsec[] = "L2TP-IPsec";
 const char kType[] = "Type";
 const char kUsername[] = "Username";
@@ -357,6 +362,7 @@ const char kAuth[] = "Auth";
 const char kCipher[] = "Cipher";
 const char kCompLZO[] = "CompLZO";
 const char kCompNoAdapt[] = "CompNoAdapt";
+const char kExtraHosts[] = "ExtraHosts";
 const char kIgnoreDefaultRoute[] = "IgnoreDefaultRoute";
 const char kInteract[] = "interact";
 const char kKeyDirection[] = "KeyDirection";
@@ -400,6 +406,10 @@ namespace third_party_vpn {
 const char kExtensionID[] = "ExtensionID";
 const char kProviderName[] = "ProviderName";
 }  // third_party_vpn
+
+namespace arc_vpn {
+const char kTunnelChrome[] = "TunnelChrome";
+}  // namespace arc_vpn
 
 namespace verify_x509 {
 const char kName[] = "Name";

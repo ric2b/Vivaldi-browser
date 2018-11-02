@@ -38,7 +38,7 @@ namespace blink {
 class LayoutObject;
 
 struct SameSizeAsInlineBox : DisplayItemClient {
-  virtual ~SameSizeAsInlineBox() {}
+  ~SameSizeAsInlineBox() override {}
   void* a[4];
   LayoutPoint b;
   LayoutUnit c;
@@ -78,8 +78,8 @@ void InlineBox::Remove(MarkLineBoxes mark_line_boxes) {
 }
 
 void* InlineBox::operator new(size_t sz) {
-  return PartitionAlloc(WTF::Partitions::LayoutPartition(), sz,
-                        WTF_HEAP_PROFILER_TYPE_NAME(InlineBox));
+  return WTF::Partitions::LayoutPartition()->Alloc(
+      sz, WTF_HEAP_PROFILER_TYPE_NAME(InlineBox));
 }
 
 void InlineBox::operator delete(void* ptr) {
@@ -332,12 +332,6 @@ LayoutPoint InlineBox::PhysicalLocation() const {
   return rect.Location();
 }
 
-void InlineBox::LogicalRectToPhysicalRect(LayoutRect& rect) const {
-  if (!IsHorizontal())
-    rect = rect.TransposedRect();
-  FlipForWritingMode(rect);
-}
-
 void InlineBox::FlipForWritingMode(FloatRect& rect) const {
   if (!UNLIKELY(GetLineLayoutItem().HasFlippedBlocksWritingMode()))
     return;
@@ -376,6 +370,13 @@ void InlineBox::SetLineLayoutItemShouldDoFullPaintInvalidationIfNeeded() {
   // style. Otherwise it paints nothing so we don't need to invalidate it.
   if (!IsRootInlineBox() || IsFirstLineStyle())
     line_layout_item_.SetShouldDoFullPaintInvalidation();
+}
+
+bool CanUseInlineBox(const LayoutObject& node) {
+  DCHECK(node.IsText() || node.IsInline() || node.IsLayoutBlockFlow());
+  return !RuntimeEnabledFeatures::LayoutNGEnabled() ||
+         !RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled() ||
+         !node.EnclosingNGBlockFlow();
 }
 
 }  // namespace blink

@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_image.h"
+#include "cc/paint/paint_text_blob.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
 namespace cc {
@@ -33,7 +34,7 @@ class CC_PAINT_EXPORT PaintCanvas {
 
   // TODO(enne): It would be nice to get rid of flush() entirely, as it
   // doesn't really make sense for recording.  However, this gets used by
-  // SkCanvasVideoRenderer which takes a PaintCanvas to paint both
+  // PaintCanvasVideoRenderer which takes a PaintCanvas to paint both
   // software and hardware video.  This is super entangled with ImageBuffer
   // and canvas/video painting in Blink where the same paths are used for
   // both recording and gpu work.
@@ -86,8 +87,6 @@ class CC_PAINT_EXPORT PaintCanvas {
     clipPath(path, SkClipOp::kIntersect, do_anti_alias);
   }
 
-  virtual bool quickReject(const SkRect& rect) const = 0;
-  virtual bool quickReject(const SkPath& path) const = 0;
   virtual SkRect getLocalClipBounds() const = 0;
   virtual bool getLocalClipBounds(SkRect* bounds) const = 0;
   virtual SkIRect getDeviceClipBounds() const = 0;
@@ -141,7 +140,7 @@ class CC_PAINT_EXPORT PaintCanvas {
     drawBitmap(bitmap, left, top, nullptr);
   }
 
-  virtual void drawTextBlob(sk_sp<SkTextBlob> blob,
+  virtual void drawTextBlob(scoped_refptr<PaintTextBlob> blob,
                             SkScalar x,
                             SkScalar y,
                             const PaintFlags& flags) = 0;
@@ -195,13 +194,6 @@ class CC_PAINT_EXPORT PaintCanvasAutoRestore {
   PaintCanvas* canvas_ = nullptr;
   int save_count_ = 0;
 };
-
-// Following routines are used in print preview workflow to mark the
-// preview metafile.
-#if defined(OS_MACOSX)
-CC_PAINT_EXPORT void SetIsPreviewMetafile(PaintCanvas* canvas, bool is_preview);
-CC_PAINT_EXPORT bool IsPreviewMetafile(PaintCanvas* canvas);
-#endif
 
 }  // namespace cc
 

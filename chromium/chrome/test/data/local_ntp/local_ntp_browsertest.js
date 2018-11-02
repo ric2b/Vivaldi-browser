@@ -32,8 +32,8 @@ test.localNtp.setUp = function() {
  */
 test.localNtp.testShowsFakeboxAndLogoIfGoogle = function() {
   initLocalNTP(/*isGooglePage=*/true);
-  assert(elementIsVisible($('fakebox')));
-  assert(elementIsVisible($('logo')));
+  assertTrue(elementIsVisible($('fakebox')));
+  assertTrue(elementIsVisible($('logo')));
 };
 
 
@@ -42,8 +42,8 @@ test.localNtp.testShowsFakeboxAndLogoIfGoogle = function() {
  */
 test.localNtp.testDoesNotShowFakeboxIfNotGoogle = function() {
   initLocalNTP(/*isGooglePage=*/false);
-  assert(!elementIsVisible($('fakebox')));
-  assert(!elementIsVisible($('logo')));
+  assertFalse(elementIsVisible($('fakebox')));
+  assertFalse(elementIsVisible($('logo')));
 };
 
 
@@ -61,7 +61,7 @@ test.localNtp.testMostVisitedContents = function() {
   // (rid), but there mustn't be url, title, etc. Those are only available
   // through getMostVisitedItemData(rid).
   for (var mvItem of window.chrome.embeddedSearch.newTabPage.mostVisited) {
-    assert(isFinite(mvItem.rid));
+    assertTrue(isFinite(mvItem.rid));
     assert(!mvItem.url);
     assert(!mvItem.title);
     assert(!mvItem.domain);
@@ -93,36 +93,26 @@ function initLocalNTP(isGooglePage) {
 // Advanced tests are controlled from the native side. The helpers here are
 // called from native code to set up the page and to check results.
 
-function handlePostMessage(event) {
-  if (event.data.cmd == 'loaded') {
-    domAutomationController.send('loaded');
-  }
-}
 
-
-function setupAdvancedTest(opt_waitForIframeLoaded) {
-  if (opt_waitForIframeLoaded) {
-    window.addEventListener('message', handlePostMessage);
-  }
-
+function setupAdvancedTest() {
   setUpPage('local-ntp-template');
   initLocalNTP(/*isGooglePage=*/true);
 
-  assert(elementIsVisible($('fakebox')));
+  assertTrue(elementIsVisible($('fakebox')));
 
   return true;
 }
 
 
 function getFakeboxPositionX() {
-  assert(elementIsVisible($('fakebox')));
+  assertTrue(elementIsVisible($('fakebox')));
   var rect = $('fakebox').getBoundingClientRect();
   return rect.left;
 }
 
 
 function getFakeboxPositionY() {
-  assert(elementIsVisible($('fakebox')));
+  assertTrue(elementIsVisible($('fakebox')));
   var rect = $('fakebox').getBoundingClientRect();
   return rect.top;
 }

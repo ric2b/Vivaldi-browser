@@ -5,9 +5,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/ui_devtools/views/ui_devtools_css_agent.h"
-#include "components/ui_devtools/views/ui_devtools_dom_agent.h"
-#include "components/ui_devtools/views/ui_devtools_overlay_agent.h"
+#include "components/ui_devtools/views/css_agent.h"
+#include "components/ui_devtools/views/dom_agent.h"
+#include "components/ui_devtools/views/overlay_agent.h"
 #include "components/ui_devtools/views/ui_element.h"
 #include "components/ui_devtools/views/view_element.h"
 #include "components/ui_devtools/views/widget_element.h"
@@ -224,14 +224,12 @@ class UIDevToolsTest : public views::ViewsTestBase {
     fake_frontend_channel_ = base::MakeUnique<FakeFrontendChannel>();
     uber_dispatcher_ =
         base::MakeUnique<UberDispatcher>(fake_frontend_channel_.get());
-    dom_agent_ = base::MakeUnique<ui_devtools::UIDevToolsDOMAgent>();
+    dom_agent_ = base::MakeUnique<DOMAgent>();
     dom_agent_->Init(uber_dispatcher_.get());
-    css_agent_ =
-        base::MakeUnique<ui_devtools::UIDevToolsCSSAgent>(dom_agent_.get());
+    css_agent_ = base::MakeUnique<CSSAgent>(dom_agent_.get());
     css_agent_->Init(uber_dispatcher_.get());
     css_agent_->enable();
-    overlay_agent_ =
-        base::MakeUnique<ui_devtools::UIDevToolsOverlayAgent>(dom_agent_.get());
+    overlay_agent_ = base::MakeUnique<OverlayAgent>(dom_agent_.get());
     overlay_agent_->Init(uber_dispatcher_.get());
     overlay_agent_->enable();
 
@@ -363,11 +361,9 @@ class UIDevToolsTest : public views::ViewsTestBase {
     return dom_agent()->root_windows()[0];
   }
 
-  ui_devtools::UIDevToolsCSSAgent* css_agent() { return css_agent_.get(); }
-  ui_devtools::UIDevToolsDOMAgent* dom_agent() { return dom_agent_.get(); }
-  ui_devtools::UIDevToolsOverlayAgent* overlay_agent() {
-    return overlay_agent_.get();
-  }
+  CSSAgent* css_agent() { return css_agent_.get(); }
+  DOMAgent* dom_agent() { return dom_agent_.get(); }
+  OverlayAgent* overlay_agent() { return overlay_agent_.get(); }
 
   std::unique_ptr<aura::Window> top_overlay_window;
   std::unique_ptr<aura::Window> top_window;
@@ -376,9 +372,9 @@ class UIDevToolsTest : public views::ViewsTestBase {
  private:
   std::unique_ptr<UberDispatcher> uber_dispatcher_;
   std::unique_ptr<FakeFrontendChannel> fake_frontend_channel_;
-  std::unique_ptr<ui_devtools::UIDevToolsDOMAgent> dom_agent_;
-  std::unique_ptr<ui_devtools::UIDevToolsCSSAgent> css_agent_;
-  std::unique_ptr<ui_devtools::UIDevToolsOverlayAgent> overlay_agent_;
+  std::unique_ptr<DOMAgent> dom_agent_;
+  std::unique_ptr<CSSAgent> css_agent_;
+  std::unique_ptr<OverlayAgent> overlay_agent_;
 
   DISALLOW_COPY_AND_ASSIGN(UIDevToolsTest);
 };
@@ -388,7 +384,7 @@ class UIDevToolsTest : public views::ViewsTestBase {
 TEST_F(UIDevToolsTest, FindElementIdTargetedByPoint) {
   std::unique_ptr<views::Widget> widget(
       CreateTestWidget(gfx::Rect(1, 1, 1, 1)));
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
   EXPECT_NE(0, dom_agent()->FindElementIdTargetedByPoint(
                    gfx::Point(1, 1), GetPrimaryRootWindow()));
@@ -402,7 +398,7 @@ TEST_F(UIDevToolsTest, OneUIElementContainsAnother) {
   const gfx::Rect inside_rect(2, 2, 50, 50);
   std::unique_ptr<views::Widget> widget_inside(CreateTestWidget(inside_rect));
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   int outside_rect_id = dom_agent()->FindElementIdTargetedByPoint(
@@ -428,10 +424,267 @@ TEST_F(UIDevToolsTest, OneUIElementContainsAnother) {
           ->GetElementFromNodeId(inside_rect_id)
           ->GetNodeWindowAndBounds());
 
-  EXPECT_TRUE(element_outside.second == outside_rect);
-  EXPECT_TRUE(element_inside.second == inside_rect);
+  EXPECT_EQ(element_outside.second, outside_rect);
+  EXPECT_EQ(element_inside.second, inside_rect);
   DCHECK_EQ(dom_agent()->highlight_rect_config(),
             HighlightRectsConfiguration::R1_CONTAINS_R2);
+}
+
+// Test case R1_HORIZONTAL_FULL_LEFT_R2.
+TEST_F(UIDevToolsTest, OneUIElementStaysHorizontalAndLeftOfAnother) {
+  const gfx::Rect outside_rect(1, 1, 50, 50);
+  std::unique_ptr<views::Widget> widget_outside(CreateTestWidget(outside_rect));
+
+  const gfx::Rect inside_rect(60, 1, 60, 60);
+  std::unique_ptr<views::Widget> widget_inside(CreateTestWidget(inside_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int outside_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      outside_rect.origin(), GetPrimaryRootWindow());
+  int inside_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      inside_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(outside_rect_id, inside_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(inside_rect_id, outside_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_outside(
+      dom_agent()
+          ->GetElementFromNodeId(outside_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_inside(
+      dom_agent()
+          ->GetElementFromNodeId(inside_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_outside.second, outside_rect);
+  EXPECT_EQ(element_inside.second, inside_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_HORIZONTAL_FULL_LEFT_R2);
+}
+
+// Test case R1_TOP_FULL_LEFT_R2.
+TEST_F(UIDevToolsTest, OneUIElementStaysFullyTopLeftOfAnother) {
+  const gfx::Rect top_left_rect(30, 30, 50, 50);
+  std::unique_ptr<views::Widget> widget_top_left(
+      CreateTestWidget(top_left_rect));
+
+  const gfx::Rect bottom_right_rect(100, 100, 50, 50);
+  std::unique_ptr<views::Widget> widget_bottom_right(
+      CreateTestWidget(bottom_right_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int top_left_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      top_left_rect.origin(), GetPrimaryRootWindow());
+  int bottom_right_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      bottom_right_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(top_left_rect_id,
+                                               bottom_right_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(bottom_right_rect_id,
+                                               top_left_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_top_left(
+      dom_agent()
+          ->GetElementFromNodeId(top_left_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_bottom_right(
+      dom_agent()
+          ->GetElementFromNodeId(bottom_right_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_top_left.second, top_left_rect);
+  EXPECT_EQ(element_bottom_right.second, bottom_right_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_TOP_FULL_LEFT_R2);
+}
+
+// Test case R1_BOTTOM_FULL_LEFT_R2.
+TEST_F(UIDevToolsTest, OneUIElementStaysFullyBottomLeftOfAnother) {
+  const gfx::Rect bottom_left_rect(100, 100, 50, 50);
+  std::unique_ptr<views::Widget> widget_bottom_left(
+      CreateTestWidget(bottom_left_rect));
+
+  const gfx::Rect top_right_rect(200, 50, 40, 40);
+  std::unique_ptr<views::Widget> widget_top_right(
+      CreateTestWidget(top_right_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int bottom_left_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      bottom_left_rect.origin(), GetPrimaryRootWindow());
+  int top_right_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      top_right_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(bottom_left_rect_id,
+                                               top_right_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(top_right_rect_id,
+                                               bottom_left_rect_id);
+
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_top_left(
+      dom_agent()
+          ->GetElementFromNodeId(bottom_left_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_bottom_right(
+      dom_agent()
+          ->GetElementFromNodeId(top_right_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_top_left.second, bottom_left_rect);
+  EXPECT_EQ(element_bottom_right.second, top_right_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_BOTTOM_FULL_LEFT_R2);
+}
+
+// Test case R1_TOP_PARTIAL_LEFT_R2.
+TEST_F(UIDevToolsTest, OneUIElementStaysPartiallyTopLeftOfAnother) {
+  const gfx::Rect top_left_rect(100, 100, 50, 50);
+  std::unique_ptr<views::Widget> widget_top_left(
+      CreateTestWidget(top_left_rect));
+
+  const gfx::Rect bottom_right_rect(120, 200, 50, 50);
+  std::unique_ptr<views::Widget> widget_bottom_right(
+      CreateTestWidget(bottom_right_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int top_left_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      top_left_rect.origin(), GetPrimaryRootWindow());
+  int bottom_right_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      bottom_right_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(top_left_rect_id,
+                                               bottom_right_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(bottom_right_rect_id,
+                                               top_left_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_top_left(
+      dom_agent()
+          ->GetElementFromNodeId(top_left_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_bottom_right(
+      dom_agent()
+          ->GetElementFromNodeId(bottom_right_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_top_left.second, top_left_rect);
+  EXPECT_EQ(element_bottom_right.second, bottom_right_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_TOP_PARTIAL_LEFT_R2);
+}
+
+// Test case R1_BOTTOM_PARTIAL_LEFT_R2.
+TEST_F(UIDevToolsTest, OneUIElementStaysPartiallyBottomLeftOfAnother) {
+  const gfx::Rect bottom_left_rect(50, 200, 100, 100);
+  std::unique_ptr<views::Widget> widget_bottom_left(
+      CreateTestWidget(bottom_left_rect));
+
+  const gfx::Rect top_right_rect(100, 50, 50, 50);
+  std::unique_ptr<views::Widget> widget_top_right(
+      CreateTestWidget(top_right_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int bottom_left_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      bottom_left_rect.origin(), GetPrimaryRootWindow());
+  int top_right_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      top_right_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(bottom_left_rect_id,
+                                               top_right_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(top_right_rect_id,
+                                               bottom_left_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_bottom_left(
+      dom_agent()
+          ->GetElementFromNodeId(bottom_left_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_top_right(
+      dom_agent()
+          ->GetElementFromNodeId(top_right_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_bottom_left.second, bottom_left_rect);
+  EXPECT_EQ(element_top_right.second, top_right_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_BOTTOM_PARTIAL_LEFT_R2);
+}
+
+// Test case R1_INTERSECTS_R2.
+TEST_F(UIDevToolsTest, OneUIElementIntersectsAnother) {
+  const gfx::Rect left_rect(100, 100, 50, 50);
+  std::unique_ptr<views::Widget> widget_left(CreateTestWidget(left_rect));
+
+  const gfx::Rect right_rect(120, 120, 50, 50);
+  std::unique_ptr<views::Widget> widget_right(CreateTestWidget(right_rect));
+
+  std::unique_ptr<DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int left_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      left_rect.origin(), GetPrimaryRootWindow());
+  int right_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      right_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(left_rect_id, right_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(right_rect_id, left_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_left(
+      dom_agent()
+          ->GetElementFromNodeId(left_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_right(
+      dom_agent()
+          ->GetElementFromNodeId(right_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_EQ(element_left.second, left_rect);
+  EXPECT_EQ(element_right.second, right_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_INTERSECTS_R2);
 }
 
 // Tests that the correct Overlay events are dispatched to the frontend when
@@ -440,7 +693,7 @@ TEST_F(UIDevToolsTest, MouseEventsGenerateFEEventsInInspectMode) {
   std::unique_ptr<views::Widget> widget(
       CreateTestWidget(gfx::Rect(1, 1, 1, 1)));
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   gfx::Point p(1, 1);
@@ -463,6 +716,15 @@ TEST_F(UIDevToolsTest, MouseEventsGenerateFEEventsInInspectMode) {
 
   // Clicking on the widget should pin that element.
   generator.PressLeftButton();
+
+  // Pin parent node after mouse wheel moves up.
+  int parent_id = dom_agent()->GetParentIdOfNodeId(node_id);
+  EXPECT_NE(parent_id, overlay_agent()->pinned_id());
+  generator.MoveMouseWheel(0, 1);
+  EXPECT_EQ(parent_id, overlay_agent()->pinned_id());
+
+  // Re-assign pin node.
+  node_id = parent_id;
 
   int inspect_node_notification_count =
       GetOverlayInspectNodeRequestedCount(node_id);
@@ -502,7 +764,7 @@ TEST_F(UIDevToolsTest, GetDocumentWithWindowWidgetView) {
   views::View* child_view = new TestView("child_view");
   widget->GetRootView()->AddChildView(child_view);
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(parent_window, root.get());
@@ -525,7 +787,7 @@ TEST_F(UIDevToolsTest, GetDocumentNativeWidgetOwnsWidget) {
   views::Widget* widget = native_widget_private->GetWidget();
   aura::Window* parent_window = widget->GetNativeWindow();
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(parent_window, root.get());
@@ -541,7 +803,7 @@ TEST_F(UIDevToolsTest, WindowAddedChildNodeInserted) {
   std::unique_ptr<aura::Window> window_child =
       CreateChildWindow(top_window.get());
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   aura::Window* root_window = GetPrimaryRootWindow();
@@ -560,7 +822,7 @@ TEST_F(UIDevToolsTest, WindowDestroyedChildNodeRemoved) {
   std::unique_ptr<aura::Window> child_2 = CreateChildWindow(child_1.get());
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   aura::Window* root_window = GetPrimaryRootWindow();
@@ -585,7 +847,7 @@ TEST_F(UIDevToolsTest, WindowReorganizedChildNodeRearranged) {
   std::unique_ptr<aura::Window> child_21 = CreateChildWindow(child_2.get());
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   aura::Window* root_window = GetPrimaryRootWindow();
@@ -624,7 +886,7 @@ TEST_F(UIDevToolsTest, WindowReorganizedChildNodeRemovedAndInserted) {
   std::unique_ptr<aura::Window> child_window(CreateChildWindow(parent_window));
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
   DOM::Node* root_node =
       root->getChildren(nullptr)->get(0)->getChildren(nullptr)->get(0);
@@ -652,7 +914,7 @@ TEST_F(UIDevToolsTest, WindowStackingChangedChildNodeRemovedAndInserted) {
   std::unique_ptr<aura::Window> child_13 = CreateChildWindow(top_window.get());
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   aura::Window* root_window = GetPrimaryRootWindow();
@@ -681,7 +943,7 @@ TEST_F(UIDevToolsTest, ViewInserted) {
   widget->Show();
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(window, root.get());
@@ -710,7 +972,7 @@ TEST_F(UIDevToolsTest, ViewRemoved) {
   root_view->AddChildView(child_view.get());
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(window, root.get());
@@ -745,7 +1007,7 @@ TEST_F(UIDevToolsTest, ViewRearranged) {
   parent_view->AddChildView(child_view_1);
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(window, root.get());
@@ -775,6 +1037,13 @@ TEST_F(UIDevToolsTest, ViewRearranged) {
                          child_view_node_1->getNodeId());
   ExpectChildNodeInserted(parent_view_node->getNodeId(), 0);
 
+  // Reorder child_view_1 to the same index 0 shouldn't perform reroder work, so
+  // we still expect 1 remove and 1 insert protocol notification messages.
+  parent_view->ReorderChildView(child_view_1, 0);
+  ExpectChildNodeRemoved(parent_view_node->getNodeId(),
+                         child_view_node_1->getNodeId());
+  ExpectChildNodeInserted(parent_view_node->getNodeId(), 0);
+
   target_view->AddChildView(child_view);
   ExpectChildNodeRemoved(parent_view_node->getNodeId(),
                          child_view_node->getNodeId());
@@ -795,7 +1064,7 @@ TEST_F(UIDevToolsTest, ViewRearrangedRemovedAndInserted) {
   parent_view->AddChildView(child_view);
 
   // Initialize DOMAgent
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(window, root.get());
@@ -827,7 +1096,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   std::unique_ptr<aura::Window> window(CreateChildWindow(parent_window));
   views::View* root_view = widget->GetRootView();
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(parent_window, root.get());
@@ -844,9 +1113,9 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   EXPECT_TRUE(highlighting_layer->visible());
   EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 
-  ui_devtools::UIElement* element =
+  UIElement* element =
       dom_agent()->GetElementFromNodeId(window_node->getNodeId());
-  ASSERT_EQ(ui_devtools::UIElementType::WINDOW, element->type());
+  ASSERT_EQ(UIElementType::WINDOW, element->type());
   EXPECT_EQ(element->GetNodeWindowAndBounds().first, window.get());
   EXPECT_EQ(element->GetNodeWindowAndBounds().second,
             window->GetBoundsInScreen());
@@ -859,7 +1128,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 
   element = dom_agent()->GetElementFromNodeId(widget_node->getNodeId());
-  ASSERT_EQ(ui_devtools::UIElementType::WIDGET, element->type());
+  ASSERT_EQ(UIElementType::WIDGET, element->type());
   EXPECT_EQ(element->GetNodeWindowAndBounds().first, widget->GetNativeWindow());
   EXPECT_EQ(element->GetNodeWindowAndBounds().second,
             widget->GetWindowBoundsInScreen());
@@ -872,7 +1141,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 
   element = dom_agent()->GetElementFromNodeId(root_view_node->getNodeId());
-  ASSERT_EQ(ui_devtools::UIElementType::VIEW, element->type());
+  ASSERT_EQ(UIElementType::VIEW, element->type());
   EXPECT_EQ(element->GetNodeWindowAndBounds().first,
             root_view->GetWidget()->GetNativeWindow());
   EXPECT_EQ(element->GetNodeWindowAndBounds().second,
@@ -885,16 +1154,15 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   EXPECT_FALSE(GetHighlightingLayer(GetPrimaryRootWindow())->visible());
 }
 
-int GetNodeIdFromWindow(ui_devtools::UIElement* ui_element,
-                        aura::Window* window) {
+int GetNodeIdFromWindow(UIElement* ui_element, aura::Window* window) {
   for (auto* child : ui_element->children()) {
-    if (child->type() == ui_devtools::UIElementType::WINDOW &&
-        static_cast<ui_devtools::WindowElement*>(child)->window() == window) {
+    if (child->type() == UIElementType::WINDOW &&
+        static_cast<WindowElement*>(child)->window() == window) {
       return child->node_id();
     }
   }
   for (auto* child : ui_element->children()) {
-    if (child->type() == ui_devtools::UIElementType::WINDOW) {
+    if (child->type() == UIElementType::WINDOW) {
       int node_id = GetNodeIdFromWindow(child, window);
       if (node_id > 0)
         return node_id;
@@ -918,7 +1186,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewGetMatchedStylesForNode) {
   widget->SetBounds(widget_bounds);
   widget->GetRootView()->SetBoundsRect(view_bounds);
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(parent_window, root.get());
@@ -940,7 +1208,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewStyleSheetChanged) {
   aura::Window* widget_window = widget->GetNativeWindow();
   std::unique_ptr<aura::Window> child(CreateChildWindow(widget_window));
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   gfx::Rect child_bounds(2, 2, 3, 3);
@@ -971,7 +1239,7 @@ TEST_F(UIDevToolsTest, WindowWidgetViewSetStyleText) {
   std::unique_ptr<aura::Window> window(CreateChildWindow(parent_window));
   views::View* root_view = widget->GetRootView();
 
-  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  std::unique_ptr<DOM::Node> root;
   dom_agent()->getDocument(&root);
 
   DOM::Node* parent_node = FindInRoot(parent_window, root.get());

@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef MEDIA_BASE_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_
-#define MEDIA_BASE_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_
+#ifndef PLATFORM_MEDIA_COMMON_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_
+#define PLATFORM_MEDIA_COMMON_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #import <CoreMedia/CoreMedia.h>
 
@@ -56,4 +59,4 @@ std::string FourCCToString(uint32_t fourcc);
 
 }  // namespace media
 
-#endif  // MEDIA_BASE_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_
+#endif  // PLATFORM_MEDIA_COMMON_MAC_FRAMEWORK_TYPE_CONVERSIONS_H_

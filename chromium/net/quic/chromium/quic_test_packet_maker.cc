@@ -7,7 +7,6 @@
 #include <list>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "net/quic/chromium/quic_http_utils.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_utils.h"
@@ -15,8 +14,17 @@
 
 namespace net {
 namespace test {
+namespace {
 
-QuicTestPacketMaker::QuicTestPacketMaker(QuicVersion version,
+QuicAckFrame MakeAckFrame(QuicPacketNumber largest_observed) {
+  QuicAckFrame ack;
+  ack.deprecated_largest_observed = largest_observed;
+  return ack;
+}
+
+}  // namespace
+
+QuicTestPacketMaker::QuicTestPacketMaker(QuicTransportVersion version,
                                          QuicConnectionId connection_id,
                                          MockClock* clock,
                                          const std::string& host,
@@ -39,10 +47,10 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakePingPacket(
     QuicPacketNumber num,
     bool include_version) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = include_version;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = include_version;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
   QuicPingFrame ping;
@@ -65,13 +73,13 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeRstPacket(
     QuicRstStreamErrorCode error_code,
     size_t bytes_written) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = include_version;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = include_version;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
-  QuicRstStreamFrame rst(stream_id, error_code, bytes_written);
+  QuicRstStreamFrame rst(1, stream_id, error_code, bytes_written);
   DVLOG(1) << "Adding frame: " << QuicFrame(&rst);
   return std::unique_ptr<QuicReceivedPacket>(
       MakePacket(header, QuicFrame(&rst)));
@@ -102,10 +110,10 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckAndRstPacket(
     bool send_feedback,
     size_t bytes_written) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = include_version;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = include_version;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
   QuicAckFrame ack(MakeAckFrame(largest_received));
@@ -125,11 +133,12 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckAndRstPacket(
   frames.push_back(QuicFrame(&stop_waiting));
   DVLOG(1) << "Adding frame: " << frames[1];
 
-  QuicRstStreamFrame rst(stream_id, error_code, bytes_written);
+  QuicRstStreamFrame rst(1, stream_id, error_code, bytes_written);
   frames.push_back(QuicFrame(&rst));
   DVLOG(1) << "Adding frame: " << frames[2];
 
-  QuicFramer framer(SupportedVersions(version_), clock_->Now(), perspective_);
+  QuicFramer framer(SupportedTransportVersions(version_), clock_->Now(),
+                    perspective_);
   std::unique_ptr<QuicPacket> packet(
       BuildUnsizedDataPacket(&framer, header, frames));
   char buffer[kMaxPacketSize];
@@ -151,10 +160,10 @@ QuicTestPacketMaker::MakeAckAndConnectionClosePacket(
     QuicErrorCode quic_error,
     const std::string& quic_error_details) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = include_version;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = include_version;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
   QuicAckFrame ack(MakeAckFrame(largest_received));
@@ -181,7 +190,8 @@ QuicTestPacketMaker::MakeAckAndConnectionClosePacket(
   frames.push_back(QuicFrame(&close));
   DVLOG(1) << "Adding frame: " << frames[2];
 
-  QuicFramer framer(SupportedVersions(version_), clock_->Now(), perspective_);
+  QuicFramer framer(SupportedTransportVersions(version_), clock_->Now(),
+                    perspective_);
   std::unique_ptr<QuicPacket> packet(
       BuildUnsizedDataPacket(&framer, header, frames));
   char buffer[kMaxPacketSize];
@@ -195,10 +205,10 @@ QuicTestPacketMaker::MakeAckAndConnectionClosePacket(
 std::unique_ptr<QuicReceivedPacket>
 QuicTestPacketMaker::MakeConnectionClosePacket(QuicPacketNumber num) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = false;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = false;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
   QuicConnectionCloseFrame close;
@@ -213,10 +223,10 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeGoAwayPacket(
     QuicErrorCode error_code,
     std::string reason_phrase) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = false;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = false;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = num;
 
   QuicGoAwayFrame goaway;
@@ -245,10 +255,10 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
     bool send_feedback,
     QuicTime::Delta ack_delay_time) {
   QuicPacketHeader header;
-  header.public_header.connection_id = connection_id_;
-  header.public_header.reset_flag = false;
-  header.public_header.version_flag = false;
-  header.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.connection_id = connection_id_;
+  header.reset_flag = false;
+  header.version_flag = false;
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header.packet_number = packet_number;
 
   QuicAckFrame ack(MakeAckFrame(largest_received));
@@ -260,7 +270,8 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
     ack.packets.AddRange(1, largest_received + 1);
   }
 
-  QuicFramer framer(SupportedVersions(version_), clock_->Now(), perspective_);
+  QuicFramer framer(SupportedTransportVersions(version_), clock_->Now(),
+                    perspective_);
   QuicFrames frames;
   QuicFrame ack_frame(&ack);
   DVLOG(1) << "Adding frame: " << ack_frame;
@@ -646,7 +657,8 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakePacket(
 std::unique_ptr<QuicReceivedPacket>
 QuicTestPacketMaker::MakeMultipleFramesPacket(const QuicPacketHeader& header,
                                               const QuicFrames& frames) {
-  QuicFramer framer(SupportedVersions(version_), clock_->Now(), perspective_);
+  QuicFramer framer(SupportedTransportVersions(version_), clock_->Now(),
+                    perspective_);
   std::unique_ptr<QuicPacket> packet(
       BuildUnsizedDataPacket(&framer, header, frames));
   char buffer[kMaxPacketSize];
@@ -659,10 +671,10 @@ QuicTestPacketMaker::MakeMultipleFramesPacket(const QuicPacketHeader& header,
 
 void QuicTestPacketMaker::InitializeHeader(QuicPacketNumber packet_number,
                                            bool should_include_version) {
-  header_.public_header.connection_id = connection_id_;
-  header_.public_header.reset_flag = false;
-  header_.public_header.version_flag = should_include_version;
-  header_.public_header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header_.connection_id = connection_id_;
+  header_.reset_flag = false;
+  header_.version_flag = should_include_version;
+  header_.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
   header_.packet_number = packet_number;
 }
 

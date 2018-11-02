@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://wicg.github.io/shape-detection-api/#text-detection-api
+// https://wicg.github.io/shape-detection-api/text.html#detectedtext-section
 
 [
     Constructor,
@@ -10,4 +10,7 @@
 ] interface DetectedText {
     [SameObject] readonly attribute DOMString rawValue;
     [SameObject] readonly attribute DOMRect boundingBox;
+    // 4 corner points in clockwise direction starting with top-left. Due to
+    // possible perspective distortions, this is not necessarily a rectangle.
+    [SameObject] readonly attribute FrozenArray<Point2D> cornerPoints;
 };

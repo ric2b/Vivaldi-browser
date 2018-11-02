@@ -80,6 +80,12 @@
       <message name="IDS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
         Copyright <ph name="YEAR">{0,date,y}<ex>2016</ex></ph> Vivaldi Technologies AS. All rights reserved.
       </message>
+      <if expr="is_win">
+        <!-- Necessary to avoid Hash collision errors; might be able to remove when google strings have been updated to match chromium strings -->
+        <message name="IDS_WIN_NOTIFICATION_SETTINGS_CONTEXT_MENU_ITEM_NAME" desc="The name of the button in Windows Notification Center which leads to Chrome notification settings.">
+          Go to Vivaldi notification settings
+        </message>
+      </if>
     </messages>
   </release>
 </grit>

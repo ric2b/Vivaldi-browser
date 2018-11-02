@@ -24,7 +24,8 @@
 #ifndef MatchedPropertiesCache_h
 #define MatchedPropertiesCache_h
 
-#include "core/css/StylePropertySet.h"
+#include "base/macros.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/resolver/MatchResult.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -40,14 +41,14 @@ class CachedMatchedProperties final
     : public GarbageCollectedFinalized<CachedMatchedProperties> {
  public:
   HeapVector<MatchedProperties> matched_properties;
-  RefPtr<ComputedStyle> computed_style;
-  RefPtr<ComputedStyle> parent_computed_style;
+  scoped_refptr<ComputedStyle> computed_style;
+  scoped_refptr<ComputedStyle> parent_computed_style;
 
   void Set(const ComputedStyle&,
            const ComputedStyle& parent_style,
            const MatchedPropertiesVector&);
   void Clear();
-  DEFINE_INLINE_TRACE() { visitor->Trace(matched_properties); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(matched_properties); }
 };
 
 // Specialize the HashTraits for CachedMatchedProperties to check for dead
@@ -92,7 +93,6 @@ struct CachedMatchedPropertiesHashTraits
 
 class MatchedPropertiesCache {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(MatchedPropertiesCache);
 
  public:
   MatchedPropertiesCache();
@@ -112,7 +112,7 @@ class MatchedPropertiesCache {
   static bool IsCacheable(const StyleResolverState&);
   static bool IsStyleCacheable(const ComputedStyle&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   using Cache = HeapHashMap<unsigned,
@@ -121,6 +121,7 @@ class MatchedPropertiesCache {
                             HashTraits<unsigned>,
                             CachedMatchedPropertiesHashTraits>;
   Cache cache_;
+  DISALLOW_COPY_AND_ASSIGN(MatchedPropertiesCache);
 };
 
 }  // namespace blink

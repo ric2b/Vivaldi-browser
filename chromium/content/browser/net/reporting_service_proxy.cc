@@ -25,20 +25,78 @@ namespace content {
 
 namespace {
 
-class ReportingServiceProxyImpl : public mojom::ReportingServiceProxy {
+class ReportingServiceProxyImpl : public blink::mojom::ReportingServiceProxy {
  public:
   ReportingServiceProxyImpl(
       scoped_refptr<net::URLRequestContextGetter> request_context_getter)
       : request_context_getter_(std::move(request_context_getter)) {}
 
-  // mojom::ReportingServiceProxy:
+  // blink::mojom::ReportingServiceProxy:
+
+  void QueueInterventionReport(const GURL& url,
+                               const std::string& message,
+                               const std::string& source_file,
+                               int line_number,
+                               int column_number) override {
+    auto body = std::make_unique<base::DictionaryValue>();
+    body->SetString("message", message);
+    body->SetString("sourceFile", source_file);
+    body->SetInteger("lineNumber", line_number);
+    body->SetInteger("columnNumber", column_number);
+    QueueReport(url, "default", "intervention", std::move(body));
+  }
+
+  void QueueDeprecationReport(const GURL& url,
+                              const std::string& message,
+                              const std::string& source_file,
+                              int line_number,
+                              int column_number) override {
+    auto body = std::make_unique<base::DictionaryValue>();
+    body->SetString("message", message);
+    body->SetString("sourceFile", source_file);
+    body->SetInteger("lineNumber", line_number);
+    body->SetInteger("columnNumber", column_number);
+    QueueReport(url, "default", "deprecation", std::move(body));
+  }
+
+  void QueueCspViolationReport(const GURL& url,
+                               const std::string& group,
+                               const std::string& document_uri,
+                               const std::string& referrer,
+                               const std::string& violated_directive,
+                               const std::string& effective_directive,
+                               const std::string& original_policy,
+                               const std::string& disposition,
+                               const std::string& blocked_uri,
+                               int line_number,
+                               int column_number,
+                               const std::string& source_file,
+                               int status_code,
+                               const std::string& script_sample) override {
+    auto body = std::make_unique<base::DictionaryValue>();
+    body->SetString("document-uri", document_uri);
+    body->SetString("referrer", referrer);
+    body->SetString("violated-directive", violated_directive);
+    body->SetString("effective-directive", effective_directive);
+    body->SetString("original-policy", original_policy);
+    body->SetString("disposition", disposition);
+    body->SetString("blocked-uri", blocked_uri);
+    if (line_number)
+      body->SetInteger("line-number", line_number);
+    if (column_number)
+      body->SetInteger("column-number", column_number);
+    body->SetString("source-file", source_file);
+    if (status_code)
+      body->SetInteger("status-code", status_code);
+    body->SetString("script-sample", script_sample);
+    QueueReport(url, group, "csp", std::move(body));
+  }
+
+ private:
   void QueueReport(const GURL& url,
                    const std::string& group,
                    const std::string& type,
-                   std::unique_ptr<base::Value> body) override {
-    std::unique_ptr<const base::Value> const_body =
-        base::WrapUnique(body.release());
-
+                   std::unique_ptr<base::Value> body) {
     net::URLRequestContext* request_context =
         request_context_getter_->GetURLRequestContext();
     if (!request_context) {
@@ -53,17 +111,16 @@ class ReportingServiceProxyImpl : public mojom::ReportingServiceProxy {
       return;
     }
 
-    reporting_service->QueueReport(url, group, type, std::move(const_body));
+    reporting_service->QueueReport(url, group, type, std::move(body));
   }
 
- private:
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
 };
 
 void CreateReportingServiceProxyOnNetworkTaskRunner(
-    mojom::ReportingServiceProxyRequest request,
+    blink::mojom::ReportingServiceProxyRequest request,
     scoped_refptr<net::URLRequestContextGetter> request_context_getter) {
-  mojo::MakeStrongBinding(base::MakeUnique<ReportingServiceProxyImpl>(
+  mojo::MakeStrongBinding(std::make_unique<ReportingServiceProxyImpl>(
                               std::move(request_context_getter)),
                           std::move(request));
 }
@@ -73,7 +130,7 @@ void CreateReportingServiceProxyOnNetworkTaskRunner(
 // static
 void CreateReportingServiceProxy(
     StoragePartition* storage_partition,
-    mojom::ReportingServiceProxyRequest request) {
+    blink::mojom::ReportingServiceProxyRequest request) {
   scoped_refptr<net::URLRequestContextGetter> request_context_getter(
       storage_partition->GetURLRequestContext());
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner(

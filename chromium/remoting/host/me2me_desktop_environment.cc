@@ -57,12 +57,10 @@ std::string Me2MeDesktopEnvironment::GetCapabilities() const {
     capabilities += protocol::kTouchEventsCapability;
   }
 
-// TODO(jarhar): Replace this ifdef with settings in DesktopEnvironmentOptions,
-//               and then a chrome policy.
-#ifdef CHROME_REMOTE_DESKTOP_FILE_TRANSFER_ENABLED
-  capabilities += " ";
-  capabilities += protocol::kFileTransferCapability;
-#endif
+  if (desktop_environment_options().enable_file_transfer()) {
+    capabilities += " ";
+    capabilities += protocol::kFileTransferCapability;
+  }
 
   return capabilities;
 }
@@ -72,11 +70,13 @@ Me2MeDesktopEnvironment::Me2MeDesktopEnvironment(
     scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
+    ui::SystemInputInjectorFactory* system_input_injector_factory,
     const DesktopEnvironmentOptions& options)
     : BasicDesktopEnvironment(caller_task_runner,
                               video_capture_task_runner,
                               input_task_runner,
                               ui_task_runner,
+                              system_input_injector_factory,
                               options) {
   DCHECK(caller_task_runner->BelongsToCurrentThread());
 
@@ -143,11 +143,13 @@ Me2MeDesktopEnvironmentFactory::Me2MeDesktopEnvironmentFactory(
     scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
+    ui::SystemInputInjectorFactory* system_input_injector_factory)
     : BasicDesktopEnvironmentFactory(caller_task_runner,
                                      video_capture_task_runner,
                                      input_task_runner,
-                                     ui_task_runner) {}
+                                     ui_task_runner,
+                                     system_input_injector_factory) {}
 
 Me2MeDesktopEnvironmentFactory::~Me2MeDesktopEnvironmentFactory() {
 }
@@ -161,7 +163,7 @@ std::unique_ptr<DesktopEnvironment> Me2MeDesktopEnvironmentFactory::Create(
       new Me2MeDesktopEnvironment(caller_task_runner(),
                                   video_capture_task_runner(),
                                   input_task_runner(), ui_task_runner(),
-                                  options));
+                                  system_input_injector_factory(), options));
   if (!desktop_environment->InitializeSecurity(client_session_control)) {
     return nullptr;
   }

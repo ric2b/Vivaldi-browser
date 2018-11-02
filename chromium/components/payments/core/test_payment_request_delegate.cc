@@ -14,7 +14,11 @@ TestPaymentRequestDelegate::TestPaymentRequestDelegate(
       locale_("en-US"),
       last_committed_url_("https://shop.com"),
       request_context_(new TestURLRequestContextGetter(loop_.task_runner())),
-      payments_client_(request_context_.get(), &payments_cleint_delegate_),
+      payments_client_(request_context_.get(),
+                       nullptr,
+                       nullptr,
+                       /*unmask_delegate=*/&payments_client_delegate_,
+                       /*save_delegate=*/nullptr),
       full_card_request_(&autofill_client_,
                          &payments_client_,
                          personal_data_manager) {}
@@ -56,7 +60,8 @@ void TestPaymentRequestDelegate::DoFullCardRequest(
   full_card_result_delegate_ = result_delegate;
 }
 
-AddressNormalizer* TestPaymentRequestDelegate::GetAddressNormalizer() {
+autofill::AddressNormalizer*
+TestPaymentRequestDelegate::GetAddressNormalizer() {
   return &address_normalizer_;
 }
 
@@ -68,7 +73,8 @@ ukm::UkmRecorder* TestPaymentRequestDelegate::GetUkmRecorder() {
   return nullptr;
 }
 
-TestAddressNormalizer* TestPaymentRequestDelegate::test_address_normalizer() {
+autofill::TestAddressNormalizer*
+TestPaymentRequestDelegate::test_address_normalizer() {
   return &address_normalizer_;
 }
 
@@ -90,6 +96,10 @@ PrefService* TestPaymentRequestDelegate::GetPrefService() {
   return nullptr;
 }
 
+bool TestPaymentRequestDelegate::IsBrowserWindowActive() const {
+  return true;
+}
+
 TestPaymentsClientDelegate::TestPaymentsClientDelegate() {}
 
 TestPaymentsClientDelegate::~TestPaymentsClientDelegate() {}
@@ -97,19 +107,6 @@ TestPaymentsClientDelegate::~TestPaymentsClientDelegate() {}
 void TestPaymentsClientDelegate::OnDidGetRealPan(
     autofill::AutofillClient::PaymentsRpcResult result,
     const std::string& real_pan) {}
-
-IdentityProvider* TestPaymentsClientDelegate::GetIdentityProvider() {
-  return nullptr;
-}
-
-void TestPaymentsClientDelegate::OnDidGetUploadDetails(
-    autofill::AutofillClient::PaymentsRpcResult result,
-    const base::string16& context_token,
-    std::unique_ptr<base::DictionaryValue> legal_message) {}
-
-void TestPaymentsClientDelegate::OnDidUploadCard(
-    autofill::AutofillClient::PaymentsRpcResult result,
-    const std::string& server_id) {}
 
 TestURLRequestContextGetter::TestURLRequestContextGetter(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)

@@ -13,7 +13,6 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/page_transition_types.h"
 
-class ChromeExtensionsDispatcherDelegate;
 class GURL;
 
 namespace blink {
@@ -25,7 +24,6 @@ class WebURL;
 namespace content {
 class BrowserPluginDelegate;
 class RenderFrame;
-class RenderView;
 }
 
 namespace extensions {
@@ -56,7 +54,6 @@ class ChromeExtensionsRendererClient
   void RenderThreadStarted();
   void RenderFrameCreated(content::RenderFrame* render_frame,
                           service_manager::BinderRegistry* registry);
-  void RenderViewCreated(content::RenderView* render_view);
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             const blink::WebPluginParams& params);
   bool AllowPopup();
@@ -87,8 +84,6 @@ class ChromeExtensionsRendererClient
   }
 
  private:
-  std::unique_ptr<ChromeExtensionsDispatcherDelegate>
-      extension_dispatcher_delegate_;
   std::unique_ptr<extensions::Dispatcher> extension_dispatcher_;
   std::unique_ptr<extensions::RendererPermissionsPolicyDelegate>
       permissions_policy_delegate_;

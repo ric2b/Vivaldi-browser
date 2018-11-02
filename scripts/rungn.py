@@ -30,6 +30,13 @@ parser.add_argument("args", nargs=argparse.REMAINDER);
 
 args = parser.parse_args()
 
+# Need this file to be present
+gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_args.gni")
+if not os.access(gclient_gni_file_name, os.F_OK):
+  with open(gclient_gni_file_name, "w") as f:
+    f.write("""checkout_nacl=false
+    checkout_libaom=false""")
+
 extra_subprocess_flags = {}
 if is_windows:
   try:
@@ -48,6 +55,7 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
   for x in ["VIVALDI_SIGNING_KEY", "VIVALDI_SIGN_EXECUTABLE", "GN_DEFINES"]:
     if x in bootstrap_env:
       del bootstrap_env[x]
+    bootstrap_env["GN_DEFINES"]="enable_precompiled_headers=false"
   full_bootstrap = True
   if not args.bootstrap and os.access(os.path.join(gn_workdir, "Release", "build.ninja"), os.F_OK):
     full_bootstrap = False
@@ -94,7 +102,7 @@ if args.refresh or not args.args:
   produce_ide = not args.no_ide and ide_kind != "None" and not is_builder
   if produce_ide and not ide_kind:
     if platform.system() == "Windows":
-      ide_kind = "vs2015"
+      ide_kind = "vs2017"
     elif platform.system()== "darwin":
       ide_kind = "xcode"
     else:

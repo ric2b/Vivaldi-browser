@@ -9,10 +9,10 @@
 
 #include "chrome/installer/util/shell_util.h"
 
-#include <windows.h>
 #include <objbase.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <iterator>
@@ -24,7 +24,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/file_version_info.h"
+#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -46,7 +46,6 @@
 #include "base/values.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_co_mem.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/shortcut.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -69,6 +68,8 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "components/base32/base32.h"
+
+#include "base/file_version_info.h"
 
 using base::win::RegKey;
 
@@ -810,7 +811,10 @@ bool LaunchDefaultAppsSettingsModernDialog(const wchar_t* protocol) {
       L"windows.immersivecontrolpanel_cw5n1h2txyewy"
       L"!microsoft.windows.immersivecontrolpanel";
 
-  base::win::ScopedComPtr<IApplicationActivationManager> activator;
+  static constexpr base::Feature kHighlightProtocolInWindowsSettings{
+      "HighlightProtocolInWindowsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
+
+  Microsoft::WRL::ComPtr<IApplicationActivationManager> activator;
   HRESULT hr = ::CoCreateInstance(CLSID_ApplicationActivationManager, nullptr,
                                   CLSCTX_ALL, IID_PPV_ARGS(&activator));
   if (SUCCEEDED(hr)) {
@@ -819,7 +823,8 @@ bool LaunchDefaultAppsSettingsModernDialog(const wchar_t* protocol) {
     hr = activator->ActivateApplication(kControlPanelAppModelId,
                                         L"page=SettingsPageAppsDefaults",
                                         AO_NONE, &pid);
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr) &&
+        base::FeatureList::IsEnabled(kHighlightProtocolInWindowsSettings)) {
       hr = activator->ActivateApplication(
           kControlPanelAppModelId,
           base::StringPrintf(L"page=SettingsPageAppsDefaults&target=%ls",
@@ -1133,6 +1138,11 @@ base::win::ShortcutProperties TranslateShortcutProperties(
   if (properties.has_app_id())
     shortcut_properties.set_app_id(properties.app_id);
 
+  if (properties.has_toast_activator_clsid()) {
+    shortcut_properties.set_toast_activator_clsid(
+        properties.toast_activator_clsid);
+  }
+
   return shortcut_properties;
 }
 
@@ -1166,7 +1176,7 @@ ShellUtil::DefaultState ProbeCurrentDefaultHandlers(
     const base::FilePath& chrome_exe,
     const wchar_t* const* protocols,
     size_t num_protocols) {
-  base::win::ScopedComPtr<IApplicationAssociationRegistration> registration;
+  Microsoft::WRL::ComPtr<IApplicationAssociationRegistration> registration;
   HRESULT hr =
       ::CoCreateInstance(CLSID_ApplicationAssociationRegistration, NULL,
                          CLSCTX_INPROC, IID_PPV_ARGS(&registration));
@@ -1225,7 +1235,7 @@ ShellUtil::DefaultState ProbeAppIsDefaultHandlers(
     const base::FilePath& chrome_exe,
     const wchar_t* const* protocols,
     size_t num_protocols) {
-  base::win::ScopedComPtr<IApplicationAssociationRegistration> registration;
+  Microsoft::WRL::ComPtr<IApplicationAssociationRegistration> registration;
   HRESULT hr =
       ::CoCreateInstance(CLSID_ApplicationAssociationRegistration, NULL,
                          CLSCTX_INPROC, IID_PPV_ARGS(&registration));
@@ -2040,7 +2050,7 @@ bool ShellUtil::MakeChromeDefault(BrowserDistribution* dist,
   // On Windows 7 we still can set ourselves via the the
   // IApplicationAssociationRegistration interface.
   VLOG(1) << "Registering Chrome as default browser on Windows 7.";
-  base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
+  Microsoft::WRL::ComPtr<IApplicationAssociationRegistration> pAAR;
   HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
                                   NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
   if (SUCCEEDED(hr)) {
@@ -2134,7 +2144,7 @@ bool ShellUtil::MakeChromeDefaultProtocolClient(
 
   // Windows 8 does not permit making a browser default just like that.
   // This process needs to be routed through the system's UI. Use
-  // ShowMakeChromeDefaultProocolClientSystemUI instead (below).
+  // ShowMakeChromeDefaultProtocolClientSystemUI instead (below).
   if (!CanMakeChromeDefaultUnattended())
     return false;
 
@@ -2143,7 +2153,7 @@ bool ShellUtil::MakeChromeDefaultProtocolClient(
   // protocol handler.
   VLOG(1) << "Registering Chrome as default handler for " << protocol
           << " on Windows 7.";
-  base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
+  Microsoft::WRL::ComPtr<IApplicationAssociationRegistration> pAAR;
   HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
                                   NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
   if (SUCCEEDED(hr)) {

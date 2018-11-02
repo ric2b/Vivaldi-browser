@@ -5,6 +5,7 @@
 #include "modules/serviceworkers/ServiceWorkerWindowClient.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
@@ -16,7 +17,7 @@
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "modules/serviceworkers/ServiceWorkerWindowClientCallback.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/bindings/V8ThrowException.h"
 #include "public/platform/WebString.h"
 
 namespace blink {
@@ -41,8 +42,7 @@ ServiceWorkerWindowClient::ServiceWorkerWindowClient(
 ServiceWorkerWindowClient::~ServiceWorkerWindowClient() {}
 
 String ServiceWorkerWindowClient::visibilityState() const {
-  return PageVisibilityStateString(
-      static_cast<PageVisibilityState>(page_visibility_state_));
+  return PageVisibilityStateString(page_visibility_state_);
 }
 
 ScriptPromise ServiceWorkerWindowClient::focus(ScriptState* script_state) {
@@ -58,8 +58,8 @@ ScriptPromise ServiceWorkerWindowClient::focus(ScriptState* script_state) {
 
   ServiceWorkerGlobalScopeClient::From(ExecutionContext::From(script_state))
       ->Focus(Uuid(),
-              WTF::MakeUnique<CallbackPromiseAdapter<ServiceWorkerWindowClient,
-                                                     ServiceWorkerError>>(
+              std::make_unique<CallbackPromiseAdapter<ServiceWorkerWindowClient,
+                                                      ServiceWorkerError>>(
                   resolver));
   return promise;
 }
@@ -84,11 +84,11 @@ ScriptPromise ServiceWorkerWindowClient::navigate(ScriptState* script_state,
   }
 
   ServiceWorkerGlobalScopeClient::From(context)->Navigate(
-      Uuid(), parsed_url, WTF::MakeUnique<NavigateClientCallback>(resolver));
+      Uuid(), parsed_url, std::make_unique<NavigateClientCallback>(resolver));
   return promise;
 }
 
-DEFINE_TRACE(ServiceWorkerWindowClient) {
+void ServiceWorkerWindowClient::Trace(blink::Visitor* visitor) {
   ServiceWorkerClient::Trace(visitor);
 }
 

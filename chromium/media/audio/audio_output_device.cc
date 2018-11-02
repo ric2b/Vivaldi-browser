@@ -11,8 +11,10 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
@@ -31,7 +33,6 @@ class AudioOutputDevice::AudioThreadCallback
  public:
   AudioThreadCallback(const AudioParameters& audio_parameters,
                       base::SharedMemoryHandle memory,
-                      int memory_length,
                       AudioRendererSink::RenderCallback* render_callback);
   ~AudioThreadCallback() override;
 
@@ -89,6 +90,13 @@ AudioOutputDevice::AudioOutputDevice(
 
 void AudioOutputDevice::Initialize(const AudioParameters& params,
                                    RenderCallback* callback) {
+  task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&AudioOutputDevice::InitializeOnIOThread, this,
+                                params, callback));
+}
+
+void AudioOutputDevice::InitializeOnIOThread(const AudioParameters& params,
+                                             RenderCallback* callback) {
   DCHECK(!callback_) << "Calling Initialize() twice?";
   DCHECK(params.IsValid());
   audio_parameters_ = params;
@@ -115,10 +123,8 @@ void AudioOutputDevice::RequestDeviceAuthorization() {
 }
 
 void AudioOutputDevice::Start() {
-  DCHECK(callback_) << "Initialize hasn't been called";
-  task_runner()->PostTask(FROM_HERE,
-      base::Bind(&AudioOutputDevice::CreateStreamOnIOThread, this,
-                 audio_parameters_));
+  task_runner()->PostTask(
+      FROM_HERE, base::Bind(&AudioOutputDevice::CreateStreamOnIOThread, this));
 }
 
 void AudioOutputDevice::Stop() {
@@ -197,8 +203,9 @@ void AudioOutputDevice::RequestDeviceAuthorizationOnIOThread() {
   }
 }
 
-void AudioOutputDevice::CreateStreamOnIOThread(const AudioParameters& params) {
+void AudioOutputDevice::CreateStreamOnIOThread() {
   DCHECK(task_runner()->BelongsToCurrentThread());
+  DCHECK(callback_) << "Initialize hasn't been called";
   switch (state_) {
     case IPC_CLOSED:
       if (callback_)
@@ -209,7 +216,7 @@ void AudioOutputDevice::CreateStreamOnIOThread(const AudioParameters& params) {
       if (did_receive_auth_.IsSignaled() && device_id_.empty() &&
           security_origin_.unique()) {
         state_ = CREATING_STREAM;
-        ipc_->CreateStream(this, params);
+        ipc_->CreateStream(this, audio_parameters_);
       } else {
         RequestDeviceAuthorizationOnIOThread();
         start_on_authorized_ = true;
@@ -222,7 +229,7 @@ void AudioOutputDevice::CreateStreamOnIOThread(const AudioParameters& params) {
 
     case AUTHORIZED:
       state_ = CREATING_STREAM;
-      ipc_->CreateStream(this, params);
+      ipc_->CreateStream(this, audio_parameters_);
       start_on_authorized_ = false;
       break;
 
@@ -372,7 +379,7 @@ void AudioOutputDevice::OnDeviceAuthorized(
       did_receive_auth_.Signal();
     }
     if (start_on_authorized_)
-      CreateStreamOnIOThread(audio_parameters_);
+      CreateStreamOnIOThread();
   } else {
     // Closing IPC forces a Signal(), so no clients are locked waiting
     // indefinitely after this method returns.
@@ -385,8 +392,7 @@ void AudioOutputDevice::OnDeviceAuthorized(
 
 void AudioOutputDevice::OnStreamCreated(
     base::SharedMemoryHandle handle,
-    base::SyncSocket::Handle socket_handle,
-    int length) {
+    base::SyncSocket::Handle socket_handle) {
   DCHECK(task_runner()->BelongsToCurrentThread());
   DCHECK(base::SharedMemory::IsHandleValid(handle));
 #if defined(OS_WIN)
@@ -394,7 +400,7 @@ void AudioOutputDevice::OnStreamCreated(
 #else
   DCHECK_GE(socket_handle, 0);
 #endif
-  DCHECK_GT(length, 0);
+  DCHECK_GT(handle.GetSize(), 0u);
 
   if (state_ != CREATING_STREAM)
     return;
@@ -420,7 +426,7 @@ void AudioOutputDevice::OnStreamCreated(
     DCHECK(!audio_callback_);
 
     audio_callback_.reset(new AudioOutputDevice::AudioThreadCallback(
-        audio_parameters_, handle, length, callback_));
+        audio_parameters_, handle, callback_));
     audio_thread_.reset(new AudioDeviceThread(
         audio_callback_.get(), socket_handle, "AudioOutputDevice"));
     state_ = PAUSED;
@@ -451,21 +457,20 @@ void AudioOutputDevice::WillDestroyCurrentMessageLoop() {
 AudioOutputDevice::AudioThreadCallback::AudioThreadCallback(
     const AudioParameters& audio_parameters,
     base::SharedMemoryHandle memory,
-    int memory_length,
     AudioRendererSink::RenderCallback* render_callback)
-    : AudioDeviceThread::Callback(audio_parameters, memory, memory_length, 1),
+    : AudioDeviceThread::Callback(
+          audio_parameters,
+          memory,
+          ComputeAudioOutputBufferSize(audio_parameters),
+          1),
       render_callback_(render_callback),
       callback_num_(0) {}
 
-AudioOutputDevice::AudioThreadCallback::~AudioThreadCallback() {
-}
+AudioOutputDevice::AudioThreadCallback::~AudioThreadCallback() = default;
 
 void AudioOutputDevice::AudioThreadCallback::MapSharedMemory() {
-  CHECK_EQ(total_segments_, 1);
+  CHECK_EQ(total_segments_, 1u);
   CHECK(shared_memory_.Map(memory_length_));
-  DCHECK_EQ(static_cast<size_t>(memory_length_),
-            sizeof(AudioOutputBufferParameters) +
-                AudioBus::CalculateMemorySize(audio_parameters_));
 
   AudioOutputBuffer* buffer =
       reinterpret_cast<AudioOutputBuffer*>(shared_memory_.memory());
@@ -476,15 +481,6 @@ void AudioOutputDevice::AudioThreadCallback::MapSharedMemory() {
 // Called whenever we receive notifications about pending data.
 void AudioOutputDevice::AudioThreadCallback::Process(uint32_t control_signal) {
   callback_num_++;
-  TRACE_EVENT1("audio", "AudioOutputDevice::FireRenderCallback",
-               "callback_num", callback_num_);
-
-  // When playback starts, we get an immediate callback to Process to make sure
-  // that we have some data, we'll get another one after the device is awake and
-  // ingesting data, which is what we want to track with this trace.
-  if (callback_num_ == 2) {
-    TRACE_EVENT_ASYNC_END0("audio", "StartingPlayback", this);
-  }
 
   // Read and reset the number of frames skipped.
   AudioOutputBuffer* buffer =
@@ -499,8 +495,21 @@ void AudioOutputDevice::AudioThreadCallback::Process(uint32_t control_signal) {
       base::TimeTicks() +
       base::TimeDelta::FromMicroseconds(buffer->params.delay_timestamp);
 
+  TRACE_EVENT2(
+      "audio", "AudioOutputDevice::FireRenderCallback", "callback_num",
+      callback_num_, "delay_info",
+      base::StringPrintf("Timestamp: %" PRId64 "us, Delay: %" PRId64
+                         "us, Skip: %u frames",
+                         (delay_timestamp - base::TimeTicks()).InMicroseconds(),
+                         delay.InMicroseconds(), frames_skipped));
   DVLOG(4) << __func__ << " delay:" << delay << " delay_timestamp:" << delay
            << " frames_skipped:" << frames_skipped;
+
+  // When playback starts, we get an immediate callback to Process to make sure
+  // that we have some data, we'll get another one after the device is awake and
+  // ingesting data, which is what we want to track with this trace.
+  if (callback_num_ == 2)
+    TRACE_EVENT_ASYNC_END0("audio", "StartingPlayback", this);
 
   // Update the audio-delay measurement, inform about the number of skipped
   // frames, and ask client to render audio.  Since |output_bus_| is wrapping

@@ -180,20 +180,20 @@ PersistentPrefStoreImpl::CreateConnection(ObservedPrefs observed_prefs) {
         nullptr, nullptr, backing_pref_store_->GetReadError(),
         backing_pref_store_->ReadOnly());
   }
-  mojom::PersistentPrefStorePtr pref_store_ptr;
+  mojom::PersistentPrefStorePtrInfo pref_store_info;
   mojom::PrefStoreObserverPtr observer;
   mojom::PrefStoreObserverRequest observer_request =
       mojo::MakeRequest(&observer);
   auto values = FilterPrefs(backing_pref_store_->GetValues(), observed_prefs);
-  auto connection = base::MakeUnique<Connection>(
-      this, mojo::MakeRequest(&pref_store_ptr), std::move(observer),
+  auto connection = std::make_unique<Connection>(
+      this, mojo::MakeRequest(&pref_store_info), std::move(observer),
       std::move(observed_prefs));
   auto* connection_ptr = connection.get();
   connections_.insert(std::make_pair(connection_ptr, std::move(connection)));
   return mojom::PersistentPrefStoreConnection::New(
       mojom::PrefStoreConnection::New(std::move(observer_request),
                                       std::move(values), true),
-      std::move(pref_store_ptr), backing_pref_store_->GetReadError(),
+      std::move(pref_store_info), backing_pref_store_->GetReadError(),
       backing_pref_store_->ReadOnly());
 }
 
@@ -242,7 +242,7 @@ void PersistentPrefStoreImpl::SetValues(
       std::unique_ptr<base::DictionaryValue> pending_dictionary;
       if (!backing_pref_store_->GetMutableValue(update->key, &mutable_value) ||
           !mutable_value->GetAsDictionary(&dictionary_value)) {
-        pending_dictionary = base::MakeUnique<base::DictionaryValue>();
+        pending_dictionary = std::make_unique<base::DictionaryValue>();
         dictionary_value = pending_dictionary.get();
       }
       std::set<std::vector<std::string>> updated_paths;

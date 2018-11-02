@@ -32,9 +32,6 @@ namespace sessions {
 
 class SerializedNavigationEntryTestHelper;
 
-// The key used to store search terms data in the NavigationEntry.
-SESSIONS_EXPORT extern const char kSearchTermsKey[];
-
 // SerializedNavigationEntry is a "freeze-dried" version of NavigationEntry.  It
 // contains the data needed to restore a NavigationEntry during session restore
 // and tab restore, and it can also be pickled and unpickled.  It is also
@@ -60,7 +57,11 @@ class SESSIONS_EXPORT SerializedNavigationEntry {
   // Creates an invalid (index < 0) SerializedNavigationEntry.
   SerializedNavigationEntry();
   SerializedNavigationEntry(const SerializedNavigationEntry& other);
+  SerializedNavigationEntry(SerializedNavigationEntry&& other) noexcept;
   ~SerializedNavigationEntry();
+
+  SerializedNavigationEntry& operator=(const SerializedNavigationEntry& other);
+  SerializedNavigationEntry& operator=(SerializedNavigationEntry&& other);
 
   // Construct a SerializedNavigationEntry for a particular index from a sync
   // protocol buffer.  Note that the sync protocol buffer doesn't contain all
@@ -89,7 +90,6 @@ class SESSIONS_EXPORT SerializedNavigationEntry {
   // Accessors for some fields taken from NavigationEntry.
   int unique_id() const { return unique_id_; }
   const base::string16& title() const { return title_; }
-  const base::string16& search_terms() const { return search_terms_; }
   const GURL& favicon_url() const { return favicon_url_; }
   int http_status_code() const { return http_status_code_; }
   ui::PageTransition transition_type() const {
@@ -155,32 +155,31 @@ class SESSIONS_EXPORT SerializedNavigationEntry {
   friend class IOSSerializedNavigationDriver;
 
   // Index in the NavigationController.
-  int index_;
+  int index_ = -1;
 
   // Member variables corresponding to NavigationEntry fields.
   // If you add a new field that can allocate memory, please also add
   // it to the EstimatedMemoryUsage() implementation.
-  int unique_id_;
+  int unique_id_ = 0;
   GURL referrer_url_;
   int referrer_policy_;
   GURL virtual_url_;
   base::string16 title_;
   std::string encoded_page_state_;
-  ui::PageTransition transition_type_;
-  bool has_post_data_;
-  int64_t post_id_;
+  ui::PageTransition transition_type_ = ui::PAGE_TRANSITION_TYPED;
+  bool has_post_data_ = false;
+  int64_t post_id_ = -1;
   GURL original_request_url_;
-  bool is_overriding_user_agent_;
+  bool is_overriding_user_agent_ = false;
   base::Time timestamp_;
-  base::string16 search_terms_;
   GURL favicon_url_;
-  int http_status_code_;
-  bool is_restored_;    // Not persisted.
+  int http_status_code_ = 0;
+  bool is_restored_ = false;          // Not persisted.
   std::vector<GURL> redirect_chain_;  // Not persisted.
 
   // Additional information.
-  BlockedState blocked_state_;
-  PasswordState password_state_;
+  BlockedState blocked_state_ = STATE_INVALID;
+  PasswordState password_state_ = PASSWORD_STATE_UNKNOWN;
   std::set<std::string> content_pack_categories_;
 
   // Provides storage for arbitrary key/value pairs used by features. This

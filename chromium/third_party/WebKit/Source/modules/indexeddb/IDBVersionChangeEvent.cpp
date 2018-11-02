@@ -25,7 +25,7 @@
 
 #include "modules/indexeddb/IDBVersionChangeEvent.h"
 
-#include "modules/IndexedDBNames.h"
+#include "modules/indexed_db_names.h"
 
 namespace blink {
 
@@ -72,7 +72,7 @@ const AtomicString& IDBVersionChangeEvent::InterfaceName() const {
   return EventNames::IDBVersionChangeEvent;
 }
 
-DEFINE_TRACE(IDBVersionChangeEvent) {
+void IDBVersionChangeEvent::Trace(blink::Visitor* visitor) {
   Event::Trace(visitor);
 }
 

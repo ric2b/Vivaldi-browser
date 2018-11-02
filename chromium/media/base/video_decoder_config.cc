@@ -45,6 +45,10 @@ VideoCodec VideoCodecProfileToVideoCodec(VideoCodecProfile profile) {
     case DOLBYVISION_PROFILE5:
     case DOLBYVISION_PROFILE7:
       return kCodecDolbyVision;
+    case THEORAPROFILE_ANY:
+      return kCodecTheora;
+    case AV1PROFILE_PROFILE0:
+      return kCodecAV1;
   }
   NOTREACHED();
   return kUnknownVideoCodec;
@@ -54,26 +58,28 @@ VideoDecoderConfig::VideoDecoderConfig()
     : codec_(kUnknownVideoCodec),
       profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
       format_(PIXEL_FORMAT_UNKNOWN),
-      color_space_(COLOR_SPACE_UNSPECIFIED) {}
+      color_space_(COLOR_SPACE_UNSPECIFIED),
+      rotation_(VIDEO_ROTATION_0) {}
 
 VideoDecoderConfig::VideoDecoderConfig(
     VideoCodec codec,
     VideoCodecProfile profile,
     VideoPixelFormat format,
     ColorSpace color_space,
+    VideoRotation rotation,
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
     const std::vector<uint8_t>& extra_data,
     const EncryptionScheme& encryption_scheme) {
-  Initialize(codec, profile, format, color_space, coded_size, visible_rect,
-             natural_size, extra_data, encryption_scheme);
+  Initialize(codec, profile, format, color_space, rotation, coded_size,
+             visible_rect, natural_size, extra_data, encryption_scheme);
 }
 
 VideoDecoderConfig::VideoDecoderConfig(const VideoDecoderConfig& other) =
     default;
 
-VideoDecoderConfig::~VideoDecoderConfig() {}
+VideoDecoderConfig::~VideoDecoderConfig() = default;
 
 void VideoDecoderConfig::set_color_space_info(
     const VideoColorSpace& color_space_info) {
@@ -96,6 +102,7 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
                                     VideoCodecProfile profile,
                                     VideoPixelFormat format,
                                     ColorSpace color_space,
+                                    VideoRotation rotation,
                                     const gfx::Size& coded_size,
                                     const gfx::Rect& visible_rect,
                                     const gfx::Size& natural_size,
@@ -105,6 +112,7 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
   profile_ = profile;
   format_ = format;
   color_space_ = color_space;
+  rotation_ = rotation;
   coded_size_ = coded_size;
   visible_rect_ = visible_rect;
   natural_size_ = natural_size;
@@ -138,6 +146,7 @@ bool VideoDecoderConfig::IsValidConfig() const {
 bool VideoDecoderConfig::Matches(const VideoDecoderConfig& config) const {
   return ((codec() == config.codec()) && (format() == config.format()) &&
           (profile() == config.profile()) &&
+          (video_rotation() == config.video_rotation()) &&
           (coded_size() == config.coded_size()) &&
           (visible_rect() == config.visible_rect()) &&
           (natural_size() == config.natural_size()) &&
@@ -157,7 +166,8 @@ std::string VideoDecoderConfig::AsHumanReadableString() const {
     << " natural size: [" << natural_size().width() << ","
     << natural_size().height() << "]"
     << " has extra data? " << (extra_data().empty() ? "false" : "true")
-    << " encrypted? " << (is_encrypted() ? "true" : "false");
+    << " encrypted? " << (is_encrypted() ? "true" : "false")
+    << " rotation: " << VideoRotationToString(video_rotation());
   return s.str();
 }
 

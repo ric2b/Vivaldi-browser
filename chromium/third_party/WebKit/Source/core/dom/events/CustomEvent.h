@@ -58,9 +58,9 @@ class CORE_EXPORT CustomEvent final : public Event {
 
   ScriptValue detail(ScriptState*) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   CustomEvent();
@@ -68,7 +68,7 @@ class CORE_EXPORT CustomEvent final : public Event {
               const AtomicString& type,
               const CustomEventInit& initializer);
 
-  RefPtr<DOMWrapperWorld> world_;
+  scoped_refptr<DOMWrapperWorld> world_;
   TraceWrapperV8Reference<v8::Value> detail_;
 };
 

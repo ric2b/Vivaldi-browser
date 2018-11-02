@@ -31,14 +31,13 @@
 #include "public/platform/WebCryptoKeyAlgorithm.h"
 
 #include <memory>
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 
 namespace blink {
 
 // FIXME: Remove the need for this.
 WebCryptoAlgorithm CreateHash(WebCryptoAlgorithmId hash) {
-  return WebCryptoAlgorithm::AdoptParamsAndCreate(hash, 0);
+  return WebCryptoAlgorithm::AdoptParamsAndCreate(hash, nullptr);
 }
 
 class WebCryptoKeyAlgorithmPrivate
@@ -56,8 +55,8 @@ class WebCryptoKeyAlgorithmPrivate
 WebCryptoKeyAlgorithm::WebCryptoKeyAlgorithm(
     WebCryptoAlgorithmId id,
     std::unique_ptr<WebCryptoKeyAlgorithmParams> params)
-    : private_(
-          AdoptRef(new WebCryptoKeyAlgorithmPrivate(id, std::move(params)))) {}
+    : private_(base::AdoptRef(
+          new WebCryptoKeyAlgorithmPrivate(id, std::move(params)))) {}
 
 WebCryptoKeyAlgorithm WebCryptoKeyAlgorithm::AdoptParamsAndCreate(
     WebCryptoAlgorithmId id,
@@ -74,7 +73,7 @@ WebCryptoKeyAlgorithm WebCryptoKeyAlgorithm::CreateAes(
       key_length_bits != 256)
     return WebCryptoKeyAlgorithm();
   return WebCryptoKeyAlgorithm(
-      id, WTF::MakeUnique<WebCryptoAesKeyAlgorithmParams>(key_length_bits));
+      id, std::make_unique<WebCryptoAesKeyAlgorithmParams>(key_length_bits));
 }
 
 WebCryptoKeyAlgorithm WebCryptoKeyAlgorithm::CreateHmac(
@@ -107,7 +106,7 @@ WebCryptoKeyAlgorithm WebCryptoKeyAlgorithm::CreateEc(
     WebCryptoAlgorithmId id,
     WebCryptoNamedCurve named_curve) {
   return WebCryptoKeyAlgorithm(
-      id, WTF::MakeUnique<WebCryptoEcKeyAlgorithmParams>(named_curve));
+      id, std::make_unique<WebCryptoEcKeyAlgorithmParams>(named_curve));
 }
 
 WebCryptoKeyAlgorithm WebCryptoKeyAlgorithm::CreateWithoutParams(
@@ -137,7 +136,7 @@ WebCryptoAesKeyAlgorithmParams* WebCryptoKeyAlgorithm::AesParams() const {
   DCHECK(!IsNull());
   if (ParamsType() == kWebCryptoKeyAlgorithmParamsTypeAes)
     return static_cast<WebCryptoAesKeyAlgorithmParams*>(private_->params.get());
-  return 0;
+  return nullptr;
 }
 
 WebCryptoHmacKeyAlgorithmParams* WebCryptoKeyAlgorithm::HmacParams() const {
@@ -145,7 +144,7 @@ WebCryptoHmacKeyAlgorithmParams* WebCryptoKeyAlgorithm::HmacParams() const {
   if (ParamsType() == kWebCryptoKeyAlgorithmParamsTypeHmac)
     return static_cast<WebCryptoHmacKeyAlgorithmParams*>(
         private_->params.get());
-  return 0;
+  return nullptr;
 }
 
 WebCryptoRsaHashedKeyAlgorithmParams* WebCryptoKeyAlgorithm::RsaHashedParams()
@@ -154,14 +153,14 @@ WebCryptoRsaHashedKeyAlgorithmParams* WebCryptoKeyAlgorithm::RsaHashedParams()
   if (ParamsType() == kWebCryptoKeyAlgorithmParamsTypeRsaHashed)
     return static_cast<WebCryptoRsaHashedKeyAlgorithmParams*>(
         private_->params.get());
-  return 0;
+  return nullptr;
 }
 
 WebCryptoEcKeyAlgorithmParams* WebCryptoKeyAlgorithm::EcParams() const {
   DCHECK(!IsNull());
   if (ParamsType() == kWebCryptoKeyAlgorithmParamsTypeEc)
     return static_cast<WebCryptoEcKeyAlgorithmParams*>(private_->params.get());
-  return 0;
+  return nullptr;
 }
 
 void WebCryptoKeyAlgorithm::WriteToDictionary(

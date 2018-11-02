@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/accelerators/accelerator_controller_delegate_classic.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -32,6 +31,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -69,9 +69,6 @@
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/instant_service.h"
-#include "chrome/browser/search/instant_service_factory.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ssl/ssl_blocking_page.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
@@ -86,12 +83,17 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
+#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/common/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
@@ -117,7 +119,6 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/search/search.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
@@ -177,9 +178,11 @@
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "extensions/common/switches.h"
+#include "extensions/common/value_builder.h"
 #include "media/media_features.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -201,12 +204,9 @@
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
-#include "ash/accessibility_types.h"
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/accessibility_types.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
-#include "ash/shell_port_classic.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
@@ -218,6 +218,7 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_session_runner.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
@@ -236,12 +237,6 @@
 #include "extensions/browser/app_window/native_app_window.h"
 #include "ui/base/window_open_disposition.h"
 #endif
-
-#if !defined(OS_ANDROID)
-#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
-#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#endif  // !defined(OS_ANDROID)
 
 using content::BrowserThread;
 using net::URLRequestMockHTTPJob;
@@ -298,29 +293,22 @@ const base::FilePath::CharType kUnpackedFullscreenAppName[] =
 const char kTestWebRtcUdpPortRange[] = "10000-10100";
 #endif
 
+void GetTestDataDirectory(base::FilePath* test_data_directory) {
+  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, test_data_directory));
+}
+
 // Filters requests to the hosts in |urls| and redirects them to the test data
 // dir through URLRequestMockHTTPJobs.
 void RedirectHostsToTestData(const char* const urls[], size_t size) {
   // Map the given hosts to the test data dir.
   net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
   base::FilePath base_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &base_path);
+  GetTestDataDirectory(&base_path);
   for (size_t i = 0; i < size; ++i) {
     const GURL url(urls[i]);
     EXPECT_TRUE(url.is_valid());
     filter->AddUrlInterceptor(
         url, URLRequestMockHTTPJob::CreateInterceptor(base_path));
-  }
-}
-
-// Remove filters for requests to the hosts in |urls|.
-void UndoRedirectHostsToTestData(const char* const urls[], size_t size) {
-  // Map the given hosts to the test data dir.
-  net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
-  for (size_t i = 0; i < size; ++i) {
-    const GURL url(urls[i]);
-    EXPECT_TRUE(url.is_valid());
-    filter->RemoveUrlHandler(url);
   }
 }
 
@@ -382,9 +370,40 @@ class MakeRequestFail {
   const std::string host_;
 };
 
+// Registers a handler to respond to requests whose path matches |match_path|.
+// The response contents are generated from |template_file|, by replacing all
+// "${URL_PLACEHOLDER}" substrings in the file with the request URL excluding
+// filename, query values and fragment.
+void RegisterURLReplacingHandler(net::EmbeddedTestServer* test_server,
+                                 const std::string& match_path,
+                                 const base::FilePath& template_file) {
+  test_server->RegisterRequestHandler(base::Bind(
+      [](net::EmbeddedTestServer* test_server, const std::string& match_path,
+         const base::FilePath& template_file,
+         const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        GURL url = test_server->GetURL(request.relative_url);
+        if (url.path() != match_path)
+          return nullptr;
+
+        std::string contents;
+        CHECK(base::ReadFileToString(template_file, &contents));
+
+        GURL url_base = url.GetWithoutFilename();
+        base::ReplaceSubstringsAfterOffset(&contents, 0, "${URL_PLACEHOLDER}",
+                                           url_base.spec());
+
+        auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+        response->set_content(contents);
+        response->set_content_type("text/plain");
+        return response;
+      },
+      base::Unretained(test_server), match_path, template_file));
+}
+
 // Verifies that the given url |spec| can be opened. This assumes that |spec|
 // points at empty.html in the test data dir.
-void CheckCanOpenURL(Browser* browser, const char* spec) {
+void CheckCanOpenURL(Browser* browser, const std::string& spec) {
   GURL url(spec);
   ui_test_utils::NavigateToURL(browser, url);
   content::WebContents* contents =
@@ -402,7 +421,7 @@ void CheckCanOpenURL(Browser* browser, const char* spec) {
 }
 
 // Verifies that access to the given url |spec| is blocked.
-void CheckURLIsBlocked(Browser* browser, const char* spec) {
+void CheckURLIsBlocked(Browser* browser, const std::string& spec) {
   GURL url(spec);
   ui_test_utils::NavigateToURL(browser, url);
   content::WebContents* contents =
@@ -433,12 +452,17 @@ void CheckURLIsBlocked(Browser* browser, const char* spec) {
 // must be empty.
 void DownloadAndVerifyFile(
     Browser* browser, const base::FilePath& dir, const base::FilePath& file) {
+  net::EmbeddedTestServer embedded_test_server;
+  base::FilePath test_data_directory;
+  GetTestDataDirectory(&test_data_directory);
+  embedded_test_server.ServeFilesFromDirectory(test_data_directory);
+  ASSERT_TRUE(embedded_test_server.Start());
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(browser->profile());
   content::DownloadTestObserverTerminal observer(
       download_manager, 1,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
-  GURL url(URLRequestMockHTTPJob::GetMockUrl(file.MaybeAsASCII()));
+  GURL url(embedded_test_server.GetURL("/" + file.MaybeAsASCII()));
   base::FilePath downloaded = dir.Append(file);
   EXPECT_FALSE(base::PathExists(downloaded));
   ui_test_utils::NavigateToURL(browser, url);
@@ -482,7 +506,7 @@ bool IsJavascriptEnabled(content::WebContents* contents) {
       content::ExecuteScriptAndGetValue(contents->GetMainFrame(), "123");
   int result = 0;
   if (!value->GetAsInteger(&result))
-    EXPECT_EQ(base::Value::Type::NONE, value->GetType());
+    EXPECT_EQ(base::Value::Type::NONE, value->type());
   return result == 123;
 }
 
@@ -495,7 +519,7 @@ void FlushBlacklistPolicy() {
   // Updates of the URLBlacklist are done on IO, after building the blacklist
   // on the blocking pool, which is initiated from IO.
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
 }
 
@@ -654,6 +678,7 @@ class PolicyTest : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(chrome_browser_net::SetUrlRequestMocksEnabled, true));
@@ -661,18 +686,6 @@ class PolicyTest : public InProcessBrowserTest {
       extension_service()->updater()->SetExtensionCacheForTesting(
           test_extension_cache_.get());
     }
-  }
-
-  // Makes URLRequestMockHTTPJobs serve data from content::DIR_TEST_DATA
-  // instead of chrome::DIR_TEST_DATA.
-  void ServeContentTestData() {
-    base::FilePath root_http;
-    PathService::Get(content::DIR_TEST_DATA, &root_http);
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(URLRequestMockHTTPJob::AddUrlHandlers, root_http),
-        base::MessageLoop::current()->QuitWhenIdleClosure());
-    content::RunMessageLoop();
   }
 
   void SetScreenshotPolicy(bool enabled) {
@@ -698,30 +711,16 @@ class PolicyTest : public InProcessBrowserTest {
   };
 
   void TestScreenshotFile(bool enabled) {
-    // AddObserver is an ash-specific method, so just replace the screenshot
-    // grabber with one we've created here.
-    std::unique_ptr<ChromeScreenshotGrabber> chrome_screenshot_grabber(
-        new ChromeScreenshotGrabber);
     // ScreenshotGrabber doesn't own this observer, so the observer's lifetime
     // is tied to the test instead.
-    chrome_screenshot_grabber->screenshot_grabber()->AddObserver(&observer_);
-    ash::ShellPortClassic::Get()
-        ->accelerator_controller_delegate()
-        ->SetScreenshotDelegate(std::move(chrome_screenshot_grabber));
-
+    ChromeScreenshotGrabber* grabber = ChromeScreenshotGrabber::Get();
+    grabber->screenshot_grabber()->AddObserver(&observer_);
     SetScreenshotPolicy(enabled);
-    ash::Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
-        ash::TAKE_SCREENSHOT);
-
+    grabber->HandleTakeScreenshotForAllRootWindows();
     content::RunMessageLoop();
-    static_cast<ChromeScreenshotGrabber*>(
-        ash::ShellPortClassic::Get()
-            ->accelerator_controller_delegate()
-            ->screenshot_delegate())
-        ->screenshot_grabber()
-        ->RemoveObserver(&observer_);
+    grabber->screenshot_grabber()->RemoveObserver(&observer_);
   }
-#endif
+#endif  // defined(OS_CHROMEOS)
 
   ExtensionService* extension_service() {
     extensions::ExtensionSystem* system =
@@ -748,6 +747,23 @@ class PolicyTest : public InProcessBrowserTest {
     return details.ptr();
   }
 
+  const extensions::Extension* InstallBookmarkApp() {
+    WebApplicationInfo web_app;
+    web_app.title = base::ASCIIToUTF16("Bookmark App");
+    web_app.app_url = GURL("http://www.google.com");
+
+    scoped_refptr<extensions::CrxInstaller> installer =
+        extensions::CrxInstaller::CreateSilent(extension_service());
+
+    content::WindowedNotificationObserver observer(
+        extensions::NOTIFICATION_CRX_INSTALLER_DONE,
+        content::NotificationService::AllSources());
+    installer->InstallWebApp(web_app);
+    observer.Wait();
+    content::Details<const extensions::Extension> details = observer.details();
+    return details.ptr();
+  }
+
   scoped_refptr<const extensions::Extension> LoadUnpackedExtension(
       const base::FilePath::StringType& name) {
     base::FilePath extension_path(ui_test_utils::GetTestFilePath(
@@ -761,8 +777,7 @@ class PolicyTest : public InProcessBrowserTest {
       extensions::TestExtensionRegistryObserver observer(
           extensions::ExtensionRegistry::Get(browser()->profile()));
       extension_service()->UninstallExtension(
-          id, extensions::UNINSTALL_REASON_FOR_TESTING,
-          base::Bind(&base::DoNothing), NULL);
+          id, extensions::UNINSTALL_REASON_FOR_TESTING, NULL);
       observer.WaitForExtensionUninstalled();
     } else {
       content::WindowedNotificationObserver observer(
@@ -771,7 +786,6 @@ class PolicyTest : public InProcessBrowserTest {
       extension_service()->UninstallExtension(
           id,
           extensions::UNINSTALL_REASON_FOR_TESTING,
-          base::Bind(&base::DoNothing),
           NULL);
       observer.Wait();
     }
@@ -781,7 +795,7 @@ class PolicyTest : public InProcessBrowserTest {
     extensions::TestExtensionRegistryObserver observer(
         extensions::ExtensionRegistry::Get(browser()->profile()));
     extension_service()->DisableExtension(
-        id, extensions::disable_reason::DISABLE_NONE);
+        id, extensions::disable_reason::DISABLE_USER_ACTION);
     observer.WaitForExtensionUnloaded();
   }
 
@@ -878,7 +892,7 @@ class LocalePolicyTest : public PolicyTest {
     // The "en-US" ResourceBundle is always loaded before this step for tests,
     // but in this test we want the browser to load the bundle as it
     // normally would.
-    ResourceBundle::CleanupSharedInstance();
+    ui::ResourceBundle::CleanupSharedInstance();
   }
 };
 
@@ -892,7 +906,7 @@ IN_PROC_BROWSER_TEST_F(LocalePolicyTest, ApplicationLocaleValue) {
   EXPECT_EQ(french_title, title);
 
   // Make sure this is really French and differs from the English title.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   std::string loaded =
       ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources("en-US");
   EXPECT_EQ("en-US", loaded);
@@ -978,11 +992,9 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   // policy. Also checks that default search can be completely disabled.
   const base::string16 kKeyword(base::ASCIIToUTF16("testsearch"));
   const std::string kSearchURL("http://search.example/search?q={searchTerms}");
-  const std::string kInstantURL("http://does/not/exist");
   const std::string kAlternateURL0(
       "http://search.example/search#q={searchTerms}");
   const std::string kAlternateURL1("http://search.example/#q={searchTerms}");
-  const std::string kSearchTermsReplacementKey("zekey");
   const std::string kImageURL("http://test.com/searchbyimage/upload");
   const std::string kImageURLPostParams(
       "image_content=content,image_url=http://test.com/test.png");
@@ -995,13 +1007,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_NE(kKeyword, default_search->keyword());
   EXPECT_NE(kSearchURL, default_search->url());
-  EXPECT_NE(kInstantURL, default_search->instant_url());
   EXPECT_FALSE(
     default_search->alternate_urls().size() == 2 &&
     default_search->alternate_urls()[0] == kAlternateURL0 &&
     default_search->alternate_urls()[1] == kAlternateURL1 &&
-    default_search->search_terms_replacement_key() ==
-        kSearchTermsReplacementKey &&
     default_search->image_url() == kImageURL &&
     default_search->image_url_post_params() == kImageURLPostParams &&
     default_search->new_tab_url() == kNewTabURL);
@@ -1017,19 +1026,12 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   policies.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(kSearchURL), nullptr);
-  policies.Set(key::kDefaultSearchProviderInstantURL, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kInstantURL), nullptr);
   std::unique_ptr<base::ListValue> alternate_urls(new base::ListValue);
   alternate_urls->AppendString(kAlternateURL0);
   alternate_urls->AppendString(kAlternateURL1);
   policies.Set(key::kDefaultSearchProviderAlternateURLs, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                std::move(alternate_urls), nullptr);
-  policies.Set(key::kDefaultSearchProviderSearchTermsReplacementKey,
-               POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kSearchTermsReplacementKey),
-               nullptr);
   policies.Set(key::kDefaultSearchProviderImageURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(kImageURL), nullptr);
@@ -1044,12 +1046,9 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_EQ(kKeyword, default_search->keyword());
   EXPECT_EQ(kSearchURL, default_search->url());
-  EXPECT_EQ(kInstantURL, default_search->instant_url());
   EXPECT_EQ(2U, default_search->alternate_urls().size());
   EXPECT_EQ(kAlternateURL0, default_search->alternate_urls()[0]);
   EXPECT_EQ(kAlternateURL1, default_search->alternate_urls()[1]);
-  EXPECT_EQ(kSearchTermsReplacementKey,
-            default_search->search_terms_replacement_key());
   EXPECT_EQ(kImageURL, default_search->image_url());
   EXPECT_EQ(kImageURLPostParams, default_search->image_url_post_params());
   EXPECT_EQ(kNewTabURL, default_search->new_tab_url());
@@ -1206,9 +1205,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ForceGoogleSafeSearch) {
                           safe_search == 0  // ForceGoogleSafeSearch
                               ? nullptr
                               : base::MakeUnique<base::Value>(safe_search == 1),
-                          nullptr,  // ForceYouTubeSafetyMode
-                          nullptr   // ForceYouTubeRestrict
-                          );
+                          nullptr,   // ForceYouTubeSafetyMode
+                          nullptr);  // ForceYouTubeRestrict
     // Verify that the safe search pref behaves the way we expect.
     PrefService* prefs = browser()->profile()->GetPrefs();
     EXPECT_EQ(safe_search != 0,
@@ -1453,7 +1451,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DownloadDirectory) {
   // Verifies that the download directory can be forced by policy.
 
   // Set the initial download directory.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir initial_dir;
   ASSERT_TRUE(initial_dir.CreateUniqueTempDir());
   browser()->profile()->GetPrefs()->SetFilePath(
@@ -1506,6 +1504,106 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallBlacklistSelective) {
             service->GetExtensionById(kAdBlockCrxId, true));
 }
 
+// Ensure that bookmark apps are not blocked by the ExtensionInstallBlacklist
+// policy.
+IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallBlacklist_BookmarkApp) {
+  const extensions::Extension* bookmark_app = InstallBookmarkApp();
+  ASSERT_TRUE(bookmark_app);
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+
+  // Now set ExtensionInstallBlacklist policy to block all extensions.
+  PolicyMap policies;
+  policies.Set(key::kExtensionInstallBlacklist, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::ListBuilder().Append("*").Build(), nullptr);
+  UpdateProviderPolicy(policies);
+
+  // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+}
+
+// Ensure that bookmark apps are not blocked by the ExtensionAllowedTypes
+// policy.
+IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionAllowedTypes_BookmarkApp) {
+  const extensions::Extension* bookmark_app = InstallBookmarkApp();
+  ASSERT_TRUE(bookmark_app);
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+
+  // Now set policy to only allow themes. Note: Bookmark apps are hosted
+  // apps.
+  PolicyMap policies;
+  policies.Set(key::kExtensionAllowedTypes, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::ListBuilder().Append("theme").Build(), nullptr);
+  UpdateProviderPolicy(policies);
+
+  // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+}
+
+// Ensure that bookmark apps are not blocked by the ExtensionSettings
+// policy.
+IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionSettings_BookmarkApp) {
+  const extensions::Extension* bookmark_app = InstallBookmarkApp();
+  ASSERT_TRUE(bookmark_app);
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+
+  // Now set policy to block all extensions.
+  PolicyMap policies;
+  policies.Set(key::kExtensionSettings, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::DictionaryBuilder()
+                   .Set("*", extensions::DictionaryBuilder()
+                                 .Set("installation_mode", "blocked")
+                                 .Build())
+                   .Build(),
+               nullptr);
+  UpdateProviderPolicy(policies);
+
+  // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+
+  // Clear all policies.
+  policies.Clear();
+  UpdateProviderPolicy(policies);
+
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+
+  // Now set policy to only allow themes. Note: Bookmark apps are hosted
+  // apps.
+  policies.Set(
+      key::kExtensionSettings, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD,
+      extensions::DictionaryBuilder()
+          .Set("*", extensions::DictionaryBuilder()
+                        .Set("allowed_types",
+                             extensions::ListBuilder().Append("theme").Build())
+                        .Build())
+          .Build(),
+      nullptr);
+  UpdateProviderPolicy(policies);
+
+  // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+}
+
 // Flaky on windows; http://crbug.com/307994.
 #if defined(OS_WIN)
 #define MAYBE_ExtensionInstallBlacklistWildcard DISABLED_ExtensionInstallBlacklistWildcard
@@ -1543,6 +1641,20 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_ExtensionInstallBlacklistWildcard) {
 IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallBlacklistSharedModules) {
   // Verifies that shared_modules are not affected by the blacklist.
 
+  base::FilePath base_path;
+  GetTestDataDirectory(&base_path);
+  base::FilePath update_xml_template_path =
+      base_path.Append(kTestExtensionsDir)
+          .AppendASCII("policy_shared_module")
+          .AppendASCII("update_template.xml");
+
+  std::string update_xml_path =
+      "/" + base::FilePath(kTestExtensionsDir).MaybeAsASCII() +
+      "/policy_shared_module/gen_update.xml";
+  RegisterURLReplacingHandler(embedded_test_server(), update_xml_path,
+                              update_xml_template_path);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
   const char kImporterId[] = "pchakhniekfaeoddkifplhnfbffomabh";
   const char kSharedModuleId[] = "nfgclafboonjbiafbllihiailjlhelpm";
 
@@ -1557,13 +1669,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallBlacklistSharedModules) {
 
   // Mock the webstore update URL. This is where the shared module extension
   // will be installed from.
-  base::FilePath update_xml_path = base::FilePath(kTestExtensionsDir)
-                                       .AppendASCII("policy_shared_module")
-                                       .AppendASCII("update.xml");
-  GURL update_xml_url(
-      URLRequestMockHTTPJob::GetMockUrl(update_xml_path.MaybeAsASCII()));
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kAppsGalleryUpdateURL, update_xml_url.spec());
+  GURL update_xml_url = embedded_test_server()->GetURL(update_xml_path);
+  extension_test_util::SetGalleryUpdateURL(update_xml_url);
   ui_test_utils::NavigateToURL(browser(), update_xml_url);
 
   // Blacklist "*" but force-install the importer extension. The shared module
@@ -1700,7 +1807,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallForcelist) {
       service->GetExtensionById(kGoodCrxId, true)->version()->GetString();
 
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
 
   TestRequestInterceptor interceptor(
       "update.extension",
@@ -1856,7 +1963,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_ExtensionInstallSources) {
       URLRequestMockHTTPJob::GetMockUrl("extensions/*"));
   const GURL referrer_url(URLRequestMockHTTPJob::GetMockUrl("policy/*"));
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir download_directory;
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =
@@ -1912,7 +2019,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequired) {
 
   // Setup interceptor for extension updates.
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
   TestRequestInterceptor interceptor(
       "update.extension",
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
@@ -1982,7 +2089,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
 
   // Setup interceptor for extension updates.
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
   TestRequestInterceptor interceptor(
       "update.extension",
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
@@ -2365,23 +2472,15 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
   // Checks that URLs can be blacklisted, and that exceptions can be made to
   // the blacklist.
 
-  // Filter |kURLS| on IO thread, so that requests to those hosts end up
-  // as URLRequestMockHTTPJobs.
-  const char* kURLS[] = {
-    "http://aaa.com/empty.html",
-    "http://bbb.com/empty.html",
-    "http://sub.bbb.com/empty.html",
-    "http://bbb.com/policy/blank.html",
-    "http://bbb.com./policy/blank.html",
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string kURLS[] = {
+      embedded_test_server()->GetURL("aaa.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("bbb.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("sub.bbb.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("bbb.com", "/policy/blank.html").spec(),
+      embedded_test_server()->GetURL("bbb.com.", "/policy/blank.html").spec(),
   };
-  {
-    base::RunLoop loop;
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
-        loop.QuitClosure());
-    loop.Run();
-  }
 
   // Verify that "bbb.com" opens before applying the blacklist.
   CheckCanOpenURL(browser(), kURLS[1]);
@@ -2411,34 +2510,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
   CheckCanOpenURL(browser(), kURLS[2]);
   CheckCanOpenURL(browser(), kURLS[3]);
   CheckCanOpenURL(browser(), kURLS[4]);
-
-  {
-    base::RunLoop loop;
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(UndoRedirectHostsToTestData, kURLS, arraysize(kURLS)),
-        loop.QuitClosure());
-    loop.Run();
-  }
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistAndWhitelist) {
   // Regression test for http://crbug.com/755256. Blacklisting * and
   // whitelisting an origin should work.
 
-  // Filter |kURLS| on IO thread, so that requests to those hosts end up
-  // as URLRequestMockHTTPJobs.
-  const char* kURLS[] = {
-      "http://aaa.com/empty.html",
-  };
-  {
-    base::RunLoop loop;
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
-        loop.QuitClosure());
-    loop.Run();
-  }
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   base::ListValue blacklist;
   blacklist.AppendString("*");
@@ -2452,17 +2530,21 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistAndWhitelist) {
                POLICY_SOURCE_CLOUD, whitelist.CreateDeepCopy(), nullptr);
   UpdateProviderPolicy(policies);
   FlushBlacklistPolicy();
-  CheckCanOpenURL(browser(), kURLS[0]);
+  CheckCanOpenURL(
+      browser(),
+      embedded_test_server()->GetURL("aaa.com", "/empty.html").spec());
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistSubresources) {
   // Checks that an image with a blacklisted URL is loaded, but an iframe with a
   // blacklisted URL is not.
 
+  ASSERT_TRUE(embedded_test_server()->Start());
+
   GURL main_url =
-      URLRequestMockHTTPJob::GetMockUrl("policy/blacklist-subresources.html");
-  GURL image_url = URLRequestMockHTTPJob::GetMockUrl("policy/pixel.png");
-  GURL subframe_url = URLRequestMockHTTPJob::GetMockUrl("policy/blank.html");
+      embedded_test_server()->GetURL("/policy/blacklist-subresources.html");
+  GURL image_url = embedded_test_server()->GetURL("/policy/pixel.png");
+  GURL subframe_url = embedded_test_server()->GetURL("/policy/blank.html");
 
   // Set a blacklist containing the image and the iframe which are used by the
   // main document.
@@ -2503,14 +2585,14 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_FileURLBlacklist) {
   // with URLblacklisting and URLwhitelisting.
 
   base::FilePath test_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_path);
+  GetTestDataDirectory(&test_path);
   const std::string base_path = "file://" + test_path.AsUTF8Unsafe() +"/";
   const std::string folder_path = base_path + "apptest/";
   const std::string file_path1 = base_path + "title1.html";
   const std::string file_path2 = folder_path + "basic.html";
 
-  CheckCanOpenURL(browser(), file_path1.c_str());
-  CheckCanOpenURL(browser(), file_path2.c_str());
+  CheckCanOpenURL(browser(), file_path1);
+  CheckCanOpenURL(browser(), file_path2);
 
   // Set a blacklist for all the files.
   base::ListValue blacklist;
@@ -2521,8 +2603,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_FileURLBlacklist) {
   UpdateProviderPolicy(policies);
   FlushBlacklistPolicy();
 
-  CheckURLIsBlocked(browser(), file_path1.c_str());
-  CheckURLIsBlocked(browser(), file_path2.c_str());
+  CheckURLIsBlocked(browser(), file_path1);
+  CheckURLIsBlocked(browser(), file_path2);
 
   // Replace the URLblacklist with disabling the file scheme.
   blacklist.Remove(base::Value("file://*"), NULL);
@@ -2556,8 +2638,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_FileURLBlacklist) {
   UpdateProviderPolicy(policies);
   FlushBlacklistPolicy();
 
-  CheckCanOpenURL(browser(), file_path1.c_str());
-  CheckURLIsBlocked(browser(), file_path2.c_str());
+  CheckCanOpenURL(browser(), file_path1);
+  CheckURLIsBlocked(browser(), file_path2);
 }
 
 #if !defined(OS_MACOSX)
@@ -3178,59 +3260,29 @@ class MediaStreamDevicesControllerBrowserTest
     : public PolicyTest,
       public testing::WithParamInterface<bool> {
  public:
-  // TODO(raymes): When crbug.com/606138 is finished and the
-  // PermissionRequestManager is used to show all prompts on Android/Desktop
-  // we should remove PermissionPromptDelegate and just use
-  // MockPermissionPromptFactory instead. The APIs are the same.
-  class TestPermissionPromptDelegate
-      : public MediaStreamDevicesController::PermissionPromptDelegate {
-   public:
-    void ShowPrompt(bool user_gesture,
-                    content::WebContents* web_contents,
-                    std::unique_ptr<MediaStreamDevicesController::Request>
-                        request) override {
-      if (response_type_ == PermissionRequestManager::ACCEPT_ALL)
-        request->PermissionGranted();
-      else if (response_type_ == PermissionRequestManager::DENY_ALL)
-        request->PermissionDenied();
-    }
-
-    void set_response_type(
-        PermissionRequestManager::AutoResponseType response_type) {
-      response_type_ = response_type;
-    }
-
-   private:
-    PermissionRequestManager::AutoResponseType response_type_ =
-        PermissionRequestManager::NONE;
-  };
-
   MediaStreamDevicesControllerBrowserTest()
-      : request_url_allowed_via_whitelist_(false),
-        request_url_("https://www.example.com/foo") {
+      : request_url_allowed_via_whitelist_(false) {
     policy_value_ = GetParam();
   }
   virtual ~MediaStreamDevicesControllerBrowserTest() {}
 
   void SetUpOnMainThread() override {
     PolicyTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+    request_url_ = embedded_test_server()->GetURL("/simple.html");
+    request_pattern_ = request_url_.GetOrigin().spec();
     ui_test_utils::NavigateToURL(browser(), request_url_);
 
     // Testing both the new (PermissionManager) and old code-paths is not simple
     // since we are already using WithParamInterface. We only test whichever one
     // is enabled in chrome_features.cc since we won't keep the old path around
     // for long once we flip the flag.
-    if (base::FeatureList::IsEnabled(
-            features::kUsePermissionManagerForMediaRequests)) {
-      PermissionRequestManager* manager =
-          PermissionRequestManager::FromWebContents(
-              browser()->tab_strip_model()->GetActiveWebContents());
-      prompt_factory_.reset(new MockPermissionPromptFactory(manager));
-      prompt_factory_->set_response_type(PermissionRequestManager::ACCEPT_ALL);
-      manager->DisplayPendingRequests();
-    } else {
-      prompt_delegate_.set_response_type(PermissionRequestManager::ACCEPT_ALL);
-    }
+    PermissionRequestManager* manager =
+        PermissionRequestManager::FromWebContents(
+            browser()->tab_strip_model()->GetActiveWebContents());
+    prompt_factory_.reset(new MockPermissionPromptFactory(manager));
+    prompt_factory_->set_response_type(PermissionRequestManager::ACCEPT_ALL);
   }
 
   void TearDownOnMainThread() override { prompt_factory_.reset(); }
@@ -3242,7 +3294,7 @@ class MediaStreamDevicesControllerBrowserTest
         browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_EQ(request_url_,
               web_contents->GetMainFrame()->GetLastCommittedURL());
-    int render_process_id = web_contents->GetRenderProcessHost()->GetID();
+    int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
     int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
     return content::MediaStreamRequest(
         render_process_id, render_frame_id, 0, request_url_.GetOrigin(), false,
@@ -3297,11 +3349,9 @@ class MediaStreamDevicesControllerBrowserTest
         content::MEDIA_DEVICE_AUDIO_CAPTURE, content::MEDIA_NO_SERVICE));
     // TODO(raymes): Test MEDIA_DEVICE_OPEN (Pepper) which grants both webcam
     // and microphone permissions at the same time.
-    MediaStreamDevicesController::RequestPermissionsWithDelegate(
-        request,
-        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
-                   base::Unretained(this)),
-        &prompt_delegate_);
+    MediaStreamDevicesController::RequestPermissions(
+        request, base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
+                            base::Unretained(this)));
 
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
@@ -3311,26 +3361,19 @@ class MediaStreamDevicesControllerBrowserTest
         content::MEDIA_NO_SERVICE, content::MEDIA_DEVICE_VIDEO_CAPTURE));
     // TODO(raymes): Test MEDIA_DEVICE_OPEN (Pepper) which grants both webcam
     // and microphone permissions at the same time.
-    MediaStreamDevicesController::RequestPermissionsWithDelegate(
-        request,
-        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
-                   base::Unretained(this)),
-        &prompt_delegate_);
+    MediaStreamDevicesController::RequestPermissions(
+        request, base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
+                            base::Unretained(this)));
 
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
-  TestPermissionPromptDelegate prompt_delegate_;
   std::unique_ptr<MockPermissionPromptFactory> prompt_factory_;
   bool policy_value_;
   bool request_url_allowed_via_whitelist_;
   GURL request_url_;
-  static const char kExampleRequestPattern[];
+  std::string request_pattern_;
 };
-
-// static
-const char MediaStreamDevicesControllerBrowserTest::kExampleRequestPattern[] =
-    "https://[*.]example.com/";
 
 IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
                        AudioCaptureAllowed) {
@@ -3363,11 +3406,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
   audio_devices.push_back(fake_audio_device);
 
   const char* allow_pattern[] = {
-    kExampleRequestPattern,
-    // This will set an allow-all policy whitelist.  Since we do not allow
-    // setting an allow-all entry in the whitelist, this entry should be ignored
-    // and therefore the request should be denied.
-    NULL,
+      request_pattern_.c_str(),
+      // This will set an allow-all policy whitelist.  Since we do not allow
+      // setting an allow-all entry in the whitelist, this entry should be
+      // ignored and therefore the request should be denied.
+      nullptr,
   };
 
   for (size_t i = 0; i < arraysize(allow_pattern); ++i) {
@@ -3421,11 +3464,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
   video_devices.push_back(fake_video_device);
 
   const char* allow_pattern[] = {
-    kExampleRequestPattern,
-    // This will set an allow-all policy whitelist.  Since we do not allow
-    // setting an allow-all entry in the whitelist, this entry should be ignored
-    // and therefore the request should be denied.
-    NULL,
+      request_pattern_.c_str(),
+      // This will set an allow-all policy whitelist.  Since we do not allow
+      // setting an allow-all entry in the whitelist, this entry should be
+      // ignored and therefore the request should be denied.
+      nullptr,
   };
 
   for (size_t i = 0; i < arraysize(allow_pattern); ++i) {
@@ -3751,7 +3794,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterDisabledPolicyTest, MediaRouterDisabled) {
   EXPECT_FALSE(media_router::MediaRouterEnabled(browser()->profile()));
 }
 
-#if !defined(OS_ANDROID)
 template <bool enable>
 class MediaRouterActionPolicyTest : public PolicyTest {
  public:
@@ -3792,7 +3834,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterActionDisabledPolicyTest,
       MediaRouterActionController::IsActionShownByPolicy(browser()->profile()));
   EXPECT_FALSE(HasMediaRouterActionAtInit());
 }
-#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 // Sets the proper policy before the browser is started.
@@ -3931,18 +3972,17 @@ update_client::CrxComponent ComponentUpdaterPolicyTest::MakeCrxComponent(
    public:
     MockInstaller() {}
 
-    // gMock does not support mocking functions with parameters which have
-    // move semantics. This function is a shim to work around it.
-    Result Install(std::unique_ptr<base::DictionaryValue> manifest,
-                   const base::FilePath& unpack_path) {
-      return Install_(manifest, unpack_path);
+    void Install(const base::FilePath& unpack_path,
+                 const std::string& public_key,
+                 Callback callback) {
+      DoInstall(unpack_path, public_key, std::move(callback));
     }
 
     MOCK_METHOD1(OnUpdateError, void(int error));
-    MOCK_METHOD2(Install_,
-                 update_client::CrxInstaller::Result(
-                     const std::unique_ptr<base::DictionaryValue>& manifest,
-                     const base::FilePath& unpack_path));
+    MOCK_METHOD3(DoInstall,
+                 void(const base::FilePath& unpack_path,
+                      const std::string& public_key,
+                      const Callback& callback));
     MOCK_METHOD2(GetInstalledFile,
                  bool(const std::string& file, base::FilePath* installed_file));
     MOCK_METHOD0(Uninstall, bool());
@@ -4213,8 +4253,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingWhitelist) {
 
 #endif  // !defined(CHROME_OS)
 
-
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS)
 // Sets the hardware acceleration mode policy before the browser is started.
 class HardwareAccelerationModePolicyTest : public PolicyTest {
  public:
@@ -4236,7 +4275,7 @@ IN_PROC_BROWSER_TEST_F(HardwareAccelerationModePolicyTest,
   EXPECT_FALSE(
       content::GpuDataManager::GetInstance()->HardwareAccelerationEnabled());
 }
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
 // Policy is only available in ChromeOS
@@ -4277,8 +4316,9 @@ class ArcPolicyTest : public PolicyTest {
         base::MakeUnique<arc::ArcSessionRunner>(
             base::Bind(arc::FakeArcSession::Create)));
 
-    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
-    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted,
+    browser()->profile()->GetPrefs()->SetBoolean(arc::prefs::kArcSignedIn,
+                                                 true);
+    browser()->profile()->GetPrefs()->SetBoolean(arc::prefs::kArcTermsAccepted,
                                                  true);
   }
 
@@ -4300,7 +4340,7 @@ class ArcPolicyTest : public PolicyTest {
     UpdateProviderPolicy(policies);
     if (browser()) {
       const PrefService* const prefs = browser()->profile()->GetPrefs();
-      EXPECT_EQ(prefs->GetBoolean(prefs::kArcEnabled), enabled);
+      EXPECT_EQ(prefs->GetBoolean(arc::prefs::kArcEnabled), enabled);
     }
   }
 
@@ -4314,16 +4354,16 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
   const auto* const arc_session_manager = arc::ArcSessionManager::Get();
 
   // ARC is switched off by default.
-  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcEnabled));
+  EXPECT_FALSE(arc_session_manager->enable_requested());
 
   // Enable ARC.
   SetArcEnabledByPolicy(true);
-  EXPECT_TRUE(arc_session_manager->IsSessionRunning());
+  EXPECT_TRUE(arc_session_manager->enable_requested());
 
   // Disable ARC.
   SetArcEnabledByPolicy(false);
-  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
+  EXPECT_FALSE(arc_session_manager->enable_requested());
 }
 
 // Test ArcBackupRestoreEnabled policy.
@@ -4331,12 +4371,12 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
   PrefService* const pref = browser()->profile()->GetPrefs();
 
   // ARC Backup & Restore is switched off by default.
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 
   // Switch on ARC Backup & Restore in the user prefs.
-  pref->SetBoolean(prefs::kArcBackupRestoreEnabled, true);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  pref->SetBoolean(arc::prefs::kArcBackupRestoreEnabled, true);
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
 
   // Disable ARC Backup & Restore through the policy.
   PolicyMap policies;
@@ -4344,16 +4384,16 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 
   // Enable ARC Backup & Restore through the policy.
   policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
-  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
 }
 
 // Test ArcLocationServiceEnabled policy and its interplay with the
@@ -4375,12 +4415,13 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
   test_default_geo_policy_values.emplace_back(3);  // 'AskGeolocation'
 
   // The pref is switched off by default.
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled));
+  EXPECT_FALSE(
+      pref->IsManagedPreference(arc::prefs::kArcLocationServiceEnabled));
 
   // Switch on the pref in the user prefs.
-  pref->SetBoolean(prefs::kArcLocationServiceEnabled, true);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
+  pref->SetBoolean(arc::prefs::kArcLocationServiceEnabled, true);
+  EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled));
 
   for (const auto& test_policy_value : test_policy_values) {
     for (const auto& test_default_geo_policy_value :
@@ -4407,7 +4448,7 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
           !(should_be_disabled_by_policy ||
             should_be_disabled_by_default_geo_policy);
       EXPECT_EQ(expected_pref_value,
-                pref->GetBoolean(prefs::kArcLocationServiceEnabled))
+                pref->GetBoolean(arc::prefs::kArcLocationServiceEnabled))
           << "ArcLocationServiceEnabled policy is set to " << test_policy_value
           << "DefaultGeolocationSetting policy is set to "
           << test_default_geo_policy_value;
@@ -4416,8 +4457,9 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
           test_policy_value.is_bool() ||
           (test_default_geo_policy_value.is_int() &&
            test_default_geo_policy_value.GetInt() == 2);
-      EXPECT_EQ(expected_pref_managed,
-                pref->IsManagedPreference(prefs::kArcLocationServiceEnabled))
+      EXPECT_EQ(
+          expected_pref_managed,
+          pref->IsManagedPreference(arc::prefs::kArcLocationServiceEnabled))
           << "ArcLocationServiceEnabled policy is set to " << test_policy_value
           << "DefaultGeolocationSetting policy is set to "
           << test_default_geo_policy_value;
@@ -4429,10 +4471,15 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
 
 class NetworkTimePolicyTest : public PolicyTest {
  public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    content::EnableFeatureWithParam(network_time::kNetworkTimeServiceQuerying,
-                                    "FetchBehavior", "on-demand-only",
-                                    command_line);
+  NetworkTimePolicyTest() : PolicyTest() {}
+  ~NetworkTimePolicyTest() override {}
+
+  void SetUpOnMainThread() override {
+    std::map<std::string, std::string> parameters;
+    parameters["FetchBehavior"] = "on-demand-only";
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        network_time::kNetworkTimeServiceQuerying, parameters);
+    PolicyTest::SetUpOnMainThread();
   }
 
   // A request handler that returns a dummy response and counts the number of
@@ -4454,7 +4501,10 @@ class NetworkTimePolicyTest : public PolicyTest {
   uint32_t num_requests() { return num_requests_; }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   uint32_t num_requests_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkTimePolicyTest);
 };
 
 IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {

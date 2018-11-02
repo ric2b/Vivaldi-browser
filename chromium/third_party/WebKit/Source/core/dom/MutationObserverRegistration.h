@@ -83,8 +83,8 @@ class CORE_EXPORT MutationObserverRegistration final
 
   void Dispose();
 
-  DECLARE_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   MutationObserverRegistration(MutationObserver&,

@@ -17,9 +17,9 @@ import android.view.ViewGroup;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
+import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContentViewDelegate;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.ui.base.SPenSupport;
 import org.chromium.ui.resources.ResourceManager;
@@ -117,6 +116,9 @@ public class LayoutManager
     // Whether the currently active event filter has changed.
     private boolean mIsNewEventFilter;
 
+    /** The animation handler responsible for updating all the browser compositor's animations. */
+    private final CompositorAnimationHandler mAnimationHandler;
+
     /**
      * Creates a {@link LayoutManager} instance.
      * @param host A {@link LayoutManagerHost} instance.
@@ -127,6 +129,8 @@ public class LayoutManager
 
         mContext = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
+
+        mAnimationHandler = new CompositorAnimationHandler(this);
 
         mToolbarOverlay = new ToolbarSceneLayer(mContext, this, renderHost);
 
@@ -142,6 +146,11 @@ public class LayoutManager
         mStaticLayout.setLayoutHandlesTabLifecycles(true);
 
         setNextLayout(null);
+    }
+
+    @Override
+    public CompositorAnimationHandler getAnimationHandler() {
+        return mAnimationHandler;
     }
 
     /**
@@ -245,8 +254,12 @@ public class LayoutManager
     public boolean onUpdate(long timeMs, long dtMs) {
         if (!mUpdateRequested) return false;
         mUpdateRequested = false;
+
+        boolean areAnimatorsComplete = mAnimationHandler.pushUpdate(dtMs);
+
         final Layout layout = getActiveLayout();
-        if (layout != null && layout.onUpdate(timeMs, dtMs) && layout.isHiding()) {
+        if (layout != null && layout.onUpdate(timeMs, dtMs) && layout.isHiding()
+                && areAnimatorsComplete) {
             layout.doneHiding();
         }
         return mUpdateRequested;
@@ -315,6 +328,7 @@ public class LayoutManager
      * Cleans up and destroys this object.  It should not be used after this.
      */
     public void destroy() {
+        mAnimationHandler.destroy();
         mSceneChangeObservers.clear();
         if (mStaticLayout != null) mStaticLayout.destroy();
         if (mOverlayPanelManager != null) mOverlayPanelManager.destroy();
@@ -407,9 +421,8 @@ public class LayoutManager
                 tab.getContentViewCore() != null && !tab.isShowingSadTab() && !isNativePage;
 
         boolean isNtp = tab.getNativePage() instanceof NewTabPage;
-        boolean useModernDesign = tab.getActivity() != null
-                && tab.getActivity().getBottomSheet() != null
-                && FeatureUtilities.isChromeHomeModernEnabled();
+        boolean useModernDesign =
+                tab.getActivity() != null && tab.getActivity().getBottomSheet() != null;
         boolean needsUpdate = layoutTab.initFromHost(tab.getBackgroundColor(), tab.shouldStall(),
                 canUseLiveTexture, themeColor,
                 ColorUtils.getTextBoxColorForToolbarBackground(
@@ -514,7 +527,6 @@ public class LayoutManager
         }
     }
 
-    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
     @Override
     public void doneHiding() {
         // TODO: If next layout is default layout clear caches (should this be a sub layout thing?)

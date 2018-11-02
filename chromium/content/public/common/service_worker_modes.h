@@ -13,23 +13,6 @@ static const int kInvalidServiceWorkerProviderId = -1;
 // The enum entries below are written to histograms and thus cannot be deleted
 // or reordered.
 // New entries must be added immediately before the end.
-enum FetchRequestMode {
-  FETCH_REQUEST_MODE_SAME_ORIGIN,
-  FETCH_REQUEST_MODE_NO_CORS,
-  FETCH_REQUEST_MODE_CORS,
-  FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT,
-  FETCH_REQUEST_MODE_NAVIGATE,
-  FETCH_REQUEST_MODE_LAST = FETCH_REQUEST_MODE_NAVIGATE
-};
-
-enum FetchCredentialsMode {
-  FETCH_CREDENTIALS_MODE_OMIT,
-  FETCH_CREDENTIALS_MODE_SAME_ORIGIN,
-  FETCH_CREDENTIALS_MODE_INCLUDE,
-  FETCH_CREDENTIALS_MODE_PASSWORD,
-  FETCH_CREDENTIALS_MODE_LAST = FETCH_CREDENTIALS_MODE_PASSWORD
-};
-
 enum class FetchRedirectMode {
   FOLLOW_MODE,
   ERROR_MODE,
@@ -37,24 +20,19 @@ enum class FetchRedirectMode {
   LAST = MANUAL_MODE
 };
 
-// Whether this is a regular fetch, or a foreign fetch request.
+// Whether this is a regular fetch, or a foreign fetch request (now removed).
 // Duplicate of blink::mojom::ServiceWorkerFetchType.
-enum class ServiceWorkerFetchType {
-  FETCH,
-  FOREIGN_FETCH,
-  LAST = FOREIGN_FETCH
-};
+// TODO(falken): Remove this since it's always FETCH.
+enum class ServiceWorkerFetchType { FETCH, LAST = FETCH };
 
-// Indicates which service workers will receive fetch events for this request.
+// Indicates whether service workers will receive fetch events for this request.
+// TODO(falken): This enum made more sense when there was a foreign fetch mode.
+// Find better names or fold this into a boolean.
 enum class ServiceWorkerMode {
-  // Relevant local and foreign service workers will get a fetch or
-  // foreignfetch event for this request.
-  ALL,
-  // Only relevant foreign service workers will get a foreignfetch event for
-  // this request.
-  FOREIGN,
-  // Neither local nor foreign service workers will get events for this
+  // The relevant service worker, if any, will get a fetch event for this
   // request.
+  ALL,
+  // No service worker will get events for this request.
   NONE,
   LAST = NONE
 };

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -47,10 +46,12 @@ const char kAuthTokenExchangeEndPoint[] =
 
 ArcBackgroundAuthCodeFetcher::ArcBackgroundAuthCodeFetcher(
     Profile* profile,
-    ArcAuthContext* context)
+    ArcAuthContext* context,
+    bool initial_signin)
     : OAuth2TokenService::Consumer(kConsumerName),
       profile_(profile),
       context_(context),
+      initial_signin_(initial_signin),
       weak_ptr_factory_(this) {}
 
 ArcBackgroundAuthCodeFetcher::~ArcBackgroundAuthCodeFetcher() = default;
@@ -100,12 +101,39 @@ void ArcBackgroundAuthCodeFetcher::OnGetTokenSuccess(
   std::string request_string;
   base::JSONWriter::Write(request_data, &request_string);
 
-  auth_code_fetcher_ = net::URLFetcher::Create(
-      0, GURL(kAuthTokenExchangeEndPoint), net::URLFetcher::POST, this);
+  const net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("arc_auth_code_fetcher", R"(
+        semantics {
+          sender: "ARC auth code fetcher"
+          description:
+            "Fetches auth code to be used for Google Play Store sign-in."
+          trigger:
+            "The user or administrator initially enables Google Play Store on "
+            "the device, and Google Play Store requests authorization code for "
+            "account setup. This is also triggered when the Google Play Store "
+            "detects that current credentials are revoked or invalid and "
+            "requests extra authorization code for the account re-sign in."
+          data:
+            "Device id and access token."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "There's no direct Chromium's setting to disable this, but you can "
+            "remove Google Play Store in Chrome's settings under the Google "
+            "Play Store section if this is allowed by policy."
+          policy_exception_justification: "Not implemented."
+        })");
+
+  auth_code_fetcher_ =
+      net::URLFetcher::Create(0, GURL(kAuthTokenExchangeEndPoint),
+                              net::URLFetcher::POST, this, traffic_annotation);
   auth_code_fetcher_->SetRequestContext(request_context_getter_);
   auth_code_fetcher_->SetUploadData(kContentTypeJSON, request_string);
-  auth_code_fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE |
-                                   net::LOAD_BYPASS_CACHE);
+  auth_code_fetcher_->SetLoadFlags(
+      net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE |
+      net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES);
   auth_code_fetcher_->SetAutomaticallyRetryOnNetworkChanges(
       kGetAuthCodeNetworkRetry);
   auth_code_fetcher_->SetExtraRequestHeaders(kGetAuthCodeHeaders);
@@ -180,8 +208,11 @@ void ArcBackgroundAuthCodeFetcher::ResetFetchers() {
 void ArcBackgroundAuthCodeFetcher::ReportResult(
     const std::string& auth_code,
     OptInSilentAuthCode uma_status) {
-  UpdateSilentAuthCodeUMA(uma_status);
-  base::ResetAndReturn(&callback_).Run(!auth_code.empty(), auth_code);
+  if (initial_signin_)
+    UpdateSilentAuthCodeUMA(uma_status);
+  else
+    UpdateReauthorizationSilentAuthCodeUMA(uma_status);
+  std::move(callback_).Run(!auth_code.empty(), auth_code);
 }
 
 }  // namespace arc

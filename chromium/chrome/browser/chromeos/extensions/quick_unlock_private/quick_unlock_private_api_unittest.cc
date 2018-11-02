@@ -13,12 +13,12 @@
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
 #include "chrome/browser/signin/easy_unlock_service_factory.h"
 #include "chrome/browser/signin/easy_unlock_service_regular.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/login/auth/fake_extended_authenticator.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 
@@ -34,10 +34,11 @@ using CredentialList = std::vector<std::string>;
 namespace chromeos {
 namespace {
 
-const char* kTestUserEmail = "testuser@gmail.com";
-const char* kTestUserEmailHash = "testuser@gmail.com-hash";
-const char* kValidPassword = "valid";
-const char* kInvalidPassword = "invalid";
+constexpr char kTestUserEmail[] = "testuser@gmail.com";
+constexpr char kTestUserGaiaId[] = "9876543210";
+constexpr char kTestUserEmailHash[] = "testuser@gmail.com-hash";
+constexpr char kValidPassword[] = "valid";
+constexpr char kInvalidPassword[] = "invalid";
 
 class FakeEasyUnlockService : public EasyUnlockServiceRegular {
  public:
@@ -70,7 +71,8 @@ std::unique_ptr<KeyedService> CreateEasyUnlockServiceForTest(
 
 ExtendedAuthenticator* CreateFakeAuthenticator(
     AuthStatusConsumer* auth_status_consumer) {
-  AccountId account_id = AccountId::FromUserEmail(kTestUserEmail);
+  const AccountId account_id =
+      AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
   UserContext expected_context(account_id);
   expected_context.SetKey(Key(kValidPassword));
 
@@ -100,7 +102,7 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
  public:
   QuickUnlockPrivateUnitTest()
       : fake_user_manager_(new FakeChromeUserManager()),
-        scoped_user_manager_(fake_user_manager_) {}
+        scoped_user_manager_(base::WrapUnique(fake_user_manager_)) {}
 
  protected:
   void SetUp() override {
@@ -109,9 +111,11 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     quick_unlock::EnableForTesting(quick_unlock::PinStorageType::kPrefs);
 
     // Setup a primary user.
-    auto test_account = AccountId::FromUserEmail(kTestUserEmail);
+    auto test_account =
+        AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
     fake_user_manager_->AddUser(test_account);
-    fake_user_manager_->UserLoggedIn(test_account, kTestUserEmailHash, false);
+    fake_user_manager_->UserLoggedIn(test_account, kTestUserEmailHash, false,
+                                     false);
 
     // Ensure that quick unlock is turned off.
     SetModes(QuickUnlockModeList{}, CredentialList{});
@@ -119,11 +123,9 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     modes_changed_handler_ = base::Bind(&DoNothing);
   }
 
-  TestingProfile* CreateProfile() override {
-    TestingProfile::Builder builder;
-    builder.AddTestingFactory(EasyUnlockServiceFactory::GetInstance(),
-                              &CreateEasyUnlockServiceForTest);
-    return builder.Build().release();
+  TestingProfile::TestingFactories GetTestingFactories() override {
+    return {{EasyUnlockServiceFactory::GetInstance(),
+             &CreateEasyUnlockServiceForTest}};
   }
 
   // If a mode change event is raised, fail the test.
@@ -324,7 +326,7 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
   }
 
   FakeChromeUserManager* fake_user_manager_;
-  ScopedUserManagerEnabler scoped_user_manager_;
+  user_manager::ScopedUserManager scoped_user_manager_;
   QuickUnlockPrivateSetModesFunction::ModesChangedEventHandler
       modes_changed_handler_;
   bool expect_modes_changed_ = false;
@@ -427,8 +429,10 @@ TEST_F(QuickUnlockPrivateUnitTest, VerifyAuthenticationAgainstPIN) {
 
   quick_unlock_storage->MarkStrongAuth();
   quick_unlock_storage->pin_storage()->ResetUnlockAttemptCount();
-  EXPECT_TRUE(quick_unlock_storage->TryAuthenticatePin("111111"));
-  EXPECT_FALSE(quick_unlock_storage->TryAuthenticatePin("000000"));
+  EXPECT_TRUE(quick_unlock_storage->TryAuthenticatePin(
+      "111111", Key::KEY_TYPE_PASSWORD_PLAIN));
+  EXPECT_FALSE(quick_unlock_storage->TryAuthenticatePin(
+      "000000", Key::KEY_TYPE_PASSWORD_PLAIN));
 }
 
 // Verifies that the number of modes and the number of passwords given must be

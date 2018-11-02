@@ -9,7 +9,6 @@ import pickle
 import re
 
 from devil.android import apk_helper
-from devil.android import md5sum
 from pylib import constants
 from pylib.base import base_test_result
 from pylib.base import test_exception
@@ -17,6 +16,7 @@ from pylib.base import test_instance
 from pylib.constants import host_paths
 from pylib.instrumentation import test_result
 from pylib.instrumentation import instrumentation_parser
+from pylib.symbols import deobfuscator
 from pylib.symbols import stack_symbolizer
 from pylib.utils import dexdump
 from pylib.utils import instrumentation_tracing
@@ -56,6 +56,8 @@ _EXTRA_DRIVER_TARGET_CLASS = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetClass')
 _EXTRA_TIMEOUT_SCALE = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TimeoutScale')
+_TEST_LIST_JUNIT4_RUNNERS = [
+    'org.chromium.base.test.BaseChromiumAndroidJUnitRunner']
 
 _SKIP_PARAMETERIZATION = 'SkipCommandLineParameterization'
 _COMMANDLINE_PARAMETERIZATION = 'CommandLineParameter'
@@ -273,41 +275,36 @@ def FilterTests(tests, test_filter=None, annotations=None,
 def GetAllTestsFromJar(test_jar):
   pickle_path = '%s-proguard.pickle' % test_jar
   try:
-    tests = GetTestsFromPickle(pickle_path, test_jar)
+    tests = GetTestsFromPickle(pickle_path, os.path.getmtime(test_jar))
   except TestListPickleException as e:
     logging.info('Could not get tests from pickle: %s', e)
     logging.info('Getting tests from JAR via proguard.')
     tests = _GetTestsFromProguard(test_jar)
-    SaveTestsToPickle(pickle_path, test_jar, tests)
+    SaveTestsToPickle(pickle_path, tests)
   return tests
 
 
 def GetAllTestsFromApk(test_apk):
   pickle_path = '%s-dexdump.pickle' % test_apk
   try:
-    tests = GetTestsFromPickle(pickle_path, test_apk)
+    tests = GetTestsFromPickle(pickle_path, os.path.getmtime(test_apk))
   except TestListPickleException as e:
     logging.info('Could not get tests from pickle: %s', e)
     logging.info('Getting tests from dex via dexdump.')
     tests = _GetTestsFromDexdump(test_apk)
-    SaveTestsToPickle(pickle_path, test_apk, tests)
+    SaveTestsToPickle(pickle_path, tests)
   return tests
 
-def GetTestsFromPickle(pickle_path, jar_path):
+def GetTestsFromPickle(pickle_path, test_mtime):
   if not os.path.exists(pickle_path):
     raise TestListPickleException('%s does not exist.' % pickle_path)
-  if os.path.getmtime(pickle_path) <= os.path.getmtime(jar_path):
-    raise TestListPickleException(
-        '%s newer than %s.' % (jar_path, pickle_path))
+  if os.path.getmtime(pickle_path) <= test_mtime:
+    raise TestListPickleException('File is stale: %s' % pickle_path)
 
   with open(pickle_path, 'r') as f:
     pickle_data = pickle.load(f)
-  jar_md5 = md5sum.CalculateHostMd5Sums(jar_path)[jar_path]
-
   if pickle_data['VERSION'] != _PICKLE_FORMAT_VERSION:
     raise TestListPickleException('PICKLE_FORMAT_VERSION has changed.')
-  if pickle_data['JAR_MD5SUM'] != jar_md5:
-    raise TestListPickleException('JAR file MD5 sum differs.')
   return pickle_data['TEST_METHODS']
 
 
@@ -368,11 +365,9 @@ def _GetTestsFromDexdump(test_apk):
         })
   return tests
 
-def SaveTestsToPickle(pickle_path, jar_path, tests):
-  jar_md5 = md5sum.CalculateHostMd5Sums(jar_path)[jar_path]
+def SaveTestsToPickle(pickle_path, tests):
   pickle_data = {
     'VERSION': _PICKLE_FORMAT_VERSION,
-    'JAR_MD5SUM': jar_md5,
     'TEST_METHODS': tests,
   }
   with open(pickle_path, 'w') as pickle_file:
@@ -466,6 +461,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._test_package = None
     self._junit3_runner_class = None
     self._junit4_runner_class = None
+    self._junit4_runner_supports_listing = None
     self._test_support_apk = None
     self._initializeApkAttributes(args, error_func)
 
@@ -487,9 +483,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._driver_name = None
     self._initializeDriverAttributes()
 
-    self._render_results_dir = None
     self._screenshot_dir = None
     self._timeout_scale = None
+    self._wait_for_java_debugger = None
     self._initializeTestControlAttributes(args)
 
     self._coverage_directory = None
@@ -497,10 +493,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._store_tombstones = False
     self._symbolizer = None
-    self._initializeTombstonesAttributes(args)
-
-    self._gs_results_bucket = None
-    self._should_save_logcat = None
+    self._enable_java_deobfuscation = False
+    self._deobfuscator = None
     self._initializeLogAttributes(args)
 
     self._edit_shared_prefs = []
@@ -593,6 +587,16 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       all_junit4_test_runner_classes[0]['android:name']
       if all_junit4_test_runner_classes else None)
 
+    if self._junit4_runner_class:
+      if self._test_apk_incremental_install_json:
+        self._junit4_runner_supports_listing = next(
+            (True for x in self._test_apk.GetAllMetadata()
+             if 'real-instr' in x[0] and x[1] in _TEST_LIST_JUNIT4_RUNNERS),
+            False)
+      else:
+        self._junit4_runner_supports_listing = (
+            self._junit4_runner_class in _TEST_LIST_JUNIT4_RUNNERS)
+
     self._package_info = None
     if self._apk_under_test:
       package_under_test = self._apk_under_test.GetPackageName()
@@ -670,23 +674,20 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._driver_apk = None
 
   def _initializeTestControlAttributes(self, args):
-    self._render_results_dir = args.render_results_dir
     self._screenshot_dir = args.screenshot_dir
     self._timeout_scale = args.timeout_scale or 1
     self._ui_screenshot_dir = args.ui_screenshot_dir
+    self._wait_for_java_debugger = args.wait_for_java_debugger
 
   def _initializeTestCoverageAttributes(self, args):
     self._coverage_directory = args.coverage_dir
 
-  def _initializeTombstonesAttributes(self, args):
+  def _initializeLogAttributes(self, args):
+    self._enable_java_deobfuscation = args.enable_java_deobfuscation
     self._store_tombstones = args.store_tombstones
     self._symbolizer = stack_symbolizer.Symbolizer(
         self.apk_under_test.path if self.apk_under_test else None,
-        args.enable_relocation_packing)
-
-  def _initializeLogAttributes(self, args):
-    self._gs_results_bucket = args.gs_results_bucket
-    self._should_save_logcat = bool(args.json_results_file)
+        args.non_native_packed_relocations)
 
   def _initializeEditPrefsAttributes(self, args):
     if not hasattr(args, 'shared_prefs_file') or not args.shared_prefs_file:
@@ -744,10 +745,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._flags
 
   @property
-  def gs_results_bucket(self):
-    return self._gs_results_bucket
-
-  @property
   def junit3_runner_class(self):
     return self._junit3_runner_class
 
@@ -756,16 +753,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._junit4_runner_class
 
   @property
-  def should_save_logcat(self):
-    return self._should_save_logcat
+  def junit4_runner_supports_listing(self):
+    return self._junit4_runner_supports_listing
 
   @property
   def package_info(self):
     return self._package_info
-
-  @property
-  def render_results_dir(self):
-    return self._render_results_dir
 
   @property
   def replace_system_package(self):
@@ -819,6 +812,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def ui_screenshot_dir(self):
     return self._ui_screenshot_dir
 
+  @property
+  def wait_for_java_debugger(self):
+    return self._wait_for_java_debugger
+
   #override
   def TestType(self):
     return 'instrumentation'
@@ -827,6 +824,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def SetUp(self):
     self._data_deps.extend(
         self._data_deps_delegate(self._runtime_deps_path))
+    if self._enable_java_deobfuscation:
+      self._deobfuscator = deobfuscator.DeobfuscatorPool(
+          self.test_apk.path + '.mapping')
 
   def GetDataDependencies(self):
     return self._data_deps
@@ -837,6 +837,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     else:
       raw_tests = GetAllTestsFromApk(self.test_apk.path)
     return self.ProcessRawTests(raw_tests)
+
+  def MaybeDeobfuscateLines(self, lines):
+    if not self._deobfuscator:
+      return lines
+    return self._deobfuscator.TransformLines(lines)
 
   def ProcessRawTests(self, raw_tests):
     inflated_tests = self._ParameterizeTestsWithFlags(
@@ -915,3 +920,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   #override
   def TearDown(self):
     self.symbolizer.CleanUp()
+    if self._deobfuscator:
+      self._deobfuscator.Close()
+      self._deobfuscator = None

@@ -6,6 +6,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -14,7 +15,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
@@ -48,7 +48,7 @@ class LayerFillBackgroundPainter : public views::Background {
   explicit LayerFillBackgroundPainter(std::unique_ptr<views::Painter> painter)
       : painter_(std::move(painter)) {}
 
-  ~LayerFillBackgroundPainter() override {}
+  ~LayerFillBackgroundPainter() override = default;
 
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
     views::Painter::PaintPainterAt(canvas, painter_.get(),
@@ -70,7 +70,9 @@ class WindowPreviewView : public views::View, public aura::WindowObserver {
   explicit WindowPreviewView(aura::Window* window)
       : window_title_(new views::Label),
         preview_background_(new views::View),
-        mirror_view_(new wm::WindowMirrorView(window)),
+        mirror_view_(
+            new wm::WindowMirrorView(window,
+                                     /*trilinear_filtering_on_init=*/true)),
         window_observer_(this) {
     window_observer_.Add(window);
     window_title_->SetText(window->GetTitle());
@@ -98,7 +100,7 @@ class WindowPreviewView : public views::View, public aura::WindowObserver {
 
     SetFocusBehavior(FocusBehavior::ALWAYS);
   }
-  ~WindowPreviewView() override {}
+  ~WindowPreviewView() override = default;
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override {
@@ -239,6 +241,8 @@ class WindowCycleView : public views::WidgetDelegateView {
 
     for (auto* window : windows) {
       // |mirror_container_| owns |view|.
+      // The |mirror_view_| in |view| will use trilinear filtering in
+      // InitLayerOwner().
       views::View* view = new WindowPreviewView(window);
       window_view_map_[window] = view;
       mirror_container_->AddChildView(view);
@@ -247,7 +251,7 @@ class WindowCycleView : public views::WidgetDelegateView {
     // The background needs to be painted to fill the layer, not the View,
     // because the layer animates bounds changes but the View's bounds change
     // immediately.
-    highlight_view_->SetBackground(base::MakeUnique<LayerFillBackgroundPainter>(
+    highlight_view_->SetBackground(std::make_unique<LayerFillBackgroundPainter>(
         views::Painter::CreateRoundRectWith1PxBorderPainter(
             SkColorSetA(SK_ColorWHITE, 0x4D), SkColorSetA(SK_ColorWHITE, 0x33),
             kBackgroundCornerRadius)));
@@ -259,7 +263,7 @@ class WindowCycleView : public views::WidgetDelegateView {
     AddChildView(mirror_container_);
   }
 
-  ~WindowCycleView() override {}
+  ~WindowCycleView() override = default;
 
   void SetTargetWindow(aura::Window* target) {
     target_window_ = target;

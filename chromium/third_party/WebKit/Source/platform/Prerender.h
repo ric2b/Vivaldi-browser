@@ -32,13 +32,13 @@
 #ifndef Prerender_h
 #define Prerender_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -47,7 +47,7 @@ class PrerenderClient;
 
 class PLATFORM_EXPORT Prerender final
     : public GarbageCollectedFinalized<Prerender> {
-  WTF_MAKE_NONCOPYABLE(Prerender);
+  DISALLOW_COPY_AND_ASSIGN(Prerender);
 
  public:
   class ExtraData : public RefCounted<ExtraData> {
@@ -63,7 +63,7 @@ class PLATFORM_EXPORT Prerender final
   }
 
   ~Prerender();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void Dispose();
 
@@ -76,10 +76,10 @@ class PLATFORM_EXPORT Prerender final
   const String& GetReferrer() const { return referrer_.referrer; }
   ReferrerPolicy GetReferrerPolicy() const { return referrer_.referrer_policy; }
 
-  void SetExtraData(PassRefPtr<ExtraData> extra_data) {
+  void SetExtraData(scoped_refptr<ExtraData> extra_data) {
     extra_data_ = std::move(extra_data);
   }
-  ExtraData* GetExtraData() { return extra_data_.Get(); }
+  ExtraData* GetExtraData() { return extra_data_.get(); }
 
   void DidStartPrerender();
   void DidStopPrerender();
@@ -99,7 +99,7 @@ class PLATFORM_EXPORT Prerender final
   const unsigned rel_types_;
   const Referrer referrer_;
 
-  RefPtr<ExtraData> extra_data_;
+  scoped_refptr<ExtraData> extra_data_;
 };
 
 }  // namespace blink

@@ -9,9 +9,18 @@
 
 namespace blink {
 
-DEFINE_TRACE(GeolocationWatchers) {
+void GeolocationWatchers::Trace(blink::Visitor* visitor) {
   visitor->Trace(id_to_notifier_map_);
   visitor->Trace(notifier_to_id_map_);
+}
+
+void GeolocationWatchers::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  for (const auto& notifier : id_to_notifier_map_.Values())
+    visitor->TraceWrappers(notifier);
+  // |notifier_to_id_map_| is a HeapHashMap that is the inverse mapping of
+  // |id_to_notifier_map_|.  As the contents are the same, we don't need to
+  // trace |id_to_notifier_map_|.
 }
 
 bool GeolocationWatchers::Add(int id, GeoNotifier* notifier) {
@@ -26,7 +35,7 @@ GeoNotifier* GeolocationWatchers::Find(int id) {
   DCHECK_GT(id, 0);
   IdToNotifierMap::iterator iter = id_to_notifier_map_.find(id);
   if (iter == id_to_notifier_map_.end())
-    return 0;
+    return nullptr;
   return iter->value;
 }
 
@@ -58,6 +67,11 @@ void GeolocationWatchers::Clear() {
 
 bool GeolocationWatchers::IsEmpty() const {
   return id_to_notifier_map_.IsEmpty();
+}
+
+void GeolocationWatchers::Swap(GeolocationWatchers& other) {
+  swap(id_to_notifier_map_, other.id_to_notifier_map_);
+  swap(notifier_to_id_map_, other.notifier_to_id_map_);
 }
 
 void GeolocationWatchers::GetNotifiersVector(

@@ -64,13 +64,12 @@ views::ScrollView* CreateCredentialsView(
         form.get(), request_context);
     credential_view->SetLowerLabelColor(kAutoSigninTextColor);
     ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
-    gfx::Insets dialog_insets =
-        layout_provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+    gfx::Insets insets =
+        layout_provider->GetInsetsMetric(views::INSETS_DIALOG_SUBSECTION);
     const int vertical_padding = layout_provider->GetDistanceMetric(
         views::DISTANCE_RELATED_CONTROL_VERTICAL);
-    credential_view->SetBorder(
-        views::CreateEmptyBorder(vertical_padding, dialog_insets.left(),
-                                 vertical_padding, dialog_insets.right()));
+    credential_view->SetBorder(views::CreateEmptyBorder(
+        vertical_padding, insets.left(), vertical_padding, insets.right()));
     item_height = std::max(item_height, credential_view->GetPreferredHeight());
     list_view->AddChildView(credential_view);
   }
@@ -126,8 +125,7 @@ void AccountChooserDialogView::AddedToWidget() {
       controller_->GetAccoutChooserTitle();
   std::unique_ptr<views::StyledLabel> title_label =
       base::MakeUnique<views::StyledLabel>(title_content.first, this);
-  title_label->SetBaseFontList(views::style::GetFont(
-      views::style::CONTEXT_DIALOG_TITLE, views::style::STYLE_PRIMARY));
+  title_label->SetTextContext(views::style::CONTEXT_DIALOG_TITLE);
   if (!title_content.second.is_empty())
     title_label->AddStyleRange(title_content.second, GetLinkStyle());
   GetBubbleFrameView()->SetTitleView(std::move(title_label));

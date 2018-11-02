@@ -3,89 +3,15 @@
 // found in the LICENSE file.
 
 #include <atk/atk.h>
-#include <glib-2.0/gmodule.h>
 
-#include "base/bind.h"
 #include "base/environment.h"
-#include "base/files/file_path.h"
-#include "base/location.h"
-#include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
 #include "ui/accessibility/platform/atk_util_auralinux.h"
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 
 namespace {
 
-typedef void (*GnomeAccessibilityModuleInitFunc)();
-
 const char kAccessibilityEnabled[] = "ACCESSIBILITY_ENABLED";
-const char kAtkBridgeModule[] = "atk-bridge";
-const char kAtkBridgePath[] = "gtk-2.0/modules/libatk-bridge.so";
-const char kAtkBridgeSymbolName[] = "gnome_accessibility_module_init";
-const char kGtkModules[] = "GTK_MODULES";
-
-// Returns a function pointer to be invoked on the main thread to init
-// the gnome accessibility module if it's enabled (nullptr otherwise).
-GnomeAccessibilityModuleInitFunc GetAccessibilityModuleInitFunc() {
-  base::ThreadRestrictions::AssertIOAllowed();
-
-  // Try to load libatk-bridge.so.
-  base::FilePath atk_bridge_path(ATK_LIB_DIR);
-  atk_bridge_path = atk_bridge_path.Append(kAtkBridgePath);
-  GModule* bridge = g_module_open(atk_bridge_path.value().c_str(),
-                                  static_cast<GModuleFlags>(0));
-  if (!bridge) {
-    VLOG(1) << "Unable to open module " << atk_bridge_path.value();
-    return nullptr;
-  }
-
-  GnomeAccessibilityModuleInitFunc init_func = nullptr;
-
-  if (!g_module_symbol(bridge, kAtkBridgeSymbolName, (gpointer*)&init_func)) {
-    VLOG(1) << "Unable to get symbol pointer from " << atk_bridge_path.value();
-    return nullptr;
-  }
-
-  DCHECK(init_func);
-  return init_func;
-}
-
-void FinishAccessibilityInitOnMainThread(
-    GnomeAccessibilityModuleInitFunc init_func) {
-  if (!init_func) {
-    VLOG(1) << "Will not enable ATK accessibility support.";
-    return;
-  }
-
-  init_func();
-}
-
-bool PlatformShouldEnableAccessibility() {
-  std::unique_ptr<base::Environment> env(base::Environment::Create());
-  std::string gtk_modules;
-  if (!env->GetVar(kGtkModules, &gtk_modules))
-    return false;
-
-  for (const std::string& module :
-       base::SplitString(gtk_modules, ":", base::TRIM_WHITESPACE,
-                         base::SPLIT_WANT_NONEMPTY)) {
-    if (module == kAtkBridgeModule)
-      return true;
-  }
-  return false;
-}
-
-bool ShouldEnableAccessibility() {
-  char* enable_accessibility = getenv(kAccessibilityEnabled);
-  if ((enable_accessibility && atoi(enable_accessibility) == 1) ||
-      PlatformShouldEnableAccessibility())
-    return true;
-  return false;
-}
 
 }  // namespace
 
@@ -174,18 +100,34 @@ AtkUtilAuraLinux* AtkUtilAuraLinux::GetInstance() {
   return base::Singleton<AtkUtilAuraLinux>::get();
 }
 
+bool AtkUtilAuraLinux::ShouldEnableAccessibility() {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  std::string enable_accessibility;
+  env->GetVar(kAccessibilityEnabled, &enable_accessibility);
+  if (enable_accessibility == "1" || PlatformShouldEnableAccessibility())
+    return true;
+  return false;
+}
+
 void AtkUtilAuraLinux::InitializeAsync() {
+  static bool initialized = false;
+
+  if (initialized || !ShouldEnableAccessibility())
+    return;
+
+  initialized = true;
+
   // Register our util class.
   g_type_class_unref(g_type_class_ref(ATK_UTIL_AURALINUX_TYPE));
 
-  if (!ShouldEnableAccessibility())
-    return;
+  PlatformInitializeAsync();
+}
 
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&GetAccessibilityModuleInitFunc),
-      base::Bind(&FinishAccessibilityInitOnMainThread));
+void AtkUtilAuraLinux::InitializeForTesting() {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  env->SetVar(kAccessibilityEnabled, "1");
+
+  InitializeAsync();
 }
 
 }  // namespace ui

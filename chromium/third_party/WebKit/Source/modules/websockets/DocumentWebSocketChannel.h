@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <memory>
 #include <utility>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
@@ -46,8 +47,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Deque.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
@@ -101,7 +100,7 @@ class MODULES_EXPORT DocumentWebSocketChannel final
   void Send(const DOMArrayBuffer&,
             unsigned byte_offset,
             unsigned byte_length) override;
-  void Send(PassRefPtr<BlobDataHandle>) override;
+  void Send(scoped_refptr<BlobDataHandle>) override;
   void SendTextAsCharVector(std::unique_ptr<Vector<char>> data) override;
   void SendBinaryAsCharVector(std::unique_ptr<Vector<char>> data) override;
   // Start closing handshake. Use the CloseEventCodeNotSpecified for the code
@@ -112,7 +111,7 @@ class MODULES_EXPORT DocumentWebSocketChannel final
             std::unique_ptr<SourceLocation>) override;
   void Disconnect() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   class BlobLoader;
@@ -162,8 +161,9 @@ class MODULES_EXPORT DocumentWebSocketChannel final
   void DidConnect(WebSocketHandle*,
                   const String& selected_protocol,
                   const String& extensions) override;
-  void DidStartOpeningHandshake(WebSocketHandle*,
-                                PassRefPtr<WebSocketHandshakeRequest>) override;
+  void DidStartOpeningHandshake(
+      WebSocketHandle*,
+      scoped_refptr<WebSocketHandshakeRequest>) override;
   void DidFinishOpeningHandshake(WebSocketHandle*,
                                  const WebSocketHandshakeResponse*) override;
   void DidFail(WebSocketHandle*, const String& message) override;
@@ -214,7 +214,7 @@ class MODULES_EXPORT DocumentWebSocketChannel final
       connection_handle_for_scheduler_;
 
   std::unique_ptr<SourceLocation> location_at_construction_;
-  RefPtr<WebSocketHandshakeRequest> handshake_request_;
+  scoped_refptr<WebSocketHandshakeRequest> handshake_request_;
   std::unique_ptr<WebSocketHandshakeThrottle> handshake_throttle_;
   // This field is only initialised if the object is still waiting for a
   // throttle response when DidConnect is called.

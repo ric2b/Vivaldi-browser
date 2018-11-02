@@ -49,7 +49,7 @@ TextDecoder* TextDecoder::Create(const String& label,
   if (!encoding.IsValid() || !strcasecmp(encoding.GetName(), "replacement")) {
     exception_state.ThrowRangeError("The encoding label provided ('" + label +
                                     "') is invalid.");
-    return 0;
+    return nullptr;
   }
 
   return new TextDecoder(encoding, options.fatal(), options.ignoreBOM());
@@ -79,17 +79,17 @@ String TextDecoder::encoding() const {
 String TextDecoder::decode(const BufferSource& input,
                            const TextDecodeOptions& options,
                            ExceptionState& exception_state) {
-  DCHECK(!input.isNull());
-  if (input.isArrayBufferView()) {
+  DCHECK(!input.IsNull());
+  if (input.IsArrayBufferView()) {
     const char* start = static_cast<const char*>(
-        input.getAsArrayBufferView().View()->BaseAddress());
-    size_t length = input.getAsArrayBufferView().View()->byteLength();
+        input.GetAsArrayBufferView().View()->BaseAddress());
+    size_t length = input.GetAsArrayBufferView().View()->byteLength();
     return decode(start, length, options, exception_state);
   }
-  DCHECK(input.isArrayBuffer());
+  DCHECK(input.IsArrayBuffer());
   const char* start =
-      static_cast<const char*>(input.getAsArrayBuffer()->Data());
-  size_t length = input.getAsArrayBuffer()->ByteLength();
+      static_cast<const char*>(input.GetAsArrayBuffer()->Data());
+  size_t length = input.GetAsArrayBuffer()->ByteLength();
   return decode(start, length, options, exception_state);
 }
 

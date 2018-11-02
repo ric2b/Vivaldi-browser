@@ -6,14 +6,15 @@
 
 #include "base/android/build_info.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/stringprintf.h"
 #include "jni/MidiManagerAndroid_jni.h"
 #include "media/midi/midi_device_android.h"
 #include "media/midi/midi_manager_usb.h"
 #include "media/midi/midi_output_port_android.h"
+#include "media/midi/midi_service.h"
 #include "media/midi/midi_switches.h"
+#include "media/midi/task_service.h"
 #include "media/midi/usb_midi_device_factory_android.h"
 
 using base::android::JavaParamRef;
@@ -24,71 +25,67 @@ namespace midi {
 
 namespace {
 
-// MidiManagerAndroid should be enabled only when the feature is enabled via
-// chrome://flags on M+, or enabled by server configurations under specified
-// Android versions, M+ or N+.
-bool IsMidiManagerAndroidEnabled() {
-  // The feature is not enabled by chrome://flags or field trials.
-  if (!base::FeatureList::IsEnabled(features::kMidiManagerAndroid))
-    return false;
-
+bool HasSystemFeatureMidi() {
+  // MIDI API was added at Android M.
   auto sdk_version = base::android::BuildInfo::GetInstance()->sdk_int();
   if (sdk_version < base::android::SDK_VERSION_MARSHMALLOW)
     return false;
 
-  bool has_midi = Java_MidiManagerAndroid_hasSystemFeatureMidi(
+  // Check if the MIDI service actually runs on the system.
+  return Java_MidiManagerAndroid_hasSystemFeatureMidi(
       base::android::AttachCurrentThread());
-
-  // If the feature is enabled, check the RequredAndroidVersion param. If the
-  // param is provided and the value is "NOUGAT", use MidiManagerAndroid on N
-  // and later versions. This string comparison should not match when users
-  // enable the feature via chrome://flags.
-  if (base::GetFieldTrialParamValueByFeature(features::kMidiManagerAndroid,
-                                             "RequiredAndroidVersion") ==
-      "NOUGAT") {
-    return has_midi && sdk_version >= base::android::SDK_VERSION_NOUGAT;
-  }
-
-  // Otherwise, allow to use MidiManagerAndroid on M and later versions.
-  return has_midi && sdk_version >= base::android::SDK_VERSION_MARSHMALLOW;
 }
 
 }  // namespace
 
 MidiManager* MidiManager::Create(MidiService* service) {
-  if (IsMidiManagerAndroidEnabled())
+  if (HasSystemFeatureMidi())
     return new MidiManagerAndroid(service);
 
   return new MidiManagerUsb(service,
-                            base::MakeUnique<UsbMidiDeviceFactoryAndroid>());
+                            std::make_unique<UsbMidiDeviceFactoryAndroid>());
 }
 
 MidiManagerAndroid::MidiManagerAndroid(MidiService* service)
     : MidiManager(service) {}
 
 MidiManagerAndroid::~MidiManagerAndroid() {
-  base::AutoLock auto_lock(scheduler_lock_);
-  CHECK(!scheduler_);
+  // TODO(toyoshim): Remove following code once the dynamic instantiation mode
+  // is enabled by default.
+  base::AutoLock lock(lock_);
+  DCHECK(devices_.empty());
+  DCHECK(all_input_ports_.empty());
+  DCHECK(input_port_to_index_.empty());
+  DCHECK(all_output_ports_.empty());
+  DCHECK(output_port_to_index_.empty());
+  DCHECK(raw_manager_.is_null());
 }
 
 void MidiManagerAndroid::StartInitialization() {
+  bool result = service()->task_service()->BindInstance();
+  DCHECK(result);
+
   JNIEnv* env = base::android::AttachCurrentThread();
 
   uintptr_t pointer = reinterpret_cast<uintptr_t>(this);
   raw_manager_.Reset(Java_MidiManagerAndroid_create(env, pointer));
 
-  {
-    base::AutoLock auto_lock(scheduler_lock_);
-    scheduler_.reset(new MidiScheduler(this));
-  }
-
   Java_MidiManagerAndroid_initialize(env, raw_manager_);
 }
 
 void MidiManagerAndroid::Finalize() {
-  // Destruct MidiScheduler on Chrome_IOThread.
-  base::AutoLock auto_lock(scheduler_lock_);
-  scheduler_.reset();
+  bool result = service()->task_service()->UnbindInstance();
+  DCHECK(result);
+
+  // TODO(toyoshim): Remove following code once the dynamic instantiation mode
+  // is enabled by default.
+  base::AutoLock lock(lock_);
+  devices_.clear();
+  all_input_ports_.clear();
+  input_port_to_index_.clear();
+  all_output_ports_.clear();
+  output_port_to_index_.clear();
+  raw_manager_.Reset();
 }
 
 void MidiManagerAndroid::DispatchSendMidiData(MidiManagerClient* client,
@@ -112,13 +109,20 @@ void MidiManagerAndroid::DispatchSendMidiData(MidiManagerClient* client,
     }
   }
 
-  // output_streams_[port_index] is alive unless MidiManagerUsb is deleted.
-  // The task posted to the MidiScheduler will be disposed safely on deleting
-  // the scheduler.
-  scheduler_->PostSendDataTask(
-      client, data.size(), timestamp,
-      base::Bind(&MidiOutputPortAndroid::Send,
-                 base::Unretained(all_output_ports_[port_index]), data));
+  // output_streams_[port_index] is alive unless MidiManagerAndroid is deleted.
+  // The task posted to the TaskService will be disposed safely after unbinding
+  // the service.
+  base::TimeDelta delay = MidiService::TimestampToTimeDeltaDelay(timestamp);
+  service()->task_service()->PostBoundDelayedTask(
+      TaskService::kDefaultRunnerId,
+      base::BindOnce(&MidiOutputPortAndroid::Send,
+                     base::Unretained(all_output_ports_[port_index]), data),
+      delay);
+  service()->task_service()->PostBoundDelayedTask(
+      TaskService::kDefaultRunnerId,
+      base::BindOnce(&MidiManager::AccumulateMidiBytesSent,
+                     base::Unretained(this), client, data.size()),
+      delay);
 }
 
 void MidiManagerAndroid::OnReceivedData(MidiInputPortAndroid* port,
@@ -139,7 +143,7 @@ void MidiManagerAndroid::OnInitialized(
   for (jsize i = 0; i < length; ++i) {
     base::android::ScopedJavaLocalRef<jobject> raw_device(
         env, env->GetObjectArrayElement(devices, i));
-    AddDevice(base::MakeUnique<MidiDeviceAndroid>(env, raw_device, this));
+    AddDevice(std::make_unique<MidiDeviceAndroid>(env, raw_device, this));
   }
   CompleteInitialization(Result::OK);
 }
@@ -153,7 +157,7 @@ void MidiManagerAndroid::OnInitializationFailed(
 void MidiManagerAndroid::OnAttached(JNIEnv* env,
                                     const JavaParamRef<jobject>& caller,
                                     const JavaParamRef<jobject>& raw_device) {
-  AddDevice(base::MakeUnique<MidiDeviceAndroid>(env, raw_device, this));
+  AddDevice(std::make_unique<MidiDeviceAndroid>(env, raw_device, this));
 }
 
 void MidiManagerAndroid::OnDetached(JNIEnv* env,

@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/accessibility_types.h"
+#include "ash/public/cpp/accessibility_types.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
@@ -352,10 +352,10 @@ void ScreenMagnifierPolicyHandler::ApplyPolicySettings(
   const base::Value* value = policies.GetValue(policy_name());
   int value_in_range;
   if (value && EnsureInRange(value, &value_in_range, NULL)) {
+    // The "type" is only used to enable or disable the feature as a whole.
+    // http://crbug.com/170850
     prefs->SetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled,
                       value_in_range != ash::MAGNIFIER_DISABLED);
-    prefs->SetInteger(ash::prefs::kAccessibilityScreenMagnifierType,
-                      value_in_range);
   }
 }
 

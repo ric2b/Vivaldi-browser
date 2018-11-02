@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/libgtkui/gtk_ui.h"
 
-#include <X11/Xcursor/Xcursor.h>
 #include <dlfcn.h>
 #include <math.h>
 #include <pango/pango.h>
@@ -19,6 +18,8 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/protected_memory.h"
+#include "base/memory/protected_memory_cfi.h"
 #include "base/memory/ptr_util.h"
 #include "base/nix/mime_util_xdg.h"
 #include "base/nix/xdg_util.h"
@@ -53,6 +54,7 @@
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -62,7 +64,6 @@
 #include "ui/views/linux_ui/device_scale_factor_observer.h"
 #include "ui/views/linux_ui/window_button_order_observer.h"
 #include "ui/views/resources/grit/views_resources.h"
-#include "ui/views/window/nav_button_provider.h"
 
 #if GTK_MAJOR_VERSION == 2
 #include "chrome/browser/ui/libgtkui/native_theme_gtk2.h"  // nogncheck
@@ -74,6 +75,10 @@
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
 #include "printing/printing_context_linux.h"
+#endif
+
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+#include "chrome/browser/ui/views/nav_button_provider.h"
 #endif
 
 #if defined(USE_GCONF)
@@ -91,15 +96,6 @@
 namespace libgtkui {
 
 namespace {
-
-// We would like this to be a feature flag, but GtkUi gets initialized
-// earlier than the feature flag registry, so just use a simple bool.
-// The reason for wanting a flag is so that we can release the GTK3
-// nav button layout manager and the GTK3 nav button provider at the
-// same time (so users don't have to deal with things changing twice).
-// Since this was never really intended to be toggled by users, this
-// is fine for now.
-const bool kUseGtkNavButtonLayoutManager = true;
 
 const double kDefaultDPI = 96;
 
@@ -282,7 +278,7 @@ const char* kUnknownContentType = "application/octet-stream";
 std::unique_ptr<NavButtonLayoutManager> CreateNavButtonLayoutManager(
     GtkUi* gtk_ui) {
 #if GTK_MAJOR_VERSION == 3
-  if (GtkVersionCheck(3, 14) && kUseGtkNavButtonLayoutManager)
+  if (GtkVersionCheck(3, 14))
     return std::make_unique<NavButtonLayoutManagerGtk3>(gtk_ui);
 #endif
 #if defined(USE_GCONF)
@@ -408,6 +404,12 @@ SkColor GetToolbarTopSeparatorColor(SkColor header_fg,
 }
 #endif
 
+using GdkSetAllowedBackendsFn = void (*)(const gchar*);
+// Place this function pointers in read-only memory after being resolved to
+// prevent it being tampered with. See crbug.com/771365 for details.
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<GdkSetAllowedBackendsFn>
+    g_gdk_set_allowed_backends;
+
 }  // namespace
 
 GtkUi::GtkUi() : middle_click_action_(GetDefaultMiddleClickAction()) {
@@ -416,13 +418,20 @@ GtkUi::GtkUi() : middle_click_action_(GetDefaultMiddleClickAction()) {
   // the use of X11 (eg. X11InputMethodContextImplGtk) and will crash under
   // other backends.
   // TODO(thomasanderson): Change this logic once Wayland support is added.
-  static auto* _gdk_set_allowed_backends =
+  static base::ProtectedMemory<GdkSetAllowedBackendsFn>::Initializer init(
+      &g_gdk_set_allowed_backends,
       reinterpret_cast<void (*)(const gchar*)>(
-          dlsym(GetGdkSharedLibrary(), "gdk_set_allowed_backends"));
+          dlsym(GetGdkSharedLibrary(), "gdk_set_allowed_backends")));
   if (GtkVersionCheck(3, 10))
-    DCHECK(_gdk_set_allowed_backends);
-  if (_gdk_set_allowed_backends)
-    _gdk_set_allowed_backends("x11");
+    DCHECK(*g_gdk_set_allowed_backends);
+  if (*g_gdk_set_allowed_backends)
+    base::UnsanitizedCfiCall(g_gdk_set_allowed_backends)("x11");
+#endif
+#if GTK_MAJOR_VERSION >= 3
+  // Avoid GTK initializing atk-bridge, and let AuraLinux implementation
+  // do it once it is ready.
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  env->SetVar("NO_AT_BRIDGE", "1");
 #endif
   GtkInitFromCommandLine(*base::CommandLine::ForCurrentProcess());
 #if GTK_MAJOR_VERSION == 2
@@ -541,7 +550,7 @@ SkColor GtkUi::GetInactiveSelectionFgColor() const {
   return inactive_selection_fg_color_;
 }
 
-double GtkUi::GetCursorBlinkInterval() const {
+base::TimeDelta GtkUi::GetCursorBlinkInterval() const {
   // From http://library.gnome.org/devel/gtk/unstable/GtkSettings.html, this is
   // the default value for gtk-cursor-blink-time.
   static const gint kGtkDefaultCursorBlinkTime = 1200;
@@ -556,7 +565,9 @@ double GtkUi::GetCursorBlinkInterval() const {
   gboolean cursor_blink = TRUE;
   g_object_get(gtk_settings_get_default(), "gtk-cursor-blink-time",
                &cursor_blink_time, "gtk-cursor-blink", &cursor_blink, nullptr);
-  return cursor_blink ? (cursor_blink_time / kGtkCursorBlinkCycleFactor) : 0.0;
+  return cursor_blink ? base::TimeDelta::FromSecondsD(
+                            cursor_blink_time / kGtkCursorBlinkCycleFactor)
+                      : base::TimeDelta();
 }
 
 ui::NativeTheme* GtkUi::GetNativeTheme(aura::Window* window) const {
@@ -579,6 +590,7 @@ bool GtkUi::GetDefaultUsesSystemTheme() const {
 
   switch (base::nix::GetDesktopEnvironment(env.get())) {
     case base::nix::DESKTOP_ENVIRONMENT_GNOME:
+    case base::nix::DESKTOP_ENVIRONMENT_PANTHEON:
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
     case base::nix::DESKTOP_ENVIRONMENT_XFCE:
       return true;
@@ -776,10 +788,6 @@ ui::SelectFileDialog* GtkUi::CreateSelectFileDialog(
   return SelectFileDialogImpl::Create(listener, std::move(policy));
 }
 
-bool GtkUi::UnityIsRunning() {
-  return unity::IsRunning();
-}
-
 views::LinuxUI::NonClientMiddleClickAction
 GtkUi::GetNonClientMiddleClickAction() {
   return middle_click_action_;
@@ -801,13 +809,20 @@ void GtkUi::RemoveDeviceScaleFactorObserver(
   device_scale_factor_observer_list_.RemoveObserver(observer);
 }
 
+bool GtkUi::PreferDarkTheme() const {
+  gboolean dark = false;
+  g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
+               &dark, nullptr);
+  return dark;
+}
+
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 std::unique_ptr<views::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
-#if GTK_MAJOR_VERSION >= 3
   if (GtkVersionCheck(3, 14))
     return base::MakeUnique<libgtkui::NavButtonProviderGtk3>();
-#endif
   return nullptr;
 }
+#endif
 
 bool GtkUi::MatchEvent(const ui::Event& event,
                        std::vector<ui::TextEditCommandAuraLinux>* commands) {

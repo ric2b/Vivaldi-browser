@@ -19,7 +19,7 @@ namespace shape_detection {
 void TextDetectionImpl::Create(mojom::TextDetectionRequest request) {
   // Text detection needs at least MAC OS X 10.11.
   if (@available(macOS 10.11, *)) {
-    mojo::MakeStrongBinding(base::MakeUnique<TextDetectionImplMac>(),
+    mojo::MakeStrongBinding(std::make_unique<TextDetectionImplMac>(),
                             std::move(request));
   }
 }
@@ -57,6 +57,15 @@ void TextDetectionImplMac::Detect(const SkBitmap& bitmap,
                            height - f.bounds.origin.y - f.bounds.size.height,
                            f.bounds.size.width, f.bounds.size.height);
     result->bounding_box = std::move(boundingbox);
+
+    // Enumerate corner points starting from top-left in clockwise fashion:
+    // https://wicg.github.io/shape-detection-api/text.html#dom-detectedtext-cornerpoints
+    result->corner_points.emplace_back(f.topLeft.x, height - f.topLeft.y);
+    result->corner_points.emplace_back(f.topRight.x, height - f.topRight.y);
+    result->corner_points.emplace_back(f.bottomRight.x,
+                                       height - f.bottomRight.y);
+    result->corner_points.emplace_back(f.bottomLeft.x, height - f.bottomLeft.y);
+
     results.push_back(std::move(result));
   }
   std::move(scoped_callback).Run(std::move(results));

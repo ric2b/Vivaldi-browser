@@ -4,8 +4,7 @@
 
 #include "core/animation/PropertyHandle.h"
 
-#include "core/SVGNames.h"
-#include "core/XLinkNames.h"
+#include "core/svg_names.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -19,25 +18,31 @@ TEST_F(PropertyHandleTest, Equality) {
   AtomicString name_a = "--a";
   AtomicString name_b = "--b";
 
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity) ==
-              PropertyHandle(CSSPropertyOpacity));
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity) !=
-               PropertyHandle(CSSPropertyOpacity));
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity) ==
-               PropertyHandle(CSSPropertyTransform));
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity) !=
-              PropertyHandle(CSSPropertyTransform));
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity) == PropertyHandle(name_a));
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity) != PropertyHandle(name_a));
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity) ==
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()) ==
+              PropertyHandle(GetCSSPropertyOpacity()));
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()) !=
+               PropertyHandle(GetCSSPropertyOpacity()));
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()) ==
+               PropertyHandle(GetCSSPropertyTransform()));
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()) !=
+              PropertyHandle(GetCSSPropertyTransform()));
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()) ==
+               PropertyHandle(name_a));
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()) !=
+              PropertyHandle(name_a));
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()) ==
                PropertyHandle(amplitudeAttr));
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity) !=
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()) !=
               PropertyHandle(amplitudeAttr));
 
-  EXPECT_FALSE(PropertyHandle(name_a) == PropertyHandle(CSSPropertyOpacity));
-  EXPECT_TRUE(PropertyHandle(name_a) != PropertyHandle(CSSPropertyOpacity));
-  EXPECT_FALSE(PropertyHandle(name_a) == PropertyHandle(CSSPropertyTransform));
-  EXPECT_TRUE(PropertyHandle(name_a) != PropertyHandle(CSSPropertyTransform));
+  EXPECT_FALSE(PropertyHandle(name_a) ==
+               PropertyHandle(GetCSSPropertyOpacity()));
+  EXPECT_TRUE(PropertyHandle(name_a) !=
+              PropertyHandle(GetCSSPropertyOpacity()));
+  EXPECT_FALSE(PropertyHandle(name_a) ==
+               PropertyHandle(GetCSSPropertyTransform()));
+  EXPECT_TRUE(PropertyHandle(name_a) !=
+              PropertyHandle(GetCSSPropertyTransform()));
   EXPECT_TRUE(PropertyHandle(name_a) == PropertyHandle(name_a));
   EXPECT_FALSE(PropertyHandle(name_a) != PropertyHandle(name_a));
   EXPECT_FALSE(PropertyHandle(name_a) == PropertyHandle(name_b));
@@ -46,9 +51,9 @@ TEST_F(PropertyHandleTest, Equality) {
   EXPECT_TRUE(PropertyHandle(name_a) != PropertyHandle(amplitudeAttr));
 
   EXPECT_FALSE(PropertyHandle(amplitudeAttr) ==
-               PropertyHandle(CSSPropertyOpacity));
+               PropertyHandle(GetCSSPropertyOpacity()));
   EXPECT_TRUE(PropertyHandle(amplitudeAttr) !=
-              PropertyHandle(CSSPropertyOpacity));
+              PropertyHandle(GetCSSPropertyOpacity()));
   EXPECT_FALSE(PropertyHandle(amplitudeAttr) == PropertyHandle(name_a));
   EXPECT_TRUE(PropertyHandle(amplitudeAttr) != PropertyHandle(name_a));
   EXPECT_TRUE(PropertyHandle(amplitudeAttr) == PropertyHandle(amplitudeAttr));
@@ -61,17 +66,17 @@ TEST_F(PropertyHandleTest, Hash) {
   AtomicString name_a = "--a";
   AtomicString name_b = "--b";
 
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity).GetHash() ==
-              PropertyHandle(CSSPropertyOpacity).GetHash());
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity).GetHash() ==
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()).GetHash() ==
+              PropertyHandle(GetCSSPropertyOpacity()).GetHash());
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()).GetHash() ==
                PropertyHandle(name_a).GetHash());
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity).GetHash() ==
-               PropertyHandle(CSSPropertyTransform).GetHash());
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity).GetHash() ==
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()).GetHash() ==
+               PropertyHandle(GetCSSPropertyTransform()).GetHash());
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()).GetHash() ==
                PropertyHandle(amplitudeAttr).GetHash());
 
   EXPECT_FALSE(PropertyHandle(name_a).GetHash() ==
-               PropertyHandle(CSSPropertyOpacity).GetHash());
+               PropertyHandle(GetCSSPropertyOpacity()).GetHash());
   EXPECT_TRUE(PropertyHandle(name_a).GetHash() ==
               PropertyHandle(name_a).GetHash());
   EXPECT_FALSE(PropertyHandle(name_a).GetHash() ==
@@ -80,7 +85,7 @@ TEST_F(PropertyHandleTest, Hash) {
                PropertyHandle(exponentAttr).GetHash());
 
   EXPECT_FALSE(PropertyHandle(amplitudeAttr).GetHash() ==
-               PropertyHandle(CSSPropertyOpacity).GetHash());
+               PropertyHandle(GetCSSPropertyOpacity()).GetHash());
   EXPECT_FALSE(PropertyHandle(amplitudeAttr).GetHash() ==
                PropertyHandle(name_a).GetHash());
   EXPECT_TRUE(PropertyHandle(amplitudeAttr).GetHash() ==
@@ -92,21 +97,23 @@ TEST_F(PropertyHandleTest, Hash) {
 TEST_F(PropertyHandleTest, Accessors) {
   AtomicString name = "--x";
 
-  EXPECT_TRUE(PropertyHandle(CSSPropertyOpacity).IsCSSProperty());
+  EXPECT_TRUE(PropertyHandle(GetCSSPropertyOpacity()).IsCSSProperty());
   EXPECT_TRUE(PropertyHandle(name).IsCSSProperty());
   EXPECT_FALSE(PropertyHandle(amplitudeAttr).IsCSSProperty());
 
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity).IsSVGAttribute());
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()).IsSVGAttribute());
   EXPECT_FALSE(PropertyHandle(name).IsSVGAttribute());
   EXPECT_TRUE(PropertyHandle(amplitudeAttr).IsSVGAttribute());
 
-  EXPECT_FALSE(PropertyHandle(CSSPropertyOpacity).IsCSSCustomProperty());
+  EXPECT_FALSE(PropertyHandle(GetCSSPropertyOpacity()).IsCSSCustomProperty());
   EXPECT_TRUE(PropertyHandle(name).IsCSSCustomProperty());
   EXPECT_FALSE(PropertyHandle(amplitudeAttr).IsCSSCustomProperty());
 
-  EXPECT_EQ(PropertyHandle(CSSPropertyOpacity).CssProperty(),
-            CSSPropertyOpacity);
-  EXPECT_EQ(PropertyHandle(name).CssProperty(), CSSPropertyVariable);
+  EXPECT_EQ(
+      PropertyHandle(GetCSSPropertyOpacity()).GetCSSProperty().PropertyID(),
+      CSSPropertyOpacity);
+  EXPECT_EQ(PropertyHandle(name).GetCSSProperty().PropertyID(),
+            CSSPropertyVariable);
   EXPECT_EQ(PropertyHandle(name).CustomPropertyName(), name);
   EXPECT_EQ(PropertyHandle(amplitudeAttr).SvgAttribute(), amplitudeAttr);
 }

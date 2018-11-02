@@ -5,10 +5,11 @@
 source_set("tabs") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "tab_strip_controller+tab_switcher_animation.h",
+    "tab_strip_controller+placeholder_view.h",
     "tab_strip_controller.h",
     "tab_strip_controller.mm",
-    "tab_strip_controller_private.h",
+    "tab_strip_placeholder_view.h",
+    "tab_strip_placeholder_view.mm",
     "tab_strip_view.h",
     "tab_strip_view.mm",
     "tab_view.h",
@@ -36,6 +37,7 @@ source_set("tabs") {
     "resources:tabstrip_toggle_button_gradient",
     "//base",
     "//base:i18n",
+    "//components/favicon/ios",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
@@ -44,6 +46,7 @@ source_set("tabs") {
     "//ios/chrome/browser/ui/bubble",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/tabs/requirements",
     "//ios/chrome/browser/ui/util",
     "//ios/third_party/material_components_ios",
     "//ios/web",
@@ -52,6 +55,22 @@ source_set("tabs") {
     "//ui/gfx",
   ]
   libs = [ "UIKit.framework" ]
+}
+
+source_set("coordinator") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "tab_strip_legacy_coordinator.h",
+    "tab_strip_legacy_coordinator.mm",
+  ]
+  deps = [
+    ":tabs",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/ui/bubble",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/tabs/requirements",
+  ]
 }
 
 source_set("unit_tests") {
@@ -68,6 +87,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
     "//testing/gtest",
     "//third_party/ocmock",
   ]
@@ -86,7 +106,7 @@ source_set("eg_tests") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
-    "//ios/third_party/earl_grey",
+    "//ios/third_party/earl_grey:earl_grey+link",
     "//ui/base",
   ]
   libs = [ "XCTest.framework" ]

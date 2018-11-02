@@ -23,6 +23,8 @@
 #include "third_party/crashpad/crashpad/client/crashpad_info.h"
 #include "third_party/crashpad/crashpad/client/simulate_crash_win.h"
 
+#include "installer/vivaldi_crash_urls.h"
+
 namespace crash_reporter {
 namespace internal {
 
@@ -81,7 +83,7 @@ base::FilePath PlatformCrashpadInitialization(
     GetPlatformCrashpadAnnotations(&process_annotations);
 
 #if defined(GOOGLE_CHROME_BUILD)
-    std::string url = "https://clients2.google.com/cr/report";
+    std::string url = CRASH_REPORT_URL("/report");
 #else
     std::string url;
 #endif
@@ -205,7 +207,7 @@ static int CrashForExceptionInNonABICompliantCodeRange(
     PCONTEXT ContextRecord,
     PDISPATCHER_CONTEXT DispatcherContext) {
   EXCEPTION_POINTERS info = { ExceptionRecord, ContextRecord };
-  return CrashForException(&info);
+  return CrashForException_ExportThunk(&info);
 }
 
 // See https://msdn.microsoft.com/en-us/library/ddssxxy8.aspx
@@ -225,9 +227,7 @@ struct ExceptionHandlerRecord {
   unsigned char thunk[12];
 };
 
-// These are GetProcAddress()d from V8 binding code.
-void __cdecl RegisterNonABICompliantCodeRangeImpl(void* start,
-                                                  size_t size_in_bytes) {
+void RegisterNonABICompliantCodeRangeImpl(void* start, size_t size_in_bytes) {
   ExceptionHandlerRecord* record =
       reinterpret_cast<ExceptionHandlerRecord*>(start);
 

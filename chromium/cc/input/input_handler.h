@@ -12,7 +12,7 @@
 #include "cc/cc_export.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/main_thread_scrolling_reason.h"
-#include "cc/input/scroll_boundary_behavior.h"
+#include "cc/input/overscroll_behavior.h"
 #include "cc/input/scroll_state.h"
 #include "cc/input/scrollbar.h"
 #include "cc/input/touch_action.h"
@@ -48,7 +48,7 @@ struct CC_EXPORT InputHandlerScrollResult {
   gfx::Vector2dF unused_scroll_delta;
   // How the browser should handle the overscroll navigation based on the css
   // property scroll-boundary-behavior.
-  ScrollBoundaryBehavior scroll_boundary_behavior;
+  OverscrollBehavior overscroll_behavior;
 };
 
 class CC_EXPORT InputHandlerClient {
@@ -185,7 +185,7 @@ class CC_EXPORT InputHandler {
   virtual void PinchGestureBegin() = 0;
   virtual void PinchGestureUpdate(float magnify_delta,
                                   const gfx::Point& anchor) = 0;
-  virtual void PinchGestureEnd() = 0;
+  virtual void PinchGestureEnd(const gfx::Point& anchor, bool snap_to_min) = 0;
 
   // Request another callback to InputHandlerClient::Animate().
   virtual void SetNeedsAnimateInput() = 0;

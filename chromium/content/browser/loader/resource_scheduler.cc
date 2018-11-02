@@ -255,7 +255,7 @@ class ResourceScheduler::ScheduledResourceRequest : public ResourceThrottle {
         host_port_pair_(net::HostPortPair::FromURL(request->url())),
         weak_ptr_factory_(this) {
     DCHECK(!request_->GetUserData(kUserDataKey));
-    request_->SetUserData(kUserDataKey, base::MakeUnique<UnownedPointer>(this));
+    request_->SetUserData(kUserDataKey, std::make_unique<UnownedPointer>(this));
   }
 
   ~ScheduledResourceRequest() override {
@@ -780,6 +780,9 @@ class ResourceScheduler::Client {
 
   ShouldStartReqResult ShouldStartRequest(
       ScheduledResourceRequest* request) const {
+    if (!resource_scheduler_->enabled())
+      return START_REQUEST;
+
     const net::URLRequest& url_request = *request->url_request();
     // Syncronous requests could block the entire render, which could impact
     // user-observable Clients.
@@ -993,8 +996,9 @@ class ResourceScheduler::Client {
   base::WeakPtrFactory<ResourceScheduler::Client> weak_ptr_factory_;
 };
 
-ResourceScheduler::ResourceScheduler()
-    : priority_requests_delayable_(
+ResourceScheduler::ResourceScheduler(bool enabled)
+    : enabled_(enabled),
+      priority_requests_delayable_(
           base::FeatureList::IsEnabled(kPrioritySupportedRequestsDelayable)),
       head_priority_requests_delayable_(base::FeatureList::IsEnabled(
           kHeadPrioritySupportedRequestsDelayable)),
@@ -1161,7 +1165,7 @@ ResourceScheduler::Client* ResourceScheduler::GetClient(int child_id,
   ClientId client_id = MakeClientId(child_id, route_id);
   ClientMap::iterator client_it = client_map_.find(client_id);
   if (client_it == client_map_.end()) {
-    return NULL;
+    return nullptr;
   }
   return client_it->second;
 }

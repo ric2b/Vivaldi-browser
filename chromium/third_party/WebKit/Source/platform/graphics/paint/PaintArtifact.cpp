@@ -25,16 +25,16 @@ void ComputeChunkBoundsAndOpaqueness(const DisplayItemList& display_items,
     SkRegion known_to_be_opaque_region;
     for (const DisplayItem& item : display_items.ItemsInPaintChunk(chunk)) {
       bounds.Unite(FloatRect(item.Client().VisualRect()));
-      if (!item.IsDrawing())
+      if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
+          !item.IsDrawing())
         continue;
       const auto& drawing = static_cast<const DrawingDisplayItem&>(item);
       if (drawing.GetPaintRecord() && drawing.KnownToBeOpaque()) {
-        // TODO(pdr): It may be too conservative to round in to the
-        // EnclosedIntRect.
-        SkIRect conservative_rounded_rect;
-        const SkRect& record_bounds = drawing.GetPaintRecordBounds();
-        record_bounds.roundIn(&conservative_rounded_rect);
-        known_to_be_opaque_region.op(conservative_rounded_rect,
+        // TODO(wkorman): Confirm the visual rect is in the right
+        // space. It looks correct now, and was perhaps incorrect
+        // previously?
+        LayoutRect visual_rect = drawing.VisualRect();
+        known_to_be_opaque_region.op(SkIRect(IntRect(visual_rect)),
                                      SkRegion::kUnion_Op);
       }
     }
@@ -52,7 +52,8 @@ PaintArtifact::PaintArtifact(DisplayItemList display_items,
                              Vector<PaintChunk> paint_chunks)
     : display_item_list_(std::move(display_items)),
       paint_chunks_(std::move(paint_chunks)) {
-  ComputeChunkBoundsAndOpaqueness(display_item_list_, paint_chunks_);
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
+    ComputeChunkBoundsAndOpaqueness(display_item_list_, paint_chunks_);
 }
 
 PaintArtifact::PaintArtifact(PaintArtifact&& source)
@@ -77,22 +78,21 @@ size_t PaintArtifact::ApproximateUnsharedMemoryUsage() const {
          paint_chunks_.capacity() * sizeof(paint_chunks_[0]);
 }
 
-void PaintArtifact::Replay(const FloatRect& bounds,
-                           GraphicsContext& graphics_context) const {
-  TRACE_EVENT0("blink,benchmark", "PaintArtifact::replay");
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+void PaintArtifact::Replay(GraphicsContext& graphics_context,
+                           const PropertyTreeState& replay_state) const {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+    TRACE_EVENT0("blink,benchmark", "PaintArtifact::replay");
     for (const DisplayItem& display_item : display_item_list_)
       display_item.Replay(graphics_context);
   } else {
-    Replay(bounds, *graphics_context.Canvas());
+    Replay(*graphics_context.Canvas(), replay_state);
   }
 }
 
-void PaintArtifact::Replay(const FloatRect& bounds,
-                           PaintCanvas& canvas,
+void PaintArtifact::Replay(PaintCanvas& canvas,
                            const PropertyTreeState& replay_state) const {
   TRACE_EVENT0("blink,benchmark", "PaintArtifact::replay");
-  DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+  DCHECK(RuntimeEnabledFeatures::SlimmingPaintV175Enabled());
   Vector<const PaintChunk*> pointer_paint_chunks;
   pointer_paint_chunks.ReserveInitialCapacity(PaintChunks().size());
 

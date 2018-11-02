@@ -41,10 +41,12 @@ class Tracker;
 // If DESKTOP, shows "Request Mobile Site" in enabled state.
 @property(nonatomic, assign) web::UserAgentType userAgentType;
 
+// The view controller from which to present other view controllers.
+@property(nonatomic, weak, readonly) UIViewController* baseViewController;
 // View that the menu will be displayed in.
-@property(nonatomic, readonly) UIView* displayView;
+@property(nonatomic, weak, readonly) UIView* displayView;
 // Button from which popup menu will be opened.
-@property(nonatomic, assign) UIButton* toolsMenuButton;
+@property(nonatomic, weak) UIButton* toolsMenuButton;
 // Menu's origin relative to the |displayView|'s coordinate system, calculated
 // from |toolsMenuButton| and |displayView|.
 @property(nonatomic, readonly) CGRect sourceRect;
@@ -53,7 +55,7 @@ class Tracker;
 @property(nonatomic, readonly) UIEdgeInsets toolsButtonInsets;
 // Notifier for changes to the reading list requiring the menu to be updated.
 // Menus needing to be updated should set themselves as this object's delegate.
-@property(nonatomic, assign) ReadingListMenuNotifier* readingListMenuNotifier;
+@property(nonatomic, weak) ReadingListMenuNotifier* readingListMenuNotifier;
 // Records the time that the tools menu was requested; value is the time
 // interval since the NSDate referenceDate.
 @property(nonatomic, assign) NSTimeInterval requestStartTime;
@@ -64,8 +66,10 @@ class Tracker;
 
 // Initialize a ToolsMenuContext instance with default values. |displayView| is
 // the weakly-held parent view within which the popup tools menu using this
-// context will be displayed.
+// context will be displayed. |baseViewController| is a weakly-held view
+// controller from which to present other view controllers.
 - (instancetype)initWithDisplayView:(UIView*)displayView
+                 baseViewController:(UIViewController*)baseViewController
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

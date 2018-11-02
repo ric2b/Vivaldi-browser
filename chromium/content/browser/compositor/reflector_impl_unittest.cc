@@ -10,11 +10,11 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "cc/output/output_surface_frame.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/reflector_texture.h"
@@ -25,6 +25,7 @@
 #include "ui/compositor/test/context_factories_for_test.h"
 
 #if defined(USE_OZONE)
+#include "cc/output/overlay_candidate.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator_ozone.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
 #endif  // defined(USE_OZONE)
@@ -35,12 +36,12 @@ class FakeTaskRunner : public base::SingleThreadTaskRunner {
  public:
   FakeTaskRunner() {}
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
                                   base::OnceClosure task,
                                   base::TimeDelta delay) override {
     return true;
   }
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     return true;
@@ -85,7 +86,7 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
 
   void SetFlip(bool flip) { capabilities_.flipped_output_surface = flip; }
 
-  void BindToClient(cc::OutputSurfaceClient* client) override {}
+  void BindToClient(viz::OutputSurfaceClient* client) override {}
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {}
@@ -95,7 +96,7 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override {}
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override {}
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return GL_RGB; }
   bool IsDisplayedAsOverlayPlane() const override { return false; }
   unsigned GetOverlayTextureId() const override { return 0; }
@@ -133,16 +134,17 @@ class ReflectorImplTest : public testing::Test {
     ui::ContextFactory* context_factory = nullptr;
     ui::ContextFactoryPrivate* context_factory_private = nullptr;
 
-    message_loop_ = base::MakeUnique<base::MessageLoop>();
+    message_loop_ = std::make_unique<base::MessageLoop>();
     ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
                                          &context_factory_private);
-    ImageTransportFactory::InitializeForUnitTests(
-        base::MakeUnique<NoTransportImageTransportFactory>());
+    ImageTransportFactory::SetFactory(
+        std::make_unique<NoTransportImageTransportFactory>());
     task_runner_ = message_loop_->task_runner();
     compositor_task_runner_ = new FakeTaskRunner();
-    begin_frame_source_.reset(new viz::DelayBasedBeginFrameSource(
-        base::MakeUnique<viz::DelayBasedTimeSource>(
-            compositor_task_runner_.get())));
+    begin_frame_source_ = std::make_unique<viz::DelayBasedBeginFrameSource>(
+        std::make_unique<viz::DelayBasedTimeSource>(
+            compositor_task_runner_.get()),
+        viz::BeginFrameSource::kNotRestartableId);
     compositor_.reset(new ui::Compositor(
         context_factory_private->AllocateFrameSinkId(), context_factory,
         context_factory_private, compositor_task_runner_.get(),
@@ -153,7 +155,7 @@ class ReflectorImplTest : public testing::Test {
     auto context_provider = cc::TestContextProvider::Create();
     context_provider->BindToCurrentThread();
     output_surface_ =
-        base::MakeUnique<TestOutputSurface>(std::move(context_provider));
+        std::make_unique<TestOutputSurface>(std::move(context_provider));
 
     root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
     compositor_->SetRootLayer(root_layer_.get());
@@ -165,7 +167,7 @@ class ReflectorImplTest : public testing::Test {
   }
 
   void SetUpReflector() {
-    reflector_ = base::MakeUnique<ReflectorImpl>(compositor_.get(),
+    reflector_ = std::make_unique<ReflectorImpl>(compositor_.get(),
                                                  mirroring_layer_.get());
     reflector_->OnSourceSurfaceReady(output_surface_.get());
   }
@@ -173,9 +175,9 @@ class ReflectorImplTest : public testing::Test {
   void TearDown() override {
     if (reflector_)
       reflector_->RemoveMirroringLayer(mirroring_layer_.get());
-    viz::TextureMailbox mailbox;
+    viz::TransferableResource resource;
     std::unique_ptr<viz::SingleReleaseCallback> release;
-    if (mirroring_layer_->PrepareTextureMailbox(&mailbox, &release)) {
+    if (mirroring_layer_->PrepareTransferableResource(&resource, &release)) {
       release->Run(gpu::SyncToken(), false);
     }
     compositor_.reset();

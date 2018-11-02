@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -42,9 +44,9 @@ TEST(AutocompleteMatchTest, MoreRelevant) {
     {  -5, -10, true },
   };
 
-  AutocompleteMatch m1(NULL, 0, false,
+  AutocompleteMatch m1(nullptr, 0, false,
                        AutocompleteMatchType::URL_WHAT_YOU_TYPED);
-  AutocompleteMatch m2(NULL, 0, false,
+  AutocompleteMatch m2(nullptr, 0, false,
                        AutocompleteMatchType::URL_WHAT_YOU_TYPED);
 
   for (size_t i = 0; i < arraysize(cases); ++i) {
@@ -125,64 +127,6 @@ TEST(AutocompleteMatchTest, MergeClassifications) {
                   "0,2," "1,0," "5,7," "6,1," "17,0"))));
 }
 
-TEST(AutocompleteMatchTest, InlineNontailPrefix) {
-  struct TestData {
-    std::string contents;
-    ACMatchClassifications before_contents_class, after_contents_class;
-  } cases[] = {
-      {"1234567890123456",
-       // should just shift the NONE
-       {{0, ACMatchClassification::NONE}},
-       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::NONE}}},
-      {"1234567890123456",
-       // should just shift the NONE
-       {{0, ACMatchClassification::NONE}, {10, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM},
-        {8, ACMatchClassification::NONE},
-        {10, ACMatchClassification::MATCH}}},
-      {"1234567890123456",
-       // should nuke NONE
-       {{0, ACMatchClassification::NONE}, {8, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
-      {"1234567890123456",
-       // should nuke NONE and shift MATCH
-       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
-      {"1234567890123456",
-       // should nuke NONE, shift MATCH and preserve NONE
-       {{0, ACMatchClassification::NONE},
-        {4, ACMatchClassification::MATCH},
-        {12, ACMatchClassification::NONE}},
-       {{0, ACMatchClassification::DIM},
-        {8, ACMatchClassification::MATCH},
-        {12, ACMatchClassification::NONE}}},
-      {"12345678",
-       // should have only DIM when done
-       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM}}},
-      {"1234567890123456",
-       // should nuke several classifications and shift MATCH
-       {{0, ACMatchClassification::NONE},
-        {1, ACMatchClassification::NONE},
-        {2, ACMatchClassification::NONE},
-        {4, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
-      {"1234567190123456",
-       // should do nothing since prefix doesn't match
-       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}}},
-  };
-  for (const auto& test_case : cases) {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED;
-    match.contents = base::UTF8ToUTF16(test_case.contents);
-    match.contents_class = test_case.before_contents_class;
-    match.InlineTailPrefix(base::UTF8ToUTF16("12345678"));
-    EXPECT_TRUE(EqualClassifications(match.contents_class,
-                                     test_case.after_contents_class));
-  }
-}
-
 TEST(AutocompleteMatchTest, InlineTailPrefix) {
   struct TestData {
     std::string before_contents, after_contents;
@@ -190,9 +134,9 @@ TEST(AutocompleteMatchTest, InlineTailPrefix) {
   } cases[] = {
       {"90123456",
        "1234567890123456",
-       // should prepend DIM and offset rest
+       // should prepend INVISIBLE and offset rest
        {{0, ACMatchClassification::NONE}, {2, ACMatchClassification::MATCH}},
-       {{0, ACMatchClassification::DIM},
+       {{0, ACMatchClassification::INVISIBLE},
         {8, ACMatchClassification::NONE},
         {10, ACMatchClassification::MATCH}}},
   };
@@ -205,6 +149,100 @@ TEST(AutocompleteMatchTest, InlineTailPrefix) {
     EXPECT_EQ(match.contents, base::UTF8ToUTF16(test_case.after_contents));
     EXPECT_TRUE(EqualClassifications(match.contents_class,
                                      test_case.after_contents_class));
+  }
+}
+
+TEST(AutocompleteMatchTest, GetMatchComponents) {
+  struct MatchComponentsTestData {
+    const std::string url;
+    std::vector<std::string> input_terms;
+    bool expected_match_in_scheme;
+    bool expected_match_in_subdomain;
+    bool expected_match_after_host;
+  };
+
+  MatchComponentsTestData test_cases[] = {
+      // Match in scheme.
+      {"http://www.google.com", {"ht"}, true, false, false},
+      // Match within the scheme, but not starting at the beginning, i.e. "ttp".
+      {"http://www.google.com", {"tp"}, false, false, false},
+      // Sanity check that HTTPS still works.
+      {"https://www.google.com", {"http"}, true, false, false},
+
+      // Match within the subdomain.
+      {"http://www.google.com", {"www"}, false, true, false},
+      {"http://www.google.com", {"www."}, false, true, false},
+      // Don't consider matches on the '.' delimiter as a match_in_subdomain.
+      {"http://www.google.com", {"."}, false, false, false},
+      {"http://www.google.com", {".goo"}, false, false, false},
+      // Matches within the domain.
+      {"http://www.google.com", {"goo"}, false, false, false},
+      // Verify that in private registries, we detect matches in subdomains.
+      {"http://www.appspot.com", {"www"}, false, true, false},
+
+      // Matches spanning the scheme, subdomain, and domain.
+      {"http://www.google.com", {"http://www.goo"}, true, true, false},
+      {"http://www.google.com", {"ht", "www"}, true, true, false},
+      // But we should not flag match_in_subdomain if there is no subdomain.
+      {"http://google.com", {"http://goo"}, true, false, false},
+
+      // Matches in the path, query, and ref.
+      {"http://google.com/abc?def=ghi#jkl", {"abc"}, false, false, true},
+      {"http://google.com/abc?def=ghi#jkl", {"ghi"}, false, false, true},
+      {"http://google.com/abc?def=ghi#jkl", {"jkl"}, false, false, true},
+      // Match spanning an arbitrary portion of the URL after the host.
+      {"http://google.com/abc?def=ghi#jkl", {"bc?def=g"}, false, false, true},
+      // Don't consider the '/' delimiter as a match_in_path.
+      {"http://google.com/abc?def=ghi#jkl", {"com/"}, false, false, false},
+      // Match on the query and ref only
+      {"http://google.com?def", {"def"}, false, false, true},
+      {"http://google.com#jkl", {"jkl"}, false, false, true},
+
+      // Matches spanning the subdomain and path.
+      {"http://www.google.com/abc", {"www.google.com/ab"}, false, true, true},
+      {"http://www.google.com/abc", {"www", "ab"}, false, true, true},
+
+      // Matches spanning the scheme, subdomain, and path.
+      {"http://www.google.com/abc",
+       {"http://www.google.com/ab"},
+       true,
+       true,
+       true},
+      {"http://www.google.com/abc", {"ht", "ww", "ab"}, true, true, true},
+
+      // Intranet sites.
+      {"http://foobar/biz", {"foobar"}, false, false, false},
+      {"http://foobar/biz", {"biz"}, false, false, true},
+
+      // Ensure something sane happens when the URL input is invalid.
+      {"", {""}, false, false, false},
+      {"foobar", {"bar"}, false, false, false},
+  };
+  for (auto& test_case : test_cases) {
+    SCOPED_TRACE(testing::Message()
+                 << " url=" << test_case.url << " first input term="
+                 << test_case.input_terms[0] << " expected_match_in_scheme="
+                 << test_case.expected_match_in_scheme
+                 << " expected_match_in_subdomain="
+                 << test_case.expected_match_in_subdomain
+                 << " expected_match_after_host="
+                 << test_case.expected_match_after_host);
+    bool match_in_scheme = false;
+    bool match_in_subdomain = false;
+    bool match_after_host = false;
+    std::vector<AutocompleteMatch::MatchPosition> match_positions;
+    for (auto& term : test_case.input_terms) {
+      size_t start = test_case.url.find(term);
+      ASSERT_NE(std::string::npos, start);
+      size_t end = start + term.size();
+      match_positions.push_back(std::make_pair(start, end));
+    }
+    AutocompleteMatch::GetMatchComponents(GURL(test_case.url), match_positions,
+                                          &match_in_scheme, &match_in_subdomain,
+                                          &match_after_host);
+    EXPECT_EQ(test_case.expected_match_in_scheme, match_in_scheme);
+    EXPECT_EQ(test_case.expected_match_in_subdomain, match_in_subdomain);
+    EXPECT_EQ(test_case.expected_match_after_host, match_after_host);
   }
 }
 
@@ -232,7 +270,7 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
                 url_formatter::FormatUrl(GURL(url), format_types,
                                          net::UnescapeRule::SPACES, nullptr,
                                          nullptr, nullptr));
-    };
+    }
   };
 
   FormatUrlTestData normal_cases[] = {
@@ -295,25 +333,25 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
 
 TEST(AutocompleteMatchTest, SupportsDeletion) {
   // A non-deletable match with no duplicates.
-  AutocompleteMatch m(NULL, 0, false,
+  AutocompleteMatch m(nullptr, 0, false,
                       AutocompleteMatchType::URL_WHAT_YOU_TYPED);
   EXPECT_FALSE(m.SupportsDeletion());
 
   // A deletable match with no duplicates.
-  AutocompleteMatch m1(NULL, 0, true,
+  AutocompleteMatch m1(nullptr, 0, true,
                        AutocompleteMatchType::URL_WHAT_YOU_TYPED);
   EXPECT_TRUE(m1.SupportsDeletion());
 
   // A non-deletable match, with non-deletable duplicates.
   m.duplicate_matches.push_back(AutocompleteMatch(
-      NULL, 0, false, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
+      nullptr, 0, false, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
   m.duplicate_matches.push_back(AutocompleteMatch(
-      NULL, 0, false, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
+      nullptr, 0, false, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
   EXPECT_FALSE(m.SupportsDeletion());
 
   // A non-deletable match, with at least one deletable duplicate.
   m.duplicate_matches.push_back(AutocompleteMatch(
-      NULL, 0, true, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
+      nullptr, 0, true, AutocompleteMatchType::URL_WHAT_YOU_TYPED));
   EXPECT_TRUE(m.SupportsDeletion());
 }
 
@@ -370,10 +408,9 @@ TEST(AutocompleteMatchTest, Duplicates) {
   for (size_t i = 0; i < arraysize(cases); ++i) {
     SCOPED_TRACE("input=" + base::WideToUTF8(cases[i].input) +
                  " url1=" + cases[i].url1 + " url2=" + cases[i].url2);
-    AutocompleteInput input(
-        base::WideToUTF16(cases[i].input), base::string16::npos, std::string(),
-        GURL(), base::string16(), metrics::OmniboxEventProto::INVALID_SPEC,
-        false, false, true, true, false, TestSchemeClassifier());
+    AutocompleteInput input(base::WideToUTF16(cases[i].input),
+                            metrics::OmniboxEventProto::OTHER,
+                            TestSchemeClassifier());
     AutocompleteMatch m1(nullptr, 100, false,
                          AutocompleteMatchType::URL_WHAT_YOU_TYPED);
     m1.destination_url = GURL(cases[i].url1);

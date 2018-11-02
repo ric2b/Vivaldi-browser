@@ -47,12 +47,32 @@ void NGLineInfo::SetLineStyle(const NGInlineNode& node,
   }
 }
 
-void NGLineInfo::SetLineLocation(LayoutUnit line_left,
-                                 LayoutUnit available_width,
-                                 LayoutUnit line_top) {
-  line_left_ = line_left;
+#if DCHECK_IS_ON()
+void NGInlineItemResult::CheckConsistency() const {
+  DCHECK(item);
+  if (item->Type() == NGInlineItem::kText) {
+    DCHECK(shape_result);
+    DCHECK_LT(start_offset, end_offset);
+    DCHECK_EQ(end_offset - start_offset, shape_result->NumCharacters());
+    DCHECK_EQ(start_offset, shape_result->StartIndexForResult());
+    DCHECK_EQ(end_offset, shape_result->EndIndexForResult());
+  }
+}
+#endif
+
+void NGLineInfo::SetLineBfcOffset(NGBfcOffset line_bfc_offset,
+                                  LayoutUnit available_width,
+                                  LayoutUnit width) {
+  line_bfc_offset_ = line_bfc_offset;
   available_width_ = available_width;
-  line_top_ = line_top;
+  width_ = width;
+}
+
+void NGLineInfo::SetLineEndShapeResult(
+    scoped_refptr<ShapeResult> result,
+    scoped_refptr<const ComputedStyle> style) {
+  line_end_shape_result_ = std::move(result);
+  line_end_style_ = std::move(style);
 }
 
 }  // namespace blink

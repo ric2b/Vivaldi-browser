@@ -19,6 +19,7 @@
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/nacl/common/features.h"
 #include "content/common/frame_messages.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/pepper/host_dispatcher_wrapper.h"
@@ -33,6 +34,7 @@
 #include "content/renderer/pepper/ppb_var_deprecated_impl.h"
 #include "content/renderer/pepper/ppb_video_decoder_impl.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
+#include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "ppapi/c/dev/ppb_audio_input_dev.h"
 #include "ppapi/c/dev/ppb_audio_output_dev.h"
@@ -170,7 +172,7 @@ namespace {
 // TODO(raymes): I'm not sure if it is completely necessary to leak the
 // HostGlobals. Figure out the shutdown sequence and find a way to do this
 // more elegantly.
-HostGlobals* host_globals = NULL;
+HostGlobals* host_globals = nullptr;
 
 // Maintains all currently loaded plugin libs for validating PP_Module
 // identifiers.
@@ -295,9 +297,7 @@ PP_Bool ReadImageData(PP_Resource device_context_2d,
 }
 
 void RunMessageLoop(PP_Instance instance) {
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
-  base::RunLoop().Run();
+  base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).Run();
 }
 
 void QuitMessageLoop(PP_Instance instance) {
@@ -428,7 +428,7 @@ const void* InternalGetInterface(const char* name) {
     if (strcmp(name, PPB_TESTING_PRIVATE_INTERFACE) == 0)
       return &testing_interface;
   }
-  return NULL;
+  return nullptr;
 }
 
 const void* GetInterface(const char* name) {
@@ -497,13 +497,13 @@ PluginModule::PluginModule(const std::string& name,
     : callback_tracker_(new ppapi::CallbackTracker),
       is_in_destructor_(false),
       is_crashed_(false),
-      broker_(NULL),
-      library_(NULL),
+      broker_(nullptr),
+      library_(nullptr),
       name_(name),
       version_(version),
       path_(path),
       permissions_(ppapi::PpapiPermissions::GetForCommandLine(perms.GetBits())),
-      reserve_instance_id_(NULL) {
+      reserve_instance_id_(nullptr) {
   // Ensure the globals object is created.
   if (!host_globals)
     host_globals = new HostGlobals;
@@ -566,7 +566,7 @@ bool PluginModule::InitAsInternalPlugin(
 }
 
 bool PluginModule::InitAsLibrary(const base::FilePath& path) {
-  base::NativeLibrary library = base::LoadNativeLibrary(path, NULL);
+  base::NativeLibrary library = base::LoadNativeLibrary(path, nullptr);
   if (!library)
     return false;
 
@@ -641,7 +641,7 @@ PepperPluginInstanceImpl* PluginModule::CreateInstance(
       render_frame, this, container, plugin_url);
   if (!instance) {
     LOG(WARNING) << "Plugin doesn't support instance interface, failing.";
-    return NULL;
+    return nullptr;
   }
   if (host_dispatcher_wrapper_)
     host_dispatcher_wrapper_->AddInstance(instance->pp_instance());
@@ -661,7 +661,7 @@ const void* PluginModule::GetPluginInterface(const char* name) const {
 
   // In-process plugins.
   if (!entry_points_.get_interface)
-    return NULL;
+    return nullptr;
   return entry_points_.get_interface(name);
 }
 
@@ -723,12 +723,24 @@ RendererPpapiHostImpl* PluginModule::CreateOutOfProcessModule(
       path, render_frame->GetRoutingID(), plugin_child_id));
   std::unique_ptr<HostDispatcherWrapper> dispatcher(new HostDispatcherWrapper(
       this, peer_pid, plugin_child_id, permissions, is_external));
-  if (!dispatcher->Init(channel_handle,
-                        &GetInterface,
+
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  if (!render_thread)
+    return nullptr;
+  scoped_refptr<gpu::GpuChannelHost> channel =
+      render_thread->EstablishGpuChannelSync();
+  // If no channel is established, feature statuses are unknown and disabled.
+  const gpu::GpuFeatureInfo default_gpu_feature_info;
+  const gpu::GpuFeatureInfo& gpu_feature_info =
+      channel ? channel->gpu_feature_info() : default_gpu_feature_info;
+
+  if (!dispatcher->Init(channel_handle, &GetInterface,
                         ppapi::Preferences(PpapiPreferencesBuilder::Build(
-                            render_frame->render_view()->webkit_preferences())),
-                        hung_filter.get()))
-    return NULL;
+                            render_frame->render_view()->webkit_preferences(),
+                            gpu_feature_info)),
+                        hung_filter.get())) {
+    return nullptr;
+  }
 
   RendererPpapiHostImpl* host_impl =
       RendererPpapiHostImpl::CreateOnModuleForOutOfProcess(
@@ -742,18 +754,18 @@ RendererPpapiHostImpl* PluginModule::CreateOutOfProcessModule(
 // static
 void PluginModule::ResetHostGlobalsForTest() {
   delete host_globals;
-  host_globals = NULL;
+  host_globals = nullptr;
 }
 
 bool PluginModule::InitializeModule(
     const PepperPluginInfo::EntryPoints& entry_points) {
   DCHECK(!host_dispatcher_wrapper_.get()) << "Don't call for proxied modules.";
-  DCHECK(entry_points.initialize_module != NULL);
+  DCHECK(entry_points.initialize_module != nullptr);
   int retval = entry_points.initialize_module(pp_module(), &GetInterface);
   if (retval != 0) {
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
     LOG(WARNING) << "PPP_InitializeModule returned failure " << retval;
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
     return false;
   }
   return true;

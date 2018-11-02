@@ -28,7 +28,7 @@ namespace media {
 class AudioFileReaderTest : public testing::Test {
  public:
   AudioFileReaderTest() : packet_verification_disabled_(false) {}
-  ~AudioFileReaderTest() override {}
+  ~AudioFileReaderTest() override = default;
 
   void Initialize(const char* filename) {
     data_ = ReadTestDataFile(filename);
@@ -72,9 +72,6 @@ class AudioFileReaderTest : public testing::Test {
     for (int i = 0; i < kTestPasses; ++i) {
       for (int j = 0; j < kReads; ++j) {
         ASSERT_TRUE(reader_->ReadPacketForTesting(&packet));
-
-        // Remove metadata from the packet data section before hashing.
-        av_packet_split_side_data(&packet);
 
         // On the first pass save the MD5 hash of each packet, on subsequent
         // passes ensure it matches.
@@ -138,7 +135,7 @@ class AudioFileReaderTest : public testing::Test {
 
  protected:
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
+  IPCFactory::ScopedDisableForTesting ipc_audio_decoder_disabler_;
 #endif
   scoped_refptr<DecoderBuffer> data_;
   std::unique_ptr<InMemoryUrlProtocol> protocol_;

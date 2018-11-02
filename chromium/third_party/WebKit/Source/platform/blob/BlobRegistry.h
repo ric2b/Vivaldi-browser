@@ -32,10 +32,10 @@
 #define BlobRegistry_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -55,7 +55,7 @@ class PLATFORM_EXPORT BlobRegistry {
   static void RemoveBlobDataRef(const String& uuid);
   static void RegisterPublicBlobURL(SecurityOrigin*,
                                     const KURL&,
-                                    PassRefPtr<BlobDataHandle>);
+                                    scoped_refptr<BlobDataHandle>);
   static void RevokePublicBlobURL(const KURL&);
 };
 

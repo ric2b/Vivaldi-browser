@@ -15,6 +15,7 @@
 #include "base/process/kill.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/test/multiprocess_test.h"
 #include "base/threading/platform_thread.h"
@@ -33,14 +34,18 @@
 #include <unistd.h>
 #endif
 
+#if defined(OS_LINUX)
+#include <sys/syscall.h>
+#endif
+
 #if defined(OS_WIN)
 #include "base/win/scoped_handle.h"
 #endif
 
 #if defined(OS_FUCHSIA)
-#include <magenta/process.h>
-#include <magenta/syscalls.h>
-#include "base/fuchsia/scoped_mx_handle.h"
+#include <zircon/process.h>
+#include <zircon/syscalls.h>
+#include "base/fuchsia/scoped_zx_handle.h"
 #endif
 
 namespace base {
@@ -54,7 +59,7 @@ namespace {
 class MultipleThreadMain : public PlatformThread::Delegate {
  public:
   explicit MultipleThreadMain(int16_t id) : id_(id) {}
-  ~MultipleThreadMain() override {}
+  ~MultipleThreadMain() override = default;
 
   static void CleanUp() {
     SharedMemory memory;
@@ -125,8 +130,8 @@ TEST(SharedMemoryTest, OpenClose) {
   EXPECT_NE(memory1.memory(), memory2.memory());  // Compare the pointers.
 
   // Make sure we don't segfault. (it actually happened!)
-  ASSERT_NE(memory1.memory(), static_cast<void*>(NULL));
-  ASSERT_NE(memory2.memory(), static_cast<void*>(NULL));
+  ASSERT_NE(memory1.memory(), static_cast<void*>(nullptr));
+  ASSERT_NE(memory2.memory(), static_cast<void*>(nullptr));
 
   // Write data to the first memory segment, verify contents of second.
   memset(memory1.memory(), '1', kDataSize);
@@ -222,7 +227,7 @@ TEST(SharedMemoryTest, CloseNoUnmap) {
   SharedMemory memory;
   ASSERT_TRUE(memory.CreateAndMapAnonymous(kDataSize));
   char* ptr = static_cast<char*>(memory.memory());
-  ASSERT_NE(ptr, static_cast<void*>(NULL));
+  ASSERT_NE(ptr, static_cast<void*>(nullptr));
   memset(ptr, 'G', kDataSize);
 
   memory.Close();
@@ -374,16 +379,16 @@ TEST(SharedMemoryTest, GetReadOnlyHandle) {
   (void)handle;
 #elif defined(OS_FUCHSIA)
   uintptr_t addr;
-  EXPECT_NE(MX_OK, mx_vmar_map(mx_vmar_root_self(), 0, handle.GetHandle(), 0,
-                               contents.size(), MX_VM_FLAG_PERM_WRITE, &addr))
+  EXPECT_NE(ZX_OK, zx_vmar_map(zx_vmar_root_self(), 0, handle.GetHandle(), 0,
+                               contents.size(), ZX_VM_FLAG_PERM_WRITE, &addr))
       << "Shouldn't be able to map as writable.";
 
-  ScopedMxHandle duped_handle;
-  EXPECT_NE(MX_OK, mx_handle_duplicate(handle.GetHandle(), MX_RIGHT_WRITE,
+  ScopedZxHandle duped_handle;
+  EXPECT_NE(ZX_OK, zx_handle_duplicate(handle.GetHandle(), ZX_RIGHT_WRITE,
                                        duped_handle.receive()))
       << "Shouldn't be able to duplicate the handle into a writable one.";
 
-  EXPECT_EQ(MX_OK, mx_handle_duplicate(handle.GetHandle(), MX_RIGHT_READ,
+  EXPECT_EQ(ZX_OK, zx_handle_duplicate(handle.GetHandle(), ZX_RIGHT_READ,
                                        duped_handle.receive()))
       << "Should be able to duplicate the handle into a readable one.";
 #elif defined(OS_POSIX)
@@ -392,7 +397,7 @@ TEST(SharedMemoryTest, GetReadOnlyHandle) {
       << "The descriptor itself should be read-only.";
 
   errno = 0;
-  void* writable = mmap(NULL, contents.size(), PROT_READ | PROT_WRITE,
+  void* writable = mmap(nullptr, contents.size(), PROT_READ | PROT_WRITE,
                         MAP_SHARED, handle_fd, 0);
   int mmap_errno = errno;
   EXPECT_EQ(MAP_FAILED, writable)
@@ -456,6 +461,50 @@ TEST(SharedMemoryTest, ShareToSelf) {
                         contents.size()));
 }
 
+TEST(SharedMemoryTest, ShareWithMultipleInstances) {
+  static const StringPiece kContents = "Hello World";
+
+  SharedMemory shmem;
+  ASSERT_TRUE(shmem.CreateAndMapAnonymous(kContents.size()));
+  // We do not need to unmap |shmem| to let |shared| map.
+  const StringPiece shmem_contents(static_cast<const char*>(shmem.memory()),
+                                   shmem.requested_size());
+
+  SharedMemoryHandle shared_handle = shmem.handle().Duplicate();
+  ASSERT_TRUE(shared_handle.IsValid());
+  SharedMemory shared(shared_handle, /*readonly=*/false);
+  ASSERT_TRUE(shared.Map(kContents.size()));
+  // The underlying shared memory is created by |shmem|, so both
+  // |shared|.requested_size() and |readonly|.requested_size() are zero.
+  ASSERT_EQ(0U, shared.requested_size());
+  const StringPiece shared_contents(static_cast<const char*>(shared.memory()),
+                                    shmem.requested_size());
+
+  shared_handle = shmem.handle().Duplicate();
+  ASSERT_TRUE(shared_handle.IsValid());
+  ASSERT_TRUE(shared_handle.OwnershipPassesToIPC());
+  SharedMemory readonly(shared_handle, /*readonly=*/true);
+  ASSERT_TRUE(readonly.Map(kContents.size()));
+  ASSERT_EQ(0U, readonly.requested_size());
+  const StringPiece readonly_contents(
+      static_cast<const char*>(readonly.memory()),
+      shmem.requested_size());
+
+  // |shmem| should be able to update the content.
+  memcpy(shmem.memory(), kContents.data(), kContents.size());
+
+  ASSERT_EQ(kContents, shmem_contents);
+  ASSERT_EQ(kContents, shared_contents);
+  ASSERT_EQ(kContents, readonly_contents);
+
+  // |shared| should also be able to update the content.
+  memcpy(shared.memory(), ToLowerASCII(kContents).c_str(), kContents.size());
+
+  ASSERT_EQ(StringPiece(ToLowerASCII(kContents)), shmem_contents);
+  ASSERT_EQ(StringPiece(ToLowerASCII(kContents)), shared_contents);
+  ASSERT_EQ(StringPiece(ToLowerASCII(kContents)), readonly_contents);
+}
+
 TEST(SharedMemoryTest, MapAt) {
   ASSERT_TRUE(SysInfo::VMAllocationGranularity() >= sizeof(uint32_t));
   const size_t kCount = SysInfo::VMAllocationGranularity();
@@ -464,7 +513,7 @@ TEST(SharedMemoryTest, MapAt) {
   SharedMemory memory;
   ASSERT_TRUE(memory.CreateAndMapAnonymous(kDataSize));
   uint32_t* ptr = static_cast<uint32_t*>(memory.memory());
-  ASSERT_NE(ptr, static_cast<void*>(NULL));
+  ASSERT_NE(ptr, static_cast<void*>(nullptr));
 
   for (size_t i = 0; i < kCount; ++i) {
     ptr[i] = i;
@@ -476,7 +525,7 @@ TEST(SharedMemoryTest, MapAt) {
   ASSERT_TRUE(memory.MapAt(offset, kDataSize - offset));
   offset /= sizeof(uint32_t);
   ptr = static_cast<uint32_t*>(memory.memory());
-  ASSERT_NE(ptr, static_cast<void*>(NULL));
+  ASSERT_NE(ptr, static_cast<void*>(nullptr));
   for (size_t i = offset; i < kCount; ++i) {
     EXPECT_EQ(ptr[i - offset], i);
   }
@@ -523,6 +572,7 @@ TEST(SharedMemoryTest, AnonymousExecutable) {
 // shared memory implementation. So the tests about file permissions are not
 // included on Android. Fuchsia does not use a file-backed shared memory
 // implementation.
+
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 // Set a umask and restore the old mask on destruction.

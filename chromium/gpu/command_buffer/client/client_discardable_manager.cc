@@ -135,40 +135,54 @@ ClientDiscardableManager::ClientDiscardableManager()
     : allocation_size_(AllocationSize()) {}
 ClientDiscardableManager::~ClientDiscardableManager() = default;
 
-ClientDiscardableHandle ClientDiscardableManager::InitializeTexture(
-    CommandBuffer* command_buffer,
-    uint32_t texture_id) {
-  DCHECK(texture_handles_.find(texture_id) == texture_handles_.end());
-
+ClientDiscardableHandle::Id ClientDiscardableManager::CreateHandle(
+    CommandBuffer* command_buffer) {
   scoped_refptr<Buffer> buffer;
+  int32_t shm_id;
   uint32_t offset = 0;
-  int32_t shm_id = 0;
-  FindAllocation(command_buffer, &buffer, &shm_id, &offset);
-  uint32_t byte_offset = offset * element_size_;
+  if (!FindAllocation(command_buffer, &buffer, &shm_id, &offset)) {
+    // This can fail if we've lost context, return an invalid Id.
+    return ClientDiscardableHandle::Id();
+  }
+
+  DCHECK_LT(offset * element_size_, std::numeric_limits<uint32_t>::max());
+  uint32_t byte_offset = static_cast<uint32_t>(offset * element_size_);
   ClientDiscardableHandle handle(std::move(buffer), byte_offset, shm_id);
-  texture_handles_.emplace(texture_id, handle);
-  return handle;
+  ClientDiscardableHandle::Id handle_id = handle.GetId();
+  handles_.emplace(handle_id, handle);
+
+  return handle_id;
 }
 
-bool ClientDiscardableManager::LockTexture(uint32_t texture_id) {
-  auto found = texture_handles_.find(texture_id);
-  DCHECK(found != texture_handles_.end());
+bool ClientDiscardableManager::LockHandle(
+    ClientDiscardableHandle::Id handle_id) {
+  auto found = handles_.find(handle_id);
+  DCHECK(found != handles_.end());
   return found->second.Lock();
 }
 
-void ClientDiscardableManager::FreeTexture(uint32_t texture_id) {
-  auto found = texture_handles_.find(texture_id);
-  if (found == texture_handles_.end())
+void ClientDiscardableManager::FreeHandle(
+    ClientDiscardableHandle::Id handle_id) {
+  auto found = handles_.find(handle_id);
+  if (found == handles_.end())
     return;
   pending_handles_.push(found->second);
-  texture_handles_.erase(found);
+  handles_.erase(found);
 }
 
-bool ClientDiscardableManager::TextureIsValid(uint32_t texture_id) const {
-  return texture_handles_.find(texture_id) != texture_handles_.end();
+bool ClientDiscardableManager::HandleIsValid(
+    ClientDiscardableHandle::Id handle_id) const {
+  return handles_.find(handle_id) != handles_.end();
 }
 
-void ClientDiscardableManager::FindAllocation(CommandBuffer* command_buffer,
+ClientDiscardableHandle ClientDiscardableManager::GetHandle(
+    ClientDiscardableHandle::Id handle_id) {
+  auto found = handles_.find(handle_id);
+  DCHECK(found != handles_.end());
+  return found->second;
+}
+
+bool ClientDiscardableManager::FindAllocation(CommandBuffer* command_buffer,
                                               scoped_refptr<Buffer>* buffer,
                                               int32_t* shm_id,
                                               uint32_t* offset) {
@@ -181,18 +195,21 @@ void ClientDiscardableManager::FindAllocation(CommandBuffer* command_buffer,
     *offset = allocation->free_offsets.TakeFreeOffset();
     *shm_id = allocation->shm_id;
     *buffer = allocation->buffer;
-    return;
+    return true;
   }
 
   // We couldn't find an existing free entry. Allocate more space.
-  auto allocation = base::MakeUnique<Allocation>(elements_per_allocation_);
+  auto allocation = std::make_unique<Allocation>(elements_per_allocation_);
   allocation->buffer = command_buffer->CreateTransferBuffer(
       allocation_size_, &allocation->shm_id);
+  if (!allocation->buffer)
+    return false;
 
   *offset = allocation->free_offsets.TakeFreeOffset();
   *shm_id = allocation->shm_id;
   *buffer = allocation->buffer;
   allocations_.push_back(std::move(allocation));
+  return true;
 }
 
 void ClientDiscardableManager::ReturnAllocation(
@@ -203,8 +220,8 @@ void ClientDiscardableManager::ReturnAllocation(
     if (allocation->shm_id != handle.shm_id())
       continue;
 
-    allocation->free_offsets.ReturnFreeOffset(handle.byte_offset() /
-                                              element_size_);
+    allocation->free_offsets.ReturnFreeOffset(
+        static_cast<uint32_t>(handle.byte_offset() / element_size_));
 
     if (!allocation->free_offsets.HasUsedOffset()) {
       command_buffer->DestroyTransferBuffer(allocation->shm_id);
@@ -220,13 +237,6 @@ void ClientDiscardableManager::CheckPending(CommandBuffer* command_buffer) {
     ReturnAllocation(command_buffer, pending_handles_.front());
     pending_handles_.pop();
   }
-}
-
-ClientDiscardableHandle ClientDiscardableManager::GetHandleForTesting(
-    uint32_t texture_id) {
-  auto found = texture_handles_.find(texture_id);
-  DCHECK(found != texture_handles_.end());
-  return found->second;
 }
 
 }  // namespace gpu

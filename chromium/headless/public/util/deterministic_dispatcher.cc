@@ -20,7 +20,7 @@ DeterministicDispatcher::DeterministicDispatcher(
       navigation_in_progress_(false),
       weak_ptr_factory_(this) {}
 
-DeterministicDispatcher::~DeterministicDispatcher() {}
+DeterministicDispatcher::~DeterministicDispatcher() = default;
 
 void DeterministicDispatcher::JobCreated(ManagedDispatchURLRequestJob* job) {
   base::AutoLock lock(lock_);
@@ -142,8 +142,9 @@ void DeterministicDispatcher::NavigationDoneTask() {
   MaybeDispatchJobLocked();
 }
 
-DeterministicDispatcher::Request::Request() : url_request(nullptr) {}
-DeterministicDispatcher::Request::~Request() {}
+DeterministicDispatcher::Request::Request() = default;
+DeterministicDispatcher::Request::Request(Request&&) = default;
+DeterministicDispatcher::Request::~Request() = default;
 
 DeterministicDispatcher::Request::Request(
     ManagedDispatchURLRequestJob* url_request)
@@ -151,13 +152,9 @@ DeterministicDispatcher::Request::Request(
 
 DeterministicDispatcher::Request::Request(
     std::unique_ptr<NavigationRequest> navigation_request)
-    : url_request(nullptr), navigation_request(std::move(navigation_request)) {}
+    : navigation_request(std::move(navigation_request)) {}
 
 DeterministicDispatcher::Request& DeterministicDispatcher::Request::operator=(
-    DeterministicDispatcher::Request&& other) {
-  url_request = other.url_request;
-  navigation_request = std::move(other.navigation_request);
-  return *this;
-}
+    DeterministicDispatcher::Request&& other) = default;
 
 }  // namespace headless

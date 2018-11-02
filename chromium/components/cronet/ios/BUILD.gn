@@ -55,10 +55,10 @@ _cronet_deps = [
   "//base:base",
   "//components/grpc_support",
   "//components/metrics:metrics",
-  "//components/metrics/proto:proto",
+  "//third_party/metrics_proto",
   "//components/prefs:prefs",
   "//ios/net:net",
-  "//ios/web:user_agent",
+  "//ios/web/public:user_agent",
   "//ios/web/public/global_state",
   "//net",
   "//url",
@@ -79,6 +79,8 @@ _cronet_sources = [
   "Cronet.mm",
   "cronet_environment.h",
   "cronet_environment.mm",
+  "cronet_metrics.h",
+  "cronet_metrics.mm",
 ]
 
 _cronet_public_headers = [ "Cronet.h" ]
@@ -94,6 +96,8 @@ source_set("cronet_sources") {
   if (!use_platform_icu_alternatives) {
     deps += [ "//base:i18n" ]
   }
+
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("cronet_sources_with_global_state") {
@@ -186,6 +190,7 @@ static_library("cronet_static") {
   public_deps = [
     "//components/grpc_support",
   ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 # A static library which contains all dependencies of :cronet_static.
@@ -258,7 +263,7 @@ template("ios_static_framework") {
     visibility = [ ":$_target_name" ]
     sources = invoker.public_headers
     outputs = [
-      "{{bundle_root_dir}}/Headers/{{source_file_part}}",
+      "{{bundle_contents_dir}}/Headers/{{source_file_part}}",
     ]
   }
 
@@ -269,7 +274,7 @@ template("ios_static_framework") {
     visibility = [ ":$_target_name" ]
     sources = get_target_outputs(_static_library_target)
     outputs = [
-      "{{bundle_root_dir}}/$_framework_name",
+      "{{bundle_executable_dir}}/$_framework_name",
     ]
     public_deps = [
       _static_library_target,
@@ -278,10 +283,11 @@ template("ios_static_framework") {
 
   create_bundle(_target_name) {
     product_type = "com.apple.product-type.framework"
-    bundle_root_dir = "$root_out_dir/Static/$_output_name"
-    bundle_executable_dir = bundle_root_dir
-    bundle_resources_dir = bundle_root_dir
-    bundle_plugins_dir = bundle_root_dir
+    bundle_root_dir = "$root_out_dir/Static/${_output_name}"
+    bundle_contents_dir = bundle_root_dir
+    bundle_executable_dir = bundle_contents_dir
+    bundle_resources_dir = bundle_contents_dir
+    bundle_plugins_dir = bundle_contents_dir
     deps = [
       ":$_framework_binary_target",
       ":$_framework_headers_target",

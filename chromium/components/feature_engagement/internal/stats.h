@@ -20,6 +20,7 @@ namespace stats {
 // Most of the fields maps to |ConditionValidator::Result|.
 // The failure reasons are not mutually exclusive.
 // Out-dated entries shouldn't be deleted but marked as obselete.
+// Keep this synced with the enum in //tools/metrics/histograms/enums.xml.
 enum class TriggerHelpUIResult {
   // The help UI is triggered.
   SUCCESS = 0,
@@ -57,13 +58,20 @@ enum class TriggerHelpUIResult {
   // Availability precondition is not satisfied.
   FAILURE_AVAILABILITY_PRECONDITION_UNMET = 11,
 
+  // Same as |SUCCESS|, but feature configuration was set to tracking only.
+  SUCCESS_TRACKING_ONLY = 12,
+
+  // Display of help UI is locked.
+  FAILURE_DISPLAY_LOCK = 13,
+
   // Last entry for the enum.
-  COUNT = 12,
+  COUNT = 14,
 };
 
 // Used in the metrics to track the configuration parsing event.
 // The failure reasons are not mutually exclusive.
 // Out-dated entries shouldn't be deleted but marked as obsolete.
+// Keep this synced with the enum in //tools/metrics/histograms/enums.xml.
 enum class ConfigParsingEvent {
   // The configuration is parsed correctly.
   SUCCESS = 0,
@@ -98,8 +106,17 @@ enum class ConfigParsingEvent {
   // UnKnown key in configuration parameters.
   FAILURE_UNKNOWN_KEY = 10,
 
+  // Fails to parse the session rate impact.
+  FAILURE_SESSION_RATE_IMPACT_PARSE = 11,
+
+  // Fails to parse the session rate impact.
+  FAILURE_SESSION_RATE_IMPACT_UNKNOWN_FEATURE = 12,
+
+  // Fails to parse the tracking only flag.
+  FAILURE_TRACKING_ONLY_PARSE = 13,
+
   // Last entry for the enum.
-  COUNT = 11,
+  COUNT = 14,
 };
 
 // Used in metrics to track database states. Each type will match to a suffix
@@ -124,6 +141,7 @@ void RecordNotifyEvent(const std::string& event,
 // Records user action and the result histogram when in-product help will be
 // shown to the user.
 void RecordShouldTriggerHelpUI(const base::Feature& feature,
+                               const FeatureConfig& feature_config,
                                const ConditionValidator::Result& result);
 
 // Records when the user dismisses the in-product help UI.

@@ -11,7 +11,7 @@ var ROOT_PATH = '../../../../../';
 
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_interactive_ui_test.js']);
-GEN('#include "base/command_line.h"');
+GEN('#include "chrome/common/chrome_features.h"');
 
 function MaterialBookmarksFocusTest() {}
 
@@ -20,8 +20,7 @@ MaterialBookmarksFocusTest.prototype = {
 
   browsePreload: 'chrome://bookmarks',
 
-  commandLineSwitches:
-      [{switchName: 'enable-features', switchValue: 'MaterialDesignBookmarks'}],
+  featureList: ['features::kMaterialDesignBookmarks', ''],
 
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'test_command_manager.js',
@@ -93,6 +92,14 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       // Only the selected folder should be keyboard focusable.
       assertEquals(
           '-1', getFolderNode('2').$.container.getAttribute('tabindex'));
+
+      store.data.search.term = 'asdf';
+
+      // The selected folder is focus enabled even with a search term.
+      assertEquals(
+          '0', getFolderNode('1').$.container.getAttribute('tabindex'));
+
+      store.data.search.term = '';
 
       // Give keyboard focus to the first item.
       getFolderNode('1').$.container.focus();
@@ -425,7 +432,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       return new Promise(function(resolve) {
         listenOnce(el, 'close', function(e) {
           resolve();
-        })
+        });
       });
     }
 

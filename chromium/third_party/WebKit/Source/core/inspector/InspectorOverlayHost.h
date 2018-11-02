@@ -34,9 +34,7 @@
 
 namespace blink {
 
-class CORE_EXPORT InspectorOverlayHost final
-    : public GarbageCollected<InspectorOverlayHost>,
-      public ScriptWrappable {
+class CORE_EXPORT InspectorOverlayHost final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -48,7 +46,7 @@ class CORE_EXPORT InspectorOverlayHost final
   };
 
   explicit InspectorOverlayHost(Listener*);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void resume();
   void stepOver();

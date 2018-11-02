@@ -27,6 +27,7 @@
 
 #include "platform/PODIntervalTree.h"
 
+#include "platform/geometry/FloatPolygon.h"
 #include "platform/testing/TreeTestHelpers.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
@@ -38,11 +39,6 @@ using TreeTestHelpers::InitRandom;
 using TreeTestHelpers::NextRandom;
 
 #ifndef NDEBUG
-template <>
-struct ValueToString<float> {
-  static String ToString(const float& value) { return String::Number(value); }
-};
-
 template <>
 struct ValueToString<void*> {
   static String ToString(void* const& value) {
@@ -209,7 +205,7 @@ struct ValueToString<int> {
 
 namespace {
 
-void InsertionAndDeletionTest(int32_t seed, int tree_size) {
+void TreeInsertionAndDeletionTest(int32_t seed, int tree_size) {
   InitRandom(seed);
   int maximum_value = tree_size;
   // Build the tree
@@ -240,7 +236,7 @@ void InsertionAndDeletionTest(int32_t seed, int tree_size) {
         << "Test failed for seed " << seed;
     tree.Remove(added_elements[index]);
     removed_elements.push_back(added_elements[index]);
-    added_elements.erase(index);
+    added_elements.EraseAt(index);
     ASSERT_TRUE(tree.CheckInvariants()) << "Test failed for seed " << seed;
   }
   // Now randomly add or remove elements.
@@ -261,7 +257,7 @@ void InsertionAndDeletionTest(int32_t seed, int tree_size) {
 #endif
       tree.Add(removed_elements[index]);
       added_elements.push_back(removed_elements[index]);
-      removed_elements.erase(index);
+      removed_elements.EraseAt(index);
     } else {
       int index = NextRandom(added_elements.size());
 #ifdef DEBUG_INSERTION_AND_DELETION_TEST
@@ -274,7 +270,7 @@ void InsertionAndDeletionTest(int32_t seed, int tree_size) {
       ASSERT_TRUE(tree.Remove(added_elements[index]))
           << "Test failed for seed " << seed;
       removed_elements.push_back(added_elements[index]);
-      added_elements.erase(index);
+      added_elements.EraseAt(index);
     }
     ASSERT_TRUE(tree.CheckInvariants()) << "Test failed for seed " << seed;
   }
@@ -283,11 +279,11 @@ void InsertionAndDeletionTest(int32_t seed, int tree_size) {
 }  // anonymous namespace
 
 TEST(PODIntervalTreeTest, RandomDeletionAndInsertionRegressionTest1) {
-  InsertionAndDeletionTest(13972, 100);
+  TreeInsertionAndDeletionTest(13972, 100);
 }
 
 TEST(PODIntervalTreeTest, RandomDeletionAndInsertionRegressionTest2) {
-  InsertionAndDeletionTest(1283382113, 10);
+  TreeInsertionAndDeletionTest(1283382113, 10);
 }
 
 TEST(PODIntervalTreeTest, RandomDeletionAndInsertionRegressionTest3) {

@@ -4,14 +4,45 @@
 
 #include "core/editing/iterators/SimplifiedBackwardsTextIterator.h"
 
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/EphemeralRange.h"
-#include "platform/wtf/Vector.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/testing/EditingTestBase.h"
+#include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
+namespace simplified_backwards_text_iterator_test {
 
-class SimplifiedBackwardsTextIteratorTest : public EditingTestBase {};
+TextIteratorBehavior EmitsSmallXForTextSecurityBehavior() {
+  return TextIteratorBehavior::Builder()
+      .SetEmitsSmallXForTextSecurity(true)
+      .Build();
+}
+
+class SimplifiedBackwardsTextIteratorTest : public EditingTestBase {
+ protected:
+  std::string ExtractStringInRange(
+      const std::string selection_text,
+      const TextIteratorBehavior& behavior = TextIteratorBehavior()) {
+    const SelectionInDOMTree selection = SetSelectionTextToBody(selection_text);
+    StringBuilder builder;
+    bool is_first = true;
+    for (SimplifiedBackwardsTextIterator iterator(
+             EphemeralRange(selection.ComputeStartPosition(),
+                            selection.ComputeEndPosition()),
+             behavior);
+         !iterator.AtEnd(); iterator.Advance()) {
+      BackwardsTextBuffer buffer;
+      iterator.CopyTextTo(&buffer);
+      if (!is_first)
+        builder.Append(", ", 2);
+      is_first = false;
+      builder.Append(buffer.Data(), buffer.Size());
+    }
+    CString utf8 = builder.ToString().Utf8();
+    return std::string(utf8.data(), utf8.length());
+  }
+};
 
 template <typename Strategy>
 static String ExtractString(const Element& element) {
@@ -23,6 +54,38 @@ static String ExtractString(const Element& element) {
     it.CopyTextTo(&buffer);
   }
   return String(buffer.Data(), buffer.Size());
+}
+
+TEST_F(SimplifiedBackwardsTextIteratorTest, CopyTextToWithFirstLetterPart) {
+  InsertStyleElement("p::first-letter {font-size: 200%}");
+  // TODO(editing-dev): |SimplifiedBackwardsTextIterator| should not account
+  // collapsed whitespace (http://crbug.com/760428)
+
+  // Simulate PreviousBoundary()
+  EXPECT_EQ(" , \n", ExtractStringInRange("^<p> |[(3)]678</p>"));
+  EXPECT_EQ(" [, \n", ExtractStringInRange("^<p> [|(3)]678</p>"));
+  EXPECT_EQ(" [(, \n", ExtractStringInRange("^<p> [(|3)]678</p>"));
+  EXPECT_EQ(" [(3, \n", ExtractStringInRange("^<p> [(3|)]678</p>"));
+  EXPECT_EQ(" [(3), \n", ExtractStringInRange("^<p> [(3)|]678</p>"));
+  EXPECT_EQ(" [(3)], \n", ExtractStringInRange("^<p> [(3)]|678</p>"));
+
+  EXPECT_EQ("6,  [(3)], \n, ab", ExtractStringInRange("^ab<p> [(3)]6|78</p>"))
+      << "From remaining part to outside";
+
+  EXPECT_EQ("(3)", ExtractStringInRange("<p> [^(3)|]678</p>"))
+      << "Iterate in first-letter part";
+
+  EXPECT_EQ("67, (3)]", ExtractStringInRange("<p> [^(3)]67|8</p>"))
+      << "From remaining part to first-letter part";
+
+  EXPECT_EQ("789", ExtractStringInRange("<p> [(3)]6^789|a</p>"))
+      << "Iterate in remaining part";
+
+  EXPECT_EQ("9, \n, 78", ExtractStringInRange("<p> [(3)]6^78</p>9|a"))
+      << "Enter into remaining part and stop in remaining part";
+
+  EXPECT_EQ("9, \n, 678, (3)]", ExtractStringInRange("<p> [^(3)]678</p>9|a"))
+      << "Enter into remaining part and stop in first-letter part";
 }
 
 TEST_F(SimplifiedBackwardsTextIteratorTest, Basic) {
@@ -262,4 +325,15 @@ TEST_F(SimplifiedBackwardsTextIteratorTest, CopyWholeCodePoints) {
     EXPECT_EQ(kExpected[i], buffer[i]);
 }
 
+TEST_F(SimplifiedBackwardsTextIteratorTest, TextSecurity) {
+  InsertStyleElement("s {-webkit-text-security:disc;}");
+  EXPECT_EQ("baz, xxx, abc",
+            ExtractStringInRange("^abc<s>foo</s>baz|",
+                                 EmitsSmallXForTextSecurityBehavior()));
+  // E2 80 A2 is U+2022 BULLET
+  EXPECT_EQ("baz, \xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2, abc",
+            ExtractStringInRange("^abc<s>foo</s>baz|", TextIteratorBehavior()));
+}
+
+}  // namespace simplified_backwards_text_iterator_test
 }  // namespace blink

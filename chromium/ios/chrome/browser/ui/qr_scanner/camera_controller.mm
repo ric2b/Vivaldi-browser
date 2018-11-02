@@ -181,8 +181,23 @@
   DCHECK([self getAuthorizationStatus] == AVAuthorizationStatusAuthorized);
   dispatch_async(_sessionQueue, ^{
     // Get the back camera.
-    NSArray* videoCaptureDevices =
-        [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
+    NSArray* videoCaptureDevices = nil;
+    if (@available(iOS 10, *)) {
+      AVCaptureDeviceDiscoverySession* discoverySession =
+          [AVCaptureDeviceDiscoverySession
+              discoverySessionWithDeviceTypes:@[
+                AVCaptureDeviceTypeBuiltInWideAngleCamera
+              ]
+                                    mediaType:AVMediaTypeVideo
+                                     position:AVCaptureDevicePositionBack];
+      videoCaptureDevices = [discoverySession devices];
+    }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+    else {
+      videoCaptureDevices =
+          [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
+    }
+#endif
     if ([videoCaptureDevices count] == 0) {
       [self setCameraState:qr_scanner::CAMERA_UNAVAILABLE];
       return;
@@ -247,8 +262,8 @@
 
     [previewLayer setSession:_captureSession];
     [previewLayer setVideoGravity:AVLayerVideoGravityResizeAspectFill];
-    [self resetVideoOrientation:previewLayer];
     dispatch_async(dispatch_get_main_queue(), ^{
+      [self resetVideoOrientation:previewLayer];
       [_delegate captureSessionIsConnected];
       [self startRecording];
     });
@@ -353,6 +368,14 @@
       case AVCaptureSessionInterruptionReasonVideoDeviceNotAvailableWithMultipleForegroundApps:
         [self setCameraState:qr_scanner::MULTIPLE_FOREGROUND_APPS];
         break;
+#if defined(__IPHONE_11_1) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_1)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+      case AVCaptureSessionInterruptionReasonVideoDeviceNotAvailableDueToSystemPressure:
+        [self setCameraState:qr_scanner::CAMERA_UNAVAILABLE_DUE_TO_SYSTEM_PRESSURE];
+        break;
+#pragma clang diagnostic pop
+#endif
       case AVCaptureSessionInterruptionReasonAudioDeviceInUseByAnotherClient:
         NOTREACHED();
         break;

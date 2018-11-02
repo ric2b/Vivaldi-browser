@@ -76,7 +76,7 @@ class MIMEHeader : public GarbageCollectedFinalized<MIMEHeader> {
   String EndOfPartBoundary() const { return end_of_part_boundary_; }
   String EndOfDocumentBoundary() const { return end_of_document_boundary_; }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  private:
   MIMEHeader();
@@ -205,7 +205,7 @@ static bool SkipLinesUntilBoundaryFound(SharedBufferChunkReader& line_reader,
   return false;
 }
 
-MHTMLParser::MHTMLParser(PassRefPtr<const SharedBuffer> data)
+MHTMLParser::MHTMLParser(scoped_refptr<const SharedBuffer> data)
     : line_reader_(std::move(data), "\r\n") {}
 
 HeapVector<Member<ArchiveResource>> MHTMLParser::ParseArchive() {
@@ -356,7 +356,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       DVLOG(1) << "Invalid encoding for MHTML part.";
       return nullptr;
   }
-  RefPtr<SharedBuffer> content_buffer = SharedBuffer::AdoptVector(data);
+  scoped_refptr<SharedBuffer> content_buffer = SharedBuffer::AdoptVector(data);
   // FIXME: the URL in the MIME header could be relative, we should resolve it
   // if it is.  The specs mentions 5 ways to resolve a URL:
   // http://tools.ietf.org/html/rfc2557#section-5

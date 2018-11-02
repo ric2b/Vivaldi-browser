@@ -14,38 +14,35 @@ namespace blink {
 
 class ExceptionState;
 class HTMLDivElement;
-class TestCallback;
-class TestEnumCallback;
-class TestInterfaceCallback;
-class TestReceiverObjectCallback;
-class TestSequenceCallback;
+class V8TestCallback;
+class V8TestEnumCallback;
+class V8TestInterfaceCallback;
+class V8TestReceiverObjectCallback;
+class V8TestSequenceCallback;
 
-class CallbackFunctionTest final
-    : public GarbageCollected<CallbackFunctionTest>,
-      public ScriptWrappable {
+class CallbackFunctionTest final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DECLARE_TRACE();
-
   static CallbackFunctionTest* Create() { return new CallbackFunctionTest(); }
 
-  String testCallback(TestCallback*,
+  String testCallback(V8TestCallback*,
                       const String&,
                       const String&,
                       ExceptionState&);
-  String testNullableCallback(TestCallback*,
+  String testNullableCallback(V8TestCallback*,
                               const String&,
                               const String&,
                               ExceptionState&);
-  void testInterfaceCallback(TestInterfaceCallback*,
+  void testInterfaceCallback(V8TestInterfaceCallback*,
                              HTMLDivElement*,
                              ExceptionState&);
-  void testReceiverObjectCallback(TestReceiverObjectCallback*, ExceptionState&);
-  Vector<String> testSequenceCallback(TestSequenceCallback*,
+  void testReceiverObjectCallback(V8TestReceiverObjectCallback*,
+                                  ExceptionState&);
+  Vector<String> testSequenceCallback(V8TestSequenceCallback*,
                                       const Vector<int>& numbers,
                                       ExceptionState&);
-  void testEnumCallback(TestEnumCallback*,
+  void testEnumCallback(V8TestEnumCallback*,
                         const String& enum_value,
                         ExceptionState&);
 };

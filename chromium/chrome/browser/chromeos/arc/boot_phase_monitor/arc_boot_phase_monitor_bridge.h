@@ -7,16 +7,17 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/sessions/session_restore_observer.h"
 #include "components/arc/common/boot_phase_monitor.mojom.h"
-#include "components/arc/instance_holder.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/account_id/account_id.h"
-#include "mojo/public/cpp/bindings/binding.h"
+
+class BrowserContextKeyedServiceFactory;
 
 namespace content {
 class BrowserContext;
@@ -27,16 +28,25 @@ namespace arc {
 class ArcBridgeService;
 class ArcInstanceThrottle;
 
-// Receives boot phase notifications from ARC.
-// TODO(yusukes): Add unit tests for this.
+// Receives events regarding ARC boot phase from both ARC and Chrome, and do
+// either one-time or continuous container priority adjustment / UMA recording
+// in response.
 class ArcBootPhaseMonitorBridge
     : public KeyedService,
-      public InstanceHolder<mojom::BootPhaseMonitorInstance>::Observer,
       public mojom::BootPhaseMonitorHost,
-      public ArcSessionManager::Observer {
+      public ArcSessionManager::Observer,
+      public SessionRestoreObserver {
  public:
-  using FirstAppLaunchDelayRecorder =
-      base::RepeatingCallback<void(base::TimeDelta)>;
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+
+    virtual void DisableCpuRestriction() = 0;
+    virtual void RecordFirstAppLaunchDelayUMA(base::TimeDelta delta) = 0;
+  };
+
+  // Returns the factory instance for this class.
+  static BrowserContextKeyedServiceFactory* GetFactory();
 
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -58,37 +68,44 @@ class ArcBootPhaseMonitorBridge
                             ArcBridgeService* bridge_service);
   ~ArcBootPhaseMonitorBridge() override;
 
-  // InstanceHolder<mojom::BootPhaseMonitorInstance>::Observer
-  void OnInstanceReady() override;
-
   // mojom::BootPhaseMonitorHost
   void OnBootCompleted() override;
 
   // ArcSessionManager::Observer
+  void OnArcPlayStoreEnabledChanged(bool enabled) override;
   void OnArcInitialStart() override;
   void OnArcSessionStopped(ArcStopReason stop_reason) override;
   void OnArcSessionRestarting() override;
 
+  // SessionRestoreObserver
+  void OnSessionRestoreFinishedLoadingTabs() override;
+
+  void SetDelegateForTesting(std::unique_ptr<Delegate> delegate);
   void RecordFirstAppLaunchDelayUMAForTesting() {
     RecordFirstAppLaunchDelayUMAInternal();
   }
+  void OnExtensionsReadyForTesting() { OnExtensionsReady(); }
 
   ArcInstanceThrottle* throttle_for_testing() const { return throttle_.get(); }
-  void set_first_app_launch_delay_recorder_for_testing(
-      const FirstAppLaunchDelayRecorder& first_app_launch_delay_recorder) {
-    first_app_launch_delay_recorder_ = first_app_launch_delay_recorder;
-  }
 
  private:
   void RecordFirstAppLaunchDelayUMAInternal();
   void Reset();
+  void MaybeDisableCpuRestriction();
+
+  // Called when ExtensionsServices finishes loading all extensions for the
+  // profile.
+  void OnExtensionsReady();
 
   THREAD_CHECKER(thread_checker_);
 
+  content::BrowserContext* const context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
   const AccountId account_id_;
-  mojo::Binding<mojom::BootPhaseMonitorHost> binding_;
-  FirstAppLaunchDelayRecorder first_app_launch_delay_recorder_;
+  std::unique_ptr<Delegate> delegate_;
+
+  // Indicates whether all extensions for the profile have been loaded.
+  bool extensions_ready_ = false;
 
   // The following variables must be reset every time when the instance stops or
   // restarts.
@@ -96,6 +113,10 @@ class ArcBootPhaseMonitorBridge
   base::TimeTicks app_launch_time_;
   bool first_app_launch_delay_recorded_ = false;
   bool boot_completed_ = false;
+  bool enabled_by_policy_ = false;
+
+  // This has to be the last member variable in the class.
+  base::WeakPtrFactory<ArcBootPhaseMonitorBridge> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcBootPhaseMonitorBridge);
 };

@@ -9,10 +9,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
-#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -31,8 +28,7 @@
 #endif
 
 using chrome_test_util::NavigationBarDoneButton;
-
-const CGFloat kScrollDisplacement = 50.0;
+using chrome_test_util::RecentTabsMenuButton;
 
 // Test cases to verify that keyboard commands are and are not registered when
 // expected.
@@ -76,21 +72,6 @@ const CGFloat kScrollDisplacement = 50.0;
   }
 }
 
-// Verifies the internal state of the Bookmarks has loaded and is ready for use.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code.
-- (void)verifyBookmarksLoaded {
-  BOOL (^block)
-  () = ^BOOL {
-    return chrome_test_util::BookmarksLoaded();
-  };
-  GREYCondition* bookmarksDoneLoading =
-      [GREYCondition conditionWithName:@"Waiting for bookmark model to load."
-                                 block:block];
-
-  BOOL success = [bookmarksDoneLoading waitWithTimeout:5];
-  GREYAssert(success, @"The bookmark model was not loaded.");
-}
-
 // Waits for the bookmark editor to display.
 // TODO(crbug.com/638674): Evaluate if this can move to shared code.
 - (void)waitForSingleBookmarkEditorToDisplay {
@@ -110,18 +91,6 @@ const CGFloat kScrollDisplacement = 50.0;
 
   BOOL success = [editorDisplayed waitWithTimeout:5];
   GREYAssert(success, @"The bookmark editor was not displayed.");
-}
-
-// Open tools menu, find and tap on item specified by |toolsMenuItem| matcher.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code.
-- (void)selectToolsMenuItem:(id<GREYMatcher>)toolsMenuItem {
-  [ChromeEarlGreyUI openToolsMenu];
-
-  id<GREYMatcher> toolsMenuTableView = chrome_test_util::ToolsMenuView();
-  [[[EarlGrey selectElementWithMatcher:toolsMenuItem]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
-                                                  kScrollDisplacement)
-      onElementWithMatcher:toolsMenuTableView] performAction:grey_tap()];
 }
 
 #pragma mark - Tests
@@ -145,7 +114,7 @@ const CGFloat kScrollDisplacement = 50.0;
 // Tests that keyboard commands are not registered when the bookmark UI is
 // shown.
 - (void)testKeyboardCommandsNotRegistered_AddBookmarkPresented {
-  [self verifyBookmarksLoaded];
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
   BOOL success = chrome_test_util::ClearBookmarks();
   GREYAssert(success, @"Not all bookmarks were removed.");
 
@@ -177,15 +146,14 @@ const CGFloat kScrollDisplacement = 50.0;
 
 // Tests that keyboard commands are not registered when the Bookmarks UI is
 // shown on iPhone and registered on iPad.
-// TODO(crbug.com/695749): Check if we need to rewrite this test for the new
-// Bookmarks UI.
 - (void)testKeyboardCommandsNotRegistered_BookmarksPresented {
+  // TODO(crbug.com/782551): Rewrite this test for the new Bookmarks UI.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      bookmark_new_generation::features::kBookmarkNewGeneration);
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
 
   // Open Bookmarks
-  [self selectToolsMenuItem:grey_accessibilityID(kToolsMenuBookmarksId)];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
 
   if (IsIPadIdiom()) {
     [self verifyKeyboardCommandsAreRegistered];
@@ -201,8 +169,8 @@ const CGFloat kScrollDisplacement = 50.0;
 // shown on iPhone and registered on iPad.
 - (void)testKeyboardCommands_RecentTabsPresented {
   // Open Recent Tabs
-  id<GREYMatcher> recentTabs = grey_accessibilityID(kToolsMenuOtherDevicesId);
-  [self selectToolsMenuItem:recentTabs];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI tapToolsMenuButton:RecentTabsMenuButton()];
 
   if (IsIPadIdiom()) {
     [self verifyKeyboardCommandsAreRegistered];

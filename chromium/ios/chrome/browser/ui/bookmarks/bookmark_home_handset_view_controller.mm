@@ -49,11 +49,6 @@ using bookmarks::BookmarkNode;
 @interface BookmarkHomeHandsetViewController ()<BookmarkMenuViewDelegate,
                                                 BookmarkPanelViewDelegate>
 
-// When the view is first shown on the screen, this property represents the
-// cached value of the y of the content offset of the folder view. This
-// property is set to nil after it is used.
-@property(nonatomic, strong) NSNumber* cachedContentPosition;
-
 #pragma mark Navigation bar
 
 - (void)updateNavigationBarWithDuration:(CGFloat)duration
@@ -79,11 +74,12 @@ using bookmarks::BookmarkNode;
 
 @implementation BookmarkHomeHandsetViewController
 
-@synthesize cachedContentPosition = _cachedContentPosition;
-
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
-                  browserState:(ios::ChromeBrowserState*)browserState {
-  self = [super initWithLoader:loader browserState:browserState];
+                  browserState:(ios::ChromeBrowserState*)browserState
+                    dispatcher:(id<ApplicationCommands>)dispatcher {
+  self = [super initWithLoader:loader
+                  browserState:browserState
+                    dispatcher:dispatcher];
   if (self) {
     self.sideSwipingPossible = YES;
   }
@@ -95,8 +91,7 @@ using bookmarks::BookmarkNode;
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  if (!base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+  if (!base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     self.navigationBar.frame = [self navigationBarFrame];
     [self.navigationBar setMenuTarget:self
                                action:@selector(navigationBarToggledMenu:)];
@@ -133,10 +128,7 @@ using bookmarks::BookmarkNode;
 
 - (void)viewWillLayoutSubviews {
   [super viewWillLayoutSubviews];
-  if (base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
-    // TODO(crbug.com/695749): See if we need to store/restore the content
-    // scroll position for BookmarkTableView here.
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     return;
   }
 
@@ -185,8 +177,7 @@ using bookmarks::BookmarkNode;
   // TODO(crbug.com/695749): Restore the content scroll position for
   // BookmarkTableView in the UI.
 
-  if (!base::FeatureList::IsEnabled(
-          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+  if (!base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     self.menuView.delegate = self;
 
     // Set view frames and add them to hierarchy.

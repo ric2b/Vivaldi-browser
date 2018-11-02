@@ -31,11 +31,6 @@
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/output_surface.h"
-#include "cc/output/output_surface_client.h"
-#include "cc/output/output_surface_frame.h"
-#include "cc/output/texture_mailbox_deleter.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/layer_tree_host.h"
@@ -43,11 +38,15 @@
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
+#include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator_android.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/direct_layer_tree_frame_sink.h"
@@ -60,7 +59,6 @@
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/compositor_client.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
@@ -75,7 +73,6 @@
 #include "ui/android/window_android.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_utils.h"
 
@@ -193,17 +190,14 @@ gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
-
-  if (base::FeatureList::IsEnabled(features::kColorCorrectRendering)) {
-    if (display_color_space == gfx::ColorSpace::CreateSRGB()) {
-      attributes.color_space = gpu::gles2::COLOR_SPACE_SRGB;
-    } else if (display_color_space == gfx::ColorSpace::CreateDisplayP3D65()) {
-      attributes.color_space = gpu::gles2::COLOR_SPACE_DISPLAY_P3;
-    } else {
-      attributes.color_space = gpu::gles2::COLOR_SPACE_UNSPECIFIED;
-      DLOG(ERROR) << "Android color space is neither sRGB nor P3, output color "
-                     "will be incorrect.";
-    }
+  if (display_color_space == gfx::ColorSpace::CreateSRGB()) {
+    attributes.color_space = gpu::gles2::COLOR_SPACE_SRGB;
+  } else if (display_color_space == gfx::ColorSpace::CreateDisplayP3D65()) {
+    attributes.color_space = gpu::gles2::COLOR_SPACE_DISPLAY_P3;
+  } else {
+    attributes.color_space = gpu::gles2::COLOR_SPACE_UNSPECIFIED;
+    DLOG(ERROR) << "Android color space is neither sRGB nor P3, output color "
+                   "will be incorrect.";
   }
 
   if (requires_alpha_channel) {
@@ -228,6 +222,8 @@ gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
     attributes.blue_size = 5;
   }
 
+  attributes.enable_swap_timestamps_if_supported = true;
+
   return attributes;
 }
 
@@ -246,8 +242,8 @@ void CreateContextProviderAfterGpuChannelEstablished(
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
-      new ui::ContextProviderCommandBuffer(
+  auto context_provider =
+      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, shared_memory_limits, attributes,
@@ -256,23 +252,28 @@ void CreateContextProviderAfterGpuChannelEstablished(
   callback.Run(std::move(context_provider));
 }
 
-class AndroidOutputSurface : public cc::OutputSurface {
+class AndroidOutputSurface
+    : public viz::OutputSurface,
+      public viz::OutputSurface::LatencyInfoCache::Client {
  public:
   AndroidOutputSurface(
       scoped_refptr<ui::ContextProviderCommandBuffer> context_provider,
       base::Closure swap_buffers_callback)
-      : cc::OutputSurface(std::move(context_provider)),
+      : viz::OutputSurface(std::move(context_provider)),
         swap_buffers_callback_(std::move(swap_buffers_callback)),
         overlay_candidate_validator_(
             new viz::CompositorOverlayCandidateValidatorAndroid()),
+        latency_info_cache_(this),
         weak_ptr_factory_(this) {
     capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
   }
 
   ~AndroidOutputSurface() override = default;
 
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override {
-    GetCommandBufferProxy()->AddLatencyInfo(frame.latency_info);
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override {
+    if (latency_info_cache_.WillSwap(std::move(frame.latency_info)))
+      GetCommandBufferProxy()->SetSnapshotRequested();
+
     if (frame.sub_buffer_rect) {
       DCHECK(frame.sub_buffer_rect->IsEmpty());
       context_provider_->ContextSupport()->CommitOverlayPlanes();
@@ -281,7 +282,13 @@ class AndroidOutputSurface : public cc::OutputSurface {
     }
   }
 
-  void BindToClient(cc::OutputSurfaceClient* client) override {
+  // OutputSurface::LatencyInfoCache::Client implementation.
+  void LatencyInfoCompleted(
+      const std::vector<ui::LatencyInfo>& latency_info) override {
+    RenderWidgetHostImpl::OnGpuSwapBuffersCompleted(latency_info);
+  }
+
+  void BindToClient(viz::OutputSurfaceClient* client) override {
     DCHECK(client);
     DCHECK(!client_);
     client_ = client;
@@ -312,7 +319,8 @@ class AndroidOutputSurface : public cc::OutputSurface {
         gl::GetGLColorSpace(color_space), has_alpha);
   }
 
-  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
+  viz::OverlayCandidateValidator* GetOverlayCandidateValidator()
+      const override {
     return overlay_candidate_validator_.get();
   }
 
@@ -342,23 +350,24 @@ class AndroidOutputSurface : public cc::OutputSurface {
   }
 
   void OnSwapBuffersCompleted(
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result,
+      const gfx::SwapResponse& response,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
-    RenderWidgetHostImpl::OnGpuSwapBuffersCompleted(latency_info);
-    client_->DidReceiveSwapBuffersAck();
+    client_->DidReceiveSwapBuffersAck(response.swap_id);
     swap_buffers_callback_.Run();
+    latency_info_cache_.OnSwapBuffersCompleted(response);
   }
 
  private:
-  cc::OutputSurfaceClient* client_ = nullptr;
+  viz::OutputSurfaceClient* client_ = nullptr;
   base::Closure swap_buffers_callback_;
-  std::unique_ptr<cc::OverlayCandidateValidator> overlay_candidate_validator_;
+  std::unique_ptr<viz::OverlayCandidateValidator> overlay_candidate_validator_;
+  LatencyInfoCache latency_info_cache_;
+
   base::WeakPtrFactory<AndroidOutputSurface> weak_ptr_factory_;
 };
 
 #if BUILDFLAG(ENABLE_VULKAN)
-class VulkanOutputSurface : public cc::OutputSurface {
+class VulkanOutputSurface : public viz::OutputSurface {
  public:
   explicit VulkanOutputSurface(
       scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
@@ -382,13 +391,13 @@ class VulkanOutputSurface : public cc::OutputSurface {
     return true;
   }
 
-  bool BindToClient(cc::OutputSurfaceClient* client) override {
+  bool BindToClient(viz::OutputSurfaceClient* client) override {
     if (!OutputSurface::BindToClient(client))
       return false;
     return true;
   }
 
-  void SwapBuffers(cc::CompositorFrame frame) override {
+  void SwapBuffers(viz::CompositorFrame frame) override {
     surface_->SwapBuffers();
     task_runner_->PostTask(FROM_HERE,
                            base::Bind(&VulkanOutputSurface::SwapBuffersAck,
@@ -474,10 +483,13 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
       root_window_(root_window),
       needs_animate_(false),
       pending_frames_(0U),
-      num_successive_context_creation_failures_(0),
       layer_tree_frame_sink_request_pending_(false),
       weak_factory_(this) {
   GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
+#if DCHECK_IS_ON()
+  GetHostFrameSinkManager()->SetFrameSinkDebugLabel(frame_sink_id_,
+                                                    "CompositorImpl");
+#endif
   DCHECK(client);
   DCHECK(root_window);
   DCHECK(root_window->GetLayer() == nullptr);
@@ -488,9 +500,14 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
   root_window->AttachCompositor(this);
   CreateLayerTreeHost();
   resource_manager_.Init(host_->GetUIResourceManager());
+
+  // Listen to display density change events and update painted device scale
+  // factor accordingly.
+  display::Screen::GetScreen()->AddObserver(this);
 }
 
 CompositorImpl::~CompositorImpl() {
+  display::Screen::GetScreen()->RemoveObserver(this);
   root_window_->DetachCompositor();
   root_window_->SetLayer(nullptr);
   // Clean-up any surface references.
@@ -554,6 +571,11 @@ void CompositorImpl::SetSurface(jobject surface) {
   }
 }
 
+void CompositorImpl::SetBackgroundColor(int color) {
+  DCHECK(host_);
+  host_->set_background_color(color);
+}
+
 void CompositorImpl::CreateLayerTreeHost() {
   DCHECK(!host_);
 
@@ -583,6 +605,7 @@ void CompositorImpl::CreateLayerTreeHost() {
   host_->SetFrameSinkId(frame_sink_id_);
   host_->SetViewportSize(size_);
   host_->SetDeviceScaleFactor(1);
+  host_->SetPaintedDeviceScaleFactor(root_window_->GetDipScale());
 
   if (needs_animate_)
     host_->SetNeedsAnimate();
@@ -627,26 +650,12 @@ void CompositorImpl::SetWindowBounds(const gfx::Size& size) {
   root_window_->GetLayer()->SetBounds(size);
 }
 
-void CompositorImpl::SetHasTransparentBackground(bool transparent) {
-  DCHECK(host_);
-  host_->set_has_transparent_background(transparent);
-
-  // Give a delay in setting the background color to avoid the color for
-  // the normal mode (white) affecting the UI transition.
-  base::ThreadTaskRunnerHandle::Get().get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&CompositorImpl::SetBackgroundColor,
-                 weak_factory_.GetWeakPtr(),
-                 transparent ? SK_ColorBLACK : SK_ColorWHITE),
-      base::TimeDelta::FromMilliseconds(500));
+void CompositorImpl::SetDeferCommits(bool defer_commits) {
+  host_->SetDeferCommits(defer_commits);
 }
 
 void CompositorImpl::SetRequiresAlphaChannel(bool flag) {
   requires_alpha_channel_ = flag;
-}
-
-void CompositorImpl::SetBackgroundColor(int color) {
-  host_->set_background_color(color);
 }
 
 void CompositorImpl::SetNeedsComposite() {
@@ -700,34 +709,11 @@ void CompositorImpl::HandlePendingLayerTreeFrameSinkRequest() {
     return;
 #endif
 
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableTimeoutsForProfiling)) {
-#if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
-    defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
-    const int64_t kGpuChannelTimeoutInSeconds = 40;
-#else
-    // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
-    // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
-    // chance to crash itself before crashing the browser.
-    const int64_t kGpuChannelTimeoutInSeconds = 20;
-#endif
-
-    // Start the timer first, if the result comes synchronously, we want it to
-    // stop in the callback.
-    establish_gpu_channel_timeout_.Start(
-        FROM_HERE, base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
-        this, &CompositorImpl::OnGpuChannelTimeout);
-  }
-
   DCHECK(surface_handle_ != gpu::kNullSurfaceHandle);
   BrowserMainLoop::GetInstance()
       ->gpu_channel_establish_factory()
       ->EstablishGpuChannel(base::Bind(&CompositorImpl::OnGpuChannelEstablished,
                                        weak_factory_.GetWeakPtr()));
-}
-
-void CompositorImpl::OnGpuChannelTimeout() {
-  LOG(FATAL) << "Timed out waiting for GPU channel.";
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -742,7 +728,7 @@ void CompositorImpl::CreateVulkanOutputSurface() {
     return;
 
   // TODO(crbug.com/582558): Need to match GL and implement DidSwapBuffers.
-  auto vulkan_surface = base::MakeUnique<VulkanOutputSurface>(
+  auto vulkan_surface = std::make_unique<VulkanOutputSurface>(
       vulkan_context_provider, base::ThreadTaskRunnerHandle::Get());
   if (!vulkan_surface->Initialize(window_))
     return;
@@ -754,8 +740,6 @@ void CompositorImpl::CreateVulkanOutputSurface() {
 
 void CompositorImpl::OnGpuChannelEstablished(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
-  establish_gpu_channel_timeout_.Stop();
-
   // We might end up queing multiple GpuChannel requests for the same
   // LayerTreeFrameSink request as the visibility of the compositor changes, so
   // the LayerTreeFrameSink request could have been handled already.
@@ -784,8 +768,8 @@ void CompositorImpl::OnGpuChannelEstablished(
                              .color_space();
 
   ui::ContextProviderCommandBuffer* shared_context = nullptr;
-  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
-      new ui::ContextProviderCommandBuffer(
+  auto context_provider =
+      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), stream_id, stream_priority,
           surface_handle_,
           GURL(std::string("chrome://gpu/CompositorImpl::") +
@@ -796,16 +780,16 @@ void CompositorImpl::OnGpuChannelEstablished(
                                          requires_alpha_channel_),
           shared_context,
           ui::command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
-  if (!context_provider->BindToCurrentThread()) {
-    LOG(ERROR) << "Failed to init viz::ContextProvider for compositor.";
-    LOG_IF(FATAL, ++num_successive_context_creation_failures_ >= 2)
-        << "Too many context creation failures. Giving up... ";
+  auto result = context_provider->BindToCurrentThread();
+  LOG_IF(FATAL, result == gpu::ContextResult::kFatalFailure)
+      << "Fatal error making Gpu context";
+  if (result != gpu::ContextResult::kSuccess) {
     HandlePendingLayerTreeFrameSinkRequest();
     return;
   }
 
   // Unretained is safe this owns viz::Display which owns OutputSurface.
-  auto display_output_surface = base::MakeUnique<AndroidOutputSurface>(
+  auto display_output_surface = std::make_unique<AndroidOutputSurface>(
       context_provider,
       base::Bind(&CompositorImpl::DidSwapBuffers, base::Unretained(this)));
   InitializeDisplay(std::move(display_output_surface), nullptr,
@@ -813,13 +797,12 @@ void CompositorImpl::OnGpuChannelEstablished(
 }
 
 void CompositorImpl::InitializeDisplay(
-    std::unique_ptr<cc::OutputSurface> display_output_surface,
+    std::unique_ptr<viz::OutputSurface> display_output_surface,
     scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
     scoped_refptr<viz::ContextProvider> context_provider) {
   DCHECK(layer_tree_frame_sink_request_pending_);
 
   pending_frames_ = 0;
-  num_successive_context_creation_failures_ = 0;
 
   if (context_provider) {
     gpu_capabilities_ = context_provider->ContextCapabilities();
@@ -828,31 +811,33 @@ void CompositorImpl::InitializeDisplay(
   }
 
   viz::FrameSinkManagerImpl* manager = GetFrameSinkManager();
-  auto* task_runner = base::ThreadTaskRunnerHandle::Get().get();
-  auto scheduler = base::MakeUnique<viz::DisplayScheduler>(
-      root_window_->GetBeginFrameSource(), task_runner,
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      base::ThreadTaskRunnerHandle::Get();
+  auto scheduler = std::make_unique<viz::DisplayScheduler>(
+      root_window_->GetBeginFrameSource(), task_runner.get(),
       display_output_surface->capabilities().max_frames_pending);
 
   viz::RendererSettings renderer_settings;
   renderer_settings.allow_antialiasing = false;
   renderer_settings.highp_threshold_min = 2048;
-  renderer_settings.enable_color_correct_rendering =
-      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
   auto* gpu_memory_buffer_manager = BrowserMainLoop::GetInstance()
                                         ->gpu_channel_establish_factory()
                                         ->GetGpuMemoryBufferManager();
-  display_ = base::MakeUnique<viz::Display>(
+
+  // Don't re-register BeginFrameSource on context loss.
+  const bool should_register_begin_frame_source = !display_;
+
+  display_ = std::make_unique<viz::Display>(
       viz::ServerSharedBitmapManager::current(), gpu_memory_buffer_manager,
       renderer_settings, frame_sink_id_, std::move(display_output_surface),
-      std::move(scheduler),
-      base::MakeUnique<cc::TextureMailboxDeleter>(task_runner));
+      std::move(scheduler), std::move(task_runner));
 
   auto layer_tree_frame_sink =
       vulkan_context_provider
-          ? base::MakeUnique<viz::DirectLayerTreeFrameSink>(
+          ? std::make_unique<viz::DirectLayerTreeFrameSink>(
                 frame_sink_id_, GetHostFrameSinkManager(), manager,
                 display_.get(), vulkan_context_provider)
-          : base::MakeUnique<viz::DirectLayerTreeFrameSink>(
+          : std::make_unique<viz::DirectLayerTreeFrameSink>(
                 frame_sink_id_, GetHostFrameSinkManager(), manager,
                 display_.get(), context_provider,
                 nullptr /* worker_context_provider */,
@@ -862,8 +847,10 @@ void CompositorImpl::InitializeDisplay(
   display_->SetVisible(true);
   display_->Resize(size_);
   display_->SetColorSpace(display_color_space_, display_color_space_);
-  GetFrameSinkManager()->RegisterBeginFrameSource(
-      root_window_->GetBeginFrameSource(), frame_sink_id_);
+  if (should_register_begin_frame_source) {
+    GetFrameSinkManager()->RegisterBeginFrameSource(
+        root_window_->GetBeginFrameSource(), frame_sink_id_);
+  }
   host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 }
 
@@ -954,6 +941,17 @@ void CompositorImpl::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   // TODO(fsamuel): Once surface synchronization is turned on, the fallback
   // surface should be set here.
+}
+
+void CompositorImpl::OnDisplayMetricsChanged(const display::Display& display,
+                                             uint32_t changed_metrics) {
+  if (changed_metrics & display::DisplayObserver::DisplayMetric::
+                            DISPLAY_METRIC_DEVICE_SCALE_FACTOR &&
+      display.id() == display::Screen::GetScreen()
+                          ->GetDisplayNearestWindow(root_window_)
+                          .id()) {
+    host_->SetPaintedDeviceScaleFactor(root_window_->GetDipScale());
+  }
 }
 
 bool CompositorImpl::HavePendingReadbacks() {

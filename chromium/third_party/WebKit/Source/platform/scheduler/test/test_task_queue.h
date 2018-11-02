@@ -12,10 +12,17 @@ namespace scheduler {
 
 class TestTaskQueue : public TaskQueue {
  public:
-  explicit TestTaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl);
+  explicit TestTaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
+                         const TaskQueue::Spec& spec);
   ~TestTaskQueue() override;
 
   using TaskQueue::GetTaskQueueImpl;
+
+  base::WeakPtr<TestTaskQueue> GetWeakPtr();
+
+ private:
+  // Used to ensure that task queue is deleted in tests.
+  base::WeakPtrFactory<TestTaskQueue> weak_factory_;
 };
 
 }  // namespace scheduler

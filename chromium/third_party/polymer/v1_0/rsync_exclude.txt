@@ -20,3 +20,10 @@ metadata.html
 */patterns/
 */site/
 */templates/
+
+# iron-flex-layout
+iron-flex-layout/classes/
+
+#paper-material
+paper-material/paper-material.html
+paper-material/paper-material.js

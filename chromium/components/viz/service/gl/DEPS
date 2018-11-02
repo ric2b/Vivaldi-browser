@@ -1,4 +1,5 @@
 include_rules = [
+  "+components/arc/video_accelerator",
   "+gpu/command_buffer",
   "+gpu/config",
   "+gpu/ipc",
@@ -8,7 +9,7 @@ include_rules = [
   "+media/gpu",
   "+media/mojo",
   "+mojo/public/cpp",
-  "+services/ui/gpu/interfaces",
+  "+services/viz/privileged/interfaces",
   "+ui/gl",
 ]
 

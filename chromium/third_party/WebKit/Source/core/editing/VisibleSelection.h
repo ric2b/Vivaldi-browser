@@ -28,12 +28,11 @@
 
 #include "core/CoreExport.h"
 #include "core/editing/EditingStrategy.h"
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/SelectionTemplate.h"
+#include "core/editing/Forward.h"
+#include "core/editing/Position.h"
 #include "core/editing/SelectionType.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/TextGranularity.h"
-#include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "platform/wtf/Allocator.h"
 
@@ -69,26 +68,10 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   PositionTemplate<Strategy> Start() const;
   PositionTemplate<Strategy> End() const;
 
-  VisiblePositionTemplate<Strategy> VisibleStart() const {
-    return CreateVisiblePosition(
-        Start(), IsRange() ? TextAffinity::kDownstream : Affinity());
-  }
-  VisiblePositionTemplate<Strategy> VisibleEnd() const {
-    return CreateVisiblePosition(
-        End(), IsRange() ? TextAffinity::kUpstream : Affinity());
-  }
-  VisiblePositionTemplate<Strategy> VisibleBase() const {
-    return CreateVisiblePosition(
-        base_, IsRange() ? (IsBaseFirst() ? TextAffinity::kUpstream
-                                          : TextAffinity::kDownstream)
-                         : Affinity());
-  }
-  VisiblePositionTemplate<Strategy> VisibleExtent() const {
-    return CreateVisiblePosition(
-        extent_, IsRange() ? (IsBaseFirst() ? TextAffinity::kDownstream
-                                            : TextAffinity::kUpstream)
-                           : Affinity());
-  }
+  VisiblePositionTemplate<Strategy> VisibleStart() const;
+  VisiblePositionTemplate<Strategy> VisibleEnd() const;
+  VisiblePositionTemplate<Strategy> VisibleBase() const;
+  VisiblePositionTemplate<Strategy> VisibleExtent() const;
 
   bool operator==(const VisibleSelectionTemplate&) const;
   bool operator!=(const VisibleSelectionTemplate& other) const {
@@ -98,9 +81,6 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   bool IsNone() const;
   bool IsCaret() const;
   bool IsRange() const;
-  bool IsNonOrphanedCaretOrRange() const {
-    return !IsNone() && !Start().IsOrphan() && !End().IsOrphan();
-  }
 
   // True if base() <= extent().
   bool IsBaseFirst() const { return base_is_first_; }
@@ -125,7 +105,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
       const PositionTemplate<Strategy>& extent,
       TextAffinity);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
 #ifndef NDEBUG
   void ShowTreeForThis() const;

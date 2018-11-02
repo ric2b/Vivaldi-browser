@@ -9,18 +9,16 @@
   <template>
     <style>
       :host {
-        @apply(--cr-icon-height-width);
         display: flex;  /* Position independently from the line-height. */
       }
 
       paper-tooltip {
-        --paper-tooltip: {
-          font-size: 92.31%;  /* Effectively 12px if the host default is 13px. */
-          font-weight: 500;
-          max-width: 330px;
-          min-width: 200px;
-          padding: 10px 8px;
-        };
+        --paper-tooltip: var(--cr-tooltip);
+      }
+
+      iron-icon {
+        --iron-icon-width: var(--cr-icon-size);
+        --iron-icon-height: var(--cr-icon-size);
       }
     </style>
     <iron-icon id="indicator" tabindex="0" aria-label$="[[iconAriaLabel]]"

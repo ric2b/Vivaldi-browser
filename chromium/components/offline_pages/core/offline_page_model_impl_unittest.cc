@@ -25,6 +25,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/client_policy_controller.h"
 #include "components/offline_pages/core/offline_page_client_policy.h"
@@ -92,7 +93,6 @@ class OfflinePageModelImplTest
   void OnSavePageDone(SavePageResult result, int64_t offline_id);
   void OnAddPageDone(AddPageResult result, int64_t offline_id);
   void OnDeletePageDone(DeletePageResult result);
-  void OnCheckPagesExistOfflineDone(const CheckPagesExistOfflineResult& result);
   void OnGetOfflineIdsForClientIdDone(MultipleOfflineIdResult* storage,
                                       const MultipleOfflineIdResult& result);
   void OnGetSingleOfflinePageItemResult(
@@ -171,9 +171,11 @@ class OfflinePageModelImplTest
     model()->DeletePagesByOfflineId(offline_ids, callback);
   }
 
-  bool HasPages(std::string name_space);
+  void SetTemporaryDirSameWithPersistent(bool is_same) {
+    temporary_dir_same_with_persistent_ = is_same;
+  }
 
-  CheckPagesExistOfflineResult CheckPagesExistOffline(std::set<GURL>);
+  bool HasPages(std::string name_space);
 
   MultipleOfflineIdResult GetOfflineIdsForClientId(const ClientId& client_id);
 
@@ -181,8 +183,6 @@ class OfflinePageModelImplTest
 
   MultipleOfflinePageItemResult GetPagesByFinalURL(const GURL& url);
   MultipleOfflinePageItemResult GetPagesByAllURLS(const GURL& url);
-
-  const base::FilePath& temp_path() const { return temp_dir_.GetPath(); }
 
   OfflinePageModelImpl* model() { return model_.get(); }
 
@@ -216,10 +216,21 @@ class OfflinePageModelImplTest
 
   const base::HistogramTester& histograms() const { return histogram_tester_; }
 
+  const base::FilePath& temporary_dir_path() const {
+    if (temporary_dir_same_with_persistent_)
+      return persistent_dir_.GetPath();
+    return temporary_dir_.GetPath();
+  }
+
+  const base::FilePath& persistent_dir_path() const {
+    return persistent_dir_.GetPath();
+  }
+
  private:
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
-  base::ScopedTempDir temp_dir_;
+  base::ScopedTempDir temporary_dir_;
+  base::ScopedTempDir persistent_dir_;
 
   std::unique_ptr<OfflinePageModelImpl> model_;
   SavePageResult last_save_result_;
@@ -231,10 +242,10 @@ class OfflinePageModelImplTest
   int64_t last_deleted_offline_id_;
   ClientId last_deleted_client_id_;
   std::string last_deleted_request_origin_;
-  CheckPagesExistOfflineResult last_pages_exist_result_;
   int last_cleared_pages_count_;
   DeletePageResult last_clear_page_result_;
   bool last_expire_page_result_;
+  bool temporary_dir_same_with_persistent_;
 
   base::HistogramTester histogram_tester_;
 };
@@ -247,12 +258,14 @@ OfflinePageModelImplTest::OfflinePageModelImplTest()
       last_add_result_(AddPageResult::STORE_FAILURE),
       last_add_offline_id_(-1),
       last_delete_result_(DeletePageResult::CANCELLED),
-      last_deleted_offline_id_(-1) {}
+      last_deleted_offline_id_(-1),
+      temporary_dir_same_with_persistent_(false) {}
 
 OfflinePageModelImplTest::~OfflinePageModelImplTest() {}
 
 void OfflinePageModelImplTest::SetUp() {
-  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+  ASSERT_TRUE(temporary_dir_.CreateUniqueTempDir());
+  ASSERT_TRUE(persistent_dir_.CreateUniqueTempDir());
   model_ = BuildModel(BuildStore());
   model_->GetPolicyController()->AddPolicyForTest(
       kOriginalTabNamespace,
@@ -310,11 +323,6 @@ void OfflinePageModelImplTest::OnDeletePageDone(DeletePageResult result) {
   last_delete_result_ = result;
 }
 
-void OfflinePageModelImplTest::OnCheckPagesExistOfflineDone(
-    const CheckPagesExistOfflineResult& result) {
-  last_pages_exist_result_ = result;
-}
-
 void OfflinePageModelImplTest::OnStoreUpdateDone(bool /* success - ignored */) {
 }
 
@@ -322,9 +330,9 @@ std::unique_ptr<OfflinePageTestArchiver>
 OfflinePageModelImplTest::BuildArchiver(
     const GURL& url,
     OfflinePageArchiver::ArchiverResult result) {
-  return std::unique_ptr<OfflinePageTestArchiver>(
-      new OfflinePageTestArchiver(this, url, result, kTestTitle, kTestFileSize,
-                                  base::ThreadTaskRunnerHandle::Get()));
+  return std::unique_ptr<OfflinePageTestArchiver>(new OfflinePageTestArchiver(
+      this, url, result, kTestTitle, kTestFileSize, std::string(),
+      base::ThreadTaskRunnerHandle::Get()));
 }
 
 std::unique_ptr<OfflinePageMetadataStore>
@@ -335,8 +343,10 @@ OfflinePageModelImplTest::BuildStore() {
 
 std::unique_ptr<OfflinePageModelImpl> OfflinePageModelImplTest::BuildModel(
     std::unique_ptr<OfflinePageMetadataStore> store) {
-  std::unique_ptr<ArchiveManager> archive_manager(new ArchiveManager(
-      temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get()));
+  std::unique_ptr<ArchiveManager> archive_manager = nullptr;
+  archive_manager = base::MakeUnique<ArchiveManager>(
+      temporary_dir_path(), persistent_dir_path(),
+      base::ThreadTaskRunnerHandle::Get());
   return std::unique_ptr<OfflinePageModelImpl>(
       new OfflinePageModelImpl(std::move(store), std::move(archive_manager),
                                base::ThreadTaskRunnerHandle::Get()));
@@ -368,7 +378,6 @@ void OfflinePageModelImplTest::ResetResults() {
   last_save_result_ = SavePageResult::CANCELLED;
   last_delete_result_ = DeletePageResult::CANCELLED;
   last_archiver_path_.clear();
-  last_pages_exist_result_.clear();
   last_cleared_pages_count_ = 0;
 }
 
@@ -478,15 +487,6 @@ void OfflinePageModelImplTest::DeletePagesByClientIds(
       client_ids,
       base::Bind(&OfflinePageModelImplTest::OnDeletePageDone, AsWeakPtr()));
   PumpLoop();
-}
-
-CheckPagesExistOfflineResult OfflinePageModelImplTest::CheckPagesExistOffline(
-    std::set<GURL> pages) {
-  model()->CheckPagesExistOffline(
-      pages, base::Bind(&OfflinePageModelImplTest::OnCheckPagesExistOfflineDone,
-                        AsWeakPtr()));
-  PumpLoop();
-  return last_pages_exist_result_;
 }
 
 MultipleOfflineIdResult OfflinePageModelImplTest::GetOfflineIdsForClientId(
@@ -811,7 +811,7 @@ TEST_F(OfflinePageModelImplTest, SavePageOnBackground) {
 
 TEST_F(OfflinePageModelImplTest, AddPage) {
   base::FilePath file_path;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_path(), &file_path));
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temporary_dir_path(), &file_path));
   int64_t offline_id =
       base::RandGenerator(std::numeric_limits<int64_t>::max()) + 1;
 
@@ -1052,7 +1052,6 @@ TEST_F(OfflinePageModelImplTest, DetectThatOfflineCopyIsMissing) {
 TEST_F(OfflinePageModelImplTest, DetectThatOfflineCopyIsMissingAfterLoad) {
   // Save a page.
   SavePage(kTestUrl, kTestClientId1);
-  PumpLoop();
   int64_t offline_id = last_save_offline_id();
 
   ResetResults();
@@ -1071,7 +1070,6 @@ TEST_F(OfflinePageModelImplTest, DetectThatOfflineCopyIsMissingAfterLoad) {
 TEST_F(OfflinePageModelImplTest, DetectThatHeadlessPageIsDeleted) {
   // Save a page.
   SavePage(kTestUrl, kTestClientId1);
-  PumpLoop();
   int64_t offline_id = last_save_offline_id();
 
   ResetResults();
@@ -1089,6 +1087,48 @@ TEST_F(OfflinePageModelImplTest, DetectThatHeadlessPageIsDeleted) {
 
   EXPECT_EQ(0UL, GetAllPages().size());
   EXPECT_FALSE(base::PathExists(path));
+}
+
+// This test is affected by https://crbug.com/725685, which only affects windows
+// platform.
+#if defined(OS_WIN)
+#define MAYBE_DeleteTemporaryPagesInWrongDir \
+  DISABLED_DeleteTemporaryPagesInWrongDir
+#else
+#define MAYBE_DeleteTemporaryPagesInWrongDir DeleteTemporaryPagesInWrongDir
+#endif
+TEST_F(OfflinePageModelImplTest, MAYBE_DeleteTemporaryPagesInWrongDir) {
+  // Set temporary directory same with persistent one.
+  SetTemporaryDirSameWithPersistent(true);
+  ResetModel();
+  PumpLoop();
+
+  // Save a temporary page.
+  SavePage(kTestUrl, kTestClientId1);
+  int64_t temporary_id = last_save_offline_id();
+  // Save a persistent page.
+  SavePage(kTestUrl2, kTestUserRequestedClientId);
+  int64_t persistent_id = last_save_offline_id();
+
+  EXPECT_EQ(2UL, GetAllPages().size());
+  std::unique_ptr<OfflinePageItem> temporary_page =
+      GetPageByOfflineId(temporary_id);
+  std::unique_ptr<OfflinePageItem> persistent_page =
+      GetPageByOfflineId(persistent_id);
+
+  EXPECT_EQ(temporary_page->file_path.DirName(),
+            persistent_page->file_path.DirName());
+
+  // Reset model to trigger consistency check, and let temporary directory be
+  // different with the persistent one. The previously saved temporary page will
+  // be treated as 'saved in persistent location'.
+  SetTemporaryDirSameWithPersistent(false);
+  ResetModel();
+  PumpLoop();
+
+  // Check the temporary page is deleted.
+  EXPECT_EQ(1UL, GetAllPages().size());
+  EXPECT_EQ(persistent_id, GetAllPages()[0].offline_id);
 }
 
 TEST_F(OfflinePageModelImplTest, DeleteMultiplePages) {
@@ -1206,27 +1246,6 @@ TEST_F(OfflinePageModelImplTest, GetPagesByAllURLS) {
   EXPECT_EQ(kTestUrl, pages[1 - i].url);
   EXPECT_EQ(kTestClientId1, pages[1 - i].client_id);
   EXPECT_EQ(kTestUrl2, pages[1 - i].original_url);
-}
-
-TEST_F(OfflinePageModelImplTest, CheckPagesExistOffline) {
-  SavePage(kTestUrl, kTestClientId1);
-  SavePage(kTestUrl2, kTestClientId2);
-
-  const ClientId last_n_client_id(kOriginalTabNamespace, "1234");
-  SavePage(kTestUrl3, last_n_client_id);
-
-  std::set<GURL> input;
-  input.insert(kTestUrl);
-  input.insert(kTestUrl2);
-  input.insert(kTestUrl3);
-  input.insert(kTestUrl4);
-
-  CheckPagesExistOfflineResult existing_pages = CheckPagesExistOffline(input);
-  EXPECT_EQ(2U, existing_pages.size());
-  EXPECT_NE(existing_pages.end(), existing_pages.find(kTestUrl));
-  EXPECT_NE(existing_pages.end(), existing_pages.find(kTestUrl2));
-  EXPECT_EQ(existing_pages.end(), existing_pages.find(kTestUrl3));
-  EXPECT_EQ(existing_pages.end(), existing_pages.find(kTestUrl4));
 }
 
 TEST_F(OfflinePageModelImplTest, CanSaveURL) {
@@ -1449,7 +1468,7 @@ TEST_F(OfflinePageModelImplTest, StoreLoadFailurePersists) {
 
   // Model will 'load' but the store underneath it is not functional and
   // will silently fail all sql operations.
-  EXPECT_TRUE(model()->is_loaded());
+  EXPECT_TRUE(model()->is_loaded_);
   EXPECT_EQ(StoreState::FAILED_LOADING, GetStore()->state());
   EXPECT_EQ(0UL, offline_pages.size());
 
@@ -1460,87 +1479,134 @@ TEST_F(OfflinePageModelImplTest, StoreLoadFailurePersists) {
   EXPECT_EQ(SavePageResult::STORE_FAILURE, result.first);
 }
 
-TEST_F(OfflinePageModelImplTest, GetPagesMatchingQuery) {
-  std::unique_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
-      kTestUrl, OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED));
-  SavePageWithArchiverAsync(kTestUrl, kTestClientId1, kTestUrl2, "",
-                            std::move(archiver));
-  PumpLoop();
-
-  std::vector<ClientId> client_ids{kTestClientId1};
-  OfflinePageModelQueryBuilder builder;
-  builder.SetClientIds(OfflinePageModelQuery::Requirement::INCLUDE_MATCHING,
-                       client_ids);
+TEST_F(OfflinePageModelImplTest, GetPagesByNamespace) {
+  SavePage(kTestUrl, ClientId(kCCTNamespace, "123"));
+  SavePage(kTestUrl, ClientId(kDownloadNamespace, "456"));
+  base::FilePath archive_path(last_archiver_path());
+  SavePage(kTestUrl, ClientId(kNTPSuggestionsNamespace, "789"));
 
   MultipleOfflinePageItemResult offline_pages;
-  model()->GetPagesMatchingQuery(
-      builder.Build(model()->GetPolicyController()),
+  model()->GetPagesByNamespace(
+      kDownloadNamespace,
       base::Bind(&OfflinePageModelImplTest::OnGetMultipleOfflinePageItemsResult,
                  AsWeakPtr(), base::Unretained(&offline_pages)));
   PumpLoop();
 
   ASSERT_EQ(1UL, offline_pages.size());
   EXPECT_EQ(kTestUrl, offline_pages[0].url);
-  EXPECT_EQ(kTestClientId1.id, offline_pages[0].client_id.id);
-  EXPECT_EQ(kTestClientId1.name_space, offline_pages[0].client_id.name_space);
-  EXPECT_EQ(last_archiver_path(), offline_pages[0].file_path);
+  EXPECT_EQ("456", offline_pages[0].client_id.id);
+  EXPECT_EQ(kDownloadNamespace, offline_pages[0].client_id.name_space);
+  EXPECT_EQ(archive_path, offline_pages[0].file_path);
   EXPECT_EQ(kTestFileSize, offline_pages[0].file_size);
   EXPECT_EQ(0, offline_pages[0].access_count);
   EXPECT_EQ(0, offline_pages[0].flags);
   EXPECT_EQ(kTestTitle, offline_pages[0].title);
-  EXPECT_EQ(kTestUrl2, offline_pages[0].original_url);
+  EXPECT_EQ(GURL(), offline_pages[0].original_url);
+  EXPECT_EQ("", offline_pages[0].request_origin);
 }
 
-TEST(CommandLineFlagsTest, OfflineBookmarks) {
-  // Enabled by default.
-  EXPECT_TRUE(offline_pages::IsOfflineBookmarksEnabled());
+TEST_F(OfflinePageModelImplTest, GetPagesRemovedOnCacheReset) {
+  SavePage(kTestUrl, ClientId(kCCTNamespace, "123"));
+  base::FilePath archive_path(last_archiver_path());
+  SavePage(kTestUrl, ClientId(kDownloadNamespace, "456"));
+  SavePage(kTestUrl, ClientId(kNTPSuggestionsNamespace, "789"));
 
-  // Check if feature is correctly disabled by command-line flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kOfflineBookmarksFeature);
-  EXPECT_FALSE(offline_pages::IsOfflineBookmarksEnabled());
+  MultipleOfflinePageItemResult offline_pages;
+  model()->GetPagesRemovedOnCacheReset(
+      base::Bind(&OfflinePageModelImplTest::OnGetMultipleOfflinePageItemsResult,
+                 AsWeakPtr(), base::Unretained(&offline_pages)));
+  PumpLoop();
+
+  ASSERT_EQ(1UL, offline_pages.size());
+  EXPECT_EQ(kTestUrl, offline_pages[0].url);
+  EXPECT_EQ("123", offline_pages[0].client_id.id);
+  EXPECT_EQ(kCCTNamespace, offline_pages[0].client_id.name_space);
+  EXPECT_EQ(archive_path, offline_pages[0].file_path);
+  EXPECT_EQ(kTestFileSize, offline_pages[0].file_size);
+  EXPECT_EQ(0, offline_pages[0].access_count);
+  EXPECT_EQ(0, offline_pages[0].flags);
+  EXPECT_EQ(kTestTitle, offline_pages[0].title);
+  EXPECT_EQ(GURL(), offline_pages[0].original_url);
+  EXPECT_EQ("", offline_pages[0].request_origin);
 }
 
-TEST(CommandLineFlagsTest, OffliningRecentPages) {
-  // Enabled by default.
-  EXPECT_TRUE(offline_pages::IsOffliningRecentPagesEnabled());
+TEST_F(OfflinePageModelImplTest, GetPagesSupportedByDownloads) {
+  SavePage(kTestUrl, ClientId(kCCTNamespace, "123"));
+  SavePage(kTestUrl, ClientId(kDownloadNamespace, "456"));
+  base::FilePath download_archive_path(last_archiver_path());
+  SavePage(kTestUrl, ClientId(kNTPSuggestionsNamespace, "789"));
+  base::FilePath ntp_suggestions_archive_path(last_archiver_path());
 
-  // Check if feature is correctly disabled by command-line flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kOffliningRecentPagesFeature);
-  EXPECT_FALSE(offline_pages::IsOffliningRecentPagesEnabled());
+  MultipleOfflinePageItemResult offline_pages;
+  model()->GetPagesSupportedByDownloads(
+      base::Bind(&OfflinePageModelImplTest::OnGetMultipleOfflinePageItemsResult,
+                 AsWeakPtr(), base::Unretained(&offline_pages)));
+  PumpLoop();
+
+  ASSERT_EQ(2UL, offline_pages.size());
+  int download_index = 0;
+  int ntp_suggestions_index = 1;
+  if (offline_pages[0].client_id.name_space != kDownloadNamespace) {
+    download_index = 1;
+    ntp_suggestions_index = 0;
+  }
+
+  EXPECT_EQ(kTestUrl, offline_pages[download_index].url);
+  EXPECT_EQ("456", offline_pages[download_index].client_id.id);
+  EXPECT_EQ(kDownloadNamespace,
+            offline_pages[download_index].client_id.name_space);
+  EXPECT_EQ(download_archive_path, offline_pages[download_index].file_path);
+  EXPECT_EQ(kTestFileSize, offline_pages[download_index].file_size);
+  EXPECT_EQ(0, offline_pages[download_index].access_count);
+  EXPECT_EQ(0, offline_pages[download_index].flags);
+  EXPECT_EQ(kTestTitle, offline_pages[download_index].title);
+  EXPECT_EQ(GURL(), offline_pages[download_index].original_url);
+  EXPECT_EQ("", offline_pages[download_index].request_origin);
+
+  EXPECT_EQ(kTestUrl, offline_pages[ntp_suggestions_index].url);
+  EXPECT_EQ("789", offline_pages[ntp_suggestions_index].client_id.id);
+  EXPECT_EQ(kNTPSuggestionsNamespace,
+            offline_pages[ntp_suggestions_index].client_id.name_space);
+  EXPECT_EQ(ntp_suggestions_archive_path,
+            offline_pages[ntp_suggestions_index].file_path);
+  EXPECT_EQ(kTestFileSize, offline_pages[ntp_suggestions_index].file_size);
+  EXPECT_EQ(0, offline_pages[ntp_suggestions_index].access_count);
+  EXPECT_EQ(0, offline_pages[ntp_suggestions_index].flags);
+  EXPECT_EQ(kTestTitle, offline_pages[ntp_suggestions_index].title);
+  EXPECT_EQ(GURL(), offline_pages[ntp_suggestions_index].original_url);
+  EXPECT_EQ("", offline_pages[ntp_suggestions_index].request_origin);
 }
 
-TEST(CommandLineFlagsTest, OfflinePagesSharing) {
-  // This feature is disabled by default.
-  EXPECT_FALSE(offline_pages::IsOfflinePagesSharingEnabled());
+// This test is affected by https://crbug.com/725685, which only affects windows
+// platform.
+#if defined(OS_WIN)
+#define MAYBE_CheckPagesSavedInSeparateDirs \
+  DISABLED_CheckPagesSavedInSeparateDirs
+#else
+#define MAYBE_CheckPagesSavedInSeparateDirs CheckPagesSavedInSeparateDirs
+#endif
+TEST_F(OfflinePageModelImplTest, MAYBE_CheckPagesSavedInSeparateDirs) {
+  // Save a temporary page.
+  SavePage(kTestUrl, kTestClientId1);
+  int64_t temporary_id = last_save_offline_id();
+  // Save a persistent page.
+  SavePage(kTestUrl2, kTestUserRequestedClientId);
+  int64_t persistent_id = last_save_offline_id();
 
-  // Check if feature is correctly disabled by command-line flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(kOfflinePagesSharingFeature);
-  EXPECT_TRUE(offline_pages::IsOfflinePagesSharingEnabled());
-}
+  std::unique_ptr<OfflinePageItem> temporary_page =
+      GetPageByOfflineId(temporary_id);
+  std::unique_ptr<OfflinePageItem> persistent_page =
+      GetPageByOfflineId(persistent_id);
 
-TEST(CommandLineFlagsTest, OfflinePagesSvelteConcurrentLoading) {
-  // This feature is disabled by default.
-  EXPECT_FALSE(offline_pages::IsOfflinePagesSvelteConcurrentLoadingEnabled());
+  ASSERT_TRUE(temporary_page);
+  ASSERT_TRUE(persistent_page);
 
-  // Check if feature is correctly enabled by command-line flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kOfflinePagesSvelteConcurrentLoadingFeature);
-  EXPECT_TRUE(offline_pages::IsOfflinePagesSvelteConcurrentLoadingEnabled());
-}
+  base::FilePath temporary_page_path = temporary_page->file_path;
+  base::FilePath persistent_page_path = persistent_page->file_path;
 
-TEST(CommandLineFlagsTest, OfflinePagesLoadSignalCollecting) {
-  // This feature is disabled by default.
-  EXPECT_FALSE(offline_pages::IsOfflinePagesLoadSignalCollectingEnabled());
-
-  // Check if feature is correctly enabled by command-line flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kOfflinePagesLoadSignalCollectingFeature);
-  EXPECT_TRUE(offline_pages::IsOfflinePagesLoadSignalCollectingEnabled());
+  EXPECT_TRUE(temporary_dir_path().IsParent(temporary_page_path));
+  EXPECT_TRUE(persistent_dir_path().IsParent(persistent_page_path));
+  EXPECT_NE(temporary_page_path.DirName(), persistent_page_path.DirName());
 }
 
 }  // namespace offline_pages

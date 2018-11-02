@@ -8,6 +8,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/mac/foundation_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller_mock.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -48,13 +50,13 @@ class ManagePasswordsBubbleControllerTest
 };
 
 TEST_F(ManagePasswordsBubbleControllerTest, PendingStateShouldHavePendingView) {
-  SetUpSavePendingState(false);
+  SetUpSavePendingState();
   EXPECT_EQ([SavePendingPasswordViewController class],
             [[controller() currentController] class]);
 }
 
 TEST_F(ManagePasswordsBubbleControllerTest, DismissingShouldCloseWindow) {
-  SetUpSavePendingState(false);
+  SetUpSavePendingState();
   [controller() showWindow:nil];
 
   // Turn off animations so that closing happens immediately.
@@ -88,12 +90,38 @@ TEST_F(ManagePasswordsBubbleControllerTest, ClearModelOnClose) {
 }
 
 TEST_F(ManagePasswordsBubbleControllerTest, TransitionToSignInPromo) {
-  SetUpSavePendingState(false);
+  SetUpSavePendingState();
   [controller() showWindow:nil];
   SavePendingPasswordViewController* saveController =
       base::mac::ObjCCastStrict<SavePendingPasswordViewController>(
           [controller() currentController]);
   EXPECT_TRUE(saveController.saveButton);
+  [saveController.saveButton performClick:nil];
+  EXPECT_EQ([SignInPromoViewController class],
+            [[controller() currentController] class]);
+  EXPECT_TRUE([[controller() window] isVisible]);
+}
+
+// Test that crash doesn't occur after editing the password.
+// https://crbug.com/774033
+TEST_F(ManagePasswordsBubbleControllerTest,
+       TransitionToSignInPromoAfterEditingPassword) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kEnablePasswordSelection);
+  SetUpSavePendingState();
+  GetModelAndCreateIfNull()->set_hide_eye_icon(false);
+  [controller() showWindow:nil];
+  SavePendingPasswordViewController* saveController =
+      base::mac::ObjCCastStrict<SavePendingPasswordViewController>(
+          [controller() currentController]);
+  // Edit the password.
+  ASSERT_TRUE(saveController.eyeButton);
+  [saveController.eyeButton performClick:nil];
+  NSPopUpButton* passwordSelection = saveController.passwordSelectionField;
+  [passwordSelection selectItemAtIndex:1];
+
+  // Save and move to the promo state.
   [saveController.saveButton performClick:nil];
   EXPECT_EQ([SignInPromoViewController class],
             [[controller() currentController] class]);

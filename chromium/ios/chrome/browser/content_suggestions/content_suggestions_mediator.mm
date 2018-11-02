@@ -32,6 +32,8 @@
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
+#include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
+#include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/images/branded_image_provider.h"
 #include "ios/public/provider/chrome/browser/images/whats_new_icon.h"
@@ -171,6 +173,10 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 - (void)setDataSink:(id<ContentSuggestionsDataSink>)dataSink {
   _dataSink = dataSink;
   self.faviconMediator.dataSink = dataSink;
+}
+
++ (NSUInteger)maxSitesShown {
+  return kMaxNumMostVisitedTiles;
 }
 
 #pragma mark - ContentSuggestionsDataSource
@@ -347,9 +353,12 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     self.readingListNeedsReload = NO;
   }
 
-  [self.dataSink
-      dataAvailableForSection:self.sectionInformationByCategory[wrapper]
-                  forceReload:forceReload];
+  if (ntp_snippets::IsCategoryStatusAvailable(
+          self.contentService->GetCategoryStatus(category))) {
+    [self.dataSink
+        dataAvailableForSection:self.sectionInformationByCategory[wrapper]
+                    forceReload:forceReload];
+  }
 }
 
 - (void)contentSuggestionsService:
@@ -436,6 +445,11 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 
 - (void)onMostVisitedURLsAvailable:
     (const ntp_tiles::NTPTilesVector&)mostVisited {
+  // This is used by the content widget.
+  ntp_tile_saver::SaveMostVisitedToDisk(
+      mostVisited, self.faviconMediator.mostVisitedAttributesProvider,
+      app_group::ContentWidgetFaviconsFolder());
+
   self.freshMostVisitedItems = [NSMutableArray array];
   for (const ntp_tiles::NTPTile& tile : mostVisited) {
     ContentSuggestionsMostVisitedItem* item =
@@ -460,6 +474,11 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 }
 
 - (void)onIconMadeAvailable:(const GURL&)siteURL {
+  // This is used by the content widget.
+  ntp_tile_saver::UpdateSingleFavicon(
+      siteURL, self.faviconMediator.mostVisitedAttributesProvider,
+      app_group::ContentWidgetFaviconsFolder());
+
   for (ContentSuggestionsMostVisitedItem* item in self.mostVisitedItems) {
     if (item.URL == siteURL) {
       [self.faviconMediator fetchFaviconForMostVisited:item];

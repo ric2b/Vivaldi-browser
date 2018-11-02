@@ -9,8 +9,7 @@
 #include "core/dom/SandboxFlags.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "public/platform/WebFeaturePolicy.h"
-#include "public/platform/WebVector.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
 
 namespace blink {
 
@@ -22,7 +21,7 @@ class Frame;
 class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
  public:
   virtual ~FrameOwner() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual bool IsLocal() const = 0;
   virtual bool IsRemote() const = 0;
@@ -50,7 +49,7 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
   virtual bool AllowPaymentRequest() const = 0;
   virtual bool IsDisplayNone() const = 0;
   virtual AtomicString Csp() const = 0;
-  virtual const WebParsedFeaturePolicy& ContainerPolicy() const = 0;
+  virtual const ParsedFeaturePolicy& ContainerPolicy() const = 0;
 };
 
 // TODO(dcheng): This class is an internal implementation detail of provisional
@@ -64,7 +63,7 @@ class CORE_EXPORT DummyFrameOwner
  public:
   static DummyFrameOwner* Create() { return new DummyFrameOwner; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { FrameOwner::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { FrameOwner::Trace(visitor); }
 
   // FrameOwner overrides:
   Frame* ContentFrame() const override { return nullptr; }
@@ -84,8 +83,8 @@ class CORE_EXPORT DummyFrameOwner
   bool AllowPaymentRequest() const override { return false; }
   bool IsDisplayNone() const override { return false; }
   AtomicString Csp() const override { return g_null_atom; }
-  const WebParsedFeaturePolicy& ContainerPolicy() const override {
-    DEFINE_STATIC_LOCAL(WebParsedFeaturePolicy, container_policy, ());
+  const ParsedFeaturePolicy& ContainerPolicy() const override {
+    DEFINE_STATIC_LOCAL(ParsedFeaturePolicy, container_policy, ());
     return container_policy;
   }
 

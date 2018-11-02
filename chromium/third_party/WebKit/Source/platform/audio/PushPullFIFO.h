@@ -71,7 +71,7 @@ class BLINK_PLATFORM_EXPORT PushPullFIFO {
   unsigned NumberOfChannels() const { return fifo_bus_->NumberOfChannels(); }
 
   // TODO(hongchan): For single thread unit test only. Consider refactoring.
-  AudioBus* GetFIFOBusForTest() const { return fifo_bus_.Get(); }
+  AudioBus* GetFIFOBusForTest() const { return fifo_bus_.get(); }
 
   // For single thread unit test only. Get the current configuration that
   // consists of FIFO length, number of channels, read/write index position and
@@ -93,7 +93,7 @@ class BLINK_PLATFORM_EXPORT PushPullFIFO {
   size_t frames_available_ = 0;
   size_t index_read_ = 0;
   size_t index_write_ = 0;
-  RefPtr<AudioBus> fifo_bus_;
+  scoped_refptr<AudioBus> fifo_bus_;
 };
 
 }  // namespace blink

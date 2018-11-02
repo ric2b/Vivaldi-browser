@@ -30,6 +30,26 @@ class Browser;
 // Creates and returns a touch bar for the browser window.
 - (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2));
 
+// Updates the back/forward button. Called when creating the touch bar or when
+// the back and forward commands have changed.
+- (void)updateBackForwardControl;
+
+@end
+
+// Private methods exposed for testing.
+@interface BrowserWindowTouchBar (ExposedForTesting)
+
+// Updates the reload/stop button. Called when creating the touch bar or the
+// page load state has been updated.
+- (void)updateReloadStopButton;
+
+// Returns the reload/stop button on the touch bar. Creates it if it's null.
+- (NSButton*)reloadStopButton;
+
+// Returns the back/forward segmented control on the touch bar. Creates it if
+// it's null.
+- (NSSegmentedControl*)backForwardControl;
+
 @end
 
 #endif  // CHROME_BROWSER_UI_COCOA_BROWSER_WINDOW_TOUCH_BAR_H_

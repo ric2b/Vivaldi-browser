@@ -248,6 +248,14 @@ public class AwScrollOffsetManager {
         mDelegate.scrollNativeTo(x, y);
     }
 
+    int getScrollX() {
+        return mNativeScrollX;
+    }
+
+    int getScrollY() {
+        return mNativeScrollY;
+    }
+
     private static int computeDurationInMilliSec(int dx, int dy) {
         int distance = Math.max(Math.abs(dx), Math.abs(dy));
         int duration = distance * 1000 / STD_SCROLL_ANIMATION_SPEED_PIX_PER_SEC;

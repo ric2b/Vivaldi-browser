@@ -4,7 +4,7 @@
 
 #include "core/css/MediaValues.h"
 
-#include "core/css/CSSHelper.h"
+#include "core/css/CSSResolutionUnits.h"
 #include "core/css/MediaValuesCached.h"
 #include "core/css/MediaValuesDynamic.h"
 #include "core/dom/Document.h"
@@ -218,6 +218,9 @@ bool MediaValues::ComputeLengthImpl(double value,
       return true;
     case CSSPrimitiveValue::UnitType::kMillimeters:
       result = value * kCssPixelsPerMillimeter;
+      return true;
+    case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+      result = value * kCssPixelsPerQuarterMillimeter;
       return true;
     case CSSPrimitiveValue::UnitType::kInches:
       result = value * kCssPixelsPerInch;

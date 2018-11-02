@@ -59,7 +59,7 @@ class BatteryImageSource : public gfx::CanvasImageSource {
         bg_color_(bg_color),
         fg_color_(fg_color) {}
 
-  ~BatteryImageSource() override {}
+  ~BatteryImageSource() override = default;
 
   // gfx::ImageSkiaSource implementation.
   void Draw(gfx::Canvas* canvas) override {
@@ -453,7 +453,7 @@ base::string16 PowerStatus::GetAccessibleNameString(
   }
   return battery_time_accessible.empty()
              ? battery_percentage_accessible
-             : battery_percentage_accessible + base::ASCIIToUTF16(". ") +
+             : battery_percentage_accessible + base::ASCIIToUTF16(" ") +
                    battery_time_accessible;
 }
 

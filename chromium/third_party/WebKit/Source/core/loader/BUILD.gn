@@ -6,6 +6,8 @@ import("//third_party/WebKit/Source/core/core.gni")
 
 blink_core_sources("loader") {
   sources = [
+    "AllowedByNosniff.cpp",
+    "AllowedByNosniff.h",
     "BaseFetchContext.cpp",
     "BaseFetchContext.h",
     "CookieJar.cpp",
@@ -34,8 +36,12 @@ blink_core_sources("loader") {
     "HistoryItem.h",
     "HttpEquiv.cpp",
     "HttpEquiv.h",
+    "IdlenessDetector.cpp",
+    "IdlenessDetector.h",
     "ImageLoader.cpp",
     "ImageLoader.h",
+    "InteractiveDetector.cpp",
+    "InteractiveDetector.h",
     "LinkLoader.cpp",
     "LinkLoader.h",
     "LinkLoaderClient.h",
@@ -46,8 +52,6 @@ blink_core_sources("loader") {
     "NavigationScheduler.cpp",
     "NavigationScheduler.h",
     "NetworkHintsInterface.h",
-    "NetworkQuietDetector.cpp",
-    "NetworkQuietDetector.h",
     "PingLoader.cpp",
     "PingLoader.h",
     "PrerendererClient.cpp",
@@ -79,6 +83,8 @@ blink_core_sources("loader") {
     "appcache/ApplicationCache.h",
     "appcache/ApplicationCacheHost.cpp",
     "appcache/ApplicationCacheHost.h",
+    "modulescript/DocumentModuleScriptFetcher.cpp",
+    "modulescript/DocumentModuleScriptFetcher.h",
     "modulescript/ModuleScriptCreationParams.h",
     "modulescript/ModuleScriptFetchRequest.h",
     "modulescript/ModuleScriptFetcher.cpp",
@@ -92,7 +98,6 @@ blink_core_sources("loader") {
     "modulescript/ModuleTreeLinker.h",
     "modulescript/ModuleTreeLinkerRegistry.cpp",
     "modulescript/ModuleTreeLinkerRegistry.h",
-    "modulescript/ModuleTreeReachedUrlSet.h",
     "modulescript/WorkletModuleScriptFetcher.cpp",
     "modulescript/WorkletModuleScriptFetcher.h",
     "private/FrameClientHintsPreferencesContext.cpp",
@@ -131,6 +136,6 @@ blink_core_sources("loader") {
   ]
 
   public_deps = [
-    "//services/network/public/interfaces:interfaces_blink",
+    "//third_party/WebKit/Source/platform",
   ]
 }

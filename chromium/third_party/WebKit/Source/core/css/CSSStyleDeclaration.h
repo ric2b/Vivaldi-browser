@@ -21,8 +21,10 @@
 #ifndef CSSStyleDeclaration_h
 #define CSSStyleDeclaration_h
 
+#include "base/macros.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
@@ -34,31 +36,35 @@ class CSSRule;
 class CSSStyleSheet;
 class CSSValue;
 class ExceptionState;
+enum class SecureContextMode;
 
-class CORE_EXPORT CSSStyleDeclaration
-    : public GarbageCollectedFinalized<CSSStyleDeclaration>,
-      public ScriptWrappable {
+class CORE_EXPORT CSSStyleDeclaration : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
-  WTF_MAKE_NONCOPYABLE(CSSStyleDeclaration);
 
  public:
-  virtual ~CSSStyleDeclaration() {}
+  virtual ~CSSStyleDeclaration() = default;
 
   virtual CSSRule* parentRule() const = 0;
   String cssFloat() { return GetPropertyValueInternal(CSSPropertyFloat); }
-  void setCSSFloat(const String& value, ExceptionState& exception_state) {
+  void setCSSFloat(const ExecutionContext* execution_context,
+                   const String& value,
+                   ExceptionState& exception_state) {
     SetPropertyInternal(CSSPropertyFloat, String(), value, false,
+                        execution_context->GetSecureContextMode(),
                         exception_state);
   }
   virtual String cssText() const = 0;
-  virtual void setCSSText(const String&, ExceptionState&) = 0;
+  virtual void setCSSText(const ExecutionContext*,
+                          const String&,
+                          ExceptionState&) = 0;
   virtual unsigned length() const = 0;
   virtual String item(unsigned index) const = 0;
   virtual String getPropertyValue(const String& property_name) = 0;
   virtual String getPropertyPriority(const String& property_name) = 0;
   virtual String GetPropertyShorthand(const String& property_name) = 0;
   virtual bool IsPropertyImplicit(const String& property_name) = 0;
-  virtual void setProperty(const String& property_name,
+  virtual void setProperty(const ExecutionContext*,
+                           const String& property_name,
                            const String& value,
                            const String& priority,
                            ExceptionState&) = 0;
@@ -78,15 +84,17 @@ class CORE_EXPORT CSSStyleDeclaration
                                    const String& property_value,
                                    const String& value,
                                    bool important,
+                                   SecureContextMode,
                                    ExceptionState&) = 0;
 
   virtual bool CssPropertyMatches(CSSPropertyID, const CSSValue*) const = 0;
-  virtual CSSStyleSheet* ParentStyleSheet() const { return 0; }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual CSSStyleSheet* ParentStyleSheet() const { return nullptr; }
 
  protected:
-  CSSStyleDeclaration() {}
+  CSSStyleDeclaration() = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CSSStyleDeclaration);
 };
 
 }  // namespace blink

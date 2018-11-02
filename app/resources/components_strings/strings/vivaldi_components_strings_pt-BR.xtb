@@ -33,7 +33,6 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Verificar as configurações de DNS, proxy e firewall<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Se você usa um servidor proxy...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
-<translation id="4021036232240155012">O DNS é o serviço de rede que traduz o nome de um website para o real endereço na Internet.</translation>
 <translation id="4130226655945681476">Verificar o modem, o roteador e os cabos da rede</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificar as configurações do antivírus e do firewall<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de rede<ph name="END_LINK" />.</translation>
@@ -76,7 +75,6 @@
 <translation id="7716424297397655342">Não é possível carregar este site do cache</translation>
 <translation id="7758069387465995638">É possível que o software antivírus ou o firewall tenha bloqueado a conexão.</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
-<translation id="8134994873729925007">Não foi possível encontrar um <ph name="BEGIN_ABBR" />endereço DNS<ph name="END_ABBR" /> para <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Acesse &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver a lista de URLs adicionados à lista negra e outras políticas aplicadas pelo administrador do seu sistema.</translation>
 <translation id="8149426793427495338">Seu computador entrou em suspensão.</translation>
 <translation id="8150722005171944719">O arquivo em <ph name="URL" /> não pode ser lido. Ele pode ter sido removido, movido, ou as permissões do arquivo podem estar impedindo o acesso.</translation>

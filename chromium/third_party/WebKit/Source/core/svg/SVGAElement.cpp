@@ -22,8 +22,6 @@
 
 #include "core/svg/SVGAElement.h"
 
-#include "core/SVGNames.h"
-#include "core/XLinkNames.h"
 #include "core/dom/Attr.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
@@ -32,7 +30,7 @@
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAnchorElement.h"
-#include "core/html/HTMLFormElement.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/svg/LayoutSVGInline.h"
 #include "core/layout/svg/LayoutSVGText.h"
@@ -43,6 +41,8 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/svg/animation/SVGSMILElement.h"
+#include "core/svg_names.h"
+#include "core/xlink_names.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 
 namespace blink {
@@ -57,7 +57,7 @@ inline SVGAElement::SVGAElement(Document& document)
   AddToPropertyMap(svg_target_);
 }
 
-DEFINE_TRACE(SVGAElement) {
+void SVGAElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(svg_target_);
   SVGGraphicsElement::Trace(visitor);
   SVGURIReference::Trace(visitor);

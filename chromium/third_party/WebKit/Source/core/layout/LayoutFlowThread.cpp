@@ -217,7 +217,7 @@ void LayoutFlowThread::GenerateColumnSetIntervalTree() {
   // manually managing the tree nodes lifecycle.
   multi_column_set_interval_tree_.Clear();
   multi_column_set_interval_tree_.InitIfNeeded();
-  for (auto column_set : multi_column_set_list_)
+  for (auto* column_set : multi_column_set_list_)
     multi_column_set_interval_tree_.Add(
         MultiColumnSetIntervalTree::CreateInterval(
             column_set->LogicalTopInFlowThread(),
@@ -237,7 +237,7 @@ LayoutUnit LayoutFlowThread::NextLogicalTopForUnbreakableContent(
 
 LayoutRect LayoutFlowThread::FragmentsBoundingBox(
     const LayoutRect& layer_bounding_box) const {
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
+  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() ||
          !column_sets_invalidated_);
 
   LayoutRect result;

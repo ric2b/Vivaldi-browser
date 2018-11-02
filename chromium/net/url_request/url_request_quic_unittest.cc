@@ -2,11 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
-
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -134,8 +131,8 @@ class URLRequestQuicTest : public ::testing::Test {
         directory.Append(FILE_PATH_LITERAL("quic_test.example.com.key.sct"))));
     server_.reset(new QuicSimpleServer(
         test::crypto_test_utils::ProofSourceForTesting(), config,
-        net::QuicCryptoServerConfig::ConfigOptions(), AllSupportedVersions(),
-        &response_cache_));
+        net::QuicCryptoServerConfig::ConfigOptions(),
+        AllSupportedTransportVersions(), &response_cache_));
     int rv = server_->Listen(
         net::IPEndPoint(net::IPAddress::IPv4AllZeros(), kTestServerPort));
     EXPECT_GE(rv, 0) << "Quic server fails to start";

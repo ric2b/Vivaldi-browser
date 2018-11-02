@@ -88,9 +88,8 @@ bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
 
   bool outside = true;
   for (auto* browser : *BrowserList::GetInstance()) {
-    gfx::Rect rect = static_cast<VivaldiBrowserWindow*>(browser->window())
-                         ->GetBaseWindow()
-                         ->GetBounds();
+    gfx::Rect rect =
+        browser->is_devtools() ? gfx::Rect() : browser->window()->GetBounds();
     if (rect.Contains(screen_point)) {
       outside = false;
       break;

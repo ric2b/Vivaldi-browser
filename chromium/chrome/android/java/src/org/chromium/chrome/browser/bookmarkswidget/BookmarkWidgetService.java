@@ -11,6 +11,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.StrictMode;
 import android.support.annotation.BinderThread;
@@ -24,20 +27,21 @@ import com.google.android.apps.chrome.appwidget.bookmarks.BookmarkThumbnailWidge
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
+import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
+import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
 
 import java.util.ArrayList;
@@ -187,7 +191,7 @@ public class BookmarkWidgetService extends RemoteViewsService {
 
             mRemainingTaskCount = 1;
             mBookmarkModel = new BookmarkModel();
-            mBookmarkModel.runAfterBookmarkModelLoaded(new Runnable() {
+            mBookmarkModel.finishLoadingBookmarkModel(new Runnable() {
                 @Override
                 public void run() {
                     loadBookmarks(folderId);
@@ -239,8 +243,8 @@ public class BookmarkWidgetService extends RemoteViewsService {
             mRemainingTaskCount++;
             LargeIconCallback callback = new LargeIconCallback() {
                 @Override
-                public void onLargeIconAvailable(
-                        Bitmap icon, int fallbackColor, boolean isFallbackColorDefault) {
+                public void onLargeIconAvailable(Bitmap icon, int fallbackColor,
+                        boolean isFallbackColorDefault, @IconType int iconType) {
                     if (icon == null) {
                         mIconGenerator.setBackgroundColor(fallbackColor);
                         icon = mIconGenerator.generateIconForUrl(bookmark.url);
@@ -286,6 +290,7 @@ public class BookmarkWidgetService extends RemoteViewsService {
 
         // Accessed only on binder threads.
         private BookmarkFolder mCurrentFolder;
+        private Bitmap mFolderBitmap;
 
         @UiThread
         public BookmarkAdapter(Context context, int widgetId) {
@@ -295,7 +300,6 @@ public class BookmarkWidgetService extends RemoteViewsService {
         }
 
         @UiThread
-        @SuppressFBWarnings("DM_EXIT")
         @Override
         public void onCreate() {
             // Required to be applied here redundantly to prevent crashes in the cases where the
@@ -311,9 +315,6 @@ public class BookmarkWidgetService extends RemoteViewsService {
             if (isWidgetNewlyCreated()) {
                 RecordUserAction.record("BookmarkNavigatorWidgetAdded");
             }
-
-            // Partner bookmarks need to be loaded explicitly.
-            PartnerBookmarksShim.kickOffReading(mContext);
 
             mBookmarkModel = new BookmarkModel();
             mBookmarkModel.addObserver(new BookmarkModelObserver() {
@@ -364,6 +365,7 @@ public class BookmarkWidgetService extends RemoteViewsService {
                 }
             });
             deleteWidgetState(mContext, mWidgetId);
+            mFolderBitmap = null;
         }
 
         @BinderThread
@@ -499,7 +501,8 @@ public class BookmarkWidgetService extends RemoteViewsService {
             if (bookmark == mCurrentFolder.folder) {
                 views.setImageViewResource(R.id.favicon, R.drawable.back_normal);
             } else if (bookmark.isFolder) {
-                views.setImageViewResource(R.id.favicon, R.drawable.bookmark_folder);
+                if (mFolderBitmap == null) generateFolderBitmap();
+                views.setImageViewBitmap(R.id.favicon, mFolderBitmap);
             } else {
                 views.setImageViewBitmap(R.id.favicon, bookmark.favicon);
             }
@@ -520,6 +523,26 @@ public class BookmarkWidgetService extends RemoteViewsService {
             }
             views.setOnClickFillInIntent(R.id.list_item, fillIn);
             return views;
+        }
+
+        @BinderThread
+        private void generateFolderBitmap() {
+            // RemoteView does not inherently support tinting icons, and while
+            // BookmarkUtils#getFolderIcon() returns a TintedDrawable, Drawable#getBitmap() does
+            // not return a Bitmap with the tint applied. Programatically draw the drawable into a
+            // canvas backed by a bitmap that can be set as the RemoveView's ImageView bitmap.
+            TintedDrawable drawable = BookmarkUtils.getFolderIcon(mContext.getResources());
+            int width = drawable.getIntrinsicWidth();
+            int height = drawable.getIntrinsicHeight();
+            drawable.setBounds(new Rect(0, 0, width, height));
+
+            // Use the solid color equivalent of dark_mode_tint since bookmark widget has a
+            // translucent background.
+            drawable.setTint(ApiCompatibilityUtils.getColorStateList(
+                    mContext.getResources(), R.color.light_normal_color));
+
+            mFolderBitmap = Bitmap.createBitmap(width, height, Config.ARGB_8888);
+            drawable.draw(new Canvas(mFolderBitmap));
         }
     }
 }

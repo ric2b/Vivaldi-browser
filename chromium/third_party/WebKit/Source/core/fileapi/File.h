@@ -26,11 +26,11 @@
 #ifndef File_h
 #define File_h
 
-#include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrUSVString.h"
+#include "base/memory/scoped_refptr.h"
+#include "bindings/core/v8/array_buffer_or_array_buffer_view_or_blob_or_usv_string.h"
 #include "core/CoreExport.h"
 #include "core/fileapi/Blob.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -72,7 +72,7 @@ class CORE_EXPORT File final : public Blob {
 
   static File* Create(const String& name,
                       double modification_time,
-                      RefPtr<BlobDataHandle> blob_data_handle) {
+                      scoped_refptr<BlobDataHandle> blob_data_handle) {
     return new File(name, modification_time, std::move(blob_data_handle));
   }
 
@@ -85,7 +85,7 @@ class CORE_EXPORT File final : public Blob {
       bool has_snapshot_data,
       uint64_t size,
       double last_modified,
-      RefPtr<BlobDataHandle> blob_data_handle) {
+      scoped_refptr<BlobDataHandle> blob_data_handle) {
     return new File(path, name, relative_path, user_visibility,
                     has_snapshot_data, size, last_modified,
                     std::move(blob_data_handle));
@@ -95,7 +95,7 @@ class CORE_EXPORT File final : public Blob {
       const String& name,
       uint64_t size,
       double last_modified,
-      RefPtr<BlobDataHandle> blob_data_handle) {
+      scoped_refptr<BlobDataHandle> blob_data_handle) {
     return new File(path, name, String(), kIsNotUserVisible, true, size,
                     last_modified, std::move(blob_data_handle));
   }
@@ -208,8 +208,10 @@ class CORE_EXPORT File final : public Blob {
        bool has_snapshot_data,
        uint64_t size,
        double last_modified,
-       RefPtr<BlobDataHandle>);
-  File(const String& name, double modification_time, RefPtr<BlobDataHandle>);
+       scoped_refptr<BlobDataHandle>);
+  File(const String& name,
+       double modification_time,
+       scoped_refptr<BlobDataHandle>);
   File(const String& name, const FileMetadata&, UserVisibility);
   File(const KURL& file_system_url, const FileMetadata&, UserVisibility);
   File(const File&);

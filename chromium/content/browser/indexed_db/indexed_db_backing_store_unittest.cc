@@ -17,9 +17,11 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/default_clock.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_factory_impl.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
+#include "content/browser/indexed_db/indexed_db_metadata_coding.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
 #include "content/browser/indexed_db/leveldb/leveldb_factory.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -88,7 +90,7 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
     DCHECK(!path_base.empty());
 
     std::unique_ptr<LevelDBComparator> comparator =
-        base::MakeUnique<Comparator>();
+        std::make_unique<Comparator>();
 
     if (!base::CreateDirectory(path_base)) {
       *status = leveldb::Status::IOError("Unable to create base dir");
@@ -192,7 +194,7 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
 class TestIDBFactory : public IndexedDBFactoryImpl {
  public:
   explicit TestIDBFactory(IndexedDBContextImpl* idb_context)
-      : IndexedDBFactoryImpl(idb_context) {}
+      : IndexedDBFactoryImpl(idb_context, base::DefaultClock::GetInstance()) {}
 
   scoped_refptr<TestableIndexedDBBackingStore> OpenBackingStoreForTest(
       const Origin& origin,
@@ -250,7 +252,8 @@ class IndexedDBBackingStoreTest : public testing::Test {
     idb_context_->TaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(
                        [](IndexedDBBackingStoreTest* test) {
-                         const Origin origin(GURL("http://localhost:81"));
+                         const Origin origin =
+                             Origin::Create(GURL("http://localhost:81"));
                          test->idb_factory_ =
                              base::MakeRefCounted<TestIDBFactory>(
                                  test->idb_context_.get());
@@ -259,7 +262,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
                                  origin, test->url_request_context_getter_);
                        },
                        base::Unretained(this)));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     // useful keys and values during tests
     value1_ = IndexedDBValue("value1", std::vector<IndexedDBBlobInfo>());
@@ -278,7 +281,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
                          test->backing_store_ = nullptr;
                        },
                        base::Unretained(this)));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   }
@@ -489,7 +492,7 @@ TEST_F(IndexedDBBackingStoreTest, PutGetConsistency) {
             }
           },
           base::Unretained(backing_store()), key1_, value1_));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
@@ -506,7 +509,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
           [](IndexedDBBackingStoreTestWithBlobs* test, TestState* state) {
             // Initiate transaction1 - writing blobs.
             state->transaction1 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction1->Begin();
             std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
@@ -521,7 +524,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
                 state->transaction1->CommitPhaseOne(state->callback1).ok());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -557,7 +560,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
 
             // Initiate transaction3, deleting blobs.
             state->transaction3 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction3->Begin();
             EXPECT_TRUE(test->backing_store()
@@ -570,7 +573,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
 
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -581,7 +584,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
             EXPECT_TRUE(test->CheckBlobRemovals());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
@@ -635,7 +638,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
 
               // Initiate transaction1 - write records.
               state->transaction1 =
-                  base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                  std::make_unique<IndexedDBBackingStore::Transaction>(
                       backing_store);
               state->transaction1->Begin();
               std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
@@ -656,7 +659,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
             },
             base::Unretained(backing_store()), base::Unretained(&state),
             base::ConstRef(keys), database_id, object_store_id));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     idb_context_->TaskRunner()->PostTask(
         FROM_HERE,
@@ -671,7 +674,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
 
               // Initiate transaction 2 - delete range.
               state->transaction2 =
-                  base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                  std::make_unique<IndexedDBBackingStore::Transaction>(
                       backing_store);
               state->transaction2->Begin();
               IndexedDBValue result_value;
@@ -687,7 +690,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
             },
             base::Unretained(backing_store()), base::Unretained(&state), range,
             database_id, object_store_id));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     idb_context_->TaskRunner()->PostTask(
         FROM_HERE,
@@ -706,7 +709,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRange) {
                         backing_store->removals()[1]);
             },
             base::Unretained(backing_store()), base::Unretained(&state)));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
   }
 }
 
@@ -760,7 +763,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRangeEmptyRange) {
 
               // Initiate transaction1 - write records.
               state->transaction1 =
-                  base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                  std::make_unique<IndexedDBBackingStore::Transaction>(
                       backing_store);
               state->transaction1->Begin();
 
@@ -781,7 +784,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRangeEmptyRange) {
             },
             base::Unretained(backing_store()), base::Unretained(&state),
             base::ConstRef(keys), database_id, object_store_id));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     idb_context_->TaskRunner()->PostTask(
         FROM_HERE,
@@ -796,7 +799,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRangeEmptyRange) {
 
               // Initiate transaction 2 - delete range.
               state->transaction2 =
-                  base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                  std::make_unique<IndexedDBBackingStore::Transaction>(
                       backing_store);
               state->transaction2->Begin();
               IndexedDBValue result_value;
@@ -812,7 +815,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRangeEmptyRange) {
             },
             base::Unretained(backing_store()), base::Unretained(&state), range,
             database_id, object_store_id));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
 
     idb_context_->TaskRunner()->PostTask(
         FROM_HERE,
@@ -827,7 +830,7 @@ TEST_F(IndexedDBBackingStoreTest, DeleteRangeEmptyRange) {
               EXPECT_EQ(0UL, backing_store->removals().size());
             },
             base::Unretained(backing_store()), base::Unretained(&state)));
-    RunAllBlockingPoolTasksUntilIdle();
+    RunAllTasksUntilIdle();
   }
 }
 
@@ -845,7 +848,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
           [](IndexedDBBackingStoreTestWithBlobs* test, TestState* state) {
             // Initiate transaction1.
             state->transaction1 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction1->Begin();
             std::vector<std::unique_ptr<storage::BlobDataHandle>> handles1;
@@ -860,7 +863,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
                 state->transaction1->CommitPhaseOne(state->callback1).ok());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -874,7 +877,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
 
             // Initiate transaction2.
             state->transaction2 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction2->Begin();
             std::vector<std::unique_ptr<storage::BlobDataHandle>> handles2;
@@ -889,7 +892,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
                 state->transaction2->CommitPhaseOne(state->callback2).ok());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -909,7 +912,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
             EXPECT_EQ(0U, test->backing_store()->removals().size());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
@@ -926,7 +929,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
       base::BindOnce(
           [](IndexedDBBackingStoreTestWithBlobs* test, TestState* state) {
             state->transaction1 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction1->Begin();
             std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
@@ -941,7 +944,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
                 state->transaction1->CommitPhaseOne(state->callback1).ok());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -976,7 +979,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
             }
 
             state->transaction3 =
-                base::MakeUnique<IndexedDBBackingStore::Transaction>(
+                std::make_unique<IndexedDBBackingStore::Transaction>(
                     test->backing_store());
             state->transaction3->Begin();
             EXPECT_TRUE(test->backing_store()
@@ -988,7 +991,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
                 state->transaction3->CommitPhaseOne(state->callback3).ok());
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -1005,7 +1008,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
             }
           },
           base::Unretained(this), base::Unretained(&state)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 
   idb_context_->TaskRunner()->PostTask(
       FROM_HERE,
@@ -1030,7 +1033,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
             EXPECT_FALSE(test->backing_store()->IsBlobCleanupPending());
           },
           base::Unretained(this)));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 // Make sure that using very high ( more than 32 bit ) values for database_id
@@ -1110,7 +1113,7 @@ TEST_F(IndexedDBBackingStoreTest, HighIds) {
             }
           },
           base::Unretained(backing_store()), key1_, key2_, value1_));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 // Make sure that other invalid ids do not crash.
@@ -1186,7 +1189,7 @@ TEST_F(IndexedDBBackingStoreTest, InvalidIds) {
             EXPECT_FALSE(s.ok());
           },
           base::Unretained(backing_store()), key1_, value1_));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
@@ -1211,23 +1214,32 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
             const bool multi_entry = true;
             const IndexedDBKeyPath index_key_path(ASCIIToUTF16("index_key"));
 
+            IndexedDBMetadataCoding metadata_coding;
+
             {
-              leveldb::Status s = backing_store->CreateIDBDatabaseMetaData(
-                  database_name, version, &database_id);
+              IndexedDBDatabaseMetadata database;
+              leveldb::Status s = metadata_coding.CreateDatabase(
+                  backing_store->db(), backing_store->origin_identifier(),
+                  database_name, version, &database);
               EXPECT_TRUE(s.ok());
-              EXPECT_GT(database_id, 0);
+              EXPECT_GT(database.id, 0);
+              database_id = database.id;
 
               IndexedDBBackingStore::Transaction transaction(backing_store);
               transaction.Begin();
 
-              s = backing_store->CreateObjectStore(
-                  &transaction, database_id, object_store_id, object_store_name,
-                  object_store_key_path, auto_increment);
+              IndexedDBObjectStoreMetadata object_store;
+              s = metadata_coding.CreateObjectStore(
+                  transaction.transaction(), database.id, object_store_id,
+                  object_store_name, object_store_key_path, auto_increment,
+                  &object_store);
               EXPECT_TRUE(s.ok());
 
-              s = backing_store->CreateIndex(
-                  &transaction, database_id, object_store_id, index_id,
-                  index_name, index_key_path, unique, multi_entry);
+              IndexedDBIndexMetadata index;
+              s = metadata_coding.CreateIndex(
+                  transaction.transaction(), database.id, object_store.id,
+                  index_id, index_name, index_key_path, unique, multi_entry,
+                  &index);
               EXPECT_TRUE(s.ok());
 
               scoped_refptr<TestCallback> callback(
@@ -1241,7 +1253,8 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
             {
               IndexedDBDatabaseMetadata database;
               bool found;
-              leveldb::Status s = backing_store->GetIDBDatabaseMetaData(
+              leveldb::Status s = metadata_coding.ReadMetadataForDatabaseName(
+                  backing_store->db(), backing_store->origin_identifier(),
                   database_name, &database, &found);
               EXPECT_TRUE(s.ok());
               EXPECT_TRUE(found);
@@ -1249,10 +1262,6 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
               // database.name is not filled in by the implementation.
               EXPECT_EQ(version, database.version);
               EXPECT_EQ(database_id, database.id);
-
-              s = backing_store->GetObjectStores(database.id,
-                                                 &database.object_stores);
-              EXPECT_TRUE(s.ok());
 
               EXPECT_EQ(1UL, database.object_stores.size());
               IndexedDBObjectStoreMetadata object_store =
@@ -1270,7 +1279,7 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
             }
           },
           base::Unretained(backing_store())));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 TEST_F(IndexedDBBackingStoreTest, GetDatabaseNames) {
@@ -1279,34 +1288,40 @@ TEST_F(IndexedDBBackingStoreTest, GetDatabaseNames) {
                      [](IndexedDBBackingStore* backing_store) {
                        const base::string16 db1_name(ASCIIToUTF16("db1"));
                        const int64_t db1_version = 1LL;
-                       int64_t db1_id;
 
                        // Database records with DEFAULT_VERSION represent
                        // stale data, and should not be enumerated.
                        const base::string16 db2_name(ASCIIToUTF16("db2"));
                        const int64_t db2_version =
                            IndexedDBDatabaseMetadata::DEFAULT_VERSION;
-                       int64_t db2_id;
+                       IndexedDBMetadataCoding metadata_coding;
 
-                       leveldb::Status s =
-                           backing_store->CreateIDBDatabaseMetaData(
-                               db1_name, db1_version, &db1_id);
+                       IndexedDBDatabaseMetadata db1;
+                       leveldb::Status s = metadata_coding.CreateDatabase(
+                           backing_store->db(),
+                           backing_store->origin_identifier(), db1_name,
+                           db1_version, &db1);
                        EXPECT_TRUE(s.ok());
-                       EXPECT_GT(db1_id, 0LL);
+                       EXPECT_GT(db1.id, 0LL);
 
-                       s = backing_store->CreateIDBDatabaseMetaData(
-                           db2_name, db2_version, &db2_id);
+                       IndexedDBDatabaseMetadata db2;
+                       s = metadata_coding.CreateDatabase(
+                           backing_store->db(),
+                           backing_store->origin_identifier(), db2_name,
+                           db2_version, &db2);
                        EXPECT_TRUE(s.ok());
-                       EXPECT_GT(db2_id, db1_id);
+                       EXPECT_GT(db2.id, db1.id);
 
-                       std::vector<base::string16> names =
-                           backing_store->GetDatabaseNames(&s);
+                       std::vector<base::string16> names;
+                       s = metadata_coding.ReadDatabaseNames(
+                           backing_store->db(),
+                           backing_store->origin_identifier(), &names);
                        EXPECT_TRUE(s.ok());
                        ASSERT_EQ(1U, names.size());
                        EXPECT_EQ(db1_name, names[0]);
                      },
                      base::Unretained(backing_store())));
-  RunAllBlockingPoolTasksUntilIdle();
+  RunAllTasksUntilIdle();
 }
 
 }  // namespace
@@ -1321,7 +1336,7 @@ TEST_F(IndexedDBBackingStoreTest, ReadCorruptionInfo) {
   message.clear();
 
   const base::FilePath path_base = temp_dir_.GetPath();
-  const Origin origin(GURL("http://www.google.com/"));
+  const Origin origin = Origin::Create(GURL("http://www.google.com/"));
   ASSERT_FALSE(path_base.empty());
   ASSERT_TRUE(PathIsWritable(path_base));
 

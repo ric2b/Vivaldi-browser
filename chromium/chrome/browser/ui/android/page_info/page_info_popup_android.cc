@@ -8,12 +8,13 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/stl_util.h"
-#include "chrome/browser/android/search_geolocation/search_geolocation_service.h"
+#include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/page_info/page_info.h"
 #include "chrome/browser/ui/page_info/page_info_ui.h"
+#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/security_state/core/security_state.h"
@@ -29,10 +30,11 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 
 // static
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jclass>& clazz,
-                  const JavaParamRef<jobject>& obj,
-                  const JavaParamRef<jobject>& java_web_contents) {
+static jlong JNI_PageInfoPopup_Init(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
 
@@ -51,6 +53,7 @@ PageInfoPopupAndroid::PageInfoPopupAndroid(JNIEnv* env,
     return;
 
   url_ = nav_entry->GetURL();
+  web_contents_ = web_contents;
 
   popup_jobject_.Reset(env, java_page_info_pop);
 
@@ -61,7 +64,7 @@ PageInfoPopupAndroid::PageInfoPopupAndroid(JNIEnv* env,
   helper->GetSecurityInfo(&security_info);
 
   search_geolocation_service_ =
-      SearchGeolocationService::Factory::GetForBrowserContext(
+      SearchPermissionsService::Factory::GetForBrowserContext(
           web_contents->GetBrowserContext());
 
   presenter_.reset(new PageInfo(
@@ -119,6 +122,8 @@ void PageInfoPopupAndroid::SetPermissionInfo(
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_POPUPS);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_ADS);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_AUTOPLAY);
+  if (base::FeatureList::IsEnabled(features::kSoundContentSetting))
+    permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_SOUND);
 
   std::map<ContentSettingsType, ContentSetting>
       user_specified_settings_to_display;
@@ -170,7 +175,7 @@ base::Optional<ContentSetting> PageInfoPopupAndroid::GetSettingToDisplay(
   if (permission.type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
     if (search_geolocation_service_ &&
         search_geolocation_service_->UseDSEGeolocationSetting(
-            url::Origin(url_))) {
+            url::Origin::Create(url_))) {
       return search_geolocation_service_->GetDSEGeolocationSetting()
                  ? CONTENT_SETTING_ALLOW
                  : CONTENT_SETTING_BLOCK;
@@ -181,6 +186,11 @@ base::Optional<ContentSetting> PageInfoPopupAndroid::GetSettingToDisplay(
     // setting should show up in Page Info is in ShouldShowPermission in
     // page_info.cc.
     return permission.default_setting;
+  } else if (permission.type == CONTENT_SETTINGS_TYPE_SOUND) {
+    // The sound content setting should always show up when the tab has played
+    // audio since last navigation.
+    if (web_contents_->WasEverAudible())
+      return permission.default_setting;
   }
   return base::Optional<ContentSetting>();
 }

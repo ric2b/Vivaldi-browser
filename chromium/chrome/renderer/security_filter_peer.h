@@ -11,9 +11,9 @@
 #include <string>
 
 #include "base/macros.h"
-#include "content/public/child/request_peer.h"
 #include "content/public/common/resource_response_info.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/renderer/request_peer.h"
 
 // The SecurityFilterPeer is a proxy to a
 // content::RequestPeer instance.  It is used to pre-process
@@ -66,12 +66,8 @@ class ReplaceContentPeer : public SecurityFilterPeer {
   // content::RequestPeer Implementation.
   void OnReceivedResponse(const content::ResourceResponseInfo& info) override;
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
-  void OnCompletedRequest(int error_code,
-                          bool stale_copy_in_cache,
-                          const base::TimeTicks& completion_time,
-                          int64_t total_transfer_size,
-                          int64_t encoded_body_size,
-                          int64_t decoded_body_size) override;
+  void OnCompletedRequest(
+      const network::URLLoaderCompletionStatus& status) override;
 
  private:
   content::ResourceResponseInfo response_info_;

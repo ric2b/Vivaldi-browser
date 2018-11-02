@@ -179,6 +179,15 @@ def parse_common_test_results(json_results, test_separator='/'):
   return results
 
 
+def extract_filter_list(filter_list):
+  """Helper for isolated script test wrappers. Parses the
+  --isolated-script-test-filter command line argument. Currently, double-colon
+  ('::') is used as the separator between test names, because a single colon may
+  be used in the names of perf benchmarks, which contain URLs.
+  """
+  return filter_list.split('::')
+
+
 def run_integration_test(script_to_run, extra_args, log_file, output):
   integration_test_res = subprocess.call(
       [sys.executable, script_to_run] + extra_args)

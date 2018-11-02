@@ -5,11 +5,12 @@
 #include "core/animation/CSSBasicShapeInterpolationType.h"
 
 #include <memory>
+#include "core/CSSPropertyNames.h"
 #include "core/animation/BasicShapeInterpolationFunctions.h"
-#include "core/animation/BasicShapePropertyFunctions.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/style/BasicShapes.h"
+#include "core/style/ComputedStyle.h"
 #include "core/style/DataEquivalency.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -17,18 +18,41 @@ namespace blink {
 
 namespace {
 
+const BasicShape* GetBasicShape(CSSPropertyID property,
+                                const ComputedStyle& style) {
+  switch (property) {
+    case CSSPropertyShapeOutside:
+      if (!style.ShapeOutside())
+        return nullptr;
+      if (style.ShapeOutside()->GetType() != ShapeValue::kShape)
+        return nullptr;
+      if (style.ShapeOutside()->CssBox() != kBoxMissing)
+        return nullptr;
+      return style.ShapeOutside()->Shape();
+    case CSSPropertyClipPath:
+      if (!style.ClipPath())
+        return nullptr;
+      if (style.ClipPath()->GetType() != ClipPathOperation::SHAPE)
+        return nullptr;
+      return ToShapeClipPathOperation(style.ClipPath())->GetBasicShape();
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
 class UnderlyingCompatibilityChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
   static std::unique_ptr<UnderlyingCompatibilityChecker> Create(
-      RefPtr<NonInterpolableValue> underlying_non_interpolable_value) {
+      scoped_refptr<NonInterpolableValue> underlying_non_interpolable_value) {
     return WTF::WrapUnique(new UnderlyingCompatibilityChecker(
         std::move(underlying_non_interpolable_value)));
   }
 
  private:
   UnderlyingCompatibilityChecker(
-      RefPtr<NonInterpolableValue> underlying_non_interpolable_value)
+      scoped_refptr<NonInterpolableValue> underlying_non_interpolable_value)
       : underlying_non_interpolable_value_(
             std::move(underlying_non_interpolable_value)) {}
 
@@ -39,7 +63,7 @@ class UnderlyingCompatibilityChecker
         *underlying.non_interpolable_value);
   }
 
-  RefPtr<NonInterpolableValue> underlying_non_interpolable_value_;
+  scoped_refptr<NonInterpolableValue> underlying_non_interpolable_value_;
 };
 
 class InheritedShapeChecker
@@ -47,25 +71,24 @@ class InheritedShapeChecker
  public:
   static std::unique_ptr<InheritedShapeChecker> Create(
       CSSPropertyID property,
-      RefPtr<BasicShape> inherited_shape) {
+      scoped_refptr<BasicShape> inherited_shape) {
     return WTF::WrapUnique(
         new InheritedShapeChecker(property, std::move(inherited_shape)));
   }
 
  private:
   InheritedShapeChecker(CSSPropertyID property,
-                        RefPtr<BasicShape> inherited_shape)
+                        scoped_refptr<BasicShape> inherited_shape)
       : property_(property), inherited_shape_(std::move(inherited_shape)) {}
 
   bool IsValid(const StyleResolverState& state,
                const InterpolationValue&) const final {
-    return DataEquivalent(inherited_shape_.Get(),
-                          BasicShapePropertyFunctions::GetBasicShape(
-                              property_, *state.ParentStyle()));
+    return DataEquivalent(inherited_shape_.get(),
+                          GetBasicShape(property_, *state.ParentStyle()));
   }
 
   const CSSPropertyID property_;
-  RefPtr<BasicShape> inherited_shape_;
+  scoped_refptr<BasicShape> inherited_shape_;
 };
 
 }  // namespace
@@ -76,7 +99,7 @@ InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertNeutral(
   // const_cast is for taking refs.
   NonInterpolableValue* non_interpolable_value =
       const_cast<NonInterpolableValue*>(
-          underlying.non_interpolable_value.Get());
+          underlying.non_interpolable_value.get());
   conversion_checkers.push_back(
       UnderlyingCompatibilityChecker::Create(non_interpolable_value));
   return InterpolationValue(
@@ -89,14 +112,13 @@ InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers&) const {
   return BasicShapeInterpolationFunctions::MaybeConvertBasicShape(
-      BasicShapePropertyFunctions::GetInitialBasicShape(CssProperty()), 1);
+      GetBasicShape(CssProperty(), ComputedStyle::InitialStyle()), 1);
 }
 
 InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertInherit(
     const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
-  const BasicShape* shape = BasicShapePropertyFunctions::GetBasicShape(
-      CssProperty(), *state.ParentStyle());
+  const BasicShape* shape = GetBasicShape(CssProperty(), *state.ParentStyle());
   // const_cast to take a ref.
   conversion_checkers.push_back(InheritedShapeChecker::Create(
       CssProperty(), const_cast<BasicShape*>(shape)));
@@ -132,8 +154,7 @@ InterpolationValue
 CSSBasicShapeInterpolationType::MaybeConvertStandardPropertyUnderlyingValue(
     const ComputedStyle& style) const {
   return BasicShapeInterpolationFunctions::MaybeConvertBasicShape(
-      BasicShapePropertyFunctions::GetBasicShape(CssProperty(), style),
-      style.EffectiveZoom());
+      GetBasicShape(CssProperty(), style), style.EffectiveZoom());
 }
 
 void CSSBasicShapeInterpolationType::Composite(
@@ -156,11 +177,23 @@ void CSSBasicShapeInterpolationType::ApplyStandardPropertyValue(
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value,
     StyleResolverState& state) const {
-  BasicShapePropertyFunctions::SetBasicShape(
-      CssProperty(), *state.Style(),
+  scoped_refptr<BasicShape> shape =
       BasicShapeInterpolationFunctions::CreateBasicShape(
           interpolable_value, *non_interpolable_value,
-          state.CssToLengthConversionData()));
+          state.CssToLengthConversionData());
+  switch (CssProperty()) {
+    case CSSPropertyShapeOutside:
+      state.Style()->SetShapeOutside(
+          ShapeValue::CreateShapeValue(std::move(shape), kBoxMissing));
+      break;
+    case CSSPropertyClipPath:
+      state.Style()->SetClipPath(
+          ShapeClipPathOperation::Create(std::move(shape)));
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
 }
 
 }  // namespace blink

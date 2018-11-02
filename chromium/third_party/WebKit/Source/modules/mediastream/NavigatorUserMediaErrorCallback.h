@@ -25,7 +25,8 @@
 #ifndef NavigatorUserMediaErrorCallback_h
 #define NavigatorUserMediaErrorCallback_h
 
-#include "modules/mediastream/NavigatorUserMediaError.h"
+#include "bindings/modules/v8/dom_exception_or_overconstrained_error.h"
+#include "modules/mediastream/OverconstrainedError.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -34,8 +35,8 @@ class NavigatorUserMediaErrorCallback
     : public GarbageCollectedFinalized<NavigatorUserMediaErrorCallback> {
  public:
   virtual ~NavigatorUserMediaErrorCallback() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-  virtual void handleEvent(NavigatorUserMediaError*) = 0;
+  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void handleEvent(DOMExceptionOrOverconstrainedError) = 0;
 };
 
 }  // namespace blink

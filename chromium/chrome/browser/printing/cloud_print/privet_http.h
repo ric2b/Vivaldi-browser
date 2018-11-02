@@ -32,8 +32,8 @@ class PrivetHTTPClient;
 class PrivetJSONOperation {
  public:
   // If value is null, the operation failed.
-  typedef base::Callback<void(
-      const base::DictionaryValue* /*value*/)> ResultCallback;
+  typedef base::RepeatingCallback<void(const base::DictionaryValue* /*value*/)>
+      ResultCallback;
 
   virtual ~PrivetJSONOperation() {}
 

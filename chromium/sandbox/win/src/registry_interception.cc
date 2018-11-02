@@ -18,14 +18,17 @@
 namespace sandbox {
 
 NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
-                                  PHANDLE key, ACCESS_MASK desired_access,
+                                  PHANDLE key,
+                                  ACCESS_MASK desired_access,
                                   POBJECT_ATTRIBUTES object_attributes,
-                                  ULONG title_index, PUNICODE_STRING class_name,
-                                  ULONG create_options, PULONG disposition) {
+                                  ULONG title_index,
+                                  PUNICODE_STRING class_name,
+                                  ULONG create_options,
+                                  PULONG disposition) {
   // Check if the process can create it first.
-  NTSTATUS status = orig_CreateKey(key, desired_access, object_attributes,
-                                   title_index, class_name, create_options,
-                                   disposition);
+  NTSTATUS status =
+      orig_CreateKey(key, desired_access, object_attributes, title_index,
+                     class_name, create_options, disposition);
   if (NT_SUCCESS(status))
     return status;
 
@@ -49,7 +52,7 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     wchar_t* name;
@@ -57,18 +60,18 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
     HANDLE root_directory = 0;
     NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
                                     &root_directory);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     uint32_t desired_access_uint32 = desired_access;
     CountedParameterSet<OpenKey> params;
     params[OpenKey::ACCESS] = ParamPickerMake(desired_access_uint32);
 
-    wchar_t* full_name = NULL;
+    wchar_t* full_name = nullptr;
 
     if (root_directory) {
       ret = sandbox::AllocAndGetFullPath(root_directory, name, &full_name);
-      if (!NT_SUCCESS(ret) || NULL == full_name)
+      if (!NT_SUCCESS(ret) || !full_name)
         break;
       params[OpenKey::NAME] = ParamPickerMake(full_name);
     } else {
@@ -77,7 +80,7 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
 
     bool query_broker = QueryBroker(IPC_NTCREATEKEY_TAG, params.GetBase());
 
-    if (full_name != NULL)
+    if (full_name)
       operator delete(full_name, NT_ALLOC);
 
     if (!query_broker)
@@ -86,9 +89,9 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
     SharedMemIPCClient ipc(memory);
     CrossCallReturn answer = {0};
 
-    ResultCode code = CrossCall(ipc, IPC_NTCREATEKEY_TAG, name, attributes,
-                                root_directory, desired_access, title_index,
-                                create_options, &answer);
+    ResultCode code =
+        CrossCall(ipc, IPC_NTCREATEKEY_TAG, name, attributes, root_directory,
+                  desired_access, title_index, create_options, &answer);
 
     operator delete(name, NT_ALLOC);
 
@@ -96,22 +99,22 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
       break;
 
     if (!NT_SUCCESS(answer.nt_status))
-        // TODO(nsylvain): We should return answer.nt_status here instead
-        // of status. We can do this only after we checked the policy.
-        // otherwise we will returns ACCESS_DENIED for all paths
-        // that are not specified by a policy, even though your token allows
-        // access to that path, and the original call had a more meaningful
-        // error. Bug 4369
-        break;
+      // TODO(nsylvain): We should return answer.nt_status here instead
+      // of status. We can do this only after we checked the policy.
+      // otherwise we will returns ACCESS_DENIED for all paths
+      // that are not specified by a policy, even though your token allows
+      // access to that path, and the original call had a more meaningful
+      // error. Bug 4369
+      break;
 
     __try {
       *key = answer.handle;
 
       if (disposition)
-       *disposition = answer.extended[0].unsigned_int;
+        *disposition = answer.extended[0].unsigned_int;
 
       status = answer.nt_status;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
   } while (false);
@@ -119,7 +122,8 @@ NTSTATUS WINAPI TargetNtCreateKey(NtCreateKeyFunction orig_CreateKey,
   return status;
 }
 
-NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
+NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status,
+                                PHANDLE key,
                                 ACCESS_MASK desired_access,
                                 POBJECT_ATTRIBUTES object_attributes) {
   // We don't trust that the IPC can work this early.
@@ -131,7 +135,7 @@ NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
       break;
 
     void* memory = GetGlobalIPCMemory();
-    if (NULL == memory)
+    if (!memory)
       break;
 
     wchar_t* name;
@@ -139,18 +143,18 @@ NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
     HANDLE root_directory;
     NTSTATUS ret = AllocAndCopyName(object_attributes, &name, &attributes,
                                     &root_directory);
-    if (!NT_SUCCESS(ret) || NULL == name)
+    if (!NT_SUCCESS(ret) || !name)
       break;
 
     uint32_t desired_access_uint32 = desired_access;
     CountedParameterSet<OpenKey> params;
     params[OpenKey::ACCESS] = ParamPickerMake(desired_access_uint32);
 
-    wchar_t* full_name = NULL;
+    wchar_t* full_name = nullptr;
 
     if (root_directory) {
       ret = sandbox::AllocAndGetFullPath(root_directory, name, &full_name);
-      if (!NT_SUCCESS(ret) || NULL == full_name)
+      if (!NT_SUCCESS(ret) || !full_name)
         break;
       params[OpenKey::NAME] = ParamPickerMake(full_name);
     } else {
@@ -159,7 +163,7 @@ NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
 
     bool query_broker = QueryBroker(IPC_NTOPENKEY_TAG, params.GetBase());
 
-    if (full_name != NULL)
+    if (full_name)
       operator delete(full_name, NT_ALLOC);
 
     if (!query_broker)
@@ -176,18 +180,18 @@ NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
       break;
 
     if (!NT_SUCCESS(answer.nt_status))
-        // TODO(nsylvain): We should return answer.nt_status here instead
-        // of status. We can do this only after we checked the policy.
-        // otherwise we will returns ACCESS_DENIED for all paths
-        // that are not specified by a policy, even though your token allows
-        // access to that path, and the original call had a more meaningful
-        // error. Bug 4369
-        break;
+      // TODO(nsylvain): We should return answer.nt_status here instead
+      // of status. We can do this only after we checked the policy.
+      // otherwise we will returns ACCESS_DENIED for all paths
+      // that are not specified by a policy, even though your token allows
+      // access to that path, and the original call had a more meaningful
+      // error. Bug 4369
+      break;
 
     __try {
       *key = answer.handle;
       status = answer.nt_status;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
   } while (false);
@@ -195,7 +199,8 @@ NTSTATUS WINAPI CommonNtOpenKey(NTSTATUS status, PHANDLE key,
   return status;
 }
 
-NTSTATUS WINAPI TargetNtOpenKey(NtOpenKeyFunction orig_OpenKey, PHANDLE key,
+NTSTATUS WINAPI TargetNtOpenKey(NtOpenKeyFunction orig_OpenKey,
+                                PHANDLE key,
                                 ACCESS_MASK desired_access,
                                 POBJECT_ATTRIBUTES object_attributes) {
   // Check if the process can open it first.
@@ -207,12 +212,13 @@ NTSTATUS WINAPI TargetNtOpenKey(NtOpenKeyFunction orig_OpenKey, PHANDLE key,
 }
 
 NTSTATUS WINAPI TargetNtOpenKeyEx(NtOpenKeyExFunction orig_OpenKeyEx,
-                                  PHANDLE key, ACCESS_MASK desired_access,
+                                  PHANDLE key,
+                                  ACCESS_MASK desired_access,
                                   POBJECT_ATTRIBUTES object_attributes,
                                   ULONG open_options) {
   // Check if the process can open it first.
-  NTSTATUS status = orig_OpenKeyEx(key, desired_access, object_attributes,
-                                   open_options);
+  NTSTATUS status =
+      orig_OpenKeyEx(key, desired_access, object_attributes, open_options);
 
   // We do not support open_options at this time. The 2 current known values
   // are REG_OPTION_CREATE_LINK, to open a symbolic link, and

@@ -7,25 +7,19 @@
 #include <memory>
 
 #import "base/mac/foundation_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/util.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state_removal_controller.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -37,14 +31,9 @@
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
-#include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/ui/authentication/signin_interaction_controller.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_item.h"
-#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
-#import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
-#import "ios/chrome/browser/ui/authentication/signin_promo_view_delegate.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_account_item.h"
@@ -53,7 +42,7 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/settings_main_page_commands.h"
 #import "ios/chrome/browser/ui/settings/about_chrome_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill_collection_view_controller.h"
@@ -64,10 +53,11 @@
 #import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/save_passwords_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/search_engine_settings_collection_view_controller.h"
-#import "ios/chrome/browser/ui/settings/settings_utils.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/settings/voicesearch_collection_view_controller.h"
-#import "ios/chrome/browser/ui/sync/sync_util.h"
+#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
+#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/browser/voice/speech_input_locale_config.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -76,8 +66,6 @@
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_provider.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_prefs.h"
-#import "ios/shared/chrome/browser/ui/settings/settings_main_page_commands.h"
-#import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -98,8 +86,6 @@ NSString* const kSettingsVoiceSearchCellId = @"Voice Search Settings";
 namespace {
 
 const CGFloat kAccountProfilePhotoDimension = 40.0f;
-
-const int kAutomaticSigninPromoViewDismissCount = 5;
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSignIn = kSectionIdentifierEnumZero,
@@ -127,6 +113,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeLogJavascript,
   ItemTypeShowAutofillTypePredictions,
   ItemTypeCellCatalog,
+  ItemTypeArticlesForYou,
 };
 
 #if CHROMIUM_BUILD && !defined(NDEBUG)
@@ -185,21 +172,24 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                                                PrefObserverDelegate,
                                                SettingsControllerProtocol,
                                                SettingsMainPageCommands,
+                                               SigninPresenter,
                                                SigninPromoViewConsumer,
-                                               SigninPromoViewDelegate,
                                                SyncObserverModelBridge> {
   // The current browser state that hold the settings. Never off the record.
   ios::ChromeBrowserState* _browserState;  // weak
 
   std::unique_ptr<SigninObserverBridge> _notificationBridge;
   std::unique_ptr<SyncObserverBridge> _syncObserverBridge;
-  SigninInteractionController* _signinInteractionController;
   // Whether the impression of the Signin button has already been recorded.
   BOOL _hasRecordedSigninImpression;
   // PrefBackedBoolean for ShowMemoryDebugTools switch.
   PrefBackedBoolean* _showMemoryDebugToolsEnabled;
+  // PrefBackedBoolean for ArticlesForYou switch.
+  PrefBackedBoolean* _articlesEnabled;
   // The item related to the switch for the show suggestions setting.
   CollectionViewSwitchItem* _showMemoryDebugToolsItem;
+  // The item related to the switch for the show suggestions setting.
+  CollectionViewSwitchItem* _articlesForYouItem;
 
   // Mediator to configure the sign-in promo cell. Also used to received
   // identity update notifications.
@@ -236,6 +226,11 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
 @property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
 
+// The SigninInteractionCoordinator that presents Sign In UI for the
+// Settings page.
+@property(nonatomic, strong)
+    SigninInteractionCoordinator* signinInteractionCoordinator;
+
 // Stops observing browser state services. This is required during the shutdown
 // phase to avoid observing services for a profile that is being killed.
 - (void)stopBrowserStateServiceObservers;
@@ -245,6 +240,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 @implementation SettingsCollectionViewController
 @synthesize settingsMainPageDispatcher = _settingsMainPageDispatcher;
 @synthesize dispatcher = _dispatcher;
+@synthesize signinInteractionCoordinator = _signinInteractionCoordinator;
 
 #pragma mark Initialization
 
@@ -276,6 +272,11 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
     PrefService* prefService = _browserState->GetPrefs();
 
+    _articlesEnabled = [[PrefBackedBoolean alloc]
+        initWithPrefService:prefService
+                   prefName:prefs::kArticlesForYouEnabled];
+    [_articlesEnabled setObserver:self];
+
     _voiceLocaleCode.Init(prefs::kVoiceSearchLocale, prefService);
 
     _prefChangeRegistrar.Init(prefService);
@@ -293,6 +294,8 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     _settingsMainPageDispatcher = self;
     _dispatcher = dispatcher;
 
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
     [self loadModel];
   }
   return self;
@@ -308,10 +311,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   _notificationBridge.reset();
   _identityServiceObserver.reset();
   [_showMemoryDebugToolsEnabled setObserver:nil];
-}
-
-- (SigninInteractionController*)signinInteractionController {
-  return _signinInteractionController;
+  [_articlesEnabled setObserver:nil];
 }
 
 #pragma mark View lifecycle
@@ -336,31 +336,26 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   AuthenticationService* authService =
       AuthenticationServiceFactory::GetForBrowserState(_browserState);
   if (!authService->IsAuthenticated()) {
-    if (!_hasRecordedSigninImpression) {
-      // Once the Settings are open, this button impression will at most be
-      // recorded once until they are closed.
-      base::RecordAction(
-          base::UserMetricsAction("Signin_Impression_FromSettings"));
-      _hasRecordedSigninImpression = YES;
-    }
-    PrefService* prefs = _browserState->GetPrefs();
-    int displayedCount =
-        prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
-    if (experimental_flags::IsSigninPromoEnabled() &&
-        displayedCount < kAutomaticSigninPromoViewDismissCount) {
+    if ([SigninPromoViewMediator
+            shouldDisplaySigninPromoViewWithAccessPoint:
+                signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS
+                                           browserState:_browserState]) {
       if (!_signinPromoViewMediator) {
         _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
             initWithBrowserState:_browserState
                      accessPoint:signin_metrics::AccessPoint::
-                                     ACCESS_POINT_SETTINGS];
+                                     ACCESS_POINT_SETTINGS
+                       presenter:self /* id<SigninPresenter> */];
         _signinPromoViewMediator.consumer = self;
-        prefs->SetInteger(prefs::kIosSettingsSigninPromoDisplayedCount,
-                          displayedCount + 1);
       }
+    } else {
+      [_signinPromoViewMediator signinPromoViewRemoved];
+      _signinPromoViewMediator = nil;
     }
     [model addItem:[self signInTextItem]
         toSectionWithIdentifier:SectionIdentifierSignIn];
   } else {
+    _hasRecordedSigninImpression = NO;
     [_signinPromoViewMediator signinPromoViewRemoved];
     _signinPromoViewMediator = nil;
     [model addItem:[self accountCellItem]
@@ -394,6 +389,9 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   [model addItem:[self voiceSearchDetailItem]
       toSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self privacyDetailItem]
+      toSectionWithIdentifier:SectionIdentifierAdvanced];
+  _articlesForYouItem = [self articlesForYouSwitchItem];
+  [model addItem:_articlesForYouItem
       toSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self contentSettingsDetailItem]
       toSectionWithIdentifier:SectionIdentifierAdvanced];
@@ -442,7 +440,15 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
         [[SigninPromoItem alloc] initWithType:ItemTypeSigninPromo];
     signinPromoItem.configurator =
         [_signinPromoViewMediator createConfigurator];
+    [_signinPromoViewMediator signinPromoViewVisible];
     return signinPromoItem;
+  }
+  if (!_hasRecordedSigninImpression) {
+    // Once the Settings are open, this button impression will at most be
+    // recorded once until they are closed.
+    base::RecordAction(
+        base::UserMetricsAction("Signin_Impression_FromSettings"));
+    _hasRecordedSigninImpression = YES;
   }
   AccountSignInItem* signInTextItem =
       [[AccountSignInItem alloc] initWithType:ItemTypeSignInButton];
@@ -563,6 +569,17 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
   return showMemoryDebugSwitchItem;
 }
+
+- (CollectionViewSwitchItem*)articlesForYouSwitchItem {
+  CollectionViewSwitchItem* articlesForYouSwitchItem =
+      [self switchItemWithType:ItemTypeArticlesForYou
+                         title:l10n_util::GetNSString(
+                                   IDS_IOS_CONTENT_SUGGESTIONS_SETTING_TITLE)
+               withDefaultsKey:nil];
+  articlesForYouSwitchItem.on = [_articlesEnabled value];
+
+  return articlesForYouSwitchItem;
+}
 #if CHROMIUM_BUILD && !defined(NDEBUG)
 
 - (CollectionViewSwitchItem*)viewSourceSwitchItem {
@@ -673,10 +690,18 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                       forControlEvents:UIControlEventValueChanged];
       break;
     }
+    case ItemTypeArticlesForYou: {
+      CollectionViewSwitchCell* switchCell =
+          base::mac::ObjCCastStrict<CollectionViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                                action:@selector(articlesForYouSwitchToggled:)
+                      forControlEvents:UIControlEventValueChanged];
+      break;
+    }
     case ItemTypeSigninPromo: {
       SigninPromoCell* signinPromoCell =
           base::mac::ObjCCast<SigninPromoCell>(cell);
-      signinPromoCell.signinPromoView.delegate = self;
+      signinPromoCell.signinPromoView.delegate = _signinPromoViewMediator;
       break;
     }
     case ItemTypeViewSource: {
@@ -742,9 +767,11 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
   switch (itemType) {
     case ItemTypeSignInButton:
+      base::RecordAction(base::UserMetricsAction("Signin_Signin_FromSettings"));
       [self showSignInWithIdentity:nil
                        promoAction:signin_metrics::PromoAction::
-                                       PROMO_ACTION_NO_SIGNIN_PROMO];
+                                       PROMO_ACTION_NO_SIGNIN_PROMO
+                        completion:nil];
       break;
     case ItemTypeAccount:
       controller = [[AccountsCollectionViewController alloc]
@@ -856,6 +883,20 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   BOOL newSwitchValue = sender.isOn;
   switchItem.on = newSwitchValue;
   [_showMemoryDebugToolsEnabled setValue:newSwitchValue];
+}
+
+- (void)articlesForYouSwitchToggled:(UISwitch*)sender {
+  NSIndexPath* switchPath =
+      [self.collectionViewModel indexPathForItemType:ItemTypeArticlesForYou
+                                   sectionIdentifier:SectionIdentifierAdvanced];
+
+  CollectionViewSwitchItem* switchItem =
+      base::mac::ObjCCastStrict<CollectionViewSwitchItem>(
+          [self.collectionViewModel itemAtIndexPath:switchPath]);
+
+  BOOL newSwitchValue = sender.isOn;
+  switchItem.on = newSwitchValue;
+  [_articlesEnabled setValue:newSwitchValue];
 }
 
 #if CHROMIUM_BUILD && !defined(NDEBUG)
@@ -981,32 +1022,39 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   }
 }
 
+#pragma mark - SigninPresenter
+
+- (void)showSignin:(ShowSigninCommand*)command {
+  [self.dispatcher showSignin:command baseViewController:self];
+}
+
 #pragma mark Sign in
 
 - (void)showSignInWithIdentity:(ChromeIdentity*)identity
-                   promoAction:(signin_metrics::PromoAction)promoAction {
-  base::RecordAction(base::UserMetricsAction("Signin_Signin_FromSettings"));
-  DCHECK(!_signinInteractionController);
-  _signinInteractionController = [[SigninInteractionController alloc]
-          initWithBrowserState:_browserState
-      presentingViewController:self.navigationController
-         isPresentedOnSettings:YES
+                   promoAction:(signin_metrics::PromoAction)promoAction
+                    completion:(ShowSigninCommandCompletionCallback)completion {
+  DCHECK(!self.signinInteractionCoordinator.isActive);
+  if (!self.signinInteractionCoordinator) {
+    self.signinInteractionCoordinator = [[SigninInteractionCoordinator alloc]
+        initWithBrowserState:_browserState
+                  dispatcher:self.dispatcher];
+  }
+
+  __weak SettingsCollectionViewController* weakSelf = self;
+  [self.signinInteractionCoordinator
+            signInWithIdentity:identity
                    accessPoint:signin_metrics::AccessPoint::
                                    ACCESS_POINT_SETTINGS
                    promoAction:promoAction
-                    dispatcher:self.dispatcher];
-
-  __weak SettingsCollectionViewController* weakSelf = self;
-  [_signinInteractionController
-      signInWithViewController:self
-                      identity:identity
+      presentingViewController:self.navigationController
                     completion:^(BOOL success) {
+                      if (completion)
+                        completion(success);
                       [weakSelf didFinishSignin:success];
                     }];
 }
 
 - (void)didFinishSignin:(BOOL)signedIn {
-  _signinInteractionController = nil;
   // The sign-in is done. The sign-in promo cell or account cell can be
   // reloaded.
   if (!_settingsHasBeenDismissed)
@@ -1024,12 +1072,12 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 #pragma mark NotificationBridgeDelegate
 
 - (void)onSignInStateChanged {
-  // While the sign-in interaction controller is presented, the collection view
-  // should not be updated. Otherwise, it would lead to have an UI glitch either
-  // while the interaction controller is appearing or while it is disappearing.
-  // The collection view will be reloaded once the animation is finished. See:
-  // -[SettingsCollectionViewController didFinishSignin:].
-  if (!_signinInteractionController) {
+  // While the sign-in interaction coordinator is presenting UI, the collection
+  // view should not be updated. Otherwise, it would lead to have an UI glitch
+  // either while the sign in UI is appearing or while it is disappearing. The
+  // collection view will be reloaded once the animation is finished.
+  // See: -[SettingsCollectionViewController didFinishSignin:].
+  if (!self.signinInteractionCoordinator.isActive) {
     // Sign in state changes are rare. Just reload the entire collection when
     // this happens.
     [self reloadData];
@@ -1041,17 +1089,9 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 - (void)settingsWillBeDismissed {
   DCHECK(!_settingsHasBeenDismissed);
   _settingsHasBeenDismissed = YES;
-  if (!_signinStarted && _signinPromoViewMediator) {
-    PrefService* prefs = _browserState->GetPrefs();
-    int displayedCount =
-        prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
-    UMA_HISTOGRAM_COUNTS_100(
-        "MobileSignInPromo.SettingsManager.ImpressionsTilDismiss",
-        displayedCount);
-  }
+  [self.signinInteractionCoordinator cancel];
   [_signinPromoViewMediator signinPromoViewRemoved];
   _signinPromoViewMediator = nil;
-  [_signinInteractionController cancel];
   [self stopBrowserStateServiceObservers];
 }
 
@@ -1111,12 +1151,17 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  DCHECK_EQ(observableBoolean, _showMemoryDebugToolsEnabled);
-  // Update the Item.
-  _showMemoryDebugToolsItem.on = [_showMemoryDebugToolsEnabled value];
-
-  // Update the Cell.
-  [self reconfigureCellsForItems:@[ _showMemoryDebugToolsItem ]];
+  if (observableBoolean == _showMemoryDebugToolsEnabled) {
+    // Update the Item.
+    _showMemoryDebugToolsItem.on = [_showMemoryDebugToolsEnabled value];
+    // Update the Cell.
+    [self reconfigureCellsForItems:@[ _showMemoryDebugToolsItem ]];
+  } else if (observableBoolean == _articlesEnabled) {
+    _articlesForYouItem.on = [_articlesEnabled value];
+    [self reconfigureCellsForItems:@[ _articlesForYouItem ]];
+  } else {
+    NOTREACHED();
+  }
 }
 
 #pragma mark - PrefObserverDelegate
@@ -1161,20 +1206,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 - (void)configureSigninPromoWithConfigurator:
             (SigninPromoViewConfigurator*)configurator
                              identityChanged:(BOOL)identityChanged {
-  if (_signinInteractionController) {
-    // When sign-in is started in a cold state (no default account), the sign-in
-    // interaction controller does the sign-in and then asks for sync
-    // authorization. If the user cancels this operation, the controller
-    // signs-out from this new account, and then disappears while removing the
-    // new account asynchronously.
-    // This leads to an UI glitch. The interaction controller disappears before
-    // the newly added account is removed. The user can see the sign-in promo in
-    // warm state quickly before being replaced by the cold state sign-in promo.
-    // To avoid this UI glitch, all notifications from the mediator should be
-    // ignored, while the sign-in is in progress to avoid showing the warm
-    // state.
-    return;
-  }
+  DCHECK(!self.signinInteractionCoordinator.isActive);
   if (![self.collectionViewModel hasItemForItemType:ItemTypeSigninPromo
                                   sectionIdentifier:SectionIdentifierSignIn]) {
     return;
@@ -1193,52 +1225,19 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   }
 }
 
-#pragma mark - SigninPromoViewDelegate
-
-- (void)signinPromoViewDidTapSigninWithNewAccount:
-    (SigninPromoView*)signinPromoView {
-  [self sendImpressionsTilSigninButtonsHistogram];
-  DCHECK(!_signinPromoViewMediator.defaultIdentity);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_SigninNewAccount_FromSettings"));
-  [self showSignInWithIdentity:nil
-                   promoAction:signin_metrics::PromoAction::
-                                   PROMO_ACTION_NEW_ACCOUNT];
-}
-
-- (void)signinPromoViewDidTapSigninWithDefaultAccount:
-    (SigninPromoView*)signinPromoView {
-  [self sendImpressionsTilSigninButtonsHistogram];
-  ChromeIdentity* identity = _signinPromoViewMediator.defaultIdentity;
-  DCHECK(identity);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_SigninWithDefault_FromSettings"));
+- (void)signinPromoViewMediator:(SigninPromoViewMediator*)mediator
+    shouldOpenSigninWithIdentity:(ChromeIdentity*)identity
+                     promoAction:(signin_metrics::PromoAction)promoAction
+                      completion:
+                          (ShowSigninCommandCompletionCallback)completion {
   [self showSignInWithIdentity:identity
-                   promoAction:signin_metrics::PromoAction::
-                                   PROMO_ACTION_WITH_DEFAULT];
+                   promoAction:promoAction
+                    completion:completion];
 }
 
-- (void)signinPromoViewDidTapSigninWithOtherAccount:
-    (SigninPromoView*)signinPromoView {
-  [self sendImpressionsTilSigninButtonsHistogram];
-  DCHECK(_signinPromoViewMediator.defaultIdentity);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_SigninNotDefault_FromSettings"));
-  [self showSignInWithIdentity:nil
-                   promoAction:signin_metrics::PromoAction::
-                                   PROMO_ACTION_NOT_DEFAULT];
-}
-
-#pragma mark - Metrics
-
-- (void)sendImpressionsTilSigninButtonsHistogram {
-  _signinStarted = YES;
-  PrefService* prefs = _browserState->GetPrefs();
-  int displayedCount =
-      prefs->GetInteger(prefs::kIosSettingsSigninPromoDisplayedCount);
-  UMA_HISTOGRAM_COUNTS_100(
-      "MobileSignInPromo.SettingsManager.ImpressionsTilSigninButtons",
-      displayedCount);
+- (void)signinPromoViewMediatorCloseButtonWasTapped:
+    (SigninPromoViewMediator*)mediator {
+  [self reloadData];
 }
 
 @end

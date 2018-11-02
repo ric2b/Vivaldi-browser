@@ -21,7 +21,6 @@
 #ifndef SVGTextPositioningElement_h
 #define SVGTextPositioningElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedLengthList.h"
 #include "core/svg/SVGAnimatedNumberList.h"
 #include "core/svg/SVGTextContentElement.h"
@@ -39,7 +38,7 @@ class SVGTextPositioningElement : public SVGTextContentElement {
   SVGAnimatedLengthList* dy() { return dy_.Get(); }
   SVGAnimatedNumberList* rotate() { return rotate_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   SVGTextPositioningElement(const QualifiedName&, Document&);

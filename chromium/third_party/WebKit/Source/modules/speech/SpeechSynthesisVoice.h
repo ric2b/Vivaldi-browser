@@ -34,13 +34,12 @@
 
 namespace blink {
 
-class SpeechSynthesisVoice final
-    : public GarbageCollectedFinalized<SpeechSynthesisVoice>,
-      public ScriptWrappable {
+class SpeechSynthesisVoice final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static SpeechSynthesisVoice* Create(PassRefPtr<PlatformSpeechSynthesisVoice>);
+  static SpeechSynthesisVoice* Create(
+      scoped_refptr<PlatformSpeechSynthesisVoice>);
   ~SpeechSynthesisVoice();
 
   const String& voiceURI() const { return platform_voice_->VoiceURI(); }
@@ -50,15 +49,13 @@ class SpeechSynthesisVoice final
   bool isDefault() const { return platform_voice_->IsDefault(); }
 
   PlatformSpeechSynthesisVoice* PlatformVoice() const {
-    return platform_voice_.Get();
+    return platform_voice_.get();
   }
 
-  DEFINE_INLINE_TRACE() {}
-
  private:
-  explicit SpeechSynthesisVoice(PassRefPtr<PlatformSpeechSynthesisVoice>);
+  explicit SpeechSynthesisVoice(scoped_refptr<PlatformSpeechSynthesisVoice>);
 
-  RefPtr<PlatformSpeechSynthesisVoice> platform_voice_;
+  scoped_refptr<PlatformSpeechSynthesisVoice> platform_voice_;
 };
 
 }  // namespace blink

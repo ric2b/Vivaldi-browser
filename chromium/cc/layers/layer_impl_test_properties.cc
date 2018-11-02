@@ -6,13 +6,14 @@
 
 #include "cc/layers/layer_impl.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 
 namespace cc {
 
 LayerImplTestProperties::LayerImplTestProperties(LayerImpl* owning_layer)
     : owning_layer(owning_layer),
       double_sided(true),
+      trilinear_filtering(false),
       cache_render_surface(false),
       force_render_surface(false),
       is_container_for_fixed_position_layers(false),
@@ -27,7 +28,7 @@ LayerImplTestProperties::LayerImplTestProperties(LayerImpl* owning_layer)
       clip_parent(nullptr),
       mask_layer(nullptr),
       parent(nullptr),
-      scroll_boundary_behavior(ScrollBoundaryBehavior()) {}
+      overscroll_behavior(OverscrollBehavior()) {}
 
 LayerImplTestProperties::~LayerImplTestProperties() {}
 

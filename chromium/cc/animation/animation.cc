@@ -41,6 +41,10 @@ static_assert(static_cast<int>(cc::AnimationCurve::LAST_CURVE_TYPE) + 1 ==
 
 namespace cc {
 
+std::string Animation::ToString(RunState state) {
+  return s_runStateNames[state];
+}
+
 std::unique_ptr<Animation> Animation::Create(
     std::unique_ptr<AnimationCurve> curve,
     int animation_id,
@@ -149,6 +153,21 @@ bool Animation::IsFinishedAt(base::TimeTicks monotonic_time) const {
 bool Animation::InEffect(base::TimeTicks monotonic_time) const {
   return ConvertToActiveTime(monotonic_time) >= base::TimeDelta() ||
          (fill_mode_ == FillMode::BOTH || fill_mode_ == FillMode::BACKWARDS);
+}
+
+base::TimeTicks Animation::ConvertFromActiveTime(
+    base::TimeDelta active_time) const {
+  // When waiting on receiving a start time, then our global clock is 'stuck' at
+  // the initial state.
+  if ((run_state_ == STARTING && !has_set_start_time()) ||
+      needs_synchronized_start_time())
+    return base::TimeTicks();
+
+  // If we're paused, time is 'stuck' at the pause time.
+  if (run_state_ == PAUSED)
+    return pause_time_ - time_offset_;
+
+  return active_time - time_offset_ + start_time_ + total_paused_time_;
 }
 
 base::TimeDelta Animation::ConvertToActiveTime(
@@ -272,7 +291,7 @@ std::string Animation::ToString() const {
       "Animation{id=%d, group=%d, target_property_id=%d, "
       "run_state=%s}",
       id_, group_, target_property_id_,
-      s_runStateNames[static_cast<int>(run_state_)]);
+      Animation::ToString(run_state_).c_str());
 }
 
 }  // namespace cc

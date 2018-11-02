@@ -37,11 +37,9 @@ class InputDeviceControllerClient;
 namespace ash {
 
 class AccessibilityDelegate;
-class GPUSupport;
 class NetworkingConfigDelegate;
-class PaletteDelegate;
+class ScreenshotDelegate;
 class WallpaperDelegate;
-enum class TouchscreenEnabledSource;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -51,13 +49,6 @@ class ASH_EXPORT ShellDelegate {
 
   // Returns the connector for the mojo service manager. Returns null in tests.
   virtual service_manager::Connector* GetShellConnector() const = 0;
-
-  // Returns true if multi-profiles feature is enabled.
-  virtual bool IsMultiProfilesEnabled() const = 0;
-
-  // Returns true if incognito mode is allowed for the user.
-  // Incognito windows are restricted for supervised users.
-  virtual bool IsIncognitoAllowed() const = 0;
 
   // Returns true if we're running in forced app mode.
   virtual bool IsRunningInForcedAppMode() const = 0;
@@ -79,22 +70,17 @@ class ASH_EXPORT ShellDelegate {
   // delegate can use Shell instance to perform cleanup tasks.
   virtual void PreShutdown() = 0;
 
-  // Invoked when the user uses Ctrl-Shift-Q to close chrome.
-  virtual void Exit() = 0;
-
   // Create a shell-specific keyboard::KeyboardUI.
   virtual std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() = 0;
 
   // Opens the |url| in a new browser tab.
   virtual void OpenUrlFromArc(const GURL& url) = 0;
 
-  // Functions called when the shelf is initialized and shut down.
-  // TODO(msw): Refine ChromeLauncherController lifetime management.
-  virtual void ShelfInit() = 0;
-  virtual void ShelfShutdown() = 0;
-
   // Returns the delegate. May be null in tests.
   virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() = 0;
+
+  // TODO(jamescook): Replace with a mojo-compatible interface.
+  virtual std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() = 0;
 
   // Creates a wallpaper delegate. Shell takes ownership of the delegate.
   virtual std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() = 0;
@@ -102,34 +88,12 @@ class ASH_EXPORT ShellDelegate {
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
 
-  virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
-
-  // Creates a GPU support object. Shell takes ownership of the object.
-  virtual GPUSupport* CreateGPUSupport() = 0;
-
   // Get the product name.
   virtual base::string16 GetProductName() const = 0;
 
   virtual void OpenKeyboardShortcutHelpPage() const {}
 
   virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
-
-  // Returns the current touchscreen enabled status as specified by |source|.
-  // Note that the actual state of the touchscreen device is automatically
-  // determined based on the requests of multiple sources.
-  virtual bool GetTouchscreenEnabled(TouchscreenEnabledSource source) const = 0;
-
-  // Sets |source|'s requested touchscreen enabled status to |enabled|. Note
-  // that the actual state of the touchscreen device is automatically determined
-  // based on the requests of multiple sources.
-  virtual void SetTouchscreenEnabled(bool enabled,
-                                     TouchscreenEnabledSource source) = 0;
-
-  // Toggles the status of touchpad between enabled and disabled.
-  virtual void ToggleTouchpad() {}
-
-  // Suspends all WebContents-associated media sessions to stop managed players.
-  virtual void SuspendMediaSessions() {}
 
   // Creator of Shell owns this; it's assumed this outlives Shell.
   virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;

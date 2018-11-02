@@ -27,7 +27,7 @@
 
 #include "build/build_config.h"
 #include "platform/Decimal.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HexNumber.h"
 #include "platform/wtf/MathExtras.h"
@@ -270,11 +270,11 @@ static inline const NamedColor* FindNamedColor(const String& name) {
   char buffer[64];  // easily big enough for the longest color name
   unsigned length = name.length();
   if (length > sizeof(buffer) - 1)
-    return 0;
+    return nullptr;
   for (unsigned i = 0; i < length; ++i) {
     UChar c = name[i];
     if (!c || c > 0x7F)
-      return 0;
+      return nullptr;
     buffer[i] = ToASCIILower(static_cast<char>(c));
   }
   buffer[length] = '\0';

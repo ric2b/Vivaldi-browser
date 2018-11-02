@@ -306,17 +306,6 @@ void TabContentManager::RemoveTabThumbnail(JNIEnv* env,
   NativeRemoveTabThumbnail(tab_id);
 }
 
-void TabContentManager::GetDecompressedThumbnail(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jint tab_id) {
-  base::Callback<void(bool, SkBitmap)> decompress_done_callback =
-      base::Bind(&TabContentManager::OnFinishDecompressThumbnail,
-                 weak_factory_.GetWeakPtr(), reinterpret_cast<int>(tab_id));
-  thumbnail_cache_->DecompressThumbnailFromFile(reinterpret_cast<int>(tab_id),
-                                                decompress_done_callback);
-}
-
 void TabContentManager::OnUIResourcesWereEvicted() {
   thumbnail_cache_->OnUIResourcesWereEvicted();
 }
@@ -344,13 +333,13 @@ void TabContentManager::PutThumbnailIntoCache(int tab_id,
 // Native JNI methods
 // ----------------------------------------------------------------------------
 
-jlong Init(JNIEnv* env,
-           const JavaParamRef<jobject>& obj,
-           jint default_cache_size,
-           jint approximation_cache_size,
-           jint compression_queue_max_size,
-           jint write_queue_max_size,
-           jboolean use_approximation_thumbnail) {
+jlong JNI_TabContentManager_Init(JNIEnv* env,
+                                 const JavaParamRef<jobject>& obj,
+                                 jint default_cache_size,
+                                 jint approximation_cache_size,
+                                 jint compression_queue_max_size,
+                                 jint write_queue_max_size,
+                                 jboolean use_approximation_thumbnail) {
   TabContentManager* manager = new TabContentManager(
       env, obj, default_cache_size, approximation_cache_size,
       compression_queue_max_size, write_queue_max_size,

@@ -20,6 +20,7 @@
 
     table {
       border-collapse: collapse;
+      margin-bottom: 20px;
     }
 
     table td,
@@ -54,7 +55,9 @@
 
     .visits-count-cell,
     .media-playbacks-count-cell,
-    .last-playback-time-cell {
+    .last-playback-time-cell,
+    .audible-playbacks-count-cell,
+    .significant-playbacks-count-cell {
       background-color: rgba(230, 230, 230, 0.5);
       text-align: right;
     }
@@ -70,6 +73,10 @@
       border: 1px solid rgb(143, 185, 252);
       box-shadow: 0 0 2px rgb(113, 158, 206);
       outline: none;
+    }
+
+    .name-cell {
+      background-color: rgba(230, 230, 230, 0.5);
     }
 
     table tr:hover {
@@ -91,6 +98,20 @@
   <h1>Media Engagement</h1>
   <table>
     <thead>
+      <tr id="config-table-header">
+        <th>
+          Setting Name
+        </th>
+        <th>
+          Setting Value
+        </th>
+      </tr>
+    </thead>
+    <tbody id="config-table-body">
+    </tbody>
+  </table>
+  <table>
+    <thead>
       <tr id="engagement-table-header">
         <th sort-key="origin">
           Origin
@@ -99,7 +120,13 @@
           Visits
         </th>
         <th sort-key="mediaPlaybacks" sort-reverse>
-          Number of Playbacks
+          Playbacks
+        </th>
+        <th sort-key="audiblePlaybacks" sort-reverse>
+          Audible Playbacks*
+        </th>
+        <th sort-key="significantPlaybacks" sort-reverse>
+          Significant Playbacks*
         </th>
         <th sort-key="lastMediaPlaybackTime" sort-reverse>
           Last Playback
@@ -116,17 +143,29 @@
     </tbody>
   </table>
 
+  <p>
+    * These columns are experimental and do not currently affect the MEI score.
+  </p>
+
   <template id="datarow">
     <tr>
       <td class="origin-cell"></td>
       <td class="visits-count-cell"></td>
       <td class="media-playbacks-count-cell"></td>
+      <td class="audible-playbacks-count-cell"></td>
+      <td class="significant-playbacks-count-cell"></td>
       <td class="last-playback-time-cell"></td>
       <td class="is-high-cell"></td>
       <td class="total-score-cell"></td>
       <td class="engagement-bar-cell">
         <div class="engagement-bar"></div>
       </td>
+    </tr>
+  </template>
+  <template id="configrow">
+    <tr>
+      <td class="name-cell"></td>
+      <td></td>
     </tr>
   </template>
 </body>

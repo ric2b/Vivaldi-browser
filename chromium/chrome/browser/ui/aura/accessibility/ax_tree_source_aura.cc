@@ -108,6 +108,19 @@ void AXTreeSourceAura::SerializeNode(AXAuraObjWrapper* node,
                                      ui::AXNodeData* out_data) const {
   node->Serialize(out_data);
 
+  // Convert the global coordinates reported by each AXAuraObjWrapper
+  // into parent-relative coordinates to be used in the accessibility
+  // tree. That way when any Window, Widget, or View moves (and fires
+  // a location changed event), its descendants all move relative to
+  // it by default.
+  AXAuraObjWrapper* parent = node->GetParent();
+  if (parent) {
+    ui::AXNodeData parent_data;
+    parent->Serialize(&parent_data);
+    out_data->location.Offset(-parent_data.location.OffsetFromOrigin());
+    out_data->offset_container_id = parent->GetID();
+  }
+
   if (out_data->role == ui::AX_ROLE_WEB_VIEW) {
     views::View* view = static_cast<views::AXViewObjWrapper*>(node)->view();
     content::WebContents* contents =
@@ -117,6 +130,10 @@ void AXTreeSourceAura::SerializeNode(AXAuraObjWrapper* node,
       int ax_tree_id = rfh->GetAXTreeID();
       out_data->AddIntAttribute(ui::AX_ATTR_CHILD_TREE_ID, ax_tree_id);
     }
+  } else if (out_data->role == ui::AX_ROLE_WINDOW ||
+             out_data->role == ui::AX_ROLE_DIALOG) {
+    // Add clips children flag by default to these roles.
+    out_data->AddBoolAttribute(ui::AX_ATTR_CLIPS_CHILDREN, true);
   }
 }
 

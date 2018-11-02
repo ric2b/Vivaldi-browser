@@ -75,6 +75,10 @@ std::string UkmReportingService::GetUploadUrl() const {
   return GetServerUrl();
 }
 
+std::string UkmReportingService::GetInsecureUploadUrl() const {
+  return "";
+}
+
 base::StringPiece UkmReportingService::upload_mime_type() const {
   return kMimeType;
 }
@@ -90,7 +94,9 @@ void UkmReportingService::LogCellularConstraint(bool upload_canceled) {
 }
 
 void UkmReportingService::LogResponseOrErrorCode(int response_code,
-                                                 int error_code) {
+                                                 int error_code,
+                                                 bool was_https) {
+  // |was_https| is ignored since all UKM logs are received over HTTPS.
   UMA_HISTOGRAM_SPARSE_SLOWLY("UKM.LogUpload.ResponseOrErrorCode",
                               response_code >= 0 ? response_code : error_code);
 }

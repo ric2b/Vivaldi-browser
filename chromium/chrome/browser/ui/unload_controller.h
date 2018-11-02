@@ -25,8 +25,6 @@ class NotificationDetails;
 class WebContents;
 }
 
-namespace chrome {
-
 class UnloadController : public content::NotificationObserver,
                          public TabStripModelObserver {
  public:
@@ -135,7 +133,7 @@ class UnloadController : public content::NotificationObserver,
     return !on_close_confirmed_.is_null();
   }
 
-  Browser* browser_;
+  Browser* const browser_;
 
   content::NotificationRegistrar registrar_;
 
@@ -162,7 +160,5 @@ class UnloadController : public content::NotificationObserver,
 
   DISALLOW_COPY_AND_ASSIGN(UnloadController);
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_UI_UNLOAD_CONTROLLER_H_

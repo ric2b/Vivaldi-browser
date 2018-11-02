@@ -10,6 +10,13 @@ import("//tools/grit/grit_rule.gni")
 
 component("keyboard") {
   sources = [
+    "container_behavior.h",
+    "container_floating_behavior.cc",
+    "container_floating_behavior.h",
+    "container_full_width_behavior.cc",
+    "container_full_width_behavior.h",
+    "drag_descriptor.cc",
+    "drag_descriptor.h",
     "keyboard_controller.cc",
     "keyboard_controller.h",
     "keyboard_controller_observer.h",
@@ -31,8 +38,6 @@ component("keyboard") {
 
   deps = [
     "//base",
-    "//base/third_party/dynamic_annotations",
-    "//skia",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -40,7 +45,6 @@ component("keyboard") {
     "//ui/display:display",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
-    "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/wm",
@@ -59,8 +63,6 @@ component("keyboard_with_content") {
     "content/keyboard_constants.h",
     "content/keyboard_content_util.cc",
     "content/keyboard_content_util.h",
-    "content/keyboard_ui_content.cc",
-    "content/keyboard_ui_content.h",
   ]
 
   defines = [ "KEYBOARD_IMPLEMENTATION" ]
@@ -69,21 +71,7 @@ component("keyboard_with_content") {
     ":keyboard",
     ":resources",
     "//base",
-    "//base/third_party/dynamic_annotations",
-    "//content/public/browser",
-    "//content/public/common",
-    "//ipc",
-    "//skia",
-    "//ui/aura",
     "//ui/base",
-    "//ui/base/ime",
-    "//ui/compositor",
-    "//ui/events",
-    "//ui/events:dom_keycode_converter",
-    "//ui/events:events_base",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
-    "//ui/wm",
     "//url",
   ]
 
@@ -101,8 +89,8 @@ static_library("test_support") {
   deps = [
     ":keyboard",
     "//base",
-    "//skia",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/base:test_support",
   ]
 }
@@ -161,7 +149,8 @@ mojom("mojom") {
 
 test("keyboard_unittests") {
   sources = [
-    "content/keyboard_ui_content_unittest.cc",
+    "container_floating_behavior_unittest.cc",
+    "container_full_width_behavior_unittest.cc",
     "keyboard_controller_unittest.cc",
     "keyboard_event_filter_unittest.cc",
     "keyboard_util_unittest.cc",
@@ -174,9 +163,7 @@ test("keyboard_unittests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//content/test:test_support",
     "//mojo/edk/system",
-    "//skia",
     "//testing/gtest",
     "//ui/aura:test_support",
     "//ui/base",
@@ -194,4 +181,8 @@ test("keyboard_unittests") {
   data_deps = [
     "//ui/resources:ui_test_pak_data",
   ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 }

@@ -30,9 +30,9 @@
 #ifndef DOMSelection_h
 #define DOMSelection_h
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/editing/Position.h"
-#include "core/editing/VisibleSelection.h"
+#include "core/editing/Forward.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -44,8 +44,7 @@ class Node;
 class Range;
 class TreeScope;
 
-class CORE_EXPORT DOMSelection final : public GarbageCollected<DOMSelection>,
-                                       public ScriptWrappable,
+class CORE_EXPORT DOMSelection final : public ScriptWrappable,
                                        public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(DOMSelection);
@@ -102,7 +101,7 @@ class CORE_EXPORT DOMSelection final : public GarbageCollected<DOMSelection>,
   // Microsoft Selection Object API
   void empty();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit DOMSelection(const TreeScope*);
@@ -111,7 +110,7 @@ class CORE_EXPORT DOMSelection final : public GarbageCollected<DOMSelection>,
 
   void UpdateFrameSelection(const SelectionInDOMTree&, Range*) const;
   // Convenience methods for accessors, does not check m_frame present.
-  const VisibleSelection& GetVisibleSelection() const;
+  VisibleSelection GetVisibleSelection() const;
   bool IsBaseFirstInSelection() const;
   const Position& AnchorPosition() const;
 

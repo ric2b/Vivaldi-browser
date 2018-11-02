@@ -9,10 +9,9 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/time/time.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 namespace scheduler {
@@ -22,28 +21,42 @@ class FakeWebTaskRunner : public WebTaskRunner {
  public:
   FakeWebTaskRunner();
 
-  void SetTime(double new_time);
+  void SetTime(base::TimeTicks new_time);
+  void SetTime(double new_time) {
+    SetTime(base::TimeTicks() + base::TimeDelta::FromSecondsD(new_time));
+  }
+
+  // base::SingleThreadTaskRunner implementation:
+  bool RunsTasksInCurrentSequence() const override;
 
   // WebTaskRunner implementation:
-  bool RunsTasksInCurrentSequence() override;
-  double VirtualTimeSeconds() const override;
   double MonotonicallyIncreasingVirtualTimeSeconds() const override;
-  SingleThreadTaskRunner* ToSingleThreadTaskRunner() override;
 
   void RunUntilIdle();
-  void AdvanceTimeAndRun(double delta_seconds);
-  std::deque<std::pair<base::OnceClosure, double>> TakePendingTasksForTesting();
+  void AdvanceTimeAndRun(base::TimeDelta delta);
+  void AdvanceTimeAndRun(double delta_seconds) {
+    AdvanceTimeAndRun(base::TimeDelta::FromSecondsD(delta_seconds));
+  }
+
+  using PendingTask = std::pair<base::OnceClosure, base::TimeTicks>;
+  std::deque<PendingTask> TakePendingTasksForTesting();
+
+ protected:
+  bool PostDelayedTask(const base::Location& location,
+                       base::OnceClosure task,
+                       base::TimeDelta delay) override;
+  bool PostNonNestableDelayedTask(const base::Location&,
+                                  base::OnceClosure task,
+                                  base::TimeDelta delay) override;
 
  private:
   ~FakeWebTaskRunner() override;
 
   class Data;
   class BaseTaskRunner;
-  RefPtr<Data> data_;
-  scoped_refptr<BaseTaskRunner> base_task_runner_;
+  scoped_refptr<Data> data_;
 
-  FakeWebTaskRunner(PassRefPtr<Data> data,
-                    scoped_refptr<BaseTaskRunner> base_task_runner);
+  explicit FakeWebTaskRunner(scoped_refptr<Data> data);
 
   DISALLOW_COPY_AND_ASSIGN(FakeWebTaskRunner);
 };

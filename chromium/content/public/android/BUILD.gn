@@ -4,6 +4,7 @@
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
+import("//device/vr/features/features.gni")
 
 android_aidl("common_aidl") {
   interface_file = "java/src/org/chromium/content/common/common.aidl"
@@ -120,6 +121,7 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/ContentVideoViewEmbedder.java",
     "java/src/org/chromium/content/browser/ContentView.java",
     "java/src/org/chromium/content/browser/ContentViewCore.java",
+    "java/src/org/chromium/content/browser/ContentViewCoreImpl.java",
     "java/src/org/chromium/content/browser/ContentViewRenderView.java",
     "java/src/org/chromium/content/browser/ContentViewStatics.java",
     "java/src/org/chromium/content/browser/DeviceUtils.java",
@@ -140,10 +142,12 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/PositionObserver.java",
     "java/src/org/chromium/content/browser/RenderCoordinates.java",
     "java/src/org/chromium/content/browser/ScreenOrientationProvider.java",
-    "java/src/org/chromium/content/browser/SelectionClient.java",
+    "java/src/org/chromium/content/browser/SelectionEventProxyImpl.java",
+    "java/src/org/chromium/content/browser/SelectionIndicesConverter.java",
     "java/src/org/chromium/content/browser/SelectionPopupController.java",
     "java/src/org/chromium/content/browser/SmartClipProvider.java",
     "java/src/org/chromium/content/browser/SmartSelectionClient.java",
+    "java/src/org/chromium/content/browser/SmartSelectionMetricsLogger.java",
     "java/src/org/chromium/content/browser/SmartSelectionProvider.java",
     "java/src/org/chromium/content/browser/SpareChildConnection.java",
     "java/src/org/chromium/content/browser/SpeechRecognition.java",
@@ -190,9 +194,12 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/input/SelectPopupDialog.java",
     "java/src/org/chromium/content/browser/input/SelectPopupDropdown.java",
     "java/src/org/chromium/content/browser/input/SelectPopupItem.java",
+    "java/src/org/chromium/content/browser/input/SpellCheckPopupWindow.java",
+    "java/src/org/chromium/content/browser/input/SuggestionInfo.java",
     "java/src/org/chromium/content/browser/input/SuggestionsPopupWindow.java",
     "java/src/org/chromium/content/browser/input/TextInputState.java",
     "java/src/org/chromium/content/browser/input/TextSuggestionHost.java",
+    "java/src/org/chromium/content/browser/input/TextSuggestionsPopupWindow.java",
     "java/src/org/chromium/content/browser/input/ThreadedInputConnection.java",
     "java/src/org/chromium/content/browser/input/ThreadedInputConnectionFactory.java",
     "java/src/org/chromium/content/browser/input/ThreadedInputConnectionProxyView.java",
@@ -232,11 +239,14 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/RenderFrameHost.java",
     "java/src/org/chromium/content_public/browser/ScreenOrientationDelegate.java",
     "java/src/org/chromium/content_public/browser/ScreenOrientationDelegateManager.java",
+    "java/src/org/chromium/content_public/browser/SelectionClient.java",
+    "java/src/org/chromium/content_public/browser/SelectionMetricsLogger.java",
     "java/src/org/chromium/content_public/browser/SmartClipCallback.java",
-    "java/src/org/chromium/content_public/browser/SmartSelectionToggle.java",
     "java/src/org/chromium/content_public/browser/WebContents.java",
+    "java/src/org/chromium/content_public/browser/WebContentsInternals.java",
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/browser/WebContentsStatics.java",
+    "java/src/org/chromium/content_public/common/BrowserSideNavigationPolicy.java",
     "java/src/org/chromium/content_public/common/ContentProcessInfo.java",
     "java/src/org/chromium/content_public/common/ContentUrlConstants.java",
     "java/src/org/chromium/content_public/common/MediaMetadata.java",
@@ -299,7 +309,6 @@ java_strings_grd("content_strings_grd") {
 java_cpp_enum("content_public_android_java_enums_srcjar") {
   sources = [
     "//content/browser/android/content_view_core.cc",
-    "//content/browser/android/gesture_event_type.h",
     "//content/public/browser/android/child_process_importance.h",
     "//content/public/browser/android/motion_event_action.h",
     "//content/public/browser/download_item.h",
@@ -335,7 +344,7 @@ generate_jni("content_jni_headers") {
     "java/src/org/chromium/content/browser/ContentFeatureList.java",
     "java/src/org/chromium/content/browser/ContentNfcDelegate.java",
     "java/src/org/chromium/content/browser/ContentVideoView.java",
-    "java/src/org/chromium/content/browser/ContentViewCore.java",
+    "java/src/org/chromium/content/browser/ContentViewCoreImpl.java",
     "java/src/org/chromium/content/browser/ContentViewRenderView.java",
     "java/src/org/chromium/content/browser/ContentViewStatics.java",
     "java/src/org/chromium/content/browser/GpuProcessCallback.java",
@@ -361,10 +370,12 @@ generate_jni("content_jni_headers") {
     "java/src/org/chromium/content/browser/input/DateTimeChooserAndroid.java",
     "java/src/org/chromium/content/browser/input/HandleViewResources.java",
     "java/src/org/chromium/content/browser/input/ImeAdapter.java",
+    "java/src/org/chromium/content/browser/input/SuggestionInfo.java",
     "java/src/org/chromium/content/browser/input/TextSuggestionHost.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java",
     "java/src/org/chromium/content_public/browser/LoadUrlParams.java",
+    "java/src/org/chromium/content_public/common/BrowserSideNavigationPolicy.java",
     "java/src/org/chromium/content_public/common/MediaMetadata.java",
     "java/src/org/chromium/content_public/common/ResourceRequestBody.java",
   ]
@@ -460,7 +471,7 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/accessibility/captioning/CaptioningChangeDelegateTest.java",
     "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplPixelTest.java",
     "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplTest.java",
-    "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplTestBase.java",
+    "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplTestRule.java",
     "javatests/src/org/chromium/content/browser/crypto/CipherFactoryTest.java",
     "javatests/src/org/chromium/content/browser/input/CursorAnchorInfoControllerTest.java",
     "javatests/src/org/chromium/content/browser/input/ImeLollipopTest.java",
@@ -469,6 +480,7 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/input/ImeTestUtils.java",
     "javatests/src/org/chromium/content/browser/input/InputDialogContainerTest.java",
     "javatests/src/org/chromium/content/browser/input/SelectPopupTest.java",
+    "javatests/src/org/chromium/content/browser/input/TextSuggestionMenuTest.java",
     "javatests/src/org/chromium/content/browser/picker/DateTimePickerDialogTest.java",
     "javatests/src/org/chromium/content/browser/webcontents/AccessibilitySnapshotTest.java",
     "javatests/src/org/chromium/content/browser/webcontents/WebContentsTest.java",
@@ -487,6 +499,8 @@ junit_binary("content_junit_tests") {
   java_files = [
     "junit/src/org/chromium/content/browser/BindingManagerImplTest.java",
     "junit/src/org/chromium/content/browser/MenuDescriptorTest.java",
+    "junit/src/org/chromium/content/browser/SelectionPopupControllerTest.java",
+    "junit/src/org/chromium/content/browser/SmartSelectionMetricsLoggerTest.java",
     "junit/src/org/chromium/content/browser/SpareChildConnectionTest.java",
     "junit/src/org/chromium/content/browser/androidoverlay/DialogOverlayCoreTest.java",
     "junit/src/org/chromium/content/browser/input/RangeTest.java",
@@ -503,6 +517,7 @@ junit_binary("content_junit_tests") {
     "//media/mojo/interfaces:interfaces_java",
     "//mojo/public/java:bindings_java",
     "//third_party/WebKit/public:android_mojo_bindings_java",
+    "//ui/android:ui_java",
     "//ui/gfx/geometry/mojo:mojo_java",
   ]
 }

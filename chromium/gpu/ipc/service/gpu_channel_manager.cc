@@ -19,10 +19,10 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/feature_info.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_program_cache.h"
 #include "gpu/command_buffer/service/passthrough_program_cache.h"
-#include "gpu/command_buffer/service/preemption_flag.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
@@ -91,8 +91,7 @@ GpuChannelManager::GpuChannelManager(
   // |application_status_listener_| must be created on the right task runner.
   DCHECK(task_runner->BelongsToCurrentThread());
   DCHECK(io_task_runner);
-  if (gpu_preferences.ui_prioritize_in_gpu_process)
-    preemption_flag_ = new PreemptionFlag;
+  DCHECK(scheduler);
 }
 
 GpuChannelManager::~GpuChannelManager() {
@@ -102,6 +101,12 @@ GpuChannelManager::~GpuChannelManager() {
     default_offscreen_surface_->Destroy();
     default_offscreen_surface_ = NULL;
   }
+}
+
+gles2::Outputter* GpuChannelManager::outputter() {
+  if (!outputter_)
+    outputter_.reset(new gles2::TraceOutputter("GpuChannelManager Trace"));
+  return outputter_.get();
 }
 
 gles2::ProgramCache* GpuChannelManager::program_cache() {
@@ -139,11 +144,9 @@ GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
 GpuChannel* GpuChannelManager::EstablishChannel(int client_id,
                                                 uint64_t client_tracing_id,
                                                 bool is_gpu_host) {
-  std::unique_ptr<GpuChannel> gpu_channel = base::MakeUnique<GpuChannel>(
-      this, scheduler_, sync_point_manager_, share_group_,
-      is_gpu_host ? preemption_flag_ : nullptr,
-      is_gpu_host ? nullptr : preemption_flag_, task_runner_, io_task_runner_,
-      client_id, client_tracing_id, is_gpu_host);
+  std::unique_ptr<GpuChannel> gpu_channel = std::make_unique<GpuChannel>(
+      this, scheduler_, sync_point_manager_, share_group_, task_runner_,
+      io_task_runner_, client_id, client_tracing_id, is_gpu_host);
 
   GpuChannel* gpu_channel_ptr = gpu_channel.get();
   gpu_channels_[client_id] = std::move(gpu_channel);
@@ -263,6 +266,10 @@ void GpuChannelManager::DoWakeUpGpu() {
 
 void GpuChannelManager::OnApplicationStateChange(
     base::android::ApplicationState state) {
+  // TODO(ericrk): Temporarily disable the context release logic due to
+  // https://crbug.com/792120. Re-enable when the fix lands.
+  return;
+
   if (state != base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES ||
       !is_running_on_low_end_mode_) {
     return;
@@ -279,6 +286,11 @@ void GpuChannelManager::OnApplicationStateChange(
                  weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kDelayToClearContextMs));
   return;
+}
+
+void GpuChannelManager::OnApplicationBackgroundedForTesting() {
+  is_backgrounded_for_testing_ = true;
+  OnApplicationBackgrounded();
 }
 
 void GpuChannelManager::OnApplicationBackgrounded() {
@@ -314,23 +326,9 @@ void GpuChannelManager::OnApplicationBackgrounded() {
 
 void GpuChannelManager::HandleMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
-  // Set a low limit on cache size for MEMORY_PRESSURE_LEVEL_MODERATE.
-  size_t limit = gpu_preferences_.gpu_program_cache_size / 4;
-  if (memory_pressure_level ==
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
-    limit = 0;
-  }
-
-  if (!program_cache_) {
-    return;
-  }
-
-  size_t bytes_freed = program_cache_->Trim(limit);
-  if (bytes_freed > 0) {
-    UMA_HISTOGRAM_COUNTS_100000(
-        "GPU.ProgramCache.MemoryReleasedOnPressure",
-        static_cast<base::HistogramBase::Sample>(bytes_freed) / 1024);
-  }
+  if (program_cache_)
+    program_cache_->HandleMemoryPressure(memory_pressure_level);
+  discardable_manager_.HandleMemoryPressure(memory_pressure_level);
 }
 
 }  // namespace gpu

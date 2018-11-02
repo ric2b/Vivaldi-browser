@@ -11,7 +11,7 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/task_runner_util.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tracker.h"
@@ -34,7 +34,9 @@ static void MakeAsyncCopyRequest(
     const gfx::Rect& source_rect,
     viz::CopyOutputRequest::CopyOutputRequestCallback callback) {
   std::unique_ptr<viz::CopyOutputRequest> request =
-      viz::CopyOutputRequest::CreateBitmapRequest(std::move(callback));
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          std::move(callback));
   request->set_area(source_rect);
   layer->RequestCopyOfOutput(std::move(request));
 }
@@ -69,7 +71,7 @@ static void MakeInitialAsyncCopyRequest(
     aura::Window* window,
     const gfx::Rect& source_rect,
     viz::CopyOutputRequest::CopyOutputRequestCallback callback) {
-  auto tracker = base::MakeUnique<aura::WindowTracker>();
+  auto tracker = std::make_unique<aura::WindowTracker>();
   tracker->Add(window);
   MakeAsyncCopyRequest(
       window->layer(), source_rect,
@@ -135,7 +137,7 @@ void GrabViewSnapshotAsync(gfx::NativeView view,
 
 void GrabLayerSnapshotAsync(ui::Layer* layer,
                             const gfx::Rect& source_rect,
-                            const GrabLayerSnapshotCallback& callback) {
+                            const GrabWindowSnapshotAsyncCallback& callback) {
   MakeAsyncCopyRequest(
       layer, source_rect,
       base::BindOnce(&SnapshotAsync::RunCallbackWithCopyOutputResult,

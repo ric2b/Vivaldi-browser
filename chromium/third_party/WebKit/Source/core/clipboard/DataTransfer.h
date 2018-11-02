@@ -52,10 +52,8 @@ class PropertyTreeState;
 // http://www.whatwg.org/specs/web-apps/current-work/multipage/dnd.html
 // Clipboard API (copy/paste):
 // http://dev.w3.org/2006/webapi/clipops/clipops.html
-class CORE_EXPORT DataTransfer final
-    : public GarbageCollectedFinalized<DataTransfer>,
-      public ScriptWrappable,
-      public DataObject::Observer {
+class CORE_EXPORT DataTransfer final : public ScriptWrappable,
+                                       public DataObject::Observer {
   USING_GARBAGE_COLLECTED_MIXIN(DataTransfer);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -134,17 +132,28 @@ class CORE_EXPORT DataTransfer final
 
   DataObject* GetDataObject() const;
 
-  static FloatRect DeviceSpaceBounds(const FloatRect, const LocalFrame&);
+  // Clip to the visible area of the visual viewport.
+  static FloatRect ClipByVisualViewport(const FloatRect& rect_in_document,
+                                        const LocalFrame&);
+
+  // Returns the size with device scale factor and page scale factor applied.
+  static FloatSize DeviceSpaceSize(const FloatSize& css_size,
+                                   const LocalFrame&);
+
+  // |css_size| is the size of the image in CSS pixels.
+  // |paint_offset| is the offset from the origin of the dragged
+  // object of the PaintRecordBuilder.
   static std::unique_ptr<DragImage> CreateDragImageForFrame(
       const LocalFrame&,
       float,
       RespectImageOrientationEnum,
-      const FloatRect&,
+      const FloatSize& css_size,
+      const FloatPoint& paint_offset,
       PaintRecordBuilder&,
       const PropertyTreeState&);
   static std::unique_ptr<DragImage> NodeImage(const LocalFrame&, Node&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   DataTransfer(DataTransferType, DataTransferAccessPolicy, DataObject*);

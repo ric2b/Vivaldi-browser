@@ -6,6 +6,8 @@ import("//third_party/WebKit/Source/modules/modules.gni")
 
 blink_modules_sources("mediastream") {
   sources = [
+    "ApplyConstraintsRequest.cpp",
+    "ApplyConstraintsRequest.h",
     "DOMWindowMediaStream.h",
     "MediaConstraintsImpl.cpp",
     "MediaConstraintsImpl.h",
@@ -32,10 +34,10 @@ blink_modules_sources("mediastream") {
     "NavigatorMediaStream.h",
     "NavigatorUserMedia.cpp",
     "NavigatorUserMedia.h",
-    "NavigatorUserMediaError.cpp",
-    "NavigatorUserMediaError.h",
     "NavigatorUserMediaErrorCallback.h",
     "NavigatorUserMediaSuccessCallback.h",
+    "OverconstrainedError.cpp",
+    "OverconstrainedError.h",
     "URLMediaStream.cpp",
     "URLMediaStream.h",
     "UserMediaClient.cpp",
@@ -44,5 +46,9 @@ blink_modules_sources("mediastream") {
     "UserMediaController.h",
     "UserMediaRequest.cpp",
     "UserMediaRequest.h",
+  ]
+
+  deps = [
+    "//third_party/WebKit/public:media_devices_mojo_bindings_blink",
   ]
 }

@@ -8,6 +8,8 @@
 
 #include <bitset>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -32,6 +34,7 @@
 #include "content/public/common/push_messaging_status.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -78,6 +81,7 @@ NotificationDatabaseData CreateDatabaseData(
       l10n_util::GetStringUTF16(IDS_PUSH_MESSAGING_GENERIC_NOTIFICATION_BODY);
   notification_data.tag = kPushMessagingForcedNotificationTag;
   notification_data.icon = GURL();
+  notification_data.timestamp = base::Time::Now();
   notification_data.silent = true;
 
   NotificationDatabaseData database_data;
@@ -183,7 +187,8 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
           profile_, notification_database_data.notification_id);
       platform_notification_service->OnPersistentNotificationClose(
           profile_, notification_database_data.notification_id,
-          notification_database_data.origin, false /* by_user */);
+          notification_database_data.origin, false /* by_user */,
+          base::BindOnce(&base::DoNothing));
 
       break;
     }
@@ -194,7 +199,8 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
     // push was allowed.
     BudgetManager* manager = BudgetManagerFactory::GetForProfile(profile_);
     manager->Consume(
-        url::Origin(origin), blink::mojom::BudgetOperationType::SILENT_PUSH,
+        url::Origin::Create(origin),
+        blink::mojom::BudgetOperationType::SILENT_PUSH,
         base::Bind(&PushMessagingNotificationManager::ProcessSilentPush,
                    weak_factory_.GetWeakPtr(), origin,
                    service_worker_registration_id, message_handled_closure));
@@ -228,10 +234,10 @@ bool PushMessagingNotificationManager::IsTabVisible(
 
   // Ignore minimized windows.
   switch (active_web_contents->GetMainFrame()->GetVisibilityState()) {
-    case blink::kWebPageVisibilityStateHidden:
-    case blink::kWebPageVisibilityStatePrerender:
+    case blink::mojom::PageVisibilityState::kHidden:
+    case blink::mojom::PageVisibilityState::kPrerender:
       return false;
-    case blink::kWebPageVisibilityStateVisible:
+    case blink::mojom::PageVisibilityState::kVisible:
       break;
   }
 

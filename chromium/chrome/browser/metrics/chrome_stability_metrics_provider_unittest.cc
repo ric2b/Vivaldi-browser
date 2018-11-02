@@ -5,10 +5,11 @@
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
 
 #include "base/macros.h"
+#include "base/test/histogram_tester.h"
+#include "build/build_config.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/metrics/proto/system_profile.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
@@ -24,6 +25,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/system_profile.pb.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/process_map.h"
@@ -69,6 +71,7 @@ TEST_F(ChromeStabilityMetricsProviderTest, BrowserChildProcessObserver) {
 }
 
 TEST_F(ChromeStabilityMetricsProviderTest, NotificationObserver) {
+  base::HistogramTester histogram_tester;
   ChromeStabilityMetricsProvider provider(prefs());
   std::unique_ptr<TestingProfileManager> profile_manager(
       new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
@@ -128,7 +131,13 @@ TEST_F(ChromeStabilityMetricsProviderTest, NotificationObserver) {
   // be executed immediately.
   provider.ProvideStabilityMetrics(&system_profile);
 
+#if defined(OS_ANDROID)
+  EXPECT_EQ(
+      2u,
+      histogram_tester.GetAllSamples("Stability.Android.RendererCrash").size());
+#else
   EXPECT_EQ(2, system_profile.stability().renderer_crash_count());
+#endif
   EXPECT_EQ(1, system_profile.stability().renderer_failed_launch_count());
   EXPECT_EQ(0, system_profile.stability().extension_renderer_crash_count());
 

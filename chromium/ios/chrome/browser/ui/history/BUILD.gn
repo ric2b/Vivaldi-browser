@@ -31,6 +31,7 @@ source_set("history") {
     "ios_browsing_history_driver.mm",
   ]
   deps = [
+    ":history_base_feature",
     "//base",
     "//base:i18n",
     "//components/browser_sync",
@@ -77,6 +78,16 @@ source_set("history") {
     "MobileCoreServices.framework",
     "QuartzCore.framework",
     "UIKit.framework",
+  ]
+}
+
+source_set("history_base_feature") {
+  sources = [
+    "history_base_feature.h",
+    "history_base_feature.mm",
+  ]
+  deps = [
+    "//base",
   ]
 }
 
@@ -161,8 +172,10 @@ source_set("eg_tests") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/ui:ui",
     "//ios/chrome/browser/ui/authentication:authentication_ui",
+    "//ios/chrome/browser/ui/authentication:eg_test_support",
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/tools_menu",
+    "//ios/chrome/browser/ui/tools_menu/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common",
     "//ios/chrome/test/app:test_support",
@@ -170,7 +183,7 @@ source_set("eg_tests") {
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/testing:ios_test_support",
-    "//ios/third_party/earl_grey",
+    "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/web/public/test",
     "//ios/web/public/test/http_server",
     "//net",

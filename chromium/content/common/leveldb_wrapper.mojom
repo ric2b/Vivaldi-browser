@@ -15,6 +15,12 @@ interface LevelDBObserver {
              string source);
   KeyDeleted(array<uint8> key, array<uint8> old_value, string source);
   AllDeleted(string source);
+
+  // Tells the client if it should send the old values for the key on Put() and
+  // Delete() calls for sending notifications. By default the clients are
+  // expected to send old values. It is set to true when the leveldb wrapper
+  // does not cache values in memory.
+  ShouldSendOldValueOnMutations(bool value);
 };
 
 struct KeyValue {
@@ -37,21 +43,42 @@ interface LevelDBWrapperGetAllCallback {
 interface LevelDBWrapper {
   AddObserver(associated LevelDBObserver observer);
 
-  // Sets the database entry for |key| to |value|. Returns OK on success.
-  Put(array<uint8> key, array<uint8> value, string source) => (bool success);
+  // Set the database entry for |key| to |value|.
+  // Takes an optional |client_old_value| (see ShouldSendOldValueOnMutations()):
+  // 1. If the client is notified to not send old value on mutations
+  //    |client_old_value| is unused and can be nullopt.
+  // 2. If the client is notified to send old values or not notified at all,
+  //    |client_old_value| must be filled in with old value of the |key|, or
+  //    nullopt if |key| was not present in database. This value is used to send
+  //    notifications to LevelDBObserver(s).
+  // Returns OK on success.
+  Put(array<uint8> key, array<uint8> value, array<uint8>? client_old_value,
+      string source) =>
+          (bool success);
 
-  // Remove the database entry (if any) for |key|.  Returns OK on success, and a
-  // non-OK status on error.  It is not an error if |key| did not exist in the
-  // database.
-  Delete(array<uint8> key, string source) => (bool success);
+  // Remove the database entry (if any) for |key|.
+  // Takes an optional |client_old_value| (see ShouldSendOldValueOnMutations()):
+  // 1. If the client is notified to not send old value on mutations,
+  //    |client_old_value| is unused and can be nullopt.
+  // 2. If the client is notified to send old values or not notified at all,
+  //    |client_old_value| must be filled in with old value of the |key|, or
+  //    nullopt if |key| was not present in database. This value is used to send
+  //    notifications to LevelDBObserver(s).
+  // Returns OK on success, and a non-OK status on error. It is not an error if
+  // |key| did not exist in the database.
+  Delete(array<uint8> key, array<uint8>? client_old_value, string source) =>
+      (bool success);
 
   // Removes all the entries.
   DeleteAll(string source) => (bool success);
 
-  // Returns the value of the |key|.
+  // [DEPRECATED] Returns the value of the |key| only if values are
+  // stored in the internal in-memory cache. Fails if the |key| does not exist
+  // or if values are not required to be stored in the cache.
+  // TODO(ssid): Remove this function, crbug.com/764127.
   Get(array<uint8> key) => (bool success, array<uint8> value);
 
-  // Only used with small databases. Returns all key/value pairs.
+  // Returns all key/value pairs.
   [Sync]
   GetAll(associated LevelDBWrapperGetAllCallback complete_callback)
     => (leveldb.mojom.DatabaseError status, array<KeyValue> data);

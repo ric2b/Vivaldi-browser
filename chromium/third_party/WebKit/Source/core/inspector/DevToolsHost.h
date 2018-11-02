@@ -41,9 +41,7 @@ class FrontendMenuProvider;
 class InspectorFrontendClient;
 class LocalFrame;
 
-class CORE_EXPORT DevToolsHost final
-    : public GarbageCollectedFinalized<DevToolsHost>,
-      public ScriptWrappable {
+class CORE_EXPORT DevToolsHost final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -53,7 +51,7 @@ class CORE_EXPORT DevToolsHost final
   }
 
   ~DevToolsHost();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void DisconnectClient();
 
   float zoomFactor();

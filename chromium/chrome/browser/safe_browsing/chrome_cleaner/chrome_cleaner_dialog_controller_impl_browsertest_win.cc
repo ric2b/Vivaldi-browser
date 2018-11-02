@@ -9,16 +9,17 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/mock_chrome_cleaner_controller_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/component_updater/pref_names.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/variations/variations_params_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,7 +32,6 @@ using ::testing::InvokeWithoutArgs;
 using ::testing::StrictMock;
 using ::testing::Return;
 
-constexpr char kSRTPromptTrial[] = "SRTPromptFieldTrial";
 constexpr char kSRTPromptGroup[] = "SRTGroup";
 
 class MockChromeCleanerPromptDelegate : public ChromeCleanerPromptDelegate {
@@ -40,23 +40,6 @@ class MockChromeCleanerPromptDelegate : public ChromeCleanerPromptDelegate {
                void(Browser* browser,
                     ChromeCleanerDialogController* dialog_controller,
                     ChromeCleanerController* cleaner_controller));
-};
-
-class MockChromeCleanerController
-    : public safe_browsing::ChromeCleanerController {
- public:
-  MOCK_METHOD0(ShouldShowCleanupInSettingsUI, bool());
-  MOCK_METHOD0(IsPoweredByPartner, bool());
-  MOCK_CONST_METHOD0(state, State());
-  MOCK_CONST_METHOD0(idle_reason, IdleReason());
-  MOCK_METHOD1(SetLogsEnabled, void(bool));
-  MOCK_CONST_METHOD0(logs_enabled, bool());
-  MOCK_METHOD0(ResetIdleState, void());
-  MOCK_METHOD1(AddObserver, void(Observer*));
-  MOCK_METHOD1(RemoveObserver, void(Observer*));
-  MOCK_METHOD1(Scan, void(const safe_browsing::SwReporterInvocation&));
-  MOCK_METHOD2(ReplyWithUserResponse, void(Profile*, UserResponse));
-  MOCK_METHOD0(Reboot, void());
 };
 
 // Parameters for this test:
@@ -115,14 +98,14 @@ class ChromeCleanerPromptUserTest
 IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest,
                        OnInfectedBrowserAvailable) {
   EXPECT_CALL(mock_delegate_, ShowChromeCleanerPrompt(_, _, _)).Times(1);
-  dialog_controller_->OnInfected(std::set<base::FilePath>());
+  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
 }
 
 IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest,
                        DISABLED_OnInfectedBrowserNotAvailable) {
   browser()->window()->Minimize();
   base::RunLoop().RunUntilIdle();
-  dialog_controller_->OnInfected(std::set<base::FilePath>());
+  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
 
   base::RunLoop run_loop;
   // We only set the expectation here because we want to make sure that the
@@ -141,7 +124,7 @@ IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest, AllBrowsersClosed) {
 
   CloseAllBrowsers();
   base::RunLoop().RunUntilIdle();
-  dialog_controller_->OnInfected(std::set<base::FilePath>());
+  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
 
   base::RunLoop run_loop;
   // We only set the expectation here because we want to make sure that the

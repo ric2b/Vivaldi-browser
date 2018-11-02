@@ -15,24 +15,22 @@
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/common/content_export.h"
+#include "content/common/devtools.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/net_errors.h"
 
 #if defined(OS_ANDROID)
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/android/view_android.h"
 #endif  // OS_ANDROID
-
-namespace cc {
-class CompositorFrameMetadata;
-}
 
 namespace net {
 class HttpRequestHeaders;
 }
 
-#if defined(OS_ANDROID)
-#include "services/device/public/interfaces/wake_lock.mojom.h"
-#endif
+namespace viz {
+class CompositorFrameMetadata;
+}
 
 namespace content {
 
@@ -41,10 +39,9 @@ class DevToolsFrameTraceRecorder;
 class FrameTreeNode;
 class NavigationHandle;
 class NavigationHandleImpl;
+class NavigationRequest;
 class NavigationThrottle;
 class RenderFrameHostImpl;
-struct BeginNavigationParams;
-struct CommonNavigationParams;
 
 class CONTENT_EXPORT RenderFrameDevToolsAgentHost
     : public DevToolsAgentHostImpl,
@@ -54,24 +51,29 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   static scoped_refptr<DevToolsAgentHost> GetOrCreateFor(
       FrameTreeNode* frame_tree_node);
 
+  // This method does not climb up to the suitable parent frame,
+  // so only use it when we are sure the frame will be a local root.
+  // Prefer GetOrCreateFor instead.
+  static scoped_refptr<DevToolsAgentHost> GetOrCreateForDangling(
+      FrameTreeNode* frame_tree_node);
+
   static void OnCancelPendingNavigation(RenderFrameHost* pending,
                                         RenderFrameHost* current);
   static void OnBeforeNavigation(RenderFrameHost* current,
                                  RenderFrameHost* pending);
-  static void OnFailedNavigation(RenderFrameHost* host,
-                                 const CommonNavigationParams& common_params,
-                                 const BeginNavigationParams& begin_params,
-                                 net::Error error_code);
-  static std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
-      NavigationHandle* navigation_handle);
+  static void OnResetNavigationRequest(NavigationRequest* navigation_request);
+
+  static std::vector<std::unique_ptr<NavigationThrottle>>
+  CreateNavigationThrottles(NavigationHandle* navigation_handle);
   static bool IsNetworkHandlerEnabled(FrameTreeNode* frame_tree_node);
   static void AppendDevToolsHeaders(FrameTreeNode* frame_tree_node,
                                     net::HttpRequestHeaders* headers);
+  static bool ShouldBypassServiceWorker(FrameTreeNode* frame_tree_node);
   static void WebContentsCreated(WebContents* web_contents);
 
   static void SignalSynchronousSwapCompositorFrame(
       RenderFrameHost* frame_host,
-      cc::CompositorFrameMetadata frame_metadata);
+      viz::CompositorFrameMetadata frame_metadata);
 
   FrameTreeNode* frame_tree_node() { return frame_tree_node_; }
 
@@ -81,6 +83,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   BrowserContext* GetBrowserContext() override;
   WebContents* GetWebContents() override;
   std::string GetParentId() override;
+  std::string GetOpenerId() override;
   std::string GetType() override;
   std::string GetTitle() override;
   std::string GetDescription() override;
@@ -91,6 +94,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   bool Close() override;
   base::TimeTicks GetLastActivityTime() override;
+
+  // PlzNavigate
+  RenderFrameHostImpl* GetFrameHostForTesting() { return frame_host_; }
 
  private:
   friend class DevToolsAgentHost;
@@ -114,8 +120,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void FrameDeleted(RenderFrameHost* rfh) override;
   void RenderFrameDeleted(RenderFrameHost* rfh) override;
   void RenderProcessGone(base::TerminationStatus status) override;
-  bool OnMessageReceived(const IPC::Message& message,
-                         RenderFrameHost* render_frame_host) override;
   void DidAttachInterstitialPage() override;
   void DidDetachInterstitialPage() override;
   void WasShown() override;
@@ -137,10 +141,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   void RenderFrameCrashed();
   void OnSwapCompositorFrame(const IPC::Message& message);
-  void OnDispatchOnInspectorFrontend(
-      RenderFrameHost* sender,
-      const DevToolsMessageChunk& message);
-  void OnRequestNewWindow(RenderFrameHost* sender, int new_routing_id);
   void DestroyOnRenderFrameGone();
 
   bool CheckConsistency();
@@ -154,7 +154,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 #endif
 
   void SynchronousSwapCompositorFrame(
-      cc::CompositorFrameMetadata frame_metadata);
+      viz::CompositorFrameMetadata frame_metadata);
+  bool EnsureAgent();
 
   class FrameHostHolder;
 
@@ -175,6 +176,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   // The active host we are talking to.
   RenderFrameHostImpl* frame_host_ = nullptr;
+  mojom::DevToolsAgentAssociatedPtr agent_ptr_;
   base::flat_set<NavigationHandleImpl*> navigation_handles_;
   bool render_frame_alive_ = false;
 

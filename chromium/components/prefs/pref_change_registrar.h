@@ -10,8 +10,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "components/prefs/base_prefs_export.h"
 #include "components/prefs/pref_observer.h"
+#include "components/prefs/prefs_export.h"
 
 class PrefService;
 
@@ -19,14 +19,14 @@ class PrefService;
 // with a PrefStore. Functions much like NotificationRegistrar, but specifically
 // manages observers of preference changes. When the Registrar is destroyed,
 // all registered observers are automatically unregistered with the PrefStore.
-class COMPONENTS_PREFS_EXPORT PrefChangeRegistrar : public PrefObserver {
+class COMPONENTS_PREFS_EXPORT PrefChangeRegistrar final : public PrefObserver {
  public:
   // You can register this type of callback if you need to know the
   // path of the preference that is changing.
-  typedef base::Callback<void(const std::string&)> NamedChangeCallback;
+  using NamedChangeCallback = base::RepeatingCallback<void(const std::string&)>;
 
   PrefChangeRegistrar();
-  virtual ~PrefChangeRegistrar();
+  ~PrefChangeRegistrar();
 
   // Must be called before adding or removing observers. Can be called more
   // than once as long as the value of |service| doesn't change.
@@ -70,7 +70,7 @@ class COMPONENTS_PREFS_EXPORT PrefChangeRegistrar : public PrefObserver {
   static void InvokeUnnamedCallback(const base::Closure& callback,
                                     const std::string& pref_name);
 
-  typedef std::map<std::string, NamedChangeCallback> ObserverMap;
+  using ObserverMap = std::map<std::string, NamedChangeCallback>;
 
   ObserverMap observers_;
   PrefService* service_;

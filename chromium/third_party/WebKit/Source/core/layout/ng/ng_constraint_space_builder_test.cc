@@ -4,27 +4,20 @@
 
 #include "core/layout/ng/ng_constraint_space_builder.h"
 
-#include "core/layout/LayoutTestHelper.h"
+#include "core/layout/ng/ng_layout_test.h"
 
 namespace blink {
 namespace {
 
-class NGConstraintSpaceBuilderTest {
- public:
-  NGConstraintSpaceBuilderTest() {
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
-  };
-  ~NGConstraintSpaceBuilderTest() {
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(false);
-  };
-};
+using NGConstraintSpaceBuilderTest = NGLayoutTest;
 
 // Asserts that indefinite inline length becomes initial containing
 // block width for horizontal-tb inside vertical document.
 TEST(NGConstraintSpaceBuilderTest, AvailableSizeFromHorizontalICB) {
   NGPhysicalSize icb_size{NGSizeIndefinite, LayoutUnit(51)};
 
-  NGConstraintSpaceBuilder horizontal_builder(kHorizontalTopBottom, icb_size);
+  NGConstraintSpaceBuilder horizontal_builder(WritingMode::kHorizontalTb,
+                                              icb_size);
   NGLogicalSize fixed_size{LayoutUnit(100), LayoutUnit(200)};
   NGLogicalSize indefinite_size{NGSizeIndefinite, NGSizeIndefinite};
 
@@ -32,12 +25,12 @@ TEST(NGConstraintSpaceBuilderTest, AvailableSizeFromHorizontalICB) {
   horizontal_builder.SetPercentageResolutionSize(fixed_size);
 
   NGConstraintSpaceBuilder vertical_builder(
-      *horizontal_builder.ToConstraintSpace(kHorizontalTopBottom));
+      *horizontal_builder.ToConstraintSpace(WritingMode::kHorizontalTb));
 
   vertical_builder.SetAvailableSize(indefinite_size);
   vertical_builder.SetPercentageResolutionSize(indefinite_size);
-  RefPtr<NGConstraintSpace> space =
-      vertical_builder.ToConstraintSpace(kVerticalLeftRight);
+  scoped_refptr<NGConstraintSpace> space =
+      vertical_builder.ToConstraintSpace(WritingMode::kVerticalLr);
 
   EXPECT_EQ(space->AvailableSize().inline_size, icb_size.height);
   EXPECT_EQ(space->PercentageResolutionSize().inline_size, icb_size.height);
@@ -48,7 +41,8 @@ TEST(NGConstraintSpaceBuilderTest, AvailableSizeFromHorizontalICB) {
 TEST(NGConstraintSpaceBuilderTest, AvailableSizeFromVerticalICB) {
   NGPhysicalSize icb_size{LayoutUnit(51), NGSizeIndefinite};
 
-  NGConstraintSpaceBuilder horizontal_builder(kVerticalLeftRight, icb_size);
+  NGConstraintSpaceBuilder horizontal_builder(WritingMode::kVerticalLr,
+                                              icb_size);
   NGLogicalSize fixed_size{LayoutUnit(100), LayoutUnit(200)};
   NGLogicalSize indefinite_size{NGSizeIndefinite, NGSizeIndefinite};
 
@@ -56,12 +50,12 @@ TEST(NGConstraintSpaceBuilderTest, AvailableSizeFromVerticalICB) {
   horizontal_builder.SetPercentageResolutionSize(fixed_size);
 
   NGConstraintSpaceBuilder vertical_builder(
-      *horizontal_builder.ToConstraintSpace(kVerticalLeftRight));
+      *horizontal_builder.ToConstraintSpace(WritingMode::kVerticalLr));
 
   vertical_builder.SetAvailableSize(indefinite_size);
   vertical_builder.SetPercentageResolutionSize(indefinite_size);
-  RefPtr<NGConstraintSpace> space =
-      vertical_builder.ToConstraintSpace(kHorizontalTopBottom);
+  scoped_refptr<NGConstraintSpace> space =
+      vertical_builder.ToConstraintSpace(WritingMode::kHorizontalTb);
 
   EXPECT_EQ(space->AvailableSize().inline_size, icb_size.width);
   EXPECT_EQ(space->PercentageResolutionSize().inline_size, icb_size.width);

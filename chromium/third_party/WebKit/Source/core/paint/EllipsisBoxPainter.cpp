@@ -20,7 +20,7 @@ void EllipsisBoxPainter::Paint(const PaintInfo& paint_info,
                                const LayoutPoint& paint_offset,
                                LayoutUnit line_top,
                                LayoutUnit line_bottom) {
-  if (paint_info.phase == kPaintPhaseSelection)
+  if (paint_info.phase == PaintPhase::kSelection)
     return;
 
   const ComputedStyle& style = ellipsis_box_.GetLineLayoutItem().StyleRef(
@@ -35,7 +35,6 @@ void EllipsisBoxPainter::PaintEllipsis(const PaintInfo& paint_info,
                                        const ComputedStyle& style) {
   LayoutPoint box_origin = ellipsis_box_.PhysicalLocation();
   box_origin.MoveBy(paint_offset);
-  LayoutRect paint_rect(box_origin, ellipsis_box_.Size());
 
   GraphicsContext& context = paint_info.context;
   DisplayItem::Type display_item_type =
@@ -44,8 +43,7 @@ void EllipsisBoxPainter::PaintEllipsis(const PaintInfo& paint_info,
                                                   display_item_type))
     return;
 
-  DrawingRecorder recorder(context, ellipsis_box_, display_item_type,
-                           FloatRect(paint_rect));
+  DrawingRecorder recorder(context, ellipsis_box_, display_item_type);
 
   LayoutRect box_rect(box_origin,
                       LayoutSize(ellipsis_box_.LogicalWidth(),
@@ -61,7 +59,7 @@ void EllipsisBoxPainter::PaintEllipsis(const PaintInfo& paint_info,
   if (!font_data)
     return;
 
-  TextPainter::Style text_style = TextPainter::TextPaintingStyle(
+  TextPaintStyle text_style = TextPainter::TextPaintingStyle(
       ellipsis_box_.GetLineLayoutItem().GetDocument(), style, paint_info);
   TextRun text_run = ConstructTextRun(font, ellipsis_box_.EllipsisStr(), style,
                                       TextRun::kAllowTrailingExpansion);
@@ -71,6 +69,9 @@ void EllipsisBoxPainter::PaintEllipsis(const PaintInfo& paint_info,
                            ellipsis_box_.IsHorizontal());
   text_painter.Paint(0, ellipsis_box_.EllipsisStr().length(),
                      ellipsis_box_.EllipsisStr().length(), text_style);
+  // TODO(npm): Check that there are non-whitespace characters. See
+  // crbug.com/788444.
+  context.GetPaintController().SetTextPainted();
 }
 
 }  // namespace blink

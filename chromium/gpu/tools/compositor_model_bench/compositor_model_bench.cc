@@ -13,11 +13,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <X11/keysym.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 
-#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +21,7 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -37,12 +34,12 @@
 #include "gpu/tools/compositor_model_bench/render_model_utils.h"
 #include "gpu/tools/compositor_model_bench/render_models.h"
 #include "gpu/tools/compositor_model_bench/render_tree.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gl/init/gl_factory.h"
 
 using base::TimeTicks;
 using base::DirectoryExists;
 using base::PathExists;
-using std::queue;
 using std::string;
 
 struct SimulationSpecification {
@@ -160,7 +157,7 @@ class Simulator {
 
     // Get properties of the screen.
     int screen = DefaultScreen(display_);
-    int root_window = RootWindow(display_, screen);
+    int root_window = XRootWindow(display_, screen);
 
     // Creates the window.
     window_ = XCreateSimpleWindow(display_,
@@ -201,7 +198,7 @@ class Simulator {
 
     for (int i = 0; i < visual_info_count && !gl_context_; ++i) {
       gl_context_ = glXCreateContext(display_, visual_info_list + i, 0,
-                                     True /* Direct rendering */);
+                                     x11::True /* Direct rendering */);
     }
 
     XFree(visual_info_list);
@@ -252,11 +249,8 @@ class Simulator {
 
     XExposeEvent ev = { Expose, 0, 1, display_, window_,
                         0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0 };
-    XSendEvent(display_,
-      window_,
-      False,
-      ExposureMask,
-      reinterpret_cast<XEvent*>(&ev));
+    XSendEvent(display_, window_, x11::False, ExposureMask,
+               reinterpret_cast<XEvent*>(&ev));
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
@@ -335,8 +329,8 @@ class Simulator {
 
   // Simulation task list for this execution
   std::unique_ptr<RenderModelSimulator> current_sim_;
-  queue<SimulationSpecification> sims_remaining_;
-  queue<SimulationSpecification> sims_completed_;
+  base::queue<SimulationSpecification> sims_remaining_;
+  base::queue<SimulationSpecification> sims_completed_;
   base::FilePath output_path_;
   // Amount of time to run each simulation
   int seconds_per_test_;

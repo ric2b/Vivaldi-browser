@@ -14,7 +14,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
-#include "ui/display/manager/chromeos/touchscreen_util.h"
+#include "ui/display/manager/chromeos/test/touch_device_manager_test_api.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -79,8 +79,9 @@ TEST_F(OobeDisplayChooserTest, PreferTouchAsPrimary) {
   base::RunLoop().RunUntilIdle();
 
   // Associate touchscreen device with display
-  display_info[1].AddInputDevice(touchscreen.id);
-  display_info[1].set_touch_support(display::Display::TOUCH_SUPPORT_AVAILABLE);
+  display::test::TouchDeviceManagerTestApi(
+      display_manager()->touch_device_manager())
+      .Associate(&display_info[1], touchscreen);
   display_manager()->OnNativeDisplaysChanged(display_info);
   base::RunLoop().RunUntilIdle();
 
@@ -114,8 +115,9 @@ TEST_F(OobeDisplayChooserTest, DontSwitchFromTouch) {
   base::RunLoop().RunUntilIdle();
 
   // Associate touchscreen device with display
-  display_info[1].AddInputDevice(touchscreen.id);
-  display_info[1].set_touch_support(display::Display::TOUCH_SUPPORT_AVAILABLE);
+  display::test::TouchDeviceManagerTestApi(
+      display_manager()->touch_device_manager())
+      .Associate(&display_info[1], touchscreen);
   display_manager()->OnNativeDisplaysChanged(display_info);
   base::RunLoop().RunUntilIdle();
 

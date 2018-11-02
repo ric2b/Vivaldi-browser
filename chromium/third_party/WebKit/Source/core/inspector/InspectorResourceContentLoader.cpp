@@ -15,13 +15,13 @@
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
 #include "core/page/Page.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
-#include "public/platform/WebCachePolicy.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -43,7 +43,7 @@ class InspectorResourceContentLoader::ResourceClient final
       resource->AddClient(static_cast<StyleSheetResourceClient*>(this));
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(loader_);
     StyleSheetResourceClient::Trace(visitor);
     RawResourceClient::Trace(visitor);
@@ -103,7 +103,8 @@ InspectorResourceContentLoader::InspectorResourceContentLoader(
 void InspectorResourceContentLoader::Start() {
   started_ = true;
   HeapVector<Member<Document>> documents;
-  InspectedFrames* inspected_frames = InspectedFrames::Create(inspected_frame_);
+  InspectedFrames* inspected_frames =
+      new InspectedFrames(inspected_frame_, String());
   for (LocalFrame* frame : *inspected_frames) {
     documents.push_back(frame->GetDocument());
     documents.AppendVector(InspectorPageAgent::ImportsForFrame(frame));
@@ -115,11 +116,11 @@ void InspectorResourceContentLoader::Start() {
     HistoryItem* item =
         document->Loader() ? document->Loader()->GetHistoryItem() : nullptr;
     if (item) {
-      resource_request = item->GenerateResourceRequest(
-          WebCachePolicy::kReturnCacheDataDontLoad);
+      resource_request =
+          item->GenerateResourceRequest(mojom::FetchCacheMode::kOnlyIfCached);
     } else {
       resource_request = ResourceRequest(document->Url());
-      resource_request.SetCachePolicy(WebCachePolicy::kReturnCacheDataDontLoad);
+      resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
     }
     resource_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
 
@@ -191,7 +192,7 @@ InspectorResourceContentLoader::~InspectorResourceContentLoader() {
   DCHECK(resources_.IsEmpty());
 }
 
-DEFINE_TRACE(InspectorResourceContentLoader) {
+void InspectorResourceContentLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frame_);
   visitor->Trace(pending_resource_clients_);
   visitor->Trace(resources_);
@@ -236,9 +237,9 @@ void InspectorResourceContentLoader::CheckDone() {
     return;
   HashMap<int, Callbacks> callbacks;
   callbacks.swap(callbacks_);
-  for (const auto& key_value : callbacks) {
-    for (const auto& callback : key_value.value)
-      callback();
+  for (auto& key_value : callbacks) {
+    for (auto& callback : key_value.value)
+      std::move(callback).Run();
   }
 }
 

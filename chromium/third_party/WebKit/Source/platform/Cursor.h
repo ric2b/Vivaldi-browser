@@ -26,11 +26,11 @@
 #ifndef Cursor_h
 #define Cursor_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/graphics/Image.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 
 // To avoid conflicts with the CreateWindow macro from the Windows SDK...
 #undef CopyCursor
@@ -110,14 +110,14 @@ class PLATFORM_EXPORT Cursor {
     DCHECK_LE(type_, kCustom);
     return type_;
   }
-  Image* GetImage() const { return image_.Get(); }
+  Image* GetImage() const { return image_.get(); }
   const IntPoint& HotSpot() const { return hot_spot_; }
   // Image scale in image pixels per logical (UI) pixel.
   float ImageScaleFactor() const { return image_scale_factor_; }
 
  private:
   Type type_;
-  RefPtr<Image> image_;
+  scoped_refptr<Image> image_;
   IntPoint hot_spot_;
   float image_scale_factor_;
 };

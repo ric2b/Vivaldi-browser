@@ -5,16 +5,16 @@
 #ifndef Sensor_h
 #define Sensor_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/dom/DOMTimeStamp.h"
-#include "core/dom/SuspendableObject.h"
+#include "core/dom/PausableObject.h"
 #include "core/frame/PlatformEventController.h"
 #include "modules/EventTargetModules.h"
 #include "modules/sensor/SensorOptions.h"
 #include "modules/sensor/SensorProxy.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
@@ -49,6 +49,7 @@ class Sensor : public EventTargetWithInlineData,
 
   // Getters
   bool activated() const;
+  bool hasReading() const;
   DOMHighResTimeStamp timestamp(ScriptState*, bool& is_null) const;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
@@ -58,7 +59,7 @@ class Sensor : public EventTargetWithInlineData,
   // ActiveScriptWrappable overrides.
   bool HasPendingActivity() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   Sensor(ExecutionContext*,
@@ -74,7 +75,6 @@ class Sensor : public EventTargetWithInlineData,
   // parameters if needed.
   virtual SensorConfigurationPtr CreateSensorConfig();
 
-  bool CanReturnReadings() const;
   bool IsActivated() const { return state_ == SensorState::kActivated; }
   bool IsIdleOrErrored() const;
   const SensorProxy* proxy() const { return sensor_proxy_; }
@@ -124,7 +124,7 @@ class Sensor : public EventTargetWithInlineData,
 // To be used in getters in concrete sensors
 // bindings code.
 #define INIT_IS_NULL_AND_RETURN(is_null, x) \
-  is_null = !CanReturnReadings();           \
+  is_null = !hasReading();                  \
   if (is_null)                              \
   return (x)
 

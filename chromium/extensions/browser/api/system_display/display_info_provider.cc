@@ -73,10 +73,14 @@ api::system_display::DisplayUnitInfo DisplayInfoProvider::CreateDisplayUnitInfo(
   unit.work_area.height = work_area.height();
   unit.has_touch_support =
       display.touch_support() == display::Display::TOUCH_SUPPORT_AVAILABLE;
+  unit.has_accelerometer_support =
+      display.accelerometer_support() ==
+      display::Display::ACCELEROMETER_SUPPORT_AVAILABLE;
   return unit;
 }
 
-bool DisplayInfoProvider::SetDisplayLayout(const DisplayLayoutList& layout) {
+bool DisplayInfoProvider::SetDisplayLayout(const DisplayLayoutList& layout,
+                                           std::string* error) {
   NOTREACHED();  // Implemented on Chrome OS only in override.
   return false;
 }
@@ -124,7 +128,7 @@ bool DisplayInfoProvider::OverscanCalibrationComplete(const std::string& id) {
 bool DisplayInfoProvider::ShowNativeTouchCalibration(
     const std::string& id,
     std::string* error,
-    const TouchCalibrationCallback& callback) {
+    TouchCalibrationCallback callback) {
   NOTREACHED();  // Implemented on Chrome OS only in override.
   return false;
 }

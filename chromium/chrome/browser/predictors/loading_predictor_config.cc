@@ -4,7 +4,9 @@
 
 #include "chrome/browser/predictors/loading_predictor_config.h"
 
+#include "base/metrics/field_trial_params.h"
 #include "chrome/browser/net/prediction_options.h"
+#include "chrome/browser/net/predictor.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
@@ -43,6 +45,8 @@ bool IsPreconnectEnabledInternal(Profile* profile, int mode, int mask) {
 }  // namespace
 
 const char kSpeculativePreconnectFeatureName[] = "SpeculativePreconnect";
+const char kPreconnectMode[] = "preconnect";
+const char kNoPreconnectMode[] = "no-preconnect";
 
 const base::Feature kSpeculativePreconnectFeature{
     kSpeculativePreconnectFeatureName, base::FEATURE_DISABLED_BY_DEFAULT};
@@ -51,13 +55,36 @@ bool MaybeEnableSpeculativePreconnect(LoadingPredictorConfig* config) {
   if (!base::FeatureList::IsEnabled(kSpeculativePreconnectFeature))
     return false;
 
-  if (config) {
-    config->mode |=
-        LoadingPredictorConfig::LEARNING | LoadingPredictorConfig::PRECONNECT;
-    config->is_origin_learning_enabled = true;
+  std::string mode_value = base::GetFieldTrialParamValueByFeature(
+      kSpeculativePreconnectFeature, kModeParamName);
+  if (mode_value == kLearningMode) {
+    if (config) {
+      config->mode |= LoadingPredictorConfig::LEARNING;
+      config->is_origin_learning_enabled = true;
+    }
+    return true;
+  } else if (mode_value == kPreconnectMode) {
+    if (config) {
+      config->mode |=
+          LoadingPredictorConfig::LEARNING | LoadingPredictorConfig::PRECONNECT;
+      config->is_origin_learning_enabled = true;
+      config->should_disable_other_preconnects = true;
+    }
+    return true;
+  } else if (mode_value == kNoPreconnectMode) {
+    if (config) {
+      config->should_disable_other_preconnects = true;
+    }
+    return false;
   }
 
-  return true;
+  return false;
+}
+
+bool ShouldDisableOtherPreconnects() {
+  LoadingPredictorConfig config;
+  MaybeEnableSpeculativePreconnect(&config);
+  return config.should_disable_other_preconnects;
 }
 
 bool IsLoadingPredictorEnabled(Profile* profile,
@@ -76,7 +103,7 @@ LoadingPredictorConfig::LoadingPredictorConfig()
     : mode(0),
       max_navigation_lifetime_seconds(60),
       max_urls_to_track(500),
-      max_hosts_to_track(200),
+      max_hosts_to_track(chrome_browser_net::Predictor::kMaxReferrers),
       min_url_visit_count(2),
       max_resources_per_entry(50),
       max_origins_per_entry(50),
@@ -86,9 +113,10 @@ LoadingPredictorConfig::LoadingPredictorConfig()
       min_resource_hits_to_trigger_prefetch(2),
       max_prefetches_inflight_per_navigation(5),
       max_prefetches_inflight_per_host_per_navigation(3),
+      is_host_learning_enabled(false),
       is_url_learning_enabled(false),
-      is_manifests_enabled(false),
-      is_origin_learning_enabled(false) {}
+      is_origin_learning_enabled(false),
+      should_disable_other_preconnects(false) {}
 
 LoadingPredictorConfig::LoadingPredictorConfig(
     const LoadingPredictorConfig& other) = default;
@@ -115,6 +143,9 @@ bool LoadingPredictorConfig::IsPrefetchingEnabledForOrigin(
       break;
     case HintOrigin::EXTERNAL:
       mask = PREFETCHING_FOR_EXTERNAL;
+      break;
+    case HintOrigin::OMNIBOX:
+      // No prefetching for omnibox.
       break;
   }
   return IsPrefetchingEnabledInternal(profile, mode, mask);

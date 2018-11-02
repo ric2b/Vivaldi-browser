@@ -17,9 +17,7 @@ class ExceptionState;
 // Accessibility Object Model node list
 // Explainer: https://github.com/WICG/aom/blob/master/explainer.md
 // Spec: https://wicg.github.io/aom/spec/
-class CORE_EXPORT AccessibleNodeList
-    : public GarbageCollectedFinalized<AccessibleNodeList>,
-      public ScriptWrappable {
+class CORE_EXPORT AccessibleNodeList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -38,7 +36,7 @@ class CORE_EXPORT AccessibleNodeList
   unsigned length() const;
   void setLength(unsigned);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   void NotifyChanged();

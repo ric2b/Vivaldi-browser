@@ -45,39 +45,40 @@ BackgroundFetchBridge::BackgroundFetchBridge(
 
 BackgroundFetchBridge::~BackgroundFetchBridge() = default;
 
-void BackgroundFetchBridge::Fetch(const String& id,
+void BackgroundFetchBridge::Fetch(const String& developer_id,
                                   Vector<WebServiceWorkerRequest> requests,
                                   const BackgroundFetchOptions& options,
                                   RegistrationCallback callback) {
   GetService()->Fetch(
       GetSupplementable()->WebRegistration()->RegistrationId(),
-      GetSecurityOrigin(), id, std::move(requests),
+      GetSecurityOrigin(), developer_id, std::move(requests),
       mojom::blink::BackgroundFetchOptions::From(options),
       ConvertToBaseCallback(
           WTF::Bind(&BackgroundFetchBridge::DidGetRegistration,
                     WrapPersistent(this), WTF::Passed(std::move(callback)))));
 }
 
-void BackgroundFetchBridge::Abort(const String& id, AbortCallback callback) {
+void BackgroundFetchBridge::Abort(const String& developer_id,
+                                  const String& unique_id,
+                                  AbortCallback callback) {
   GetService()->Abort(GetSupplementable()->WebRegistration()->RegistrationId(),
-                      GetSecurityOrigin(), id,
+                      GetSecurityOrigin(), developer_id, unique_id,
                       ConvertToBaseCallback(std::move(callback)));
 }
 
-void BackgroundFetchBridge::UpdateUI(const String& id,
+void BackgroundFetchBridge::UpdateUI(const String& developer_id,
+                                     const String& unique_id,
                                      const String& title,
                                      UpdateUICallback callback) {
-  GetService()->UpdateUI(
-      GetSupplementable()->WebRegistration()->RegistrationId(),
-      GetSecurityOrigin(), id, title,
-      ConvertToBaseCallback(std::move(callback)));
+  GetService()->UpdateUI(unique_id, title,
+                         ConvertToBaseCallback(std::move(callback)));
 }
 
-void BackgroundFetchBridge::GetRegistration(const String& id,
+void BackgroundFetchBridge::GetRegistration(const String& developer_id,
                                             RegistrationCallback callback) {
   GetService()->GetRegistration(
       GetSupplementable()->WebRegistration()->RegistrationId(),
-      GetSecurityOrigin(), id,
+      GetSecurityOrigin(), developer_id,
       ConvertToBaseCallback(
           WTF::Bind(&BackgroundFetchBridge::DidGetRegistration,
                     WrapPersistent(this), WTF::Passed(std::move(callback)))));
@@ -92,16 +93,22 @@ void BackgroundFetchBridge::DidGetRegistration(
 
   if (registration) {
     DCHECK_EQ(error, mojom::blink::BackgroundFetchError::NONE);
-    registration->SetServiceWorkerRegistration(GetSupplementable());
+    registration->Initialize(GetSupplementable());
   }
 
-  callback(error, registration);
+  std::move(callback).Run(error, registration);
 }
 
-void BackgroundFetchBridge::GetIds(GetIdsCallback callback) {
-  GetService()->GetIds(GetSupplementable()->WebRegistration()->RegistrationId(),
-                       GetSecurityOrigin(),
-                       ConvertToBaseCallback(std::move(callback)));
+void BackgroundFetchBridge::GetDeveloperIds(GetDeveloperIdsCallback callback) {
+  GetService()->GetDeveloperIds(
+      GetSupplementable()->WebRegistration()->RegistrationId(),
+      GetSecurityOrigin(), ConvertToBaseCallback(std::move(callback)));
+}
+
+void BackgroundFetchBridge::AddRegistrationObserver(
+    const String& unique_id,
+    mojom::blink::BackgroundFetchRegistrationObserverPtr observer) {
+  GetService()->AddRegistrationObserver(unique_id, std::move(observer));
 }
 
 SecurityOrigin* BackgroundFetchBridge::GetSecurityOrigin() {

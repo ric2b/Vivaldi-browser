@@ -21,7 +21,7 @@
 
 namespace crypto {
 
-ECPrivateKey::~ECPrivateKey() {}
+ECPrivateKey::~ECPrivateKey() = default;
 
 // static
 std::unique_ptr<ECPrivateKey> ECPrivateKey::Create() {
@@ -59,10 +59,7 @@ std::unique_ptr<ECPrivateKey> ECPrivateKey::CreateFromPrivateKeyInfo(
 
 // static
 std::unique_ptr<ECPrivateKey> ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
-    const std::vector<uint8_t>& encrypted_private_key_info,
-    const std::vector<uint8_t>& subject_public_key_info) {
-  // TODO(davidben): The |subject_public_key_info| parameter is a remnant of
-  // the NSS implementation. Remove it.
+    const std::vector<uint8_t>& encrypted_private_key_info) {
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
   CBS cbs;
@@ -176,6 +173,6 @@ bool ECPrivateKey::ExportRawPublicKey(std::string* output) const {
   return true;
 }
 
-ECPrivateKey::ECPrivateKey() {}
+ECPrivateKey::ECPrivateKey() = default;
 
 }  // namespace crypto

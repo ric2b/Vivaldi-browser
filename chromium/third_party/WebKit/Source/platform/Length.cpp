@@ -25,6 +25,7 @@
 
 #include "platform/Length.h"
 
+#include "base/macros.h"
 #include "platform/CalculationValue.h"
 #include "platform/animation/AnimationUtilities.h"
 #include "platform/wtf/HashMap.h"
@@ -33,12 +34,11 @@ namespace blink {
 
 class CalculationValueHandleMap {
   USING_FAST_MALLOC(CalculationValueHandleMap);
-  WTF_MAKE_NONCOPYABLE(CalculationValueHandleMap);
 
  public:
   CalculationValueHandleMap() : index_(1) {}
 
-  int insert(PassRefPtr<CalculationValue> calc_value) {
+  int insert(scoped_refptr<CalculationValue> calc_value) {
     DCHECK(index_);
     // FIXME calc(): https://bugs.webkit.org/show_bug.cgi?id=80489
     // This monotonically increasing handle generation scheme is potentially
@@ -70,13 +70,15 @@ class CalculationValueHandleMap {
       map_.Set(index, nullptr);
       map_.erase(index);
     } else {
-      value->Deref();
+      value->Release();
     }
   }
 
  private:
   int index_;
-  HashMap<int, RefPtr<CalculationValue>> map_;
+  HashMap<int, scoped_refptr<CalculationValue>> map_;
+
+  DISALLOW_COPY_AND_ASSIGN(CalculationValueHandleMap);
 };
 
 static CalculationValueHandleMap& CalcHandles() {
@@ -84,7 +86,7 @@ static CalculationValueHandleMap& CalcHandles() {
   return handle_map;
 }
 
-Length::Length(PassRefPtr<CalculationValue> calc)
+Length::Length(scoped_refptr<CalculationValue> calc)
     : quirk_(false), type_(kCalculated), is_float_(false) {
   int_value_ = CalcHandles().insert(std::move(calc));
 }
@@ -164,7 +166,7 @@ CalculationValue& Length::GetCalculationValue() const {
 
 void Length::IncrementCalculatedRef() const {
   DCHECK(IsCalculated());
-  GetCalculationValue().Ref();
+  GetCalculationValue().AddRef();
 }
 
 void Length::DecrementCalculatedRef() const {

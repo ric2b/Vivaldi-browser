@@ -34,8 +34,8 @@
 
 namespace blink {
 
-RefPtr<LayoutTheme> LayoutThemeMobile::Create() {
-  return AdoptRef(new LayoutThemeMobile());
+scoped_refptr<LayoutTheme> LayoutThemeMobile::Create() {
+  return base::AdoptRef(new LayoutThemeMobile());
 }
 
 LayoutThemeMobile::~LayoutThemeMobile() {}
@@ -44,10 +44,6 @@ String LayoutThemeMobile::ExtraDefaultStyleSheet() {
   return LayoutThemeDefault::ExtraDefaultStyleSheet() +
          GetDataResourceAsASCIIString("themeChromiumLinux.css") +
          GetDataResourceAsASCIIString("themeChromiumAndroid.css");
-}
-
-String LayoutThemeMobile::ExtraMediaControlsStyleSheet() {
-  return GetDataResourceAsASCIIString("mediaControlsAndroid.css");
 }
 
 String LayoutThemeMobile::ExtraFullscreenStyleSheet() {

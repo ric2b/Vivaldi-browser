@@ -65,12 +65,17 @@ void DownloadItemImplDelegate::ResumeInterruptedDownload(
     uint32_t id) {}
 
 BrowserContext* DownloadItemImplDelegate::GetBrowserContext() const {
-  return NULL;
+  return nullptr;
 }
 
 void DownloadItemImplDelegate::UpdatePersistence(DownloadItemImpl* download) {}
 
 void DownloadItemImplDelegate::OpenDownload(DownloadItemImpl* download) {}
+
+bool DownloadItemImplDelegate::IsMostRecentDownloadItemAtFilePath(
+    DownloadItemImpl* download) {
+  return true;
+}
 
 void DownloadItemImplDelegate::ShowDownloadInShell(DownloadItemImpl* download) {
 }

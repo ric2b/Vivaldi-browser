@@ -68,7 +68,7 @@ void NativeGetAllNodesCallback(
   Java_ProfileSyncService_onGetAllNodesResult(env, callback, java_json_string);
 }
 
-ScopedJavaLocalRef<jintArray> ModelTypeSetToJavaIntArray(
+ScopedJavaLocalRef<jintArray> JNI_ProfileSyncService_ModelTypeSetToJavaIntArray(
     JNIEnv* env,
     syncer::ModelTypeSet types) {
   std::vector<int> type_vector;
@@ -208,14 +208,14 @@ ScopedJavaLocalRef<jintArray> ProfileSyncServiceAndroid::GetActiveDataTypes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   syncer::ModelTypeSet types = sync_service_->GetActiveDataTypes();
-  return ModelTypeSetToJavaIntArray(env, types);
+  return JNI_ProfileSyncService_ModelTypeSetToJavaIntArray(env, types);
 }
 
 ScopedJavaLocalRef<jintArray> ProfileSyncServiceAndroid::GetPreferredDataTypes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   syncer::ModelTypeSet types = sync_service_->GetPreferredDataTypes();
-  return ModelTypeSetToJavaIntArray(env, types);
+  return JNI_ProfileSyncService_ModelTypeSetToJavaIntArray(env, types);
 }
 
 void ProfileSyncServiceAndroid::SetPreferredDataTypes(
@@ -460,20 +460,6 @@ ProfileSyncServiceAndroid::GetSyncEnterCustomPassphraseBodyText(
 
 // Functionality only available for testing purposes.
 
-ScopedJavaLocalRef<jstring> ProfileSyncServiceAndroid::GetAboutInfoForTest(
-    JNIEnv* env,
-    const JavaParamRef<jobject>&) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  std::unique_ptr<base::DictionaryValue> about_info =
-      syncer::sync_ui_util::ConstructAboutInformation(sync_service_,
-                                                      chrome::GetChannel());
-  std::string about_info_json;
-  base::JSONWriter::Write(*about_info, &about_info_json);
-
-  return ConvertUTF8ToJavaString(env, about_info_json);
-}
-
 jlong ProfileSyncServiceAndroid::GetLastSyncedTimeForTest(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -502,7 +488,8 @@ ProfileSyncServiceAndroid*
           AttachCurrentThread()));
 }
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_ProfileSyncService_Init(JNIEnv* env,
+                                         const JavaParamRef<jobject>& obj) {
   ProfileSyncServiceAndroid* profile_sync_service_android =
       new ProfileSyncServiceAndroid(env, obj);
   if (profile_sync_service_android->Init()) {

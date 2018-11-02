@@ -21,11 +21,21 @@ class ViewportAwareRoot : public UiElement {
   ViewportAwareRoot();
   ~ViewportAwareRoot() override;
 
-  void AdjustRotationForHeadPose(const gfx::Vector3dF& look_at) override;
+  void Reset();
+  bool HasVisibleChildren();
+
+ protected:
+  // Returns true if the rotation was adjusted.
+  // Virtual for tests.
+  virtual bool AdjustRotationForHeadPose(const gfx::Vector3dF& look_at);
 
  private:
-  void OnUpdatedInheritedProperties() override;
-  float viewport_aware_total_rotation_ = 0;
+  bool OnBeginFrame(const base::TimeTicks& time,
+                    const gfx::Vector3dF& head_direction) override;
+  void OnUpdatedWorldSpaceTransform() override;
+
+  float viewport_aware_total_rotation_ = 0.f;
+  bool children_visible_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ViewportAwareRoot);
 };

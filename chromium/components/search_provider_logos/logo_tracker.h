@@ -15,7 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/sequenced_task_runner.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -87,9 +87,10 @@ class LogoTracker : public net::URLFetcherDelegate {
   // |request_context_getter| is the URLRequestContextGetter used to download
   // the logo.
   explicit LogoTracker(
-      base::FilePath cached_logo_directory,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
-      std::unique_ptr<LogoDelegate> delegate);
+      std::unique_ptr<LogoDelegate> delegate,
+      std::unique_ptr<LogoCache> logo_cache,
+      std::unique_ptr<base::Clock> clock);
 
   ~LogoTracker() override;
 
@@ -97,8 +98,8 @@ class LogoTracker : public net::URLFetcherDelegate {
   // called at least once before calling GetLogo().
   //
   // |logo_url| is the URL from which the logo will be downloaded. If |logo_url|
-  // is different than the current logo URL, any pending LogoObservers will be
-  // canceled.
+  // is different than the current logo URL, any pending callbacks will be run
+  // with LogoCallbackReason::CANCELED.
   //
   // |parse_logo_response_func| is a callback that will be used to parse the
   // server's response into a EncodedLogo object. |append_queryparams_func| is a
@@ -108,19 +109,12 @@ class LogoTracker : public net::URLFetcherDelegate {
                     const AppendQueryparamsToLogoURL& append_queryparams_func);
 
   // Retrieves the current search provider's logo from the local cache and/or
-  // over the network, and registers |observer| to be called when the cached
+  // over the network, and registers the callbacks to be called when the cached
   // and/or fresh logos are available.
-  void GetLogo(LogoObserver* observer);
-
-  // Prevents |observer| from receiving future updates. This is safe to call
-  // even when the observer is being notified of an update.
-  void RemoveObserver(LogoObserver* observer);
-
-  // Overrides the cache used to store logos.
-  void SetLogoCacheForTests(std::unique_ptr<LogoCache> cache);
-
-  // Overrides the clock used to check the time.
-  void SetClockForTests(std::unique_ptr<base::Clock> clock);
+  //
+  // At least one callback must be non-null. All non-null callbacks will be
+  // invoked exactly once.
+  void GetLogo(LogoCallbacks callbacks);
 
  private:
 
@@ -150,7 +144,7 @@ class LogoTracker : public net::URLFetcherDelegate {
 
   // Called when the cached logo has been decoded into an SkBitmap. |image| will
   // be NULL if decoding failed.
-  void OnCachedLogoAvailable(const LogoMetadata& metadata,
+  void OnCachedLogoAvailable(std::unique_ptr<EncodedLogo> encoded_logo,
                              const SkBitmap& image);
 
   // Stores |logo| in the cache.
@@ -171,6 +165,7 @@ class LogoTracker : public net::URLFetcherDelegate {
   // Called when the fresh logo has been decoded into an SkBitmap. |image| will
   // be NULL if decoding failed.
   void OnFreshLogoAvailable(std::unique_ptr<EncodedLogo> logo,
+                            bool download_failed,
                             bool parsing_failed,
                             bool from_http_cache,
                             const SkBitmap& image);
@@ -198,6 +193,7 @@ class LogoTracker : public net::URLFetcherDelegate {
   // The logo that's been read from the cache, or NULL if the cache is empty.
   // Meaningful only if is_cached_logo_valid_ is true; NULL otherwise.
   std::unique_ptr<Logo> cached_logo_;
+  std::unique_ptr<EncodedLogo> cached_encoded_logo_;
 
   // Whether the value of |cached_logo_| reflects the actual cached logo.
   // This will be false if the logo hasn't been read from the cache yet.
@@ -211,9 +207,12 @@ class LogoTracker : public net::URLFetcherDelegate {
   // The URLFetcher currently fetching the logo. NULL when not fetching.
   std::unique_ptr<net::URLFetcher> fetcher_;
 
-  // The list of observers to be notified when the logo is available. This
-  // should be empty when the state is IDLE.
-  base::ObserverList<LogoObserver> logo_observers_;
+  // Lists of callbacks to be invoked when logos are available. All should be
+  // empty when the state is IDLE.
+  std::vector<LogoCallback> on_cached_decoded_logo_;
+  std::vector<EncodedLogoCallback> on_cached_encoded_logo_;
+  std::vector<LogoCallback> on_fresh_decoded_logo_;
+  std::vector<EncodedLogoCallback> on_fresh_encoded_logo_;
 
   std::unique_ptr<LogoDelegate> logo_delegate_;
 

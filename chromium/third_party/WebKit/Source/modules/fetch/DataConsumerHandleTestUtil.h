@@ -62,7 +62,7 @@ class DataConsumerHandleTestUtil {
 
     WebThreadSupportingGC* GetThread() { return thread_.get(); }
     ExecutionContext* GetExecutionContext() { return execution_context_.Get(); }
-    ScriptState* GetScriptState() { return script_state_.Get(); }
+    ScriptState* GetScriptState() { return script_state_.get(); }
     v8::Isolate* GetIsolate() { return isolate_holder_->isolate(); }
 
    private:
@@ -74,7 +74,7 @@ class DataConsumerHandleTestUtil {
     std::unique_ptr<WaitableEvent> waitable_event_;
     Persistent<NullExecutionContext> execution_context_;
     std::unique_ptr<gin::IsolateHolder> isolate_holder_;
-    RefPtr<ScriptState> script_state_;
+    scoped_refptr<ScriptState> script_state_;
   };
 
   class ThreadingTestBase : public ThreadSafeRefCounted<ThreadingTestBase> {
@@ -85,7 +85,9 @@ class DataConsumerHandleTestUtil {
 
     class Context : public ThreadSafeRefCounted<Context> {
      public:
-      static PassRefPtr<Context> Create() { return AdoptRef(new Context); }
+      static scoped_refptr<Context> Create() {
+        return base::AdoptRef(new Context);
+      }
       void RecordAttach(const String& handle) {
         MutexLocker locker(logging_mutex_);
         result_.Append("A reader is attached to ");
@@ -176,7 +178,7 @@ class DataConsumerHandleTestUtil {
       }
 
      private:
-      RefPtr<Context> context_;
+      scoped_refptr<Context> context_;
       std::unique_ptr<Thread> reading_thread_;
       std::unique_ptr<Thread> updating_thread_;
     };
@@ -185,7 +187,7 @@ class DataConsumerHandleTestUtil {
       USING_FAST_MALLOC(ReaderImpl);
 
      public:
-      ReaderImpl(const String& name, PassRefPtr<Context> context)
+      ReaderImpl(const String& name, scoped_refptr<Context> context)
           : name_(name.IsolatedCopy()), context_(std::move(context)) {
         context_->RecordAttach(name_.IsolatedCopy());
       }
@@ -202,7 +204,7 @@ class DataConsumerHandleTestUtil {
 
      private:
       const String name_;
-      RefPtr<Context> context_;
+      scoped_refptr<Context> context_;
     };
     class DataConsumerHandle final : public WebDataConsumerHandle {
       USING_FAST_MALLOC(DataConsumerHandle);
@@ -210,24 +212,24 @@ class DataConsumerHandleTestUtil {
      public:
       static std::unique_ptr<WebDataConsumerHandle> Create(
           const String& name,
-          PassRefPtr<Context> context) {
+          scoped_refptr<Context> context) {
         return WTF::WrapUnique(
             new DataConsumerHandle(name, std::move(context)));
       }
 
      private:
-      DataConsumerHandle(const String& name, PassRefPtr<Context> context)
+      DataConsumerHandle(const String& name, scoped_refptr<Context> context)
           : name_(name.IsolatedCopy()), context_(std::move(context)) {}
 
-      std::unique_ptr<Reader> ObtainReader(Client*) {
-        return WTF::MakeUnique<ReaderImpl>(name_, context_);
+      std::unique_ptr<Reader> ObtainReader(Client*) override {
+        return std::make_unique<ReaderImpl>(name_, context_);
       }
       const char* DebugName() const override {
         return "ThreadingTestBase::DataConsumerHandle";
       }
 
       const String name_;
-      RefPtr<Context> context_;
+      scoped_refptr<Context> context_;
     };
 
     void ResetReader() { reader_ = nullptr; }
@@ -255,7 +257,7 @@ class DataConsumerHandleTestUtil {
    protected:
     ThreadingTestBase() : context_(Context::Create()) {}
 
-    RefPtr<Context> context_;
+    scoped_refptr<Context> context_;
     std::unique_ptr<WebDataConsumerHandle::Reader> reader_;
     std::unique_ptr<WaitableEvent> waitable_event_;
     NoopClient client_;
@@ -265,16 +267,16 @@ class DataConsumerHandleTestUtil {
                                           public WebDataConsumerHandle::Client {
    public:
     using Self = ThreadingHandleNotificationTest;
-    static PassRefPtr<Self> Create() { return AdoptRef(new Self); }
+    static scoped_refptr<Self> Create() { return base::AdoptRef(new Self); }
 
     void Run(std::unique_ptr<WebDataConsumerHandle> handle) {
       ThreadHolder holder(this);
-      waitable_event_ = WTF::MakeUnique<WaitableEvent>();
+      waitable_event_ = std::make_unique<WaitableEvent>();
       handle_ = std::move(handle);
 
       PostTaskToReadingThreadAndWait(
           BLINK_FROM_HERE,
-          CrossThreadBind(&Self::ObtainReader, WrapPassRefPtr(this)));
+          CrossThreadBind(&Self::ObtainReader, WrapRefCounted(this)));
     }
 
    private:
@@ -283,10 +285,10 @@ class DataConsumerHandleTestUtil {
     void DidGetReadable() override {
       PostTaskToReadingThread(
           BLINK_FROM_HERE,
-          CrossThreadBind(&Self::ResetReader, WrapPassRefPtr(this)));
+          CrossThreadBind(&Self::ResetReader, WrapRefCounted(this)));
       PostTaskToReadingThread(
           BLINK_FROM_HERE,
-          CrossThreadBind(&Self::SignalDone, WrapPassRefPtr(this)));
+          CrossThreadBind(&Self::SignalDone, WrapRefCounted(this)));
     }
 
     std::unique_ptr<WebDataConsumerHandle> handle_;
@@ -297,16 +299,16 @@ class DataConsumerHandleTestUtil {
         public WebDataConsumerHandle::Client {
    public:
     using Self = ThreadingHandleNoNotificationTest;
-    static PassRefPtr<Self> Create() { return AdoptRef(new Self); }
+    static scoped_refptr<Self> Create() { return base::AdoptRef(new Self); }
 
     void Run(std::unique_ptr<WebDataConsumerHandle> handle) {
       ThreadHolder holder(this);
-      waitable_event_ = WTF::MakeUnique<WaitableEvent>();
+      waitable_event_ = std::make_unique<WaitableEvent>();
       handle_ = std::move(handle);
 
       PostTaskToReadingThreadAndWait(
           BLINK_FROM_HERE,
-          CrossThreadBind(&Self::ObtainReader, WrapPassRefPtr(this)));
+          CrossThreadBind(&Self::ObtainReader, WrapRefCounted(this)));
     }
 
    private:
@@ -316,7 +318,7 @@ class DataConsumerHandleTestUtil {
       reader_ = nullptr;
       PostTaskToReadingThread(
           BLINK_FROM_HERE,
-          CrossThreadBind(&Self::SignalDone, WrapPassRefPtr(this)));
+          CrossThreadBind(&Self::SignalDone, WrapRefCounted(this)));
     }
     void DidGetReadable() override { NOTREACHED(); }
 
@@ -357,7 +359,7 @@ class DataConsumerHandleTestUtil {
     static std::unique_ptr<ReplayingHandle> Create() {
       return WTF::WrapUnique(new ReplayingHandle());
     }
-    ~ReplayingHandle();
+    ~ReplayingHandle() override;
 
     // Add a command to this handle. This function must be called on the
     // creator thread. This function must be called BEFORE any reader is
@@ -366,7 +368,9 @@ class DataConsumerHandleTestUtil {
 
     class Context final : public ThreadSafeRefCounted<Context> {
      public:
-      static PassRefPtr<Context> Create() { return AdoptRef(new Context); }
+      static scoped_refptr<Context> Create() {
+        return base::AdoptRef(new Context);
+      }
 
       // This function cannot be called after creating a tee.
       void Add(const Command&);
@@ -396,7 +400,7 @@ class DataConsumerHandleTestUtil {
       std::unique_ptr<WaitableEvent> detached_;
     };
 
-    Context* GetContext() { return context_.Get(); }
+    Context* GetContext() { return context_.get(); }
     std::unique_ptr<Reader> ObtainReader(Client*) override;
 
    private:
@@ -405,7 +409,7 @@ class DataConsumerHandleTestUtil {
     ReplayingHandle();
     const char* DebugName() const override { return "ReplayingHandle"; }
 
-    RefPtr<Context> context_;
+    scoped_refptr<Context> context_;
   };
 
   static std::unique_ptr<WebDataConsumerHandle>

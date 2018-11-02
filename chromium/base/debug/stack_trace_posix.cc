@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -38,7 +39,9 @@
 #include "base/debug/proc_maps_linux.h"
 #endif
 
+#include "base/cfi_flags.h"
 #include "base/debug/debugger.h"
+#include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
@@ -104,7 +107,7 @@ void DemangleSymbols(std::string* text) {
     // Try to demangle the mangled symbol candidate.
     int status = 0;
     std::unique_ptr<char, base::FreeDeleter> demangled_symbol(
-        abi::__cxa_demangle(mangled_symbol.c_str(), NULL, 0, &status));
+        abi::__cxa_demangle(mangled_symbol.c_str(), nullptr, 0, &status));
     if (status == 0) {  // Demangling is successful.
       // Remove the mangled symbol.
       text->erase(mangled_start, mangled_end - mangled_start);
@@ -126,7 +129,7 @@ class BacktraceOutputHandler {
   virtual void HandleOutput(const char* output) = 0;
 
  protected:
-  virtual ~BacktraceOutputHandler() {}
+  virtual ~BacktraceOutputHandler() = default;
 };
 
 #if !defined(__UCLIBC__) && !defined(_AIX)
@@ -235,7 +238,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
     action.sa_sigaction = &StackDumpSignalHandler;
     sigemptyset(&action.sa_mask);
 
-    sigaction(signal, &action, NULL);
+    sigaction(signal, &action, nullptr);
     return;
   }
 
@@ -311,7 +314,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   }
   PrintToStderr("\n");
 
-#if defined(CFI_ENFORCEMENT_TRAP)
+#if BUILDFLAG(CFI_ENFORCEMENT_TRAP)
   if (signal == SIGILL && info->si_code == ILL_ILLOPN) {
     PrintToStderr(
         "CFI: Most likely a control flow integrity violation; for more "
@@ -319,7 +322,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
     PrintToStderr(
         "https://www.chromium.org/developers/testing/control-flow-integrity\n");
   }
-#endif
+#endif  // BUILDFLAG(CFI_ENFORCEMENT_TRAP)
 
   debug::StackTrace().Print();
 
@@ -412,7 +415,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
 
 class PrintBacktraceOutputHandler : public BacktraceOutputHandler {
  public:
-  PrintBacktraceOutputHandler() {}
+  PrintBacktraceOutputHandler() = default;
 
   void HandleOutput(const char* output) override {
     // NOTE: This code MUST be async-signal safe (it's used by in-process
@@ -563,25 +566,10 @@ class SandboxSymbolizeHelper {
     // The assumption here is that iterating over
     // std::vector<MappedMemoryRegion> using a const_iterator does not allocate
     // dynamic memory, hence it is async-signal-safe.
-    std::vector<MappedMemoryRegion>::const_iterator it;
-    bool is_first = true;
-    for (it = instance->regions_.begin(); it != instance->regions_.end();
-         ++it, is_first = false) {
-      const MappedMemoryRegion& region = *it;
+    for (const MappedMemoryRegion& region : instance->regions_) {
       if (region.start <= pc && pc < region.end) {
         start_address = region.start;
-        // Don't subtract 'start_address' from the first entry:
-        // * If a binary is compiled w/o -pie, then the first entry in
-        //   process maps is likely the binary itself (all dynamic libs
-        //   are mapped higher in address space). For such a binary,
-        //   instruction offset in binary coincides with the actual
-        //   instruction address in virtual memory (as code section
-        //   is mapped to a fixed memory range).
-        // * If a binary is compiled with -pie, all the modules are
-        //   mapped high at address space (in particular, higher than
-        //   shadow memory of the tool), so the module can't be the
-        //   first entry.
-        base_address = (is_first ? 0U : start_address) - region.offset;
+        base_address = region.base;
         if (file_path && file_path_size > 0) {
           strncpy(file_path, region.path.c_str(), file_path_size);
           // Ensure null termination.
@@ -591,6 +579,60 @@ class SandboxSymbolizeHelper {
       }
     }
     return -1;
+  }
+
+  // Set the base address for each memory region by reading ELF headers in
+  // process memory.
+  void SetBaseAddressesForMemoryRegions() {
+    base::ScopedFD mem_fd(
+        HANDLE_EINTR(open("/proc/self/mem", O_RDONLY | O_CLOEXEC)));
+    if (!mem_fd.is_valid())
+      return;
+
+    auto safe_memcpy = [&mem_fd](void* dst, uintptr_t src, size_t size) {
+      return HANDLE_EINTR(pread(mem_fd.get(), dst, size, src)) == ssize_t(size);
+    };
+
+    uintptr_t cur_base = 0;
+    for (auto& r : regions_) {
+      ElfW(Ehdr) ehdr;
+      static_assert(SELFMAG <= sizeof(ElfW(Ehdr)), "SELFMAG too large");
+      if ((r.permissions & MappedMemoryRegion::READ) &&
+          safe_memcpy(&ehdr, r.start, sizeof(ElfW(Ehdr))) &&
+          memcmp(ehdr.e_ident, ELFMAG, SELFMAG) == 0) {
+        switch (ehdr.e_type) {
+          case ET_EXEC:
+            cur_base = 0;
+            break;
+          case ET_DYN:
+            // Find the segment containing file offset 0. This will correspond
+            // to the ELF header that we just read. Normally this will have
+            // virtual address 0, but this is not guaranteed. We must subtract
+            // the virtual address from the address where the ELF header was
+            // mapped to get the base address.
+            //
+            // If we fail to find a segment for file offset 0, use the address
+            // of the ELF header as the base address.
+            cur_base = r.start;
+            for (unsigned i = 0; i != ehdr.e_phnum; ++i) {
+              ElfW(Phdr) phdr;
+              if (safe_memcpy(&phdr, r.start + ehdr.e_phoff + i * sizeof(phdr),
+                              sizeof(phdr)) &&
+                  phdr.p_type == PT_LOAD && phdr.p_offset == 0) {
+                cur_base = r.start - phdr.p_vaddr;
+                break;
+              }
+            }
+            break;
+          default:
+            // ET_REL or ET_CORE. These aren't directly executable, so they
+            // don't affect the base address.
+            break;
+        }
+      }
+
+      r.base = cur_base;
+    }
   }
 
   // Parses /proc/self/maps in order to compile a list of all object file names
@@ -609,6 +651,8 @@ class SandboxSymbolizeHelper {
       LOG(ERROR) << "Failed to parse the contents of /proc/self/maps";
       return false;
     }
+
+    SetBaseAddressesForMemoryRegions();
 
     is_initialized_ = true;
     return true;
@@ -666,7 +710,7 @@ class SandboxSymbolizeHelper {
   // Unregister symbolization callback.
   void UnregisterCallback() {
     if (is_initialized_) {
-      google::InstallSymbolizeOpenObjectFileCallback(NULL);
+      google::InstallSymbolizeOpenObjectFileCallback(nullptr);
       is_initialized_ = false;
     }
   }
@@ -716,7 +760,7 @@ bool EnableInProcessStackDumping() {
   memset(&sigpipe_action, 0, sizeof(sigpipe_action));
   sigpipe_action.sa_handler = SIG_IGN;
   sigemptyset(&sigpipe_action.sa_mask);
-  bool success = (sigaction(SIGPIPE, &sigpipe_action, NULL) == 0);
+  bool success = (sigaction(SIGPIPE, &sigpipe_action, nullptr) == 0);
 
   // Avoid hangs during backtrace initialization, see above.
   WarmUpBacktrace();
@@ -727,14 +771,14 @@ bool EnableInProcessStackDumping() {
   action.sa_sigaction = &StackDumpSignalHandler;
   sigemptyset(&action.sa_mask);
 
-  success &= (sigaction(SIGILL, &action, NULL) == 0);
-  success &= (sigaction(SIGABRT, &action, NULL) == 0);
-  success &= (sigaction(SIGFPE, &action, NULL) == 0);
-  success &= (sigaction(SIGBUS, &action, NULL) == 0);
-  success &= (sigaction(SIGSEGV, &action, NULL) == 0);
+  success &= (sigaction(SIGILL, &action, nullptr) == 0);
+  success &= (sigaction(SIGABRT, &action, nullptr) == 0);
+  success &= (sigaction(SIGFPE, &action, nullptr) == 0);
+  success &= (sigaction(SIGBUS, &action, nullptr) == 0);
+  success &= (sigaction(SIGSEGV, &action, nullptr) == 0);
 // On Linux, SIGSYS is reserved by the kernel for seccomp-bpf sandboxing.
 #if !defined(OS_LINUX)
-  success &= (sigaction(SIGSYS, &action, NULL) == 0);
+  success &= (sigaction(SIGSYS, &action, nullptr) == 0);
 #endif  // !defined(OS_LINUX)
 
   return success;
@@ -784,11 +828,11 @@ char* itoa_r(intptr_t i, char* buf, size_t sz, int base, size_t padding) {
   // Make sure we can write at least one NUL byte.
   size_t n = 1;
   if (n > sz)
-    return NULL;
+    return nullptr;
 
   if (base < 2 || base > 16) {
     buf[0] = '\000';
-    return NULL;
+    return nullptr;
   }
 
   char* start = buf;
@@ -803,7 +847,7 @@ char* itoa_r(intptr_t i, char* buf, size_t sz, int base, size_t padding) {
     // Make sure we can write the '-' character.
     if (++n > sz) {
       buf[0] = '\000';
-      return NULL;
+      return nullptr;
     }
     *start++ = '-';
   }
@@ -815,7 +859,7 @@ char* itoa_r(intptr_t i, char* buf, size_t sz, int base, size_t padding) {
     // Make sure there is still enough space left in our output buffer.
     if (++n > sz) {
       buf[0] = '\000';
-      return NULL;
+      return nullptr;
     }
 
     // Output the next digit.

@@ -29,15 +29,14 @@
 #ifndef Pattern_h
 #define Pattern_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintShader.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
-
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 class SkMatrix;
 
@@ -55,9 +54,9 @@ class PLATFORM_EXPORT Pattern : public RefCounted<Pattern> {
     kRepeatModeXY = kRepeatModeX | kRepeatModeY
   };
 
-  static PassRefPtr<Pattern> CreateImagePattern(PassRefPtr<Image>,
-                                                RepeatMode = kRepeatModeXY);
-  static PassRefPtr<Pattern> CreatePaintRecordPattern(
+  static scoped_refptr<Pattern> CreateImagePattern(scoped_refptr<Image>,
+                                                   RepeatMode = kRepeatModeXY);
+  static scoped_refptr<Pattern> CreatePaintRecordPattern(
       sk_sp<PaintRecord>,
       const FloatRect& record_bounds,
       RepeatMode = kRepeatModeXY);

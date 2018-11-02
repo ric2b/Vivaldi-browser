@@ -126,7 +126,7 @@ bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
     return true;
 
   CHECK(background_scripts_value);
-  if (background_scripts_value->GetType() != base::Value::Type::LIST) {
+  if (background_scripts_value->type() != base::Value::Type::LIST) {
     *error = ASCIIToUTF16(errors::kInvalidBackgroundScripts);
     return false;
   }
@@ -137,7 +137,7 @@ bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
     std::string script;
     if (!background_scripts->GetString(i, &script)) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
-          errors::kInvalidBackgroundScript, base::SizeTToString(i));
+          errors::kInvalidBackgroundScript, base::NumberToString(i));
       return false;
     }
     background_scripts_.push_back(script);

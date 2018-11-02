@@ -5,10 +5,10 @@
 #include "components/sync/syncable/change_reorder_buffer.h"
 
 #include <limits>
-#include <queue>
 #include <set>
 #include <utility>  // for pair<>
 
+#include "base/containers/queue.h"
 #include "components/sync/syncable/base_node.h"
 #include "components/sync/syncable/base_transaction.h"
 #include "components/sync/syncable/entry.h"
@@ -16,7 +16,6 @@
 
 using std::numeric_limits;
 using std::pair;
-using std::queue;
 using std::set;
 
 namespace syncer {
@@ -48,7 +47,7 @@ class ChangeReorderBuffer::Traversal {
       int64_t node_parent = 0;
 
       syncable::Entry node(trans, syncable::GET_BY_HANDLE, node_to_include);
-      CHECK(node.good());
+      DCHECK(node.good());
       if (node.GetId().IsRoot()) {
         // If we've hit the root, and the root isn't already in the tree
         // (it would have to be |top_| if it were), start a new expansion
@@ -67,7 +66,7 @@ class ChangeReorderBuffer::Traversal {
                                             ? node.GetParentId()
                                             : syncable::Id::GetRoot();
         syncable::Entry parent(trans, syncable::GET_BY_ID, parent_id);
-        CHECK(parent.good());
+        DCHECK(parent.good());
         node_parent = parent.GetMetahandle();
 
         ParentChildLink link(node_parent, node_to_include);
@@ -186,7 +185,7 @@ bool ChangeReorderBuffer::GetAllChangesInTreeOrder(
   }
 
   // Step 2: Breadth-first expansion of the traversal.
-  queue<int64_t> to_visit;
+  base::queue<int64_t> to_visit;
   to_visit.push(traversal.top());
   while (!to_visit.empty()) {
     int64_t next = to_visit.front();
@@ -209,7 +208,7 @@ bool ChangeReorderBuffer::GetAllChangesInTreeOrder(
     Traversal::LinkSet::const_iterator j = traversal.begin_children(next);
     Traversal::LinkSet::const_iterator end = traversal.end_children(next);
     for (; j != end; ++j) {
-      CHECK(j->first == next);
+      DCHECK(j->first == next);
       to_visit.push(j->second);
     }
   }

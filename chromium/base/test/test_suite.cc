@@ -4,6 +4,8 @@
 
 #include "base/test/test_suite.h"
 
+#include <signal.h>
+
 #include <memory>
 
 #include "base/at_exit.h"
@@ -318,6 +320,40 @@ void TestSuite::UnitTestAssertHandler(const char* file,
   _exit(1);
 }
 
+#if defined(OS_WIN)
+namespace {
+
+// Disable optimizations to prevent function folding or other transformations
+// that will make the call stacks on failures more confusing.
+#pragma optimize("", off)
+// Handlers for invalid parameter, pure call, and abort. They generate a
+// breakpoint to ensure that we get a call stack on these failures.
+void InvalidParameter(const wchar_t* expression,
+                      const wchar_t* function,
+                      const wchar_t* file,
+                      unsigned int line,
+                      uintptr_t reserved) {
+  // CRT printed message is sufficient.
+  __debugbreak();
+  _exit(1);
+}
+
+void PureCall() {
+  fprintf(stderr, "Pure-virtual function call. Terminating.\n");
+  __debugbreak();
+  _exit(1);
+}
+
+void AbortHandler(int signal) {
+  // Print EOL after the CRT abort message.
+  fprintf(stderr, "\n");
+  __debugbreak();
+}
+#pragma optimize("", on)
+
+}  // namespace
+#endif
+
 void TestSuite::SuppressErrorDialogs() {
 #if defined(OS_WIN)
   UINT new_flags = SEM_FAILCRITICALERRORS |
@@ -329,26 +365,57 @@ void TestSuite::SuppressErrorDialogs() {
   UINT existing_flags = SetErrorMode(new_flags);
   SetErrorMode(existing_flags | new_flags);
 
-#if defined(_DEBUG) && defined(_HAS_EXCEPTIONS) && (_HAS_EXCEPTIONS == 1)
+#if defined(_DEBUG)
   // Suppress the "Debug Assertion Failed" dialog.
   // TODO(hbono): remove this code when gtest has it.
   // http://groups.google.com/d/topic/googletestframework/OjuwNlXy5ac/discussion
-  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
   _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-#endif  // defined(_DEBUG) && defined(_HAS_EXCEPTIONS) && (_HAS_EXCEPTIONS == 1)
+  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+#endif  // defined(_DEBUG)
+
+  // See crbug.com/783040 for test code to trigger all of these failures.
+  _set_invalid_parameter_handler(InvalidParameter);
+  _set_purecall_handler(PureCall);
+  signal(SIGABRT, AbortHandler);
 #endif  // defined(OS_WIN)
 }
 
 void TestSuite::Initialize() {
+  const CommandLine* command_line = CommandLine::ForCurrentProcess();
 #if !defined(OS_IOS)
-  if (CommandLine::ForCurrentProcess()->HasSwitch(switches::kWaitForDebugger)) {
+  if (command_line->HasSwitch(switches::kWaitForDebugger)) {
     debug::WaitForDebugger(60, true);
   }
 #endif
   // Set up a FeatureList instance, so that code using that API will not hit a
   // an error that it's not set. It will be cleared automatically.
-  // TODO(chaopeng) Should load the actually features in command line here.
-  scoped_feature_list_.InitFromCommandLine(std::string(), std::string());
+  // TestFeatureForBrowserTest1 and TestFeatureForBrowserTest2 used in
+  // ContentBrowserTestScopedFeatureListTest to ensure ScopedFeatureList keeps
+  // features from command line.
+  std::string enabled =
+      command_line->GetSwitchValueASCII(switches::kEnableFeatures);
+  std::string disabled =
+      command_line->GetSwitchValueASCII(switches::kDisableFeatures);
+  enabled += ",TestFeatureForBrowserTest1";
+  disabled += ",TestFeatureForBrowserTest2";
+  scoped_feature_list_.InitFromCommandLine(enabled, disabled);
+
+  // The enable-features and disable-features flags were just slurped into a
+  // FeatureList, so remove them from the command line. Tests should enable and
+  // disable features via the ScopedFeatureList API rather than command-line
+  // flags.
+  CommandLine new_command_line(command_line->GetProgram());
+  CommandLine::SwitchMap switches = command_line->GetSwitches();
+
+  switches.erase(switches::kEnableFeatures);
+  switches.erase(switches::kDisableFeatures);
+
+  for (const auto& iter : switches)
+    new_command_line.AppendSwitchNative(iter.first, iter.second);
+
+  *CommandLine::ForCurrentProcess() = new_command_line;
 
 #if defined(OS_IOS)
   InitIOSTestMessageLoop();
@@ -368,7 +435,7 @@ void TestSuite::Initialize() {
 
   // In some cases, we do not want to see standard error dialogs.
   if (!debug::BeingDebugged() &&
-      !CommandLine::ForCurrentProcess()->HasSwitch("show-error-dialogs")) {
+      !command_line->HasSwitch("show-error-dialogs")) {
     SuppressErrorDialogs();
     debug::SetSuppressDebugUI(true);
     assert_handler_ = std::make_unique<logging::ScopedLogAssertHandler>(

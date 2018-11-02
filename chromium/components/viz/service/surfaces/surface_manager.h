@@ -33,10 +33,6 @@
 #include <string>
 #endif
 
-namespace cc {
-class CompositorFrame;
-}
-
 namespace viz {
 
 namespace test {
@@ -77,9 +73,9 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Destroy the Surface once a set of sequence numbers has been satisfied.
   void DestroySurface(const SurfaceId& surface_id);
 
-  // Called when a surface has been added to the aggregated CompositorFrame
-  // and will notify observers with SurfaceObserver::OnSurfaceWillDraw.
-  void SurfaceWillDraw(const SurfaceId& surface_id);
+  // Called when |surface_id| or one of its descendents is determined to be
+  // damaged at aggregation time.
+  void SurfaceSubtreeDamaged(const SurfaceId& surface_id);
 
   Surface* GetSurfaceForId(const SurfaceId& surface_id);
 
@@ -106,8 +102,8 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // has changed.
   void SurfaceDependenciesChanged(
       Surface* surface,
-      const base::flat_set<SurfaceId>& added_dependencies,
-      const base::flat_set<SurfaceId>& removed_dependencies);
+      const base::flat_set<FrameSinkId>& added_dependencies,
+      const base::flat_set<FrameSinkId>& removed_dependencies);
 
   // Called when |surface| is being destroyed.
   void SurfaceDiscarded(Surface* surface);
@@ -131,6 +127,20 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Invalidate a frame_sink_id that might still have associated sequences,
   // possibly because a renderer process has crashed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
+
+  const base::flat_map<FrameSinkId, std::string>& valid_frame_sink_labels()
+      const {
+    return valid_frame_sink_labels_;
+  }
+
+  // Set |debug_label| of the |frame_sink_id|. |frame_sink_id| must exist in
+  // |valid_frame_sink_labels_| already when UpdateFrameSinkDebugLabel is
+  // called.
+  void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
+                              const std::string& debug_label);
+
+  // Returns the debug label associated with |frame_sink_id| if any.
+  std::string GetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id) const;
 
   // Register a relationship between two namespaces.  This relationship means
   // that surfaces from the child namespace will be displayed in the parent.
@@ -166,6 +176,9 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // nothing.
   void DropTemporaryReference(const SurfaceId& surface_id);
 
+  // Garbage collects all destroyed surfaces that aren't live.
+  void GarbageCollectSurfaces();
+
   // Returns all surfaces referenced by parent |surface_id|. Will return an
   // empty set if |surface_id| is unknown or has no references.
   const base::flat_set<SurfaceId>& GetSurfacesReferencedByParent(
@@ -183,6 +196,21 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   bool using_surface_references() const {
     return lifetime_type_ == LifetimeType::REFERENCES;
   }
+
+  // Returns the most recent surface associated with the |fallback_surface_id|'s
+  // FrameSinkId that was created prior to the current primary surface and
+  // verified by the viz host to be owned by |parent|. If the FrameSinkId of the
+  // |primary_surface_id| does not match the |fallback_surface_id|'s then this
+  // method will always return the fallback surface because we cannot guarantee
+  // the latest in flight surface from the fallback frame sink is older than the
+  // primary surface.
+  Surface* GetLatestInFlightSurface(const FrameSinkId& parent,
+                                    const SurfaceId& primary_surface_id,
+                                    const SurfaceId& fallback_surface_id);
+
+  // Called by SurfaceAggregator notifying us that it will use |surface| in the
+  // next display frame. We will notify SurfaceObservers accordingly.
+  void SurfaceWillBeDrawn(Surface* surface);
 
  private:
   friend class test::SurfaceSynchronizationTest;
@@ -213,9 +241,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
     // timer tick and will be true on second timer tick.
     bool marked_as_old = false;
   };
-
-  // Garbage collects all destroyed surfaces that aren't live.
-  void GarbageCollectSurfaces();
 
   // Returns set of live surfaces for |lifetime_manager_| is REFERENCES.
   SurfaceIdSet GetLiveSurfacesForReferences();
@@ -280,10 +305,10 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // waited on.
   base::flat_set<SurfaceSequence> satisfied_sequences_;
 
-  // Set of valid FrameSinkIds. When a FrameSinkId is removed from
-  // this set, any remaining (surface) sequences with that FrameSinkId are
+  // Set of valid FrameSinkIds and their labels. When a FrameSinkId is removed
+  // from this set, any remaining (surface) sequences with that FrameSinkId are
   // considered satisfied.
-  base::flat_set<FrameSinkId> valid_frame_sink_ids_;
+  base::flat_map<FrameSinkId, std::string> valid_frame_sink_labels_;
 
   // Root SurfaceId that references display root surfaces. There is no Surface
   // with this id, it's for bookkeeping purposes only.

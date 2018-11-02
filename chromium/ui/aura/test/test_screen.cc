@@ -55,7 +55,9 @@ WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
   // Makes sure InputMethod is default focused so that IME basics can work.
   host_->GetInputMethod()->OnFocus();
   host_->window()->AddObserver(this);
-  host_->InitHost();
+  // Other test code may have already initialized the compositor.
+  if (!host_->compositor()->root_layer())
+    host_->InitHost();
   host_->window()->Show();
   return host_;
 }
@@ -134,8 +136,10 @@ gfx::Transform TestScreen::GetUIScaleTransform() const {
   return ui_scale;
 }
 
-void TestScreen::OnWindowBoundsChanged(
-    Window* window, const gfx::Rect& old_bounds, const gfx::Rect& new_bounds) {
+void TestScreen::OnWindowBoundsChanged(Window* window,
+                                       const gfx::Rect& old_bounds,
+                                       const gfx::Rect& new_bounds,
+                                       ui::PropertyChangeReason reason) {
   DCHECK_EQ(host_->window(), window);
   display::Display display(GetPrimaryDisplay());
   display.SetSize(gfx::ScaleToFlooredSize(new_bounds.size(),

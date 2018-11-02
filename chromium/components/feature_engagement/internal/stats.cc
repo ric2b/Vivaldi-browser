@@ -56,7 +56,8 @@ void RecordNotifyEvent(const std::string& event_name,
   DCHECK(config);
 
   // Find which feature this event belongs to.
-  const Configuration::ConfigMap& features = config->GetRegisteredFeatures();
+  const Configuration::ConfigMap& features =
+      config->GetRegisteredFeatureConfigs();
   std::string feature_name;
   for (const auto& element : features) {
     const std::string fname = element.first;
@@ -99,6 +100,7 @@ void RecordNotifyEvent(const std::string& event_name,
 }
 
 void RecordShouldTriggerHelpUI(const base::Feature& feature,
+                               const FeatureConfig& feature_config,
                                const ConditionValidator::Result& result) {
   // Records the user action.
   std::string name = std::string(kShouldTriggerHelpUIHistogram)
@@ -109,15 +111,22 @@ void RecordShouldTriggerHelpUI(const base::Feature& feature,
   // Total count histogram, used to compute the percentage of each failure type,
   // in addition to a user action for whether the result was to trigger or not.
   if (result.NoErrors()) {
-    LogTriggerHelpUIResult(name, TriggerHelpUIResult::SUCCESS);
-    std::string name = "InProductHelp.ShouldTriggerHelpUIResult.Triggered.";
-    name.append(feature.name);
-    base::RecordComputedAction(name);
+    LogTriggerHelpUIResult(name,
+                           feature_config.tracking_only
+                               ? TriggerHelpUIResult::SUCCESS_TRACKING_ONLY
+                               : TriggerHelpUIResult::SUCCESS);
+    std::string action_name = "InProductHelp.ShouldTriggerHelpUIResult.";
+    action_name.append(feature_config.tracking_only ? "WouldHaveTriggered"
+                                                    : "Triggered");
+    action_name.append(".");
+    action_name.append(feature.name);
+    base::RecordComputedAction(action_name);
   } else {
     LogTriggerHelpUIResult(name, TriggerHelpUIResult::FAILURE);
-    std::string name = "InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.";
-    name.append(feature.name);
-    base::RecordComputedAction(name);
+    std::string action_name =
+        "InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.";
+    action_name.append(feature.name);
+    base::RecordComputedAction(action_name);
   }
 
   // Histogram about the failure reasons.
@@ -157,6 +166,9 @@ void RecordShouldTriggerHelpUI(const base::Feature& feature,
   if (!result.availability_ok) {
     LogTriggerHelpUIResult(
         name, TriggerHelpUIResult::FAILURE_AVAILABILITY_PRECONDITION_UNMET);
+  }
+  if (!result.display_lock_ok) {
+    LogTriggerHelpUIResult(name, TriggerHelpUIResult::FAILURE_DISPLAY_LOCK);
   }
 }
 

@@ -37,15 +37,17 @@ LayoutFrame::LayoutFrame(HTMLFrameElement* frame)
 }
 
 FrameEdgeInfo LayoutFrame::EdgeInfo() const {
-  HTMLFrameElement* element = toHTMLFrameElement(GetNode());
+  HTMLFrameElement* element = ToHTMLFrameElement(GetNode());
   return FrameEdgeInfo(element->NoResize(), element->HasFrameBorder());
 }
 
-void LayoutFrame::ImageChanged(WrappedImagePtr image, const IntRect*) {
+void LayoutFrame::ImageChanged(WrappedImagePtr image,
+                               CanDeferInvalidation,
+                               const IntRect*) {
   if (const CursorList* cursors = Style()->Cursors()) {
     for (const CursorData& cursor : *cursors) {
       if (cursor.GetImage() && cursor.GetImage()->CachedImage() == image) {
-        if (LocalFrame* frame = this->GetFrame()) {
+        if (LocalFrame* frame = GetFrame()) {
           // Cursor update scheduling is done by the local root, which is the
           // main frame if there are no RemoteFrame ancestors in the frame tree.
           // Use of localFrameRoot() is discouraged but will change when cursor

@@ -89,9 +89,6 @@ function createSearchEntry(timestamp, urlStr) {
 function createHistoryInfo(searchTerm) {
   return {
     finished: true,
-    hasSyncedResults: false,
-    queryInterval: 'Monday - Tuesday',
-    queryMonth: 'June',
     term: searchTerm || ''
   };
 }
@@ -124,7 +121,7 @@ function waitForEvent(element, eventName, predicate) {
 
       resolve();
       element.removeEventListener(eventName, listener);
-    }
+    };
 
     element.addEventListener(eventName, listener);
   });

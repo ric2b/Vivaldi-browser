@@ -60,8 +60,6 @@ class HttpServerPropertiesImplPeer {
 
 namespace {
 
-const int kMaxSupportsSpdyServerHosts = 500;
-
 class HttpServerPropertiesImplTest : public testing::Test {
  protected:
   HttpServerPropertiesImplTest()
@@ -117,7 +115,7 @@ TEST_F(SpdyServerPropertiesTest, SetWithSchemeHostPort) {
   // Initializing https://www.google.com:443 and https://photos.google.com:443
   // as spdy servers.
   std::unique_ptr<SpdyServersMap> spdy_servers1 =
-      std::make_unique<SpdyServersMap>(SpdyServersMap::NO_AUTO_EVICT);
+      std::make_unique<SpdyServersMap>();
   spdy_servers1->Put(spdy_server_g, true);
   spdy_servers1->Put(spdy_server_p, true);
   impl_.SetSpdyServers(std::move(spdy_servers1));
@@ -143,14 +141,14 @@ TEST_F(SpdyServerPropertiesTest, Set) {
 
   // Check by initializing empty spdy servers.
   std::unique_ptr<SpdyServersMap> spdy_servers =
-      std::make_unique<SpdyServersMap>(SpdyServersMap::NO_AUTO_EVICT);
+      std::make_unique<SpdyServersMap>();
   impl_.SetSpdyServers(std::move(spdy_servers));
   EXPECT_FALSE(impl_.SupportsRequestPriority(spdy_server_google));
 
   // Check by initializing www.google.com:443 and photos.google.com:443 as spdy
   // servers.
   std::unique_ptr<SpdyServersMap> spdy_servers1 =
-      std::make_unique<SpdyServersMap>(SpdyServersMap::NO_AUTO_EVICT);
+      std::make_unique<SpdyServersMap>();
   spdy_servers1->Put(spdy_server_g, true);
   spdy_servers1->Put(spdy_server_p, true);
   impl_.SetSpdyServers(std::move(spdy_servers1));
@@ -159,16 +157,18 @@ TEST_F(SpdyServerPropertiesTest, Set) {
   EXPECT_TRUE(impl_.SupportsRequestPriority(spdy_server_photos));
 
   // Verify spdy_server_g and spdy_server_d are in the list in MRU order.
-  std::vector<std::string> returned_spdy_servers;
-  impl_.GetSpdyServerList(&returned_spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(2U, returned_spdy_servers.size());
-  EXPECT_EQ(spdy_server_p, returned_spdy_servers[0]);
-  EXPECT_EQ(spdy_server_g, returned_spdy_servers[1]);
+  ASSERT_EQ(2U, impl_.spdy_servers_map().size());
+  auto it = impl_.spdy_servers_map().begin();
+  EXPECT_EQ(spdy_server_p, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_g, it->first);
+  EXPECT_TRUE(it->second);
 
   // Check by initializing mail.google.com:443 and docs.google.com:443 as spdy
   // servers.
   std::unique_ptr<SpdyServersMap> spdy_servers2 =
-      std::make_unique<SpdyServersMap>(SpdyServersMap::NO_AUTO_EVICT);
+      std::make_unique<SpdyServersMap>();
   spdy_servers2->Put(spdy_server_m, true);
   spdy_servers2->Put(spdy_server_d, true);
   impl_.SetSpdyServers(std::move(spdy_servers2));
@@ -176,14 +176,19 @@ TEST_F(SpdyServerPropertiesTest, Set) {
   // Verify all the servers are in the list in MRU order. Note that
   // SetSpdyServers will put existing spdy server entries in front of newly
   // added entries.
-  returned_spdy_servers.clear();
-  impl_.GetSpdyServerList(&returned_spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(4U, returned_spdy_servers.size());
-
-  EXPECT_EQ(spdy_server_p, returned_spdy_servers[0]);
-  EXPECT_EQ(spdy_server_g, returned_spdy_servers[1]);
-  EXPECT_EQ(spdy_server_d, returned_spdy_servers[2]);
-  EXPECT_EQ(spdy_server_m, returned_spdy_servers[3]);
+  ASSERT_EQ(4U, impl_.spdy_servers_map().size());
+  it = impl_.spdy_servers_map().begin();
+  EXPECT_EQ(spdy_server_p, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_g, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_d, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_m, it->first);
+  EXPECT_TRUE(it->second);
 
   // Check these in reverse MRU order so that MRU order stays the same.
   EXPECT_TRUE(impl_.SupportsRequestPriority(spdy_server_mail));
@@ -197,18 +202,25 @@ TEST_F(SpdyServerPropertiesTest, Set) {
   // Change supports SPDY value for photos and mails servers and order of
   // initalization shouldn't matter.
   std::unique_ptr<SpdyServersMap> spdy_servers3 =
-      std::make_unique<SpdyServersMap>(SpdyServersMap::NO_AUTO_EVICT);
+      std::make_unique<SpdyServersMap>();
   spdy_servers3->Put(spdy_server_m, false);
   spdy_servers3->Put(spdy_server_p, false);
   impl_.SetSpdyServers(std::move(spdy_servers3));
 
   // Verify the entries are in the same order.
-  returned_spdy_servers.clear();
-  impl_.GetSpdyServerList(&returned_spdy_servers, kMaxSupportsSpdyServerHosts);
-  EXPECT_EQ(2U, returned_spdy_servers.size());
-
-  ASSERT_EQ(spdy_server_g, returned_spdy_servers[0]);
-  ASSERT_EQ(spdy_server_d, returned_spdy_servers[1]);
+  ASSERT_EQ(4U, impl_.spdy_servers_map().size());
+  it = impl_.spdy_servers_map().begin();
+  EXPECT_EQ(spdy_server_p, it->first);
+  EXPECT_FALSE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_g, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_d, it->first);
+  EXPECT_TRUE(it->second);
+  ++it;
+  EXPECT_EQ(spdy_server_m, it->first);
+  EXPECT_FALSE(it->second);
 
   // Verify photos and mail servers don't support SPDY and other servers support
   // SPDY.
@@ -273,59 +285,7 @@ TEST_F(SpdyServerPropertiesTest, Clear) {
   EXPECT_FALSE(impl_.SupportsRequestPriority(spdy_server_mail));
 }
 
-TEST_F(SpdyServerPropertiesTest, GetSpdyServerList) {
-  std::vector<std::string> spdy_servers;
-
-  // Check there are no spdy_servers.
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  EXPECT_EQ(0U, spdy_servers.size());
-
-  // Check empty server is not added.
-  url::SchemeHostPort spdy_server_empty("https", std::string(), 443);
-  impl_.SetSupportsSpdy(spdy_server_empty, true);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  EXPECT_EQ(0U, spdy_servers.size());
-
-  url::SchemeHostPort spdy_server_google("https", "www.google.com", 443);
-  std::string spdy_server_g = spdy_server_google.Serialize();
-  url::SchemeHostPort spdy_server_mail("https", "mail.google.com", 443);
-  std::string spdy_server_m = spdy_server_mail.Serialize();
-
-  // Add www.google.com:443 as not supporting SPDY.
-  impl_.SetSupportsSpdy(spdy_server_google, false);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  EXPECT_EQ(0U, spdy_servers.size());
-
-  // Add www.google.com:443 as supporting SPDY.
-  impl_.SetSupportsSpdy(spdy_server_google, true);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(1U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_g, spdy_servers[0]);
-
-  // Add mail.google.com:443 as not supporting SPDY.
-  impl_.SetSupportsSpdy(spdy_server_mail, false);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(1U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_g, spdy_servers[0]);
-
-  // Add mail.google.com:443 as supporting SPDY.
-  impl_.SetSupportsSpdy(spdy_server_mail, true);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(2U, spdy_servers.size());
-
-  // Verify www.google.com:443 and mail.google.com:443 are in the list.
-  ASSERT_EQ(spdy_server_m, spdy_servers[0]);
-  ASSERT_EQ(spdy_server_g, spdy_servers[1]);
-
-  // Request for only one server and verify that we get only one server.
-  impl_.GetSpdyServerList(&spdy_servers, 1);
-  ASSERT_EQ(1U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_m, spdy_servers[0]);
-}
-
-TEST_F(SpdyServerPropertiesTest, MRUOfGetSpdyServers) {
-  std::vector<std::string> spdy_servers;
-
+TEST_F(SpdyServerPropertiesTest, MRUOfSpdyServersMap) {
   url::SchemeHostPort spdy_server_google("https", "www.google.com", 443);
   std::string spdy_server_g = spdy_server_google.Serialize();
   url::SchemeHostPort spdy_server_mail("https", "mail.google.com", 443);
@@ -333,25 +293,26 @@ TEST_F(SpdyServerPropertiesTest, MRUOfGetSpdyServers) {
 
   // Add www.google.com:443 as supporting SPDY.
   impl_.SetSupportsSpdy(spdy_server_google, true);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(1U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_g, spdy_servers[0]);
+  ASSERT_EQ(1u, impl_.spdy_servers_map().size());
+  auto it = impl_.spdy_servers_map().begin();
+  ASSERT_EQ(spdy_server_g, it->first);
 
   // Add mail.google.com:443 as supporting SPDY. Verify mail.google.com:443 and
   // www.google.com:443 are in the list.
   impl_.SetSupportsSpdy(spdy_server_mail, true);
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(2U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_m, spdy_servers[0]);
-  ASSERT_EQ(spdy_server_g, spdy_servers[1]);
+  ASSERT_EQ(2u, impl_.spdy_servers_map().size());
+  it = impl_.spdy_servers_map().begin();
+  ASSERT_EQ(spdy_server_m, it->first);
+  ++it;
+  ASSERT_EQ(spdy_server_g, it->first);
 
-  // Get www.google.com:443 should reorder SpdyServerHostPortMap. Verify that it
-  // is www.google.com:443 is the MRU server.
+  // Get www.google.com:443. It should become the most-recently-used server.
   EXPECT_TRUE(impl_.SupportsRequestPriority(spdy_server_google));
-  impl_.GetSpdyServerList(&spdy_servers, kMaxSupportsSpdyServerHosts);
-  ASSERT_EQ(2U, spdy_servers.size());
-  ASSERT_EQ(spdy_server_g, spdy_servers[0]);
-  ASSERT_EQ(spdy_server_m, spdy_servers[1]);
+  ASSERT_EQ(2u, impl_.spdy_servers_map().size());
+  it = impl_.spdy_servers_map().begin();
+  ASSERT_EQ(spdy_server_g, it->first);
+  ++it;
+  ASSERT_EQ(spdy_server_m, it->first);
 }
 
 typedef HttpServerPropertiesImplTest AlternateProtocolServerPropertiesTest;
@@ -438,8 +399,7 @@ TEST_F(AlternateProtocolServerPropertiesTest, Set) {
   // Prepare |alternative_service_map| to be loaded by
   // SetAlternativeServiceServers().
   std::unique_ptr<AlternativeServiceMap> alternative_service_map =
-      std::make_unique<AlternativeServiceMap>(
-          AlternativeServiceMap::NO_AUTO_EVICT);
+      std::make_unique<AlternativeServiceMap>();
   const AlternativeService alternative_service3(kProtoHTTP2, "bar3", 123);
   base::Time expiration3 = now + base::TimeDelta::FromDays(3);
   const AlternativeServiceInfo alternative_service_info1 =
@@ -499,8 +459,7 @@ TEST_F(AlternateProtocolServerPropertiesTest, SetWithEmptyHostname) {
   impl_.MarkAlternativeServiceBroken(alternative_service_with_foo_hostname);
 
   std::unique_ptr<AlternativeServiceMap> alternative_service_map =
-      std::make_unique<AlternativeServiceMap>(
-          AlternativeServiceMap::NO_AUTO_EVICT);
+      std::make_unique<AlternativeServiceMap>();
   impl_.SetAlternativeServiceServers(std::move(alternative_service_map));
 
   EXPECT_TRUE(
@@ -523,8 +482,7 @@ TEST_F(AlternateProtocolServerPropertiesTest, EmptyVector) {
       AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
           alternative_service, expiration);
   std::unique_ptr<AlternativeServiceMap> alternative_service_map =
-      std::make_unique<AlternativeServiceMap>(
-          AlternativeServiceMap::NO_AUTO_EVICT);
+      std::make_unique<AlternativeServiceMap>();
   alternative_service_map->Put(
       server,
       AlternativeServiceInfoVector(/*size=*/1, alternative_service_info));
@@ -558,8 +516,7 @@ TEST_F(AlternateProtocolServerPropertiesTest, EmptyVectorForCanonical) {
       AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
           alternative_service, expiration);
   std::unique_ptr<AlternativeServiceMap> alternative_service_map =
-      std::make_unique<AlternativeServiceMap>(
-          AlternativeServiceMap::NO_AUTO_EVICT);
+      std::make_unique<AlternativeServiceMap>();
   alternative_service_map->Put(
       canonical_server,
       AlternativeServiceInfoVector(/*size=*/1, alternative_service_info));
@@ -1148,8 +1105,7 @@ TEST_F(ServerNetworkStatsServerPropertiesTest, Set) {
 
   // Check by initializing empty ServerNetworkStats.
   std::unique_ptr<ServerNetworkStatsMap> init_server_network_stats_map =
-      std::make_unique<ServerNetworkStatsMap>(
-          ServerNetworkStatsMap::NO_AUTO_EVICT);
+      std::make_unique<ServerNetworkStatsMap>();
   impl_.SetServerNetworkStats(std::move(init_server_network_stats_map));
   const ServerNetworkStats* stats = impl_.GetServerNetworkStats(google_server);
   EXPECT_EQ(NULL, stats);
@@ -1158,8 +1114,7 @@ TEST_F(ServerNetworkStatsServerPropertiesTest, Set) {
   ServerNetworkStats stats_google;
   stats_google.srtt = base::TimeDelta::FromMicroseconds(10);
   stats_google.bandwidth_estimate = QuicBandwidth::FromBitsPerSecond(100);
-  init_server_network_stats_map = std::make_unique<ServerNetworkStatsMap>(
-      ServerNetworkStatsMap::NO_AUTO_EVICT);
+  init_server_network_stats_map = std::make_unique<ServerNetworkStatsMap>();
   init_server_network_stats_map->Put(google_server, stats_google);
   impl_.SetServerNetworkStats(std::move(init_server_network_stats_map));
 
@@ -1182,8 +1137,7 @@ TEST_F(ServerNetworkStatsServerPropertiesTest, Set) {
   // Prepare |server_network_stats_map| to be loaded by
   // SetServerNetworkStats().
   std::unique_ptr<ServerNetworkStatsMap> server_network_stats_map =
-      std::make_unique<ServerNetworkStatsMap>(
-          ServerNetworkStatsMap::NO_AUTO_EVICT);
+      std::make_unique<ServerNetworkStatsMap>();
 
   // Change the values for |docs_server|.
   ServerNetworkStats new_stats_docs;
@@ -1254,21 +1208,20 @@ TEST_F(QuicServerInfoServerPropertiesTest, Set) {
   HostPortPair google_server("www.google.com", 443);
   QuicServerId google_quic_server_id(google_server, PRIVACY_MODE_ENABLED);
 
-  EXPECT_EQ(QuicServerInfoMap::NO_AUTO_EVICT,
-            impl_.quic_server_info_map().max_size());
-  impl_.SetMaxServerConfigsStoredInProperties(10);
+  const int kMaxQuicServerEntries = 10;
+  impl_.SetMaxServerConfigsStoredInProperties(kMaxQuicServerEntries);
   EXPECT_EQ(10u, impl_.quic_server_info_map().max_size());
 
   // Check empty map.
   std::unique_ptr<QuicServerInfoMap> init_quic_server_info_map =
-      std::make_unique<QuicServerInfoMap>(QuicServerInfoMap::NO_AUTO_EVICT);
+      std::make_unique<QuicServerInfoMap>(kMaxQuicServerEntries);
   impl_.SetQuicServerInfoMap(std::move(init_quic_server_info_map));
   EXPECT_EQ(0u, impl_.quic_server_info_map().size());
 
   // Check by initializing with www.google.com:443.
   std::string google_server_info("google_quic_server_info");
   init_quic_server_info_map =
-      std::make_unique<QuicServerInfoMap>(QuicServerInfoMap::NO_AUTO_EVICT);
+      std::make_unique<QuicServerInfoMap>(kMaxQuicServerEntries);
   init_quic_server_info_map->Put(google_quic_server_id, google_server_info);
   impl_.SetQuicServerInfoMap(std::move(init_quic_server_info_map));
 
@@ -1300,7 +1253,7 @@ TEST_F(QuicServerInfoServerPropertiesTest, Set) {
   // Prepare |quic_server_info_map| to be loaded by
   // SetQuicServerInfoMap().
   std::unique_ptr<QuicServerInfoMap> quic_server_info_map =
-      std::make_unique<QuicServerInfoMap>(QuicServerInfoMap::NO_AUTO_EVICT);
+      std::make_unique<QuicServerInfoMap>(kMaxQuicServerEntries);
   // Change the values for |docs_server|.
   std::string new_docs_server_info("new_docs_quic_server_info");
   quic_server_info_map->Put(docs_quic_server_id, new_docs_server_info);
@@ -1355,6 +1308,139 @@ TEST_F(QuicServerInfoServerPropertiesTest, SetQuicServerInfo) {
   impl_.Clear();
   EXPECT_EQ(0u, impl_.quic_server_info_map().size());
   EXPECT_EQ(nullptr, impl_.GetQuicServerInfo(quic_server_id));
+}
+
+// Tests that GetQuicServerInfo() returns server info of a host
+// with the same canonical suffix when there is no exact host match.
+TEST_F(QuicServerInfoServerPropertiesTest, TestCanonicalSuffixMatch) {
+  // Set up HttpServerProperties.
+  // Add a host that has the same canonical suffix.
+  QuicServerId foo_server_id("foo.googlevideo.com", 443);
+  std::string foo_server_info("foo_server_info");
+  impl_.SetQuicServerInfo(foo_server_id, foo_server_info);
+
+  // Add a host that has a different canonical suffix.
+  QuicServerId baz_server_id("baz.video.com", 443);
+  std::string baz_server_info("baz_server_info");
+  impl_.SetQuicServerInfo(baz_server_id, baz_server_info);
+
+  // Create QuicServerId with a host that has the same canonical suffix.
+  QuicServerId bar_server_id("bar.googlevideo.com", 443);
+
+  // Check the the server info associated with "foo" is returned for "bar".
+  const std::string* bar_server_info = impl_.GetQuicServerInfo(bar_server_id);
+  ASSERT_TRUE(bar_server_info != nullptr);
+  EXPECT_STREQ(foo_server_info.c_str(), bar_server_info->c_str());
+}
+
+// Verifies that GetQuicServerInfo() returns the MRU entry if multiple records
+// match a given canonical host.
+TEST_F(QuicServerInfoServerPropertiesTest,
+       TestCanonicalSuffixMatchReturnsMruEntry) {
+  // Set up HttpServerProperties by adding two hosts with the same canonical
+  // suffixes.
+  QuicServerId h1_server_id("h1.googlevideo.com", 443);
+  std::string h1_server_info("h1_server_info");
+  impl_.SetQuicServerInfo(h1_server_id, h1_server_info);
+
+  QuicServerId h2_server_id("h2.googlevideo.com", 443);
+  std::string h2_server_info("h2_server_info");
+  impl_.SetQuicServerInfo(h2_server_id, h2_server_info);
+
+  // Create QuicServerId to use for the search.
+  QuicServerId foo_server_id("foo.googlevideo.com", 443);
+
+  // Check that 'h2' info is returned since it is MRU.
+  const std::string* server_info = impl_.GetQuicServerInfo(foo_server_id);
+  ASSERT_TRUE(server_info != nullptr);
+  EXPECT_STREQ(h2_server_info.c_str(), server_info->c_str());
+
+  // Access 'h1' info, so it becomes MRU.
+  impl_.GetQuicServerInfo(h1_server_id);
+
+  // Check that 'h1' info is returned since it is MRU now.
+  server_info = impl_.GetQuicServerInfo(foo_server_id);
+  ASSERT_TRUE(server_info != nullptr);
+  EXPECT_STREQ(h1_server_info.c_str(), server_info->c_str());
+}
+
+// Verifies that |GetQuicServerInfo| doesn't change the MRU order of the server
+// info map when a record is matched based on a canonical name.
+TEST_F(QuicServerInfoServerPropertiesTest,
+       TestCanonicalSuffixMatchDoesntChangeOrder) {
+  // Add a host with a matching canonical name.
+  QuicServerId h1_server_id("h1.googlevideo.com", 443);
+  std::string h1_server_info("h1_server_info");
+  impl_.SetQuicServerInfo(h1_server_id, h1_server_info);
+
+  // Add a host hosts with a non-matching canonical name.
+  QuicServerId h2_server_id("h2.video.com", 443);
+  std::string h2_server_info("h2_server_info");
+  impl_.SetQuicServerInfo(h2_server_id, h2_server_info);
+
+  // Check that "h2.video.com" is the MRU entry in the map.
+  EXPECT_EQ(h2_server_id, impl_.quic_server_info_map().begin()->first);
+
+  // Search for the entry that matches the canonical name
+  // ("h1.googlevideo.com").
+  QuicServerId foo_server_id("foo.googlevideo.com", 443);
+  const std::string* server_info = impl_.GetQuicServerInfo(foo_server_id);
+  ASSERT_TRUE(server_info != nullptr);
+
+  // Check that the search (although successful) hasn't changed the MRU order of
+  // the map.
+  EXPECT_EQ(h2_server_id, impl_.quic_server_info_map().begin()->first);
+
+  // Search for "h1.googlevideo.com" directly, so it becomes MRU
+  impl_.GetQuicServerInfo(h1_server_id);
+
+  // Check that "h1.googlevideo.com" is the MRU entry now.
+  EXPECT_EQ(h1_server_id, impl_.quic_server_info_map().begin()->first);
+}
+
+// Tests that the canonical host matching works for hosts stored in memory cache
+// and the ones loaded from persistent storage, i.e. server info added
+// using SetQuicServerInfo() and SetQuicServerInfoMap() is taken into
+// cosideration when searching for server info for a host with the same
+// canonical suffix.
+TEST_F(QuicServerInfoServerPropertiesTest, TestCanonicalSuffixMatchSetInfoMap) {
+  // Add a host info using SetQuicServerInfo(). That will simulate an info
+  // entry stored in memory cache.
+  QuicServerId h1_server_id("h1.googlevideo.com", 443);
+  std::string h1_server_info("h1_server_info_memory_cache");
+  impl_.SetQuicServerInfo(h1_server_id, h1_server_info);
+
+  // Prepare a map with host info and add it using SetQuicServerInfoMap(). That
+  // will simulate info records read from the persistence storage.
+  QuicServerId h2_server_id("h2.googlevideo.com", 443);
+  std::string h2_server_info("h2_server_info_from_disk");
+
+  QuicServerId h3_server_id("h3.ggpht.com", 443);
+  std::string h3_server_info("h3_server_info_from_disk");
+
+  const int kMaxQuicServerEntries = 10;
+  impl_.SetMaxServerConfigsStoredInProperties(kMaxQuicServerEntries);
+
+  std::unique_ptr<QuicServerInfoMap> quic_server_info_map(
+      new QuicServerInfoMap(kMaxQuicServerEntries));
+  quic_server_info_map->Put(h2_server_id, h2_server_info);
+  quic_server_info_map->Put(h3_server_id, h3_server_info);
+  impl_.SetQuicServerInfoMap(std::move(quic_server_info_map));
+
+  // Check that the server info from the memory cache is returned since unique
+  // entries from the memory cache are added after entries from the
+  // persistence storage and, therefore, are most recently used.
+  QuicServerId foo_server_id("foo.googlevideo.com", 443);
+  const std::string* server_info = impl_.GetQuicServerInfo(foo_server_id);
+  ASSERT_TRUE(server_info != nullptr);
+  EXPECT_STREQ(h1_server_info.c_str(), server_info->c_str());
+
+  // Check that server info that was added using SetQuicServerInfoMap() can be
+  // found.
+  foo_server_id = QuicServerId("foo.ggpht.com", 443);
+  server_info = impl_.GetQuicServerInfo(foo_server_id);
+  ASSERT_TRUE(server_info != nullptr);
+  EXPECT_STREQ(h3_server_info.c_str(), server_info->c_str());
 }
 
 }  // namespace

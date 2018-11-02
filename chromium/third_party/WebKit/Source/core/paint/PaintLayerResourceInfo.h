@@ -69,7 +69,7 @@ class PaintLayerResourceInfo final
   void ResourceContentChanged() override;
   void ResourceElementChanged() override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   // |clearLayer| must be called before *m_layer becomes invalid.

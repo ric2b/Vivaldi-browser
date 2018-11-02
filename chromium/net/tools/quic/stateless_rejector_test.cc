@@ -51,7 +51,7 @@ const char* FlagsModeToString(FlagsMode mode) {
 
 // Test various combinations of QUIC version and flag state.
 struct TestParams {
-  QuicVersion version;
+  QuicTransportVersion version;
   FlagsMode flags;
 };
 
@@ -64,7 +64,7 @@ std::vector<TestParams> GetTestParams() {
   std::vector<TestParams> params;
   for (FlagsMode flags :
        {ENABLED, STATELESS_DISABLED, CHEAP_DISABLED, BOTH_DISABLED}) {
-    for (QuicVersion version : AllSupportedVersions()) {
+    for (QuicTransportVersion version : AllSupportedTransportVersions()) {
       TestParams param;
       param.version = version;
       param.flags = flags;
@@ -86,7 +86,7 @@ class StatelessRejectorTest : public QuicTestWithParam<TestParams> {
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         rejector_(QuicMakeUnique<StatelessRejector>(
             GetParam().version,
-            AllSupportedVersions(),
+            AllSupportedTransportVersions(),
             &config_,
             &compressed_certs_cache_,
             &clock_,
@@ -108,7 +108,8 @@ class StatelessRejectorTest : public QuicTestWithParam<TestParams> {
         "#" + QuicTextUtils::HexEncode(config_peer_.GetPrimaryConfig()->id);
 
     // Encode the QUIC version.
-    ver_hex_ = QuicTagToString(QuicVersionToQuicTag(GetParam().version));
+    ver_hex_ = QuicVersionLabelToString(
+        QuicVersionToQuicVersionLabel(GetParam().version));
 
     // Generate a public value.
     char public_value[32];

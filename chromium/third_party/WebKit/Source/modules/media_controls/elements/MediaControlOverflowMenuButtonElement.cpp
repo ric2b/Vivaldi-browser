@@ -4,8 +4,8 @@
 
 #include "modules/media_controls/elements/MediaControlOverflowMenuButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
+#include "core/input_type_names.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "public/platform/Platform.h"
 
@@ -14,7 +14,6 @@ namespace blink {
 MediaControlOverflowMenuButtonElement::MediaControlOverflowMenuButtonElement(
     MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaOverflowButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-internal-media-controls-overflow-button"));
   SetIsWanted(false);

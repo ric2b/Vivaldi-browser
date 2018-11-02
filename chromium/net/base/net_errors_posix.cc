@@ -83,7 +83,7 @@ Error MapSystemError(logging::SystemErrorCode os_error) {
     case ENFILE:  // Too many open files in system.
       return ERR_INSUFFICIENT_RESOURCES;
     case ENOBUFS:  // No buffer space available.
-      return ERR_OUT_OF_MEMORY;
+      return ERR_NO_BUFFER_SPACE;
     case ENODEV:  // No such device.
       return ERR_INVALID_ARGUMENT;
     case ENOENT:  // No such file or directory.
@@ -112,9 +112,9 @@ Error MapSystemError(logging::SystemErrorCode os_error) {
       return ERR_INSUFFICIENT_RESOURCES;
 #if defined(OS_FUCHSIA)
     case EIO:
-      // MXIO maps all unrecognized errors to EIO. If you see this message then
-      // consider adding custom error in MXIO for the corresponding error.
-      DLOG(FATAL) << "EIO was returned by MXIO.";
+      // FDIO maps all unrecognized errors to EIO. If you see this message then
+      // consider adding custom error in FDIO for the corresponding error.
+      DLOG(FATAL) << "EIO was returned by FDIO.";
       return ERR_FAILED;
 #endif  // OS_FUCHSIA
 

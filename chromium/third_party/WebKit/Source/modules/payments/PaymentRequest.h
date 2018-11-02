@@ -5,6 +5,7 @@
 #ifndef PaymentRequest_h
 #define PaymentRequest_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -20,7 +21,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Compiler.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/modules/payments/payment_request.mojom-blink.h"
@@ -85,9 +85,18 @@ class MODULES_EXPORT PaymentRequest final
   void OnUpdatePaymentDetails(const ScriptValue& details_script_value) override;
   void OnUpdatePaymentDetailsFailure(const String& error) override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void OnCompleteTimeoutForTesting();
+
+  enum {
+    // Implementation defined constants controlling the allowed list length
+    kMaxListSize = 1024,
+    // ... and string length
+    kMaxStringLength = 1024,
+    // ... and JSON length.
+    kMaxJSONStringLength = 1048576
+  };
 
  private:
   PaymentRequest(ExecutionContext*,
@@ -121,6 +130,7 @@ class MODULES_EXPORT PaymentRequest final
   String id_;
   String shipping_option_;
   String shipping_type_;
+  HashSet<String> method_names_;
   Member<ScriptPromiseResolver> show_resolver_;
   Member<ScriptPromiseResolver> complete_resolver_;
   Member<ScriptPromiseResolver> abort_resolver_;

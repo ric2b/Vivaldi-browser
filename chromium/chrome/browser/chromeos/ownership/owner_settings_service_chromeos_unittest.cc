@@ -5,9 +5,9 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 
 #include <memory>
-#include <queue>
 #include <utility>
 
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/run_loop.h"
@@ -73,8 +73,8 @@ class PrefsChecker : public ownership::OwnerSettingsService::Observer {
   DeviceSettingsProvider* provider_;
   base::RunLoop loop_;
 
-  typedef std::pair<std::string, linked_ptr<base::Value>> SetRequest;
-  std::queue<SetRequest> set_requests_;
+  using SetRequest = std::pair<std::string, linked_ptr<base::Value>>;
+  base::queue<SetRequest> set_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefsChecker);
 };
@@ -113,7 +113,7 @@ class OwnerSettingsServiceChromeOSTest : public DeviceSettingsTestBase {
     device_policy_.policy_data().set_management_mode(
         em::PolicyData::LOCAL_OWNER);
     device_policy_.Build();
-    device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+    session_manager_client_.set_device_policy(device_policy_.GetBlob());
     ReloadDeviceSettings();
   }
 
@@ -165,7 +165,7 @@ TEST_F(OwnerSettingsServiceChromeOSTest, MultipleSetTest) {
 }
 
 TEST_F(OwnerSettingsServiceChromeOSTest, FailedSetRequest) {
-  device_settings_test_helper_.set_store_result(false);
+  session_manager_client_.set_store_device_policy_success(false);
   std::string current_channel;
   ASSERT_TRUE(provider_->Get(kReleaseChannel)->GetAsString(&current_channel));
   ASSERT_NE(current_channel, "stable-channel");

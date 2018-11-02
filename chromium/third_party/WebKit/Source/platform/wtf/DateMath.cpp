@@ -80,10 +80,10 @@
 #include "build/build_config.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/StringExtras.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 #if defined(OS_WIN)
@@ -341,7 +341,7 @@ static double CalculateUTCOffset() {
       time_zone_information.Bias + time_zone_information.StandardBias;
   return -bias * 60 * 1000;
 #else
-  time_t local_time = time(0);
+  time_t local_time = time(nullptr);
   tm localt;
   GetLocalTime(&local_time, &localt);
 

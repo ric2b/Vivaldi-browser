@@ -87,7 +87,7 @@ void LayoutTestContentBrowserClient::RenderProcessWillLaunch(
 
 void LayoutTestContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
-    AssociatedInterfaceRegistry* associated_registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
     RenderProcessHost* render_process_host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
       content::BrowserThread::GetTaskRunnerForThread(
@@ -162,7 +162,7 @@ bool LayoutTestContentBrowserClient::DoesSiteRequireDedicatedProcess(
   if (ShellContentBrowserClient::DoesSiteRequireDedicatedProcess(
           browser_context, effective_site_url))
     return true;
-  url::Origin origin(effective_site_url);
+  url::Origin origin = url::Origin::Create(effective_site_url);
   return base::MatchPattern(origin.Serialize(), "*oopif.test");
 }
 

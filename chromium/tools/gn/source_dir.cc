@@ -25,8 +25,7 @@ void AssertValueSourceDirString(const std::string& s) {
 
 }  // namespace
 
-SourceDir::SourceDir() {
-}
+SourceDir::SourceDir() = default;
 
 SourceDir::SourceDir(const base::StringPiece& p)
     : value_(p.data(), p.size()) {
@@ -55,8 +54,7 @@ SourceDir::SourceDir(SwapIn, std::string* s) {
   actual_path_ = BuildSettings::RemapSourcePathToActual(value_);
 }
 
-SourceDir::~SourceDir() {
-}
+SourceDir::~SourceDir() = default;
 
 SourceFile SourceDir::ResolveRelativeFile(
     const Value& p,

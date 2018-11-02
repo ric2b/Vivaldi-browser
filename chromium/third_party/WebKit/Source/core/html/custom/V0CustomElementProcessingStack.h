@@ -31,6 +31,7 @@
 #ifndef V0CustomElementProcessingStack_h
 #define V0CustomElementProcessingStack_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/html/custom/V0CustomElementCallbackQueue.h"
 #include "platform/wtf/Vector.h"
@@ -39,8 +40,6 @@ namespace blink {
 
 class CORE_EXPORT V0CustomElementProcessingStack
     : public GarbageCollected<V0CustomElementProcessingStack> {
-  WTF_MAKE_NONCOPYABLE(V0CustomElementProcessingStack);
-
  public:
   // This is stack allocated in many DOM callbacks. Make it cheap.
   class CallbackDeliveryScope {
@@ -66,7 +65,7 @@ class CORE_EXPORT V0CustomElementProcessingStack
   static V0CustomElementProcessingStack& Instance();
   void Enqueue(V0CustomElementCallbackQueue*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   V0CustomElementProcessingStack() {
@@ -75,7 +74,7 @@ class CORE_EXPORT V0CustomElementProcessingStack
     // CallbackDeliveryScope active. Also, if the processing stack
     // is popped when empty, this sentinel will cause a null deref
     // crash.
-    V0CustomElementCallbackQueue* sentinel = 0;
+    V0CustomElementCallbackQueue* sentinel = nullptr;
     for (size_t i = 0; i < kNumSentinels; i++)
       flattened_processing_stack_.push_back(sentinel);
     DCHECK_EQ(element_queue_end_, flattened_processing_stack_.size());
@@ -101,6 +100,8 @@ class CORE_EXPORT V0CustomElementProcessingStack
   // is a null sentinel value.
   static const size_t kNumSentinels = 1;
   HeapVector<Member<V0CustomElementCallbackQueue>> flattened_processing_stack_;
+
+  DISALLOW_COPY_AND_ASSIGN(V0CustomElementProcessingStack);
 };
 
 }  // namespace blink

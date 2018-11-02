@@ -1,23 +1,27 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_IPC_MEDIA_PIPELINE_H_
-#define CONTENT_COMMON_GPU_MEDIA_IPC_MEDIA_PIPELINE_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_IPC_MEDIA_PIPELINE_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_IPC_MEDIA_PIPELINE_H_
 
-#include <map>
-#include <string>
-#include <vector>
+#include "platform_media/common/feature_toggles.h"
+
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 #include "gpu/ipc/service/gpu_command_buffer_stub.h"
 #include "ipc/ipc_listener.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
+
+#include <map>
+#include <string>
+#include <vector>
 
 struct MediaPipelineMsg_DecodedDataReady_Params;
 
@@ -29,7 +33,7 @@ namespace media {
 class DataBuffer;
 }
 
-namespace content {
+namespace media {
 
 class GpuCommandBufferStub;
 class IPCDataSourceImpl;
@@ -68,22 +72,24 @@ class IPCMediaPipeline : public IPC::Listener {
                     const std::string& mime_type);
   void Initialized(bool success,
                    int bitrate,
-                   const media::PlatformMediaTimeInfo& time_info,
-                   const media::PlatformAudioConfig& audio_config,
-                   const media::PlatformVideoConfig& video_config);
+                   const PlatformMediaTimeInfo& time_info,
+                   const PlatformAudioConfig& audio_config,
+                   const PlatformVideoConfig& video_config);
 
-  void OnBufferForDecodedDataReady(media::PlatformMediaDataType type,
+  void OnBufferForDecodedDataReady(PlatformMediaDataType type,
                                    size_t buffer_size,
                                    base::SharedMemoryHandle handle);
-  void DecodedDataReady(media::PlatformMediaDataType type,
-                        const scoped_refptr<media::DataBuffer>& buffer);
+  void DecodedDataReady(PlatformMediaDataType type,
+                        const scoped_refptr<DataBuffer>& buffer);
+#if defined(PLATFORM_MEDIA_HWA)
   void DecodedTextureReady(uint32_t client_texture_id,
-                           const scoped_refptr<media::DataBuffer>& buffer);
-  void DecodedDataReadyImpl(media::PlatformMediaDataType type,
+                           const scoped_refptr<DataBuffer>& buffer);
+#endif
+  void DecodedDataReadyImpl(PlatformMediaDataType type,
                             uint32_t client_texture_id,
-                            const scoped_refptr<media::DataBuffer>& buffer);
-  void OnAudioConfigChanged(const media::PlatformAudioConfig& audio_config);
-  void OnVideoConfigChanged(const media::PlatformVideoConfig& video_config);
+                            const scoped_refptr<DataBuffer>& buffer);
+  void OnAudioConfigChanged(const PlatformAudioConfig& audio_config);
+  void OnVideoConfigChanged(const PlatformVideoConfig& video_config);
 
   void OnWillSeek();
   void OnSeek(base::TimeDelta time);
@@ -91,31 +97,33 @@ class IPCMediaPipeline : public IPC::Listener {
 
   void OnStop();
 
-  void OnReadDecodedData(media::PlatformMediaDataType type,
+  void OnReadDecodedData(PlatformMediaDataType type,
                          uint32_t client_texture_id);
 
-  void SendAudioData(media::MediaDataStatus status,
+  void SendAudioData(MediaDataStatus status,
                      base::TimeDelta timestamp,
                      base::TimeDelta duration);
 
-  bool has_media_type(media::PlatformMediaDataType type) const {
-    DCHECK_LT(type, media::PLATFORM_MEDIA_DATA_TYPE_COUNT);
+  bool has_media_type(PlatformMediaDataType type) const {
+    DCHECK_LT(type, PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT);
     return has_media_type_[type];
   }
 
+#if defined(PLATFORM_MEDIA_HWA)
   bool is_handling_accelerated_video_decode(
-      media::PlatformMediaDataType type) const {
-    return type == media::PLATFORM_MEDIA_VIDEO &&
+      PlatformMediaDataType type) const {
+    return type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO &&
            video_config_.decoding_mode ==
-               media::PlatformMediaDecodingMode::HARDWARE;
+               PlatformMediaDecodingMode::HARDWARE;
   }
 
   bool ClientToServiceTextureId(uint32_t client_texture_id,
                                 uint32_t* service_texture_id);
+#endif
 
   State state_;
 
-  bool has_media_type_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  bool has_media_type_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   IPC::Sender* const channel_;
   const int32_t routing_id_;
@@ -125,7 +133,7 @@ class IPCMediaPipeline : public IPC::Listener {
 
   base::ThreadChecker thread_checker_;
 
-  media::PlatformVideoConfig video_config_;
+  PlatformVideoConfig video_config_;
   gpu::GpuCommandBufferStub* command_buffer_;
   // Maps texture ID used in renderer process to one used in GPU process.
   std::map<uint32_t, uint32_t> known_picture_buffers_;
@@ -133,18 +141,18 @@ class IPCMediaPipeline : public IPC::Listener {
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.
   std::unique_ptr<base::SharedMemory>
-      shared_decoded_data_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+      shared_decoded_data_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   // Holding place for decoded media data when it didn't fit into shared buffer
   // or such buffer is not ready.
-  scoped_refptr<media::DataBuffer>
-      pending_output_buffers_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  scoped_refptr<DataBuffer>
+      pending_output_buffers_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   base::WeakPtrFactory<IPCMediaPipeline> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(IPCMediaPipeline);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_IPC_MEDIA_PIPELINE_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_IPC_MEDIA_PIPELINE_H_

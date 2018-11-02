@@ -27,7 +27,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/events/MediaElementEventQueue.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/InbandTextTrack.h"
 #include "core/html/track/LoadableTextTrack.h"
 #include "core/html/track/TextTrack.h"
@@ -36,7 +36,9 @@
 namespace blink {
 
 TextTrackList::TextTrackList(HTMLMediaElement* owner)
-    : owner_(owner), async_event_queue_(MediaElementEventQueue::Create(this)) {}
+    : owner_(owner),
+      async_event_queue_(
+          MediaElementEventQueue::Create(this, &owner_->GetDocument())) {}
 
 TextTrackList::~TextTrackList() {}
 
@@ -122,7 +124,7 @@ TextTrack* TextTrackList::AnonymousIndexedGetter(unsigned index) {
   if (index < inband_tracks_.size())
     return inband_tracks_[index];
 
-  return 0;
+  return nullptr;
 }
 
 TextTrack* TextTrackList::getTrackById(const AtomicString& id) {
@@ -137,7 +139,7 @@ TextTrack* TextTrackList::getTrackById(const AtomicString& id) {
   }
 
   // When no tracks match the given argument, the method must return null.
-  return 0;
+  return nullptr;
 }
 
 void TextTrackList::InvalidateTrackIndexesAfterTrack(TextTrack* track) {
@@ -208,16 +210,16 @@ void TextTrackList::Remove(TextTrack* track) {
   InvalidateTrackIndexesAfterTrack(track);
 
   DCHECK_EQ(track->TrackList(), this);
-  track->SetTrackList(0);
+  track->SetTrackList(nullptr);
 
-  tracks->erase(index);
+  tracks->EraseAt(index);
 
   ScheduleRemoveTrackEvent(track);
 }
 
 void TextTrackList::RemoveAllInbandTracks() {
   for (const auto& track : inband_tracks_) {
-    track->SetTrackList(0);
+    track->SetTrackList(nullptr);
   }
   inband_tracks_.clear();
 }
@@ -242,7 +244,7 @@ const AtomicString& TextTrackList::InterfaceName() const {
 }
 
 ExecutionContext* TextTrackList::GetExecutionContext() const {
-  return owner_ ? owner_->GetExecutionContext() : 0;
+  return owner_ ? owner_->GetExecutionContext() : nullptr;
 }
 
 void TextTrackList::ScheduleTrackEvent(const AtomicString& event_name,
@@ -299,7 +301,7 @@ HTMLMediaElement* TextTrackList::Owner() const {
   return owner_;
 }
 
-DEFINE_TRACE(TextTrackList) {
+void TextTrackList::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_);
   visitor->Trace(async_event_queue_);
   visitor->Trace(add_track_tracks_);
@@ -308,7 +310,7 @@ DEFINE_TRACE(TextTrackList) {
   EventTargetWithInlineData::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(TextTrackList) {
+void TextTrackList::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (auto track : add_track_tracks_)
     visitor->TraceWrappers(track);
   for (auto track : element_tracks_)

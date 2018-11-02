@@ -21,12 +21,9 @@
 namespace net {
 
 HttpServerPropertiesImpl::HttpServerPropertiesImpl(base::TickClock* clock)
-    : spdy_servers_map_(SpdyServersMap::NO_AUTO_EVICT),
-      alternative_service_map_(AlternativeServiceMap::NO_AUTO_EVICT),
-      broken_alternative_services_(this, clock ? clock : &default_clock_),
-      server_network_stats_map_(ServerNetworkStatsMap::NO_AUTO_EVICT),
-      quic_server_info_map_(QuicServerInfoMap::NO_AUTO_EVICT),
-      max_server_configs_stored_in_properties_(kMaxQuicServersToPersist) {
+    : broken_alternative_services_(this, clock ? clock : &default_clock_),
+      quic_server_info_map_(kDefaultMaxQuicServerEntries),
+      max_server_configs_stored_in_properties_(kDefaultMaxQuicServerEntries) {
   canonical_suffixes_.push_back(".ggpht.com");
   canonical_suffixes_.push_back(".c.youtube.com");
   canonical_suffixes_.push_back(".googlevideo.com");
@@ -88,9 +85,9 @@ void HttpServerPropertiesImpl::SetAlternativeServiceServers(
     url::SchemeHostPort canonical_server(kCanonicalScheme, canonical_suffix,
                                          kCanonicalPort);
     // If we already have a valid canonical server, we're done.
-    if (base::ContainsKey(canonical_host_to_origin_map_, canonical_server) &&
+    if (base::ContainsKey(canonical_alt_svc_map_, canonical_server) &&
         (alternative_service_map_.Peek(
-             canonical_host_to_origin_map_[canonical_server]) !=
+             canonical_alt_svc_map_[canonical_server]) !=
          alternative_service_map_.end())) {
       continue;
     }
@@ -102,7 +99,7 @@ void HttpServerPropertiesImpl::SetAlternativeServiceServers(
       if (base::EndsWith(it->first.host(), canonical_suffix,
                          base::CompareCase::INSENSITIVE_ASCII) &&
           it->first.scheme() == canonical_server.scheme()) {
-        canonical_host_to_origin_map_[canonical_server] = it->first;
+        canonical_alt_svc_map_[canonical_server] = it->first;
         break;
       }
     }
@@ -131,6 +128,8 @@ void HttpServerPropertiesImpl::SetServerNetworkStats(
 
 void HttpServerPropertiesImpl::SetQuicServerInfoMap(
     std::unique_ptr<QuicServerInfoMap> quic_server_info_map) {
+  DCHECK_EQ(quic_server_info_map->max_size(), quic_server_info_map_.max_size());
+
   // Add the entries from persisted data.
   quic_server_info_map_.Swap(*quic_server_info_map);
 
@@ -141,24 +140,19 @@ void HttpServerPropertiesImpl::SetQuicServerInfoMap(
       quic_server_info_map_.Put(it->first, it->second);
     }
   }
+
+  // Repopulate |canonical_server_info_map_| to stay in sync with
+  // |quic_server_info_map_|.
+  canonical_server_info_map_.clear();
+  for (QuicServerInfoMap::reverse_iterator it = quic_server_info_map_.rbegin();
+       it != quic_server_info_map_.rend(); ++it) {
+    UpdateCanonicalServerInfoMap(it->first);
+  }
 }
 
-void HttpServerPropertiesImpl::GetSpdyServerList(
-    std::vector<std::string>* spdy_servers,
-    size_t max_size) const {
+const SpdyServersMap& HttpServerPropertiesImpl::spdy_servers_map() const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(spdy_servers);
-
-  spdy_servers->clear();
-  size_t count = 0;
-  // Get the list of servers (scheme/host/port) that support SPDY.
-  for (SpdyServersMap::const_iterator it = spdy_servers_map_.begin();
-       it != spdy_servers_map_.end() && count < max_size; ++it) {
-    if (it->second) {
-      spdy_servers->push_back(it->first);
-      ++count;
-    }
-  }
+  return spdy_servers_map_;
 }
 
 void HttpServerPropertiesImpl::SetBrokenAndRecentlyBrokenAlternativeServices(
@@ -186,10 +180,11 @@ void HttpServerPropertiesImpl::Clear() {
   spdy_servers_map_.Clear();
   alternative_service_map_.Clear();
   broken_alternative_services_.Clear();
-  canonical_host_to_origin_map_.clear();
+  canonical_alt_svc_map_.clear();
   last_quic_address_ = IPAddress();
   server_network_stats_map_.Clear();
   quic_server_info_map_.Clear();
+  canonical_server_info_map_.clear();
 }
 
 bool HttpServerPropertiesImpl::SupportsRequestPriority(
@@ -322,8 +317,8 @@ HttpServerPropertiesImpl::GetAlternativeServiceInfos(
     return valid_alternative_service_infos;
   }
 
-  CanonicalHostMap::const_iterator canonical = GetCanonicalHost(origin);
-  if (canonical == canonical_host_to_origin_map_.end()) {
+  CanonicalAltSvcMap::const_iterator canonical = GetCanonicalAltSvcHost(origin);
+  if (canonical == canonical_alt_svc_map_.end()) {
     return AlternativeServiceInfoVector();
   }
   map_it = alternative_service_map_.Get(canonical->second);
@@ -383,7 +378,7 @@ bool HttpServerPropertiesImpl::SetQuicAlternativeService(
     const url::SchemeHostPort& origin,
     const AlternativeService& alternative_service,
     base::Time expiration,
-    const QuicVersionVector& advertised_versions) {
+    const QuicTransportVersionVector& advertised_versions) {
   DCHECK(alternative_service.protocol == kProtoQUIC);
 
   return SetAlternativeServices(
@@ -399,7 +394,7 @@ bool HttpServerPropertiesImpl::SetAlternativeServices(
   AlternativeServiceMap::iterator it = alternative_service_map_.Peek(origin);
 
   if (alternative_service_info_vector.empty()) {
-    RemoveCanonicalHost(origin);
+    RemoveAltSvcCanonicalHost(origin);
     if (it == alternative_service_map_.end())
       return false;
 
@@ -463,7 +458,7 @@ bool HttpServerPropertiesImpl::SetAlternativeServices(
     if (canonical_suffix != nullptr) {
       url::SchemeHostPort canonical_server(kCanonicalScheme, *canonical_suffix,
                                            origin.port());
-      canonical_host_to_origin_map_[canonical_server] = origin;
+      canonical_alt_svc_map_[canonical_server] = origin;
     }
   }
   return changed;
@@ -587,15 +582,46 @@ bool HttpServerPropertiesImpl::SetQuicServerInfo(
   bool changed =
       (it == quic_server_info_map_.end() || it->second != server_info);
   quic_server_info_map_.Put(server_id, server_info);
+  UpdateCanonicalServerInfoMap(server_id);
   return changed;
 }
 
 const std::string* HttpServerPropertiesImpl::GetQuicServerInfo(
     const QuicServerId& server_id) {
   QuicServerInfoMap::iterator it = quic_server_info_map_.Get(server_id);
-  if (it == quic_server_info_map_.end())
+  if (it != quic_server_info_map_.end()) {
+    // Since |canonical_server_info_map_| should always map to the most
+    // recent host, update it with the one that became MRU in
+    // |quic_server_info_map_|.
+    UpdateCanonicalServerInfoMap(server_id);
+    return &it->second;
+  }
+
+  // If the exact match for |server_id| wasn't found, check
+  // |canonical_server_info_map_| whether there is server info for a host with
+  // the same canonical host suffix.
+  CanonicalServerInfoMap::const_iterator canonical_itr =
+      GetCanonicalServerInfoHost(server_id);
+  if (canonical_itr == canonical_server_info_map_.end())
     return nullptr;
-  return &it->second;
+
+  // When search in |quic_server_info_map_|, do not change the MRU order.
+  it = quic_server_info_map_.Peek(canonical_itr->second);
+  if (it != quic_server_info_map_.end())
+    return &it->second;
+
+  return nullptr;
+}
+
+HttpServerPropertiesImpl::CanonicalServerInfoMap::const_iterator
+HttpServerPropertiesImpl::GetCanonicalServerInfoHost(
+    const QuicServerId& server) const {
+  const std::string* canonical_suffix = GetCanonicalSuffix(server.host());
+  if (canonical_suffix == nullptr)
+    return canonical_server_info_map_.end();
+
+  HostPortPair canonical_pair(*canonical_suffix, server.port());
+  return canonical_server_info_map_.find(canonical_pair);
 }
 
 const QuicServerInfoMap& HttpServerPropertiesImpl::quic_server_info_map()
@@ -610,19 +636,37 @@ size_t HttpServerPropertiesImpl::max_server_configs_stored_in_properties()
 
 void HttpServerPropertiesImpl::SetMaxServerConfigsStoredInProperties(
     size_t max_server_configs_stored_in_properties) {
+  // Do nothing if the new size is the same as the old one.
+  if (max_server_configs_stored_in_properties_ ==
+      max_server_configs_stored_in_properties)
+    return;
+
   max_server_configs_stored_in_properties_ =
       max_server_configs_stored_in_properties;
 
-  // MRUCache doesn't allow the size of the cache to be changed. Thus create a
-  // new map with the new size and add current elements and swap the new map.
+  // MRUCache doesn't allow the capacity of the cache to be changed. Thus create
+  // a new map with the new size and add current elements and swap the new map.
   quic_server_info_map_.ShrinkToSize(max_server_configs_stored_in_properties_);
   QuicServerInfoMap temp_map(max_server_configs_stored_in_properties_);
+  // Update the |canonical_server_info_map_| as well, so it stays in sync with
+  // |quic_server_info_map_|.
+  canonical_server_info_map_ = CanonicalServerInfoMap();
   for (QuicServerInfoMap::reverse_iterator it = quic_server_info_map_.rbegin();
        it != quic_server_info_map_.rend(); ++it) {
     temp_map.Put(it->first, it->second);
+    UpdateCanonicalServerInfoMap(it->first);
   }
 
   quic_server_info_map_.Swap(temp_map);
+}
+
+void HttpServerPropertiesImpl::UpdateCanonicalServerInfoMap(
+    const QuicServerId& server) {
+  const std::string* suffix = GetCanonicalSuffix(server.host());
+  if (suffix) {
+    HostPortPair canonical_pair(*suffix, server.port());
+    canonical_server_info_map_[canonical_pair] = server;
+  }
 }
 
 bool HttpServerPropertiesImpl::IsInitialized() const {
@@ -638,8 +682,8 @@ HttpServerPropertiesImpl::GetAlternateProtocolIterator(
   if (it != alternative_service_map_.end())
     return it;
 
-  CanonicalHostMap::const_iterator canonical = GetCanonicalHost(server);
-  if (canonical == canonical_host_to_origin_map_.end()) {
+  CanonicalAltSvcMap::const_iterator canonical = GetCanonicalAltSvcHost(server);
+  if (canonical == canonical_alt_svc_map_.end()) {
     return alternative_service_map_.end();
   }
 
@@ -660,33 +704,33 @@ HttpServerPropertiesImpl::GetAlternateProtocolIterator(
     }
   }
 
-  RemoveCanonicalHost(canonical_server);
+  RemoveAltSvcCanonicalHost(canonical_server);
   return alternative_service_map_.end();
 }
 
-HttpServerPropertiesImpl::CanonicalHostMap::const_iterator
-HttpServerPropertiesImpl::GetCanonicalHost(
+HttpServerPropertiesImpl::CanonicalAltSvcMap::const_iterator
+HttpServerPropertiesImpl::GetCanonicalAltSvcHost(
     const url::SchemeHostPort& server) const {
   const char* kCanonicalScheme = "https";
   if (server.scheme() != kCanonicalScheme)
-    return canonical_host_to_origin_map_.end();
+    return canonical_alt_svc_map_.end();
 
   const std::string* canonical_suffix = GetCanonicalSuffix(server.host());
   if (canonical_suffix == nullptr)
-    return canonical_host_to_origin_map_.end();
+    return canonical_alt_svc_map_.end();
 
   url::SchemeHostPort canonical_server(kCanonicalScheme, *canonical_suffix,
                                        server.port());
-  return canonical_host_to_origin_map_.find(canonical_server);
+  return canonical_alt_svc_map_.find(canonical_server);
 }
 
-void HttpServerPropertiesImpl::RemoveCanonicalHost(
+void HttpServerPropertiesImpl::RemoveAltSvcCanonicalHost(
     const url::SchemeHostPort& server) {
-  CanonicalHostMap::const_iterator canonical = GetCanonicalHost(server);
-  if (canonical == canonical_host_to_origin_map_.end())
+  CanonicalAltSvcMap::const_iterator canonical = GetCanonicalAltSvcHost(server);
+  if (canonical == canonical_alt_svc_map_.end())
     return;
 
-  canonical_host_to_origin_map_.erase(canonical->first);
+  canonical_alt_svc_map_.erase(canonical->first);
 }
 
 void HttpServerPropertiesImpl::OnExpireBrokenAlternativeService(
@@ -711,10 +755,10 @@ void HttpServerPropertiesImpl::OnExpireBrokenAlternativeService(
       ++it;
     }
     // If an origin has an empty list of alternative services, then remove it
-    // from both |canonical_host_to_origin_map_| and
+    // from both |canonical_alt_svc_map_| and
     // |alternative_service_map_|.
     if (map_it->second.empty()) {
-      RemoveCanonicalHost(map_it->first);
+      RemoveAltSvcCanonicalHost(map_it->first);
       map_it = alternative_service_map_.Erase(map_it);
       continue;
     }

@@ -488,7 +488,7 @@ void UserManagerProfileDialog::ShowReauthDialog(
   // This method should only be called if the user manager is already showing.
   if (!UserManager::IsShowing())
     return;
-  GURL url = signin::GetReauthURLWithEmail(
+  GURL url = signin::GetReauthURLWithEmailForDialog(
       signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER, reason, email);
   instance_->ShowDialog(browser_context, email, url);
 }
@@ -496,13 +496,16 @@ void UserManagerProfileDialog::ShowReauthDialog(
 // static
 void UserManagerProfileDialog::ShowSigninDialog(
     content::BrowserContext* browser_context,
-    const base::FilePath& profile_path) {
+    const base::FilePath& profile_path,
+    signin_metrics::Reason reason) {
   if (!UserManager::IsShowing())
     return;
+  DCHECK(reason ==
+             signin_metrics::Reason::REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT ||
+         reason == signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT);
   instance_->SetSigninProfilePath(profile_path);
-  GURL url = signin::GetPromoURL(
-      signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER,
-      signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, true, true);
+  GURL url = signin::GetPromoURLForDialog(
+      signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER, reason, true);
   instance_->ShowDialog(browser_context, std::string(), url);
 }
 

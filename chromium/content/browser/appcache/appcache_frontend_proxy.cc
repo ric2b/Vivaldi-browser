@@ -24,8 +24,8 @@ void AppCacheFrontendProxy::OnStatusChanged(const std::vector<int>& host_ids,
 
 void AppCacheFrontendProxy::OnEventRaised(const std::vector<int>& host_ids,
                                           AppCacheEventID event_id) {
-  DCHECK_NE(APPCACHE_PROGRESS_EVENT,
-      event_id);  // See OnProgressEventRaised.
+  DCHECK_NE(AppCacheEventID::APPCACHE_PROGRESS_EVENT,
+            event_id);  // See OnProgressEventRaised.
   sender_->Send(new AppCacheMsg_EventRaised(host_ids, event_id));
 }
 
@@ -51,6 +51,13 @@ void AppCacheFrontendProxy::OnLogMessage(int host_id,
 void AppCacheFrontendProxy::OnContentBlocked(int host_id,
                                              const GURL& manifest_url) {
   sender_->Send(new AppCacheMsg_ContentBlocked(host_id, manifest_url));
+}
+
+void AppCacheFrontendProxy::OnSetSubresourceFactory(
+    int host_id,
+    mojo::MessagePipeHandle loader_factory_pipe_handle) {
+  sender_->Send(new AppCacheMsg_SetSubresourceFactory(
+      host_id, loader_factory_pipe_handle));
 }
 
 }  // namespace content

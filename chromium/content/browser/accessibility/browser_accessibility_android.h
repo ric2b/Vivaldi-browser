@@ -77,6 +77,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   base::string16 GetText() const override;
   base::string16 GetHint() const;
 
+  std::string GetRoleString() const;
+
   base::string16 GetRoleDescription() const;
 
   int GetItemIndex() const;
@@ -153,8 +155,6 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsIframe() const;
   bool ShouldExposeValueAsName() const;
 
-  void NotifyLiveRegionUpdate(base::string16& aria_live);
-
   int CountChildrenWithRole(ui::AXRole role) const;
 
   static size_t CommonPrefixLength(const base::string16 a,
@@ -165,7 +165,6 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
                                  const base::string16 b);
 
   base::string16 cached_text_;
-  bool first_time_;
   base::string16 old_value_;
   base::string16 new_value_;
   int32_t unique_id_;

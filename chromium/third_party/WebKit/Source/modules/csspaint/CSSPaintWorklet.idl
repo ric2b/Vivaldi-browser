@@ -5,7 +5,10 @@
 // https://drafts.css-houdini.org/css-paint-api/#dom-css-paintworklet
 
 [
-    RuntimeEnabled=CSSPaintAPI
+    ImplementedAs=CSSPaintWorklet,
+    RuntimeEnabled=CSSPaintAPI,
+    MeasureAs=PaintWorklet,
+    SecureContext
 ] partial interface CSS {
     [CallWith=ScriptState] static readonly attribute Worklet paintWorklet;
 };

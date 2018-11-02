@@ -5,15 +5,14 @@
 #include "chrome/browser/ui/cocoa/tab_dialogs_cocoa.h"
 
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/content_settings/collected_cookies_mac.h"
 #import "chrome/browser/ui/cocoa/hung_renderer_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_signin_confirmation_dialog_cocoa.h"
 #include "chrome/browser/ui/cocoa/tab_dialogs_views_mac.h"
-#import "chrome/browser/ui/cocoa/validation_message_bubble_cocoa.h"
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/base/material_design/material_design_controller.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -23,7 +22,7 @@ void TabDialogs::CreateForWebContents(content::WebContents* contents) {
 
   if (!FromWebContents(contents)) {
     std::unique_ptr<TabDialogs> tab_dialogs =
-        ui::MaterialDesignController::IsSecondaryUiMaterial()
+        chrome::ShowAllDialogsWithViewsToolkit()
             ? base::MakeUnique<TabDialogsViewsMac>(contents)
             : base::MakeUnique<TabDialogsCocoa>(contents);
     contents->SetUserData(UserDataKey(), std::move(tab_dialogs));
@@ -63,6 +62,10 @@ void TabDialogsCocoa::HideHungRendererDialog() {
   [HungRendererController endForWebContents:web_contents_];
 }
 
+bool TabDialogsCocoa::IsShowingHungRendererDialog() {
+  return [HungRendererController isShowing];
+}
+
 void TabDialogsCocoa::ShowProfileSigninConfirmation(
     Browser* browser,
     Profile* profile,
@@ -86,12 +89,4 @@ void TabDialogsCocoa::HideManagePasswordsBubble() {
       instance->Close();
     }
   }
-}
-
-base::WeakPtr<ValidationMessageBubble> TabDialogsCocoa::ShowValidationMessage(
-    const gfx::Rect& anchor_in_root_view,
-    const base::string16& main_text,
-    const base::string16& sub_text) {
-  return (new ValidationMessageBubbleCocoa(
-      web_contents_, anchor_in_root_view, main_text, sub_text))->AsWeakPtr();
 }

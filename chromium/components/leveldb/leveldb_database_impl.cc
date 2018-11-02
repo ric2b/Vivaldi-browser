@@ -5,6 +5,7 @@
 #include "components/leveldb/leveldb_database_impl.h"
 
 #include <inttypes.h>
+#include <algorithm>
 #include <map>
 #include <string>
 #include <utility>
@@ -27,8 +28,12 @@ template <typename FunctionType>
 leveldb::Status ForEachWithPrefix(leveldb::DB* db,
                                   const leveldb::Slice& key_prefix,
                                   FunctionType function) {
-  std::unique_ptr<leveldb::Iterator> it(
-      db->NewIterator(leveldb::ReadOptions()));
+  leveldb::ReadOptions read_options;
+  // Disable filling the cache for bulk scans. Either this is for deletion
+  // (where caching those blocks doesn't make sense) or a mass-read, which the
+  // user "should" be caching / only needing once.
+  read_options.fill_cache = false;
+  std::unique_ptr<leveldb::Iterator> it(db->NewIterator(read_options));
   it->Seek(key_prefix);
   for (; it->Valid(); it->Next()) {
     if (!it->key().starts_with(key_prefix))
@@ -41,9 +46,9 @@ leveldb::Status ForEachWithPrefix(leveldb::DB* db,
 }  // namespace
 
 LevelDBDatabaseImpl::LevelDBDatabaseImpl(
-    std::unique_ptr<leveldb::Env> environment,
-    std::unique_ptr<leveldb::DB> db,
-    std::unique_ptr<leveldb::Cache> cache,
+    std::unique_ptr<Env> environment,
+    std::unique_ptr<DB> db,
+    std::unique_ptr<Cache> cache,
     base::Optional<base::trace_event::MemoryAllocatorDumpGuid> memory_dump_id)
     : environment_(std::move(environment)),
       cache_(std::move(cache)),
@@ -67,23 +72,21 @@ LevelDBDatabaseImpl::~LevelDBDatabaseImpl() {
 void LevelDBDatabaseImpl::Put(const std::vector<uint8_t>& key,
                               const std::vector<uint8_t>& value,
                               PutCallback callback) {
-  leveldb::Status status =
+  Status status =
       db_->Put(leveldb::WriteOptions(), GetSliceFor(key), GetSliceFor(value));
   std::move(callback).Run(LeveldbStatusToError(status));
 }
 
 void LevelDBDatabaseImpl::Delete(const std::vector<uint8_t>& key,
                                  DeleteCallback callback) {
-  leveldb::Status status =
-      db_->Delete(leveldb::WriteOptions(), GetSliceFor(key));
+  Status status = db_->Delete(leveldb::WriteOptions(), GetSliceFor(key));
   std::move(callback).Run(LeveldbStatusToError(status));
 }
 
 void LevelDBDatabaseImpl::DeletePrefixed(const std::vector<uint8_t>& key_prefix,
                                          DeletePrefixedCallback callback) {
-  leveldb::WriteBatch batch;
-  leveldb::Status status = DeletePrefixedHelper(
-      GetSliceFor(key_prefix), &batch);
+  WriteBatch batch;
+  Status status = DeletePrefixedHelper(GetSliceFor(key_prefix), &batch);
   if (status.ok())
     status = db_->Write(leveldb::WriteOptions(), &batch);
   std::move(callback).Run(LeveldbStatusToError(status));
@@ -92,7 +95,7 @@ void LevelDBDatabaseImpl::DeletePrefixed(const std::vector<uint8_t>& key_prefix,
 void LevelDBDatabaseImpl::Write(
     std::vector<mojom::BatchedOperationPtr> operations,
     WriteCallback callback) {
-  leveldb::WriteBatch batch;
+  WriteBatch batch;
 
   for (size_t i = 0; i < operations.size(); ++i) {
     switch (operations[i]->type) {
@@ -101,7 +104,7 @@ void LevelDBDatabaseImpl::Write(
           batch.Put(GetSliceFor(operations[i]->key),
                     GetSliceFor(*(operations[i]->value)));
         } else {
-          batch.Put(GetSliceFor(operations[i]->key), leveldb::Slice());
+          batch.Put(GetSliceFor(operations[i]->key), Slice());
         }
         break;
       }
@@ -113,18 +116,27 @@ void LevelDBDatabaseImpl::Write(
         DeletePrefixedHelper(GetSliceFor(operations[i]->key), &batch);
         break;
       }
+      case mojom::BatchOperationType::COPY_PREFIXED_KEY: {
+        if (!operations[i]->value) {
+          mojo::ReportBadMessage(
+              "COPY_PREFIXED_KEY operation must provide a value.");
+          std::move(callback).Run(mojom::DatabaseError::INVALID_ARGUMENT);
+          return;
+        }
+        CopyPrefixedHelper(operations[i]->key, *(operations[i]->value), &batch);
+        break;
+      }
     }
   }
 
-  leveldb::Status status = db_->Write(leveldb::WriteOptions(), &batch);
+  Status status = db_->Write(leveldb::WriteOptions(), &batch);
   std::move(callback).Run(LeveldbStatusToError(status));
 }
 
 void LevelDBDatabaseImpl::Get(const std::vector<uint8_t>& key,
                               GetCallback callback) {
   std::string value;
-  leveldb::Status status =
-      db_->Get(leveldb::ReadOptions(), GetSliceFor(key), &value);
+  Status status = db_->Get(leveldb::ReadOptions(), GetSliceFor(key), &value);
   std::move(callback).Run(LeveldbStatusToError(status),
                           StdStringToUint8Vector(value));
 }
@@ -132,15 +144,27 @@ void LevelDBDatabaseImpl::Get(const std::vector<uint8_t>& key,
 void LevelDBDatabaseImpl::GetPrefixed(const std::vector<uint8_t>& key_prefix,
                                       GetPrefixedCallback callback) {
   std::vector<mojom::KeyValuePtr> data;
-  leveldb::Status status = ForEachWithPrefix(
-      db_.get(), GetSliceFor(key_prefix),
-      [&data](const leveldb::Slice& key, const leveldb::Slice& value) {
-        mojom::KeyValuePtr kv = mojom::KeyValue::New();
-        kv->key = GetVectorFor(key);
-        kv->value = GetVectorFor(value);
-        data.push_back(std::move(kv));
-      });
+  Status status =
+      ForEachWithPrefix(db_.get(), GetSliceFor(key_prefix),
+                        [&data](const Slice& key, const Slice& value) {
+                          mojom::KeyValuePtr kv = mojom::KeyValue::New();
+                          kv->key = GetVectorFor(key);
+                          kv->value = GetVectorFor(value);
+                          data.push_back(std::move(kv));
+                        });
   std::move(callback).Run(LeveldbStatusToError(status), std::move(data));
+}
+
+void LevelDBDatabaseImpl::CopyPrefixed(
+    const std::vector<uint8_t>& source_key_prefix,
+    const std::vector<uint8_t>& destination_key_prefix,
+    CopyPrefixedCallback callback) {
+  WriteBatch batch;
+  Status status =
+      CopyPrefixedHelper(source_key_prefix, destination_key_prefix, &batch);
+  if (status.ok())
+    status = db_->Write(leveldb::WriteOptions(), &batch);
+  std::move(callback).Run(LeveldbStatusToError(status));
 }
 
 void LevelDBDatabaseImpl::GetSnapshot(GetSnapshotCallback callback) {
@@ -174,7 +198,7 @@ void LevelDBDatabaseImpl::GetFromSnapshot(
   std::string value;
   leveldb::ReadOptions options;
   options.snapshot = it->second;
-  leveldb::Status status = db_->Get(options, GetSliceFor(key), &value);
+  Status status = db_->Get(options, GetSliceFor(key), &value);
   std::move(callback).Run(LeveldbStatusToError(status),
                           StdStringToUint8Vector(value));
 }
@@ -290,42 +314,16 @@ void LevelDBDatabaseImpl::IteratorPrev(const base::UnguessableToken& iterator,
 bool LevelDBDatabaseImpl::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  std::string name = base::StringPrintf("leveldb/mojo/0x%" PRIXPTR,
-                                        reinterpret_cast<uintptr_t>(db_.get()));
-  auto* mad = pmd->CreateAllocatorDump(name);
-
-  uint64_t memory_usage = 0;
-  std::string memory_usage_string;
-  bool got_memory_usage =
-      db_->GetProperty("leveldb.approximate-memory-usage",
-                       &memory_usage_string) &&
-      base::StringToUint64(memory_usage_string, &memory_usage);
-  DCHECK(got_memory_usage);
-  mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                 base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                 memory_usage);
-  if (cache_) {
-    auto* cache_mad = pmd->CreateAllocatorDump(name + "/block_cache");
-    cache_mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+  auto* dump = leveldb_env::DBTracker::GetOrCreateAllocatorDump(pmd, db_.get());
+  if (!dump)
+    return true;
+  auto* global_dump = pmd->CreateSharedGlobalAllocatorDump(*memory_dump_id_);
+  pmd->AddOwnershipEdge(global_dump->guid(), dump->guid());
+  // Add size to global dump to propagate the size of the database to the
+  // client's dump.
+  global_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                          base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                         cache_->TotalCharge());
-  }
-
-  // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
-  // an edge to avoid double counting.
-  pmd->AddSuballocation(mad->guid(),
-                        leveldb_env::DBTracker::GetMemoryDumpName(db_.get()));
-
-  if (memory_dump_id_) {
-    auto* global_dump = pmd->CreateSharedGlobalAllocatorDump(*memory_dump_id_);
-    pmd->AddOwnershipEdge(global_dump->guid(), mad->guid());
-    // Add size to global dump to propagate the size of the database to the
-    // client's dump.
-    global_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                           base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                           memory_usage);
-  }
-
+                         dump->GetSizeInternal());
   return true;
 }
 
@@ -342,12 +340,30 @@ void LevelDBDatabaseImpl::ReplyToIteratorMessage(
                           GetVectorFor(it->key()), GetVectorFor(it->value()));
 }
 
-leveldb::Status LevelDBDatabaseImpl::DeletePrefixedHelper(
-    const leveldb::Slice& key_prefix,
+Status LevelDBDatabaseImpl::DeletePrefixedHelper(const Slice& key_prefix,
+                                                 WriteBatch* batch) {
+  Status status = ForEachWithPrefix(
+      db_.get(), key_prefix,
+      [batch](const Slice& key, const Slice& value) { batch->Delete(key); });
+  return status;
+}
+
+Status LevelDBDatabaseImpl::CopyPrefixedHelper(
+    const std::vector<uint8_t>& source_key_prefix,
+    const std::vector<uint8_t>& destination_key_prefix,
     leveldb::WriteBatch* batch) {
-  leveldb::Status status = ForEachWithPrefix(db_.get(), key_prefix,
-      [batch](const leveldb::Slice& key, const leveldb::Slice& value) {
-        batch->Delete(key);
+  std::vector<uint8_t> new_prefix = destination_key_prefix;
+  size_t source_key_prefix_size = source_key_prefix.size();
+  size_t destination_key_prefix_size = destination_key_prefix.size();
+  Status status = ForEachWithPrefix(
+      db_.get(), GetSliceFor(source_key_prefix),
+      [&batch, &new_prefix, source_key_prefix_size,
+       destination_key_prefix_size](const Slice& key, const Slice& value) {
+        size_t excess_key = key.size() - source_key_prefix_size;
+        new_prefix.resize(destination_key_prefix_size + excess_key);
+        std::copy(key.data() + source_key_prefix_size, key.data() + key.size(),
+                  new_prefix.begin() + destination_key_prefix_size);
+        batch->Put(GetSliceFor(new_prefix), value);
       });
   return status;
 }

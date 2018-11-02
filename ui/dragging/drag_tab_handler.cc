@@ -90,7 +90,7 @@ void DragTabHandler::SetDragData(const content::DropData* drop_data) {
   // We only need custom_data atm.
   if (!drop_data->custom_data.empty()) {
     tab_drag_data_.clear();
-    for (std::map<base::string16, base::string16>::const_iterator it =
+    for (std::unordered_map<base::string16, base::string16>::const_iterator it =
              drop_data->custom_data.begin();
          it != drop_data->custom_data.end(); ++it) {
       tab_drag_data_.insert(std::make_pair(it->first, it->second));

@@ -25,7 +25,7 @@
 
 #include "platform/text/TextRun.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/text/Character.h"
 
 namespace blink {
@@ -47,7 +47,7 @@ static_assert(sizeof(TextRun) == sizeof(ExpectedTextRunSize),
 void TextRun::SetText(const String& string) {
   len_ = string.length();
   if (!len_) {
-    data_.characters8 = 0;
+    data_.characters8 = nullptr;
     is8_bit_ = true;
     return;
   }
@@ -100,6 +100,16 @@ std::unique_ptr<UChar[]> TextRun::NormalizedUTF16(
 
   DCHECK(*result_length <= len_);
   return WrapArrayUnique(buffer);
+}
+
+unsigned TextRun::IndexOfSubRun(const TextRun& sub_run) const {
+  if (Is8Bit() == sub_run.Is8Bit() && sub_run.Bytes() >= Bytes()) {
+    size_t start_index = Is8Bit() ? sub_run.Characters8() - Characters8()
+                                  : sub_run.Characters16() - Characters16();
+    if (start_index + sub_run.length() <= length())
+      return start_index;
+  }
+  return std::numeric_limits<unsigned>::max();
 }
 
 }  // namespace blink

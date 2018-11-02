@@ -7,23 +7,21 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/auth/arc_background_auth_code_fetcher.h"
-#include "chrome/browser/chromeos/arc/auth/arc_manual_auth_code_fetcher.h"
 #include "chrome/browser/chromeos/arc/auth/arc_robot_auth_code_fetcher.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_features.h"
+#include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
@@ -54,13 +52,13 @@ class ArcAuthServiceFactory
   ~ArcAuthServiceFactory() override = default;
 };
 
-// Convers mojom::ArcSignInFailureReason into ProvisiningResult.
-ProvisioningResult ConvertArcSignInFailureReasonToProvisioningResult(
-    mojom::ArcSignInFailureReason reason) {
-  using ArcSignInFailureReason = mojom::ArcSignInFailureReason;
+// Convers mojom::ArcSignInStatus into ProvisiningResult.
+ProvisioningResult ConvertArcSignInStatusToProvisioningResult(
+    mojom::ArcSignInStatus reason) {
+  using ArcSignInStatus = mojom::ArcSignInStatus;
 
 #define MAP_PROVISIONING_RESULT(name) \
-  case ArcSignInFailureReason::name:  \
+  case ArcSignInStatus::name:         \
     return ProvisioningResult::name
 
   switch (reason) {
@@ -80,6 +78,10 @@ ProvisioningResult ConvertArcSignInFailureReasonToProvisioningResult(
     MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_TIMEOUT);
     MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_INTERNAL_ERROR);
     MAP_PROVISIONING_RESULT(NO_NETWORK_CONNECTION);
+    MAP_PROVISIONING_RESULT(CHROME_SERVER_COMMUNICATION_ERROR);
+    MAP_PROVISIONING_RESULT(ARC_DISABLED);
+    MAP_PROVISIONING_RESULT(SUCCESS);
+    MAP_PROVISIONING_RESULT(SUCCESS_ALREADY_PROVISIONED);
   }
 #undef MAP_PROVISIONING_RESULT
 
@@ -90,6 +92,26 @@ ProvisioningResult ConvertArcSignInFailureReasonToProvisioningResult(
 mojom::ChromeAccountType GetAccountType() {
   return IsArcKioskMode() ? mojom::ChromeAccountType::ROBOT_ACCOUNT
                           : mojom::ChromeAccountType::USER_ACCOUNT;
+}
+
+mojom::AccountInfoPtr CreateAccountInfo(bool is_enforced,
+                                        const std::string& auth_info,
+                                        const std::string& account_name,
+                                        mojom::ChromeAccountType account_type,
+                                        bool is_managed) {
+  mojom::AccountInfoPtr account_info = mojom::AccountInfo::New();
+  account_info->account_name = account_name;
+  if (account_type == mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT) {
+    account_info->enrollment_token = auth_info;
+  } else {
+    if (!is_enforced)
+      account_info->auth_code = base::nullopt;
+    else
+      account_info->auth_code = auth_info;
+  }
+  account_info->account_type = account_type;
+  account_info->is_managed = is_managed;
+  return account_info;
 }
 
 }  // namespace
@@ -103,108 +125,47 @@ ArcAuthService* ArcAuthService::GetForBrowserContext(
   return ArcAuthServiceFactory::GetForBrowserContext(context);
 }
 
-// TODO(lhchavez): Get rid of this class once we can safely remove all the
-// deprecated interfaces and only need to care about one type of callback.
-class ArcAuthService::AccountInfoNotifier {
- public:
-  explicit AccountInfoNotifier(
-      const GetAuthCodeDeprecatedCallback& auth_callback)
-      : callback_type_(CallbackType::AUTH_CODE),
-        auth_callback_(auth_callback) {}
-
-  explicit AccountInfoNotifier(
-      const GetAuthCodeAndAccountTypeDeprecatedCallback& auth_account_callback)
-      : callback_type_(CallbackType::AUTH_CODE_AND_ACCOUNT),
-        auth_account_callback_(auth_account_callback) {}
-
-  explicit AccountInfoNotifier(const AccountInfoCallback& account_info_callback)
-      : callback_type_(CallbackType::ACCOUNT_INFO),
-        account_info_callback_(account_info_callback) {}
-
-  void Notify(bool is_enforced,
-              const std::string& auth_info,
-              const std::string& account_name,
-              mojom::ChromeAccountType account_type,
-              bool is_managed) {
-    switch (callback_type_) {
-      case CallbackType::AUTH_CODE:
-        DCHECK(!auth_callback_.is_null());
-        auth_callback_.Run(auth_info, is_enforced);
-        break;
-      case CallbackType::AUTH_CODE_AND_ACCOUNT:
-        DCHECK(!auth_account_callback_.is_null());
-        auth_account_callback_.Run(auth_info, is_enforced, account_type);
-        break;
-      case CallbackType::ACCOUNT_INFO:
-        DCHECK(!account_info_callback_.is_null());
-        mojom::AccountInfoPtr account_info = mojom::AccountInfo::New();
-        account_info->account_name = account_name;
-        if (account_type ==
-            mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT) {
-          account_info->enrollment_token = auth_info;
-        } else {
-          if (!is_enforced)
-            account_info->auth_code = base::nullopt;
-          else
-            account_info->auth_code = auth_info;
-        }
-        account_info->account_type = account_type;
-        account_info->is_managed = is_managed;
-        account_info_callback_.Run(std::move(account_info));
-        break;
-    }
-  }
-
- private:
-  enum class CallbackType { AUTH_CODE, AUTH_CODE_AND_ACCOUNT, ACCOUNT_INFO };
-
-  const CallbackType callback_type_;
-  const GetAuthCodeDeprecatedCallback auth_callback_;
-  const GetAuthCodeAndAccountTypeDeprecatedCallback auth_account_callback_;
-  const AccountInfoCallback account_info_callback_;
-};
-
 ArcAuthService::ArcAuthService(content::BrowserContext* browser_context,
                                ArcBridgeService* arc_bridge_service)
     : profile_(Profile::FromBrowserContext(browser_context)),
       arc_bridge_service_(arc_bridge_service),
-      binding_(this),
       weak_ptr_factory_(this) {
+  arc_bridge_service_->auth()->SetHost(this);
   arc_bridge_service_->auth()->AddObserver(this);
 }
 
 ArcAuthService::~ArcAuthService() {
   arc_bridge_service_->auth()->RemoveObserver(this);
+  arc_bridge_service_->auth()->SetHost(nullptr);
 }
 
-void ArcAuthService::OnInstanceReady() {
-  auto* instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->auth(), Init);
-  DCHECK(instance);
-  mojom::AuthHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  instance->Init(std::move(host_proxy));
-}
-
-void ArcAuthService::OnInstanceClosed() {
+void ArcAuthService::OnConnectionClosed() {
   fetcher_.reset();
-  notifier_.reset();
 }
 
-void ArcAuthService::OnSignInComplete() {
-  ArcSessionManager::Get()->OnProvisioningFinished(ProvisioningResult::SUCCESS);
-}
+void ArcAuthService::OnAuthorizationComplete(mojom::ArcSignInStatus status,
+                                             bool initial_signin) {
+  if (!initial_signin) {
+    // Note, UMA for initial signin is updated from ArcSessionManager.
+    DCHECK_NE(mojom::ArcSignInStatus::SUCCESS_ALREADY_PROVISIONED, status);
+    UpdateReauthorizationResultUMA(
+        ConvertArcSignInStatusToProvisioningResult(status),
+        policy_util::IsAccountManaged(profile_));
+    return;
+  }
 
-void ArcAuthService::OnSignInFailed(mojom::ArcSignInFailureReason reason) {
   ArcSessionManager::Get()->OnProvisioningFinished(
-      ConvertArcSignInFailureReasonToProvisioningResult(reason));
+      ConvertArcSignInStatusToProvisioningResult(status));
 }
 
-void ArcAuthService::RequestAccountInfo() {
-  RequestAccountInfoInternal(
-      base::MakeUnique<ArcAuthService::AccountInfoNotifier>(
-          base::Bind(&ArcAuthService::OnAccountInfoReady,
-                     weak_ptr_factory_.GetWeakPtr())));
+void ArcAuthService::OnSignInCompleteDeprecated() {
+  OnAuthorizationComplete(mojom::ArcSignInStatus::SUCCESS,
+                          true /* initial_signin */);
+}
+
+void ArcAuthService::OnSignInFailedDeprecated(mojom::ArcSignInStatus reason) {
+  DCHECK_NE(mojom::ArcSignInStatus::SUCCESS, reason);
+  OnAuthorizationComplete(reason, true /* initial_signin */);
 }
 
 void ArcAuthService::ReportMetrics(mojom::MetricsType metrics_type,
@@ -237,63 +198,35 @@ void ArcAuthService::ReportAccountCheckStatus(
   UpdateAuthAccountCheckStatus(status);
 }
 
-void ArcAuthService::OnAccountInfoReady(mojom::AccountInfoPtr account_info) {
+void ArcAuthService::OnAccountInfoReady(mojom::AccountInfoPtr account_info,
+                                        mojom::ArcSignInStatus status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->auth(),
                                                OnAccountInfoReady);
   DCHECK(instance);
-  instance->OnAccountInfoReady(std::move(account_info));
+  instance->OnAccountInfoReady(std::move(account_info), status);
 }
 
-void ArcAuthService::GetAuthCodeDeprecated0(
-    const GetAuthCodeDeprecated0Callback& callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  NOTREACHED() << "GetAuthCodeDeprecated0() should no longer be callable";
-}
-
-void ArcAuthService::GetAuthCodeDeprecated(
-    const GetAuthCodeDeprecatedCallback& callback) {
-  // For robot account we must use RequestAccountInfo because it allows
-  // to specify account type.
-  DCHECK(!IsArcKioskMode());
-  RequestAccountInfoInternal(
-      base::MakeUnique<ArcAuthService::AccountInfoNotifier>(callback));
-}
-
-void ArcAuthService::GetAuthCodeAndAccountTypeDeprecated(
-    const GetAuthCodeAndAccountTypeDeprecatedCallback& callback) {
-  RequestAccountInfoInternal(
-      base::MakeUnique<ArcAuthService::AccountInfoNotifier>(callback));
-}
-
-void ArcAuthService::GetIsAccountManagedDeprecated(
-    const GetIsAccountManagedDeprecatedCallback& callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  callback.Run(policy_util::IsAccountManaged(profile_));
-}
-
-void ArcAuthService::RequestAccountInfoInternal(
-    std::unique_ptr<AccountInfoNotifier> notifier) {
+void ArcAuthService::RequestAccountInfo(bool initial_signin) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // No other auth code-related operation may be in progress.
-  DCHECK(!notifier_);
   DCHECK(!fetcher_);
 
   if (IsArcOptInVerificationDisabled()) {
-    notifier->Notify(false /* = is_enforced */, std::string() /* auth_info */,
-                     std::string() /* auth_name */, GetAccountType(),
-                     policy_util::IsAccountManaged(profile_));
+    OnAccountInfoReady(
+        CreateAccountInfo(false /* is_enforced */,
+                          std::string() /* auth_info */,
+                          std::string() /* auth_name */, GetAccountType(),
+                          policy_util::IsAccountManaged(profile_)),
+        mojom::ArcSignInStatus::SUCCESS);
     return;
   }
-
-  // Hereafter asynchronous operation. Remember the notifier.
-  notifier_ = std::move(notifier);
 
   if (IsActiveDirectoryUserForProfile(profile_)) {
     // For Active Directory enrolled devices, we get an enrollment token for a
     // managed Google Play account from DMServer.
     auto enrollment_token_fetcher =
-        base::MakeUnique<ArcActiveDirectoryEnrollmentTokenFetcher>(
+        std::make_unique<ArcActiveDirectoryEnrollmentTokenFetcher>(
             ArcSessionManager::Get()->support_host());
     enrollment_token_fetcher->Fetch(
         base::Bind(&ArcAuthService::OnEnrollmentTokenFetched,
@@ -305,11 +238,11 @@ void ArcAuthService::RequestAccountInfoInternal(
   std::unique_ptr<ArcAuthCodeFetcher> auth_code_fetcher;
   if (IsArcKioskMode()) {
     // In Kiosk mode, use Robot auth code fetching.
-    auth_code_fetcher = base::MakeUnique<ArcRobotAuthCodeFetcher>();
+    auth_code_fetcher = std::make_unique<ArcRobotAuthCodeFetcher>();
   } else {
     // Optionally retrieve auth code in silent mode.
-    auth_code_fetcher = base::MakeUnique<ArcBackgroundAuthCodeFetcher>(
-        profile_, ArcSessionManager::Get()->auth_context());
+    auth_code_fetcher = std::make_unique<ArcBackgroundAuthCodeFetcher>(
+        profile_, ArcSessionManager::Get()->auth_context(), initial_signin);
   }
   auth_code_fetcher->Fetch(base::Bind(&ArcAuthService::OnAuthCodeFetched,
                                       weak_ptr_factory_.GetWeakPtr()));
@@ -329,23 +262,25 @@ void ArcAuthService::OnEnrollmentTokenFetched(
       profile_->GetPrefs()->SetString(prefs::kArcActiveDirectoryPlayUserId,
                                       user_id);
 
-      // Send enrollment token to arc.
-      notifier_->Notify(true /*is_enforced*/, enrollment_token,
-                        std::string() /* account_name */,
-                        mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT,
-                        true);
-      notifier_.reset();
-      return;
+      // Send enrollment token to ARC.
+      OnAccountInfoReady(
+          CreateAccountInfo(true /* is_enforced */, enrollment_token,
+                            std::string() /* account_name */,
+                            mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT,
+                            true),
+          mojom::ArcSignInStatus::SUCCESS);
+      break;
     }
     case ArcActiveDirectoryEnrollmentTokenFetcher::Status::FAILURE: {
-      ArcSessionManager::Get()->OnProvisioningFinished(
-          ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR);
-      return;
+      // Send error to ARC.
+      OnAccountInfoReady(
+          nullptr, mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR);
+      break;
     }
     case ArcActiveDirectoryEnrollmentTokenFetcher::Status::ARC_DISABLED: {
-      ArcSessionManager::Get()->OnProvisioningFinished(
-          ProvisioningResult::ARC_DISABLED);
-      return;
+      // Send error to ARC.
+      OnAccountInfoReady(nullptr, mojom::ArcSignInStatus::ARC_DISABLED);
+      break;
     }
   }
 }
@@ -355,16 +290,18 @@ void ArcAuthService::OnAuthCodeFetched(bool success,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   fetcher_.reset();
 
-  if (!success) {
-    ArcSessionManager::Get()->OnProvisioningFinished(
-        ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR);
-    return;
+  if (success) {
+    OnAccountInfoReady(
+        CreateAccountInfo(
+            !IsArcOptInVerificationDisabled(), auth_code,
+            ArcSessionManager::Get()->auth_context()->full_account_id(),
+            GetAccountType(), policy_util::IsAccountManaged(profile_)),
+        mojom::ArcSignInStatus::SUCCESS);
+  } else {
+    // Send error to ARC.
+    OnAccountInfoReady(
+        nullptr, mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR);
   }
-
-  notifier_->Notify(!IsArcOptInVerificationDisabled(), auth_code,
-                    ArcSessionManager::Get()->auth_context()->full_account_id(),
-                    GetAccountType(), policy_util::IsAccountManaged(profile_));
-  notifier_.reset();
 }
 
 }  // namespace arc

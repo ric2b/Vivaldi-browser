@@ -45,9 +45,11 @@ void ElementIntersectionObserverData::RemoveObservation(
 void ElementIntersectionObserverData::ActivateValidIntersectionObservers(
     Node& node) {
   for (auto& observer : intersection_observers_) {
-    observer->TrackingDocument()
-        .EnsureIntersectionObserverController()
-        .AddTrackedObserver(*observer);
+    Document* document = observer->TrackingDocument();
+    if (!document)
+      continue;
+    document->EnsureIntersectionObserverController().AddTrackedObserver(
+        *observer);
   }
   for (auto& observation : intersection_observations_)
     observation.value->UpdateShouldReportRootBoundsAfterDomChange();
@@ -60,12 +62,13 @@ void ElementIntersectionObserverData::DeactivateAllIntersectionObservers(
       .RemoveTrackedObserversForRoot(node);
 }
 
-DEFINE_TRACE(ElementIntersectionObserverData) {
+void ElementIntersectionObserverData::Trace(blink::Visitor* visitor) {
   visitor->Trace(intersection_observers_);
   visitor->Trace(intersection_observations_);
 }
 
-DEFINE_TRACE_WRAPPERS(ElementIntersectionObserverData) {
+void ElementIntersectionObserverData::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (auto& entry : intersection_observations_) {
     visitor->TraceWrappers(entry.key);
   }

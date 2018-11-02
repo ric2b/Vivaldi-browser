@@ -35,6 +35,7 @@ class GpuDataManager {
   virtual bool IsFeatureBlacklisted(int feature) const = 0;
   virtual bool IsFeatureEnabled(int feature) const = 0;
   virtual bool IsWebGLEnabled() const = 0;
+  virtual bool IsWebGL2Enabled() const = 0;
 
   virtual gpu::GPUInfo GetGPUInfo() const = 0;
 
@@ -91,9 +92,6 @@ class GpuDataManager {
 
   // Whether a GPU is in use (as opposed to a software renderer).
   virtual bool HardwareAccelerationEnabled() const = 0;
-
-  // Whether the browser compositor can be used.
-  virtual bool CanUseGpuBrowserCompositor() const = 0;
 
   // Extensions that are currently disabled.
   virtual void GetDisabledExtensions(

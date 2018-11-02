@@ -27,6 +27,7 @@
 #ifndef SQLiteDatabase_h
 #define SQLiteDatabase_h
 
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Threading.h"
@@ -54,7 +55,6 @@ extern const int kSQLResultConstraint;
 
 class SQLiteDatabase {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(SQLiteDatabase);
   friend class SQLiteTransaction;
 
  public:
@@ -122,7 +122,7 @@ class SQLiteDatabase {
   };
   bool TurnOnIncrementalAutoVacuum();
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  private:
   static int AuthorizerFunction(void*,
@@ -155,6 +155,8 @@ class SQLiteDatabase {
   CString open_error_message_;
 
   int last_changes_count_;
+
+  DISALLOW_COPY_AND_ASSIGN(SQLiteDatabase);
 };
 
 }  // namespace blink

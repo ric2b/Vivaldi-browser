@@ -35,7 +35,7 @@ class MODULES_EXPORT FetchDataLoader
     virtual ~Client() {}
 
     // The method corresponding to createLoaderAs... is called on success.
-    virtual void DidFetchDataLoadedBlobHandle(PassRefPtr<BlobDataHandle>) {
+    virtual void DidFetchDataLoadedBlobHandle(scoped_refptr<BlobDataHandle>) {
       NOTREACHED();
     }
     virtual void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer*) {
@@ -53,7 +53,7 @@ class MODULES_EXPORT FetchDataLoader
 
     virtual void DidFetchDataLoadFailed() = 0;
 
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    void Trace(blink::Visitor* visitor) override {}
   };
 
   static FetchDataLoader* CreateLoaderAsBlobHandle(const String& mime_type);
@@ -72,7 +72,7 @@ class MODULES_EXPORT FetchDataLoader
 
   virtual void Cancel() = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 }  // namespace blink

@@ -31,13 +31,14 @@
 #ifndef UserMediaRequest_h
 #define UserMediaRequest_h
 
-#include "core/dom/SuspendableObject.h"
+#include "core/dom/PausableObject.h"
 #include "modules/ModulesExport.h"
 #include "modules/mediastream/NavigatorUserMediaErrorCallback.h"
 #include "modules/mediastream/NavigatorUserMediaSuccessCallback.h"
 #include "platform/mediastream/MediaStreamSource.h"
 #include "platform/wtf/Forward.h"
 #include "public/platform/WebMediaConstraints.h"
+#include "public/web/WebUserMediaRequest.h"
 
 namespace blink {
 
@@ -74,16 +75,17 @@ class MODULES_EXPORT UserMediaRequest final
   void Start();
 
   void Succeed(MediaStreamDescriptor*);
-  void FailPermissionDenied(const String& message);
   void FailConstraint(const String& constraint_name, const String& message);
-  void FailUASpecific(const String& name,
-                      const String& message,
-                      const String& constraint_name);
+  void Fail(WebUserMediaRequest::Error name, const String& message);
 
   bool Audio() const;
   bool Video() const;
   WebMediaConstraints AudioConstraints() const;
   WebMediaConstraints VideoConstraints() const;
+
+  // Flag tied to whether or not the similarly named Origin Trial is
+  // enabled. Will be removed at end of trial. See: http://crbug.com/789152.
+  bool ShouldDisableHardwareNoiseSuppression() const;
 
   // errorMessage is only set if requestIsPrivilegedContext() returns |false|.
   // Caller is responsible for properly setting errors and canceling request.
@@ -92,7 +94,7 @@ class MODULES_EXPORT UserMediaRequest final
   // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   UserMediaRequest(ExecutionContext*,
@@ -104,6 +106,7 @@ class MODULES_EXPORT UserMediaRequest final
 
   WebMediaConstraints audio_;
   WebMediaConstraints video_;
+  bool should_disable_hardware_noise_suppression_;
 
   Member<UserMediaController> controller_;
 

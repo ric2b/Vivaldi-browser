@@ -8,10 +8,8 @@
     Constructor(DOMString name),
     ConstructorCallWith=ExecutionContext,
     RaisesException=Constructor,
-    RuntimeEnabled=BroadcastChannel,
     Exposed=(Window,Worker),
     ActiveScriptWrappable,
-    DependentLifetime,
     Measure
 ] interface BroadcastChannel : EventTarget {
     readonly attribute DOMString name;

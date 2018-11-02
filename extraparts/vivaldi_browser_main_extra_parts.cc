@@ -16,17 +16,20 @@
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/switches.h"
 #include "components/translate/core/browser/translate_pref_names.h"
+#include "contact/contact_model_loaded_observer.h"
+#include "contact/contact_service_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/features/features.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
 #include "notes/notesnode.h"
-#include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/calendar/calendar_api.h"
+#include "extensions/api/contacts/contacts_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
@@ -91,6 +94,7 @@ void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::CalendarAPI::GetFactoryInstance();
+  extensions::ContactsAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
   extensions::DevtoolsConnectorAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
@@ -103,7 +107,6 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
   extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
-  extensions::VivaldiSettingsApiNotificationFactory::GetInstance();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::VivaldiWindowsAPI::GetFactoryInstance();
   extensions::ZoomAPI::GetFactoryInstance();
@@ -131,13 +134,17 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
       calendar::CalendarServiceFactory::GetForProfile(profile);
   calendar_service->AddObserver(new calendar::CalendarModelLoadedObserver());
 
+  contact::ContactService* contact_service =
+      contact::ContactServiceFactory::GetForProfile(profile);
+  contact_service->AddObserver(new contact::ContactModelLoadedObserver());
+
   if (!vivaldi::IsVivaldiRunning())
     return;
 
   PrefService* pref_service = profile->GetPrefs();
-  pref_service->SetBoolean(prefs::kEnableTranslate, false);
+  pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);
 
-  if (pref_service->GetBoolean(vivaldiprefs::kSmoothScrollingEnabled) ==
+  if (pref_service->GetBoolean(vivaldiprefs::kWebpagesSmoothScrollingEnabled) ==
       false) {
     vivaldi::CommandLineAppendSwitchNoDup(
         base::CommandLine::ForCurrentProcess(),

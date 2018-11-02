@@ -30,13 +30,13 @@
 
 #include "modules/peerconnection/RTCSessionDescriptionRequestImpl.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/peerconnection/RTCPeerConnection.h"
 #include "modules/peerconnection/RTCPeerConnectionErrorCallback.h"
 #include "modules/peerconnection/RTCSessionDescription.h"
 #include "modules/peerconnection/RTCSessionDescriptionCallback.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebRTCSessionDescription.h"
 
 namespace blink {
@@ -93,7 +93,7 @@ void RTCSessionDescriptionRequestImpl::Clear() {
   requester_.Clear();
 }
 
-DEFINE_TRACE(RTCSessionDescriptionRequestImpl) {
+void RTCSessionDescriptionRequestImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);
   visitor->Trace(requester_);

@@ -110,7 +110,7 @@ namespace android {
 // the client certificate.
 // Note: both |encoded_chain_ref| and |private_key_ref| will be NULL if
 // the user didn't select a certificate.
-static void OnSystemRequestCompletion(
+static void JNI_SSLClientCertificateRequest_OnSystemRequestCompletion(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     jlong request_id,
@@ -163,7 +163,8 @@ static void NotifyClientCertificatesChanged() {
   net::CertDatabase::GetInstance()->OnAndroidKeyStoreChanged();
 }
 
-static void NotifyClientCertificatesChangedOnIOThread(
+static void
+JNI_SSLClientCertificateRequest_NotifyClientCertificatesChangedOnIOThread(
     JNIEnv* env,
     const JavaParamRef<jclass>&) {
   if (content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
@@ -183,8 +184,12 @@ void ShowSSLClientCertificateSelector(
     net::SSLCertRequestInfo* cert_request_info,
     net::ClientCertIdentityList unused_client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
+  // TODO(asimjour): This should be removed once we have proper
+  // implementation of SSL client certificate selector in VR.
   if (vr::VrTabHelper::IsInVr(contents)) {
     delegate->ContinueWithCertificate(nullptr, nullptr);
+    vr::VrTabHelper::UISuppressed(
+        vr::UiSuppressedElement::kSslClientCertificate);
     return;
   }
 

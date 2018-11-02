@@ -55,16 +55,7 @@ class FontSelector;
 class ShapeCache;
 class TextRun;
 struct TextRunPaintInfo;
-
-// Represents text content of a NGPhysicalTextFragment for painting.
-// TODO(eae): Move to a separate file?
-struct PLATFORM_EXPORT TextFragmentPaintInfo {
-  const StringView text;
-  TextDirection direction;
-  unsigned from;
-  unsigned to;
-  const ShapeResult* shape_result;
-};
+struct NGTextFragmentPaintInfo;
 
 class PLATFORM_EXPORT Font {
   DISALLOW_NEW();
@@ -90,13 +81,13 @@ class PLATFORM_EXPORT Font {
     kDoNotPaintIfFontNotReady,
     kUseFallbackIfFontNotReady
   };
-  bool DrawText(PaintCanvas*,
+  void DrawText(PaintCanvas*,
                 const TextRunPaintInfo&,
                 const FloatPoint&,
                 float device_scale_factor,
                 const PaintFlags&) const;
-  bool DrawText(PaintCanvas*,
-                const TextFragmentPaintInfo&,
+  void DrawText(PaintCanvas*,
+                const NGTextFragmentPaintInfo&,
                 const FloatPoint&,
                 float device_scale_factor,
                 const PaintFlags&) const;
@@ -113,7 +104,7 @@ class PLATFORM_EXPORT Font {
                          float device_scale_factor,
                          const PaintFlags&) const;
   void DrawEmphasisMarks(PaintCanvas*,
-                         const TextFragmentPaintInfo&,
+                         const NGTextFragmentPaintInfo&,
                          const AtomicString& mark,
                          const FloatPoint&,
                          float device_scale_factor,
@@ -135,7 +126,7 @@ class PLATFORM_EXPORT Font {
                          const PaintFlags&,
                          const std::tuple<float, float>& bounds,
                          Vector<TextIntercept>&) const;
-  void GetTextIntercepts(const TextFragmentPaintInfo&,
+  void GetTextIntercepts(const NGTextFragmentPaintInfo&,
                          float device_scale_factor,
                          const PaintFlags&,
                          const std::tuple<float, float>& bounds,
@@ -156,6 +147,7 @@ class PLATFORM_EXPORT Font {
                                  int h,
                                  int from = 0,
                                  int to = -1) const;
+  FloatRect BoundingBox(const TextRun&) const;
   CharacterRange GetCharacterRange(const TextRun&,
                                    unsigned from,
                                    unsigned to) const;
@@ -208,7 +200,7 @@ class PLATFORM_EXPORT Font {
 
  public:
   FontSelector* GetFontSelector() const;
-  PassRefPtr<FontFallbackIterator> CreateFontFallbackIterator(
+  scoped_refptr<FontFallbackIterator> CreateFontFallbackIterator(
       FontFallbackPriority) const;
 
   void WillUseFontData(const String& text) const;
@@ -222,7 +214,7 @@ class PLATFORM_EXPORT Font {
   }
 
   FontDescription font_description_;
-  mutable RefPtr<FontFallbackList> font_fallback_list_;
+  mutable scoped_refptr<FontFallbackList> font_fallback_list_;
   mutable unsigned can_shape_word_by_word_ : 1;
   mutable unsigned shape_word_by_word_computed_ : 1;
 
@@ -243,7 +235,7 @@ inline const FontData* Font::FontDataAt(unsigned index) const {
 }
 
 inline FontSelector* Font::GetFontSelector() const {
-  return font_fallback_list_ ? font_fallback_list_->GetFontSelector() : 0;
+  return font_fallback_list_ ? font_fallback_list_->GetFontSelector() : nullptr;
 }
 
 inline float Font::TabWidth(const SimpleFontData* font_data,

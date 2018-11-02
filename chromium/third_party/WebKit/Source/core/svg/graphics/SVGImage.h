@@ -57,9 +57,9 @@ class SVGImageForContainer;
 // needed by SVGImage.
 class CORE_EXPORT SVGImage final : public Image {
  public:
-  static RefPtr<SVGImage> Create(ImageObserver* observer,
-                                 bool is_multipart = false) {
-    return AdoptRef(new SVGImage(observer, is_multipart));
+  static scoped_refptr<SVGImage> Create(ImageObserver* observer,
+                                        bool is_multipart = false) {
+    return base::AdoptRef(new SVGImage(observer, is_multipart));
   }
 
   static bool IsInSVGImage(const Node*);
@@ -72,8 +72,14 @@ class CORE_EXPORT SVGImage final : public Image {
   void CheckLoaded() const;
   bool CurrentFrameHasSingleSecurityOrigin() const override;
 
-  void StartAnimation(CatchUpAnimation = kCatchUp) override;
+  void StartAnimation() override;
   void ResetAnimation() override;
+
+  PaintImage::CompletionState completion_state() const {
+    return load_state_ == LoadState::kLoadCompleted
+               ? PaintImage::CompletionState::DONE
+               : PaintImage::CompletionState::PARTIALLY_DONE;
+  }
 
   // Does the SVG image/document contain any animations?
   bool MaybeAnimated() override;
@@ -105,6 +111,10 @@ class CORE_EXPORT SVGImage final : public Image {
                                              bool flip_y) override;
 
   PaintImage PaintImageForCurrentFrame() override;
+
+ protected:
+  // Whether or not size is available yet.
+  bool IsSizeAvailable() override { return !!page_; }
 
  private:
   // Accesses m_page.
@@ -138,7 +148,8 @@ class CORE_EXPORT SVGImage final : public Image {
             const FloatRect& from_rect,
             const FloatRect& to_rect,
             RespectImageOrientationEnum,
-            ImageClampingMode) override;
+            ImageClampingMode,
+            ImageDecodingMode) override;
   void DrawForContainer(PaintCanvas*,
                         const PaintFlags&,
                         const FloatSize&,

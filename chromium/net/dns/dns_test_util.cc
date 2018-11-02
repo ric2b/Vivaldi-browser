@@ -27,7 +27,7 @@ namespace {
 
 class MockAddressSorter : public AddressSorter {
  public:
-  ~MockAddressSorter() override {}
+  ~MockAddressSorter() override = default;
   void Sort(const AddressList& list,
             const CallbackType& callback) const override {
     // Do nothing.
@@ -164,7 +164,7 @@ class MockTransactionFactory : public DnsTransactionFactory {
   explicit MockTransactionFactory(const MockDnsClientRuleList& rules)
       : rules_(rules) {}
 
-  ~MockTransactionFactory() override {}
+  ~MockTransactionFactory() override = default;
 
   std::unique_ptr<DnsTransaction> CreateTransaction(
       const std::string& hostname,
@@ -176,6 +176,10 @@ class MockTransactionFactory : public DnsTransactionFactory {
     if (transaction->delayed())
       delayed_transactions_.push_back(transaction->AsWeakPtr());
     return std::unique_ptr<DnsTransaction>(transaction);
+  }
+
+  void AddEDNSOption(const OptRecordRdata::Opt& opt) override {
+    NOTREACHED() << "Not implemented";
   }
 
   void CompleteDelayedTransactions() {
@@ -202,7 +206,7 @@ MockDnsClient::MockDnsClient(const DnsConfig& config,
         address_sorter_(new MockAddressSorter()) {
 }
 
-MockDnsClient::~MockDnsClient() {}
+MockDnsClient::~MockDnsClient() = default;
 
 void MockDnsClient::SetConfig(const DnsConfig& config) {
   config_ = config;

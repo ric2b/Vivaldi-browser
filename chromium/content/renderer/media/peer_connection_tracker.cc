@@ -254,9 +254,9 @@ static const char* GetIceGatheringStateString(
 static std::unique_ptr<base::DictionaryValue> GetDictValueStats(
     const StatsReport& report) {
   if (report.values().empty())
-    return NULL;
+    return nullptr;
 
-  auto values = base::MakeUnique<base::ListValue>();
+  auto values = std::make_unique<base::ListValue>();
 
   for (const auto& v : report.values()) {
     const StatsReport::ValuePtr& value = v.second;
@@ -286,7 +286,7 @@ static std::unique_ptr<base::DictionaryValue> GetDictValueStats(
     }
   }
 
-  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto dict = std::make_unique<base::DictionaryValue>();
   dict->SetDouble("timestamp", report.timestamp());
   dict->Set("values", std::move(values));
 
@@ -299,12 +299,12 @@ static std::unique_ptr<base::DictionaryValue> GetDictValue(
     const StatsReport& report) {
   std::unique_ptr<base::DictionaryValue> stats = GetDictValueStats(report);
   if (!stats)
-    return NULL;
+    return nullptr;
 
   // Note:
   // The format must be consistent with what webrtc_internals.js expects.
   // If you change it here, you must change webrtc_internals.js as well.
-  auto result = base::MakeUnique<base::DictionaryValue>();
+  auto result = std::make_unique<base::DictionaryValue>();
   result->Set("stats", std::move(stats));
   result->SetString("id", report.id()->ToString());
   result->SetString("type", report.TypeToString());
@@ -550,18 +550,18 @@ void PeerConnectionTracker::TrackSetConfiguration(
 }
 
 void PeerConnectionTracker::TrackAddIceCandidate(
-      RTCPeerConnectionHandler* pc_handler,
-      const blink::WebRTCICECandidate& candidate,
-      Source source,
-      bool succeeded) {
+    RTCPeerConnectionHandler* pc_handler,
+    scoped_refptr<blink::WebRTCICECandidate> candidate,
+    Source source,
+    bool succeeded) {
   DCHECK(main_thread_.CalledOnValidThread());
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
   std::string value =
-      "sdpMid: " + candidate.SdpMid().Utf8() + ", " +
-      "sdpMLineIndex: " + base::UintToString(candidate.SdpMLineIndex()) + ", " +
-      "candidate: " + candidate.Candidate().Utf8();
+      "sdpMid: " + candidate->SdpMid().Utf8() + ", " +
+      "sdpMLineIndex: " + base::UintToString(candidate->SdpMLineIndex()) +
+      ", " + "candidate: " + candidate->Candidate().Utf8();
 
   // OnIceCandidate always succeeds as it's a callback from the browser.
   DCHECK(source != SOURCE_LOCAL || succeeded);

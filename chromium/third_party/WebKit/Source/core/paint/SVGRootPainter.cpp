@@ -46,7 +46,7 @@ void SVGRootPainter::PaintReplaced(const PaintInfo& paint_info,
 
   // An empty viewBox also disables rendering.
   // (http://www.w3.org/TR/SVG/coords.html#ViewBoxAttribute)
-  SVGSVGElement* svg = toSVGSVGElement(layout_svg_root_.GetNode());
+  SVGSVGElement* svg = ToSVGSVGElement(layout_svg_root_.GetNode());
   DCHECK(svg);
   if (svg->HasEmptyViewBox())
     return;
@@ -68,7 +68,7 @@ void SVGRootPainter::PaintReplaced(const PaintInfo& paint_info,
                                         transform_to_border_box);
 
   SVGPaintContext paint_context(layout_svg_root_, paint_info_before_filtering);
-  if (paint_context.GetPaintInfo().phase == kPaintPhaseForeground &&
+  if (paint_context.GetPaintInfo().phase == PaintPhase::kForeground &&
       !paint_context.ApplyClipMaskAndFilterIfNecessary())
     return;
 

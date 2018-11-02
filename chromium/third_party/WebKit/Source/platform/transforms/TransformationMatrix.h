@@ -76,11 +76,11 @@ class PLATFORM_EXPORT TransformationMatrix {
 #endif
 
   static std::unique_ptr<TransformationMatrix> Create() {
-    return WTF::MakeUnique<TransformationMatrix>();
+    return std::make_unique<TransformationMatrix>();
   }
   static std::unique_ptr<TransformationMatrix> Create(
       const TransformationMatrix& t) {
-    return WTF::MakeUnique<TransformationMatrix>(t);
+    return std::make_unique<TransformationMatrix>(t);
   }
   static std::unique_ptr<TransformationMatrix> Create(double a,
                                                       double b,
@@ -88,7 +88,7 @@ class PLATFORM_EXPORT TransformationMatrix {
                                                       double d,
                                                       double e,
                                                       double f) {
-    return WTF::MakeUnique<TransformationMatrix>(a, b, c, d, e, f);
+    return std::make_unique<TransformationMatrix>(a, b, c, d, e, f);
   }
   static std::unique_ptr<TransformationMatrix> Create(double m11,
                                                       double m12,
@@ -150,6 +150,7 @@ class PLATFORM_EXPORT TransformationMatrix {
               m42, m43, m44);
   }
   TransformationMatrix(const SkMatrix44& matrix) {
+    CheckAlignment();
     SetMatrix(
         matrix.get(0, 0), matrix.get(1, 0), matrix.get(2, 0), matrix.get(3, 0),
         matrix.get(0, 1), matrix.get(1, 1), matrix.get(2, 1), matrix.get(3, 1),
@@ -255,9 +256,9 @@ class PLATFORM_EXPORT TransformationMatrix {
   // a ray perpendicular to the source plane and computing
   // the local x,y position of the point where that ray intersects
   // with the destination plane.
-  FloatPoint ProjectPoint(const FloatPoint&, bool* clamped = 0) const;
+  FloatPoint ProjectPoint(const FloatPoint&, bool* clamped = nullptr) const;
   // Projects the four corners of the quad
-  FloatQuad ProjectQuad(const FloatQuad&, bool* clamped = 0) const;
+  FloatQuad ProjectQuad(const FloatQuad&, bool* clamped = nullptr) const;
   // Projects the four corners of the quad and takes a bounding box,
   // while sanitizing values created when the w component is negative.
   LayoutRect ClampedBoundsOfProjectedQuad(const FloatQuad&) const;

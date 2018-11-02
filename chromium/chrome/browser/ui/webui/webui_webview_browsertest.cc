@@ -123,7 +123,7 @@ class WebUIWebViewBrowserTest : public WebUIBrowserTest {
 #if defined(OS_CHROMEOS)
     return GURL(chrome::kChromeUIOobeURL).Resolve("/login");
 #else
-    return GURL(signin::GetPromoURL(
+    return GURL(signin::GetPromoURLForTab(
         signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
         signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false));
 #endif
@@ -336,11 +336,11 @@ IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest, DISABLED_DragAndDropToInput) {
                                       "destNode.offsetWidth"),
       ExecuteGuestScriptAndExtractInt(embedder_web_contents, "webview",
                                       "destNode.offsetHeight"));
-  const gfx::Point client_pt(
-      guest_dest_rect.x() + guest_dest_rect.width() / 2 + webview_rect.x(),
-      guest_dest_rect.y() + guest_dest_rect.height() / 2 + webview_rect.y());
+  const gfx::PointF client_pt(
+      guest_dest_rect.x() + guest_dest_rect.width() / 2.0 + webview_rect.x(),
+      guest_dest_rect.y() + guest_dest_rect.height() / 2.0 + webview_rect.y());
   gfx::Rect container_bounds = embedder_web_contents->GetContainerBounds();
-  const gfx::Point screen_pt(container_bounds.x(), container_bounds.y());
+  const gfx::PointF screen_pt(container_bounds.x(), container_bounds.y());
   const blink::WebDragOperationsMask drag_operation_mask =
       static_cast<blink::WebDragOperationsMask>(blink::kWebDragOperationCopy |
                                                 blink::kWebDragOperationLink |

@@ -12,7 +12,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "device/geolocation/access_token_store.h"
+#include "device/geolocation/public/cpp/geoposition.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace device {
 namespace {
@@ -24,13 +26,13 @@ const int kDataCompleteWaitSeconds = 2;
 // static
 const size_t NetworkLocationProvider::PositionCache::kMaximumSize = 10;
 
-NetworkLocationProvider::PositionCache::PositionCache() {}
+NetworkLocationProvider::PositionCache::PositionCache() = default;
 
-NetworkLocationProvider::PositionCache::~PositionCache() {}
+NetworkLocationProvider::PositionCache::~PositionCache() = default;
 
 bool NetworkLocationProvider::PositionCache::CachePosition(
     const WifiData& wifi_data,
-    const Geoposition& position) {
+    const mojom::Geoposition& position) {
   // Check that we can generate a valid key for the wifi data.
   base::string16 key;
   if (!MakeKey(wifi_data, &key)) {
@@ -60,7 +62,7 @@ bool NetworkLocationProvider::PositionCache::CachePosition(
 
 // Searches for a cached position response for the current WiFi data. Returns
 // the cached position if available, nullptr otherwise.
-const Geoposition* NetworkLocationProvider::PositionCache::FindPosition(
+const mojom::Geoposition* NetworkLocationProvider::PositionCache::FindPosition(
     const WifiData& wifi_data) {
   base::string16 key;
   if (!MakeKey(wifi_data, &key)) {
@@ -92,41 +94,24 @@ bool NetworkLocationProvider::PositionCache::MakeKey(const WifiData& wifi_data,
   return !key->empty();
 }
 
-// NetworkLocationProvider factory function
-LocationProvider* NewNetworkLocationProvider(
-    const scoped_refptr<AccessTokenStore>& access_token_store,
-    const scoped_refptr<net::URLRequestContextGetter>& context,
-    const GURL& url,
-    const base::string16& access_token) {
-  return new NetworkLocationProvider(access_token_store, context, url,
-                                     access_token);
-}
-
 // NetworkLocationProvider
 NetworkLocationProvider::NetworkLocationProvider(
-    const scoped_refptr<AccessTokenStore>& access_token_store,
-    const scoped_refptr<net::URLRequestContextGetter>& url_context_getter,
-    const GURL& url,
-    const base::string16& access_token)
-    : access_token_store_(access_token_store),
-      wifi_data_provider_manager_(nullptr),
+    scoped_refptr<net::URLRequestContextGetter> url_context_getter,
+    const std::string& api_key)
+    : wifi_data_provider_manager_(nullptr),
       wifi_data_update_callback_(
           base::Bind(&NetworkLocationProvider::OnWifiDataUpdate,
                      base::Unretained(this))),
       is_wifi_data_complete_(false),
-      access_token_(access_token),
       is_permission_granted_(false),
       is_new_data_available_(false),
       request_(new NetworkLocationRequest(
-          url_context_getter,
-          url,
+          std::move(url_context_getter),
+          api_key,
           base::Bind(&NetworkLocationProvider::OnLocationResponse,
                      base::Unretained(this)))),
       position_cache_(new PositionCache),
-      weak_factory_(this) {
-  DLOG_IF(WARNING, !url.is_valid())
-      << __func__ << " Bad URL: " << url.possibly_invalid_spec();
-}
+      weak_factory_(this) {}
 
 NetworkLocationProvider::~NetworkLocationProvider() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -160,33 +145,25 @@ void NetworkLocationProvider::OnWifiDataUpdate() {
 }
 
 void NetworkLocationProvider::OnLocationResponse(
-    const Geoposition& position,
+    const mojom::Geoposition& position,
     bool server_error,
-    const base::string16& access_token,
     const WifiData& wifi_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Record the position and update our cache.
   position_ = position;
-  if (position.Validate())
+  if (ValidateGeoposition(position))
     position_cache_->CachePosition(wifi_data, position);
-
-  // Record access_token if it's set.
-  if (!access_token.empty() && access_token_ != access_token) {
-    access_token_ = access_token;
-    access_token_store_->SaveAccessToken(request_->url(), access_token);
-  }
 
   // Let listeners know that we now have a position available.
   if (!location_provider_update_callback_.is_null())
     location_provider_update_callback_.Run(this, position_);
 }
 
-bool NetworkLocationProvider::StartProvider(bool high_accuracy) {
+void NetworkLocationProvider::StartProvider(bool high_accuracy) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
   if (IsStarted())
-    return true;
-  if (!request_->url().is_valid())
-    return false;
+    return;
 
   // Registers a callback with the data provider. The first call to Register()
   // will create a singleton data provider that will be deleted on Unregister().
@@ -199,7 +176,6 @@ bool NetworkLocationProvider::StartProvider(bool high_accuracy) {
       base::TimeDelta::FromSeconds(kDataCompleteWaitSeconds));
 
   OnWifiDataUpdate();
-  return true;
 }
 
 void NetworkLocationProvider::StopProvider() {
@@ -210,7 +186,7 @@ void NetworkLocationProvider::StopProvider() {
   weak_factory_.InvalidateWeakPtrs();
 }
 
-const Geoposition& NetworkLocationProvider::GetPosition() {
+const mojom::Geoposition& NetworkLocationProvider::GetPosition() {
   return position_;
 }
 
@@ -222,10 +198,10 @@ void NetworkLocationProvider::RequestPosition() {
   DCHECK(!wifi_timestamp_.is_null())
       << "|wifi_timestamp_| must be set before looking up position";
 
-  const Geoposition* cached_position =
+  const mojom::Geoposition* cached_position =
       position_cache_->FindPosition(wifi_data_);
   if (cached_position) {
-    DCHECK(cached_position->Validate());
+    DCHECK(ValidateGeoposition(*cached_position));
     // Record the position and update its timestamp.
     position_ = *cached_position;
 
@@ -253,7 +229,25 @@ void NetworkLocationProvider::RequestPosition() {
          "with new data. Wifi APs: "
       << wifi_data_.access_point_data.size();
 
-  request_->MakeRequest(access_token_, wifi_data_, wifi_timestamp_);
+  net::PartialNetworkTrafficAnnotationTag partial_traffic_annotation =
+      net::DefinePartialNetworkTrafficAnnotation("network_location_provider",
+                                                 "network_location_request",
+                                                 R"(
+      semantics {
+        sender: "Network Location Provider"
+      }
+      policy {
+        setting:
+          "Users can control this feature via the Location setting under "
+          "'Privacy', 'Content Settings', 'Location'."
+        chrome_policy {
+          DefaultGeolocationSetting {
+            DefaultGeolocationSetting: 2
+          }
+        }
+      })");
+  request_->MakeRequest(wifi_data_, wifi_timestamp_,
+                        partial_traffic_annotation);
 }
 
 bool NetworkLocationProvider::IsStarted() const {

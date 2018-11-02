@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/test/gtest_util.h"
 #include "base/values.h"
 #include "cc/base/region.h"
 #include "cc/paint/paint_flags.h"
@@ -60,13 +61,15 @@ class DiscardableImageMapTest : public testing::Test {
     image_map.GetDiscardableImagesInRect(rect, &draw_image_ptrs);
     std::vector<DrawImage> draw_images;
     for (const auto* image : draw_image_ptrs)
-      draw_images.push_back(DrawImage(*image, 1.f, target_color_space));
+      draw_images.push_back(DrawImage(
+          *image, 1.f, PaintImage::kDefaultFrameIndex, target_color_space));
 
     std::vector<PositionScaleDrawImage> position_draw_images;
     for (DrawImage& image : image_map.images_rtree_.Search(rect)) {
       auto image_id = image.paint_image().stable_id();
       position_draw_images.push_back(PositionScaleDrawImage(
-          image.paint_image(), image_map.GetRectForImage(image_id),
+          image.paint_image(),
+          ImageRectsToRegion(image_map.GetRectsForImage(image_id)).bounds(),
           image.scale()));
     }
 
@@ -138,8 +141,6 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectTest) {
             << x << " " << y;
         EXPECT_EQ(gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500),
                   inset_rects[0]);
-        EXPECT_EQ(images[0].image_rect,
-                  image_map.GetRectForImage(images[0].image.stable_id()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -154,23 +155,15 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectTest) {
 
   EXPECT_TRUE(images[0].image == discardable_image[1][2]);
   EXPECT_EQ(gfx::Rect(2 * 512 + 6, 512 + 6, 500, 500), inset_rects[0]);
-  EXPECT_EQ(images[0].image_rect,
-            image_map.GetRectForImage(images[0].image.stable_id()));
 
   EXPECT_TRUE(images[1].image == discardable_image[2][1]);
   EXPECT_EQ(gfx::Rect(512 + 6, 2 * 512 + 6, 500, 500), inset_rects[1]);
-  EXPECT_EQ(images[1].image_rect,
-            image_map.GetRectForImage(images[1].image.stable_id()));
 
   EXPECT_TRUE(images[2].image == discardable_image[2][3]);
   EXPECT_EQ(gfx::Rect(3 * 512 + 6, 2 * 512 + 6, 500, 500), inset_rects[2]);
-  EXPECT_EQ(images[2].image_rect,
-            image_map.GetRectForImage(images[2].image.stable_id()));
 
   EXPECT_TRUE(images[3].image == discardable_image[3][2]);
   EXPECT_EQ(gfx::Rect(2 * 512 + 6, 3 * 512 + 6, 500, 500), inset_rects[3]);
-  EXPECT_EQ(images[3].image_rect,
-            image_map.GetRectForImage(images[3].image.stable_id()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
@@ -221,8 +214,6 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
             << x << " " << y;
         EXPECT_EQ(gfx::Rect(1024 + x * 512 + 6, y * 512 + 6, 500, 500),
                   inset_rects[0]);
-        EXPECT_EQ(images[0].image_rect,
-                  image_map.GetRectForImage(images[0].image.stable_id()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -237,25 +228,17 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
 
     EXPECT_TRUE(images[0].image == discardable_image[1][2]);
     EXPECT_EQ(gfx::Rect(1024 + 2 * 512 + 6, 512 + 6, 500, 500), inset_rects[0]);
-    EXPECT_EQ(images[0].image_rect,
-              image_map.GetRectForImage(images[0].image.stable_id()));
 
     EXPECT_TRUE(images[1].image == discardable_image[2][1]);
     EXPECT_EQ(gfx::Rect(1024 + 512 + 6, 2 * 512 + 6, 500, 500), inset_rects[1]);
-    EXPECT_EQ(images[1].image_rect,
-              image_map.GetRectForImage(images[1].image.stable_id()));
 
     EXPECT_TRUE(images[2].image == discardable_image[2][3]);
     EXPECT_EQ(gfx::Rect(1024 + 3 * 512 + 6, 2 * 512 + 6, 500, 500),
               inset_rects[2]);
-    EXPECT_EQ(images[2].image_rect,
-              image_map.GetRectForImage(images[2].image.stable_id()));
 
     EXPECT_TRUE(images[3].image == discardable_image[3][2]);
     EXPECT_EQ(gfx::Rect(1024 + 2 * 512 + 6, 3 * 512 + 6, 500, 500),
               inset_rects[3]);
-    EXPECT_EQ(images[3].image_rect,
-              image_map.GetRectForImage(images[3].image.stable_id()));
   }
 
   // Non intersecting rects
@@ -283,7 +266,7 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
   // Image not present in the list.
   {
     PaintImage image = CreateDiscardablePaintImage(gfx::Size(500, 500));
-    EXPECT_EQ(gfx::Rect(), image_map.GetRectForImage(image.stable_id()));
+    EXPECT_EQ(image_map.GetRectsForImage(image.stable_id())->size(), 0u);
   }
 }
 
@@ -333,8 +316,6 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectOnePixelQuery) {
             << x << " " << y;
         EXPECT_EQ(gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500),
                   inset_rects[0]);
-        EXPECT_EQ(images[0].image_rect,
-                  image_map.GetRectForImage(images[0].image.stable_id()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -348,7 +329,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMassiveImage) {
   content_layer_client.set_bounds(visible_rect.size());
 
   PaintImage discardable_image =
-      CreateDiscardablePaintImage(gfx::Size(1 << 25, 1 << 25));
+      CreateDiscardablePaintImage(gfx::Size(1 << 25, 1 << 25), nullptr,
+                                  false /* allocate_encoded_memory */);
   PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(0, 0),
                                       flags);
@@ -365,8 +347,6 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMassiveImage) {
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(images[0].image == discardable_image);
   EXPECT_EQ(gfx::Rect(0, 0, 2048, 2048), inset_rects[0]);
-  EXPECT_EQ(images[0].image_rect,
-            image_map.GetRectForImage(images[0].image.stable_id()));
 }
 
 TEST_F(DiscardableImageMapTest, PaintDestroyedWhileImageIsDrawn) {
@@ -426,8 +406,10 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImage) {
   content_layer_client.set_bounds(visible_rect.size());
 
   int dimension = std::numeric_limits<int>::max();
-  PaintImage discardable_image =
-      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
+  sk_sp<SkColorSpace> no_color_space;
+  PaintImage discardable_image = CreateDiscardablePaintImage(
+      gfx::Size(dimension, dimension), no_color_space,
+      false /* allocate_encoded_memory */);
   PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(42, 42),
                                       flags);
@@ -444,8 +426,6 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImage) {
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(images[0].image == discardable_image);
   EXPECT_EQ(gfx::Rect(42, 42, 2006, 2006), inset_rects[0]);
-  EXPECT_EQ(images[0].image_rect,
-            image_map.GetRectForImage(images[0].image.stable_id()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImageMaxLayer) {
@@ -460,12 +440,16 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImageMaxLayer) {
   FakeContentLayerClient content_layer_client;
   content_layer_client.set_bounds(visible_rect.size());
 
-  PaintImage discardable_image1 =
-      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
-  PaintImage discardable_image2 =
-      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
-  PaintImage discardable_image3 =
-      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
+  sk_sp<SkColorSpace> no_color_space;
+  PaintImage discardable_image1 = CreateDiscardablePaintImage(
+      gfx::Size(dimension, dimension), no_color_space,
+      false /* allocate_encoded_memory */);
+  PaintImage discardable_image2 = CreateDiscardablePaintImage(
+      gfx::Size(dimension, dimension), no_color_space,
+      false /* allocate_encoded_memory */);
+  PaintImage discardable_image3 = CreateDiscardablePaintImage(
+      gfx::Size(dimension, dimension), no_color_space,
+      false /* allocate_encoded_memory */);
 
   PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image1, gfx::Point(0, 0),
@@ -574,7 +558,7 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInShader) {
     for (int x = 0; x < 4; ++x) {
       if ((x + y) & 1) {
         discardable_image[y][x] =
-            PaintImageBuilder()
+            PaintImageBuilder::WithDefault()
                 .set_id(y * 4 + x)
                 .set_paint_image_generator(
                     CreatePaintImageGenerator(gfx::Size(500, 500)))
@@ -691,6 +675,249 @@ TEST_F(DiscardableImageMapTest, GathersDiscardableImagesFromNestedOps) {
   image_map.GetDiscardableImagesInRect(gfx::Rect(105, 105, 5, 95), &images);
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(discardable_image2 == images[0]->paint_image());
+}
+
+TEST_F(DiscardableImageMapTest, GathersAnimatedImages) {
+  gfx::Rect visible_rect(1000, 1000);
+  FakeContentLayerClient content_layer_client;
+  content_layer_client.set_bounds(visible_rect.size());
+
+  std::vector<FrameMetadata> frames = {
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(2)),
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(3))};
+
+  gfx::Size image_size(100, 100);
+  PaintImage static_image = CreateDiscardablePaintImage(image_size);
+  PaintImage animated_loop_none =
+      CreateAnimatedImage(image_size, frames, kAnimationNone);
+  PaintImage animation_loop_infinite =
+      CreateAnimatedImage(image_size, frames, 1u);
+
+  PaintFlags flags;
+  content_layer_client.add_draw_image(static_image, gfx::Point(0, 0), flags);
+  content_layer_client.add_draw_image(animated_loop_none, gfx::Point(100, 100),
+                                      flags);
+  content_layer_client.add_draw_image(animation_loop_infinite,
+                                      gfx::Point(200, 200), flags);
+
+  scoped_refptr<DisplayItemList> display_list =
+      content_layer_client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  display_list->GenerateDiscardableImagesMetadata();
+  const auto& animated_images_metadata =
+      display_list->discardable_image_map().animated_images_metadata();
+
+  ASSERT_EQ(animated_images_metadata.size(), 1u);
+  EXPECT_EQ(animated_images_metadata[0].paint_image_id,
+            animation_loop_infinite.stable_id());
+  EXPECT_EQ(animated_images_metadata[0].completion_state,
+            animation_loop_infinite.completion_state());
+  EXPECT_EQ(animated_images_metadata[0].frames,
+            animation_loop_infinite.GetFrameMetadata());
+  EXPECT_EQ(animated_images_metadata[0].repetition_count,
+            animation_loop_infinite.repetition_count());
+
+  std::vector<const DrawImage*> images;
+  display_list->discardable_image_map().GetDiscardableImagesInRect(visible_rect,
+                                                                   &images);
+  ASSERT_EQ(images.size(), 3u);
+  EXPECT_EQ(images[0]->paint_image(), static_image);
+  EXPECT_DCHECK_DEATH(images[0]->frame_index());
+  EXPECT_EQ(images[1]->paint_image(), animated_loop_none);
+  EXPECT_DCHECK_DEATH(images[1]->frame_index());
+  EXPECT_EQ(images[2]->paint_image(), animation_loop_infinite);
+  EXPECT_DCHECK_DEATH(images[2]->frame_index());
+}
+
+TEST_F(DiscardableImageMapTest, CapturesImagesInPaintRecordShaders) {
+  // Create the record to use in the shader.
+  auto shader_record = sk_make_sp<PaintOpBuffer>();
+  shader_record->push<ScaleOp>(2.0f, 2.0f);
+  PaintImage paint_image = CreateDiscardablePaintImage(gfx::Size(100, 100));
+  shader_record->push<DrawImageOp>(paint_image, 0.f, 0.f, nullptr);
+
+  gfx::Rect visible_rect(500, 500);
+  scoped_refptr<DisplayItemList> display_list = new DisplayItemList();
+  display_list->StartPaint();
+  display_list->push<ScaleOp>(2.0f, 2.0f);
+  PaintFlags flags;
+  SkRect tile = SkRect::MakeWH(100, 100);
+  flags.setShader(PaintShader::MakePaintRecord(
+      shader_record, tile, SkShader::TileMode::kClamp_TileMode,
+      SkShader::TileMode::kClamp_TileMode, nullptr));
+  display_list->push<DrawRectOp>(SkRect::MakeWH(200, 200), flags);
+  display_list->EndPaintOfUnpaired(visible_rect);
+  display_list->Finalize();
+
+  display_list->GenerateDiscardableImagesMetadata();
+  const auto& image_map = display_list->discardable_image_map();
+
+  // The image rect is set to the rect for the DrawRectOp.
+  std::vector<PositionScaleDrawImage> draw_images =
+      GetDiscardableImagesInRect(image_map, visible_rect);
+  std::vector<gfx::Rect> inset_rects = InsetImageRects(draw_images);
+  ASSERT_EQ(draw_images.size(), 1u);
+  EXPECT_EQ(draw_images[0].image, paint_image);
+  // The position of the image is the position of the DrawRectOp that uses the
+  // shader.
+  EXPECT_EQ(gfx::Rect(400, 400), inset_rects[0]);
+  // The scale of the image includes the scale at which the shader record is
+  // rasterized.
+  EXPECT_EQ(SkSize::Make(4.f, 4.f), draw_images[0].scale);
+}
+
+TEST_F(DiscardableImageMapTest, DecodingModeHintsBasic) {
+  gfx::Rect visible_rect(100, 100);
+  PaintImage unspecified_image =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(1)
+          .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
+          .TakePaintImage();
+  PaintImage async_image =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(2)
+          .set_decoding_mode(PaintImage::DecodingMode::kAsync)
+          .TakePaintImage();
+  PaintImage sync_image =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(3)
+          .set_decoding_mode(PaintImage::DecodingMode::kSync)
+          .TakePaintImage();
+
+  FakeContentLayerClient content_layer_client;
+  content_layer_client.set_bounds(visible_rect.size());
+  content_layer_client.add_draw_image(unspecified_image, gfx::Point(0, 0),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(async_image, gfx::Point(10, 10),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(sync_image, gfx::Point(20, 20),
+                                      PaintFlags());
+  scoped_refptr<DisplayItemList> display_list =
+      content_layer_client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  display_list->GenerateDiscardableImagesMetadata();
+  auto decode_hints = display_list->TakeDecodingModeMap();
+  ASSERT_EQ(decode_hints.size(), 3u);
+  ASSERT_TRUE(decode_hints.find(1) != decode_hints.end());
+  ASSERT_TRUE(decode_hints.find(2) != decode_hints.end());
+  ASSERT_TRUE(decode_hints.find(3) != decode_hints.end());
+  EXPECT_EQ(decode_hints[1], PaintImage::DecodingMode::kUnspecified);
+  EXPECT_EQ(decode_hints[2], PaintImage::DecodingMode::kAsync);
+  EXPECT_EQ(decode_hints[3], PaintImage::DecodingMode::kSync);
+
+  decode_hints = display_list->TakeDecodingModeMap();
+  EXPECT_EQ(decode_hints.size(), 0u);
+}
+
+TEST_F(DiscardableImageMapTest, DecodingModeHintsDuplicates) {
+  gfx::Rect visible_rect(100, 100);
+  PaintImage unspecified_image1 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(1)
+          .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
+          .TakePaintImage();
+  PaintImage async_image1 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(1)
+          .set_decoding_mode(PaintImage::DecodingMode::kAsync)
+          .TakePaintImage();
+
+  PaintImage unspecified_image2 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(2)
+          .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
+          .TakePaintImage();
+  PaintImage sync_image2 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(2)
+          .set_decoding_mode(PaintImage::DecodingMode::kSync)
+          .TakePaintImage();
+
+  PaintImage async_image3 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(3)
+          .set_decoding_mode(PaintImage::DecodingMode::kAsync)
+          .TakePaintImage();
+  PaintImage sync_image3 =
+      PaintImageBuilder::WithCopy(
+          CreateDiscardablePaintImage(gfx::Size(10, 10)))
+          .set_id(3)
+          .set_decoding_mode(PaintImage::DecodingMode::kSync)
+          .TakePaintImage();
+
+  FakeContentLayerClient content_layer_client;
+  content_layer_client.set_bounds(visible_rect.size());
+  content_layer_client.add_draw_image(unspecified_image1, gfx::Point(0, 0),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(async_image1, gfx::Point(10, 10),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(unspecified_image2, gfx::Point(20, 20),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(sync_image2, gfx::Point(30, 30),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(async_image3, gfx::Point(40, 40),
+                                      PaintFlags());
+  content_layer_client.add_draw_image(sync_image3, gfx::Point(50, 50),
+                                      PaintFlags());
+  scoped_refptr<DisplayItemList> display_list =
+      content_layer_client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  display_list->GenerateDiscardableImagesMetadata();
+
+  auto decode_hints = display_list->TakeDecodingModeMap();
+  ASSERT_EQ(decode_hints.size(), 3u);
+  ASSERT_TRUE(decode_hints.find(1) != decode_hints.end());
+  ASSERT_TRUE(decode_hints.find(2) != decode_hints.end());
+  ASSERT_TRUE(decode_hints.find(3) != decode_hints.end());
+  // 1 was unspecified and async, so the result should be unspecified.
+  EXPECT_EQ(decode_hints[1], PaintImage::DecodingMode::kUnspecified);
+  // 2 was unspecified and sync, so the result should be sync.
+  EXPECT_EQ(decode_hints[2], PaintImage::DecodingMode::kSync);
+  // 3 was async and sync, so the result should be sync
+  EXPECT_EQ(decode_hints[3], PaintImage::DecodingMode::kSync);
+
+  decode_hints = display_list->TakeDecodingModeMap();
+  EXPECT_EQ(decode_hints.size(), 0u);
+}
+
+TEST_F(DiscardableImageMapTest, TracksImageRegions) {
+  gfx::Rect visible_rect(500, 500);
+  FakeContentLayerClient content_layer_client;
+  content_layer_client.set_bounds(visible_rect.size());
+
+  std::vector<FrameMetadata> frames = {
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(1)),
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(1)),
+  };
+  auto image = CreateAnimatedImage(gfx::Size(100, 100), frames);
+  PaintFlags flags;
+  content_layer_client.add_draw_image(image, gfx::Point(0, 0), flags);
+  content_layer_client.add_draw_image(image, gfx::Point(400, 400), flags);
+
+  scoped_refptr<DisplayItemList> display_list =
+      content_layer_client.PaintContentsToDisplayList(
+          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  display_list->GenerateDiscardableImagesMetadata();
+  const auto& image_map = display_list->discardable_image_map();
+
+  std::vector<gfx::Rect> rects = {gfx::Rect(100, 100),
+                                  gfx::Rect(400, 400, 100, 100)};
+  Region expected_region;
+  for (auto& rect : rects) {
+    rect.Inset(-1, -1);
+    expected_region.Union(rect);
+  }
+
+  EXPECT_EQ(ImageRectsToRegion(image_map.GetRectsForImage(image.stable_id())),
+            expected_region);
 }
 
 class DiscardableImageMapColorSpaceTest

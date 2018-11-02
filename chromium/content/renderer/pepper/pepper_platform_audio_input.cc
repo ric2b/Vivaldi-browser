@@ -41,7 +41,7 @@ PepperPlatformAudioInput* PepperPlatformAudioInput::Create(
     audio_input->AddRef();
     return audio_input.get();
   }
-  return NULL;
+  return nullptr;
 }
 
 void PepperPlatformAudioInput::StartCapture() {
@@ -69,7 +69,7 @@ void PepperPlatformAudioInput::ShutDown() {
 
   // Called on the main thread to stop all audio callbacks. We must only change
   // the client on the main thread, and the delegates from the I/O thread.
-  client_ = NULL;
+  client_ = nullptr;
   io_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&PepperPlatformAudioInput::ShutDownOnIOThread, this));
@@ -78,8 +78,6 @@ void PepperPlatformAudioInput::ShutDown() {
 void PepperPlatformAudioInput::OnStreamCreated(
     base::SharedMemoryHandle handle,
     base::SyncSocket::Handle socket_handle,
-    int length,
-    int total_segments,
     bool initially_muted) {
 #if defined(OS_WIN)
   DCHECK(handle.IsValid());
@@ -88,9 +86,7 @@ void PepperPlatformAudioInput::OnStreamCreated(
   DCHECK(base::SharedMemory::IsHandleValid(handle));
   DCHECK_NE(-1, socket_handle);
 #endif
-  DCHECK(length);
-  // TODO(yzshen): Make use of circular buffer scheme. crbug.com/181449.
-  DCHECK_EQ(1, total_segments);
+  DCHECK(handle.GetSize());
 
   if (base::ThreadTaskRunnerHandle::Get().get() != main_task_runner_.get()) {
     // If shutdown has occurred, |client_| will be NULL and the handles will be
@@ -98,12 +94,12 @@ void PepperPlatformAudioInput::OnStreamCreated(
     main_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&PepperPlatformAudioInput::OnStreamCreated, this, handle,
-                       socket_handle, length, total_segments, initially_muted));
+                       socket_handle, initially_muted));
   } else {
     // Must dereference the client only on the main thread. Shutdown may have
     // occurred while the request was in-flight, so we need to NULL check.
     if (client_) {
-      client_->StreamCreated(handle, length, socket_handle);
+      client_->StreamCreated(handle, handle.GetSize(), socket_handle);
     } else {
       // Clean up the handles.
       base::SyncSocket temp_socket(socket_handle);
@@ -131,14 +127,13 @@ PepperPlatformAudioInput::~PepperPlatformAudioInput() {
 }
 
 PepperPlatformAudioInput::PepperPlatformAudioInput()
-    : client_(NULL),
+    : client_(nullptr),
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(ChildProcess::current()->io_task_runner()),
       render_frame_id_(MSG_ROUTING_NONE),
       create_stream_sent_(false),
       pending_open_device_(false),
-      pending_open_device_id_(-1) {
-}
+      pending_open_device_id_(-1) {}
 
 bool PepperPlatformAudioInput::Initialize(
     int render_frame_id,
@@ -281,8 +276,9 @@ PepperMediaDeviceManager* PepperPlatformAudioInput::GetMediaDeviceManager() {
 
   RenderFrameImpl* const render_frame =
       RenderFrameImpl::FromRoutingID(render_frame_id_);
-  return render_frame ?
-      PepperMediaDeviceManager::GetForRenderFrame(render_frame).get() : NULL;
+  return render_frame
+             ? PepperMediaDeviceManager::GetForRenderFrame(render_frame).get()
+             : nullptr;
 }
 
 }  // namespace content

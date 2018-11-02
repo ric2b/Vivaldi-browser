@@ -20,9 +20,9 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
-import org.robolectric.res.builder.RobolectricPackageManager;
 import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.shadows.ShadowPackageManager;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationState;
@@ -99,8 +99,7 @@ public class InvalidationControllerTest {
         mShadowActivity = Shadows.shadowOf(activity);
         mContext = activity;
 
-        RobolectricPackageManager packageManager =
-                (RobolectricPackageManager) mContext.getPackageManager();
+        ShadowPackageManager packageManager = Shadows.shadowOf(mContext.getPackageManager());
         Bundle metaData = new Bundle();
         metaData.putString(
                 "ipc.invalidation.ticl.listener_service_class",
@@ -115,7 +114,7 @@ public class InvalidationControllerTest {
         ContextUtils.initApplicationContextForTests(mContext.getApplicationContext());
 
         AccountManagerFacade.overrideAccountManagerFacadeForTests(
-                mContext, new SystemAccountManagerDelegate());
+                new SystemAccountManagerDelegate());
 
         ModelTypeHelper.setTestDelegate(new ModelTypeHelper.TestDelegate() {
             @Override
@@ -138,7 +137,7 @@ public class InvalidationControllerTest {
         MockSyncContentResolverDelegate delegate = new MockSyncContentResolverDelegate();
         // Android master sync can safely always be on.
         delegate.setMasterSyncAutomatically(true);
-        AndroidSyncSettings.overrideForTests(mContext, delegate);
+        AndroidSyncSettings.overrideForTests(mContext, delegate, null);
 
         ChromeSigninController.get().setSignedInAccountName("test@example.com");
         AndroidSyncSettings.updateAccount(mContext, ChromeSigninController.get().getSignedInUser());

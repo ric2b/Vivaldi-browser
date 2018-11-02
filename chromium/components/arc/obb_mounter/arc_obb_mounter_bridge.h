@@ -9,9 +9,7 @@
 
 #include "base/macros.h"
 #include "components/arc/common/obb_mounter.mojom.h"
-#include "components/arc/instance_holder.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 class BrowserContext;
@@ -24,7 +22,6 @@ class ArcBridgeService;
 // This class handles OBB mount/unmount requests from Android.
 class ArcObbMounterBridge
     : public KeyedService,
-      public InstanceHolder<mojom::ObbMounterInstance>::Observer,
       public mojom::ObbMounterHost {
  public:
   // Returns singleton instance for the given BrowserContext,
@@ -36,21 +33,16 @@ class ArcObbMounterBridge
                       ArcBridgeService* bridge_service);
   ~ArcObbMounterBridge() override;
 
-  // InstanceHolder<mojom::ObbMounterInstance>::Observer overrides:
-  void OnInstanceReady() override;
-
   // mojom::ObbMounterHost overrides:
   void MountObb(const std::string& obb_file,
                 const std::string& target_path,
                 int32_t owner_gid,
-                const MountObbCallback& callback) override;
+                MountObbCallback callback) override;
   void UnmountObb(const std::string& target_path,
-                  const UnmountObbCallback& callback) override;
+                  UnmountObbCallback callback) override;
 
  private:
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
-
-  mojo::Binding<mojom::ObbMounterHost> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcObbMounterBridge);
 };

@@ -62,18 +62,18 @@ scoped_refptr<BluetoothSocketBlueZ> BluetoothSocketBlueZ::CreateBluetoothSocket(
     scoped_refptr<BluetoothSocketThread> socket_thread) {
   DCHECK(ui_task_runner->RunsTasksInCurrentSequence());
 
-  return make_scoped_refptr(
+  return base::WrapRefCounted(
       new BluetoothSocketBlueZ(ui_task_runner, socket_thread));
 }
 
-BluetoothSocketBlueZ::AcceptRequest::AcceptRequest() {}
+BluetoothSocketBlueZ::AcceptRequest::AcceptRequest() = default;
 
-BluetoothSocketBlueZ::AcceptRequest::~AcceptRequest() {}
+BluetoothSocketBlueZ::AcceptRequest::~AcceptRequest() = default;
 
 BluetoothSocketBlueZ::ConnectionRequest::ConnectionRequest()
     : accepting(false), cancelled(false) {}
 
-BluetoothSocketBlueZ::ConnectionRequest::~ConnectionRequest() {}
+BluetoothSocketBlueZ::ConnectionRequest::~ConnectionRequest() = default;
 
 BluetoothSocketBlueZ::BluetoothSocketBlueZ(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
@@ -450,7 +450,7 @@ void BluetoothSocketBlueZ::DoNewConnection(
     const bluez::BluetoothProfileServiceProvider::Delegate::Options& options,
     const ConfirmationCallback& callback) {
   DCHECK(socket_thread()->task_runner()->RunsTasksInCurrentSequence());
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   if (!fd.is_valid()) {
     LOG(WARNING) << uuid_.canonical_value() << " :" << fd.get()

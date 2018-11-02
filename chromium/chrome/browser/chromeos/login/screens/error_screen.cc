@@ -39,6 +39,7 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace chromeos {
@@ -276,8 +277,8 @@ void ErrorScreen::DefaultHideCallback() {
 void ErrorScreen::OnConfigureCerts() {
   gfx::NativeWindow native_window =
       LoginDisplayHost::default_host()->GetNativeWindow();
-  CertificateManagerDialog* dialog = new CertificateManagerDialog(
-      GetAppProfile(), NULL, native_window);
+  CertificateManagerDialog* dialog =
+      new CertificateManagerDialog(GetAppProfile(), NULL, native_window);
   dialog->Show();
 }
 
@@ -314,7 +315,8 @@ void ErrorScreen::OnLocalStateErrorPowerwashButtonClicked() {
 }
 
 void ErrorScreen::OnRebootButtonClicked() {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+      power_manager::REQUEST_RESTART_FOR_USER, "login error screen");
 }
 
 void ErrorScreen::OnConnectRequested() {
@@ -323,13 +325,11 @@ void ErrorScreen::OnConnectRequested() {
 
 void ErrorScreen::StartGuestSessionAfterOwnershipCheck(
     DeviceSettingsService::OwnershipStatus ownership_status) {
-
   // Make sure to disallow guest login if it's explicitly disabled.
   CrosSettingsProvider::TrustedStatus trust_status =
       CrosSettings::Get()->PrepareTrustedValues(
           base::Bind(&ErrorScreen::StartGuestSessionAfterOwnershipCheck,
-                     weak_factory_.GetWeakPtr(),
-                     ownership_status));
+                     weak_factory_.GetWeakPtr(), ownership_status));
   switch (trust_status) {
     case CrosSettingsProvider::TEMPORARILY_UNTRUSTED:
       // Wait for a callback.

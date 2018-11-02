@@ -7,13 +7,10 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "components/update_client/update_client.h"
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace update_client {
 
@@ -26,8 +23,9 @@ class TestInstaller : public CrxInstaller {
 
   void OnUpdateError(int error) override;
 
-  Result Install(std::unique_ptr<base::DictionaryValue> manifest,
-                 const base::FilePath& unpack_path) override;
+  void Install(const base::FilePath& unpack_path,
+               const std::string& public_key,
+               Callback callback) override;
 
   bool GetInstalledFile(const std::string& file,
                         base::FilePath* installed_file) override;
@@ -40,6 +38,8 @@ class TestInstaller : public CrxInstaller {
 
  protected:
   ~TestInstaller() override;
+
+  void InstallComplete(Callback callback, const Result& result) const;
 
   int error_;
   int install_count_;
@@ -70,8 +70,9 @@ class VersionedTestInstaller : public TestInstaller {
  public:
   VersionedTestInstaller();
 
-  Result Install(std::unique_ptr<base::DictionaryValue> manifest,
-                 const base::FilePath& unpack_path) override;
+  void Install(const base::FilePath& unpack_path,
+               const std::string& public_key,
+               Callback callback) override;
 
   bool GetInstalledFile(const std::string& file,
                         base::FilePath* installed_file) override;

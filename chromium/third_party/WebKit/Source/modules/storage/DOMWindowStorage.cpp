@@ -4,6 +4,7 @@
 
 #include "modules/storage/DOMWindowStorage.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -12,14 +13,13 @@
 #include "modules/storage/Storage.h"
 #include "modules/storage/StorageNamespace.h"
 #include "modules/storage/StorageNamespaceController.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
 DOMWindowStorage::DOMWindowStorage(LocalDOMWindow& window)
     : Supplement<LocalDOMWindow>(window) {}
 
-DEFINE_TRACE(DOMWindowStorage) {
+void DOMWindowStorage::Trace(blink::Visitor* visitor) {
   visitor->Trace(session_storage_);
   visitor->Trace(local_storage_);
   Supplement<LocalDOMWindow>::Trace(visitor);

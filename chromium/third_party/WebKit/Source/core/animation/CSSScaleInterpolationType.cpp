@@ -8,6 +8,7 @@
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -86,17 +87,18 @@ class CSSScaleNonInterpolableValue : public NonInterpolableValue {
  public:
   ~CSSScaleNonInterpolableValue() final {}
 
-  static RefPtr<CSSScaleNonInterpolableValue> Create(const Scale& scale) {
-    return AdoptRef(
+  static scoped_refptr<CSSScaleNonInterpolableValue> Create(
+      const Scale& scale) {
+    return base::AdoptRef(
         new CSSScaleNonInterpolableValue(scale, scale, false, false));
   }
 
-  static RefPtr<CSSScaleNonInterpolableValue> Merge(
+  static scoped_refptr<CSSScaleNonInterpolableValue> Merge(
       const CSSScaleNonInterpolableValue& start,
       const CSSScaleNonInterpolableValue& end) {
-    return AdoptRef(new CSSScaleNonInterpolableValue(start.Start(), end.end(),
-                                                     start.IsStartAdditive(),
-                                                     end.IsEndAdditive()));
+    return base::AdoptRef(new CSSScaleNonInterpolableValue(
+        start.Start(), end.end(), start.IsStartAdditive(),
+        end.IsEndAdditive()));
   }
 
   const Scale& Start() const { return start_; }

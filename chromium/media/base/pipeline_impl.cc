@@ -646,6 +646,8 @@ void PipelineImpl::RendererWrapper::OnStatisticsUpdate(
   shared_state_.statistics.audio_bytes_decoded += stats.audio_bytes_decoded;
   shared_state_.statistics.video_bytes_decoded += stats.video_bytes_decoded;
   shared_state_.statistics.video_frames_decoded += stats.video_frames_decoded;
+  shared_state_.statistics.video_frames_decoded_power_efficient +=
+      stats.video_frames_decoded_power_efficient;
   shared_state_.statistics.video_frames_dropped += stats.video_frames_dropped;
   shared_state_.statistics.audio_memory_usage += stats.audio_memory_usage;
   shared_state_.statistics.video_memory_usage += stats.video_memory_usage;
@@ -946,9 +948,8 @@ void PipelineImpl::RendererWrapper::ReportMetadata() {
         if (stream->type() == DemuxerStream::VIDEO && !metadata.has_video) {
           metadata.has_video = true;
           metadata.natural_size = GetRotatedVideoSize(
-              stream->video_rotation(),
+              stream->video_decoder_config().video_rotation(),
               stream->video_decoder_config().natural_size());
-          metadata.video_rotation = stream->video_rotation();
           metadata.video_decoder_config = stream->video_decoder_config();
         }
         if (stream->type() == DemuxerStream::AUDIO && !metadata.has_audio) {
@@ -1041,11 +1042,7 @@ void PipelineImpl::Stop() {
 
   if (media_task_runner_->BelongsToCurrentThread()) {
     // This path is executed by unittests that share media and main threads.
-    base::Closure stop_cb = base::Bind(&base::DoNothing);
-    media_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&RendererWrapper::Stop,
-                   base::Unretained(renderer_wrapper_.get()), stop_cb));
+    renderer_wrapper_->Stop(base::Bind(&base::DoNothing));
   } else {
     // This path is executed by production code where the two task runners -
     // main and media - live on different threads.

@@ -6,7 +6,9 @@
 #define REMOTING_CODEC_WEBRTC_VIDEO_ENCODER_GPU_H_
 
 #include "media/video/video_encode_accelerator.h"
+#include "remoting/codec/encoder_bitrate_filter.h"
 #include "remoting/codec/webrtc_video_encoder.h"
+#include "remoting/codec/webrtc_video_encoder_selector.h"
 
 namespace base {
 class SharedMemory;
@@ -34,7 +36,9 @@ namespace remoting {
 class WebrtcVideoEncoderGpu : public WebrtcVideoEncoder,
                               public media::VideoEncodeAccelerator::Client {
  public:
-  static std::unique_ptr<WebrtcVideoEncoderGpu> CreateForH264();
+  static std::unique_ptr<WebrtcVideoEncoder> CreateForH264();
+  static bool IsSupportedByH264(
+      const WebrtcVideoEncoderSelector::Profile& profile);
 
   ~WebrtcVideoEncoderGpu() override;
 
@@ -61,6 +65,8 @@ class WebrtcVideoEncoderGpu : public WebrtcVideoEncoder,
   void BeginInitialization();
 
   void UseOutputBitstreamBufferId(int32_t bitstream_buffer_id);
+
+  void RunAnyPendingEncode();
 
   State state_;
 
@@ -98,6 +104,8 @@ class WebrtcVideoEncoderGpu : public WebrtcVideoEncoder,
 
   base::flat_map<base::TimeDelta, WebrtcVideoEncoder::EncodeCallback>
       callbacks_;
+
+  EncoderBitrateFilter bitrate_filter_;
 
   base::WeakPtrFactory<WebrtcVideoEncoderGpu> weak_factory_;
 

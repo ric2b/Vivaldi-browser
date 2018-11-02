@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.widget.FrameLayout;
 
 import org.chromium.base.annotations.CalledByNative;
@@ -28,9 +29,13 @@ public class ContentViewRenderView extends FrameLayout {
     // The native side of this object.
     private long mNativeContentViewRenderView;
     private SurfaceHolder.Callback mSurfaceCallback;
+    private WindowAndroid mWindowAndroid;
 
     private final SurfaceView mSurfaceView;
     protected ContentViewCore mContentViewCore;
+
+    private int mWidth;
+    private int mHeight;
 
     /**
      * Constructs a new ContentViewRenderView.
@@ -64,6 +69,7 @@ public class ContentViewRenderView extends FrameLayout {
         assert rootWindow != null;
         mNativeContentViewRenderView = nativeInit(rootWindow.getNativePointer());
         assert mNativeContentViewRenderView != 0;
+        mWindowAndroid = rootWindow;
         mSurfaceCallback = new SurfaceHolder.Callback() {
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
@@ -101,6 +107,31 @@ public class ContentViewRenderView extends FrameLayout {
         mSurfaceView.setVisibility(VISIBLE);
     }
 
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        mWidth = w;
+        mHeight = h;
+        WebContents webContents =
+                mContentViewCore != null ? mContentViewCore.getWebContents() : null;
+        if (webContents != null) webContents.setSize(w, h);
+    }
+
+    /**
+     * View's method override to notify WindowAndroid about changes in its visibility.
+     */
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+
+        if (mWindowAndroid == null) return;
+
+        if (visibility == View.GONE) {
+            mWindowAndroid.onVisibilityChanged(false);
+        } else if (visibility == View.VISIBLE) {
+            mWindowAndroid.onVisibilityChanged(true);
+        }
+    }
+
     /**
      * Sets the background color of the surface view.  This method is necessary because the
      * background color of ContentViewRenderView itself is covered by the background of
@@ -126,6 +157,7 @@ public class ContentViewRenderView extends FrameLayout {
      */
     public void destroy() {
         mSurfaceView.getHolder().removeCallback(mSurfaceCallback);
+        mWindowAndroid = null;
         nativeDestroy(mNativeContentViewRenderView);
         mNativeContentViewRenderView = 0;
     }
@@ -137,7 +169,7 @@ public class ContentViewRenderView extends FrameLayout {
         WebContents webContents = contentViewCore != null ? contentViewCore.getWebContents() : null;
         if (webContents != null) {
             nativeOnPhysicalBackingSizeChanged(
-                    mNativeContentViewRenderView, webContents, getWidth(), getHeight());
+                    mNativeContentViewRenderView, webContents, mWidth, mHeight);
         }
         nativeSetCurrentWebContents(mNativeContentViewRenderView, webContents);
     }

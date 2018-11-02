@@ -8,11 +8,13 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/drive/chromeos/drive_test_util.h"
@@ -27,6 +29,9 @@ namespace internal {
 
 class ResourceMetadataStorageTest : public testing::Test {
  protected:
+  ResourceMetadataStorageTest() {}
+  ~ResourceMetadataStorageTest() override {}
+
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
@@ -41,21 +46,6 @@ class ResourceMetadataStorageTest : public testing::Test {
     ASSERT_EQ(FILE_ERROR_OK, storage_->GetHeader(&header));
     header.set_version(version);
     EXPECT_EQ(FILE_ERROR_OK, storage_->PutHeader(header));
-  }
-
-  // Overwrites |storage_|'s starred_property_initialized.
-  void SetStarredPropertyInitialized(bool value) {
-    ResourceMetadataHeader header;
-    ASSERT_EQ(FILE_ERROR_OK, storage_->GetHeader(&header));
-    header.set_starred_property_initialized(value);
-    EXPECT_EQ(FILE_ERROR_OK, storage_->PutHeader(header));
-  }
-
-  // Returns |storage_|'s starred_property_initialized.
-  bool GetStarredPropertyInitialized() {
-    ResourceMetadataHeader header;
-    EXPECT_EQ(FILE_ERROR_OK, storage_->GetHeader(&header));
-    return header.starred_property_initialized();
   }
 
   bool CheckValidity() {
@@ -82,10 +72,16 @@ class ResourceMetadataStorageTest : public testing::Test {
         ResourceMetadataStorage::GetChildEntryKey(parent_id, child_base_name));
   }
 
+  bool UpgradeOldDB() {
+    return ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath());
+  }
+
   content::TestBrowserThreadBundle thread_bundle_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<ResourceMetadataStorage, test_util::DestroyHelperForTests>
       storage_;
+
+  DISALLOW_COPY_AND_ASSIGN(ResourceMetadataStorageTest);
 };
 
 TEST_F(ResourceMetadataStorageTest, LargestChangestamp) {
@@ -171,9 +167,9 @@ TEST_F(ResourceMetadataStorageTest, Iterator) {
   keys.push_back("entry3");
   keys.push_back("entry4");
 
-  for (size_t i = 0; i < keys.size(); ++i) {
+  for (const std::string& key : keys) {
     ResourceEntry entry;
-    entry.set_local_id(keys[i]);
+    entry.set_local_id(key);
     EXPECT_EQ(FILE_ERROR_OK, storage_->PutEntry(entry));
   }
 
@@ -189,8 +185,8 @@ TEST_F(ResourceMetadataStorageTest, Iterator) {
   EXPECT_FALSE(it->HasError());
 
   EXPECT_EQ(keys.size(), found_entries.size());
-  for (size_t i = 0; i < keys.size(); ++i)
-    EXPECT_EQ(1U, found_entries.count(keys[i]));
+  for (const std::string& key : keys)
+    EXPECT_TRUE(base::ContainsKey(found_entries, key));
 }
 
 TEST_F(ResourceMetadataStorageTest, GetIdByResourceId) {
@@ -238,19 +234,19 @@ TEST_F(ResourceMetadataStorageTest, GetChildren) {
   children_name_id[4].push_back(std::make_pair("iapetus", "saturn_vii"));
 
   // Put parents.
-  for (size_t i = 0; i < arraysize(parents_id); ++i) {
+  for (const std::string& id : parents_id) {
     ResourceEntry entry;
-    entry.set_local_id(parents_id[i]);
+    entry.set_local_id(id);
     EXPECT_EQ(FILE_ERROR_OK, storage_->PutEntry(entry));
   }
 
   // Put children.
   for (size_t i = 0; i < children_name_id.size(); ++i) {
-    for (size_t j = 0; j < children_name_id[i].size(); ++j) {
+    for (const auto& id : children_name_id[i]) {
       ResourceEntry entry;
-      entry.set_local_id(children_name_id[i][j].second);
+      entry.set_local_id(id.second);
       entry.set_parent_local_id(parents_id[i]);
-      entry.set_base_name(children_name_id[i][j].first);
+      entry.set_base_name(id.first);
       EXPECT_EQ(FILE_ERROR_OK, storage_->PutEntry(entry));
     }
   }
@@ -260,10 +256,8 @@ TEST_F(ResourceMetadataStorageTest, GetChildren) {
     std::vector<std::string> children;
     storage_->GetChildren(parents_id[i], &children);
     EXPECT_EQ(children_name_id[i].size(), children.size());
-    for (size_t j = 0; j < children_name_id[i].size(); ++j) {
-      EXPECT_EQ(1, std::count(children.begin(),
-                              children.end(),
-                              children_name_id[i][j].second));
+    for (const auto& id : children_name_id[i]) {
+      EXPECT_EQ(1, std::count(children.begin(), children.end(), id.second));
     }
   }
 }
@@ -330,7 +324,7 @@ TEST_F(ResourceMetadataStorageTest, IncompatibleDB_M29) {
 
   // Upgrade and reopen.
   storage_.reset();
-  EXPECT_TRUE(ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath()));
+  EXPECT_TRUE(UpgradeOldDB());
   storage_.reset(new ResourceMetadataStorage(
       temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
   ASSERT_TRUE(storage_->Initialize());
@@ -382,7 +376,7 @@ TEST_F(ResourceMetadataStorageTest, IncompatibleDB_M32) {
 
   // Upgrade and reopen.
   storage_.reset();
-  EXPECT_TRUE(ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath()));
+  EXPECT_TRUE(UpgradeOldDB());
   storage_.reset(new ResourceMetadataStorage(
       temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
   ASSERT_TRUE(storage_->Initialize());
@@ -443,17 +437,18 @@ TEST_F(ResourceMetadataStorageTest, IncompatibleDB_M33) {
 
   // Upgrade and reopen.
   storage_.reset();
-  EXPECT_TRUE(ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath()));
+  EXPECT_TRUE(UpgradeOldDB());
   storage_.reset(new ResourceMetadataStorage(
       temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
   ASSERT_TRUE(storage_->Initialize());
 
-  // No data is lost.
+  // largest_changestamp is cleared.
   int64_t largest_changestamp = 0;
   EXPECT_EQ(FILE_ERROR_OK,
             storage_->GetLargestChangestamp(&largest_changestamp));
-  EXPECT_EQ(kLargestChangestamp, largest_changestamp);
+  EXPECT_EQ(0, largest_changestamp);
 
+  // No other data is lost.
   std::string id;
   EXPECT_EQ(FILE_ERROR_OK, storage_->GetIdByResourceId(resource_id, &id));
   EXPECT_EQ(local_id, id);
@@ -481,7 +476,7 @@ TEST_F(ResourceMetadataStorageTest, IncompatibleDB_Unknown) {
   // Set newer version, upgrade and reopen DB.
   SetDBVersion(ResourceMetadataStorage::kDBVersion + 1);
   storage_.reset();
-  EXPECT_FALSE(ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath()));
+  EXPECT_FALSE(UpgradeOldDB());
   storage_.reset(new ResourceMetadataStorage(
       temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
   ASSERT_TRUE(storage_->Initialize());
@@ -494,7 +489,14 @@ TEST_F(ResourceMetadataStorageTest, IncompatibleDB_Unknown) {
   EXPECT_EQ(FILE_ERROR_NOT_FOUND, storage_->GetEntry(key1, &entry));
 }
 
-TEST_F(ResourceMetadataStorageTest, DeleteUnusedIDEntries) {
+TEST_F(ResourceMetadataStorageTest, IncompatibleDB_M37) {
+  const int64_t kLargestChangestamp = 1234567890;
+
+  // Construct v13 DB. It was used from M37 to M62.
+  SetDBVersion(13);
+  EXPECT_EQ(FILE_ERROR_OK,
+            storage_->SetLargestChangestamp(kLargestChangestamp));
+
   leveldb::WriteBatch batch;
 
   // Put an ID entry with a corresponding ResourceEntry.
@@ -514,7 +516,7 @@ TEST_F(ResourceMetadataStorageTest, DeleteUnusedIDEntries) {
 
   // Upgrade and reopen.
   storage_.reset();
-  EXPECT_TRUE(ResourceMetadataStorage::UpgradeOldDB(temp_dir_.GetPath()));
+  EXPECT_TRUE(UpgradeOldDB());
   storage_.reset(new ResourceMetadataStorage(
       temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
   ASSERT_TRUE(storage_->Initialize());
@@ -525,6 +527,12 @@ TEST_F(ResourceMetadataStorageTest, DeleteUnusedIDEntries) {
   EXPECT_EQ("id1", id);
   EXPECT_EQ(FILE_ERROR_NOT_FOUND,
             storage_->GetIdByResourceId("resource_id2", &id));
+
+  // largest_changestamp is cleared.
+  int64_t largest_changestamp = 0;
+  EXPECT_EQ(FILE_ERROR_OK,
+            storage_->GetLargestChangestamp(&largest_changestamp));
+  EXPECT_EQ(0, largest_changestamp);
 }
 
 TEST_F(ResourceMetadataStorageTest, WrongPath) {
@@ -647,29 +655,6 @@ TEST_F(ResourceMetadataStorageTest, CheckValidity) {
   // Remove key1.
   EXPECT_EQ(FILE_ERROR_OK, storage_->RemoveEntry(key1));
   EXPECT_TRUE(CheckValidity());
-}
-
-TEST_F(ResourceMetadataStorageTest, ChangeStarredPropertyInitialized) {
-  // Suppose 'Starred' property has not loaded.
-  bool starred_property_initialized = false;
-  SetStarredPropertyInitialized(starred_property_initialized);
-
-  const int64_t kLargestChangestamp = 1234567890;
-  EXPECT_EQ(FILE_ERROR_OK,
-            storage_->SetLargestChangestamp(kLargestChangestamp));
-
-  // Close DB and reopen.
-  storage_.reset(new ResourceMetadataStorage(
-      temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
-  ASSERT_TRUE(storage_->Initialize());
-
-  starred_property_initialized = GetStarredPropertyInitialized();
-  EXPECT_TRUE(starred_property_initialized);
-
-  int64_t largest_changestamp = 0;
-  EXPECT_EQ(FILE_ERROR_OK,
-            storage_->GetLargestChangestamp(&largest_changestamp));
-  EXPECT_EQ(0, largest_changestamp);
 }
 
 }  // namespace internal

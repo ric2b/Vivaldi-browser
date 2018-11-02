@@ -6,20 +6,19 @@
 
 namespace base {
 
-NullTaskRunner::NullTaskRunner() {}
+NullTaskRunner::NullTaskRunner() = default;
 
-NullTaskRunner::~NullTaskRunner() {}
+NullTaskRunner::~NullTaskRunner() = default;
 
-bool NullTaskRunner::PostDelayedTask(const tracked_objects::Location& from_here,
+bool NullTaskRunner::PostDelayedTask(const Location& from_here,
                                      OnceClosure task,
                                      base::TimeDelta delay) {
   return false;
 }
 
-bool NullTaskRunner::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
-    OnceClosure task,
-    base::TimeDelta delay) {
+bool NullTaskRunner::PostNonNestableDelayedTask(const Location& from_here,
+                                                OnceClosure task,
+                                                base::TimeDelta delay) {
   return false;
 }
 

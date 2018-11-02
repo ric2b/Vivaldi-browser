@@ -26,12 +26,12 @@
 #ifndef TextTrackList_h
 #define TextTrackList_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/events/EventListener.h"
 #include "core/dom/events/EventTarget.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -73,9 +73,9 @@ class CORE_EXPORT TextTrackList final : public EventTargetWithInlineData {
 
   bool HasShowingTracks();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit TextTrackList(HTMLMediaElement*);

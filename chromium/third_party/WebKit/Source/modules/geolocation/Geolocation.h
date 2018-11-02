@@ -27,6 +27,8 @@
 #ifndef Geolocation_h
 #define Geolocation_h
 
+#include "bindings/modules/v8/v8_position_callback.h"
+#include "bindings/modules/v8/v8_position_error_callback.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "device/geolocation/public/interfaces/geolocation.mojom-blink.h"
@@ -34,13 +36,12 @@
 #include "modules/geolocation/GeoNotifier.h"
 #include "modules/geolocation/GeolocationWatchers.h"
 #include "modules/geolocation/Geoposition.h"
-#include "modules/geolocation/PositionCallback.h"
 #include "modules/geolocation/PositionError.h"
-#include "modules/geolocation/PositionErrorCallback.h"
 #include "modules/geolocation/PositionOptions.h"
 #include "platform/Timer.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/modules/geolocation/geolocation_service.mojom-blink.h"
 
 namespace blink {
 
@@ -49,8 +50,8 @@ class LocalFrame;
 class ExecutionContext;
 
 class MODULES_EXPORT Geolocation final
-    : public GarbageCollectedFinalized<Geolocation>,
-      public ScriptWrappable,
+    : public ScriptWrappable,
+      public ActiveScriptWrappable<Geolocation>,
       public ContextLifecycleObserver,
       public PageVisibilityObserver {
   DEFINE_WRAPPERTYPEINFO();
@@ -59,7 +60,8 @@ class MODULES_EXPORT Geolocation final
  public:
   static Geolocation* Create(ExecutionContext*);
   ~Geolocation();
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
   // Inherited from ContextLifecycleObserver and PageVisibilityObserver.
   void ContextDestroyed(ExecutionContext*) override;
@@ -69,15 +71,15 @@ class MODULES_EXPORT Geolocation final
 
   // Creates a oneshot and attempts to obtain a position that meets the
   // constraints of the options.
-  void getCurrentPosition(PositionCallback*,
-                          PositionErrorCallback*,
-                          const PositionOptions&);
+  void getCurrentPosition(V8PositionCallback*,
+                          V8PositionErrorCallback* = nullptr,
+                          const PositionOptions& = PositionOptions());
 
   // Creates a watcher that will be notified whenever a new position is
   // available that meets the constraints of the options.
-  int watchPosition(PositionCallback*,
-                    PositionErrorCallback*,
-                    const PositionOptions&);
+  int watchPosition(V8PositionCallback*,
+                    V8PositionErrorCallback* = nullptr,
+                    const PositionOptions& = PositionOptions());
 
   // Removes all references to the watcher, it will not be updated again.
   void clearWatch(int watch_id);
@@ -97,14 +99,21 @@ class MODULES_EXPORT Geolocation final
   // Discards the notifier if it is a oneshot because it timed it.
   void RequestTimedOut(GeoNotifier*);
 
+  // Returns true if this geolocation still owns the given notifier.
+  bool DoesOwnNotifier(GeoNotifier*) const;
+
   // Inherited from PageVisibilityObserver.
   void PageVisibilityChanged() override;
+
+  // TODO(yukishiino): This is a short-term speculative fix for
+  // crbug.com/792604. Remove this once the bug is fixed.
+  bool HasPendingActivity() const final;
 
  private:
   explicit Geolocation(ExecutionContext*);
 
   typedef HeapVector<Member<GeoNotifier>> GeoNotifierVector;
-  typedef HeapHashSet<Member<GeoNotifier>> GeoNotifierSet;
+  typedef HeapHashSet<TraceWrapperMember<GeoNotifier>> GeoNotifierSet;
 
   bool HasListeners() const {
     return !one_shots_.IsEmpty() || !watchers_.IsEmpty();
@@ -168,10 +177,24 @@ class MODULES_EXPORT Geolocation final
 
   GeoNotifierSet one_shots_;
   GeolocationWatchers watchers_;
+  // GeoNotifiers that may be scheduled to be invoked but need to be removed
+  // from |one_shots_| and |watchers_|.
+  //
+  // |HandleError(error)| and |MakeSuccessCallbacks| need to clear |one_shots_|
+  // (and optionally |watchers_|) before invoking the callbacks, in order to
+  // avoid clearing notifiers added by calls to Geolocation methods from the
+  // callbacks. Thus, something else needs to make the notifiers being invoked
+  // alive with wrapper-tracing because V8 GC may run during the callbacks.
+  // |one_shots_being_invoked_| and |watchers_being_invoked_| perform
+  // wrapper-tracing.
+  // TODO(https://crbug.com/796145): Remove this hack once on-stack objects
+  // get supported by either of wrapper-tracing or unified GC.
+  GeoNotifierSet one_shots_being_invoked_;
+  GeolocationWatchers watchers_being_invoked_;
   Member<Geoposition> last_position_;
 
   device::mojom::blink::GeolocationPtr geolocation_;
-  device::mojom::blink::GeolocationServicePtr geolocation_service_;
+  mojom::blink::GeolocationServicePtr geolocation_service_;
   bool enable_high_accuracy_ = false;
 
   // Whether a GeoNotifier is waiting for a position update.

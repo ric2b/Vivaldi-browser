@@ -21,7 +21,8 @@
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp"
         android:contentDescription="@null"
-        android:importantForAccessibility="no" />
+        android:importantForAccessibility="no"
+        android:src="@drawable/ntp_all_dismissed_gray" />
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/title_text"
@@ -32,8 +33,7 @@
         android:layout_marginBottom="8dp"
         android:gravity="center_horizontal"
         android:text="@string/ntp_title_no_suggestions"
-        android:textSize="16sp"
-        android:textColor="@color/snippets_headline_text_color"
+        android:textAppearance="@style/BlackTitle1"
         chrome:leading="24dp" />
 
     <org.chromium.ui.widget.TextViewWithLeading

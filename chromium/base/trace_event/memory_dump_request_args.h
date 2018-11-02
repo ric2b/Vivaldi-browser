@@ -32,9 +32,7 @@ enum class MemoryDumpType {
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
   PEAK_MEMORY_USAGE,     // Dumping memory at detected peak total memory usage.
   SUMMARY_ONLY,          // Calculate just the summary & don't add to the trace.
-  VM_REGIONS_ONLY,       // Retrieve only memory maps & don't add to the trace.
-                         // Used only for the heap profiler.
-  LAST = VM_REGIONS_ONLY
+  LAST = SUMMARY_ONLY
 };
 
 // Tells the MemoryDumpProvider(s) how much detailed their dumps should be.
@@ -55,15 +53,17 @@ enum class MemoryDumpLevelOfDetail : uint32_t {
   // Few entries, typically a fixed number, per dump.
   LIGHT,
 
+  // Retrieve only memory maps. Used only for the heap profiler.
+  VM_REGIONS_ONLY_FOR_HEAP_PROFILER,
+
   // Unrestricted amount of entries per dump.
   DETAILED,
 
   LAST = DETAILED
 };
 
-// Initial request arguments for a global memory dump. (see
-// MemoryDumpManager::RequestGlobalMemoryDump()). Keep this consistent with
-// memory_instrumentation.mojo and memory_instrumentation_struct_traits.{h,cc}
+// Keep this consistent with memory_instrumentation.mojo and
+// memory_instrumentation_struct_traits.{h,cc}
 struct BASE_EXPORT MemoryDumpRequestArgs {
   // Globally unique identifier. In multi-process dumps, all processes issue a
   // local dump with the same guid. This allows the trace importers to
@@ -74,11 +74,25 @@ struct BASE_EXPORT MemoryDumpRequestArgs {
   MemoryDumpLevelOfDetail level_of_detail;
 };
 
+// Initial request arguments for a global memory dump. (see
+// MemoryDumpManager::RequestGlobalMemoryDump()). Keep this consistent with
+// memory_instrumentation.mojo and memory_instrumentation_struct_traits.{h,cc}
+// TODO(hjd): Move this to memory_instrumentation, crbug.com/776726
+struct BASE_EXPORT GlobalMemoryDumpRequestArgs {
+  MemoryDumpType dump_type;
+  MemoryDumpLevelOfDetail level_of_detail;
+};
+
 // Args for ProcessMemoryDump and passed to OnMemoryDump calls for memory dump
 // providers. Dump providers are expected to read the args for creating dumps.
 struct MemoryDumpArgs {
   // Specifies how detailed the dumps should be.
   MemoryDumpLevelOfDetail level_of_detail;
+
+  // Globally unique identifier. In multi-process dumps, all processes issue a
+  // local dump with the same guid. This allows the trace importers to
+  // reconstruct the global dump.
+  uint64_t dump_guid;
 };
 
 using ProcessMemoryDumpCallback = Callback<

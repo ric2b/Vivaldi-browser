@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_CHROME_SESSION_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_CHROME_SESSION_MANAGER_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "components/session_manager/core/session_manager.h"
 
@@ -35,7 +37,8 @@ class ChromeSessionManager : public session_manager::SessionManager {
   void SessionStarted() override;
   void NotifyUserLoggedIn(const AccountId& user_account_id,
                           const std::string& user_id_hash,
-                          bool browser_restart) override;
+                          bool browser_restart,
+                          bool is_child) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeSessionManager);

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/base64.h"
@@ -20,6 +21,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/launcher/test_launcher.h"
+#include "base/time/time.h"
 #include "base/values.h"
 
 namespace base {
@@ -34,8 +36,8 @@ const FilePath::CharType kDefaultOutputFile[] = FILE_PATH_LITERAL(
 // 8601 format, without the timezone information.
 // TODO(xyzzyz): Find a good place in Chromium to put it and refactor all uses
 // to point to it.
-std::string FormatTimeAsIso8601(base::Time time) {
-  base::Time::Exploded exploded;
+std::string FormatTimeAsIso8601(Time time) {
+  Time::Exploded exploded;
   time.UTCExplode(&exploded);
   return StringPrintf("%04d-%02d-%02dT%02d:%02d:%02d",
                       exploded.year,
@@ -78,13 +80,12 @@ struct TestSuiteResultsAggregator {
   int disabled;
   int errors;
 
-  base::TimeDelta elapsed_time;
+  TimeDelta elapsed_time;
 };
 
 }  // namespace
 
-TestResultsTracker::TestResultsTracker() : iteration_(-1), out_(NULL) {
-}
+TestResultsTracker::TestResultsTracker() : iteration_(-1), out_(nullptr) {}
 
 TestResultsTracker::~TestResultsTracker() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -106,14 +107,13 @@ TestResultsTracker::~TestResultsTracker() {
   }
 
   fprintf(out_, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-  fprintf(out_, "<testsuites name=\"AllTests\" tests=\"%d\" failures=\"%d\""
+  fprintf(out_,
+          "<testsuites name=\"AllTests\" tests=\"%d\" failures=\"%d\""
           " disabled=\"%d\" errors=\"%d\" time=\"%.3f\" timestamp=\"%s\">\n",
-          all_tests_aggregator.tests,
-          all_tests_aggregator.failures,
-          all_tests_aggregator.disabled,
-          all_tests_aggregator.errors,
+          all_tests_aggregator.tests, all_tests_aggregator.failures,
+          all_tests_aggregator.disabled, all_tests_aggregator.errors,
           all_tests_aggregator.elapsed_time.InSecondsF(),
-          FormatTimeAsIso8601(base::Time::Now()).c_str());
+          FormatTimeAsIso8601(Time::Now()).c_str());
 
   for (const TestCaseMap::value_type& i : test_case_map) {
     const std::string testsuite_name = i.first;
@@ -123,14 +123,14 @@ TestResultsTracker::~TestResultsTracker() {
     for (const TestResult& result : results) {
       aggregator.Add(result);
     }
-    fprintf(out_, "  <testsuite name=\"%s\" tests=\"%d\" "
+    fprintf(out_,
+            "  <testsuite name=\"%s\" tests=\"%d\" "
             "failures=\"%d\" disabled=\"%d\" errors=\"%d\" time=\"%.3f\" "
             "timestamp=\"%s\">\n",
-            testsuite_name.c_str(),
-            aggregator.tests, aggregator.failures,
+            testsuite_name.c_str(), aggregator.tests, aggregator.failures,
             aggregator.disabled, aggregator.errors,
             aggregator.elapsed_time.InSecondsF(),
-            FormatTimeAsIso8601(base::Time::Now()).c_str());
+            FormatTimeAsIso8601(Time::Now()).c_str());
 
     for (const TestResult& result : results) {
       fprintf(out_, "    <testcase name=\"%s\" status=\"run\" time=\"%.3f\""
@@ -189,7 +189,7 @@ bool TestResultsTracker::Init(const CommandLine& command_line) {
     LOG(WARNING) << "The output directory does not exist. "
                  << "Creating the directory: " << dir_name.value();
     // Create the directory if necessary (because the gtest does the same).
-    if (!base::CreateDirectory(dir_name)) {
+    if (!CreateDirectory(dir_name)) {
       LOG(ERROR) << "Failed to created directory " << dir_name.value();
       return false;
     }
@@ -227,8 +227,7 @@ void TestResultsTracker::AddDisabledTest(const std::string& test_name) {
 void TestResultsTracker::AddTestLocation(const std::string& test_name,
                                          const std::string& file,
                                          int line) {
-  test_locations_.insert(std::make_pair(
-      TestNameWithoutDisabledPrefix(test_name), CodeLocation(file, line)));
+  test_locations_.insert(std::make_pair(test_name, CodeLocation(file, line)));
 }
 
 void TestResultsTracker::AddTestResult(const TestResult& result) {
@@ -484,33 +483,29 @@ void TestResultsTracker::PrintTests(InputIterator first,
           count,
           count != 1 ? "s" : "",
           description.c_str());
-  for (InputIterator i = first; i != last; ++i) {
-    fprintf(stdout,
-            "    %s (%s:%d)\n",
-            (*i).c_str(),
-            test_locations_.at(*i).file.c_str(),
-            test_locations_.at(*i).line);
+  for (InputIterator it = first; it != last; ++it) {
+    const std::string& test_name = *it;
+    const auto location_it = test_locations_.find(test_name);
+    DCHECK(location_it != test_locations_.end()) << test_name;
+    const CodeLocation& location = location_it->second;
+    fprintf(stdout, "    %s (%s:%d)\n", test_name.c_str(),
+            location.file.c_str(), location.line);
   }
   fflush(stdout);
 }
 
-
-TestResultsTracker::AggregateTestResult::AggregateTestResult() {
-}
+TestResultsTracker::AggregateTestResult::AggregateTestResult() = default;
 
 TestResultsTracker::AggregateTestResult::AggregateTestResult(
     const AggregateTestResult& other) = default;
 
-TestResultsTracker::AggregateTestResult::~AggregateTestResult() {
-}
+TestResultsTracker::AggregateTestResult::~AggregateTestResult() = default;
 
-TestResultsTracker::PerIterationData::PerIterationData() {
-}
+TestResultsTracker::PerIterationData::PerIterationData() = default;
 
 TestResultsTracker::PerIterationData::PerIterationData(
     const PerIterationData& other) = default;
 
-TestResultsTracker::PerIterationData::~PerIterationData() {
-}
+TestResultsTracker::PerIterationData::~PerIterationData() = default;
 
 }  // namespace base

@@ -126,7 +126,7 @@ ExternalProviderImpl::ExternalProviderImpl(
 }
 
 ExternalProviderImpl::~ExternalProviderImpl() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   loader_->OwnerShutdown();
 }
 
@@ -137,7 +137,7 @@ void ExternalProviderImpl::VisitRegisteredExtension() {
 
 void ExternalProviderImpl::SetPrefs(
     std::unique_ptr<base::DictionaryValue> prefs) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Check if the service is still alive. It is possible that it went
   // away while |loader_| was working on the FILE thread.
@@ -146,25 +146,23 @@ void ExternalProviderImpl::SetPrefs(
   prefs_ = std::move(prefs);
   ready_ = true;  // Queries for extensions are allowed from this point.
 
-  std::vector<std::unique_ptr<ExternalInstallInfoUpdateUrl>>
-      external_update_url_extensions;
-  std::vector<std::unique_ptr<ExternalInstallInfoFile>>
-      external_file_extensions;
+  std::vector<ExternalInstallInfoUpdateUrl> external_update_url_extensions;
+  std::vector<ExternalInstallInfoFile> external_file_extensions;
 
   RetrieveExtensionsFromPrefs(&external_update_url_extensions,
                               &external_file_extensions);
   for (const auto& extension : external_update_url_extensions)
-    service_->OnExternalExtensionUpdateUrlFound(*extension, true);
+    service_->OnExternalExtensionUpdateUrlFound(extension, true);
 
   for (const auto& extension : external_file_extensions)
-    service_->OnExternalExtensionFileFound(*extension);
+    service_->OnExternalExtensionFileFound(extension);
 
   service_->OnExternalProviderReady(this);
 }
 
 void ExternalProviderImpl::UpdatePrefs(
     std::unique_ptr<base::DictionaryValue> prefs) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // We only expect updates from windows registry or via policies on chromeos.
   CHECK(crx_location_ == Manifest::EXTERNAL_REGISTRY ||
         download_location_ == Manifest::EXTERNAL_POLICY_DOWNLOAD);
@@ -187,10 +185,8 @@ void ExternalProviderImpl::UpdatePrefs(
 
   prefs_ = std::move(prefs);
 
-  std::vector<std::unique_ptr<ExternalInstallInfoUpdateUrl>>
-      external_update_url_extensions;
-  std::vector<std::unique_ptr<ExternalInstallInfoFile>>
-      external_file_extensions;
+  std::vector<ExternalInstallInfoUpdateUrl> external_update_url_extensions;
+  std::vector<ExternalInstallInfoFile> external_file_extensions;
   RetrieveExtensionsFromPrefs(&external_update_url_extensions,
                               &external_file_extensions);
 
@@ -203,10 +199,8 @@ void ExternalProviderImpl::UpdatePrefs(
 }
 
 void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
-    std::vector<std::unique_ptr<ExternalInstallInfoUpdateUrl>>*
-        external_update_url_extensions,
-    std::vector<std::unique_ptr<ExternalInstallInfoFile>>*
-        external_file_extensions) {
+    std::vector<ExternalInstallInfoUpdateUrl>* external_update_url_extensions,
+    std::vector<ExternalInstallInfoFile>* external_file_extensions) {
   // Set of unsupported extensions that need to be deleted from prefs_.
   std::set<std::string> unsupported_extensions;
 
@@ -246,7 +240,7 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
 
     bool has_external_version = false;
     if (extension->Get(kExternalVersion, &external_version_value)) {
-      if (external_version_value->IsType(base::Value::Type::STRING)) {
+      if (external_version_value->is_string()) {
         external_version_value->GetAsString(&external_version);
         has_external_version = true;
       } else {
@@ -384,18 +378,16 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         path = base_path.Append(external_crx);
       }
 
-      std::unique_ptr<base::Version> version(
-          new base::Version(external_version));
-      if (!version->IsValid()) {
+      base::Version version(external_version);
+      if (!version.IsValid()) {
         LOG(WARNING) << "Malformed extension dictionary for extension: "
                      << extension_id.c_str() << ".  Invalid version string \""
                      << external_version << "\".";
         continue;
       }
-      external_file_extensions->push_back(
-          base::MakeUnique<ExternalInstallInfoFile>(
-              extension_id, std::move(version), path, crx_location_,
-              creation_flags, auto_acknowledge_, install_immediately_));
+      external_file_extensions->emplace_back(
+          extension_id, version, path, crx_location_, creation_flags,
+          auto_acknowledge_, install_immediately_);
     } else {  // if (has_external_update_url)
       CHECK(has_external_update_url);  // Checking of keys above ensures this.
       if (download_location_ == Manifest::INVALID_LOCATION) {
@@ -403,18 +395,17 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
                      << "extensions from update URLs.";
         continue;
       }
-      std::unique_ptr<GURL> update_url(new GURL(external_update_url));
-      if (!update_url->is_valid()) {
+      GURL update_url(external_update_url);
+      if (!update_url.is_valid()) {
         LOG(WARNING) << "Malformed extension dictionary for extension: "
                      << extension_id.c_str() << ".  Key " << kExternalUpdateUrl
                      << " has value \"" << external_update_url
                      << "\", which is not a valid URL.";
         continue;
       }
-      external_update_url_extensions->push_back(
-          base::MakeUnique<ExternalInstallInfoUpdateUrl>(
-              extension_id, install_parameter, std::move(update_url),
-              download_location_, creation_flags, auto_acknowledge_));
+      external_update_url_extensions->emplace_back(
+          extension_id, install_parameter, std::move(update_url),
+          download_location_, creation_flags, auto_acknowledge_);
     }
   }
 
@@ -436,7 +427,7 @@ bool ExternalProviderImpl::IsReady() const {
 
 bool ExternalProviderImpl::HasExtension(
     const std::string& id) const {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   CHECK(prefs_.get());
   CHECK(ready_);
   return prefs_->HasKey(id);
@@ -446,7 +437,7 @@ bool ExternalProviderImpl::GetExtensionDetails(
     const std::string& id,
     Manifest::Location* location,
     std::unique_ptr<base::Version>* version) const {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   CHECK(prefs_.get());
   CHECK(ready_);
   base::DictionaryValue* extension = NULL;

@@ -40,6 +40,10 @@ source_set("browser_sources") {
     "appcache_service.h",
     "ax_event_notification_details.cc",
     "ax_event_notification_details.h",
+    "background_fetch_delegate.cc",
+    "background_fetch_delegate.h",
+    "background_fetch_response.cc",
+    "background_fetch_response.h",
     "background_sync_controller.h",
     "background_sync_parameters.cc",
     "background_sync_parameters.h",
@@ -99,6 +103,7 @@ source_set("browser_sources") {
     "devtools_frontend_host.h",
     "devtools_manager_delegate.cc",
     "devtools_manager_delegate.h",
+    "devtools_network_transaction_factory.h",
     "devtools_socket_factory.h",
     "discardable_shared_memory_manager.h",
     "dom_storage_context.h",
@@ -110,14 +115,18 @@ source_set("browser_sources") {
     "download_manager.h",
     "download_manager_delegate.cc",
     "download_manager_delegate.h",
+    "download_request_utils.h",
     "download_save_info.cc",
     "download_save_info.h",
+    "download_source.h",
     "download_url_parameters.cc",
     "download_url_parameters.h",
     "favicon_status.cc",
     "favicon_status.h",
+    "file_url_loader.h",
     "focused_node_details.h",
     "font_list_async.h",
+    "frame_service_base.h",
     "global_request_id.h",
     "gpu_data_manager.h",
     "gpu_data_manager_observer.h",
@@ -131,7 +140,6 @@ source_set("browser_sources") {
     "guest_mode.cc",
     "guest_mode.h",
     "histogram_fetcher.h",
-    "ignore_errors_cert_verifier.h",
     "indexed_db_context.h",
     "indexed_db_info.h",
     "interstitial_page.h",
@@ -199,8 +207,6 @@ source_set("browser_sources") {
     "presentation_request.h",
     "presentation_screen_availability_listener.h",
     "presentation_service_delegate.h",
-    "profiler_controller.h",
-    "profiler_subscriber.h",
     "provision_fetcher_factory.h",
     "provision_fetcher_impl.cc",
     "provision_fetcher_impl.h",
@@ -242,6 +248,7 @@ source_set("browser_sources") {
     "service_worker_usage_info.h",
     "session_storage_namespace.h",
     "session_storage_usage_info.h",
+    "shared_worker_service.h",
     "site_instance.h",
     "speech_recognition_event_listener.h",
     "speech_recognition_manager.h",
@@ -296,8 +303,8 @@ source_set("browser_sources") {
     "web_ui_data_source.h",
     "web_ui_message_handler.h",
     "websocket_handshake_request_info.h",
-    "worker_service.h",
-    "worker_service_observer.h",
+    "webvr_service_provider.cc",
+    "webvr_service_provider.h",
     "zygote_handle_linux.h",
     "zygote_host_linux.h",
   ]
@@ -312,6 +319,7 @@ source_set("browser_sources") {
     "//ipc",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
     "//services/service_manager/public/cpp",
 
     # We expose skia headers in the public API.
@@ -366,16 +374,15 @@ source_set("browser_sources") {
   }
 
   if (is_chromeos) {
-    sources += [
-      "arc_tracing_agent.cc",
-      "arc_tracing_agent.h",
-    ]
+    sources += [ "arc_tracing_agent.h" ]
   }
 
   if (enable_webrtc) {
     sources += [
       "desktop_capture.cc",
       "desktop_capture.h",
+      "webrtc_log.cc",
+      "webrtc_log.h",
     ]
     deps += [ "//third_party/webrtc/modules/desktop_capture" ]
   }

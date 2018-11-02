@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/media/media_engagement_ui.h"
 
 #include "base/macros.h"
+#include "chrome/browser/media/media_engagement_score.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
@@ -39,6 +40,15 @@ class MediaEngagementScoreDetailsProviderImpl
     std::move(callback).Run(service_->GetAllScoreDetails());
   }
 
+  void GetMediaEngagementConfig(
+      media::mojom::MediaEngagementScoreDetailsProvider::
+          GetMediaEngagementConfigCallback callback) override {
+    std::move(callback).Run(media::mojom::MediaEngagementConfig::New(
+        MediaEngagementScore::GetScoreMinVisits(),
+        MediaEngagementScore::GetHighScoreLowerThreshold(),
+        MediaEngagementScore::GetHighScoreUpperThreshold()));
+  }
+
  private:
   Profile* profile_;
 
@@ -63,7 +73,7 @@ MediaEngagementUI::MediaEngagementUI(content::WebUI* web_ui)
       IDR_MEDIA_ENGAGEMENT_MOJO_JS);
   source->AddResourcePath("url/mojo/url.mojom.js", IDR_URL_MOJO_JS);
   source->SetDefaultResource(IDR_MEDIA_ENGAGEMENT_HTML);
-  source->UseGzip(std::unordered_set<std::string>());
+  source->UseGzip();
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source.release());
 }
 

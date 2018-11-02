@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2013 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -137,7 +138,7 @@ void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {
   if (stopping_) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PIPELINE_ERROR_ABORT);
+    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
     return;
   }
 
@@ -259,14 +260,14 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
   if (stopping_) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    callback.Run(PIPELINE_ERROR_ABORT);
+    callback.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (!success) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_INITIALIZATION_FAILED";
-    callback.Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
+    callback.Run(PipelineStatus::PIPELINE_ERROR_INITIALIZATION_FAILED);
     return;
   }
 
@@ -289,7 +290,7 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
                                              ipc_media_pipeline_host_.get()));
     pipeline_stats::AddStream(video_stream_.get(), video_config.decoding_mode);
 
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(PLATFORM_MEDIA_HWA)
     // |decoding_mode| might be misleading on OS X, because the platform
     // decoder may or may not use HW acceleration internally.
     const char* mode =
@@ -315,7 +316,7 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
   // guarantee that the platform decoders return a non-negative value.
   start_time_ = std::max(time_info.start_time, base::TimeDelta());
 
-  callback.Run(PIPELINE_OK);
+  callback.Run(PipelineStatus::PIPELINE_OK);
 }
 
 }  // namespace media

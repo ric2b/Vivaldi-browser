@@ -4,7 +4,7 @@
 
 // <include src="../../../../ui/webui/resources/js/cr/ui/focus_row.js">
 // <include src="../../../../ui/webui/resources/js/cr/ui/focus_grid.js">
-// <include src="drag_and_drop_handler.js">
+// <include src="../md_extensions/drag_and_drop_handler.js">
 // <include src="extension_code.js">
 // <include src="extension_commands_overlay.js">
 // <include src="extension_error_overlay.js">
@@ -108,7 +108,7 @@ cr.define('extensions', function() {
       var dragTarget = document.documentElement;
       /** @private {extensions.DragAndDropHandler} */
       this.dragWrapperHandler_ =
-          new extensions.DragAndDropHandler(true, dragTarget);
+          new extensions.DragAndDropHandler(true, false, dragTarget);
       dragTarget.addEventListener('extension-drag-started', function() {
         ExtensionSettings.showOverlay($('drop-target-overlay'));
       });

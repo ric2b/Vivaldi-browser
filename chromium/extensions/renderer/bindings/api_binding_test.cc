@@ -21,6 +21,8 @@ v8::ExtensionConfiguration* APIBindingTest::GetV8ExtensionConfiguration() {
 }
 
 void APIBindingTest::SetUp() {
+  test_js_runner_ = CreateTestJSRunner();
+
   // Much of this initialization is stolen from the somewhat-similar
   // gin::V8Test.
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -55,6 +57,8 @@ void APIBindingTest::TearDown() {
 
   isolate()->Exit();
   isolate_holder_.reset();
+
+  test_js_runner_.reset();
 }
 
 void APIBindingTest::DisposeAllContexts() {
@@ -123,10 +127,6 @@ void APIBindingTest::DisposeContext(v8::Local<v8::Context> context) {
   additional_context_holders_.erase(iter);
 }
 
-v8::Isolate* APIBindingTest::isolate() {
-  return isolate_holder_->isolate();
-}
-
 void APIBindingTest::RunGarbageCollection() {
   // '5' is a magic number stolen from Blink; arbitrarily large enough to
   // hopefully clean up all the various paths.
@@ -134,6 +134,15 @@ void APIBindingTest::RunGarbageCollection() {
     isolate()->RequestGarbageCollectionForTesting(
         v8::Isolate::kFullGarbageCollection);
   }
+}
+
+std::unique_ptr<TestJSRunner::Scope> APIBindingTest::CreateTestJSRunner() {
+  return std::make_unique<TestJSRunner::Scope>(
+      std::make_unique<TestJSRunner>());
+}
+
+v8::Isolate* APIBindingTest::isolate() {
+  return isolate_holder_->isolate();
 }
 
 }  // namespace extensions

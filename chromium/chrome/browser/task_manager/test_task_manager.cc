@@ -26,7 +26,7 @@ bool TestTaskManager::IsTaskKillable(TaskId task_id) {
 void TestTaskManager::KillTask(TaskId task_id) {
 }
 
-double TestTaskManager::GetCpuUsage(TaskId task_id) const {
+double TestTaskManager::GetPlatformIndependentCPUUsage(TaskId task_id) const {
   return 0.0;
 }
 
@@ -36,6 +36,10 @@ base::Time TestTaskManager::GetStartTime(TaskId task_id) const {
 
 base::TimeDelta TestTaskManager::GetCpuTime(TaskId task_id) const {
   return base::TimeDelta();
+}
+
+int64_t TestTaskManager::GetMemoryFootprintUsage(TaskId task_id) const {
+  return -1;
 }
 
 int64_t TestTaskManager::GetPhysicalMemoryUsage(TaskId task_id) const {
@@ -64,6 +68,10 @@ base::MemoryState TestTaskManager::GetMemoryState(TaskId task_id) const {
 }
 
 int TestTaskManager::GetIdleWakeupsPerSecond(TaskId task_id) const {
+  return -1;
+}
+
+int TestTaskManager::GetHardFaultsPerSecond(TaskId task_id) const {
   return -1;
 }
 

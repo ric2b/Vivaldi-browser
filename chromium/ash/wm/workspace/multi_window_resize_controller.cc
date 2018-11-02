@@ -190,7 +190,7 @@ MultiWindowResizeController::ResizeWindows::ResizeWindows()
 MultiWindowResizeController::ResizeWindows::ResizeWindows(
     const ResizeWindows& other) = default;
 
-MultiWindowResizeController::ResizeWindows::~ResizeWindows() {}
+MultiWindowResizeController::ResizeWindows::~ResizeWindows() = default;
 
 bool MultiWindowResizeController::ResizeWindows::Equals(
     const ResizeWindows& other) const {
@@ -198,7 +198,7 @@ bool MultiWindowResizeController::ResizeWindows::Equals(
          direction == other.direction;
 }
 
-MultiWindowResizeController::MultiWindowResizeController() {}
+MultiWindowResizeController::MultiWindowResizeController() = default;
 
 MultiWindowResizeController::~MultiWindowResizeController() {
   window_resizer_.reset();
@@ -281,8 +281,8 @@ MultiWindowResizeController::DetermineWindowsFromScreenPoint(
 }
 
 void MultiWindowResizeController::CreateMouseWatcher() {
-  mouse_watcher_.reset(
-      new views::MouseWatcher(new ResizeMouseWatcherHost(this), this));
+  mouse_watcher_ = std::make_unique<views::MouseWatcher>(
+      std::make_unique<ResizeMouseWatcherHost>(this), this);
   mouse_watcher_->set_notify_on_exit_time(
       base::TimeDelta::FromMilliseconds(kHideDelayMS));
   mouse_watcher_->Start();

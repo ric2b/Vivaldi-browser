@@ -7,11 +7,12 @@
 
 #include "bindings/core/v8/ScriptModule.h"
 #include "core/CoreExport.h"
-#include "core/dom/AncestorList.h"
+#include "core/dom/ModuleImportMeta.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/V8PerContextData.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/loader/fetch/ScriptFetchOptions.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/text/TextPosition.h"
@@ -22,9 +23,11 @@ namespace blink {
 class ExceptionState;
 class ModuleScript;
 class ModuleScriptFetchRequest;
+class ModuleScriptFetcher;
 class ModuleScriptLoaderClient;
-class ModuleTreeReachedUrlSet;
+class ReferrerScriptInfo;
 class ScriptModuleResolver;
+class ScriptPromiseResolver;
 class ScriptState;
 class ScriptValue;
 class SecurityOrigin;
@@ -38,7 +41,7 @@ class CORE_EXPORT SingleModuleClient
       public TraceWrapperBase {
  public:
   virtual ~SingleModuleClient() = default;
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual void NotifyModuleLoadFinished(ModuleScript*) = 0;
 };
@@ -50,7 +53,7 @@ class CORE_EXPORT ModuleTreeClient
       public TraceWrapperBase {
  public:
   virtual ~ModuleTreeClient() = default;
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual void NotifyModuleTreeLoadFinished(ModuleScript*) = 0;
 };
@@ -76,24 +79,22 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   static void SetModulator(ScriptState*, Modulator*);
   static void ClearModulator(ScriptState*);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual ScriptModuleResolver* GetScriptModuleResolver() = 0;
   virtual WebTaskRunner* TaskRunner() = 0;
   virtual ReferrerPolicy GetReferrerPolicy() = 0;
-  virtual SecurityOrigin* GetSecurityOrigin() = 0;
+
+  // Returns the security origin of the "fetch client settings object".
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
+  // This should be called only from ModuleScriptLoader.
+  virtual SecurityOrigin* GetSecurityOriginForFetch() = 0;
+
   virtual ScriptState* GetScriptState() = 0;
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-script-tree
   virtual void FetchTree(const ModuleScriptFetchRequest&,
                          ModuleTreeClient*) = 0;
-
-  // https://html.spec.whatwg.org/#internal-module-script-graph-fetching-procedure
-  virtual void FetchTreeInternal(const ModuleScriptFetchRequest&,
-                                 const AncestorList&,
-                                 ModuleGraphLevel,
-                                 ModuleTreeReachedUrlSet*,
-                                 ModuleTreeClient*) = 0;
 
   // Asynchronously retrieve a module script from the module map, or fetch it
   // and put it in the map if it's not there already.
@@ -113,12 +114,23 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
 
   // https://html.spec.whatwg.org/#resolve-a-module-specifier
   static KURL ResolveModuleSpecifier(const String& module_request,
-                                     const KURL& base_url);
+                                     const KURL& base_url,
+                                     String* failure_reason = nullptr);
+
+  // https://tc39.github.io/proposal-dynamic-import/#sec-hostimportmoduledynamically
+  virtual void ResolveDynamically(const String& specifier,
+                                  const KURL&,
+                                  const ReferrerScriptInfo&,
+                                  ScriptPromiseResolver*) = 0;
+
+  // https://html.spec.whatwg.org/#hostgetimportmetaproperties
+  virtual ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const = 0;
 
   virtual bool HasValidContext() = 0;
 
   virtual ScriptModule CompileModule(const String& script,
                                      const String& url_str,
+                                     const ScriptFetchOptions&,
                                      AccessControlStatus,
                                      const TextPosition&,
                                      ExceptionState&) = 0;
@@ -139,7 +151,21 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   virtual Vector<ModuleRequest> ModuleRequestsFromScriptModule(
       ScriptModule) = 0;
 
-  virtual void ExecuteModule(const ModuleScript*) = 0;
+  enum class CaptureEvalErrorFlag : bool { kReport, kCapture };
+
+  // ExecuteModule implements #run-a-module-script HTML spec algorithm.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#run-a-module-script
+  // CaptureEvalErrorFlag is used to implement "rethrow errors" parameter in
+  // run-a-module-script.
+  // - When "rethrow errors" is to be set, use kCapture for EvaluateModule().
+  // Then EvaluateModule() returns an exception if any (instead of throwing it),
+  // and the caller should rethrow the returned exception. - When "rethrow
+  // errors" is not to be set, use kReport. EvaluateModule() "report the error"
+  // inside it (if any), and always returns null ScriptValue().
+  virtual ScriptValue ExecuteModule(const ModuleScript*,
+                                    CaptureEvalErrorFlag) = 0;
+
+  virtual ModuleScriptFetcher* CreateModuleScriptFetcher() = 0;
 
  private:
   friend class ModuleMap;

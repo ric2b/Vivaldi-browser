@@ -11,12 +11,14 @@
 
       popup = window.open('title2.html', 'name', 'width=200,height=200');
       popup.close();
+      document.location = 'title2.html'
     }
 
     // Try opening/closing a few windows.
     function test2() {
       openPopups();
       closePopups();
+      document.location = 'title2.html'
     }
 
     function test3() {
@@ -50,9 +52,12 @@
     }
 
     function startTheTest() {
-      test1();
-      test2();
-      test3();
+      if (location.search == "?test1")
+        test1();
+      else if (location.search == "?test2")
+        test2();
+      else if (location.search == "?test3")
+        test3();
     }
   </script>
 </head>

@@ -21,6 +21,7 @@
 namespace gfx {
 class Display;
 class Point;
+class PointF;
 class Rect;
 class Size;
 }   // namespace gfx
@@ -40,7 +41,7 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
   // Converts a screen physical point to a screen DIP point.
   // The DPI scale is performed relative to the display containing the physical
   // point.
-  static gfx::Point ScreenToDIPPoint(const gfx::Point& pixel_point);
+  static gfx::PointF ScreenToDIPPoint(const gfx::PointF& pixel_point);
 
   // Converts a screen DIP point to a screen physical point.
   // The DPI scale is performed relative to the display containing the DIP
@@ -111,6 +112,20 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
   // you are targeting.
   static float GetSystemScaleFactor();
 
+  // Set a callback to use to query the status of HDR. This callback will be
+  // called when the status of HDR may have changed.
+  using RequestHDRStatusCallback = base::Callback<void()>;
+  static void SetRequestHDRStatusCallback(
+      RequestHDRStatusCallback request_hdr_status_callback);
+
+  // Set whether or not to treat all displays as HDR capable. Note that
+  // more precise information about which displays are HDR capable is
+  // available. We make a conscious choice to force all displays to HDR mode if
+  // any display is in HDR mode, under the assumption that the user will be
+  // using the HDR display to view media, and thus will want all media queries
+  // to return that HDR is supported.
+  static void SetHDREnabled(bool hdr_enabled);
+
   // Returns the HWND associated with the NativeView.
   virtual HWND GetHWNDFromNativeView(gfx::NativeView view) const;
 
@@ -155,6 +170,7 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
  private:
   void Initialize();
   void OnWndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
+  void UpdateAllDisplaysAndNotify();
 
   // Returns the ScreenWinDisplay closest to or enclosing |hwnd|.
   ScreenWinDisplay GetScreenWinDisplayNearestHWND(HWND hwnd) const;
@@ -203,9 +219,11 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
   // A helper to read color profiles from the filesystem.
   std::unique_ptr<ColorProfileReader> color_profile_reader_;
 
-  // Whether or not HDR mode is enabled.
-  // TODO(ccameron): Set this via the GPU process when the system "HDR and
-  // advanced color" setting is enabled.
+  // Callback to use to query when the HDR status may have changed.
+  RequestHDRStatusCallback request_hdr_status_callback_;
+
+  // Whether or not HDR mode is enabled for any monitor via the "HDR and
+  // advanced color" setting.
   bool hdr_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenWin);

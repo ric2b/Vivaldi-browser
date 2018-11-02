@@ -34,10 +34,6 @@ char kTSanDefaultSuppressions[] =
     "race:pcache1EnforceMaxPage\n"
     "race:pcache1AllocPage\n"
 
-    // http://crbug.com/102327.
-    // Test-only race, won't fix.
-    "race:tracked_objects::ThreadData::ShutdownSingleThreadedCleanup\n"
-
     // http://crbug.com/120808
     "race:base/threading/watchdog.cc\n"
 
@@ -88,13 +84,10 @@ char kTSanDefaultSuppressions[] =
     "race:*trace_event_unique_catstatic*\n"
 
     // http://crbug.com/244856
-    "race:AutoPulseLock\n"
+    "race:libpulsecommon*.so\n"
 
     // http://crbug.com/246968
     "race:webrtc::VideoCodingModuleImpl::RegisterPacketRequestCallback\n"
-
-    // http://crbug.com/246974
-    "race:content::GpuWatchdogThread::CheckArmed\n"
 
     // http://crbug.com/257396
     "race:base::trace_event::"
@@ -125,10 +118,6 @@ char kTSanDefaultSuppressions[] =
 
     // http://crbug.com/310851
     "race:net::ProxyResolverV8Tracing::Job::~Job\n"
-
-    // http://crbug.com/327330
-    "race:PrepareTextureMailbox\n"
-    "race:cc::LayerTreeHost::PaintLayerContents\n"
 
     // http://crbug.com/476529
     "deadlock:cc::VideoLayerImpl::WillDraw\n"

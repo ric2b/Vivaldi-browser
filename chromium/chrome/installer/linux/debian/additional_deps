@@ -1,0 +1,16 @@
+# Additional dependencies not in the dpkg-shlibdeps output.
+#
+# ca-certificates: Make sure users have SSL certificates.
+# fonts-liberation: Make sure users have compatible fonts for viewing PDFs.
+# libappindicator1: Make systray icons work in Unity.
+# libnss3: Pull a more recent version of NSS than required by runtime linking,
+#          for security and stability updates in NSS.
+# lsb-release: For lsb_release.
+# wget: For uploading crash reports with Breakpad.
+# xdg-utils: For OS integration.
+ca-certificates
+fonts-liberation
+libappindicator1
+libnss3 (>= 3.26)
+wget
+xdg-utils (>= 1.0.2)

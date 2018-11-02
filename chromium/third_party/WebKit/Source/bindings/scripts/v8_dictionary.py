@@ -8,6 +8,7 @@ implementation classes that are used by blink's core/modules.
 
 import operator
 from idl_types import IdlType
+from utilities import to_snake_case
 from v8_globals import includes
 import v8_types
 import v8_utilities
@@ -28,8 +29,6 @@ DICTIONARY_CPP_INCLUDES = frozenset([
 
 def getter_name_for_dictionary_member(member):
     name = v8_utilities.cpp_name(member)
-    if 'PrefixGet' in member.extended_attributes:
-        return 'get%s' % v8_utilities.capitalize(name)
     return name
 
 
@@ -72,12 +71,20 @@ def dictionary_context(dictionary, interfaces_info):
 
     for member in members:
         if member['runtime_enabled_feature_name']:
-            includes.add('platform/RuntimeEnabledFeatures.h')
+            includes.add('platform/runtime_enabled_features.h')
+            break
+
+    has_origin_trial_members = False
+    for member in members:
+        if member['origin_trial_enabled_function']:
+            has_origin_trial_members = True
+            includes.add('core/origin_trials/origin_trials.h')
             break
 
     cpp_class = v8_utilities.cpp_name(dictionary)
     context = {
         'cpp_class': cpp_class,
+        'has_origin_trial_members': has_origin_trial_members,
         'header_includes': set(DICTIONARY_H_INCLUDES),
         'members': members,
         'required_member_names': sorted([member.name
@@ -121,7 +128,7 @@ def member_context(dictionary, member):
         return cpp_default_value, v8_default_value
 
     cpp_default_value, v8_default_value = default_values()
-    cpp_name = v8_utilities.cpp_name(member)
+    cpp_name = to_snake_case(v8_utilities.cpp_name(member))
     getter_name = getter_name_for_dictionary_member(member)
     is_deprecated_dictionary = unwrapped_idl_type.name == 'Dictionary'
 
@@ -144,6 +151,7 @@ def member_context(dictionary, member):
         'is_object': unwrapped_idl_type.name == 'Object' or is_deprecated_dictionary,
         'is_required': member.is_required,
         'name': member.name,
+        'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(member),  # [OriginTrialEnabled]
         'runtime_enabled_feature_name': v8_utilities.runtime_enabled_feature_name(member),  # [RuntimeEnabled]
         'setter_name': setter_name_for_dictionary_member(member),
         'null_setter_name': null_setter_name_for_dictionary_member(member),
@@ -200,25 +208,22 @@ def dictionary_impl_context(dictionary, interfaces_info):
 def member_impl_context(member, interfaces_info, header_includes,
                         header_forward_decls):
     idl_type = unwrap_nullable_if_needed(member.idl_type)
-    cpp_name = v8_utilities.cpp_name(member)
+    cpp_name = to_snake_case(v8_utilities.cpp_name(member))
 
     nullable_indicator_name = None
     if not idl_type.cpp_type_has_null_value:
-        nullable_indicator_name = 'm_has' + cpp_name[0].upper() + cpp_name[1:]
+        nullable_indicator_name = 'has_' + cpp_name + '_'
 
     def has_method_expression():
         if nullable_indicator_name:
             return nullable_indicator_name
-        elif idl_type.is_union_type:
-            return '!m_%s.isNull()' % cpp_name
-        elif idl_type.is_enum or idl_type.is_string_type:
-            return '!m_%s.IsNull()' % cpp_name
-        elif idl_type.name in ['Any', 'Object']:
-            return '!(m_{0}.IsEmpty() || m_{0}.IsNull() || m_{0}.IsUndefined())'.format(cpp_name)
-        elif idl_type.name == 'Dictionary':
-            return '!m_%s.IsUndefinedOrNull()' % cpp_name
-        else:
-            return 'm_%s' % cpp_name
+        if idl_type.is_union_type or idl_type.is_enum or idl_type.is_string_type:
+            return '!%s_.IsNull()' % cpp_name
+        if idl_type.name in ['Any', 'Object']:
+            return '!({0}_.IsEmpty() || {0}_.IsNull() || {0}_.IsUndefined())'.format(cpp_name)
+        if idl_type.name == 'Dictionary':
+            return '!%s_.IsUndefinedOrNull()' % cpp_name
+        return '%s_' % cpp_name
 
     cpp_default_value = None
     if member.default_value and not member.default_value.is_null:
@@ -235,10 +240,16 @@ def member_impl_context(member, interfaces_info, header_includes,
     if idl_type.is_array_buffer_view_or_typed_array:
         setter_value += '.View()'
 
+    non_null_type = idl_type.inner_type if idl_type.is_nullable else idl_type
+    setter_inline = 'inline ' if (
+        non_null_type.is_basic_type or
+        non_null_type.is_enum or
+        non_null_type.is_wrapper_type) else ''
+
     return {
         'cpp_default_value': cpp_default_value,
         'cpp_name': cpp_name,
-        'getter_expression': 'm_' + cpp_name,
+        'getter_expression': cpp_name + '_',
         'getter_name': getter_name_for_dictionary_member(member),
         'has_method_expression': has_method_expression(),
         'has_method_name': has_method_name_for_dictionary_member(member),
@@ -248,6 +259,7 @@ def member_impl_context(member, interfaces_info, header_includes,
         'null_setter_name': null_setter_name_for_dictionary_member(member),
         'nullable_indicator_name': nullable_indicator_name,
         'rvalue_cpp_type': idl_type.cpp_type_args(used_as_rvalue_type=True),
+        'setter_inline': setter_inline,
         'setter_name': setter_name_for_dictionary_member(member),
         'setter_value': setter_value,
     }

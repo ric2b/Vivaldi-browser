@@ -24,16 +24,17 @@ namespace {
 
 // A mask for the refresh types that are done in the background thread.
 const int kBackgroundRefreshTypesMask =
-    REFRESH_TYPE_CPU | REFRESH_TYPE_MEMORY | REFRESH_TYPE_IDLE_WAKEUPS |
+    REFRESH_TYPE_CPU | REFRESH_TYPE_PHYSICAL_MEMORY |
+    REFRESH_TYPE_MEMORY_DETAILS | REFRESH_TYPE_IDLE_WAKEUPS |
 #if defined(OS_WIN)
     REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME |
 #endif  // defined(OS_WIN)
 #if defined(OS_LINUX)
     REFRESH_TYPE_FD_COUNT |
 #endif  // defined(OS_LINUX)
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
     REFRESH_TYPE_NACL |
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
     REFRESH_TYPE_PRIORITY;
 
 #if defined(OS_WIN)
@@ -66,12 +67,12 @@ void GetWindowsHandles(base::ProcessHandle handle,
 }
 #endif  // defined(OS_WIN)
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 int GetNaClDebugStubPortOnIoThread(int process_id) {
   return nacl::NaClBrowser::GetInstance()->GetProcessGdbDebugStubPort(
       process_id);
 }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 }  // namespace
 
@@ -88,7 +89,8 @@ TaskGroup::TaskGroup(
       shared_sampler_(shared_sampler),
       expected_on_bg_done_flags_(kBackgroundRefreshTypesMask),
       current_on_bg_done_flags_(0),
-      cpu_usage_(0.0),
+      platform_independent_cpu_usage_(0.0),
+      memory_footprint_(-1),
       gpu_memory_(-1),
       memory_state_(base::MemoryState::UNKNOWN),
       per_process_network_usage_rate_(-1),
@@ -98,14 +100,15 @@ TaskGroup::TaskGroup(
       gdi_peak_handles_(-1),
       user_current_handles_(-1),
       user_peak_handles_(-1),
+      hard_faults_per_second_(-1),
 #endif  // defined(OS_WIN)
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
       nacl_debug_stub_port_(nacl::kGdbDebugStubPortUnknown),
-#endif  // !defined(DISABLE_NACL)
-      idle_wakeups_per_second_(-1),
+#endif  // BUILDFLAG(ENABLE_NACL)
 #if defined(OS_LINUX)
       open_fd_count_(-1),
 #endif  // defined(OS_LINUX)
+      idle_wakeups_per_second_(-1),
       gpu_memory_has_duplicates_(false),
       is_backgrounded_(false),
       weak_ptr_factory_(this) {
@@ -125,21 +128,14 @@ TaskGroup::TaskGroup(
         base::Bind(&TaskGroup::OnProcessPriorityDone,
                    weak_ptr_factory_.GetWeakPtr()));
 
-    shared_sampler_->RegisterCallbacks(
+    shared_sampler_->RegisterCallback(
         process_id_,
-        base::Bind(&TaskGroup::OnIdleWakeupsRefreshDone,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&TaskGroup::OnPhysicalMemoryUsageRefreshDone,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&TaskGroup::OnStartTimeRefreshDone,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&TaskGroup::OnCpuTimeRefreshDone,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::Bind(&TaskGroup::OnSamplerRefreshDone, base::Unretained(this)));
   }
 }
 
 TaskGroup::~TaskGroup() {
-  shared_sampler_->UnregisterCallbacks(process_id_);
+  shared_sampler_->UnregisterCallback(process_id_);
 }
 
 void TaskGroup::AddTask(Task* task) {
@@ -193,12 +189,12 @@ void TaskGroup::Refresh(const gpu::VideoMemoryUsageStats& gpu_memory_stats,
 
 // 4- Refresh the NACL debug stub port (if enabled). This calls out to
 //    NaClBrowser on the browser's IO thread, completing asynchronously.
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
   if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_NACL,
                                                     refresh_flags)) {
     RefreshNaClDebugStubPort(tasks_[0]->GetChildProcessUniqueID());
   }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
   int64_t shared_refresh_flags =
       refresh_flags & shared_sampler_->GetSupportedFlags();
@@ -271,7 +267,7 @@ void TaskGroup::RefreshWindowsHandles() {
 #endif  // defined(OS_WIN)
 }
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 void TaskGroup::RefreshNaClDebugStubPort(int child_process_unique_id) {
   content::BrowserThread::PostTaskAndReplyWithResult(
       content::BrowserThread::IO, FROM_HERE,
@@ -286,36 +282,22 @@ void TaskGroup::OnRefreshNaClDebugStubPortDone(int nacl_debug_stub_port) {
   nacl_debug_stub_port_ = nacl_debug_stub_port;
   OnBackgroundRefreshTypeFinished(REFRESH_TYPE_NACL);
 }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
+
+#if defined(OS_LINUX)
+void TaskGroup::OnOpenFdCountRefreshDone(int open_fd_count) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  open_fd_count_ = open_fd_count;
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_FD_COUNT);
+}
+#endif  // defined(OS_LINUX)
 
 void TaskGroup::OnCpuRefreshDone(double cpu_usage) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  cpu_usage_ = cpu_usage;
+  platform_independent_cpu_usage_ = cpu_usage;
   OnBackgroundRefreshTypeFinished(REFRESH_TYPE_CPU);
-}
-
-void TaskGroup::OnStartTimeRefreshDone(base::Time start_time) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  start_time_ = start_time;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_START_TIME);
-}
-
-void TaskGroup::OnCpuTimeRefreshDone(base::TimeDelta cpu_time) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  cpu_time_ = cpu_time;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_CPU_TIME);
-}
-
-void TaskGroup::OnPhysicalMemoryUsageRefreshDone(int64_t physical_bytes) {
-#if defined(OS_WIN)
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  memory_usage_.physical_bytes = physical_bytes;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_PHYSICAL_MEMORY);
-#endif  // OS_WIN
 }
 
 void TaskGroup::OnMemoryUsageRefreshDone(MemoryUsageStats memory_usage) {
@@ -327,8 +309,16 @@ void TaskGroup::OnMemoryUsageRefreshDone(MemoryUsageStats memory_usage) {
   OnBackgroundRefreshTypeFinished(REFRESH_TYPE_MEMORY_DETAILS);
 #else
   memory_usage_ = memory_usage;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_MEMORY);
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_PHYSICAL_MEMORY |
+                                  REFRESH_TYPE_MEMORY_DETAILS);
 #endif // OS_WIN
+}
+
+void TaskGroup::OnProcessPriorityDone(bool is_backgrounded) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  is_backgrounded_ = is_backgrounded;
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_PRIORITY);
 }
 
 void TaskGroup::OnIdleWakeupsRefreshDone(int idle_wakeups_per_second) {
@@ -338,20 +328,34 @@ void TaskGroup::OnIdleWakeupsRefreshDone(int idle_wakeups_per_second) {
   OnBackgroundRefreshTypeFinished(REFRESH_TYPE_IDLE_WAKEUPS);
 }
 
-#if defined(OS_LINUX)
-void TaskGroup::OnOpenFdCountRefreshDone(int open_fd_count) {
+void TaskGroup::OnSamplerRefreshDone(
+    base::Optional<SharedSampler::SamplingResult> results) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  open_fd_count_ = open_fd_count;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_FD_COUNT);
-}
-#endif  // defined(OS_LINUX)
+  // If any of the Optional<> fields have no value then replace them with
+  // sentinel values.
+  // TODO(wez): Migrate the TaskGroup fields to Optional<> so we can remove
+  // the need for all this sentinel-handling logic.
+  if (results) {
+    cpu_time_ = results->cpu_time;
+    idle_wakeups_per_second_ = results->idle_wakeups_per_second;
+#if defined(OS_WIN)
+    hard_faults_per_second_ = results->hard_faults_per_second;
+    memory_usage_.physical_bytes = results->physical_bytes;
+#endif
+    start_time_ = results->start_time;
+  } else {
+    cpu_time_ = base::TimeDelta();
+    idle_wakeups_per_second_ = -1;
+#if defined(OS_WIN)
+    hard_faults_per_second_ = 0;
+    memory_usage_.physical_bytes = -1;
+#endif
+    start_time_ = base::Time();
+  }
 
-void TaskGroup::OnProcessPriorityDone(bool is_backgrounded) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  is_backgrounded_ = is_backgrounded;
-  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_PRIORITY);
+  OnBackgroundRefreshTypeFinished(expected_on_bg_done_flags_ &
+                                  shared_sampler_->GetSupportedFlags());
 }
 
 void TaskGroup::OnBackgroundRefreshTypeFinished(int64_t finished_refresh_type) {

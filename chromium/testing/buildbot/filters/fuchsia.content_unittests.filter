@@ -1,25 +1,5 @@
 # Being ported, https://crbug.com/754861.
 
--ChildMemoryCoordinatorImplTest.MultipleClients
--LegacyInputRouterImplTest.AckedTouchEventState
--MediaStreamManagerTest.MakeAndCancelMultipleRequests
--MediaStreamManagerTest.MakeMediaAccessRequest
--MediaStreamManagerTest.MakeMultipleRequests
--RenderWidgetHostViewAuraCopyRequestTest.DedupeFrameSubscriberRequests
--RenderWidgetHostViewAuraCopyRequestTest.DestroyedAfterCopyRequest
--RenderWidgetHostViewAuraCopyRequestTest.PresentTime
--ServiceWorkerDatabaseTest.DatabaseVersion_CorruptedSchemaVersion
--ServiceWorkerProviderHostTest.ActiveIsNotController
--URLLoaderImplTest.Basic
--URLLoaderImplTest.BasicSSL
--URLLoaderImplTest.CantSniffEmptyHtml
--URLLoaderImplTest.DoNotSniffHTMLFromImageGIF
--URLLoaderImplTest.DoNotSniffHTMLFromTextPlain
--URLLoaderImplTest.Empty
--URLLoaderImplTest.SSLSentOnlyWhenRequested
--URLLoaderImplTest.SniffMimeType
--WebContentsAudioInputStreamTest.MirroringOneStreamAfterTargetChange/0
-
 # These rely on chmod() for MakeFileUnread/writable(), https://crbug.com/759853.
 -BaseFileTest.ReadonlyBaseFile
 -BaseFileTest.RenameWithError
@@ -30,52 +10,51 @@
 -DownloadFile/DownloadFileTestWithRename.RenameWithErrorRetry/0
 -DownloadFile/DownloadFileTestWithRename.RenameWithErrorRetry/1
 
-# lstat() errno is incorrect for empty file, https://crbug.com/759691.
--BackgroundSyncManagerTest.DeleteAndStartOverServiceWorkerContext
--BackgroundSyncManagerTest.DisabledManagerWorksAfterDeleteAndStartOver
--BackgroundSyncManagerTest.DisabledPermanently
--ServiceWorkerContextRecoveryTest/ServiceWorkerContextRecoveryTest.DeleteAndStartOver/0
+# https://crbug.com/761214
+-RendererAudioOutputStreamFactoryIntegrationTest.StreamIntegrationTest
+-WebContentsAudioInputStreamTest.MirroringNothingWithTargetChange/0
 
-# See https://crbug.com/758634 on advisory file locks.
--AppCacheDatabaseTest.ExperimentalFlags
--AppCacheDatabaseTest.QuickIntegrityCheck
--AppCacheDatabaseTest.ReCreate
--AppCacheDatabaseTest.UpgradeSchema4to7
--AppCacheDatabaseTest.UpgradeSchema5or6to7
--AppCacheDatabaseTest.WasCorrutionDetected
--AppCacheStorageImplTest.Reinitialize1
--AppCacheStorageImplTest.Reinitialize2
--AppCacheStorageImplTest.Reinitialize3
+# https://crbug.com/762125
+-VideoCaptureBufferPoolTest.BufferPool/*
+
+# Flaky: https://crbug.com/760687.
+-CacheStorageManagerTest.GetAllOriginsUsageWithOldIndex
+-CacheStorageManagerTest.GetOriginSizeWithOldIndex
+
+# Flaky: https://crbug.com/759653.
+-RenderWidgetHostViewAuraTest.Resize
+
+# Flaky: https://crbug.com/766223.
 -AppCacheUpdateJobTest.AlreadyChecking/1
 -AppCacheUpdateJobTest.AlreadyDownloading/1
--BrowsingDataRemoverImplTest.MultipleTasks
--ChromeAppCacheServiceTest.KeepOnDestruction
--ChromeAppCacheServiceTest.SaveSessionState
--DOMStorageAreaTest.DeleteOrigin
--DOMStorageContextImplTest.DeleteSuboriginLocalStorage
--DOMStorageContextImplTest.PurgeMemory
--DOMStorageContextImplTest.SessionOnly
--DOMStorageContextImplTest.SetForceKeepSessionState
--DOMStorageContextImplTest.UsageInfo
--DOMStorageDatabaseTest.CloseEmptyDatabaseDeletesFile
--DOMStorageDatabaseTest.TestCanOpenAndReadWebCoreDatabase
--DOMStorageDatabaseTest.TestCanOpenFileThatIsNotADatabase
--DOMStorageDatabaseTest.TestLazyOpenIsLazy
--DOMStorageDatabaseTest.TestLazyOpenUpgradesDatabase
--IndexedDBDispatcherHostTest.AbortTransactionsAfterCompletingTransaction
--IndexedDBDispatcherHostTest.AbortTransactionsWhileDoingTransaction
--IndexedDBDispatcherHostTest.AbortTransactionsWhileUpgrading
--IndexedDBDispatcherHostTest.CloseAfterUpgrade
--IndexedDBDispatcherHostTest.CloseConnectionBeforeUpgrade
--IndexedDBDispatcherHostTest.CompactDatabaseWhileDoingTransaction
--IndexedDBDispatcherHostTest.CompactDatabaseWhileUpgrading
--IndexedDBDispatcherHostTest.CompactDatabaseWithConnection
--IndexedDBDispatcherHostTest.OpenNewConnectionWhileUpgrading
--IndexedDBDispatcherHostTest.PutWithInvalidBlob
+
+# These expect video capture: https://crbug.com/766356.
+-MediaStreamManagerTest.MakeAndCancelMultipleRequests
+-MediaStreamManagerTest.MakeMediaAccessRequest
+-MediaStreamManagerTest.MakeMultipleRequests
+
+# These expect to be able to compile shader programs but Fuchsia currently uses
+# a stub GPU implementation, so that fails. https://crbug.com/766360.
+-RenderWidgetHostViewAuraCopyRequestTest.DedupeFrameSubscriberRequests
+-RenderWidgetHostViewAuraCopyRequestTest.DestroyedAfterCopyRequest
+-RenderWidgetHostViewAuraCopyRequestTest.PresentTime
+
+# Failing: https://crbug.com/771701.
 -IndexedDBFactoryTest.DataFormatVersion
--IndexedDBFactoryTest.MemoryBackingStoreLifetime
--LocalStorageContextMojoTest.Migration
--QuotaPolicyCookieStoreTest.ForceKeepSessionState
--QuotaPolicyCookieStoreTest.TestDestroyOnBackgroundThread
--QuotaPolicyCookieStoreTest.TestPersistence
--QuotaPolicyCookieStoreTest.TestPolicy
+
+# Flaky: https://crbug.com/776424.
+-RenderWidgetHostViewAuraOverscrollTest.*
+-RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest.*
+-RenderWidgetHostViewGuestSurfaceTest.TestGuestSurface
+
+# Flaky: https://crbug.com/777916.
+-NotificationDatabaseTest.NotificationIdCorruption
+
+# Flaky: https://crbug.com/777917.
+-LevelDBTransactionRangeTests/LevelDBTransactionRangeTest.*
+
+# Flaky: https://crbug.com/780508.
+-ServiceWorkerProviderHostTest.*
+
+# Flaky, https://crbug.com/784449.
+-WebContentsAudioInputStreamTest.MirroringOneStreamAfterTargetChange*

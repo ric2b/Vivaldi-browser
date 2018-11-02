@@ -18,8 +18,7 @@ DeferredSequencedTaskRunner::DeferredTask::DeferredTask()
 DeferredSequencedTaskRunner::DeferredTask::DeferredTask(DeferredTask&& other) =
     default;
 
-DeferredSequencedTaskRunner::DeferredTask::~DeferredTask() {
-}
+DeferredSequencedTaskRunner::DeferredTask::~DeferredTask() = default;
 
 DeferredSequencedTaskRunner::DeferredTask&
 DeferredSequencedTaskRunner::DeferredTask::operator=(DeferredTask&& other) =
@@ -29,13 +28,11 @@ DeferredSequencedTaskRunner::DeferredSequencedTaskRunner(
     scoped_refptr<SequencedTaskRunner> target_task_runner)
     : started_(false), target_task_runner_(std::move(target_task_runner)) {}
 
-DeferredSequencedTaskRunner::~DeferredSequencedTaskRunner() {
-}
+DeferredSequencedTaskRunner::~DeferredSequencedTaskRunner() = default;
 
-bool DeferredSequencedTaskRunner::PostDelayedTask(
-    const tracked_objects::Location& from_here,
-    OnceClosure task,
-    TimeDelta delay) {
+bool DeferredSequencedTaskRunner::PostDelayedTask(const Location& from_here,
+                                                  OnceClosure task,
+                                                  TimeDelta delay) {
   AutoLock lock(lock_);
   if (started_) {
     DCHECK(deferred_tasks_queue_.empty());
@@ -53,7 +50,7 @@ bool DeferredSequencedTaskRunner::RunsTasksInCurrentSequence() const {
 }
 
 bool DeferredSequencedTaskRunner::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
+    const Location& from_here,
     OnceClosure task,
     TimeDelta delay) {
   AutoLock lock(lock_);
@@ -67,11 +64,10 @@ bool DeferredSequencedTaskRunner::PostNonNestableDelayedTask(
   return true;
 }
 
-void DeferredSequencedTaskRunner::QueueDeferredTask(
-    const tracked_objects::Location& from_here,
-    OnceClosure task,
-    TimeDelta delay,
-    bool is_non_nestable) {
+void DeferredSequencedTaskRunner::QueueDeferredTask(const Location& from_here,
+                                                    OnceClosure task,
+                                                    TimeDelta delay,
+                                                    bool is_non_nestable) {
   // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
   // for details.
   CHECK(task);

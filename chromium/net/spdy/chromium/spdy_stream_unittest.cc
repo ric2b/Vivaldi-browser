@@ -130,8 +130,9 @@ class SpdyStreamTest : public ::testing::Test {
   void AddSSLSocketData() {
     // Load a cert that is valid for
     // www.example.org, mail.example.org, and mail.example.com.
-    ssl_.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-    ASSERT_TRUE(ssl_.cert);
+    ssl_.ssl_info.cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+    ASSERT_TRUE(ssl_.ssl_info.cert);
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_);
   }
 
@@ -194,7 +195,7 @@ TEST_F(SpdyStreamTest, SendDataAfterOpen) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
 
   EXPECT_TRUE(delegate.send_headers_completed());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(kPostBody, kPostBodyLength),
             delegate.TakeReceivedData());
   EXPECT_TRUE(data.AllWriteDataConsumed());
@@ -272,7 +273,7 @@ TEST_F(SpdyStreamTest, Trailers) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
 
   EXPECT_TRUE(delegate.send_headers_completed());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   const SpdyHeaderBlock& received_trailers = delegate.trailers();
   SpdyHeaderBlock::const_iterator it = received_trailers.find("foo");
   EXPECT_EQ("bar", it->second);
@@ -364,11 +365,11 @@ TEST_F(SpdyStreamTest, PushedStream) {
   EXPECT_FALSE(load_timing_info.push_end.is_null());
 
   EXPECT_THAT(delegate.WaitForClose(), IsOk());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(msg, delegate.TakeReceivedData());
 
   EXPECT_THAT(push_delegate.WaitForClose(), IsOk());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(pushed_msg, push_delegate.TakeReceivedData());
 }
 
@@ -422,7 +423,7 @@ TEST_F(SpdyStreamTest, StreamError) {
   const SpdyStreamId stream_id = delegate.stream_id();
 
   EXPECT_TRUE(delegate.send_headers_completed());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(kPostBody, kPostBodyLength),
             delegate.TakeReceivedData());
   EXPECT_TRUE(data.AllWriteDataConsumed());
@@ -492,7 +493,7 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenRequestResponse) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
 
   EXPECT_TRUE(delegate.send_headers_completed());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(), delegate.TakeReceivedData());
   EXPECT_TRUE(data.AllWriteDataConsumed());
 }
@@ -545,7 +546,7 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenBidirectional) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
 
   EXPECT_TRUE(delegate.send_headers_completed());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(), delegate.TakeReceivedData());
   EXPECT_TRUE(data.AllWriteDataConsumed());
 }
@@ -676,10 +677,10 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatus) {
 
   // Response headers without ":status" header field: protocol error.
   SpdyHeaderBlock header_block_without_status;
-  header_block_without_status[spdy_util_.GetMethodKey()] = "GET";
-  header_block_without_status[spdy_util_.GetHostKey()] = "www.example.org";
-  header_block_without_status[spdy_util_.GetSchemeKey()] = "https";
-  header_block_without_status[spdy_util_.GetPathKey()] = "/";
+  header_block_without_status[kHttp2MethodHeader] = "GET";
+  header_block_without_status[kHttp2AuthorityHeader] = "www.example.org";
+  header_block_without_status[kHttp2SchemeHeader] = "https";
+  header_block_without_status[kHttp2PathHeader] = "/";
   SpdySerializedFrame reply(
       spdy_util_.ConstructSpdyReply(1, std::move(header_block_without_status)));
   AddRead(reply);
@@ -741,10 +742,10 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatusOnPushedStream) {
 
   // Response headers without ":status" header field: protocol error.
   SpdyHeaderBlock header_block_without_status;
-  header_block_without_status[spdy_util_.GetMethodKey()] = "GET";
-  header_block_without_status[spdy_util_.GetHostKey()] = "www.example.org";
-  header_block_without_status[spdy_util_.GetSchemeKey()] = "https";
-  header_block_without_status[spdy_util_.GetPathKey()] = "/";
+  header_block_without_status[kHttp2MethodHeader] = "GET";
+  header_block_without_status[kHttp2AuthorityHeader] = "www.example.org";
+  header_block_without_status[kHttp2SchemeHeader] = "https";
+  header_block_without_status[kHttp2PathHeader] = "/";
   SpdySerializedFrame pushed_reply(
       spdy_util_.ConstructSpdyReply(2, std::move(header_block_without_status)));
   AddRead(pushed_reply);
@@ -785,7 +786,7 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatusOnPushedStream) {
   EXPECT_EQ(kDefaultUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsOk());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(kPostBody, kPostBodyLength),
             delegate.TakeReceivedData());
 
@@ -895,7 +896,7 @@ TEST_F(SpdyStreamTest, HeadersMustPreceedDataOnPushedStream) {
   EXPECT_EQ(kDefaultUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsOk());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(kPostBody, kPostBodyLength),
             delegate.TakeReceivedData());
 
@@ -1074,7 +1075,7 @@ TEST_F(SpdyStreamTest, InformationalHeaders) {
   EXPECT_EQ(kDefaultUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsOk());
-  EXPECT_EQ("200", delegate.GetResponseHeaderValue(spdy_util_.GetStatusKey()));
+  EXPECT_EQ("200", delegate.GetResponseHeaderValue(kHttp2StatusHeader));
   EXPECT_EQ(SpdyString(kPostBody, kPostBodyLength),
             delegate.TakeReceivedData());
 
@@ -1321,11 +1322,11 @@ void AdjustStreamSendWindowSize(const base::WeakPtr<SpdyStream>& stream,
                                 int32_t delta_window_size) {
   // Make sure that negative adjustments are handled properly.
   EXPECT_TRUE(stream->send_stalled_by_flow_control());
-  stream->AdjustSendWindowSize(-delta_window_size);
+  EXPECT_TRUE(stream->AdjustSendWindowSize(-delta_window_size));
   EXPECT_TRUE(stream->send_stalled_by_flow_control());
-  stream->AdjustSendWindowSize(+delta_window_size);
+  EXPECT_TRUE(stream->AdjustSendWindowSize(+delta_window_size));
   EXPECT_TRUE(stream->send_stalled_by_flow_control());
-  stream->AdjustSendWindowSize(+delta_window_size);
+  EXPECT_TRUE(stream->AdjustSendWindowSize(+delta_window_size));
   EXPECT_FALSE(stream->send_stalled_by_flow_control());
 }
 

@@ -28,12 +28,12 @@
 namespace blink {
 
 SpeechSynthesisVoice* SpeechSynthesisVoice::Create(
-    PassRefPtr<PlatformSpeechSynthesisVoice> voice) {
+    scoped_refptr<PlatformSpeechSynthesisVoice> voice) {
   return new SpeechSynthesisVoice(std::move(voice));
 }
 
 SpeechSynthesisVoice::SpeechSynthesisVoice(
-    PassRefPtr<PlatformSpeechSynthesisVoice> voice)
+    scoped_refptr<PlatformSpeechSynthesisVoice> voice)
     : platform_voice_(std::move(voice)) {}
 
 SpeechSynthesisVoice::~SpeechSynthesisVoice() {}

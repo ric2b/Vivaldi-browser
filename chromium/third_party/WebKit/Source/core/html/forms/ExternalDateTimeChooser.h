@@ -43,7 +43,7 @@ class CORE_EXPORT ExternalDateTimeChooser final : public DateTimeChooser {
                                          DateTimeChooserClient*,
                                          const DateTimeChooserParameters&);
   ~ExternalDateTimeChooser() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // The following functions are for DateTimeChooserCompletion.
   void DidChooseValue(const WebString&);

@@ -63,7 +63,6 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   void OnBeforeRedirect(URLRequest* request, const GURL& new_location) override;
 
   void OnResponseStarted(URLRequest* request, int net_error) override;
-  void OnResponseStarted(URLRequest* request) override;
 
   void OnNetworkBytesReceived(URLRequest* request,
                               int64_t bytes_received) override;
@@ -86,7 +85,7 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
                        const CookieList& cookie_list) override;
 
   bool OnCanSetCookie(const URLRequest& request,
-                      const std::string& cookie_line,
+                      const net::CanonicalCookie& cookie,
                       CookieOptions* options) override;
 
   bool OnCanAccessFile(const URLRequest& request,

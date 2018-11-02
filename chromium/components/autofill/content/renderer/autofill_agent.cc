@@ -11,6 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/location.h"
 #include "base/metrics/field_trial.h"
@@ -28,6 +29,7 @@
 #include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
@@ -144,7 +146,7 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
                              PasswordGenerationAgent* password_generation_agent,
                              service_manager::BinderRegistry* registry)
     : content::RenderFrameObserver(render_frame),
-      form_cache_(*render_frame->GetWebFrame()),
+      form_cache_(render_frame->GetWebFrame()),
       password_autofill_agent_(password_autofill_agent),
       password_generation_agent_(password_generation_agent),
       autofill_query_id_(0),
@@ -154,7 +156,6 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
       is_generation_popup_possibly_visible_(false),
       is_user_gesture_required_(true),
       is_secure_context_required_(false),
-      page_click_tracker_(new PageClickTracker(render_frame, this)),
       binding_(this),
       weak_ptr_factory_(this) {
   render_frame->GetWebFrame()->SetAutofillClient(this);
@@ -218,14 +219,47 @@ void AutofillAgent::WillSubmitForm(const WebFormElement& form) {
 }
 
 void AutofillAgent::DidChangeScrollOffset() {
-  if (IsKeyboardAccessoryEnabled())
+  if (!focus_requires_scroll_) {
+    // Post a task here since scroll offset may change during layout.
+    // (https://crbug.com/804886)
+    weak_ptr_factory_.InvalidateWeakPtrs();
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&AutofillAgent::DidChangeScrollOffsetImpl,
+                                  weak_ptr_factory_.GetWeakPtr(), element_));
+  } else if (!IsKeyboardAccessoryEnabled()) {
+    HidePopup();
+  }
+}
+
+void AutofillAgent::DidChangeScrollOffsetImpl(
+    const WebFormControlElement& element) {
+  if (element != element_ || focus_requires_scroll_ ||
+      !is_popup_possibly_visible_ || !element_.Focused())
     return;
 
-  HidePopup();
+  FormData form;
+  FormFieldData field;
+  if (form_util::FindFormAndFieldForFormControlElement(element_, &form,
+                                                       &field)) {
+    GetAutofillDriver()->TextFieldDidScroll(
+        form, field,
+        render_frame()->GetRenderView()->ElementBoundsInWindow(element_));
+  }
+
+  // Ignore subsequent scroll offset changes.
+  if (!IsKeyboardAccessoryEnabled())
+    HidePopup();
 }
 
 void AutofillAgent::FocusedNodeChanged(const WebNode& node) {
-  page_click_tracker_->FocusedNodeChanged(node);
+  was_focused_before_now_ = false;
+
+  if ((IsKeyboardAccessoryEnabled() || !focus_requires_scroll_) &&
+      WebUserGestureIndicator::IsProcessingUserGesture(
+          node.IsNull() ? nullptr : node.GetDocument().GetFrame())) {
+    focused_node_was_last_clicked_ = true;
+    HandleFocusChangeComplete();
+  }
 
   HidePopup();
 
@@ -296,28 +330,6 @@ void AutofillAgent::FireHostSubmitEvents(const FormData& form_data,
 
 void AutofillAgent::Shutdown() {
   weak_ptr_factory_.InvalidateWeakPtrs();
-}
-
-
-void AutofillAgent::FormControlElementClicked(
-    const WebFormControlElement& element,
-    bool was_focused) {
-  const WebInputElement* input_element = ToWebInputElement(&element);
-  if (!input_element && !form_util::IsTextAreaElement(element))
-    return;
-
-  ShowSuggestionsOptions options;
-  options.autofill_on_empty_values = true;
-  options.show_full_suggestion_list = element.IsAutofilled();
-
-  if (!IsSingleClickEnabled()) {
-    // Show full suggestions when clicking on an already-focused form field. On
-    // the initial click (not focused yet), only show password suggestions.
-    options.show_full_suggestion_list =
-        options.show_full_suggestion_list || was_focused;
-    options.show_password_suggestions_only = !was_focused;
-  }
-  ShowSuggestions(element, options);
 }
 
 void AutofillAgent::TextFieldDidEndEditing(const WebInputElement& element) {
@@ -482,8 +494,10 @@ void AutofillAgent::PreviewForm(int32_t id, const FormData& form) {
 
 void AutofillAgent::FieldTypePredictionsAvailable(
     const std::vector<FormDataPredictions>& forms) {
+  bool attach_predictions_to_dom =
+      base::FeatureList::IsEnabled(features::kAutofillShowTypePredictions);
   for (const auto& form : forms) {
-    form_cache_.ShowPredictions(form);
+    form_cache_.ShowPredictions(form, attach_predictions_to_dom);
   }
 }
 
@@ -684,6 +698,10 @@ void AutofillAgent::SetSecureContextRequired(bool required) {
   is_secure_context_required_ = required;
 }
 
+void AutofillAgent::SetFocusRequiresScroll(bool require) {
+  focus_requires_scroll_ = require;
+}
+
 void AutofillAgent::QueryAutofillSuggestions(
     const WebFormControlElement& element) {
   if (!element.GetDocument().GetFrame())
@@ -734,7 +752,7 @@ void AutofillAgent::QueryAutofillSuggestions(
 void AutofillAgent::DoFillFieldWithValue(const base::string16& value,
                                          WebInputElement* node) {
   base::AutoReset<bool> auto_reset(&ignore_text_changes_, true);
-  node->SetEditingValue(
+  node->SetAutofillValue(
       blink::WebString::FromUTF16(value.substr(0, node->MaxLength())));
   password_autofill_agent_->UpdateStateForTextChange(*node);
 }
@@ -773,7 +791,8 @@ void AutofillAgent::HidePopup() {
 }
 
 bool AutofillAgent::IsUserGesture() const {
-  return WebUserGestureIndicator::IsProcessingUserGesture();
+  return WebUserGestureIndicator::IsProcessingUserGesture(
+      render_frame()->GetWebFrame());
 }
 
 void AutofillAgent::DidAssociateFormControlsDynamically() {
@@ -800,14 +819,57 @@ void AutofillAgent::DidCompleteFocusChangeInFrame() {
   if (!focused_element.IsNull() && password_autofill_agent_)
     password_autofill_agent_->FocusedNodeHasChanged(focused_element);
 
-  // PageClickTracker needs to be notified after
-  // |is_generation_popup_possibly_visible_| has been updated.
-  page_click_tracker_->DidCompleteFocusChangeInFrame();
+  if (!IsKeyboardAccessoryEnabled() && focus_requires_scroll_)
+    HandleFocusChangeComplete();
 }
 
 void AutofillAgent::DidReceiveLeftMouseDownOrGestureTapInNode(
     const WebNode& node) {
-  page_click_tracker_->DidReceiveLeftMouseDownOrGestureTapInNode(node);
+  DCHECK(!node.IsNull());
+  focused_node_was_last_clicked_ = node.Focused();
+
+  if (IsKeyboardAccessoryEnabled() || !focus_requires_scroll_)
+    HandleFocusChangeComplete();
+}
+
+void AutofillAgent::FormControlElementClicked(
+    const WebFormControlElement& element,
+    bool was_focused) {
+  last_clicked_form_control_element_for_testing_ = element;
+  last_clicked_form_control_element_was_focused_for_testing_ = was_focused;
+
+  const WebInputElement* input_element = ToWebInputElement(&element);
+  if (!input_element && !form_util::IsTextAreaElement(element))
+    return;
+
+  ShowSuggestionsOptions options;
+  options.autofill_on_empty_values = true;
+  options.show_full_suggestion_list = element.IsAutofilled();
+
+  if (!IsSingleClickEnabled()) {
+    // Show full suggestions when clicking on an already-focused form field. On
+    // the initial click (not focused yet), only show password suggestions.
+    options.show_full_suggestion_list =
+        options.show_full_suggestion_list || was_focused;
+    options.show_password_suggestions_only = !was_focused;
+  }
+  ShowSuggestions(element, options);
+}
+
+void AutofillAgent::HandleFocusChangeComplete() {
+  WebElement focused_element =
+      render_frame()->GetWebFrame()->GetDocument().FocusedElement();
+
+  if (focused_node_was_last_clicked_ && !focused_element.IsNull() &&
+      focused_element.IsFormControlElement() &&
+      (form_util::IsTextInput(blink::ToWebInputElement(&focused_element)) ||
+       focused_element.HasHTMLTagName("textarea"))) {
+    FormControlElementClicked(focused_element.ToConst<WebFormControlElement>(),
+                              was_focused_before_now_);
+  }
+
+  was_focused_before_now_ = true;
+  focused_node_was_last_clicked_ = false;
 }
 
 void AutofillAgent::AjaxSucceeded() {

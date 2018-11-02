@@ -6,12 +6,15 @@
 #define DEVICE_VR_TEST_FAKE_VR_DEVICE_PROVIDER_H_
 
 #include <vector>
+
 #include "device/vr/vr_device.h"
 #include "device/vr/vr_device_provider.h"
+#include "device/vr/vr_export.h"
 
 namespace device {
 
-class FakeVRDeviceProvider : public VRDeviceProvider {
+// TODO(mthiesse, crbug.com/769373): Remove DEVICE_VR_EXPORT.
+class DEVICE_VR_EXPORT FakeVRDeviceProvider : public VRDeviceProvider {
  public:
   FakeVRDeviceProvider();
   ~FakeVRDeviceProvider() override;
@@ -19,15 +22,20 @@ class FakeVRDeviceProvider : public VRDeviceProvider {
   // Adds devices to the provider with the given device, which will be
   // returned when GetDevices is queried.
   void AddDevice(std::unique_ptr<VRDevice> device);
-  void RemoveDevice(std::unique_ptr<VRDevice> device);
-  bool IsInitialized() { return initialized_; }
+  void RemoveDevice(unsigned int device_id);
 
-  void GetDevices(std::vector<VRDevice*>* devices) override;
-  void Initialize() override;
+  void Initialize(base::Callback<void(VRDevice*)> add_device_callback,
+                  base::Callback<void(VRDevice*)> remove_device_callback,
+                  base::OnceClosure initialization_complete) override;
+  bool Initialized() override;
 
  private:
   std::vector<std::unique_ptr<VRDevice>> devices_;
   bool initialized_;
+  base::Callback<void(VRDevice*)> add_device_callback_;
+  base::Callback<void(VRDevice*)> remove_device_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeVRDeviceProvider);
 };
 
 }  // namespace device

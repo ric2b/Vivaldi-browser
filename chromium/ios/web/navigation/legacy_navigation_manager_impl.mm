@@ -136,7 +136,7 @@ void LegacyNavigationManagerImpl::DiscardNonCommittedItems() {
 }
 
 int LegacyNavigationManagerImpl::GetItemCount() const {
-  return [session_controller_ items].size();
+  return session_controller_ ? [session_controller_ items].size() : 0;
 }
 
 NavigationItem* LegacyNavigationManagerImpl::GetItemAtIndex(
@@ -216,8 +216,8 @@ void LegacyNavigationManagerImpl::Restore(
     int last_committed_item_index,
     std::vector<std::unique_ptr<NavigationItem>> items) {
   DCHECK(GetItemCount() == 0 && !GetPendingItem());
-  DCHECK_GE(last_committed_item_index, 0);
-  DCHECK_LT(static_cast<size_t>(last_committed_item_index), items.size());
+  DCHECK_LT(last_committed_item_index, static_cast<int>(items.size()));
+  DCHECK(items.empty() || last_committed_item_index >= 0);
   SetSessionController([[CRWSessionController alloc]
         initWithBrowserState:browser_state_
              navigationItems:std::move(items)
@@ -298,7 +298,9 @@ NavigationItemImpl* LegacyNavigationManagerImpl::GetTransientItemImpl() const {
   return [session_controller_ transientItem];
 }
 
-void LegacyNavigationManagerImpl::FinishGoToIndex(int index) {
+void LegacyNavigationManagerImpl::FinishGoToIndex(
+    int index,
+    NavigationInitiationType type) {
   const ScopedNavigationItemImplList& items = [session_controller_ items];
   NavigationItem* to_item = items[index].get();
   NavigationItem* previous_item = [session_controller_ currentItem];
@@ -308,7 +310,7 @@ void LegacyNavigationManagerImpl::FinishGoToIndex(int index) {
                                                        andItem:to_item];
   if (same_document_navigation) {
     [session_controller_ goToItemAtIndex:index discardNonCommittedItems:YES];
-    delegate_->UpdateHtml5HistoryState();
+    delegate_->OnGoToIndexSameDocumentNavigation(type);
   } else {
     [session_controller_ discardNonCommittedItems];
     [session_controller_ setPendingItemIndex:index];
@@ -330,6 +332,20 @@ bool LegacyNavigationManagerImpl::IsRedirectItemAtIndex(int index) const {
 
 int LegacyNavigationManagerImpl::GetPreviousItemIndex() const {
   return base::checked_cast<int>([session_controller_ previousItemIndex]);
+}
+
+void LegacyNavigationManagerImpl::SetPreviousItemIndex(
+    int previous_item_index) {
+  [session_controller_ setPreviousItemIndex:previous_item_index];
+}
+
+void LegacyNavigationManagerImpl::AddPushStateItemIfNecessary(
+    const GURL& url,
+    NSString* state_object,
+    ui::PageTransition transition) {
+  [session_controller_ pushNewItemWithURL:url
+                              stateObject:state_object
+                               transition:transition];
 }
 
 }  // namespace web

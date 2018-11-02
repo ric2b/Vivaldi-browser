@@ -117,12 +117,14 @@ class FakeDelegate : public ImageTransportSurfaceDelegate,
   const GpuPreferences& GetGpuPreferences() const override {
     return gpu_preferences_;
   }
-  void SetLatencyInfoCallback(const LatencyInfoCallback& callback) override {}
+  void SetSnapshotRequestedCallback(const base::Closure& callback) override {}
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override {
     // This shouldn't be called by GpuVSyncProviderWin
     NOTREACHED();
   }
+  void BufferPresented(uint64_t swap_id,
+                       const gfx::PresentationFeedback& feedback) override {}
 
   void AddFilter(IPC::MessageFilter* message_filter) override {
     channel_->AddFilter(message_filter);
@@ -171,6 +173,7 @@ class GpuVSyncProviderTest : public testing::Test {
 
  protected:
   base::WaitableEvent vsync_event_;
+  std::unique_ptr<GpuVSyncProviderWin> provider_;
 
  private:
   void OnVSync(base::TimeTicks timestamp, base::TimeDelta interval) {
@@ -189,7 +192,6 @@ class GpuVSyncProviderTest : public testing::Test {
   base::TimeTicks previous_vsync_timestamp_;
   std::unique_ptr<FakeChannel> channel_;
   std::unique_ptr<FakeDelegate> delegate_;
-  std::unique_ptr<GpuVSyncProviderWin> provider_;
 };
 
 // Tests that VSync signal production is controlled by SetNeedsVSync.
@@ -227,6 +229,13 @@ TEST_F(GpuVSyncProviderTest, VSyncMonotonicTimestampTest) {
   // Make sure this doesn't run for longer than 1 second in case VSync
   // callbacks are slowed by running multiple tests in parallel.
   vsync_event_.TimedWait(base::TimeDelta::FromMilliseconds(1000));
+}
+
+// Verifies that receiving SetNeedsVSync signal after stopping the v-sync
+// doesn't trigger a crash.
+TEST_F(GpuVSyncProviderTest, SetNeedsVSyncAfterShutdown) {
+  provider_.reset();
+  SetNeedsVSync(true);
 }
 
 }  // namespace gpu

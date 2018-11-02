@@ -21,7 +21,7 @@
 #include "cc/layers/layer_client.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer_client.h"
-#include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/sequence_surface_reference_factory.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor.h"
@@ -42,6 +42,7 @@ class TextureLayer;
 
 namespace viz {
 class CopyOutputRequest;
+struct TransferableResource;
 }
 
 namespace ui {
@@ -148,7 +149,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // The transform, relative to the parent.
   void SetTransform(const gfx::Transform& transform);
-  gfx::Transform transform() const;
+  const gfx::Transform& transform() const { return cc_layer_->transform(); }
 
   gfx::PointF position() const { return cc_layer_->position(); }
 
@@ -276,7 +277,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // tree.
   static void ConvertPointToLayer(const Layer* source,
                                   const Layer* target,
-                                  gfx::Point* point);
+                                  gfx::PointF* point);
 
   // Converts a transform to be relative to the given |ancestor|. Returns
   // whether success (that is, whether the given ancestor was really an
@@ -297,10 +298,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   const std::string& name() const { return name_; }
   void set_name(const std::string& name) { name_ = name; }
 
-  // Set new TextureMailbox for this layer. Note that |mailbox| may hold a
-  // shared memory resource or an actual mailbox for a texture.
-  void SetTextureMailbox(
-      const viz::TextureMailbox& mailbox,
+  // Set new TransferableResource for this layer. Note that |resource| may hold
+  // a handle for a shared memory resource or a gpu texture.
+  void SetTransferableResource(
+      const viz::TransferableResource& resource,
       std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       gfx::Size texture_size_in_dip);
   void SetTextureSize(gfx::Size texture_size_in_dip);
@@ -309,18 +310,19 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // Begins showing content from a surface with a particular ID.
   void SetShowPrimarySurface(
-      const viz::SurfaceInfo& surface_info,
+      const viz::SurfaceId& surface_id,
+      const gfx::Size& frame_size_in_dip,
       scoped_refptr<viz::SurfaceReferenceFactory> surface_ref);
 
   // In the event that the primary surface is not yet available in the
   // display compositor, the fallback surface will be used.
-  void SetFallbackSurface(const viz::SurfaceInfo& surface_info);
+  void SetFallbackSurfaceId(const viz::SurfaceId& surface_id);
 
-  // Returns the primary SurfaceInfo set by SetShowPrimarySurface.
-  const viz::SurfaceInfo* GetPrimarySurfaceInfo() const;
+  // Returns the primary SurfaceId set by SetShowPrimarySurface.
+  const viz::SurfaceId* GetPrimarySurfaceId() const;
 
-  // Returns the fallback SurfaceInfo set by SetFallbackSurface.
-  const viz::SurfaceInfo* GetFallbackSurfaceInfo() const;
+  // Returns the fallback SurfaceId set by SetFallbackSurfaceId.
+  const viz::SurfaceId* GetFallbackSurfaceId() const;
 
   bool has_external_content() {
     return texture_layer_.get() || surface_layer_.get();
@@ -366,10 +368,6 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Notifies the layer that the device scale factor has changed.
   void OnDeviceScaleFactorChanged(float device_scale_factor);
 
-  // Notifies the layer that one of its children has received a new
-  // delegated frame.
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip);
-
   // Requets a copy of the layer's output as a texture or bitmap.
   void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request);
 
@@ -390,7 +388,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   gfx::ScrollOffset CurrentScrollOffset() const;
   void SetScrollOffset(const gfx::ScrollOffset& offset);
 
-  // ContentLayerClient
+  // ContentLayerClient implementation.
   gfx::Rect PaintableRegion() override;
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
       ContentLayerClient::PaintingControlSetting painting_control) override;
@@ -399,14 +397,14 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   cc::Layer* cc_layer_for_testing() { return cc_layer_; }
 
-  // TextureLayerClient
-  bool PrepareTextureMailbox(
-      viz::TextureMailbox* mailbox,
+  // TextureLayerClient implementation.
+  bool PrepareTransferableResource(
+      viz::TransferableResource* resource,
       std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
   float device_scale_factor() const { return device_scale_factor_; }
 
-  // LayerClient
+  // LayerClient implementation.
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer* layer) override;
   void didUpdateMainThreadScrollingReasons() override;
@@ -430,6 +428,16 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void AddCacheRenderSurfaceRequest();
   void RemoveCacheRenderSurfaceRequest();
 
+  // Request deferring painting for layer.
+  void AddDeferredPaintRequest();
+  void RemoveDeferredPaintRequest();
+
+  bool IsPaintDeferredForTesting() const { return deferred_paint_requests_; }
+
+  // Request trilinear filtering for layer.
+  void AddTrilinearFilteringRequest();
+  void RemoveTrilinearFilteringRequest();
+
   // The back link from the mask layer to it's associated masked layer.
   // We keep this reference for the case that if the mask layer gets deleted
   // while attached to the main layer before the main layer is deleted.
@@ -445,18 +453,27 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // StackBelow().
   void StackRelativeTo(Layer* child, Layer* other, bool above);
 
-  bool ConvertPointForAncestor(const Layer* ancestor, gfx::Point* point) const;
-  bool ConvertPointFromAncestor(const Layer* ancestor, gfx::Point* point) const;
+  bool ConvertPointForAncestor(const Layer* ancestor, gfx::PointF* point) const;
+  bool ConvertPointFromAncestor(const Layer* ancestor,
+                                gfx::PointF* point) const;
 
   // Implementation of LayerAnimatorDelegate
-  void SetBoundsFromAnimation(const gfx::Rect& bounds) override;
-  void SetTransformFromAnimation(const gfx::Transform& transform) override;
-  void SetOpacityFromAnimation(float opacity) override;
-  void SetVisibilityFromAnimation(bool visibility) override;
-  void SetBrightnessFromAnimation(float brightness) override;
-  void SetGrayscaleFromAnimation(float grayscale) override;
-  void SetColorFromAnimation(SkColor color) override;
-  void SetTemperatureFromAnimation(float temperature) override;
+  void SetBoundsFromAnimation(const gfx::Rect& bounds,
+                              PropertyChangeReason reason) override;
+  void SetTransformFromAnimation(const gfx::Transform& transform,
+                                 PropertyChangeReason reason) override;
+  void SetOpacityFromAnimation(float opacity,
+                               PropertyChangeReason reason) override;
+  void SetVisibilityFromAnimation(bool visibility,
+                                  PropertyChangeReason reason) override;
+  void SetBrightnessFromAnimation(float brightness,
+                                  PropertyChangeReason reason) override;
+  void SetGrayscaleFromAnimation(float grayscale,
+                                 PropertyChangeReason reason) override;
+  void SetColorFromAnimation(SkColor color,
+                             PropertyChangeReason reason) override;
+  void SetTemperatureFromAnimation(float temperature,
+                                   PropertyChangeReason reason) override;
   void ScheduleDrawForAnimation() override;
   const gfx::Rect& GetBoundsForAnimation() const override;
   gfx::Transform GetTransformForAnimation() const override;
@@ -590,21 +607,32 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   gfx::ImageSkia nine_patch_layer_image_;
   gfx::Rect nine_patch_layer_aperture_;
 
-  // The mailbox used by texture_layer_.
-  viz::TextureMailbox mailbox_;
+  // The external resource used by texture_layer_.
+  viz::TransferableResource transfer_resource_;
 
   // The callback to release the mailbox. This is only set after
-  // SetTextureMailbox is called, before we give it to the TextureLayer.
-  std::unique_ptr<viz::SingleReleaseCallback> mailbox_release_callback_;
+  // SetTransferableResource() is called, before we give it to the TextureLayer.
+  std::unique_ptr<viz::SingleReleaseCallback> transfer_release_callback_;
 
   // The size of the frame or texture in DIP, set when SetShowDelegatedContent
-  // or SetTextureMailbox was called.
+  // or SetTransferableResource() was called.
   gfx::Size frame_size_in_dip_;
 
   // The counter to maintain how many cache render surface requests we have. If
   // the value > 0, means we need to cache the render surface. If the value
   // == 0, means we should not cache the render surface.
   unsigned cache_render_surface_requests_;
+
+  // The counter to maintain how many deferred paint requests we have. If the
+  // value > 0, means we need to defer painting the layer. If the value == 0,
+  // means we should paint the layer.
+  unsigned deferred_paint_requests_;
+
+  // The counter to maintain how many trilinear filtering requests we have. If
+  // the value > 0, means we need to perform trilinear filtering on the layer.
+  // If the value == 0, means we should not perform trilinear filtering on the
+  // layer.
+  unsigned trilinear_filtering_request_;
 
   DISALLOW_COPY_AND_ASSIGN(Layer);
 };

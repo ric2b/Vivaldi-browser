@@ -19,7 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "components/metrics/proto/system_profile.pb.h"
+#include "third_party/metrics_proto/system_profile.pb.h"
 
 // AntiVirusMetricsProvider is responsible for adding antivirus information to
 // the UMA system profile proto.
@@ -77,7 +77,7 @@ class AntiVirusMetricsProvider : public metrics::MetricsProvider {
   static void MaybeAddUnregisteredAntiVirusProducts(
       std::vector<AvProduct>* products);
 
-  static std::vector<AvProduct> GetAntiVirusProductsOnFileThread();
+  static std::vector<AvProduct> GetAntiVirusProductsOnCOMSTAThread();
 
   // Removes anything extraneous from the end of the product name such as
   // versions, years, or anything containing numbers to make it more constant.

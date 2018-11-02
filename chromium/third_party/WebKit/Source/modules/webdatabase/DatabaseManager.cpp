@@ -29,7 +29,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/DatabaseClient.h"
@@ -39,6 +38,7 @@
 #include "modules/webdatabase/StorageLog.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebTraceLocation.h"
 
 namespace blink {
@@ -138,7 +138,7 @@ Database* DatabaseManager::OpenDatabaseInternal(
     const String& expected_version,
     const String& display_name,
     unsigned estimated_size,
-    DatabaseCallback* creation_callback,
+    V8DatabaseCallback* creation_callback,
     bool set_version_in_new_database,
     DatabaseError& error,
     String& error_message) {
@@ -147,11 +147,10 @@ Database* DatabaseManager::OpenDatabaseInternal(
   DatabaseContext* backend_context = DatabaseContextFor(context)->Backend();
   if (DatabaseTracker::Tracker().CanEstablishDatabase(
           backend_context, name, display_name, estimated_size, error)) {
-    Database* backend =
-        new Database(backend_context, name, expected_version, display_name,
-                     estimated_size, creation_callback);
+    Database* backend = new Database(backend_context, name, expected_version,
+                                     display_name, estimated_size);
     if (backend->OpenAndVerifyVersion(set_version_in_new_database, error,
-                                      error_message))
+                                      error_message, creation_callback))
       return backend;
   }
 
@@ -176,7 +175,7 @@ Database* DatabaseManager::OpenDatabase(ExecutionContext* context,
                                         const String& expected_version,
                                         const String& display_name,
                                         unsigned estimated_size,
-                                        DatabaseCallback* creation_callback,
+                                        V8DatabaseCallback* creation_callback,
                                         DatabaseError& error,
                                         String& error_message) {
   DCHECK_EQ(error, DatabaseError::kNone);

@@ -19,7 +19,10 @@ AnimatedIconView::AnimatedIconView(const gfx::VectorIcon& icon)
   UpdateStaticImage();
 }
 
-AnimatedIconView::~AnimatedIconView() {}
+AnimatedIconView::~AnimatedIconView() {
+  if (compositor_ && compositor_->HasAnimationObserver(this))
+    compositor_->RemoveAnimationObserver(this);
+}
 
 void AnimatedIconView::SetColor(SkColor color) {
   if (color_ != color) {
@@ -30,14 +33,20 @@ void AnimatedIconView::SetColor(SkColor color) {
 
 void AnimatedIconView::Animate(State target) {
   SetState(target);
-  if (!IsAnimating())
-    GetWidget()->GetCompositor()->AddAnimationObserver(this);
+  if (!IsAnimating()) {
+    compositor_ = GetWidget()->GetCompositor();
+    compositor_->AddAnimationObserver(this);
+  }
   start_time_ = base::TimeTicks::Now();
 }
 
 void AnimatedIconView::SetState(State state) {
   state_ = state;
   UpdateStaticImage();
+}
+
+bool AnimatedIconView::IsAnimating() const {
+  return start_time_ != base::TimeTicks();
 }
 
 void AnimatedIconView::OnPaint(gfx::Canvas* canvas) {
@@ -58,17 +67,18 @@ void AnimatedIconView::OnPaint(gfx::Canvas* canvas) {
 void AnimatedIconView::OnAnimationStep(base::TimeTicks timestamp) {
   base::TimeDelta elapsed = timestamp - start_time_;
   if (elapsed > duration_) {
-    GetWidget()->GetCompositor()->RemoveAnimationObserver(this);
+    compositor_->RemoveAnimationObserver(this);
+    compositor_ = nullptr;
     start_time_ = base::TimeTicks();
   }
 
   SchedulePaint();
 }
 
-void AnimatedIconView::OnCompositingShuttingDown(ui::Compositor* compositor) {}
-
-bool AnimatedIconView::IsAnimating() const {
-  return start_time_ != base::TimeTicks();
+void AnimatedIconView::OnCompositingShuttingDown(ui::Compositor* compositor) {
+  DCHECK_EQ(compositor, compositor_);
+  compositor_->RemoveAnimationObserver(this);
+  compositor_ = nullptr;
 }
 
 void AnimatedIconView::UpdateStaticImage() {

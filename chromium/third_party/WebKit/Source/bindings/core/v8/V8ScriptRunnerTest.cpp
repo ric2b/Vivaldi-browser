@@ -4,6 +4,7 @@
 
 #include "bindings/core/v8/V8ScriptRunner.h"
 
+#include "bindings/core/v8/ReferrerScriptInfo.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/loader/resource/ScriptResource.h"
@@ -45,8 +46,7 @@ class V8ScriptRunnerTest : public ::testing::Test {
     return WTF::String::Format("whatever%d.js", counter_);
   }
   KURL Url() const {
-    return KURL(kParsedURLString,
-                WTF::String::Format("http://bla.com/bla%d", counter_));
+    return KURL(WTF::String::Format("http://bla.com/bla%d", counter_));
   }
   unsigned TagForParserCache(CachedMetadataHandler* cache_handler) const {
     return V8ScriptRunner::TagForParserCache(cache_handler);
@@ -61,9 +61,10 @@ class V8ScriptRunnerTest : public ::testing::Test {
   bool CompileScript(ScriptState* script_state, V8CacheOptions cache_options) {
     return !V8ScriptRunner::CompileScript(
                 script_state, V8String(script_state->GetIsolate(), Code()),
-                Filename(), String(), WTF::TextPosition(), resource_.Get(),
+                Filename(), String(), WTF::TextPosition(),
+                ScriptSourceLocationType::kExternalFile, resource_.Get(),
                 nullptr, resource_.Get() ? resource_->CacheHandler() : nullptr,
-                kNotSharableCrossOrigin, cache_options)
+                kNotSharableCrossOrigin, cache_options, ReferrerScriptInfo())
                 .IsEmpty();
   }
 

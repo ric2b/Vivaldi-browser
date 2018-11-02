@@ -9,8 +9,6 @@ import("shell_apk_version.gni")
 shell_apk_manifest = "$target_gen_dir/shell_apk_manifest/AndroidManifest.xml"
 unbound_shell_apk_manifest =
     "$target_gen_dir/unbound_shell_apk_manifest/AndroidManifest.xml"
-shell_apk_manifest_javatests =
-    "$target_gen_dir/shell_apk_manifest_javatests/AndroidManifest.xml"
 
 manifest_processor_template("shell_apk_manifest") {
   input = "AndroidManifest.xml"
@@ -28,15 +26,6 @@ manifest_processor_template("unbound_shell_apk_manifest") {
   extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
 }
 
-# Manifest for instrumentation tests. Cannot be customized via GN args.
-manifest_processor_template("shell_apk_manifest_javatests") {
-  input = "AndroidManifest.xml"
-  config_file = "javatest_manifest_config.json"
-  output = shell_apk_manifest_javatests
-
-  extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
-}
-
 android_resources("shell_apk_resources") {
   resource_dirs = [ "res" ]
   custom_package = "org.chromium.webapk.shell_apk"
@@ -49,21 +38,30 @@ android_library("webapk_java") {
   java_files = [
     "src/org/chromium/webapk/shell_apk/DexLoader.java",
     "src/org/chromium/webapk/shell_apk/HostBrowserClassLoader.java",
+    "src/org/chromium/webapk/shell_apk/HostBrowserLauncher.java",
     "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
     "src/org/chromium/webapk/shell_apk/MainActivity.java",
     "src/org/chromium/webapk/shell_apk/IdentityService.java",
     "src/org/chromium/webapk/shell_apk/InstallHostBrowserDialog.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity0.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity1.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity2.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity3.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity4.java",
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService.java",
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService0.java",
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService1.java",
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService2.java",
     "src/org/chromium/webapk/shell_apk/WebApkServiceFactory.java",
+    "src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapper.java",
     "src/org/chromium/webapk/shell_apk/WebApkUtils.java",
   ]
   deps = [
     ":shell_apk_manifest",
     ":shell_apk_resources",
     "//chrome/android/webapk/libs/common:common_java",
+    "//chrome/android/webapk/libs/runtime_library:webapk_service_aidl_java",
   ]
 
   # Manifest used for linting (determining unused resources).
@@ -89,6 +87,7 @@ template("webapk_tmpl") {
     if (!is_java_debug) {
       proguard_enabled = true
       proguard_configs = [
+        "//chrome/android/webapk/shell_apk/proguard.flags",
         "//chrome/android/java/proguard.flags",
         "//base/android/proguard/chromium_apk.flags",
         "//base/android/proguard/chromium_code.flags",
@@ -163,13 +162,6 @@ webapk_tmpl("unbound_webapk") {
   apk_name = "UnboundWebApk"
 }
 
-# WebAPK for instrumentation tests.
-webapk_tmpl("webapk_javatests") {
-  android_manifest = shell_apk_manifest_javatests
-  android_manifest_dep = ":shell_apk_manifest_javatests"
-  apk_name = "webapk_javatests"
-}
-
 android_library("shell_apk_javatests") {
   testonly = true
   java_files =
@@ -190,11 +182,14 @@ junit_binary("webapk_shell_apk_junit_tests") {
   java_files = [
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserClassLoaderTest.java",
     "junit/src/org/chromium/webapk/shell_apk/MainActivityTest.java",
+    "junit/src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapperTest.java",
     "junit/src/org/chromium/webapk/shell_apk/WebApkUtilsTest.java",
   ]
   deps = [
     ":webapk_java",
     "//chrome/android/webapk/libs/common:common_java",
+    "//chrome/android/webapk/libs/runtime_library:runtime_library_for_tests_java",
+    "//chrome/android/webapk/libs/runtime_library:webapk_service_aidl_java",
     "//chrome/android/webapk/test:junit_test_support",
   ]
 }

@@ -1765,6 +1765,7 @@ class BasicAuthProxyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   """
 
   _AUTH_CREDENTIAL = 'Basic Zm9vOmJhcg==' # foo:bar
+  redirect_connect_to_localhost = False;
 
   def parse_request(self):
     """Overrides parse_request to check credential."""
@@ -1849,6 +1850,9 @@ class BasicAuthProxyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     except Exception:
       self.send_response(400)
       self.end_headers()
+
+    if BasicAuthProxyRequestHandler.redirect_connect_to_localhost:
+      host = "127.0.0.1"
 
     try:
       sock = socket.create_connection((host, port))
@@ -2058,8 +2062,14 @@ class ServerRunner(testserver_base.TestServerRunner):
       if self.options.cert_and_key_file:
         scheme = "wss"
         websocket_options.use_tls = True
-        websocket_options.private_key = self.options.cert_and_key_file
-        websocket_options.certificate = self.options.cert_and_key_file
+        key_path = os.path.join(ROOT_DIR, self.options.cert_and_key_file)
+        if not os.path.isfile(key_path):
+          raise testserver_base.OptionError(
+              'specified server cert file not found: ' +
+              self.options.cert_and_key_file + ' exiting...')
+        websocket_options.private_key = key_path
+        websocket_options.certificate = key_path
+
       if self.options.ssl_client_auth:
         websocket_options.tls_client_cert_optional = False
         websocket_options.tls_client_auth = True
@@ -2093,6 +2103,8 @@ class ServerRunner(testserver_base.TestServerRunner):
       print 'Echo UDP server started on port %d...' % server.server_port
       server_data['port'] = server.server_port
     elif self.options.server_type == SERVER_BASIC_AUTH_PROXY:
+      BasicAuthProxyRequestHandler.redirect_connect_to_localhost = \
+          self.options.redirect_connect_to_localhost
       server = HTTPServer((host, port), BasicAuthProxyRequestHandler)
       print 'BasicAuthProxy server started on port %d...' % server.server_port
       server_data['port'] = server.server_port
@@ -2300,6 +2312,12 @@ class ServerRunner(testserver_base.TestServerRunner):
                                   action='store_true')
     self.option_parser.add_option('--token-binding-params', action='append',
                                   default=[], type='int')
+    self.option_parser.add_option('--redirect-connect-to-localhost',
+                                  dest='redirect_connect_to_localhost',
+                                  default=False, action='store_true',
+                                  help='If set, the Proxy server will connect '
+                                  'to localhost instead of the requested URL '
+                                  'on CONNECT requests')
 
 
 if __name__ == '__main__':

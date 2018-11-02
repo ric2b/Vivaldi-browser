@@ -42,7 +42,7 @@ bool TerminateMultiProcessTestChild(const Process& process,
 #endif  // !defined(OS_ANDROID)
 
 CommandLine GetMultiProcessTestChildBaseCommandLine() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   CommandLine cmd_line = *CommandLine::ForCurrentProcess();
   cmd_line.SetProgram(MakeAbsoluteFilePath(cmd_line.GetProgram()));
   return cmd_line;
@@ -50,8 +50,7 @@ CommandLine GetMultiProcessTestChildBaseCommandLine() {
 
 // MultiProcessTest ------------------------------------------------------------
 
-MultiProcessTest::MultiProcessTest() {
-}
+MultiProcessTest::MultiProcessTest() = default;
 
 Process MultiProcessTest::SpawnChild(const std::string& procname) {
   LaunchOptions options;

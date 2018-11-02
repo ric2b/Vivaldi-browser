@@ -38,31 +38,19 @@ const char kSAMLStartCookie[] = "google-accounts-saml-start";
 const char kSAMLEndCookie[] = "google-accounts-saml-end";
 
 // Import |cookies| into |cookie_store|.
+// |cookie.IsCanonical()| must be true for all cookies in |cookies|.
 void ImportCookies(const net::CookieList& cookies,
                    net::CookieStore* cookie_store) {
   for (const auto& cookie : cookies) {
-    // To re-create the original cookie, a domain should only be passed in to
-    // SetCookieWithDetailsAsync if cookie.Domain() has a leading period, to
-    // re-create the original cookie.
-    std::string effective_domain = cookie.Domain();
-    std::string host;
-    if (effective_domain.length() > 1 && effective_domain[0] == '.') {
-      host = effective_domain.substr(1);
-    } else {
-      host = effective_domain;
-      effective_domain = "";
-    }
+    std::unique_ptr<net::CanonicalCookie> cc(
+        std::make_unique<net::CanonicalCookie>(cookie));
+    DCHECK(cc->IsCanonical());
 
-    // Assume HTTPS - since the cookies are being restored from another store,
-    // they have already gone through the strict secure check.
-    GURL url(std::string(url::kHttpsScheme) + url::kStandardSchemeSeparator +
-             host + "/");
-
-    cookie_store->SetCookieWithDetailsAsync(
-        url, cookie.Name(), cookie.Value(), effective_domain, cookie.Path(),
-        cookie.CreationDate(), cookie.ExpiryDate(), cookie.LastAccessDate(),
-        cookie.IsSecure(), cookie.IsHttpOnly(), cookie.SameSite(),
-        cookie.Priority(), net::CookieStore::SetCookiesCallback());
+    // Assume secure_source - since the cookies are being restored from
+    // another store, they have already gone through the strict secure check.
+    cookie_store->SetCanonicalCookieAsync(
+        std::move(cc), true /*secure_source*/, true /*modify_http_only*/,
+        net::CookieStore::SetCookiesCallback());
   }
 }
 
@@ -162,8 +150,7 @@ ProfileAuthDataTransferer::ProfileAuthDataTransferer(
       completion_callback_(completion_callback),
       first_login_(false),
       waiting_for_auth_cookies_(false),
-      waiting_for_channel_ids_(false) {
-}
+      waiting_for_channel_ids_(false) {}
 
 void ProfileAuthDataTransferer::BeginTransfer() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -201,10 +188,14 @@ void ProfileAuthDataTransferer::BeginTransferOnIOThread() {
 
 void ProfileAuthDataTransferer::TransferProxyAuthCache() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::HttpAuthCache* new_cache = to_context_->GetURLRequestContext()->
-      http_transaction_factory()->GetSession()->http_auth_cache();
-  new_cache->UpdateAllFrom(*from_context_->GetURLRequestContext()->
-      http_transaction_factory()->GetSession()->http_auth_cache());
+  net::HttpAuthCache* new_cache = to_context_->GetURLRequestContext()
+                                      ->http_transaction_factory()
+                                      ->GetSession()
+                                      ->http_auth_cache();
+  new_cache->UpdateAllFrom(*from_context_->GetURLRequestContext()
+                                ->http_transaction_factory()
+                                ->GetSession()
+                                ->http_auth_cache());
 }
 
 void ProfileAuthDataTransferer::OnTargetCookieJarContentsRetrieved(
@@ -256,7 +247,7 @@ void ProfileAuthDataTransferer::OnCookiesToTransferRetrieved(
   // their creation times are stored in |saml_start_time_| and
   // |cookies_to_transfer_| and the cookies are deleted.
   for (net::CookieList::iterator it = cookies_to_transfer_.begin();
-       it != cookies_to_transfer_.end(); ) {
+       it != cookies_to_transfer_.end();) {
     if (it->Name() == kSAMLStartCookie) {
       saml_start_time_ = it->CreationDate();
       it = cookies_to_transfer_.erase(it);
@@ -276,9 +267,8 @@ void ProfileAuthDataTransferer::RetrieveChannelIDsToTransfer() {
   net::ChannelIDService* from_service =
       from_context_->GetURLRequestContext()->channel_id_service();
   from_service->GetChannelIDStore()->GetAllChannelIDs(
-      base::Bind(
-          &ProfileAuthDataTransferer::OnChannelIDsToTransferRetrieved,
-          base::Unretained(this)));
+      base::Bind(&ProfileAuthDataTransferer::OnChannelIDsToTransferRetrieved,
+                 base::Unretained(this)));
 }
 
 void ProfileAuthDataTransferer::OnChannelIDsToTransferRetrieved(
@@ -345,11 +335,10 @@ void ProfileAuthData::Transfer(
     const base::Closure& completion_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   (new ProfileAuthDataTransferer(
-       from_context,
-       to_context,
+       from_context, to_context,
        transfer_auth_cookies_and_channel_ids_on_first_login,
-       transfer_saml_auth_cookies_on_subsequent_login,
-       completion_callback))->BeginTransfer();
+       transfer_saml_auth_cookies_on_subsequent_login, completion_callback))
+      ->BeginTransfer();
 }
 
 }  // namespace chromeos

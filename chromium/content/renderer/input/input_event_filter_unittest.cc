@@ -46,7 +46,6 @@ const base::TimeDelta kFrameInterval = base::TimeDelta::FromMilliseconds(16);
 bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
   return ui::WebInputEventTraits::ShouldBlockEventStream(
       event,
-      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents),
       base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 }
 
@@ -214,7 +213,7 @@ class InputEventFilterTest : public testing::Test,
         base::Bind(base::IgnoreResult(&IPCMessageRecorder::OnMessageReceived),
                    base::Unretained(&message_recorder_)),
         main_task_runner_, main_task_runner_);
-    event_recorder_ = base::MakeUnique<InputEventRecorder>(filter_.get());
+    event_recorder_ = std::make_unique<InputEventRecorder>(filter_.get());
     filter_->SetInputHandlerManager(event_recorder_.get());
     filter_->OnFilterAdded(&ipc_sink_);
   }

@@ -43,7 +43,7 @@ class WebContents;
 - (void)onActivateTabWithContents:(content::WebContents*)contents;
 
 // Stripped down version of TabStripModelObserverBridge:tabChangedWithContents.
-- (void)onTabChanged:(TabStripModelObserver::TabChangeType)change
+- (void)onTabChanged:(TabChangeType)change
         withContents:(content::WebContents*)contents;
 
 // Stripped down version of TabStripModelObserverBridge:tabDetachedWithContents.
@@ -158,6 +158,9 @@ class WebContents;
   // added in fullscreen in 10.10+.
   base::scoped_nsobject<CustomWindowControlsView> customWindowControls_;
   base::scoped_nsobject<CrTrackingArea> customWindowControlsTrackingArea_;
+
+  // The set stores the WebContens that were hiding their throbbers.
+  std::set<content::WebContents*> wasHidingThrobberSet_;
 }
 
 @property(nonatomic) CGFloat leadingIndentForControls;

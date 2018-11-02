@@ -26,40 +26,33 @@
 #ifndef Canvas2DLayerBridge_h
 #define Canvas2DLayerBridge_h
 
+#include <memory>
+
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "cc/layers/texture_layer_client.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/CanvasResourceHost.h"
 #include "platform/graphics/ImageBufferSurface.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/wtf/Allocator.h"
+#include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
-#include "platform/wtf/Vector.h"
 #include "platform/wtf/WeakPtr.h"
 #include "public/platform/WebExternalTextureLayer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/color_space.h"
 
-#include <memory>
-
-class SkImage;
 struct SkImageInfo;
-
-namespace gpu {
-namespace gles2 {
-class GLES2Interface;
-}
-}
 
 namespace blink {
 
 class Canvas2DLayerBridgeTest;
+class CanvasResourceProvider;
 class ImageBuffer;
-class WebGraphicsContext3DProviderWrapper;
 class SharedContextRateLimiter;
 
 #if defined(OS_MACOSX)
@@ -86,17 +79,15 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
 
   Canvas2DLayerBridge(const IntSize&,
                       int msaa_sample_count,
-                      OpacityMode,
                       AccelerationMode,
-                      const CanvasColorParams&,
-                      bool is_unit_test = false);
+                      const CanvasColorParams&);
 
   ~Canvas2DLayerBridge() override;
 
   // cc::TextureLayerClient implementation.
-  bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
-                             std::unique_ptr<viz::SingleReleaseCallback>*
-                                 out_release_callback) override;
+  bool PrepareTransferableResource(viz::TransferableResource* out_resource,
+                                   std::unique_ptr<viz::SingleReleaseCallback>*
+                                       out_release_callback) override;
 
   // ImageBufferSurface implementation
   void FinalizeFrame() override;
@@ -106,7 +97,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   void DisableDeferral(DisableDeferralReason) override;
   bool IsValid() const override;
   bool Restore() override;
-  WebLayer* Layer() const override;
+  WebLayer* Layer() override;
   bool IsAccelerated() const override;
   void SetFilterQuality(SkFilterQuality) override;
   void SetIsHidden(bool) override;
@@ -117,21 +108,23 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
                    size_t row_bytes,
                    int x,
                    int y) override;
-  void Flush(FlushReason) override;
-  void FlushGpu(FlushReason) override;
-  OpacityMode GetOpacityMode() { return opacity_mode_; }
   void DontUseIdleSchedulingForTesting() {
     dont_use_idle_scheduling_for_testing_ = true;
   }
+  void SetCanvasResourceHost(CanvasResourceHost* host) {
+    resource_host_ = host;
+  }
+  CanvasResourceHost* GetCanvasResourceHost() { return resource_host_; }
 
   void BeginDestruction();
   void Hibernate();
-  bool IsHibernating() const { return hibernation_image_.get(); }
-  const CanvasColorParams& color_params() const { return color_params_; }
+  bool IsHibernating() const { return hibernation_image_; }
+  const CanvasColorParams& ColorParams() const { return color_params_; }
 
   bool HasRecordedDrawCommands() { return have_recorded_draw_commands_; }
 
-  RefPtr<StaticBitmapImage> NewImageSnapshot(AccelerationHint, SnapshotReason);
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot(AccelerationHint,
+                                                    SnapshotReason);
 
   // The values of the enum entries must not change because they are used for
   // usage metrics histograms. New values can be added to the end.
@@ -162,82 +155,23 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   void SetLoggerForTesting(std::unique_ptr<Logger>);
 
  private:
-  void ResetSurface();
+  void ResetResourceProvider();
   bool IsHidden() { return is_hidden_; }
-  bool CheckSurfaceValid();
-  void Init();
-  void FlushInternal();
-  void FlushGpuInternal();
+  bool CheckResourceProviderValid();
 
-  // All information associated with a CHROMIUM image.
-  struct ImageInfo;
-
-  struct MailboxInfo {
-    RefPtr<StaticBitmapImage> image_;
-
-    // If this mailbox wraps an IOSurface-backed texture, the ids of the
-    // CHROMIUM image and the texture.
-    RefPtr<ImageInfo> image_info_;
-
-    MailboxInfo(const MailboxInfo&);
-    MailboxInfo();
-  };
-
-  // Callback for mailboxes given to the compositor from PrepareTextureMailbox.
-  static void ReleaseFrameResources(
-      WeakPtr<Canvas2DLayerBridge>,
-      WeakPtr<WebGraphicsContext3DProviderWrapper>,
-      std::unique_ptr<MailboxInfo>,
-      const gpu::Mailbox&,
-      const gpu::SyncToken&,
-      bool lost_resource);
-
-  gpu::gles2::GLES2Interface* ContextGL();
   void StartRecording();
   void SkipQueuedDrawCommands();
-  void FlushRecordingOnly();
-  void ReportSurfaceCreationFailure();
+  void FlushRecording();
+  void ReportResourceProviderCreationFailure();
 
-  SkSurface* GetOrCreateSurface(AccelerationHint = kPreferAcceleration);
+  CanvasResourceProvider* GetOrCreateResourceProvider(
+      AccelerationHint = kPreferAcceleration);
   bool ShouldAccelerate(AccelerationHint) const;
 
-  // Returns the GL filter associated with |m_filterQuality|.
-  GLenum GetGLFilter();
-
-  // Creates an IOSurface-backed texture. Copies |image| into the texture.
-  // Prepares a mailbox from the texture. The caller must have created a new
-  // MailboxInfo, and prepended it to |m_mailboxs|. Returns whether the
-  // mailbox was successfully prepared. |mailbox| is an out parameter only
-  // populated on success.
-  bool PrepareIOSurfaceMailboxFromImage(SkImage*,
-                                        MailboxInfo*,
-                                        viz::TextureMailbox*);
-
-  // Creates an IOSurface-backed texture. Returns an ImageInfo, which is empty
-  // on failure. The caller takes ownership of both the texture and the image.
-  RefPtr<ImageInfo> CreateIOSurfaceBackedTexture();
-
-  // Releases all resources in the CHROMIUM image cache.
-  void ClearCHROMIUMImageCache();
-
-  // Returns whether the mailbox was successfully prepared from the SkImage.
-  // The mailbox is an out parameter only populated on success.
-  bool PrepareMailboxFromImage(RefPtr<StaticBitmapImage>&&,
-                               MailboxInfo*,
-                               viz::TextureMailbox*);
-
-  // Used for cloning context_provider_wrapper_ into an rvalue
-  WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper() const {
-    return context_provider_wrapper_;
-  }
-
+  std::unique_ptr<CanvasResourceProvider> resource_provider_;
   std::unique_ptr<PaintRecorder> recorder_;
-  sk_sp<SkSurface> surface_;
-  std::unique_ptr<PaintCanvas> surface_paint_canvas_;
   sk_sp<SkImage> hibernation_image_;
-  int initial_surface_save_count_;
   std::unique_ptr<WebExternalTextureLayer> layer_;
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
   std::unique_ptr<SharedContextRateLimiter> rate_limiter_;
   std::unique_ptr<Logger> logger_;
   WeakPtrFactory<Canvas2DLayerBridge> weak_ptr_factory_;
@@ -251,29 +185,20 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   bool is_hidden_;
   bool is_deferral_enabled_;
   bool software_rendering_while_hidden_;
-  bool surface_creation_failed_at_least_once_ = false;
+  bool resource_provider_creation_failed_at_least_once_ = false;
   bool hibernation_scheduled_ = false;
   bool dont_use_idle_scheduling_for_testing_ = false;
-  bool did_draw_since_last_flush_ = false;
-  bool did_draw_since_last_gpu_flush_ = false;
+  bool context_lost_ = false;
 
   friend class Canvas2DLayerBridgeTest;
   friend class CanvasRenderingContext2DTest;
   friend class HTMLCanvasPainterTestForSPv2;
 
-  uint32_t last_image_id_;
-
-  GLenum last_filter_;
   AccelerationMode acceleration_mode_;
-  OpacityMode opacity_mode_;
-  const IntSize size_;
   CanvasColorParams color_params_;
-  int recording_pixel_count_;
+  CheckedNumeric<int> recording_pixel_count_;
 
-  // Each element in this vector represents an IOSurface backed texture that
-  // is ready to be reused.
-  // Elements in this vector can safely be purged in low memory conditions.
-  Vector<RefPtr<ImageInfo>> image_info_cache_;
+  CanvasResourceHost* resource_host_;
 };
 
 }  // namespace blink

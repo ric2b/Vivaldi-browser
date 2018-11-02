@@ -8,6 +8,7 @@
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "bindings/core/v8/serialization/UnpackedSerializedScriptValue.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/workers/WorkerThreadTestHelper.h"
@@ -37,26 +38,21 @@ TEST(SerializedScriptValueThreadedTest,
   transferables.array_buffers.push_back(array_buffer);
   SerializedScriptValue::SerializeOptions options;
   options.transferables = &transferables;
-  RefPtr<SerializedScriptValue> serialized = SerializedScriptValue::Serialize(
-      scope.GetIsolate(),
-      ToV8(array_buffer, scope.GetContext()->Global(), scope.GetIsolate()),
-      options, ASSERT_NO_EXCEPTION);
+  scoped_refptr<SerializedScriptValue> serialized =
+      SerializedScriptValue::Serialize(
+          scope.GetIsolate(),
+          ToV8(array_buffer, scope.GetContext()->Global(), scope.GetIsolate()),
+          options, ASSERT_NO_EXCEPTION);
   EXPECT_TRUE(serialized);
   EXPECT_TRUE(array_buffer->IsNeutered());
 
   // Deserialize the serialized value on the worker.
   // Intentionally keep a reference on this thread while this occurs.
-  //
-  // Note that the reference is passed strangely to make sure that the main
-  // thread keeps its reference, and the bound callback passes its reference
-  // into the block, without keeping an additional reference. (Failing to do
-  // this results in a data race.)
-  WaitableEvent done;
   worker_thread.GetWorkerBackingThread().BackingThread().PostTask(
       FROM_HERE,
       CrossThreadBind(
-          [](WorkerThread* worker_thread, WaitableEvent* done,
-             RefPtr<SerializedScriptValue> serialized) {
+          [](WorkerThread* worker_thread,
+             scoped_refptr<SerializedScriptValue> serialized) {
             WorkerOrWorkletScriptController* script =
                 worker_thread->GlobalScope()->ScriptController();
             EXPECT_TRUE(script->IsContextInitialized());
@@ -64,14 +60,18 @@ TEST(SerializedScriptValueThreadedTest,
             SerializedScriptValue::Unpack(serialized)
                 ->Deserialize(worker_thread->GetIsolate());
 
-            // Make sure this thread's references are dropped before the main
-            // thread continues.
-            serialized = nullptr;
+            // Make sure this thread's references in the Oilpan heap are dropped
+            // before the main thread continues.
             ThreadState::Current()->CollectAllGarbage();
-            done->Signal();
           },
-          CrossThreadUnretained(&worker_thread), CrossThreadUnretained(&done),
-          Passed(RefPtr<SerializedScriptValue>(serialized))));
+          CrossThreadUnretained(&worker_thread), serialized));
+
+  // Wait for a subsequent task on the worker to finish, to ensure that the
+  // references held by the task are dropped.
+  WaitableEvent done;
+  worker_thread.GetWorkerBackingThread().BackingThread().PostTask(
+      FROM_HERE,
+      CrossThreadBind(&WaitableEvent::Signal, CrossThreadUnretained(&done)));
   done.Wait();
 
   // Now destroy the value on the main thread.

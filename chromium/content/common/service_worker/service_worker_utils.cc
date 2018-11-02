@@ -4,6 +4,7 @@
 
 #include "content/common/service_worker/service_worker_utils.h"
 
+#include <sstream>
 #include <string>
 
 #include "base/command_line.h"
@@ -145,6 +146,22 @@ bool ServiceWorkerUtils::IsServicificationEnabled() {
 // static
 bool ServiceWorkerUtils::IsScriptStreamingEnabled() {
   return base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming);
+}
+
+// static
+std::string ServiceWorkerUtils::ErrorTypeToString(
+    blink::mojom::ServiceWorkerErrorType error) {
+  std::ostringstream oss;
+  oss << error;
+  return oss.str();
+}
+
+// static
+std::string ServiceWorkerUtils::ClientTypeToString(
+    blink::mojom::ServiceWorkerClientType type) {
+  std::ostringstream oss;
+  oss << type;
+  return oss.str();
 }
 
 bool LongestScopeMatcher::MatchLongest(const GURL& scope) {

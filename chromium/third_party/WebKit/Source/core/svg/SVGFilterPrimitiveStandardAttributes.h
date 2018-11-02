@@ -55,16 +55,16 @@ class SVGFilterPrimitiveStandardAttributes : public SVGElement {
   SVGAnimatedLength* height() const { return height_.Get(); }
   SVGAnimatedString* result() const { return result_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
+
+  void PrimitiveAttributeChanged(const QualifiedName&);
+  void Invalidate();
 
  protected:
   SVGFilterPrimitiveStandardAttributes(const QualifiedName&, Document&);
 
   void SvgAttributeChanged(const QualifiedName&) override;
   void ChildrenChanged(const ChildrenChange&) override;
-
-  void Invalidate();
-  void PrimitiveAttributeChanged(const QualifiedName&);
 
  private:
   bool IsFilterEffect() const final { return true; }
@@ -79,7 +79,14 @@ class SVGFilterPrimitiveStandardAttributes : public SVGElement {
   Member<SVGAnimatedString> result_;
 };
 
-void InvalidateFilterPrimitiveParent(SVGElement*);
+void InvalidateFilterPrimitiveParent(SVGElement&);
+
+inline bool IsSVGFilterPrimitiveStandardAttributes(const SVGElement& element) {
+  return element.IsFilterEffect();
+}
+
+DEFINE_SVGELEMENT_TYPE_CASTS_WITH_FUNCTION(
+    SVGFilterPrimitiveStandardAttributes);
 
 }  // namespace blink
 

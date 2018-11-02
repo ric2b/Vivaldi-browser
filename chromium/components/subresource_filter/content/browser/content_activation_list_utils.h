@@ -5,14 +5,15 @@
 #ifndef COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_CONTENT_ACTIVATION_LIST_UTILS_H_
 #define COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_CONTENT_ACTIVATION_LIST_UTILS_H_
 
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/util.h"
 #include "components/subresource_filter/core/common/activation_list.h"
 
 namespace subresource_filter {
 
 ActivationList GetListForThreatTypeAndMetadata(
     safe_browsing::SBThreatType threat_type,
-    const safe_browsing::ThreatMetadata& threat_type_metadata);
+    const safe_browsing::ThreatMetadata& threat_type_metadata,
+    bool* warning);
 
 }  // namespace subresource_filter
 

@@ -51,7 +51,8 @@ TEST(LayerAnimationSequenceTest, SingleElement) {
   for (int i = 0; i < 2; ++i) {
     start_time += delta;
     sequence.set_start_time(start_time);
-    delegate.SetBrightnessFromAnimation(start);
+    delegate.SetBrightnessFromAnimation(
+        start, PropertyChangeReason::NOT_FROM_ANIMATION);
     sequence.Start(&delegate);
     sequence.Progress(start_time, &delegate);
     EXPECT_FLOAT_EQ(start, delegate.GetBrightnessForAnimation());
@@ -88,7 +89,8 @@ TEST(LayerAnimationSequenceTest, SingleThreadedElement) {
     sequence.set_animation_group_id(starting_group_id);
     start_time = effective_start + delta;
     sequence.set_start_time(start_time);
-    delegate.SetOpacityFromAnimation(start);
+    delegate.SetOpacityFromAnimation(start,
+                                     PropertyChangeReason::NOT_FROM_ANIMATION);
     sequence.Start(&delegate);
     sequence.Progress(start_time, &delegate);
     EXPECT_FLOAT_EQ(start, sequence.last_progressed_fraction());
@@ -139,8 +141,10 @@ TEST(LayerAnimationSequenceTest, MultipleElement) {
     sequence.set_animation_group_id(starting_group_id);
     start_time = opacity_effective_start + 4 * delta;
     sequence.set_start_time(start_time);
-    delegate.SetOpacityFromAnimation(start_opacity);
-    delegate.SetTransformFromAnimation(start_transform);
+    delegate.SetOpacityFromAnimation(start_opacity,
+                                     PropertyChangeReason::NOT_FROM_ANIMATION);
+    delegate.SetTransformFromAnimation(
+        start_transform, PropertyChangeReason::NOT_FROM_ANIMATION);
 
     sequence.Start(&delegate);
     sequence.Progress(start_time, &delegate);
@@ -209,7 +213,8 @@ TEST(LayerAnimationSequenceTest, AbortingCyclicSequence) {
 
   sequence.set_is_cyclic(true);
 
-  delegate.SetBrightnessFromAnimation(start_brightness);
+  delegate.SetBrightnessFromAnimation(start_brightness,
+                                      PropertyChangeReason::NOT_FROM_ANIMATION);
 
   start_time += delta;
   sequence.set_start_time(start_time);
@@ -220,7 +225,8 @@ TEST(LayerAnimationSequenceTest, AbortingCyclicSequence) {
   sequence.Abort(&delegate);
 
   // Should be able to reuse the sequence after aborting.
-  delegate.SetBrightnessFromAnimation(start_brightness);
+  delegate.SetBrightnessFromAnimation(start_brightness,
+                                      PropertyChangeReason::NOT_FROM_ANIMATION);
   start_time += base::TimeDelta::FromMilliseconds(101000);
   sequence.set_start_time(start_time);
   sequence.Progress(start_time + base::TimeDelta::FromMilliseconds(100000),
@@ -285,7 +291,7 @@ TEST(LayerAnimationSequenceTest, ToString) {
       base::StringPrintf(
           "LayerAnimationSequence{size=1, properties=BRIGHTNESS, "
           "elements=[LayerAnimationElement{name=BrightnessTransition, id=%d, "
-          "group=0, last_progressed_fraction=0.00, start_frame_number=0}], "
+          "group=0, last_progressed_fraction=0.00}], "
           "is_cyclic=0, group_id=0}",
           brightness_id),
       sequence.ToString());
@@ -300,10 +306,10 @@ TEST(LayerAnimationSequenceTest, ToString) {
       base::StringPrintf(
           "LayerAnimationSequence{size=2, properties=OPACITY|BRIGHTNESS, "
           "elements=[LayerAnimationElement{name=BrightnessTransition, id=%d, "
-          "group=0, last_progressed_fraction=0.00, start_frame_number=0}, "
+          "group=0, last_progressed_fraction=0.00}, "
           "LayerAnimationElement{name=ThreadedOpacityTransition, id=%d, "
           "group=0, "
-          "last_progressed_fraction=0.00, start_frame_number=0}], is_cyclic=1, "
+          "last_progressed_fraction=0.00}], is_cyclic=1, "
           "group_id=1973}",
           brightness_id, opacity_id),
       sequence.ToString());

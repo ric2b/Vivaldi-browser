@@ -62,7 +62,9 @@ namespace {
 void GetAudioDeviceDescriptions(bool for_input,
                                 AudioDeviceDescriptions* device_descriptions) {
   base::RunLoop run_loop;
-  media::AudioSystem::Get()->GetDeviceDescriptions(
+  std::unique_ptr<media::AudioSystem> audio_system =
+      media::AudioSystem::CreateInstance();
+  audio_system->GetDeviceDescriptions(
       for_input,
       base::BindOnce(
           [](base::Closure finished_callback, AudioDeviceDescriptions* result,
@@ -156,7 +158,7 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
             ? media::AudioDeviceDescription::kDefaultDeviceId
             : content::GetHMACForMediaDeviceID(
                   profile()->GetMediaDeviceIDSalt(),
-                  url::Origin(source_url_.GetOrigin()), it->unique_id);
+                  url::Origin::Create(source_url_.GetOrigin()), it->unique_id);
 
     EXPECT_EQ(expected_id, sink_id);
     std::string sink_label;
@@ -189,7 +191,8 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
     VLOG(2) << "Trying to find associated sink for device " << raw_device_id;
     GURL origin(GURL("http://www.google.com/").GetOrigin());
     std::string source_id_in_origin = content::GetHMACForMediaDeviceID(
-        profile()->GetMediaDeviceIDSalt(), url::Origin(origin), raw_device_id);
+        profile()->GetMediaDeviceIDSalt(), url::Origin::Create(origin),
+        raw_device_id);
 
     base::ListValue parameters;
     parameters.AppendString(origin.spec());

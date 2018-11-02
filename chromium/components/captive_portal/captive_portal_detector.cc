@@ -104,7 +104,7 @@ void CaptivePortalDetector::GetCaptivePortalResultFromResponse(
     std::string retry_after_string;
 
     // If there's no Retry-After header, nothing else to do.
-    if (!headers->EnumerateHeader(NULL, "Retry-After", &retry_after_string))
+    if (!headers->EnumerateHeader(nullptr, "Retry-After", &retry_after_string))
       return;
 
     base::TimeDelta retry_after_delta;
@@ -142,12 +142,11 @@ void CaptivePortalDetector::GetCaptivePortalResultFromResponse(
 base::Time CaptivePortalDetector::GetCurrentTime() const {
   if (time_for_testing_.is_null())
     return base::Time::Now();
-  else
-    return time_for_testing_;
+  return time_for_testing_;
 }
 
 bool CaptivePortalDetector::FetchingURL() const {
-  return url_fetcher_.get() != NULL;
+  return url_fetcher_.get() != nullptr;
 }
 
 }  // namespace captive_portal

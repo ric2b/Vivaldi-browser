@@ -21,52 +21,10 @@
 @synthesize publicKey = _publicKey;
 @synthesize status = _status;
 @synthesize updatedTime = _updatedTime;
-@synthesize isOnline = _isOnline;
+@synthesize offlineReason = _offlineReason;
 
 - (bool)isOnline {
-  _isOnline = (self.status && [self.status isEqualToString:@"ONLINE"]);
-  return _isOnline;
-}
-
-// Parse jsonData into Host list.
-+ (NSMutableArray<HostInfo*>*)parseListFromJSON:(NSMutableData*)data {
-  NSError* error;
-
-  NSDictionary* json = [NSJSONSerialization JSONObjectWithData:data
-                                                       options:kNilOptions
-                                                         error:&error];
-  NSDictionary* dataDict = [json objectForKey:@"data"];
-  NSArray* availableHosts = [dataDict objectForKey:@"items"];
-  NSMutableArray* hostList = [[NSMutableArray alloc] init];
-  NSUInteger idx = 0;
-  NSDictionary* svr;
-  NSUInteger count = [availableHosts count];
-
-  while (idx < count) {
-    svr = [availableHosts objectAtIndex:idx++];
-    HostInfo* host = [[HostInfo alloc] init];
-    host.createdTime = [svr objectForKey:@"createdTime"];
-    host.hostId = [svr objectForKey:@"hostId"];
-    host.hostName = [svr objectForKey:@"hostName"];
-    host.hostOs = [svr objectForKey:@"hostOs"];
-    host.hostVersion = [svr objectForKey:@"hostVersion"];
-    host.hostOsVersion = [svr objectForKey:@"hostOsVersion"];
-    host.jabberId = [svr objectForKey:@"jabberId"];
-    host.kind = [svr objectForKey:@"kind"];
-    host.publicKey = [svr objectForKey:@"publicKey"];
-    host.status = [svr objectForKey:@"status"];
-
-    //    NSString* ISO8601DateString = [svr objectForKey:@"updatedTime"];
-    //    if (ISO8601DateString != nil) {
-    //      NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
-    //      [dateFormatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss.SSSz"];
-    //      host.updatedTime = [dateFormatter dateFromString:ISO8601DateString];
-    //    }
-
-    [hostList addObject:host];
-  }
-
-  return hostList;
+  return (self.status && [self.status isEqualToString:@"ONLINE"]);
 }
 
 - (NSComparisonResult)compare:(HostInfo*)host {

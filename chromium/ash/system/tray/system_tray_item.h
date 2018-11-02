@@ -19,7 +19,7 @@ class View;
 
 namespace ash {
 class SystemTray;
-class SystemTrayBubble;
+class SystemTrayView;
 class TrayItemView;
 
 // Controller for an item in the system tray. Each item can create these views:
@@ -118,16 +118,15 @@ class ASH_EXPORT SystemTrayItem {
   // something, e.g. volume, network availability etc. changes). If
   // |for_seconds| is non-zero, then the popup is closed after the specified
   // time.
-  void ShowDetailedView(int for_seconds, bool activate);
+  void ShowDetailedView(int for_seconds);
 
   // Continue showing the currently-shown detailed view, if any, for
   // |for_seconds| seconds.  The caller is responsible for checking that the
   // currently-shown view is for this item.
   void SetDetailedViewCloseDelay(int for_seconds);
 
-  // Hides the detailed view for this item. Disable hiding animation if
-  // |animate| is false.
-  void HideDetailedView(bool animate);
+  // Hides the detailed view for this item.
+  void HideDetailedView();
 
   // Returns true if this item needs to force the shelf to be visible when
   // the shelf is in the auto-hide state. Default is true.
@@ -141,7 +140,7 @@ class ASH_EXPORT SystemTrayItem {
 
  private:
   // Accesses uma_type().
-  friend class SystemTrayBubble;
+  friend class SystemTrayView;
 
   UmaType uma_type() const { return uma_type_; }
 

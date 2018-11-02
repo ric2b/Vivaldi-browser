@@ -14,7 +14,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
-#include "ui/gfx/color_space.h"
+#include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_binders.h"
@@ -66,6 +66,7 @@ bool ValidFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::YVU_420:
       return false;
   }
@@ -99,6 +100,7 @@ GLenum TextureFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::YVU_420:
       NOTREACHED();
       return 0;
@@ -132,6 +134,7 @@ GLenum DataFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
@@ -166,6 +169,7 @@ GLenum DataType(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
@@ -187,6 +191,12 @@ GLenum ConvertRequestedInternalFormat(GLenum internalformat) {
 }
 
 }  // namespace
+
+// static
+GLImageIOSurface* GLImageIOSurface::Create(const gfx::Size& size,
+                                           unsigned internalformat) {
+  return new GLImageIOSurface(size, internalformat);
+}
 
 GLImageIOSurface::GLImageIOSurface(const gfx::Size& size,
                                    unsigned internalformat)
@@ -424,6 +434,13 @@ base::ScopedCFTypeRef<CVPixelBufferRef> GLImageIOSurface::cv_pixel_buffer() {
 
 GLImage::Type GLImageIOSurface::GetType() const {
   return Type::IOSURFACE;
+}
+
+void GLImageIOSurface::SetColorSpace(const gfx::ColorSpace& color_space) {
+  if (color_space_ == color_space)
+    return;
+  color_space_ = color_space;
+  IOSurfaceSetColorSpace(io_surface_, color_space);
 }
 
 // static

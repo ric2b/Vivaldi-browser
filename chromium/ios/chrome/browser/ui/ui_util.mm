@@ -5,9 +5,14 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 
 #import <UIKit/UIKit.h>
+#include <limits>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/toolbar_private_base_feature.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/gfx/ios/uikit_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -15,8 +20,7 @@
 #endif
 
 bool IsIPadIdiom() {
-  UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
-  return idiom == UIUserInterfaceIdiomPad;
+  return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
 }
 
 const CGFloat kPortraitWidth[INTERFACE_IDIOM_COUNT] = {
@@ -30,14 +34,8 @@ bool IsHighResScreen() {
 
 bool IsPortrait() {
   UIInterfaceOrientation orient = GetInterfaceOrientation();
-// If building with an SDK prior to iOS 8 don't worry about
-// UIInterfaceOrientationUnknown because it wasn't defined.
-#if !defined(__IPHONE_8_0) || __IPHONE_OS_VERSION_MAX_ALLOWED < __IPHONE_8_0
-  return UIInterfaceOrientationIsPortrait(orient);
-#else
   return UIInterfaceOrientationIsPortrait(orient) ||
          orient == UIInterfaceOrientationUnknown;
-#endif  // SDK
 }
 
 bool IsLandscape() {
@@ -58,15 +56,25 @@ bool IsIPhoneX() {
           CGRectGetHeight([[UIScreen mainScreen] nativeBounds]) == 2436);
 }
 
+bool IsSafeAreaCompatibleToolbarEnabled() {
+  return (IsIPhoneX() &&
+          base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) ||
+         base::FeatureList::IsEnabled(kCleanToolbar);
+}
+
 CGFloat StatusBarHeight() {
   // This is a temporary solution until usage of StatusBarHeight has been
   // replaced with topLayoutGuide.
 
   if (IsIPhoneX()) {
-    // Return the height of the portrait status bar even in landscape because
-    // the Toolbar does not properly layout itself if the status bar height
-    // changes.
-    return 44;
+    if (IsSafeAreaCompatibleToolbarEnabled()) {
+      return IsPortrait() ? 44 : 0;
+    } else {
+      // Return the height of the portrait status bar even in landscape because
+      // the Toolbar does not properly layout itself if the status bar height
+      // changes.
+      return 44;
+    }
   }
 
   // Checking [UIApplication sharedApplication].statusBarFrame will return the
@@ -102,6 +110,10 @@ CGRect CGRectCopyWithOrigin(CGRect rect, CGFloat x, CGFloat y) {
 CGRect CGRectMakeAlignedAndCenteredAt(CGFloat x, CGFloat y, CGFloat width) {
   return AlignRectOriginAndSizeToPixels(
       CGRectMake(x - width / 2.0, y - width / 2.0, width, width));
+}
+
+bool AreCGFloatsEqual(CGFloat a, CGFloat b) {
+  return std::fabs(a - b) <= std::numeric_limits<CGFloat>::epsilon();
 }
 
 // Based on an original size and a target size applies the transformations.

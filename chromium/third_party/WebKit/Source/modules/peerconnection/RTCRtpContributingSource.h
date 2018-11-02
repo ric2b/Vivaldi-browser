@@ -16,9 +16,7 @@ class RTCRtpReceiver;
 class WebRTCRtpContributingSource;
 
 // https://w3c.github.io/webrtc-pc/#dom-rtcrtpcontributingsource
-class RTCRtpContributingSource final
-    : public GarbageCollectedFinalized<RTCRtpContributingSource>,
-      public ScriptWrappable {
+class RTCRtpContributingSource final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -29,7 +27,7 @@ class RTCRtpContributingSource final
   double timestamp();
   uint32_t source() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   Member<RTCRtpReceiver> receiver_;

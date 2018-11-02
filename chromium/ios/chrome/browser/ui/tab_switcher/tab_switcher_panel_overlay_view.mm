@@ -14,13 +14,12 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/material_components/activity_indicator.h"
-#import "ios/chrome/browser/ui/sync/sync_util.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_presenter.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_model.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -68,13 +67,13 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
 - (void)updateText;
 // Updates the button target and tag according to the current |overlayType|.
 - (void)updateButtonTarget;
-// Sends a SignIn chrome command.
-- (void)showSignIn;
 
 @end
 
 @implementation TabSwitcherPanelOverlayView {
   ios::ChromeBrowserState* _browserState;  // Weak.
+  // |_container| should not be shown when |overlayType| is set to
+  // |OVERLAY_PANEL_USER_SIGNED_OUT|.
   UIView* _container;
   UILabel* _titleLabel;
   UILabel* _subtitleLabel;
@@ -83,18 +82,24 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
   MDCActivityIndicator* _activityIndicator;
   std::string _recordedMetricString;
   SigninPromoViewMediator* _signinPromoViewMediator;
+  // |_signinPromoView| should only be shown when |overlayType| is set to
+  // |OVERLAY_PANEL_USER_SIGNED_OUT|.
   SigninPromoView* _signinPromoView;
 }
 
 @synthesize overlayType = _overlayType;
+@synthesize presenter = _presenter;
 @synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithFrame:(CGRect)frame
                  browserState:(ios::ChromeBrowserState*)browserState
-                   dispatcher:(id<BrowserCommands>)dispatcher {
+                    presenter:(id<SigninPresenter, SyncPresenter>)presenter
+                   dispatcher:
+                       (id<ApplicationCommands, BrowserCommands>)dispatcher {
   self = [super initWithFrame:frame];
   if (self) {
     _browserState = browserState;
+    _presenter = presenter;
     _dispatcher = dispatcher;
     // Create and add container. Will be vertically and horizontally centered.
     _container = [[UIView alloc] initWithFrame:CGRectZero];
@@ -204,10 +209,9 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
 
 - (void)setOverlayType:(TabSwitcherPanelOverlayType)overlayType {
   _overlayType = overlayType;
-  if (experimental_flags::IsSigninPromoEnabled() &&
-      _overlayType ==
-          TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_OUT) {
-    [self createSigninPromoviewIfNeeded];
+  if (_overlayType ==
+      TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_OUT) {
+    [self createSigninPromoViewIfNeeded];
     _container.hidden = YES;
   } else {
     _container.hidden = NO;
@@ -221,10 +225,18 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
   }
 }
 
+- (void)wasShown {
+  [_signinPromoViewMediator signinPromoViewVisible];
+}
+
+- (void)wasHidden {
+  [_signinPromoViewMediator signinPromoViewHidden];
+}
+
 #pragma mark - Private
 
 // Creates the sign-in view and its mediator if it doesn't exist.
-- (void)createSigninPromoviewIfNeeded {
+- (void)createSigninPromoViewIfNeeded {
   if (_signinPromoView) {
     DCHECK(_signinPromoViewMediator);
     return;
@@ -250,7 +262,8 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
   _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
       initWithBrowserState:_browserState
                accessPoint:signin_metrics::AccessPoint::
-                               ACCESS_POINT_TAB_SWITCHER];
+                               ACCESS_POINT_TAB_SWITCHER
+                 presenter:self.presenter /* id<SigninPresenter> */];
   _signinPromoView.delegate = _signinPromoViewMediator;
   _signinPromoViewMediator.consumer = self;
   [[_signinPromoViewMediator createConfigurator]
@@ -273,15 +286,9 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_EMPTY:
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_OUT:
-      DCHECK(!experimental_flags::IsSigninPromoEnabled());
-      titleString = [[NSMutableAttributedString alloc]
-          initWithString:l10n_util::GetNSString(
-                             IDS_IOS_TAB_SWITCHER_SIGN_IN_ACCOUNT_TITLE)];
-      subtitleString = [[NSMutableAttributedString alloc]
-          initWithString:l10n_util::GetNSString(
-                             IDS_IOS_TAB_SWITCHER_SIGN_IN_ACCOUNT_PROMO)];
-      buttonTitle =
-          l10n_util::GetNSString(IDS_IOS_TAB_SWITCHER_SIGN_IN_ACCOUNT_BUTTON);
+      // |_container| and its subviews should not be shown or updated when the
+      // user is signed out. |_signinPromoView| should be visible.
+      NOTREACHED();
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_IN_SYNC_OFF:
       titleString = [[NSMutableAttributedString alloc]
@@ -405,9 +412,9 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
       shouldShowTextButton = NO;
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_OUT:
-      DCHECK(!experimental_flags::IsSigninPromoEnabled());
-      selector = @selector(showSignIn);
-      _recordedMetricString = "MobileTabSwitcherSignIn";
+      // |_textButton| and |_container| should not be shown when the user is
+      // signed out. |_signinPromoView| should be visible.
+      NOTREACHED();
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_SIGNED_IN_SYNC_OFF:
       selector = @selector(showSyncSettings);
@@ -453,16 +460,16 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
   [_floatingButton setHidden:!shouldShowFloatingButton];
 }
 
-- (void)showSignIn {
-  base::RecordAction(base::UserMetricsAction("Signin_Signin_FromTabSwitcher"));
-  ShowSigninCommand* command = [[ShowSigninCommand alloc]
-      initWithOperation:AUTHENTICATION_OPERATION_SIGNIN
-            accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER];
-  [self chromeExecuteCommand:command];
-}
-
 - (void)showSyncSettings {
-  [self chromeExecuteCommand:GetSyncCommandForBrowserState(_browserState)];
+  SyncSetupService::SyncServiceState syncState =
+      GetSyncStateForBrowserState(_browserState);
+  if (ShouldShowSyncSignin(syncState)) {
+    [self.presenter showReauthenticateSignin];
+  } else if (ShouldShowSyncSettings(syncState)) {
+    [self.presenter showSyncSettings];
+  } else if (ShouldShowSyncPassphraseSettings(syncState)) {
+    [self.presenter showSyncPassphraseSettings];
+  }
 }
 
 - (void)sendNewTabCommand:(id)sender {

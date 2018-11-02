@@ -53,7 +53,13 @@ class FakeContentPasswordManagerDriver
   }
 
   bool called_password_form_submitted() const {
-    return called_password_form_submitted_;
+    return called_password_form_submitted_ && password_form_submitted_ &&
+           !password_form_submitted_->only_for_fallback_saving;
+  }
+
+  bool called_password_form_submitted_only_for_fallback() const {
+    return called_password_form_submitted_ && password_form_submitted_ &&
+           password_form_submitted_->only_for_fallback_saving;
   }
 
   const base::Optional<autofill::PasswordForm>& password_form_submitted()
@@ -136,6 +142,10 @@ class FakeContentPasswordManagerDriver
 
   int called_show_manual_fallback_for_saving_count() const {
     return called_show_manual_fallback_for_saving_count_;
+  }
+
+  bool last_fallback_for_saving_was_for_generated_password() const {
+    return last_fallback_for_saving_was_for_generated_password_;
   }
 
   bool called_manual_fallback_suggestion() {
@@ -223,10 +233,12 @@ class FakeContentPasswordManagerDriver
   bool called_save_generation_field_ = false;
   // Records data received via SaveGenerationFieldDetectedByClassifier() call.
   base::Optional<base::string16> save_generation_field_;
-  // Records whether PasswordNoLongerGenerated() gets called.
-  bool called_password_no_longer_generated_ = false;
   // Records whether PresaveGeneratedPassword() gets called.
   bool called_presave_generated_password_ = false;
+  // Records whether PasswordNoLongerGenerated() gets called.
+  bool called_password_no_longer_generated_ = false;
+  // True iff the current password is generated.
+  bool password_is_generated_ = false;
 
   // Records number of times CheckSafeBrowsingReputation() gets called.
   int called_check_safe_browsing_reputation_cnt_ = 0;
@@ -234,6 +246,8 @@ class FakeContentPasswordManagerDriver
   // Records the number of request to show manual fallback for password saving.
   // If it is zero, the fallback is not available.
   int called_show_manual_fallback_for_saving_count_ = 0;
+  // True if the last request of saving fallback was for a generated password.
+  bool last_fallback_for_saving_was_for_generated_password_ = false;
 
   mojo::BindingSet<autofill::mojom::PasswordManagerDriver> bindings_;
 };

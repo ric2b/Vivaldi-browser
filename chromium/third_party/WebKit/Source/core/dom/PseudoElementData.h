@@ -5,20 +5,19 @@
 #ifndef PseudoElementData_h
 #define PseudoElementData_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class PseudoElementData final : public GarbageCollected<PseudoElementData> {
-  WTF_MAKE_NONCOPYABLE(PseudoElementData);
-
  public:
   static PseudoElementData* Create();
   void SetPseudoElement(PseudoId, PseudoElement*);
   PseudoElement* GetPseudoElement(PseudoId) const;
   bool HasPseudoElements() const;
   void ClearPseudoElements();
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(generated_before_);
     visitor->Trace(generated_after_);
     visitor->Trace(generated_first_letter_);
@@ -31,6 +30,7 @@ class PseudoElementData final : public GarbageCollected<PseudoElementData> {
   Member<PseudoElement> generated_after_;
   Member<PseudoElement> generated_first_letter_;
   Member<PseudoElement> backdrop_;
+  DISALLOW_COPY_AND_ASSIGN(PseudoElementData);
 };
 
 inline PseudoElementData* PseudoElementData::Create() {

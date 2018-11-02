@@ -37,5 +37,5 @@ class TracingWithBackgroundMemoryInfra(perf_benchmark.PerfBenchmark):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # No tests disabled.
+        pass
     return StoryExpectations()

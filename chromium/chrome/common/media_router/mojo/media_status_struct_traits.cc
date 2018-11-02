@@ -5,6 +5,7 @@
 #include "chrome/common/media_router/mojo/media_status_struct_traits.h"
 
 #include "base/strings/string_util.h"
+#include "mojo/common/time_struct_traits.h"
 
 namespace mojo {
 
@@ -38,6 +39,17 @@ bool StructTraits<media_router::mojom::MediaStatusDataView,
   if (!data.ReadCurrentTime(&out->current_time))
     return false;
 
+  if (!data.ReadHangoutsExtraData(&out->hangouts_extra_data))
+    return false;
+
+  return true;
+}
+
+bool StructTraits<media_router::mojom::HangoutsMediaStatusExtraDataDataView,
+                  media_router::HangoutsMediaStatusExtraData>::
+    Read(media_router::mojom::HangoutsMediaStatusExtraDataDataView data,
+         media_router::HangoutsMediaStatusExtraData* out) {
+  out->local_present = data.local_present();
   return true;
 }
 

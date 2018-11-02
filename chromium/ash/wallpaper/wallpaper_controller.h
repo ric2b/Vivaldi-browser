@@ -97,6 +97,10 @@ class ASH_EXPORT WallpaperController
   // crashes. An example test is SystemGestureEventFilterTest.ThreeFingerSwipe.
   void CreateEmptyWallpaper();
 
+  // Prepares wallpaper to lock screen transition. Will apply blur if
+  // |locking| is true and remove it otherwise.
+  void PrepareWallpaperForLockScreenChange(bool locking);
+
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
@@ -127,11 +131,42 @@ class ASH_EXPORT WallpaperController
   // Opens the set wallpaper page in the browser.
   void OpenSetWallpaperPage();
 
+  // Wallpaper should be dimmed for login, lock, OOBE and add user screens.
+  bool ShouldApplyDimming() const;
+
+  // Returns whether blur is enabled for login, lock, OOBE and add user screens.
+  // See crbug.com/775591.
+  bool IsBlurEnabled() const;
+
+  // Returns whether the current wallpaper is blurred.
+  bool IsWallpaperBlurred() const { return is_wallpaper_blurred_; }
+
   // mojom::WallpaperController overrides:
-  void AddObserver(mojom::WallpaperObserverAssociatedPtrInfo observer) override;
-  void SetWallpaperPicker(mojom::WallpaperPickerPtr picker) override;
+  void SetClient(mojom::WallpaperControllerClientPtr client) override;
+  void SetCustomWallpaper(mojom::WallpaperUserInfoPtr user_info,
+                          const std::string& wallpaper_files_id,
+                          const std::string& file_name,
+                          wallpaper::WallpaperLayout layout,
+                          wallpaper::WallpaperType type,
+                          const SkBitmap& image,
+                          bool show_wallpaper) override;
+  void SetOnlineWallpaper(mojom::WallpaperUserInfoPtr user_info,
+                          const SkBitmap& image,
+                          const std::string& url,
+                          wallpaper::WallpaperLayout layout,
+                          bool show_wallpaper) override;
+  void SetDefaultWallpaper(mojom::WallpaperUserInfoPtr user_info,
+                           bool show_wallpaper) override;
+  void SetCustomizedDefaultWallpaper(
+      const GURL& wallpaper_url,
+      const base::FilePath& file_path,
+      const base::FilePath& resized_directory) override;
+  void ShowUserWallpaper(mojom::WallpaperUserInfoPtr user_info) override;
+  void ShowSigninWallpaper() override;
+  void RemoveUserWallpaper(mojom::WallpaperUserInfoPtr user_info) override;
   void SetWallpaper(const SkBitmap& wallpaper,
                     const wallpaper::WallpaperInfo& wallpaper_info) override;
+  void AddObserver(mojom::WallpaperObserverAssociatedPtrInfo observer) override;
   void GetWallpaperColors(GetWallpaperColorsCallback callback) override;
 
   // WallpaperResizerObserver:
@@ -139,6 +174,9 @@ class ASH_EXPORT WallpaperController
 
   // WallpaperColorCalculatorObserver:
   void OnColorCalculationComplete() override;
+
+  // Flushes the mojo message pipe to chrome.
+  void FlushForTesting();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WallpaperControllerTest, BasicReparenting);
@@ -160,7 +198,7 @@ class ASH_EXPORT WallpaperController
   int GetWallpaperContainerId(bool locked);
 
   // Reload the wallpaper. |clear_cache| specifies whether to clear the
-  // wallpaper cahce or not.
+  // wallpaper cache or not.
   void UpdateWallpaper(bool clear_cache);
 
   // Sets |prominent_colors_| and notifies the observers if there is a change.
@@ -185,6 +223,9 @@ class ASH_EXPORT WallpaperController
   // Returns true if the wallpaper moved.
   bool MoveToUnlockedContainer();
 
+  // Returns whether the current wallpaper is set by device policy.
+  bool IsDevicePolicyWallpaper() const;
+
   // When wallpaper resizes, we can check which displays will be affected. For
   // simplicity, we only lock the compositor for the internal display.
   void GetInternalDisplayCompositorLock();
@@ -195,8 +236,8 @@ class ASH_EXPORT WallpaperController
 
   WallpaperMode wallpaper_mode_;
 
-  // Wallpaper picker interface in chrome browser, used to open the picker.
-  mojom::WallpaperPickerPtr wallpaper_picker_;
+  // Client interface in chrome browser.
+  mojom::WallpaperControllerClientPtr wallpaper_controller_client_;
 
   // Bindings for the WallpaperController interface.
   mojo::BindingSet<mojom::WallpaperController> bindings_;
@@ -227,6 +268,8 @@ class ASH_EXPORT WallpaperController
   base::OneShotTimer timer_;
 
   int wallpaper_reload_delay_;
+
+  bool is_wallpaper_blurred_ = false;
 
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
 

@@ -29,12 +29,9 @@
 
 #include "core/fullscreen/Fullscreen.h"
 
-#include "core/HTMLElementTypeHelpers.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/StyleEngine.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/UserGestureIndicator.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalFrame.h"
@@ -42,6 +39,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
+#include "core/html_element_type_helpers.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBlockFlow.h"
@@ -52,6 +50,7 @@
 #include "platform/ScopedOrientationChangeIndicator.h"
 #include "platform/bindings/Microtask.h"
 #include "platform/feature_policy/FeaturePolicy.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -66,7 +65,7 @@ bool AllowedToUseFullscreen(const Frame* frame) {
   if (!frame)
     return false;
 
-  if (!IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kFullscreen)) {
+  if (!IsSupportedInFeaturePolicy(FeaturePolicyFeature::kFullscreen)) {
     // 2. If |document|'s browsing context is a top-level browsing context, then
     // return true.
     if (frame->IsMainFrame())
@@ -85,7 +84,7 @@ bool AllowedToUseFullscreen(const Frame* frame) {
 
   // 2. If Feature Policy is enabled, return the policy for "fullscreen"
   // feature.
-  return frame->IsFeatureEnabled(WebFeaturePolicyFeature::kFullscreen);
+  return frame->IsFeatureEnabled(FeaturePolicyFeature::kFullscreen);
 }
 
 bool AllowedToRequestFullscreen(Document& document) {
@@ -93,7 +92,7 @@ bool AllowedToRequestFullscreen(Document& document) {
   // true:
 
   //  The algorithm is triggered by a user activation.
-  if (UserGestureIndicator::ProcessingUserGesture())
+  if (Frame::HasTransientUserActivation(document.GetFrame()))
     return true;
 
   //  The algorithm is triggered by a user generated orientation change.
@@ -167,7 +166,11 @@ bool FullscreenElementReady(const Element& element) {
 bool RequestFullscreenConditionsMet(Element& pending, Document& document) {
   // |pending|'s namespace is the HTML namespace or |pending| is an SVG svg or
   // MathML math element. Note: MathML is not supported.
-  if (!pending.IsHTMLElement() && !isSVGSVGElement(pending))
+  if (!pending.IsHTMLElement() && !IsSVGSVGElement(pending))
+    return false;
+
+  // |pending| is not a dialog element.
+  if (IsHTMLDialogElement(pending))
     return false;
 
   // The fullscreen element ready check for |pending| returns false.
@@ -482,20 +485,6 @@ void Fullscreen::RequestFullscreen(Element& pending, RequestType request_type) {
                         WebFeature::kFullscreenRequestWithPendingElement);
     }
 
-    // TODO(foolip): In order to reinstate the hierarchy restrictions in the
-    // spec, something has to prevent dialog elements from moving within top
-    // layer. Either disallowing fullscreen for dialog elements entirely or just
-    // preventing dialog elements from simultaneously being fullscreen and modal
-    // are good candidates. See https://github.com/whatwg/fullscreen/pull/91
-    if (isHTMLDialogElement(pending)) {
-      UseCounter::Count(document,
-                        WebFeature::kRequestFullscreenForDialogElement);
-      if (pending.IsInTopLayer()) {
-        UseCounter::Count(
-            document, WebFeature::kRequestFullscreenForDialogElementInTopLayer);
-      }
-    }
-
     From(document).pending_requests_.push_back(
         std::make_pair(&pending, request_type));
     LocalFrame& frame = *document.GetFrame();
@@ -622,7 +611,7 @@ void Fullscreen::FullyExitFullscreen(Document& document) {
   // 2. Unfullscreen elements whose fullscreen flag is set, within
   // |document|'s top layer, except for |document|'s fullscreen element.
   size_t stack_size = From(doc).fullscreen_element_stack_.size();
-  From(doc).fullscreen_element_stack_.erase(0, stack_size - 1);
+  From(doc).fullscreen_element_stack_.EraseAt(0, stack_size - 1);
   DCHECK_EQ(From(doc).fullscreen_element_stack_.size(), 1u);
 
   // 3. Exit fullscreen |document|.
@@ -808,7 +797,7 @@ void Fullscreen::ElementRemoved(Element& node) {
   // 2.2. Otherwise, unfullscreen |node| within its node document.
   for (size_t i = 0; i < fullscreen_element_stack_.size(); ++i) {
     if (fullscreen_element_stack_[i].first.Get() == &node) {
-      fullscreen_element_stack_.erase(i);
+      fullscreen_element_stack_.EraseAt(i);
       return;
     }
   }
@@ -855,6 +844,7 @@ void Fullscreen::FullscreenElementChanged(Element* old_element,
     DCHECK_NE(old_element, FullscreenElement());
 
     old_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
+    old_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
 
     old_element->SetContainsFullScreenElement(false);
     old_element->SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
@@ -865,12 +855,13 @@ void Fullscreen::FullscreenElementChanged(Element* old_element,
     DCHECK_EQ(new_element, FullscreenElement());
 
     new_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
+    new_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
 
     // OOPIF: For RequestType::PrefixedForCrossProcessDescendant, |toElement| is
     // the iframe element for the out-of-process frame that contains the
     // fullscreen element. Hence, it must match :-webkit-full-screen-ancestor.
     if (new_request_type == RequestType::kPrefixedForCrossProcessDescendant) {
-      DCHECK(isHTMLIFrameElement(new_element));
+      DCHECK(IsHTMLIFrameElement(new_element));
       new_element->SetContainsFullScreenElement(true);
     }
     new_element->SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
@@ -890,7 +881,7 @@ void Fullscreen::FullscreenElementChanged(Element* old_element,
 
     if (new_element != GetDocument()->documentElement()) {
       LayoutFullScreen::WrapLayoutObject(
-          layout_object, layout_object ? layout_object->Parent() : 0,
+          layout_object, layout_object ? layout_object->Parent() : nullptr,
           GetDocument());
     }
   }
@@ -911,9 +902,14 @@ void Fullscreen::FullscreenElementChanged(Element* old_element,
 
   // TODO(foolip): This should not call |UpdateStyleAndLayoutTree()|.
   GetDocument()->UpdateStyleAndLayoutTree();
+
+  // Any element not contained by the fullscreen element is inert (see
+  // |Node::IsInert()|), so changing the fullscreen element will typically
+  // change the inertness of most elements. Clear the entire cache.
+  GetDocument()->ClearAXObjectCache();
 }
 
-DEFINE_TRACE(Fullscreen) {
+void Fullscreen::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_requests_);
   visitor->Trace(fullscreen_element_stack_);
   Supplement<Document>::Trace(visitor);

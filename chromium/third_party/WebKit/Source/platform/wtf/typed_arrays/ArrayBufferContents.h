@@ -27,10 +27,10 @@
 #ifndef ArrayBufferContents_h
 #define ArrayBufferContents_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/WTF.h"
 #include "platform/wtf/WTFExport.h"
@@ -38,7 +38,6 @@
 namespace WTF {
 
 class WTF_EXPORT ArrayBufferContents {
-  WTF_MAKE_NONCOPYABLE(ArrayBufferContents);
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
@@ -55,7 +54,7 @@ class WTF_EXPORT ArrayBufferContents {
   enum class AllocationKind { kNormal, kReservation };
 
   class DataHandle {
-    WTF_MAKE_NONCOPYABLE(DataHandle);
+    DISALLOW_COPY_AND_ASSIGN(DataHandle);
 
    public:
     DataHandle(void* data, DataDeleter deleter)
@@ -122,7 +121,9 @@ class WTF_EXPORT ArrayBufferContents {
     void* Data() const { return data_; }
     size_t DataLength() const { return data_length_; }
 
-    ArrayBufferContents::AllocationKind AllocationKind() const { return kind_; }
+    ArrayBufferContents::AllocationKind GetAllocationKind() const {
+      return kind_;
+    }
 
     operator bool() const { return allocation_base_; }
 
@@ -206,7 +207,7 @@ class WTF_EXPORT ArrayBufferContents {
       int64_t diff);
 
   class DataHolder : public ThreadSafeRefCounted<DataHolder> {
-    WTF_MAKE_NONCOPYABLE(DataHolder);
+    DISALLOW_COPY_AND_ASSIGN(DataHolder);
 
    public:
     DataHolder();
@@ -260,13 +261,15 @@ class WTF_EXPORT ArrayBufferContents {
     bool has_registered_external_allocation_;
   };
 
-  RefPtr<DataHolder> holder_;
+  scoped_refptr<DataHolder> holder_;
   static AdjustAmountOfExternalAllocatedMemoryFunction
       adjust_amount_of_external_allocated_memory_function_;
 #if DCHECK_IS_ON()
   static AdjustAmountOfExternalAllocatedMemoryFunction
       last_used_adjust_amount_of_external_allocated_memory_function_;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(ArrayBufferContents);
 };
 
 }  // namespace WTF

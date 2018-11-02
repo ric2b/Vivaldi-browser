@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "ui/events/blink/did_overscroll_params.h"
 
 #include "app/vivaldi_apptools.h"
 #include "base/mac/mac_util.h"
@@ -162,6 +163,12 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   }
 }
 
+- (void)onOverscrolled:(const ui::DidOverscrollParams&)params {
+  rendererDisabledOverscroll_ = params.overscroll_behavior.x !=
+                                cc::OverscrollBehavior::OverscrollBehaviorType::
+                                    kOverscrollBehaviorTypeAuto;
+}
+
 - (void)beginGestureWithEvent:(NSEvent*)event {
   inGesture_ = YES;
   if (vivaldi::IsVivaldiRunning()) {
@@ -235,6 +242,7 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   gestureStartPointValid_ = NO;
   gestureTotalY_ = 0;
   firstScrollUnconsumed_ = NO;
+  rendererDisabledOverscroll_ = NO;
   waitingForFirstGestureScroll_ = NO;
   recognitionState_ = history_swiper::kPending;
 }
@@ -595,6 +603,10 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   // Don't enable history swiping until the renderer has decided to not consume
   // the event with phase NSEventPhaseBegan.
   if (!firstScrollUnconsumed_)
+    return NO;
+
+  // History swiping should be prevented if the renderer disables it.
+  if (rendererDisabledOverscroll_)
     return NO;
 
   // Magic mouse and touchpad swipe events are identical except magic mouse

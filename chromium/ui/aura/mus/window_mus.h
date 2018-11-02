@@ -125,14 +125,11 @@ class AURA_EXPORT WindowMus {
   // window (as compared to DestroyFromServer()).
   virtual void PrepareForDestroy() = 0;
 
-  // See TransientWindowClientObserver::OnWillRestackTransientChildAbove() for
-  // details on this and OnTransientRestackDone().
-  virtual void PrepareForTransientRestack(WindowMus* window) = 0;
-  virtual void OnTransientRestackDone(WindowMus* window) = 0;
-
   virtual void NotifyEmbeddedAppDisconnected() = 0;
 
   virtual bool HasLocalLayerTreeFrameSink() = 0;
+
+  virtual float GetDeviceScaleFactor() = 0;
 
  private:
   // Just for set_server_id(), which other places should not call.

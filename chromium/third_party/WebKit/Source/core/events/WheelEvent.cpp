@@ -99,11 +99,11 @@ bool WheelEvent::IsWheelEvent() const {
   return true;
 }
 
-EventDispatchMediator* WheelEvent::CreateMediator() {
-  return EventDispatchMediator::Create(this);
+DispatchEventResult WheelEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  return dispatcher.Dispatch();
 }
 
-DEFINE_TRACE(WheelEvent) {
+void WheelEvent::Trace(blink::Visitor* visitor) {
   MouseEvent::Trace(visitor);
 }
 

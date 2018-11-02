@@ -36,11 +36,13 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/HostsUsingFeatures.h"
+#include "core/origin_trials/origin_trials.h"
 #include "modules/mediastream/MediaConstraintsImpl.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/mediastream/MediaStreamConstraints.h"
@@ -48,7 +50,7 @@
 #include "modules/mediastream/UserMediaController.h"
 #include "platform/mediastream/MediaStreamCenter.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
-#include "public/platform/WebFeaturePolicyFeature.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
 
 namespace blink {
 
@@ -308,14 +310,14 @@ WebMediaConstraints ParseOptions(ExecutionContext* context,
   WebMediaConstraints constraints;
 
   Dictionary constraints_dictionary;
-  if (options.isNull()) {
+  if (options.IsNull()) {
     // Do nothing.
-  } else if (options.isMediaTrackConstraints()) {
+  } else if (options.IsMediaTrackConstraints()) {
     constraints = MediaConstraintsImpl::Create(
-        context, options.getAsMediaTrackConstraints(), error_state);
+        context, options.GetAsMediaTrackConstraints(), error_state);
   } else {
-    DCHECK(options.isBoolean());
-    if (options.getAsBoolean()) {
+    DCHECK(options.IsBoolean());
+    if (options.GetAsBoolean()) {
       constraints = MediaConstraintsImpl::Create();
     }
   }
@@ -373,9 +375,16 @@ UserMediaRequest::UserMediaRequest(
     : ContextLifecycleObserver(context),
       audio_(audio),
       video_(video),
+      should_disable_hardware_noise_suppression_(
+          OriginTrials::disableHardwareNoiseSuppressionEnabled(context)),
       controller_(controller),
       success_callback_(success_callback),
-      error_callback_(error_callback) {}
+      error_callback_(error_callback) {
+  if (should_disable_hardware_noise_suppression_) {
+    UseCounter::Count(context,
+                      WebFeature::kUserMediaDisableHardwareNoiseSuppression);
+  }
+}
 
 UserMediaRequest::~UserMediaRequest() {}
 
@@ -395,6 +404,10 @@ WebMediaConstraints UserMediaRequest::VideoConstraints() const {
   return video_;
 }
 
+bool UserMediaRequest::ShouldDisableHardwareNoiseSuppression() const {
+  return should_disable_hardware_noise_suppression_;
+}
+
 bool UserMediaRequest::IsSecureContextUse(String& error_message) {
   Document* document = OwnerDocument();
 
@@ -403,13 +416,31 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
                       WebFeature::kGetUserMediaSecureOrigin);
     UseCounter::CountCrossOriginIframe(
         *document, WebFeature::kGetUserMediaSecureOriginIframe);
+
+    // Feature policy deprecation messages.
     if (Audio()) {
-      Deprecation::CountDeprecationFeaturePolicy(
-          *document, WebFeaturePolicyFeature::kMicrophone);
+      if (RuntimeEnabledFeatures::FeaturePolicyForPermissionsEnabled()) {
+        if (!document->GetFrame()->IsFeatureEnabled(
+                FeaturePolicyFeature::kMicrophone)) {
+          UseCounter::Count(
+              document, WebFeature::kMicrophoneDisabledByFeaturePolicyEstimate);
+        }
+      } else {
+        Deprecation::CountDeprecationFeaturePolicy(
+            *document, FeaturePolicyFeature::kMicrophone);
+      }
     }
     if (Video()) {
-      Deprecation::CountDeprecationFeaturePolicy(
-          *document, WebFeaturePolicyFeature::kCamera);
+      if (RuntimeEnabledFeatures::FeaturePolicyForPermissionsEnabled()) {
+        if (!document->GetFrame()->IsFeatureEnabled(
+                FeaturePolicyFeature::kCamera)) {
+          UseCounter::Count(document,
+                            WebFeature::kCameraDisabledByFeaturePolicyEstimate);
+        }
+      } else {
+        Deprecation::CountDeprecationFeaturePolicy(
+            *document, FeaturePolicyFeature::kCamera);
+      }
     }
 
     HostsUsingFeatures::CountAnyWorld(
@@ -433,7 +464,7 @@ Document* UserMediaRequest::OwnerDocument() {
     return ToDocument(context);
   }
 
-  return 0;
+  return nullptr;
 }
 
 void UserMediaRequest::Start() {
@@ -465,31 +496,53 @@ void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor) {
   success_callback_->handleEvent(stream);
 }
 
-void UserMediaRequest::FailPermissionDenied(const String& message) {
-  if (!GetExecutionContext())
-    return;
-  error_callback_->handleEvent(NavigatorUserMediaError::Create(
-      NavigatorUserMediaError::kNamePermissionDenied, message, String()));
-}
-
 void UserMediaRequest::FailConstraint(const String& constraint_name,
                                       const String& message) {
   DCHECK(!constraint_name.IsEmpty());
   if (!GetExecutionContext())
     return;
-  error_callback_->handleEvent(NavigatorUserMediaError::Create(
-      NavigatorUserMediaError::kNameConstraintNotSatisfied, message,
-      constraint_name));
+  error_callback_->handleEvent(
+      DOMExceptionOrOverconstrainedError::FromOverconstrainedError(
+          OverconstrainedError::Create(constraint_name, message)));
 }
 
-void UserMediaRequest::FailUASpecific(const String& name,
-                                      const String& message,
-                                      const String& constraint_name) {
-  DCHECK(!name.IsEmpty());
+void UserMediaRequest::Fail(WebUserMediaRequest::Error name,
+                            const String& message) {
   if (!GetExecutionContext())
     return;
+
+  ExceptionCode ec = kNotSupportedError;
+  switch (name) {
+    case WebUserMediaRequest::Error::kPermissionDenied:
+    case WebUserMediaRequest::Error::kPermissionDismissed:
+    case WebUserMediaRequest::Error::kInvalidState:
+    case WebUserMediaRequest::Error::kFailedDueToShutdown:
+    case WebUserMediaRequest::Error::kKillSwitchOn:
+      ec = kNotAllowedError;
+      break;
+    case WebUserMediaRequest::Error::kDevicesNotFound:
+      ec = kNotFoundError;
+      break;
+    case WebUserMediaRequest::Error::kTabCapture:
+    case WebUserMediaRequest::Error::kScreenCapture:
+    case WebUserMediaRequest::Error::kCapture:
+      ec = kAbortError;
+      break;
+    case WebUserMediaRequest::Error::kTrackStart:
+      ec = kNotReadableError;
+      break;
+    case WebUserMediaRequest::Error::kNotSupported:
+      ec = kNotSupportedError;
+      break;
+    case WebUserMediaRequest::Error::kSecurityError:
+      ec = kSecurityError;
+      break;
+    default:
+      NOTREACHED();
+  }
   error_callback_->handleEvent(
-      NavigatorUserMediaError::Create(name, message, constraint_name));
+      DOMExceptionOrOverconstrainedError::FromDOMException(
+          DOMException::Create(ec, message)));
 }
 
 void UserMediaRequest::ContextDestroyed(ExecutionContext*) {
@@ -499,7 +552,7 @@ void UserMediaRequest::ContextDestroyed(ExecutionContext*) {
   }
 }
 
-DEFINE_TRACE(UserMediaRequest) {
+void UserMediaRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(controller_);
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);

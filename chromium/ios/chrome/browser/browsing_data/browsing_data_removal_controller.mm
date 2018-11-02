@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/containers/hash_tables.h"
+#include "base/ios/callback_counter.h"
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted.h"
@@ -21,11 +22,12 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_remover_helper.h"
 #include "ios/chrome/browser/browsing_data/ios_chrome_browsing_data_remover.h"
-#include "ios/chrome/browser/callback_counter.h"
 #include "ios/chrome/browser/sessions/session_util.h"
 #include "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/snapshots/snapshots_util.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
+#import "ios/chrome/browser/ui/external_file_remover.h"
+#import "ios/chrome/browser/ui/external_file_remover_factory.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
@@ -104,32 +106,28 @@ void DoNothing(uint32_t n) {}
 // Called when a removal operation for |browserState| finishes.
 - (void)decrementPendingRemovalCountForBrowserState:
     (ios::ChromeBrowserState*)browserState;
+
+// Removes files received from other applications by |browserState|.
+// |completionHandler| is called when the files have been removed.
+- (void)removeExternalFilesForBrowserState:
+            (ios::ChromeBrowserState*)browserState
+                         completionHandler:(ProceduralBlock)completionHandler;
 @end
 
 @implementation BrowsingDataRemovalController {
   // Wrapper around IOSChromeBrowsingDataRemover that serializes removal
   // operations.
   std::unique_ptr<BrowsingDataRemoverHelper> _browsingDataRemoverHelper;
-  // The delegate.
-  __weak id<BrowsingDataRemovalControllerDelegate> _delegate;
   // A map that tracks the number of pending removals for a given
   // ChromeBrowserState.
   base::hash_map<ios::ChromeBrowserState*, int> _pendingRemovalCount;
 }
 
-- (instancetype)initWithDelegate:
-    (id<BrowsingDataRemovalControllerDelegate>)delegate {
+- (instancetype)init {
   if ((self = [super init])) {
-    DCHECK(delegate);
     _browsingDataRemoverHelper.reset(new BrowsingDataRemoverHelper());
-    _delegate = delegate;
   }
   return self;
-}
-
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
 }
 
 - (void)removeBrowsingDataFromBrowserState:
@@ -175,10 +173,11 @@ void DoNothing(uint32_t n) {}
   if (mask & IOSChromeBrowsingDataRemover::REMOVE_DOWNLOADS) {
     DCHECK_EQ(browsing_data::TimePeriod::ALL_TIME, timePeriod)
         << "Partial clearing not supported";
-    callbackCounter->IncrementCount();
-    [_delegate
-        removeExternalFilesForBrowserState:browserState
-                         completionHandler:decrementCallbackCounterCount];
+    if (!browserState->IsOffTheRecord()) {
+      callbackCounter->IncrementCount();
+      [self removeExternalFilesForBrowserState:browserState
+                             completionHandler:decrementCallbackCounterCount];
+    }
   }
 
   if (!browserState->IsOffTheRecord()) {
@@ -431,6 +430,18 @@ removeWKWebViewCreatedBrowsingDataFromBrowserState:
 
 - (void)browserStateDestroyed:(ios::ChromeBrowserState*)browserState {
   _pendingRemovalCount.erase(browserState);
+}
+
+- (void)removeExternalFilesForBrowserState:
+            (ios::ChromeBrowserState*)browserState
+                         completionHandler:(ProceduralBlock)completionHandler {
+  DCHECK(!browserState->IsOffTheRecord());
+  base::OnceClosure callback;
+  if (completionHandler)
+    callback = base::BindBlockArc(completionHandler);
+
+  ExternalFileRemoverFactory::GetForBrowserState(browserState)
+      ->RemoveAfterDelay(base::TimeDelta::FromSeconds(0), std::move(callback));
 }
 
 @end

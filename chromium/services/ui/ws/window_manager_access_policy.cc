@@ -170,6 +170,13 @@ bool WindowManagerAccessPolicy::CanStackAtTop(
   return false;
 }
 
+bool WindowManagerAccessPolicy::CanPerformWmAction(
+    const ServerWindow* window) const {
+  // This API is for clients. Window managers don't need to tell themselves to
+  // do things.
+  return false;
+}
+
 bool WindowManagerAccessPolicy::CanSetCursorProperties(
     const ServerWindow* window) const {
   return WasCreatedByThisClient(window) ||
@@ -219,7 +226,7 @@ bool WindowManagerAccessPolicy::IsValidIdForNewWindow(
   // use the client id when creating windows the WM could end up with two
   // windows with the same id. Because of this the wm must use the same
   // client id for all windows it creates.
-  return WindowIdFromTransportId(id.id).client_id == client_id_;
+  return base::checked_cast<ClientSpecificId>(id.client_id()) == client_id_;
 }
 
 bool WindowManagerAccessPolicy::WasCreatedByThisClient(

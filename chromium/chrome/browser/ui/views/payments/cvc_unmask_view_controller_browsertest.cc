@@ -13,9 +13,7 @@ namespace payments {
 class PaymentRequestCvcUnmaskViewControllerTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestCvcUnmaskViewControllerTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_no_shipping_test.html") {}
+  PaymentRequestCvcUnmaskViewControllerTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestCvcUnmaskViewControllerTest);
@@ -23,6 +21,7 @@ class PaymentRequestCvcUnmaskViewControllerTest
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
                        CvcSentToResponse) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -30,7 +29,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
   AddCreditCard(card);
 
   InvokePaymentRequestUI();
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   PayWithCreditCardAndWait(base::ASCIIToUTF16("012"));
 
   ExpectBodyContains({"\"cardSecurityCode\": \"012\""});
@@ -40,6 +39,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
 // does not crash.
 IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
                        OpenGoBackOpenPay) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -59,6 +59,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
                        EnterAcceleratorConfirmsCvc) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -67,14 +68,14 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
 
   InvokePaymentRequestUI();
 
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   // This prevents a timeout in error cases where PAY_BUTTON is disabled.
   ASSERT_TRUE(dialog_view()
                   ->GetViewByID(static_cast<int>(DialogViewID::PAY_BUTTON))
                   ->enabled());
   OpenCVCPromptWithCVC(base::ASCIIToUTF16("012"));
 
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   views::View* cvc_sheet = dialog_view()->GetViewByID(
       static_cast<int>(DialogViewID::CVC_UNMASK_SHEET));
   cvc_sheet->AcceleratorPressed(ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE));
@@ -86,6 +87,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
                        ButtonDisabled) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -94,7 +96,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCvcUnmaskViewControllerTest,
 
   InvokePaymentRequestUI();
 
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   // This prevents a timeout in error cases where PAY_BUTTON is disabled.
   ASSERT_TRUE(dialog_view()
                   ->GetViewByID(static_cast<int>(DialogViewID::PAY_BUTTON))

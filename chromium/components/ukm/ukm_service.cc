@@ -15,16 +15,17 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_service_client.h"
-#include "components/metrics/proto/ukm/report.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/ukm/persisted_logs_metrics_impl.h"
 #include "components/ukm/ukm_pref_names.h"
 #include "components/ukm/ukm_rotation_scheduler.h"
+#include "services/metrics/public/cpp/delegating_ukm_recorder.h"
+#include "third_party/metrics_proto/ukm/report.pb.h"
 
 namespace ukm {
 
@@ -93,28 +94,28 @@ UkmService::UkmService(PrefService* pref_service,
 
   StoreWhitelistedEntries();
 
-  UkmRecorder::Set(this);
+  DelegatingUkmRecorder::Get()->AddDelegate(self_ptr_factory_.GetWeakPtr());
 }
 
 UkmService::~UkmService() {
   DisableReporting();
-  UkmRecorder::Set(nullptr);
+  DelegatingUkmRecorder::Get()->RemoveDelegate(this);
 }
 
 void UkmService::Initialize() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!initialize_started_);
   DVLOG(1) << "UkmService::Initialize";
   initialize_started_ = true;
 
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&UkmService::StartInitTask, self_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(kInitializationDelaySeconds));
 }
 
 void UkmService::EnableReporting() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::EnableReporting";
   if (reporting_service_.reporting_active())
     return;
@@ -128,7 +129,7 @@ void UkmService::EnableReporting() {
 }
 
 void UkmService::DisableReporting() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::DisableReporting";
 
   reporting_service_.DisableReporting();
@@ -141,7 +142,7 @@ void UkmService::DisableReporting() {
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 void UkmService::OnAppEnterForeground() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::OnAppEnterForeground";
 
   // If initialize_started_ is false, UKM has not yet been started, so bail. The
@@ -153,7 +154,7 @@ void UkmService::OnAppEnterForeground() {
 }
 
 void UkmService::OnAppEnterBackground() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::OnAppEnterBackground";
 
   if (!initialize_started_)
@@ -169,14 +170,14 @@ void UkmService::OnAppEnterBackground() {
 #endif
 
 void UkmService::Flush() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (initialize_complete_)
     BuildAndStoreLog();
   reporting_service_.ukm_log_store()->PersistUnsentLogs();
 }
 
 void UkmService::Purge() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::Purge";
   reporting_service_.ukm_log_store()->Purge();
   UkmRecorderImpl::Purge();
@@ -185,6 +186,7 @@ void UkmService::Purge() {
 // TODO(bmcquade): rename this to something more generic, like
 // ResetClientState. Consider resetting all prefs here.
 void UkmService::ResetClientId() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   client_id_ = GenerateClientId(pref_service_);
   session_id_ = LoadSessionId(pref_service_);
   report_count_ = 0;
@@ -203,7 +205,7 @@ void UkmService::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 void UkmService::StartInitTask() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::StartInitTask";
   client_id_ = LoadOrGenerateClientId(pref_service_);
   session_id_ = LoadSessionId(pref_service_);
@@ -214,14 +216,14 @@ void UkmService::StartInitTask() {
 }
 
 void UkmService::FinishedInitTask() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::FinishedInitTask";
   initialize_complete_ = true;
   scheduler_->InitTaskComplete();
 }
 
 void UkmService::RotateLog() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::RotateLog";
   if (!reporting_service_.ukm_log_store()->has_unsent_logs())
     BuildAndStoreLog();
@@ -229,7 +231,7 @@ void UkmService::RotateLog() {
 }
 
 void UkmService::BuildAndStoreLog() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::BuildAndStoreLog";
 
   // Suppress generating a log if we have no new data to include.

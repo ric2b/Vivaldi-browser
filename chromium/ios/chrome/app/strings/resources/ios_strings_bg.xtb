@@ -20,7 +20,6 @@
 <translation id="1254117744268754948">Избор на папка</translation>
 <translation id="1265739287306757398">Научете как</translation>
 <translation id="1272079795634619415">Стоп</translation>
-<translation id="129553762522093515">Наскоро затворени</translation>
 <translation id="1323735185997015385">Изтриване</translation>
 <translation id="132683371494960526">Докоснете двукратно, за да промените главната папка.</translation>
 <translation id="1340643665687018190">Затваряне на менюто</translation>
@@ -48,7 +47,6 @@
 <translation id="1690731385917361335">Няма елементи</translation>
 <translation id="1700629756560807968">Избрахте <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
 <translation id="1740468249224277719">Докоснете двукратно, за да инсталирате.</translation>
-<translation id="1749561566933687563">Синхронизирайте отметките си</translation>
 <translation id="1752547299766512813">Запазени пароли</translation>
 <translation id="1753905327828125965">Ползвани</translation>
 <translation id="1809939268435598390">Изтриване на папката</translation>
@@ -80,6 +78,8 @@
 <translation id="2381405137052800939">Основни положения</translation>
 <translation id="2386793615875593361">1 избрана</translation>
 <translation id="2435457462613246316">Показване на паролата</translation>
+<translation id="2523363575747517183">Този уебсайт многократно се опитва да отвори друго приложение.</translation>
+<translation id="2529021024822217800">Отваряне на всички</translation>
 <translation id="2572712655377361602">Достъпът до снимките ви е блокиран от правило за устройства</translation>
 <translation id="2584132361465095047">Добавяне на профил…</translation>
 <translation id="2593774076813182497">Стр. не може да се отпечата.</translation>
@@ -129,9 +129,7 @@
 <translation id="3324193307694657476">Адрес 2</translation>
 <translation id="3329904751041170572">Не можа да се установи връзка със сървъра.</translation>
 <translation id="3335947283844343239">Повторно отваряне на затворения раздел</translation>
-<translation id="3387752218061326363">Показва се историята от устройствата, на които сте влезли в профила си. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" />.</translation>
 <translation id="3393920035788932672">Изск. прозорци са разр.</translation>
-<translation id="3414292259312108062">Chrome ще съхрани тази парола при <ph name="BEGIN_LINK" />останалите, запазени в Google<ph name="END_LINK" />, и автоматично ще я попълва вместо вас, за да не се налага да я помните.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> мин</translation>
 <translation id="3448016392200048164">Разделен изглед</translation>
 <translation id="3474624961160222204">Продължаване като <ph name="NAME" /></translation>
@@ -146,19 +144,14 @@
 <translation id="3567664240939803299">Искате ли Google Smart Lock да запази паролата ви за този сайт?</translation>
 <translation id="3588820906588687999">Отваряне на изображението в нов раздел</translation>
 <translation id="3603009562372709545">Копиране на URL адреса на връзката</translation>
-<translation id="360480449234699036">Научавайте за темите в уебсайтовете, без да напускате страницата. Функцията за търсене с докосване изпраща до Google Търсене определени думи и заобикалящия ги текст и така извежда определения, снимки, резултати и други подробности.
-
-За да коригирате думата си за търсене, натиснете продължително за избор. За да прецизирате заявката, плъзнете панела нагоре докрай и докоснете полето за търсене.</translation>
 <translation id="3607167657931203000">Автоматично попълване на данни</translation>
 <translation id="3628119975092896051">Списъкът ви за четене е налице офлайн. За да добавите страница към него, докоснете „<ph name="SHARE_OPENING_ICON" />“.</translation>
 <translation id="3638472932233958418">Предв. зареждане на уеб стр.</translation>
 <translation id="3691593122358196899">Отметката бе запазена в/ъв „<ph name="FOLDER_TITLE" />“</translation>
-<translation id="3738139272394829648">Търсене чрез докосване</translation>
 <translation id="3771033907050503522">Раздели „инкогнито“</translation>
 <translation id="3779810277399252432">Няма връзка с интернет.</translation>
 <translation id="3783017676699494206">Запазване на изобрaжението</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3857761338463387655">Създаване на имейл със:</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3928666092801078803">Комбиниране на данните ми</translation>
 <translation id="3950820424414687140">Вход</translation>
@@ -181,6 +174,7 @@
 <translation id="4342284590510997375">Ново</translation>
 <translation id="434816576838749873">Избиране на приложение за електронна поща</translation>
 <translation id="4359125752503270327">Тази страница ще се отвори в друго приложение.</translation>
+<translation id="4370827530403103842">Синхронизирането не работи. Докоснете, за да отстраните проблема.</translation>
 <translation id="4375040482473363939">Търсене по код за бърза реакция</translation>
 <translation id="4378154925671717803">Телефон</translation>
 <translation id="441868831736628555">Съобщение за поверителност</translation>
@@ -188,6 +182,7 @@
 <translation id="4508750114462689118">Затваряне на подканата за вход</translation>
 <translation id="4526249700380860531">Преглед и управление на запазените пароли на адрес <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Опитайте да влезете отново.</translation>
+<translation id="457386861538956877">Още...</translation>
 <translation id="461440297010471931">Търсене с Google</translation>
 <translation id="4620246317052452550">Страници, които сте прочели</translation>
 <translation id="4636930964841734540">Информация</translation>
@@ -243,6 +238,7 @@
 <translation id="5771816112378578655">Извършва се настройка...</translation>
 <translation id="5816228676161003208">Това ви позволява да търсите по-бързо посредством гласа си.</translation>
 <translation id="5846482154967366008">Търсеща машина</translation>
+<translation id="5854790677617711513">По-стари от 30 дни</translation>
 <translation id="5857090052475505287">Нова папка</translation>
 <translation id="5857770089550859117">За старт на синхронизирането е необходим пропуск.</translation>
 <translation id="5860033963881614850">Изключено</translation>
@@ -267,7 +263,6 @@
 <translation id="6122191549521593678">Онлайн</translation>
 <translation id="6127379762771434464">Елементът бе премахнат</translation>
 <translation id="6136914049981179737">Току-що</translation>
-<translation id="6149061208933997199">Ползване на паролата</translation>
 <translation id="6158823227857319455">Нов раздел</translation>
 <translation id="616831107264507309">Четене по-късно</translation>
 <translation id="6184086493125982861">Показване на разделите</translation>
@@ -277,7 +272,6 @@
 <translation id="6254066287920239840">Отваряне на връзките в приложението вместо в браузъра.</translation>
 <translation id="6255097610484507482">Редактиране на кредитната карта</translation>
 <translation id="6308436439357671616">Това ви позволява да правите и качвате снимки.</translation>
-<translation id="6314335155547195432">Генериране на парола</translation>
 <translation id="6324528485781869530">Превключване на профила за синхронизиране</translation>
 <translation id="6324669097367352121">Настройки за вход</translation>
 <translation id="6337234675334993532">Шифроване</translation>
@@ -295,7 +289,6 @@
 <translation id="6418346271604475326">PDF файлът се подготвя</translation>
 <translation id="6445051938772793705">Държава</translation>
 <translation id="6445981559479772097">Съобщ. е изпратено.</translation>
-<translation id="6456425917241817154">Парола, генерирана от Chrome</translation>
 <translation id="6464071786529933911">Отв. в нов раздел „инкогнито“</translation>
 <translation id="6482629121755362506">Изтрихте <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> елемента</translation>
 <translation id="6541915733953096570">Последния час</translation>
@@ -309,6 +302,7 @@
 <translation id="6785453220513215166">Сигналите за сривове се изпращат...</translation>
 <translation id="679325081238418596">Получете отметките, историята, паролите и другите си настройки на всичките си устройства</translation>
 <translation id="6797885426782475225">Гласово търсене</translation>
+<translation id="6807889908376551050">Показване на всички...</translation>
 <translation id="681368974849482173">Елементът е създаден</translation>
 <translation id="6896758677409633944">Копиране</translation>
 <translation id="6903907808598579934">Включване на синхронизирането</translation>
@@ -317,9 +311,9 @@
 <translation id="7004499039102548441">Скорошни раздели</translation>
 <translation id="7006788746334555276">Настройки за съдържанието</translation>
 <translation id="7031882061095297553">Синхронизиране със</translation>
+<translation id="7053983685419859001">Блокиране</translation>
 <translation id="7062545763355031412">Приемане и превключване на профилите</translation>
 <translation id="7108338896283013870">Скриване</translation>
-<translation id="7131892264600713844">Показва се историята от това устройство. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" />.</translation>
 <translation id="7133798577887235672">Име и фамилия</translation>
 <translation id="7136892417564438900">Няма достъп до камерата</translation>
 <translation id="7159472599653637159">Мобилен сайт</translation>
@@ -338,7 +332,6 @@
 <translation id="7456847797759667638">Отваряне на местоположение...</translation>
 <translation id="7464701184726199289">Синхронизираните данни ще се изчистят от всички устройства. Запазените настройки за сайтове няма да бъдат изтрити и може да отразяват навиците ви при сърфиране. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /></translation>
 <translation id="7472734401283673885">Име на фирмата</translation>
-<translation id="7473891865547856676">Не, благодаря</translation>
 <translation id="7481312909269577407">Препращане</translation>
 <translation id="750493650310597496">Избрахте 0</translation>
 <translation id="7514365320538308">Изтегляне</translation>
@@ -351,12 +344,10 @@
 <translation id="7649070708921625228">Помощ</translation>
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="7671141431838911305">INSTALL</translation>
-<translation id="7677825787905683892">Избиране на стандартно приложение за електронна поща</translation>
 <translation id="7765158879357617694">Преместване</translation>
 <translation id="7769602470925380267">Приемане и излизане от профила</translation>
 <translation id="7772032839648071052">Потвърдете пропуска</translation>
 <translation id="780301667611848630">Не, благодаря</translation>
-<translation id="7851858861565204677">Други устройства</translation>
 <translation id="7859704718976024901">История на сърфирането</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7947953824732555851">Приемам и влизам</translation>
@@ -369,7 +360,6 @@
 <translation id="806745655614357130">Оставяне на данните отделно</translation>
 <translation id="8076014560081431679">Запазените настройки за сайтове няма да бъдат изтрити и може да отразяват навиците ви при сърфиране. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">Затваряне на разделите</translation>
-<translation id="8137558756159375272">При търсене с докосване избраната дума и текущата страница се изпращат като контекст до Google Търсене. Можете да изключите функцията от <ph name="BEGIN_LINK" />Настройки<ph name="END_LINK" />.</translation>
 <translation id="8205564605687841303">Отказ</translation>
 <translation id="8225985093977202398">Кеширани изображения и файлове</translation>
 <translation id="8261506727792406068">Изтриване</translation>
@@ -382,6 +372,7 @@
 <translation id="8458397775385147834">Изтрихте 1 елемент</translation>
 <translation id="8487700953926739672">Налице офлайн</translation>
 <translation id="8503813439785031346">Потребителско име</translation>
+<translation id="850600235656508448">Отваряне в режим „инкогнито“</translation>
 <translation id="8517375800490286174">Лицензи за отворен код</translation>
 <translation id="8524799873541103884">Раздели в режим „<ph name="INCOGNITO" />“: <ph name="FIRST_VISIBLE_TAB" /> до <ph name="LAST_VISIBLE_TAB" /> от общо <ph name="NUMBER_OF_OPEN_TABS" /></translation>
 <translation id="8532105204136943229">Година на валидност</translation>
@@ -400,6 +391,7 @@
 <translation id="8775144690796719618">Невалиден URL адрес</translation>
 <translation id="8820817407110198400">Отметки</translation>
 <translation id="8840513115188359703">Няма да излезете от профила си в Google.</translation>
+<translation id="8870413625673593573">Наскоро затворени</translation>
 <translation id="8881801611828450202">Търсене на изобр. със: <ph name="SEARCH_ENGINE" /></translation>
 <translation id="8904976895050290827">Синхронизиране в Chrome</translation>
 <translation id="895541991026785598">Подаване на сигнал за проблем</translation>
@@ -415,7 +407,6 @@
 <translation id="9083392325882095631">1 елемент</translation>
 <translation id="9100610230175265781">Изисква се пропуск</translation>
 <translation id="9148126808321036104">Влезте отново</translation>
-<translation id="914898748153555155">Можете да промените това предпочитание по всяко време от настройките на Chrome</translation>
 <translation id="91549621916703028">Създайте няколко раздела за всичките си задачи</translation>
 <translation id="9157836665414082580">Диалогови прозорци: Блокиране</translation>
 <translation id="9188680907066685419">Излизане от управляван профил</translation>
@@ -427,4 +418,5 @@
 <translation id="976982866697960176">Управление на синхронизираните данни…</translation>
 <translation id="988141524645182168">Други устройства</translation>
 <translation id="989988560359834682">Редактиране на адреса</translation>
+<translation id="994757059139821576">Предложения за статии</translation>
 </translationbundle>

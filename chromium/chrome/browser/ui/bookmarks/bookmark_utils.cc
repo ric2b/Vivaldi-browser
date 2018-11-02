@@ -20,6 +20,7 @@
 #include "components/search/search.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/features/features.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -149,8 +150,8 @@ bool IsAppsShortcutEnabled(Profile* profile) {
   if (profile->IsLegacySupervised())
     return false;
 
-#if defined(USE_ASH)
-  // Don't show the apps shortcut in ash since the app launcher is enabled.
+#if defined(OS_CHROMEOS)
+  // Chrome OS uses the app list / app launcher.
   return false;
 #else
   return search::IsInstantExtendedAPIEnabled() && !profile->IsOffTheRecord();
@@ -298,16 +299,7 @@ gfx::ImageSkia GetBookmarkFolderIcon(SkColor text_color) {
   return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       IDR_BOOKMARK_BAR_FOLDER);
 #else
-  return GetFolderIcon(kFolderIcon, text_color);
-#endif
-}
-
-gfx::ImageSkia GetBookmarkSupervisedFolderIcon(SkColor text_color) {
-#if defined(OS_WIN)
-  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-      IDR_BOOKMARK_BAR_FOLDER_SUPERVISED);
-#else
-  return GetFolderIcon(kFolderSupervisedIcon, text_color);
+  return GetFolderIcon(vector_icons::kFolderIcon, text_color);
 #endif
 }
 

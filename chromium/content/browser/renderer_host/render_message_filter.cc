@@ -21,6 +21,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
@@ -44,7 +45,6 @@
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/render_message_filter.mojom.h"
-#include "content/common/render_process_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_context.h"
@@ -80,17 +80,18 @@
 #include "content/common/mac/font_loader.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
-
 #if defined(OS_LINUX)
 #include "base/linux_util.h"
 #include "base/threading/platform_thread.h"
 #endif
 
+using blink::mojom::CacheStorageError;
+
 namespace content {
 namespace {
 
-const uint32_t kFilteredMessageClasses[] = {
-    ChildProcessMsgStart, RenderProcessMsgStart, ViewMsgStart,
+const uint32_t kRenderFilteredMessageClasses[] = {
+    ChildProcessMsgStart, ViewMsgStart,
 };
 
 #if defined(OS_MACOSX)
@@ -110,9 +111,8 @@ void ResizeHelperPostMsgToUIThread(int render_process_id,
 }
 #endif
 
-void NoOpCacheStorageErrorCallback(
-    std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-    CacheStorageError error) {}
+void NoOpCacheStorageErrorCallback(CacheStorageCacheHandle cache_handle,
+                                   CacheStorageError error) {}
 
 }  // namespace
 
@@ -124,8 +124,8 @@ RenderMessageFilter::RenderMessageFilter(
     MediaInternals* media_internals,
     DOMStorageContextWrapper* dom_storage_context,
     CacheStorageContextImpl* cache_storage_context)
-    : BrowserMessageFilter(kFilteredMessageClasses,
-                           arraysize(kFilteredMessageClasses)),
+    : BrowserMessageFilter(kRenderFilteredMessageClasses,
+                           arraysize(kRenderFilteredMessageClasses)),
       BrowserAssociatedInterface<mojom::RenderMessageFilter>(this, this),
       resource_dispatcher_host_(ResourceDispatcherHostImpl::Get()),
       request_context_(request_context),
@@ -151,25 +151,11 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderMessageFilter, message)
 #if defined(OS_MACOSX)
-    // On Mac, ViewHostMsg_UpdateRect needs to be handled in a nested message
-    // loop during resize.
+    // On Mac, ViewHostMsg_ResizeOrRepaint_ACK needs to be handled in a nested
+    // message loop during resize.
     IPC_MESSAGE_HANDLER_GENERIC(
-        ViewHostMsg_UpdateRect,
+        ViewHostMsg_ResizeOrRepaint_ACK,
         ResizeHelperPostMsgToUIThread(render_process_id_, message))
-#endif
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(ChildProcessHostMsg_HasGpuProcess,
-                                    OnHasGpuProcess)
-#if defined(OS_LINUX)
-    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_SetThreadPriority,
-                        OnSetThreadPriority)
-#endif
-    IPC_MESSAGE_HANDLER(RenderProcessHostMsg_DidGenerateCacheableMetadata,
-                        OnCacheableMetadataAvailable)
-    IPC_MESSAGE_HANDLER(
-        RenderProcessHostMsg_DidGenerateCacheableMetadataInCacheStorage,
-        OnCacheableMetadataAvailableForCacheStorage)
-#if defined(OS_MACOSX)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(RenderProcessHostMsg_LoadFont, OnLoadFont)
 #endif
     IPC_MESSAGE_HANDLER(ViewHostMsg_MediaLogEvents, OnMediaLogEvents)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -214,25 +200,16 @@ void RenderMessageFilter::CreateFullscreenWidget(
   std::move(callback).Run(route_id);
 }
 
+void RenderMessageFilter::LoadFont(const base::string16& font_name,
+                                   float font_point_size,
+                                   LoadFontCallback callback) {
 #if defined(OS_MACOSX)
-
-void RenderMessageFilter::OnLoadFont(const FontDescriptor& font,
-                                     IPC::Message* reply_msg) {
-  FontLoader::LoadFont(
-      font,
-      base::BindOnce(&RenderMessageFilter::SendLoadFontReply, this, reply_msg));
-}
-
-void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
-                                            uint32_t data_size,
-                                            base::SharedMemoryHandle handle,
-                                            uint32_t font_id) {
-  RenderProcessHostMsg_LoadFont::WriteReplyParams(reply, data_size, handle,
-                                                  font_id);
-  Send(reply);
-}
-
+  FontLoader::LoadFont(font_name, font_point_size, std::move(callback));
+#else
+  // TODO(https://crbug.com/676224): remove this reporting.
+  mojo::ReportBadMessage("LoadFont is OS_MACOSX only.");
 #endif  // defined(OS_MACOSX)
+}
 
 #if defined(OS_LINUX)
 void RenderMessageFilter::SetThreadPriorityOnFileThread(
@@ -253,23 +230,33 @@ void RenderMessageFilter::SetThreadPriorityOnFileThread(
 
   base::PlatformThread::SetThreadPriority(peer_tid, priority);
 }
+#endif
 
-void RenderMessageFilter::OnSetThreadPriority(base::PlatformThreadId ns_tid,
-                                              base::ThreadPriority priority) {
+void RenderMessageFilter::SetThreadPriority(int32_t ns_tid,
+                                            base::ThreadPriority priority) {
+#if defined(OS_LINUX)
   constexpr base::TaskTraits kTraits = {
       base::MayBlock(), base::TaskPriority::USER_BLOCKING,
       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN};
   base::PostTaskWithTraits(
       FROM_HERE, kTraits,
       base::BindOnce(&RenderMessageFilter::SetThreadPriorityOnFileThread, this,
-                     ns_tid, priority));
-}
+                     static_cast<base::PlatformThreadId>(ns_tid), priority));
+#else
+  mojo::ReportBadMessage("SetThreadPriority is only supported on OS_LINUX");
 #endif
+}
 
-void RenderMessageFilter::OnCacheableMetadataAvailable(
+void RenderMessageFilter::DidGenerateCacheableMetadata(
     const GURL& url,
     base::Time expected_response_time,
-    const std::vector<char>& data) {
+    const std::vector<uint8_t>& data) {
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    bad_message::ReceivedBadMessage(
+        this, bad_message::RMF_BAD_URL_CACHEABLE_METADATA);
+    return;
+  }
+
   net::HttpCache* cache = request_context_->GetURLRequestContext()->
       http_transaction_factory()->GetCache();
   if (!cache)
@@ -288,10 +275,10 @@ void RenderMessageFilter::OnCacheableMetadataAvailable(
                        data.size());
 }
 
-void RenderMessageFilter::OnCacheableMetadataAvailableForCacheStorage(
+void RenderMessageFilter::DidGenerateCacheableMetadataInCacheStorage(
     const GURL& url,
     base::Time expected_response_time,
-    const std::vector<char>& data,
+    const std::vector<uint8_t>& data,
     const url::Origin& cache_storage_origin,
     const std::string& cache_storage_cache_name) {
   scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(data.size()));
@@ -310,13 +297,11 @@ void RenderMessageFilter::OnCacheStorageOpenCallback(
     base::Time expected_response_time,
     scoped_refptr<net::IOBuffer> buf,
     int buf_len,
-    std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+    CacheStorageCacheHandle cache_handle,
     CacheStorageError error) {
-  if (error != CACHE_STORAGE_OK || !cache_handle || !cache_handle->value())
+  if (error != CacheStorageError::kSuccess || !cache_handle.value())
     return;
-  CacheStorageCache* cache = cache_handle->value();
-  if (!cache)
-    return;
+  CacheStorageCache* cache = cache_handle.value();
   cache->WriteSideData(base::BindOnce(&NoOpCacheStorageErrorCallback,
                                       base::Passed(std::move(cache_handle))),
                        url, expected_response_time, buf, buf_len);
@@ -331,18 +316,8 @@ void RenderMessageFilter::OnMediaLogEvents(
     media_internals_->OnMediaEvents(render_process_id_, events);
 }
 
-void RenderMessageFilter::OnHasGpuProcess(IPC::Message* reply_ptr) {
-  std::unique_ptr<IPC::Message> reply(reply_ptr);
-  GpuProcessHost::GetHasGpuProcess(
-      base::Bind(&RenderMessageFilter::GetHasGpuProcessCallback,
-                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply)));
-}
-
-void RenderMessageFilter::GetHasGpuProcessCallback(
-    std::unique_ptr<IPC::Message> reply,
-    bool has_gpu) {
-  ChildProcessHostMsg_HasGpuProcess::WriteReplyParams(reply.get(), has_gpu);
-  Send(reply.release());
+void RenderMessageFilter::HasGpuProcess(HasGpuProcessCallback callback) {
+  GpuProcessHost::GetHasGpuProcess(std::move(callback));
 }
 
 }  // namespace content

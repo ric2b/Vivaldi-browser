@@ -1,6 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 //
 // This file is an original work developed by Vivaldi Technologies AS.
 
@@ -9,6 +9,9 @@
 
 #include "media/base/audio_decoder_config.h"
 #include "media/base/video_decoder_config.h"
+
+#include <iomanip>
+#include <iostream>
 
 namespace media {
 
@@ -41,6 +44,19 @@ std::string Loggable(const VideoDecoderConfig & config) {
     << "]"
     << "\n encrypted : " << (config.is_encrypted() ? "true" : "false")
     << "\n size of extra data : " << config.extra_data().size();
+
+  if(!config.extra_data().empty() && config.extra_data().size() < 50) {
+      s << "\n extra data : \n";
+    size_t count = 0;
+    for(auto const& data: config.extra_data()) {
+      s  << "0x" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << int(data) << ", ";
+      count++;
+
+      if (count % 8 == 0)
+          s << "\n";
+    }
+  }
+
   return s.str();
 }
 
@@ -59,7 +75,7 @@ std::string Loggable(const AudioDecoderConfig & config) {
     << "\n encrypted : " << (config.is_encrypted() ? "true" : "false")
     << "\n size of extra data : " << config.extra_data().size();
 
-  if(!config.extra_data().empty() && config.extra_data().size() < 40) {
+  if(!config.extra_data().empty() && config.extra_data().size() < 50) {
       s << "\n extra data : ";
     size_t count = 0;
     for(auto const& data: config.extra_data()) {
@@ -82,8 +98,8 @@ std::string Loggable(const PlatformAudioConfig & config) {
 
 std::string LoggableMediaType(PlatformMediaDataType type) {
     switch (type) {
-      case media::PLATFORM_MEDIA_AUDIO: return "AUDIO";
-      case media::PLATFORM_MEDIA_VIDEO: return "VIDEO";
+      case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO: return "AUDIO";
+      case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: return "VIDEO";
       default : return "UNKNOWN";
     }
 }

@@ -4,8 +4,9 @@
 
 #include "ash/metrics/task_switch_metrics_recorder.h"
 
+#include <memory>
+
 #include "ash/metrics/task_switch_time_tracker.h"
-#include "base/memory/ptr_util.h"
 
 namespace ash {
 
@@ -45,9 +46,9 @@ const char* GetHistogramName(TaskSwitchSource task_switch_source) {
 
 }  // namespace
 
-TaskSwitchMetricsRecorder::TaskSwitchMetricsRecorder() {}
+TaskSwitchMetricsRecorder::TaskSwitchMetricsRecorder() = default;
 
-TaskSwitchMetricsRecorder::~TaskSwitchMetricsRecorder() {}
+TaskSwitchMetricsRecorder::~TaskSwitchMetricsRecorder() = default;
 
 void TaskSwitchMetricsRecorder::OnTaskSwitch(
     TaskSwitchSource task_switch_source) {
@@ -89,7 +90,7 @@ void TaskSwitchMetricsRecorder::AddTaskSwitchTimeTracker(
   DCHECK(histogram_name);
 
   histogram_map_[static_cast<int>(task_switch_source)] =
-      base::MakeUnique<TaskSwitchTimeTracker>(histogram_name);
+      std::make_unique<TaskSwitchTimeTracker>(histogram_name);
 }
 
 }  // namespace ash

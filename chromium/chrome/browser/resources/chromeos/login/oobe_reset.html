@@ -68,8 +68,7 @@
             i18n-values="alt:resetScreenIllustrationTitle">
         <div id="tpmFirmwareUpdate" class="layout horizontal"
             hidden="[[!tpmFirmwareUpdateAvailable_]]">
-          <paper-checkbox aria-labelledby="tpm-firmware-update-label"
-              id="tpmFirmwareUpdateCheckbox"
+          <paper-checkbox id="tpmFirmwareUpdateCheckbox"
               checked="{{tpmFirmwareUpdateChecked_}}"
               disabled="{{!tpmFirmwareUpdateEditable_}}"
               on-change="onTPMFirmwareUpdateChanged_">
@@ -88,16 +87,16 @@
             hidden="[[isCancelHidden_(uiState_)]]">
           <div i18n-content="cancelButton"></div>
         </oobe-text-button>
-        <oobe-text-button inverse on-tap="onRestartTap_"
+        <oobe-text-button inverse on-tap="onRestartTap_" class="focus-on-show"
             hidden="[[!isState_(uiState_, 'restart-required-view')]]">
           <div i18n-content="resetButtonRestart"></div>
         </oobe-text-button>
-        <oobe-text-button inverse on-tap="onPowerwashTap_"
+        <oobe-text-button inverse on-tap="onPowerwashTap_" class="focus-on-show"
             hidden="[[!isState_(uiState_, 'rollback-proposal-view')]]"
             disabled="[[tpmFirmwareUpdateChecked_]]">
           <div i18n-content="resetButtonPowerwashAndRollback"></div>
         </oobe-text-button>
-        <oobe-text-button inverse on-tap="onPowerwashTap_"
+        <oobe-text-button inverse on-tap="onPowerwashTap_" class="focus-on-show"
             hidden="[[!isState_(uiState_, 'powerwash-proposal-view')]]">
           <div i18n-content="resetButtonPowerwash"></div>
         </oobe-text-button>

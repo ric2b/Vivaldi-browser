@@ -42,8 +42,8 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
 
   // SettingsPageUIHandler overrides:
   void RegisterMessages() override;
-  void OnJavascriptAllowed() override {}
-  void OnJavascriptDisallowed() override {}
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
 
  private:
   // Gets all CUPS printers and return it to WebUI.
@@ -83,7 +83,10 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   // location of (i.e. a printer that was not 'discovered' automatically).
   void OnAddedSpecifiedPrinter(const Printer& printer,
                                PrinterSetupResult result);
-  void OnAddPrinterError();
+
+  // Handles the result of failure to add a printer. |result_code| is used to
+  // determine the reason for the failure.
+  void OnAddPrinterError(PrinterSetupResult result_code);
 
   // Get a list of all manufacturers for which we have at least one model of
   // printer supported.  Takes one argument, the callback id for the result.
@@ -111,6 +114,9 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   void HandleStartDiscovery(const base::ListValue* args);
   void HandleStopDiscovery(const base::ListValue* args);
 
+  // Logs printer set ups that are abandoned.
+  void HandleSetUpCancel(const base::ListValue* args);
+
   // Given a printer id, find the corresponding ppdManufacturer and ppdModel.
   void HandleGetPrinterPpdManufacturerAndModel(const base::ListValue* args);
   void OnGetPrinterPpdManufacturerAndModel(
@@ -127,8 +133,7 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                                 PrinterSetupResult result_code);
 
   // Code common between the discovered and manual add printer code paths.
-  // Returns true if the printer was added successfully, false otherwise.
-  bool OnAddedPrinterCommon(const Printer& printer,
+  void OnAddedPrinterCommon(const Printer& printer,
                             PrinterSetupResult result_code);
 
   // CupsPrintersManager::Observer override:

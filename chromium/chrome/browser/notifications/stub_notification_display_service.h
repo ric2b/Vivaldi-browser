@@ -11,9 +11,10 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "chrome/browser/notifications/notification.h"
+#include "base/optional.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
+#include "ui/message_center/notification.h"
 
 class Profile;
 
@@ -34,34 +35,53 @@ class StubNotificationDisplayService : public NotificationDisplayService {
   void SetNotificationAddedClosure(base::RepeatingClosure closure);
 
   // Returns a vector of the displayed Notification objects.
-  std::vector<Notification> GetDisplayedNotificationsForType(
-      NotificationCommon::Type type) const;
+  std::vector<message_center::Notification> GetDisplayedNotificationsForType(
+      NotificationHandler::Type type) const;
+
+  base::Optional<message_center::Notification> GetNotification(
+      const std::string& notification_id);
+
+  const NotificationCommon::Metadata* GetMetadataForNotification(
+      const message_center::Notification& notification);
 
   // Simulates the notification identified by |notification_id| being closed due
   // to external events, such as the user dismissing it when |by_user| is set.
-  // When |silent| is set, the notification handlers won't be informed of the
-  // change to immitate behaviour of operating systems that don't inform apps
-  // about removed notifications.
-  void RemoveNotification(NotificationCommon::Type notification_type,
+  // Will wait for the close event to complete. When |silent| is set, the
+  // notification handlers won't be informed of the change to immitate behaviour
+  // of operating systems that don't inform apps about removed notifications.
+  void RemoveNotification(NotificationHandler::Type notification_type,
                           const std::string& notification_id,
                           bool by_user,
                           bool silent);
 
-  // Removes all notifications shown by this display service.
-  void RemoveAllNotifications(NotificationCommon::Type notification_type,
+  // Removes all notifications shown by this display service. Will wait for the
+  // close events to complete.
+  void RemoveAllNotifications(NotificationHandler::Type notification_type,
                               bool by_user);
 
   // NotificationDisplayService implementation:
-  void Display(NotificationCommon::Type notification_type,
-               const std::string& notification_id,
-               const Notification& notification) override;
-  void Close(NotificationCommon::Type notification_type,
+  void Display(NotificationHandler::Type notification_type,
+               const message_center::Notification& notification,
+               std::unique_ptr<NotificationCommon::Metadata> metadata) override;
+  void Close(NotificationHandler::Type notification_type,
              const std::string& notification_id) override;
   void GetDisplayed(const DisplayedNotificationsCallback& callback) override;
 
  private:
   // Data to store for a notification that's being shown through this service.
-  using NotificationData = std::pair<NotificationCommon::Type, Notification>;
+  struct NotificationData {
+    NotificationData(NotificationHandler::Type type,
+                     const message_center::Notification& notification,
+                     std::unique_ptr<NotificationCommon::Metadata> metadata);
+    NotificationData(NotificationData&& other);
+    ~NotificationData();
+
+    NotificationData& operator=(NotificationData&& other);
+
+    NotificationHandler::Type type;
+    message_center::Notification notification;
+    std::unique_ptr<NotificationCommon::Metadata> metadata;
+  };
 
   base::RepeatingClosure notification_added_closure_;
   std::vector<NotificationData> notifications_;

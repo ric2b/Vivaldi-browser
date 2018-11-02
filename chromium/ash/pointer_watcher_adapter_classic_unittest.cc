@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/public/cpp/config.h"
+#include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/events/base_event_utils.h"
@@ -93,7 +95,7 @@ class TestHelper {
       : basic_watcher_(views::PointerWatcherEventTypes::BASIC),
         move_watcher_(views::PointerWatcherEventTypes::MOVES),
         drag_watcher_(views::PointerWatcherEventTypes::DRAGS) {}
-  ~TestHelper() {}
+  ~TestHelper() = default;
 
   // Used to verify call counts. One ExpectCallCount call should be made after
   // each generated mouse events. |basic_events_bitmask| defines which events
@@ -151,6 +153,10 @@ class TestHelper {
 };
 
 TEST_F(PointerWatcherAdapterClassicTest, MouseEvents) {
+  // Not relevant for mash.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   TestHelper helper;
 
   // Move: only the move and drag PointerWatcher should get the event.
@@ -192,6 +198,10 @@ TEST_F(PointerWatcherAdapterClassicTest, MouseEvents) {
 }
 
 TEST_F(PointerWatcherAdapterClassicTest, TouchEvents) {
+  // Not relevant for mash.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   TestHelper helper;
 
   // Press: all.

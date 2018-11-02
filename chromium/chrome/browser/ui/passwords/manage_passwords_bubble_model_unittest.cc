@@ -56,6 +56,7 @@ constexpr char kSignInPromoDismissalReasonMetric[] =
     "PasswordManager.SignInPromo";
 constexpr char kSiteOrigin[] = "http://example.com/login";
 constexpr char kUsername[] = "Admin";
+constexpr char kPassword[] = "AdminPass";
 constexpr char kUIDismissalReasonMetric[] = "PasswordManager.UIDismissalReason";
 
 class TestSyncService : public browser_sync::ProfileSyncServiceMock {
@@ -248,7 +249,7 @@ autofill::PasswordForm ManagePasswordsBubbleModelTest::GetPendingPassword() {
   form.origin = GURL(kSiteOrigin);
   form.signon_realm = kSiteOrigin;
   form.username_value = base::ASCIIToUTF16(kUsername);
-  form.password_value = base::ASCIIToUTF16("12345");
+  form.password_value = base::ASCIIToUTF16(kPassword);
   return form;
 }
 
@@ -265,7 +266,7 @@ TEST_F(ManagePasswordsBubbleModelTest, CloseWithoutInteraction) {
   stats.update_time = now;
   EXPECT_CALL(*GetStore(), AddSiteStatsImpl(stats));
   EXPECT_CALL(*controller(), OnNoInteraction());
-  EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+  EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
   EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
   DestroyModelExpectReason(
       password_manager::metrics_util::NO_DIRECT_INTERACTION);
@@ -274,8 +275,11 @@ TEST_F(ManagePasswordsBubbleModelTest, CloseWithoutInteraction) {
 TEST_F(ManagePasswordsBubbleModelTest, ClickSave) {
   PretendPasswordWaiting();
 
+  EXPECT_TRUE(model()->enable_editing());
+
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value));
+  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value,
+                                          GetPendingPassword().password_value));
   EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
   model()->OnSaveClicked();
   DestroyModelExpectReason(password_manager::metrics_util::CLICKED_SAVE);
@@ -285,7 +289,7 @@ TEST_F(ManagePasswordsBubbleModelTest, ClickNever) {
   PretendPasswordWaiting();
 
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+  EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
   EXPECT_CALL(*controller(), NeverSavePassword());
   model()->OnNeverForThisSiteClicked();
   EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE, model()->state());
@@ -327,64 +331,21 @@ TEST_F(ManagePasswordsBubbleModelTest, ClickUpdate) {
   DestroyModel();
 }
 
-TEST_F(ManagePasswordsBubbleModelTest, Edit) {
-  using password_manager::metrics_util::CredentialSourceType;
-  using UkmEntry = ukm::builders::PasswordForm;
-  for (const bool do_change : {false, true}) {
-    ukm::TestAutoSetUkmRecorder test_ukm_recorder;
-    {
-      // Setup metrics recorder
-      ukm::SourceId source_id = test_ukm_recorder.GetNewSourceID();
-      auto recorder =
-          base::MakeRefCounted<password_manager::PasswordFormMetricsRecorder>(
-              true /*is_main_frame_secure*/, &test_ukm_recorder, source_id,
-              GURL("https://www.example.com/"));
+TEST_F(ManagePasswordsBubbleModelTest, EditCredential) {
+  PretendPasswordWaiting();
+  EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
 
-      // Exercise bubble.
-      ON_CALL(*controller(), GetPasswordFormMetricsRecorder())
-          .WillByDefault(Return(recorder.get()));
-      ON_CALL(*controller(), GetCredentialSource())
-          .WillByDefault(Return(CredentialSourceType::kPasswordManager));
+  const base::string16 kExpectedUsername = base::UTF8ToUTF16("new_username");
+  const base::string16 kExpectedPassword = base::UTF8ToUTF16("new_password");
 
-      PretendPasswordWaiting();
-
-      const base::string16 kExpectedUsername =
-          base::UTF8ToUTF16(do_change ? "new_username" : kUsername);
-
-      EXPECT_CALL(*GetStore(),
-                  RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-
-      model()->OnUsernameEdited(kExpectedUsername);
-      EXPECT_EQ(kExpectedUsername, model()->pending_password().username_value);
-
-      EXPECT_CALL(*controller(), SavePassword(kExpectedUsername));
-      model()->OnSaveClicked();
-      DestroyModel();
-
-      ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(controller()));
-      // Flush async calls on password store.
-      base::RunLoop().RunUntilIdle();
-      ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(GetStore()));
-    }
-
-    // Verify metrics.
-    const ukm::UkmSource* source =
-        test_ukm_recorder.GetSourceForUrl("https://www.example.com/");
-    ASSERT_TRUE(source);
-
-    const int64_t kEditedUsernameInBubbleAsInt64 =
-        static_cast<int64_t>(password_manager::PasswordFormMetricsRecorder::
-                                 DetailedUserAction::kEditedUsernameInBubble);
-    if (do_change) {
-      EXPECT_THAT(test_ukm_recorder.GetMetrics(*source, UkmEntry::kEntryName,
-                                               UkmEntry::kUser_ActionName),
-                  Contains(kEditedUsernameInBubbleAsInt64));
-    } else {
-      EXPECT_THAT(test_ukm_recorder.GetMetrics(*source, UkmEntry::kEntryName,
-                                               UkmEntry::kUser_ActionName),
-                  Not(Contains(kEditedUsernameInBubbleAsInt64)));
-    }
-  }
+  model()->OnCredentialEdited(kExpectedUsername, kExpectedPassword);
+  EXPECT_EQ(kExpectedUsername, model()->pending_password().username_value);
+  EXPECT_EQ(kExpectedPassword, model()->pending_password().password_value);
+  EXPECT_CALL(*controller(),
+              SavePassword(kExpectedUsername, kExpectedPassword));
+  EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
+  model()->OnSaveClicked();
+  DestroyModel();
 }
 
 TEST_F(ManagePasswordsBubbleModelTest, OnBrandLinkClicked) {
@@ -400,7 +361,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SuppressSignInPromo) {
   base::HistogramTester histogram_tester;
   PretendPasswordWaiting();
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value));
+  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value,
+                                          GetPendingPassword().password_value));
   model()->OnSaveClicked();
 
   EXPECT_FALSE(model()->ReplaceToShowPromotionIfNeeded());
@@ -415,7 +377,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoOK) {
   base::HistogramTester histogram_tester;
   PretendPasswordWaiting();
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value));
+  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value,
+                                          GetPendingPassword().password_value));
   model()->OnSaveClicked();
 
   EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
@@ -439,7 +402,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoCancel) {
   base::HistogramTester histogram_tester;
   PretendPasswordWaiting();
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value));
+  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value,
+                                          GetPendingPassword().password_value));
   model()->OnSaveClicked();
 
   EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
@@ -462,7 +426,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoDismiss) {
   base::HistogramTester histogram_tester;
   PretendPasswordWaiting();
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value));
+  EXPECT_CALL(*controller(), SavePassword(GetPendingPassword().username_value,
+                                          GetPendingPassword().password_value));
   model()->OnSaveClicked();
 
   EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
@@ -597,27 +562,28 @@ TEST_F(ManagePasswordsBubbleModelTest, RecordUKMs) {
             EXPECT_CALL(*GetStore(),
                         RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
             EXPECT_CALL(*controller(),
-                        SavePassword(GetPendingPassword().username_value));
+                        SavePassword(GetPendingPassword().username_value,
+                                     GetPendingPassword().password_value));
             model()->OnSaveClicked();
           } else if (interaction == BubbleDismissalReason::kDeclined &&
                      update) {
-            EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+            EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
             model()->OnNopeUpdateClicked();
           } else if (interaction == BubbleDismissalReason::kDeclined &&
                      !update) {
             EXPECT_CALL(*GetStore(),
                         RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-            EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+            EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
             EXPECT_CALL(*controller(), NeverSavePassword());
             model()->OnNeverForThisSiteClicked();
           } else if (interaction == BubbleDismissalReason::kIgnored && update) {
-            EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+            EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
             EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
           } else if (interaction == BubbleDismissalReason::kIgnored &&
                      !update) {
             EXPECT_CALL(*GetStore(), AddSiteStatsImpl(testing::_));
             EXPECT_CALL(*controller(), OnNoInteraction());
-            EXPECT_CALL(*controller(), SavePassword(_)).Times(0);
+            EXPECT_CALL(*controller(), SavePassword(_, _)).Times(0);
             EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
           } else {
             NOTREACHED();
@@ -631,28 +597,97 @@ TEST_F(ManagePasswordsBubbleModelTest, RecordUKMs) {
         ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(GetStore()));
 
         // Verify metrics.
-        const ukm::UkmSource* source =
-            test_ukm_recorder.GetSourceForUrl("https://www.example.com/");
-        ASSERT_TRUE(source);
-        test_ukm_recorder.ExpectMetric(
-            *source, UkmEntry::kEntryName,
-            update ? UkmEntry::kUpdating_Prompt_ShownName
-                   : UkmEntry::kSaving_Prompt_ShownName,
-            1);
-        test_ukm_recorder.ExpectMetric(
-            *source, UkmEntry::kEntryName,
-            update ? UkmEntry::kUpdating_Prompt_TriggerName
-                   : UkmEntry::kSaving_Prompt_TriggerName,
-            static_cast<int64_t>(
-                credential_management_api
-                    ? BubbleTrigger::kCredentialManagementAPIAutomatic
-                    : BubbleTrigger::kPasswordManagerSuggestionAutomatic));
-        test_ukm_recorder.ExpectMetric(
-            *source, UkmEntry::kEntryName,
-            update ? UkmEntry::kUpdating_Prompt_InteractionName
-                   : UkmEntry::kSaving_Prompt_InteractionName,
-            static_cast<int64_t>(interaction));
+        const auto& entries =
+            test_ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
+        EXPECT_EQ(1u, entries.size());
+        for (const auto* entry : entries) {
+          test_ukm_recorder.ExpectEntrySourceHasUrl(
+              entry, GURL("https://www.example.com/"));
+          test_ukm_recorder.ExpectEntryMetric(
+              entry,
+              update ? UkmEntry::kUpdating_Prompt_ShownName
+                     : UkmEntry::kSaving_Prompt_ShownName,
+              1);
+          test_ukm_recorder.ExpectEntryMetric(
+              entry,
+              update ? UkmEntry::kUpdating_Prompt_TriggerName
+                     : UkmEntry::kSaving_Prompt_TriggerName,
+              static_cast<int64_t>(
+                  credential_management_api
+                      ? BubbleTrigger::kCredentialManagementAPIAutomatic
+                      : BubbleTrigger::kPasswordManagerSuggestionAutomatic));
+          test_ukm_recorder.ExpectEntryMetric(
+              entry,
+              update ? UkmEntry::kUpdating_Prompt_InteractionName
+                     : UkmEntry::kSaving_Prompt_InteractionName,
+              static_cast<int64_t>(interaction));
+        }
       }
     }
   }
+}
+
+TEST_F(ManagePasswordsBubbleModelTest, EyeIcon) {
+  for (bool is_manual_fallback_for_saving : {false, true}) {
+    for (bool form_has_autofilled_value : {false, true}) {
+      for (ManagePasswordsBubbleModel::DisplayReason display_reason :
+           {ManagePasswordsBubbleModel::AUTOMATIC,
+            ManagePasswordsBubbleModel::USER_ACTION}) {
+        if (is_manual_fallback_for_saving &&
+            (display_reason == ManagePasswordsBubbleModel::AUTOMATIC))
+          continue;
+
+        SCOPED_TRACE(testing::Message()
+                     << "is_manual_fallback_for_saving = "
+                     << is_manual_fallback_for_saving
+                     << " form_has_autofilled_value = "
+                     << form_has_autofilled_value << " display_reason = "
+                     << (display_reason == ManagePasswordsBubbleModel::AUTOMATIC
+                             ? "AUTOMATIC"
+                             : "USER_ACTION"));
+
+        autofill::PasswordForm form = GetPendingPassword();
+        form.form_has_autofilled_value = form_has_autofilled_value;
+        EXPECT_CALL(*controller(), GetPendingPassword())
+            .WillOnce(ReturnRef(form));
+        password_manager::InteractionsStats stats = GetTestStats();
+        EXPECT_CALL(*controller(), GetCurrentInteractionStats())
+            .WillOnce(Return(&stats));
+        if (display_reason == ManagePasswordsBubbleModel::AUTOMATIC)
+          EXPECT_CALL(*GetStore(), AddSiteStatsImpl(_));
+
+        EXPECT_CALL(*controller(), BubbleIsManualFallbackForSaving())
+            .WillOnce(Return(is_manual_fallback_for_saving));
+        SetUpWithState(password_manager::ui::PENDING_PASSWORD_STATE,
+                       display_reason);
+        EXPECT_EQ(
+            is_manual_fallback_for_saving
+                ? form_has_autofilled_value
+                : display_reason == ManagePasswordsBubbleModel::USER_ACTION,
+            model()->hide_eye_icon());
+
+        DestroyModel();
+        // Flush async calls on password store.
+        base::RunLoop().RunUntilIdle();
+        testing::Mock::VerifyAndClearExpectations(GetStore());
+      }
+    }
+  }
+}
+
+TEST_F(ManagePasswordsBubbleModelTest, DisableEditing) {
+  autofill::PasswordForm form = GetPendingPassword();
+  EXPECT_CALL(*controller(), GetPendingPassword()).WillOnce(ReturnRef(form));
+  password_manager::InteractionsStats stats = GetTestStats();
+  EXPECT_CALL(*controller(), GetCurrentInteractionStats())
+      .WillOnce(Return(&stats));
+  EXPECT_CALL(*controller(), BubbleIsManualFallbackForSaving())
+      .WillOnce(Return(false));
+
+  EXPECT_CALL(*controller(), GetCredentialSource())
+      .WillOnce(Return(password_manager::metrics_util::CredentialSourceType::
+                           kCredentialManagementAPI));
+  SetUpWithState(password_manager::ui::PENDING_PASSWORD_STATE,
+                 ManagePasswordsBubbleModel::AUTOMATIC);
+  EXPECT_FALSE(model()->enable_editing());
 }

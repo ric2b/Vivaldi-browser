@@ -213,13 +213,10 @@ cr.define('settings', function() {
     // Dynamically position the bubble at the edge the associated control
     // element.
     var updatePosition = function() {
-      if (innards.classList.contains('above')) {
-        searchBubble.style.top =
-            element.offsetTop - searchBubble.offsetHeight + 'px';
-      } else {
-        searchBubble.style.top =
-            element.offsetTop + element.offsetHeight + 'px';
-      }
+      searchBubble.style.top = element.offsetTop +
+          (innards.classList.contains('above') ? -searchBubble.offsetHeight :
+                                                 element.offsetHeight) +
+          'px';
     };
     updatePosition();
 
@@ -520,7 +517,7 @@ cr.define('settings', function() {
       // problematic for regular expressions.
       var searchText = this.rawQuery_.trim().replace(SANITIZE_REGEX, '\\$&');
       if (searchText.length > 0)
-        regExp = new RegExp('(' + searchText + ')', 'i');
+        regExp = new RegExp(`(${searchText})`, 'i');
 
       return regExp;
     }

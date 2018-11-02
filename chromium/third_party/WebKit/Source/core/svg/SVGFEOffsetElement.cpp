@@ -20,8 +20,8 @@
 
 #include "core/svg/SVGFEOffsetElement.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/FEOffset.h"
 
 namespace blink {
@@ -40,7 +40,7 @@ inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFEOffsetElement) {
+void SVGFEOffsetElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(dx_);
   visitor->Trace(dy_);
   visitor->Trace(in1_);

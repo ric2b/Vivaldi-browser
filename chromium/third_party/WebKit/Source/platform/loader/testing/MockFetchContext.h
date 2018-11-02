@@ -10,9 +10,11 @@
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
+#include "platform/scheduler/test/fake_web_frame_scheduler.h"
 #include "platform/scheduler/test/fake_web_task_runner.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebURLLoaderFactory.h"
 
 #include <memory>
 
@@ -40,10 +42,10 @@ class MockFetchContext : public FetchContext {
   long long GetTransferSize() const { return transfer_size_; }
 
   SecurityOrigin* GetSecurityOrigin() const override {
-    return security_origin_.Get();
+    return security_origin_.get();
   }
 
-  void SetSecurityOrigin(RefPtr<SecurityOrigin> security_origin) {
+  void SetSecurityOrigin(scoped_refptr<SecurityOrigin> security_origin) {
     security_origin_ = security_origin;
   }
 
@@ -69,6 +71,11 @@ class MockFetchContext : public FetchContext {
       ResourceRequest::RedirectStatus redirect_status) const override {
     return ResourceRequestBlockedReason::kNone;
   }
+  virtual ResourceRequestBlockedReason CheckResponseNosniff(
+      WebURLRequest::RequestContext,
+      const ResourceResponse&) const {
+    return ResourceRequestBlockedReason::kNone;
+  }
   bool ShouldLoadNewResource(Resource::Type) const override {
     return load_policy_ == kShouldLoadNewResource;
   }
@@ -79,48 +86,50 @@ class MockFetchContext : public FetchContext {
   }
 
   std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const ResourceRequest& request) override {
+      const ResourceRequest& request,
+      scoped_refptr<WebTaskRunner> task_runner) override {
+    if (!url_loader_factory_) {
+      url_loader_factory_ =
+          Platform::Current()->CreateDefaultURLLoaderFactory();
+    }
     WrappedResourceRequest wrapped(request);
-    return Platform::Current()->CreateURLLoader(
-        wrapped, runner_->ToSingleThreadTaskRunner());
+    return url_loader_factory_->CreateURLLoader(wrapped, task_runner);
   }
 
   WebFrameScheduler* GetFrameScheduler() override {
     return frame_scheduler_.get();
   }
 
+  scoped_refptr<WebTaskRunner> GetLoadingTaskRunner() override {
+    return frame_scheduler_->GetTaskRunner(TaskType::kUnspecedLoading);
+  }
+
  private:
-  class MockFrameScheduler final : public WebFrameScheduler {
+  class MockFrameScheduler final : public scheduler::FakeWebFrameScheduler {
    public:
-    MockFrameScheduler(RefPtr<WebTaskRunner> runner)
+    MockFrameScheduler(scoped_refptr<WebTaskRunner> runner)
         : runner_(std::move(runner)) {}
-    void AddThrottlingObserver(ObserverType, Observer*) override {}
-    void RemoveThrottlingObserver(ObserverType, Observer*) override {}
-    RefPtr<WebTaskRunner> LoadingTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> LoadingControlTaskRunner() override {
+    scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) override {
       return runner_;
     }
-    RefPtr<WebTaskRunner> ThrottleableTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> DeferrableTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> PausableTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> UnpausableTaskRunner() override { return runner_; }
 
    private:
-    RefPtr<WebTaskRunner> runner_;
+    scoped_refptr<WebTaskRunner> runner_;
   };
 
   MockFetchContext(LoadPolicy load_policy)
       : load_policy_(load_policy),
-        runner_(AdoptRef(new scheduler::FakeWebTaskRunner)),
+        runner_(base::MakeRefCounted<scheduler::FakeWebTaskRunner>()),
         security_origin_(SecurityOrigin::CreateUnique()),
         frame_scheduler_(new MockFrameScheduler(runner_)),
         complete_(false),
         transfer_size_(-1) {}
 
   enum LoadPolicy load_policy_;
-  RefPtr<WebTaskRunner> runner_;
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<WebTaskRunner> runner_;
+  scoped_refptr<SecurityOrigin> security_origin_;
   std::unique_ptr<WebFrameScheduler> frame_scheduler_;
+  std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
   bool complete_;
   long long transfer_size_;
 };

@@ -22,8 +22,8 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/extensions/api/identity.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -204,7 +204,7 @@ void IdentityGetAuthTokenFunction::OnReceivedExtensionAccountInfo(
 #endif
 
   if (!account_state.has_refresh_token) {
-    if (!should_prompt_for_signin_) {
+    if (!ShouldStartSigninFlow()) {
       CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
       return;
     }
@@ -218,15 +218,16 @@ void IdentityGetAuthTokenFunction::OnReceivedExtensionAccountInfo(
 void IdentityGetAuthTokenFunction::StartAsyncRun() {
   // Balanced in CompleteAsyncRun
   AddRef();
-  extensions::IdentityAPI::GetFactoryInstance()
-      ->Get(GetProfile())
-      ->set_get_auth_token_function(this);
+
+  identity_api_shutdown_subscription_ =
+      extensions::IdentityAPI::GetFactoryInstance()
+          ->Get(GetProfile())
+          ->RegisterOnShutdownCallback(base::Bind(
+              &IdentityGetAuthTokenFunction::OnIdentityAPIShutdown, this));
 }
 
 void IdentityGetAuthTokenFunction::CompleteAsyncRun(bool success) {
-  extensions::IdentityAPI::GetFactoryInstance()
-      ->Get(GetProfile())
-      ->set_get_auth_token_function(nullptr);
+  identity_api_shutdown_subscription_.reset();
 
   SendResponse(success);
   Release();  // Balanced in StartAsyncRun
@@ -250,7 +251,22 @@ void IdentityGetAuthTokenFunction::CompleteFunctionWithError(
   CompleteAsyncRun(false);
 }
 
+bool IdentityGetAuthTokenFunction::ShouldStartSigninFlow() {
+  if (!should_prompt_for_signin_)
+    return false;
+
+  ProfileOAuth2TokenService* token_service =
+      ProfileOAuth2TokenServiceFactory::GetForProfile(GetProfile());
+  bool account_needs_reauth =
+      !token_service->RefreshTokenIsAvailable(token_key_->account_id) ||
+      token_service->RefreshTokenHasError(token_key_->account_id);
+
+  return account_needs_reauth;
+}
+
 void IdentityGetAuthTokenFunction::StartSigninFlow() {
+  DCHECK(ShouldStartSigninFlow());
+
   // All cached tokens are invalid because the user is not signed in.
   IdentityAPI* id_api =
       extensions::IdentityAPI::GetFactoryInstance()->Get(GetProfile());
@@ -421,7 +437,7 @@ void IdentityGetAuthTokenFunction::OnMintTokenFailure(
   CompleteMintTokenFlow();
   switch (error.state()) {
     case GoogleServiceAuthError::SERVICE_ERROR:
-      if (interactive_) {
+      if (ShouldStartSigninFlow()) {
         StartSigninFlow();
         return;
       }
@@ -430,8 +446,7 @@ void IdentityGetAuthTokenFunction::OnMintTokenFailure(
     case GoogleServiceAuthError::ACCOUNT_DELETED:
     case GoogleServiceAuthError::ACCOUNT_DISABLED:
       // TODO(courage): flush ticket and retry once
-      if (should_prompt_for_signin_) {
-        // Display a login prompt and try again (once).
+      if (ShouldStartSigninFlow()) {
         StartSigninFlow();
         return;
       }
@@ -504,14 +519,14 @@ void IdentityGetAuthTokenFunction::OnGaiaFlowFailure(
 
     case GaiaWebAuthFlow::SERVICE_AUTH_ERROR:
       // If this is really an authentication error and not just a transient
-      // network error, and this is an interactive request for a signed-in
-      // user, then we show signin UI instead of failing.
+      // network error, then we show signin UI if appropriate.
       if (service_error.state() != GoogleServiceAuthError::CONNECTION_FAILED &&
           service_error.state() !=
-              GoogleServiceAuthError::SERVICE_UNAVAILABLE &&
-          interactive_ && HasLoginToken()) {
-        StartSigninFlow();
-        return;
+              GoogleServiceAuthError::SERVICE_UNAVAILABLE) {
+        if (ShouldStartSigninFlow()) {
+          StartSigninFlow();
+          return;
+        }
       }
       error = std::string(identity_constants::kAuthFailure) +
           service_error.ToString();
@@ -595,7 +610,7 @@ void IdentityGetAuthTokenFunction::OnGetTokenFailure(
 }
 #endif
 
-void IdentityGetAuthTokenFunction::Shutdown() {
+void IdentityGetAuthTokenFunction::OnIdentityAPIShutdown() {
   gaia_web_auth_flow_.reset();
   login_token_request_.reset();
   identity_manager_.reset();

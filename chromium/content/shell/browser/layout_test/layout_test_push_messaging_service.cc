@@ -14,6 +14,7 @@
 #include "content/shell/browser/layout_test/layout_test_browser_context.h"
 #include "content/shell/browser/layout_test/layout_test_content_browser_client.h"
 #include "content/shell/browser/layout_test/layout_test_permission_manager.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -59,7 +60,7 @@ blink::WebPushPermissionStatus ToWebPushPermissionStatus(
 
 LayoutTestPushMessagingService::LayoutTestPushMessagingService()
     : subscribed_service_worker_registration_(
-          kInvalidServiceWorkerRegistrationId) {}
+          blink::mojom::kInvalidServiceWorkerRegistrationId) {}
 
 LayoutTestPushMessagingService::~LayoutTestPushMessagingService() {
 }
@@ -120,10 +121,11 @@ void LayoutTestPushMessagingService::GetSubscriptionInfo(
 blink::WebPushPermissionStatus
 LayoutTestPushMessagingService::GetPermissionStatus(const GURL& origin,
                                                     bool user_visible) {
-  return ToWebPushPermissionStatus(LayoutTestContentBrowserClient::Get()
-      ->browser_context()
-      ->GetPermissionManager()
-      ->GetPermissionStatus(PermissionType::PUSH_MESSAGING, origin, origin));
+  return ToWebPushPermissionStatus(
+      LayoutTestContentBrowserClient::Get()
+          ->browser_context()
+          ->GetPermissionManager()
+          ->GetPermissionStatus(PermissionType::NOTIFICATIONS, origin, origin));
 }
 
 bool LayoutTestPushMessagingService::SupportNonVisibleMessages() {
@@ -148,7 +150,7 @@ void LayoutTestPushMessagingService::Unsubscribe(
   if (service_worker_registration_id ==
       subscribed_service_worker_registration_) {
     subscribed_service_worker_registration_ =
-        kInvalidServiceWorkerRegistrationId;
+        blink::mojom::kInvalidServiceWorkerRegistrationId;
   }
 }
 
@@ -158,12 +160,13 @@ void LayoutTestPushMessagingService::DidDeleteServiceWorkerRegistration(
   if (service_worker_registration_id ==
       subscribed_service_worker_registration_) {
     subscribed_service_worker_registration_ =
-        kInvalidServiceWorkerRegistrationId;
+        blink::mojom::kInvalidServiceWorkerRegistrationId;
   }
 }
 
 void LayoutTestPushMessagingService::DidDeleteServiceWorkerDatabase() {
-  subscribed_service_worker_registration_ = kInvalidServiceWorkerRegistrationId;
+  subscribed_service_worker_registration_ =
+      blink::mojom::kInvalidServiceWorkerRegistrationId;
 }
 
 }  // namespace content

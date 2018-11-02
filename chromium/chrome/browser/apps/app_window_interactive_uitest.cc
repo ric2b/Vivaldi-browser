@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/macros.h"
+#include "chrome/browser/apps/app_window_interactive_uitest.h"
+
 #include "build/build_config.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/lifetime/keep_alive_registry.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
@@ -32,66 +32,48 @@
 using extensions::AppWindow;
 using extensions::NativeAppWindow;
 
-// Helper class that has to be created in the stack to check if the fullscreen
-// setting of a NativeWindow has changed since the creation of the object.
-class FullscreenChangeWaiter {
- public:
-  explicit FullscreenChangeWaiter(NativeAppWindow* window)
-      : window_(window),
-        initial_fullscreen_state_(window_->IsFullscreen()) {}
+FullscreenChangeWaiter::FullscreenChangeWaiter(NativeAppWindow* window)
+    : window_(window), initial_fullscreen_state_(window_->IsFullscreen()) {}
 
-  void Wait() {
-    while (initial_fullscreen_state_ == window_->IsFullscreen())
-      content::RunAllPendingInMessageLoop();
+void FullscreenChangeWaiter::Wait() {
+  while (initial_fullscreen_state_ == window_->IsFullscreen())
+    content::RunAllPendingInMessageLoop();
+}
+
+bool
+AppWindowInteractiveTest::RunAppWindowInteractiveTest(const char* testName) {
+  ExtensionTestMessageListener launched_listener("Launched", true);
+  LoadAndLaunchPlatformApp("window_api_interactive", &launched_listener);
+
+  extensions::ResultCatcher catcher;
+  launched_listener.Reply(testName);
+
+  if (!catcher.GetNextResult()) {
+    message_ = catcher.message();
+    return false;
   }
 
- private:
-  NativeAppWindow* window_;
-  bool initial_fullscreen_state_;
+  return true;
+}
 
-  DISALLOW_COPY_AND_ASSIGN(FullscreenChangeWaiter);
-};
+bool AppWindowInteractiveTest::SimulateKeyPress(ui::KeyboardCode key) {
+  return ui_test_utils::SendKeyPressToWindowSync(
+      GetFirstAppWindow()->GetNativeWindow(),
+      key,
+      false,
+      false,
+      false,
+      false);
+}
 
-class AppWindowInteractiveTest : public extensions::PlatformAppBrowserTest {
- public:
-  bool RunAppWindowInteractiveTest(const char* testName) {
-    ExtensionTestMessageListener launched_listener("Launched", true);
-    LoadAndLaunchPlatformApp("window_api_interactive", &launched_listener);
+void AppWindowInteractiveTest::WaitUntilKeyFocus() {
+  ExtensionTestMessageListener key_listener("KeyReceived", false);
 
-    extensions::ResultCatcher catcher;
-    launched_listener.Reply(testName);
-
-    if (!catcher.GetNextResult()) {
-      message_ = catcher.message();
-      return false;
-    }
-
-    return true;
+  while (!key_listener.was_satisfied()) {
+    ASSERT_TRUE(SimulateKeyPress(ui::VKEY_Z));
+    content::RunAllPendingInMessageLoop();
   }
-
-  bool SimulateKeyPress(ui::KeyboardCode key) {
-    return ui_test_utils::SendKeyPressToWindowSync(
-        GetFirstAppWindow()->GetNativeWindow(),
-        key,
-        false,
-        false,
-        false,
-        false);
-  }
-
-  // This method will wait until the application is able to ack a key event.
-  void WaitUntilKeyFocus() {
-    ExtensionTestMessageListener key_listener("KeyReceived", false);
-
-    while (!key_listener.was_satisfied()) {
-      ASSERT_TRUE(SimulateKeyPress(ui::VKEY_Z));
-      content::RunAllPendingInMessageLoop();
-    }
-  }
-
-  // This test is a method so that we can test with each frame type.
-  void TestOuterBoundsHelper(const std::string& frame_type);
-};
+}
 
 IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest, ESCLeavesFullscreenWindow) {
 #if defined(OS_MACOSX)
@@ -330,7 +312,7 @@ IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest,
   EXPECT_TRUE(GetFirstAppWindow()->GetBaseWindow()->IsFullscreen());
 }
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MACOSX)
 // http://crbug.com/404081
 #define MAYBE_TestInnerBounds DISABLED_TestInnerBounds
 #else
@@ -418,24 +400,36 @@ IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest,
 
 // This test does not work on Linux Aura because ShowInactive() is not
 // implemented. See http://crbug.com/325142
+// It also does not work on MacOS because ::ShowInactive() ends up behaving like
+// ::Show() because of Cocoa conventions. See http://crbug.com/326987
+// Those tests should be disabled on Linux GTK when they are enabled on the
+// other platforms, see http://crbug.com/328829.
+// Flaky failures on Windows; see https://crbug.com/788283.
+#if (defined(OS_LINUX) && defined(USE_AURA)) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+#define MAYBE_TestCreate DISABLED_TestCreate
+#else
+#define MAYBE_TestCreate TestCreate
+#endif
+
+IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest, MAYBE_TestCreate) {
+  ASSERT_TRUE(RunAppWindowInteractiveTest("testCreate")) << message_;
+}
+
+// This test does not work on Linux Aura because ShowInactive() is not
+// implemented. See http://crbug.com/325142
 // It also does not work on Windows because of the document being focused even
 // though the window is not activated. See http://crbug.com/326986
 // It also does not work on MacOS because ::ShowInactive() ends up behaving like
 // ::Show() because of Cocoa conventions. See http://crbug.com/326987
 // Those tests should be disabled on Linux GTK when they are enabled on the
 // other platforms, see http://crbug.com/328829
-#if (defined(OS_LINUX) && defined(USE_AURA)) || \
-    defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_TestCreate DISABLED_TestCreate
+#if (defined(OS_LINUX) && defined(USE_AURA)) || defined(OS_WIN) || \
+    defined(OS_MACOSX)
 #define MAYBE_TestShow DISABLED_TestShow
 #else
-#define MAYBE_TestCreate TestCreate
 #define MAYBE_TestShow TestShow
 #endif
-
-IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest, MAYBE_TestCreate) {
-  ASSERT_TRUE(RunAppWindowInteractiveTest("testCreate")) << message_;
-}
 
 IN_PROC_BROWSER_TEST_F(AppWindowInteractiveTest, MAYBE_TestShow) {
   ASSERT_TRUE(RunAppWindowInteractiveTest("testShow")) << message_;

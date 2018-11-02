@@ -29,7 +29,7 @@ TransactionDataReader::TransactionDataReader(const TransactionData& data)
     : reader_(reinterpret_cast<const char*>(data.GetData()),
               data.GetDataSize()) {}
 
-TransactionDataReader::~TransactionDataReader() {}
+TransactionDataReader::~TransactionDataReader() = default;
 
 bool TransactionDataReader::HasMoreData() const {
   return reader_.HasMoreData();
@@ -120,9 +120,9 @@ scoped_refptr<Object> TransactionDataReader::ReadObject(
   }
   switch (obj.type) {
     case BINDER_TYPE_HANDLE:
-      return make_scoped_refptr(new RemoteObject(command_broker, obj.handle));
+      return base::MakeRefCounted<RemoteObject>(command_broker, obj.handle);
     case BINDER_TYPE_BINDER:
-      return make_scoped_refptr(reinterpret_cast<LocalObject*>(obj.cookie));
+      return base::WrapRefCounted(reinterpret_cast<LocalObject*>(obj.cookie));
   }
   return scoped_refptr<Object>();
 }

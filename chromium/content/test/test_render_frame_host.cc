@@ -4,6 +4,9 @@
 
 #include "content/test/test_render_frame_host.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/guid.h"
 #include "base/run_loop.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -23,13 +26,13 @@
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_view_host.h"
+#include "content/test/test_render_widget_host.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
+#include "third_party/WebKit/common/frame_policy.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
 #include "ui/base/page_transition_types.h"
 
@@ -37,8 +40,7 @@ namespace content {
 
 TestRenderFrameHostCreationObserver::TestRenderFrameHostCreationObserver(
     WebContents* web_contents)
-    : WebContentsObserver(web_contents), last_created_frame_(NULL) {
-}
+    : WebContentsObserver(web_contents), last_created_frame_(nullptr) {}
 
 TestRenderFrameHostCreationObserver::~TestRenderFrameHostCreationObserver() {
 }
@@ -47,6 +49,34 @@ void TestRenderFrameHostCreationObserver::RenderFrameCreated(
     RenderFrameHost* render_frame_host) {
   last_created_frame_ = render_frame_host;
 }
+
+class TestRenderFrameHost::NavigationInterceptor
+    : public mojom::FrameNavigationControl {
+ public:
+  explicit NavigationInterceptor(TestRenderFrameHost* frame_host)
+      : frame_host_(frame_host) {}
+  ~NavigationInterceptor() override = default;
+
+  // mojom::FrameNavigationControl:
+  void CommitNavigation(
+      const ResourceResponseHead& head,
+      const GURL& body_url,
+      const CommonNavigationParams& common_params,
+      const RequestNavigationParams& request_params,
+      mojo::ScopedDataPipeConsumerHandle body_data,
+      base::Optional<URLLoaderFactoryBundle> subresource_loader_factories,
+      const base::UnguessableToken& devtools_navigation_token) override {
+    frame_host_->GetProcess()->set_did_frame_commit_navigation(true);
+    frame_host_->GetInternalNavigationControl()->CommitNavigation(
+        head, body_url, common_params, request_params, std::move(body_data),
+        std::move(subresource_loader_factories), devtools_navigation_token);
+  }
+
+ private:
+  TestRenderFrameHost* const frame_host_;
+
+  DISALLOW_COPY_AND_ASSIGN(NavigationInterceptor);
+};
 
 TestRenderFrameHost::TestRenderFrameHost(SiteInstance* site_instance,
                                          RenderViewHostImpl* render_view_host,
@@ -67,7 +97,8 @@ TestRenderFrameHost::TestRenderFrameHost(SiteInstance* site_instance,
                           widget_routing_id,
                           flags,
                           false),
-      child_creation_observer_(delegate ? delegate->GetAsWebContents() : NULL),
+      child_creation_observer_(delegate ? delegate->GetAsWebContents()
+                                        : nullptr),
       contents_mime_type_("text/html"),
       simulate_history_list_was_cleared_(false),
       last_commit_was_error_page_(false) {}
@@ -84,6 +115,17 @@ MockRenderProcessHost* TestRenderFrameHost::GetProcess() {
   return static_cast<MockRenderProcessHost*>(RenderFrameHostImpl::GetProcess());
 }
 
+TestRenderWidgetHost* TestRenderFrameHost::GetRenderWidgetHost() {
+  return static_cast<TestRenderWidgetHost*>(
+      RenderFrameHostImpl::GetRenderWidgetHost());
+}
+
+void TestRenderFrameHost::AddMessageToConsole(ConsoleMessageLevel level,
+                                              const std::string& message) {
+  console_messages_.push_back(message);
+  RenderFrameHostImpl::AddMessageToConsole(level, message);
+}
+
 void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
   if (!render_view_host()->IsRenderViewLive()) {
     render_view_host()->GetProcess()->Init();
@@ -96,9 +138,10 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
   std::string frame_unique_name = base::GenerateGUID();
   OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
+                     CreateStubInterfaceProviderRequest(),
                      blink::WebTreeScopeType::kDocument, frame_name,
-                     frame_unique_name, blink::WebSandboxFlags::kNone,
-                     ParsedFeaturePolicyHeader(), FrameOwnerProperties());
+                     frame_unique_name, false, base::UnguessableToken::Create(),
+                     blink::FramePolicy(), FrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
 }
@@ -148,7 +191,7 @@ void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
   params.url = url;
-  params.origin = url::Origin(url);
+  params.origin = url::Origin::Create(url);
   if (!GetParent())
     params.transition = ui::PAGE_TRANSITION_LINK;
   else if (is_auto_subframe)
@@ -269,13 +312,17 @@ void TestRenderFrameHost::NavigateAndCommitRendererInitiated(
 }
 
 void TestRenderFrameHost::SimulateFeaturePolicyHeader(
-    blink::WebFeaturePolicyFeature feature,
+    blink::FeaturePolicyFeature feature,
     const std::vector<url::Origin>& whitelist) {
-  content::ParsedFeaturePolicyHeader header(1);
+  blink::ParsedFeaturePolicy header(1);
   header[0].feature = feature;
   header[0].matches_all_origins = false;
   header[0].origins = whitelist;
-  OnDidSetFeaturePolicyHeader(header);
+  OnDidSetFramePolicyHeaders(blink::WebSandboxFlags::kNone, header);
+}
+
+const std::vector<std::string>& TestRenderFrameHost::GetConsoleMessages() {
+  return console_messages_;
 }
 
 void TestRenderFrameHost::SendNavigate(int nav_entry_id,
@@ -283,14 +330,6 @@ void TestRenderFrameHost::SendNavigate(int nav_entry_id,
                                        const GURL& url) {
   SendNavigateWithParameters(nav_entry_id, did_create_new_entry, false,
                              url, ui::PAGE_TRANSITION_LINK, 200,
-                             ModificationCallback());
-}
-
-void TestRenderFrameHost::SendFailedNavigate(int nav_entry_id,
-                                             bool did_create_new_entry,
-                                             const GURL& url) {
-  SendNavigateWithParameters(nav_entry_id, did_create_new_entry, false,
-                             url, ui::PAGE_TRANSITION_RELOAD, 500,
                              ModificationCallback());
 }
 
@@ -382,7 +421,7 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   // In most cases, the origin will match the URL's origin.  Tests that need to
   // check corner cases (like about:blank) should specify the origin param
   // manually.
-  url::Origin origin(url_copy);
+  url::Origin origin = url::Origin::Create(url_copy);
   params.origin = origin;
 
   url::Replacements<char> replacements;
@@ -418,8 +457,8 @@ void TestRenderFrameHost::SendNavigateWithParams(
         std::string("Content-Type: ") + contents_mime_type_);
     navigation_handle()->set_response_headers_for_testing(response_headers);
   }
-  FrameHostMsg_DidCommitProvisionalLoad msg(GetRoutingID(), *params);
-  OnDidCommitProvisionalLoad(msg);
+  DidCommitProvisionalLoad(
+      std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>(*params));
   last_commit_was_error_page_ = params->url_is_unreachable;
 }
 
@@ -433,8 +472,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   if (IsBrowserSideNavigationEnabled()) {
     // TODO(mkwst): The initiator origin here is incorrect.
     BeginNavigationParams begin_params(
-        std::string(), net::LOAD_NORMAL, has_user_gesture, false,
-        REQUEST_CONTEXT_TYPE_HYPERLINK,
+        std::string(), net::LOAD_NORMAL, false, REQUEST_CONTEXT_TYPE_HYPERLINK,
         blink::WebMixedContentContextType::kBlockable,
         false,  // is_form_submission
         url::Origin());
@@ -443,6 +481,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
     common_params.referrer = Referrer(GURL(), blink::kWebReferrerPolicyDefault);
     common_params.transition = ui::PAGE_TRANSITION_LINK;
     common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
+    common_params.has_user_gesture = has_user_gesture;
     OnBeginNavigation(common_params, begin_params);
   }
 }
@@ -457,11 +496,22 @@ void TestRenderFrameHost::DidEnforceInsecureRequestPolicy(
 }
 
 void TestRenderFrameHost::PrepareForCommit() {
-  PrepareForCommitWithServerRedirect(GURL());
+  PrepareForCommitInternal(GURL(), net::HostPortPair());
+}
+
+void TestRenderFrameHost::PrepareForCommitWithSocketAddress(
+    const net::HostPortPair& socket_address) {
+  PrepareForCommitInternal(GURL(), socket_address);
 }
 
 void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
     const GURL& redirect_url) {
+  PrepareForCommitInternal(redirect_url, net::HostPortPair());
+}
+
+void TestRenderFrameHost::PrepareForCommitInternal(
+    const GURL& redirect_url,
+    const net::HostPortPair& socket_address) {
   if (!IsBrowserSideNavigationEnabled()) {
     // Non PlzNavigate
     if (is_waiting_for_beforeunload_ack())
@@ -506,6 +556,7 @@ void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
 
   // Simulate the network stack commit.
   scoped_refptr<ResourceResponse> response(new ResourceResponse);
+  response->head.socket_address = socket_address;
   // TODO(carlosk): ideally with PlzNavigate it should be possible someday to
   // fully commit the navigation at this call to CallOnResponseStarted.
   url_loader->CallOnResponseStarted(response, MakeEmptyStream(), nullptr);
@@ -535,6 +586,30 @@ void TestRenderFrameHost::SimulateWillStartRequest(
   navigation_handle()->CallWillStartRequestForTesting(
       false /* is_post */, Referrer(GURL(), blink::kWebReferrerPolicyDefault),
       true /* user_gesture */, transition, false /* is_external_protocol */);
+}
+
+void TestRenderFrameHost::SendFramePolicy(
+    blink::WebSandboxFlags sandbox_flags,
+    const blink::ParsedFeaturePolicy& declared_policy) {
+  OnDidSetFramePolicyHeaders(sandbox_flags, declared_policy);
+}
+
+mojom::FrameNavigationControl* TestRenderFrameHost::GetNavigationControl() {
+  if (!navigation_interceptor_)
+    navigation_interceptor_ = std::make_unique<NavigationInterceptor>(this);
+  return navigation_interceptor_.get();
+}
+
+mojom::FrameNavigationControl*
+TestRenderFrameHost::GetInternalNavigationControl() {
+  return RenderFrameHostImpl::GetNavigationControl();
+}
+
+// static
+service_manager::mojom::InterfaceProviderRequest
+TestRenderFrameHost::CreateStubInterfaceProviderRequest() {
+  ::service_manager::mojom::InterfaceProviderPtr dead_interface_provider_proxy;
+  return mojo::MakeRequest(&dead_interface_provider_proxy);
 }
 
 }  // namespace content

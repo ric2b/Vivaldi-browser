@@ -11,8 +11,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
@@ -48,21 +48,23 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "ipc/ipc_message_macros.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#include "chrome/browser/profiles/profile_manager.h"
 #if !defined(OS_MACOSX)
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/pref_names.h"
 #endif
 
 #include "browser/vivaldi_download_status.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_event.h"
@@ -309,6 +311,9 @@ void AppWindow::Init(const GURL& url,
   // Initialize the window
   CreateParams new_params = LoadDefaults(params);
   window_type_ = new_params.window_type;
+  UMA_HISTOGRAM_ENUMERATION("Apps.Window.Type", new_params.window_type,
+                            WINDOW_TYPE_COUNT);
+
   window_key_ = new_params.window_key;
 
 #if !defined(OS_MACOSX)
@@ -442,12 +447,8 @@ void AppWindow::AddNewContents(WebContents* source,
                                bool user_gesture,
                                bool* was_blocked) {
   DCHECK(new_contents->GetBrowserContext() == browser_context_);
-  app_delegate_->AddNewContents(browser_context_,
-                                new_contents,
-                                disposition,
-                                initial_rect,
-                                user_gesture,
-                                was_blocked);
+  app_delegate_->AddNewContents(browser_context_, new_contents, disposition,
+                                initial_rect, user_gesture);
 }
 
 content::KeyboardEventProcessingResult AppWindow::PreHandleKeyboardEvent(
@@ -479,7 +480,6 @@ content::KeyboardEventProcessingResult AppWindow::PreHandleKeyboardEvent(
 void AppWindow::HandleKeyboardEvent(
     WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
-
   // If the window is currently fullscreen and not forced, ESC should leave
   // fullscreen.  If this code is being called for ESC, that means that the
   // KeyEvent's default behavior was not prevented by the content.
@@ -516,8 +516,17 @@ bool AppWindow::TakeFocus(WebContents* source, bool reverse) {
   return app_delegate_->TakeFocus(source, reverse);
 }
 
+bool AppWindow::OnMessageReceived(const IPC::Message& message,
+                                  content::RenderFrameHost* render_frame_host) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(AppWindow, message)
+    IPC_MESSAGE_HANDLER(ExtensionHostMsg_AppWindowReady, OnAppWindowReady)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
+}
+
 void AppWindow::ContentsMouseEvent(WebContents* source,
-                                   const gfx::Point& location,
                                    bool motion,
                                    bool exited) {
   extensions::WebViewGuest* guest =
@@ -537,9 +546,10 @@ void AppWindow::RenderViewCreated(content::RenderViewHost* render_view_host) {
   app_delegate_->RenderViewCreated(render_view_host);
 }
 
-void AppWindow::SetOnFirstCommitCallback(const base::Closure& callback) {
-  DCHECK(on_first_commit_callback_.is_null());
-  on_first_commit_callback_ = callback;
+void AppWindow::SetOnFirstCommitOrWindowClosedCallback(
+    FirstCommitOrWindowClosedCallback callback) {
+  DCHECK(on_first_commit_or_window_closed_callback_.is_null());
+  on_first_commit_or_window_closed_callback_ = std::move(callback);
 }
 
 void AppWindow::OnReadyToCommitFirstNavigation() {
@@ -551,7 +561,7 @@ void AppWindow::OnReadyToCommitFirstNavigation() {
   // would happen before the navigation starts, but PlzNavigate must wait until
   // this point in time in the navigation.
 
-  if (on_first_commit_callback_.is_null())
+  if (on_first_commit_or_window_closed_callback_.is_null())
     return;
   // It is important that the callback executes after the calls to
   // WebContentsObserver::ReadyToCommitNavigation have been processed. The
@@ -559,18 +569,34 @@ void AppWindow::OnReadyToCommitFirstNavigation() {
   // sent after these, and it must be sent before the callback gets to run,
   // hence the use of PostTask.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::ResetAndReturn(&on_first_commit_callback_));
+      FROM_HERE,
+      base::BindOnce(std::move(on_first_commit_or_window_closed_callback_),
+                     true /* ready_to_commit */));
 }
 
 void AppWindow::OnNativeClose() {
   AppWindowRegistry::Get(browser_context_)->RemoveAppWindow(this);
+
+  // Dispatch "OnClosed" event by default.
+  bool send_onclosed = true;
+
+  // Run pending |on_first_commit_or_window_closed_callback_| so that
+  // AppWindowCreateFunction can respond with an error properly.
+  if (!on_first_commit_or_window_closed_callback_.is_null()) {
+    std::move(on_first_commit_or_window_closed_callback_)
+        .Run(false /* ready_to_commit */);
+
+    send_onclosed = false;  // No "OnClosed" event on window creation error.
+  }
+
   if (app_window_contents_) {
     WebContentsModalDialogManager* modal_dialog_manager =
         WebContentsModalDialogManager::FromWebContents(web_contents());
     if (modal_dialog_manager)  // May be null in unit tests.
       modal_dialog_manager->SetDelegate(nullptr);
-    app_window_contents_->NativeWindowClosed();
+    app_window_contents_->NativeWindowClosed(send_onclosed);
   }
+
   delete this;
 }
 
@@ -818,11 +844,6 @@ void AppWindow::RestoreAlwaysOnTop() {
     UpdateNativeAlwaysOnTop();
 }
 
-void AppWindow::NotifyRenderViewReady() {
-  if (app_window_contents_)
-    app_window_contents_->OnWindowReady();
-}
-
 void AppWindow::GetSerializedState(base::DictionaryValue* properties) const {
   DCHECK(properties);
 
@@ -986,6 +1007,11 @@ void AppWindow::EnterFullscreenModeForTab(content::WebContents* source,
 
 void AppWindow::ExitFullscreenModeForTab(content::WebContents* source) {
   ToggleFullscreenModeForTab(source, false);
+}
+
+void AppWindow::OnAppWindowReady() {
+  if (app_window_contents_)
+    app_window_contents_->OnWindowReady();
 }
 
 void AppWindow::ToggleFullscreenModeForTab(content::WebContents* source,

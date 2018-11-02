@@ -10,43 +10,44 @@ namespace content {
 
 SharedWorkerInstance::SharedWorkerInstance(
     const GURL& url,
-    const base::string16& name,
-    const base::string16& content_security_policy,
+    const std::string& name,
+    const url::Origin& constructor_origin,
+    const std::string& content_security_policy,
     blink::WebContentSecurityPolicyType security_policy_type,
     blink::WebAddressSpace creation_address_space,
     ResourceContext* resource_context,
     const WorkerStoragePartitionId& partition_id,
-    blink::WebSharedWorkerCreationContextType creation_context_type,
-    bool data_saver_enabled)
+    blink::mojom::SharedWorkerCreationContextType creation_context_type,
+    const base::UnguessableToken& devtools_worker_token)
     : url_(url),
       name_(name),
+      constructor_origin_(constructor_origin),
       content_security_policy_(content_security_policy),
-      security_policy_type_(security_policy_type),
+      content_security_policy_type_(security_policy_type),
       creation_address_space_(creation_address_space),
       resource_context_(resource_context),
       partition_id_(partition_id),
       creation_context_type_(creation_context_type),
-      data_saver_enabled_(data_saver_enabled) {
+      devtools_worker_token_(devtools_worker_token) {
   DCHECK(resource_context_);
+  DCHECK(!devtools_worker_token_.is_empty());
 }
 
-SharedWorkerInstance::SharedWorkerInstance(const SharedWorkerInstance& other)
-    : url_(other.url_),
-      name_(other.name_),
-      content_security_policy_(other.content_security_policy_),
-      security_policy_type_(other.security_policy_type_),
-      creation_address_space_(other.creation_address_space_),
-      resource_context_(other.resource_context_),
-      partition_id_(other.partition_id_),
-      creation_context_type_(other.creation_context_type_),
-      data_saver_enabled_(other.data_saver_enabled_) {}
+SharedWorkerInstance::SharedWorkerInstance(const SharedWorkerInstance& other) =
+    default;
 
-SharedWorkerInstance::~SharedWorkerInstance() {}
+SharedWorkerInstance::~SharedWorkerInstance() = default;
 
-bool SharedWorkerInstance::Matches(const GURL& match_url,
-                                   const base::string16& match_name,
+bool SharedWorkerInstance::Matches(const GURL& url,
+                                   const std::string& name,
+                                   const url::Origin& constructor_origin,
                                    const WorkerStoragePartitionId& partition_id,
                                    ResourceContext* resource_context) const {
+  // |url| and |constructor_origin| should be in the same origin, or |url|
+  // should be a data: URL.
+  DCHECK(url::Origin::Create(url).IsSameOriginWith(constructor_origin) ||
+         url.SchemeIs(url::kDataScheme));
+
   // ResourceContext equivalence is being used as a proxy to ensure we only
   // matched shared workers within the same BrowserContext.
   if (resource_context_ != resource_context)
@@ -57,19 +58,20 @@ bool SharedWorkerInstance::Matches(const GURL& match_url,
   if (!partition_id_.Equals(partition_id))
     return false;
 
-  if (url_.GetOrigin() != match_url.GetOrigin())
-    return false;
-
-  if (name_ != match_name || url_ != match_url)
+  // Step 11.2: "If there exists a SharedWorkerGlobalScope object whose closing
+  // flag is false, constructor origin is same origin with outside settings's
+  // origin, constructor url equals urlRecord, and name equals the value of
+  // options's name member, then set worker global scope to that
+  // SharedWorkerGlobalScope object."
+  if (!constructor_origin_.IsSameOriginWith(constructor_origin) ||
+      url_ != url || name_ != name)
     return false;
   return true;
 }
 
 bool SharedWorkerInstance::Matches(const SharedWorkerInstance& other) const {
-  return Matches(other.url(),
-                 other.name(),
-                 other.partition_id(),
-                 other.resource_context());
+  return Matches(other.url(), other.name(), other.constructor_origin(),
+                 other.partition_id(), other.resource_context());
 }
 
 }  // namespace content

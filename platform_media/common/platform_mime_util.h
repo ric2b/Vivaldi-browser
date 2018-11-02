@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef MEDIA_BASE_PLATFORM_MIME_UTIL_H_
-#define MEDIA_BASE_PLATFORM_MIME_UTIL_H_
+#ifndef PLATFORM_MEDIA_COMMON_PLATFORM_MIME_UTIL_H_
+#define PLATFORM_MEDIA_COMMON_PLATFORM_MIME_UTIL_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #error Should only be built with USE_SYSTEM_PROPRIETARY_CODECS
@@ -41,4 +44,4 @@ bool IsPlatformVideoDecoderAvailable();
 
 }  // namespace media
 
-#endif  // MEDIA_BASE_PLATFORM_MIME_UTIL_H_
+#endif  // PLATFORM_MEDIA_COMMON_PLATFORM_MIME_UTIL_H_

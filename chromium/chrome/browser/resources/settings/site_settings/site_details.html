@@ -107,16 +107,21 @@
           icon="cr:open-in-new" id="popups" label="$i18n{siteSettingsPopups}">
       </site-details-permission>
       <site-details-permission
+          category="{{ContentSettingsTypes.ADS}}"
+          icon="settings:ads" id="ads"
+          label="$i18n{siteSettingsAds}"
+          hidden$="[[!enableSafeBrowsingSubresourceFilter_]]">
+      </site-details-permission>
+      <site-details-permission
           category="{{ContentSettingsTypes.BACKGROUND_SYNC}}"
           icon="settings:sync" id="backgroundSync"
           label="$i18n{siteSettingsBackgroundSync}">
       </site-details-permission>
-      <template is="dom-if" if="[[enableSoundContentSetting_]]" no-search>
-        <site-details-permission category="{{ContentSettingsTypes.SOUND}}"
-            icon="settings:volume-up" id="sound"
-            label="$i18n{siteSettingsSound}">
-        </site-details-permission>
-      </template>
+      <site-details-permission category="{{ContentSettingsTypes.SOUND}}"
+          icon="settings:volume-up" id="sound"
+          label="$i18n{siteSettingsSound}"
+          hidden$="[[!enableSoundContentSetting_]]">
+      </site-details-permission>
       <site-details-permission
           category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}"
           icon="cr:file-download" id="automaticDownloads"
@@ -127,10 +132,23 @@
           id="midiDevices" label="$i18n{siteSettingsMidiDevices}">
       </site-details-permission>
       <site-details-permission
+          category="{{ContentSettingsTypes.CLIPBOARD}}"
+          icon="settings:clipboard" id="clipboard"
+          label="$i18n{siteSettingsClipboard}"
+          hidden$="[[!enableClipboardContentSetting_]]">
+      </site-details-permission>
+      <site-details-permission
           category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}"
           icon="cr:extension" id="unsandboxedPlugins"
           label="$i18n{siteSettingsUnsandboxedPlugins}">
       </site-details-permission>
+<if expr="chromeos">
+      <site-details-permission
+          category="{{ContentSettingsTypes.PROTECTED_CONTENT}}"
+          icon="settings:security" id="protectedContent"
+          label="$i18n{siteSettingsProtectedContentIdentifiers}">
+      </site-details-permission>
+</if>
     </div>
 
     <div id="clearAndReset" class="settings-box"

@@ -1,5 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
@@ -8,7 +10,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tabs.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="display_layout.html">
 <link rel="import" href="display_overscan_dialog.html">
 <link rel="import" href="night_light_slider.html">
@@ -21,46 +22,48 @@
 <dom-module id="settings-display">
   <template>
     <style include="settings-shared md-select iron-flex iron-flex-alignment">
-     .settings-box.indented {
-       -webkit-margin-start: 20px;
-       align-self: stretch;
-       padding: 0;
-     }
+      .indented {
+        -webkit-margin-start: var(--cr-section-indent-padding);
+        align-self: stretch;
+        padding: 0;
+      }
 
-     :host {
-       --paper-tabs-selection-bar-color: var(--paper-blue-500);
-     }
+      #nightLightTemperatureDiv[disabled] {
+        opacity: 0.38;
+        pointer-events: none;
+      }
 
-     .display-tabs {
-       width: 100%;
-     }
+      .display-tabs {
+        width: 100%;
+      }
 
-     display-layout {
-       align-self: stretch;
-       flex: 1 1;
-       height: 300px;
-       margin: 10px;
-     }
+      display-layout {
+        align-self: stretch;
+        flex: 1 1;
+        height: 300px;
+        margin: 10px;
+      }
 
-     .textarea {
-       margin: 10px 0;
-     }
+      .text-area {
+        margin: 10px 0;
+      }
 
-     .settings-box > paper-button:first-child {
-       -webkit-padding-start: 0
-     }
+      .settings-box > paper-button:first-child {
+        -webkit-padding-start: 0
+      }
 
-     paper-tab {
-       text-transform: uppercase;
-     }
+      paper-tab {
+        text-transform: uppercase;
+      }
 
-     #controlsDiv > .settings-box:first-of-type {
-       border-top: none;
-     }
+      #controlsDiv > .settings-box:first-of-type {
+        border-top: none;
+      }
 
-     #nightLightSlider {
-       margin-top: 20px;
-     }
+      #nightLightSlider {
+        flex-grow: 1;
+        margin-top: 20px;
+      }
     </style>
     <div class="settings-box first layout vertical self-stretch">
       <h2 class="layout self-start">
@@ -74,6 +77,18 @@
           selected-display="[[selectedDisplay]]"
           on-select-display="onSelectDisplay_">
       </display-layout>
+
+    <template is="dom-if" if="[[showMirror_(unifiedDesktopMode_, displays)]]"
+        restamp>
+      <div class="secondary self-start">
+        <paper-checkbox checked="[[isMirrored_(displays)]]"
+            on-tap="onMirroredTap_"
+            aria-label="[[getDisplayMirrorText_(displays)]]">
+          <div class="text-area">[[getDisplayMirrorText_(displays)]]</div>
+        </paper-checkbox>
+      </div>
+    </template>
+
     </div>
     <div hidden="[[!hasMultipleDisplays_(displays)]]" class="settings-box">
       <paper-tabs noink selected="[[selectedDisplay.id]]" class="display-tabs"
@@ -88,36 +103,21 @@
 
     <div id="controlsDiv" class="settings-box layout vertical first">
       <h2>[[selectedDisplay.name]]</h2>
-
-      <template is="dom-if" if="[[showMirror_(unifiedDesktopMode_, displays)]]"
-          restamp>
-        <div class="settings-box indented two-line">
-          <div class="start">
-            <div id="displayMirrorCheckboxLabel">$i18n{displayMirror}</div>
-            <div class="secondary">[[getDisplayMirrorText_(displays)]]</div>
-          </div>
-          <paper-toggle-button checked="[[isMirrored_(displays)]]"
-              on-tap="onMirroredTap_"
-              aria-labelledby="displayMirrorCheckboxLabel">
-          </paper-toggle-button>
-        </div>
-      </template>
-
       <template is="dom-if" if="[[showUnifiedDesktop_(unifiedDesktopAvailable_,
           unifiedDesktopMode_, displays)]]" restamp>
         <div class="settings-box indented two-line">
           <div class="start">
             <div id="displayUnifiedDesktopCheckboxLabel">
-              $i18n{displayUnfiedDesktop}
+              $i18n{displayUnifiedDesktop}
             </div>
             <div class="secondary">
               [[getUnifiedDesktopText_(unifiedDesktopMode_)]]
             </div>
           </div>
-          <paper-toggle-button checked="[[unifiedDesktopMode_]]"
+          <cr-toggle checked="[[unifiedDesktopMode_]]"
               on-tap="onUnifiedDesktopTap_"
               aria-labelledby="displayUnifiedDesktopCheckboxLabel">
-          </paper-toggle-button>
+          </cr-toggle>
         </div>
       </template>
 
@@ -141,7 +141,7 @@
       </template>
 
       <div class="settings-box indented two-line">
-        <div class="start textarea layout vertical">
+        <div class="start text-area layout vertical">
           <div>$i18n{displayResolutionTitle}</div>
           <div class="secondary layout self-start">
             [[getResolutionText_(selectedDisplay, selectedModePref_.value)]]
@@ -155,11 +155,12 @@
 
       <template is="dom-if" if="[[!unifiedDesktopMode_]]" restamp>
         <div class="settings-box indented">
-          <div id="displayOrientation" class="start textarea">
+          <div id="displayOrientation" class="start text-area">
             $i18n{displayOrientation}
           </div>
           <div class="md-select-wrapper">
             <select class="md-select" value="[[selectedDisplay.rotation]]"
+                disabled="[[selectedDisplay.isTabletMode]]"
                 aria-labelledby="displayOrientation"
                 on-change="onOrientationChange_">
               <option value="0">$i18n{displayOrientationStandard}</option>
@@ -172,19 +173,10 @@
         </div>
       </template>
 
-      <div id="overscan" class="settings-box indented two-line"
-          on-tap="onOverscanTap_" hidden$="[[selectedDisplay.isInternal]]"
-          actionable>
-        <div class="start">
-          $i18n{displayOverscanPageTitle}
-          <div class="secondary" id="displayOverscanSecondary">
-            $i18n{displayOverscanPageText}
-          </div>
-        </div>
-        <button class="subpage-arrow" is="paper-icon-button-light"
-            aria-label="$i18n{displayOverscanPageTitle}"
-            aria-describedby="displayOverscanSecondary"></button>
-      </div>
+      <button is="cr-link-row" icon-class="subpage-arrow" class="indented hr"
+          id="overscan" label="$i18n{displayOverscanPageTitle}"
+          sub-label="$i18n{displayOverscanPageText}" on-tap="onOverscanTap_">
+      </button>
 
       <settings-display-overscan-dialog id="displayOverscan"
           display-id="{{overscanDisplayId}}"
@@ -218,20 +210,23 @@
       <div id="nightLightSettingsDiv"
           class="settings-box continuation start layout vertical">
         <!-- Color temperature slider -->
-        <div class="settings-box indented continuation">
-          <div class="start textarea" id="colorTemperatureLabel">
+        <div id="nightLightTemperatureDiv"
+            class="settings-box indented continuation"
+            disabled$="[[!prefs.ash.night_light.enabled.value]]">
+          <div class="start text-area" id="colorTemperatureLabel">
             $i18n{displayNightLightTemperatureLabel}
           </div>
           <settings-slider id="colorTemperatureSlider"
               aria-labelledby="colorTemperatureLabel" min="0" max="100"
               scale="100" label-min="$i18n{displayNightLightTempSliderMinLabel}"
               label-max="$i18n{displayNightLightTempSliderMaxLabel}"
-              pref="{{prefs.ash.night_light.color_temperature}}">
+              pref="{{prefs.ash.night_light.color_temperature}}"
+              disabled$="[[!prefs.ash.night_light.enabled.value]]">
           </settings-slider>
         </div>
         <!-- Schedule settings -->
         <div class="settings-box indented">
-          <div id="nightLightScheduleLabel" class="start textarea">
+          <div id="nightLightScheduleLabel" class="start text-area">
             $i18n{displayNightLightScheduleLabel}
           </div>
           <settings-dropdown-menu
@@ -244,9 +239,9 @@
         <!-- Custom schedule slider -->
         <div class="settings-box indented continuation">
           <iron-collapse id="nightLightCustomScheduleCollapse"
-              class="start textarea layout vertical"
+              class="start text-area layout vertical"
               opened="[[shouldOpenCustomScheduleCollapse_]]">
-            <div class="settings-box indented continuation">
+            <div class="settings-box continuation self-stretch">
               <night-light-slider id="nightLightSlider" prefs="{{prefs}}">
               </night-light-slider>
             </div>

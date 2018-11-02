@@ -24,8 +24,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_delegate.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -57,9 +55,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
-#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/user_flow.h"
@@ -79,15 +78,8 @@ const char kNotifierId[] = "app.background.crashed";
 bool g_disable_close_balloon_for_testing = false;
 
 void CloseBalloon(const std::string& balloon_id, ProfileID profile_id) {
-  NotificationUIManager* notification_ui_manager =
-      g_browser_process->notification_ui_manager();
-  bool cancelled = notification_ui_manager->CancelById(balloon_id, profile_id);
-  if (cancelled) {
-    // TODO(dewittj): Add this functionality to the notification UI manager's
-    // API.
-    g_browser_process->message_center()->SetVisibility(
-        message_center::VISIBILITY_TRANSIENT);
-  }
+  g_browser_process->notification_ui_manager()->CancelById(balloon_id,
+                                                           profile_id);
 }
 
 // Closes the crash notification balloon for the app/extension with this id.
@@ -102,7 +94,7 @@ void ScheduleCloseBalloon(const std::string& extension_id, Profile* profile) {
 
 // Delegate for the app/extension crash notification balloon. Restarts the
 // app/extension when the balloon is clicked.
-class CrashNotificationDelegate : public NotificationDelegate {
+class CrashNotificationDelegate : public message_center::NotificationDelegate {
  public:
   CrashNotificationDelegate(Profile* profile,
                             const Extension* extension)
@@ -125,8 +117,7 @@ class CrashNotificationDelegate : public NotificationDelegate {
       // loading the background page.
       BackgroundContentsService* service =
           BackgroundContentsServiceFactory::GetForProfile(profile_);
-      if (!service->GetAppBackgroundContents(
-              base::ASCIIToUTF16(copied_extension_id))) {
+      if (!service->GetAppBackgroundContents(copied_extension_id)) {
         service->LoadBackgroundContentsForExtension(profile_,
                                                     copied_extension_id);
       }
@@ -143,12 +134,6 @@ class CrashNotificationDelegate : public NotificationDelegate {
     ScheduleCloseBalloon(copied_extension_id, profile_);
   }
 
-  bool HasClickedListener() override { return true; }
-
-  std::string id() const override {
-    return kNotificationPrefix + extension_id_;
-  }
-
  private:
   ~CrashNotificationDelegate() override {}
 
@@ -160,12 +145,12 @@ class CrashNotificationDelegate : public NotificationDelegate {
   DISALLOW_COPY_AND_ASSIGN(CrashNotificationDelegate);
 };
 
-void NotificationImageReady(
-    const std::string extension_name,
-    const base::string16 message,
-    scoped_refptr<CrashNotificationDelegate> delegate,
-    Profile* profile,
-    const gfx::Image& icon) {
+void NotificationImageReady(const std::string extension_name,
+                            const std::string extension_id,
+                            const base::string16 message,
+                            scoped_refptr<CrashNotificationDelegate> delegate,
+                            Profile* profile,
+                            const gfx::Image& icon) {
   if (g_browser_process->IsShuttingDown())
     return;
 
@@ -178,18 +163,14 @@ void NotificationImageReady(
   // Origin URL must be different from the crashed extension to avoid the
   // conflict. NotificationSystemObserver will cancel all notifications from
   // the same origin when OnExtensionUnloaded() is called.
-  Notification notification(message_center::NOTIFICATION_TYPE_SIMPLE,
-                            base::string16(),
-                            message,
-                            notification_icon,
-                            message_center::NotifierId(
-                                message_center::NotifierId::SYSTEM_COMPONENT,
-                                kNotifierId),
-                            base::string16(),
-                            GURL("chrome://extension-crash"),
-                            delegate->id(),
-                            message_center::RichNotificationData(),
-                            delegate.get());
+  std::string id = kNotificationPrefix + extension_id;
+  message_center::Notification notification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, id, base::string16(), message,
+      notification_icon, base::string16(), GURL("chrome://extension-crash"),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 kNotifierId),
+      message_center::RichNotificationData(), delegate.get());
+  notification.set_clickable(true);
 
   g_browser_process->notification_ui_manager()->Add(notification, profile);
 }
@@ -210,14 +191,10 @@ void ShowBalloon(const Extension* extension, Profile* profile) {
   // However, it's possible that the extension went away during the interim,
   // so we'll bind all the pertinent data here.
   extensions::ImageLoader::Get(profile)->LoadImageAsync(
-      extension,
-      resource,
-      gfx::Size(size, size),
+      extension, resource, gfx::Size(size, size),
       base::Bind(
-          &NotificationImageReady,
-          extension->name(),
-          message,
-          make_scoped_refptr(new CrashNotificationDelegate(profile, extension)),
+          &NotificationImageReady, extension->name(), extension->id(), message,
+          base::MakeRefCounted<CrashNotificationDelegate>(profile, extension),
           profile));
 }
 
@@ -402,13 +379,13 @@ void BackgroundContentsService::Observe(
       BackgroundContents* bgcontents =
           content::Details<BackgroundContents>(details).ptr();
       Profile* profile = content::Source<Profile>(source).ptr();
-      const base::string16& appid = GetParentApplicationId(bgcontents);
+      const std::string& appid = GetParentApplicationId(bgcontents);
       ExtensionService* extension_service =
           extensions::ExtensionSystem::Get(profile)->extension_service();
-      // extension_service can be NULL when running tests.
+      // extension_service can be nullptr when running tests.
       if (extension_service) {
-        const Extension* extension = extension_service->GetExtensionById(
-            base::UTF16ToUTF8(appid), false);
+        const Extension* extension =
+            extension_service->GetExtensionById(appid, false);
         if (extension && BackgroundInfo::HasBackgroundPage(extension))
           break;
       }
@@ -418,13 +395,13 @@ void BackgroundContentsService::Observe(
     case extensions::NOTIFICATION_EXTENSION_PROCESS_TERMINATED:
     case chrome::NOTIFICATION_BACKGROUND_CONTENTS_TERMINATED: {
       Profile* profile = content::Source<Profile>(source).ptr();
-      const Extension* extension = NULL;
+      const Extension* extension = nullptr;
       if (type == chrome::NOTIFICATION_BACKGROUND_CONTENTS_TERMINATED) {
         BackgroundContents* bg =
             content::Details<BackgroundContents>(details).ptr();
-        std::string extension_id = base::UTF16ToASCII(
-            BackgroundContentsServiceFactory::GetForProfile(profile)->
-                GetParentApplicationId(bg));
+        std::string extension_id =
+            BackgroundContentsServiceFactory::GetForProfile(profile)
+                ->GetParentApplicationId(bg);
         extension =
           extensions::ExtensionSystem::Get(profile)->extension_service()->
               GetExtensionById(extension_id, false);
@@ -468,7 +445,7 @@ void BackgroundContentsService::OnExtensionLoaded(
       BackgroundInfo::HasBackgroundPage(extension)) {
     // If there is a background page specified in the manifest for a hosted
     // app, then blow away registered urls in the pref.
-    ShutdownAssociatedBackgroundContents(base::ASCIIToUTF16(extension->id()));
+    ShutdownAssociatedBackgroundContents(extension->id());
 
     ExtensionService* service =
         extensions::ExtensionSystem::Get(browser_context)->extension_service();
@@ -478,8 +455,7 @@ void BackgroundContentsService::OnExtensionLoaded(
       // EXTENSIONS_READY callback.
       LoadBackgroundContents(profile,
                              BackgroundInfo::GetBackgroundURL(extension),
-                             "background",
-                             base::UTF8ToUTF16(extension->id()));
+                             "background", extension->id());
     }
   }
 
@@ -518,7 +494,7 @@ void BackgroundContentsService::OnExtensionUnloaded(
     case UnloadedExtensionReason::LOCK_ALL:               // Fall through.
     case UnloadedExtensionReason::MIGRATED_TO_COMPONENT:  // Fall through.
     case UnloadedExtensionReason::PROFILE_SHUTDOWN:
-      ShutdownAssociatedBackgroundContents(base::ASCIIToUTF16(extension->id()));
+      ShutdownAssociatedBackgroundContents(extension->id());
       SendChangeNotification(Profile::FromBrowserContext(browser_context));
       return;
     case UnloadedExtensionReason::UPDATE: {
@@ -528,10 +504,8 @@ void BackgroundContentsService::OnExtensionUnloaded(
       // BackgroundContents in place.
       // We don't call SendChangeNotification here - it will be generated
       // from the LOADED callback.
-      if (BackgroundInfo::HasBackgroundPage(extension)) {
-        ShutdownAssociatedBackgroundContents(
-            base::ASCIIToUTF16(extension->id()));
-      }
+      if (BackgroundInfo::HasBackgroundPage(extension))
+        ShutdownAssociatedBackgroundContents(extension->id());
       return;
       case UnloadedExtensionReason::UNDEFINED:
         // Fall through to undefined case.
@@ -539,8 +513,7 @@ void BackgroundContentsService::OnExtensionUnloaded(
     }
   }
   NOTREACHED() << "Undefined UnloadedExtensionReason.";
-  return ShutdownAssociatedBackgroundContents(
-      base::ASCIIToUTF16(extension->id()));
+  return ShutdownAssociatedBackgroundContents(extension->id());
 }
 
 void BackgroundContentsService::OnExtensionUninstalled(
@@ -652,10 +625,8 @@ void BackgroundContentsService::LoadBackgroundContentsForExtension(
           GetExtensionById(extension_id, false);
   DCHECK(!extension || extension->is_hosted_app());
   if (extension && BackgroundInfo::HasBackgroundPage(extension)) {
-    LoadBackgroundContents(profile,
-                           BackgroundInfo::GetBackgroundURL(extension),
-                           "background",
-                           base::UTF8ToUTF16(extension->id()));
+    LoadBackgroundContents(profile, BackgroundInfo::GetBackgroundURL(extension),
+                           "background", extension->id());
     return;
   }
 
@@ -679,17 +650,14 @@ void BackgroundContentsService::LoadBackgroundContentsFromDictionary(
 
   const base::DictionaryValue* dict;
   if (!contents->GetDictionaryWithoutPathExpansion(extension_id, &dict) ||
-      dict == NULL)
+      dict == nullptr)
     return;
 
   std::string frame_name;
   std::string url;
   dict->GetString(kUrlKey, &url);
   dict->GetString(kFrameNameKey, &frame_name);
-  LoadBackgroundContents(profile,
-                         GURL(url),
-                         frame_name,
-                         base::UTF8ToUTF16(extension_id));
+  LoadBackgroundContents(profile, GURL(url), frame_name, extension_id);
 }
 
 void BackgroundContentsService::LoadBackgroundContentsFromManifests(
@@ -698,9 +666,9 @@ void BackgroundContentsService::LoadBackgroundContentsFromManifests(
        extensions::ExtensionRegistry::Get(profile)->enabled_extensions()) {
     if (extension->is_hosted_app() &&
         BackgroundInfo::HasBackgroundPage(extension.get())) {
-      LoadBackgroundContents(
-          profile, BackgroundInfo::GetBackgroundURL(extension.get()),
-          "background", base::UTF8ToUTF16(extension->id()));
+      LoadBackgroundContents(profile,
+                             BackgroundInfo::GetBackgroundURL(extension.get()),
+                             "background", extension->id());
     }
   }
 }
@@ -709,7 +677,7 @@ void BackgroundContentsService::LoadBackgroundContents(
     Profile* profile,
     const GURL& url,
     const std::string& frame_name,
-    const base::string16& application_id) {
+    const std::string& application_id) {
   // We are depending on the fact that we will initialize before any user
   // actions or session restore can take place, so no BackgroundContents should
   // be running yet for the passed application_id.
@@ -721,7 +689,7 @@ void BackgroundContentsService::LoadBackgroundContents(
   BackgroundContents* contents = CreateBackgroundContents(
       SiteInstance::CreateForURL(profile, url), nullptr, MSG_ROUTING_NONE,
       MSG_ROUTING_NONE, MSG_ROUTING_NONE, profile, frame_name, application_id,
-      std::string(), NULL);
+      std::string(), nullptr);
 
   contents->CreateRenderViewSoon(url);
 }
@@ -734,7 +702,7 @@ BackgroundContents* BackgroundContentsService::CreateBackgroundContents(
     int32_t main_frame_widget_route_id,
     Profile* profile,
     const std::string& frame_name,
-    const base::string16& application_id,
+    const std::string& application_id,
     const std::string& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
   BackgroundContents* contents =
@@ -770,28 +738,25 @@ void BackgroundContentsService::RegisterBackgroundContents(
   // feedback (http://crbug.com/47118).
   DictionaryPrefUpdate update(prefs_, prefs::kRegisteredBackgroundContents);
   base::DictionaryValue* pref = update.Get();
-  const base::string16& appid = GetParentApplicationId(background_contents);
+  const std::string& appid = GetParentApplicationId(background_contents);
   base::DictionaryValue* current;
-  if (pref->GetDictionaryWithoutPathExpansion(base::UTF16ToUTF8(appid),
-                                              &current)) {
+  if (pref->GetDictionaryWithoutPathExpansion(appid, &current))
     return;
-  }
 
   // No entry for this application yet, so add one.
   auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString(kUrlKey, background_contents->GetURL().spec());
   dict->SetString(kFrameNameKey, contents_map_[appid].frame_name);
-  pref->SetWithoutPathExpansion(base::UTF16ToUTF8(appid), std::move(dict));
+  pref->SetWithoutPathExpansion(appid, std::move(dict));
 }
 
 bool BackgroundContentsService::HasRegisteredBackgroundContents(
-    const base::string16& app_id) {
+    const std::string& app_id) {
   if (!prefs_)
     return false;
-  std::string app = base::UTF16ToUTF8(app_id);
   const base::DictionaryValue* contents =
       prefs_->GetDictionary(prefs::kRegisteredBackgroundContents);
-  return contents->HasKey(app);
+  return contents->HasKey(app_id);
 }
 
 void BackgroundContentsService::UnregisterBackgroundContents(
@@ -799,13 +764,13 @@ void BackgroundContentsService::UnregisterBackgroundContents(
   if (!prefs_)
     return;
   DCHECK(IsTracked(background_contents));
-  const base::string16 appid = GetParentApplicationId(background_contents);
+  const std::string& appid = GetParentApplicationId(background_contents);
   DictionaryPrefUpdate update(prefs_, prefs::kRegisteredBackgroundContents);
-  update.Get()->RemoveWithoutPathExpansion(base::UTF16ToUTF8(appid), NULL);
+  update.Get()->RemoveWithoutPathExpansion(appid, nullptr);
 }
 
 void BackgroundContentsService::ShutdownAssociatedBackgroundContents(
-    const base::string16& appid) {
+    const std::string& appid) {
   BackgroundContents* contents = GetAppBackgroundContents(appid);
   if (contents) {
     UnregisterBackgroundContents(contents);
@@ -823,7 +788,7 @@ void BackgroundContentsService::BackgroundContentsOpened(
   contents_map_[details->application_id].contents = details->contents;
   contents_map_[details->application_id].frame_name = details->frame_name;
 
-  ScheduleCloseBalloon(base::UTF16ToASCII(details->application_id), profile);
+  ScheduleCloseBalloon(details->application_id, profile);
 }
 
 // Used by test code and debug checks to verify whether a given
@@ -837,24 +802,23 @@ void BackgroundContentsService::BackgroundContentsShutdown(
     BackgroundContents* background_contents) {
   // Remove the passed object from our list.
   DCHECK(IsTracked(background_contents));
-  base::string16 appid = GetParentApplicationId(background_contents);
-  contents_map_.erase(appid);
+  contents_map_.erase(GetParentApplicationId(background_contents));
 }
 
 BackgroundContents* BackgroundContentsService::GetAppBackgroundContents(
-    const base::string16& application_id) {
+    const std::string& application_id) {
   BackgroundContentsMap::const_iterator it = contents_map_.find(application_id);
-  return (it != contents_map_.end()) ? it->second.contents : NULL;
+  return (it != contents_map_.end()) ? it->second.contents : nullptr;
 }
 
-const base::string16& BackgroundContentsService::GetParentApplicationId(
+const std::string& BackgroundContentsService::GetParentApplicationId(
     BackgroundContents* contents) const {
   for (BackgroundContentsMap::const_iterator it = contents_map_.begin();
        it != contents_map_.end(); ++it) {
     if (contents == it->second.contents)
       return it->first;
   }
-  return base::EmptyString16();
+  return base::EmptyString();
 }
 
 void BackgroundContentsService::AddWebContents(
@@ -866,7 +830,7 @@ void BackgroundContentsService::AddWebContents(
   Browser* browser = chrome::FindLastActiveWithProfile(
       Profile::FromBrowserContext(new_contents->GetBrowserContext()));
   if (browser) {
-    chrome::AddWebContents(browser, NULL, new_contents, disposition,
-                           initial_rect, user_gesture, was_blocked);
+    chrome::AddWebContents(browser, nullptr, new_contents, disposition,
+                           initial_rect, user_gesture);
   }
 }

@@ -5,11 +5,13 @@
 #ifndef ScrollableAreaPainter_h
 #define ScrollableAreaPainter_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class CullRect;
+class DisplayItemClient;
 class GraphicsContext;
 class IntPoint;
 class IntRect;
@@ -17,7 +19,6 @@ class PaintLayerScrollableArea;
 
 class ScrollableAreaPainter {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(ScrollableAreaPainter);
 
  public:
   explicit ScrollableAreaPainter(
@@ -31,15 +32,20 @@ class ScrollableAreaPainter {
                              const IntPoint& paint_offset,
                              const CullRect&,
                              bool painting_overlay_controls);
-  void PaintScrollCorner(GraphicsContext&, const IntPoint&, const CullRect&);
+  void PaintScrollCorner(GraphicsContext&,
+                         const IntPoint& paint_offset,
+                         const CullRect&);
 
  private:
   void DrawPlatformResizerImage(GraphicsContext&, IntRect resizer_corner_rect);
   bool OverflowControlsIntersectRect(const CullRect&) const;
 
   PaintLayerScrollableArea& GetScrollableArea() const;
+  const DisplayItemClient& DisplayItemClientForCorner() const;
 
   Member<PaintLayerScrollableArea> scrollable_area_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScrollableAreaPainter);
 };
 
 }  // namespace blink

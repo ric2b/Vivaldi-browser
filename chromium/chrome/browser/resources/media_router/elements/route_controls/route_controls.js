@@ -12,6 +12,20 @@ Polymer({
 
   properties: {
     /**
+     * Set of possible options for playing fullscreen videos when mirroring.
+     * @private {!Object}
+     */
+    FullscreenVideoOption_: {
+      type: Object,
+      value: {
+        // Play on remote screen only.
+        REMOTE_SCREEN: 'remote_screen',
+        // Play on both remote and local screens.
+        BOTH_SCREENS: 'both_screens'
+      }
+    },
+
+    /**
      * The current time displayed in seconds, before formatting.
      * @private {number}
      */
@@ -21,11 +35,11 @@ Polymer({
     },
 
     /**
-     * The media description to display. Uses route description if none is
-     * provided by the route status object.
+     * The route description to display. Uses the media route description if
+     * none is provided by the media route status object.
      * @private {string}
      */
-    displayedDescription_: {
+    routeDescription_: {
       type: String,
       value: '',
     },
@@ -37,6 +51,25 @@ Polymer({
     displayedVolume_: {
       type: Number,
       value: 0,
+    },
+
+    /**
+     * True if the Hangouts route is currently using local present mode.
+     * Valid for Hangouts routes only.
+     * @private {boolean}
+     */
+    hangoutsLocalPresent_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * Keep in sync with media remoting individual user setting.
+     * @private {boolean}
+     */
+    mediaRemotingEnabled_: {
+      type: Boolean,
+      value: true,
     },
 
     /**
@@ -94,6 +127,15 @@ Polymer({
     lastVolumeChangeByUser_: {
       type: Number,
       value: 0,
+    },
+
+    /**
+     * The route currently associated with this controller.
+     * @type {?media_router.Route|undefined}
+     */
+    route: {
+      type: Object,
+      observer: 'onRouteUpdated_',
     },
 
     /**
@@ -284,6 +326,15 @@ Polymer({
   },
 
   /**
+   * Called when the "smooth motion" box for Hangouts is changed by the user.
+   * @param {!{target: !PaperCheckboxElement}} e
+   * @private
+   */
+  onHangoutsLocalPresentChange_: function(e) {
+    media_router.browserApi.setHangoutsLocalPresent(e.target.checked);
+  },
+
+  /**
    * Called when the user toggles the mute status of the media. Sends a mute or
    * unmute command to the browser.
    * @private
@@ -320,7 +371,7 @@ Polymer({
       this.displayedVolume_ = Math.round(newRouteStatus.volume * 100) / 100;
     }
     if (newRouteStatus.description !== '') {
-      this.displayedDescription_ = newRouteStatus.description;
+      this.routeDescription_ = newRouteStatus.description;
     }
     if (!this.initialLoadTime_) {
       this.initialLoadTime_ = Date.now();
@@ -332,20 +383,32 @@ Polymer({
       this.timeIncrementsTimeoutId_ =
           setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
     }
+    this.hangoutsLocalPresent_ = !!newRouteStatus.hangoutsExtraData &&
+        newRouteStatus.hangoutsExtraData.localPresent;
+    if (newRouteStatus.mirroringExtraData) {
+      // Manually update the selected value on the
+      // mirroring-fullscreen-video-dropdown dropbox.
+      // TODO(imcheng): Avoid doing this by wrapping the dropbox in a Polymer
+      // template, or introduce <paper-dropdown-menu> to the Polymer library.
+      this.$['mirroring-fullscreen-video-dropdown'].value =
+          newRouteStatus.mirroringExtraData.mediaRemotingEnabled ?
+          this.FullscreenVideoOption_.REMOTE_SCREEN :
+          this.FullscreenVideoOption_.BOTH_SCREENS;
+    }
   },
 
   /**
    * Called when the route is updated. Updates the description shown if it has
    * not been provided by status updates.
    * @param {?media_router.Route} route
+   * @private
    */
-  onRouteUpdated: function(route) {
+  onRouteUpdated_: function(route) {
     if (!route) {
       this.stopIncrementingCurrentTime_();
     }
     if (route && this.routeStatus.description === '') {
-      this.displayedDescription_ =
-          loadTimeData.getStringF('castingActivityStatus', route.description);
+      this.routeDescription_ = route.description;
     }
   },
 
@@ -402,6 +465,19 @@ Polymer({
     var target = /** @type {{immediateValue: number}} */ (e.target);
     this.displayedVolume_ = target.immediateValue;
     media_router.browserApi.setCurrentMediaVolume(this.displayedVolume_);
+  },
+
+  /**
+   * Called when the value on the mirroring-fullscreen-video-dropdown dropdown
+   * menu changes.
+   * @param {!Event} e
+   * @private
+   */
+  onFullscreenVideoDropdownChange_: function(e) {
+    /** @const */ var dropdownValue =
+        this.$['mirroring-fullscreen-video-dropdown'].value;
+    media_router.browserApi.setMediaRemotingEnabled(
+        dropdownValue == this.FullscreenVideoOption_.REMOTE_SCREEN);
   },
 
   /**

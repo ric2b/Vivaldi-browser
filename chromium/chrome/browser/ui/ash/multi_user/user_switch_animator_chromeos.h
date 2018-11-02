@@ -14,8 +14,6 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "ui/aura/window.h"
 
-namespace chrome {
-
 class MultiUserWindowManagerChromeOS;
 
 // A class which performs transitions animations between users. Upon creation,
@@ -41,9 +39,7 @@ class UserSwitchAnimatorChromeOS {
   // Check if a window is covering the entire work area of the screen it is on.
   static bool CoversScreen(aura::Window* window);
 
-  bool IsAnimationFinished() {
-    return animation_step_ == ANIMATION_STEP_ENDED;
-  }
+  bool IsAnimationFinished() { return animation_step_ == ANIMATION_STEP_ENDED; }
 
   // Returns the user id for which the wallpaper is currently shown.
   // If a wallpaper is transitioning to B it will be returned as "->B".
@@ -79,7 +75,7 @@ class UserSwitchAnimatorChromeOS {
   // Execute the user wallpaper animations for |animation_step|.
   void TransitionWallpaper(AnimationStep animtion_step);
 
-  // Execute the user shelf animations for |animation_step|.
+  // Update the shelf for |animation_step|.
   void TransitionUserShelf(AnimationStep animtion_step);
 
   // Execute the window animations for |animation_step|.
@@ -108,7 +104,7 @@ class UserSwitchAnimatorChromeOS {
   AnimationStep animation_step_;
 
   // The screen cover status before the animation has started.
-  TransitioningScreenCover screen_cover_;
+  const TransitioningScreenCover screen_cover_;
 
   // Mapping users IDs to the list of windows to show for these users.
   typedef std::map<AccountId, aura::Window::Windows> UserToWindowsMap;
@@ -123,7 +119,5 @@ class UserSwitchAnimatorChromeOS {
 
   DISALLOW_COPY_AND_ASSIGN(UserSwitchAnimatorChromeOS);
 };
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_UI_ASH_MULTI_USER_USER_SWITCH_ANIMATOR_CHROMEOS_H_

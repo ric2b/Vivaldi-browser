@@ -5,20 +5,19 @@
 #ifndef PaintPropertyTreeBuilder_h
 #define PaintPropertyTreeBuilder_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/EffectPaintPropertyNode.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 
-class FragmentData;
-class LayoutBoxModelObject;
 class LayoutObject;
 class LocalFrameView;
-class ObjectPaintProperties;
+class PaintLayer;
 
 // The context for PaintPropertyTreeBuilder.
 // It's responsible for bookkeeping tree state in other order, for example, the
@@ -38,7 +37,11 @@ struct PaintPropertyTreeBuilderFragmentContext {
     // to refer the object's border box, then the callee will derive its own
     // border box by translating the space with its own layout location.
     const TransformPaintPropertyNode* transform = nullptr;
+    // Corresponds to LayoutObject::PaintOffset, which does not include
+    // fragmentation offsets. See FragmentContext for the fragmented version.
     LayoutPoint paint_offset;
+    // The PaintLayer corresponding to the origin of |paint_offset|.
+    const LayoutObject* paint_offset_root = nullptr;
     // Whether newly created children should flatten their inherited transform
     // (equivalently, draw into the plane of their parent). Should generally
     // be updated whenever |transform| is; flattening only needs to happen
@@ -58,6 +61,10 @@ struct PaintPropertyTreeBuilderFragmentContext {
     // reference a scroll offset transform, scroll nodes should be updated if
     // the transform tree changes.
     const ScrollPaintPropertyNode* scroll = nullptr;
+
+    // True if any fixed-position children within this context are fixed to the
+    // root of the FrameView (and hence above its scroll).
+    bool fixed_position_children_fixed_to_root = false;
   };
 
   ContainingBlockContext current;
@@ -83,11 +90,9 @@ struct PaintPropertyTreeBuilderFragmentContext {
   // Therefore, we don't need extra bookkeeping for effect nodes and can
   // generate the effect tree from a DOM-order traversal.
   const EffectPaintPropertyNode* current_effect;
-  // Some effects are spatial, i.e. may refer to input pixels outside of output
-  // clip. The cull rect for its input shall be derived from its output clip.
-  // This variable represents the input cull of current effect, also serves as
-  // output clip of child effects that don't have a hard clip.
-  const ClipPaintPropertyNode* input_clip_of_current_effect;
+
+  // If the object is fragmented, it will have a fragment clip.
+  Optional<LayoutRect> fragment_clip;
 };
 
 struct PaintPropertyTreeBuilderContext {
@@ -116,115 +121,46 @@ struct PaintPropertyTreeBuilderContext {
   // needed. See FindPaintOffsetAndVisualRectNeedingUpdate.h.
   bool is_actually_needed = true;
 #endif
+
+  PaintLayer* painting_layer = nullptr;
 };
 
-// Creates paint property tree nodes for special things in the layout tree.
+// |FrameViewPaintPropertyTreeBuilder| and |ObjectPaintPropertyTreeBuilder|
+// create paint property tree nodes for special things in the layout tree.
 // Special things include but not limit to: overflow clip, transform, fixed-pos,
 // animation, mask, filter, ... etc.
 // It expects to be invoked for each layout tree node in DOM order during
 // InPrePaint phase.
-class PaintPropertyTreeBuilder {
+
+class FrameViewPaintPropertyTreeBuilder {
  public:
-  // Update the paint properties for a frame and ensure the context is up to
-  // date.
-  void UpdateProperties(LocalFrameView&, PaintPropertyTreeBuilderContext&);
+  // Update the paint properties for a frame view and ensure the context is up
+  // to date.
+  static void Update(LocalFrameView&, PaintPropertyTreeBuilderContext&);
+};
+
+class ObjectPaintPropertyTreeBuilder {
+ public:
+  ObjectPaintPropertyTreeBuilder(const LayoutObject& object,
+                                 PaintPropertyTreeBuilderContext& context)
+      : object_(object), context_(context) {}
 
   // Update the paint properties that affect this object (e.g., properties like
   // paint offset translation) and ensure the context is up to date. Also
   // handles updating the object's paintOffset.
-  void UpdatePropertiesForSelf(const LayoutObject&,
-                               PaintPropertyTreeBuilderContext&);
+  void UpdateForSelf();
+
   // Update the paint properties that affect children of this object (e.g.,
   // scroll offset transform) and ensure the context is up to date.
-  void UpdatePropertiesForChildren(const LayoutObject&,
-                                   PaintPropertyTreeBuilderContext&);
+  void UpdateForChildren();
 
  private:
-  ALWAYS_INLINE static void UpdatePaintOffset(
-      const LayoutBoxModelObject&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      const LayoutObject* container_for_absolute_position);
-  ALWAYS_INLINE static void UpdatePaintOffsetTranslation(
-      const LayoutBoxModelObject&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      ObjectPaintProperties&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateForObjectLocationAndSize(
-      const LayoutObject&,
-      const LayoutObject* container_for_absolute_position,
-      ObjectPaintProperties*,
-      bool& is_actually_needed,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateTransform(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateTransformForNonRootSVG(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateEffect(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update,
-      bool& clip_changed);
-  ALWAYS_INLINE static void UpdateFilter(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateCssClip(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update,
-      bool& clip_changed);
-  ALWAYS_INLINE static void UpdateLocalBorderBoxContext(
-      const LayoutObject&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      FragmentData*,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateScrollbarPaintOffset(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateOverflowClip(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update,
-      bool& clip_changed);
-  ALWAYS_INLINE static void UpdatePerspective(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateSvgLocalToBorderBoxTransform(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateScrollAndScrollTranslation(
-      const LayoutObject&,
-      ObjectPaintProperties&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      bool& force_subtree_update);
-  ALWAYS_INLINE static void UpdateOutOfFlowContext(
-      const LayoutObject&,
-      PaintPropertyTreeBuilderFragmentContext&,
-      ObjectPaintProperties*,
-      bool& force_subtree_update);
+  ALWAYS_INLINE void InitSingleFragmentFromParent(bool needs_paint_properties);
+  ALWAYS_INLINE void UpdateFragments();
+  ALWAYS_INLINE void UpdatePaintingLayer();
 
-  // Ensure the ObjectPaintProperties object is created if it will be needed, or
-  // cleared otherwise.
-  ALWAYS_INLINE static void UpdatePaintProperties(
-      const LayoutObject&,
-      PaintPropertyTreeBuilderContext&);
+  const LayoutObject& object_;
+  PaintPropertyTreeBuilderContext& context_;
 };
 
 }  // namespace blink

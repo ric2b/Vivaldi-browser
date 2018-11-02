@@ -10,8 +10,10 @@
 <translation id="1054153489933238809">在新标签中打开原图(&amp;I)</translation>
 <translation id="1056898198331236512">警告</translation>
 <translation id="1084824384139382525">复制链接地址(&amp;E)</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD,plural, =1{继续下载} other {继续下载}}</translation>
 <translation id="1128109161498068552">禁止任何网站使用系统专有消息访问 MIDI 设备</translation>
 <translation id="114140604515785785">扩展程序根目录：</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD,plural, =1{有 1 项下载任务正在进行。确定要取消下载并退出隐身模式吗？} other {有 # 项下载任务正在进行。确定要取消下载并退出隐身模式吗？}}</translation>
 <translation id="1163931534039071049">查看框架的源码(&amp;V)</translation>
 <translation id="1165039591588034296">错误</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
@@ -20,7 +22,6 @@
 <translation id="1187722533808055681">闲置状态唤醒</translation>
 <translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">仅限选定内容</translation>
-<translation id="1238150413700645698">受保护的内容</translation>
 <translation id="1244303850296295656">扩展程序错误</translation>
 <translation id="1274977772557788323">Adobe Flash Player 存储设置</translation>
 <translation id="1278049586634282054">检查视图：</translation>
@@ -41,13 +42,12 @@
 <translation id="1588438908519853928">正常</translation>
 <translation id="1588870296199743671">打开方式...</translation>
 <translation id="159359590073980872">图片缓存</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD,plural, =1{有 1 项下载任务正在进行} other {有多项下载任务正在进行}}</translation>
 <translation id="1601560923496285236">应用</translation>
 <translation id="1603914832182249871">（隐身）</translation>
-<translation id="1616206807336925449">此扩展程序无需任何特殊权限。</translation>
 <translation id="1620510694547887537">摄像头</translation>
 <translation id="1627276047960621195">文件描述符数量</translation>
 <translation id="1635033183663317347">这是您的监护人安装的。</translation>
-<translation id="1681120471812444678">设置以添加打印机…</translation>
 <translation id="1682548588986054654">新建隐身窗口</translation>
 <translation id="1698122934742150150">仅限当前的隐身会话</translation>
 <translation id="1706625117072057435">缩放级别</translation>
@@ -61,13 +61,14 @@
 <translation id="176587472219019965">新建窗口(&amp;N)</translation>
 <translation id="1769104665586091481">在新窗口中打开链接(&amp;W)</translation>
 <translation id="1789575671122666129">弹出式窗口</translation>
+<translation id="1805822111539868586">审阅视图</translation>
 <translation id="1815083418640426271">粘贴为纯文本</translation>
 <translation id="1828901632669367785">使用系统对话框打印...</translation>
-<translation id="1838288018605456492">点击设置</translation>
 <translation id="1846308012215045257">Ctrl+右键点击即可运行 <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">顺时针旋转(&amp;C)</translation>
 <translation id="1859234291848436338">书写方向</translation>
 <translation id="1886996562706621347">允许网站请求成为协议的默认处理程序（推荐）</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID：&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">全选(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">全部移除</translation>
@@ -146,11 +147,9 @@
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />无法与此打印机通信。请确保此打印机已插好并重试。</translation>
 <translation id="2904456025988372123">当网站下载第一个文件后要自动下载更多文件时询问您</translation>
 <translation id="2913331724188855103">允许网站保存和读取 Cookie 数据（推荐）</translation>
-<translation id="2914303854539667666">生成密码</translation>
 <translation id="2916745397441987255">搜索扩展程序</translation>
 <translation id="2932883381142163287">举报滥用行为</translation>
 <translation id="2941112035454246133">低</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID：&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
 <translation id="299483336428448530">这是您的家长安装的。</translation>
 <translation id="3003623123441819449">CSS 缓存</translation>
@@ -170,7 +169,6 @@
 <translation id="3127156390846601284">此操作会删除所显示的全部网站在您设备上存储的所有数据。要继续吗？</translation>
 <translation id="3129173833825111527">左侧页边距</translation>
 <translation id="3144647712221361880">以其他身份打开链接</translation>
-<translation id="3149510190863420837">Chrome 应用程序</translation>
 <translation id="3154429428035006212">离线超过 1 个月</translation>
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">麦克风</translation>
@@ -198,7 +196,6 @@
 <translation id="3396331542604645348">所选打印机无法使用或未正确安装。请检查打印机，或尝试选择其他打印机。</translation>
 <translation id="3432227430032737297">移除显示的所有 Cookie</translation>
 <translation id="3435896845095436175">启用</translation>
-<translation id="3439970425423980614">在预览中打开PDF</translation>
 <translation id="3440761377721825626">当网站要使用插件访问您的计算机时询问您</translation>
 <translation id="345693547134384690">在新标签中打开图片(&amp;I)</translation>
 <translation id="3467267818798281173">请求 Google 拼写建议</translation>
@@ -207,19 +204,18 @@
 <translation id="3494769164076977169">当网站下载第一个文件后要自动下载更多文件时询问您（推荐）</translation>
 <translation id="3505030558724226696">撤消对设备的访问权限</translation>
 <translation id="3511307672085573050">复制链接地址(&amp;E)</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD,plural, =1{取消下载} other {取消下载}}</translation>
 <translation id="3523642406908660543">当网站要使用插件访问您的计算机时询问您（推荐）</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;希望与您拥有的以下群组共享打印机&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;：&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;。如果您接受，该群组的所有成员都可以将内容发送到该打印机进行打印。</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3618849550573277856">查找“<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">在隐身窗口中打开链接(&amp;G)</translation>
-<translation id="3640006360782160348">取消设置打印机</translation>
 <translation id="3668823961463113931">处理程序</translation>
 <translation id="3678156199662914018">扩展程序：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 屏幕共享请求</translation>
 <translation id="370665806235115550">正在载入...</translation>
 <translation id="3725367690636977613">页</translation>
 <translation id="3727187387656390258">检查弹出窗口</translation>
-<translation id="3730639321086573427">本地目标打印机</translation>
 <translation id="3744111561329211289">后台同步</translation>
 <translation id="3760460896538743390">检查背景页(&amp;B)</translation>
 <translation id="3763401818161139108">总是在<ph name="ORIGIN" />中运行</translation>
@@ -256,6 +252,7 @@
 <translation id="4091434297613116013">张纸</translation>
 <translation id="4096508467498758490">请停用以开发者模式运行的扩展程序</translation>
 <translation id="4100839878934973028">您计算机上的其他程序添加了一个应用，该应用可能会改变 Vivaldi 的工作方式。</translation>
+<translation id="4109898769411476438">导入之前关闭浏览器</translation>
 <translation id="4115080753528843955">某些内容服务使用唯一标识符以授权访问受保护的内容</translation>
 <translation id="411666854932687641">专用内存</translation>
 <translation id="4130207949184424187">此扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
@@ -268,6 +265,7 @@
 <translation id="4256316378292851214">视频另存为(&amp;V)...</translation>
 <translation id="4278390842282768270">允许</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> 千字节（实际大小 <ph name="NUM_KILOBYTES_LIVE" /> 千字节）</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD,plural, =1{继续下载} other {继续下载}}</translation>
 <translation id="4345587454538109430">配置...</translation>
 <translation id="4348766275249686434">收集错误信息</translation>
 <translation id="4363771538994847871">找不到投射目标。需要帮助吗？</translation>
@@ -287,7 +285,6 @@
 <translation id="4593021220803146968">转到 <ph name="URL" />(&amp;G)</translation>
 <translation id="4595560905247879544">只有管理员（<ph name="CUSTODIAN_NAME" />）可以修改应用和扩展程序。</translation>
 <translation id="4613271546271159013">某个扩展程序更改了您打开新标签页时系统显示的页面。</translation>
-<translation id="4624768044135598934">成功！</translation>
 <translation id="4628314759732363424">更改...</translation>
 <translation id="4643612240819915418">在新标签中打开视频(&amp;O)</translation>
 <translation id="4677772697204437347">GPU内存</translation>
@@ -359,13 +356,14 @@
 <translation id="5623842676595125836">日志</translation>
 <translation id="5627086634964711283">它还能够控制您点击“主页”按钮后系统显示的页面。</translation>
 <translation id="563535393368633106">访问前先询问（推荐）</translation>
-<translation id="5646376287012673985">地点</translation>
 <translation id="5649053991847567735">自动下载</translation>
 <translation id="5677928146339483299">已阻止</translation>
+<translation id="5689516760719285838">地点</translation>
 <translation id="5707185214361380026">加载失败的扩展程序来自：</translation>
 <translation id="5715711091495208045">插件代理程序：<ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">抱歉，此次错误的代码无法显示。</translation>
 <translation id="5746169159649715125">另存为 PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD,plural, =1{取消下载} other {取消多个下载}}</translation>
 <translation id="5759728514498647443">您通过“<ph name="APP_NAME" />”发送以进行打印的文档可由“<ph name="APP_NAME" />”读取。</translation>
 <translation id="5764483294734785780">音频另存为(&amp;V)...</translation>
 <translation id="577624874850706961">搜索 Cookie</translation>
@@ -375,7 +373,6 @@
 <translation id="5829401023154985950">管理...</translation>
 <translation id="583281660410589416">未知</translation>
 <translation id="5838456317242088717">当前的隐身会话</translation>
-<translation id="5848934677402291689">正在保存为 PDF</translation>
 <translation id="5849869942539715694">打包扩展程序...</translation>
 <translation id="5908769186679515905">禁止网站运行 Flash</translation>
 <translation id="5910363049092958439">图片另存为(&amp;V)...</translation>
@@ -418,8 +415,8 @@
 <translation id="6308937455967653460">链接另存为(&amp;K)...</translation>
 <translation id="6314335155547195432">生成口令</translation>
 <translation id="6326855256003666642">Keepalive 活动数</translation>
-<translation id="6348109281845364640">打印机设置失败</translation>
 <translation id="6370021412472292592">无法加载元数据。</translation>
+<translation id="6374469231428023295">重试</translation>
 <translation id="6385543213911723544">网站可以保存和读取 Cookie 数据</translation>
 <translation id="6398765197997659313">退出全屏模式</translation>
 <translation id="6406303162637086258">模拟浏览器重启</translation>
@@ -430,11 +427,11 @@
 <translation id="6452181791372256707">拒绝</translation>
 <translation id="6498249116389603658">所选全部语言(&amp;A)</translation>
 <translation id="6503077044568424649">常去网站</translation>
-<translation id="650584126816009598">您的打印机已准备就绪。</translation>
 <translation id="6508261954199872201">应用：<ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">复制图片(&amp;Y)</translation>
 <translation id="6550675742724504774">选项</translation>
 <translation id="6596092346130528198">这是您想要的新标签页吗？</translation>
+<translation id="6612358246767739896">受保护的内容</translation>
 <translation id="6639554308659482635">SQLite 使用的内存</translation>
 <translation id="6655190889273724601">开发者模式</translation>
 <translation id="6691936601825168937">前进(&amp;F)</translation>
@@ -461,7 +458,6 @@
 <translation id="6955446738988643816">检查弹出窗口</translation>
 <translation id="6970856801391541997">打印特定页面</translation>
 <translation id="6974053822202609517">从右向左</translation>
-<translation id="6982896539684144327">已检测到来自 <ph name="VENDOR_NAME" /> 的打印机</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">选择目标打印机</translation>
 <translation id="7005848115657603926">页码范围无效，请使用 <ph name="EXAMPLE_PAGE_RANGE" /></translation>
@@ -472,6 +468,7 @@
 <translation id="708060913198414444">复制音频地址(&amp;O)</translation>
 <translation id="7084192839369222683">只运行重要内容</translation>
 <translation id="7144878232160441200">重试</translation>
+<translation id="7152478047064750137">此扩展程序无需特殊权限</translation>
 <translation id="7175353351958621980">加载自:</translation>
 <translation id="7186088072322679094">保留在工具栏</translation>
 <translation id="7206693748120342859">正在下载 <ph name="PLUGIN_NAME" />...</translation>
@@ -491,7 +488,6 @@
 <translation id="7421925624202799674">查看网页源码(&amp;V)</translation>
 <translation id="7423098979219808738">先询问</translation>
 <translation id="7427348830195639090">后台网页：<ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">设置打印机...</translation>
 <translation id="7453008956351770337">选择此打印机即表示您允许以下扩展程序访问您的打印机：</translation>
 <translation id="7473891865547856676">谢谢不必了</translation>
 <translation id="749028671485790643">用户<ph name="VALUE" /></translation>
@@ -522,7 +518,6 @@
 <translation id="7814458197256864873">复制(&amp;C)</translation>
 <translation id="7818135753970109980">已添加新主题背景（<ph name="EXTENSION_NAME" />）</translation>
 <translation id="782057141565633384">复制视频地址(&amp;O)</translation>
-<translation id="7831493768366098287">Google打印</translation>
 <translation id="7849264908733290972">在新标签中打开图片(&amp;I)</translation>
 <translation id="7857949311770343000">这是您想要的新标签页吗？</translation>
 <translation id="786073089922909430">服务：<ph name="ARC_PROCESS_NAME" /></translation>
@@ -534,7 +529,6 @@
 <translation id="7947962633355574091">复制视频地址(&amp;O)</translation>
 <translation id="7965010376480416255">共享内存</translation>
 <translation id="7966241909927244760">复制图片地址(&amp;O)</translation>
-<translation id="7967437925638594022">扩展及应用程序</translation>
 <translation id="7978412674231730200">私有密钥</translation>
 <translation id="7982789257301363584">网络</translation>
 <translation id="7997826902155442747">进程优先级</translation>
@@ -548,13 +542,11 @@
 <translation id="8018313076035239964">控制网站可使用的信息以及可向您显示的内容</translation>
 <translation id="8023801379949507775">获取更多扩展程序</translation>
 <translation id="8032244173881942855">无法投射标签页。</translation>
-<translation id="8069615408251337349">Google 云打印</translation>
 <translation id="8071432093239591881">以图片形式打印</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> 千字节</translation>
 <translation id="8137559199583651773">管理扩展程序</translation>
 <translation id="8180239481735238521">页面</translation>
 <translation id="8188120771410500975">检查文本字段的拼写(&amp;C)</translation>
-<translation id="8259581864063078725">点击以查找对应此打印机的应用。</translation>
 <translation id="8261378640211443080">该扩展程序未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中，并可能是在您不知情的情况下添加的。</translation>
 <translation id="8261506727792406068">删除</translation>
 <translation id="8270242299912238708">PDF 文档</translation>
@@ -591,6 +583,7 @@
 <translation id="8708000541097332489">退出时清除</translation>
 <translation id="8714838604780058252">背景图形</translation>
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> 下载失败</translation>
+<translation id="8725066075913043281">重试</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> 更新完毕后，重新加载页面即可启用该插件</translation>
 <translation id="8757090071857742562">无法投射桌面，请查看您是否已确认开始共享屏幕的提示。</translation>
 <translation id="8770406935328356739">扩展程序根目录</translation>
@@ -604,6 +597,7 @@
 <translation id="8823514049557262177">复制链接文本(&amp;X)</translation>
 <translation id="8845001906332463065">获得帮助</translation>
 <translation id="8859174528519900719">辅助框架：<ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">生成密码...</translation>
 <translation id="8899285681604219177">已停用不支持的扩展程序</translation>
 <translation id="8899851313684471736">在新窗口中打开链接(&amp;W)</translation>
 <translation id="8910146161325739742">共享屏幕</translation>
@@ -611,7 +605,6 @@
 <translation id="8916476537757519021">隐身辅助框架：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">停用以开发者模式运行的扩展程序</translation>
 <translation id="8938356204940892126">放弃</translation>
-<translation id="8944779739948852228">已检测到打印机</translation>
 <translation id="895944840846194039">JavaScript 使用的内存</translation>
 <translation id="8962083179518285172">隐藏细节</translation>
 <translation id="8973557916016709913">移除缩放级别</translation>
@@ -620,6 +613,7 @@
 <translation id="9027459031423301635">在新标签页中打开链接(&amp;T)</translation>
 <translation id="9056810968620647706">未找到匹配项。</translation>
 <translation id="9088234649737575428">系统已根据企业政策屏蔽 <ph name="PLUGIN_NAME" /></translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD,plural, =1{正在下载} other {正在下载}}</translation>
 <translation id="9137916601698928395">以 <ph name="USER" /> 身份打开链接</translation>
 <translation id="9153341767479566106">加载失败的其他扩展程序：</translation>
 <translation id="9170848237812810038">撤消(&amp;U)</translation>

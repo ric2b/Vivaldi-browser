@@ -37,8 +37,7 @@ class ExecutionContext;
 class ScriptState;
 class ScriptValue;
 
-class MODULES_EXPORT IDBKeyRange final : public GarbageCollected<IDBKeyRange>,
-                                         public ScriptWrappable {
+class MODULES_EXPORT IDBKeyRange final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -57,14 +56,14 @@ class MODULES_EXPORT IDBKeyRange final : public GarbageCollected<IDBKeyRange>,
                                       const ScriptValue&,
                                       ExceptionState&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Implement the IDBKeyRange IDL
   IDBKey* Lower() const { return lower_.Get(); }
   IDBKey* Upper() const { return upper_.Get(); }
 
-  ScriptValue lowerValue(ScriptState*) const;
-  ScriptValue upperValue(ScriptState*) const;
+  ScriptValue LowerValue(ScriptState*) const;
+  ScriptValue UpperValue(ScriptState*) const;
   bool lowerOpen() const { return lower_type_ == kLowerBoundOpen; }
   bool upperOpen() const { return upper_type_ == kUpperBoundOpen; }
 

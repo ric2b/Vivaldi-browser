@@ -5,14 +5,13 @@
 #ifndef NET_SSL_CLIENT_CERT_STORE_NSS_H_
 #define NET_SSL_CLIENT_CERT_STORE_NSS_H_
 
-#include <memory>
-
 #include "base/callback.h"
 #include "base/macros.h"
 #include "net/base/net_export.h"
 #include "net/ssl/client_cert_store.h"
 
 typedef struct CERTCertListStr CERTCertList;
+typedef struct CERTCertificateStr CERTCertificate;
 
 namespace crypto {
 class CryptoModuleBlockingPasswordDelegate;
@@ -26,6 +25,8 @@ class NET_EXPORT ClientCertStoreNSS : public ClientCertStore {
  public:
   typedef base::Callback<crypto::CryptoModuleBlockingPasswordDelegate*(
       const HostPortPair& /* server */)> PasswordDelegateFactory;
+
+  using CertFilter = base::RepeatingCallback<bool(CERTCertificate*)>;
 
   explicit ClientCertStoreNSS(
       const PasswordDelegateFactory& password_delegate_factory);
@@ -43,11 +44,14 @@ class NET_EXPORT ClientCertStoreNSS : public ClientCertStore {
                                         const SSLCertRequestInfo& request);
 
   // Retrieves all client certificates that are stored by NSS and adds them to
-  // |identities|. |password_delegate| is used to unlock slots if required.
+  // |identities|. |password_delegate| is used to unlock slots if required. If
+  // |cert_filter| is not null, only certificates that it returns true on will
+  // be added.
   // Must be called from a worker thread.
   static void GetPlatformCertsOnWorkerThread(
       scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate>
           password_delegate,
+      const CertFilter& cert_filter,
       ClientCertIdentityList* identities);
 
  private:

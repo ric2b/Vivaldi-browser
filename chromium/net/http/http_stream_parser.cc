@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "net/base/io_buffer.h"
@@ -212,8 +211,7 @@ HttpStreamParser::HttpStreamParser(ClientSocketHandle* connection,
                             weak_ptr_factory_.GetWeakPtr());
 }
 
-HttpStreamParser::~HttpStreamParser() {
-}
+HttpStreamParser::~HttpStreamParser() = default;
 
 int HttpStreamParser::SendRequest(const std::string& request_line,
                                   const HttpRequestHeaders& headers,
@@ -448,11 +446,6 @@ int HttpStreamParser::DoLoop(int result) {
 }
 
 int HttpStreamParser::DoSendHeaders() {
-  // TODO(mmenke): Remove ScopedTracker below once crbug.com/424359 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "424359 HttpStreamParser::DoSendHeaders"));
-
   int bytes_remaining = request_headers_->BytesRemaining();
   DCHECK_GT(bytes_remaining, 0);
 

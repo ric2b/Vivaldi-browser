@@ -14,9 +14,11 @@
 #include "content/public/app/content_main.h"
 #include "content/public/common/content_switches.h"
 #include "headless/public/headless_shell.h"
+#include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_features.h"
 #include "ui/gfx/switches.h"
 
-#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+#if BUILDFLAG(ENABLE_MUS)
 #include "services/service_manager/runner/common/client_util.h"
 #endif
 
@@ -111,11 +113,7 @@ int ChromeMain(int argc, const char** argv) {
   }
 #endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
-  if (service_manager::ServiceManagerIsRemote()) {
-    params.create_discardable_memory = false;
-    params.env_mode = aura::Env::Mode::MUS;
-  }
+#if BUILDFLAG(ENABLE_MUS)
   // In config==mus the ui service runs in process and is shut down well before
   // the rest of Chrome. Have Chrome create the DiscardableSharedMemoryManager
   // to ensure the DiscardableSharedMemoryManager is destroyed later on. Doing
@@ -125,8 +123,18 @@ int ChromeMain(int argc, const char** argv) {
   if (command_line->HasSwitch(switches::kMus)) {
     params.create_discardable_memory = true;
     params.env_mode = aura::Env::Mode::MUS;
+    // TODO(786453): Remove when mus no longer needs to host viz.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kMus, switches::kMusHostVizValue);
   }
-#endif  // BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+  if (service_manager::ServiceManagerIsRemote() ||
+      command_line->HasSwitch(switches::kMash)) {
+    params.create_discardable_memory = false;
+    params.env_mode = aura::Env::Mode::MUS;
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kMus, switches::kMusHostVizValue);
+  }
+#endif  // BUILDFLAG(ENABLE_MUS)
 
   int rv = content::ContentMain(params);
 

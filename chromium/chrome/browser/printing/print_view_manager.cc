@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
@@ -19,8 +20,10 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/webplugininfo.h"
+#include "ipc/ipc_message_macros.h"
 #include "printing/features/features.h"
 
 using content::BrowserThread;
@@ -54,14 +57,26 @@ void EnableInternalPDFPluginForContents(int render_process_id,
 
 namespace printing {
 
+struct PrintViewManager::FrameDispatchHelper {
+  PrintViewManager* manager;
+  content::RenderFrameHost* render_frame_host;
+
+  bool Send(IPC::Message* msg) { return render_frame_host->Send(msg); }
+
+  void OnSetupScriptedPrintPreview(IPC::Message* reply_msg) {
+    manager->OnSetupScriptedPrintPreview(render_frame_host, reply_msg);
+  }
+};
+
 PrintViewManager::PrintViewManager(content::WebContents* web_contents)
     : PrintViewManagerBase(web_contents),
       print_preview_state_(NOT_PREVIEWING),
       print_preview_rfh_(nullptr),
-      scripted_print_preview_rph_(nullptr) {
+      scripted_print_preview_rph_(nullptr),
+      is_switching_to_system_dialog_(false) {
   if (PrintPreviewDialogController::IsPrintPreviewURL(web_contents->GetURL())) {
     EnableInternalPDFPluginForContents(
-        web_contents->GetRenderProcessHost()->GetID(),
+        web_contents->GetMainFrame()->GetProcess()->GetID(),
         web_contents->GetMainFrame()->GetRoutingID());
   }
 }
@@ -76,6 +91,7 @@ bool PrintViewManager::PrintForSystemDialogNow(
   DCHECK(!dialog_shown_callback.is_null());
   DCHECK(on_print_dialog_shown_callback_.is_null());
   on_print_dialog_shown_callback_ = dialog_shown_callback;
+  is_switching_to_system_dialog_ = true;
 
   SetPrintingRFH(print_preview_rfh_);
   int32_t id = print_preview_rfh_->GetRoutingID();
@@ -131,6 +147,24 @@ void PrintViewManager::PrintPreviewDone() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (print_preview_state_ == NOT_PREVIEWING)
     return;
+
+// Send ClosePrintPreview message for 'afterprint' event.
+#if defined(OS_WIN)
+  // On Windows, we always send ClosePrintPreviewDialog. It's ok to dispatch
+  // 'afterprint' at this timing because system dialog printing on
+  // Windows doesn't need the original frame.
+  bool send_message = true;
+#else
+  // On non-Windows, we don't need to send ClosePrintPreviewDialog when we are
+  // switching to system dialog. PrintRenderFrameHelper is responsible to
+  // dispatch 'afterprint' event.
+  bool send_message = !is_switching_to_system_dialog_;
+#endif
+  if (send_message) {
+    print_preview_rfh_->Send(new PrintMsg_ClosePrintPreviewDialog(
+        print_preview_rfh_->GetRoutingID()));
+  }
+  is_switching_to_system_dialog_ = false;
 
   if (print_preview_state_ == SCRIPTED_PREVIEW) {
     auto& map = g_scripted_print_preview_closure_map.Get();
@@ -241,11 +275,13 @@ void PrintViewManager::OnScriptedPrintPreviewReply(IPC::Message* reply_msg) {
 bool PrintViewManager::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
+  FrameDispatchHelper helper = {this, render_frame_host};
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(PrintViewManager, message, render_frame_host)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidShowPrintDialog, OnDidShowPrintDialog)
-    IPC_MESSAGE_HANDLER_WITH_PARAM_DELAY_REPLY(
-        PrintHostMsg_SetupScriptedPrintPreview, OnSetupScriptedPrintPreview)
+    IPC_MESSAGE_FORWARD_DELAY_REPLY(
+        PrintHostMsg_SetupScriptedPrintPreview, &helper,
+        FrameDispatchHelper::OnSetupScriptedPrintPreview)
     IPC_MESSAGE_HANDLER(PrintHostMsg_ShowScriptedPrintPreview,
                         OnShowScriptedPrintPreview)
     IPC_MESSAGE_UNHANDLED(handled = false)

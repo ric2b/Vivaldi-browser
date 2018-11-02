@@ -4,31 +4,26 @@
 
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/WorkerThreadDebugger.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
 
 ThreadedWorkletGlobalScope::ThreadedWorkletGlobalScope(
-    const KURL& url,
-    const String& user_agent,
-    RefPtr<SecurityOrigin> security_origin,
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
     v8::Isolate* isolate,
-    WorkerThread* thread,
-    WorkerClients* worker_clients)
-    : WorkletGlobalScope(url,
-                         user_agent,
-                         std::move(security_origin),
+    WorkerThread* thread)
+    : WorkletGlobalScope(std::move(creation_params),
                          isolate,
-                         worker_clients,
                          thread->GetWorkerReportingProxy()),
       thread_(thread) {}
 

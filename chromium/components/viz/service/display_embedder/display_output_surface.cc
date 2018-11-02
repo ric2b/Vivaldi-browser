@@ -9,10 +9,10 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/output_surface_client.h"
-#include "cc/output/output_surface_frame.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/output_surface_frame.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "ui/gl/gl_utils.h"
@@ -22,8 +22,10 @@ namespace viz {
 DisplayOutputSurface::DisplayOutputSurface(
     scoped_refptr<InProcessContextProvider> context_provider,
     SyntheticBeginFrameSource* synthetic_begin_frame_source)
-    : cc::OutputSurface(context_provider),
+    : OutputSurface(context_provider),
       synthetic_begin_frame_source_(synthetic_begin_frame_source),
+      latency_tracker_(true),
+      latency_info_cache_(this),
       weak_ptr_factory_(this) {
   capabilities_.flipped_output_surface =
       context_provider->ContextCapabilities().flips_vertically;
@@ -35,11 +37,13 @@ DisplayOutputSurface::DisplayOutputSurface(
   context_provider->SetUpdateVSyncParametersCallback(
       base::Bind(&DisplayOutputSurface::OnVSyncParametersUpdated,
                  weak_ptr_factory_.GetWeakPtr()));
+  context_provider->SetPresentationCallback(base::Bind(
+      &DisplayOutputSurface::OnPresentation, weak_ptr_factory_.GetWeakPtr()));
 }
 
 DisplayOutputSurface::~DisplayOutputSurface() {}
 
-void DisplayOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
+void DisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
   DCHECK(client);
   DCHECK(!client_);
   client_ = client;
@@ -79,11 +83,11 @@ void DisplayOutputSurface::Reshape(const gfx::Size& size,
       gl::GetGLColorSpace(color_space), has_alpha);
 }
 
-void DisplayOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
+void DisplayOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   DCHECK(context_provider_);
 
-  if (frame.latency_info.size() > 0)
-    context_provider_->ContextSupport()->AddLatencyInfo(frame.latency_info);
+  if (latency_info_cache_.WillSwap(std::move(frame.latency_info)))
+    context_provider_->ContextSupport()->SetSnapshotRequested();
 
   set_draw_rectangle_for_frame_ = false;
   if (frame.sub_buffer_rect) {
@@ -101,8 +105,8 @@ uint32_t DisplayOutputSurface::GetFramebufferCopyTextureFormat() {
   return GL_RGB;
 }
 
-cc::OverlayCandidateValidator*
-DisplayOutputSurface::GetOverlayCandidateValidator() const {
+OverlayCandidateValidator* DisplayOutputSurface::GetOverlayCandidateValidator()
+    const {
   return nullptr;
 }
 
@@ -128,19 +132,23 @@ bool DisplayOutputSurface::HasExternalStencilTest() const {
 
 void DisplayOutputSurface::ApplyExternalStencil() {}
 
-void DisplayOutputSurface::DidReceiveSwapBuffersAck(gfx::SwapResult result) {
-  client_->DidReceiveSwapBuffersAck();
+void DisplayOutputSurface::DidReceiveSwapBuffersAck(gfx::SwapResult result,
+                                                    uint64_t swap_id) {
+  client_->DidReceiveSwapBuffersAck(swap_id);
 }
 
 void DisplayOutputSurface::OnGpuSwapBuffersCompleted(
-    const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result,
+    const gfx::SwapResponse& response,
     const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
+  DidReceiveSwapBuffersAck(response.result, response.swap_id);
+  latency_info_cache_.OnSwapBuffersCompleted(response);
+}
+
+void DisplayOutputSurface::LatencyInfoCompleted(
+    const std::vector<ui::LatencyInfo>& latency_info) {
   for (const auto& latency : latency_info) {
-    if (latency.latency_components().size() > 0)
-      latency_tracker_.OnGpuSwapBuffersCompleted(latency);
+    latency_tracker_.OnGpuSwapBuffersCompleted(latency);
   }
-  DidReceiveSwapBuffersAck(result);
 }
 
 void DisplayOutputSurface::OnVSyncParametersUpdated(base::TimeTicks timebase,
@@ -149,6 +157,12 @@ void DisplayOutputSurface::OnVSyncParametersUpdated(base::TimeTicks timebase,
   synthetic_begin_frame_source_->OnUpdateVSyncParameters(
       timebase,
       interval.is_zero() ? BeginFrameArgs::DefaultInterval() : interval);
+}
+
+void DisplayOutputSurface::OnPresentation(
+    uint64_t swap_id,
+    const gfx::PresentationFeedback& feedback) {
+  client_->DidReceivePresentationFeedback(swap_id, feedback);
 }
 
 }  // namespace viz

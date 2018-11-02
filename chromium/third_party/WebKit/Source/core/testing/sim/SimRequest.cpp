@@ -17,7 +17,7 @@ SimRequest::SimRequest(String url, String mime_type)
       client_(nullptr),
       total_encoded_data_length_(0),
       is_ready_(false) {
-  KURL full_url(kParsedURLString, url);
+  KURL full_url(url);
   WebURLResponse response(full_url);
   response.SetMIMEType(mime_type);
   response.SetHTTPStatusCode(200);
@@ -49,15 +49,22 @@ void SimRequest::Start() {
 
 void SimRequest::Write(const String& data) {
   DCHECK(is_ready_);
-  DCHECK(!error_.reason);
+  DCHECK(!error_);
   total_encoded_data_length_ += data.length();
   client_->DidReceiveData(data.Utf8().data(), data.length());
 }
 
+void SimRequest::Write(const Vector<char>& data) {
+  DCHECK(is_ready_);
+  DCHECK(!error_);
+  total_encoded_data_length_ += data.size();
+  client_->DidReceiveData(data.data(), data.size());
+}
+
 void SimRequest::Finish() {
   DCHECK(is_ready_);
-  if (error_.reason) {
-    client_->DidFail(error_, total_encoded_data_length_,
+  if (error_) {
+    client_->DidFail(*error_, total_encoded_data_length_,
                      total_encoded_data_length_, total_encoded_data_length_);
   } else {
     // TODO(esprehn): Is claiming a request time of 0 okay for tests?
@@ -69,6 +76,13 @@ void SimRequest::Finish() {
 }
 
 void SimRequest::Complete(const String& data) {
+  Start();
+  if (!data.IsEmpty())
+    Write(data);
+  Finish();
+}
+
+void SimRequest::Complete(const Vector<char>& data) {
   Start();
   if (!data.IsEmpty())
     Write(data);

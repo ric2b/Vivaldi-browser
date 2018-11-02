@@ -4,7 +4,7 @@
 
 #include "modules/media_controls/elements/MediaControlElementBase.h"
 
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/layout/LayoutObject.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 
@@ -75,7 +75,7 @@ void MediaControlElementBase::SetDisplayType(
     object->SetShouldDoFullPaintInvalidation();
 }
 
-DEFINE_TRACE(MediaControlElementBase) {
+void MediaControlElementBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_controls_);
   visitor->Trace(element_);
 }

@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "components/offline_pages/core/offline_store_utils.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
 #include "sql/connection.h"
@@ -78,7 +79,7 @@ bool MarkDownloadAsCompletedSync(int64_t offline_id,
 
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt(0, static_cast<int>(PrefetchItemState::DOWNLOADED));
-  statement.BindString(1, file_path.AsUTF8Unsafe());
+  statement.BindString(1, store_utils::ToDatabaseFilePath(file_path));
   statement.BindInt64(2, file_size);
   statement.BindInt64(3, offline_id);
 
@@ -98,6 +99,7 @@ bool CleanupDownloadsSync(
   if (!transaction.Begin())
     return false;
 
+  // TODO(carlosk): add UMA to track any extraordinary conditions detected here.
   std::vector<DownloadInfo> outstanding_prefetch_downloads =
       GetAllOutstandingDownloadsSync(db);
   if (outstanding_prefetch_downloads.empty())

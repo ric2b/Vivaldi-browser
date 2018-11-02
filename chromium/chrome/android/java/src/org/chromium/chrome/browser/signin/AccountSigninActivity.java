@@ -13,7 +13,6 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
 
 import org.chromium.base.Log;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -21,7 +20,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager.SignInCallback;
 
 import java.lang.annotation.Retention;
@@ -63,22 +61,6 @@ public class AccountSigninActivity extends AppCompatActivity
 
     /**
      * A convenience method to create a AccountSigninActivity passing the access point as an
-     * intent.
-     * @param accessPoint {@link AccessPoint} for starting signin flow. Used in metrics.
-     * @param isFromPersonalizedPromo Whether the signin activity is started from a personalized
-     *         promo.
-     */
-    public static void startAccountSigninActivity(
-            Context context, @AccessPoint int accessPoint, boolean isFromPersonalizedPromo) {
-        Intent intent = new Intent(context, AccountSigninActivity.class);
-        intent.putExtra(INTENT_SIGNIN_ACCESS_POINT, accessPoint);
-        intent.putExtra(INTENT_SIGNIN_FLOW_TYPE, SIGNIN_FLOW_DEFAULT);
-        intent.putExtra(INTENT_IS_FROM_PERSONALIZED_PROMO, isFromPersonalizedPromo);
-        context.startActivity(intent);
-    }
-
-    /**
-     * A convenience method to create a AccountSigninActivity passing the access point as an
      * intent. Checks if the sign in flow can be started before showing the activity.
      * @param accessPoint {@link AccessPoint} for starting signin flow. Used in metrics.
      * @return {@code true} if sign in has been allowed.
@@ -91,12 +73,28 @@ public class AccountSigninActivity extends AppCompatActivity
             return false;
         }
 
-        startAccountSigninActivity(context, accessPoint, false);
+        context.startActivity(createIntentForDefaultSigninFlow(context, accessPoint, false));
         return true;
     }
 
     /**
-     * Starts AccountSigninActivity from signin confirmation page.
+     * Creates an {@link Intent} which can be used to start the default signin flow.
+     * @param accessPoint {@link AccessPoint} for starting signin flow. Used in metrics.
+     * @param isFromPersonalizedPromo Whether the signin activity is started from a personalized
+     *         promo.
+     */
+    public static Intent createIntentForDefaultSigninFlow(
+            Context context, @AccessPoint int accessPoint, boolean isFromPersonalizedPromo) {
+        Intent intent = new Intent(context, AccountSigninActivity.class);
+        intent.putExtra(INTENT_SIGNIN_ACCESS_POINT, accessPoint);
+        intent.putExtra(INTENT_SIGNIN_FLOW_TYPE, SIGNIN_FLOW_DEFAULT);
+        intent.putExtra(INTENT_IS_FROM_PERSONALIZED_PROMO, isFromPersonalizedPromo);
+        return intent;
+    }
+
+    /**
+     * Creates an {@link Intent} which can be used to start the signin flow from the confirmation
+     * screen.
      * @param accessPoint {@link AccessPoint} for starting signin flow. Used in metrics.
      * @param selectAccount Account for which signin confirmation page should be shown.
      * @param isDefaultAccount Whether {@param selectedAccount} is the default account on
@@ -104,34 +102,35 @@ public class AccountSigninActivity extends AppCompatActivity
      * @param isFromPersonalizedPromo Whether the signin activity is started from a personalized
      *         promo.
      */
-    public static void startFromConfirmationPage(Context context, @AccessPoint int accessPoint,
-            String selectAccount, boolean isDefaultAccount, boolean isFromPersonalizedPromo) {
+    public static Intent createIntentForConfirmationOnlySigninFlow(Context context,
+            @AccessPoint int accessPoint, String selectAccount, boolean isDefaultAccount,
+            boolean isFromPersonalizedPromo) {
         Intent intent = new Intent(context, AccountSigninActivity.class);
         intent.putExtra(INTENT_SIGNIN_ACCESS_POINT, accessPoint);
         intent.putExtra(INTENT_SIGNIN_FLOW_TYPE, SIGNIN_FLOW_CONFIRMATION_ONLY);
         intent.putExtra(INTENT_ACCOUNT_NAME, selectAccount);
         intent.putExtra(INTENT_IS_DEFAULT_ACCOUNT, isDefaultAccount);
         intent.putExtra(INTENT_IS_FROM_PERSONALIZED_PROMO, isFromPersonalizedPromo);
-        context.startActivity(intent);
+        return intent;
     }
 
     /**
-     * Starts AccountSigninActivity from "Add account" page.
+     * Creates an {@link Intent} which can be used to start the signin flow from the "Add Account"
+     * page.
      * @param accessPoint {@link AccessPoint} for starting signin flow. Used in metrics.
      * @param isFromPersonalizedPromo Whether the signin activity is started from a personalized
      *         promo.
      */
-    public static void startFromAddAccountPage(
+    public static Intent createIntentForAddAccountSigninFlow(
             Context context, @AccessPoint int accessPoint, boolean isFromPersonalizedPromo) {
         Intent intent = new Intent(context, AccountSigninActivity.class);
         intent.putExtra(INTENT_SIGNIN_ACCESS_POINT, accessPoint);
         intent.putExtra(INTENT_SIGNIN_FLOW_TYPE, SIGNIN_FLOW_ADD_NEW_ACCOUNT);
         intent.putExtra(INTENT_IS_FROM_PERSONALIZED_PROMO, isFromPersonalizedPromo);
-        context.startActivity(intent);
+        return intent;
     }
 
     @Override
-    @SuppressFBWarnings("DM_EXIT")
     protected void onCreate(Bundle savedInstanceState) {
         // The browser process must be started here because this activity may be started from the
         // recent apps list and it relies on other activities and the native library to be loaded.
@@ -162,14 +161,10 @@ public class AccountSigninActivity extends AppCompatActivity
         AccountSigninView view = (AccountSigninView) LayoutInflater.from(this).inflate(
                 R.layout.account_signin_view, null);
 
-        int imageSize = getResources().getDimensionPixelSize(R.dimen.signin_account_image_size);
-        ProfileDataCache profileDataCache =
-                new ProfileDataCache(this, Profile.getLastUsedProfile(), imageSize);
-
         mSigninFlowType = getIntent().getIntExtra(INTENT_SIGNIN_FLOW_TYPE, -1);
         switch (mSigninFlowType) {
             case SIGNIN_FLOW_DEFAULT:
-                view.initFromSelectionPage(profileDataCache, false, this, this);
+                view.initFromSelectionPage(false, this, this);
                 break;
             case SIGNIN_FLOW_CONFIRMATION_ONLY: {
                 String accountName = getIntent().getStringExtra(INTENT_ACCOUNT_NAME);
@@ -178,12 +173,12 @@ public class AccountSigninActivity extends AppCompatActivity
                 }
                 boolean isDefaultAccount =
                         getIntent().getBooleanExtra(INTENT_IS_DEFAULT_ACCOUNT, false);
-                view.initFromConfirmationPage(profileDataCache, false, accountName,
-                        isDefaultAccount, AccountSigninView.UNDO_ABORT, this, this);
+                view.initFromConfirmationPage(false, accountName, isDefaultAccount,
+                        AccountSigninView.UNDO_ABORT, this, this);
                 break;
             }
             case SIGNIN_FLOW_ADD_NEW_ACCOUNT:
-                view.initFromAddAccountPage(profileDataCache, this, this);
+                view.initFromAddAccountPage(this, this);
                 break;
             default:
                 throw new IllegalArgumentException("Unknown signin flow type: " + mSigninFlowType);

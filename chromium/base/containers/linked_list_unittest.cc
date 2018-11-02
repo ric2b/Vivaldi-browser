@@ -28,7 +28,7 @@ class MultipleInheritanceNodeBase {
 class MultipleInheritanceNode : public MultipleInheritanceNodeBase,
                                 public LinkNode<MultipleInheritanceNode> {
  public:
-  MultipleInheritanceNode() {}
+  MultipleInheritanceNode() = default;
 };
 
 // Checks that when iterating |list| (either from head to tail, or from
@@ -65,12 +65,12 @@ TEST(LinkedList, Empty) {
   LinkedList<Node> list;
   EXPECT_EQ(list.end(), list.head());
   EXPECT_EQ(list.end(), list.tail());
-  ExpectListContents(list, 0, NULL);
+  ExpectListContents(list, 0, nullptr);
 }
 
 TEST(LinkedList, Append) {
   LinkedList<Node> list;
-  ExpectListContents(list, 0, NULL);
+  ExpectListContents(list, 0, nullptr);
 
   Node n1(1);
   list.Append(&n1);
@@ -159,7 +159,7 @@ TEST(LinkedList, RemoveFromList) {
   n2.RemoveFromList();
   n4.RemoveFromList();
 
-  ExpectListContents(list, 0, NULL);
+  ExpectListContents(list, 0, nullptr);
   EXPECT_EQ(list.end(), list.head());
   EXPECT_EQ(list.end(), list.tail());
 
@@ -300,8 +300,8 @@ TEST(LinkedList, RemovedNodeHasNullNextPrevious) {
   list.Append(&n);
   n.RemoveFromList();
 
-  EXPECT_EQ(NULL, n.next());
-  EXPECT_EQ(NULL, n.previous());
+  EXPECT_EQ(nullptr, n.next());
+  EXPECT_EQ(nullptr, n.previous());
 }
 
 }  // namespace

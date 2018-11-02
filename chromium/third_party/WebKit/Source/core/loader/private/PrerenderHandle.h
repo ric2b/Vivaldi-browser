@@ -31,11 +31,11 @@
 #ifndef PrerenderHandle_h
 #define PrerenderHandle_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -62,7 +62,7 @@ class PrerenderHandle final : public GarbageCollectedFinalized<PrerenderHandle>,
   // ContextLifecycleObserver:
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
   EAGERLY_FINALIZE();
 
  private:

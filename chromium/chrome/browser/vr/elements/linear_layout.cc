@@ -8,9 +8,8 @@ namespace vr {
 
 namespace {
 
-float GetExtent(const UiElement& element, LinearLayout::Direction direction) {
-  gfx::SizeF size = element.size();
-  return direction == LinearLayout::kHorizontal ? size.width() : size.height();
+float GetExtent(const UiElement& element, bool horizontal) {
+  return horizontal ? element.size().width() : element.size().height();
 }
 
 }  // namespace
@@ -19,23 +18,47 @@ LinearLayout::LinearLayout(Direction direction) : direction_(direction) {}
 LinearLayout::~LinearLayout() {}
 
 void LinearLayout::LayOutChildren() {
+  bool horizontal =
+      direction_ == LinearLayout::kLeft || direction_ == LinearLayout::kRight;
   float total_extent = -margin_;
+  float minor_extent = 0;
+
   for (auto& child : children()) {
-    if (child->requires_layout())
-      total_extent += GetExtent(*child, direction_) + margin_;
+    if (child->requires_layout()) {
+      total_extent += GetExtent(*child, horizontal) + margin_;
+      minor_extent = std::max(minor_extent, GetExtent(*child, !horizontal));
+    }
   }
 
-  float offset = -0.5 * total_extent;
+  float x_factor = 0.f;
+  float y_factor = 0.f;
+  switch (direction_) {
+    case kUp:
+      y_factor = 1.f;
+      break;
+    case kDown:
+      y_factor = -1.f;
+      break;
+    case kLeft:
+      x_factor = -1.f;
+      break;
+    case kRight:
+      x_factor = 1.f;
+      break;
+  }
+
+  float cumulative_offset = -0.5 * total_extent;
   for (auto& child : children()) {
     if (!child->requires_layout())
       continue;
-    float extent = GetExtent(*child, direction_);
-    if (direction_ == kHorizontal)
-      child->SetLayoutOffset(offset + 0.5 * extent, 0);
-    else
-      child->SetLayoutOffset(0, offset + 0.5 * extent);
-    offset += extent + margin_;
+    float extent = GetExtent(*child, horizontal);
+    float offset = cumulative_offset + 0.5 * extent;
+    child->SetLayoutOffset(offset * x_factor, offset * y_factor);
+    cumulative_offset += extent + margin_;
   }
+
+  SetSize(horizontal ? total_extent : minor_extent,
+          !horizontal ? total_extent : minor_extent);
 }
 
 }  // namespace vr

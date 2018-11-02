@@ -7,6 +7,7 @@
 #include <d3d11_1.h>
 #include <dcomptypes.h>
 
+#include "base/debug/alias.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
@@ -99,11 +100,11 @@ bool DirectCompositionChildSurfaceWin::InitializeSurface() {
   } else {
     DXGI_ALPHA_MODE alpha_mode =
         has_alpha_ ? DXGI_ALPHA_MODE_PREMULTIPLIED : DXGI_ALPHA_MODE_IGNORE;
-    base::win::ScopedComPtr<IDXGIDevice> dxgi_device;
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
     d3d11_device_.CopyTo(dxgi_device.GetAddressOf());
-    base::win::ScopedComPtr<IDXGIAdapter> dxgi_adapter;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
     dxgi_device->GetAdapter(dxgi_adapter.GetAddressOf());
-    base::win::ScopedComPtr<IDXGIFactory2> dxgi_factory;
+    Microsoft::WRL::ComPtr<IDXGIFactory2> dxgi_factory;
     dxgi_adapter->GetParent(IID_PPV_ARGS(dxgi_factory.GetAddressOf()));
 
     DXGI_SWAP_CHAIN_DESC1 desc = {};
@@ -113,8 +114,7 @@ bool DirectCompositionChildSurfaceWin::InitializeSurface() {
     desc.Stereo = FALSE;
     desc.SampleDesc.Count = 1;
     desc.BufferCount = 2;
-    desc.BufferUsage =
-        DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.Scaling = DXGI_SCALING_STRETCH;
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     desc.AlphaMode = alpha_mode;
@@ -142,6 +142,10 @@ void DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
     } else if (!will_discard) {
       DXGI_PRESENT_PARAMETERS params = {};
       RECT dirty_rect = swap_rect_.ToRECT();
+      // TODO(sunnyps): Remove Alias calls once crbug.com/776403 is fixed.
+      base::debug::Alias(&dirty_rect);
+      gfx::Size surface_size = size_;
+      base::debug::Alias(&surface_size);
       params.DirtyRectsCount = 1;
       params.pDirtyRects = &dirty_rect;
       swap_chain_->Present1(first_swap_ ? 0 : 1, 0, &params);
@@ -149,7 +153,7 @@ void DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
         // Wait for the GPU to finish executing its commands before
         // committing the DirectComposition tree, or else the swapchain
         // may flicker black when it's first presented.
-        base::win::ScopedComPtr<IDXGIDevice2> dxgi_device2;
+        Microsoft::WRL::ComPtr<IDXGIDevice2> dxgi_device2;
         HRESULT hr = d3d11_device_.CopyTo(dxgi_device2.GetAddressOf());
         DCHECK(SUCCEEDED(hr));
         base::WaitableEvent event(
@@ -201,7 +205,9 @@ void* DirectCompositionChildSurfaceWin::GetHandle() {
   return real_surface_ ? real_surface_ : default_surface_;
 }
 
-gfx::SwapResult DirectCompositionChildSurfaceWin::SwapBuffers() {
+gfx::SwapResult DirectCompositionChildSurfaceWin::SwapBuffers(
+    const PresentationCallback& callback) {
+  // TODO(penghuang): Provide presentation feedback. https://crbug.com/776877
   ReleaseDrawTexture(false);
   return gfx::SwapResult::SWAP_ACK;
 }

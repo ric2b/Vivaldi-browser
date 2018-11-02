@@ -17,7 +17,8 @@ TEST(WebDragDataTest, items) {
   data_object->Add(File::Create("/native/path"));
 
   // Blob file.
-  const RefPtr<BlobDataHandle> blob_data_handle = BlobDataHandle::Create();
+  const scoped_refptr<BlobDataHandle> blob_data_handle =
+      BlobDataHandle::Create();
   data_object->Add(File::Create("name", 0.0, blob_data_handle));
 
   // User visible snapshot file.
@@ -41,7 +42,6 @@ TEST(WebDragDataTest, items) {
     FileMetadata metadata;
     metadata.length = 1234;
     KURL url(
-        ParsedURLStringTag(),
         "filesystem:http://example.com/isolated/hash/visible-non-native-file");
     data_object->Add(
         File::CreateForFileSystemFile(url, metadata, File::kIsUserVisible));
@@ -51,9 +51,9 @@ TEST(WebDragDataTest, items) {
   {
     FileMetadata metadata;
     metadata.length = 1234;
-    KURL url(ParsedURLStringTag(),
-             "filesystem:http://example.com/isolated/hash/"
-             "not-visible-non-native-file");
+    KURL url(
+        "filesystem:http://example.com/isolated/hash/"
+        "not-visible-non-native-file");
     data_object->Add(
         File::CreateForFileSystemFile(url, metadata, File::kIsNotUserVisible));
   }

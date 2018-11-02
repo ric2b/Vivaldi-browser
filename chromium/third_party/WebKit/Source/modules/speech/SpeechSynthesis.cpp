@@ -28,7 +28,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "modules/speech/SpeechSynthesisEvent.h"
 #include "platform/speech/PlatformSpeechSynthesisVoice.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -58,7 +58,7 @@ const HeapVector<Member<SpeechSynthesisVoice>>& SpeechSynthesis::getVoices() {
 
   // If the voiceList is empty, that's the cue to get the voices from the
   // platform again.
-  const Vector<RefPtr<PlatformSpeechSynthesisVoice>>& platform_voices =
+  const Vector<scoped_refptr<PlatformSpeechSynthesisVoice>>& platform_voices =
       platform_speech_synthesizer_->VoiceList();
   size_t voice_count = platform_voices.size();
   for (size_t k = 0; k < voice_count; k++)
@@ -234,7 +234,7 @@ const AtomicString& SpeechSynthesis::InterfaceName() const {
   return EventTargetNames::SpeechSynthesis;
 }
 
-DEFINE_TRACE(SpeechSynthesis) {
+void SpeechSynthesis::Trace(blink::Visitor* visitor) {
   visitor->Trace(platform_speech_synthesizer_);
   visitor->Trace(voice_list_);
   visitor->Trace(utterance_queue_);

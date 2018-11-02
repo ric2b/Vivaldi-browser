@@ -27,10 +27,16 @@
 
 #include "core/editing/iterators/TextIteratorTextState.h"
 
+#include "core/editing/EditingUtilities.h"
+#include "core/editing/iterators/BackwardsTextBuffer.h"
 #include "core/html/HTMLElement.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
+
+TextIteratorTextState::TextIteratorTextState(
+    const TextIteratorBehavior& behavior)
+    : behavior_(behavior) {}
 
 UChar TextIteratorTextState::CharacterAt(unsigned index) const {
   SECURITY_DCHECK(index < length());
@@ -76,7 +82,7 @@ void TextIteratorTextState::AppendTextToStringBuilder(
   }
 }
 
-void TextIteratorTextState::UpdateForReplacedElement(Node* base_node) {
+void TextIteratorTextState::UpdateForReplacedElement(const Node* base_node) {
   has_emitted_ = true;
   position_node_ = base_node->parentNode();
   position_offset_base_node_ = base_node;
@@ -89,7 +95,7 @@ void TextIteratorTextState::UpdateForReplacedElement(Node* base_node) {
   last_character_ = 0;
 }
 
-void TextIteratorTextState::EmitAltText(Node* node) {
+void TextIteratorTextState::EmitAltText(const Node* node) {
   text_ = ToHTMLElement(node)->AltText();
   text_start_offset_ = 0;
   text_length_ = text_.length();
@@ -106,8 +112,8 @@ void TextIteratorTextState::FlushPositionOffsets() const {
 }
 
 void TextIteratorTextState::SpliceBuffer(UChar c,
-                                         Node* text_node,
-                                         Node* offset_base_node,
+                                         const Node* text_node,
+                                         const Node* offset_base_node,
                                          unsigned text_start_offset,
                                          unsigned text_end_offset) {
   DCHECK(text_node);
@@ -132,14 +138,17 @@ void TextIteratorTextState::SpliceBuffer(UChar c,
   last_character_ = c;
 }
 
-void TextIteratorTextState::EmitText(Node* text_node,
+void TextIteratorTextState::EmitText(const Node* text_node,
                                      unsigned position_start_offset,
                                      unsigned position_end_offset,
                                      const String& string,
                                      unsigned text_start_offset,
                                      unsigned text_end_offset) {
   DCHECK(text_node);
-  text_ = string;
+  text_ =
+      behavior_.EmitsSmallXForTextSecurity() && IsTextSecurityNode(text_node)
+          ? RepeatString("x", string.length())
+          : string,
 
   DCHECK(!text_.IsEmpty());
   DCHECK_LT(text_start_offset, text_.length());
@@ -181,6 +190,32 @@ void TextIteratorTextState::AppendTextTo(ForwardsTextBuffer* output,
     output->PushRange(text_.Characters8() + offset, length_to_append);
   else
     output->PushRange(text_.Characters16() + offset, length_to_append);
+}
+
+void TextIteratorTextState::PrependTextTo(BackwardsTextBuffer* output,
+                                          unsigned position,
+                                          unsigned length_to_prepend) const {
+  SECURITY_DCHECK(position + length_to_prepend <= length());
+  // Make sure there's no integer overflow.
+  SECURITY_DCHECK(position + length_to_prepend >= position);
+  if (!length_to_prepend)
+    return;
+  DCHECK(output);
+  if (single_character_buffer_) {
+    DCHECK_EQ(position, 0u);
+    DCHECK_EQ(length(), 1u);
+    output->PushCharacters(single_character_buffer_, 1);
+    return;
+  }
+  const unsigned offset =
+      text_start_offset_ + length() - position - length_to_prepend;
+  // Any failure is a security bug (buffer overflow) and must be captured.
+  CHECK_LE(offset, text_.length());
+  CHECK_LE(offset + length_to_prepend, text_.length());
+  if (text_.Is8Bit())
+    output->PushRange(text_.Characters8() + offset, length_to_prepend);
+  else
+    output->PushRange(text_.Characters16() + offset, length_to_prepend);
 }
 
 }  // namespace blink

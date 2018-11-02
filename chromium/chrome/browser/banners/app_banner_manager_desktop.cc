@@ -31,7 +31,7 @@ bool AppBannerManagerDesktop::IsEnabled() {
     return false;
 
   return base::FeatureList::IsEnabled(features::kAppBanners) ||
-         base::FeatureList::IsEnabled(features::kExperimentalAppBanners);
+         IsExperimentalAppBannersEnabled();
 }
 
 void AppBannerManagerDesktop::DisableTriggeringForTesting() {
@@ -48,27 +48,38 @@ void AppBannerManagerDesktop::DidFinishCreatingBookmarkApp(
     const extensions::Extension* extension,
     const WebApplicationInfo& web_app_info) {
   content::WebContents* contents = web_contents();
-  if (contents) {
-    // A null extension pointer indicates that the bookmark app install was
-    // not successful. Call Stop() to terminate the flow. Don't record a dismiss
-    // metric here because the banner isn't necessarily dismissed.
-    if (extension == nullptr) {
-      Stop();
-    } else {
-      SendBannerAccepted();
+  if (!contents)
+    return;
 
-      AppBannerSettingsHelper::RecordBannerInstallEvent(
-          contents, GetAppIdentifier(), AppBannerSettingsHelper::WEB);
-    }
+  if (extension) {
+    SendBannerAccepted();
+    AppBannerSettingsHelper::RecordBannerInstallEvent(
+        contents, GetAppIdentifier(), AppBannerSettingsHelper::WEB);
+    return;
   }
+
+  // |extension| is null, so we assume that the confirmation dialog was
+  // cancelled. Alternatively, the extension installation may have failed, but
+  // we can't tell the difference here.
+  // TODO(crbug.com/789381): plumb through enough information to be able to
+  // distinguish between extension install failures and user-cancellations of
+  // the app install dialog.
+  if (IsExperimentalAppBannersEnabled()) {
+    SendBannerPromptRequest();  // Reprompt.
+    return;
+  }
+  // Call Terminate() to terminate the flow but don't record a dismiss metric
+  // here because the banner isn't necessarily dismissed.
+  Terminate();
 }
 
-bool AppBannerManagerDesktop::IsWebAppInstalled(
-    content::BrowserContext* browser_context,
+bool AppBannerManagerDesktop::IsWebAppConsideredInstalled(
+    content::WebContents* web_contents,
+    const GURL& validated_url,
     const GURL& start_url,
     const GURL& manifest_url) {
   return extensions::BookmarkAppHelper::BookmarkOrHostedAppInstalled(
-      browser_context, start_url);
+      web_contents->GetBrowserContext(), start_url);
 }
 
 void AppBannerManagerDesktop::ShowBannerUi() {
@@ -81,6 +92,16 @@ void AppBannerManagerDesktop::ShowBannerUi() {
   bookmark_app_helper_.reset(
       new extensions::BookmarkAppHelper(profile, web_app_info, contents));
 
+  if (IsExperimentalAppBannersEnabled()) {
+    RecordDidShowBanner("AppBanner.WebApp.Shown");
+    TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
+    TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
+    ReportStatus(SHOWING_APP_INSTALLATION_DIALOG);
+    bookmark_app_helper_->Create(base::Bind(
+        &AppBannerManager::DidFinishCreatingBookmarkApp, GetWeakPtr()));
+    return;
+  }
+
   // This differs from Android, where there is a concrete
   // AppBannerInfoBarAndroid class to interface with Java, and the manager calls
   // the InfoBarService to show the banner. On desktop, an InfoBar class
@@ -90,9 +111,9 @@ void AppBannerManagerDesktop::ShowBannerUi() {
   if (infobar) {
     RecordDidShowBanner("AppBanner.WebApp.Shown");
     TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
-    ReportStatus(contents, SHOWING_WEB_APP_BANNER);
+    ReportStatus(SHOWING_WEB_APP_BANNER);
   } else {
-    ReportStatus(contents, FAILED_TO_CREATE_BANNER);
+    ReportStatus(FAILED_TO_CREATE_BANNER);
   }
 }
 

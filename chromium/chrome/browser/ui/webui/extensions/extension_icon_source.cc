@@ -92,7 +92,7 @@ GURL ExtensionIconSource::GetIconURL(const Extension* extension,
 // static
 SkBitmap* ExtensionIconSource::LoadImageByResourceId(int resource_id) {
   base::StringPiece contents =
-      ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
           resource_id, ui::SCALE_FACTOR_100P);
 
   // Convert and return it.
@@ -221,12 +221,9 @@ void ExtensionIconSource::LoadFaviconImage(int request_id) {
   GURL favicon_url =
       AppLaunchInfo::GetFullLaunchURL(GetData(request_id)->extension.get());
   favicon_service->GetRawFaviconForPageURL(
-      favicon_url,
-      favicon_base::FAVICON,
-      gfx::kFaviconSize,
+      favicon_url, {favicon_base::IconType::kFavicon}, gfx::kFaviconSize,
       base::Bind(&ExtensionIconSource::OnFaviconDataAvailable,
-                 base::Unretained(this),
-                 request_id),
+                 base::Unretained(this), request_id),
       &cancelable_task_tracker_);
 }
 

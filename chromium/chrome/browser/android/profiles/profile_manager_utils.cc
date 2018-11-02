@@ -41,7 +41,7 @@ void CommitPendingWritesForProfile(Profile* profile) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&FlushCookiesOnIOThread,
-                 make_scoped_refptr(profile->GetRequestContext())));
+                 base::WrapRefCounted(profile->GetRequestContext())));
   content::BrowserContext::ForEachStoragePartition(
       profile, base::Bind(FlushStoragePartition));
 }
@@ -57,13 +57,14 @@ void RemoveSessionCookiesForProfile(Profile* profile) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&RemoveSessionCookiesOnIOThread,
-                 make_scoped_refptr(profile->GetRequestContext())));
+                 base::WrapRefCounted(profile->GetRequestContext())));
 }
 
 }  // namespace
 
-static void FlushPersistentDataForAllProfiles(JNIEnv* env,
-                                              const JavaParamRef<jclass>& obj) {
+static void JNI_ProfileManagerUtils_FlushPersistentDataForAllProfiles(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& obj) {
   std::vector<Profile*> loaded_profiles =
       g_browser_process->profile_manager()->GetLoadedProfiles();
   std::for_each(loaded_profiles.begin(), loaded_profiles.end(),
@@ -73,7 +74,7 @@ static void FlushPersistentDataForAllProfiles(JNIEnv* env,
     g_browser_process->local_state()->CommitPendingWrite();
 }
 
-static void RemoveSessionCookiesForAllProfiles(
+static void JNI_ProfileManagerUtils_RemoveSessionCookiesForAllProfiles(
     JNIEnv* env,
     const JavaParamRef<jclass>& obj) {
   std::vector<Profile*> loaded_profiles =

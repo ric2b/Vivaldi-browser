@@ -7,6 +7,7 @@
 #include <map>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -29,6 +30,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/base/network_delegate_impl.h"
@@ -215,7 +217,19 @@ void TestDataReductionProxyConfigServiceClient::
   OnApplicationStateChange(
       base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES);
 }
-#endif
+#endif  // OS_ANDROID
+
+void TestDataReductionProxyConfigServiceClient::SetRemoteConfigApplied(
+    bool remote_config_applied) {
+  remote_config_applied_ = remote_config_applied;
+}
+
+bool TestDataReductionProxyConfigServiceClient::RemoteConfigApplied() const {
+  if (!remote_config_applied_) {
+    return DataReductionProxyConfigServiceClient::RemoteConfigApplied();
+  }
+  return remote_config_applied_.value();
+}
 
 MockDataReductionProxyService::MockDataReductionProxyService(
     DataReductionProxySettings* settings,
@@ -445,6 +459,7 @@ DataReductionProxyTestContext::Builder::Build() {
         std::move(params), task_runner, net_log.get(), configurator.get(),
         event_creator.get()));
   } else {
+    test_context_flags ^= USE_MOCK_CONFIG;
     if (!proxy_servers_.empty()) {
       params->SetProxiesForHttp(proxy_servers_);
     }
@@ -613,12 +628,11 @@ DataReductionProxyTestContext::CreateDataReductionProxyServiceInternal(
     return base::MakeUnique<MockDataReductionProxyService>(
         settings, simple_pref_service_.get(), request_context_getter_.get(),
         task_runner_);
-  } else {
-    return base::MakeUnique<DataReductionProxyService>(
-        settings, simple_pref_service_.get(), request_context_getter_.get(),
-        base::WrapUnique(new TestDataStore()), task_runner_, task_runner_,
-        task_runner_, base::TimeDelta());
   }
+  return base::MakeUnique<DataReductionProxyService>(
+      settings, simple_pref_service_.get(), request_context_getter_.get(),
+      base::WrapUnique(new TestDataStore()), task_runner_, task_runner_,
+      task_runner_, base::TimeDelta());
 }
 
 void DataReductionProxyTestContext::AttachToURLRequestContext(
@@ -661,6 +675,11 @@ void DataReductionProxyTestContext::
   // Set the pref to cause the secure proxy check to be issued.
   pref_service()->SetBoolean(kDataReductionProxyEnabled, true);
   RunUntilIdle();
+}
+
+void DataReductionProxyTestContext::DisableWarmupURLFetch() {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableDataReductionProxyWarmupURLFetch);
 }
 
 MockDataReductionProxyConfig* DataReductionProxyTestContext::mock_config()
@@ -723,6 +742,8 @@ DataReductionProxyTestContext::TestConfigStorer::TestConfigStorer(
 void DataReductionProxyTestContext::TestConfigStorer::StoreSerializedConfig(
     const std::string& serialized_config) {
   prefs_->SetString(prefs::kDataReductionProxyConfig, serialized_config);
+  prefs_->SetInt64(prefs::kDataReductionProxyLastConfigRetrievalTime,
+                   (base::Time::Now() - base::Time()).InMicroseconds());
 }
 
 std::vector<net::ProxyServer>

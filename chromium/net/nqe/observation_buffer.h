@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/optional.h"
 #include "base/time/tick_clock.h"
 #include "net/base/net_export.h"
@@ -28,16 +28,11 @@ class TimeTicks;
 
 namespace net {
 
+class NetworkQualityEstimatorParams;
+
 namespace nqe {
 
 namespace internal {
-
-namespace {
-
-// Maximum number of observations that can be held in the ObservationBuffer.
-static const size_t kMaximumObservationsBufferSize = 300;
-
-}  // namespace
 
 struct WeightedObservation;
 
@@ -45,7 +40,9 @@ struct WeightedObservation;
 // computing weighted and non-weighted summary statistics.
 class NET_EXPORT_PRIVATE ObservationBuffer {
  public:
-  ObservationBuffer(double weight_multiplier_per_second,
+  ObservationBuffer(const NetworkQualityEstimatorParams* params,
+                    base::TickClock* tick_clock,
+                    double weight_multiplier_per_second,
                     double weight_multiplier_per_signal_level);
 
   ~ObservationBuffer();
@@ -58,7 +55,7 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
   size_t Size() const { return static_cast<size_t>(observations_.size()); }
 
   // Returns the capacity of this buffer.
-  size_t Capacity() const { return kMaximumObservationsBufferSize; }
+  size_t Capacity() const;
 
   // Clears the observations stored in this buffer.
   void Clear() { observations_.clear(); }
@@ -69,17 +66,17 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
   // value is unavailable, false is returned and |result| is not modified.
   // Percentile value is unavailable if all the values in observation buffer are
   // older than |begin_timestamp|. |current_signal_strength| is the current
-  // signal strength. |result| must not be null.
-  // TODO(tbansal): Move out param |result| as the last param of the function.
+  // signal strength. |result| must not be null. If |observations_count| is not
+  // null, then it is set to the number of observations that were available
+  // in the observation buffer for computing the percentile.
   base::Optional<int32_t> GetPercentile(
       base::TimeTicks begin_timestamp,
       const base::Optional<int32_t>& current_signal_strength,
       int percentile,
-      const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources) const;
+      size_t* observations_count) const;
 
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock) {
-    tick_clock_ = std::move(tick_clock);
+  void SetTickClockForTesting(base::TickClock* tick_clock) {
+    tick_clock_ = tick_clock;
   }
 
   // Computes percentiles separately for each host. Observations without
@@ -91,11 +88,16 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
   void GetPercentileForEachHostWithCounts(
       base::TimeTicks begin_timestamp,
       int percentile,
-      const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources,
       const base::Optional<std::set<IPHash>>& host_filter,
       std::map<IPHash, int32_t>* host_keyed_percentiles,
       std::map<IPHash, size_t>* host_keyed_counts) const;
+
+  // Removes all observations from the buffer whose corresponding entry in
+  // |deleted_observation_sources| is set to true. For example, if index 1 and
+  // 3 in |deleted_observation_sources| are set to true, then all observations
+  // in the buffer that have source set to either 1 or 3 would be removed.
+  void RemoveObservationsWithSource(
+      bool deleted_observation_sources[NETWORK_QUALITY_OBSERVATION_SOURCE_MAX]);
 
  private:
   // Computes the weighted observations and stores them in
@@ -109,13 +111,13 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
       const base::TimeTicks& begin_timestamp,
       const base::Optional<int32_t>& current_signal_strength,
       std::vector<WeightedObservation>* weighted_observations,
-      double* total_weight,
-      const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources) const;
+      double* total_weight) const;
+
+  const NetworkQualityEstimatorParams* params_;
 
   // Holds observations sorted by time, with the oldest observation at the
   // front of the queue.
-  std::deque<Observation> observations_;
+  base::circular_deque<Observation> observations_;
 
   // The factor by which the weight of an observation reduces every second.
   // For example, if an observation is 6 seconds old, its weight would be:
@@ -132,7 +134,7 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
   // |weight_multiplier_per_signal_level_| ^ 3.
   const double weight_multiplier_per_signal_level_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  base::TickClock* tick_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(ObservationBuffer);
 };

@@ -22,14 +22,14 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
     : public BrowserCompositorOutputSurface {
  public:
   SoftwareBrowserCompositorOutputSurface(
-      std::unique_ptr<cc::SoftwareOutputDevice> software_device,
+      std::unique_ptr<viz::SoftwareOutputDevice> software_device,
       const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   ~SoftwareBrowserCompositorOutputSurface() override;
 
   // OutputSurface implementation.
-  void BindToClient(cc::OutputSurfaceClient* client) override;
+  void BindToClient(viz::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
@@ -39,7 +39,7 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override;
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
@@ -52,10 +52,14 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
 #endif
 
-  void SwapBuffersCallback();
+  void SwapBuffersCallback(uint64_t swap_id);
+  void UpdateVSyncCallback(const base::TimeTicks timebase,
+                           const base::TimeDelta interval);
 
-  cc::OutputSurfaceClient* client_ = nullptr;
+  viz::OutputSurfaceClient* client_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  uint64_t swap_id_ = 0;
+  base::TimeDelta refresh_interval_;
   base::WeakPtrFactory<SoftwareBrowserCompositorOutputSurface> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurface);

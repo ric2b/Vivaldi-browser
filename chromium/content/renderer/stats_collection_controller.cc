@@ -6,13 +6,17 @@
 
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/string_util.h"
-#include "content/common/child_process_messages.h"
+#include "content/common/renderer_host.mojom.h"
+#include "content/public/common/service_names.mojom.h"
+#include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
@@ -56,13 +60,13 @@ void ConvertLoadTimeToJSON(
   base::DictionaryValue item;
 
   if (load_start_time.is_null()) {
-    item.Set("load_start_ms", base::MakeUnique<base::Value>());
+    item.Set("load_start_ms", std::make_unique<base::Value>());
   } else {
     item.SetDouble("load_start_ms", (load_start_time - base::Time::UnixEpoch())
                    .InMillisecondsF());
   }
   if (load_start_time.is_null() || load_stop_time.is_null()) {
-    item.Set("load_duration_ms", base::MakeUnique<base::Value>());
+    item.Set("load_duration_ms", std::make_unique<base::Value>());
   } else {
     item.SetDouble("load_duration_ms",
         (load_stop_time - load_start_time).InMillisecondsF());
@@ -118,38 +122,28 @@ std::string StatsCollectionController::GetHistogram(
   if (!histogram) {
     output = "{}";
   } else {
-    histogram->WriteJSON(&output);
+    histogram->WriteJSON(&output, base::JSON_VERBOSITY_LEVEL_FULL);
   }
   return output;
 }
 
 std::string StatsCollectionController::GetBrowserHistogram(
     const std::string& histogram_name) {
-  RenderViewImpl *render_view_impl = NULL;
-  if (!CurrentRenderViewImpl(&render_view_impl)) {
-    NOTREACHED();
-    return std::string();
-  }
-
   std::string histogram_json;
-  render_view_impl->Send(new ChildProcessHostMsg_GetBrowserHistogram(
-      histogram_name, &histogram_json));
+  RenderThreadImpl::current()->GetRendererHost()->GetBrowserHistogram(
+      histogram_name, &histogram_json);
+
   return histogram_json;
 }
 
 std::string StatsCollectionController::GetTabLoadTiming() {
-  RenderViewImpl *render_view_impl = NULL;
-  if (!CurrentRenderViewImpl(&render_view_impl)) {
-    NOTREACHED();
-    return std::string();
-  }
+  RenderViewImpl* render_view_impl = nullptr;
+  bool result = CurrentRenderViewImpl(&render_view_impl);
+  DCHECK(result);
 
   StatsCollectionObserver* observer =
       render_view_impl->GetStatsCollectionObserver();
-  if (!observer) {
-    NOTREACHED();
-    return std::string();
-  }
+  DCHECK(observer);
 
   std::string tab_timing_json;
   ConvertLoadTimeToJSON(

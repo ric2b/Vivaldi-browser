@@ -5,15 +5,16 @@
 #include "net/http/mock_http_cache.h"
 
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_cache_writers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -327,8 +328,7 @@ void MockDiskEntry::IgnoreCallbacks(bool value) {
     StoreAndDeliverCallbacks(false, NULL, CompletionCallback(), 0);
 }
 
-MockDiskEntry::~MockDiskEntry() {
-}
+MockDiskEntry::~MockDiskEntry() = default;
 
 // Unlike the callbacks for MockHttpTransaction, we want this one to run even
 // if the consumer called Close on the MockDiskEntry.  We achieve that by
@@ -724,37 +724,32 @@ void MockHttpCache::SetTestMode(int test_mode) {
 
 bool MockHttpCache::IsWriterPresent(const std::string& key) {
   HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
-  if (entry)
-    return entry->writer;
-  return false;
+  return entry && entry->writers && !entry->writers->IsEmpty();
 }
 
 bool MockHttpCache::IsHeadersTransactionPresent(const std::string& key) {
   HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
-  if (entry)
-    return entry->headers_transaction;
-  return false;
+  return entry && entry->headers_transaction;
 }
 
 int MockHttpCache::GetCountReaders(const std::string& key) {
   HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
-  if (entry)
-    return entry->readers.size();
-  return false;
+  return entry ? entry->readers.size() : 0;
 }
 
 int MockHttpCache::GetCountAddToEntryQueue(const std::string& key) {
   HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
-  if (entry)
-    return entry->add_to_entry_queue.size();
-  return false;
+  return entry ? entry->add_to_entry_queue.size() : 0;
 }
 
 int MockHttpCache::GetCountDoneHeadersQueue(const std::string& key) {
   HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
-  if (entry)
-    return entry->done_headers_queue.size();
-  return false;
+  return entry ? entry->done_headers_queue.size() : 0;
+}
+
+int MockHttpCache::GetCountWriterTransactions(const std::string& key) {
+  HttpCache::ActiveEntry* entry = http_cache_.FindActiveEntry(key);
+  return entry && entry->writers ? entry->writers->GetTransactionsCount() : 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -783,8 +778,7 @@ MockBlockingBackendFactory::MockBlockingBackendFactory()
       fail_(false) {
 }
 
-MockBlockingBackendFactory::~MockBlockingBackendFactory() {
-}
+MockBlockingBackendFactory::~MockBlockingBackendFactory() = default;
 
 int MockBlockingBackendFactory::CreateBackend(
     NetLog* net_log,

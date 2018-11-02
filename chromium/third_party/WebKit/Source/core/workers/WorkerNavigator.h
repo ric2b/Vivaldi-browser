@@ -38,8 +38,7 @@
 namespace blink {
 
 class CORE_EXPORT WorkerNavigator final
-    : public GarbageCollectedFinalized<WorkerNavigator>,
-      public ScriptWrappable,
+    : public ScriptWrappable,
       public NavigatorConcurrentHardware,
       public NavigatorID,
       public NavigatorOnLine,
@@ -55,7 +54,7 @@ class CORE_EXPORT WorkerNavigator final
 
   String userAgent() const override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   explicit WorkerNavigator(const String&);

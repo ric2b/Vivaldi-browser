@@ -70,7 +70,11 @@ DelegatedFrameHostClientAura::DelegatedFrameHostCreateResizeLock() {
   host->dispatcher()->HoldPointerMoves();
 
   gfx::Size desired_size = render_widget_host_view_->window_->bounds().size();
-  return base::MakeUnique<CompositorResizeLock>(this, desired_size);
+  return std::make_unique<CompositorResizeLock>(this, desired_size);
+}
+
+viz::LocalSurfaceId DelegatedFrameHostClientAura::GetLocalSurfaceId() const {
+  return render_widget_host_view_->GetLocalSurfaceId();
 }
 
 void DelegatedFrameHostClientAura::OnBeginFrame() {
@@ -79,6 +83,10 @@ void DelegatedFrameHostClientAura::OnBeginFrame() {
 
 bool DelegatedFrameHostClientAura::IsAutoResizeEnabled() const {
   return render_widget_host_view_->host_->auto_resize_enabled();
+}
+
+void DelegatedFrameHostClientAura::OnFrameTokenChanged(uint32_t frame_token) {
+  render_widget_host_view_->OnFrameTokenChangedForView(frame_token);
 }
 
 std::unique_ptr<ui::CompositorLock>

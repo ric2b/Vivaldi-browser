@@ -36,6 +36,10 @@ class AutofillProviderAndroid : public AutofillProvider {
                             const FormFieldData& field,
                             const gfx::RectF& bounding_box,
                             const base::TimeTicks timestamp) override;
+  void OnTextFieldDidScroll(AutofillHandlerProxy* handler,
+                            const FormData& form,
+                            const FormFieldData& field,
+                            const gfx::RectF& bounding_box) override;
   bool OnWillSubmitForm(AutofillHandlerProxy* handler,
                         const FormData& form,
                         const base::TimeTicks timestamp) override;
@@ -57,7 +61,7 @@ class AutofillProviderAndroid : public AutofillProvider {
                       size_t index,
                       const gfx::RectF& bounding_box);
 
-  bool ValidateHandler(AutofillHandlerProxy* handler);
+  bool IsCurrentlyLinkedHandler(AutofillHandlerProxy* handler);
 
   bool IsCurrentlyLinkedForm(const FormData& form);
 

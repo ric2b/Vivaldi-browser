@@ -26,6 +26,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/crash_reporter_client.h"
+#include "third_party/crashpad/crashpad/client/annotation.h"
+#include "third_party/crashpad/crashpad/client/annotation_list.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
 #include "third_party/crashpad/crashpad/client/crashpad_client.h"
 #include "third_party/crashpad/crashpad/client/crashpad_info.h"
@@ -149,6 +151,12 @@ void InitializeCrashpadImpl(bool initial_client,
   base::debug::SetCrashKeyReportingFunctions(SetCrashKeyValue, ClearCrashKey);
   crash_reporter_client->RegisterCrashKeys();
 
+  crashpad::AnnotationList::Register();
+
+  // TODO(rsesek): Remove this test annotation.
+  static crashpad::StringAnnotation<8> test_annotation("annotation-v2-test");
+  test_annotation.Set("it works");
+
   SetCrashKeyValue("ptype", browser_process ? base::StringPiece("browser")
                                             : base::StringPiece(process_type));
 #if defined(OS_POSIX)
@@ -188,11 +196,11 @@ void InitializeCrashpadImpl(bool initial_client,
 
 void SetCrashKeyValue(const base::StringPiece& key,
                       const base::StringPiece& value) {
-  g_simple_string_dictionary->SetKeyValue(key.data(), value.data());
+  g_simple_string_dictionary->SetKeyValue(key, value);
 }
 
 void ClearCrashKey(const base::StringPiece& key) {
-  g_simple_string_dictionary->RemoveKey(key.data());
+  g_simple_string_dictionary->RemoveKey(key);
 }
 
 void InitializeCrashpad(bool initial_client, const std::string& process_type) {
@@ -261,7 +269,7 @@ void GetReports(std::vector<Report>* reports) {
   reports->resize(25);
   while (true) {
     size_t available_reports =
-        GetCrashReportsImpl(&reports->at(0), reports->size());
+        GetCrashReports_ExportThunk(&reports->at(0), reports->size());
     if (available_reports <= reports->size()) {
       // The input size was large enough to capture all available crashes.
       // Trim the vector to the actual number of reports returned and return.
@@ -283,7 +291,7 @@ void RequestSingleCrashUpload(const std::string& local_id) {
 #if defined(OS_WIN)
   // On Windows, crash reporting may be implemented in another module, which is
   // why this can't call crash_reporter::RequestSingleCrashUpload directly.
-  RequestSingleCrashUploadImpl(local_id);
+  RequestSingleCrashUpload_ExportThunk(local_id.c_str());
 #else
   crash_reporter::RequestSingleCrashUploadImpl(local_id);
 #endif

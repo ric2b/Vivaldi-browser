@@ -2,23 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Multiply-included message file, hence no include guard.
+#ifndef CONTENT_COMMON_APPCACHE_MESSAGES_H_
+#define CONTENT_COMMON_APPCACHE_MESSAGES_H_
 
 #include "ipc/ipc_message_macros.h"
 
 #include <stdint.h>
 
 #include "content/common/appcache_interfaces.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "url/ipc/url_param_traits.h"
 
 #define IPC_MESSAGE_START AppCacheMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::AppCacheEventID,
-                          content::APPCACHE_EVENT_ID_LAST)
+                          content::AppCacheEventID::APPCACHE_OBSOLETE_EVENT)
 IPC_ENUM_TRAITS_MAX_VALUE(content::AppCacheStatus,
-                          content::APPCACHE_STATUS_LAST)
+                          content::AppCacheStatus::APPCACHE_STATUS_OBSOLETE)
 IPC_ENUM_TRAITS_MAX_VALUE(content::AppCacheErrorReason,
-    content::APPCACHE_ERROR_REASON_LAST)
+                          content::AppCacheErrorReason::APPCACHE_UNKNOWN_ERROR)
 
 IPC_STRUCT_TRAITS_BEGIN(content::AppCacheInfo)
   IPC_STRUCT_TRAITS_MEMBER(manifest_url)
@@ -83,10 +85,6 @@ IPC_MESSAGE_CONTROL4(AppCacheHostMsg_SelectCache,
                      GURL /* opt_manifest_url */)
 
 // Initiates worker specific cache selection algorithm for the given host.
-IPC_MESSAGE_CONTROL3(AppCacheHostMsg_SelectCacheForWorker,
-                     int /* host_id */,
-                     int /* parent_process_id */,
-                     int /* parent_host_id */)
 IPC_MESSAGE_CONTROL2(AppCacheHostMsg_SelectCacheForSharedWorker,
                      int /* host_id */,
                      int64_t /* appcache_id */)
@@ -160,3 +158,11 @@ IPC_MESSAGE_CONTROL3(AppCacheMsg_LogMessage,
 IPC_MESSAGE_CONTROL2(AppCacheMsg_ContentBlocked,
                      int /* host_id */,
                      GURL /* manifest_url */)
+
+// In the network service world this message sets the URLLoaderFactory to be
+// used for subresources.
+IPC_MESSAGE_CONTROL2(AppCacheMsg_SetSubresourceFactory,
+                     int /* host_id */,
+                     mojo::MessagePipeHandle /* url_loader_factory */)
+
+#endif  // CONTENT_COMMON_APPCACHE_MESSAGES_H_

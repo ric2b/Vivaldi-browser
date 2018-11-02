@@ -6,6 +6,8 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 component("metrics_cpp") {
   sources = [
+    "delegating_ukm_recorder.cc",
+    "delegating_ukm_recorder.h",
     "metrics_export.h",
     "mojo_ukm_recorder.cc",
     "mojo_ukm_recorder.h",
@@ -29,6 +31,7 @@ component("metrics_cpp") {
 
   deps = [
     "//mojo/public/cpp/bindings",
+    "//services/service_manager/public/cpp",
   ]
 }
 
@@ -44,6 +47,8 @@ action("gen_ukm_builders") {
   outputs = [
     outdir + "/ukm_builders.cc",
     outdir + "/ukm_builders.h",
+    outdir + "/ukm_decode.cc",
+    outdir + "/ukm_decode.h",
   ]
 
   args = [

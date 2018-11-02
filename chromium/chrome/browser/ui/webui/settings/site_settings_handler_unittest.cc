@@ -35,7 +35,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
+#include "components/user_manager/scoped_user_manager.h"
 #endif
 
 namespace {
@@ -88,11 +88,12 @@ class SiteSettingsHandlerTest : public testing::Test {
   SiteSettingsHandlerTest()
       : kNotifications(site_settings::ContentSettingsTypeToGroupName(
             CONTENT_SETTINGS_TYPE_NOTIFICATIONS)),
+        kCookies(site_settings::ContentSettingsTypeToGroupName(
+            CONTENT_SETTINGS_TYPE_COOKIES)),
         handler_(&profile_) {
 #if defined(OS_CHROMEOS)
-    mock_user_manager_ = new chromeos::MockUserManager;
-    user_manager_enabler_.reset(
-        new chromeos::ScopedUserManagerEnabler(mock_user_manager_));
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::make_unique<chromeos::MockUserManager>());
 #endif
   }
 
@@ -273,8 +274,9 @@ class SiteSettingsHandlerTest : public testing::Test {
     incognito_profile_ = nullptr;
   }
 
-  // Content setting group name for |CONTENT_SETTINGS_TYPE_NOTIFICATIONS|.
+  // Content setting group name for the relevant ContentSettingsType.
   const std::string kNotifications;
+  const std::string kCookies;
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
@@ -283,8 +285,7 @@ class SiteSettingsHandlerTest : public testing::Test {
   content::TestWebUI web_ui_;
   SiteSettingsHandler handler_;
 #if defined(OS_CHROMEOS)
-  chromeos::MockUserManager* mock_user_manager_;  // Not owned.
-  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 #endif
 };
 
@@ -314,7 +315,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
 
 TEST_F(SiteSettingsHandlerTest, Origins) {
   const std::string google("https://www.google.com:443");
-  const std::string kUmaBase("WebsiteSettings.Menu.PermissionChanged");
+  const std::string uma_base("WebsiteSettings.Menu.PermissionChanged");
   {
     // Test the JS -> C++ -> JS callback path for configuring origins, by
     // setting Google.com to blocked.
@@ -328,10 +329,11 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
     base::HistogramTester histograms;
     handler()->HandleSetCategoryPermissionForPattern(&set_args);
     EXPECT_EQ(1U, web_ui()->call_data().size());
-    histograms.ExpectTotalCount(kUmaBase, 1);
-    histograms.ExpectTotalCount(kUmaBase + ".Allowed", 0);
-    histograms.ExpectTotalCount(kUmaBase + ".Blocked", 1);
-    histograms.ExpectTotalCount(kUmaBase + ".Reset", 0);
+    histograms.ExpectTotalCount(uma_base, 1);
+    histograms.ExpectTotalCount(uma_base + ".Allowed", 0);
+    histograms.ExpectTotalCount(uma_base + ".Blocked", 1);
+    histograms.ExpectTotalCount(uma_base + ".Reset", 0);
+    histograms.ExpectTotalCount(uma_base + ".SessionOnly", 0);
   }
 
   base::ListValue get_exception_list_args;
@@ -351,10 +353,10 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
     base::HistogramTester histograms;
     handler()->HandleResetCategoryPermissionForPattern(&reset_args);
     EXPECT_EQ(3U, web_ui()->call_data().size());
-    histograms.ExpectTotalCount(kUmaBase, 1);
-    histograms.ExpectTotalCount(kUmaBase + ".Allowed", 0);
-    histograms.ExpectTotalCount(kUmaBase + ".Blocked", 0);
-    histograms.ExpectTotalCount(kUmaBase + ".Reset", 1);
+    histograms.ExpectTotalCount(uma_base, 1);
+    histograms.ExpectTotalCount(uma_base + ".Allowed", 0);
+    histograms.ExpectTotalCount(uma_base + ".Blocked", 0);
+    histograms.ExpectTotalCount(uma_base + ".Reset", 1);
   }
 
   // Verify the reset was successful.
@@ -868,6 +870,23 @@ TEST_F(SiteSettingsHandlerInfobarTest, SettingPermissionsTriggersInfobar) {
                 ->delegate()
                 ->GetIdentifier());
   EXPECT_TRUE(url::IsSameOriginWith(origin, tab_url));
+}
+
+TEST_F(SiteSettingsHandlerTest, SessionOnlyException) {
+  const std::string google_with_port("https://www.google.com:443");
+  const std::string uma_base("WebsiteSettings.Menu.PermissionChanged");
+  base::ListValue set_args;
+  set_args.AppendString(google_with_port);  // Primary pattern.
+  set_args.AppendString(google_with_port);  // Secondary pattern.
+  set_args.AppendString(kCookies);
+  set_args.AppendString(
+      content_settings::ContentSettingToString(CONTENT_SETTING_SESSION_ONLY));
+  set_args.AppendBoolean(false);  // Incognito.
+  base::HistogramTester histograms;
+  handler()->HandleSetCategoryPermissionForPattern(&set_args);
+  EXPECT_EQ(1U, web_ui()->call_data().size());
+  histograms.ExpectTotalCount(uma_base, 1);
+  histograms.ExpectTotalCount(uma_base + ".SessionOnly", 1);
 }
 
 }  // namespace settings

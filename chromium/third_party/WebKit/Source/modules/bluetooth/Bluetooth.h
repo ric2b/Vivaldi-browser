@@ -18,8 +18,7 @@ class RequestDeviceOptions;
 class ScriptPromise;
 class ScriptState;
 
-class Bluetooth final : public GarbageCollectedFinalized<Bluetooth>,
-                        public ScriptWrappable {
+class Bluetooth final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -33,7 +32,7 @@ class Bluetooth final : public GarbageCollectedFinalized<Bluetooth>,
   mojom::blink::WebBluetoothService* Service() { return service_.get(); }
 
   // Interface required by Garbage Collection:
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   Bluetooth();

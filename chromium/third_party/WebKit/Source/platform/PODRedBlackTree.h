@@ -72,11 +72,11 @@
 #ifndef PODRedBlackTree_h
 #define PODRedBlackTree_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PODFreeListArena.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #ifndef NDEBUG
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -113,7 +113,7 @@ class PODRedBlackTree {
   // to init the structure. This constructor is usefull for creating
   // lazy initialized tree.
   explicit PODRedBlackTree(UninitializedTreeEnum)
-      : root_(0),
+      : root_(nullptr),
         needs_full_ordering_comparisons_(false)
 #ifndef NDEBUG
         ,
@@ -126,7 +126,7 @@ class PODRedBlackTree {
   // from a newly constructed PODFreeListArena.
   PODRedBlackTree()
       : arena_(PODFreeListArena<Node>::Create()),
-        root_(0),
+        root_(nullptr),
         needs_full_ordering_comparisons_(false)
 #ifndef NDEBUG
         ,
@@ -137,9 +137,9 @@ class PODRedBlackTree {
 
   // Constructs a new red-black tree, allocating temporary objects
   // from the given PODArena.
-  explicit PODRedBlackTree(PassRefPtr<PODFreeListArena<Node>> arena)
+  explicit PODRedBlackTree(scoped_refptr<PODFreeListArena<Node>> arena)
       : arena_(std::move(arena)),
-        root_(0),
+        root_(nullptr),
         needs_full_ordering_comparisons_(false)
 #ifndef NDEBUG
         ,
@@ -155,10 +155,10 @@ class PODRedBlackTree {
   void Clear() {
     MarkFree(root_);
     arena_ = nullptr;
-    root_ = 0;
+    root_ = nullptr;
   }
 
-  bool IsInitialized() const { return arena_.Get(); }
+  bool IsInitialized() const { return arena_.get(); }
 
   void InitIfNeeded() {
     if (!arena_)
@@ -245,7 +245,11 @@ class PODRedBlackTree {
    public:
     // Constructor. Newly-created nodes are colored red.
     explicit Node(const T& data)
-        : left_(0), right_(0), parent_(0), color_(kRed), data_(data) {}
+        : left_(nullptr),
+          right_(nullptr),
+          parent_(nullptr),
+          color_(kRed),
+          data_(data) {}
 
     virtual ~Node() {}
 
@@ -319,14 +323,14 @@ class PODRedBlackTree {
       else
         current = current->Right();
     }
-    return 0;
+    return nullptr;
   }
 
   // Searches the tree using multiple comparison operations, required
   // for data types with more complex behavior such as intervals.
   Node* TreeSearchFullComparisons(Node* current, const T& data) const {
     if (!current)
-      return 0;
+      return nullptr;
     if (data < current->Data())
       return TreeSearchFullComparisons(current->Left(), data);
     if (current->Data() < data)
@@ -342,7 +346,7 @@ class PODRedBlackTree {
   }
 
   void TreeInsert(Node* z) {
-    Node* y = 0;
+    Node* y = nullptr;
     Node* x = root_;
     while (x) {
       y = x;
@@ -782,7 +786,7 @@ class PODRedBlackTree {
   //----------------------------------------------------------------------
   // Data members
 
-  RefPtr<PODFreeListArena<Node>> arena_;
+  scoped_refptr<PODFreeListArena<Node>> arena_;
   Node* root_;
   bool needs_full_ordering_comparisons_;
 #ifndef NDEBUG

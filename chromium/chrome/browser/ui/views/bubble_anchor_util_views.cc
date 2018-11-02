@@ -9,6 +9,8 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 
+#include "app/vivaldi_apptools.h"
+
 // This file contains the bubble_anchor_util implementation for a Views
 // browser window (BrowserView).
 
@@ -26,6 +28,15 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   // GetPageInfoAnchorView() should be preferred when there is a location bar.
   DCHECK(!browser->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR));
 
+  // TODO(pettern@vivaldi.com): Is this a bit of a quick hack to avoid crashing.
+  // See VB-36537 for more details.
+  if (vivaldi::IsVivaldiRunning()) {
+    BrowserWindow *window = browser->window();
+    gfx::Point browser_view_origin = window->GetBounds().origin();
+    browser_view_origin +=
+        gfx::Vector2d(bubble_anchor_util::kNoToolbarLeftOffset, 0);
+    return gfx::Rect(browser_view_origin, gfx::Size());
+  } else {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   // Get position in view (taking RTL UI into account).
   int x_within_browser_view = browser_view->GetMirroredXInView(
@@ -36,6 +47,7 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   gfx::Point browser_view_origin = browser_view->GetBoundsInScreen().origin();
   browser_view_origin += gfx::Vector2d(x_within_browser_view, 0);
   return gfx::Rect(browser_view_origin, gfx::Size());
+  }
 }
 
 }  // namespace bubble_anchor_util

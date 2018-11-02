@@ -44,8 +44,7 @@ namespace IPC {
 
 //------------------------------------------------------------------------------
 
-Message::~Message() {
-}
+Message::~Message() = default;
 
 Message::Message() : base::Pickle(sizeof(Header)) {
   header()->routing = header()->type = 0;
@@ -133,7 +132,7 @@ void Message::set_received_time(int64_t time) const {
 Message::NextMessageInfo::NextMessageInfo()
     : message_size(0), message_found(false), pickle_end(nullptr),
       message_end(nullptr) {}
-Message::NextMessageInfo::~NextMessageInfo() {}
+Message::NextMessageInfo::~NextMessageInfo() = default;
 
 // static
 void Message::FindNext(const char* range_start,
@@ -168,12 +167,9 @@ bool Message::WriteAttachment(
     scoped_refptr<base::Pickle::Attachment> attachment) {
   size_t index;
   bool success = attachment_set()->AddAttachment(
-      make_scoped_refptr(static_cast<MessageAttachment*>(attachment.get())),
+      base::WrapRefCounted(static_cast<MessageAttachment*>(attachment.get())),
       &index);
   DCHECK(success);
-
-  // NOTE: If you add more data to the pickle, make sure to update
-  // PickleSizer::AddAttachment.
 
   // Write the index of the descriptor so that we don't have to
   // keep the current descriptor as extra decoding state when deserialising.

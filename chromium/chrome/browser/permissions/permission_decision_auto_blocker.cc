@@ -5,6 +5,8 @@
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
@@ -19,32 +21,36 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/chrome_features.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing/db/database_manager.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 namespace {
 
+constexpr int kDefaultDismissalsBeforeBlock = 3;
+constexpr int kDefaultIgnoresBeforeBlock = 4;
+constexpr int kDefaultEmbargoDays = 7;
+
 // The number of times that users may explicitly dismiss a permission prompt
 // from an origin before it is automatically blocked.
-int g_dismissals_before_block = 3;
+int g_dismissals_before_block = kDefaultDismissalsBeforeBlock;
 
 // The number of times that users may ignore a permission prompt from an origin
 // before it is automatically blocked.
-int g_ignores_before_block = 4;
+int g_ignores_before_block = kDefaultIgnoresBeforeBlock;
 
 // The number of days that an origin will stay under embargo for a requested
 // permission due to repeated dismissals.
-int g_dismissal_embargo_days = 7;
+int g_dismissal_embargo_days = kDefaultEmbargoDays;
 
 // The number of days that an origin will stay under embargo for a requested
 // permission due to repeated ignores.
-int g_ignore_embargo_days = 7;
+int g_ignore_embargo_days = kDefaultEmbargoDays;
 
 // The number of days that an origin will stay under embargo for a requested
 // permission due to blacklisting.
-int g_blacklist_embargo_days = 7;
+int g_blacklist_embargo_days = kDefaultEmbargoDays;
 
 // Maximum time in milliseconds to wait for safe browsing service to check a
 // url for blacklisting. After this amount of time, the check will be aborted
@@ -65,17 +71,14 @@ std::unique_ptr<base::DictionaryValue> GetOriginDict(
   return dict;
 }
 
-base::DictionaryValue* GetOrCreatePermissionDict(
-    base::DictionaryValue* origin_dict,
-    const std::string& permission) {
-  base::DictionaryValue* permission_dict = nullptr;
-  if (!origin_dict->GetDictionaryWithoutPathExpansion(permission,
-                                                      &permission_dict)) {
-    permission_dict = origin_dict->SetDictionaryWithoutPathExpansion(
-        permission, base::MakeUnique<base::DictionaryValue>());
-  }
-
-  return permission_dict;
+base::Value* GetOrCreatePermissionDict(base::Value* origin_dict,
+                                       const std::string& permission) {
+  base::Value* permission_dict =
+      origin_dict->FindKeyOfType(permission, base::Value::Type::DICTIONARY);
+  if (permission_dict)
+    return permission_dict;
+  return origin_dict->SetKey(permission,
+                             base::Value(base::Value::Type::DICTIONARY));
 }
 
 int RecordActionInWebsiteSettings(const GURL& url,
@@ -86,12 +89,13 @@ int RecordActionInWebsiteSettings(const GURL& url,
       HostContentSettingsMapFactory::GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> dict = GetOriginDict(map, url);
 
-  base::DictionaryValue* permission_dict = GetOrCreatePermissionDict(
+  base::Value* permission_dict = GetOrCreatePermissionDict(
       dict.get(), PermissionUtil::GetPermissionString(permission));
 
-  int current_count = 0;
-  permission_dict->GetInteger(key, &current_count);
-  permission_dict->SetInteger(key, ++current_count);
+  base::Value* value =
+      permission_dict->FindKeyOfType(key, base::Value::Type::INTEGER);
+  int current_count = value ? value->GetInt() : 0;
+  permission_dict->SetKey(key, base::Value(++current_count));
 
   map->SetWebsiteSettingDefaultScope(
       url, GURL(), CONTENT_SETTINGS_TYPE_PERMISSION_AUTOBLOCKER_DATA,
@@ -107,28 +111,38 @@ int GetActionCount(const GURL& url,
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> dict = GetOriginDict(map, url);
-  base::DictionaryValue* permission_dict = GetOrCreatePermissionDict(
+  base::Value* permission_dict = GetOrCreatePermissionDict(
       dict.get(), PermissionUtil::GetPermissionString(permission));
 
-  int current_count = 0;
-  permission_dict->GetInteger(key, &current_count);
-  return current_count;
+  base::Value* value =
+      permission_dict->FindKeyOfType(key, base::Value::Type::INTEGER);
+  return value ? value->GetInt() : 0;
 }
 
-bool IsUnderEmbargo(base::DictionaryValue* permission_dict,
+bool IsUnderEmbargo(base::Value* permission_dict,
                     const base::Feature& feature,
                     const char* key,
                     base::Time current_time,
                     base::TimeDelta offset) {
-  double embargo_date = -1;
-
-  if (base::FeatureList::IsEnabled(feature) &&
-      permission_dict->GetDouble(key, &embargo_date)) {
-    if (current_time < base::Time::FromInternalValue(embargo_date) + offset)
-      return true;
+  base::Value* found =
+      permission_dict->FindKeyOfType(key, base::Value::Type::DOUBLE);
+  if (found && base::FeatureList::IsEnabled(feature) &&
+      current_time <
+          base::Time::FromInternalValue(found->GetDouble()) + offset) {
+    return true;
   }
 
   return false;
+}
+
+void UpdateValueFromVariation(const std::string& variation_value,
+                              int* value_store,
+                              const int default_value) {
+  int tmp_value = -1;
+  if (base::StringToInt(variation_value, &tmp_value) && tmp_value > 0)
+    *value_store = tmp_value;
+  else
+    *value_store = default_value;
 }
 
 }  // namespace
@@ -204,7 +218,7 @@ PermissionResult PermissionDecisionAutoBlocker::GetEmbargoResult(
   DCHECK(settings_map);
   std::unique_ptr<base::DictionaryValue> dict =
       GetOriginDict(settings_map, request_origin);
-  base::DictionaryValue* permission_dict = GetOrCreatePermissionDict(
+  base::Value* permission_dict = GetOrCreatePermissionDict(
       dict.get(), PermissionUtil::GetPermissionString(permission));
 
   if (IsUnderEmbargo(permission_dict, features::kPermissionsBlacklist,
@@ -234,12 +248,6 @@ PermissionResult PermissionDecisionAutoBlocker::GetEmbargoResult(
 
 // static
 void PermissionDecisionAutoBlocker::UpdateFromVariations() {
-  int dismissals_before_block = -1;
-  int ignores_before_block = -1;
-  int dismissal_embargo_days = -1;
-  int ignore_embargo_days = -1;
-  int blacklist_embargo_days = -1;
-
   std::string dismissals_before_block_value =
       variations::GetVariationParamValueByFeature(
           features::kBlockPromptsIfDismissedOften, kPromptDismissCountKey);
@@ -257,30 +265,18 @@ void PermissionDecisionAutoBlocker::UpdateFromVariations() {
       variations::GetVariationParamValueByFeature(
           features::kPermissionsBlacklist, kPermissionBlacklistEmbargoKey);
 
-  // If converting the value fails, stick with the current value.
-  if (base::StringToInt(dismissals_before_block_value,
-                        &dismissals_before_block) &&
-      dismissals_before_block > 0) {
-    g_dismissals_before_block = dismissals_before_block;
-  }
-  if (base::StringToInt(ignores_before_block_value, &ignores_before_block) &&
-      ignores_before_block > 0) {
-    g_ignores_before_block = ignores_before_block;
-  }
-  if (base::StringToInt(dismissal_embargo_days_value,
-                        &dismissal_embargo_days) &&
-      dismissal_embargo_days > 0) {
-    g_dismissal_embargo_days = dismissal_embargo_days;
-  }
-  if (base::StringToInt(ignore_embargo_days_value, &ignore_embargo_days) &&
-      ignore_embargo_days > 0) {
-    g_ignore_embargo_days = ignore_embargo_days;
-  }
-  if (base::StringToInt(blacklist_embargo_days_value,
-                        &blacklist_embargo_days) &&
-      blacklist_embargo_days > 0) {
-    g_blacklist_embargo_days = blacklist_embargo_days;
-  }
+  // If converting the value fails, revert to the original value.
+  UpdateValueFromVariation(dismissals_before_block_value,
+                           &g_dismissals_before_block,
+                           kDefaultDismissalsBeforeBlock);
+  UpdateValueFromVariation(ignores_before_block_value, &g_ignores_before_block,
+                           kDefaultIgnoresBeforeBlock);
+  UpdateValueFromVariation(dismissal_embargo_days_value,
+                           &g_dismissal_embargo_days, kDefaultEmbargoDays);
+  UpdateValueFromVariation(ignore_embargo_days_value, &g_ignore_embargo_days,
+                           kDefaultEmbargoDays);
+  UpdateValueFromVariation(blacklist_embargo_days_value,
+                           &g_blacklist_embargo_days, kDefaultEmbargoDays);
 }
 
 void PermissionDecisionAutoBlocker::CheckSafeBrowsingBlacklist(
@@ -288,7 +284,6 @@ void PermissionDecisionAutoBlocker::CheckSafeBrowsingBlacklist(
     const GURL& request_origin,
     ContentSettingsType permission,
     base::Callback<void(bool)> callback) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   DCHECK_EQ(CONTENT_SETTING_ASK,
             GetEmbargoResult(request_origin, permission).content_setting);
 
@@ -312,7 +307,6 @@ void PermissionDecisionAutoBlocker::CheckSafeBrowsingBlacklist(
 PermissionResult PermissionDecisionAutoBlocker::GetEmbargoResult(
     const GURL& request_origin,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   return GetEmbargoResult(
       HostContentSettingsMapFactory::GetForProfile(profile_), request_origin,
       permission, clock_->Now());
@@ -321,21 +315,18 @@ PermissionResult PermissionDecisionAutoBlocker::GetEmbargoResult(
 int PermissionDecisionAutoBlocker::GetDismissCount(
     const GURL& url,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   return GetActionCount(url, permission, kPromptDismissCountKey, profile_);
 }
 
 int PermissionDecisionAutoBlocker::GetIgnoreCount(
     const GURL& url,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   return GetActionCount(url, permission, kPromptIgnoreCountKey, profile_);
 }
 
 bool PermissionDecisionAutoBlocker::RecordDismissAndEmbargo(
     const GURL& url,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   int current_dismissal_count = RecordActionInWebsiteSettings(
       url, permission, kPromptDismissCountKey, profile_);
 
@@ -360,7 +351,6 @@ bool PermissionDecisionAutoBlocker::RecordDismissAndEmbargo(
 bool PermissionDecisionAutoBlocker::RecordIgnoreAndEmbargo(
     const GURL& url,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   int current_ignore_count = RecordActionInWebsiteSettings(
       url, permission, kPromptIgnoreCountKey, profile_);
 
@@ -376,7 +366,6 @@ bool PermissionDecisionAutoBlocker::RecordIgnoreAndEmbargo(
 void PermissionDecisionAutoBlocker::RemoveEmbargoByUrl(
     const GURL& url,
     ContentSettingsType permission) {
-  permission = PermissionUtil::GetContentSettingsStorageType(permission);
   if (!PermissionUtil::IsPermission(permission))
     return;
 
@@ -390,18 +379,16 @@ void PermissionDecisionAutoBlocker::RemoveEmbargoByUrl(
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
   std::unique_ptr<base::DictionaryValue> dict = GetOriginDict(map, url);
-  base::DictionaryValue* permission_dict = GetOrCreatePermissionDict(
+  base::Value* permission_dict = GetOrCreatePermissionDict(
       dict.get(), PermissionUtil::GetPermissionString(permission));
 
   // Deleting non-existent entries will return a false value. Since it should be
   // impossible for a permission to have been embargoed for two different
   // reasons at the same time, check that exactly one deletion was successful.
   const bool dismissal_key_deleted =
-      permission_dict->RemoveWithoutPathExpansion(
-          kPermissionDismissalEmbargoKey, nullptr);
+      permission_dict->RemoveKey(kPermissionDismissalEmbargoKey);
   const bool blacklist_key_deleted =
-      permission_dict->RemoveWithoutPathExpansion(
-          kPermissionBlacklistEmbargoKey, nullptr);
+      permission_dict->RemoveKey(kPermissionBlacklistEmbargoKey);
   DCHECK(dismissal_key_deleted != blacklist_key_deleted);
 
   map->SetWebsiteSettingDefaultScope(
@@ -465,9 +452,10 @@ void PermissionDecisionAutoBlocker::PlaceUnderEmbargo(
       HostContentSettingsMapFactory::GetForProfile(profile_);
   std::unique_ptr<base::DictionaryValue> dict =
       GetOriginDict(map, request_origin);
-  base::DictionaryValue* permission_dict = GetOrCreatePermissionDict(
+  base::Value* permission_dict = GetOrCreatePermissionDict(
       dict.get(), PermissionUtil::GetPermissionString(permission));
-  permission_dict->SetDouble(key, clock_->Now().ToInternalValue());
+  permission_dict->SetKey(
+      key, base::Value(static_cast<double>(clock_->Now().ToInternalValue())));
   map->SetWebsiteSettingDefaultScope(
       request_origin, GURL(), CONTENT_SETTINGS_TYPE_PERMISSION_AUTOBLOCKER_DATA,
       std::string(), std::move(dict));

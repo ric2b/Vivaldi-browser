@@ -31,10 +31,12 @@
 #include "core/dom/PresentationAttributeStyle.h"
 
 #include <algorithm>
-#include "core/css/StylePropertySet.h"
+
+#include "base/macros.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Element.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "platform/Timer.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/HashFunctions.h"
@@ -63,10 +65,10 @@ static bool operator!=(const PresentationAttributeCacheKey& a,
 struct PresentationAttributeCacheEntry final
     : public GarbageCollectedFinalized<PresentationAttributeCacheEntry> {
  public:
-  DEFINE_INLINE_TRACE() { visitor->Trace(value); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(value); }
 
   PresentationAttributeCacheKey key;
-  Member<StylePropertySet> value;
+  Member<CSSPropertyValueSet> value;
 };
 
 using PresentationAttributeCache =
@@ -83,7 +85,6 @@ static PresentationAttributeCache& GetPresentationAttributeCache() {
 // Thus it is appropriate to use the main thread's timer task runner, rather
 // than one associated with a particular frame.
 class PresentationAttributeCacheCleaner {
-  WTF_MAKE_NONCOPYABLE(PresentationAttributeCacheCleaner);
   USING_FAST_MALLOC(PresentationAttributeCacheCleaner);
 
  public:
@@ -123,6 +124,7 @@ class PresentationAttributeCacheCleaner {
 
   unsigned hit_count_;
   TaskRunnerTimer<PresentationAttributeCacheCleaner> clean_timer_;
+  DISALLOW_COPY_AND_ASSIGN(PresentationAttributeCacheCleaner);
 };
 
 static bool AttributeNameSort(const std::pair<StringImpl*, AtomicString>& p1,
@@ -140,7 +142,7 @@ static void MakePresentationAttributeCacheKey(
     return;
   // Interpretation of the size attributes on <input> depends on the type
   // attribute.
-  if (isHTMLInputElement(element))
+  if (IsHTMLInputElement(element))
     return;
   AttributeCollection attributes = element.AttributesWithoutUpdate();
   for (const Attribute& attr : attributes) {
@@ -175,7 +177,7 @@ static unsigned ComputePresentationAttributeCacheHash(
   return WTF::HashInts(key.tag_name->ExistingHash(), attribute_hash);
 }
 
-StylePropertySet* ComputePresentationAttributeStyle(Element& element) {
+CSSPropertyValueSet* ComputePresentationAttributeStyle(Element& element) {
   DEFINE_STATIC_LOCAL(PresentationAttributeCacheCleaner, cache_cleaner, ());
 
   DCHECK(element.IsStyledElement());
@@ -196,17 +198,18 @@ StylePropertySet* ComputePresentationAttributeStyle(Element& element) {
     cache_value = nullptr;
   }
 
-  StylePropertySet* style = nullptr;
+  CSSPropertyValueSet* style = nullptr;
   if (cache_hash && cache_value->value) {
     style = cache_value->value->value;
     cache_cleaner.DidHitPresentationAttributeCache();
   } else {
-    style = MutableStylePropertySet::Create(
+    style = MutableCSSPropertyValueSet::Create(
         element.IsSVGElement() ? kSVGAttributeMode : kHTMLStandardMode);
     AttributeCollection attributes = element.AttributesWithoutUpdate();
-    for (const Attribute& attr : attributes)
+    for (const Attribute& attr : attributes) {
       element.CollectStyleForPresentationAttribute(
-          attr.GetName(), attr.Value(), ToMutableStylePropertySet(style));
+          attr.GetName(), attr.Value(), ToMutableCSSPropertyValueSet(style));
+    }
   }
 
   if (!cache_hash || cache_value->value)

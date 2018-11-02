@@ -5,8 +5,8 @@
 #ifndef CHROME_PROFILING_MEMLOG_STREAM_PARSER_H_
 #define CHROME_PROFILING_MEMLOG_STREAM_PARSER_H_
 
-#include <deque>
-
+#include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "chrome/profiling/memlog_receiver.h"
@@ -36,6 +36,7 @@ class MemlogStreamParser : public MemlogStreamReceiver {
  private:
   struct Block {
     Block(std::unique_ptr<char[]> d, size_t s);
+    Block(Block&& other) noexcept;
     ~Block();
 
     std::unique_ptr<char[]> data;
@@ -62,13 +63,14 @@ class MemlogStreamParser : public MemlogStreamReceiver {
   ReadStatus ParseHeader();
   ReadStatus ParseAlloc();
   ReadStatus ParseFree();
+  ReadStatus ParseBarrier();
 
   void SetErrorState();
 
   // Not owned by this class.
   MemlogReceiver* receiver_;
 
-  std::deque<Block> blocks_;
+  base::circular_deque<Block> blocks_;
 
   bool received_header_ = false;
   bool error_ = false;

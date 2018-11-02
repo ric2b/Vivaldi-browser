@@ -26,7 +26,9 @@
 
 #include "platform/graphics/BitmapImage.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/time/default_tick_clock.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/BitmapImageMetrics.h"
@@ -39,14 +41,32 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/instrumentation/PlatformInstrumentation.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/web/WebSettings.h"
 
 namespace blink {
+
+int GetRepetitionCountWithPolicyOverride(int actual_count,
+                                         ImageAnimationPolicy policy) {
+  switch (policy) {
+    case kImageAnimationPolicyAllowed:
+      // Default policy, no count override.
+      return actual_count;
+    case kImageAnimationPolicyAnimateOnce:
+      // Only a single loop allowed.
+      return kAnimationLoopOnce;
+    case kImageAnimationPolicyNoAnimation:
+      // Dont animate.
+      return kAnimationNone;
+  }
+
+  NOTREACHED();
+  return actual_count;
+}
 
 BitmapImage::BitmapImage(ImageObserver* observer, bool is_multipart)
     : Image(observer, is_multipart),
@@ -61,12 +81,13 @@ BitmapImage::BitmapImage(ImageObserver* observer, bool is_multipart)
       repetition_count_status_(kUnknown),
       repetition_count_(kAnimationNone),
       repetitions_complete_(0),
-      desired_frame_start_time_(0),
       frame_count_(0),
+      clock_(base::DefaultTickClock::GetInstance()),
       task_runner_(Platform::Current()
                        ->CurrentThread()
                        ->Scheduler()
-                       ->CompositorTaskRunner()) {}
+                       ->CompositorTaskRunner()),
+      weak_factory_(this) {}
 
 BitmapImage::~BitmapImage() {
   StopAnimation();
@@ -85,7 +106,7 @@ void BitmapImage::DestroyDecodedData() {
   NotifyMemoryChanged();
 }
 
-PassRefPtr<SharedBuffer> BitmapImage::Data() {
+scoped_refptr<SharedBuffer> BitmapImage::Data() {
   return decoder_ ? decoder_->Data() : nullptr;
 }
 
@@ -111,60 +132,38 @@ PaintImage BitmapImage::CreateAndCacheFrame(size_t index) {
   if (frames_.size() < num_frames)
     frames_.Grow(num_frames);
 
-  // Invalidate the uniqueID if the alpha type changes. Skia
-  // expects all generators with the same ID to have a constant
-  // alpha type.
-  if (generator->GetSkImageInfo().alphaType() != frames_[index].alpha_type_) {
-    frames_[index].sk_image_unique_id_ =
-        SkiaPaintImageGenerator::kNeedNewImageUniqueID;
-  }
-  frames_[index].alpha_type_ = generator->GetSkImageInfo().alphaType();
-
   frames_[index].orientation_ = decoder_->OrientationAtIndex(index);
   frames_[index].have_metadata_ = true;
   frames_[index].is_complete_ = decoder_->FrameIsReceivedAtIndex(index);
-  if (RepetitionCount(false) != kAnimationNone)
+  if (RepetitionCount() != kAnimationNone)
     frames_[index].duration_ = decoder_->FrameDurationAtIndex(index);
   frames_[index].has_alpha_ = decoder_->FrameHasAlphaAtIndex(index);
   frames_[index].frame_bytes_ =
       decoder_->Size().Area() * sizeof(ImageFrame::PixelData);
 
-  PaintImageBuilder builder;
-  InitPaintImageBuilder(builder);
-  builder.set_paint_image_generator(std::move(generator))
-      .set_frame_index(index);
-
-  // The caching of the decoded image data by the external users of this image
-  // is keyed based on the uniqueID of the underlying SkImage for this
-  // PaintImage. For this reason once the decoded output of an image becomes
-  // constant, we want use the same uniqueID for repeated calls to create a
-  // PaintImage.
-  // The decoded bitmap for a PaintImage can be considered constant in the
-  // following cases:
-  // 1) Once all data for this image has been received, each frame of the image
-  //    is constant.
-  // 2) For multi-frame images, each frame represents a unique constant bitmap
-  //    once all data for that frame has been received.
-  //
-  // TODO(khushalsagar): This reliance on SkImage ids should be removed once cc
-  // is responsible for decoding all images and can rely on inputs provided in
-  // PaintImage/PaintImageGenerator. See crbug.com/753639.
-  const bool frame_complete = all_data_received_ || frames_[index].is_complete_;
-  DCHECK(frames_[index].sk_image_unique_id_ ==
-             SkiaPaintImageGenerator::kNeedNewImageUniqueID ||
-         frame_complete);
-  builder.set_sk_image_id(frames_[index].sk_image_unique_id_);
+  auto completion_state = all_data_received_
+                              ? PaintImage::CompletionState::DONE
+                              : PaintImage::CompletionState::PARTIALLY_DONE;
+  auto builder =
+      CreatePaintImageBuilder()
+          .set_paint_image_generator(std::move(generator))
+          .set_frame_index(index)
+          .set_repetition_count(GetRepetitionCountWithPolicyOverride(
+              repetition_count_, animation_policy_))
+          .set_completion_state(completion_state)
+          .set_reset_animation_sequence_id(reset_animation_sequence_id_);
 
   // We are caching frame snapshots.  This is OK even for partially decoded
   // frames, as they are cleared by dataChanged() when new data arrives.
   cached_frame_ = builder.TakePaintImage();
   cached_frame_index_ = index;
 
-  // It's important to create the SkImage here to ensure that subsequent calls
-  // for a PaintImage get the same SkImage id.
-  uint32_t sk_image_id = cached_frame_.GetSkImage()->uniqueID();
-  if (frame_complete)
-    frames_[index].sk_image_unique_id_ = sk_image_id;
+  // Create the SkImage backing for this PaintImage here to ensure that copies
+  // of the PaintImage share the same SkImage. Skia's caching of the decoded
+  // output of this image is tied to the lifetime of the SkImage. So we create
+  // the SkImage here and cache the PaintImage to keep the decode alive in
+  // skia's cache.
+  cached_frame_.GetSkImage();
 
   NotifyMemoryChanged();
   return cached_frame_;
@@ -196,7 +195,7 @@ bool BitmapImage::GetHotSpot(IntPoint& hot_spot) const {
   return decoder_ && decoder_->HotSpot(hot_spot);
 }
 
-Image::SizeAvailability BitmapImage::SetData(RefPtr<SharedBuffer> data,
+Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
                                              bool all_data_received) {
   if (!data)
     return kSizeAvailable;
@@ -210,14 +209,10 @@ Image::SizeAvailability BitmapImage::SetData(RefPtr<SharedBuffer> data,
     return DataChanged(all_data_received);
   }
 
-  ColorBehavior color_behavior =
-      RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()
-          ? ColorBehavior::Tag()
-          : ColorBehavior::TransformToGlobalTarget();
   bool has_enough_data = ImageDecoder::HasSufficientDataToSniffImageType(*data);
   decoder_ = DeferredImageDecoder::Create(std::move(data), all_data_received,
                                           ImageDecoder::kAlphaPremultiplied,
-                                          color_behavior);
+                                          ColorBehavior::Tag());
   // If we had enough data but couldn't create a decoder, it implies a decode
   // failure.
   if (has_enough_data && !decoder_)
@@ -256,10 +251,31 @@ Image::SizeAvailability BitmapImage::DataChanged(bool all_data_received) {
     }
   }
 
+  // If the image is being animated by the compositor, clear the cached_frame_
+  // on a data update to push it to the compositor. Since we never advance the
+  // animation here, the |cached_frame_index_| is always the first frame and the
+  // |cached_frame_| might have not have been cleared in the loop above.
+  if (RuntimeEnabledFeatures::CompositorImageAnimationsEnabled()
+      && MaybeAnimated())
+    cached_frame_ = PaintImage();
+
   // Feed all the data we've seen so far to the image decoder.
   all_data_received_ = all_data_received;
 
   have_frame_count_ = false;
+
+  // Reset the cached image if the metadata has changed.
+  if (cached_frame_) {
+    PaintImage::CompletionState new_completion_state =
+        all_data_received_ ? PaintImage::CompletionState::DONE
+                           : PaintImage::CompletionState::PARTIALLY_DONE;
+    const bool metadata_changed =
+        cached_frame_.repetition_count() != RepetitionCount() ||
+        cached_frame_.completion_state() != new_completion_state;
+    if (metadata_changed)
+      cached_frame_ = PaintImage();
+  }
+
   return IsSizeAvailable() ? kSizeAvailable : kSizeUnavailable;
 }
 
@@ -277,12 +293,20 @@ void BitmapImage::Draw(
     const FloatRect& dst_rect,
     const FloatRect& src_rect,
     RespectImageOrientationEnum should_respect_image_orientation,
-    ImageClampingMode clamp_mode) {
+    ImageClampingMode clamp_mode,
+    ImageDecodingMode decode_mode) {
   TRACE_EVENT0("skia", "BitmapImage::draw");
 
   PaintImage image = PaintImageForCurrentFrame();
   if (!image)
     return;  // It's too early and we don't have an image yet.
+
+  auto paint_image_decoding_mode = ToPaintImageDecodingMode(decode_mode);
+  if (image.decoding_mode() != paint_image_decoding_mode) {
+    image = PaintImageBuilder::WithCopy(std::move(image))
+                .set_decoding_mode(paint_image_decoding_mode)
+                .TakePaintImage();
+  }
 
   FloatRect adjusted_src_rect = src_rect;
   adjusted_src_rect.Intersect(SkRect::MakeWH(image.width(), image.height()));
@@ -374,12 +398,12 @@ bool BitmapImage::FrameIsReceivedAtIndex(size_t index) const {
   return decoder_ && decoder_->FrameIsReceivedAtIndex(index);
 }
 
-float BitmapImage::FrameDurationAtIndex(size_t index) const {
+TimeDelta BitmapImage::FrameDurationAtIndex(size_t index) const {
   if (index < frames_.size() && frames_[index].have_metadata_)
     return frames_[index].duration_;
 
   if (!decoder_)
-    return 0.f;
+    return TimeDelta();
   return decoder_->FrameDurationAtIndex(index);
 }
 
@@ -387,9 +411,21 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
   return FrameAtIndex(current_frame_index_);
 }
 
-PassRefPtr<Image> BitmapImage::ImageForDefaultFrame() {
+scoped_refptr<Image> BitmapImage::ImageForDefaultFrame() {
   if (FrameCount() > 1) {
-    return StaticBitmapImage::Create(FrameAtIndex(0u));
+    PaintImage paint_image = FrameAtIndex(PaintImage::kDefaultFrameIndex);
+    if (!paint_image)
+      return nullptr;
+
+    if (paint_image.ShouldAnimate()) {
+      // To prevent the compositor from animating this image, we set the
+      // animation count to kAnimationNone. This makes the image essentially
+      // static.
+      paint_image = PaintImageBuilder::WithCopy(std::move(paint_image))
+                        .set_repetition_count(kAnimationNone)
+                        .TakePaintImage();
+    }
+    return StaticBitmapImage::Create(std::move(paint_image));
   }
 
   return Image::ImageForDefaultFrame();
@@ -445,17 +481,16 @@ ImageOrientation BitmapImage::FrameOrientationAtIndex(size_t index) {
   return decoder_->OrientationAtIndex(index);
 }
 
-int BitmapImage::RepetitionCount(bool image_known_to_be_complete) {
+int BitmapImage::RepetitionCount() {
   if ((repetition_count_status_ == kUnknown) ||
-      ((repetition_count_status_ == kUncertain) &&
-       image_known_to_be_complete)) {
+      ((repetition_count_status_ == kUncertain) && all_data_received_)) {
     // Snag the repetition count.  If |imageKnownToBeComplete| is false, the
     // repetition count may not be accurate yet for GIFs; in this case the
     // decoder will default to cAnimationLoopOnce, and we'll try and read
     // the count again once the whole image is decoded.
     repetition_count_ = decoder_ ? decoder_->RepetitionCount() : kAnimationNone;
     repetition_count_status_ =
-        (image_known_to_be_complete || repetition_count_ == kAnimationNone)
+        (all_data_received_ || repetition_count_ == kAnimationNone)
             ? kCertain
             : kUncertain;
   }
@@ -463,47 +498,61 @@ int BitmapImage::RepetitionCount(bool image_known_to_be_complete) {
 }
 
 bool BitmapImage::ShouldAnimate() {
-  bool animated = RepetitionCount(false) != kAnimationNone &&
-                  !animation_finished_ && GetImageObserver();
+  if (RuntimeEnabledFeatures::CompositorImageAnimationsEnabled())
+    return false;
+
+  bool animated = RepetitionCount() != kAnimationNone && !animation_finished_ &&
+                  GetImageObserver();
   if (animated && animation_policy_ == kImageAnimationPolicyNoAnimation)
     animated = false;
   return animated;
 }
 
-void BitmapImage::StartAnimation(CatchUpAnimation catch_up_if_necessary) {
-  if (frame_timer_ || !ShouldAnimate() || FrameCount() <= 1)
+void BitmapImage::StartAnimation() {
+  last_num_frames_skipped_ = StartAnimationInternal(clock_->NowTicks());
+  if (!last_num_frames_skipped_.has_value())
     return;
 
+  UMA_HISTOGRAM_COUNTS_100000("AnimatedImage.NumOfFramesSkipped.Main",
+                              last_num_frames_skipped_.value());
+}
+
+Optional<size_t> BitmapImage::StartAnimationInternal(TimeTicks time) {
+  // If the |frame_timer_| is set, it indicates that a task is already pending
+  // to advance the current frame of the animation. We don't need to schedule
+  // a task to advance the animation in that case.
+  if (frame_timer_ || !ShouldAnimate() || FrameCount() <= 1)
+    return WTF::nullopt;
+
   // If we aren't already animating, set now as the animation start time.
-  const double time = MonotonicallyIncreasingTime();
-  if (!desired_frame_start_time_)
+  if (desired_frame_start_time_.is_null())
     desired_frame_start_time_ = time;
 
   // Don't advance the animation to an incomplete frame.
   size_t next_frame = (current_frame_index_ + 1) % FrameCount();
-  if (!all_data_received_ && !FrameIsReceivedAtIndex(next_frame))
-    return;
+  if (!FrameIsReceivedAtIndex(next_frame))
+    return WTF::nullopt;
 
   // Don't advance past the last frame if we haven't decoded the whole image
   // yet and our repetition count is potentially unset.  The repetition count
   // in a GIF can potentially come after all the rest of the image data, so
   // wait on it.
   if (!all_data_received_ &&
-      (RepetitionCount(false) == kAnimationLoopOnce ||
+      (RepetitionCount() == kAnimationLoopOnce ||
        animation_policy_ == kImageAnimationPolicyAnimateOnce) &&
       current_frame_index_ >= (FrameCount() - 1))
-    return;
+    return WTF::nullopt;
 
   // Determine time for next frame to start.  By ignoring paint and timer lag
   // in this calculation, we make the animation appear to run at its desired
   // rate regardless of how fast it's being repainted.
-  const double current_duration = FrameDurationAtIndex(current_frame_index_);
+  TimeDelta current_duration = FrameDurationAtIndex(current_frame_index_);
   desired_frame_start_time_ += current_duration;
 
   // When an animated image is more than five minutes out of date, the
   // user probably doesn't care about resyncing and we could burn a lot of
   // time looping through frames below.  Just reset the timings.
-  const double kCAnimationResyncCutoff = 5 * 60;
+  constexpr TimeDelta kCAnimationResyncCutoff = TimeDelta::FromMinutes(5);
   if ((time - desired_frame_start_time_) > kCAnimationResyncCutoff)
     desired_frame_start_time_ = time + current_duration;
 
@@ -521,44 +570,74 @@ void BitmapImage::StartAnimation(CatchUpAnimation catch_up_if_necessary) {
       desired_frame_start_time_ < time)
     desired_frame_start_time_ = time;
 
-  if (catch_up_if_necessary == kDoNotCatchUp ||
-      time < desired_frame_start_time_) {
-    // Haven't yet reached time for next frame to start; delay until then.
+  if (time < desired_frame_start_time_) {
+    // Haven't yet reached time for next frame to start; delay until then
     frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
         task_runner_, this, &BitmapImage::AdvanceAnimation));
-    frame_timer_->StartOneShot(std::max(desired_frame_start_time_ - time, 0.),
-                               BLINK_FROM_HERE);
-  } else {
-    // We've already reached or passed the time for the next frame to start.
-    // See if we've also passed the time for frames after that to start, in
-    // case we need to skip some frames entirely.  Remember not to advance
-    // to an incomplete frame.
-    for (size_t frame_after_next = (next_frame + 1) % FrameCount();
-         FrameIsReceivedAtIndex(frame_after_next);
-         frame_after_next = (next_frame + 1) % FrameCount()) {
-      // Should we skip the next frame?
-      double frame_after_next_start_time =
-          desired_frame_start_time_ + FrameDurationAtIndex(next_frame);
-      if (time < frame_after_next_start_time)
-        break;
+    frame_timer_->StartOneShot(
+        std::max(desired_frame_start_time_ - time, TimeDelta()),
+        BLINK_FROM_HERE);
 
-      // Skip the next frame by advancing the animation forward one frame.
-      if (!InternalAdvanceAnimation(kSkipFramesToCatchUp)) {
-        DCHECK(animation_finished_);
-        return;
-      }
-      desired_frame_start_time_ = frame_after_next_start_time;
-      next_frame = frame_after_next;
+    // No frames needed to be skipped to advance to the next frame.
+    return Optional<size_t>(0u);
+  }
+
+  // We've already reached or passed the time for the next frame to start.
+  // See if we've also passed the time for frames after that to start, in
+  // case we need to skip some frames entirely.  Remember not to advance
+  // to an incomplete frame.
+  // Note that |desired_frame_start_time_| is always set to the time at which
+  // |next_frame| should be displayed.
+  size_t frames_advanced = 0u;
+  for (; FrameIsReceivedAtIndex(next_frame);
+       next_frame = (current_frame_index_ + 1) % FrameCount()) {
+    // Should we skip the next frame?
+    // TODO(vmpstr): This function can probably deal in TimeTicks/TimeDelta
+    // instead.
+    if (time < desired_frame_start_time_)
+      break;
+
+    // Skip the next frame by advancing the animation forward one frame.
+    if (!InternalAdvanceAnimation(kSkipFramesToCatchUp)) {
+      DCHECK(animation_finished_);
+
+      // No frames skipped, we simply marked the animation as finished on the
+      // first attempt to advance it.
+      if (frames_advanced == 0u)
+        return WTF::nullopt;
+
+      // Don't include the |current_frame_index_|, the last frame we will be
+      // painting when finishing this animation, in the number of frames
+      // skipped.
+      return Optional<size_t>(frames_advanced - 1);
     }
 
-    // Post a task to advance the frame immediately. m_desiredFrameStartTime
-    // may be in the past, meaning the next time through this function we'll
-    // kick off the next advancement sooner than this frame's duration would
-    // suggest.
-    frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
-        task_runner_, this, &BitmapImage::AdvanceAnimationWithoutCatchUp));
-    frame_timer_->StartOneShot(0, BLINK_FROM_HERE);
+    DCHECK_EQ(current_frame_index_, next_frame);
+    frames_advanced++;
+    desired_frame_start_time_ += FrameDurationAtIndex(current_frame_index_);
   }
+
+  DCHECK_GT(frames_advanced, 0u);
+
+  // Since we just advanced a bunch of frames during catch up, post a
+  // notification to the observers. Note this has to be async because the
+  // animation can happen during painting and this invalidation is required
+  // after the current paint.
+  task_runner_->PostTask(
+      BLINK_FROM_HERE,
+      WTF::Bind(&BitmapImage::NotifyObserversOfAnimationAdvance,
+                weak_factory_.CreateWeakPtr(), nullptr));
+
+  // Reset the |desired_frame_start_time_| to the time for starting the
+  // |current_frame_index_|. Whenever StartAnimationInternal decides to schedule
+  // the task for the next frame (which may not happen in the call below), it
+  // always updates the |desired_frame_start_time_| based on the current frame
+  // duration.
+  desired_frame_start_time_ -= FrameDurationAtIndex(current_frame_index_);
+
+  // Don't include the |current_frame_index_|, which will be used on the next
+  // paint, in the number of frames skipped.
+  return Optional<size_t>(frames_advanced - 1);
 }
 
 void BitmapImage::StopAnimation() {
@@ -571,9 +650,10 @@ void BitmapImage::ResetAnimation() {
   StopAnimation();
   current_frame_index_ = 0;
   repetitions_complete_ = 0;
-  desired_frame_start_time_ = 0;
+  desired_frame_start_time_ = TimeTicks();
   animation_finished_ = false;
   cached_frame_ = PaintImage();
+  reset_animation_sequence_id_++;
 }
 
 bool BitmapImage::MaybeAnimated() {
@@ -585,12 +665,11 @@ bool BitmapImage::MaybeAnimated() {
   return decoder_ && decoder_->RepetitionCount() != kAnimationNone;
 }
 
-void BitmapImage::AdvanceTime(double delta_time_in_seconds) {
-  if (desired_frame_start_time_)
-    desired_frame_start_time_ -= delta_time_in_seconds;
+void BitmapImage::AdvanceTime(TimeDelta delta) {
+  if (!desired_frame_start_time_.is_null())
+    desired_frame_start_time_ -= delta;
   else
-    desired_frame_start_time_ =
-        MonotonicallyIncreasingTime() - delta_time_in_seconds;
+    desired_frame_start_time_ = clock_->NowTicks() - delta;
 }
 
 void BitmapImage::AdvanceAnimation(TimerBase*) {
@@ -598,11 +677,6 @@ void BitmapImage::AdvanceAnimation(TimerBase*) {
   // At this point the image region has been marked dirty, and if it's
   // onscreen, we'll soon make a call to draw(), which will call
   // startAnimation() again to keep the animation moving.
-}
-
-void BitmapImage::AdvanceAnimationWithoutCatchUp(TimerBase*) {
-  if (InternalAdvanceAnimation())
-    StartAnimation(kDoNotCatchUp);
 }
 
 bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
@@ -624,16 +698,13 @@ bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
   } else {
     repetitions_complete_++;
 
-    // Get the repetition count again. If we weren't able to get a
-    // repetition count before, we should have decoded the whole image by
-    // now, so it should now be available.
     // We don't need to special-case cAnimationLoopOnce here because it is
     // 0 (see comments on its declaration in ImageAnimation.h).
-    if ((RepetitionCount(true) != kAnimationLoopInfinite &&
+    if ((RepetitionCount() != kAnimationLoopInfinite &&
          repetitions_complete_ > repetition_count_) ||
         animation_policy_ == kImageAnimationPolicyAnimateOnce) {
       animation_finished_ = true;
-      desired_frame_start_time_ = 0;
+      desired_frame_start_time_ = TimeTicks();
 
       // We skipped to the last frame and cannot advance further. The
       // observer will not receive animationAdvanced notifications while
@@ -644,7 +715,7 @@ bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
         frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
             task_runner_, this,
             &BitmapImage::NotifyObserversOfAnimationAdvance));
-        frame_timer_->StartOneShot(0, BLINK_FROM_HERE);
+        frame_timer_->StartOneShot(TimeDelta(), BLINK_FROM_HERE);
       }
 
       return false;
@@ -659,6 +730,14 @@ bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
     GetImageObserver()->AnimationAdvanced(this);
 
   return true;
+}
+
+void BitmapImage::SetAnimationPolicy(ImageAnimationPolicy policy) {
+  if (animation_policy_ == policy)
+    return;
+
+  animation_policy_ = policy;
+  ResetAnimation();
 }
 
 void BitmapImage::NotifyObserversOfAnimationAdvance(TimerBase*) {

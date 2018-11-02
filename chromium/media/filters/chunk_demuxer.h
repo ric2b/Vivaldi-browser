@@ -8,13 +8,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/synchronization/lock.h"
@@ -25,6 +25,8 @@
 #include "media/base/ranges.h"
 #include "media/base/stream_parser.h"
 #include "media/filters/source_buffer_parse_warnings.h"
+#include "media/filters/source_buffer_range_by_dts.h"
+#include "media/filters/source_buffer_range_by_pts.h"
 #include "media/filters/source_buffer_state.h"
 #include "media/filters/source_buffer_stream.h"
 
@@ -32,9 +34,13 @@ namespace media {
 
 class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
  public:
-  typedef std::deque<scoped_refptr<StreamParserBuffer> > BufferQueue;
+  using BufferQueue = base::circular_deque<scoped_refptr<StreamParserBuffer>>;
 
-  ChunkDemuxerStream(Type type, MediaTrack::Id media_track_id);
+  enum class RangeApi { kLegacyByDts, kNewByPts };
+
+  ChunkDemuxerStream(Type type,
+                     MediaTrack::Id media_track_id,
+                     RangeApi range_api);
   ~ChunkDemuxerStream() override;
 
   // ChunkDemuxerStream control methods.
@@ -91,8 +97,10 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   size_t GetBufferedSize() const;
 
   // Signal to the stream that buffers handed in through subsequent calls to
-  // Append() belong to a coded frame group that starts at |start_timestamp|.
-  void OnStartOfCodedFrameGroup(DecodeTimestamp start_timestamp);
+  // Append() belong to a coded frame group that starts at |start_dts| and
+  // |start_pts|.
+  void OnStartOfCodedFrameGroup(DecodeTimestamp start_dts,
+                                base::TimeDelta start_pts);
 
   // Called when midstream config updates occur.
   // Returns true if the new config is accepted.
@@ -111,7 +119,6 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   AudioDecoderConfig audio_decoder_config() override;
   VideoDecoderConfig video_decoder_config() override;
   bool SupportsConfigChanges() override;
-  VideoRotation video_rotation() override;
 
   bool IsEnabled() const;
   void SetEnabled(bool enabled, base::TimeDelta timestamp);
@@ -148,10 +155,14 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
 
   // Specifies the type of the stream.
   Type type_;
+  const RangeApi range_api_;
 
   Liveness liveness_;
 
-  std::unique_ptr<SourceBufferStream> stream_;
+  // Precisely one of these will be used by an instance, determined by
+  // |range_api_| set in ctor. See https://crbug.com/718641.
+  std::unique_ptr<SourceBufferStream<SourceBufferRangeByDts>> stream_dts_;
+  std::unique_ptr<SourceBufferStream<SourceBufferRangeByPts>> stream_pts_;
 
   const MediaTrack::Id media_track_id_;
 
@@ -460,6 +471,11 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   int detected_audio_track_count_;
   int detected_video_track_count_;
   int detected_text_track_count_;
+
+  // Caches whether |media::kMseBufferByPts| feature was enabled at ChunkDemuxer
+  // construction time. This makes sure that all buffering for this ChunkDemuxer
+  // uses the same behavior. See https://crbug.com/718641.
+  const bool buffering_by_pts_;
 
   std::map<MediaTrack::Id, ChunkDemuxerStream*> track_id_to_demux_stream_map_;
 

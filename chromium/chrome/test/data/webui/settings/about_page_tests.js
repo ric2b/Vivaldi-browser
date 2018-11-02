@@ -18,6 +18,7 @@ cr.define('settings_about_page', function() {
           'getChannelInfo',
           'getVersionInfo',
           'getRegulatoryInfo',
+          'refreshTPMFirmwareUpdateStatus',
           'setChannel');
       }
 
@@ -46,6 +47,11 @@ cr.define('settings_about_page', function() {
 
         /** @private {?RegulatoryInfo} */
         this.regulatoryInfo_ = null;
+
+        /** @private {!TPMFirmwareUpdateStatus} */
+        this.tpmFirmwareUpdateStatus_ = {
+          updateAvailable: false,
+        };
       }
     }
 
@@ -146,6 +152,20 @@ cr.define('settings_about_page', function() {
         channel, isPowerwashAllowed) {
       this.methodCalled('setChannel', [channel, isPowerwashAllowed]);
     };
+
+    /** @param {!TPMFirmwareUpdateStatus} status */
+    TestAboutPageBrowserProxy.prototype.setTPMFirmwareUpdateStatus = function(
+        status) {
+      this.tpmFirmwareUpdateStatus_ = status;
+    };
+
+    /** @override */
+    TestAboutPageBrowserProxy.prototype.refreshTPMFirmwareUpdateStatus =
+        function() {
+      this.methodCalled('refreshTPMFirmwareUpdateStatus');
+      cr.webUIListenerCallback(
+          'tpm-firmware-update-status-changed', this.tpmFirmwareUpdateStatus_);
+    };
   }
 
 
@@ -209,6 +229,7 @@ cr.define('settings_about_page', function() {
           return Promise.all([
             aboutBrowserProxy.whenCalled('getChannelInfo'),
             aboutBrowserProxy.whenCalled('refreshUpdateStatus'),
+            aboutBrowserProxy.whenCalled('refreshTPMFirmwareUpdateStatus'),
           ]);
         }
       }
@@ -220,7 +241,7 @@ cr.define('settings_about_page', function() {
       test('IconAndMessageUpdates', function() {
         var icon = page.$$('iron-icon');
         assertTrue(!!icon);
-        var statusMessageEl = page.$.updateStatusMessage;
+        var statusMessageEl = page.$$('#updateStatusMessage div');
         var previousMessageText = statusMessageEl.textContent;
 
         fireStatusChanged(UpdateStatus.CHECKING);
@@ -267,8 +288,18 @@ cr.define('settings_about_page', function() {
         var htmlError = 'hello<br>there<br>was<pre>an</pre>error';
         fireStatusChanged(
             UpdateStatus.FAILED, {message: htmlError});
-        var statusMessageEl = page.$.updateStatusMessage;
+        var statusMessageEl = page.$$('#updateStatusMessage div');
         assertEquals(htmlError, statusMessageEl.innerHTML);
+      });
+
+      test('FailedLearnMoreLink', function() {
+        // Check that link is shown when update failed.
+        fireStatusChanged(UpdateStatus.FAILED, {message: 'foo'});
+        assertTrue(!!page.$$('#updateStatusMessage a:not([hidden])'));
+
+        // Check that link is hidden when update hasn't failed.
+        fireStatusChanged(UpdateStatus.UPDATED, {message: ''});
+        assertTrue(!!page.$$('#updateStatusMessage a[hidden]'));
       });
 
       /**
@@ -541,6 +572,27 @@ cr.define('settings_about_page', function() {
             return initNewPage();
           }).then(function() {
             return checkRegulatoryInfo(true);
+          });
+        });
+
+        test('TPMFirmwareUpdate', function() {
+          return initNewPage().then(function() {
+            assertTrue(page.$.aboutTPMFirmwareUpdate.hidden);
+            aboutBrowserProxy.setTPMFirmwareUpdateStatus(
+                {updateAvailable: true});
+            aboutBrowserProxy.refreshTPMFirmwareUpdateStatus();
+          }).then(function() {
+            assertFalse(page.$.aboutTPMFirmwareUpdate.hidden);
+            MockInteractions.tap(page.$.aboutTPMFirmwareUpdate);
+          }).then(function() {
+            var dialog = page.$$('settings-powerwash-dialog');
+            assertTrue(!!dialog);
+            assertTrue(dialog.$.dialog.open);
+            MockInteractions.tap(dialog.$$('#powerwash'));
+            return lifetimeBrowserProxy.whenCalled('factoryReset')
+                .then(function(requestTpmFirmwareUpdate) {
+                  assertTrue(requestTpmFirmwareUpdate);
+                });
           });
         });
       }

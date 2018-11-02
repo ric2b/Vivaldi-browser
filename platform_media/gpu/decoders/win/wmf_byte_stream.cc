@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2013 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -10,7 +11,7 @@
 
 #include <algorithm>
 
-namespace content {
+namespace media {
 
 namespace {
 
@@ -28,7 +29,7 @@ class WMFReadRequest : public base::win::IUnknownImpl {
 
 }  // namespace
 
-WMFByteStream::WMFByteStream(media::DataSource* data_source)
+WMFByteStream::WMFByteStream(DataSource* data_source)
     : async_result_(nullptr),
       read_stream_(new ReadStream(data_source)) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
@@ -167,7 +168,7 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
 
   int bytes_read = read_stream_->SyncRead(buff, len);
 
-  if (bytes_read == media::DataSource::kReadError) {
+  if (bytes_read == DataSource::kReadError) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_FAIL) Stream sync read error";
     return E_FAIL;
@@ -186,12 +187,12 @@ void WMFByteStream::OnReadData(int size) {
     return;
   }
 
-  base::win::ScopedComPtr<IUnknown> unknown;
+  Microsoft::WRL::ComPtr<IUnknown> unknown;
   HRESULT hr = async_result_->GetObjectW(unknown.GetAddressOf());
   WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
 
   HRESULT status;
-  if (FAILED(hr) || !unknown || size == media::DataSource::kReadError) {
+  if (FAILED(hr) || !unknown || size == DataSource::kReadError) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_FAIL Stream async read error";
     status = E_FAIL;
@@ -228,7 +229,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
     return E_ABORT;
   }
 
-  base::win::ScopedComPtr<IUnknown> read_request(new WMFReadRequest(buff, len));
+  Microsoft::WRL::ComPtr<IUnknown> read_request(new WMFReadRequest(buff, len));
   HRESULT hresult =
       MFCreateAsyncResult(read_request.Get(), callback, state, &async_result_);
   if (FAILED(hresult)) {
@@ -244,7 +245,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
 HRESULT STDMETHODCALLTYPE
 WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
   HRESULT hresult;
-  base::win::ScopedComPtr<IUnknown> unknown;
+  Microsoft::WRL::ComPtr<IUnknown> unknown;
   if (FAILED(result->GetObjectW(unknown.GetAddressOf())) || !unknown) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_INVALIDARG) Stream has failed";
@@ -604,4 +605,4 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::CopyAllItems(IMFAttributes* dest) {
   }
 }
 
-}  // namespace content
+}  // namespace media

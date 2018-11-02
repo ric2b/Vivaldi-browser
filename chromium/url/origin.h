@@ -87,7 +87,13 @@ class URL_EXPORT Origin {
   // 2. 'filesystem' URLs behave as 'blob' URLs (that is, the origin is parsed
   //    out of everything in the URL which follows the scheme).
   // 3. 'file' URLs all parse as ("file", "", 0).
-  explicit Origin(const GURL& url);
+  static Origin Create(const GURL& url);
+
+  // Copyable and movable.
+  Origin(const Origin&);
+  Origin& operator=(const Origin&);
+  Origin(Origin&&);
+  Origin& operator=(Origin&&);
 
   // Creates an Origin from a |scheme|, |host|, |port| and |suborigin|. All the
   // parameters must be valid and canonicalized. Do not use this method to
@@ -168,16 +174,8 @@ class URL_EXPORT Origin {
   bool operator<(const Origin& other) const;
 
  private:
-  Origin(base::StringPiece scheme,
-         base::StringPiece host,
-         uint16_t port,
-         base::StringPiece suborigin,
-         SchemeHostPort::ConstructPolicy policy);
-  Origin(std::string scheme,
-         std::string host,
-         uint16_t port,
-         std::string suborigin,
-         SchemeHostPort::ConstructPolicy policy);
+  // |tuple| must be valid, implying that the created Origin is never unique.
+  Origin(SchemeHostPort tuple, std::string suborigin);
 
   SchemeHostPort tuple_;
   bool unique_;

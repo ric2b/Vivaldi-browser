@@ -28,7 +28,9 @@
 
 #include <memory>
 
-#include "bindings/modules/v8/StringOrStringSequence.h"
+#include "base/memory/scoped_refptr.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
+#include "bindings/modules/v8/string_or_string_sequence.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMStringList.h"
 #include "modules/EventModules.h"
@@ -41,11 +43,9 @@
 #include "modules/indexeddb/IDBObjectStoreParameters.h"
 #include "modules/indexeddb/IDBTransaction.h"
 #include "modules/indexeddb/IndexedDB.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/modules/indexeddb/WebIDBDatabase.h"
 
 namespace blink {
@@ -69,8 +69,8 @@ class MODULES_EXPORT IDBDatabase final
                              IDBDatabaseCallbacks*,
                              v8::Isolate*);
   ~IDBDatabase() override;
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // Overwrites the database metadata, including object store and index
   // metadata. Used to pass metadata to the database when it is opened.
@@ -144,7 +144,8 @@ class MODULES_EXPORT IDBDatabase final
   }
   void RenameObjectStore(int64_t store_id, const String& new_name);
   void RevertObjectStoreCreation(int64_t object_store_id);
-  void RevertObjectStoreMetadata(RefPtr<IDBObjectStoreMetadata> old_metadata);
+  void RevertObjectStoreMetadata(
+      scoped_refptr<IDBObjectStoreMetadata> old_metadata);
 
   // Will return nullptr if this database is stopped.
   WebIDBDatabase* Backend() const { return backend_.get(); }

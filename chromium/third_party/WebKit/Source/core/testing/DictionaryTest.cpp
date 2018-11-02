@@ -73,7 +73,6 @@ void DictionaryTest::set(const InternalDictionary& testing_dictionary) {
         testing_dictionary.dictionaryMember().GetOwnPropertiesAsStringHashMap(
             exception_state);
   }
-  prefix_get_member_ = testing_dictionary.getPrefixGetMember();
 }
 
 void DictionaryTest::get(InternalDictionary& result) {
@@ -114,13 +113,12 @@ void DictionaryTest::get(InternalDictionary& result) {
     result.setElementOrNullMember(element_or_null_member_);
   result.setObjectMember(object_member_);
   result.setObjectOrNullMemberWithDefault(object_or_null_member_with_default_);
-  if (!double_or_string_member_.isNull())
+  if (!double_or_string_member_.IsNull())
     result.setDoubleOrStringMember(double_or_string_member_);
   if (!double_or_string_sequence_member_.IsNull())
     result.setDoubleOrStringSequenceMember(
         double_or_string_sequence_member_.Get());
   result.setEventTargetOrNullMember(event_target_or_null_member_);
-  result.setPrefixGetMember(prefix_get_member_);
 }
 
 ScriptValue DictionaryTest::getDictionaryMemberProperties(
@@ -221,14 +219,14 @@ void DictionaryTest::Reset() {
   derived_string_member_with_default_ = String();
   required_boolean_member_ = false;
   dictionary_member_properties_ = nullptr;
-  prefix_get_member_ = ScriptValue();
 }
 
-DEFINE_TRACE(DictionaryTest) {
+void DictionaryTest::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_member_);
   visitor->Trace(element_or_null_member_);
   visitor->Trace(double_or_string_sequence_member_);
   visitor->Trace(event_target_or_null_member_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

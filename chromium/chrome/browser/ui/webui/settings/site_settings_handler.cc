@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -49,6 +50,9 @@
 #include "ui/base/text/bytes_formatting.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -208,12 +212,24 @@ void SiteSettingsHandler::OnJavascriptAllowed() {
           ->AddZoomLevelChangedCallback(
               base::Bind(&SiteSettingsHandler::OnZoomLevelChanged,
                          base::Unretained(this)));
+
+#if defined(OS_CHROMEOS)
+  pref_change_registrar_ = base::MakeUnique<PrefChangeRegistrar>();
+  pref_change_registrar_->Init(profile_->GetPrefs());
+  pref_change_registrar_->Add(
+      prefs::kEnableDRM,
+      base::Bind(&SiteSettingsHandler::OnPrefEnableDrmChanged,
+                 base::Unretained(this)));
+#endif
 }
 
 void SiteSettingsHandler::OnJavascriptDisallowed() {
   observer_.RemoveAll();
   notification_registrar_.RemoveAll();
   host_zoom_map_subscription_.reset();
+#if defined(OS_CHROMEOS)
+  pref_change_registrar_->Remove(prefs::kEnableDRM);
+#endif
 }
 
 void SiteSettingsHandler::OnGetUsageInfo(
@@ -238,6 +254,13 @@ void SiteSettingsHandler::OnUsageInfoCleared(storage::QuotaStatusCode code) {
                            base::Value(clearing_origin_));
   }
 }
+
+#if defined(OS_CHROMEOS)
+void SiteSettingsHandler::OnPrefEnableDrmChanged() {
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::Value("prefEnableDrmChanged"));
+}
+#endif
 
 void SiteSettingsHandler::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
@@ -395,6 +418,8 @@ void SiteSettingsHandler::HandleSetDefaultValueForContentType(
   CHECK(args->GetString(1, &setting));
   ContentSetting default_setting;
   CHECK(content_settings::ContentSettingFromString(setting, &default_setting));
+  ContentSettingsType type =
+      site_settings::ContentSettingsTypeFromGroupName(content_type);
 
   Profile* profile = profile_;
 #if defined(OS_CHROMEOS)
@@ -405,9 +430,20 @@ void SiteSettingsHandler::HandleSetDefaultValueForContentType(
 #endif
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  map->SetDefaultContentSetting(
-      site_settings::ContentSettingsTypeFromGroupName(content_type),
-      default_setting);
+  ContentSetting previous_setting =
+      map->GetDefaultContentSetting(type, nullptr);
+  map->SetDefaultContentSetting(type, default_setting);
+
+  if (type == CONTENT_SETTINGS_TYPE_SOUND &&
+      previous_setting != default_setting) {
+    if (default_setting == CONTENT_SETTING_BLOCK) {
+      base::RecordAction(
+          base::UserMetricsAction("SoundContentSetting.MuteBy.DefaultSwitch"));
+    } else {
+      base::RecordAction(base::UserMetricsAction(
+          "SoundContentSetting.UnmuteBy.DefaultSwitch"));
+    }
+  }
 }
 
 void SiteSettingsHandler::HandleGetDefaultValueForContentType(
@@ -551,6 +587,20 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
     }
     map->SetContentSettingDefaultScope(origin, origin, content_type,
                                        std::string(), setting);
+    if (content_type == CONTENT_SETTINGS_TYPE_SOUND) {
+      ContentSetting default_setting =
+          map->GetDefaultContentSetting(CONTENT_SETTINGS_TYPE_SOUND, nullptr);
+      bool mute = (setting == CONTENT_SETTING_BLOCK) ||
+                  (setting == CONTENT_SETTING_DEFAULT &&
+                   default_setting == CONTENT_SETTING_BLOCK);
+      if (mute) {
+        base::RecordAction(
+            base::UserMetricsAction("SoundContentSetting.MuteBy.SiteSettings"));
+      } else {
+        base::RecordAction(base::UserMetricsAction(
+            "SoundContentSetting.UnmuteBy.SiteSettings"));
+      }
+    }
     WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
   }
 
@@ -610,6 +660,17 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
                                     content_type, "", CONTENT_SETTING_DEFAULT);
 
+  if (content_type == CONTENT_SETTINGS_TYPE_SOUND) {
+    ContentSetting default_setting =
+        map->GetDefaultContentSetting(CONTENT_SETTINGS_TYPE_SOUND, nullptr);
+    if (default_setting == CONTENT_SETTING_BLOCK) {
+      base::RecordAction(base::UserMetricsAction(
+          "SoundContentSetting.MuteBy.PatternException"));
+    } else {
+      base::RecordAction(base::UserMetricsAction(
+          "SoundContentSetting.UnmuteBy.PatternException"));
+    }
+  }
   WebSiteSettingsUmaUtil::LogPermissionChange(
       content_type, ContentSetting::CONTENT_SETTING_DEFAULT);
 }
@@ -660,6 +721,20 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
                                     content_type, "", setting);
 
+  if (content_type == CONTENT_SETTINGS_TYPE_SOUND) {
+    ContentSetting default_setting =
+        map->GetDefaultContentSetting(CONTENT_SETTINGS_TYPE_SOUND, nullptr);
+    bool mute = (setting == CONTENT_SETTING_BLOCK) ||
+                (setting == CONTENT_SETTING_DEFAULT &&
+                 default_setting == CONTENT_SETTING_BLOCK);
+    if (mute) {
+      base::RecordAction(base::UserMetricsAction(
+          "SoundContentSetting.MuteBy.PatternException"));
+    } else {
+      base::RecordAction(base::UserMetricsAction(
+          "SoundContentSetting.UnmuteBy.PatternException"));
+    }
+  }
   WebSiteSettingsUmaUtil::LogPermissionChange(content_type, setting);
 }
 

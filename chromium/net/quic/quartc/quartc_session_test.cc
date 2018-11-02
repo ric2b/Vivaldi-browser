@@ -155,9 +155,8 @@ class FakeProofSource : public ProofSource {
   void GetProof(const QuicSocketAddress& server_ip,
                 const string& hostname,
                 const string& server_config,
-                QuicVersion quic_version,
+                QuicTransportVersion transport_version,
                 QuicStringPiece chlo_hash,
-                const QuicTagVector& connection_options,
                 std::unique_ptr<Callback> callback) override {
     QuicReferenceCountedPointer<ProofSource::Chain> chain;
     QuicCryptoProof proof;
@@ -202,7 +201,7 @@ class FakeProofVerifier : public ProofVerifier {
       const string& hostname,
       const uint16_t port,
       const string& server_config,
-      QuicVersion quic_version,
+      QuicTransportVersion transport_version,
       QuicStringPiece chlo_hash,
       const std::vector<string>& certs,
       const string& cert_sct,
@@ -482,7 +481,7 @@ class QuartcSessionTest : public ::testing::Test,
     return std::unique_ptr<QuicConnection>(new QuicConnection(
         0, QuicSocketAddress(ip, 0), this /*QuicConnectionHelperInterface*/,
         alarm_factory_.get(), writer, owns_writer, perspective,
-        AllSupportedVersions()));
+        AllSupportedTransportVersions()));
   }
 
   // Runs all tasks scheduled in the next 200 ms.
@@ -564,10 +563,6 @@ class QuartcSessionTest : public ::testing::Test,
 
   QuicRandom* GetRandomGenerator() override {
     return QuicRandom::GetInstance();
-  }
-
-  QuicBufferAllocator* GetStreamFrameBufferAllocator() override {
-    return &buffer_allocator_;
   }
 
   QuicBufferAllocator* GetStreamSendBufferAllocator() override {
@@ -661,8 +656,21 @@ TEST_F(QuartcSessionTest, GetStats) {
   ASSERT_TRUE(client_peer_->IsCryptoHandshakeConfirmed());
   ASSERT_TRUE(server_peer_->IsCryptoHandshakeConfirmed());
 
-  QuartcSessionStats stats = client_peer_->GetStats();
-  EXPECT_GT(stats.bandwidth_estimate_bits_per_second, 0);
+  QuartcSessionStats stats = server_peer_->GetStats();
+  EXPECT_GT(stats.bandwidth_estimate, QuicBandwidth::Zero());
+  EXPECT_GT(stats.smoothed_rtt, QuicTime::Delta::Zero());
+}
+
+TEST_F(QuartcSessionTest, CloseConnection) {
+  CreateClientAndServerSessions();
+  StartHandshake();
+  ASSERT_TRUE(client_peer_->IsCryptoHandshakeConfirmed());
+  ASSERT_TRUE(server_peer_->IsCryptoHandshakeConfirmed());
+
+  client_peer_->CloseConnection("Connection closed by client");
+  EXPECT_FALSE(client_peer_->session_delegate()->connected());
+  RunTasks();
+  EXPECT_FALSE(server_peer_->session_delegate()->connected());
 }
 
 }  // namespace

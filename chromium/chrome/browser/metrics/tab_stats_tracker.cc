@@ -13,7 +13,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/metrics/metrics_pref_names.h"
+#include "chrome/common/pref_names.h"
+#include "components/metrics/daily_event.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
 namespace metrics {
@@ -32,7 +34,7 @@ TabStatsTracker* g_instance = nullptr;
 
 // static
 const char TabStatsTracker::kTabStatsDailyEventHistogramName[] =
-    "Tabs.TabsStatsDailyEventInteral";
+    "Tabs.TabsStatsDailyEventInterval";
 const char TabStatsTracker::UmaStatsReportingDelegate::
     kNumberOfTabsOnResumeHistogramName[] = "Tabs.NumberOfTabsOnResume";
 const char
@@ -104,7 +106,15 @@ TabStatsTracker* TabStatsTracker::GetInstance() {
   return g_instance;
 }
 
-void TabStatsTracker::TabStatsDailyObserver::OnDailyEvent() {
+void TabStatsTracker::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterIntegerPref(prefs::kTabStatsTotalTabCountMax, 0);
+  registry->RegisterIntegerPref(prefs::kTabStatsMaxTabsPerWindow, 0);
+  registry->RegisterIntegerPref(prefs::kTabStatsWindowCountMax, 0);
+  DailyEvent::RegisterPref(registry, prefs::kTabStatsDailySample);
+}
+
+void TabStatsTracker::TabStatsDailyObserver::OnDailyEvent(
+    DailyEvent::IntervalType type) {
   reporting_delegate_->ReportDailyMetrics(data_store_->tab_stats());
   data_store_->ResetMaximumsToCurrentState();
 }
@@ -157,6 +167,11 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportTabCountOnResume(
 
 void TabStatsTracker::UmaStatsReportingDelegate::ReportDailyMetrics(
     const TabStatsDataStore::TabsStats& tab_stats) {
+  // Don't report the counts if they're equal to 0, this means that Chrome has
+  // only been running in the background since the last time the metrics have
+  // been reported.
+  if (tab_stats.total_tab_count_max == 0)
+    return;
   UMA_HISTOGRAM_COUNTS_10000(kMaxTabsInADayHistogramName,
                              tab_stats.total_tab_count_max);
   UMA_HISTOGRAM_COUNTS_10000(kMaxTabsPerWindowInADayHistogramName,

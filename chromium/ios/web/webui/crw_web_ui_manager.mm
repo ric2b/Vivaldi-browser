@@ -37,9 +37,6 @@ const char kScriptCommandPrefix[] = "webui";
 
 @interface CRWWebUIManager () <CRWWebUIPageBuilderDelegate>
 
-// Current web state.
-@property(nonatomic, readonly) web::WebStateImpl* webState;
-
 // Composes WebUI page for webUIURL and invokes completionHandler with the
 // result.
 - (void)loadWebUIPageForURL:(const GURL&)webUIURL
@@ -65,7 +62,8 @@ const char kScriptCommandPrefix[] = "webui";
   std::vector<std::unique_ptr<web::URLFetcherBlockAdapter>> _fetchers;
   // Bridge to observe the web state from Objective-C.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
-  // Weak WebStateImpl this CRWWebUIManager is associated with.
+  // The WebState this instance is observing. Will be null after
+  // -webStateDestroyed: has been called.
   web::WebStateImpl* _webState;
 }
 
@@ -76,10 +74,13 @@ const char kScriptCommandPrefix[] = "webui";
 
 - (instancetype)initWithWebState:(web::WebStateImpl*)webState {
   if (self = [super init]) {
+    DCHECK(webState);
     _webState = webState;
-    _webStateObserverBridge.reset(
-        new web::WebStateObserverBridge(webState, self));
-    base::WeakNSObject<CRWWebUIManager> weakSelf(self);
+    _webStateObserverBridge =
+        std::make_unique<web::WebStateObserverBridge>(self);
+    _webState->AddObserver(_webStateObserverBridge.get());
+
+    __weak CRWWebUIManager* weakSelf = self;
     _webState->AddScriptCommandCallback(
         base::BindBlockArc(
             ^bool(const base::DictionaryValue& message, const GURL&, bool) {
@@ -94,24 +95,24 @@ const char kScriptCommandPrefix[] = "webui";
   [self resetWebState];
 }
 
-#pragma mark - CRWWebStateObserver Methods
-
-- (void)webState:(web::WebState*)webState
-    didStartNavigation:(web::NavigationContext*)navigation {
-  DCHECK(webState == _webState);
+- (void)loadWebUIForURL:(const GURL&)URL {
   // If URL is not an application specific URL, ignore the navigation.
-  GURL URL(navigation->GetUrl());
-  if (!web::GetWebClient()->IsAppSpecificURL(URL))
+  GURL URLCopy(URL);
+  if (!web::GetWebClient()->IsAppSpecificURL(URLCopy))
     return;
 
-  base::WeakNSObject<CRWWebUIManager> weakSelf(self);
-  [self loadWebUIPageForURL:URL completionHandler:^(NSString* HTML) {
-    web::WebStateImpl* webState = [weakSelf webState];
-    if (webState) {
-      webState->LoadWebUIHtml(base::SysNSStringToUTF16(HTML), URL);
-    }
-  }];
+  __weak CRWWebUIManager* weakSelf = self;
+  [self loadWebUIPageForURL:URLCopy
+          completionHandler:^(NSString* HTML) {
+            CRWWebUIManager* strongSelf = weakSelf;
+            if (strongSelf && strongSelf->_webState) {
+              strongSelf->_webState->LoadWebUIHtml(
+                  base::SysNSStringToUTF16(HTML), URLCopy);
+            }
+          }];
 }
+
+#pragma mark - CRWWebStateObserver Methods
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(webState, _webState);
@@ -120,6 +121,7 @@ const char kScriptCommandPrefix[] = "webui";
 }
 
 - (void)webStateDestroyed:(web::WebState*)webState {
+  DCHECK_EQ(webState, _webState);
   [self resetWebState];
 }
 
@@ -149,7 +151,7 @@ const char kScriptCommandPrefix[] = "webui";
 
 - (void)fetchResourceWithURL:(const GURL&)URL
            completionHandler:(void (^)(NSData*))completionHandler {
-  base::WeakNSObject<CRWWebUIManager> weakSelf(self);
+  __weak CRWWebUIManager* weakSelf = self;
   web::URLFetcherBlockAdapterCompletion fetcherCompletion =
       ^(NSData* data, web::URLFetcherBlockAdapter* fetcher) {
         completionHandler(data);
@@ -185,12 +187,9 @@ const char kScriptCommandPrefix[] = "webui";
 - (void)resetWebState {
   if (_webState) {
     _webState->RemoveScriptCommandCallback(kScriptCommandPrefix);
+    _webState->RemoveObserver(_webStateObserverBridge.get());
+    _webState = nullptr;
   }
-  _webState = nullptr;
-}
-
-- (web::WebStateImpl*)webState {
-  return _webState;
 }
 
 - (void)removeFetcher:(web::URLFetcherBlockAdapter*)fetcher {

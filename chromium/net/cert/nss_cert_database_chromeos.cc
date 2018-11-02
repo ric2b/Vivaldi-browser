@@ -15,8 +15,8 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/stl_util.h"
-#include "base/task_runner.h"
-#include "net/cert/x509_certificate.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 
 namespace net {
 
@@ -31,7 +31,7 @@ NSSCertDatabaseChromeOS::NSSCertDatabaseChromeOS(
                        crypto::ScopedPK11Slot() /* no system slot */);
 }
 
-NSSCertDatabaseChromeOS::~NSSCertDatabaseChromeOS() {}
+NSSCertDatabaseChromeOS::~NSSCertDatabaseChromeOS() = default;
 
 void NSSCertDatabaseChromeOS::SetSystemSlot(
     crypto::ScopedPK11Slot system_slot) {
@@ -39,20 +39,17 @@ void NSSCertDatabaseChromeOS::SetSystemSlot(
   profile_filter_.Init(GetPublicSlot(), GetPrivateSlot(), GetSystemSlot());
 }
 
-void NSSCertDatabaseChromeOS::ListCertsSync(CertificateList* certs) {
-  ListCertsImpl(profile_filter_, certs);
+ScopedCERTCertificateList NSSCertDatabaseChromeOS::ListCertsSync() {
+  return ListCertsImpl(profile_filter_);
 }
 
 void NSSCertDatabaseChromeOS::ListCerts(
     const NSSCertDatabase::ListCertsCallback& callback) {
-  std::unique_ptr<CertificateList> certs(new CertificateList());
-
-  // base::Pased will NULL out |certs|, so cache the underlying pointer here.
-  CertificateList* raw_certs = certs.get();
-  GetSlowTaskRunner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&NSSCertDatabaseChromeOS::ListCertsImpl,
-                            profile_filter_, base::Unretained(raw_certs)),
-      base::Bind(callback, base::Passed(&certs)));
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::Bind(&NSSCertDatabaseChromeOS::ListCertsImpl, profile_filter_),
+      callback);
 }
 
 crypto::ScopedPK11Slot NSSCertDatabaseChromeOS::GetSystemSlot() const {
@@ -74,17 +71,24 @@ void NSSCertDatabaseChromeOS::ListModules(
            << " modules";
 }
 
-void NSSCertDatabaseChromeOS::ListCertsImpl(
-    const NSSProfileFilterChromeOS& profile_filter,
-    CertificateList* certs) {
-  NSSCertDatabase::ListCertsImpl(crypto::ScopedPK11Slot(), certs);
+ScopedCERTCertificateList NSSCertDatabaseChromeOS::ListCertsImpl(
+    const NSSProfileFilterChromeOS& profile_filter) {
+  // This method may acquire the NSS lock or reenter this code via extension
+  // hooks (such as smart card UI). To ensure threads are not starved or
+  // deadlocked, the base::ScopedBlockingCall below increments the thread pool
+  // capacity if this method takes too much time to run.
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
-  size_t pre_size = certs->size();
-  base::EraseIf(*certs,
+  ScopedCERTCertificateList certs(
+      NSSCertDatabase::ListCertsImpl(crypto::ScopedPK11Slot()));
+
+  size_t pre_size = certs.size();
+  base::EraseIf(certs,
                 NSSProfileFilterChromeOS::CertNotAllowedForProfilePredicate(
                     profile_filter));
-  DVLOG(1) << "filtered " << pre_size - certs->size() << " of " << pre_size
+  DVLOG(1) << "filtered " << pre_size - certs.size() << " of " << pre_size
            << " certs";
+  return certs;
 }
 
 }  // namespace net

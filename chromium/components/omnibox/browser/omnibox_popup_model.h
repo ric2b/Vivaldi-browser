@@ -6,12 +6,13 @@
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_MODEL_H_
 
 #include <stddef.h>
-#include <vector>
 
+#include "base/containers/mru_cache.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -80,8 +81,8 @@ class OmniboxPopupModel {
   // the necessary parts of the window, as well as updating the edit with the
   // new temporary text.  |line| will be clamped to the range of valid lines.
   // |reset_to_default| is true when the selection is being reset back to the
-  // default match, and thus there is no temporary text (and no
-  // |manually_selected_match_|). If |force| is true then the selected line will
+  // default match, and thus there is no temporary text (and not
+  // |has_selected_match_|). If |force| is true then the selected line will
   // be updated forcibly even if the |line| is same as the current selected
   // line.
   // NOTE: This assumes the popup is open, and thus both old and new values for
@@ -114,17 +115,11 @@ class OmniboxPopupModel {
   // can be removed from history, and if so, remove it and update the popup.
   void TryDeletingCurrentItem();
 
-  // If |match| is from an extension, returns the extension icon; otherwise
-  // returns an empty Image.
-  gfx::Image GetIconIfExtensionMatch(const AutocompleteMatch& match) const;
-
   // Returns true if the destination URL of the match is bookmarked.
   bool IsStarredMatch(const AutocompleteMatch& match) const;
 
-  // The match the user has manually chosen, if any.
-  const AutocompleteResult::Selection& manually_selected_match() const {
-    return manually_selected_match_;
-  }
+  // The user has manually selected a match.
+  bool has_selected_match() { return has_selected_match_; }
 
   // Invoked from the edit model any time the result set of the controller
   // changes.
@@ -138,20 +133,24 @@ class OmniboxPopupModel {
   void SetAnswerBitmap(const SkBitmap& bitmap);
   const SkBitmap& answer_bitmap() const { return answer_bitmap_; }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Gets the icon for the match index.
+  gfx::Image GetMatchIcon(const AutocompleteMatch& match,
+                          SkColor vector_icon_color);
+#endif
+
   // The token value for selected_line_ and functions dealing with a "line
   // number" that indicates "no line".
   static const size_t kNoMatch;
 
  private:
-  void OnPageFaviconFetched(size_t match_index,
-                            const GURL& page_url,
-                            const gfx::Image& icon);
+  void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon);
 
   SkBitmap answer_bitmap_;
 
-  // The GURLs track which pages' favicon is displayed for each match view.
-  // An empty GURL means no favicon is displayed for that match view.
-  std::vector<GURL> displayed_page_favicons_;
+  // We cache a very small number of favicons so we can synchronously deliver
+  // them to prevent flicker as the user types.
+  base::MRUCache<GURL, gfx::Image> favicons_cache_;
   base::CancelableTaskTracker favicon_task_tracker_;
 
   OmniboxPopupView* view_;
@@ -167,8 +166,8 @@ class OmniboxPopupModel {
   // (if KEYWORD) is selected.
   LineState selected_line_state_;
 
-  // The match the user has manually chosen, if any.
-  AutocompleteResult::Selection manually_selected_match_;
+  // The user has manually selected a match.
+  bool has_selected_match_;
 
   // Observers.
   base::ObserverList<OmniboxPopupModelObserver> observers_;

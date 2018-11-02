@@ -37,7 +37,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableSectionPainter.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/HashSet.h"
 
 namespace blink {
@@ -116,7 +116,7 @@ void LayoutTableSection::StyleDidChange(StyleDifference diff,
   if (!old_style)
     return;
 
-  LayoutTable* table = this->Table();
+  LayoutTable* table = Table();
   if (!table)
     return;
 
@@ -124,9 +124,10 @@ void LayoutTableSection::StyleDidChange(StyleDifference diff,
       *this, *table, diff, *old_style);
 
   if (LayoutTableBoxComponent::DoCellsHaveDirtyWidth(*this, *table, diff,
-                                                     *old_style))
+                                                     *old_style)) {
     MarkAllCellsWidthsDirtyAndOrNeedsLayout(
         LayoutTable::kMarkDirtyAndNeedsLayout);
+  }
 }
 
 void LayoutTableSection::WillBeRemovedFromTree() {
@@ -1091,15 +1092,17 @@ void LayoutTableSection::DistributeRemainingExtraLogicalHeight(
   if (extra_logical_height <= 0 || !row_pos_[total_rows])
     return;
 
-  // FIXME: row_pos_[total_rows] - row_pos_[0] is the total rows' size.
-  int total_row_size = row_pos_[total_rows];
   int total_logical_height_added = 0;
   int previous_row_position = row_pos_[0];
+  float total_row_size = row_pos_[total_rows] - previous_row_position;
   for (unsigned r = 0; r < total_rows; r++) {
     // weight with the original height
-    total_logical_height_added += extra_logical_height *
-                                  (row_pos_[r + 1] - previous_row_position) /
-                                  total_row_size;
+    float height_to_add = extra_logical_height *
+                          (row_pos_[r + 1] - previous_row_position) /
+                          total_row_size;
+    total_logical_height_added =
+        std::min<int>(total_logical_height_added + std::ceil(height_to_add),
+                      extra_logical_height);
     previous_row_position = row_pos_[r + 1];
     row_pos_[r + 1] += total_logical_height_added;
   }
@@ -1411,12 +1414,13 @@ void LayoutTableSection::ComputeOverflowFromDescendants() {
   }
 
 #if DCHECK_IS_ON()
-  DCHECK_EQ(has_overflowing_cell, this->HasOverflowingCell());
+  DCHECK_EQ(has_overflowing_cell, HasOverflowingCell());
 #endif
 }
 
-bool LayoutTableSection::RecalcChildOverflowAfterStyleChange() {
-  DCHECK(ChildNeedsOverflowRecalcAfterStyleChange());
+bool LayoutTableSection::RecalcOverflowAfterStyleChange() {
+  if (!ChildNeedsOverflowRecalcAfterStyleChange())
+    return false;
   ClearChildNeedsOverflowRecalcAfterStyleChange();
   unsigned total_rows = grid_.size();
   bool children_overflow_changed = false;
@@ -1430,7 +1434,7 @@ bool LayoutTableSection::RecalcChildOverflowAfterStyleChange() {
     unsigned n_cols = NumCols(r);
     for (unsigned c = 0; c < n_cols; c++) {
       auto* cell = OriginatingCellAt(r, c);
-      if (!cell || !cell->NeedsOverflowRecalcAfterStyleChange())
+      if (!cell)
         continue;
       row_children_overflow_changed |= cell->RecalcOverflowAfterStyleChange();
     }
@@ -1725,7 +1729,7 @@ void LayoutTableSection::SplitEffectiveColumn(unsigned pos, unsigned first) {
     c_col_++;
   for (unsigned row = 0; row < grid_.size(); ++row) {
     auto& grid_cells = grid_[row].grid_cells;
-    EnsureCols(row, pos + 2);
+    EnsureCols(row, pos + 1);
     grid_cells.insert(pos + 1, TableGridCell());
     if (grid_cells[pos].HasCells()) {
       grid_cells[pos + 1].Cells().AppendVector(grid_cells[pos].Cells());
@@ -1828,7 +1832,7 @@ bool LayoutTableSection::NodeAtPoint(
 
 LayoutTableSection* LayoutTableSection::CreateAnonymousWithParent(
     const LayoutObject* parent) {
-  RefPtr<ComputedStyle> new_style =
+  scoped_refptr<ComputedStyle> new_style =
       ComputedStyle::CreateAnonymousStyleWithDisplay(parent->StyleRef(),
                                                      EDisplay::kTableRowGroup);
   LayoutTableSection* new_section = new LayoutTableSection(nullptr);
@@ -1864,20 +1868,10 @@ void LayoutTableSection::RelayoutCellIfFlexed(LayoutTableCell& cell,
                                               int row_height) {
   // Force percent height children to lay themselves out again.
   // This will cause these children to grow to fill the cell.
-  // FIXME: There is still more work to do here to fully match WinIE (should
-  // it become necessary to do so).  In quirks mode, WinIE behaves like we
-  // do, but it will clip the cells that spill out of the table section.
-  // strict mode, Mozilla and WinIE both regrow the table to accommodate the
-  // new height of the cell (thus letting the percentages cause growth one
-  // time only). We may also not be handling row-spanning cells correctly.
-  //
-  // Note also the oddity where replaced elements always flex, and yet blocks/
-  // tables do not necessarily flex. WinIE is crazy and inconsistent, and we
-  // can't hope to match the behavior perfectly, but we'll continue to refine it
-  // as we discover new bugs. :)
   bool cell_children_flex = false;
   bool flex_all_children = CellHasExplicitlySpecifiedHeight(cell) ||
-                           (!Table()->Style()->LogicalHeight().IsAuto() &&
+                           (GetDocument().InQuirksMode() &&
+                            !Table()->Style()->LogicalHeight().IsAuto() &&
                             row_height != cell.LogicalHeight());
 
   for (LayoutObject* child = cell.FirstChild(); child;
@@ -1958,6 +1952,14 @@ int LayoutTableSection::LogicalHeightForRow(
   return logical_height;
 }
 
+int LayoutTableSection::OffsetForRepeatedHeader() const {
+  LayoutTableSection* header = Table()->Header();
+  if (header && header != this)
+    return Table()->RowOffsetFromRepeatingHeader().ToInt();
+  LayoutState* layout_state = View()->GetLayoutState();
+  return layout_state->HeightOffsetForTableHeaders().ToInt();
+}
+
 void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
                                                 SubtreeLayoutScope& layouter) {
   row_object.SetPaginationStrut(LayoutUnit());
@@ -1971,14 +1973,14 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
   if (!pagination_strut) {
     LayoutUnit page_logical_height =
         PageLogicalHeightForOffset(row_object.LogicalTop());
-    if (Table()->Header() && Table()->Header() != this &&
-        Table()->RowOffsetFromRepeatingHeader()) {
+    if (OffsetForRepeatedHeader()) {
       offset_from_top_of_page =
           page_logical_height -
           PageRemainingLogicalHeightForOffset(row_object.LogicalTop(),
                                               kAssociateWithLatterPage);
       row_is_at_top_of_column =
           !offset_from_top_of_page ||
+          offset_from_top_of_page <= OffsetForRepeatedHeader() ||
           offset_from_top_of_page <= Table()->VBorderSpacing();
     }
 
@@ -1998,9 +2000,7 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
 
   // If we have a header group we will paint it at the top of each page,
   // move the rows down to accomodate it.
-  LayoutTableSection* header = Table()->Header();
-  if (header && header != this)
-    pagination_strut += Table()->RowOffsetFromRepeatingHeader().ToInt();
+  pagination_strut += OffsetForRepeatedHeader();
   row_object.SetPaginationStrut(LayoutUnit(pagination_strut));
 
   // We have inserted a pagination strut before the row. Adjust the logical top
@@ -2030,12 +2030,13 @@ bool LayoutTableSection::GroupShouldRepeat() const {
     return true;
   LayoutUnit page_height = PageLogicalHeightForOffset(LayoutUnit());
 
-  if (LogicalHeight() > page_height)
+  LayoutUnit logical_height = LogicalHeight() - OffsetForRepeatedHeader();
+  if (logical_height > page_height)
     return false;
 
   // See https://drafts.csswg.org/css-tables-3/#repeated-headers which says
   // a header/footer can repeat if it takes up less than a quarter of the page.
-  if (LogicalHeight() > 0 && page_height / LogicalHeight() < 4)
+  if (logical_height > 0 && page_height / logical_height < 4)
     return false;
 
   return true;

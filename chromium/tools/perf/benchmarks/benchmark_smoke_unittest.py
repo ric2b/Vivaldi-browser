@@ -15,20 +15,21 @@ import unittest
 
 from telemetry import benchmark as benchmark_module
 from telemetry import decorators
-from telemetry.internal.browser import browser_finder
 from telemetry.testing import options_for_unittests
 from telemetry.testing import progress_reporter
 
 from py_utils import discover
 
 from benchmarks import battor
-from benchmarks import indexeddb_perf
 from benchmarks import jetstream
 from benchmarks import kraken
 from benchmarks import octane
 from benchmarks import rasterize_and_record_micro
 from benchmarks import speedometer
 from benchmarks import v8_browsing
+
+
+MAX_NUM_VALUES = 50000
 
 
 def SmokeTestGenerator(benchmark, num_pages=1):
@@ -72,13 +73,19 @@ def SmokeTestGenerator(benchmark, num_pages=1):
     benchmark.SetArgumentDefaults(parser)
     options.MergeDefaultValues(parser.get_default_values())
 
+    # Prevent benchmarks from accidentally trying to upload too much data to the
+    # chromeperf dashboard. The number of values uploaded is equal to (the
+    # average number of values produced by a single story) * (1 + (the number of
+    # stories)). The "1 + " accounts for values summarized across all stories.
+    # We can approximate "the average number of values produced by a single
+    # story" as the number of values produced by the first story.
+    # pageset_repeat doesn't matter because values are summarized across
+    # repetitions before uploading.
+    story_set = benchmark().CreateStorySet(options)
+    SinglePageBenchmark.MAX_NUM_VALUES = MAX_NUM_VALUES / len(story_set.stories)
+
     benchmark.ProcessCommandLineArgs(None, options)
     benchmark_module.ProcessCommandLineArgs(None, options)
-
-    possible_browser = browser_finder.FindBrowser(options)
-    if SinglePageBenchmark.ShouldDisable(possible_browser):
-      self.skipTest('Benchmark %s has ShouldDisable return True' %
-                    SinglePageBenchmark.Name())
 
     self.assertEqual(0, SinglePageBenchmark().Run(options),
                      msg='Failed: %s' % benchmark)
@@ -88,7 +95,6 @@ def SmokeTestGenerator(benchmark, num_pages=1):
 
 # The list of benchmark modules to be excluded from our smoke tests.
 _BLACK_LIST_TEST_MODULES = {
-    indexeddb_perf,  # Always fails on Win7 & Android Tests builder.
     octane,  # Often fails & take long time to timeout on cq bot.
     rasterize_and_record_micro,  # Always fails on cq bot.
     speedometer,  # Takes 101 seconds.

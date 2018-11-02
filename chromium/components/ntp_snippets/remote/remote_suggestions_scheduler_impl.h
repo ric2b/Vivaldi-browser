@@ -15,6 +15,7 @@
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/logger.h"
 #include "components/ntp_snippets/remote/persistent_scheduler.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
 #include "components/ntp_snippets/remote/request_throttler.h"
@@ -40,7 +41,8 @@ class RemoteSuggestionsSchedulerImpl : public RemoteSuggestionsScheduler {
                                  const UserClassifier* user_classifier,
                                  PrefService* profile_prefs,
                                  PrefService* local_state_prefs,
-                                 std::unique_ptr<base::Clock> clock);
+                                 std::unique_ptr<base::Clock> clock,
+                                 Logger* debug_logger);
 
   ~RemoteSuggestionsSchedulerImpl() override;
 
@@ -69,6 +71,12 @@ class RemoteSuggestionsSchedulerImpl : public RemoteSuggestionsScheduler {
     bool operator!=(const FetchingSchedule& other) const;
     bool is_empty() const;
 
+    // Interval since the last successful fetch after which to consider the
+    // current content stale.
+    base::TimeDelta GetStalenessInterval() const;
+
+    // Intervals since the last fetch attempt after which to fetch again
+    // (depending on the trigger and connectivity).
     base::TimeDelta interval_persistent_wifi;
     base::TimeDelta interval_persistent_fallback;
     base::TimeDelta interval_startup_wifi;
@@ -89,14 +97,16 @@ class RemoteSuggestionsSchedulerImpl : public RemoteSuggestionsScheduler {
   // schedule.
   void StopScheduling();
 
+  bool IsLastSuccessfulFetchStale() const;
+
   // Trigger a background refetch for the given |trigger| if enabled and if the
   // timing is appropriate for another fetch.
-  void RefetchInTheBackgroundIfAppropriate(TriggerType trigger);
+  void RefetchIfAppropriate(TriggerType trigger);
 
   // Checks whether it is time to perform a soft background fetch for |trigger|,
   // according to |schedule|.
-  bool ShouldRefetchInTheBackgroundNow(base::Time last_fetch_attempt_time,
-                                       TriggerType trigger);
+  bool ShouldRefetchNow(base::Time last_fetch_attempt_time,
+                        TriggerType trigger);
 
   // Returns whether all components are ready for background fetches.
   bool IsReadyForBackgroundFetches() const;
@@ -106,14 +116,15 @@ class RemoteSuggestionsSchedulerImpl : public RemoteSuggestionsScheduler {
   // Returns true if quota is available for another request.
   bool AcquireQuota(bool interactive_request);
 
-  // Callback after RefetchInTheBackground is completed.
-  void RefetchInTheBackgroundFinished(Status fetch_status);
+  // Callback after Refetch is completed.
+  void RefetchFinished(Status fetch_status);
 
   // Common function to call after a fetch of any type is finished.
   void OnFetchCompleted(Status fetch_status);
 
   // Clears the time of the last fetch so that the provider is ready to make a
-  // soft fetch at any later time (upon a trigger).
+  // soft fetch at any later time (upon a trigger), treating the last fetch as
+  // stale.
   void ClearLastFetchAttemptTime();
 
   FetchingSchedule GetDesiredFetchingSchedule() const;
@@ -163,6 +174,9 @@ class RemoteSuggestionsSchedulerImpl : public RemoteSuggestionsScheduler {
   std::set<TriggerType> queued_triggers_;
 
   base::Time background_fetches_allowed_after_;
+
+  // Additional logging, accesible through snippets-internals.
+  Logger* debug_logger_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoteSuggestionsSchedulerImpl);
 };

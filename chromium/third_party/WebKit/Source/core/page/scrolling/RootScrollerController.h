@@ -42,7 +42,7 @@ class CORE_EXPORT RootScrollerController
   // of this class need to be made aware of layout updates.
   static RootScrollerController* Create(Document&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Sets the element that will be used as the root scroller. This can be
   // nullptr, in which case we'll use the default element (documentElement) as
@@ -66,7 +66,7 @@ class CORE_EXPORT RootScrollerController
 
   // This class needs to be informed of changes in layout so that it can
   // determine if the current root scroller is still valid or if it must be
-  // replaced by the default root scroller. Must be called from LayoutClean.
+  // replaced by the default root scroller.
   void DidUpdateLayout();
 
   // This class needs to be informed when the FrameView of its Document changes

@@ -13,8 +13,8 @@
 #include "core/layout/ng/inline/ng_baseline.h"
 #include "core/layout/ng/ng_exclusion_space.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
-#include "core/layout/ng/ng_writing_mode.h"
 #include "platform/text/TextDirection.h"
+#include "platform/text/WritingMode.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/text/WTFString.h"
@@ -38,12 +38,8 @@ class CORE_EXPORT NGConstraintSpace final
   // Creates NGConstraintSpace representing LayoutObject's containing block.
   // This should live on NGBlockNode or another layout bridge and probably take
   // a root NGConstraintSpace.
-  // override_logical_width/height are only used if
-  // LayoutObject::OverideLogicalContentWidth/Height is undefined.
-  static RefPtr<NGConstraintSpace> CreateFromLayoutObject(
-      const LayoutBox&,
-      Optional<LayoutUnit> override_logical_width = WTF::nullopt,
-      Optional<LayoutUnit> override_logical_height = WTF::nullopt);
+  static scoped_refptr<NGConstraintSpace> CreateFromLayoutObject(
+      const LayoutBox&);
 
   const NGExclusionSpace& ExclusionSpace() const { return *exclusion_space_; }
 
@@ -51,8 +47,12 @@ class CORE_EXPORT NGConstraintSpace final
     return static_cast<TextDirection>(direction_);
   }
 
-  NGWritingMode WritingMode() const {
-    return static_cast<NGWritingMode>(writing_mode_);
+  WritingMode GetWritingMode() const {
+    return static_cast<WritingMode>(writing_mode_);
+  }
+
+  bool IsOrthogonalWritingModeRoot() const {
+    return is_orthogonal_writing_mode_root_;
   }
 
   // The size to use for percentage resolution.
@@ -60,6 +60,11 @@ class CORE_EXPORT NGConstraintSpace final
   NGLogicalSize PercentageResolutionSize() const {
     return percentage_resolution_size_;
   }
+
+  // The size to use for percentage resolution for margin/border/padding.
+  // They are always get computed relative to the inline size, in the parent
+  // writing mode.
+  LayoutUnit PercentageResolutionInlineSizeForParentWritingMode() const;
 
   // Parent's PercentageResolutionInlineSize().
   // This is not always available.
@@ -73,10 +78,17 @@ class CORE_EXPORT NGConstraintSpace final
     return initial_containing_block_size_;
   }
 
-  // Return the block-direction space available in the current fragmentainer.
-  LayoutUnit FragmentainerSpaceAvailable() const {
+  LayoutUnit FragmentainerBlockSize() const {
+    return fragmentainer_block_size_;
+  }
+
+  // Return the block space that was available in the current fragmentainer at
+  // the start of the current block formatting context. Note that if the start
+  // of the current block formatting context is in a previous fragmentainer, the
+  // size of the current fragmentainer is returned instead.
+  LayoutUnit FragmentainerSpaceAtBfcStart() const {
     DCHECK(HasBlockFragmentation());
-    return fragmentainer_space_available_;
+    return fragmentainer_space_at_bfc_start_;
   }
 
   // Whether the current constraint space is for the newly established
@@ -87,6 +99,13 @@ class CORE_EXPORT NGConstraintSpace final
   // may be a column in a multi-column layout). In such cases it shouldn't have
   // any borders or padding.
   bool IsAnonymous() const { return is_anonymous_; }
+
+  // Whether to use the ':first-line' style or not.
+  // Note, this is not about the first line of the content to layout, but
+  // whether the constraint space itself is on the first line, such as when it's
+  // an inline block.
+  // Also note this is true only when the document has ':first-line' rules.
+  bool UseFirstLineStyle() const { return use_first_line_style_; }
 
   // Whether exceeding the AvailableSize() triggers the presence of a scrollbar
   // for the indicated direction.
@@ -157,7 +176,7 @@ class CORE_EXPORT NGConstraintSpace final
     return floats_bfc_offset_;
   }
 
-  const Vector<RefPtr<NGUnpositionedFloat>>& UnpositionedFloats() const {
+  const Vector<scoped_refptr<NGUnpositionedFloat>>& UnpositionedFloats() const {
     return unpositioned_floats_;
   }
 
@@ -178,13 +197,15 @@ class CORE_EXPORT NGConstraintSpace final
   friend class NGConstraintSpaceBuilder;
   // Default constructor.
   NGConstraintSpace(
-      NGWritingMode,
+      WritingMode,
+      bool is_orthogonal_writing_mode_root,
       TextDirection,
       NGLogicalSize available_size,
       NGLogicalSize percentage_resolution_size,
       Optional<LayoutUnit> parent_percentage_resolution_inline_size,
       NGPhysicalSize initial_containing_block_size,
-      LayoutUnit fragmentainer_space_available,
+      LayoutUnit fragmentainer_block_size,
+      LayoutUnit fragmentainer_space_at_bfc_start,
       bool is_fixed_size_inline,
       bool is_fixed_size_block,
       bool is_shrink_to_fit,
@@ -193,11 +214,12 @@ class CORE_EXPORT NGConstraintSpace final
       NGFragmentationType block_direction_fragmentation_type,
       bool is_new_fc,
       bool is_anonymous,
+      bool use_first_line_style,
       const NGMarginStrut& margin_strut,
       const NGBfcOffset& bfc_offset,
       const WTF::Optional<NGBfcOffset>& floats_bfc_offset,
       const NGExclusionSpace& exclusion_space,
-      Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
+      Vector<scoped_refptr<NGUnpositionedFloat>>& unpositioned_floats,
       const WTF::Optional<LayoutUnit>& clearance_offset,
       Vector<NGBaselineRequest>& baseline_requests);
 
@@ -206,7 +228,8 @@ class CORE_EXPORT NGConstraintSpace final
   Optional<LayoutUnit> parent_percentage_resolution_inline_size_;
   NGPhysicalSize initial_containing_block_size_;
 
-  LayoutUnit fragmentainer_space_available_;
+  LayoutUnit fragmentainer_block_size_;
+  LayoutUnit fragmentainer_space_at_bfc_start_;
 
   unsigned is_fixed_size_inline_ : 1;
   unsigned is_fixed_size_block_ : 1;
@@ -223,8 +246,10 @@ class CORE_EXPORT NGConstraintSpace final
   unsigned is_new_fc_ : 1;
 
   unsigned is_anonymous_ : 1;
+  unsigned use_first_line_style_ : 1;
 
   unsigned writing_mode_ : 3;
+  unsigned is_orthogonal_writing_mode_root_ : 1;
   unsigned direction_ : 1;
 
   NGMarginStrut margin_strut_;
@@ -233,7 +258,7 @@ class CORE_EXPORT NGConstraintSpace final
 
   const std::unique_ptr<const NGExclusionSpace> exclusion_space_;
   WTF::Optional<LayoutUnit> clearance_offset_;
-  Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
+  Vector<scoped_refptr<NGUnpositionedFloat>> unpositioned_floats_;
 
   Vector<NGBaselineRequest> baseline_requests_;
 };

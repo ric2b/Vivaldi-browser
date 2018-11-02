@@ -16,6 +16,8 @@ static_library("search_provider_logos") {
     "logo_common.h",
     "logo_service.cc",
     "logo_service.h",
+    "logo_service_impl.cc",
+    "logo_service_impl.h",
     "logo_tracker.cc",
     "logo_tracker.h",
     "switches.cc",
@@ -84,12 +86,14 @@ source_set("unit_tests") {
   sources = [
     "google_logo_api_unittest.cc",
     "logo_cache_unittest.cc",
-    "logo_tracker_unittest.cc",
+    "logo_service_impl_unittest.cc",
   ]
   deps = [
     ":search_provider_logos",
     ":unit_tests_bundle_data",
     "//base/test:test_support",
+    "//components/image_fetcher/core",
+    "//components/search_engines",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",

@@ -7,7 +7,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/RetainPtr.h"
 #include "skia/ext/skia_utils_mac.h"
 
@@ -50,9 +50,7 @@ CGContextRef GraphicsContextCanvas::CgContext() {
   // Allocate an offscreen and draw into that, relying on the
   // compositing step to apply skia's clip.
   WTF::RetainPtr<CGColorSpace> color_space(
-      RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()
-          ? CGColorSpaceCreateWithName(kCGColorSpaceSRGB)
-          : CGColorSpaceCreateDeviceRGB());
+      CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
 
   bool result = offscreen_.tryAllocN32Pixels(
       SkScalarCeilToInt(bitmap_scale_factor_ * paint_rect_.width()),

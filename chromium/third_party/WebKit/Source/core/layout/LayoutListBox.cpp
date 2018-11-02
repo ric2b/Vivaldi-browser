@@ -32,9 +32,9 @@
 
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLDivElement.h"
-#include "core/html/HTMLOptGroupElement.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLOptGroupElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/paint/PaintLayer.h"
 
 namespace blink {
@@ -48,13 +48,13 @@ const int kDefaultPaddingBottom = 1;
 LayoutListBox::LayoutListBox(Element* element) : LayoutBlockFlow(element) {
   DCHECK(element);
   DCHECK(element->IsHTMLElement());
-  DCHECK(isHTMLSelectElement(element));
+  DCHECK(IsHTMLSelectElement(element));
 }
 
 LayoutListBox::~LayoutListBox() {}
 
 inline HTMLSelectElement* LayoutListBox::SelectElement() const {
-  return toHTMLSelectElement(GetNode());
+  return ToHTMLSelectElement(GetNode());
 }
 
 unsigned LayoutListBox::size() const {
@@ -84,8 +84,8 @@ LayoutUnit LayoutListBox::ItemHeight() const {
 
   LayoutUnit max_height;
   for (Element* element : items) {
-    if (isHTMLOptGroupElement(element))
-      element = &toHTMLOptGroupElement(element)->OptGroupLabelElement();
+    if (auto* optgroup = ToHTMLOptGroupElementOrNull(element))
+      element = &optgroup->OptGroupLabelElement();
     LayoutObject* layout_object = element->GetLayoutObject();
     LayoutUnit item_height;
     if (layout_object && layout_object->IsBox())

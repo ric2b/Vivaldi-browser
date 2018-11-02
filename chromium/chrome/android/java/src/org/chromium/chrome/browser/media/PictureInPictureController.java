@@ -10,11 +10,11 @@ import android.app.PictureInPictureParams;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.util.Rational;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.library_loader.LibraryLoader;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsObserver;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
@@ -60,13 +61,14 @@ public class PictureInPictureController {
 
     private static final String METRICS_END_REASON = "Media.VideoPersistence.EndReason";
     private static final int METRICS_END_REASON_RESUME = 0;
-    private static final int METRICS_END_REASON_NAVIGATION = 1;
+    // Obsolete: METRICS_END_REASON_NAVIGATION = 1;
     private static final int METRICS_END_REASON_CLOSE = 2;
     private static final int METRICS_END_REASON_CRASH = 3;
     private static final int METRICS_END_REASON_NEW_TAB = 4;
     private static final int METRICS_END_REASON_REPARENT = 5;
     private static final int METRICS_END_REASON_LEFT_FULLSCREEN = 6;
-    private static final int METRICS_END_REASON_COUNT = 7;
+    private static final int METRICS_END_REASON_WEB_CONTENTS_LEFT_FULLSCREEN = 7;
+    private static final int METRICS_END_REASON_COUNT = 8;
 
     /** Callbacks to cleanup after leaving PiP. */
     private List<Callback<ChromeActivity>> mOnLeavePipCallbacks = new LinkedList<>();
@@ -103,7 +105,7 @@ public class PictureInPictureController {
             return false;
         }
 
-        if (!BuildInfo.isAtLeastO()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             recordAttemptResult(METRICS_ATTEMPT_RESULT_NO_SYSTEM_SUPPORT);
             return false;
         }
@@ -170,11 +172,12 @@ public class PictureInPictureController {
 
         Rect bounds = getVideoBounds(webContents, activity);
         try {
-            activity.enterPictureInPictureMode(
+            boolean entered = activity.enterPictureInPictureMode(
                     new PictureInPictureParams.Builder()
                             .setAspectRatio(new Rational(bounds.width(), bounds.height()))
                             .setSourceRectHint(bounds)
                             .build());
+            if (!entered) return;
         } catch (IllegalStateException e) {
             Log.e(TAG, "Error entering PiP: " + e);
             return;
@@ -197,15 +200,19 @@ public class PictureInPictureController {
         final TabObserver tabObserver = new DismissActivityOnTabEventObserver(activity);
         final TabModelSelectorObserver tabModelSelectorObserver =
                 new DismissActivityOnTabModelSelectorEventObserver(activity);
+        final WebContentsObserver webContentsObserver =
+                new DismissActivityOnWebContentsObserver(activity);
 
         activityTab.addObserver(tabObserver);
         activityTab.getTabModelSelector().addObserver(tabModelSelectorObserver);
+        webContents.addObserver(webContentsObserver);
 
         mOnLeavePipCallbacks.add(new Callback<ChromeActivity>() {
             @Override
             public void onResult(ChromeActivity activity2) {
                 activityTab.removeObserver(tabObserver);
                 activityTab.getTabModelSelector().removeObserver(tabModelSelectorObserver);
+                webContents.removeObserver(webContentsObserver);
             }
         });
 
@@ -288,8 +295,7 @@ public class PictureInPictureController {
     /**
      * A class to dismiss the Activity when the tab:
      * - Closes.
-     * - Navigates.
-     * - Reparents.
+     * - Reparents: Attaches to a different activity.
      * - Crashes.
      * - Leaves fullscreen.
      */
@@ -300,21 +306,15 @@ public class PictureInPictureController {
         }
 
         @Override
-        public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
-                boolean isErrorPage, boolean hasCommitted, boolean isSameDocument,
-                boolean isFragmentNavigation, @Nullable Integer pageTransition, int errorCode,
-                int httpStatusCode) {
-            dismissActivity(mActivity, METRICS_END_REASON_NAVIGATION);
+        public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
+            if (isAttached) {
+                dismissActivity(mActivity, METRICS_END_REASON_REPARENT);
+            }
         }
 
         @Override
         public void onClosingStateChanged(Tab tab, boolean closing) {
             dismissActivity(mActivity, METRICS_END_REASON_CLOSE);
-        }
-
-        @Override
-        public void onReparentingFinished(Tab tab) {
-            dismissActivity(mActivity, METRICS_END_REASON_REPARENT);
         }
 
         @Override
@@ -343,6 +343,26 @@ public class PictureInPictureController {
             if (mActivity.getActivityTab() != mTab) {
                 dismissActivity(mActivity, METRICS_END_REASON_NEW_TAB);
             }
+        }
+    }
+
+    /**
+     * A class to dismiss the Activity when the Web Contents stops being effectively fullscreen.
+     * This catches page navigations but unlike TabObserver's onNavigationFinished will not trigger
+     * if an iframe without the fullscreen video navigates.
+     */
+    private class DismissActivityOnWebContentsObserver extends WebContentsObserver {
+        private final ChromeActivity mActivity;
+
+        public DismissActivityOnWebContentsObserver(ChromeActivity activity) {
+            mActivity = activity;
+        }
+
+        @Override
+        public void hasEffectivelyFullscreenVideoChange(boolean isFullscreen) {
+            if (isFullscreen) return;
+
+            dismissActivity(mActivity, METRICS_END_REASON_WEB_CONTENTS_LEFT_FULLSCREEN);
         }
     }
 }

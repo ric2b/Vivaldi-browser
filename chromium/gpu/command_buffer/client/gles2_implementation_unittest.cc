@@ -46,6 +46,7 @@ using testing::Sequence;
 using testing::StrictMock;
 using testing::Truly;
 using testing::Return;
+using testing::ReturnRef;
 
 namespace gpu {
 namespace gles2 {
@@ -445,42 +446,42 @@ class GLES2ImplementationTest : public testing::Test {
       helper_->Initialize(limits.command_buffer_size);
 
       gpu_control_.reset(new StrictMock<MockClientGpuControl>());
-      Capabilities capabilities;
-      capabilities.VisitPrecisions(
+      capabilities_.VisitPrecisions(
           [](GLenum shader, GLenum type,
              Capabilities::ShaderPrecision* precision) {
             precision->min_range = 3;
             precision->max_range = 5;
             precision->precision = 7;
           });
-      capabilities.max_combined_texture_image_units =
+      capabilities_.max_combined_texture_image_units =
           kMaxCombinedTextureImageUnits;
-      capabilities.max_cube_map_texture_size = kMaxCubeMapTextureSize;
-      capabilities.max_fragment_uniform_vectors = kMaxFragmentUniformVectors;
-      capabilities.max_renderbuffer_size = kMaxRenderbufferSize;
-      capabilities.max_texture_image_units = kMaxTextureImageUnits;
-      capabilities.max_texture_size = kMaxTextureSize;
-      capabilities.max_varying_vectors = kMaxVaryingVectors;
-      capabilities.max_vertex_attribs = kMaxVertexAttribs;
-      capabilities.max_vertex_texture_image_units = kMaxVertexTextureImageUnits;
-      capabilities.max_vertex_uniform_vectors = kMaxVertexUniformVectors;
-      capabilities.max_viewport_width = kMaxViewportWidth;
-      capabilities.max_viewport_height = kMaxViewportHeight;
-      capabilities.num_compressed_texture_formats =
+      capabilities_.max_cube_map_texture_size = kMaxCubeMapTextureSize;
+      capabilities_.max_fragment_uniform_vectors = kMaxFragmentUniformVectors;
+      capabilities_.max_renderbuffer_size = kMaxRenderbufferSize;
+      capabilities_.max_texture_image_units = kMaxTextureImageUnits;
+      capabilities_.max_texture_size = kMaxTextureSize;
+      capabilities_.max_varying_vectors = kMaxVaryingVectors;
+      capabilities_.max_vertex_attribs = kMaxVertexAttribs;
+      capabilities_.max_vertex_texture_image_units =
+          kMaxVertexTextureImageUnits;
+      capabilities_.max_vertex_uniform_vectors = kMaxVertexUniformVectors;
+      capabilities_.max_viewport_width = kMaxViewportWidth;
+      capabilities_.max_viewport_height = kMaxViewportHeight;
+      capabilities_.num_compressed_texture_formats =
           kNumCompressedTextureFormats;
-      capabilities.num_shader_binary_formats = kNumShaderBinaryFormats;
-      capabilities.max_transform_feedback_separate_attribs =
+      capabilities_.num_shader_binary_formats = kNumShaderBinaryFormats;
+      capabilities_.max_transform_feedback_separate_attribs =
           kMaxTransformFeedbackSeparateAttribs;
-      capabilities.max_uniform_buffer_bindings = kMaxUniformBufferBindings;
-      capabilities.bind_generates_resource_chromium =
+      capabilities_.max_uniform_buffer_bindings = kMaxUniformBufferBindings;
+      capabilities_.bind_generates_resource_chromium =
           bind_generates_resource_service ? 1 : 0;
-      capabilities.sync_query = sync_query;
-      capabilities.occlusion_query_boolean = occlusion_query_boolean;
-      capabilities.timer_queries = timer_queries;
-      capabilities.major_version = major_version;
-      capabilities.minor_version = minor_version;
+      capabilities_.sync_query = sync_query;
+      capabilities_.occlusion_query_boolean = occlusion_query_boolean;
+      capabilities_.timer_queries = timer_queries;
+      capabilities_.major_version = major_version;
+      capabilities_.minor_version = minor_version;
       EXPECT_CALL(*gpu_control_, GetCapabilities())
-          .WillOnce(Return(capabilities));
+          .WillOnce(ReturnRef(capabilities_));
 
       {
         InSequence sequence;
@@ -498,7 +499,7 @@ class GLES2ImplementationTest : public testing::Test {
       // The client should be set to something non-null.
       EXPECT_CALL(*gpu_control_, SetGpuControlClient(gl_.get())).Times(1);
 
-      if (!gl_->Initialize(limits))
+      if (gl_->Initialize(limits) != gpu::ContextResult::kSuccess)
         return false;
 
       helper_->CommandBufferHelper::Finish();
@@ -543,6 +544,7 @@ class GLES2ImplementationTest : public testing::Test {
     std::unique_ptr<GLES2Implementation> gl_;
     CommandBufferEntry* commands_;
     int token_;
+    Capabilities capabilities_;
   };
 
   GLES2ImplementationTest() : commands_(NULL) {}
@@ -3715,19 +3717,6 @@ TEST_F(GLES2ImplementationTest, Enable) {
   EXPECT_TRUE(NoCommandsWritten());
 }
 
-TEST_F(GLES2ImplementationTest, ConsumeTextureCHROMIUM) {
-  struct Cmds {
-    cmds::ConsumeTextureCHROMIUMImmediate cmd;
-    GLbyte data[GL_MAILBOX_SIZE_CHROMIUM];
-  };
-
-  Mailbox mailbox = Mailbox::Generate();
-  Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, mailbox.name);
-  gl_->ConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
 TEST_F(GLES2ImplementationTest, CreateAndConsumeTextureCHROMIUM) {
   struct Cmds {
     cmds::CreateAndConsumeTextureINTERNALImmediate cmd;
@@ -4639,23 +4628,28 @@ TEST_F(GLES2ImplementationManualInitTest, FailInitOnTransferBufferFail) {
 
 TEST_F(GLES2ImplementationTest, DiscardableMemoryDelete) {
   const GLuint texture_id = 1;
-  EXPECT_FALSE(share_group_->discardable_manager()->TextureIsValid(texture_id));
+  EXPECT_FALSE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
   gl_->InitializeDiscardableTextureCHROMIUM(texture_id);
-  EXPECT_TRUE(share_group_->discardable_manager()->TextureIsValid(texture_id));
+  EXPECT_TRUE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 
   // Deleting a texture should clear its discardable entry.
   gl_->DeleteTextures(1, &texture_id);
-  EXPECT_FALSE(share_group_->discardable_manager()->TextureIsValid(texture_id));
+  EXPECT_FALSE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 }
 
 TEST_F(GLES2ImplementationTest, DiscardableMemoryLockFail) {
   const GLuint texture_id = 1;
   gl_->InitializeDiscardableTextureCHROMIUM(texture_id);
-  EXPECT_TRUE(share_group_->discardable_manager()->TextureIsValid(texture_id));
+  EXPECT_TRUE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 
   // Unlock and delete the handle.
   ClientDiscardableHandle client_handle =
-      share_group_->discardable_manager()->GetHandleForTesting(texture_id);
+      share_group_->discardable_texture_manager()->GetHandleForTesting(
+          texture_id);
   ServiceDiscardableHandle service_handle(client_handle.BufferForTesting(),
                                           client_handle.byte_offset(),
                                           client_handle.shm_id());
@@ -4664,7 +4658,8 @@ TEST_F(GLES2ImplementationTest, DiscardableMemoryLockFail) {
 
   // Trying to re-lock the texture via GL should fail and delete the entry.
   EXPECT_FALSE(gl_->LockDiscardableTextureCHROMIUM(texture_id));
-  EXPECT_FALSE(share_group_->discardable_manager()->TextureIsValid(texture_id));
+  EXPECT_FALSE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 }
 
 TEST_F(GLES2ImplementationTest, DiscardableMemoryDoubleInitError) {

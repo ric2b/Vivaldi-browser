@@ -27,6 +27,7 @@
 #ifndef ShadowRoot_h
 #define ShadowRoot_h
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CoreExport.h"
 #include "core/css/StyleSheetList.h"
 #include "core/dom/ContainerNode.h"
@@ -42,9 +43,10 @@ class Document;
 class ElementShadow;
 class ExceptionState;
 class HTMLShadowElement;
-class V0InsertionPoint;
 class ShadowRootRareDataV0;
 class SlotAssignment;
+class StringOrTrustedHTML;
+class V0InsertionPoint;
 class WhitespaceAttacher;
 
 enum class ShadowRootType { kUserAgent, V0, kOpen, kClosed };
@@ -100,10 +102,11 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void RemovedFrom(ContainerNode*) override;
 
+  void SetNeedsAssignmentRecalc();
+
   // For V0
   ShadowRoot* YoungerShadowRoot() const;
   ShadowRoot* OlderShadowRoot() const;
-  ShadowRoot* olderShadowRootForBindings() const;
   void SetYoungerShadowRoot(ShadowRoot&);
   void SetOlderShadowRoot(ShadowRoot&);
   bool IsYoungest() const { return !YoungerShadowRoot(); }
@@ -143,8 +146,14 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
 
   Element* ActiveElement() const;
 
-  String innerHTML() const;
-  void setInnerHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
+  String InnerHTMLAsString() const;
+  void SetInnerHTMLFromString(const String&,
+                              ExceptionState& = ASSERT_NO_EXCEPTION);
+
+  // TrustedTypes variants of the above.
+  // TODO(mkwst): Write a spec for these bits. https://crbug.com/739170
+  void innerHTML(StringOrTrustedHTML&) const;
+  void setInnerHTML(const StringOrTrustedHTML&, ExceptionState&);
 
   Node* cloneNode(bool, ExceptionState&) override;
 
@@ -158,8 +167,8 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
     style_sheet_list_ = style_sheet_list;
   }
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   ShadowRoot(Document&, ShadowRootType);
@@ -176,7 +185,6 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
     --child_shadow_root_count_;
   }
   void InvalidateDescendantInsertionPoints();
-  void SkipRebuildLayoutTree(WhitespaceAttacher&) const;
 
   Member<ShadowRootRareDataV0> shadow_root_rare_data_v0_;
   TraceWrapperMember<StyleSheetList> style_sheet_list_;
@@ -193,7 +201,7 @@ inline Element* ShadowRoot::ActiveElement() const {
 }
 
 inline ShadowRoot* Element::ShadowRootIfV1() const {
-  ShadowRoot* root = this->GetShadowRoot();
+  ShadowRoot* root = GetShadowRoot();
   if (root && root->IsV1())
     return root;
   return nullptr;

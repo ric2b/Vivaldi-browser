@@ -13,16 +13,10 @@ source_set("app") {
   sources = [
     "deferred_initialization_runner.h",
     "deferred_initialization_runner.mm",
-    "safe_mode_crashing_modules_config.h",
-    "safe_mode_crashing_modules_config.mm",
-    "safe_mode_util.cc",
-    "safe_mode_util.h",
   ]
 
   deps = [
-    ":resources",
     "//base",
-    ios_packed_resources_target,
   ]
 
   libs = [ "Foundation.framework" ]
@@ -32,12 +26,10 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "chrome_app_startup_parameters_unittest.mm",
     "chrome_overlay_window_testing.h",
     "deferred_initialization_runner_unittest.mm",
     "main_application_delegate_unittest.mm",
     "main_controller_unittest.mm",
-    "safe_mode_util_unittest.cc",
   ]
   deps = [
     ":app",
@@ -76,16 +68,6 @@ source_set("tests_fake_hook") {
   ]
 }
 
-bundle_data("resources") {
-  visibility = [ ":app" ]
-  sources = [
-    "resources/SafeModeCrashingModules.plist",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
-
 tweak_info_plist("info_plist") {
   info_plists = [
     "resources/Info.plist",
@@ -103,11 +85,10 @@ tweak_info_plist("info_plist") {
   ]
 }
 
-compile_plist("entitlements") {
-  format = "xml1"
-  plist_templates = [ "resources/Chrome.entitlements" ]
+compile_entitlements("entitlements") {
+  entitlements_templates = [ "resources/Chrome.entitlements" ]
   if (ios_chrome_entitlements_additions != []) {
-    plist_templates += ios_chrome_entitlements_additions
+    entitlements_templates += ios_chrome_entitlements_additions
   }
   substitutions = [ "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix" ]
   output_name = "$target_gen_dir/$chromium_short_name.entitlements"
@@ -117,8 +98,6 @@ source_set("app_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "application_mode.h",
-    "chrome_app_startup_parameters.h",
-    "chrome_app_startup_parameters.mm",
     "chrome_overlay_window.h",
     "chrome_overlay_window.mm",
     "main_application_delegate.h",
@@ -141,6 +120,7 @@ source_set("app_internal") {
     "//components/browser_sync",
     "//components/browsing_data/core",
     "//components/component_updater",
+    "//components/component_updater:crl_set_remover",
     "//components/content_settings/core/browser",
     "//components/crash/core/common",
     "//components/favicon/core",
@@ -163,13 +143,11 @@ source_set("app_internal") {
     "//components/web_resource",
     "//ios/chrome/app/application_delegate",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
-    "//ios/chrome/app/safe_mode",
     "//ios/chrome/app/spotlight",
     "//ios/chrome/app/startup",
     "//ios/chrome/app/startup:startup_basic",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
-    "//ios/chrome/browser:browser_internal",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
@@ -191,6 +169,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/omaha",
     "//ios/chrome/browser/payments",
+    "//ios/chrome/browser/payments:constants",
     "//ios/chrome/browser/prefs",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
@@ -204,13 +183,16 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui:ui_internal",
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/contextual_search",
-    "//ios/chrome/browser/ui/downloads",
+    "//ios/chrome/browser/ui/download",
     "//ios/chrome/browser/ui/first_run",
+    "//ios/chrome/browser/ui/fullscreen",
+    "//ios/chrome/browser/ui/fullscreen:legacy_fullscreen",
     "//ios/chrome/browser/ui/history",
     "//ios/chrome/browser/ui/main",
+    "//ios/chrome/browser/ui/main:feature_flags",
     "//ios/chrome/browser/ui/promos",
     "//ios/chrome/browser/ui/settings",
+    "//ios/chrome/browser/ui/signin_interaction",
     "//ios/chrome/browser/ui/stack_view",
     "//ios/chrome/browser/ui/tab_switcher",
     "//ios/chrome/browser/ui/tabs",
@@ -228,6 +210,7 @@ source_set("app_internal") {
     "//ios/public/provider/chrome/browser/distribution",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/user_feedback",
+    "//ios/testing/perf:startup",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
     "//ios/web/public/app",
@@ -260,9 +243,9 @@ source_set("main") {
     "//base",
     "//components/crash/core/common",
     "//ios/chrome/app/startup:startup_basic",
-    "//ios/chrome/browser:browser_internal",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/common",
+    "//ios/testing/perf:startup",
     "//third_party/google_toolbox_for_mac",
   ]
 }

@@ -36,9 +36,9 @@ LogoutConfirmationDialog::LogoutConfirmationDialog(
     base::TimeTicks logout_time)
     : controller_(controller), logout_time_(logout_time) {
   SetLayoutManager(new views::FillLayout());
-  SetBorder(
-      views::CreateEmptyBorder(views::LayoutProvider::Get()->GetInsetsMetric(
-          views::INSETS_DIALOG_CONTENTS)));
+  SetBorder(views::CreateEmptyBorder(
+      views::LayoutProvider::Get()->GetDialogInsetsForContentType(
+          views::TEXT, views::TEXT)));
 
   label_ = new views::Label;
   label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -60,7 +60,7 @@ LogoutConfirmationDialog::LogoutConfirmationDialog(
       this, &LogoutConfirmationDialog::UpdateLabel);
 }
 
-LogoutConfirmationDialog::~LogoutConfirmationDialog() {}
+LogoutConfirmationDialog::~LogoutConfirmationDialog() = default;
 
 void LogoutConfirmationDialog::Update(base::TimeTicks logout_time) {
   logout_time_ = logout_time;

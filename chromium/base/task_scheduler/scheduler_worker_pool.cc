@@ -16,6 +16,21 @@ namespace internal {
 
 namespace {
 
+// The number of SchedulerWorkerPool that are alive in this process. This
+// variable should only be incremented when the SchedulerWorkerPool instances
+// are brought up (on the main thread; before any tasks are posted) and
+// decremented when the same instances are brought down (i.e., only when unit
+// tests tear down the task environment and never in production). This makes the
+// variable const while worker threads are up and as such it doesn't need to be
+// atomic. It is used to tell when a task is posted from the main thread after
+// the task environment was brought down in unit tests so that
+// SchedulerWorkerPool bound TaskRunners can return false on PostTask, letting
+// such callers know they should complete necessary work synchronously. Note:
+// |!g_active_pools_count| is generally equivalent to
+// |!TaskScheduler::GetInstance()| but has the advantage of being valid in
+// task_scheduler unit tests that don't instantiate a full TaskScheduler.
+int g_active_pools_count = 0;
+
 // SchedulerWorkerPool that owns the current thread, if any.
 LazyInstance<ThreadLocalPointer<const SchedulerWorkerPool>>::Leaky
     tls_current_worker_pool = LAZY_INSTANCE_INITIALIZER;
@@ -39,9 +54,12 @@ class SchedulerParallelTaskRunner : public TaskRunner {
   }
 
   // TaskRunner:
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure closure,
                        TimeDelta delay) override {
+    if (!g_active_pools_count)
+      return false;
+
     // Post the task as part of a one-off single-task Sequence.
     return worker_pool_->PostTaskWithSequence(
         std::make_unique<Task>(from_here, std::move(closure), traits_, delay),
@@ -74,9 +92,12 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
   }
 
   // SequencedTaskRunner:
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const Location& from_here,
                        OnceClosure closure,
                        TimeDelta delay) override {
+    if (!g_active_pools_count)
+      return false;
+
     std::unique_ptr<Task> task =
         std::make_unique<Task>(from_here, std::move(closure), traits_, delay);
     task->sequenced_task_runner_ref = this;
@@ -85,7 +106,7 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
     return worker_pool_->PostTaskWithSequence(std::move(task), sequence_);
   }
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure closure,
                                   base::TimeDelta delay) override {
     // Tasks are never nested within the task scheduler.
@@ -154,6 +175,12 @@ SchedulerWorkerPool::SchedulerWorkerPool(
     : task_tracker_(task_tracker), delayed_task_manager_(delayed_task_manager) {
   DCHECK(task_tracker_);
   DCHECK(delayed_task_manager_);
+  ++g_active_pools_count;
+}
+
+SchedulerWorkerPool::~SchedulerWorkerPool() {
+  --g_active_pools_count;
+  DCHECK_GE(g_active_pools_count, 0);
 }
 
 void SchedulerWorkerPool::BindToCurrentThread() {
@@ -178,12 +205,14 @@ void SchedulerWorkerPool::PostTaskWithSequenceNow(
 
   const bool sequence_was_empty = sequence->PushTask(std::move(task));
   if (sequence_was_empty) {
-    // Submit |sequence| to the worker pool if the sequence was empty before
-    // |task| was inserted into it. Otherwise, one of these must be true:
-    // - |sequence| is already pending execution in the worker pool, or,
+    // Try to schedule |sequence| if it was empty before |task| was inserted
+    // into it. Otherwise, one of these must be true:
+    // - |sequence| is already scheduled, or,
     // - The pool is running a Task from |sequence|. The pool is expected to
-    // resubmit |sequence| once it's done running the Task.
-    ScheduleSequence(sequence);
+    //   reschedule |sequence| once it's done running the Task.
+    sequence = task_tracker_->WillScheduleSequence(std::move(sequence), this);
+    if (sequence)
+      OnCanScheduleSequence(std::move(sequence));
   }
 }
 

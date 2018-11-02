@@ -78,18 +78,22 @@ class NET_EXPORT CookieStore {
   typedef base::CallbackList<void(const CanonicalCookie& cookie,
                                   ChangeCause cause)>
       CookieChangedCallbackList;
-  typedef CookieChangedCallbackList::Subscription CookieChangedSubscription;
   typedef base::Callback<bool(const CanonicalCookie& cookie)> CookiePredicate;
+
+  class CookieChangedSubscription {
+   public:
+    virtual ~CookieChangedSubscription(){};
+  };
 
   virtual ~CookieStore();
 
   // Returns the cookie line (e.g. "cookie1=value1; cookie2=value2") represented
   // by |cookies|. The string is built in the same order as the given list.
   //
-  // TODO(mkwst): We really should standardize on either
-  // 'std::vector<CanonicalCookie>' or 'std::vector<CanonicalCookie*>'.
-  static std::string BuildCookieLine(
-      const std::vector<CanonicalCookie>& cookies);
+  // Deprecated; use CanonicalCookie::BuildCookieLine(
+  //     const std::vector<CanonicalCookie>& cookies) instead.
+  // TODO(http://crbug.com/588081#c3): Believed to only be used (directly
+  // and indirectly) by tests; should be removed.
   static std::string BuildCookieLine(
       const std::vector<CanonicalCookie*>& cookies);
 
@@ -105,32 +109,6 @@ class NET_EXPORT CookieStore {
                                          const CookieOptions& options,
                                          SetCookiesCallback callback) = 0;
 
-  // Sets a cookie given explicit user-provided cookie attributes. The cookie
-  // name, value, domain, etc. are each provided as separate strings. This
-  // function expects each attribute to be well-formed. It will check for
-  // disallowed characters (e.g. the ';' character is disallowed within the
-  // cookie value attribute) and will return false without setting the cookie
-  // if such characters are found.
-  //
-  // If |creation_time| is null, it will be set to the time the cookie is set.
-  // If |last_access_time| is null, it be set to |creation_time|.
-  //
-  // If unable to set a cookie, will  invoke |callback| with false.
-  virtual void SetCookieWithDetailsAsync(const GURL& url,
-                                         const std::string& name,
-                                         const std::string& value,
-                                         const std::string& domain,
-                                         const std::string& path,
-                                         base::Time creation_time,
-                                         base::Time expiration_time,
-                                         base::Time last_access_time,
-                                         bool secure,
-                                         bool http_only,
-                                         CookieSameSite same_site,
-                                         CookiePriority priority,
-                                         SetCookiesCallback callback) = 0;
-
-  // TODO(rdsmith): Remove SetCookieWithDetailsAsync in favor of this.
   // Set the cookie on the cookie store.  |cookie.IsCanonical()| must
   // be true.  |secure_source| indicates if the source of the setting
   // may be considered secure (if from a URL, the scheme is
@@ -235,6 +213,8 @@ class NET_EXPORT CookieStore {
   // |callback| will be called when a cookie is added or removed. |callback| is
   // passed the respective |cookie| which was added to or removed from the
   // cookies and a boolean indicating if the cookies was removed or not.
+  // |callback| is guaranteed not to be called after the return handled is
+  // destroyed.
   //
   // Note that |callback| is called twice when a cookie is updated: once for
   // the removal of the existing cookie and once for the adding the new cookie.
@@ -253,7 +233,8 @@ class NET_EXPORT CookieStore {
 
   // Add a callback to be notified on all cookie changes (with a few
   // bookkeeping exceptions; see kChangeCauseMapping in
-  // cookie_monster.cc).
+  // cookie_monster.cc).  See the comment on AddCallbackForCookie for details
+  // on callback behavior.
   virtual std::unique_ptr<CookieChangedSubscription> AddCallbackForAllChanges(
       const CookieChangedCallback& callback) = 0;
 

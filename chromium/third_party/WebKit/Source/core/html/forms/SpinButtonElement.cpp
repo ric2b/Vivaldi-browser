@@ -27,17 +27,17 @@
 #include "core/html/forms/SpinButtonElement.h"
 
 #include "build/build_config.h"
-#include "core/HTMLNames.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBox.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -50,10 +50,9 @@ inline SpinButtonElement::SpinButtonElement(Document& document,
       capturing_(false),
       up_down_state_(kIndeterminate),
       press_starting_state_(kIndeterminate),
-      repeating_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &document),
-          this,
-          &SpinButtonElement::RepeatingTimerFired) {}
+      repeating_timer_(document.GetTaskRunner(TaskType::kUnspecedTimer),
+                       this,
+                       &SpinButtonElement::RepeatingTimerFired) {}
 
 SpinButtonElement* SpinButtonElement::Create(
     Document& document,
@@ -210,7 +209,9 @@ bool SpinButtonElement::MatchesReadWritePseudoClass() const {
 
 void SpinButtonElement::StartRepeatingTimer() {
   press_starting_state_ = up_down_state_;
-  ScrollbarTheme& theme = ScrollbarTheme::GetTheme();
+  Page* page = GetDocument().GetPage();
+  DCHECK(page);
+  ScrollbarTheme& theme = page->GetScrollbarTheme();
   repeating_timer_.Start(theme.InitialAutoscrollTimerDelay(),
                          theme.AutoscrollTimerDelay(), BLINK_FROM_HERE);
 }
@@ -248,7 +249,7 @@ bool SpinButtonElement::ShouldRespondToMouseEvents() {
          spin_button_owner_->ShouldSpinButtonRespondToMouseEvents();
 }
 
-DEFINE_TRACE(SpinButtonElement) {
+void SpinButtonElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(spin_button_owner_);
   HTMLDivElement::Trace(visitor);
 }

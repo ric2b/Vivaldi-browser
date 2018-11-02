@@ -54,7 +54,8 @@ namespace content {
 
 namespace {
 
-const uint32_t kFilteredMessageClasses[] = {FileSystemMsgStart, BlobMsgStart};
+const uint32_t kFileApiFilteredMessageClasses[] = {FileSystemMsgStart,
+                                                   BlobMsgStart};
 
 void RevokeFilePermission(int child_id, const base::FilePath& path) {
   ChildProcessSecurityPolicyImpl::GetInstance()->RevokeAllPermissionsForFile(
@@ -68,13 +69,13 @@ FileAPIMessageFilter::FileAPIMessageFilter(
     net::URLRequestContextGetter* request_context_getter,
     storage::FileSystemContext* file_system_context,
     ChromeBlobStorageContext* blob_storage_context)
-    : BrowserMessageFilter(kFilteredMessageClasses,
-                           arraysize(kFilteredMessageClasses)),
+    : BrowserMessageFilter(kFileApiFilteredMessageClasses,
+                           arraysize(kFileApiFilteredMessageClasses)),
       process_id_(process_id),
       context_(file_system_context),
       security_policy_(ChildProcessSecurityPolicyImpl::GetInstance()),
       request_context_getter_(request_context_getter),
-      request_context_(NULL),
+      request_context_(nullptr),
       blob_storage_context_(blob_storage_context) {
   DCHECK(context_);
   DCHECK(request_context_getter_.get());
@@ -86,8 +87,8 @@ FileAPIMessageFilter::FileAPIMessageFilter(
     net::URLRequestContext* request_context,
     storage::FileSystemContext* file_system_context,
     ChromeBlobStorageContext* blob_storage_context)
-    : BrowserMessageFilter(kFilteredMessageClasses,
-                           arraysize(kFilteredMessageClasses)),
+    : BrowserMessageFilter(kFileApiFilteredMessageClasses,
+                           arraysize(kFileApiFilteredMessageClasses)),
       process_id_(process_id),
       context_(file_system_context),
       security_policy_(ChildProcessSecurityPolicyImpl::GetInstance()),
@@ -104,7 +105,7 @@ void FileAPIMessageFilter::OnChannelConnected(int32_t peer_pid) {
   if (request_context_getter_.get()) {
     DCHECK(!request_context_);
     request_context_ = request_context_getter_->GetURLRequestContext();
-    request_context_getter_ = NULL;
+    request_context_getter_ = nullptr;
     DCHECK(request_context_);
   }
 
@@ -124,7 +125,7 @@ base::TaskRunner* FileAPIMessageFilter::OverrideTaskRunnerForMessage(
     const IPC::Message& message) {
   if (message.type() == FileSystemHostMsg_SyncGetPlatformPath::ID)
     return context_->default_file_task_runner();
-  return NULL;
+  return nullptr;
 }
 
 bool FileAPIMessageFilter::OnMessageReceived(const IPC::Message& message) {
@@ -186,8 +187,8 @@ void FileAPIMessageFilter::OnResolveURL(
     return;
   }
 
-  context_->ResolveURL(url, base::Bind(
-      &FileAPIMessageFilter::DidResolveURL, this, request_id));
+  context_->ResolveURL(url, base::BindOnce(&FileAPIMessageFilter::DidResolveURL,
+                                           this, request_id));
 }
 
 void FileAPIMessageFilter::OnMove(

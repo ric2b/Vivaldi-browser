@@ -12,9 +12,10 @@
 #include "base/logging.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/memory/shared_memory.h"
-#include "content/common/mac/font_descriptor.h"
+#include "base/strings/utf_string_conversions.h"
 #include "content/common/mac/font_loader.h"
 #include "content/common/sandbox_mac_unittest_helper.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -26,7 +27,7 @@ class FontLoadingTestCase : public MacSandboxTestCase {
   bool SandboxedTest() override;
 
  private:
-  std::unique_ptr<base::SharedMemory> font_shmem_;
+  mojo::ScopedSharedBufferHandle font_shmem_;
   size_t font_data_length_;
 };
 REGISTER_SANDBOX_TEST_CASE(FontLoadingTestCase);
@@ -46,35 +47,32 @@ bool FontLoadingTestCase::BeforeSandboxInit() {
     return false;
   }
 
-  font_shmem_.reset(new base::SharedMemory);
-  if (!font_shmem_) {
+  font_shmem_ = mojo::SharedBufferHandle::Create(font_data_length_);
+  if (!font_shmem_.is_valid()) {
     LOG(ERROR) << "Failed to create shared memory object.";
     return false;
   }
 
-  if (!font_shmem_->CreateAndMapAnonymous(font_data_length_)) {
-    LOG(ERROR) << "SharedMemory::Create failed";
+  mojo::ScopedSharedBufferMapping mapping = font_shmem_->Map(font_data_length_);
+  if (!mapping) {
+    LOG(ERROR) << "ScopedSharedBufferHandle::Map failed";
     return false;
   }
 
-  memcpy(font_shmem_->memory(), font_data.c_str(), font_data_length_);
-  if (!font_shmem_->Unmap())  {
-    LOG(ERROR) << "SharedMemory::Unmap failed";
-    return false;
-  }
+  memcpy(mapping.get(), font_data.c_str(), font_data_length_);
   return true;
 }
 
 bool FontLoadingTestCase::SandboxedTest() {
-  base::SharedMemoryHandle shmem_handle = font_shmem_->handle().Duplicate();
-  if (!shmem_handle.IsValid()) {
-    LOG(ERROR) << "SharedMemory handle duplication failed";
+  mojo::ScopedSharedBufferHandle shmem_handle = font_shmem_->Clone();
+  if (!shmem_handle.is_valid()) {
+    LOG(ERROR) << "ScopedSharedBufferHandle handle duplication failed";
     return false;
   }
 
   CGFontRef cg_font_ref;
-  if (!FontLoader::CGFontRefFromBuffer(shmem_handle, font_data_length_,
-                                       &cg_font_ref)) {
+  if (!FontLoader::CGFontRefFromBuffer(std::move(shmem_handle),
+                                       font_data_length_, &cg_font_ref)) {
     LOG(ERROR) << "Call to CreateCGFontFromBuffer() failed";
     return false;
   }
@@ -111,19 +109,22 @@ TEST_F(MacSandboxTest, FontLoadingTest) {
   ASSERT_TRUE(temp_file);
   base::ScopedFILE temp_file_closer(temp_file);
 
-  NSFont* srcFont = [NSFont fontWithName:@"Geeza Pro" size:16.0];
-  FontDescriptor descriptor(srcFont);
   std::unique_ptr<FontLoader::ResultInternal> result =
-      FontLoader::LoadFontForTesting(descriptor);
+      FontLoader::LoadFontForTesting(base::ASCIIToUTF16("Geeza Pro"), 16);
   EXPECT_GT(result->font_data_size, 0U);
   EXPECT_GT(result->font_id, 0U);
 
-  base::WriteFileDescriptor(
-      fileno(temp_file), static_cast<const char*>(result->font_data.memory()),
-      result->font_data_size);
+  mojo::ScopedSharedBufferMapping mapping =
+      result->font_data->Map(result->font_data_size);
+  ASSERT_TRUE(mapping);
 
-  ASSERT_TRUE(RunTestInSandbox(SANDBOX_TYPE_RENDERER,
-                  "FontLoadingTestCase", temp_file_path.value().c_str()));
+  base::WriteFileDescriptor(fileno(temp_file),
+                            static_cast<const char*>(mapping.get()),
+                            result->font_data_size);
+
+  ASSERT_TRUE(RunTestInSandbox(service_manager::SANDBOX_TYPE_RENDERER,
+                               "FontLoadingTestCase",
+                               temp_file_path.value().c_str()));
   temp_file_closer.reset();
   ASSERT_TRUE(base::DeleteFile(temp_file_path, false));
 }

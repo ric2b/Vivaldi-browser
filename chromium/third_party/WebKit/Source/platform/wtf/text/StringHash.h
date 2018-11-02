@@ -33,6 +33,16 @@ inline bool HashTraits<String>::IsEmptyValue(const String& value) {
   return value.IsNull();
 }
 
+inline bool HashTraits<String>::IsDeletedValue(const String& value) {
+  return HashTraits<scoped_refptr<StringImpl>>::IsDeletedValue(value.impl_);
+}
+
+inline void HashTraits<String>::ConstructDeletedValue(String& slot,
+                                                      bool zero_value) {
+  HashTraits<scoped_refptr<StringImpl>>::ConstructDeletedValue(slot.impl_,
+                                                               zero_value);
+}
+
 // The hash() functions on StringHash and CaseFoldingHash do not support null
 // strings. get(), contains(), and add() on HashMap<String,..., StringHash>
 // cause a null-pointer dereference when passed null strings.
@@ -49,11 +59,12 @@ struct StringHash {
     return EqualNonNull(a, b);
   }
 
-  static unsigned GetHash(const RefPtr<StringImpl>& key) {
+  static unsigned GetHash(const scoped_refptr<StringImpl>& key) {
     return key->GetHash();
   }
-  static bool Equal(const RefPtr<StringImpl>& a, const RefPtr<StringImpl>& b) {
-    return Equal(a.Get(), b.Get());
+  static bool Equal(const scoped_refptr<StringImpl>& a,
+                    const scoped_refptr<StringImpl>& b) {
+    return Equal(a.get(), b.get());
   }
 
   static unsigned GetHash(const String& key) { return key.Impl()->GetHash(); }
@@ -103,12 +114,13 @@ class CaseFoldingHash {
     return DeprecatedEqualIgnoringCaseAndNullity(*a, *b);
   }
 
-  static unsigned GetHash(const RefPtr<StringImpl>& key) {
-    return GetHash(key.Get());
+  static unsigned GetHash(const scoped_refptr<StringImpl>& key) {
+    return GetHash(key.get());
   }
 
-  static bool Equal(const RefPtr<StringImpl>& a, const RefPtr<StringImpl>& b) {
-    return Equal(a.Get(), b.Get());
+  static bool Equal(const scoped_refptr<StringImpl>& a,
+                    const scoped_refptr<StringImpl>& b) {
+    return Equal(a.get(), b.get());
   }
 
   static unsigned GetHash(const String& key) { return GetHash(key.Impl()); }

@@ -6,13 +6,13 @@
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_EMULATOR_H_
 
 #include <memory>
-#include <queue>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/common/cursors/webcursor.h"
-#include "content/common/input/input_event_ack_state.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
@@ -149,7 +149,7 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   float pinch_scale_;
   bool pinch_gesture_active_;
 
-  std::queue<base::OnceClosure> injected_touch_completion_callbacks_;
+  base::queue<base::OnceClosure> injected_touch_completion_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchEmulator);
 };

@@ -8,11 +8,12 @@
 #include "core/dom/Document.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/UseCounter.h"
-#include "modules/EventTargetModulesNames.h"
+#include "modules/event_target_modules_names.h"
 #include "modules/presentation/PresentationController.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace blink {
 
@@ -24,7 +25,7 @@ PresentationAvailability* PresentationAvailability::Take(
   PresentationAvailability* presentation_availability =
       new PresentationAvailability(resolver->GetExecutionContext(), urls,
                                    value);
-  presentation_availability->SuspendIfNeeded();
+  presentation_availability->PauseIfNeeded();
   presentation_availability->UpdateListening();
   return presentation_availability;
 }
@@ -33,7 +34,7 @@ PresentationAvailability::PresentationAvailability(
     ExecutionContext* execution_context,
     const WTF::Vector<KURL>& urls,
     bool value)
-    : SuspendableObject(execution_context),
+    : PausableObject(execution_context),
       PageVisibilityObserver(ToDocument(execution_context)->GetPage()),
       urls_(urls),
       value_(value),
@@ -53,7 +54,7 @@ const AtomicString& PresentationAvailability::InterfaceName() const {
 }
 
 ExecutionContext* PresentationAvailability::GetExecutionContext() const {
-  return SuspendableObject::GetExecutionContext();
+  return PausableObject::GetExecutionContext();
 }
 
 void PresentationAvailability::AddedEventListener(
@@ -81,11 +82,11 @@ bool PresentationAvailability::HasPendingActivity() const {
   return state_ != State::kInactive;
 }
 
-void PresentationAvailability::Resume() {
+void PresentationAvailability::Unpause() {
   SetState(State::kActive);
 }
 
-void PresentationAvailability::Suspend() {
+void PresentationAvailability::Pause() {
   SetState(State::kSuspended);
 }
 
@@ -112,7 +113,7 @@ void PresentationAvailability::UpdateListening() {
 
   if (state_ == State::kActive &&
       (ToDocument(GetExecutionContext())->GetPageVisibilityState() ==
-       kPageVisibilityStateVisible))
+       mojom::PageVisibilityState::kVisible))
     client->StartListening(this);
   else
     client->StopListening(this);
@@ -126,10 +127,10 @@ bool PresentationAvailability::value() const {
   return value_;
 }
 
-DEFINE_TRACE(PresentationAvailability) {
+void PresentationAvailability::Trace(blink::Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
-  SuspendableObject::Trace(visitor);
+  PausableObject::Trace(visitor);
 }
 
 }  // namespace blink

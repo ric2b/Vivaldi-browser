@@ -7,8 +7,10 @@
 #include <vector>
 
 #include "ash/mus/window_manager.h"
-#include "ash/mus/window_manager_application.h"
+#include "ash/mus/window_manager_service.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/window_properties.mojom.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -19,6 +21,7 @@
 #include "components/session_manager/session_manager_types.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/property_converter.h"
@@ -35,7 +38,6 @@
 #include "ui/wm/core/wm_state.h"
 
 namespace ash {
-namespace mus {
 
 class WindowTreeClientDelegate : public aura::WindowTreeClientDelegate {
  public:
@@ -106,7 +108,7 @@ TEST_F(WindowManagerServiceTest, OpenWindow) {
   aura::WindowTreeClient client(connector(), &window_tree_delegate, nullptr,
                                 nullptr, nullptr, false);
   client.ConnectViaWindowTreeFactory();
-  aura::test::EnvTestHelper().SetWindowTreeClient(&client);
+  aura::test::EnvWindowTreeClientSetter env_window_tree_client_setter(&client);
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kWindowType_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
@@ -141,7 +143,7 @@ TEST_F(WindowManagerTest, SystemModalLockIsntReparented) {
       Shell::GetPrimaryRootWindow(), kShellWindowId_LockSystemModalContainer);
   system_modal_container->AddChild(window.get());
   aura::WindowManagerDelegate* window_manager_delegate =
-      ash_test_helper()->window_manager_app()->window_manager();
+      ash_test_helper()->window_manager_service()->window_manager();
   window_manager_delegate->OnWmSetModalType(window.get(),
                                             ui::MODAL_TYPE_SYSTEM);
   ASSERT_TRUE(window->parent());
@@ -149,5 +151,17 @@ TEST_F(WindowManagerTest, SystemModalLockIsntReparented) {
   EXPECT_EQ(kShellWindowId_LockSystemModalContainer, window->parent()->id());
 }
 
-}  // namespace mus
+TEST_F(WindowManagerTest, CanConsumeSystemKeysFromContentBrowser) {
+  std::map<std::string, std::vector<uint8_t>> properties;
+  properties[ash::mojom::kCanConsumeSystemKeys_Property] =
+      mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int64_t>(true));
+
+  aura::WindowManagerDelegate* window_manager_delegate =
+      ash_test_helper()->window_manager_service()->window_manager();
+  aura::Window* window = window_manager_delegate->OnWmCreateTopLevelWindow(
+      ui::mojom::WindowType::WINDOW, &properties);
+
+  EXPECT_EQ(true, window->GetProperty(kCanConsumeSystemKeysKey));
+}
+
 }  // namespace ash

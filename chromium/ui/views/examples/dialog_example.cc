@@ -133,8 +133,7 @@ void DialogExample::CreateExampleView(View* container) {
   views::LayoutProvider* provider = views::LayoutProvider::Get();
   const int horizontal_spacing =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
-  GridLayout* layout = GridLayout::CreatePanel(container);
-  container->SetLayoutManager(layout);
+  GridLayout* layout = GridLayout::CreateAndInstall(container);
   ColumnSet* column_set = layout->AddColumnSet(kFieldsColumnId);
   column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, kFixed,
                         GridLayout::USE_PREF, 0, 0);
@@ -295,7 +294,7 @@ void DialogExample::ButtonPressed(Button* sender, const ui::Event& event) {
 
   // Other buttons are all checkboxes. Update the dialog if there is one.
   if (last_dialog_) {
-    last_dialog_->GetDialogClientView()->UpdateDialogButtons();
+    last_dialog_->DialogModelChanged();
     ResizeDialog();
   }
 }
@@ -313,7 +312,7 @@ void DialogExample::ContentsChanged(Textfield* sender,
   } else if (sender == body_) {
     last_body_label_->SetText(new_contents);
   } else {
-    last_dialog_->GetDialogClientView()->UpdateDialogButtons();
+    last_dialog_->DialogModelChanged();
   }
 
   ResizeDialog();

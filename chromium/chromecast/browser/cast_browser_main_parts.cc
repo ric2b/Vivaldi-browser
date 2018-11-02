@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -21,6 +22,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "cc/base/switches.h"
 #include "chromecast/base/cast_constants.h"
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/cast_paths.h"
@@ -36,7 +38,6 @@
 #include "chromecast/browser/cast_memory_pressure_monitor.h"
 #include "chromecast/browser/cast_net_log.h"
 #include "chromecast/browser/devtools/remote_debugging_server.h"
-#include "chromecast/browser/geolocation/cast_access_token_store.h"
 #include "chromecast/browser/media/media_caps_impl.h"
 #include "chromecast/browser/metrics/cast_metrics_prefs.h"
 #include "chromecast/browser/metrics/cast_metrics_service_client.h"
@@ -60,8 +61,6 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
-#include "device/geolocation/geolocation_delegate.h"
-#include "device/geolocation/geolocation_provider.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
@@ -69,12 +68,10 @@
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
 
-#if !defined(OS_ANDROID)
-#include <signal.h>
-#include <sys/prctl.h>
-#endif
 #if defined(OS_LINUX)
 #include <fontconfig/fontconfig.h>
+#include <signal.h>
+#include <sys/prctl.h>
 #endif
 
 #if defined(OS_ANDROID)
@@ -86,10 +83,15 @@
 #include "chromecast/net/network_change_notifier_factory_cast.h"
 #endif
 
+#if defined(OS_FUCHSIA)
+#include "chromecast/net/fake_connectivity_checker.h"
+#endif
+
 #if defined(USE_AURA)
 // gn check ignored on OverlayManagerCast as it's not a public ozone
 // header, but is exported to allow injecting the overlay-composited
 // callback.
+#include "chromecast/browser/cast_display_configurator.h"
 #include "chromecast/graphics/cast_screen.h"
 #include "ui/display/screen.h"
 #include "ui/ozone/platform/cast/overlay_manager_cast.h"  // nogncheck
@@ -97,7 +99,7 @@
 
 namespace {
 
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 int kSignalsToRunClosure[] = { SIGTERM, SIGINT, };
 // Closure to run on SIGTERM and SIGINT.
 base::Closure* g_signal_closure = nullptr;
@@ -188,7 +190,7 @@ void DeregisterKillOnAlarm() {
   }
 }
 
-#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 }  // namespace
 
@@ -196,22 +198,6 @@ namespace chromecast {
 namespace shell {
 
 namespace {
-
-// A provider of services for Geolocation.
-class CastGeolocationDelegate : public device::GeolocationDelegate {
- public:
-  explicit CastGeolocationDelegate(CastBrowserContext* context)
-      : context_(context) {}
-
-  scoped_refptr<device::AccessTokenStore> CreateAccessTokenStore() override {
-    return new CastAccessTokenStore(context_);
-  }
-
- private:
-  CastBrowserContext* context_;
-
-  DISALLOW_COPY_AND_ASSIGN(CastGeolocationDelegate);
-};
 
 struct DefaultCommandLineSwitch {
   const char* const switch_name;
@@ -236,6 +222,7 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     {switches::kDisableGpuVsync, ""},
     {switches::kSkipGpuDataLoading, ""},
     {switches::kDisableGpuCompositing, ""},
+    {cc::switches::kDisableThreadedAnimation, ""},
 #endif  // defined(OS_ANDROID)
 #endif  // BUILDFLAG(IS_CAST_AUDIO_ONLY)
 #if defined(OS_LINUX)
@@ -254,9 +241,6 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     // BrowserThreadsStarted).  The GPU process will be created as soon as a
     // renderer needs it, which always happens after main loop starts.
     {switches::kDisableGpuEarlyInit, ""},
-    // TODO(halliwell): Cast builds don't support ES3. Remove this switch when
-    // support is added (crbug.com/659395)
-    {switches::kDisableES3GLContext, ""},
     // Enable navigator.connection API.
     // TODO(derekjchow): Remove this switch when enabled by default.
     {switches::kEnableNetworkInformationDownlinkMax, ""},
@@ -265,6 +249,9 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     // TODO(halliwell): Revert after fix for b/63101386.
     {switches::kDisallowNonExactResourceReuse, ""},
     {switches::kEnableMediaSuspend, ""},
+    // Enable autoplay without requiring any user gesture.
+    {switches::kAutoplayPolicy,
+     switches::autoplay::kNoUserGestureRequiredPolicy},
 };
 
 void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
@@ -375,10 +362,10 @@ void CastBrowserMainParts::PreMainMessageLoopStart() {
 #if defined(OS_ANDROID)
   net::NetworkChangeNotifier::SetFactory(
       new net::NetworkChangeNotifierFactoryAndroid());
-#else
+#elif !defined(OS_FUCHSIA)
   net::NetworkChangeNotifier::SetFactory(
       new NetworkChangeNotifierFactoryCast());
-#endif  // defined(OS_ANDROID)
+#endif  // !defined(OS_FUCHSIA)
 }
 
 void CastBrowserMainParts::PostMainMessageLoopStart() {
@@ -462,7 +449,9 @@ int CastBrowserMainParts::PreCreateThreads() {
   cast_browser_process_->SetCastScreen(base::WrapUnique(new CastScreen()));
   DCHECK(!display::Screen::GetScreen());
   display::Screen::SetScreenInstance(cast_browser_process_->cast_screen());
-#endif
+  display_configurator_ = base::MakeUnique<CastDisplayConfigurator>(
+      cast_browser_process_->cast_screen());
+#endif  // defined(USE_AURA)
 
   content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       kChromeResourceScheme);
@@ -470,18 +459,24 @@ int CastBrowserMainParts::PreCreateThreads() {
 }
 
 void CastBrowserMainParts::PreMainMessageLoopRun() {
-
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   memory_pressure_monitor_.reset(new CastMemoryPressureMonitor());
-#endif  // defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
   cast_browser_process_->SetNetLog(net_log_.get());
   url_request_context_factory_->InitializeOnUIThread(net_log_.get());
 
+#if defined(OS_FUCHSIA)
+  // TODO(777973): Switch to using the real ConnectivityChecker once setup works
+  // properly.
+  LOG(WARNING) << "Using FakeConnectivityChecker.";
+  cast_browser_process_->SetConnectivityChecker(new FakeConnectivityChecker());
+#else
   cast_browser_process_->SetConnectivityChecker(ConnectivityChecker::Create(
       content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO),
       url_request_context_factory_->GetSystemGetter()));
+#endif  // defined(OS_FUCHSIA)
 
   cast_browser_process_->SetBrowserContext(
       base::MakeUnique<CastBrowserContext>(url_request_context_factory_));
@@ -509,8 +504,9 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
                  base::Unretained(video_plane_controller_.get())));
 #endif
 
-  window_manager_ =
-      CastWindowManager::Create(CAST_IS_DEBUG_BUILD() /* enable input */);
+  window_manager_ = CastWindowManager::Create(
+      CAST_IS_DEBUG_BUILD() ||
+      GetSwitchValueBoolean(switches::kEnableInput, false));
 
   cast_browser_process_->SetCastService(
       cast_browser_process_->browser_client()->CreateCastService(
@@ -525,9 +521,6 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
 #endif
   ::media::InitializeMediaLibrary();
   media_caps_->Initialize();
-
-  device::GeolocationProvider::SetGeolocationDelegate(
-      new CastGeolocationDelegate(cast_browser_process_->browser_context()));
 
   // Initializing metrics service and network delegates must happen after cast
   // service is intialized because CastMetricsServiceClient and
@@ -547,7 +540,11 @@ bool CastBrowserMainParts::MainMessageLoopRun(int* result_code) {
 #else
   base::RunLoop run_loop;
   base::Closure quit_closure(run_loop.QuitClosure());
+
+#if !defined(OS_FUCHSIA)
+  // Fuchsia doesn't have signals.
   RegisterClosureOnSignal(quit_closure);
+#endif  // !defined(OS_FUCHSIA)
 
   // If parameters_.ui_task is not NULL, we are running browser tests.
   if (parameters_.ui_task) {
@@ -558,11 +555,16 @@ bool CastBrowserMainParts::MainMessageLoopRun(int* result_code) {
 
   run_loop.Run();
 
+#if !defined(OS_FUCHSIA)
   // Once the main loop has stopped running, we give the browser process a few
   // seconds to stop cast service and finalize all resources. If a hang occurs
   // and cast services refuse to terminate successfully, then we SIGKILL the
-  // current process to avoid indefinte hangs.
+  // current process to avoid indefinite hangs.
+  //
+  // TODO(sergeyu): Fuchsia doesn't implement POSIX signals. Implement a
+  // different shutdown watchdog mechanism.
   RegisterKillOnAlarm(kKillOnAlarmTimeoutSec);
+#endif  // !defined(OS_FUCHSIA)
 
   cast_browser_process_->cast_service()->Stop();
   return true;
@@ -580,7 +582,9 @@ void CastBrowserMainParts::PostMainMessageLoopRun() {
   cast_browser_process_->metrics_service_client()->Finalize();
   cast_browser_process_.reset();
 
+#if !defined(OS_FUCHSIA)
   DeregisterKillOnAlarm();
+#endif  // !defined(OS_FUCHSIA)
 #endif
 }
 

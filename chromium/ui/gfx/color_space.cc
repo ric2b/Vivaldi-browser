@@ -4,6 +4,7 @@
 
 #include "ui/gfx/color_space.h"
 
+#include <iomanip>
 #include <map>
 #include <sstream>
 
@@ -48,8 +49,7 @@ ColorSpace::ColorSpace(const ColorSpace& other)
       transfer_(other.transfer_),
       matrix_(other.matrix_),
       range_(other.range_),
-      icc_profile_id_(other.icc_profile_id_),
-      icc_profile_sk_color_space_(other.icc_profile_sk_color_space_) {
+      icc_profile_id_(other.icc_profile_id_) {
   if (transfer_ == TransferID::CUSTOM) {
     memcpy(custom_transfer_params_, other.custom_transfer_params_,
            sizeof(custom_transfer_params_));
@@ -95,13 +95,18 @@ ColorSpace ColorSpace::CreateCustom(const SkMatrix44& to_XYZD50,
   ColorSpace result(ColorSpace::PrimaryID::CUSTOM,
                     ColorSpace::TransferID::CUSTOM, ColorSpace::MatrixID::RGB,
                     ColorSpace::RangeID::FULL);
-  for (int row = 0; row < 3; ++row) {
-    for (int col = 0; col < 3; ++col) {
-      result.custom_primary_matrix_[3 * row + col] = to_XYZD50.get(row, col);
-    }
-  }
+  result.SetCustomPrimaries(to_XYZD50);
   result.SetCustomTransferFunction(fn);
   return result;
+}
+
+void ColorSpace::SetCustomPrimaries(const SkMatrix44& to_XYZD50) {
+  for (int row = 0; row < 3; ++row) {
+    for (int col = 0; col < 3; ++col) {
+      custom_primary_matrix_[3 * row + col] = to_XYZD50.get(row, col);
+    }
+  }
+  primaries_ = PrimaryID::CUSTOM;
 }
 
 void ColorSpace::SetCustomTransferFunction(const SkColorSpaceTransferFn& fn) {
@@ -123,11 +128,7 @@ ColorSpace ColorSpace::CreateCustom(const SkMatrix44& to_XYZD50,
   DCHECK_NE(transfer_id, ColorSpace::TransferID::INVALID);
   ColorSpace result(ColorSpace::PrimaryID::CUSTOM, transfer_id,
                     ColorSpace::MatrixID::RGB, ColorSpace::RangeID::FULL);
-  for (int row = 0; row < 3; ++row) {
-    for (int col = 0; col < 3; ++col) {
-      result.custom_primary_matrix_[3 * row + col] = to_XYZD50.get(row, col);
-    }
-  }
+  result.SetCustomPrimaries(to_XYZD50);
   return result;
 }
 
@@ -165,7 +166,8 @@ ColorSpace ColorSpace::CreateREC709() {
 
 bool ColorSpace::operator==(const ColorSpace& other) const {
   if (primaries_ != other.primaries_ || transfer_ != other.transfer_ ||
-      matrix_ != other.matrix_ || range_ != other.range_)
+      matrix_ != other.matrix_ || range_ != other.range_ ||
+      icc_profile_id_ != other.icc_profile_id_)
     return false;
   if (primaries_ == PrimaryID::CUSTOM) {
     if (memcmp(custom_primary_matrix_, other.custom_primary_matrix_,
@@ -178,11 +180,6 @@ bool ColorSpace::operator==(const ColorSpace& other) const {
                sizeof(custom_transfer_params_))) {
       return false;
     }
-  }
-  if (primaries_ == PrimaryID::ICC_BASED ||
-      transfer_ == TransferID::ICC_BASED) {
-    if (icc_profile_id_ != other.icc_profile_id_)
-      return false;
   }
   return true;
 }
@@ -201,27 +198,10 @@ bool ColorSpace::FullRangeEncodedValues() const {
          transfer_ == TransferID::IEC61966_2_4;
 }
 
-bool ColorSpace::IsParametric() const {
-  return primaries_ != PrimaryID::ICC_BASED &&
-         transfer_ != TransferID::ICC_BASED;
-}
-
 ColorSpace ColorSpace::GetParametricApproximation() const {
-  // If this is parametric already, return it directly.
-  if (IsParametric())
-    return *this;
-
-  // Query the ICC profile, if available, for the parametric approximation.
-  ICCProfile icc_profile;
-  if (icc_profile_id_ && GetICCProfile(&icc_profile)) {
-    return icc_profile.GetParametricColorSpace();
-  } else {
-    DLOG(ERROR)
-        << "Unable to acquire ICC profile for parametric approximation.";
-  }
-
-  // Fall back to sRGB if the ICC profile is no longer cached.
-  return CreateSRGB();
+  ColorSpace result = *this;
+  result.icc_profile_id_ = 0;
+  return result;
 }
 
 bool ColorSpace::operator!=(const ColorSpace& other) const {
@@ -244,6 +224,10 @@ bool ColorSpace::operator<(const ColorSpace& other) const {
   if (range_ < other.range_)
     return true;
   if (range_ > other.range_)
+    return false;
+  if (icc_profile_id_ < other.icc_profile_id_)
+    return true;
+  if (icc_profile_id_ > other.icc_profile_id_)
     return false;
   if (primaries_ == PrimaryID::CUSTOM) {
     int primary_result =
@@ -287,40 +271,103 @@ size_t ColorSpace::GetHash() const {
   return result;
 }
 
+#define PRINT_ENUM_CASE(TYPE, NAME) \
+  case TYPE::NAME:                  \
+    ss << #NAME;                    \
+    break;
+
 std::string ColorSpace::ToString() const {
   std::stringstream ss;
+  ss << std::fixed << std::setprecision(4);
   ss << "{primaries:";
-  if (primaries_ == PrimaryID::CUSTOM) {
-    ss << "[";
-    for (size_t i = 0; i < 3; ++i) {
+  switch (primaries_) {
+    PRINT_ENUM_CASE(PrimaryID, INVALID)
+    PRINT_ENUM_CASE(PrimaryID, BT709)
+    PRINT_ENUM_CASE(PrimaryID, BT470M)
+    PRINT_ENUM_CASE(PrimaryID, BT470BG)
+    PRINT_ENUM_CASE(PrimaryID, SMPTE170M)
+    PRINT_ENUM_CASE(PrimaryID, SMPTE240M)
+    PRINT_ENUM_CASE(PrimaryID, FILM)
+    PRINT_ENUM_CASE(PrimaryID, BT2020)
+    PRINT_ENUM_CASE(PrimaryID, SMPTEST428_1)
+    PRINT_ENUM_CASE(PrimaryID, SMPTEST431_2)
+    PRINT_ENUM_CASE(PrimaryID, SMPTEST432_1)
+    PRINT_ENUM_CASE(PrimaryID, XYZ_D50)
+    PRINT_ENUM_CASE(PrimaryID, ADOBE_RGB)
+    PRINT_ENUM_CASE(PrimaryID, APPLE_GENERIC_RGB)
+    PRINT_ENUM_CASE(PrimaryID, WIDE_GAMUT_COLOR_SPIN)
+    case PrimaryID::CUSTOM:
       ss << "[";
-      for (size_t j = 0; j < 3; ++j) {
-        ss << custom_primary_matrix_[3 * i + j];
-        ss << ",";
+      for (size_t i = 0; i < 3; ++i) {
+        ss << "[";
+        for (size_t j = 0; j < 3; ++j)
+          ss << custom_primary_matrix_[3 * i + j] << ",";
+        ss << "],";
       }
-      ss << "],";
-    }
-    ss << "]";
-  } else {
-    ss << static_cast<int>(primaries_);
+      ss << "]";
+      break;
   }
   ss << ", transfer:";
-  if (transfer_ == TransferID::CUSTOM) {
-    ss << "[";
-    for (size_t i = 0; i < 7; ++i) {
-      ss << custom_transfer_params_[i];
-      ss << ",";
+  switch (transfer_) {
+    PRINT_ENUM_CASE(TransferID, INVALID)
+    PRINT_ENUM_CASE(TransferID, BT709)
+    PRINT_ENUM_CASE(TransferID, GAMMA18)
+    PRINT_ENUM_CASE(TransferID, GAMMA22)
+    PRINT_ENUM_CASE(TransferID, GAMMA24)
+    PRINT_ENUM_CASE(TransferID, GAMMA28)
+    PRINT_ENUM_CASE(TransferID, SMPTE170M)
+    PRINT_ENUM_CASE(TransferID, SMPTE240M)
+    PRINT_ENUM_CASE(TransferID, LINEAR)
+    PRINT_ENUM_CASE(TransferID, LOG)
+    PRINT_ENUM_CASE(TransferID, LOG_SQRT)
+    PRINT_ENUM_CASE(TransferID, IEC61966_2_4)
+    PRINT_ENUM_CASE(TransferID, BT1361_ECG)
+    PRINT_ENUM_CASE(TransferID, IEC61966_2_1)
+    PRINT_ENUM_CASE(TransferID, BT2020_10)
+    PRINT_ENUM_CASE(TransferID, BT2020_12)
+    PRINT_ENUM_CASE(TransferID, SMPTEST2084)
+    PRINT_ENUM_CASE(TransferID, SMPTEST428_1)
+    PRINT_ENUM_CASE(TransferID, ARIB_STD_B67)
+    PRINT_ENUM_CASE(TransferID, SMPTEST2084_NON_HDR)
+    PRINT_ENUM_CASE(TransferID, IEC61966_2_1_HDR)
+    PRINT_ENUM_CASE(TransferID, LINEAR_HDR)
+    case TransferID::CUSTOM: {
+      SkColorSpaceTransferFn fn;
+      GetTransferFunction(&fn);
+      ss << fn.fC << "*x + " << fn.fF << " if x < " << fn.fD << " else (";
+      ss << fn.fA << "*x + " << fn.fB << ")**" << fn.fG << " + " << fn.fE;
+      break;
     }
-    ss << "]";
-  } else {
-    ss << static_cast<int>(transfer_);
   }
-  ss << ", matrix:" << static_cast<int>(matrix_);
-  ss << ", range:" << static_cast<int>(range_);
-  ss << ", icc_profile_id:" << icc_profile_id_;
+  ss << ", matrix:";
+  switch (matrix_) {
+    PRINT_ENUM_CASE(MatrixID, INVALID)
+    PRINT_ENUM_CASE(MatrixID, RGB)
+    PRINT_ENUM_CASE(MatrixID, BT709)
+    PRINT_ENUM_CASE(MatrixID, FCC)
+    PRINT_ENUM_CASE(MatrixID, BT470BG)
+    PRINT_ENUM_CASE(MatrixID, SMPTE170M)
+    PRINT_ENUM_CASE(MatrixID, SMPTE240M)
+    PRINT_ENUM_CASE(MatrixID, YCOCG)
+    PRINT_ENUM_CASE(MatrixID, BT2020_NCL)
+    PRINT_ENUM_CASE(MatrixID, BT2020_CL)
+    PRINT_ENUM_CASE(MatrixID, YDZDX)
+  }
+  ss << ", range:";
+  switch (range_) {
+    PRINT_ENUM_CASE(RangeID, INVALID)
+    PRINT_ENUM_CASE(RangeID, LIMITED)
+    PRINT_ENUM_CASE(RangeID, FULL)
+    PRINT_ENUM_CASE(RangeID, DERIVED)
+  }
+  if (icc_profile_id_) {
+    ss << ", icc_profile_id:" << icc_profile_id_;
+  }
   ss << "}";
   return ss.str();
 }
+
+#undef PRINT_ENUM_CASE
 
 ColorSpace ColorSpace::GetAsFullRangeRGB() const {
   ColorSpace result(*this);
@@ -333,13 +380,15 @@ ColorSpace ColorSpace::GetAsFullRangeRGB() const {
 
 ColorSpace ColorSpace::GetRasterColorSpace() const {
   // Rasterization can only be done into parametric color spaces.
-  if (!IsParametric())
+  if (icc_profile_id_)
     return GetParametricApproximation();
+
   // Rasterization doesn't support more than 8 bit unorm values. If the output
   // space has an extended range, use Display P3 for the rasterization space,
   // to get a somewhat wider color gamut.
   if (HasExtendedSkTransferFn())
     return CreateDisplayP3D65();
+
   return *this;
 }
 
@@ -352,11 +401,6 @@ ColorSpace ColorSpace::GetBlendingColorSpace() const {
 }
 
 sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
-  // If we got a specific SkColorSpace from the ICCProfile that this color space
-  // was created from, use that.
-  if (icc_profile_sk_color_space_)
-    return icc_profile_sk_color_space_;
-
   // Unspecified color spaces correspond to the null SkColorSpace.
   if (!IsValid())
     return nullptr;
@@ -369,6 +413,19 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
   if (range_ != RangeID::FULL) {
     DLOG(ERROR) << "Not creating non-full-range SkColorSpace";
     return nullptr;
+  }
+
+  // If we got a specific SkColorSpace from the ICCProfile that this color space
+  // was created from, use that.
+  if (icc_profile_id_) {
+    sk_sp<SkColorSpace> result =
+        ICCProfile::GetSkColorSpaceFromId(icc_profile_id_);
+    if (result)
+      return result;
+
+    // This will fall through to creating a parametric approximation. The
+    // result will be that we will use an inaccurate transfer function.
+    DLOG(ERROR) << "Unable to find ICCProfile for SkColorSpace.";
   }
 
   // Use the named SRGB and linear-SRGB instead of the generic constructors.
@@ -433,85 +490,6 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
   return SkColorSpace::MakeRGB(fn, to_xyz_d50);
 }
 
-bool ColorSpace::GetICCProfile(ICCProfile* icc_profile) const {
-  if (!IsValid()) {
-    DLOG(ERROR) << "Cannot fetch ICCProfile for invalid space.";
-    return false;
-  }
-  if (matrix_ != MatrixID::RGB) {
-    DLOG(ERROR) << "Not creating non-RGB ICCProfile";
-    return false;
-  }
-  if (range_ != RangeID::FULL) {
-    DLOG(ERROR) << "Not creating non-full-range ICCProfile";
-    return false;
-  }
-
-  // If this was created from an ICC profile, retrieve that exact profile.
-  ICCProfile result;
-  if (ICCProfile::FromId(icc_profile_id_, icc_profile))
-    return true;
-
-  // Otherwise, construct an ICC profile based on the best approximated
-  // primaries and matrix.
-  SkMatrix44 to_XYZD50_matrix;
-  GetPrimaryMatrix(&to_XYZD50_matrix);
-  SkColorSpaceTransferFn fn;
-  if (!GetTransferFunction(&fn)) {
-    DLOG(ERROR) << "Failed to get ColorSpace transfer function for ICCProfile.";
-    return false;
-  }
-  sk_sp<SkData> data = SkICC::WriteToICC(fn, to_XYZD50_matrix);
-  if (!data) {
-    DLOG(ERROR) << "Failed to create SkICC.";
-    return false;
-  }
-  *icc_profile = ICCProfile::FromData(data->data(), data->size());
-  DCHECK(icc_profile->IsValid());
-  return true;
-}
-
-bool ColorSpace::GetICCProfileData(std::vector<char>* output_data) const {
-  if (!IsValid()) {
-    DLOG(ERROR) << "Cannot fetch ICCProfile for invalid space.";
-    return false;
-  }
-  if (matrix_ != MatrixID::RGB) {
-    DLOG(ERROR) << "Not creating non-RGB ICCProfile";
-    return false;
-  }
-  if (range_ != RangeID::FULL) {
-    DLOG(ERROR) << "Not creating non-full-range ICCProfile";
-    return false;
-  }
-
-  // If this was created from an ICC profile, retrieve that exact profile.
-  ICCProfile icc_profile;
-  if (ICCProfile::FromId(icc_profile_id_, &icc_profile)) {
-    *output_data = icc_profile.data_;
-    return true;
-  }
-
-  // Otherwise, construct an ICC profile based on the best approximated
-  // primaries and matrix.
-  SkMatrix44 to_XYZD50_matrix;
-  GetPrimaryMatrix(&to_XYZD50_matrix);
-  SkColorSpaceTransferFn fn;
-  if (!GetTransferFunction(&fn)) {
-    DLOG(ERROR) << "Failed to get ColorSpace transfer function for ICCProfile.";
-    return false;
-  }
-  sk_sp<SkData> data = SkICC::WriteToICC(fn, to_XYZD50_matrix);
-  if (!data || !data->size()) {
-    DLOG(ERROR) << "Failed to create SkICC.";
-    return false;
-  }
-  const char* data_as_char = reinterpret_cast<const char*>(data->data());
-  output_data->insert(output_data->begin(), data_as_char,
-                      data_as_char + data->size());
-  return true;
-}
-
 void ColorSpace::GetPrimaryMatrix(SkMatrix44* to_XYZD50) const {
   SkColorSpacePrimaries primaries = {0};
   switch (primaries_) {
@@ -520,7 +498,6 @@ void ColorSpace::GetPrimaryMatrix(SkMatrix44* to_XYZD50) const {
       return;
 
     case ColorSpace::PrimaryID::INVALID:
-    case ColorSpace::PrimaryID::ICC_BASED:
       to_XYZD50->setIdentity();
       return;
 
@@ -754,7 +731,6 @@ bool ColorSpace::GetTransferFunction(SkColorSpaceTransferFn* fn) const {
     case ColorSpace::TransferID::SMPTEST2084:
     case ColorSpace::TransferID::SMPTEST2084_NON_HDR:
     case ColorSpace::TransferID::INVALID:
-    case ColorSpace::TransferID::ICC_BASED:
       break;
   }
 

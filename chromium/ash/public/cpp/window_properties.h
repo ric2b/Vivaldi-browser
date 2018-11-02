@@ -20,11 +20,21 @@ namespace ash {
 
 namespace mojom {
 enum class WindowPinType;
+enum class WindowStateType;
 }
 
 // Shell-specific window property keys for use by ash and its clients.
 
 // Alphabetical sort.
+
+// If true, will send system keys to the window for dispatch.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kCanConsumeSystemKeysKey;
+
+// Whether the shelf should be hidden when this window is put into fullscreen.
+// Exposed because some windows want to explicitly opt-out of this.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kHideShelfWhenFullscreenKey;
 
 // If true (and the window is a panel), it's attached to its shelf item.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
@@ -50,6 +60,16 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
 // setting this property to NONE, the window manager will restore the window.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<mojom::WindowPinType>* const
     kWindowPinTypeKey;
+
+// A property key to indicate whether ash should perform auto management of
+// window positions; when you open a second browser, ash will move the two to
+// minimize overlap.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kWindowPositionManagedTypeKey;
+
+// A property key to indicate ash's extended window state.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<
+    mojom::WindowStateType>* const kWindowStateTypeKey;
 
 // Alphabetical sort.
 

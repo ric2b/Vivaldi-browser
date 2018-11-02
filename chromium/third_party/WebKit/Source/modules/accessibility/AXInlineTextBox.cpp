@@ -39,12 +39,12 @@ namespace blink {
 using namespace HTMLNames;
 
 AXInlineTextBox::AXInlineTextBox(
-    PassRefPtr<AbstractInlineTextBox> inline_text_box,
+    scoped_refptr<AbstractInlineTextBox> inline_text_box,
     AXObjectCacheImpl& ax_object_cache)
     : AXObject(ax_object_cache), inline_text_box_(std::move(inline_text_box)) {}
 
 AXInlineTextBox* AXInlineTextBox::Create(
-    PassRefPtr<AbstractInlineTextBox> inline_text_box,
+    scoped_refptr<AbstractInlineTextBox> inline_text_box,
     AXObjectCacheImpl& ax_object_cache) {
   return new AXInlineTextBox(std::move(inline_text_box), ax_object_cache);
 }
@@ -56,10 +56,10 @@ void AXInlineTextBox::Detach() {
   inline_text_box_ = nullptr;
 }
 
-void AXInlineTextBox::GetRelativeBounds(
-    AXObject** out_container,
-    FloatRect& out_bounds_in_container,
-    SkMatrix44& out_container_transform) const {
+void AXInlineTextBox::GetRelativeBounds(AXObject** out_container,
+                                        FloatRect& out_bounds_in_container,
+                                        SkMatrix44& out_container_transform,
+                                        bool* clips_children) const {
   *out_container = nullptr;
   out_bounds_in_container = FloatRect();
   out_container_transform.setIdentity();
@@ -112,7 +112,7 @@ void AXInlineTextBox::TextCharacterOffsets(Vector<int>& offsets) const {
 }
 
 void AXInlineTextBox::GetWordBoundaries(Vector<AXRange>& words) const {
-  if (!inline_text_box_)
+  if (!inline_text_box_ || inline_text_box_->GetText().ContainsOnlyWhitespace())
     return;
 
   Vector<AbstractInlineTextBox::WordBoundaries> word_boundaries;
@@ -135,7 +135,7 @@ String AXInlineTextBox::GetName(AXNameFrom& name_from,
 AXObject* AXInlineTextBox::ComputeParent() const {
   DCHECK(!IsDetached());
   if (!inline_text_box_ || !ax_object_cache_)
-    return 0;
+    return nullptr;
 
   LineLayoutText line_layout_text = inline_text_box_->GetLineLayoutItem();
   return ax_object_cache_->GetOrCreate(
@@ -170,24 +170,25 @@ Node* AXInlineTextBox::GetNode() const {
 }
 
 AXObject* AXInlineTextBox::NextOnLine() const {
-  RefPtr<AbstractInlineTextBox> next_on_line = inline_text_box_->NextOnLine();
+  scoped_refptr<AbstractInlineTextBox> next_on_line =
+      inline_text_box_->NextOnLine();
   if (next_on_line)
-    return ax_object_cache_->GetOrCreate(next_on_line.Get());
+    return ax_object_cache_->GetOrCreate(next_on_line.get());
 
   if (!inline_text_box_->IsLast())
-    return 0;
+    return nullptr;
 
   return ParentObject()->NextOnLine();
 }
 
 AXObject* AXInlineTextBox::PreviousOnLine() const {
-  RefPtr<AbstractInlineTextBox> previous_on_line =
+  scoped_refptr<AbstractInlineTextBox> previous_on_line =
       inline_text_box_->PreviousOnLine();
   if (previous_on_line)
-    return ax_object_cache_->GetOrCreate(previous_on_line.Get());
+    return ax_object_cache_->GetOrCreate(previous_on_line.get());
 
   if (!inline_text_box_->IsFirst())
-    return 0;
+    return nullptr;
 
   return ParentObject()->PreviousOnLine();
 }

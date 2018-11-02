@@ -22,7 +22,7 @@ InternalDocumentStateData::InternalDocumentStateData()
       is_overriding_user_agent_(false),
       must_reset_scroll_and_scale_state_(false),
       cache_policy_override_set_(false),
-      cache_policy_override_(blink::WebCachePolicy::kUseProtocolCachePolicy) {}
+      cache_policy_override_(blink::mojom::FetchCacheMode::kDefault) {}
 
 // static
 InternalDocumentStateData* InternalDocumentStateData::FromDocumentLoader(
@@ -35,7 +35,7 @@ InternalDocumentStateData* InternalDocumentStateData::FromDocumentLoader(
 InternalDocumentStateData* InternalDocumentStateData::FromDocumentState(
     DocumentState* ds) {
   if (!ds)
-    return NULL;
+    return nullptr;
   InternalDocumentStateData* data = static_cast<InternalDocumentStateData*>(
       ds->GetUserData(&kUserDataKey));
   if (!data) {

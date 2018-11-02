@@ -19,11 +19,11 @@
 
 #include "core/svg/SVGMPathElement.h"
 
-#include "core/SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/svg/SVGAnimateMotionElement.h"
 #include "core/svg/SVGPathElement.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -32,7 +32,7 @@ inline SVGMPathElement::SVGMPathElement(Document& document)
   DCHECK(RuntimeEnabledFeatures::SMILEnabled());
 }
 
-DEFINE_TRACE(SVGMPathElement) {
+void SVGMPathElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(target_id_observer_);
   SVGElement::Trace(visitor);
   SVGURIReference::Trace(visitor);
@@ -47,11 +47,11 @@ void SVGMPathElement::BuildPendingResource() {
   if (!isConnected())
     return;
   Element* target = ObserveTarget(target_id_observer_, *this);
-  if (isSVGPathElement(target)) {
+  if (auto* path = ToSVGPathElementOrNull(target)) {
     // Register us with the target in the dependencies map. Any change of
     // hrefElement that leads to relayout/repainting now informs us, so we can
     // react to it.
-    AddReferenceTo(ToSVGElement(target));
+    AddReferenceTo(path);
   }
   TargetPathChanged();
 }
@@ -88,7 +88,7 @@ void SVGMPathElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 
 SVGPathElement* SVGMPathElement::PathElement() {
   Element* target = TargetElementFromIRIString(HrefString(), GetTreeScope());
-  return isSVGPathElement(target) ? toSVGPathElement(target) : 0;
+  return ToSVGPathElementOrNull(target);
 }
 
 void SVGMPathElement::TargetPathChanged() {
@@ -96,8 +96,8 @@ void SVGMPathElement::TargetPathChanged() {
 }
 
 void SVGMPathElement::NotifyParentOfPathChange(ContainerNode* parent) {
-  if (isSVGAnimateMotionElement(parent))
-    toSVGAnimateMotionElement(parent)->UpdateAnimationPath();
+  if (auto* motion = ToSVGAnimateMotionElementOrNull(parent))
+    motion->UpdateAnimationPath();
 }
 
 }  // namespace blink

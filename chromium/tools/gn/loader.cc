@@ -4,8 +4,9 @@
 
 #include "tools/gn/loader.h"
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/err.h"
@@ -36,7 +37,7 @@ struct SourceFileAndOrigin {
 // Identifies one time a file is loaded in a given toolchain so we don't load
 // it more than once.
 struct LoaderImpl::LoadID {
-  LoadID() {}
+  LoadID() = default;
   LoadID(const SourceFile& f, const Label& tc_name)
       : file(f),
         toolchain_name(tc_name) {
@@ -81,11 +82,9 @@ struct LoaderImpl::ToolchainRecord {
 
 const void* const Loader::kDefaultToolchainKey = &kDefaultToolchainKey;
 
-Loader::Loader() {
-}
+Loader::Loader() = default;
 
-Loader::~Loader() {
-}
+Loader::~Loader() = default;
 
 void Loader::Load(const Label& label, const LocationRange& origin) {
   Load(BuildFileForLabel(label), origin, label.GetToolchainLabel());
@@ -106,8 +105,7 @@ LoaderImpl::LoaderImpl(const BuildSettings* build_settings)
     task_runner_ = base::ThreadTaskRunnerHandle::Get();
 }
 
-LoaderImpl::~LoaderImpl() {
-}
+LoaderImpl::~LoaderImpl() = default;
 
 void LoaderImpl::Load(const SourceFile& file,
                       const LocationRange& origin,
@@ -123,8 +121,8 @@ void LoaderImpl::Load(const SourceFile& file,
     // should not specify a toolchain.
     DCHECK(toolchain_name.is_null());
 
-    std::unique_ptr<ToolchainRecord> new_record(
-        new ToolchainRecord(build_settings_, Label(), Label()));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, Label(), Label());
     ToolchainRecord* record = new_record.get();
     toolchain_records_[Label()] = std::move(new_record);
 
@@ -149,8 +147,9 @@ void LoaderImpl::Load(const SourceFile& file,
     DCHECK(!default_toolchain_label_.is_null());
 
     // No reference to this toolchain found yet, make one.
-    std::unique_ptr<ToolchainRecord> new_record(new ToolchainRecord(
-        build_settings_, toolchain_name, default_toolchain_label_));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, toolchain_name,
+                                          default_toolchain_label_);
     record = new_record.get();
     toolchain_records_[toolchain_name] = std::move(new_record);
 
@@ -168,8 +167,9 @@ void LoaderImpl::ToolchainLoaded(const Toolchain* toolchain) {
   ToolchainRecord* record = toolchain_records_[toolchain->label()].get();
   if (!record) {
     DCHECK(!default_toolchain_label_.is_null());
-    std::unique_ptr<ToolchainRecord> new_record(new ToolchainRecord(
-        build_settings_, toolchain->label(), default_toolchain_label_));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, toolchain->label(),
+                                          default_toolchain_label_);
     record = new_record.get();
     toolchain_records_[toolchain->label()] = std::move(new_record);
   }

@@ -30,7 +30,7 @@ TabRestoreServiceDelegateImplIOS::~TabRestoreServiceDelegateImplIOS() {}
 
 WebStateList* TabRestoreServiceDelegateImplIOS::GetWebStateList() const {
   TabModel* tab_model =
-      GetLastActiveTabModelForChromeBrowserState(browser_state_);
+      TabModelList::GetLastActiveTabModelForChromeBrowserState(browser_state_);
   DCHECK([tab_model webStateList]);
   return [tab_model webStateList];
 }
@@ -124,5 +124,6 @@ sessions::LiveTab* TabRestoreServiceDelegateImplIOS::ReplaceRestoredTab(
 
 void TabRestoreServiceDelegateImplIOS::CloseTab() {
   WebStateList* web_state_list = GetWebStateList();
-  web_state_list->CloseWebStateAt(web_state_list->active_index());
+  web_state_list->CloseWebStateAt(web_state_list->active_index(),
+                                  WebStateList::CLOSE_USER_ACTION);
 }

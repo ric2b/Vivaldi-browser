@@ -9,6 +9,18 @@
     "description": "Use <code>vivaldi.sync</code> for sync messages.",
     "types": [
       {
+        "id": "SyncNotificationClientStatus",
+        "description": "Used to report whether we have a connection to the notification server.",
+        "type": "string",
+        "enum": [ "connected", "disconnected" ]
+      },
+      {
+        "id": "SyncOperationResult",
+        "description": "The current result of a sync commit or download operation. Passed from the engine when requesting status.",
+        "type": "string",
+        "enum": [ "pending", "success", "failure" ]
+      },
+      {
         "id": "SyncLoginDetails",
         "type": "object",
         "description": "Information available following a successful sync login",
@@ -66,12 +78,12 @@
             "type": "string",
             "description": "The last time a sync cycle started"
           },
-          "last_download_updates_success": {
-            "type": "boolean",
+          "last_download_updates_status": {
+            "$ref": "SyncOperationResult",
             "description": "Whether the download updates part of the last sync cycle was successful"
           },
-          "last_commit_success": {
-            "type": "boolean",
+          "last_commit_status": {
+            "$ref": "SyncOperationResult",
             "description": "Whether the commit part of the last sync cycle was successful"
           },
           "is_encrypting_everything": {
@@ -255,10 +267,35 @@
         "parameters": [ ]
       },
       {
-        "name": "pollServer",
+        "name": "updateNotificationClientStatus",
         "type": "function",
-        "description": "Triggers a polling of the sync server",
-        "parameters": []
+        "description": "Tells whether we are successfully connected to the notification server",
+        "parameters": [
+          {
+            "name": "status",
+            "$ref": "SyncNotificationClientStatus"
+          }
+        ]
+      },
+      {
+        "name": "notificationReceived",
+        "type": "function",
+        "description": "Informs that we have received a notification",
+        "parameters": [
+          {
+            "name": "client_id",
+            "type": "string"
+          },
+          {
+            "name": "notification_type",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string",
+            "serialized_type": "int64"
+        }
+        ]
       }
     ],
     "events": [

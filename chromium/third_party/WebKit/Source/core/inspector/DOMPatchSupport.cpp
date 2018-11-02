@@ -31,6 +31,7 @@
 #include "core/inspector/DOMPatchSupport.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ContextFeatures.h"
@@ -50,7 +51,6 @@
 #include "platform/Crypto.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/HashTraits.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/Base64.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/Platform.h"
@@ -129,22 +129,22 @@ Node* DOMPatchSupport::PatchNode(Node* node,
   HeapVector<Member<Digest>> old_list;
   for (Node* child = parent_node->firstChild(); child;
        child = child->nextSibling())
-    old_list.push_back(CreateDigest(child, 0));
+    old_list.push_back(CreateDigest(child, nullptr));
 
   // Compose the new list.
   String markup_copy = markup.DeprecatedLower();
   HeapVector<Member<Digest>> new_list;
   for (Node* child = parent_node->firstChild(); child != node;
        child = child->nextSibling())
-    new_list.push_back(CreateDigest(child, 0));
+    new_list.push_back(CreateDigest(child, nullptr));
   for (Node* child = fragment->firstChild(); child;
        child = child->nextSibling()) {
-    if (isHTMLHeadElement(*child) && !child->hasChildren() &&
+    if (IsHTMLHeadElement(*child) && !child->hasChildren() &&
         markup_copy.Find("</head>") == kNotFound) {
       // HTML5 parser inserts empty <head> tag whenever it parses <body>
       continue;
     }
-    if (isHTMLBodyElement(*child) && !child->hasChildren() &&
+    if (IsHTMLBodyElement(*child) && !child->hasChildren() &&
         markup_copy.Find("</body>") == kNotFound) {
       // HTML5 parser inserts empty <body> tag whenever it parses </head>
       continue;
@@ -152,7 +152,7 @@ Node* DOMPatchSupport::PatchNode(Node* node,
     new_list.push_back(CreateDigest(child, &unused_nodes_map_));
   }
   for (Node* child = node->nextSibling(); child; child = child->nextSibling())
-    new_list.push_back(CreateDigest(child, 0));
+    new_list.push_back(CreateDigest(child, nullptr));
 
   if (!InnerPatchChildren(parent_node, old_list, new_list, exception_state)) {
     // Fall back to total replace.
@@ -223,12 +223,12 @@ DOMPatchSupport::Diff(const HeapVector<Member<Digest>>& old_list,
   ResultMap old_map(old_list.size());
 
   for (size_t i = 0; i < old_map.size(); ++i) {
-    old_map[i].first = 0;
+    old_map[i].first = nullptr;
     old_map[i].second = 0;
   }
 
   for (size_t i = 0; i < new_map.size(); ++i) {
-    new_map[i].first = 0;
+    new_map[i].first = nullptr;
     new_map[i].second = 0;
   }
 
@@ -329,17 +329,17 @@ bool DOMPatchSupport::InnerPatchChildren(
     if (old_map[i].first) {
       if (used_new_ordinals.insert(old_map[i].second).is_new_entry)
         continue;
-      old_map[i].first = 0;
+      old_map[i].first = nullptr;
       old_map[i].second = 0;
     }
 
     // Always match <head> and <body> tags with each other - we can't remove
     // them from the DOM upon patching.
-    if (isHTMLHeadElement(*old_list[i]->node_)) {
+    if (IsHTMLHeadElement(*old_list[i]->node_)) {
       old_head = old_list[i].Get();
       continue;
     }
-    if (isHTMLBodyElement(*old_list[i]->node_)) {
+    if (IsHTMLBodyElement(*old_list[i]->node_)) {
       old_body = old_list[i].Get();
       continue;
     }
@@ -375,7 +375,7 @@ bool DOMPatchSupport::InnerPatchChildren(
     size_t old_ordinal = new_map[i].second;
     if (used_old_ordinals.Contains(old_ordinal)) {
       // Do not map node more than once
-      new_map[i].first = 0;
+      new_map[i].first = nullptr;
       new_map[i].second = 0;
       continue;
     }
@@ -386,9 +386,9 @@ bool DOMPatchSupport::InnerPatchChildren(
   // Mark <head> and <body> nodes for merge.
   if (old_head || old_body) {
     for (size_t i = 0; i < new_list.size(); ++i) {
-      if (old_head && isHTMLHeadElement(*new_list[i]->node_))
+      if (old_head && IsHTMLHeadElement(*new_list[i]->node_))
         merges.Set(new_list[i].Get(), old_head);
-      if (old_body && isHTMLBodyElement(*new_list[i]->node_))
+      if (old_body && IsHTMLBodyElement(*new_list[i]->node_))
         merges.Set(new_list[i].Get(), old_body);
     }
   }
@@ -417,7 +417,7 @@ bool DOMPatchSupport::InnerPatchChildren(
     Node* anchor_node = NodeTraversal::ChildAt(*parent_node, old_map[i].second);
     if (node == anchor_node)
       continue;
-    if (isHTMLBodyElement(*node) || isHTMLHeadElement(*node)) {
+    if (IsHTMLBodyElement(*node) || IsHTMLHeadElement(*node)) {
       // Never move head or body, move the rest of the nodes around them.
       continue;
     }
@@ -535,7 +535,7 @@ void DOMPatchSupport::MarkNodeAsUsed(Digest* digest) {
   }
 }
 
-DEFINE_TRACE(DOMPatchSupport::Digest) {
+void DOMPatchSupport::Digest::Trace(blink::Visitor* visitor) {
   visitor->Trace(node_);
   visitor->Trace(children_);
 }

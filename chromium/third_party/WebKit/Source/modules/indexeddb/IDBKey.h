@@ -26,11 +26,11 @@
 #ifndef IDBKey_h
 #define IDBKey_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/ModulesExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -46,7 +46,7 @@ class MODULES_EXPORT IDBKey : public GarbageCollectedFinalized<IDBKey> {
     return new IDBKey(kNumberType, number);
   }
 
-  static IDBKey* CreateBinary(RefPtr<SharedBuffer> binary) {
+  static IDBKey* CreateBinary(scoped_refptr<SharedBuffer> binary) {
     return new IDBKey(std::move(binary));
   }
 
@@ -61,7 +61,7 @@ class MODULES_EXPORT IDBKey : public GarbageCollectedFinalized<IDBKey> {
   }
 
   ~IDBKey();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // In order of the least to the highest precedent in terms of sort order.
   // These values are written to logs. New enum values can be added, but
@@ -84,7 +84,7 @@ class MODULES_EXPORT IDBKey : public GarbageCollectedFinalized<IDBKey> {
     return array_;
   }
 
-  RefPtr<SharedBuffer> Binary() const {
+  scoped_refptr<SharedBuffer> Binary() const {
     DCHECK_EQ(type_, kBinaryType);
     return binary_;
   }
@@ -115,14 +115,14 @@ class MODULES_EXPORT IDBKey : public GarbageCollectedFinalized<IDBKey> {
   IDBKey() : type_(kInvalidType) {}
   IDBKey(Type type, double number) : type_(type), number_(number) {}
   explicit IDBKey(const String& value) : type_(kStringType), string_(value) {}
-  explicit IDBKey(RefPtr<SharedBuffer> value)
+  explicit IDBKey(scoped_refptr<SharedBuffer> value)
       : type_(kBinaryType), binary_(std::move(value)) {}
   explicit IDBKey(const KeyArray& key_array)
       : type_(kArrayType), array_(key_array) {}
 
   const Type type_;
   const KeyArray array_;
-  RefPtr<SharedBuffer> binary_;
+  scoped_refptr<SharedBuffer> binary_;
   const String string_;
   const double number_ = 0;
 };

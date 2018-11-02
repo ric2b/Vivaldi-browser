@@ -22,11 +22,13 @@
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/thread_restrictions.h"
 #include "components/cronet/cronet_prefs_manager.h"
 #include "components/cronet/histogram_manager.h"
 #include "components/cronet/ios/version.h"
 #include "components/prefs/pref_filter.h"
 #include "ios/net/cookies/cookie_store_ios.h"
+#include "ios/net/cookies/cookie_store_ios_client.h"
 #include "ios/web/public/global_state/ios_global_state.h"
 #include "ios/web/public/global_state/ios_global_state_configuration.h"
 #include "ios/web/public/user_agent.h"
@@ -54,6 +56,10 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -84,6 +90,25 @@ class CronetURLRequestContextGetter : public net::URLRequestContextGetter {
   DISALLOW_COPY_AND_ASSIGN(CronetURLRequestContextGetter);
 };
 
+// Cronet implementation of net::CookieStoreIOSClient.
+// Used to provide Cronet Network IO TaskRunner.
+class CronetCookieStoreIOSClient : public net::CookieStoreIOSClient {
+ public:
+  CronetCookieStoreIOSClient(
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner)
+      : task_runner_(task_runner) {}
+
+  scoped_refptr<base::SequencedTaskRunner> GetTaskRunner() const override {
+    return task_runner_;
+  }
+
+ private:
+  ~CronetCookieStoreIOSClient() override {}
+
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  DISALLOW_COPY_AND_ASSIGN(CronetCookieStoreIOSClient);
+};
+
 void SignalEvent(base::WaitableEvent* event) {
   event->Signal();
 }
@@ -107,9 +132,8 @@ base::SingleThreadTaskRunner* CronetEnvironment::GetNetworkThreadTaskRunner() {
   return ios_global_state::GetSharedNetworkIOThreadTaskRunner().get();
 }
 
-void CronetEnvironment::PostToNetworkThread(
-    const tracked_objects::Location& from_here,
-    const base::Closure& task) {
+void CronetEnvironment::PostToNetworkThread(const base::Location& from_here,
+                                            const base::Closure& task) {
   GetNetworkThreadTaskRunner()->PostTask(from_here, task);
 }
 
@@ -245,10 +269,14 @@ void CronetEnvironment::Start() {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       ios_global_state::GetSharedNetworkIOThreadTaskRunner();
   if (!task_runner) {
-    network_io_thread_.reset(new base::Thread("Chrome Network IO Thread"));
+    network_io_thread_.reset(
+        new CronetNetworkThread("Chrome Network IO Thread", this));
     network_io_thread_->StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
   }
+
+  net::SetCookieStoreIOSClient(new CronetCookieStoreIOSClient(
+      CronetEnvironment::GetNetworkThreadTaskRunner()));
 
   main_context_getter_ = new CronetURLRequestContextGetter(
       this, CronetEnvironment::GetNetworkThreadTaskRunner());
@@ -258,7 +286,7 @@ void CronetEnvironment::Start() {
                                  base::Unretained(this)));
 }
 
-void CronetEnvironment::PrepareForDestroyOnNetworkThread() {
+void CronetEnvironment::CleanUpOnNetworkThread() {
   // TODO(lilyhoughton) make unregistering of this work.
   // net::HTTPProtocolHandlerDelegate::SetInstance(nullptr);
 
@@ -272,30 +300,24 @@ void CronetEnvironment::PrepareForDestroyOnNetworkThread() {
     cronet_prefs_manager_->PrepareForShutdown();
   }
 
-  // cronet_prefs_manager_ should be deleted on the network thread.
-  cronet_prefs_manager_.reset(nullptr);
-
-  file_thread_.reset(nullptr);
-
   // TODO(lilyhoughton) this should be smarter about making sure there are no
   // pending requests, etc.
-  main_context_.reset(nullptr);
+  main_context_.reset();
+
+  // cronet_prefs_manager_ should be deleted on the network thread.
+  cronet_prefs_manager_.reset();
 }
 
 CronetEnvironment::~CronetEnvironment() {
-  PostToNetworkThread(
-      FROM_HERE,
-      base::Bind(&CronetEnvironment::PrepareForDestroyOnNetworkThread,
-                 base::Unretained(this)));
-  if (network_io_thread_) {
-    // Deleting a thread blocks the current thread and waits until all pending
-    // tasks are completed.
-    network_io_thread_.reset(nullptr);
-  }
+  // Deleting a thread blocks the current thread and waits until all pending
+  // tasks are completed.
+  network_io_thread_.reset();
+  file_thread_.reset();
 }
 
 void CronetEnvironment::InitializeOnNetworkThread() {
   DCHECK(GetNetworkThreadTaskRunner()->BelongsToCurrentThread());
+  base::DisallowBlocking();
 
   static bool ssl_key_log_file_set = false;
   if (!ssl_key_log_file_set && !ssl_key_log_file_name_.empty()) {
@@ -387,7 +409,7 @@ void CronetEnvironment::InitializeOnNetworkThread() {
                                          quic_hint.port());
     main_context_->http_server_properties()->SetQuicAlternativeService(
         quic_hint_server, alternative_service, base::Time::Max(),
-        net::QuicVersionVector());
+        net::QuicTransportVersionVector());
   }
 
   main_context_->transport_security_state()
@@ -448,6 +470,19 @@ std::string CronetEnvironment::getDefaultQuicUserAgentId() const {
 base::SingleThreadTaskRunner* CronetEnvironment::GetFileThreadRunnerForTesting()
     const {
   return file_thread_->task_runner().get();
+}
+
+CronetEnvironment::CronetNetworkThread::CronetNetworkThread(
+    const std::string& name,
+    cronet::CronetEnvironment* cronet_environment)
+    : base::Thread(name), cronet_environment_(cronet_environment) {}
+
+CronetEnvironment::CronetNetworkThread::~CronetNetworkThread() {
+  Stop();
+}
+
+void CronetEnvironment::CronetNetworkThread::CleanUp() {
+  cronet_environment_->CleanUpOnNetworkThread();
 }
 
 }  // namespace cronet

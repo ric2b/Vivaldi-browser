@@ -41,9 +41,8 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin {
   virtual DispatchEventResult HostDispatchEvent(Event*) = 0;
   virtual const KURL& GetExecutionContextUrl() const = 0;
 
-  virtual ScriptPromise Commit(RefPtr<StaticBitmapImage>,
+  virtual ScriptPromise Commit(scoped_refptr<StaticBitmapImage>,
                                const SkIRect& damage_rect,
-                               bool is_web_gl_software_rendering,
                                ScriptState*,
                                ExceptionState&);
 
@@ -51,7 +50,13 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin {
   virtual ImageBuffer* GetImageBuffer() const = 0;
   virtual ImageBuffer* GetOrCreateImageBuffer() = 0;
 
-  virtual bool IsWebGLAllowed() const = 0;
+  // If WebGL1 is disabled by enterprise policy or command line switch.
+  virtual bool IsWebGL1Enabled() const = 0;
+  // If WebGL2 is disabled by enterprise policy or command line switch.
+  virtual bool IsWebGL2Enabled() const = 0;
+  // If WebGL is temporarily blocked because WebGL contexts were lost one or
+  // more times, in particular, via the GL_ARB_robustness extension.
+  virtual bool IsWebGLBlocked() const = 0;
 
   virtual FontSelector* GetFontSelector() = 0;
 

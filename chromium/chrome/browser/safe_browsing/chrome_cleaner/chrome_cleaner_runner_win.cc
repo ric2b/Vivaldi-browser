@@ -56,7 +56,7 @@ void ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
     base::OnceClosure on_connection_closed,
     ChromeCleanerRunner::ProcessDoneCallback on_process_done,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
-  auto cleaner_runner = make_scoped_refptr(new ChromeCleanerRunner(
+  auto cleaner_runner = base::WrapRefCounted(new ChromeCleanerRunner(
       cleaner_executable_path, reporter_invocation, metrics_status,
       std::move(on_prompt_user), std::move(on_connection_closed),
       std::move(on_process_done), std::move(task_runner)));
@@ -88,7 +88,6 @@ ChromeCleanerRunner::ChromeCleanerRunner(
       on_prompt_user_(std::move(on_prompt_user)),
       on_connection_closed_(std::move(on_connection_closed)),
       on_process_done_(std::move(on_process_done)) {
-  DCHECK(base::FeatureList::IsEnabled(kInBrowserCleanerUIFeature));
   DCHECK(on_prompt_user_);
   DCHECK(on_connection_closed_);
   DCHECK(on_process_done_);
@@ -118,7 +117,7 @@ ChromeCleanerRunner::ChromeCleanerRunner(
   // If set, forward the engine flag from the reporter. Otherwise, set the
   // engine flag explicitly to 1.
   const std::string& reporter_engine =
-      reporter_invocation.command_line.GetSwitchValueASCII(
+      reporter_invocation.command_line().GetSwitchValueASCII(
           chrome_cleaner::kEngineSwitch);
   cleaner_command_line_.AppendSwitchASCII(
       chrome_cleaner::kEngineSwitch,
@@ -130,6 +129,12 @@ ChromeCleanerRunner::ChromeCleanerRunner(
     cleaner_command_line_.AppendSwitch(chrome_cleaner::kUmaUserSwitch);
     cleaner_command_line_.AppendSwitch(
         chrome_cleaner::kEnableCrashReportingSwitch);
+  }
+
+  const std::string group_name = GetSRTFieldTrialGroupName();
+  if (!group_name.empty()) {
+    cleaner_command_line_.AppendSwitchASCII(
+        chrome_cleaner::kSRTPromptFieldTrialGroupNameSwitch, group_name);
   }
 }
 
@@ -179,7 +184,6 @@ ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
 
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       "SoftwareReporter.Cleaner.ExitCodeFromConnectedProcess", exit_code);
-
   return ProcessStatus(LaunchStatus::kSuccess, exit_code);
 }
 
@@ -200,12 +204,12 @@ void ChromeCleanerRunner::CreateChromePromptImpl(
 }
 
 void ChromeCleanerRunner::OnPromptUser(
-    std::unique_ptr<std::set<base::FilePath>> files_to_delete,
+    ChromeCleanerScannerResults&& scanner_results,
     ChromePrompt::PromptUserCallback prompt_user_callback) {
   if (on_prompt_user_) {
     task_runner_->PostTask(FROM_HERE,
                            base::BindOnce(std::move(on_prompt_user_),
-                                          base::Passed(&files_to_delete),
+                                          base::Passed(&scanner_results),
                                           base::Passed(&prompt_user_callback)));
   }
 }

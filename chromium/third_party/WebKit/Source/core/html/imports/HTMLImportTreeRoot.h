@@ -5,11 +5,11 @@
 #ifndef HTMLImportTreeRoot_h
 #define HTMLImportTreeRoot_h
 
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/html/imports/HTMLImport.h"
 #include "platform/Timer.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/TraceWrapperMember.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -34,8 +34,8 @@ class HTMLImportTreeRoot final : public HTMLImport, public TraceWrapperBase {
   HTMLImportChild* Add(HTMLImportChild*);
   HTMLImportChild* Find(const KURL&) const;
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit HTMLImportTreeRoot(Document*);

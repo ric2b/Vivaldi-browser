@@ -30,13 +30,12 @@ ChromotingClient::ChromotingClient(
     ClientContext* client_context,
     ClientUserInterface* user_interface,
     protocol::VideoRenderer* video_renderer,
-    base::WeakPtr<protocol::AudioStub> audio_consumer)
-    : user_interface_(user_interface),
-      video_renderer_(video_renderer) {
+    base::WeakPtr<protocol::AudioStub> audio_stream_consumer)
+    : user_interface_(user_interface), video_renderer_(video_renderer) {
   DCHECK(client_context->main_task_runner()->BelongsToCurrentThread());
 
   audio_decode_task_runner_ = client_context->audio_decode_task_runner();
-  audio_consumer_ = audio_consumer;
+  audio_stream_consumer_ = audio_stream_consumer;
 }
 
 ChromotingClient::~ChromotingClient() {
@@ -98,8 +97,9 @@ void ChromotingClient::Start(
   connection_->set_clipboard_stub(this);
   connection_->set_video_renderer(video_renderer_);
 
-  if (audio_consumer_) {
-    connection_->InitializeAudio(audio_decode_task_runner_, audio_consumer_);
+  if (audio_stream_consumer_) {
+    connection_->InitializeAudio(audio_decode_task_runner_,
+                                 audio_stream_consumer_);
   } else {
     protocol_config_->DisableAudioChannel();
   }
@@ -243,6 +243,7 @@ void ChromotingClient::OnSignalStrategyStateChange(
     }
   } else if (state == SignalStrategy::DISCONNECTED) {
     VLOG(1) << "Signaling connection closed.";
+    mouse_input_scaler_.set_input_stub(nullptr);
     connection_.reset();
     user_interface_->OnConnectionState(protocol::ConnectionToHost::CLOSED,
                                        protocol::SIGNALING_ERROR);

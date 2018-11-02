@@ -6,7 +6,7 @@
 #define DataEquivalency_h
 
 #include <memory>
-#include "platform/wtf/RefPtr.h"
+#include "base/memory/scoped_refptr.h"
 
 namespace blink {
 
@@ -25,8 +25,8 @@ bool DataEquivalent(const T* a, const T* b) {
 }
 
 template <typename T>
-bool DataEquivalent(const RefPtr<T>& a, const RefPtr<T>& b) {
-  return DataEquivalent(a.Get(), b.Get());
+bool DataEquivalent(const scoped_refptr<T>& a, const scoped_refptr<T>& b) {
+  return DataEquivalent(a.get(), b.get());
 }
 
 template <typename T>

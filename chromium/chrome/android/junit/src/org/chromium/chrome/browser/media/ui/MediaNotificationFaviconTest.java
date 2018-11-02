@@ -32,6 +32,9 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
  */
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+        // Remove this after updating to a version of Robolectric that supports
+        // notification channel creation. crbug.com/774315
+        sdk = Build.VERSION_CODES.N_MR1,
         shadows = {MediaNotificationTestShadowResources.class,
                 MediaNotificationTestShadowNotificationManager.class})
 public class MediaNotificationFaviconTest extends MediaNotificationManagerTestBase {
@@ -53,6 +56,7 @@ public class MediaNotificationFaviconTest extends MediaNotificationManagerTestBa
         mTabHolder = new MediaNotificationTestTabHolder(TAB_ID_1, "about:blank", "title1");
     }
 
+    @Override
     @After
     public void tearDown() {
         CommandLine.reset();

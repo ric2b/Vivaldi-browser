@@ -138,10 +138,11 @@ HeadlessBrowserTest::HeadlessBrowserTest() {
 }
 
 void HeadlessBrowserTest::SetUp() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   // Enable GPU usage (i.e., SwiftShader, hardware GL on macOS) in all tests
   // since that's the default configuration of --headless.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kUseGpuInTests);
+  command_line->AppendSwitch(switches::kUseGpuInTests);
+  SetUpCommandLine(command_line);
   BrowserTestBase::SetUp();
 }
 
@@ -149,7 +150,7 @@ void HeadlessBrowserTest::SetUpWithoutGPU() {
   BrowserTestBase::SetUp();
 }
 
-HeadlessBrowserTest::~HeadlessBrowserTest() {}
+HeadlessBrowserTest::~HeadlessBrowserTest() = default;
 
 void HeadlessBrowserTest::PreRunTestOnMainThread() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
@@ -197,7 +198,9 @@ void HeadlessBrowserTest::RunAsynchronousTest() {
       base::MessageLoop::current());
   EXPECT_FALSE(run_loop_);
   run_loop_ = base::MakeUnique<base::RunLoop>();
+  PreRunAsynchronousTest();
   run_loop_->Run();
+  PostRunAsynchronousTest();
   run_loop_ = nullptr;
 }
 
@@ -212,7 +215,8 @@ HeadlessAsyncDevTooledBrowserTest::HeadlessAsyncDevTooledBrowserTest()
       browser_devtools_client_(HeadlessDevToolsClient::Create()),
       render_process_exited_(false) {}
 
-HeadlessAsyncDevTooledBrowserTest::~HeadlessAsyncDevTooledBrowserTest() {}
+HeadlessAsyncDevTooledBrowserTest::~HeadlessAsyncDevTooledBrowserTest() =
+    default;
 
 void HeadlessAsyncDevTooledBrowserTest::DevToolsTargetReady() {
   EXPECT_TRUE(web_contents_->GetDevToolsTarget());
@@ -247,6 +251,7 @@ void HeadlessAsyncDevTooledBrowserTest::RunTest() {
 
   web_contents_ = browser_context_->CreateWebContentsBuilder()
                       .SetAllowTabSockets(GetAllowTabSockets())
+                      .SetEnableBeginFrameControl(GetEnableBeginFrameControl())
                       .Build();
   web_contents_->AddObserver(this);
 
@@ -267,6 +272,10 @@ ProtocolHandlerMap HeadlessAsyncDevTooledBrowserTest::GetProtocolHandlers() {
 }
 
 bool HeadlessAsyncDevTooledBrowserTest::GetAllowTabSockets() {
+  return false;
+}
+
+bool HeadlessAsyncDevTooledBrowserTest::GetEnableBeginFrameControl() {
   return false;
 }
 

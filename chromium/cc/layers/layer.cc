@@ -25,12 +25,11 @@
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "cc/trees/mutable_properties.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -46,7 +45,7 @@ Layer::Inputs::Inputs(int layer_id)
       opacity(1.f),
       blend_mode(SkBlendMode::kSrcOver),
       is_root_for_isolated_group(false),
-      should_hit_test(false),
+      hit_testable_without_draws_content(false),
       contents_opaque(false),
       is_drawable(false),
       double_sided(true),
@@ -61,19 +60,18 @@ Layer::Inputs::Inputs(int layer_id)
           MainThreadScrollingReason::kNotScrollingOnMain),
       is_resized_by_browser_controls(false),
       is_container_for_fixed_position_layers(false),
-      mutable_properties(MutableProperty::kNone),
       scroll_parent(nullptr),
       clip_parent(nullptr),
       has_will_change_transform_hint(false),
+      trilinear_filtering(false),
       hide_layer_and_subtree(false),
       client(nullptr),
-      scroll_boundary_behavior(
-          ScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeAuto) {}
+      overscroll_behavior(OverscrollBehavior::kOverscrollBehaviorTypeAuto) {}
 
 Layer::Inputs::~Inputs() {}
 
 scoped_refptr<Layer> Layer::Create() {
-  return make_scoped_refptr(new Layer());
+  return base::WrapRefCounted(new Layer());
 }
 
 Layer::Layer()
@@ -308,18 +306,18 @@ void Layer::SetBounds(const gfx::Size& size) {
   SetNeedsCommit();
 }
 
-void Layer::SetScrollBoundaryBehavior(const ScrollBoundaryBehavior& behavior) {
+void Layer::SetOverscrollBehavior(const OverscrollBehavior& behavior) {
   DCHECK(IsPropertyChangeAllowed());
-  if (scroll_boundary_behavior() == behavior)
+  if (overscroll_behavior() == behavior)
     return;
-  inputs_.scroll_boundary_behavior = behavior;
+  inputs_.overscroll_behavior = behavior;
   if (!layer_tree_host_)
     return;
 
   if (scrollable()) {
     auto& scroll_tree = layer_tree_host_->property_trees()->scroll_tree;
     if (auto* scroll_node = scroll_tree.Node(scroll_tree_index_))
-      scroll_node->scroll_boundary_behavior = behavior;
+      scroll_node->overscroll_behavior = behavior;
     else
       SetPropertyTreesNeedRebuild();
   }
@@ -374,8 +372,6 @@ void Layer::RequestCopyOfOutput(
     if (it != inputs_.copy_requests.end())
       inputs_.copy_requests.erase(it);
   }
-  if (request->IsEmpty())
-    return;
   inputs_.copy_requests.push_back(std::move(request));
   SetSubtreePropertyChanged();
   SetPropertyTreesNeedRebuild();
@@ -448,7 +444,7 @@ void Layer::SetMaskLayer(Layer* mask_layer) {
     inputs_.mask_layer->RemoveFromParent();
     DCHECK(!inputs_.mask_layer->parent());
     inputs_.mask_layer->SetParent(this);
-    if (inputs_.filters.IsEmpty() &&
+    if (inputs_.filters.IsEmpty() && inputs_.background_filters.IsEmpty() &&
         (!layer_tree_host_ ||
          layer_tree_host_->GetSettings().enable_mask_tiling)) {
       inputs_.mask_layer->SetLayerMaskType(
@@ -467,9 +463,10 @@ void Layer::SetFilters(const FilterOperations& filters) {
   if (inputs_.filters == filters)
     return;
   inputs_.filters = filters;
-  if (inputs_.mask_layer)
+  if (inputs_.mask_layer && !filters.IsEmpty()) {
     inputs_.mask_layer->SetLayerMaskType(
         Layer::LayerMaskType::SINGLE_TEXTURE_MASK);
+  }
   SetSubtreePropertyChanged();
   SetPropertyTreesNeedRebuild();
   SetNeedsCommit();
@@ -480,6 +477,14 @@ void Layer::SetBackgroundFilters(const FilterOperations& filters) {
   if (inputs_.background_filters == filters)
     return;
   inputs_.background_filters = filters;
+
+  // We will not set the mask type to MULTI_TEXTURE_MASK if the mask layer's
+  // filters are removed, because we do not want to reraster if the filters are
+  // being animated.
+  if (inputs_.mask_layer && !filters.IsEmpty()) {
+    inputs_.mask_layer->SetLayerMaskType(
+        Layer::LayerMaskType::SINGLE_TEXTURE_MASK);
+  }
   SetSubtreePropertyChanged();
   SetPropertyTreesNeedRebuild();
   SetNeedsCommit();
@@ -590,11 +595,11 @@ void Layer::SetIsRootForIsolatedGroup(bool root) {
   SetNeedsCommit();
 }
 
-void Layer::SetShouldHitTest(bool should_hit_test) {
+void Layer::SetHitTestableWithoutDrawsContent(bool should_hit_test) {
   DCHECK(IsPropertyChangeAllowed());
-  if (inputs_.should_hit_test == should_hit_test)
+  if (inputs_.hit_testable_without_draws_content == should_hit_test)
     return;
-  inputs_.should_hit_test = should_hit_test;
+  inputs_.hit_testable_without_draws_content = should_hit_test;
   SetPropertyTreesNeedRebuild();
   SetNeedsCommit();
 }
@@ -682,7 +687,6 @@ void Layer::SetTransform(const gfx::Transform& transform) {
   }
 
   inputs_.transform = transform;
-
   SetNeedsCommit();
 }
 
@@ -1167,7 +1171,8 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetScrollTreeIndex(scroll_tree_index());
   layer->set_offset_to_transform_parent(offset_to_transform_parent_);
   layer->SetDrawsContent(DrawsContent());
-  layer->SetShouldHitTest(should_hit_test());
+  layer->SetHitTestableWithoutDrawsContent(
+      hit_testable_without_draws_content());
   // subtree_property_changed_ is propagated to all descendants while building
   // property trees. So, it is enough to check it only for the current layer.
   if (subtree_property_changed_)
@@ -1187,7 +1192,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
 
   if (scrollable())
     layer->SetScrollable(inputs_.scroll_container_bounds);
-  layer->SetMutableProperties(inputs_.mutable_properties);
 
   // The property trees must be safe to access because they will be used below
   // to call |SetScrollOffsetClobberActiveValue|.
@@ -1214,6 +1218,8 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
 
   layer->SetHasWillChangeTransformHint(has_will_change_transform_hint());
   layer->SetNeedsPushProperties();
+
+  layer->SetTrilinearFiltering(trilinear_filtering());
 
   // Reset any state that should be cleared for the next update.
   needs_show_scrollbars_ = false;
@@ -1319,10 +1325,6 @@ void Layer::SetScrollbarsHiddenFromImplSide(bool hidden) {
     inputs_.client->didChangeScrollbarsHidden(hidden);
 }
 
-gfx::ScrollOffset Layer::ScrollOffsetForAnimation() const {
-  return CurrentScrollOffset();
-}
-
 // On<Property>Animated is called due to an ongoing accelerated animation.
 // Since this animation is also being run on the compositor thread, there
 // is no need to request a commit to push this value over, so the value is
@@ -1356,6 +1358,13 @@ void Layer::SetHasWillChangeTransformHint(bool has_will_change) {
   if (inputs_.has_will_change_transform_hint == has_will_change)
     return;
   inputs_.has_will_change_transform_hint = has_will_change;
+  SetNeedsCommit();
+}
+
+void Layer::SetTrilinearFiltering(bool trilinear_filtering) {
+  if (inputs_.trilinear_filtering == trilinear_filtering)
+    return;
+  inputs_.trilinear_filtering = trilinear_filtering;
   SetNeedsCommit();
 }
 
@@ -1402,8 +1411,8 @@ void Layer::SetElementId(ElementId id) {
   if ((layer_tree_host_ && layer_tree_host_->IsUsingLayerLists()) ||
       inputs_.element_id == id)
     return;
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "Layer::SetElementId", "element", id.AsValue().release());
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"), "Layer::SetElementId",
+               "element", id.AsValue().release());
   if (inputs_.element_id && layer_tree_host()) {
     layer_tree_host_->UnregisterElement(inputs_.element_id,
                                         ElementListType::ACTIVE);
@@ -1416,16 +1425,6 @@ void Layer::SetElementId(ElementId id) {
                                       ElementListType::ACTIVE, this);
   }
 
-  SetNeedsCommit();
-}
-
-void Layer::SetMutableProperties(uint32_t properties) {
-  DCHECK(IsPropertyChangeAllowed());
-  if (inputs_.mutable_properties == properties)
-    return;
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "Layer::SetMutableProperties", "properties", properties);
-  inputs_.mutable_properties = properties;
   SetNeedsCommit();
 }
 

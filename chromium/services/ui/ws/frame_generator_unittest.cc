@@ -5,8 +5,8 @@
 #include "services/ui/ws/frame_generator.h"
 
 #include "base/macros.h"
-#include "cc/quads/render_pass.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/fake_external_begin_frame_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -43,7 +43,7 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
   // viz::mojom::CompositorFrameSink implementation:
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
-      cc::CompositorFrame frame,
+      viz::CompositorFrame frame,
       viz::mojom::HitTestRegionListPtr hit_test_region_list,
       uint64_t submit_time) override {
     ++frames_submitted_;
@@ -82,11 +82,11 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
     begin_frame_source_ = begin_frame_source;
   }
 
-  const cc::RenderPassList& last_render_pass_list() const {
+  const viz::RenderPassList& last_render_pass_list() const {
     return last_frame_.render_pass_list;
   }
 
-  const cc::CompositorFrameMetadata& last_metadata() const {
+  const viz::CompositorFrameMetadata& last_metadata() const {
     return last_frame_.metadata;
   }
 
@@ -99,7 +99,7 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
  private:
   viz::mojom::CompositorFrameSinkClient* sink_client_;
   viz::BeginFrameArgs last_begin_frame_args_;
-  cc::CompositorFrame last_frame_;
+  viz::CompositorFrame last_frame_;
   viz::BeginFrameSource* begin_frame_source_ = nullptr;
   bool observing_begin_frames_ = false;
   int frames_submitted_ = 0;
@@ -115,14 +115,14 @@ class FrameGeneratorTest : public testing::Test {
   void SetUp() override {
     testing::Test::SetUp();
 
-    frame_generator_ = base::MakeUnique<FrameGenerator>();
-    begin_frame_source_ = base::MakeUnique<viz::FakeExternalBeginFrameSource>(
+    frame_generator_ = std::make_unique<FrameGenerator>();
+    begin_frame_source_ = std::make_unique<viz::FakeExternalBeginFrameSource>(
         kRefreshRate, kTickAutomatically);
 
     // FrameGenerator requires a valid SurfaceInfo before generating
     // CompositorFrames.
     std::unique_ptr<TestClientBinding> client_binding =
-        base::MakeUnique<TestClientBinding>(frame_generator_.get());
+        std::make_unique<TestClientBinding>(frame_generator_.get());
     binding_ = client_binding.get();
     IssueBeginFrame();
 
@@ -156,11 +156,11 @@ class FrameGeneratorTest : public testing::Test {
     return binding_->last_begin_frame_ack();
   }
 
-  const cc::CompositorFrameMetadata& LastMetadata() const {
+  const viz::CompositorFrameMetadata& LastMetadata() const {
     return binding_->last_metadata();
   }
 
-  const cc::RenderPassList& LastRenderPassList() const {
+  const viz::RenderPassList& LastRenderPassList() const {
     return binding_->last_render_pass_list();
   }
 
@@ -193,7 +193,7 @@ TEST_F(FrameGeneratorTest, OnFirstSurfaceActivation) {
 
   // Verify that the CompositorFrame refers to the window manager's surface via
   // referenced_surfaces.
-  const cc::CompositorFrameMetadata& last_metadata = LastMetadata();
+  const viz::CompositorFrameMetadata& last_metadata = LastMetadata();
   const std::vector<viz::SurfaceId>& referenced_surfaces =
       last_metadata.referenced_surfaces;
   EXPECT_EQ(1lu, referenced_surfaces.size());
@@ -217,13 +217,13 @@ TEST_F(FrameGeneratorTest, SetDeviceScaleFactor) {
   frame_generator()->SetDeviceScaleFactor(kDefaultScaleFactor);
   IssueBeginFrame();
   EXPECT_EQ(1, NumberOfFramesReceived());
-  const cc::CompositorFrameMetadata& last_metadata = LastMetadata();
+  const viz::CompositorFrameMetadata& last_metadata = LastMetadata();
   EXPECT_EQ(kDefaultScaleFactor, last_metadata.device_scale_factor);
 
   frame_generator()->SetDeviceScaleFactor(kArbitraryScaleFactor);
   IssueBeginFrame();
   EXPECT_EQ(2, NumberOfFramesReceived());
-  const cc::CompositorFrameMetadata& second_last_metadata = LastMetadata();
+  const viz::CompositorFrameMetadata& second_last_metadata = LastMetadata();
   EXPECT_EQ(kArbitraryScaleFactor, second_last_metadata.device_scale_factor);
 }
 
@@ -236,7 +236,7 @@ TEST_F(FrameGeneratorTest, SetHighContrastMode) {
   EXPECT_EQ(2, NumberOfFramesReceived());
 
   // Verify that the last frame has an invert filter.
-  const cc::RenderPassList& render_pass_list = LastRenderPassList();
+  const viz::RenderPassList& render_pass_list = LastRenderPassList();
   const cc::FilterOperations expected_filters(
       {cc::FilterOperation::CreateInvertFilter(1.f)});
   EXPECT_EQ(expected_filters, render_pass_list.front()->filters);
@@ -246,11 +246,11 @@ TEST_F(FrameGeneratorTest, WindowBoundsChanged) {
   InitWithSurfaceInfo();
 
   // Window bounds change triggers a BeginFrame.
-  constexpr cc::RenderPassId expected_render_pass_id = 1u;
+  constexpr viz::RenderPassId expected_render_pass_id = 1u;
   frame_generator()->OnWindowSizeChanged(kArbitrarySize);
   IssueBeginFrame();
   EXPECT_EQ(2, NumberOfFramesReceived());
-  cc::RenderPass* received_render_pass = LastRenderPassList().front().get();
+  viz::RenderPass* received_render_pass = LastRenderPassList().front().get();
   EXPECT_EQ(expected_render_pass_id, received_render_pass->id);
   EXPECT_EQ(kArbitrarySize, received_render_pass->output_rect.size());
   EXPECT_EQ(kArbitrarySize, received_render_pass->damage_rect.size());
@@ -266,7 +266,7 @@ TEST_F(FrameGeneratorTest, WindowBoundsChangedTwice) {
   frame_generator()->OnWindowSizeChanged(kAnotherArbitrarySize);
   IssueBeginFrame();
   EXPECT_EQ(2, NumberOfFramesReceived());
-  cc::RenderPass* received_render_pass = LastRenderPassList().front().get();
+  viz::RenderPass* received_render_pass = LastRenderPassList().front().get();
   EXPECT_EQ(kAnotherArbitrarySize, received_render_pass->output_rect.size());
   EXPECT_EQ(kAnotherArbitrarySize, received_render_pass->damage_rect.size());
 

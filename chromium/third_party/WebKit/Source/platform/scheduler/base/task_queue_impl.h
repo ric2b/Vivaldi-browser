@@ -19,6 +19,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "platform/scheduler/base/enqueue_order.h"
+#include "platform/scheduler/base/graceful_queue_shutdown_helper.h"
 #include "platform/scheduler/base/intrusive_heap.h"
 #include "platform/scheduler/base/task_queue.h"
 #include "platform/wtf/Deque.h"
@@ -85,18 +86,13 @@ class PLATFORM_EXPORT TaskQueueImpl {
 
   class PLATFORM_EXPORT Task : public TaskQueue::Task {
    public:
-    Task();
-    Task(const tracked_objects::Location& posted_from,
-         base::OnceClosure task,
+    Task(TaskQueue::PostedTask task,
          base::TimeTicks desired_run_time,
-         EnqueueOrder sequence_number,
-         bool nestable);
+         EnqueueOrder sequence_number);
 
-    Task(const tracked_objects::Location& posted_from,
-         base::OnceClosure task,
+    Task(TaskQueue::PostedTask task,
          base::TimeTicks desired_run_time,
          EnqueueOrder sequence_number,
-         bool nestable,
          EnqueueOrder enqueue_order);
 
     DelayedWakeUp delayed_wake_up() const {
@@ -143,12 +139,7 @@ class PLATFORM_EXPORT TaskQueueImpl {
   // TaskQueue implementation.
   const char* GetName() const;
   bool RunsTasksInCurrentSequence() const;
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       base::OnceClosure task,
-                       base::TimeDelta delay);
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
-                                  base::OnceClosure task,
-                                  base::TimeDelta delay);
+  bool PostDelayedTask(TaskQueue::PostedTask task);
   // Require a reference to enclosing task queue for lifetime control.
   std::unique_ptr<TaskQueue::QueueEnabledVoter> CreateQueueEnabledVoter(
       scoped_refptr<TaskQueue> owning_task_queue);
@@ -165,13 +156,14 @@ class PLATFORM_EXPORT TaskQueueImpl {
   TimeDomain* GetTimeDomain() const;
   void SetBlameContext(base::trace_event::BlameContext* blame_context);
   void InsertFence(TaskQueue::InsertFencePosition position);
+  void InsertFenceAt(base::TimeTicks time);
   void RemoveFence();
-  bool HasFence() const;
+  bool HasActiveFence();
   bool BlockedByFence() const;
   // Implementation of TaskQueue::SetObserver.
   void SetOnNextWakeUpChangedCallback(OnNextWakeUpChangedCallback callback);
 
-  void UnregisterTaskQueue(scoped_refptr<TaskQueue> task_queue);
+  void UnregisterTaskQueue();
 
   // Returns true if a (potentially hypothetical) task with the specified
   // |enqueue_order| could run on the queue. Must be called from the main
@@ -272,6 +264,14 @@ class PLATFORM_EXPORT TaskQueueImpl {
                        base::TimeTicks end);
   bool RequiresTaskTiming() const;
 
+  base::WeakPtr<TaskQueueManager> GetTaskQueueManagerWeakPtr();
+
+  scoped_refptr<GracefulQueueShutdownHelper> GetGracefulQueueShutdownHelper();
+
+  // Returns true if this queue is unregistered or task queue manager is deleted
+  // and this queue can be safely deleted on any thread.
+  bool IsUnregistered() const;
+
   // Disables queue for testing purposes, when a QueueEnabledVoter can't be
   // constructed due to not having TaskQueue.
   void SetQueueEnabledForTest(bool enabled);
@@ -279,11 +279,6 @@ class PLATFORM_EXPORT TaskQueueImpl {
  private:
   friend class WorkQueue;
   friend class WorkQueueTest;
-
-  enum class TaskType {
-    NORMAL,
-    NON_NESTABLE,
-  };
 
   struct AnyThread {
     AnyThread(TaskQueueManager* task_queue_manager, TimeDomain* time_domain);
@@ -322,6 +317,7 @@ class PLATFORM_EXPORT TaskQueueImpl {
     int voter_refcount;
     base::trace_event::BlameContext* blame_context;  // Not owned.
     EnqueueOrder current_fence;
+    base::Optional<base::TimeTicks> delayed_fence;
     base::Optional<base::TimeTicks> scheduled_time_domain_wake_up;
     OnTaskStartedHandler on_task_started_handler;
     OnTaskCompletedHandler on_task_completed_handler;
@@ -329,13 +325,8 @@ class PLATFORM_EXPORT TaskQueueImpl {
     bool is_enabled_for_test;
   };
 
-  bool PostImmediateTaskImpl(const tracked_objects::Location& from_here,
-                             base::OnceClosure task,
-                             TaskType task_type);
-  bool PostDelayedTaskImpl(const tracked_objects::Location& from_here,
-                           base::OnceClosure task,
-                           base::TimeDelta delay,
-                           TaskType task_type);
+  bool PostImmediateTaskImpl(TaskQueue::PostedTask task);
+  bool PostDelayedTaskImpl(TaskQueue::PostedTask task);
 
   // Push the task onto the |delayed_incoming_queue|. Lock-free main thread
   // only fast path.
@@ -353,12 +344,7 @@ class PLATFORM_EXPORT TaskQueueImpl {
   // Push the task onto the |immediate_incoming_queue| and for auto pumped
   // queues it calls MaybePostDoWorkOnMainRunner if the Incoming queue was
   // empty.
-  void PushOntoImmediateIncomingQueueLocked(
-      const tracked_objects::Location& posted_from,
-      base::OnceClosure task,
-      base::TimeTicks desired_run_time,
-      EnqueueOrder sequence_number,
-      bool nestable);
+  void PushOntoImmediateIncomingQueueLocked(Task task);
 
   // We reserve an inline capacity of 8 tasks to try and reduce the load on
   // PartitionAlloc.
@@ -385,6 +371,12 @@ class PLATFORM_EXPORT TaskQueueImpl {
 
   // Schedules delayed work on time domain and calls the observer.
   void ScheduleDelayedWorkInTimeDomain(base::TimeTicks now);
+
+  // Activate a delayed fence if a time has come.
+  void ActivateDelayedFenceIfNeeded(base::TimeTicks now);
+
+  // Returns true if new work has been unblocked.
+  bool InsertFenceImpl(EnqueueOrder enqueue_order);
 
   const char* name_;
 

@@ -5,12 +5,19 @@
 #ifndef CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 #define CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 
+#include <vector>
+
 #include "base/macros.h"
 #include "chrome/browser/download/test_download_shelf.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/common/features.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
+#endif  // defined(OS_CHROMEOS)
 
 class LocationBarTesting;
 class OmniboxView;
@@ -91,6 +98,12 @@ class TestBrowserWindow : public BrowserWindow {
   bool IsToolbarShowing() const override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
+#if defined(OS_CHROMEOS)
+  void ShowIntentPickerBubble(
+      std::vector<arc::ArcNavigationThrottle::AppInfo> app_info,
+      IntentPickerResponse callback) override {}
+  void SetIntentPickerViewVisibility(bool visible) override {}
+#endif  // defined(OS_CHROMEOS)
   autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
@@ -154,6 +167,7 @@ class TestBrowserWindow : public BrowserWindow {
     void UpdateContentSettingsIcons() override {}
     void UpdateManagePasswordsIconAndBubble() override {}
     void UpdateSaveCreditCardIcon() override {}
+    void UpdateFindBarIconVisibility() override {}
     void UpdateBookmarkStarVisibility() override {}
     void UpdateZoomViewVisibility() override {}
     void UpdateLocationBarVisibility(bool visible, bool animate) override {}
@@ -188,12 +202,8 @@ class TestBrowserWindowOwner : public chrome::BrowserListObserver {
   DISALLOW_COPY_AND_ASSIGN(TestBrowserWindowOwner);
 };
 
-namespace chrome {
-
 // Helper that handle the lifetime of TestBrowserWindow instances.
 std::unique_ptr<Browser> CreateBrowserWithTestWindowForParams(
     Browser::CreateParams* params);
-
-}  // namespace chrome
 
 #endif  // CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_

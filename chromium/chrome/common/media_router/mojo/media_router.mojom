@@ -30,6 +30,11 @@ struct MediaSink {
   // The human-readable name, e.g. "Janet's Chromecast".
   string name;
   // Optional description of the sink.
+  //
+  // DEPRECATED.  This is currently used in the Media Router UX to relay a
+  // Hangouts meeting name.  It should not be used for other purposes.
+  // TODO(crbug.com/786208): Remove this at a future date when Hangouts names
+  // are no longer required.
   string? description;
   // Optional domain of the sink if this sink is associated with an identity.
   string? domain;
@@ -76,16 +81,29 @@ struct CastMediaSink {
   int32 cast_channel_id;
 };
 
+enum RouteControllerType {
+  kNone,
+  kGeneric,
+  kHangouts,
+  kMirroring
+};
+
 // Should be kept in sync with media_route.h.
 struct MediaRoute {
   // The ID of this media route, e.g. "r_PR1O_blkC9dsKp-tb1ti8qurOo".
   string media_route_id;
+  // The ID of the presentation that this route is associated with.
+  string presentation_id;
   // The ID of the media source being sent through this media route.
   // May be missing if route is not local.
   string? media_source;
   // The ID of sink that is rendering the media content.
   string media_sink_id;
-  // Human readable description of this route, e.g. "Tab casting".
+  // Human readable description of the casting activity.  Examples:
+  // "Mirroring tab (www.example.com)", "Casting media", "Casting YouTube"
+  //
+  // TODO(crbug.com/786208): Localize this properly by passing it in a way that
+  // permits use of template strings and placeholders.
   string description;
   // Specifies that the route is requested locally.
   bool is_local;
@@ -96,12 +114,17 @@ struct MediaRoute {
   string? custom_controller_path;
   // Whether the provider for this route supports the Media Route Controller.
   bool supports_media_route_controller;
+  // The type of route controller that can be created for this route. See
+  // media_controller.mojom for details.
+  // TODO(crbug.com/684642): Remove supports_media_route_controller in favor
+  // of controller_type.
+  RouteControllerType controller_type;
   // Set to true if this route should be displayed for |media_sink_id| in UI.
   bool for_display;
   // Set to true if this route was created by an incognito profile.
   bool is_incognito;
-  // Set to true if this route corresponds to an offscreen presentation.
-  bool is_offscreen_presentation;
+  // Set to true if this route corresponds to a local presentation.
+  bool is_local_presentation;
 };
 
 // Notifications or an actionable events to be shown to the user.
@@ -148,7 +171,7 @@ struct Issue {
 
   ActionType default_action;
 
-  array<ActionType>? secondary_actions;
+  array<ActionType> secondary_actions;
 
   // The ID of the help page to be opened if users select learn_more.
   int32 help_page_id;
@@ -205,7 +228,17 @@ struct MediaRouteProviderConfig {
 
 // Modeled after the MediaRouter interface defined in
 // chrome/browser/media/router/media_router.h
+//
+// MediaRouteProvider is responsible for discovering MediaSinks, and managing
+// MediaRoutes associated with them. It notifies its observers (i.e.
+// MediaRouter) when there are changes related to sinks or routes.
 interface MediaRouteProvider {
+  // Each MediaRouteProvider is associated with a unique ID.
+  enum Id {
+    EXTENSION,
+    WIRED_DISPLAY
+  };
+
   // Creates a media route from |media_source| to the sink given by |sink_id|.
   //
   // The presentation ID of the route created will be |presentation_id|, but it
@@ -405,8 +438,8 @@ interface MediaRouteProvider {
                                  (bool success);
 };
 
-// Interface for a service which observes state changes across media
-// sources, sinks, and issues.
+// Interface for a service which observes MediaRouteProviders for state changes
+// across media sources, sinks, and issues.
 interface MediaRouter {
 
   // Represents overall media sink availability states.
@@ -438,26 +471,33 @@ interface MediaRouter {
   // Registers a MediaRouteProvider with the MediaRouter.
   // Returns a string that uniquely identifies the Media Router browser
   // process.
-  RegisterMediaRouteProvider(MediaRouteProvider media_router_provider) =>
+  RegisterMediaRouteProvider(MediaRouteProvider.Id provider_id,
+                             MediaRouteProvider media_router_provider) =>
       (string instance_id, MediaRouteProviderConfig config);
 
-  // Called when the Media Route Manager receives a new list of |sinks|
+  // Called when a MediaRouteProvider receives a new list of |sinks|
   // compatible with |media_source|. The result is only valid for |origins|. If
   // |origins| is empty, the result is valid for any origin.
-  OnSinksReceived(string media_source, array<MediaSink> sinks,
-      array<url.mojom.Origin> origins);
+  OnSinksReceived(MediaRouteProvider.Id provider_id,
+                  string media_source,
+                  array<MediaSink> sinks,
+                  array<url.mojom.Origin> origins);
 
   // Called when issues are reported for media routes.
   OnIssue(Issue issue);
 
-  // Called when list of routes has been updated in the context of the
-  // calling |media_source|.  The array |joinable_route_ids| should
-  // contain route IDs of joinable routes found in the |routes| array.
-  OnRoutesUpdated(array<MediaRoute> routes, string media_source,
-      array<string> joinable_route_ids);
+  // Called when list of routes for a MediaRouteProvider has been updated in the
+  // context of the calling |media_source|.  The array |joinable_route_ids|
+  // should contain route IDs of joinable routes found in the |routes| array.
+  OnRoutesUpdated(MediaRouteProvider.Id provider_id,
+                  array<MediaRoute> routes,
+                  string media_source,
+                  array<string> joinable_route_ids);
 
-  // Called when the overall availability of media sinks has been updated.
-  OnSinkAvailabilityUpdated(SinkAvailability availability);
+  // Called when the availability of media sinks for a MediaRouteProvider has
+  // been updated.
+  OnSinkAvailabilityUpdated(MediaRouteProvider.Id provider_id,
+                            SinkAvailability availability);
 
   // Called when the state of presentation connected to route |route_id| has
   // changed to |state|.

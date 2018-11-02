@@ -12,8 +12,11 @@ namespace media {
 MojoAndroidOverlay::MojoAndroidOverlay(
     mojom::AndroidOverlayProviderPtr provider_ptr,
     AndroidOverlayConfig config,
-    const base::UnguessableToken& routing_token)
-    : config_(std::move(config)) {
+    const base::UnguessableToken& routing_token,
+    std::unique_ptr<service_manager::ServiceContextRef> context_ref)
+    : config_(std::move(config)),
+      binding_(this),
+      context_ref_(std::move(context_ref)) {
   // Fill in details of |config| into |mojo_config|.  Our caller could do this
   // too, but since we want to retain |config_| anyway, we do it here.
   mojom::AndroidOverlayConfigPtr mojo_config =
@@ -21,11 +24,10 @@ MojoAndroidOverlay::MojoAndroidOverlay(
   mojo_config->routing_token = routing_token;
   mojo_config->rect = config_.rect;
   mojo_config->secure = config_.secure;
+  mojo_config->power_efficient = config_.power_efficient;
 
   mojom::AndroidOverlayClientPtr ptr;
-  binding_ = base::MakeUnique<mojo::Binding<mojom::AndroidOverlayClient>>(
-      this, mojo::MakeRequest(&ptr));
-
+  binding_.Bind(mojo::MakeRequest(&ptr));
   provider_ptr->CreateOverlay(mojo::MakeRequest(&overlay_ptr_), std::move(ptr),
                               std::move(mojo_config));
 }
@@ -77,6 +79,11 @@ void MojoAndroidOverlay::OnDestroyed() {
 
   // Note: we do not delete |overlay_ptr_| here.  Our client must delete us to
   // signal that we should do that, since it still might be in use.
+}
+
+void MojoAndroidOverlay::OnPowerEfficientState(bool is_power_efficient) {
+  if (config_.power_cb)
+    config_.power_cb.Run(this, is_power_efficient);
 }
 
 }  // namespace media

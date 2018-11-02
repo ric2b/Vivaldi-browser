@@ -39,16 +39,8 @@
 #include "content/app/strings/grit/content_strings.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/content_child_helpers.h"
-#include "content/child/feature_policy/feature_policy_platform.h"
-#include "content/child/notifications/notification_dispatcher.h"
-#include "content/child/notifications/notification_manager.h"
-#include "content/child/push_messaging/push_provider.h"
-#include "content/child/thread_safe_sender.h"
-#include "content/child/web_data_consumer_handle_impl.h"
-#include "content/child/web_url_loader_impl.h"
-#include "content/child/web_url_request_util.h"
-#include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "net/base/net_errors.h"
@@ -71,7 +63,6 @@ using blink::WebString;
 using blink::WebThemeEngine;
 using blink::WebURL;
 using blink::WebURLError;
-using blink::WebURLLoader;
 
 namespace content {
 
@@ -187,8 +178,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_INPUT_ALT;
     case WebLocalizedString::kMissingPluginText:
       return IDS_PLUGIN_INITIALIZATION_ERROR;
-    case WebLocalizedString::kMediaRemotingDisableText:
-      return IDS_MEDIA_REMOTING_DISABLE_TEXT;
     case WebLocalizedString::kMediaRemotingCastText:
       return IDS_MEDIA_REMOTING_CAST_TEXT;
     case WebLocalizedString::kMediaRemotingCastToUnknownDeviceText:
@@ -205,6 +194,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_OTHER_WEEK_LABEL;
     case WebLocalizedString::kOverflowMenuCaptions:
       return IDS_MEDIA_OVERFLOW_MENU_CLOSED_CAPTIONS;
+    case WebLocalizedString::kOverflowMenuCaptionsSubmenuTitle:
+      return IDS_MEDIA_OVERFLOW_MENU_CLOSED_CAPTIONS_SUBMENU_TITLE;
     case WebLocalizedString::kOverflowMenuCast:
       return IDS_MEDIA_OVERFLOW_MENU_CAST;
     case WebLocalizedString::kOverflowMenuEnterFullscreen:
@@ -320,24 +311,14 @@ static int ToMessageID(WebLocalizedString::Name name) {
 BlinkPlatformImpl::BlinkPlatformImpl()
     : BlinkPlatformImpl(base::ThreadTaskRunnerHandle::IsSet()
                             ? base::ThreadTaskRunnerHandle::Get()
-                            : nullptr) {
-}
+                            : nullptr,
+                        nullptr) {}
 
 BlinkPlatformImpl::BlinkPlatformImpl(
-    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
-    : main_thread_task_runner_(main_thread_task_runner),
-      compositor_thread_(nullptr) {
-  InternalInit();
-}
-
-void BlinkPlatformImpl::InternalInit() {
-  // ChildThread may not exist in some tests.
-  if (ChildThreadImpl::current()) {
-    thread_safe_sender_ = ChildThreadImpl::current()->thread_safe_sender();
-    notification_dispatcher_ =
-        ChildThreadImpl::current()->notification_dispatcher();
-  }
-}
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
+    : main_thread_task_runner_(std::move(main_thread_task_runner)),
+      io_thread_task_runner_(std::move(io_thread_task_runner)) {}
 
 void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
     blink::scheduler::WebThreadBase* thread) {
@@ -359,12 +340,6 @@ void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread,
 }
 
 BlinkPlatformImpl::~BlinkPlatformImpl() {
-}
-
-std::unique_ptr<blink::WebDataConsumerHandle>
-BlinkPlatformImpl::CreateDataConsumerHandle(
-    mojo::ScopedDataPipeConsumerHandle handle) {
-  return base::MakeUnique<WebDataConsumerHandleImpl>(std::move(handle));
 }
 
 WebString BlinkPlatformImpl::UserAgent() {
@@ -395,13 +370,6 @@ std::unique_ptr<blink::WebThread> BlinkPlatformImpl::CreateWebAudioThread() {
   thread->Init();
   WaitUntilWebThreadTLSUpdate(thread.get());
   return std::move(thread);
-}
-
-void BlinkPlatformImpl::SetCompositorThread(
-    blink::scheduler::WebThreadBase* compositor_thread) {
-  compositor_thread_ = compositor_thread;
-  if (compositor_thread_)
-    WaitUntilWebThreadTLSUpdate(compositor_thread_);
 }
 
 blink::WebThread* BlinkPlatformImpl::CurrentThread() {
@@ -484,47 +452,6 @@ struct DataResource {
 const DataResource kDataResources[] = {
     {"missingImage", IDR_BROKENIMAGE, ui::SCALE_FACTOR_100P, false},
     {"missingImage@2x", IDR_BROKENIMAGE, ui::SCALE_FACTOR_200P, false},
-    {"mediaplayerPause", IDR_MEDIAPLAYER_PAUSE_BUTTON, ui::SCALE_FACTOR_100P,
-     false},
-    {"mediaplayerPlay", IDR_MEDIAPLAYER_PLAY_BUTTON, ui::SCALE_FACTOR_100P,
-     false},
-    {"mediaplayerSoundNotMuted", IDR_MEDIAPLAYER_SOUND_NOT_MUTED_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerSoundMuted", IDR_MEDIAPLAYER_SOUND_MUTED_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerSliderThumb", IDR_MEDIAPLAYER_SLIDER_THUMB,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerVolumeSliderThumb", IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerClosedCaption", IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerClosedCaptionDisabled",
-     IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_DISABLED, ui::SCALE_FACTOR_100P,
-     false},
-    {"mediaplayerEnterFullscreen", IDR_MEDIAPLAYER_ENTER_FULLSCREEN_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerExitFullscreen", IDR_MEDIAPLAYER_EXIT_FULLSCREEN_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerCastOff", IDR_MEDIAPLAYER_CAST_BUTTON_OFF,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerCastOn", IDR_MEDIAPLAYER_CAST_BUTTON_ON, ui::SCALE_FACTOR_100P,
-     false},
-    {"mediaplayerOverlayCastOff", IDR_MEDIAPLAYER_OVERLAY_CAST_BUTTON_OFF,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerOverlayPlay", IDR_MEDIAPLAYER_OVERLAY_PLAY_BUTTON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaRemotingCastIcon", IDR_MEDIA_REMOTING_CAST_ICON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerTrackSelectionCheckmark",
-     IDR_MEDIAPLAYER_TRACKSELECTION_CHECKMARK, ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerClosedCaptionsIcon", IDR_MEDIAPLAYER_CLOSEDCAPTIONS_ICON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerSubtitlesIcon", IDR_MEDIAPLAYER_SUBTITLES_ICON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerOverflowMenu", IDR_MEDIAPLAYER_OVERFLOW_MENU_ICON,
-     ui::SCALE_FACTOR_100P, false},
-    {"mediaplayerDownloadIcon", IDR_MEDIAPLAYER_DOWNLOAD_ICON,
-     ui::SCALE_FACTOR_100P, false},
     {"searchCancel", IDR_SEARCH_CANCEL, ui::SCALE_FACTOR_100P, false},
     {"searchCancelPressed", IDR_SEARCH_CANCEL_PRESSED, ui::SCALE_FACTOR_100P,
      false},
@@ -542,9 +469,6 @@ const DataResource kDataResources[] = {
     // Not limited to Android since it's used for mobile layouts in inspector.
     {"fullscreenAndroid.css", IDR_UASTYLE_FULLSCREEN_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE, true},
-    // Not limited to Android since it's used for mobile layouts in inspector.
-    {"mediaControlsAndroid.css", IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_CSS,
-     ui::SCALE_FACTOR_NONE, true},
     // Not limited to Linux since it's used for mobile layouts in inspector.
     {"themeChromiumLinux.css", IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
      ui::SCALE_FACTOR_NONE, true},
@@ -558,8 +482,6 @@ const DataResource kDataResources[] = {
      ui::SCALE_FACTOR_NONE, true},
     {"svg.css", IDR_UASTYLE_SVG_CSS, ui::SCALE_FACTOR_NONE, true},
     {"mathml.css", IDR_UASTYLE_MATHML_CSS, ui::SCALE_FACTOR_NONE, true},
-    {"mediaControls.css", IDR_UASTYLE_MEDIA_CONTROLS_CSS, ui::SCALE_FACTOR_NONE,
-     true},
     {"fullscreen.css", IDR_UASTYLE_FULLSCREEN_CSS, ui::SCALE_FACTOR_NONE, true},
     {"xhtmlmp.css", IDR_UASTYLE_XHTMLMP_CSS, ui::SCALE_FACTOR_NONE, true},
     {"viewportAndroid.css", IDR_UASTYLE_VIEWPORT_ANDROID_CSS,
@@ -617,7 +539,7 @@ WebData BlinkPlatformImpl::GetDataResource(const char* name) {
     if (!strcmp(name, kDataResources[i].name)) {
       base::StringPiece resource = GetContentClient()->GetDataResource(
           kDataResources[i].id, kDataResources[i].scale_factor);
-      if (kDataResources[i].is_gzipped) {
+      if (!resource.empty() && kDataResources[i].is_gzipped) {
         std::string uncompressed;
         CHECK(compression::GzipUncompress(resource.as_string(), &uncompressed));
         return WebData(uncompressed.data(), uncompressed.size());
@@ -651,7 +573,8 @@ WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
   if (message_id < 0)
     return WebString();
   return WebString::FromUTF16(base::ReplaceStringPlaceholders(
-      GetContentClient()->GetLocalizedString(message_id), value.Utf16(), NULL));
+      GetContentClient()->GetLocalizedString(message_id), value.Utf16(),
+      nullptr));
 }
 
 WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
@@ -665,11 +588,11 @@ WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
   values.push_back(value1.Utf16());
   values.push_back(value2.Utf16());
   return WebString::FromUTF16(base::ReplaceStringPlaceholders(
-      GetContentClient()->GetLocalizedString(message_id), values, NULL));
+      GetContentClient()->GetLocalizedString(message_id), values, nullptr));
 }
 
-blink::WebThread* BlinkPlatformImpl::CompositorThread() const {
-  return compositor_thread_;
+bool BlinkPlatformImpl::IsRendererSideResourceSchedulerEnabled() const {
+  return base::FeatureList::IsEnabled(features::kRendererSideResourceScheduler);
 }
 
 std::unique_ptr<blink::WebGestureCurve>
@@ -683,14 +606,6 @@ BlinkPlatformImpl::CreateFlingAnimationCurve(
       IsMainThread());
 }
 
-void BlinkPlatformImpl::DidStartWorkerThread() {
-  WorkerThreadRegistry::Instance()->DidStartCurrentWorkerThread();
-}
-
-void BlinkPlatformImpl::WillStopWorkerThread() {
-  WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
-}
-
 bool BlinkPlatformImpl::AllowScriptExtensionForServiceWorker(
     const blink::WebURL& scriptUrl) {
   return GetContentClient()->AllowScriptExtensionForServiceWorker(scriptUrl);
@@ -702,19 +617,6 @@ blink::WebCrypto* BlinkPlatformImpl::Crypto() {
 
 const char* BlinkPlatformImpl::GetBrowserServiceName() const {
   return mojom::kBrowserServiceName;
-}
-
-blink::WebNotificationManager* BlinkPlatformImpl::GetNotificationManager() {
-  if (!thread_safe_sender_.get() || !notification_dispatcher_.get())
-    return nullptr;
-
-  return NotificationManager::ThreadSpecificInstance(
-      thread_safe_sender_.get(),
-      notification_dispatcher_.get());
-}
-
-blink::WebPushProvider* BlinkPlatformImpl::PushProvider() {
-  return PushProvider::ThreadSpecificInstance(main_thread_task_runner_);
 }
 
 blink::WebMediaCapabilitiesClient*
@@ -834,24 +736,9 @@ bool BlinkPlatformImpl::IsDomKeyForModifier(int dom_key) {
       static_cast<ui::DomKey>(dom_key));
 }
 
-std::unique_ptr<blink::WebFeaturePolicy> BlinkPlatformImpl::CreateFeaturePolicy(
-    const blink::WebFeaturePolicy* parent_policy,
-    const blink::WebParsedFeaturePolicy& container_policy,
-    const blink::WebParsedFeaturePolicy& policy_header,
-    const blink::WebSecurityOrigin& origin) {
-  std::unique_ptr<FeaturePolicy> policy = FeaturePolicy::CreateFromParentPolicy(
-      static_cast<const FeaturePolicy*>(parent_policy),
-      FeaturePolicyHeaderFromWeb(container_policy), url::Origin(origin));
-  policy->SetHeaderPolicy(FeaturePolicyHeaderFromWeb(policy_header));
-  return std::move(policy);
-}
-
-std::unique_ptr<blink::WebFeaturePolicy>
-BlinkPlatformImpl::DuplicateFeaturePolicyWithOrigin(
-    const blink::WebFeaturePolicy& policy,
-    const blink::WebSecurityOrigin& new_origin) {
-  return FeaturePolicy::CreateFromPolicyWithOrigin(
-      static_cast<const FeaturePolicy&>(policy), url::Origin(new_origin));
+scoped_refptr<base::SingleThreadTaskRunner> BlinkPlatformImpl::GetIOTaskRunner()
+    const {
+  return io_thread_task_runner_;
 }
 
 }  // namespace content

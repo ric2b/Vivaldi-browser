@@ -51,10 +51,10 @@ extern const char kOptionPageRange[] = "page_range";
 extern const char kOptionReverse[] = "reverse_order";
 extern const char kOptionPwgRasterConfig[] = "pwg_raster_config";
 
-const char kMargineBottom[] = "bottom_microns";
-const char kMargineLeft[] = "left_microns";
-const char kMargineRight[] = "right_microns";
-const char kMargineTop[] = "top_microns";
+const char kMarginBottom[] = "bottom_microns";
+const char kMarginLeft[] = "left_microns";
+const char kMarginRight[] = "right_microns";
+const char kMarginTop[] = "top_microns";
 
 const char kDpiHorizontal[] = "horizontal_dpi";
 const char kDpiVertical[] = "vertical_dpi";
@@ -351,7 +351,7 @@ const MediaDefinition& FindMediaByType(MediaType type) {
 }
 
 const MediaDefinition* FindMediaBySize(int32_t width_um, int32_t height_um) {
-  const MediaDefinition* result = NULL;
+  const MediaDefinition* result = nullptr;
   for (size_t i = 0; i < arraysize(kMediaDefinitions); ++i) {
     int32_t diff =
         std::max(std::abs(width_um - kMediaDefinitions[i].width_um),
@@ -575,9 +575,11 @@ class PwgRasterConfigTraits : public NoValueValidation,
     dict->SetString(
         kPwgRasterDocumentSheetBack,
         TypeToString(kDocumentSheetBackNames, option.document_sheet_back));
-    if (option.reverse_order_streaming)
+
+    if (option.reverse_order_streaming) {
       dict->SetBoolean(kPwgRasterReverseOrderStreaming,
                        option.reverse_order_streaming);
+    }
 
     if (option.rotate_all_pages)
       dict->SetBoolean(kPwgRasterRotateAllPages, option.rotate_all_pages);
@@ -658,18 +660,18 @@ class MarginsTraits : public NoValueValidation,
       return false;
     if (!TypeFromString(kMarginsNames, type_str, &option->type))
       return false;
-    return dict.GetInteger(kMargineTop, &option->top_um) &&
-           dict.GetInteger(kMargineRight, &option->right_um) &&
-           dict.GetInteger(kMargineBottom, &option->bottom_um) &&
-           dict.GetInteger(kMargineLeft, &option->left_um);
+    return dict.GetInteger(kMarginTop, &option->top_um) &&
+           dict.GetInteger(kMarginRight, &option->right_um) &&
+           dict.GetInteger(kMarginBottom, &option->bottom_um) &&
+           dict.GetInteger(kMarginLeft, &option->left_um);
   }
 
   static void Save(const Margins& option, base::DictionaryValue* dict) {
     dict->SetString(kKeyType, TypeToString(kMarginsNames, option.type));
-    dict->SetInteger(kMargineTop, option.top_um);
-    dict->SetInteger(kMargineRight, option.right_um);
-    dict->SetInteger(kMargineBottom, option.bottom_um);
-    dict->SetInteger(kMargineLeft, option.left_um);
+    dict->SetInteger(kMarginTop, option.top_um);
+    dict->SetInteger(kMarginRight, option.right_um);
+    dict->SetInteger(kMarginBottom, option.bottom_um);
+    dict->SetInteger(kMarginLeft, option.left_um);
   }
 };
 
@@ -678,11 +680,8 @@ class DpiTraits : public ItemsTraits<kOptionDpi> {
   static bool IsValid(const Dpi& option) { return option.IsValid(); }
 
   static bool Load(const base::DictionaryValue& dict, Dpi* option) {
-    if (!dict.GetInteger(kDpiHorizontal, &option->horizontal) ||
-        !dict.GetInteger(kDpiVertical, &option->vertical)) {
-      return false;
-    }
-    return true;
+    return dict.GetInteger(kDpiHorizontal, &option->horizontal) &&
+           dict.GetInteger(kDpiVertical, &option->vertical);
   }
 
   static void Save(const Dpi& option, base::DictionaryValue* dict) {
@@ -717,11 +716,11 @@ class PageRangeTraits : public ItemsTraits<kOptionPageRange> {
   }
 
   static bool Load(const base::DictionaryValue& dict, PageRange* option) {
-    const base::ListValue* list = NULL;
+    const base::ListValue* list = nullptr;
     if (!dict.GetList(kPageRangeInterval, &list))
       return false;
     for (size_t i = 0; i < list->GetSize(); ++i) {
-      const base::DictionaryValue* interval = NULL;
+      const base::DictionaryValue* interval = nullptr;
       if (!list->GetDictionary(i, &interval))
         return false;
       Interval new_interval(1, kMaxPageNumber);

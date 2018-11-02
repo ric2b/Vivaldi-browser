@@ -58,11 +58,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionPageCaptureApiTest, SaveAsMHTML) {
   // Make sure the MHTML data gets written to the temporary file.
   ASSERT_FALSE(delegate.temp_file_.empty());
   // Flush the message loops to make sure the delete happens.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   content::RunAllPendingInMessageLoop(content::BrowserThread::IO);
   // Make sure the temporary file is destroyed once the javascript side reads
   // the contents.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_FALSE(base::PathExists(delegate.temp_file_));
 }
 
@@ -76,9 +76,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionPageCaptureApiTest,
   ScopedTestDialogAutoConfirm auto_confirm(ScopedTestDialogAutoConfirm::ACCEPT);
   ASSERT_TRUE(RunExtensionTest("page_capture")) << message_;
   ASSERT_FALSE(delegate.temp_file_.empty());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   content::RunAllPendingInMessageLoop(content::BrowserThread::IO);
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_FALSE(base::PathExists(delegate.temp_file_));
 }
 

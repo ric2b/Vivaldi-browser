@@ -16,6 +16,7 @@
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "content/public/renderer/render_view.h"
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_test_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebFrameContentDumper.h"
@@ -26,20 +27,37 @@ using testing::DeleteArg;
 
 namespace {
 
+constexpr char kScriptHtml[] =
+    "<html>"
+    "<head>"
+    "<script src='data:foo'></script>"
+    "</head>"
+    "<body>"
+    "</body>"
+    "</html>";
+
 class MockContentSettingsObserver : public ContentSettingsObserver {
  public:
   MockContentSettingsObserver(content::RenderFrame* render_frame,
                               service_manager::BinderRegistry* registry);
+  ~MockContentSettingsObserver() override {}
 
-  virtual bool Send(IPC::Message* message);
+  bool Send(IPC::Message* message) override;
 
   MOCK_METHOD2(OnContentBlocked,
                void(ContentSettingsType, const base::string16&));
 
   MOCK_METHOD5(OnAllowDOMStorage,
                void(int, const GURL&, const GURL&, bool, IPC::Message*));
-  GURL image_url_;
-  std::string image_origin_;
+
+  const GURL& image_url() const { return image_url_; }
+  const std::string& image_origin() const { return image_origin_; }
+
+ private:
+  const GURL image_url_;
+  const std::string image_origin_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockContentSettingsObserver);
 };
 
 MockContentSettingsObserver::MockContentSettingsObserver(
@@ -84,15 +102,17 @@ class CommitTimeConditionChecker : public content::RenderFrameObserver {
   }
 
  private:
-  Predicate predicate_;
-  bool expectation_;
+  const Predicate predicate_;
+  const bool expectation_;
 
   DISALLOW_COPY_AND_ASSIGN(CommitTimeConditionChecker);
 };
 
 }  // namespace
 
-TEST_F(ChromeRenderViewTest, DidBlockContentType) {
+using ContentSettingsObserverBrowserTest = ChromeRenderViewTest;
+
+TEST_F(ContentSettingsObserverBrowserTest, DidBlockContentType) {
   MockContentSettingsObserver observer(view_->GetMainRenderFrame(),
                                        registry_.get());
   EXPECT_CALL(observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES,
@@ -106,7 +126,7 @@ TEST_F(ChromeRenderViewTest, DidBlockContentType) {
 
 // Tests that multiple invokations of AllowDOMStorage result in a single IPC.
 // Fails due to http://crbug.com/104300
-TEST_F(ChromeRenderViewTest, DISABLED_AllowDOMStorage) {
+TEST_F(ContentSettingsObserverBrowserTest, DISABLED_AllowDOMStorage) {
   // Load some HTML, so we have a valid security origin.
   LoadHTML("<html></html>");
   MockContentSettingsObserver observer(view_->GetMainRenderFrame(),
@@ -124,7 +144,7 @@ TEST_F(ChromeRenderViewTest, DISABLED_AllowDOMStorage) {
 }
 
 // Regression test for http://crbug.com/35011
-TEST_F(ChromeRenderViewTest, JSBlockSentAfterPageLoad) {
+TEST_F(ContentSettingsObserverBrowserTest, JSBlockSentAfterPageLoad) {
   // 1. Load page with JS.
   const char kHtml[] =
       "<html>"
@@ -176,7 +196,7 @@ TEST_F(ChromeRenderViewTest, JSBlockSentAfterPageLoad) {
   EXPECT_TRUE(HasSentChromeViewHostMsgContentBlocked(render_thread_.get()));
 }
 
-TEST_F(ChromeRenderViewTest, PluginsTemporarilyAllowed) {
+TEST_F(ContentSettingsObserverBrowserTest, PluginsTemporarilyAllowed) {
   // Load some HTML.
   LoadHTML("<html>Foo</html>");
 
@@ -208,7 +228,7 @@ TEST_F(ChromeRenderViewTest, PluginsTemporarilyAllowed) {
   EXPECT_TRUE(observer->IsPluginTemporarilyAllowed(bar_plugin));
 }
 
-TEST_F(ChromeRenderViewTest, ImagesBlockedByDefault) {
+TEST_F(ContentSettingsObserverBrowserTest, ImagesBlockedByDefault) {
   MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
                                             registry_.get());
 
@@ -229,7 +249,7 @@ TEST_F(ChromeRenderViewTest, ImagesBlockedByDefault) {
   observer->SetContentSettingRules(&content_setting_rules);
   EXPECT_CALL(mock_observer,
               OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES, base::string16()));
-  EXPECT_FALSE(observer->AllowImage(true, mock_observer.image_url_));
+  EXPECT_FALSE(observer->AllowImage(true, mock_observer.image_url()));
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 
   // Create an exception which allows the image.
@@ -237,17 +257,17 @@ TEST_F(ChromeRenderViewTest, ImagesBlockedByDefault) {
       image_setting_rules.begin(),
       ContentSettingPatternSource(
           ContentSettingsPattern::Wildcard(),
-          ContentSettingsPattern::FromString(mock_observer.image_origin_),
+          ContentSettingsPattern::FromString(mock_observer.image_origin()),
           content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
           std::string(), false));
 
   EXPECT_CALL(mock_observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES,
                                               base::string16())).Times(0);
-  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url_));
+  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url()));
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
-TEST_F(ChromeRenderViewTest, ImagesAllowedByDefault) {
+TEST_F(ContentSettingsObserverBrowserTest, ImagesAllowedByDefault) {
   MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
                                             registry_.get());
 
@@ -268,7 +288,7 @@ TEST_F(ChromeRenderViewTest, ImagesAllowedByDefault) {
   observer->SetContentSettingRules(&content_setting_rules);
   EXPECT_CALL(mock_observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES,
                                               base::string16())).Times(0);
-  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url_));
+  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url()));
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 
   // Create an exception which blocks the image.
@@ -276,16 +296,16 @@ TEST_F(ChromeRenderViewTest, ImagesAllowedByDefault) {
       image_setting_rules.begin(),
       ContentSettingPatternSource(
           ContentSettingsPattern::Wildcard(),
-          ContentSettingsPattern::FromString(mock_observer.image_origin_),
+          ContentSettingsPattern::FromString(mock_observer.image_origin()),
           content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
           std::string(), false));
   EXPECT_CALL(mock_observer,
               OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES, base::string16()));
-  EXPECT_FALSE(observer->AllowImage(true, mock_observer.image_url_));
+  EXPECT_FALSE(observer->AllowImage(true, mock_observer.image_url()));
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
-TEST_F(ChromeRenderViewTest, ContentSettingsBlockScripts) {
+TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsBlockScripts) {
   // Set the content settings for scripts.
   RendererContentSettingRules content_setting_rules;
   ContentSettingsForOneType& script_setting_rules =
@@ -300,27 +320,14 @@ TEST_F(ChromeRenderViewTest, ContentSettingsBlockScripts) {
   observer->SetContentSettingRules(&content_setting_rules);
 
   // Load a page which contains a script.
-  const char kHtml[] =
-      "<html>"
-      "<head>"
-      "<script src='data:foo'></script>"
-      "</head>"
-      "<body>"
-      "</body>"
-      "</html>";
-  LoadHTML(kHtml);
+  LoadHTML(kScriptHtml);
 
   // Verify that the script was blocked.
-  bool was_blocked = false;
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(i);
-    if (msg->type() == ChromeViewHostMsg_ContentBlocked::ID)
-      was_blocked = true;
-  }
-  EXPECT_TRUE(was_blocked);
+  EXPECT_TRUE(render_thread_->sink().GetFirstMessageMatching(
+      ChromeViewHostMsg_ContentBlocked::ID));
 }
 
-TEST_F(ChromeRenderViewTest, ContentSettingsAllowScripts) {
+TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsAllowScripts) {
   // Set the content settings for scripts.
   RendererContentSettingRules content_setting_rules;
   ContentSettingsForOneType& script_setting_rules =
@@ -335,30 +342,17 @@ TEST_F(ChromeRenderViewTest, ContentSettingsAllowScripts) {
   observer->SetContentSettingRules(&content_setting_rules);
 
   // Load a page which contains a script.
-  const char kHtml[] =
-      "<html>"
-      "<head>"
-      "<script src='data:foo'></script>"
-      "</head>"
-      "<body>"
-      "</body>"
-      "</html>";
-  LoadHTML(kHtml);
+  LoadHTML(kScriptHtml);
 
   // Verify that the script was not blocked.
-  bool was_blocked = false;
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(i);
-    if (msg->type() == ChromeViewHostMsg_ContentBlocked::ID)
-      was_blocked = true;
-  }
-  EXPECT_FALSE(was_blocked);
+  EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
+      ChromeViewHostMsg_ContentBlocked::ID));
 }
 
 // Regression test for crbug.com/232410: Load a page with JS blocked. Then,
 // allow JS and reload the page. In each case, only one of noscript or script
 // tags should be enabled, but never both.
-TEST_F(ChromeRenderViewTest, ContentSettingsNoscriptTag) {
+TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsNoscriptTag) {
   // 1. Block JavaScript.
   RendererContentSettingRules content_setting_rules;
   ContentSettingsForOneType& script_setting_rules =
@@ -422,28 +416,16 @@ TEST_F(ChromeRenderViewTest, ContentSettingsNoscriptTag) {
 
 // Checks that same document navigations don't update content settings for the
 // page.
-TEST_F(ChromeRenderViewTest, ContentSettingsSameDocumentNavigation) {
+TEST_F(ContentSettingsObserverBrowserTest,
+       ContentSettingsSameDocumentNavigation) {
   MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
                                             registry_.get());
   // Load a page which contains a script.
-  const char kHtml[] =
-      "<html>"
-      "<head>"
-      "<script src='data:foo'></script>"
-      "</head>"
-      "<body>"
-      "</body>"
-      "</html>";
-  LoadHTML(kHtml);
+  LoadHTML(kScriptHtml);
 
   // Verify that the script was not blocked.
-  bool was_blocked = false;
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(i);
-    if (msg->type() == ChromeViewHostMsg_ContentBlocked::ID)
-      was_blocked = true;
-  }
-  EXPECT_FALSE(was_blocked);
+  EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
+      ChromeViewHostMsg_ContentBlocked::ID));
 
   // Block JavaScript.
   RendererContentSettingRules content_setting_rules;
@@ -464,7 +446,7 @@ TEST_F(ChromeRenderViewTest, ContentSettingsSameDocumentNavigation) {
   EXPECT_TRUE(observer->AllowScript(true));
 }
 
-TEST_F(ChromeRenderViewTest, ContentSettingsInterstitialPages) {
+TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsInterstitialPages) {
   MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
                                             registry_.get());
   // Block scripts.
@@ -489,33 +471,20 @@ TEST_F(ChromeRenderViewTest, ContentSettingsInterstitialPages) {
   observer->OnSetAsInterstitial();
 
   // Load a page which contains a script.
-  const char kHtml[] =
-      "<html>"
-      "<head>"
-      "<script src='data:foo'></script>"
-      "</head>"
-      "<body>"
-      "</body>"
-      "</html>";
-  LoadHTML(kHtml);
+  LoadHTML(kScriptHtml);
 
   // Verify that the script was allowed.
-  bool was_blocked = false;
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(i);
-    if (msg->type() == ChromeViewHostMsg_ContentBlocked::ID)
-      was_blocked = true;
-  }
-  EXPECT_FALSE(was_blocked);
+  EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
+      ChromeViewHostMsg_ContentBlocked::ID));
 
   // Verify that images are allowed.
   EXPECT_CALL(mock_observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES,
                                               base::string16())).Times(0);
-  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url_));
+  EXPECT_TRUE(observer->AllowImage(true, mock_observer.image_url()));
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
-TEST_F(ChromeRenderViewTest, AutoplayContentSettings) {
+TEST_F(ContentSettingsObserverBrowserTest, AutoplayContentSettings) {
   MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
                                             registry_.get());
 

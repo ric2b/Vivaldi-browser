@@ -17,13 +17,14 @@ namespace blink {
 class CSSLengthNonInterpolableValue : public NonInterpolableValue {
  public:
   ~CSSLengthNonInterpolableValue() final { NOTREACHED(); }
-  static RefPtr<CSSLengthNonInterpolableValue> Create(bool has_percentage) {
+  static scoped_refptr<CSSLengthNonInterpolableValue> Create(
+      bool has_percentage) {
     DEFINE_STATIC_REF(CSSLengthNonInterpolableValue, singleton,
-                      AdoptRef(new CSSLengthNonInterpolableValue()));
+                      base::AdoptRef(new CSSLengthNonInterpolableValue()));
     DCHECK(singleton);
     return has_percentage ? singleton : nullptr;
   }
-  static RefPtr<CSSLengthNonInterpolableValue> Merge(
+  static scoped_refptr<CSSLengthNonInterpolableValue> Merge(
       const NonInterpolableValue* a,
       const NonInterpolableValue* b) {
     return Create(HasPercentage(a) || HasPercentage(b));
@@ -120,8 +121,8 @@ PairwiseInterpolationValue LengthInterpolationFunctions::MergeSingles(
     InterpolationValue&& end) {
   return PairwiseInterpolationValue(
       std::move(start.interpolable_value), std::move(end.interpolable_value),
-      CSSLengthNonInterpolableValue::Merge(start.non_interpolable_value.Get(),
-                                           end.non_interpolable_value.Get()));
+      CSSLengthNonInterpolableValue::Merge(start.non_interpolable_value.get(),
+                                           end.non_interpolable_value.get()));
 }
 
 bool LengthInterpolationFunctions::NonInterpolableValuesAreCompatible(
@@ -134,14 +135,14 @@ bool LengthInterpolationFunctions::NonInterpolableValuesAreCompatible(
 
 void LengthInterpolationFunctions::Composite(
     std::unique_ptr<InterpolableValue>& underlying_interpolable_value,
-    RefPtr<NonInterpolableValue>& underlying_non_interpolable_value,
+    scoped_refptr<NonInterpolableValue>& underlying_non_interpolable_value,
     double underlying_fraction,
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value) {
   underlying_interpolable_value->ScaleAndAdd(underlying_fraction,
                                              interpolable_value);
   underlying_non_interpolable_value = CSSLengthNonInterpolableValue::Merge(
-      underlying_non_interpolable_value.Get(), non_interpolable_value);
+      underlying_non_interpolable_value.get(), non_interpolable_value);
 }
 
 void LengthInterpolationFunctions::SubtractFromOneHundredPercent(

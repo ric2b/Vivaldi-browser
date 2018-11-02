@@ -11,7 +11,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -21,6 +20,7 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/data_driven_test.h"
+#include "components/autofill/core/browser/form_data_importer.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
@@ -117,7 +117,7 @@ class PersonalDataManagerMock : public PersonalDataManager {
 
   // PersonalDataManager:
   std::string SaveImportedProfile(const AutofillProfile& profile) override;
-  std::vector<AutofillProfile*> web_profiles() const override;
+  std::vector<AutofillProfile*> GetProfiles() const override;
 
  private:
   std::vector<std::unique_ptr<AutofillProfile>> profiles_;
@@ -142,11 +142,11 @@ std::string PersonalDataManagerMock::SaveImportedProfile(
   std::string merged_guid =
       MergeProfile(profile, &profiles_, "en-US", &profiles);
   if (merged_guid == profile.guid())
-    profiles_.push_back(base::MakeUnique<AutofillProfile>(profile));
+    profiles_.push_back(std::make_unique<AutofillProfile>(profile));
   return merged_guid;
 }
 
-std::vector<AutofillProfile*> PersonalDataManagerMock::web_profiles() const {
+std::vector<AutofillProfile*> PersonalDataManagerMock::GetProfiles() const {
   std::vector<AutofillProfile*> result;
   for (const auto& profile : profiles_)
     result.push_back(profile.get());
@@ -182,6 +182,7 @@ class AutofillMergeTest : public DataDrivenTest,
   ServerFieldType StringToFieldType(const std::string& str);
 
   PersonalDataManagerMock personal_data_;
+  std::unique_ptr<FormDataImporter> form_data_importer_;
 
  private:
   std::map<std::string, ServerFieldType> string_to_field_type_map_;
@@ -202,6 +203,9 @@ AutofillMergeTest::~AutofillMergeTest() {
 
 void AutofillMergeTest::SetUp() {
   test::DisableSystemServices(nullptr);
+  form_data_importer_ = std::make_unique<FormDataImporter>(
+      /*AutofillClient=*/nullptr,
+      /*payments::PaymentsClient=*/nullptr, &personal_data_, "en");
 }
 
 void AutofillMergeTest::TearDown() {
@@ -272,8 +276,11 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
       // Import the profile.
       std::unique_ptr<CreditCard> imported_credit_card;
       bool imported_credit_card_matches_masked_server_credit_card;
-      personal_data_.ImportFormData(
-          form_structure, false, &imported_credit_card,
+      form_data_importer_->ImportFormData(
+          form_structure,
+          true,   // credit card autofill enabled
+          false,  // should return local card
+          &imported_credit_card,
           &imported_credit_card_matches_masked_server_credit_card);
       EXPECT_FALSE(imported_credit_card);
 
@@ -282,7 +289,7 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
     }
   }
 
-  *merged_profiles = SerializeProfiles(personal_data_.web_profiles());
+  *merged_profiles = SerializeProfiles(personal_data_.GetProfiles());
 }
 
 ServerFieldType AutofillMergeTest::StringToFieldType(const std::string& str) {
@@ -290,7 +297,9 @@ ServerFieldType AutofillMergeTest::StringToFieldType(const std::string& str) {
 }
 
 TEST_P(AutofillMergeTest, DataDrivenMergeProfiles) {
-  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName));
+  const bool kIsExpectedToPass = true;
+  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName),
+                       kIsExpectedToPass);
 }
 
 INSTANTIATE_TEST_CASE_P(, AutofillMergeTest, testing::ValuesIn(GetTestFiles()));

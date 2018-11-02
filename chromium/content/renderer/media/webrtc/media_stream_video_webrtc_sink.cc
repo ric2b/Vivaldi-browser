@@ -16,7 +16,6 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
-#include "content/common/media/media_stream_options.h"
 #include "content/public/common/content_features.h"
 #include "content/public/renderer/media_stream_utils.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
@@ -214,8 +213,8 @@ void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::
   // thread, it should be released on the render thread.
   base::AutoLock auto_lock(capture_adapter_stop_lock_);
   // |video_source| owns |capture_adapter_|.
-  capture_adapter_ = NULL;
-  video_source_ = NULL;
+  capture_adapter_ = nullptr;
+  video_source_ = nullptr;
 }
 
 void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::SetContentHint(

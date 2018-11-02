@@ -14,9 +14,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "components/safe_browsing_db/v4_get_hash_protocol_manager.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
-#include "components/safe_browsing_db/v4_test_util.h"
+#include "components/safe_browsing/db/v4_get_hash_protocol_manager.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/v4_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -319,7 +319,7 @@ TEST_F(LocalDatabaseManagerTest, ServiceStopWithPendingChecks) {
 
   // Start the service and flush tasks to ensure database is made available.
   db_manager->StartOnIOThread(NULL, GetTestV4ProtocolConfig());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(db_manager->DatabaseAvailable());
 
@@ -333,7 +333,7 @@ TEST_F(LocalDatabaseManagerTest, ServiceStopWithPendingChecks) {
 
   // Now run posted tasks, whish should include the extension check which has
   // been posted to the safe browsing task runner. This should not crash.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   base::RunLoop().RunUntilIdle();
 }
 

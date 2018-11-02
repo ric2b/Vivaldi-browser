@@ -56,7 +56,12 @@ TEST(TranslateAcceptLanguagesTest, TestCanBeAcceptLanguage) {
   EXPECT_TRUE(TranslateAcceptLanguages::CanBeAcceptLanguage("en"));
   EXPECT_TRUE(TranslateAcceptLanguages::CanBeAcceptLanguage("en-US"));
   EXPECT_TRUE(TranslateAcceptLanguages::CanBeAcceptLanguage("es"));
+  EXPECT_TRUE(TranslateAcceptLanguages::CanBeAcceptLanguage("es-419"));
   EXPECT_TRUE(TranslateAcceptLanguages::CanBeAcceptLanguage("zh-CN"));
+
+  // Not valid format.
+  EXPECT_FALSE(TranslateAcceptLanguages::CanBeAcceptLanguage("en-us"));
+  EXPECT_FALSE(TranslateAcceptLanguages::CanBeAcceptLanguage("zh-Hant"));
 
   // Not valid language.
   EXPECT_FALSE(TranslateAcceptLanguages::CanBeAcceptLanguage("xx"));

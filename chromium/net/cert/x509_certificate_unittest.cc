@@ -24,7 +24,6 @@
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "url/url_features.h"
 
 using base::HexEncode;
 using base::Time;
@@ -266,7 +265,6 @@ TEST(X509CertificateTest, UnescapedSpecialCharacters) {
   EXPECT_EQ(0U, subject.domain_components.size());
 }
 
-#if BUILDFLAG(USE_BYTE_CERTS)
 TEST(X509CertificateTest, InvalidPrintableStringIsUtf8) {
   base::FilePath certs_dir =
       GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
@@ -297,7 +295,6 @@ TEST(X509CertificateTest, InvalidPrintableStringIsUtf8) {
   const CertPrincipal& subject = cert->subject();
   EXPECT_EQ("Foo@#_ Clïênt Cërt", subject.common_name);
 }
-#endif
 
 TEST(X509CertificateTest, TeletexStringIsLatin1) {
   base::FilePath certs_dir =
@@ -332,7 +329,7 @@ TEST(X509CertificateTest, TeletexStringControlChars) {
       subject.organization_names[0]);
 }
 
-TEST(X509CertificateTest, TeletexStringIsLatin1OrCp1252) {
+TEST(X509CertificateTest, TeletexStringIsLatin1NotCp1252) {
   base::FilePath certs_dir =
       GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
 
@@ -341,28 +338,14 @@ TEST(X509CertificateTest, TeletexStringIsLatin1OrCp1252) {
   ASSERT_TRUE(cert);
 
   const CertPrincipal& subject = cert->subject();
-#if (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (BUILDFLAG(USE_BYTE_CERTS) && !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES))
-  // Mac: TeletexString is decoded as CP1252.
-  // use_byte_certs: ICU ISO-8859-1 seems to be CP1252 actually.
-  //   (but with use_platform_icu_alternatives it's not.)
-  EXPECT_EQ(
-      "~\x7F\xE2\x82\xAC\xC2\x81\xE2\x80\x9A\xC6\x92\xE2\x80\x9E\xE2\x80\xA6"
-      "\xE2\x80\xA0\xE2\x80\xA1\xCB\x86\xE2\x80\xB0\xC5\xA0\xE2\x80\xB9\xC5\x92"
-      "\xC2\x8D\xC5\xBD\xC2\x8F\xC2\x90\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2"
-      "\x80\x9D\xE2\x80\xA2\xE2\x80\x93\xE2\x80\x94\xCB\x9C\xE2\x84\xA2\xC5\xA1"
-      "\xE2\x80\xBA\xC5\x93\xC2\x9D\xC5\xBE\xC5\xB8\xC2\xA0",
-      subject.organization_names[0]);
-#else
-  // NSS, Win, Android, iOS: TeletexString is decoded as latin1, so 127-160 get
-  // decoded to equivalent unicode control chars.
+  // TeletexString is decoded as latin1, so 127-160 get decoded to equivalent
+  // unicode control chars.
   EXPECT_EQ(
       "~\x7F\xC2\x80\xC2\x81\xC2\x82\xC2\x83\xC2\x84\xC2\x85\xC2\x86\xC2\x87"
       "\xC2\x88\xC2\x89\xC2\x8A\xC2\x8B\xC2\x8C\xC2\x8D\xC2\x8E\xC2\x8F\xC2\x90"
       "\xC2\x91\xC2\x92\xC2\x93\xC2\x94\xC2\x95\xC2\x96\xC2\x97\xC2\x98\xC2\x99"
       "\xC2\x9A\xC2\x9B\xC2\x9C\xC2\x9D\xC2\x9E\xC2\x9F\xC2\xA0",
       subject.organization_names[0]);
-#endif
 }
 
 TEST(X509CertificateTest, TeletexStringIsNotARealT61String) {
@@ -512,29 +495,6 @@ TEST(X509CertificateTest, CAFingerprints) {
                                         intermediates);
   ASSERT_TRUE(cert_chain3);
 
-  SHA256HashValue cert_chain1_ca_fingerprint_256 = {
-      {0x51, 0x15, 0x30, 0x49, 0x97, 0x54, 0xf8, 0xb4, 0x17, 0x41, 0x6b,
-       0x58, 0x78, 0xb0, 0x89, 0xd2, 0xc3, 0xae, 0x66, 0xc1, 0x16, 0x80,
-       0xa0, 0x78, 0xe7, 0x53, 0x45, 0xa2, 0xfb, 0x80, 0xe1, 0x07}};
-  SHA256HashValue cert_chain2_ca_fingerprint_256 = {
-      {0x00, 0xbd, 0x2b, 0x0e, 0xdd, 0x83, 0x40, 0xb1, 0x74, 0x6c, 0xc3,
-       0x95, 0xc0, 0xe3, 0x55, 0xb2, 0x16, 0x58, 0x53, 0xfd, 0xb9, 0x3c,
-       0x52, 0xda, 0xdd, 0xa8, 0x22, 0x8b, 0x07, 0x00, 0x2d, 0xce}};
-  // The SHA-256 hash of nothing.
-  SHA256HashValue cert_chain3_ca_fingerprint_256 = {
-      {0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4,
-       0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b,
-       0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55}};
-  EXPECT_EQ(cert_chain1_ca_fingerprint_256,
-            X509Certificate::CalculateCAFingerprint256(
-                cert_chain1->GetIntermediateCertificates()));
-  EXPECT_EQ(cert_chain2_ca_fingerprint_256,
-            X509Certificate::CalculateCAFingerprint256(
-                cert_chain2->GetIntermediateCertificates()));
-  EXPECT_EQ(cert_chain3_ca_fingerprint_256,
-            X509Certificate::CalculateCAFingerprint256(
-                cert_chain3->GetIntermediateCertificates()));
-
   SHA256HashValue cert_chain1_chain_fingerprint_256 = {
       {0xac, 0xff, 0xcc, 0x63, 0x0d, 0xd0, 0xa7, 0x19, 0x78, 0xb5, 0x8a,
        0x47, 0x8b, 0x67, 0x97, 0xcb, 0x8d, 0xe1, 0x6a, 0x8a, 0x57, 0x70,
@@ -548,17 +508,11 @@ TEST(X509CertificateTest, CAFingerprints) {
        0x6a, 0xa6, 0x02, 0x73, 0x30, 0x3e, 0x34, 0x1b, 0x43, 0xc2, 0x7c,
        0x98, 0x52, 0x9f, 0x34, 0x7f, 0x55, 0x97, 0xe9, 0x1a, 0x10}};
   EXPECT_EQ(cert_chain1_chain_fingerprint_256,
-            X509Certificate::CalculateChainFingerprint256(
-                cert_chain1->os_cert_handle(),
-                cert_chain1->GetIntermediateCertificates()));
+            cert_chain1->CalculateChainFingerprint256());
   EXPECT_EQ(cert_chain2_chain_fingerprint_256,
-            X509Certificate::CalculateChainFingerprint256(
-                cert_chain2->os_cert_handle(),
-                cert_chain2->GetIntermediateCertificates()));
+            cert_chain2->CalculateChainFingerprint256());
   EXPECT_EQ(cert_chain3_chain_fingerprint_256,
-            X509Certificate::CalculateChainFingerprint256(
-                cert_chain3->os_cert_handle(),
-                cert_chain3->GetIntermediateCertificates()));
+            cert_chain3->CalculateChainFingerprint256());
 }
 
 TEST(X509CertificateTest, ParseSubjectAltNames) {
@@ -636,26 +590,6 @@ TEST(X509CertificateTest, ExtractSPKIFromDERCert) {
   EXPECT_EQ(0, memcmp(hash, kNistSPKIHash, sizeof(hash)));
 }
 
-TEST(X509CertificateTest, ExtractCRLURLsFromDERCert) {
-  base::FilePath certs_dir = GetTestCertsDirectory();
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(certs_dir, "nist.der");
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), cert.get());
-
-  std::string derBytes;
-  EXPECT_TRUE(X509Certificate::GetDEREncoded(cert->os_cert_handle(),
-                                             &derBytes));
-
-  std::vector<base::StringPiece> crl_urls;
-  EXPECT_TRUE(asn1::ExtractCRLURLsFromDERCert(derBytes, &crl_urls));
-
-  EXPECT_EQ(1u, crl_urls.size());
-  if (crl_urls.size() > 0) {
-    EXPECT_EQ("http://SVRSecure-G3-crl.verisign.com/SVRSecureG3.crl",
-              crl_urls[0].as_string());
-  }
-}
-
 TEST(X509CertificateTest, HasTLSFeatureExtension) {
   base::FilePath certs_dir = GetTestCertsDirectory();
   scoped_refptr<X509Certificate> cert =
@@ -682,7 +616,7 @@ TEST(X509CertificateTest, DoesNotHaveTLSFeatureExtension) {
   EXPECT_FALSE(asn1::HasTLSFeatureExtension(derBytes));
 }
 
-// Tests X509CertificateCache via X509Certificate::CreateFromHandle.  We
+// Tests OSCertHandle deduping via X509Certificate::CreateFromHandle.  We
 // call X509Certificate::CreateFromHandle several times and observe whether
 // it returns a cached or new OSCertHandle.
 TEST(X509CertificateTest, Cache) {
@@ -747,7 +681,7 @@ TEST(X509CertificateTest, Pickle) {
   intermediates.push_back(thawte_cert_handle);
   scoped_refptr<X509Certificate> cert = X509Certificate::CreateFromHandle(
       google_cert_handle, intermediates);
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), cert.get());
+  ASSERT_TRUE(cert);
 
   X509Certificate::FreeOSCertHandle(google_cert_handle);
   X509Certificate::FreeOSCertHandle(thawte_cert_handle);
@@ -757,9 +691,8 @@ TEST(X509CertificateTest, Pickle) {
 
   base::PickleIterator iter(pickle);
   scoped_refptr<X509Certificate> cert_from_pickle =
-      X509Certificate::CreateFromPickle(
-          &iter, X509Certificate::PICKLETYPE_CERTIFICATE_CHAIN_V3);
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), cert_from_pickle.get());
+      X509Certificate::CreateFromPickle(&iter);
+  ASSERT_TRUE(cert_from_pickle);
   EXPECT_TRUE(X509Certificate::IsSameOSCert(
       cert->os_cert_handle(), cert_from_pickle->os_cert_handle()));
   const X509Certificate::OSCertHandles& cert_intermediates =
@@ -1038,7 +971,7 @@ const struct CertificateFormatTestData {
 class X509CertificateParseTest
     : public testing::TestWithParam<CertificateFormatTestData> {
  public:
-  virtual ~X509CertificateParseTest() {}
+  virtual ~X509CertificateParseTest() = default;
   void SetUp() override { test_data_ = GetParam(); }
   void TearDown() override {}
 
@@ -1330,14 +1263,7 @@ const struct PublicKeyInfoTestData {
      X509Certificate::kPublicKeyTypeRSA},
     {"prime256v1-ecdsa-ee-by-1024-rsa-intermediate.pem", 256,
      X509Certificate::kPublicKeyTypeECDSA},
-#if defined(OS_MACOSX) && !defined(OS_IOS) && !BUILDFLAG(USE_BYTE_CERTS)
-    // OS X has an key length limit of 4096 bits. This should manifest as an
-    // unknown key. If a future version of OS X changes this, large_key.pem may
-    // need to be renegerated with a larger key. See https://crbug.com/472291.
-    {"large_key.pem", 0, X509Certificate::kPublicKeyTypeUnknown},
-#else
     {"large_key.pem", 8200, X509Certificate::kPublicKeyTypeRSA},
-#endif
 };
 
 class X509CertificatePublicKeyInfoTest

@@ -4,9 +4,6 @@
 
 #include "ui/gl/gl_surface_glx.h"
 
-extern "C" {
-#include <X11/Xlib.h>
-}
 #include <memory>
 
 #include "base/command_line.h"
@@ -25,6 +22,7 @@ extern "C" {
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/events/platform/platform_event_source.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_connection.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
@@ -115,7 +113,7 @@ GLXFBConfig GetConfigForWindow(Display* display,
 bool CreateDummyWindow(Display* display) {
   DCHECK(display);
   gfx::AcceleratedWidget parent_window =
-      RootWindow(display, DefaultScreen(display));
+      XRootWindow(display, DefaultScreen(display));
   gfx::AcceleratedWidget window =
       XCreateWindow(display, parent_window, 0, 0, 1, 1, 0, CopyFromParent,
                     InputOutput, CopyFromParent, 0, nullptr);
@@ -124,6 +122,11 @@ bool CreateDummyWindow(Display* display) {
     return false;
   }
   GLXFBConfig config = GetConfigForWindow(display, window);
+  if (!config) {
+    LOG(ERROR) << "Failed to get GLXConfig";
+    XDestroyWindow(display, window);
+    return false;
+  }
   GLXWindow glx_window = glXCreateWindow(display, config, window, nullptr);
   if (!glx_window) {
     LOG(ERROR) << "glXCreateWindow failed";
@@ -212,7 +215,7 @@ class SGIVideoSyncProviderThreadShim {
         vsync_lock_() {
     // This ensures that creation of |parent_window_| has occured when this shim
     // is executing in the same thread as the call to create |parent_window_|.
-    XSync(g_display, False);
+    XSync(g_display, x11::False);
   }
 
   virtual ~SGIVideoSyncProviderThreadShim() {
@@ -239,7 +242,10 @@ class SGIVideoSyncProviderThreadShim {
     }
 
     GLXFBConfig config = GetConfigForWindow(display_, window_);
-    DCHECK(config);
+    if (!config) {
+      LOG(ERROR) << "video_sync: Failed to get GLXConfig";
+      return;
+    }
 
     glx_window_ = glXCreateWindow(display_, config, window_, nullptr);
     if (!glx_window_) {
@@ -249,8 +255,8 @@ class SGIVideoSyncProviderThreadShim {
 
     // Create the context only once for all vsync providers.
     if (!context_) {
-      context_ =
-        glXCreateNewContext(display_, config, GLX_RGBA_TYPE, nullptr, True);
+      context_ = glXCreateNewContext(display_, config, GLX_RGBA_TYPE, nullptr,
+                                     x11::True);
       if (!context_)
         LOG(ERROR) << "video_sync: glXCreateNewContext failed";
     }
@@ -394,20 +400,15 @@ bool GLSurfaceGLX::InitializeOneOff() {
   // http://crbug.com/245466
   setenv("force_s3tc_enable", "true", 1);
 
-  {
-    // As a hack to avoid sandbox threading violation on certain NVidia drivers,
-    // this block of code needs to be put before gfx::InitializeThreadedX11().
-    // See crbug.com/756885.
-    g_display = gfx::GetXDisplay();
-    if (!g_display) {
-      LOG(ERROR) << "XOpenDisplay failed.";
-      return false;
-    }
-    glXQueryExtensionsString(g_display, 0);
-  }
   // SGIVideoSyncProviderShim (if instantiated) will issue X commands on
   // it's own thread.
   gfx::InitializeThreadedX11();
+
+  g_display = gfx::GetXDisplay();
+  if (!g_display) {
+    LOG(ERROR) << "XOpenDisplay failed.";
+    return false;
+  }
 
   int major, minor;
   if (!glXQueryVersion(g_display, &major, &minor)) {
@@ -473,6 +474,27 @@ bool GLSurfaceGLX::InitializeExtensionSettingsOneOff() {
     SGIVideoSyncProviderThreadShim::display_ = video_sync_display;
   }
   return true;
+}
+
+// static
+void GLSurfaceGLX::ShutdownOneOff() {
+  initialized_ = false;
+  g_display = nullptr;
+  g_glx_context_create = false;
+  g_glx_create_context_robustness_supported = false;
+  g_glx_create_context_profile_supported = false;
+  g_glx_create_context_profile_es2_supported = false;
+  g_glx_texture_from_pixmap_supported = false;
+  g_glx_oml_sync_control_supported = false;
+
+  g_glx_get_msc_rate_oml_supported = false;
+  g_glx_ext_swap_control_supported = false;
+  g_glx_mesa_swap_control_supported = false;
+  g_glx_sgi_video_sync_supported = false;
+
+  g_visual = nullptr;
+  g_depth = CopyFromParent;
+  g_colormap = CopyFromParent;
 }
 
 // static
@@ -562,14 +584,25 @@ bool NativeViewGLSurfaceGLX::Initialize(GLSurfaceFormat format) {
   window_ = XCreateWindow(g_display, parent_window_, 0, 0, size_.width(),
                           size_.height(), 0, CopyFromParent, InputOutput,
                           CopyFromParent, CWBackPixmap | CWBitGravity, &swa);
+  if (!window_) {
+    LOG(ERROR) << "XCreateWindow failed";
+    return false;
+  }
   XMapWindow(g_display, window_);
 
   RegisterEvents();
   XFlush(g_display);
 
   GetConfig();
-  DCHECK(config_);
+  if (!config_) {
+    LOG(ERROR) << "Failed to get GLXConfig";
+    return false;
+  }
   glx_window_ = glXCreateWindow(g_display, config_, window_, NULL);
+  if (!glx_window_) {
+    LOG(ERROR) << "glXCreateWindow failed";
+    return false;
+  }
 
   if (g_glx_oml_sync_control_supported) {
     vsync_provider_.reset(new OMLSyncControlVSyncProvider(glx_window_));
@@ -620,7 +653,9 @@ bool NativeViewGLSurfaceGLX::IsOffscreen() {
   return false;
 }
 
-gfx::SwapResult NativeViewGLSurfaceGLX::SwapBuffers() {
+gfx::SwapResult NativeViewGLSurfaceGLX::SwapBuffers(
+    const PresentationCallback& callback) {
+  // TODO(penghuang): Provide presentation feedback. https://crbug.com/776877
   TRACE_EVENT2("gpu", "NativeViewGLSurfaceGLX:RealSwapBuffers", "width",
                GetSize().width(), "height", GetSize().height());
   glXSwapBuffers(g_display, GetDrawableHandle());
@@ -653,10 +688,13 @@ unsigned long NativeViewGLSurfaceGLX::GetCompatibilityKey() {
   return visual_id_;
 }
 
-gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(int x,
-                                                      int y,
-                                                      int width,
-                                                      int height) {
+gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(
+    int x,
+    int y,
+    int width,
+    int height,
+    const PresentationCallback& callback) {
+  // TODO(penghuang): Provide presentation feedback. https://crbug.com/776877
   DCHECK(g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer);
   glXCopySubBufferMESA(g_display, GetDrawableHandle(), x, y, width, height);
   return gfx::SwapResult::SWAP_ACK;
@@ -673,7 +711,8 @@ NativeViewGLSurfaceGLX::~NativeViewGLSurfaceGLX() {
 void NativeViewGLSurfaceGLX::ForwardExposeEvent(XEvent* event) {
   XEvent forwarded_event = *event;
   forwarded_event.xexpose.window = parent_window_;
-  XSendEvent(g_display, parent_window_, False, ExposureMask, &forwarded_event);
+  XSendEvent(g_display, parent_window_, x11::False, ExposureMask,
+             &forwarded_event);
   XFlush(g_display);
 }
 
@@ -701,10 +740,21 @@ bool UnmappedNativeViewGLSurfaceGLX::Initialize(GLSurfaceFormat format) {
   window_ = XCreateWindow(g_display, parent_window, 0, 0, size_.width(),
                           size_.height(), 0, g_depth, InputOutput, g_visual,
                           CWBorderPixel | CWColormap, &attrs);
+  if (!window_) {
+    LOG(ERROR) << "XCreateWindow failed";
+    return false;
+  }
   GetConfig();
-  DCHECK(config_);
+  if (!config_) {
+    LOG(ERROR) << "Failed to get GLXConfig";
+    return false;
+  }
   glx_window_ = glXCreateWindow(g_display, config_, window_, NULL);
-  return window_ != 0;
+  if (!glx_window_) {
+    LOG(ERROR) << "glXCreateWindow failed";
+    return false;
+  }
+  return true;
 }
 
 void UnmappedNativeViewGLSurfaceGLX::Destroy() {
@@ -723,7 +773,8 @@ bool UnmappedNativeViewGLSurfaceGLX::IsOffscreen() {
   return true;
 }
 
-gfx::SwapResult UnmappedNativeViewGLSurfaceGLX::SwapBuffers() {
+gfx::SwapResult UnmappedNativeViewGLSurfaceGLX::SwapBuffers(
+    const PresentationCallback& callback) {
   NOTREACHED() << "Attempted to call SwapBuffers on an unmapped window.";
   return gfx::SwapResult::SWAP_FAILED;
 }

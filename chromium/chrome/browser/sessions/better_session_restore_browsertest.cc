@@ -19,8 +19,6 @@
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_impl.h"
@@ -42,6 +40,8 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -175,6 +175,7 @@ class BetterSessionRestoreTest : public InProcessBrowserTest {
     test_files.push_back("post_with_password.html");
     test_files.push_back("session_cookies.html");
     test_files.push_back("session_storage.html");
+    test_files.push_back("subdomain_cookies.html");
     base::FilePath test_file_dir;
     CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &test_file_dir));
     test_file_dir =
@@ -869,4 +870,26 @@ IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest, CookiesClearedOnCloseAllBrowsers) {
   DisableBackgroundMode();
   new_browser = QuitBrowserAndRestore(new_browser, true);
   StoreDataWithPage(new_browser, "cookies.html");
+}
+
+// Check that cookies are cleared on a wrench menu quit only if cookies are set
+// to current session only, regardless of whether background mode is enabled.
+IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest,
+                       SubdomainCookiesClearedOnCloseAllBrowsers) {
+  StoreDataWithPage("subdomain_cookies.html");
+
+  // Normally cookies are restored.
+  Browser* new_browser = QuitBrowserAndRestore(browser(), true);
+  NavigateAndCheckStoredData(new_browser, "subdomain_cookies.html");
+
+  // ... but not if the content setting is set to clear on exit.
+  auto cookie_settings =
+      CookieSettingsFactory::GetForProfile(new_browser->profile());
+  cookie_settings->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
+  cookie_settings->SetCookieSetting(GURL("http://www.test.com"),
+                                    CONTENT_SETTING_SESSION_ONLY);
+
+  // Cookie for .test.com is created on www.test.com and deleted on shutdown.
+  new_browser = QuitBrowserAndRestore(new_browser, true);
+  StoreDataWithPage(new_browser, "subdomain_cookies.html");
 }

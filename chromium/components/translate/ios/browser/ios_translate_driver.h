@@ -10,16 +10,13 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #include "components/translate/core/browser/translate_driver.h"
 #include "components/translate/ios/browser/language_detection_controller.h"
 #include "components/translate/ios/browser/translate_controller.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 
 @class CRWJSInjectionReceiver;
-
-namespace language {
-class UrlLanguageHistogram;
-}
 
 namespace web {
 class NavigationManager;
@@ -37,8 +34,7 @@ class IOSTranslateDriver : public TranslateDriver,
  public:
   IOSTranslateDriver(web::WebState* web_state,
                      web::NavigationManager* navigation_manager,
-                     TranslateManager* translate_manager,
-                     language::UrlLanguageHistogram* language_histogram);
+                     TranslateManager* translate_manager);
   ~IOSTranslateDriver() override;
 
   LanguageDetectionController* language_detection_controller() {
@@ -49,9 +45,14 @@ class IOSTranslateDriver : public TranslateDriver,
     return translate_controller_.get();
   }
 
+  // Creates a callback to be used when language detection occurs.
+  language::IOSLanguageDetectionTabHelper::Callback
+  CreateLanguageDetectionCallback();
+
   // web::WebStateObserver methods.
-  void NavigationItemCommitted(
-      const web::LoadCommittedDetails& load_details) override;
+  void DidFinishNavigation(web::WebState* web_state,
+                           web::NavigationContext* navigation_context) override;
+  void WebStateDestroyed(web::WebState* web_state) override;
 
   // TranslateDriver methods.
   void OnIsPageTranslatedChanged() override;
@@ -88,9 +89,8 @@ class IOSTranslateDriver : public TranslateDriver,
   // being destroyed.
   bool IsPageValid(int page_seq_no) const;
 
-  // Callback for LanguageDetectionController.
-  void OnLanguageDetermined(
-      const LanguageDetectionController::DetectionDetails& details);
+  // Used to kick off translation process.
+  void OnLanguageDetermined(const LanguageDetectionDetails& details);
 
   // TranslateController::Observer methods.
   void OnTranslateScriptReady(bool success,
@@ -100,17 +100,16 @@ class IOSTranslateDriver : public TranslateDriver,
                            const std::string& original_language,
                            double translation_time) override;
 
+  // The WebState this instance is observing. Will be null after
+  // WebStateDestroyed has been called.
+  web::WebState* web_state_ = nullptr;
+
   // The navigation manager of the tab we are associated with.
   web::NavigationManager* navigation_manager_;
-
-  // Model to be notified about detected language of every page visited.
-  language::UrlLanguageHistogram* language_histogram_;
 
   base::WeakPtr<TranslateManager> translate_manager_;
   std::unique_ptr<TranslateController> translate_controller_;
   std::unique_ptr<LanguageDetectionController> language_detection_controller_;
-  std::unique_ptr<LanguageDetectionController::CallbackList::Subscription>
-      language_detection_callback_subscription_;
 
   // An ever-increasing sequence number of the current page, used to match up
   // translation requests with responses.

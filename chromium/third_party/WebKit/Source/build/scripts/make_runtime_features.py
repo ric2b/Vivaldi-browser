@@ -31,31 +31,34 @@ import sys
 
 import json5_generator
 import name_utilities
+from name_utilities import class_member_name
 from name_utilities import lower_first
 import template_expander
 
 
 class RuntimeFeatureWriter(json5_generator.Writer):
     class_name = 'RuntimeEnabledFeatures'
+    file_basename = 'runtime_enabled_features'
 
     def __init__(self, json5_file_path):
         super(RuntimeFeatureWriter, self).__init__(json5_file_path)
-        self._outputs = {(self.class_name + '.h'): self.generate_header,
-                         (self.class_name + '.cpp'): self.generate_implementation,
+        self._outputs = {(self.file_basename + '.h'): self.generate_header,
+                         (self.file_basename + '.cc'): self.generate_implementation,
                         }
 
         self._features = self.json5_file.name_dictionaries
         # Make sure the resulting dictionaries have all the keys we expect.
         for feature in self._features:
             feature['first_lowered_name'] = lower_first(feature['name'])
+            feature['class_member_name'] = class_member_name(feature['name'])
             # Most features just check their isFooEnabled bool
             # but some depend on or are implied by other bools.
-            enabled_condition = 'is%sEnabled' % feature['name']
+            enabled_condition = 'is_%senabled_' % feature['class_member_name']
             assert not feature['implied_by'] or not feature['depends_on'], 'Only one of implied_by and depends_on is allowed'
             for implied_by_name in feature['implied_by']:
-                enabled_condition += ' || is%sEnabled' % implied_by_name
+                enabled_condition += ' || is_%senabled_' % class_member_name(implied_by_name)
             for dependant_name in feature['depends_on']:
-                enabled_condition += ' && is%sEnabled' % dependant_name
+                enabled_condition += ' && is_%senabled_' % class_member_name(dependant_name)
             feature['enabled_condition'] = enabled_condition
         self._standard_features = [feature for feature in self._features if not feature['custom']]
         self._origin_trial_features = [feature for feature in self._features if feature['origin_trial_feature_name']]
@@ -74,14 +77,35 @@ class RuntimeFeatureWriter(json5_generator.Writer):
             'origin_trial_controlled_features': self._origin_trial_features,
         }
 
-    @template_expander.use_jinja('templates/' + class_name + '.h.tmpl')
+    @template_expander.use_jinja('templates/' + file_basename + '.h.tmpl')
     def generate_header(self):
         return self._template_inputs()
 
-    @template_expander.use_jinja('templates/' + class_name + '.cpp.tmpl')
+    @template_expander.use_jinja('templates/' + file_basename + '.cc.tmpl')
     def generate_implementation(self):
         return self._template_inputs()
 
 
+class RuntimeFeatureTestHelpersWriter(json5_generator.Writer):
+    class_name = 'ScopedRuntimeEnabledFeatureForTest'
+    file_basename = 'RuntimeEnabledFeaturesTestHelpers'
+
+    def __init__(self, json5_file_path):
+        super(RuntimeFeatureTestHelpersWriter, self).__init__(json5_file_path)
+        self._outputs = {('testing/' + self.file_basename + '.h'): self.generate_header}
+
+        self._features = self.json5_file.name_dictionaries
+
+    def _template_inputs(self):
+        return {
+            'features': self._features,
+            'input_files': self._input_files,
+        }
+
+    @template_expander.use_jinja('templates/' + file_basename + '.h.tmpl')
+    def generate_header(self):
+        return self._template_inputs()
+
 if __name__ == '__main__':
     json5_generator.Maker(RuntimeFeatureWriter).main()
+    json5_generator.Maker(RuntimeFeatureTestHelpersWriter).main()

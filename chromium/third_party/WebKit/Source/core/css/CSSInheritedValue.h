@@ -21,8 +21,8 @@
 #ifndef CSSInheritedValue_h
 #define CSSInheritedValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/css/CSSValue.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -34,7 +34,7 @@ class CSSInheritedValue : public CSSValue {
 
   bool Equals(const CSSInheritedValue&) const { return true; }
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     CSSValue::TraceAfterDispatch(visitor);
   }
 

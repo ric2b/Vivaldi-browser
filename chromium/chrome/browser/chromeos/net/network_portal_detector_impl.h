@@ -29,6 +29,10 @@
 
 class NetworkingConfigTest;
 
+namespace base {
+class Value;
+}
+
 namespace net {
 class URLRequestContextGetter;
 }
@@ -46,19 +50,10 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
                                   public content::NotificationObserver,
                                   public PortalDetectorStrategy::Delegate {
  public:
-  static const char kOobeDetectionResultHistogram[];
-  static const char kOobeDetectionDurationHistogram[];
-  static const char kOobeShillOnlineHistogram[];
-  static const char kOobeShillPortalHistogram[];
-  static const char kOobeShillOfflineHistogram[];
-  static const char kOobePortalToOnlineHistogram[];
-
-  static const char kSessionDetectionResultHistogram[];
-  static const char kSessionDetectionDurationHistogram[];
-  static const char kSessionShillOnlineHistogram[];
-  static const char kSessionShillPortalHistogram[];
-  static const char kSessionShillOfflineHistogram[];
-  static const char kSessionPortalToOnlineHistogram[];
+  // The delay since the default network shill reports a portal network, used to
+  // record UMA. Public for tests.
+  static constexpr base::TimeDelta kDelaySinceShillPortalForUMA =
+      base::TimeDelta::FromSeconds(60);
 
   NetworkPortalDetectorImpl(
       const scoped_refptr<net::URLRequestContextGetter>& request_context,
@@ -225,6 +220,9 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
   // Connection state of the default network.
   std::string default_connection_state_;
 
+  // Proxy configuration of the default network.
+  std::unique_ptr<base::Value> default_proxy_config_;
+
   State state_ = STATE_IDLE;
   CaptivePortalStateMap portal_state_map_;
   base::ObserverList<Observer> observers_;
@@ -251,6 +249,10 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
 
   // Delay before next portal detection.
   base::TimeDelta next_attempt_delay_;
+
+  // Saves the most recent timestamp that shill reports |default_network_id_|
+  // network is portal network.
+  base::TimeTicks last_shill_reports_portal_time_;
 
   // Current detection strategy.
   std::unique_ptr<PortalDetectorStrategy> strategy_;

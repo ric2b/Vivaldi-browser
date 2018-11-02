@@ -5,10 +5,10 @@
 #ifndef OffscreenCanvasFrameDispatcher_h
 #define OffscreenCanvasFrameDispatcher_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/geometry/IntRect.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/WeakPtr.h"
 
 namespace blink {
@@ -23,10 +23,9 @@ class OffscreenCanvasFrameDispatcherClient {
 class PLATFORM_EXPORT OffscreenCanvasFrameDispatcher {
  public:
   virtual ~OffscreenCanvasFrameDispatcher() {}
-  virtual void DispatchFrame(RefPtr<StaticBitmapImage>,
+  virtual void DispatchFrame(scoped_refptr<StaticBitmapImage>,
                              double commit_start_time,
-                             const SkIRect& damage_rect,
-                             bool is_web_gl_software_rendering) = 0;
+                             const SkIRect& damage_rect) = 0;
   virtual void ReclaimResource(unsigned resource_id) = 0;
   virtual void SetNeedsBeginFrame(bool) = 0;
   virtual void SetSuspendAnimation(bool) = 0;

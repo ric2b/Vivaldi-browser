@@ -5,8 +5,8 @@
 #include "core/html/forms/OptionList.h"
 
 #include "core/dom/ElementTraversal.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 
 namespace blink {
 
@@ -23,11 +23,11 @@ void OptionListIterator::Advance(HTMLOptionElement* previous) {
     current = ElementTraversal::FirstChild(*select_);
   }
   while (current) {
-    if (isHTMLOptionElement(current)) {
-      current_ = toHTMLOptionElement(current);
+    if (auto* option = ToHTMLOptionElementOrNull(current)) {
+      current_ = option;
       return;
     }
-    if (isHTMLOptGroupElement(current) &&
+    if (IsHTMLOptGroupElement(current) &&
         current->parentNode() == select_.Get()) {
       if ((current_ = Traversal<HTMLOptionElement>::FirstChild(*current)))
         return;

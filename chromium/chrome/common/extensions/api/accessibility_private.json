@@ -55,7 +55,7 @@
       {
         "name": "setFocusRing",
         "type": "function",
-        "description": "Set the bounds of the accessibility focus ring.",
+        "description": "Sets the bounds of the accessibility focus ring.",
         "parameters": [
           {
             "name": "rects",
@@ -68,6 +68,24 @@
             "type": "string",
             "description": "CSS-style hex color string beginning with # like #FF9982 or #EEE.",
             "optional": true
+          }
+        ]
+      },
+      {
+        "name": "setHighlights",
+        "type": "function",
+        "description": "Sets the bounds of the accessibility highlight.",
+        "parameters": [
+          {
+            "name": "rects",
+            "type": "array",
+            "items": { "$ref": "ScreenRect" },
+            "description": "Array of rectangles to draw the highlight around."
+          },
+          {
+            "name": "color",
+            "type": "string",
+            "description": "CSS-style hex color string beginning with # like #FF9982 or #EEE."
           }
         ]
       },
@@ -115,6 +133,19 @@
               "maximum": 90  // 'z' key
             },
             "description": "The key codes for the keys that will be captured."
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "setNativeChromeVoxArcSupportForCurrentApp",
+        "type": "function",
+        "description": "Sets current ARC app to use native ARC support.",
+        "parameters": [
+          {
+            "name": "enabled",
+            "type": "boolean",
+            "description": "True for ChromeVox (native), false for TalkBack."
           }
         ],
         "platforms": ["chromeos"]

@@ -34,13 +34,13 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_usage/tab_id_annotator.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
-#include "chrome/browser/net/async_dns_field_trial.h"
 #include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/dns_probe_service.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/net/sth_distributor_provider.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/certificate_transparency/tree_state_tracker.h"
@@ -59,14 +59,14 @@
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/ignore_errors_cert_verifier.h"
 #include "content/public/browser/network_quality_observer_factory.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
+#include "content/public/network/ignore_errors_cert_verifier.h"
+#include "content/public/network/url_request_context_builder_mojo.h"
 #include "extensions/features/features.h"
-#include "net/base/logging_network_change_observer.h"
-#include "net/base/sdch_manager.h"
 #include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
@@ -94,11 +94,9 @@
 #include "net/proxy/proxy_service.h"
 #include "net/quic/chromium/quic_utils_chromium.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/socket/tcp_client_socket.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
-#include "net/url_request/url_request_context_builder_mojo.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "url/url_constants.h"
 
@@ -179,28 +177,25 @@ base::FilePath GetSSLKeyLogFile(const base::CommandLine& command_line) {
 std::unique_ptr<net::HostResolver> CreateGlobalHostResolver(
     net::NetLog* net_log) {
   TRACE_EVENT0("startup", "IOThread::CreateGlobalHostResolver");
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
 
-  net::HostResolver::Options options;
-  std::unique_ptr<net::HostResolver> global_host_resolver;
-#if defined OS_CHROMEOS
-  global_host_resolver =
-      chromeos::HostResolverImplChromeOS::CreateSystemResolver(options,
-                                                               net_log);
+#if defined(OS_CHROMEOS)
+  using resolver = chromeos::HostResolverImplChromeOS;
 #else
-  global_host_resolver =
-      net::HostResolver::CreateSystemResolver(options, net_log);
+  using resolver = net::HostResolver;
 #endif
+  std::unique_ptr<net::HostResolver> global_host_resolver =
+      resolver::CreateSystemResolver(net::HostResolver::Options(), net_log);
 
   // If hostname remappings were specified on the command-line, layer these
   // rules on top of the real host resolver. This allows forwarding all requests
   // through a designated test server.
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kHostResolverRules))
     return global_host_resolver;
 
-  std::unique_ptr<net::MappedHostResolver> remapped_resolver(
-      new net::MappedHostResolver(std::move(global_host_resolver)));
+  auto remapped_resolver = std::make_unique<net::MappedHostResolver>(
+      std::move(global_host_resolver));
   remapped_resolver->SetRulesFromString(
       command_line.GetSwitchValueASCII(switches::kHostResolverRules));
   return std::move(remapped_resolver);
@@ -284,8 +279,7 @@ SystemRequestContextLeakChecker::~SystemRequestContextLeakChecker() {
 
 IOThread::Globals::Globals()
     : system_request_context(nullptr),
-      system_request_context_leak_checker(this),
-      enable_brotli(false) {}
+      system_request_context_leak_checker(this) {}
 
 IOThread::Globals::~Globals() {}
 
@@ -303,6 +297,7 @@ IOThread::IOThread(
 #endif
       globals_(nullptr),
       is_quic_allowed_on_init_(true),
+      network_service_request_(mojo::MakeRequest(&ui_thread_network_service_)),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
@@ -331,7 +326,7 @@ IOThread::IOThread(
                  base::Unretained(this)));
   auth_android_negotiate_account_type_.MoveToThread(io_thread_proxy);
 #endif
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   gssapi_library_name_ = local_state->GetString(prefs::kGSSAPILibraryName);
 #endif
 #if defined(OS_CHROMEOS)
@@ -356,18 +351,25 @@ IOThread::IOThread(
           local_state,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
-  base::Value* dns_client_enabled_default =
-      new base::Value(chrome_browser_net::ConfigureAsyncDnsFieldTrial());
-  local_state->SetDefaultPrefValue(prefs::kBuiltInDnsClientEnabled,
-                                   dns_client_enabled_default);
-  chrome_browser_net::LogAsyncDnsPrefSource(
-      local_state->FindPreference(prefs::kBuiltInDnsClientEnabled));
+  local_state->SetDefaultPrefValue(
+      prefs::kBuiltInDnsClientEnabled,
+      base::Value(base::FeatureList::IsEnabled(features::kAsyncDns)));
 
   dns_client_enabled_.Init(prefs::kBuiltInDnsClientEnabled,
                            local_state,
                            base::Bind(&IOThread::UpdateDnsClientEnabled,
                                       base::Unretained(this)));
   dns_client_enabled_.MoveToThread(io_thread_proxy);
+
+#if defined(OS_POSIX)
+  local_state->SetDefaultPrefValue(
+      prefs::kNtlmV2Enabled,
+      base::Value(base::FeatureList::IsEnabled(features::kNtlmV2Enabled)));
+  ntlm_v2_enabled_.Init(
+      prefs::kNtlmV2Enabled, local_state,
+      base::Bind(&IOThread::UpdateNtlmV2Enabled, base::Unretained(this)));
+  ntlm_v2_enabled_.MoveToThread(io_thread_proxy);
+#endif
 
   quick_check_enabled_.Init(prefs::kQuickCheckEnabled,
                             local_state);
@@ -378,7 +380,7 @@ IOThread::IOThread(
   pac_https_url_stripping_enabled_.MoveToThread(io_thread_proxy);
 
   chrome_browser_net::SetGlobalSTHDistributor(
-      std::unique_ptr<net::ct::STHDistributor>(new net::ct::STHDistributor()));
+      std::make_unique<net::ct::STHDistributor>());
 
   BrowserThread::SetIOThreadDelegate(this);
 
@@ -427,7 +429,7 @@ net::URLRequestContextGetter* IOThread::system_url_request_context_getter() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!system_url_request_context_getter_.get()) {
     system_url_request_context_getter_ =
-        new SystemURLRequestContextGetter(this);
+        base::MakeRefCounted<SystemURLRequestContextGetter>(this);
   }
   return system_url_request_context_getter_.get();
 }
@@ -451,12 +453,6 @@ void IOThread::Init() {
   DCHECK(!globals_);
   globals_ = new Globals;
 
-  // Add an observer that will emit network change events to the ChromeNetLog.
-  // Assuming NetworkChangeNotifier dispatches in FIFO order, we should be
-  // logging the network change before other IO thread consumers respond to it.
-  network_change_observer_.reset(
-      new net::LoggingNetworkChangeObserver(net_log_));
-
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
 
@@ -467,23 +463,24 @@ void IOThread::Init() {
 
   std::unique_ptr<data_usage::DataUseAmortizer> data_use_amortizer;
 #if defined(OS_ANDROID)
-  data_use_amortizer.reset(new data_usage::android::TrafficStatsAmortizer());
+  data_use_amortizer =
+      std::make_unique<data_usage::android::TrafficStatsAmortizer>();
 #endif  // defined(OS_ANDROID)
 
   globals_->data_use_ascriber =
       base::MakeUnique<data_use_measurement::ChromeDataUseAscriber>();
 
-  globals_->data_use_aggregator.reset(new data_usage::DataUseAggregator(
-      std::unique_ptr<data_usage::DataUseAnnotator>(
-          new chrome_browser_data_usage::TabIdAnnotator()),
-      std::move(data_use_amortizer)));
+  globals_->data_use_aggregator =
+      std::make_unique<data_usage::DataUseAggregator>(
+          std::make_unique<chrome_browser_data_usage::TabIdAnnotator>(),
+          std::move(data_use_amortizer));
 
 #if defined(OS_ANDROID)
-  globals_->external_data_use_observer.reset(
-      new chrome::android::ExternalDataUseObserver(
+  globals_->external_data_use_observer =
+      std::make_unique<android::ExternalDataUseObserver>(
           globals_->data_use_aggregator.get(),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
 #endif  // defined(OS_ANDROID)
 
   std::map<std::string, std::string> network_quality_estimator_params;
@@ -505,15 +502,16 @@ void IOThread::Init() {
 
   std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
 #if defined(OS_ANDROID)
-  external_estimate_provider.reset(
-      new chrome::android::ExternalEstimateProviderAndroid());
+  external_estimate_provider =
+      std::make_unique<chrome::android::ExternalEstimateProviderAndroid>();
 #endif  // defined(OS_ANDROID)
   // Pass ownership.
-  globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
-      std::move(external_estimate_provider),
-      base::MakeUnique<net::NetworkQualityEstimatorParams>(
-          network_quality_estimator_params),
-      net_log_));
+  globals_->network_quality_estimator =
+      std::make_unique<net::NetworkQualityEstimator>(
+          std::move(external_estimate_provider),
+          base::MakeUnique<net::NetworkQualityEstimatorParams>(
+              network_quality_estimator_params),
+          net_log_);
   globals_->network_quality_observer = content::CreateNetworkQualityObserver(
       globals_->network_quality_estimator.get());
 
@@ -522,23 +520,14 @@ void IOThread::Init() {
 
   globals_->ct_logs.assign(ct_logs.begin(), ct_logs.end());
 
-  ct_tree_tracker_.reset(new certificate_transparency::TreeStateTracker(
-      globals_->ct_logs, net_log_));
+  ct_tree_tracker_ =
+      std::make_unique<certificate_transparency::TreeStateTracker>(
+          globals_->ct_logs, net_log_);
   // Register the ct_tree_tracker_ as observer for new STHs.
   RegisterSTHObserver(ct_tree_tracker_.get());
 
-  globals_->dns_probe_service.reset(new chrome_browser_net::DnsProbeService());
-  globals_->enable_brotli =
-      base::FeatureList::IsEnabled(features::kBrotliEncoding);
-
-  // Check for OS support of TCP FastOpen, and turn it on for all connections if
-  // indicated by user.
-  // TODO(rch): Make the client socket factory a per-network session instance,
-  // constructed from a NetworkSession::Params, to allow us to move this option
-  // to IOThread::Globals & HttpNetworkSession::Params.
-  bool always_enable_tfo_if_supported =
-      command_line.HasSwitch(switches::kEnableTcpFastOpen);
-  net::CheckSupportAndMaybeEnableTCPFastOpen(always_enable_tfo_if_supported);
+  globals_->dns_probe_service =
+      std::make_unique<chrome_browser_net::DnsProbeService>();
 
   if (command_line.HasSwitch(switches::kIgnoreUrlFetcherCertRequests))
     net::URLFetcher::SetIgnoreCertificateRequests(true);
@@ -552,10 +541,13 @@ void IOThread::Init() {
 #endif
 
 #if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
-  // Record how common CPUs with broken NEON units are. See
-  // https://crbug.com/341598.
   crypto::EnsureOpenSSLInit();
+  // Measure CPUs with broken NEON units. See https://crbug.com/341598.
   UMA_HISTOGRAM_BOOLEAN("Net.HasBrokenNEON", CRYPTO_has_broken_NEON());
+  // Measure Android kernels with missing AT_HWCAP2 auxv fields. See
+  // https://crbug.com/boringssl/46.
+  UMA_HISTOGRAM_BOOLEAN("Net.NeedsHWCAP2Workaround",
+                        CRYPTO_needs_hwcap2_workaround());
 #endif
 
   ConstructSystemRequestContext();
@@ -570,7 +562,7 @@ void IOThread::CleanUp() {
   net::ShutdownNSSHttpIO();
 #endif
 
-  system_url_request_context_getter_ = NULL;
+  system_url_request_context_getter_ = nullptr;
 
   // Unlink the ct_tree_tracker_ from the global cert_transparency_verifier
   // and unregister it from new STH notifications so it will take no actions
@@ -587,7 +579,7 @@ void IOThread::CleanUp() {
 #endif
 
 #if defined(OS_ANDROID)
-  net::CertVerifyProcAndroid::ShutdownCertNetFetcher();
+  net::ShutdownGlobalCertNetFetcher();
 #endif
 
   // Release objects that the net::URLRequestContext could have been pointing
@@ -596,12 +588,9 @@ void IOThread::CleanUp() {
   // Shutdown the HistogramWatcher on the IO thread.
   net::NetworkChangeNotifier::ShutdownHistogramWatcher();
 
-  // This must be reset before the ChromeNetLog is destroyed.
-  network_change_observer_.reset();
-
   system_proxy_config_service_.reset();
   delete globals_;
-  globals_ = NULL;
+  globals_ = nullptr;
 
   base::debug::LeakTracker<SystemURLRequestContextGetter>::CheckForLeaks();
 
@@ -626,15 +615,18 @@ void IOThread::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled, true);
   registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
   registry->RegisterBooleanPref(prefs::kPacHttpsUrlStrippingEnabled, true);
+#if defined(OS_POSIX)
+  registry->RegisterBooleanPref(prefs::kNtlmV2Enabled, false);
+#endif
 }
 
 void IOThread::UpdateServerWhitelist() {
-  globals_->http_auth_preferences->set_server_whitelist(
+  globals_->http_auth_preferences->SetServerWhitelist(
       auth_server_whitelist_.GetValue());
 }
 
 void IOThread::UpdateDelegateWhitelist() {
-  globals_->http_auth_preferences->set_delegate_whitelist(
+  globals_->http_auth_preferences->SetDelegateWhitelist(
       auth_delegate_whitelist_.GetValue());
 }
 
@@ -655,25 +647,34 @@ void IOThread::UpdateNegotiateEnablePort() {
       negotiate_enable_port_.GetValue());
 }
 
+#if defined(OS_POSIX)
+void IOThread::UpdateNtlmV2Enabled() {
+  globals_->http_auth_preferences->set_ntlm_v2_enabled(
+      ntlm_v2_enabled_.GetValue());
+}
+#endif
+
 std::unique_ptr<net::HttpAuthHandlerFactory>
 IOThread::CreateDefaultAuthHandlerFactory(net::HostResolver* host_resolver) {
   std::vector<std::string> supported_schemes = base::SplitString(
       auth_schemes_, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  globals_->http_auth_preferences.reset(new net::HttpAuthPreferences(
-      supported_schemes
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
-      ,
-      gssapi_library_name_
-#endif
+  globals_->http_auth_preferences =
+      std::make_unique<net::HttpAuthPreferences>(supported_schemes
 #if defined(OS_CHROMEOS)
-      ,
-      allow_gssapi_library_load_
+                                                 ,
+                                                 allow_gssapi_library_load_
+#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+                                                 ,
+                                                 gssapi_library_name_
 #endif
-      ));
+                                                 );
   UpdateServerWhitelist();
   UpdateDelegateWhitelist();
   UpdateNegotiateDisableCnameLookup();
   UpdateNegotiateEnablePort();
+#if defined(OS_POSIX)
+  UpdateNtlmV2Enabled();
+#endif
 #if defined(OS_ANDROID)
   UpdateAndroidAuthNegotiateAccountType();
 #endif
@@ -730,7 +731,7 @@ bool IOThread::PacHttpsUrlStrippingEnabled() const {
 }
 
 void IOThread::SetUpProxyConfigService(
-    net::URLRequestContextBuilderMojo* builder,
+    content::URLRequestContextBuilderMojo* builder,
     std::unique_ptr<net::ProxyConfigService> proxy_config_service) const {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -742,10 +743,10 @@ void IOThread::SetUpProxyConfigService(
     if (command_line.HasSwitch(switches::kSingleProcess)) {
       LOG(ERROR) << "Cannot use V8 Proxy resolver in single process mode.";
     } else {
-      builder->set_mojo_proxy_resolver_factory(
-          ChromeMojoProxyResolverFactory::GetInstance());
+      builder->SetMojoProxyResolverFactory(
+          ChromeMojoProxyResolverFactory::CreateWithStrongBinding());
 #if defined(OS_CHROMEOS)
-      builder->set_dhcp_fetcher_factory(
+      builder->SetDhcpFetcherFactory(
           base::MakeUnique<chromeos::DhcpProxyScriptFetcherFactoryChromeos>());
 #endif
     }
@@ -759,19 +760,26 @@ void IOThread::SetUpProxyConfigService(
   builder->set_proxy_config_service(std::move(proxy_config_service));
 }
 
+content::mojom::NetworkService* IOThread::GetNetworkServiceOnUIThread() {
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    return content::GetNetworkService();
+  } else {
+    return ui_thread_network_service_.get();
+  }
+}
+
 void IOThread::ConstructSystemRequestContext() {
-  std::unique_ptr<net::URLRequestContextBuilderMojo> builder =
-      base::MakeUnique<net::URLRequestContextBuilderMojo>();
+  DCHECK(network_service_request_.is_pending());
+
+  std::unique_ptr<content::URLRequestContextBuilderMojo> builder =
+      base::MakeUnique<content::URLRequestContextBuilderMojo>();
 
   builder->set_network_quality_estimator(
       globals_->network_quality_estimator.get());
-  builder->set_enable_brotli(globals_->enable_brotli);
-  builder->set_name("system");
 
   builder->set_user_agent(GetUserAgent());
-  std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate(
-      new ChromeNetworkDelegate(extension_event_router_forwarder(),
-                                &system_enable_referrers_));
+  auto chrome_network_delegate = std::make_unique<ChromeNetworkDelegate>(
+      extension_event_router_forwarder(), &system_enable_referrers_);
   // By default, data usage is considered off the record.
   chrome_network_delegate->set_data_use_aggregator(
       globals_->data_use_aggregator.get(),
@@ -779,7 +787,6 @@ void IOThread::ConstructSystemRequestContext() {
   builder->set_network_delegate(
       globals_->data_use_ascriber->CreateNetworkDelegate(
           std::move(chrome_network_delegate), GetMetricsDataUseForwarder()));
-  builder->set_net_log(net_log_);
   std::unique_ptr<net::HostResolver> host_resolver(
       CreateGlobalHostResolver(net_log_));
 
@@ -794,9 +801,11 @@ void IOThread::ConstructSystemRequestContext() {
   // Creates a CertVerifyProc that doesn't allow any profile-provided certs.
   cert_verifier = base::MakeUnique<net::CachingCertVerifier>(
       base::MakeUnique<net::MultiThreadedCertVerifier>(
-          new chromeos::CertVerifyProcChromeOS()));
+          base::MakeRefCounted<chromeos::CertVerifyProcChromeOS>()));
 #else
-  cert_verifier = net::CertVerifier::CreateDefault();
+  cert_verifier = std::make_unique<net::CachingCertVerifier>(
+      std::make_unique<net::MultiThreadedCertVerifier>(
+          net::CertVerifyProc::CreateDefault()));
 #endif
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -820,7 +829,8 @@ void IOThread::ConstructSystemRequestContext() {
   SetUpProxyConfigService(builder.get(),
                           std::move(system_proxy_config_service_));
 
-  globals_->network_service = content::NetworkService::Create();
+  globals_->network_service = content::NetworkService::Create(
+      std::move(network_service_request_), net_log_);
   if (!is_quic_allowed_on_init_)
     globals_->network_service->DisableQuic();
 
@@ -834,7 +844,7 @@ void IOThread::ConstructSystemRequestContext() {
   net::SetURLRequestContextForNSSHttpIO(globals_->system_request_context);
 #endif
 #if defined(OS_ANDROID)
-  net::CertVerifyProcAndroid::SetCertNetFetcher(
+  net::SetGlobalCertNetFetcher(
       net::CreateCertNetFetcher(globals_->system_request_context));
 #endif
 }

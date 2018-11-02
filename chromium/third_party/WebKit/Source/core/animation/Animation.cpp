@@ -35,26 +35,26 @@
 #include "core/animation/KeyframeEffectReadOnly.h"
 #include "core/animation/PendingAnimations.h"
 #include "core/animation/css/CSSAnimations.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/AnimationPlaybackEvent.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/paint/PaintLayer.h"
 #include "core/probe/CoreProbes.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/animation/CompositorAnimationPlayer.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/heap/Persistent.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebCompositorSupport.h"
 
 namespace blink {
@@ -136,7 +136,7 @@ Animation::Animation(ExecutionContext* execution_context,
   if (content_) {
     if (content_->GetAnimation()) {
       content_->GetAnimation()->cancel();
-      content_->GetAnimation()->setEffect(0);
+      content_->GetAnimation()->setEffect(nullptr);
     }
     content_->Attach(this);
   }
@@ -324,11 +324,31 @@ bool Animation::PreCommit(
   if (should_start) {
     compositor_group_ = compositor_group;
     if (start_on_compositor) {
-      if (CheckCanStartAnimationOnCompositor(composited_element_ids).Ok()) {
+      CompositorAnimations::FailureCode failure_code =
+          CheckCanStartAnimationOnCompositor(composited_element_ids);
+      if (failure_code.Ok()) {
         CreateCompositorPlayer();
         StartAnimationOnCompositor(composited_element_ids);
         compositor_state_ = WTF::WrapUnique(new CompositorState(*this));
       } else {
+        // failure_code.Ok() is equivalent of |will_composite| = true, so if the
+        // |can_composite| is true here, then we know that it is a main thread
+        // compositable animation.
+        // The |will_composite| is set at
+        // CompositorAnimations::CheckCanStartElementOnCompositor. Please refer
+        // to that function for more details.
+        //
+        // In the CompositingRequirementsUpdater::UpdateRecursive, the
+        // (direct_reasons & kCompositingReasonActiveAnimation) can be non-zero
+        // which indicates that there is a compositor animation. However, the
+        // PaintLayerCompositor::CanBeComposited could still return false
+        // because the LocalFrameView is not visible. And in that case, the code
+        // path will get here because there is a compositor animation but it
+        // won't be composited. We have to account for this case.
+        if (failure_code.can_composite &&
+            TimelineInternal()->GetDocument()->View()->IsVisible()) {
+          is_non_composited_compositable_ = true;
+        }
         CancelIncompatibleAnimationsOnCompositor();
       }
     }
@@ -420,7 +440,8 @@ void Animation::NotifyStartTime(double timeline_time) {
   }
 }
 
-bool Animation::Affects(const Element& element, CSSPropertyID property) const {
+bool Animation::Affects(const Element& element,
+                        const CSSProperty& property) const {
   if (!content_ || !content_->IsKeyframeEffectReadOnly())
     return false;
 
@@ -498,7 +519,7 @@ void Animation::setEffect(AnimationEffectReadOnly* new_effect) {
     // FIXME: This logic needs to be updated once groups are implemented
     if (new_effect->GetAnimation()) {
       new_effect->GetAnimation()->cancel();
-      new_effect->GetAnimation()->setEffect(0);
+      new_effect->GetAnimation()->setEffect(nullptr);
     }
     new_effect->Attach(this);
     SetOutdated();
@@ -717,7 +738,16 @@ void Animation::setPlaybackRate(double playback_rate) {
 
   PlayStateUpdateScope update_scope(*this, kTimingUpdateOnDemand);
 
+  double start_time_before = start_time_;
   SetPlaybackRateInternal(playback_rate);
+
+  // Adds a UseCounter to check if setting playbackRate causes a compensatory
+  // seek forcing a change in start_time_
+  if (!std::isnan(start_time_before) && start_time_ != start_time_before &&
+      play_state_ != kFinished) {
+    UseCounter::Count(GetExecutionContext(),
+                      WebFeature::kAnimationSetPlaybackRateCompensatorySeek);
+  }
 }
 
 void Animation::SetPlaybackRateInternal(double playback_rate) {
@@ -1228,7 +1258,8 @@ void Animation::InvalidateKeyframeEffect(const TreeScope& tree_scope) {
 
 void Animation::ResolvePromiseMaybeAsync(AnimationPromise* promise) {
   if (ScriptForbiddenScope::IsScriptForbidden()) {
-    TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetExecutionContext())
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kDOMManipulation)
         ->PostTask(BLINK_FROM_HERE,
                    WTF::Bind(&AnimationPromise::Resolve<Animation*>,
                              WrapPersistent(promise), WrapPersistent(this)));
@@ -1244,7 +1275,8 @@ void Animation::RejectAndResetPromise(AnimationPromise* promise) {
 
 void Animation::RejectAndResetPromiseMaybeAsync(AnimationPromise* promise) {
   if (ScriptForbiddenScope::IsScriptForbidden()) {
-    TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetExecutionContext())
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kDOMManipulation)
         ->PostTask(BLINK_FROM_HERE,
                    WTF::Bind(&Animation::RejectAndResetPromise,
                              WrapPersistent(this), WrapPersistent(promise)));
@@ -1253,7 +1285,7 @@ void Animation::RejectAndResetPromiseMaybeAsync(AnimationPromise* promise) {
   }
 }
 
-DEFINE_TRACE(Animation) {
+void Animation::Trace(blink::Visitor* visitor) {
   visitor->Trace(content_);
   visitor->Trace(timeline_);
   visitor->Trace(pending_finished_event_);

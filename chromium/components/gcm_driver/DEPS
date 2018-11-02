@@ -10,9 +10,9 @@ include_rules = [
   "+components/sync/protocol",
   "+components/timers",  # Only used for Chrome OS builds.
   "+components/version_info",
-  "+content/public/android/java",
   "+google_apis/gaia",
   "+google_apis/gcm",
   "+jni",
   "+net",
+  "+third_party/leveldatabase",  # Only used for tests.
 ]

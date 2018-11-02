@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/process/process.h"
-#include "base/profiler/scoped_profile.h"
 #include "base/scoped_observer.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -24,7 +23,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -49,7 +47,6 @@
 #include "ipc/ipc_message_macros.h"
 
 using content::BrowserThread;
-using content::RenderViewHost;
 
 namespace extensions {
 namespace {
@@ -330,9 +327,6 @@ void ExtensionFunctionDispatcher::DispatchOnIOThread(
                             static_cast<content::BrowserContext*>(profile_id));
     UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.FunctionCalls",
                                 function->histogram_value());
-    tracked_objects::ScopedProfile scoped_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(function->name()),
-        tracked_objects::ScopedProfile::ENABLED);
     base::ElapsedTimer timer;
     function->RunWithValidation()->Execute();
     // TODO(devlin): Once we have a baseline metric for how long functions take,
@@ -488,9 +482,6 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
                             browser_context_);
     UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.FunctionCalls",
                                 function->histogram_value());
-    tracked_objects::ScopedProfile scoped_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(function->name()),
-        tracked_objects::ScopedProfile::ENABLED);
     base::ElapsedTimer timer;
     function->RunWithValidation()->Execute();
     // TODO(devlin): Once we have a baseline metric for how long functions take,

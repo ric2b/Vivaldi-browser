@@ -58,8 +58,8 @@ cr.define('downloads', function() {
     /** @private {?downloads.BrowserProxy} */
     browserProxy_: null,
 
-    /** @private {?downloads.ActionService} */
-    actionService_: null,
+    /** @private {?downloads.SearchService} */
+    searchService_: null,
 
     /** @private {!PromiseResolver} */
     loaded_: new PromiseResolver,
@@ -67,7 +67,7 @@ cr.define('downloads', function() {
     /** @override */
     created: function() {
       this.browserProxy_ = downloads.BrowserProxy.getInstance();
-      this.actionService_ = downloads.ActionService.getInstance();
+      this.searchService_ = downloads.SearchService.getInstance();
     },
 
     /** @override */
@@ -95,8 +95,16 @@ cr.define('downloads', function() {
      * @private
      */
     insertItems_: function(index, list) {
-      this.splice.apply(this, ['items_', index, 0].concat(list));
+      // Insert |list| at the given |index| via Array#splice().
+      this.items_.splice.apply(this.items_, [index, 0].concat(list));
       this.updateHideDates_(index, index + list.length);
+      this.notifySplices('items_', [{
+                           index: index,
+                           addedCount: list.length,
+                           object: this.items_,
+                           type: 'splice',
+                           removed: [],
+                         }]);
 
       if (this.hasAttribute('loading')) {
         this.removeAttribute('loading');
@@ -167,7 +175,7 @@ cr.define('downloads', function() {
       const list = this.$['downloads-list'];
       if (list.scrollHeight - list.scrollTop - list.offsetHeight <= 100) {
         // Approaching the end of the scrollback. Attempt to load more items.
-        this.actionService_.loadMore();
+        this.searchService_.loadMore();
       }
       this.hasShadow_ = list.scrollTop > 0;
     },
@@ -181,13 +189,13 @@ cr.define('downloads', function() {
       document.addEventListener('canExecute', this.onCanExecute_.bind(this));
       document.addEventListener('command', this.onCommand_.bind(this));
 
-      this.actionService_.loadMore();
+      this.searchService_.loadMore();
       return this.loaded_.promise;
     },
 
     /** @private */
     onSearchChanged_: function() {
-      this.inSearchMode_ = this.actionService_.isSearching();
+      this.inSearchMode_ = this.searchService_.isSearching();
     },
 
     /**
@@ -195,12 +203,22 @@ cr.define('downloads', function() {
      * @private
      */
     removeItem_: function(index) {
-      this.splice('items_', index, 1);
+      let removed = this.items_.splice(index, 1);
       this.updateHideDates_(index, index);
+      this.notifySplices('items_', [{
+                           index: index,
+                           addedCount: 0,
+                           object: this.items_,
+                           type: 'splice',
+                           removed: removed,
+                         }]);
       this.onListScroll_();
     },
 
     /**
+     * Updates whether dates should show for |this.items_[start - end]|. Note:
+     * this method does not trigger template bindings. Use notifySplices() or
+     * after calling this method to ensure items are redrawn.
      * @param {number} start
      * @param {number} end
      * @private
@@ -211,8 +229,7 @@ cr.define('downloads', function() {
         if (!current)
           continue;
         const prev = this.items_[i - 1];
-        const hideDate = !!prev && prev.date_string == current.date_string;
-        this.set('items_.' + i + '.hideDate', hideDate);
+        current.hideDate = !!prev && prev.date_string == current.date_string;
       }
     },
 
@@ -222,8 +239,15 @@ cr.define('downloads', function() {
      * @private
      */
     updateItem_: function(index, data) {
-      this.set('items_.' + index, data);
+      this.items_[index] = data;
       this.updateHideDates_(index, index);
+      this.notifySplices('items_', [{
+                           index: index,
+                           addedCount: 0,
+                           object: this.items_,
+                           type: 'splice',
+                           removed: [],
+                         }]);
       const list = /** @type {!IronListElement} */ (this.$['downloads-list']);
       list.updateSizeForItem(index);
     },

@@ -38,6 +38,10 @@ using AudioOutputStreamFactoryRequest =
 using AudioOutputStream = media::mojom::AudioOutputStream;
 using AudioOutputStreamPtr = mojo::InterfacePtr<AudioOutputStream>;
 using AudioOutputStreamRequest = mojo::InterfaceRequest<AudioOutputStream>;
+using AudioOutputStreamClient = media::mojom::AudioOutputStreamClient;
+using AudioOutputStreamClientPtr = mojo::InterfacePtr<AudioOutputStreamClient>;
+using AudioOutputStreamClientRequest =
+    mojo::InterfaceRequest<AudioOutputStreamClient>;
 using AudioOutputStreamProvider = media::mojom::AudioOutputStreamProvider;
 using AudioOutputStreamProviderPtr =
     mojo::InterfacePtr<AudioOutputStreamProvider>;
@@ -71,7 +75,7 @@ class MockAudioOutputDelegate : public media::AudioOutputDelegate {
       std::move(on_destruction_).Run();
   }
 
-  MOCK_CONST_METHOD0(GetStreamId, int());
+  MOCK_METHOD0(GetStreamId, int());
   MOCK_METHOD0(OnPlayStream, void());
   MOCK_METHOD0(OnPauseStream, void());
   MOCK_METHOD1(OnSetVolume, void(double));
@@ -140,9 +144,9 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
   AudioOutputStreamFactoryPtr CreateFactory() {
     DCHECK(!factory_);
     AudioOutputStreamFactoryPtr ret;
-    factory_ = base::MakeUnique<RenderFrameAudioOutputStreamFactory>(
+    factory_ = std::make_unique<RenderFrameAudioOutputStreamFactory>(
         kRenderFrameId, this);
-    factory_binding_ = base::MakeUnique<
+    factory_binding_ = std::make_unique<
         mojo::Binding<mojom::RendererAudioOutputStreamFactory>>(
         factory_.get(), mojo::MakeRequest(&ret));
     return ret;
@@ -161,10 +165,10 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
   DISALLOW_COPY_AND_ASSIGN(MockContext);
 };
 
-class MockClient {
+class MockClient : public AudioOutputStreamClient {
  public:
   MockClient() {}
-  ~MockClient() {}
+  ~MockClient() override {}
 
   void StreamCreated(mojo::ScopedSharedBufferHandle handle1,
                      mojo::ScopedHandle handle2) {
@@ -172,6 +176,8 @@ class MockClient {
   }
 
   bool was_called() { return was_called_; }
+
+  MOCK_METHOD0(OnError, void());
 
  private:
   bool was_called_ = false;
@@ -201,10 +207,13 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, CreateStream) {
   AudioOutputStreamProviderPtr provider;
   AudioOutputStreamPtr output_stream;
   MockClient client;
+  AudioOutputStreamClientPtr client_ptr;
+  mojo::Binding<AudioOutputStreamClient> client_binding(
+      &client, mojo::MakeRequest(&client_ptr));
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
-  auto factory_context = base::MakeUnique<MockContext>(true);
+  auto factory_context = std::make_unique<MockContext>(true);
   factory_context->PrepareDelegateForCreation(
-      base::MakeUnique<MockAudioOutputDelegate>(), &event_handler);
+      std::make_unique<MockAudioOutputDelegate>(), &event_handler);
   AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
 
   media::OutputDeviceStatus status;
@@ -221,7 +230,7 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, CreateStream) {
   EXPECT_TRUE(id.empty());
 
   provider->Acquire(
-      mojo::MakeRequest(&output_stream), params,
+      mojo::MakeRequest(&output_stream), std::move(client_ptr), params,
       base::BindOnce(&MockClient::StreamCreated, base::Unretained(&client)));
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
@@ -229,8 +238,8 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, CreateStream) {
   base::SharedMemory shared_memory;
   ASSERT_TRUE(shared_memory.CreateAndMapAnonymous(100));
 
-  auto local = base::MakeUnique<base::CancelableSyncSocket>();
-  auto remote = base::MakeUnique<base::CancelableSyncSocket>();
+  auto local = std::make_unique<base::CancelableSyncSocket>();
+  auto remote = std::make_unique<base::CancelableSyncSocket>();
   ASSERT_TRUE(
       base::CancelableSyncSocket::CreatePair(local.get(), remote.get()));
   event_handler->OnStreamCreated(kStreamId, &shared_memory, std::move(remote));
@@ -243,7 +252,7 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, CreateStream) {
 TEST(RenderFrameAudioOutputStreamFactoryTest, NotAuthorized_Denied) {
   content::TestBrowserThreadBundle thread_bundle;
   AudioOutputStreamProviderPtr output_provider;
-  auto factory_context = base::MakeUnique<MockContext>(false);
+  auto factory_context = std::make_unique<MockContext>(false);
   AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
 
   media::OutputDeviceStatus status;
@@ -263,11 +272,14 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, ConnectionError_DeletesStream) {
   AudioOutputStreamProviderPtr provider;
   AudioOutputStreamPtr output_stream;
   MockClient client;
+  AudioOutputStreamClientPtr client_ptr;
+  mojo::Binding<AudioOutputStreamClient> client_binding(
+      &client, mojo::MakeRequest(&client_ptr));
   bool delegate_is_destructed = false;
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
-  auto factory_context = base::MakeUnique<MockContext>(true);
+  auto factory_context = std::make_unique<MockContext>(true);
   factory_context->PrepareDelegateForCreation(
-      base::MakeUnique<MockAudioOutputDelegate>(
+      std::make_unique<MockAudioOutputDelegate>(
           base::BindOnce([](bool* destructed) { *destructed = true; },
                          &delegate_is_destructed)),
       &event_handler);
@@ -281,7 +293,8 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, ConnectionError_DeletesStream) {
   base::RunLoop().RunUntilIdle();
 
   provider->Acquire(
-      mojo::MakeRequest(&output_stream), GetTestAudioParameters(),
+      mojo::MakeRequest(&output_stream), std::move(client_ptr),
+      GetTestAudioParameters(),
       base::BindOnce(&MockClient::StreamCreated, base::Unretained(&client)));
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
@@ -296,11 +309,14 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, DelegateError_DeletesStream) {
   AudioOutputStreamProviderPtr provider;
   AudioOutputStreamPtr output_stream;
   MockClient client;
+  AudioOutputStreamClientPtr client_ptr;
+  mojo::Binding<AudioOutputStreamClient> client_binding(
+      &client, mojo::MakeRequest(&client_ptr));
   bool delegate_is_destructed = false;
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
-  auto factory_context = base::MakeUnique<MockContext>(true);
+  auto factory_context = std::make_unique<MockContext>(true);
   factory_context->PrepareDelegateForCreation(
-      base::MakeUnique<MockAudioOutputDelegate>(
+      std::make_unique<MockAudioOutputDelegate>(
           base::BindOnce([](bool* destructed) { *destructed = true; },
                          &delegate_is_destructed)),
       &event_handler);
@@ -314,7 +330,8 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, DelegateError_DeletesStream) {
   base::RunLoop().RunUntilIdle();
 
   provider->Acquire(
-      mojo::MakeRequest(&output_stream), GetTestAudioParameters(),
+      mojo::MakeRequest(&output_stream), std::move(client_ptr),
+      GetTestAudioParameters(),
       base::BindOnce(&MockClient::StreamCreated, base::Unretained(&client)));
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
@@ -343,7 +360,7 @@ TEST(RenderFrameAudioOutputStreamFactoryTest, OutOfRangeSessionId_BadMessage) {
   TestBrowserThreadBundle thread_bundle;
 
   AudioOutputStreamProviderPtr output_provider;
-  auto factory_context = base::MakeUnique<MockContext>(true);
+  auto factory_context = std::make_unique<MockContext>(true);
   auto factory_ptr = factory_context->CreateFactory();
 
   int64_t session_id = std::numeric_limits<int>::max();

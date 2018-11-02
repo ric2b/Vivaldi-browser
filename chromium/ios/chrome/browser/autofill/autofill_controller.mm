@@ -14,24 +14,24 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
+#import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_client_ios_bridge.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
 #include "components/autofill/ios/browser/autofill_driver_ios_bridge.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
+#import "components/autofill/ios/browser/form_suggestion_provider.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "ios/chrome/browser/application_context.h"
-#import "ios/chrome/browser/autofill/autofill_agent.h"
-#import "ios/chrome/browser/autofill/form_suggestion_provider.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#import "ios/chrome/browser/ui/autofill/autofill_client_ios.h"
+#import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 #import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -75,7 +75,7 @@ using autofill::AutofillPopupDelegate;
             ios::SigninManagerFactory::GetForBrowserState(originalBrowserState),
             OAuth2TokenServiceFactory::GetForBrowserState(originalBrowserState),
             base::Closure()));
-    _autofillClient.reset(new autofill::AutofillClientIOS(
+    _autofillClient.reset(new autofill::ChromeAutofillClientIOS(
         browserState, webState, infobarManager, self, passwordGenerationManager,
         std::move(identityProvider)));
     autofill::AutofillDriverIOS::CreateForWebStateAndDelegate(
@@ -97,8 +97,8 @@ using autofill::AutofillPopupDelegate;
                    passwordGenerationManager
                             webState:(web::WebState*)webState {
   AutofillAgent* autofillAgent =
-      [[AutofillAgent alloc] initWithBrowserState:browserState
-                                         webState:webState];
+      [[AutofillAgent alloc] initWithPrefService:browserState->GetPrefs()
+                                        webState:webState];
   return [self initWithBrowserState:browserState
                            webState:webState
                       autofillAgent:autofillAgent

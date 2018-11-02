@@ -27,16 +27,16 @@ by a child template that "extends" this file.
     <!--
       Enable runtime permissions as uses-permission in tip of tree builds
       only for ease of development on Android L and earlier. For consumer
-      channels use "runtime permission" uses-permission-sdk-m which provides
+      channels use "runtime permission" uses-permission-sdk-23 which provides
       permission on Android M and later without a prompt.
     -->
     {% if channel in ['default'] %}
         <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     {% endif %}
-    <uses-permission-sdk-m android:name="android.permission.BLUETOOTH"/>
-    <uses-permission-sdk-m android:name="android.permission.BLUETOOTH_ADMIN"/>
-    <uses-permission-sdk-m android:name="android.permission.REORDER_TASKS"/>
-    <uses-permission-sdk-m android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission-sdk-23 android:name="android.permission.BLUETOOTH"/>
+    <uses-permission-sdk-23 android:name="android.permission.BLUETOOTH_ADMIN"/>
+    <uses-permission-sdk-23 android:name="android.permission.REORDER_TASKS"/>
+    <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
@@ -136,10 +136,14 @@ by a child template that "extends" this file.
         <!-- Samsung MultiWindow Support -->
         <meta-data android:name="com.samsung.android.sdk.multiwindow.enable"
             android:value="true" />
+
+        {% if min_sdk_version|int < 24 %}
         <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.enable"
             android:value="true" />
         <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.launchmode"
             android:value="singleTask" />
+        {% endif %}
+
         <meta-data android:name="com.samsung.android.sdk.multiwindow.penwindow.enable"
             android:value="true"/>
 
@@ -168,19 +172,12 @@ by a child template that "extends" this file.
             android:excludeFromRecents="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
-        <activity-alias android:name="com.google.android.apps.chrome.Main"
+        <activity-alias android:name="com.google.android.apps.chrome.IntentDispatcher"
             android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <category android:name="android.intent.category.APP_BROWSER" />
                 <category android:name="android.intent.category.NOTIFICATION_PREFERENCES" />
-                {% if channel in ['dev', 'canary', 'default'] %}
-                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
-                {% endif %}
             </intent-filter>
             <!-- Matches the common case of intents with no MIME type.
                  Make sure to keep in sync with the next filter.  -->
@@ -263,8 +260,6 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
-            <meta-data android:name="android.app.shortcuts"
-                android:resource="@xml/launchershortcuts" />
 
             {{ self.supports_vr() }}
         </activity-alias>
@@ -357,9 +352,18 @@ by a child template that "extends" this file.
         {% endfor %}
         {% if enable_vr == "true" %}
         <activity android:name="org.chromium.chrome.browser.vr.VrMainActivity"
+            android:theme="@style/VrSupportThemeLauncher"
+            android:exported="true"
+            android:enableVrMode="@string/gvr_vr_mode_component"
+            android:taskAffinity=""
+            android:relinquishTaskIdentity="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+            {{ self.supports_vr() }}
+        </activity>
+        <activity android:name="org.chromium.chrome.browser.vr.CustomTabVrActivity"
             android:theme="@style/VrSupportTheme"
             android:screenOrientation="landscape"
-            android:exported="true"
             android:enableVrMode="@string/gvr_vr_mode_component"
             android:taskAffinity=""
             android:persistableMode="persistNever"
@@ -374,7 +378,7 @@ by a child template that "extends" this file.
         <!-- ChromeTabbedActivity related -->
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
             android:theme="@style/TabbedModeTheme"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             {# We can only use blocks once in Jinja, for future substitutions we use
             self.supports_video_persistence(). #}
@@ -384,7 +388,7 @@ by a child template that "extends" this file.
             {% endblock %}
             {% block chrome_activity_common %}
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density"
             android:hardwareAccelerated="false"
             {% endblock %}
         >
@@ -401,6 +405,28 @@ by a child template that "extends" this file.
             </intent-filter>
             {% endblock %}
         </activity>
+        <!-- TODO(crbug.com/780674): retarget .Main back to CTA for non-modern APK -->
+        <activity-alias android:name="com.google.android.apps.chrome.Main"
+            {% if min_sdk_version|int < 21 %}
+            android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
+            {% else %}
+            android:targetActivity="org.chromium.chrome.browser.ChromeTabbedActivity"
+            {% endif %}
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <category android:name="android.intent.category.APP_BROWSER" />
+                {% if channel in ['dev', 'canary', 'default'] %}
+                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
+                {% endif %}
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts"
+                android:resource="@xml/launchershortcuts" />
+            {{ self.supports_vr() }}
+        </activity-alias>
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity2"
             android:theme="@style/TabbedModeTheme"
             android:exported="false"
@@ -430,18 +456,22 @@ by a child template that "extends" this file.
         </activity>
         <activity android:name="org.chromium.chrome.browser.firstrun.LightweightFirstRunActivity"
             android:theme="@style/SimpleDialog"
-            android:launchMode="singleInstance"
-            android:autoRemoveFromRecents="true"
-            android:windowSoftInputMode="stateHidden|adjustPan"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+            {{ self.first_run_activity_common() }}>
         </activity>
         <activity android:name="org.chromium.chrome.browser.firstrun.FirstRunActivity"
-            android:theme="@style/DialogWhenLarge"
+            android:theme="@style/FirstRunTheme"
+            {% block first_run_activity_common %}
+            android:label="@string/fre_activity_label"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:autoRemoveFromRecents="true"
             android:windowSoftInputMode="stateHidden|adjustPan"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+            {% endblock %}
+        </activity>
+        <activity android:name="org.chromium.chrome.browser.firstrun.TabbedModeFirstRunActivity"
+            android:theme="@style/TabbedModeFirstRunTheme"
+            {{ self.first_run_activity_common() }}>
         </activity>
         {% if enable_vr == "true" %}
         <activity android:name="org.chromium.chrome.browser.vr_shell.VrFirstRunActivity"
@@ -702,12 +732,16 @@ by a child template that "extends" this file.
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
             <intent-filter>
-                <action android:name="android.support.customtabs.browseractions.browser_action_open" />
+                <action android:name="androidx.browser.browseractions.browser_action_open" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="http" />
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <service android:name="org.chromium.chrome.browser.browseractions.BrowserActionsService"
+            android:exported="false">
+        </service>
         {% endif %}
 
         <!-- Service for Broadcasting a Physical Web URL -->
@@ -716,12 +750,20 @@ by a child template that "extends" this file.
             android:exported="false">
         </service>
 
-        <!-- Service for decoding images in a sandboxed process. -->
+        <!-- Service for decoding images in a sandboxed process.  When
+             use_order_profiling is set, all processes need to be able to write
+             profiling information and thus cannot be sandboxed. Order profiling
+             is used only on bots to optimize binary layout, and is never used
+             for a released version of chrome. -->
         <service
             android:description="@string/decoder_description"
             android:name="org.chromium.chrome.browser.photo_picker.DecoderService"
             android:exported="false"
+            {% if use_order_profiling is defined %}
+            android:isolatedProcess="false"
+            {% else %}
             android:isolatedProcess="true"
+            {% endif %}
             android:process=":decoder_service" />
 
         <!-- Providers for chrome data. -->
@@ -963,10 +1005,18 @@ by a child template that "extends" this file.
             android:value="org.chromium.content.app.SandboxedProcessService"/>
 
         {% for i in range(num_sandboxed_services) %}
+        <!-- When use_order_profiling is set, the renderer processes need to be
+             able to write profiling information and thus cannot be
+             sandboxed. Order profiling is used only on bots to optimize binary
+             layout, and is never used for a released version of chrome. -->
         <service android:name="org.chromium.content.app.SandboxedProcessService{{ i }}"
             android:process=":sandboxed_process{{ i }}"
             android:permission="{{ manifest_package }}.permission.CHILD_SERVICE"
+            {% if use_order_profiling is defined %}
+            android:isolatedProcess="false"
+            {% else %}
             android:isolatedProcess="true"
+            {% endif %}
             android:exported="{{sandboxed_service_exported|default(false)}}"
             {% if (sandboxed_service_exported|default(false)) == 'true' %}
             android:externalService="true"
@@ -1005,6 +1055,11 @@ android:value="true" />
         <receiver android:name="org.chromium.chrome.browser.ntp.ContentSuggestionsNotifier$DeleteReceiver"
             android:exported="false"/>
         <receiver android:name="org.chromium.chrome.browser.ntp.ContentSuggestionsNotifier$TimeoutReceiver"
+            android:exported="false"/>
+
+        <receiver android:name="org.chromium.chrome.browser.offlinepages.prefetch.PrefetchedPagesNotifier$ClickReceiver"
+            android:exported="false"/>
+        <receiver android:name="org.chromium.chrome.browser.offlinepages.prefetch.PrefetchedPagesNotifier$SettingsReceiver"
             android:exported="false"/>
 
         <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"

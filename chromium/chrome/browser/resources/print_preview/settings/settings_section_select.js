@@ -8,15 +8,21 @@ cr.define('print_preview', function() {
   /**
    * Base class for the printer option element visualizing the generic selection
    * based option.
-   * @param {!print_preview.ticket_items.TicketItem} ticketItem Ticket item
-   *     visualized by this component.
+   * @param {(!print_preview.ticket_items.Dpi |
+   *          !print_preview.ticket_items.MediaSize)} ticketItem
+   *     Ticket item visualized by this component. Must have a defined
+   *     capability() getter.
    * @constructor
    * @extends {print_preview.SettingsSection}
    */
   function SettingsSectionSelect(ticketItem) {
     print_preview.SettingsSection.call(this);
 
-    /** @private {!print_preview.ticket_items.TicketItem} */
+    /**
+     * {(!print_preview.ticket_items.Dpi |
+     *   !print_preview.ticket_items.MediaSize)}
+     * @private
+     */
     this.ticketItem_ = ticketItem;
   }
 
@@ -63,22 +69,22 @@ cr.define('print_preview', function() {
      * @private
      */
     updateSelect_: function() {
-      var select = this.select_;
+      const select = this.select_;
       if (!this.isAvailable()) {
         select.innerHTML = '';
         return;
       }
       // Should the select content be updated?
-      var sameContent =
+      const sameContent =
           this.ticketItem_.capability.option.length == select.length &&
           this.ticketItem_.capability.option.every(function(option, index) {
             return select.options[index].value == JSON.stringify(option);
           });
-      var indexToSelect = select.selectedIndex;
+      let indexToSelect = select.selectedIndex;
       if (!sameContent) {
         select.innerHTML = '';
         this.ticketItem_.capability.option.forEach(function(option, index) {
-          var selectOption = document.createElement('option');
+          const selectOption = document.createElement('option');
           selectOption.text = this.getCustomDisplayName_(option) ||
               this.getDefaultDisplayName_(option);
           selectOption.value = JSON.stringify(option);
@@ -88,8 +94,8 @@ cr.define('print_preview', function() {
         }, this);
       }
       // Try to select current ticket item.
-      var valueToSelect = JSON.stringify(this.ticketItem_.getValue());
-      for (var i = 0, option; (option = select.options[i]); i++) {
+      const valueToSelect = JSON.stringify(this.ticketItem_.getValue());
+      for (let i = 0, option; (option = select.options[i]); i++) {
         if (option.value == valueToSelect) {
           indexToSelect = i;
           break;
@@ -105,7 +111,7 @@ cr.define('print_preview', function() {
      * @private
      */
     getCustomDisplayName_: function(option) {
-      var displayName = option.custom_display_name;
+      let displayName = option.custom_display_name;
       if (!displayName && option.custom_display_name_localized) {
         displayName =
             getStringForCurrentLocale(option.custom_display_name_localized);
@@ -127,7 +133,7 @@ cr.define('print_preview', function() {
      * @private
      */
     onSelectChange_: function() {
-      var select = this.select_;
+      const select = this.select_;
       this.ticketItem_.updateValue(
           JSON.parse(select.options[select.selectedIndex].value));
     },

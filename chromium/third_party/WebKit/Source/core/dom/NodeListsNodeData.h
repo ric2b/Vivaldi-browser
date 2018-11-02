@@ -22,6 +22,7 @@
 #ifndef NodeListsNodeData_h
 #define NodeListsNodeData_h
 
+#include "base/macros.h"
 #include "core/dom/ChildNodeList.h"
 #include "core/dom/EmptyNodeList.h"
 #include "core/dom/QualifiedName.h"
@@ -34,8 +35,6 @@
 namespace blink {
 
 class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
-  WTF_MAKE_NONCOPYABLE(NodeListsNodeData);
-
  public:
   ChildNodeList* GetChildNodeList(ContainerNode& node) {
     DCHECK(!child_node_list_ || node == child_node_list_->VirtualOwnerNode());
@@ -135,7 +134,7 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
 
   static NodeListsNodeData* Create() { return new NodeListsNodeData; }
 
-  void InvalidateCaches(const QualifiedName* attr_name = 0);
+  void InvalidateCaches(const QualifiedName* attr_name = nullptr);
 
   bool IsEmpty() const {
     return !child_node_list_ && atomic_name_caches_.IsEmpty() &&
@@ -167,8 +166,8 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
     }
   }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   NodeListsNodeData() : child_node_list_(nullptr) {}
@@ -177,6 +176,7 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
   TraceWrapperMember<NodeList> child_node_list_;
   NodeListAtomicNameCacheMap atomic_name_caches_;
   TagCollectionNSCache tag_collection_ns_caches_;
+  DISALLOW_COPY_AND_ASSIGN(NodeListsNodeData);
 };
 
 DEFINE_TRAIT_FOR_TRACE_WRAPPERS(NodeListsNodeData);
@@ -207,7 +207,7 @@ inline Collection* ContainerNode::EnsureCachedCollection(
 
 template <typename Collection>
 inline Collection* ContainerNode::CachedCollection(CollectionType type) {
-  NodeListsNodeData* node_lists = this->NodeLists();
+  NodeListsNodeData* node_lists = NodeLists();
   return node_lists ? node_lists->Cached<Collection>(type) : nullptr;
 }
 

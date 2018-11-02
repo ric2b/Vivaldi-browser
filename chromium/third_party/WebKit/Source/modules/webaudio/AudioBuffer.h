@@ -29,12 +29,11 @@
 #ifndef AudioBuffer_h
 #define AudioBuffer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/ModulesExport.h"
 #include "platform/bindings/ScriptWrappable.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -43,8 +42,7 @@ class AudioBus;
 class AudioBufferOptions;
 class ExceptionState;
 
-class MODULES_EXPORT AudioBuffer final : public GarbageCollected<AudioBuffer>,
-                                         public ScriptWrappable {
+class MODULES_EXPORT AudioBuffer final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -103,7 +101,10 @@ class MODULES_EXPORT AudioBuffer final : public GarbageCollected<AudioBuffer>,
 
   void Zero();
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(channels_); }
+  void Trace(blink::Visitor* visitor) {
+    visitor->Trace(channels_);
+    ScriptWrappable::Trace(visitor);
+  }
 
  private:
   // How to initialize the contents of an AudioBuffer.  Default is to

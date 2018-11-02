@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include "platform/geometry/FloatShapeHelpers.h"
 #include "platform/wtf/text/WTFString.h"
 #include "third_party/skia/include/core/SkPoint.h"
 
@@ -48,10 +49,6 @@ static inline float Max4(float a, float b, float c, float d) {
 
 inline float Dot(const FloatSize& a, const FloatSize& b) {
   return a.Width() * b.Width() + a.Height() * b.Height();
-}
-
-inline float Determinant(const FloatSize& a, const FloatSize& b) {
-  return a.Width() * b.Height() - a.Height() * b.Width();
 }
 
 inline bool IsPointInTriangle(const FloatPoint& p,
@@ -246,6 +243,10 @@ bool FloatQuad::IsCounterclockwise() const {
   // Return if the two first vectors are turning clockwise. If the quad is
   // convex then all following vectors will turn the same way.
   return Determinant(p2_ - p1_, p3_ - p2_) < 0;
+}
+
+std::ostream& operator<<(std::ostream& ostream, const FloatQuad& quad) {
+  return ostream << quad.ToString();
 }
 
 String FloatQuad::ToString() const {

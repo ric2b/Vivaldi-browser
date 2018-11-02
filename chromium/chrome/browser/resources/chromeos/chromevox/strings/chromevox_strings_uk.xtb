@@ -4,6 +4,7 @@
 <translation id="100812568230599391">Змінити стиль дисплея на чергування.</translation>
 <translation id="1012173283529841972">Пункт списку</translation>
 <translation id="1013742170491673792">пошук</translation>
+<translation id="1022586497894531524">Уперше користуєтеся голосовими підказками ChromeVox? З цього посібника ви швидко дізнаєтеся про основні функції програми.</translation>
 <translation id="1023866615269196768">Розтягнута.</translation>
 <translation id="1025074108959230262">Закріплений режим вимкнено</translation>
 <translation id="1031961866430398710">тоді</translation>
@@ -29,12 +30,12 @@
 <translation id="1201402288615127009">Далі</translation>
 <translation id="1206619573307042055">область виділення</translation>
 <translation id="1213216066620407844">ChromeVox – голосовий супровід Chrome</translation>
-<translation id="1226487719524433143">Розкажіть нам, що ви думаєте про програму. Надішліть нам відгук, натиснувши комбінацію Search+a, а потім – клавішу i. Натисніть кнопку "Далі", щоб переглянути посібник і почати.</translation>
+<translation id="1225437811932752266">Вітаємо! Ви дізналися про основні функції ChromeVox. Ви завжди можете відкрити командне меню ChromeVox, натиснувши клавішу пошуку й клавішу крапки. Щоб дізнатися більше про ChromeVox і ОС Chrome, перегляньте статті нижче.
+Щоб вийти з посібника, перейдіть до кнопки "Закрити" за допомогою ChromeVox і натисніть її.</translation>
 <translation id="1229276918471378188">Попередній перехід</translation>
 <translation id="1237866625126425153">група перемикачів</translation>
 <translation id="1251750620252348585">Наступний заголовок рівня 6</translation>
 <translation id="1275718070701477396">Вибрано</translation>
-<translation id="1310230882256010289">Що нового. Ми повністю оновили ChromeVox. Програма працює швидше та стабільніше. Удосконалено обслуговування в Інтернеті.</translation>
 <translation id="1319608975892113573">Немає попереднього блоку цитати.</translation>
 <translation id="1321576897702511272">Сховати довідку ChromeVox</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> з <ph name="TOTAL" /></translation>
@@ -42,6 +43,7 @@
 <translation id="1339428534620983148">Попередній стовпець таблиці</translation>
 <translation id="1342835525016946179">стаття</translation>
 <translation id="1346748346194534595">Праворуч</translation>
+<translation id="135978014023467274">Тепер ви використовуєте ChromeVox 63!</translation>
 <translation id="136718599399906424">Наступний рядок таблиці</translation>
 <translation id="1377925789329510816">Перехід між заголовками. Натисніть комбінацію Search+H, щоб повернутися до першого заголовка, або Search+Shift+H, щоб перейти до другого заголовка на цій сторінці.</translation>
 <translation id="1383876407941801731">Пошук</translation>
@@ -168,6 +170,7 @@
 <translation id="2770781857296573485">Почати вивчення груп</translation>
 <translation id="2777845298774924149">Ви закрили</translation>
 <translation id="2781264313200109999">Початок посилання</translation>
+<translation id="2784959586797362050">Надішліть нам відгук, натиснувши комбінацію клавіш пошуку+a, а потім – клавішу i. Нас цікавить ваша думка.</translation>
 <translation id="2800204403141299078">Інших несхожих елементів немає.</translation>
 <translation id="2800780099804980316">Немає попереднього заголовка рівня 1.</translation>
 <translation id="280499067616661124">Пошук ChromeVox на сторінці</translation>
@@ -224,8 +227,6 @@
 <translation id="3163593631834463955">Порожній заголовок стовпця</translation>
 <translation id="316542773973815724">Навігація</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{пробіл}one{# пробіл}few{# пробіли}many{# пробілів}other{# spaces}}</translation>
-<translation id="3183233191569362040">Вітаємо! Ви дізналися про основні функції ChromeVox Next (бета-версія). Ви завжди можете відкрити командне меню ChromeVox, натиснувши Search і клавішу крапки. Щоб дізнатися більше про ChromeVox і ОС Chrome, перегляньте статті нижче.
-Щоб вийти з посібника, перейдіть до кнопки "Закрити" за допомогою ChromeVox і натисніть її.</translation>
 <translation id="320961988183078793">введено: <ph name="TYPE" /></translation>
 <translation id="3223701887221307104"><ph name="NAME" />, вкладка</translation>
 <translation id="3226035351387556942">прапорець</translation>
@@ -235,6 +236,7 @@
 <translation id="3241638166094654466">Клітинок у кожному рядку:</translation>
 <translation id="3286390186030710347">Повзунок</translation>
 <translation id="3299925995433437805">Немає наступного натиснутого посилання.</translation>
+<translation id="3300348286427369683">Підтримка форматованого тексту. Тепер ChromeVox підтримує поля форматованого тексту, зокрема команди переходу, переміщення курсора за допомогою брайлівської клавіатури, виділення тексту тощо.</translation>
 <translation id="3307886118343381874">Перейти в кінець таблиці</translation>
 <translation id="3311969765485641742">Натисніть Alt+Shift+A, щоб переглянути попередження</translation>
 <translation id="3312997241656799641">Наступне натиснуте посилання</translation>
@@ -299,6 +301,7 @@
 <translation id="3458865416877308321"><ph name="NAME" />, вимкнено</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, кнопка</translation>
 <translation id="3466530247399808663">Натискання недійсної клавіші</translation>
+<translation id="3468959318854349468">Без назви</translation>
 <translation id="3473644018603298796">виділено: <ph name="COUNT" /></translation>
 <translation id="3486232535569802404">Від <ph name="V1" /> до <ph name="V2" /></translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{права квадратна дужка}one{# права квадратна дужка}few{# праві квадратні дужки}many{# правих квадратних дужок}other{# right brackets}}</translation>
@@ -337,7 +340,7 @@
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3909320334364316587">Попередній заголовок рівня 6</translation>
 <translation id="3914173277599553213">Обов’язково</translation>
-<translation id="3951424903203718058">Уперше користуєтеся голосовими підказками ChromeVox Next? У цьому посібнику ви швидко дізнаєтеся про його основні функції.</translation>
+<translation id="3914732343065571127">Довідка щодо команд у ChromeVox</translation>
 <translation id="3962990492275676168">Почати читати з поточного місця</translation>
 <translation id="4004802134384979325">з прапорцем</translation>
 <translation id="4006140876663370126">зображення</translation>
@@ -408,7 +411,9 @@
 <translation id="4601367666219428522">табл. "<ph name="TABLENAME" />", <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">Натискання наступної клавіші ігнорується</translation>
 <translation id="461613135510474570">Речення</translation>
+<translation id="463135993322337640">Натисніть ChromeVox o, n, щоб дізнатися про нові функції</translation>
 <translation id="4647836961514597010">Вибір кольору</translation>
+<translation id="4660783501463101648">Видалено версію Classic. Комбінацію клавіш для переходу до ChromeVox Classic видалено.</translation>
 <translation id="4661075872484491155">дерево</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4688873778442829762">сітка</translation>
@@ -428,10 +433,10 @@
 <translation id="4827410568042294688">виділення скасовано</translation>
 <translation id="4842108708071771135">Немає наступного блоку цитати.</translation>
 <translation id="4844625982113518938">Натисніть клавішу, щоб дізнатися її назву. Сторінку "Докладніше" можна закрити за допомогою комбінації Ctrl+W.</translation>
+<translation id="4846428657345567687">Вітаємо в ChromeVox!</translation>
 <translation id="4846487886195635104">Кінець закресленого тексту</translation>
 <translation id="4848993367330139335">таймер</translation>
 <translation id="4850023505158945298">Попередній схожий елемент.</translation>
-<translation id="485011152882364255">У ChromeVox Next клавіша-модифікатор – це Search. Більшість комбінацій клавіш ChromeVox починаються із Search. Для навігації використовуються клавіші стрілок.</translation>
 <translation id="4866956062845190338">перемикач пунктів меню</translation>
 <translation id="4867316986324544967">Увімкнути реєстрацію TTS</translation>
 <translation id="4877261390094455813">Введіть пошуковий запит.</translation>
@@ -466,6 +471,7 @@
 <translation id="5098541983634824365">Вихід із сітки.</translation>
 <translation id="5102981729317424850">Панель інструментів</translation>
 <translation id="5105050547967751155">обов’язково</translation>
+<translation id="5106547198195128110">Нижче зазначено, що змінилося в новому випуску.</translation>
 <translation id="5110983769041734144">Немає попереднього поля форми.</translation>
 <translation id="5111640677200759579">Заголовок стовпця</translation>
 <translation id="5136967254288895616">Немає попереднього посилання.</translation>
@@ -500,7 +506,6 @@
 <translation id="5444587279251314700">(активна)</translation>
 <translation id="5451268436205074266">крапки: <ph name="DOT" /></translation>
 <translation id="5455441614648621694">Додатково</translation>
-<translation id="5458780372341732962">Використовувати ChromeVox Next (бета-версія)</translation>
 <translation id="5485036206801896268">Немає попереднього зображення.</translation>
 <translation id="5486947920110100234">Немає наступної точки переходу.</translation>
 <translation id="549602578321198708">Слово</translation>
@@ -509,7 +514,6 @@
 <translation id="5507663321906818013">Налагодити орієнтир</translation>
 <translation id="5518443085409638729">Розміщувати курсор між символами під час редагування тексту (як в ОС Mac X).</translation>
 <translation id="552195134157544755">Перемикач</translation>
-<translation id="5531530875187439488">Нові звукові ефекти. Ми оновили набір аудіозначків, щоб користуватися Інтернетом було зручніше.</translation>
 <translation id="5534303576632885660">заголовок</translation>
 <translation id="5546092960038624944">Немає попереднього заголовка рівня 5.</translation>
 <translation id="556042886152191864">Кнопка</translation>
@@ -536,7 +540,6 @@
 <translation id="5682113568322255809">Орієнтир</translation>
 <translation id="5683155931978483559">Попередній прапорець</translation>
 <translation id="5684277895745049190">Список</translation>
-<translation id="5684905390246898631">Вітаємо в ChromeVox Next!</translation>
 <translation id="5695831708991916435">Комбінації клавіш нижче не є командами в ChromeVox, але вони дуже зручні для продуктивної роботи в Chrome.
 Щоб переходити між інтерактивними елементами, як-от кнопками чи посиланнями, натискайте клавішу Tab (уперед) або Shift+Tab (назад). 
 Щоб перейти до адресного рядка веб-переглядача Chrome (універсальне вікно пошуку), натисніть Control+L. 
@@ -571,7 +574,6 @@
 <translation id="5937336320314038555">{COUNT,plural, =1{знак рівності}one{# знак рівності}few{# знаки рівності}many{# знаків рівності}other{# equal signs}}</translation>
 <translation id="5939518447894949180">Скинути</translation>
 <translation id="5948123859135882163">Переключення між структурним і семантичним аналізом математичних виразів</translation>
-<translation id="5948485979596965684">Тепер у вас найновіша версія ChromeVox!</translation>
 <translation id="5955304353782037793">додаток</translation>
 <translation id="5956928062748260866">Діалогове вікно</translation>
 <translation id="5963413905009737549">Розділ</translation>
@@ -586,6 +588,7 @@
 <translation id="6065293622157674001">Початок тексту з граматичною помилкою</translation>
 <translation id="6082768461603900813">Основна навігація</translation>
 <translation id="6092707270915298410">Кінець посилання</translation>
+<translation id="6118126368611144850">Додатки Android для Chrome. Якщо на вашому пристрої встановлено Play Маркет, спробуйте експериментальну функцію ChromeVox із додатками Android. Завантажте Google Chrome Canary з Play Маркету.</translation>
 <translation id="611827076493383239">натиснуто</translation>
 <translation id="6119955456199054975">Кінець клітинки.</translation>
 <translation id="6122013438240733403">кнопка</translation>
@@ -626,6 +629,7 @@
 <translation id="6493991254603208962">Зменшити яскравість</translation>
 <translation id="6508059270146105198">Перемістити брайлівський дисплей униз сторінки</translation>
 <translation id="6536864053412760904">Маркер Math ML</translation>
+<translation id="6540201937398578274">У ChromeVox клавіша пошуку – це клавіша-модифікатор. Більшість комбінацій клавіш ChromeVox починаються з неї. Для навігації використовуються клавіші зі стрілками.</translation>
 <translation id="6550720799683018100">Змініть поточну розкладку клавіатури, вибравши один із варіантів зі списку нижче.</translation>
 <translation id="6561818612645211875">Перейти на початок поточного рядка</translation>
 <translation id="6587021927234520429">Немає наступного заголовка рівня 4.</translation>
@@ -650,7 +654,6 @@
 <translation id="6786800275320335305">Стаття</translation>
 <translation id="6787839852456839824">Комбінації клавіш</translation>
 <translation id="6793101435925451627">спадний список</translation>
-<translation id="6818172019016005152">Представляємо оновлену та покращену програму ChromeVox</translation>
 <translation id="6833103209700200188">Нижній колонтитул</translation>
 <translation id="6871161210040114857">Регістр не враховується.</translation>
 <translation id="6877435256196695200">Немає наступного зображення.</translation>
@@ -668,7 +671,6 @@
 <translation id="7037042857287298941">Попередній список</translation>
 <translation id="7041173719775863268">Кінець виділення</translation>
 <translation id="7086377898680121060">Збільшити яскравість</translation>
-<translation id="7094527465295945904">Нові призначення клавіш. Ми зробили Search клавішею-модифікатором у ChromeVox і значно спростили комбінації.</translation>
 <translation id="7095834689119144465">Редагування тексту лише для цифр</translation>
 <translation id="7096001299300236431">Медіа – назад</translation>
 <translation id="7116595520562830928">багаторядковий</translation>
@@ -772,7 +774,6 @@
 <translation id="8066678206530322333">Банер</translation>
 <translation id="8076492880354921740">Вкладки</translation>
 <translation id="8091452896542422286">Пробіл</translation>
-<translation id="8104178626892949749">Натисніть ChromeVox o, n, щоб дізнатися більше про ChromeVox Next.</translation>
 <translation id="8110647606445335195">Немає орієнтирів ARIA.</translation>
 <translation id="8153880621934657047">Не всередині таблиці.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{підкреслення}one{# підкреслення}few{# підкреслення}many{# підкреслень}other{# underscores}}</translation>
@@ -782,7 +783,6 @@
 <translation id="8199231515320852133">Повідомити заголовки поточної клітинки</translation>
 <translation id="820417203470636242">Порожня клітинка.</translation>
 <translation id="8215202828671303819">Вибір кількох елементів</translation>
-<translation id="8224171046658870249">Ви перейшли на ChromeVox Next</translation>
 <translation id="826991282343985864">р$1с$2</translation>
 <translation id="8276439074553447000">Перейти до попереднього інтерактивного елемента</translation>
 <translation id="8278417001922463147">Немає попередньої статті.</translation>
@@ -827,7 +827,6 @@
 <translation id="8664519043722036194">секунд</translation>
 <translation id="867187640362843212">Заголовок 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{вертикальна риска}one{# вертикальна риска}few{# вертикальні риски}many{# вертикальних рисок}other{# vertical pipes}}</translation>
-<translation id="8721861170709424373">Довідка щодо команд у ChromeVox Next</translation>
 <translation id="8735450637152821465">Початок виділення</translation>
 <translation id="8743786158317878347">відкрити структурований вміст, як-от таблиці</translation>
 <translation id="8747966237988593539">Упорядкований список</translation>
@@ -880,7 +879,6 @@
 <translation id="923331726185079994">ChromeVox оновлено</translation>
 <translation id="930275611743429116">Почати або закінчити вибір.</translation>
 <translation id="948171205378458592">Зменшити темп мовлення</translation>
-<translation id="955917170449423694">Ви перейшли на Classic ChromeVox</translation>
 <translation id="962913030769097253">Наступний заголовок рівня 1</translation>
 <translation id="973955474346881951">Увімкнути чи вимкнути режим закріплення</translation>
 <translation id="976849232629612000">Немає елементів.</translation>

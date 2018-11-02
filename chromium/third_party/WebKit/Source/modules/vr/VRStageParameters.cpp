@@ -23,8 +23,9 @@ void VRStageParameters::Update(
   size_z_ = stage->sizeZ;
 }
 
-DEFINE_TRACE(VRStageParameters) {
+void VRStageParameters::Trace(blink::Visitor* visitor) {
   visitor->Trace(standing_transform_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

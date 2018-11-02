@@ -1,0 +1,95 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="model.html">
+<link rel="import" href="header.html">
+<link rel="import" href="destination_settings.html">
+<link rel="import" href="pages_settings.html">
+<link rel="import" href="copies_settings.html">
+<link rel="import" href="layout_settings.html">
+<link rel="import" href="color_settings.html">
+<link rel="import" href="media_size_settings.html">
+<link rel="import" href="margins_settings.html">
+<link rel="import" href="dpi_settings.html">
+<link rel="import" href="scaling_settings.html">
+<link rel="import" href="other_options_settings.html">
+<link rel="import" href="advanced_options_settings.html">
+
+<dom-module id="print-preview-app">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        height: 100%;
+      }
+
+      #sidebar {
+        -webkit-border-end: 1px solid #c8c8c8;
+        background-color: white;
+        display: flex;
+        flex-direction: column;
+        max-width: 310px;
+        min-width: 310px;
+      }
+
+      #settings-sections {
+        background: #fbfbfb;
+        border-top: 1px solid #f3f3f3;
+        flex: 1;
+        overflow: auto;
+      }
+
+      #previewArea {
+        -webkit-border-start: 1px solid #dcdcdc;
+        align-items: center;
+        background-color: #e6e6e6;
+        display: flex;
+        flex: 1;
+        justify-content: center;
+      }
+    </style>
+    <print-preview-model id="model" settings="{{settings}}"
+        destination="{{destination}}" document-info="{{documentInfo}}"
+        state="{{state}}"></print-preview-model>
+    <div id="sidebar">
+      <print-preview-header destination="[[destination]]" state="[[state]]"
+          settings="[[settings]]"></print-preview-header>
+      <div id="settings-sections">
+        <print-preview-destination-settings destination="[[destination]]">
+        </print-preview-destination-settings>
+        <print-preview-pages-settings settings="{{settings}}"
+            document-info="[[documentInfo]]"
+            hidden$="[[!settings.pages.available]]">
+        </print-preview-pages-settings>
+        <print-preview-copies-settings settings="{{settings}}"
+            hidden$="[[!settings.copies.available]]">
+        </print-preview-copies-settings>
+        <print-preview-layout-settings settings="{{settings}}"
+            hidden$="[[!settings.layout.available]]">
+        </print-preview-layout-settings>
+        <print-preview-color-settings settings="{{settings}}"
+            hidden$="[[!settings.color.available]]">
+        </print-preview-color-settings>
+        <print-preview-media-size-settings settings="{{settings}}"
+            hidden$="[[!settings.mediaSize.available]]">
+        </print-preview-media-size-settings>
+        <print-preview-margins-settings settings="{{settings}}"
+            hidden$="[[!settings.margins.available]]">
+        </print-preview-margins-settings>
+        <print-preview-dpi-settings settings="{{settings}}"
+            hidden$="[[!settings.dpi.available]]">
+        </print-preview-dpi-settings>
+        <print-preview-scaling-settings settings="{{settings}}"
+            document-info="[[documentInfo]]"
+            hidden$="[[!settings.scaling.available]]">
+        </print-preview-scaling-settings>
+        <print-preview-other-options-settings settings="{{settings}}">
+        </print-preview-other-options-settings>
+        <print-preview-advanced-options-settings settings="{{settings}}"
+            hidden$="[[!settings.vendorItems.available]]">
+        </print-preview-advanced-options-settings>
+      </div>
+    </div>
+    <div id="previewArea">preview area</div>
+  </template>
+  <script src="app.js"></script>
+</dom-module>

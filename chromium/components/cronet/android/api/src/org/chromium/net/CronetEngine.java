@@ -59,7 +59,7 @@ public abstract class CronetEngine {
         /**
          * Constructs a {@link Builder} object that facilitates creating a
          * {@link CronetEngine}. The default configuration enables HTTP/2 and
-         * disables QUIC, SDCH and the HTTP cache.
+         * disables QUIC and the HTTP cache.
          *
          * @param context Android {@link Context}, which is used by
          *                {@link Builder} to retrieve the application
@@ -159,15 +159,11 @@ public abstract class CronetEngine {
         }
 
         /**
-         * Sets whether
-         * <a
-         * href="https://lists.w3.org/Archives/Public/ietf-http-wg/2008JulSep/att-0441/Shared_Dictionary_Compression_over_HTTP.pdf">
-         * SDCH</a> compression is enabled. Defaults to disabled.
-         * @param value {@code true} to enable SDCH, {@code false} to disable.
-         * @return the builder to facilitate chaining.
+         * @deprecated SDCH is deprecated in Cronet M63. This method is a no-op.
+         * {@hide exclude from JavaDoc}.
          */
+        @Deprecated
         public Builder enableSdch(boolean value) {
-            mBuilderDelegate.enableSdch(value);
             return this;
         }
 

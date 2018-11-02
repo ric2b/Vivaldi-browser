@@ -34,8 +34,7 @@ namespace blink {
 class LocalFrame;
 class PluginData;
 
-class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
-                             public ScriptWrappable,
+class DOMPluginArray final : public ScriptWrappable,
                              public ContextLifecycleObserver,
                              public PluginsChangedObserver {
   DEFINE_WRAPPERTYPEINFO();
@@ -50,13 +49,15 @@ class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
   unsigned length() const;
   DOMPlugin* item(unsigned index);
   DOMPlugin* namedItem(const AtomicString& property_name);
+  void NamedPropertyEnumerator(Vector<String>&, ExceptionState&) const;
+  bool NamedPropertyQuery(const AtomicString&, ExceptionState&) const;
 
   void refresh(bool reload);
 
   // PluginsChangedObserver implementation.
   void PluginsChanged();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   explicit DOMPluginArray(LocalFrame*);

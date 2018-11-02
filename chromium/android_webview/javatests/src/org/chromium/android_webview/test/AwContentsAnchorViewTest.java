@@ -17,7 +17,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwViewAndroidDelegate;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.RenderCoordinates;
 import org.chromium.ui.display.DisplayAndroid;
 
 /**
@@ -34,7 +33,7 @@ public class AwContentsAnchorViewTest {
     @Before
     public void setUp() throws Exception {
         mContainerView = new FrameLayout(mActivityTestRule.getActivity());
-        mViewDelegate = new AwViewAndroidDelegate(mContainerView, null, new RenderCoordinates());
+        mViewDelegate = new AwViewAndroidDelegate(mContainerView, null, null);
     }
 
     @Test
@@ -210,8 +209,10 @@ public class AwContentsAnchorViewTest {
 
     private LayoutParams setLayoutParams(View anchorView, int coords, int dimension) {
         float scale = DisplayAndroid.getNonMultiDisplay(mContainerView.getContext()).getDipScale();
+        float scaledCoords = (float) coords * scale;
+        float scaledDimension = (float) dimension * scale;
         mViewDelegate.setViewPosition(
-                anchorView, coords, coords, dimension, dimension, scale, 10, 10);
+                anchorView, scaledCoords, scaledCoords, scaledDimension, scaledDimension, 10, 10);
         return anchorView.getLayoutParams();
     }
 

@@ -6,7 +6,7 @@
 
 #include "base/atomicops.h"
 #include "base/hash.h"
-#include "components/metrics/proto/ukm/source.pb.h"
+#include "third_party/metrics_proto/ukm/source.pb.h"
 
 namespace ukm {
 
@@ -39,7 +39,9 @@ void UkmSource::SetCustomTabVisible(bool visible) {
   g_custom_tab_state = visible ? kCustomTabTrue : kCustomTabFalse;
 }
 
-UkmSource::UkmSource() : custom_tab_state_(g_custom_tab_state) {}
+UkmSource::UkmSource()
+    : custom_tab_state_(g_custom_tab_state),
+      creation_time_(base::TimeTicks::Now()) {}
 
 UkmSource::~UkmSource() = default;
 

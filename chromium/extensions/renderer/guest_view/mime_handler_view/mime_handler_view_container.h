@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/guest_view/renderer/guest_view_container.h"
 #include "third_party/WebKit/public/web/WebAssociatedURLLoaderClient.h"
 #include "ui/gfx/geometry/size.h"
@@ -83,7 +84,9 @@ class MimeHandlerViewContainer : public guest_view::GuestViewContainer,
                        int guest_proxy_routing_id);
   void OnMimeHandlerViewGuestOnLoadCompleted(int element_instance_id);
 
-  void CreateMimeHandlerViewGuest();
+  // Creates a guest when a geometry and the URL of the extension to navigate
+  // to are available.
+  void CreateMimeHandlerViewGuestIfNecessary();
 
   // The MIME type of the plugin.
   const std::string mime_type_;
@@ -112,12 +115,15 @@ class MimeHandlerViewContainer : public guest_view::GuestViewContainer,
   // delivered so that messages aren't lost.
   std::vector<v8::Global<v8::Value>> pending_messages_;
 
+  // True if a guest process has been requested.
+  bool guest_created_ = false;
+
   // True if the guest page has fully loaded and its JavaScript onload function
   // has been called.
   bool guest_loaded_;
 
   // The size of the element.
-  gfx::Size element_size_;
+  base::Optional<gfx::Size> element_size_;
 
   base::WeakPtrFactory<MimeHandlerViewContainer> weak_factory_;
 

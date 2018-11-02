@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/ssl/ssl_error_handler.h"
 #include "content/public/browser/browser_thread.h"
@@ -40,44 +40,46 @@ void LoadProtoFromDisk(const base::FilePath& pb_path) {
     DVLOG(1) << "Failed reading from " << pb_path.value();
     return;
   }
-  auto proto = base::MakeUnique<chrome_browser_ssl::SSLErrorAssistantConfig>();
+  auto proto = std::make_unique<chrome_browser_ssl::SSLErrorAssistantConfig>();
   if (!proto->ParseFromString(binary_pb)) {
     DVLOG(1) << "Failed parsing proto " << pb_path.value();
     return;
   }
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&SSLErrorHandler::SetErrorAssistantProto,
-                     base::Passed(std::move(proto))));
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&SSLErrorHandler::SetErrorAssistantProto,
+                                base::Passed(std::move(proto))));
 }
 
 }  // namespace
 
 namespace component_updater {
 
-bool SSLErrorAssistantComponentInstallerTraits::
+bool SSLErrorAssistantComponentInstallerPolicy::
     SupportsGroupPolicyEnabledComponentUpdates() const {
   return false;
 }
 
-bool SSLErrorAssistantComponentInstallerTraits::RequiresNetworkEncryption()
+bool SSLErrorAssistantComponentInstallerPolicy::RequiresNetworkEncryption()
     const {
   return false;
 }
 
 update_client::CrxInstaller::Result
-SSLErrorAssistantComponentInstallerTraits::OnCustomInstall(
+SSLErrorAssistantComponentInstallerPolicy::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
   return update_client::CrxInstaller::Result(0);  // Nothing custom here.
 }
 
-base::FilePath SSLErrorAssistantComponentInstallerTraits::GetInstalledPath(
+void SSLErrorAssistantComponentInstallerPolicy::OnCustomUninstall() {}
+
+base::FilePath SSLErrorAssistantComponentInstallerPolicy::GetInstalledPath(
     const base::FilePath& base) {
   return base.Append(kConfigBinaryPbFileName);
 }
 
-void SSLErrorAssistantComponentInstallerTraits::ComponentReady(
+void SSLErrorAssistantComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
     std::unique_ptr<base::DictionaryValue> manifest) {
@@ -90,7 +92,7 @@ void SSLErrorAssistantComponentInstallerTraits::ComponentReady(
 }
 
 // Called during startup and installation before ComponentReady().
-bool SSLErrorAssistantComponentInstallerTraits::VerifyInstallation(
+bool SSLErrorAssistantComponentInstallerPolicy::VerifyInstallation(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) const {
   // No need to actually validate the proto here, since we'll do the checking
@@ -99,27 +101,27 @@ bool SSLErrorAssistantComponentInstallerTraits::VerifyInstallation(
 }
 
 base::FilePath
-SSLErrorAssistantComponentInstallerTraits::GetRelativeInstallDir() const {
+SSLErrorAssistantComponentInstallerPolicy::GetRelativeInstallDir() const {
   return base::FilePath(FILE_PATH_LITERAL("SSLErrorAssistant"));
 }
 
-void SSLErrorAssistantComponentInstallerTraits::GetHash(
+void SSLErrorAssistantComponentInstallerPolicy::GetHash(
     std::vector<uint8_t>* hash) const {
   hash->assign(kPublicKeySHA256,
                kPublicKeySHA256 + arraysize(kPublicKeySHA256));
 }
 
-std::string SSLErrorAssistantComponentInstallerTraits::GetName() const {
+std::string SSLErrorAssistantComponentInstallerPolicy::GetName() const {
   return "SSL Error Assistant";
 }
 
 update_client::InstallerAttributes
-SSLErrorAssistantComponentInstallerTraits::GetInstallerAttributes() const {
+SSLErrorAssistantComponentInstallerPolicy::GetInstallerAttributes() const {
   return update_client::InstallerAttributes();
 }
 
 std::vector<std::string>
-SSLErrorAssistantComponentInstallerTraits::GetMimeTypes() const {
+SSLErrorAssistantComponentInstallerPolicy::GetMimeTypes() const {
   return std::vector<std::string>();
 }
 
@@ -127,12 +129,9 @@ void RegisterSSLErrorAssistantComponent(ComponentUpdateService* cus,
                                         const base::FilePath& user_data_dir) {
   DVLOG(1) << "Registering SSL Error Assistant component.";
 
-  std::unique_ptr<ComponentInstallerTraits> traits(
-      new SSLErrorAssistantComponentInstallerTraits());
-  // |cus| takes ownership of |installer|.
-  DefaultComponentInstaller* installer =
-      new DefaultComponentInstaller(std::move(traits));
-  installer->Register(cus, base::Closure());
+  auto installer = base::MakeRefCounted<ComponentInstaller>(
+      std::make_unique<SSLErrorAssistantComponentInstallerPolicy>());
+  installer->Register(cus, base::OnceClosure());
 }
 
 }  // namespace component_updater

@@ -4,7 +4,7 @@
 
 #include "ash/app_list/app_list_presenter_delegate.h"
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -48,8 +48,8 @@ gfx::Point GetCenterOfDisplayForWindow(aura::Window* window,
   // until after this function is called.)
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
-  if (keyboard_controller && keyboard_controller->keyboard_visible())
-    bounds.Subtract(keyboard_controller->current_keyboard_bounds());
+  if (keyboard_controller)
+    bounds.Subtract(keyboard_controller->GetWorkspaceObscuringBounds());
 
   // Apply the |minimum_height|.
   if (bounds.height() < minimum_height)
@@ -114,14 +114,16 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
       ->UpdateAutoHideState();
   view_ = view;
   aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
-  aura::Window* container = RootWindowController::ForWindow(root_window)
-                                ->GetContainer(kShellWindowId_AppListContainer);
 
-  view->Initialize(container, current_apps_page,
-                   Shell::Get()
-                       ->tablet_mode_controller()
-                       ->IsTabletModeWindowManagerEnabled(),
-                   IsSideShelf(root_window));
+  app_list::AppListView::InitParams params;
+  params.parent = RootWindowController::ForWindow(root_window)
+                      ->GetContainer(kShellWindowId_AppListContainer);
+  params.initial_apps_page = current_apps_page;
+  params.is_tablet_mode = Shell::Get()
+                              ->tablet_mode_controller()
+                              ->IsTabletModeWindowManagerEnabled();
+  params.is_side_shelf = IsSideShelf(root_window);
+  view->Initialize(params);
 
   if (!is_fullscreen_app_list_enabled_) {
     view->MaybeSetAnchorPoint(GetCenterOfDisplayForWindow(
@@ -249,15 +251,16 @@ void AppListPresenterDelegate::OnMouseEvent(ui::MouseEvent* event) {
 void AppListPresenterDelegate::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP ||
       event->type() == ui::ET_GESTURE_TWO_FINGER_TAP ||
-      event->type() == ui::ET_GESTURE_LONG_PRESS)
+      event->type() == ui::ET_GESTURE_LONG_PRESS) {
     ProcessLocatedEvent(event);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // AppListPresenterDelegate, keyboard::KeyboardControllerObserver
 // implementation:
 
-void AppListPresenterDelegate::OnKeyboardBoundsChanging(
+void AppListPresenterDelegate::OnKeyboardWorkspaceOccludedBoundsChanging(
     const gfx::Rect& new_bounds) {
   UpdateBounds();
 }

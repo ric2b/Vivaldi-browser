@@ -40,15 +40,14 @@ class PaymentRequest;
 // provided in the initializer.
 @interface AddressEditCoordinator
     : ChromeCoordinator<PaymentRequestEditViewControllerDelegate,
-                        PaymentRequestEditViewControllerValidator,
                         CountrySelectionCoordinatorDelegate>
 
 // The address to be edited, if any. This pointer is not owned by this class
 // and should outlive it.
 @property(nonatomic, assign) autofill::AutofillProfile* address;
 
-// The PaymentRequest object owning an instance of web::PaymentRequest as
-// provided by the page invoking the Payment Request API. This pointer is not
+// The PaymentRequest object owning an instance of payments::WebPaymentRequest
+// as provided by the page invoking the Payment Request API. This pointer is not
 // owned by this class and should outlive it.
 @property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 

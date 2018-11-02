@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/profiler/scoped_tracker.h"
 #import "chrome/browser/renderer_host/chrome_render_widget_host_view_mac_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -16,6 +15,7 @@
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#import "ui/base/cocoa/focus_tracker.h"
 #include "ui/base/ui_features.h"
 
 #include "app/vivaldi_apptools.h"
@@ -41,7 +41,12 @@ gfx::NativeWindow ChromeWebContentsViewDelegateMac::GetNativeWindow() {
 
 NSObject<RenderWidgetHostViewMacDelegate>*
 ChromeWebContentsViewDelegateMac::CreateRenderWidgetHostViewDelegate(
-    content::RenderWidgetHost* render_widget_host) {
+    content::RenderWidgetHost* render_widget_host,
+    bool is_popup) {
+  // We don't need a delegate for popups since they don't have
+  // overscroll.
+  if (is_popup)
+    return nil;
   return [[ChromeRenderWidgetHostViewMacDelegate alloc]
       initWithRenderWidgetHost:render_widget_host];
 }
@@ -54,22 +59,37 @@ content::WebDragDestDelegate*
 void ChromeWebContentsViewDelegateMac::ShowContextMenu(
     content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
-  // TODO(erikchen): Remove ScopedTracker below once crbug.com/458401 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "458401 ChromeWebContentsViewDelegateMac::ShowContextMenu"));
   ShowMenu(
       BuildMenu(content::WebContents::FromRenderFrameHost(render_frame_host),
                 params));
 }
 
+void ChromeWebContentsViewDelegateMac::StoreFocus() {
+  // We're explicitly being asked to store focus, so don't worry if there's
+  // already a view saved.
+  focus_tracker_.reset(
+      [[FocusTracker alloc] initWithWindow:GetNSWindowForFocusTracker()]);
+}
+
+bool ChromeWebContentsViewDelegateMac::RestoreFocus() {
+  base::scoped_nsobject<FocusTracker> focus_tracker(std::move(focus_tracker_));
+
+  // TODO(avi): Could we be restoring a view that's no longer in the key view
+  // chain?
+  if ((focus_tracker.get() &&
+       [focus_tracker restoreFocusInWindow:GetNSWindowForFocusTracker()])) {
+    return true;
+  }
+
+  return false;
+}
+
+void ChromeWebContentsViewDelegateMac::ResetStoredFocus() {
+  focus_tracker_.reset();
+}
+
 void ChromeWebContentsViewDelegateMac::ShowMenu(
     std::unique_ptr<RenderViewContextMenuBase> menu) {
-  // TODO(erikchen): Remove ScopedTracker below once crbug.com/458401 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "458401 ChromeWebContentsViewDelegateMac::ShowMenu"));
-
   context_menu_ = std::move(menu);
   if (!context_menu_.get())
     return;
@@ -91,10 +111,6 @@ std::unique_ptr<RenderViewContextMenuBase>
 ChromeWebContentsViewDelegateMac::BuildMenu(
     content::WebContents* web_contents,
     const content::ContextMenuParams& params) {
-  // TODO(erikchen): Remove ScopedTracker below once crbug.com/458401 is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "458401 ChromeWebContentsViewDelegateMac::BuildMenu"));
   std::unique_ptr<RenderViewContextMenuBase> menu;
   content::RenderFrameHost* focused_frame = web_contents->GetFocusedFrame();
   // If the frame tree does not have a focused frame at this point, do not
@@ -104,20 +120,8 @@ ChromeWebContentsViewDelegateMac::BuildMenu(
   if (focused_frame) {
     content::RenderWidgetHostView* widget_view =
         GetActiveRenderWidgetHostView();
-
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/458401
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile2(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "458401 ChromeWebContentsViewDelegateMac::BuildMenu::MakeMenu"));
     menu.reset(new RenderViewContextMenuMac(
         focused_frame, params, widget_view->GetNativeView()));
-
-    // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/458401
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile3(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION(
-            "458401 ChromeWebContentsViewDelegateMac::BuildMenu::InitMenu"));
     menu->Init();
   }
 
@@ -125,19 +129,22 @@ ChromeWebContentsViewDelegateMac::BuildMenu(
 }
 
 content::RenderWidgetHostView*
-ChromeWebContentsViewDelegateMac::GetActiveRenderWidgetHostView() {
+ChromeWebContentsViewDelegateMac::GetActiveRenderWidgetHostView() const {
   return web_contents_->GetFullscreenRenderWidgetHostView() ?
       web_contents_->GetFullscreenRenderWidgetHostView() :
       web_contents_->GetTopLevelRenderWidgetHostView();
 }
 
+NSWindow* ChromeWebContentsViewDelegateMac::GetNSWindowForFocusTracker() const {
+  content::RenderWidgetHostView* rwhv = GetActiveRenderWidgetHostView();
+  return rwhv ? [rwhv->GetNativeView() window] : nil;
+}
+
 #if !BUILDFLAG(MAC_VIEWS_BROWSER)
-namespace chrome {
 
 content::WebContentsViewDelegate* CreateWebContentsViewDelegate(
     content::WebContents* web_contents) {
   return new ChromeWebContentsViewDelegateMac(web_contents);
 }
 
-}  // namespace chrome
 #endif  // MAC_VIEWS_BROWSER

@@ -20,7 +20,6 @@
 #include "core/layout/svg/SVGResources.h"
 
 #include <memory>
-#include "core/SVGNames.h"
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
 #include "core/layout/svg/LayoutSVGResourceFilter.h"
 #include "core/layout/svg/LayoutSVGResourceMarker.h"
@@ -31,6 +30,7 @@
 #include "core/svg/SVGPatternElement.h"
 #include "core/svg/SVGTreeScopeResources.h"
 #include "core/svg/SVGURIReference.h"
+#include "core/svg_names.h"
 #include "platform/wtf/PtrUtil.h"
 
 #ifndef NDEBUG
@@ -110,10 +110,10 @@ static HashSet<AtomicString>& ChainableResourceTags() {
 
 static inline AtomicString TargetReferenceFromResource(SVGElement& element) {
   String target;
-  if (isSVGPatternElement(element))
-    target = toSVGPatternElement(element).href()->CurrentValue()->Value();
-  else if (IsSVGGradientElement(element))
-    target = ToSVGGradientElement(element).href()->CurrentValue()->Value();
+  if (auto* pattern = ToSVGPatternElementOrNull(element))
+    target = pattern->href()->CurrentValue()->Value();
+  else if (auto* gradient = ToSVGGradientElementOrNull(element))
+    target = gradient->href()->CurrentValue()->Value();
   else
     NOTREACHED();
 

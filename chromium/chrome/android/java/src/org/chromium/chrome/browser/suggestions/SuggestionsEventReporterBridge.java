@@ -20,18 +20,16 @@ public class SuggestionsEventReporterBridge implements SuggestionsEventReporter 
     }
 
     @Override
-    public void onPageShown(int[] categories, int[] suggestionsPerCategory,
-            int[] prefetchedSuggestionsPerCategory, boolean[] isCategoryVisible) {
-        nativeOnPageShown(categories, suggestionsPerCategory, prefetchedSuggestionsPerCategory,
-                isCategoryVisible);
+    public void onPageShown(
+            int[] categories, int[] suggestionsPerCategory, boolean[] isCategoryVisible) {
+        nativeOnPageShown(categories, suggestionsPerCategory, isCategoryVisible);
     }
 
     @Override
     public void onSuggestionShown(SnippetArticle suggestion) {
         nativeOnSuggestionShown(suggestion.getGlobalRank(), suggestion.mCategory,
                 suggestion.getPerSectionRank(), suggestion.mPublishTimestampMilliseconds,
-                suggestion.mScore, suggestion.mFetchTimestampMilliseconds,
-                suggestion.isPrefetched());
+                suggestion.mScore, suggestion.mFetchTimestampMilliseconds);
     }
 
     @Override
@@ -89,11 +87,10 @@ public class SuggestionsEventReporterBridge implements SuggestionsEventReporter 
         nativeOnColdStart();
     }
 
-    private static native void nativeOnPageShown(int[] categories, int[] suggestionsPerCategory,
-            int[] prefetchedSuggestionsPerCategory, boolean[] isCategoryVisible);
+    private static native void nativeOnPageShown(
+            int[] categories, int[] suggestionsPerCategory, boolean[] isCategoryVisible);
     private static native void nativeOnSuggestionShown(int globalPosition, int category,
-            int positionInCategory, long publishTimestampMs, float score, long fetchTimestampMs,
-            boolean isPrefetched);
+            int positionInCategory, long publishTimestampMs, float score, long fetchTimestampMs);
     private static native void nativeOnSuggestionOpened(int globalPosition, int category,
             int categoryIndex, int positionInCategory, long publishTimestampMs, float score,
             int windowOpenDisposition, boolean isPrefetched);

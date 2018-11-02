@@ -320,7 +320,7 @@ bool ConvertProtoToVideoDecoderConfig(
       ToMediaVideoCodec(video_message.codec()).value(),
       ToMediaVideoCodecProfile(video_message.profile()).value(),
       ToMediaVideoPixelFormat(video_message.format()).value(),
-      ToMediaColorSpace(video_message.color_space()).value(),
+      ToMediaColorSpace(video_message.color_space()).value(), VIDEO_ROTATION_0,
       gfx::Size(video_message.coded_size().width(),
                 video_message.coded_size().height()),
       gfx::Rect(video_message.visible_rect().x(),
@@ -347,6 +347,9 @@ void ConvertProtoToPipelineStatistics(
   // HACK: Set the following to prevent "disable video when hidden" logic in
   // media::blink::WebMediaPlayerImpl.
   stats->video_keyframe_distance_average = base::TimeDelta::Max();
+
+  // This field is not used by the rpc field.
+  stats->video_frames_decoded_power_efficient = 0;
 
   // This field was added after the initial message definition. Check that
   // sender provided the value.

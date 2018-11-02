@@ -7,7 +7,6 @@
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Frame.h"
 #include "core/testing/DummyPageHolder.h"
@@ -29,7 +28,7 @@ namespace blink {
 namespace {
 
 std::unique_ptr<WebServiceWorkerResponse> CreateTestWebServiceWorkerResponse() {
-  const KURL url(kParsedURLString, "http://www.webresponse.com/");
+  const KURL url("http://www.webresponse.com/");
   const unsigned short kStatus = 200;
   const String status_text = "the best status text";
   struct {
@@ -38,11 +37,11 @@ std::unique_ptr<WebServiceWorkerResponse> CreateTestWebServiceWorkerResponse() {
   } headers[] = {{"cache-control", "no-cache"},
                  {"set-cookie", "foop"},
                  {"foo", "bar"},
-                 {0, 0}};
+                 {nullptr, nullptr}};
   Vector<WebURL> url_list;
   url_list.push_back(url);
   std::unique_ptr<WebServiceWorkerResponse> web_response =
-      WTF::MakeUnique<WebServiceWorkerResponse>();
+      std::make_unique<WebServiceWorkerResponse>();
   web_response->SetURLList(url_list);
   web_response->SetStatus(kStatus);
   web_response->SetStatusText(status_text);
@@ -56,7 +55,7 @@ std::unique_ptr<WebServiceWorkerResponse> CreateTestWebServiceWorkerResponse() {
 TEST(ServiceWorkerResponseTest, FromFetchResponseData) {
   std::unique_ptr<DummyPageHolder> page =
       DummyPageHolder::Create(IntSize(1, 1));
-  const KURL url(kParsedURLString, "http://www.response.com");
+  const KURL url("http://www.response.com");
 
   FetchResponseData* fetch_response_data = FetchResponseData::Create();
   Vector<KURL> url_list;
@@ -233,7 +232,7 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneDefault) {
   FetchResponseData* fetch_response_data =
       FetchResponseData::CreateWithBuffer(buffer);
   Vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, "http://www.response.com"));
+  url_list.push_back(KURL("http://www.response.com"));
   fetch_response_data->SetURLList(url_list);
   Response* response =
       Response::Create(scope.GetExecutionContext(), fetch_response_data);
@@ -247,7 +246,7 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneBasic) {
   FetchResponseData* fetch_response_data =
       FetchResponseData::CreateWithBuffer(buffer);
   Vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, "http://www.response.com"));
+  url_list.push_back(KURL("http://www.response.com"));
   fetch_response_data->SetURLList(url_list);
   fetch_response_data = fetch_response_data->CreateBasicFilteredResponse();
   Response* response =
@@ -262,7 +261,7 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneCORS) {
   FetchResponseData* fetch_response_data =
       FetchResponseData::CreateWithBuffer(buffer);
   Vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, "http://www.response.com"));
+  url_list.push_back(KURL("http://www.response.com"));
   fetch_response_data->SetURLList(url_list);
   fetch_response_data = fetch_response_data->CreateCORSFilteredResponse();
   Response* response =
@@ -277,7 +276,7 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneOpaque) {
   FetchResponseData* fetch_response_data =
       FetchResponseData::CreateWithBuffer(buffer);
   Vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, "http://www.response.com"));
+  url_list.push_back(KURL("http://www.response.com"));
   fetch_response_data->SetURLList(url_list);
   fetch_response_data = fetch_response_data->CreateOpaqueFilteredResponse();
   Response* response =
@@ -294,7 +293,7 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneError) {
   FetchResponseData* fetch_response_data =
       FetchResponseData::CreateWithBuffer(buffer);
   Vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, "http://www.response.com"));
+  url_list.push_back(KURL("http://www.response.com"));
   fetch_response_data->SetURLList(url_list);
   Response* response =
       Response::Create(scope.GetExecutionContext(), fetch_response_data);

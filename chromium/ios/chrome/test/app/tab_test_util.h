@@ -7,9 +7,9 @@
 
 #import <Foundation/Foundation.h>
 
-@class FormInputAccessoryViewController;
+#include "base/compiler_specific.h"
+
 @class Tab;
-@class TabView;
 
 namespace chrome_test_util {
 
@@ -66,17 +66,11 @@ BOOL SimulateTabsBackgrounding();
 // Evicts the tabs associated with the non-current browser mode.
 void EvictOtherTabModelTabs();
 
-// Closes all incognito tabs.
-void CloseAllIncognitoTabs();
-
-// Gets the tabview for tab.
-TabView* GetTabViewForTab(Tab* tab);
+// Closes all incognito tabs. Return YES on success.
+BOOL CloseAllIncognitoTabs() WARN_UNUSED_RESULT;
 
 // Returns the number of main tabs currently evicted.
 NSUInteger GetEvictedMainTabCount();
-
-// Returns the current tab's input accessory view controller.
-FormInputAccessoryViewController* GetInputAccessoryViewController();
 
 }  // namespace chrome_test_util
 

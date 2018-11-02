@@ -1,60 +1,35 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
 #include "platform_media/gpu/test/test_pipeline_host.h"
 
+#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
+#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/common/video_frame_transformer.h"
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "media/base/video_decoder_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace content {
+namespace media {
 
-TestPipelineHost::DataSourceAdapter::~DataSourceAdapter() = default;
-
-void TestPipelineHost::DataSourceAdapter::Read(int64_t position,
-                                               int size,
-                                               uint8_t* data,
-                                               const ReadCB& read_cb) {
-  data_source_->Read(position, size, data, read_cb);
-}
-
-void TestPipelineHost::DataSourceAdapter::Stop() {
-  data_source_->Stop();
-}
-
-void TestPipelineHost::DataSourceAdapter::Abort() {
-  data_source_->Abort();
-}
-
-bool TestPipelineHost::DataSourceAdapter::GetSize(int64_t* size_out) {
-  return data_source_->GetSize(size_out);
-}
-
-bool TestPipelineHost::DataSourceAdapter::IsStreaming() {
-  return data_source_->IsStreaming();
-}
-
-void TestPipelineHost::DataSourceAdapter::SetBitrate(int bitrate) {
-  data_source_->SetBitrate(bitrate);
-}
-
-TestPipelineHost::TestPipelineHost(media::DataSource* data_source)
+TestPipelineHost::TestPipelineHost(DataSource* data_source)
     : data_source_adapter_(data_source),
-      platform_pipeline_(content::PlatformMediaPipelineCreate(
+      platform_pipeline_(PlatformMediaPipelineCreate(
           &data_source_adapter_,
           base::Bind(&TestPipelineHost::OnAudioConfigChanged,
                      base::Unretained(this)),
           base::Bind(&TestPipelineHost::OnVideoConfigChanged,
                      base::Unretained(this)),
-          media::PlatformMediaDecodingMode::SOFTWARE,
+          PlatformMediaDecodingMode::SOFTWARE,
           base::Callback<bool(void)>())) {}
 
 TestPipelineHost::~TestPipelineHost() = default;
@@ -73,7 +48,7 @@ void TestPipelineHost::StartWaitingForSeek() {
 }
 
 void TestPipelineHost::Seek(base::TimeDelta time,
-                            const media::PipelineStatusCB& status_cb) {
+                            const PipelineStatusCB& status_cb) {
   platform_pipeline_->Seek(time,
                            base::Bind(&TestPipelineHost::SeekDone, status_cb));
 }
@@ -83,19 +58,19 @@ void TestPipelineHost::Stop() {
 }
 
 void TestPipelineHost::ReadDecodedData(
-    media::PlatformMediaDataType type,
-    const media::DemuxerStream::ReadCB& read_cb) {
+    PlatformMediaDataType type,
+    const DemuxerStream::ReadCB& read_cb) {
   CHECK(read_cb_[type].is_null()) << "Overlapping reads are not supported";
 
   read_cb_[type] = read_cb;
 
   switch (type) {
-    case media::PLATFORM_MEDIA_AUDIO:
+    case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
       platform_pipeline_->ReadAudioData(base::Bind(
           &TestPipelineHost::DataReady, base::Unretained(this), type));
       break;
 
-    case media::PLATFORM_MEDIA_VIDEO: {
+    case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: {
       const uint32_t dummy_texture_id = 0;
       platform_pipeline_->ReadVideoData(
           base::Bind(&TestPipelineHost::DataReady, base::Unretained(this),
@@ -110,31 +85,68 @@ void TestPipelineHost::ReadDecodedData(
   }
 }
 
-media::PlatformAudioConfig TestPipelineHost::audio_config() const {
+void TestPipelineHost::AppendBuffer(const scoped_refptr<DecoderBuffer>& buffer,
+                                      const VideoDecoder::DecodeCB& decode_cb) {
+  data_source_adapter_.AppendBuffer(buffer, decode_cb);
+}
+
+bool TestPipelineHost::DecodeVideo(const VideoDecoderConfig& config,
+                                   const DecodeVideoCB& read_cb) {
+  LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
+  config_ = config;
+  decoded_video_frame_callback_ = read_cb;
+  ReadDecodedData(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO,
+                  base::Bind(&TestPipelineHost::DecodedVideoReady,
+                             base::Unretained(this)));
+  return true;
+}
+
+void TestPipelineHost::DecodedVideoReady(
+        DemuxerStream::Status status,
+        const scoped_refptr<DecoderBuffer>& buffer) {
+  LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " status (" << status << ") : " << buffer->AsHumanReadableString();
+  if (status == DemuxerStream::kOk) {
+    scoped_refptr<VideoFrame> frame = GetVideoFrameFromMemory(buffer, config_);
+    decoded_video_frame_callback_.Run(DemuxerStream::Status::kOk, frame);
+  } else {
+    decoded_video_frame_callback_.Run(status, scoped_refptr<VideoFrame>());
+  }
+}
+
+bool TestPipelineHost::HasEnoughData() {
+  return true;
+}
+
+int TestPipelineHost::GetMaxDecodeBuffers() {
+  return 0;
+}
+
+PlatformAudioConfig TestPipelineHost::audio_config() const {
   return audio_config_;
 }
-media::PlatformVideoConfig TestPipelineHost::video_config() const {
+PlatformVideoConfig TestPipelineHost::video_config() const {
   return video_config_;
 }
 
-void TestPipelineHost::SeekDone(const media::PipelineStatusCB& status_cb,
+void TestPipelineHost::SeekDone(const PipelineStatusCB& status_cb,
                                 bool success) {
   if(success) {
-    status_cb.Run(media::PIPELINE_OK);
+    status_cb.Run(PipelineStatus::PIPELINE_OK);
     return;
   }
 
   LOG(ERROR) << " PROPMEDIA(TEST) : " << __FUNCTION__
              << ": PIPELINE_ERROR_ABORT";
-  status_cb.Run(media::PIPELINE_ERROR_ABORT);
+  status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
 }
 
 void TestPipelineHost::Initialized(
     bool success,
     int bitrate,
-    const media::PlatformMediaTimeInfo& time_info,
-    const media::PlatformAudioConfig& audio_config,
-    const media::PlatformVideoConfig& video_config) {
+    const PlatformMediaTimeInfo& time_info,
+    const PlatformAudioConfig& audio_config,
+    const PlatformVideoConfig& video_config) {
   CHECK(!init_cb_.is_null());
 
   if (audio_config.is_valid()) {
@@ -152,41 +164,41 @@ void TestPipelineHost::Initialized(
 }
 
 void TestPipelineHost::DataReady(
-    media::PlatformMediaDataType type,
-    const scoped_refptr<media::DataBuffer>& buffer) {
+    PlatformMediaDataType type,
+    const scoped_refptr<DataBuffer>& buffer) {
   CHECK(!read_cb_[type].is_null());
 
-  scoped_refptr<media::DecoderBuffer> decoder_buffer =
-      new media::DecoderBuffer(0);
+  scoped_refptr<DecoderBuffer> decoder_buffer =
+      new DecoderBuffer(0);
   if (buffer) {
     if (buffer->end_of_stream()) {
-      decoder_buffer = media::DecoderBuffer::CreateEOSBuffer();
+      decoder_buffer = DecoderBuffer::CreateEOSBuffer();
     } else {
       decoder_buffer =
-          media::DecoderBuffer::CopyFrom(buffer->data(), buffer->data_size());
+          DecoderBuffer::CopyFrom(buffer->data(), buffer->data_size());
       decoder_buffer->set_timestamp(buffer->timestamp());
       decoder_buffer->set_duration(buffer->duration());
     }
   }
 
   base::ResetAndReturn(&read_cb_[type])
-      .Run(media::DemuxerStream::kOk, decoder_buffer);
+      .Run(DemuxerStream::kOk, decoder_buffer);
 }
 
 void TestPipelineHost::OnAudioConfigChanged(
-    const media::PlatformAudioConfig& audio_config) {
-  CHECK(!read_cb_[media::PLATFORM_MEDIA_AUDIO].is_null());
+    const PlatformAudioConfig& audio_config) {
+  CHECK(!read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO].is_null());
   audio_config_ = audio_config;
-  base::ResetAndReturn(&read_cb_[media::PLATFORM_MEDIA_AUDIO])
-      .Run(media::DemuxerStream::kConfigChanged, nullptr);
+  base::ResetAndReturn(&read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO])
+      .Run(DemuxerStream::kConfigChanged, nullptr);
 }
 
 void TestPipelineHost::OnVideoConfigChanged(
-    const media::PlatformVideoConfig& video_config) {
-  CHECK(!read_cb_[media::PLATFORM_MEDIA_VIDEO].is_null());
+    const PlatformVideoConfig& video_config) {
+  CHECK(!read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO].is_null());
   video_config_ = video_config;
-  base::ResetAndReturn(&read_cb_[media::PLATFORM_MEDIA_VIDEO])
-      .Run(media::DemuxerStream::kConfigChanged, nullptr);
+  base::ResetAndReturn(&read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO])
+      .Run(DemuxerStream::kConfigChanged, nullptr);
 }
 
-}  // namespace content
+}  // namespace media

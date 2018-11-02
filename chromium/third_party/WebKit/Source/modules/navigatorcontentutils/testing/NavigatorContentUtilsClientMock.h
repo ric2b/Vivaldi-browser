@@ -7,12 +7,11 @@
 
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
 #include "platform/heap/Handle.h"
+#include "platform/weborigin/KURL.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
-
-class KURL;
 
 // Provides a mock object for the navigatorcontentutils client.
 class NavigatorContentUtilsClientMock final
@@ -28,8 +27,6 @@ class NavigatorContentUtilsClientMock final
                                        const KURL&,
                                        const String& title);
 
-  virtual CustomHandlersState IsProtocolHandlerRegistered(const String& scheme,
-                                                          const KURL&);
   virtual void UnregisterProtocolHandler(const String& scheme, const KURL&);
 
  private:

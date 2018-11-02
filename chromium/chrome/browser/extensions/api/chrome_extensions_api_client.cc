@@ -33,6 +33,7 @@
 #include "chrome/browser/guest_view/web_view/chrome_web_view_guest_delegate.h"
 #include "chrome/browser/guest_view/web_view/chrome_web_view_permission_helper_delegate.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
+#include "chrome/browser/ui/webui/devtools_ui.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "content/public/browser/browser_context.h"
@@ -46,6 +47,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/extensions/api/file_handlers/non_native_file_system_delegate_chromeos.h"
+#include "chrome/browser/extensions/api/media_perception_private/media_perception_api_delegate_chromeos.h"
 #include "chrome/browser/extensions/api/virtual_keyboard_private/chrome_virtual_keyboard_delegate.h"
 #include "chrome/browser/extensions/clipboard_extension_helper_chromeos.h"
 #endif
@@ -100,6 +102,11 @@ bool ChromeExtensionsAPIClient::ShouldHideResponseHeader(
       (url.host_piece() == GaiaUrls::GetInstance()->gaia_url().host_piece()) &&
       (base::CompareCaseInsensitiveASCII(header_name,
                                          signin::kDiceResponseHeader) == 0));
+}
+
+bool ChromeExtensionsAPIClient::ShouldHideBrowserNetworkRequest(
+    const GURL& url) const {
+  return DevToolsUI::IsFrontendResourceURL(url);
 }
 
 AppViewGuestDelegate* ChromeExtensionsAPIClient::CreateAppViewGuestDelegate()
@@ -160,9 +167,10 @@ ChromeExtensionsAPIClient::CreateDevicePermissionsPrompt(
 }
 
 std::unique_ptr<VirtualKeyboardDelegate>
-ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate() const {
+ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate(
+    content::BrowserContext* browser_context) const {
 #if defined(OS_CHROMEOS)
-  return base::MakeUnique<ChromeVirtualKeyboardDelegate>();
+  return base::MakeUnique<ChromeVirtualKeyboardDelegate>(browser_context);
 #else
   return nullptr;
 #endif
@@ -211,6 +219,15 @@ ChromeExtensionsAPIClient::GetFeedbackPrivateDelegate() {
 }
 
 #if defined(OS_CHROMEOS)
+MediaPerceptionAPIDelegate*
+ChromeExtensionsAPIClient::GetMediaPerceptionAPIDelegate() {
+  if (!media_perception_api_delegate_) {
+    media_perception_api_delegate_ =
+        std::make_unique<MediaPerceptionAPIDelegateChromeOS>();
+  }
+  return media_perception_api_delegate_.get();
+}
+
 NonNativeFileSystemDelegate*
 ChromeExtensionsAPIClient::GetNonNativeFileSystemDelegate() {
   if (!non_native_file_system_delegate_) {

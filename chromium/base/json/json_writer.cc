@@ -56,7 +56,7 @@ JSONWriter::JSONWriter(int options, std::string* json)
 }
 
 bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
-  switch (node.GetType()) {
+  switch (node.type()) {
     case Value::Type::NONE: {
       json_string_->append("null");
       return true;
@@ -89,7 +89,7 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
         json_string_->append(Int64ToString(static_cast<int64_t>(value)));
         return result;
       }
-      std::string real = DoubleToString(value);
+      std::string real = NumberToString(value);
       // Ensure that the number has a .0 if there's no decimal or 'e'.  This
       // makes sure that when we read the JSON back, it's interpreted as a
       // real rather than an int.
@@ -123,12 +123,12 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       if (pretty_print_)
         json_string_->push_back(' ');
 
-      const ListValue* list = NULL;
+      const ListValue* list = nullptr;
       bool first_value_has_been_output = false;
       bool result = node.GetAsList(&list);
       DCHECK(result);
       for (const auto& value : *list) {
-        if (omit_binary_values_ && value.GetType() == Value::Type::BINARY)
+        if (omit_binary_values_ && value.type() == Value::Type::BINARY)
           continue;
 
         if (first_value_has_been_output) {
@@ -154,14 +154,13 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       if (pretty_print_)
         json_string_->append(kPrettyPrintLineEnding);
 
-      const DictionaryValue* dict = NULL;
+      const DictionaryValue* dict = nullptr;
       bool first_value_has_been_output = false;
       bool result = node.GetAsDictionary(&dict);
       DCHECK(result);
       for (DictionaryValue::Iterator itr(*dict); !itr.IsAtEnd();
            itr.Advance()) {
-        if (omit_binary_values_ &&
-            itr.value().GetType() == Value::Type::BINARY) {
+        if (omit_binary_values_ && itr.value().type() == Value::Type::BINARY) {
           continue;
         }
 

@@ -12,16 +12,11 @@
 bool IsAppLauncherEnabled() {
 #if !BUILDFLAG(ENABLE_APP_LIST)
   return false;
-#elif defined(OS_CHROMEOS) || defined(USE_ASH)
+#elif defined(OS_CHROMEOS)
   return true;
 #else
   PrefService* prefs = g_browser_process->local_state();
   // In some tests, the prefs aren't initialised.
   return prefs && prefs->GetBoolean(prefs::kAppLauncherHasBeenEnabled);
 #endif
-}
-
-bool ShouldShowAppLauncherPromo() {
-  // Never promote. TODO(tapted): Delete this function and supporting code.
-  return false;
 }

@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_READER_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_READER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #import <AVFoundation/AVFoundation.h>
 
@@ -21,7 +24,7 @@
 
 @class DataSourceLoader;
 
-namespace content {
+namespace media {
 
 class IPCDataSource;
 
@@ -44,18 +47,18 @@ class GPU_EXPORT AVFMediaReader {
   base::TimeDelta start_time() const;
 
   bool has_audio_track() const {
-    return GetTrack(media::PLATFORM_MEDIA_AUDIO) != nil;
+    return GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) != nil;
   }
   bool has_video_track() const {
-    return GetTrack(media::PLATFORM_MEDIA_VIDEO) != nil;
+    return GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) != nil;
   }
 
   AudioStreamBasicDescription audio_stream_format() const;
   CMFormatDescriptionRef video_stream_format() const;
   CGAffineTransform video_transform() const;
 
-  scoped_refptr<media::DataBuffer> GetNextAudioSample();
-  scoped_refptr<media::DataBuffer> GetNextVideoSample();
+  scoped_refptr<DataBuffer> GetNextAudioSample();
+  scoped_refptr<DataBuffer> GetNextVideoSample();
 
   bool Seek(base::TimeDelta time);
 
@@ -65,7 +68,7 @@ class GPU_EXPORT AVFMediaReader {
     StreamReader();
     ~StreamReader();
 
-    media::PlatformMediaDataType type;
+    PlatformMediaDataType type;
     base::scoped_nsobject<AVAssetReader> asset_reader;
     base::scoped_nsobject<AVAssetReaderTrackOutput> output;
     base::TimeDelta expected_next_timestamp;
@@ -77,21 +80,21 @@ class GPU_EXPORT AVFMediaReader {
 
   bool CalculateBitrate();
   bool ResetStreamReaders(base::TimeDelta start_time);
-  bool ResetStreamReader(media::PlatformMediaDataType type,
+  bool ResetStreamReader(PlatformMediaDataType type,
                          base::TimeDelta start_time);
-  bool InitializeOutput(media::PlatformMediaDataType type);
-  NSDictionary* GetOutputSettings(media::PlatformMediaDataType type);
+  bool InitializeOutput(PlatformMediaDataType type);
+  NSDictionary* GetOutputSettings(PlatformMediaDataType type);
 
-  AVAssetTrack* GetTrack(media::PlatformMediaDataType type) const;
+  AVAssetTrack* GetTrack(PlatformMediaDataType type) const;
 
-  scoped_refptr<media::DataBuffer> ProcessNextSample(
-      media::PlatformMediaDataType type);
-  scoped_refptr<media::DataBuffer> ReadNextSample(
-      media::PlatformMediaDataType type);
+  scoped_refptr<DataBuffer> ProcessNextSample(
+      PlatformMediaDataType type);
+  scoped_refptr<DataBuffer> ReadNextSample(
+      PlatformMediaDataType type);
 
   base::scoped_nsobject<AVURLAsset> asset_;
   base::scoped_nsobject<DataSourceLoader> data_source_loader_;
-  StreamReader stream_readers_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  StreamReader stream_readers_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   int bitrate_;
   gfx::Size video_coded_size_;
@@ -101,6 +104,6 @@ class GPU_EXPORT AVFMediaReader {
   DISALLOW_COPY_AND_ASSIGN(AVFMediaReader);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_READER_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_READER_H_

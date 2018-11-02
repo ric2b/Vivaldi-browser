@@ -15,6 +15,7 @@
 #include "content/public/test/fake_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -38,6 +39,7 @@ const char kFakeGuid[] = "fake_guid";
 // driver entry.
 MATCHER_P(DriverEntryEqual, entry, "") {
   return entry.guid == arg.guid && entry.state == arg.state &&
+         entry.done == arg.done &&
          entry.bytes_downloaded == arg.bytes_downloaded &&
          entry.current_file_path.value() == arg.current_file_path.value();
 }
@@ -52,6 +54,7 @@ class MockDriverClient : public DownloadDriver::Client {
   MOCK_METHOD2(OnDownloadFailed, void(const DriverEntry&, FailureType));
   MOCK_METHOD1(OnDownloadSucceeded, void(const DriverEntry&));
   MOCK_METHOD1(OnDownloadUpdated, void(const DriverEntry&));
+  MOCK_CONST_METHOD1(IsTrackingDownload, bool(const std::string&));
 };
 
 class DownloadDriverImplTest : public testing::Test {
@@ -62,6 +65,8 @@ class DownloadDriverImplTest : public testing::Test {
   ~DownloadDriverImplTest() override = default;
 
   void SetUp() override {
+    EXPECT_CALL(mock_client_, IsTrackingDownload(_))
+        .WillRepeatedly(Return(true));
     driver_ = base::MakeUnique<DownloadDriverImpl>(&mock_manager_);
   }
 
@@ -99,6 +104,42 @@ TEST_F(DownloadDriverImplTest, TestHardRecover) {
   EXPECT_CALL(mock_client_, OnDriverHardRecoverComplete(true)).Times(1);
   driver_->HardRecover();
   task_runner_->RunUntilIdle();
+}
+// Ensure driver remove call before download created will result in content
+// layer remove call and not propagating the event to driver's client.
+TEST_F(DownloadDriverImplTest, RemoveBeforeCreated) {
+  using DownloadState = content::DownloadItem::DownloadState;
+
+  EXPECT_CALL(mock_manager_, IsManagerInitialized())
+      .Times(1)
+      .WillOnce(Return(false));
+  driver_->Initialize(&mock_client_);
+
+  EXPECT_CALL(mock_client_, OnDriverReady(true));
+  static_cast<AllDownloadItemNotifier::Observer*>(driver_.get())
+      ->OnManagerInitialized(&mock_manager_);
+
+  const std::string kTestGuid = "abc";
+  content::FakeDownloadItem fake_item;
+  fake_item.SetGuid(kTestGuid);
+  fake_item.SetState(DownloadState::IN_PROGRESS);
+
+  // Download is not created yet in content layer.
+  ON_CALL(mock_manager_, GetDownloadByGuid(kTestGuid))
+      .WillByDefault(Return(nullptr));
+  driver_->Remove(kTestGuid);
+  task_runner_->RunUntilIdle();
+
+  // Download is created in content layer.
+  ON_CALL(mock_manager_, GetDownloadByGuid(kTestGuid))
+      .WillByDefault(Return(&fake_item));
+  EXPECT_CALL(mock_client_, OnDownloadCreated(_)).Times(0);
+  static_cast<AllDownloadItemNotifier::Observer*>(driver_.get())
+      ->OnDownloadCreated(&mock_manager_, &fake_item);
+  task_runner_->RunUntilIdle();
+
+  // Expect a remove call down to content layer download item.
+  EXPECT_TRUE(fake_item.removed());
 }
 
 // Ensures download updates from download items are propagated correctly.
@@ -184,6 +225,28 @@ TEST_F(DownloadDriverImplTest, TestGetActiveDownloadsCall) {
 
   EXPECT_EQ(1U, guids.size());
   EXPECT_NE(guids.end(), guids.find(item1.GetGuid()));
+}
+
+TEST_F(DownloadDriverImplTest, TestCreateDriverEntry) {
+  using DownloadState = content::DownloadItem::DownloadState;
+  content::FakeDownloadItem item;
+  const std::string kGuid("dummy guid");
+  const std::vector<GURL> kUrls = {GURL("http://www.example.com/foo.html"),
+                                   GURL("http://www.example.com/bar.html")};
+  scoped_refptr<net::HttpResponseHeaders> headers =
+      new net::HttpResponseHeaders("HTTP/1.1 201\n");
+
+  item.SetGuid(kGuid);
+  item.SetUrlChain(kUrls);
+  item.SetState(DownloadState::IN_PROGRESS);
+  item.SetResponseHeaders(headers);
+
+  DriverEntry entry = driver_->CreateDriverEntry(&item);
+
+  EXPECT_EQ(kGuid, entry.guid);
+  EXPECT_EQ(kUrls, entry.url_chain);
+  EXPECT_EQ(DriverEntry::State::IN_PROGRESS, entry.state);
+  EXPECT_EQ(headers, entry.response_headers);
 }
 
 }  // namespace download

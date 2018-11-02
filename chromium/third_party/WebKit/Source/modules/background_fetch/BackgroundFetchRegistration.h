@@ -6,6 +6,8 @@
 #define BackgroundFetchRegistration_h
 
 #include "bindings/core/v8/ScriptPromise.h"
+#include "core/dom/events/EventTarget.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/heap/Handle.h"
@@ -14,7 +16,6 @@
 
 namespace blink {
 
-class IconDefinition;
 class ScriptPromiseResolver;
 class ScriptState;
 class ServiceWorkerRegistration;
@@ -22,39 +23,73 @@ class ServiceWorkerRegistration;
 // Represents an individual Background Fetch registration. Gives developers
 // access to its properties, options, and enables them to abort the fetch.
 class BackgroundFetchRegistration final
-    : public GarbageCollectedFinalized<BackgroundFetchRegistration>,
-      public ScriptWrappable {
+    : public EventTargetWithInlineData,
+      public blink::mojom::blink::BackgroundFetchRegistrationObserver {
   DEFINE_WRAPPERTYPEINFO();
+  USING_PRE_FINALIZER(BackgroundFetchRegistration, Dispose);
 
  public:
-  BackgroundFetchRegistration(String id,
-                              HeapVector<IconDefinition> icons,
-                              long long total_download_size,
-                              String title);
-  ~BackgroundFetchRegistration();
+  BackgroundFetchRegistration(const String& developer_id,
+                              const String& unique_id,
+                              unsigned long long upload_total,
+                              unsigned long long uploaded,
+                              unsigned long long download_total,
+                              unsigned long long downloaded);
+  ~BackgroundFetchRegistration() override;
 
-  // Sets the ServiceWorkerRegistration that this BackgroundFetchRegistration
-  // has been associated with.
-  void SetServiceWorkerRegistration(ServiceWorkerRegistration*);
+  // Initializes the BackgroundFetchRegistration to be associated with the given
+  // ServiceWorkerRegistration. It will register itself as an observer for
+  // progress events, powering the `progress` JavaScript event.
+  void Initialize(ServiceWorkerRegistration*);
 
+  // BackgroundFetchRegistrationObserver implementation.
+  void OnProgress(uint64_t upload_total,
+                  uint64_t uploaded,
+                  uint64_t download_total,
+                  uint64_t downloaded) override;
+
+  // Web Exposed attribute defined in the IDL file. Corresponds to the
+  // |developer_id| used elsewhere in the codebase.
   String id() const;
-  HeapVector<IconDefinition> icons() const;
-  long long totalDownloadSize() const;
-  String title() const;
+
+  unsigned long long uploadTotal() const;
+  unsigned long long uploaded() const;
+  unsigned long long downloadTotal() const;
+  unsigned long long downloaded() const;
+
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(progress);
 
   ScriptPromise abort(ScriptState*);
 
-  DECLARE_TRACE();
+  // EventTargetWithInlineData implementation.
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const override;
+
+  void Dispose();
+
+  void Trace(blink::Visitor*) override;
 
  private:
   void DidAbort(ScriptPromiseResolver*, mojom::blink::BackgroundFetchError);
 
   Member<ServiceWorkerRegistration> registration_;
 
-  String id_;
-  HeapVector<IconDefinition> icons_;
-  long long total_download_size_;
-  String title_;
+  // Corresponds to IDL 'id' attribute. Not unique - an active registration can
+  // have the same |developer_id_| as one or more inactive registrations.
+  String developer_id_;
+
+  // Globally unique ID for the registration, generated in content/. Used to
+  // distinguish registrations in case a developer re-uses |developer_id_|s. Not
+  // exposed to JavaScript.
+  String unique_id_;
+
+  unsigned long long upload_total_;
+  unsigned long long uploaded_;
+  unsigned long long download_total_;
+  unsigned long long downloaded_;
+
+  mojo::Binding<blink::mojom::blink::BackgroundFetchRegistrationObserver>
+      observer_binding_;
 };
 
 }  // namespace blink

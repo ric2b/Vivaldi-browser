@@ -10,6 +10,8 @@ source_set("exo") {
   sources = [
     "buffer.cc",
     "buffer.h",
+    "client_controlled_shell_surface.cc",
+    "client_controlled_shell_surface.h",
     "data_device.cc",
     "data_device.h",
     "data_device_delegate.h",
@@ -20,8 +22,10 @@ source_set("exo") {
     "data_source.cc",
     "data_source.h",
     "data_source_delegate.h",
+    "data_source_observer.h",
     "display.cc",
     "display.h",
+    "gaming_seat.cc",
     "gaming_seat.h",
     "keyboard.cc",
     "keyboard.h",
@@ -36,10 +40,15 @@ source_set("exo") {
     "pointer.cc",
     "pointer.h",
     "pointer_delegate.h",
+    "seat.cc",
+    "seat.h",
+    "seat_observer.h",
     "shared_memory.cc",
     "shared_memory.h",
     "shell_surface.cc",
     "shell_surface.h",
+    "shell_surface_base.cc",
+    "shell_surface_base.h",
     "sub_surface.cc",
     "sub_surface.h",
     "surface.cc",
@@ -53,18 +62,14 @@ source_set("exo") {
     "touch_delegate.h",
     "wm_helper.cc",
     "wm_helper.h",
-    "wm_helper_ash.cc",
-    "wm_helper_ash.h",
-    "wm_helper_mus.cc",
-    "wm_helper_mus.h",
+    "xdg_shell_surface.cc",
+    "xdg_shell_surface.h",
   ]
 
   deps = [
-    "//ash",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//cc",
-    "//cc/ipc:interfaces",
     "//components/viz/service",
     "//device/gamepad",
     "//device/gamepad/public/cpp:shared_with_blink",
@@ -76,23 +81,16 @@ source_set("exo") {
     "//ui/compositor",
     "//ui/display/manager",
     "//ui/events/devices:devices",
+    "//ui/events/ozone:events_ozone_evdev",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/ozone",
     "//ui/views",
     "//ui/views/mus",
     "//ui/wm",
     "//ui/wm/public",
   ]
-
-  if (enable_exo_ozone_gamepad) {
-    defines = [ "USE_OZONE_GAMEPAD" ]
-    sources += [ "gaming_seat_ozone.cc" ]
-    deps += [ "//ui/ozone" ]
-    deps += [ "//ui/events/ozone:events_ozone_evdev" ]
-  } else {
-    sources += [ "gaming_seat.cc" ]
-  }
 
   if (is_chromeos) {
     deps += [ "//chromeos" ]
@@ -107,12 +105,14 @@ source_set("test_support") {
     "test/exo_test_base.h",
     "test/exo_test_helper.cc",
     "test/exo_test_helper.h",
+    "test/test_client_controlled_state_delegate.cc",
+    "test/test_client_controlled_state_delegate.h",
   ]
 
   deps = [
     ":exo",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//gpu",
     "//skia",
@@ -129,11 +129,17 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "../../ui/events/ozone/gamepad/gamepad_event.cc",
     "buffer_unittest.cc",
+    "client_controlled_shell_surface_unittest.cc",
+    "data_device_unittest.cc",
     "data_offer_unittest.cc",
+    "data_source_unittest.cc",
     "display_unittest.cc",
+    "gaming_seat_unittest.cc",
     "keyboard_unittest.cc",
     "pointer_unittest.cc",
+    "seat_unittest.cc",
     "shared_memory_unittest.cc",
     "shell_surface_unittest.cc",
     "sub_surface_unittest.cc",
@@ -146,7 +152,7 @@ source_set("unit_tests") {
     ":test_support",
     "//ash",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc",
@@ -163,6 +169,7 @@ source_set("unit_tests") {
     "//ui/compositor:test_support",
     "//ui/events:dom_keycode_converter",
     "//ui/events:test_support",
+    "//ui/events/ozone:events_ozone_evdev",
     "//ui/gfx",
     "//ui/keyboard",
     "//ui/message_center",
@@ -172,14 +179,6 @@ source_set("unit_tests") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
-  }
-
-  if (enable_exo_ozone_gamepad) {
-    sources += [
-      "../../ui/events/ozone/gamepad/gamepad_event.cc",
-      "gaming_seat_unittest.cc",
-    ]
-    deps += [ "//ui/events/ozone:events_ozone_evdev" ]
   }
 }
 
@@ -193,7 +192,7 @@ test("exo_unittests") {
   deps = [
     ":unit_tests",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc:test_support",
@@ -202,6 +201,7 @@ test("exo_unittests") {
     "//mojo/edk/embedder:headers",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/base",
     "//ui/compositor:test_support",
     "//ui/gl:test_support",

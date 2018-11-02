@@ -28,17 +28,17 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "StorageQuotaClient.h"
+#include "modules/quota/StorageQuotaClient.h"
 
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/quota/DeprecatedStorageQuotaCallbacksImpl.h"
 #include "modules/quota/StorageErrorCallback.h"
 #include "modules/quota/StorageQuotaCallback.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebStorageQuotaType.h"
 #include "public/web/WebFrameClient.h"
 
@@ -74,7 +74,7 @@ const char* StorageQuotaClient::SupplementName() {
 
 StorageQuotaClient* StorageQuotaClient::From(ExecutionContext* context) {
   if (!context->IsDocument())
-    return 0;
+    return nullptr;
   return static_cast<StorageQuotaClient*>(
       Supplement<Page>::From(ToDocument(context)->GetPage(), SupplementName()));
 }

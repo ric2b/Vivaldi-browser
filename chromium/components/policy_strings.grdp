@@ -143,8 +143,8 @@
   <message name="IDS_POLICY_VALUE_FORMAT_ERROR" desc="The text displayed in the status column when a policy value doesn't match the expected format.">
     Value doesn't match format.
   </message>
-  <message name="IDS_POLICY_DEFAULT_SEARCH_DISABLED" desc="The text displayed in the status column when a policy value has been ignored because default search has been disabled.">
-    Ignored because default search is disabled by policy.
+  <message name="IDS_POLICY_DEFAULT_SEARCH_DISABLED" desc="The text displayed in the status column when a policy value has been ignored because default search has not been enabled.">
+    Ignored because default search is not enabled by policy.
   </message>
   <message name="IDS_POLICY_NOT_SPECIFIED_ERROR" desc="The text displayed in the status column when a policy value should have been specified but wasn't.">
     Must be specified.
@@ -224,6 +224,37 @@
     Unknown policy.
   </message>
 
+  <!-- chrome://policy-tool -->
+  <message name="IDS_POLICY_TOOL_TITLE" desc="Admin page title and the title of the section that lists policies.">
+    Policy management
+  </message>
+  <message name="IDS_POLICY_TOOL_EDIT" desc="Label for the button to change policy value in current session.">
+    Edit
+  </message>
+  <message name="IDS_POLICY_TOOL_SAVE" desc="Label for the button to save policy value after editing it.">
+    Save
+  </message>
+  <message name="IDS_POLICY_TOOL_LOAD_SESSION" desc="Label for the button that loads specified session.">
+    Load session
+  </message>
+  <message name="IDS_POLICY_TOOL_SESSION_NAME_PLACEHOLDER" desc="Placeholder for the input field that lets the user change policy management sessions.">
+    Session name
+  </message>
+  <message name="IDS_POLICY_TOOL_SAVING_DISABLED" desc="A message that is shown to the user when there is some problem that prevents saving the session to disk.">
+    There was a problem accessing the session files. Saving to disk is currently disabled. Please reload the page to try again.
+  </message>
+  <message name="IDS_POLICY_TOOL_INVALID_SESSION_NAME" desc="A message that is shown to the user when the entered session name is invalid.">
+    Please enter a valid session name.
+  </message>
+  <message name="IDS_POLICY_TOOL_ENABLE_EDITING" desc="Label for the button to reset the current session to enable editing policy values.">
+    Reset
+  </message>
+  <message name="IDS_POLICY_TOOL_CORRUPTED_FILE" desc="A message that is shown to the user when the session file is corrupted.">
+    The file seems to be corrupted. Click the 'Reset' button to reset the session.
+  </message>
+  <message name="IDS_POLICY_TOOL_DELETE_FAILED" desc="A message that is shown to the user when deleting the session fails because the session name that is sent from Javascript is invalid.">
+    The session with this name is not valid for deletion.
+  </message>
   <!-- chrome://policy -->
   <message name="IDS_POLICY_TITLE" desc="Page title and the title of the section that lists policies.">
     Policies
@@ -314,6 +345,9 @@
   </message>
   <message name="IDS_POLICY_HIDE_EXPANDED_VALUE" desc="Text for the link that hides the policy value. Used when the policy value is too long to be always visible.">
     Hide value
+  </message>
+  <message name="IDS_POLICY_LEARN_MORE" desc="Help text for learn-more link for known chrome policies.">
+    Learn more about <ph name="POLICY_NAME">$1<ex>AllowDinosaurEasterEgg</ex></ph> policy
   </message>
   <message name="IDS_POLICY_SCOPE_USER" desc="Text displayed in the Applies to column when a policy applies to the current user only.">
     Current user

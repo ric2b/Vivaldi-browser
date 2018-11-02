@@ -32,6 +32,7 @@
 #ifndef SQLTransactionCoordinator_h
 #define SQLTransactionCoordinator_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/HashMap.h"
@@ -44,11 +45,9 @@ class SQLTransactionBackend;
 
 class SQLTransactionCoordinator
     : public GarbageCollectedFinalized<SQLTransactionCoordinator> {
-  WTF_MAKE_NONCOPYABLE(SQLTransactionCoordinator);
-
  public:
   SQLTransactionCoordinator();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void AcquireLock(SQLTransactionBackend*);
   void ReleaseLock(SQLTransactionBackend*);
   void Shutdown();
@@ -70,6 +69,8 @@ class SQLTransactionCoordinator
   bool is_shutting_down_;
 
   void ProcessPendingTransactions(CoordinationInfo&);
+
+  DISALLOW_COPY_AND_ASSIGN(SQLTransactionCoordinator);
 };
 
 }  // namespace blink

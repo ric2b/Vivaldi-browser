@@ -21,11 +21,12 @@
 #ifndef CSSComputedStyleDeclaration_h
 #define CSSComputedStyleDeclaration_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSStyleDeclaration.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/AtomicStringHash.h"
 #include "platform/wtf/text/WTFString.h"
@@ -35,7 +36,7 @@ namespace blink {
 class CSSVariableData;
 class ExceptionState;
 class LayoutObject;
-class MutableStylePropertySet;
+class MutableCSSPropertyValueSet;
 class Node;
 class ComputedStyle;
 
@@ -50,30 +51,30 @@ class CORE_EXPORT CSSComputedStyleDeclaration final
                                            pseudo_element_name);
   }
 
-  static const Vector<CSSPropertyID>& ComputableProperties();
+  static const Vector<const CSSProperty*>& ComputableProperties();
   ~CSSComputedStyleDeclaration() override;
 
   String GetPropertyValue(CSSPropertyID) const;
   bool GetPropertyPriority(CSSPropertyID) const;
 
-  MutableStylePropertySet* CopyProperties() const;
+  MutableCSSPropertyValueSet* CopyProperties() const;
 
-  const CSSValue* GetPropertyCSSValue(CSSPropertyID) const;
+  const CSSValue* GetPropertyCSSValue(const CSSProperty&) const;
   const CSSValue* GetPropertyCSSValue(AtomicString custom_property_name) const;
-  std::unique_ptr<HashMap<AtomicString, RefPtr<CSSVariableData>>> GetVariables()
-      const;
+  std::unique_ptr<HashMap<AtomicString, scoped_refptr<CSSVariableData>>>
+  GetVariables() const;
 
   const CSSValue* GetFontSizeCSSValuePreferringKeyword() const;
   bool IsMonospaceFont() const;
 
-  MutableStylePropertySet* CopyPropertiesInSet(
-      const Vector<CSSPropertyID>&) const;
+  MutableCSSPropertyValueSet* CopyPropertiesInSet(
+      const Vector<const CSSProperty*>&) const;
 
   // CSSOM functions.
   unsigned length() const override;
   String item(unsigned index) const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   CSSComputedStyleDeclaration(Node*, bool allow_visited_style, const String&);
@@ -96,7 +97,8 @@ class CORE_EXPORT CSSComputedStyleDeclaration final
   String getPropertyPriority(const String& property_name) override;
   String GetPropertyShorthand(const String& property_name) override;
   bool IsPropertyImplicit(const String& property_name) override;
-  void setProperty(const String& property_name,
+  void setProperty(const ExecutionContext*,
+                   const String& property_name,
                    const String& value,
                    const String& priority,
                    ExceptionState&) override;
@@ -104,7 +106,9 @@ class CORE_EXPORT CSSComputedStyleDeclaration final
   String CssFloat() const;
   void SetCSSFloat(const String&, ExceptionState&);
   String cssText() const override;
-  void setCSSText(const String&, ExceptionState&) override;
+  void setCSSText(const ExecutionContext*,
+                  const String&,
+                  ExceptionState&) override;
   const CSSValue* GetPropertyCSSValueInternal(CSSPropertyID) override;
   const CSSValue* GetPropertyCSSValueInternal(
       AtomicString custom_property_name) override;
@@ -113,6 +117,7 @@ class CORE_EXPORT CSSComputedStyleDeclaration final
                            const String& custom_property_name,
                            const String& value,
                            bool important,
+                           SecureContextMode,
                            ExceptionState&) override;
 
   bool CssPropertyMatches(CSSPropertyID, const CSSValue*) const override;

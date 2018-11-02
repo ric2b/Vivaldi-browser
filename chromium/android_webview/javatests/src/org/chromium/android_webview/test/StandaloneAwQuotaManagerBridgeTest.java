@@ -28,8 +28,7 @@ public class StandaloneAwQuotaManagerBridgeTest {
     @SmallTest
     public void testStartup() throws Exception {
         // AwQuotaManager should run without any issue.
-        AwQuotaManagerBridge.Origins origins =
-                AwQuotaManagerBridgeTestUtil.getOrigins(mActivityTestRule);
+        AwQuotaManagerBridge.Origins origins = AwQuotaManagerBridgeTestUtil.getOrigins();
         Assert.assertEquals(origins.mOrigins.length, 0);
         Assert.assertEquals(AwContents.getNativeInstanceCount(), 0);
     }

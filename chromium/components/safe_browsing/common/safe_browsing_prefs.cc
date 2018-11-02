@@ -13,11 +13,6 @@
 
 namespace {
 
-// Switch value which force the ScoutGroupSelected pref to true.
-const char kForceScoutGroupValueTrue[] = "true";
-// Switch value which force the ScoutGroupSelected pref to false.
-const char kForceScoutGroupValueFalse[] = "false";
-
 // Name of the Scout Transition UMA metric.
 const char kScoutTransitionMetricName[] = "SafeBrowsing.Pref.Scout.Transition";
 
@@ -141,8 +136,6 @@ void RecordExtendedReportingPrefChanged(
 }  // namespace
 
 namespace prefs {
-const char kSafeBrowsingChangePasswordInSettingsEnabled[] =
-    "safebrowsing.change_password_enabled";
 const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
 const char kSafeBrowsingExtendedReportingEnabled[] =
     "safebrowsing.extended_reporting_enabled";
@@ -159,17 +152,14 @@ const char kSafeBrowsingScoutGroupSelected[] =
     "safebrowsing.scout_group_selected";
 const char kSafeBrowsingScoutReportingEnabled[] =
     "safebrowsing.scout_reporting_enabled";
+const char kSafeBrowsingUnhandledSyncPasswordReuses[] =
+    "safebrowsing.unhandled_sync_password_reuses";
 }  // namespace prefs
 
 namespace safe_browsing {
 
-const char kSwitchForceScoutGroup[] = "force-scout-group";
-
 const base::Feature kCanShowScoutOptIn{"CanShowScoutOptIn",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kOnlyShowScoutOptIn{"OnlyShowScoutOptIn",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 std::string ChooseOptInTextPreference(
     const PrefService& prefs,
@@ -197,10 +187,9 @@ ExtendedReportingLevel GetExtendedReportingLevel(const PrefService& prefs) {
 }
 
 const char* GetExtendedReportingPrefName(const PrefService& prefs) {
-  // The Scout pref is active if either of the experiment features are on, and
+  // The Scout pref is active if the experiment features is on, and
   // ScoutGroupSelected is on as well.
-  if ((base::FeatureList::IsEnabled(kCanShowScoutOptIn) ||
-       base::FeatureList::IsEnabled(kOnlyShowScoutOptIn)) &&
+  if (base::FeatureList::IsEnabled(kCanShowScoutOptIn) &&
       prefs.GetBoolean(prefs::kSafeBrowsingScoutGroupSelected)) {
     return prefs::kSafeBrowsingScoutReportingEnabled;
   }
@@ -211,33 +200,8 @@ const char* GetExtendedReportingPrefName(const PrefService& prefs) {
 }
 
 void InitializeSafeBrowsingPrefs(PrefService* prefs) {
-  // First handle forcing kSafeBrowsingScoutGroupSelected pref via cmd-line.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          kSwitchForceScoutGroup)) {
-    std::string switch_value =
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            kSwitchForceScoutGroup);
-    if (switch_value == kForceScoutGroupValueTrue) {
-      prefs->SetBoolean(prefs::kSafeBrowsingScoutGroupSelected, true);
-      UMA_HISTOGRAM_ENUMERATION(kScoutTransitionMetricName,
-                                FORCE_SCOUT_FLAG_TRUE, MAX_REASONS);
-    } else if (switch_value == kForceScoutGroupValueFalse) {
-      prefs->SetBoolean(prefs::kSafeBrowsingScoutGroupSelected, false);
-      UMA_HISTOGRAM_ENUMERATION(kScoutTransitionMetricName,
-                                FORCE_SCOUT_FLAG_FALSE, MAX_REASONS);
-    }
-
-    // If the switch is used, don't process the experiment state.
-    return;
-  }
-
-  // Handle the three possible experiment states.
-  if (base::FeatureList::IsEnabled(kOnlyShowScoutOptIn)) {
-    // OnlyShowScoutOptIn immediately turns on ScoutGroupSelected pref.
-    prefs->SetBoolean(prefs::kSafeBrowsingScoutGroupSelected, true);
-    UMA_HISTOGRAM_ENUMERATION(kScoutTransitionMetricName,
-                              ONLY_SHOW_SCOUT_OPT_IN, MAX_REASONS);
-  } else if (base::FeatureList::IsEnabled(kCanShowScoutOptIn)) {
+  // Handle the two possible experiment states.
+  if (base::FeatureList::IsEnabled(kCanShowScoutOptIn)) {
     // CanShowScoutOptIn will only turn on ScoutGroupSelected pref if the legacy
     // SBER pref is false. Otherwise the legacy SBER pref will stay on and
     // continue to be used until the next security incident, at which point
@@ -253,7 +217,7 @@ void InitializeSafeBrowsingPrefs(PrefService* prefs) {
                                 MAX_REASONS);
     }
   } else {
-    // Both experiment features are off, so this is the Control group. We must
+    // Experiment feature is off, so this is the Control group. We must
     // handle the possibility that the user was previously in an experiment
     // group (above) that was reverted. We want to restore the user to a
     // reasonable state based on the ScoutGroup and ScoutReporting preferences.
@@ -360,8 +324,6 @@ void RecordExtendedReportingMetrics(const PrefService& prefs) {
 }
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingChangePasswordInSettingsEnabled, false);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingExtendedReportingEnabled,
                                 false);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutReportingEnabled,
@@ -379,6 +341,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kSafeBrowsingProceedAnywayDisabled,
                                 false);
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
+  registry->RegisterDictionaryPref(
+      prefs::kSafeBrowsingUnhandledSyncPasswordReuses);
 }
 
 void SetExtendedReportingPrefAndMetric(

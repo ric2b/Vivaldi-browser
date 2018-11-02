@@ -9,21 +9,12 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/unguessable_token.h"
 #include "extensions/renderer/object_backed_native_handler.h"
-
-struct ExtensionMsg_ExternalConnectionInfo;
-struct ExtensionMsg_TabConnectionInfo;
-
-namespace content {
-class RenderFrame;
-}
 
 namespace extensions {
 class ExtensionPort;
-struct Message;
+class ScriptContext;
 struct PortId;
-class ScriptContextSet;
 
 // Manually implements JavaScript bindings for extension messaging.
 class MessagingBindings : public ObjectBackedNativeHandler {
@@ -31,37 +22,8 @@ class MessagingBindings : public ObjectBackedNativeHandler {
   explicit MessagingBindings(ScriptContext* script_context);
   ~MessagingBindings() override;
 
-  // Checks whether the port exists in the given frame. If it does not, a reply
-  // is sent back to the browser.
-  static void ValidateMessagePort(const ScriptContextSet& context_set,
-                                  const PortId& port_id,
-                                  content::RenderFrame* render_frame);
-
-  // Dispatches the onConnect content script messaging event to some contexts
-  // in |context_set|. If |restrict_to_render_frame| is specified, only contexts
-  // in that render frame will receive the message.
-  static void DispatchOnConnect(const ScriptContextSet& context_set,
-                                const PortId& target_port_id,
-                                const std::string& channel_name,
-                                const ExtensionMsg_TabConnectionInfo& source,
-                                const ExtensionMsg_ExternalConnectionInfo& info,
-                                const std::string& tls_channel_id,
-                                content::RenderFrame* restrict_to_render_frame);
-
-  // Delivers a message sent using content script messaging to some of the
-  // contexts in |bindings_context_set|. If |restrict_to_render_frame| is
-  // specified, only contexts in that render view will receive the message.
-  static void DeliverMessage(const ScriptContextSet& context_set,
-                             const PortId& target_port_id,
-                             const Message& message,
-                             content::RenderFrame* restrict_to_render_frame);
-
-  // Dispatches the onDisconnect event in response to the channel being closed.
-  static void DispatchOnDisconnect(
-      const ScriptContextSet& context_set,
-      const PortId& port_id,
-      const std::string& error_message,
-      content::RenderFrame* restrict_to_render_frame);
+  // Returns the MessagingBindings associated with the given |context|.
+  static MessagingBindings* ForContext(ScriptContext* context);
 
   // Returns an existing port with the given |id|, or null.
   ExtensionPort* GetPortWithId(const PortId& id);
@@ -69,10 +31,6 @@ class MessagingBindings : public ObjectBackedNativeHandler {
   // Creates a new port with the given |id|. MessagingBindings owns the
   // returned port.
   ExtensionPort* CreateNewPortWithId(const PortId& id);
-
-  const base::UnguessableToken& context_id() const { return context_id_; }
-
-  base::WeakPtr<MessagingBindings> GetWeakPtr();
 
  private:
   using PortMap = std::map<int, std::unique_ptr<ExtensionPort>>;
@@ -114,9 +72,6 @@ class MessagingBindings : public ObjectBackedNativeHandler {
 
   // The number of extension ports created.
   size_t num_extension_ports_ = 0;
-
-  // A unique identifier for this JS context.
-  const base::UnguessableToken context_id_;
 
   base::WeakPtrFactory<MessagingBindings> weak_ptr_factory_;
 

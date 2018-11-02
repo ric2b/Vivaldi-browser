@@ -18,6 +18,7 @@
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/login/auth/authpolicy_login_helper.h"
 #include "crypto/rsa_private_key.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -58,10 +59,9 @@ void DevicePolicyCrosTestHelper::MarkAsEnterpriseOwnedBy(
 void DevicePolicyCrosTestHelper::MarkAsActiveDirectoryEnterpriseOwned(
     const std::string& realm) {
   OverridePaths();
-  WriteInstallAttributesFile(
-      chromeos::InstallAttributes::
-          GetActiveDirectoryEnterpriseOwnedInstallAttributesBlobForTesting(
-              realm));
+  ASSERT_TRUE(
+      chromeos::AuthPolicyLoginHelper::LockDeviceActiveDirectoryForTesting(
+          realm));
 }
 
 void DevicePolicyCrosTestHelper::MarkAsEnterpriseOwned() {
@@ -95,6 +95,14 @@ DevicePolicyCrosBrowserTest::DevicePolicyCrosBrowserTest()
 }
 
 DevicePolicyCrosBrowserTest::~DevicePolicyCrosBrowserTest() {
+}
+
+void DevicePolicyCrosBrowserTest::SetUp() {
+  // Set some fake state keys to make surethey are not empty.
+  std::vector<std::string> state_keys;
+  state_keys.push_back("1");
+  fake_session_manager_client_->set_server_backed_state_keys(state_keys);
+  InProcessBrowserTest::SetUp();
 }
 
 void DevicePolicyCrosBrowserTest::SetUpInProcessBrowserTestFixture() {

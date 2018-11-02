@@ -158,6 +158,7 @@ ResultExpr RestrictPrctl() {
       .CASES((PR_GET_NAME, PR_SET_NAME, PR_GET_DUMPABLE, PR_SET_DUMPABLE
 #if defined(OS_ANDROID)
               , PR_SET_VMA, PR_SET_PTRACER, PR_SET_TIMERSLACK
+              , PR_GET_NO_NEW_PRIVS
 
 // Enable PR_SET_TIMERSLACK_PID, an Android custom prctl which is used in:
 // https://android.googlesource.com/platform/system/core/+/lollipop-release/libcutils/sched_policy.c.
@@ -365,12 +366,10 @@ ResultExpr RestrictGetRandom() {
   return If((flags & ~kGoodFlags) == 0, Allow()).Else(CrashSIGSYS());
 }
 
-ResultExpr RestrictPrlimitToGetrlimit(pid_t target_pid) {
+ResultExpr RestrictPrlimit(pid_t target_pid) {
   const Arg<pid_t> pid(0);
-  const Arg<uintptr_t> new_limit(2);
-  // Only allow 'get' operations, and only for the current process.
-  return If(AllOf(new_limit == 0, AnyOf(pid == 0, pid == target_pid)), Allow())
-      .Else(Error(EPERM));
+  // Only allow operations for the current process.
+  return If(AnyOf(pid == 0, pid == target_pid), Allow()).Else(Error(EPERM));
 }
 
 }  // namespace sandbox.

@@ -10,7 +10,8 @@
 #include "content/public/browser/notification_registrar.h"
 #include "ui/message_center/notification_blocker.h"
 
-// A notification blocker which checks the fullscreen state.
+// A notification blocker which checks the fullscreen state. This is not used on
+// ChromeOS as ash has its own fullscreen notification blocker.
 class FullscreenNotificationBlocker
     : public message_center::NotificationBlocker,
       public content::NotificationObserver {
@@ -18,8 +19,6 @@ class FullscreenNotificationBlocker
   explicit FullscreenNotificationBlocker(
       message_center::MessageCenter* message_center);
   ~FullscreenNotificationBlocker() override;
-
-  bool is_fullscreen_mode() const { return is_fullscreen_mode_; }
 
   // message_center::NotificationBlocker overrides:
   void CheckState() override;

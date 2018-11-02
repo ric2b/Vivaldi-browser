@@ -30,6 +30,10 @@ inline base::Optional<base::StringPiece16> TruncateNullableString16(
 
 template <>
 struct StructTraits<blink::mojom::ManifestDataView, content::Manifest> {
+  static bool IsNull(const content::Manifest& m) { return m.IsEmpty(); }
+
+  static void SetToNull(content::Manifest* m) { *m = content::Manifest(); }
+
   static base::Optional<base::StringPiece16> name(const content::Manifest& m) {
     return internal::TruncateNullableString16(m.name);
   }
@@ -65,6 +69,10 @@ struct StructTraits<blink::mojom::ManifestDataView, content::Manifest> {
 
   static int64_t background_color(const content::Manifest& m) {
     return m.background_color;
+  }
+
+  static const GURL& splash_screen_url(const content::Manifest& m) {
+    return m.splash_screen_url;
   }
 
   static const std::vector<content::Manifest::Icon>& icons(

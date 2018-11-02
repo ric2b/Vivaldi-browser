@@ -18,7 +18,6 @@
 #include "media/base/content_decryption_module.h"
 #include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
-#include "media/cdm/cdm_file_io.h"
 #include "media/cdm/cdm_module.h"
 #include "media/cdm/external_clear_key_test_helper.h"
 #include "media/cdm/mock_helpers.h"
@@ -90,12 +89,14 @@ class CdmAdapterTest : public testing::Test {
 
   CdmAdapterTest() {
     // Enable use of External Clear Key CDM.
-    scoped_feature_list_.InitWithFeatures(
-        {media::kExternalClearKeyForTesting,
-         media::kSupportExperimentalCdmInterface},
-        {});
+    scoped_feature_list_.InitWithFeatures({media::kExternalClearKeyForTesting},
+                                          {});
 
-    CdmModule::GetInstance()->SetCdmPathForTesting(helper_.LibraryPath());
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
+    CdmModule::GetInstance()->Initialize(helper_.LibraryPath(), {});
+#else
+    CdmModule::GetInstance()->Initialize(helper_.LibraryPath());
+#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
   }
 
   ~CdmAdapterTest() override { CdmModule::ResetInstanceForTesting(); }
@@ -260,8 +261,16 @@ TEST_F(CdmAdapterTest, Initialize) {
 }
 
 TEST_F(CdmAdapterTest, BadLibraryPath) {
-  CdmModule::GetInstance()->SetCdmPathForTesting(
+  CdmModule::ResetInstanceForTesting();
+
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
+  CdmModule::GetInstance()->Initialize(
+      base::FilePath(FILE_PATH_LITERAL("no_library_here")), {});
+#else
+  CdmModule::GetInstance()->Initialize(
       base::FilePath(FILE_PATH_LITERAL("no_library_here")));
+#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
+
   InitializeAndExpect(FAILURE);
 }
 

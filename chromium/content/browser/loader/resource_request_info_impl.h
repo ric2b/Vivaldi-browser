@@ -16,7 +16,6 @@
 #include "base/supports_user_data.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/loader/resource_requester_info.h"
-#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
@@ -51,11 +50,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       scoped_refptr<ResourceRequesterInfo> requester_info,
       int route_id,
       int frame_tree_node_id,
-      int origin_pid,
+      int plugin_child_id,
       int request_id,
       int render_frame_id,
       bool is_main_frame,
-      bool parent_is_main_frame,
       ResourceType resource_type,
       ui::PageTransition transition_type,
       bool should_replace_current_entry,
@@ -66,8 +64,9 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       bool enable_load_timing,
       bool enable_upload_progress,
       bool do_not_prompt_for_login,
+      bool keepalive,
       blink::WebReferrerPolicy referrer_policy,
-      blink::WebPageVisibilityState visibility_state,
+      blink::mojom::PageVisibilityState visibility_state,
       ResourceContext* context,
       bool report_raw_headers,
       bool is_async,
@@ -83,15 +82,14 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   int GetChildID() const override;
   int GetRouteID() const override;
   GlobalRequestID GetGlobalRequestID() const override;
-  int GetOriginPID() const override;
+  int GetPluginChildID() const override;
   int GetRenderFrameID() const override;
   int GetFrameTreeNodeId() const override;
   bool IsMainFrame() const override;
-  bool ParentIsMainFrame() const override;
   ResourceType GetResourceType() const override;
   int GetProcessType() const override;
   blink::WebReferrerPolicy GetReferrerPolicy() const override;
-  blink::WebPageVisibilityState GetVisibilityState() const override;
+  blink::mojom::PageVisibilityState GetVisibilityState() const override;
   ui::PageTransition GetPageTransition() const override;
   bool HasUserGesture() const override;
   bool GetAssociatedRenderFrame(int* render_process_id,
@@ -102,6 +100,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   PreviewsState GetPreviewsState() const override;
   bool ShouldReportRawHeaders() const;
   NavigationUIData* GetNavigationUIData() const override;
+  bool CanceledByDevTools() const override;
 
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
@@ -123,7 +122,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   // does not need to be updated.
   void UpdateForTransfer(int route_id,
                          int render_frame_id,
-                         int origin_pid,
                          int request_id,
                          ResourceRequesterInfo* requester_info,
                          mojom::URLLoaderRequest url_loader_request,
@@ -143,6 +141,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   void set_detachable_handler(DetachableResourceHandler* h) {
     detachable_handler_ = h;
   }
+  bool keepalive() const { return keepalive_; }
 
   // Downloads are allowed only as a top level request.
   bool allow_download() const { return allow_download_; }
@@ -197,6 +196,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     on_transfer_ = on_transfer;
   }
 
+  void set_canceled_by_devtools(bool canceled_by_devtools) {
+    canceled_by_devtools_ = canceled_by_devtools;
+  }
+
   void SetBlobHandles(BlobHandles blob_handles);
 
   // Vivaldi specific
@@ -225,11 +228,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   scoped_refptr<ResourceRequesterInfo> requester_info_;
   int route_id_;
   const int frame_tree_node_id_;
-  int origin_pid_;
+  int plugin_child_id_;
   int request_id_;
   int render_frame_id_;
   bool is_main_frame_;
-  bool parent_is_main_frame_;
   bool should_replace_current_entry_;
   bool is_download_;
   bool is_stream_;
@@ -238,15 +240,17 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool enable_load_timing_;
   bool enable_upload_progress_;
   bool do_not_prompt_for_login_;
+  bool keepalive_;
   bool counted_as_in_flight_request_;
   ResourceType resource_type_;
   ui::PageTransition transition_type_;
   int memory_cost_;
   blink::WebReferrerPolicy referrer_policy_;
-  blink::WebPageVisibilityState visibility_state_;
+  blink::mojom::PageVisibilityState visibility_state_;
   ResourceContext* context_;
   bool report_raw_headers_;
   bool is_async_;
+  bool canceled_by_devtools_;
   PreviewsState previews_state_;
   scoped_refptr<ResourceRequestBody> body_;
   bool initiated_in_secure_context_;

@@ -9,20 +9,17 @@
 #include <utility>
 #include <vector>
 
-#include "ash/public/interfaces/ime_controller.mojom.h"
+#include "ash/ime/test_ime_controller.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/ime/chromeos/mock_input_method_manager.h"
-#include "ui/chromeos/ime/input_method_menu_item.h"
-#include "ui/chromeos/ime/input_method_menu_manager.h"
 
 using chromeos::input_method::FakeInputMethodDelegate;
 using chromeos::input_method::InputMethodDescriptor;
@@ -142,51 +139,6 @@ class TestInputMethodManager : public MockInputMethodManager {
   DISALLOW_COPY_AND_ASSIGN(TestInputMethodManager);
 };
 
-class TestImeController : ash::mojom::ImeController {
- public:
-  TestImeController() : binding_(this) {}
-  ~TestImeController() override = default;
-
-  // Returns a mojo interface pointer bound to this object.
-  ash::mojom::ImeControllerPtr CreateInterfacePtr() {
-    ash::mojom::ImeControllerPtr ptr;
-    binding_.Bind(mojo::MakeRequest(&ptr));
-    return ptr;
-  }
-
-  // ash::mojom::ImeController:
-  void SetClient(ash::mojom::ImeControllerClientPtr client) override {}
-  void RefreshIme(const std::string& current_ime_id,
-                  std::vector<ash::mojom::ImeInfoPtr> available_imes,
-                  std::vector<ash::mojom::ImeMenuItemPtr> menu_items) override {
-    current_ime_id_ = current_ime_id;
-    available_imes_ = std::move(available_imes);
-    menu_items_ = std::move(menu_items);
-  }
-  void SetImesManagedByPolicy(bool managed) override {
-    managed_by_policy_ = managed;
-  }
-  void ShowImeMenuOnShelf(bool show) override {
-    show_ime_menu_on_shelf_ = show;
-  }
-  void SetCapsLockState(bool enabled) override {
-    is_caps_lock_enabled_ = enabled;
-  }
-
-  // The most recent values received via mojo.
-  std::string current_ime_id_;
-  std::vector<ash::mojom::ImeInfoPtr> available_imes_;
-  std::vector<ash::mojom::ImeMenuItemPtr> menu_items_;
-  bool managed_by_policy_ = false;
-  bool show_ime_menu_on_shelf_ = false;
-  bool is_caps_lock_enabled_ = false;
-
- private:
-  mojo::Binding<ash::mojom::ImeController> binding_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestImeController);
-};
-
 class ImeControllerClientTest : public testing::Test {
  public:
   ImeControllerClientTest() {
@@ -199,7 +151,7 @@ class ImeControllerClientTest : public testing::Test {
   TestInputMethodManager input_method_manager_;
 
   // Mock of mojo interface in ash.
-  TestImeController ime_controller_;
+  ash::TestImeController ime_controller_;
 
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -239,6 +191,32 @@ TEST_F(ImeControllerClientTest, CapsLock) {
   client.OnCapsLockChanged(false);
   client.FlushMojoForTesting();
   EXPECT_FALSE(ime_controller_.is_caps_lock_enabled_);
+}
+
+TEST_F(ImeControllerClientTest, ExtraInputEnabledStateChange) {
+  ImeControllerClient client(&input_method_manager_);
+  client.InitForTesting(ime_controller_.CreateInterfacePtr());
+
+  client.OnExtraInputEnabledStateChange(true, true, false, false);
+  client.FlushMojoForTesting();
+  EXPECT_TRUE(ime_controller_.is_extra_input_options_enabled_);
+  EXPECT_TRUE(ime_controller_.is_emoji_enabled_);
+  EXPECT_FALSE(ime_controller_.is_handwriting_enabled_);
+  EXPECT_FALSE(ime_controller_.is_voice_enabled_);
+
+  client.OnExtraInputEnabledStateChange(true, false, true, true);
+  client.FlushMojoForTesting();
+  EXPECT_TRUE(ime_controller_.is_extra_input_options_enabled_);
+  EXPECT_FALSE(ime_controller_.is_emoji_enabled_);
+  EXPECT_TRUE(ime_controller_.is_handwriting_enabled_);
+  EXPECT_TRUE(ime_controller_.is_voice_enabled_);
+
+  client.OnExtraInputEnabledStateChange(false, false, false, false);
+  client.FlushMojoForTesting();
+  EXPECT_FALSE(ime_controller_.is_extra_input_options_enabled_);
+  EXPECT_FALSE(ime_controller_.is_emoji_enabled_);
+  EXPECT_FALSE(ime_controller_.is_handwriting_enabled_);
+  EXPECT_FALSE(ime_controller_.is_voice_enabled_);
 }
 
 TEST_F(ImeControllerClientTest, ShowImeMenuOnShelf) {

@@ -20,7 +20,9 @@
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/scroll_offset_animations.h"
 #include "cc/animation/scroll_offset_animations_impl.h"
+#include "cc/animation/scroll_timeline.h"
 #include "cc/animation/timing_function.h"
+#include "cc/animation/worklet_animation_player.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 
@@ -45,7 +47,6 @@ AnimationHost::AnimationHost(ThreadInstance thread_instance)
       thread_instance_(thread_instance),
       supports_scroll_animations_(false),
       needs_push_properties_(false),
-      mutator_needs_mutate_(false),
       mutator_(nullptr) {
   if (thread_instance_ == ThreadInstance::IMPL) {
     scroll_offset_animations_impl_ =
@@ -141,7 +142,7 @@ void AnimationHost::RegisterPlayerForElement(ElementId element_id,
     element_animations->InitAffectedElementTypes();
   }
 
-  element_animations->AddPlayer(player);
+  element_animations->AddTicker(player->animation_ticker());
 }
 
 void AnimationHost::UnregisterPlayerForElement(ElementId element_id,
@@ -152,7 +153,7 @@ void AnimationHost::UnregisterPlayerForElement(ElementId element_id,
   scoped_refptr<ElementAnimations> element_animations =
       GetElementAnimationsForElementId(element_id);
   DCHECK(element_animations);
-  element_animations->RemovePlayer(player);
+  element_animations->RemoveTicker(player->animation_ticker());
 
   if (element_animations->IsEmpty()) {
     element_animations->ClearAffectedElementTypes();
@@ -168,9 +169,6 @@ void AnimationHost::SetMutatorHostClient(MutatorHostClient* client) {
     return;
 
   mutator_host_client_ = client;
-
-  if (needs_push_properties() && mutator_host_client())
-    SetNeedsPushProperties();
 }
 
 void AnimationHost::SetNeedsCommit() {
@@ -231,29 +229,27 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
   // to happen before the element animations are synced below.
   for (auto& kv : id_to_timeline_map_) {
     AnimationTimeline* timeline = kv.second.get();
-    if (timeline->needs_push_properties()) {
-      AnimationTimeline* timeline_impl =
-          host_impl->GetTimelineById(timeline->id());
-      if (timeline_impl)
-        timeline->PushPropertiesTo(timeline_impl);
+    if (AnimationTimeline* timeline_impl =
+            host_impl->GetTimelineById(timeline->id())) {
+      timeline->PushPropertiesTo(timeline_impl);
     }
   }
 
   // Sync properties for created ElementAnimations.
   for (auto& kv : element_to_animations_map_) {
     const auto& element_animations = kv.second;
-    if (element_animations->needs_push_properties()) {
-      auto element_animations_impl =
-          host_impl->GetElementAnimationsForElementId(kv.first);
-      if (element_animations_impl)
-        element_animations->PushPropertiesTo(
-            std::move(element_animations_impl));
+    if (auto element_animations_impl =
+            host_impl->GetElementAnimationsForElementId(kv.first)) {
+      element_animations->PushPropertiesTo(std::move(element_animations_impl));
     }
   }
 
   // Update the impl-only scroll offset animations.
   scroll_offset_animations_->PushPropertiesTo(
       host_impl->scroll_offset_animations_impl_.get());
+  host_impl->main_thread_animations_count_ = main_thread_animations_count_;
+  host_impl->main_thread_compositable_animations_count_ =
+      main_thread_compositable_animations_count_;
 }
 
 scoped_refptr<ElementAnimations>
@@ -278,7 +274,7 @@ bool AnimationHost::NeedsTickAnimations() const {
 }
 
 bool AnimationHost::NeedsTickMutator() const {
-  return mutator_ && mutator_needs_mutate_;
+  return mutator_ && mutator_->HasAnimators();
 }
 
 bool AnimationHost::NeedsTickAnimationPlayers() const {
@@ -297,7 +293,8 @@ bool AnimationHost::ActivateAnimations() {
   return true;
 }
 
-bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time) {
+bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time,
+                                   const ScrollTree& scroll_tree) {
   TRACE_EVENT0("cc", "AnimationHost::TickAnimations");
   bool did_animate = false;
 
@@ -310,16 +307,18 @@ bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time) {
   }
   if (NeedsTickMutator()) {
     // TODO(majidvp): At the moment we call this for both active and pending
-    // trees similar to other animations. However our final goal is to only
-    // call these once ideally after activation.
-    did_animate |= mutator_->Mutate(monotonic_time);
-    mutator_needs_mutate_ = did_animate;
+    // trees similar to other animations. However our final goal is to only call
+    // it once, ideally after activation, and only when the input
+    // to an active timeline has changed. http://crbug.com/767210
+    mutator_->Mutate(CollectAnimatorsState(monotonic_time, scroll_tree));
+    did_animate = true;
   }
 
   return did_animate;
 }
 
-void AnimationHost::TickScrollAnimations(base::TimeTicks monotonic_time) {
+void AnimationHost::TickScrollAnimations(base::TimeTicks monotonic_time,
+                                         const ScrollTree& scroll_tree) {
   // TODO(majidvp) For now the logic simply assumes all AnimationWorklet
   // animations depend on scroll offset but this is inefficient. We need a more
   // fine-grained approach based on invalidating individual ScrollTimelines and
@@ -329,7 +328,30 @@ void AnimationHost::TickScrollAnimations(base::TimeTicks monotonic_time) {
   // TODO(majidvp): We need to return a boolean here so that LTHI knows
   // whether it needs to schedule another frame.
   if (mutator_)
-    mutator_->Mutate(monotonic_time);
+    mutator_->Mutate(CollectAnimatorsState(monotonic_time, scroll_tree));
+}
+
+std::unique_ptr<MutatorInputState> AnimationHost::CollectAnimatorsState(
+    base::TimeTicks monotonic_time,
+    const ScrollTree& scroll_tree) {
+  TRACE_EVENT0("cc", "AnimationHost::CollectAnimatorsState");
+  std::unique_ptr<MutatorInputState> result =
+      base::MakeUnique<MutatorInputState>();
+
+  for (auto& player : ticking_players_) {
+    if (!player->IsWorkletAnimationPlayer())
+      continue;
+
+    WorkletAnimationPlayer* worklet_player =
+        static_cast<WorkletAnimationPlayer*>(player.get());
+    MutatorInputState::AnimationState state{
+        worklet_player->id(), worklet_player->name(),
+        worklet_player->CurrentTime(monotonic_time, scroll_tree)};
+
+    result->animations.push_back(std::move(state));
+  }
+
+  return result;
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
@@ -345,13 +367,6 @@ bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
     it->UpdateState(start_ready_animations, animation_events);
 
   return true;
-}
-
-base::Closure AnimationHost::TakeMutations() {
-  if (mutator_)
-    return mutator_->TakeMutations();
-
-  return base::Closure();
 }
 
 std::unique_ptr<MutatorEvents> AnimationHost::CreateEvents() {
@@ -471,24 +486,6 @@ bool AnimationHost::HasAnyAnimationTargetingProperty(
   return element_animations->HasAnyAnimationTargetingProperty(property);
 }
 
-bool AnimationHost::HasTransformAnimationThatInflatesBounds(
-    ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->HasTransformAnimationThatInflatesBounds()
-             : false;
-}
-
-bool AnimationHost::TransformAnimationBoundsForBox(ElementId element_id,
-                                                   const gfx::BoxF& box,
-                                                   gfx::BoxF* bounds) const {
-  *bounds = gfx::BoxF();
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->TransformAnimationBoundsForBox(box, bounds)
-             : true;
-}
-
 bool AnimationHost::HasOnlyTranslationTransforms(
     ElementId element_id,
     ElementListType list_type) const {
@@ -602,8 +599,65 @@ void AnimationHost::SetLayerTreeMutator(
   mutator_->SetClient(this);
 }
 
-void AnimationHost::SetNeedsMutate() {
-  mutator_needs_mutate_ = true;
+void AnimationHost::SetMutationUpdate(
+    std::unique_ptr<MutatorOutputState> output_state) {
+  if (!output_state)
+    return;
+
+  TRACE_EVENT0("cc", "AnimationHost::SetMutationUpdate");
+  for (auto& animation_state : output_state->animations) {
+    int id = animation_state.animation_player_id;
+
+    // TODO(majidvp): Use a map to make lookup O(1)
+    auto to_update =
+        std::find_if(ticking_players_.begin(), ticking_players_.end(),
+                     [id](auto& it) { return it->id() == id; });
+
+    if (to_update == ticking_players_.end())
+      continue;
+
+    DCHECK(to_update->get()->IsWorkletAnimationPlayer());
+    WorkletAnimationPlayer* worklet_player_to_update =
+        static_cast<WorkletAnimationPlayer*>(to_update->get());
+
+    worklet_player_to_update->SetLocalTime(animation_state.local_time);
+  }
+}
+
+size_t AnimationHost::CompositedAnimationsCount() const {
+  size_t composited_animations_count = 0;
+  for (const auto& it : ticking_players_)
+    composited_animations_count += it->TickingAnimationsCount();
+  return composited_animations_count;
+}
+
+void AnimationHost::SetAnimationCounts(
+    size_t total_animations_count,
+    size_t main_thread_compositable_animations_count) {
+  size_t composited_animations_count = CompositedAnimationsCount();
+  if (main_thread_animations_count_ !=
+      total_animations_count - composited_animations_count) {
+    main_thread_animations_count_ =
+        total_animations_count - composited_animations_count;
+    DCHECK_GE(main_thread_animations_count_, 0u);
+    SetNeedsPushProperties();
+  }
+  if (main_thread_compositable_animations_count_ !=
+      main_thread_compositable_animations_count) {
+    main_thread_compositable_animations_count_ =
+        main_thread_compositable_animations_count;
+    SetNeedsPushProperties();
+  }
+  DCHECK_GE(main_thread_animations_count_,
+            main_thread_compositable_animations_count_);
+}
+
+size_t AnimationHost::MainThreadAnimationsCount() const {
+  return main_thread_animations_count_;
+}
+
+size_t AnimationHost::MainThreadCompositableAnimationsCount() const {
+  return main_thread_compositable_animations_count_;
 }
 
 }  // namespace cc

@@ -31,6 +31,7 @@
 #include "core/animation/DocumentTimeline.h"
 
 #include <algorithm>
+#include "core/animation/Animation.h"
 #include "core/animation/AnimationClock.h"
 #include "core/animation/DocumentTimelineOptions.h"
 #include "core/animation/ElementAnimations.h"
@@ -38,7 +39,6 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/PtrUtil.h"
@@ -186,9 +186,15 @@ void DocumentTimeline::DocumentTimelineTiming::ServiceOnNextFrame() {
     timeline_->document_->View()->ScheduleAnimation();
 }
 
-DEFINE_TRACE(DocumentTimeline::DocumentTimelineTiming) {
+void DocumentTimeline::DocumentTimelineTiming::Trace(blink::Visitor* visitor) {
   visitor->Trace(timeline_);
   DocumentTimeline::PlatformTiming::Trace(visitor);
+}
+
+size_t DocumentTimeline::MainThreadCompositableAnimationsCount() const {
+  size_t main_thread_compositable_animations_count = 0;
+  // TODO(crbug.com/781305): Restore the calculation here.
+  return main_thread_compositable_animations_count;
 }
 
 double DocumentTimeline::ZeroTime() {
@@ -306,7 +312,7 @@ void DocumentTimeline::InvalidateKeyframeEffects(const TreeScope& tree_scope) {
     animation->InvalidateKeyframeEffect(tree_scope);
 }
 
-DEFINE_TRACE(DocumentTimeline) {
+void DocumentTimeline::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(timing_);
   visitor->Trace(animations_needing_update_);

@@ -7,36 +7,31 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/Editor.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLCanvasElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class EventHandlerTest : public ::testing::Test {
+class EventHandlerTest : public PageTestBase {
  protected:
   void SetUp() override;
-
-  Page& GetPage() const { return dummy_page_holder_->GetPage(); }
-  Document& GetDocument() const { return dummy_page_holder_->GetDocument(); }
-  FrameSelection& Selection() const {
-    return GetDocument().GetFrame()->Selection();
-  }
   void SetHtmlInnerHTML(const char* html_content);
   ShadowRoot* SetShadowContent(const char* shadow_content, const char* host);
-
- protected:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
 };
 
 class TapEventBuilder : public WebGestureEvent {
@@ -85,11 +80,12 @@ class MousePressEventBuilder : public WebMouseEvent {
 };
 
 void EventHandlerTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(300, 400));
+  PageTestBase::SetUp(IntSize(300, 400));
 }
 
 void EventHandlerTest::SetHtmlInnerHTML(const char* html_content) {
-  GetDocument().documentElement()->setInnerHTML(String::FromUTF8(html_content));
+  GetDocument().documentElement()->SetInnerHTMLFromString(
+      String::FromUTF8(html_content));
   GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
@@ -326,7 +322,8 @@ TEST_F(EventHandlerTest, HitOnNothingDoesNotShowIBeam) {
 TEST_F(EventHandlerTest, HitOnTextShowsIBeam) {
   SetHtmlInnerHTML("blabla");
   Node* const text = GetDocument().body()->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -339,7 +336,8 @@ TEST_F(EventHandlerTest, HitOnTextShowsIBeam) {
 TEST_F(EventHandlerTest, HitOnUserSelectNoneDoesNotShowIBeam) {
   SetHtmlInnerHTML("<span style='user-select: none'>blabla</span>");
   Node* const text = GetDocument().body()->firstChild()->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -355,7 +353,8 @@ TEST_F(EventHandlerTest, ChildCanOverrideUserSelectNone) {
       "<span style='user-select: text'>blabla</span>"
       "</div>");
   Node* const text = GetDocument().body()->firstChild()->firstChild()->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -371,7 +370,8 @@ TEST_F(EventHandlerTest, ShadowChildCanOverrideUserSelectNone) {
       "<span style='user-select: text' id='bla'>blabla</span>", "host");
 
   Node* const text = shadow_root->getElementById("bla")->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -387,7 +387,8 @@ TEST_F(EventHandlerTest, ChildCanOverrideUserSelectText) {
       "<span style='user-select: none'>blabla</span>"
       "</div>");
   Node* const text = GetDocument().body()->firstChild()->firstChild()->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -403,7 +404,8 @@ TEST_F(EventHandlerTest, ShadowChildCanOverrideUserSelectText) {
       "<span style='user-select: none' id='bla'>blabla</span>", "host");
 
   Node* const text = shadow_root->getElementById("bla")->firstChild();
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -415,11 +417,10 @@ TEST_F(EventHandlerTest, ShadowChildCanOverrideUserSelectText) {
 
 TEST_F(EventHandlerTest, InputFieldsCanStartSelection) {
   SetHtmlInnerHTML("<input value='blabla'>");
-  Element* const field = ToElement(GetDocument().body()->firstChild());
-  ShadowRoot* const shadow_root = field->UserAgentShadowRoot();
-
-  Element* const text = shadow_root->getElementById("inner-editor");
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  auto* const field = ToHTMLInputElement(GetDocument().body()->firstChild());
+  Element* const text = field->InnerEditorElement();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -432,29 +433,28 @@ TEST_F(EventHandlerTest, InputFieldsCanStartSelection) {
 TEST_F(EventHandlerTest, ReadOnlyInputDoesNotInheritUserSelect) {
   SetHtmlInnerHTML(
       "<div style='user-select: none'>"
-      "<input readonly value='blabla'>"
+      "<input id='sample' readonly value='blabla'>"
       "</div>");
-  Element* const field =
-      ToElement(GetDocument().body()->firstChild()->firstChild());
-  ShadowRoot* const shadow_root = field->UserAgentShadowRoot();
+  HTMLInputElement* const input =
+      ToHTMLInputElement(GetDocument().getElementById("sample"));
+  Node* const text = input->InnerEditorElement()->firstChild();
 
-  Element* const text = shadow_root->getElementById("inner-editor");
-  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      text->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
   EXPECT_TRUE(text->CanStartSelection());
-
-  // TODO(crbug.com/764661): Show I-beam because field is selectable.
-  // EXPECT_TRUE(
-  //   GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(field,
-  //                                                                      hit));
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
 }
 
 TEST_F(EventHandlerTest, ImagesCannotStartSelection) {
   SetHtmlInnerHTML("<img>");
   Element* const img = ToElement(GetDocument().body()->firstChild());
-  LayoutPoint location = img->GetLayoutObject()->VisualRect().Center();
+  LayoutPoint location =
+      img->GetLayoutObject()->FirstFragment().VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
@@ -462,6 +462,55 @@ TEST_F(EventHandlerTest, ImagesCannotStartSelection) {
   EXPECT_FALSE(
       GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(img,
                                                                          hit));
+}
+
+TEST_F(EventHandlerTest, AnchorTextCannotStartSelection) {
+  SetHtmlInnerHTML("<a href='bala'>link text</a>");
+  Node* const link = GetDocument().body()->firstChild();
+  LayoutPoint location =
+      link->GetLayoutObject()->FirstFragment().VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  Node* const text = link->firstChild();
+  EXPECT_FALSE(text->CanStartSelection());
+  EXPECT_TRUE(hit.IsOverLink());
+  // ShouldShowIBeamForNode() returns |cursor: auto|'s value.
+  // In https://github.com/w3c/csswg-drafts/issues/1598 it was decided that:
+  // a { cursor: auto } /* gives I-beam over links */
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+  EXPECT_EQ(GetDocument()
+                .GetFrame()
+                ->GetEventHandler()
+                .SelectCursor(hit)
+                .GetCursor()
+                .GetType(),
+            Cursor::Type::kHand);  // A hand signals ability to navigate.
+}
+
+TEST_F(EventHandlerTest, EditableAnchorTextCanStartSelection) {
+  SetHtmlInnerHTML("<a contenteditable='true' href='bala'>editable link</a>");
+  Node* const link = GetDocument().body()->firstChild();
+  LayoutPoint location =
+      link->GetLayoutObject()->FirstFragment().VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  Node* const text = link->firstChild();
+  EXPECT_TRUE(text->CanStartSelection());
+  EXPECT_TRUE(hit.IsOverLink());
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+  EXPECT_EQ(GetDocument()
+                .GetFrame()
+                ->GetEventHandler()
+                .SelectCursor(hit)
+                .GetCursor()
+                .GetType(),
+            Cursor::Type::kIBeam);  // An I-beam signals editability.
 }
 
 // Regression test for http://crbug.com/641403 to verify we use up-to-date
@@ -472,7 +521,7 @@ TEST_F(EventHandlerTest, sendContextMenuEventWithHover) {
       "<div>foo</div>");
   GetDocument().GetSettings()->SetScriptEnabled(true);
   Element* script = GetDocument().createElement("script");
-  script->setInnerHTML(
+  script->SetInnerHTMLFromString(
       "document.addEventListener('contextmenu', event => "
       "event.preventDefault());");
   GetDocument().body()->AppendChild(script);
@@ -732,7 +781,7 @@ class EventHandlerTooltipTest : public EventHandlerTest {
     Page::PageClients clients;
     FillWithEmptyClients(clients);
     clients.chrome_client = chrome_client_.Get();
-    dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600), &clients);
+    SetupPageWithClients(&clients);
   }
 
   String& LastToolTip() { return chrome_client_->LastToolTip(); }
@@ -767,6 +816,75 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
       mouse_leave_event);
 
   EXPECT_EQ(WTF::String(), LastToolTip());
+}
+
+class UnbufferedInputEventsTrackingChromeClient : public EmptyChromeClient {
+ public:
+  UnbufferedInputEventsTrackingChromeClient() {}
+
+  void RequestUnbufferedInputEvents(LocalFrame*) override {
+    received_unbuffered_request_ = true;
+  }
+
+  bool ReceivedRequestForUnbufferedInput() {
+    bool value = received_unbuffered_request_;
+    received_unbuffered_request_ = false;
+    return value;
+  }
+
+ private:
+  bool received_unbuffered_request_ = false;
+};
+
+class EventHandlerLatencyTest : public PageTestBase {
+ protected:
+  void SetUp() override {
+    chrome_client_ = new UnbufferedInputEventsTrackingChromeClient();
+    Page::PageClients page_clients;
+    FillWithEmptyClients(page_clients);
+    page_clients.chrome_client = chrome_client_.Get();
+    SetupPageWithClients(&page_clients);
+  }
+
+  void SetHtmlInnerHTML(const char* html_content) {
+    GetDocument().documentElement()->SetInnerHTMLFromString(
+        String::FromUTF8(html_content));
+    GetDocument().View()->UpdateAllLifecyclePhases();
+  }
+
+  Persistent<UnbufferedInputEventsTrackingChromeClient> chrome_client_;
+};
+
+TEST_F(EventHandlerLatencyTest, NeedsUnbufferedInput) {
+  GetDocument().GetSettings()->SetScriptEnabled(true);
+  SetHtmlInnerHTML(
+      "<canvas style='width: 100px; height: 100px' id='first' "
+      "onpointermove='return;'>");
+
+  HTMLCanvasElement& canvas =
+      ToHTMLCanvasElement(*GetDocument().getElementById("first"));
+
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  WebMouseEvent mouse_press_event(
+      WebInputEvent::kMouseDown, WebFloatPoint(51, 50), WebFloatPoint(51, 50),
+      WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
+      TimeTicks::Now().InSeconds());
+  mouse_press_event.SetFrameScale(1);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  canvas.SetNeedsUnbufferedInputEvents(true);
+
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_TRUE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  canvas.SetNeedsUnbufferedInputEvents(false);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
 }
 
 }  // namespace blink

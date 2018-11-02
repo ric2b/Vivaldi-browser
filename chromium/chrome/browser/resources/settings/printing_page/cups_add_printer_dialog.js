@@ -127,21 +127,30 @@ Polymer({
     // We're abandoning discovery in favor of manual specification, so
     // drop the selection if one exists.
     this.selectedPrinter = getEmptyPrinter_();
-    this.$$('add-printer-dialog').close();
+    this.close();
     this.fire('open-manually-add-printer-dialog');
   },
 
   /** @private */
   onCancelTap_: function() {
     this.stopDiscoveringPrinters_();
-    this.$$('add-printer-dialog').close();
+    this.close();
   },
 
   /** @private */
   switchToConfiguringDialog_: function() {
     this.stopDiscoveringPrinters_();
-    this.$$('add-printer-dialog').close();
+    this.close();
     this.fire('open-configuring-printer-dialog');
+  },
+
+  /**
+   * @param {?CupsPrinterInfo} selectedPrinter
+   * @return {boolean} Whether the add printer button is enabled.
+   * @private
+   */
+  canAddPrinter_: function(selectedPrinter) {
+    return !!selectedPrinter && !!selectedPrinter.printerName;
   },
 });
 
@@ -205,14 +214,20 @@ Polymer({
     },
   },
 
-  /** @private */
-  onCancelTap_: function() {
+  close: function() {
     this.$$('add-printer-dialog').close();
   },
 
   /** @private */
+  onCancelTap_: function() {
+    this.close();
+    settings.CupsPrintersBrowserProxyImpl.getInstance().cancelPrinterSetUp(
+        this.activePrinter);
+  },
+
+  /** @private */
   switchToConfiguringDialog_: function() {
-    this.$$('add-printer-dialog').close();
+    this.close();
     this.fire('open-configuring-printer-dialog');
   },
 
@@ -244,7 +259,7 @@ Polymer({
 
   /** @private */
   onCancelConfiguringTap_: function() {
-    this.$$('add-printer-dialog').close();
+    this.close();
     this.fire('configuring-dialog-closed');
   },
 

@@ -112,7 +112,7 @@ class PRINTING_EXPORT PrintingContext {
   virtual void ReleaseContext() = 0;
 
   // Returns the native context used to print.
-  virtual skia::NativeDrawingContext context() const = 0;
+  virtual printing::NativeDrawingContext context() const = 0;
 
   // Creates an instance of this object. Implementers of this interface should
   // implement this method to create an object of their implementation.
@@ -140,7 +140,7 @@ class PRINTING_EXPORT PrintingContext {
   PrintSettings settings_;
 
   // Printing context delegate.
-  Delegate* delegate_;
+  Delegate* const delegate_;
 
   // Is a print job being done.
   volatile bool in_print_job_;

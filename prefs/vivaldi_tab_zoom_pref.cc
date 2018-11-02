@@ -6,7 +6,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // NOTE(arnar@vivaldi.com): Helper function to determine if Vivaldi tab zoom
 // is enabled.
@@ -20,7 +20,8 @@ bool isTabZoomEnabled(content::WebContents* web_contents) {
   if (!is_vivaldi)
     return false;
 
-  bool tabZoom = profile->GetPrefs()->GetBoolean(vivaldiprefs::kVivaldiTabZoom);
+  bool tabZoom =
+      profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesTabZoomEnabled);
   return tabZoom;
 }
 

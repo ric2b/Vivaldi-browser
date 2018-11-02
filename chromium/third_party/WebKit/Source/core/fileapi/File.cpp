@@ -34,8 +34,8 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/DateMath.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFileUtilities.h"
 
@@ -184,7 +184,7 @@ File::File(const String& path,
            bool has_snapshot_data,
            uint64_t size,
            double last_modified,
-           RefPtr<BlobDataHandle> blob_data_handle)
+           scoped_refptr<BlobDataHandle> blob_data_handle)
     : Blob(std::move(blob_data_handle)),
       has_backing_file_(!path.IsEmpty() || !relative_path.IsEmpty()),
       user_visibility_(user_visibility),
@@ -197,7 +197,7 @@ File::File(const String& path,
 
 File::File(const String& name,
            double modification_time_ms,
-           RefPtr<BlobDataHandle> blob_data_handle)
+           scoped_refptr<BlobDataHandle> blob_data_handle)
     : Blob(std::move(blob_data_handle)),
       has_backing_file_(false),
       user_visibility_(File::kIsNotUserVisible),

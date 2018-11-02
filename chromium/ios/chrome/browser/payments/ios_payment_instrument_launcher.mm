@@ -16,14 +16,15 @@
 #include "base/values.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_instrument.h"
+#import "ios/chrome/browser/payments/payment_request_constants.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/navigation_manager.h"
-#include "ios/web/public/payments/payment_request.h"
 #include "ios/web/public/ssl_status.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "net/base/mac/url_conversions.mm"
 #include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -119,19 +120,29 @@ bool IOSPaymentInstrumentLauncher::LaunchIOSPaymentInstrument(
       payment_request->web_payment_request().payment_request_id;
 
   universal_link = net::AppendQueryParameter(
-      universal_link, web::kPaymentRequestIDExternal, payment_request_id_);
+      universal_link, payments::kPaymentRequestIDExternal, payment_request_id_);
   universal_link = net::AppendQueryParameter(
-      universal_link, web::kPaymentRequestDataExternal, base_64_params);
+      universal_link, payments::kPaymentRequestDataExternal, base_64_params);
   NSURL* url = net::NSURLWithGURL(universal_link);
-  [[UIApplication sharedApplication]
-      openURL:url
-      options:(base::ios::IsRunningOnIOS10OrLater()
-                   ? @{ UIApplicationOpenURLOptionUniversalLinksOnly : @YES }
-                   : nil)completionHandler:^(BOOL success) {
-        if (!success) {
-          CompleteLaunchRequest("", "");
+
+  if (@available(iOS 10, *)) {
+    [[UIApplication sharedApplication] openURL:url
+        options:@{
+          UIApplicationOpenURLOptionUniversalLinksOnly : @YES
         }
-      }];
+        completionHandler:^(BOOL success) {
+          if (!success) {
+            CompleteLaunchRequest("", "");
+          }
+        }];
+  }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+  else {
+    if (![[UIApplication sharedApplication] openURL:url]) {
+      CompleteLaunchRequest("", "");
+    }
+  }
+#endif
 
   return true;
 }
@@ -211,23 +222,18 @@ IOSPaymentInstrumentLauncher::SerializeCertificateChain(
     return cert_chain_list;
 
   scoped_refptr<net::X509Certificate> cert = item->GetSSL().certificate;
-  std::vector<std::vector<const char>> cert_chain;
-  net::X509Certificate::OSCertHandles cert_handles =
-      cert->GetIntermediateCertificates();
-  if (cert_handles.empty() || cert_handles[0] != cert->os_cert_handle())
-    cert_handles.insert(cert_handles.begin(), cert->os_cert_handle());
+  std::vector<base::StringPiece> cert_chain;
 
-  cert_chain.reserve(cert_handles.size());
-  for (auto* handle : cert_handles) {
-    std::string cert_bytes;
-    net::X509Certificate::GetDEREncoded(handle, &cert_bytes);
-    cert_chain.push_back(
-        std::vector<const char>(cert_bytes.begin(), cert_bytes.end()));
-  }
+  cert_chain.reserve(1 + cert->GetIntermediateCertificates().size());
+  cert_chain.push_back(
+      net::x509_util::CryptoBufferAsStringPiece(cert->os_cert_handle()));
+  for (auto* handle : cert->GetIntermediateCertificates())
+    cert_chain.push_back(net::x509_util::CryptoBufferAsStringPiece(handle));
 
   std::unique_ptr<base::ListValue> byte_array;
-  for (std::vector<const char> cert_string : cert_chain) {
+  for (const auto& cert_string : cert_chain) {
     base::ListValue byte_array;
+    byte_array.GetList().reserve(cert_string.size());
     for (const char byte : cert_string)
       byte_array.GetList().emplace_back(byte);
 

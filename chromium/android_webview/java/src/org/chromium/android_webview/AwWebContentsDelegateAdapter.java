@@ -17,12 +17,10 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
-import android.webkit.ConsoleMessage;
 import android.webkit.URLUtil;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
 import android.widget.FrameLayout;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.content.browser.ContentVideoViewEmbedder;
@@ -138,19 +136,20 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
     @Override
     public boolean addMessageToConsole(int level, String message, int lineNumber,
             String sourceId) {
-        ConsoleMessage.MessageLevel messageLevel = ConsoleMessage.MessageLevel.DEBUG;
+        @AwConsoleMessage.MessageLevel
+        int messageLevel = AwConsoleMessage.MESSAGE_LEVEL_DEBUG;
         switch(level) {
             case LOG_LEVEL_TIP:
-                messageLevel = ConsoleMessage.MessageLevel.TIP;
+                messageLevel = AwConsoleMessage.MESSAGE_LEVEL_TIP;
                 break;
             case LOG_LEVEL_LOG:
-                messageLevel = ConsoleMessage.MessageLevel.LOG;
+                messageLevel = AwConsoleMessage.MESSAGE_LEVEL_LOG;
                 break;
             case LOG_LEVEL_WARNING:
-                messageLevel = ConsoleMessage.MessageLevel.WARNING;
+                messageLevel = AwConsoleMessage.MESSAGE_LEVEL_WARNING;
                 break;
             case LOG_LEVEL_ERROR:
-                messageLevel = ConsoleMessage.MessageLevel.ERROR;
+                messageLevel = AwConsoleMessage.MESSAGE_LEVEL_ERROR;
                 break;
             default:
                 Log.w(TAG, "Unknown message level, defaulting to DEBUG");
@@ -158,7 +157,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         }
 
         boolean result = mContentsClient.onConsoleMessage(
-                new ConsoleMessage(message, sourceId, lineNumber, messageLevel));
+                new AwConsoleMessage(message, sourceId, lineNumber, messageLevel));
         if (result && message != null && message.startsWith("[blocked]")) {
             Log.e(TAG, "Blocked URL: " + message);
         }
@@ -224,10 +223,10 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         AwContentsClient.FileChooserParamsImpl params = new AwContentsClient.FileChooserParamsImpl(
                 modeFlags, acceptTypes, title, defaultFilename, capture);
 
-        mContentsClient.showFileChooser(new ValueCallback<String[]>() {
+        mContentsClient.showFileChooser(new Callback<String[]>() {
             boolean mCompleted;
             @Override
-            public void onReceiveValue(String[] results) {
+            public void onResult(String[] results) {
                 if (mCompleted) {
                     throw new IllegalStateException("Duplicate showFileChooser result");
                 }
@@ -297,7 +296,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         if (fullscreenView == null) {
             return;
         }
-        WebChromeClient.CustomViewCallback cb = () -> {
+        AwContentsClient.CustomViewCallback cb = () -> {
             if (mCustomView != null) {
                 mAwContents.requestExitFullscreen();
             }

@@ -49,7 +49,7 @@ class WebSocketHandleClient {
   // This notification can be omitted when the inspector is not active.
   virtual void DidStartOpeningHandshake(
       WebSocketHandle*,
-      PassRefPtr<WebSocketHandshakeRequest>) = 0;
+      scoped_refptr<WebSocketHandshakeRequest>) = 0;
 
   // Called when the browser finishes the opening handshake.
   // This notification precedes didConnect.

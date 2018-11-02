@@ -54,29 +54,22 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
                    gpu::GpuPreferences* out) {
     out->single_process = prefs.single_process();
     out->in_process_gpu = prefs.in_process_gpu();
-    out->ui_prioritize_in_gpu_process = prefs.ui_prioritize_in_gpu_process();
-    out->enable_gpu_scheduler = prefs.enable_gpu_scheduler();
     out->disable_accelerated_video_decode =
         prefs.disable_accelerated_video_decode();
-
-#if defined(OS_CHROMEOS)
+    out->gpu_startup_dialog = prefs.gpu_startup_dialog();
+    out->disable_gpu_watchdog = prefs.disable_gpu_watchdog();
+    out->gpu_sandbox_start_early = prefs.gpu_sandbox_start_early();
     out->disable_vaapi_accelerated_video_encode =
         prefs.disable_vaapi_accelerated_video_encode();
-#endif
-
-#if BUILDFLAG(ENABLE_WEBRTC)
     out->disable_web_rtc_hw_encoding = prefs.disable_web_rtc_hw_encoding();
-#endif
-
-#if defined(OS_WIN)
     if (!prefs.ReadEnableAcceleratedVpxDecode(
             &out->enable_accelerated_vpx_decode))
       return false;
     out->enable_low_latency_dxva = prefs.enable_low_latency_dxva();
     out->enable_zero_copy_dxgi_video = prefs.enable_zero_copy_dxgi_video();
     out->enable_nv12_dxgi_video = prefs.enable_nv12_dxgi_video();
-#endif
-
+    out->enable_media_foundation_vea_on_windows7 =
+        prefs.enable_media_foundation_vea_on_windows7();
     out->compile_shader_always_succeeds =
         prefs.compile_shader_always_succeeds();
     out->disable_gl_error_limit = prefs.disable_gl_error_limit();
@@ -99,9 +92,9 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
         prefs.enable_threaded_texture_mailboxes();
     out->gl_shader_interm_output = prefs.gl_shader_interm_output();
     out->emulate_shader_precision = prefs.emulate_shader_precision();
+    out->enable_raster_decoder = prefs.enable_raster_decoder();
     out->enable_gpu_service_logging = prefs.enable_gpu_service_logging();
     out->enable_gpu_service_tracing = prefs.enable_gpu_service_tracing();
-    out->enable_es3_apis = prefs.enable_es3_apis();
     out->use_passthrough_cmd_decoder = prefs.use_passthrough_cmd_decoder();
     return true;
   }
@@ -112,62 +105,45 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
   static bool in_process_gpu(const gpu::GpuPreferences& prefs) {
     return prefs.in_process_gpu;
   }
-  static bool ui_prioritize_in_gpu_process(const gpu::GpuPreferences& prefs) {
-    return prefs.ui_prioritize_in_gpu_process;
-  }
-  static bool enable_gpu_scheduler(const gpu::GpuPreferences& prefs) {
-    return prefs.enable_gpu_scheduler;
-  }
   static bool disable_accelerated_video_decode(
       const gpu::GpuPreferences& prefs) {
     return prefs.disable_accelerated_video_decode;
   }
+  static bool gpu_startup_dialog(const gpu::GpuPreferences& prefs) {
+    return prefs.gpu_startup_dialog;
+  }
+  static bool disable_gpu_watchdog(const gpu::GpuPreferences& prefs) {
+    return prefs.disable_gpu_watchdog;
+  }
+  static bool gpu_sandbox_start_early(const gpu::GpuPreferences& prefs) {
+    return prefs.gpu_sandbox_start_early;
+  }
 
   static bool disable_vaapi_accelerated_video_encode(
       const gpu::GpuPreferences& prefs) {
-#if defined(OS_CHROMEOS)
     return prefs.disable_vaapi_accelerated_video_encode;
-#else
-    return false;
-#endif
   }
 
   static bool disable_web_rtc_hw_encoding(const gpu::GpuPreferences& prefs) {
-#if BUILDFLAG(ENABLE_WEBRTC)
     return prefs.disable_web_rtc_hw_encoding;
-#else
-    return false;
-#endif
   }
 
   static gpu::GpuPreferences::VpxDecodeVendors enable_accelerated_vpx_decode(
       const gpu::GpuPreferences& prefs) {
-#if defined(OS_WIN)
     return prefs.enable_accelerated_vpx_decode;
-#else
-    return gpu::GpuPreferences::VPX_VENDOR_MICROSOFT;
-#endif
   }
   static bool enable_low_latency_dxva(const gpu::GpuPreferences& prefs) {
-#if defined(OS_WIN)
     return prefs.enable_low_latency_dxva;
-#else
-    return false;
-#endif
   }
   static bool enable_zero_copy_dxgi_video(const gpu::GpuPreferences& prefs) {
-#if defined(OS_WIN)
     return prefs.enable_zero_copy_dxgi_video;
-#else
-    return false;
-#endif
   }
   static bool enable_nv12_dxgi_video(const gpu::GpuPreferences& prefs) {
-#if defined(OS_WIN)
     return prefs.enable_nv12_dxgi_video;
-#else
-    return false;
-#endif
+  }
+  static bool enable_media_foundation_vea_on_windows7(
+      const gpu::GpuPreferences& prefs) {
+    return prefs.enable_media_foundation_vea_on_windows7;
   }
   static bool compile_shader_always_succeeds(const gpu::GpuPreferences& prefs) {
     return prefs.compile_shader_always_succeeds;
@@ -223,14 +199,14 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
   static bool emulate_shader_precision(const gpu::GpuPreferences& prefs) {
     return prefs.emulate_shader_precision;
   }
+  static bool enable_raster_decoder(const gpu::GpuPreferences& prefs) {
+    return prefs.enable_raster_decoder;
+  }
   static bool enable_gpu_service_logging(const gpu::GpuPreferences& prefs) {
     return prefs.enable_gpu_service_logging;
   }
   static bool enable_gpu_service_tracing(const gpu::GpuPreferences& prefs) {
     return prefs.enable_gpu_service_tracing;
-  }
-  static bool enable_es3_apis(const gpu::GpuPreferences& prefs) {
-    return prefs.enable_es3_apis;
   }
   static bool use_passthrough_cmd_decoder(const gpu::GpuPreferences& prefs) {
     return prefs.use_passthrough_cmd_decoder;

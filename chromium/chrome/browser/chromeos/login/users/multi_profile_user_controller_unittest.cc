@@ -9,11 +9,11 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller_delegate.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/policy_cert_verifier.h"
@@ -25,6 +25,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/cert/x509_certificate.h"
@@ -36,7 +37,7 @@ namespace chromeos {
 
 namespace {
 
-const char* const kUsers[] = {"a@gmail.com", "b@gmail.com" };
+const char* const kUsers[] = {"a@gmail.com", "b@gmail.com"};
 
 struct BehaviorTestCase {
   const char* primary;
@@ -49,56 +50,58 @@ struct BehaviorTestCase {
 
 const BehaviorTestCase kBehaviorTestCases[] = {
     {
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::ALLOWED, MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::ALLOWED,
     },
     {
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::ALLOWED,
-     MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::ALLOWED,
-     MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::ALLOWED, MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::ALLOWED,
     },
     {
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::ALLOWED,
-     MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::ALLOWED,
-     MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::ALLOWED,
+        MultiProfileUserController::NOT_ALLOWED_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::kBehaviorUnrestricted,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::kBehaviorUnrestricted,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::kBehaviorPrimaryOnly,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::kBehaviorPrimaryOnly,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
     },
     {
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::kBehaviorNotAllowed,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
-     MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::kBehaviorNotAllowed,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
+        MultiProfileUserController::NOT_ALLOWED_PRIMARY_USER_POLICY_FORBIDS,
     },
 };
 
@@ -121,7 +124,7 @@ class MultiProfileUserControllerTest
  public:
   MultiProfileUserControllerTest()
       : fake_user_manager_(new FakeChromeUserManager),
-        user_manager_enabler_(fake_user_manager_),
+        user_manager_enabler_(base::WrapUnique(fake_user_manager_)),
         user_not_allowed_count_(0) {
     for (size_t i = 0; i < arraysize(kUsers); ++i) {
       test_users_.push_back(AccountId::FromUserEmail(kUsers[i]));
@@ -183,23 +186,20 @@ class MultiProfileUserControllerTest
   }
 
   void SetPrefBehavior(size_t user_index, const std::string& behavior) {
-    GetUserPrefs(user_index)->SetString(prefs::kMultiProfileUserBehavior,
-                                        behavior);
+    GetUserPrefs(user_index)
+        ->SetString(prefs::kMultiProfileUserBehavior, behavior);
   }
 
   std::string GetCachedBehavior(size_t user_index) {
     return controller_->GetCachedValue(test_users_[user_index].GetUserEmail());
   }
 
-  void SetCachedBehavior(size_t user_index,
-                         const std::string& behavior) {
+  void SetCachedBehavior(size_t user_index, const std::string& behavior) {
     controller_->SetCachedValue(test_users_[user_index].GetUserEmail(),
                                 behavior);
   }
 
-  void ResetCounts() {
-    user_not_allowed_count_ = 0;
-  }
+  void ResetCounts() { user_not_allowed_count_ = 0; }
 
   // MultiProfileUserControllerDeleagte overrides:
   void OnUserNotAllowed(const std::string& user_email) override {
@@ -209,15 +209,13 @@ class MultiProfileUserControllerTest
   MultiProfileUserController* controller() { return controller_.get(); }
   int user_not_allowed_count() const { return user_not_allowed_count_; }
 
-  TestingProfile* profile(int index) {
-    return user_profiles_[index];
-  }
+  TestingProfile* profile(int index) { return user_profiles_[index]; }
 
   content::TestBrowserThreadBundle threads_;
   std::unique_ptr<policy::PolicyCertVerifier> cert_verifier_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   FakeChromeUserManager* fake_user_manager_;  // Not owned
-  ScopedUserManagerEnabler user_manager_enabler_;
+  user_manager::ScopedUserManager user_manager_enabler_;
 
   std::unique_ptr<MultiProfileUserController> controller_;
 
@@ -234,9 +232,9 @@ class MultiProfileUserControllerTest
 // Tests that everyone is allowed before a session starts.
 TEST_F(MultiProfileUserControllerTest, AllAllowedBeforeLogin) {
   const char* const kTestCases[] = {
-    MultiProfileUserController::kBehaviorUnrestricted,
-    MultiProfileUserController::kBehaviorPrimaryOnly,
-    MultiProfileUserController::kBehaviorNotAllowed,
+      MultiProfileUserController::kBehaviorUnrestricted,
+      MultiProfileUserController::kBehaviorPrimaryOnly,
+      MultiProfileUserController::kBehaviorNotAllowed,
   };
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
     SetCachedBehavior(0, kTestCases[i]);
@@ -264,10 +262,10 @@ TEST_F(MultiProfileUserControllerTest, CachedBehaviorUpdate) {
   LoginUser(0);
 
   const char* const kTestCases[] = {
-    MultiProfileUserController::kBehaviorUnrestricted,
-    MultiProfileUserController::kBehaviorPrimaryOnly,
-    MultiProfileUserController::kBehaviorNotAllowed,
-    MultiProfileUserController::kBehaviorUnrestricted,
+      MultiProfileUserController::kBehaviorUnrestricted,
+      MultiProfileUserController::kBehaviorPrimaryOnly,
+      MultiProfileUserController::kBehaviorNotAllowed,
+      MultiProfileUserController::kBehaviorUnrestricted,
   };
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
     SetPrefBehavior(0, kTestCases[i]);

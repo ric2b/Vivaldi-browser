@@ -14,8 +14,9 @@
 #include "build/build_config.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "content/common/input/input_event_ack.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/input_event_ack_state.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
@@ -28,6 +29,9 @@
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/WebKit/public/web/WebNode.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/latency/latency_info.h"
@@ -44,7 +48,7 @@ using blink::WebInputEventResult;
 using blink::WebKeyboardEvent;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
-using blink::WebScrollBoundaryBehavior;
+using blink::WebOverscrollBehavior;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
 using ui::DidOverscrollParams;
@@ -153,6 +157,23 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
 
 RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
+int RenderWidgetInputHandler::GetWidgetRoutingIdAtPoint(
+    const gfx::Point& point) {
+  blink::WebNode result_node =
+      widget_->GetWebWidget()
+          ->HitTestResultAt(blink::WebPoint(point.x(), point.y()))
+          .GetNode();
+
+  blink::WebFrame* result_frame =
+      blink::WebFrame::FromFrameOwnerElement(result_node);
+  if (!result_frame) {
+    // This means that the node is not an iframe itself. So we just return the
+    // the frame containing the node.
+    result_frame = result_node.GetDocument().GetFrame();
+  }
+  return RenderFrame::GetRoutingIdForWebFrame(result_frame);
+}
+
 void RenderWidgetInputHandler::HandleInputEvent(
     const blink::WebCoalescedInputEvent& coalesced_event,
     const ui::LatencyInfo& latency_info,
@@ -241,7 +262,13 @@ void RenderWidgetInputHandler::HandleInputEvent(
         static_cast<const WebKeyboardEvent&>(input_event);
     if (key_event.native_key_code == AKEYCODE_DPAD_CENTER &&
         widget_->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE) {
-      widget_->ShowVirtualKeyboardOnElementFocus();
+      // Show the keyboard on keyup (not keydown) to match the behavior of
+      // Android's TextView.
+      if (key_event.GetType() == WebInputEvent::kKeyUp)
+        widget_->ShowVirtualKeyboardOnElementFocus();
+      // Prevent default for both keydown and keyup (letting the keydown go
+      // through to the web app would cause compatibility problems since
+      // DPAD_CENTER is also used as a "confirm" button).
       prevent_default = true;
     }
 #endif
@@ -275,19 +302,6 @@ void RenderWidgetInputHandler::HandleInputEvent(
 
     LogPassiveEventListenersUma(processed, touch.dispatch_type,
                                 input_event.TimeStampSeconds(), latency_info);
-
-    // TODO(lanwei): Remove this metric for event latency outside fling in M56,
-    // once we've gathered enough data to decide if we want to ship the passive
-    // event listener for fling, see https://crbug.com/638661.
-    if (touch.dispatch_type == WebInputEvent::kBlocking &&
-        touch.touch_start_or_first_touch_move &&
-        base::TimeTicks::IsHighResolution()) {
-      base::TimeTicks now = base::TimeTicks::Now();
-      UMA_HISTOGRAM_CUSTOM_COUNTS(
-          "Event.Touch.TouchLatencyOutsideFling",
-          GetEventLatencyMicros(input_event.TimeStampSeconds(), now), 1,
-          100000000, 50);
-    }
   } else if (input_event.GetType() == WebInputEvent::kMouseWheel) {
     LogPassiveEventListenersUma(
         processed,
@@ -307,23 +321,6 @@ void RenderWidgetInputHandler::HandleInputEvent(
   InputEventAckState ack_result = processed == WebInputEventResult::kNotHandled
                                       ? INPUT_EVENT_ACK_STATE_NOT_CONSUMED
                                       : INPUT_EVENT_ACK_STATE_CONSUMED;
-  if (processed == WebInputEventResult::kNotHandled &&
-      input_event.GetType() == WebInputEvent::kTouchStart) {
-    const WebTouchEvent& touch_event =
-        static_cast<const WebTouchEvent&>(input_event);
-    // Hit-test for all the pressed touch points. If there is a touch-handler
-    // for any of the touch points, then the renderer should continue to receive
-    // touch events.
-    ack_result = INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
-    for (size_t i = 0; i < touch_event.touches_length; ++i) {
-      if (touch_event.touches[i].state == WebTouchPoint::kStatePressed &&
-          delegate_->HasTouchEventHandlersAt(
-              gfx::ToFlooredPoint(touch_event.touches[i].PositionInWidget()))) {
-        ack_result = INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
-        break;
-      }
-    }
-  }
 
   // Send gesture scroll events and their dispositions to the compositor thread,
   // so that they can be used to produce the elastic overscroll effect on Mac.
@@ -367,7 +364,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
   // Virtual keyboard is not supported, so react to focus change immediately.
   if (processed != WebInputEventResult::kNotHandled &&
       (input_event.GetType() == WebInputEvent::kTouchEnd ||
-       input_event.GetType() == WebInputEvent::kMouseUp)) {
+       input_event.GetType() == WebInputEvent::kMouseDown)) {
     delegate_->FocusChangeComplete();
   }
 #endif
@@ -378,7 +375,7 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
     const WebFloatSize& accumulatedOverscroll,
     const WebFloatPoint& position,
     const WebFloatSize& velocity,
-    const WebScrollBoundaryBehavior& behavior) {
+    const WebOverscrollBehavior& behavior) {
   std::unique_ptr<DidOverscrollParams> params(new DidOverscrollParams());
   params->accumulated_overscroll = gfx::Vector2dF(
       accumulatedOverscroll.width, accumulatedOverscroll.height);
@@ -387,7 +384,7 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
   params->current_fling_velocity =
       gfx::Vector2dF(velocity.width, velocity.height);
   params->causal_event_viewport_point = gfx::PointF(position.x, position.y);
-  params->scroll_boundary_behavior = behavior;
+  params->overscroll_behavior = behavior;
 
   // If we're currently handling an event, stash the overscroll data such that
   // it can be bundled in the event ack.

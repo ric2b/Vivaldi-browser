@@ -135,12 +135,12 @@ void AssociatedResourceFetcherImpl::SetServiceWorkerMode(
   request_.SetServiceWorkerMode(service_worker_mode);
 }
 
-void AssociatedResourceFetcherImpl::SetCachePolicy(
-    blink::WebCachePolicy policy) {
+void AssociatedResourceFetcherImpl::SetCacheMode(
+    blink::mojom::FetchCacheMode mode) {
   DCHECK(!request_.IsNull());
   DCHECK(!loader_);
 
-  request_.SetCachePolicy(policy);
+  request_.SetCacheMode(mode);
 }
 
 void AssociatedResourceFetcherImpl::SetLoaderOptions(
@@ -154,8 +154,8 @@ void AssociatedResourceFetcherImpl::SetLoaderOptions(
 void AssociatedResourceFetcherImpl::Start(
     blink::WebLocalFrame* frame,
     blink::WebURLRequest::RequestContext request_context,
-    blink::WebURLRequest::FetchRequestMode fetch_request_mode,
-    blink::WebURLRequest::FetchCredentialsMode fetch_credentials_mode,
+    network::mojom::FetchRequestMode fetch_request_mode,
+    network::mojom::FetchCredentialsMode fetch_credentials_mode,
     blink::WebURLRequest::FrameType frame_type,
     const Callback& callback) {
   DCHECK(!loader_);

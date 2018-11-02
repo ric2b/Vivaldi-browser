@@ -14,7 +14,6 @@ import devil_chromium
 from devil import base_error
 from devil.android import device_blacklist
 from devil.android import device_errors
-from devil.android import device_list
 from devil.android import device_utils
 from devil.android import logcat_monitor
 from devil.android.sdk import adb_wrapper
@@ -24,6 +23,14 @@ from pylib import constants
 from pylib.base import environment
 from pylib.utils import instrumentation_tracing
 from py_trace_event import trace_event
+
+
+LOGCAT_FILTERS = [
+  'chromium:v',
+  'cr_*:v',
+  'DEBUG:I',
+  'StrictMode:D',
+]
 
 
 def _DeviceCachePath(device):
@@ -77,8 +84,8 @@ def handle_shard_failures_with(on_failure):
 
 class LocalDeviceEnvironment(environment.Environment):
 
-  def __init__(self, args, _error_func):
-    super(LocalDeviceEnvironment, self).__init__()
+  def __init__(self, args, output_manager, _error_func):
+    super(LocalDeviceEnvironment, self).__init__(output_manager)
     self._blacklist = (device_blacklist.Blacklist(args.blacklist_file)
                        if args.blacklist_file
                        else None)
@@ -92,7 +99,6 @@ class LocalDeviceEnvironment(environment.Environment):
     self._logcat_output_file = args.logcat_output_file
     self._max_tries = 1 + args.num_retries
     self._skip_clear_data = args.skip_clear_data
-    self._target_devices_file = args.target_devices_file
     self._tool_name = args.tool
     self._trace_output = None
     if hasattr(args, 'trace_output'):
@@ -121,25 +127,13 @@ class LocalDeviceEnvironment(environment.Environment):
       self.EnableTracing()
 
   def _InitDevices(self):
-    device_arg = 'default'
-    if self._target_devices_file:
-      device_arg = device_list.GetPersistentDeviceList(
-          self._target_devices_file)
-      if not device_arg:
-        logging.warning('No target devices specified. Falling back to '
-                        'running on all available devices.')
-        device_arg = 'default'
-      else:
-        logging.info(
-            'Read device list %s from target devices file.', str(device_arg))
-    elif self._device_serials:
+    device_arg = []
+    if self._device_serials:
       device_arg = self._device_serials
 
     self._devices = device_utils.DeviceUtils.HealthyDevices(
         self._blacklist, enable_device_files_cache=self._enable_device_cache,
         default_retries=self._max_tries - 1, device_arg=device_arg)
-    if not self._devices:
-      raise device_errors.NoDevicesError('No devices were available')
 
     if self._logcat_output_file:
       self._logcat_output_dir = tempfile.mkdtemp()

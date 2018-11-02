@@ -17,8 +17,8 @@
 #include "platform/loader/testing/MockResourceClient.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -35,7 +35,7 @@ class FontResourceTest : public ::testing::Test {
 // loading supports.
 TEST_F(FontResourceTest,
        ResourceFetcherRevalidateDeferedResourceFromTwoInitiators) {
-  KURL url(kParsedURLString, "http://127.0.0.1:8000/font.woff");
+  KURL url("http://127.0.0.1:8000/font.woff");
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
@@ -62,7 +62,7 @@ TEST_F(FontResourceTest,
 
   // Revalidate the resource.
   ResourceRequest request2(url);
-  request2.SetCachePolicy(WebCachePolicy::kValidatingCacheData);
+  request2.SetCacheMode(mojom::FetchCacheMode::kValidateCache);
   FetchParameters fetch_params2(request2);
   Resource* resource2 = FontResource::Fetch(fetch_params2, fetcher);
   ASSERT_TRUE(resource2);
@@ -72,7 +72,7 @@ TEST_F(FontResourceTest,
 
   // Fetch the same resource again before actual load operation starts.
   ResourceRequest request3(url);
-  request3.SetCachePolicy(WebCachePolicy::kValidatingCacheData);
+  request3.SetCacheMode(mojom::FetchCacheMode::kValidateCache);
   FetchParameters fetch_params3(request3);
   Resource* resource3 = FontResource::Fetch(fetch_params3, fetcher);
   ASSERT_TRUE(resource3);
@@ -94,7 +94,7 @@ TEST_F(FontResourceTest,
 
 // Tests if cache-aware font loading works correctly.
 TEST_F(FontResourceTest, CacheAwareFontLoading) {
-  KURL url(kParsedURLString, "http://127.0.0.1:8000/font.woff");
+  KURL url("http://127.0.0.1:8000/font.woff");
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
@@ -118,7 +118,7 @@ TEST_F(FontResourceTest, CacheAwareFontLoading) {
   resource->load_limit_state_ = FontResource::kUnderLimit;
 
   // FontResource callbacks should be blocked during cache-aware loading.
-  resource->FontLoadShortLimitCallback(nullptr);
+  resource->FontLoadShortLimitCallback();
   EXPECT_FALSE(client->FontLoadShortLimitExceededCalled());
 
   // Fail first request as disk cache miss.
@@ -137,7 +137,7 @@ TEST_F(FontResourceTest, CacheAwareFontLoading) {
   EXPECT_FALSE(client2->FontLoadLongLimitExceededCalled());
 
   // FontResource callbacks are not blocked now.
-  resource->FontLoadLongLimitCallback(nullptr);
+  resource->FontLoadLongLimitCallback();
   EXPECT_TRUE(client->FontLoadLongLimitExceededCalled());
 
   // Add client now, both callbacks should be called.

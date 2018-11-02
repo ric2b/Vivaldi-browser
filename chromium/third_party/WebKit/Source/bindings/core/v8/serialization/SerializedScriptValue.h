@@ -56,14 +56,14 @@ class StaticBitmapImage;
 class UnpackedSerializedScriptValue;
 class WebBlobInfo;
 
-typedef HashMap<String, RefPtr<BlobDataHandle>> BlobDataHandleMap;
+typedef HashMap<String, scoped_refptr<BlobDataHandle>> BlobDataHandleMap;
 typedef Vector<WebBlobInfo> WebBlobInfoArray;
 
 class CORE_EXPORT SerializedScriptValue
     : public ThreadSafeRefCounted<SerializedScriptValue> {
  public:
   using ArrayBufferContentsArray = Vector<WTF::ArrayBufferContents, 1>;
-  using ImageBitmapContentsArray = Vector<RefPtr<StaticBitmapImage>, 1>;
+  using ImageBitmapContentsArray = Vector<scoped_refptr<StaticBitmapImage>, 1>;
   using TransferredWasmModulesArray =
       WTF::Vector<v8::WasmCompiledModule::TransferrableModule>;
 
@@ -126,23 +126,24 @@ class CORE_EXPORT SerializedScriptValue
     WasmSerializationPolicy wasm_policy = kTransfer;
     StoragePolicy for_storage = kNotForStorage;
   };
-  static PassRefPtr<SerializedScriptValue> Serialize(v8::Isolate*,
-                                                     v8::Local<v8::Value>,
-                                                     const SerializeOptions&,
-                                                     ExceptionState&);
-  static PassRefPtr<SerializedScriptValue> SerializeAndSwallowExceptions(
+  static scoped_refptr<SerializedScriptValue> Serialize(v8::Isolate*,
+                                                        v8::Local<v8::Value>,
+                                                        const SerializeOptions&,
+                                                        ExceptionState&);
+  static scoped_refptr<SerializedScriptValue> SerializeAndSwallowExceptions(
       v8::Isolate*,
       v8::Local<v8::Value>);
 
-  static PassRefPtr<SerializedScriptValue> Create();
-  static PassRefPtr<SerializedScriptValue> Create(const String&);
-  static PassRefPtr<SerializedScriptValue> Create(RefPtr<const SharedBuffer>);
-  static PassRefPtr<SerializedScriptValue> Create(const char* data,
-                                                  size_t length);
+  static scoped_refptr<SerializedScriptValue> Create();
+  static scoped_refptr<SerializedScriptValue> Create(const String&);
+  static scoped_refptr<SerializedScriptValue> Create(
+      scoped_refptr<const SharedBuffer>);
+  static scoped_refptr<SerializedScriptValue> Create(const char* data,
+                                                     size_t length);
 
   ~SerializedScriptValue();
 
-  static PassRefPtr<SerializedScriptValue> NullValue();
+  static scoped_refptr<SerializedScriptValue> NullValue();
 
   String ToWireString() const;
   void ToWireBytes(Vector<char>&) const;
@@ -169,7 +170,8 @@ class CORE_EXPORT SerializedScriptValue
   // objects local to this thread. A SerializedScriptValue can only be unpacked
   // once, and the result is bound to a thread.
   // See UnpackedSerializedScriptValue.h for more details.
-  static UnpackedSerializedScriptValue* Unpack(RefPtr<SerializedScriptValue>);
+  static UnpackedSerializedScriptValue* Unpack(
+      scoped_refptr<SerializedScriptValue>);
 
   // Used for debugging. Returns true if there are "packed" transferred contents
   // which would require this value to be unpacked before deserialization.
@@ -276,7 +278,7 @@ class CORE_EXPORT SerializedScriptValue
 template <>
 struct NativeValueTraits<SerializedScriptValue>
     : public NativeValueTraitsBase<SerializedScriptValue> {
-  CORE_EXPORT static inline PassRefPtr<SerializedScriptValue> NativeValue(
+  CORE_EXPORT static inline scoped_refptr<SerializedScriptValue> NativeValue(
       v8::Isolate* isolate,
       v8::Local<v8::Value> value,
       const SerializedScriptValue::SerializeOptions& options,

@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/containers/circular_deque.h"
 #include "base/lazy_instance.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -34,8 +35,9 @@ bool g_has_shut_down = false;
 uint32_t g_browser_compositor_count = 0;
 
 // A spare RecyclableCompositorMac kept around for recycling.
-base::LazyInstance<std::deque<std::unique_ptr<RecyclableCompositorMac>>>::
-    DestructorAtExit g_spare_recyclable_compositors;
+base::LazyInstance<base::circular_deque<
+    std::unique_ptr<RecyclableCompositorMac>>>::DestructorAtExit
+    g_spare_recyclable_compositors;
 
 void ReleaseSpareCompositors() {
   // Allow at most one spare recyclable compositor.
@@ -89,6 +91,7 @@ class RecyclableCompositorMac : public ui::CompositorObserver {
                             base::TimeTicks start_time) override {}
   void OnCompositingEnded(ui::Compositor* compositor) override {}
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
+  void OnCompositingChildResizing(ui::Compositor* compositor) override {}
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
 
   std::unique_ptr<ui::AcceleratedWidgetMac> accelerated_widget_mac_;
@@ -181,7 +184,10 @@ BrowserCompositorMac::BrowserCompositorMac(
   g_browser_compositor_count += 1;
 
   root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
-  delegated_frame_host_.reset(new DelegatedFrameHost(frame_sink_id, this));
+  // TODO(fsamuel): Plumb surface synchronization settings.
+  delegated_frame_host_.reset(new DelegatedFrameHost(
+      frame_sink_id, this, false /* enable_surface_synchronization */,
+      false /* enable_viz */));
 
   SetRenderWidgetHostIsHidden(render_widget_host_is_hidden);
   SetNSViewAttachedToWindow(ns_view_attached_to_window);
@@ -292,9 +298,9 @@ void BrowserCompositorMac::DidCreateNewRendererCompositorFrameSink(
 
 void BrowserCompositorMac::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   // Compute the frame size based on the root render pass rect size.
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+  viz::RenderPass* root_pass = frame.render_pass_list.back().get();
   float scale_factor = frame.metadata.device_scale_factor;
   gfx::Size pixel_size = root_pass->output_rect.size();
   gfx::Size dip_size = gfx::ConvertSizeToDIP(scale_factor, pixel_size);
@@ -304,18 +310,17 @@ void BrowserCompositorMac::SubmitCompositorFrame(
                                                           pixel_size);
   }
   delegated_frame_host_->SubmitCompositorFrame(local_surface_id,
-                                               std::move(frame));
+                                               std::move(frame), nullptr);
 }
 
 void BrowserCompositorMac::OnDidNotProduceFrame(const viz::BeginFrameAck& ack) {
   delegated_frame_host_->DidNotProduceFrame(ack);
 }
 
-void BrowserCompositorMac::SetHasTransparentBackground(bool transparent) {
-  has_transparent_background_ = transparent;
+void BrowserCompositorMac::SetBackgroundColor(SkColor background_color) {
+  background_color_ = background_color;
   if (recyclable_compositor_) {
-    recyclable_compositor_->compositor()->SetHostHasTransparentBackground(
-        has_transparent_background_);
+    recyclable_compositor_->compositor()->SetBackgroundColor(background_color_);
   }
 }
 
@@ -358,8 +363,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
   if (state_ == HasNoCompositor && new_state != HasNoCompositor) {
     recyclable_compositor_ = RecyclableCompositorMac::Create();
     recyclable_compositor_->compositor()->SetRootLayer(root_layer_.get());
-    recyclable_compositor_->compositor()->SetHostHasTransparentBackground(
-        has_transparent_background_);
+    recyclable_compositor_->compositor()->SetBackgroundColor(background_color_);
     recyclable_compositor_->accelerated_widget_mac()->SetNSView(
         accelerated_widget_mac_ns_view_);
     state_ = HasDetachedCompositor;
@@ -446,6 +450,10 @@ bool BrowserCompositorMac::DelegatedFrameCanCreateResizeLock() const {
   return false;
 }
 
+viz::LocalSurfaceId BrowserCompositorMac::GetLocalSurfaceId() const {
+  return client_->GetLocalSurfaceId();
+}
+
 std::unique_ptr<CompositorResizeLock>
 BrowserCompositorMac::DelegatedFrameHostCreateResizeLock() {
   NOTREACHED();
@@ -459,6 +467,10 @@ void BrowserCompositorMac::OnBeginFrame() {
 bool BrowserCompositorMac::IsAutoResizeEnabled() const {
   NOTREACHED();
   return false;
+}
+
+void BrowserCompositorMac::OnFrameTokenChanged(uint32_t frame_token) {
+  client_->OnFrameTokenChanged(frame_token);
 }
 
 ui::Compositor* BrowserCompositorMac::CompositorForTesting() const {

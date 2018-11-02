@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
@@ -38,8 +39,8 @@ WeakPtr<AutofillPopupControllerImpl> AutofillPopupControllerImpl::GetOrCreate(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction) {
   if (previous.get() && previous->delegate_.get() == delegate.get() &&
-      previous->container_view() == container_view &&
-      previous->element_bounds() == element_bounds) {
+      previous->container_view() == container_view) {
+    previous->SetElementBounds(element_bounds);
     previous->ClearState();
     return previous;
   }
@@ -66,6 +67,8 @@ AutofillPopupControllerImpl::AutofillPopupControllerImpl(
       delegate_(delegate),
       weak_ptr_factory_(this) {
   ClearState();
+  delegate->RegisterDeletionCallback(base::BindOnce(
+      &AutofillPopupControllerImpl::HideViewAndDie, GetWeakPtr()));
 }
 
 AutofillPopupControllerImpl::~AutofillPopupControllerImpl() {}
@@ -188,15 +191,13 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
 
 void AutofillPopupControllerImpl::Hide() {
   if (delegate_) {
+    delegate_->ClearPreviewedForm();
     delegate_->OnPopupHidden();
     static_cast<ContentAutofillDriver*>(delegate_->GetAutofillDriver())
         ->RemoveKeyPressHandler();
   }
 
-  if (view_)
-    view_->Hide();
-
-  delete this;
+  HideViewAndDie();
 }
 
 void AutofillPopupControllerImpl::ViewDestroyed() {
@@ -294,6 +295,11 @@ gfx::NativeView AutofillPopupControllerImpl::container_view() {
 
 const gfx::RectF& AutofillPopupControllerImpl::element_bounds() const {
   return controller_common_.element_bounds;
+}
+
+void AutofillPopupControllerImpl::SetElementBounds(const gfx::RectF& bounds) {
+  controller_common_.element_bounds.set_origin(bounds.origin());
+  controller_common_.element_bounds.set_size(bounds.size());
 }
 
 bool AutofillPopupControllerImpl::IsRTL() const {
@@ -513,6 +519,13 @@ void AutofillPopupControllerImpl::ClearState() {
   elided_labels_.clear();
 
   selected_line_.reset();
+}
+
+void AutofillPopupControllerImpl::HideViewAndDie() {
+  if (view_)
+    view_->Hide();
+
+  delete this;
 }
 
 }  // namespace autofill

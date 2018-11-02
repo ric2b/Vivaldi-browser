@@ -15,7 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/media/router/media_router_feature.cc"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -239,6 +239,10 @@ MediaRouterIntegrationBrowserTest::StartSessionWithTestPageAndChooseSink() {
   WebContents* web_contents = StartSessionWithTestPageAndSink();
   WaitUntilSinkDiscoveredOnUI();
   ChooseSink(web_contents, receiver_);
+
+  // Wait a few seconds for MediaRouter to receive updates containing the
+  // created route.
+  Wait(base::TimeDelta::FromSeconds(3));
   return web_contents;
 }
 
@@ -258,9 +262,9 @@ void MediaRouterIntegrationBrowserTest::OpenDialogAndCastFile() {
   // Wait for the sinks to load.
   WaitUntilSinkDiscoveredOnUI();
   // Click on sink.
-  ChooseSink(GetActiveWebContents(), kTestSinkName);
-  // Give casting a second to go through.
-  Wait(base::TimeDelta::FromSeconds(1));
+  ChooseSink(GetActiveWebContents(), receiver_);
+  // Give casting a few seconds to go through.
+  Wait(base::TimeDelta::FromSeconds(3));
   // Expect that the current tab has the file open in it.
   ASSERT_EQ(file_url, GetActiveWebContents()->GetURL());
 }
@@ -393,7 +397,7 @@ void MediaRouterIntegrationBrowserTest::SetTestData(
   std::unique_ptr<base::Value> value;
   {
     // crbug.com/724573
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     value = deserializer.Deserialize(&error_code, &error_message);
   }
   CHECK(value.get()) << "Deserialize failed: " << error_message;
@@ -431,7 +435,7 @@ base::FilePath MediaRouterIntegrationBrowserTest::GetResourceFile(
       base_dir.Append(kResourcePath).Append(relative_path);
   {
     // crbug.com/724573
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     CHECK(PathExists(full_path));
   }
   return full_path;
@@ -656,10 +660,6 @@ void MediaRouterIntegrationBrowserTest::RunReconnectSessionTest() {
   CheckSessionValidity(web_contents);
   std::string session_id(GetStartedConnectionId(web_contents));
 
-  // Wait a few seconds for MediaRouter to receive updates containing the
-  // created route.
-  Wait(base::TimeDelta::FromSeconds(3));
-
   OpenTestPageInNewTab(FILE_PATH_LITERAL("basic_test.html"));
   WebContents* new_web_contents = GetActiveWebContents();
   ASSERT_TRUE(new_web_contents);
@@ -707,6 +707,12 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
 
   // Expect that no new tab has been opened.
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
+
+  // Open the dialog again to check for a route.
+  OpenMRDialog(GetActiveWebContents());
+
+  // Wait for a route to be created.
+  WaitUntilRouteCreated();
 }
 
 // Tests that creating a route with a local file opens the file in a new tab.
@@ -722,9 +728,15 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
 
   // Expect that a new tab has been opened.
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
+
+  // Open the dialog again to check for a route.
+  OpenMRDialog(GetActiveWebContents());
+
+  // Wait for a route to be created.
+  WaitUntilRouteCreated();
 }
 
-// Tests that creating a route with a local file opens the file in a new tab.
+// Tests that failing to create a route with a local file shows an issue.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
                        MANUAL_OpenLocalMediaFileFailsAndShowsIssue) {
   OpenDialogAndCastFileFails();
@@ -775,10 +787,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
   WebContents* web_contents = StartSessionWithTestPageAndChooseSink();
   CheckSessionValidity(web_contents);
   std::string session_id(GetStartedConnectionId(web_contents));
-
-  // Wait a few seconds for MediaRouter to receive updates containing the
-  // created route.
-  Wait(base::TimeDelta::FromSeconds(3));
 
   SetTestData(FILE_PATH_LITERAL("fail_reconnect_session.json"));
   OpenTestPageInNewTab(FILE_PATH_LITERAL("fail_reconnect_session.html"));

@@ -4,24 +4,26 @@
 
 #include "chrome/installer/zucchini/disassembler_win32.h"
 
+#include <stddef.h>
+
 #include <algorithm>
-#include <cstddef>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
+#include "chrome/installer/zucchini/abs32_utils.h"
 #include "chrome/installer/zucchini/algorithm.h"
 #include "chrome/installer/zucchini/buffer_source.h"
-#include "chrome/installer/zucchini/io_utils.h"
 #include "chrome/installer/zucchini/rel32_finder.h"
 #include "chrome/installer/zucchini/rel32_utils.h"
+#include "chrome/installer/zucchini/reloc_utils.h"
 
 namespace zucchini {
 
 namespace {
 
 // Decides whether |image| points to a Win32 PE file. If this is a possibility,
-// assigns |source| to enable further parsing and returns true. Otherwise
+// assigns |source| to enable further parsing, and returns true. Otherwise
 // leaves |source| at an undefined state and returns false.
 template <class Traits>
 bool ReadWin32Header(ConstBufferView image, BufferSource* source) {
@@ -44,6 +46,15 @@ bool ReadWin32Header(ConstBufferView image, BufferSource* source) {
   return true;
 }
 
+template <class Traits>
+const pe::ImageDataDirectory* ReadDataDirectory(
+    const typename Traits::ImageOptionalHeader* optional_header,
+    size_t index) {
+  if (index >= optional_header->number_of_rva_and_sizes)
+    return nullptr;
+  return &optional_header->data_directory[index];
+}
+
 // Decides whether |section| (assumed value) is a section that contains code.
 template <class Traits>
 bool IsWin32CodeSection(const pe::ImageSectionHeader& section) {
@@ -53,32 +64,27 @@ bool IsWin32CodeSection(const pe::ImageSectionHeader& section) {
 
 }  // namespace
 
+/******** Win32X86Traits ********/
+
 // static
+constexpr Bitness Win32X86Traits::kBitness;
 constexpr ExecutableType Win32X86Traits::kExeType;
 const char Win32X86Traits::kExeTypeString[] = "Windows PE x86";
 
+/******** Win32X64Traits ********/
+
+// static
+constexpr Bitness Win32X64Traits::kBitness;
 constexpr ExecutableType Win32X64Traits::kExeType;
 const char Win32X64Traits::kExeTypeString[] = "Windows PE x64";
 
 /******** DisassemblerWin32 ********/
 
 // static.
-// This implements basic checks without storing data.
 template <class Traits>
 bool DisassemblerWin32<Traits>::QuickDetect(ConstBufferView image) {
   BufferSource source;
   return ReadWin32Header<Traits>(image, &source);
-}
-
-// static
-template <class Traits>
-std::unique_ptr<DisassemblerWin32<Traits>> DisassemblerWin32<Traits>::Make(
-    ConstBufferView image) {
-  std::unique_ptr<DisassemblerWin32> disasm =
-      base::MakeUnique<DisassemblerWin32>();
-  if (disasm->Parse(image))
-    return disasm;
-  return nullptr;
 }
 
 template <class Traits>
@@ -101,18 +107,65 @@ template <class Traits>
 std::vector<ReferenceGroup> DisassemblerWin32<Traits>::MakeReferenceGroups()
     const {
   return {
+      {ReferenceTypeTraits{2, TypeTag(kReloc), PoolTag(kReloc)},
+       &DisassemblerWin32::MakeReadRelocs, &DisassemblerWin32::MakeWriteRelocs},
+      {ReferenceTypeTraits{Traits::kVAWidth, TypeTag(kAbs32), PoolTag(kAbs32)},
+       &DisassemblerWin32::MakeReadAbs32, &DisassemblerWin32::MakeWriteAbs32},
       {ReferenceTypeTraits{4, TypeTag(kRel32), PoolTag(kRel32)},
        &DisassemblerWin32::MakeReadRel32, &DisassemblerWin32::MakeWriteRel32},
   };
 }
 
 template <class Traits>
+std::unique_ptr<ReferenceReader> DisassemblerWin32<Traits>::MakeReadRelocs(
+    offset_t lo,
+    offset_t hi) {
+  ParseAndStoreRelocBlocks();
+
+  RelocRvaReaderWin32 reloc_rva_reader(image_, reloc_region_,
+                                       reloc_block_offsets_, lo, hi);
+  CHECK_GE(image_.size(), Traits::kVAWidth);
+  offset_t offset_bound =
+      base::checked_cast<offset_t>(image_.size() - Traits::kVAWidth + 1);
+  return base::MakeUnique<RelocReaderWin32>(std::move(reloc_rva_reader),
+                                            Traits::kRelocType, offset_bound,
+                                            translator_);
+}
+
+template <class Traits>
+std::unique_ptr<ReferenceReader> DisassemblerWin32<Traits>::MakeReadAbs32(
+    offset_t lo,
+    offset_t hi) {
+  ParseAndStoreAbs32();
+  Abs32RvaExtractorWin32 abs_rva_extractor(
+      image_, {Traits::kBitness, image_base_}, abs32_locations_, lo, hi);
+  return base::MakeUnique<Abs32ReaderWin32>(std::move(abs_rva_extractor),
+                                            translator_);
+}
+
+template <class Traits>
 std::unique_ptr<ReferenceReader> DisassemblerWin32<Traits>::MakeReadRel32(
-    offset_t lower,
-    offset_t upper) {
+    offset_t lo,
+    offset_t hi) {
   ParseAndStoreRel32();
-  return base::MakeUnique<Rel32ReaderX86>(image_, lower, upper,
-                                          &rel32_locations_, translator_);
+  return base::MakeUnique<Rel32ReaderX86>(image_, lo, hi, &rel32_locations_,
+                                          translator_);
+}
+
+template <class Traits>
+std::unique_ptr<ReferenceWriter> DisassemblerWin32<Traits>::MakeWriteRelocs(
+    MutableBufferView image) {
+  ParseAndStoreRelocBlocks();
+  return base::MakeUnique<RelocWriterWin32>(Traits::kRelocType, image,
+                                            reloc_region_, reloc_block_offsets_,
+                                            translator_);
+}
+
+template <class Traits>
+std::unique_ptr<ReferenceWriter> DisassemblerWin32<Traits>::MakeWriteAbs32(
+    MutableBufferView image) {
+  return base::MakeUnique<Abs32WriterWin32>(
+      image, AbsoluteAddress(Traits::kBitness, image_base_), translator_);
 }
 
 template <class Traits>
@@ -157,7 +210,10 @@ bool DisassemblerWin32<Traits>::ParseHeader() {
   if (optional_header->number_of_rva_and_sizes > data_dir_bound)
     return false;
 
-  // TODO(huangs): Read base relocation table here.
+  base_relocation_table_ = ReadDataDirectory<Traits>(
+      optional_header, pe::kIndexOfBaseRelocationTable);
+  if (!base_relocation_table_)
+    return false;
 
   image_base_ = optional_header->image_base;
 
@@ -172,7 +228,7 @@ bool DisassemblerWin32<Traits>::ParseHeader() {
   offset_t offset_bound =
       base::checked_cast<offset_t>(source.begin() - image_.begin());
 
-  // Extract |sections_|. .
+  // Extract |sections_|.
   size_t sections_count = coff_header->number_of_sections;
   auto* sections_array =
       source.GetArray<pe::ImageSectionHeader>(sections_count);
@@ -180,12 +236,13 @@ bool DisassemblerWin32<Traits>::ParseHeader() {
     return false;
   sections_.assign(sections_array, sections_array + sections_count);
 
-  // Visit each section, validate, and add data to |trans_builder|.
+  // Prepare |units| for offset-RVA translation.
   std::vector<AddressTranslator::Unit> units;
   units.reserve(sections_count);
+
+  // Visit each section, validate, and add address translation data to |units|.
   bool has_text_section = false;
   decltype(pe::ImageSectionHeader::virtual_address) prev_virtual_address = 0;
-
   for (size_t i = 0; i < sections_count; ++i) {
     const pe::ImageSectionHeader& section = sections_[i];
     // Apply strict checks on section bounds.
@@ -215,7 +272,8 @@ bool DisassemblerWin32<Traits>::ParseHeader() {
       has_text_section = true;
   }
 
-  CHECK_LE(offset_bound, image_.size());
+  if (offset_bound > image_.size())
+    return false;
   if (!has_text_section)
     return false;
 
@@ -233,12 +291,58 @@ bool DisassemblerWin32<Traits>::ParseHeader() {
 }
 
 template <class Traits>
+bool DisassemblerWin32<Traits>::ParseAndStoreRelocBlocks() {
+  if (has_parsed_relocs_)
+    return true;
+  has_parsed_relocs_ = true;
+  DCHECK(reloc_block_offsets_.empty());
+
+  offset_t relocs_offset =
+      translator_.RvaToOffset(base_relocation_table_->virtual_address);
+  size_t relocs_size = base_relocation_table_->size;
+  reloc_region_ = {relocs_offset, relocs_size};
+  // Reject bogus relocs. Note that empty relocs are allowed!
+  if (!image_.covers(reloc_region_))
+    return false;
+
+  // Precompute offsets of all reloc blocks.
+  return RelocRvaReaderWin32::FindRelocBlocks(image_, reloc_region_,
+                                              &reloc_block_offsets_);
+}
+
+// TODO(huangs): Print warning if too few abs32 references are found.
+// Empirically, file size / # relocs is < 100, so take 200 as the
+// threshold for warning.
+template <class Traits>
+bool DisassemblerWin32<Traits>::ParseAndStoreAbs32() {
+  if (has_parsed_abs32_)
+    return true;
+  has_parsed_abs32_ = true;
+
+  ParseAndStoreRelocBlocks();
+
+  std::unique_ptr<ReferenceReader> relocs = MakeReadRelocs(0, offset_t(size()));
+  for (auto ref = relocs->GetNext(); ref.has_value(); ref = relocs->GetNext())
+    abs32_locations_.push_back(ref->target);
+
+  abs32_locations_.shrink_to_fit();
+  std::sort(abs32_locations_.begin(), abs32_locations_.end());
+
+  // Abs32 reference bodies must not overlap. If found, simply remove them.
+  size_t num_removed =
+      RemoveOverlappingAbs32Locations(Traits::kBitness, &abs32_locations_);
+  LOG_IF(WARNING, num_removed) << "Found and removed " << num_removed
+                               << " abs32 locations with overlapping bodies.";
+  return true;
+}
+
+template <class Traits>
 bool DisassemblerWin32<Traits>::ParseAndStoreRel32() {
   if (has_parsed_rel32_)
     return true;
   has_parsed_rel32_ = true;
 
-  // TODO(huangs): ParseAndStoreAbs32() once it's available.
+  ParseAndStoreAbs32();
 
   AddressTranslator::OffsetToRvaCache location_offset_to_rva(translator_);
   AddressTranslator::RvaToOffsetCache target_rva_checker(translator_);
@@ -252,8 +356,7 @@ bool DisassemblerWin32<Traits>::ParseAndStoreRel32() {
 
     ConstBufferView region =
         image_[{section.file_offset_of_raw_data, section.size_of_raw_data}];
-    // TODO(huangs): Initialize with |abs32_locations_|, once it's available.
-    Abs32GapFinder gap_finder(image_, region, std::vector<offset_t>(),
+    Abs32GapFinder gap_finder(image_, region, abs32_locations_,
                               Traits::kVAWidth);
     typename Traits::RelFinder finder(image_);
     // Iterate over gaps between abs32 references, to avoid collision.
@@ -266,8 +369,7 @@ bool DisassemblerWin32<Traits>::ParseAndStoreRel32() {
            rel32 = finder.GetNext()) {
         offset_t rel32_offset = offset_t(rel32->location - image_.begin());
         rva_t rel32_rva = location_offset_to_rva.Convert(rel32_offset);
-        rva_t target_rva =
-            rel32_rva + 4 + *reinterpret_cast<const uint32_t*>(rel32->location);
+        rva_t target_rva = rel32_rva + 4 + image_.read<uint32_t>(rel32_offset);
         if (target_rva_checker.IsValid(target_rva) &&
             (rel32->can_point_outside_section ||
              (start_rva <= target_rva && target_rva < end_rva))) {
@@ -282,18 +384,6 @@ bool DisassemblerWin32<Traits>::ParseAndStoreRel32() {
   // So sort explicitly, to be sure.
   std::sort(rel32_locations_.begin(), rel32_locations_.end());
   return true;
-}
-
-template <class Traits>
-rva_t DisassemblerWin32<Traits>::AddressToRva(
-    typename Traits::Address address) const {
-  return rva_t(address - image_base_);
-}
-
-template <class Traits>
-typename Traits::Address DisassemblerWin32<Traits>::RvaToAddress(
-    rva_t rva) const {
-  return rva + image_base_;
 }
 
 // Explicit instantiation for supported classes.

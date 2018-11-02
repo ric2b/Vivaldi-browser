@@ -11,9 +11,9 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -292,7 +292,7 @@ void DataTypeManagerImpl::Restart(ConfigureReason reason) {
     NotifyStart();
 
   download_types_queue_ = PrioritizeTypes(last_enabled_types_);
-  association_types_queue_ = std::queue<AssociationTypesInfo>();
+  association_types_queue_ = base::queue<AssociationTypesInfo>();
 
   // If we're performing a "catch up", first stop the model types to ensure the
   // call to Initialize triggers model association.
@@ -381,7 +381,7 @@ void DataTypeManagerImpl::ProcessReconfigure() {
     return;
   }
 
-  association_types_queue_ = std::queue<AssociationTypesInfo>();
+  association_types_queue_ = base::queue<AssociationTypesInfo>();
 
   // An attempt was made to reconfigure while we were already configuring.
   // This can be because a passphrase was accepted or the user changed the
@@ -434,7 +434,7 @@ void DataTypeManagerImpl::DownloadReady(
     return;
   }
 
-  CHECK(!download_types_queue_.empty());
+  DCHECK(!download_types_queue_.empty());
   download_types_queue_.pop();
 
   // Those types that were already downloaded (non first sync/error types)
@@ -610,7 +610,7 @@ ModelTypeSet DataTypeManagerImpl::PrepareConfigureParams(
 }
 
 void DataTypeManagerImpl::StartNextAssociation(AssociationGroup group) {
-  CHECK(!association_types_queue_.empty());
+  DCHECK(!association_types_queue_.empty());
 
   // If the model association manager is already associating, let it finish.
   // The model association done event will result in associating any remaining
@@ -736,8 +736,7 @@ void DataTypeManagerImpl::OnModelAssociationDone(
   }
 
   DCHECK(result.status == OK);
-
-  CHECK(!association_types_queue_.empty());
+  DCHECK(!association_types_queue_.empty());
 
   // If this model association was for the full set of types, then this priority
   // set is done. Otherwise it was just the ready types and the unready types

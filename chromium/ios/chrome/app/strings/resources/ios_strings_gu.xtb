@@ -20,7 +20,6 @@
 <translation id="1254117744268754948">ફોલ્ડર પસંદ કરો</translation>
 <translation id="1265739287306757398">જાણો કેવી રીતે</translation>
 <translation id="1272079795634619415">રોકો</translation>
-<translation id="129553762522093515">તાજેતરમાં બંધ કરેલા</translation>
 <translation id="1323735185997015385">કાઢી નાખો</translation>
 <translation id="132683371494960526">મૂળ ફોલ્ડર બદલવા માટે બે વાર ટૅપ કરો.</translation>
 <translation id="1340643665687018190">મેનૂ બંધ કરો</translation>
@@ -48,7 +47,6 @@
 <translation id="1690731385917361335">કોઈ આઇટમ નથી</translation>
 <translation id="1700629756560807968"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> પસંદ કર્યાં</translation>
 <translation id="1740468249224277719">ઇન્સ્ટૉલ કરવા માટે બે વાર ટૅપ કરો.</translation>
-<translation id="1749561566933687563">તમારા બુકમાર્ક્સ સમન્વયિત કરો</translation>
 <translation id="1752547299766512813">પાસવર્ડ્સ સાચવો</translation>
 <translation id="1753905327828125965">સૌથી વધુ જોવાયેલ</translation>
 <translation id="1809939268435598390">ફોલ્ડર કાઢી નાખો</translation>
@@ -80,6 +78,8 @@
 <translation id="2381405137052800939">મૂળભૂત</translation>
 <translation id="2386793615875593361">1 પસંદ કર્યું છે</translation>
 <translation id="2435457462613246316">પાસવર્ડ બતાવો</translation>
+<translation id="2523363575747517183">આ વેબસાઇટ વારંવાર અન્ય ઍપ્લિકેશન ખોલવાનો પ્રયાસ કરી રહી છે.</translation>
+<translation id="2529021024822217800">બધા ખોલો</translation>
 <translation id="2572712655377361602">ઉપકરણ નીતિએ તમારા ફોટોની ઍક્સેસને અવરોધિત કરી</translation>
 <translation id="2584132361465095047">એકાઉન્ટ ઉમેરો...</translation>
 <translation id="2593774076813182497">આ પૃષ્ઠ છાપી શકાતું નથી.</translation>
@@ -129,9 +129,7 @@
 <translation id="3324193307694657476">સરનામાં 2</translation>
 <translation id="3329904751041170572">સર્વરથી કનેક્ટ કરી શક્યું નથી.</translation>
 <translation id="3335947283844343239">બંધ કરેલું ટૅબ ફરીથી ખોલો</translation>
-<translation id="3387752218061326363">તમારા સાઇન ઇન થયેલ ઉપકરણોમાંથી ઇતિહાસ બતાવી રહ્યાં છે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" />.</translation>
 <translation id="3393920035788932672">પૉપ-અપ્સ મંજૂર છે</translation>
-<translation id="3414292259312108062">Chrome આને તમારા <ph name="BEGIN_LINK" />Google સાચવેલા પાસવર્ડ્સ<ph name="END_LINK" />માં સંગ્રહિત કરશે અને તમારા માટે સ્વતઃભરણ કરશે તેથી તમારે તેને જાતે યાદ રાખવાનું હોતું નથી.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> મિનિટ</translation>
 <translation id="3448016392200048164">વિભાજિત દૃશ્ય</translation>
 <translation id="3474624961160222204"><ph name="NAME" /> તરીકે ચાલુ રાખો</translation>
@@ -146,19 +144,14 @@
 <translation id="3567664240939803299">શું તમે ઇચ્છો છો કે Google Smart Lock આ સાઇટ માટે તમારો પાસવર્ડ સાચવે?</translation>
 <translation id="3588820906588687999">નવા ટેબમાં છબી ખોલો</translation>
 <translation id="3603009562372709545">લિંક URL કૉપિ કરો</translation>
-<translation id="360480449234699036">પૃષ્ઠ છોડ્યાં વગર વેબસાઇટ્સ પરના મુદ્દાઓ વિશે જાણો. શોધોને ટચ કરવાથી એક શબ્દ અને તેની આસપાસનો સંદર્ભ Google શોધને મોકલે છે, જે વ્યાખ્યાઓ, ચિત્રો, શોધ પરિણામો અને અન્ય વિગતો પરત કરે છે.
-
-તમારા શોધ શબ્દને બંધબેસતો કરવા, પસંદ કરવા માટે વધુ વખત દબાવી રાખો. તમારી શોધને રીફાઇન કરવા માટે, પેનલને આખી ઉપર સ્લાઇડ કરો અને શોધ બોક્સને ટચ કરો.</translation>
 <translation id="3607167657931203000">સ્વતઃભરણ ડેટા</translation>
 <translation id="3628119975092896051">તમારી વાંચન સૂચિ ઑફલાઇન ઉપલબ્ધ છે. તમારી વાંચન સૂચિમાં પૃષ્ઠ ઉમેરવા માટે, <ph name="SHARE_OPENING_ICON" /> ટૅપ કરો.</translation>
 <translation id="3638472932233958418">વેબપૃષ્ઠો પહેલાથી લોડ કરો</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> પર બુકમાર્ક કર્યું</translation>
-<translation id="3738139272394829648">શોધવા માટે ટચ કરો</translation>
 <translation id="3771033907050503522">છૂપા ટેબ્સ</translation>
 <translation id="3779810277399252432">કોઈ ઇન્ટરનેટ કનેક્શન નથી.</translation>
 <translation id="3783017676699494206">છબી સાચવો</translation>
 <translation id="385051799172605136">પાછળ</translation>
-<translation id="3857761338463387655">આના વડે ઇમેઇલ બનાવો:</translation>
 <translation id="3897092660631435901">મેનૂ</translation>
 <translation id="3928666092801078803">મારા ડેટાને સંયોજિત કરો</translation>
 <translation id="3950820424414687140">સાઇન ઇન</translation>
@@ -181,6 +174,7 @@
 <translation id="4342284590510997375">નવું</translation>
 <translation id="434816576838749873">એક ઇમેઇલ ઍપ પસંદ કરો</translation>
 <translation id="4359125752503270327">આ પૃષ્ઠ બીજી અ‍ૅપ્લિકેશનમાં ખુલશે.</translation>
+<translation id="4370827530403103842">સમન્વયન કામ કરતું નથી. ઠીક કરવા માટે ટૅપ કરો.</translation>
 <translation id="4375040482473363939">QR કોડ શોધો</translation>
 <translation id="4378154925671717803">ફોન</translation>
 <translation id="441868831736628555">ગોપનીયતા સૂચના</translation>
@@ -188,6 +182,7 @@
 <translation id="4508750114462689118">સાઇન-ઇન પ્રોમો બંધ કરો</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> પર સાચવેલા પાસવર્ડ્સ જુઓ અને સંચાલિત કરો</translation>
 <translation id="4536418791685807335">ફરીથી સાઇન ઇન કરવાનો પ્રયાસ કરો.</translation>
+<translation id="457386861538956877">વધુ...</translation>
 <translation id="461440297010471931">Google વડે શોધી રહ્યાં છીએ</translation>
 <translation id="4620246317052452550">તમે વાંચેલા પૃષ્ઠો</translation>
 <translation id="4636930964841734540">માહિતી</translation>
@@ -243,6 +238,7 @@
 <translation id="5771816112378578655">સેટઅપની પ્રક્રિયા ચાલુ છે...</translation>
 <translation id="5816228676161003208">આ તમને તમારા અવાજનો ઉપયોગ કરીને વધુ ઝડપથી શોધવા દે છે.</translation>
 <translation id="5846482154967366008">શોધ એન્જિન</translation>
+<translation id="5854790677617711513">30 દિવસ કરતા જૂનો</translation>
 <translation id="5857090052475505287">નવું ફોલ્ડર</translation>
 <translation id="5857770089550859117">સમન્વયનને પ્રારંભ કરવા માટે પાસફ્રેઝ આવશ્યક.</translation>
 <translation id="5860033963881614850">બંધ</translation>
@@ -267,7 +263,6 @@
 <translation id="6122191549521593678">ઓનલાઇન</translation>
 <translation id="6127379762771434464">આઇટમ દૂર કરી</translation>
 <translation id="6136914049981179737">સેકંડ પહેલાં</translation>
-<translation id="6149061208933997199">પાસવર્ડનો ઉપયોગ કરો</translation>
 <translation id="6158823227857319455">નવું ટૅબ</translation>
 <translation id="616831107264507309">પછીથી વાંચો</translation>
 <translation id="6184086493125982861">ટૅબ્સ બતાવો</translation>
@@ -277,7 +272,6 @@
 <translation id="6254066287920239840">બ્રાઉઝરને બદલે ઍપ્લિકેશનમાં લિંક્સ ખોલો.</translation>
 <translation id="6255097610484507482">ક્રેડિટ કાર્ડ સંપાદિત કરો </translation>
 <translation id="6308436439357671616">આ તમને ફોટો લેવા અને અપલોડ કરવા દે છે.</translation>
-<translation id="6314335155547195432">પાસવર્ડ જનરેટ કરો</translation>
 <translation id="6324528485781869530">સમન્વયન એકાઉન્ટ સ્વિચ કરો</translation>
 <translation id="6324669097367352121">સાઇન ઇન કરો સેટિંગ્સ</translation>
 <translation id="6337234675334993532">એન્ક્રિપ્શન</translation>
@@ -295,7 +289,6 @@
 <translation id="6418346271604475326">PDF તૈયાર કરી રહ્યાં છે</translation>
 <translation id="6445051938772793705">દેશ</translation>
 <translation id="6445981559479772097">સંદેશ મોકલ્યો.</translation>
-<translation id="6456425917241817154">Chrome દ્વારા પાસવર્ડ જનરેટ કરાયો</translation>
 <translation id="6464071786529933911">નવા છુપા ટૅબમાં ખોલો</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> આઇટમ કાઢી નાખી</translation>
 <translation id="6541915733953096570">ગત કલાક</translation>
@@ -309,6 +302,7 @@
 <translation id="6785453220513215166">ક્રેશ રિપોર્ટ મોકલી રહ્યું છે...</translation>
 <translation id="679325081238418596">તમારા તમામ ઉપકરણો પર તમારા બુકમાર્ક્સ, ઇતિહાસ, પાસવર્ડ્સ અને અન્ય સેટિંગ્સ મેળવો</translation>
 <translation id="6797885426782475225">વૉઇસ શોધ</translation>
+<translation id="6807889908376551050">બધું બતાવો...</translation>
 <translation id="681368974849482173">આઇટમ બનાવી</translation>
 <translation id="6896758677409633944">કૉપિ કરો</translation>
 <translation id="6903907808598579934">સમન્વયન ચાલુ કરો</translation>
@@ -317,9 +311,9 @@
 <translation id="7004499039102548441">તાજેતરના ટૅબ્સ</translation>
 <translation id="7006788746334555276">સામગ્રી સેટિંગ્સ</translation>
 <translation id="7031882061095297553">આના પર સમન્વયિત કરો</translation>
+<translation id="7053983685419859001">અવરોધિત કરો</translation>
 <translation id="7062545763355031412">સ્વીકારો અને એકાઉન્ટ્સ સ્વિચ કરો</translation>
 <translation id="7108338896283013870">છુપાવો</translation>
-<translation id="7131892264600713844">આ ઉપકરણમાંથી ઇતિહાસ બતાવી રહ્યાં છે. <ph name="BEGIN_LINK" />વધુ જાણો.<ph name="END_LINK" /></translation>
 <translation id="7133798577887235672">આખું નામ</translation>
 <translation id="7136892417564438900">કૅમેરો અનુપલબ્ધ છે</translation>
 <translation id="7159472599653637159">મોબાઇલ સાઇટની વિનંતી કરો</translation>
@@ -338,7 +332,6 @@
 <translation id="7456847797759667638">સ્થાન ખોલો...</translation>
 <translation id="7464701184726199289">આનાથી તમામ ઉપકરણોમાંથી સમન્વયિત ડેટા સાફ થાય છે. સાચવેલ સાઇટ સેટિંગ્સ કાઢી નાખવામાં આવશે નહીં અને તે તમારી બ્રાઉઝિંગ ટેવોને પ્રતિબિંબિત કરી શકે છે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="7472734401283673885">કંપનીનું નામ</translation>
-<translation id="7473891865547856676">નહીં આભાર</translation>
 <translation id="7481312909269577407">ફોર્વર્ડ કરો</translation>
 <translation id="750493650310597496">0 પસંદ કર્યાં</translation>
 <translation id="7514365320538308">ડાઉનલોડ કરો</translation>
@@ -351,12 +344,10 @@
 <translation id="7649070708921625228">સહાય</translation>
 <translation id="7658239707568436148">રદ કરો</translation>
 <translation id="7671141431838911305">ઇન્સ્ટોલ કરો</translation>
-<translation id="7677825787905683892">ડિફૉલ્ટ ઇમેઇલ ઍપ્લિકેશન પસંદ કરો</translation>
 <translation id="7765158879357617694">સ્થાન</translation>
 <translation id="7769602470925380267">સ્વીકારો અને સાઇન આઉટ કરો</translation>
 <translation id="7772032839648071052">પાસફ્રેઝની પુષ્ટિ કરો</translation>
 <translation id="780301667611848630">નહીં, આભાર</translation>
-<translation id="7851858861565204677">અન્ય ઉપકરણો</translation>
 <translation id="7859704718976024901">બ્રાઉઝિંગ ઇતિહાસ</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7947953824732555851">સ્વીકારો અને સાઇન ઇન કરો</translation>
@@ -369,7 +360,6 @@
 <translation id="806745655614357130">મારા ડેટાને અલગ રાખો</translation>
 <translation id="8076014560081431679">સાચવેલ સાઇટ સેટિંગ્સ કાઢી નાખવામાં આવશે નહીં અને તે તમારી બ્રાઉઝિંગ ટેવોને પ્રતિબિંબિત કરી શકે છે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="8080028325999236607">બધા ટૅબ્સ બંધ કરો</translation>
-<translation id="8137558756159375272">શોધો ને ટચ પસંદ કરાયેલ શબ્દ અને હાલના પૃષ્ઠને સંદર્ભ તરીકે Google શોધને મોકલે છે. તમે તેને <ph name="BEGIN_LINK" />સેટિંગ્સ<ph name="END_LINK" /> માં બંધ કરી શકો છો.</translation>
 <translation id="8205564605687841303">રદ કરો</translation>
 <translation id="8225985093977202398">કૅશ કરેલ છબીઓ અને ફાઇલો</translation>
 <translation id="8261506727792406068">કાઢી નાખો</translation>
@@ -382,6 +372,7 @@
 <translation id="8458397775385147834">1 આઇટમ કાઢી નાખી</translation>
 <translation id="8487700953926739672">ઑફલાઇન ઉપલબ્ધ</translation>
 <translation id="8503813439785031346">વપરાશકર્તાનામ</translation>
+<translation id="850600235656508448">છુપામાં ખોલો</translation>
 <translation id="8517375800490286174">ઓપન સોર્સ લાઇસેંસેસ</translation>
 <translation id="8524799873541103884"><ph name="NUMBER_OF_OPEN_TABS" /> ના  <ph name="FIRST_VISIBLE_TAB" /> થી <ph name="LAST_VISIBLE_TAB" /> સુધી <ph name="INCOGNITO" /> ટેબ્સ</translation>
 <translation id="8532105204136943229">સમય સમાપ્તિ વર્ષ</translation>
@@ -400,6 +391,7 @@
 <translation id="8775144690796719618">અમાન્ય URL</translation>
 <translation id="8820817407110198400">બુકમાર્ક્સ</translation>
 <translation id="8840513115188359703">તમે તમારા Google એકાઉન્ટમાંથી સાઇન આઉટ થશો નહીં.</translation>
+<translation id="8870413625673593573">તાજેતરમાં બંધ કરેલા</translation>
 <translation id="8881801611828450202"><ph name="SEARCH_ENGINE" /> પર આ છબી શોધો</translation>
 <translation id="8904976895050290827">Chrome Sync</translation>
 <translation id="895541991026785598">સમસ્યાની જાણ કરો</translation>
@@ -415,7 +407,6 @@
 <translation id="9083392325882095631">1 આઇટમ</translation>
 <translation id="9100610230175265781">પાસફ્રેઝ આવશ્યક છે</translation>
 <translation id="9148126808321036104">ફરીથી સાઇન ઇન કરો </translation>
-<translation id="914898748153555155">તમે Chrome સેટિંગ્સમાં કોઈ પણ સમયે આ પસંદગીને બદલી શકો છો</translation>
 <translation id="91549621916703028">તમારા બધાં કાર્યો માટે બહુવિધ ટૅબ બનાવો</translation>
 <translation id="9157836665414082580">સંવાદો નાબૂદ કરો</translation>
 <translation id="9188680907066685419">સંચાલિત એકાઉન્ટમાંથી સાઇન આઉટ કરો</translation>
@@ -427,4 +418,5 @@
 <translation id="976982866697960176">સમન્વયિત ડેટા સંચાલિત કરો…</translation>
 <translation id="988141524645182168">અન્ય ઉપકરણો</translation>
 <translation id="989988560359834682">સરનામું સંપાદિત કરો</translation>
+<translation id="994757059139821576">લેખ માટે સૂચનો</translation>
 </translationbundle>

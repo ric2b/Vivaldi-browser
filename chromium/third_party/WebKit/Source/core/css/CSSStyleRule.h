@@ -28,6 +28,7 @@
 namespace blink {
 
 class CSSStyleDeclaration;
+class ExecutionContext;
 class StyleRuleCSSStyleDeclaration;
 class StyleRule;
 
@@ -45,14 +46,14 @@ class CORE_EXPORT CSSStyleRule final : public CSSRule {
   void Reattach(StyleRuleBase*) override;
 
   String selectorText() const;
-  void setSelectorText(const String&);
+  void setSelectorText(const ExecutionContext*, const String&);
 
   CSSStyleDeclaration* style() const;
 
   // FIXME: Not CSSOM. Remove.
   StyleRule* GetStyleRule() const { return style_rule_.Get(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   CSSStyleRule(StyleRule*, CSSStyleSheet*);

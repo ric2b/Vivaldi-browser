@@ -65,7 +65,10 @@ template("libgtkui") {
                 "x11_input_method_context_impl_gtk.h",
               ]
 
-    configs += [ "//build/config/linux:x11" ]
+    configs += [
+      "//build/config/linux/pangocairo",
+      "//build/config/linux:x11",
+    ]
 
     if (use_gconf) {
       sources += [
@@ -82,6 +85,7 @@ template("libgtkui") {
     defines = [ "LIBGTKUI_IMPLEMENTATION" ]
 
     deps = invoker.deps + [
+             "//chrome/browser/ui/views",
              "//base",
              "//base:i18n",
              "//base/third_party/dynamic_annotations",
@@ -97,10 +101,10 @@ template("libgtkui") {
              "//printing",
              "//skia",
 
-             # GTK pulls pangoft2, which requires HarfBuzz symbols. Since we
-             # link our own HarfBuzz, avoid mixing symbols from system HarfBuzz
-             # and own ones, hence the dependency to harfbuzz-ng here.
-             "//third_party/harfbuzz-ng",
+             # GTK pulls pangoft2, which requires HarfBuzz symbols. When linking
+             # our own HarfBuzz avoid mixing symbols from system HarfBuzz and
+             # our own through the indirect dependency to harfbuzz-ng here.
+             "//third_party:freetype_harfbuzz",
              "//ui/aura",
              "//ui/base",
              "//ui/base/ime",
@@ -126,6 +130,8 @@ template("libgtkui") {
 if (use_gtk3) {
   libgtkui("libgtk3ui") {
     sources = [
+      "gtk3_background_painter.cc",
+      "gtk3_background_painter.h",
       "native_theme_gtk3.cc",
       "native_theme_gtk3.h",
       "nav_button_layout_manager_gtk3.cc",

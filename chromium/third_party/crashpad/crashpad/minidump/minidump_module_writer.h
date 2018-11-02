@@ -30,7 +30,6 @@
 #include "minidump/minidump_extensions.h"
 #include "minidump/minidump_stream_writer.h"
 #include "minidump/minidump_writable.h"
-#include "util/stdlib/pointer_container.h"
 
 namespace crashpad {
 
@@ -318,8 +317,8 @@ class MinidumpModuleListWriter final : public internal::MinidumpStreamWriter {
   //! \param[in] module_snapshots The module snapshots to use as source data.
   //!
   //! \note Valid in #kStateMutable. AddModule() may not be called before this
-  //!     this method, and it is not normally necessary to call AddModule()
-  //!     after this method.
+  //!     method, and it is not normally necessary to call AddModule() after
+  //!     this method.
   void InitializeFromSnapshot(
       const std::vector<const ModuleSnapshot*>& module_snapshots);
 
@@ -342,7 +341,7 @@ class MinidumpModuleListWriter final : public internal::MinidumpStreamWriter {
   MinidumpStreamType StreamType() const override;
 
  private:
-  PointerVector<MinidumpModuleWriter> modules_;
+  std::vector<std::unique_ptr<MinidumpModuleWriter>> modules_;
   MINIDUMP_MODULE_LIST module_list_base_;
 
   DISALLOW_COPY_AND_ASSIGN(MinidumpModuleListWriter);

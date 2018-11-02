@@ -29,14 +29,13 @@ class SingleThreadTaskRunner;
 
 namespace viz {
 
+namespace test {
+class HostFrameSinkManagerTestBase;
+}  // namespace test
 class CompositorFrameSinkSupport;
-class CompositorFrameSinkSupportClient;
 class FrameSinkManagerImpl;
 class SurfaceInfo;
 
-namespace test {
-class HostFrameSinkManagerTest;
-}
 
 // Browser side wrapper of mojom::FrameSinkManager, to be used from the
 // UI thread. Manages frame sinks and is intended to replace all usage of
@@ -45,11 +44,12 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
     : public mojom::FrameSinkManagerClient,
       public CompositorFrameSinkSupportManager {
  public:
+  using DisplayHitTestQueryMap =
+      base::flat_map<FrameSinkId, std::unique_ptr<HitTestQuery>>;
+
   HostFrameSinkManager();
   ~HostFrameSinkManager() override;
 
-  using DisplayHitTestQueryMap =
-      base::flat_map<FrameSinkId, std::unique_ptr<HitTestQuery>>;
   const DisplayHitTestQueryMap& display_hit_test_query() const {
     return display_hit_test_query_;
   }
@@ -66,6 +66,10 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       mojom::FrameSinkManagerPtr ptr);
 
+  // Sets a callback to be notified when the connection to the FrameSinkManager
+  // on |frame_sink_manager_ptr_| is lost.
+  void SetConnectionLostCallback(base::RepeatingClosure callback);
+
   // Registers |frame_sink_id| will be used. This must be called before
   // CreateCompositorFrameSink(Support) is called.
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id,
@@ -76,6 +80,11 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // CompositorFrameSink for |frame_sink_id| then it will be destroyed and the
   // message pipe to the client will be closed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
+
+  // |debug_label| is used when printing out the surface hierarchy so we know
+  // which clients are contributing which surfaces.
+  void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
+                              const std::string& debug_label);
 
   // Creates a connection for a display root to viz. Provides the same
   // interfaces as CreateCompositorFramesink() plus the priviledged
@@ -96,7 +105,8 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
                                  mojom::CompositorFrameSinkRequest request,
                                  mojom::CompositorFrameSinkClientPtr client);
 
-  // Registers frame sink hierarchy. A frame sink can have multiple parents.
+  // Registers frame sink hierarchy. Both parent and child FrameSinkIds must be
+  // registered before calling. A frame sink can have multiple parents.
   void RegisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
                                   const FrameSinkId& child_frame_sink_id);
 
@@ -105,22 +115,29 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   void UnregisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
                                     const FrameSinkId& child_frame_sink_id);
 
-  // These two functions should only be used by WindowServer.
+  // These three functions should only be used by WindowServer.
   // TODO(riajiang): Find a better way for HostFrameSinkManager to do the assign
   // and drop instead.
+  void WillAssignTemporaryReferencesExternally();
   void AssignTemporaryReference(const SurfaceId& surface_id,
                                 const FrameSinkId& owner);
   void DropTemporaryReference(const SurfaceId& surface_id);
 
+  // Asks viz to send updates regarding video activity to |observer|.
+  void AddVideoDetectorObserver(mojom::VideoDetectorObserverPtr observer);
+
   // CompositorFrameSinkSupportManager:
   std::unique_ptr<CompositorFrameSinkSupport> CreateCompositorFrameSinkSupport(
-      CompositorFrameSinkSupportClient* client,
+      mojom::CompositorFrameSinkClient* client,
       const FrameSinkId& frame_sink_id,
       bool is_root,
       bool needs_sync_points) override;
 
+  void OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
+                           uint32_t frame_token) override;
+
  private:
-  friend class test::HostFrameSinkManagerTest;
+  friend class test::HostFrameSinkManagerTestBase;
 
   struct FrameSinkData {
     FrameSinkData();
@@ -169,6 +186,13 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   // embeded |surface_id|, otherwise drops the temporary reference.
   void PerformAssignTemporaryReference(const SurfaceId& surface_id);
 
+  // Handles connection loss to |frame_sink_manager_ptr_|. This should only
+  // happen when the GPU process crashes.
+  void OnConnectionLost();
+
+  // Registers FrameSinkId and FrameSink hierarchy again after connection loss.
+  void RegisterAfterConnectionLoss();
+
   // mojom::FrameSinkManagerClient:
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
   void OnClientConnectionClosed(const FrameSinkId& frame_sink_id) override;
@@ -201,6 +225,16 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
 
   // Per CompositorFrameSink data.
   base::flat_map<FrameSinkId, FrameSinkData> frame_sink_data_map_;
+
+  // If |frame_sink_manager_ptr_| connection was lost.
+  bool connection_was_lost_ = false;
+
+  // If a FrameSinkId owner should be assigned when a new surface is created.
+  // This will be set false if using surface sequences or if temporary
+  // references are being assigned externally.
+  bool assign_temporary_references_ = true;
+
+  base::RepeatingClosure connection_lost_callback_;
 
   DisplayHitTestQueryMap display_hit_test_query_;
 

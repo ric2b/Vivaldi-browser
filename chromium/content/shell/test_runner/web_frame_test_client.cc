@@ -15,7 +15,6 @@
 #include "content/shell/test_runner/event_sender.h"
 #include "content/shell/test_runner/mock_color_chooser.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
-#include "content/shell/test_runner/mock_web_user_media_client.h"
 #include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/test_plugin.h"
@@ -47,7 +46,7 @@ namespace {
 
 void PrintFrameDescription(WebTestDelegate* delegate,
                            blink::WebLocalFrame* frame) {
-  std::string name = content::GetUniqueNameForFrame(frame);
+  std::string name = content::GetFrameNameForLayoutTests(frame);
   if (frame == frame->View()->MainFrame()) {
     DCHECK(name.empty());
     delegate->PrintMessage("main frame");
@@ -61,10 +60,10 @@ void PrintFrameDescription(WebTestDelegate* delegate,
 }
 
 void PrintFrameuserGestureStatus(WebTestDelegate* delegate,
-                                 blink::WebFrame* frame,
+                                 blink::WebLocalFrame* frame,
                                  const char* msg) {
   bool is_user_gesture =
-      blink::WebUserGestureIndicator::IsProcessingUserGesture();
+      blink::WebUserGestureIndicator::IsProcessingUserGesture(frame);
   delegate->PrintMessage(std::string("Frame with user gesture \"") +
                          (is_user_gesture ? "true" : "false") + "\"" + msg);
 }
@@ -239,7 +238,7 @@ void WebFrameTestClient::PostAccessibilityEvent(const blink::WebAXObject& obj,
   if (!test_runner()->TestIsRunning())
     return;
 
-  const char* event_name = NULL;
+  const char* event_name = nullptr;
   switch (event) {
     case blink::kWebAXEventActiveDescendantChanged:
       event_name = "ActiveDescendantChanged";
@@ -371,8 +370,9 @@ void WebFrameTestClient::DidChangeSelection(bool is_empty_callback) {
 
 blink::WebPlugin* WebFrameTestClient::CreatePlugin(
     const blink::WebPluginParams& params) {
+  blink::WebLocalFrame* frame = web_frame_test_proxy_base_->web_frame();
   if (TestPlugin::IsSupportedMimeType(params.mime_type))
-    return TestPlugin::Create(params, delegate_);
+    return TestPlugin::Create(params, delegate_, frame);
   return delegate_->CreatePluginPlaceholder(params);
 }
 
@@ -381,10 +381,6 @@ void WebFrameTestClient::ShowContextMenu(
   delegate_->GetWebWidgetTestProxyBase(web_frame_test_proxy_base_->web_frame())
       ->event_sender()
       ->SetContextMenuData(context_menu_data);
-}
-
-blink::WebUserMediaClient* WebFrameTestClient::UserMediaClient() {
-  return test_runner()->getMockWebUserMediaClient();
 }
 
 void WebFrameTestClient::DownloadURL(const blink::WebURLRequest& request,
@@ -456,7 +452,8 @@ void WebFrameTestClient::DidCommitProvisionalLoad(
 
 void WebFrameTestClient::DidReceiveTitle(const blink::WebString& title,
                                          blink::WebTextDirection direction) {
-  if (test_runner()->shouldDumpFrameLoadCallbacks()) {
+  if (test_runner()->shouldDumpFrameLoadCallbacks() &&
+      web_frame_test_proxy_base_->web_frame()) {
     PrintFrameDescription(delegate_, web_frame_test_proxy_base_->web_frame());
     delegate_->PrintMessage(std::string(" - didReceiveTitle: ") + title.Utf8() +
                             "\n");
@@ -503,17 +500,6 @@ void WebFrameTestClient::DidFinishLoad() {
   }
 }
 
-void WebFrameTestClient::DidNavigateWithinPage(
-    const blink::WebHistoryItem& history_item,
-    blink::WebHistoryCommitType commit_type,
-    bool contentInitiated) {
-  test_runner()->OnNavigationEnd();
-}
-
-void WebFrameTestClient::DidStartLoading(bool to_different_document) {
-  test_runner()->OnNavigationBegin(web_frame_test_proxy_base_->web_frame());
-}
-
 void WebFrameTestClient::DidStopLoading() {
   test_runner()->tryToClearTopLoadingFrame(
       web_frame_test_proxy_base_->web_frame());
@@ -557,11 +543,8 @@ void WebFrameTestClient::WillSendRequest(blink::WebURLRequest& request) {
   }
 
   if (test_runner()->httpHeadersToClear()) {
-    const std::set<std::string>* clearHeaders =
-        test_runner()->httpHeadersToClear();
-    for (std::set<std::string>::const_iterator header = clearHeaders->begin();
-         header != clearHeaders->end(); ++header)
-      request.ClearHTTPHeaderField(blink::WebString::FromUTF8(*header));
+    for (const std::string& header : *test_runner()->httpHeadersToClear())
+      request.ClearHTTPHeaderField(blink::WebString::FromUTF8(header));
   }
 
   std::string host = url.host();

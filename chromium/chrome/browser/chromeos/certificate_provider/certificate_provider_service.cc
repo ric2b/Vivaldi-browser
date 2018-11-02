@@ -22,6 +22,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
 #include "net/base/net_errors.h"
+#include "third_party/boringssl/src/include/openssl/digest.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace chromeos {
 
@@ -88,10 +90,10 @@ class CertificateProviderService::SSLPrivateKey : public net::SSLPrivateKey {
       const base::WeakPtr<CertificateProviderService>& service);
 
   // net::SSLPrivateKey:
-  std::vector<net::SSLPrivateKey::Hash> GetDigestPreferences() override;
-  void SignDigest(Hash hash,
-                  const base::StringPiece& input,
-                  const SignCallback& callback) override;
+  std::vector<uint16_t> GetAlgorithmPreferences() override;
+  void Sign(uint16_t algorithm,
+            base::span<const uint8_t> input,
+            const SignCallback& callback) override;
 
  private:
   ~SSLPrivateKey() override;
@@ -100,8 +102,8 @@ class CertificateProviderService::SSLPrivateKey : public net::SSLPrivateKey {
       const base::WeakPtr<CertificateProviderService>& service,
       const std::string& extension_id,
       const scoped_refptr<net::X509Certificate>& certificate,
-      Hash hash,
-      const std::string& input,
+      uint16_t algorithm,
+      base::span<const uint8_t> input,
       const SignCallback& callback);
 
   void DidSignDigest(const SignCallback& callback,
@@ -235,10 +237,10 @@ CertificateProviderService::SSLPrivateKey::SSLPrivateKey(
   thread_checker_.DetachFromThread();
 }
 
-std::vector<net::SSLPrivateKey::Hash>
-CertificateProviderService::SSLPrivateKey::GetDigestPreferences() {
+std::vector<uint16_t>
+CertificateProviderService::SSLPrivateKey::GetAlgorithmPreferences() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return cert_info_.supported_hashes;
+  return cert_info_.supported_algorithms;
 }
 
 // static
@@ -246,25 +248,39 @@ void CertificateProviderService::SSLPrivateKey::SignDigestOnServiceTaskRunner(
     const base::WeakPtr<CertificateProviderService>& service,
     const std::string& extension_id,
     const scoped_refptr<net::X509Certificate>& certificate,
-    Hash hash,
-    const std::string& input,
+    uint16_t algorithm,
+    base::span<const uint8_t> input,
     const SignCallback& callback) {
   if (!service) {
     const std::vector<uint8_t> no_signature;
     callback.Run(net::ERR_FAILED, no_signature);
     return;
   }
-  service->RequestSignatureFromExtension(extension_id, certificate, hash, input,
-                                         callback);
+  service->RequestSignatureFromExtension(extension_id, certificate, algorithm,
+                                         input, callback);
 }
 
-void CertificateProviderService::SSLPrivateKey::SignDigest(
-    Hash hash,
-    const base::StringPiece& input,
+void CertificateProviderService::SSLPrivateKey::Sign(
+    uint16_t algorithm,
+    base::span<const uint8_t> input,
     const SignCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const scoped_refptr<base::TaskRunner> source_task_runner =
       base::ThreadTaskRunnerHandle::Get();
+
+  // The extension expects the input to be hashed ahead of time.
+  const EVP_MD* md = SSL_get_signature_algorithm_digest(algorithm);
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  unsigned digest_len;
+  if (!md || !EVP_Digest(input.data(), input.size(), digest, &digest_len, md,
+                         nullptr)) {
+    source_task_runner->PostTask(
+        FROM_HERE,
+        base::Bind(callback, net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED,
+                   std::vector<uint8_t>()));
+    return;
+  }
+
   const SignCallback bound_callback =
       // The CertificateProviderService calls back on another thread, so post
       // back to the current thread.
@@ -275,9 +291,11 @@ void CertificateProviderService::SSLPrivateKey::SignDigest(
                             weak_factory_.GetWeakPtr(), callback));
 
   service_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&SSLPrivateKey::SignDigestOnServiceTaskRunner,
-                            service_, extension_id_, cert_info_.certificate,
-                            hash, input.as_string(), bound_callback));
+      FROM_HERE,
+      base::Bind(&SSLPrivateKey::SignDigestOnServiceTaskRunner, service_,
+                 extension_id_, cert_info_.certificate, algorithm,
+                 std::vector<uint8_t>(digest, digest + digest_len),
+                 bound_callback));
 }
 
 CertificateProviderService::SSLPrivateKey::~SSLPrivateKey() {
@@ -450,14 +468,14 @@ void CertificateProviderService::TerminateCertificateRequest(
 void CertificateProviderService::RequestSignatureFromExtension(
     const std::string& extension_id,
     const scoped_refptr<net::X509Certificate>& certificate,
-    net::SSLPrivateKey::Hash hash,
-    const std::string& digest,
+    uint16_t algorithm,
+    base::span<const uint8_t> digest,
     const net::SSLPrivateKey::SignCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   const int sign_request_id = sign_requests_.AddRequest(extension_id, callback);
-  if (!delegate_->DispatchSignRequestToExtension(extension_id, sign_request_id,
-                                                 hash, certificate, digest)) {
+  if (!delegate_->DispatchSignRequestToExtension(
+          extension_id, sign_request_id, algorithm, certificate, digest)) {
     sign_requests_.RemoveRequest(extension_id, sign_request_id,
                                  nullptr /* callback */);
     callback.Run(net::ERR_FAILED, std::vector<uint8_t>());

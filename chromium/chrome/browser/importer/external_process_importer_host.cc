@@ -20,7 +20,7 @@
 #include "content/public/browser/browser_thread.h"
 
 #include "app/vivaldi_resources.h"
-#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/common/importer/importer_type.h"
 #include "ui/base/l10n/l10n_util.h"
 

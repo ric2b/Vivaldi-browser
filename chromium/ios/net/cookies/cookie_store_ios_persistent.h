@@ -13,8 +13,6 @@
 #include "net/cookies/cookie_store.h"
 #include "url/gurl.h"
 
-@class NSHTTPCookieStorage;
-
 namespace net {
 
 // The CookieStoreIOSPersistent is an implementation of CookieStore relying on
@@ -29,7 +27,7 @@ namespace net {
 class CookieStoreIOSPersistent : public CookieStoreIOS {
  public:
   // Creates a CookieStoreIOS with a default value of
-  // |NSHTTPCookieStorage sharedCookieStorage| as the system's cookie store.
+  // the SystemCookieStore as the system's cookie store.
   explicit CookieStoreIOSPersistent(
       net::CookieMonster::PersistentCookieStore* persistent_store);
 
@@ -39,19 +37,6 @@ class CookieStoreIOSPersistent : public CookieStoreIOS {
   void SetCookieWithOptionsAsync(const GURL& url,
                                  const std::string& cookie_line,
                                  const net::CookieOptions& options,
-                                 SetCookiesCallback callback) override;
-  void SetCookieWithDetailsAsync(const GURL& url,
-                                 const std::string& name,
-                                 const std::string& value,
-                                 const std::string& domain,
-                                 const std::string& path,
-                                 base::Time creation_time,
-                                 base::Time expiration_time,
-                                 base::Time last_access_time,
-                                 bool secure,
-                                 bool http_only,
-                                 CookieSameSite same_site,
-                                 CookiePriority priority,
                                  SetCookiesCallback callback) override;
   void SetCanonicalCookieAsync(std::unique_ptr<CanonicalCookie> cookie,
                                bool secure_source,

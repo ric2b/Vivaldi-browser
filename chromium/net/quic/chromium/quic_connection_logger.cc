@@ -12,11 +12,9 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "net/base/ip_address.h"
@@ -87,10 +85,9 @@ std::unique_ptr<base::Value> NetLogQuicPacketHeaderCallback(
     const QuicPacketHeader* header,
     NetLogCaptureMode /* capture_mode */) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("connection_id",
-                  base::Uint64ToString(header->public_header.connection_id));
-  dict->SetInteger("reset_flag", header->public_header.reset_flag);
-  dict->SetInteger("version_flag", header->public_header.version_flag);
+  dict->SetString("connection_id", base::Uint64ToString(header->connection_id));
+  dict->SetInteger("reset_flag", header->reset_flag);
+  dict->SetInteger("version_flag", header->version_flag);
   dict->SetString("packet_number", base::Uint64ToString(header->packet_number));
   return std::move(dict);
 }
@@ -111,7 +108,7 @@ std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
     NetLogCaptureMode /* capture_mode */) {
   auto dict = std::make_unique<base::DictionaryValue>();
   dict->SetString("largest_observed",
-                  base::Uint64ToString(frame->largest_observed));
+                  base::Uint64ToString(frame->deprecated_largest_observed));
   dict->SetString("delta_time_largest_observed_us",
                   base::Int64ToString(frame->ack_delay_time.ToMicroseconds()));
 
@@ -120,7 +117,7 @@ std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
     // V34 and above express acked packets, but only print
     // missing packets, because it's typically a shorter list.
     for (QuicPacketNumber packet = frame->packets.Min();
-         packet < frame->largest_observed; ++packet) {
+         packet < frame->deprecated_largest_observed; ++packet) {
       if (!frame->packets.Contains(packet)) {
         missing->AppendString(base::Uint64ToString(packet));
       }
@@ -204,7 +201,7 @@ std::unique_ptr<base::Value> NetLogQuicVersionNegotiationPacketCallback(
     NetLogCaptureMode /* capture_mode */) {
   auto dict = std::make_unique<base::DictionaryValue>();
   auto versions = std::make_unique<base::ListValue>();
-  for (QuicVersionVector::const_iterator it = packet->versions.begin();
+  for (QuicTransportVersionVector::const_iterator it = packet->versions.begin();
        it != packet->versions.end(); ++it) {
     versions->AppendString(QuicVersionToString(*it));
   }
@@ -525,7 +522,7 @@ void QuicConnectionLogger::OnDuplicatePacket(QuicPacketNumber packet_number) {
 }
 
 void QuicConnectionLogger::OnProtocolVersionMismatch(
-    QuicVersion received_version) {
+    QuicTransportVersion received_version) {
   // TODO(rtenneti): Add logging.
 }
 
@@ -714,7 +711,7 @@ void QuicConnectionLogger::OnConnectionClosed(QuicErrorCode error,
 }
 
 void QuicConnectionLogger::OnSuccessfulVersionNegotiation(
-    const QuicVersion& version) {
+    const QuicTransportVersion& version) {
   if (!net_log_is_capturing_)
     return;
   string quic_version = QuicVersionToString(version);

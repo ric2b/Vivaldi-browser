@@ -29,8 +29,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_ANDROID)
+#include "base/android/java_handler_thread.h"
 #include "base/android/jni_android.h"
-#include "base/test/android/java_handler_thread_for_testing.h"
+#include "base/test/android/java_handler_thread_helpers.h"
 #endif
 
 #if defined(OS_WIN)
@@ -85,7 +86,7 @@ class Foo : public RefCounted<Foo> {
  private:
   friend class RefCounted<Foo>;
 
-  ~Foo() {}
+  ~Foo() = default;
 
   int test_count_;
   std::string result_;
@@ -201,7 +202,7 @@ class DummyTaskObserver : public MessageLoop::TaskObserver {
         num_tasks_processed_(0),
         num_tasks_(num_tasks) {}
 
-  ~DummyTaskObserver() override {}
+  ~DummyTaskObserver() override = default;
 
   void WillProcessTask(const PendingTask& pending_task) override {
     num_tasks_started_++;
@@ -253,46 +254,41 @@ void PostNTasks(int posts_remaining) {
 }
 
 #if defined(OS_ANDROID)
-void AbortMessagePump() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  jclass exception = env->FindClass(
-      "org/chromium/base/TestSystemMessageHandler$TestException");
-
-  env->ThrowNew(exception,
-                "This is a test exception that should be caught in "
-                "TestSystemMessageHandler.handleMessage");
-  static_cast<base::MessageLoopForUI*>(base::MessageLoop::current())->Abort();
+void DoNotRun() {
+  ASSERT_TRUE(false);
 }
 
 void RunTest_AbortDontRunMoreTasks(bool delayed, bool init_java_first) {
   WaitableEvent test_done_event(WaitableEvent::ResetPolicy::MANUAL,
                                 WaitableEvent::InitialState::NOT_SIGNALED);
-
   std::unique_ptr<android::JavaHandlerThread> java_thread;
   if (init_java_first) {
-    java_thread =
-        android::JavaHandlerThreadForTesting::CreateJavaFirst(&test_done_event);
+    java_thread = android::JavaHandlerThreadHelpers::CreateJavaFirst();
   } else {
-    java_thread = android::JavaHandlerThreadForTesting::Create(
-        "JavaHandlerThreadForTesting from AbortDontRunMoreTasks",
-        &test_done_event);
+    java_thread = std::make_unique<android::JavaHandlerThread>(
+        "JavaHandlerThreadForTesting from AbortDontRunMoreTasks");
   }
   java_thread->Start();
+  java_thread->ListenForUncaughtExceptionsForTesting();
 
+  auto target =
+      BindOnce(&android::JavaHandlerThreadHelpers::ThrowExceptionAndAbort,
+               &test_done_event);
   if (delayed) {
     java_thread->message_loop()->task_runner()->PostDelayedTask(
-        FROM_HERE, BindOnce(&AbortMessagePump),
-        TimeDelta::FromMilliseconds(10));
+        FROM_HERE, std::move(target), TimeDelta::FromMilliseconds(10));
   } else {
-    java_thread->message_loop()->task_runner()->PostTask(
-        FROM_HERE, BindOnce(&AbortMessagePump));
+    java_thread->message_loop()->task_runner()->PostTask(FROM_HERE,
+                                                         std::move(target));
+    java_thread->message_loop()->task_runner()->PostTask(FROM_HERE,
+                                                         BindOnce(&DoNotRun));
   }
-
-  // Wait to ensure we catch the correct exception (and don't crash)
   test_done_event.Wait();
-
   java_thread->Stop();
-  java_thread.reset();
+  android::ScopedJavaLocalRef<jthrowable> exception =
+      java_thread->GetUncaughtExceptionIfAny();
+  ASSERT_TRUE(
+      android::JavaHandlerThreadHelpers::IsExceptionTestException(exception));
 }
 
 TEST(MessageLoopTest, JavaExceptionAbort) {
@@ -958,12 +954,12 @@ TEST_P(MessageLoopTypedTest, DISABLED_EnsureDeletion) {
     MessageLoop loop(GetParam());
     loop.task_runner()->PostTask(
         FROM_HERE, BindOnce(&RecordDeletionProbe::Run,
-                            new RecordDeletionProbe(NULL, &a_was_deleted)));
+                            new RecordDeletionProbe(nullptr, &a_was_deleted)));
     // TODO(ajwong): Do we really need 1000ms here?
     loop.task_runner()->PostDelayedTask(
         FROM_HERE,
         BindOnce(&RecordDeletionProbe::Run,
-                 new RecordDeletionProbe(NULL, &b_was_deleted)),
+                 new RecordDeletionProbe(nullptr, &b_was_deleted)),
         TimeDelta::FromMilliseconds(1000));
   }
   EXPECT_TRUE(a_was_deleted);
@@ -981,7 +977,7 @@ TEST_P(MessageLoopTypedTest, DISABLED_EnsureDeletion_Chain) {
     MessageLoop loop(GetParam());
     // The scoped_refptr for each of the below is held either by the chained
     // RecordDeletionProbe, or the bound RecordDeletionProbe::Run() callback.
-    RecordDeletionProbe* a = new RecordDeletionProbe(NULL, &a_was_deleted);
+    RecordDeletionProbe* a = new RecordDeletionProbe(nullptr, &a_was_deleted);
     RecordDeletionProbe* b = new RecordDeletionProbe(a, &b_was_deleted);
     RecordDeletionProbe* c = new RecordDeletionProbe(b, &c_was_deleted);
     loop.task_runner()->PostTask(FROM_HERE,
@@ -1562,6 +1558,97 @@ TEST_P(MessageLoopTypedTest, RecursivePosts) {
   loop.task_runner()->PostTask(FROM_HERE,
                                BindOnce(&PostNTasksThenQuit, kNumTimes));
   RunLoop().Run();
+}
+
+TEST_P(MessageLoopTypedTest, NestableTasksAllowedAtTopLevel) {
+  MessageLoop loop(GetParam());
+  EXPECT_TRUE(MessageLoop::current()->NestableTasksAllowed());
+}
+
+// Nestable tasks shouldn't be allowed to run reentrantly by default (regression
+// test for https://crbug.com/754112).
+TEST_P(MessageLoopTypedTest, NestableTasksDisallowedByDefault) {
+  MessageLoop loop(GetParam());
+  RunLoop run_loop;
+  loop.task_runner()->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](RunLoop* run_loop) {
+            EXPECT_FALSE(MessageLoop::current()->NestableTasksAllowed());
+            run_loop->Quit();
+          },
+          Unretained(&run_loop)));
+  run_loop.Run();
+}
+
+TEST_P(MessageLoopTypedTest, NestableTasksProcessedWhenRunLoopAllows) {
+  MessageLoop loop(GetParam());
+  RunLoop run_loop;
+  loop.task_runner()->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](RunLoop* run_loop) {
+            // This test would hang if this RunLoop wasn't of type
+            // kNestableTasksAllowed (i.e. this is testing that this is
+            // processed and doesn't hang).
+            RunLoop nested_run_loop(RunLoop::Type::kNestableTasksAllowed);
+            ThreadTaskRunnerHandle::Get()->PostTask(
+                FROM_HERE,
+                BindOnce(
+                    [](RunLoop* nested_run_loop) {
+                      // Each additional layer of application task nesting
+                      // requires its own allowance. The kNestableTasksAllowed
+                      // RunLoop allowed this task to be processed but further
+                      // nestable tasks are by default disallowed from this
+                      // layer.
+                      EXPECT_FALSE(
+                          MessageLoop::current()->NestableTasksAllowed());
+                      nested_run_loop->Quit();
+                    },
+                    Unretained(&nested_run_loop)));
+            nested_run_loop.Run();
+
+            run_loop->Quit();
+          },
+          Unretained(&run_loop)));
+  run_loop.Run();
+}
+
+TEST_P(MessageLoopTypedTest, NestableTasksAllowedExplicitlyInScope) {
+  MessageLoop loop(GetParam());
+  RunLoop run_loop;
+  loop.task_runner()->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](RunLoop* run_loop) {
+            {
+              MessageLoop::ScopedNestableTaskAllower allow_nestable_tasks(
+                  MessageLoop::current());
+              EXPECT_TRUE(MessageLoop::current()->NestableTasksAllowed());
+            }
+            EXPECT_FALSE(MessageLoop::current()->NestableTasksAllowed());
+            run_loop->Quit();
+          },
+          Unretained(&run_loop)));
+  run_loop.Run();
+}
+
+TEST_P(MessageLoopTypedTest, NestableTasksAllowedManually) {
+  MessageLoop loop(GetParam());
+  RunLoop run_loop;
+  loop.task_runner()->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](RunLoop* run_loop) {
+            EXPECT_FALSE(MessageLoop::current()->NestableTasksAllowed());
+            MessageLoop::current()->SetNestableTasksAllowed(true);
+            EXPECT_TRUE(MessageLoop::current()->NestableTasksAllowed());
+            MessageLoop::current()->SetNestableTasksAllowed(false);
+            EXPECT_FALSE(MessageLoop::current()->NestableTasksAllowed());
+            run_loop->Quit();
+          },
+          Unretained(&run_loop)));
+  run_loop.Run();
 }
 
 INSTANTIATE_TEST_CASE_P(,

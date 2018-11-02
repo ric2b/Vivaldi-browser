@@ -41,6 +41,7 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebTextInputInfo.h"
+#include "public/web/WebHitTestResult.h"
 #include "public/web/WebImeTextSpan.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebTextDirection.h"
@@ -119,6 +120,11 @@ class WebWidget {
   // on receiving this message
   virtual void ThemeChanged() {}
 
+  // Do a hit test at given point and return the WebHitTestResult.
+  virtual WebHitTestResult HitTestResultAt(const WebPoint&) {
+    return WebHitTestResult();
+  }
+
   // Called to inform the WebWidget of an input event.
   virtual WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) {
     return WebInputEventResult::kNotHandled;
@@ -126,9 +132,6 @@ class WebWidget {
 
   // Called to inform the WebWidget of the mouse cursor's visibility.
   virtual void SetCursorVisibilityState(bool is_visible) {}
-
-  // Check whether the given point hits any registered touch event handlers.
-  virtual bool HasTouchEventHandlersAt(const WebPoint&) { return true; }
 
   // Applies viewport related properties during a commit from the compositor
   // thread.
@@ -147,29 +150,11 @@ class WebWidget {
   // Called to inform the WebWidget that it has gained or lost keyboard focus.
   virtual void SetFocus(bool) {}
 
-  // Fetches the character range of the current composition, also called the
-  // "marked range."
-  virtual WebRange CompositionRange() { return WebRange(); }
-
   // Returns the anchor and focus bounds of the current selection.
   // If the selection range is empty, it returns the caret bounds.
   virtual bool SelectionBounds(WebRect& anchor, WebRect& focus) const {
     return false;
   }
-
-  // Returns the text direction at the start and end bounds of the current
-  // selection.  If the selection range is empty, it returns false.
-  virtual bool SelectionTextDirection(WebTextDirection& start,
-                                      WebTextDirection& end) const {
-    return false;
-  }
-
-  // Returns true if the selection range is nonempty and its anchor is first
-  // (i.e its anchor is its start).
-  virtual bool IsSelectionAnchorFirst() const { return false; }
-
-  // Changes the text direction of the selected input node.
-  virtual void SetTextDirection(WebTextDirection) {}
 
   // Returns true if the WebWidget is currently animating a GestureFling.
   virtual bool IsFlinging() const { return false; }

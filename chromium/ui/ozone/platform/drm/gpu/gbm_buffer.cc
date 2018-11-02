@@ -59,7 +59,8 @@ GbmBuffer::GbmBuffer(const scoped_refptr<GbmDevice>& gbm,
       handles[i] = gbm_bo_get_plane_handle(bo, i).u32;
       strides[i] = gbm_bo_get_plane_stride(bo, i);
       offsets[i] = gbm_bo_get_plane_offset(bo, i);
-      modifiers[i] = modifier;
+      if (addfb_flags & DRM_MODE_FB_MODIFIERS)
+        modifiers[i] = modifier;
     }
 
     // AddFramebuffer2 only considers the modifiers if addfb_flags has
@@ -135,7 +136,7 @@ uint32_t GbmBuffer::GetOpaqueFramebufferId() const {
 }
 
 uint32_t GbmBuffer::GetHandle() const {
-  return gbm_bo_get_handle(bo_).u32;
+  return bo() ? gbm_bo_get_handle(bo()).u32 : 0;
 }
 
 // TODO(reveman): This should not be needed once crbug.com/597932 is fixed,
@@ -260,11 +261,11 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBufferFromFds(
 
   // Try to use scanout if supported.
   int gbm_flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
-  bool try_scanout =
-      gbm_device_is_format_supported(gbm->device(), format, gbm_flags);
+  if (!gbm_device_is_format_supported(gbm->device(), format, gbm_flags))
+    gbm_flags &= ~GBM_BO_USE_SCANOUT;
 
   gbm_bo* bo = nullptr;
-  if (try_scanout) {
+  if (gbm_device_is_format_supported(gbm->device(), format, gbm_flags)) {
     struct gbm_import_fd_planar_data fd_data;
     fd_data.width = size.width();
     fd_data.height = size.height();
@@ -286,8 +287,6 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBufferFromFds(
       LOG(ERROR) << "nullptr returned from gbm_bo_import";
       return nullptr;
     }
-  } else {
-    gbm_flags &= ~GBM_BO_USE_SCANOUT;
   }
 
   scoped_refptr<GbmBuffer> buffer(new GbmBuffer(gbm, bo, format, gbm_flags, 0,
@@ -362,6 +361,10 @@ gfx::BufferFormat GbmPixmap::GetBufferFormat() const {
 
 gfx::Size GbmPixmap::GetBufferSize() const {
   return buffer_->GetSize();
+}
+
+uint32_t GbmPixmap::GetUniqueId() const {
+  return buffer_->GetHandle();
 }
 
 bool GbmPixmap::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,

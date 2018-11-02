@@ -15,13 +15,11 @@
 #include "content/browser/service_worker/service_worker_register_job_base.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/service_worker/service_worker_status_code.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
-
-namespace {
-class InstallEventMethodsReceiver;
-}  // namespace
 
 // Handles the initial registration of a Service Worker and the
 // subsequent update of existing registrations.
@@ -49,7 +47,7 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase,
   CONTENT_EXPORT ServiceWorkerRegisterJob(
       base::WeakPtr<ServiceWorkerContextCore> context,
       const GURL& script_url,
-      const ServiceWorkerRegistrationOptions& options);
+      const blink::mojom::ServiceWorkerRegistrationOptions& options);
 
   // For update jobs.
   CONTENT_EXPORT ServiceWorkerRegisterJob(
@@ -126,8 +124,7 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase,
   void DispatchInstallEvent();
   void OnInstallFinished(
       int request_id,
-      std::unique_ptr<InstallEventMethodsReceiver> install_event_methods,
-      ServiceWorkerStatusCode status,
+      blink::mojom::ServiceWorkerEventStatus event_status,
       bool has_fetch_handler,
       base::Time dispatch_event_time);
   void OnInstallFailed(ServiceWorkerStatusCode status);

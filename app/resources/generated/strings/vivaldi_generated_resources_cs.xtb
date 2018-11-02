@@ -35,10 +35,8 @@
 <translation id="159359590073980872">Mezipaměť obrázků</translation>
 <translation id="1601560923496285236">Použít</translation>
 <translation id="1603914832182249871">(Soukromý režim)</translation>
-<translation id="1616206807336925449">Toto rozšíření nevyžaduje zvláštní oprávnění.</translation>
 <translation id="1627276047960621195">Popisovače souborů</translation>
 <translation id="1635033183663317347">Nainstalováno vaším opatrovníkem.</translation>
-<translation id="1681120471812444678">Přidat a nastavit tiskárny…</translation>
 <translation id="1682548588986054654">Nové soukromé okno</translation>
 <translation id="1708338024780164500">(Nečinný)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
@@ -51,7 +49,6 @@
 <translation id="1769104665586091481">Otevřít o&amp;dkaz v novém okně</translation>
 <translation id="1815083418640426271">Vložit jako prostý text</translation>
 <translation id="1828901632669367785">Pro tisk použít systémové okno…</translation>
-<translation id="1838288018605456492">Klikni pro nastavení</translation>
 <translation id="1846308012215045257">Zásuvný modul <ph name="PLUGIN_NAME" /> spustíte klepnutím pravým tlačítkem</translation>
 <translation id="1850508293116537636">Otočit &amp;ve směru hodinových ručiček</translation>
 <translation id="1859234291848436338">Směr textu</translation>
@@ -124,7 +121,6 @@
 <translation id="2916745397441987255">Hledat rozšíření</translation>
 <translation id="2932883381142163287">Nahlásit zneužití</translation>
 <translation id="2941112035454246133">Nízká</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Opakovat</translation>
 <translation id="299483336428448530">Nainstalováno vaším rodičem.</translation>
 <translation id="3003623123441819449">Mezipaměť CSS</translation>
@@ -137,7 +133,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Popisovače – UŽIVATEL</translation>
 <translation id="3129173833825111527">Levý okraj</translation>
-<translation id="3149510190863420837">Aplikace Vivaldi</translation>
 <translation id="3154429428035006212">Nepoužívána déle než měsíc</translation>
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="32279126412636473">Načíst znovu</translation>
@@ -161,7 +156,6 @@
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3396331542604645348">Zvolená tiskárna není k dispozici nebo není správně nainstalovaná. Zkontrolujte tiskárnu nebo zkuste vybrat jinou.</translation>
 <translation id="3435896845095436175">Aktivovat</translation>
-<translation id="3439970425423980614">Otevírání souboru PDF v režimu náhledu</translation>
 <translation id="345693547134384690">Otevřít o&amp;brázek v novém listu</translation>
 <translation id="3467267818798281173">Žádat o návrhy z Googlu</translation>
 <translation id="3468745736289470383">Sdílení obrazovky</translation>
@@ -171,13 +165,11 @@
 <translation id="357886715122934472">Uživatel &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce sdílet tiskárnu &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; se skupinou, kterou vlastníte: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Pokud tuto akci přijmete, pomocí této tiskárny budou moci tisknout všichni členové skupiny.</translation>
 <translation id="3587482841069643663">Vše</translation>
 <translation id="3627588569887975815">Otevřít odkaz v &amp;soukromém okně</translation>
-<translation id="3640006360782160348">Ukončit nastavování tiskárny</translation>
 <translation id="3678156199662914018">Rozšíření: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Požadavek na sdílení obrazovky s aplikací <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">Načítání...</translation>
 <translation id="3725367690636977613">stránky</translation>
 <translation id="3727187387656390258">&amp;Prozkoumat</translation>
-<translation id="3730639321086573427">Místní cíle</translation>
 <translation id="3760460896538743390">Prozkoumat stránku na &amp;pozadí</translation>
 <translation id="3763401818161139108">Přejít na odkaz <ph name="ORIGIN" /></translation>
 <translation id="3798449238516105146">Verze</translation>
@@ -232,14 +224,12 @@
 <translation id="4478664379124702289">Uložit od&amp;kaz jako...</translation>
 <translation id="4481249487722541506">Načíst nesbalené rozšíření…</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4552495056028768700">Mezipaměť obrázků</translation>
 <translation id="4557136421275541763">Upozornění:</translation>
 <translation id="4579581181964204535">Nelze odeslat do <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Přejít na adresu <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikace a rozšíření může upravit pouze správce (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozšíření změnilo stránku, která se zobrazí při otevření nového listu.</translation>
-<translation id="4624768044135598934">Úspěch!</translation>
 <translation id="4628314759732363424">Změnit…</translation>
 <translation id="4643612240819915418">&amp;Otevřít video v novém listu</translation>
 <translation id="4677772697204437347">Paměť GPU</translation>
@@ -302,7 +292,6 @@
 <translation id="5581700288664681403">Načítání služby <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">Nízká</translation>
 <translation id="5627086634964711283">Také řídí, která stránka se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
-<translation id="5646376287012673985">Poloha</translation>
 <translation id="5707185214361380026">Nepodařilo se načíst rozšíření z:</translation>
 <translation id="5715711091495208045">Zprostředkovatel zásuvného modulu: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Litujeme, není možné zobrazit kód pro tuto chybu.</translation>
@@ -314,7 +303,6 @@
 <translation id="5828633471261496623">Tiskne se…</translation>
 <translation id="5829401023154985950">Spravovat…</translation>
 <translation id="583281660410589416">Neznámé</translation>
-<translation id="5848934677402291689">Probíhá ukládání do souboru PDF</translation>
 <translation id="5849869942539715694">Sbalit rozšíření…</translation>
 <translation id="5910363049092958439">Uložit o&amp;brázek jako...</translation>
 <translation id="59174027418879706">Povoleno</translation>
@@ -347,7 +335,6 @@
 <translation id="6295855836753816081">Ukládání…</translation>
 <translation id="6308937455967653460">Uložit od&amp;kaz jako...</translation>
 <translation id="6314335155547195432">Vygenerovat heslo</translation>
-<translation id="6348109281845364640">Nastavování tiskárny selhalo</translation>
 <translation id="6370021412472292592">Načtení soupisku obsahu rozšíření (manifest) se nezdařilo.</translation>
 <translation id="6398765197997659313">Ukončit režim celé obrazovky</translation>
 <translation id="6406303162637086258">Simulovat restart prohlížeče</translation>
@@ -358,7 +345,6 @@
 <translation id="6452181791372256707">Odmítnout</translation>
 <translation id="6498249116389603658">&amp;Všechny vaše jazyky</translation>
 <translation id="6503077044568424649">Nejnavštěvovanější</translation>
-<translation id="650584126816009598">Tiskárna je připravena.</translation>
 <translation id="6508261954199872201">Aplikace: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kopírovat o&amp;brázek</translation>
 <translation id="6550675742724504774">Možnosti</translation>
@@ -386,7 +372,6 @@
 <translation id="6955446738988643816">&amp;Prozkoumat</translation>
 <translation id="6970856801391541997">Tisknout konkrétní stránky</translation>
 <translation id="6974053822202609517">Zprava doleva</translation>
-<translation id="6982896539684144327">Tiskárna z <ph name="VENDOR_NAME" /> byla zjištěna</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Vybrat cíl</translation>
 <translation id="7005848115657603926">Neplatný rozsah stránek. použijte formát: <ph name="EXAMPLE_PAGE_RANGE" /></translation>
@@ -412,11 +397,9 @@
 <translation id="7412226954991670867">Paměť GPU</translation>
 <translation id="7421925624202799674">&amp;Zobrazit zdrojový kód stránky</translation>
 <translation id="7427348830195639090">Stránka na pozadí: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">Nastavování tiskárny…</translation>
 <translation id="7453008956351770337">Výběrem tiskárny udělíte následujícímu rozšíření oprávnění k přístupu k tiskárně:</translation>
 <translation id="7473891865547856676">Ne, děkuji</translation>
 <translation id="749028671485790643">Osoba <ph name="VALUE" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Připnout na poličku</translation>
 <translation id="7554791636758816595">Nový list</translation>
 <translation id="7564847347806291057">Ukončit úlohu</translation>
@@ -450,7 +433,6 @@
 <translation id="7947962633355574091">K&amp;opírovat adresu souboru videa</translation>
 <translation id="7965010376480416255">Sdílená paměť</translation>
 <translation id="7966241909927244760">K&amp;opírovat adresu obrázku</translation>
-<translation id="7967437925638594022">Rozšíření a aplikace</translation>
 <translation id="7978412674231730200">Soukromý klíč</translation>
 <translation id="7982789257301363584">Síť</translation>
 <translation id="7997826902155442747">Priorita procesu</translation>
@@ -463,13 +445,11 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8004582292198964060">Prohlížeč</translation>
 <translation id="8023801379949507775">Aktualizovat rozšíření</translation>
 <translation id="8032244173881942855">List nelze odeslat.</translation>
-<translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Vytisknout jako obrázek</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8137559199583651773">Aktivovat rozšíření</translation>
 <translation id="8180239481735238521">stránka</translation>
 <translation id="8188120771410500975">&amp;Kontrolovat pravopis v textových polích</translation>
-<translation id="8259581864063078725">Klepněte pro nalezení aplikace k použití této tiskárny.</translation>
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>
 <translation id="8294431847097064396">Zdroj</translation>
 <translation id="8335587457941836791">Odepnout z poličky</translation>
@@ -517,7 +497,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8916476537757519021">Soukromý podrámec: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Deaktivovat rozšíření v režimu pro vývojáře</translation>
 <translation id="8938356204940892126">Vzdávám se</translation>
-<translation id="8944779739948852228">Tiskárna byla zjištěna</translation>
 <translation id="895944840846194039">Paměť JavaScriptu</translation>
 <translation id="8962083179518285172">Skrýt podrobnosti</translation>
 <translation id="8996526648899750015">Přidat účet…</translation>
@@ -528,7 +507,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9153341767479566106">Další rozšíření, jež se nepodařily načíst:</translation>
 <translation id="9170848237812810038">Z&amp;pět</translation>
 <translation id="9215293857209265904">Bylo přidáno rozšíření <ph name="EXTENSION_NAME" /></translation>
-<translation id="9219103736887031265">Obrázky</translation>
 <translation id="93766956588638423">Opravit rozšíření</translation>
 <translation id="98515147261107953">Na šířku</translation>
 <translation id="994289308992179865">&amp;Opakovat</translation>

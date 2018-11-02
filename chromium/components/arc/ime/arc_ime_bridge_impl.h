@@ -5,12 +5,12 @@
 #ifndef COMPONENTS_ARC_IME_ARC_IME_BRIDGE_IMPL_H_
 #define COMPONENTS_ARC_IME_ARC_IME_BRIDGE_IMPL_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/arc/common/ime.mojom.h"
 #include "components/arc/ime/arc_ime_bridge.h"
-#include "components/arc/instance_holder.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -24,15 +24,10 @@ class ArcBridgeService;
 
 // This class encapsulates the detail of IME related IPC between
 // Chromium and the ARC container.
-class ArcImeBridgeImpl : public ArcImeBridge,
-                         public mojom::ImeHost,
-                         public InstanceHolder<mojom::ImeInstance>::Observer {
+class ArcImeBridgeImpl : public ArcImeBridge, public mojom::ImeHost {
  public:
   ArcImeBridgeImpl(Delegate* delegate, ArcBridgeService* bridge_service);
   ~ArcImeBridgeImpl() override;
-
-  // InstanceHolder<mojom::ImeInstance>::Observer overrides:
-  void OnInstanceReady() override;
 
   // ArcImeBridge overrides:
   void SendSetCompositionText(const ui::CompositionText& composition) override;
@@ -43,17 +38,16 @@ class ArcImeBridgeImpl : public ArcImeBridge,
 
   // mojom::ImeHost overrides:
   void OnTextInputTypeChanged(mojom::TextInputType type) override;
-  void OnCursorRectChanged(gfx::Rect rect) override;
+  void OnCursorRectChanged(const gfx::Rect& rect) override;
   void OnCancelComposition() override;
   void ShowImeIfNeeded() override;
   void OnCursorRectChangedWithSurroundingText(
-      gfx::Rect rect,
-      gfx::Range text_range,
+      const gfx::Rect& rect,
+      const gfx::Range& text_range,
       const std::string& text_in_range,
-      gfx::Range selection_range) override;
+      const gfx::Range& selection_range) override;
 
  private:
-  mojo::Binding<mojom::ImeHost> binding_;
   Delegate* const delegate_;
   ArcBridgeService* const bridge_service_;
 

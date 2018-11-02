@@ -9,10 +9,10 @@
 namespace headless {
 
 HeadlessPrintRenderFrameHelperDelegate::
-    HeadlessPrintRenderFrameHelperDelegate() {}
+    HeadlessPrintRenderFrameHelperDelegate() = default;
 
 HeadlessPrintRenderFrameHelperDelegate::
-    ~HeadlessPrintRenderFrameHelperDelegate() {}
+    ~HeadlessPrintRenderFrameHelperDelegate() = default;
 
 bool HeadlessPrintRenderFrameHelperDelegate::CancelPrerender(
     content::RenderFrame* render_frame) {
@@ -36,11 +36,5 @@ bool HeadlessPrintRenderFrameHelperDelegate::OverridePrint(
 bool HeadlessPrintRenderFrameHelperDelegate::IsAskPrintSettingsEnabled() {
   return true;
 }
-
-#if defined(OS_MACOSX)
-bool HeadlessPrintRenderFrameHelperDelegate::UseSingleMetafile() {
-  return true;
-}
-#endif
 
 }  // namespace headless

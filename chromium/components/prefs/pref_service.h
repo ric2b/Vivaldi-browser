@@ -25,8 +25,8 @@
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/values.h"
-#include "components/prefs/base_prefs_export.h"
 #include "components/prefs/persistent_pref_store.h"
+#include "components/prefs/prefs_export.h"
 
 class PrefNotifier;
 class PrefNotifierImpl;
@@ -77,16 +77,16 @@ class COMPONENTS_PREFS_EXPORT PrefService {
     // dictionary (a branch), or list.  You shouldn't need to construct this on
     // your own; use the PrefService::Register*Pref methods instead.
     Preference(const PrefService* service,
-               const std::string& name,
+               std::string name,
                base::Value::Type type);
     ~Preference() {}
 
     // Returns the name of the Preference (i.e., the key, e.g.,
     // browser.window_placement).
-    const std::string name() const;
+    std::string name() const { return name_; }
 
     // Returns the registered type of the preference.
-    base::Value::Type GetType() const;
+    base::Value::Type GetType() const { return type_; }
 
     // Returns the value of the Preference, falling back to the registered
     // default value if no other has been set.
@@ -155,10 +155,10 @@ class COMPONENTS_PREFS_EXPORT PrefService {
 
     const base::Value::Type type_;
 
-    uint32_t registration_flags_;
+    const uint32_t registration_flags_;
 
     // Reference to the PrefService in which this pref was created.
-    const PrefService* pref_service_;
+    const PrefService* const pref_service_;
   };
 
   // You may wish to use PrefServiceFactory or one of its subclasses
@@ -248,14 +248,15 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // the preference is not set in the user pref store, returns NULL.
   const base::Value* GetUserPrefValue(const std::string& path) const;
 
-  // Changes the default value for a preference. Takes ownership of |value|.
+  // Changes the default value for a preference.
   //
   // Will cause a pref change notification to be fired if this causes
   // the effective value to change.
-  void SetDefaultPrefValue(const std::string& path, base::Value* value);
+  void SetDefaultPrefValue(const std::string& path, base::Value value);
 
   // Returns the default value of the given preference. |path| must point to a
-  // registered preference. In that case, will never return NULL.
+  // registered preference. In that case, will never return nullptr, so callers
+  // do not need to check this.
   const base::Value* GetDefaultPrefValue(const std::string& path) const;
 
   // Returns true if a value has been set for the specified path.
@@ -319,6 +320,21 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // Invoked when the store is deleted from disk. Allows this PrefService
   // to tangentially cleanup data it may have saved outside the store.
   void OnStoreDeletionFromDisk();
+
+  // A low level function for registering an observer for every single
+  // preference changed notification. The caller must ensure that the observer
+  // remains valid as long as it is registered. Pointer ownership is not
+  // transferred.
+  //
+  // Almost all calling code should use a PrefChangeRegistrar instead.
+  //
+  // AVOID ADDING THESE. These are low-level observer notifications that are
+  // called for every pref change. This can lead to inefficiency, and the lack
+  // of a "registrar" model makes it easy to forget to undregister. It is
+  // really designed for integrating other notification systems, not for normal
+  // observation.
+  void AddPrefObserverAllPrefs(PrefObserver* obs);
+  void RemovePrefObserverAllPrefs(PrefObserver* obs);
 
  protected:
   // The PrefNotifier handles registering and notifying preference observers.

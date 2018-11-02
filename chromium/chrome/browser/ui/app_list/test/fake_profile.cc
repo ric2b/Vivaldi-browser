@@ -65,6 +65,10 @@ content::PermissionManager* FakeProfile::GetPermissionManager() {
   return nullptr;
 }
 
+content::BackgroundFetchDelegate* FakeProfile::GetBackgroundFetchDelegate() {
+  return nullptr;
+}
+
 content::BackgroundSyncController* FakeProfile::GetBackgroundSyncController() {
   return nullptr;
 }
@@ -116,6 +120,10 @@ bool FakeProfile::HasOffTheRecordProfile() {
 }
 
 Profile* FakeProfile::GetOriginalProfile() {
+  return this;
+}
+
+const Profile* FakeProfile::GetOriginalProfile() const {
   return this;
 }
 
@@ -184,16 +192,6 @@ PrefProxyConfigTracker* FakeProfile::GetProxyConfigTracker() {
 
 chrome_browser_net::Predictor* FakeProfile::GetNetworkPredictor() {
   return nullptr;
-}
-
-DevToolsNetworkControllerHandle*
-FakeProfile::GetDevToolsNetworkControllerHandle() {
-  return nullptr;
-}
-
-void FakeProfile::ClearNetworkingHistorySince(
-    base::Time time,
-    const base::Closure& completion) {
 }
 
 GURL FakeProfile::GetHomePage() {

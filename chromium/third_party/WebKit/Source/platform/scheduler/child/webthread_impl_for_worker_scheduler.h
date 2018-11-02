@@ -6,6 +6,7 @@
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_CHILD_WEBTHREAD_IMPL_FOR_WORKER_SCHEDULER_H_
 
 #include "base/message_loop/message_loop.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/threading/thread.h"
 #include "public/platform/WebPrivatePtr.h"
 #include "public/platform/scheduler/child/webthread_base.h"
@@ -20,7 +21,6 @@ class WebScheduler;
 
 namespace blink {
 namespace scheduler {
-class SchedulerTqmDelegate;
 class SingleThreadIdleTaskRunner;
 class TaskQueue;
 class WebSchedulerImpl;
@@ -42,7 +42,7 @@ class PLATFORM_EXPORT WebThreadImplForWorkerScheduler
   WebTaskRunner* GetWebTaskRunner() override;
 
   // WebThreadBase implementation.
-  base::SingleThreadTaskRunner* GetTaskRunner() const override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override;
   scheduler::SingleThreadIdleTaskRunner* GetIdleTaskRunner() const override;
   void Init() override;
 
@@ -55,9 +55,6 @@ class PLATFORM_EXPORT WebThreadImplForWorkerScheduler
 
  protected:
   base::Thread* GetThread() const { return thread_.get(); }
-  SchedulerTqmDelegate* task_runner_delegate() const {
-    return task_runner_delegate_.get();
-  }
 
  private:
   virtual std::unique_ptr<scheduler::WorkerScheduler> CreateWorkerScheduler();
@@ -68,7 +65,7 @@ class PLATFORM_EXPORT WebThreadImplForWorkerScheduler
       base::MessageLoop::TaskObserver* observer) override;
 
   void InitOnThread(base::WaitableEvent* completion);
-  void RestoreTaskRunnerOnThread(base::WaitableEvent* completion);
+  void ShutdownOnThread(base::WaitableEvent* completion);
 
   std::unique_ptr<base::Thread> thread_;
   std::unique_ptr<scheduler::WorkerScheduler> worker_scheduler_;
@@ -76,8 +73,9 @@ class PLATFORM_EXPORT WebThreadImplForWorkerScheduler
   scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner_;
   scoped_refptr<TaskQueue> task_queue_;
   scoped_refptr<scheduler::SingleThreadIdleTaskRunner> idle_task_runner_;
-  scoped_refptr<SchedulerTqmDelegate> task_runner_delegate_;
   WebPrivatePtr<WebTaskRunnerImpl> web_task_runner_;
+
+  base::AtomicFlag was_shutdown_on_thread_;
 };
 
 }  // namespace scheduler

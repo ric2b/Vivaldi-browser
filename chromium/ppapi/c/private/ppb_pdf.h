@@ -92,13 +92,12 @@ struct PPB_PDF {
 
   // Search the given string using ICU.  Use PPB_Core's MemFree on results when
   // done.
-  void (*SearchString)(
-     PP_Instance instance,
-     const unsigned short* string,
-     const unsigned short* term,
-     bool case_sensitive,
-     struct PP_PrivateFindResult** results,
-     int* count);
+  void (*SearchString)(PP_Instance instance,
+                       const unsigned short* string,
+                       const unsigned short* term,
+                       bool case_sensitive,
+                       struct PP_PrivateFindResult** results,
+                       uint32_t* count);
 
   // Since WebFrame doesn't know about PPAPI requests, it'll think the page has
   // finished loading even if there are outstanding requests by the plugin.
@@ -169,6 +168,9 @@ struct PPB_PDF {
                            int32_t left_height,
                            const struct PP_FloatPoint* right,
                            int32_t right_height);
+
+  // Notifies embedder that the PDF has scrolled.
+  void (*DidScroll)(PP_Instance instance);
 };
 
 #endif  // PPAPI_C_PRIVATE_PPB_PDF_H_

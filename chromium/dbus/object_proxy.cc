@@ -8,11 +8,14 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/debug/leak_annotations.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -27,29 +30,91 @@ namespace dbus {
 
 namespace {
 
-const char kErrorServiceUnknown[] = "org.freedesktop.DBus.Error.ServiceUnknown";
-const char kErrorObjectUnknown[] = "org.freedesktop.DBus.Error.UnknownObject";
+constexpr char kErrorServiceUnknown[] =
+    "org.freedesktop.DBus.Error.ServiceUnknown";
+constexpr char kErrorObjectUnknown[] =
+    "org.freedesktop.DBus.Error.UnknownObject";
 
 // Used for success ratio histograms. 1 for success, 0 for failure.
-const int kSuccessRatioHistogramMaxValue = 2;
+constexpr int kSuccessRatioHistogramMaxValue = 2;
 
 // The path of D-Bus Object sending NameOwnerChanged signal.
-const char kDBusSystemObjectPath[] = "/org/freedesktop/DBus";
+constexpr char kDBusSystemObjectPath[] = "/org/freedesktop/DBus";
 
 // The D-Bus Object interface.
-const char kDBusSystemObjectInterface[] = "org.freedesktop.DBus";
+constexpr char kDBusSystemObjectInterface[] = "org.freedesktop.DBus";
 
 // The D-Bus Object address.
-const char kDBusSystemObjectAddress[] = "org.freedesktop.DBus";
+constexpr char kDBusSystemObjectAddress[] = "org.freedesktop.DBus";
 
 // The NameOwnerChanged member in |kDBusSystemObjectInterface|.
-const char kNameOwnerChangedMember[] = "NameOwnerChanged";
+constexpr char kNameOwnerChangedMember[] = "NameOwnerChanged";
 
 // An empty function used for ObjectProxy::EmptyResponseCallback().
 void EmptyResponseCallbackBody(Response* /*response*/) {
 }
 
 }  // namespace
+
+ObjectProxy::ReplyCallbackHolder::ReplyCallbackHolder(
+    scoped_refptr<base::TaskRunner> origin_task_runner,
+    ResponseOrErrorCallback callback)
+    : origin_task_runner_(origin_task_runner), callback_(std::move(callback)) {
+  DCHECK(origin_task_runner_.get());
+  DCHECK(!callback_.is_null());
+}
+
+ObjectProxy::ReplyCallbackHolder::ReplyCallbackHolder(
+    ReplyCallbackHolder&& other) = default;
+
+ObjectProxy::ReplyCallbackHolder::~ReplyCallbackHolder() {
+  if (callback_.is_null()) {
+    // This is the regular case.
+    // CallMethod and its family creates this object on the origin thread,
+    // PostTask()s to the D-Bus thread for actual D-Bus communication,
+    // then PostTask()s back to the origin thread to invoke the |callback_|.
+    // At that timing, the ownership of callback should be released via
+    // ReleaseCallback().
+    // Otherwise, this instance was moved to another one. Do nothing in
+    // either case.
+    return;
+  }
+
+  // The only case where |origin_task_runner_| becomes nullptr is that
+  // this is moved. In such a case, |callback_| should be nullptr, too, so it
+  // should be handled above. Thus, here |origin_task_runner_| must not be
+  // nullptr.
+  DCHECK(origin_task_runner_.get());
+
+  if (origin_task_runner_->RunsTasksInCurrentSequence()) {
+    // Destroyed on the origin thread. This happens when PostTask()ing to
+    // the D-Bus thread fails. The |callback_| can be destroyed on the
+    // current thread safely. Do nothing here, and let member destruction
+    // destroy the callback.
+    return;
+  }
+
+  // Here is on D-Bus thread, so try to PostTask() to destroy the callback.
+  // to the origin thread.
+  // The |origin_task_runner_| may already have stopped. E.g., on Chrome's
+  // shutdown the message loop of the UI thread (= the origin thread) stops
+  // before D-Bus threaed's. In such a case, PostTask() fails. Because we
+  // cannot do much thing here, instead, simply leak the callback rather than
+  // destroying it on the D-Bus thread, which could be unexpected from the
+  // direct or indirect caller of CallMethod.
+  auto* callback_to_be_deleted =
+      new ResponseOrErrorCallback(std::move(callback_));
+  ANNOTATE_LEAKING_OBJECT_PTR(callback_to_be_deleted);
+  origin_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&base::DeletePointer<ResponseOrErrorCallback>,
+                                callback_to_be_deleted));
+}
+
+ObjectProxy::ResponseOrErrorCallback
+ObjectProxy::ReplyCallbackHolder::ReleaseCallback() {
+  DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
+  return std::move(callback_);
+}
 
 ObjectProxy::ObjectProxy(Bus* bus,
                          const std::string& service_name,
@@ -60,6 +125,7 @@ ObjectProxy::ObjectProxy(Bus* bus,
       object_path_(object_path),
       ignore_service_unknown_errors_(
           options & IGNORE_SERVICE_UNKNOWN_ERRORS) {
+  LOG_IF(FATAL, !object_path_.IsValid()) << object_path_.value();
 }
 
 ObjectProxy::~ObjectProxy() {
@@ -118,44 +184,32 @@ std::unique_ptr<Response> ObjectProxy::CallMethodAndBlock(
 void ObjectProxy::CallMethod(MethodCall* method_call,
                              int timeout_ms,
                              ResponseCallback callback) {
-  CallMethodInternalCallback internal_callback = base::BindOnce(
+  auto internal_callback = base::BindOnce(
       &ObjectProxy::OnCallMethod, this, method_call->GetInterface(),
       method_call->GetMember(), std::move(callback));
 
-  CallMethodInternal(method_call, timeout_ms, std::move(internal_callback));
+  CallMethodWithErrorResponse(method_call, timeout_ms,
+                              std::move(internal_callback));
 }
 
-void ObjectProxy::CallMethodWithErrorCallback(MethodCall* method_call,
-                                              int timeout_ms,
-                                              ResponseCallback callback,
-                                              ErrorCallback error_callback) {
-  CallMethodInternalCallback internal_callback = base::BindOnce(
-      [](ResponseCallback callback, ErrorCallback error_callback,
-         Response* response, ErrorResponse* error_response) {
-        if (response) {
-          std::move(callback).Run(response);
-        } else {
-          std::move(error_callback).Run(error_response);
-        }
-      },
-      std::move(callback), std::move(error_callback));
-
-  CallMethodInternal(method_call, timeout_ms, std::move(internal_callback));
-}
-
-void ObjectProxy::CallMethodInternal(MethodCall* method_call,
-                                     int timeout_ms,
-                                     CallMethodInternalCallback callback) {
+void ObjectProxy::CallMethodWithErrorResponse(
+    MethodCall* method_call,
+    int timeout_ms,
+    ResponseOrErrorCallback callback) {
   bus_->AssertOnOriginThread();
 
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
+  ReplyCallbackHolder callback_holder(bus_->GetOriginTaskRunner(),
+                                      std::move(callback));
+
   if (!method_call->SetDestination(service_name_) ||
       !method_call->SetPath(object_path_)) {
     // In case of a failure, run the error callback with nullptr.
-    base::OnceClosure task = base::BindOnce(
-        &ObjectProxy::RunCallMethodInternalCallback, this, std::move(callback),
-        start_time, nullptr /* response_message */);
+    base::OnceClosure task =
+        base::BindOnce(&ObjectProxy::RunResponseOrErrorCallback, this,
+                       std::move(callback_holder), start_time,
+                       nullptr /* response */, nullptr /* error_response */);
     bus_->GetOriginTaskRunner()->PostTask(FROM_HERE, std::move(task));
     return;
   }
@@ -173,8 +227,27 @@ void ObjectProxy::CallMethodInternal(MethodCall* method_call,
   // Wait for the response in the D-Bus thread.
   base::OnceClosure task =
       base::BindOnce(&ObjectProxy::StartAsyncMethodCall, this, timeout_ms,
-                     request_message, std::move(callback), start_time);
+                     request_message, std::move(callback_holder), start_time);
   bus_->GetDBusTaskRunner()->PostTask(FROM_HERE, std::move(task));
+}
+
+void ObjectProxy::CallMethodWithErrorCallback(MethodCall* method_call,
+                                              int timeout_ms,
+                                              ResponseCallback callback,
+                                              ErrorCallback error_callback) {
+  auto internal_callback = base::BindOnce(
+      [](ResponseCallback callback, ErrorCallback error_callback,
+         Response* response, ErrorResponse* error_response) {
+        if (response) {
+          std::move(callback).Run(response);
+        } else {
+          std::move(error_callback).Run(error_response);
+        }
+      },
+      std::move(callback), std::move(error_callback));
+
+  CallMethodWithErrorResponse(method_call, timeout_ms,
+                              std::move(internal_callback));
 }
 
 void ObjectProxy::ConnectToSignal(const std::string& interface_name,
@@ -186,16 +259,17 @@ void ObjectProxy::ConnectToSignal(const std::string& interface_name,
   if (bus_->HasDBusThread()) {
     base::PostTaskAndReplyWithResult(
         bus_->GetDBusTaskRunner(), FROM_HERE,
-        base::Bind(&ObjectProxy::ConnectToSignalInternal, this, interface_name,
-                   signal_name, signal_callback),
-        base::Bind(on_connected_callback, interface_name, signal_name));
+        base::BindOnce(&ObjectProxy::ConnectToSignalInternal, this,
+                       interface_name, signal_name, signal_callback),
+        base::BindOnce(std::move(on_connected_callback), interface_name,
+                       signal_name));
   } else {
     // If the bus doesn't have a dedicated dbus thread we need to call
     // ConnectToSignalInternal directly otherwise we might miss a signal
     // that is currently queued if we do a PostTask.
     const bool success =
         ConnectToSignalInternal(interface_name, signal_name, signal_callback);
-    on_connected_callback.Run(interface_name, signal_name, success);
+    std::move(on_connected_callback).Run(interface_name, signal_name, success);
   }
 }
 
@@ -210,10 +284,10 @@ void ObjectProxy::WaitForServiceToBeAvailable(
     WaitForServiceToBeAvailableCallback callback) {
   bus_->AssertOnOriginThread();
 
-  wait_for_service_to_be_available_callbacks_.push_back(callback);
+  wait_for_service_to_be_available_callbacks_.push_back(std::move(callback));
   bus_->GetDBusTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&ObjectProxy::WaitForServiceToBeAvailableInternal, this));
+      base::BindOnce(&ObjectProxy::WaitForServiceToBeAvailableInternal, this));
 }
 
 void ObjectProxy::Detach() {
@@ -244,138 +318,116 @@ ObjectProxy::ResponseCallback ObjectProxy::EmptyResponseCallback() {
   return base::Bind(&EmptyResponseCallbackBody);
 }
 
-ObjectProxy::OnPendingCallIsCompleteData::OnPendingCallIsCompleteData(
-    ObjectProxy* in_object_proxy,
-    CallMethodInternalCallback in_callback,
-    base::TimeTicks in_start_time)
-    : object_proxy(in_object_proxy),
-      callback(std::move(in_callback)),
-      start_time(in_start_time) {}
-
-ObjectProxy::OnPendingCallIsCompleteData::~OnPendingCallIsCompleteData() =
-    default;
-
 void ObjectProxy::StartAsyncMethodCall(int timeout_ms,
                                        DBusMessage* request_message,
-                                       CallMethodInternalCallback callback,
+                                       ReplyCallbackHolder callback_holder,
                                        base::TimeTicks start_time) {
   bus_->AssertOnDBusThread();
 
   if (!bus_->Connect() || !bus_->SetUpAsyncOperations()) {
     // In case of a failure, run the error callback with nullptr.
-    base::OnceClosure task = base::BindOnce(
-        &ObjectProxy::RunCallMethodInternalCallback, this, std::move(callback),
-        start_time, nullptr /* response_message */);
+    base::OnceClosure task =
+        base::BindOnce(&ObjectProxy::RunResponseOrErrorCallback, this,
+                       std::move(callback_holder), start_time,
+                       nullptr /* response */, nullptr /* error_response */);
     bus_->GetOriginTaskRunner()->PostTask(FROM_HERE, std::move(task));
 
     dbus_message_unref(request_message);
     return;
   }
 
-  DBusPendingCall* pending_call = nullptr;
-  bus_->SendWithReply(request_message, &pending_call, timeout_ms);
+  DBusPendingCall* dbus_pending_call = nullptr;
+  bus_->SendWithReply(request_message, &dbus_pending_call, timeout_ms);
 
-  // Prepare the data we'll be passing to OnPendingCallIsCompleteThunk().
-  // The data will be deleted in OnPendingCallIsCompleteThunk().
-  OnPendingCallIsCompleteData* data =
-      new OnPendingCallIsCompleteData(this, std::move(callback), start_time);
-
+  using PendingCallback =
+      base::OnceCallback<void(DBusPendingCall * pending_call)>;
   // This returns false only when unable to allocate memory.
   const bool success = dbus_pending_call_set_notify(
-      pending_call,
-      &ObjectProxy::OnPendingCallIsCompleteThunk,
-      data,
-      &DeleteVoidPointer<OnPendingCallIsCompleteData>);
+      dbus_pending_call,
+      [](DBusPendingCall* pending_call, void* user_data) {
+        std::move(*static_cast<PendingCallback*>(user_data)).Run(pending_call);
+      },
+      // PendingCallback instance is owned by libdbus.
+      new PendingCallback(base::BindOnce(&ObjectProxy::OnPendingCallIsComplete,
+                                         this, std::move(callback_holder),
+                                         start_time)),
+      [](void* user_data) { delete static_cast<PendingCallback*>(user_data); });
   CHECK(success) << "Unable to allocate memory";
-  pending_calls_.insert(pending_call);
+  pending_calls_.insert(dbus_pending_call);
 
   // It's now safe to unref the request message.
   dbus_message_unref(request_message);
 }
 
-void ObjectProxy::OnPendingCallIsComplete(DBusPendingCall* pending_call,
-                                          CallMethodInternalCallback callback,
-                                          base::TimeTicks start_time) {
+void ObjectProxy::OnPendingCallIsComplete(ReplyCallbackHolder callback_holder,
+                                          base::TimeTicks start_time,
+                                          DBusPendingCall* pending_call) {
   bus_->AssertOnDBusThread();
 
   DBusMessage* response_message = dbus_pending_call_steal_reply(pending_call);
+
+  // Either |response| or |error_response| takes ownership of the
+  // |response_message|.
+  std::unique_ptr<Response> response;
+  std::unique_ptr<ErrorResponse> error_response;
+  if (dbus_message_get_type(response_message) == DBUS_MESSAGE_TYPE_ERROR) {
+    error_response = ErrorResponse::FromRawMessage(response_message);
+  } else {
+    response = Response::FromRawMessage(response_message);
+  }
+
   base::OnceClosure task =
-      base::BindOnce(&ObjectProxy::RunCallMethodInternalCallback, this,
-                     std::move(callback), start_time, response_message);
-  bus_->GetOriginTaskRunner()->PostTask(FROM_HERE, std::move(task));
+      base::BindOnce(&ObjectProxy::RunResponseOrErrorCallback, this,
+                     std::move(callback_holder), start_time, response.get(),
+                     error_response.get());
+
+  // The message should be deleted on the D-Bus thread for a complicated
+  // reason:
+  //
+  // libdbus keeps track of the number of bytes in the incoming message
+  // queue to ensure that the data size in the queue is manageable. The
+  // bookkeeping is partly done via dbus_message_unref(), and immediately
+  // asks the client code (Chrome) to stop monitoring the underlying
+  // socket, if the number of bytes exceeds a certian number, which is set
+  // to 63MB, per dbus-transport.cc:
+  //
+  //   /* Try to default to something that won't totally hose the system,
+  //    * but doesn't impose too much of a limitation.
+  //    */
+  //   transport->max_live_messages_size = _DBUS_ONE_MEGABYTE * 63;
+  //
+  // The monitoring of the socket is done on the D-Bus thread (see Watch
+  // class in bus.cc), hence we should stop the monitoring on D-Bus thread.
+  bus_->GetOriginTaskRunner()->PostTaskAndReply(
+      FROM_HERE, std::move(task),
+      base::BindOnce(
+          [](Response* response, ErrorResponse* error_response) {
+            // Do nothing.
+          },
+          base::Owned(response.release()),
+          base::Owned(error_response.release())));
 
   // Remove the pending call from the set.
   pending_calls_.erase(pending_call);
   dbus_pending_call_unref(pending_call);
 }
 
-void ObjectProxy::RunCallMethodInternalCallback(
-    CallMethodInternalCallback callback,
+void ObjectProxy::RunResponseOrErrorCallback(
+    ReplyCallbackHolder callback_holder,
     base::TimeTicks start_time,
-    DBusMessage* response_message) {
+    Response* response,
+    ErrorResponse* error_response) {
   bus_->AssertOnOriginThread();
+  callback_holder.ReleaseCallback().Run(response, error_response);
 
-  bool method_call_successful = false;
-  if (!response_message) {
-    // The response is not received.
-    std::move(callback).Run(nullptr, nullptr);
-  } else if (dbus_message_get_type(response_message) ==
-             DBUS_MESSAGE_TYPE_ERROR) {
-    // This will take |response_message| and release (unref) it.
-    std::unique_ptr<ErrorResponse> error_response(
-        ErrorResponse::FromRawMessage(response_message));
-    std::move(callback).Run(nullptr, error_response.get());
-    // Delete the message  on the D-Bus thread. See below for why.
-    bus_->GetDBusTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&base::DeletePointer<ErrorResponse>,
-                   error_response.release()));
-  } else {
-    // This will take |response_message| and release (unref) it.
-    std::unique_ptr<Response> response(
-        Response::FromRawMessage(response_message));
-    // The response is successfully received.
-    std::move(callback).Run(response.get(), nullptr);
-    // The message should be deleted on the D-Bus thread for a complicated
-    // reason:
-    //
-    // libdbus keeps track of the number of bytes in the incoming message
-    // queue to ensure that the data size in the queue is manageable. The
-    // bookkeeping is partly done via dbus_message_unref(), and immediately
-    // asks the client code (Chrome) to stop monitoring the underlying
-    // socket, if the number of bytes exceeds a certian number, which is set
-    // to 63MB, per dbus-transport.cc:
-    //
-    //   /* Try to default to something that won't totally hose the system,
-    //    * but doesn't impose too much of a limitation.
-    //    */
-    //   transport->max_live_messages_size = _DBUS_ONE_MEGABYTE * 63;
-    //
-    // The monitoring of the socket is done on the D-Bus thread (see Watch
-    // class in bus.cc), hence we should stop the monitoring from D-Bus
-    // thread, not from the current thread here, which is likely UI thread.
-    bus_->GetDBusTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&base::DeletePointer<Response>, response.release()));
-
-    method_call_successful = true;
+  if (response) {
     // Record time spent for the method call. Don't include failures.
     UMA_HISTOGRAM_TIMES("DBus.AsyncMethodCallTime",
                         base::TimeTicks::Now() - start_time);
   }
   // Record if the method call is successful, or not. 1 if successful.
-  UMA_HISTOGRAM_ENUMERATION("DBus.AsyncMethodCallSuccess",
-                            method_call_successful,
+  UMA_HISTOGRAM_ENUMERATION("DBus.AsyncMethodCallSuccess", response ? 1 : 0,
                             kSuccessRatioHistogramMaxValue);
-}
-
-void ObjectProxy::OnPendingCallIsCompleteThunk(DBusPendingCall* pending_call,
-                                               void* user_data) {
-  OnPendingCallIsCompleteData* data =
-      reinterpret_cast<OnPendingCallIsCompleteData*>(user_data);
-  ObjectProxy* self = data->object_proxy;
-  self->OnPendingCallIsComplete(pending_call, std::move(data->callback),
-                                data->start_time);
 }
 
 bool ObjectProxy::ConnectToNameOwnerChangedSignal() {
@@ -436,8 +488,8 @@ void ObjectProxy::WaitForServiceToBeAvailableInternal() {
     const bool service_is_ready = false;
     bus_->GetOriginTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&ObjectProxy::RunWaitForServiceToBeAvailableCallbacks,
-                   this, service_is_ready));
+        base::BindOnce(&ObjectProxy::RunWaitForServiceToBeAvailableCallbacks,
+                       this, service_is_ready));
     return;
   }
 
@@ -445,8 +497,8 @@ void ObjectProxy::WaitForServiceToBeAvailableInternal() {
   if (service_is_available) {  // Service is already available.
     bus_->GetOriginTaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(&ObjectProxy::RunWaitForServiceToBeAvailableCallbacks,
-                   this, service_is_available));
+        base::BindOnce(&ObjectProxy::RunWaitForServiceToBeAvailableCallbacks,
+                       this, service_is_available));
     return;
   }
 }
@@ -533,7 +585,7 @@ void ObjectProxy::RunMethod(base::TimeTicks start_time,
     iter->Run(signal);
 
   // Delete the message on the D-Bus thread. See comments in
-  // RunCallMethodInternalCallback().
+  // RunResponseOrErrorCallback().
   bus_->GetDBusTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&base::DeletePointer<Signal>, signal));
@@ -711,7 +763,7 @@ void ObjectProxy::RunWaitForServiceToBeAvailableCallbacks(
   std::vector<WaitForServiceToBeAvailableCallback> callbacks;
   callbacks.swap(wait_for_service_to_be_available_callbacks_);
   for (size_t i = 0; i < callbacks.size(); ++i)
-    callbacks[i].Run(service_is_available);
+    std::move(callbacks[i]).Run(service_is_available);
 }
 
 }  // namespace dbus

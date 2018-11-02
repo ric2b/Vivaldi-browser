@@ -16,7 +16,6 @@ import logging
 from webkitpy.common.memoized import memoized
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.path_finder import PathFinder
-from webkitpy.layout_tests.models.test_expectations import TestExpectationLine, TestExpectations
 from webkitpy.w3c.wpt_manifest import WPTManifest
 
 _log = logging.getLogger(__name__)
@@ -222,7 +221,6 @@ class WPTExpectationsUpdater(object):
         return merged_dict
 
     def get_expectations(self, results, test_name=''):
-
         """Returns a set of test expectations to use based on results.
 
         Returns a set of one or more test expectations based on the expected
@@ -334,7 +332,9 @@ class WPTExpectationsUpdater(object):
         for name in sorted(port_names):
             specifiers.append(self.host.builders.version_specifier_for_port_name(name))
 
-        specifiers.extend(self.skipped_specifiers(test_name))
+        if self.specifiers_can_extend_to_all_platforms(specifiers, test_name):
+            return ''
+
         specifiers = self.simplify_specifiers(specifiers, self.port.configuration_specifier_macros())
         if not specifiers:
             return ''
@@ -346,6 +346,16 @@ class WPTExpectationsUpdater(object):
         if isinstance(tuple_or_value, tuple):
             return list(tuple_or_value)
         return [tuple_or_value]
+
+    def specifiers_can_extend_to_all_platforms(self, specifiers, test_name):
+        """Tests whether a list of specifiers can be extended to all platforms.
+
+        Tries to add skipped platform specifiers to the list and tests if the
+        extended list covers all platforms.
+        """
+        extended_specifiers = specifiers + self.skipped_specifiers(test_name)
+        # If the list is simplified to empty, then all platforms are covered.
+        return not self.simplify_specifiers(extended_specifiers, self.port.configuration_specifier_macros())
 
     def skipped_specifiers(self, test_name):
         """Returns a list of platform specifiers for which the test is skipped."""
@@ -360,36 +370,46 @@ class WPTExpectationsUpdater(object):
         """Returns a list of Port objects for all try builders."""
         return [self.host.port_factory.get_from_builder_name(name) for name in self._get_try_bots()]
 
-    @staticmethod
-    def simplify_specifiers(specifiers, configuration_specifier_macros):  # pylint: disable=unused-argument
-        """Converts some collection of specifiers to an equivalent and maybe shorter list.
+    def simplify_specifiers(self, specifiers, specifier_macros):
+        """Simplifies the specifier part of an expectation line if possible.
 
-        The input strings are all case-insensitive, but the strings in the
-        return value will all be capitalized.
+        "Simplifying" means finding the shortest list of platform specifiers
+        that is equivalent to the given list of specifiers. This can be done
+        because there are "macro specifiers" that stand in for multiple version
+        specifiers, and an empty list stands in for "all platforms".
 
         Args:
-            specifiers: A collection of lower-case specifiers.
-            configuration_specifier_macros: A dict mapping "macros" for
-                groups of specifiers to lists of specific specifiers. In
-                practice, this is a dict mapping operating systems to
-                supported versions, e.g. {"win": ["win7", "win10"]}.
+            specifiers: A collection of specifiers (case insensitive).
+            specifier_macros: A dict mapping "macros" for groups of specifiers
+                to lists of version specifiers. e.g. {"win": ["win7", "win10"]}.
+                If there are versions in this dict for that have no corresponding
+                try bots, they are ignored.
 
         Returns:
-            A shortened list of specifiers. For example, ["win7", "win10"]
-            would be converted to ["Win"]. If the given list covers all
-            supported platforms, then an empty list is returned.
-            This list will be sorted and have capitalized specifier strings.
+            A shortened list of specifiers (capitalized). For example, ["win7",
+            "win10"] would be converted to ["Win"]. If the given list covers
+            all supported platforms, then an empty list is returned.
         """
-        specifiers = {specifier.lower() for specifier in specifiers}
-        for macro_specifier, version_specifiers in configuration_specifier_macros.iteritems():
-            macro_specifier = macro_specifier.lower()
-            version_specifiers = {specifier.lower() for specifier in version_specifiers}
-            if version_specifiers.issubset(specifiers):
-                specifiers -= version_specifiers
-                specifiers.add(macro_specifier)
-        if specifiers == {macro.lower() for macro in configuration_specifier_macros.keys()}:
+        specifiers = {s.lower() for s in specifiers}
+        covered_by_try_bots = self._platform_specifiers_covered_by_try_bots()
+        for macro, versions in specifier_macros.iteritems():
+            macro = macro.lower()
+
+            # Only consider version specifiers that have corresponding try bots.
+            versions = {s.lower() for s in versions if s.lower() in covered_by_try_bots}
+            if versions <= specifiers:
+                specifiers -= versions
+                specifiers.add(macro)
+        if specifiers == {macro.lower() for macro in specifier_macros}:
             return []
         return sorted(specifier.capitalize() for specifier in specifiers)
+
+    def _platform_specifiers_covered_by_try_bots(self):
+        all_platform_specifiers = set()
+        for builder_name in self._get_try_bots():
+            all_platform_specifiers.add(
+                self.host.builders.platform_specifier_for_builder(builder_name).lower())
+        return frozenset(all_platform_specifiers)
 
     def write_to_test_expectations(self, line_list):
         """Writes the given lines to the TestExpectations file.
@@ -411,10 +431,6 @@ class WPTExpectationsUpdater(object):
         expectations_file_path = self.port.path_to_generic_test_expectations_file()
         file_contents = self.host.filesystem.read_text_file(expectations_file_path)
 
-        line_list = [line for line in line_list if self._test_name_from_expectation_string(line) not in file_contents]
-        if not line_list:
-            return
-
         marker_comment_index = file_contents.find(MARKER_COMMENT)
         if marker_comment_index == -1:
             file_contents += '\n%s\n' % MARKER_COMMENT
@@ -424,10 +440,6 @@ class WPTExpectationsUpdater(object):
             file_contents = file_contents[:end_of_marker_line + 1] + '\n'.join(line_list) + file_contents[end_of_marker_line:]
 
         self.host.filesystem.write_text_file(expectations_file_path, file_contents)
-
-    @staticmethod
-    def _test_name_from_expectation_string(expectation_string):
-        return TestExpectationLine.tokenize_line(filename='', expectation_string=expectation_string, line_number=0).name
 
     def download_text_baselines(self, test_results):
         """Fetches new baseline files for tests that should be rebaselined.

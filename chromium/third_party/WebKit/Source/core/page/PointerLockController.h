@@ -26,9 +26,10 @@
 #ifndef PointerLockController_h
 #define PointerLockController_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
@@ -40,8 +41,6 @@ class WebMouseEvent;
 
 class CORE_EXPORT PointerLockController final
     : public GarbageCollected<PointerLockController> {
-  WTF_MAKE_NONCOPYABLE(PointerLockController);
-
  public:
   static PointerLockController* Create(Page*);
 
@@ -58,7 +57,7 @@ class CORE_EXPORT PointerLockController final
   void DispatchLockedMouseEvent(const WebMouseEvent&,
                                 const AtomicString& event_type);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit PointerLockController(Page*);
@@ -70,6 +69,8 @@ class CORE_EXPORT PointerLockController final
   bool lock_pending_;
   Member<Element> element_;
   Member<Document> document_of_removed_element_while_waiting_for_unlock_;
+
+  DISALLOW_COPY_AND_ASSIGN(PointerLockController);
 };
 
 }  // namespace blink

@@ -40,14 +40,14 @@ ScrollTimeline* ScrollTimeline::Create(Document& document,
   }
 
   // TODO(smcgruer): Support 'auto' value.
-  if (options.timeRange().isScrollTimelineAutoKeyword()) {
+  if (options.timeRange().IsScrollTimelineAutoKeyword()) {
     exception_state.ThrowDOMException(
         kNotSupportedError, "'auto' value for timeRange not yet supported");
     return nullptr;
   }
 
   return new ScrollTimeline(document, scroll_source, orientation,
-                            options.timeRange().getAsDouble());
+                            options.timeRange().GetAsDouble());
 }
 
 ScrollTimeline::ScrollTimeline(const Document& document,
@@ -57,7 +57,7 @@ ScrollTimeline::ScrollTimeline(const Document& document,
     : scroll_source_(scroll_source),
       orientation_(orientation),
       time_range_(time_range) {
-  DCHECK(RuntimeEnabledFeatures::CompositorWorkerEnabled());
+  DCHECK(RuntimeEnabledFeatures::AnimationWorkletEnabled());
 }
 
 double ScrollTimeline::currentTime(bool& is_null) {
@@ -138,10 +138,10 @@ String ScrollTimeline::orientation() {
 }
 
 void ScrollTimeline::timeRange(DoubleOrScrollTimelineAutoKeyword& result) {
-  result.setDouble(time_range_);
+  result.SetDouble(time_range_);
 }
 
-DEFINE_TRACE(ScrollTimeline) {
+void ScrollTimeline::Trace(blink::Visitor* visitor) {
   visitor->Trace(scroll_source_);
   AnimationTimeline::Trace(visitor);
 }

@@ -5,9 +5,6 @@
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 
 #include <stddef.h>
-#include <X11/extensions/XInput.h>
-#include <X11/extensions/XInput2.h>
-#include <X11/Xlib.h>
 
 #include <utility>
 
@@ -26,6 +23,7 @@
 #include "ui/events/event_switches.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/gfx/geometry/point3_f.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 
 // XIScrollClass was introduced in XI 2.1 so we need to define it here
@@ -79,31 +77,34 @@
 // When you add new data types, please make sure the order here is aligned
 // with the order in the DataType enum in the header file because we assume
 // they are in sync when updating the device list (see UpdateDeviceList).
-const char* kCachedAtoms[] = {
-  AXIS_LABEL_PROP_REL_HWHEEL,
-  AXIS_LABEL_PROP_REL_WHEEL,
-  AXIS_LABEL_PROP_ABS_DBL_ORDINAL_X,
-  AXIS_LABEL_PROP_ABS_DBL_ORDINAL_Y,
-  AXIS_LABEL_PROP_ABS_DBL_START_TIME,
-  AXIS_LABEL_PROP_ABS_DBL_END_TIME,
-  AXIS_LABEL_PROP_ABS_DBL_FLING_VX,
-  AXIS_LABEL_PROP_ABS_DBL_FLING_VY,
-  AXIS_LABEL_PROP_ABS_FLING_STATE,
-  AXIS_LABEL_PROP_ABS_METRICS_TYPE,
-  AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA1,
-  AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA2,
-  AXIS_LABEL_PROP_ABS_FINGER_COUNT,
-  AXIS_LABEL_ABS_MT_TOUCH_MAJOR,
-  AXIS_LABEL_ABS_MT_TOUCH_MINOR,
-  AXIS_LABEL_ABS_MT_ORIENTATION,
-  AXIS_LABEL_ABS_MT_PRESSURE,
-  AXIS_LABEL_ABS_MT_POSITION_X,
-  AXIS_LABEL_ABS_MT_POSITION_Y,
-  AXIS_LABEL_ABS_MT_TRACKING_ID,
-  AXIS_LABEL_TOUCH_TIMESTAMP,
-
-  NULL
+constexpr const char* kCachedAtoms[] = {
+    AXIS_LABEL_PROP_REL_HWHEEL,
+    AXIS_LABEL_PROP_REL_WHEEL,
+    AXIS_LABEL_PROP_ABS_DBL_ORDINAL_X,
+    AXIS_LABEL_PROP_ABS_DBL_ORDINAL_Y,
+    AXIS_LABEL_PROP_ABS_DBL_START_TIME,
+    AXIS_LABEL_PROP_ABS_DBL_END_TIME,
+    AXIS_LABEL_PROP_ABS_DBL_FLING_VX,
+    AXIS_LABEL_PROP_ABS_DBL_FLING_VY,
+    AXIS_LABEL_PROP_ABS_FLING_STATE,
+    AXIS_LABEL_PROP_ABS_METRICS_TYPE,
+    AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA1,
+    AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA2,
+    AXIS_LABEL_PROP_ABS_FINGER_COUNT,
+    AXIS_LABEL_ABS_MT_TOUCH_MAJOR,
+    AXIS_LABEL_ABS_MT_TOUCH_MINOR,
+    AXIS_LABEL_ABS_MT_ORIENTATION,
+    AXIS_LABEL_ABS_MT_PRESSURE,
+    AXIS_LABEL_ABS_MT_POSITION_X,
+    AXIS_LABEL_ABS_MT_POSITION_Y,
+    AXIS_LABEL_ABS_MT_TRACKING_ID,
+    AXIS_LABEL_TOUCH_TIMESTAMP,
 };
+
+// Make sure the sizes of enum and |kCachedAtoms| are aligned.
+static_assert(arraysize(kCachedAtoms) ==
+                  ui::DeviceDataManagerX11::DT_LAST_ENTRY,
+              "kCachedAtoms count / enum mismatch");
 
 // Constants for checking if a data type lies in the range of CMT/Touch data
 // types.
@@ -170,8 +171,6 @@ DeviceDataManagerX11::DeviceDataManagerX11()
   CHECK(gfx::GetXDisplay());
   InitializeXInputInternal();
 
-  // Make sure the sizes of enum and kCachedAtoms are aligned.
-  CHECK(arraysize(kCachedAtoms) == static_cast<size_t>(DT_LAST_ENTRY) + 1);
   UpdateDeviceList(gfx::GetXDisplay());
   UpdateButtonMap();
 }

@@ -9,6 +9,7 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/containers/stack.h"
 #include "base/containers/stack_container.h"
 #include "base/i18n/string_compare.h"
 #include "base/memory/ptr_util.h"
@@ -133,9 +134,9 @@ void BookmarkBridge::Destroy(JNIEnv*, const JavaParamRef<jobject>&) {
   delete this;
 }
 
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& obj,
-                  const JavaParamRef<jobject>& j_profile) {
+static jlong JNI_BookmarkBridge_Init(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj,
+                                     const JavaParamRef<jobject>& j_profile) {
   BookmarkBridge* delegate = new BookmarkBridge(env, obj, j_profile);
   return reinterpret_cast<intptr_t>(delegate);
 }
@@ -225,10 +226,6 @@ void BookmarkBridge::GetTopLevelFolderIDs(
         managed_bookmark_service_->managed_node()->child_count() > 0) {
       top_level_folders.push_back(managed_bookmark_service_->managed_node());
     }
-    if (managed_bookmark_service_->supervised_node() &&
-        managed_bookmark_service_->supervised_node()->child_count() > 0) {
-      top_level_folders.push_back(managed_bookmark_service_->supervised_node());
-    }
     if (partner_bookmarks_shim_->HasPartnerBookmarks()
         && IsReachable(partner_bookmarks_shim_->GetPartnerBookmarksRoot())) {
       top_level_folders.push_back(
@@ -293,7 +290,7 @@ void BookmarkBridge::GetAllFoldersWithDepths(
 
   // Stack for Depth-First Search of bookmark model. It stores nodes and their
   // heights.
-  std::stack<std::pair<const BookmarkNode*, int> > stk;
+  base::stack<std::pair<const BookmarkNode*, int>> stk;
 
   bookmarkList.push_back(bookmark_model_->mobile_node());
   bookmarkList.push_back(bookmark_model_->bookmark_bar_node());
@@ -843,10 +840,6 @@ bool BookmarkBridge::IsFolderAvailable(
   // The managed bookmarks folder is not shown if there are no bookmarks
   // configured via policy.
   if (folder == managed_bookmark_service_->managed_node() && folder->empty())
-    return false;
-  // Similarly, the supervised bookmarks folder is not shown if there are no
-  // bookmarks configured by the custodian.
-  if (folder == managed_bookmark_service_->supervised_node() && folder->empty())
     return false;
 
   SigninManager* signin = SigninManagerFactory::GetForProfile(

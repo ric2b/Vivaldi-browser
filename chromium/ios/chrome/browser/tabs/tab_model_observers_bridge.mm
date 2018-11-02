@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
-#import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observers.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -14,7 +13,11 @@
 #endif
 
 @implementation TabModelObserversBridge {
+  // The TabModel owning self.
   __weak TabModel* _tabModel;
+
+  // The TabModelObservers that forward events to TabModelObserver instances
+  // registered with owning TabModel.
   __weak TabModelObservers* _tabModelObservers;
 }
 

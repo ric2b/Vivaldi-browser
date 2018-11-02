@@ -48,7 +48,7 @@ class PermissionReporterBrowserTest : public SyncTest {
         base::BindOnce(
             &PermissionReporterBrowserTest::AttachMockReportSenderOnIOThread,
             base::Unretained(this),
-            make_scoped_refptr(g_browser_process->safe_browsing_service())),
+            base::WrapRefCounted(g_browser_process->safe_browsing_service())),
         run_loop.QuitClosure());
     run_loop.Run();
   }
@@ -94,7 +94,6 @@ IN_PROC_BROWSER_TEST_F(PermissionReporterBrowserTest,
   PermissionRequestManager* manager = GetPermissionRequestManager(browser);
   std::unique_ptr<MockPermissionPromptFactory> mock_permission_prompt_factory =
       base::MakeUnique<MockPermissionPromptFactory>(manager);
-  manager->DisplayPendingRequests();
 
   ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
@@ -138,7 +137,6 @@ IN_PROC_BROWSER_TEST_F(PermissionReporterBrowserTest,
   PermissionRequestManager* manager = GetPermissionRequestManager(browser);
   std::unique_ptr<MockPermissionPromptFactory> mock_permission_prompt_factory =
       base::MakeUnique<MockPermissionPromptFactory>(manager);
-  manager->DisplayPendingRequests();
 
   ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(

@@ -26,7 +26,8 @@ PlatformSensorAndroid::PlatformSensorAndroid(
 }
 
 PlatformSensorAndroid::~PlatformSensorAndroid() {
-  StopSensor();
+  JNIEnv* env = AttachCurrentThread();
+  Java_PlatformSensor_sensorDestroyed(env, j_object_);
 }
 
 mojom::ReportingMode PlatformSensorAndroid::GetReportingMode() {
@@ -88,7 +89,7 @@ void PlatformSensorAndroid::UpdatePlatformSensorReading(
   reading.raw.values[2] = value3;
   reading.raw.values[3] = value4;
 
-  UpdateSensorReading(reading);
+  UpdateSharedBufferAndNotifyClients(reading);
 }
 
 }  // namespace device

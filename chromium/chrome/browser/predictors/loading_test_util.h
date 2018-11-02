@@ -36,6 +36,8 @@ class MockResourcePrefetchPredictor : public ResourcePrefetchPredictor {
 
   MOCK_CONST_METHOD2(GetPrefetchData,
                      bool(const GURL&, ResourcePrefetchPredictor::Prediction*));
+  MOCK_CONST_METHOD2(PredictPreconnectOrigins,
+                     bool(const GURL&, PreconnectPrediction*));
   MOCK_METHOD1(RecordPageRequestSummaryProxy, void(PageRequestSummary*));
 };
 
@@ -104,8 +106,7 @@ ResourcePrefetchPredictor::Prediction CreatePrediction(
 PreconnectPrediction CreatePreconnectPrediction(
     std::string host,
     bool is_redirected,
-    std::vector<GURL> preconnect_urls,
-    std::vector<GURL> preresolve_urls);
+    const std::vector<PreconnectRequest>& requests);
 
 void PopulateTestConfig(LoadingPredictorConfig* config, bool small_db = true);
 
@@ -116,6 +117,7 @@ class MockURLRequestJob : public net::URLRequestJob {
  public:
   MockURLRequestJob(net::URLRequest* request,
                     const net::HttpResponseInfo& response_info,
+                    const net::LoadTimingInfo& load_timing_info,
                     const std::string& mime_type);
 
   bool GetMimeType(std::string* mime_type) const override;
@@ -123,9 +125,11 @@ class MockURLRequestJob : public net::URLRequestJob {
  protected:
   void Start() override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
+  void GetLoadTimingInfo(net::LoadTimingInfo* info) const override;
 
  private:
   net::HttpResponseInfo response_info_;
+  net::LoadTimingInfo load_timing_info_;
   std::string mime_type_;
 };
 
@@ -158,10 +162,15 @@ class MockURLRequestJobFactory : public net::URLRequestJobFactory {
     response_info_ = response_info;
   }
 
+  void set_load_timing_info(const net::LoadTimingInfo& load_timing_info) {
+    load_timing_info_ = load_timing_info;
+  }
+
   void set_mime_type(const std::string& mime_type) { mime_type_ = mime_type; }
 
  private:
   net::HttpResponseInfo response_info_;
+  net::LoadTimingInfo load_timing_info_;
   std::string mime_type_;
 };
 
@@ -185,6 +194,7 @@ std::ostream& operator<<(std::ostream& stream, const NavigationID& id);
 
 std::ostream& operator<<(std::ostream& os, const OriginData& data);
 std::ostream& operator<<(std::ostream& os, const OriginStat& redirect);
+std::ostream& operator<<(std::ostream& os, const PreconnectRequest& request);
 std::ostream& operator<<(std::ostream& os,
                          const PreconnectPrediction& prediction);
 
@@ -198,6 +208,7 @@ bool operator==(const OriginRequestSummary& lhs,
                 const OriginRequestSummary& rhs);
 bool operator==(const OriginData& lhs, const OriginData& rhs);
 bool operator==(const OriginStat& lhs, const OriginStat& rhs);
+bool operator==(const PreconnectRequest& lhs, const PreconnectRequest& rhs);
 bool operator==(const PreconnectPrediction& lhs,
                 const PreconnectPrediction& rhs);
 

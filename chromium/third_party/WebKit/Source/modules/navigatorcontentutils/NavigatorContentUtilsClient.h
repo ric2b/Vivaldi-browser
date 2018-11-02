@@ -7,12 +7,11 @@
 
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/weborigin/KURL.h"
-#include "platform/wtf/Allocator.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
+class KURL;
 class WebLocalFrameImpl;
 
 class MODULES_EXPORT NavigatorContentUtilsClient
@@ -25,17 +24,9 @@ class MODULES_EXPORT NavigatorContentUtilsClient
                                        const KURL&,
                                        const String& title);
 
-  enum CustomHandlersState {
-    kCustomHandlersNew,
-    kCustomHandlersRegistered,
-    kCustomHandlersDeclined
-  };
-
-  virtual CustomHandlersState IsProtocolHandlerRegistered(const String& scheme,
-                                                          const KURL&);
   virtual void UnregisterProtocolHandler(const String& scheme, const KURL&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   explicit NavigatorContentUtilsClient(WebLocalFrameImpl*);

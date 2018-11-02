@@ -3,13 +3,17 @@
 // found in the LICENSE file.
 
 #include "ui/accessibility/platform/ax_platform_node_win.h"
+
+#include <wrl/client.h>
+
+#include <vector>
+
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/enum_variant.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_variant.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -39,34 +43,44 @@
   if (!delegate_)                      \
     return E_FAIL;                     \
   if (!arg)                            \
-    return E_INVALIDARG;
+    return E_INVALIDARG;               \
+  *arg = {};
 #define COM_OBJECT_VALIDATE_2_ARGS(arg1, arg2) \
   if (!delegate_)                              \
     return E_FAIL;                             \
   if (!arg1)                                   \
     return E_INVALIDARG;                       \
+  *arg1 = {};                                  \
   if (!arg2)                                   \
-    return E_INVALIDARG;
+    return E_INVALIDARG;                       \
+  *arg2 = {};
 #define COM_OBJECT_VALIDATE_3_ARGS(arg1, arg2, arg3) \
   if (!delegate_)                                    \
     return E_FAIL;                                   \
   if (!arg1)                                         \
     return E_INVALIDARG;                             \
+  *arg1 = {};                                        \
   if (!arg2)                                         \
     return E_INVALIDARG;                             \
+  *arg2 = {};                                        \
   if (!arg3)                                         \
-    return E_INVALIDARG;
+    return E_INVALIDARG;                             \
+  *arg3 = {};
 #define COM_OBJECT_VALIDATE_4_ARGS(arg1, arg2, arg3, arg4) \
   if (!delegate_)                                          \
     return E_FAIL;                                         \
   if (!arg1)                                               \
     return E_INVALIDARG;                                   \
+  *arg1 = {};                                              \
   if (!arg2)                                               \
     return E_INVALIDARG;                                   \
+  *arg2 = {};                                              \
   if (!arg3)                                               \
     return E_INVALIDARG;                                   \
+  *arg3 = {};                                              \
   if (!arg4)                                               \
-    return E_INVALIDARG;
+    return E_INVALIDARG;                                   \
+  *arg4 = {};
 #define COM_OBJECT_VALIDATE_VAR_ID_AND_GET_TARGET(var_id, target) \
   if (!delegate_)                                                 \
     return E_FAIL;                                                \
@@ -80,6 +94,7 @@
     return E_FAIL;                                                           \
   if (!arg)                                                                  \
     return E_INVALIDARG;                                                     \
+  *arg = {};                                                                 \
   target = GetTargetFromChildID(var_id);                                     \
   if (!target)                                                               \
     return E_INVALIDARG;                                                     \
@@ -91,8 +106,10 @@
     return E_FAIL;                                                           \
   if (!arg1)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg1 = {};                                                                \
   if (!arg2)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg2 = {};                                                                \
   target = GetTargetFromChildID(var_id);                                     \
   if (!target)                                                               \
     return E_INVALIDARG;                                                     \
@@ -104,10 +121,13 @@
     return E_FAIL;                                                           \
   if (!arg1)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg1 = {};                                                                \
   if (!arg2)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg2 = {};                                                                \
   if (!arg3)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg3 = {};                                                                \
   target = GetTargetFromChildID(var_id);                                     \
   if (!target)                                                               \
     return E_INVALIDARG;                                                     \
@@ -119,12 +139,16 @@
     return E_FAIL;                                                           \
   if (!arg1)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg1 = {};                                                                \
   if (!arg2)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg2 = {};                                                                \
   if (!arg3)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg3 = {};                                                                \
   if (!arg4)                                                                 \
     return E_INVALIDARG;                                                     \
+  *arg4 = {};                                                                \
   target = GetTargetFromChildID(var_id);                                     \
   if (!target)                                                               \
     return E_INVALIDARG;                                                     \
@@ -166,6 +190,10 @@ IAccessible2UsageObserver::IAccessible2UsageObserver() {
 
 IAccessible2UsageObserver::~IAccessible2UsageObserver() {
 }
+
+AXHypertext::AXHypertext() {}
+AXHypertext::AXHypertext(const AXHypertext& other) = default;
+AXHypertext::~AXHypertext() {}
 
 // static
 base::ObserverList<IAccessible2UsageObserver>&
@@ -303,7 +331,7 @@ AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
     gfx::NativeViewAccessible accessible) {
   if (!accessible)
     return nullptr;
-  base::win::ScopedComPtr<AXPlatformNodeWin> ax_platform_node;
+  Microsoft::WRL::ComPtr<AXPlatformNodeWin> ax_platform_node;
   accessible->QueryInterface(ax_platform_node.GetAddressOf());
   return ax_platform_node.Get();
 }
@@ -337,6 +365,8 @@ AXPlatformNodeWin::~AXPlatformNodeWin() {
   if (unique_id_)
     g_unique_id_map.Get().erase(unique_id_);
 }
+
+const base::char16 AXPlatformNodeWin::kEmbeddedCharacter = L'\xfffc';
 
 void AXPlatformNodeWin::CalculateRelationships() {
   ClearOwnRelations();
@@ -589,8 +619,8 @@ void AXPlatformNodeWin::NotifyAccessibilityEvent(AXEvent event_type) {
 }
 
 int AXPlatformNodeWin::GetIndexInParent() {
-  base::win::ScopedComPtr<IDispatch> parent_dispatch;
-  base::win::ScopedComPtr<IAccessible> parent_accessible;
+  Microsoft::WRL::ComPtr<IDispatch> parent_dispatch;
+  Microsoft::WRL::ComPtr<IAccessible> parent_accessible;
   if (S_OK != get_accParent(parent_dispatch.GetAddressOf()))
     return -1;
   if (S_OK != parent_dispatch.CopyTo(parent_accessible.GetAddressOf()))
@@ -601,8 +631,8 @@ int AXPlatformNodeWin::GetIndexInParent() {
     return -1;
   for (LONG index = 1; index <= child_count; ++index) {
     base::win::ScopedVariant childid_index(index);
-    base::win::ScopedComPtr<IDispatch> child_dispatch;
-    base::win::ScopedComPtr<IAccessible> child_accessible;
+    Microsoft::WRL::ComPtr<IDispatch> child_dispatch;
+    Microsoft::WRL::ComPtr<IAccessible> child_accessible;
     if (S_OK == parent_accessible->get_accChild(
                     childid_index, child_dispatch.GetAddressOf()) &&
         S_OK == child_dispatch.CopyTo(child_accessible.GetAddressOf())) {
@@ -610,8 +640,14 @@ int AXPlatformNodeWin::GetIndexInParent() {
         return index - 1;
     }
   }
-
   return -1;
+}
+
+base::string16 AXPlatformNodeWin::GetText() {
+  if (IsChildOfLeaf())
+    return AXPlatformNodeBase::GetText();
+
+  return hypertext_.hypertext;
 }
 
 //
@@ -995,7 +1031,7 @@ STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
   }
 
   //
-  // Document special case (Use the document's url)
+  // Document special case (Use the document's URL)
   //
   if (target->GetData().role == AX_ROLE_ROOT_WEB_AREA ||
       target->GetData().role == AX_ROLE_WEB_AREA) {
@@ -1026,7 +1062,7 @@ STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
   if (result.empty() && target->IsRangeValueSupported()) {
     float fval;
     if (target->GetFloatAttribute(AX_ATTR_VALUE_FOR_RANGE, &fval)) {
-      result = base::UTF8ToUTF16(base::DoubleToString(fval));
+      result = base::NumberToString16(fval);
       *value = SysAllocString(result.c_str());
       DCHECK(*value);
       return S_OK;
@@ -1034,11 +1070,8 @@ STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
   }
 
   // Last resort (Use innerText)
-  if (result.empty() &&
-      (target->IsSimpleTextControl() || target->IsRichTextControl()) &&
-      !target->IsNativeTextControl()) {
+  if (result.empty() && target->IsRichTextField())
     result = target->GetInnerText();
-  }
 
   *value = SysAllocString(result.c_str());
   DCHECK(*value);
@@ -1061,58 +1094,37 @@ STDMETHODIMP AXPlatformNodeWin::put_accValue(VARIANT var_id,
 STDMETHODIMP AXPlatformNodeWin::get_accSelection(VARIANT* selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ACC_SELECTION);
   COM_OBJECT_VALIDATE_1_ARG(selected);
-
-  if (GetData().role != AX_ROLE_LIST_BOX)
-    return E_NOTIMPL;
-
-  unsigned long selected_count = 0;
-  for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-    AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
+  std::vector<Microsoft::WRL::ComPtr<IDispatch>> selected_nodes;
+  for (int i = 0; i < delegate_->GetChildCount(); ++i) {
+    auto* node = static_cast<AXPlatformNodeWin*>(
         FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
     if (node && node->GetData().HasState(AX_STATE_SELECTED))
-      ++selected_count;
+      selected_nodes.emplace_back(node);
   }
 
-  if (selected_count == 0) {
+  if (selected_nodes.empty()) {
     selected->vt = VT_EMPTY;
     return S_OK;
   }
 
-  if (selected_count == 1) {
-    for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-      AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
-          FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
-      if (node && node->GetData().HasState(AX_STATE_SELECTED)) {
-        selected->vt = VT_DISPATCH;
-        selected->pdispVal = node;
-        node->AddRef();
-        return S_OK;
+  if (selected_nodes.size() == 1) {
+    selected->vt = VT_DISPATCH;
+    selected->pdispVal = selected_nodes[0].Detach();
+    return S_OK;
       }
-    }
-  }
 
   // Multiple items are selected.
-  base::win::EnumVariant* enum_variant =
-      new base::win::EnumVariant(selected_count);
-  enum_variant->AddRef();
-  unsigned long index = 0;
-  for (auto i = 0; i < delegate_->GetChildCount(); ++i) {
-    AXPlatformNodeWin* node = static_cast<AXPlatformNodeWin*>(
-        FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
-
-    if (node && node->GetData().HasState(AX_STATE_SELECTED)) {
-      enum_variant->ItemAt(index)->vt = VT_DISPATCH;
-      enum_variant->ItemAt(index)->pdispVal = node;
-      node->AddRef();
-      ++index;
-    }
+      LONG selected_count = static_cast<LONG>(selected_nodes.size());
+      auto* enum_variant = new base::win::EnumVariant(selected_count);
+      enum_variant->AddRef();
+      for (LONG i = 0; i < selected_count; ++i) {
+        enum_variant->ItemAt(i)->vt = VT_DISPATCH;
+        enum_variant->ItemAt(i)->pdispVal = selected_nodes[i].Detach();
   }
   selected->vt = VT_UNKNOWN;
-  selected->punkVal = static_cast<IUnknown*>(
-      static_cast<base::win::IUnknownImpl*>(enum_variant));
-  return S_OK;
+  HRESULT hr = enum_variant->QueryInterface(IID_PPV_ARGS(&V_UNKNOWN(selected)));
+  enum_variant->Release();
+  return hr;
 }
 
 STDMETHODIMP AXPlatformNodeWin::accSelect(
@@ -1323,7 +1335,7 @@ STDMETHODIMP AXPlatformNodeWin::get_groupPosition(LONG* group_level,
   *similar_items_in_group = GetIntAttribute(ui::AX_ATTR_SET_SIZE);
   *position_in_group = GetIntAttribute(ui::AX_ATTR_POS_IN_SET);
 
-  if (*group_level == *similar_items_in_group == *position_in_group == 0)
+  if (!*group_level && !*similar_items_in_group && !*position_in_group)
     return S_FALSE;
   return S_OK;
 }
@@ -1350,14 +1362,69 @@ STDMETHODIMP AXPlatformNodeWin::get_extendedRole(BSTR* extended_role) {
 }
 
 STDMETHODIMP AXPlatformNodeWin::scrollTo(enum IA2ScrollType scroll_type) {
-  return E_NOTIMPL;
+  COM_OBJECT_VALIDATE();
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_IA2_SCROLL_TO);
+
+  gfx::Rect r = delegate_->GetScreenBoundsRect();
+  switch (scroll_type) {
+    case IA2_SCROLL_TYPE_TOP_LEFT:
+      r = gfx::Rect(r.x(), r.y(), 0, 0);
+      break;
+    case IA2_SCROLL_TYPE_BOTTOM_RIGHT:
+      r = gfx::Rect(r.right(), r.bottom(), 0, 0);
+      break;
+    case IA2_SCROLL_TYPE_TOP_EDGE:
+      r = gfx::Rect(r.x(), r.y(), r.width(), 0);
+      break;
+    case IA2_SCROLL_TYPE_BOTTOM_EDGE:
+      r = gfx::Rect(r.x(), r.bottom(), r.width(), 0);
+      break;
+    case IA2_SCROLL_TYPE_LEFT_EDGE:
+      r = gfx::Rect(r.x(), r.y(), 0, r.height());
+      break;
+    case IA2_SCROLL_TYPE_RIGHT_EDGE:
+      r = gfx::Rect(r.right(), r.y(), 0, r.height());
+      break;
+    case IA2_SCROLL_TYPE_ANYWHERE:
+    default:
+      break;
+  }
+
+  ui::AXActionData action_data;
+  action_data.target_node_id = GetData().id;
+  action_data.action = ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE;
+  action_data.target_rect = r;
+  delegate_->AccessibilityPerformAction(action_data);
+  return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::scrollToPoint(
     enum IA2CoordinateType coordinate_type,
     LONG x,
     LONG y) {
-  return E_NOTIMPL;
+  COM_OBJECT_VALIDATE();
+
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SCROLL_TO_POINT);
+
+  gfx::Point scroll_to(x, y);
+
+  if (coordinate_type == IA2_COORDTYPE_SCREEN_RELATIVE) {
+    scroll_to -= delegate_->GetScreenBoundsRect().OffsetFromOrigin();
+  } else if (coordinate_type == IA2_COORDTYPE_PARENT_RELATIVE) {
+    if (GetParent()) {
+      AXPlatformNodeBase* base = FromNativeViewAccessible(GetParent());
+      scroll_to += base->delegate_->GetScreenBoundsRect().OffsetFromOrigin();
+    }
+  } else {
+    return E_INVALIDARG;
+  }
+
+  ui::AXActionData action_data;
+  action_data.target_node_id = GetData().id;
+  action_data.action = ui::AX_ACTION_SCROLL_TO_POINT;
+  action_data.target_point = scroll_to;
+  delegate_->AccessibilityPerformAction(action_data);
+  return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_nExtendedStates(LONG* n_extended_states) {
@@ -2043,6 +2110,9 @@ STDMETHODIMP AXPlatformNodeWin::get_columnHeaderCells(
     return E_INVALIDARG;
 
   *n_column_header_cells = 0;
+  if (GetData().role != AX_ROLE_CELL)
+    return S_FALSE;
+
   AXPlatformNodeBase* table = GetTable();
   if (!table) {
     return S_FALSE;
@@ -2108,6 +2178,9 @@ STDMETHODIMP AXPlatformNodeWin::get_rowHeaderCells(IUnknown*** cell_accessibles,
     return E_INVALIDARG;
 
   *n_row_header_cells = 0;
+  if (GetData().role != AX_ROLE_CELL)
+    return S_FALSE;
+
   AXPlatformNodeBase* table = GetTable();
   if (!table) {
     return S_FALSE;
@@ -2213,7 +2286,11 @@ STDMETHODIMP AXPlatformNodeWin::get_table(IUnknown** table) {
 //
 
 STDMETHODIMP AXPlatformNodeWin::get_nCharacters(LONG* n_characters) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_CHARACTERS);
   COM_OBJECT_VALIDATE_1_ARG(n_characters);
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes |
+                                       ui::AXMode::kInlineTextBoxes);
+
   base::string16 text = TextForIAccessibleText();
   *n_characters = static_cast<LONG>(text.size());
 
@@ -2221,32 +2298,68 @@ STDMETHODIMP AXPlatformNodeWin::get_nCharacters(LONG* n_characters) {
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_caretOffset(LONG* offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CARET_OFFSET);
   COM_OBJECT_VALIDATE_1_ARG(offset);
-  *offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_END));
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+  *offset = 0;
+
+  if (!HasCaret())
+    return S_FALSE;
+
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  // The caret is always at the end of the selection.
+  *offset = selection_end;
+  if (*offset < 0)
+    return S_FALSE;
+
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_nSelections(LONG* n_selections) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTIONS);
   COM_OBJECT_VALIDATE_1_ARG(n_selections);
-  int sel_start = GetIntAttribute(AX_ATTR_TEXT_SEL_START);
-  int sel_end = GetIntAttribute(AX_ATTR_TEXT_SEL_END);
-  if (sel_start != sel_end)
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
+  *n_selections = 0;
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  if (selection_start >= 0 && selection_end >= 0 &&
+      selection_start != selection_end) {
     *n_selections = 1;
-  else
-    *n_selections = 0;
+  }
   return S_OK;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_selection(LONG selection_index,
                                               LONG* start_offset,
                                               LONG* end_offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTION);
   COM_OBJECT_VALIDATE_2_ARGS(start_offset, end_offset);
-  if (selection_index != 0)
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
+  if (!start_offset || !end_offset || selection_index != 0)
     return E_INVALIDARG;
 
-  *start_offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_START));
-  *end_offset = static_cast<LONG>(GetIntAttribute(AX_ATTR_TEXT_SEL_END));
-  return S_OK;
+  *start_offset = 0;
+  *end_offset = 0;
+  int selection_start, selection_end;
+  GetSelectionOffsets(&selection_start, &selection_end);
+  if (selection_start >= 0 && selection_end >= 0 &&
+      selection_start != selection_end) {
+    // We should ignore the direction of the selection when exposing start and
+    // end offsets. According to the IA2 Spec the end offset is always increased
+    // by one past the end of the selection. This wouldn't make sense if
+    // end < start.
+    if (selection_end < selection_start)
+      std::swap(selection_start, selection_end);
+
+    *start_offset = selection_start;
+    *end_offset = selection_end;
+    return S_OK;
+  }
+
+  return E_INVALIDARG;
 }
 
 STDMETHODIMP AXPlatformNodeWin::get_text(LONG start_offset,
@@ -2263,7 +2376,7 @@ STDMETHODIMP AXPlatformNodeWin::get_text(LONG start_offset,
     start_offset = static_cast<LONG>(sel_end);
   }
   if (end_offset == IA2_TEXT_OFFSET_LENGTH) {
-    end_offset = static_cast<LONG>(text_str.size());
+    end_offset = len;
   } else if (end_offset == IA2_TEXT_OFFSET_CARET) {
     end_offset = static_cast<LONG>(sel_end);
   }
@@ -2377,11 +2490,19 @@ STDMETHODIMP AXPlatformNodeWin::get_offsetAtPoint(
 
 STDMETHODIMP AXPlatformNodeWin::addSelection(LONG start_offset,
                                              LONG end_offset) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADD_SELECTION);
+  COM_OBJECT_VALIDATE();
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
   // We only support one selection.
   return setSelection(0, start_offset, end_offset);
 }
 
 STDMETHODIMP AXPlatformNodeWin::removeSelection(LONG selection_index) {
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_REMOVE_SELECTION);
+  COM_OBJECT_VALIDATE();
+  AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
+
   if (selection_index != 0)
     return E_INVALIDARG;
   // Simply collapse the selection to the position of the caret if a caret is
@@ -2541,7 +2662,8 @@ int AXPlatformNodeWin::MSAARole() {
     case AX_ROLE_COLUMN_HEADER:
       return ROLE_SYSTEM_COLUMNHEADER;
 
-    case AX_ROLE_COMBO_BOX:
+    case AX_ROLE_COMBO_BOX_GROUPING:
+    case AX_ROLE_COMBO_BOX_MENU_BUTTON:
       return ROLE_SYSTEM_COMBOBOX;
 
     case AX_ROLE_COMPLEMENTARY:
@@ -2771,6 +2893,9 @@ int AXPlatformNodeWin::MSAARole() {
     case AX_ROLE_SEARCH_BOX:
       return ROLE_SYSTEM_TEXT;
 
+    case AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX:
+      return ROLE_SYSTEM_COMBOBOX;
+
     case AX_ROLE_ABBR:
     case AX_ROLE_TIME:
       return ROLE_SYSTEM_TEXT;
@@ -2893,7 +3018,6 @@ bool AXPlatformNodeWin::IsWebAreaForPresentationalIframe() {
 
 int32_t AXPlatformNodeWin::ComputeIA2State() {
   const AXNodeData& data = GetData();
-
   int32_t ia2_state = IA2_STATE_OPAQUE;
 
   const auto checked_state =
@@ -2912,20 +3036,16 @@ int32_t AXPlatformNodeWin::ComputeIA2State() {
   if (data.HasState(AX_STATE_HORIZONTAL))
     ia2_state |= IA2_STATE_HORIZONTAL;
 
-  const bool is_editable = data.HasState(AX_STATE_EDITABLE);
-  if (is_editable)
+  if (data.HasState(AX_STATE_EDITABLE))
     ia2_state |= IA2_STATE_EDITABLE;
 
-  if (IsRichTextControl() || IsEditField(data.role)) {
-    // Support multi/single line states if root editable or appropriate role.
-    // We support the edit box roles even if the area is not actually editable,
-    // because it is technically feasible for JS to implement the edit box
-    // by controlling selection.
+  if (IsPlainTextField() || IsRichTextField()) {
     if (data.HasState(AX_STATE_MULTILINE)) {
       ia2_state |= IA2_STATE_MULTI_LINE;
     } else {
       ia2_state |= IA2_STATE_SINGLE_LINE;
     }
+    ia2_state |= IA2_STATE_SELECTABLE_TEXT;
   }
 
   if (!GetStringAttribute(AX_ATTR_AUTO_COMPLETE).empty())
@@ -2936,19 +3056,8 @@ int32_t AXPlatformNodeWin::ComputeIA2State() {
 
   switch (data.role) {
     case AX_ROLE_MENU_LIST_POPUP:
-      ia2_state &= ~(IA2_STATE_EDITABLE);
-      break;
     case AX_ROLE_MENU_LIST_OPTION:
       ia2_state &= ~(IA2_STATE_EDITABLE);
-      break;
-    case AX_ROLE_TEXT_FIELD:
-    case AX_ROLE_SEARCH_BOX:
-      if (data.HasState(AX_STATE_MULTILINE)) {
-        ia2_state |= IA2_STATE_MULTI_LINE;
-      } else {
-        ia2_state |= IA2_STATE_SINGLE_LINE;
-      }
-      ia2_state |= IA2_STATE_SELECTABLE_TEXT;
       break;
     default:
       break;
@@ -3153,6 +3262,9 @@ std::vector<base::string16> AXPlatformNodeWin::ComputeIA2Attributes() {
       case AX_ARIA_CURRENT_STATE_LOCATION:
         result.push_back(L"current:location");
         break;
+      case AX_ARIA_CURRENT_STATE_UNCLIPPED_LOCATION:
+        result.push_back(L"current:unclippedLocation");
+        break;
       case AX_ARIA_CURRENT_STATE_DATE:
         result.push_back(L"current:date");
         break;
@@ -3237,7 +3349,8 @@ std::vector<base::string16> AXPlatformNodeWin::ComputeIA2Attributes() {
   if (IsRangeValueSupported()) {
     base::string16 value = GetRangeValueText();
     SanitizeStringAttributeForIA2(value, &value);
-    result.push_back(L"valuetext:" + value);
+    if (!value.empty())
+      result.push_back(L"valuetext:" + value);
   }
 
   // Expose dropeffect attribute.
@@ -3289,19 +3402,78 @@ std::vector<base::string16> AXPlatformNodeWin::ComputeIA2Attributes() {
   // object (as opposed to treating it like a native Windows text box).
   // The text-model:a1 attribute is documented here:
   // http://www.linuxfoundation.org/collaborate/workgroups/accessibility/ia2/ia2_implementation_guide
-  if (GetData().role == AX_ROLE_TEXT_FIELD) {
+  if (IsPlainTextField() || IsRichTextField())
     result.push_back(L"text-model:a1;");
-  }
 
   // Expose input-text type attribute.
   base::string16 type;
   base::string16 html_tag = GetString16Attribute(AX_ATTR_HTML_TAG);
-  if (IsSimpleTextControl() && html_tag == L"input" &&
+  if (IsPlainTextField() && html_tag == L"input" &&
       GetData().GetHtmlAttribute("type", &type)) {
     SanitizeStringAttributeForIA2(type, &type);
     result.push_back(L"text-input-type:" + type);
   }
 
+  return result;
+}
+
+base::string16 AXPlatformNodeWin::GetValue() {
+  base::string16 value = AXPlatformNodeBase::GetValue();
+
+  // If this doesn't have a value and is linked then set its value to the URL
+  // attribute. This allows screen readers to read an empty link's
+  // destination.
+  // TODO(dougt): Look into ensuring that on click handlers correctly provide
+  // a value here.
+  if (value.empty() && (MSAAState() & STATE_SYSTEM_LINKED))
+    value = GetString16Attribute(ui::AX_ATTR_URL);
+
+  return value;
+}
+
+AXHypertext AXPlatformNodeWin::ComputeHypertext() {
+  AXHypertext result;
+
+  if (IsPlainTextField()) {
+    result.hypertext = GetValue();
+    return result;
+  }
+
+  int child_count = delegate_->GetChildCount();
+
+  if (!child_count) {
+    if (IsRichTextField()) {
+      // We don't want to expose any associated label in IA2 Hypertext.
+      return result;
+    }
+    result.hypertext = GetString16Attribute(ui::AX_ATTR_NAME);
+    return result;
+  }
+
+  // Construct the hypertext for this node, which contains the concatenation
+  // of all of the static text and widespace of this node's children and an
+  // embedded object character for all the other children. Build up a map from
+  // the character index of each embedded object character to the id of the
+  // child object it points to.
+  base::string16 hypertext;
+  for (int i = 0; i < child_count; ++i) {
+    auto* child = static_cast<AXPlatformNodeWin*>(
+        FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
+
+    DCHECK(child);
+    // Similar to Firefox, we don't expose text-only objects in IA2 hypertext.
+    if (child->IsTextOnlyObject()) {
+      hypertext += child->GetString16Attribute(ui::AX_ATTR_NAME);
+    } else {
+      int32_t char_offset = static_cast<int32_t>(hypertext.size());
+      int32_t child_unique_id = child->unique_id();
+      int32_t index = static_cast<int32_t>(result.hyperlinks.size());
+      result.hyperlink_offset_to_index[char_offset] = index;
+      result.hyperlinks.push_back(child_unique_id);
+      hypertext += kEmbeddedCharacter;
+    }
+  }
+  result.hypertext = hypertext;
   return result;
 }
 
@@ -3400,7 +3572,8 @@ int AXPlatformNodeWin::MSAAState() {
       msaa_state |= STATE_SYSTEM_HOTTRACKED;
   }
 
-  // TODO(dougt) Why do we set any state on AX_ROLE_IGNORED?
+  // If the role is IGNORED, we want these elements to be invisible so that
+  // these nodes are hidden from the screen reader.
   if (data.HasState(AX_STATE_INVISIBLE) || GetData().role == AX_ROLE_IGNORED) {
     msaa_state |= STATE_SYSTEM_INVISIBLE;
   }
@@ -3414,7 +3587,7 @@ int AXPlatformNodeWin::MSAAState() {
     msaa_state |= STATE_SYSTEM_MULTISELECTABLE;
   }
 
-  if (data.HasState(AX_STATE_OFFSCREEN))
+  if (delegate_->IsOffscreen())
     msaa_state |= STATE_SYSTEM_OFFSCREEN;
 
   if (data.HasState(AX_STATE_PROTECTED))
@@ -3492,6 +3665,11 @@ int AXPlatformNodeWin::MSAAState() {
   if (GetData().role == AX_ROLE_LINK)
     msaa_state |= STATE_SYSTEM_LINKED;
 
+  // Special case for indeterminate progressbar.
+  if (GetData().role == AX_ROLE_PROGRESS_INDICATOR &&
+      !HasFloatAttribute(ui::AX_ATTR_VALUE_FOR_RANGE))
+    msaa_state |= STATE_SYSTEM_MIXED;
+
   return msaa_state;
 }
 
@@ -3549,16 +3727,21 @@ void AXPlatformNodeWin::RemoveAlertTarget() {
 }
 
 base::string16 AXPlatformNodeWin::TextForIAccessibleText() {
-  if (GetData().role == AX_ROLE_TEXT_FIELD)
+  // Special case allows us to get text even in non-HTML case, e.g. browser UI.
+  if (IsPlainTextField())
     return GetString16Attribute(AX_ATTR_VALUE);
-  return GetString16Attribute(AX_ATTR_NAME);
+  return GetText();
 }
 
 void AXPlatformNodeWin::HandleSpecialTextOffset(LONG* offset) {
   if (*offset == IA2_TEXT_OFFSET_LENGTH) {
-    *offset = static_cast<LONG>(TextForIAccessibleText().length());
+    *offset = static_cast<LONG>(GetText().length());
   } else if (*offset == IA2_TEXT_OFFSET_CARET) {
-    get_caretOffset(offset);
+    int selection_start, selection_end;
+    GetSelectionOffsets(&selection_start, &selection_end);
+    if (selection_end < 0)
+      *offset = 0;
+    *offset = static_cast<LONG>(selection_end);
   }
 }
 
@@ -3668,6 +3851,322 @@ bool AXPlatformNodeWin::IsAncestorComboBox() {
   if (parent->MSAARole() == ROLE_SYSTEM_COMBOBOX)
     return true;
   return parent->IsAncestorComboBox();
+}
+
+bool AXPlatformNodeWin::IsHyperlink() {
+  int32_t hyperlink_index = -1;
+  AXPlatformNodeWin* parent =
+      static_cast<AXPlatformNodeWin*>(FromNativeViewAccessible(GetParent()));
+  if (parent) {
+    hyperlink_index = parent->GetHyperlinkIndexFromChild(this);
+  }
+
+  if (hyperlink_index >= 0)
+    return true;
+  return false;
+}
+
+AXPlatformNodeWin* AXPlatformNodeWin::GetHyperlinkFromHypertextOffset(
+    int offset) {
+  std::map<int32_t, int32_t>::iterator iterator =
+      hypertext_.hyperlink_offset_to_index.find(offset);
+  if (iterator == hypertext_.hyperlink_offset_to_index.end())
+    return nullptr;
+
+  int32_t index = iterator->second;
+  DCHECK_GE(index, 0);
+  DCHECK_LT(index, static_cast<int32_t>(hypertext_.hyperlinks.size()));
+  int32_t id = hypertext_.hyperlinks[index];
+  auto* hyperlink =
+      static_cast<AXPlatformNodeWin*>(AXPlatformNodeWin::GetFromUniqueId(id));
+  if (!hyperlink)
+    return nullptr;
+  return hyperlink;
+}
+
+int32_t AXPlatformNodeWin::GetHyperlinkIndexFromChild(
+    AXPlatformNodeWin* child) {
+  if (hypertext_.hyperlinks.empty())
+    return -1;
+
+  auto iterator = std::find(hypertext_.hyperlinks.begin(),
+                            hypertext_.hyperlinks.end(), child->unique_id());
+  if (iterator == hypertext_.hyperlinks.end())
+    return -1;
+
+  return static_cast<int32_t>(iterator - hypertext_.hyperlinks.begin());
+}
+
+int32_t AXPlatformNodeWin::GetHypertextOffsetFromHyperlinkIndex(
+    int32_t hyperlink_index) {
+  for (auto& offset_index : hypertext_.hyperlink_offset_to_index) {
+    if (offset_index.second == hyperlink_index)
+      return offset_index.first;
+  }
+  return -1;
+}
+
+int32_t AXPlatformNodeWin::GetHypertextOffsetFromChild(
+    AXPlatformNodeWin* child) {
+  // TODO(dougt) DCHECK(child.owner()->PlatformGetParent() == owner());
+
+  // Handle the case when we are dealing with a text-only child.
+  // Note that this object might be a platform leaf, e.g. an ARIA searchbox.
+  // Also, text-only children should not be present at tree roots and so no
+  // cross-tree traversal is necessary.
+  if (child->IsTextOnlyObject()) {
+    int32_t hypertext_offset = 0;
+    int32_t index_in_parent = child->delegate_->GetIndexInParent();
+    DCHECK_GE(index_in_parent, 0);
+    DCHECK_LT(index_in_parent,
+              static_cast<int32_t>(delegate_->GetChildCount()));
+    for (uint32_t i = 0; i < static_cast<uint32_t>(index_in_parent); ++i) {
+      auto* sibling = static_cast<AXPlatformNodeWin*>(
+          FromNativeViewAccessible(delegate_->ChildAtIndex(i)));
+      DCHECK(sibling);
+      if (sibling->IsTextOnlyObject())
+        hypertext_offset += (int32_t)sibling->GetText().size();
+      else
+        ++hypertext_offset;
+    }
+    return hypertext_offset;
+  }
+
+  int32_t hyperlink_index = GetHyperlinkIndexFromChild(child);
+  if (hyperlink_index < 0)
+    return -1;
+
+  return GetHypertextOffsetFromHyperlinkIndex(hyperlink_index);
+}
+
+int32_t AXPlatformNodeWin::GetHypertextOffsetFromDescendant(
+    AXPlatformNodeWin* descendant) {
+  auto* parent_object = static_cast<AXPlatformNodeWin*>(
+      FromNativeViewAccessible(descendant->delegate_->GetParent()));
+  while (parent_object && parent_object != this) {
+    descendant = parent_object;
+    parent_object = static_cast<AXPlatformNodeWin*>(
+        FromNativeViewAccessible(descendant->GetParent()));
+  }
+  if (!parent_object)
+    return -1;
+
+  return parent_object->GetHypertextOffsetFromChild(descendant);
+}
+
+int AXPlatformNodeWin::GetHypertextOffsetFromEndpoint(
+    AXPlatformNodeWin* endpoint_object,
+    int endpoint_offset) {
+  // There are three cases:
+  // 1. Either the selection endpoint is inside this object or is an ancestor of
+  // of this object. endpoint_offset should be returned.
+  // 2. The selection endpoint is a pure descendant of this object. The offset
+  // of the character corresponding to the subtree in which the endpoint is
+  // located should be returned.
+  // 3. The selection endpoint is in a completely different part of the tree.
+  // Either 0 or text_length should be returned depending on the direction that
+  // one needs to travel to find the endpoint.
+
+  // Case 1.
+  //
+  // IsDescendantOf includes the case when endpoint_object == this.
+  if (IsDescendantOf(endpoint_object))
+    return endpoint_offset;
+
+  AXPlatformNodeWin* common_parent = this;
+  int32_t index_in_common_parent = delegate_->GetIndexInParent();
+  while (common_parent && !endpoint_object->IsDescendantOf(common_parent)) {
+    index_in_common_parent = common_parent->delegate_->GetIndexInParent();
+    common_parent = static_cast<AXPlatformNodeWin*>(
+        FromNativeViewAccessible(common_parent->GetParent()));
+  }
+  if (!common_parent)
+    return -1;
+
+  DCHECK_GE(index_in_common_parent, 0);
+  DCHECK(!(common_parent->IsTextOnlyObject()));
+
+  // Case 2.
+  //
+  // We already checked in case 1 if our endpoint is inside this object.
+  // We can safely assume that it is a descendant or in a completely different
+  // part of the tree.
+  if (common_parent == this) {
+    int32_t hypertext_offset =
+        GetHypertextOffsetFromDescendant(endpoint_object);
+    auto* parent = static_cast<AXPlatformNodeWin*>(
+        FromNativeViewAccessible(endpoint_object->GetParent()));
+    if (parent == this && endpoint_object->IsTextOnlyObject()) {
+      hypertext_offset += endpoint_offset;
+    }
+
+    return hypertext_offset;
+  }
+
+  // Case 3.
+  //
+  // We can safely assume that the endpoint is in another part of the tree or
+  // at common parent, and that this object is a descendant of common parent.
+  int32_t endpoint_index_in_common_parent = -1;
+  for (int i = 0; i < common_parent->delegate_->GetChildCount(); ++i) {
+    auto* child = static_cast<AXPlatformNodeWin*>(
+        common_parent->delegate_->ChildAtIndex(i));
+    DCHECK(child);
+    if (endpoint_object->IsDescendantOf(child)) {
+      endpoint_index_in_common_parent = child->delegate_->GetIndexInParent();
+      break;
+    }
+  }
+  DCHECK_GE(endpoint_index_in_common_parent, 0);
+
+  if (endpoint_index_in_common_parent < index_in_common_parent)
+    return 0;
+  if (endpoint_index_in_common_parent > index_in_common_parent)
+    return (int32_t)GetText().size();
+
+  NOTREACHED();
+  return -1;
+}
+
+bool AXPlatformNodeWin::IsSameHypertextCharacter(size_t old_char_index,
+                                                 size_t new_char_index) {
+  // For anything other than the "embedded character", we just compare the
+  // characters directly.
+  base::char16 old_ch = old_hypertext_.hypertext[old_char_index];
+  base::char16 new_ch = hypertext_.hypertext[new_char_index];
+  if (old_ch != new_ch)
+    return false;
+  if (old_ch == new_ch && new_ch != kEmbeddedCharacter)
+    return true;
+
+  // If it's an embedded character, they're only identical if the child id
+  // the hyperlink points to is the same.
+  std::map<int32_t, int32_t>& old_offset_to_index =
+      old_hypertext_.hyperlink_offset_to_index;
+  std::vector<int32_t>& old_hyperlinks = old_hypertext_.hyperlinks;
+  int32_t old_hyperlinkscount = static_cast<int32_t>(old_hyperlinks.size());
+  std::map<int32_t, int32_t>::iterator iter;
+  iter = old_offset_to_index.find((int32_t)old_char_index);
+  int old_index = (iter != old_offset_to_index.end()) ? iter->second : -1;
+  int old_child_id = (old_index >= 0 && old_index < old_hyperlinkscount)
+                         ? old_hyperlinks[old_index]
+                         : -1;
+
+  std::map<int32_t, int32_t>& new_offset_to_index =
+      hypertext_.hyperlink_offset_to_index;
+  std::vector<int32_t>& new_hyperlinks = hypertext_.hyperlinks;
+  int32_t new_hyperlinkscount = static_cast<int32_t>(new_hyperlinks.size());
+  iter = new_offset_to_index.find((int32_t)new_char_index);
+  int new_index = (iter != new_offset_to_index.end()) ? iter->second : -1;
+  int new_child_id = (new_index >= 0 && new_index < new_hyperlinkscount)
+                         ? new_hyperlinks[new_index]
+                         : -1;
+
+  return old_child_id == new_child_id;
+}
+
+void AXPlatformNodeWin::ComputeHypertextRemovedAndInserted(int* start,
+                                                           int* old_len,
+                                                           int* new_len) {
+  *start = 0;
+  *old_len = 0;
+  *new_len = 0;
+
+  const base::string16& old_text = old_hypertext_.hypertext;
+  const base::string16& new_text = GetText();
+
+  size_t common_prefix = 0;
+  while (common_prefix < old_text.size() && common_prefix < new_text.size() &&
+         IsSameHypertextCharacter(common_prefix, common_prefix)) {
+    ++common_prefix;
+  }
+
+  size_t common_suffix = 0;
+  while (common_prefix + common_suffix < old_text.size() &&
+         common_prefix + common_suffix < new_text.size() &&
+         IsSameHypertextCharacter(old_text.size() - common_suffix - 1,
+                                  new_text.size() - common_suffix - 1)) {
+    ++common_suffix;
+  }
+
+  *start = (int)common_prefix;
+  *old_len = (int)(old_text.size() - common_prefix - common_suffix);
+  *new_len = (int)(new_text.size() - common_prefix - common_suffix);
+}
+
+int AXPlatformNodeWin::GetSelectionAnchor() {
+  int32_t anchor_id = delegate_->GetTreeData().sel_anchor_object_id;
+  AXPlatformNodeWin* anchor_object =
+      static_cast<AXPlatformNodeWin*>(delegate_->GetFromNodeID(anchor_id));
+  if (!anchor_object)
+    return -1;
+
+  int anchor_offset = delegate_->GetTreeData().sel_anchor_offset;
+  return GetHypertextOffsetFromEndpoint(anchor_object, anchor_offset);
+}
+
+int AXPlatformNodeWin::GetSelectionFocus() {
+  int32_t focus_id = delegate_->GetTreeData().sel_focus_object_id;
+  AXPlatformNodeWin* focus_object =
+      static_cast<AXPlatformNodeWin*>(delegate_->GetFromNodeID(focus_id));
+  if (!focus_object)
+    return -1;
+
+  int focus_offset = delegate_->GetTreeData().sel_focus_offset;
+  return GetHypertextOffsetFromEndpoint(focus_object, focus_offset);
+}
+
+void AXPlatformNodeWin::GetSelectionOffsets(int* selection_start,
+                                            int* selection_end) {
+  DCHECK(selection_start && selection_end);
+
+  if (IsPlainTextField() &&
+      GetIntAttribute(ui::AX_ATTR_TEXT_SEL_START, selection_start) &&
+      GetIntAttribute(ui::AX_ATTR_TEXT_SEL_END, selection_end)) {
+    return;
+  }
+
+  *selection_start = GetSelectionAnchor();
+  *selection_end = GetSelectionFocus();
+  if (*selection_start < 0 || *selection_end < 0)
+    return;
+
+  // There are three cases when a selection would start and end on the same
+  // character:
+  // 1. Anchor and focus are both in a subtree that is to the right of this
+  // object.
+  // 2. Anchor and focus are both in a subtree that is to the left of this
+  // object.
+  // 3. Anchor and focus are in a subtree represented by a single embedded
+  // object character.
+  // Only case 3 refers to a valid selection because cases 1 and 2 fall
+  // outside this object in their entirety.
+  // Selections that span more than one character are by definition inside this
+  // object, so checking them is not necessary.
+  if (*selection_start == *selection_end && !HasCaret()) {
+    *selection_start = -1;
+    *selection_end = -1;
+    return;
+  }
+
+  // The IA2 Spec says that if the largest of the two offsets falls on an
+  // embedded object character and if there is a selection in that embedded
+  // object, it should be incremented by one so that it points after the
+  // embedded object character.
+  // This is a signal to AT software that the embedded object is also part of
+  // the selection.
+  int* largest_offset =
+      (*selection_start <= *selection_end) ? selection_end : selection_start;
+  AXPlatformNodeWin* hyperlink =
+      GetHyperlinkFromHypertextOffset(*largest_offset);
+  if (!hyperlink)
+    return;
+
+  LONG n_selections = 0;
+  HRESULT hr = hyperlink->get_nSelections(&n_selections);
+  DCHECK(SUCCEEDED(hr));
+  if (n_selections > 0)
+    ++(*largest_offset);
 }
 
 }  // namespace ui

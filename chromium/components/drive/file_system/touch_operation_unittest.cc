@@ -40,7 +40,7 @@ TEST_F(TouchOperationTest, TouchFile) {
       base::Time::FromUTCExploded(kLastModifiedTime, &last_modified_time_utc));
   operation.TouchFile(kTestPath, last_access_time_utc, last_modified_time_utc,
                       google_apis::test_util::CreateCopyResultCallback(&error));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(FILE_ERROR_OK, error);
 
   ResourceEntry entry;
@@ -49,6 +49,8 @@ TEST_F(TouchOperationTest, TouchFile) {
             base::Time::FromInternalValue(entry.file_info().last_accessed()));
   EXPECT_EQ(last_modified_time_utc,
             base::Time::FromInternalValue(entry.file_info().last_modified()));
+  EXPECT_EQ(last_modified_time_utc,
+            base::Time::FromInternalValue(entry.last_modified_by_me()));
   EXPECT_EQ(ResourceEntry::DIRTY, entry.metadata_edit_state());
 
   EXPECT_EQ(1U, delegate()->get_changed_files().size());

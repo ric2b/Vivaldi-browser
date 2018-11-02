@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//printing/features/features.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//services/service_manager/public/tools/test/service_test.gni")
@@ -18,6 +19,7 @@ static_library("service") {
     "//base",
     "//components/discardable_memory/client",
     "//components/discardable_memory/public/interfaces",
+    "//content/public/child",
     "//content/public/common:service_names",
     "//content/public/utility",
     "//printing/common",
@@ -25,6 +27,7 @@ static_library("service") {
   ]
 
   public_deps = [
+    "//components/printing/service/public/cpp:utils",
     "//components/printing/service/public/interfaces",
     "//services/service_manager/public/cpp",
   ]
@@ -35,48 +38,31 @@ service_manifest("pdf_compositor_manifest") {
   source = "pdf_compositor_manifest.json"
 }
 
-service("pdf_compositor_test_service") {
-  testonly = true
+if (enable_basic_printing || enable_print_preview) {
+  source_set("unit_tests") {
+    testonly = true
+    sources = [
+      "pdf_compositor_service_unittest.cc",
+    ]
 
-  sources = [
-    "test_service_main.cc",
-  ]
+    include_dirs = [ "testing/gmock/include" ]
+    deps = [
+      ":service",
+      "//base/test:test_support",
+      "//components/printing/service/public/interfaces",
+      "//mojo/common",
+      "//services/service_manager/public/cpp:service_test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+    data = [
+      "//components/test/data/printing/google.mskp",
+    ]
+  }
 
-  deps = [
-    ":service",
-    "//base",
-    "//base/test:test_support",
-  ]
-}
-
-service_test("pdf_compositor_service_unittest") {
-  testonly = true
-
-  sources = [
-    "pdf_compositor_service_unittest.cc",
-  ]
-
-  catalog = ":pdf_compositor_service_unittest_catalog"
-
-  include_dirs = [ "testing/gmock/include" ]
-  deps = [
-    ":pdf_compositor_test_service",
-    "//base",
-    "//components/printing/service/public/interfaces",
-    "//mojo/common",
-    "//services/service_manager/public/cpp:service_test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
-service_manifest("pdf_compositor_service_unittest_manifest") {
-  name = "pdf_compositor_service_unittest"
-  source = "pdf_compositor_service_unittest_manifest.json"
-}
-
-catalog("pdf_compositor_service_unittest_catalog") {
-  testonly = true
-  embedded_services = [ ":pdf_compositor_service_unittest_manifest" ]
-  standalone_services = [ ":pdf_compositor_manifest" ]
+  service_manifest("pdf_compositor_service_unittest_manifest") {
+    name = "pdf_compositor_service_unittest"
+    source = "pdf_compositor_service_unittest_manifest.json"
+    packaged_services = [ ":pdf_compositor_manifest" ]
+  }
 }

@@ -155,7 +155,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   const gfx::Image& GetFavicon(const BookmarkNode* node);
 
   // Returns the type of the favicon for |node|. If the favicon has not yet
-  // been loaded, it returns |favicon_base::INVALID_ICON|.
+  // been loaded, it returns |favicon_base::IconType::kInvalid|.
   favicon_base::IconType GetFaviconType(const BookmarkNode* node);
 
   // Sets the title of |node|.
@@ -178,6 +178,9 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Returns true if there are bookmarks, otherwise returns false.
   // This method is thread safe.
   bool HasBookmarks();
+
+  // Returns true is there is no user created bookmarks or folders.
+  bool HasNoUserCreatedBookmarksOrFolders();
 
   // Returns true if the specified URL is bookmarked.
   //

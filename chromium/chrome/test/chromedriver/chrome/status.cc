@@ -32,6 +32,8 @@ const char* DefaultMessageForStatusCode(StatusCode code) {
       return "unknown error";
     case kInvalidArgument:
       return "invalid argument";
+    case kMoveTargetOutOfBounds:
+      return "move target out of bounds";
     case kElementNotInteractable:
       return "element not interactable";
     case kUnsupportedOperation:
@@ -68,6 +70,8 @@ const char* DefaultMessageForStatusCode(StatusCode code) {
       return "tab crashed";
     case kNoSuchCookie:
       return "no such cookie";
+    case kUnableToSetCookie:
+      return "unable to set cookie";
     default:
       return "<unknown>";
   }

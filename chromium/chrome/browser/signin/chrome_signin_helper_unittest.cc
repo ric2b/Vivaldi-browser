@@ -9,9 +9,9 @@
 
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/scoped_account_consistency.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_features.h"
+#include "components/signin/core/browser/signin_features.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/http/http_response_headers.h"
@@ -77,7 +77,7 @@ TEST_F(ChromeSigninHelperTest, RemoveDiceSigninHeader) {
                                                 TRAFFIC_ANNOTATION_FOR_TESTS);
   content::ResourceRequestInfo::AllocateForTesting(
       request_.get(), content::RESOURCE_TYPE_MAIN_FRAME, nullptr, -1, -1, -1,
-      true, false, false, true, content::PREVIEWS_OFF);
+      true, false, true, content::PREVIEWS_OFF, nullptr);
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
       kGaiaUrl, base::MakeUnique<TestRequestInterceptor>());
   request_->Start();

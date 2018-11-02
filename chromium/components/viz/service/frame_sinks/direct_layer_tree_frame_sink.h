@@ -7,13 +7,13 @@
 
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
-#include "cc/output/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
-#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "components/viz/service/viz_service_export.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
 namespace cc {
 class LocalSurfaceIdAllocator;
@@ -28,7 +28,7 @@ class Display;
 // client's frame being the root surface of the Display.
 class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
-      public CompositorFrameSinkSupportClient,
+      public mojom::CompositorFrameSinkClient,
       public ExternalBeginFrameSourceClient,
       public DisplayClient {
  public:
@@ -54,31 +54,37 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   // LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(CompositorFrame frame) override;
   void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
   // DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              const cc::RenderPassList& render_passes) override;
+                              const RenderPassList& render_passes) override;
   void DisplayDidDrawAndSwap() override;
 
  protected:
   std::unique_ptr<CompositorFrameSinkSupport> support_;  // protected for test.
 
  private:
-  // CompositorFrameSinkSupportClient implementation:
+  // mojom::CompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
       const std::vector<ReturnedResource>& resources) override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
   void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<ReturnedResource>& resources) override;
-  void WillDrawSurface(const LocalSurfaceId& local_surface_id,
-                       const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
   // ExternalBeginFrameSourceClient implementation:
   void OnNeedsBeginFrames(bool needs_begin_frame) override;
+
+  // ContextLostObserver implementation:
+  void OnContextLost() override;
 
   // This class is only meant to be used on a single thread.
   THREAD_CHECKER(thread_checker_);

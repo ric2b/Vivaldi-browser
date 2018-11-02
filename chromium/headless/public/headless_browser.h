@@ -12,13 +12,14 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "headless/public/headless_browser_context.h"
 #include "headless/public/headless_export.h"
 #include "headless/public/headless_web_contents.h"
-#include "net/base/ip_endpoint.h"
+#include "net/base/host_port_pair.h"
 #include "ui/gfx/geometry/size.h"
 
 #if defined(OS_WIN)
@@ -102,40 +103,43 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
 
   Options& operator=(Options&& options);
 
-  // Command line options to be passed to browser.
+  // Command line options to be passed to browser. Initialized in constructor.
   int argc;
   const char** argv;
 
 #if defined(OS_WIN)
   // Set hardware instance if available, otherwise it defaults to 0.
-  HINSTANCE instance;
+  HINSTANCE instance = 0;
 
   // Set with sandbox information. This has to be already initialized.
-  sandbox::SandboxInterfaceInfo* sandbox_info;
+  sandbox::SandboxInterfaceInfo* sandbox_info = nullptr;
 #endif
 
   // Address at which DevTools should listen for connections. Disabled by
   // default. Mutually exclusive with devtools_socket_fd.
-  net::IPEndPoint devtools_endpoint;
+  net::HostPortPair devtools_endpoint;
 
   // The fd of an already-open socket inherited from a parent process. Disabled
   // by default. Mutually exclusive with devtools_endpoint.
-  size_t devtools_socket_fd;
+  size_t devtools_socket_fd = 0;
 
   // A single way to test whether the devtools server has been requested.
   bool DevtoolsServerEnabled();
 
   // Optional message pump that overrides the default. Must outlive the browser.
-  base::MessagePump* message_pump;
+  base::MessagePump* message_pump = nullptr;
 
   // Run the browser in single process mode instead of using separate renderer
   // processes as per default. Note that this also disables any sandboxing of
   // web content, which can be a security risk.
-  bool single_process_mode;
+  bool single_process_mode = false;
 
   // Run the browser without renderer sandbox. This option can be
   // a security risk and should be used with caution.
-  bool disable_sandbox;
+  bool disable_sandbox = false;
+
+  // Whether or not to enable content::ResourceScheduler. Enabled by default.
+  bool enable_resource_scheduler = true;
 
   // Choose the GL implementation to use for rendering. A suitable
   // implementantion is selected by default. Setting this to an empty
@@ -153,7 +157,7 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   std::string user_agent;
 
   // The ProxyConfig to use. The system proxy settings are used by default.
-  std::unique_ptr<net::ProxyConfig> proxy_config;
+  std::unique_ptr<net::ProxyConfig> proxy_config = nullptr;
 
   // Comma-separated list of rules that control how hostnames are mapped. See
   // chrome::switches::kHostRules for a description for the format.
@@ -168,7 +172,10 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   base::FilePath user_data_dir;
 
   // Run a browser context in an incognito mode. Enabled by default.
-  bool incognito_mode;
+  bool incognito_mode = true;
+
+  // Whether cookies are allowed. Enabled by default.
+  bool allow_cookies = true;
 
   // Set a callback that is invoked to override WebPreferences for RenderViews
   // created within the HeadlessBrowser. Called whenever the WebPreferences of a
@@ -178,10 +185,25 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   // exposed WebPreferences API, so use with care.
   base::Callback<void(WebPreferences*)> override_web_preferences_callback;
 
+  // Set a callback that is invoked when a new child process is spawned or
+  // forked and allows adding additional command line flags to the child
+  // process's command line. Executed on the browser main thread.
+  // |child_browser_context| points to the BrowserContext of the child
+  // process, but will only be set if the child process is a renderer process.
+  //
+  // NOTE: This callback may be called on the UI or IO thread even after the
+  // HeadlessBrowser has been destroyed.
+  using AppendCommandLineFlagsCallback =
+      base::Callback<void(base::CommandLine* command_line,
+                          HeadlessBrowserContext* child_browser_context,
+                          const std::string& child_process_type,
+                          int child_process_id)>;
+  AppendCommandLineFlagsCallback append_command_line_flags_callback;
+
   // Minidump crash reporter settings. Crash reporting is disabled by default.
   // By default crash dumps are written to the directory containing the
   // executable.
-  bool enable_crash_reporter;
+  bool enable_crash_reporter = false;
   base::FilePath crash_dumps_dir;
 
   // Reminder: when adding a new field here, do not forget to add it to
@@ -200,13 +222,16 @@ class HEADLESS_EXPORT HeadlessBrowser::Options::Builder {
 
   // Browser-wide settings.
 
-  Builder& EnableDevToolsServer(const net::IPEndPoint& endpoint);
+  Builder& EnableDevToolsServer(const net::HostPortPair& endpoint);
   Builder& EnableDevToolsServer(const size_t socket_fd);
   Builder& SetMessagePump(base::MessagePump* message_pump);
   Builder& SetSingleProcessMode(bool single_process_mode);
   Builder& SetDisableSandbox(bool disable_sandbox);
+  Builder& SetEnableResourceScheduler(bool enable_resource_scheduler);
   Builder& SetGLImplementation(const std::string& gl_implementation);
   Builder& AddMojoServiceName(const std::string& mojo_service_name);
+  Builder& SetAppendCommandLineFlagsCallback(
+      const Options::AppendCommandLineFlagsCallback& callback);
 #if defined(OS_WIN)
   Builder& SetInstance(HINSTANCE instance);
   Builder& SetSandboxInfo(sandbox::SandboxInterfaceInfo* sandbox_info);
@@ -223,8 +248,9 @@ class HEADLESS_EXPORT HeadlessBrowser::Options::Builder {
   Builder& SetWindowSize(const gfx::Size& window_size);
   Builder& SetUserDataDir(const base::FilePath& user_data_dir);
   Builder& SetIncognitoMode(bool incognito_mode);
+  Builder& SetAllowCookies(bool allow_cookies);
   Builder& SetOverrideWebPreferencesCallback(
-      base::Callback<void(WebPreferences*)> callback);
+      const base::Callback<void(WebPreferences*)>& callback);
   Builder& SetCrashReporterEnabled(bool enabled);
   Builder& SetCrashDumpsDir(const base::FilePath& dir);
 

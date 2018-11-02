@@ -26,6 +26,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/nacl/common/features.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/service_worker_context.h"
@@ -37,7 +38,7 @@
 
 namespace {
 
-const std::string kInstallAndWaitForActivatedPage =
+const char kInstallAndWaitForActivatedPage[] =
     "<script>"
     "navigator.serviceWorker.register('./sw.js', {scope: './scope/'})"
     "  .then(function(reg) {"
@@ -63,7 +64,7 @@ class ChromeServiceWorkerTest : public InProcessBrowserTest {
 
   void WriteFile(const base::FilePath::StringType& filename,
                  base::StringPiece contents) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     EXPECT_EQ(base::checked_cast<int>(contents.size()),
               base::WriteFile(service_worker_dir_.GetPath().Append(filename),
                               contents.data(), contents.size()));
@@ -358,11 +359,17 @@ class ChromeServiceWorkerManifestFetchTest
 
  private:
   void ExecuteJavaScriptForTests(const std::string& js) {
+    base::RunLoop run_loop;
     browser()
         ->tab_strip_model()
         ->GetActiveWebContents()
         ->GetMainFrame()
-        ->ExecuteJavaScriptForTests(base::ASCIIToUTF16(js));
+        ->ExecuteJavaScriptForTests(
+            base::ASCIIToUTF16(js),
+            base::Bind([](const base::Closure& quit_callback,
+                          const base::Value* result) { quit_callback.Run(); },
+                       run_loop.QuitClosure()));
+    run_loop.Run();
   }
 
   std::string GetManifestAndIssuedRequests() {
@@ -414,7 +421,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerManifestFetchTest,
                                "use-credentials"));
 }
 
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 class ChromeServiceWorkerFetchPPAPITest : public ChromeServiceWorkerFetchTest {
  protected:
   ChromeServiceWorkerFetchPPAPITest() {}
@@ -603,7 +610,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchPPAPIPrivateTest,
   EXPECT_EQ(GetRequestStringForPNACL("#OtherCORSCredentials"),
             ExecutePNACLUrlLoaderTest("OtherCORSCredentials"));
 }
-#endif  // !defined(DISABLE_NACL)
+#endif  // BUILDFLAG(ENABLE_NACL)
 
 class ChromeServiceWorkerNavigationHintTest : public ChromeServiceWorkerTest {
  protected:
@@ -614,9 +621,9 @@ class ChromeServiceWorkerNavigationHintTest : public ChromeServiceWorkerTest {
     base::RunLoop run_loop;
     GetServiceWorkerContext()->StartServiceWorkerForNavigationHint(
         embedded_test_server()->GetURL(scope),
-        base::Bind(&ExpectResultAndRun<
-                       content::StartServiceWorkerForNavigationHintResult>,
-                   expected_result, run_loop.QuitClosure()));
+        base::BindOnce(&ExpectResultAndRun<
+                           content::StartServiceWorkerForNavigationHintResult>,
+                       expected_result, run_loop.QuitClosure()));
     run_loop.Run();
     if (expected_started) {
       histogram_tester_.ExpectBucketCount(

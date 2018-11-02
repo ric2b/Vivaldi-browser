@@ -11,9 +11,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/utility_process_host.h"
+#include "services/service_manager/public/cpp/identity.h"
 
 namespace base {
 class FilePath;
@@ -22,6 +24,7 @@ class Thread;
 }
 
 namespace content {
+class BrowserMessageFilter;
 class BrowserChildProcessHostImpl;
 class InProcessChildThreadParams;
 
@@ -44,10 +47,7 @@ class CONTENT_EXPORT UtilityProcessHostImpl
   base::WeakPtr<UtilityProcessHost> AsWeakPtr() override;
   bool Send(IPC::Message* message) override;
   void SetExposedDir(const base::FilePath& dir) override;
-  void SetSandboxType(SandboxType sandbox_type) override;
-#if defined(OS_WIN)
-  void ElevatePrivileges() override;
-#endif
+  void SetSandboxType(service_manager::SandboxType sandbox_type) override;
   const ChildProcessData& GetData() override;
 #if defined(OS_POSIX)
   void SetEnv(const base::EnvironmentMap& env) override;
@@ -56,8 +56,13 @@ class CONTENT_EXPORT UtilityProcessHostImpl
   void BindInterface(const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle interface_pipe) override;
   void SetName(const base::string16& name) override;
+  void AddFilter(BrowserMessageFilter* filter) override;
 
   void set_child_flags(int flags) { child_flags_ = flags; }
+
+  // Used when the utility process is going to host a service. |identity| is
+  // the identity of the service being launched.
+  void SetServiceIdentity(const service_manager::Identity& identity);
 
  private:
   // Starts the child process if needed, returns true on success.
@@ -86,10 +91,7 @@ class CONTENT_EXPORT UtilityProcessHostImpl
   base::FilePath exposed_dir_;
 
   // Launch the child process with switches that will setup this sandbox type.
-  SandboxType sandbox_type_;
-
-  // Whether to launch the child process with elevated privileges.
-  bool run_elevated_;
+  service_manager::SandboxType sandbox_type_;
 
   // ChildProcessHost flags to use when starting the child process.
   int child_flags_;
@@ -108,6 +110,10 @@ class CONTENT_EXPORT UtilityProcessHostImpl
 
   // Used in single-process mode instead of |process_|.
   std::unique_ptr<base::Thread> in_process_thread_;
+
+  // If this has a value it indicates the process is going to host a mojo
+  // service.
+  base::Optional<service_manager::Identity> service_identity_;
 
   // Used to vend weak pointers, and should always be declared last.
   base::WeakPtrFactory<UtilityProcessHostImpl> weak_ptr_factory_;

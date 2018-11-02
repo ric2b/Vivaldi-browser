@@ -12,12 +12,12 @@ namespace mojo {
 
 // static
 bool StructTraits<viz::mojom::RenderPassDataView,
-                  std::unique_ptr<cc::RenderPass>>::
+                  std::unique_ptr<viz::RenderPass>>::
     Read(viz::mojom::RenderPassDataView data,
-         std::unique_ptr<cc::RenderPass>* out) {
+         std::unique_ptr<viz::RenderPass>* out) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
                "StructTraits::RenderPass::Read");
-  *out = cc::RenderPass::Create();
+  *out = viz::RenderPass::Create();
   if (!data.ReadOutputRect(&(*out)->output_rect) ||
       !data.ReadDamageRect(&(*out)->damage_rect) ||
       !data.ReadTransformToRootTarget(&(*out)->transform_to_root_target) ||
@@ -34,18 +34,18 @@ bool StructTraits<viz::mojom::RenderPassDataView,
   (*out)->cache_render_pass = data.cache_render_pass();
   (*out)->has_damage_from_contributing_content =
       data.has_damage_from_contributing_content();
+  (*out)->generate_mipmap = data.generate_mipmap();
 
   mojo::ArrayDataView<viz::mojom::DrawQuadDataView> quads;
   data.GetQuadListDataView(&quads);
   viz::SharedQuadState* last_sqs = nullptr;
-  cc::DrawQuad* last_draw_quad = nullptr;
   for (size_t i = 0; i < quads.size(); ++i) {
     viz::mojom::DrawQuadDataView quad_data_view;
     quads.GetDataView(i, &quad_data_view);
     viz::mojom::DrawQuadStateDataView quad_state_data_view;
     quad_data_view.GetDrawQuadStateDataView(&quad_state_data_view);
 
-    cc::DrawQuad* quad =
+    viz::DrawQuad* quad =
         AllocateAndConstruct(quad_state_data_view.tag(), &(*out)->quad_list);
     if (!quad)
       return false;
@@ -65,30 +65,6 @@ bool StructTraits<viz::mojom::RenderPassDataView,
     quad->shared_quad_state = last_sqs;
     if (!quad->shared_quad_state)
       return false;
-
-    // If this quad is a fallback SurfaceDrawQuad then update the previous
-    // primary SurfaceDrawQuad to point to this quad.
-    if (quad->material == cc::DrawQuad::SURFACE_CONTENT) {
-      const cc::SurfaceDrawQuad* surface_draw_quad =
-          cc::SurfaceDrawQuad::MaterialCast(quad);
-      if (surface_draw_quad->surface_draw_quad_type ==
-          cc::SurfaceDrawQuadType::FALLBACK) {
-        // A fallback quad must immediately follow a primary SurfaceDrawQuad.
-        if (!last_draw_quad ||
-            last_draw_quad->material != cc::DrawQuad::SURFACE_CONTENT) {
-          return false;
-        }
-        cc::SurfaceDrawQuad* last_surface_draw_quad =
-            static_cast<cc::SurfaceDrawQuad*>(last_draw_quad);
-        // Only one fallback quad is currently supported.
-        if (last_surface_draw_quad->surface_draw_quad_type !=
-            cc::SurfaceDrawQuadType::PRIMARY) {
-          return false;
-        }
-        last_surface_draw_quad->fallback_quad = surface_draw_quad;
-      }
-    }
-    last_draw_quad = quad;
   }
   return true;
 }

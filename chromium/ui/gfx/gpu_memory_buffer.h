@@ -33,7 +33,9 @@ enum GpuMemoryBufferType {
   SHARED_MEMORY_BUFFER,
   IO_SURFACE_BUFFER,
   NATIVE_PIXMAP,
-  GPU_MEMORY_BUFFER_TYPE_LAST = NATIVE_PIXMAP
+  DXGI_SHARED_HANDLE,
+  ANDROID_HARDWARE_BUFFER,
+  GPU_MEMORY_BUFFER_TYPE_LAST = ANDROID_HARDWARE_BUFFER
 };
 
 using GpuMemoryBufferId = GenericSharedMemoryId;
@@ -87,8 +89,8 @@ class GFX_EXPORT GpuMemoryBuffer {
   virtual int stride(size_t plane) const = 0;
 
   // Set the color space in which this buffer should be interpreted when used
-  // for scanout. Note that this will not impact texturing from the buffer.
-  virtual void SetColorSpaceForScanout(const gfx::ColorSpace& color_space);
+  // as an overlay. Note that this will not impact texturing from the buffer.
+  virtual void SetColorSpace(const gfx::ColorSpace& color_space);
 
   // Returns a unique identifier associated with buffer.
   virtual GpuMemoryBufferId GetId() const = 0;

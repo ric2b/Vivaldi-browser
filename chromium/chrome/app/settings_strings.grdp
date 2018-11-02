@@ -57,6 +57,12 @@
     <message name="IDS_SETTINGS_ABOUT_PAGE_RELAUNCH_AND_POWERWASH" desc="The label for the  button that relaunches and powerwashes the browser once update is complete">
       Relaunch and Powerwash
     </message>
+    <message name="IDS_SETTINGS_ABOUT_TPM_FIRMWARE_UPDATE_TITLE" desc="Title for the line item on the about page that allows the user to trigger a device hardware reset and request installation of a TPM firmware update.">
+      Powerwash for added security
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_TPM_FIRMWARE_UPDATE_DESCRIPTION" desc="Descriptive text shown alongside the line item on the about page that allows the user to trigger a device hardware reset and request installation of a TPM firmware update.">
+      This upgrade resets your Chromebook and removes current user data.
+    </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating ChromiumOS or ChromeOS">
       Updating your device
     </message>
@@ -159,7 +165,7 @@
   </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_OPTIONS_IN_MENU_LABEL" desc="Label for checkbox which enables showing accessibility options in the system menu.">
-      Show accessibility options in the system menu
+      Always show accessibility options in the system menu
     </message>
     <message name="IDS_SETTINGS_LARGE_MOUSE_CURSOR_LABEL" desc="Label for checkbox which enables showing a larger mouse cursor than normal.">
       Show large mouse cursor
@@ -191,8 +197,8 @@
     <message name="IDS_SETTINGS_TAP_DRAGGING_LABEL" desc="Label for checkbox which enables tap dragging.">
       Enable tap dragging
     </message>
-    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically clicking when the mouse pointer stops.">
-      Automatically click when the mouse pointer stops
+    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically clicking when the mouse cursor stops.">
+      Automatically click when the mouse cursor stops
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL" desc="Label for dropdown menu which contains various time delays for clicks.">
       Delay before click:
@@ -326,8 +332,11 @@
       <ph name="LINE_BREAKS2">&lt;br&gt;&lt;br&gt;</ph>
       This doesn’t affect apps or content on other devices.
     </message>
-    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE" desc="Lable for confirmation button in the disable android apps dialog.">
+    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE" desc="Label for confirmation button in the disable android apps dialog.">
       Remove Android apps
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_MANAGE_APP_LINKS" desc="Label for accessing app preferrences on ARC side.">
+      Manage Play app links
     </message>
   </if>
 
@@ -347,9 +356,16 @@
   <message name="IDS_SETTINGS_SET_WALLPAPER" desc="Name of the control which allows the user to set the wallpaper.">
     Wallpaper
   </message>
-  <message name="IDS_SETTINGS_THEMES" desc="Name of the control which allows the user to get a theme for the browser.">
-    Themes
-  </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_THEMES" desc="Name of the control which allows the user to get a theme for the browser.">
+      Browser themes
+    </message>
+  </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_THEMES" desc="Name of the control which allows the user to get a theme for the browser.">
+      Themes
+    </message>
+  </if>
   <if expr="is_linux and not chromeos">
     <message name="IDS_SETTINGS_SYSTEM_THEME" desc="Text of the label describing the system (GTK+) browser theme on Linux">
       GTK+
@@ -406,14 +422,8 @@
   <message name="IDS_SETTINGS_SEARCH_PROMPT" desc="Label for input field to search within settings.">
     Search settings
   </message>
-  <message name="IDS_SETTINGS_SEARCH_NO_RESULTS" desc="Text description of a search that has no results.">
-    No search results found
-  </message>
   <message name="IDS_SETTINGS_SEARCH_NO_RESULTS_HELP" desc="Help text for a search that has no results.">
     Go to <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Google Chrome help<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> if you can't find what you're looking for
-  </message>
-  <message name="IDS_SETTINGS_SEARCH_RESULTS" desc="Message announced to screenreader users when searching within settings completes and results are showing.">
-    Search results for '<ph name="SEARCH_TEXT">$1<ex>cookies</ex></ph>'
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
@@ -583,14 +593,32 @@
   <message name="IDS_SETTINGS_CREDIT_CARD_NONE" desc="Placeholder that is shown when there are no credit cards in the list of saved credit cards.">
     Saved cards will appear here
   </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_DISABLED" desc="Placeholder that is shown when credit card autofill has been disabled by policy.">
+    Saved cards are disabled by your administrator
+  </message>
   <message name="IDS_SETTINGS_PASSWORDS_NONE" desc="Placeholder that is shown when there are no passwords in the list of saved passwords.">
     Saved passwords will appear here
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_EXCEPTIONS_NONE" desc="Placeholder text that is shown when there are no sites in the list of sites for which to never save passwords.">
     Sites which never save passwords will appear here
   </message>
+  <message name="IDS_SETTINGS_PASSWORD_UNDO" desc="Label for a button triggering an undo of a saved password or exception deletion.">
+    Undo
+  </message>
+  <message name="IDS_SETTINGS_PASSWORD_DELETED_PASSWORD" desc="Label for an undo tooltip following a saved password deletion.">
+    Password deleted
+  </message>
   <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link.">
     Access your passwords from any device at <ph name="BEGIN_LINK">&lt;a is="action-link" href="$1" target="_blank"&gt;</ph>passwords.google.com<ph name="END_LINK">&lt;/a&gt;</ph>
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_EXPORT_TITLE" desc="The title of a dialog, which offers to the user the ability to export passwords they've saved with Chrome.">
+    Export passwords
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_EXPORT_DESCRIPTION" desc="Text shown to the user on the dialog for exporting passwords, before any passwords have been exported.">
+    Your passwords will be visible to anyone who can see the exported file. Do not share the file with anyone and delete it after importing it.
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_EXPORT" desc="A button in the dialog for exporting passwords from Chrome. A password list will be written to a destination, which the user will be asked to choose after initiating this action.">
+    Export passwords...
   </message>
 
   <!-- Default Browser Page -->
@@ -911,8 +939,23 @@
   <message name="IDS_SETTINGS_CLEAR_FOLLOWING_ITEMS_FROM" desc="Label at the top of the client area of the dialog, preceding the period combo box">
     Clear the following items from
   </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_TITLE" desc="Label of the dropdown that selects the time range for which browsing data will be deleted.">
+    Time range
+  </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY" desc="Checkbox for deleting Browsing History">
     Browsing history
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC" desc="A summary for the 'Cookies and site data' option in the 'Clear Browsing Data' screen, explaining that deleting cookies and site data will sign the user out of most websites.">
+    Signs you out of most sites.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY" desc="A subtext for the basic tab explaining browsing history.">
+    Clears history and autocompletions in the address bar.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN" desc="A description explaining other forms of activity for signed in users.">
+    Clears history and autocompletions in the address bar. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED" desc="A description for the basic tab explaining browsing history for users with history sync.">
+    Clears history from all signed-in devices. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_DOWNLOAD_HISTORY" desc="Checkbox for deleting Download History">
     Download history
@@ -952,6 +995,21 @@
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_EVERYTHING" desc="deletion period combo box: everything. In English this finishes the sentence that starts with 'Delete the following items from'.">
     the beginning of time
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_HOUR" desc="The option to delete browsing data from the last hour.">
+    Last hour
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_24_HOURS" desc="The option to delete browsing data from the last 24 hours.">
+    Last 24 hours
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_7_DAYS" desc="The option to delete browsing data from the last seven days.">
+    Last 7 days
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_FOUR_WEEKS" desc="The option to delete browsing data from the last 4 weeks.">
+    Last 4 weeks
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_EVERYTHING" desc="The option to delete browsing data from the beginning of time.">
+    All time
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_SOME_STUFF_REMAINS" desc="A text shown at the bottom of the Clear Browsing Data dialog, informing the user that some data types will not be cleared.">
     Some settings that may reflect browsing habits will not be cleared.
@@ -1106,8 +1164,23 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_ERROR_MESSAGE" desc="The message shown when a new printer is not set up successfully.">
       Error adding printer
     </message>
-    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_TRY_AGAIN_MESSAGE" desc="The try-again message shown when a new printer is not set up successfully.">
-      Try again
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_FATAL_ERROR_MESSAGE" desc="The message shown when a fatal error occurs while trying to add a new printer.">
+      Can't add printer. Restart and try again.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PRINTER_UNREACHABLE_MESSAGE" desc="The message shown when the printer that is to be added is unreachable for configuration.">
+      Can't connect printer. Check that the printer is turned on and is connected to your Chromebook by Wi-Fi or USB.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_TOO_LARGE_MESSAGE" desc="The message shown when the PPD provided while trying to add new printer is too large.">
+      Can't load large PPD. Maximum size is 250kB.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_INVALID_PPD_MESSAGE" desc="The message shown when the PPD provided while trying to add a new printer is invalid.">
+      Provided PPD is invalid.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_NOT_FOUND" desc="The message shown when the PPD provided while trying to add a new printer cannot be found.">
+      Can't find PPD. Check that your Chromebook is online and try again.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_PPD_UNRETRIEVABLE" desc="The message shown when the PPD provided while trying to add a new printer is unretrievable.">
+      Can't find PPD. Check that your Chromebook is online and try again.
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_REQUIRE_INTERNET_MESSAGE" desc="The message shown when there is no internet access to set up a printer.">
       Connect to the internet to add a printer
@@ -1119,6 +1192,11 @@
       Save
     </message>
   </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_PRINTING_LOCAL_PRINTERS_TITLE" desc="In Printing Settings, the title of local printers setting section on OS other than Chrome OS.">
+      Printers
+    </message>
+  </if>
   <message name="IDS_SETTINGS_PRINTING_CLOUD_PRINTERS" desc="In Printing Settings, the title of the google cloud printers setting section.">
     Google Cloud Print
   </message>
@@ -1127,7 +1205,7 @@
   <message name="IDS_SETTINGS_DOWNLOADS" desc="Name of the settings page which displays download preferences.">
     Downloads
   </message>
-  <message name="IDS_SETTINGS_DOWNLOAD_LOCATION" desc="Label for the input which allows the user to specify the default download directory.">
+  <message name="IDS_SETTINGS_DOWNLOAD_LOCATION" desc="Label for the input which allows the user to specify the default download directory." meaning="File location">
     Location
   </message>
   <message name="IDS_SETTINGS_CHANGE_DOWNLOAD_LOCATION" desc="Text for the button which allows the user to change the default download directory.">
@@ -1147,6 +1225,36 @@
     <!-- Date/Time Page -->
     <message name="IDS_SETTINGS_DATE_TIME" desc="Name of the settings page which displays date and time preferences.">
       Date and time
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_BUTTON" desc="Label for the button that opens time zone settings page.">
+      Time zone
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_SUBPAGE_TITLE" desc="The title of the dialog that allows user to control different time zone settings.">
+      Time zone
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_DISABLED" desc="Display name for the automatic time zone detection mode which disables automatic detection.">
+      Automatic time zone detection is disabled
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_IP_ONLY_DEFAULT" desc="Display name for the automatic time zone detection mode which enables time zone detection sending unprecise location to Google servers. Default means that this is the default time zone detection mode.">
+      Set automatically using your general location (default)
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_IP_ONLY_DESCRIPTION" desc="Display name for the automatic time zone detection mode which enables time zone detection by requesting user location from Google servers based on device IP address. Default means that this is the default time zone detection mode.">
+      Use your IP address to determine location
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_WIFI_AP" desc="Display name for the automatic time zone detection mode which enables time zone detection sending list of visible WiFi Access Point names to Google servers.">
+      Set automatically using your WiFi network
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_WIFI_AP_DESCRIPTION" desc="Description for the automatic time zone detection mode which enables time zone detection sending list of visible WiFi Access Point names to Google servers.">
+      Use WiFi network to determine location
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_ALL_INFO" desc="Display name for the automatic time zone detection mode which enables time zone detection sending list of visible WiFi and Cellular Access Point names to Google servers.">
+      Set automatically using your accurate location
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_ALL_INFO_DESCRIPTION" desc="Description for the automatic time zone detection mode which enables time zone detection sending list of visible WiFi and Cellular Access Point names to Google servers.">
+      Use WiFi or cellular network to determine location
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_DETECTION_SELECT_YOUR_TIME_ZONE" desc="Option name in the list of automatic time zone detection modes that turns automatic detection off, and suggests user to select time zone from the displayed drop-down list.">
+      Choose from list
     </message>
     <message name="IDS_SETTINGS_TIME_ZONE" desc="Label for the picker which allows users to choose their time zone.">
       Time zone:
@@ -1221,8 +1329,14 @@
     <message name="IDS_SETTINGS_INTERNET" desc="Name of the settings page which displays internet preferences.">
       Network
     </message>
-    <message name="IDS_SETTINGS_INTERNET_CONFIG" desc="Name of the settings page for configuring a network.">
+    <message name="IDS_SETTINGS_INTERNET_CONFIG" desc="Title for the network configuration dialog.">
       Configure network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_CONFIG_NAME" desc="Title for the network configuration dialog for an existing network.">
+      Configure <ph name="NAME">$1<ex>My WiFi network</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_JOIN_TYPE" desc="Title for the network configuration dialog for a new network.">
+      Join <ph name="TYPE">$1<ex>WiFi</ex></ph> network
     </message>
     <message name="IDS_SETTINGS_INTERNET_DETAIL" desc="Name of the settings page which displays network details.">
       Network Details
@@ -1248,6 +1362,12 @@
     <message name="IDS_SETTINGS_INTERNET_ADD_THIRD_PARTY_VPN" desc="Settings > Internet > Add third party VPN label">
       Add <ph name="PROVIDER_NAME">$1<ex>VPN Demo</ex></ph>...
     </message>
+    <message name="IDS_SETTINGS_INTERNET_ADD_ARC_VPN" desc="Settings > Internet > Add Arc VPN label.">
+      Add Android VPN...
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_ADD_ARC_VPN_PROVIDER" desc="Settings > Internet > Add Arc VPN provider label">
+      Add <ph name="PROVIDER_NAME">$1<ex>VPN Demo</ex></ph>...
+    </message>
     <message name="IDS_SETTINGS_INTERNET_DEVICE_ENABLING" desc="Settings > Internet > Message when a device (e.g a Cellular modem) is enabling.">
       Enabling
     </message>
@@ -1260,11 +1380,38 @@
     <message name="IDS_SETTINGS_INTERNET_CONFIG_SAVE_CREDENTIALS" desc="Settings > Internet > Network config: Label for the setting to save identity and password.">
       Save identity and password
     </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CA_USE_DEFAULT" desc="Settings > Internet > Network config: Label for selecting the default Certificate Authority for an EAP network.">
+      Default
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CA_DO_NOT_CHECK" desc="Settings > Internet > Network config: Label for selecting that no Certificate Authority should be used for an EAP network.">
+      Do not check
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME" desc="Settings > Internet > Network config: Formatting string for network certificate names.">
+      <ph name="ISSUED_BY">$1<ex>Google Inc</ex></ph> [<ph name="ISSUED_TO">$2<ex>John Doe</ex></ph>]
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME_HARDWARE_BACKED" desc="Settings > Internet > Network configuration: Formatting string for network certificate names that are hardware backed.">
+      <ph name="ISSUED_BY">$1<ex>Google Inc</ex></ph> [<ph name="ISSUED_TO">$2<ex>John Doe</ex></ph>] (hardware-backed)
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NONE_INSTALLED" desc="Settings > Internet > Network configuration: Label when no certificates are installed.">
+      None installed
+    </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_ACCESS_POINT" desc="Settings > Internet > Network details: Access Point section label.">
       Access Point
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS" desc="Settings > Network: Name servers label.">
       Name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_AUTOMATIC" desc="Settings > Internet > Network details: Label for setting automatic name servers.">
+      Automatic name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_CUSTOM" desc="Settings > Internet > Network details: Label for setting custom name servers.">
+      Custom name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_GOOGLE" desc="Settings > Internet > Network details: Label for setting Google name servers.">
+      Google name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_LEARN_MORE" desc="Settings > Internet > Network details: Text for the learn more link for the Google name servers option.">
+      Learn more
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_WPAD" desc="Settings > Internet > Network details: Web Proxy Auto Discovery (WPAD) label.">
       Web Proxy Auto Discovery URL:
@@ -1293,11 +1440,23 @@
     <message name="IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING" desc="Settings > Internet > Network details: Toggle label to allow mobile data roaming.">
       Allow mobile data roaming
     </message>
-    <message name="IDS_SETTINGS_SETTINGS_NETWORK_CHOOSE_MOBILE_DETAIL" desc="Settings > Internet > Network details: Label for section to choose a mobile data network.">
-      Choose a mobile data network
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CHOOSE_MOBILE" desc="Settings > Internet > Network details: Label for control to choose a mobile data network.">
+      Mobile data network
     </message>
-    <message name="IDS_SETTINGS_SETTINGS_NETWORK_CHOOSE_MOBILE_BUTTON" desc="Settings > Internet > Network details: Label for button to choose a mobile data network.">
-      Choose network
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN" desc="Settings > Internet > Network details: Label for button to start a Cellular scan.">
+      Scan
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_COMPLETED" desc="Settings > Internet > Network details: Status text when a scan has completed.">
+      Scan completed
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_CONNECTED_HELP" desc="Settings > Internet > Network details: Help message for scan button when network is connected.">
+      Disconnect to enable scanning
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCANNING" desc="Settings > Internet > Network details: Status text when a scan is in progress.">
+      Scanning...
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_NO_NETWORKS" desc="Settings > Internet > Network details: Dropdown text when no cellular networks were found after a scan.">
+      No networks
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Network details: Text to show when a network is shared.">
       Other users of this device can use this network.
@@ -1311,8 +1470,11 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED" desc="Settings > Internet > Network details: Text next to the checkbox for allowing proxy settings for shared networks.">
       Allow proxies for shared networks
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_TITLE" desc="Settings > Internet > Network details: Title for warning dialog when changing the allow shared proxies setting.">
-      Confirm change to allow proxies for shared networks
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_ENABLE_WARNING_TITLE" desc="Settings > Internet > Network details: Title for warning dialog when changing the allow shared proxies setting is enabled.">
+      Allow proxies for shared networks
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_DISABLE_WARNING_TITLE" desc="Settings > Internet > Network details: Title for warning dialog when changing the allow shared proxies setting is disabled.">
+      Disallow proxies for shared networks
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_MESSAGE" desc="Settings > Internet > Network details: Warning message when changing the allow shared proxies setting.">
       Changing this setting will affect all shared networks
@@ -1522,6 +1684,20 @@
       WiMAX enable
     </message>
 
+     <!-- Network error strings. -->
+    <message name="IDS_NETWORK_ERROR_CANNOT_CHANGE_SHARED_CONFIG" desc="Network error message shown when attempting to change a shared network configuration if the operation is not allowed">
+      Changing shared network configurations is not allowed
+    </message>
+    <message name="IDS_NETWORK_ERROR_NO_USER_CERT" desc="In the network connect dialog, when creating a VPN or enterprise Wi-Fi connection, error message to display when no user certificates are installed.">
+      Please install a user certificate.
+    </message>
+    <message name="IDS_NETWORK_ERROR_POLICY_CONTROLLED" desc="Network error message shown when attempting to remove or illegally modify a policy controlled network">
+      Network is policy controlled
+    </message>
+    <message name="IDS_NETWORK_ERROR_UNKNOWN" desc="Network error message shown for an unknown or unexpected network configuration error">
+      Error configuring network
+    </message>
+
      <!-- Strings translating ONC (Open Network Configuration) properties -->
      <!-- and translatable values. See onc_spec.html for more information. -->
     <message name="IDS_ONC_IPV4_ADDRESS" desc="ONC Property label for ipv4-IPAddress">
@@ -1662,14 +1838,23 @@
     <message name="IDS_ONC_EAP_OUTER_TTLS" desc="ONC Property value for EAP.Outer = TTLS">
       EAP-TTLS
     </message>
+    <message name="IDS_ONC_EAP_SERVER_CA" desc="ONC Property label for EAP Server CA Certificate">
+      Server CA certificate
+    </message>
     <message name="IDS_ONC_EAP_SUBJECT_MATCH" desc="ONC Property label for EAP.SubjectMatch">
       Subject match
+    </message>
+    <message name="IDS_ONC_EAP_USER_CERT" desc="ONC Property label for EAP User Certs">
+      User certificate
     </message>
     <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
       Not Connected
     </message>
     <message name="IDS_ONC_MAC_ADDRESS" desc="ONC Property label for MacAddress">
       MAC address
+    </message>
+    <message name="IDS_ONC_NAME" desc="ONC Property label for the network Name (displayed when configuring a VPN service name)">
+      Service name
     </message>
     <message name="IDS_ONC_RESTRICTED_CONNECTIVITY" desc="ONC Property label for RestrictedConnectivity">
       Restricted IP
@@ -1705,12 +1890,21 @@
       Unknown carrier
     </message>
     <message name="IDS_ONC_VPN_HOST" desc="ONC Property label for VPN.Host">
-      Host
+      Server hostname
     </message>
-    <message name="IDS_ONC_VPN_L2TP_USERNAME" desc="ONC Property label for VPN.L2TP.Username">
-      Username
+    <message name="IDS_ONC_VPN_IPSEC_GROUP" desc="ONC Property label for VPN.IPSec.Group">
+      Group name
     </message>
-    <message name="IDS_ONC_VPN_OPEN_VPN_USERNAME" desc="ONC Property label for VPN.OpenVPN.Username">
+    <message name="IDS_ONC_VPN_IPSEC_PSK" desc="ONC Property label for VPN.IPSec.PSK">
+      Pre-shared key
+    </message>
+    <message name="IDS_ONC_VPN_OPENVPN_OTP" desc="ONC Property label for VPN.OpenVPN.OTP">
+      OTP
+    </message>
+    <message name="IDS_ONC_VPN_PASSWORD" desc="ONC Property label for VPN.OpenVPN.Password or VPN.L2TP.Password">
+      Password
+    </message>
+    <message name="IDS_ONC_VPN_USERNAME" desc="ONC Property label for VPN.OpenVPN.Username or VPN.L2TP.Username">
       Username
     </message>
     <message name="IDS_ONC_VPN_THIRD_PARTY_VPN_PROVIDER_NAME" desc="ONC Property label for VPN.ThirdPartyVPN.ProviderName">
@@ -1718,6 +1912,21 @@
     </message>
     <message name="IDS_ONC_VPN_TYPE" desc="ONC Property label for VPN.Type">
       Provider type
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC" desc="ONC Property label for VPN.Type.L2TP-IPSec">
+      L2TP/IPsec
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC_PSK" desc="ONC Property label for configuring VPN.Type.L2TP-IPSec with AuthenticationType = PSK">
+      L2TP/IPsec + pre-shared key
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_L2TP_IPSEC_CERT" desc="ONC Property label for configuring VPN.Type.L2TP-IPSec  with AuthenticationType = Cert">
+      L2TP/IPsec + user certificate
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_OPENVPN" desc="ONC Property label for VPN.Type.OpenVPN">
+      Open VPN
+    </message>
+    <message name="IDS_ONC_VPN_TYPE_ARCVPN" desc="ONC Property label for VPN.Type.ARCVPN">
+      Android VPN
     </message>
     <message name="IDS_ONC_WIFI_FREQUENCY" desc="ONC Property label for WiFi.Frequency">
       Frequency
@@ -1960,7 +2169,10 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_DESCRIPTION" desc="Secondary, continued explanation of what content settings in Chrome do">
     Control what information websites can use and what content they can show you
   </message>
-  <message name="IDS_SETTINGS_CLEAR_DATA" desc="Text for clear browsing data button in Privacy options">
+  <message name="IDS_SETTINGS_CLEAR_DATA" desc="Text for clear browsing data button in Privacy options in the tabbed UI">
+    Clear data
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA" desc="Text for clear browsing data button in Privacy options">
     Clear browsing data
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_DESCRIPTION" desc="Description for clear browsing data button in Privacy options. 'History' refers to browsing history. 'Cookies' refers to the technical meaning of a cookie, i.e. data saved by a website on the user's computer, as in when a website saves your preferences.">
@@ -1987,6 +2199,19 @@
     Reset all settings
   </message>
 
+  <!-- Reset card title and Chrome Cleanup item on Windows -->
+  <if expr="is_win and _google_chrome">
+    <message name="IDS_SETTINGS_RESET_AND_CLEANUP" desc="Title of a section in Chrome Settings. Imperative. 'Reset' refers to resetting settings to defaults. 'Clean up' refers to cleaning up harmful software on the user's computer.">
+      Reset and clean up
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_TRIGGER" desc="Title for an item in the 'Reset and clean up' section of Chrome Settings. 'Clean up' refers to cleaning up harmful software on the user's computer. Imperative.">
+      Clean up computer
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_TRIGGER_DESCRIPTION" desc="Description of an item in Chrome Settings. Imperative.">
+      Find and remove harmful software
+    </message>
+  </if>
+
   <!-- Factory Reset / Powerwash -->
   <if expr="chromeos">
     <message name="IDS_SETTINGS_FACTORY_RESET" desc="Name of the factory reset option on the Chrome settings page">
@@ -2009,7 +2234,7 @@
   </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_SEARCH_AND_ASSISTANT" desc="Name of the settings page which displays search engine and assistant preferences on Chrome OS.">
-      Search engine and Google Assistant
+      Search and Assistant
     </message>
   </if>
   <message name="IDS_SETTINGS_SEARCH_EXPLANATION" desc="Explanation for the search engine dropdown setting.">
@@ -2017,39 +2242,6 @@
   </message>
   <message name="IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES" desc="Label for the Manage Search Engines button.">
     Manage search engines
-  </message>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_LABEL" desc="Label for the checkbox which enables the OK Google hotword.">
-    Enable "Ok Google" to start a voice search
-  </message>
-  <if expr="chromeos">
-    <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_DISABLED" desc="Label to indicate to the user that the OK Google hotword has been disabled.">
-      "Ok Google" voice search has been removed from Chrome OS
-    </message>
-  </if>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_ALWAYS_ON" desc="Subtext describing when the OK Google hotword may be used.">
-    Say "Ok Google" when the screen is on and unlocked
-  </message>
-  <if expr="chromeos">
-    <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_NO_HARDWARE" desc="Subtext describing when the OK Google hotword may be used for devices without hardware support.">
-      Say "Ok Google" in a new tab, google.com, and the App Launcher
-    </message>
-  </if>
-  <if expr="not chromeos">
-    <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_NO_HARDWARE" desc="Subtext describing when the OK Google hotword may be used for devices with no hardware support.">
-      Say "Ok Google" in a new tab and google.com
-    </message>
-  </if>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_LABEL" desc="Text to display when the user has audio history enabled.">
-    Voice and Audio Activity for <ph name="USER_EMAIL">$1<ex>joe@gmail.com</ex></ph>.
-  </message>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_SUBTEXT" desc="Subtext describing why audio history is enabled.">
-    Enabled (required to use "Ok Google")
-  </message>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_RETRAIN" desc="Text for button to retrain the OK Google hotword voice model.">
-    Retrain
-  </message>
-  <message name="IDS_SETTINGS_SEARCH_ENABLE_GOOGLE_NOW" desc="Label for the checkbox which enables the Google Now in the launcher.">
-    Show Google Now cards in the launcher
   </message>
 <if expr="chromeos">
   <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT" desc="Label for the Google Assistant button.">
@@ -2060,6 +2252,9 @@
   </message>
   <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_DISABLED" desc="Sub label for the Google Assistant button when Assistant is disabled.">
     Disabled
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_TURN_ON" desc="Label for the Google Assistant button when ARC is disabled or value prop is not accepted.">
+    Enable
   </message>
 </if>
 
@@ -2116,10 +2311,10 @@
     Google Assistant
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT" desc="Title for a toggle that lets the assistant use whats on the screen.">
-    Let assistant use what's on your screen
+    Let Assistant use what's on your screen
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT_DESCRIPTION" desc="Sub label for context-enable toggle.">
-    Enables the assistant to show you related info, apps, and actions.
+    Enables the Assistant to show you related info, apps, and actions.
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_SETTINGS" desc="Title for a button that opens the Google Assistant app settings.">
     Google Assistant settings
@@ -2154,13 +2349,25 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_CAMERA_LABEL" desc="The accessibility label of the 'camera device' select menu">
     Camera
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD" desc="Label for the clipboard site settings.">
+    Clipboard
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_ASK" desc="The ask label for clipboard access in site settings.">
+    Ask when a site wants to see text and images you copy to the clipboard
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_ASK_RECOMMENDED" desc="The ask label for clipboard access in site settings (with the 'recommended' suffix).">
+    Ask when a site wants to see text and images you copy to the clipboard (recommended)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_BLOCK" desc="The block label for clipboard access in site settings.">
+    Do not allow sites to see text and images you copy to the clipboard
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES" desc="Label for the cookies site settings.">
     Cookies
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS" desc="Label for the protocol handlers (e.g. mailto) in site settings.">
     Handlers
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the location site settings.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the geolocation site settings." meaning="Geolocation">
     Location
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_MIC" desc="Label for the microphone site settings.">
@@ -2191,7 +2398,10 @@
     Popups
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT" desc="Label for the protected content site settings.">
-    Protected Content
+    Protected content
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS" desc="Label for the permission to allow a site to use unique identifiers to access protected content in site details.">
+    Protected content identifiers
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_ENABLE" desc="Label for the toggle enabling protected content.">
     Allow sites to play protected content (recommended)
@@ -2300,6 +2510,15 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_RECOMMENDED" desc="The block label for ads in site settings (with the 'recommended' suffix).">
     Blocked on sites that tend to show intrusive ads (recommended)
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOW" desc="The allow label for sound in site settings.">
+    Allow sites to play sound
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOW_RECOMMENDED" desc="The allow label for sound in site settings (with the 'recommended' suffix).">
+    Allow sites to play sound (recommended)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOUND_BLOCK" desc="The block label for sound in site settings.">
+    Mute sites that play sound
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOAD_ASK" desc="The allow label for automatic download in site settings.">
     Ask when a site tries to download files automatically after the first file
   </message>
@@ -2335,6 +2554,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK" desc="Label for add block sites in site settings.">
     Block
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK_SOUND" desc="Label for add muted sites in site settings.">
+    Muted
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY" desc="Label for sites in site settings allowing cookies for the current session only.">
     Clear on exit
@@ -2375,6 +2597,12 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS" desc="The Permissions header, used to group together permissions, such as Geolocation, on the Site Details page.">
     Permissions
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED" desc="A label shown when the protected content / protected media identifier permission on the Site Details page is disabled because the user has turned off using unique identifiers to access protected content.">
+    To change this setting, first <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>turn on identifiers<ph name="END_LINK">&lt;/a&gt;</ph>
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_SINGULAR" desc="A label shown when the Ads permission on the Site Details page is blocked by the user, but the site is not blacklisted for having bad ads.">
+    Block if site tends to show intrusive ads
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH" desc="A label shown when a permission on the Site Details page is temporarily blocked for the user's safety.">
     Temporarily blocked to protect your security
@@ -2581,6 +2809,12 @@
   <message name="IDS_SETTINGS_COOKIES_SERVICE_WORKER_SCOPES_LABEL" desc="Label for list of Service Worker (name of an HTML standard) patterns">
     Scopes
   </message>
+  <message name="IDS_SETTINGS_COOKIES_SHARED_WORKER" desc="The text shown when there is data for Shared Workers within an origin (name of a Web standard) in the Cookies table">
+    Shared Workers
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_SHARED_WORKER_WORKER_LABEL" desc="Label for the URL of a Shared Worker's (name of an HTML standard) main script">
+    URL
+  </message>
   <message name="IDS_SETTINGS_COOKIES_CACHE_STORAGE" desc="The text shown when there is Cache Storage (name of a Web standard) in the Cookies table">
     Cache Storage
   </message>
@@ -2741,6 +2975,9 @@
     <message name="IDS_SETTINGS_CHANGE_PICTURE_TAKE_PHOTO" desc="The text on the button to take photo of the current user.">
       Take photo
     </message>
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_CAPTURE_VIDEO" desc="The text on the button to capture video of the current user.">
+      Capture video
+    </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_DISCARD_PHOTO" desc="The text on the button to discard the captured photo of the current user.">
       Discard photo
     </message>
@@ -2750,14 +2987,17 @@
     <message name="IDS_SETTINGS_PHOTO_DISCARD_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was discarded.">
       Photo was discarded
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_FLIP_PHOTO" desc="The text on the button to flip the camera image horizontally.">
-      Flip camera image horizontally
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE_TO_CAMERA" desc="The text on the button to switch the mode of the camera to photo.">
+    Switch to camera mode
     </message>
-    <message name="IDS_SETTINGS_PHOTO_FLIP_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal flip of camera image.">
-      Photo flipped
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE_TO_VIDEO" desc="The text on the button to switch the mode of the camera to video.">
+    Switch to video recorder
     </message>
-    <message name="IDS_SETTINGS_PHOTO_FLIPBACK_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce horizontal back-flip of camera image to not-flipped state.">
-      Photo flipped back
+    <message name="IDS_SETTINGS_PHOTO_MODE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce a switch to photo mode for camera.">
+      Photo mode entered
+    </message>
+    <message name="IDS_SETTINGS_VIDEO_MODE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce a switch to video mode for camera.">
+      Video mode entered
     </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_PREVIEW_ALT" desc="Alt text for the big preview of user image.">
       User image preview
@@ -3211,7 +3451,10 @@
       Drag to move a display
     </message>
     <message name="IDS_SETTINGS_DISPLAY_MIRROR" desc="In Device Settings > Displays, the label for the control for mirroring.">
-      Mirroring
+      Mirror <ph name="DISPLAY_NAME">$1<ex>HP Z27n</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_MIRROR_DISPLAY_NAME" desc="In Device Settings > Displays, the label for the mirrored display name shown in the layout.">
+      Mirrored
     </message>
     <message name="IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL" desc="In Device Settings > Displays, the label for the Night Light feature (which controls the color temperature of the screen) section.">
       Night Light
@@ -3385,13 +3628,13 @@
     <message name="IDS_SETTINGS_POWER_IDLE_LABEL" desc="In Device Settings > Power, label for behavior when device is idle.">
       When idle
     </message>
-    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF_SLEEP" desc="In Device Settings > Power, menu item for idle behavior that turns the screen off and later puts the device to sleep.">
-      Turn off display and sleep
+    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF_SLEEP" desc="In Device Settings > Power, menu item for idle behavior that turns the screen off and later puts the device to sleep. String must be short enough to fit in a drop-down menu.">
+      Sleep
     </message>
-    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF" desc="In Device Settings > Power, menu item for idle behavior that turns the screen off but prevents the device from sleeping.">
+    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF" desc="In Device Settings > Power, menu item for idle behavior that turns the screen off but prevents the device from sleeping. String must be short enough to fit in a drop-down menu.">
       Turn off display
     </message>
-    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_ON" desc="In Device Settings > Power, menu item for idle behavior that prevents the screen from turning off and prevents the device from sleeping.">
+    <message name="IDS_SETTINGS_POWER_IDLE_DISPLAY_ON" desc="In Device Settings > Power, menu item for idle behavior that prevents the screen from turning off and prevents the device from sleeping. String must be short enough to fit in a drop-down menu.">
       Keep display on
     </message>
     <message name="IDS_SETTINGS_POWER_IDLE_OTHER" desc="In Device Settings > Power, menu item for custom idle behavior.">
@@ -3432,14 +3675,14 @@
 
   <!-- Multidevice Page -->
   <if expr="chromeos">
-    <message name="IDS_SETTINGS_MULTIDEVICE" desc="Name of the settings page features the user's other devices connected to the Chromebook.">
+    <message name="IDS_SETTINGS_MULTIDEVICE" desc="Title of a section of settings. This section describes settings for devices that are connected to the Chromebook, like phones.">
       Connected devices
     </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_SMS_CONNECT" desc="Title of the multi-device feature for displaying SMS notifications.">
-      SMS connect
+    <message name="IDS_SETTINGS_MULTIDEVICE_SMS_CONNECT" desc="Name of a feature. This feature lets the user read and reply to text messages from their Chromebook. New text messages will appear as notifications.">
+      SMS Connect
     </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_SMS_CONNECT_SUMMARY" desc="Summary explaining what the SMS connect feature does.">
-      Get notifications for new text messages on your Chromebook
+    <message name="IDS_SETTINGS_MULTIDEVICE_SMS_CONNECT_SUMMARY" desc="Description of for the 'SMS Connect' setting.  This feature lets the user read and reply to text messages from their Chromebook. New text messages will appear as notifications.">
+      Read and reply to text messages on your Chromebook
     </message>
   </if>
 
@@ -3456,4 +3699,108 @@
   <message name="IDS_SETTINGS_CHANGE_PASSWORD_BUTTON" desc="Label on button that takes user to change password page.">
     Change Password
   </message>
+
+  <!-- Chrome Cleanup Page -->
+  <if expr="is_win and _google_chrome">
+    <message name="IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_PAGE_TITLE" desc="Title for an item in the 'Reset and clean up' section of Chrome Settings. 'Clean up' refers to cleaning up harmful software on the user's computer. Imperative.">
+      Clean up computer
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_EXPLANATION" desc="Text that appears below the list of files, programs, and registry entries to be removed by Chrome as part of a cleanup process. 'privacy white paper' is a guide to Chrome's privacy policy and practices. In 'unwanted software protection,' the word 'unwanted' modifies 'software,' i.e. 'protection from unwanted software'.">
+      Items not listed here may also be removed, if needed. Learn more about &lt;a href=&quot;<ph name="URL">$1<ex>https://www.google.com/chrome/browser/privacy/whitepaper.html#unwantedsoftware</ex></ph>&quot;&gt;unwanted software protection&lt;/a&gt; in the Chrome privacy white paper.
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_FILES_AND_PROGRAMS" desc="Introduces a bullet list containing the names of files and programs to be removed by Chrome.">
+      Files and programs:
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_ITEMS_TO_BE_REMOVED" desc="Label for an expansion arrow. On expansion, the screen displays a list of files and programs that Chrome will remove. Placeholder can be 2 or more items.">
+      {NUM_ITEMS, plural,
+        =1 {1 item to be removed}
+        other {# items to be removed}}
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_REGISTRY_ENTRIES" desc="Introduces a bullet list containing the names of registry entries to be removed/changed by Chrome.">
+      Registry entries:
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_MORE" desc="Link; on click, the screen shows items to be removed by Chrome. Items could include files, programs, or registry entries. This link is for advanced users. Placeholder can be 2 or more items.">
+      {NUM_DOWNLOAD, plural,
+        =1 {1 more}
+        other {# more}}
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DONE_BUTTON_LABEL" desc="A button on the web page for Chrome Cleanup. Clicking this button causes the card on the settings page to be dismissed.">
+      Done
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_CLEANUP_ERROR" desc="Body of a generic error message that could appear during the cleanup of harmful software. Multiple causes for the error are possible.">
+      An error occurred while Chrome was removing harmful software.
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_FIND_AND_REMOVE" desc="Subtitle of the 'Find an remove harmful software' item. Imperative.">
+      Chrome can find harmful software on your computer and remove it.
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_NO_INTERNET_CONNECTION" desc="Body of error message that could appear during the cleanup of harmful software. Imperative instruction to user. This message will only appear on Windows desktop/laptop computers. Imperative.">
+      Connect to a network and try again
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_PERMISSIONS_NEEDED" desc="Body of error message that could appear during the cleanup of harmful software. Imperative. ">
+      Click Try Again, and accept the prompt on your computer
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_REMOVE" desc="Description in the Chrome Cleanup web page that Chrome browser shows when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears under the title asking 'Remove harmful software.' Actor is Chrome; we are asking, Do you want Chrome to remove harmful software? 'it' is harmful software. The user can click 'Remove' to proceed with a cleanup. Preferrably, the translation for this string should match IDS_CHROME_CLEANUP_PROMPT_EXPLANATION.">
+      Chrome found harmful software on your computer. Chrome can remove it and restore your settings to make your browser work normally again.
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_SCAN_ERROR" desc="Body of error message that could appear during the cleanup of harmful software.">
+      An error occurred while Chrome was searching for harmful software.
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_FIND_BUTTON_LABEL" desc="Button for the 'Find and remove harmful software' item in Chrome Settings. Imperative. On click, Chrome looks for harmful software on the user's computer. Imperative.">
+      Find
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_FOOTER_POWERED_BY" desc="Branding footer on the web page for Chrome Cleanup. COMPANY_NAME is the name of a technology service that Chrome uses to remove harmful software from the user's computer. It is not necessary to translate 'powered by' literally; use an appropriate word for your language to convey the meaning of 'uses'. A similar use in other Google products is 'Powered by Google Translate.'">
+      Powered by <ph name="COMPANY_NAME">$1<ex>Google</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_LINK_SHOW_FILES" desc="A link, appearing on the Chrome Cleanup web page, that the user can click to show the files that will be removed. Imperative.">
+      Show files to be removed
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_REMOVE_BUTTON_LABEL" desc="Button on the Chrome Cleanup web page. Allows users to start a cleanup of unwanted software on their computer and restore browser settings to default values. 'Remove' is imperative.">
+      Remove
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_RESTART_BUTTON_LABEL" desc="Button on the web page for Chrome Cleanup. Clicking this button causes the user's computer to turn off (shut down) and turn back on again. Imperative. ">
+      Restart computer
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_DONE" desc="Message confirming that Chrome has removed harmful software. Exclamation point is nice in EN-US but is optional in your language; please use or omit as appropriate. The UI will also display a checkmark icon to indicate the operation is done. ">
+      Done!
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_CANT_REMOVE" desc="An error message, appearing on the Chrome Cleanup web page, that Chrome tried to clean up unwanted software, as requested by the user, but was unsuccessful. Omits subject, i.e. Chrome can't remove harmful software.">
+      Can't remove harmful software
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_PERMISSIONS_NEEDED" desc="Title of error message that could appear during the cleanup of harmful software. 'permission' refers to the user granting permission, e.g. from an operating system prompt, before the cleanup operation can continue.">
+      Chrome needs permission to continue
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_FIND_AND_REMOVE" desc="Title of an item in Chrome Settings. Imperative.">
+      Find and remove harmful software
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_NO_INTERNET_CONNECTION" desc="Title of error message that could appear during the cleanup of harmful software.">
+      No internet connection
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_NOTHING_FOUND" desc="Message displayed after Chrome looks for harmful software but doesn't find any. ">
+      No harmful software found
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVE" desc="Title of the Chrome Cleanup web page. Chrome browser shows the webpage when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears above a description of what the cleanup does. 'Remove' is imperative.">
+      Remove harmful software
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVED" desc="A confirmation, appearing on the Chrome Cleanup web page, that the cleanup of unwanted software is finished. Omits 'was', i.e. Harmful software was removed. Appears next to a Done button, which lets user dismiss the confirmation.">
+      Harmful software removed
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVING" desc="A status message, appearing on the Chrome cleanup web page, that the cleanup of unwanted software initiated by the user is in progress. Omits subject, i.e. 'Chrome is removing harmful software.' If appropriate for your language, include ellipsis to show that the operation is in progress.">
+      Removing harmful software...
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_RESTART" desc="A status message, appearing on the Chrome Cleanup web page, that the cleanup of unwanted software initiated by the user was performed but isn't finished. User must take additional action to finish the cleanup. 'Restart' is imperative. Short for 'To finish removing harmful software...'">
+      To finish removing harmful software, restart your computer
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_SCANNING" desc="Message displayed after the user clicks the 'Find' button to find harmful software. Ellipses indicate that the operation is in process.">
+      Checking for harmful software...
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_SCANNING_FAILED" desc="Title of error message that could appear during the cleanup of harmful software.">
+      Scanning failed
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TRY_AGAIN_BUTTON_LABEL" desc="Generic button that appears next to a message indicating that an operation failed during the cleanup of harmful software.">
+      Try again
+    </message>
+    <message name="IDS_SETTINGS_RESET_CLEANUP_LOGS_PERMISSION_EXPLANATION" desc="Description for the 'Report details to Google' option. Subject, 'Details', is omitted. Although the plural subject would indicate usage of the plural verb, here, we use the plural form of the verb, 'includes', to avoid the impression that 'include' is an infinitive verb. 'Includes' is a present tense main verb. ">
+      Includes information about harmful software, system settings, and processes on your computer.
+    </message>
+  </if>
 </grit-part>

@@ -27,7 +27,7 @@
 <link rel="import" href="../default_browser_page/default_browser_page.html">
 </if>
 
-<if expr="is_win">
+<if expr="_google_chrome and is_win">
 <link rel="import" href="../chrome_cleanup_page/chrome_cleanup_page.html">
 </if>
 
@@ -124,7 +124,7 @@
           </settings-section>
         </template>
 </if>
-<if expr="is_win">
+<if expr="_google_chrome and is_win">
         <template is="dom-if" if="[[showChromeCleanup]]" restamp>
           <settings-section section="chromeCleanup">
             <settings-chrome-cleanup-page></settings-chrome-cleanup-page>
@@ -162,7 +162,16 @@
         <template is="dom-if" if="[[showPage_(pageVisibility.search)]]" restamp>
           <settings-section page-title="$i18n{searchPageTitle}"
               section="search">
+<if expr="chromeos">
+            <settings-search-page prefs="{{prefs}}"
+                 arc-enabled="[[prefs.arc.enabled.value]]"
+                 voice-interaction-value-prop-accepted="[[
+                     prefs.arc.voice_interaction_value_prop.accepted.value]]">
+            </settings-search-page>
+</if>
+<if expr="not chromeos">
             <settings-search-page prefs="{{prefs}}"></settings-search-page>
+</if>
           </settings-section>
         </template>
 <if expr="chromeos">

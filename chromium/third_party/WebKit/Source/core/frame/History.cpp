@@ -59,7 +59,8 @@ bool EqualIgnoringQueryAndFragment(const KURL& a, const KURL& b) {
 History::History(LocalFrame* frame)
     : DOMWindowClient(frame), last_state_object_requested_(nullptr) {}
 
-DEFINE_TRACE(History) {
+void History::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
   DOMWindowClient::Trace(visitor);
 }
 
@@ -78,22 +79,22 @@ SerializedScriptValue* History::state(ExceptionState& exception_state) {
     exception_state.ThrowSecurityError(
         "May not use a History object associated with a Document that is not "
         "fully active");
-    return 0;
+    return nullptr;
   }
   last_state_object_requested_ = StateInternal();
-  return last_state_object_requested_.Get();
+  return last_state_object_requested_.get();
 }
 
 SerializedScriptValue* History::StateInternal() const {
   if (!GetFrame())
-    return 0;
+    return nullptr;
 
   if (HistoryItem* history_item =
           GetFrame()->Loader().GetDocumentLoader()->GetHistoryItem()) {
     return history_item->StateObject();
   }
 
-  return 0;
+  return nullptr;
 }
 
 void History::setScrollRestoration(const String& value,
@@ -210,7 +211,7 @@ void History::go(ScriptState* script_state,
   }
 }
 
-void History::pushState(RefPtr<SerializedScriptValue> data,
+void History::pushState(scoped_refptr<SerializedScriptValue> data,
                         const String& title,
                         const String& url,
                         ExceptionState& exception_state) {
@@ -247,7 +248,7 @@ bool History::CanChangeToUrl(const KURL& url,
   if (!EqualIgnoringPathQueryAndFragment(url, document_url))
     return false;
 
-  RefPtr<SecurityOrigin> requested_origin = SecurityOrigin::Create(url);
+  scoped_refptr<SecurityOrigin> requested_origin = SecurityOrigin::Create(url);
   if (requested_origin->IsUnique() ||
       !requested_origin->IsSameSchemeHostPort(document_origin)) {
     return false;
@@ -256,7 +257,7 @@ bool History::CanChangeToUrl(const KURL& url,
   return true;
 }
 
-void History::StateObjectAdded(RefPtr<SerializedScriptValue> data,
+void History::StateObjectAdded(scoped_refptr<SerializedScriptValue> data,
                                const String& /* title */,
                                const String& url_string,
                                HistoryScrollRestorationType restoration_type,

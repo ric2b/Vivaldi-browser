@@ -4,6 +4,7 @@
 
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 source_set("lib") {
   sources = [
@@ -11,6 +12,10 @@ source_set("lib") {
     "data_decoder_service.h",
     "image_decoder_impl.cc",
     "image_decoder_impl.h",
+    "json_parser_impl.cc",
+    "json_parser_impl.h",
+    "xml_parser.cc",
+    "xml_parser.h",
   ]
 
   deps = [
@@ -18,6 +23,7 @@ source_set("lib") {
     "//mojo/public/cpp/bindings",
     "//skia",
     "//third_party/WebKit/public:blink",
+    "//third_party/libxml",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -33,6 +39,10 @@ source_set("tests") {
 
   sources = [
     "image_decoder_impl_unittest.cc",
+    "public/cpp/json_sanitizer_unittest.cc",
+    "public/cpp/safe_xml_parser_unittest.cc",
+    "public/cpp/testing_json_parser_unittest.cc",
+    "xml_parser_unittest.cc",
   ]
 
   deps = [
@@ -40,6 +50,8 @@ source_set("tests") {
     "//base",
     "//gin",
     "//gin:gin_test",
+    "//services/data_decoder/public/cpp",
+    "//services/data_decoder/public/cpp:test_support",
     "//skia",
     "//testing/gtest",
     "//third_party/WebKit/public:blink",
@@ -52,4 +64,16 @@ source_set("tests") {
 service_manifest("manifest") {
   name = "data_decoder"
   source = "manifest.json"
+}
+
+fuzzer_test("xml_parser_fuzzer") {
+  sources = [
+    "xml_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/xml.dict"
+  seed_corpus = "xml_parser_fuzzer_corpus"
 }

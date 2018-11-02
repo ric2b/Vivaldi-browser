@@ -27,13 +27,9 @@
 #include "modules/navigatorcontentutils/NavigatorContentUtils.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/Navigator.h"
 #include "core/frame/UseCounter.h"
-#include "platform/wtf/HashSet.h"
-#include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -68,8 +64,7 @@ static bool VerifyCustomHandlerURL(const Document& document,
   // the "%s" token and prepending the base url, does not resolve.
   String new_url = url;
   new_url.Remove(index, WTF_ARRAY_LENGTH(kToken) - 1);
-
-  KURL kurl = document.CompleteURL(url);
+  KURL kurl = document.CompleteURL(new_url);
 
   if (kurl.IsEmpty() || !kurl.IsValid()) {
     exception_state.ThrowDOMException(
@@ -165,52 +160,6 @@ void NavigatorContentUtils::registerProtocolHandler(
       scheme, document->CompleteURL(url), title);
 }
 
-static String CustomHandlersStateString(
-    const NavigatorContentUtilsClient::CustomHandlersState state) {
-  DEFINE_STATIC_LOCAL(const String, new_handler, ("new"));
-  DEFINE_STATIC_LOCAL(const String, registered_handler, ("registered"));
-  DEFINE_STATIC_LOCAL(const String, declined_handler, ("declined"));
-
-  switch (state) {
-    case NavigatorContentUtilsClient::kCustomHandlersNew:
-      return new_handler;
-    case NavigatorContentUtilsClient::kCustomHandlersRegistered:
-      return registered_handler;
-    case NavigatorContentUtilsClient::kCustomHandlersDeclined:
-      return declined_handler;
-  }
-
-  NOTREACHED();
-  return String();
-}
-
-String NavigatorContentUtils::isProtocolHandlerRegistered(
-    Navigator& navigator,
-    const String& scheme,
-    const String& url,
-    ExceptionState& exception_state) {
-  DEFINE_STATIC_LOCAL(const String, declined, ("declined"));
-
-  if (!navigator.GetFrame())
-    return declined;
-
-  Document* document = navigator.GetFrame()->GetDocument();
-  DCHECK(document);
-  if (document->IsContextDestroyed())
-    return declined;
-
-  if (!VerifyCustomHandlerURL(*document, url, exception_state))
-    return declined;
-
-  if (!VerifyCustomHandlerScheme(scheme, exception_state))
-    return declined;
-
-  return CustomHandlersStateString(
-      NavigatorContentUtils::From(navigator)
-          ->Client()
-          ->IsProtocolHandlerRegistered(scheme, document->CompleteURL(url)));
-}
-
 void NavigatorContentUtils::unregisterProtocolHandler(
     Navigator& navigator,
     const String& scheme,
@@ -232,7 +181,7 @@ void NavigatorContentUtils::unregisterProtocolHandler(
       scheme, document->CompleteURL(url));
 }
 
-DEFINE_TRACE(NavigatorContentUtils) {
+void NavigatorContentUtils::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
   Supplement<Navigator>::Trace(visitor);
 }

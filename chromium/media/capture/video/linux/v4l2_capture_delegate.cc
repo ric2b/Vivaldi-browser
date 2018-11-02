@@ -753,7 +753,7 @@ base::WeakPtr<V4L2CaptureDelegate> V4L2CaptureDelegate::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-V4L2CaptureDelegate::~V4L2CaptureDelegate() {}
+V4L2CaptureDelegate::~V4L2CaptureDelegate() = default;
 
 bool V4L2CaptureDelegate::MapAndQueueBuffer(int index) {
   v4l2_buffer buffer;
@@ -837,6 +837,11 @@ void V4L2CaptureDelegate::DoCapture() {
       buffer.bytesused = 0;
     } else
 #endif
+        if (buffer.bytesused < capture_format_.ImageAllocationSize()) {
+      LOG(ERROR) << "Dequeued v4l2 buffer contains invalid length ("
+                 << buffer.bytesused << " bytes).";
+      buffer.bytesused = 0;
+    } else
       client_->OnIncomingCapturedData(
           buffer_tracker->start(), buffer_tracker->payload_size(),
           capture_format_, rotation_, now, timestamp);
@@ -862,15 +867,14 @@ void V4L2CaptureDelegate::DoCapture() {
       FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, GetWeakPtr()));
 }
 
-void V4L2CaptureDelegate::SetErrorState(
-    const tracked_objects::Location& from_here,
-    const std::string& reason) {
+void V4L2CaptureDelegate::SetErrorState(const base::Location& from_here,
+                                        const std::string& reason) {
   DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
   is_capturing_ = false;
   client_->OnError(from_here, reason);
 }
 
-V4L2CaptureDelegate::BufferTracker::BufferTracker() {}
+V4L2CaptureDelegate::BufferTracker::BufferTracker() = default;
 
 V4L2CaptureDelegate::BufferTracker::~BufferTracker() {
   if (start_ == nullptr)

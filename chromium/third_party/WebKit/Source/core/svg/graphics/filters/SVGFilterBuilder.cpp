@@ -21,7 +21,7 @@
 
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/layout/LayoutObject.h"
 #include "core/svg/SVGFilterElement.h"
@@ -100,7 +100,7 @@ void SVGFilterGraphNodeMap::InvalidateDependentEffects(FilterEffect* effect) {
     InvalidateDependentEffects(effect_reference);
 }
 
-DEFINE_TRACE(SVGFilterGraphNodeMap) {
+void SVGFilterGraphNodeMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(effect_renderer_);
   visitor->Trace(effect_references_);
 }
@@ -145,7 +145,7 @@ static EColorInterpolation ColorInterpolationForElement(
 
   // No layout has been performed, try to determine the property value
   // "manually" (used by external SVG files.)
-  if (const StylePropertySet* property_set =
+  if (const CSSPropertyValueSet* property_set =
           element.PresentationAttributeStyle()) {
     const CSSValue* css_value =
         property_set->GetPropertyCSSValue(CSSPropertyColorInterpolationFilters);
@@ -177,26 +177,25 @@ void SVGFilterBuilder::BuildGraph(Filter* filter,
     if (!element->IsFilterEffect())
       continue;
 
-    SVGFilterPrimitiveStandardAttributes* effect_element =
-        static_cast<SVGFilterPrimitiveStandardAttributes*>(element);
-    FilterEffect* effect = effect_element->Build(this, filter);
+    SVGFilterPrimitiveStandardAttributes& effect_element =
+        ToSVGFilterPrimitiveStandardAttributes(*element);
+    FilterEffect* effect = effect_element.Build(this, filter);
     if (!effect)
       continue;
 
     if (node_map_)
-      node_map_->AddPrimitive(effect_element->GetLayoutObject(), effect);
+      node_map_->AddPrimitive(effect_element.GetLayoutObject(), effect);
 
-    effect_element->SetStandardAttributes(effect, primitive_units,
-                                          reference_box);
+    effect_element.SetStandardAttributes(effect, primitive_units,
+                                         reference_box);
     EColorInterpolation color_interpolation = ColorInterpolationForElement(
-        *effect_element, filter_color_interpolation);
+        effect_element, filter_color_interpolation);
     effect->SetOperatingInterpolationSpace(
         ResolveInterpolationSpace(color_interpolation));
-    if (effect_element->TaintsOrigin(effect->InputsTaintOrigin()))
+    if (effect_element.TaintsOrigin(effect->InputsTaintOrigin()))
       effect->SetOriginTainted();
 
-    Add(AtomicString(effect_element->result()->CurrentValue()->Value()),
-        effect);
+    Add(AtomicString(effect_element.result()->CurrentValue()->Value()), effect);
   }
 }
 

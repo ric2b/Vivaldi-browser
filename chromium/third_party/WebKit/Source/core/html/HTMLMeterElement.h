@@ -22,7 +22,7 @@
 #define HTMLMeterElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/LabelableElement.h"
+#include "core/html/forms/LabelableElement.h"
 
 namespace blink {
 
@@ -63,7 +63,7 @@ class CORE_EXPORT HTMLMeterElement final : public LabelableElement {
 
   bool CanContainRangeEndPoint() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit HTMLMeterElement(Document&);

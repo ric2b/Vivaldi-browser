@@ -27,13 +27,13 @@
 #define IDBCursor_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBRequest.h"
 #include "modules/indexeddb/IndexedDB.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Compiler.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 
@@ -45,8 +45,7 @@ class IDBTransaction;
 class IDBValue;
 class ScriptState;
 
-class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
-                  public ScriptWrappable {
+class IDBCursor : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -58,7 +57,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
                            IDBAny* source,
                            IDBTransaction*);
   virtual ~IDBCursor();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void ContextWillBeDestroyed() { backend_.reset(); }
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
@@ -75,12 +74,12 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
 
   IDBRequest* update(ScriptState*, const ScriptValue&, ExceptionState&);
   void advance(unsigned, ExceptionState&);
-  void continueFunction(ScriptState*, const ScriptValue& key, ExceptionState&);
+  void Continue(ScriptState*, const ScriptValue& key, ExceptionState&);
   void continuePrimaryKey(ScriptState*,
                           const ScriptValue& key,
                           const ScriptValue& primary_key,
                           ExceptionState&);
-  IDBRequest* deleteFunction(ScriptState*, ExceptionState&);
+  IDBRequest* Delete(ScriptState*, ExceptionState&);
 
   bool isKeyDirty() const { return key_dirty_; }
   bool isPrimaryKeyDirty() const { return primary_key_dirty_; }
@@ -93,7 +92,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
   void PostSuccessHandlerCallback();
   bool IsDeleted() const;
   void Close();
-  void SetValueReady(IDBKey*, IDBKey* primary_key, RefPtr<IDBValue>);
+  void SetValueReady(IDBKey*, IDBKey* primary_key, scoped_refptr<IDBValue>);
   IDBKey* IdbPrimaryKey() const { return primary_key_; }
   virtual bool IsKeyCursor() const { return true; }
   virtual bool IsCursorWithValue() const { return false; }
@@ -119,7 +118,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
   bool value_dirty_ = true;
   Member<IDBKey> key_;
   Member<IDBKey> primary_key_;
-  RefPtr<IDBValue> value_;
+  scoped_refptr<IDBValue> value_;
 };
 
 }  // namespace blink

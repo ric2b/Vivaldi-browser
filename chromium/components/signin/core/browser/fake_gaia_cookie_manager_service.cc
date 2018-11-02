@@ -15,7 +15,7 @@ FakeGaiaCookieManagerService::FakeGaiaCookieManagerService(
     const std::string& source,
     SigninClient* client)
     : GaiaCookieManagerService(token_service, source, client),
-      url_fetcher_factory_(NULL) {}
+      url_fetcher_factory_(nullptr) {}
 
 void FakeGaiaCookieManagerService::Init(
     net::FakeURLFetcherFactory* url_fetcher_factory) {
@@ -59,17 +59,21 @@ void FakeGaiaCookieManagerService::SetListAccountsResponseOneAccount(
       net::HTTP_OK, net::URLRequestStatus::SUCCESS);
 }
 
-void FakeGaiaCookieManagerService::SetListAccountsResponseOneAccountWithExpiry(
+void FakeGaiaCookieManagerService::SetListAccountsResponseOneAccountWithParams(
     const char* email,
     const char* gaia_id,
-    bool expired) {
+    bool is_email_valid,
+    bool signed_out,
+    bool verified) {
   DCHECK(url_fetcher_factory_);
   url_fetcher_factory_->SetFakeResponse(
       GaiaUrls::GetInstance()->ListAccountsURLWithSource(
           GaiaConstants::kChromeSource),
       base::StringPrintf(
-          "[\"f\", [[\"b\", 0, \"n\", \"%s\", \"p\", 0, 0, 0, 0, %d, \"%s\"]]]",
-          email, expired ? 0 : 1, gaia_id),
+          "[\"f\", [[\"b\", 0, \"n\", \"%s\", \"p\", 0, 0, 0, 0, %d, \"%s\", "
+          "null, null, null, %d, %d]]]",
+          email, is_email_valid ? 1 : 0, gaia_id, signed_out ? 1 : 0,
+          verified ? 1 : 0),
       net::HTTP_OK, net::URLRequestStatus::SUCCESS);
 }
 

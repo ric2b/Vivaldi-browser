@@ -42,7 +42,7 @@
 #include "platform/graphics/filters/FEGaussianBlur.h"
 #include "platform/graphics/filters/Filter.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
+#include "platform/graphics/filters/PaintFilterBuilder.h"
 #include "platform/graphics/filters/SourceGraphic.h"
 #include "platform/wtf/MathExtras.h"
 #include "public/platform/WebPoint.h"
@@ -317,15 +317,18 @@ CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
         Filter* reference_filter =
             BuildReferenceFilter(reference_operation, nullptr);
         if (reference_filter && reference_filter->LastEffect()) {
-          SkiaImageFilterBuilder::PopulateSourceGraphicImageFilters(
+          PaintFilterBuilder::PopulateSourceGraphicImageFilters(
               reference_filter->GetSourceGraphic(), nullptr,
               current_interpolation_space);
 
           FilterEffect* filter_effect = reference_filter->LastEffect();
           current_interpolation_space =
               filter_effect->OperatingInterpolationSpace();
-          filters.AppendReferenceFilter(SkiaImageFilterBuilder::Build(
-              filter_effect, current_interpolation_space));
+          auto paint_filter = PaintFilterBuilder::Build(
+              filter_effect, current_interpolation_space);
+          if (!paint_filter)
+            continue;
+          filters.AppendReferenceFilter(std::move(paint_filter));
         }
         reference_operation.SetFilter(reference_filter);
         break;
@@ -394,7 +397,7 @@ CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
         // instead of calling this a "reference filter".
         const auto& reflection = ToBoxReflectFilterOperation(*op).Reflection();
         filters.AppendReferenceFilter(
-            SkiaImageFilterBuilder::BuildBoxReflectFilter(reflection, nullptr));
+            PaintFilterBuilder::BuildBoxReflectFilter(reflection, nullptr));
         break;
       }
       case FilterOperation::NONE:
@@ -403,9 +406,8 @@ CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
   }
   if (current_interpolation_space != kInterpolationSpaceSRGB) {
     // Transform to device color space at the end of processing, if required.
-    sk_sp<SkImageFilter> filter =
-        SkiaImageFilterBuilder::TransformInterpolationSpace(
-            nullptr, current_interpolation_space, kInterpolationSpaceSRGB);
+    sk_sp<PaintFilter> filter = PaintFilterBuilder::TransformInterpolationSpace(
+        nullptr, current_interpolation_space, kInterpolationSpaceSRGB);
     filters.AppendReferenceFilter(std::move(filter));
   }
   return filters;
@@ -417,10 +419,9 @@ Filter* FilterEffectBuilder::BuildReferenceFilter(
   DCHECK(target_context_);
   Element* filter_element = reference_operation.ElementProxy().FindElement(
       target_context_->GetTreeScope());
-  if (!isSVGFilterElement(filter_element))
-    return nullptr;
-  return BuildReferenceFilter(toSVGFilterElement(*filter_element),
-                              previous_effect);
+  if (auto* filter = ToSVGFilterElementOrNull(filter_element))
+    return BuildReferenceFilter(*filter, previous_effect);
+  return nullptr;
 }
 
 Filter* FilterEffectBuilder::BuildReferenceFilter(

@@ -16,6 +16,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/posix/eintr_wrapper.h"
@@ -75,19 +76,19 @@ class GamepadEventConverterEvdevTest : public testing::Test {
         ui::CreateDeviceEventDispatcherEvdevForTest(event_factory_.get());
   }
 
-  ui::GamepadEventConverterEvdev* CreateDevice(
+  std::unique_ptr<ui::GamepadEventConverterEvdev> CreateDevice(
       const ui::DeviceCapabilities& caps) {
     int evdev_io[2];
     if (pipe(evdev_io))
       PLOG(FATAL) << "failed pipe";
-    ui::ScopedInputDevice events_in(evdev_io[0]);
-    ui::ScopedInputDevice events_out(evdev_io[1]);
+    base::ScopedFD events_in(evdev_io[0]);
+    base::ScopedFD events_out(evdev_io[1]);
 
     ui::EventDeviceInfo devinfo;
     CapabilitiesToDeviceInfo(caps, &devinfo);
-    return new ui::GamepadEventConverterEvdev(std::move(events_in),
-                                              base::FilePath(kTestDevicePath),
-                                              1, devinfo, dispatcher_.get());
+    return std::make_unique<ui::GamepadEventConverterEvdev>(
+        std::move(events_in), base::FilePath(kTestDevicePath), 1, devinfo,
+        dispatcher_.get());
   }
 
  private:
@@ -113,7 +114,7 @@ const double axis_delta = 0.00001;
 TEST_F(GamepadEventConverterEvdevTest, XboxGamepadEvents) {
   TestGamepadObserver observer;
   std::unique_ptr<ui::GamepadEventConverterEvdev> dev =
-      base::WrapUnique(CreateDevice(kXboxGamepad));
+      CreateDevice(kXboxGamepad);
 
   struct input_event mock_kernel_queue[] = {
       {{1493076826, 766851}, EV_ABS, 0, 19105},
@@ -178,7 +179,7 @@ TEST_F(GamepadEventConverterEvdevTest, XboxGamepadEvents) {
 TEST_F(GamepadEventConverterEvdevTest, iBuffaloGamepadEvents) {
   TestGamepadObserver observer;
   std::unique_ptr<ui::GamepadEventConverterEvdev> dev =
-      base::WrapUnique(CreateDevice(kiBuffaloGamepad));
+      CreateDevice(kiBuffaloGamepad);
 
   struct input_event mock_kernel_queue[] = {
       {{1493141044, 176725}, EV_MSC, 4, 90002},

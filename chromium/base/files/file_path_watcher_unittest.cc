@@ -75,7 +75,7 @@ class NotificationCollector
 
  private:
   friend class base::RefCountedThreadSafe<NotificationCollector>;
-  ~NotificationCollector() {}
+  ~NotificationCollector() = default;
 
   void RecordChange(TestDelegate* delegate) {
     // Warning: |delegate| is Unretained. Do not dereference.
@@ -100,8 +100,8 @@ class NotificationCollector
 
 class TestDelegateBase : public SupportsWeakPtr<TestDelegateBase> {
  public:
-  TestDelegateBase() {}
-  virtual ~TestDelegateBase() {}
+  TestDelegateBase() = default;
+  virtual ~TestDelegateBase() = default;
 
   virtual void OnFileChanged(const FilePath& path, bool error) = 0;
 
@@ -120,7 +120,7 @@ class TestDelegate : public TestDelegateBase {
       : collector_(collector) {
     collector_->Register(this);
   }
-  ~TestDelegate() override {}
+  ~TestDelegate() override = default;
 
   void OnFileChanged(const FilePath& path, bool error) override {
     if (error)
@@ -144,7 +144,7 @@ class FilePathWatcherTest : public testing::Test {
   {
   }
 
-  ~FilePathWatcherTest() override {}
+  ~FilePathWatcherTest() override = default;
 
  protected:
   void SetUp() override {
@@ -275,7 +275,7 @@ class Deleter : public TestDelegateBase {
       : watcher_(watcher),
         loop_(loop) {
   }
-  ~Deleter() override {}
+  ~Deleter() override = default;
 
   void OnFileChanged(const FilePath&, bool) override {
     watcher_.reset();
@@ -304,7 +304,7 @@ TEST_F(FilePathWatcherTest, DeleteDuringNotify) {
 
   // We win if we haven't crashed yet.
   // Might as well double-check it got deleted, too.
-  ASSERT_TRUE(deleter->watcher() == NULL);
+  ASSERT_TRUE(deleter->watcher() == nullptr);
 }
 
 // Verify that deleting the watcher works even if there is a pending

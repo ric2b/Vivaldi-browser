@@ -5,11 +5,11 @@
 #include "core/frame/ReportingContext.h"
 
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Report.h"
 #include "core/frame/ReportingObserver.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/bindings/ScriptState.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -42,7 +42,7 @@ void ReportingContext::QueueReport(Report* report) {
   // When the first report of a batch is queued, make a task to report the whole
   // batch (in the queue) to all ReportingObservers.
   if (reports_.size() == 1) {
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, execution_context_)
+    execution_context_->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, WTF::Bind(&ReportingContext::SendReports,
                                               WrapWeakPersistent(this)));
   }
@@ -70,7 +70,7 @@ bool ReportingContext::ObserverExists() {
   return observers_.size();
 }
 
-DEFINE_TRACE(ReportingContext) {
+void ReportingContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(observers_);
   visitor->Trace(reports_);
   visitor->Trace(execution_context_);

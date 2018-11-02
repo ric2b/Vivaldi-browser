@@ -10,7 +10,6 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -18,7 +17,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures_util.h"
@@ -27,30 +26,11 @@
 #include "url/gurl.h"
 
 using base::ASCIIToUTF16;
+using autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics;
+using autofill::features::kAutofillEnforceMinRequiredFieldsForQuery;
+using autofill::features::kAutofillEnforceMinRequiredFieldsForUpload;
 
 namespace autofill {
-
-namespace content {
-
-std::ostream& operator<<(std::ostream& os, const FormData& form) {
-  os << base::UTF16ToUTF8(form.name)
-     << " "
-     << form.origin.spec()
-     << " "
-     << form.action.spec()
-     << " ";
-
-  for (std::vector<FormFieldData>::const_iterator iter =
-           form.fields.begin();
-       iter != form.fields.end(); ++iter) {
-    os << *iter
-       << " ";
-  }
-
-  return os;
-}
-
-}  // namespace content
 
 class FormStructureTest : public testing::Test {
  public:
@@ -64,16 +44,92 @@ class FormStructureTest : public testing::Test {
   }
 
  protected:
-  void DisableAutofillMetadataFieldTrial() {
-    field_trial_list_.reset();
+  void InitFeature(base::test::ScopedFeatureList* feature_list,
+                   const base::Feature& feature,
+                   bool is_enabled) {
+    if (is_enabled)
+      feature_list->InitAndEnableFeature(feature);
+    else
+      feature_list->InitAndDisableFeature(feature);
   }
+
+  // Single field forms are not parseable iff all of the minimum required field
+  // values are enforced.
+  void CheckFormShouldBeParsed(const char* trace_message,
+                               const FormData form,
+                               bool expected_if_all_enforced,
+                               bool expected_if_not_all_enforced) {
+    SCOPED_TRACE(trace_message);
+    for (bool enforce_min_for_heuristics : {true, false}) {
+      base::test::ScopedFeatureList heuristics, query, upload;
+      InitFeature(&heuristics, kAutofillEnforceMinRequiredFieldsForHeuristics,
+                  enforce_min_for_heuristics);
+      for (bool enforce_min_for_query : {true, false}) {
+        base::test::ScopedFeatureList heuristics, query, upload;
+        InitFeature(&query, kAutofillEnforceMinRequiredFieldsForQuery,
+                    enforce_min_for_query);
+        for (bool enforce_min_for_upload : {true, false}) {
+          base::test::ScopedFeatureList heuristics, query, upload;
+          InitFeature(&upload, kAutofillEnforceMinRequiredFieldsForUpload,
+                      enforce_min_for_upload);
+          bool all_enforced = enforce_min_for_heuristics &&
+                              enforce_min_for_query && enforce_min_for_upload;
+          FormStructure form_structure(form);
+          if (all_enforced) {
+            EXPECT_EQ(expected_if_all_enforced,
+                      form_structure.ShouldBeParsed());
+          } else {
+            EXPECT_EQ(expected_if_not_all_enforced,
+                      form_structure.ShouldBeParsed())
+                << "heuristics:" << enforce_min_for_heuristics << "; "
+                << "query:" << enforce_min_for_query << "; "
+                << "upload:" << enforce_min_for_upload;
+          }
+        }
+      }
+    }
+  }
+
+  bool FormIsAutofillable(const FormData& form, bool enforce_min_fields) {
+    base::test::ScopedFeatureList feature_list;
+    InitFeature(&feature_list, kAutofillEnforceMinRequiredFieldsForHeuristics,
+                enforce_min_fields);
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    return form_structure.IsAutofillable();
+  }
+
+  bool FormShouldRunHeuristics(const FormData& form, bool enforce_min_fields) {
+    base::test::ScopedFeatureList feature_list;
+    InitFeature(&feature_list, kAutofillEnforceMinRequiredFieldsForHeuristics,
+                enforce_min_fields);
+    FormStructure form_structure(form);
+    return form_structure.ShouldRunHeuristics();
+  }
+
+  bool FormShouldBeQueried(const FormData& form, bool enforce_min_fields) {
+    base::test::ScopedFeatureList feature_list;
+    InitFeature(&feature_list, kAutofillEnforceMinRequiredFieldsForQuery,
+                enforce_min_fields);
+    FormStructure form_structure(form);
+    return form_structure.ShouldBeQueried();
+  }
+
+  bool FormShouldBeUploaded(const FormData& form, bool enforce_min_fields) {
+    base::test::ScopedFeatureList feature_list;
+    InitFeature(&feature_list, kAutofillEnforceMinRequiredFieldsForUpload,
+                enforce_min_fields);
+    FormStructure form_structure(form);
+    return form_structure.ShouldBeUploaded();
+  }
+
+  void DisableAutofillMetadataFieldTrial() { field_trial_list_.reset(); }
 
  private:
   void EnableAutofillMetadataFieldTrial() {
     field_trial_list_.reset();
-    field_trial_list_.reset(
-        new base::FieldTrialList(
-            base::MakeUnique<metrics::SHA1EntropyProvider>("foo")));
+    field_trial_list_.reset(new base::FieldTrialList(
+        std::make_unique<metrics::SHA1EntropyProvider>("foo")));
     field_trial_ = base::FieldTrialList::CreateFieldTrial(
         "AutofillFieldMetadata", "Enabled");
     field_trial_->group();
@@ -177,93 +233,103 @@ TEST_F(FormStructureTest, SourceURL) {
 }
 
 TEST_F(FormStructureTest, IsAutofillable) {
-  std::unique_ptr<FormStructure> form_structure;
   FormData form;
-
-  // We need at least three text fields to be auto-fillable.
   FormFieldData field;
 
+  // Start with a username field. It should be picked up by the password but
+  // not by autofill.
   field.label = ASCIIToUTF16("username");
   field.name = ASCIIToUTF16("username");
   field.form_control_type = "text";
   form.fields.push_back(field);
 
+  // With min required fields enabled.
+  EXPECT_FALSE(FormIsAutofillable(form, true));   // Min enforced.
+  EXPECT_FALSE(FormIsAutofillable(form, false));  // Min not enforced.
+
+  // Add a password field. The form should be picked up by the password but
+  // not by autofill.
   field.label = ASCIIToUTF16("password");
   field.name = ASCIIToUTF16("password");
   field.form_control_type = "password";
   form.fields.push_back(field);
 
-  field.label = base::string16();
-  field.name = ASCIIToUTF16("Submit");
-  field.form_control_type = "submit";
-  form.fields.push_back(field);
+  EXPECT_FALSE(FormIsAutofillable(form, true));   // Min enforced.
+  EXPECT_FALSE(FormIsAutofillable(form, false));  // Min not enforced.
 
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_FALSE(form_structure->IsAutofillable());
-
-  // We now have three text fields, but only two auto-fillable fields.
-  field.label = ASCIIToUTF16("First Name");
-  field.name = ASCIIToUTF16("firstname");
+  // Add an auto-fillable fields. With just one auto-fillable field, this should
+  // be picked up by autofill only if there is no minimum field enforcement.
+  field.label = ASCIIToUTF16("Full Name");
+  field.name = ASCIIToUTF16("fullname");
   field.form_control_type = "text";
   form.fields.push_back(field);
 
-  field.label = ASCIIToUTF16("Last Name");
-  field.name = ASCIIToUTF16("lastname");
+  EXPECT_FALSE(FormIsAutofillable(form, true));  // Min enforced.
+  EXPECT_TRUE(FormIsAutofillable(form, false));  // Min not enforced.
+
+  // Add an auto-fillable fields. With just one auto-fillable field, this should
+  // be picked up by autofill only if there is no minimum field enforcement.
+  field.label = ASCIIToUTF16("Address Line 1");
+  field.name = ASCIIToUTF16("address1");
   field.form_control_type = "text";
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_FALSE(form_structure->IsAutofillable());
+  EXPECT_FALSE(FormIsAutofillable(form, true));  // Min enforced.
+  EXPECT_TRUE(FormIsAutofillable(form, false));  // Min not enforced.
 
-  // We now have three auto-fillable fields.
+  // We now have three auto-fillable fields. It's always autofillable.
   field.label = ASCIIToUTF16("Email");
   field.name = ASCIIToUTF16("email");
   field.form_control_type = "email";
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_TRUE(form_structure->IsAutofillable());
+  EXPECT_TRUE(FormIsAutofillable(form, true));   // Min enforced.
+  EXPECT_TRUE(FormIsAutofillable(form, false));  // Min not enforced.
 
   // The target cannot include http(s)://*/search...
   form.action = GURL("http://google.com/search?q=hello");
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_FALSE(form_structure->IsAutofillable());
+
+  EXPECT_FALSE(FormIsAutofillable(form, true));   // Min enforced.
+  EXPECT_FALSE(FormIsAutofillable(form, false));  // Min not enforced.
 
   // But search can be in the URL.
   form.action = GURL("http://search.com/?q=hello");
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_TRUE(form_structure->IsAutofillable());
+
+  EXPECT_TRUE(FormIsAutofillable(form, true));   // Min enforced.
+  EXPECT_TRUE(FormIsAutofillable(form, false));  // Min not enforced.
 }
 
 TEST_F(FormStructureTest, ShouldBeParsed) {
-  std::unique_ptr<FormStructure> form_structure;
   FormData form;
 
-  // We need at least three text fields to be parseable.
-  FormFieldData field;
-  field.label = ASCIIToUTF16("username");
-  field.name = ASCIIToUTF16("username");
-  field.form_control_type = "text";
-  form.fields.push_back(field);
-
+  // Start with a single checkable field.
   FormFieldData checkable_field;
   checkable_field.check_status = FormFieldData::CHECKABLE_BUT_UNCHECKED;
   checkable_field.name = ASCIIToUTF16("radiobtn");
   checkable_field.form_control_type = "radio";
   form.fields.push_back(checkable_field);
 
+  // A form with a single checkable field isn't interesting.
+  CheckFormShouldBeParsed("one checkable", form, false, false);
+
+  // Add a second checkable field.
   checkable_field.name = ASCIIToUTF16("checkbox");
   checkable_field.form_control_type = "checkbox";
   form.fields.push_back(checkable_field);
 
-  // We have only one text field, should not be parsed.
-  form_structure.reset(new FormStructure(form));
-  EXPECT_FALSE(form_structure->ShouldBeParsed());
+  // A form with a only checkable fields isn't interesting.
+  CheckFormShouldBeParsed("two checkable", form, false, false);
+
+  // Add a text field.
+  FormFieldData field;
+  field.label = ASCIIToUTF16("username");
+  field.name = ASCIIToUTF16("username");
+  field.form_control_type = "text";
+  form.fields.push_back(field);
+
+  // Single text field forms shouldn't be parsed if all of the minimums are
+  // enforced but should be parsed if ANY of the minimums is not enforced.
+  CheckFormShouldBeParsed("username", form, false, true);
 
   // We now have three text fields, though only two are auto-fillable.
   field.label = ASCIIToUTF16("First Name");
@@ -276,22 +342,16 @@ TEST_F(FormStructureTest, ShouldBeParsed) {
   field.form_control_type = "text";
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
-
-  form_structure.reset(new FormStructure(form));
-  EXPECT_FALSE(form_structure->IsAutofillable());
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
+  // Three text field forms should always be parsed.
+  CheckFormShouldBeParsed("three field", form, true, true);
 
   // The target cannot include http(s)://*/search...
   form.action = GURL("http://google.com/search?q=hello");
-  form_structure.reset(new FormStructure(form));
-  EXPECT_FALSE(form_structure->ShouldBeParsed());
+  CheckFormShouldBeParsed("search path", form, false, false);
 
   // But search can be in the URL.
   form.action = GURL("http://search.com/?q=hello");
-  form_structure.reset(new FormStructure(form));
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
+  CheckFormShouldBeParsed("search domain", form, true, true);
 
   // The form need only have three fields, but at least one must be a text
   // field.
@@ -312,34 +372,30 @@ TEST_F(FormStructureTest, ShouldBeParsed) {
   field.form_control_type = "select-one";
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
-
-  form.fields[0].form_control_type = "select-one";
+  CheckFormShouldBeParsed("text + selects", form, true, true);
 
   // Now, no text fields.
-  form_structure.reset(new FormStructure(form));
-  EXPECT_FALSE(form_structure->ShouldBeParsed());
+  form.fields[0].form_control_type = "select-one";
+  CheckFormShouldBeParsed("only selects", form, false, false);
 
-  // We have only one field, which is password, should not be parsed.
+  // We have only one field, which is password.
   form.fields.clear();
   field.label = ASCIIToUTF16("Password");
   field.name = ASCIIToUTF16("pw");
   field.form_control_type = "password";
   form.fields.push_back(field);
-  form_structure.reset(new FormStructure(form));
-  EXPECT_FALSE(form_structure->ShouldBeParsed());
+  CheckFormShouldBeParsed("password", form, false, true);
 
   // We have two fields, which are passwords, should be parsed.
   field.label = ASCIIToUTF16("New password");
   field.name = ASCIIToUTF16("new_pw");
   field.form_control_type = "password";
   form.fields.push_back(field);
-  form_structure.reset(new FormStructure(form));
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
+  CheckFormShouldBeParsed("new password", form, true, true);
 
   // There are 2 fields, one of which is password, and this is an upload of
-  // a sign-in form submission, should be parsed.
+  // a sign-in form submission, should be parsed. even if all minimums are
+  // enforced.
   form.fields.clear();
   field.name = ASCIIToUTF16("username");
   field.form_control_type = "text";
@@ -347,9 +403,17 @@ TEST_F(FormStructureTest, ShouldBeParsed) {
   field.name = ASCIIToUTF16("pw");
   field.form_control_type = "password";
   form.fields.push_back(field);
-  form_structure.reset(new FormStructure(form));
-  form_structure->set_is_signin_upload(true);
-  EXPECT_TRUE(form_structure->ShouldBeParsed());
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      // Enabled.
+      {kAutofillEnforceMinRequiredFieldsForHeuristics,
+       kAutofillEnforceMinRequiredFieldsForQuery,
+       kAutofillEnforceMinRequiredFieldsForUpload},
+      // Disabled.
+      {});
+  FormStructure form_structure(form);
+  form_structure.set_is_signin_upload(true);
+  EXPECT_TRUE(form_structure.ShouldBeParsed());
 }
 
 // Tests that ShouldBeParsed returns true for a form containing less than three
@@ -374,6 +438,41 @@ TEST_F(FormStructureTest, ShouldBeParsed_TwoFields_HasAutocomplete) {
   form_structure.reset(new FormStructure(form));
   form_structure->ParseFieldTypesFromAutocompleteAttributes();
   EXPECT_TRUE(form_structure->ShouldBeParsed());
+}
+
+// Tests that ShouldBeParsed returns true for a form containing less than three
+// fields if at least one has an autocomplete attribute.
+TEST_F(FormStructureTest, DetermineHeuristicTypes_AutocompleteFalse) {
+  std::unique_ptr<FormStructure> form_structure;
+  FormData form;
+  FormFieldData field;
+
+  field.label = ASCIIToUTF16("Name");
+  field.name = ASCIIToUTF16("name");
+  field.form_control_type = "text";
+  field.autocomplete_attribute = "false";
+  form.fields.push_back(field);
+
+  field.label = ASCIIToUTF16("Email");
+  field.name = ASCIIToUTF16("email");
+  field.form_control_type = "text";
+  field.autocomplete_attribute = "false";
+  form.fields.push_back(field);
+
+  field.label = ASCIIToUTF16("State");
+  field.name = ASCIIToUTF16("state");
+  field.form_control_type = "select-one";
+  field.autocomplete_attribute = "false";
+  form.fields.push_back(field);
+
+  form_structure.reset(new FormStructure(form));
+  form_structure->DetermineHeuristicTypes(nullptr);
+  EXPECT_TRUE(form_structure->ShouldBeParsed());
+  EXPECT_EQ(3U, form_structure->autofill_count());
+  EXPECT_EQ(NAME_FULL, form_structure->field(0)->Type().GetStorableType());
+  EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(1)->Type().GetStorableType());
+  EXPECT_EQ(ADDRESS_HOME_STATE,
+            form_structure->field(2)->Type().GetStorableType());
 }
 
 TEST_F(FormStructureTest, HeuristicsContactInfo) {
@@ -436,7 +535,7 @@ TEST_F(FormStructureTest, HeuristicsContactInfo) {
   EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(2)->heuristic_type());
   // Phone.
   EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER,
-      form_structure->field(3)->heuristic_type());
+            form_structure->field(3)->heuristic_type());
   // Phone extension.
   EXPECT_EQ(PHONE_HOME_EXTENSION, form_structure->field(4)->heuristic_type());
   // Address.
@@ -823,7 +922,8 @@ TEST_F(FormStructureTest,
   form_structure.reset(new FormStructure(form));
   form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(form_structure->IsAutofillable());
-  EXPECT_TRUE(form_structure->ShouldBeCrowdsourced());
+  EXPECT_TRUE(form_structure->ShouldBeQueried());
+  EXPECT_TRUE(form_structure->ShouldBeUploaded());
 
   ASSERT_EQ(3U, form_structure->field_count());
   ASSERT_EQ(3U, form_structure->autofill_count());
@@ -861,7 +961,8 @@ TEST_F(FormStructureTest,
   form_structure.reset(new FormStructure(form));
   form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(form_structure->IsAutofillable());
-  EXPECT_TRUE(form_structure->ShouldBeCrowdsourced());
+  EXPECT_TRUE(form_structure->ShouldBeQueried());
+  EXPECT_TRUE(form_structure->ShouldBeUploaded());
 
   ASSERT_EQ(3U, form_structure->field_count());
   ASSERT_EQ(3U, form_structure->autofill_count());
@@ -904,7 +1005,7 @@ TEST_F(FormStructureTest,
   form_structure.reset(new FormStructure(form));
   form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
   EXPECT_TRUE(form_structure->IsAutofillable());
-  EXPECT_TRUE(form_structure->ShouldBeCrowdsourced());
+  EXPECT_TRUE(form_structure->ShouldBeQueried());
 
   ASSERT_EQ(4U, form_structure->field_count());
   ASSERT_EQ(3U, form_structure->autofill_count());
@@ -915,43 +1016,82 @@ TEST_F(FormStructureTest,
   EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(3)->heuristic_type());
 }
 
-// Tests the heuristics and server predictions are not run for forms with less
-// than 3 fields.
+// Tests whether the heuristics and server predictions are run for forms with
+// fewer than 3 fields  and no autocomplete attributes.
 TEST_F(FormStructureTest,
        HeuristicsAndServerPredictions_SmallForm_NoAutocompleteAttribute) {
-  std::unique_ptr<FormStructure> form_structure;
   FormData form;
-
   FormFieldData field;
   field.form_control_type = "text";
-
   field.label = ASCIIToUTF16("First Name");
   field.name = ASCIIToUTF16("firstname");
   form.fields.push_back(field);
-
   field.label = ASCIIToUTF16("Last Name");
   field.name = ASCIIToUTF16("lastname");
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_FALSE(form_structure->IsAutofillable());
-  EXPECT_FALSE(form_structure->ShouldBeCrowdsourced());
+  EXPECT_FALSE(FormShouldRunHeuristics(form, true));  // Min enforced.
+  EXPECT_TRUE(FormShouldRunHeuristics(form, false));  // Min not enforced.
 
-  ASSERT_EQ(2U, form_structure->field_count());
-  ASSERT_EQ(0U, form_structure->autofill_count());
+  EXPECT_FALSE(FormShouldBeQueried(form, true));  // Min enforced.
+  EXPECT_TRUE(FormShouldBeQueried(form, false));  // Min not enforced.
 
-  EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(0)->heuristic_type());
-  EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(1)->heuristic_type());
-  EXPECT_EQ(NO_SERVER_DATA, form_structure->field(0)->server_type());
-  EXPECT_EQ(NO_SERVER_DATA, form_structure->field(1)->server_type());
+  // Status Quo (Q3/2017) - Small forms not supported.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        // Enabled.
+        {kAutofillEnforceMinRequiredFieldsForHeuristics,
+         kAutofillEnforceMinRequiredFieldsForQuery,
+         kAutofillEnforceMinRequiredFieldsForUpload},
+        // Disabled.
+        {});
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(2U, form_structure.field_count());
+    ASSERT_EQ(0U, form_structure.autofill_count());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_FALSE(form_structure.IsAutofillable());
+  }
+
+  // Default configuration.
+  {
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(2U, form_structure.field_count());
+    ASSERT_EQ(0U, form_structure.autofill_count());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_FALSE(form_structure.IsAutofillable());
+  }
+
+  // Enable small form heuristics.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(
+        kAutofillEnforceMinRequiredFieldsForHeuristics);
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(2U, form_structure.field_count());
+    ASSERT_EQ(2U, form_structure.autofill_count());
+    EXPECT_EQ(NAME_FIRST, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(NAME_LAST, form_structure.field(1)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_TRUE(form_structure.IsAutofillable());
+  }
 }
 
 // Tests the heuristics and server predictions are not run for forms with less
-// than 3 fields, even if an autocomplete attribute is specified.
+// than 3 fields, if the minimum fields required feature is enforced, even if an
+// autocomplete attribute is specified.
 TEST_F(FormStructureTest,
        HeuristicsAndServerPredictions_SmallForm_ValidAutocompleteAttribute) {
-  std::unique_ptr<FormStructure> form_structure;
   FormData form;
 
   FormFieldData field;
@@ -968,25 +1108,76 @@ TEST_F(FormStructureTest,
   field.autocomplete_attribute = "";
   form.fields.push_back(field);
 
-  form_structure.reset(new FormStructure(form));
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_FALSE(form_structure->IsAutofillable());
-  EXPECT_FALSE(form_structure->ShouldBeCrowdsourced());
+  EXPECT_FALSE(FormShouldRunHeuristics(form, true));  // Min enforced.
+  EXPECT_TRUE(FormShouldRunHeuristics(form, false));  // Min not enforced.
 
-  ASSERT_EQ(2U, form_structure->field_count());
-  ASSERT_EQ(1U, form_structure->autofill_count());
+  EXPECT_FALSE(FormShouldBeQueried(form, true));  // Min enforced.
+  EXPECT_TRUE(FormShouldBeQueried(form, false));  // Min not enforced.
 
-  EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(0)->heuristic_type());
-  EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(1)->heuristic_type());
-  EXPECT_EQ(NO_SERVER_DATA, form_structure->field(0)->server_type());
-  EXPECT_EQ(NO_SERVER_DATA, form_structure->field(1)->server_type());
+  // Status Quo (Q3/2017) - Small forms not supported.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        // Enabled.
+        {kAutofillEnforceMinRequiredFieldsForHeuristics,
+         kAutofillEnforceMinRequiredFieldsForQuery,
+         kAutofillEnforceMinRequiredFieldsForUpload},
+        // Disabled.
+        {});
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(2U, form_structure.field_count());
+    ASSERT_EQ(1U, form_structure.autofill_count());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(1)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_FALSE(form_structure.IsAutofillable());
+  }
+
+  // Enable small form heuristics.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(
+        kAutofillEnforceMinRequiredFieldsForHeuristics);
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(2U, form_structure.field_count());
+    ASSERT_EQ(2U, form_structure.autofill_count());
+    EXPECT_EQ(NAME_FIRST, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(NAME_LAST, form_structure.field(1)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(1)->overall_server_type());
+    EXPECT_EQ(NAME_FIRST, form_structure.field(0)->Type().GetStorableType());
+    EXPECT_EQ(NAME_LAST, form_structure.field(1)->Type().GetStorableType());
+    EXPECT_TRUE(form_structure.IsAutofillable());
+  }
+
+  // As a side effect of parsing small forms (if any of the heuristics, query,
+  // or upload minimmums are disabled, we'll autofill fields with an
+  // autocomplete attribute, even if its the only field in the form.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(
+        kAutofillEnforceMinRequiredFieldsForUpload);
+    FormData form_copy = form;
+    form_copy.fields.pop_back();
+    FormStructure form_structure(form_copy);
+    form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
+    ASSERT_EQ(1U, form_structure.field_count());
+    ASSERT_EQ(1U, form_structure.autofill_count());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->overall_server_type());
+    EXPECT_EQ(NAME_FIRST, form_structure.field(0)->Type().GetStorableType());
+    EXPECT_TRUE(form_structure.IsAutofillable());
+  }
 }
 
-// Even with an 'autocomplete' attribute set, ShouldBeCrowdsourced() should
+// Even with an 'autocomplete' attribute set, ShouldBeQueried() should
 // return true if the structure contains a password field, since there are
 // no local heuristics to depend upon in this case. Fields will still not be
 // considered autofillable though.
-TEST_F(FormStructureTest, PasswordFormShouldBeCrowdsourced) {
+TEST_F(FormStructureTest, PasswordFormShouldBeQueried) {
   FormData form;
 
   // Start with a regular contact form.
@@ -1013,7 +1204,8 @@ TEST_F(FormStructureTest, PasswordFormShouldBeCrowdsourced) {
 
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes(nullptr /* ukm_service */);
-  EXPECT_TRUE(form_structure.ShouldBeCrowdsourced());
+  EXPECT_TRUE(form_structure.ShouldBeQueried());
+  EXPECT_TRUE(form_structure.ShouldBeUploaded());
 }
 
 // Verify that we can correctly process sections listed in the |autocomplete|
@@ -1261,7 +1453,7 @@ TEST_F(FormStructureTest, HeuristicsSample8) {
   EXPECT_EQ(ADDRESS_HOME_COUNTRY, form_structure->field(7)->heuristic_type());
   // Phone.
   EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER,
-      form_structure->field(8)->heuristic_type());
+            form_structure->field(8)->heuristic_type());
   // Submit.
   EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(9)->heuristic_type());
 }
@@ -1382,7 +1574,7 @@ TEST_F(FormStructureTest, HeuristicsLabelsOnly) {
   EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(2)->heuristic_type());
   // Phone.
   EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER,
-      form_structure->field(3)->heuristic_type());
+            form_structure->field(3)->heuristic_type());
   // Address.
   EXPECT_EQ(ADDRESS_HOME_LINE1, form_structure->field(4)->heuristic_type());
   // Address Line 2.
@@ -1810,11 +2002,9 @@ TEST_F(FormStructureTest, ThreePartPhoneNumber) {
   // Area code.
   EXPECT_EQ(PHONE_HOME_CITY_CODE, form_structure->field(0)->heuristic_type());
   // Phone number suffix.
-  EXPECT_EQ(PHONE_HOME_NUMBER,
-            form_structure->field(1)->heuristic_type());
+  EXPECT_EQ(PHONE_HOME_NUMBER, form_structure->field(1)->heuristic_type());
   // Phone number suffix.
-  EXPECT_EQ(PHONE_HOME_NUMBER,
-            form_structure->field(2)->heuristic_type());
+  EXPECT_EQ(PHONE_HOME_NUMBER, form_structure->field(2)->heuristic_type());
   // Phone extension.
   EXPECT_EQ(PHONE_HOME_EXTENSION, form_structure->field(3)->heuristic_type());
 }
@@ -3302,8 +3492,9 @@ TEST_F(FormStructureTest, CheckMultipleTypes) {
 
   // Match last field as both address home line 1 and 2.
   possible_field_types[3].insert(ADDRESS_HOME_LINE2);
-  form_structure->field(form_structure->field_count() - 1)->set_possible_types(
-      possible_field_types[form_structure->field_count() - 1]);
+  form_structure->field(form_structure->field_count() - 1)
+      ->set_possible_types(
+          possible_field_types[form_structure->field_count() - 1]);
 
   // Adjust the expected upload proto.
   test::FillUploadField(upload.add_field(), 509334676U, "address", "text",
@@ -3321,8 +3512,9 @@ TEST_F(FormStructureTest, CheckMultipleTypes) {
   possible_field_types[3].clear();
   possible_field_types[3].insert(ADDRESS_HOME_LINE1);
   possible_field_types[3].insert(COMPANY_NAME);
-  form_structure->field(form_structure->field_count() - 1)->set_possible_types(
-      possible_field_types[form_structure->field_count() - 1]);
+  form_structure->field(form_structure->field_count() - 1)
+      ->set_possible_types(
+          possible_field_types[form_structure->field_count() - 1]);
 
   // Adjust the expected upload proto.
   upload.mutable_field(5)->set_autofill_type(60);
@@ -3382,6 +3574,7 @@ TEST_F(FormStructureTest, CheckFormSignature) {
                 "https://login.facebook.com&login_form&email&first")),
             form_structure->FormSignatureAsStr());
 
+  // Checks how digits are removed from field names.
   field.check_status = FormFieldData::NOT_CHECKABLE;
   field.label = ASCIIToUTF16("Random Field label");
   field.name = ASCIIToUTF16("random1234");
@@ -3391,15 +3584,15 @@ TEST_F(FormStructureTest, CheckFormSignature) {
   field.name = ASCIIToUTF16("random12345");
   form.fields.push_back(field);
   field.label = ASCIIToUTF16("Random Field label3");
-  field.name = ASCIIToUTF16("1random12345678");
+  field.name = ASCIIToUTF16("1ran12dom12345678");
   form.fields.push_back(field);
   field.label = ASCIIToUTF16("Random Field label3");
-  field.name = ASCIIToUTF16("12345random");
+  field.name = ASCIIToUTF16("12345ran123456dom123");
   form.fields.push_back(field);
   form_structure.reset(new FormStructure(form));
   EXPECT_EQ(FormStructureTest::Hash64Bit(
                 std::string("https://login.facebook.com&login_form&email&first&"
-                            "random1234&random&1random&random")),
+                            "random1234&random&1ran12dom&random123")),
             form_structure->FormSignatureAsStr());
 }
 
@@ -3768,10 +3961,17 @@ TEST_F(FormStructureTest, ParseQueryResponse) {
   forms.push_back(&form_structure2);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(7);
-  response.add_field()->set_autofill_type(30);
-  response.add_field()->set_autofill_type(9);
-  response.add_field()->set_autofill_type(0);
+  AutofillQueryResponseContents_Field* field0 = response.add_field();
+  field0->set_overall_type_prediction(7);
+  AutofillQueryResponseContents_Field_FieldPrediction* field_prediction0 =
+      field0->add_predictions();
+  field_prediction0->set_type(7);
+  AutofillQueryResponseContents_Field_FieldPrediction* field_prediction1 =
+      field0->add_predictions();
+  field_prediction1->set_type(22);
+  response.add_field()->set_overall_type_prediction(30);
+  response.add_field()->set_overall_type_prediction(9);
+  response.add_field()->set_overall_type_prediction(0);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3779,10 +3979,19 @@ TEST_F(FormStructureTest, ParseQueryResponse) {
 
   ASSERT_GE(forms[0]->field_count(), 2U);
   ASSERT_GE(forms[1]->field_count(), 2U);
-  EXPECT_EQ(7, forms[0]->field(0)->server_type());
-  EXPECT_EQ(30, forms[0]->field(1)->server_type());
-  EXPECT_EQ(9, forms[1]->field(0)->server_type());
-  EXPECT_EQ(0, forms[1]->field(1)->server_type());
+  EXPECT_EQ(7, forms[0]->field(0)->overall_server_type());
+  ASSERT_EQ(2U, forms[0]->field(0)->server_predictions().size());
+  EXPECT_EQ(7U, forms[0]->field(0)->server_predictions()[0].type());
+  EXPECT_EQ(22U, forms[0]->field(0)->server_predictions()[1].type());
+  EXPECT_EQ(30, forms[0]->field(1)->overall_server_type());
+  ASSERT_EQ(1U, forms[0]->field(1)->server_predictions().size());
+  EXPECT_EQ(30U, forms[0]->field(1)->server_predictions()[0].type());
+  EXPECT_EQ(9, forms[1]->field(0)->overall_server_type());
+  ASSERT_EQ(1U, forms[1]->field(0)->server_predictions().size());
+  EXPECT_EQ(9U, forms[1]->field(0)->server_predictions()[0].type());
+  EXPECT_EQ(0, forms[1]->field(1)->overall_server_type());
+  ASSERT_EQ(1U, forms[1]->field(1)->server_predictions().size());
+  EXPECT_EQ(0U, forms[1]->field(1)->server_predictions()[0].type());
 }
 
 TEST_F(FormStructureTest, ParseQueryResponseAuthorDefinedTypes) {
@@ -3808,8 +4017,8 @@ TEST_F(FormStructureTest, ParseQueryResponseAuthorDefinedTypes) {
   forms.front()->DetermineHeuristicTypes(nullptr /* ukm_service */);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(EMAIL_ADDRESS);
-  response.add_field()->set_autofill_type(ACCOUNT_CREATION_PASSWORD);
+  response.add_field()->set_overall_type_prediction(EMAIL_ADDRESS);
+  response.add_field()->set_overall_type_prediction(ACCOUNT_CREATION_PASSWORD);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3817,9 +4026,10 @@ TEST_F(FormStructureTest, ParseQueryResponseAuthorDefinedTypes) {
 
   ASSERT_GE(forms[0]->field_count(), 2U);
   // Server type is parsed from the response and is the end result type.
-  EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->server_type());
+  EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->overall_server_type());
   EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(0)->Type().GetStorableType());
-  EXPECT_EQ(ACCOUNT_CREATION_PASSWORD, forms[0]->field(1)->server_type());
+  EXPECT_EQ(ACCOUNT_CREATION_PASSWORD,
+            forms[0]->field(1)->overall_server_type());
   // TODO(crbug.com/613666): Should be a properly defined type, and not
   // UNKNOWN_TYPE.
   EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(1)->Type().GetStorableType());
@@ -3852,10 +4062,11 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeLoneField) {
   forms.push_back(&form_structure);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(NAME_FULL);
-  response.add_field()->set_autofill_type(ADDRESS_HOME_LINE1);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_MONTH);  // Uh-oh!
-  response.add_field()->set_autofill_type(EMAIL_ADDRESS);
+  response.add_field()->set_overall_type_prediction(NAME_FULL);
+  response.add_field()->set_overall_type_prediction(ADDRESS_HOME_LINE1);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_MONTH);  // Uh-oh!
+  response.add_field()->set_overall_type_prediction(EMAIL_ADDRESS);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3869,10 +4080,10 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeLoneField) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(2)->server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->server_type());
+    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->overall_server_type());
   }
 
   // Sanity check that the enable/disabled works.
@@ -3884,10 +4095,10 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeLoneField) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->server_type());
+    EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(3)->overall_server_type());
   }
 }
 
@@ -3914,9 +4125,9 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeCCName) {
   forms.push_back(&form_structure);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(CREDIT_CARD_NAME_FIRST);
-  response.add_field()->set_autofill_type(CREDIT_CARD_NAME_LAST);
-  response.add_field()->set_autofill_type(EMAIL_ADDRESS);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_FIRST);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_LAST);
+  response.add_field()->set_overall_type_prediction(EMAIL_ADDRESS);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3930,9 +4141,9 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeCCName) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(3U, forms[0]->field_count());
-    EXPECT_EQ(NAME_FIRST, forms[0]->field(0)->server_type());
-    EXPECT_EQ(NAME_LAST, forms[0]->field(1)->server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->server_type());
+    EXPECT_EQ(NAME_FIRST, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(NAME_LAST, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->overall_server_type());
   }
 
   // Sanity check that the enable/disabled works.
@@ -3944,9 +4155,10 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeCCName) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(3U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FIRST, forms[0]->field(0)->server_type());
-    EXPECT_EQ(CREDIT_CARD_NAME_LAST, forms[0]->field(1)->server_type());
-    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FIRST,
+              forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_LAST, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(EMAIL_ADDRESS, forms[0]->field(2)->overall_server_type());
   }
 }
 
@@ -3981,11 +4193,13 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_1) {
   forms.push_back(&form_structure);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(CREDIT_CARD_NAME_FULL);
-  response.add_field()->set_autofill_type(CREDIT_CARD_NUMBER);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_MONTH);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_2_DIGIT_YEAR);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_MONTH);  // Uh-oh!
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_FULL);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NUMBER);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_EXP_MONTH);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_MONTH);  // Uh-oh!
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -3999,11 +4213,12 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_1) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(5U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR, forms[0]->field(3)->server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(4)->server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR,
+              forms[0]->field(3)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(4)->overall_server_type());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4015,11 +4230,12 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_1) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(5U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR, forms[0]->field(3)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(4)->server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_2_DIGIT_YEAR,
+              forms[0]->field(3)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(4)->overall_server_type());
   }
 }
 
@@ -4050,10 +4266,12 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_2) {
   forms.push_back(&form_structure);
 
   AutofillQueryResponseContents response;
-  response.add_field()->set_autofill_type(CREDIT_CARD_NAME_FULL);
-  response.add_field()->set_autofill_type(CREDIT_CARD_NUMBER);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
-  response.add_field()->set_autofill_type(CREDIT_CARD_EXP_MONTH);  // Uh-oh!
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NAME_FULL);
+  response.add_field()->set_overall_type_prediction(CREDIT_CARD_NUMBER);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
+  response.add_field()->set_overall_type_prediction(
+      CREDIT_CARD_EXP_MONTH);  // Uh-oh!
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -4066,11 +4284,11 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_2) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
     EXPECT_EQ(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
-              forms[0]->field(2)->server_type());
-    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(3)->server_type());
+              forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(NO_SERVER_DATA, forms[0]->field(3)->overall_server_type());
   }
 
   // Sanity check that the enable/disabled works.
@@ -4081,11 +4299,11 @@ TEST_F(FormStructureTest, ParseQueryResponse_RationalizeMultiMonth_2) {
     FormStructure::ParseQueryResponse(response_string, forms);
     ASSERT_EQ(1U, forms.size());
     ASSERT_EQ(4U, forms[0]->field_count());
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->server_type());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->server_type());
+    EXPECT_EQ(CREDIT_CARD_NAME_FULL, forms[0]->field(0)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->overall_server_type());
     EXPECT_EQ(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
-              forms[0]->field(2)->server_type());
-    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(3)->server_type());
+              forms[0]->field(2)->overall_server_type());
+    EXPECT_EQ(CREDIT_CARD_EXP_MONTH, forms[0]->field(3)->overall_server_type());
   }
 }
 
@@ -4127,6 +4345,60 @@ TEST_F(FormStructureTest, FindLongestCommonPrefix) {
   strings.clear();
   prefix = FormStructure::FindLongestCommonPrefix(strings);
   EXPECT_EQ(ASCIIToUTF16(""), prefix);
+}
+
+TEST_F(FormStructureTest, RationalizePhoneNumber_RunsOncePerSection) {
+  FormData form;
+  form.origin = GURL("http://foo.com");
+  FormFieldData field;
+  field.form_control_type = "text";
+  field.max_length = 10000;
+
+  field.label = ASCIIToUTF16("Full Name");
+  field.name = ASCIIToUTF16("fullName");
+  form.fields.push_back(field);
+
+  field.label = ASCIIToUTF16("Address");
+  field.name = ASCIIToUTF16("address");
+  form.fields.push_back(field);
+
+  field.label = ASCIIToUTF16("Home Phone");
+  field.name = ASCIIToUTF16("homePhoneNumber");
+  form.fields.push_back(field);
+
+  field.label = ASCIIToUTF16("Cell Phone");
+  field.name = ASCIIToUTF16("cellPhoneNumber");
+  form.fields.push_back(field);
+
+  AutofillQueryResponseContents response;
+  response.add_field()->set_overall_type_prediction(NAME_FULL);
+  response.add_field()->set_overall_type_prediction(
+      ADDRESS_HOME_STREET_ADDRESS);
+  response.add_field()->set_overall_type_prediction(PHONE_HOME_WHOLE_NUMBER);
+  response.add_field()->set_overall_type_prediction(PHONE_HOME_WHOLE_NUMBER);
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
+
+  FormStructure form_structure(form);
+  std::vector<FormStructure*> forms;
+  forms.push_back(&form_structure);
+  FormStructure::ParseQueryResponse(response_string, forms);
+
+  EXPECT_FALSE(form_structure.phone_rationalized_["fullName_1-default"]);
+  form_structure.RationalizePhoneNumbersInSection("fullName_1-default");
+  EXPECT_TRUE(form_structure.phone_rationalized_["fullName_1-default"]);
+  ASSERT_EQ(1U, forms.size());
+  ASSERT_EQ(4U, forms[0]->field_count());
+  EXPECT_EQ(NAME_FULL, forms[0]->field(0)->overall_server_type());
+  EXPECT_EQ(ADDRESS_HOME_STREET_ADDRESS,
+            forms[0]->field(1)->overall_server_type());
+
+  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(2)->overall_server_type());
+  EXPECT_FALSE(forms[0]->field(2)->only_fill_when_focused());
+
+  EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, forms[0]->field(3)->overall_server_type());
+  EXPECT_TRUE(forms[0]->field(3)->only_fill_when_focused());
 }
 
 }  // namespace autofill

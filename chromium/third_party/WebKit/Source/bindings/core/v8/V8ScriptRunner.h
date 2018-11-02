@@ -28,33 +28,47 @@
 
 #include <stdint.h>
 
+#include "bindings/core/v8/ReferrerScriptInfo.h"
+#include "bindings/core/v8/ScriptSourceLocationType.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8BindingMacros.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/loader/fetch/ScriptFetchOptions.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
 
+namespace WTF {
+class TextEncoding;
+}  // namespace WTF
+
 namespace blink {
 
+class CachedMetadata;
 class CachedMetadataHandler;
+class ExecutionContext;
 class ScriptResource;
 class ScriptSourceCode;
-class ExecutionContext;
 class ScriptStreamer;
 
 class CORE_EXPORT V8ScriptRunner final {
   STATIC_ONLY(V8ScriptRunner);
 
  public:
+  enum class OpaqueMode {
+    kOpaque,
+    kNotOpaque,
+  };
+
   // For the following methods, the caller sites have to hold
   // a HandleScope and a ContextScope.
   static v8::MaybeLocal<v8::Script> CompileScript(ScriptState*,
                                                   const ScriptSourceCode&,
+                                                  const ScriptFetchOptions&,
                                                   AccessControlStatus,
                                                   V8CacheOptions);
   static v8::MaybeLocal<v8::Script> CompileScript(ScriptState*,
@@ -62,9 +76,11 @@ class CORE_EXPORT V8ScriptRunner final {
                                                   const String& file_name,
                                                   const String& source_map_url,
                                                   const TextPosition&,
+                                                  ScriptSourceLocationType,
                                                   CachedMetadataHandler*,
                                                   AccessControlStatus,
-                                                  V8CacheOptions);
+                                                  V8CacheOptions,
+                                                  const ReferrerScriptInfo&);
   // CachedMetadataHandler is set when metadata caching is supported. For
   // normal scripe resources, CachedMetadataHandler is from ScriptResource.
   // For worker script, ScriptResource is null but CachedMetadataHandler may be
@@ -74,16 +90,19 @@ class CORE_EXPORT V8ScriptRunner final {
                                                   const String& file_name,
                                                   const String& source_map_url,
                                                   const TextPosition&,
+                                                  ScriptSourceLocationType,
                                                   ScriptResource*,
                                                   ScriptStreamer*,
                                                   CachedMetadataHandler*,
                                                   AccessControlStatus,
-                                                  V8CacheOptions);
+                                                  V8CacheOptions,
+                                                  const ReferrerScriptInfo&);
   static v8::MaybeLocal<v8::Module> CompileModule(v8::Isolate*,
                                                   const String& source,
                                                   const String& file_name,
                                                   AccessControlStatus,
-                                                  const TextPosition&);
+                                                  const TextPosition&,
+                                                  const ReferrerScriptInfo&);
   static v8::MaybeLocal<v8::Value> RunCompiledScript(v8::Isolate*,
                                                      v8::Local<v8::Script>,
                                                      ExecutionContext*);
@@ -101,7 +120,7 @@ class CORE_EXPORT V8ScriptRunner final {
       v8::Local<v8::Object>,
       ExecutionContext*,
       int argc = 0,
-      v8::Local<v8::Value> argv[] = 0);
+      v8::Local<v8::Value> argv[] = nullptr);
   static v8::MaybeLocal<v8::Value> CallInternalFunction(
       v8::Local<v8::Function>,
       v8::Local<v8::Value> receiver,
@@ -151,6 +170,13 @@ class CORE_EXPORT V8ScriptRunner final {
   // TODO(adamk): This should live on V8ThrowException, but it depends on
   // V8Initializer and so can't trivially move to platform/bindings.
   static void ReportException(v8::Isolate*, v8::Local<v8::Value> exception);
+
+  static scoped_refptr<CachedMetadata> GenerateFullCodeCache(
+      ScriptState*,
+      const String& script_string,
+      const String& file_name,
+      const WTF::TextEncoding&,
+      OpaqueMode);
 
  private:
   static v8::MaybeLocal<v8::Value> CallExtraHelper(ScriptState*,

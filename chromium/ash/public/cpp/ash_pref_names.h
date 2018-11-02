@@ -18,7 +18,6 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilitySpokenFeedbackEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityHighContrastEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierCenterFocus[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierEnabled[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierType[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierScale[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityMonoAudioEnabled[];
@@ -32,6 +31,9 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessEnabled[];
 ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
 
 ASH_PUBLIC_EXPORT extern const char kHasSeenStylus[];
+ASH_PUBLIC_EXPORT extern const char kShownPaletteWelcomeBubble[];
+ASH_PUBLIC_EXPORT extern const char kEnableStylusTools[];
+ASH_PUBLIC_EXPORT extern const char kLaunchPaletteOnEjectEvent[];
 
 ASH_PUBLIC_EXPORT extern const char kNightLightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kNightLightTemperature[];
@@ -52,6 +54,12 @@ ASH_PUBLIC_EXPORT extern const char kWallpaperColors[];
 
 ASH_PUBLIC_EXPORT extern const char kUserBluetoothAdapterEnabled[];
 ASH_PUBLIC_EXPORT extern const char kSystemBluetoothAdapterEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kTouchHudProjectionEnabled[];
+ASH_PUBLIC_EXPORT extern const char kTouchpadEnabled[];
+ASH_PUBLIC_EXPORT extern const char kTouchscreenEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kQuickUnlockPinSalt[];
 
 }  // namespace prefs
 

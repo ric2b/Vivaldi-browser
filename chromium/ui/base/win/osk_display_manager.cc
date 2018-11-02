@@ -20,6 +20,7 @@
 #include "base/win/scoped_co_mem.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "ui/base/win/hidden_window.h"
 #include "ui/base/win/osk_display_observer.h"
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/geometry/dip_util.h"
@@ -117,7 +118,9 @@ class OnScreenKeyboardDetector {
 OnScreenKeyboardDetector::OnScreenKeyboardDetector()
     : keyboard_detector_factory_(this) {}
 
-OnScreenKeyboardDetector::~OnScreenKeyboardDetector() {}
+OnScreenKeyboardDetector::~OnScreenKeyboardDetector() {
+  ClearObservers();
+}
 
 void OnScreenKeyboardDetector::DetectKeyboard(HWND main_window) {
   main_window_ = main_window;
@@ -269,7 +272,7 @@ bool OnScreenKeyboardDisplayManager::DisplayVirtualKeyboard(
   if (base::win::GetVersion() < base::win::VERSION_WIN8)
     return false;
 
-  if (base::win::IsKeyboardPresentOnSlate(nullptr))
+  if (base::win::IsKeyboardPresentOnSlate(nullptr, ui::GetHiddenWindow()))
     return false;
 
   if (osk_path_.empty() && !GetOSKPath(&osk_path_)) {

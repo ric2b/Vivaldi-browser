@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 #include "base/memory/ptr_util.h"
-#include "cc/base/filter_operations.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/painted_scrollbar_layer.h"
@@ -15,6 +14,7 @@
 #include "cc/layers/texture_layer_impl.h"
 #include "cc/layers/video_layer.h"
 #include "cc/layers/video_layer_impl.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/test/fake_content_layer_client.h"
@@ -35,7 +35,7 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "media/base/media.h"
@@ -55,7 +55,7 @@ class LayerTreeHostContextTest : public LayerTreeTest {
  public:
   LayerTreeHostContextTest()
       : LayerTreeTest(),
-        context3d_(NULL),
+        context3d_(nullptr),
         times_to_fail_create_(0),
         times_to_lose_during_commit_(0),
         times_to_lose_during_draw_(0),
@@ -694,7 +694,7 @@ class LayerTreeHostContextTestLostContextAndEvictTextures
  public:
   LayerTreeHostContextTestLostContextAndEvictTextures()
       : LayerTreeHostContextTest(),
-        impl_host_(0),
+        impl_host_(nullptr),
         num_commits_(0),
         lost_context_(false) {}
 
@@ -826,9 +826,9 @@ class LayerTreeHostContextTestLayersNotified : public LayerTreeHostContextTest {
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
     LayerTreeHostContextTest::DidActivateTreeOnThread(host_impl);
 
-    FakePictureLayerImpl* root_picture = NULL;
-    FakePictureLayerImpl* child_picture = NULL;
-    FakePictureLayerImpl* grandchild_picture = NULL;
+    FakePictureLayerImpl* root_picture = nullptr;
+    FakePictureLayerImpl* child_picture = nullptr;
+    FakePictureLayerImpl* grandchild_picture = nullptr;
 
     root_picture = static_cast<FakePictureLayerImpl*>(
         host_impl->active_tree()->root_layer_for_testing());
@@ -880,10 +880,11 @@ class LayerTreeHostContextTestDontUseLostResources
     context_should_support_io_surface_ = true;
 
     child_context_provider_ = TestContextProvider::Create();
-    CHECK(child_context_provider_->BindToCurrentThread());
+    auto result = child_context_provider_->BindToCurrentThread();
+    CHECK_EQ(result, gpu::ContextResult::kSuccess);
     shared_bitmap_manager_.reset(new TestSharedBitmapManager);
     child_resource_provider_ =
-        FakeResourceProvider::Create<LayerTreeResourceProvider>(
+        FakeResourceProvider::CreateLayerTreeResourceProvider(
             child_context_provider_.get(), shared_bitmap_manager_.get());
   }
 
@@ -911,14 +912,16 @@ class LayerTreeHostContextTestDontUseLostResources
     layer->SetIsDrawable(true);
     root->AddChild(layer);
 
-    scoped_refptr<TextureLayer> texture = TextureLayer::CreateForMailbox(NULL);
+    scoped_refptr<TextureLayer> texture =
+        TextureLayer::CreateForMailbox(nullptr);
     texture->SetBounds(gfx::Size(10, 10));
     texture->SetIsDrawable(true);
-    texture->SetTextureMailbox(
-        viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
-        viz::SingleReleaseCallback::Create(
-            base::Bind(&LayerTreeHostContextTestDontUseLostResources::
-                           EmptyReleaseCallback)));
+    auto resource = viz::TransferableResource::MakeGL(
+        mailbox, GL_LINEAR, GL_TEXTURE_2D, sync_token);
+    texture->SetTransferableResource(
+        resource, viz::SingleReleaseCallback::Create(
+                      base::Bind(&LayerTreeHostContextTestDontUseLostResources::
+                                     EmptyReleaseCallback)));
     root->AddChild(texture);
 
     scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client_);
@@ -995,8 +998,8 @@ class LayerTreeHostContextTestDontUseLostResources
       // On the third commit we're recovering from context loss. Hardware
       // video frames should not be reused by the VideoFrameProvider, but
       // software frames can be.
-      hw_frame_provider_.set_frame(NULL);
-      scaled_hw_frame_provider_.set_frame(NULL);
+      hw_frame_provider_.set_frame(nullptr);
+      scaled_hw_frame_provider_.set_frame(nullptr);
     }
   }
 

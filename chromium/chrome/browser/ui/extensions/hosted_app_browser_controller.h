@@ -8,16 +8,27 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 class Browser;
 
+namespace gfx {
+class ImageSkia;
+}
+
 namespace extensions {
+
+class Extension;
 
 // Class to encapsulate logic to control the browser UI for hosted apps.
 class HostedAppBrowserController {
  public:
   // Indicates whether |browser| is a hosted app browser.
-  static bool IsForHostedApp(Browser* browser);
+  static bool IsForHostedApp(const Browser* browser);
+
+  // Returns whether |browser| uses the experimental hosted app experience.
+  static bool IsForExperimentalHostedAppBrowser(const Browser* browser);
 
   explicit HostedAppBrowserController(Browser* browser);
   ~HostedAppBrowserController();
@@ -31,8 +42,29 @@ class HostedAppBrowserController {
   // animated.
   void UpdateLocationBarVisibility(bool animate) const;
 
+  // Returns the app icon for the window to use in the task list.
+  gfx::ImageSkia GetWindowAppIcon() const;
+
+  // Returns the icon to be displayed in the window title bar.
+  gfx::ImageSkia GetWindowIcon() const;
+
+  // Returns the color of the title bar.
+  base::Optional<SkColor> GetThemeColor() const;
+
+  // Returns the title to be displayed in the window title bar.
+  base::string16 GetTitle() const;
+
+  // Gets the short name of the app.
+  std::string GetAppShortName() const;
+
+  // Gets the domain and registry of the app start url (e.g example.com.au).
+  std::string GetDomainAndRegistry() const;
+
  private:
-  Browser* browser_;
+  // Gets the extension for this controller.
+  const Extension* GetExtension() const;
+
+  Browser* const browser_;
   const std::string extension_id_;
 
   DISALLOW_COPY_AND_ASSIGN(HostedAppBrowserController);

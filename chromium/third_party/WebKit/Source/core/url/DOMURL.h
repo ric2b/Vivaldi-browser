@@ -41,9 +41,7 @@ class ExecutionContext;
 class URLRegistrable;
 class URLSearchParams;
 
-class DOMURL final : public GarbageCollectedFinalized<DOMURL>,
-                     public ScriptWrappable,
-                     public DOMURLUtils {
+class DOMURL final : public ScriptWrappable, public DOMURLUtils {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -73,7 +71,7 @@ class DOMURL final : public GarbageCollectedFinalized<DOMURL>,
 
   URLSearchParams* searchParams();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class URLSearchParams;

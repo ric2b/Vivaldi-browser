@@ -145,6 +145,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   FloatRect ComputeStickyConstrainingRect() const;
   void UpdateStickyPositionConstraints() const;
   LayoutSize StickyPositionOffset() const;
+  bool IsSlowRepaintConstrainedObject() const;
 
   LayoutSize OffsetForInFlowPosition() const;
 
@@ -167,7 +168,9 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 
   bool HasSelfPaintingLayer() const;
   PaintLayer* Layer() const {
-    return GetRarePaintData() ? GetRarePaintData()->Layer() : nullptr;
+    return FirstFragment().GetRarePaintData()
+               ? FirstFragment().GetRarePaintData()->Layer()
+               : nullptr;
   }
   // The type of PaintLayer to instantiate. Any value returned from this
   // function other than NoPaintLayer will lead to a PaintLayer being created.
@@ -420,7 +423,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   void ContentChanged(ContentChangeType);
   bool HasAcceleratedCompositing() const;
 
-  void ComputeLayerHitTestRects(LayerHitTestRects&) const override;
+  void ComputeLayerHitTestRects(LayerHitTestRects&, TouchAction) const override;
 
   // Returns true if the background is painted opaque in the given rect.
   // The query rect is given in local coordinate system.
@@ -470,7 +473,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   }
 
   LayoutRect LocalCaretRectForEmptyElement(LayoutUnit width,
-                                           LayoutUnit text_indent_offset);
+                                           LayoutUnit text_indent_offset) const;
 
   bool HasAutoHeightOrContainingBlockWithAutoHeight() const;
   LayoutBlock* ContainingBlockForAutoHeightDetection(
@@ -487,7 +490,9 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   void AddLayerHitTestRects(LayerHitTestRects&,
                             const PaintLayer*,
                             const LayoutPoint&,
-                            const LayoutRect&) const override;
+                            TouchAction,
+                            const LayoutRect&,
+                            TouchAction) const override;
 
   void StyleWillChange(StyleDifference,
                        const ComputedStyle& new_style) override;
@@ -508,16 +513,16 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   void MoveChildTo(LayoutBoxModelObject* to_box_model_object,
                    LayoutObject* child,
                    bool full_remove_insert = false) {
-    MoveChildTo(to_box_model_object, child, 0, full_remove_insert);
+    MoveChildTo(to_box_model_object, child, nullptr, full_remove_insert);
   }
   void MoveAllChildrenTo(LayoutBoxModelObject* to_box_model_object,
                          bool full_remove_insert = false) {
-    MoveAllChildrenTo(to_box_model_object, 0, full_remove_insert);
+    MoveAllChildrenTo(to_box_model_object, nullptr, full_remove_insert);
   }
   void MoveAllChildrenTo(LayoutBoxModelObject* to_box_model_object,
                          LayoutObject* before_child,
                          bool full_remove_insert = false) {
-    MoveChildrenTo(to_box_model_object, SlowFirstChild(), 0, before_child,
+    MoveChildrenTo(to_box_model_object, SlowFirstChild(), nullptr, before_child,
                    full_remove_insert);
   }
   // Move all of the kids from |startChild| up to but excluding |endChild|. 0
@@ -527,7 +532,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
                       LayoutObject* start_child,
                       LayoutObject* end_child,
                       bool full_remove_insert = false) {
-    MoveChildrenTo(to_box_model_object, start_child, end_child, 0,
+    MoveChildrenTo(to_box_model_object, start_child, end_child, nullptr,
                    full_remove_insert);
   }
   virtual void MoveChildrenTo(LayoutBoxModelObject* to_box_model_object,

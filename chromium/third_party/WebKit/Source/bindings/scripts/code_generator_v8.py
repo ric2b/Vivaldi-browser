@@ -58,8 +58,8 @@ from v8_globals import includes
 import v8_interface
 import v8_types
 import v8_union
-from v8_utilities import cpp_name
-from utilities import idl_filename_to_component, is_testing_target, shorten_union_name
+from v8_utilities import build_basename, cpp_name
+from utilities import idl_filename_to_component, is_testing_target, shorten_union_name, to_snake_case
 
 
 # Make sure extension is .py, not .pyc or .pyo, so doesn't depend on caching
@@ -134,8 +134,8 @@ class TypedefResolver(Visitor):
 class CodeGeneratorV8Base(CodeGeneratorBase):
     """Base class for v8 bindings generator and IDL dictionary impl generator"""
 
-    def __init__(self, info_provider, cache_dir, output_dir):
-        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir)
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case):
+        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir, snake_case)
         self.typedef_resolver = TypedefResolver(info_provider)
 
     def generate_code(self, definitions, definition_name):
@@ -152,15 +152,19 @@ class CodeGeneratorV8Base(CodeGeneratorBase):
         # This should be implemented in subclasses.
         raise NotImplementedError()
 
+    def get_output_basename(self, definition_name, ext, prefix=None):
+        return build_basename(definition_name, self.snake_case_generated_files, prefix=prefix, ext=ext)
+
 
 class CodeGeneratorV8(CodeGeneratorV8Base):
-    def __init__(self, info_provider, cache_dir, output_dir):
-        CodeGeneratorV8Base.__init__(self, info_provider, cache_dir, output_dir)
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case):
+        CodeGeneratorV8Base.__init__(self, info_provider, cache_dir, output_dir, snake_case)
 
     def output_paths(self, definition_name):
-        header_path = posixpath.join(self.output_dir,
-                                     'V8%s.h' % definition_name)
-        cpp_path = posixpath.join(self.output_dir, 'V8%s.cpp' % definition_name)
+        header_path = posixpath.join(self.output_dir, self.get_output_basename(
+            definition_name, '.h', prefix='V8'))
+        cpp_path = posixpath.join(self.output_dir, self.get_output_basename(
+            definition_name, '.cpp', prefix='V8'))
         return header_path, cpp_path
 
     def generate_code_internal(self, definitions, definition_name):
@@ -217,12 +221,13 @@ class CodeGeneratorV8(CodeGeneratorV8Base):
             template_context['header_includes'].add(interface_info['include_path'])
         template_context['header_includes'].update(
             interface_info.get('additional_header_includes', []))
+        header_path, cpp_path = self.output_paths(interface_name)
+        template_context['this_include_header_name'] = posixpath.basename(header_path)
         header_template = self.jinja_env.get_template(header_template_filename)
         cpp_template = self.jinja_env.get_template(cpp_template_filename)
         header_text, cpp_text = self.render_template(
             include_paths, header_template, cpp_template, template_context,
             component)
-        header_path, cpp_path = self.output_paths(interface_name)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),
@@ -243,9 +248,10 @@ class CodeGeneratorV8(CodeGeneratorV8Base):
         if not is_testing_target(interface_info.get('full_path')):
             template_context['header_includes'].add(self.info_provider.include_path_for_export)
             template_context['exported'] = self.info_provider.specifier_for_export
+        header_path, cpp_path = self.output_paths(dictionary_name)
+        template_context['this_include_header_name'] = posixpath.basename(header_path)
         header_text, cpp_text = self.render_template(
             include_paths, header_template, cpp_template, template_context)
-        header_path, cpp_path = self.output_paths(dictionary_name)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),
@@ -253,14 +259,16 @@ class CodeGeneratorV8(CodeGeneratorV8Base):
 
 
 class CodeGeneratorDictionaryImpl(CodeGeneratorV8Base):
-    def __init__(self, info_provider, cache_dir, output_dir):
-        CodeGeneratorV8Base.__init__(self, info_provider, cache_dir, output_dir)
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case):
+        CodeGeneratorV8Base.__init__(self, info_provider, cache_dir, output_dir, snake_case)
 
     def output_paths(self, definition_name, interface_info):
         output_dir = posixpath.join(self.output_dir,
                                     interface_info['relative_dir'])
-        header_path = posixpath.join(output_dir, '%s.h' % definition_name)
-        cpp_path = posixpath.join(output_dir, '%s.cpp' % definition_name)
+        header_path = posixpath.join(output_dir,
+                                     self.get_output_basename(definition_name, '.h'))
+        cpp_path = posixpath.join(output_dir,
+                                  self.get_output_basename(definition_name, '.cpp'))
         return header_path, cpp_path
 
     def generate_code_internal(self, definitions, definition_name):
@@ -279,10 +287,11 @@ class CodeGeneratorDictionaryImpl(CodeGeneratorV8Base):
             template_context['header_includes'].add(self.info_provider.include_path_for_export)
         template_context['header_includes'].update(
             interface_info.get('additional_header_includes', []))
-        header_text, cpp_text = self.render_template(
-            include_paths, header_template, cpp_template, template_context)
         header_path, cpp_path = self.output_paths(
             cpp_name(dictionary), interface_info)
+        template_context['this_include_header_name'] = posixpath.basename(header_path)
+        header_text, cpp_text = self.render_template(
+            include_paths, header_template, cpp_template, template_context)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),
@@ -295,8 +304,8 @@ class CodeGeneratorUnionType(CodeGeneratorBase):
     CodeGeneratorDictionaryImpl. It assumes that all union types are already
     collected. It doesn't process idl files directly.
     """
-    def __init__(self, info_provider, cache_dir, output_dir, target_component):
-        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir)
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case, target_component):
+        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir, snake_case)
         self.target_component = target_component
         # The code below duplicates parts of TypedefResolver. We do not use it
         # directly because IdlUnionType is not a type defined in
@@ -315,15 +324,17 @@ class CodeGeneratorUnionType(CodeGeneratorBase):
         template_context['header_includes'].append(
             self.info_provider.include_path_for_export)
         template_context['header_includes'] = normalize_and_sort_includes(
-            template_context['header_includes'])
+            template_context['header_includes'], self.snake_case_generated_files)
+        template_context['cpp_includes'] = normalize_and_sort_includes(
+            template_context['cpp_includes'], self.snake_case_generated_files)
         template_context['code_generator'] = self.generator_name
         template_context['exported'] = self.info_provider.specifier_for_export
-        name = shorten_union_name(union_type)
-        template_context['this_include_header_name'] = name
+        snake_base_name = to_snake_case(shorten_union_name(union_type))
+        template_context['this_include_header_name'] = snake_base_name
         header_text = render_template(header_template, template_context)
         cpp_text = render_template(cpp_template, template_context)
-        header_path = posixpath.join(self.output_dir, '%s.h' % name)
-        cpp_path = posixpath.join(self.output_dir, '%s.cpp' % name)
+        header_path = posixpath.join(self.output_dir, '%s.h' % snake_base_name)
+        cpp_path = posixpath.join(self.output_dir, '%s.cc' % snake_base_name)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),
@@ -357,8 +368,8 @@ class CodeGeneratorUnionType(CodeGeneratorBase):
 
 
 class CodeGeneratorCallbackFunction(CodeGeneratorBase):
-    def __init__(self, info_provider, cache_dir, output_dir, target_component):
-        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir)
+    def __init__(self, info_provider, cache_dir, output_dir, snake_case, target_component):
+        CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir, snake_case)
         self.target_component = target_component
         self.typedef_resolver = TypedefResolver(info_provider)
 
@@ -373,12 +384,15 @@ class CodeGeneratorCallbackFunction(CodeGeneratorBase):
             template_context['header_includes'].append(
                 self.info_provider.include_path_for_export)
         template_context['header_includes'] = normalize_and_sort_includes(
-            template_context['header_includes'])
+            template_context['header_includes'], self.snake_case_generated_files)
+        template_context['cpp_includes'] = normalize_and_sort_includes(
+            template_context['cpp_includes'], self.snake_case_generated_files)
         template_context['code_generator'] = MODULE_PYNAME
         header_text = render_template(header_template, template_context)
         cpp_text = render_template(cpp_template, template_context)
-        header_path = posixpath.join(self.output_dir, '%s.h' % callback_function.name)
-        cpp_path = posixpath.join(self.output_dir, '%s.cpp' % callback_function.name)
+        snake_base_name = to_snake_case('V8%s' % callback_function.name)
+        header_path = posixpath.join(self.output_dir, '%s.h' % snake_base_name)
+        cpp_path = posixpath.join(self.output_dir, '%s.cc' % snake_base_name)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),

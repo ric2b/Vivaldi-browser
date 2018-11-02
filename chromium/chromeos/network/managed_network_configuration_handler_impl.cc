@@ -72,7 +72,7 @@ void InvokeErrorCallback(const std::string& service_path,
       error_callback, service_path, error_name, error_msg);
 }
 
-void LogErrorWithDict(const tracked_objects::Location& from_where,
+void LogErrorWithDict(const base::Location& from_where,
                       const std::string& error_name,
                       std::unique_ptr<base::DictionaryValue> error_data) {
   device_event_log::AddEntry(from_where.file_name(), from_where.line_number(),
@@ -88,13 +88,6 @@ const base::DictionaryValue* GetByGUID(const GuidToPolicyMap& policies,
   return it->second.get();
 }
 
-bool IsTetherShillDictionary(const base::DictionaryValue& dict) {
-  std::string network_type;
-  return dict.GetStringWithoutPathExpansion(shill::kTypeProperty,
-                                            &network_type) &&
-         network_type == kTypeTether;
-}
-
 }  // namespace
 
 struct ManagedNetworkConfigurationHandlerImpl::Policies {
@@ -104,7 +97,7 @@ struct ManagedNetworkConfigurationHandlerImpl::Policies {
   base::DictionaryValue global_network_config;
 };
 
-ManagedNetworkConfigurationHandlerImpl::Policies::~Policies() {}
+ManagedNetworkConfigurationHandlerImpl::Policies::~Policies() = default;
 
 void ManagedNetworkConfigurationHandlerImpl::AddObserver(
     NetworkPolicyObserver* observer) {
@@ -149,13 +142,13 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
   std::string profile_path;
   shill_properties->GetStringWithoutPathExpansion(shill::kProfileProperty,
                                                   &profile_path);
+  const NetworkState* network_state =
+      network_state_handler_->GetNetworkState(service_path);
   const NetworkProfile* profile =
       network_profile_handler_->GetProfileForPath(profile_path);
-  if (!profile && !IsTetherShillDictionary(*shill_properties)) {
-    // Tether networks are not expected to have an associated profile; only
-    // log an error if the provided properties do not correspond to a
-    // Tether network.
-    NET_LOG_ERROR("No profile for service: " + profile_path, service_path);
+  if (!profile && !(network_state && network_state->IsNonProfileType())) {
+    // Visible but unsaved (not known) networks will not have a profile.
+    NET_LOG_DEBUG("No profile for service: " + profile_path, service_path);
   }
 
   std::unique_ptr<NetworkUIData> ui_data =
@@ -177,8 +170,6 @@ void ManagedNetworkConfigurationHandlerImpl::SendManagedProperties(
 
   ::onc::ONCSource onc_source;
   FindPolicyByGUID(userhash, guid, &onc_source);
-  const NetworkState* network_state =
-      network_state_handler_->GetNetworkState(service_path);
   std::unique_ptr<base::DictionaryValue> active_settings(
       onc::TranslateShillServiceToONCPart(*shill_properties, onc_source,
                                           &onc::kNetworkWithStateSignature,
@@ -811,22 +802,25 @@ void ManagedNetworkConfigurationHandlerImpl::OnPolicyAppliedToNetwork(
 void ManagedNetworkConfigurationHandlerImpl::GetDeviceStateProperties(
     const std::string& service_path,
     base::DictionaryValue* properties) {
-  std::string connection_state;
-  properties->GetStringWithoutPathExpansion(
-      shill::kStateProperty, &connection_state);
-  if (!NetworkState::StateIsConnected(connection_state))
+  const NetworkState* network =
+      network_state_handler_->GetNetworkState(service_path);
+  if (!network) {
+    NET_LOG(ERROR) << "GetDeviceStateProperties: no network for: "
+                   << service_path;
     return;
+  }
+  if (!network->IsConnectedState())
+    return;  // No (non saved) IP Configs for non connected networks.
 
   // Get the IPConfig properties from the device and store them in "IPConfigs"
   // (plural) in the properties dictionary. (Note: Shill only provides a single
   // "IPConfig" property for a network service, but a consumer of this API may
   // want information about all ipv4 and ipv6 IPConfig properties.
-  std::string device;
-  properties->GetStringWithoutPathExpansion(shill::kDeviceProperty, &device);
   const DeviceState* device_state =
-      network_state_handler_->GetDeviceState(device);
+      network_state_handler_->GetDeviceState(network->device_path());
   if (!device_state) {
-    NET_LOG_ERROR("GetDeviceProperties: no device: " + device, service_path);
+    NET_LOG(ERROR) << "GetDeviceStateProperties: no device: "
+                   << network->device_path() << " For: " << service_path;
     return;
   }
 
@@ -836,11 +830,21 @@ void ManagedNetworkConfigurationHandlerImpl::GetDeviceStateProperties(
                        base::Value(device_state->mac_address()));
   }
 
-  // Convert IPConfig dictionary to a ListValue.
-  auto ip_configs = base::MakeUnique<base::ListValue>();
-  for (base::DictionaryValue::Iterator iter(device_state->ip_configs());
-       !iter.IsAtEnd(); iter.Advance()) {
-    ip_configs->Append(iter.value().CreateDeepCopy());
+  // Build a list of IPConfigs.
+  auto ip_configs = std::make_unique<base::ListValue>();
+
+  if (device_state->ip_configs().empty()) {
+    // Shill may not provide IPConfigs for external Cellular devices
+    // (dongles), so build a dictionary of ipv4 properties from cached
+    // NetworkState properties (crbug.com/739314).
+    NET_LOG(DEBUG)
+        << "GetDeviceStateProperties: Setting IPv4 properties from network: "
+        << service_path;
+    ip_configs->GetList().push_back(network->ipv4_config().Clone());
+  } else {
+    // Convert the DeviceState IPConfigs dictionary to a ListValue.
+    for (const auto iter : device_state->ip_configs().DictItems())
+      ip_configs->GetList().push_back(iter.second.Clone());
   }
   properties->SetWithoutPathExpansion(shill::kIPConfigsProperty,
                                       std::move(ip_configs));

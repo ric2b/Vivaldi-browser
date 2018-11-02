@@ -5,7 +5,6 @@
 <translation id="1127811143501539442">{DAYS,plural, =1{1 दिन पहले}one{# दिन पहले}other{# दिन पहले}}</translation>
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 मिनट पहले}one{# मिनट पहले}other{# मिनट पहले}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 मिनट}one{# मिनट}other{# मिनट}}</translation>
-<translation id="1190609913194133056">सूचना केंद्र</translation>
 <translation id="1243314992276662751">अपलोड करें</translation>
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">सुझाए गए ऐप्लिकेशन</translation>
@@ -13,13 +12,13 @@
 <translation id="1413622004203049571"><ph name="NOTIFIER_NAME" /> से सूचनाएं अक्षम करें</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 मिनट और }one{# मिनट और }other{# मिनट और }}</translation>
 <translation id="1643823602425662293">नोटिफ़िकेशन</translation>
-<translation id="1685967565548146460">हैट</translation>
 <translation id="1710340000377843106">अभी</translation>
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 मिनट}one{# मिनट}other{# मिनट}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> बाइट</translation>
 <translation id="1801827354178857021">अवधि</translation>
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 माह}one{# माह}other{# माह}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
+<translation id="1812519734428420144">तारा रेटिंग <ph name="RATING_SCORE" /></translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 घंटा और }one{# घंटे और }other{# घंटे और }}</translation>
 <translation id="1842960171412779397">चुनें</translation>
 <translation id="1860796786778352021">सूचना बंद करें</translation>
@@ -30,10 +29,11 @@
 <translation id="2148716181193084225">आज</translation>
 <translation id="2168039046890040389">पेज ऊपर</translation>
 <translation id="2190355936436201913">(खाली)</translation>
+<translation id="219905428774326614">लॉन्चर, सभी ऐप्लिकेशन</translation>
 <translation id="2289052229480071835">अपनी स्क्रीन पर स्पर्श लक्ष्य पर टैप करें.</translation>
+<translation id="2295140143284145483">सर्वे</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="24452542372838207">सूचना को विस्तृत करें</translation>
-<translation id="2482878487686419369">अधिसूचनाएं</translation>
 <translation id="2497284189126895209">सभी फ़ाइलें</translation>
 <translation id="2522350507219695259">कैलिब्रेशन पूरा हो गया</translation>
 <translation id="252373100621549798">अज्ञात डिस्प्ले</translation>
@@ -67,17 +67,16 @@
 <translation id="4316910396681052118">सभी ऐप्लिकेशन</translation>
 <translation id="4320177379694898372">कोई इंटरनेट कनेक्‍शन नहीं</translation>
 <translation id="4588090240171750605">दाएं स्क्रॉल करें</translation>
+<translation id="4724120544754982507">सूचना केंद्र, <ph name="UNREAD_NOTIFICATION_COUNT" /> गैर-पढ़ी गई सूचनाएं</translation>
 <translation id="4730374152663651037">अक्सर उपयोग किए गए</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{1 माह शेष}one{# माह शेष}other{# माह शेष}}</translation>
 <translation id="4820616160060340806">आदेश+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 सेकंड}one{# सेकंड}other{# सेकंड}}</translation>
 <translation id="4971687151119236543">मीडिया पिछला ट्रैक</translation>
 <translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="5016049845330225051">खोज बॉक्स लेख साफ़ करें बटन</translation>
 <translation id="5046499563572181734">यहां टैप करें</translation>
 <translation id="5076340679995252485">&amp;चिपकाएं</translation>
 <translation id="5120799197269191491">Search+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="5153297660536091054">पिन अनलॉक सुविधा</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">प्रकटीकरण त्रिकोण</translation>
 <translation id="528468243742722775">समाप्त</translation>
@@ -92,7 +91,8 @@
 <translation id="5941711191222866238">छोटा करें</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 घंटा}one{# घंटे}other{# घंटे}}</translation>
 <translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="598033046487663418">सभी ऐप्स</translation>
+<translation id="6012623610530968780"><ph name="TOTAL_PAGE_NUM" /> में से <ph name="SELECTED_PAGE" /> पेज</translation>
+<translation id="6022924867608035986">खोज बॉक्स का लेख मिटाएं</translation>
 <translation id="6040143037577758943">बंद करें</translation>
 <translation id="6119846243427417423">सक्रिय करें</translation>
 <translation id="6129953537138746214">Space</translation>
@@ -105,7 +105,7 @@
 <translation id="6394627529324717982">अल्पविराम</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 सेकंड पहले}one{# सेकंड पहले}other{# सेकंड पहले}}</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 सेकंड पहले}one{# सेकंड पहले}other{# सेकंड पहले}}</translation>
-<translation id="6528179044667508675">परेशान न करें</translation>
+<translation id="6567071839949112727">पहले वाले पर क्लिक करें</translation>
 <translation id="6612467943526193239">कैलिब्रेशन से बाहर निकलने के लिए Esc दबाएं.</translation>
 <translation id="6620110761915583480">फ़ाइल सहेजें</translation>
 <translation id="6699343763173986273">मीडिया अगला ट्रैक</translation>
@@ -117,26 +117,21 @@
 <translation id="688711909580084195">शीर्षक-रहित वेबपेज</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 वर्ष शेष}one{# वर्ष शेष}other{# वर्ष शेष}}</translation>
-<translation id="6918245111648057970">प्रत्येक उपयोगकर्ता के लिए निम्न में से नोटिफ़िकेशन की अनुमति दें:</translation>
 <translation id="6945221475159498467">चुनें</translation>
-<translation id="6965382102122355670">ठीक</translation>
+<translation id="6965382102122355670">ठीक है</translation>
 <translation id="7052633198403197513">F1</translation>
 <translation id="7130207228079676353">सबसे अधिक संभावना है</translation>
-<translation id="7135556860107312402">निम्न से आने वाली नोटिफ़िकेशन की अनुमति दें:</translation>
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 मिनट शेष}one{# मिनट शेष}other{# मिनट शेष}}</translation>
+<translation id="7319740667687257810">लॉन्चर, आंशिक दृश्य</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 मिनट पहले}one{# मिनट पहले}other{# मिनट पहले}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 मिनट शेष}one{# मिनट शेष}other{# मिनट शेष}}</translation>
-<translation id="7457942297256758195">सभी साफ़ करें</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
-<translation id="7647488630410863958">अपने नोटिफ़िकेशन देखने के लिए डिवाइस अनलॉक करें</translation>
 <translation id="7658239707568436148">अभी नहीं</translation>
 <translation id="7781829728241885113">बीता कल</translation>
 <translation id="7814458197256864873">&amp;प्रतिलिपि बनाएं</translation>
-<translation id="7850320739366109486">परेशान न करें</translation>
 <translation id="7907591526440419938">फ़ाइल खोलें</translation>
-<translation id="8054029954190364711">फ़िंगरप्रिंट अनलॉक सुविधा</translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 घंटा पहले}one{# घंटे पहले}other{# घंटे पहले}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 सेकंड शेष}one{# सेकंड शेष}other{# सेकंड शेष}}</translation>
 <translation id="815598010540052116">नीचे स्क्रॉल करें</translation>
@@ -148,10 +143,9 @@
 <translation id="8352146631962686268">{YEARS,plural, =1{1 वर्ष}one{# वर्ष}other{# वर्ष}}</translation>
 <translation id="8371695176452482769">अब बोलें</translation>
 <translation id="838869780401515933">चेक करें</translation>
-<translation id="8392688371657486010">आपके पास कोई भी नोटिफ़िकेशन नहीं है</translation>
+<translation id="8393700583063109961">संदेश भेजें</translation>
 <translation id="8394908167088220973">मीडिया चलाएं/रोकें</translation>
 <translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8428213095426709021">सेटिंग्स</translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1y}one{#y}other{#y}}</translation>
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> फ़ाइल (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>

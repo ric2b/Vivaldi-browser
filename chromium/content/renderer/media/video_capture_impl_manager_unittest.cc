@@ -12,7 +12,6 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
-#include "content/common/media/media_stream_options.h"
 #include "content/common/video_capture.mojom.h"
 #include "content/renderer/media/video_capture_impl.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
@@ -112,7 +111,7 @@ class MockVideoCaptureImplManager : public VideoCaptureImplManager {
  private:
   std::unique_ptr<VideoCaptureImpl> CreateVideoCaptureImplForTesting(
       media::VideoCaptureSessionId session_id) const override {
-    auto video_capture_impl = base::MakeUnique<MockVideoCaptureImpl>(
+    auto video_capture_impl = std::make_unique<MockVideoCaptureImpl>(
         session_id, pause_callback_, stop_capture_callback_);
     video_capture_impl->SetVideoCaptureHostForTesting(video_capture_impl.get());
     return std::move(video_capture_impl);
@@ -235,13 +234,13 @@ TEST_F(VideoCaptureImplManagerTest, NoLeak) {
 
 TEST_F(VideoCaptureImplManagerTest, SuspendAndResumeSessions) {
   std::array<base::Closure, kNumClients> release_callbacks;
-  StreamDeviceInfoArray video_device_array;
+  MediaStreamDevices video_devices;
   for (size_t i = 0; i < kNumClients; ++i) {
     release_callbacks[i] =
         manager_->UseDevice(static_cast<media::VideoCaptureSessionId>(i));
-    StreamDeviceInfo video_device_info;
-    video_device_info.session_id = static_cast<media::VideoCaptureSessionId>(i);
-    video_device_array.push_back(video_device_info);
+    MediaStreamDevice video_device;
+    video_device.session_id = static_cast<media::VideoCaptureSessionId>(i);
+    video_devices.push_back(video_device);
   }
   std::array<base::Closure, kNumClients> stop_callbacks =
       StartCaptureForAllClients(false);
@@ -255,7 +254,7 @@ TEST_F(VideoCaptureImplManagerTest, SuspendAndResumeSessions) {
     EXPECT_CALL(*this, OnPaused(1)).Times(1).RetiresOnSaturation();
     EXPECT_CALL(*this, OnPaused(2)).WillOnce(RunClosure(quit_closure))
         .RetiresOnSaturation();
-    manager_->SuspendDevices(video_device_array, true);
+    manager_->SuspendDevices(video_devices, true);
     run_loop.Run();
   }
 
@@ -267,7 +266,7 @@ TEST_F(VideoCaptureImplManagerTest, SuspendAndResumeSessions) {
     EXPECT_CALL(*this, OnResumed(1)).Times(1).RetiresOnSaturation();
     EXPECT_CALL(*this, OnResumed(2)).WillOnce(RunClosure(quit_closure))
         .RetiresOnSaturation();
-    manager_->SuspendDevices(video_device_array, false);
+    manager_->SuspendDevices(video_devices, false);
     run_loop.Run();
   }
 
@@ -290,7 +289,7 @@ TEST_F(VideoCaptureImplManagerTest, SuspendAndResumeSessions) {
     EXPECT_CALL(*this, OnPaused(1)).Times(1).RetiresOnSaturation();
     EXPECT_CALL(*this, OnPaused(2)).WillOnce(RunClosure(quit_closure))
         .RetiresOnSaturation();
-    manager_->SuspendDevices(video_device_array, true);
+    manager_->SuspendDevices(video_devices, true);
     run_loop.Run();
   }
 
@@ -309,7 +308,7 @@ TEST_F(VideoCaptureImplManagerTest, SuspendAndResumeSessions) {
     EXPECT_CALL(*this, OnResumed(1)).Times(1).RetiresOnSaturation();
     EXPECT_CALL(*this, OnResumed(2)).WillOnce(RunClosure(quit_closure))
         .RetiresOnSaturation();
-    manager_->SuspendDevices(video_device_array, false);
+    manager_->SuspendDevices(video_devices, false);
     run_loop.Run();
   }
 

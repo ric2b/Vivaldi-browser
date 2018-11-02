@@ -5,10 +5,10 @@
 #ifndef ShapeResultBuffer_h
 #define ShapeResultBuffer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -26,7 +26,7 @@ class PLATFORM_EXPORT ShapeResultBuffer {
  public:
   ShapeResultBuffer() : has_vertical_offsets_(false) {}
 
-  void AppendResult(PassRefPtr<const ShapeResult> result) {
+  void AppendResult(scoped_refptr<const ShapeResult> result) {
     has_vertical_offsets_ |= result->HasVerticalOffsets();
     results_.push_back(std::move(result));
   }
@@ -43,7 +43,7 @@ class PLATFORM_EXPORT ShapeResultBuffer {
   Vector<CharacterRange> IndividualCharacterRanges(TextDirection,
                                                    float total_width) const;
 
-  static CharacterRange GetCharacterRange(RefPtr<const ShapeResult>,
+  static CharacterRange GetCharacterRange(scoped_refptr<const ShapeResult>,
                                           TextDirection,
                                           float total_width,
                                           unsigned from,
@@ -61,7 +61,7 @@ class PLATFORM_EXPORT ShapeResultBuffer {
  private:
   friend class ShapeResultBloberizer;
   static CharacterRange GetCharacterRangeInternal(
-      const Vector<RefPtr<const ShapeResult>, 64>&,
+      const Vector<scoped_refptr<const ShapeResult>, 64>&,
       TextDirection,
       float total_width,
       unsigned from,
@@ -73,7 +73,7 @@ class PLATFORM_EXPORT ShapeResultBuffer {
 
   // Empirically, cases where we get more than 50 ShapeResults are extremely
   // rare.
-  Vector<RefPtr<const ShapeResult>, 64> results_;
+  Vector<scoped_refptr<const ShapeResult>, 64> results_;
   bool has_vertical_offsets_;
 };
 

@@ -12,14 +12,12 @@
 
 namespace blink {
 
-class CORE_EXPORT DOMArrayBufferBase
-    : public GarbageCollectedFinalized<DOMArrayBufferBase>,
-      public ScriptWrappable {
+class CORE_EXPORT DOMArrayBufferBase : public ScriptWrappable {
  public:
   virtual ~DOMArrayBufferBase() {}
 
-  const WTF::ArrayBuffer* Buffer() const { return buffer_.Get(); }
-  WTF::ArrayBuffer* Buffer() { return buffer_.Get(); }
+  const WTF::ArrayBuffer* Buffer() const { return buffer_.get(); }
+  WTF::ArrayBuffer* Buffer() { return buffer_.get(); }
 
   const void* Data() const { return Buffer()->Data(); }
   void* Data() { return Buffer()->Data(); }
@@ -33,15 +31,13 @@ class CORE_EXPORT DOMArrayBufferBase
     return v8::Local<v8::Object>();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-
  protected:
-  explicit DOMArrayBufferBase(RefPtr<WTF::ArrayBuffer> buffer)
+  explicit DOMArrayBufferBase(scoped_refptr<WTF::ArrayBuffer> buffer)
       : buffer_(std::move(buffer)) {
     DCHECK(buffer_);
   }
 
-  RefPtr<WTF::ArrayBuffer> buffer_;
+  scoped_refptr<WTF::ArrayBuffer> buffer_;
 };
 
 }  // namespace blink

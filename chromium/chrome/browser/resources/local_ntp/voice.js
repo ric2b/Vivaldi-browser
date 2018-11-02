@@ -36,20 +36,59 @@ function getChromeUILanguage() {
 
 
 /**
- * Enum for keycodes.
- * @enum {number}
+ * The different types of user action and error events that are logged
+ * from Voice Search. This enum is used to transfer information to
+ * the renderer and is not used as a UMA enum histogram's logged value.
+ * Note: Keep in sync with common/ntp_logging_events.h
+ * @enum {!number}
+ * @const
+ */
+const LOG_TYPE = {
+  // Activated by clicking on the fakebox icon.
+  ACTION_ACTIVATE_FAKEBOX: 13,
+  // Activated by keyboard shortcut.
+  ACTION_ACTIVATE_KEYBOARD: 14,
+  // Close the voice overlay by a user's explicit action.
+  ACTION_CLOSE_OVERLAY: 15,
+  // Submitted voice query.
+  ACTION_QUERY_SUBMITTED: 16,
+  // Clicked on support link in error message.
+  ACTION_SUPPORT_LINK_CLICKED: 17,
+  // Retried by clicking Try Again link.
+  ACTION_TRY_AGAIN_LINK: 18,
+  // Retried by clicking microphone button.
+  ACTION_TRY_AGAIN_MIC_BUTTON: 10,
+  // Errors received from the Speech Recognition API.
+  ERROR_NO_SPEECH: 20,
+  ERROR_ABORTED: 21,
+  ERROR_AUDIO_CAPTURE: 22,
+  ERROR_NETWORK: 23,
+  ERROR_NOT_ALLOWED: 24,
+  ERROR_SERVICE_NOT_ALLOWED: 25,
+  ERROR_BAD_GRAMMAR: 26,
+  ERROR_LANGUAGE_NOT_SUPPORTED: 27,
+  ERROR_NO_MATCH: 28,
+  ERROR_OTHER: 29
+};
+
+
+/**
+ * Enum for keyboard event codes.
+ * @enum {!string}
  * @const
  */
 const KEYCODE = {
-  ENTER: 13,
-  ESC: 27,
-  PERIOD: 190
+  ENTER: 'Enter',
+  ESC: 'Escape',
+  NUMPAD_ENTER: 'NumpadEnter',
+  PERIOD: 'Period',
+  SPACE: 'Space'
 };
 
 
 /**
  * The set of possible recognition errors.
- * @enum {number}
+ * @enum {!number}
  * @const
  */
 const RecognitionError = {
@@ -85,6 +124,7 @@ let speech = {};
  *   networkError: string,
  *   noTranslation: string,
  *   noVoice: string,
+ *   otherError: string,
  *   permissionError: string,
  *   ready: string,
  *   tryAgain: string,
@@ -100,6 +140,7 @@ speech.messages = {
   networkError: '',
   noTranslation: '',
   noVoice: '',
+  otherError: '',
   permissionError: '',
   ready: '',
   tryAgain: '',
@@ -113,7 +154,7 @@ speech.messages = {
  * @private
  */
 speech.State_ = {
-  // Initial state of the controller. Is never re-entered.
+  // Initial state of the controller. It is never re-entered.
   // The only state from which the |speech.init()| method can be called.
   // The UI overlay is hidden, recognition is inactive.
   UNINITIALIZED: -1,
@@ -257,8 +298,17 @@ speech.recognition_;
 
 
 /**
+ * Log an event from Voice Search.
+ * @param {!number} eventType Event from |LOG_TYPE|.
+ */
+speech.logEvent = function(eventType) {
+  window.chrome.embeddedSearch.newTabPage.logEvent(eventType);
+};
+
+
+/**
  * Initialize the speech module as part of the local NTP. Adds event handlers
- * and shows the fakebox speech microphone icon.
+ * and shows the fakebox microphone icon.
  * @param {!string} googleBaseUrl Base URL for sending queries to Search.
  * @param {!Object} translatedStrings Dictionary of localized string messages.
  * @param {!HTMLElement} fakeboxMicrophoneElem Fakebox microphone icon element.
@@ -275,10 +325,18 @@ speech.init = function(
   // Initialize event handlers.
   fakeboxMicrophoneElem.hidden = false;
   fakeboxMicrophoneElem.title = translatedStrings.fakeboxMicrophoneTooltip;
-  fakeboxMicrophoneElem.onmouseup = function(event) {
+  fakeboxMicrophoneElem.onclick = function(event) {
     // If propagated, closes the overlay (click on the background).
     event.stopPropagation();
-    speech.toggleStartStop();
+    speech.logEvent(LOG_TYPE.ACTION_ACTIVATE_FAKEBOX);
+    speech.start();
+  };
+  fakeboxMicrophoneElem.onkeydown = function(event) {
+    if (!event.repeat && speech.isSpaceOrEnter_(event.code) &&
+        speech.currentState_ == speech.State_.READY) {
+      event.stopPropagation();
+      speech.start();
+    }
   };
   window.addEventListener('keydown', speech.onKeyDown);
   if (searchboxApiHandle.onfocuschange) {
@@ -297,6 +355,7 @@ speech.init = function(
     networkError: translatedStrings.networkError,
     noTranslation: translatedStrings.noTranslation,
     noVoice: translatedStrings.noVoice,
+    otherError: translatedStrings.otherError,
     permissionError: translatedStrings.permissionError,
     ready: translatedStrings.ready,
     tryAgain: translatedStrings.tryAgain,
@@ -309,27 +368,6 @@ speech.init = function(
 
 
 /**
- * Resets the internal state of Voice Search and disables the speech
- * recognition interface. Only used for testing.
- * @param {HTMLElement} fakeboxMicrophoneElem Fakebox microphone icon element.
- * @param {!Object} searchboxApiHandle SearchBox API handle.
- * @private
- */
-speech.uninit_ = function(fakeboxMicrophoneElem, searchboxApiHandle) {
-  speech.reset_();
-  speech.googleBaseUrl_ = null;
-  speech.messages = {};
-  speech.currentState_ = speech.State_.UNINITIALIZED;
-  fakeboxMicrophoneElem.hidden = true;
-  fakeboxMicrophoneElem.title = '';
-  fakeboxMicrophoneElem.onmouseup = null;
-  window.removeEventListener('keydown', speech.onKeyDown);
-  searchboxApiHandle.onfocuschange = null;
-  speech.recognition_ = null;
-};
-
-
-/**
  * Initializes and configures the speech recognition API.
  * @private
  */
@@ -338,7 +376,6 @@ speech.initWebkitSpeech_ = function() {
   speech.recognition_.continuous = false;
   speech.recognition_.interimResults = true;
   speech.recognition_.lang = getChromeUILanguage();
-  speech.recognition_.maxAlternatives = 4;
   speech.recognition_.onaudiostart = speech.handleRecognitionAudioStart_;
   speech.recognition_.onend = speech.handleRecognitionEnd_;
   speech.recognition_.onerror = speech.handleRecognitionError_;
@@ -351,9 +388,8 @@ speech.initWebkitSpeech_ = function() {
 /**
  * Sets up the necessary states for voice search and then starts the
  * speech recognition interface.
- * @private
  */
-speech.start_ = function() {
+speech.start = function() {
   view.show();
 
   speech.resetIdleTimer_(speech.IDLE_TIMEOUT_MS_);
@@ -361,14 +397,14 @@ speech.start_ = function() {
   document.addEventListener(
       'webkitvisibilitychange', speech.onVisibilityChange_, false);
 
-  if (!speech.isRecognitionInitialized_()) {
+  // Initialize |speech.recognition_| if it isn't already.
+  if (!speech.recognition_) {
     speech.initWebkitSpeech_();
   }
 
-  // If |speech.start_()| is called too soon after |speech.stop_()| then the
+  // If |speech.start()| is called too soon after |speech.stop()| then the
   // recognition interface hasn't yet reset and an error occurs. In this case
   // we need to hard-reset it and reissue the |recognition_.start()| command.
-  // TODO(oskopek): Add tests + possibly fix the root cause.
   try {
     speech.recognition_.start();
     speech.currentState_ = speech.State_.STARTED;
@@ -378,8 +414,7 @@ speech.start_ = function() {
       speech.recognition_.start();
       speech.currentState_ = speech.State_.STARTED;
     } catch (error2) {
-      speech.currentState_ = speech.State_.STOPPED;
-      speech.stop_();
+      speech.stop();
     }
   }
 };
@@ -387,22 +422,12 @@ speech.start_ = function() {
 
 /**
  * Hides the overlay and resets the speech state.
- * @private
  */
-speech.stop_ = function() {
+speech.stop = function() {
+  speech.recognition_.abort();
   speech.currentState_ = speech.State_.STOPPED;
   view.hide();
   speech.reset_();
-};
-
-
-/**
- * Aborts speech recognition and calls |speech.stop_()|.
- * @private
- */
-speech.abort_ = function() {
-  speech.recognition_.abort();
-  speech.stop_();
 };
 
 
@@ -514,6 +539,38 @@ speech.handleRecognitionResult_ = function(responseEvent) {
 
 
 /**
+ * Convert a |RecognitionError| to a |LOG_TYPE| error constant,
+ * for UMA logging.
+ * @param {RecognitionError} error The received error.
+ * @private
+ */
+speech.errorToLogType_ = function(error) {
+  switch (error) {
+    case RecognitionError.ABORTED:
+      return LOG_TYPE.ERROR_ABORTED;
+    case RecognitionError.AUDIO_CAPTURE:
+      return LOG_TYPE.ERROR_AUDIO_CAPTURE;
+    case RecognitionError.BAD_GRAMMAR:
+      return LOG_TYPE.ERROR_BAD_GRAMMAR;
+    case RecognitionError.LANGUAGE_NOT_SUPPORTED:
+      return LOG_TYPE.ERROR_LANGUAGE_NOT_SUPPORTED;
+    case RecognitionError.NETWORK:
+      return LOG_TYPE.ERROR_NETWORK;
+    case RecognitionError.NO_MATCH:
+      return LOG_TYPE.ERROR_NO_MATCH;
+    case RecognitionError.NO_SPEECH:
+      return LOG_TYPE.ERROR_NO_SPEECH;
+    case RecognitionError.NOT_ALLOWED:
+      return LOG_TYPE.ERROR_NOT_ALLOWED;
+    case RecognitionError.SERVICE_NOT_ALLOWED:
+      return LOG_TYPE.ERROR_SERVICE_NOT_ALLOWED;
+    default:
+      return LOG_TYPE.ERROR_OTHER;
+  }
+};
+
+
+/**
  * Handles state transition for the controller when an error occurs
  * during speech recognition.
  * @param {RecognitionError} error The appropriate error state from
@@ -521,6 +578,7 @@ speech.handleRecognitionResult_ = function(responseEvent) {
  * @private
  */
 speech.onErrorReceived_ = function(error) {
+  speech.logEvent(speech.errorToLogType_(error));
   speech.resetIdleTimer_(speech.IDLE_TIMEOUT_MS_);
   speech.errorTimeoutMs_ = speech.getRecognitionErrorTimeout_(error);
   if (error != RecognitionError.ABORTED) {
@@ -558,7 +616,6 @@ speech.handleRecognitionOnNoMatch_ = function() {
  */
 speech.handleRecognitionEnd_ = function() {
   window.clearTimeout(speech.idleTimer_);
-  window.clearTimeout(speech.permissionTimer_);
 
   let error;
   switch (speech.currentState_) {
@@ -589,6 +646,34 @@ speech.handleRecognitionEnd_ = function() {
 
 
 /**
+ * Determines whether the user's browser is probably running on a Mac.
+ * @return {boolean} True iff the user's browser is running on a Mac.
+ * @private
+ */
+speech.isUserAgentMac_ = function() {
+  return window.navigator.userAgent.includes('Macintosh');
+};
+
+
+/**
+ * Determines, if the given KeyboardEvent |code| is a space or enter key.
+ * @param {!string} A KeyboardEvent's |code| property.
+ * @return True, iff the code represents a space or enter key.
+ * @private
+ */
+speech.isSpaceOrEnter_ = function(code) {
+  switch (code) {
+    case KEYCODE.ENTER:
+    case KEYCODE.NUMPAD_ENTER:
+    case KEYCODE.SPACE:
+      return true;
+    default:
+      return false;
+  }
+};
+
+
+/**
  * Handles the following keyboard actions.
  * - <CTRL> + <SHIFT> + <.> starts voice input(<CMD> + <SHIFT> + <.> on mac).
  * - <ESC> aborts voice input when the recognition interface is active.
@@ -596,34 +681,34 @@ speech.handleRecognitionEnd_ = function() {
  * @param {KeyboardEvent} event The keydown event.
  */
 speech.onKeyDown = function(event) {
-  function isUserAgentMac(userAgent) {
-    return userAgent.includes('Macintosh');
-  }
-
-  if (!speech.isRecognizing_()) {
-    const ctrlKeyPressed = event.ctrlKey ||
-        (isUserAgentMac(window.navigator.userAgent) && event.metaKey);
+  if (speech.isUiDefinitelyHidden_()) {
+    const ctrlKeyPressed =
+        event.ctrlKey || (speech.isUserAgentMac_() && event.metaKey);
     if (speech.currentState_ == speech.State_.READY &&
-        event.keyCode == KEYCODE.PERIOD && event.shiftKey && ctrlKeyPressed) {
-      speech.toggleStartStop();
+        event.code == KEYCODE.PERIOD && event.shiftKey && ctrlKeyPressed) {
+      speech.logEvent(LOG_TYPE.ACTION_ACTIVATE_KEYBOARD);
+      speech.start();
     }
   } else {
     // Ensures that keyboard events are not propagated during voice input.
     event.stopPropagation();
-    if (event.keyCode == KEYCODE.ESC) {
-      speech.abort_();
-    } else if (event.keyCode == KEYCODE.ENTER && speech.finalResult_) {
+    if (speech.isSpaceOrEnter_(event.code) && speech.finalResult_) {
       speech.submitFinalResult_();
+    } else if (
+        speech.isSpaceOrEnter_(event.code) || event.code == KEYCODE.ESC) {
+      speech.logEvent(LOG_TYPE.ACTION_CLOSE_OVERLAY);
+      speech.stop();
     }
   }
 };
 
 
 /**
- * Stops the recognition interface and closes the UI if no interactions occur
- * after some time and the interface is still active. This is a safety net in
- * case the recognition.onend event doesn't fire, as is sometime the case. If
- * a high confidence transcription was received then show the search results.
+ * Displays the no match error if no interactions occur after some time while
+ * the interface is active. This is a safety net in case the onend event
+ * doesn't fire, or the user has persistent noise in the background, and does
+ * not speak. If a high confidence transcription was received, then this submits
+ * the search query instead of displaying an error.
  * @private
  */
 speech.onIdleTimeout_ = function() {
@@ -638,7 +723,7 @@ speech.onIdleTimeout_ = function() {
     case speech.State_.SPEECH_RECEIVED:
     case speech.State_.RESULT_RECEIVED:
     case speech.State_.ERROR_RECEIVED:
-      speech.abort_();
+      speech.onErrorReceived_(RecognitionError.NO_MATCH);
       break;
   }
 };
@@ -655,7 +740,7 @@ speech.onVisibilityChange_ = function() {
   }
 
   if (document.webkitHidden) {
-    speech.abort_();
+    speech.stop();
   }
 };
 
@@ -665,8 +750,19 @@ speech.onVisibilityChange_ = function() {
  */
 speech.onOmniboxFocused = function() {
   if (!speech.isUiDefinitelyHidden_()) {
-    speech.abort_();
+    speech.logEvent(LOG_TYPE.ACTION_CLOSE_OVERLAY);
+    speech.stop();
   }
+};
+
+
+/**
+ * Change the location of this tab to the new URL. Used for query submission.
+ * @param {!URL} The URL to navigate to.
+ * @private
+ */
+speech.navigateToUrl_ = function(url) {
+  window.location.href = url.href;
 };
 
 
@@ -676,22 +772,24 @@ speech.onOmniboxFocused = function() {
  */
 speech.submitFinalResult_ = function() {
   window.clearTimeout(speech.idleTimer_);
-
   if (!speech.finalResult_) {
     throw new Error('Submitting empty query.');
   }
 
-  // Getting |speech.finalResult_| needs to happen before stopping speech.
-  const encodedQuery =
-      encodeURIComponent(speech.finalResult_).replace(/%20/g, '+');
-  const queryUrl = speech.googleBaseUrl_ +
-      // Add the actual query.
-      'search?q=' + encodedQuery +
-      // Add a parameter to indicate that this request is a voice search.
-      '&gs_ivs=1';
+  const searchParams = new URLSearchParams();
+  // Add the encoded query. Getting |speech.finalResult_| needs to happen
+  // before stopping speech.
+  searchParams.append('q', speech.finalResult_);
+  // Add a parameter to indicate that this request is a voice search.
+  searchParams.append('gs_ivs', 1);
 
-  speech.stop_();
-  window.location.href = queryUrl;
+  // Build the query URL.
+  const queryUrl = new URL('/search', speech.googleBaseUrl_);
+  queryUrl.search = searchParams;
+
+  speech.logEvent(LOG_TYPE.ACTION_QUERY_SUBMITTED);
+  speech.stop();
+  speech.navigateToUrl_(queryUrl);
 };
 
 
@@ -767,16 +865,26 @@ speech.resetIdleTimer_ = function(duration) {
  */
 speech.resetErrorTimer_ = function(duration) {
   window.clearTimeout(speech.errorTimer_);
-  speech.errorTimer_ = window.setTimeout(speech.stop_, duration);
+  speech.errorTimer_ = window.setTimeout(speech.stop, duration);
+};
+
+
+/**
+ * Check to see if the speech recognition interface is running, and has
+ * received any results.
+ * @return {boolean} True, if the speech recognition interface is running,
+ *     and has received any results.
+ */
+speech.hasReceivedResults = function() {
+  return speech.currentState_ == speech.State_.RESULT_RECEIVED;
 };
 
 
 /**
  * Check to see if the speech recognition interface is running.
  * @return {boolean} True, if the speech recognition interface is running.
- * @private
  */
-speech.isRecognizing_ = function() {
+speech.isRecognizing = function() {
   switch (speech.currentState_) {
     case speech.State_.STARTED:
     case speech.State_.AUDIO_RECEIVED:
@@ -791,7 +899,7 @@ speech.isRecognizing_ = function() {
 /**
  * Check if the controller is in a state where the UI is definitely hidden.
  * Since we show the UI for a few seconds after we receive an error from the
- * API, we need a separate definition to |speech.isRecognizing_()| to indicate
+ * API, we need a separate definition to |speech.isRecognizing()| to indicate
  * when the UI is hidden. <strong>Note:</strong> that if this function
  * returns false, it might not necessarily mean that the UI is visible.
  * @return {boolean} True if the UI is hidden.
@@ -808,51 +916,26 @@ speech.isUiDefinitelyHidden_ = function() {
 
 
 /**
- * Check if the Web Speech API is initialized and event functions are set.
- * @return {boolean} True if recognition is initialized.
- * @private
- */
-speech.isRecognitionInitialized_ = function() {
-  // TODO(oskopek): Do handlers of |recognition_| get reset? Verify and test.
-  return !!speech.recognition_;
-};
-
-
-/**
- * Toggles starting and stopping of speech recognition by the speech tool.
- */
-speech.toggleStartStop = function() {
-  if (speech.currentState_ == speech.State_.READY) {
-    speech.start_();
-  } else {
-    speech.abort_();
-  }
-};
-
-
-/**
  * Handles click events during speech recognition.
  * @param {boolean} shouldSubmit True if a query should be submitted.
  * @param {boolean} shouldRetry True if the interface should be restarted.
+ * @param {boolean} navigatingAway True if the browser is navigating away
+ *     from the NTP.
  * @private
  */
-speech.onClick_ = function(shouldSubmit, shouldRetry) {
+speech.onClick_ = function(shouldSubmit, shouldRetry, navigatingAway) {
   if (speech.finalResult_ && shouldSubmit) {
     speech.submitFinalResult_();
   } else if (speech.currentState_ == speech.State_.STOPPED && shouldRetry) {
-    speech.restart();
+    speech.reset_();
+    speech.start();
+  } else if (speech.currentState_ == speech.State_.STOPPED && navigatingAway) {
+    // If the user clicks on a "Learn more" or "Details" support page link
+    // from an error message, do nothing, and let Chrome navigate to that page.
   } else {
-    speech.abort_();
+    speech.logEvent(LOG_TYPE.ACTION_CLOSE_OVERLAY);
+    speech.stop();
   }
-};
-
-/**
- * Restarts voice recognition. Used for the 'Try again' error link.
- * @private
- */
-speech.restart = function() {
-  speech.reset_();
-  speech.toggleStartStop();
 };
 
 
@@ -865,10 +948,24 @@ let text = {};
 
 
 /**
- * ID for the link shown in error output.
+ * ID for the "Try Again" link shown in error output.
  * @const
  */
-text.ERROR_LINK_ID = 'voice-text-area';
+text.RETRY_LINK_ID = 'voice-retry-link';
+
+
+/**
+ * ID for the Voice Search support site link shown in error output.
+ * @const
+ */
+text.SUPPORT_LINK_ID = 'voice-support-link';
+
+
+/**
+ * Class for the links shown in error output.
+ * @const @private
+ */
+text.ERROR_LINK_CLASS_ = 'voice-text-link';
 
 
 /**
@@ -927,6 +1024,15 @@ text.LISTENING_TIMEOUT_MS_ = 2000;
 
 
 /**
+ * Base link target for help regarding voice search. To be appended
+ * with a locale string for proper target site localization.
+ * @const @private
+ */
+text.SUPPORT_LINK_BASE_ =
+    'https://support.google.com/chrome/?p=ui_voice_search&hl=';
+
+
+/**
  * The final / high confidence speech recognition result element.
  * @private {Element}
  */
@@ -955,15 +1061,6 @@ text.listeningTimer_;
 
 
 /**
- * Base link target for help regarding voice search. To be appended
- * with a locale string for proper target site localization.
- * @const @private
- */
-text.SUPPORT_LINK_BASE_ =
-    'https://support.google.com/chrome/?p=ui_voice_search&hl=';
-
-
-/**
  * Finds the text view elements.
  */
 text.init = function() {
@@ -975,39 +1072,38 @@ text.init = function() {
 
 /**
  * Updates the text elements with new recognition results.
- * @param {string} interimText Low confidence speech recognition result text.
- * @param {string} opt_finalText High confidence speech recognition result text,
- *    defaults to an empty string.
+ * @param {!string} interimText Low confidence speech recognition result text.
+ * @param {!string} opt_finalText High confidence speech recognition result
+ *     text, defaults to an empty string.
  */
-text.updateTextArea = function(interimText, opt_finalText) {
-  const finalText = opt_finalText || '';
-
+text.updateTextArea = function(interimText, opt_finalText = '') {
   window.clearTimeout(text.initializingTimer_);
-  text.cancelListeningTimeout();
+  text.clearListeningTimeout();
 
   text.interim_.textContent = interimText;
-  text.final_.textContent = finalText;
+  text.final_.textContent = opt_finalText;
 
   text.interim_.className = text.final_.className = text.getTextClassName_();
 };
 
 
 /**
- * Sets the text view to the initializing state.
+ * Sets the text view to the initializing state. The initializing message
+ * shown while waiting for permission is not displayed immediately, but after
+ * a short timeout. The reason for this is that the "Waiting..." message would
+ * still appear ("blink") every time a user opens Voice Search, even if they
+ * have already granted and persisted microphone permission for the NTP,
+ * and could therefore directly proceed to the "Speak now" message.
  */
 text.showInitializingMessage = function() {
-  const displayMessage = function() {
-    if (text.interim_.innerText == '') {
-      text.updateTextArea(speech.messages.waiting);
-    }
-  };
-
   text.interim_.textContent = '';
   text.final_.textContent = '';
 
-  // We give the interface some time to get the permission. Once permission
-  // is obtained, the ready message is displayed, in which case the
-  // initializing message won't be shown.
+  const displayMessage = function() {
+    if (text.interim_.textContent == '') {
+      text.updateTextArea(speech.messages.waiting);
+    }
+  };
   text.initializingTimer_ =
       window.setTimeout(displayMessage, text.INITIALIZING_TIMEOUT_MS_);
 };
@@ -1018,12 +1114,14 @@ text.showInitializingMessage = function() {
  */
 text.showReadyMessage = function() {
   window.clearTimeout(text.initializingTimer_);
+  text.clearListeningTimeout();
   text.updateTextArea(speech.messages.ready);
   text.startListeningMessageAnimation_();
 };
 
 
 /**
+ * Display an error message in the text area for the given error.
  * @param {RecognitionError} error The error that occured.
  */
 text.showErrorMessage = function(error) {
@@ -1059,7 +1157,7 @@ text.getErrorMessage_ = function(error) {
     case RecognitionError.LANGUAGE_NOT_SUPPORTED:
       return speech.messages.languageError;
     default:
-      throw new Error('Illegal RecognitionError value: ' + error);
+      return speech.messages.otherError;
   }
 };
 
@@ -1071,21 +1169,24 @@ text.getErrorMessage_ = function(error) {
  */
 text.getErrorLink_ = function(error) {
   let linkElement = document.createElement('a');
-  linkElement.id = text.ERROR_LINK_ID;
+  linkElement.className = text.ERROR_LINK_CLASS_;
 
   switch (error) {
     case RecognitionError.NO_MATCH:
+      linkElement.id = text.RETRY_LINK_ID;
       linkElement.textContent = speech.messages.tryAgain;
-      linkElement.onclick = speech.restart;
+      // When clicked, |view.onWindowClick_| gets called.
       return linkElement;
     case RecognitionError.NO_SPEECH:
     case RecognitionError.AUDIO_CAPTURE:
+      linkElement.id = text.SUPPORT_LINK_ID;
       linkElement.href = text.SUPPORT_LINK_BASE_ + getChromeUILanguage();
       linkElement.textContent = speech.messages.learnMore;
       linkElement.target = '_blank';
       return linkElement;
     case RecognitionError.NOT_ALLOWED:
     case RecognitionError.SERVICE_NOT_ALLOWED:
+      linkElement.id = text.SUPPORT_LINK_ID;
       linkElement.href = text.SUPPORT_LINK_BASE_ + getChromeUILanguage();
       linkElement.textContent = speech.messages.details;
       linkElement.target = '_blank';
@@ -1100,7 +1201,9 @@ text.getErrorLink_ = function(error) {
  * Clears the text elements.
  */
 text.clear = function() {
-  text.cancelListeningTimeout();
+  text.updateTextArea('');
+
+  text.clearListeningTimeout();
   window.clearTimeout(text.initializingTimer_);
 
   text.interim_.className = text.TEXT_AREA_CLASS_;
@@ -1111,7 +1214,7 @@ text.clear = function() {
 /**
  * Cancels listening message display.
  */
-text.cancelListeningTimeout = function() {
+text.clearListeningTimeout = function() {
   window.clearTimeout(text.listeningTimer_);
 };
 
@@ -1152,7 +1255,8 @@ text.getTextClassName_ = function() {
  */
 text.startListeningMessageAnimation_ = function() {
   const animateListeningText = function() {
-    if (text.interim_.innerText == speech.messages.ready) {
+    // If speech is active with no results yet, show the message and animation.
+    if (speech.isRecognizing() && !speech.hasReceivedResults()) {
       text.updateTextArea(speech.messages.listening);
       text.interim_.classList.add(text.LISTENING_ANIMATION_CLASS_);
     }
@@ -1255,7 +1359,7 @@ microphone.init = function() {
 
 
 /**
- * Starts the volume circles animations.
+ * Starts the volume circles animations, if it has not started yet.
  */
 microphone.startInputAnimation = function() {
   if (!microphone.isLevelAnimating_) {
@@ -1325,13 +1429,6 @@ view.OVERLAY_HIDDEN_CLASS_ = 'overlay-hidden';
  * @const @private
  */
 view.BACKGROUND_ID_ = 'voice-overlay';
-
-
-/**
- * ID of the close (x) button.
- * @const @private
- */
-view.CLOSE_BUTTON_ID_ = 'voice-close-button';
 
 
 /**
@@ -1411,13 +1508,13 @@ view.show = function() {
   if (!view.isVisible_) {
     text.showInitializingMessage();
     view.showView_();
-    window.addEventListener('mouseup', view.onWindowClick_, false);
+    window.addEventListener('click', view.onWindowClick_, false);
   }
 };
 
 /**
  * Sets the output area text to listening. This should only be called when
- * the Web Speech API is receiving audio input (i.e., onaudiostart).
+ * the Web Speech API starts receiving audio input (i.e., onaudiostart).
  */
 view.setReadyForSpeech = function() {
   if (view.isVisible_) {
@@ -1429,14 +1526,16 @@ view.setReadyForSpeech = function() {
 
 /**
  * Shows the pulsing animation emanating from the microphone. This should only
- * be called when the Web Speech API is receiving speech input (i.e.,
- * onspeechstart).
+ * be called when the Web Speech API starts receiving speech input (i.e.,
+ * |onspeechstart|). Do note that this may also be run when the Web Speech API
+ * is receiving speech recognition results (|onresult|), because |onspeechstart|
+ * may not have been called.
  */
 view.setReceivingSpeech = function() {
   if (view.isVisible_) {
     view.container_.className = view.RECEIVING_SPEECH_CLASS_;
     microphone.startInputAnimation();
-    text.cancelListeningTimeout();
+    text.clearListeningTimeout();
   }
 };
 
@@ -1448,7 +1547,11 @@ view.setReceivingSpeech = function() {
  */
 view.updateSpeechResult = function(interimResultText, finalResultText) {
   if (view.isVisible_) {
-    view.container_.className = view.RECEIVING_SPEECH_CLASS_;
+    // If the Web Speech API is receiving speech recognition results
+    // (|onresult|) and |onspeechstart| has not been called.
+    if (view.container_.className != view.RECEIVING_SPEECH_CLASS_) {
+      view.setReceivingSpeech();
+    }
     text.updateTextArea(interimResultText, finalResultText);
   }
 };
@@ -1458,7 +1561,7 @@ view.updateSpeechResult = function(interimResultText, finalResultText) {
  * Hides the UI and stops animations.
  */
 view.hide = function() {
-  window.removeEventListener('mouseup', view.onWindowClick_, false);
+  window.removeEventListener('click', view.onWindowClick_, false);
   view.stopMicrophoneAnimations_();
   view.hideView_();
   view.isNoMatchShown_ = false;
@@ -1543,19 +1646,33 @@ view.stopMicrophoneAnimations_ = function() {
 
 /**
  * Makes sure that a click anywhere closes the UI when it is active.
- * @param {Event} event The click event.
+ * @param {!MouseEvent} event The click event.
  * @private
  */
 view.onWindowClick_ = function(event) {
   if (!view.isVisible_) {
     return;
   }
-  const targetId = event.target.id;
-  const shouldRetry = (targetId == microphone.RED_BUTTON_ID ||
-                       targetId == text.ERROR_LINK_ID) &&
-      view.isNoMatchShown_;
-  const submitQuery =
-      targetId == microphone.RED_BUTTON_ID && !view.isNoMatchShown_;
-  view.onClick_(submitQuery, shouldRetry);
+  const retryLinkClicked = event.target.id === text.RETRY_LINK_ID;
+  const supportLinkClicked = event.target.id === text.SUPPORT_LINK_ID;
+  const micIconClicked = event.target.id === microphone.RED_BUTTON_ID;
+
+  const submitQuery = micIconClicked && !view.isNoMatchShown_;
+  const shouldRetry =
+      retryLinkClicked || (micIconClicked && view.isNoMatchShown_);
+  const navigatingAway = supportLinkClicked;
+
+  if (shouldRetry) {
+    if (micIconClicked) {
+      speech.logEvent(LOG_TYPE.ACTION_TRY_AGAIN_MIC_BUTTON);
+    } else if (retryLinkClicked) {
+      speech.logEvent(LOG_TYPE.ACTION_TRY_AGAIN_LINK);
+    }
+  }
+  if (supportLinkClicked) {
+    speech.logEvent(LOG_TYPE.ACTION_SUPPORT_LINK_CLICKED);
+  }
+
+  view.onClick_(submitQuery, shouldRetry, navigatingAway);
 };
 /* END VIEW */

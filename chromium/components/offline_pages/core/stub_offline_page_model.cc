@@ -4,9 +4,12 @@
 
 #include "components/offline_pages/core/stub_offline_page_model.h"
 
+#include "base/files/file_path.h"
+
 namespace offline_pages {
 
-StubOfflinePageModel::StubOfflinePageModel() {}
+StubOfflinePageModel::StubOfflinePageModel()
+    : archive_directory_(base::FilePath(FILE_PATH_LITERAL("/archive_dir/"))) {}
 StubOfflinePageModel::~StubOfflinePageModel() {}
 
 void StubOfflinePageModel::AddObserver(Observer* observer) {}
@@ -24,18 +27,12 @@ void StubOfflinePageModel::DeletePagesByOfflineId(
 void StubOfflinePageModel::DeletePagesByClientIds(
     const std::vector<ClientId>& client_ids,
     const DeletePageCallback& callback) {}
-void StubOfflinePageModel::GetPagesMatchingQuery(
-    std::unique_ptr<OfflinePageModelQuery> query,
-    const MultipleOfflinePageItemCallback& callback) {}
 void StubOfflinePageModel::GetPagesByClientIds(
     const std::vector<ClientId>& client_ids,
     const MultipleOfflinePageItemCallback& callback) {}
 void StubOfflinePageModel::DeleteCachedPagesByURLPredicate(
     const UrlPredicate& predicate,
     const DeletePageCallback& callback) {}
-void StubOfflinePageModel::CheckPagesExistOffline(
-    const std::set<GURL>& urls,
-    const CheckPagesExistOfflineCallback& callback) {}
 void StubOfflinePageModel::GetAllPages(
     const MultipleOfflinePageItemCallback& callback) {}
 void StubOfflinePageModel::GetOfflineIdsForClientId(
@@ -51,11 +48,20 @@ void StubOfflinePageModel::GetPagesByURL(
 void StubOfflinePageModel::GetPagesByRequestOrigin(
     const std::string& origin,
     const MultipleOfflinePageItemCallback& callback) {}
+void StubOfflinePageModel::GetPagesRemovedOnCacheReset(
+    const MultipleOfflinePageItemCallback& callback) {}
+void StubOfflinePageModel::GetPagesByNamespace(
+    const std::string& name_space,
+    const MultipleOfflinePageItemCallback& callback) {}
+void StubOfflinePageModel::GetPagesSupportedByDownloads(
+    const MultipleOfflinePageItemCallback& callback) {}
+const base::FilePath& StubOfflinePageModel::GetArchiveDirectory(
+    const std::string& name_space) const {
+  return archive_directory_;
+}
+
 ClientPolicyController* StubOfflinePageModel::GetPolicyController() {
   return &policy_controller_;
-}
-bool StubOfflinePageModel::is_loaded() const {
-  return true;
 }
 OfflineEventLogger* StubOfflinePageModel::GetLogger() {
   return nullptr;

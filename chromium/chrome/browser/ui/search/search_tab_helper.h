@@ -13,11 +13,9 @@
 #include "base/time/time.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
-#include "chrome/browser/ui/search/search_model.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
-#include "components/ntp_tiles/tile_source.h"
-#include "components/ntp_tiles/tile_visual_type.h"
+#include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -34,22 +32,14 @@ class OmniboxView;
 class Profile;
 class SearchIPCRouterTest;
 
-// Per-tab search "helper".  Acts as the owner and controller of the tab's
-// search UI model.
-//
-// When a navigation is committed and when the page is finished loading,
-// SearchTabHelper determines the instant support for the page, i.e. whether
-// the page is rendered in the instant process.
+// This is the browser-side, per-tab implementation of the embeddedSearch API
+// (see https://www.chromium.org/embeddedsearch).
 class SearchTabHelper : public content::WebContentsObserver,
                         public content::WebContentsUserData<SearchTabHelper>,
                         public InstantServiceObserver,
                         public SearchIPCRouter::Delegate {
  public:
   ~SearchTabHelper() override;
-
-  SearchModel* model() {
-    return &model_;
-  }
 
   // Invoked when the omnibox input state is changed in some way that might
   // affect the search mode.
@@ -59,12 +49,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   // |reason|.
   void OmniboxFocusChanged(OmniboxFocusState state,
                            OmniboxFocusChangeReason reason);
-
-  // Sends the current SearchProvider suggestion to the Instant page if any.
-  void SetSuggestionToPrefetch(const InstantSuggestion& suggestion);
-
-  // Tells the page that the user pressed Enter in the omnibox.
-  void Submit(const EmbeddedSearchRequestParams& params);
 
   // Called when the tab corresponding to |this| instance is activated.
   void OnTabActivated();
@@ -78,20 +62,16 @@ class SearchTabHelper : public content::WebContentsObserver,
   friend class content::WebContentsUserData<SearchTabHelper>;
   friend class SearchIPCRouterTest;
 
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, ChromeIdentityCheckMatch);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatch);
+                           ChromeIdentityCheckMatchSlightlyDifferentGmail);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatchSlightlyDifferentGmail);
+                           ChromeIdentityCheckMatchSlightlyDifferentGmail2);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, ChromeIdentityCheckMismatch);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckMatchSlightlyDifferentGmail2);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, OnChromeIdentityCheckMismatch);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnChromeIdentityCheckSignedOutMismatch);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnHistorySyncCheckSyncing);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnHistorySyncCheckNotSyncing);
-  FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest, HandleTabChangedEvents);
+                           ChromeIdentityCheckSignedOutMismatch);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckSyncing);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckNotSyncing);
 
   explicit SearchTabHelper(content::WebContents* web_contents);
 
@@ -103,6 +83,7 @@ class SearchTabHelper : public content::WebContentsObserver,
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void TitleWasSet(content::NavigationEntry* entry) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void NavigationEntryCommitted(
@@ -114,23 +95,18 @@ class SearchTabHelper : public content::WebContentsObserver,
   void OnUndoMostVisitedDeletion(const GURL& url) override;
   void OnUndoAllMostVisitedDeletions() override;
   void OnLogEvent(NTPLoggingEventType event, base::TimeDelta time) override;
-  void OnLogMostVisitedImpression(int position,
-                                  ntp_tiles::TileSource tile_source,
-                                  ntp_tiles::TileVisualType tile_type) override;
-  void OnLogMostVisitedNavigation(int position,
-                                  ntp_tiles::TileSource tile_source,
-                                  ntp_tiles::TileVisualType tile_type) override;
+  void OnLogMostVisitedImpression(
+      const ntp_tiles::NTPTileImpression& impression) override;
+  void OnLogMostVisitedNavigation(
+      const ntp_tiles::NTPTileImpression& impression) override;
   void PasteIntoOmnibox(const base::string16& text) override;
-  void OnChromeIdentityCheck(const base::string16& identity) override;
-  void OnHistorySyncCheck() override;
+  bool ChromeIdentityCheck(const base::string16& identity) override;
+  bool HistorySyncCheck() override;
 
   // Overridden from InstantServiceObserver:
   void ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) override;
   void MostVisitedItemsChanged(
       const std::vector<InstantMostVisitedItem>& items) override;
-
-  // Sets the mode of the model based on the current URL of web_contents().
-  void UpdateMode();
 
   OmniboxView* GetOmniboxView();
   const OmniboxView* GetOmniboxView() const;
@@ -141,16 +117,13 @@ class SearchTabHelper : public content::WebContentsObserver,
   // active tab is in mode SEARCH_SUGGESTIONS.
   bool IsInputInProgress() const;
 
-  const bool is_search_enabled_;
-
-  // Model object for UI that cares about search state.
-  SearchModel model_;
-
   content::WebContents* web_contents_;
 
   SearchIPCRouter ipc_router_;
 
   InstantService* instant_service_;
+
+  bool is_setting_title_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SearchTabHelper);
 };

@@ -36,6 +36,7 @@
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
+#include "content/renderer/media/webrtc/audio_codec_factory.h"
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
@@ -61,11 +62,13 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/webrtc/api/audio_codecs/builtin_audio_decoder_factory.h"
-#include "third_party/webrtc/api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
+#include "third_party/webrtc/api/video_codecs/video_decoder_factory.h"
+#include "third_party/webrtc/api/video_codecs/video_encoder_factory.h"
 #include "third_party/webrtc/api/videosourceproxy.h"
+#include "third_party/webrtc/media/engine/convert_legacy_video_factory.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
+#include "third_party/webrtc/rtc_base/refcountedobject.h"
 #include "third_party/webrtc/rtc_base/ssladapter.h"
 
 #if defined(OS_ANDROID)
@@ -103,10 +106,10 @@ bool IsValidPortRange(uint16_t min_port, uint16_t max_port) {
 
 PeerConnectionDependencyFactory::PeerConnectionDependencyFactory(
     P2PSocketDispatcher* p2p_socket_dispatcher)
-    : network_manager_(NULL),
+    : network_manager_(nullptr),
       p2p_socket_dispatcher_(p2p_socket_dispatcher),
-      signaling_thread_(NULL),
-      worker_thread_(NULL),
+      signaling_thread_(nullptr),
+      worker_thread_(nullptr),
       chrome_signaling_thread_("Chrome_libJingle_Signaling"),
       chrome_worker_thread_("Chrome_libJingle_WorkerThread") {
   TryScheduleStunProbeTrial();
@@ -126,7 +129,7 @@ PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
   // webKitRTCPeerConnection.
   UpdateWebRTCMethodCount(WEBKIT_RTC_PEER_CONNECTION);
 
-  return base::MakeUnique<RTCPeerConnectionHandler>(client, this);
+  return std::make_unique<RTCPeerConnectionHandler>(client, this);
 }
 
 const scoped_refptr<webrtc::PeerConnectionFactoryInterface>&
@@ -253,11 +256,17 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
     encoder_factory.reset();
 #endif
 
+  // TODO(magjed): Update RTCVideoEncoderFactory/RTCVideoDecoderFactory to new
+  // interface and let Chromium be responsible in what order video codecs are
+  // listed, instead of using
+  // cricket::ConvertVideoEncoderFactory/cricket::ConvertVideoDecoderFactory.
   pc_factory_ = webrtc::CreatePeerConnectionFactory(
-      worker_thread_, signaling_thread_, audio_device_.get(),
-      webrtc::CreateBuiltinAudioEncoderFactory(),
-      webrtc::CreateBuiltinAudioDecoderFactory(), encoder_factory.release(),
-      decoder_factory.release());
+      worker_thread_ /* network thread */, worker_thread_, signaling_thread_,
+      audio_device_.get(), CreateWebrtcAudioEncoderFactory(),
+      CreateWebrtcAudioDecoderFactory(),
+      cricket::ConvertVideoEncoderFactory(std::move(encoder_factory)),
+      cricket::ConvertVideoDecoderFactory(std::move(decoder_factory)),
+      nullptr /* audio_mixer */, nullptr /* audio_processing */);
   CHECK(pc_factory_.get());
 
   webrtc::PeerConnectionFactoryInterface::Options factory_options;
@@ -274,7 +283,7 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
 }
 
 bool PeerConnectionDependencyFactory::PeerConnectionFactoryCreated() {
-  return pc_factory_.get() != NULL;
+  return pc_factory_.get() != nullptr;
 }
 
 scoped_refptr<webrtc::PeerConnectionInterface>
@@ -285,7 +294,7 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   CHECK(web_frame);
   CHECK(observer);
   if (!GetPcFactory().get())
-    return NULL;
+    return nullptr;
 
   // Copy the flag from Preference associated with this WebLocalFrame.
   P2PPortAllocator::Config port_config;
@@ -514,12 +523,12 @@ void PeerConnectionDependencyFactory::CreateIpcNetworkManagerOnWorkerThread(
 void PeerConnectionDependencyFactory::DeleteIpcNetworkManager() {
   DCHECK(chrome_worker_thread_.task_runner()->BelongsToCurrentThread());
   delete network_manager_;
-  network_manager_ = NULL;
+  network_manager_ = nullptr;
 }
 
 void PeerConnectionDependencyFactory::CleanupPeerConnectionFactory() {
   DVLOG(1) << "PeerConnectionDependencyFactory::CleanupPeerConnectionFactory()";
-  pc_factory_ = NULL;
+  pc_factory_ = nullptr;
   if (network_manager_) {
     // The network manager needs to free its resources on the thread they were
     // created, which is the worked thread.
@@ -564,7 +573,7 @@ void PeerConnectionDependencyFactory::EnsureWebRtcAudioDeviceImpl() {
   if (audio_device_.get())
     return;
 
-  audio_device_ = new WebRtcAudioDeviceImpl();
+  audio_device_ = new rtc::RefCountedObject<WebRtcAudioDeviceImpl>();
 }
 
 }  // namespace content

@@ -43,11 +43,9 @@ void SetOverrides(sync_preferences::TestingPrefServiceSyncable* prefs,
   entry->SetString("encoding", "UTF-8");
   entry->SetInteger("id", 1001);
   entry->SetString("suggest_url", "http://foo.com/suggest?q={searchTerms}");
-  entry->SetString("instant_url", "http://foo.com/instant?q={searchTerms}");
   auto alternate_urls = base::MakeUnique<base::ListValue>();
   alternate_urls->AppendString("http://foo.com/alternate?q={searchTerms}");
   entry->Set("alternate_urls", std::move(alternate_urls));
-  entry->SetString("search_terms_replacement_key", "espv");
   overrides->Append(std::move(entry));
 
   entry = base::MakeUnique<base::DictionaryValue>();
@@ -188,9 +186,9 @@ TEST_F(DefaultSearchManagerTest, DefaultSearchSetByOverrides) {
   ExpectSimilar(prepopulated_urls[default_search_index].get(),
                 manager.GetDefaultSearchEngine(&source));
   EXPECT_EQ(DefaultSearchManager::FROM_FALLBACK, source);
-  EXPECT_NE(manager.GetDefaultSearchEngine(NULL)->short_name(),
+  EXPECT_NE(manager.GetDefaultSearchEngine(nullptr)->short_name(),
             first_default.short_name());
-  EXPECT_NE(manager.GetDefaultSearchEngine(NULL)->keyword(),
+  EXPECT_NE(manager.GetDefaultSearchEngine(nullptr)->keyword(),
             first_default.keyword());
 }
 
@@ -214,7 +212,7 @@ TEST_F(DefaultSearchManagerTest, DefaultSearchSetByPolicy) {
 
   TemplateURLData null_policy_data;
   SetPolicy(pref_service(), false, &null_policy_data);
-  EXPECT_EQ(NULL, manager.GetDefaultSearchEngine(&source));
+  EXPECT_EQ(nullptr, manager.GetDefaultSearchEngine(&source));
   EXPECT_EQ(DefaultSearchManager::FROM_POLICY, source);
 
   pref_service()->RemoveManagedPref(

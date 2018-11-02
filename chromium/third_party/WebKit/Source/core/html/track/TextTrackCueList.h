@@ -33,8 +33,7 @@
 
 namespace blink {
 
-class TextTrackCueList final : public GarbageCollected<TextTrackCueList>,
-                               public ScriptWrappable {
+class TextTrackCueList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -57,8 +56,8 @@ class TextTrackCueList final : public GarbageCollected<TextTrackCueList>,
   }
   void ValidateCueIndexes();
 
-  DECLARE_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   TextTrackCueList();

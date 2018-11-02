@@ -13,20 +13,15 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
-#include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "components/update_client/out_of_process_patcher.h"
 #include "components/update_client/update_client_errors.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace update_client {
 
 class CrxInstaller;
 class ComponentPatcher;
-
-// Deserializes the CRX manifest. The top level must be a dictionary.
-std::unique_ptr<base::DictionaryValue> ReadManifest(
-    const base::FilePath& unpack_path);
 
 // In charge of unpacking the component CRX package and verifying that it is
 // well formed and the cryptographic signature is correct.
@@ -76,9 +71,12 @@ class ComponentUnpacker : public base::RefCountedThreadSafe<ComponentUnpacker> {
 
     // Path of the unpacked files if the unpacking was successful.
     base::FilePath unpack_path;
+
+    // The extracted public key of the package if the unpacking was successful.
+    std::string public_key;
   };
 
-  using Callback = base::Callback<void(const Result& result)>;
+  using Callback = base::OnceCallback<void(const Result& result)>;
 
   // Constructs an unpacker for a specific component unpacking operation.
   // |pk_hash| is the expected/ public key SHA256 hash. |path| is the current
@@ -86,12 +84,12 @@ class ComponentUnpacker : public base::RefCountedThreadSafe<ComponentUnpacker> {
   ComponentUnpacker(const std::vector<uint8_t>& pk_hash,
                     const base::FilePath& path,
                     const scoped_refptr<CrxInstaller>& installer,
-                    const scoped_refptr<OutOfProcessPatcher>& oop_patcher);
+                    std::unique_ptr<service_manager::Connector> connector);
 
   // Begins the actual unpacking of the files. May invoke a patcher and the
   // component installer if the package is a differential update.
   // Calls |callback| with the result.
-  void Unpack(const Callback& callback);
+  void Unpack(Callback callback);
 
  private:
   friend class base::RefCountedThreadSafe<ComponentUnpacker>;
@@ -129,9 +127,10 @@ class ComponentUnpacker : public base::RefCountedThreadSafe<ComponentUnpacker> {
   scoped_refptr<ComponentPatcher> patcher_;
   scoped_refptr<CrxInstaller> installer_;
   Callback callback_;
-  scoped_refptr<OutOfProcessPatcher> oop_patcher_;
+  std::unique_ptr<service_manager::Connector> connector_;
   UnpackerError error_;
   int extended_error_;
+  std::string public_key_;
 
   DISALLOW_COPY_AND_ASSIGN(ComponentUnpacker);
 };

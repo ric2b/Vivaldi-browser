@@ -122,6 +122,8 @@ GLint viewport_x;
 GLint viewport_y;
 GLsizei viewport_width;
 GLsizei viewport_height;
+GLenum window_rectangles_mode;
+GLint num_window_rectangles;
 
 inline void SetDeviceCapabilityState(GLenum cap, bool enable) {
   switch (cap) {
@@ -206,8 +208,8 @@ inline void SetDeviceCapabilityState(GLenum cap, bool enable) {
       return;
   }
   if (enable)
-    glEnable(cap);
+    api()->glEnableFn(cap);
   else
-    glDisable(cap);
+    api()->glDisableFn(cap);
 }
 #endif  // GPU_COMMAND_BUFFER_SERVICE_CONTEXT_STATE_AUTOGEN_H_

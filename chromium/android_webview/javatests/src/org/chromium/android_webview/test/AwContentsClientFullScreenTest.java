@@ -21,10 +21,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.test.util.JavascriptEventObserver;
-import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -43,7 +42,6 @@ import java.util.concurrent.TimeoutException;
  * very common use case.
  */
 @RunWith(AwJUnit4ClassRunner.class)
-@DisableIf.Build(sdk_is_greater_than = 22, message = "crbug.com/615483,615184")
 public class AwContentsClientFullScreenTest {
     @Rule
     public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
@@ -192,7 +190,6 @@ public class AwContentsClientFullScreenTest {
     @Test
     @MediumTest
     @Feature({"AndroidWebView"})
-    @RetryOnFailure
     public void testExitFullscreenEndsIfAppInvokesCallbackFromOnHideCustomView() throws Throwable {
         mContentsClient.setOnHideCustomViewRunnable(
                 () -> mContentsClient.getExitCallback().onCustomViewHidden());
@@ -301,7 +298,6 @@ public class AwContentsClientFullScreenTest {
     @Test
     @MediumTest
     @Feature({"AndroidWebView"})
-    @RetryOnFailure
     public void testPowerSaveBlockerIsTransferredToFullscreen() throws Throwable {
         Assert.assertFalse(DOMUtils.isFullscreen(getWebContentsOnUiThread()));
         loadTestPage(VIDEO_INSIDE_DIV_TEST_URL);
@@ -329,7 +325,6 @@ public class AwContentsClientFullScreenTest {
     @Test
     @MediumTest
     @Feature({"AndroidWebView"})
-    @RetryOnFailure
     public void testPowerSaveBlockerIsTransferredToEmbedded() throws Throwable {
         // Enter fullscreen.
         doOnShowCustomViewTest(VIDEO_INSIDE_DIV_TEST_URL);
@@ -393,8 +388,7 @@ public class AwContentsClientFullScreenTest {
 
     private boolean getKeepScreenOnOnInstrumentationThread(final View view) {
         try {
-            return mActivityTestRule.runTestOnUiThreadAndGetResult(
-                    () -> getKeepScreenOnOnUiThread(view));
+            return ThreadUtils.runOnUiThreadBlocking(() -> getKeepScreenOnOnUiThread(view));
         } catch (Exception e) {
             Assert.fail(e.getMessage());
             return false;
@@ -449,7 +443,7 @@ public class AwContentsClientFullScreenTest {
     private JavascriptEventObserver registerObserver(final String observerName) throws Throwable {
         final JavascriptEventObserver observer = new JavascriptEventObserver();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
-                () -> observer.register(mContentViewCore, observerName));
+                () -> observer.register(mContentViewCore.getWebContents(), observerName));
         return observer;
     }
 
@@ -481,8 +475,7 @@ public class AwContentsClientFullScreenTest {
 
     private WebContents getWebContentsOnUiThread() {
         try {
-            return mActivityTestRule.runTestOnUiThreadAndGetResult(
-                    () -> mContentViewCore.getWebContents());
+            return ThreadUtils.runOnUiThreadBlocking(() -> mContentViewCore.getWebContents());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
             return null;

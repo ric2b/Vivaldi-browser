@@ -17,13 +17,15 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/sandbox_type.h"
 #include "content/public/common/url_loader_throttle.h"
+#include "device/geolocation/public/cpp/location_provider.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/cdm_factory.h"
 #include "media/media_features.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "net/ssl/client_cert_identity.h"
+#include "net/url_request/url_request_context_getter.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -32,13 +34,20 @@
 
 namespace content {
 
+void OverrideOnBindInterface(const service_manager::BindSourceInfo& remote_info,
+                             const std::string& name,
+                             mojo::ScopedMessagePipeHandle* handle) {
+  GetContentClient()->browser()->OverrideOnBindInterface(remote_info, name,
+                                                         handle);
+}
+
 BrowserMainParts* ContentBrowserClient::CreateBrowserMainParts(
     const MainFunctionParams& parameters) {
   return nullptr;
 }
 
 void ContentBrowserClient::PostAfterStartupTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const scoped_refptr<base::TaskRunner>& task_runner,
     base::OnceClosure task) {
   task_runner->PostTask(from_here, std::move(task));
@@ -53,6 +62,10 @@ void ContentBrowserClient::SetBrowserStartupIsCompleteForTesting() {}
 WebContentsViewDelegate* ContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
   return nullptr;
+}
+
+bool ContentBrowserClient::AllowGpuLaunchRetryOnIOThread() {
+  return true;
 }
 
 GURL ContentBrowserClient::GetEffectiveURL(BrowserContext* browser_context,
@@ -74,6 +87,13 @@ bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
 bool ContentBrowserClient::ShouldLockToOrigin(BrowserContext* browser_context,
                                               const GURL& effective_url) {
   return true;
+}
+
+bool ContentBrowserClient::ShouldBypassDocumentBlocking(
+    const url::Origin& initiator,
+    const GURL& url,
+    ResourceType resource_type) {
+  return false;
 }
 
 void ContentBrowserClient::GetAdditionalViewSourceSchemes(
@@ -99,10 +119,22 @@ bool ContentBrowserClient::ShouldAllowOpenURL(SiteInstance* site_instance,
   return true;
 }
 
+bool ContentBrowserClient::IsURLAcceptableForWebUI(
+    BrowserContext* browser_context,
+    const GURL& url) {
+  return false;
+}
+
 bool ContentBrowserClient::
     ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
         const GURL& url,
         SiteInstance* parent_site_instance) {
+  return false;
+}
+
+bool ContentBrowserClient::ShouldStayInParentProcessForNTP(
+    const GURL& url,
+    SiteInstance* parent_site_instance) {
   return false;
 }
 
@@ -152,6 +184,13 @@ ContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
   return std::vector<url::Origin>();
 }
 
+bool ContentBrowserClient::IsFileAccessAllowed(
+    const base::FilePath& path,
+    const base::FilePath& absolute_path,
+    const base::FilePath& profile_path) {
+  return true;
+}
+
 std::string ContentBrowserClient::GetApplicationLocale() {
   return "en-US";
 }
@@ -165,7 +204,8 @@ const gfx::ImageSkia* ContentBrowserClient::GetDefaultFavicon() {
   return empty;
 }
 
-base::FilePath ContentBrowserClient::GetLoggingFileName() {
+base::FilePath ContentBrowserClient::GetLoggingFileName(
+    const base::CommandLine& command_line) {
   return base::FilePath();
 }
 
@@ -183,8 +223,26 @@ bool ContentBrowserClient::AllowServiceWorker(
   return true;
 }
 
+bool ContentBrowserClient::AllowSharedWorker(
+    const GURL& worker_url,
+    const GURL& main_frame_url,
+    const std::string& name,
+    const url::Origin& constructor_origin,
+    BrowserContext* context,
+    int render_process_id,
+    int render_frame_id) {
+  return true;
+}
+
 bool ContentBrowserClient::IsDataSaverEnabled(BrowserContext* context) {
   return false;
+}
+
+std::unique_ptr<net::HttpRequestHeaders>
+ContentBrowserClient::GetAdditionalNavigationRequestHeaders(
+    BrowserContext* context,
+    const GURL& url) const {
+  return nullptr;
 }
 
 bool ContentBrowserClient::AllowGetCookie(const GURL& url,
@@ -198,7 +256,7 @@ bool ContentBrowserClient::AllowGetCookie(const GURL& url,
 
 bool ContentBrowserClient::AllowSetCookie(const GURL& url,
                                           const GURL& first_party,
-                                          const std::string& cookie_line,
+                                          const net::CanonicalCookie& cookie,
                                           ResourceContext* context,
                                           int render_process_id,
                                           int render_frame_id,
@@ -252,7 +310,6 @@ void ContentBrowserClient::AllowCertificateError(
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
     ResourceType resource_type,
-    bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
     const base::Callback<void(CertificateRequestResultType)>& callback) {
@@ -268,6 +325,21 @@ void ContentBrowserClient::SelectClientCertificate(
 net::URLRequestContext* ContentBrowserClient::OverrideRequestContextForURL(
     const GURL& url, ResourceContext* context) {
   return nullptr;
+}
+
+std::unique_ptr<device::LocationProvider>
+ContentBrowserClient::OverrideSystemLocationProvider() {
+  return nullptr;
+}
+
+void ContentBrowserClient::GetGeolocationRequestContext(
+    base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
+        callback) {
+  std::move(callback).Run(scoped_refptr<net::URLRequestContextGetter>(nullptr));
+}
+
+std::string ContentBrowserClient::GetGeolocationApiKey() {
+  return std::string();
 }
 
 std::string ContentBrowserClient::GetStoragePartitionIdForSite(
@@ -346,11 +418,6 @@ base::FilePath ContentBrowserClient::GetShaderDiskCacheDirectory() {
 
 BrowserPpapiHost*
     ContentBrowserClient::GetExternalBrowserPpapiHost(int plugin_process_id) {
-  return nullptr;
-}
-
-gpu::GpuChannelEstablishFactory*
-ContentBrowserClient::GetGpuChannelEstablishFactory() {
   return nullptr;
 }
 
@@ -465,6 +532,11 @@ std::unique_ptr<base::Value> ContentBrowserClient::GetServiceManifestOverlay(
   return nullptr;
 }
 
+bool ContentBrowserClient::ShouldTerminateOnServiceQuit(
+    const service_manager::Identity& id) {
+  return false;
+}
+
 std::vector<ContentBrowserClient::ServiceManifestInfo>
 ContentBrowserClient::GetExtraServiceManifests() {
   return std::vector<ContentBrowserClient::ServiceManifestInfo>();
@@ -490,6 +562,15 @@ ContentBrowserClient::CreateURLLoaderThrottles(
   return std::vector<std::unique_ptr<URLLoaderThrottle>>();
 }
 
+void ContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
+    RenderFrameHost* frame_host,
+    NonNetworkURLLoaderFactoryMap* factories) {}
+
+void ContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
+    RenderFrameHost* frame_host,
+    const GURL& frame_url,
+    NonNetworkURLLoaderFactoryMap* factories) {}
+
 mojom::NetworkContextPtr ContentBrowserClient::CreateNetworkContext(
     BrowserContext* context,
     bool in_memory,
@@ -507,11 +588,18 @@ mojom::NetworkContextPtr ContentBrowserClient::CreateNetworkContext(
   return network_context;
 }
 
-bool ContentBrowserClient::OverrideLegacySymantecCertConsoleMessage(
-    const GURL& url,
-    const scoped_refptr<net::X509Certificate>& cert,
-    std::string* console_messsage) {
+#if defined(OS_ANDROID)
+bool ContentBrowserClient::ShouldOverrideUrlLoading(
+    int frame_tree_node_id,
+    bool browser_initiated,
+    const GURL& gurl,
+    const std::string& request_method,
+    bool has_user_gesture,
+    bool is_redirect,
+    bool is_main_frame,
+    ui::PageTransition transition) {
   return false;
 }
+#endif
 
 }  // namespace content

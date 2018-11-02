@@ -34,7 +34,8 @@ class MockUserManager : public ChromeUserManager {
                      user_manager::UserList(void));
   MOCK_CONST_METHOD0(GetLoggedInUsers, const user_manager::UserList&(void));
   MOCK_CONST_METHOD0(GetLRULoggedInUsers, const user_manager::UserList&(void));
-  MOCK_METHOD3(UserLoggedIn, void(const AccountId&, const std::string&, bool));
+  MOCK_METHOD4(UserLoggedIn,
+               void(const AccountId&, const std::string&, bool, bool));
   MOCK_METHOD1(SwitchActiveUser, void(const AccountId& account_id));
   MOCK_METHOD0(SessionStarted, void(void));
   MOCK_METHOD2(RemoveUser,
@@ -76,6 +77,9 @@ class MockUserManager : public ChromeUserManager {
                void(UserManager::UserSessionStateObserver*));
   MOCK_METHOD0(NotifyLocalStateChanged, void(void));
   MOCK_CONST_METHOD0(AreSupervisedUsersAllowed, bool(void));
+  MOCK_CONST_METHOD0(IsGuestSessionAllowed, bool(void));
+  MOCK_CONST_METHOD1(IsGaiaUserAllowed, bool(const user_manager::User& user));
+  MOCK_CONST_METHOD1(IsUserAllowed, bool(const user_manager::User& user));
   MOCK_CONST_METHOD3(UpdateLoginState,
                      void(const user_manager::User*,
                           const user_manager::User*,
@@ -130,7 +134,6 @@ class MockUserManager : public ChromeUserManager {
   const user_manager::User* GetPrimaryUser() const override;
 
   // ChromeUserManager overrides:
-  BootstrapManager* GetBootstrapManager() override;
   MultiProfileUserController* GetMultiProfileUserController() override;
   UserImageManager* GetUserImageManager(const AccountId& account_id) override;
   SupervisedUserManager* GetSupervisedUserManager() override;

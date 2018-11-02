@@ -12,14 +12,11 @@ struct SameSizeAsDisplayItem {
   LayoutRect rect;
   LayoutUnit outset;
   int i;
-#ifndef NDEBUG
-  WTF::String debug_string_;
-#endif
 };
 static_assert(sizeof(DisplayItem) == sizeof(SameSizeAsDisplayItem),
               "DisplayItem should stay small");
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 
 static WTF::String PaintPhaseAsDebugString(int paint_phase) {
   // Must be kept in sync with PaintPhase.
@@ -90,6 +87,7 @@ static WTF::String SpecialDrawingTypeAsDebugString(DisplayItem::Type type) {
     DEBUG_STRING_CASE(PrintedContentPDFURLRect);
     DEBUG_STRING_CASE(Resizer);
     DEBUG_STRING_CASE(SVGClip);
+    DEBUG_STRING_CASE(SVGClipBoundsHack);
     DEBUG_STRING_CASE(SVGFilter);
     DEBUG_STRING_CASE(SVGMask);
     DEBUG_STRING_CASE(ScrollbarBackButtonEnd);
@@ -219,39 +217,22 @@ WTF::String DisplayItem::TypeAsDebugString(Type type) {
 }
 
 WTF::String DisplayItem::AsDebugString() const {
-  WTF::StringBuilder string_builder;
-  string_builder.Append('{');
-  DumpPropertiesAsDebugString(string_builder);
-  string_builder.Append('}');
-  return string_builder.ToString();
+  auto json = JSONObject::Create();
+  PropertiesAsJSON(*json);
+  return json->ToPrettyJSONString();
 }
 
-void DisplayItem::DumpPropertiesAsDebugString(
-    WTF::StringBuilder& string_builder) const {
-  if (!HasValidClient()) {
-    string_builder.Append("validClient: false, originalDebugString: ");
-    // This is the original debug string which is in json format.
-    string_builder.Append(ClientDebugString());
-    return;
-  }
+void DisplayItem::PropertiesAsJSON(JSONObject& json) const {
+  if (IsTombstone())
+    json.SetBoolean("ISTOMBSTONE", true);
 
-  string_builder.Append(String::Format("client: \"%p", &Client()));
-  if (!ClientDebugString().IsEmpty()) {
-    string_builder.Append(' ');
-    string_builder.Append(ClientDebugString());
-  }
-  string_builder.Append("\", visualRect: \"");
-  string_builder.Append(VisualRect().ToString());
-  string_builder.Append("\", ");
-  if (OutsetForRasterEffects()) {
-    string_builder.Append(
-        String::Format("outset: %f, ", OutsetForRasterEffects().ToFloat()));
-  }
-  string_builder.Append("type: \"");
-  string_builder.Append(TypeAsDebugString(GetType()));
-  string_builder.Append('"');
+  json.SetString("client", String::Format("%p", &Client()));
+  json.SetString("visualRect", VisualRect().ToString());
+  if (OutsetForRasterEffects())
+    json.SetDouble("outset", OutsetForRasterEffects().ToDouble());
+  json.SetString("type", TypeAsDebugString(GetType()));
   if (skipped_cache_)
-    string_builder.Append(", skippedCache: true");
+    json.SetBoolean("skippedCache", true);
 }
 
 #endif

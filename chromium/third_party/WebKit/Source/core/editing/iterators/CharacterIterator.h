@@ -28,7 +28,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Range.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/iterators/TextIteratorBehavior.h"
 #include "platform/heap/Heap.h"
@@ -63,14 +63,9 @@ class CORE_EXPORT CharacterIteratorAlgorithm {
   void CopyTextTo(ForwardsTextBuffer* output);
 
   int CharacterOffset() const { return offset_; }
-  EphemeralRangeTemplate<Strategy> Range() const;
-
-  bool IsInTextSecurityMode() const {
-    return text_iterator_.IsInTextSecurityMode();
-  }
 
   Document* OwnerDocument() const;
-  Node* CurrentContainer() const;
+  const Node* CurrentContainer() const;
   int StartOffset() const;
   int EndOffset() const;
   PositionTemplate<Strategy> StartPosition() const;

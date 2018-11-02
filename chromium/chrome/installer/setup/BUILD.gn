@@ -17,7 +17,6 @@ if (is_win) {
 
   executable("setup") {
     sources = [
-      "setup.ico",
       "setup.rc",
       "setup_exe_version.rc.version",
       "setup_main.cc",
@@ -87,8 +86,7 @@ if (is_win) {
       "//chrome/installer/zucchini:zucchini_io",
       "//chrome_elf:constants",
       "//components/base32",
-      "//components/crash/content/app:app",
-      "//components/crash/content/app:lib",
+      "//components/crash/content/app",
       "//components/crash/core/common",
       "//content/public/common:static_switches",
       "//courgette:courgette_lib",

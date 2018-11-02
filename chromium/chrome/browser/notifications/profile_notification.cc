@@ -6,9 +6,9 @@
 
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "chrome/browser/lifetime/keep_alive_types.h"
-#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/signin/core/account_id/account_id.h"
 
 // static
@@ -22,16 +22,21 @@ std::string ProfileNotification::GetProfileNotificationId(
                             delegate_id.c_str());
 }
 
-ProfileNotification::ProfileNotification(Profile* profile,
-                                         const Notification& notification)
-    : profile_id_(NotificationUIManager::GetProfileID(profile)),
+ProfileNotification::ProfileNotification(
+    Profile* profile,
+    const message_center::Notification& notification,
+    NotificationHandler::Type type)
+    : profile_(profile),
+      profile_id_(NotificationUIManager::GetProfileID(profile)),
       notification_(
           // Uses Notification's copy constructor to assign the message center
           // id, which should be unique for every profile + Notification pair.
           GetProfileNotificationId(
-              notification.delegate_id(),
+              notification.id(),
               NotificationUIManager::GetProfileID(profile)),
           notification),
+      original_id_(notification.id()),
+      type_(type),
       keep_alive_(new ScopedKeepAlive(KeepAliveOrigin::NOTIFICATION,
                                       KeepAliveRestartOption::DISABLED)) {
   DCHECK(profile);

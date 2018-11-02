@@ -31,6 +31,7 @@
 #include "platform/blob/BlobRegistry.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/blob/BlobData.h"
@@ -39,7 +40,6 @@
 #include "platform/weborigin/URLSecurityOriginMap.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSpecific.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/text/StringHash.h"
@@ -62,7 +62,7 @@ static WebBlobRegistry* GetBlobRegistry() {
   return Platform::Current()->GetBlobRegistry();
 }
 
-typedef HashMap<String, RefPtr<SecurityOrigin>> BlobURLOriginMap;
+typedef HashMap<String, scoped_refptr<SecurityOrigin>> BlobURLOriginMap;
 static ThreadSpecific<BlobURLOriginMap>& OriginMap() {
   // We want to create the BlobOriginMap exactly once because it is shared by
   // all the threads.
@@ -103,7 +103,7 @@ void BlobRegistry::RemoveBlobDataRef(const String& uuid) {
 
 void BlobRegistry::RegisterPublicBlobURL(SecurityOrigin* origin,
                                          const KURL& url,
-                                         PassRefPtr<BlobDataHandle> handle) {
+                                         scoped_refptr<BlobDataHandle> handle) {
   SaveToOriginMap(origin, url);
   GetBlobRegistry()->RegisterPublicBlobURL(url, handle->Uuid());
 }
@@ -120,7 +120,7 @@ BlobOriginMap::BlobOriginMap() {
 SecurityOrigin* BlobOriginMap::GetOrigin(const KURL& url) {
   if (url.ProtocolIs("blob"))
     return OriginMap()->at(url.GetString());
-  return 0;
+  return nullptr;
 }
 
 }  // namespace blink

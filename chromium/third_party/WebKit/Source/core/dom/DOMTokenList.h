@@ -25,6 +25,7 @@
 #ifndef DOMTokenList_h
 #define DOMTokenList_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/QualifiedName.h"
 #include "core/dom/SpaceSplitString.h"
@@ -38,17 +39,15 @@ namespace blink {
 class Element;
 class ExceptionState;
 
-class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
-                                 public ScriptWrappable {
+class CORE_EXPORT DOMTokenList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
-  WTF_MAKE_NONCOPYABLE(DOMTokenList);
 
  public:
   static DOMTokenList* Create(Element& element, const QualifiedName& attr) {
     return new DOMTokenList(element, attr);
   }
   virtual ~DOMTokenList() {}
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   unsigned length() const { return token_set_.size(); }
   const AtomicString item(unsigned index) const;
@@ -93,6 +92,7 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
   const Member<Element> element_;
   const QualifiedName attribute_name_;
   bool is_in_update_step_ = false;
+  DISALLOW_COPY_AND_ASSIGN(DOMTokenList);
 };
 
 }  // namespace blink

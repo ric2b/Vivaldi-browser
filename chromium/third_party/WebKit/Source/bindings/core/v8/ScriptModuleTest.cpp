@@ -36,6 +36,10 @@ class TestScriptModuleResolver final : public ScriptModuleResolver {
 
   void RegisterModuleScript(ModuleScript*) override { NOTREACHED(); }
   void UnregisterModuleScript(ModuleScript*) override { NOTREACHED(); }
+  ModuleScript* GetHostDefined(const ScriptModule&) const override {
+    NOTREACHED();
+    return nullptr;
+  }
 
   ScriptModule Resolve(const String& specifier,
                        const ScriptModule&,
@@ -53,7 +57,7 @@ class ScriptModuleTestModulator final : public DummyModulator {
   ScriptModuleTestModulator();
   virtual ~ScriptModuleTestModulator() {}
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   TestScriptModuleResolver* GetTestScriptModuleResolver() {
     return resolver_.Get();
@@ -72,7 +76,7 @@ class ScriptModuleTestModulator final : public DummyModulator {
 ScriptModuleTestModulator::ScriptModuleTestModulator()
     : resolver_(new TestScriptModuleResolver) {}
 
-DEFINE_TRACE(ScriptModuleTestModulator) {
+void ScriptModuleTestModulator::Trace(blink::Visitor* visitor) {
   visitor->Trace(resolver_);
   DummyModulator::Trace(visitor);
 }
@@ -81,8 +85,8 @@ TEST(ScriptModuleTest, compileSuccess) {
   V8TestingScope scope;
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42;", "foo.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   EXPECT_EQ(ScriptModuleState::kUninstantiated,
             module.Status(scope.GetScriptState()));
@@ -91,8 +95,9 @@ TEST(ScriptModuleTest, compileSuccess) {
 TEST(ScriptModuleTest, compileFail) {
   V8TestingScope scope;
   ScriptModule module = ScriptModule::Compile(
-      scope.GetIsolate(), "123 = 456", "foo.js", kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), scope.GetExceptionState());
+      scope.GetIsolate(), "123 = 456", "foo.js", ScriptFetchOptions(),
+      kSharableCrossOrigin, TextPosition::MinimumPosition(),
+      scope.GetExceptionState());
   ASSERT_TRUE(module.IsNull());
   EXPECT_TRUE(scope.GetExceptionState().HadException());
 }
@@ -102,12 +107,14 @@ TEST(ScriptModuleTest, equalAndHash) {
 
   ScriptModule module_null;
   ScriptModule module_a = ScriptModule::Compile(
-      scope.GetIsolate(), "export const a = 'a';", "a.js", kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      scope.GetIsolate(), "export const a = 'a';", "a.js", ScriptFetchOptions(),
+      kSharableCrossOrigin, TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_a.IsNull());
   ScriptModule module_b = ScriptModule::Compile(
-      scope.GetIsolate(), "export const b = 'b';", "b.js", kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      scope.GetIsolate(), "export const b = 'b';", "b.js", ScriptFetchOptions(),
+      kSharableCrossOrigin, TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_b.IsNull());
   Vector<char> module_deleted_buffer(sizeof(ScriptModule));
   ScriptModule& module_deleted =
@@ -147,8 +154,8 @@ TEST(ScriptModuleTest, moduleRequests) {
   V8TestingScope scope;
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'a'; import 'b'; export const c = 'c';",
-      "foo.js", kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      "foo.js", ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
 
   auto requests = module.ModuleRequests(scope.GetScriptState());
@@ -165,8 +172,8 @@ TEST(ScriptModuleTest, instantiateNoDeps) {
 
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42;", "foo.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
@@ -184,22 +191,22 @@ TEST(ScriptModuleTest, instantiateWithDeps) {
 
   ScriptModule module_a = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 'a';", "foo.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_a.IsNull());
   resolver->PushScriptModule(module_a);
 
   ScriptModule module_b = ScriptModule::Compile(
       scope.GetIsolate(), "export const b = 'b';", "foo.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_b.IsNull());
   resolver->PushScriptModule(module_b);
 
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'a'; import 'b'; export const c = 123;",
-      "c.js", kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      "c.js", ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
@@ -225,13 +232,13 @@ TEST(ScriptModuleTest, instantiateError) {
 
   ScriptModule module_failure = ScriptModule::Compile(
       scope.GetIsolate(), "nonexistent_function()", "failure.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_failure.IsNull());
   module_failure.Instantiate(scope.GetScriptState());
   ASSERT_EQ(ScriptModuleState::kInstantiated,
             module_failure.Status(scope.GetScriptState()));
-  module_failure.Evaluate(scope.GetScriptState());
+  EXPECT_FALSE(module_failure.Evaluate(scope.GetScriptState()).IsEmpty());
   ASSERT_EQ(ScriptModuleState::kErrored,
             module_failure.Status(scope.GetScriptState()));
   v8::Local<v8::Value> error =
@@ -241,8 +248,8 @@ TEST(ScriptModuleTest, instantiateError) {
 
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'failure'; export const c = 123;", "c.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      scope.GetExceptionState());
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), scope.GetExceptionState());
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   EXPECT_FALSE(exception.IsEmpty());
@@ -264,13 +271,13 @@ TEST(ScriptModuleTest, Evaluate) {
 
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42; window.foo = 'bar';", "foo.js",
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), kSharableCrossOrigin,
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
 
-  module.Evaluate(scope.GetScriptState());
+  EXPECT_TRUE(module.Evaluate(scope.GetScriptState()).IsEmpty());
   v8::Local<v8::Value> value = scope.GetFrame()
                                    .GetScriptController()
                                    .ExecuteScriptInMainWorldAndReturnValue(
@@ -288,6 +295,26 @@ TEST(ScriptModuleTest, Evaluate) {
           ->Get(scope.GetContext(), V8String(scope.GetIsolate(), "a"))
           .ToLocalChecked();
   EXPECT_EQ(42.0, exported_value->NumberValue(scope.GetContext()).ToChecked());
+}
+
+TEST(ScriptModuleTest, EvaluateCaptureError) {
+  V8TestingScope scope;
+
+  auto modulator = new ScriptModuleTestModulator();
+  Modulator::SetModulator(scope.GetScriptState(), modulator);
+
+  ScriptModule module = ScriptModule::Compile(
+      scope.GetIsolate(), "throw 'bar';", "foo.js", ScriptFetchOptions(),
+      kSharableCrossOrigin, TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
+  ASSERT_FALSE(module.IsNull());
+  ScriptValue exception = module.Instantiate(scope.GetScriptState());
+  ASSERT_TRUE(exception.IsEmpty());
+
+  ScriptValue error = module.Evaluate(scope.GetScriptState());
+  ASSERT_TRUE(error.V8Value()->IsString());
+  EXPECT_EQ("bar", ToCoreString(v8::Local<v8::String>::Cast(error.V8Value())));
+  EXPECT_EQ(ScriptModuleState::kErrored, module.Status(scope.GetScriptState()));
 }
 
 }  // namespace

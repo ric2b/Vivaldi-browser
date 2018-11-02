@@ -28,18 +28,17 @@
 
 #include <algorithm>
 #include <memory>
-#include "core/HTMLNames.h"
-#include "core/MediaTypeNames.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/FontFaceSetDocument.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementVisibilityObserver.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/DragCaret.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/RenderedPosition.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/ErrorEvent.h"
 #include "core/frame/BrowserControls.h"
@@ -55,12 +54,14 @@
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/html/HTMLPlugInElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/intersection_observer/IntersectionObserverController.h"
 #include "core/intersection_observer/IntersectionObserverInit.h"
+#include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutCounter.h"
 #include "core/layout/LayoutEmbeddedContent.h"
@@ -78,6 +79,7 @@
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
+#include "core/media_type_names.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -100,14 +102,12 @@
 #include "core/probe/CoreProbes.h"
 #include "core/resize_observer/ResizeObserverController.h"
 #include "core/style/ComputedStyle.h"
-#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/Histogram.h"
 #include "platform/Language.h"
 #include "platform/PlatformChromeClient.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/FloatRect.h"
@@ -124,15 +124,18 @@
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/json/JSONValues.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollbarTheme.h"
-#include "platform/scroll/ScrollerSizeMetrics.h"
 #include "platform/text/TextStream.h"
-#include "platform/wtf/CheckedNumeric.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Time.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebDisplayItemList.h"
+#include "public/platform/WebRect.h"
+#include "public/platform/WebRemoteScrollProperties.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 // Used to check for dirty layouts violating document lifecycle rules.
 // If arg evaluates to true, the program will continue. If arg evaluates to
@@ -157,6 +160,27 @@ constexpr int kLetterPortraitPageHeight = 792;
 }  // namespace
 
 namespace blink {
+namespace {
+using WebRemoteScrollAlignment = WebRemoteScrollProperties::Alignment;
+WebRemoteScrollAlignment ToWebRemoteScrollAlignment(
+    const ScrollAlignment& alignment) {
+  if (alignment == ScrollAlignment::kAlignCenterIfNeeded)
+    return WebRemoteScrollAlignment::kCenterIfNeeded;
+  if (alignment == ScrollAlignment::kAlignToEdgeIfNeeded)
+    return WebRemoteScrollAlignment::kToEdgeIfNeeded;
+  if (alignment == ScrollAlignment::kAlignTopAlways)
+    return WebRemoteScrollAlignment::kTopAlways;
+  if (alignment == ScrollAlignment::kAlignBottomAlways)
+    return WebRemoteScrollAlignment::kBottomAlways;
+  if (alignment == ScrollAlignment::kAlignLeftAlways)
+    return WebRemoteScrollAlignment::kLeftAlways;
+  if (alignment == ScrollAlignment::kAlignRightAlways)
+    return WebRemoteScrollAlignment::kRightAlways;
+  NOTREACHED();
+  return WebRemoteScrollAlignment::kCenterIfNeeded;
+}
+
+}  // namespace
 
 using namespace HTMLNames;
 
@@ -175,14 +199,12 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       can_have_scrollbars_(true),
       has_pending_layout_(false),
       in_synchronous_post_layout_(false),
-      post_layout_tasks_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
-          this,
-          &LocalFrameView::PostLayoutTimerFired),
-      update_plugins_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
-          this,
-          &LocalFrameView::UpdatePluginsTimerFired),
+      post_layout_tasks_timer_(frame.GetTaskRunner(TaskType::kUnspecedTimer),
+                               this,
+                               &LocalFrameView::PostLayoutTimerFired),
+      update_plugins_timer_(frame.GetTaskRunner(TaskType::kUnspecedTimer),
+                            this,
+                            &LocalFrameView::UpdatePluginsTimerFired),
       base_background_color_(Color::kWhite),
       media_type_(MediaTypeNames::screen),
       safe_to_propagate_scroll_to_parent_(true),
@@ -190,7 +212,7 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       sticky_position_object_count_(0),
       input_events_scale_factor_for_emulation_(1),
       layout_size_fixed_to_frame_size_(true),
-      did_scroll_timer_(TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
+      did_scroll_timer_(frame.GetTaskRunner(TaskType::kUnspecedTimer),
                         this,
                         &LocalFrameView::DidScrollTimerFired),
       needs_update_geometries_(false),
@@ -209,7 +231,6 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
           DocumentLifecycle::kUninitialized),
       past_layout_lifecycle_update_(false),
       scroll_anchor_(this),
-      in_perform_scroll_anchoring_adjustments_(false),
       scrollbar_manager_(*this),
       needs_scrollbars_update_(false),
       suppress_adjust_view_size_(false),
@@ -217,6 +238,7 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       forcing_layout_parent_view_(false),
       needs_intersection_observation_(false),
       needs_forced_compositing_update_(false),
+      scroll_gesture_region_is_dirty_(false),
       main_thread_scrolling_reasons_(0),
       paint_frame_count_(0),
       unique_id_(NewUniqueObjectId()) {
@@ -245,7 +267,7 @@ LocalFrameView::~LocalFrameView() {
 #endif
 }
 
-DEFINE_TRACE(LocalFrameView) {
+void LocalFrameView::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(parent_);
   visitor->Trace(fragment_anchor_);
@@ -556,9 +578,6 @@ void LocalFrameView::InvalidateRect(const IntRect& rect) {
   paint_invalidation_rect.Move(
       (layout_item.BorderLeft() + layout_item.PaddingLeft()).ToInt(),
       (layout_item.BorderTop() + layout_item.PaddingTop()).ToInt());
-  // FIXME: We should not allow paint invalidation out of paint invalidation
-  // state. crbug.com/457415
-  DisablePaintInvalidationStateAsserts paint_invalidation_assert_disabler;
   layout_item.InvalidatePaintRectangle(LayoutRect(paint_invalidation_rect));
 }
 
@@ -609,7 +628,7 @@ LayoutViewItem LocalFrameView::GetLayoutViewItem() const {
 
 ScrollingCoordinator* LocalFrameView::GetScrollingCoordinator() const {
   Page* p = GetPage();
-  return p ? p->GetScrollingCoordinator() : 0;
+  return p ? p->GetScrollingCoordinator() : nullptr;
 }
 
 CompositorAnimationHost* LocalFrameView::GetCompositorAnimationHost() const {
@@ -660,8 +679,8 @@ FloatQuad LocalFrameView::LocalToVisibleContentQuad(
   return result;
 }
 
-RefPtr<WebTaskRunner> LocalFrameView::GetTimerTaskRunner() const {
-  return TaskRunnerHelper::Get(TaskType::kUnspecedTimer, frame_.Get());
+scoped_refptr<WebTaskRunner> LocalFrameView::GetTimerTaskRunner() const {
+  return frame_->GetTaskRunner(TaskType::kUnspecedTimer);
 }
 
 void LocalFrameView::SetCanHaveScrollbars(bool can_have_scrollbars) {
@@ -694,7 +713,7 @@ bool LocalFrameView::ShouldUseCustomScrollbars(
   Document* doc = frame_->GetDocument();
 
   // Try the <body> element first as a scrollbar source.
-  Element* body = doc ? doc->body() : 0;
+  Element* body = doc ? doc->body() : nullptr;
   if (body && body->GetLayoutObject() &&
       body->GetLayoutObject()->Style()->HasPseudoStyle(kPseudoIdScrollbar)) {
     custom_scrollbar_element = body;
@@ -702,7 +721,7 @@ bool LocalFrameView::ShouldUseCustomScrollbars(
   }
 
   // If the <body> didn't have a custom style, then the root element might.
-  Element* doc_element = doc ? doc->documentElement() : 0;
+  Element* doc_element = doc ? doc->documentElement() : nullptr;
   if (doc_element && doc_element->GetLayoutObject() &&
       doc_element->GetLayoutObject()->Style()->HasPseudoStyle(
           kPseudoIdScrollbar)) {
@@ -717,11 +736,11 @@ Scrollbar* LocalFrameView::CreateScrollbar(ScrollbarOrientation orientation) {
   return scrollbar_manager_.CreateScrollbar(orientation);
 }
 
-void LocalFrameView::SetContentsSize(const IntSize& size) {
-  if (size == ContentsSize())
+void LocalFrameView::SetLayoutOverflowSize(const IntSize& size) {
+  if (size == layout_overflow_size_)
     return;
 
-  contents_size_ = size;
+  layout_overflow_size_ = size;
   needs_scrollbars_update_ = true;
   ScrollableArea::ContentsResized();
 
@@ -756,7 +775,7 @@ void LocalFrameView::AdjustViewSize() {
       SetScrollOrigin(origin);
   }
 
-  SetContentsSize(size);
+  SetLayoutOverflowSize(size);
 }
 
 void LocalFrameView::AdjustViewSizeAndLayout() {
@@ -784,8 +803,9 @@ void LocalFrameView::RecalcOverflowAfterStyleChange() {
   // Changing overflow should notify scrolling coordinator to ensures that it
   // updates non-fast scroll rects even if there is no layout.
   if (ScrollingCoordinator* scrolling_coordinator =
-          this->GetScrollingCoordinator())
-    scrolling_coordinator->NotifyOverflowUpdated();
+          this->GetScrollingCoordinator()) {
+    SetScrollGestureRegionIsDirty(true);
+  }
 
   IntRect document_rect = layout_view_item.DocumentRect();
   if (ScrollOrigin() == -document_rect.Location() &&
@@ -826,6 +846,12 @@ void LocalFrameView::RecalcOverflowAfterStyleChange() {
 
   if (ScrollOriginChanged())
     SetNeedsLayout();
+}
+
+void LocalFrameView::UpdateCountersAfterStyleChange() {
+  LayoutViewItem layout_view_item = this->GetLayoutViewItem();
+  DCHECK(!layout_view_item.IsNull());
+  layout_view_item.UpdateCounters();
 }
 
 bool LocalFrameView::UsesCompositedScrolling() const {
@@ -1001,7 +1027,7 @@ void LocalFrameView::PrepareLayoutAnalyzer() {
     return;
   }
   if (!analyzer_)
-    analyzer_ = WTF::MakeUnique<LayoutAnalyzer>();
+    analyzer_ = std::make_unique<LayoutAnalyzer>();
   analyzer_->Reset();
 }
 
@@ -1119,7 +1145,7 @@ void LocalFrameView::ScheduleOrPerformPostLayoutTasks() {
     // after we return.  postLayoutTasks() can make us need to update again, and
     // we can get stuck in a nasty cycle unless we call it through the timer
     // here.
-    post_layout_tasks_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    post_layout_tasks_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
     if (NeedsLayout())
       UpdateLayout();
   }
@@ -1172,8 +1198,6 @@ void LocalFrameView::UpdateLayout() {
                                               false);
     nested_layout_count_++;
 
-    UpdateCounters();
-
     // If the layout view was marked as needing layout after we added items in
     // the subtree roots we need to clear the roots and do the layout from the
     // layoutView.
@@ -1198,9 +1222,9 @@ void LocalFrameView::UpdateLayout() {
       ClearLayoutSubtreeRootsAndMarkContainingBlocks();
       Node* body = document->body();
       if (body && body->GetLayoutObject()) {
-        if (isHTMLFrameSetElement(*body)) {
+        if (IsHTMLFrameSetElement(*body)) {
           body->GetLayoutObject()->SetChildNeedsLayout();
-        } else if (isHTMLBodyElement(*body)) {
+        } else if (IsHTMLBodyElement(*body)) {
           if (!first_layout_ && size_.Height() != GetLayoutSize().Height() &&
               body->GetLayoutObject()->EnclosingBox()->StretchesToViewport())
             body->GetLayoutObject()->SetChildNeedsLayout();
@@ -1226,6 +1250,11 @@ void LocalFrameView::UpdateLayout() {
         if (v_mode == kScrollbarAuto) {
           // This causes a vertical scrollbar to appear.
           SetVerticalScrollbarMode(kScrollbarAlwaysOn);
+          if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+            GetLayoutView()
+                ->GetScrollableArea()
+                ->ForceVerticalScrollbarForFirstLayout();
+          }
         }
         // Set the initial hMode to AlwaysOff if we're auto.
         if (h_mode == kScrollbarAuto) {
@@ -1249,10 +1278,10 @@ void LocalFrameView::UpdateLayout() {
         LayoutBox* root_layout_object =
             document->documentElement()
                 ? document->documentElement()->GetLayoutBox()
-                : 0;
+                : nullptr;
         LayoutBox* body_layout_object = root_layout_object && document->body()
                                             ? document->body()->GetLayoutBox()
-                                            : 0;
+                                            : nullptr;
         if (body_layout_object && body_layout_object->StretchesToViewport())
           body_layout_object->SetChildNeedsLayout();
         else if (root_layout_object &&
@@ -1295,12 +1324,13 @@ void LocalFrameView::UpdateLayout() {
   }  // Reset m_layoutSchedulingEnabled to its previous value.
   CheckDoesNotNeedLayout();
 
-  Lifecycle().AdvanceTo(DocumentLifecycle::kLayoutClean);
+  DocumentLifecycle::Scope lifecycle_scope(Lifecycle(),
+                                           DocumentLifecycle::kLayoutClean);
 
   frame_timing_requests_dirty_ = true;
 
-  // FIXME: Could find the common ancestor layer of all dirty subtrees and
-  // mark from there. crbug.com/462719
+  // FIXME: Could find the common ancestor layer of all dirty subtrees and mark
+  // from there. crbug.com/462719
   GetLayoutViewItem().EnclosingLayer()->UpdateLayerPositionsAfterLayout();
 
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
@@ -1311,7 +1341,7 @@ void LocalFrameView::UpdateLayout() {
 
   layout_count_++;
 
-  if (AXObjectCache* cache = document->AxObjectCache()) {
+  if (AXObjectCache* cache = document->GetOrCreateAXObjectCache()) {
     const KURL& url = document->Url();
     if (url.IsValid() && !url.IsAboutBlankURL())
       cache->HandleLayoutComplete(document);
@@ -1496,7 +1526,7 @@ void LocalFrameView::AddPartToUpdate(LayoutEmbeddedObject& object) {
   // Tell the DOM element that it needs a Plugin update.
   Node* node = object.GetNode();
   DCHECK(node);
-  if (isHTMLObjectElement(*node) || isHTMLEmbedElement(*node))
+  if (IsHTMLObjectElement(*node) || IsHTMLEmbedElement(*node))
     ToHTMLPlugInElement(node)->SetNeedsPluginUpdate(true);
 
   part_update_set_.insert(&object);
@@ -1724,7 +1754,8 @@ IntPoint LocalFrameView::LastKnownMousePosition() const {
 
 bool LocalFrameView::ShouldSetCursor() const {
   Page* page = GetFrame().GetPage();
-  return page && page->VisibilityState() != kPageVisibilityStateHidden &&
+  return page &&
+         page->VisibilityState() != mojom::PageVisibilityState::kHidden &&
          !frame_->GetEventHandler().IsMousePositionUnknown() &&
          page->GetFocusController().IsActive();
 }
@@ -1736,8 +1767,25 @@ void LocalFrameView::ScrollContentsIfNeededRecursive() {
 
 void LocalFrameView::InvalidateBackgroundAttachmentFixedObjects() {
   for (const auto& layout_object : background_attachment_fixed_objects_) {
-    layout_object->SetShouldDoFullPaintInvalidation(
-        PaintInvalidationReason::kBackground);
+    bool needs_scrolling_contents_layer_invalidation = false;
+    if (layout_object->HasLayer()) {
+      PaintLayer* layer = ToLayoutBoxModelObject(layout_object)->Layer();
+      if (layer->GetBackgroundPaintLocation() ==
+          kBackgroundPaintInScrollingContents) {
+        needs_scrolling_contents_layer_invalidation = true;
+      }
+    }
+    if (needs_scrolling_contents_layer_invalidation) {
+      // BoxPaintInvalidator doesn't want to invalidate scrolling contents layer
+      // whenever the LayoutObject is marked ShouldDoFullPaintInvalidation() -
+      // see crrev.com/433093.  (LayoutObject doesn't track full-invalidation
+      // reasons independently, so it's not safe for BoxPaintInvalidator to have
+      // special handling of kBackground.)
+      layout_object->SetBackgroundChangedSinceLastPaintInvalidation();
+    } else {
+      layout_object->SetShouldDoFullPaintInvalidation(
+          PaintInvalidationReason::kBackground);
+    }
   }
 }
 
@@ -1828,29 +1876,19 @@ void LocalFrameView::ScrollContentsSlowPath() {
   if (ContentsInCompositedLayer()) {
     IntRect update_rect = VisibleContentRect();
     DCHECK(!GetLayoutViewItem().IsNull());
-    // FIXME: We should not allow paint invalidation out of paint invalidation
-    // state. crbug.com/457415
-    DisablePaintInvalidationStateAsserts disabler;
     GetLayoutViewItem().InvalidatePaintRectangle(LayoutRect(update_rect));
-  }
-  LayoutEmbeddedContentItem frame_layout_item = frame_->OwnerLayoutItem();
-  if (!frame_layout_item.IsNull()) {
-    if (IsEnclosedInCompositingLayer()) {
-      LayoutRect rect(
-          frame_layout_item.BorderLeft() + frame_layout_item.PaddingLeft(),
-          frame_layout_item.BorderTop() + frame_layout_item.PaddingTop(),
-          LayoutUnit(VisibleWidth()), LayoutUnit(VisibleHeight()));
-      // FIXME: We should not allow paint invalidation out of paint invalidation
-      // state. crbug.com/457415
-      DisablePaintInvalidationStateAsserts disabler;
-      frame_layout_item.InvalidatePaintRectangle(rect);
-      return;
-    }
   }
 }
 
 void LocalFrameView::RestoreScrollbar() {
   SetScrollbarsSuppressed(false);
+}
+
+bool LocalFrameView::RestoreScrollAnchor(
+    const ScrollAnchor::SerializedAnchor& serialized_anchor) {
+  if (!RuntimeEnabledFeatures::ScrollAnchorSerializationEnabled())
+    return false;
+  return scroll_anchor_.RestoreAnchor(frame_->GetDocument(), serialized_anchor);
 }
 
 void LocalFrameView::ProcessUrlFragment(const KURL& url,
@@ -1897,11 +1935,15 @@ bool LocalFrameView::ProcessUrlFragmentHelper(const String& name,
 
   if (frame_->GetDocument()->IsSVGDocument()) {
     if (SVGSVGElement* svg =
-            SVGDocumentExtensions::rootElement(*frame_->GetDocument())) {
+            ToSVGSVGElementOrNull(frame_->GetDocument()->documentElement())) {
       svg->SetupInitialView(name, anchor_node);
       if (!anchor_node)
         return true;
     }
+    // If this is not the top-level frame, then don't scroll to the
+    // anchor position.
+    if (!frame_->IsMainFrame())
+      behavior = kUrlFragmentDontScroll;
   }
 
   // Implement the rule that "" and "top" both mean top of page as in other
@@ -2007,6 +2049,8 @@ void LocalFrameView::DidScrollTimerFired(TimerBase*) {
   if (frame_->GetDocument() &&
       !frame_->GetDocument()->GetLayoutViewItem().IsNull())
     frame_->GetDocument()->Fetcher()->UpdateAllImageResourcePriorities();
+
+  GetFrame().Loader().SaveScrollAnchor();
 }
 
 void LocalFrameView::UpdateLayersAndCompositingAfterScrollIfNeeded() {
@@ -2177,7 +2221,7 @@ void LocalFrameView::ScrollbarExistenceMaybeChanged() {
   Element* custom_scrollbar_element = nullptr;
 
   bool uses_overlay_scrollbars =
-      ScrollbarTheme::GetTheme().UsesOverlayScrollbars() &&
+      GetPageScrollbarTheme().UsesOverlayScrollbars() &&
       !ShouldUseCustomScrollbars(custom_scrollbar_element);
 
   if (!uses_overlay_scrollbars && NeedsLayout())
@@ -2201,26 +2245,6 @@ void LocalFrameView::HandleLoadCompleted() {
   // finishes.
   if (!NeedsLayout())
     ClearFragmentAnchor();
-
-  if (!scrollable_areas_)
-    return;
-  for (const auto& scrollable_area : *scrollable_areas_) {
-    if (!scrollable_area->IsPaintLayerScrollableArea())
-      continue;
-    PaintLayerScrollableArea* paint_layer_scrollable_area =
-        ToPaintLayerScrollableArea(scrollable_area);
-    if (paint_layer_scrollable_area->ScrollsOverflow() &&
-        !paint_layer_scrollable_area->Layer()->IsRootLayer() &&
-        paint_layer_scrollable_area->VisibleContentRect().Size().Area() > 0) {
-      CheckedNumeric<int> size =
-          paint_layer_scrollable_area->VisibleContentRect().Width();
-      size *= paint_layer_scrollable_area->VisibleContentRect().Height();
-      UMA_HISTOGRAM_CUSTOM_COUNTS(
-          "Event.Scroll.ScrollerSize.OnLoad",
-          size.ValueOrDefault(std::numeric_limits<int>::max()), 1,
-          kScrollerSizeLargestBucket, kScrollerSizeBucketCount);
-    }
-  }
 }
 
 void LocalFrameView::ClearLayoutSubtreeRoot(const LayoutObject& root) {
@@ -2268,7 +2292,7 @@ static bool PrepareOrthogonalWritingModeRootForLayout(LayoutObject& root) {
   if (!root.NeedsLayout() || root.IsOutOfFlowPositioned() ||
       root.IsColumnSpanAll() ||
       !root.StyleRef().LogicalHeight().IsIntrinsicOrAuto() ||
-      ToLayoutBox(root).IsGridItem())
+      ToLayoutBox(root).IsGridItem() || root.IsTablePart())
     return false;
 
   RemoveFloatingObjectsForSubtreeRoot(root);
@@ -2555,7 +2579,7 @@ void LocalFrameView::ScheduleUpdatePluginsIfNecessary() {
   DCHECK(!IsInPerformLayout());
   if (update_plugins_timer_.IsActive() || part_update_set_.IsEmpty())
     return;
-  update_plugins_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  update_plugins_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void LocalFrameView::PerformPostLayoutTasks() {
@@ -2599,8 +2623,9 @@ void LocalFrameView::PerformPostLayoutTasks() {
   ScheduleUpdatePluginsIfNecessary();
 
   if (ScrollingCoordinator* scrolling_coordinator =
-          this->GetScrollingCoordinator())
-    scrolling_coordinator->NotifyGeometryChanged();
+          this->GetScrollingCoordinator()) {
+    scrolling_coordinator->NotifyGeometryChanged(this);
+  }
 
   ScrollToFragmentAnchor();
   SendResizeEventIfNeeded();
@@ -2640,20 +2665,6 @@ void LocalFrameView::SendResizeEventIfNeeded() {
 
 void LocalFrameView::PostLayoutTimerFired(TimerBase*) {
   PerformPostLayoutTasks();
-}
-
-void LocalFrameView::UpdateCounters() {
-  LayoutView* view = GetLayoutView();
-  if (!view->HasLayoutCounters())
-    return;
-
-  for (LayoutObject* layout_object = view; layout_object;
-       layout_object = layout_object->NextInPreOrder()) {
-    if (!layout_object->IsCounter())
-      continue;
-
-    ToLayoutCounter(layout_object)->UpdateCounter();
-  }
 }
 
 bool LocalFrameView::ShouldUseIntegerScrollOffset() const {
@@ -2740,7 +2751,12 @@ LocalFrameView::ScrollingReasons LocalFrameView::GetScrollingReasons() const {
   // 4) scrolling: no;
 
   // Covers #1
-  IntSize contents_size = this->ContentsSize();
+  IntSize contents_size;
+  if (GetLayoutView())
+    contents_size = GetLayoutView()->DocumentRect().Size();
+  else
+    contents_size = ContentsSize();
+
   IntSize visible_content_size = VisibleContentRect().Size();
   if ((contents_size.Height() <= visible_content_size.Height() &&
        contents_size.Width() <= visible_content_size.Width()))
@@ -2823,7 +2839,8 @@ void LocalFrameView::NotifyPageThatContentAreaWillPaint() const {
 
 CompositorElementId LocalFrameView::GetCompositorElementId() const {
   if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    return CompositorElementIdFromUniqueObjectId(unique_id_);
+    return CompositorElementIdFromUniqueObjectId(
+        unique_id_, CompositorElementIdNamespace::kScroll);
   } else {
     return PaintInvalidationCapableScrollableArea::GetCompositorElementId();
   }
@@ -2869,7 +2886,7 @@ void LocalFrameView::DidAttachDocument() {
 }
 
 void LocalFrameView::UpdateScrollCorner() {
-  RefPtr<ComputedStyle> corner_style;
+  scoped_refptr<ComputedStyle> corner_style;
   IntRect corner_rect = ScrollCornerRect();
   Document* doc = frame_->GetDocument();
 
@@ -3177,6 +3194,13 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
   AutoReset<bool> past_layout_lifecycle_update(&past_layout_lifecycle_update_,
                                                true);
 
+  // OOPIF local frame roots that are throttled can return now that layout
+  // is clean and intersection observations can be calculated.
+  if (ShouldThrottleRendering()) {
+    UpdateViewportIntersectionsForSubtree(target_state);
+    return;
+  }
+
   ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
     frame_view.PerformScrollAnchoringAdjustments();
   });
@@ -3215,8 +3239,10 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
 
       if (target_state >= DocumentLifecycle::kPrePaintClean) {
         if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-          if (view.Compositor()->InCompositingMode())
-            GetScrollingCoordinator()->UpdateAfterCompositingChangeIfNeeded();
+          if (view.Compositor()->InCompositingMode()) {
+            GetScrollingCoordinator()->UpdateAfterCompositingChangeIfNeeded(
+                this);
+          }
         }
 
         // This is needed since, at present, the ScrollingCoordinator doesn't
@@ -3271,20 +3297,18 @@ void LocalFrameView::EnqueueScrollAnchoringAdjustment(
 }
 
 void LocalFrameView::PerformScrollAnchoringAdjustments() {
-  // TODO(bokan): Temporary to get more information about crash in
-  // crbug.com/745686.
-  CHECK(!in_perform_scroll_anchoring_adjustments_);
-  in_perform_scroll_anchoring_adjustments_ = true;
+  // Adjust() will cause a scroll which could end up causing a layout and
+  // reentering this method. Copy and clear the queue so we don't modify it
+  // during iteration.
+  AnchoringAdjustmentQueue queue_copy = anchoring_adjustment_queue_;
+  anchoring_adjustment_queue_.clear();
 
-  for (WeakMember<ScrollableArea>& scroller : anchoring_adjustment_queue_) {
+  for (WeakMember<ScrollableArea>& scroller : queue_copy) {
     if (scroller) {
       DCHECK(scroller->GetScrollAnchor());
       scroller->GetScrollAnchor()->Adjust();
     }
   }
-  anchoring_adjustment_queue_.clear();
-
-  in_perform_scroll_anchoring_adjustments_ = false;
 }
 
 void LocalFrameView::PrePaint() {
@@ -3332,7 +3356,6 @@ void LocalFrameView::PaintTree() {
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     if (GetLayoutView()->Layer()->NeedsRepaint()) {
-      paint_controller_->SetupRasterUnderInvalidationChecking();
       GraphicsContext graphics_context(*paint_controller_);
       if (RuntimeEnabledFeatures::PrintBrowserEnabled())
         graphics_context.SetPrinting(true);
@@ -3347,7 +3370,8 @@ void LocalFrameView::PaintTree() {
         graphics_context.SetHighContrast(high_contrast_settings);
       }
 
-      Paint(graphics_context, CullRect(LayoutRect::InfiniteIntRect()));
+      PaintInternal(graphics_context, kGlobalPaintNormalPhase,
+                    CullRect(LayoutRect::InfiniteIntRect()));
       paint_controller_->CommitNewDisplayItems();
     }
   } else {
@@ -3356,25 +3380,21 @@ void LocalFrameView::PaintTree() {
     // frame view of a page overlay. The page overlay is in the layer tree of
     // the host page and will be painted during painting of the host page.
     if (GraphicsLayer* root_graphics_layer =
-            view.Compositor()->RootGraphicsLayer()) {
-      PaintGraphicsLayerRecursively(root_graphics_layer);
-    }
+            view.Compositor()->RootGraphicsLayer())
+      root_graphics_layer->PaintRecursively();
 
     // TODO(sataya.m):Main frame doesn't create RootFrameViewport in some
     // webkit_unit_tests (http://crbug.com/644788).
     if (viewport_scrollable_area_) {
       if (GraphicsLayer* layer_for_horizontal_scrollbar =
-              viewport_scrollable_area_->LayerForHorizontalScrollbar()) {
-        PaintGraphicsLayerRecursively(layer_for_horizontal_scrollbar);
-      }
+              viewport_scrollable_area_->LayerForHorizontalScrollbar())
+        layer_for_horizontal_scrollbar->PaintRecursively();
       if (GraphicsLayer* layer_for_vertical_scrollbar =
-              viewport_scrollable_area_->LayerForVerticalScrollbar()) {
-        PaintGraphicsLayerRecursively(layer_for_vertical_scrollbar);
-      }
+              viewport_scrollable_area_->LayerForVerticalScrollbar())
+        layer_for_vertical_scrollbar->PaintRecursively();
       if (GraphicsLayer* layer_for_scroll_corner =
-              viewport_scrollable_area_->LayerForScrollCorner()) {
-        PaintGraphicsLayerRecursively(layer_for_scroll_corner);
-      }
+              viewport_scrollable_area_->LayerForScrollCorner())
+        layer_for_scroll_corner->PaintRecursively();
     }
   }
 
@@ -3384,23 +3404,6 @@ void LocalFrameView::PaintTree() {
     if (!layout_view_item.IsNull())
       layout_view_item.Layer()->ClearNeedsRepaintRecursively();
   });
-}
-
-void LocalFrameView::PaintGraphicsLayerRecursively(
-    GraphicsLayer* graphics_layer) {
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
-  if (graphics_layer->DrawsContent()) {
-    graphics_layer->Paint(nullptr);
-  }
-
-  if (GraphicsLayer* mask_layer = graphics_layer->MaskLayer())
-    PaintGraphicsLayerRecursively(mask_layer);
-  if (GraphicsLayer* contents_clipping_mask_layer =
-          graphics_layer->ContentsClippingMaskLayer())
-    PaintGraphicsLayerRecursively(contents_clipping_mask_layer);
-
-  for (auto& child : graphics_layer->Children())
-    PaintGraphicsLayerRecursively(child);
 }
 
 void LocalFrameView::PushPaintArtifactToCompositor(
@@ -3663,23 +3666,38 @@ IntRect LocalFrameView::ConvertToLayoutItem(const LayoutItem& layout_item,
 IntPoint LocalFrameView::ConvertFromLayoutItem(
     const LayoutItem& layout_item,
     const IntPoint& layout_object_point) const {
-  IntPoint point = RoundedIntPoint(
-      layout_item.LocalToAbsolute(layout_object_point, kUseTransforms));
-
-  // Convert from page ("absolute") to LocalFrameView coordinates.
-  point.Move(-ScrollOffsetInt());
-  return point;
+  return RoundedIntPoint(
+      ConvertFromLayoutItem(layout_item, LayoutPoint(layout_object_point)));
 }
 
 IntPoint LocalFrameView::ConvertToLayoutItem(
     const LayoutItem& layout_item,
     const IntPoint& frame_point) const {
-  IntPoint point = frame_point;
+  return RoundedIntPoint(
+      ConvertToLayoutItem(layout_item, LayoutPoint(frame_point)));
+}
+
+LayoutPoint LocalFrameView::ConvertFromLayoutItem(
+    const LayoutItem& layout_item,
+    const LayoutPoint& layout_object_point) const {
+  LayoutPoint point(layout_item.LocalToAbsolute(FloatPoint(layout_object_point),
+                                                kUseTransforms));
+
+  // Convert from page ("absolute") to LocalFrameView coordinates.
+  point.Move(-LayoutSize(GetScrollOffset()));
+  return point;
+}
+
+LayoutPoint LocalFrameView::ConvertToLayoutItem(
+    const LayoutItem& layout_item,
+    const LayoutPoint& frame_point) const {
+  LayoutPoint point = frame_point;
 
   // Convert from LocalFrameView coords into page ("absolute") coordinates.
-  point += IntSize(ScrollX(), ScrollY());
+  point += LayoutSize(ScrollX(), ScrollY());
 
-  return RoundedIntPoint(layout_item.AbsoluteToLocal(point, kUseTransforms));
+  return LayoutPoint(
+      layout_item.AbsoluteToLocal(FloatPoint(point), kUseTransforms));
 }
 
 IntPoint LocalFrameView::ConvertSelfToChild(const EmbeddedContentView& child,
@@ -3688,6 +3706,20 @@ IntPoint LocalFrameView::ConvertSelfToChild(const EmbeddedContentView& child,
   new_point = FrameToContents(point);
   new_point.MoveBy(-child.FrameRect().Location());
   return new_point;
+}
+
+IntRect LocalFrameView::AbsoluteToRootFrame(
+    const IntRect& absolute_rect) const {
+  IntRect rect_in_frame(absolute_rect);
+  // With RLS turned on, this will be a no-op.
+  rect_in_frame.Move(-ScrollOffsetInt());
+  return ConvertToRootFrame(rect_in_frame);
+}
+
+IntRect LocalFrameView::RootFrameToDocument(const IntRect& rect_in_root_frame) {
+  IntRect local_rect = ConvertFromRootFrame(rect_in_root_frame);
+  local_rect.Move(LayoutViewportScrollableArea()->ScrollOffsetInt());
+  return local_rect;
 }
 
 IntRect LocalFrameView::ConvertToContainingEmbeddedContentView(
@@ -3720,41 +3752,53 @@ IntRect LocalFrameView::ConvertFromContainingEmbeddedContentView(
   return parent_rect;
 }
 
-IntPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
-    const IntPoint& local_point) const {
+LayoutPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
+    const LayoutPoint& local_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
     // Get our layoutObject in the parent view
     LayoutEmbeddedContentItem layout_item = frame_->OwnerLayoutItem();
     if (layout_item.IsNull())
       return local_point;
 
-    IntPoint point(local_point);
+    LayoutPoint point(local_point);
 
     // Add borders and padding
-    point.Move((layout_item.BorderLeft() + layout_item.PaddingLeft()).ToInt(),
-               (layout_item.BorderTop() + layout_item.PaddingTop()).ToInt());
+    point.Move((layout_item.BorderLeft() + layout_item.PaddingLeft()),
+               (layout_item.BorderTop() + layout_item.PaddingTop()));
     return parent->ConvertFromLayoutItem(layout_item, point);
   }
 
   return local_point;
 }
 
-IntPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
-    const IntPoint& parent_point) const {
+LayoutPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
+    const LayoutPoint& parent_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
     // Get our layoutObject in the parent view
     LayoutEmbeddedContentItem layout_item = frame_->OwnerLayoutItem();
     if (layout_item.IsNull())
       return parent_point;
 
-    IntPoint point = parent->ConvertToLayoutItem(layout_item, parent_point);
+    LayoutPoint point = parent->ConvertToLayoutItem(layout_item, parent_point);
     // Subtract borders and padding
-    point.Move((-layout_item.BorderLeft() - layout_item.PaddingLeft()).ToInt(),
-               (-layout_item.BorderTop() - layout_item.PaddingTop()).ToInt());
+    point.Move((-layout_item.BorderLeft() - layout_item.PaddingLeft()),
+               (-layout_item.BorderTop() - layout_item.PaddingTop()));
     return point;
   }
 
   return parent_point;
+}
+
+IntPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
+    const IntPoint& local_point) const {
+  return RoundedIntPoint(
+      ConvertToContainingEmbeddedContentView(LayoutPoint(local_point)));
+}
+
+IntPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
+    const IntPoint& parent_point) const {
+  return RoundedIntPoint(
+      ConvertFromContainingEmbeddedContentView(LayoutPoint(parent_point)));
 }
 
 void LocalFrameView::SetInitialTracksPaintInvalidationsForTesting(
@@ -3789,8 +3833,7 @@ void LocalFrameView::SetTracksPaintInvalidations(
               track_paint_invalidations);
         }
       } else {
-        layout_view.Compositor()->SetTracksRasterInvalidations(
-            track_paint_invalidations);
+        layout_view.Compositor()->UpdateTrackingRasterInvalidations();
       }
     }
   }
@@ -3852,6 +3895,35 @@ void LocalFrameView::RemoveResizerArea(LayoutBox& resizer_box) {
     resizer_areas_->erase(it);
 }
 
+bool LocalFrameView::ScrollGestureRegionIsDirty() const {
+  DCHECK(GetFrame().IsLocalRoot());
+  return scroll_gesture_region_is_dirty_;
+}
+
+void LocalFrameView::SetScrollGestureRegionIsDirty(bool dirty) {
+  if (GetFrame().IsLocalRoot()) {
+    // TODO(wjmaclean): It would be nice to move the !NeedsLayout() check from
+    // ScrollableAreasDidChange() to here, but at present doing so breaks
+    // layout tests. This suggests that there is something that wants to set the
+    // dirty bit when layout is needed, and won't re-try setting the bit after
+    // layout has completed - it would be nice to find that and fix it.
+    scroll_gesture_region_is_dirty_ = dirty;
+    return;
+  }
+
+  GetFrame().LocalFrameRoot().View()->SetScrollGestureRegionIsDirty(dirty);
+}
+
+void LocalFrameView::ScrollableAreasDidChange() {
+  // Layout may update scrollable area bounding boxes. It also sets the same
+  // dirty flag making this one redundant (See
+  // |ScrollingCoordinator::notifyGeometryChanged|).
+  // So if layout is expected, ignore this call allowing scrolling coordinator
+  // to be notified post-layout to recompute gesture regions.
+  if (!NeedsLayout())
+    SetScrollGestureRegionIsDirty(true);
+}
+
 void LocalFrameView::AddScrollableArea(ScrollableArea* scrollable_area) {
   DCHECK(scrollable_area);
   if (!scrollable_areas_)
@@ -3859,8 +3931,9 @@ void LocalFrameView::AddScrollableArea(ScrollableArea* scrollable_area) {
   scrollable_areas_->insert(scrollable_area);
 
   if (ScrollingCoordinator* scrolling_coordinator =
-          this->GetScrollingCoordinator())
-    scrolling_coordinator->ScrollableAreasDidChange();
+          this->GetScrollingCoordinator()) {
+    ScrollableAreasDidChange();
+  }
 }
 
 void LocalFrameView::RemoveScrollableArea(ScrollableArea* scrollable_area) {
@@ -3869,8 +3942,9 @@ void LocalFrameView::RemoveScrollableArea(ScrollableArea* scrollable_area) {
   scrollable_areas_->erase(scrollable_area);
 
   if (ScrollingCoordinator* scrolling_coordinator =
-          this->GetScrollingCoordinator())
-    scrolling_coordinator->ScrollableAreasDidChange();
+          this->GetScrollingCoordinator()) {
+    ScrollableAreasDidChange();
+  }
 }
 
 void LocalFrameView::AddAnimatingScrollableArea(
@@ -3966,7 +4040,7 @@ bool LocalFrameView::VisualViewportSuppliesScrollbars() {
              controller.GlobalRootScroller()) == LayoutViewportScrollableArea();
 }
 
-AXObjectCache* LocalFrameView::AxObjectCache() const {
+AXObjectCache* LocalFrameView::ExistingAXObjectCache() const {
   if (GetFrame().GetDocument())
     return GetFrame().GetDocument()->ExistingAXObjectCache();
   return nullptr;
@@ -4092,7 +4166,9 @@ IntRect LocalFrameView::VisibleContentRect(
 }
 
 IntSize LocalFrameView::ContentsSize() const {
-  return contents_size_;
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
+    return Size();
+  return layout_overflow_size_;
 }
 
 void LocalFrameView::ClipPaintRect(FloatRect* paint_rect) const {
@@ -4128,7 +4204,7 @@ int LocalFrameView::ScrollSize(ScrollbarOrientation orientation) const {
 
   // If no scrollbars are present, the content may still be scrollable.
   if (!scrollbar) {
-    IntSize scroll_size = contents_size_ - VisibleContentRect().Size();
+    IntSize scroll_size = ContentsSize() - VisibleContentRect().Size();
     scroll_size.ClampNegativeToZero();
     return orientation == kHorizontalScrollbar ? scroll_size.Width()
                                                : scroll_size.Height();
@@ -4182,7 +4258,7 @@ void LocalFrameView::UpdateScrollOffset(const ScrollOffset& offset,
   GetFrame().Loader().SaveScrollState();
   DidChangeScrollOffset();
 
-  if (scroll_type == kCompositorScroll && frame_->IsMainFrame()) {
+  if (scroll_type == kCompositorScroll || scroll_type == kUserScroll) {
     if (DocumentLoader* document_loader = frame_->Loader().GetDocumentLoader())
       document_loader->GetInitialScrollState().was_scrolled_by_user = true;
   }
@@ -4269,7 +4345,7 @@ void LocalFrameView::ComputeScrollbarExistence(
 
 void LocalFrameView::UpdateScrollbarEnabledState() {
   bool force_disabled =
-      ScrollbarTheme::GetTheme().ShouldDisableInvisibleScrollbars() &&
+      GetPageScrollbarTheme().ShouldDisableInvisibleScrollbars() &&
       ScrollbarsHidden();
 
   if (HorizontalScrollbar()) {
@@ -4352,7 +4428,7 @@ bool LocalFrameView::AdjustScrollbarExistence(
 
   Element* custom_scrollbar_element = nullptr;
   bool uses_overlay_scrollbars =
-      ScrollbarTheme::GetTheme().UsesOverlayScrollbars() &&
+      GetPageScrollbarTheme().UsesOverlayScrollbars() &&
       !ShouldUseCustomScrollbars(custom_scrollbar_element);
 
   if (!uses_overlay_scrollbars)
@@ -4363,30 +4439,41 @@ bool LocalFrameView::AdjustScrollbarExistence(
 }
 
 bool LocalFrameView::NeedsScrollbarReconstruction() const {
-  Scrollbar* scrollbar = HorizontalScrollbar();
-  if (!scrollbar)
-    scrollbar = VerticalScrollbar();
-  if (!scrollbar) {
-    // We have no scrollbar to reconstruct.
+  // We have no scrollbar to reconstruct.
+  if (!HorizontalScrollbar() && !VerticalScrollbar())
     return false;
-  }
+
   Element* style_source = nullptr;
   bool needs_custom = ShouldUseCustomScrollbars(style_source);
-  bool is_custom = scrollbar->IsCustomScrollbar();
-  if (needs_custom != is_custom) {
+
+  Scrollbar* scrollbars[] = {HorizontalScrollbar(), VerticalScrollbar()};
+
+  for (Scrollbar* scrollbar : scrollbars) {
+    if (!scrollbar)
+      continue;
+
     // We have a native scrollbar that should be custom, or vice versa.
-    return true;
-  }
-  if (!needs_custom) {
-    // We have a native scrollbar that should remain native.
-    return false;
-  }
-  DCHECK(needs_custom && is_custom);
-  DCHECK(style_source);
-  if (ToLayoutScrollbar(scrollbar)->StyleSource() !=
-      style_source->GetLayoutObject()) {
-    // We have a custom scrollbar with a stale m_owner.
-    return true;
+    if (scrollbar->IsCustomScrollbar() != needs_custom)
+      return true;
+
+    if (needs_custom) {
+      DCHECK(scrollbar->IsCustomScrollbar());
+      // We have a custom scrollbar with a stale m_owner.
+      if (ToLayoutScrollbar(scrollbar)->StyleSource() !=
+          style_source->GetLayoutObject())
+        return true;
+
+      // Should use custom scrollbar and nothing should change.
+      continue;
+    }
+
+    // Check if native scrollbar should change.
+    Page* page = frame_->GetPage();
+    DCHECK(page);
+    ScrollbarTheme* current_theme = &page->GetScrollbarTheme();
+
+    if (current_theme != &scrollbar->GetTheme())
+      return true;
   }
   return false;
 }
@@ -4466,8 +4553,11 @@ void LocalFrameView::AdjustScrollOffsetFromUpdateScrollbars() {
 
 ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
     const CompositorElementId& id) {
-  if (id == GetCompositorElementId())
+  // With root layer scrolling the LocalFrameView does not scroll.
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
+      id == GetCompositorElementId()) {
     return this;
+  }
   if (scrollable_areas_) {
     // This requires iterating over all scrollable areas. We may want to store a
     // map of ElementId to ScrollableArea if this is an issue for performance.
@@ -4477,6 +4567,36 @@ ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
     }
   }
   return nullptr;
+}
+
+void LocalFrameView::ScrollRectToVisibleInRemoteParent(
+    const LayoutRect& rect_to_scroll,
+    const ScrollAlignment& align_x,
+    const ScrollAlignment& align_y,
+    ScrollType scroll_type,
+    bool make_visible_in_visual_viewport,
+    ScrollBehavior scroll_behavior,
+    bool is_for_scroll_sequence) {
+  DCHECK(GetFrame().IsLocalRoot() && !GetFrame().IsMainFrame() &&
+         safe_to_propagate_scroll_to_parent_);
+  // Find the coordinates of the |rect_to_scroll| after removing all transforms
+  // on this LayoutObject. |new_rect| will be in the coordinate space of this
+  // frame; which is a local root. In the parent frame process, a similar
+  // transformation will convert the absolute coordinates in here to the space
+  // of the parent frame. The combination of the two transforms should act as a
+  // call to LocalToAncestorQuad when frame and its parent are in the same
+  // process (which is done in LayoutBox::ScrollRectIntoVisibleRecusive).
+  LayoutRect new_rect = EnclosingLayoutRect(
+      GetLayoutView()
+          ->LocalToAbsoluteQuad(FloatRect(rect_to_scroll), 0)
+          .BoundingBox());
+  GetFrame().Client()->ScrollRectToVisibleInParentFrame(
+      WebRect(new_rect.X().ToInt(), new_rect.Y().ToInt(),
+              new_rect.Width().ToInt(), new_rect.Height().ToInt()),
+      WebRemoteScrollProperties(ToWebRemoteScrollAlignment(align_x),
+                                ToWebRemoteScrollAlignment(align_y),
+                                scroll_type, make_visible_in_visual_viewport,
+                                scroll_behavior, is_for_scroll_sequence));
 }
 
 void LocalFrameView::ScrollContentsIfNeeded() {
@@ -4508,6 +4628,16 @@ void LocalFrameView::ScrollContents(const IntSize& scroll_delta) {
   FrameRectsChanged();
 }
 
+FloatPoint LocalFrameView::ContentsToFrame(
+    const FloatPoint& point_in_content_space) const {
+  return point_in_content_space - GetScrollOffset();
+}
+
+LayoutPoint LocalFrameView::ContentsToFrame(
+    const LayoutPoint& point_in_content_space) const {
+  return point_in_content_space - LayoutSize(GetScrollOffset());
+}
+
 IntPoint LocalFrameView::ContentsToFrame(
     const IntPoint& point_in_content_space) const {
   return point_in_content_space - ScrollOffsetInt();
@@ -4524,6 +4654,11 @@ FloatPoint LocalFrameView::FrameToContents(
   return point_in_frame + GetScrollOffset();
 }
 
+LayoutPoint LocalFrameView::FrameToContents(
+    const LayoutPoint& point_in_frame) const {
+  return point_in_frame + LayoutSize(GetScrollOffset());
+}
+
 IntPoint LocalFrameView::FrameToContents(const IntPoint& point_in_frame) const {
   return point_in_frame + ScrollOffsetInt();
 }
@@ -4531,6 +4666,18 @@ IntPoint LocalFrameView::FrameToContents(const IntPoint& point_in_frame) const {
 IntRect LocalFrameView::FrameToContents(const IntRect& rect_in_frame) const {
   return IntRect(FrameToContents(rect_in_frame.Location()),
                  rect_in_frame.Size());
+}
+
+LayoutPoint LocalFrameView::RootFrameToContents(
+    const LayoutPoint& point_in_root_frame) const {
+  LayoutPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(frame_point);
+}
+
+FloatPoint LocalFrameView::RootFrameToContents(
+    const FloatPoint& point_in_root_frame) const {
+  FloatPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(frame_point);
 }
 
 IntPoint LocalFrameView::RootFrameToContents(
@@ -4545,6 +4692,12 @@ IntRect LocalFrameView::RootFrameToContents(
                  root_frame_rect.Size());
 }
 
+LayoutPoint LocalFrameView::ContentsToRootFrame(
+    const LayoutPoint& contents_point) const {
+  LayoutPoint frame_point = ContentsToFrame(contents_point);
+  return ConvertToRootFrame(frame_point);
+}
+
 IntPoint LocalFrameView::ContentsToRootFrame(
     const IntPoint& contents_point) const {
   IntPoint frame_point = ContentsToFrame(contents_point);
@@ -4557,10 +4710,13 @@ IntRect LocalFrameView::ContentsToRootFrame(
   return ConvertToRootFrame(rect_in_frame);
 }
 
-FloatPoint LocalFrameView::RootFrameToContents(
-    const FloatPoint& point_in_root_frame) const {
-  FloatPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
-  return FrameToContents(frame_point);
+LayoutPoint LocalFrameView::ViewportToContents(
+    const LayoutPoint& point_in_viewport) const {
+  LayoutPoint point_in_root_frame(
+      frame_->GetPage()->GetVisualViewport().ViewportToRootFrame(
+          FloatPoint(point_in_viewport)));
+  LayoutPoint point_in_frame = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(point_in_frame);
 }
 
 IntRect LocalFrameView::ViewportToContents(
@@ -4574,11 +4730,7 @@ IntRect LocalFrameView::ViewportToContents(
 
 IntPoint LocalFrameView::ViewportToContents(
     const IntPoint& point_in_viewport) const {
-  IntPoint point_in_root_frame =
-      frame_->GetPage()->GetVisualViewport().ViewportToRootFrame(
-          point_in_viewport);
-  IntPoint point_in_frame = ConvertFromRootFrame(point_in_root_frame);
-  return FrameToContents(point_in_frame);
+  return RoundedIntPoint(ViewportToContents(LayoutPoint(point_in_viewport)));
 }
 
 IntRect LocalFrameView::ContentsToViewport(
@@ -4633,6 +4785,8 @@ static void PositionScrollbarLayer(GraphicsLayer* graphics_layer,
 
   IntRect scrollbar_rect = scrollbar->FrameRect();
   graphics_layer->SetPosition(scrollbar_rect.Location());
+  graphics_layer->SetOffsetFromLayoutObject(
+      ToIntSize(scrollbar_rect.Location()));
 
   if (scrollbar_rect.Size() == graphics_layer->Size())
     return;
@@ -4655,6 +4809,7 @@ static void PositionScrollCornerLayer(GraphicsLayer* graphics_layer,
     return;
   graphics_layer->SetDrawsContent(!corner_rect.IsEmpty());
   graphics_layer->SetPosition(corner_rect.Location());
+  graphics_layer->SetOffsetFromLayoutObject(ToIntSize(corner_rect.Location()));
   if (corner_rect.Size() != graphics_layer->Size())
     graphics_layer->SetNeedsDisplay();
   graphics_layer->SetSize(FloatSize(corner_rect.Size()));
@@ -4705,6 +4860,8 @@ LayoutRect LocalFrameView::ScrollIntoView(const LayoutRect& rect_in_content,
                                           bool is_smooth,
                                           ScrollType scroll_type,
                                           bool is_for_scroll_sequence) {
+  GetLayoutBox()->SetPendingOffsetToScroll(LayoutSize());
+
   LayoutRect view_rect(VisibleContentRect());
   LayoutRect expose_rect = ScrollAlignment::GetRectToExpose(
       view_rect, rect_in_content, align_x, align_y);
@@ -4780,20 +4937,44 @@ ScrollBehavior LocalFrameView::ScrollBehaviorStyle() const {
 }
 
 void LocalFrameView::Paint(GraphicsContext& context,
-                           const CullRect& cull_rect) const {
-  Paint(context, kGlobalPaintNormalPhase, cull_rect);
-}
-
-void LocalFrameView::Paint(GraphicsContext& context,
                            const GlobalPaintFlags global_paint_flags,
                            const CullRect& cull_rect) const {
+  PaintInternal(context, global_paint_flags, cull_rect);
+}
+
+void LocalFrameView::PaintWithLifecycleUpdate(
+    GraphicsContext& context,
+    const GlobalPaintFlags global_paint_flags,
+    const CullRect& cull_rect) {
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
+  });
+
+  PaintInternal(context, global_paint_flags, cull_rect);
+
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
+  });
+}
+
+void LocalFrameView::PaintInternal(GraphicsContext& context,
+                                   const GlobalPaintFlags global_paint_flags,
+                                   const CullRect& cull_rect) const {
   FramePainter(*this).Paint(context, global_paint_flags, cull_rect);
 }
 
 void LocalFrameView::PaintContents(GraphicsContext& context,
                                    const GlobalPaintFlags global_paint_flags,
-                                   const IntRect& damage_rect) const {
+                                   const IntRect& damage_rect) {
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
+  });
+
   FramePainter(*this).PaintContents(context, global_paint_flags, damage_rect);
+
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
+  });
 }
 
 bool LocalFrameView::IsPointInScrollbarCorner(
@@ -4842,8 +5023,14 @@ IntRect LocalFrameView::ConvertToRootFrame(const IntRect& local_rect) const {
 }
 
 IntPoint LocalFrameView::ConvertToRootFrame(const IntPoint& local_point) const {
+  return RoundedIntPoint(ConvertToRootFrame(LayoutPoint(local_point)));
+}
+
+LayoutPoint LocalFrameView::ConvertToRootFrame(
+    const LayoutPoint& local_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
-    IntPoint parent_point = ConvertToContainingEmbeddedContentView(local_point);
+    LayoutPoint parent_point =
+        ConvertToContainingEmbeddedContentView(local_point);
     return parent->ConvertToRootFrame(parent_point);
   }
   return local_point;
@@ -4860,8 +5047,15 @@ IntRect LocalFrameView::ConvertFromRootFrame(
 
 IntPoint LocalFrameView::ConvertFromRootFrame(
     const IntPoint& point_in_root_frame) const {
+  return RoundedIntPoint(
+      ConvertFromRootFrame(LayoutPoint(point_in_root_frame)));
+}
+
+LayoutPoint LocalFrameView::ConvertFromRootFrame(
+    const LayoutPoint& point_in_root_frame) const {
   if (LocalFrameView* parent = ParentFrameView()) {
-    IntPoint parent_point = parent->ConvertFromRootFrame(point_in_root_frame);
+    LayoutPoint parent_point =
+        parent->ConvertFromRootFrame(point_in_root_frame);
     return ConvertFromContainingEmbeddedContentView(parent_point);
   }
   return point_in_root_frame;
@@ -4921,8 +5115,9 @@ void LocalFrameView::Show() {
   if (!IsSelfVisible()) {
     SetSelfVisible(true);
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator())
-      scrolling_coordinator->FrameViewVisibilityDidChange();
+            this->GetScrollingCoordinator()) {
+      SetScrollGestureRegionIsDirty(true);
+    }
     SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
     UpdateParentScrollableAreaSet();
     if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
@@ -4949,8 +5144,9 @@ void LocalFrameView::Hide() {
     }
     SetSelfVisible(false);
     if (ScrollingCoordinator* scrolling_coordinator =
-            this->GetScrollingCoordinator())
-      scrolling_coordinator->FrameViewVisibilityDidChange();
+            this->GetScrollingCoordinator()) {
+      SetScrollGestureRegionIsDirty(true);
+    }
     SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
     UpdateParentScrollableAreaSet();
     if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
@@ -4963,7 +5159,7 @@ void LocalFrameView::Hide() {
 
 int LocalFrameView::ViewportWidth() const {
   int viewport_width = GetLayoutSize(kIncludeScrollbars).Width();
-  return AdjustForAbsoluteZoom(viewport_width, GetLayoutView());
+  return AdjustForAbsoluteZoom::AdjustInt(viewport_width, GetLayoutView());
 }
 
 ScrollableArea* LocalFrameView::GetScrollableArea() {
@@ -5073,10 +5269,11 @@ void LocalFrameView::UpdateRenderThrottlingStatus(
 
   // Note that we disallow throttling of 0x0 and display:none frames because
   // some sites use them to drive UI logic.
-  HTMLFrameOwnerElement* owner_element = frame_->DeprecatedLocalOwner();
-  hidden_for_throttling_ = hidden && !FrameRect().IsEmpty() &&
-                           (owner_element && owner_element->GetLayoutObject());
+  hidden_for_throttling_ = hidden && !FrameRect().IsEmpty();
   subtree_throttled_ = subtree_throttled;
+  HTMLFrameOwnerElement* owner_element = frame_->DeprecatedLocalOwner();
+  if (owner_element)
+    hidden_for_throttling_ &= !!owner_element->GetLayoutObject();
 
   bool is_throttled = CanThrottleRendering();
   bool became_unthrottled = was_throttled && !is_throttled;
@@ -5102,7 +5299,7 @@ void LocalFrameView::UpdateRenderThrottlingStatus(
     // ScrollingCoordinator needs to update according to the new throttling
     // status.
     if (scrolling_coordinator)
-      scrolling_coordinator->NotifyGeometryChanged();
+      scrolling_coordinator->NotifyGeometryChanged(this);
     // Start ticking animation frames again if necessary.
     if (GetPage())
       GetPage()->Animator().ScheduleVisualUpdate(frame_.Get());
@@ -5120,6 +5317,8 @@ void LocalFrameView::UpdateRenderThrottlingStatus(
   bool has_handlers =
       frame_->GetPage() &&
       (frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
+           EventHandlerRegistry::kTouchAction) ||
+       frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
            EventHandlerRegistry::kTouchStartOrMoveEventBlocking) ||
        frame_->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
            EventHandlerRegistry::kTouchStartOrMoveEventBlockingLowLatency));
@@ -5285,32 +5484,11 @@ int LocalFrameView::InitialViewportHeight() const {
 bool LocalFrameView::HasVisibleSlowRepaintViewportConstrainedObjects() const {
   if (!ViewportConstrainedObjects())
     return false;
-
   for (const LayoutObject* layout_object : *ViewportConstrainedObjects()) {
     DCHECK(layout_object->IsBoxModelObject() && layout_object->HasLayer());
     DCHECK(layout_object->Style()->GetPosition() == EPosition::kFixed ||
            layout_object->Style()->GetPosition() == EPosition::kSticky);
-    PaintLayer* layer = ToLayoutBoxModelObject(layout_object)->Layer();
-
-    // Whether the Layer sticks to the viewport is a tree-depenent
-    // property and our viewportConstrainedObjects collection is maintained
-    // with only LayoutObject-level information.
-    if (!layer->FixedToViewport() && !layer->SticksToScroller())
-      continue;
-
-    // If the whole subtree is invisible, there's no reason to scroll on
-    // the main thread because we don't need to generate invalidations
-    // for invisible content.
-    if (layer->SubtreeIsInvisible())
-      continue;
-
-    // We're only smart enough to scroll viewport-constrainted objects
-    // in the compositor if they have their own backing or they paint
-    // into a grouped back (which necessarily all have the same viewport
-    // constraints).
-    CompositingState compositing_state = layer->GetCompositingState();
-    if (compositing_state != kPaintsIntoOwnBacking &&
-        compositing_state != kPaintsIntoGroupedBacking)
+    if (ToLayoutBoxModelObject(layout_object)->IsSlowRepaintConstrainedObject())
       return true;
   }
   return false;
@@ -5515,7 +5693,15 @@ void LocalFrameView::SetAnimationHost(
 }
 
 LayoutUnit LocalFrameView::CaretWidth() const {
-  return LayoutUnit(GetChromeClient()->WindowToViewportScalar(1));
+  return LayoutUnit(
+      std::max<float>(1.0, GetChromeClient()->WindowToViewportScalar(1)));
+}
+
+ScrollbarTheme& LocalFrameView::GetPageScrollbarTheme() const {
+  Page* page = frame_->GetPage();
+  DCHECK(page);
+
+  return page->GetScrollbarTheme();
 }
 
 }  // namespace blink

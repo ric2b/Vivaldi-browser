@@ -14,11 +14,11 @@ _ELF_OUTPUT = """002b6e20 t $t
 002a0010 t {}
 0028d900 t startup._GLOBAL__sub_I_page_allocator.cc
 002a0010 t FooAlias()
-002b6bb8 t $t
+002b6bb8 t $t.23
 002a0010 t BarAlias()
 002a0000 t blink::ContiguousContainerBase::shrinkToFit()
 002a0000 t BazAlias(bool)
-002b6bb8 t $t
+002b6bb8 t $t.22
 """.format(_SHRINK_TO_FIT_CLONE)
 
 _SHRINK_TO_FIT = ('blink::ContiguousContainerBase::shrinkToFit() '
@@ -29,6 +29,9 @@ _OBJECT_OUTPUTS = {
         '01010101 t _GLOBAL__sub_I_SkDeviceProfile.cpp',
         '01010101 t foo_bar',
         '002a0000 t BazAlias(bool)',
+        '00000000 r .L.str',
+        '00000005 r .L.str.1',
+        '01010101 r vtable for ChromeMainDelegate',
         '01010101 r vtable for ChromeMainDelegate',
         '01010101 r vtable for chrome::mojom::FieldTrialRecorder',
         ('01010101 t ucnv_extMatchFromU(int const*, int, unsigned short const*,'
@@ -62,7 +65,7 @@ _OBJECT_OUTPUTS = {
         '01010101 t _GLOBAL__sub_I_page_allocator.cc',
         '01010101 t _GLOBAL__sub_I_bbr_sender.cc',
         '01010101 t _GLOBAL__sub_I_pacing_sender.cc',
-        '01010101 t _GLOBAL__sub_I_bbr_sender.cc',
+        '00000000 r .L.str',
         '01010101 t extFromUUseMapping(aj, int)',
         '01010101 t extFromUUseMapping(signed char, unsigned int, int)',
         '01010101 t Name',
@@ -101,7 +104,7 @@ def _PrintOutput(path):
   if path.endswith(os.path.join('mock_output_directory', 'elf')):
     sys.stdout.write(_ELF_OUTPUT)
   else:
-    lines = _OBJECT_OUTPUTS.get(path)
+    lines = _OBJECT_OUTPUTS.get(os.path.normpath(path))
     assert lines, 'No mock_nm.py entry for: ' + path
     sys.stdout.write('\n'.join(lines))
     sys.stdout.write('\n')

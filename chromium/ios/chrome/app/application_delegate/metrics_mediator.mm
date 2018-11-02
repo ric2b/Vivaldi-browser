@@ -29,6 +29,7 @@
 #include "ios/chrome/common/app_group/app_group_metrics_mainapp.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/distribution/app_distribution_provider.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "ios/web/public/web_thread.h"
 #include "url/gurl.h"
 
@@ -142,10 +143,10 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
     NSTimeInterval interval = -[lastAppClose timeIntervalSinceNow];
     [startupInformation
         activateFirstUserActionRecorderWithBackgroundTime:interval];
-    GURL ntpUrl = GURL(kChromeUINewTabURL);
 
     Tab* currentTab = [[browserViewInformation currentTabModel] currentTab];
-    if (currentTab && currentTab.lastCommittedURL == ntpUrl) {
+    if (currentTab.webState &&
+        currentTab.webState->GetLastCommittedURL() == kChromeUINewTabURL) {
       startupInformation.firstUserActionRecorder->RecordStartOnNTP();
       [startupInformation resetFirstUserActionRecorder];
     } else {
@@ -254,6 +255,7 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
     app_group::main_app::DisableMetrics();
   }
 
+  app_group::main_app::RecordWidgetUsage();
   base::PostTaskWithTraits(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&app_group::main_app::ProcessPendingLogs, callback));

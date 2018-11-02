@@ -4,9 +4,10 @@
 
 #include "ash/autoclick/mus/autoclick_application.h"
 
+#include <utility>
+
 #include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -87,12 +88,14 @@ AutoclickApplication::AutoclickApplication()
                  base::Unretained(this)));
 }
 
-AutoclickApplication::~AutoclickApplication() {}
+AutoclickApplication::~AutoclickApplication() = default;
 
 void AutoclickApplication::OnStart() {
+  const bool register_path_provider = running_standalone_;
   aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
-      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS,
+      register_path_provider);
   if (!aura_init_) {
     context()->QuitNow();
     return;

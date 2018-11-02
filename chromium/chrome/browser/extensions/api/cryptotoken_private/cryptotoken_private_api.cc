@@ -7,17 +7,27 @@
 #include <stddef.h>
 
 #include "base/memory/ptr_util.h"
+#include "chrome/common/pref_names.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "extensions/common/error_utils.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+
+namespace {
+
+const char kGoogleDotCom[] = "google.com";
+constexpr const char* kGoogleGstaticAppIds[] = {
+    "https://www.gstatic.com/securitykey/origins.json",
+    "https://www.gstatic.com/securitykey/a/google.com/origins.json"};
+
+}  // namespace
 
 namespace extensions {
 namespace api {
 
-const char kGoogleDotCom[] = "google.com";
-const char* kGoogleGstaticAppIds[] = {
-  "https://www.gstatic.com/securitykey/origins.json",
-  "https://www.gstatic.com/securitykey/a/google.com/origins.json"
-};
+void CryptotokenRegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterListPref(prefs::kSecurityKeyPermitAttestation);
+}
 
 CryptotokenPrivateCanOriginAssertAppIdFunction::
     CryptotokenPrivateCanOriginAssertAppIdFunction()
@@ -69,16 +79,32 @@ CryptotokenPrivateCanOriginAssertAppIdFunction::Run() {
   // gstatic.com appIds.
   // TODO(juanlang): remove when legacy constraints are removed.
   if (origin_etldp1 == kGoogleDotCom) {
-    for (size_t i = 0;
-         i < sizeof(kGoogleGstaticAppIds) / sizeof(kGoogleGstaticAppIds[0]);
-         i++) {
-      if (params->app_id_url == kGoogleGstaticAppIds[i]) {
+    for (const char* id : kGoogleGstaticAppIds) {
+      if (params->app_id_url == id)
         return RespondNow(OneArgument(base::MakeUnique<base::Value>(true)));
-      }
     }
   }
   return RespondNow(OneArgument(base::MakeUnique<base::Value>(false)));
 }
+
+// TODO(agl/mab): remove special casing for individual attestation in
+// Javascript in favour of an enterprise policy, which can be accessed like
+// this:
+//
+// #include "chrome/browser/profiles/profile.h"
+// #include "components/prefs/pref_service.h"
+//
+//   Profile* const profile = Profile::FromBrowserContext(browser_context());
+//   const PrefService* const prefs = profile->GetPrefs();
+//   const base::ListValue* const permit_attestation =
+//       prefs->GetList(prefs::kSecurityKeyPermitAttestation);
+//
+//   for (size_t i = 0; i < permit_attestation->GetSize(); i++) {
+//     std::string value;
+//     if (!permit_attestation->GetString(i, &value)) {
+//       continue;
+//     }
+//   }
 
 }  // namespace api
 }  // namespace extensions

@@ -8,13 +8,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <list>
 #include <map>
 #include <memory>
 #include <set>
 #include <utility>
 
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -30,15 +30,20 @@
 
 namespace base {
 class WaitableEvent;
-};
+};  // namespace base
 
 namespace media {
 class GpuVideoAcceleratorFactories;
-}
+}  // namespace media
 
 namespace gpu {
 struct SyncToken;
-}
+}  // namespace gpu
+
+namespace rtc_video_decoder {
+// Maximum number of pending WebRTC buffers that are waiting for shared memory.
+static const size_t kMaxNumOfPendingBuffers = 8;
+}  // namespace rtc_video_decoder
 
 namespace content {
 
@@ -110,7 +115,10 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsBufferAfterReset);
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsFirstBufferAfterReset);
-  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, GetVDAErrorCounterForTesting);
+  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest,
+                           GetVDAErrorCounterForNotifyError);
+  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest,
+                           GetVDAErrorCounterForRunningOutOfPendingBuffers);
 
   RTCVideoDecoder(webrtc::VideoCodecType type,
                   media::GpuVideoAcceleratorFactories* factories);
@@ -203,6 +211,9 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Clears the pending_buffers_ queue, freeing memory.
   void ClearPendingBuffers();
 
+  // Checks |vda_error_counter_| to see if we should ask for SW fallback.
+  bool ShouldFallbackToSoftwareDecode();
+
   enum State {
     UNINITIALIZED,  // The decoder has not initialized.
     INITIALIZED,    // The decoder has initialized.
@@ -274,11 +285,13 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // A queue storing WebRTC encoding images (and their metadata) that are
   // waiting for the shared memory. Guarded by |lock_|.
-  std::deque<std::pair<webrtc::EncodedImage, BufferData>> pending_buffers_;
+  base::circular_deque<std::pair<webrtc::EncodedImage, BufferData>>
+      pending_buffers_;
 
   // A queue storing buffers (and their metadata) that will be sent to VDA for
   // decode. Guarded by |lock_|.
-  std::deque<std::pair<std::unique_ptr<base::SharedMemory>, BufferData>>
+  base::circular_deque<
+      std::pair<std::unique_ptr<base::SharedMemory>, BufferData>>
       decode_buffers_;
 
   // The id that will be given to the next bitstream buffer. Guarded by |lock_|.

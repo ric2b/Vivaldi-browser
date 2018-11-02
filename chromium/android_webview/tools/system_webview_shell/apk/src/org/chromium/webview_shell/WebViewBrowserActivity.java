@@ -22,7 +22,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Browser;
 import android.util.SparseArray;
-
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MenuItem;
@@ -32,14 +31,12 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.PopupMenu;
@@ -50,7 +47,6 @@ import org.chromium.base.Log;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -118,20 +114,24 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
             mCallback = callback;
         }
 
+        @Override
         public Uri getOrigin() {
             return Uri.parse(mOrigin);
         }
 
+        @Override
         public String[] getResources() {
             return new String[] { WebViewBrowserActivity.RESOURCE_GEO };
         }
 
+        @Override
         public void grant(String[] resources) {
             assert resources.length == 1;
             assert WebViewBrowserActivity.RESOURCE_GEO.equals(resources[0]);
             mCallback.invoke(mOrigin, true, false);
         }
 
+        @Override
         public void deny() {
             mCallback.invoke(mOrigin, false, false);
         }
@@ -147,14 +147,17 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
             mOrigin = origin;
         }
 
+        @Override
         public Uri getOrigin() {
             return Uri.parse(mOrigin);
         }
 
+        @Override
         public String[] getResources() {
             return new String[] { WebViewBrowserActivity.RESOURCE_FILE_URL };
         }
 
+        @Override
         public void grant(String[] resources) {
             assert resources.length == 1;
             assert WebViewBrowserActivity.RESOURCE_FILE_URL.equals(resources[0]);
@@ -162,6 +165,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
             WebViewBrowserActivity.this.mWebView.loadUrl(mOrigin);
         }
 
+        @Override
         public void deny() {
             // womp womp
         }
@@ -176,6 +180,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
         setContentView(R.layout.activity_webview_browser);
         mUrlBar = (EditText) findViewById(R.id.url_field);
         mUrlBar.setOnKeyListener(new OnKeyListener() {
+            @Override
             public boolean onKey(View view, int keyCode, KeyEvent event) {
                 if (keyCode == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_UP) {
                     loadUrlFromUrlBar(view);
@@ -347,7 +352,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
     @TargetApi(Build.VERSION_CODES.M)
     private boolean canGrant(String webkitPermission) {
         String androidPermission = sPermissions.get(webkitPermission);
-        if (androidPermission == NO_ANDROID_PERMISSION) {
+        if (androidPermission.equals(NO_ANDROID_PERMISSION)) {
             return true;
         }
         return PackageManager.PERMISSION_GRANTED == checkSelfPermission(androidPermission);
@@ -406,6 +411,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
         // takes a list of permissions, grant() is actually all-or-nothing. If there are any
         // requested permissions not included in the granted permissions, all will be denied.
         PermissionRequest request = mPendingRequests.get(requestCode);
+        mPendingRequests.delete(requestCode);
         for (String webkitPermission : request.getResources()) {
             if (!canGrant(webkitPermission)) {
                 request.deny();
@@ -413,7 +419,6 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
             }
         }
         request.grant(request.getResources());
-        mPendingRequests.delete(requestCode);
     }
 
     public void loadUrlFromUrlBar(View view) {
@@ -475,6 +480,11 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
         settings.setGeolocationEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setDomStorageEnabled(true);
+
+        // Default layout behavior for chrome on android.
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
     }
 
     private void about() {

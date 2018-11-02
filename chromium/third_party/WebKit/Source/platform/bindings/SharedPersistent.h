@@ -31,8 +31,8 @@
 #ifndef SharedPersistent_h
 #define SharedPersistent_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/bindings/ScopedPersistent.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
 #include "v8/include/v8.h"
 
@@ -46,9 +46,9 @@ class SharedPersistent : public RefCounted<SharedPersistent<T>> {
   WTF_MAKE_NONCOPYABLE(SharedPersistent);
 
  public:
-  static PassRefPtr<SharedPersistent<T>> Create(v8::Local<T> value,
-                                                v8::Isolate* isolate) {
-    return AdoptRef(new SharedPersistent<T>(value, isolate));
+  static scoped_refptr<SharedPersistent<T>> Create(v8::Local<T> value,
+                                                   v8::Isolate* isolate) {
+    return base::AdoptRef(new SharedPersistent<T>(value, isolate));
   }
 
   v8::Local<T> NewLocal(v8::Isolate* isolate) const {

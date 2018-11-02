@@ -69,6 +69,8 @@
   <script src="chrome://resources/js/cr/ui/bubble_button.js"></script>
   <script src="chrome://resources/js/cr/ui/controlled_indicator.js"></script>
   <script src="chrome://resources/js/cr/ui/overlay.js"></script>
+  <script src="chrome://resources/js/cr/ui/focus_manager.js"></script>
+  <script src="arc_optin_focus_manager.js"></script>
   <script src="progressbar.js"></script>
 </head>
 <body>
@@ -80,7 +82,7 @@
       <div class="content">
         <p class="title" id="greetingTitle" i18n-content="greetingHeader"
             aria-hidden="true"></p>
-        <p class="subtitle" i18n-content="progressLsoLoading"
+        <p class="subtitle" i18n-content="progressTermsLoading"
             aria-live="polite"></p>
         <div class="progress-container">
           <div class="progress-primary"></div>
@@ -95,7 +97,7 @@
         <p class="subtitle" i18n-content="greetingDescription">
         </p>
         <div class="section-terms" id="terms-container">
-          <webview id="terms-view" partition="persist:arc_support"></webview>
+          <webview id="terms-view"></webview>
         </div>
         <div class="subcontentcontainer">
           <div>
@@ -151,9 +153,7 @@
             i18n-content="activeDirectoryAuthDesc"></p>
         <div class="section-active-directory-auth-view"
             id="active-directory-auth-container">
-          <webview id="active-directory-auth-view"
-              partition="persist:arc_support">
-          </webview>
+          <webview id="active-directory-auth-view"></webview>
         </div>
         <div class="section-active-directory-auth-buttons">
           <paper-button class="button-active-directory-auth"
@@ -164,30 +164,14 @@
       </div>
     </div>
   </div>
-  <div id="lso-loading" class="section" hidden>
-    <img class="image-header" src="images/header.png">
-    <div class="scrollable">
-      <div class="content">
-        <div class="progress-container">
-          <div class="progress-primary"></div>
-          <div class="progress-secondary"></div>
-        </div>
-        <p class="text-status" i18n-content="progressLsoLoading"
-            aria-live="polite"></p>
-      </div>
-    </div>
-  </div>
-  <div id="lso" class="section" hidden>
-    <img class="image-header" src="images/header.png">
-    <webview id="arc-support" partition="persist:arc_support"></webview>
-  </div>
   <div id="arc-loading" class="section" hidden>
     <div class="header">
       <img class="icon-header" src="icon/playstore.svg" aria-hidden="true">
     </div>
     <div class="scrollable">
       <div class="content">
-        <p class="title" id="greetingTitle" i18n-content="greetingHeader"></p>
+        <p class="title" id="greetingTitle"
+            i18n-content="initializingHeader"></p>
         <p class="subtitle" i18n-content="progressAndroidLoading"
             aria-live="polite">
         </p>
@@ -223,7 +207,7 @@
     </div>
   </div>
   <div id="overlay-container" class="overlay" hidden>
-    <div class="page">
+    <div class="page" id="overlay-page">
       <div class="close-button"></div>
       <div class="content-area">
         <span id="overlay-text-content"></span>
@@ -240,6 +224,7 @@
         </div>
       </div>
     </div>
+    <a href="#" class="invisible-link"></a>
   </div>
 </body>
 </html>

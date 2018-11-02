@@ -16,6 +16,14 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory_native_pixmap.h"
 #endif
 
+#if defined(OS_WIN)
+#include "gpu/ipc/service/gpu_memory_buffer_factory_dxgi.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "gpu/ipc/service/gpu_memory_buffer_factory_android_hardware_buffer.h"
+#endif
+
 namespace gpu {
 
 // static
@@ -23,11 +31,15 @@ std::unique_ptr<GpuMemoryBufferFactory>
 GpuMemoryBufferFactory::CreateNativeType() {
 #if defined(OS_MACOSX)
   return base::WrapUnique(new GpuMemoryBufferFactoryIOSurface);
-#endif
-#if defined(OS_LINUX)
+#elif defined(OS_ANDROID)
+  return base::WrapUnique(new GpuMemoryBufferFactoryAndroidHardwareBuffer);
+#elif defined(OS_LINUX)
   return base::WrapUnique(new GpuMemoryBufferFactoryNativePixmap);
-#endif
+#elif defined(OS_WIN)
+  return base::WrapUnique(new GpuMemoryBufferFactoryDXGI);
+#else
   return nullptr;
+#endif
 }
 
 }  // namespace gpu

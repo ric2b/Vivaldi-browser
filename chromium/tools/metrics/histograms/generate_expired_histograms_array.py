@@ -14,8 +14,10 @@ import sys
 import extract_histograms
 import merge_xml
 
+_DATE_FILE_PATTERN = r".*MAJOR_BRANCH_DATE=(.+).*"
+
 _SCRIPT_NAME = "generate_expired_histograms_array.py"
-_HASH_DATATYPE = "unit64_t"
+_HASH_DATATYPE = "uint64_t"
 _HEADER = """// Generated from {script_name}. Do not edit!
 
 #ifndef {include_guard}
@@ -72,6 +74,34 @@ def _GetExpiredHistograms(histograms, base_date):
   return expired_histograms_names
 
 
+def _GetBaseDate(content, pattern):
+  """Fetches base date from |content| to compare expiry dates with.
+
+  Args:
+   content: A string with the base date.
+   pattern(str): A regular expression that matches the base date.
+
+  Returns:
+   A base date as datetime.date object.
+
+  Raises:
+    Error if |content| doesn't match |pattern| or the matched date has invalid
+    format.
+  """
+  match_result = re.search(pattern, content)
+  if not match_result:
+    raise Error("Unable to match {pattern} with provided content: {content}".
+                format(pattern=pattern, content=content))
+  base_date_str = match_result.group(1)
+  try:
+    base_date = datetime.datetime.strptime(
+        base_date_str, extract_histograms.EXPIRY_DATE_PATTERN).date()
+    return base_date
+  except ValueError:
+    raise Error("Unable to parse base date {date} from {content}.".
+                format(date=base_date_str, content=content))
+
+
 def _HashName(name):
   """Returns hash for the given histogram |name|."""
   return "0x" + hashlib.md5(name).hexdigest()[:16]
@@ -85,7 +115,7 @@ def _GetHashToNameMap(histograms_names):
   return hash_to_name_map
 
 
-def _GenerateHeaderFileContent(header_filename, namespace, hash_datatype,
+def _GenerateHeaderFileContent(header_filename, namespace,
                                histograms_map):
   """Generates header file content.
 
@@ -99,6 +129,9 @@ def _GenerateHeaderFileContent(header_filename, namespace, hash_datatype,
     String with the generated content.
   """
   include_guard = re.sub("[^A-Z]", "_", header_filename.upper()) + "_"
+  if not histograms_map:
+    # Some platforms don't allow creating empty arrays.
+    histograms_map["0x0000000000000000"] = "Dummy.Histogram"
   hashes = "\n".join([
       "  {hash},  // {name}".format(hash=value, name=histograms_map[value])
       for value in sorted(histograms_map.keys())
@@ -107,7 +140,7 @@ def _GenerateHeaderFileContent(header_filename, namespace, hash_datatype,
       script_name=_SCRIPT_NAME,
       include_guard=include_guard,
       namespace=namespace,
-      hash_datatype=hash_datatype,
+      hash_datatype=_HASH_DATATYPE,
       hashes=hashes,
       hashes_size=len(histograms_map))
 
@@ -131,11 +164,13 @@ def _GenerateFile(arguments):
       extract_histograms.ExtractHistogramsFromDom(descriptions))
   if had_errors:
     raise Error("Error parsing inputs.")
-  today = datetime.datetime.now().date()
-  expired_histograms_names = _GetExpiredHistograms(histograms, today)
+  with open(arguments.major_branch_date_filepath, "r") as date_file:
+    file_content = date_file.read()
+  base_date = _GetBaseDate(file_content, _DATE_FILE_PATTERN)
+  expired_histograms_names = _GetExpiredHistograms(histograms, base_date)
   expired_histograms_map = _GetHashToNameMap(expired_histograms_names)
   header_file_content = _GenerateHeaderFileContent(
-      arguments.header_filename, arguments.namespace, _HASH_DATATYPE,
+      arguments.header_filename, arguments.namespace,
       expired_histograms_map)
   with open(os.path.join(arguments.output_dir, arguments.header_filename),
             "w") as generated_file:
@@ -162,6 +197,11 @@ def _ParseArguments():
       default="",
       help="Namespace of the generated factory function (code will be in "
       "the global namespace if this is omitted).")
+  arg_parser.add_argument(
+      "--major_branch_date_filepath",
+      "-d",
+      default="",
+      help="A path to the file with the base date.")
   arg_parser.add_argument(
       "inputs",
       nargs="+",

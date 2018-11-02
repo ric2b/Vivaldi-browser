@@ -31,11 +31,11 @@
 #ifndef ThreadingPrimitives_h
 #define ThreadingPrimitives_h
 
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Locker.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/WTFExport.h"
 
 #if defined(OS_WIN)
@@ -61,24 +61,13 @@ struct PlatformMutex {
   CRITICAL_SECTION internal_mutex_;
   size_t recursion_count_;
 };
-struct PlatformCondition {
-  size_t waiters_gone_;
-  size_t waiters_blocked_;
-  size_t waiters_to_unblock_;
-  HANDLE block_lock_;
-  HANDLE block_queue_;
-  HANDLE unblock_lock_;
-
-  bool TimedWait(PlatformMutex&, DWORD duration_milliseconds);
-  void Signal(bool unblock_all);
-};
+typedef CONDITION_VARIABLE PlatformCondition;
 #else
 typedef void* PlatformMutex;
 typedef void* PlatformCondition;
 #endif
 
 class WTF_EXPORT MutexBase {
-  WTF_MAKE_NONCOPYABLE(MutexBase);
   USING_FAST_MALLOC(MutexBase);
 
  public:
@@ -97,6 +86,8 @@ class WTF_EXPORT MutexBase {
   MutexBase(bool recursive);
 
   PlatformMutex mutex_;
+
+  DISALLOW_COPY_AND_ASSIGN(MutexBase);
 };
 
 class WTF_EXPORT Mutex : public MutexBase {
@@ -115,7 +106,6 @@ typedef Locker<MutexBase> MutexLocker;
 
 class MutexTryLocker final {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(MutexTryLocker);
 
  public:
   MutexTryLocker(Mutex& mutex) : mutex_(mutex), locked_(mutex.TryLock()) {}
@@ -129,11 +119,12 @@ class MutexTryLocker final {
  private:
   Mutex& mutex_;
   bool locked_;
+
+  DISALLOW_COPY_AND_ASSIGN(MutexTryLocker);
 };
 
 class WTF_EXPORT ThreadCondition final {
   USING_FAST_MALLOC(ThreadCondition);  // Only HeapTest.cpp requires.
-  WTF_MAKE_NONCOPYABLE(ThreadCondition);
 
  public:
   ThreadCondition();
@@ -150,6 +141,8 @@ class WTF_EXPORT ThreadCondition final {
 
  private:
   PlatformCondition condition_;
+
+  DISALLOW_COPY_AND_ASSIGN(ThreadCondition);
 };
 
 #if defined(OS_WIN)

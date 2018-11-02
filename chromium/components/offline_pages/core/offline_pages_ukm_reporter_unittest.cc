@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/offline_pages/core/offline_pages_ukm_reporter.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,6 +19,7 @@ class OfflinePagesUkmReporterTest : public testing::Test {
   ukm::TestUkmRecorder* test_recorder() { return &test_recorder_; }
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ukm::TestAutoSetUkmRecorder test_recorder_;
 };
 
@@ -27,16 +29,17 @@ TEST_F(OfflinePagesUkmReporterTest, RecordOfflinePageVisit) {
 
   reporter.ReportUrlOfflineRequest(gurl, false);
 
-  EXPECT_EQ(1U, test_recorder()->sources_count());
-  const ukm::UkmSource* found_source =
-      test_recorder()->GetSourceForUrl(kVisitedUrl);
-  EXPECT_NE(nullptr, found_source);
-
-  test_recorder()->ExpectMetric(
-      *found_source, ukm::builders::OfflinePages_SavePageRequested::kEntryName,
-      ukm::builders::OfflinePages_SavePageRequested::
-          kRequestedFromForegroundName,
-      0);
+  const auto& entries = test_recorder()->GetEntriesByName(
+      ukm::builders::OfflinePages_SavePageRequested::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder()->ExpectEntrySourceHasUrl(entry, gurl);
+    test_recorder()->ExpectEntryMetric(
+        entry,
+        ukm::builders::OfflinePages_SavePageRequested::
+            kRequestedFromForegroundName,
+        0);
+  }
 }
 
 }  // namespace offline_pages

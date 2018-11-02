@@ -351,6 +351,16 @@
             "description": "The new value for the key."
           }
         ]
+      },
+      {
+        "name": "onSuspend",
+        "type": "function",
+        "description": "Fired when the computer is about to suspend."
+      },
+      {
+        "name": "onResume",
+        "type": "function",
+        "description": "Fired when the computer has resumed from suspension."
       }
     ]
   }

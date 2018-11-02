@@ -26,6 +26,7 @@
 #include "core/editing/CaretDisplayItemClient.h"
 
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
@@ -80,7 +81,10 @@ static LayoutRect MapCaretRectToCaretPainter(
   // FIXME: This should probably just use mapLocalToAncestor.
   // Compute an offset between the caretLayoutItem and the caretPainterItem.
 
-  LayoutItem caret_layout_item = LayoutItem(caret_rect.layout_object);
+  // TODO(layout-dev): We should allow constructing a "const layout item" from a
+  // |const LayoutObject*| that allows using all const functions.
+  LayoutItem caret_layout_item =
+      LayoutItem(const_cast<LayoutObject*>(caret_rect.layout_object));
   DCHECK(caret_layout_item.IsDescendantOf(caret_painter_item));
 
   LayoutRect result_rect = caret_rect.rect;
@@ -202,8 +206,8 @@ void CaretDisplayItemClient::InvalidatePaintInPreviousLayoutBlock(
 
   ObjectPaintInvalidatorWithContext object_invalidator(*previous_layout_block_,
                                                        context);
-  // For SPv2 raster invalidation will be done in PaintController.
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+  // For SPv175 raster invalidation will be done in PaintController.
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
       !IsImmediateFullPaintInvalidationReason(
           previous_layout_block_->FullPaintInvalidationReason())) {
     object_invalidator.InvalidatePaintRectangleWithContext(
@@ -266,7 +270,7 @@ void CaretDisplayItemClient::InvalidatePaintInCurrentLayoutBlock(
 
   needs_paint_invalidation_ = false;
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
       !IsImmediateFullPaintInvalidationReason(
           layout_block_->FullPaintInvalidationReason())) {
     object_invalidator.FullyInvalidatePaint(PaintInvalidationReason::kCaret,
@@ -291,9 +295,8 @@ void CaretDisplayItemClient::PaintCaret(
   LayoutRect drawing_rect = local_rect_;
   drawing_rect.MoveBy(paint_offset);
 
+  DrawingRecorder recorder(context, *this, display_item_type);
   IntRect paint_rect = PixelSnappedIntRect(drawing_rect);
-  DrawingRecorder drawing_recorder(context, *this, display_item_type,
-                                   paint_rect);
   context.FillRect(paint_rect, color_);
 }
 

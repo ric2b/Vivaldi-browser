@@ -27,7 +27,9 @@ class MODULES_EXPORT MediaKeysController final
         Supplement<Page>::From(page, SupplementName()));
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { Supplement<Page>::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    Supplement<Page>::Trace(visitor);
+  }
 
  private:
   MediaKeysController();

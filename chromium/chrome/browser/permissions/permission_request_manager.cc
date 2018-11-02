@@ -7,19 +7,27 @@
 #include <algorithm>
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
+#include "base/containers/circular_deque.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "url/origin.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/extensions/extension_ui_util.h"
+#include "extensions/common/constants.h"
+#endif  // !defined(OS_ANDROID)
 
 namespace {
 
@@ -32,7 +40,9 @@ class CancelledRequest : public PermissionRequest {
 #endif
         message_fragment_(cancelled->GetMessageTextFragment()),
         origin_(cancelled->GetOrigin()),
-        request_type_(cancelled->GetPermissionRequestType()) {
+        request_type_(cancelled->GetPermissionRequestType()),
+        gesture_type_(cancelled->GetGestureType()),
+        content_settings_type_(cancelled->GetContentSettingsType()) {
   }
   ~CancelledRequest() override {}
 
@@ -56,6 +66,14 @@ class CancelledRequest : public PermissionRequest {
     return request_type_;
   }
 
+  PermissionRequestGestureType GetGestureType() const override {
+    return gesture_type_;
+  }
+
+  ContentSettingsType GetContentSettingsType() const override {
+    return content_settings_type_;
+  }
+
  private:
   IconId icon_;
 #if defined(OS_ANDROID)
@@ -64,6 +82,8 @@ class CancelledRequest : public PermissionRequest {
   base::string16 message_fragment_;
   GURL origin_;
   PermissionRequestType request_type_;
+  PermissionRequestGestureType gesture_type_;
+  ContentSettingsType content_settings_type_;
 };
 
 bool IsMessageTextEqual(PermissionRequest* a,
@@ -118,14 +138,9 @@ PermissionRequestManager::PermissionRequestManager(
       view_factory_(base::Bind(&PermissionPrompt::Create)),
       view_(nullptr),
       main_frame_has_fully_loaded_(false),
-      tab_can_show_prompts_(false),
-      persist_(true),
+      tab_is_visible_(web_contents->IsVisible()),
       auto_response_for_test_(NONE),
-      weak_factory_(this) {
-#if defined(OS_ANDROID)
-  tab_can_show_prompts_ = true;
-#endif
-}
+      weak_factory_(this) {}
 
 PermissionRequestManager::~PermissionRequestManager() {
   DCHECK(requests_.empty());
@@ -135,6 +150,13 @@ PermissionRequestManager::~PermissionRequestManager() {
 
 void PermissionRequestManager::AddRequest(PermissionRequest* request) {
   DCHECK(!vr::VrTabHelper::IsInVr(web_contents()));
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDenyPermissionPrompts)) {
+    request->PermissionDenied();
+    request->RequestFinished();
+    return;
+  }
 
   // TODO(tsergeant): change the UMA to no longer mention bubbles.
   base::RecordAction(base::UserMetricsAction("PermissionBubbleRequest"));
@@ -146,8 +168,9 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
   // correct behavior on interstitials -- we probably want to basically queue
   // any request for which GetVisibleURL != GetLastCommittedURL.
   const GURL& request_url_ = web_contents()->GetLastCommittedURL();
-  bool is_main_frame = url::Origin(request_url_)
-                           .IsSameOriginWith(url::Origin(request->GetOrigin()));
+  bool is_main_frame =
+      url::Origin::Create(request_url_)
+          .IsSameOriginWith(url::Origin::Create(request->GetOrigin()));
 
   // Don't re-add an existing request or one with a duplicate text request.
   PermissionRequest* existing_request = GetExistingRequest(request);
@@ -183,7 +206,7 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
 void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
   // First look in the queued requests, where we can simply finish the request
   // and go on.
-  std::deque<PermissionRequest*>::iterator queued_requests_iter;
+  base::circular_deque<PermissionRequest*>::iterator queued_requests_iter;
   for (queued_requests_iter = queued_requests_.begin();
        queued_requests_iter != queued_requests_.end(); queued_requests_iter++) {
     if (*queued_requests_iter == request) {
@@ -230,27 +253,6 @@ void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
   NOTREACHED();  // Callers should not cancel requests that are not pending.
 }
 
-void PermissionRequestManager::HideBubble() {
-  tab_can_show_prompts_ = false;
-
-  if (view_)
-    DeleteBubble();
-}
-
-void PermissionRequestManager::DisplayPendingRequests() {
-  tab_can_show_prompts_ = true;
-
-  if (!main_frame_has_fully_loaded_)
-    return;
-
-  if (requests_.empty()) {
-    DequeueRequestsAndShowBubble();
-  } else {
-    // We switched tabs away and back while a prompt was active.
-    ShowBubble();
-  }
-}
-
 void PermissionRequestManager::UpdateAnchorPosition() {
   if (view_)
     view_->UpdateAnchorPosition();
@@ -258,15 +260,6 @@ void PermissionRequestManager::UpdateAnchorPosition() {
 
 bool PermissionRequestManager::IsBubbleVisible() {
   return view_ && !requests_.empty();
-}
-
-// static
-bool PermissionRequestManager::IsEnabled() {
-#if defined(OS_ANDROID)
-  return base::FeatureList::IsEnabled(features::kUseGroupedPermissionInfobars);
-#else
-  return true;
-#endif
 }
 
 gfx::NativeWindow PermissionRequestManager::GetBubbleWindow() {
@@ -314,12 +307,64 @@ void PermissionRequestManager::WebContentsDestroyed() {
   // returning from this function is the only safe thing to do.
 }
 
+void PermissionRequestManager::WasShown() {
+  // This function can be called when the tab is already showing.
+  if (tab_is_visible_)
+    return;
+
+  tab_is_visible_ = true;
+
+  if (!main_frame_has_fully_loaded_)
+    return;
+
+  if (requests_.empty()) {
+    DequeueRequestsAndShowBubble();
+  } else {
+    // We switched tabs away and back while a prompt was active.
+#if defined(OS_ANDROID)
+    DCHECK(view_);
+#else
+    ShowBubble(/*is_reshow=*/true);
+#endif
+  }
+}
+
+void PermissionRequestManager::WasHidden() {
+  // This function can be called when the tab is not showing.
+  if (!tab_is_visible_)
+    return;
+
+  tab_is_visible_ = false;
+
+#if !defined(OS_ANDROID)
+  if (view_)
+    DeleteBubble();
+#endif
+}
+
 const std::vector<PermissionRequest*>& PermissionRequestManager::Requests() {
   return requests_;
 }
 
-void PermissionRequestManager::TogglePersist(bool new_value) {
-  persist_ = new_value;
+PermissionPrompt::DisplayNameOrOrigin
+PermissionRequestManager::GetDisplayNameOrOrigin() {
+  DCHECK(!requests_.empty());
+  GURL origin_url = requests_[0]->GetOrigin();
+
+#if !defined(OS_ANDROID)
+  if (origin_url.SchemeIs(extensions::kExtensionScheme)) {
+    base::string16 extension_name =
+        extensions::ui_util::GetEnabledExtensionNameForUrl(
+            origin_url, web_contents()->GetBrowserContext());
+    if (!extension_name.empty())
+      return {extension_name, false /* is_origin */};
+  }
+#endif  // !defined(OS_ANDROID)
+
+  // Web URLs should be displayed as the origin in the URL.
+  return {url_formatter::FormatUrlForSecurityDisplay(
+              origin_url, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC),
+          true /* is_origin */};
 }
 
 void PermissionRequestManager::Accept() {
@@ -375,7 +420,7 @@ void PermissionRequestManager::ScheduleShowBubble() {
 void PermissionRequestManager::DequeueRequestsAndShowBubble() {
   if (view_)
     return;
-  if (!main_frame_has_fully_loaded_ || !tab_can_show_prompts_)
+  if (!main_frame_has_fully_loaded_ || !tab_is_visible_)
     return;
   if (queued_requests_.empty())
     return;
@@ -390,17 +435,18 @@ void PermissionRequestManager::DequeueRequestsAndShowBubble() {
     queued_requests_.pop_front();
   }
 
-  ShowBubble();
+  ShowBubble(/*is_reshow=*/false);
 }
 
-void PermissionRequestManager::ShowBubble() {
+void PermissionRequestManager::ShowBubble(bool is_reshow) {
   DCHECK(!view_);
   DCHECK(!requests_.empty());
   DCHECK(main_frame_has_fully_loaded_);
-  DCHECK(tab_can_show_prompts_);
+  DCHECK(tab_is_visible_);
 
   view_ = view_factory_.Run(web_contents(), this);
-  PermissionUmaUtil::PermissionPromptShown(requests_);
+  if (!is_reshow)
+    PermissionUmaUtil::PermissionPromptShown(requests_);
   NotifyBubbleAdded();
 
   // If in testing mode, automatically respond to the bubble that was shown.
@@ -423,6 +469,29 @@ void PermissionRequestManager::FinalizeBubble(
   PermissionUmaUtil::PermissionPromptResolved(requests_, web_contents(),
                                               permission_action);
 
+  if (permission_action == PermissionAction::IGNORED) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+    PermissionDecisionAutoBlocker* autoblocker =
+        PermissionDecisionAutoBlocker::GetForProfile(profile);
+
+    for (PermissionRequest* request : requests_) {
+      // TODO(timloh): We only support ignore embargo for permissions which use
+      // PermissionRequestImpl as the other subclasses don't support
+      // GetContentSettingsType.
+      if (request->GetContentSettingsType() == CONTENT_SETTINGS_TYPE_DEFAULT)
+        continue;
+
+      PermissionEmbargoStatus embargo_status =
+          PermissionEmbargoStatus::NOT_EMBARGOED;
+      if (autoblocker->RecordIgnoreAndEmbargo(
+              request->GetOrigin(), request->GetContentSettingsType())) {
+        embargo_status = PermissionEmbargoStatus::REPEATED_IGNORES;
+      }
+      PermissionUmaUtil::RecordEmbargoStatus(embargo_status);
+    }
+  }
+
   std::vector<PermissionRequest*>::iterator requests_iter;
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
@@ -435,12 +504,8 @@ void PermissionRequestManager::FinalizeBubble(
 }
 
 void PermissionRequestManager::CleanUpRequests() {
-  std::deque<PermissionRequest*>::iterator requests_iter;
-  for (requests_iter = queued_requests_.begin();
-       requests_iter != queued_requests_.end();
-       requests_iter++) {
-    RequestFinishedIncludingDuplicates(*requests_iter);
-  }
+  for (PermissionRequest* request : queued_requests_)
+    RequestFinishedIncludingDuplicates(request);
   queued_requests_.clear();
 
   if (!requests_.empty())
@@ -449,12 +514,14 @@ void PermissionRequestManager::CleanUpRequests() {
 
 PermissionRequest* PermissionRequestManager::GetExistingRequest(
     PermissionRequest* request) {
-  for (PermissionRequest* existing_request : requests_)
+  for (PermissionRequest* existing_request : requests_) {
     if (IsMessageTextEqual(existing_request, request))
       return existing_request;
-  for (PermissionRequest* existing_request : queued_requests_)
+  }
+  for (PermissionRequest* existing_request : queued_requests_) {
     if (IsMessageTextEqual(existing_request, request))
       return existing_request;
+  }
   return nullptr;
 }
 
@@ -462,26 +529,22 @@ void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(request, GetExistingRequest(request))
       << "Only requests in [queued_[frame_]]requests_ can have duplicates";
-  request->set_persist(persist_);
   request->PermissionGranted();
   auto range = duplicate_requests_.equal_range(request);
-  for (auto it = range.first; it != range.second; ++it) {
-    it->second->set_persist(persist_);
+  for (auto it = range.first; it != range.second; ++it)
     it->second->PermissionGranted();
-  }
 }
+
 void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(request, GetExistingRequest(request))
       << "Only requests in [queued_]requests_ can have duplicates";
-  request->set_persist(persist_);
   request->PermissionDenied();
   auto range = duplicate_requests_.equal_range(request);
-  for (auto it = range.first; it != range.second; ++it) {
-    it->second->set_persist(persist_);
+  for (auto it = range.first; it != range.second; ++it)
     it->second->PermissionDenied();
-  }
 }
+
 void PermissionRequestManager::CancelledIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(request, GetExistingRequest(request))
@@ -491,6 +554,7 @@ void PermissionRequestManager::CancelledIncludingDuplicates(
   for (auto it = range.first; it != range.second; ++it)
     it->second->Cancelled();
 }
+
 void PermissionRequestManager::RequestFinishedIncludingDuplicates(
     PermissionRequest* request) {
   // We can't call GetExistingRequest here, because other entries in requests_,

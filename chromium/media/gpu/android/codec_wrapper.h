@@ -16,12 +16,16 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "media/base/android/media_codec_bridge.h"
+#include "media/base/decoder_buffer.h"
+#include "media/gpu/android/avda_surface_bundle.h"
 #include "media/gpu/android/device_info.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/gpu/surface_texture_gl_owner.h"
 
 namespace media {
 class CodecWrapperImpl;
+
+using CodecSurfacePair = std::pair<std::unique_ptr<MediaCodecBridge>,
+                                   scoped_refptr<AVDASurfaceBundle>>;
 
 // A MediaCodec output buffer that can be released on any thread. Releasing a
 // CodecOutputBuffer implicitly discards all CodecOutputBuffers that
@@ -52,30 +56,26 @@ class MEDIA_GPU_EXPORT CodecOutputBuffer {
   DISALLOW_COPY_AND_ASSIGN(CodecOutputBuffer);
 };
 
-// This wraps a MediaCodecBridge and provides a pared down version of its
-// interface. It also adds the following features:
-// * It outputs CodecOutputBuffers from DequeueOutputBuffer() which can be
-//   safely rendered on any thread, and that will release their buffers on
-//   destruction. This lets us decode on one thread while rendering on another.
-// * It maintains codec specific state like whether an error has occurred.
-//
+// This wraps a MediaCodecBridge and provides higher level features and tracks
+// more state that is useful for video decoding.
 // CodecWrapper is not threadsafe, but the CodecOutputBuffers it outputs
 // can be released on any thread.
 class MEDIA_GPU_EXPORT CodecWrapper {
  public:
-  // |codec| should be in the flushed state, i.e., freshly configured or after a
-  // Flush(). |output_buffer_release_cb| will be run whenever an output buffer
-  // is released back to the codec (whether it's rendered or not). This is a
-  // signal that the codec might be ready to accept more input. It may be run on
-  // any thread.
-  CodecWrapper(std::unique_ptr<MediaCodecBridge> codec,
+  // The given codec should be in the flushed state, i.e., freshly configured or
+  // after a Flush(). The surface must be the one that the codec was configured
+  // with. |output_buffer_release_cb| will be run whenever an output buffer is
+  // released back to the codec (whether it's rendered or not). This is a signal
+  // that the codec might be ready to accept more input. It may be run on any
+  // thread.
+  CodecWrapper(CodecSurfacePair codec_surface_pair,
                base::Closure output_buffer_release_cb);
   ~CodecWrapper();
 
-  // Takes the backing codec and discards all outstanding codec buffers. This
-  // lets you tear down the codec while there are still CodecOutputBuffers
-  // referencing |this|.
-  std::unique_ptr<MediaCodecBridge> TakeCodec();
+  // Takes the backing codec and surface, implicitly discarding all outstanding
+  // codec buffers. It's safe to use CodecOutputBuffers after this is called,
+  // but they can no longer be rendered.
+  CodecSurfacePair TakeCodecSurfacePair();
 
   // Whether the codec is in the flushed state.
   bool IsFlushed() const;
@@ -86,33 +86,29 @@ class MEDIA_GPU_EXPORT CodecWrapper {
   // Whether an EOS has been dequeued but the codec hasn't been flushed yet.
   bool IsDrained() const;
 
-  // Whether there are any valid CodecOutputBuffers that have not been released.
-  bool HasValidCodecOutputBuffers() const;
+  // Whether there are any dequeued output buffers that have not been released.
+  bool HasUnreleasedOutputBuffers() const;
 
-  // Releases currently dequeued codec buffers back to the codec without
-  // rendering.
-  void DiscardCodecOutputBuffers();
+  // Releases all dequeued output buffers back to the codec without rendering.
+  void DiscardOutputBuffers();
 
   // Whether the codec supports Flush().
   bool SupportsFlush(DeviceInfo* device_info) const;
 
-  // See MediaCodecBridge documentation for the following.
+  // Flushes the codec and discards all output buffers.
   bool Flush();
-  MediaCodecStatus QueueInputBuffer(int index,
-                                    const uint8_t* data,
-                                    size_t data_size,
-                                    base::TimeDelta presentation_time);
-  MediaCodecStatus QueueSecureInputBuffer(
-      int index,
-      const uint8_t* data,
-      size_t data_size,
-      const std::string& key_id,
-      const std::string& iv,
-      const std::vector<SubsampleEntry>& subsamples,
-      const EncryptionScheme& encryption_scheme,
-      base::TimeDelta presentation_time);
-  void QueueEOS(int input_buffer_index);
-  MediaCodecStatus DequeueInputBuffer(int* index);
+
+  // Sets the given surface and returns true on success.
+  bool SetSurface(scoped_refptr<AVDASurfaceBundle> surface_bundle);
+
+  // Returns the surface bundle that the codec is currently configured with.
+  // Returns null after TakeCodecSurfacePair() is called.
+  scoped_refptr<AVDASurfaceBundle> SurfaceBundle();
+
+  // Queues |buffer| if the codec has an available input buffer.
+  enum class QueueStatus { kOk, kError, kTryAgainLater, kNoKey };
+  QueueStatus QueueInputBuffer(const DecoderBuffer& buffer,
+                               const EncryptionScheme& encryption_scheme);
 
   // Like MediaCodecBridge::DequeueOutputBuffer() but it outputs a
   // CodecOutputBuffer instead of an index. |*codec_buffer| must be null.
@@ -121,14 +117,11 @@ class MEDIA_GPU_EXPORT CodecWrapper {
   // codec immediately. Unlike MediaCodecBridge, this does not return
   // MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED or MEDIA_CODEC_OUTPUT_FORMAT_CHANGED. It
   // tries to dequeue another buffer instead.
-  MediaCodecStatus DequeueOutputBuffer(
+  enum class DequeueStatus { kOk, kError, kTryAgainLater };
+  DequeueStatus DequeueOutputBuffer(
       base::TimeDelta* presentation_time,
       bool* end_of_stream,
       std::unique_ptr<CodecOutputBuffer>* codec_buffer);
-
-  // Sets the given surface and returns MEDIA_CODEC_OK on success or
-  // MEDIA_CODEC_ERROR on failure.
-  MediaCodecStatus SetSurface(const base::android::JavaRef<jobject>& surface);
 
  private:
   scoped_refptr<CodecWrapperImpl> impl_;

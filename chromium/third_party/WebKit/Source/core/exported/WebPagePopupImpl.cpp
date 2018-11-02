@@ -29,6 +29,8 @@
 
 #include "core/exported/WebPagePopupImpl.h"
 
+#include <memory>
+
 #include "core/dom/AXObjectCacheBase.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/events/MessageEvent.h"
@@ -52,8 +54,8 @@
 #include "core/page/PagePopupSupplement.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/LayoutTestSupport.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/animation/CompositorAnimationHost.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -76,6 +78,8 @@ class PagePopupChromeClient final : public EmptyChromeClient {
   void SetWindowRect(const IntRect& rect, LocalFrame&) override {
     popup_->SetWindowRect(rect);
   }
+
+  bool IsPopup() override { return true; }
 
  private:
   explicit PagePopupChromeClient(WebPagePopupImpl* popup) : popup_(popup) {
@@ -245,9 +249,9 @@ bool PagePopupFeaturesClient::IsEnabled(Document*,
 WebPagePopupImpl::WebPagePopupImpl(WebWidgetClient* client)
     : widget_client_(client),
       closing_(false),
-      layer_tree_view_(0),
-      root_layer_(0),
-      root_graphics_layer_(0),
+      layer_tree_view_(nullptr),
+      root_layer_(nullptr),
+      root_graphics_layer_(nullptr),
       is_accelerated_compositing_active_(false) {
   DCHECK(client);
 }
@@ -296,10 +300,11 @@ bool WebPagePopupImpl::InitializePage() {
   page_->GetSettings().SetPrimaryPointerType(
       main_settings.GetPrimaryPointerType());
 
-  ProvideContextFeaturesTo(*page_, WTF::MakeUnique<PagePopupFeaturesClient>());
+  ProvideContextFeaturesTo(*page_, std::make_unique<PagePopupFeaturesClient>());
   DEFINE_STATIC_LOCAL(LocalFrameClient, empty_local_frame_client,
                       (EmptyLocalFrameClient::Create()));
-  LocalFrame* frame = LocalFrame::Create(&empty_local_frame_client, *page_, 0);
+  LocalFrame* frame =
+      LocalFrame::Create(&empty_local_frame_client, *page_, nullptr);
   frame->SetPagePopupOwner(popup_client_->OwnerElement());
   frame->SetView(LocalFrameView::Create(*frame));
   frame->Init();
@@ -316,12 +321,10 @@ bool WebPagePopupImpl::InitializePage() {
 
   InitializeLayerTreeView();
 
-  RefPtr<SharedBuffer> data = SharedBuffer::Create();
-  popup_client_->WriteDocument(data.Get());
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
+  popup_client_->WriteDocument(data.get());
   frame->SetPageZoomFactor(popup_client_->ZoomFactor());
-  frame->Loader().Load(
-      FrameLoadRequest(0, ResourceRequest(BlankURL()),
-                       SubstituteData(data, kForceSynchronousLoad)));
+  frame->ForceSynchronousDocumentInstall("text/html", data);
   return true;
 }
 
@@ -343,11 +346,11 @@ void WebPagePopupImpl::DestroyPage() {
 
 AXObject* WebPagePopupImpl::RootAXObject() {
   if (!page_ || !page_->MainFrame())
-    return 0;
+    return nullptr;
   Document* document = ToLocalFrame(page_->MainFrame())->GetDocument();
   if (!document)
-    return 0;
-  AXObjectCache* cache = document->AxObjectCache();
+    return nullptr;
+  AXObjectCache* cache = document->GetOrCreateAXObjectCache();
   DCHECK(cache);
   return ToAXObjectCacheBase(cache)->GetOrCreate(ToLayoutView(
       LayoutAPIShim::LayoutObjectFrom(document->GetLayoutViewItem())));
@@ -359,7 +362,7 @@ void WebPagePopupImpl::SetWindowRect(const IntRect& rect_in_screen) {
 
 void WebPagePopupImpl::SetRootGraphicsLayer(GraphicsLayer* layer) {
   root_graphics_layer_ = layer;
-  root_layer_ = layer ? layer->PlatformLayer() : 0;
+  root_layer_ = layer ? layer->PlatformLayer() : nullptr;
 
   is_accelerated_compositing_active_ = !!layer;
   if (layer_tree_view_) {
@@ -376,7 +379,7 @@ void WebPagePopupImpl::InitializeLayerTreeView() {
   layer_tree_view_ = widget_client_->InitializeLayerTreeView();
   if (layer_tree_view_) {
     layer_tree_view_->SetVisible(true);
-    animation_host_ = WTF::MakeUnique<CompositorAnimationHost>(
+    animation_host_ = std::make_unique<CompositorAnimationHost>(
         layer_tree_view_->CompositorAnimationHost());
     page_->LayerTreeViewInitialized(*layer_tree_view_, nullptr);
   } else {
@@ -522,7 +525,7 @@ void WebPagePopupImpl::Close() {
   if (page_)
     Cancel();
   widget_client_ = nullptr;
-  Deref();
+  Release();
 }
 
 void WebPagePopupImpl::ClosePopup() {
@@ -592,7 +595,9 @@ WebPagePopup* WebPagePopup::Create(WebWidgetClient* client) {
   //    WebPagePopupImpl to close.
   // We need them because the closing operation is asynchronous and the widget
   // can be closed while the WebViewImpl is unaware of it.
-  return AdoptRef(new WebPagePopupImpl(client)).LeakRef();
+  auto popup = base::AdoptRef(new WebPagePopupImpl(client));
+  popup->AddRef();
+  return popup.get();
 }
 
 }  // namespace blink

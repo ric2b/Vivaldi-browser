@@ -14,10 +14,8 @@
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/parser/HTMLDocumentParser.h"
-#include "core/loader/DocumentLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 
@@ -25,8 +23,11 @@ namespace blink {
 
 namespace {
 static const double kLongTaskSubTaskThresholdInSeconds = 0.012;
-static const double kNetworkQuietWindowSeconds = 0.5;
 }  // namespace
+
+void PerformanceMonitor::BypassLongCompileThresholdOnceForTesting() {
+  bypass_long_compile_threshold_ = true;
+};
 
 // static
 double PerformanceMonitor::Threshold(ExecutionContext* context,
@@ -135,17 +136,33 @@ void PerformanceMonitor::WillExecuteScript(ExecutionContext* context) {
   // In V2, timing of script execution along with style & layout updates will be
   // accounted for detailed and more accurate attribution.
   ++script_depth_;
-  if (!task_execution_context_)
-    task_execution_context_ = context;
-  else if (task_execution_context_ != context)
-    task_has_multiple_contexts_ = true;
+  UpdateTaskAttribution(context);
 }
 
 void PerformanceMonitor::DidExecuteScript() {
   --script_depth_;
 }
 
+void PerformanceMonitor::UpdateTaskAttribution(ExecutionContext* context) {
+  // If |context| is not a document, unable to attribute a frame context.
+  if (!context || !context->IsDocument())
+    return;
+
+  UpdateTaskShouldBeReported(ToDocument(context)->GetFrame());
+  if (!task_execution_context_)
+    task_execution_context_ = context;
+  else if (task_execution_context_ != context)
+    task_has_multiple_contexts_ = true;
+}
+
+void PerformanceMonitor::UpdateTaskShouldBeReported(LocalFrame* frame) {
+  if (frame && local_root_ == &(frame->LocalFrameRoot()))
+    task_should_be_reported_ = true;
+}
+
 void PerformanceMonitor::Will(const probe::RecalculateStyle& probe) {
+  UpdateTaskShouldBeReported(probe.document ? probe.document->GetFrame()
+                                            : nullptr);
   if (enabled_ && thresholds_[kLongLayout] && script_depth_)
     probe.CaptureStartTime();
 }
@@ -156,6 +173,8 @@ void PerformanceMonitor::Did(const probe::RecalculateStyle& probe) {
 }
 
 void PerformanceMonitor::Will(const probe::UpdateLayout& probe) {
+  UpdateTaskShouldBeReported(probe.document ? probe.document->GetFrame()
+                                            : nullptr);
   ++layout_depth_;
   if (!enabled_)
     return;
@@ -224,6 +243,7 @@ void PerformanceMonitor::Did(const probe::CallFunction& probe) {
 }
 
 void PerformanceMonitor::Will(const probe::V8Compile& probe) {
+  UpdateTaskAttribution(probe.context);
   if (!enabled_ || !thresholds_[kLongTask])
     return;
 
@@ -235,8 +255,14 @@ void PerformanceMonitor::Did(const probe::V8Compile& probe) {
     return;
 
   double v8_compile_duration = probe.Duration();
-  if (v8_compile_duration <= kLongTaskSubTaskThresholdInSeconds)
-    return;
+
+  if (bypass_long_compile_threshold_) {
+    bypass_long_compile_threshold_ = false;
+  } else {
+    if (v8_compile_duration <= kLongTaskSubTaskThresholdInSeconds)
+      return;
+  }
+
   std::unique_ptr<SubTaskAttribution> sub_task_attribution =
       SubTaskAttribution::Create(
           String("script-compile"),
@@ -248,7 +274,7 @@ void PerformanceMonitor::Did(const probe::V8Compile& probe) {
 
 void PerformanceMonitor::Will(const probe::UserCallback& probe) {
   ++user_callback_depth_;
-
+  UpdateTaskAttribution(probe.context);
   if (!enabled_ || user_callback_depth_ != 1 ||
       !thresholds_[probe.recurring ? kRecurringHandler : kHandler])
     return;
@@ -264,74 +290,6 @@ void PerformanceMonitor::Did(const probe::UserCallback& probe) {
   DCHECK(user_callback_ != &probe);
 }
 
-void PerformanceMonitor::WillSendRequest(ExecutionContext*,
-                                         unsigned long,
-                                         DocumentLoader* loader,
-                                         ResourceRequest&,
-                                         const ResourceResponse&,
-                                         const FetchInitiatorInfo&) {
-  if (loader->GetFrame() != local_root_)
-    return;
-  int request_count = loader->Fetcher()->ActiveRequestCount();
-  // If we are above the allowed number of active requests, reset timers.
-  if (network_2_quiet_ >= 0 && request_count > 2)
-    network_2_quiet_ = 0;
-  if (network_0_quiet_ >= 0 && request_count > 0)
-    network_0_quiet_ = 0;
-}
-
-void PerformanceMonitor::DidFailLoading(unsigned long identifier,
-                                        DocumentLoader* loader,
-                                        const ResourceError&) {
-  if (loader->GetFrame() != local_root_)
-    return;
-  DidLoadResource();
-}
-
-void PerformanceMonitor::DidFinishLoading(unsigned long,
-                                          DocumentLoader* loader,
-                                          double,
-                                          int64_t,
-                                          int64_t) {
-  if (loader->GetFrame() != local_root_)
-    return;
-  DidLoadResource();
-}
-
-void PerformanceMonitor::DidLoadResource() {
-  // If we already reported quiet time, bail out.
-  if (network_0_quiet_ < 0 && network_2_quiet_ < 0)
-    return;
-
-  int request_count =
-      local_root_->GetDocument()->Fetcher()->ActiveRequestCount();
-  // If we did not achieve either 0 or 2 active connections, bail out.
-  if (request_count > 2)
-    return;
-
-  double timestamp = MonotonicallyIncreasingTime();
-  // Arriving at =2 updates the quiet_2 base timestamp.
-  // Arriving at <2 sets the quiet_2 base timestamp only if
-  // it was not already set.
-  if (request_count == 2 && network_2_quiet_ >= 0)
-    network_2_quiet_ = timestamp;
-  else if (request_count < 2 && network_2_quiet_ == 0)
-    network_2_quiet_ = timestamp;
-
-  if (request_count == 0 && network_0_quiet_ >= 0)
-    network_0_quiet_ = timestamp;
-}
-
-void PerformanceMonitor::DomContentLoadedEventFired(LocalFrame* frame) {
-  if (frame != local_root_)
-    return;
-  // Reset idle timers upon DOMContentLoaded, look at current active
-  // connections.
-  network_2_quiet_ = 0;
-  network_0_quiet_ = 0;
-  DidLoadResource();
-}
-
 void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
   if (!enabled_)
     return;
@@ -340,26 +298,11 @@ void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
 }
 
 void PerformanceMonitor::WillProcessTask(double start_time) {
-  // If we have idle time and we are kNetworkQuietWindowSeconds seconds past it,
-  // emit idle signals.
-  if (network_2_quiet_ > 0 &&
-      start_time - network_2_quiet_ > kNetworkQuietWindowSeconds) {
-    probe::lifecycleEvent(local_root_->GetDocument(), "networkAlmostIdle",
-                          start_time);
-    network_2_quiet_ = -1;
-  }
-
-  if (network_0_quiet_ > 0 &&
-      start_time - network_0_quiet_ > kNetworkQuietWindowSeconds) {
-    probe::lifecycleEvent(local_root_->GetDocument(), "networkIdle",
-                          start_time);
-    network_0_quiet_ = -1;
-  }
-
   // Reset m_taskExecutionContext. We don't clear this in didProcessTask
   // as it is needed in ReportTaskTime which occurs after didProcessTask.
   task_execution_context_ = nullptr;
   task_has_multiple_contexts_ = false;
+  task_should_be_reported_ = false;
 
   if (!enabled_)
     return;
@@ -374,13 +317,7 @@ void PerformanceMonitor::WillProcessTask(double start_time) {
 }
 
 void PerformanceMonitor::DidProcessTask(double start_time, double end_time) {
-  // Shift idle timestamps with the duration of the task, we were not idle.
-  if (network_2_quiet_ > 0)
-    network_2_quiet_ += end_time - start_time;
-  if (network_0_quiet_ > 0)
-    network_0_quiet_ += end_time - start_time;
-
-  if (!enabled_)
+  if (!enabled_ || !task_should_be_reported_)
     return;
   double layout_threshold = thresholds_[kLongLayout];
   if (layout_threshold && per_task_style_and_layout_time_ > layout_threshold) {
@@ -423,7 +360,7 @@ void PerformanceMonitor::InnerReportGenericViolation(
   }
 }
 
-DEFINE_TRACE(PerformanceMonitor) {
+void PerformanceMonitor::Trace(blink::Visitor* visitor) {
   visitor->Trace(local_root_);
   visitor->Trace(task_execution_context_);
   visitor->Trace(subscriptions_);

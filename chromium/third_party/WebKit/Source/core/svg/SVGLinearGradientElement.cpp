@@ -60,7 +60,7 @@ inline SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
   AddToPropertyMap(y2_);
 }
 
-DEFINE_TRACE(SVGLinearGradientElement) {
+void SVGLinearGradientElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x1_);
   visitor->Trace(y1_);
   visitor->Trace(x2_);
@@ -102,7 +102,7 @@ static void SetGradientAttributes(const SVGGradientElement& element,
 
   if (!is_linear)
     return;
-  const SVGLinearGradientElement& linear = toSVGLinearGradientElement(element);
+  const SVGLinearGradientElement& linear = ToSVGLinearGradientElement(element);
 
   if (!attributes.HasX1() && linear.x1()->IsSpecified())
     attributes.SetX1(linear.x1()->CurrentValue());
@@ -126,7 +126,7 @@ bool SVGLinearGradientElement::CollectGradientAttributes(
 
   while (true) {
     SetGradientAttributes(*current, attributes,
-                          isSVGLinearGradientElement(*current));
+                          IsSVGLinearGradientElement(*current));
     visited.insert(current);
 
     current = current->ReferencedElement();

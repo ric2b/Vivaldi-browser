@@ -22,12 +22,9 @@
 @property(nonatomic, copy) NSString* publicKey;
 @property(nonatomic, copy) NSString* status;
 @property(nonatomic, copy) NSString* updatedTime;
+@property(nonatomic, copy) NSString* offlineReason;
 // True when |status| is @"ONLINE", anything else is False.
 @property(nonatomic, readonly) bool isOnline;
-
-// Convert a json blob into a |HostInfo| object. Most useful for test.
-// TODO(nicholss): Might move this out into a catagory.
-+ (NSMutableArray<HostInfo*>*)parseListFromJSON:(NSMutableData*)data;
 
 // First consider if |isOnline| is greater than anything else, then consider by
 // case insensitive locale of |hostName|.

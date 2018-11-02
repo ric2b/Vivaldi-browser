@@ -85,6 +85,8 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
     _avatarCache = [[ResizedAvatarCache alloc] init];
     _identityServiceObserver.reset(
         new ChromeIdentityServiceObserverBridge(self));
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
     [self loadModel];
   }
   return self;
@@ -226,9 +228,9 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   return self;
 }
 
-- (void)dismiss {
+- (void)dismissWithCompletion:(ProceduralBlock)completion {
   [self.presentingViewController dismissViewControllerAnimated:YES
-                                                    completion:nil];
+                                                    completion:completion];
 }
 
 - (void)dealloc {
@@ -372,12 +374,17 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
 #pragma mark Events
 
 - (void)onPrimaryButtonPressed:(id)sender {
-  [self dismiss];
+  [self dismissWithCompletion:nil];
 }
 
 - (void)onSecondaryButtonPressed:(id)sender {
-  [self dismiss];
-  [self.dispatcher showAccountsSettings];
+  __weak id<ApplicationSettingsCommands> weakDispatcher = self.dispatcher;
+  __weak UIViewController* weakPresentingViewController =
+      self.presentingViewController;
+  [self dismissWithCompletion:^{
+    [weakDispatcher
+        showAccountsSettingsFromViewController:weakPresentingViewController];
+  }];
 }
 
 #pragma mark OAuth2TokenServiceObserverBridgeDelegate
@@ -386,7 +393,7 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   ProfileOAuth2TokenService* tokenService =
       OAuth2TokenServiceFactory::GetForBrowserState(_browserState);
   if (tokenService->GetAccounts().empty()) {
-    [self dismiss];
+    [self dismissWithCompletion:nil];
     return;
   }
   [_accountsCollection loadModel];

@@ -7,12 +7,14 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/timer/timer.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/ui/browser_command_controller.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -73,6 +75,11 @@ ManagePasswordsUIController::~ManagePasswordsUIController() {}
 
 void ManagePasswordsUIController::OnPasswordSubmitted(
     std::unique_ptr<PasswordFormManager> form_manager) {
+  // If the save bubble is already shown (possibly manual fallback for saving)
+  // then ignore the changes because the user may interact with it right now.
+  if (bubble_status_ == SHOWN &&
+      GetState() == password_manager::ui::PENDING_PASSWORD_STATE)
+    return;
   bool show_bubble = !form_manager->IsBlacklisted();
   DestroyAccountChooser();
   save_fallback_timer_.Stop();
@@ -222,7 +229,11 @@ void ManagePasswordsUIController::OnPasswordAutofilled(
       passwords_data_.state() == password_manager::ui::MANAGE_STATE) {
     passwords_data_.OnPasswordAutofilled(password_form_map, origin,
                                          federated_matches);
-    UpdateBubbleAndIconVisibility();
+    // Don't close the existing bubble. Update the icon later.
+    if (bubble_status_ == SHOWN)
+      bubble_status_ = SHOWN_PENDING_ICON_UPDATE;
+    if (bubble_status_ != SHOWN_PENDING_ICON_UPDATE)
+      UpdateBubbleAndIconVisibility();
   }
 }
 
@@ -327,6 +338,10 @@ ManagePasswordsUIController::GetCurrentInteractionStats() const {
       form_manager->pending_credentials().username_value);
 }
 
+bool ManagePasswordsUIController::BubbleIsManualFallbackForSaving() const {
+  return save_fallback_timer_.IsRunning();
+}
+
 void ManagePasswordsUIController::OnBubbleShown() {
   bubble_status_ = SHOWN;
 }
@@ -371,12 +386,46 @@ void ManagePasswordsUIController::NeverSavePassword() {
   // The state stays the same.
 }
 
-void ManagePasswordsUIController::SavePassword(const base::string16& username) {
+void ManagePasswordsUIController::SavePassword(const base::string16& username,
+                                               const base::string16& password) {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, GetState());
-  if (passwords_data_.form_manager()->pending_credentials().username_value !=
-      username) {
+  const auto& pending_credentials =
+      passwords_data_.form_manager()->pending_credentials();
+  bool username_edited = pending_credentials.username_value != username;
+  bool password_changed = pending_credentials.password_value != password;
+  if (username_edited) {
     passwords_data_.form_manager()->UpdateUsername(username);
+    if (GetPasswordFormMetricsRecorder()) {
+      GetPasswordFormMetricsRecorder()->RecordDetailedUserAction(
+          password_manager::PasswordFormMetricsRecorder::DetailedUserAction::
+              kEditedUsernameInBubble);
+    }
   }
+  if (password_changed) {
+    passwords_data_.form_manager()->UpdatePasswordValue(password);
+    if (GetPasswordFormMetricsRecorder()) {
+      GetPasswordFormMetricsRecorder()->RecordDetailedUserAction(
+          password_manager::PasswordFormMetricsRecorder::DetailedUserAction::
+              kSelectedDifferentPasswordInBubble);
+    }
+  }
+
+  // Values of this histogram are a bit mask. Only the lower two bits are used:
+  // 0001 to indicate that the user has edited the username in the password
+  //      save bubble.
+  // 0010 to indicate that the user has changed the password in the password
+  //      save bubble.
+  // The maximum possible value is defined by OR-ing these values.
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.EditsInSaveBubble",
+                            username_edited + 2 * password_changed, 4);
+  UMA_HISTOGRAM_BOOLEAN("PasswordManager.PasswordSavedWithManualFallback",
+                        BubbleIsManualFallbackForSaving());
+  if (GetPasswordFormMetricsRecorder() && BubbleIsManualFallbackForSaving()) {
+    GetPasswordFormMetricsRecorder()->RecordDetailedUserAction(
+        password_manager::PasswordFormMetricsRecorder::DetailedUserAction::
+            kTriggeredManualFallbackForSaving);
+  }
+
   save_fallback_timer_.Stop();
   SavePasswordInternal();
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
@@ -388,6 +437,14 @@ void ManagePasswordsUIController::SavePassword(const base::string16& username) {
 void ManagePasswordsUIController::UpdatePassword(
     const autofill::PasswordForm& password_form) {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE, GetState());
+  UMA_HISTOGRAM_BOOLEAN("PasswordManager.PasswordUpdatedWithManualFallback",
+                        BubbleIsManualFallbackForSaving());
+  if (GetPasswordFormMetricsRecorder() && BubbleIsManualFallbackForSaving()) {
+    GetPasswordFormMetricsRecorder()->RecordDetailedUserAction(
+        password_manager::PasswordFormMetricsRecorder::DetailedUserAction::
+            kTriggeredManualFallbackForUpdating);
+  }
+
   save_fallback_timer_.Stop();
   UpdatePasswordInternal(password_form);
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
@@ -554,8 +611,7 @@ void ManagePasswordsUIController::ShowBubbleWithoutUserInteraction() {
   if (!browser || browser->toolbar_model()->input_in_progress())
     return;
 
-  CommandUpdater* updater = browser->command_controller()->command_updater();
-  updater->ExecuteCommand(IDC_MANAGE_PASSWORDS_FOR_PAGE);
+  chrome::ExecuteCommand(browser, IDC_MANAGE_PASSWORDS_FOR_PAGE);
 }
 
 void ManagePasswordsUIController::DestroyAccountChooser() {
@@ -570,4 +626,7 @@ void ManagePasswordsUIController::WebContentsDestroyed() {
       GetPasswordStore(web_contents());
   if (password_store)
     password_store->RemoveObserver(this);
+  TabDialogs* tab_dialogs = TabDialogs::FromWebContents(web_contents());
+  if (tab_dialogs)
+    tab_dialogs->HideManagePasswordsBubble();
 }

@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/css/RuleFeature.h"
+#include "core/css/RuleFeatureSet.h"
 
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSSelectorList.h"
 #include "core/css/RuleSet.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/invalidation/InvalidationSet.h"
 #include "core/css/parser/CSSParser.h"
@@ -21,7 +21,7 @@ namespace blink {
 
 class RuleFeatureSetTest : public ::testing::Test {
  public:
-  RuleFeatureSetTest() {}
+  RuleFeatureSetTest() = default;
 
   void SetUp() {
     document_ = HTMLDocument::CreateForTest();
@@ -29,17 +29,18 @@ class RuleFeatureSetTest : public ::testing::Test {
     html->AppendChild(HTMLBodyElement::Create(*document_));
     document_->AppendChild(html);
 
-    document_->body()->setInnerHTML("<b><i></i></b>");
+    document_->body()->SetInnerHTMLFromString("<b><i></i></b>");
   }
 
   RuleFeatureSet::SelectorPreMatch CollectFeatures(
       const String& selector_text) {
     CSSSelectorList selector_list = CSSParser::ParseSelector(
-        StrictCSSParserContext(), nullptr, selector_text);
+        StrictCSSParserContext(SecureContextMode::kInsecureContext), nullptr,
+        selector_text);
 
-    StyleRule* style_rule =
-        StyleRule::Create(std::move(selector_list),
-                          MutableStylePropertySet::Create(kHTMLStandardMode));
+    StyleRule* style_rule = StyleRule::Create(
+        std::move(selector_list),
+        MutableCSSPropertyValueSet::Create(kHTMLStandardMode));
     RuleData rule_data(style_rule, 0, 0, kRuleHasNoSpecialState);
     return rule_feature_set_.CollectFeaturesFromRuleData(rule_data);
   }
@@ -121,6 +122,16 @@ class RuleFeatureSetTest : public ::testing::Test {
   void ExpectNoSelfInvalidation(InvalidationSetVector& invalidation_sets) {
     EXPECT_EQ(1u, invalidation_sets.size());
     EXPECT_FALSE(invalidation_sets[0]->InvalidatesSelf());
+  }
+
+  void ExpectSelfInvalidationSet(InvalidationSetVector& invalidation_sets) {
+    EXPECT_EQ(1u, invalidation_sets.size());
+    EXPECT_TRUE(invalidation_sets[0]->IsSelfInvalidationSet());
+  }
+
+  void ExpectNotSelfInvalidationSet(InvalidationSetVector& invalidation_sets) {
+    EXPECT_EQ(1u, invalidation_sets.size());
+    EXPECT_FALSE(invalidation_sets[0]->IsSelfInvalidationSet());
   }
 
   void ExpectWholeSubtreeInvalidation(
@@ -862,6 +873,57 @@ TEST_F(RuleFeatureSetTest, RuleSetInvalidationAnyPseudo) {
   EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
             CollectFeatures(":-webkit-any(*, .a) *"));
   ExpectFullRecalcForRuleSetInvalidation(true);
+}
+
+TEST_F(RuleFeatureSetTest, SelfInvalidationSet) {
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a"));
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures("div .b"));
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures("#c"));
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures("[d]"));
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(":hover"));
+
+  InvalidationLists invalidation_lists;
+  CollectInvalidationSetsForClass(invalidation_lists, "a");
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+
+  invalidation_lists.descendants.clear();
+  CollectInvalidationSetsForClass(invalidation_lists, "b");
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+
+  invalidation_lists.descendants.clear();
+  CollectInvalidationSetsForId(invalidation_lists, "c");
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+
+  invalidation_lists.descendants.clear();
+  CollectInvalidationSetsForAttribute(invalidation_lists,
+                                      QualifiedName("", "d", ""));
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+
+  invalidation_lists.descendants.clear();
+  CollectInvalidationSetsForPseudoClass(invalidation_lists,
+                                        CSSSelector::kPseudoHover);
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+}
+
+TEST_F(RuleFeatureSetTest, ReplaceSelfInvalidationSet) {
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a"));
+
+  InvalidationLists invalidation_lists;
+  CollectInvalidationSetsForClass(invalidation_lists, "a");
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectSelfInvalidationSet(invalidation_lists.descendants);
+
+  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a div"));
+
+  invalidation_lists.descendants.clear();
+  CollectInvalidationSetsForClass(invalidation_lists, "a");
+  ExpectSelfInvalidation(invalidation_lists.descendants);
+  ExpectNotSelfInvalidationSet(invalidation_lists.descendants);
 }
 
 }  // namespace blink

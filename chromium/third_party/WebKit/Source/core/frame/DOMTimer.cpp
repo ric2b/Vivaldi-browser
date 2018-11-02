@@ -27,26 +27,28 @@
 #include "core/frame/DOMTimer.h"
 
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
-static const int kMaxIntervalForUserGestureForwarding =
-    1000;  // One second matches Gecko.
+static const TimeDelta kMaxIntervalForUserGestureForwarding =
+    TimeDelta::FromMilliseconds(1000);  // One second matches Gecko.
 static const int kMaxTimerNestingLevel = 5;
-static const double kOneMillisecond = 0.001;
 // Chromium uses a minimum timer interval of 4ms. We'd like to go
 // lower; however, there are poorly coded websites out there which do
 // create CPU-spinning loops.  Using 4ms prevents the CPU from
 // spinning too busily and provides a balance between CPU spinning and
 // the smallest possible interval timer.
-static const double kMinimumInterval = 0.004;
+static constexpr TimeDelta kMinimumInterval = TimeDelta::FromMilliseconds(4);
 
-static inline bool ShouldForwardUserGesture(int interval, int nesting_level) {
+static inline bool ShouldForwardUserGesture(TimeDelta interval,
+                                            int nesting_level) {
+  if (RuntimeEnabledFeatures::UserActivationV2Enabled())
+    return false;
   return UserGestureIndicator::ProcessingUserGestureThreadSafe() &&
          interval <= kMaxIntervalForUserGestureForwarding &&
          nesting_level ==
@@ -55,7 +57,7 @@ static inline bool ShouldForwardUserGesture(int interval, int nesting_level) {
 
 int DOMTimer::Install(ExecutionContext* context,
                       ScheduledAction* action,
-                      int timeout,
+                      TimeDelta timeout,
                       bool single_shot) {
   int timeout_id = context->Timers()->InstallNewTimeout(context, action,
                                                         timeout, single_shot);
@@ -74,10 +76,10 @@ void DOMTimer::RemoveByID(ExecutionContext* context, int timeout_id) {
 
 DOMTimer::DOMTimer(ExecutionContext* context,
                    ScheduledAction* action,
-                   int interval,
+                   TimeDelta interval,
                    bool single_shot,
                    int timeout_id)
-    : SuspendableTimer(context, TaskType::kTimer),
+    : PausableTimer(context, TaskType::kJavascriptTimer),
       timeout_id_(timeout_id),
       nesting_level_(context->Timers()->TimerNestingLevel() + 1),
       action_(action) {
@@ -88,8 +90,8 @@ DOMTimer::DOMTimer(ExecutionContext* context,
     user_gesture_token_ = UserGestureIndicator::CurrentToken();
   }
 
-  double interval_milliseconds =
-      std::max(kOneMillisecond, interval * kOneMillisecond);
+  TimeDelta interval_milliseconds =
+      std::max(TimeDelta::FromMilliseconds(1), interval);
   if (interval_milliseconds < kMinimumInterval &&
       nesting_level_ >= kMaxTimerNestingLevel)
     interval_milliseconds = kMinimumInterval;
@@ -98,7 +100,7 @@ DOMTimer::DOMTimer(ExecutionContext* context,
   else
     StartRepeating(interval_milliseconds, BLINK_FROM_HERE);
 
-  SuspendIfNeeded();
+  PauseIfNeeded();
   TRACE_EVENT_INSTANT1("devtools.timeline", "TimerInstall",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorTimerInstallEvent::Data(context, timeout_id,
@@ -124,7 +126,7 @@ void DOMTimer::Stop() {
   if (action_)
     action_->Dispose();
   action_ = nullptr;
-  SuspendableTimer::Stop();
+  PausableTimer::Stop();
 }
 
 void DOMTimer::ContextDestroyed(ExecutionContext*) {
@@ -135,7 +137,7 @@ void DOMTimer::Fired() {
   ExecutionContext* context = GetExecutionContext();
   DCHECK(context);
   context->Timers()->SetTimerNestingLevel(nesting_level_);
-  DCHECK(!context->IsContextSuspended());
+  DCHECK(!context->IsContextPaused());
   // Only the first execution of a multi-shot timer should get an affirmative
   // user gesture indicator.
   UserGestureIndicator gesture_indicator(std::move(user_gesture_token_));
@@ -150,10 +152,11 @@ void DOMTimer::Fired() {
 
   // Simple case for non-one-shot timers.
   if (IsActive()) {
-    if (RepeatInterval() && RepeatInterval() < kMinimumInterval) {
+    if (!RepeatIntervalDelta().is_zero() &&
+        RepeatIntervalDelta() < kMinimumInterval) {
       nesting_level_++;
       if (nesting_level_ >= kMaxTimerNestingLevel)
-        AugmentRepeatInterval(kMinimumInterval - RepeatInterval());
+        AugmentRepeatInterval(kMinimumInterval - RepeatIntervalDelta());
     }
 
     // No access to member variables after this point, it can delete the timer.
@@ -183,13 +186,13 @@ void DOMTimer::Fired() {
   action->Dispose();
 }
 
-RefPtr<WebTaskRunner> DOMTimer::TimerTaskRunner() const {
+scoped_refptr<WebTaskRunner> DOMTimer::TimerTaskRunner() const {
   return GetExecutionContext()->Timers()->TimerTaskRunner();
 }
 
-DEFINE_TRACE(DOMTimer) {
+void DOMTimer::Trace(blink::Visitor* visitor) {
   visitor->Trace(action_);
-  SuspendableTimer::Trace(visitor);
+  PausableTimer::Trace(visitor);
 }
 
 }  // namespace blink

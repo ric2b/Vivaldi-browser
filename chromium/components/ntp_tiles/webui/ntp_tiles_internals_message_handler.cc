@@ -38,10 +38,10 @@ struct IconTypeAndName {
 };
 
 constexpr std::array<IconTypeAndName, 4> kIconTypesAndNames{{
-    {favicon_base::FAVICON, "FAVICON"},
-    {favicon_base::TOUCH_ICON, "TOUCH_ICON"},
-    {favicon_base::TOUCH_PRECOMPOSED_ICON, "TOUCH_PRECOMPOSED_ICON"},
-    {favicon_base::WEB_MANIFEST_ICON, "WEB_MANIFEST_ICON"},
+    {favicon_base::IconType::kFavicon, "kFavicon"},
+    {favicon_base::IconType::kTouchIcon, "kTouchIcon"},
+    {favicon_base::IconType::kTouchPrecomposedIcon, "kTouchPrecomposedIcon"},
+    {favicon_base::IconType::kWebManifestIcon, "kWebManifestIcon"},
 }};
 
 std::string FormatJson(const base::Value& value) {
@@ -262,6 +262,7 @@ void NTPTilesInternalsMessageHandler::SendTiles(
         auto icon = base::MakeUnique<base::DictionaryValue>();
         icon->SetString("url", result.icon_url.spec());
         icon->SetString("type", entry.type_name);
+        icon->SetBoolean("onDemand", !result.fetched_because_of_page_visit);
         icon->SetInteger("width", result.pixel_size.width());
         icon->SetInteger("height", result.pixel_size.height());
         icon_list->Append(std::move(icon));
@@ -298,7 +299,7 @@ void NTPTilesInternalsMessageHandler::OnURLsAvailable(
   for (const NTPTile& tile : tiles) {
     for (const auto& entry : kIconTypesAndNames) {
       favicon_service_->GetLargestRawFaviconForPageURL(
-          tile.url, std::vector<int>(1U, entry.type_enum),
+          tile.url, std::vector<favicon_base::IconTypeSet>({{entry.type_enum}}),
           /*minimum_size_in_pixels=*/0, base::Bind(on_lookup_done, tile.url),
           &cancelable_task_tracker_);
     }

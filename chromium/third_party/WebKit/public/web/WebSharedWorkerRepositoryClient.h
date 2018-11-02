@@ -31,14 +31,13 @@
 #ifndef WebSharedWorkerRepositoryClient_h
 #define WebSharedWorkerRepositoryClient_h
 
-#include "WebSharedWorkerCreationContextType.h"
-#include "WebSharedWorkerCreationErrors.h"
-#include "public/platform/WebAddressSpace.h"
 #include <memory>
+#include "public/platform/WebAddressSpace.h"
+#include "public/web/shared_worker_creation_context_type.mojom-shared.h"
 
 namespace blink {
 
-class WebMessagePortChannel;
+class MessagePortChannel;
 class WebSharedWorkerConnectListener;
 class WebString;
 class WebURL;
@@ -50,17 +49,16 @@ class WebSharedWorkerRepositoryClient {
   using DocumentID = unsigned long long;
 
   // Connects to a shared worker.
-  virtual void Connect(const WebURL& url,
-                       const WebString& name,
-                       DocumentID id,
-                       const WebString& content_security_policy,
-                       WebContentSecurityPolicyType,
-                       WebAddressSpace,
-                       WebSharedWorkerCreationContextType,
-                       bool data_saver_enabled,
-                       std::unique_ptr<WebMessagePortChannel>,
-                       std::unique_ptr<blink::WebSharedWorkerConnectListener>) {
-  }
+  virtual void Connect(
+      const WebURL&,
+      const WebString& name,
+      DocumentID,
+      const WebString& content_security_policy,
+      WebContentSecurityPolicyType,
+      WebAddressSpace,
+      mojom::SharedWorkerCreationContextType,
+      MessagePortChannel,
+      std::unique_ptr<blink::WebSharedWorkerConnectListener>) = 0;
 
   // Invoked when a document has been detached. DocumentID can be re-used after
   // documentDetached() is invoked.

@@ -13,7 +13,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/mock_permission_manager.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission.mojom.h"
 #include "url/origin.h"
 
@@ -59,12 +59,13 @@ class TestPermissionManager : public MockPermissionManager {
 
 class PermissionServiceImplTest : public RenderViewHostTestHarness {
  public:
-  PermissionServiceImplTest() : origin_(GURL("https://www.google.com")) {}
+  PermissionServiceImplTest()
+      : origin_(url::Origin::Create(GURL("https://www.google.com"))) {}
 
   void SetUp() override {
     RenderViewHostTestHarness::SetUp();
     static_cast<TestBrowserContext*>(browser_context())
-        ->SetPermissionManager(base::MakeUnique<TestPermissionManager>());
+        ->SetPermissionManager(std::make_unique<TestPermissionManager>());
     NavigateAndCommit(origin_.GetURL());
     service_context_.reset(new PermissionServiceContext(main_rfh()));
     service_impl_.reset(new PermissionServiceImpl(service_context_.get()));
@@ -79,7 +80,7 @@ class PermissionServiceImplTest : public RenderViewHostTestHarness {
  protected:
   // The header policy should only be set once on page load, so we refresh the
   // page to simulate that.
-  void RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature feature,
+  void RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature feature,
                                      bool enabled) {
     NavigateAndCommit(origin_.GetURL());
     std::vector<url::Origin> whitelist;
@@ -145,7 +146,7 @@ TEST_F(PermissionServiceImplTest, HasPermissionWithFeaturePolicy) {
   EXPECT_EQ(PermissionStatus::GRANTED,
             HasPermission(PermissionName::GEOLOCATION));
 
-  RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature::kGeolocation,
+  RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature::kGeolocation,
                                 /*enabled=*/false);
   EXPECT_EQ(PermissionStatus::DENIED,
             HasPermission(PermissionName::GEOLOCATION));
@@ -154,14 +155,15 @@ TEST_F(PermissionServiceImplTest, HasPermissionWithFeaturePolicy) {
   EXPECT_EQ(PermissionStatus::GRANTED, HasPermission(PermissionName::MIDI));
 
   // Now block midi.
-  RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature::kMidiFeature,
+  RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature::kMidiFeature,
                                 /*enabled=*/false);
   EXPECT_EQ(PermissionStatus::DENIED, HasPermission(PermissionName::MIDI));
 
   // Ensure that the policy is ignored if kUseFeaturePolicyForPermissions is
   // disabled.
   base::test::ScopedFeatureList empty_feature_list;
-  empty_feature_list.Init();
+  empty_feature_list.InitAndDisableFeature(
+      features::kUseFeaturePolicyForPermissions);
   EXPECT_EQ(PermissionStatus::GRANTED, HasPermission(PermissionName::MIDI));
 }
 
@@ -170,7 +172,7 @@ TEST_F(PermissionServiceImplTest, RequestPermissionsWithFeaturePolicy) {
   feature_list.InitAndEnableFeature(features::kUseFeaturePolicyForPermissions);
 
   // Disable midi.
-  RefreshPageAndSetHeaderPolicy(blink::WebFeaturePolicyFeature::kMidiFeature,
+  RefreshPageAndSetHeaderPolicy(blink::FeaturePolicyFeature::kMidiFeature,
                                 /*enabled=*/false);
 
   std::vector<PermissionStatus> result =
@@ -186,4 +188,4 @@ TEST_F(PermissionServiceImplTest, RequestPermissionsWithFeaturePolicy) {
   EXPECT_EQ(PermissionStatus::GRANTED, result[1]);
 }
 
-}  // namespace
+}  // namespace content

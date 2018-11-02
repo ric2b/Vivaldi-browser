@@ -112,8 +112,7 @@ IdentityAPI::IdentityAPI(content::BrowserContext* context)
           LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(
               Profile::FromBrowserContext(context))),
       account_tracker_(&profile_identity_provider_,
-                       g_browser_process->system_request_context()),
-      get_auth_token_function_(nullptr) {
+                       g_browser_process->system_request_context()) {
   account_tracker_.AddObserver(this);
 }
 
@@ -155,19 +154,17 @@ const IdentityAPI::CachedTokens& IdentityAPI::GetAllCachedTokens() {
 }
 
 void IdentityAPI::Shutdown() {
-  if (get_auth_token_function_)
-    get_auth_token_function_->Shutdown();
+  on_shutdown_callback_list_.Notify();
   account_tracker_.RemoveObserver(this);
   account_tracker_.Shutdown();
 }
 
-static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<IdentityAPI>>::DestructorAtExit g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<IdentityAPI>>::
+    DestructorAtExit g_identity_api_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<IdentityAPI>* IdentityAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_identity_api_factory.Pointer();
 }
 
 void IdentityAPI::OnAccountSignInChanged(const gaia::AccountIds& ids,

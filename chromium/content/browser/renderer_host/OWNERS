@@ -1,3 +1,6 @@
+# General renderer_host owners
+kenrb@chromium.org
+
 # for *aura*
 per-file *aura*=sadrul@chromium.org
 
@@ -11,9 +14,6 @@ asvitkine@chromium.org
 kbr@chromium.org
 ccameron@chromium.org
 
-# for *android*
-aelias@chromium.org
-
 # For touch/gesture specific changes
 rjkroege@chromium.org
 sadrul@chromium.org
@@ -22,14 +22,7 @@ tdresser@chromium.org
 # For surface ID propagation and synchronization
 fsamuel@chromium.org
 
-# Linux sandboxing
-per-file render_sandbox_host_linux.*=jln@chromium.org
-per-file render_sandbox_host_linux.*=jorgelo@chromium.org
-per-file sandbox_ipc_linux.*=jln@chromium.org
-per-file sandbox_ipc_linux.*=jorgelo@chromium.org
-
 # DelegatedFrame*
-per-file *delegated_frame*=jbauman@chromium.org
 per-file *delegated_frame*=fsamuel@chromium.org
 
 # WebSQL

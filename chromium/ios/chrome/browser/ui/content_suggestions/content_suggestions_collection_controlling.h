@@ -7,16 +7,19 @@
 
 #import <UIKit/UIKit.h>
 
-@protocol ContentSuggestionsViewControllerDelegate;
+@protocol ContentSuggestionsHeaderSynchronizing;
 
+// Controller for the ContentSuggestions collection.
 @protocol ContentSuggestionsCollectionControlling
-
-@property(nonatomic, weak) id<ContentSuggestionsViewControllerDelegate>
-    suggestionsDelegate;
 
 // |YES| if the collection scrollView is scrolled all the way to the top. Used
 // to lock this position in place on various frame changes.
 @property(nonatomic, assign, getter=isScrolledToTop) BOOL scrolledToTop;
+
+// Synchronizer for the collection controller, allowing it to synchronize with
+// its header.
+@property(nonatomic, weak) id<ContentSuggestionsHeaderSynchronizing>
+    headerSynchronizer;
 
 - (UICollectionView*)collectionView;
 

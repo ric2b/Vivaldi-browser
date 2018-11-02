@@ -4,6 +4,7 @@
 
 #include "bindings/modules/v8/wasm/WasmResponseExtensions.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
@@ -13,7 +14,6 @@
 #include "modules/fetch/FetchDataLoader.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -64,7 +64,7 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
           break;
         }
         case BytesConsumer::Result::kDone: {
-          ScriptState::Scope scope(script_state_.Get());
+          ScriptState::Scope scope(script_state_.get());
           builder_.Finish();
           client_->DidFetchDataLoadedCustomFormat();
           return;
@@ -76,12 +76,14 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
     }
   }
 
+  String DebugName() const override { return "FetchDataLoaderAsWasmModule"; }
+
   void Cancel() override {
     consumer_->Cancel();
     return AbortCompilation();
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -98,7 +100,7 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
   Member<BytesConsumer> consumer_;
   Member<FetchDataLoader::Client> client_;
   v8::WasmModuleObjectBuilderStreaming builder_;
-  const RefPtr<ScriptState> script_state_;
+  const scoped_refptr<ScriptState> script_state_;
 };
 
 // TODO(mtrofin): WasmDataLoaderClient is necessary so we may provide an
@@ -146,7 +148,7 @@ void CompileFromResponseCallback(
     return;
   }
 
-  Response* response = V8Response::toImpl(v8::Local<v8::Object>::Cast(args[0]));
+  Response* response = V8Response::ToImpl(v8::Local<v8::Object>::Cast(args[0]));
   if (response->MimeType() != "application/wasm") {
     V8SetReturnValue(
         args,

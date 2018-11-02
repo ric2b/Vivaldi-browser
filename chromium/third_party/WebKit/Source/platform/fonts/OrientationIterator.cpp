@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "OrientationIterator.h"
+#include "platform/fonts/OrientationIterator.h"
 
-#include "platform/wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 OrientationIterator::OrientationIterator(const UChar* buffer,
                                          unsigned buffer_size,
                                          FontOrientation run_orientation)
-    : utf16_iterator_(WTF::MakeUnique<UTF16TextIterator>(buffer, buffer_size)),
+    : utf16_iterator_(std::make_unique<UTF16TextIterator>(buffer, buffer_size)),
       buffer_size_(buffer_size),
       at_end_(buffer_size == 0) {
   // There's not much point in segmenting by isUprightInVertical if the text

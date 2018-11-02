@@ -5,6 +5,7 @@
 #ifndef InspectorAuditsAgent_h
 #define InspectorAuditsAgent_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Audits.h"
@@ -13,13 +14,11 @@ namespace blink {
 
 class CORE_EXPORT InspectorAuditsAgent final
     : public InspectorBaseAgent<protocol::Audits::Metainfo> {
-  WTF_MAKE_NONCOPYABLE(InspectorAuditsAgent);
-
  public:
   explicit InspectorAuditsAgent(InspectorNetworkAgent*);
   ~InspectorAuditsAgent() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // Protocol methods.
   protocol::Response getEncodedResponse(const String& request_id,
@@ -32,6 +31,8 @@ class CORE_EXPORT InspectorAuditsAgent final
 
  private:
   Member<InspectorNetworkAgent> network_agent_;
+
+  DISALLOW_COPY_AND_ASSIGN(InspectorAuditsAgent);
 };
 
 }  // namespace blink

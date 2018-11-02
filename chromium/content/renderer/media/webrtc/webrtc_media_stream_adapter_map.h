@@ -5,19 +5,19 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_WEBRTC_MEDIA_STREAM_ADAPTER_MAP_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_WEBRTC_MEDIA_STREAM_ADAPTER_MAP_H_
 
+#include <map>
+#include <memory>
+
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
+#include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
+#include "content/renderer/media/webrtc/two_keys_adapter_map.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 
 namespace content {
-
-// TODO(hbos): The string id of streams is not necessarily unique as is assumed
-// here. When updating the map to take care of both local and remote streams
-// as part of https://crbug.com/705901, make use of |TwoKeysAdapterMap| like
-// |WebRtcMediaStreamTrackAdapterMap| does.
 
 // A map and owner of |WebRtcMediaStreamAdapter|s. Adapters are the glue between
 // blink and webrtc layer versions of streams. As long as a stream is in use by
@@ -54,22 +54,25 @@ class CONTENT_EXPORT WebRtcMediaStreamAdapterMap
     ~AdapterRef();
 
     std::unique_ptr<AdapterRef> Copy() const;
+    bool is_initialized() const { return adapter().is_initialized(); }
     const WebRtcMediaStreamAdapter& adapter() const {
-      return *it_->second.adapter;
+      return *adapter_entry_->adapter;
     }
+    WebRtcMediaStreamAdapter& adapter() { return *adapter_entry_->adapter; }
 
    private:
     friend class WebRtcMediaStreamAdapterMap;
-    using MapEntryIterator = std::map<std::string, AdapterEntry>::iterator;
 
-    // Increments the |AdapterEntry::ref_count|.
+    enum class Type { kLocal, kRemote };
+
+    // Increments the |AdapterEntry::ref_count|. Assumes map's |lock_| is held.
     AdapterRef(scoped_refptr<WebRtcMediaStreamAdapterMap> map,
-               const MapEntryIterator& it);
-
-    AdapterEntry* entry() { return &it_->second; }
+               Type type,
+               AdapterEntry* adapter_entry);
 
     scoped_refptr<WebRtcMediaStreamAdapterMap> map_;
-    MapEntryIterator it_;
+    Type type_;
+    AdapterEntry* adapter_entry_;
   };
 
   // Must be invoked on the main thread.
@@ -77,37 +80,86 @@ class CONTENT_EXPORT WebRtcMediaStreamAdapterMap
       PeerConnectionDependencyFactory* const factory,
       scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map);
 
-  // Invoke on the main thread. Gets a new reference to the local stream adapter
-  // by ID, or null if no such adapter was found. When all references are
-  // destroyed the adapter is destroyed and removed from the map. References
-  // must be destroyed on the main thread.
-  std::unique_ptr<AdapterRef> GetLocalStreamAdapter(const std::string& id);
+  // Gets a new reference to the local stream adapter, or null if no such
+  // adapter was found. When all references are destroyed the adapter is
+  // destroyed and removed from the map. This can be called on any thread, but
+  // references must be destroyed on the main thread.
+  // The adapter is a associated with a blink and webrtc stream, lookup works by
+  // either stream.
+  std::unique_ptr<AdapterRef> GetLocalStreamAdapter(
+      const blink::WebMediaStream& web_stream);
+  std::unique_ptr<AdapterRef> GetLocalStreamAdapter(
+      webrtc::MediaStreamInterface* webrtc_stream);
   // Invoke on the main thread. Gets a new reference to the local stream adapter
   // for the web stream. If no adapter exists for the stream one is created.
   // When all references are destroyed the adapter is destroyed and removed from
   // the map. References must be destroyed on the main thread.
   std::unique_ptr<AdapterRef> GetOrCreateLocalStreamAdapter(
       const blink::WebMediaStream& web_stream);
-  // Invoke on the main thread.
   size_t GetLocalStreamCount() const;
 
- protected:
+  // Gets a new reference to the remote stream adapter by ID, or null if no such
+  // adapter was found. When all references are destroyed the adapter is
+  // destroyed and removed from the map. This can be called on any thread, but
+  // references must be destroyed on the main thread. The adapter is a
+  // associated with a blink and webrtc stream, lookup works by either stream.
+  // First variety: If an adapter exists it will already be initialized, if one
+  // does not exist null is returned.
+  std::unique_ptr<AdapterRef> GetRemoteStreamAdapter(
+      const blink::WebMediaStream& web_stream);
+  // Second variety: If an adapter exists it may or may not be initialized, see
+  // |AdapterRef::is_initialized|. If an adapter does not exist null is
+  // returned.
+  std::unique_ptr<AdapterRef> GetRemoteStreamAdapter(
+      webrtc::MediaStreamInterface* webrtc_stream);
+  // Invoke on the webrtc signaling thread. Gets a new reference to the remote
+  // stream adapter for the webrtc stream. If no adapter exists for the stream
+  // one is created and initialization completes on the main thread in a post.
+  // When all references are destroyed the adapter is destroyed and removed from
+  // the map. References must be destroyed on the main thread.
+  std::unique_ptr<AdapterRef> GetOrCreateRemoteStreamAdapter(
+      scoped_refptr<webrtc::MediaStreamInterface> webrtc_stream);
+  size_t GetRemoteStreamCount() const;
+
+  const scoped_refptr<WebRtcMediaStreamTrackAdapterMap>& track_adapter_map()
+      const {
+    return track_adapter_map_;
+  }
+
+ private:
   friend class base::RefCountedThreadSafe<WebRtcMediaStreamAdapterMap>;
+
+  // "(blink::WebMediaStream, webrtc::MediaStreamInterface) -> AdapterEntry"
+  // maps. The primary key is based on the object used to create the adapter.
+  // Local streams are created from |blink::WebMediaStream|s, remote streams are
+  // created from |webrtc::MediaStreamInterface|s.
+  // The adapter keeps the |webrtc::MediaStreamInterface| alive with ref
+  // counting making it safe to use a raw pointer for key.
+  using LocalStreamAdapterMap =
+      TwoKeysAdapterMap<int,  // blink::WebMediaStream::UniqueId()
+                        webrtc::MediaStreamInterface*,
+                        AdapterEntry>;
+  using RemoteStreamAdapterMap =
+      TwoKeysAdapterMap<webrtc::MediaStreamInterface*,
+                        int,  // blink::WebMediaStream::UniqueId()
+                        AdapterEntry>;
 
   // Invoke on the main thread.
   virtual ~WebRtcMediaStreamAdapterMap();
 
- private:
+  void OnRemoteStreamAdapterInitialized(
+      std::unique_ptr<AdapterRef> adapter_ref);
+
   // Pointer to a |PeerConnectionDependencyFactory| owned by the |RenderThread|.
   // It's valid for the lifetime of |RenderThread|.
   PeerConnectionDependencyFactory* const factory_;
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
+  const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
   // Takes care of creating and owning track adapters, used by stream adapters.
-  scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map_;
+  const scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map_;
 
-  std::map<std::string, AdapterEntry> local_stream_adapters_;
-  // TODO(hbos): Take care of remote stream adapters as well. This will require
-  // usage of the signaling thread. crbug.com/705901
+  mutable base::Lock lock_;
+  LocalStreamAdapterMap local_stream_adapters_;
+  RemoteStreamAdapterMap remote_stream_adapters_;
 };
 
 }  // namespace content

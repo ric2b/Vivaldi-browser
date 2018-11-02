@@ -17,6 +17,7 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
+#include "ui/views/background.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
 
@@ -43,9 +44,12 @@ ButtonFromView::ButtonFromView(views::View* content,
     SetFocusForPlatform();
 
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+
+  SetBackground(views::CreateThemedSolidBackground(
+      this, ui::NativeTheme::kColorId_BubbleBackground));
 }
 
-ButtonFromView::~ButtonFromView() {}
+ButtonFromView::~ButtonFromView() = default;
 
 void ButtonFromView::OnMouseEntered(const ui::MouseEvent& event) {
   button_hovered_ = true;

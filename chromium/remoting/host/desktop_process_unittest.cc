@@ -47,8 +47,8 @@ namespace {
 
 class MockDaemonListener : public IPC::Listener {
  public:
-  MockDaemonListener() {}
-  ~MockDaemonListener() override {}
+  MockDaemonListener() = default;
+  ~MockDaemonListener() override = default;
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
@@ -62,8 +62,8 @@ class MockDaemonListener : public IPC::Listener {
 
 class MockNetworkListener : public IPC::Listener {
  public:
-  MockNetworkListener() {}
-  ~MockNetworkListener() override {}
+  MockNetworkListener() = default;
+  ~MockNetworkListener() override = default;
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
@@ -164,16 +164,15 @@ class DesktopProcessTest : public testing::Test {
   mojo::ScopedMessagePipeHandle desktop_process_channel_;
 };
 
-DesktopProcessTest::DesktopProcessTest() {}
+DesktopProcessTest::DesktopProcessTest() = default;
 
-DesktopProcessTest::~DesktopProcessTest() {
-}
+DesktopProcessTest::~DesktopProcessTest() = default;
 
 void DesktopProcessTest::ConnectNetworkChannel(
     const IPC::ChannelHandle& channel_handle) {
-  network_channel_ =
-      IPC::ChannelProxy::Create(channel_handle, IPC::Channel::MODE_CLIENT,
-                                &network_listener_, io_task_runner_.get());
+  network_channel_ = IPC::ChannelProxy::Create(
+      channel_handle, IPC::Channel::MODE_CLIENT, &network_listener_,
+      io_task_runner_.get(), base::ThreadTaskRunnerHandle::Get());
 }
 
 void DesktopProcessTest::OnDesktopAttached(
@@ -247,7 +246,7 @@ void DesktopProcessTest::RunDesktopProcess() {
   mojo::MessagePipe pipe;
   daemon_channel_ = IPC::ChannelProxy::Create(
       pipe.handle0.release(), IPC::Channel::MODE_SERVER, &daemon_listener_,
-      io_task_runner_.get());
+      io_task_runner_.get(), base::ThreadTaskRunnerHandle::Get());
 
   std::unique_ptr<MockDesktopEnvironmentFactory> desktop_environment_factory(
       new MockDesktopEnvironmentFactory());
@@ -279,7 +278,7 @@ void DesktopProcessTest::RunDeathTest() {
 }
 
 void DesktopProcessTest::SendCrashRequest() {
-  tracked_objects::Location location = FROM_HERE;
+  base::Location location = FROM_HERE;
   daemon_channel_->Send(new ChromotingDaemonMsg_Crash(
       location.function_name(), location.file_name(), location.line_number()));
 }

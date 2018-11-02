@@ -18,13 +18,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
+#include "components/data_reduction_proxy/core/browser/secure_proxy_checker.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/previews/core/previews_experiments.h"
-#include "net/base/net_errors.h"
 #include "net/base/network_change_notifier.h"
 #include "net/log/net_log_with_source.h"
-#include "net/nqe/effective_connection_type.h"
-#include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_retry_info.h"
 
@@ -45,10 +44,6 @@ class PreviewsDecider;
 }
 
 namespace data_reduction_proxy {
-
-typedef base::Callback<void(const std::string&,
-                            const net::URLRequestStatus&,
-                            int)> FetcherResponseCallback;
 
 class DataReductionProxyConfigValues;
 class DataReductionProxyConfigurator;
@@ -123,11 +118,6 @@ class DataReductionProxyConfig
   // InitDataReductionProxySettings.
   void SetProxyConfig(bool enabled, bool at_startup);
 
-  // Provides a mechanism for an external object to force |this| to refresh
-  // the Data Reduction Proxy configuration from |config_values_| and apply to
-  // |configurator_|. Used by the Data Reduction Proxy config service client.
-  void ReloadConfig();
-
   // Returns true if a Data Reduction Proxy was used for the given |request|.
   // If true, |proxy_info.proxy_servers.front()| will contain the name of the
   // proxy that was used. Subsequent entries in |proxy_info.proxy_servers| will
@@ -183,12 +173,6 @@ class DataReductionProxyConfig
   virtual bool ContainsDataReductionProxy(
       const net::ProxyConfig::ProxyRules& proxy_rules) const;
 
-  // Sets |lofi_off_| to true.
-  void SetLoFiModeOff();
-
-  // Returns |lofi_off_|.
-  bool lofi_off() const { return lofi_off_; }
-
   // Returns true when Lo-Fi Previews should be activated. Records metrics for
   // Lo-Fi state changes. |request| is used to get the network quality estimator
   // from the URLRequestContext. |previews_decider| is used to check if
@@ -210,15 +194,32 @@ class DataReductionProxyConfig
   // This should only be used for logging purposes.
   net::ProxyConfig ProxyConfigIgnoringHoldback() const;
 
+  // Returns true if secure data saver proxies are allowed.
   bool secure_proxy_allowed() const;
+
+  // Returns true if insecure data saver proxies are allowed.
+  bool insecure_proxies_allowed() const;
 
   std::vector<DataReductionProxyServer> GetProxiesForHttp() const;
 
+  // Called when a new client config has been fetched.
+  void OnNewClientConfigFetched();
+
  protected:
+  // Should be called when there is a change in the status of the availability
+  // of the insecure data saver proxies triggered due to warmup URL.
+  void OnInsecureProxyWarmupURLProbeStatusChange(bool insecure_proxies_allowed);
+
   virtual base::TimeTicks GetTicksNow() const;
 
   // Updates the Data Reduction Proxy configurator with the current config.
-  void UpdateConfigForTesting(bool enabled, bool restricted);
+  void UpdateConfigForTesting(bool enabled,
+                              bool secure_proxies_allowed,
+                              bool insecure_proxies_allowed);
+
+  // Returns true if the default bypass rules should be added. Virtualized for
+  // testing.
+  virtual bool ShouldAddDefaultProxyBypassRules() const;
 
  private:
   friend class MockDataReductionProxyConfig;
@@ -243,6 +244,11 @@ class DataReductionProxyConfig
     NETWORK_QUALITY_AT_LAST_QUERY_NOT_SLOW
   };
 
+  // Provides a mechanism for an external object to force |this| to refresh
+  // the Data Reduction Proxy configuration from |config_values_| and apply to
+  // |configurator_|. Used by the Data Reduction Proxy config service client.
+  void ReloadConfig();
+
   // NetworkChangeNotifier::IPAddressObserver implementation:
   void OnIPAddressChanged() override;
 
@@ -252,7 +258,7 @@ class DataReductionProxyConfig
 
   // Requests the secure proxy check URL. Upon completion, returns the results
   // to the caller via the |fetcher_callback|. Virtualized for unit testing.
-  virtual void SecureProxyCheck(FetcherResponseCallback fetcher_callback);
+  virtual void SecureProxyCheck(SecureProxyCheckerCallback fetcher_callback);
 
   // Parses the secure proxy check responses and appropriately configures the
   // Data Reduction Proxy rules.
@@ -309,9 +315,6 @@ class DataReductionProxyConfig
   // URL fetcher used for fetching the warmup URL.
   std::unique_ptr<WarmupURLFetcher> warmup_url_fetcher_;
 
-  // Indicates if the secure Data Reduction Proxy can be used or not.
-  bool secure_proxy_allowed_;
-
   bool unreachable_;
   bool enabled_by_user_;
 
@@ -340,13 +343,7 @@ class DataReductionProxyConfig
   // The current connection type.
   net::NetworkChangeNotifier::ConnectionType connection_type_;
 
-  // If true, Lo-Fi is turned off for the rest of the session. This is set to
-  // true if Lo-Fi is disabled via flags or if the user implicitly opts out.
-  bool lofi_off_;
-
-  // Set to true if the captive portal probe for the current network has been
-  // blocked.
-  bool is_captive_portal_;
+  NetworkPropertiesManager network_properties_manager_;
 
   base::WeakPtrFactory<DataReductionProxyConfig> weak_factory_;
 

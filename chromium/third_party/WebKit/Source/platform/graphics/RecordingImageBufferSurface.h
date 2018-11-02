@@ -6,6 +6,7 @@
 #define RecordingImageBufferSurface_h
 
 #include <memory>
+#include "platform/graphics/CanvasResourceHost.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBufferSurface.h"
 #include "platform/wtf/Allocator.h"
@@ -31,7 +32,6 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   // Only GetRecord() should be used to access the resulting frame.
   RecordingImageBufferSurface(const IntSize&,
                               AllowFallback,
-                              OpacityMode = kNonOpaque,
                               const CanvasColorParams& = CanvasColorParams());
   ~RecordingImageBufferSurface() override;
 
@@ -39,7 +39,11 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   PaintCanvas* Canvas() override;
   void DisableDeferral(DisableDeferralReason) override;
   sk_sp<PaintRecord> GetRecord() override;
-  void Flush(FlushReason) override;
+  void SetCanvasResourceHost(CanvasResourceHost* host) {
+    resource_host_ = host;
+  }
+  CanvasResourceHost* GetCanvasResourceHost() { return resource_host_; }
+
   void DidDraw(const FloatRect&) override;
   bool IsValid() const override { return true; }
   bool IsRecording() const override { return !fallback_surface_; }
@@ -50,10 +54,9 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
                    int y) override;
   void WillOverwriteCanvas() override;
   void FinalizeFrame() override;
-  void DoPaintInvalidation(const FloatRect&) override;
   void SetImageBuffer(ImageBuffer*) override;
-  RefPtr<StaticBitmapImage> NewImageSnapshot(AccelerationHint,
-                                             SnapshotReason) override;
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot(AccelerationHint,
+                                                    SnapshotReason) override;
   void Draw(GraphicsContext&,
             const FloatRect& dest_rect,
             const FloatRect& src_rect,
@@ -63,7 +66,7 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
 
   // Passthroughs to fallback surface
   bool Restore() override;
-  WebLayer* Layer() const override;
+  WebLayer* Layer() override;
   bool IsAccelerated() const override;
   void SetIsHidden(bool) override;
 
@@ -74,8 +77,8 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
     kFallbackReasonCanvasNotClearedBetweenFrames = 1,
     kFallbackReasonRunawayStateStack = 2,
     kFallbackReasonWritePixels = 3,
-    kFallbackReasonFlushInitialClear = 4,
-    kFallbackReasonFlushForDrawImageOfWebGL = 5,
+    // kFallbackReasonFlushInitialClear = 4,
+    // kFallbackReasonFlushForDrawImageOfWebGL = 5,
     kFallbackReasonSnapshotForGetImageData = 6,
     kFallbackReasonSnapshotForPaint = 8,
     kFallbackReasonSnapshotForToDataURL = 9,
@@ -121,6 +124,8 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   bool did_record_draw_commands_in_current_frame_;
   bool current_frame_has_expensive_op_;
   bool previous_frame_has_expensive_op_;
+
+  CanvasResourceHost* resource_host_;
 };
 
 }  // namespace blink

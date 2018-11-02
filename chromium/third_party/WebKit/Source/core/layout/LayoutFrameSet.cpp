@@ -47,7 +47,7 @@ LayoutFrameSet::~LayoutFrameSet() {}
 LayoutFrameSet::GridAxis::GridAxis() : split_being_resized_(kNoSplit) {}
 
 HTMLFrameSetElement* LayoutFrameSet::FrameSet() const {
-  return toHTMLFrameSetElement(GetNode());
+  return ToHTMLFrameSetElement(GetNode());
 }
 
 void LayoutFrameSet::Paint(const PaintInfo& paint_info,
@@ -508,8 +508,10 @@ void LayoutFrameSet::SetIsResizing(bool is_resizing) {
     if (ancestor->IsFrameSet())
       ToLayoutFrameSet(ancestor)->is_child_resizing_ = is_resizing;
   }
-  if (LocalFrame* frame = this->GetFrame())
-    frame->GetEventHandler().SetResizingFrameSet(is_resizing ? FrameSet() : 0);
+  if (LocalFrame* frame = GetFrame()) {
+    frame->GetEventHandler().SetResizingFrameSet(is_resizing ? FrameSet()
+                                                             : nullptr);
+  }
 }
 
 bool LayoutFrameSet::CanResizeRow(const IntPoint& p) const {

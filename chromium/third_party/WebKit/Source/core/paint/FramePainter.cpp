@@ -7,10 +7,10 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/layout/LayoutScrollbarPart.h"
 #include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/paint/FramePaintTiming.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerPainter.h"
@@ -19,7 +19,9 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/ClipRecorder.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/scroll/ScrollbarTheme.h"
@@ -31,6 +33,9 @@ bool FramePainter::in_paint_contents_ = false;
 void FramePainter::Paint(GraphicsContext& context,
                          const GlobalPaintFlags global_paint_flags,
                          const CullRect& rect) {
+  if (GetFrameView().ShouldThrottleRendering())
+    return;
+
   GetFrameView().NotifyPageThatContentAreaWillPaint();
 
   IntRect document_dirty_rect;
@@ -38,7 +43,7 @@ void FramePainter::Paint(GraphicsContext& context,
       GetFrameView().Location(), GetFrameView().VisibleContentRect().Size());
   IntPoint content_offset =
       -GetFrameView().Location() + GetFrameView().ScrollOffsetInt();
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
       !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     auto content_cull_rect = rect;
     content_cull_rect.UpdateForScrollingContents(
@@ -61,19 +66,15 @@ void FramePainter::Paint(GraphicsContext& context,
   if (should_paint_contents) {
     // TODO(pdr): Creating frame paint properties here will not be needed once
     // settings()->rootLayerScrolls() is enabled.
-    // TODO(pdr): Make this conditional on the rootLayerScrolls setting.
     Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
         !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-      if (const PropertyTreeState* contents_state =
-              frame_view_->TotalPropertyTreeStateForContents()) {
-        PaintChunkProperties properties(
-            context.GetPaintController().CurrentPaintChunkProperties());
-        properties.property_tree_state = *contents_state;
-        scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                              *GetFrameView().GetLayoutView(),
-                                              properties);
-      }
+      const auto* contents_state =
+          frame_view_->TotalPropertyTreeStateForContents();
+      DCHECK(contents_state);
+      scoped_paint_chunk_properties.emplace(context.GetPaintController(),
+                                            *contents_state,
+                                            *GetFrameView().GetLayoutView());
     }
 
     TransformRecorder transform_recorder(
@@ -82,15 +83,10 @@ void FramePainter::Paint(GraphicsContext& context,
             GetFrameView().X() - GetFrameView().ScrollX(),
             GetFrameView().Y() - GetFrameView().ScrollY()));
 
-    if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-      PaintContents(context, global_paint_flags, document_dirty_rect);
-    } else {
-      ClipRecorder clip_recorder(context, *GetFrameView().GetLayoutView(),
-                                 DisplayItem::kClipFrameToVisibleContentRect,
-                                 GetFrameView().VisibleContentRect());
-
-      PaintContents(context, global_paint_flags, document_dirty_rect);
-    }
+    ClipRecorder clip_recorder(context, *GetFrameView().GetLayoutView(),
+                               DisplayItem::kClipFrameToVisibleContentRect,
+                               GetFrameView().VisibleContentRect());
+    PaintContents(context, global_paint_flags, document_dirty_rect);
   }
 
   if (should_paint_scrollbars) {
@@ -103,23 +99,12 @@ void FramePainter::Paint(GraphicsContext& context,
     scroll_view_dirty_rect.MoveBy(-GetFrameView().Location());
 
     Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-      if (const PropertyTreeState* contents_state =
-              frame_view_->TotalPropertyTreeStateForContents()) {
-        // The scrollbar's property nodes are similar to the frame view's
-        // contents state but we want to exclude the content-specific
-        // properties. This prevents the scrollbars from scrolling, for example.
-        PaintChunkProperties properties(
-            context.GetPaintController().CurrentPaintChunkProperties());
-        properties.property_tree_state.SetTransform(
-            frame_view_->PreTranslation());
-        properties.property_tree_state.SetClip(
-            frame_view_->ContentClip()->Parent());
-        properties.property_tree_state.SetEffect(contents_state->Effect());
-        scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                              *GetFrameView().GetLayoutView(),
-                                              properties);
-      }
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
+        !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+      scoped_paint_chunk_properties.emplace(
+          context.GetPaintController(),
+          GetFrameView().PreContentClipProperties(),
+          *GetFrameView().GetLayoutView());
     }
 
     TransformRecorder transform_recorder(
@@ -160,8 +145,9 @@ void FramePainter::PaintContents(GraphicsContext& context,
          DocumentLifecycle::kCompositingClean);
 
   FramePaintTiming frame_paint_timing(context, &GetFrameView().GetFrame());
-  TRACE_EVENT1("devtools.timeline,rail", "Paint", "data",
-               InspectorPaintEvent::Data(layout_view, LayoutRect(rect), 0));
+  TRACE_EVENT1(
+      "devtools.timeline,rail", "Paint", "data",
+      InspectorPaintEvent::Data(layout_view, LayoutRect(rect), nullptr));
 
   bool is_top_level_painter = !in_paint_contents_;
   in_paint_contents_ = true;
@@ -170,10 +156,15 @@ void FramePainter::PaintContents(GraphicsContext& context,
 
   // TODO(jchaffraix): GlobalPaintFlags should be const during a paint
   // phase. Thus we should set this flag upfront (crbug.com/510280).
-  GlobalPaintFlags local_paint_flags = global_paint_flags;
-  if (document->Printing())
-    local_paint_flags |=
+  GlobalPaintFlags updated_global_paint_flags = global_paint_flags;
+  PaintLayerFlags root_layer_paint_flags = 0;
+  if (document->Printing()) {
+    updated_global_paint_flags |=
         kGlobalPaintFlattenCompositingLayers | kGlobalPaintPrinting;
+    // This will prevent clipping the root PaintLayer to its visible content
+    // rect when root layer scrolling is enabled.
+    root_layer_paint_flags = kPaintLayerPaintingOverflowContents;
+  }
 
   PaintLayer* root_layer = layout_view->Layer();
 
@@ -189,11 +180,13 @@ void FramePainter::PaintContents(GraphicsContext& context,
       root_layer->GetLayoutObject().GetFrame());
   context.SetDeviceScaleFactor(device_scale_factor);
 
-  layer_painter.Paint(context, LayoutRect(rect), local_paint_flags);
+  layer_painter.Paint(context, LayoutRect(rect), updated_global_paint_flags,
+                      root_layer_paint_flags);
 
-  if (root_layer->ContainsDirtyOverlayScrollbars())
+  if (root_layer->ContainsDirtyOverlayScrollbars()) {
     layer_painter.PaintOverlayScrollbars(context, LayoutRect(rect),
-                                         local_paint_flags);
+                                         updated_global_paint_flags);
+  }
 
   // Regions may have changed as a result of the visibility/z-index of element
   // changing.
@@ -207,7 +200,7 @@ void FramePainter::PaintContents(GraphicsContext& context,
     in_paint_contents_ = false;
   }
 
-  probe::didPaint(layout_view->GetFrame(), 0, context, LayoutRect(rect));
+  probe::didPaint(layout_view->GetFrame(), nullptr, context, LayoutRect(rect));
 }
 
 void FramePainter::PaintScrollbars(GraphicsContext& context,
@@ -215,32 +208,28 @@ void FramePainter::PaintScrollbars(GraphicsContext& context,
   if (GetFrameView().HorizontalScrollbar() &&
       !GetFrameView().LayerForHorizontalScrollbar())
     PaintScrollbar(context, *GetFrameView().HorizontalScrollbar(), rect);
+
   if (GetFrameView().VerticalScrollbar() &&
       !GetFrameView().LayerForVerticalScrollbar())
     PaintScrollbar(context, *GetFrameView().VerticalScrollbar(), rect);
 
-  if (GetFrameView().LayerForScrollCorner() ||
-      !GetFrameView().IsScrollCornerVisible()) {
-    return;
-  }
-
-  PaintScrollCorner(context, GetFrameView().ScrollCornerRect());
+  if (!GetFrameView().LayerForScrollCorner() &&
+      GetFrameView().IsScrollCornerVisible())
+    PaintScrollCorner(context, GetFrameView().ScrollCornerRect());
 }
 
 void FramePainter::PaintScrollCorner(GraphicsContext& context,
                                      const IntRect& corner_rect) {
-  if (GetFrameView().ScrollCorner()) {
+  if (const auto* scroll_corner = GetFrameView().ScrollCorner()) {
     bool needs_background = GetFrameView().GetFrame().IsMainFrame();
     if (needs_background &&
-        !LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-            context, *GetFrameView().GetLayoutView(),
-            DisplayItem::kScrollbarCorner)) {
-      LayoutObjectDrawingRecorder drawing_recorder(
-          context, *GetFrameView().GetLayoutView(),
-          DisplayItem::kScrollbarCorner, FloatRect(corner_rect));
+        !DrawingRecorder::UseCachedDrawingIfPossible(
+            context, *scroll_corner, DisplayItem::kScrollbarBackground)) {
+      DrawingRecorder recorder(context, *scroll_corner,
+                               DisplayItem::kScrollbarBackground);
       context.FillRect(corner_rect, GetFrameView().BaseBackgroundColor());
     }
-    ScrollbarPainter::PaintIntoRect(*GetFrameView().ScrollCorner(), context,
+    ScrollbarPainter::PaintIntoRect(*scroll_corner, context,
                                     corner_rect.Location(),
                                     LayoutRect(corner_rect));
     return;
@@ -256,8 +245,12 @@ void FramePainter::PaintScrollCorner(GraphicsContext& context,
     NOTREACHED();
   }
 
-  theme->PaintScrollCorner(context, *GetFrameView().GetLayoutView(),
-                           corner_rect);
+  const DisplayItemClient* client;
+  if (auto* graphics_layer = GetFrameView().LayerForScrollCorner())
+    client = graphics_layer;
+  else
+    client = GetFrameView().GetLayoutView();
+  theme->PaintScrollCorner(context, *client, corner_rect);
 }
 
 void FramePainter::PaintScrollbar(GraphicsContext& context,
@@ -268,7 +261,12 @@ void FramePainter::PaintScrollbar(GraphicsContext& context,
   if (needs_background) {
     IntRect to_fill = bar.FrameRect();
     to_fill.Intersect(rect);
-    context.FillRect(to_fill, GetFrameView().BaseBackgroundColor());
+    if (!to_fill.IsEmpty() &&
+        !DrawingRecorder::UseCachedDrawingIfPossible(
+            context, bar, DisplayItem::kScrollbarBackground)) {
+      DrawingRecorder recorder(context, bar, DisplayItem::kScrollbarBackground);
+      context.FillRect(to_fill, GetFrameView().BaseBackgroundColor());
+    }
   }
 
   bar.Paint(context, CullRect(rect));

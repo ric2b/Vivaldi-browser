@@ -33,12 +33,11 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebIsolatedWorldIds.h"
 #include "v8/include/v8.h"
 
@@ -78,11 +77,11 @@ class PLATFORM_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
 
   // Creates a world other than IsolatedWorld. Note this can return nullptr if
   // GenerateWorldIdForType fails to allocate a valid id.
-  static PassRefPtr<DOMWrapperWorld> Create(v8::Isolate*, WorldType);
+  static scoped_refptr<DOMWrapperWorld> Create(v8::Isolate*, WorldType);
 
   // Ensures an IsolatedWorld for |worldId|.
-  static PassRefPtr<DOMWrapperWorld> EnsureIsolatedWorld(v8::Isolate*,
-                                                         int world_id);
+  static scoped_refptr<DOMWrapperWorld> EnsureIsolatedWorld(v8::Isolate*,
+                                                            int world_id);
   ~DOMWrapperWorld();
   void Dispose();
 
@@ -92,7 +91,8 @@ class PLATFORM_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
     return number_of_non_main_worlds_in_main_thread_;
   }
 
-  static void AllWorldsInCurrentThread(Vector<RefPtr<DOMWrapperWorld>>& worlds);
+  static void AllWorldsInCurrentThread(
+      Vector<scoped_refptr<DOMWrapperWorld>>& worlds);
   static void MarkWrappersInAllWorlds(ScriptWrappable*,
                                       const ScriptWrappableVisitor*);
 
@@ -113,7 +113,7 @@ class PLATFORM_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
   // origin. XMLHttpRequest instances used in that world will be considered
   // to come from that origin, not the frame's.
   static void SetIsolatedWorldSecurityOrigin(int world_id,
-                                             PassRefPtr<SecurityOrigin>);
+                                             scoped_refptr<SecurityOrigin>);
   SecurityOrigin* IsolatedWorldSecurityOrigin();
 
   // Associated an isolated world with a Content Security Policy. Resources

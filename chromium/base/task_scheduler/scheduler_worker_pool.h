@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner.h"
+#include "base/task_scheduler/can_schedule_sequence_observer.h"
 #include "base/task_scheduler/sequence.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_traits.h"
@@ -22,9 +23,9 @@ class DelayedTaskManager;
 class TaskTracker;
 
 // Interface for a worker pool.
-class BASE_EXPORT SchedulerWorkerPool {
+class BASE_EXPORT SchedulerWorkerPool : public CanScheduleSequenceObserver {
  public:
-  virtual ~SchedulerWorkerPool() = default;
+  ~SchedulerWorkerPool() override;
 
   // Returns a TaskRunner whose PostTask invocations result in scheduling tasks
   // in this SchedulerWorkerPool using |traits|. Tasks may run in any order and
@@ -50,13 +51,12 @@ class BASE_EXPORT SchedulerWorkerPool {
   // Resets the worker pool in TLS.
   void UnbindFromCurrentThread();
 
-  // Prevents new tasks from being scheduled and waits for currently scheduled
-  // tasks to complete their execution. It is guaranteed that no thread will
-  // do work on behalf of this SchedulerWorkerPool after this returns.
-  // It is invalid to post a task once this is called. TaskTracker::Flush()
-  // can be called before this to complete existing tasks, which might
-  // otherwise post a task during JoinForTesting(). This can only be called
-  // once.
+  // Prevents new tasks from starting to run and waits for currently running
+  // tasks to complete their execution. It is guaranteed that no thread will do
+  // work on behalf of this SchedulerWorkerPool after this returns. It is
+  // invalid to post a task once this is called. TaskTracker::Flush() can be
+  // called before this to complete existing tasks, which might otherwise post a
+  // task during JoinForTesting(). This can only be called once.
   virtual void JoinForTesting() = 0;
 
  protected:
@@ -68,9 +68,6 @@ class BASE_EXPORT SchedulerWorkerPool {
   // PostTaskWithSequence() and after |task|'s delayed run time.
   void PostTaskWithSequenceNow(std::unique_ptr<Task> task,
                                scoped_refptr<Sequence> sequence);
-
-  // Submits |sequence| to the worker pool to be scheduled for execution.
-  virtual void ScheduleSequence(scoped_refptr<Sequence> sequence) = 0;
 
   TaskTracker* const task_tracker_;
   DelayedTaskManager* const delayed_task_manager_;

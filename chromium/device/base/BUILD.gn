@@ -51,7 +51,6 @@ source_set("mocks") {
 
   deps = [
     ":base",
-    "//device/hid:mocks",
     "//device/usb:test_support",
   ]
 }

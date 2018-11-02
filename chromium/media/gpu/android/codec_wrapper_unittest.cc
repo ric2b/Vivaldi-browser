@@ -30,17 +30,24 @@ class CodecWrapperTest : public testing::Test {
   CodecWrapperTest() {
     auto codec = base::MakeUnique<NiceMock<MockMediaCodecBridge>>();
     codec_ = codec.get();
-    wrapper_ = base::MakeUnique<CodecWrapper>(std::move(codec),
-                                              output_buffer_release_cb_.Get());
+    surface_bundle_ = base::MakeRefCounted<AVDASurfaceBundle>();
+    wrapper_ = base::MakeUnique<CodecWrapper>(
+        CodecSurfacePair(std::move(codec), surface_bundle_),
+        output_buffer_release_cb_.Get());
     ON_CALL(*codec_, DequeueOutputBuffer(_, _, _, _, _, _, _))
         .WillByDefault(Return(MEDIA_CODEC_OK));
+    ON_CALL(*codec_, DequeueInputBuffer(_, _))
+        .WillByDefault(DoAll(SetArgPointee<1>(12), Return(MEDIA_CODEC_OK)));
     ON_CALL(*codec_, QueueInputBuffer(_, _, _, _))
         .WillByDefault(Return(MEDIA_CODEC_OK));
+
+    uint8_t data = 0;
+    fake_decoder_buffer_ = DecoderBuffer::CopyFrom(&data, 1);
   }
 
   ~CodecWrapperTest() override {
     // ~CodecWrapper asserts that the codec was taken.
-    wrapper_->TakeCodec();
+    wrapper_->TakeCodecSurfacePair();
   }
 
   std::unique_ptr<CodecOutputBuffer> DequeueCodecOutputBuffer() {
@@ -51,12 +58,14 @@ class CodecWrapperTest : public testing::Test {
 
   NiceMock<MockMediaCodecBridge>* codec_;
   std::unique_ptr<CodecWrapper> wrapper_;
+  scoped_refptr<AVDASurfaceBundle> surface_bundle_;
   NiceMock<base::MockCallback<base::Closure>> output_buffer_release_cb_;
+  scoped_refptr<DecoderBuffer> fake_decoder_buffer_;
 };
 
 TEST_F(CodecWrapperTest, TakeCodecReturnsTheCodecFirstAndNullLater) {
-  ASSERT_EQ(wrapper_->TakeCodec().get(), codec_);
-  ASSERT_EQ(wrapper_->TakeCodec(), nullptr);
+  ASSERT_EQ(wrapper_->TakeCodecSurfacePair().first.get(), codec_);
+  ASSERT_EQ(wrapper_->TakeCodecSurfacePair().first, nullptr);
 }
 
 TEST_F(CodecWrapperTest, NoCodecOutputBufferReturnedIfDequeueFails) {
@@ -67,7 +76,7 @@ TEST_F(CodecWrapperTest, NoCodecOutputBufferReturnedIfDequeueFails) {
 }
 
 TEST_F(CodecWrapperTest, InitiallyThereAreNoValidCodecOutputBuffers) {
-  ASSERT_FALSE(wrapper_->HasValidCodecOutputBuffers());
+  ASSERT_FALSE(wrapper_->HasUnreleasedOutputBuffers());
 }
 
 TEST_F(CodecWrapperTest, FlushInvalidatesCodecOutputBuffers) {
@@ -78,13 +87,13 @@ TEST_F(CodecWrapperTest, FlushInvalidatesCodecOutputBuffers) {
 
 TEST_F(CodecWrapperTest, TakingTheCodecInvalidatesCodecOutputBuffers) {
   auto codec_buffer = DequeueCodecOutputBuffer();
-  wrapper_->TakeCodec();
+  wrapper_->TakeCodecSurfacePair();
   ASSERT_FALSE(codec_buffer->ReleaseToSurface());
 }
 
 TEST_F(CodecWrapperTest, SetSurfaceInvalidatesCodecOutputBuffers) {
   auto codec_buffer = DequeueCodecOutputBuffer();
-  wrapper_->SetSurface(0);
+  wrapper_->SetSurface(base::MakeRefCounted<AVDASurfaceBundle>());
   ASSERT_FALSE(codec_buffer->ReleaseToSurface());
 }
 
@@ -94,7 +103,7 @@ TEST_F(CodecWrapperTest, CodecOutputBuffersAreAllInvalidatedTogether) {
   wrapper_->Flush();
   ASSERT_FALSE(codec_buffer1->ReleaseToSurface());
   ASSERT_FALSE(codec_buffer2->ReleaseToSurface());
-  ASSERT_FALSE(wrapper_->HasValidCodecOutputBuffers());
+  ASSERT_FALSE(wrapper_->HasUnreleasedOutputBuffers());
 }
 
 TEST_F(CodecWrapperTest, CodecOutputBuffersAfterFlushAreValid) {
@@ -134,13 +143,13 @@ TEST_F(CodecWrapperTest, CodecOutputBuffersDoNotReleaseIfAlreadyReleased) {
 
 TEST_F(CodecWrapperTest, ReleasingCodecOutputBuffersAfterTheCodecIsSafe) {
   auto codec_buffer = DequeueCodecOutputBuffer();
-  wrapper_->TakeCodec();
+  wrapper_->TakeCodecSurfacePair();
   codec_buffer->ReleaseToSurface();
 }
 
 TEST_F(CodecWrapperTest, DeletingCodecOutputBuffersAfterTheCodecIsSafe) {
   auto codec_buffer = DequeueCodecOutputBuffer();
-  wrapper_->TakeCodec();
+  wrapper_->TakeCodecSurfacePair();
   // This test ensures the destructor doesn't crash.
   codec_buffer = nullptr;
 }
@@ -165,7 +174,7 @@ TEST_F(CodecWrapperTest, FormatChangedStatusIsSwallowed) {
       .WillOnce(Return(MEDIA_CODEC_TRY_AGAIN_LATER));
   std::unique_ptr<CodecOutputBuffer> codec_buffer;
   auto status = wrapper_->DequeueOutputBuffer(nullptr, nullptr, &codec_buffer);
-  ASSERT_EQ(status, MEDIA_CODEC_TRY_AGAIN_LATER);
+  ASSERT_EQ(status, CodecWrapper::DequeueStatus::kTryAgainLater);
 }
 
 TEST_F(CodecWrapperTest, BuffersChangedStatusIsSwallowed) {
@@ -174,7 +183,7 @@ TEST_F(CodecWrapperTest, BuffersChangedStatusIsSwallowed) {
       .WillOnce(Return(MEDIA_CODEC_TRY_AGAIN_LATER));
   std::unique_ptr<CodecOutputBuffer> codec_buffer;
   auto status = wrapper_->DequeueOutputBuffer(nullptr, nullptr, &codec_buffer);
-  ASSERT_EQ(status, MEDIA_CODEC_TRY_AGAIN_LATER);
+  ASSERT_EQ(status, CodecWrapper::DequeueStatus::kTryAgainLater);
 }
 
 TEST_F(CodecWrapperTest, MultipleFormatChangedStatusesIsAnError) {
@@ -182,7 +191,7 @@ TEST_F(CodecWrapperTest, MultipleFormatChangedStatusesIsAnError) {
       .WillRepeatedly(Return(MEDIA_CODEC_OUTPUT_FORMAT_CHANGED));
   std::unique_ptr<CodecOutputBuffer> codec_buffer;
   auto status = wrapper_->DequeueOutputBuffer(nullptr, nullptr, &codec_buffer);
-  ASSERT_EQ(status, MEDIA_CODEC_ERROR);
+  ASSERT_EQ(status, CodecWrapper::DequeueStatus::kError);
 }
 
 TEST_F(CodecWrapperTest, CodecOutputBuffersHaveTheCorrectSize) {
@@ -213,26 +222,27 @@ TEST_F(CodecWrapperTest, CodecStartsInFlushedState) {
   ASSERT_FALSE(wrapper_->IsDrained());
 }
 
-TEST_F(CodecWrapperTest, CodecIsNotFlushedAfterAnInputIsQueued) {
-  wrapper_->QueueInputBuffer(0, nullptr, 0, base::TimeDelta());
+TEST_F(CodecWrapperTest, CodecIsNotInFlushedStateAfterAnInputIsQueued) {
+  wrapper_->QueueInputBuffer(*fake_decoder_buffer_, EncryptionScheme());
   ASSERT_FALSE(wrapper_->IsFlushed());
   ASSERT_FALSE(wrapper_->IsDraining());
   ASSERT_FALSE(wrapper_->IsDrained());
 }
 
-TEST_F(CodecWrapperTest, FlushReturnsCodecToFlushed) {
-  wrapper_->QueueInputBuffer(0, nullptr, 0, base::TimeDelta());
+TEST_F(CodecWrapperTest, FlushTransitionsToFlushedState) {
+  wrapper_->QueueInputBuffer(*fake_decoder_buffer_, EncryptionScheme());
   wrapper_->Flush();
   ASSERT_TRUE(wrapper_->IsFlushed());
 }
 
-TEST_F(CodecWrapperTest, EosTransitionsToStateDraining) {
-  wrapper_->QueueInputBuffer(0, nullptr, 0, base::TimeDelta());
-  wrapper_->QueueEOS(0);
+TEST_F(CodecWrapperTest, EosTransitionsToDrainingState) {
+  wrapper_->QueueInputBuffer(*fake_decoder_buffer_, EncryptionScheme());
+  auto eos = DecoderBuffer::CreateEOSBuffer();
+  wrapper_->QueueInputBuffer(*eos, EncryptionScheme());
   ASSERT_TRUE(wrapper_->IsDraining());
 }
 
-TEST_F(CodecWrapperTest, DequeuingEosTransitionsToStateDrained) {
+TEST_F(CodecWrapperTest, DequeuingEosTransitionsToDrainedState) {
   // Set EOS on next dequeue.
   codec_->ProduceOneOutput(MockMediaCodecBridge::kEos);
   DequeueCodecOutputBuffer();
@@ -240,6 +250,36 @@ TEST_F(CodecWrapperTest, DequeuingEosTransitionsToStateDrained) {
   ASSERT_TRUE(wrapper_->IsDrained());
   wrapper_->Flush();
   ASSERT_FALSE(wrapper_->IsDrained());
+}
+
+TEST_F(CodecWrapperTest, RejectedInputBuffersAreReused) {
+  // If we get a MEDIA_CODEC_NO_KEY status, the next time we try to queue a
+  // buffer the previous input buffer should be reused.
+  EXPECT_CALL(*codec_, DequeueInputBuffer(_, _))
+      .WillOnce(DoAll(SetArgPointee<1>(666), Return(MEDIA_CODEC_OK)));
+  EXPECT_CALL(*codec_, QueueInputBuffer(666, _, _, _))
+      .WillOnce(Return(MEDIA_CODEC_NO_KEY))
+      .WillOnce(Return(MEDIA_CODEC_OK));
+  auto status =
+      wrapper_->QueueInputBuffer(*fake_decoder_buffer_, EncryptionScheme());
+  ASSERT_EQ(status, CodecWrapper::QueueStatus::kNoKey);
+  wrapper_->QueueInputBuffer(*fake_decoder_buffer_, EncryptionScheme());
+}
+
+TEST_F(CodecWrapperTest, SurfaceBundleIsInitializedByConstructor) {
+  ASSERT_EQ(surface_bundle_.get(), wrapper_->SurfaceBundle());
+}
+
+TEST_F(CodecWrapperTest, SurfaceBundleIsUpdatedBySetSurface) {
+  auto new_bundle = base::MakeRefCounted<AVDASurfaceBundle>();
+  EXPECT_CALL(*codec_, SetSurface(_)).WillOnce(Return(true));
+  wrapper_->SetSurface(new_bundle);
+  ASSERT_EQ(new_bundle.get(), wrapper_->SurfaceBundle());
+}
+
+TEST_F(CodecWrapperTest, SurfaceBundleIsTaken) {
+  ASSERT_EQ(wrapper_->TakeCodecSurfacePair().second, surface_bundle_);
+  ASSERT_EQ(wrapper_->SurfaceBundle(), nullptr);
 }
 
 }  // namespace media

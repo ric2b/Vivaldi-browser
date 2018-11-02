@@ -30,8 +30,7 @@
 
 #include "public/web/WebFrameSerializer.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
+#include "base/macros.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementShadow.h"
@@ -45,9 +44,12 @@
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTableElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "core/layout/LayoutBox.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/Histogram.h"
@@ -63,14 +65,12 @@
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringConcatenate.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLResponse.h"
-#include "public/platform/WebVector.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebDocumentLoader.h"
 #include "public/web/WebFrame.h"
@@ -87,7 +87,6 @@ const char kShadowDelegatesFocusAttributeName[] = "shadowdelegatesfocus";
 
 class MHTMLFrameSerializerDelegate final : public FrameSerializer::Delegate {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(MHTMLFrameSerializerDelegate);
 
  public:
   MHTMLFrameSerializerDelegate(
@@ -110,12 +109,12 @@ class MHTMLFrameSerializerDelegate final : public FrameSerializer::Delegate {
   bool ShouldIgnorePopupOverlayElement(const Element&);
   void GetCustomAttributesForImageElement(const HTMLImageElement&,
                                           Vector<Attribute>*);
-  void GetCustomAttributesForFormControlElement(const Element&,
-                                                Vector<Attribute>*);
 
   WebFrameSerializer::MHTMLPartsGenerationDelegate& web_delegate_;
   HeapHashSet<WeakMember<const Element>>& shadow_template_elements_;
   bool popup_overlays_skipped_;
+
+  DISALLOW_COPY_AND_ASSIGN(MHTMLFrameSerializerDelegate);
 };
 
 MHTMLFrameSerializerDelegate::MHTMLFrameSerializerDelegate(
@@ -147,13 +146,22 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnoreElement(const Element& element) {
 
 bool MHTMLFrameSerializerDelegate::ShouldIgnoreHiddenElement(
     const Element& element) {
+  // If an iframe is in the head, it will be moved to the body when the page is
+  // being loaded. But if an iframe is injected into the head later, it will
+  // stay there and not been displayed. To prevent it from being brought to the
+  // saved page and cause it being displayed, we should not include it.
+  if (IsHTMLIFrameElement(element) &&
+      Traversal<HTMLHeadElement>::FirstAncestor(element)) {
+    return true;
+  }
+
   // Do not include the element that is marked with hidden attribute.
   if (element.FastHasAttribute(HTMLNames::hiddenAttr))
     return true;
 
   // Do not include the hidden form element.
-  return isHTMLInputElement(element) &&
-         toHTMLInputElement(&element)->type() == InputTypeNames::hidden;
+  return IsHTMLInputElement(element) &&
+         ToHTMLInputElement(&element)->type() == InputTypeNames::hidden;
 }
 
 bool MHTMLFrameSerializerDelegate::ShouldIgnoreMetaElement(
@@ -164,7 +172,7 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnoreMetaElement(
   // the saved MHTML page, there is no need to carry the directives. If they
   // are still kept in the MHTML, child frames that are referred to using cid:
   // scheme could be prevented from loading.
-  if (!isHTMLMetaElement(element))
+  if (!IsHTMLMetaElement(element))
     return false;
   if (!element.FastHasAttribute(HTMLNames::contentAttr))
     return false;
@@ -209,7 +217,7 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnoreAttribute(
 
   // Do not save ping attribute since anyway the ping will be blocked from
   // MHTML.
-  if (isHTMLAnchorElement(element) &&
+  if (IsHTMLAnchorElement(element) &&
       attribute.LocalName() == HTMLNames::pingAttr) {
     return true;
   }
@@ -217,7 +225,7 @@ bool MHTMLFrameSerializerDelegate::ShouldIgnoreAttribute(
   // The special attribute in a template element to denote the shadow DOM
   // should only be generated from MHTML serialization. If it is found in the
   // original page, it should be ignored.
-  if (isHTMLTemplateElement(element) &&
+  if (IsHTMLTemplateElement(element) &&
       (attribute.LocalName() == kShadowModeAttributeName ||
        attribute.LocalName() == kShadowDelegatesFocusAttributeName) &&
       !shadow_template_elements_.Contains(&element)) {
@@ -260,7 +268,7 @@ bool MHTMLFrameSerializerDelegate::RewriteLink(const Element& element,
     return true;
   }
 
-  if (isHTMLObjectElement(&element)) {
+  if (IsHTMLObjectElement(&element)) {
     Document* doc = frame_owner_element->contentDocument();
     bool is_handled_by_serializer = doc->IsHTMLDocument() ||
                                     doc->IsXHTMLDocument() ||
@@ -292,11 +300,8 @@ Vector<Attribute> MHTMLFrameSerializerDelegate::GetCustomAttributes(
     const Element& element) {
   Vector<Attribute> attributes;
 
-  if (isHTMLImageElement(element)) {
-    GetCustomAttributesForImageElement(toHTMLImageElement(element),
-                                       &attributes);
-  } else if (element.IsFormControlElement()) {
-    GetCustomAttributesForFormControlElement(element, &attributes);
+  if (auto* image = ToHTMLImageElementOrNull(element)) {
+    GetCustomAttributesForImageElement(*image, &attributes);
   }
 
   return attributes;
@@ -341,18 +346,6 @@ void MHTMLFrameSerializerDelegate::GetCustomAttributesForImageElement(
   Attribute height_attribute(HTMLNames::heightAttr,
                              AtomicString::Number(element.LayoutBoxHeight()));
   attributes->push_back(height_attribute);
-}
-
-void MHTMLFrameSerializerDelegate::GetCustomAttributesForFormControlElement(
-    const Element& element,
-    Vector<Attribute>* attributes) {
-  // Disable all form elements in MTHML to tell the user that the form cannot be
-  // worked on. MHTML is loaded in full sandboxing mode which disable the form
-  // submission and script execution.
-  if (element.FastHasAttribute(HTMLNames::disabledAttr))
-    return;
-  Attribute disabled_attribute(HTMLNames::disabledAttr, "");
-  attributes->push_back(disabled_attribute);
 }
 
 std::pair<Node*, Element*> MHTMLFrameSerializerDelegate::GetAuxiliaryDOMTree(
@@ -449,7 +442,7 @@ WebThreadSafeData WebFrameSerializer::GenerateMHTMLHeader(
 
   Document* document = web_local_frame->GetFrame()->GetDocument();
 
-  RefPtr<RawData> buffer = RawData::Create();
+  scoped_refptr<RawData> buffer = RawData::Create();
   MHTMLArchive::GenerateMHTMLHeader(
       boundary, document->Url(), document->title(),
       document->SuggestedMIMEType(), *buffer->MutableData());
@@ -499,7 +492,7 @@ WebThreadSafeData WebFrameSerializer::GenerateMHTMLParts(
     return WebThreadSafeData();
 
   // Encode serialized resources as MHTML.
-  RefPtr<RawData> output = RawData::Create();
+  scoped_refptr<RawData> output = RawData::Create();
   {
     SCOPED_BLINK_UMA_HISTOGRAM_TIMER(
         "PageSerialization.MhtmlGeneration.EncodingTime.SingleFrame");

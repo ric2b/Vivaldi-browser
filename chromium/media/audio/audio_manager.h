@@ -12,7 +12,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "media/audio/audio_device_description.h"
@@ -92,7 +91,7 @@ class MEDIA_EXPORT AudioManager {
 
   // Log callback used for sending log messages from a stream to the object
   // that manages the stream.
-  using LogCallback = base::Callback<void(const std::string&)>;
+  using LogCallback = base::RepeatingCallback<void(const std::string&)>;
 
   // Factory for all the supported stream formats. |params| defines parameters
   // of the audio stream to be created.
@@ -174,14 +173,12 @@ class MEDIA_EXPORT AudioManager {
   virtual std::unique_ptr<AudioLog> CreateAudioLog(
       AudioLogFactory::AudioComponent component) = 0;
 
-  // Enable output debug recording. InitializeOutputDebugRecording() must be
-  // called before this function.
-  // TODO(grunell): Control input debug recording via these functions too.
-  virtual void EnableOutputDebugRecording(
-      const base::FilePath& base_file_name) = 0;
+  // Enable debug recording. InitializeDebugRecording() must be called before
+  // this function.
+  virtual void EnableDebugRecording(const base::FilePath& base_file_name) = 0;
 
-  // Disable output debug recording.
-  virtual void DisableOutputDebugRecording() = 0;
+  // Disable debug recording.
+  virtual void DisableDebugRecording() = 0;
 
   // Gets the name of the audio manager (e.g., Windows, Mac, PulseAudio).
   virtual const char* GetName() = 0;
@@ -199,7 +196,7 @@ class MEDIA_EXPORT AudioManager {
 
   // Initializes output debug recording. Can be called on any thread; will post
   // to the audio thread if not called on it.
-  virtual void InitializeOutputDebugRecording() = 0;
+  virtual void InitializeDebugRecording() = 0;
 
   // Returns true if the OS reports existence of audio devices. This does not
   // guarantee that the existing devices support all formats and sample rates.
@@ -209,10 +206,6 @@ class MEDIA_EXPORT AudioManager {
   // does not guarantee that the existing devices support all formats and
   // sample rates.
   virtual bool HasAudioInputDevices() = 0;
-
-  // Returns a human readable string for the model/make of the active audio
-  // input device for this computer.
-  virtual base::string16 GetAudioInputDeviceModel() = 0;
 
   // Appends a list of available input devices to |device_descriptions|,
   // which must initially be empty. It is not guaranteed that all the
@@ -260,7 +253,7 @@ class MEDIA_EXPORT AudioManager {
       const std::string& input_device_id) = 0;
 
  private:
-  friend class AudioSystemImpl;
+  friend class AudioSystemHelper;
 
   std::unique_ptr<AudioThread> audio_thread_;
   bool shutdown_ = false;  // True after |this| has been shutdown.

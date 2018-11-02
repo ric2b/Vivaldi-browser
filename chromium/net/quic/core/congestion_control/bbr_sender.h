@@ -57,6 +57,8 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
     NOT_IN_RECOVERY,
     // Allow an extra outstanding byte for each byte acknowledged.
     CONSERVATION,
+    // Allow 1.5 extra outstanding bytes for each byte acknowledged.
+    MEDIUM_GROWTH,
     // Allow two extra outstanding bytes for each byte acknowledged (slow
     // start).
     GROWTH
@@ -110,16 +112,15 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
                          QuicByteCount prior_in_flight,
                          QuicTime event_time,
                          const AckedPacketVector& acked_packets,
-                         const CongestionVector& lost_packets) override;
-  bool OnPacketSent(QuicTime sent_time,
+                         const LostPacketVector& lost_packets) override;
+  void OnPacketSent(QuicTime sent_time,
                     QuicByteCount bytes_in_flight,
                     QuicPacketNumber packet_number,
                     QuicByteCount bytes,
                     HasRetransmittableData is_retransmittable) override;
   void OnRetransmissionTimeout(bool packets_retransmitted) override {}
   void OnConnectionMigration() override {}
-  QuicTime::Delta TimeUntilSend(QuicTime now,
-                                QuicByteCount bytes_in_flight) override;
+  bool CanSend(QuicByteCount bytes_in_flight) override;
   QuicBandwidth PacingRate(QuicByteCount bytes_in_flight) const override;
   QuicBandwidth BandwidthEstimate() const override;
   QuicByteCount GetCongestionWindow() const override;
@@ -161,6 +162,11 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   bool IsAtFullBandwidth() const;
   // Computes the target congestion window using the specified gain.
   QuicByteCount GetTargetCongestionWindow(float gain) const;
+  // The target congestion window during PROBE_RTT.
+  QuicByteCount ProbeRttCongestionWindow() const;
+  // Returns true if the current min_rtt should be kept and we should not enter
+  // PROBE_RTT immediately.
+  bool ShouldExtendMinRttExpiry() const;
 
   // Enters the STARTUP mode.
   void EnterStartupMode();
@@ -168,7 +174,7 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   void EnterProbeBandwidthMode(QuicTime now);
 
   // Discards the lost packets from BandwidthSampler state.
-  void DiscardLostPackets(const CongestionVector& lost_packets);
+  void DiscardLostPackets(const LostPacketVector& lost_packets);
   // Updates the round-trip counter if a round-trip has passed.  Returns true if
   // the counter has been advanced.
   bool UpdateRoundTripCounter(QuicPacketNumber last_acked_packet);
@@ -312,13 +318,38 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // Current state of recovery.
   RecoveryState recovery_state_;
   // Receiving acknowledgement of a packet after |end_recovery_at_| will cause
-  // BBR to exit the recovery mode.
+  // BBR to exit the recovery mode.  A value above zero indicates at least one
+  // loss has been detected, so it must not be set back to zero.
   QuicPacketNumber end_recovery_at_;
   // A window used to limit the number of bytes in flight during loss recovery.
   QuicByteCount recovery_window_;
 
   // When true, recovery is rate based rather than congestion window based.
   bool rate_based_recovery_;
+
+  // When true, pace at 1.5x and disable packet conservation in STARTUP.
+  bool slower_startup_;
+  // When true, disables packet conservation in STARTUP.
+  bool rate_based_startup_;
+  // Used as the initial packet conservation mode when first entering recovery.
+  RecoveryState initial_conservation_in_startup_;
+
+  // If true, will not exit low gain mode until bytes_in_flight drops below BDP
+  // or it's time for high gain mode.
+  bool fully_drain_queue_;
+
+  // If true, use a CWND of 0.75*BDP during probe_rtt instead of 4 packets.
+  bool probe_rtt_based_on_bdp_;
+  // If true, skip probe_rtt and update the timestamp of the existing min_rtt to
+  // now if min_rtt over the last cycle is within 12.5% of the current min_rtt.
+  // Even if the min_rtt is 12.5% too low, the 25% gain cycling and 2x CWND gain
+  // should overcome an overly small min_rtt.
+  bool probe_rtt_skipped_if_similar_rtt_;
+  // If true, disable PROBE_RTT entirely as long as the connection was recently
+  // app limited.
+  bool probe_rtt_disabled_if_app_limited_;
+  bool app_limited_since_last_probe_rtt_;
+  QuicTime::Delta min_rtt_since_last_probe_rtt_;
 
   DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };

@@ -126,9 +126,8 @@ gfx::ColorSpace Display::GetForcedColorProfile() {
     gfx::ColorSpace color_space(
         gfx::ColorSpace::PrimaryID::WIDE_GAMUT_COLOR_SPIN,
         gfx::ColorSpace::TransferID::GAMMA24);
-    gfx::ICCProfile icc_profile;
-    color_space.GetICCProfile(&icc_profile);
-    return icc_profile.GetColorSpace();
+    return gfx::ICCProfile::FromParametricColorSpace(color_space)
+        .GetColorSpace();
   }
   LOG(ERROR) << "Invalid forced color profile";
   return gfx::ColorSpace::CreateSRGB();
@@ -140,6 +139,14 @@ bool Display::HasForceColorProfile() {
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceColorProfile);
   return has_force_color_profile;
+}
+
+// static
+bool Display::HasEnsureForcedColorProfile() {
+  static bool has_ensure_forced_color_profile =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnsureForcedColorProfile);
+  return has_ensure_forced_color_profile;
 }
 
 Display::Display() : Display(kInvalidDisplayId) {}

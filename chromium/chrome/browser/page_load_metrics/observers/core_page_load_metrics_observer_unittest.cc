@@ -326,7 +326,8 @@ TEST_F(CorePageLoadMetricsObserverTest, FailedProvisionalLoad) {
   std::unique_ptr<content::NavigationSimulator> navigation =
       content::NavigationSimulator::CreateRendererInitiated(url, main_rfh());
   navigation->Fail(net::ERR_TIMED_OUT);
-  content::RenderFrameHostTester::For(main_rfh())->SimulateNavigationStop();
+  content::RenderFrameHostTester::For(navigation->GetFinalRenderFrameHost())
+      ->SimulateNavigationStop();
 
   histogram_tester().ExpectTotalCount(internal::kHistogramDomContentLoaded, 0);
   histogram_tester().ExpectTotalCount(internal::kHistogramLoad, 0);
@@ -736,4 +737,137 @@ TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaint) {
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFirstMeaningfulPaintStatus,
       internal::FIRST_MEANINGFUL_PAINT_RECORDED, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, ForegroundToFirstMeaningfulPaint) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.paint_timing->first_meaningful_paint = base::TimeDelta::FromSeconds(2);
+  PopulateRequiredTimingFields(&timing);
+
+  // Simulate "Open link in new tab."
+  web_contents()->WasHidden();
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+
+  // First Meaningful Paint happens after tab is foregrounded.
+  web_contents()->WasShown();
+  SimulateTimingUpdate(timing);
+
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramForegroundToFirstMeaningfulPaint, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, TimeToInteractiveAlwaysForeground) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.interactive_timing->interactive =
+      base::TimeDelta::FromMilliseconds(100);
+  timing.interactive_timing->interactive_detection =
+      base::TimeDelta::FromMilliseconds(5200);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateTimingUpdate(timing);
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramTimeToInteractive, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramTimeToInteractiveStatus,
+      internal::TIME_TO_INTERACTIVE_RECORDED, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, TimeToInteractiveStatusBackgrounded) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.interactive_timing->interactive =
+      base::TimeDelta::FromMilliseconds(100);
+  timing.interactive_timing->interactive_detection =
+      base::TimeDelta::FromMilliseconds(5200);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+
+  // Background the tab, then foreground it.
+  web_contents()->WasHidden();
+  web_contents()->WasShown();
+
+  SimulateTimingUpdate(timing);
+
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramTimeToInteractive, 0);
+  histogram_tester().ExpectUniqueSample(
+      internal::kHistogramTimeToInteractiveStatus,
+      internal::TIME_TO_INTERACTIVE_BACKGROUNDED, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest,
+       TimeToInteractiveStatusUserInteractionBeforeInteractive) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.paint_timing->first_meaningful_paint =
+      base::TimeDelta::FromMilliseconds(200);
+  timing.interactive_timing->first_invalidating_input =
+      base::TimeDelta::FromMilliseconds(1000);
+  timing.interactive_timing->interactive =
+      base::TimeDelta::FromMilliseconds(2000);
+  timing.interactive_timing->interactive_detection =
+      base::TimeDelta::FromMilliseconds(7100);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateTimingUpdate(timing);
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramTimeToInteractive, 0);
+  histogram_tester().ExpectUniqueSample(
+      internal::kHistogramTimeToInteractiveStatus,
+      internal::TIME_TO_INTERACTIVE_USER_INTERACTION_BEFORE_INTERACTIVE, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest,
+       TimeToInteractiveStatusDidNotReachQuiescence) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.paint_timing->first_meaningful_paint =
+      base::TimeDelta::FromMilliseconds(200);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateTimingUpdate(timing);
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramTimeToInteractive, 0);
+  histogram_tester().ExpectUniqueSample(
+      internal::kHistogramTimeToInteractiveStatus,
+      internal::TIME_TO_INTERACTIVE_DID_NOT_REACH_QUIESCENCE, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, TimeToInteractiveStatusDidNotReachFMP) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(200);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateTimingUpdate(timing);
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramTimeToInteractive, 0);
+  histogram_tester().ExpectUniqueSample(
+      internal::kHistogramTimeToInteractiveStatus,
+      internal::TIME_TO_INTERACTIVE_DID_NOT_REACH_FIRST_MEANINGFUL_PAINT, 1);
 }

@@ -25,7 +25,7 @@
 #define LayoutInline_h
 
 #include "core/CoreExport.h"
-#include "core/editing/PositionWithAffinity.h"
+#include "core/editing/Forward.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineFlowBox.h"
@@ -115,6 +115,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
  public:
   explicit LayoutInline(Element*);
 
+  static LayoutInline* CreateAnonymous(Document*);
+
   LayoutObject* FirstChild() const {
     DCHECK_EQ(Children(), VirtualChildren());
     return Children()->FirstChild();
@@ -197,9 +199,9 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   }
   void UpdateAlwaysCreateLineBoxes(bool full_layout);
 
-  LayoutRect LocalCaretRect(InlineBox*,
+  LayoutRect LocalCaretRect(const InlineBox*,
                             int,
-                            LayoutUnit* extra_width_to_end_of_line) final;
+                            LayoutUnit* extra_width_to_end_of_line) const final;
 
   bool HitTestCulledInline(HitTestResult&,
                            const HitTestLocation& location_in_container,
@@ -303,13 +305,7 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 
   virtual InlineFlowBox* CreateInlineFlowBox();  // Subclassed by SVG and Ruby
 
-  void DirtyLinesFromChangedChild(
-      LayoutObject* child,
-      MarkingBehavior marking_behaviour = kMarkContainerChain) final {
-    line_boxes_.DirtyLinesFromChangedChild(
-        LineLayoutItem(this), LineLayoutItem(child),
-        marking_behaviour == kMarkContainerChain);
-  }
+  void DirtyLinesFromChangedChild(LayoutObject*, MarkingBehavior) final;
 
   // TODO(leviw): This should probably be an int. We don't snap equivalent lines
   // to different heights.
@@ -327,7 +323,9 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 
   void UpdateHitTestResult(HitTestResult&, const LayoutPoint&) final;
 
-  void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) final;
+  void ImageChanged(WrappedImagePtr,
+                    CanDeferInvalidation,
+                    const IntRect* = nullptr) final;
 
   void AddAnnotatedRegions(Vector<AnnotatedRegionValue>&) final;
 

@@ -252,7 +252,7 @@ input[type=checkbox]:checked ~ .checkbox::before {
 @media (max-width: 420px) {
   #details-button {
     border: 0;
-    margin: 28px 0 0;
+    margin: 8px 0 0;
   }
 
   .secondary-button {
@@ -270,11 +270,14 @@ input[type=checkbox]:checked ~ .checkbox::before {
     background: #f7f7f7;
     bottom: 0;
     box-shadow: 0 -22px 40px rgb(247, 247, 247);
-    margin: 0;
+    left: 0;
+    margin: 0 auto;
     max-width: 736px;
-    padding-left: 0px;
-    padding-right: 48px;
+    padding-left: 24px;
+    padding-right: 24px;
     position: fixed;
+    right: 0;
+    width: 100%;
     z-index: 2;
   }
 
@@ -289,6 +292,10 @@ input[type=checkbox]:checked ~ .checkbox::before {
 
   #details {
     padding-top: 5.5vh;
+  }
+
+  #details-button:hover {
+    box-shadow: none;
   }
 }
 

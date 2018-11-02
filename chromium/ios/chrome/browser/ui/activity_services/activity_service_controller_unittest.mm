@@ -7,7 +7,7 @@
 #import <MobileCoreServices/MobileCoreServices.h>
 
 #import "base/test/ios/wait_util.h"
-#import "ios/chrome/browser/passwords/password_controller.h"
+#import "ios/chrome/browser/passwords/password_form_filler.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
 #import "ios/chrome/browser/ui/activity_services/appex_constants.h"
 #import "ios/chrome/browser/ui/activity_services/chrome_activity_item_source.h"
@@ -15,9 +15,10 @@
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_password.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
-#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_snackbar.h"
 #import "ios/chrome/browser/ui/activity_services/share_to_data.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -29,6 +30,37 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+@interface FakePasswordFormFiller : NSObject<PasswordFormFiller>
+
+// Stores the latest value passed to the invocation of the method
+// -findAndFillPasswordForms:password:completionHandler:.
+@property(nonatomic, readonly, copy) NSString* username;
+@property(nonatomic, readonly, copy) NSString* password;
+
+// YES if the method -findAndFillPasswordForms:password:completionHandler:
+// was called on this object, NO otherwise.
+@property(nonatomic, readonly, assign) BOOL methodCalled;
+
+@end
+
+@implementation FakePasswordFormFiller
+
+@synthesize username = _username;
+@synthesize password = _password;
+@synthesize methodCalled = _methodCalled;
+
+- (void)findAndFillPasswordForms:(NSString*)username
+                        password:(NSString*)password
+               completionHandler:(void (^)(BOOL))completionHandler {
+  _methodCalled = YES;
+  _username = [username copy];
+  _password = [password copy];
+  if (completionHandler)
+    completionHandler(YES);
+}
+
+@end
 
 @interface ActivityServiceController (CrVisibleForTesting)
 - (NSArray*)activityItemsForData:(ShareToData*)data;
@@ -42,19 +74,20 @@
        completionMessage:(NSString*)message;
 
 // Setter function for mocking during testing
-- (void)setProvidersForTesting:(id<ActivityServicePassword,
-                                   ActivityServicePresentation,
-                                   ActivityServiceSnackbar>)provider;
+- (void)setProvidersForTesting:
+            (id<ActivityServicePassword, ActivityServicePresentation>)provider
+                    dispatcher:(id<SnackbarCommands>)dispatcher;
 @end
 
 @interface FakeActivityServiceControllerTestProvider
     : NSObject<ActivityServicePassword,
                ActivityServicePositioner,
                ActivityServicePresentation,
-               ActivityServiceSnackbar>
+               SnackbarCommands>
 
 @property(nonatomic, readonly, strong) UIViewController* parentViewController;
-@property(nonatomic, readonly, strong) OCMockObject* passwordControllerMock;
+@property(nonatomic, readonly, strong)
+    FakePasswordFormFiller* fakePasswordFormFiller;
 
 // Tracks whether or not the associated provider methods were called.
 @property(nonatomic, readonly, assign)
@@ -84,18 +117,18 @@
 @synthesize latestErrorAlertMessage = _latestErrorAlertMessage;
 @synthesize latestSnackbarMessage = _latestSnackbarMessage;
 @synthesize parentViewController = _parentViewController;
-@synthesize passwordControllerMock = _passwordControllerMock;
+@synthesize fakePasswordFormFiller = _fakePasswordFormFiller;
 
 - (instancetype)initWithParentViewController:(UIViewController*)controller {
   if ((self = [super init])) {
     _parentViewController = controller;
-    _passwordControllerMock = OCMClassMock([PasswordController class]);
+    _fakePasswordFormFiller = [[FakePasswordFormFiller alloc] init];
   }
   return self;
 }
 
-- (PasswordController*)currentPasswordController {
-  return static_cast<PasswordController*>(self.passwordControllerMock);
+- (id<PasswordFormFiller>)currentPasswordFormFiller {
+  return _fakePasswordFormFiller;
 }
 
 - (void)presentActivityServiceViewController:(UIViewController*)controller {
@@ -127,8 +160,8 @@
   return self.parentViewController.view;
 }
 
-- (void)showSnackbar:(NSString*)message {
-  _latestSnackbarMessage = [message copy];
+- (void)showSnackbarMessage:(MDCSnackbarMessage*)message {
+  _latestSnackbarMessage = [message.text copy];
 }
 
 - (void)resetState {
@@ -152,11 +185,12 @@ class ActivityServiceControllerTest : public PlatformTest {
     [[UIApplication sharedApplication] keyWindow].rootViewController =
         parentController_;
     shareData_ =
-        [[ShareToData alloc] initWithURL:GURL("https://chromium.org")
-                                   title:@""
-                         isOriginalTitle:YES
-                         isPagePrintable:YES
-                      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+        [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org")
+                           passwordManagerURL:GURL("https://chromium.org")
+                                        title:@""
+                              isOriginalTitle:YES
+                              isPagePrintable:YES
+                           thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   }
 
   void TearDown() override {
@@ -240,19 +274,12 @@ class ActivityServiceControllerTest : public PlatformTest {
     FakeActivityServiceControllerTestProvider* provider =
         [[FakeActivityServiceControllerTestProvider alloc]
             initWithParentViewController:nil];
-    [activityController setProvidersForTesting:provider];
+    [activityController setProvidersForTesting:provider dispatcher:provider];
 
     // The following call to |processItemsReturnedFromActivity| should not
-    // trigger any calls to the mock PasswordController.  Use |rejectBlock| to
-    // trigger gtest failures because strict mocks throw exceptions when they
-    // receive unexpected methods, and crashing the whole test suite is bad.
-    void (^rejectBlock)(NSInvocation*) = ^(NSInvocation* invocation) {
-      FAIL() << "Methods were called unexpectedly on PasswordController";
-    };
-    [[[provider.passwordControllerMock stub] andDo:rejectBlock]
-        findAndFillPasswordForms:OCMOCK_ANY
-                        password:OCMOCK_ANY
-               completionHandler:OCMOCK_ANY];
+    // trigger any calls to the PasswordFormFiller.
+    EXPECT_TRUE(provider.fakePasswordFormFiller);
+    EXPECT_FALSE(provider.fakePasswordFormFiller.methodCalled);
 
     // Sets up the returned item from a Password Management App Extension.
     NSString* activityType = @"com.lastpass.ilastpass.LastPassExt";
@@ -263,8 +290,8 @@ class ActivityServiceControllerTest : public PlatformTest {
                                                        items:extensionItems];
     ASSERT_EQ(expectedResetUI, resetUI);
 
-    ASSERT_TRUE([provider currentPasswordController]);
-    EXPECT_OCMOCK_VERIFY(provider.passwordControllerMock);
+    EXPECT_TRUE(provider.fakePasswordFormFiller);
+    EXPECT_FALSE(provider.fakePasswordFormFiller.methodCalled);
   }
 
   web::TestWebThreadBundle thread_bundle_;
@@ -289,8 +316,7 @@ TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
                          dispatcher:nil
                    passwordProvider:provider
                    positionProvider:provider
-               presentationProvider:provider
-                   snackbarProvider:provider];
+               presentationProvider:provider];
   EXPECT_TRUE(provider.presentActivityServiceViewControllerWasCalled);
   EXPECT_FALSE(provider.activityServiceDidEndPresentingWasCalled);
   EXPECT_TRUE([activityController isActive]);
@@ -312,11 +338,12 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForData) {
   // ShareToData does not contain an image, so the result items array will not
   // contain an image source.
   ShareToData* data =
-      [[ShareToData alloc] initWithURL:GURL("https://chromium.org")
-                                 title:@"foo"
-                       isOriginalTitle:YES
-                       isPagePrintable:YES
-                    thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+      [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org")
+                         passwordManagerURL:GURL("https://chromium.org")
+                                      title:@"foo"
+                            isOriginalTitle:YES
+                            isPagePrintable:YES
+                         thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   EXPECT_FALSE(ArrayContainsImageSource(items));
 
@@ -332,12 +359,13 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForData) {
 TEST_F(ActivityServiceControllerTest, ActivityItemsForDataWithPasswordAppEx) {
   ActivityServiceController* activityController =
       [[ActivityServiceController alloc] init];
-  ShareToData* data =
-      [[ShareToData alloc] initWithURL:GURL("https://chromium.org/login.html")
-                                 title:@"kung fu fighting"
-                       isOriginalTitle:YES
-                       isPagePrintable:YES
-                    thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  ShareToData* data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/login.html")
+      passwordManagerURL:GURL("https://m.chromium.org/login.html")
+                   title:@"kung fu fighting"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   NSString* findLoginAction =
       (NSString*)activity_services::kUTTypeAppExtensionFindLoginAction;
@@ -373,7 +401,7 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForDataWithPasswordAppEx) {
   // Checks URL.
   NSString* appExUrlString =
       [result objectForKey:activity_services::kPasswordAppExURLStringKey];
-  EXPECT_NSEQ(@"https://chromium.org/login.html", appExUrlString);
+  EXPECT_NSEQ(@"https://m.chromium.org/login.html", appExUrlString);
 
   // Checks that the list includes the page's title.
   NSArray* sources = FindItemsOfClass(items, [UIActivityURLSource class]);
@@ -393,12 +421,13 @@ TEST_F(ActivityServiceControllerTest,
        ActivityItemsForDataWithPasswordAppExReturnsURL) {
   ActivityServiceController* activityController =
       [[ActivityServiceController alloc] init];
-  ShareToData* data =
-      [[ShareToData alloc] initWithURL:GURL("https://chromium.org/login.html")
-                                 title:@"kung fu fighting"
-                       isOriginalTitle:YES
-                       isPagePrintable:YES
-                    thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  ShareToData* data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/login.html")
+      passwordManagerURL:GURL("https://m.chromium.org/login.html")
+                   title:@"kung fu fighting"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   NSString* shareAction = @"com.apple.UIKit.activity.PostToFacebook";
   NSArray* urlItems =
@@ -422,28 +451,16 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  ASSERT_TRUE([provider currentPasswordController]);
-  [activityController setProvidersForTesting:provider];
+  ASSERT_TRUE([provider currentPasswordFormFiller]);
+  [activityController setProvidersForTesting:provider dispatcher:nil];
+
+  EXPECT_TRUE(provider.fakePasswordFormFiller);
+  EXPECT_FALSE(provider.fakePasswordFormFiller.methodCalled);
 
   // Sets up expectations on the mock PasswordController to check that the
   // callback function is called with the correct username and password.
   NSString* const kSecretUsername = @"john.doe";
   NSString* const kSecretPassword = @"super!secret";
-  __block bool blockCalled = false;
-  void (^validationBlock)(NSInvocation*) = ^(NSInvocation* invocation) {
-    __unsafe_unretained NSString* username;
-    __unsafe_unretained NSString* password;
-    // Skips 0 and 1 index because they are |self| and |cmd|.
-    [invocation getArgument:&username atIndex:2];
-    [invocation getArgument:&password atIndex:3];
-    EXPECT_NSEQ(kSecretUsername, username);
-    EXPECT_NSEQ(kSecretPassword, password);
-    blockCalled = true;
-  };
-  [[[provider.passwordControllerMock stub] andDo:validationBlock]
-      findAndFillPasswordForms:OCMOCK_ANY
-                      password:OCMOCK_ANY
-             completionHandler:OCMOCK_ANY];
 
   // Sets up the returned item from a Password Management App Extension.
   NSString* activityType = @"com.software.find-login-action.extension";
@@ -462,11 +479,15 @@ TEST_F(ActivityServiceControllerTest, ProcessItemsReturnedSuccessfully) {
                                                     status:result
                                                      items:@[ extensionItem ]];
   ASSERT_FALSE(resetUI);
-  // Wait for the PasswordController mock to be called.
-  base::test::ios::WaitUntilCondition(^{
-    return blockCalled;
+
+  // Wait for the -findAndFillPasswordForms:password:completionHandler: method
+  // to be called on the FakePasswordFormFiller.
+  base::test::ios::WaitUntilCondition(^bool() {
+    return provider.fakePasswordFormFiller.methodCalled;
   });
-  EXPECT_OCMOCK_VERIFY(provider.passwordControllerMock);
+
+  EXPECT_NSEQ(kSecretUsername, provider.fakePasswordFormFiller.username);
+  EXPECT_NSEQ(kSecretPassword, provider.fakePasswordFormFiller.password);
 }
 
 // Verifies that -processItemsReturnedFromActivity:status:item: fails when
@@ -502,12 +523,13 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
       [[ActivityServiceController alloc] init];
 
   // Verify printable data.
-  ShareToData* data =
-      [[ShareToData alloc] initWithURL:GURL("https://chromium.org/printable")
-                                 title:@"bar"
-                       isOriginalTitle:YES
-                       isPagePrintable:YES
-                    thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  ShareToData* data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/printable")
+      passwordManagerURL:GURL("https://chromium.org/printable")
+                   title:@"bar"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
 
   NSArray* items = [activityController applicationActivitiesForData:data
                                                          dispatcher:nil];
@@ -515,12 +537,13 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
   EXPECT_EQ([PrintActivity class], [[items objectAtIndex:0] class]);
 
   // Verify non-printable data.
-  data =
-      [[ShareToData alloc] initWithURL:GURL("https://chromium.org/unprintable")
-                                 title:@"baz"
-                       isOriginalTitle:YES
-                       isPagePrintable:NO
-                    thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/unprintable")
+      passwordManagerURL:GURL("https://chromium.org/unprintable")
+                   title:@"baz"
+         isOriginalTitle:YES
+         isPagePrintable:NO
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data
                                                 dispatcher:nil];
   EXPECT_EQ(1U, [items count]);
@@ -563,7 +586,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithSuccess) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   NSString* completion_message = @"Completion!";
   [controller shareDidComplete:ShareTo::SHARE_SUCCESS
@@ -581,7 +604,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithCancellation) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   [controller shareDidComplete:ShareTo::SHARE_CANCEL
              completionMessage:@"dummy"];
@@ -599,7 +622,7 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithError) {
   FakeActivityServiceControllerTestProvider* provider =
       [[FakeActivityServiceControllerTestProvider alloc]
           initWithParentViewController:nil];
-  [controller setProvidersForTesting:provider];
+  [controller setProvidersForTesting:provider dispatcher:provider];
 
   [controller shareDidComplete:ShareTo::SHARE_ERROR completionMessage:@"dummy"];
 

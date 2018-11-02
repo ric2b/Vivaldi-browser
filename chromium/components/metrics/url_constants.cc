@@ -11,9 +11,11 @@ namespace metrics {
 const char kNewMetricsServerUrl[] =
     SYNC_URL("/uma/v2");
 
+const char kNewMetricsServerUrlInsecure[] =
+    SYNC_URL("/uma/v2");
+
 const char kOldMetricsServerUrl[] = SYNC_URL("/uma/v2");
 
 const char kDefaultMetricsMimeType[] = "application/vnd.chrome.uma";
 
 } // namespace metrics
-

@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_context_menu_model.h"
 
+#include <memory>
 #include <string>
 
 #include "ash/public/cpp/ash_pref_names.h"
@@ -84,6 +85,9 @@ void AddLocalMenuItems(MenuItemList* menu, int64_t display_id) {
   if (!prefs)  // Null during startup.
     return;
 
+  const bool is_tablet_mode = Shell::Get()
+                                  ->tablet_mode_controller()
+                                  ->IsTabletModeWindowManagerEnabled();
   // In fullscreen, the shelf is either hidden or auto-hidden, depending on
   // the type of fullscreen. Do not show the auto-hide menu item while in
   // fullscreen because it is confusing when the preference appears not to
@@ -95,9 +99,6 @@ void AddLocalMenuItems(MenuItemList* menu, int64_t display_id) {
     auto_hide->label = GetStringUTF16(IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE);
     auto_hide->checked = GetShelfAutoHideBehaviorPref(prefs, display_id) ==
                          SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
-    const bool is_tablet_mode = Shell::Get()
-                                    ->tablet_mode_controller()
-                                    ->IsTabletModeWindowManagerEnabled();
     auto_hide->enabled = !is_tablet_mode;
     menu->push_back(std::move(auto_hide));
   }
@@ -113,7 +114,7 @@ void AddLocalMenuItems(MenuItemList* menu, int64_t display_id) {
   alignment_menu->command_id = ShelfContextMenuModel::MENU_ALIGNMENT_MENU;
   alignment_menu->label = GetStringUTF16(IDS_ASH_SHELF_CONTEXT_MENU_POSITION);
   alignment_menu->submenu = MenuItemList();
-  alignment_menu->enabled = true;
+  alignment_menu->enabled = !is_tablet_mode;
 
   mojom::MenuItemPtr left(mojom::MenuItem::New());
   left->type = ui::MenuModel::TYPE_RADIO;
@@ -165,7 +166,7 @@ ShelfContextMenuModel::ShelfContextMenuModel(MenuItemList menu_items,
   AddItems(this, this, menu_items_, &submenus_);
 }
 
-ShelfContextMenuModel::~ShelfContextMenuModel() {}
+ShelfContextMenuModel::~ShelfContextMenuModel() = default;
 
 // static
 void ShelfContextMenuModel::AddItems(ui::SimpleMenuModel* model,
@@ -192,7 +193,7 @@ void ShelfContextMenuModel::AddItems(ui::SimpleMenuModel* model,
       case ui::MenuModel::TYPE_SUBMENU:
         if (item->submenu.has_value()) {
           std::unique_ptr<ui::MenuModel> submenu =
-              base::MakeUnique<ShelfContextSubMenuModel>(
+              std::make_unique<ShelfContextSubMenuModel>(
                   delegate, item->submenu.value(), submenus);
           model->AddSubMenu(item->command_id, item->label, submenu.get());
           submenus->push_back(std::move(submenu));
@@ -201,7 +202,7 @@ void ShelfContextMenuModel::AddItems(ui::SimpleMenuModel* model,
     }
     if (!item->image.isNull()) {
       model->SetIcon(model->GetIndexOfCommandId(item->command_id),
-                     gfx::Image::CreateFrom1xBitmap(item->image));
+                     gfx::Image(item->image));
     }
   }
 }

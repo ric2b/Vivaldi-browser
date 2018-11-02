@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
-#import "chrome/browser/ui/cocoa/location_bar/location_icon_decoration.h"
+#import "chrome/browser/ui/cocoa/location_bar/page_info_bubble_decoration.h"
 #import "chrome/browser/ui/cocoa/page_info/split_block_button.h"
 #import "chrome/browser/ui/cocoa/permission_bubble/permission_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
@@ -70,7 +70,6 @@ class PermissionBubbleControllerTest : public CocoaProfileTest,
                                        public PermissionPrompt::Delegate {
  public:
 
-  MOCK_METHOD1(TogglePersist, void(bool));
   MOCK_METHOD0(SetCustomizationMode, void());
   MOCK_METHOD0(Accept, void());
   MOCK_METHOD0(Deny, void());
@@ -95,6 +94,10 @@ class PermissionBubbleControllerTest : public CocoaProfileTest,
 
   const std::vector<PermissionRequest*>& Requests() override {
     return requests_;
+  }
+
+  PermissionPrompt::DisplayNameOrOrigin GetDisplayNameOrOrigin() override {
+    return {base::string16(), false /* is_origin */};
   }
 
   void AddRequest(const std::string& title) {
@@ -170,7 +173,7 @@ TEST_F(PermissionBubbleControllerTest, PageIconDecorationActiveState) {
   BrowserWindowController* controller =
       [BrowserWindowController browserWindowControllerForWindow:window];
   LocationBarDecoration* decoration =
-      [controller locationBarBridge]->GetPageInfoDecoration();
+      [controller locationBarBridge]->page_info_decoration();
 
   [controller_ showWindow:nil];
   EXPECT_TRUE([[controller_ window] isVisible]);

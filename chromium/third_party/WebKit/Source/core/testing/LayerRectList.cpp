@@ -44,7 +44,7 @@ unsigned LayerRectList::length() const {
 
 LayerRect* LayerRectList::item(unsigned index) {
   if (index >= list_.size())
-    return 0;
+    return nullptr;
 
   return list_[index].Get();
 }
@@ -58,8 +58,9 @@ void LayerRectList::Append(Node* layer_root_node,
                                     layer_offset_y, layer_relative_rect));
 }
 
-DEFINE_TRACE(LayerRectList) {
+void LayerRectList::Trace(blink::Visitor* visitor) {
   visitor->Trace(list_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

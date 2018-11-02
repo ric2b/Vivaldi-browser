@@ -16,26 +16,26 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/notifications/message_center_stats_collector.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_system_observer.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
-#include "ui/message_center/message_center_tray_delegate.h"
 #include "ui/message_center/message_center_types.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/ui_delegate.h"
 
-class Notification;
 class Profile;
 class ProfileNotification;
 
 namespace message_center {
+class Notification;
 class NotificationBlocker;
 FORWARD_DECLARE_TEST(WebNotificationTrayTest, ManuallyCloseMessageCenter);
 }
 
 #if !defined(OS_CHROMEOS)
 // Implementations are platform specific.
-message_center::MessageCenterTrayDelegate* CreateMessageCenterTrayDelegate();
+message_center::UiDelegate* CreateUiDelegate();
 #endif
 
 // This class extends NotificationUIManagerImpl and delegates actual display
@@ -44,22 +44,20 @@ class MessageCenterNotificationManager
     : public NotificationUIManager,
       public message_center::MessageCenterObserver {
  public:
-  MessageCenterNotificationManager(
-      message_center::MessageCenter* message_center,
-      std::unique_ptr<message_center::NotifierSettingsProvider>
-          settings_provider);
+  explicit MessageCenterNotificationManager(
+      message_center::MessageCenter* message_center);
   ~MessageCenterNotificationManager() override;
 
   // NotificationUIManager
-  void Add(const Notification& notification, Profile* profile) override;
-  bool Update(const Notification& notification, Profile* profile) override;
-  const Notification* FindById(const std::string& delegate_id,
-                               ProfileID profile_id) const override;
+  void Add(const message_center::Notification& notification,
+           Profile* profile) override;
+  bool Update(const message_center::Notification& notification,
+              Profile* profile) override;
+  const message_center::Notification* FindById(
+      const std::string& delegate_id,
+      ProfileID profile_id) const override;
   bool CancelById(const std::string& delegate_id,
                   ProfileID profile_id) override;
-  std::set<std::string> GetAllIdsByProfileAndSourceOrigin(
-      ProfileID profile_id,
-      const GURL& source) override;
   std::set<std::string> GetAllIdsByProfile(ProfileID profile_id) override;
   bool CancelAllBySourceOrigin(const GURL& source_origin) override;
   bool CancelAllByProfile(ProfileID profile_id) override;
@@ -71,8 +69,7 @@ class MessageCenterNotificationManager
                              bool by_user) override;
 
   // Takes ownership of |delegate|.
-  void SetMessageCenterTrayDelegateForTest(
-      message_center::MessageCenterTrayDelegate* delegate);
+  void SetUiDelegateForTest(message_center::UiDelegate* delegate);
 
   // Returns the notification id which this manager will use to add to message
   // center, for this combination of delegate id and profile.
@@ -83,7 +80,7 @@ class MessageCenterNotificationManager
   FRIEND_TEST_ALL_PREFIXES(message_center::WebNotificationTrayTest,
                            ManuallyCloseMessageCenter);
 
-  std::unique_ptr<message_center::MessageCenterTrayDelegate> tray_;
+  std::unique_ptr<message_center::UiDelegate> tray_;
   message_center::MessageCenter* message_center_;  // Weak, global.
 
   // Use a map by notification_id since this mapping is the most often used.
@@ -99,8 +96,6 @@ class MessageCenterNotificationManager
   // Returns the ProfileNotification for the |id|, or NULL if no such
   // notification is found.
   ProfileNotification* FindProfileNotification(const std::string& id) const;
-
-  std::unique_ptr<message_center::NotifierSettingsProvider> settings_provider_;
 
   // To own the blockers.
   std::vector<std::unique_ptr<message_center::NotificationBlocker>> blockers_;

@@ -15,8 +15,9 @@ from telemetry.web_perf import timeline_based_measurement
 import page_sets
 
 
-# See tr.v.Numeric.getSummarizedScalarNumericsWithNames()
-# https://github.com/catapult-project/catapult/blob/master/tracing/tracing/value/numeric.html#L323
+# Regex to filter out a few names of statistics supported by
+# Histogram.getStatisticScalar(), see:
+#   https://github.com/catapult-project/catapult/blob/d4179a05/tracing/tracing/value/histogram.html#L645  pylint: disable=line-too-long
 _IGNORED_STATS_RE = re.compile(
     r'(?<!dump)(?<!process)_(std|count|max|min|sum|pct_\d{4}(_\d+)?)$')
 
@@ -180,17 +181,12 @@ class MemoryLongRunningIdleGmail(_MemoryV8Benchmark):
   def Name(cls):
     return 'memory.long_running_idle_gmail_tbmv2'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return (cls.IsSvelte(possible_browser) or  # http://crbug.com/611167
-            # http://crbug.com/671650
-            ((possible_browser.browser_type == 'reference' and
-              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5')))
-
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing disabled.
+        self.DisableBenchmark(
+            [story.expectations.ANDROID_SVELTE],
+            'Requires a lot of memory: crbug.com/611167')
     return StoryExpectations()
 
 
@@ -208,12 +204,10 @@ class MemoryLongRunningIdleGmailBackground(_MemoryV8Benchmark):
   def Name(cls):
     return 'memory.long_running_idle_gmail_background_tbmv2'
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/616530
-    return cls.IsSvelte(possible_browser)
-
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass
+        self.DisableBenchmark(
+            [story.expectations.ANDROID_SVELTE],
+            'Requires a lot of memory: crbug.com/616530')
     return StoryExpectations()

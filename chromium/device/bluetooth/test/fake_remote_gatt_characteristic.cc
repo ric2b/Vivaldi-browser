@@ -43,7 +43,7 @@ FakeRemoteGattCharacteristic::FakeRemoteGattCharacteristic(
     properties_ |= PROPERTY_EXTENDED_PROPERTIES;
 }
 
-FakeRemoteGattCharacteristic::~FakeRemoteGattCharacteristic() {}
+FakeRemoteGattCharacteristic::~FakeRemoteGattCharacteristic() = default;
 
 std::string FakeRemoteGattCharacteristic::AddFakeDescriptor(
     const device::BluetoothUUID& descriptor_uuid) {
@@ -72,6 +72,22 @@ void FakeRemoteGattCharacteristic::SetNextReadResponse(
 void FakeRemoteGattCharacteristic::SetNextWriteResponse(uint16_t gatt_code) {
   DCHECK(!next_write_response_);
   next_write_response_.emplace(gatt_code);
+}
+
+void FakeRemoteGattCharacteristic::SetNextSubscribeToNotificationsResponse(
+    uint16_t gatt_code) {
+  DCHECK(!next_subscribe_to_notifications_response_);
+  next_subscribe_to_notifications_response_.emplace(gatt_code);
+}
+
+bool FakeRemoteGattCharacteristic::AllResponsesConsumed() {
+  // TODO(crbug.com/569709): Update this when
+  // SetNextUnsubscribeFromNotificationsResponse is implemented.
+  return !next_read_response_ && !next_write_response_ &&
+         !next_subscribe_to_notifications_response_ &&
+         std::all_of(
+             fake_descriptors_.begin(), fake_descriptors_.end(),
+             [](const auto& e) { return e.second->AllResponsesConsumed(); });
 }
 
 std::string FakeRemoteGattCharacteristic::GetIdentifier() const {
@@ -154,7 +170,11 @@ void FakeRemoteGattCharacteristic::SubscribeToNotifications(
     device::BluetoothRemoteGattDescriptor* ccc_descriptor,
     const base::Closure& callback,
     const ErrorCallback& error_callback) {
-  NOTREACHED();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&FakeRemoteGattCharacteristic::
+                     DispatchSubscribeToNotificationsResponse,
+                 weak_ptr_factory_.GetWeakPtr(), callback, error_callback));
 }
 
 void FakeRemoteGattCharacteristic::UnsubscribeFromNotifications(
@@ -172,15 +192,18 @@ void FakeRemoteGattCharacteristic::DispatchReadResponse(
   base::Optional<std::vector<uint8_t>> value = next_read_response_->value();
   next_read_response_.reset();
 
-  if (gatt_code == mojom::kGATTSuccess) {
-    DCHECK(value);
-    value_ = std::move(value.value());
-    callback.Run(value_);
-    return;
-  } else if (gatt_code == mojom::kGATTInvalidHandle) {
-    DCHECK(!value);
-    error_callback.Run(device::BluetoothGattService::GATT_ERROR_FAILED);
-    return;
+  switch (gatt_code) {
+    case mojom::kGATTSuccess:
+      DCHECK(value);
+      value_ = std::move(value.value());
+      callback.Run(value_);
+      break;
+    case mojom::kGATTInvalidHandle:
+      DCHECK(!value);
+      error_callback.Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+      break;
+    default:
+      NOTREACHED();
   }
 }
 
@@ -192,13 +215,35 @@ void FakeRemoteGattCharacteristic::DispatchWriteResponse(
   uint16_t gatt_code = next_write_response_.value();
   next_write_response_.reset();
 
-  if (gatt_code == mojom::kGATTSuccess) {
-    last_written_value_ = value;
-    callback.Run();
-    return;
-  } else if (gatt_code == mojom::kGATTInvalidHandle) {
-    error_callback.Run(device::BluetoothGattService::GATT_ERROR_FAILED);
-    return;
+  switch (gatt_code) {
+    case mojom::kGATTSuccess:
+      last_written_value_ = value;
+      callback.Run();
+      break;
+    case mojom::kGATTInvalidHandle:
+      error_callback.Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
+void FakeRemoteGattCharacteristic::DispatchSubscribeToNotificationsResponse(
+    const base::Closure& callback,
+    const ErrorCallback& error_callback) {
+  DCHECK(next_subscribe_to_notifications_response_);
+  uint16_t gatt_code = next_subscribe_to_notifications_response_.value();
+  next_subscribe_to_notifications_response_.reset();
+
+  switch (gatt_code) {
+    case mojom::kGATTSuccess:
+      callback.Run();
+      break;
+    case mojom::kGATTInvalidHandle:
+      error_callback.Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+      break;
+    default:
+      NOTREACHED();
   }
 }
 

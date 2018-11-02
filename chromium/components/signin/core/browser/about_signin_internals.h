@@ -164,7 +164,7 @@ class AboutSigninInternals
         SigninErrorController* signin_error_controller,
         ProfileOAuth2TokenService* token_service,
         GaiaCookieManagerService* cookie_manager_service_,
-        const std::string& product_version);
+        SigninClient* signin_client);
   };
 
   // SigninManager::SigninDiagnosticsObserver implementation.
@@ -187,6 +187,7 @@ class AboutSigninInternals
 
   // OAuth2TokenServiceDelegate::Observer implementations.
   void OnRefreshTokensLoaded() override;
+  void OnEndBatchChanges() override;
 
   // SigninManagerBase::Observer implementations.
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;

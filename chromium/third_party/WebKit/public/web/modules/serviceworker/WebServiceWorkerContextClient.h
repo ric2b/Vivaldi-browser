@@ -33,19 +33,19 @@
 
 #include <memory>
 
-#include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsClaimCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerStreamHandle.h"
+#include "public/platform/modules/serviceworker/service_worker_event_status.mojom-shared.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
+class MessagePortChannel;
 struct WebPaymentHandlerResponse;
 struct WebServiceWorkerClientQueryOptions;
 class WebServiceWorkerContextProxy;
@@ -65,12 +65,6 @@ class WebString;
 class WebServiceWorkerContextClient {
  public:
   virtual ~WebServiceWorkerContextClient() {}
-
-  // Returns the scope of the service worker's registration. Currently
-  // only used by InstallEvent#registerForeignFetch().
-  // TODO(falken): Figure out why registerForeignFetch() can't just use
-  // self.registration.scope.
-  virtual WebURL Scope() const { return WebURL(); }
 
   // For Clients#get(id). Requests the embedder to return the specified Client.
   virtual void GetClient(const WebString& client_id,
@@ -172,33 +166,31 @@ class WebServiceWorkerContextClient {
 
   // Called after an 'activate' event completed.
   virtual void DidHandleActivateEvent(int event_id,
-                                      WebServiceWorkerEventResult result,
+                                      mojom::ServiceWorkerEventStatus,
                                       double event_dispatch_time) {}
 
   // Called after Background Fetch events (dispatched via
   // WebServiceWorkerContextProxy) are handled by the service worker.
   virtual void DidHandleBackgroundFetchAbortEvent(
       int event_id,
-      WebServiceWorkerEventResult result,
+      mojom::ServiceWorkerEventStatus,
       double event_dispatch_time) {}
   virtual void DidHandleBackgroundFetchClickEvent(
       int event_id,
-      WebServiceWorkerEventResult result,
+      mojom::ServiceWorkerEventStatus,
       double event_dispatch_time) {}
   virtual void DidHandleBackgroundFetchFailEvent(
       int event_id,
-      WebServiceWorkerEventResult result,
+      mojom::ServiceWorkerEventStatus,
       double event_dispatch_time) {}
-  virtual void DidHandleBackgroundFetchedEvent(
-      int event_id,
-      WebServiceWorkerEventResult result,
-      double event_dispatch_time) {}
+  virtual void DidHandleBackgroundFetchedEvent(int event_id,
+                                               mojom::ServiceWorkerEventStatus,
+                                               double event_dispatch_time) {}
 
   // Called after ExtendableMessageEvent was handled by the service worker.
-  virtual void DidHandleExtendableMessageEvent(
-      int event_id,
-      WebServiceWorkerEventResult result,
-      double event_dispatch_time) {}
+  virtual void DidHandleExtendableMessageEvent(int event_id,
+                                               mojom::ServiceWorkerEventStatus,
+                                               double event_dispatch_time) {}
 
   // RespondToFetchEvent* will be called after the service worker returns a
   // response to a FetchEvent, and DidHandleFetchEvent will be called after the
@@ -221,39 +213,37 @@ class WebServiceWorkerContextClient {
       WebServiceWorkerStreamHandle* body_as_stream,
       double event_dispatch_time) {}
   virtual void DidHandleFetchEvent(int fetch_event_id,
-                                   WebServiceWorkerEventResult result,
+                                   mojom::ServiceWorkerEventStatus,
                                    double event_dispatch_time) {}
 
   // Called after InstallEvent (dispatched via WebServiceWorkerContextProxy) is
   // handled by the service worker.
   virtual void DidHandleInstallEvent(int install_event_id,
-                                     WebServiceWorkerEventResult result,
+                                     mojom::ServiceWorkerEventStatus,
                                      double event_dispatch_time) {}
 
   // Called after NotificationClickEvent (dispatched via
   // WebServiceWorkerContextProxy) is handled by the service worker.
-  virtual void DidHandleNotificationClickEvent(
-      int event_id,
-      WebServiceWorkerEventResult result,
-      double event_dispatch_time) {}
+  virtual void DidHandleNotificationClickEvent(int event_id,
+                                               mojom::ServiceWorkerEventStatus,
+                                               double event_dispatch_time) {}
 
   // Called after NotificationCloseEvent (dispatched via
   // WebServiceWorkerContextProxy) is handled by the service worker.
-  virtual void DidHandleNotificationCloseEvent(
-      int event_id,
-      WebServiceWorkerEventResult result,
-      double event_dispatch_time) {}
+  virtual void DidHandleNotificationCloseEvent(int event_id,
+                                               mojom::ServiceWorkerEventStatus,
+                                               double event_dispatch_time) {}
 
   // Called after PushEvent (dispatched via WebServiceWorkerContextProxy) is
   // handled by the service worker.
   virtual void DidHandlePushEvent(int push_event_id,
-                                  WebServiceWorkerEventResult result,
+                                  mojom::ServiceWorkerEventStatus,
                                   double event_dispatch_time) {}
 
   // Called after SyncEvent (dispatched via WebServiceWorkerContextProxy) is
   // handled by the service worker.
   virtual void DidHandleSyncEvent(int sync_event_id,
-                                  WebServiceWorkerEventResult result,
+                                  mojom::ServiceWorkerEventStatus,
                                   double event_dispatch_time) {}
 
   // RespondToAbortPaymentEvent will be called after the service worker
@@ -266,7 +256,7 @@ class WebServiceWorkerContextClient {
   // Called after AbortPaymentEvent (dispatched
   // via WebServiceWorkerContextProxy) is handled by the service worker.
   virtual void DidHandleAbortPaymentEvent(int abort_payment_event_id,
-                                          WebServiceWorkerEventResult result,
+                                          mojom::ServiceWorkerEventStatus,
                                           double event_dispatch_time) {}
 
   // RespondToCanMakePaymentEvent will be called after the service worker
@@ -280,7 +270,7 @@ class WebServiceWorkerContextClient {
   // Called after CanMakePaymentEvent (dispatched
   // via WebServiceWorkerContextProxy) is handled by the service worker.
   virtual void DidHandleCanMakePaymentEvent(int payment_request_event_id,
-                                            WebServiceWorkerEventResult result,
+                                            mojom::ServiceWorkerEventStatus,
                                             double event_dispatch_time) {}
 
   // RespondToPaymentRequestEvent will be called after the service worker
@@ -295,7 +285,7 @@ class WebServiceWorkerContextClient {
   // Called after PaymentRequestEvent (dispatched via
   // WebServiceWorkerContextProxy) is handled by the service worker.
   virtual void DidHandlePaymentRequestEvent(int payment_request_event_id,
-                                            WebServiceWorkerEventResult result,
+                                            mojom::ServiceWorkerEventStatus,
                                             double event_dispatch_time) {}
 
   // Called on the main thread.
@@ -318,7 +308,7 @@ class WebServiceWorkerContextClient {
   // crbug.com/351753
   virtual void PostMessageToClient(const WebString& uuid,
                                    const WebString&,
-                                   WebMessagePortChannelArray) = 0;
+                                   WebVector<MessagePortChannel>) = 0;
 
   // For WindowClient#focus(). Requests the embedder to focus a window.
   virtual void Focus(const WebString& uuid,
@@ -336,13 +326,6 @@ class WebServiceWorkerContextClient {
   // For Clients#claim().
   virtual void Claim(
       std::unique_ptr<WebServiceWorkerClientsClaimCallbacks>) = 0;
-
-  // Called when the worker wants to register subscopes to handle via foreign
-  // fetch. Will only be called while an install event is in progress.
-  virtual void RegisterForeignFetchScopes(
-      int install_event_id,
-      const WebVector<WebURL>& sub_scopes,
-      const WebVector<WebSecurityOrigin>& origins) = 0;
 };
 
 }  // namespace blink

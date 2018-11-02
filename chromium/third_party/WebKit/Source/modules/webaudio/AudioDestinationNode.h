@@ -66,6 +66,11 @@ class AudioDestinationHandler : public AudioHandler, public AudioIOCallback {
   virtual void StartRendering() = 0;
   virtual void StopRendering() = 0;
 
+  // The render thread needs to be changed after Worklet JS code is loaded by
+  // AudioWorklet. This method ensures the switching of render thread and the
+  // restart of the context.
+  virtual void RestartRendering() = 0;
+
   // Returns the rendering callback buffer size.
   virtual size_t CallbackBufferSize() const = 0;
   virtual double SampleRate() const = 0;
@@ -103,7 +108,7 @@ class AudioDestinationHandler : public AudioHandler, public AudioIOCallback {
     }
 
    private:
-    RefPtr<AudioBus> source_bus_;
+    scoped_refptr<AudioBus> source_bus_;
   };
 
   // Counts the number of sample-frames processed by the destination.

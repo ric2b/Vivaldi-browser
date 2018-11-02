@@ -8,7 +8,7 @@
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#import "ios/chrome/browser/passwords/password_controller.h"
+#import "ios/chrome/browser/passwords/password_form_filler.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
 #import "ios/chrome/browser/ui/activity_services/appex_constants.h"
 #import "ios/chrome/browser/ui/activity_services/chrome_activity_item_source.h"
@@ -17,24 +17,31 @@
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_password.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
-#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_snackbar.h"
 #import "ios/chrome/browser/ui/activity_services/share_protocol.h"
 #import "ios/chrome/browser/ui/activity_services/share_to_data.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
+namespace {
+// Snackbar category for activity services.
+NSString* const kActivityServicesSnackbarCategory =
+    @"ActivityServicesSnackbarCategory";
+}  // namespace
+
 @interface ActivityServiceController () {
   BOOL active_;
   __weak id<ActivityServicePassword> passwordProvider_;
   __weak id<ActivityServicePresentation> presentationProvider_;
-  __weak id<ActivityServiceSnackbar> snackbarProvider_;
   UIActivityViewController* activityViewController_;
+  __weak id<SnackbarCommands> dispatcher_;
 }
 
 // Resets the controller's user interface and delegate.
@@ -100,11 +107,10 @@
 
 - (void)shareWithData:(ShareToData*)data
             browserState:(ios::ChromeBrowserState*)browserState
-              dispatcher:(id<BrowserCommands>)dispatcher
+              dispatcher:(id<BrowserCommands, SnackbarCommands>)dispatcher
         passwordProvider:(id<ActivityServicePassword>)passwordProvider
         positionProvider:(id<ActivityServicePositioner>)positionProvider
-    presentationProvider:(id<ActivityServicePresentation>)presentationProvider
-        snackbarProvider:(id<ActivityServiceSnackbar>)snackbarProvider {
+    presentationProvider:(id<ActivityServicePresentation>)presentationProvider {
   DCHECK(data);
   DCHECK(!active_);
 
@@ -112,8 +118,8 @@
   UIView* inView = nil;
   if (IsIPadIdiom()) {
     DCHECK(positionProvider);
-    fromRect = [positionProvider shareButtonAnchorRect];
     inView = [positionProvider shareButtonView];
+    fromRect = inView.bounds;
     DCHECK(fromRect.size.height);
     DCHECK(fromRect.size.width);
     DCHECK(inView);
@@ -121,10 +127,10 @@
 
   DCHECK(!passwordProvider_);
   DCHECK(!presentationProvider_);
-  DCHECK(!snackbarProvider_);
   passwordProvider_ = passwordProvider;
   presentationProvider_ = presentationProvider;
-  snackbarProvider_ = snackbarProvider;
+
+  dispatcher_ = dispatcher;
 
   DCHECK(!activityViewController_);
   activityViewController_ = [[UIActivityViewController alloc]
@@ -164,7 +170,6 @@
 - (void)resetUserInterface {
   passwordProvider_ = nil;
   presentationProvider_ = nil;
-  snackbarProvider_ = nil;
   activityViewController_ = nil;
   active_ = NO;
 }
@@ -176,7 +181,6 @@
   DCHECK(active_);
   DCHECK(passwordProvider_);
   DCHECK(presentationProvider_);
-  DCHECK(snackbarProvider_);
 
   BOOL shouldResetUI = YES;
   if (activityType) {
@@ -207,17 +211,20 @@
 
 - (NSArray*)activityItemsForData:(ShareToData*)data {
   NSMutableArray* activityItems = [NSMutableArray array];
-  // ShareToData object guarantees that there is a NSURL.
-  DCHECK(data.nsurl);
+  // ShareToData object guarantees that there is a sharedNSURL and
+  // passwordManagerNSURL.
+  DCHECK(data.shareNSURL);
+  DCHECK(data.passwordManagerNSURL);
 
   // In order to support find-login-action protocol, the provider object
   // UIActivityURLSource supports both Password Management App Extensions
   // (e.g. 1Password) and also provide a public.url UTType for Share Extensions
   // (e.g. Facebook, Twitter).
   UIActivityURLSource* loginActionProvider =
-      [[UIActivityURLSource alloc] initWithURL:data.nsurl
-                                       subject:data.title
-                            thumbnailGenerator:data.thumbnailGenerator];
+      [[UIActivityURLSource alloc] initWithShareURL:data.shareNSURL
+                                 passwordManagerURL:data.passwordManagerNSURL
+                                            subject:data.title
+                                 thumbnailGenerator:data.thumbnailGenerator];
   [activityItems addObject:loginActionProvider];
 
   if (data.image) {
@@ -237,9 +244,9 @@
     printActivity.dispatcher = dispatcher;
     [applicationActivities addObject:printActivity];
   }
-  if (data.url.SchemeIsHTTPOrHTTPS()) {
+  if (data.shareURL.SchemeIsHTTPOrHTTPS()) {
     ReadingListActivity* readingListActivity =
-        [[ReadingListActivity alloc] initWithURL:data.url
+        [[ReadingListActivity alloc] initWithURL:data.shareURL
                                            title:data.title
                                       dispatcher:dispatcher];
     [applicationActivities addObject:readingListActivity];
@@ -322,21 +329,19 @@
              completionMessage:(NSString*)message {
   switch (shareStatus) {
     case ShareTo::SHARE_SUCCESS: {
-      PasswordController* passwordController =
-          [passwordProvider_ currentPasswordController];
-      // Captures this provider for use in the asynchronously executed
-      // completion block.
-      __weak id<ActivityServiceSnackbar> snackbarProvider = snackbarProvider_;
+      __weak ActivityServiceController* weakSelf = self;
       // Flag to limit user feedback after form filled to just once.
       __block BOOL shown = NO;
-      [passwordController findAndFillPasswordForms:username
+      id<PasswordFormFiller> passwordFormFiller =
+          [passwordProvider_ currentPasswordFormFiller];
+      [passwordFormFiller findAndFillPasswordForms:username
                                           password:password
                                  completionHandler:^(BOOL completed) {
                                    if (shown || !completed || ![message length])
                                      return;
                                    TriggerHapticFeedbackForNotification(
                                        UINotificationFeedbackTypeSuccess);
-                                   [snackbarProvider showSnackbar:message];
+                                   [weakSelf showSnackbar:message];
                                    shown = YES;
                                  }];
       break;
@@ -357,7 +362,7 @@
     case ShareTo::SHARE_SUCCESS:
       if ([message length]) {
         TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
-        [snackbarProvider_ showSnackbar:message];
+        [self showSnackbar:message];
       }
       break;
     case ShareTo::SHARE_ERROR:
@@ -384,14 +389,22 @@
   [presentationProvider_ showErrorAlertWithStringTitle:title message:message];
 }
 
+- (void)showSnackbar:(NSString*)text {
+  MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
+  message.accessibilityLabel = text;
+  message.duration = 2.0;
+  message.category = kActivityServicesSnackbarCategory;
+  [dispatcher_ showSnackbarMessage:message];
+}
+
 #pragma mark - For Testing
 
-- (void)setProvidersForTesting:(id<ActivityServicePassword,
-                                   ActivityServicePresentation,
-                                   ActivityServiceSnackbar>)provider {
+- (void)setProvidersForTesting:
+            (id<ActivityServicePassword, ActivityServicePresentation>)provider
+                    dispatcher:(id<SnackbarCommands>)dispatcher {
   passwordProvider_ = provider;
   presentationProvider_ = provider;
-  snackbarProvider_ = provider;
+  dispatcher_ = dispatcher;
 }
 
 @end

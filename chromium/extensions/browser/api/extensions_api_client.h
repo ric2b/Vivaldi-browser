@@ -42,6 +42,7 @@ class ExtensionOptionsGuestDelegate;
 class FeedbackPrivateDelegate;
 class FileSystemDelegate;
 class ManagementAPIDelegate;
+class MediaPerceptionAPIDelegate;
 class MessagingDelegate;
 class MetricsPrivateDelegate;
 class MimeHandlerViewGuest;
@@ -93,6 +94,10 @@ class ExtensionsAPIClient {
   virtual bool ShouldHideResponseHeader(const GURL& url,
                                         const std::string& header_name) const;
 
+  // Returns true if a request from the given URL from the browser context
+  // should be hidden from extensions.
+  virtual bool ShouldHideBrowserNetworkRequest(const GURL& url) const;
+
   // Creates the AppViewGuestDelegate.
   virtual AppViewGuestDelegate* CreateAppViewGuestDelegate() const;
 
@@ -136,7 +141,7 @@ class ExtensionsAPIClient {
 
   // Returns a delegate for some of VirtualKeyboardAPI's behavior.
   virtual std::unique_ptr<VirtualKeyboardDelegate>
-  CreateVirtualKeyboardDelegate() const;
+  CreateVirtualKeyboardDelegate(content::BrowserContext* browser_context) const;
 
   // Creates a delegate for handling the management extension api.
   virtual ManagementAPIDelegate* CreateManagementAPIDelegate() const;
@@ -161,6 +166,10 @@ class ExtensionsAPIClient {
   // If supported by the embedder, returns a delegate for querying non-native
   // file systems.
   virtual NonNativeFileSystemDelegate* GetNonNativeFileSystemDelegate();
+
+  // Returns a delegate for embedder-specific chrome.mediaPerceptionPrivate API
+  // behavior.
+  virtual MediaPerceptionAPIDelegate* GetMediaPerceptionAPIDelegate();
 
   // Saves image data on clipboard.
   virtual void SaveImageDataToClipboard(

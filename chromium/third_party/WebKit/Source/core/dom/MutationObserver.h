@@ -32,6 +32,7 @@
 #define MutationObserver_h
 
 #include "base/gtest_prod_util.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
@@ -46,13 +47,13 @@ namespace blink {
 class Document;
 class ExceptionState;
 class HTMLSlotElement;
-class MutationCallback;
 class MutationObserver;
 class MutationObserverInit;
 class MutationObserverRegistration;
 class MutationRecord;
 class Node;
 class ScriptState;
+class V8MutationCallback;
 
 typedef unsigned char MutationObserverOptions;
 typedef unsigned char MutationRecordDeliveryOptions;
@@ -64,9 +65,8 @@ using MutationObserverVector = HeapVector<Member<MutationObserver>>;
 using MutationRecordVector = HeapVector<Member<MutationRecord>>;
 
 class CORE_EXPORT MutationObserver final
-    : public GarbageCollectedFinalized<MutationObserver>,
+    : public ScriptWrappable,
       public ActiveScriptWrappable<MutationObserver>,
-      public ScriptWrappable,
       public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MutationObserver);
@@ -94,14 +94,14 @@ class CORE_EXPORT MutationObserver final
     virtual ExecutionContext* GetExecutionContext() const = 0;
     virtual void Deliver(const MutationRecordVector& records,
                          MutationObserver&) = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
-    DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {}
+    virtual void Trace(blink::Visitor* visitor) {}
+    virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {}
   };
 
   class CORE_EXPORT V8DelegateImpl;
 
   static MutationObserver* Create(Delegate*);
-  static MutationObserver* Create(ScriptState*, MutationCallback*);
+  static MutationObserver* Create(ScriptState*, V8MutationCallback*);
   static void ResumeSuspendedObservers();
   static void DeliverMutations();
   static void EnqueueSlotChange(HTMLSlotElement&);
@@ -123,9 +123,9 @@ class CORE_EXPORT MutationObserver final
 
   // Eagerly finalized as destructor accesses heap object members.
   EAGERLY_FINALIZE();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   struct ObserverLessThan;

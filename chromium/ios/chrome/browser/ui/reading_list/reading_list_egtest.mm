@@ -13,8 +13,6 @@
 #include "base/test/ios/wait_util.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_empty_collection_background.h"
@@ -133,11 +131,12 @@ void TapButtonWithID(int button_id) {
 // Performs |action| on the entry with the title |entryTitle|.
 void performActionOnEntry(const std::string& entryTitle,
                           id<GREYAction> action) {
-  [[EarlGrey selectElementWithMatcher:
-                 grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
-                                base::SysUTF8ToNSString(entryTitle)),
-                            grey_sufficientlyVisible(), nil)]
-      performAction:action];
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
+                         base::SysUTF8ToNSString(entryTitle)),
+                     grey_ancestor(grey_kindOfClass([ReadingListCell class])),
+                     grey_sufficientlyVisible(), nil)] performAction:action];
 }
 
 // Taps the entry with the title |entryTitle|.

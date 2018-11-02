@@ -30,8 +30,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/view.h"
-#include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -99,9 +97,13 @@ void MediaGalleriesDialogViews::InitChildViews() {
   contents_->RemoveAllChildViews(true);
   checkbox_map_.clear();
 
-  int dialog_content_width = views::Widget::GetLocalizedContentsWidth(
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  contents_->SetBorder(views::CreateEmptyBorder(
+      provider->GetDialogInsetsForContentType(views::TEXT, views::CONTROL)));
+
+  const int dialog_content_width = views::Widget::GetLocalizedContentsWidth(
       IDS_MEDIA_GALLERIES_DIALOG_CONTENT_WIDTH_CHARS);
-  views::GridLayout* layout = views::GridLayout::CreatePanel(contents_);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(contents_);
 
   int column_set_id = 0;
   views::ColumnSet* columns = layout->AddColumnSet(column_set_id);
@@ -113,7 +115,6 @@ void MediaGalleriesDialogViews::InitChildViews() {
                      0);
 
   // Message text.
-  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const int vertical_padding =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
   views::Label* subtext = new views::Label(controller_->GetSubtext());
@@ -182,7 +183,7 @@ void MediaGalleriesDialogViews::UpdateGalleries() {
   contents_->Layout();
 
   if (ControllerHasWebContents())
-    GetWidget()->client_view()->AsDialogClientView()->UpdateDialogButtons();
+    DialogModelChanged();
 }
 
 bool MediaGalleriesDialogViews::AddOrUpdateGallery(
@@ -270,7 +271,7 @@ void MediaGalleriesDialogViews::ButtonPressed(views::Button* sender,
   confirm_available_ = true;
 
   if (ControllerHasWebContents())
-    GetWidget()->client_view()->AsDialogClientView()->UpdateDialogButtons();
+    DialogModelChanged();
 
   if (sender == auxiliary_button_) {
     controller_->DidClickAuxiliaryButton();

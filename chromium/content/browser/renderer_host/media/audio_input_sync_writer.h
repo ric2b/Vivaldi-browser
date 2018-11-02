@@ -8,11 +8,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/sync_socket.h"
@@ -26,6 +26,10 @@
 #if defined(OS_POSIX)
 #include "base/file_descriptor_posix.h"
 #endif
+
+namespace base {
+class SharedMemory;
+}
 
 namespace content {
 
@@ -164,13 +168,24 @@ class CONTENT_EXPORT AudioInputSyncWriter
   // It should ideally be rare, but we need to guarantee that the data arrives
   // since audio processing such as echo cancelling requires that to perform
   // properly.
-  std::vector<std::unique_ptr<media::AudioBus>> overflow_buses_;
-  struct OverflowParams {
-    double volume;
-    bool key_pressed;
-    base::TimeTicks capture_time;
+  struct OverflowData {
+    OverflowData(double volume,
+                 bool key_pressed,
+                 base::TimeTicks capture_time,
+                 std::unique_ptr<media::AudioBus> audio_bus);
+    ~OverflowData();
+    OverflowData(OverflowData&&);
+    OverflowData& operator=(OverflowData&& other);
+    double volume_;
+    bool key_pressed_;
+    base::TimeTicks capture_time_;
+    std::unique_ptr<media::AudioBus> audio_bus_;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(OverflowData);
   };
-  std::deque<OverflowParams> overflow_params_;
+
+  std::vector<OverflowData> overflow_data_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(AudioInputSyncWriter);
 };

@@ -34,26 +34,17 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
   global_scope = {
       'Var': var.Lookup,
       'deps': {},
-      'deps_os': {},
-      'include_rules': [],
-      'skip_child_includes': [],
       'hooks': [],
-      'hooks_os': [],
   }
   exec(content, global_scope, local_scope)
   local_scope.setdefault('deps', {})
-  local_scope.setdefault('deps_os', {})
-  local_scope.setdefault('include_rules', [])
-  local_scope.setdefault('skip_child_includes', [])
   local_scope.setdefault('hooks', [])
-  local_scope.setdefault('hooks_os', [])
   local_scope.setdefault('vars', {})
   local_scope.setdefault('recursion', None)
 
   if return_dict:
     return local_scope
 
-  return (local_scope['deps'], local_scope['deps_os'],
-          local_scope['include_rules'], local_scope['skip_child_includes'],
-          local_scope['hooks'], local_scope['hooks_os'], local_scope['vars'],
+  return (local_scope['deps'],
+          local_scope['hooks'], local_scope['vars'],
           local_scope['recursion'])

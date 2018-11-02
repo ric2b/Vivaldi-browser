@@ -21,8 +21,8 @@
 #ifndef CSSInitialValue_h
 #define CSSInitialValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/css/CSSValue.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -34,7 +34,7 @@ class CSSInitialValue : public CSSValue {
 
   bool Equals(const CSSInitialValue&) const { return true; }
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     CSSValue::TraceAfterDispatch(visitor);
   }
 

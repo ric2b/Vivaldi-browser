@@ -11,14 +11,15 @@
 
   const _closedPromise = v8.createPrivateSymbol('[[closedPromise]]');
   const _ownerReadableStream =
-      v8.createPrivateSymbol('[[ownerReadableStream]]');
+        v8.createPrivateSymbol('[[ownerReadableStream]]');
 
   const _readRequests = v8.createPrivateSymbol('[[readRequests]]');
 
   const createWithExternalControllerSentinel =
-      v8.createPrivateSymbol('flag for UA-created ReadableStream to pass');
+        v8.createPrivateSymbol('flag for UA-created ReadableStream to pass');
 
-  const _readableStreamBits = v8.createPrivateSymbol('bit field for [[state]] and [[disturbed]]');
+  const _readableStreamBits =
+        v8.createPrivateSymbol('bit field for [[state]] and [[disturbed]]');
   const DISTURBED = 0b1;
   // The 2nd and 3rd bit are for [[state]].
   const STATE_MASK = 0b110;
@@ -29,19 +30,18 @@
 
   const _underlyingSource = v8.createPrivateSymbol('[[underlyingSource]]');
   const _controlledReadableStream =
-      v8.createPrivateSymbol('[[controlledReadableStream]]');
+        v8.createPrivateSymbol('[[controlledReadableStream]]');
   const _strategySize = v8.createPrivateSymbol('[[strategySize]]');
   const _strategyHWM = v8.createPrivateSymbol('[[strategyHWM]]');
 
   const _readableStreamDefaultControllerBits = v8.createPrivateSymbol(
-      'bit field for [[started]], [[closeRequested]], [[pulling]], [[pullAgain]]');
+      'bit field for [[started]], [[closeRequested]], [[pulling]], ' +
+        '[[pullAgain]]');
   const STARTED = 0b1;
   const CLOSE_REQUESTED = 0b10;
   const PULLING = 0b100;
   const PULL_AGAIN = 0b1000;
   const EXTERNALLY_CONTROLLED = 0b10000;
-
-  const undefined = global.undefined;
 
   const defineProperty = global.Object.defineProperty;
   const callFunction = v8.uncurryThis(global.Function.prototype.call);
@@ -59,42 +59,60 @@
   const Promise_reject = v8.simpleBind(Promise.reject, Promise);
 
   // From CommonOperations.js
-  const { _queue, _queueTotalSize, hasOwnPropertyNoThrow, rejectPromise,
-          resolvePromise, markPromiseAsHandled, DequeueValue,
-          EnqueueValueWithSize,
-          ValidateAndNormalizeQueuingStrategy } = binding.streamOperations;
+  const {
+    _queue,
+    _queueTotalSize,
+    hasOwnPropertyNoThrow,
+    rejectPromise,
+    resolvePromise,
+    markPromiseAsHandled,
+    DequeueValue,
+    EnqueueValueWithSize,
+    ValidateAndNormalizeQueuingStrategy,
+    CallOrNoop1,
+    PromiseCallOrNoop1
+  } = binding.streamOperations;
 
   const streamErrors = binding.streamErrors;
   const errCancelLockedStream =
-      'Cannot cancel a readable stream that is locked to a reader';
+        'Cannot cancel a readable stream that is locked to a reader';
   const errEnqueueCloseRequestedStream =
-      'Cannot enqueue a chunk into a readable stream that is closed or has been requested to be closed';
+        'Cannot enqueue a chunk into a readable stream that is closed or ' +
+        'has been requested to be closed';
   const errCancelReleasedReader =
-      'This readable stream reader has been released and cannot be used to cancel its previous owner stream';
+        'This readable stream reader has been released and cannot be used ' +
+        'to cancel its previous owner stream';
   const errReadReleasedReader =
-      'This readable stream reader has been released and cannot be used to read from its previous owner stream';
+        'This readable stream reader has been released and cannot be used ' +
+        'to read from its previous owner stream';
   const errCloseCloseRequestedStream =
-      'Cannot close a readable stream that has already been requested to be closed';
-  const errEnqueueClosedStream = 'Cannot enqueue a chunk into a closed readable stream';
-  const errEnqueueErroredStream = 'Cannot enqueue a chunk into an errored readable stream';
+        'Cannot close a readable stream that has already been requested to ' +
+        'be closed';
+  const errEnqueueClosedStream =
+        'Cannot enqueue a chunk into a closed readable stream';
+  const errEnqueueErroredStream =
+        'Cannot enqueue a chunk into an errored readable stream';
   const errCloseClosedStream = 'Cannot close a closed readable stream';
   const errCloseErroredStream = 'Cannot close an errored readable stream';
   const errErrorClosedStream = 'Cannot error a close readable stream';
   const errErrorErroredStream =
-      'Cannot error a readable stream that is already errored';
-  const errGetReaderNotByteStream = 'This readable stream does not support BYOB readers';
-  const errGetReaderBadMode = 'Invalid reader mode given: expected undefined or "byob"';
+        'Cannot error a readable stream that is already errored';
+  const errGetReaderNotByteStream =
+        'This readable stream does not support BYOB readers';
+  const errGetReaderBadMode =
+        'Invalid reader mode given: expected undefined or "byob"';
   const errReaderConstructorBadArgument =
-      'ReadableStreamReader constructor argument is not a readable stream';
+        'ReadableStreamReader constructor argument is not a readable stream';
   const errReaderConstructorStreamAlreadyLocked =
-      'ReadableStreamReader constructor can only accept readable streams that are not yet locked to a reader';
+        'ReadableStreamReader constructor can only accept readable streams ' +
+        'that are not yet locked to a reader';
   const errReleaseReaderWithPendingRead =
-      'Cannot release a readable stream reader when it still has outstanding read() calls that have not yet settled';
+        'Cannot release a readable stream reader when it still has ' +
+        'outstanding read() calls that have not yet settled';
   const errReleasedReaderClosedPromise =
-      'This readable stream reader has been released and cannot be used to monitor the stream\'s state';
+        'This readable stream reader has been released and cannot be used ' +
+        'to monitor the stream\'s state';
 
-  const errTmplMustBeFunctionOrUndefined = name =>
-      `${name} must be a function or undefined`;
   const errCannotPipeLockedStream = 'Cannot pipe a locked stream';
   const errCannotPipeToALockedStream = 'Cannot pipe to a locked stream';
   const errDestinationStreamClosed = 'Destination stream closed';
@@ -106,17 +124,8 @@
         '1\'s \'readable\' property is undefined.';
 
   class ReadableStream {
-    constructor() {
-      // TODO(domenic): when V8 gets default parameters and destructuring, all
-      // this can be cleaned up.
-      const underlyingSource = arguments[0] === undefined ? {} : arguments[0];
-      const strategy = arguments[1] === undefined ? {} : arguments[1];
-      const size = strategy.size;
-      let highWaterMark = strategy.highWaterMark;
-      if (highWaterMark === undefined) {
-        highWaterMark = 1;
-      }
-
+    constructor(underlyingSource = {}, { size, highWaterMark = 1 } = {},
+                internalArgument = undefined) {
       this[_readableStreamBits] = 0b0;
       ReadableStreamSetState(this, STATE_READABLE);
       this[_reader] = undefined;
@@ -137,8 +146,9 @@
         throw new RangeError(streamErrors.invalidType);
       }
 
-      this[_controller] =
-          new ReadableStreamDefaultController(this, underlyingSource, size, highWaterMark, arguments[2] === createWithExternalControllerSentinel);
+      this[_controller] = new ReadableStreamDefaultController(
+          this, underlyingSource, size, highWaterMark,
+          internalArgument === createWithExternalControllerSentinel);
     }
 
     get locked() {
@@ -161,7 +171,7 @@
       return ReadableStreamCancel(this, reason);
     }
 
-    getReader({ mode } = {}) {
+    getReader({mode} = {}) {
       if (IsReadableStream(this) === false) {
         throw new TypeError(streamErrors.illegalInvocation);
       }
@@ -219,8 +229,8 @@
         return Promise_reject(new TypeError(errCannotPipeToALockedStream));
       }
 
-      return ReadableStreamPipeTo(this, dest, preventClose, preventAbort,
-                                  preventCancel);
+      return ReadableStreamPipeTo(
+          this, dest, preventClose, preventAbort, preventCancel);
     }
 
     tee() {
@@ -232,8 +242,8 @@
     }
   }
 
-  function ReadableStreamPipeTo(readable, dest, preventClose, preventAbort,
-                                preventCancel) {
+  function ReadableStreamPipeTo(
+      readable, dest, preventClose, preventAbort, preventCancel) {
     // Callers of this function must ensure that the following invariants
     // are enforced:
     // assert(IsReadableStream(readable));
@@ -292,7 +302,7 @@
         return;
       }
       const desiredSize =
-          binding.WritableStreamDefaultWriterGetDesiredSize(writer);
+            binding.WritableStreamDefaultWriterGetDesiredSize(writer);
       if (desiredSize === null) {
         // This can happen if abort() is queued but not yet started when
         // pipeTo() is called. In that case [[storedError]] is not set yet, and
@@ -418,7 +428,8 @@
   }
 
   class ReadableStreamDefaultController {
-    constructor(stream, underlyingSource, size, highWaterMark, isExternallyControlled) {
+    constructor(
+        stream, underlyingSource, size, highWaterMark, isExternallyControlled) {
       if (IsReadableStream(stream) === false) {
         throw new TypeError(streamErrors.illegalConstructor);
       }
@@ -440,15 +451,16 @@
       }
 
       const normalizedStrategy =
-          ValidateAndNormalizeQueuingStrategy(size, highWaterMark);
+            ValidateAndNormalizeQueuingStrategy(size, highWaterMark);
       this[_strategySize] = normalizedStrategy.size;
       this[_strategyHWM] = normalizedStrategy.highWaterMark;
 
       const controller = this;
 
-      const startResult = CallOrNoop(
+      const startResult = CallOrNoop1(
           underlyingSource, 'start', this, 'underlyingSource.start');
-      thenPromise(Promise_resolve(startResult),
+      thenPromise(
+          Promise_resolve(startResult),
           () => {
             controller[_readableStreamDefaultControllerBits] |= STARTED;
             ReadableStreamDefaultControllerCallPullIfNeeded(controller);
@@ -495,18 +507,9 @@
         throw new TypeError(streamErrors.illegalInvocation);
       }
 
-      const stream = this[_controlledReadableStream];
-
-      if (this[_readableStreamDefaultControllerBits] & CLOSE_REQUESTED) {
-        throw new TypeError(errEnqueueCloseRequestedStream);
-      }
-
-      const state = ReadableStreamGetState(stream);
-      if (state === STATE_ERRORED) {
-        throw new TypeError(errEnqueueErroredStream);
-      }
-      if (state === STATE_CLOSED) {
-        throw new TypeError(errEnqueueClosedStream);
+      if (!ReadableStreamDefaultControllerCanCloseOrEnqueue(this)) {
+        const stream = this[_controlledReadableStream];
+        throw getReadableStreamEnqueueError(stream, this);
       }
 
       return ReadableStreamDefaultControllerEnqueue(this, chunk);
@@ -535,7 +538,8 @@
     controller[_queue] = new binding.SimpleQueue();
 
     const underlyingSource = controller[_underlyingSource];
-    return PromiseCallOrNoop(underlyingSource, 'cancel', reason, 'underlyingSource.cancel');
+    return PromiseCallOrNoop1(
+        underlyingSource, 'cancel', reason, 'underlyingSource.cancel');
   }
 
   function ReadableStreamDefaultControllerPull(controller) {
@@ -544,7 +548,8 @@
     if (controller[_queue].length > 0) {
       const chunk = DequeueValue(controller);
 
-      if ((controller[_readableStreamDefaultControllerBits] & CLOSE_REQUESTED) &&
+      if ((controller[_readableStreamDefaultControllerBits] &
+           CLOSE_REQUESTED) &&
           controller[_queue].length === 0) {
         ReadableStreamClose(stream);
       } else {
@@ -655,7 +660,8 @@
 
     ReadableStreamClose(stream);
 
-    const sourceCancelPromise = ReadableStreamDefaultControllerCancel(stream[_controller], reason);
+    const sourceCancelPromise =
+          ReadableStreamDefaultControllerCancel(stream[_controller], reason);
     return thenPromise(sourceCancelPromise, () => undefined);
   }
 
@@ -670,8 +676,6 @@
   }
 
   function ReadableStreamFulfillReadRequest(stream, chunk, done) {
-    const reader = stream[_reader];
-
     const readRequest = stream[_reader][_readRequests].shift();
     resolvePromise(readRequest, CreateIterResultObject(chunk, done));
   }
@@ -679,7 +683,8 @@
   function ReadableStreamDefaultControllerEnqueue(controller, chunk) {
     const stream = controller[_controlledReadableStream];
 
-    if (IsReadableStreamLocked(stream) === true && ReadableStreamGetNumReadRequests(stream) > 0) {
+    if (IsReadableStreamLocked(stream) === true &&
+        ReadableStreamGetNumReadRequests(stream) > 0) {
       ReadableStreamFulfillReadRequest(stream, chunk, false);
     } else {
       let chunkSize = 1;
@@ -751,8 +756,9 @@
     }
 
     if (IsReadableStreamDefaultReader(reader) === true) {
-      reader[_readRequests].forEach(request =>
-          resolvePromise(request, CreateIterResultObject(undefined, true)));
+      reader[_readRequests].forEach(
+          request =>
+            resolvePromise(request, CreateIterResultObject(undefined, true)));
       reader[_readRequests] = new binding.SimpleQueue();
     }
 
@@ -761,6 +767,18 @@
 
   function ReadableStreamDefaultControllerGetDesiredSize(controller) {
     return controller[_strategyHWM] - controller[_queueTotalSize];
+  }
+
+  function ReadableStreamDefaultControllerHasBackpressure(controller) {
+    return !ReadableStreamDefaultControllerShouldCallPull(controller);
+  }
+
+  function ReadableStreamDefaultControllerCanCloseOrEnqueue(controller) {
+    if (controller[_readableStreamDefaultControllerBits] & CLOSE_REQUESTED) {
+      return false;
+    }
+    const state = ReadableStreamGetState(controller[_controlledReadableStream]);
+    return state === STATE_READABLE;
   }
 
   function IsReadableStream(x) {
@@ -795,11 +813,26 @@
     return ReadableStreamGetState(stream) === STATE_ERRORED;
   }
 
+  // Used internally by enqueue() and also by TransformStream.
+  function getReadableStreamEnqueueError(stream, controller) {
+    if (controller[_readableStreamDefaultControllerBits] & CLOSE_REQUESTED) {
+      return new TypeError(errEnqueueCloseRequestedStream);
+    }
+
+    const state = ReadableStreamGetState(stream);
+    if (state === STATE_ERRORED) {
+      return new TypeError(errEnqueueErroredStream);
+    }
+    // assert(state === STATE_CLOSED, 'state is "closed"');
+    return new TypeError(errEnqueueClosedStream);
+  }
+
   function ReadableStreamReaderGenericInitialize(reader, stream) {
     // TODO(yhirano): Remove this when we don't need hasPendingActivity in
     // blink::UnderlyingSourceBase.
     const controller = stream[_controller];
-    if (controller[_readableStreamDefaultControllerBits] & EXTERNALLY_CONTROLLED) {
+    if (controller[_readableStreamDefaultControllerBits] &
+        EXTERNALLY_CONTROLLED) {
       // The stream is created with an external controller (i.e. made in
       // Blink).
       const underlyingSource = controller[_underlyingSource];
@@ -827,17 +860,22 @@
     // TODO(yhirano): Remove this when we don't need hasPendingActivity in
     // blink::UnderlyingSourceBase.
     const controller = reader[_ownerReadableStream][_controller];
-    if (controller[_readableStreamDefaultControllerBits] & EXTERNALLY_CONTROLLED) {
+    if (controller[_readableStreamDefaultControllerBits] &
+        EXTERNALLY_CONTROLLED) {
       // The stream is created with an external controller (i.e. made in
       // Blink).
       const underlyingSource = controller[_underlyingSource];
       callFunction(underlyingSource.notifyLockReleased, underlyingSource);
     }
 
-    if (ReadableStreamGetState(reader[_ownerReadableStream]) === STATE_READABLE) {
-      rejectPromise(reader[_closedPromise], new TypeError(errReleasedReaderClosedPromise));
+    if (ReadableStreamGetState(reader[_ownerReadableStream]) ===
+        STATE_READABLE) {
+      rejectPromise(
+          reader[_closedPromise],
+          new TypeError(errReleasedReaderClosedPromise));
     } else {
-      reader[_closedPromise] = Promise_reject(new TypeError(errReleasedReaderClosedPromise));
+      reader[_closedPromise] =
+          Promise_reject(new TypeError(errReleasedReaderClosedPromise));
     }
     markPromiseAsHandled(reader[_closedPromise]);
 
@@ -861,7 +899,8 @@
   }
 
   function ReadableStreamDefaultControllerCallPullIfNeeded(controller) {
-    const shouldPull = ReadableStreamDefaultControllerShouldCallPull(controller);
+    const shouldPull =
+          ReadableStreamDefaultControllerShouldCallPull(controller);
     if (shouldPull === false) {
       return undefined;
     }
@@ -874,10 +913,11 @@
     controller[_readableStreamDefaultControllerBits] |= PULLING;
 
     const underlyingSource = controller[_underlyingSource];
-    const pullPromise = PromiseCallOrNoop(
+    const pullPromise = PromiseCallOrNoop1(
         underlyingSource, 'pull', controller, 'underlyingSource.pull');
 
-    thenPromise(pullPromise,
+    thenPromise(
+        pullPromise,
         () => {
           controller[_readableStreamDefaultControllerBits] &= ~PULLING;
 
@@ -887,7 +927,8 @@
           }
         },
         e => {
-          if (ReadableStreamGetState(controller[_controlledReadableStream]) === STATE_READABLE) {
+          if (ReadableStreamGetState(controller[_controlledReadableStream]) ===
+              STATE_READABLE) {
             ReadableStreamDefaultControllerError(controller, e);
           }
         });
@@ -909,11 +950,13 @@
       return false;
     }
 
-    if (IsReadableStreamLocked(stream) === true && ReadableStreamGetNumReadRequests(stream) > 0) {
+    if (IsReadableStreamLocked(stream) === true &&
+        ReadableStreamGetNumReadRequests(stream) > 0) {
       return true;
     }
 
-    const desiredSize = ReadableStreamDefaultControllerGetDesiredSize(controller);
+    const desiredSize =
+          ReadableStreamDefaultControllerGetDesiredSize(controller);
     if (desiredSize > 0) {
       return true;
     }
@@ -940,7 +983,7 @@
     let canceled2 = false;
     let reason1;
     let reason2;
-    let promise = v8.createPromise();
+    const promise = v8.createPromise();
 
     const branch1Stream = new ReadableStream({pull, cancel: cancel1});
 
@@ -949,16 +992,15 @@
     const branch1 = branch1Stream[_controller];
     const branch2 = branch2Stream[_controller];
 
-    thenPromise(
-        reader[_closedPromise], undefined, function(r) {
-          if (closedOrErrored === true) {
-            return;
-          }
+    thenPromise(reader[_closedPromise], undefined, function(r) {
+      if (closedOrErrored === true) {
+        return;
+      }
 
-          ReadableStreamDefaultControllerError(branch1, r);
-          ReadableStreamDefaultControllerError(branch2, r);
-          closedOrErrored = true;
-        });
+      ReadableStreamDefaultControllerError(branch1, r);
+      ReadableStreamDefaultControllerError(branch2, r);
+      closedOrErrored = true;
+    });
 
     return [branch1Stream, branch2Stream];
 
@@ -1023,45 +1065,25 @@
   // Other helpers
   //
 
-  // Modified from InvokeOrNoop in spec
-  function CallOrNoop(O, P, arg, nameForError) {
-    const method = O[P];
-    if (method === undefined) {
-      return undefined;
-    }
-    if (typeof method !== 'function') {
-      throw new TypeError(errTmplMustBeFunctionOrUndefined(nameForError));
-    }
-
-    return callFunction(method, O, arg);
+  function CreateIterResultObject(value, done) {
+    return {value, done};
   }
 
-  // Modified from PromiseInvokeOrNoop in spec
-  function PromiseCallOrNoop(O, P, arg, nameForError) {
-    let method;
-    try {
-      method = O[P];
-    } catch (methodE) {
-      return Promise_reject(methodE);
-    }
+  //
+  // Accessors used by TransformStream
+  //
 
-    if (method === undefined) {
-      return Promise_resolve(undefined);
-    }
-
-    if (typeof method !== 'function') {
-      return Promise_reject(new TypeError(errTmplMustBeFunctionOrUndefined(nameForError)));
-    }
-
-    try {
-      return Promise_resolve(callFunction(method, O, arg));
-    } catch (e) {
-      return Promise_reject(e);
-    }
+  function getReadableStreamController(stream) {
+    // assert(
+    //     IsReadableStream(stream), '! IsReadableStream(stream) is true.');
+    return stream[_controller];
   }
 
-  function CreateIterResultObject(value, done) { return {value, done}; }
-
+  function getReadableStreamStoredError(stream) {
+    // assert(
+    //     IsReadableStream(stream), '! IsReadableStream(stream) is true.');
+    return stream[_storedError];
+  }
 
   //
   // Additions to the global
@@ -1078,7 +1100,8 @@
   // Exports to Blink
   //
 
-  binding.AcquireReadableStreamDefaultReader = AcquireReadableStreamDefaultReader;
+  binding.AcquireReadableStreamDefaultReader =
+      AcquireReadableStreamDefaultReader;
   binding.IsReadableStream = IsReadableStream;
   binding.IsReadableStreamDisturbed = IsReadableStreamDisturbed;
   binding.IsReadableStreamLocked = IsReadableStreamLocked;
@@ -1089,14 +1112,31 @@
   binding.ReadableStreamDefaultReaderRead = ReadableStreamDefaultReaderRead;
   binding.ReadableStreamTee = ReadableStreamTee;
 
-  binding.ReadableStreamDefaultControllerClose = ReadableStreamDefaultControllerClose;
-  binding.ReadableStreamDefaultControllerGetDesiredSize = ReadableStreamDefaultControllerGetDesiredSize;
-  binding.ReadableStreamDefaultControllerEnqueue = ReadableStreamDefaultControllerEnqueue;
-  binding.ReadableStreamDefaultControllerError = ReadableStreamDefaultControllerError;
+  binding.ReadableStreamDefaultControllerClose =
+      ReadableStreamDefaultControllerClose;
+  binding.ReadableStreamDefaultControllerGetDesiredSize =
+      ReadableStreamDefaultControllerGetDesiredSize;
+  binding.ReadableStreamDefaultControllerEnqueue =
+      ReadableStreamDefaultControllerEnqueue;
+  binding.ReadableStreamDefaultControllerError =
+      ReadableStreamDefaultControllerError;
 
   binding.createReadableStreamWithExternalController =
       (underlyingSource, strategy) => {
         return new ReadableStream(
             underlyingSource, strategy, createWithExternalControllerSentinel);
       };
+
+  //
+  // Exports to TransformStream
+  //
+  binding.ReadableStream = ReadableStream;
+  binding.ReadableStreamDefaultControllerCanCloseOrEnqueue =
+      ReadableStreamDefaultControllerCanCloseOrEnqueue;
+  binding.ReadableStreamDefaultControllerHasBackpressure =
+      ReadableStreamDefaultControllerHasBackpressure;
+
+  binding.getReadableStreamEnqueueError = getReadableStreamEnqueueError;
+  binding.getReadableStreamController = getReadableStreamController;
+  binding.getReadableStreamStoredError = getReadableStreamStoredError;
 });

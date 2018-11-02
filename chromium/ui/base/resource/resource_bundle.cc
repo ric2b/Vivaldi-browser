@@ -21,7 +21,9 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
@@ -212,7 +214,7 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
   InitSharedInstance(NULL);
-  auto data_pack = base::MakeUnique<DataPack>(SCALE_FACTOR_100P);
+  auto data_pack = std::make_unique<DataPack>(SCALE_FACTOR_100P);
   if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     LOG(WARNING) << "failed to load pak file";
     NOTREACHED();
@@ -253,7 +255,7 @@ ResourceBundle& ResourceBundle::GetSharedInstance() {
 void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
-  auto data_pack = base::MakeUnique<DataPack>(SCALE_FACTOR_100P);
+  auto data_pack = std::make_unique<DataPack>(SCALE_FACTOR_100P);
   if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     LOG(WARNING) << "failed to load secondary pak file";
     NOTREACHED();
@@ -431,6 +433,28 @@ const base::FilePath& ResourceBundle::GetOverriddenPakPath() {
   return overridden_pak_path_;
 }
 
+base::string16 ResourceBundle::MaybeMangleLocalizedString(
+    const base::string16& str) {
+  if (!mangle_localized_strings_)
+    return str;
+
+  // IDS_DEFAULT_FONT_SIZE and friends are localization "strings" that are
+  // actually integral constants. These should not be mangled or they become
+  // impossible to parse.
+  int ignored;
+  if (base::StringToInt(str, &ignored))
+    return str;
+
+  // For a string S, produce [[ --- S --- ]], where the number of dashes is 1/4
+  // of the number of characters in S. This makes S something around 50-75%
+  // longer, except for extremely short strings, which get > 100% longer.
+  base::string16 start_marker = base::UTF8ToUTF16("[[");
+  base::string16 end_marker = base::UTF8ToUTF16("]]");
+  base::string16 dashes = base::string16(str.size() / 4, '-');
+  return base::JoinString({start_marker, dashes, str, dashes, end_marker},
+                          base::UTF8ToUTF16(" "));
+}
+
 std::string ResourceBundle::ReloadLocaleResources(
     const std::string& pref_locale) {
   base::AutoLock lock_scope(*locale_resources_data_lock_);
@@ -443,14 +467,14 @@ std::string ResourceBundle::ReloadLocaleResources(
 }
 
 gfx::ImageSkia* ResourceBundle::GetImageSkiaNamed(int resource_id) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const gfx::ImageSkia* image = GetImageNamed(resource_id).ToImageSkia();
   return const_cast<gfx::ImageSkia*>(image);
 }
 
 gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Check to see if the image is already in the cache.
   auto found = images_.find(resource_id);
@@ -462,8 +486,7 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
     image = delegate_->GetImageNamed(resource_id);
 
   if (image.IsEmpty()) {
-    DCHECK(!data_packs_.empty()) <<
-        "Missing call to SetResourcesDataDLL?";
+    DCHECK(!data_packs_.empty()) << "Missing call to SetResourcesDataDLL?";
 
 #if defined(OS_CHROMEOS)
     ui::ScaleFactor scale_factor_to_load = GetMaxScaleFactor();
@@ -481,7 +504,7 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
     // BrowserMainLoop has finished running. |image_skia| is guaranteed to be
     // destroyed before the resource bundle is destroyed.
     gfx::ImageSkia image_skia(
-        base::MakeUnique<ResourceBundleImageSource>(this, resource_id),
+        std::make_unique<ResourceBundleImageSource>(this, resource_id),
         GetScaleForScaleFactor(scale_factor_to_load));
     if (image_skia.isNull()) {
       LOG(WARNING) << "Unable to load image with id " << resource_id;
@@ -558,7 +581,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
 base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   base::string16 string;
   if (delegate_ && delegate_->GetLocalizedString(message_id, &string))
-    return string;
+    return MaybeMangleLocalizedString(string);
 
   // Ensure that ReloadLocaleResources() doesn't drop the resources while
   // we're using them.
@@ -567,7 +590,7 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   IdToStringMap::const_iterator it =
       overridden_locale_strings_.find(message_id);
   if (it != overridden_locale_strings_.end())
-    return it->second;
+    return MaybeMangleLocalizedString(it->second);
 
   // If for some reason we were unable to load the resources , return an empty
   // string (better than crashing).
@@ -610,7 +633,7 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   } else if (encoding == ResourceHandle::UTF8) {
     msg = base::UTF8ToUTF16(data);
   }
-  return msg;
+  return MaybeMangleLocalizedString(msg);
 }
 
 base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
@@ -641,7 +664,7 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
     int size_delta,
     gfx::Font::FontStyle style,
     gfx::Font::Weight weight) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const FontKey styled_key(size_delta, style, weight);
 
@@ -677,12 +700,12 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
 const gfx::Font& ResourceBundle::GetFontWithDelta(int size_delta,
                                                   gfx::Font::FontStyle style,
                                                   gfx::Font::Weight weight) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetFontListWithDelta(size_delta, style, weight).GetPrimaryFont();
 }
 
 const gfx::FontList& ResourceBundle::GetFontList(FontStyle legacy_style) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   gfx::Font::Weight font_weight = gfx::Font::Weight::NORMAL;
   if (legacy_style == BoldFont || legacy_style == MediumBoldFont)
     font_weight = gfx::Font::Weight::BOLD;
@@ -708,12 +731,12 @@ const gfx::FontList& ResourceBundle::GetFontList(FontStyle legacy_style) {
 }
 
 const gfx::Font& ResourceBundle::GetFont(FontStyle style) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetFontList(style).GetPrimaryFont();
 }
 
 void ResourceBundle::ReloadFonts() {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   InitDefaultFontList();
   font_cache_.clear();
 }
@@ -736,6 +759,8 @@ ResourceBundle::ResourceBundle(Delegate* delegate)
     : delegate_(delegate),
       locale_resources_data_lock_(new base::Lock),
       max_scale_factor_(SCALE_FACTOR_100P) {
+  mangle_localized_strings_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kMangleLocalizedStrings);
 }
 
 ResourceBundle::~ResourceBundle() {
@@ -916,7 +941,7 @@ bool ResourceBundle::LoadBitmap(int resource_id,
 }
 
 gfx::Image& ResourceBundle::GetEmptyImage() {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (empty_image_.IsEmpty()) {
     // The placeholder bitmap is bright red so people notice the problem.

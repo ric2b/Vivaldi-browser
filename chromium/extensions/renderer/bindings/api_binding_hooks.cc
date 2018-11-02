@@ -9,6 +9,7 @@
 #include "base/supports_user_data.h"
 #include "extensions/renderer/bindings/api_binding_hooks_delegate.h"
 #include "extensions/renderer/bindings/api_signature.h"
+#include "extensions/renderer/bindings/js_runner.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -204,9 +205,8 @@ APIBindingHooks::RequestResult::~RequestResult() {}
 APIBindingHooks::RequestResult::RequestResult(const RequestResult& other) =
     default;
 
-APIBindingHooks::APIBindingHooks(const std::string& api_name,
-                                 const binding::RunJSFunctionSync& run_js)
-    : api_name_(api_name), run_js_(run_js) {}
+APIBindingHooks::APIBindingHooks(const std::string& api_name)
+    : api_name_(api_name) {}
 APIBindingHooks::~APIBindingHooks() {}
 
 APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
@@ -219,8 +219,11 @@ APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
   if (delegate_) {
     RequestResult result = delegate_->HandleRequest(
         method_name, signature, context, arguments, type_refs);
-    if (result.code != RequestResult::NOT_HANDLED)
+    // If the native hooks handled the call or set a custom callback, use that.
+    if (result.code != RequestResult::NOT_HANDLED ||
+        !result.custom_callback.IsEmpty()) {
       return result;
+    }
   }
 
   // Harder case: looking up a custom hook registered on the context (since
@@ -295,16 +298,17 @@ APIBindingHooks::RequestResult APIBindingHooks::RunHooks(
     return RequestResult(result, custom_callback);
   }
 
-  v8::Global<v8::Value> global_result =
-      run_js_.Run(handle_request, context, arguments->size(),
-                  arguments->data());
+  // Safe to use synchronous JS since it's in direct response to JS calling
+  // into the binding.
+  v8::MaybeLocal<v8::Value> v8_result =
+      JSRunner::Get(context)->RunJSFunctionSync(
+          handle_request, context, arguments->size(), arguments->data());
   if (try_catch.HasCaught()) {
     try_catch.ReThrow();
     return RequestResult(RequestResult::THROWN);
   }
   RequestResult result(RequestResult::HANDLED, custom_callback);
-  if (!global_result.IsEmpty())
-    result.return_value = global_result.Get(isolate);
+  result.return_value = v8_result.ToLocalChecked();
   return result;
 }
 
@@ -332,7 +336,7 @@ bool APIBindingHooks::CreateCustomEvent(v8::Local<v8::Context> context,
                                         const std::string& event_name,
                                         v8::Local<v8::Value>* event_out) {
   return delegate_ &&
-         delegate_->CreateCustomEvent(context, run_js_, event_name, event_out);
+         delegate_->CreateCustomEvent(context, event_name, event_out);
 }
 
 void APIBindingHooks::InitializeTemplate(
@@ -341,6 +345,12 @@ void APIBindingHooks::InitializeTemplate(
     const APITypeReferenceMap& type_refs) {
   if (delegate_)
     delegate_->InitializeTemplate(isolate, object_template, type_refs);
+}
+
+void APIBindingHooks::InitializeInstance(v8::Local<v8::Context> context,
+                                         v8::Local<v8::Object> instance) {
+  if (delegate_)
+    delegate_->InitializeInstance(context, instance);
 }
 
 void APIBindingHooks::SetDelegate(
@@ -352,18 +362,20 @@ bool APIBindingHooks::UpdateArguments(
     v8::Local<v8::Function> function,
     v8::Local<v8::Context> context,
     std::vector<v8::Local<v8::Value>>* arguments) {
-  v8::Global<v8::Value> global_result;
+  v8::Local<v8::Value> result;
   {
     v8::TryCatch try_catch(context->GetIsolate());
-    global_result = run_js_.Run(function, context,
-                                arguments->size(), arguments->data());
+    // Safe to use synchronous JS since it's in direct response to JS calling
+    // into the binding.
+    v8::MaybeLocal<v8::Value> maybe_result =
+        JSRunner::Get(context)->RunJSFunctionSync(
+            function, context, arguments->size(), arguments->data());
     if (try_catch.HasCaught()) {
       try_catch.ReThrow();
       return false;
     }
+    result = maybe_result.ToLocalChecked();
   }
-  DCHECK(!global_result.IsEmpty());
-  v8::Local<v8::Value> result = global_result.Get(context->GetIsolate());
   std::vector<v8::Local<v8::Value>> new_args;
   if (result.IsEmpty() ||
       !gin::Converter<std::vector<v8::Local<v8::Value>>>::FromV8(

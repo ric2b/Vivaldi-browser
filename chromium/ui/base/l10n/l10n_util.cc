@@ -212,8 +212,10 @@ static const char* const kAcceptLanguageList[] = {
 // Returns true if |locale_name| has an alias in the ICU data file.
 bool IsDuplicateName(const std::string& locale_name) {
   static const char* const kDuplicateNames[] = {
+    "ar_001",
     "en",
     "en_001",
+    "en_150",
     "pt", // pt-BR and pt-PT are used.
     "zh",
     "zh_hans_cn",
@@ -263,13 +265,13 @@ bool IsLocaleAvailable(const std::string& locale) {
 
   // If the ResourceBundle is not yet initialized, return false to avoid the
   // CHECK failure in ResourceBundle::GetSharedInstance().
-  if (!ResourceBundle::HasSharedInstance())
+  if (!ui::ResourceBundle::HasSharedInstance())
     return false;
 
   // TODO(hshi): make ResourceBundle::LocaleDataPakExists() a static function
   // so that this can be invoked without initializing the global instance.
   // See crbug.com/230432: CHECK failure in GetUserDataDir().
-  return ResourceBundle::GetSharedInstance().LocaleDataPakExists(locale);
+  return ui::ResourceBundle::GetSharedInstance().LocaleDataPakExists(locale);
 }
 #endif
 
@@ -708,7 +710,7 @@ std::string GetStringUTF8(int message_id) {
 }
 
 base::string16 GetStringUTF16(int message_id) {
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   base::string16 str = rb.GetLocalizedString(message_id);
   AdjustParagraphDirectionality(&str);
 
@@ -722,7 +724,7 @@ base::string16 GetStringFUTF16(int message_id,
   // a StringPiece and were able to call ReplaceStringPlaceholders with
   // a StringPiece format string and base::string16 substitution strings.  In
   // practice, the strings should be relatively short.
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   const base::string16& format_string = rb.GetLocalizedString(message_id);
 
 #ifndef NDEBUG
@@ -901,6 +903,17 @@ void GetAcceptLanguagesForLocale(const std::string& display_locale,
     }
     locale_codes->push_back(accept_language);
   }
+}
+
+bool IsLanguageAccepted(const std::string& display_locale,
+                        const std::string& locale) {
+  for (const char* accept_language : kAcceptLanguageList) {
+    if (accept_language == locale &&
+        l10n_util::IsLocaleNameTranslated(locale.c_str(), display_locale)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 int GetLocalizedContentsWidthInPixels(int pixel_resource_id) {

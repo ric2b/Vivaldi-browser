@@ -31,7 +31,7 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
   MOCK_METHOD0(DoResurrectLastOutputBuffer, void(void));
   MOCK_METHOD2(OnError,
-               void(const tracked_objects::Location& from_here,
+               void(const base::Location& from_here,
                     const std::string& reason));
   MOCK_CONST_METHOD0(GetBufferPoolUtilization, double(void));
   MOCK_METHOD0(OnStarted, void(void));
@@ -82,14 +82,14 @@ class ScreenCaptureDeviceAndroidTest : public testing::Test {
 
 TEST_F(ScreenCaptureDeviceAndroidTest, ConstructionDestruction) {
   std::unique_ptr<media::VideoCaptureDevice> capture_device =
-      base::MakeUnique<ScreenCaptureDeviceAndroid>();
+      std::make_unique<ScreenCaptureDeviceAndroid>();
 }
 
 // Place holder. Currently user input result is required to start
 // MediaProjection, so we can't start a unittest that really starts capture.
 TEST_F(ScreenCaptureDeviceAndroidTest, DISABLED_StartAndStop) {
   std::unique_ptr<media::VideoCaptureDevice> capture_device =
-      base::MakeUnique<ScreenCaptureDeviceAndroid>();
+      std::make_unique<ScreenCaptureDeviceAndroid>();
   ASSERT_TRUE(capture_device);
 
   std::unique_ptr<MockDeviceClient> client(new MockDeviceClient());

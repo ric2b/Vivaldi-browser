@@ -19,6 +19,7 @@ namespace midi {
 class MidiManager;
 class MidiManagerClient;
 
+// DEPRECATED: Use TaskService for new code.
 // TODO(crbug.com/467442): Make tasks cancelable per client.
 class MIDI_EXPORT MidiScheduler final {
  public:
@@ -36,12 +37,12 @@ class MIDI_EXPORT MidiScheduler final {
   void PostSendDataTask(MidiManagerClient* client,
                         size_t length,
                         double timestamp,
-                        const base::Closure& closure);
+                        base::OnceClosure closure);
 
  private:
   void InvokeClosure(MidiManagerClient* client,
                      size_t length,
-                     const base::Closure& closure);
+                     base::OnceClosure closure);
 
   // MidiManager should own the MidiScheduler and be alive longer.
   MidiManager* manager_;

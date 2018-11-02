@@ -15,6 +15,7 @@
 #include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/media/capture/web_contents_tracker.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
@@ -145,7 +146,7 @@ WebContentsAudioInputStream::Impl::Impl(
       mixer_stream_(mixer_stream),
       state_(CONSTRUCTED),
       is_target_lost_(false),
-      callback_(NULL),
+      callback_(nullptr),
       is_duplication_(is_duplication) {
   DCHECK(mirroring_manager_);
   DCHECK(tracker_);
@@ -162,8 +163,12 @@ WebContentsAudioInputStream::Impl::~Impl() {
 
 bool WebContentsAudioInputStream::Impl::Open() {
   DCHECK(thread_checker_.CalledOnValidThread());
-
   DCHECK_EQ(CONSTRUCTED, state_) << "Illegal to Open more than once.";
+
+  // For browser tests, not to start audio track to a fake tab.
+  if (initial_render_process_id_ == DesktopMediaID::kFakeId &&
+      initial_main_render_frame_id_ == DesktopMediaID::kFakeId)
+    return true;
 
   if (!mixer_stream_->Open())
     return false;
@@ -195,7 +200,7 @@ void WebContentsAudioInputStream::Impl::Start(AudioInputCallback* callback) {
   callback_ = callback;
   if (is_target_lost_) {
     ReportError();
-    callback_ = NULL;
+    callback_ = nullptr;
     return;
   }
 
@@ -220,7 +225,7 @@ void WebContentsAudioInputStream::Impl::Stop() {
   state_ = OPENED;
 
   mixer_stream_->Stop();
-  callback_ = NULL;
+  callback_ = nullptr;
 
   StopMirroring();
 }
@@ -253,9 +258,7 @@ void WebContentsAudioInputStream::Impl::DecrementCapturerCount() {
 void WebContentsAudioInputStream::Impl::ReportError() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // TODO(miu): Need clean-up of AudioInputCallback interface in a future
-  // change, since its only implementation ignores the first argument entirely
-  callback_->OnError(NULL);
+  callback_->OnError();
 }
 
 void WebContentsAudioInputStream::Impl::StartMirroring() {
@@ -369,7 +372,7 @@ WebContentsAudioInputStream* WebContentsAudioInputStream::Create(
     AudioMirroringManager* audio_mirroring_manager) {
   WebContentsMediaCaptureId media_id;
   if (!WebContentsMediaCaptureId::Parse(device_id, &media_id)) {
-    return NULL;
+    return nullptr;
   }
 
   return new WebContentsAudioInputStream(

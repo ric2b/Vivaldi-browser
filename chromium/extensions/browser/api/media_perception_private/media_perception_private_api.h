@@ -66,6 +66,26 @@ class MediaPerceptionPrivateGetDiagnosticsFunction
   DISALLOW_COPY_AND_ASSIGN(MediaPerceptionPrivateGetDiagnosticsFunction);
 };
 
+class MediaPerceptionPrivateSetAnalyticsComponentFunction
+    : public UIThreadExtensionFunction {
+ public:
+  MediaPerceptionPrivateSetAnalyticsComponentFunction();
+  DECLARE_EXTENSION_FUNCTION("mediaPerceptionPrivate.setAnalyticsComponent",
+                             MEDIAPERCEPTIONPRIVATE_SETANALYTICSCOMPONENT);
+
+ private:
+  ~MediaPerceptionPrivateSetAnalyticsComponentFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void OnAnalyticsComponentSet(
+      extensions::api::media_perception_private::ComponentState
+          component_state);
+
+  DISALLOW_COPY_AND_ASSIGN(MediaPerceptionPrivateSetAnalyticsComponentFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_MEDIA_PERCEPTION_PRIVATE_MEDIA_PERCEPTION_PRIVATE_API_H_

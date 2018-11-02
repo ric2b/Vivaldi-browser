@@ -48,6 +48,8 @@ enum ProfileSignout {
   TRANSFER_CREDENTIALS,
   // Signed out because credentials are invalid and force-sign-in is enabled.
   AUTHENTICATION_FAILED_WITH_FORCE_SIGNIN,
+  // The user disables sync from the DICE UI.
+  USER_TUNED_OFF_SYNC_FROM_DICE_UI,
   // Keep this as the last enum.
   NUM_PROFILE_SIGNOUT_METRICS,
 };
@@ -165,7 +167,8 @@ enum class Reason : int {
   REASON_REAUTHENTICATION,
   REASON_UNLOCK,
   REASON_UNKNOWN_REASON,  // This should never have been used to get signin URL.
-  REASON_MAX,             // This must be last.
+  REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT,
+  REASON_MAX,  // This must be last.
 };
 
 // Enum values used for use with the "Signin.Reauth" histogram.
@@ -219,7 +222,7 @@ enum CrossDevicePromoInitialized {
 // histogram, which records the state of the AccountReconcilor when GAIA returns
 // a specific response.
 enum AccountReconcilorState {
-  // The AccountReconcilor has finished running ans is up to date.
+  // The AccountReconcilor has finished running and is up to date.
   ACCOUNT_RECONCILOR_OK,
   // The AccountReconcilor is running and gathering information.
   ACCOUNT_RECONCILOR_RUNNING,
@@ -293,6 +296,10 @@ enum class AccountRelation : int {
 
 // Different types of reporting. This is used as a histogram suffix.
 enum class ReportingType { PERIODIC, ON_CHANGE };
+
+// -----------------------------------------------------------------------------
+// Histograms
+// -----------------------------------------------------------------------------
 
 // Tracks the access point of sign in on desktop.
 void LogSigninAccessPointStarted(AccessPoint access_point);
@@ -389,42 +396,13 @@ void LogAccountRelation(const AccountRelation relation,
 // between multiple users.
 void LogIsShared(const bool is_shared, const ReportingType type);
 
-// These intermediate macros are necessary when we may emit to different
-// histograms from the same logical place in the code. The base histogram macros
-// expand in a way that can only work for a single histogram name, so these
-// allow a single place in the code to fan out for multiple names.
-#define INVESTIGATOR_HISTOGRAM_CUSTOM_COUNTS(name, type, sample, min, max, \
-                                             bucket_count)                 \
-  switch (type) {                                                          \
-    case ReportingType::PERIODIC:                                          \
-      UMA_HISTOGRAM_CUSTOM_COUNTS(name "_Periodic", sample, min, max,      \
-                                  bucket_count);                           \
-      break;                                                               \
-    case ReportingType::ON_CHANGE:                                         \
-      UMA_HISTOGRAM_CUSTOM_COUNTS(name "_OnChange", sample, min, max,      \
-                                  bucket_count);                           \
-      break;                                                               \
-  }
+// -----------------------------------------------------------------------------
+// User actions
+// -----------------------------------------------------------------------------
 
-#define INVESTIGATOR_HISTOGRAM_BOOLEAN(name, type, sample) \
-  switch (type) {                                          \
-    case ReportingType::PERIODIC:                          \
-      UMA_HISTOGRAM_BOOLEAN(name "_Periodic", sample);     \
-      break;                                               \
-    case ReportingType::ON_CHANGE:                         \
-      UMA_HISTOGRAM_BOOLEAN(name "_OnChange", sample);     \
-      break;                                               \
-  }
-
-#define INVESTIGATOR_HISTOGRAM_ENUMERATION(name, type, sample, boundary_value) \
-  switch (type) {                                                              \
-    case ReportingType::PERIODIC:                                              \
-      UMA_HISTOGRAM_ENUMERATION(name "_Periodic", sample, boundary_value);     \
-      break;                                                                   \
-    case ReportingType::ON_CHANGE:                                             \
-      UMA_HISTOGRAM_ENUMERATION(name "_OnChange", sample, boundary_value);     \
-      break;                                                                   \
-  }
+// Records corresponding sign in user action for an access point.
+void RecordSigninUserActionForAccessPoint(
+    signin_metrics::AccessPoint access_point);
 
 }  // namespace signin_metrics
 

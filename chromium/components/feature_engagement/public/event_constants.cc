@@ -4,18 +4,25 @@
 
 #include "components/feature_engagement/public/event_constants.h"
 
+#include "build/build_config.h"
+#include "components/feature_engagement/features.h"
+
 namespace feature_engagement {
 
 namespace events {
 
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+const char kBookmarkAdded[] = "bookmark_added";
+const char kBookmarkSessionTimeMet[] = "bookmark_session_time_met";
+
 const char kOmniboxInteraction[] = "omnibox_used";
 const char kNewTabSessionTimeMet[] = "new_tab_session_time_met";
 
-const char kHistoryDeleted[] = "history_deleted";
 const char kIncognitoWindowOpened[] = "incognito_window_opened";
+const char kIncognitoWindowSessionTimeMet[] =
+    "incognito_window_session_time_met";
 
-#endif  // defined(OS_WIN) || defined(OS_LINUX)
+#endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_IOS)
 const char kNewTabOpened[] = "new_tab_opened";

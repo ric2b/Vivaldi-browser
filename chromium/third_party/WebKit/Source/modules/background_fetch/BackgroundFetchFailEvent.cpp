@@ -4,9 +4,9 @@
 
 #include "modules/background_fetch/BackgroundFetchFailEvent.h"
 
-#include "modules/EventModulesNames.h"
 #include "modules/background_fetch/BackgroundFetchFailEventInit.h"
 #include "modules/background_fetch/BackgroundFetchSettledFetch.h"
+#include "modules/event_modules_names.h"
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
 #include "public/platform/modules/background_fetch/WebBackgroundFetchSettledFetch.h"
@@ -47,7 +47,7 @@ const AtomicString& BackgroundFetchFailEvent::InterfaceName() const {
   return EventNames::BackgroundFetchFailEvent;
 }
 
-DEFINE_TRACE(BackgroundFetchFailEvent) {
+void BackgroundFetchFailEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetches_);
   BackgroundFetchEvent::Trace(visitor);
 }

@@ -5,14 +5,18 @@
 #include "core/editing/FrameSelection.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
-#include "core/editing/EditingTestBase.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameCaret.h"
 #include "core/editing/SelectionController.h"
 #include "core/editing/SelectionModifier.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisiblePosition.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/input/EventHandler.h"
@@ -22,7 +26,6 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,10 +33,10 @@ namespace blink {
 
 class FrameSelectionTest : public EditingTestBase {
  protected:
-  const VisibleSelection& VisibleSelectionInDOMTree() const {
+  VisibleSelection VisibleSelectionInDOMTree() const {
     return Selection().ComputeVisibleSelectionInDOMTree();
   }
-  const VisibleSelectionInFlatTree& GetVisibleSelectionInFlatTree() const {
+  VisibleSelectionInFlatTree GetVisibleSelectionInFlatTree() const {
     return Selection().GetSelectionInFlatTree();
   }
 
@@ -46,6 +49,11 @@ class FrameSelectionTest : public EditingTestBase {
     return Selection().frame_caret_->CaretPosition();
   }
 
+  Page& GetPage() const { return GetDummyPageHolder().GetPage(); }
+
+  // Returns if a word is is selected.
+  bool SelectWordAroundPosition(const Position&);
+
  private:
   Persistent<Text> text_node_;
 };
@@ -54,6 +62,12 @@ Text* FrameSelectionTest::AppendTextNode(const String& data) {
   Text* text = GetDocument().createTextNode(data);
   GetDocument().body()->AppendChild(text);
   return text;
+}
+
+bool FrameSelectionTest::SelectWordAroundPosition(const Position& position) {
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder().Collapse(position).Build());
+  return Selection().SelectWordAroundCaret();
 }
 
 TEST_F(FrameSelectionTest, FirstEphemeralRangeOf) {
@@ -122,37 +136,32 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
 #define EXPECT_EQ_SELECTED_TEXT(text) \
   EXPECT_EQ(text, WebString(Selection().SelectedText()).Utf8())
 
-TEST_F(FrameSelectionTest, SelectWordAroundPosition) {
+TEST_F(FrameSelectionTest, SelectWordAroundCaret) {
   // "Foo Bar  Baz,"
   Text* text = AppendTextNode("Foo Bar&nbsp;&nbsp;Baz,");
   UpdateAllLifecyclePhases();
 
   // "Fo|o Bar  Baz,"
-  EXPECT_TRUE(Selection().SelectWordAroundPosition(
-      CreateVisiblePosition(Position(text, 2))));
+  EXPECT_TRUE(SelectWordAroundPosition(Position(text, 2)));
   EXPECT_EQ_SELECTED_TEXT("Foo");
   // "Foo| Bar  Baz,"
-  EXPECT_TRUE(Selection().SelectWordAroundPosition(
-      CreateVisiblePosition(Position(text, 3))));
+  EXPECT_TRUE(SelectWordAroundPosition(Position(text, 3)));
   EXPECT_EQ_SELECTED_TEXT("Foo");
   // "Foo Bar | Baz,"
-  EXPECT_FALSE(Selection().SelectWordAroundPosition(
-      CreateVisiblePosition(Position(text, 13))));
+  EXPECT_FALSE(SelectWordAroundPosition(Position(text, 13)));
   // "Foo Bar  Baz|,"
-  EXPECT_TRUE(Selection().SelectWordAroundPosition(
-      CreateVisiblePosition(Position(text, 22))));
+  EXPECT_TRUE(SelectWordAroundPosition(Position(text, 22)));
   EXPECT_EQ_SELECTED_TEXT("Baz");
 }
 
 // crbug.com/657996
-TEST_F(FrameSelectionTest, SelectWordAroundPosition2) {
+TEST_F(FrameSelectionTest, SelectWordAroundCaret2) {
   SetBodyContent(
       "<p style='width:70px; font-size:14px'>foo bar<em>+</em> baz</p>");
   // "foo bar
   //  b|az"
   Node* const baz = GetDocument().body()->firstChild()->lastChild();
-  EXPECT_TRUE(Selection().SelectWordAroundPosition(
-      CreateVisiblePosition(Position(baz, 2))));
+  EXPECT_TRUE(SelectWordAroundPosition(Position(baz, 2)));
   EXPECT_EQ_SELECTED_TEXT("baz");
 }
 
@@ -320,7 +329,7 @@ TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
 }
 
 TEST_F(FrameSelectionTest, BoldCommandPreservesHandle) {
-  SetBodyContent("<div id=sample>abc</div>");
+  SetBodyContent("<div id=sample contenteditable>abc</div>");
   Element* sample = GetDocument().getElementById("sample");
   const Position end_of_text(sample->firstChild(), 3);
   Selection().SetSelection(SelectionInDOMTree::Builder()
@@ -1005,6 +1014,51 @@ TEST_F(FrameSelectionTest, InconsistentVisibleSelectionNoCrash) {
 
   // Shouldn't crash inside.
   EXPECT_FALSE(Selection().SelectionHasFocus());
+}
+
+TEST_F(FrameSelectionTest, SelectionBounds) {
+  SetBodyContent(
+      "<style>"
+      "  * { margin: 0; } "
+      "  html, body { height: 2000px; }"
+      "  div {"
+      "    width: 20px;"
+      "    height: 1000px;"
+      "    font-size: 30px;"
+      "    overflow: hidden;"
+      "    margin-top: 2px;"
+      "  }"
+      "</style>"
+      "<div>"
+      "  a<br>b<br>c<br>d<br>e<br>f<br>g<br>h<br>i<br>j<br>k<br>l<br>m<br>n<br>"
+      "  a<br>b<br>c<br>d<br>e<br>f<br>g<br>h<br>i<br>j<br>k<br>l<br>m<br>n<br>"
+      "  a<br>b<br>c<br>d<br>e<br>f<br>g<br>h<br>i<br>j<br>k<br>l<br>m<br>n<br>"
+      "</div>");
+  Selection().SelectAll();
+
+  const int node_width = 20;
+  const int node_height = 1000;
+  const int node_margin_top = 2;
+  // The top of the node should be visible but the bottom should be outside
+  // by the viewport. The unclipped selection bounds should not be clipped.
+  EXPECT_EQ(LayoutRect(0, node_margin_top, node_width, node_height),
+            Selection().UnclippedBounds());
+
+  // Scroll 500px down so the top of the node is outside the viewport and the
+  // bottom is visible. The unclipped selection bounds should not be clipped.
+  const int scroll_offset = 500;
+  LocalFrameView* frame_view = GetDocument().View();
+  frame_view->LayoutViewportScrollableArea()->SetScrollOffset(
+      ScrollOffset(0, scroll_offset), kProgrammaticScroll);
+  EXPECT_EQ(LayoutRect(0, node_margin_top, node_width, node_height),
+            Selection().UnclippedBounds());
+
+  // Adjust the page scale factor which changes the selection bounds as seen
+  // through the viewport. The unclipped selection bounds should not be clipped.
+  const int page_scale_factor = 2;
+  GetPage().SetPageScaleFactor(page_scale_factor);
+  EXPECT_EQ(LayoutRect(0, node_margin_top, node_width, node_height),
+            Selection().UnclippedBounds());
 }
 
 }  // namespace blink

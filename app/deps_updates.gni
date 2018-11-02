@@ -87,3 +87,18 @@ foreach(_target,
     deps += [ "//vivaldi/app:vivaldi_native_resources" ]
   }
 }
+
+foreach(_target, [
+      "//chrome/app:chrome_dll_resources",
+      "//chrome/app:chrome_exe_resources",
+      "//chrome/installer/mini_installer:lib",
+      "//chrome/installer/setup:setup",
+    ]) {
+  post_process_target(_target) {
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += ["//vivaldi/app:vivaldi_icon"]
+    #configs += ["//vivaldi/app:vivaldi_app_config"]
+  }
+}

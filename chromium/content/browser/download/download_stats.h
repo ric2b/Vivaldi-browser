@@ -114,10 +114,17 @@ enum DownloadCountTypes {
   // bytes are received when resuming the download.
   NO_BYTES_RECEIVED_AFTER_CONTENT_LENGTH_MISMATCH_COUNT,
 
+  // Count of downloads that requested target determination.
+  DETERMINE_DOWNLOAD_TARGET_COUNT,
+
+  // Count of downloads that has target determination completed.
+  DOWNLOAD_TARGET_DETERMINED_COUNT,
+
   DOWNLOAD_COUNT_TYPES_LAST_ENTRY
 };
 
-enum DownloadSource {
+// TODO(xingliu): Deprecate this enum.
+enum DownloadTriggerSource {
   // The download was initiated when the SavePackage system rejected
   // a Save Page As ... by returning false from
   // SavePackage::IsSaveableContents().
@@ -199,11 +206,12 @@ enum class ParallelDownloadCreationEvent {
 void RecordDownloadCount(DownloadCountTypes type);
 
 // Record initiation of a download from a specific source.
-void RecordDownloadSource(DownloadSource source);
+void RecordDownloadSource(DownloadTriggerSource source);
 
 // Record COMPLETED_COUNT and how long the download took.
 void RecordDownloadCompleted(const base::TimeTicks& start,
-                             int64_t download_len);
+                             int64_t download_len,
+                             bool is_parallelizable);
 
 // Record INTERRUPTED_COUNT, |reason|, |received| and |total| bytes.
 void RecordDownloadInterrupted(DownloadInterruptReason reason,

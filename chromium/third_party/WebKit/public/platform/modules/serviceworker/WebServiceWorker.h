@@ -32,14 +32,14 @@
 #define WebServiceWorker_h
 
 #include "public/platform/WebCommon.h"
-#include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerState.h"
+#include "public/platform/modules/serviceworker/service_worker_state.mojom-shared.h"
 
 namespace blink {
 
+class MessagePortChannel;
 class WebSecurityOrigin;
 class WebServiceWorkerProvider;
 class WebServiceWorkerProxy;
@@ -66,8 +66,8 @@ class WebServiceWorker {
   virtual WebServiceWorkerProxy* Proxy() { return nullptr; }
 
   virtual WebURL Url() const { return WebURL(); }
-  virtual WebServiceWorkerState GetState() const {
-    return kWebServiceWorkerStateUnknown;
+  virtual mojom::ServiceWorkerState GetState() const {
+    return mojom::ServiceWorkerState::kUnknown;
   }
 
   // Callee receives ownership of the passed vector.
@@ -75,7 +75,7 @@ class WebServiceWorker {
   virtual void PostMessage(WebServiceWorkerProvider*,
                            const WebString&,
                            const WebSecurityOrigin&,
-                           WebMessagePortChannelArray) = 0;
+                           WebVector<MessagePortChannel>) = 0;
 
   virtual void Terminate() {}
 };

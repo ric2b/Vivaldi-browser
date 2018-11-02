@@ -47,7 +47,7 @@ class TestEventHandler : public ui::EventHandler {
         scroll_y_offset_(0.0),
         scroll_x_offset_ordinal_(0.0),
         scroll_y_offset_ordinal_(0.0) {}
-  ~TestEventHandler() override {}
+  ~TestEventHandler() override = default;
 
   void OnMouseEvent(ui::MouseEvent* event) override {
     if (event->flags() & ui::EF_IS_SYNTHESIZED)
@@ -115,8 +115,8 @@ class TestEventHandler : public ui::EventHandler {
 
 class RootWindowTransformersTest : public AshTestBase {
  public:
-  RootWindowTransformersTest() {}
-  ~RootWindowTransformersTest() override {}
+  RootWindowTransformersTest() = default;
+  ~RootWindowTransformersTest() override = default;
 
   float GetStoredUIScale(int64_t id) {
     return display_manager()->GetDisplayInfo(id).GetEffectiveUIScale();
@@ -127,7 +127,7 @@ class RootWindowTransformersTest : public AshTestBase {
     DCHECK(display_manager()->IsInMirrorMode());
     const display::ManagedDisplayInfo& mirror_display_info =
         display_manager()->GetDisplayInfo(
-            display_manager()->mirroring_display_id());
+            display_manager()->GetMirroringDestinationDisplayIdList()[0]);
     const display::ManagedDisplayInfo& source_display_info =
         display_manager()->GetDisplayInfo(
             display::Screen::GetScreen()->GetPrimaryDisplay().id());

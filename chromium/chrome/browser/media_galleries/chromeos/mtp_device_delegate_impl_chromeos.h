@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -48,7 +48,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
   struct PendingTaskInfo {
     PendingTaskInfo(const base::FilePath& path,
                     content::BrowserThread::ID thread_id,
-                    const tracked_objects::Location& location,
+                    const base::Location& location,
                     const base::Closure& task);
     PendingTaskInfo(const PendingTaskInfo& other);
     ~PendingTaskInfo();
@@ -56,7 +56,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
     base::FilePath path;
     base::FilePath cached_path;
     const content::BrowserThread::ID thread_id;
-    const tracked_objects::Location location;
+    const base::Location location;
     const base::Closure task;
   };
 
@@ -493,7 +493,7 @@ class MTPDeviceDelegateImplLinux : public MTPDeviceAsyncDelegate {
 
   // A list of pending tasks that needs to be run when the device is
   // initialized or when the current task in progress is complete.
-  std::deque<PendingTaskInfo> pending_tasks_;
+  base::circular_deque<PendingTaskInfo> pending_tasks_;
 
   // Used to track the current snapshot file request. A snapshot file is created
   // incrementally. CreateSnapshotFile request reads the device file and writes

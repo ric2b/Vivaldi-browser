@@ -23,9 +23,9 @@ namespace {
 enum MarkHttpStatus {
   NEUTRAL = 0,  // Deprecated
   NON_SECURE = 1,
-  HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS = 2,
-  NON_SECURE_AFTER_EDITING = 3,
-  NON_SECURE_WHILE_INCOGNITO = 4,
+  HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS = 2,  // Deprecated as of Chrome 64
+  NON_SECURE_AFTER_EDITING = 3,               // Deprecated as of Chrome 64
+  NON_SECURE_WHILE_INCOGNITO = 4,             // Deprecated as of Chrome 64
   NON_SECURE_WHILE_INCOGNITO_OR_EDITING = 5,
   LAST_STATUS
 };
@@ -35,37 +35,10 @@ enum MarkHttpStatus {
 // appropriate values and returns true. Otherwise, returns false.
 bool GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
     std::string switch_or_field_trial_group,
-    bool displayed_sensitive_input_on_http,
     bool is_incognito,
-    const InsecureInputEventData* input_events,
+    const InsecureInputEventData& input_events,
     SecurityLevel* level,
     MarkHttpStatus* mark_http_as) {
-  if (switch_or_field_trial_group ==
-      switches::kMarkHttpAsNonSecureWhileIncognito) {
-    *mark_http_as = NON_SECURE_WHILE_INCOGNITO;
-    *level = (is_incognito || displayed_sensitive_input_on_http)
-                 ? security_state::HTTP_SHOW_WARNING
-                 : NONE;
-    return true;
-  }
-  if (switch_or_field_trial_group ==
-      switches::kMarkHttpAsNonSecureWhileIncognitoOrEditing) {
-    *mark_http_as = NON_SECURE_WHILE_INCOGNITO_OR_EDITING;
-    *level = (is_incognito || displayed_sensitive_input_on_http ||
-              (input_events && input_events->insecure_field_edited))
-                 ? security_state::HTTP_SHOW_WARNING
-                 : NONE;
-    return true;
-  }
-  if (switch_or_field_trial_group ==
-      switches::kMarkHttpAsNonSecureAfterEditing) {
-    *mark_http_as = NON_SECURE_AFTER_EDITING;
-    *level = (displayed_sensitive_input_on_http ||
-              (input_events && input_events->insecure_field_edited))
-                 ? security_state::HTTP_SHOW_WARNING
-                 : NONE;
-    return true;
-  }
   if (switch_or_field_trial_group == switches::kMarkHttpAsDangerous) {
     *mark_http_as = NON_SECURE;
     *level = DANGEROUS;
@@ -76,9 +49,8 @@ bool GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
 }
 
 SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
-    bool displayed_sensitive_input_on_http,
     bool is_incognito,
-    const InsecureInputEventData* input_events,
+    const InsecureInputEventData& input_events,
     MarkHttpStatus* mark_http_as) {
   std::string choice =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -92,13 +64,15 @@ SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
   // If the command-line switch is set, then it takes precedence over
   // the field trial group.
   if (!GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
-          choice, displayed_sensitive_input_on_http, is_incognito, input_events,
-          &level, mark_http_as)) {
+          choice, is_incognito, input_events, &level, mark_http_as)) {
     if (!GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
-            group, displayed_sensitive_input_on_http, is_incognito,
-            input_events, &level, mark_http_as)) {
-      *mark_http_as = HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS;
-      level = displayed_sensitive_input_on_http
+            group, is_incognito, input_events, &level, mark_http_as)) {
+      // No command-line switch or field trial is in effect.
+      // Default to warning on incognito or editing or sensitive form fields.
+      *mark_http_as = NON_SECURE_WHILE_INCOGNITO_OR_EDITING;
+      level = (is_incognito || input_events.insecure_field_edited ||
+               input_events.password_field_shown ||
+               input_events.credit_card_field_edited)
                   ? security_state::HTTP_SHOW_WARNING
                   : NONE;
     }
@@ -150,9 +124,12 @@ SecurityLevel GetSecurityLevelForRequest(
   }
 
   // data: URLs don't define a secure context, and are a vector for spoofing.
-  // Display a "Not secure" badge for all data URLs, regardless of whether
+  // Likewise, ftp: URLs are always non-secure, and are uncommon enough that
+  // we can treat them as such without significant user impact.
+  //
+  // Display a "Not secure" badge for all these URLs, regardless of whether
   // they show a password or credit card field.
-  if (url.SchemeIs(url::kDataScheme))
+  if (url.SchemeIs(url::kDataScheme) || url.SchemeIs(url::kFtpScheme))
     return SecurityLevel::HTTP_SHOW_WARNING;
 
   // Choose the appropriate security level for requests to HTTP and remaining
@@ -160,13 +137,12 @@ SecurityLevel GetSecurityLevelForRequest(
   // not need to be explicitly listed here.
   // TODO(meacer): Remove special case for blob (crbug.com/684751).
   if (!is_cryptographic_with_certificate) {
-    if (!is_origin_secure_callback.Run(url) &&
+    if (!visible_security_state.is_error_page &&
+        !is_origin_secure_callback.Run(url) &&
         (url.IsStandard() || url.SchemeIs(url::kBlobScheme))) {
       return GetSecurityLevelForNonSecureFieldTrial(
-          visible_security_state.displayed_password_field_on_http ||
-              visible_security_state.displayed_credit_card_field_on_http,
           visible_security_state.is_incognito,
-          &visible_security_state.insecure_input_events, mark_http_as);
+          visible_security_state.insecure_input_events, mark_http_as);
     }
     return NONE;
   }
@@ -178,14 +154,6 @@ SecurityLevel GetSecurityLevelForRequest(
       content_with_cert_errors_status == CONTENT_STATUS_DISPLAYED_AND_RAN) {
     return kRanInsecureContentLevel;
   }
-
-  // Report if there is a policy cert first, before reporting any other
-  // authenticated-but-with-errors cases. A policy cert is a strong
-  // indicator of a MITM being present (the enterprise), while the
-  // other authenticated-but-with-errors indicate something may
-  // be wrong, or may be wrong in the future, but is unclear now.
-  if (used_policy_installed_certificate)
-    return SECURE_WITH_POLICY_INSTALLED_CERT;
 
   // In most cases, SHA1 use is treated as a certificate error, in which case
   // DANGEROUS will have been returned above. If SHA1 was permitted by policy,
@@ -209,6 +177,16 @@ SecurityLevel GetSecurityLevelForRequest(
     return NONE;
   }
 
+  if (visible_security_state.is_view_source) {
+    return NONE;
+  }
+
+  // Any prior observation of a policy-installed cert is a strong indicator
+  // of a MITM being present (the enterprise), so a "secure-but-inspected"
+  // security level is returned.
+  if (used_policy_installed_certificate)
+    return SECURE_WITH_POLICY_INSTALLED_CERT;
+
   if ((visible_security_state.cert_status & net::CERT_STATUS_IS_EV) &&
       visible_security_state.certificate) {
     return EV_SECURE;
@@ -224,7 +202,7 @@ void SecurityInfoForRequest(
   // |mark_http_as| will be updated to the value specified by the
   // field trial or command-line in |GetSecurityLevelForNonSecureFieldTrial|
   // if that function is reached.
-  MarkHttpStatus mark_http_as = HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS;
+  MarkHttpStatus mark_http_as = NON_SECURE_WHILE_INCOGNITO_OR_EDITING;
 
   if (!visible_security_state.connection_info_initialized) {
     *security_info = SecurityInfo();
@@ -263,10 +241,6 @@ void SecurityInfoForRequest(
   security_info->malicious_content_status =
       visible_security_state.malicious_content_status;
 
-  security_info->displayed_password_field_on_http =
-      visible_security_state.displayed_password_field_on_http;
-  security_info->displayed_credit_card_field_on_http =
-      visible_security_state.displayed_credit_card_field_on_http;
   security_info->cert_missing_subject_alt_name =
       visible_security_state.certificate &&
       !visible_security_state.certificate->GetSubjectAltName(nullptr, nullptr);
@@ -282,15 +256,14 @@ void SecurityInfoForRequest(
 
   security_info->incognito_downgraded_security_level =
       (visible_security_state.is_incognito &&
+       !visible_security_state.is_error_page &&
        security_info->security_level == HTTP_SHOW_WARNING &&
-       (mark_http_as == NON_SECURE_WHILE_INCOGNITO ||
-        mark_http_as == NON_SECURE_WHILE_INCOGNITO_OR_EDITING));
+       (mark_http_as == NON_SECURE_WHILE_INCOGNITO_OR_EDITING));
 
   security_info->field_edit_downgraded_security_level =
       (security_info->security_level == HTTP_SHOW_WARNING &&
        visible_security_state.insecure_input_events.insecure_field_edited &&
-       (mark_http_as == NON_SECURE_AFTER_EDITING ||
-        mark_http_as == NON_SECURE_WHILE_INCOGNITO_OR_EDITING));
+       (mark_http_as == NON_SECURE_WHILE_INCOGNITO_OR_EDITING));
 
   security_info->insecure_input_events =
       visible_security_state.insecure_input_events;
@@ -314,8 +287,6 @@ SecurityInfo::SecurityInfo()
       key_exchange_group(0),
       obsolete_ssl_status(net::OBSOLETE_SSL_NONE),
       pkp_bypassed(false),
-      displayed_password_field_on_http(false),
-      displayed_credit_card_field_on_http(false),
       contained_mixed_form(false),
       cert_missing_subject_alt_name(false),
       incognito_downgraded_security_level(false),
@@ -350,10 +321,25 @@ VisibleSecurityState::VisibleSecurityState()
       displayed_content_with_cert_errors(false),
       ran_content_with_cert_errors(false),
       pkp_bypassed(false),
-      displayed_password_field_on_http(false),
-      displayed_credit_card_field_on_http(false),
-      is_incognito(false) {}
+      is_incognito(false),
+      is_error_page(false),
+      is_view_source(false) {}
 
 VisibleSecurityState::~VisibleSecurityState() {}
+
+bool IsSchemeCryptographic(const GURL& url) {
+  return url.is_valid() && url.SchemeIsCryptographic();
+}
+
+bool IsOriginLocalhostOrFile(const GURL& url) {
+  return url.is_valid() &&
+         (net::IsLocalhost(url.HostNoBracketsPiece()) || url.SchemeIsFile());
+}
+
+bool IsSslCertificateValid(security_state::SecurityLevel security_level) {
+  return security_level == security_state::SECURE ||
+         security_level == security_state::EV_SECURE ||
+         security_level == security_state::SECURE_WITH_POLICY_INSTALLED_CERT;
+}
 
 }  // namespace security_state

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_DEVELOPER_PRIVATE_DEVELOPER_PRIVATE_API_H_
 #define CHROME_BROWSER_EXTENSIONS_API_DEVELOPER_PRIVATE_DEVELOPER_PRIVATE_API_H_
 
+#include <map>
 #include <set>
 
 #include "base/files/file.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
+#include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/extensions/pack_extension_job.h"
@@ -194,6 +196,13 @@ class DeveloperPrivateAPI : public BrowserContextKeyedAPI,
   base::FilePath GetUnpackedPath(content::WebContents* web_contents,
                                  const UnpackedRetryId& id) const;
 
+  // Sets the dragged path for the given |web_contents|.
+  void SetDraggedPath(content::WebContents* web_contents,
+                      const base::FilePath& path);
+
+  // Returns the dragged path for the given |web_contents|, if one exists.
+  base::FilePath GetDraggedPath(content::WebContents* web_contents) const;
+
   // KeyedService implementation
   void Shutdown() override;
 
@@ -211,6 +220,30 @@ class DeveloperPrivateAPI : public BrowserContextKeyedAPI,
  private:
   class WebContentsTracker;
 
+  using IdToPathMap = std::map<UnpackedRetryId, base::FilePath>;
+  // Data specific to a given WebContents.
+  struct WebContentsData {
+    WebContentsData();
+    ~WebContentsData();
+    WebContentsData(WebContentsData&& other);
+
+    // A set of unpacked paths that we are allowed to load for different
+    // WebContents. For security reasons, we don't let JavaScript arbitrarily
+    // pass us a path and load the extension at that location; instead, the user
+    // has to explicitly select the path through a native dialog first, and then
+    // we will allow JavaScript to request we reload that same selected path.
+    // Additionally, these are segmented by WebContents; this is primarily to
+    // allow collection (removing old paths when the WebContents closes) but has
+    // the effect that WebContents A cannot retry a path selected in
+    // WebContents B.
+    IdToPathMap allowed_unpacked_paths;
+
+    // The last dragged path for the WebContents.
+    base::FilePath dragged_path;
+
+    DISALLOW_COPY_AND_ASSIGN(WebContentsData);
+  };
+
   friend class BrowserContextKeyedAPIFactory<DeveloperPrivateAPI>;
 
   // BrowserContextKeyedAPI implementation.
@@ -220,23 +253,18 @@ class DeveloperPrivateAPI : public BrowserContextKeyedAPI,
 
   void RegisterNotifications();
 
+  const WebContentsData* GetWebContentsData(
+      content::WebContents* web_contents) const;
+  WebContentsData* GetOrCreateWebContentsData(
+      content::WebContents* web_contents);
+
   Profile* profile_;
 
   // Used to start the load |load_extension_dialog_| in the last directory that
   // was loaded.
   base::FilePath last_unpacked_directory_;
 
-  // A set of unpacked paths that we are allowed to load for different
-  // WebContents. For security reasons, we don't let JavaScript arbitrarily
-  // pass us a path and load the extension at that location; instead, the user
-  // has to explicitly select the path through a native dialog first, and then
-  // we will allow JavaScript to request we reload that same selected path.
-  // Additionally, these are segmented by WebContents; this is primarily to
-  // allow collection (removing old paths when the WebContents closes) but has
-  // the effect that WebContents A cannot retry a path selected in
-  // WebContents B.
-  using IdToPathMap = std::map<UnpackedRetryId, base::FilePath>;
-  std::map<content::WebContents*, IdToPathMap> allowed_unpacked_paths_;
+  std::map<content::WebContents*, WebContentsData> web_contents_data_;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<DeveloperPrivateEventRouter> developer_private_event_router_;
@@ -328,6 +356,22 @@ class DeveloperPrivateGetExtensionInfoFunction
   DISALLOW_COPY_AND_ASSIGN(DeveloperPrivateGetExtensionInfoFunction);
 };
 
+class DeveloperPrivateGetExtensionSizeFunction
+    : public DeveloperPrivateAPIFunction {
+ public:
+  DeveloperPrivateGetExtensionSizeFunction();
+  DECLARE_EXTENSION_FUNCTION("developerPrivate.getExtensionSize",
+                             DEVELOPERPRIVATE_GETEXTENSIONSIZE);
+
+ private:
+  ~DeveloperPrivateGetExtensionSizeFunction() override;
+  ResponseAction Run() override;
+
+  void OnSizeCalculated(int64_t size_in_bytes);
+
+  DISALLOW_COPY_AND_ASSIGN(DeveloperPrivateGetExtensionSizeFunction);
+};
+
 class DeveloperPrivateGetProfileConfigurationFunction
     : public DeveloperPrivateAPIFunction {
  public:
@@ -361,16 +405,50 @@ class DeveloperPrivateUpdateExtensionConfigurationFunction
   ResponseAction Run() override;
 };
 
-class DeveloperPrivateReloadFunction : public DeveloperPrivateAPIFunction {
+class DeveloperPrivateReloadFunction : public DeveloperPrivateAPIFunction,
+                                       public ExtensionRegistryObserver,
+                                       public ExtensionErrorReporter::Observer {
  public:
   DECLARE_EXTENSION_FUNCTION("developerPrivate.reload",
                              DEVELOPERPRIVATE_RELOAD);
+
+  DeveloperPrivateReloadFunction();
+
+  // ExtensionRegistryObserver:
+  void OnExtensionLoaded(content::BrowserContext* browser_context,
+                         const Extension* extension) override;
+  void OnShutdown(ExtensionRegistry* registry) override;
+
+  // ExtensionErrorReporter::Observer:
+  void OnLoadFailure(content::BrowserContext* browser_context,
+                     const base::FilePath& file_path,
+                     const std::string& error) override;
 
  protected:
   ~DeveloperPrivateReloadFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
+
+ private:
+  // Callback once we parse a manifest error from a failed reload.
+  void OnGotManifestError(const base::FilePath& file_path,
+                          const std::string& error,
+                          size_t line_number,
+                          const std::string& manifest);
+
+  // Clears the scoped observers.
+  void ClearObservers();
+
+  // The file path of the extension that's reloading.
+  base::FilePath reloading_extension_path_;
+
+  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
+      registry_observer_;
+  ScopedObserver<ExtensionErrorReporter, ExtensionErrorReporter::Observer>
+      error_reporter_observer_;
+
+  DISALLOW_COPY_AND_ASSIGN(DeveloperPrivateReloadFunction);
 };
 
 class DeveloperPrivateShowPermissionsDialogFunction
@@ -436,6 +514,24 @@ class DeveloperPrivateLoadUnpackedFunction
 
   // The identifier for the selected path when retrying an unpacked load.
   DeveloperPrivateAPI::UnpackedRetryId retry_guid_;
+};
+
+class DeveloperPrivateNotifyDragInstallInProgressFunction
+    : public DeveloperPrivateAPIFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("developerPrivate.notifyDragInstallInProgress",
+                             DEVELOPERPRIVATE_NOTIFYDRAGINSTALLINPROGRESS);
+
+  DeveloperPrivateNotifyDragInstallInProgressFunction();
+
+  ResponseAction Run() override;
+
+  static void SetDropPathForTesting(base::FilePath* file_path);
+
+ private:
+  ~DeveloperPrivateNotifyDragInstallInProgressFunction() override;
+
+  DISALLOW_COPY_AND_ASSIGN(DeveloperPrivateNotifyDragInstallInProgressFunction);
 };
 
 class DeveloperPrivateChoosePathFunction

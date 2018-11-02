@@ -31,15 +31,16 @@
 #include "core/html/forms/SearchInputType.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/KeyboardEvent.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/frame/WebFeature.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
 #include "core/layout/LayoutSearchField.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -47,10 +48,10 @@ using namespace HTMLNames;
 
 inline SearchInputType::SearchInputType(HTMLInputElement& element)
     : BaseTextInputType(element),
-      search_event_timer_(TaskRunnerHelper::Get(TaskType::kUserInteraction,
-                                                &element.GetDocument()),
-                          this,
-                          &SearchInputType::SearchEventTimerFired) {}
+      search_event_timer_(
+          element.GetDocument().GetTaskRunner(TaskType::kUserInteraction),
+          this,
+          &SearchInputType::SearchEventTimerFired) {}
 
 InputType* SearchInputType::Create(HTMLInputElement& element) {
   return new SearchInputType(element);
@@ -106,8 +107,9 @@ void SearchInputType::StartSearchEventTimer() {
 
   if (!length) {
     search_event_timer_.Stop();
-    TaskRunnerHelper::Get(TaskType::kUserInteraction,
-                          &GetElement().GetDocument())
+    GetElement()
+        .GetDocument()
+        .GetTaskRunner(TaskType::kUserInteraction)
         ->PostTask(BLINK_FROM_HERE, WTF::Bind(&HTMLInputElement::OnSearch,
                                               WrapPersistent(&GetElement())));
     return;

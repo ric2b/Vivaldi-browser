@@ -34,6 +34,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/log/net_log_with_source.h"
+#include "net/net_features.h"
 #include "net/proxy/proxy_server.h"
 #include "net/socket/connection_attempts.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -126,6 +127,11 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     UPDATE_FIRST_PARTY_URL_ON_REDIRECT,
   };
 
+  // Max number of http redirects to follow. The Fetch spec says: "If
+  // request's redirect count is twenty, return a network error."
+  // https://fetch.spec.whatwg.org/#http-redirect-fetch
+  static constexpr int kMaxRedirects = 20;
+
   // The delegate's methods are called from the message loop of the thread
   // on which the request's Start() method is called. See above for the
   // ordering of callbacks.
@@ -211,9 +217,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     // meta data about the response is available, including for example HTTP
     // response headers if this is a request for a HTTP resource.
     virtual void OnResponseStarted(URLRequest* request, int net_error);
-    // Deprecated.
-    // TODO(maksims): Remove this;
-    virtual void OnResponseStarted(URLRequest* request);
 
     // Called when the a Read of the response body is completed after an
     // IO_PENDING status from a Read() call.
@@ -646,8 +649,8 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     return received_response_content_length_;
   }
 
-  // Available at NetworkDelegate::NotifyHeadersReceived() time, which is before
-  // the more general response_info() is available, even though it is a subset.
+  // Available when the request headers are sent, which is before the more
+  // general response_info() is available.
   const ProxyServer& proxy_server() const { return proxy_server_; }
 
   // Gets the connection attempts made in the process of servicing this
@@ -762,7 +765,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // If |network_delegate_| is NULL, cookies can be used unless
   // SetDefaultCookiePolicyToBlock() has been called.
   bool CanGetCookies(const CookieList& cookie_list) const;
-  bool CanSetCookie(const std::string& cookie_line,
+  bool CanSetCookie(const net::CanonicalCookie& cookie,
                     CookieOptions* options) const;
   bool CanEnablePrivacyMode() const;
 
@@ -771,6 +774,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // Called when the delegate lets a request continue.  Also called on
   // cancellation.
   void OnCallToDelegateComplete();
+
+#if BUILDFLAG(ENABLE_REPORTING)
+  void MaybeGenerateNetworkErrorLoggingReport();
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
   // Contextual information used for this request. Cannot be NULL. This contains
   // most of the dependencies which are shared between requests (disk cache,

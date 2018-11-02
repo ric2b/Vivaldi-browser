@@ -26,6 +26,7 @@
 #ifndef EventHandler_h
 #define EventHandler_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/TextEventInputType.h"
@@ -46,7 +47,6 @@
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashTraits.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebInputEventResult.h"
 #include "public/platform/WebMenuSourceType.h"
@@ -67,7 +67,6 @@ class HitTestResult;
 class LayoutObject;
 class LocalFrame;
 class Node;
-class OptionalCursor;
 class ScrollableArea;
 class Scrollbar;
 class SelectionController;
@@ -83,7 +82,7 @@ class CORE_EXPORT EventHandler final
 
  public:
   explicit EventHandler(LocalFrame&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void Clear();
 
@@ -149,7 +148,7 @@ class CORE_EXPORT EventHandler final
       const Vector<WebMouseEvent>& coalesced_events);
   void HandleMouseLeaveEvent(const WebMouseEvent&);
 
-  WebInputEventResult HandlePointerEvent(const WebPointerEvent&, Node* target);
+  WebInputEventResult HandlePointerEvent(const WebPointerEvent&);
 
   WebInputEventResult HandleMousePressEvent(const WebMouseEvent&);
   WebInputEventResult HandleMouseReleaseEvent(const WebMouseEvent&);
@@ -240,7 +239,7 @@ class CORE_EXPORT EventHandler final
 
   void NotifyElementActivated();
 
-  RefPtr<UserGestureToken> TakeLastMouseDownGestureToken() {
+  scoped_refptr<UserGestureToken> TakeLastMouseDownGestureToken() {
     return std::move(last_mouse_down_user_gesture_token_);
   }
 
@@ -272,6 +271,25 @@ class CORE_EXPORT EventHandler final
   void ClearDragState();
 
  private:
+  enum NoCursorChangeType { kNoCursorChange };
+
+  class OptionalCursor {
+   public:
+    OptionalCursor(NoCursorChangeType) : is_cursor_change_(false) {}
+    OptionalCursor(const Cursor& cursor)
+        : is_cursor_change_(true), cursor_(cursor) {}
+
+    bool IsCursorChange() const { return is_cursor_change_; }
+    const Cursor& GetCursor() const {
+      DCHECK(is_cursor_change_);
+      return cursor_;
+    }
+
+   private:
+    bool is_cursor_change_;
+    Cursor cursor_;
+  };
+
   WebInputEventResult HandleMouseMoveOrLeaveEvent(
       const WebMouseEvent&,
       const Vector<WebMouseEvent>&,
@@ -293,7 +311,9 @@ class CORE_EXPORT EventHandler final
 
   bool ShouldApplyTouchAdjustment(const WebGestureEvent&) const;
 
+  bool IsSelectingLink(const HitTestResult&);
   bool ShouldShowIBeamForNode(const Node*, const HitTestResult&);
+  bool ShouldShowResizeForNode(const Node*, const HitTestResult&);
   OptionalCursor SelectCursor(const HitTestResult&);
   OptionalCursor SelectAutoCursor(const HitTestResult&,
                                   Node*,
@@ -376,7 +396,7 @@ class CORE_EXPORT EventHandler final
 
   Member<HTMLFrameSetElement> frame_set_being_resized_;
 
-  RefPtr<UserGestureToken> last_mouse_down_user_gesture_token_;
+  scoped_refptr<UserGestureToken> last_mouse_down_user_gesture_token_;
 
   Member<ScrollManager> scroll_manager_;
   Member<MouseEventManager> mouse_event_manager_;
@@ -411,6 +431,11 @@ class CORE_EXPORT EventHandler final
                            ShadowChildCanOverrideUserSelectText);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, InputFieldsCanStartSelection);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, ImagesCannotStartSelection);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, AnchorTextCannotStartSelection);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           EditableAnchorTextCanStartSelection);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           ReadOnlyInputDoesNotInheritUserSelect);
 };
 
 }  // namespace blink

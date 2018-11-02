@@ -975,8 +975,8 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   /* Helpers */
   GLint GetMaxTransformFeedbackSeparateAttribs() const;
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  protected:
   friend class V8WebGL2RenderingContext;
@@ -985,6 +985,7 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   WebGL2RenderingContextBase(
       CanvasRenderingContextHost*,
       std::unique_ptr<WebGraphicsContext3DProvider>,
+      bool using_gpu_compositing,
       const CanvasContextCreationAttributes& requested_attributes);
 
   // DrawingBuffer::Client implementation.
@@ -1133,10 +1134,7 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   GLint pack_row_length_;
   GLint pack_skip_pixels_;
   GLint pack_skip_rows_;
-  GLint unpack_row_length_;
   GLint unpack_image_height_;
-  GLint unpack_skip_pixels_;
-  GLint unpack_skip_rows_;
   GLint unpack_skip_images_;
 
   HeapHashSet<Member<WebGLGetBufferSubDataAsyncCallback>>

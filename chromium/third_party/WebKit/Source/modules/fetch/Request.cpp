@@ -5,19 +5,18 @@
 #include "modules/fetch/Request.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/ThreadableLoader.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchManager.h"
 #include "modules/fetch/RequestInit.h"
-#include "platform/HTTPNames.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/http_names.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/OriginAccessEntry.h"
 #include "platform/weborigin/Referrer.h"
 #include "public/platform/WebURLRequest.h"
@@ -46,7 +45,6 @@ FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
   request->SetMode(original->Mode());
   request->SetCredentials(original->Credentials());
   request->SetCacheMode(original->CacheMode());
-  request->SetAttachedCredential(original->AttachedCredential());
   request->SetRedirect(original->Redirect());
   request->SetIntegrity(original->Integrity());
   return request;
@@ -74,7 +72,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // "Let |request| be |input|'s request, if |input| is a Request object,
   // and a new request otherwise."
 
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       ExecutionContext::From(script_state)->GetSecurityOrigin();
 
   // TODO(yhirano): Implement the following steps:
@@ -103,13 +101,14 @@ Request* Request::CreateRequestWithRequestOrString(
   // We don't use fallback values. We set these flags directly in below.
   // - "Let |fallbackMode| be null."
   // - "Let |fallbackCredentials| be null."
-  // - "Let |baseURL| be entry settings object's API base URL."
+
+  // "Let |baseURL| be entry settings object's API base URL."
+  const KURL base_url = ExecutionContext::From(script_state)->BaseURL();
 
   // "If |input| is a string, run these substeps:"
   if (!input_request) {
     // "Let |parsedURL| be the result of parsing |input| with |baseURL|."
-    KURL parsed_url =
-        ExecutionContext::From(script_state)->CompleteURL(input_string);
+    KURL parsed_url = KURL(base_url, input_string);
     // "If |parsedURL| is failure, throw a TypeError."
     if (!parsed_url.IsValid()) {
       exception_state.ThrowTypeError("Failed to parse URL from " +
@@ -134,9 +133,9 @@ Request* Request::CreateRequestWithRequestOrString(
   }
 
   // "If any of |init|'s members are present, run these substeps:"
-  if (init.are_any_members_set) {
+  if (init.AreAnyMembersSet()) {
     // "If |request|'s |mode| is "navigate", throw a TypeError."
-    if (request->Mode() == WebURLRequest::kFetchRequestModeNavigate) {
+    if (request->Mode() == network::mojom::FetchRequestMode::kNavigate) {
       exception_state.ThrowTypeError(
           "Cannot construct a Request with a Request whose mode is 'navigate' "
           "and a non-empty RequestInit.");
@@ -167,22 +166,22 @@ Request* Request::CreateRequestWithRequestOrString(
   // (areAnyMembersSet) is used for the if-clause instead of conditions
   // indicating presence of each member as specified in the spec. This is to
   // perform the substeps in the previous step together here.
-  if (init.are_any_members_set) {
+  if (init.AreAnyMembersSet()) {
     // Nothing to do for the step "Let |referrer| be |init|'s referrer
     // member."
 
-    if (init.referrer.referrer.IsEmpty()) {
+    if (init.GetReferrer().referrer.IsEmpty()) {
       // "If |referrer| is the empty string, set |request|'s referrer to
       // "no-referrer" and terminate these substeps."
       request->SetReferrerString(AtomicString(Referrer::NoReferrer()));
     } else {
       // "Let |parsedReferrer| be the result of parsing |referrer| with
       // |baseURL|."
-      KURL parsed_referrer = ExecutionContext::From(script_state)
-                                 ->CompleteURL(init.referrer.referrer);
+      KURL parsed_referrer(base_url, init.GetReferrer().referrer);
       if (!parsed_referrer.IsValid()) {
         // "If |parsedReferrer| is failure, throw a TypeError."
-        exception_state.ThrowTypeError("Referrer '" + init.referrer.referrer +
+        exception_state.ThrowTypeError("Referrer '" +
+                                       init.GetReferrer().referrer +
                                        "' is not a valid URL.");
         return nullptr;
       }
@@ -195,11 +194,11 @@ Request* Request::CreateRequestWithRequestOrString(
         // substeps."
         request->SetReferrerString(FetchRequestData::ClientReferrerString());
       } else if (!origin->IsSameSchemeHostPortAndSuborigin(
-                     SecurityOrigin::Create(parsed_referrer).Get())) {
+                     SecurityOrigin::Create(parsed_referrer).get())) {
         // "If |parsedReferrer|'s origin is not same origin with
         // |origin|, throw a TypeError."
         exception_state.ThrowTypeError(
-            "The origin of '" + init.referrer.referrer +
+            "The origin of '" + init.GetReferrer().referrer +
             "' should be same as '" + origin->ToString() + "'");
         return nullptr;
       } else {
@@ -207,7 +206,7 @@ Request* Request::CreateRequestWithRequestOrString(
         request->SetReferrerString(AtomicString(parsed_referrer.GetString()));
       }
     }
-    request->SetReferrerPolicy(init.referrer.referrer_policy);
+    request->SetReferrerPolicy(init.GetReferrer().referrer_policy);
   }
 
   // The following code performs the following steps:
@@ -215,98 +214,101 @@ Request* Request::CreateRequestWithRequestOrString(
   //   |fallbackMode| otherwise."
   // - "If |mode| is "navigate", throw a TypeError."
   // - "If |mode| is non-null, set |request|'s mode to |mode|."
-  if (init.mode == "navigate") {
+  if (init.Mode() == "navigate") {
     exception_state.ThrowTypeError(
         "Cannot construct a Request with a RequestInit whose mode member is "
         "set as 'navigate'.");
     return nullptr;
   }
-  if (init.mode == "same-origin") {
-    request->SetMode(WebURLRequest::kFetchRequestModeSameOrigin);
-  } else if (init.mode == "no-cors") {
-    request->SetMode(WebURLRequest::kFetchRequestModeNoCORS);
-  } else if (init.mode == "cors") {
-    request->SetMode(WebURLRequest::kFetchRequestModeCORS);
+  if (init.Mode() == "same-origin") {
+    request->SetMode(network::mojom::FetchRequestMode::kSameOrigin);
+  } else if (init.Mode() == "no-cors") {
+    request->SetMode(network::mojom::FetchRequestMode::kNoCORS);
+  } else if (init.Mode() == "cors") {
+    request->SetMode(network::mojom::FetchRequestMode::kCORS);
   } else {
     // |inputRequest| is directly checked here instead of setting and
     // checking |fallbackMode| as specified in the spec.
     if (!input_request)
-      request->SetMode(WebURLRequest::kFetchRequestModeCORS);
+      request->SetMode(network::mojom::FetchRequestMode::kCORS);
   }
 
   // "Let |credentials| be |init|'s credentials member if it is present, and
   // |fallbackCredentials| otherwise."
   // "If |credentials| is non-null, set |request|'s credentials mode to
   // |credentials|."
-  if (init.credentials == "omit") {
-    request->SetCredentials(WebURLRequest::kFetchCredentialsModeOmit);
-  } else if (init.credentials == "same-origin") {
-    request->SetCredentials(WebURLRequest::kFetchCredentialsModeSameOrigin);
-  } else if (init.credentials == "include") {
-    request->SetCredentials(WebURLRequest::kFetchCredentialsModeInclude);
-  } else if (init.credentials == "password") {
-    if (!init.attached_credential.Get()) {
-      exception_state.ThrowTypeError(
-          "Cannot construct a Request with a credential mode of 'password' "
-          "without a PasswordCredential.");
-      return nullptr;
-    }
-    request->SetCredentials(WebURLRequest::kFetchCredentialsModePassword);
-    request->SetAttachedCredential(init.attached_credential);
-    request->SetRedirect(WebURLRequest::kFetchRedirectModeManual);
+  if (init.Credentials() == "omit") {
+    request->SetCredentials(network::mojom::FetchCredentialsMode::kOmit);
+  } else if (init.Credentials() == "same-origin") {
+    request->SetCredentials(network::mojom::FetchCredentialsMode::kSameOrigin);
+  } else if (init.Credentials() == "include") {
+    request->SetCredentials(network::mojom::FetchCredentialsMode::kInclude);
   } else {
     if (!input_request)
-      request->SetCredentials(WebURLRequest::kFetchCredentialsModeOmit);
+      request->SetCredentials(network::mojom::FetchCredentialsMode::kOmit);
   }
 
   // "If |init|'s cache member is present, set |request|'s cache mode to it."
-  if (init.cache == "default") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeDefault);
-  } else if (init.cache == "no-store") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeNoStore);
-  } else if (init.cache == "reload") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeReload);
-  } else if (init.cache == "no-cache") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeNoCache);
-  } else if (init.cache == "force-cache") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeForceCache);
-  } else if (init.cache == "only-if-cached") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeOnlyIfCached);
+  if (init.CacheMode() == "default") {
+    request->SetCacheMode(mojom::FetchCacheMode::kDefault);
+  } else if (init.CacheMode() == "no-store") {
+    request->SetCacheMode(mojom::FetchCacheMode::kNoStore);
+  } else if (init.CacheMode() == "reload") {
+    request->SetCacheMode(mojom::FetchCacheMode::kBypassCache);
+  } else if (init.CacheMode() == "no-cache") {
+    request->SetCacheMode(mojom::FetchCacheMode::kValidateCache);
+  } else if (init.CacheMode() == "force-cache") {
+    request->SetCacheMode(mojom::FetchCacheMode::kForceCache);
+  } else if (init.CacheMode() == "only-if-cached") {
+    request->SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
+  }
+
+  // If |request|’s cache mode is "only-if-cached" and |request|’s mode is not
+  // "same-origin", then throw a TypeError.
+  if (request->CacheMode() == mojom::FetchCacheMode::kOnlyIfCached &&
+      request->Mode() != network::mojom::FetchRequestMode::kSameOrigin) {
+    exception_state.ThrowTypeError(
+        "'only-if-cached' can be set only with 'same-origin' mode");
+    return nullptr;
   }
 
   // "If |init|'s redirect member is present, set |request|'s redirect mode
   // to it."
-  if (init.redirect == "follow") {
+  if (init.Redirect() == "follow") {
     request->SetRedirect(WebURLRequest::kFetchRedirectModeFollow);
-  } else if (init.redirect == "error") {
+  } else if (init.Redirect() == "error") {
     request->SetRedirect(WebURLRequest::kFetchRedirectModeError);
-  } else if (init.redirect == "manual") {
+  } else if (init.Redirect() == "manual") {
     request->SetRedirect(WebURLRequest::kFetchRedirectModeManual);
   }
 
   // "If |init|'s integrity member is present, set |request|'s
   // integrity metadata to it."
-  if (!init.integrity.IsNull())
-    request->SetIntegrity(init.integrity);
+  if (!init.Integrity().IsNull())
+    request->SetIntegrity(init.Integrity());
+
+  if (init.Keepalive().has_value())
+    request->SetKeepalive(*init.Keepalive());
 
   // "If |init|'s method member is present, let |method| be it and run these
   // substeps:"
-  if (!init.method.IsNull()) {
+  if (!init.Method().IsNull()) {
     // "If |method| is not a method or method is a forbidden method, throw
     // a TypeError."
-    if (!IsValidHTTPToken(init.method)) {
-      exception_state.ThrowTypeError("'" + init.method +
+    if (!IsValidHTTPToken(init.Method())) {
+      exception_state.ThrowTypeError("'" + init.Method() +
                                      "' is not a valid HTTP method.");
       return nullptr;
     }
-    if (FetchUtils::IsForbiddenMethod(init.method)) {
-      exception_state.ThrowTypeError("'" + init.method +
+    if (FetchUtils::IsForbiddenMethod(init.Method())) {
+      exception_state.ThrowTypeError("'" + init.Method() +
                                      "' HTTP method is unsupported.");
       return nullptr;
     }
     // "Normalize |method|."
     // "Set |request|'s method to |method|."
-    request->SetMethod(FetchUtils::NormalizeMethod(AtomicString(init.method)));
+    request->SetMethod(
+        FetchUtils::NormalizeMethod(AtomicString(init.Method())));
   }
   // "Let |r| be a new Request object associated with |request| and a new
   // Headers object whose guard is "request"."
@@ -319,13 +321,13 @@ Request* Request::CreateRequestWithRequestOrString(
   // We don't create a copy of r's Headers object when init's headers member
   // is present.
   Headers* headers = nullptr;
-  if (init.headers.isNull()) {
+  if (init.GetHeaders().IsNull()) {
     headers = r->getHeaders()->Clone();
   }
   // "Empty |r|'s request's header list."
   r->request_->HeaderList()->ClearList();
   // "If |r|'s request's mode is "no-cors", run these substeps:
-  if (r->GetRequest()->Mode() == WebURLRequest::kFetchRequestModeNoCORS) {
+  if (r->GetRequest()->Mode() == network::mojom::FetchRequestMode::kNoCORS) {
     // "If |r|'s request's method is not a CORS-safelisted method, throw a
     // TypeError."
     if (!FetchUtils::IsCORSSafelistedMethod(r->GetRequest()->Method())) {
@@ -333,19 +335,12 @@ Request* Request::CreateRequestWithRequestOrString(
                                      "' is unsupported in no-cors mode.");
       return nullptr;
     }
-    // "If |request|'s integrity metadata is not the empty string, throw a
-    // TypeError."
-    if (!request->Integrity().IsEmpty()) {
-      exception_state.ThrowTypeError(
-          "The integrity attribute is unsupported in no-cors mode.");
-      return nullptr;
-    }
     // "Set |r|'s Headers object's guard to "request-no-cors"."
     r->getHeaders()->SetGuard(Headers::kRequestNoCORSGuard);
   }
   // "Fill |r|'s Headers object with |headers|. Rethrow any exceptions."
-  if (!init.headers.isNull()) {
-    r->getHeaders()->FillWith(init.headers, exception_state);
+  if (!init.GetHeaders().IsNull()) {
+    r->getHeaders()->FillWith(init.GetHeaders(), exception_state);
   } else {
     DCHECK(headers);
     r->getHeaders()->FillWith(headers, exception_state);
@@ -355,8 +350,7 @@ Request* Request::CreateRequestWithRequestOrString(
 
   // "If either |init|'s body member is present or |temporaryBody| is
   // non-null, and |request|'s method is `GET` or `HEAD`, throw a TypeError.
-  if (init.body || temporary_body ||
-      request->Credentials() == WebURLRequest::kFetchCredentialsModePassword) {
+  if (init.GetBody() || temporary_body) {
     if (request->Method() == HTTPNames::GET ||
         request->Method() == HTTPNames::HEAD) {
       exception_state.ThrowTypeError(
@@ -365,26 +359,11 @@ Request* Request::CreateRequestWithRequestOrString(
     }
   }
 
-  // TODO(mkwst): See the comment in RequestInit about serializing the attached
-  // credential prior to hitting the Service Worker machinery.
-  if (request->Credentials() == WebURLRequest::kFetchCredentialsModePassword) {
-    r->getHeaders()->append(HTTPNames::Content_Type, init.content_type,
-                            exception_state);
-
-    const OriginAccessEntry access_entry =
-        OriginAccessEntry(r->url().Protocol(), r->url().Host(),
-                          OriginAccessEntry::kAllowRegisterableDomains);
-    if (access_entry.MatchesDomain(*origin) ==
-        OriginAccessEntry::kDoesNotMatchOrigin) {
-      exception_state.ThrowTypeError(
-          "Credentials may only be submitted to endpoints on the same "
-          "registrable domain.");
-      return nullptr;
-    }
-  }
-
   // "If |init|'s body member is present, run these substeps:"
-  if (init.body) {
+  if (init.GetBody()) {
+    // TODO(yhirano): Throw if keepalive flag is set and body is a
+    // ReadableStream. We don't support body stream setting for Request yet.
+
     // Perform the following steps:
     // - "Let |stream| and |Content-Type| be the result of extracting
     //   |init|'s body member."
@@ -393,10 +372,11 @@ Request* Request::CreateRequestWithRequestOrString(
     //   contains no header named `Content-Type`, append
     //   `Content-Type`/|Content-Type| to |r|'s Headers object. Rethrow any
     //   exception."
-    temporary_body = new BodyStreamBuffer(script_state, std::move(init.body));
-    if (!init.content_type.IsEmpty() &&
+    temporary_body =
+        new BodyStreamBuffer(script_state, std::move(init.GetBody()));
+    if (!init.ContentType().IsEmpty() &&
         !r->getHeaders()->has(HTTPNames::Content_Type, exception_state)) {
-      r->getHeaders()->append(HTTPNames::Content_Type, init.content_type,
+      r->getHeaders()->append(HTTPNames::Content_Type, init.ContentType(),
                               exception_state);
     }
     if (exception_state.HadException())
@@ -417,7 +397,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // non-null, run these substeps:"
   if (input_request && input_request->BodyBuffer()) {
     // "Let |dummyStream| be an empty ReadableStream object."
-    auto dummy_stream =
+    auto* dummy_stream =
         new BodyStreamBuffer(script_state, BytesConsumer::CreateClosed());
     // "Set |input|'s request's body to a new body whose stream is
     // |dummyStream|."
@@ -436,10 +416,10 @@ Request* Request::Create(ScriptState* script_state,
                          const RequestInfo& input,
                          const Dictionary& init,
                          ExceptionState& exception_state) {
-  DCHECK(!input.isNull());
-  if (input.isUSVString())
-    return Create(script_state, input.getAsUSVString(), init, exception_state);
-  return Create(script_state, input.getAsRequest(), init, exception_state);
+  DCHECK(!input.IsNull());
+  if (input.IsUSVString())
+    return Create(script_state, input.GetAsUSVString(), init, exception_state);
+  return Create(script_state, input.GetAsRequest(), init, exception_state);
 }
 
 Request* Request::Create(ScriptState* script_state,
@@ -623,14 +603,14 @@ String Request::mode() const {
   // "The mode attribute's getter must return the value corresponding to the
   // first matching statement, switching on request's mode:"
   switch (request_->Mode()) {
-    case WebURLRequest::kFetchRequestModeSameOrigin:
+    case network::mojom::FetchRequestMode::kSameOrigin:
       return "same-origin";
-    case WebURLRequest::kFetchRequestModeNoCORS:
+    case network::mojom::FetchRequestMode::kNoCORS:
       return "no-cors";
-    case WebURLRequest::kFetchRequestModeCORS:
-    case WebURLRequest::kFetchRequestModeCORSWithForcedPreflight:
+    case network::mojom::FetchRequestMode::kCORS:
+    case network::mojom::FetchRequestMode::kCORSWithForcedPreflight:
       return "cors";
-    case WebURLRequest::kFetchRequestModeNavigate:
+    case network::mojom::FetchRequestMode::kNavigate:
       return "navigate";
   }
   NOTREACHED();
@@ -642,14 +622,12 @@ String Request::credentials() const {
   // to the first matching statement, switching on request's credentials
   // mode:"
   switch (request_->Credentials()) {
-    case WebURLRequest::kFetchCredentialsModeOmit:
+    case network::mojom::FetchCredentialsMode::kOmit:
       return "omit";
-    case WebURLRequest::kFetchCredentialsModeSameOrigin:
+    case network::mojom::FetchCredentialsMode::kSameOrigin:
       return "same-origin";
-    case WebURLRequest::kFetchCredentialsModeInclude:
+    case network::mojom::FetchCredentialsMode::kInclude:
       return "include";
-    case WebURLRequest::kFetchCredentialsModePassword:
-      return "password";
   }
   NOTREACHED();
   return "";
@@ -658,18 +636,22 @@ String Request::credentials() const {
 String Request::cache() const {
   // "The cache attribute's getter must return request's cache mode."
   switch (request_->CacheMode()) {
-    case WebURLRequest::kFetchRequestCacheModeDefault:
+    case mojom::FetchCacheMode::kDefault:
       return "default";
-    case WebURLRequest::kFetchRequestCacheModeNoStore:
+    case mojom::FetchCacheMode::kNoStore:
       return "no-store";
-    case WebURLRequest::kFetchRequestCacheModeReload:
+    case mojom::FetchCacheMode::kBypassCache:
       return "reload";
-    case WebURLRequest::kFetchRequestCacheModeNoCache:
+    case mojom::FetchCacheMode::kValidateCache:
       return "no-cache";
-    case WebURLRequest::kFetchRequestCacheModeForceCache:
+    case mojom::FetchCacheMode::kForceCache:
       return "force-cache";
-    case WebURLRequest::kFetchRequestCacheModeOnlyIfCached:
+    case mojom::FetchCacheMode::kOnlyIfCached:
       return "only-if-cached";
+    case mojom::FetchCacheMode::kUnspecifiedOnlyIfCachedStrict:
+    case mojom::FetchCacheMode::kUnspecifiedForceCacheMiss:
+      NOTREACHED();
+      break;
   }
   NOTREACHED();
   return "";
@@ -691,6 +673,10 @@ String Request::redirect() const {
 
 String Request::integrity() const {
   return request_->Integrity();
+}
+
+bool Request::keepalive() const {
+  return request_->Keepalive();
 }
 
 Request* Request::clone(ScriptState* script_state,
@@ -776,7 +762,7 @@ void Request::RefreshBody(ScriptState* script_state) {
       .Set(request.As<v8::Object>(), body_buffer);
 }
 
-DEFINE_TRACE(Request) {
+void Request::Trace(blink::Visitor* visitor) {
   Body::Trace(visitor);
   visitor->Trace(request_);
   visitor->Trace(headers_);

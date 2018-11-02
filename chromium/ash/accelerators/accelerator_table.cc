@@ -89,7 +89,6 @@ const AcceleratorData kAcceleratorData[] = {
     // down. The key_code here is MENU (for Alt) and Search is a modifier
     // (EF_COMMAND_DOWN is used for Search as a modifier).
     {false, ui::VKEY_MENU, ui::EF_COMMAND_DOWN, TOGGLE_CAPS_LOCK},
-    {false, ui::VKEY_CAPITAL, ui::EF_NONE, TOGGLE_CAPS_LOCK},
     {true, ui::VKEY_VOLUME_MUTE, ui::EF_NONE, VOLUME_MUTE},
     {true, ui::VKEY_VOLUME_DOWN, ui::EF_NONE, VOLUME_DOWN},
     {true, ui::VKEY_VOLUME_UP, ui::EF_NONE, VOLUME_UP},
@@ -156,6 +155,16 @@ const AcceleratorData kAcceleratorData[] = {
      WINDOW_POSITION_CENTER},
     {true, ui::VKEY_BROWSER_FORWARD, ui::EF_CONTROL_DOWN, FOCUS_NEXT_PANE},
     {true, ui::VKEY_BROWSER_BACK, ui::EF_CONTROL_DOWN, FOCUS_PREVIOUS_PANE},
+
+    // Window movement between displays shortcuts.
+    {true, ui::VKEY_UP, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN,
+     MOVE_WINDOW_TO_ABOVE_DISPLAY},
+    {true, ui::VKEY_DOWN, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN,
+     MOVE_WINDOW_TO_BELOW_DISPLAY},
+    {true, ui::VKEY_LEFT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN,
+     MOVE_WINDOW_TO_LEFT_DISPLAY},
+    {true, ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN,
+     MOVE_WINDOW_TO_RIGHT_DISPLAY},
 
     // Media Player shortcuts.
     {true, ui::VKEY_MEDIA_NEXT_TRACK, ui::EF_NONE, MEDIA_NEXT_TRACK},
@@ -480,14 +489,18 @@ const size_t kActionsAllowedInPinnedModeLength =
 const AcceleratorAction kActionsNeedingWindow[] = {
     CYCLE_BACKWARD_MRU,
     CYCLE_FORWARD_MRU,
+    MOVE_WINDOW_TO_ABOVE_DISPLAY,
+    MOVE_WINDOW_TO_BELOW_DISPLAY,
+    MOVE_WINDOW_TO_LEFT_DISPLAY,
+    MOVE_WINDOW_TO_RIGHT_DISPLAY,
+    ROTATE_WINDOW,
+    TOGGLE_FULLSCREEN,
+    TOGGLE_MAXIMIZED,
     TOGGLE_OVERVIEW,
     WINDOW_CYCLE_SNAP_LEFT,
     WINDOW_CYCLE_SNAP_RIGHT,
     WINDOW_MINIMIZE,
-    TOGGLE_FULLSCREEN,
-    TOGGLE_MAXIMIZED,
     WINDOW_POSITION_CENTER,
-    ROTATE_WINDOW,
 };
 
 const size_t kActionsNeedingWindowLength = arraysize(kActionsNeedingWindow);

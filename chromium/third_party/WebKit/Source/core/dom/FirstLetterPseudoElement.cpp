@@ -24,8 +24,8 @@
 
 #include "core/dom/FirstLetterPseudoElement.h"
 
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Element.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/layout/GeneratedChildren.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
@@ -105,15 +105,16 @@ static bool IsInvalidFirstLetterLayoutObject(const LayoutObject* obj) {
 
 LayoutObject* FirstLetterPseudoElement::FirstLetterTextLayoutObject(
     const Element& element) {
-  LayoutObject* parent_layout_object = 0;
+  LayoutObject* parent_layout_object = nullptr;
 
   // If we are looking at a first letter element then we need to find the
   // first letter text layoutObject from the parent node, and not ourselves.
-  if (element.IsFirstLetterPseudoElement())
+  if (element.IsFirstLetterPseudoElement()) {
     parent_layout_object =
         element.ParentOrShadowHostElement()->GetLayoutObject();
-  else
+  } else {
     parent_layout_object = element.GetLayoutObject();
+  }
 
   if (!parent_layout_object ||
       !parent_layout_object->Style()->HasPseudoStyle(kPseudoIdFirstLetter) ||
@@ -137,12 +138,12 @@ LayoutObject* FirstLetterPseudoElement::FirstLetterTextLayoutObject(
     } else if (first_letter_text_layout_object->IsText()) {
       // FIXME: If there is leading punctuation in a different LayoutText than
       // the first letter, we'll not apply the correct style to it.
-      RefPtr<StringImpl> str =
+      scoped_refptr<StringImpl> str =
           ToLayoutText(first_letter_text_layout_object)->IsTextFragment()
               ? ToLayoutTextFragment(first_letter_text_layout_object)
                     ->CompleteText()
               : ToLayoutText(first_letter_text_layout_object)->OriginalText();
-      if (FirstLetterLength(str.Get()) ||
+      if (FirstLetterLength(str.get()) ||
           IsInvalidFirstLetterLayoutObject(first_letter_text_layout_object))
         break;
       first_letter_text_layout_object =
@@ -240,10 +241,11 @@ void FirstLetterPseudoElement::SetRemainingTextLayoutObject(
   // The text fragment we get our content from is being destroyed. We need
   // to tell our parent element to recalcStyle so we can get cleaned up
   // as well.
-  if (!fragment)
+  if (!fragment) {
     SetNeedsStyleRecalc(
         kLocalStyleChange,
         StyleChangeReasonForTracing::Create(StyleChangeReason::kPseudoClass));
+  }
 
   remaining_text_layout_object_ = fragment;
 }
@@ -352,7 +354,7 @@ void FirstLetterPseudoElement::AttachFirstLetterTextLayoutObjects() {
 }
 
 void FirstLetterPseudoElement::DidRecalcStyle() {
-  LayoutObject* layout_object = this->GetLayoutObject();
+  LayoutObject* layout_object = GetLayoutObject();
   if (!layout_object)
     return;
 

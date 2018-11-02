@@ -30,13 +30,13 @@
 #define AudioParam_h
 
 #include <sys/types.h>
+#include "base/memory/scoped_refptr.h"
 #include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/webaudio/AudioParamTimeline.h"
 #include "modules/webaudio/AudioSummingJunction.h"
 #include "modules/webaudio/BaseAudioContext.h"
 #include "platform/bindings/ScriptWrappable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -53,8 +53,6 @@ enum AudioParamType {
   kParamTypeAudioBufferSourceDetune,
   kParamTypeBiquadFilterFrequency,
   kParamTypeBiquadFilterQ,
-  kParamTypeBiquadFilterQLowpass,
-  kParamTypeBiquadFilterQHighpass,
   kParamTypeBiquadFilterGain,
   kParamTypeBiquadFilterDetune,
   kParamTypeDelayDelayTime,
@@ -82,7 +80,7 @@ enum AudioParamType {
   kParamTypeAudioListenerUpX,
   kParamTypeAudioListenerUpY,
   kParamTypeAudioListenerUpZ,
-  kParamTypeConstantSourceValue,
+  kParamTypeConstantSourceOffset,
   kParamTypeAudioWorklet,
 };
 
@@ -104,13 +102,14 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   static const double kDefaultSmoothingConstant;
   static const double kSnapThreshold;
 
-  static PassRefPtr<AudioParamHandler> Create(BaseAudioContext& context,
-                                              AudioParamType param_type,
-                                              double default_value,
-                                              float min_value,
-                                              float max_value) {
-    return AdoptRef(new AudioParamHandler(context, param_type, default_value,
-                                          min_value, max_value));
+  static scoped_refptr<AudioParamHandler> Create(BaseAudioContext& context,
+                                                 AudioParamType param_type,
+                                                 String param_name,
+                                                 double default_value,
+                                                 float min_value,
+                                                 float max_value) {
+    return base::AdoptRef(new AudioParamHandler(
+        context, param_type, param_name, default_value, min_value, max_value));
   }
 
   // This should be used only in audio rendering thread.
@@ -162,17 +161,16 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
 
   float IntrinsicValue() const { return NoBarrierLoad(&intrinsic_value_); }
 
-  // Update any histograms with the given value.
-  void UpdateHistograms(float new_value);
+  // TODO(crbug.com/764396): remove this when fixed.
+  void WarnSetterOverlapsEvent(int event_index, BaseAudioContext&) const;
 
  private:
   AudioParamHandler(BaseAudioContext&,
                     AudioParamType,
+                    String param_name,
                     double default_value,
                     float min,
                     float max);
-
-  void WarnIfOutsideRange(float value, float min_value, float max_value);
 
   // sampleAccurate corresponds to a-rate (audio rate) vs. k-rate in the Web
   // Audio specification.
@@ -187,6 +185,9 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   // node it belongs to.  Mostly for informational purposes and doesn't affect
   // implementation.
   AudioParamType param_type_;
+  // Name of the AudioParam. This is only used for printing out more
+  // informative warnings, and is otherwise arbitrary.
+  String param_name_;
 
   // Intrinsic value
   float intrinsic_value_;
@@ -202,25 +203,23 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
 
   // The destination node used to get necessary information like the smaple rate
   // and context time.
-  RefPtr<AudioDestinationHandler> destination_handler_;
+  scoped_refptr<AudioDestinationHandler> destination_handler_;
 };
 
 // AudioParam class represents web-exposed AudioParam interface.
-class AudioParam final : public GarbageCollectedFinalized<AudioParam>,
-                         public ScriptWrappable {
+class AudioParam final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static AudioParam* Create(BaseAudioContext&,
-                            AudioParamType,
-                            double default_value);
-  static AudioParam* Create(BaseAudioContext&,
-                            AudioParamType,
-                            double default_value,
-                            float min_value,
-                            float max_value);
+  static AudioParam* Create(
+      BaseAudioContext&,
+      AudioParamType,
+      String param_name,
+      double default_value,
+      float min_value = -std::numeric_limits<float>::max(),
+      float max_value = std::numeric_limits<float>::max());
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   // |handler| always returns a valid object.
   AudioParamHandler& Handler() const { return *handler_; }
   // |context| always returns a valid object.
@@ -233,6 +232,13 @@ class AudioParam final : public GarbageCollectedFinalized<AudioParam>,
   float value() const;
   void setValue(float);
   float defaultValue() const;
+  // Use when setting the initial value of an AudioParam when creating
+  // the AudioParam.  This bypasses any deprecation messages about
+  // using the value setter that has dezippering.
+  //
+  // TODO(rtoy): Replace all calls to this with just setValue() when
+  // dezippering deprecation messages are removed.
+  void setInitialValue(float);
 
   float minValue() const;
   float maxValue() const;
@@ -258,14 +264,19 @@ class AudioParam final : public GarbageCollectedFinalized<AudioParam>,
  private:
   AudioParam(BaseAudioContext&,
              AudioParamType,
+             String param_name,
              double default_value,
              float min,
              float max);
 
   void WarnIfOutsideRange(const String& param_methd, float value);
 
-  RefPtr<AudioParamHandler> handler_;
+  scoped_refptr<AudioParamHandler> handler_;
   Member<BaseAudioContext> context_;
+
+  // TODO(crbug.com/764396): Remove this method and attribute when fixed.
+  void WarnIfSetterOverlapsEvent();
+  static bool s_value_setter_warning_done_;
 };
 
 }  // namespace blink

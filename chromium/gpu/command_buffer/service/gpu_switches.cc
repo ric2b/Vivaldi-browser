@@ -6,6 +6,13 @@
 
 #include "base/macros.h"
 
+namespace gpu {
+
+const char kCmdDecoderValidatingName[] = "validating";
+const char kCmdDecoderPassthroughName[] = "passthrough";
+
+}  // namespace gpu
+
 namespace switches {
 
 // Always return success when compiling a shader. Linking will still fail.
@@ -61,5 +68,12 @@ const char kGLShaderIntermOutput[] = "gl-shader-interm-output";
 // Emulate ESSL lowp and mediump float precisions by mutating the shaders to
 // round intermediate values in ANGLE.
 const char kEmulateShaderPrecision[] = "emulate-shader-precision";
+
+// Use the Pass-through command decoder, skipping all validation and state
+// tracking.
+const char kUseCmdDecoder[] = "use-cmd-decoder";
+
+// Use a dedicated RasterInterfaceDecoder instead of generic GLES2Decoder.
+const char kEnableRasterDecoder[] = "enable-raster-decoder";
 
 }  // namespace switches

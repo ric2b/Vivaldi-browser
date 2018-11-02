@@ -26,6 +26,10 @@ bool NullDecrypter::SetNoncePrefix(QuicStringPiece nonce_prefix) {
   return nonce_prefix.empty();
 }
 
+bool NullDecrypter::SetIV(QuicStringPiece iv) {
+  return iv.empty();
+}
+
 bool NullDecrypter::SetPreliminaryKey(QuicStringPiece key) {
   QUIC_BUG << "Should not be called";
   return false;
@@ -36,14 +40,14 @@ bool NullDecrypter::SetDiversificationNonce(const DiversificationNonce& nonce) {
   return true;
 }
 
-bool NullDecrypter::DecryptPacket(QuicVersion version,
+bool NullDecrypter::DecryptPacket(QuicTransportVersion version,
                                   QuicPacketNumber /*packet_number*/,
                                   QuicStringPiece associated_data,
                                   QuicStringPiece ciphertext,
                                   char* output,
                                   size_t* output_length,
                                   size_t max_output_length) {
-  QuicDataReader reader(ciphertext.data(), ciphertext.length(), perspective_,
+  QuicDataReader reader(ciphertext.data(), ciphertext.length(),
                         HOST_BYTE_ORDER);
   uint128 hash;
 
@@ -73,10 +77,6 @@ QuicStringPiece NullDecrypter::GetNoncePrefix() const {
   return QuicStringPiece();
 }
 
-const char* NullDecrypter::cipher_name() const {
-  return "NULL";
-}
-
 uint32_t NullDecrypter::cipher_id() const {
   return 0;
 }
@@ -91,11 +91,11 @@ bool NullDecrypter::ReadHash(QuicDataReader* reader, uint128* hash) {
   return true;
 }
 
-uint128 NullDecrypter::ComputeHash(QuicVersion version,
+uint128 NullDecrypter::ComputeHash(QuicTransportVersion version,
                                    const QuicStringPiece data1,
                                    const QuicStringPiece data2) const {
   uint128 correct_hash;
-  if (version > QUIC_VERSION_36) {
+  if (version > QUIC_VERSION_35) {
     if (perspective_ == Perspective::IS_CLIENT) {
       // Peer is a server.
       correct_hash = QuicUtils::FNV1a_128_Hash_Three(data1, data2, "Server");

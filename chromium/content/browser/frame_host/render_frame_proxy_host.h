@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "content/browser/site_instance_impl.h"
 #include "ipc/ipc_listener.h"
@@ -17,6 +18,14 @@
 
 struct FrameHostMsg_OpenURL_Params;
 struct FrameMsg_PostMessage_Params;
+
+namespace blink {
+struct WebRemoteScrollProperties;
+}
+
+namespace gfx {
+class Rect;
+}
 
 namespace content {
 
@@ -57,6 +66,8 @@ class RenderFrameProxyHost
     : public IPC::Listener,
       public IPC::Sender {
  public:
+  using DestructionCallback = base::OnceClosure;
+
   static RenderFrameProxyHost* FromID(int process_id, int routing_id);
 
   RenderFrameProxyHost(SiteInstance* site_instance,
@@ -107,12 +118,22 @@ class RenderFrameProxyHost
   // becomes focused.
   void SetFocusedFrame();
 
+  // Scroll |rect_to_scroll| into view, starting from this proxy's FrameOwner
+  // element in the frame's parent. Calling this continues a scroll started in
+  // the frame's current process. |rect_to_scroll| is with respect to the
+  // coordinates of the originating frame in OOPIF process.
+  void ScrollRectToVisible(const gfx::Rect& rect_to_scroll,
+                           const blink::WebRemoteScrollProperties properties);
+
   void set_render_frame_proxy_created(bool created) {
     render_frame_proxy_created_ = created;
   }
 
   // Returns if the RenderFrameProxy for this host is alive.
   bool is_render_frame_proxy_live() { return render_frame_proxy_created_; }
+
+  // Sets a callback that is run when this is destroyed.
+  void SetDestructionCallback(DestructionCallback destruction_callback);
 
  private:
   // IPC Message handlers.
@@ -151,6 +172,8 @@ class RenderFrameProxyHost
   // kept alive as long as any RenderFrameHosts or RenderFrameProxyHosts
   // are associated with it.
   RenderViewHostImpl* render_view_host_;
+
+  DestructionCallback destruction_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxyHost);
 };

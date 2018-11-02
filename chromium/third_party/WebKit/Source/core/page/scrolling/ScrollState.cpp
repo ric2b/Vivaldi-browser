@@ -29,7 +29,7 @@ Element* ElementForId(int element_id) {
 
 ScrollState* ScrollState::Create(ScrollStateInit init) {
   std::unique_ptr<ScrollStateData> scroll_state_data =
-      WTF::MakeUnique<ScrollStateData>();
+      std::make_unique<ScrollStateData>();
   scroll_state_data->delta_x = init.deltaX();
   scroll_state_data->delta_y = init.deltaY();
   scroll_state_data->delta_x_hint = init.deltaXHint();
@@ -41,7 +41,6 @@ ScrollState* ScrollState::Create(ScrollStateInit init) {
   scroll_state_data->is_beginning = init.isBeginning();
   scroll_state_data->is_in_inertial_phase = init.isInInertialPhase();
   scroll_state_data->is_ending = init.isEnding();
-  scroll_state_data->should_propagate = init.shouldPropagate();
   scroll_state_data->from_user_input = init.fromUserInput();
   scroll_state_data->is_direct_manipulation = init.isDirectManipulation();
   scroll_state_data->delta_granularity = init.deltaGranularity();

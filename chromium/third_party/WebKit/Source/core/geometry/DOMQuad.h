@@ -17,8 +17,7 @@ class DOMQuadInit;
 class DOMRect;
 class DOMRectInit;
 
-class CORE_EXPORT DOMQuad : public GarbageCollected<DOMQuad>,
-                            public ScriptWrappable {
+class CORE_EXPORT DOMQuad : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -38,11 +37,12 @@ class CORE_EXPORT DOMQuad : public GarbageCollected<DOMQuad>,
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(p1_);
     visitor->Trace(p2_);
     visitor->Trace(p3_);
     visitor->Trace(p4_);
+    ScriptWrappable::Trace(visitor);
   }
 
  private:

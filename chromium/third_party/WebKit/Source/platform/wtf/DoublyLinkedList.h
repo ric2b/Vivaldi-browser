@@ -26,6 +26,7 @@
 #ifndef DoublyLinkedList_h
 #define DoublyLinkedList_h
 
+#include "base/macros.h"
 #include "platform/wtf/Allocator.h"
 
 namespace WTF {
@@ -45,8 +46,8 @@ class DoublyLinkedListNode {
 
 template <typename T>
 inline DoublyLinkedListNode<T>::DoublyLinkedListNode() {
-  SetPrev(0);
-  SetNext(0);
+  SetPrev(nullptr);
+  SetNext(nullptr);
 }
 
 template <typename T>
@@ -92,6 +93,8 @@ class DoublyLinkedList {
  private:
   T* head_;
   T* tail_;
+
+  DISALLOW_COPY_AND_ASSIGN(DoublyLinkedList);
 };
 
 template <typename T>

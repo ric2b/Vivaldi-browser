@@ -40,20 +40,22 @@ class TracedValue;
 // produced by the MemoryDumpProvider(s) for a specific process.
 class BASE_EXPORT ProcessMemoryDump {
  public:
-  struct MemoryAllocatorDumpEdge {
+  struct BASE_EXPORT MemoryAllocatorDumpEdge {
+    bool operator==(const MemoryAllocatorDumpEdge&) const;
+    bool operator!=(const MemoryAllocatorDumpEdge&) const;
+
     MemoryAllocatorDumpGuid source;
     MemoryAllocatorDumpGuid target;
-    int importance;
-    bool overridable;
+    int importance = 0;
+    bool overridable = false;
   };
 
   // Maps allocator dumps absolute names (allocator_name/heap/subheap) to
   // MemoryAllocatorDump instances.
   using AllocatorDumpsMap =
-      std::unordered_map<std::string, std::unique_ptr<MemoryAllocatorDump>>;
+      std::map<std::string, std::unique_ptr<MemoryAllocatorDump>>;
 
-  using HeapDumpsMap =
-      std::unordered_map<std::string, std::unique_ptr<TracedValue>>;
+  using HeapDumpsMap = std::map<std::string, std::unique_ptr<TracedValue>>;
 
   // Stores allocator dump edges indexed by source allocator dump GUID.
   using AllocatorDumpEdgesMap =
@@ -78,7 +80,6 @@ class BASE_EXPORT ProcessMemoryDump {
       const SharedMemory& shared_memory);
 #endif
 
-  ProcessMemoryDump();
   ProcessMemoryDump(scoped_refptr<HeapProfilerSerializationState>
                         heap_profiler_serialization_state,
                     const MemoryDumpArgs& dump_args);
@@ -133,6 +134,18 @@ class BASE_EXPORT ProcessMemoryDump {
   // Returns the map of the MemoryAllocatorDumps added to this dump.
   const AllocatorDumpsMap& allocator_dumps() const { return allocator_dumps_; }
 
+  AllocatorDumpsMap* mutable_allocator_dumps_for_serialization() const {
+    // Mojo takes a const input argument even for move-only types that can be
+    // mutate while serializing (like this one). Hence the const_cast.
+    return const_cast<AllocatorDumpsMap*>(&allocator_dumps_);
+  }
+  void SetAllocatorDumpsForSerialization(
+      std::vector<std::unique_ptr<MemoryAllocatorDump>>);
+
+  // Only for mojo serialization.
+  std::vector<MemoryAllocatorDumpEdge> GetAllEdgesForSerialization() const;
+  void SetAllEdgesForSerialization(const std::vector<MemoryAllocatorDumpEdge>&);
+
   // Dumps heap usage with |allocator_name|.
   void DumpHeapUsage(
       const std::unordered_map<base::trace_event::AllocationContext,
@@ -146,6 +159,8 @@ class BASE_EXPORT ProcessMemoryDump {
   // the memory usage of |target| to |source|. |importance| is optional and
   // relevant only for the cases of co-ownership, where it acts as a z-index:
   // the owner with the highest importance will be attributed |target|'s memory.
+  // If an edge is present, its importance will not be updated unless
+  // |importance| is larger.
   void AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,
                         const MemoryAllocatorDumpGuid& target,
                         int importance);
@@ -180,7 +195,7 @@ class BASE_EXPORT ProcessMemoryDump {
       const UnguessableToken& shared_memory_guid,
       int importance);
 
-  const AllocatorDumpEdgesMap& allocator_dumps_edges_for_testing() const {
+  const AllocatorDumpEdgesMap& allocator_dumps_edges() const {
     return allocator_dumps_edges_;
   }
 
@@ -209,8 +224,12 @@ class BASE_EXPORT ProcessMemoryDump {
   // of the MemoryDumpProvider::OnMemoryDump(ProcessMemoryDump*) callback.
   void TakeAllDumpsFrom(ProcessMemoryDump* other);
 
-  // Called at trace generation time to populate the TracedValue.
-  void AsValueInto(TracedValue* value) const;
+  // Populate the traced value with information about the memory allocator
+  // dumps.
+  void SerializeAllocatorDumpsInto(TracedValue* value) const;
+
+  // Populate the traced value with information about the heap profiler.
+  void SerializeHeapProfilerDumpsInto(TracedValue* value) const;
 
   const HeapDumpsMap& heap_dumps() const { return heap_dumps_; }
 
@@ -218,9 +237,24 @@ class BASE_EXPORT ProcessMemoryDump {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ProcessMemoryDumpTest, BackgroundModeTest);
+  FRIEND_TEST_ALL_PREFIXES(ProcessMemoryDumpTest, SharedMemoryOwnershipTest);
+  FRIEND_TEST_ALL_PREFIXES(ProcessMemoryDumpTest, GuidsTest);
 
   MemoryAllocatorDump* AddAllocatorDumpInternal(
       std::unique_ptr<MemoryAllocatorDump> mad);
+
+  // A per-process token, valid throughout all the lifetime of the current
+  // process, used to disambiguate dumps with the same name generated in
+  // different processes.
+  const UnguessableToken& process_token() const { return process_token_; }
+  void set_process_token_for_testing(UnguessableToken token) {
+    process_token_ = token;
+  };
+
+  // Returns the Guid of the dump for the given |absolute_name| for
+  // for the given process' token. |process_token| is used to disambiguate GUIDs
+  // derived from the same name under different processes.
+  MemoryAllocatorDumpGuid GetDumpId(const std::string& absolute_name);
 
   void CreateSharedMemoryOwnershipEdgeInternal(
       const MemoryAllocatorDumpGuid& client_local_dump_guid,
@@ -230,6 +264,7 @@ class BASE_EXPORT ProcessMemoryDump {
 
   MemoryAllocatorDump* GetBlackHoleMad();
 
+  UnguessableToken process_token_;
   AllocatorDumpsMap allocator_dumps_;
   HeapDumpsMap heap_dumps_;
 

@@ -43,12 +43,10 @@ class DataObjectItem;
 class DataTransfer;
 class ExecutionContext;
 class File;
-class FunctionStringCallback;
 class ScriptState;
+class V8FunctionStringCallback;
 
-class CORE_EXPORT DataTransferItem final
-    : public GarbageCollected<DataTransferItem>,
-      public ScriptWrappable {
+class CORE_EXPORT DataTransferItem final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(DataTransferItem);
 
@@ -58,25 +56,25 @@ class CORE_EXPORT DataTransferItem final
   String kind() const;
   String type() const;
 
-  void getAsString(ScriptState*, FunctionStringCallback*);
+  void getAsString(ScriptState*, V8FunctionStringCallback*);
   File* getAsFile() const;
 
   DataTransfer* GetDataTransfer() { return data_transfer_.Get(); }
   DataObjectItem* GetDataObjectItem() { return item_.Get(); }
 
-  DECLARE_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   DataTransferItem(DataTransfer*, DataObjectItem*);
 
   void RunGetAsStringTask(ExecutionContext*,
-                          FunctionStringCallback*,
+                          V8FunctionStringCallback*,
                           const String& data);
 
   Member<DataTransfer> data_transfer_;
   Member<DataObjectItem> item_;
-  HeapVector<TraceWrapperMember<FunctionStringCallback>> callbacks_;
+  HeapVector<TraceWrapperMember<V8FunctionStringCallback>> callbacks_;
 };
 
 }  // namespace blink

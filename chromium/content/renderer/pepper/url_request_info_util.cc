@@ -9,8 +9,8 @@
 
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "content/child/request_extra_data.h"
 #include "content/common/fileapi/file_system_messages.h"
+#include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
@@ -243,7 +243,7 @@ bool URLRequestRequiresUniversalAccess(const URLRequestInfoData& data) {
   return data.has_custom_referrer_url ||
          data.has_custom_content_transfer_encoding ||
          data.has_custom_user_agent ||
-         url::FindAndCompareScheme(data.url, url::kJavaScriptScheme, NULL);
+         url::FindAndCompareScheme(data.url, url::kJavaScriptScheme, nullptr);
 }
 
 }  // namespace content

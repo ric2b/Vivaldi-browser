@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_restrictions.h"
@@ -22,9 +21,6 @@ BackgroundIO::BackgroundIO(InFlightIO* controller)
 
 // Runs on the primary thread.
 void BackgroundIO::OnIOSignalled() {
-  // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("477117 BackgroundIO::OnIOSignalled"));
   if (controller_)
     controller_->InvokeCallback(this, false);
 }
@@ -36,8 +32,7 @@ void BackgroundIO::Cancel() {
   controller_ = NULL;
 }
 
-BackgroundIO::~BackgroundIO() {
-}
+BackgroundIO::~BackgroundIO() = default;
 
 // ---------------------------------------------------------------------------
 
@@ -45,8 +40,7 @@ InFlightIO::InFlightIO()
     : callback_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       running_(false) {}
 
-InFlightIO::~InFlightIO() {
-}
+InFlightIO::~InFlightIO() = default;
 
 // Runs on the background thread.
 void BackgroundIO::NotifyController() {
@@ -69,7 +63,7 @@ void InFlightIO::DropPendingIO() {
     BackgroundIO* operation = it->get();
     operation->Cancel();
     DCHECK(io_list_.find(operation) != io_list_.end());
-    io_list_.erase(make_scoped_refptr(operation));
+    io_list_.erase(base::WrapRefCounted(operation));
   }
 }
 
@@ -103,14 +97,14 @@ void InFlightIO::InvokeCallback(BackgroundIO* operation, bool cancel_task) {
   // callback (so that a subsequent cancel does not invoke the callback again).
   DCHECK(io_list_.find(operation) != io_list_.end());
   DCHECK(!operation->HasOneRef());
-  io_list_.erase(make_scoped_refptr(operation));
+  io_list_.erase(base::WrapRefCounted(operation));
   OnOperationComplete(operation, cancel_task);
 }
 
 // Runs on the primary thread.
 void InFlightIO::OnOperationPosted(BackgroundIO* operation) {
   DCHECK(callback_task_runner_->RunsTasksInCurrentSequence());
-  io_list_.insert(make_scoped_refptr(operation));
+  io_list_.insert(base::WrapRefCounted(operation));
 }
 
 }  // namespace disk_cache

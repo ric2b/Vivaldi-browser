@@ -64,8 +64,9 @@ static const unsigned char kMaxDatabaseIdTypeByte = 1;
 static const unsigned char kDataVersionTypeByte = 2;
 static const unsigned char kBlobJournalTypeByte = 3;
 static const unsigned char kLiveBlobJournalTypeByte = 4;
+static const unsigned char kEarliestSweepTimeTypeByte = 5;
 static const unsigned char kMaxSimpleGlobalMetaDataTypeByte =
-    5;  // Insert before this and increment.
+    6;  // Insert before this and increment.
 static const unsigned char kDatabaseFreeListTypeByte = 100;
 static const unsigned char kDatabaseNameTypeByte = 201;
 
@@ -376,7 +377,7 @@ bool DecodeIDBKey(StringPiece* slice, std::unique_ptr<IndexedDBKey>* value) {
 
   switch (type) {
     case kIndexedDBKeyNullTypeByte:
-      *value = base::MakeUnique<IndexedDBKey>();
+      *value = std::make_unique<IndexedDBKey>();
       return true;
 
     case kIndexedDBKeyArrayTypeByte: {
@@ -390,35 +391,35 @@ bool DecodeIDBKey(StringPiece* slice, std::unique_ptr<IndexedDBKey>* value) {
           return false;
         array.push_back(*key);
       }
-      *value = base::MakeUnique<IndexedDBKey>(array);
+      *value = std::make_unique<IndexedDBKey>(array);
       return true;
     }
     case kIndexedDBKeyBinaryTypeByte: {
       std::string binary;
       if (!DecodeBinary(slice, &binary))
         return false;
-      *value = base::MakeUnique<IndexedDBKey>(binary);
+      *value = std::make_unique<IndexedDBKey>(binary);
       return true;
     }
     case kIndexedDBKeyStringTypeByte: {
       base::string16 s;
       if (!DecodeStringWithLength(slice, &s))
         return false;
-      *value = base::MakeUnique<IndexedDBKey>(s);
+      *value = std::make_unique<IndexedDBKey>(s);
       return true;
     }
     case kIndexedDBKeyDateTypeByte: {
       double d;
       if (!DecodeDouble(slice, &d))
         return false;
-      *value = base::MakeUnique<IndexedDBKey>(d, kWebIDBKeyTypeDate);
+      *value = std::make_unique<IndexedDBKey>(d, kWebIDBKeyTypeDate);
       return true;
     }
     case kIndexedDBKeyNumberTypeByte: {
       double d;
       if (!DecodeDouble(slice, &d))
         return false;
-      *value = base::MakeUnique<IndexedDBKey>(d, kWebIDBKeyTypeNumber);
+      *value = std::make_unique<IndexedDBKey>(d, kWebIDBKeyTypeNumber);
       return true;
     }
   }
@@ -998,6 +999,14 @@ int Compare(const StringPiece& a,
   return result;
 }
 
+int CompareKeys(const StringPiece& a, const StringPiece& b) {
+  return Compare(a, b, false /*index_keys*/);
+}
+
+int CompareIndexKeys(const StringPiece& a, const StringPiece& b) {
+  return Compare(a, b, true /*index_keys*/);
+}
+
 KeyPrefix::KeyPrefix()
     : database_id_(INVALID_TYPE),
       object_store_id_(INVALID_TYPE),
@@ -1209,6 +1218,12 @@ std::string LiveBlobJournalKey::Encode() {
   return ret;
 }
 
+std::string EarliestSweepKey::Encode() {
+  std::string ret = KeyPrefix::EncodeEmpty();
+  ret.push_back(kEarliestSweepTimeTypeByte);
+  return ret;
+}
+
 DatabaseFreeListKey::DatabaseFreeListKey() : database_id_(-1) {}
 
 bool DatabaseFreeListKey::Decode(StringPiece* slice,
@@ -1308,6 +1323,8 @@ std::string DatabaseMetaDataKey::Encode(int64_t database_id,
   ret.push_back(meta_data_type);
   return ret;
 }
+
+const int64_t ObjectStoreMetaDataKey::kKeyGeneratorInitialNumber = 1;
 
 ObjectStoreMetaDataKey::ObjectStoreMetaDataKey()
     : object_store_id_(-1), meta_data_type_(0xFF) {}

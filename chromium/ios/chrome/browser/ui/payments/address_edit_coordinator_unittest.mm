@@ -9,21 +9,19 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/ios/wait_util.h"
-#include "base/test/scoped_task_environment.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/test_region_data_loader.h"
 #include "components/payments/core/payments_profile_comparator.h"
-#include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
+#include "ios/chrome/browser/payments/payment_request_unittest_base.h"
 #include "ios/chrome/browser/payments/test_payment_request.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 #import "ios/chrome/browser/ui/payments/payment_request_editor_field.h"
+#import "ios/chrome/browser/ui/payments/payment_request_navigation_controller.h"
 #import "ios/chrome/test/scoped_key_window.h"
-#import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -53,7 +51,7 @@ class MockPaymentsProfileComparator
 
 class MockTestPaymentRequest : public payments::TestPaymentRequest {
  public:
-  MockTestPaymentRequest(web::PaymentRequest web_payment_request,
+  MockTestPaymentRequest(payments::WebPaymentRequest web_payment_request,
                          ios::ChromeBrowserState* browser_state,
                          web::WebState* web_state,
                          autofill::PersonalDataManager* personal_data_manager)
@@ -106,17 +104,21 @@ NSArray<EditorField*>* GetEditorFields() {
 using ::testing::_;
 }  // namespace
 
-class PaymentRequestAddressEditCoordinatorTest : public PlatformTest {
+class PaymentRequestAddressEditCoordinatorTest
+    : public PaymentRequestUnitTestBase,
+      public PlatformTest {
  protected:
-  PaymentRequestAddressEditCoordinatorTest()
-      : pref_service_(autofill::test::PrefServiceForTesting()),
-        chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {
+  PaymentRequestAddressEditCoordinatorTest() {}
+
+  void SetUp() override {
+    PaymentRequestUnitTestBase::SetUp();
+
     autofill::CountryNames::SetLocaleString("en-US");
-    personal_data_manager_.SetTestingPrefService(pref_service_.get());
+    personal_data_manager_.SetTestingPrefService(pref_service());
 
     payment_request_ = base::MakeUnique<MockTestPaymentRequest>(
         payment_request_test_util::CreateTestWebPaymentRequest(),
-        chrome_browser_state_.get(), &web_state_, &personal_data_manager_);
+        browser_state(), web_state(), &personal_data_manager_);
 
     profile_comparator_ = base::MakeUnique<MockPaymentsProfileComparator>(
         payment_request_->GetApplicationLocale(), *payment_request_.get());
@@ -128,16 +130,13 @@ class PaymentRequestAddressEditCoordinatorTest : public PlatformTest {
 
   void TearDown() override {
     personal_data_manager_.SetTestingPrefService(nullptr);
+
+    PaymentRequestUnitTestBase::TearDown();
   }
 
-  base::test::ScopedTaskEnvironment scoped_task_evironment_;
-
-  web::TestWebState web_state_;
-  std::unique_ptr<PrefService> pref_service_;
   MockTestPersonalDataManager personal_data_manager_;
   autofill::TestRegionDataLoader test_region_data_loader_;
   std::unique_ptr<MockPaymentsProfileComparator> profile_comparator_;
-  std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<MockTestPaymentRequest> payment_request_;
 };
 
@@ -158,9 +157,9 @@ TEST_F(PaymentRequestAddressEditCoordinatorTest, StartAndStop) {
   // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_TRUE([base_view_controller.presentedViewController
-      isMemberOfClass:[UINavigationController class]]);
-  UINavigationController* navigation_controller =
-      base::mac::ObjCCastStrict<UINavigationController>(
+      isMemberOfClass:[PaymentRequestNavigationController class]]);
+  PaymentRequestNavigationController* navigation_controller =
+      base::mac::ObjCCastStrict<PaymentRequestNavigationController>(
           base_view_controller.presentedViewController);
   EXPECT_TRUE([navigation_controller.visibleViewController
       isMemberOfClass:[PaymentRequestEditViewController class]]);
@@ -221,9 +220,9 @@ TEST_F(PaymentRequestAddressEditCoordinatorTest, DidFinishCreating) {
 
   // Call the controller delegate method.
   EXPECT_TRUE([base_view_controller.presentedViewController
-      isMemberOfClass:[UINavigationController class]]);
-  UINavigationController* navigation_controller =
-      base::mac::ObjCCastStrict<UINavigationController>(
+      isMemberOfClass:[PaymentRequestNavigationController class]]);
+  PaymentRequestNavigationController* navigation_controller =
+      base::mac::ObjCCastStrict<PaymentRequestNavigationController>(
           base_view_controller.presentedViewController);
   PaymentRequestEditViewController* view_controller =
       base::mac::ObjCCastStrict<PaymentRequestEditViewController>(
@@ -285,9 +284,9 @@ TEST_F(PaymentRequestAddressEditCoordinatorTest, DidFinishEditing) {
 
   // Call the controller delegate method.
   EXPECT_TRUE([base_view_controller.presentedViewController
-      isMemberOfClass:[UINavigationController class]]);
-  UINavigationController* navigation_controller =
-      base::mac::ObjCCastStrict<UINavigationController>(
+      isMemberOfClass:[PaymentRequestNavigationController class]]);
+  PaymentRequestNavigationController* navigation_controller =
+      base::mac::ObjCCastStrict<PaymentRequestNavigationController>(
           base_view_controller.presentedViewController);
   PaymentRequestEditViewController* view_controller =
       base::mac::ObjCCastStrict<PaymentRequestEditViewController>(
@@ -325,9 +324,9 @@ TEST_F(PaymentRequestAddressEditCoordinatorTest, DidCancel) {
 
   // Call the controller delegate method.
   EXPECT_TRUE([base_view_controller.presentedViewController
-      isMemberOfClass:[UINavigationController class]]);
-  UINavigationController* navigation_controller =
-      base::mac::ObjCCastStrict<UINavigationController>(
+      isMemberOfClass:[PaymentRequestNavigationController class]]);
+  PaymentRequestNavigationController* navigation_controller =
+      base::mac::ObjCCastStrict<PaymentRequestNavigationController>(
           base_view_controller.presentedViewController);
   PaymentRequestEditViewController* view_controller =
       base::mac::ObjCCastStrict<PaymentRequestEditViewController>(

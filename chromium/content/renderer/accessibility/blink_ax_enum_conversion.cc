@@ -40,9 +40,6 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
   if (o.IsMultiSelectable())
     state |= (1 << ui::AX_STATE_MULTISELECTABLE);
 
-  if (o.IsOffScreen())
-    state |= (1 << ui::AX_STATE_OFFSCREEN);
-
   if (o.IsPasswordField())
     state |= (1 << ui::AX_STATE_PROTECTED);
 
@@ -113,8 +110,10 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_COLUMN;
     case blink::kWebAXRoleColumnHeader:
       return ui::AX_ROLE_COLUMN_HEADER;
-    case blink::kWebAXRoleComboBox:
-      return ui::AX_ROLE_COMBO_BOX;
+    case blink::kWebAXRoleComboBoxGrouping:
+      return ui::AX_ROLE_COMBO_BOX_GROUPING;
+    case blink::kWebAXRoleComboBoxMenuButton:
+      return ui::AX_ROLE_COMBO_BOX_MENU_BUTTON;
     case blink::kWebAXRoleComplementary:
       return ui::AX_ROLE_COMPLEMENTARY;
     case blink::kWebAXRoleContentInfo:
@@ -285,6 +284,8 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_TERM;
     case blink::kWebAXRoleTextField:
       return ui::AX_ROLE_TEXT_FIELD;
+    case blink::kWebAXRoleTextFieldWithComboBox:
+      return ui::AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX;
     case blink::kWebAXRoleTime:
       return ui::AX_ROLE_TIME;
     case blink::kWebAXRoleTimer:
@@ -392,6 +393,8 @@ ui::AXDefaultActionVerb AXDefaultActionVerbFromBlink(
       return ui::AX_DEFAULT_ACTION_VERB_CHECK;
     case blink::WebAXDefaultActionVerb::kClick:
       return ui::AX_DEFAULT_ACTION_VERB_CLICK;
+    case blink::WebAXDefaultActionVerb::kClickAncestor:
+      return ui::AX_DEFAULT_ACTION_VERB_CLICK_ANCESTOR;
     case blink::WebAXDefaultActionVerb::kJump:
       return ui::AX_DEFAULT_ACTION_VERB_JUMP;
     case blink::WebAXDefaultActionVerb::kOpen:

@@ -57,8 +57,10 @@ class CONTENT_EXPORT ChromeBlobStorageContext
   storage::BlobStorageContext* context() const { return context_.get(); }
 
   // Returns a NULL scoped_ptr on failure.
-  std::unique_ptr<BlobHandle> CreateMemoryBackedBlob(const char* data,
-                                                     size_t length);
+  std::unique_ptr<BlobHandle> CreateMemoryBackedBlob(
+      const char* data,
+      size_t length,
+      const std::string& content_type);
 
   // Returns a NULL scoped_ptr on failure.
   std::unique_ptr<BlobHandle> CreateFileBackedBlob(
@@ -100,6 +102,8 @@ using BlobHandles = std::vector<std::unique_ptr<storage::BlobDataHandle>>;
 bool GetBodyBlobDataHandles(ResourceRequestBody* body,
                             ResourceContext* resource_context,
                             BlobHandles* blob_handles);
+
+extern const char kBlobStorageContextKeyName[];
 
 }  // namespace content
 

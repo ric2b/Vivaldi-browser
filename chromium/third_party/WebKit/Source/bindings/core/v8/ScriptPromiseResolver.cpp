@@ -5,16 +5,16 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/probe/CoreProbes.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
 ScriptPromiseResolver::ScriptPromiseResolver(ScriptState* script_state)
-    : SuspendableObject(ExecutionContext::From(script_state)),
+    : PausableObject(ExecutionContext::From(script_state)),
       state_(kPending),
       script_state_(script_state),
-      timer_(TaskRunnerHelper::Get(TaskType::kMicrotask, GetExecutionContext()),
+      timer_(GetExecutionContext()->GetTaskRunner(TaskType::kMicrotask),
              this,
              &ScriptPromiseResolver::OnTimerFired),
       resolver_(script_state) {
@@ -22,16 +22,15 @@ ScriptPromiseResolver::ScriptPromiseResolver(ScriptState* script_state)
     state_ = kDetached;
     resolver_.Clear();
   }
-  probe::AsyncTaskScheduled(GetExecutionContext(), "Promise", this);
 }
 
-void ScriptPromiseResolver::Suspend() {
+void ScriptPromiseResolver::Pause() {
   timer_.Stop();
 }
 
-void ScriptPromiseResolver::Resume() {
+void ScriptPromiseResolver::Unpause() {
   if (state_ == kResolving || state_ == kRejecting)
-    timer_.StartOneShot(0, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void ScriptPromiseResolver::Detach() {
@@ -42,7 +41,6 @@ void ScriptPromiseResolver::Detach() {
   resolver_.Clear();
   value_.Clear();
   keep_alive_.Clear();
-  probe::AsyncTaskCanceled(GetExecutionContext(), this);
 }
 
 void ScriptPromiseResolver::KeepAliveWhilePending() {
@@ -64,15 +62,14 @@ void ScriptPromiseResolver::OnTimerFired(TimerBase*) {
     return;
   }
 
-  ScriptState::Scope scope(script_state_.Get());
+  ScriptState::Scope scope(script_state_.get());
   ResolveOrRejectImmediately();
 }
 
 void ScriptPromiseResolver::ResolveOrRejectImmediately() {
   DCHECK(!GetExecutionContext()->IsContextDestroyed());
-  DCHECK(!GetExecutionContext()->IsContextSuspended());
+  DCHECK(!GetExecutionContext()->IsContextPaused());
   {
-    probe::AsyncTask async_task(GetExecutionContext(), this);
     if (state_ == kResolving) {
       resolver_.Resolve(value_.NewLocal(script_state_->GetIsolate()));
     } else {
@@ -83,8 +80,8 @@ void ScriptPromiseResolver::ResolveOrRejectImmediately() {
   Detach();
 }
 
-DEFINE_TRACE(ScriptPromiseResolver) {
-  SuspendableObject::Trace(visitor);
+void ScriptPromiseResolver::Trace(blink::Visitor* visitor) {
+  PausableObject::Trace(visitor);
 }
 
 }  // namespace blink

@@ -7,20 +7,11 @@
 
 #include <memory>
 
-#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/web_contents.h"
+#include "chrome/browser/vr/mode.h"
 #include "content/public/browser/web_contents_observer.h"
 
 namespace vr_shell {
-
-enum class VRMode {
-  NO_VR = 0,
-  VR_BROWSER = 1,     // VR Shell.
-  VR_FULLSCREEN = 2,  // Cinema mode.
-  WEBVR = 3,
-};
 
 // SessionTimer will monitor the time between calls to StartSession and
 // StopSession.  It will combine multiple segments into a single session if they
@@ -31,8 +22,9 @@ enum class VRMode {
 class SessionTimer {
  public:
   virtual ~SessionTimer() {}
-  void StartSession(base::Time startTime);
-  void StopSession(bool continuable, base::Time stopTime);
+
+  void StartSession(base::Time start_time);
+  void StopSession(bool continuable, base::Time stop_time);
 
  protected:
   SessionTimer() {}
@@ -53,25 +45,31 @@ class SessionTimer {
   DISALLOW_COPY_AND_ASSIGN(SessionTimer);
 };
 
-// This class is not threadsafe and must only be used from the main thread.
+// This class is not thread-safe and must only be used from the main thread.
 class VrMetricsHelper : public content::WebContentsObserver {
  public:
-  explicit VrMetricsHelper(content::WebContents*);
+  VrMetricsHelper(content::WebContents* contents,
+                  vr::Mode initial_mode,
+                  bool started_with_autopresentation);
   ~VrMetricsHelper() override;
+
   void SetWebVREnabled(bool is_webvr_presenting);
   void SetVRActive(bool is_vr_enabled);
+  void RecordVoiceSearchStarted();
 
  private:
   // WebContentObserver
   void MediaStartedPlaying(const MediaPlayerInfo& media_info,
                            const MediaPlayerId&) override;
-  void MediaStoppedPlaying(const MediaPlayerInfo& media_info,
-                           const MediaPlayerId&) override;
-  void DidFinishNavigation(content::NavigationHandle*) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& media_info,
+      const MediaPlayerId&,
+      WebContentsObserver::MediaStoppedReason reason) override;
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
   void DidToggleFullscreenModeForTab(bool entered_fullscreen,
                                      bool will_cause_resize) override;
 
-  void SetVrMode(VRMode mode);
+  void SetVrMode(vr::Mode mode);
   void UpdateMode();
 
   std::unique_ptr<SessionTimer> mode_video_timer_;
@@ -79,16 +77,18 @@ class VrMetricsHelper : public content::WebContentsObserver {
   std::unique_ptr<SessionTimer> mode_timer_;
   std::unique_ptr<SessionTimer> session_timer_;
 
-  VRMode mode_ = VRMode::NO_VR;
+  vr::Mode mode_ = vr::Mode::kNoVr;
 
   // state that gets translated into vr_mode:
   bool is_fullscreen_ = false;
   bool is_webvr_ = false;
   bool is_vr_enabled_ = false;
+  bool started_with_autopresentation_ = false;
 
   int num_videos_playing_ = 0;
   int num_session_navigation_ = 0;
   int num_session_video_playback_ = 0;
+  int num_voice_search_started_ = 0;
 
   GURL origin_;
 };

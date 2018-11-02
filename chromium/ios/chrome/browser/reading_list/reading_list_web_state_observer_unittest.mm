@@ -17,6 +17,10 @@
 #include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 const char kTestURL[] = "http://foo.bar";
 const char kTestTitle[] = "title";
@@ -71,8 +75,8 @@ class ReadingListWebStateObserverTest : public web::WebTest {
         nullptr, nullptr, base::MakeUnique<base::DefaultClock>());
     reading_list_model_->AddEntry(GURL(kTestURL), kTestTitle,
                                   reading_list::ADDED_VIA_CURRENT_APP);
-    ReadingListWebStateObserver::FromWebState(&test_web_state_,
-                                              reading_list_model_.get());
+    ReadingListWebStateObserver::CreateForWebState(&test_web_state_,
+                                                   reading_list_model_.get());
   }
 
  protected:

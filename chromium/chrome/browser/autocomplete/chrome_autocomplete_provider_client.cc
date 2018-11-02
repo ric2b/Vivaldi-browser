@@ -24,17 +24,23 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/features/features.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
@@ -45,7 +51,7 @@
 namespace {
 
 #if !defined(OS_ANDROID)
-// This list should be kept in sync with chrome/common/url_constants.h.
+// This list should be kept in sync with chrome/common/webui_url_constants.h.
 // Only include useful sub-pages, confirmation alerts are not useful.
 const char* const kChromeSettingsSubPages[] = {
     chrome::kAutofillSubPage,        chrome::kClearBrowserDataSubPage,
@@ -233,6 +239,12 @@ bool ChromeAutocompleteProviderClient::TabSyncEnabledAndUnencrypted() const {
       profile_->GetPrefs());
 }
 
+bool ChromeAutocompleteProviderClient::IsAuthenticated() const {
+  SigninManagerBase* signin_manager =
+      SigninManagerFactory::GetForProfile(profile_);
+  return signin_manager != nullptr && signin_manager->IsAuthenticated();
+}
+
 void ChromeAutocompleteProviderClient::Classify(
     const base::string16& text,
     bool prefer_keyword,
@@ -318,7 +330,7 @@ void ChromeAutocompleteProviderClient::StartServiceWorker(
     return;
 
   context->StartServiceWorkerForNavigationHint(destination_url,
-                                               base::Bind(&NoopCallback));
+                                               base::BindOnce(&NoopCallback));
 }
 
 void ChromeAutocompleteProviderClient::OnAutocompleteControllerResultReady(
@@ -327,4 +339,23 @@ void ChromeAutocompleteProviderClient::OnAutocompleteControllerResultReady(
       chrome::NOTIFICATION_AUTOCOMPLETE_CONTROLLER_RESULT_READY,
       content::Source<AutocompleteController>(controller),
       content::NotificationService::NoDetails());
+}
+
+// TODO(crbug.com/46623): Maintain a map of URL->WebContents for fast look-up.
+bool ChromeAutocompleteProviderClient::IsTabOpenWithURL(const GURL& url) {
+#if !defined(OS_ANDROID)
+  for (auto* browser : *BrowserList::GetInstance()) {
+    // Only look at same profile (and anonymity level).
+    if (browser->profile()->IsSameProfile(profile_) &&
+        browser->profile()->GetProfileType() == profile_->GetProfileType()) {
+      for (int i = 0; i < browser->tab_strip_model()->count(); ++i) {
+        content::WebContents* web_contents =
+            browser->tab_strip_model()->GetWebContentsAt(i);
+        if (web_contents->GetLastCommittedURL() == url)
+          return true;
+      }
+    }
+  }
+#endif  // !defined(OS_ANDROID)
+  return false;
 }

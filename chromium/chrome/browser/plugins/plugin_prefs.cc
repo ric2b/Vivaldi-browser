@@ -43,7 +43,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/webplugininfo.h"
 
-#include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::BrowserThread;
 using content::PluginService;
@@ -123,7 +123,7 @@ void PluginPrefs::UpdatePdfPolicy(const std::string& pref_name) {
 void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
   base::AutoLock auto_lock(lock_);
   enable_widevine_ =
-      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevideEnabled);
+      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevineEnabled);
 
   NotifyPluginStatusChanged();
 }
@@ -228,7 +228,7 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
       prefs_->GetBoolean(prefs::kPluginsAlwaysOpenPdfExternally);
 
   enable_widevine_ =
-      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevideEnabled);
+      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevineEnabled);
 
   registrar_.Init(prefs_);
 
@@ -239,7 +239,7 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
   registrar_.Add(prefs::kPluginsAlwaysOpenPdfExternally,
                  base::Bind(&PluginPrefs::UpdatePdfPolicy,
                  base::Unretained(this)));
-  registrar_.Add(vivaldiprefs::kPluginsWidevideEnabled,
+  registrar_.Add(vivaldiprefs::kPluginsWidevineEnabled,
                  base::Bind(&PluginPrefs::UpdateWidevinePolicy,
                  base::Unretained(this)));
 

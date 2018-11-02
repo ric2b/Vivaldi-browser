@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
@@ -15,9 +16,14 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/test_render_view_host.h"
+#include "content/test/test_render_widget_host.h"
 #include "ui/base/page_transition_types.h"
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
+
+namespace net {
+class HostPortPair;
+}
 
 namespace content {
 
@@ -52,15 +58,15 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // RenderFrameHostImpl overrides (same values, but in Test*/Mock* types)
   TestRenderViewHost* GetRenderViewHost() override;
   MockRenderProcessHost* GetProcess() override;
+  TestRenderWidgetHost* GetRenderWidgetHost() override;
+  void AddMessageToConsole(ConsoleMessageLevel level,
+                           const std::string& message) override;
 
   // RenderFrameHostTester implementation.
   void InitializeRenderFrameIfNeeded() override;
   TestRenderFrameHost* AppendChild(const std::string& frame_name) override;
   void Detach() override;
   void SimulateNavigationStop() override;
-  void SendFailedNavigate(int nav_entry_id,
-                          bool did_create_new_entry,
-                          const GURL& url) override;
   void SendNavigateWithTransition(int nav_entry_id,
                                   bool did_create_new_entry,
                                   const GURL& url,
@@ -72,8 +78,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void NavigateAndCommitRendererInitiated(bool did_create_new_entry,
                                           const GURL& url) override;
   void SimulateFeaturePolicyHeader(
-      blink::WebFeaturePolicyFeature feature,
+      blink::FeaturePolicyFeature feature,
       const std::vector<url::Origin>& whitelist) override;
+  const std::vector<std::string>& GetConsoleMessages() override;
 
   void SendNavigateWithReplacement(int nav_entry_id,
                                    bool did_create_new_entry,
@@ -139,6 +146,12 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // interaction with the IO thread up until the response is ready to commit.
   void PrepareForCommit();
 
+  // Like PrepareForCommit, but with the socket address when needed.
+  // TODO(clamy): Have NavigationSimulator make the relevant calls directly and
+  // remove this function.
+  void PrepareForCommitWithSocketAddress(
+      const net::HostPortPair& socket_address);
+
   // This method does the same as PrepareForCommit.
   // PlzNavigate: Beyond doing the same as PrepareForCommit, this method will
   // also simulate a server redirect to |redirect_url|. If the URL is empty the
@@ -156,6 +169,10 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void set_pending_commit(bool pending) { pending_commit_ = pending; }
   bool pending_commit() const { return pending_commit_; }
 
+  // Send a message with the sandbox flags and feature policy
+  void SendFramePolicy(blink::WebSandboxFlags sandbox_flags,
+                       const blink::ParsedFeaturePolicy& declared_policy);
+
   // Creates a WebBluetooth Service with a dummy InterfaceRequest.
   WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting();
 
@@ -163,7 +180,14 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
     return last_commit_was_error_page_;
   }
 
+  // Returns a pending InterfaceProvider request that is safe to bind to an
+  // implementation, but will never receive any interface requests.
+  static service_manager::mojom::InterfaceProviderRequest
+  CreateStubInterfaceProviderRequest();
+
  private:
+  class NavigationInterceptor;
+
   void SendNavigateWithParameters(int nav_entry_id,
                                   bool did_create_new_entry,
                                   bool should_replace_entry,
@@ -172,10 +196,21 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                                   int response_code,
                                   const ModificationCallback& callback);
 
+  void PrepareForCommitInternal(const GURL& redirect_url,
+                                const net::HostPortPair& socket_address);
+
   // Computes the page ID for a pending navigation in this RenderFrameHost;
   int32_t ComputeNextPageID();
 
   void SimulateWillStartRequest(ui::PageTransition transition);
+
+  // RenderFrameHostImpl:
+  mojom::FrameNavigationControl* GetNavigationControl() override;
+
+  mojom::FrameNavigationControl* GetInternalNavigationControl();
+
+  // Keeps a running vector of messages sent to AddMessageToConsole.
+  std::vector<std::string> console_messages_;
 
   TestRenderFrameHostCreationObserver child_creation_observer_;
 
@@ -186,6 +221,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
 
   // The last commit was for an error page.
   bool last_commit_was_error_page_;
+
+  // Used to track and forward outgoing navigation requests from the host.
+  std::unique_ptr<NavigationInterceptor> navigation_interceptor_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRenderFrameHost);
 };

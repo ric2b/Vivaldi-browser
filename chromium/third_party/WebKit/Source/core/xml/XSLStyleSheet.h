@@ -25,23 +25,15 @@
 
 #include <libxml/tree.h>
 #include <libxslt/transform.h>
+#include "base/memory/scoped_refptr.h"
 #include "core/css/StyleSheet.h"
 #include "core/dom/ProcessingInstruction.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
-class XSLImportRule;
-
 class XSLStyleSheet final : public StyleSheet {
  public:
-  static XSLStyleSheet* Create(XSLImportRule* parent_import,
-                               const String& original_url,
-                               const KURL& final_url) {
-    DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
-    return new XSLStyleSheet(parent_import, original_url, final_url);
-  }
   static XSLStyleSheet* Create(ProcessingInstruction* parent_node,
                                const String& original_url,
                                const KURL& final_url) {
@@ -73,16 +65,10 @@ class XSLStyleSheet final : public StyleSheet {
 
   void CheckLoaded();
 
-  const KURL& FinalURL() const { return final_url_; }
-
-  void LoadChildSheets();
-  void LoadChildSheet(const String& href);
-
   Document* OwnerDocument();
   XSLStyleSheet* parentStyleSheet() const override {
     return parent_style_sheet_;
   }
-  void SetParentStyleSheet(XSLStyleSheet*);
 
   xmlDocPtr GetDocument();
   xsltStylesheetPtr CompileStyleSheet();
@@ -103,9 +89,9 @@ class XSLStyleSheet final : public StyleSheet {
 
   void ClearOwnerNode() override { owner_node_ = nullptr; }
   KURL BaseURL() const override { return final_url_; }
-  bool IsLoading() const override;
+  bool IsLoading() const override { return false; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   XSLStyleSheet(Node* parent_node,
@@ -117,16 +103,19 @@ class XSLStyleSheet final : public StyleSheet {
                 const String& original_url,
                 const KURL& final_url,
                 bool embedded);
-  XSLStyleSheet(XSLImportRule* parent_import,
+  XSLStyleSheet(XSLStyleSheet* parent_style_sheet,
                 const String& original_url,
                 const KURL& final_url);
+
+  void LoadChildSheets();
+  void LoadChildSheet(const String& href);
 
   Member<Node> owner_node_;
   String original_url_;
   KURL final_url_;
   bool is_disabled_;
 
-  HeapVector<Member<XSLImportRule>> children_;
+  HeapVector<Member<XSLStyleSheet>> children_;
 
   bool embedded_;
   bool processed_;

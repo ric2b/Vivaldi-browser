@@ -2,22 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
+#define CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
+
 #include <stddef.h>
 
 #include "base/memory/shared_memory_handle.h"
 #include "base/optional.h"
-#include "cc/output/compositor_frame.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/common/input/input_event_ack_state.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 
-#ifndef CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
-#define CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
+#ifndef INTERNAL_CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
+#define INTERNAL_CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
 
 namespace content {
 
@@ -75,9 +78,7 @@ struct SyncCompositorCommonRendererParams {
 
 }  // namespace content
 
-#endif  // CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
-
-// Multiply-included message file, hence no include guard.
+#endif  // INTERNAL_CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -132,7 +133,7 @@ IPC_SYNC_MESSAGE_ROUTED1_3(SyncCompositorMsg_DemandDrawHw,
                            content::SyncCompositorDemandDrawHwParams,
                            content::SyncCompositorCommonRendererParams,
                            uint32_t /* layer_tree_frame_sink_id */,
-                           base::Optional<cc::CompositorFrame>);
+                           base::Optional<viz::CompositorFrame>);
 
 IPC_SYNC_MESSAGE_ROUTED1_2(SyncCompositorMsg_SetSharedMemory,
                            content::SyncCompositorSetSharedMemoryParams,
@@ -144,7 +145,7 @@ IPC_MESSAGE_ROUTED0(SyncCompositorMsg_ZeroSharedMemory);
 IPC_SYNC_MESSAGE_ROUTED1_2(SyncCompositorMsg_DemandDrawSw,
                            content::SyncCompositorDemandDrawSwParams,
                            content::SyncCompositorCommonRendererParams,
-                           base::Optional<cc::CompositorFrameMetadata>)
+                           base::Optional<viz::CompositorFrameMetadata>)
 
 IPC_SYNC_MESSAGE_ROUTED2_1(SyncCompositorMsg_ZoomBy,
                            float /* delta */,
@@ -170,4 +171,6 @@ IPC_MESSAGE_ROUTED1(SyncCompositorHostMsg_UpdateState,
 
 IPC_MESSAGE_ROUTED2(SyncCompositorHostMsg_ReturnFrame,
                     uint32_t /* layer_tree_frame_sink_id */,
-                    base::Optional<cc::CompositorFrame>);
+                    base::Optional<viz::CompositorFrame>);
+
+#endif  // CONTENT_COMMON_ANDROID_SYNC_COMPOSITOR_MESSAGES_H_

@@ -36,19 +36,20 @@
 
 namespace blink {
 
-class DOMWindowCSS : public GarbageCollected<DOMWindowCSS>,
-                     public ScriptWrappable {
+class ExecutionContext;
+
+class DOMWindowCSS : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static bool supports(const String& property, const String& value);
-  static bool supports(const String& condition_text);
+  static bool supports(const ExecutionContext*,
+                       const String& property,
+                       const String& value);
+  static bool supports(const ExecutionContext*, const String& condition_text);
   static String escape(const String& ident);
 
-  DEFINE_INLINE_TRACE() {}
-
  private:
-  DOMWindowCSS() {}
+  DOMWindowCSS() = default;
 };
 
 }  // namespace blink

@@ -33,7 +33,11 @@ WebContentsView* WebContentsViewChildFrame::GetOuterView() {
 }
 
 const WebContentsView* WebContentsViewChildFrame::GetOuterView() const {
-  return web_contents_->GetOuterWebContents()->GetView();
+  // NOTE(andre@vivaldi.com) : If a webview has not been shown before being
+  // deleted there is no outerwebcontents.
+  return web_contents_->GetOuterWebContents()
+             ? web_contents_->GetOuterWebContents()->GetView()
+             : nullptr;
 }
 
 RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
@@ -48,7 +52,7 @@ gfx::NativeView WebContentsViewChildFrame::GetNativeView() const {
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetContentNativeView() const {
-  return GetOuterView()->GetContentNativeView();
+  return GetOuterView() ? GetOuterView()->GetContentNativeView() : nullptr;
 }
 
 gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
@@ -60,10 +64,12 @@ void WebContentsViewChildFrame::GetScreenInfo(ScreenInfo* screen_info) const {
   // to happen in RenderWidgetHostViewChildFrame, but it seems like the right
   // thing to do. We should keep an eye on this in case the else-clause below
   // causes problems.
-  if (web_contents_->GetOuterWebContents())
-    GetOuterView()->GetScreenInfo(screen_info);
-  else
+  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
+  if (!rwhv) {
     WebContentsView::GetDefaultScreenInfo(screen_info);
+    return;
+  }
+  rwhv->GetScreenInfo(screen_info);
 }
 
 void WebContentsViewChildFrame::GetContainerBounds(gfx::Rect* out) const {
@@ -143,6 +149,10 @@ void WebContentsViewChildFrame::Focus() {
 }
 
 void WebContentsViewChildFrame::StoreFocus() {
+  NOTREACHED();
+}
+
+void WebContentsViewChildFrame::FocusThroughTabTraversal(bool reverse) {
   NOTREACHED();
 }
 

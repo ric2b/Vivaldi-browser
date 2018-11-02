@@ -73,6 +73,21 @@ bool CanRetry(QuerySourceStatus status) {
   return status == MORE_RESULTS || status == FAILURE || status == TIMED_OUT;
 }
 
+base::Time OldestTime(
+    const std::vector<BrowsingHistoryService::HistoryEntry>& entries) {
+  // If the vector is empty, then there is no oldest, so we use the oldest
+  // possible time instead.
+  if (entries.empty()) {
+    return base::Time();
+  }
+
+  base::Time best = base::Time::Max();
+  for (const BrowsingHistoryService::HistoryEntry& entry : entries) {
+    best = std::min(best, entry.time);
+  }
+  return best;
+}
+
 }  // namespace
 
 struct BrowsingHistoryService::QueryHistoryState
@@ -421,14 +436,10 @@ void BrowsingHistoryService::MergeDuplicateResults(
   DCHECK(results);
   DCHECK(results->empty());
 
-  // Will be used later to decide if we need to hold back results. This requires
-  // results to be sorted.
-  base::Time youngest_local = state->local_results.empty()
-                                  ? base::Time()
-                                  : state->local_results.rbegin()->time;
-  base::Time youngest_remote = state->remote_results.empty()
-                                   ? base::Time()
-                                   : state->remote_results.rbegin()->time;
+  // Will be used later to decide if we need to hold back results. This iterates
+  // through each entry and makes no assumptions about their ordering.
+  base::Time oldest_local = OldestTime(state->local_results);
+  base::Time oldest_remote = OldestTime(state->remote_results);
 
   std::vector<HistoryEntry> sorted;
   sorted.assign(std::make_move_iterator(state->local_results.begin()),
@@ -481,25 +492,25 @@ void BrowsingHistoryService::MergeDuplicateResults(
   // held back until the former source catches up. This only send the UI history
   // entries in the correct order. Subsequent continuation requests will get the
   // delayed entries.
-  base::Time youngest_allowed = base::Time();
+  base::Time oldest_allowed = base::Time();
   if (state->local_status == MORE_RESULTS) {
-    youngest_allowed = std::max(youngest_allowed, youngest_local);
-    state->local_end_time_for_continuation = youngest_local;
+    oldest_allowed = std::max(oldest_allowed, oldest_local);
+    state->local_end_time_for_continuation = oldest_local;
   }
   if (state->remote_status == MORE_RESULTS) {
-    youngest_allowed = std::max(youngest_allowed, youngest_remote);
-    state->remote_end_time_for_continuation = youngest_remote;
+    oldest_allowed = std::max(oldest_allowed, oldest_remote);
+    state->remote_end_time_for_continuation = oldest_remote;
   } else if (CanRetry(state->remote_status)) {
     // TODO(skym): It is unclear if this is the best behavior. The UI is going
     // to behave incorrectly if out of order results are received. So to
-    // guarantee that doesn't happen, use |youngest_local| for continuation
+    // guarantee that doesn't happen, use |oldest_local| for continuation
     // calls. This will result in missing history entries for the failed calls.
     // crbug.com/685866 is related to this problem.
-    state->remote_end_time_for_continuation = youngest_local;
+    state->remote_end_time_for_continuation = oldest_local;
   }
 
   HistoryEntry search_entry;
-  search_entry.time = youngest_allowed;
+  search_entry.time = oldest_allowed;
   auto threshold_iter =
       std::upper_bound(deduped.begin(), deduped.end(), search_entry,
                        HistoryEntry::SortByTimeDescending);
@@ -554,24 +565,25 @@ void BrowsingHistoryService::ReturnResultsToDriver(
   // call to Web History is successful, we shouldn't be able to have empty sync
   // results at the same time as we have pending local.
   if (state->remote_results.size()) {
-    int local_result_count = state->local_results.size();
     MergeDuplicateResults(state.get(), &results);
 
-    if (local_result_count) {
-      // In the best case, we expect that all local results are duplicated on
-      // the server. Keep track of how many are missing.
-      int missing_count = 0;
-      for (const HistoryEntry& entry : results) {
-        missing_count +=
-            entry.entry_type ==
-                    BrowsingHistoryService::HistoryEntry::LOCAL_ENTRY
-                ? entry.all_timestamps.size()
-                : 0;
-      }
-      DCHECK_GE(local_result_count, missing_count);
-      UMA_HISTOGRAM_PERCENTAGE("WebHistory.LocalResultMissingOnServer",
-                               missing_count * 100.0 / local_result_count);
+    // In the best case, we expect that all local results are duplicated on
+    // the server. Keep track of how many are missing.
+    int combined_count = 0;
+    int local_count = 0;
+    for (const HistoryEntry& entry : results) {
+      if (entry.entry_type == HistoryEntry::LOCAL_ENTRY)
+        ++local_count;
+      else if (entry.entry_type == HistoryEntry::COMBINED_ENTRY)
+        ++combined_count;
     }
+
+    int local_and_combined = combined_count + local_count;
+    if (local_and_combined > 0) {
+      UMA_HISTOGRAM_PERCENTAGE("WebHistory.LocalResultMissingOnServer",
+                               local_count * 100.0 / local_and_combined);
+    }
+
   } else {
     // TODO(skym): Is the optimization to skip merge on local only results worth
     // the complexity increase here?

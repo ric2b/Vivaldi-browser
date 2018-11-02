@@ -4,9 +4,11 @@
 
 #include "media/video/video_encode_accelerator.h"
 
+#include "base/callback.h"
+
 namespace media {
 
-VideoEncodeAccelerator::~VideoEncodeAccelerator() {}
+VideoEncodeAccelerator::~VideoEncodeAccelerator() = default;
 
 VideoEncodeAccelerator::SupportedProfile::SupportedProfile()
     : profile(media::VIDEO_CODEC_PROFILE_UNKNOWN),
@@ -14,13 +16,18 @@ VideoEncodeAccelerator::SupportedProfile::SupportedProfile()
       max_framerate_denominator(0) {
 }
 
-VideoEncodeAccelerator::SupportedProfile::~SupportedProfile() {
-}
+VideoEncodeAccelerator::SupportedProfile::~SupportedProfile() = default;
 
 bool VideoEncodeAccelerator::TryToSetupEncodeOnSeparateThread(
     const base::WeakPtr<Client>& encode_client,
     const scoped_refptr<base::SingleThreadTaskRunner>& encode_task_runner) {
   return false;
+}
+
+void VideoEncodeAccelerator::Flush(FlushCallback flush_callback) {
+  // TODO(owenlin): implements this https://crbug.com/755889.
+  NOTIMPLEMENTED();
+  std::move(flush_callback).Run(false);
 }
 
 }  // namespace media

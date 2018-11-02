@@ -26,17 +26,17 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
 #include "core/css/CSSImageValue.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Attribute.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -60,7 +60,7 @@ bool HTMLBodyElement::IsPresentationAttribute(const QualifiedName& name) const {
 void HTMLBodyElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == backgroundAttr) {
     String url = StripLeadingAndTrailingHTMLSpaces(value);
     if (!url.IsEmpty()) {
@@ -69,7 +69,8 @@ void HTMLBodyElement::CollectStyleForPresentationAttribute(
                                 Referrer(GetDocument().OutgoingReferrer(),
                                          GetDocument().GetReferrerPolicy()));
       image_value->SetInitiator(localName());
-      style->SetProperty(CSSProperty(CSSPropertyBackgroundImage, *image_value));
+      style->SetProperty(
+          CSSPropertyValue(GetCSSPropertyBackgroundImage(), *image_value));
     }
   } else if (name == marginwidthAttr || name == leftmarginAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyMarginRight, value);
@@ -115,6 +116,16 @@ void HTMLBodyElement::ParseAttribute(
     SetNeedsStyleRecalc(kSubtreeStyleChange,
                         StyleChangeReasonForTracing::Create(
                             StyleChangeReason::kLinkColorChange));
+  } else if (name == onafterprintAttr) {
+    GetDocument().SetWindowAttributeEventListener(
+        EventTypeNames::afterprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
+                                     EventParameterName()));
+  } else if (name == onbeforeprintAttr) {
+    GetDocument().SetWindowAttributeEventListener(
+        EventTypeNames::beforeprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
+                                     EventParameterName()));
   } else if (name == onloadAttr) {
     GetDocument().SetWindowAttributeEventListener(
         EventTypeNames::load,

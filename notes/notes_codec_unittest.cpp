@@ -100,19 +100,19 @@ class NotesCodecTest : public testing::Test {
   void GetNotesChildValue(base::Value* value,
                           size_t index,
                           base::DictionaryValue** result_value) {
-    ASSERT_EQ(base::Value::Type::DICTIONARY, value->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, value->type());
 
     base::DictionaryValue* d_value = static_cast<base::DictionaryValue*>(value);
 
     base::Value* bb_children_value;
     ASSERT_TRUE(d_value->Get(NotesCodec::kChildrenKey, &bb_children_value));
-    ASSERT_EQ(base::Value::Type::LIST, bb_children_value->GetType());
+    ASSERT_EQ(base::Value::Type::LIST, bb_children_value->type());
 
     base::ListValue* bb_children_l_value =
         static_cast<base::ListValue*>(bb_children_value);
     base::Value* child_value;
     ASSERT_TRUE(bb_children_l_value->Get(index, &child_value));
-    ASSERT_EQ(base::Value::Type::DICTIONARY, child_value->GetType());
+    ASSERT_EQ(base::Value::Type::DICTIONARY, child_value->type());
 
     *result_value = static_cast<base::DictionaryValue*>(child_value);
   }

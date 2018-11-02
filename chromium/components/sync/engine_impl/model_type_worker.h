@@ -87,7 +87,6 @@ class ModelTypeWorker : public UpdateHandler,
   void PassiveApplyUpdates(StatusController* status) override;
 
   // CommitQueue implementation.
-  void EnqueueForCommit(const CommitRequestDataList& request_list) override;
   void NudgeForCommit() override;
 
   // CommitContributor implementation.
@@ -100,6 +99,9 @@ class ModelTypeWorker : public UpdateHandler,
 
   // Callback for when our contribution gets a response.
   void OnCommitResponse(CommitResponseDataList* response_list);
+
+  // Called at the end of commit regardless of commit success.
+  void CleanupAfterCommit();
 
   // If migration the directory encounters an error partway through, we need to
   // clear the update data that has been added so far.
@@ -130,27 +132,16 @@ class ModelTypeWorker : public UpdateHandler,
   // encryption issues and must wait for keys to be updated.
   bool BlockForEncryption() const;
 
-  // Takes |commit_entity| populated from fields of WorkerEntityTracker and
-  // adjusts some fields before committing to server. Adjustments include
-  // generating client-assigned ID, encrypting data, etc.
-  void AdjustCommitProto(sync_pb::SyncEntity* commit_entity);
-
-  // Attempts to decrypt encrypted updates stored in the EntityMap. If
-  // successful, will remove the update from the its tracker and forward
-  // it to the processor for application. Will forward any new encryption
-  // keys to the processor to trigger re-encryption if necessary.
-  void OnCryptographerUpdated();
-
   // Updates the encryption key name stored in |model_type_state_| if it differs
   // from the default encryption key name in |cryptographer_|. Returns whether
-  // an update occured.
+  // an update occurred.
   bool UpdateEncryptionKeyName();
 
   // Iterates through all elements in |entities_| and tries to decrypt anything
   // that has encrypted data. Also updates |has_encrypted_updates_| to reflect
   // whether anything in |entities_| was not decryptable by |cryptographer_|.
   // Should only be called during a GetUpdates cycle.
-  void DecryptedStoredEntities();
+  void DecryptStoredEntities();
 
   // Attempts to decrypt the given specifics and return them in the |out|
   // parameter. Assumes cryptographer_->CanDecrypt(specifics) returned true.
@@ -169,10 +160,15 @@ class ModelTypeWorker : public UpdateHandler,
 
   // Creates an entity tracker in the map using the given |data| and returns a
   // pointer to it. Requires that one doesn't exist for data.client_tag_hash.
-  WorkerEntityTracker* CreateEntityTracker(const EntityData& data);
+  WorkerEntityTracker* CreateEntityTracker(const std::string& tag_hash);
 
   // Gets the entity tracker for |data| or creates one if it doesn't exist.
-  WorkerEntityTracker* GetOrCreateEntityTracker(const EntityData& data);
+  WorkerEntityTracker* GetOrCreateEntityTracker(const std::string& tag_hash);
+
+  // Nudges nudge_handler_ when initial sync is done, processor has local
+  // changes and either encryption is disabled for the type or cryptographer is
+  // ready (doesn't have pending keys).
+  void NudgeIfReadyToCommit();
 
   ModelType type_;
   DataTypeDebugInfoEmitter* debug_info_emitter_;
@@ -195,7 +191,7 @@ class ModelTypeWorker : public UpdateHandler,
   //
   // When commits are pending, their information is stored here. This
   // information is dropped from memory when the commit succeeds or gets
-  // cancelled.
+  // canceled.
   //
   // This also stores some information related to received server state in
   // order to implement reflection blocking and conflict detection. This
@@ -209,7 +205,12 @@ class ModelTypeWorker : public UpdateHandler,
   // Whether there are outstanding encrypted updates in |entities_|.
   bool has_encrypted_updates_ = false;
 
-  // Cancelation signal is used to cancel blocking operation on engine shutdown.
+  // Indicates if processor has local changes. Processor only nudges worker once
+  // and worker might not be ready to commit entities at the time.
+  bool has_local_changes_ = false;
+
+  // Cancellation signal is used to cancel blocking operation on engine
+  // shutdown.
   CancelationSignal* cancelation_signal_;
 
   base::ThreadChecker thread_checker_;
@@ -220,7 +221,7 @@ class ModelTypeWorker : public UpdateHandler,
 
 // GetLocalChangesRequest is a container for GetLocalChanges call response. It
 // allows sync thread to block waiting for model thread to call SetResponse.
-// This class supports cancelling blocking call through CancelationSignal during
+// This class supports canceling blocking call through CancelationSignal during
 // sync engine shutdown.
 //
 // It should be used in the following manner:
@@ -243,7 +244,7 @@ class GetLocalChangesRequest
   void OnSignalReceived() override;
 
   // Blocks current thread until either SetResponse is called or
-  // cancelation_signal_ is signalled.
+  // cancelation_signal_ is signaled.
   void WaitForResponse();
 
   // SetResponse takes ownership of |local_changes| and unblocks WaitForResponse
@@ -251,7 +252,7 @@ class GetLocalChangesRequest
   // GetLocalChanges.
   void SetResponse(CommitRequestDataList&& local_changes);
 
-  // Checks if WaitForResponse was cancelled through CancelationSignal. When
+  // Checks if WaitForResponse was canceled through CancelationSignal. When
   // returns true calling ExtractResponse is unsafe.
   bool WasCancelled();
 

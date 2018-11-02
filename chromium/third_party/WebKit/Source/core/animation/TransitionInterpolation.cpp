@@ -37,12 +37,12 @@ const InterpolableValue& TransitionInterpolation::CurrentInterpolableValue()
 NonInterpolableValue* TransitionInterpolation::CurrentNonInterpolableValue()
     const {
   if (cached_fraction_ == 0) {
-    return start_.non_interpolable_value.Get();
+    return start_.non_interpolable_value.get();
   }
   if (cached_fraction_ == 1) {
-    return end_.non_interpolable_value.Get();
+    return end_.non_interpolable_value.get();
   }
-  return merge_.non_interpolable_value.Get();
+  return merge_.non_interpolable_value.get();
 }
 
 void TransitionInterpolation::Apply(StyleResolverState& state) const {
@@ -58,10 +58,10 @@ TransitionInterpolation::GetInterpolatedValue() const {
       type_, CurrentInterpolableValue().Clone(), CurrentNonInterpolableValue());
 }
 
-RefPtr<AnimatableValue>
+scoped_refptr<AnimatableValue>
 TransitionInterpolation::GetInterpolatedCompositorValue() const {
-  return AnimatableValue::Interpolate(compositor_start_.Get(),
-                                      compositor_end_.Get(), cached_fraction_);
+  return AnimatableValue::Interpolate(compositor_start_.get(),
+                                      compositor_end_.get(), cached_fraction_);
 }
 
 }  // namespace blink

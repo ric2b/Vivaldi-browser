@@ -27,7 +27,7 @@
 
 #include <algorithm>
 #include <memory>
-#include "platform/RuntimeEnabledFeatures.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
@@ -41,13 +41,13 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/text/StringTruncator.h"
 #include "platform/text/TextRun.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -115,15 +115,13 @@ PaintImage DragImage::ResizeAndOrientImage(
 
   SkCanvas* canvas = surface->getCanvas();
   std::unique_ptr<SkCanvas> color_transform_canvas;
-  if (RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()) {
-    color_transform_canvas =
-        SkCreateColorSpaceXformCanvas(canvas, SkColorSpace::MakeSRGB());
-    canvas = color_transform_canvas.get();
-  }
+  color_transform_canvas =
+      SkCreateColorSpaceXformCanvas(canvas, SkColorSpace::MakeSRGB());
+  canvas = color_transform_canvas.get();
   canvas->concat(AffineTransformToSkMatrix(transform));
   canvas->drawImage(image.GetSkImage(), 0, 0, &paint);
 
-  return PaintImageBuilder(std::move(image))
+  return PaintImageBuilder::WithProperties(std::move(image))
       .set_image(surface->makeImageSnapshot())
       .TakePaintImage();
 }
@@ -311,8 +309,8 @@ std::unique_ptr<DragImage> DragImage::Create(const KURL& url,
                           FloatPoint(text_pos), Font::kDoNotPaintIfFontNotReady,
                           device_scale_factor, text_paint);
 
-  RefPtr<StaticBitmapImage> image = buffer->NewImageSnapshot();
-  return DragImage::Create(image.Get(), kDoNotRespectImageOrientation,
+  scoped_refptr<StaticBitmapImage> image = buffer->NewImageSnapshot();
+  return DragImage::Create(image.get(), kDoNotRespectImageOrientation,
                            device_scale_factor);
 }
 

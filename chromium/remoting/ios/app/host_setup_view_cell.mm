@@ -10,6 +10,7 @@
 
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "remoting/ios/app/remoting_theme.h"
+#import "remoting/ios/app/view_utils.h"
 
 static const CGFloat kNumberIconPadding = 16.f;
 static const CGFloat kNumberIconSize = 45.f;
@@ -32,6 +33,7 @@ static const CGFloat kCellPadding = 22.f;
 }
 
 - (void)commonInit {
+  self.isAccessibilityElement = YES;
   self.backgroundColor = RemotingTheme.setupListBackgroundColor;
 
   _numberContainerView = [[UIView alloc] init];
@@ -56,12 +58,15 @@ static const CGFloat kCellPadding = 22.f;
   [self.contentView addSubview:_contentLabel];
   [_numberContainerView addSubview:_numberLabel];
 
+  UILayoutGuide* safeAreaLayoutGuide =
+      remoting::SafeAreaLayoutGuideForView(self.contentView);
+
   NSArray* constraints = @[
     [_numberContainerView.leadingAnchor
-        constraintEqualToAnchor:self.contentView.leadingAnchor
+        constraintEqualToAnchor:safeAreaLayoutGuide.leadingAnchor
                        constant:kCellPadding],
     [_numberContainerView.centerYAnchor
-        constraintEqualToAnchor:self.contentView.centerYAnchor],
+        constraintEqualToAnchor:safeAreaLayoutGuide.centerYAnchor],
     [_numberContainerView.widthAnchor
         constraintEqualToConstant:kNumberIconSize],
     [_numberContainerView.heightAnchor
@@ -76,15 +81,16 @@ static const CGFloat kCellPadding = 22.f;
         constraintEqualToAnchor:_numberContainerView.trailingAnchor
                        constant:kNumberIconPadding],
     [_contentLabel.trailingAnchor
-        constraintEqualToAnchor:self.contentView.trailingAnchor
+        constraintEqualToAnchor:safeAreaLayoutGuide.trailingAnchor
                        constant:-kCellPadding],
     [_contentLabel.centerYAnchor
-        constraintEqualToAnchor:self.contentView.centerYAnchor],
+        constraintEqualToAnchor:safeAreaLayoutGuide.centerYAnchor],
   ];
   [NSLayoutConstraint activateConstraints:constraints];
 }
 
 - (void)setContentText:(NSString*)text number:(NSInteger)number {
+  self.accessibilityLabel = text;
   _contentLabel.text = text;
   _numberLabel.text = [@(number) stringValue];
 }

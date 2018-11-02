@@ -8,11 +8,11 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -44,9 +44,10 @@ class ChannelAssociatedGroupController
  public:
   ChannelAssociatedGroupController(
       bool set_interface_id_namespace_bit,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner)
+      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+      const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner)
       : task_runner_(ipc_task_runner),
-        proxy_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+        proxy_task_runner_(proxy_task_runner),
         set_interface_id_namespace_bit_(set_interface_id_namespace_bit),
         filters_(this),
         control_message_handler_(this),
@@ -534,7 +535,7 @@ class ChannelAssociatedGroupController
     scoped_refptr<base::SequencedTaskRunner> task_runner_;
     std::unique_ptr<mojo::SyncEventWatcher> sync_watcher_;
     std::unique_ptr<base::WaitableEvent> sync_message_event_;
-    std::queue<std::pair<uint32_t, MessageWrapper>> sync_messages_;
+    base::queue<std::pair<uint32_t, MessageWrapper>> sync_messages_;
     uint32_t next_sync_message_id_ = 0;
 
     DISALLOW_COPY_AND_ASSIGN(Endpoint);
@@ -927,10 +928,12 @@ class MojoBootstrapImpl : public MojoBootstrap {
 std::unique_ptr<MojoBootstrap> MojoBootstrap::Create(
     mojo::ScopedMessagePipeHandle handle,
     Channel::Mode mode,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner) {
   return std::make_unique<MojoBootstrapImpl>(
-      std::move(handle), new ChannelAssociatedGroupController(
-                             mode == Channel::MODE_SERVER, ipc_task_runner));
+      std::move(handle),
+      new ChannelAssociatedGroupController(mode == Channel::MODE_SERVER,
+                                           ipc_task_runner, proxy_task_runner));
 }
 
 }  // namespace IPC

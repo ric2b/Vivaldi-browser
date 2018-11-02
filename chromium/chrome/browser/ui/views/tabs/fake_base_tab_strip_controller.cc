@@ -4,14 +4,12 @@
 
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 
-#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include <utility>
 
-FakeBaseTabStripController::FakeBaseTabStripController()
-    : tab_strip_(NULL),
-      num_tabs_(0),
-      active_index_(-1) {
-}
+#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
+
+FakeBaseTabStripController::FakeBaseTabStripController() {}
 
 FakeBaseTabStripController::~FakeBaseTabStripController() {
 }
@@ -27,7 +25,7 @@ void FakeBaseTabStripController::AddPinnedTab(int index, bool is_active) {
   TabRendererData data;
   data.pinned = true;
   num_tabs_++;
-  tab_strip_->AddTabAt(index, data, is_active);
+  tab_strip_->AddTabAt(index, std::move(data), is_active);
   if (is_active)
     active_index_ = index;
 }
@@ -101,9 +99,6 @@ void FakeBaseTabStripController::ShowContextMenuForTab(
     ui::MenuSourceType source_type) {
 }
 
-void FakeBaseTabStripController::UpdateLoadingAnimations() {
-}
-
 int FakeBaseTabStripController::HasAvailableDragActions() const {
   return 0;
 }
@@ -117,7 +112,7 @@ void FakeBaseTabStripController::PerformDrop(bool drop_before,
                                              const GURL& url) {
 }
 
-bool FakeBaseTabStripController::IsCompatibleWith(TabStrip* other) const {
+bool FakeBaseTabStripController::IsCompatibleWith(TabStripImpl* other) const {
   return false;
 }
 

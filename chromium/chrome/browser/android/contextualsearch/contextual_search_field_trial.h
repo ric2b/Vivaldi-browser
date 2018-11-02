@@ -34,9 +34,6 @@ class ContextualSearchFieldTrial {
   // Gets whether decoding the mentions fields in the Resolve is disabled.
   bool IsDecodeMentionsDisabled();
 
-  // Gets whether Bar integration with Contextual Cards data is enabled.
-  bool IsContextualCardsBarIntegrationEnabled();
-
   // Gets an explicit version to use for Contextual Cards integration, or 0 if
   // not set.
   int GetContextualCardsVersion();

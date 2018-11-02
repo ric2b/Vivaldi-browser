@@ -5,7 +5,6 @@
 #include "net/base/network_delegate.h"
 
 #include "base/logging.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -29,11 +28,6 @@ int NetworkDelegate::NotifyBeforeURLRequest(
 
   // ClusterFuzz depends on the following VLOG. See: crbug.com/715656
   VLOG(1) << "NetworkDelegate::NotifyBeforeURLRequest: " << request->url();
-
-  // TODO(cbentzel): Remove ScopedTracker below once crbug.com/475753 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "475753 NetworkDelegate::OnBeforeURLRequest"));
   return OnBeforeURLRequest(request, callback, new_url);
 }
 
@@ -121,10 +115,6 @@ void NetworkDelegate::NotifyCompleted(URLRequest* request,
   TRACE_EVENT0(kNetTracingCategory, "NetworkDelegate::NotifyCompleted");
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(request);
-  // TODO(cbentzel): Remove ScopedTracker below once crbug.com/475753 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION("475753 NetworkDelegate::OnCompleted"));
-
   OnCompleted(request, started, net_error);
 }
 
@@ -159,11 +149,11 @@ bool NetworkDelegate::CanGetCookies(const URLRequest& request,
 }
 
 bool NetworkDelegate::CanSetCookie(const URLRequest& request,
-                                   const std::string& cookie_line,
+                                   const net::CanonicalCookie& cookie,
                                    CookieOptions* options) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!(request.load_flags() & LOAD_DO_NOT_SAVE_COOKIES));
-  return OnCanSetCookie(request, cookie_line, options);
+  return OnCanSetCookie(request, cookie, options);
 }
 
 bool NetworkDelegate::CanAccessFile(const URLRequest& request,
@@ -216,11 +206,6 @@ bool NetworkDelegate::CanUseReportingClient(const url::Origin& origin,
 }
 
 void NetworkDelegate::OnResponseStarted(URLRequest* request, int net_error) {
-  OnResponseStarted(request);
-}
-
-// Deprecated
-void NetworkDelegate::OnResponseStarted(URLRequest* request) {
   NOTREACHED();
 }
 

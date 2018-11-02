@@ -227,7 +227,9 @@ int MockHostResolverBase::ResolveProc(const RequestInfo& info,
     base::TimeDelta ttl;
     if (rv == OK)
       ttl = base::TimeDelta::FromSeconds(kCacheEntryTTLSeconds);
-    cache_->Set(key, HostCache::Entry(rv, addr), base::TimeTicks::Now(), ttl);
+    cache_->Set(key,
+                HostCache::Entry(rv, addr, HostCache::Entry::SOURCE_UNKNOWN),
+                base::TimeTicks::Now(), ttl);
   }
   if (rv == OK)
     *addresses = AddressList::CopyWithPort(addr, info.port());
@@ -447,8 +449,7 @@ int RuleBasedHostResolverProc::Resolve(const std::string& host,
                               host_resolver_flags, addrlist, os_error);
 }
 
-RuleBasedHostResolverProc::~RuleBasedHostResolverProc() {
-}
+RuleBasedHostResolverProc::~RuleBasedHostResolverProc() = default;
 
 void RuleBasedHostResolverProc::AddRuleInternal(const Rule& rule) {
   Rule fixed_rule = rule;
@@ -502,7 +503,7 @@ int HangingHostResolver::ResolveFromCache(const RequestInfo& info,
 
 //-----------------------------------------------------------------------------
 
-ScopedDefaultHostResolverProc::ScopedDefaultHostResolverProc() {}
+ScopedDefaultHostResolverProc::ScopedDefaultHostResolverProc() = default;
 
 ScopedDefaultHostResolverProc::ScopedDefaultHostResolverProc(
     HostResolverProc* proc) {

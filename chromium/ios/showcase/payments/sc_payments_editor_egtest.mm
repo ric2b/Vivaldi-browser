@@ -8,9 +8,9 @@
 #import "base/mac/foundation_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/autofill/autofill_edit_accessory_view.h"
-#import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/showcase/test/showcase_eg_utils.h"
 #import "ios/showcase/test/showcase_test_case.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -77,6 +77,15 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
                            @"didSelectField:%@",
                            argument]),
       grey_sufficientlyVisible(), nil);
+}
+
+// Matcher for the next key on the keyboard.
+id<GREYMatcher> KeyboardNextKey() {
+  return grey_allOf(grey_anyOf(grey_accessibilityID(@"Next"),
+                               grey_accessibilityID(@"Next:"), nil),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    grey_accessibilityTrait(UIAccessibilityTraitKeyboardKey),
+                    grey_sufficientlyVisible(), nil);
 }
 
 }  // namespace
@@ -208,16 +217,8 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
 // states depending on the focused textfield and that they can be used to
 // navigate between the textfields.
 - (void)testInputAccessoryViewNavigationButtons {
-  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
-  // grey_typeText works on iOS 11.  The test failes on iOS 11 iPhone as well,
-  // but possibly for a different reason.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
-  }
-
   // Initially, no error message is showing.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kWarningMessageAccessibilityID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WarningMessageView()]
       assertWithMatcher:grey_nil()];
 
   // Tap the name textfield.
@@ -257,8 +258,7 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
 
   // Assert an error message is showing because the address textfield is
   // required.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kWarningMessageAccessibilityID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WarningMessageView()]
       assertWithMatcher:grey_accessibilityLabel(@"Field is required")];
 
   // Assert the postal code textfield is focused.
@@ -277,41 +277,21 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
   // Type in an address.
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Address_textField")]
-      performAction:grey_typeText(@"Main St")];
+      performAction:grey_replaceText(@"Main St")];
 
-  // Assert the input accessory view's next button is enabled.
+  // Tap the input accessory view's next button.
   [[EarlGrey selectElementWithMatcher:InputAccessoryViewNextButton()]
-      assertWithMatcher:grey_enabled()];
-  // Assert the input accessory view's previous button is enabled and tap it.
-  [[[EarlGrey selectElementWithMatcher:InputAccessoryViewPreviousButton()]
-      assertWithMatcher:grey_enabled()] performAction:grey_tap()];
+      performAction:grey_tap()];
 
   // Assert the error message disappeared because an address was typed in.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kWarningMessageAccessibilityID)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WarningMessageView()]
       assertWithMatcher:grey_notVisible()];
-
-  // Assert the province textfield is focused.
-  AssertTextFieldWithAccessibilityIDIsFirstResponder(
-      @"City/Province_textField");
-
-  // Assert the input accessory view's previous button is enabled.
-  [[EarlGrey selectElementWithMatcher:InputAccessoryViewPreviousButton()]
-      assertWithMatcher:grey_enabled()];
-  // Assert the input accessory view's next button is enabled.
-  [[EarlGrey selectElementWithMatcher:InputAccessoryViewNextButton()]
-      assertWithMatcher:grey_enabled()];
 }
 
 // Tests tapping the return key on every textfield causes the next textfield to
 // get focus except for the last textfield in which case causes the focus to go
 // away from the textfield.
 - (void)testNavigationByTappingReturn {
-  // TODO(crbug.com/759904): Reenable on iOS11 iPad when working on iPad iOS 11
-  // devices.
-  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
-  }
   // Tap the name textfield.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Name_textField")]
       performAction:grey_tap()];
@@ -319,18 +299,18 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
   // Assert the name textfield is focused.
   AssertTextFieldWithAccessibilityIDIsFirstResponder(@"Name_textField");
 
-  // Press the return key on the name textfield.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Name_textField")]
-      performAction:grey_typeText(@"\n")];
+  // Press the return key.
+  [[EarlGrey selectElementWithMatcher:KeyboardNextKey()]
+      performAction:grey_tap()];
 
   // Assert the province textfield is focused.
   AssertTextFieldWithAccessibilityIDIsFirstResponder(
       @"City/Province_textField");
 
   // The standard keyboard does not display for the province field. Instead, tap
-  // the address textfield.
+  // the postal code textfield.
   id<GREYMatcher> matcher =
-      grey_allOf(grey_accessibilityID(@"Address_textField"),
+      grey_allOf(grey_accessibilityID(@"Postal Code_textField"),
                  grey_interactable(), grey_sufficientlyVisible(), nil);
   [[[EarlGrey selectElementWithMatcher:matcher]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 50)
@@ -339,21 +319,12 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
               @"kPaymentRequestEditCollectionViewAccessibilityID")]
       performAction:grey_tap()];
 
-  // Assert the address textfield is focused.
-  AssertTextFieldWithAccessibilityIDIsFirstResponder(@"Address_textField");
-
-  // Press the return key on the address textfield.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Address_textField")]
-      performAction:grey_typeText(@"\n")];
-
   // Assert the postal code textfield is focused.
   AssertTextFieldWithAccessibilityIDIsFirstResponder(@"Postal Code_textField");
 
-  // Press the return key on the postal code textfield.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Postal Code_textField")]
-      performAction:grey_typeText(@"\n")];
+  // Press the return key.
+  [[EarlGrey selectElementWithMatcher:KeyboardNextKey()]
+      performAction:grey_tap()];
 
   // Expect non of the textfields to be focused.
   UIResponder* firstResponder =

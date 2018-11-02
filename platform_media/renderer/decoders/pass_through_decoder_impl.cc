@@ -1,10 +1,15 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
 #include "platform_media/renderer/decoders/pass_through_decoder_impl.h"
+
+#include "platform_media/common/platform_logging_util.h"
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/common/video_frame_transformer.h"
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -12,67 +17,26 @@
 #include "media/base/audio_buffer.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/video_frame.h"
-#include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace media {
 
 namespace {
 
-// This function is used as observer of frame of
-// VideoFrame::WrapExternalYuvData to make sure we keep reference to
-// DecoderBuffer object as long as we need it.
-void BufferHolder(const scoped_refptr<DecoderBuffer>& buffer) {
-  /* Intentionally empty */
-}
-
-const PlatformVideoConfig::Plane* GetPlanes(const VideoDecoderConfig& config) {
-  DCHECK(!config.extra_data().empty());
-  return reinterpret_cast<const PlatformVideoConfig::Plane*>(
-      &config.extra_data().front());
-}
-
-scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
-    const scoped_refptr<DecoderBuffer>& buffer,
-    const VideoDecoderConfig& config) {
-  const PlatformVideoConfig::Plane* planes = GetPlanes(config);
-
-  for (size_t i = 0; i < VideoFrame::NumPlanes(PIXEL_FORMAT_YV12); ++i) {
-    if (planes[i].offset + planes[i].size > int(buffer->data_size())) {
-      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Buffer doesn't match video format";
-      return nullptr;
-    }
-  }
-
-  // We need to ensure that our data buffer stays valid long enough.
-  // For this reason we pass it as an argument to |no_longer_needed_cb|, this
-  // way, thanks to base::Bind, we keep reference to the buffer.
-  scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
-      config.format(), config.coded_size(), config.visible_rect(),
-      config.natural_size(), planes[VideoFrame::kYPlane].stride,
-      planes[VideoFrame::kUPlane].stride, planes[VideoFrame::kVPlane].stride,
-      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kYPlane].offset),
-      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kUPlane].offset),
-      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kVPlane].offset),
-      buffer->timestamp());
-  frame->AddDestructionObserver(base::Bind(&BufferHolder, buffer));
-  return frame;
-}
-
+#if defined(PLATFORM_MEDIA_HWA)
 scoped_refptr<VideoFrame> GetVideoFrameFromTexture(
     const scoped_refptr<DecoderBuffer>& buffer,
     const VideoDecoderConfig& config,
-    std::unique_ptr<media::PassThroughDecoderTexture> texture) {
+    std::unique_ptr<PassThroughDecoderTexture> texture) {
   DCHECK(texture);
-   gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes] = {
+   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes] = {
        *texture->mailbox_holder};
-  return VideoFrame::WrapNativeTextures(PIXEL_FORMAT_ARGB,
+  return VideoFrame::WrapNativeTextures(VideoPixelFormat::PIXEL_FORMAT_ARGB,
       mailbox_holders, texture->mailbox_holder_release_cb,
       config.coded_size(), config.visible_rect(), config.natural_size(),
       buffer->timestamp());
 }
+#endif
 
 }  // namespace
 
@@ -115,7 +79,7 @@ void PassThroughDecoderImpl<StreamType>::Decode(
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(IsValidConfig(config_));
 
-  typename media::DecodeStatus status = media::DecodeStatus::OK;
+  typename media::DecodeStatus status = DecodeStatus::OK;
 
   if (!buffer->end_of_stream()) {
     scoped_refptr<OutputType> output;
@@ -132,7 +96,7 @@ void PassThroughDecoderImpl<StreamType>::Decode(
       LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                    << " Detected " << DecoderTraits::ToString()
                    << " DECODE_ERROR";
-      status = media::DecodeStatus::DECODE_ERROR;
+      status = DecodeStatus::DECODE_ERROR;
     }
   }
 
@@ -149,11 +113,11 @@ template <>
 bool PassThroughDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
 
-  LOG_IF(WARNING, !(config.codec() == kCodecPCM))
+  LOG_IF(WARNING, !(config.codec() == AudioCodec::kCodecPCM))
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " Unsupported Audio codec : " << GetCodecName(config.codec());
 
-  if (config.codec() == kCodecPCM) {
+  if (config.codec() == AudioCodec::kCodecPCM) {
     LOG_IF(WARNING, !(ChannelLayoutToChannelCount(config.channel_layout()) > 0))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Channel count is zero for : " << GetCodecName(config.codec());
@@ -162,7 +126,7 @@ bool PassThroughDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
         << " Bytes per frame is zero for : " << GetCodecName(config.codec());
   }
 
-  return config.codec() == kCodecPCM &&
+  return config.codec() == AudioCodec::kCodecPCM &&
          ChannelLayoutToChannelCount(config.channel_layout()) > 0 &&
          config.bytes_per_frame() > 0;
 }
@@ -171,31 +135,31 @@ template <>
 bool PassThroughDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
 
-  LOG_IF(WARNING, !(config.codec() == kCodecH264))
+  LOG_IF(WARNING, !(config.codec() == VideoCodec::kCodecH264))
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " Unsupported Video codec : " << GetCodecName(config.codec());
 
-  if (config.codec() == kCodecH264) {
+  if (config.codec() == VideoCodec::kCodecH264) {
     LOG_IF(WARNING, !(config.extra_data().size() == sizeof(PlatformVideoConfig().planes)))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Extra data has wrong size : " << config.extra_data().size()
         << " Expected size : " << sizeof(PlatformVideoConfig().planes)
         << Loggable(config);
 
-    LOG_IF(WARNING, !(config.profile() >= H264PROFILE_MIN))
+    LOG_IF(WARNING, !(config.profile() >= VideoCodecProfile::H264PROFILE_MIN))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too low) ? : "
         << GetProfileName(config.profile())
-        << " Minimum is " << GetProfileName(H264PROFILE_MIN);
+        << " Minimum is " << GetProfileName(VideoCodecProfile::H264PROFILE_MIN);
 
-    LOG_IF(WARNING, !(config.profile() <= H264PROFILE_MAX))
+    LOG_IF(WARNING, !(config.profile() <= VideoCodecProfile::H264PROFILE_MAX))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too high) ? : "
         << GetProfileName(config.profile())
-        << " Maximum is " << GetProfileName(H264PROFILE_MAX);
+        << " Maximum is " << GetProfileName(VideoCodecProfile::H264PROFILE_MAX);
   }
 
-  return config.codec() == kCodecH264 &&
+  return config.codec() == VideoCodec::kCodecH264 &&
          config.extra_data().size() == sizeof(PlatformVideoConfig().planes);
 }
 
@@ -231,10 +195,12 @@ PassThroughDecoderImpl<DemuxerStream::VIDEO>::DecoderBufferToOutputBuffer(
     const scoped_refptr<DecoderBuffer>& buffer) const {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
+#if defined(PLATFORM_MEDIA_HWA)
   std::unique_ptr<AutoReleasedPassThroughDecoderTexture> wrapped_texture =
       buffer->PassWrappedTexture();
   if (wrapped_texture)
     return GetVideoFrameFromTexture(buffer, config_, wrapped_texture->Pass());
+#endif
 
   return GetVideoFrameFromMemory(buffer, config_);
 }

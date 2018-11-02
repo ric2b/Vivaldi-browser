@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include "base/i18n/break_iterator.h"
@@ -21,7 +22,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_i18n.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -33,6 +33,7 @@
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_fixer.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 namespace {
@@ -124,7 +125,7 @@ void ShortcutsProvider::Start(const AutocompleteInput& input,
   if (input.text().length() < 6) {
     base::TimeTicks end_time = base::TimeTicks::Now();
     std::string name = "ShortcutsProvider.QueryIndexTime." +
-                       base::SizeTToString(input.text().size());
+                       base::NumberToString(input.text().size());
     base::HistogramBase* counter = base::Histogram::FactoryGet(
         name, 1, 1000, 50, base::Histogram::kUmaTargetedHistogramFlag);
     counter->Add(static_cast<int>((end_time - start_time).InMilliseconds()));
@@ -198,6 +199,7 @@ ACMatchClassifications ShortcutsProvider::ClassifyAllMatchesInString(
     const base::string16& find_text,
     const WordMap& find_words,
     const base::string16& text,
+    const bool text_is_search_query,
     const ACMatchClassifications& original_class) {
   DCHECK(!find_text.empty());
   DCHECK(!find_words.empty());
@@ -212,31 +214,35 @@ ACMatchClassifications ShortcutsProvider::ClassifyAllMatchesInString(
   // First check whether |text| begins with |find_text| and mark that whole
   // section as a match if so.
   base::string16 text_lowercase(base::i18n::ToLower(text));
+  const ACMatchClassification::Style& class_of_find_text =
+      text_is_search_query ? ACMatchClassification::NONE
+                           : ACMatchClassification::MATCH;
+  const ACMatchClassification::Style& class_of_additional_text =
+      text_is_search_query ? ACMatchClassification::MATCH
+                           : ACMatchClassification::NONE;
   ACMatchClassifications match_class;
   size_t last_position = 0;
   if (base::StartsWith(text_lowercase, find_text,
                        base::CompareCase::SENSITIVE)) {
-    match_class.push_back(
-        ACMatchClassification(0, ACMatchClassification::MATCH));
+    match_class.push_back(ACMatchClassification(0, class_of_find_text));
     last_position = find_text.length();
     // If |text_lowercase| is actually equal to |find_text|, we don't need to
     // (and in fact shouldn't) put a trailing NONE classification after the end
     // of the string.
     if (last_position < text_lowercase.length()) {
       match_class.push_back(
-          ACMatchClassification(last_position, ACMatchClassification::NONE));
+          ACMatchClassification(last_position, class_of_additional_text));
     }
   } else {
     // |match_class| should start at position 0.  If the first matching word is
     // found at position 0, this will be popped from the vector further down.
-    match_class.push_back(
-        ACMatchClassification(0, ACMatchClassification::NONE));
+    match_class.push_back(ACMatchClassification(0, class_of_additional_text));
   }
 
   // Now, starting with |last_position|, check each character in
   // |text_lowercase| to see if we have words starting with that character in
   // |find_words|.  If so, check each of them to see if they match the portion
-  // of |text_lowercase| beginning with |last_position|.  Accept the first
+  // of |text_lowercase| beginning with |last_position|. Accept the first
   // matching word found (which should be the longest possible match at this
   // location, given the construction of |find_words|) and add a MATCH region to
   // |match_class|, moving |last_position| to be after the matching word.  If we
@@ -255,10 +261,10 @@ ACMatchClassifications ShortcutsProvider::ClassifyAllMatchesInString(
           match_class.pop_back();
 
         AutocompleteMatch::AddLastClassificationIfNecessary(
-            &match_class, last_position, ACMatchClassification::MATCH);
+            &match_class, last_position, class_of_find_text);
         if (word_end < text_lowercase.length()) {
           match_class.push_back(
-              ACMatchClassification(word_end, ACMatchClassification::NONE));
+              ACMatchClassification(word_end, class_of_additional_text));
         }
         last_position = word_end;
         break;
@@ -393,7 +399,8 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
   // otherwise prevent inline autocompletion.  This allows, for example, the
   // input of "foo.c" to autocomplete to "foo.com" for a fill_into_edit of
   // "http://foo.com".
-  if (AutocompleteMatch::IsSearchType(match.type)) {
+  const bool is_search_type = AutocompleteMatch::IsSearchType(match.type);
+  if (is_search_type) {
     if (match.fill_into_edit.size() >= input.text().size() &&
         std::equal(match.fill_into_edit.begin(),
                    match.fill_into_edit.begin() + input.text().size(),
@@ -423,10 +430,12 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
   // Try to mark pieces of the contents and description as matches if they
   // appear in |input.text()|.
   if (!terms_map.empty()) {
-    match.contents_class = ClassifyAllMatchesInString(
-        term_string, terms_map, match.contents, match.contents_class);
+    match.contents_class =
+        ClassifyAllMatchesInString(term_string, terms_map, match.contents,
+                                   is_search_type, match.contents_class);
     match.description_class = ClassifyAllMatchesInString(
-        term_string, terms_map, match.description, match.description_class);
+        term_string, terms_map, match.description,
+        /*text_is_search_query=*/false, match.description_class);
   }
   return match;
 }

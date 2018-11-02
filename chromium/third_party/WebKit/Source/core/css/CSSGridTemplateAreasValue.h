@@ -46,7 +46,7 @@ class CSSGridTemplateAreasValue : public CSSValue {
     return new CSSGridTemplateAreasValue(grid_area_map, row_count,
                                          column_count);
   }
-  ~CSSGridTemplateAreasValue() {}
+  ~CSSGridTemplateAreasValue() = default;
 
   String CustomCSSText() const;
 
@@ -56,7 +56,7 @@ class CSSGridTemplateAreasValue : public CSSValue {
 
   bool Equals(const CSSGridTemplateAreasValue&) const;
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     CSSValue::TraceAfterDispatch(visitor);
   }
 

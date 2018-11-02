@@ -90,7 +90,7 @@ void HtmlVideoElementCapturerSource::StartCapture(
     running_callback_.Run(false);
     return;
   }
-  canvas_ = base::MakeUnique<cc::SkiaPaintCanvas>(bitmap_);
+  canvas_ = std::make_unique<cc::SkiaPaintCanvas>(bitmap_);
 
   new_frame_callback_ = new_frame_callback;
   // Force |capture_frame_rate_| to be in between k{Min,Max}FramesPerSecond.
@@ -101,8 +101,8 @@ void HtmlVideoElementCapturerSource::StartCapture(
 
   running_callback_.Run(true);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&HtmlVideoElementCapturerSource::sendNewFrame,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&HtmlVideoElementCapturerSource::sendNewFrame,
+                                weak_factory_.GetWeakPtr()));
 }
 
 void HtmlVideoElementCapturerSource::StopCapture() {
@@ -150,21 +150,22 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
       (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
                                                    : libyuv::FOURCC_ARGB;
 
-  if (frame && libyuv::ConvertToI420(
-                   static_cast<uint8*>(bitmap_.getPixels()), bitmap_.getSize(),
-                   frame->visible_data(media::VideoFrame::kYPlane),
-                   frame->stride(media::VideoFrame::kYPlane),
-                   frame->visible_data(media::VideoFrame::kUPlane),
-                   frame->stride(media::VideoFrame::kUPlane),
-                   frame->visible_data(media::VideoFrame::kVPlane),
-                   frame->stride(media::VideoFrame::kVPlane), 0 /* crop_x */,
-                   0 /* crop_y */, frame->visible_rect().size().width(),
-                   frame->visible_rect().size().height(),
-                   bitmap_.info().width(), bitmap_.info().height(),
-                   libyuv::kRotate0, source_pixel_format) == 0) {
+  if (frame &&
+      libyuv::ConvertToI420(
+          static_cast<uint8*>(bitmap_.getPixels()), bitmap_.computeByteSize(),
+          frame->visible_data(media::VideoFrame::kYPlane),
+          frame->stride(media::VideoFrame::kYPlane),
+          frame->visible_data(media::VideoFrame::kUPlane),
+          frame->stride(media::VideoFrame::kUPlane),
+          frame->visible_data(media::VideoFrame::kVPlane),
+          frame->stride(media::VideoFrame::kVPlane), 0 /* crop_x */,
+          0 /* crop_y */, frame->visible_rect().size().width(),
+          frame->visible_rect().size().height(), bitmap_.info().width(),
+          bitmap_.info().height(), libyuv::kRotate0,
+          source_pixel_format) == 0) {
     // Success!
     io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(new_frame_callback_, frame, current_time));
+        FROM_HERE, base::BindOnce(new_frame_callback_, frame, current_time));
   }
 
   // Calculate the time in the future where the next frame should be created.
@@ -181,8 +182,9 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
   }
   // Schedule next capture.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&HtmlVideoElementCapturerSource::sendNewFrame,
-                            weak_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&HtmlVideoElementCapturerSource::sendNewFrame,
+                     weak_factory_.GetWeakPtr()),
       next_capture_time_ - current_time);
 }
 

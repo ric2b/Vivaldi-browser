@@ -8,6 +8,7 @@
 #include <set>
 
 #include "base/guid.h"
+#include "base/test/histogram_tester.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_downloader_quota.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store_test_util.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store_utils.h"
@@ -21,7 +22,7 @@ namespace {
 
 const int64_t kSmallArchiveSize = 1LL * 1024 * 1024;
 const int64_t kLargeArchiveSize =
-    2 * PrefetchDownloaderQuota::kMaxDailyQuotaBytes / 3;
+    2 * PrefetchDownloaderQuota::GetMaxDailyQuotaBytes() / 3;
 
 const PrefetchItem* FindPrefetchItemByOfflineId(
     const std::set<PrefetchItem>& items,
@@ -68,6 +69,14 @@ int64_t DownloadArchivesTaskTest::InsertItemToDownload(int64_t archive_size) {
   return item.offline_id;
 }
 
+TEST_F(DownloadArchivesTaskTest, StoreFailure) {
+  store_util()->SimulateInitializationError();
+  DownloadArchivesTask task(store(), prefetch_downloader());
+  ExpectTaskCompletes(&task);
+  task.Run();
+  RunUntilIdle();
+}
+
 TEST_F(DownloadArchivesTaskTest, NoArchivesToDownload) {
   InsertDummyItemInState(PrefetchItemState::NEW_REQUEST);
   InsertDummyItemInState(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE);
@@ -84,6 +93,7 @@ TEST_F(DownloadArchivesTaskTest, NoArchivesToDownload) {
   EXPECT_EQ(10U, store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -92,6 +102,9 @@ TEST_F(DownloadArchivesTaskTest, NoArchivesToDownload) {
   EXPECT_EQ(10U, store_util()->GetAllItems(&items_after_run));
 
   EXPECT_EQ(items_before_run, items_after_run);
+
+  histogram_tester.ExpectTotalCount(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize", 0);
 }
 
 TEST_F(DownloadArchivesTaskTest, SingleArchiveToDownload) {
@@ -102,6 +115,7 @@ TEST_F(DownloadArchivesTaskTest, SingleArchiveToDownload) {
   EXPECT_EQ(2U, store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -136,6 +150,10 @@ TEST_F(DownloadArchivesTaskTest, SingleArchiveToDownload) {
   auto it = requested_downloads.find(download_item->guid);
   ASSERT_TRUE(it != requested_downloads.end());
   EXPECT_EQ(it->second, download_item->archive_body_name);
+
+  histogram_tester.ExpectUniqueSample(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize",
+      kLargeArchiveSize / 1024, 1);
 }
 
 TEST_F(DownloadArchivesTaskTest, MultipleArchivesToDownload) {
@@ -147,6 +165,7 @@ TEST_F(DownloadArchivesTaskTest, MultipleArchivesToDownload) {
   EXPECT_EQ(3U, store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -183,6 +202,10 @@ TEST_F(DownloadArchivesTaskTest, MultipleArchivesToDownload) {
   it = requested_downloads.find(download_item_2->guid);
   ASSERT_TRUE(it != requested_downloads.end());
   EXPECT_EQ(it->second, download_item_2->archive_body_name);
+
+  histogram_tester.ExpectUniqueSample(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize",
+      kSmallArchiveSize / 1024, 2);
 }
 
 TEST_F(DownloadArchivesTaskTest, MultipleLargeArchivesToDownload) {
@@ -195,6 +218,7 @@ TEST_F(DownloadArchivesTaskTest, MultipleLargeArchivesToDownload) {
   EXPECT_EQ(3U, store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -227,6 +251,10 @@ TEST_F(DownloadArchivesTaskTest, MultipleLargeArchivesToDownload) {
   auto it = requested_downloads.find(download_item_1->guid);
   ASSERT_TRUE(it != requested_downloads.end());
   EXPECT_EQ(it->second, download_item_1->archive_body_name);
+
+  histogram_tester.ExpectUniqueSample(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize",
+      kLargeArchiveSize / 1024, 1);
 }
 
 TEST_F(DownloadArchivesTaskTest, TooManyArchivesToDownload) {
@@ -243,6 +271,7 @@ TEST_F(DownloadArchivesTaskTest, TooManyArchivesToDownload) {
             store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -280,6 +309,10 @@ TEST_F(DownloadArchivesTaskTest, TooManyArchivesToDownload) {
     EXPECT_EQ(*download_item_before, *download_item_before);
     EXPECT_EQ(PrefetchItemState::RECEIVED_BUNDLE, download_item_after->state);
   }
+
+  histogram_tester.ExpectUniqueSample(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize",
+      kSmallArchiveSize / 1024, 2);
 }
 
 TEST_F(DownloadArchivesTaskTest, SingleArchiveSecondAttempt) {
@@ -294,6 +327,7 @@ TEST_F(DownloadArchivesTaskTest, SingleArchiveSecondAttempt) {
   EXPECT_EQ(1U, store_util()->GetAllItems(&items_before_run));
 
   DownloadArchivesTask task(store(), prefetch_downloader());
+  base::HistogramTester histogram_tester;
   ExpectTaskCompletes(&task);
   task.Run();
   RunUntilIdle();
@@ -317,6 +351,10 @@ TEST_F(DownloadArchivesTaskTest, SingleArchiveSecondAttempt) {
   auto it = requested_downloads.find(download_item->guid);
   ASSERT_TRUE(it != requested_downloads.end());
   EXPECT_EQ(it->second, download_item->archive_body_name);
+
+  histogram_tester.ExpectUniqueSample(
+      "OfflinePages.Prefetching.DownloadExpectedFileSize",
+      item.archive_body_length / 1024, 1);
 }
 
 }  // namespace

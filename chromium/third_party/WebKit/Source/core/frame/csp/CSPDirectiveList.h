@@ -35,9 +35,12 @@ class CORE_EXPORT CSPDirectiveList
                                   const UChar* begin,
                                   const UChar* end,
                                   ContentSecurityPolicyHeaderType,
-                                  ContentSecurityPolicyHeaderSource);
+                                  ContentSecurityPolicyHeaderSource,
+                                  bool should_parse_wasm_eval = false);
 
-  void Parse(const UChar* begin, const UChar* end);
+  void Parse(const UChar* begin,
+             const UChar* end,
+             bool should_parse_wasm_eval = false);
 
   const String& Header() const { return header_; }
   ContentSecurityPolicyHeaderType HeaderType() const { return header_type_; }
@@ -71,6 +74,10 @@ class CORE_EXPORT CSPDirectiveList
                  SecurityViolationReportingPolicy,
                  ContentSecurityPolicy::ExceptionStatus,
                  const String& script_content) const;
+  bool AllowWasmEval(ScriptState*,
+                     SecurityViolationReportingPolicy,
+                     ContentSecurityPolicy::ExceptionStatus,
+                     const String& script_content) const;
   bool AllowPluginType(const String& type,
                        const String& type_attribute,
                        const KURL&,
@@ -181,7 +188,7 @@ class CORE_EXPORT CSPDirectiveList
   // instance it doesn't contains 'unsafe-inline' or 'unsafe-eval'
   WebContentSecurityPolicy ExposeForNavigationalChecks() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CSPDirectiveListTest, IsMatchingNoncePresent);
@@ -209,11 +216,13 @@ class CORE_EXPORT CSPDirectiveList
                                          const String& value);
   void EnableInsecureRequestsUpgrade(const String& name, const String& value);
   void TreatAsPublicAddress(const String& name, const String& value);
+  void RequireTrustedTypes(const String& name, const String& value);
 
   template <class CSPDirectiveType>
   void SetCSPDirective(const String& name,
                        const String& value,
-                       Member<CSPDirectiveType>&);
+                       Member<CSPDirectiveType>&,
+                       bool should_parse_wasm_eval = false);
 
   SourceListDirective* OperativeDirective(SourceListDirective*) const;
   SourceListDirective* OperativeDirective(SourceListDirective*,
@@ -245,6 +254,7 @@ class CORE_EXPORT CSPDirectiveList
                            const String& content) const;
 
   bool CheckEval(SourceListDirective*) const;
+  bool CheckWasmEval(SourceListDirective*) const;
   bool CheckDynamic(SourceListDirective*) const;
   bool IsMatchingNoncePresent(SourceListDirective*, const String&) const;
   bool AreAllMatchingHashesPresent(SourceListDirective*,
@@ -269,6 +279,11 @@ class CORE_EXPORT CSPDirectiveList
                                    ScriptState*,
                                    ContentSecurityPolicy::ExceptionStatus,
                                    const String& script_content) const;
+  bool CheckWasmEvalAndReportViolation(SourceListDirective*,
+                                       const String& console_message,
+                                       ScriptState*,
+                                       ContentSecurityPolicy::ExceptionStatus,
+                                       const String& script_content) const;
   bool CheckInlineAndReportViolation(SourceListDirective*,
                                      const String& console_message,
                                      Element*,
@@ -320,6 +335,7 @@ class CORE_EXPORT CSPDirectiveList
 
   bool upgrade_insecure_requests_;
   bool treat_as_public_address_;
+  bool require_safe_types_;
 
   Member<MediaListDirective> plugin_types_;
   Member<SourceListDirective> base_uri_;

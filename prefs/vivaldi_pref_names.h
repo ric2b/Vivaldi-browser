@@ -8,42 +8,32 @@
 namespace vivaldiprefs {
 
 // Profile prefs go here.
-
-extern const char kAlwaysLoadPinnedTabAfterRestore[];
 extern const char kAutoUpdateEnabled[];
-extern const char kDeferredTabLoadingAfterRestore[];
+
+// Old pref names that have been changed during the migration
+// to the new prefs api.
+extern const char kOldAlwaysLoadPinnedTabAfterRestore[];
+extern const char kOldDeferredTabLoadingAfterRestore[];
+#if defined(USE_AURA)
+extern const char kOldHideMouseCursorInFullscreen[];
+#endif  // USE_AURA
 extern const char kOldMousegesturesEnabled[];
-extern const char kPluginsWidevideEnabled[];
-extern const char kRockerGesturesEnabled[];
-extern const char kSmoothScrollingEnabled[];
-extern const char kVivaldiCaptureDirectory[];
-extern const char kVivaldiHomepage[];
-extern const char kVivaldiLastTopSitesVacuumDate[];
-extern const char kVivaldiNumberOfDaysToKeepVisits[];
-extern const char kVivaldiTabZoom[];
-extern const char kVivaldiTabsToLinks[];
-extern const char kVivaldiHasDesktopWallpaperProtocol[];
+extern const char kOldPluginsWidevideEnabled[];
+extern const char kOldRockerGesturesEnabled[];
+extern const char kOldSmoothScrollingEnabled[];
+extern const char kOldVivaldiCaptureDirectory[];
+extern const char kOldVivaldiHomepage[];
+extern const char kOldVivaldiNumberOfDaysToKeepVisits[];
+extern const char kOldVivaldiTabZoom[];
+extern const char kOldVivaldiTabsToLinks[];
+extern const char kOldVivaldiUseNativeWindowDecoration[];
 
 extern const char kVivaldiExperiments[];
-
-#if defined(USE_AURA)
-extern const char kHideMouseCursorInFullscreen[];
-#endif  // USE_AURA
-
-#if defined(OS_MACOSX)
-extern const char kAppleKeyboardUIMode[];
-extern const char kAppleMiniaturizeOnDoubleClick[];
-extern const char kAppleAquaColorVariant[];
-extern const char kAppleInterfaceStyle[];
-extern const char kTableViewDefaultSizeMode[];
-extern const char kAppleActionOnDoubleClick[];
-extern const char kSwipeScrollDirection[];
-#endif
+extern const char kVivaldiLastTopSitesVacuumDate[];
 
 // Local state prefs go here.
 
 extern const char kVivaldiUniqueUserId[];
-extern const char kVivaldiUseNativeWindowDecoration[];
 
 }  // namespace vivaldiprefs
 

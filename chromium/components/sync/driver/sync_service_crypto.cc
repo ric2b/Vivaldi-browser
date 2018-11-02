@@ -282,8 +282,9 @@ void SyncServiceCrypto::OnPassphraseAccepted() {
 
   // Make sure the data types that depend on the passphrase are started at
   // this time.
+  // Except if we haven't started the data type manager yet.
   const ModelTypeSet types = get_preferred_types_.Run();
-  if (data_type_manager_) {
+  if (data_type_manager_ && data_type_manager_->state() != DataTypeManager::STOPPED) {
     // Re-enable any encrypted types if necessary.
     data_type_manager_->Configure(types, CONFIGURE_REASON_CRYPTO);
   }
@@ -295,7 +296,7 @@ void SyncServiceCrypto::OnBootstrapTokenUpdated(
     const std::string& bootstrap_token,
     BootstrapTokenType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  CHECK(sync_prefs_);
+  DCHECK(sync_prefs_);
   if (type == PASSPHRASE_BOOTSTRAP_TOKEN) {
     sync_prefs_->SetEncryptionBootstrapToken(bootstrap_token);
   } else {

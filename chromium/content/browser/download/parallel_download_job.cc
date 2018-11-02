@@ -19,7 +19,7 @@
 namespace content {
 namespace {
 
-const int kVerboseLevel = 1;
+const int kDownloadJobVerboseLevel = 1;
 
 }  // namespace
 
@@ -29,6 +29,7 @@ ParallelDownloadJob::ParallelDownloadJob(
     const DownloadCreateInfo& create_info)
     : DownloadJobImpl(download_item, std::move(request_handle), true),
       initial_request_offset_(create_info.offset),
+      initial_received_slices_(download_item->GetReceivedSlices()),
       content_length_(create_info.total_bytes),
       requests_sent_(false),
       is_canceled_(false) {}
@@ -119,13 +120,14 @@ void ParallelDownloadJob::BuildParallelRequestAfterDelay() {
 void ParallelDownloadJob::OnByteStreamReady(
     DownloadWorker* worker,
     std::unique_ptr<ByteStreamReader> stream_reader) {
-  bool success = DownloadJob::AddByteStream(std::move(stream_reader),
-                                            worker->offset(), worker->length());
+  bool success = DownloadJob::AddInputStream(
+      std::make_unique<DownloadManager::InputStream>(std::move(stream_reader)),
+      worker->offset(), worker->length());
   RecordParallelDownloadAddStreamSuccess(success);
 
   // Destroy the request if the sink is gone.
   if (!success) {
-    VLOG(kVerboseLevel)
+    VLOG(kDownloadJobVerboseLevel)
         << "Byte stream arrived after download file is released.";
     worker->Cancel(false);
   }
@@ -156,7 +158,7 @@ void ParallelDownloadJob::BuildParallelRequests() {
   // previous session only has one stream writing to disk. In these cases, fall
   // back to non parallel download.
   if (initial_request_offset_ > first_slice_offset) {
-    VLOG(kVerboseLevel)
+    VLOG(kDownloadJobVerboseLevel)
         << "Received slices data mismatch initial request offset.";
     return;
   }
@@ -204,9 +206,25 @@ void ParallelDownloadJob::ForkSubRequests(
   if (slices_to_download.size() < 2)
     return;
 
-  // Assume the first slice to download will be handled by the initial request.
-  for (auto it = slices_to_download.begin() + 1; it != slices_to_download.end();
+  // If the initial request is working on the first hole, don't create parallel
+  // request for this hole.
+  bool skip_first_slice = true;
+  DownloadItem::ReceivedSlices initial_slices_to_download =
+      FindSlicesToDownload(initial_received_slices_);
+  if (initial_slices_to_download.size() > 1) {
+    DCHECK_EQ(initial_request_offset_, initial_slices_to_download[0].offset);
+    int64_t first_hole_max = initial_slices_to_download[0].offset +
+                             initial_slices_to_download[0].received_bytes;
+    skip_first_slice = slices_to_download[0].offset <= first_hole_max;
+  }
+
+  for (auto it = slices_to_download.begin(); it != slices_to_download.end();
        ++it) {
+    if (skip_first_slice) {
+      skip_first_slice = false;
+      continue;
+    }
+
     DCHECK_GE(it->offset, initial_request_offset_);
     CreateRequest(it->offset, it->received_bytes);
   }
@@ -216,7 +234,7 @@ void ParallelDownloadJob::CreateRequest(int64_t offset, int64_t length) {
   DCHECK(download_item_);
 
   std::unique_ptr<DownloadWorker> worker =
-      base::MakeUnique<DownloadWorker>(this, offset, length);
+      std::make_unique<DownloadWorker>(this, offset, length);
 
   StoragePartition* storage_partition =
       BrowserContext::GetStoragePartitionForSite(

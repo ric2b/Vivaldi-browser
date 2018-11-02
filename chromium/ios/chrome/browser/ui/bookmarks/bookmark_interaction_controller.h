@@ -6,6 +6,7 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol ApplicationCommands;
 @class Tab;
 @protocol UrlLoader;
 
@@ -18,21 +19,16 @@ class ChromeBrowserState;
 // point is called when the user taps on the star icon.
 @interface BookmarkInteractionController : NSObject
 
-
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                               loader:(id<UrlLoader>)loader
                     parentController:(UIViewController*)parentController
+                          dispatcher:(id<ApplicationCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-// Presents the bookmark UI for a single bookmark. The |parentView| and |origin|
-// are hints that may or may not be used in how the UI for a single bookmark
-// will appear.
-// Subclasses must override this method.
-- (void)presentBookmarkForTab:(Tab*)tab
-          currentlyBookmarked:(BOOL)bookmarked
-                       inView:(UIView*)parentView
-                   originRect:(CGRect)origin;
+// Presents the bookmark UI for a single bookmark. Subclasses must override this
+// method.
+- (void)presentBookmarkForTab:(Tab*)tab currentlyBookmarked:(BOOL)bookmarked;
 
 // Presents the bookmarks browser modally. Subclasses must override this method.
 - (void)presentBookmarks;

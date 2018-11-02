@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/controls/button/checkbox.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/test_layout_provider.h"
@@ -70,6 +71,10 @@ class DialogClientViewTest : public test::WidgetTest,
   }
 
   int GetDialogButtons() const override { return dialog_buttons_; }
+  int GetDefaultDialogButton() const override {
+    return default_button_.value_or(
+        DialogDelegateView::GetDefaultDialogButton());
+  }
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override {
     return button == ui::DIALOG_BUTTON_CANCEL && !cancel_label_.empty()
                ? cancel_label_
@@ -97,7 +102,7 @@ class DialogClientViewTest : public test::WidgetTest,
   // Sets the buttons to show in the dialog and refreshes the dialog.
   void SetDialogButtons(int dialog_buttons) {
     dialog_buttons_ = dialog_buttons;
-    client_view_->UpdateDialogButtons();
+    DialogModelChanged();
   }
 
   // Sets the view to provide to CreateExtraView() and updates the dialog. This
@@ -106,7 +111,7 @@ class DialogClientViewTest : public test::WidgetTest,
   void SetExtraView(View* view) {
     EXPECT_FALSE(next_extra_view_);
     next_extra_view_ = base::WrapUnique(view);
-    client_view_->UpdateDialogButtons();
+    DialogModelChanged();
     EXPECT_FALSE(next_extra_view_);
   }
 
@@ -114,7 +119,7 @@ class DialogClientViewTest : public test::WidgetTest,
   void SetExtraViewPadding(int padding) {
     DCHECK(!extra_view_padding_);
     extra_view_padding_.reset(new int(padding));
-    client_view_->UpdateDialogButtons();
+    DialogModelChanged();
   }
 
   void SetSizeConstraints(const gfx::Size& min_size,
@@ -138,6 +143,8 @@ class DialogClientViewTest : public test::WidgetTest,
   void SetLongCancelLabel() {
     cancel_label_ = base::ASCIIToUTF16("Cancel Cancel Cancel");
   }
+
+  void set_default_button(int button) { default_button_ = button; }
 
   DialogClientView* client_view() { return client_view_; }
 
@@ -163,6 +170,7 @@ class DialogClientViewTest : public test::WidgetTest,
   gfx::Size max_size_;
 
   base::string16 cancel_label_;  // If set, the label for the Cancel button.
+  base::Optional<int> default_button_;
 
   DISALLOW_COPY_AND_ASSIGN(DialogClientViewTest);
 };
@@ -369,6 +377,10 @@ TEST_F(DialogClientViewTest, LinkedWidths) {
   layout_provider.SetDistanceMetric(DISTANCE_BUTTON_MAX_LINKABLE_WIDTH, 200);
   SetLongCancelLabel();
 
+  // Ensure there is no default button since getting a bold font can throw off
+  // the cached sizes.
+  set_default_button(ui::DIALOG_BUTTON_NONE);
+
   SetDialogButtons(ui::DIALOG_BUTTON_OK);
   CheckContentsIsSetToPreferredSize();
   const int ok_button_only_width = client_view()->ok_button()->width();
@@ -385,6 +397,9 @@ TEST_F(DialogClientViewTest, LinkedWidths) {
   SetDialogButtons(ui::DIALOG_BUTTON_CANCEL | ui::DIALOG_BUTTON_OK);
   CheckContentsIsSetToPreferredSize();
 
+  // Cancel button shouldn't have changed widths.
+  EXPECT_EQ(cancel_button_width, client_view()->cancel_button()->width());
+
   // OK button should now match the bigger, cancel button.
   EXPECT_EQ(cancel_button_width, client_view()->ok_button()->width());
 
@@ -392,7 +407,7 @@ TEST_F(DialogClientViewTest, LinkedWidths) {
   layout_provider.SetDistanceMetric(DISTANCE_BUTTON_MAX_LINKABLE_WIDTH, 100);
   EXPECT_GT(cancel_button_width, 100);
 
-  client_view()->UpdateDialogButtons();
+  DialogModelChanged();
   CheckContentsIsSetToPreferredSize();
   EXPECT_EQ(ok_button_only_width, client_view()->ok_button()->width());
   layout_provider.SetDistanceMetric(DISTANCE_BUTTON_MAX_LINKABLE_WIDTH, 200);
@@ -414,6 +429,17 @@ TEST_F(DialogClientViewTest, LinkedWidths) {
 
   // Remove |extra_button| from the View hierarchy so that it can be replaced.
   delete extra_button;
+
+  // ImageButton extends Button, but it should not participate in linking. Even
+  // without an image, the minimum size (16x14) of the button should be smaller
+  // than the dialog buttons.
+  ImageButton* image_button = new ImageButton(nullptr);
+  SetExtraView(image_button);
+  CheckContentsIsSetToPreferredSize();
+  EXPECT_NE(cancel_button_width, image_button->width());
+
+  // Remove |image_button| from the View hierarchy so that it can be replaced.
+  delete image_button;
 
   // Non-buttons should always be sized to their preferred size.
   View* boring_view = new StaticSizedView(gfx::Size(20, 20));
@@ -446,7 +472,7 @@ TEST_F(DialogClientViewTest, FocusUpdate) {
   EXPECT_FALSE(client_view()->ok_button()->HasFocus());
   client_view()->ok_button()->RequestFocus();  // Set focus.
   EXPECT_TRUE(client_view()->ok_button()->HasFocus());
-  client_view()->UpdateDialogButtons();
+  DialogModelChanged();
   EXPECT_TRUE(client_view()->ok_button()->HasFocus());
 }
 
@@ -461,7 +487,7 @@ TEST_F(DialogClientViewTest, FocusMultipleButtons) {
   client_view()->cancel_button()->RequestFocus();  // Set focus.
   EXPECT_FALSE(client_view()->ok_button()->HasFocus());
   EXPECT_TRUE(client_view()->cancel_button()->HasFocus());
-  client_view()->UpdateDialogButtons();
+  DialogModelChanged();
   EXPECT_TRUE(client_view()->cancel_button()->HasFocus());
 }
 

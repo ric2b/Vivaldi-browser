@@ -8,9 +8,11 @@
 #include "base/containers/hash_tables.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 
 using chromeos::DBusThreadManager;
@@ -22,19 +24,15 @@ namespace {
 AsyncMethodCaller* g_async_method_caller = NULL;
 
 // The implementation of AsyncMethodCaller
-class AsyncMethodCallerImpl : public AsyncMethodCaller {
+class AsyncMethodCallerImpl : public AsyncMethodCaller,
+                              public chromeos::CryptohomeClient::Observer {
  public:
   AsyncMethodCallerImpl() : weak_ptr_factory_(this) {
-    DBusThreadManager::Get()->GetCryptohomeClient()->SetAsyncCallStatusHandlers(
-        base::Bind(&AsyncMethodCallerImpl::HandleAsyncResponse,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&AsyncMethodCallerImpl::HandleAsyncDataResponse,
-                   weak_ptr_factory_.GetWeakPtr()));
+    DBusThreadManager::Get()->GetCryptohomeClient()->AddObserver(this);
   }
 
   ~AsyncMethodCallerImpl() override {
-    DBusThreadManager::Get()->GetCryptohomeClient()->
-        ResetAsyncCallStatusHandlers();
+    DBusThreadManager::Get()->GetCryptohomeClient()->RemoveObserver(this);
   }
 
   void AsyncCheckKey(const Identification& cryptohome_id,
@@ -87,16 +85,6 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
             weak_ptr_factory_.GetWeakPtr(),
             callback,
             "Couldn't initiate async mount of cryptohome."));
-  }
-
-  void AsyncMountPublic(const Identification& public_mount_id,
-                        int flags,
-                        Callback callback) override {
-    DBusThreadManager::Get()->GetCryptohomeClient()->AsyncMountPublic(
-        public_mount_id, flags,
-        base::Bind(&AsyncMethodCallerImpl::RegisterAsyncCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback,
-                   "Couldn't initiate async mount public of cryptohome."));
   }
 
   void AsyncRemove(const Identification& cryptohome_id,
@@ -213,20 +201,18 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
                                  const DataCallback& callback) override {
     DBusThreadManager::Get()->GetCryptohomeClient()->GetSanitizedUsername(
         cryptohome_id,
-        base::Bind(&AsyncMethodCallerImpl::GetSanitizedUsernameCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&AsyncMethodCallerImpl::GetSanitizedUsernameCallback,
+                       weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
-  virtual void GetSanitizedUsernameCallback(
-      const DataCallback& callback,
-      const chromeos::DBusMethodCallStatus call_status,
-      const std::string& result) {
-    callback.Run(true, result);
+  void GetSanitizedUsernameCallback(const DataCallback& callback,
+                                    base::Optional<std::string> result) {
+    callback.Run(true, result.value_or(std::string()));
   }
 
  private:
   struct CallbackElement {
-    CallbackElement() {}
+    CallbackElement() = default;
     explicit CallbackElement(const AsyncMethodCaller::Callback& callback)
         : callback(callback),
           task_runner(base::ThreadTaskRunnerHandle::Get()) {}
@@ -235,7 +221,7 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
   };
 
   struct DataCallbackElement {
-    DataCallbackElement() {}
+    DataCallbackElement() = default;
     explicit DataCallbackElement(
         const AsyncMethodCaller::DataCallback& callback)
         : data_callback(callback),
@@ -256,7 +242,9 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
   //    "async ID"
   // 4. "HandleAsyncResponse" handles the result signal and call the registered
   //    callback associated with the "async ID".
-  void HandleAsyncResponse(int async_id, bool return_status, int return_code) {
+  void AsyncCallStatus(int async_id,
+                       bool return_status,
+                       int return_code) override {
     const CallbackMap::iterator it = callback_map_.find(async_id);
     if (it == callback_map_.end()) {
       LOG(ERROR) << "Received signal for unknown async_id " << async_id;
@@ -269,9 +257,9 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
   }
 
   // Similar to HandleAsyncResponse but for signals with a raw data payload.
-  void HandleAsyncDataResponse(int async_id,
+  void AsyncCallStatusWithData(int async_id,
                                bool return_status,
-                               const std::string& return_data) {
+                               const std::string& return_data) override {
     const DataCallbackMap::iterator it = data_callback_map_.find(async_id);
     if (it == data_callback_map_.end()) {
       LOG(ERROR) << "Received signal for unknown async_id " << async_id;
@@ -283,44 +271,46 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller {
     data_callback_map_.erase(it);
   }
   // Registers a callback which is called when the result for AsyncXXX is ready.
-  void RegisterAsyncCallback(
-      Callback callback, const char* error, int async_id) {
-    if (async_id == chromeos::CryptohomeClient::kNotReadyAsyncId) {
+  void RegisterAsyncCallback(Callback callback,
+                             const char* error,
+                             base::Optional<int> async_id) {
+    if (!async_id.has_value()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(callback,
-                                false,  // return status
-                                cryptohome::MOUNT_ERROR_FATAL));
+          FROM_HERE, base::BindOnce(callback,
+                                    false,  // return status
+                                    cryptohome::MOUNT_ERROR_FATAL));
       return;
     }
 
-    if (async_id == 0) {
+    if (async_id.value() == 0) {
       LOG(ERROR) << error;
       return;
     }
-    VLOG(1) << "Adding handler for " << async_id;
-    DCHECK_EQ(callback_map_.count(async_id), 0U);
-    DCHECK_EQ(data_callback_map_.count(async_id), 0U);
-    callback_map_[async_id] = CallbackElement(callback);
+    VLOG(1) << "Adding handler for " << async_id.value();
+    DCHECK_EQ(callback_map_.count(async_id.value()), 0U);
+    DCHECK_EQ(data_callback_map_.count(async_id.value()), 0U);
+    callback_map_[async_id.value()] = CallbackElement(callback);
   }
 
   // Registers a callback which is called when the result for AsyncXXX is ready.
-  void RegisterAsyncDataCallback(
-      DataCallback callback, const char* error, int async_id) {
-    if (async_id == chromeos::CryptohomeClient::kNotReadyAsyncId) {
+  void RegisterAsyncDataCallback(DataCallback callback,
+                                 const char* error,
+                                 base::Optional<int> async_id) {
+    if (!async_id.has_value()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(callback,
-                                false,  // return status
-                                std::string()));
+          FROM_HERE, base::BindOnce(callback,
+                                    false,  // return status
+                                    std::string()));
       return;
     }
-    if (async_id == 0) {
+    if (async_id.value() == 0) {
       LOG(ERROR) << error;
       return;
     }
-    VLOG(1) << "Adding handler for " << async_id;
-    DCHECK_EQ(callback_map_.count(async_id), 0U);
-    DCHECK_EQ(data_callback_map_.count(async_id), 0U);
-    data_callback_map_[async_id] = DataCallbackElement(callback);
+    VLOG(1) << "Adding handler for " << async_id.value();
+    DCHECK_EQ(callback_map_.count(async_id.value()), 0U);
+    DCHECK_EQ(data_callback_map_.count(async_id.value()), 0U);
+    data_callback_map_[async_id.value()] = DataCallbackElement(callback);
   }
 
   CallbackMap callback_map_;

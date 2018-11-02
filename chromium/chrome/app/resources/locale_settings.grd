@@ -16,13 +16,7 @@
     <output filename="locale_settings_en-GB.pak" type="data_package" lang="en-GB" />
     <output filename="locale_settings_en-US.pak" type="data_package" lang="en" />
     <output filename="locale_settings_es.pak" type="data_package" lang="es" />
-    <if expr="is_ios">
-      <!-- iOS uses es-MX for es-419 -->
-      <output filename="locale_settings_es-MX.pak" type="data_package" lang="es-419" />
-    </if>
-    <if expr="not is_ios">
-      <output filename="locale_settings_es-419.pak" type="data_package" lang="es-419" />
-    </if>
+    <output filename="locale_settings_es-419.pak" type="data_package" lang="es-419" />
     <output filename="locale_settings_et.pak" type="data_package" lang="et" />
     <output filename="locale_settings_fa.pak" type="data_package" lang="fa" />
     <output filename="locale_settings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
@@ -49,13 +43,7 @@
          be 'nb'. -->
     <output filename="locale_settings_nb.pak" type="data_package" lang="no" />
     <output filename="locale_settings_pl.pak" type="data_package" lang="pl" />
-    <if expr="is_ios">
-      <!-- iOS uses pt for pt-BR -->
-      <output filename="locale_settings_pt.pak" type="data_package" lang="pt-BR" />
-    </if>
-    <if expr="not is_ios">
-      <output filename="locale_settings_pt-BR.pak" type="data_package" lang="pt-BR" />
-    </if>
+    <output filename="locale_settings_pt-BR.pak" type="data_package" lang="pt-BR" />
     <output filename="locale_settings_pt-PT.pak" type="data_package" lang="pt-PT" />
     <output filename="locale_settings_ro.pak" type="data_package" lang="ro" />
     <output filename="locale_settings_ru.pak" type="data_package" lang="ru" />
@@ -156,7 +144,7 @@
         <message name="IDS_CONFLICTING_MODULE_BUBBLE_WIDTH_CHARS" use_name_for_id="true">
           46
         </message>
-        
+
         <!-- The width of the Text on the save password Desktop iOS promotion bubble. -->
         <message name="IDS_DESKTOP_IOS_PROMOTION_SAVE_PASSWORDS_BUBBLE_TEXT_WIDTH_CHARS" use_name_for_id="true">
           55
@@ -196,17 +184,6 @@
         25
       </message>
 
-      <!-- The width and height of the "Mozilla Firefox is locked" dialog box in -->
-      <!-- characters and lines (See above). -->
-      <message name="IDS_IMPORTLOCK_DIALOG_WIDTH_CHARS" use_name_for_id="true">
-        50
-      </message>
-
-      <!-- The URL for the the Welcome to Chrome page shown on first run. -->
-      <message name="IDS_WELCOME_PAGE_URL" translateable="false">
-        https://www.google.com/intl/[GRITLANGCODE]/chrome/browser/welcome.html
-      </message>
-
       <!-- The language dependent download view size. -->
       <message name="IDS_DOWNLOAD_BIG_PROGRESS_SIZE" use_name_for_id="true">
         52
@@ -227,7 +204,7 @@
       <message name="IDS_CHROME_WELCOME_URL" translateable="false">
         http://www.google.com/chrome/intl/[GRITLANGCODE]/welcome.html
       </message>
-      <if expr="is_android or is_ios">
+      <if expr="is_android">
         <message name="IDS_MOBILE_WELCOME_URL" translateable="false">
           chrome://welcome
         </message>
@@ -307,13 +284,13 @@
         https://history.google.com/history/?utm_source=chrome_cbd
       </message>
 
-      <message name="IDS_SETTINGS_CLEAR_DATA_WEB_HISTORY_URL_IN_DIALOG" translateable="false">
-        https://history.google.com/history/?utm_source=chrome_n
+      <message name="IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_DIALOG" translateable="false">
+        https://myactivity.google.com/myactivity/?utm_source=chrome_n
       </message>
 
       <!-- Links on the History page. -->
-      <message name="IDS_SETTINGS_CLEAR_DATA_WEB_HISTORY_URL_IN_HISTORY" translateable="false">
-        https://history.google.com/history/?utm_source=chrome_h
+      <message name="IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_HISTORY" translateable="false">
+        https://myactivity.google.com/myactivity/?utm_source=chrome_h
       </message>
 
     </messages>

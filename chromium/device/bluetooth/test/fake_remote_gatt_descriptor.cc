@@ -20,13 +20,19 @@ FakeRemoteGattDescriptor::FakeRemoteGattDescriptor(
       characteristic_(characteristic),
       weak_ptr_factory_(this) {}
 
-FakeRemoteGattDescriptor::~FakeRemoteGattDescriptor() {}
+FakeRemoteGattDescriptor::~FakeRemoteGattDescriptor() = default;
 
 void FakeRemoteGattDescriptor::SetNextReadResponse(
     uint16_t gatt_code,
     const base::Optional<std::vector<uint8_t>>& value) {
   DCHECK(!next_read_response_);
   next_read_response_.emplace(gatt_code, value);
+}
+
+bool FakeRemoteGattDescriptor::AllResponsesConsumed() {
+  // TODO(crbug.com/569709): Update this when SetNextWriteResponse is
+  // implemented.
+  return !next_read_response_;
 }
 
 std::string FakeRemoteGattDescriptor::GetIdentifier() const {

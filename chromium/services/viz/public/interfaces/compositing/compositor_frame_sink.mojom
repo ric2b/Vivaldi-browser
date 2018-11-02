@@ -4,14 +4,14 @@
 
 module viz.mojom;
 
-import "cc/ipc/frame_sink_id.mojom";
-import "cc/ipc/local_surface_id.mojom";
+import "mojo/common/time.mojom";
 import "services/viz/public/interfaces/compositing/begin_frame_args.mojom";
 import "services/viz/public/interfaces/compositing/compositor_frame.mojom";
-import "services/viz/public/interfaces/compositing/copy_output_request.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
 import "services/viz/public/interfaces/compositing/returned_resource.mojom";
 import "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
+
 
 // A CompositorFrameSink is an interface for receiving CompositorFrame
 // structs. A CompositorFrame contains the complete output meant for display.
@@ -27,15 +27,16 @@ interface CompositorFrameSink {
   // to screen the next time frames from all CompositorFrameSinks are aggregated
   // to produce a display CompositorFrame. If a client wishes to allocate a new
   // surface (e.g. during resize), then it can simply allocate a new
-  // |local_surface_id|. Submit time is set to when this function is called to
-  // used for tracing how much time is spend between a CompositorFrame is sent
-  // and received.
+  // |local_surface_id|. The local_id component of |local_surface_id| must be
+  // monontonically increasing for each change to LocalSurfaceId. Submit time is
+  // set to when this function is called to used for tracing how much time is
+  // spend between a CompositorFrame is sent and received.
   // TODO(weiliangc): Submit time is recorded in microseconds right now and
   // should be changed to use TimeTicks when Blink can send base types directly.
   // For successful swaps, the implementation must call
   // DidReceiveCompositorFrameAck() asynchronously when the frame has been
   // processed in order to unthrottle the next frame.
-  SubmitCompositorFrame(cc.mojom.LocalSurfaceId local_surface_id,
+  SubmitCompositorFrame(LocalSurfaceId local_surface_id,
                         CompositorFrame frame,
                         HitTestRegionList? hit_test_region_list,
                         uint64 submit_time);
@@ -54,6 +55,19 @@ interface CompositorFrameSinkClient {
   // However, there's a fair amount of cleanup and refactoring necessary to get
   // rid of it.
   DidReceiveCompositorFrameAck(array<ReturnedResource> resources);
+
+  // Notification that a CompositorFrame with given |presentation_token| has
+  // been turned into light the first time on display. |time| indicates the
+  // presentation time, |refresh| indicates the time till next refresh, |flags|
+  // is a combination of |gfx::PresentationFlags|.
+  DidPresentCompositorFrame(uint32 presentation_token,
+                            mojo.common.mojom.TimeTicks time,
+                            mojo.common.mojom.TimeDelta refresh,
+                            uint32 flags);
+
+  // Notification that a CompositorFrame with given presentation_token has been
+  // discarded. It will never be displayed.
+  DidDiscardCompositorFrame(uint32 presentation_token);
 
   // Notification for the client to generate a CompositorFrame.
   OnBeginFrame(BeginFrameArgs args);

@@ -7,7 +7,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <map>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -22,7 +25,7 @@
 #include "ipc/ipc_test_sink.h"
 #include "media/media_features.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
-#include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
+#include "services/resource_coordinator/public/cpp/process_resource_coordinator.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
@@ -51,6 +54,8 @@ class MockRenderProcessHost : public RenderProcessHost {
 
   // Provides tests a way to simulate this render process crashing.
   void SimulateCrash();
+  void SimulateRenderProcessExit(base::TerminationStatus termination_status,
+                                 int exit_code);
 
   // RenderProcessHost implementation (public portion).
   bool Init() override;
@@ -104,10 +109,9 @@ class MockRenderProcessHost : public RenderProcessHost {
   void DisableAudioDebugRecordings() override;
   bool StartWebRTCEventLog(const base::FilePath& file_path) override;
   bool StopWebRTCEventLog() override;
-  void SetEchoCanceller3(bool enable) override;
-  void SetWebRtcLogMessageCallback(
-      base::Callback<void(const std::string&)> callback) override;
-  void ClearWebRtcLogMessageCallback() override;
+  void SetEchoCanceller3(
+      bool enable,
+      base::OnceCallback<void(bool, const std::string&)> callback) override;
   WebRtcStopRtpDumpCallback StartRtpDump(
       bool incoming,
       bool outgoing,
@@ -129,7 +133,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void PurgeAndSuspend() override;
   void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
-  resource_coordinator::ResourceCoordinatorInterface*
+  resource_coordinator::ProcessResourceCoordinator*
   GetProcessResourceCoordinator() override;
 
   void SetIsNeverSuitableForReuse() override;
@@ -173,6 +177,13 @@ class MockRenderProcessHost : public RenderProcessHost {
       std::unique_ptr<mojo::AssociatedInterfacePtr<mojom::Renderer>>
           renderer_interface);
 
+  void set_did_frame_commit_navigation(bool did_frame_commit_navigation) {
+    did_frame_commit_navigation_ = did_frame_commit_navigation;
+  }
+  bool did_frame_commit_navigation() const {
+    return did_frame_commit_navigation_;
+  }
+
  private:
   // Stores IPC messages that would have been sent to the renderer.
   IPC::TestSink sink_;
@@ -188,6 +199,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool fast_shutdown_started_;
   bool deletion_callback_called_;
   bool is_for_guests_only_;
+  bool is_never_suitable_for_reuse_;
   bool is_process_backgrounded_;
   bool is_unused_;
   std::unique_ptr<base::ProcessHandle> process_handle;
@@ -195,11 +207,12 @@ class MockRenderProcessHost : public RenderProcessHost {
   std::unique_ptr<mojo::AssociatedInterfacePtr<mojom::Renderer>>
       renderer_interface_;
   std::map<std::string, InterfaceBinder> binder_overrides_;
-  std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
+  std::unique_ptr<resource_coordinator::ProcessResourceCoordinator>
       process_resource_coordinator_;
   service_manager::Identity child_identity_;
   viz::SharedBitmapAllocationNotifierImpl
       shared_bitmap_allocation_notifier_impl_;
+  bool did_frame_commit_navigation_ = false;
   base::WeakPtrFactory<MockRenderProcessHost> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderProcessHost);
@@ -231,6 +244,12 @@ class MockRenderProcessHostFactory : public RenderProcessHostFactory {
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderProcessHostFactory);
 };
+
+// Convenient method to retrieve |InputMsg_HandleInputEvent|s from process sink
+// and returns a string of WebInputEvent types. Will append a trailing '*' if
+// other types of messages were found.
+// This method clears the sink.
+std::string GetInputMessageTypes(MockRenderProcessHost*);
 
 }  // namespace content
 

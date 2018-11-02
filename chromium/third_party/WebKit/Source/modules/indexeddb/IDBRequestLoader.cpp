@@ -14,11 +14,11 @@
 
 namespace blink {
 
-IDBRequestLoader::IDBRequestLoader(IDBRequestQueueItem* queue_item,
-                                   Vector<RefPtr<IDBValue>>* result_values)
+IDBRequestLoader::IDBRequestLoader(
+    IDBRequestQueueItem* queue_item,
+    Vector<scoped_refptr<IDBValue>>* result_values)
     : queue_item_(queue_item), values_(result_values) {
   DCHECK(IDBValueUnwrapper::IsWrapped(*values_));
-  loader_ = FileReaderLoader::Create(FileReaderLoader::kReadByClient, this);
 }
 
 IDBRequestLoader::~IDBRequestLoader() {
@@ -48,7 +48,8 @@ void IDBRequestLoader::Cancel() {
   DCHECK(file_reader_loading_);
   file_reader_loading_ = false;
 #endif  // DCHECK_IS_ON()
-  loader_->Cancel();
+  if (loader_)
+    loader_->Cancel();
 }
 
 void IDBRequestLoader::StartNextValue() {
@@ -59,7 +60,7 @@ void IDBRequestLoader::StartNextValue() {
       ReportSuccess();
       return;
     }
-    if (unwrapper.Parse(current_value_->Get()))
+    if (unwrapper.Parse(current_value_->get()))
       break;
     ++current_value_;
   }
@@ -77,6 +78,7 @@ void IDBRequestLoader::StartNextValue() {
   DCHECK(!file_reader_loading_);
   file_reader_loading_ = true;
 #endif  // DCHECK_IS_ON()
+  loader_ = FileReaderLoader::Create(FileReaderLoader::kReadByClient, this);
   loader_->Start(context, unwrapper.WrapperBlobHandle());
 }
 
@@ -102,7 +104,7 @@ void IDBRequestLoader::DidFinishLoading() {
 #endif  // DCHECK_IS_ON()
 
   *current_value_ = IDBValueUnwrapper::Unwrap(
-      current_value_->Get(), SharedBuffer::AdoptVector(wrapped_data_));
+      current_value_->get(), SharedBuffer::AdoptVector(wrapped_data_));
   ++current_value_;
 
   StartNextValue();

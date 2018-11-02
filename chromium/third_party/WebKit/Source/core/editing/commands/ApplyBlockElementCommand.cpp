@@ -27,14 +27,16 @@
 #include "core/editing/commands/ApplyBlockElementCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
@@ -238,7 +240,7 @@ static const ComputedStyle* ComputedStyleOfEnclosingTextNode(
     const Position& position) {
   if (!position.IsOffsetInAnchor() || !position.ComputeContainerNode() ||
       !position.ComputeContainerNode()->IsTextNode())
-    return 0;
+    return nullptr;
   return position.ComputeContainerNode()->GetComputedStyle();
 }
 
@@ -324,19 +326,24 @@ void ApplyBlockElementCommand::RangeForParagraphSplittingTextNodesIfNeeded(
       SplitTextNode(end_container, end.OffsetInContainerNode());
       GetDocument().UpdateStyleAndLayoutTree();
 
-      if (is_start_and_end_on_same_node)
-        start = FirstPositionInOrBeforeNode(end_container->previousSibling());
+      const Node* const previous_sibling_of_end =
+          end_container->previousSibling();
+      DCHECK(previous_sibling_of_end);
+      if (is_start_and_end_on_same_node) {
+        start = FirstPositionInOrBeforeNode(*previous_sibling_of_end);
+      }
       if (is_end_and_end_of_last_paragraph_on_same_node) {
         if (end_of_last_paragraph.OffsetInContainerNode() ==
-            end.OffsetInContainerNode())
+            end.OffsetInContainerNode()) {
           end_of_last_paragraph =
-              LastPositionInOrAfterNode(end_container->previousSibling());
-        else
+              LastPositionInOrAfterNode(*previous_sibling_of_end);
+        } else {
           end_of_last_paragraph = Position(
               end_container, end_of_last_paragraph.OffsetInContainerNode() -
                                  end.OffsetInContainerNode());
+        }
       }
-      end = Position::LastPositionInNode(*end_container->previousSibling());
+      end = Position::LastPositionInNode(*previous_sibling_of_end);
     }
   }
 }

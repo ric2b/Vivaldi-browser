@@ -21,8 +21,9 @@ class Service;
 // machinery. Typical usage should look something like:
 //
 //     TEST(MyTest, Foo) {
-//       MyServiceImpl impl;  // Your implementation of service_manager::Service
-//       TestConnectorFactory connector_factory(&impl);
+//       // Your implementation of service_manager::Service.
+//       auto impl =  std::make_unique<MyServiceImpl>();
+//       TestConnectorFactory connector_factory(std::move(impl));
 //       std::unique_ptr<service_manager::Connector> connector =
 //           connector_factory.CreateConnector();
 //       RunSomeClientCode(connector.get());
@@ -38,9 +39,8 @@ class Service;
 class TestConnectorFactory {
  public:
   // Constructs a new TestConnectorFactory which creates Connectors whose
-  // requests are routed directly to |service|. |service| is not owned and must
-  // outlive this TestConnectorFactory instance.
-  explicit TestConnectorFactory(Service* service);
+  // requests are routed directly to |service|.
+  explicit TestConnectorFactory(std::unique_ptr<Service> service);
   ~TestConnectorFactory();
 
   // Allows a test to override the default Identity seen by the target service

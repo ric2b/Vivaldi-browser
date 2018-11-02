@@ -27,14 +27,18 @@ void WebContentsViewDelegate::ShowContextMenu(
 void WebContentsViewDelegate::StoreFocus() {
 }
 
-void WebContentsViewDelegate::RestoreFocus() {
+bool WebContentsViewDelegate::RestoreFocus() {
+  return false;
 }
+
+void WebContentsViewDelegate::ResetStoredFocus() {}
 
 bool WebContentsViewDelegate::Focus() {
   return false;
 }
 
-void WebContentsViewDelegate::TakeFocus(bool reverse) {
+bool WebContentsViewDelegate::TakeFocus(bool reverse) {
+  return false;
 }
 
 void WebContentsViewDelegate::SizeChanged(const gfx::Size& size) {
@@ -44,7 +48,8 @@ void WebContentsViewDelegate::OverrideDisplayColorSpace(
     gfx::ColorSpace* color_space) {}
 
 void* WebContentsViewDelegate::CreateRenderWidgetHostViewDelegate(
-    RenderWidgetHost* render_widget_host) {
+    RenderWidgetHost* render_widget_host,
+    bool is_popup) {
   return nullptr;
 }
 

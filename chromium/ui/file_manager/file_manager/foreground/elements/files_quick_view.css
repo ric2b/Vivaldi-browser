@@ -93,9 +93,10 @@ paper-button:focus:not(:active) {
   color: white;
   display: flex;
   flex-direction: column;
+  height: calc(100% - 64px);
   justify-content: center;
   outline: none;
-  padding: 24px 15%;
+  padding: 32px;
   position: relative;
   text-align: center;
   width: 100%;
@@ -105,9 +106,6 @@ paper-button:focus:not(:active) {
 #innerContentPanel[type="image"],
 #innerContentPanel[type="video"] {
   align-self: center;
-  height: 70%;
-  padding-bottom: initial;
-  padding-top: initial;
 }
 
 .content {
@@ -116,15 +114,27 @@ paper-button:focus:not(:active) {
 }
 
 #toolbar {
-  --paper-toolbar-background: rgb(40, 42, 45);
-  --paper-toolbar-height: 48px;
+  align-items: center;
+  background-color: rgb(40, 42, 45);
   color: white;
+  display: flex;
   font-size: 108%;
+  height: 48px;
   margin: 0;
   opacity: 0.9;
   padding: 0;
-  width: 100%;
   z-index: 1;
+}
+
+#file-path {
+  flex: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buttons-group {
+  display: flex;
 }
 
 #metadata-button {
@@ -134,17 +144,6 @@ paper-button:focus:not(:active) {
   --files-toggle-ripple-activated: {
     opacity: 0.3;
   };
-}
-
-#buttons {
-  display: flex;
-  position: absolute;
-  right: 0px;
-}
-
-:host-context(html[dir='rtl']) #buttons {
-  right: auto;
-  left: 0px
 }
 
 paper-button,

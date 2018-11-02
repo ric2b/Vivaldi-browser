@@ -10,8 +10,8 @@
 #include "base/stl_util.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
-#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
 namespace viz {
 
@@ -26,6 +26,10 @@ void HostFrameSinkManager::SetLocalManager(
   frame_sink_manager_impl_ = frame_sink_manager_impl;
 
   frame_sink_manager_ = frame_sink_manager_impl;
+
+  // Assign temporary references if FrameSinkManagerImpl is using them.
+  assign_temporary_references_ =
+      frame_sink_manager_impl_->surface_manager()->using_surface_references();
 }
 
 void HostFrameSinkManager::BindAndSetManager(
@@ -37,8 +41,20 @@ void HostFrameSinkManager::BindAndSetManager(
 
   binding_.Bind(std::move(request), std::move(task_runner));
   frame_sink_manager_ptr_ = std::move(ptr);
-
   frame_sink_manager_ = frame_sink_manager_ptr_.get();
+
+  frame_sink_manager_ptr_.set_connection_error_handler(base::BindOnce(
+      &HostFrameSinkManager::OnConnectionLost, base::Unretained(this)));
+
+  if (connection_was_lost_) {
+    RegisterAfterConnectionLoss();
+    connection_was_lost_ = false;
+  }
+}
+
+void HostFrameSinkManager::SetConnectionLostCallback(
+    base::RepeatingClosure callback) {
+  connection_lost_callback_ = std::move(callback);
 }
 
 void HostFrameSinkManager::RegisterFrameSinkId(const FrameSinkId& frame_sink_id,
@@ -70,6 +86,12 @@ void HostFrameSinkManager::InvalidateFrameSinkId(
     frame_sink_data_map_.erase(frame_sink_id);
 
   display_hit_test_query_.erase(frame_sink_id);
+}
+
+void HostFrameSinkManager::SetFrameSinkDebugLabel(
+    const FrameSinkId& frame_sink_id,
+    const std::string& debug_label) {
+  frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id, debug_label);
 }
 
 void HostFrameSinkManager::CreateRootCompositorFrameSink(
@@ -107,6 +129,18 @@ void HostFrameSinkManager::CreateCompositorFrameSink(
       frame_sink_id, std::move(request), std::move(client));
 }
 
+void HostFrameSinkManager::OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
+                                               uint32_t frame_token) {
+  DCHECK(frame_sink_id.is_valid());
+  auto iter = frame_sink_data_map_.find(frame_sink_id);
+  if (iter == frame_sink_data_map_.end())
+    return;
+
+  const FrameSinkData& data = iter->second;
+  if (data.client)
+    data.client->OnFrameTokenChanged(frame_token);
+}
+
 void HostFrameSinkManager::RegisterFrameSinkHierarchy(
     const FrameSinkId& parent_frame_sink_id,
     const FrameSinkId& child_frame_sink_id) {
@@ -115,10 +149,12 @@ void HostFrameSinkManager::RegisterFrameSinkHierarchy(
                                                   child_frame_sink_id);
 
   FrameSinkData& child_data = frame_sink_data_map_[child_frame_sink_id];
+  DCHECK(child_data.IsFrameSinkRegistered());
   DCHECK(!base::ContainsValue(child_data.parents, parent_frame_sink_id));
   child_data.parents.push_back(parent_frame_sink_id);
 
   FrameSinkData& parent_data = frame_sink_data_map_[parent_frame_sink_id];
+  DCHECK(parent_data.IsFrameSinkRegistered());
   DCHECK(!base::ContainsValue(parent_data.children, child_frame_sink_id));
   parent_data.children.push_back(child_frame_sink_id);
 }
@@ -144,19 +180,25 @@ void HostFrameSinkManager::UnregisterFrameSinkHierarchy(
     frame_sink_data_map_.erase(parent_frame_sink_id);
 }
 
+void HostFrameSinkManager::WillAssignTemporaryReferencesExternally() {
+  assign_temporary_references_ = false;
+}
+
 void HostFrameSinkManager::AssignTemporaryReference(
     const SurfaceId& surface_id,
     const FrameSinkId& frame_sink_id) {
+  DCHECK(!assign_temporary_references_);
   frame_sink_manager_->AssignTemporaryReference(surface_id, frame_sink_id);
 }
 
 void HostFrameSinkManager::DropTemporaryReference(const SurfaceId& surface_id) {
+  DCHECK(!assign_temporary_references_);
   frame_sink_manager_->DropTemporaryReference(surface_id);
 }
 
 std::unique_ptr<CompositorFrameSinkSupport>
 HostFrameSinkManager::CreateCompositorFrameSinkSupport(
-    CompositorFrameSinkSupportClient* client,
+    mojom::CompositorFrameSinkClient* client,
     const FrameSinkId& frame_sink_id,
     bool is_root,
     bool needs_sync_points) {
@@ -191,10 +233,14 @@ void HostFrameSinkManager::CompositorFrameSinkSupportDestroyed(
 
 void HostFrameSinkManager::PerformAssignTemporaryReference(
     const SurfaceId& surface_id) {
-  // Find the expected embedder for the new surface and assign the temporary
-  // reference to it.
   auto iter = frame_sink_data_map_.find(surface_id.frame_sink_id());
-  DCHECK(iter != frame_sink_data_map_.end());
+  if (iter == frame_sink_data_map_.end()) {
+    // We don't have any hierarchy information for what will embed the new
+    // surface, drop the temporary reference.
+    frame_sink_manager_->DropTemporaryReference(surface_id);
+    return;
+  }
+
   const FrameSinkData& data = iter->second;
 
   // Display roots don't have temporary references to assign.
@@ -212,7 +258,7 @@ void HostFrameSinkManager::PerformAssignTemporaryReference(
   for (const FrameSinkId& parent_id : data.parents) {
     const FrameSinkData& parent_data = frame_sink_data_map_[parent_id];
     if (parent_data.IsFrameSinkRegistered()) {
-      frame_sink_manager_impl_->AssignTemporaryReference(surface_id, parent_id);
+      frame_sink_manager_->AssignTemporaryReference(surface_id, parent_id);
       return;
     }
   }
@@ -227,25 +273,58 @@ void HostFrameSinkManager::PerformAssignTemporaryReference(
   frame_sink_manager_->DropTemporaryReference(surface_id);
 }
 
+void HostFrameSinkManager::OnConnectionLost() {
+  connection_was_lost_ = true;
+
+  binding_.Close();
+  frame_sink_manager_ptr_.reset();
+  frame_sink_manager_ = nullptr;
+
+  // CompositorFrameSinks are lost along with the connection to
+  // mojom::FrameSinkManager.
+  for (auto& map_entry : frame_sink_data_map_)
+    map_entry.second.has_created_compositor_frame_sink = false;
+
+  if (!connection_lost_callback_.is_null())
+    connection_lost_callback_.Run();
+}
+
+void HostFrameSinkManager::RegisterAfterConnectionLoss() {
+  // Register FrameSinkIds first.
+  for (auto& map_entry : frame_sink_data_map_) {
+    const FrameSinkId& frame_sink_id = map_entry.first;
+    FrameSinkData& data = map_entry.second;
+    if (data.client)
+      frame_sink_manager_->RegisterFrameSinkId(frame_sink_id);
+  }
+
+  // Register FrameSink hierarchy second.
+  for (auto& map_entry : frame_sink_data_map_) {
+    const FrameSinkId& frame_sink_id = map_entry.first;
+    FrameSinkData& data = map_entry.second;
+    for (auto& child_frame_sink_id : data.children) {
+      frame_sink_manager_->RegisterFrameSinkHierarchy(frame_sink_id,
+                                                      child_frame_sink_id);
+    }
+  }
+}
+
 void HostFrameSinkManager::OnFirstSurfaceActivation(
     const SurfaceInfo& surface_info) {
+  // TODO(kylechar): This needs to happen when the surface is created, not when
+  // it first activates.
+  if (assign_temporary_references_)
+    PerformAssignTemporaryReference(surface_info.id());
+
   auto it = frame_sink_data_map_.find(surface_info.id().frame_sink_id());
+
   // If we've received a bogus or stale SurfaceId from Viz then just ignore it.
-  if (it == frame_sink_data_map_.end()) {
-    // We don't have any hierarchy information for what will embed the new
-    // surface, drop the temporary reference.
-    frame_sink_manager_->DropTemporaryReference(surface_info.id());
+  if (it == frame_sink_data_map_.end())
     return;
-  }
 
   FrameSinkData& frame_sink_data = it->second;
   if (frame_sink_data.client)
     frame_sink_data.client->OnFirstSurfaceActivation(surface_info);
-
-  if (frame_sink_manager_impl_ &&
-      frame_sink_manager_impl_->surface_manager()->using_surface_references()) {
-    PerformAssignTemporaryReference(surface_info.id());
-  }
 }
 
 void HostFrameSinkManager::OnClientConnectionClosed(
@@ -260,13 +339,11 @@ void HostFrameSinkManager::OnAggregatedHitTestRegionListUpdated(
     mojo::ScopedSharedBufferHandle idle_handle,
     uint32_t idle_handle_size) {
   auto iter = display_hit_test_query_.find(frame_sink_id);
-  if (iter == display_hit_test_query_.end()) {
-    // TODO(riajiang): Report security fault. http://crbug.com/746470
-    // Or verify if it is the case that display got destroyed, but viz doesn't
-    // know it yet.
-    NOTREACHED();
+  // The corresponding HitTestQuery has already been deleted, so drop the
+  // in-flight hit-test data.
+  if (iter == display_hit_test_query_.end())
     return;
-  }
+
   iter->second->OnAggregatedHitTestRegionListUpdated(
       std::move(active_handle), active_handle_size, std::move(idle_handle),
       idle_handle_size);
@@ -276,11 +353,13 @@ void HostFrameSinkManager::SwitchActiveAggregatedHitTestRegionList(
     const FrameSinkId& frame_sink_id,
     uint8_t active_handle_index) {
   auto iter = display_hit_test_query_.find(frame_sink_id);
-  if (iter == display_hit_test_query_.end() ||
-      (active_handle_index != 0u && active_handle_index != 1u)) {
+  // The corresponding HitTestQuery has already been deleted, so drop the
+  // in-flight hit-test data.
+  if (iter == display_hit_test_query_.end())
+    return;
+
+  if (active_handle_index != 0u && active_handle_index != 1u) {
     // TODO(riajiang): Report security fault. http://crbug.com/746470
-    // Or verify if it is the case that display got destroyed, but viz doesn't
-    // know it yet.
     NOTREACHED();
     return;
   }
@@ -296,5 +375,10 @@ HostFrameSinkManager::FrameSinkData::~FrameSinkData() = default;
 
 HostFrameSinkManager::FrameSinkData& HostFrameSinkManager::FrameSinkData::
 operator=(FrameSinkData&& other) = default;
+
+void HostFrameSinkManager::AddVideoDetectorObserver(
+    mojom::VideoDetectorObserverPtr observer) {
+  frame_sink_manager_->AddVideoDetectorObserver(std::move(observer));
+}
 
 }  // namespace viz

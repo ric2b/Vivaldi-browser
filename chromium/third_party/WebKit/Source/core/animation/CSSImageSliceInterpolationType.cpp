@@ -24,7 +24,7 @@ struct SliceTypes {
     is_number[kSideLeft] = slice.slices.Left().IsFixed();
     fill = slice.fill;
   }
-  explicit SliceTypes(const CSSBorderImageSliceValue& slice) {
+  explicit SliceTypes(const cssvalue::CSSBorderImageSliceValue& slice) {
     is_number[kSideTop] = slice.Slices().Top()->IsPrimitiveValue() &&
                           ToCSSPrimitiveValue(slice.Slices().Top())->IsNumber();
     is_number[kSideRight] =
@@ -57,9 +57,9 @@ struct SliceTypes {
 
 class CSSImageSliceNonInterpolableValue : public NonInterpolableValue {
  public:
-  static RefPtr<CSSImageSliceNonInterpolableValue> Create(
+  static scoped_refptr<CSSImageSliceNonInterpolableValue> Create(
       const SliceTypes& types) {
-    return AdoptRef(new CSSImageSliceNonInterpolableValue(types));
+    return base::AdoptRef(new CSSImageSliceNonInterpolableValue(types));
   }
 
   const SliceTypes& Types() const { return types_; }
@@ -193,7 +193,8 @@ InterpolationValue CSSImageSliceInterpolationType::MaybeConvertValue(
   if (!value.IsBorderImageSliceValue())
     return nullptr;
 
-  const CSSBorderImageSliceValue& slice = ToCSSBorderImageSliceValue(value);
+  const cssvalue::CSSBorderImageSliceValue& slice =
+      cssvalue::ToCSSBorderImageSliceValue(value);
   std::unique_ptr<InterpolableList> list =
       InterpolableList::Create(kSideIndexCount);
   const CSSValue* sides[kSideIndexCount];

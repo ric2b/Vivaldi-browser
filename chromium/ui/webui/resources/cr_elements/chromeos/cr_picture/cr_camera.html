@@ -3,12 +3,18 @@
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+<link rel="import" href="cr_png_behavior.html">
 
 <dom-module id="cr-camera">
   <template>
     <!-- Note: Do not include cr-shared-style, we use different
          paper-icon-button-light styling -->
     <style>
+      :host {
+        --cr-camera-hidden-frame-size: 406px;
+        --cr-camera-preview-frame-size: 280px;
+      }
+
       #perspectiveBox {
         height: var(--cr-camera-image-size, 228px);
         margin: auto;
@@ -22,21 +28,46 @@
         height: 100%;
         overflow: hidden;
         position: relative;
-        width: 100%;
-      }
-
-      #userImageStreamCrop.flip-x {
         transform: rotateY(180deg);
+        width: 100%;
       }
 
       #userImageStreamCrop::after {
-        -webkit-mask-image: radial-gradient(transparent 140px, black 140px);
-        background-color: rgba(214, 214, 214, 0.34);
+        border: 100px solid rgba(214, 214, 214, 0.34);
+        border-radius: 100%;
         content: '';
         display: block;
-        height: 100%;
-        transform: translateZ(0);
-        width: 100%;
+        height: var(--cr-camera-hidden-frame-size);
+        margin: 50% 50%;
+        transform: translateZ(0) translateX(-50%) translateY(-50%);
+        transition: width 100ms, height 100ms;
+        transition-timing-function: ease-in;
+        width: var(--cr-camera-hidden-frame-size);
+      }
+
+      #userImageStreamCrop.preview::after {
+        height: var(--cr-camera-preview-frame-size);
+        transition-timing-function: ease-out;
+        width: var(--cr-camera-preview-frame-size);
+      }
+
+      :host([!videomode]) #userImageStreamCrop.capture::after {
+        background-color: white;
+        transition: background-color 50ms ease-in 100ms;
+      }
+
+      @-webkit-keyframes flash {
+        0% { background-color: rgba(255, 255, 255, 0); }
+        33% { background-color: rgba(255, 255, 255, 0.67); }
+        100% { background-color: rgba(255, 255, 255, 0); }
+      }
+
+      :host([videomode]) #userImageStreamCrop.capture::after {
+        animation-delay: 100ms;
+        animation-duration: 100ms;
+        animation-iteration-count: 10;
+        animation-name: flash;
+        animation-timing-function: ease-out;
       }
 
       paper-spinner {
@@ -50,9 +81,10 @@
 
       #cameraVideo {
         height: var(--cr-camera-image-size, 228px);
-        /* Center image for 4:3 aspect ratio. */
-        left: -16.6%;
+        object-fit: cover;
+        object-position: center;
         position: absolute;
+        width: var(--cr-camera-image-size, 228px);
       }
 
       #cameraControls {
@@ -79,16 +111,24 @@
         display: block;
       }
 
-      #flipPhoto {
-        -webkit-margin-end: 8px;
-        background-image: url(camera_flip_icon.svg);
+      #takePhoto {
+        background-image: url(camera_shutter_icon.svg);
       }
 
-      :host-context([dir=rtl]) #flipPhoto {
+      :host([videomode]) #takePhoto {
+        background-image: url(videocam_shutter_icon.svg);
+      }
+
+      :host-context([dir=rtl]) #switchMode {
         float: left;
       }
 
-      #takePhoto {
+      #switchMode {
+        -webkit-margin-end: 8px;
+        background-image: url(videocam_icon.svg);
+      }
+
+      :host([videomode]) #switchMode {
         background-image: url(camera_alt_icon.svg);
       }
     </style>
@@ -104,14 +144,16 @@
       </div>
       <div>
         <button is="paper-icon-button-light" id="takePhoto" tabindex="1"
-            title="[[takePhotoLabel]]" on-tap="takePhoto"
+            title="[[getTakePhotoLabel_(videomode, takePhotoLabel,
+                captureVideoLabel)]]" on-tap="takePhoto"
             disabled="[[!cameraOnline_]]">
         </button>
       </div>
       <div>
-        <button is="paper-icon-button-light" id="flipPhoto" tabindex="2"
-            title="[[flipPhotoLabel]]" on-tap="onTapFlipPhoto_"
-            disabled="[[!cameraOnline_]]">
+        <button is="paper-icon-button-light" id="switchMode" tabindex="2"
+            title="[[getSwitchModeLabel_(videomode, switchModeToCameraLabel,
+                switchModeToVideoLabel)]]" on-tap="onTapSwitchMode_"
+            disabled="[[!cameraOnline_]]" hidden="[[!videoModeEnabled]]">
         </button>
       </div>
     </div>

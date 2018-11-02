@@ -15,7 +15,6 @@ namespace content {
 
 DownloadCreateInfo::DownloadCreateInfo(
     const base::Time& start_time,
-    const net::NetLogWithSource& net_log,
     std::unique_ptr<DownloadSaveInfo> save_info,
     bool open_when_done)
     : download_id(DownloadItem::kInvalidId),
@@ -26,7 +25,6 @@ DownloadCreateInfo::DownloadCreateInfo(
       transient(false),
       result(DOWNLOAD_INTERRUPT_REASON_NONE),
       save_info(std::move(save_info)),
-      request_net_log(net_log),
       accept_range(false),
       connection_info(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
       method("GET"),
@@ -34,7 +32,6 @@ DownloadCreateInfo::DownloadCreateInfo(
 
 DownloadCreateInfo::DownloadCreateInfo()
     : DownloadCreateInfo(base::Time(),
-                         net::NetLogWithSource(),
                          base::WrapUnique(new DownloadSaveInfo),
                          false) {}
 

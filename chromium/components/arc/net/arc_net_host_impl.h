@@ -10,19 +10,17 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/values.h"
+#include "chromeos/network/network_connection_observer.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "components/arc/common/net.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
-
-namespace base {
-class DictionaryValue;
-}  // namespace base
 
 namespace content {
 class BrowserContext;
@@ -34,7 +32,8 @@ class ArcBridgeService;
 
 // Private implementation of ArcNetHost.
 class ArcNetHostImpl : public KeyedService,
-                       public InstanceHolder<mojom::NetInstance>::Observer,
+                       public ConnectionObserver<mojom::NetInstance>,
+                       public chromeos::NetworkConnectionObserver,
                        public chromeos::NetworkStateHandlerObserver,
                        public mojom::NetHost {
  public:
@@ -49,46 +48,58 @@ class ArcNetHostImpl : public KeyedService,
 
   // ARC -> Chrome calls:
 
-  void GetNetworksDeprecated(
-      mojom::GetNetworksRequestType type,
-      const GetNetworksDeprecatedCallback& callback) override;
+  void GetNetworksDeprecated(mojom::GetNetworksRequestType type,
+                             GetNetworksDeprecatedCallback callback) override;
 
   void GetNetworks(mojom::GetNetworksRequestType type,
-                   const GetNetworksCallback& callback) override;
+                   GetNetworksCallback callback) override;
 
-  void GetWifiEnabledState(
-      const GetWifiEnabledStateCallback& callback) override;
+  void GetWifiEnabledState(GetWifiEnabledStateCallback callback) override;
 
-  void SetWifiEnabledState(
-      bool is_enabled,
-      const SetWifiEnabledStateCallback& callback) override;
+  void SetWifiEnabledState(bool is_enabled,
+                           SetWifiEnabledStateCallback callback) override;
 
   void StartScan() override;
 
   void CreateNetwork(mojom::WifiConfigurationPtr cfg,
-                     const CreateNetworkCallback& callback) override;
+                     CreateNetworkCallback callback) override;
 
   void ForgetNetwork(const std::string& guid,
-                     const ForgetNetworkCallback& callback) override;
+                     ForgetNetworkCallback callback) override;
 
   void StartConnect(const std::string& guid,
-                    const StartConnectCallback& callback) override;
+                    StartConnectCallback callback) override;
 
   void StartDisconnect(const std::string& guid,
-                       const StartDisconnectCallback& callback) override;
+                       StartDisconnectCallback callback) override;
+
+  void AndroidVpnConnected(mojom::AndroidVpnConfigurationPtr cfg) override;
+
+  void AndroidVpnStateChanged(mojom::ConnectionStateType state) override;
+
+  std::unique_ptr<base::DictionaryValue> TranslateVpnConfigurationToOnc(
+      const mojom::AndroidVpnConfiguration& cfg);
 
   // Overriden from chromeos::NetworkStateHandlerObserver.
   void ScanCompleted(const chromeos::DeviceState* /*unused*/) override;
   void OnShuttingDown() override;
   void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void NetworkConnectionStateChanged(
+      const chromeos::NetworkState* network) override;
+  void NetworkListChanged() override;
   void DeviceListChanged() override;
-  void GetDefaultNetwork(const GetDefaultNetworkCallback& callback) override;
+  void GetDefaultNetwork(GetDefaultNetworkCallback callback) override;
 
-  // Overridden from ArcBridgeService::InterfaceObserver<mojom::NetInstance>:
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // Overriden from chromeos::NetworkConnectionObserver.
+  void DisconnectRequested(const std::string& service_path) override;
+
+  // Overridden from ConnectionObserver<mojom::NetInstance>:
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
  private:
+  const chromeos::NetworkState* GetDefaultNetworkFromChrome();
+  void UpdateDefaultNetwork();
   void DefaultNetworkSuccessCallback(const std::string& service_path,
                                      const base::DictionaryValue& dictionary);
 
@@ -100,13 +111,36 @@ class ArcNetHostImpl : public KeyedService,
   // successive Create operations (crbug.com/631646).
   bool GetNetworkPathFromGuid(const std::string& guid, std::string* path);
 
+  // Look through the list of known networks for an ARC VPN service.
+  // If found, return the Shill service path.  Otherwise return
+  // an empty string.  It is assumed that there is at most one ARC VPN
+  // service in the list, as the same service will be reused for every
+  // ARC VPN connection.
+  std::string LookupArcVpnServicePath();
+
+  // Convert a vector of strings, |string_list|, to a base::Value
+  // that can be added to an ONC dictionary.  This is used for fields
+  // like NameServers, SearchDomains, etc.
+  std::unique_ptr<base::Value> TranslateStringListToValue(
+      const std::vector<std::string>& string_list);
+
+  // Ask Shill to connect to the Android VPN with name |service_path|.
+  // |service_path| and |guid| are stored locally for future reference.
+  // This is used as the callback from a CreateConfiguration() or
+  // SetProperties() call, depending on whether an ARCVPN service already
+  // exists.
+  void ConnectArcVpn(const std::string& service_path, const std::string& guid);
+
+  // Ask Android to disconnect any VPN app that is currently connected.
+  void DisconnectArcVpn();
+
   void CreateNetworkSuccessCallback(
-      const mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      base::OnceCallback<void(const std::string&)> callback,
       const std::string& service_path,
       const std::string& guid);
 
   void CreateNetworkFailureCallback(
-      const mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      base::OnceCallback<void(const std::string&)> callback,
       const std::string& error_name,
       std::unique_ptr<base::DictionaryValue> error_data);
 
@@ -119,8 +153,9 @@ class ArcNetHostImpl : public KeyedService,
   std::string cached_service_path_;
   std::string cached_guid_;
 
+  std::string arc_vpn_service_path_;
+
   THREAD_CHECKER(thread_checker_);
-  mojo::Binding<mojom::NetHost> binding_;
   base::WeakPtrFactory<ArcNetHostImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcNetHostImpl);

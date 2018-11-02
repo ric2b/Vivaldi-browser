@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/controls/hyperlink_text_view.h"
-#include "ui/base/l10n/l10n_util.h"
 
 @implementation PendingPasswordViewController
 
@@ -113,20 +112,22 @@
 
   // Buttons go on the bottom row and are right-aligned.
   // Start with [Save].
-  CGFloat curX = width - kFramePadding + kRelatedControlHorizontalPadding;
-  CGFloat curY = kFramePadding;
+  CGFloat curX = 0;
+  CGFloat curY = 0;
 
   for (NSButton* button in buttons) {
-    curX -= kRelatedControlHorizontalPadding + NSWidth([button frame]);
+    if (button == buttons[0]) {
+      // The right side of the alignment rect is used for the padding.
+      curX = width - kFramePadding -
+             (NSMaxX([button alignmentRectForFrame:[button frame]]) -
+              NSMinX([button frame]));
+      curY = kFramePadding -
+             (NSMinY([button alignmentRectForFrame:[button frame]]) -
+              NSMinY([button frame]));
+    } else {
+      curX -= kRelatedControlHorizontalPadding + NSWidth([button frame]);
+    }
     [button setFrameOrigin:NSMakePoint(curX, curY)];
-  }
-
-  // Add the third button to the left if it was sent.
-  if ([buttons count] == 3) {
-    curX = kFramePadding - (NSWidth([buttons[2] frame]) -
-                            ([buttons[2] intrinsicContentSize]).width) /
-                               2;
-    [buttons[2] setFrameOrigin:NSMakePoint(curX, curY)];
   }
 
   curX = kFramePadding;

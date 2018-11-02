@@ -75,8 +75,7 @@ class PrintJobWorker {
   bool IsRunning() const;
 
   // Posts the given task to be run.
-  bool PostTask(const tracked_objects::Location& from_here,
-                const base::Closure& task);
+  bool PostTask(const base::Location& from_here, const base::Closure& task);
 
   // Signals the thread to exit in the near future.
   void StopSoon();
@@ -129,16 +128,14 @@ class PrintJobWorker {
   void UseDefaultSettings();
 
   // Printing context delegate.
-  std::unique_ptr<PrintingContext::Delegate> printing_context_delegate_;
+  const std::unique_ptr<PrintingContext::Delegate> printing_context_delegate_;
 
   // Information about the printer setting.
-  std::unique_ptr<PrintingContext> printing_context_;
+  const std::unique_ptr<PrintingContext> printing_context_;
 
   // The printed document. Only has read-only access.
   scoped_refptr<PrintedDocument> document_;
 
-  int render_process_id_;
-  int render_frame_id_;
   // The print job owning this worker thread. It is guaranteed to outlive this
   // object.
   PrintJobWorkerOwner* owner_;
@@ -149,7 +146,7 @@ class PrintJobWorker {
   // Thread to run worker tasks.
   base::Thread thread_;
 
-  // Tread-safe pointer to task runner of the |thread_|.
+  // Thread-safe pointer to task runner of the |thread_|.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // Used to generate a WeakPtr for callbacks.

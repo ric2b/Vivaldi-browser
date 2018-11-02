@@ -10,8 +10,11 @@
 <translation id="1054153489933238809">Abrir la &amp;Imagen original en una nueva pestaña</translation>
 <translation id="1056898198331236512">Advertencia</translation>
 <translation id="1084824384139382525">Copiar dir&amp;ección de enlace</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural,
+        =1 {Continuar la descarga} other {Continuar las descargas}}</translation>
 <translation id="1128109161498068552">No permitir que los sitios utilicen mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="114140604515785785">Directorio de raíz de la extensión:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD,plural, =1{En este momento, se está realizando una descarga. ¿Deseas cancelarla y salir del modo de navegación de incógnito?}other{En este momento, hay # descargas en marcha. ¿Deseas cancelarlas y salir del modo de navegación de incógnito?}}</translation>
 <translation id="1163931534039071049">&amp;Ver fuente de marco</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -20,7 +23,6 @@
 <translation id="1187722533808055681">Reactivaciones</translation>
 <translation id="119944043368869598">Borrar todo</translation>
 <translation id="1221825588892235038">Solo selección</translation>
-<translation id="1238150413700645698">Contenido protegido</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
 <translation id="1274977772557788323">Configuración del almacenamiento para Adobe Flash Player</translation>
 <translation id="1278049586634282054">Inspeccionar vistas:</translation>
@@ -41,13 +43,12 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Abrir enlace con...</translation>
 <translation id="159359590073980872">Caché de imagen</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD,plural, =1{Descarga en marcha}other{Descargas en marcha}}</translation>
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(Incógnito)</translation>
-<translation id="1616206807336925449">Esta extensión no requiere permisos especiales.</translation>
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1627276047960621195">Descriptores de archivo</translation>
 <translation id="1635033183663317347">Instalado por su tutor.</translation>
-<translation id="1681120471812444678">Configurar para agregar impresoras…</translation>
 <translation id="1682548588986054654">Nueva ventana de navegación de incó&amp;gnito</translation>
 <translation id="1698122934742150150">Solo a la sesión de incógnito actual</translation>
 <translation id="1706625117072057435">Niveles de zoom</translation>
@@ -61,13 +62,14 @@
 <translation id="176587472219019965">Nueva &amp;Ventana</translation>
 <translation id="1769104665586091481">Abrir enlace en una &amp;ventana nueva</translation>
 <translation id="1789575671122666129">Ventanas emergentes</translation>
+<translation id="1805822111539868586">Revisar vistas</translation>
 <translation id="1815083418640426271">Pegar como solo texto</translation>
 <translation id="1828901632669367785">Imprimir utilizando el diálogo de sistema...</translation>
-<translation id="1838288018605456492">Haz click para configurar</translation>
 <translation id="1846308012215045257">Hacer Control+clic para ejecutar <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Girar &amp;a la derecha</translation>
 <translation id="1859234291848436338">Sentido de la escritura</translation>
 <translation id="1886996562706621347">Permitir a los sitios web pedirle permiso para convertirse en los controladores predeterminados de protocolos (recomendado)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Seleccionar &amp;todo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
 <translation id="1963227389609234879">Eliminar todo</translation>
@@ -146,11 +148,9 @@
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no pudo comunicarse con esta impresora. Asegúrate de que la impresora esté conectada y vuelve a intentarlo.</translation>
 <translation id="2904456025988372123">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo</translation>
 <translation id="2913331724188855103">Permitir que todos los sitios web guarden y lean datos de cookies (recomendado)</translation>
-<translation id="2914303854539667666">Generar contraseña</translation>
 <translation id="2916745397441987255">Buscar extensiones</translation>
 <translation id="2932883381142163287">Informar sobre abusos</translation>
 <translation id="2941112035454246133">Baja</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Rehacer</translation>
 <translation id="299483336428448530">Instalado por sus padres.</translation>
 <translation id="3003623123441819449">Caché CSS</translation>
@@ -170,7 +170,6 @@
 <translation id="3127156390846601284">Esta acción eliminará de su dispositivo los datos almacenados de todos los sitios web que se muestran. ¿Quiere continuar?</translation>
 <translation id="3129173833825111527">Margen izquierdo</translation>
 <translation id="3144647712221361880">Abrir vínculo como</translation>
-<translation id="3149510190863420837">Aplicaciones de Chrome</translation>
 <translation id="3154429428035006212">Sin conexión durante más de un mes</translation>
 <translation id="3222066309010235055">Renderizar previamente: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Micrófono</translation>
@@ -198,7 +197,6 @@
 <translation id="3396331542604645348">La impresora seleccionada no está disponible o no está instalada correctamente.  Comprueba tu impresora o selecciona otra.</translation>
 <translation id="3432227430032737297">Quitar todo lo que se muestra</translation>
 <translation id="3435896845095436175">Habilitar</translation>
-<translation id="3439970425423980614">Abriendo PDF en Vista previa</translation>
 <translation id="3440761377721825626">Preguntarme cuando un sitio web intente usar un complemento para acceder a mi ordenador</translation>
 <translation id="345693547134384690">Abrir &amp;imagen en una nueva pestaña</translation>
 <translation id="3467267818798281173">Pedir sugerencias a Google</translation>
@@ -207,19 +205,19 @@
 <translation id="3494769164076977169">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo (recomendado)</translation>
 <translation id="3505030558724226696">Revocar el acceso al dispositivo</translation>
 <translation id="3511307672085573050">Copiar dir&amp;ección de enlace</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural,
+        =1 {Cancelar descarga} other {Cancelar descargas}}</translation>
 <translation id="3523642406908660543">Preguntarme cuando un sitio web intente usar un complemento para acceder a mi ordenador (recomendado)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir la impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un grupo del cual eres propietario: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si aceptas, todos los miembros del grupo podrán usar esa impresora para imprimir.</translation>
 <translation id="3587482841069643663">Todos</translation>
 <translation id="3618849550573277856">Buscar “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">Abrir el enlace en una ventana de navegación de incó&amp;gnito</translation>
-<translation id="3640006360782160348">Cancelar configuración de impresora</translation>
 <translation id="3668823961463113931">Manejadores</translation>
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitud para compartir la pantalla de <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">Cargando...</translation>
 <translation id="3725367690636977613">páginas</translation>
 <translation id="3727187387656390258">Inspeccionar ventana emergente</translation>
-<translation id="3730639321086573427">Destinos locales</translation>
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
 <translation id="3760460896538743390">Inspeccionar página de &amp;fondo</translation>
 <translation id="3763401818161139108">Ejecutar siempre en <ph name="ORIGIN" /></translation>
@@ -256,6 +254,7 @@
 <translation id="4091434297613116013">hojas de papel</translation>
 <translation id="4096508467498758490">Inhabilitar extensiones en modo de programador</translation>
 <translation id="4100839878934973028">Otro programa en tu computadora agregó una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
+<translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
 <translation id="4115080753528843955">Algunos servicios de contenido usan identificadores únicos con el propósito de autorizar el acceso a contenido protegido</translation>
 <translation id="411666854932687641">Memoria privada</translation>
 <translation id="4130207949184424187">Esta extensión cambió la página que se muestra al realizar búsquedas desde el cuadro multifunción.</translation>
@@ -268,6 +267,7 @@
 <translation id="4256316378292851214">Guardar &amp;vídeo como...</translation>
 <translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K en vivo)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD,plural, =1{Continuar descarga}other{Continuar descargas}}</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recopilar errores</translation>
 <translation id="4363771538994847871">No se encontraron destinos de transmisión. ¿Necesita ayuda?</translation>
@@ -287,7 +287,6 @@
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Solo el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar las apps y extensiones.</translation>
 <translation id="4613271546271159013">Una extensión cambió la página que se muestra al abrir una nueva pestaña.</translation>
-<translation id="4624768044135598934">¡Éxito!</translation>
 <translation id="4628314759732363424">Cambiar...</translation>
 <translation id="4643612240819915418">Abrir vídeo en una nueva pestaña</translation>
 <translation id="4677772697204437347">Memoria de la GPU</translation>
@@ -359,13 +358,14 @@
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">También controla qué página se muestra al hacer clic en el botón de página principal.</translation>
 <translation id="563535393368633106">Preguntar antes de acceder (recomendado)</translation>
-<translation id="5646376287012673985">Ubicación</translation>
 <translation id="5649053991847567735">Descargas automáticas</translation>
 <translation id="5677928146339483299">Bloqueado</translation>
+<translation id="5689516760719285838">Ubicación</translation>
 <translation id="5707185214361380026">No se ha podido cargar la extensión desde:</translation>
 <translation id="5715711091495208045">Agente del complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Disculpa, no podemos mostrarte el código de este error.</translation>
 <translation id="5746169159649715125">Guardar como PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD,plural, =1{Cancelar descarga}other{Cancelar descargas}}</translation>
 <translation id="5759728514498647443">Los documentos que envíes a través de <ph name="APP_NAME" /> podrán ser leídos por <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Guardar audio como...</translation>
 <translation id="577624874850706961">Buscar cookies</translation>
@@ -375,7 +375,6 @@
 <translation id="5829401023154985950">Administrar...</translation>
 <translation id="583281660410589416">Desconocido</translation>
 <translation id="5838456317242088717">Sesión actual en modo incógnito</translation>
-<translation id="5848934677402291689">Guardado como PDF en progreso</translation>
 <translation id="5849869942539715694">Empaquetar extensión...</translation>
 <translation id="5908769186679515905">No ejecutar Flash</translation>
 <translation id="5910363049092958439">Guar&amp;dar imagen como...</translation>
@@ -418,8 +417,8 @@
 <translation id="6308937455967653460">Guardar &amp;enlace como...</translation>
 <translation id="6314335155547195432">Generar contraseña</translation>
 <translation id="6326855256003666642">Número de keepalive (para extensiones)</translation>
-<translation id="6348109281845364640">Error al configurar impresora</translation>
 <translation id="6370021412472292592">No se pudo cargar el manifiesto.</translation>
+<translation id="6374469231428023295">Intentarlo de nuevo</translation>
 <translation id="6385543213911723544">Los sitios web pueden guardar y consultar datos de cookies</translation>
 <translation id="6398765197997659313">Salir de pantalla completa</translation>
 <translation id="6406303162637086258">Simular reinicio de navegador</translation>
@@ -430,11 +429,11 @@
 <translation id="6452181791372256707">Rechazar</translation>
 <translation id="6498249116389603658">&amp;Todos tus idiomas</translation>
 <translation id="6503077044568424649">Más visitados</translation>
-<translation id="650584126816009598">Tu impresora está preparada.</translation>
 <translation id="6508261954199872201">Aplicación: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Copia&amp;r imagen</translation>
 <translation id="6550675742724504774">Opciones</translation>
 <translation id="6596092346130528198">¿Es ésta la página de Nueva pestaña que esperaba ver?</translation>
+<translation id="6612358246767739896">Contenido protegido</translation>
 <translation id="6639554308659482635">Memoria SQLite</translation>
 <translation id="6655190889273724601">Modo desarrollador</translation>
 <translation id="6691936601825168937">&amp;Reenviar</translation>
@@ -461,7 +460,6 @@
 <translation id="6955446738988643816">Inspeccionar ventana emergente</translation>
 <translation id="6970856801391541997">Imprimir páginas específicas</translation>
 <translation id="6974053822202609517">De derecha a izquierda</translation>
-<translation id="6982896539684144327">Impresora de <ph name="VENDOR_NAME" /> detectada</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Seleccionar un destino</translation>
 <translation id="7005848115657603926">Rango de páginas inválido, utiliza <ph name="EXAMPLE_PAGE_RANGE" /></translation>
@@ -472,6 +470,7 @@
 <translation id="708060913198414444">Copiar dirección del audio</translation>
 <translation id="7084192839369222683">Ejecutar solo contenido importante</translation>
 <translation id="7144878232160441200">Volver a intentarlo</translation>
+<translation id="7152478047064750137">Esta extensión no necesita permisos especiales</translation>
 <translation id="7175353351958621980">Cargada desde:</translation>
 <translation id="7186088072322679094">Mantener en la barra</translation>
 <translation id="7206693748120342859">Descargando <ph name="PLUGIN_NAME" />...</translation>
@@ -491,7 +490,6 @@
 <translation id="7421925624202799674">&amp;Ver código fuente de la página</translation>
 <translation id="7423098979219808738">Preguntar primero</translation>
 <translation id="7427348830195639090">Página de fondo: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">Configurar impresora...</translation>
 <translation id="7453008956351770337">Al seleccionar esta impresora, concedes a la siguiente extensión permiso para acceder a tu impresora:</translation>
 <translation id="7473891865547856676">No, gracias</translation>
 <translation id="749028671485790643">Persona <ph name="VALUE" /></translation>
@@ -522,7 +520,6 @@
 <translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7818135753970109980">Nuevo tema añadido (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Copiar dirección del video</translation>
-<translation id="7831493768366098287">Google Print</translation>
 <translation id="7849264908733290972">Abrir &amp;imagen en una nueva pestaña</translation>
 <translation id="7857949311770343000">¿Esta es la página Nueva pestaña que esperabas ver?</translation>
 <translation id="786073089922909430">Servicio: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -534,7 +531,6 @@
 <translation id="7947962633355574091">C&amp;opiar dirección del vídeo</translation>
 <translation id="7965010376480416255">Memoria compartida</translation>
 <translation id="7966241909927244760">Copiar la dirección de la imagen</translation>
-<translation id="7967437925638594022">Extensiones y apps</translation>
 <translation id="7978412674231730200">Clave privada</translation>
 <translation id="7982789257301363584">Red</translation>
 <translation id="7997826902155442747">Prioridad del proceso</translation>
@@ -548,13 +544,11 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8018313076035239964">Controla qué contenido pueden mostrarte los sitios web y qué información pueden usar</translation>
 <translation id="8023801379949507775">Actualizar extensiones</translation>
 <translation id="8032244173881942855">No se puede transmitir la pestaña.</translation>
-<translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Imprimir como imagen</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">Administrar extensiones</translation>
 <translation id="8180239481735238521">página</translation>
 <translation id="8188120771410500975">&amp;Comprobar la ortografía de los campos de texto</translation>
-<translation id="8259581864063078725">Haz click para añadir una aplicación para usar esta impresora.</translation>
 <translation id="8261378640211443080">Esta extensión no figura en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y es posible que se haya agregado sin tu conocimiento.</translation>
 <translation id="8261506727792406068">Borrar</translation>
 <translation id="8270242299912238708">Documentos PDF</translation>
@@ -591,6 +585,7 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8708000541097332489">Borrar al salir</translation>
 <translation id="8714838604780058252">Gráficos de fondo</translation>
 <translation id="8719653885894320876">Se produjo un error al descargar <ph name="PLUGIN_NAME" /></translation>
+<translation id="8725066075913043281">Intentar nuevamente</translation>
 <translation id="873545264931343897">Cuando <ph name="PLUGIN_NAME" /> termine de actualizarse, vuelve a cargar la página para activarlo</translation>
 <translation id="8757090071857742562">No se puede transmitir el escritorio. Verifique que ha si confirmado el aviso para comenzar a compartir su pantalla.</translation>
 <translation id="8770406935328356739">Directorio raíz de la extensión</translation>
@@ -604,6 +599,7 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8823514049557262177">Copiar texto del vínculo</translation>
 <translation id="8845001906332463065">Obtener ayuda</translation>
 <translation id="8859174528519900719">Submarco: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">Generar contraseña…</translation>
 <translation id="8899285681604219177">Desactivadas las extensiones sin soporte</translation>
 <translation id="8899851313684471736">Abrir enlace en una &amp;ventana nueva</translation>
 <translation id="8910146161325739742">Compartir tu pantalla</translation>
@@ -611,7 +607,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8916476537757519021">Submarco incógnito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Inhabilitar extensiones del modo de programador</translation>
 <translation id="8938356204940892126">Me rindo</translation>
-<translation id="8944779739948852228">Impresora detectada</translation>
 <translation id="895944840846194039">Memoria de JavaScript</translation>
 <translation id="8962083179518285172">Ocultar detalles</translation>
 <translation id="8973557916016709913">Quitar este nivel de zoom</translation>
@@ -620,6 +615,8 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="9027459031423301635">Abrir enlace en una nueva pes&amp;taña</translation>
 <translation id="9056810968620647706">No se encontraron coincidencias.</translation>
 <translation id="9088234649737575428">La política empresarial bloqueó <ph name="PLUGIN_NAME" /></translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural,
+       =1 {Descarga en marcha} other {Descargas en marcha}}</translation>
 <translation id="9137916601698928395">Abrir vínculo como <ph name="USER" /></translation>
 <translation id="9153341767479566106">Otras extensiones no se han podido cargar:</translation>
 <translation id="9170848237812810038">&amp;Deshacer</translation>

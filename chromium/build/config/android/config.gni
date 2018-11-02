@@ -6,6 +6,7 @@
 
 if (is_android) {
   import("//build_overrides/build.gni")
+  import("abi.gni")
 
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
@@ -26,10 +27,19 @@ if (is_android) {
 
   if (enable_chrome_android_internal) {
     import("//clank/config.gni")
+  } else {
+    import("//build/config/android/sdk.gni")
+    declare_args() {
+      # Android SDK release. Currently, only "o_mr1" is publicly supported.
+      android_sdk_release = default_android_sdk_release
+    }
   }
 
   if (!defined(extra_chrome_shared_library_configs)) {
     extra_chrome_shared_library_configs = []
+  }
+  if (!defined(extra_chrome_shared_library_deps)) {
+    extra_chrome_shared_library_deps = []
   }
 
   if (!defined(default_android_ndk_root)) {
@@ -41,11 +51,12 @@ if (is_android) {
     assert(defined(default_android_ndk_major_version))
   }
 
-  if (!defined(default_android_sdk_root)) {
+  if (android_sdk_release == "o_mr1") {
     default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "26"
-    default_android_sdk_build_tools_version = "26.0.0"
-    default_android_sdk_tools_version_suffix = "-25.3.2"
+    default_android_sdk_version = "27"
+    default_android_sdk_build_tools_version = "27.0.1"
+    default_android_sdk_tools_version_suffix = "-26.0.0-dev"
+    public_android_sdk = true
   }
 
   if (!defined(default_lint_android_sdk_root)) {
@@ -63,8 +74,7 @@ if (is_android) {
   }
 
   if (!defined(default_android_keystore_path)) {
-    default_android_keystore_path =
-        "//build/android/ant/chromium-debug.keystore"
+    default_android_keystore_path = "//build/android/chromium-debug.keystore"
     default_android_keystore_name = "chromiumdebugkey"
     default_android_keystore_password = "chromium"
   }
@@ -88,6 +98,9 @@ if (is_android) {
   if (!defined(webview_framework_jar)) {
     webview_framework_jar = webview_public_framework_jar
   }
+
+  assert(defined(default_android_sdk_root),
+         "SDK release " + android_sdk_release + " not recognized.")
 
   declare_args() {
     android_ndk_root = default_android_ndk_root
@@ -120,13 +133,6 @@ if (is_android) {
     # The password for the keystore to use for signing builds.
     android_keystore_password = default_android_keystore_password
 
-    # Set to true to run findbugs on JAR targets.
-    run_findbugs = false
-
-    # Set to true to enable verbose findbugs logging. This does nothing if
-    # run_findbugs is false.
-    findbugs_verbose = false
-
     # Enables verbose proguard output (summaries and unfiltered output).
     proguard_verbose = false
 
@@ -134,11 +140,15 @@ if (is_android) {
     # off will enable proguard.
     is_java_debug = is_debug
 
+    # Report Java assert failure on Android. Turning it on will report Java
+    # assert failure without crash.
+    report_java_assert = false
+
     # Mark APKs as android:debuggable="true".
     debuggable_apks = !is_official_build
 
-    # Set to true to enable the Errorprone compiler
-    use_errorprone_java_compiler = false
+    # Set to false to disable the Errorprone compiler
+    use_errorprone_java_compiler = true
 
     # Enables EMMA Java code coverage. Instruments classes during build to
     # produce .ec files during runtime
@@ -155,14 +165,6 @@ if (is_android) {
 
     # Speeds up incremental compiles by compiling only changed files.
     enable_incremental_javac = false
-
-    # Adds intrumentation to each function. Writes a file with the order that
-    # functions are called at startup.
-    use_order_profiling = false
-
-    # Builds secondary abi for APKs, supports build 32-bit arch as secondary
-    # abi in 64-bit Monochrome and WebView.
-    build_apk_secondary_abi = true
 
     # Build incremental targets whenever possible.
     # Ex. with this arg set to true, the chrome_public_apk target result in
@@ -317,64 +319,8 @@ if (is_android) {
 
   android_libcpp_root = "$android_ndk_root/sources/cxx-stl/llvm-libc++"
 
-  # ABI ------------------------------------------------------------------------
-
-  if (current_cpu == "x86") {
-    android_app_abi = "x86"
-  } else if (current_cpu == "arm") {
-    import("//build/config/arm.gni")
-    if (arm_version < 7) {
-      android_app_abi = "armeabi"
-    } else {
-      android_app_abi = "armeabi-v7a"
-    }
-  } else if (current_cpu == "mipsel") {
-    android_app_abi = "mips"
-  } else if (current_cpu == "x64") {
-    android_app_abi = "x86_64"
-  } else if (current_cpu == "arm64") {
-    android_app_abi = "arm64-v8a"
-  } else if (current_cpu == "mips64el") {
-    android_app_abi = "mips64"
-  } else {
-    assert(false, "Unknown Android ABI: " + current_cpu)
-  }
-
   if (android_libcpp_lib_dir == "") {
     android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
-  }
-
-  # Secondary ABI -------------------------------------------------------------
-  if (target_cpu == "arm64" || target_cpu == "x64" || target_cpu == "mips64el") {
-    android_64bit_target_cpu = true
-  } else if (target_cpu == "arm" || target_cpu == "x86" ||
-             target_cpu == "mipsel") {
-    android_64bit_target_cpu = false
-  } else {
-    assert(false, "Unknown target CPU: $target_cpu")
-  }
-
-  # Intentionally do not define android_app_secondary_abi_cpu and
-  # android_app_secondary_abi for 32-bit target_cpu, since they are not used.
-  if (target_cpu == "arm64") {
-    android_secondary_abi_cpu = "arm"
-    android_app_secondary_abi = "armeabi-v7a"
-  } else if (target_cpu == "x64") {
-    android_secondary_abi_cpu = "x86"
-    android_app_secondary_abi = "x86"
-  } else if (target_cpu == "mips64el") {
-    android_secondary_abi_cpu = "mipsel"
-    android_app_secondary_abi = "mips"
-  }
-
-  if (defined(android_secondary_abi_cpu)) {
-    if (is_clang) {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
-    } else {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_${android_secondary_abi_cpu}"
-    }
   }
 }
 

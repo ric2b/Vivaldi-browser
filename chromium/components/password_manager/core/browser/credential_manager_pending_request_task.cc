@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
 #include "components/autofill/core/common/password_form.h"
@@ -123,7 +123,8 @@ CredentialManagerPendingRequestTask::CredentialManagerPendingRequestTask(
       include_passwords_(include_passwords) {
   CHECK(!delegate_->client()->DidLastPageLoadEncounterSSLErrors());
   for (const GURL& federation : request_federations)
-    federations_.insert(url::Origin(federation.GetOrigin()).Serialize());
+    federations_.insert(
+        url::Origin::Create(federation.GetOrigin()).Serialize());
 }
 
 CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
@@ -134,7 +135,7 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   // localhost is a secure origin but not https.
   if (results.empty() && origin_.SchemeIs(url::kHttpsScheme)) {
     // Try to migrate the HTTP passwords and process them later.
-    http_migrator_ = base::MakeUnique<HttpPasswordStoreMigrator>(
+    http_migrator_ = std::make_unique<HttpPasswordStoreMigrator>(
         origin_, delegate_->client(), this);
     return;
   }

@@ -56,7 +56,7 @@ void InstalledAppController::GetInstalledRelatedApps(
   // TODO(mgiuca): This roundtrip to content could be eliminated if the Manifest
   // class was moved from content into Blink.
   related_apps_fetcher_->GetManifestRelatedApplications(
-      WTF::MakeUnique<GetRelatedAppsCallbacks>(this, std::move(callbacks)));
+      std::make_unique<GetRelatedAppsCallbacks>(this, std::move(callbacks)));
 }
 
 void InstalledAppController::ProvideTo(
@@ -135,7 +135,7 @@ void InstalledAppController::OnFilterInstalledApps(
       blink::WebVector<blink::WebRelatedApplication>(applications));
 }
 
-DEFINE_TRACE(InstalledAppController) {
+void InstalledAppController::Trace(blink::Visitor* visitor) {
   Supplement<LocalFrame>::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
 }

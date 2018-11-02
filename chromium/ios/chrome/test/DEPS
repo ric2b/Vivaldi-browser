@@ -1,5 +1,4 @@
 include_rules = [
-  "+breakpad/src/client/ios",
   "+components/autofill/core/browser",
   "+components/bookmarks",
   "+components/browser_sync",
@@ -11,7 +10,6 @@ include_rules = [
   "+components/network_time",
   "+components/prefs",
   "+components/signin/core/browser",
-  "+components/signin/core/common",
   "+components/sync",
   "+components/variations",
   "+components/version_info",
@@ -20,8 +18,8 @@ include_rules = [
   "+ios/chrome/browser",
   "+ios/public/provider/chrome",
   "+ios/public/test",
-  "+ios/web/public",
   "+net/url_request",
+  "+third_party/breakpad/breakpad/src/client/ios",
   "+third_party/google_toolbox_for_mac",
   "+ui",
 

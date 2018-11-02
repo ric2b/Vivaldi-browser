@@ -8,7 +8,7 @@
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/modules/v8/ToV8ForModules.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
-#include "modules/IndexedDBNames.h"
+#include "modules/indexed_db_names.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBKeyRange.h"
 #include "modules/indexeddb/IDBValue.h"
@@ -80,8 +80,9 @@ IDBObservation::IDBObservation(const WebIDBObservation& observation,
       value_(IDBValue::Create(observation.value, isolate)),
       operation_type_(observation.type) {}
 
-DEFINE_TRACE(IDBObservation) {
+void IDBObservation::Trace(blink::Visitor* visitor) {
   visitor->Trace(key_range_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

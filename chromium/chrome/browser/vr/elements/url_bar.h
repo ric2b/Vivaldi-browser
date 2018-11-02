@@ -19,12 +19,12 @@ namespace vr {
 
 class UrlBarTexture;
 struct ToolbarState;
+struct UrlBarColors;
 
 class UrlBar : public TexturedElement {
  public:
   UrlBar(int preferred_width,
          const base::Callback<void()>& back_button_callback,
-         const base::Callback<void()>& security_icon_callback,
          const base::Callback<void(UiUnsupportedMode)>& failure_callback);
   ~UrlBar() override;
 
@@ -33,10 +33,12 @@ class UrlBar : public TexturedElement {
   void OnMove(const gfx::PointF& position) override;
   void OnButtonDown(const gfx::PointF& position) override;
   void OnButtonUp(const gfx::PointF& position) override;
-  bool HitTest(const gfx::PointF& point) const override;
+  bool LocalHitTest(const gfx::PointF& point) const override;
 
   void SetHistoryButtonsEnabled(bool can_go_back);
   void SetToolbarState(const ToolbarState& state);
+
+  void SetColors(const UrlBarColors& colors);
 
  private:
   UiTexture* GetTexture() const override;
@@ -44,7 +46,7 @@ class UrlBar : public TexturedElement {
 
   std::unique_ptr<UrlBarTexture> texture_;
   base::Callback<void()> back_button_callback_;
-  base::Callback<void()> security_icon_callback_;
+  base::Callback<void(UiUnsupportedMode)> failure_callback_;
   bool can_go_back_ = false;
   bool down_ = false;
   bool security_region_down_ = false;

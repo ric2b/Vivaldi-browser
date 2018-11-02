@@ -8,6 +8,7 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.support.graphics.drawable.VectorDrawableCompat;
@@ -16,6 +17,7 @@ import android.widget.Button;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.widget.animation.AnimatorProperties;
 
 import java.util.ArrayList;
@@ -26,9 +28,11 @@ import java.util.List;
  */
 public class NewTabButton extends Button implements Drawable.Callback {
 
-    private final Drawable mNormalDrawable;
-    private final Drawable mIncognitoDrawable;
-    private Drawable mModernDrawable;
+    private final ColorStateList mLightModeTint;
+    private final ColorStateList mDarkModeTint;
+    private Drawable mNormalDrawable;
+    private Drawable mIncognitoDrawable;
+    private VectorDrawableCompat mModernDrawable;
     private boolean mIsIncognito;
     private AnimatorSet mTransitionAnimation;
 
@@ -49,6 +53,10 @@ public class NewTabButton extends Button implements Drawable.Callback {
                 mIncognitoDrawable.getIntrinsicWidth(), mIncognitoDrawable.getIntrinsicHeight());
         mIncognitoDrawable.setCallback(this);
         mIsIncognito = false;
+        mLightModeTint =
+                ApiCompatibilityUtils.getColorStateList(getResources(), R.color.light_mode_tint);
+        mDarkModeTint =
+                ApiCompatibilityUtils.getColorStateList(getResources(), R.color.dark_mode_tint);
     }
 
     @Override
@@ -114,9 +122,16 @@ public class NewTabButton extends Button implements Drawable.Callback {
     public void setIsModern() {
         mModernDrawable = VectorDrawableCompat.create(
                 getContext().getResources(), R.drawable.new_tab_icon, getContext().getTheme());
+        mModernDrawable.setState(getDrawableState());
+        mModernDrawable.setTintList(DeviceClassManager.enableAccessibilityLayout() && mIsIncognito
+                        ? mLightModeTint
+                        : mDarkModeTint);
         mModernDrawable.setBounds(
                 0, 0, mModernDrawable.getIntrinsicWidth(), mModernDrawable.getIntrinsicHeight());
         mModernDrawable.setCallback(this);
+
+        mNormalDrawable = null;
+        mIncognitoDrawable = null;
     }
 
     /**
@@ -124,9 +139,16 @@ public class NewTabButton extends Button implements Drawable.Callback {
      * @param incognito Whether the button is now used for creating incognito tabs.
      */
     public void setIsIncognito(boolean incognito) {
-        if (mModernDrawable != null) return;
         if (mIsIncognito == incognito) return;
         mIsIncognito = incognito;
+
+        if (mModernDrawable != null) {
+            mModernDrawable.setTintList(
+                    DeviceClassManager.enableAccessibilityLayout() && mIsIncognito ? mLightModeTint
+                                                                                   : mDarkModeTint);
+            invalidateDrawable(mModernDrawable);
+            return;
+        }
 
         if (mTransitionAnimation != null) {
             mTransitionAnimation.cancel();
@@ -163,8 +185,11 @@ public class NewTabButton extends Button implements Drawable.Callback {
     protected void drawableStateChanged() {
         super.drawableStateChanged();
 
-        if (mModernDrawable != null) return;
-        mNormalDrawable.setState(getDrawableState());
-        mIncognitoDrawable.setState(getDrawableState());
+        if (mModernDrawable != null) {
+            mModernDrawable.setState(getDrawableState());
+        } else {
+            mNormalDrawable.setState(getDrawableState());
+            mIncognitoDrawable.setState(getDrawableState());
+        }
     }
 }

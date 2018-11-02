@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
+#include "ash/app_list/model/app_list_item.h"
+#include "ash/app_list/model/app_list_model.h"
 #include "base/files/scoped_temp_dir.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -17,8 +19,6 @@
 #include "components/sync/protocol/sync.pb.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
-#include "ui/app_list/app_list_item.h"
-#include "ui/app_list/app_list_model.h"
 
 using namespace crx_file::id_util;
 
@@ -270,7 +270,7 @@ TEST_F(AppListSyncableServiceTest, InitialMerge) {
       syncer::APP_LIST, sync_list,
       base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
       base::MakeUnique<syncer::SyncErrorFactoryMock>());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId1));
   EXPECT_EQ("item_name1", GetSyncItem(kItemId1)->item_name);
@@ -294,7 +294,7 @@ TEST_F(AppListSyncableServiceTest, InitialMerge_BadData) {
       syncer::APP_LIST, sync_list,
       base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
       base::MakeUnique<syncer::SyncErrorFactoryMock>());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Invalid item_ordinal and item_pin_ordinal.
   // Invalid item_ordinal is fixed up.
@@ -349,7 +349,7 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate) {
       syncer::APP_LIST, sync_list,
       base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
       base::MakeUnique<syncer::SyncErrorFactoryMock>());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId1));
   ASSERT_TRUE(GetSyncItem(kItemId2));
@@ -364,9 +364,9 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate) {
       CreateAppRemoteData(kItemId2, "item_name2x", GenerateId("parent_id2x"),
                           "ordinalx", "pinordinalx")));
 
-  app_list_syncable_service()->ProcessSyncChanges(tracked_objects::Location(),
+  app_list_syncable_service()->ProcessSyncChanges(base::Location(),
                                                   change_list);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId1));
   EXPECT_EQ("item_name1x", GetSyncItem(kItemId1)->item_name);
@@ -394,7 +394,7 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate_BadData) {
       syncer::APP_LIST, sync_list,
       base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
       base::MakeUnique<syncer::SyncErrorFactoryMock>());
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId));
 
@@ -407,9 +407,9 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate_BadData) {
   }
 
   // Validate items with bad data are processed without crashing.
-  app_list_syncable_service()->ProcessSyncChanges(tracked_objects::Location(),
+  app_list_syncable_service()->ProcessSyncChanges(base::Location(),
                                                   change_list);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId));
 }

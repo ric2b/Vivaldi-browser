@@ -27,20 +27,20 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CoreInitializer.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/LinkManifest.h"
 #include "core/html/imports/LinkImport.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/NetworkHintsInterface.h"
-#include "core/origin_trials/OriginTrials.h"
+#include "core/origin_trials/origin_trials.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebIconSizesParser.h"
 #include "public/platform/WebSize.h"
 
@@ -103,6 +103,8 @@ void HTMLLinkElement::ParseAttribute(
   } else if (name == scopeAttr) {
     scope_ = value;
     Process();
+  } else if (name == integrityAttr) {
+    integrity_ = value;
   } else if (name == disabledAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kHTMLLinkElementDisabled);
     if (LinkStyle* link = GetLinkStyle())
@@ -127,13 +129,16 @@ bool HTMLLinkElement::ShouldLoadLink() {
 bool HTMLLinkElement::LoadLink(const String& type,
                                const String& as,
                                const String& media,
+                               const String& nonce,
+                               const String& integrity,
                                ReferrerPolicy referrer_policy,
                                const KURL& url) {
-  return link_loader_->LoadLink(rel_attribute_,
-                                GetCrossOriginAttributeValue(FastGetAttribute(
-                                    HTMLNames::crossoriginAttr)),
-                                type, as, media, referrer_policy, url,
-                                GetDocument(), NetworkHintsInterfaceImpl());
+  return link_loader_->LoadLink(
+      rel_attribute_,
+      GetCrossOriginAttributeValue(
+          FastGetAttribute(HTMLNames::crossoriginAttr)),
+      type, as, media, nonce, integrity, referrer_policy, url, GetDocument(),
+      NetworkHintsInterfaceImpl());
 }
 
 LinkResource* HTMLLinkElement::LinkResourceToProcess() {
@@ -148,12 +153,6 @@ LinkResource* HTMLLinkElement::LinkResourceToProcess() {
       link_ = LinkImport::Create(this);
     } else if (rel_attribute_.IsManifest()) {
       link_ = LinkManifest::Create(this);
-    } else if (rel_attribute_.IsServiceWorker() &&
-               OriginTrials::linkServiceWorkerEnabled(GetExecutionContext())) {
-      if (GetDocument().GetFrame()) {
-        link_ = CoreInitializer::GetInstance().CreateServiceWorkerLinkResource(
-            this);
-      }
     } else {
       LinkStyle* link = LinkStyle::Create(this);
       if (FastHasAttribute(disabledAttr)) {
@@ -272,8 +271,8 @@ void HTMLLinkElement::DidSendDOMContentLoadedForLinkPrerender() {
   DispatchEvent(Event::Create(EventTypeNames::webkitprerenderdomcontentloaded));
 }
 
-RefPtr<WebTaskRunner> HTMLLinkElement::GetLoadingTaskRunner() {
-  return TaskRunnerHelper::Get(TaskType::kNetworking, &GetDocument());
+scoped_refptr<WebTaskRunner> HTMLLinkElement::GetLoadingTaskRunner() {
+  return GetDocument().GetTaskRunner(TaskType::kNetworking);
 }
 
 bool HTMLLinkElement::SheetLoaded() {
@@ -301,7 +300,8 @@ void HTMLLinkElement::DispatchPendingEvent(
 }
 
 void HTMLLinkElement::ScheduleEvent() {
-  TaskRunnerHelper::Get(TaskType::kDOMManipulation, &GetDocument())
+  GetDocument()
+      .GetTaskRunner(TaskType::kDOMManipulation)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&HTMLLinkElement::DispatchPendingEvent,
                            WrapPersistent(this),
@@ -364,7 +364,7 @@ DOMTokenList* HTMLLinkElement::sizes() const {
   return sizes_.Get();
 }
 
-DEFINE_TRACE(HTMLLinkElement) {
+void HTMLLinkElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(link_);
   visitor->Trace(sizes_);
   visitor->Trace(link_loader_);
@@ -373,7 +373,8 @@ DEFINE_TRACE(HTMLLinkElement) {
   LinkLoaderClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLLinkElement) {
+void HTMLLinkElement::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(rel_list_);
   HTMLElement::TraceWrappers(visitor);
 }

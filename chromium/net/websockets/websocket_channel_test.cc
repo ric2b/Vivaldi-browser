@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <iostream>
 #include <iterator>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -156,7 +155,7 @@ typedef StrictMock< MockFunction<void(int)> > Checkpoint;  // NOLINT
 // This mock is for testing expectations about how the EventInterface is used.
 class MockWebSocketEventInterface : public WebSocketEventInterface {
  public:
-  MockWebSocketEventInterface() {}
+  MockWebSocketEventInterface() = default;
 
   ChannelState OnDataFrame(bool fin,
                            WebSocketMessageType type,
@@ -256,7 +255,7 @@ class FakeWebSocketEventInterface : public WebSocketEventInterface {
 class FakeWebSocketStream : public WebSocketStream {
  public:
   // Constructs with empty protocol and extensions.
-  FakeWebSocketStream() {}
+  FakeWebSocketStream() = default;
 
   // Constructs with specified protocol and extensions.
   FakeWebSocketStream(const std::string& protocol,
@@ -733,7 +732,7 @@ struct WebSocketStreamCreationCallbackArgumentSaver {
     this->url_request_context = url_request_context;
     this->net_log = net_log;
     this->connect_delegate = std::move(connect_delegate);
-    return base::WrapUnique(new MockWebSocketStreamRequest);
+    return std::make_unique<MockWebSocketStreamRequest>();
   }
 
   GURL socket_url;
@@ -797,7 +796,7 @@ class WebSocketChannelTest : public ::testing::Test {
   // This implementation returns a newly-created fake. Subclasses may return a
   // mock instead.
   virtual std::unique_ptr<WebSocketEventInterface> CreateEventInterface() {
-    return base::WrapUnique(new FakeWebSocketEventInterface);
+    return std::make_unique<FakeWebSocketEventInterface>();
   }
 
   // This method serves no other purpose than to provide a nice syntax for
@@ -813,7 +812,7 @@ class WebSocketChannelTest : public ::testing::Test {
   struct ConnectData {
     ConnectData()
         : socket_url("ws://ws/"),
-          origin(GURL("http://ws")),
+          origin(url::Origin::Create(GURL("http://ws"))),
           site_for_cookies("http://ws/") {}
 
     // URLRequestContext object.
@@ -999,7 +998,7 @@ class WebSocketChannelSendUtf8Test
     : public WebSocketChannelEventInterfaceTest {
  public:
   void SetUp() override {
-    set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+    set_stream(std::make_unique<WriteableFakeWebSocketStream>());
     // For the purpose of the tests using this fixture, it doesn't matter
     // whether these methods are called or not.
     EXPECT_CALL(*event_interface_, OnAddChannelResponse(_, _))
@@ -1041,7 +1040,7 @@ class WebSocketChannelReceiveUtf8Test : public WebSocketChannelStreamTest {
 // callback is passed to the argument saver.
 TEST_F(WebSocketChannelTest, EverythingIsPassedToTheCreatorFunction) {
   connect_data_.socket_url = GURL("ws://example.com/test");
-  connect_data_.origin = url::Origin(GURL("http://example.com"));
+  connect_data_.origin = url::Origin::Create(GURL("http://example.com"));
   connect_data_.site_for_cookies = GURL("http://example.com/");
   connect_data_.requested_subprotocols.push_back("Sinbad");
 
@@ -1119,7 +1118,7 @@ TEST_F(WebSocketChannelDeletingTest, OnFlowControlAfterConnect) {
 }
 
 TEST_F(WebSocketChannelDeletingTest, OnFlowControlAfterSend) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   // Avoid deleting the channel yet.
   deleting_ = EVENT_ON_FAIL_CHANNEL | EVENT_ON_DROP_CHANNEL;
   CreateChannelAndConnectSuccessfully();
@@ -1160,7 +1159,7 @@ TEST_F(WebSocketChannelDeletingTest, OnClosingHandshakeAsync) {
 }
 
 TEST_F(WebSocketChannelDeletingTest, OnDropChannelWriteError) {
-  set_stream(base::WrapUnique(new UnWriteableFakeWebSocketStream));
+  set_stream(std::make_unique<UnWriteableFakeWebSocketStream>());
   deleting_ = EVENT_ON_DROP_CHANNEL;
   CreateChannelAndConnectSuccessfully();
   ASSERT_TRUE(channel_);
@@ -1223,7 +1222,7 @@ TEST_F(WebSocketChannelDeletingTest, OnNotifyFinishOpeningHandshakeError) {
 }
 
 TEST_F(WebSocketChannelDeletingTest, FailChannelInSendFrame) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   deleting_ = EVENT_ON_FAIL_CHANNEL;
   CreateChannelAndConnectSuccessfully();
   ASSERT_TRUE(channel_);
@@ -1753,7 +1752,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, FrameAfterInvalidFrame) {
 // If the renderer sends lots of small writes, we don't want to update the quota
 // for each one.
 TEST_F(WebSocketChannelEventInterfaceTest, SmallWriteDoesntUpdateQuota) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   {
     InSequence s;
     EXPECT_CALL(*event_interface_, OnAddChannelResponse(_, _));
@@ -1768,7 +1767,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, SmallWriteDoesntUpdateQuota) {
 // If we send enough to go below |send_quota_low_water_mark_| we should get our
 // quota refreshed.
 TEST_F(WebSocketChannelEventInterfaceTest, LargeWriteUpdatesQuota) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   // We use this checkpoint object to verify that the quota update comes after
   // the write.
   Checkpoint checkpoint;
@@ -1791,7 +1790,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, LargeWriteUpdatesQuota) {
 
 // Verify that our quota actually is refreshed when we are told it is.
 TEST_F(WebSocketChannelEventInterfaceTest, QuotaReallyIsRefreshed) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   Checkpoint checkpoint;
   {
     InSequence s;
@@ -1822,7 +1821,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, QuotaReallyIsRefreshed) {
 // If we send more than the available quota then the connection will be closed
 // with an error.
 TEST_F(WebSocketChannelEventInterfaceTest, WriteOverQuotaIsRejected) {
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   {
     InSequence s;
     EXPECT_CALL(*event_interface_, OnAddChannelResponse(_, _));
@@ -1838,7 +1837,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, WriteOverQuotaIsRejected) {
 
 // If a write fails, the channel is dropped.
 TEST_F(WebSocketChannelEventInterfaceTest, FailedWrite) {
-  set_stream(base::WrapUnique(new UnWriteableFakeWebSocketStream));
+  set_stream(std::make_unique<UnWriteableFakeWebSocketStream>());
   Checkpoint checkpoint;
   {
     InSequence s;
@@ -1860,7 +1859,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, FailedWrite) {
 
 // OnDropChannel() is called exactly once when StartClosingHandshake() is used.
 TEST_F(WebSocketChannelEventInterfaceTest, SendCloseDropsChannel) {
-  set_stream(base::WrapUnique(new EchoeyFakeWebSocketStream));
+  set_stream(std::make_unique<EchoeyFakeWebSocketStream>());
   {
     InSequence s;
     EXPECT_CALL(*event_interface_, OnAddChannelResponse(_, _));
@@ -1890,7 +1889,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, CloseDuringConnection) {
 // OnDropChannel() is only called once when a write() on the socket triggers a
 // connection reset.
 TEST_F(WebSocketChannelEventInterfaceTest, OnDropChannelCalledOnce) {
-  set_stream(base::WrapUnique(new ResetOnWriteFakeWebSocketStream));
+  set_stream(std::make_unique<ResetOnWriteFakeWebSocketStream>());
   EXPECT_CALL(*event_interface_, OnAddChannelResponse(_, _));
   EXPECT_CALL(*event_interface_, OnFlowControl(_));
 
@@ -3417,7 +3416,7 @@ TEST_F(WebSocketChannelStreamTest, ProtocolError) {
 // Set the closing handshake timeout to a very tiny value before connecting.
 class WebSocketChannelStreamTimeoutTest : public WebSocketChannelStreamTest {
  protected:
-  WebSocketChannelStreamTimeoutTest() {}
+  WebSocketChannelStreamTimeoutTest() = default;
 
   void CreateChannelAndConnectSuccessfully() override {
     set_stream(std::move(mock_stream_));
@@ -3550,7 +3549,7 @@ TEST_F(WebSocketChannelTest, CurrentSendQuotaNonZero) {
 // Verify that current_send_quota() is updated when SendFrame() is called.
 TEST_F(WebSocketChannelTest, CurrentSendQuotaUpdated) {
   const int kMessageSize = 5;
-  set_stream(base::WrapUnique(new WriteableFakeWebSocketStream));
+  set_stream(std::make_unique<WriteableFakeWebSocketStream>());
   CreateChannelAndConnectSuccessfully();
 
   int initial_send_quota = channel_->current_send_quota();

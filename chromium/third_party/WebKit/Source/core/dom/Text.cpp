@@ -23,7 +23,6 @@
 #include "core/dom/Text.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/SVGNames.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/FirstLetterPseudoElement.h"
@@ -40,6 +39,7 @@
 #include "core/layout/api/LayoutTextItem.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/svg/SVGForeignObjectElement.h"
+#include "core/svg_names.h"
 #include "platform/bindings/DOMDataStore.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -64,7 +64,7 @@ Node* Text::MergeNextSiblingNodesIfPossible() {
   }
 
   // Merge text nodes.
-  while (Node* next_sibling = this->nextSibling()) {
+  while (Node* next_sibling = nextSibling()) {
     if (next_sibling->getNodeType() != kTextNode)
       break;
 
@@ -321,7 +321,7 @@ static bool IsSVGText(Text* text) {
   Node* parent_or_shadow_host_node = text->ParentOrShadowHostNode();
   DCHECK(parent_or_shadow_host_node);
   return parent_or_shadow_host_node->IsSVGElement() &&
-         !isSVGForeignObjectElement(*parent_or_shadow_host_node);
+         !IsSVGForeignObjectElement(*parent_or_shadow_host_node);
 }
 
 LayoutText* Text::CreateTextLayoutObject(const ComputedStyle& style) {
@@ -383,7 +383,7 @@ void Text::ReattachLayoutTreeIfNeeded(const AttachContext& context) {
 }
 
 void Text::RecalcTextStyle(StyleRecalcChange change) {
-  if (LayoutTextItem layout_item = LayoutTextItem(this->GetLayoutObject())) {
+  if (LayoutTextItem layout_item = LayoutTextItem(GetLayoutObject())) {
     if (change != kNoChange || NeedsStyleRecalc())
       layout_item.SetStyle(
           GetDocument().EnsureStyleResolver().StyleForText(this));
@@ -457,7 +457,7 @@ Text* Text::CloneWithData(const String& data) {
   return Create(GetDocument(), data);
 }
 
-DEFINE_TRACE(Text) {
+void Text::Trace(blink::Visitor* visitor) {
   CharacterData::Trace(visitor);
 }
 

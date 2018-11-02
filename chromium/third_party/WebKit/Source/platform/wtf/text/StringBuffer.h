@@ -29,6 +29,7 @@
 #ifndef StringBuffer_h
 #define StringBuffer_h
 
+#include "base/macros.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/text/StringImpl.h"
@@ -39,7 +40,6 @@ namespace WTF {
 template <typename CharType>
 class StringBuffer {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(StringBuffer);
 
  public:
   StringBuffer() {}
@@ -56,7 +56,7 @@ class StringBuffer {
   unsigned length() const { return data_ ? data_->length() : 0; }
   CharType* Characters() {
     return length() ? const_cast<CharType*>(data_->GetCharacters<CharType>())
-                    : 0;
+                    : nullptr;
   }
 
   CharType& operator[](unsigned i) {
@@ -64,10 +64,12 @@ class StringBuffer {
     return Characters()[i];
   }
 
-  RefPtr<StringImpl> Release() { return std::move(data_); }
+  scoped_refptr<StringImpl> Release() { return std::move(data_); }
 
  private:
-  RefPtr<StringImpl> data_;
+  scoped_refptr<StringImpl> data_;
+
+  DISALLOW_COPY_AND_ASSIGN(StringBuffer);
 };
 
 template <typename CharType>

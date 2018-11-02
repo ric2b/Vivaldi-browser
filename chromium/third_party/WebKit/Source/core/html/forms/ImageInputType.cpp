@@ -23,17 +23,19 @@
 
 #include "core/html/forms/ImageInputType.h"
 
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/SyncReattachContext.h"
 #include "core/events/MouseEvent.h"
-#include "core/html/FormData.h"
-#include "core/html/HTMLFormElement.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLImageFallbackHelper.h"
 #include "core/html/HTMLImageLoader.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/FormData.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
+#include "core/input_type_names.h"
+#include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -72,8 +74,11 @@ void ImageInputType::AppendToFormData(FormData& form_data) const {
   form_data.append(name + dot_x_string, click_location_.X());
   form_data.append(name + dot_y_string, click_location_.Y());
 
-  if (!GetElement().value().IsEmpty())
+  if (!GetElement().value().IsEmpty()) {
+    UseCounter::Count(GetElement().GetDocument(),
+                      WebFeature::kImageInputTypeFormDataWithNonEmptyValue);
     form_data.append(name, GetElement().value());
+  }
 }
 
 String ImageInputType::ResultForDialogSubmit() const {
@@ -150,7 +155,7 @@ void ImageInputType::StartResourceLoading() {
 
   LayoutImageResource* image_resource =
       ToLayoutImage(layout_object)->ImageResource();
-  image_resource->SetImageResource(image_loader.GetImage());
+  image_resource->SetImageResource(image_loader.GetContent());
 }
 
 bool ImageInputType::ShouldRespectAlignAttribute() {
@@ -179,17 +184,19 @@ unsigned ImageInputType::Height() const {
 
     // If the image is available, use its height.
     HTMLImageLoader* image_loader = GetElement().ImageLoader();
-    if (image_loader && image_loader->GetImage())
-      return image_loader->GetImage()
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr), 1)
-          .Height()
-          .ToUnsigned();
+    if (image_loader && image_loader->GetContent()) {
+      return image_loader->GetContent()
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Height();
+    }
   }
 
   GetElement().GetDocument().UpdateStyleAndLayout();
 
   LayoutBox* box = GetElement().GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom(box->ContentHeight().ToInt(), box) : 0;
+  return box ? AdjustForAbsoluteZoom::AdjustInt(box->ContentHeight().ToInt(),
+                                                box)
+             : 0;
 }
 
 unsigned ImageInputType::Width() const {
@@ -202,17 +209,19 @@ unsigned ImageInputType::Width() const {
 
     // If the image is available, use its width.
     HTMLImageLoader* image_loader = GetElement().ImageLoader();
-    if (image_loader && image_loader->GetImage())
-      return image_loader->GetImage()
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr), 1)
-          .Width()
-          .ToUnsigned();
+    if (image_loader && image_loader->GetContent()) {
+      return image_loader->GetContent()
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Width();
+    }
   }
 
   GetElement().GetDocument().UpdateStyleAndLayout();
 
   LayoutBox* box = GetElement().GetLayoutBox();
-  return box ? AdjustForAbsoluteZoom(box->ContentWidth().ToInt(), box) : 0;
+  return box ? AdjustForAbsoluteZoom::AdjustInt(box->ContentWidth().ToInt(),
+                                                box)
+             : 0;
 }
 
 bool ImageInputType::HasLegalLinkAttribute(const QualifiedName& name) const {
@@ -270,8 +279,8 @@ void ImageInputType::CreateShadowSubtree() {
   HTMLImageFallbackHelper::CreateAltTextShadowTree(GetElement());
 }
 
-RefPtr<ComputedStyle> ImageInputType::CustomStyleForLayoutObject(
-    RefPtr<ComputedStyle> new_style) {
+scoped_refptr<ComputedStyle> ImageInputType::CustomStyleForLayoutObject(
+    scoped_refptr<ComputedStyle> new_style) {
   if (!use_fallback_content_)
     return new_style;
 

@@ -30,15 +30,16 @@
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/FontFaceSetDocument.h"
+#include "core/css/FontFaceSetWorker.h"
 #include "core/css/RemoteFontFaceSource.h"
 #include "core/frame/UseCounter.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
 
 namespace blink {
 
 void CSSFontFace::AddSource(CSSFontFaceSource* source) {
-  source->SetFontFace(this);
   sources_.push_back(source);
 }
 
@@ -53,15 +54,14 @@ void CSSFontFace::DidBeginLoad() {
     SetLoadStatus(FontFace::kLoading);
 }
 
-void CSSFontFace::FontLoaded(RemoteFontFaceSource* source) {
+bool CSSFontFace::FontLoaded(RemoteFontFaceSource* source) {
   if (!IsValid() || source != sources_.front())
-    return;
+    return false;
 
   if (LoadStatus() == FontFace::kLoading) {
     if (source->IsValid()) {
       SetLoadStatus(FontFace::kLoaded);
-    } else if (source->GetDisplayPeriod() ==
-               RemoteFontFaceSource::kFailurePeriod) {
+    } else if (source->IsInFailurePeriod()) {
       sources_.clear();
       SetLoadStatus(FontFace::kError);
     } else {
@@ -72,32 +72,45 @@ void CSSFontFace::FontLoaded(RemoteFontFaceSource* source) {
 
   if (segmented_font_face_)
     segmented_font_face_->FontFaceInvalidated();
+  return true;
 }
 
 size_t CSSFontFace::ApproximateBlankCharacterCount() const {
-  if (!sources_.IsEmpty() && sources_.front()->IsBlank() &&
+  if (!sources_.IsEmpty() && sources_.front()->IsInBlockPeriod() &&
       segmented_font_face_)
     return segmented_font_face_->ApproximateCharacterCount();
   return 0;
 }
 
-void CSSFontFace::DidBecomeVisibleFallback(RemoteFontFaceSource* source) {
+bool CSSFontFace::DidBecomeVisibleFallback(RemoteFontFaceSource* source) {
   if (!IsValid() || source != sources_.front())
-    return;
+    return false;
   if (segmented_font_face_)
     segmented_font_face_->FontFaceInvalidated();
+  return true;
 }
 
-RefPtr<SimpleFontData> CSSFontFace::GetFontData(
+scoped_refptr<SimpleFontData> CSSFontFace::GetFontData(
     const FontDescription& font_description) {
   if (!IsValid())
     return nullptr;
 
+  // https://www.w3.org/TR/css-fonts-4/#src-desc
+  // "When a font is needed the user agent iterates over the set of references
+  // listed, using the first one it can successfully activate."
   while (!sources_.IsEmpty()) {
     Member<CSSFontFaceSource>& source = sources_.front();
-    if (RefPtr<SimpleFontData> result = source->GetFontData(
+
+    // Bail out if the first source is in the Failure period, causing fallback
+    // to next font-family.
+    if (source->IsInFailurePeriod())
+      return nullptr;
+
+    if (scoped_refptr<SimpleFontData> result = source->GetFontData(
             font_description,
             segmented_font_face_->GetFontSelectionCapabilities())) {
+      // The active source may already be loading or loaded. Adjust our
+      // FontFace status accordingly.
       if (LoadStatus() == FontFace::kUnloaded &&
           (source->IsLoading() || source->IsLoaded()))
         SetLoadStatus(FontFace::kLoading);
@@ -108,6 +121,7 @@ RefPtr<SimpleFontData> CSSFontFace::GetFontData(
     sources_.pop_front();
   }
 
+  // We ran out of source. Set the FontFace status to "error" and return.
   if (LoadStatus() == FontFace::kUnloaded)
     SetLoadStatus(FontFace::kLoading);
   if (LoadStatus() == FontFace::kLoading)
@@ -182,15 +196,23 @@ void CSSFontFace::SetLoadStatus(FontFace::LoadStatusType new_status) {
   else
     font_face_->SetLoadStatus(new_status);
 
-  if (!segmented_font_face_ || !font_face_->GetExecutionContext() ||
-      !font_face_->GetExecutionContext()->IsDocument())
+  if (!segmented_font_face_ || !font_face_->GetExecutionContext())
     return;
-  Document* document = ToDocument(font_face_->GetExecutionContext());
-  if (document && new_status == FontFace::kLoading)
-    FontFaceSetDocument::From(*document)->BeginFontLoading(font_face_);
+
+  if (font_face_->GetExecutionContext()->IsDocument()) {
+    Document* document = ToDocument(font_face_->GetExecutionContext());
+    if (new_status == FontFace::kLoading)
+      FontFaceSetDocument::From(*document)->BeginFontLoading(font_face_);
+  }
+  if (font_face_->GetExecutionContext()->IsWorkerGlobalScope()) {
+    WorkerGlobalScope* scope =
+        ToWorkerGlobalScope(font_face_->GetExecutionContext());
+    if (new_status == FontFace::kLoading)
+      FontFaceSetWorker::From(*scope)->BeginFontLoading(font_face_);
+  }
 }
 
-DEFINE_TRACE(CSSFontFace) {
+void CSSFontFace::Trace(blink::Visitor* visitor) {
   visitor->Trace(segmented_font_face_);
   visitor->Trace(sources_);
   visitor->Trace(font_face_);

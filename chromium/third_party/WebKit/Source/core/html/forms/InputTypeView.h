@@ -33,13 +33,13 @@
 #ifndef InputTypeView_h
 #define InputTypeView_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/events/EventDispatcher.h"
 #include "platform/heap/Handle.h"
 #include "platform/text/TextDirection.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebFocusType.h"
 
 namespace blink {
@@ -58,7 +58,7 @@ class ComputedStyle;
 
 class ClickHandlingState final : public EventDispatchHandlingState {
  public:
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   bool checked;
   bool indeterminate;
@@ -69,11 +69,9 @@ class ClickHandlingState final : public EventDispatchHandlingState {
 // HTMLInputElement. Do not expose instances of InputTypeView and classes
 // derived from it to classes other than HTMLInputElement.
 class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
-  WTF_MAKE_NONCOPYABLE(InputTypeView);
-
  public:
   virtual ~InputTypeView();
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   virtual bool SizeShouldIncludeDecoration(int default_size,
                                            int& preferred_size) const;
@@ -92,7 +90,6 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
   virtual bool ShouldSubmitImplicitly(Event*);
   virtual HTMLFormElement* FormForSubmission() const;
   virtual bool HasCustomFocusLogic() const;
-  virtual void HandleFocusEvent(Element* old_focused_element, WebFocusType);
   virtual void HandleFocusInEvent(Element* old_focused_element, WebFocusType);
   virtual void HandleBlurEvent();
   virtual void HandleDOMActivateEvent(Event*);
@@ -102,11 +99,12 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
 
   virtual void SubtreeHasChanged();
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&) const;
-  virtual RefPtr<ComputedStyle> CustomStyleForLayoutObject(
-      RefPtr<ComputedStyle>);
+  virtual scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
+      scoped_refptr<ComputedStyle>);
   virtual TextDirection ComputedTextDirection();
   virtual void StartResourceLoading();
   virtual void ClosePopupView();
+  virtual bool NeedsShadowSubtree() const;
   virtual void CreateShadowSubtree();
   virtual void DestroyShadowSubtree();
   virtual void MinOrMaxAttributeChanged();
@@ -140,6 +138,8 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
 
  private:
   Member<HTMLInputElement> element_;
+
+  DISALLOW_COPY_AND_ASSIGN(InputTypeView);
 };
 
 }  // namespace blink

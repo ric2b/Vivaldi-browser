@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-announcer/iron-a11y-announcer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
@@ -14,7 +15,7 @@
     <style include="shared-style">
       :host {
         overflow-y: auto;
-        padding: 20px var(--card-padding-side) 20px
+        padding: 24px var(--card-padding-side) 24px
             calc(var(--card-padding-side) - var(--splitter-width));
       }
 
@@ -38,8 +39,11 @@
         user-select: none;
       }
     </style>
-    <iron-list id="list" items="[[displayedList_]]"
-        hidden$="[[isEmptyList_(displayedList_.length)]]" role="list">
+    <iron-list id="list"
+        items="[[displayedList_]]"
+        hidden$="[[isEmptyList_(displayedList_.length)]]"
+        role="group"
+        aria-label="$i18n{listAxLabel}">
       <template>
         <bookmarks-item item-id="[[item.id]]" draggable="true"
             tabindex$="[[tabIndex]]" iron-list-tab-index="[[tabIndex]]">

@@ -89,7 +89,7 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
         },
         'version': '1.0'
       };
-    };
+    }
 
     function waitForEvent(element, eventName) {
       return new Promise(function(resolve) {
@@ -100,7 +100,7 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
 
         element.addEventListener(eventName, listener);
       });
-    };
+    }
 
     function requestSetup(destId, destinationSearch) {
       var origin = cr.isChromeOS ? print_preview.DestinationOrigin.CROS :
@@ -113,7 +113,7 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
           print_preview.DestinationConnectionStatus.ONLINE);
 
       // Add the destination to the list.
-      destinationSearch.localList_.updateDestinations([dest]);
+      destinationSearch.printList_.updateDestinations([dest]);
 
       // Select destination.
       if (cr.isChromeOS) {
@@ -121,7 +121,7 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
       } else {
         destinationSearch.handleOnDestinationSelect_(dest);
       }
-    };
+    }
 
     setup(function() {
       nativeLayer_ = new print_preview.NativeLayerStub();
@@ -140,10 +140,12 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
     test('ResolutionFails', function() {
       var destId = "001122DEADBEEF";
       if (cr.isChromeOS) {
-        nativeLayer_.setSetupPrinterResponse(true, { printerId: destId,
-                                                     success: false,});
+        nativeLayer_.setSetupPrinterResponse(true, {printerId: destId,
+                                                    success: false,});
       } else {
-        nativeLayer_.setLocalDestinationCapabilities({printerId: destId,
+        nativeLayer_.setLocalDestinationCapabilities({printer: {
+                                                          deviceName: destId,
+                                                      },
                                                       capabilities: getCaps()},
                                                      true);
       }
@@ -165,7 +167,9 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
       if (cr.isChromeOS)
         nativeLayer_.setSetupPrinterResponse(false, response);
       else
-        nativeLayer_.setLocalDestinationCapabilities({printerId: destId,
+        nativeLayer_.setLocalDestinationCapabilities({printer: {
+                                                          deviceName: destId,
+                                                      },
                                                       capabilities: getCaps()});
 
       var waiter = waitForEvent(
@@ -214,8 +218,8 @@ TEST_F('PrintPreviewDestinationSearchTest', 'Select', function() {
       cloudDest.capabilities = getCaps();
 
       // Place destination in the local list as happens for Kiosk printers.
-      destinationSearch_.localList_.updateDestinations([cloudDest]);
-      var dest = destinationSearch_.localList_.getDestinationItem(printerId);
+      destinationSearch_.printList_.updateDestinations([cloudDest]);
+      var dest = destinationSearch_.printList_.getDestinationItem(printerId);
       // Simulate a click.
       dest.onActivate_();
 

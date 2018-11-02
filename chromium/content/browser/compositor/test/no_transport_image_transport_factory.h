@@ -15,6 +15,10 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "ui/compositor/test/in_process_context_factory.h"
 
+namespace gl {
+class DisableNullDrawGLBindings;
+}
+
 namespace ui {
 class InProcessContextFactory;
 }
@@ -32,11 +36,10 @@ class NoTransportImageTransportFactory : public ImageTransportFactory {
   ~NoTransportImageTransportFactory() override;
 
   // ImageTransportFactory implementation.
+  bool IsGpuCompositingDisabled() override;
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
   viz::GLHelper* GetGLHelper() override;
-  void SetGpuChannelEstablishFactory(
-      gpu::GpuChannelEstablishFactory* factory) override;
 #if defined(OS_MACOSX)
   void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
                                         bool suspended) override {}
@@ -49,6 +52,7 @@ class NoTransportImageTransportFactory : public ImageTransportFactory {
   ui::InProcessContextFactory context_factory_;
   scoped_refptr<viz::ContextProvider> context_provider_;
   std::unique_ptr<viz::GLHelper> gl_helper_;
+  std::unique_ptr<gl::DisableNullDrawGLBindings> disable_null_draw_;
 
   DISALLOW_COPY_AND_ASSIGN(NoTransportImageTransportFactory);
 };

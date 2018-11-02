@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "bindings/core/v8/NodeOrString.h"
+#include "bindings/core/v8/node_or_string.h"
 #include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/BrowserControls.h"
 #include "core/frame/FrameTestHelpers.h"
@@ -44,10 +44,12 @@ namespace {
 
 class RootScrollerTest : public ::testing::Test,
                          public ::testing::WithParamInterface<bool>,
-                         private ScopedRootLayerScrollingForTest {
+                         private ScopedRootLayerScrollingForTest,
+                         private ScopedSetRootScrollerForTest {
  public:
   RootScrollerTest()
       : ScopedRootLayerScrollingForTest(GetParam()),
+        ScopedSetRootScrollerForTest(true),
         base_url_("http://www.test.com/") {
     RegisterMockedHttpURLLoad("overflow-scrolling.html");
     RegisterMockedHttpURLLoad("root-scroller.html");
@@ -165,8 +167,6 @@ class RootScrollerTest : public ::testing::Test,
 
   WebViewImpl* InitializeInternal(const std::string& url,
                                   FrameTestHelpers::TestWebViewClient* client) {
-    RuntimeEnabledFeatures::SetSetRootScrollerEnabled(true);
-
     helper_.InitializeAndLoad(url, nullptr, client, nullptr,
                               &ConfigureSettings);
 
@@ -219,7 +219,7 @@ TEST_P(RootScrollerTest, defaultEffectiveRootScrollerIsDocumentNode) {
   // should remain the same.
   NonThrowableExceptionState non_throw;
   HeapVector<NodeOrString> nodes;
-  nodes.push_back(NodeOrString::fromNode(iframe));
+  nodes.push_back(NodeOrString::FromNode(iframe));
   document->documentElement()->ReplaceWith(nodes, non_throw);
 
   MainFrameView()->UpdateAllLifecyclePhases();
@@ -235,7 +235,7 @@ class OverscrollTestWebViewClient : public FrameTestHelpers::TestWebViewClient {
                     const WebFloatSize&,
                     const WebFloatPoint&,
                     const WebFloatSize&,
-                    const WebScrollBoundaryBehavior&));
+                    const WebOverscrollBehavior&));
 };
 
 // Tests that setting an element as the root scroller causes it to control url
@@ -278,7 +278,7 @@ TEST_P(RootScrollerTest, TestSetRootScroller) {
     // overscroll.
     EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 50), WebFloatSize(0, 50),
                                       WebFloatPoint(100, 100), WebFloatSize(),
-                                      WebScrollBoundaryBehavior()));
+                                      WebOverscrollBehavior()));
     GetWebView()->HandleInputEvent(GenerateTouchGestureEvent(
         WebInputEvent::kGestureScrollUpdate, 0, -500));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
@@ -290,7 +290,7 @@ TEST_P(RootScrollerTest, TestSetRootScroller) {
     // Continue the gesture overscroll.
     EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 20), WebFloatSize(0, 70),
                                       WebFloatPoint(100, 100), WebFloatSize(),
-                                      WebScrollBoundaryBehavior()));
+                                      WebOverscrollBehavior()));
     GetWebView()->HandleInputEvent(
         GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, -20));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
@@ -309,7 +309,7 @@ TEST_P(RootScrollerTest, TestSetRootScroller) {
 
     EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 30), WebFloatSize(0, 30),
                                       WebFloatPoint(100, 100), WebFloatSize(),
-                                      WebScrollBoundaryBehavior()));
+                                      WebOverscrollBehavior()));
     GetWebView()->HandleInputEvent(
         GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, -30));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
@@ -856,7 +856,7 @@ TEST_P(RootScrollerTest, RemoveRootScrollerFromDom) {
     ASSERT_EQ(inner_container,
               EffectiveRootScroller(iframe->contentDocument()));
 
-    iframe->contentDocument()->body()->setInnerHTML("");
+    iframe->contentDocument()->body()->SetInnerHTMLFromString("");
 
     // If the root scroller wasn't updated by the DOM removal above, this
     // will touch the disposed root scroller's ScrollableArea.
@@ -927,7 +927,8 @@ TEST_P(RootScrollerTest, UseVisualViewportScrollbarsIframe) {
 
   MainFrameView()->UpdateAllLifecyclePhases();
 
-  ScrollableArea* container_scroller = child_frame->View();
+  ScrollableArea* container_scroller =
+      child_frame->View()->LayoutViewportScrollableArea();
 
   EXPECT_FALSE(container_scroller->HorizontalScrollbar());
   EXPECT_FALSE(container_scroller->VerticalScrollbar());
@@ -1167,49 +1168,6 @@ TEST_P(RootScrollerTest, ImmediateUpdateOfLayoutViewport) {
 
   EXPECT_EQ(MainFrameView()->LayoutViewportScrollableArea(),
             &MainFrameView()->GetRootFrameViewport()->LayoutViewport());
-}
-
-// Ensure that background style is propagated to the layout view.
-TEST_P(RootScrollerTest, PropagateBackgroundToLayoutView) {
-  Initialize();
-
-  WebURL base_url = URLTestHelpers::ToKURL("http://www.test.com/");
-  FrameTestHelpers::LoadHTMLString(GetWebView()->MainFrameImpl(),
-                                   "<!DOCTYPE html>"
-                                   "<style>"
-                                   "  body, html {"
-                                   "    width: 100%;"
-                                   "    height: 100%;"
-                                   "    margin: 0px;"
-                                   "    background-color: #ff0000;"
-                                   "  }"
-                                   "  #container {"
-                                   "    width: 100%;"
-                                   "    height: 100%;"
-                                   "    overflow: auto;"
-                                   "    background-color: #0000ff;"
-                                   "  }"
-                                   "</style>"
-                                   "<div id='container'>"
-                                   "  <div style='height:1000px'>test</div>"
-                                   "</div>",
-                                   base_url);
-  MainFrameView()->UpdateAllLifecyclePhases();
-
-  Document* document = MainFrame()->GetDocument();
-  ASSERT_EQ(Color(255, 0, 0),
-            document->GetLayoutView()->Style()->VisitedDependentColor(
-                CSSPropertyBackgroundColor));
-
-  Element* container = MainFrame()->GetDocument()->getElementById("container");
-  document->setRootScroller(container, ASSERT_NO_EXCEPTION);
-
-  document->setRootScroller(container);
-  MainFrameView()->UpdateAllLifecyclePhases();
-
-  EXPECT_EQ(Color(0, 0, 255),
-            document->GetLayoutView()->Style()->VisitedDependentColor(
-                CSSPropertyBackgroundColor));
 }
 
 class RootScrollerHitTest : public RootScrollerTest {

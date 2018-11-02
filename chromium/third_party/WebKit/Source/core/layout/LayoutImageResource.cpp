@@ -30,6 +30,7 @@
 
 #include "core/dom/Element.h"
 #include "core/layout/LayoutImage.h"
+#include "core/page/Page.h"
 #include "core/svg/graphics/SVGImageForContainer.h"
 
 namespace blink {
@@ -65,10 +66,14 @@ void LayoutImageResource::SetImageResource(ImageResourceContent* new_image) {
   cached_image_ = new_image;
   if (cached_image_) {
     cached_image_->AddObserver(layout_object_);
-    if (cached_image_->ErrorOccurred())
-      layout_object_->ImageChanged(cached_image_.Get());
+    if (cached_image_->ErrorOccurred()) {
+      layout_object_->ImageChanged(
+          cached_image_.Get(),
+          ImageResourceObserver::CanDeferInvalidation::kNo);
+    }
   } else {
-    layout_object_->ImageChanged(cached_image_.Get());
+    layout_object_->ImageChanged(
+        cached_image_.Get(), ImageResourceObserver::CanDeferInvalidation::kNo);
   }
 }
 
@@ -83,35 +88,77 @@ void LayoutImageResource::ResetAnimation() {
   layout_object_->SetShouldDoFullPaintInvalidation();
 }
 
+bool LayoutImageResource::ImageHasRelativeSize() const {
+  return cached_image_ && cached_image_->GetImage()->HasRelativeSize();
+}
+
 LayoutSize LayoutImageResource::ImageSize(float multiplier) const {
   if (!cached_image_)
     return LayoutSize();
-  LayoutSize size = cached_image_->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(layout_object_), multiplier);
+  LayoutSize size(cached_image_->IntrinsicSize(
+      LayoutObject::ShouldRespectImageOrientation(layout_object_)));
+  if (multiplier != 1 && !ImageHasRelativeSize()) {
+    // Don't let images that have a width/height >= 1 shrink below 1 when
+    // zoomed.
+    LayoutSize minimum_size(
+        size.Width() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit(),
+        size.Height() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit());
+    size.Scale(multiplier);
+    size.ClampToMinimumSize(minimum_size);
+  }
   if (layout_object_ && layout_object_->IsLayoutImage() && size.Width() &&
       size.Height())
     size.Scale(ToLayoutImage(layout_object_)->ImageDevicePixelRatio());
   return size;
 }
 
-RefPtr<Image> LayoutImageResource::GetImage(
+float LayoutImageResource::DeviceScaleFactor() const {
+  return DeviceScaleFactorDeprecated(layout_object_->GetFrame());
+}
+
+Image* LayoutImageResource::BrokenImage(float device_scale_factor) {
+  // TODO(schenney): Replace static resources with dynamically
+  // generated ones, to support a wider range of device scale factors.
+  if (device_scale_factor >= 2) {
+    DEFINE_STATIC_REF(Image, broken_image_hi_res,
+                      (Image::LoadPlatformResource("missingImage@2x")));
+    return broken_image_hi_res;
+  }
+
+  DEFINE_STATIC_REF(Image, broken_image_lo_res,
+                    (Image::LoadPlatformResource("missingImage")));
+  return broken_image_lo_res;
+}
+
+void LayoutImageResource::UseBrokenImage() {
+  SetImageResource(
+      ImageResourceContent::CreateLoaded(BrokenImage(DeviceScaleFactor())));
+}
+
+scoped_refptr<Image> LayoutImageResource::GetImage(
     const IntSize& container_size) const {
   if (!cached_image_)
     return Image::NullImage();
 
-  if (!cached_image_->GetImage()->IsSVGImage())
-    return cached_image_->GetImage();
+  if (cached_image_->ErrorOccurred())
+    return BrokenImage(DeviceScaleFactor());
+
+  if (!cached_image_->HasImage())
+    return Image::NullImage();
+
+  Image* image = cached_image_->GetImage();
+  if (!image->IsSVGImage())
+    return image;
 
   KURL url;
-  SVGImage* svg_image = ToSVGImage(cached_image_->GetImage());
   Node* node = layout_object_->GetNode();
   if (node && node->IsElementNode()) {
     const AtomicString& url_string = ToElement(node)->ImageSourceURL();
     url = node->GetDocument().CompleteURL(url_string);
   }
   return SVGImageForContainer::Create(
-      svg_image, container_size, layout_object_->StyleRef().EffectiveZoom(),
-      url);
+      ToSVGImage(image), container_size,
+      layout_object_->StyleRef().EffectiveZoom(), url);
 }
 
 bool LayoutImageResource::MaybeAnimated() const {

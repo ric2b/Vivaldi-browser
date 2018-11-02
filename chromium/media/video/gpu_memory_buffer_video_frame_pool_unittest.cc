@@ -79,15 +79,15 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
 
 class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
  public:
-  GpuMemoryBufferVideoFramePoolTest() {}
+  GpuMemoryBufferVideoFramePoolTest() = default;
   void SetUp() override {
     // Seed test clock with some dummy non-zero value to avoid confusion with
     // empty base::TimeTicks values.
     test_clock_.Advance(base::TimeDelta::FromSeconds(1234));
 
     gles2_.reset(new TestGLES2Interface);
-    media_task_runner_ = make_scoped_refptr(new base::TestSimpleTaskRunner);
-    copy_task_runner_ = make_scoped_refptr(new base::TestSimpleTaskRunner);
+    media_task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
+    copy_task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
     media_task_runner_handle_.reset(
         new base::ThreadTaskRunnerHandle(media_task_runner_));
     mock_gpu_factories_.reset(
@@ -176,6 +176,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareFrame) {
   RunUntilIdle();
 
   EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_I420, frame->format());
+  EXPECT_EQ(3u, frame->NumTextures());
   EXPECT_EQ(3u, gles2_->gen_textures_count());
 }
 
@@ -243,6 +245,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareUYUVFrame) {
   RunUntilIdle();
 
   EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_UYVY, frame->format());
+  EXPECT_EQ(1u, frame->NumTextures());
   EXPECT_EQ(1u, gles2_->gen_textures_count());
   EXPECT_TRUE(frame->metadata()->IsTrue(
       media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
@@ -259,6 +263,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareNV12Frame) {
   RunUntilIdle();
 
   EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_NV12, frame->format());
+  EXPECT_EQ(1u, frame->NumTextures());
   EXPECT_EQ(1u, gles2_->gen_textures_count());
   EXPECT_TRUE(frame->metadata()->IsTrue(
       media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
@@ -275,6 +281,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareNV12Frame2) {
   RunUntilIdle();
 
   EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_NV12, frame->format());
+  EXPECT_EQ(2u, frame->NumTextures());
   EXPECT_EQ(2u, gles2_->gen_textures_count());
   EXPECT_TRUE(frame->metadata()->IsTrue(
       media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));

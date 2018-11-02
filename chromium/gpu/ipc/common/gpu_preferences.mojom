@@ -17,18 +17,22 @@ enum VpxDecodeVendors {
 struct GpuPreferences {
   bool single_process;
   bool in_process_gpu;
-  bool ui_prioritize_in_gpu_process;
-  bool enable_gpu_scheduler;
   bool disable_accelerated_video_decode;
+  bool gpu_startup_dialog;
+  bool disable_gpu_watchdog;
+  bool gpu_sandbox_start_early;
 
   bool disable_vaapi_accelerated_video_encode;
 
   bool disable_web_rtc_hw_encoding;
 
+  // TODO(http://crbug.com/676224) Support preprocessing of mojoms. Following
+  // variables should be used on Windows only.
   VpxDecodeVendors enable_accelerated_vpx_decode;
   bool enable_low_latency_dxva;
   bool enable_zero_copy_dxgi_video;
   bool enable_nv12_dxgi_video;
+  bool enable_media_foundation_vea_on_windows7;
 
   bool compile_shader_always_succeeds;
   bool disable_gl_error_limit;
@@ -47,8 +51,8 @@ struct GpuPreferences {
   bool enable_threaded_texture_mailboxes;
   bool gl_shader_interm_output;
   bool emulate_shader_precision;
+  bool enable_raster_decoder;
   bool enable_gpu_service_logging;
   bool enable_gpu_service_tracing;
-  bool enable_es3_apis;
   bool use_passthrough_cmd_decoder;
 };

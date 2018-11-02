@@ -22,7 +22,7 @@ import gn_helpers
 
 SCRIPT_DIR = os.path.dirname(__file__)
 
-def _ExtractImportantEnvironment(output_of_set, sdk_path=None):
+def _ExtractImportantEnvironment(output_of_set):
   """Extracts environment variables required for the toolchain to run from
   a textual dump output by the cmd.exe 'set' command."""
   envvars_to_save = (
@@ -51,8 +51,6 @@ def _ExtractImportantEnvironment(output_of_set, sdk_path=None):
           # path. Add the path to this python here so that if it's not in the
           # path when ninja is run later, python will still be found.
           setting = os.path.dirname(sys.executable) + os.pathsep + setting
-          if sdk_path:
-            setting = sdk_path + os.pathsep + setting
         env[var.upper()] = setting.lower()
         break
   if sys.platform in ('win32', 'cygwin'):
@@ -93,7 +91,6 @@ def _LoadToolchainEnv(cpu, sdk_dir):
   # the setup script from the SDK if so. |cpu| should be either
   # 'x86' or 'x64'.
   assert cpu in ('x86', 'x64')
-  sdk_path = None
   if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))) and sdk_dir:
     # Load environment from json file.
     env = os.path.normpath(os.path.join(sdk_dir, 'bin/SetEnv.%s.json' % cpu))
@@ -149,15 +146,13 @@ def _LoadToolchainEnv(cpu, sdk_dir):
     args = [script_path, 'amd64_x86' if cpu == 'x86' else 'amd64']
 
     kits_dir = r"c:\Program Files (x86)\Windows Kits\10\Include"
-    sdk_path = r"c:\Program Files (x86)\Windows Kits\10\bin"
-    sdk_ver = "10.0.15063.0"
     if os.access(os.path.join(kits_dir, "10.0.16299.0"), os.F_OK):
-      if not os.access(os.path.join(kits_dir, "10.0.15063.0"), os.F_OK):
-        sdk_ver = "10.0.14393.0"
-    args.append(sdk_ver)
-    sdk_path = os.path.join(sdk_path, sdk_ver, cpu)
+      if os.access(os.path.join(kits_dir, "10.0.15063.0"), os.F_OK):
+        args.append("10.0.15063.0")
+      else:
+        args.append("10.0.14393.0")
     variables = _LoadEnvFromBat(args)
-  return _ExtractImportantEnvironment(variables, sdk_path)
+  return _ExtractImportantEnvironment(variables)
 
 
 def _FormatAsEnvironmentBlock(envvar_dict):
@@ -173,14 +168,15 @@ def _FormatAsEnvironmentBlock(envvar_dict):
 
 
 def main():
-  if len(sys.argv) != 5:
+  if len(sys.argv) != 6:
     print('Usage setup_toolchain.py '
           '<visual studio path> <win sdk path> '
-          '<runtime dirs> <target_cpu> <include prefix>')
+          '<runtime dirs> <target_cpu> <goma_disabled>')
     sys.exit(2)
   win_sdk_path = sys.argv[2]
   runtime_dirs = sys.argv[3]
   target_cpu = sys.argv[4]
+  goma_disabled = sys.argv[5]
 
   cpus = ('x86', 'x64')
   assert target_cpu in cpus
@@ -194,6 +190,7 @@ def main():
     # Extract environment variables for subprocesses.
     env = _LoadToolchainEnv(cpu, win_sdk_path)
     env['PATH'] = runtime_dirs + os.pathsep + env['PATH']
+    env['GOMA_DISABLED'] = goma_disabled
 
     if cpu == target_cpu:
       for path in env['PATH'].split(os.pathsep):

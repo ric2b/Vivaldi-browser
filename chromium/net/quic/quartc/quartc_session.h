@@ -46,7 +46,7 @@ class QUIC_EXPORT_PRIVATE QuartcSession
 
   const QuicCryptoStream* GetCryptoStream() const override;
 
-  QuartcStream* CreateOutgoingDynamicStream(SpdyPriority priority) override;
+  QuartcStream* CreateOutgoingDynamicStream() override;
 
   void OnCryptoHandshakeEvent(CryptoHandshakeEvent event) override;
 
@@ -67,10 +67,14 @@ class QUIC_EXPORT_PRIVATE QuartcSession
                             uint8_t* result,
                             size_t result_len) override;
 
+  void CloseConnection(const std::string& details) override;
+
   QuartcStreamInterface* CreateOutgoingStream(
       const OutgoingStreamParameters& param) override;
 
   void CancelStream(QuicStreamId stream_id) override;
+
+  bool IsOpenStream(QuicStreamId stream_id) override;
 
   QuartcSessionStats GetStats() override;
 

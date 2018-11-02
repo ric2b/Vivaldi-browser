@@ -11,7 +11,8 @@ namespace omnibox {
 // Keep alphabetized, and document each in the .cc file.
 
 extern const char kZeroSuggestCachedResults[];
+extern const char kZeroSuggestChromeHomePersonalized[];
 
-}  // namespace metrics
+}  // namespace omnibox
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_PREF_NAMES_H_

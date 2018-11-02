@@ -17,9 +17,7 @@
 #include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
-#include "content/browser/renderer_host/media/media_stream_requester.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
-#include "content/common/media/media_stream_options.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_device_description.h"
@@ -69,7 +67,7 @@ const char kMockSalt[] = "";
 class MockAudioManager : public AudioManagerPlatform {
  public:
   MockAudioManager()
-      : AudioManagerPlatform(base::MakeUnique<media::TestAudioThread>(),
+      : AudioManagerPlatform(std::make_unique<media::TestAudioThread>(),
                              &fake_audio_log_factory_),
         num_output_devices_(2),
         num_input_devices_(2) {}
@@ -85,8 +83,8 @@ class MockAudioManager : public AudioManagerPlatform {
 
     for (size_t i = 0; i < num_input_devices_; i++) {
       device_names->push_back(media::AudioDeviceName(
-          std::string("fake_device_name_") + base::SizeTToString(i),
-          std::string("fake_device_id_") + base::SizeTToString(i)));
+          std::string("fake_device_name_") + base::NumberToString(i),
+          std::string("fake_device_id_") + base::NumberToString(i)));
     }
   }
 
@@ -100,8 +98,8 @@ class MockAudioManager : public AudioManagerPlatform {
 
     for (size_t i = 0; i < num_output_devices_; i++) {
       device_names->push_back(media::AudioDeviceName(
-          std::string("fake_device_name_") + base::SizeTToString(i),
-          std::string("fake_device_id_") + base::SizeTToString(i)));
+          std::string("fake_device_name_") + base::NumberToString(i),
+          std::string("fake_device_id_") + base::NumberToString(i)));
     }
   }
 
@@ -131,44 +129,16 @@ class MockAudioManager : public AudioManagerPlatform {
   DISALLOW_COPY_AND_ASSIGN(MockAudioManager);
 };
 
-class MockMediaStreamRequester : public MediaStreamRequester {
- public:
-  virtual ~MockMediaStreamRequester() {}
-
-  // MediaStreamRequester implementation.
-  MOCK_METHOD5(StreamGenerated,
-               void(int render_frame_id,
-                    int page_request_id,
-                    const std::string& label,
-                    const StreamDeviceInfoArray& audio_devices,
-                    const StreamDeviceInfoArray& video_devices));
-  MOCK_METHOD3(StreamGenerationFailed,
-               void(int render_frame_id,
-                    int page_request_id,
-                    content::MediaStreamRequestResult result));
-  MOCK_METHOD3(DeviceStopped,
-               void(int render_frame_id,
-                    const std::string& label,
-                    const StreamDeviceInfo& device));
-  MOCK_METHOD4(DeviceOpened,
-               void(int render_frame_id,
-                    int page_request_id,
-                    const std::string& label,
-                    const StreamDeviceInfo& device_info));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockMediaStreamRequester);
-};
-
 }  // namespace
 
 class MediaStreamManagerTest : public ::testing::Test {
  public:
   MediaStreamManagerTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {
-    audio_manager_.reset(new MockAudioManager());
-    audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
-    media_stream_manager_ = base::MakeUnique<MediaStreamManager>(
+    audio_manager_ = std::make_unique<MockAudioManager>();
+    audio_system_ =
+        std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
+    media_stream_manager_ = std::make_unique<MediaStreamManager>(
         audio_system_.get(), audio_manager_->GetTaskRunner());
     base::RunLoop().RunUntilIdle();
   }
@@ -190,7 +160,7 @@ class MediaStreamManagerTest : public ::testing::Test {
     const int render_frame_id = 1;
     const int page_request_id = 1;
     const url::Origin security_origin;
-    MediaStreamManager::MediaRequestResponseCallback callback =
+    MediaStreamManager::MediaAccessRequestCallback callback =
         base::BindOnce(&MediaStreamManagerTest::ResponseCallback,
                        base::Unretained(this), index);
     StreamControls controls(true, true);
@@ -237,7 +207,7 @@ TEST_F(MediaStreamManagerTest, MakeMultipleRequests) {
   int page_request_id = 2;
   url::Origin security_origin;
   StreamControls controls(true, true);
-  MediaStreamManager::MediaRequestResponseCallback callback = base::BindOnce(
+  MediaStreamManager::MediaAccessRequestCallback callback = base::BindOnce(
       &MediaStreamManagerTest::ResponseCallback, base::Unretained(this), 1);
   std::string label2 = media_stream_manager_->MakeMediaAccessRequest(
       render_process_id, render_frame_id, page_request_id, controls,
@@ -263,7 +233,7 @@ TEST_F(MediaStreamManagerTest, MakeAndCancelMultipleRequests) {
 }
 
 TEST_F(MediaStreamManagerTest, DeviceID) {
-  url::Origin security_origin(GURL("http://localhost"));
+  url::Origin security_origin = url::Origin::Create(GURL("http://localhost"));
   const std::string unique_default_id(
       media::AudioDeviceDescription::kDefaultDeviceId);
   const std::string hashed_default_id =

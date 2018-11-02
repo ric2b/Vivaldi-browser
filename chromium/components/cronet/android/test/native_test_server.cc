@@ -43,14 +43,6 @@ const char kEchoAllHeadersPath[] = "/echo_all_headers";
 const char kEchoMethodPath[] = "/echo_method";
 const char kRedirectToEchoBodyPath[] = "/redirect_to_echo_body";
 const char kExabyteResponsePath[] = "/exabyte_response";
-// Path that advertises the dictionary passed in query params if client
-// supports Sdch encoding. E.g. /sdch/index?q=LeQxM80O will make the server
-// responds with "Get-Dictionary: /sdch/dict/LeQxM80O".
-const char kSdchPath[] = "/sdch/index";
-// Path that returns encoded response if client has the right dictionary.
-const char kSdchTestPath[] = "/sdch/test";
-// Path where dictionaries are stored.
-const char kSdchDictPath[] = "/sdch/dict/";
 
 net::EmbeddedTestServer* g_test_server = nullptr;
 
@@ -80,21 +72,6 @@ class ExabyteResponse : public net::test_server::BasicHttpResponse {
 
   DISALLOW_COPY_AND_ASSIGN(ExabyteResponse);
 };
-
-std::unique_ptr<net::test_server::RawHttpResponse> ConstructResponseBasedOnFile(
-    const base::FilePath& file_path) {
-  std::string file_contents;
-  bool read_file = base::ReadFileToString(file_path, &file_contents);
-  DCHECK(read_file) << file_path.value();
-  base::FilePath headers_path(
-      file_path.AddExtension(FILE_PATH_LITERAL("mock-http-headers")));
-  std::string headers_contents;
-  bool read_headers = base::ReadFileToString(headers_path, &headers_contents);
-  DCHECK(read_headers);
-  std::unique_ptr<net::test_server::RawHttpResponse> http_response(
-      new net::test_server::RawHttpResponse(headers_contents, file_contents));
-  return http_response;
-}
 
 std::unique_ptr<net::test_server::HttpResponse> NativeTestServerRequestHandler(
     const net::test_server::HttpRequest& request) {
@@ -144,53 +121,6 @@ std::unique_ptr<net::test_server::HttpResponse> NativeTestServerRequestHandler(
   return std::unique_ptr<net::test_server::BasicHttpResponse>();
 }
 
-std::unique_ptr<net::test_server::HttpResponse> SdchRequestHandler(
-    const base::FilePath& test_files_root,
-    const net::test_server::HttpRequest& request) {
-  DCHECK(g_test_server);
-  base::FilePath dir_path = test_files_root;
-
-  if (base::StartsWith(request.relative_url, kSdchPath,
-                       base::CompareCase::SENSITIVE)) {
-    base::FilePath file_path = dir_path.Append("sdch/index");
-    std::unique_ptr<net::test_server::RawHttpResponse> response =
-        ConstructResponseBasedOnFile(file_path);
-    // Check for query params to see which dictionary to advertise.
-    // For instance, ?q=dictionaryA will make the server advertise dictionaryA.
-    GURL url = g_test_server->GetURL(request.relative_url);
-    std::string dictionary;
-    if (!net::GetValueForKeyInQuery(url, "q", &dictionary)) {
-      CHECK(false) << "dictionary is not found in query params of "
-                   << request.relative_url;
-    }
-    auto accept_encoding_header = request.headers.find("Accept-Encoding");
-    if (accept_encoding_header != request.headers.end()) {
-      if (accept_encoding_header->second.find("sdch") != std::string::npos)
-        response->AddHeader(base::StringPrintf(
-            "Get-Dictionary: %s%s", kSdchDictPath, dictionary.c_str()));
-    }
-    return std::move(response);
-  }
-
-  if (base::StartsWith(request.relative_url, kSdchTestPath,
-                       base::CompareCase::SENSITIVE)) {
-    auto avail_dictionary_header = request.headers.find("Avail-Dictionary");
-    if (avail_dictionary_header != request.headers.end()) {
-      base::FilePath file_path = dir_path.Append(
-          "sdch/" + avail_dictionary_header->second + "_encoded");
-      return ConstructResponseBasedOnFile(file_path);
-    }
-    std::unique_ptr<net::test_server::BasicHttpResponse> response(
-        new net::test_server::BasicHttpResponse());
-    response->set_content_type("text/plain");
-    response->set_content("Sdch is not used.\n");
-    return std::move(response);
-  }
-
-  // Unhandled requests result in the Embedded test server sending a 404.
-  return std::unique_ptr<net::test_server::BasicHttpResponse>();
-}
-
 std::unique_ptr<net::test_server::HttpResponse> HandleExabyteRequest(
     const net::test_server::HttpRequest& request) {
   return base::WrapUnique(new ExabyteResponse);
@@ -198,10 +128,11 @@ std::unique_ptr<net::test_server::HttpResponse> HandleExabyteRequest(
 
 }  // namespace
 
-jboolean StartNativeTestServer(JNIEnv* env,
-                               const JavaParamRef<jclass>& jcaller,
-                               const JavaParamRef<jstring>& jtest_files_root,
-                               const JavaParamRef<jstring>& jtest_data_dir) {
+jboolean JNI_NativeTestServer_StartNativeTestServer(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    const JavaParamRef<jstring>& jtest_files_root,
+    const JavaParamRef<jstring>& jtest_data_dir) {
   // Shouldn't happen.
   if (g_test_server)
     return false;
@@ -218,8 +149,6 @@ jboolean StartNativeTestServer(JNIEnv* env,
                  base::Bind(&HandleExabyteRequest)));
   base::FilePath test_files_root(
       base::android::ConvertJavaStringToUTF8(env, jtest_files_root));
-  g_test_server->RegisterRequestHandler(
-      base::Bind(&SdchRequestHandler, test_files_root));
 
   // Add a third handler for paths that NativeTestServerRequestHandler does not
   // handle.
@@ -227,15 +156,16 @@ jboolean StartNativeTestServer(JNIEnv* env,
   return g_test_server->Start();
 }
 
-void ShutdownNativeTestServer(JNIEnv* env,
-                              const JavaParamRef<jclass>& jcaller) {
+void JNI_NativeTestServer_ShutdownNativeTestServer(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller) {
   if (!g_test_server)
     return;
   delete g_test_server;
   g_test_server = NULL;
 }
 
-ScopedJavaLocalRef<jstring> GetEchoBodyURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetEchoBodyURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
@@ -243,7 +173,7 @@ ScopedJavaLocalRef<jstring> GetEchoBodyURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetEchoHeaderURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetEchoHeaderURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller,
     const JavaParamRef<jstring>& jheader) {
@@ -256,7 +186,7 @@ ScopedJavaLocalRef<jstring> GetEchoHeaderURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetEchoAllHeadersURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetEchoAllHeadersURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
@@ -264,7 +194,7 @@ ScopedJavaLocalRef<jstring> GetEchoAllHeadersURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetEchoMethodURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetEchoMethodURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
@@ -272,7 +202,7 @@ ScopedJavaLocalRef<jstring> GetEchoMethodURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetRedirectToEchoBody(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetRedirectToEchoBody(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
@@ -280,7 +210,7 @@ ScopedJavaLocalRef<jstring> GetRedirectToEchoBody(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetFileURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetFileURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller,
     const JavaParamRef<jstring>& jfile_path) {
@@ -290,12 +220,13 @@ ScopedJavaLocalRef<jstring> GetFileURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-int GetPort(JNIEnv* env, const JavaParamRef<jclass>& jcaller) {
+int JNI_NativeTestServer_GetPort(JNIEnv* env,
+                                 const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
   return g_test_server->port();
 }
 
-ScopedJavaLocalRef<jstring> GetExabyteResponseURL(
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetExabyteResponseURL(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
@@ -303,8 +234,9 @@ ScopedJavaLocalRef<jstring> GetExabyteResponseURL(
   return base::android::ConvertUTF8ToJavaString(env, url.spec());
 }
 
-ScopedJavaLocalRef<jstring> GetHostPort(JNIEnv* env,
-                                        const JavaParamRef<jclass>& jcaller) {
+ScopedJavaLocalRef<jstring> JNI_NativeTestServer_GetHostPort(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller) {
   DCHECK(g_test_server);
   std::string host_port =
       net::HostPortPair::FromURL(g_test_server->base_url()).ToString();

@@ -10,19 +10,18 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/queue.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
-#include "cc/input/selection.h"
+#include "components/viz/client/frame_evictor.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
-#include "components/viz/service/frame_sinks/frame_evictor.h"
-#include "content/browser/android/content_view_core_observer.h"
+#include "components/viz/common/quads/selection.h"
 #include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -76,7 +75,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       public viz::FrameEvictorClient,
       public StylusTextSelectorClient,
       public ui::TouchSelectionControllerClient,
-      public content::ContentViewCoreObserver,
       public content::TextInputManager::Observer,
       public ui::DelegatedFrameHostAndroid::Client,
       public viz::BeginFrameObserver {
@@ -130,6 +128,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool DoBrowserControlsShrinkBlinkSize() const override;
   float GetTopControlsHeight() const override;
   float GetBottomControlsHeight() const override;
+  int GetMouseWheelMinimumGranularity() const override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
   void FocusedNodeChanged(bool is_editable_node,
@@ -157,8 +156,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DidCreateNewRendererCompositorFrameSink(
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
-  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
-                             cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      viz::CompositorFrame frame,
+      viz::mojom::HitTestRegionListPtr hit_test_region_list) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   void SetIsInVR(bool is_in_vr) override;
@@ -173,8 +174,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
   viz::FrameSinkId GetFrameSinkId() override;
   viz::FrameSinkId FrameSinkIdAtPoint(viz::SurfaceHittestDelegate* delegate,
-                                      const gfx::Point& point,
-                                      gfx::Point* transformed_point) override;
+                                      const gfx::PointF& point,
+                                      gfx::PointF* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -183,13 +184,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
-  bool TransformPointToLocalCoordSpace(const gfx::Point& point,
+  bool TransformPointToLocalCoordSpace(const gfx::PointF& point,
                                        const viz::SurfaceId& original_surface,
-                                       gfx::Point* transformed_point) override;
+                                       gfx::PointF* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
-      const gfx::Point& point,
+      const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
-      gfx::Point* transformed_point) override;
+      gfx::PointF* transformed_point) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
 
@@ -197,6 +198,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
+  bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
   void OnPhysicalBackingSizeChanged() override;
 
   // ui::ViewAndroidObserver implementation:
@@ -214,9 +216,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnAnimate(base::TimeTicks begin_frame_time) override;
   void OnActivityStopped() override;
   void OnActivityStarted() override;
-
-  // content::ContentViewCoreObserver implementation.
-  void OnContentViewCoreDestroyed() override;
 
   // viz::FrameEvictor implementation
   void EvictDelegatedFrame() override;
@@ -236,12 +235,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                                 const gfx::PointF& extent) override;
   void OnSelectionEvent(ui::SelectionEventType event) override;
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
+  void DidScroll() override;
 
   // DelegatedFrameHostAndroid::Client implementation.
   void SetBeginFrameSource(viz::BeginFrameSource* begin_frame_source) override;
   void DidReceiveCompositorFrameAck() override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
+  void OnFrameTokenChanged(uint32_t frame_token) override;
 
   // viz::BeginFrameObserver implementation.
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
@@ -250,6 +251,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Non-virtual methods
   void SetContentViewCore(ContentViewCore* content_view_core);
+  void OnContentViewCoreDestroyed();
   SkColor GetCachedBackgroundColor() const;
   void SendKeyEvent(const NativeWebKeyboardEvent& event);
   void SendMouseEvent(const ui::MotionEventAndroid&, int action_button);
@@ -294,7 +296,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                                   int start_adjust,
                                   int end_adjust);
 
-  void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
+  void SynchronousFrameMetadata(viz::CompositorFrameMetadata frame_metadata);
 
   void SetSynchronousCompositorClient(SynchronousCompositorClient* client);
 
@@ -339,8 +341,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void SendReclaimCompositorResources(bool is_swap_ack);
 
-  void OnFrameMetadataUpdated(const cc::CompositorFrameMetadata& frame_metadata,
-                              bool is_transparent);
+  void OnFrameMetadataUpdated(
+      const viz::CompositorFrameMetadata& frame_metadata,
+      bool is_transparent);
 
   void ShowInternal();
   void HideInternal();
@@ -380,9 +383,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void CreateOverscrollControllerIfPossible();
 
-  void UpdateLeftClickCount(int action_button,
-                            float mousedown_x,
-                            float mouse_down_y);
+  void UpdateMouseState(int action_button,
+                        float mousedown_x,
+                        float mouse_down_y);
 
   WebContentsAccessibilityAndroid* GetWebContentsAccessibilityAndroid() const;
 
@@ -435,7 +438,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // The most recent surface size that was pushed to the surface layer.
   gfx::Size current_surface_size_;
 
-  std::queue<base::Closure> ack_callbacks_;
+  base::queue<base::Closure> ack_callbacks_;
 
   // Used to control and render overscroll-related effects.
   std::unique_ptr<OverscrollControllerAndroid> overscroll_controller_;
@@ -474,6 +477,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   float prev_top_shown_pix_;
   float prev_bottom_shown_pix_;
+  float page_scale_;
+  float min_page_scale_;
+  float max_page_scale_;
 
   base::TimeTicks prev_mousedown_timestamp_;
   gfx::Point prev_mousedown_point_;

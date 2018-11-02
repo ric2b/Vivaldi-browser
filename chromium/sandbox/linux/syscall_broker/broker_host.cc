@@ -22,6 +22,7 @@
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/unix_domain_socket.h"
+#include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/third_party/valgrind/valgrind.h"
 #include "sandbox/linux/syscall_broker/broker_common.h"
 #include "sandbox/linux/syscall_broker/broker_policy.h"
@@ -33,27 +34,17 @@ namespace syscall_broker {
 
 namespace {
 
-bool IsRunningOnValgrind() {
-  return RUNNING_ON_VALGRIND;
-}
-
 // A little open(2) wrapper to handle some oddities for us. In the general case
 // make a direct system call since we want to keep in control of the broker
 // process' system calls profile to be able to loosely sandbox it.
 int sys_open(const char* pathname, int flags) {
   // Hardcode mode to rw------- when creating files.
-  int mode;
-  if (flags & O_CREAT) {
-    mode = 0600;
-  } else {
-    mode = 0;
-  }
-  if (IsRunningOnValgrind()) {
+  int mode = (flags & O_CREAT) ? 0600 : 0;
+  if (RunningOnValgrind()) {
     // Valgrind does not support AT_FDCWD, just use libc's open() in this case.
     return open(pathname, flags, mode);
-  } else {
-    return syscall(__NR_openat, AT_FDCWD, pathname, flags, mode);
   }
+  return syscall(__NR_openat, AT_FDCWD, pathname, flags, mode);
 }
 
 // Open |requested_filename| with |flags| if allowed by our policy.
@@ -113,50 +104,111 @@ void AccessFileForIPC(const BrokerPolicy& policy,
   }
 }
 
-// Handle a |command_type| request contained in |iter| and send the reply
-// on |reply_ipc|.
-// Currently COMMAND_OPEN and COMMAND_ACCESS are supported.
-bool HandleRemoteCommand(const BrokerPolicy& policy,
-                         IPCCommand command_type,
-                         int reply_ipc,
-                         base::PickleIterator iter) {
-  // Currently all commands have two arguments: filename and flags.
-  std::string requested_filename;
-  int flags = 0;
-  if (!iter.ReadString(&requested_filename) || !iter.ReadInt(&flags))
-    return false;
+// Perform stat(2) on |requested_filename| and marshal the result to
+// |write_pickle|.
+void StatFileForIPC(const BrokerPolicy& policy,
+                    IPCCommand command_type,
+                    const std::string& requested_filename,
+                    base::Pickle* write_pickle) {
+  DCHECK(write_pickle);
+  DCHECK(command_type == COMMAND_STAT || command_type == COMMAND_STAT64);
+  const char* file_to_access = nullptr;
+  if (!policy.GetFileNameIfAllowedToAccess(requested_filename.c_str(), F_OK,
+                                           &file_to_access)) {
+    write_pickle->WriteInt(-policy.denied_errno());
+    return;
+  }
+  if (command_type == COMMAND_STAT) {
+    struct stat sb;
+    if (stat(file_to_access, &sb) < 0) {
+      write_pickle->WriteInt(-errno);
+      return;
+    }
+    write_pickle->WriteInt(0);
+    write_pickle->WriteData(reinterpret_cast<char*>(&sb), sizeof(sb));
+  } else {
+    struct stat64 sb;
+    if (stat64(file_to_access, &sb) < 0) {
+      write_pickle->WriteInt(-errno);
+      return;
+    }
+    write_pickle->WriteInt(0);
+    write_pickle->WriteData(reinterpret_cast<char*>(&sb), sizeof(sb));
+  }
+}
 
-  base::Pickle write_pickle;
-  std::vector<int> opened_files;
+// Perform rename(2) on |old_filename| to |new_filename| and marshal the
+// result to |write_pickle|.
+void RenameFileForIPC(const BrokerPolicy& policy,
+                      const std::string& old_filename,
+                      const std::string& new_filename,
+                      base::Pickle* write_pickle) {
+  DCHECK(write_pickle);
+  bool ignore;
+  const char* old_file_to_access = nullptr;
+  const char* new_file_to_access = nullptr;
+  if (!policy.GetFileNameIfAllowedToOpen(old_filename.c_str(), O_RDWR,
+                                         &old_file_to_access, &ignore) ||
+      !policy.GetFileNameIfAllowedToOpen(new_filename.c_str(), O_RDWR,
+                                         &new_file_to_access, &ignore)) {
+    write_pickle->WriteInt(-policy.denied_errno());
+    return;
+  }
+  if (rename(old_file_to_access, new_file_to_access) < 0) {
+    write_pickle->WriteInt(-errno);
+    return;
+  }
+  write_pickle->WriteInt(0);
+}
+
+// Handle a |command_type| request contained in |iter| and write the reply
+// to |write_pickle|, adding any files opened to |opened_files|.
+bool HandleRemoteCommand(const BrokerPolicy& policy,
+                         base::PickleIterator iter,
+                         base::Pickle* write_pickle,
+                         std::vector<int>* opened_files) {
+  int command_type;
+  if (!iter.ReadInt(&command_type))
+    return false;
 
   switch (command_type) {
-    case COMMAND_ACCESS:
-      AccessFileForIPC(policy, requested_filename, flags, &write_pickle);
+    case COMMAND_ACCESS: {
+      std::string requested_filename;
+      int flags = 0;
+      if (!iter.ReadString(&requested_filename) || !iter.ReadInt(&flags))
+        return false;
+      AccessFileForIPC(policy, requested_filename, flags, write_pickle);
       break;
-    case COMMAND_OPEN:
-      OpenFileForIPC(
-          policy, requested_filename, flags, &write_pickle, &opened_files);
+    }
+    case COMMAND_OPEN: {
+      std::string requested_filename;
+      int flags = 0;
+      if (!iter.ReadString(&requested_filename) || !iter.ReadInt(&flags))
+        return false;
+      OpenFileForIPC(policy, requested_filename, flags, write_pickle,
+                     opened_files);
       break;
+    }
+    case COMMAND_STAT:
+    case COMMAND_STAT64: {
+      std::string requested_filename;
+      if (!iter.ReadString(&requested_filename))
+        return false;
+      StatFileForIPC(policy, static_cast<IPCCommand>(command_type),
+                     requested_filename, write_pickle);
+      break;
+    }
+    case COMMAND_RENAME: {
+      std::string old_filename;
+      std::string new_filename;
+      if (!iter.ReadString(&old_filename) || !iter.ReadString(&new_filename))
+        return false;
+      RenameFileForIPC(policy, old_filename, new_filename, write_pickle);
+      break;
+    }
     default:
       LOG(ERROR) << "Invalid IPC command";
-      break;
-  }
-
-  CHECK_LE(write_pickle.size(), kMaxMessageLength);
-  ssize_t sent = base::UnixDomainSocket::SendMsg(
-      reply_ipc, write_pickle.data(), write_pickle.size(), opened_files);
-
-  // Close anything we have opened in this process.
-  for (std::vector<int>::iterator it = opened_files.begin();
-       it != opened_files.end();
-       ++it) {
-    int ret = IGNORE_EINTR(close(*it));
-    DCHECK(!ret) << "Could not close file descriptor";
-  }
-
-  if (sent <= 0) {
-    LOG(ERROR) << "Could not send IPC reply";
-    return false;
+      return false;
   }
   return true;
 }
@@ -197,34 +249,29 @@ BrokerHost::RequestStatus BrokerHost::HandleRequest() const {
 
   base::Pickle pickle(buf, msg_len);
   base::PickleIterator iter(pickle);
-  int command_type;
-  if (iter.ReadInt(&command_type)) {
-    bool command_handled = false;
-    // Go through all the possible IPC messages.
-    switch (command_type) {
-      case COMMAND_ACCESS:
-      case COMMAND_OPEN:
-        // We reply on the file descriptor sent to us via the IPC channel.
-        command_handled = HandleRemoteCommand(
-            broker_policy_, static_cast<IPCCommand>(command_type),
-            temporary_ipc.get(), iter);
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+  base::Pickle write_pickle;
+  std::vector<int> opened_files;
+  bool result =
+      HandleRemoteCommand(broker_policy_, iter, &write_pickle, &opened_files);
 
-    if (command_handled) {
-      return RequestStatus::SUCCESS;
-    } else {
-      return RequestStatus::FAILURE;
+  if (result) {
+    CHECK_LE(write_pickle.size(), kMaxMessageLength);
+    ssize_t sent = base::UnixDomainSocket::SendMsg(
+        temporary_ipc.get(), write_pickle.data(), write_pickle.size(),
+        opened_files);
+    if (sent <= 0) {
+      LOG(ERROR) << "Could not send IPC reply";
+      result = false;
     }
-
-    NOTREACHED();
   }
 
-  LOG(ERROR) << "Error parsing IPC request";
-  return RequestStatus::FAILURE;
+  // Close anything we have opened in this process.
+  for (int fd : opened_files) {
+    int ret = IGNORE_EINTR(close(fd));
+    DCHECK(!ret) << "Could not close file descriptor";
+  }
+
+  return result ? RequestStatus::SUCCESS : RequestStatus::FAILURE;
 }
 
 }  // namespace syscall_broker

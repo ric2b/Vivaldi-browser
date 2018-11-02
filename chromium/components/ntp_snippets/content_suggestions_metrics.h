@@ -20,9 +20,7 @@ namespace metrics {
 // whether the user actually saw the category.
 void OnPageShown(const std::vector<Category>& categories,
                  const std::vector<int>& suggestions_per_category,
-                 const std::vector<int>& prefetched_suggestions_per_category,
-                 const std::vector<bool>& is_category_visible,
-                 bool is_offline);
+                 const std::vector<bool>& is_category_visible);
 
 // Should only be called once per NTP for each suggestion.
 void OnSuggestionShown(int global_position,
@@ -30,9 +28,7 @@ void OnSuggestionShown(int global_position,
                        int position_in_category,
                        base::Time publish_date,
                        float score,
-                       base::Time fetch_date,
-                       bool is_prefetched,
-                       bool is_offline);
+                       base::Time fetch_date);
 
 // TODO(crbug.com/682160): Take struct, so that one could not mix up the
 // order of arguments.

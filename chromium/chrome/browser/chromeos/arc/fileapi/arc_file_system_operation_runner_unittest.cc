@@ -7,7 +7,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
@@ -37,12 +36,12 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
   ~ArcFileSystemOperationRunnerTest() override = default;
 
   void SetUp() override {
-    arc_service_manager_ = base::MakeUnique<ArcServiceManager>();
-    profile_ = base::MakeUnique<TestingProfile>();
+    arc_service_manager_ = std::make_unique<ArcServiceManager>();
+    profile_ = std::make_unique<TestingProfile>();
     ArcFileSystemBridge::GetFactory()->SetTestingFactoryAndUse(
         profile_.get(),
         [](content::BrowserContext* context) -> std::unique_ptr<KeyedService> {
-          return base::MakeUnique<ArcFileSystemBridge>(
+          return std::make_unique<ArcFileSystemBridge>(
               context, ArcServiceManager::Get()->arc_bridge_service());
         });
     runner_ = ArcFileSystemOperationRunner::CreateForTesting(
@@ -53,6 +52,12 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
     // Run the message loop until FileSystemInstance::Init() is called.
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(file_system_instance_.InitCalled());
+  }
+
+  void TearDown() override {
+    // Explicitly calls Shutdown() to detach from services.
+    if (runner_)
+      runner_->Shutdown();
   }
 
  protected:
@@ -152,6 +157,7 @@ TEST_F(ArcFileSystemOperationRunnerTest, DeferAndDiscard) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, counter);
 
+  runner_->Shutdown();
   runner_.reset();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, counter);

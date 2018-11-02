@@ -7,11 +7,11 @@
 
 #include <string>
 
+#include "ash/app_list/model/app_list_model_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "ui/app_list/app_list_export.h"
-#include "ui/app_list/app_list_model_observer.h"
 #include "ui/app_list/views/search_box_view_delegate.h"
 #include "ui/views/view.h"
 
@@ -35,9 +35,7 @@ class APP_LIST_EXPORT AppListMainView : public views::View,
   AppListMainView(AppListViewDelegate* delegate, AppListView* app_list_view);
   ~AppListMainView() override;
 
-  void Init(gfx::NativeView parent,
-            int initial_apps_page,
-            SearchBoxView* search_box_view);
+  void Init(int initial_apps_page, SearchBoxView* search_box_view);
 
   void ShowAppListWhenReady();
 
@@ -61,15 +59,8 @@ class APP_LIST_EXPORT AppListMainView : public views::View,
   // Called when the search box's visibility is changed.
   void NotifySearchBoxVisibilityChanged();
 
-  bool ShouldShowCustomLauncherPage() const;
-  void UpdateCustomLauncherPageVisibility();
-
   // Overridden from views::View:
   const char* GetClassName() const override;
-
-  // Overridden from AppListModelObserver:
-  void OnCustomLauncherPageEnabledStateChanged(bool enabled) override;
-  void OnSearchEngineIsGoogleChanged(bool is_google) override;
 
   // Invoked when an item is activated on the grid view. |event_flags| contains
   // the flags of the keyboard/mouse event that triggers the activation request.

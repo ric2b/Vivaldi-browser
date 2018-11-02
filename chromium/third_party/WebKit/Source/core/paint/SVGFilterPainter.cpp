@@ -6,12 +6,12 @@
 
 #include "core/layout/svg/LayoutSVGResourceFilter.h"
 #include "core/paint/FilterEffectBuilder.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/svg/SVGFilterElement.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 #include "platform/graphics/filters/Filter.h"
-#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
+#include "platform/graphics/filters/PaintFilterBuilder.h"
 #include "platform/graphics/filters/SourceGraphic.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -23,9 +23,9 @@ GraphicsContext* SVGFilterRecordingContext::BeginContent() {
 
   // Content painted into a new PaintRecord in SPv2 will have an
   // independent property tree set.
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     paint_controller_->UpdateCurrentPaintChunkProperties(
-        nullptr, PropertyTreeState::Root());
+        WTF::nullopt, PropertyTreeState::Root());
   }
   return context_.get();
 }
@@ -38,7 +38,8 @@ sk_sp<PaintRecord> SVGFilterRecordingContext::EndContent(
   context_->BeginRecording(bounds);
   paint_controller_->CommitNewDisplayItems();
 
-  paint_controller_->GetPaintArtifact().Replay(bounds, *context_);
+  paint_controller_->GetPaintArtifact().Replay(*context_,
+                                               PropertyTreeState::Root());
 
   sk_sp<PaintRecord> content = context_->EndRecording();
   // Content is cached by the source graphic so temporaries can be freed.
@@ -57,14 +58,13 @@ static void PaintFilteredContent(GraphicsContext& context,
                                  const LayoutObject& object,
                                  const FloatRect& bounds,
                                  FilterEffect* effect) {
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          context, object, DisplayItem::kSVGFilter))
+  if (DrawingRecorder::UseCachedDrawingIfPossible(context, object,
+                                                  DisplayItem::kSVGFilter))
     return;
 
-  LayoutObjectDrawingRecorder recorder(context, object, DisplayItem::kSVGFilter,
-                                       bounds);
-  sk_sp<SkImageFilter> image_filter =
-      SkiaImageFilterBuilder::Build(effect, kInterpolationSpaceSRGB);
+  DrawingRecorder recorder(context, object, DisplayItem::kSVGFilter);
+  sk_sp<PaintFilter> image_filter =
+      PaintFilterBuilder::Build(effect, kInterpolationSpaceSRGB);
   context.Save();
 
   // Clip drawing of filtered image to the minimum required paint rect.
@@ -97,7 +97,7 @@ GraphicsContext* SVGFilterPainter::PrepareEffect(
   SVGFilterGraphNodeMap* node_map = SVGFilterGraphNodeMap::Create();
   FilterEffectBuilder builder(nullptr, object.ObjectBoundingBox(), 1);
   Filter* filter = builder.BuildReferenceFilter(
-      toSVGFilterElement(*filter_.GetElement()), nullptr, node_map);
+      ToSVGFilterElement(*filter_.GetElement()), nullptr, node_map);
   if (!filter || !filter->LastEffect())
     return nullptr;
 
@@ -149,8 +149,8 @@ void SVGFilterPainter::FinishEffect(
   if (filter_data->state_ == FilterData::kRecordingContent) {
     DCHECK(filter->GetSourceGraphic());
     sk_sp<PaintRecord> content = recording_context.EndContent(bounds);
-    SkiaImageFilterBuilder::BuildSourceGraphic(filter->GetSourceGraphic(),
-                                               std::move(content), bounds);
+    PaintFilterBuilder::BuildSourceGraphic(filter->GetSourceGraphic(),
+                                           std::move(content), bounds);
     filter_data->state_ = FilterData::kReadyToPaint;
   }
 

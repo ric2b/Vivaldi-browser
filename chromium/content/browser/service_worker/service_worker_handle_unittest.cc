@@ -23,7 +23,8 @@
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_test_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerState.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h"
 
 namespace content {
 
@@ -32,9 +33,9 @@ namespace {
 const int kRenderFrameId = 44;  // A dummy ID for testing.
 
 void VerifyStateChangedMessage(int expected_handle_id,
-                              blink::WebServiceWorkerState expected_state,
-                              const IPC::Message* message) {
-  ASSERT_TRUE(message != NULL);
+                               blink::mojom::ServiceWorkerState expected_state,
+                               const IPC::Message* message) {
+  ASSERT_TRUE(message != nullptr);
   ServiceWorkerMsg_ServiceWorkerStateChanged::Param param;
   ASSERT_TRUE(ServiceWorkerMsg_ServiceWorkerStateChanged::Read(
       message, &param));
@@ -79,9 +80,9 @@ class ServiceWorkerHandleTest : public testing::Test {
     dispatcher_host_->Init(helper_->context_wrapper());
 
     const GURL pattern("http://www.example.com/");
-    registration_ =
-        new ServiceWorkerRegistration(ServiceWorkerRegistrationOptions(pattern),
-                                      1L, helper_->context()->AsWeakPtr());
+    registration_ = new ServiceWorkerRegistration(
+        blink::mojom::ServiceWorkerRegistrationOptions(pattern), 1L,
+        helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(),
         GURL("http://www.example.com/service_worker.js"),
@@ -97,7 +98,8 @@ class ServiceWorkerHandleTest : public testing::Test {
     version_->SetStatus(ServiceWorkerVersion::INSTALLING);
 
     // Make the registration findable via storage functions.
-    helper_->context()->storage()->LazyInitialize(base::Bind(&base::DoNothing));
+    helper_->context()->storage()->LazyInitializeForTest(
+        base::BindOnce(&base::DoNothing));
     base::RunLoop().RunUntilIdle();
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
     helper_->context()->storage()->StoreRegistration(
@@ -116,9 +118,9 @@ class ServiceWorkerHandleTest : public testing::Test {
   }
 
   void TearDown() override {
-    dispatcher_host_ = NULL;
-    registration_ = NULL;
-    version_ = NULL;
+    dispatcher_host_ = nullptr;
+    registration_ = nullptr;
+    version_ = nullptr;
     provider_host_.reset();
     helper_.reset();
   }
@@ -163,7 +165,8 @@ TEST_F(ServiceWorkerHandleTest, OnVersionStateChanged) {
 
   // StateChanged (state == Installed).
   VerifyStateChangedMessage(handle->handle_id(),
-                            blink::kWebServiceWorkerStateInstalled, message);
+                            blink::mojom::ServiceWorkerState::kInstalled,
+                            message);
 }
 
 }  // namespace content

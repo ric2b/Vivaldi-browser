@@ -4,13 +4,13 @@
 
 #include "chromeos/dbus/fake_image_burner_client.h"
 
+#include <utility>
+
 namespace chromeos {
 
-FakeImageBurnerClient::FakeImageBurnerClient() {
-}
+FakeImageBurnerClient::FakeImageBurnerClient() = default;
 
-FakeImageBurnerClient::~FakeImageBurnerClient() {
-}
+FakeImageBurnerClient::~FakeImageBurnerClient() = default;
 
 void FakeImageBurnerClient::Init(dbus::Bus* bus) {
 }
@@ -28,4 +28,4 @@ void FakeImageBurnerClient::SetEventHandlers(
     const BurnProgressUpdateHandler& burn_progress_update_handler) {
 }
 
-} // namespace chromeos
+}  // namespace chromeos

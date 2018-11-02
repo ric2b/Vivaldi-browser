@@ -32,14 +32,14 @@
 #include "core/dom/events/EventTarget.h"
 
 #include <memory>
-#include "bindings/core/v8/AddEventListenerOptionsOrBoolean.h"
-#include "bindings/core/v8/EventListenerOptionsOrBoolean.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/SourceLocation.h"
-#include "bindings/core/v8/V8DOMActivityLogger.h"
+#include "bindings/core/v8/add_event_listener_options_or_boolean.h"
+#include "bindings/core/v8/event_listener_options_or_boolean.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/events/Event.h"
+#include "core/dom/events/EventTargetImpl.h"
 #include "core/editing/Editor.h"
 #include "core/events/EventUtil.h"
 #include "core/events/PointerEvent.h"
@@ -52,6 +52,7 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
+#include "platform/bindings/V8DOMActivityLogger.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -116,7 +117,7 @@ void ReportBlockedEvent(ExecutionContext* context,
                         const Event* event,
                         RegisteredEventListener* registered_listener,
                         double delayed_seconds) {
-  if (registered_listener->Listener()->GetType() !=
+  if (registered_listener->Callback()->GetType() !=
       EventListener::kJSEventListenerType)
     return;
 
@@ -129,7 +130,7 @@ void ReportBlockedEvent(ExecutionContext* context,
 
   PerformanceMonitor::ReportGenericViolation(
       context, PerformanceMonitor::kBlockedEvent, message_text, delayed_seconds,
-      GetFunctionLocation(context, registered_listener->Listener()));
+      GetFunctionLocation(context, registered_listener->Callback()));
   registered_listener->SetBlockedEventWarningEmitted();
 }
 
@@ -151,11 +152,12 @@ EventTargetData::EventTargetData() {}
 
 EventTargetData::~EventTargetData() {}
 
-DEFINE_TRACE(EventTargetData) {
+void EventTargetData::Trace(blink::Visitor* visitor) {
   visitor->Trace(event_listener_map);
 }
 
-DEFINE_TRACE_WRAPPERS(EventTargetData) {
+void EventTargetData::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(event_listener_map);
 }
 
@@ -187,6 +189,19 @@ ServiceWorker* EventTarget::ToServiceWorker() {
   return nullptr;
 }
 
+// An instance of EventTargetImpl is returned because EventTarget
+// is an abstract class, and making it non-abstract is unfavorable
+// because it will increase the size of EventTarget and all of its
+// subclasses with code that are mostly unnecessary for them,
+// resulting in a performance decrease.
+// We also don't use ImplementedAs=EventTargetImpl in EventTarget.idl
+// because it will result in some complications with classes that are
+// currently derived from EventTarget.
+// Spec: https://dom.spec.whatwg.org/#dom-eventtarget-eventtarget
+EventTarget* EventTarget::Create(ScriptState* script_state) {
+  return EventTargetImpl::Create(script_state);
+}
+
 inline LocalDOMWindow* EventTarget::ExecutingWindow() {
   if (ExecutionContext* context = GetExecutionContext())
     return context->ExecutingWindow();
@@ -205,7 +220,7 @@ void EventTarget::SetDefaultAddEventListenerOptions(
     return;
   }
 
-  LocalDOMWindow* executing_window = this->ExecutingWindow();
+  LocalDOMWindow* executing_window = ExecutingWindow();
   if (executing_window) {
     if (options.hasPassive()) {
       UseCounter::Count(executing_window->document(),
@@ -286,7 +301,7 @@ void EventTarget::SetDefaultAddEventListenerOptions(
       options.setPassive(false);
   }
 
-  if (!options.passive()) {
+  if (!options.passive() && !options.PassiveSpecified()) {
     String message_text = String::Format(
         "Added non-passive event listener to a scroll-blocking '%s' event. "
         "Consider marking event handler as 'passive' to make the page more "
@@ -313,11 +328,11 @@ bool EventTarget::addEventListener(
     const AtomicString& event_type,
     EventListener* listener,
     const AddEventListenerOptionsOrBoolean& options_union) {
-  if (options_union.isBoolean())
-    return addEventListener(event_type, listener, options_union.getAsBoolean());
-  if (options_union.isAddEventListenerOptions()) {
+  if (options_union.IsBoolean())
+    return addEventListener(event_type, listener, options_union.GetAsBoolean());
+  if (options_union.IsAddEventListenerOptions()) {
     AddEventListenerOptionsResolved options =
-        options_union.getAsAddEventListenerOptions();
+        options_union.GetAsAddEventListenerOptions();
     return addEventListener(event_type, listener, options);
   }
   return addEventListener(event_type, listener);
@@ -359,7 +374,7 @@ bool EventTarget::AddEventListenerInternal(
 void EventTarget::AddedEventListener(
     const AtomicString& event_type,
     RegisteredEventListener& registered_listener) {
-  if (const LocalDOMWindow* executing_window = this->ExecutingWindow()) {
+  if (const LocalDOMWindow* executing_window = ExecutingWindow()) {
     if (const Document* document = executing_window->document()) {
       if (event_type == EventTypeNames::auxclick)
         UseCounter::Count(*document, WebFeature::kAuxclickAddListenerCount);
@@ -396,11 +411,12 @@ bool EventTarget::removeEventListener(
     const AtomicString& event_type,
     const EventListener* listener,
     const EventListenerOptionsOrBoolean& options_union) {
-  if (options_union.isBoolean())
+  if (options_union.IsBoolean()) {
     return removeEventListener(event_type, listener,
-                               options_union.getAsBoolean());
-  if (options_union.isEventListenerOptions()) {
-    EventListenerOptions options = options_union.getAsEventListenerOptions();
+                               options_union.GetAsBoolean());
+  }
+  if (options_union.IsEventListenerOptions()) {
+    EventListenerOptions options = options_union.GetAsEventListenerOptions();
     return removeEventListener(event_type, listener, options);
   }
   return removeEventListener(event_type, listener);
@@ -458,34 +474,44 @@ void EventTarget::RemovedEventListener(
     const AtomicString& event_type,
     const RegisteredEventListener& registered_listener) {}
 
-bool EventTarget::SetAttributeEventListener(const AtomicString& event_type,
-                                            EventListener* listener) {
-  ClearAttributeEventListener(event_type);
-  if (!listener)
-    return false;
-  return addEventListener(event_type, listener, false);
-}
-
-EventListener* EventTarget::GetAttributeEventListener(
+RegisteredEventListener* EventTarget::GetAttributeRegisteredEventListener(
     const AtomicString& event_type) {
   EventListenerVector* listener_vector = GetEventListeners(event_type);
   if (!listener_vector)
     return nullptr;
 
   for (auto& event_listener : *listener_vector) {
-    EventListener* listener = event_listener.Listener();
+    EventListener* listener = event_listener.Callback();
     if (listener->IsAttribute() &&
         listener->BelongsToTheCurrentWorld(GetExecutionContext()))
-      return listener;
+      return &event_listener;
   }
   return nullptr;
 }
 
-bool EventTarget::ClearAttributeEventListener(const AtomicString& event_type) {
-  EventListener* listener = GetAttributeEventListener(event_type);
-  if (!listener)
+bool EventTarget::SetAttributeEventListener(const AtomicString& event_type,
+                                            EventListener* listener) {
+  RegisteredEventListener* registered_listener =
+      GetAttributeRegisteredEventListener(event_type);
+  if (!listener) {
+    if (registered_listener)
+      removeEventListener(event_type, registered_listener->Callback(), false);
     return false;
-  return removeEventListener(event_type, listener, false);
+  }
+  if (registered_listener) {
+    registered_listener->SetCallback(listener);
+    return true;
+  }
+  return addEventListener(event_type, listener, false);
+}
+
+EventListener* EventTarget::GetAttributeEventListener(
+    const AtomicString& event_type) {
+  RegisteredEventListener* registered_listener =
+      GetAttributeRegisteredEventListener(event_type);
+  if (registered_listener)
+    return registered_listener->Callback();
+  return nullptr;
 }
 
 bool EventTarget::dispatchEventForBindings(Event* event,
@@ -583,7 +609,7 @@ void EventTarget::CountLegacyEvents(
     return;
   }
 
-  if (const LocalDOMWindow* executing_window = this->ExecutingWindow()) {
+  if (const LocalDOMWindow* executing_window = ExecutingWindow()) {
     if (const Document* document = executing_window->document()) {
       if (legacy_listeners_vector) {
         if (listeners_vector)
@@ -647,7 +673,7 @@ bool EventTarget::FireEventListeners(Event* event,
   // dispatch. Conveniently, all new event listeners will be added after or at
   // index |size|, so iterating up to (but not including) |size| naturally
   // excludes new event listeners.
-  if (const LocalDOMWindow* executing_window = this->ExecutingWindow()) {
+  if (const LocalDOMWindow* executing_window = ExecutingWindow()) {
     if (const Document* document = executing_window->document()) {
       if (CheckTypeThenUseCount(event, EventTypeNames::beforeunload,
                                 WebFeature::kDocumentBeforeUnloadFired,
@@ -656,6 +682,12 @@ bool EventTarget::FireEventListeners(Event* event,
           UseCounter::Count(*document, WebFeature::kSubFrameBeforeUnloadFired);
       } else if (CheckTypeThenUseCount(event, EventTypeNames::unload,
                                        WebFeature::kDocumentUnloadFired,
+                                       document)) {
+      } else if (CheckTypeThenUseCount(event, EventTypeNames::pagehide,
+                                       WebFeature::kDocumentPageHideFired,
+                                       document)) {
+      } else if (CheckTypeThenUseCount(event, EventTypeNames::pageshow,
+                                       WebFeature::kDocumentPageShowFired,
                                        document)) {
       } else if (CheckTypeThenUseCount(event, EventTypeNames::DOMFocusIn,
                                        WebFeature::kDOMFocusInOutEvent,
@@ -737,7 +769,7 @@ bool EventTarget::FireEventListeners(Event* event,
         registered_listener.Capture())
       continue;
 
-    EventListener* listener = registered_listener.Listener();
+    EventListener* listener = registered_listener.Callback();
     // The listener will be retained by Member<EventListener> in the
     // registeredListener, i and size are updated with the firing event iterator
     // in case the listener is removed from the listener vector below.
@@ -763,7 +795,7 @@ bool EventTarget::FireEventListeners(Event* event,
     // If we're about to report this event listener as blocking, make sure it
     // wasn't removed while handling the event.
     if (should_report_blocked_event && i > 0 &&
-        entry[i - 1].Listener() == listener && !entry[i - 1].Passive() &&
+        entry[i - 1].Callback() == listener && !entry[i - 1].Passive() &&
         !entry[i - 1].BlockedEventWarningEmitted() &&
         !event->defaultPrevented()) {
       ReportBlockedEvent(context, event, &entry[i - 1],

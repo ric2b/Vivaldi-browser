@@ -6,6 +6,7 @@
 
 #include <math.h>
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -16,7 +17,6 @@
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -116,11 +116,11 @@ void AddLayerAnimationsForMinimize(aura::Window* window, bool show) {
   float scale_y = static_cast<float>(target_bounds.height()) / bounds.height();
 
   std::unique_ptr<ui::InterpolatedTransform> scale =
-      base::MakeUnique<ui::InterpolatedScale>(
+      std::make_unique<ui::InterpolatedScale>(
           gfx::Point3F(1, 1, 1), gfx::Point3F(scale_x, scale_y, 1));
 
   std::unique_ptr<ui::InterpolatedTransform> translation =
-      base::MakeUnique<ui::InterpolatedTranslation>(
+      std::make_unique<ui::InterpolatedTranslation>(
           gfx::PointF(), gfx::PointF(target_bounds.x() - bounds.x(),
                                      target_bounds.y() - bounds.y()));
 
@@ -308,8 +308,12 @@ base::TimeDelta CrossFadeAnimation(
     aura::Window* window,
     std::unique_ptr<ui::LayerTreeOwner> old_layer_owner,
     gfx::Tween::Type tween_type) {
-  DCHECK(old_layer_owner->root());
+  ui::Layer* old_layer = old_layer_owner->root();
+  ui::Layer* new_layer = window->layer();
+
+  DCHECK(old_layer);
   const gfx::Rect old_bounds(old_layer_owner->root()->bounds());
+
   gfx::RectF old_transformed_bounds(old_bounds);
   gfx::Transform old_transform(old_layer_owner->root()->transform());
   gfx::Transform old_transform_in_root;
@@ -319,6 +323,12 @@ base::TimeDelta CrossFadeAnimation(
   old_transform_in_root.TransformRect(&old_transformed_bounds);
   const gfx::Rect new_bounds(window->bounds());
   const bool old_on_top = (old_bounds.width() > new_bounds.width());
+
+  // Ensure the higher-resolution layer is on top.
+  if (old_on_top)
+    old_layer->parent()->StackBelow(new_layer, old_layer);
+  else
+    old_layer->parent()->StackAbove(new_layer, old_layer);
 
   // Shorten the animation if there's not much visual movement.
   const base::TimeDelta duration =
@@ -330,15 +340,23 @@ base::TimeDelta CrossFadeAnimation(
     old_layer->GetAnimator()->StopAnimating();
     old_layer->SetTransform(old_transform);
     ui::ScopedLayerAnimationSettings settings(old_layer->GetAnimator());
-
     // Animation observer owns the old layer and deletes itself.
     settings.AddObserver(
         new CrossFadeObserver(window, std::move(old_layer_owner)));
-    settings.CacheRenderSurface();
     settings.SetTransitionDuration(duration);
     settings.SetTweenType(tween_type);
     // Only add reporter to |old_layer|.
     settings.SetAnimationMetricsReporter(g_reporter_cross_fade.Pointer());
+    settings.DeferPaint();
+    if (old_on_top) {
+      // Only caching render surface when there is an opacity animation and
+      // multiple layers.
+      if (!old_layer->children().empty())
+        settings.CacheRenderSurface();
+      // The old layer is on top, and should fade out.  The new layer below will
+      // stay opaque to block the desktop.
+      old_layer->SetOpacity(kWindowAnimation_HideOpacity);
+    }
     gfx::Transform out_transform;
     float scale_x = static_cast<float>(new_bounds.width()) /
                     static_cast<float>(old_bounds.width());
@@ -348,11 +366,6 @@ base::TimeDelta CrossFadeAnimation(
                             new_bounds.y() - old_bounds.y());
     out_transform.Scale(scale_x, scale_y);
     old_layer->SetTransform(out_transform);
-    if (old_on_top) {
-      // The old layer is on top, and should fade out.  The new layer below will
-      // stay opaque to block the desktop.
-      old_layer->SetOpacity(kWindowAnimation_HideOpacity);
-    }
     // In tests |old_layer| is deleted here, as animations have zero duration.
     old_layer = NULL;
   }
@@ -367,24 +380,28 @@ base::TimeDelta CrossFadeAnimation(
   in_transform.Translate(old_transformed_bounds.x() - new_bounds.x(),
                          old_transformed_bounds.y() - new_bounds.y());
   in_transform.Scale(scale_x, scale_y);
-  window->layer()->SetTransform(in_transform);
+  new_layer->SetTransform(in_transform);
   if (!old_on_top) {
     // The new layer is on top and should fade in.  The old layer below will
     // stay opaque and block the desktop.
-    window->layer()->SetOpacity(kWindowAnimation_HideOpacity);
+    new_layer->SetOpacity(kWindowAnimation_HideOpacity);
   }
   {
     // Animate the new layer to the identity transform, so the window goes to
     // its newly set bounds.
-    ui::ScopedLayerAnimationSettings settings(window->layer()->GetAnimator());
-    settings.CacheRenderSurface();
+    ui::ScopedLayerAnimationSettings settings(new_layer->GetAnimator());
     settings.SetTransitionDuration(duration);
     settings.SetTweenType(tween_type);
-    window->layer()->SetTransform(gfx::Transform());
+    settings.DeferPaint();
     if (!old_on_top) {
+      // Only caching render surface when there is an opacity animation and
+      // multiple layers.
+      if (!new_layer->children().empty())
+        settings.CacheRenderSurface();
       // New layer is on top, fade it in.
-      window->layer()->SetOpacity(kWindowAnimation_ShowOpacity);
+      new_layer->SetOpacity(kWindowAnimation_ShowOpacity);
     }
+    new_layer->SetTransform(gfx::Transform());
   }
   return duration;
 }
@@ -410,9 +427,9 @@ CreateBrightnessGrayscaleAnimationSequence(float target_value,
                                            base::TimeDelta duration) {
   gfx::Tween::Type animation_type = gfx::Tween::EASE_OUT;
   std::unique_ptr<ui::LayerAnimationSequence> brightness_sequence =
-      base::MakeUnique<ui::LayerAnimationSequence>();
+      std::make_unique<ui::LayerAnimationSequence>();
   std::unique_ptr<ui::LayerAnimationSequence> grayscale_sequence =
-      base::MakeUnique<ui::LayerAnimationSequence>();
+      std::make_unique<ui::LayerAnimationSequence>();
 
   std::unique_ptr<ui::LayerAnimationElement> brightness_element =
       ui::LayerAnimationElement::CreateBrightnessElement(target_value,

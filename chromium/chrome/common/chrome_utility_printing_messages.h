@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Multiply-included message file, so no include guard.
+#ifndef CHROME_COMMON_CHROME_UTILITY_PRINTING_MESSAGES_H_
+#define CHROME_COMMON_CHROME_UTILITY_PRINTING_MESSAGES_H_
 
 #include <string>
 #include <vector>
@@ -69,25 +70,9 @@ IPC_STRUCT_TRAITS_BEGIN(printing::PrinterSemanticCapsAndDefaults)
   IPC_STRUCT_TRAITS_MEMBER(default_dpi)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(printing::PwgRasterTransformType,
-                          printing::TRANSFORM_TYPE_LAST)
-
-IPC_STRUCT_TRAITS_BEGIN(printing::PwgRasterSettings)
-  IPC_STRUCT_TRAITS_MEMBER(odd_page_transform)
-  IPC_STRUCT_TRAITS_MEMBER(rotate_all_pages)
-  IPC_STRUCT_TRAITS_MEMBER(reverse_page_order)
-IPC_STRUCT_TRAITS_END()
-
 //------------------------------------------------------------------------------
 // Utility process messages:
 // These are messages from the browser to the utility process.
-// Tell the utility process to render the given PDF into a PWGRaster.
-IPC_MESSAGE_CONTROL4(ChromeUtilityMsg_RenderPDFPagesToPWGRaster,
-                     IPC::PlatformFileForTransit /* Input PDF file */,
-                     printing::PdfRenderSettings /* PDF render settings */,
-                     // PWG transform settings.
-                     printing::PwgRasterSettings,
-                     IPC::PlatformFileForTransit /* Output PWG file */)
 
 // Tells the utility process to get capabilities and defaults for the specified
 // printer. Used on Windows to isolate the service process from printer driver
@@ -128,12 +113,6 @@ IPC_MESSAGE_CONTROL0(ChromeUtilityMsg_RenderPDFPagesToMetafiles_Stop)
 // These are messages from the utility process to the browser.
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Reply when the utility process has succeeded in rendering the PDF to PWG.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_RenderPDFPagesToPWGRaster_Succeeded)
-
-// Reply when an error occurred rendering the PDF to PWG.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_RenderPDFPagesToPWGRaster_Failed)
-
 // Reply when the utility process has succeeded in obtaining the printer
 // capabilities and defaults.
 IPC_MESSAGE_CONTROL2(ChromeUtilityHostMsg_GetPrinterCapsAndDefaults_Succeeded,
@@ -178,3 +157,5 @@ IPC_SYNC_MESSAGE_CONTROL2_0(ChromeUtilityHostMsg_PreCacheFontCharacters,
                             base::string16 /* characters */)
 
 #endif  // ENABLE_PRINTING && OS_WIN
+
+#endif  // CHROME_COMMON_CHROME_UTILITY_PRINTING_MESSAGES_H_

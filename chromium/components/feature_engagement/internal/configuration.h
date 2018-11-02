@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 
 namespace base {
 struct Feature;
@@ -80,6 +81,33 @@ bool operator!=(const EventConfig& lhs, const EventConfig& rhs);
 bool operator<(const EventConfig& lhs, const EventConfig& rhs);
 std::ostream& operator<<(std::ostream& os, const EventConfig& event_config);
 
+// A SessionRateImpact describes which features the |session_rate| of a given
+// FeatureConfig should affect. It can affect either |ALL| (default), |NONE|,
+// or an |EXPLICIT| list of the features. In the latter case, a list of affected
+// features is given as their base::Feature name.
+struct SessionRateImpact {
+ public:
+  enum class Type {
+    ALL = 0,      // Affects all other features.
+    NONE = 1,     // Affects no other features.
+    EXPLICIT = 2  // Affects only features in |affected_features|.
+  };
+
+  SessionRateImpact();
+  SessionRateImpact(const SessionRateImpact& other);
+  ~SessionRateImpact();
+
+  // Describes which features are impacted.
+  Type type;
+
+  // In the case of the Type |EXPLICIT|, this is the list of affected
+  // base::Feature names.
+  base::Optional<std::vector<std::string>> affected_features;
+};
+
+bool operator==(const SessionRateImpact& lhs, const SessionRateImpact& rhs);
+std::ostream& operator<<(std::ostream& os, const SessionRateImpact& impact);
+
 // A FeatureConfig contains all the configuration for a given feature.
 struct FeatureConfig {
  public:
@@ -106,9 +134,19 @@ struct FeatureConfig {
   // comparison.
   Comparator session_rate;
 
+  // Which features the showing this in-product help impacts.
+  SessionRateImpact session_rate_impact;
+
   // Number of days the in-product help has been available must fit this
   // comparison.
   Comparator availability;
+
+  // Whether this configuration will only be used for tracking and comparisons
+  // between experiment groups. Setting this to true will ensure that
+  // Tracker::ShouldTriggerHelpUI(...) always returns false, but if all
+  // other conditions are met, it will still be recorded as having been
+  // shown in the internal database and through UMA.
+  bool tracking_only;
 };
 
 bool operator==(const FeatureConfig& lhs, const FeatureConfig& rhs);
@@ -135,7 +173,10 @@ class Configuration {
       const std::string& feature_name) const = 0;
 
   // Returns the immutable ConfigMap that contains all registered features.
-  virtual const ConfigMap& GetRegisteredFeatures() const = 0;
+  virtual const ConfigMap& GetRegisteredFeatureConfigs() const = 0;
+
+  // Returns the list of the names of all registred features.
+  virtual const std::vector<std::string> GetRegisteredFeatures() const = 0;
 
  protected:
   Configuration() = default;

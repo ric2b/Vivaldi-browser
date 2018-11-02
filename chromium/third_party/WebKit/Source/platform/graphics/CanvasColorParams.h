@@ -6,8 +6,16 @@
 #define CanvasColorParams_h
 
 #include "platform/PlatformExport.h"
+#include "platform/graphics/GraphicsTypes.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
+#include "ui/gfx/buffer_types.h"
+
+class SkCanvas;
+
+namespace cc {
+class PaintCanvas;
+}
 
 namespace gfx {
 class ColorSpace;
@@ -16,7 +24,6 @@ class ColorSpace;
 namespace blink {
 
 enum CanvasColorSpace {
-  kLegacyCanvasColorSpace,
   kSRGBCanvasColorSpace,
   kRec2020CanvasColorSpace,
   kP3CanvasColorSpace,
@@ -33,54 +40,58 @@ class PLATFORM_EXPORT CanvasColorParams {
  public:
   // The default constructor will create an output-blended 8-bit surface.
   CanvasColorParams();
-  CanvasColorParams(CanvasColorSpace, CanvasPixelFormat);
+  CanvasColorParams(CanvasColorSpace, CanvasPixelFormat, OpacityMode);
   explicit CanvasColorParams(const SkImageInfo&);
-  CanvasColorSpace color_space() const { return color_space_; }
-  CanvasPixelFormat pixel_format() const { return pixel_format_; }
+  CanvasColorSpace ColorSpace() const { return color_space_; }
+  CanvasPixelFormat PixelFormat() const { return pixel_format_; }
+  OpacityMode GetOpacityMode() const { return opacity_mode_; }
 
   void SetCanvasColorSpace(CanvasColorSpace);
   void SetCanvasPixelFormat(CanvasPixelFormat);
+  void SetOpacityMode(OpacityMode);
 
-  // Returns true if the canvas blends output color space values (that is,
-  // not linear space colors).
-  bool UsesOutputSpaceBlending() const;
+  // Indicates whether rendering needs to go through an SkColorSpaceXformCanvas
+  // in order to enforce non-gamma-aware pixel math behaviour.
+  bool NeedsSkColorSpaceXformCanvas() const;
 
-  // Returns true if color correct rendering flag is set.
-  static bool ColorCorrectRenderingEnabled();
-  // Returns true if color correct rendering flag is set but canvas color
-  // extensions flag is not.
-  static bool ColorCorrectRenderingInSRGBOnly();
-  // Returns true if both color correct rendering and canvas color extensions
-  // flags are set. This activates the color management pipeline for all color
-  // spaces.
-  static bool ColorCorrectRenderingInAnyColorSpace();
-  // Returns true if color correct rendering flag is set but color canvas
-  // extensions flag is not set and the color space stored in CanvasColorParams
-  // object is null.
-  bool ColorCorrectNoColorSpaceToSRGB() const;
+  // Indicates if pixels in this canvas color settings require any color
+  // conversion to be used in the passed canvas color settings.
+  bool NeedsColorConversion(const CanvasColorParams&) const;
 
   // The SkColorSpace to use in the SkImageInfo for allocated SkSurfaces. This
-  // is nullptr in legacy rendering mode.
+  // is nullptr in legacy rendering mode and when the surface is supposed to be
+  // in sRGB (for which we wrap the canvas into a PaintCanvas along with an
+  // SkColorSpaceXformCanvas).
   sk_sp<SkColorSpace> GetSkColorSpaceForSkSurfaces() const;
+
+  // Wraps an SkCanvas into a PaintCanvas, along with an SkColorSpaceXformCanvas
+  // if necessary.
+  std::unique_ptr<cc::PaintCanvas> WrapCanvas(SkCanvas*) const;
 
   // The pixel format to use for allocating SkSurfaces.
   SkColorType GetSkColorType() const;
   uint8_t BytesPerPixel() const;
 
-  // The color space to use for compositing. This will always return a valid
-  // gfx or skia color space.
-  gfx::ColorSpace GetGfxColorSpace() const;
-  sk_sp<SkColorSpace> GetSkColorSpace() const;
+  // The color space in which pixels read from the canvas via a shader will be
+  // returned. Note that for canvases with linear pixel math, these will be
+  // converted from their storage space into a linear space.
+  gfx::ColorSpace GetSamplerGfxColorSpace() const;
 
-  // This matches CanvasRenderingContext::LinearPixelMath, and is true only when
-  // the pixel format is half-float linear.
-  // TODO(ccameron): This is not the same as !UsesOutputSpaceBlending, but
-  // perhaps should be.
-  bool LinearPixelMath() const;
+  // Return the color space of the underlying data for the canvas.
+  gfx::ColorSpace GetStorageGfxColorSpace() const;
+  sk_sp<SkColorSpace> GetSkColorSpace() const;
+  SkAlphaType GetSkAlphaType() const;
+  const SkSurfaceProps* GetSkSurfaceProps() const;
+
+  // Gpu memory buffer parameters
+  gfx::BufferFormat GetBufferFormat() const;
+  uint32_t GLInternalFormat() const;
+  uint32_t GLType() const;
 
  private:
-  CanvasColorSpace color_space_ = kLegacyCanvasColorSpace;
+  CanvasColorSpace color_space_ = kSRGBCanvasColorSpace;
   CanvasPixelFormat pixel_format_ = kRGBA8CanvasPixelFormat;
+  OpacityMode opacity_mode_ = kNonOpaque;
 };
 
 }  // namespace blink

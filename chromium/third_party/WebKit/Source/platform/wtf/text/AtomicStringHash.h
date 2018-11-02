@@ -50,7 +50,7 @@ struct AtomicStringHash {
 template <>
 struct HashTraits<AtomicString> : SimpleClassHashTraits<AtomicString> {
   // Unlike other types, we can return a const reference for AtomicString's
-  // empty value (nullAtom).
+  // empty value (g_null_atom).
   typedef const AtomicString& PeekOutType;
 
   static const AtomicString& EmptyValue() { return g_null_atom; }
@@ -58,6 +58,14 @@ struct HashTraits<AtomicString> : SimpleClassHashTraits<AtomicString> {
 
   static const bool kHasIsEmptyValueFunction = true;
   static bool IsEmptyValue(const AtomicString& value) { return value.IsNull(); }
+
+  static bool IsDeletedValue(const AtomicString& value) {
+    return HashTraits<String>::IsDeletedValue(value.string_);
+  }
+
+  static void ConstructDeletedValue(AtomicString& slot, bool zero_value) {
+    HashTraits<String>::ConstructDeletedValue(slot.string_, zero_value);
+  }
 };
 
 }  // namespace WTF

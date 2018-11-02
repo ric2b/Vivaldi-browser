@@ -20,7 +20,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import static org.chromium.chrome.browser.ntp.cards.ContentSuggestionsUnitTestUtils.bindViewHolders;
 import static org.chromium.chrome.browser.ntp.cards.ContentSuggestionsUnitTestUtils.makeUiConfig;
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.createDummySuggestions;
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.registerCategory;
@@ -35,6 +34,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -75,8 +75,11 @@ import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
+import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
@@ -90,18 +93,15 @@ import java.util.List;
  */
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@Features({@Features.Register(value = ChromeFeatureList.NTP_CONDENSED_LAYOUT, enabled = false),
-        @Features.Register(value = ChromeFeatureList.CHROME_HOME, enabled = false),
-        @Features.Register(value = ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT, enabled = false),
-        @Features.Register(value = ChromeFeatureList.CONTENT_SUGGESTIONS_SCROLL_TO_LOAD,
-                enabled = false),
-        @Features.Register(value = ChromeFeatureList.ANDROID_SIGNIN_PROMOS, enabled = false)})
+@DisableFeatures({ChromeFeatureList.NTP_CONDENSED_LAYOUT, ChromeFeatureList.CHROME_HOME,
+        ChromeFeatureList.CONTENT_SUGGESTIONS_SCROLL_TO_LOAD,
+        ChromeFeatureList.ANDROID_SIGNIN_PROMOS})
 public class NewTabPageAdapterTest {
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
 
     @Rule
-    public Features.Processor mFeatureProcessor = new Features.Processor();
+    public TestRule mFeatureProcessor = new Features.JUnitProcessor();
 
     @CategoryInt
     private static final int TEST_CATEGORY = 42;
@@ -146,16 +146,20 @@ public class NewTabPageAdapterTest {
         }
 
         public SectionDescriptor withViewAllButton() {
+            assertFalse(mProgressItem);
             mViewAllButton = true;
             return this;
         }
 
         public SectionDescriptor withFetchButton() {
+            assertFalse(mProgressItem);
             mFetchButton = true;
             return this;
         }
 
         public SectionDescriptor withProgress() {
+            assertFalse(mViewAllButton);
+            assertFalse(mFetchButton);
             mProgressItem = true;
             return this;
         }
@@ -264,6 +268,13 @@ public class NewTabPageAdapterTest {
         MockitoAnnotations.initMocks(this);
 
         ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
+
+        // Ensure that NetworkChangeNotifier is initialized.
+        if (!NetworkChangeNotifier.isInitialized()) {
+            NetworkChangeNotifier.init();
+        }
+        NetworkChangeNotifier.forceConnectivityState(true);
+
         // Make sure that isChromeHome() is current value set by the test, not the value saved in
         // the shared preference.
         // TODO(changwan): check if we can clear shared preferences for each test case.
@@ -378,7 +389,7 @@ public class NewTabPageAdapterTest {
 
         // Add another suggestion.
         suggestions.add(new SnippetArticle(TEST_CATEGORY, "https://site.com/url3", "title3", "pub3",
-                "txt3", "https://site.com/url3", 0, 0, 0, false));
+                "https://site.com/url3", 0, 0, 0, false, /* thumbnailDominantColor = */ null));
 
         // When the provider is removed, we should not be able to load suggestions. The UI should
         // stay the same though.
@@ -409,16 +420,16 @@ public class NewTabPageAdapterTest {
     @Feature({"Ntp"})
     public void testProgressIndicatorDisplay() {
         SuggestionsSection section = mAdapter.getSectionListForTesting().getSection(TEST_CATEGORY);
-        ProgressItem progress = section.getProgressItemForTesting();
+        ActionItem item = section.getActionItemForTesting();
 
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
-        assertTrue(progress.isVisible());
+        assertEquals(ActionItem.State.LOADING, item.getState());
 
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
-        assertFalse(progress.isVisible());
+        assertEquals(ActionItem.State.HIDDEN, item.getState());
 
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE_LOADING);
-        assertTrue(progress.isVisible());
+        assertEquals(ActionItem.State.LOADING, item.getState());
 
         // After the section gets disabled, it should gone completely, so checking the progress
         // indicator doesn't make sense anymore.
@@ -499,8 +510,8 @@ public class NewTabPageAdapterTest {
         reloadNtp();
         assertItemsFor(section(suggestions), section(otherSuggestions));
 
-        // Bind the whole section - indicate that it is being viewed.
-        bindViewHolders(mAdapter.getSectionListForTesting().getSection(otherCategory));
+        // Indicate that the whole section is being viewed.
+        for (SnippetArticle article : otherSuggestions) article.mExposed = true;
 
         List<SnippetArticle> newSuggestions = createDummySuggestions(3, TEST_CATEGORY, "new");
         mSource.setSuggestionsForCategory(TEST_CATEGORY, newSuggestions);
@@ -542,7 +553,7 @@ public class NewTabPageAdapterTest {
 
         // Part 2: VisibleIfEmpty = false
         suggestionsSource = new FakeSuggestionsSource();
-        suggestionsSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
+        suggestionsSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         suggestionsSource.setInfoForCategory(
                 TEST_CATEGORY, new CategoryInfoBuilder(TEST_CATEGORY).build());
 
@@ -577,7 +588,7 @@ public class NewTabPageAdapterTest {
         // 1.1 - Initial state.
         when(mUiDelegate.getSuggestionsSource()).thenReturn(suggestionsSource);
         reloadNtp();
-        assertItemsFor(sectionWithStatusCard().withViewAllButton().withProgress());
+        assertItemsFor(sectionWithStatusCard().withProgress());
 
         // 1.2 - With suggestions.
         List<SnippetArticle> suggestions =
@@ -640,7 +651,7 @@ public class NewTabPageAdapterTest {
         // 1.1 - Initial state.
         when(mUiDelegate.getSuggestionsSource()).thenReturn(suggestionsSource);
         reloadNtp();
-        assertItemsFor(sectionWithStatusCard().withFetchButton().withProgress());
+        assertItemsFor(sectionWithStatusCard().withProgress());
 
         // 1.2 - With suggestions.
         List<SnippetArticle> articles =
@@ -962,13 +973,7 @@ public class NewTabPageAdapterTest {
 
     @Test
     @Feature({"Ntp"})
-    // TODO(https://crbug.com/754778) improve annotation processor, flags repeated to enable modern.
-    @Features({@Features.Register(value = ChromeFeatureList.NTP_CONDENSED_LAYOUT, enabled = false),
-            @Features.Register(value = ChromeFeatureList.CHROME_HOME),
-            @Features.Register(value = ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT),
-            @Features.Register(value = ChromeFeatureList.CONTENT_SUGGESTIONS_SCROLL_TO_LOAD,
-                enabled = false),
-            @Features.Register(value = ChromeFeatureList.ANDROID_SIGNIN_PROMOS, enabled = false)})
+    @EnableFeatures(ChromeFeatureList.CHROME_HOME)
     public void testSigninPromoModern() {
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
@@ -1135,24 +1140,19 @@ public class NewTabPageAdapterTest {
 
     @Test
     @Feature({"Ntp"})
-    // TODO(https://crbug.com/754778) improve annotation processor, flags repeated to enable modern.
-    @Features({@Features.Register(value = ChromeFeatureList.NTP_CONDENSED_LAYOUT, enabled = false),
-            @Features.Register(value = ChromeFeatureList.CHROME_HOME),
-            @Features.Register(value = ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT),
-            @Features.Register(value = ChromeFeatureList.CONTENT_SUGGESTIONS_SCROLL_TO_LOAD,
-                enabled = false),
-            @Features.Register(value = ChromeFeatureList.ANDROID_SIGNIN_PROMOS, enabled = false)})
+    @EnableFeatures(ChromeFeatureList.CHROME_HOME)
     public void testAllDismissedModern() {
         when(mUiDelegate.isVisible()).thenReturn(true);
 
+        @CategoryInt
+        int category = KnownCategories.ARTICLES;
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.NOT_PROVIDED);
-        mSource.setInfoForCategory(KnownCategories.ARTICLES,
-                new CategoryInfoBuilder(TEST_CATEGORY).showIfEmpty().build());
-        mSource.setStatusForCategory(KnownCategories.ARTICLES, CategoryStatus.AVAILABLE);
+        mSource.setInfoForCategory(
+                category, new CategoryInfoBuilder(category).showIfEmpty().build());
+        mSource.setStatusForCategory(category, CategoryStatus.AVAILABLE);
         final int numSuggestions = 3;
-        List<SnippetArticle> suggestions =
-                createDummySuggestions(numSuggestions, KnownCategories.ARTICLES);
-        mSource.setSuggestionsForCategory(KnownCategories.ARTICLES, suggestions);
+        List<SnippetArticle> suggestions = createDummySuggestions(numSuggestions, category);
+        mSource.setSuggestionsForCategory(category, suggestions);
         reloadNtp();
         assertItemsForChromeHome(section(suggestions).withoutHeader());
 
@@ -1163,7 +1163,7 @@ public class NewTabPageAdapterTest {
             verify(itemRemovedCallback).onResult(anyString());
         }
 
-        assertItemsForChromeHome(emptySection().withoutHeader());
+        assertItemsForEmptyChromeHome(emptySection().withoutHeader());
     }
 
     /**
@@ -1216,9 +1216,19 @@ public class NewTabPageAdapterTest {
 
         // TODO(bauerb): Remove above-the-fold from test setup in Chrome Home.
         matcher.expectAboveTheFoldItem();
-        if (section.mSuggestions.isEmpty()) matcher.expectAllDismissedItem();
         matcher.expectSection(section);
-        if (!section.mSuggestions.isEmpty()) matcher.expectFooter();
+        matcher.expectFooter(); // TODO(dgn): Handle scroll to reload with removes the footer
+        matcher.expectSpacingItem();
+        matcher.expectEnd();
+    }
+
+    private void assertItemsForEmptyChromeHome(SectionDescriptor section) {
+        ItemsMatcher matcher = new ItemsMatcher(mAdapter.getRootForTesting());
+
+        // TODO(bauerb): Remove above-the-fold from test setup in Chrome Home.
+        matcher.expectAboveTheFoldItem();
+        matcher.expectAllDismissedItem();
+        matcher.expectSection(section);
         matcher.expectSpacingItem();
         matcher.expectEnd();
     }
@@ -1247,7 +1257,7 @@ public class NewTabPageAdapterTest {
      * @return A descriptor for the section.
      */
     private SectionDescriptor sectionWithStatusCard() {
-        assertFalse(FeatureUtilities.isChromeHomeModernEnabled());
+        assertFalse(FeatureUtilities.isChromeHomeEnabled());
         return new SectionDescriptor(Collections.<SnippetArticle>emptyList()).withStatusCard();
     }
 
@@ -1258,7 +1268,7 @@ public class NewTabPageAdapterTest {
      * @return A descriptor for the section.
      */
     private SectionDescriptor emptySection() {
-        assertTrue(FeatureUtilities.isChromeHomeModernEnabled());
+        assertTrue(FeatureUtilities.isChromeHomeEnabled());
         return new SectionDescriptor(Collections.<SnippetArticle>emptyList());
     }
 
@@ -1271,8 +1281,8 @@ public class NewTabPageAdapterTest {
 
     private void reloadNtp() {
         mSource.removeObservers();
-        mAdapter = new NewTabPageAdapter(mUiDelegate, mock(View.class), makeUiConfig(),
-                mOfflinePageBridge, mock(ContextMenuManager.class),
+        mAdapter = new NewTabPageAdapter(mUiDelegate, mock(View.class), /* logoView = */ null,
+                makeUiConfig(), mOfflinePageBridge, mock(ContextMenuManager.class),
                 /* tileGroupDelegate = */ null, /* suggestionsCarousel = */ null);
         mAdapter.refreshSuggestions();
     }

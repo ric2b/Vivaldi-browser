@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -22,6 +21,7 @@
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/test/test_utils.h"
 #include "crypto/rsa_private_key.h"
@@ -138,7 +138,7 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest, LoadNoKey) {
 }
 
 TEST_F(DeviceCloudPolicyStoreChromeOSTest, LoadNoPolicy) {
-  device_settings_test_helper_.set_policy_blob(std::string());
+  session_manager_client_.set_device_policy(std::string());
   store_->Load();
   FlushDeviceSettings();
   ExpectFailure(CloudPolicyStore::STATUS_LOAD_ERROR);
@@ -197,8 +197,7 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest, StoreKeyRotation) {
   device_policy_.SetDefaultNewSigningKey();
   device_policy_.Build();
   store_->Store(device_policy_.policy());
-  content::RunAllBlockingPoolTasksUntilIdle();
-  device_settings_test_helper_.FlushStore();
+  content::RunAllTasksUntilIdle();
   owner_key_util_->SetPublicKeyFromPrivateKey(
       *device_policy_.GetNewSigningKey());
   ReloadDeviceSettings();

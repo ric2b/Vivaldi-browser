@@ -42,7 +42,7 @@
 namespace blink {
 
 class ShareableElementData;
-class StylePropertySet;
+class CSSPropertyValueSet;
 class UniqueElementData;
 
 // ElementData represents very common, but not necessarily unique to an element,
@@ -66,9 +66,9 @@ class ElementData : public GarbageCollectedFinalized<ElementData> {
     id_for_style_resolution_ = new_id;
   }
 
-  const StylePropertySet* InlineStyle() const { return inline_style_.Get(); }
+  const CSSPropertyValueSet* InlineStyle() const { return inline_style_.Get(); }
 
-  const StylePropertySet* PresentationAttributeStyle() const;
+  const CSSPropertyValueSet* PresentationAttributeStyle() const;
 
   AttributeCollection Attributes() const;
 
@@ -79,8 +79,8 @@ class ElementData : public GarbageCollectedFinalized<ElementData> {
 
   bool IsUnique() const { return is_unique_; }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
-  DECLARE_TRACE();
+  void TraceAfterDispatch(blink::Visitor*);
+  void Trace(blink::Visitor*);
 
  protected:
   ElementData();
@@ -95,7 +95,7 @@ class ElementData : public GarbageCollectedFinalized<ElementData> {
   mutable unsigned style_attribute_is_dirty_ : 1;
   mutable unsigned animated_svg_attributes_are_dirty_ : 1;
 
-  mutable Member<StylePropertySet> inline_style_;
+  mutable Member<CSSPropertyValueSet> inline_style_;
   mutable SpaceSplitString class_names_;
   mutable AtomicString id_for_style_resolution_;
 
@@ -131,7 +131,7 @@ class ShareableElementData final : public ElementData {
   explicit ShareableElementData(const UniqueElementData&);
   ~ShareableElementData();
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+  void TraceAfterDispatch(blink::Visitor* visitor) {
     ElementData::TraceAfterDispatch(visitor);
   }
 
@@ -173,13 +173,13 @@ class UniqueElementData final : public ElementData {
   explicit UniqueElementData(const ShareableElementData&);
   explicit UniqueElementData(const UniqueElementData&);
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
 
   // FIXME: We might want to support sharing element data for elements with
   // presentation attribute style. Lots of table cells likely have the same
   // attributes. Most modern pages don't use presentation attributes though
   // so this might not make sense.
-  mutable Member<StylePropertySet> presentation_attribute_style_;
+  mutable Member<CSSPropertyValueSet> presentation_attribute_style_;
   AttributeVector attribute_vector_;
 };
 
@@ -187,7 +187,8 @@ DEFINE_ELEMENT_DATA_TYPE_CASTS(UniqueElementData,
                                data->IsUnique(),
                                data.IsUnique());
 
-inline const StylePropertySet* ElementData::PresentationAttributeStyle() const {
+inline const CSSPropertyValueSet* ElementData::PresentationAttributeStyle()
+    const {
   if (!is_unique_)
     return nullptr;
   return ToUniqueElementData(this)->presentation_attribute_style_.Get();

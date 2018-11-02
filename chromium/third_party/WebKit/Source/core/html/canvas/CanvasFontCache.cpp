@@ -71,21 +71,22 @@ bool CanvasFontCache::GetFontUsingDefaultStyle(const String& font_string,
   }
 
   // Addition to LRU list taken care of inside parseFont
-  MutableStylePropertySet* parsed_style = ParseFont(font_string);
+  MutableCSSPropertyValueSet* parsed_style = ParseFont(font_string);
   if (!parsed_style)
     return false;
 
-  RefPtr<ComputedStyle> font_style =
-      ComputedStyle::Clone(*default_font_style_.Get());
-  document_->EnsureStyleResolver().ComputeFont(font_style.Get(), *parsed_style);
+  scoped_refptr<ComputedStyle> font_style =
+      ComputedStyle::Clone(*default_font_style_.get());
+  document_->EnsureStyleResolver().ComputeFont(font_style.get(), *parsed_style);
   fonts_resolved_using_default_style_.insert(font_string,
                                              font_style->GetFont());
   resolved_font = fonts_resolved_using_default_style_.find(font_string)->value;
   return true;
 }
 
-MutableStylePropertySet* CanvasFontCache::ParseFont(const String& font_string) {
-  MutableStylePropertySet* parsed_style;
+MutableCSSPropertyValueSet* CanvasFontCache::ParseFont(
+    const String& font_string) {
+  MutableCSSPropertyValueSet* parsed_style;
   MutableStylePropertyMap::iterator i = fetched_fonts_.find(font_string);
   if (i != fetched_fonts_.end()) {
     DCHECK(font_lru_list_.Contains(font_string));
@@ -93,17 +94,17 @@ MutableStylePropertySet* CanvasFontCache::ParseFont(const String& font_string) {
     font_lru_list_.erase(font_string);
     font_lru_list_.insert(font_string);
   } else {
-    parsed_style = MutableStylePropertySet::Create(kHTMLStandardMode);
-    CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true);
+    parsed_style = MutableCSSPropertyValueSet::Create(kHTMLStandardMode);
+    CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true,
+                          document_->GetSecureContextMode());
     if (parsed_style->IsEmpty())
       return nullptr;
     // According to
     // http://lists.w3.org/Archives/Public/public-html/2009Jul/0947.html,
-    // the "inherit" and "initial" values must be ignored.
+    // the "inherit", "initial" and "unset" values must be ignored.
     const CSSValue* font_value =
         parsed_style->GetPropertyCSSValue(CSSPropertyFontSize);
-    if (font_value &&
-        (font_value->IsInitialValue() || font_value->IsInheritedValue()))
+    if (font_value && font_value->IsCSSWideKeyword())
       return nullptr;
     fetched_fonts_.insert(font_string, parsed_style);
     font_lru_list_.insert(font_string);
@@ -154,7 +155,7 @@ void CanvasFontCache::PruneAll() {
   fonts_resolved_using_default_style_.clear();
 }
 
-DEFINE_TRACE(CanvasFontCache) {
+void CanvasFontCache::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetched_fonts_);
   visitor->Trace(document_);
 }

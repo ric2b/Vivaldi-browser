@@ -17,12 +17,6 @@ namespace arc {
 
 namespace {
 
-// Used to convert mojo Callback to VoidDBusMethodCallback.
-void RunObbCallback(const base::Callback<void(bool)>& callback,
-                    chromeos::DBusMethodCallStatus result) {
-  callback.Run(result == chromeos::DBUS_METHOD_CALL_SUCCESS);
-}
-
 // Singleton factory for ArcObbMounterBridge.
 class ArcObbMounterBridgeFactory
     : public internal::ArcBrowserContextKeyedServiceFactoryBase<
@@ -52,35 +46,26 @@ ArcObbMounterBridge* ArcObbMounterBridge::GetForBrowserContext(
 
 ArcObbMounterBridge::ArcObbMounterBridge(content::BrowserContext* context,
                                          ArcBridgeService* bridge_service)
-    : arc_bridge_service_(bridge_service), binding_(this) {
-  arc_bridge_service_->obb_mounter()->AddObserver(this);
+    : arc_bridge_service_(bridge_service) {
+  arc_bridge_service_->obb_mounter()->SetHost(this);
 }
 
 ArcObbMounterBridge::~ArcObbMounterBridge() {
-  arc_bridge_service_->obb_mounter()->RemoveObserver(this);
-}
-
-void ArcObbMounterBridge::OnInstanceReady() {
-  mojom::ObbMounterInstance* obb_mounter_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->obb_mounter(), Init);
-  DCHECK(obb_mounter_instance);
-  mojom::ObbMounterHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  obb_mounter_instance->Init(std::move(host_proxy));
+  arc_bridge_service_->obb_mounter()->SetHost(nullptr);
 }
 
 void ArcObbMounterBridge::MountObb(const std::string& obb_file,
                                    const std::string& target_path,
                                    int32_t owner_gid,
-                                   const MountObbCallback& callback) {
+                                   MountObbCallback callback) {
   chromeos::DBusThreadManager::Get()->GetArcObbMounterClient()->MountObb(
-      obb_file, target_path, owner_gid, base::Bind(&RunObbCallback, callback));
+      obb_file, target_path, owner_gid, std::move(callback));
 }
 
 void ArcObbMounterBridge::UnmountObb(const std::string& target_path,
-                                     const UnmountObbCallback& callback) {
+                                     UnmountObbCallback callback) {
   chromeos::DBusThreadManager::Get()->GetArcObbMounterClient()->UnmountObb(
-      target_path, base::Bind(&RunObbCallback, callback));
+      target_path, std::move(callback));
 }
 
 }  // namespace arc

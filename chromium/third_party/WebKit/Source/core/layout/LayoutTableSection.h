@@ -120,7 +120,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   int CalcRowLogicalHeight();
   void LayoutRows();
   void ComputeOverflowFromDescendants();
-  bool RecalcChildOverflowAfterStyleChange();
+  bool RecalcOverflowAfterStyleChange() override;
 
   void MarkAllCellsWidthsDirtyAndOrNeedsLayout(LayoutTable::WhatToMarkAllCells);
 
@@ -314,7 +314,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   }
 
   void EnsureCols(unsigned row_index, unsigned num_cols) {
-    if (num_cols > this->NumCols(row_index))
+    if (num_cols > NumCols(row_index))
       grid_[row_index].grid_cells.Grow(num_cols);
   }
 
@@ -376,6 +376,10 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   // Honor breaking restrictions inside the table row, and adjust position and
   // size accordingly.
   void AdjustRowForPagination(LayoutTableRow&, SubtreeLayoutScope&);
+
+  // The offset at which the first row in the section will get positioned to
+  // avoid any repeating headers in its table or ancestor tables.
+  int OffsetForRepeatedHeader() const;
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 

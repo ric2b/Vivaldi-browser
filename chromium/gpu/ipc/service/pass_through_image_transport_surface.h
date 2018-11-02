@@ -15,7 +15,6 @@
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
 #include "ui/gl/gl_surface.h"
-#include "ui/latency/latency_info.h"
 
 namespace gpu {
 
@@ -39,22 +38,36 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
   // GLSurface implementation.
   bool Initialize(gl::GLSurfaceFormat format) override;
   void Destroy() override;
-  gfx::SwapResult SwapBuffers() override;
-  void SwapBuffersAsync(const SwapCompletionCallback& callback) override;
+  gfx::SwapResult SwapBuffers(const PresentationCallback& callback) override;
+  void SwapBuffersAsync(
+      const SwapCompletionCallback& completion_callback,
+      const PresentationCallback& presentation_callback) override;
   gfx::SwapResult SwapBuffersWithBounds(
-      const std::vector<gfx::Rect>& rects) override;
-  gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
-  void PostSubBufferAsync(int x,
-                          int y,
-                          int width,
-                          int height,
-                          const SwapCompletionCallback& callback) override;
-  gfx::SwapResult CommitOverlayPlanes() override;
+      const std::vector<gfx::Rect>& rects,
+      const PresentationCallback& callback) override;
+  gfx::SwapResult PostSubBuffer(int x,
+                                int y,
+                                int width,
+                                int height,
+                                const PresentationCallback& callback) override;
+  void PostSubBufferAsync(
+      int x,
+      int y,
+      int width,
+      int height,
+      const SwapCompletionCallback& completion_callback,
+      const PresentationCallback& presentation_callback) override;
+  gfx::SwapResult CommitOverlayPlanes(
+      const PresentationCallback& callback) override;
   void CommitOverlayPlanesAsync(
-      const SwapCompletionCallback& callback) override;
+      const SwapCompletionCallback& completion_callback,
+      const PresentationCallback& presentation_callback) override;
 
  private:
   ~PassThroughImageTransportSurface() override;
+
+  void SetSnapshotRequested();
+  bool GetAndResetSnapshotRequested();
 
   // If updated vsync parameters can be determined, send this information to
   // the browser.
@@ -62,20 +75,22 @@ class PassThroughImageTransportSurface : public gl::GLSurfaceAdapter {
 
   void UpdateSwapInterval();
 
-  // Add |latency_info| to be reported and augumented with GPU latency
-  // components next time there is a GPU buffer swap.
-  void AddLatencyInfo(const std::vector<ui::LatencyInfo>& latency_info);
-  std::unique_ptr<std::vector<ui::LatencyInfo>> StartSwapBuffers();
-  void FinishSwapBuffers(
-      std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info,
-      gfx::SwapResult result);
-  void FinishSwapBuffersAsync(
-      std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info,
-      GLSurface::SwapCompletionCallback callback,
-      gfx::SwapResult result);
+  void StartSwapBuffers(gfx::SwapResponse* response);
+  void FinishSwapBuffers(bool snapshot_requested, gfx::SwapResponse response);
+  void FinishSwapBuffersAsync(GLSurface::SwapCompletionCallback callback,
+                              bool snapshot_requested,
+                              gfx::SwapResponse response,
+                              gfx::SwapResult result);
 
+  void BufferPresented(uint64_t swap_id,
+                       const GLSurface::PresentationCallback& callback,
+                       const gfx::PresentationFeedback& feedback);
+
+  const bool is_gpu_vsync_disabled_;
+  const bool is_presentation_callback_enabled_;
   base::WeakPtr<ImageTransportSurfaceDelegate> delegate_;
-  std::vector<ui::LatencyInfo> latency_info_;
+  uint64_t swap_id_ = 0;
+  bool snapshot_requested_ = false;
   MultiWindowSwapInterval multi_window_swap_interval_ =
       kMultiWindowSwapIntervalDefault;
   int swap_generation_ = 0;

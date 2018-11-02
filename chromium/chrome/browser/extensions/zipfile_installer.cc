@@ -26,7 +26,7 @@ const char kExtensionHandlerFileUnzipError[] =
 
 base::Optional<base::FilePath> PrepareAndGetUnzipDir(
     const base::FilePath& zip_file) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath dir_temp;
   base::PathService::Get(base::DIR_TEMP, &dir_temp);
@@ -49,7 +49,7 @@ namespace extensions {
 scoped_refptr<ZipFileInstaller> ZipFileInstaller::Create(
     ExtensionService* service) {
   DCHECK(service);
-  return make_scoped_refptr(new ZipFileInstaller(service));
+  return base::WrapRefCounted(new ZipFileInstaller(service));
 }
 
 void ZipFileInstaller::LoadFromZipFile(const base::FilePath& zip_file) {

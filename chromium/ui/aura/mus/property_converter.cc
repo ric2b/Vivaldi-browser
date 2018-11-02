@@ -22,8 +22,8 @@ std::unique_ptr<std::vector<uint8_t>> GetArray(Window* window,
                                                const WindowProperty<T>* key) {
   const T value = window->GetProperty(key);
   if (!value)
-    return base::MakeUnique<std::vector<uint8_t>>();
-  return base::MakeUnique<std::vector<uint8_t>>(
+    return std::make_unique<std::vector<uint8_t>>();
+  return std::make_unique<std::vector<uint8_t>>(
       mojo::ConvertTo<std::vector<uint8_t>>(*value));
 }
 
@@ -73,6 +73,9 @@ PropertyConverter::PropertyConverter() {
   RegisterPrimitiveProperty(client::kAlwaysOnTopKey,
                             ui::mojom::WindowManager::kAlwaysOnTop_Property,
                             CreateAcceptAnyValueCallback());
+  RegisterPrimitiveProperty(client::kDrawAttentionKey,
+                            ui::mojom::WindowManager::kDrawAttention_Property,
+                            CreateAcceptAnyValueCallback());
   RegisterPrimitiveProperty(
       client::kImmersiveFullscreenKey,
       ui::mojom::WindowManager::kImmersiveFullscreen_Property,
@@ -117,10 +120,10 @@ bool PropertyConverter::ConvertPropertyForTransport(
     if (value) {
       // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
       SkBitmap bitmap = value->GetRepresentation(1.f).sk_bitmap();
-      *transport_value = base::MakeUnique<std::vector<uint8_t>>(
+      *transport_value = std::make_unique<std::vector<uint8_t>>(
           mojo::ConvertTo<std::vector<uint8_t>>(bitmap));
     } else {
-      *transport_value = base::MakeUnique<std::vector<uint8_t>>();
+      *transport_value = std::make_unique<std::vector<uint8_t>>();
     }
     return true;
   }
@@ -154,7 +157,7 @@ bool PropertyConverter::ConvertPropertyForTransport(
   PrimitiveType default_value = primitive_properties_[key].default_value;
   // TODO(msw): Using the int64_t accessor is wasteful for smaller types.
   const PrimitiveType value = window->GetPropertyInternal(key, default_value);
-  *transport_value = base::MakeUnique<std::vector<uint8_t>>(
+  *transport_value = std::make_unique<std::vector<uint8_t>>(
       mojo::ConvertTo<std::vector<uint8_t>>(value));
   return true;
 }

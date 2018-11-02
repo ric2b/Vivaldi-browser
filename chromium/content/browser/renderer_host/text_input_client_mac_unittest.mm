@@ -61,7 +61,7 @@ class TextInputClientMacTest : public testing::Test {
     int32_t routing_id = rph->GetNextRoutingID();
     mojom::WidgetPtr widget;
     mock_widget_impl_ =
-        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+        std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
     widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id,
                                            std::move(widget), false));
@@ -83,12 +83,11 @@ class TextInputClientMacTest : public testing::Test {
 
   // Helper method to post a task on the testing thread's MessageLoop after
   // a short delay.
-  void PostTask(const tracked_objects::Location& from_here,
-                const base::Closure& task) {
+  void PostTask(const base::Location& from_here, const base::Closure& task) {
     PostTask(from_here, task, base::TimeDelta::FromMilliseconds(kTaskDelayMs));
   }
 
-  void PostTask(const tracked_objects::Location& from_here,
+  void PostTask(const base::Location& from_here,
                 const base::Closure& task,
                 const base::TimeDelta delay) {
     thread_.task_runner()->PostDelayedTask(from_here, task, delay);

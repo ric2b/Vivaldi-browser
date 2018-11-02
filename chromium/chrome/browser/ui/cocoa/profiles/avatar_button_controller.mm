@@ -8,8 +8,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile_attributes_entry.h"
-#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #import "chrome/browser/themes/theme_properties.h"
@@ -20,7 +18,7 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/appkit_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -167,6 +165,7 @@ const CGFloat kFrameColorDarkUpperBound = 0.33;
 
     AvatarButton* avatarButton =
         [[AvatarButton alloc] initWithFrame:NSZeroRect];
+    avatarButton.sendActionOnMouseDown = YES;
     button_.reset(avatarButton);
 
     base::scoped_nsobject<NSButtonCell> cell(
@@ -236,15 +235,7 @@ const CGFloat kFrameColorDarkUpperBound = 0.33;
   NSColor* foregroundColor =
       [self isFrameColorDark] ? [NSColor whiteColor] : [NSColor blackColor];
 
-  ProfileAttributesStorage& storage =
-      g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  // If there is a single local profile, then use the generic avatar button
-  // instead of the profile name. Never use the generic button if the active
-  // profile is Guest.
-  bool useGenericButton =
-      !browser_->profile()->IsGuestSession() &&
-      storage.GetNumberOfProfiles() == 1 &&
-      !storage.GetAllProfilesAttributes().front()->IsAuthenticated();
+  bool useGenericButton = [self shouldUseGenericButton];
 
   NSString* buttonTitle = base::SysUTF16ToNSString(useGenericButton ?
       base::string16() :
@@ -332,14 +323,16 @@ const CGFloat kFrameColorDarkUpperBound = 0.33;
                     fromAccessPoint:accessPoint];
 
   AvatarButton* button = base::mac::ObjCCastStrict<AvatarButton>(button_);
-  [button setIsActive:[[menuController_ window] isVisible]];
+  // When the user clicks a second time on the button, the menu closes.
+  [button setIsActive:[self isMenuOpened]];
 }
 
-- (void)bubbleWillClose:(NSNotification*)notif {
+// AvatarBaseController overrides:
+- (void)bubbleWillClose {
   AvatarButton* button = base::mac::ObjCCastStrict<AvatarButton>(button_);
   [button setIsActive:NO];
   [self updateAvatarButtonAndLayoutParent:NO];
-  [super bubbleWillClose:notif];
+  [super bubbleWillClose];
 }
 
 @end

@@ -7,7 +7,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/message_center/message_center_style.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 
 namespace message_center {
 
@@ -35,14 +35,13 @@ void DesktopPopupAlignmentDelegate::StartObserving(display::Screen* screen) {
 int DesktopPopupAlignmentDelegate::GetToastOriginX(
     const gfx::Rect& toast_bounds) const {
   if (IsFromLeft())
-    return work_area_.x() + kMarginBetweenItems;
-  return work_area_.right() - kMarginBetweenItems - toast_bounds.width();
+    return work_area_.x() + kMarginBetweenPopups;
+  return work_area_.right() - kMarginBetweenPopups - toast_bounds.width();
 }
 
 int DesktopPopupAlignmentDelegate::GetBaseLine() const {
-  return IsTopDown()
-      ? work_area_.y() + kMarginBetweenItems
-      : work_area_.bottom() - kMarginBetweenItems;
+  return IsTopDown() ? work_area_.y() + kMarginBetweenPopups
+                     : work_area_.bottom() - kMarginBetweenPopups;
 }
 
 gfx::Rect DesktopPopupAlignmentDelegate::GetWorkArea() const {

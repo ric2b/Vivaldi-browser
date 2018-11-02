@@ -19,21 +19,22 @@ class WebServiceWorkerResponsePrivate
   WebServiceWorkerResponsePrivate()
       : status(0),
         response_type(network::mojom::FetchResponseType::kDefault),
-        error(kWebServiceWorkerResponseErrorUnknown) {}
+        error(mojom::ServiceWorkerResponseError::kUnknown) {}
   WebVector<WebURL> url_list;
   unsigned short status;
   WebString status_text;
   network::mojom::FetchResponseType response_type;
   HTTPHeaderMap headers;
-  RefPtr<BlobDataHandle> blob_data_handle;
-  WebServiceWorkerResponseError error;
+  scoped_refptr<BlobDataHandle> blob_data_handle;
+  mojom::ServiceWorkerResponseError error;
   Time response_time;
   WebString cache_storage_cache_name;
   WebVector<WebString> cors_exposed_header_names;
+  scoped_refptr<BlobDataHandle> side_data_blob_data_handle;
 };
 
 WebServiceWorkerResponse::WebServiceWorkerResponse()
-    : private_(AdoptRef(new WebServiceWorkerResponsePrivate)) {}
+    : private_(base::AdoptRef(new WebServiceWorkerResponsePrivate)) {}
 
 void WebServiceWorkerResponse::Reset() {
   private_.Reset();
@@ -118,8 +119,8 @@ void WebServiceWorkerResponse::SetBlob(
     mojo::ScopedMessagePipeHandle blob_pipe) {
   private_->blob_data_handle = BlobDataHandle::Create(
       uuid, String(), size,
-      storage::mojom::blink::BlobPtrInfo(
-          std::move(blob_pipe), storage::mojom::blink::Blob::Version_));
+      mojom::blink::BlobPtrInfo(std::move(blob_pipe),
+                                mojom::blink::Blob::Version_));
 }
 
 WebString WebServiceWorkerResponse::BlobUUID() const {
@@ -142,11 +143,12 @@ mojo::ScopedMessagePipeHandle WebServiceWorkerResponse::CloneBlobPtr() const {
       .PassHandle();
 }
 
-void WebServiceWorkerResponse::SetError(WebServiceWorkerResponseError error) {
+void WebServiceWorkerResponse::SetError(
+    mojom::ServiceWorkerResponseError error) {
   private_->error = error;
 }
 
-WebServiceWorkerResponseError WebServiceWorkerResponse::GetError() const {
+mojom::ServiceWorkerResponseError WebServiceWorkerResponse::GetError() const {
   return private_->error;
 }
 
@@ -182,12 +184,39 @@ const HTTPHeaderMap& WebServiceWorkerResponse::Headers() const {
 }
 
 void WebServiceWorkerResponse::SetBlobDataHandle(
-    PassRefPtr<BlobDataHandle> blob_data_handle) {
+    scoped_refptr<BlobDataHandle> blob_data_handle) {
   private_->blob_data_handle = std::move(blob_data_handle);
 }
 
-PassRefPtr<BlobDataHandle> WebServiceWorkerResponse::GetBlobDataHandle() const {
+scoped_refptr<BlobDataHandle> WebServiceWorkerResponse::GetBlobDataHandle()
+    const {
   return private_->blob_data_handle;
+}
+
+void WebServiceWorkerResponse::SetSideDataBlobDataHandle(
+    scoped_refptr<BlobDataHandle> blob_data_handle) {
+  private_->side_data_blob_data_handle = std::move(blob_data_handle);
+}
+
+WebString WebServiceWorkerResponse::SideDataBlobUUID() const {
+  if (!private_->side_data_blob_data_handle)
+    return WebString();
+  return private_->side_data_blob_data_handle->Uuid();
+}
+
+uint64_t WebServiceWorkerResponse::SideDataBlobSize() const {
+  if (!private_->side_data_blob_data_handle)
+    return 0;
+  return private_->side_data_blob_data_handle->size();
+}
+
+mojo::ScopedMessagePipeHandle WebServiceWorkerResponse::CloneSideDataBlobPtr()
+    const {
+  if (!private_->side_data_blob_data_handle)
+    return mojo::ScopedMessagePipeHandle();
+  return private_->side_data_blob_data_handle->CloneBlobPtr()
+      .PassInterface()
+      .PassHandle();
 }
 
 }  // namespace blink

@@ -42,7 +42,8 @@ enum CallsBitmap {
   DEACTIVATED = 2U,
   ONFOCUS = 4U,
   ONBLUR = 8U,
-  ONCOMPOSITIONBOUNDSCHANGED = 16U
+  ONCOMPOSITIONBOUNDSCHANGED = 16U,
+  RESET = 32U
 };
 
 void InitInputMethod() {
@@ -79,9 +80,11 @@ class TestObserver : public InputMethodEngineBase::Observer {
 
   void OnActivate(const std::string& engine_id) override {
     calls_bitmap_ |= ACTIVATE;
+    engine_id_ = engine_id;
   }
   void OnDeactivated(const std::string& engine_id) override {
     calls_bitmap_ |= DEACTIVATED;
+    engine_id_ = engine_id;
   }
   void OnFocus(
       const ui::IMEEngineHandlerInterface::InputContext& context) override {
@@ -111,7 +114,10 @@ class TestObserver : public InputMethodEngineBase::Observer {
       const std::vector<gfx::Rect>& bounds) override {
     calls_bitmap_ |= ONCOMPOSITIONBOUNDSCHANGED;
   }
-  void OnReset(const std::string& engine_id) override {}
+  void OnReset(const std::string& engine_id) override {
+    calls_bitmap_ |= RESET;
+    engine_id_ = engine_id;
+  }
 
   unsigned char GetCallsBitmapAndReset() {
     unsigned char ret = calls_bitmap_;
@@ -119,8 +125,15 @@ class TestObserver : public InputMethodEngineBase::Observer {
     return ret;
   }
 
+  std::string GetEngineIdAndReset() {
+    std::string engine_id{engine_id_};
+    engine_id_.clear();
+    return engine_id;
+  }
+
  private:
   unsigned char calls_bitmap_;
+  std::string engine_id_;
 
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
@@ -183,23 +196,29 @@ TEST_F(InputMethodEngineTest, TestSwitching) {
   EXPECT_EQ(NONE, observer_->GetCallsBitmapAndReset());
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   // Enable/disable without focus.
   engine_->FocusOut();
   EXPECT_EQ(NONE, observer_->GetCallsBitmapAndReset());
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   // Focus change when enabled.
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->FocusOut();
   EXPECT_EQ(ONBLUR, observer_->GetCallsBitmapAndReset());
   // Focus change when disabled.
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   FocusIn(ui::TEXT_INPUT_TYPE_TEXT);
   EXPECT_EQ(NONE, observer_->GetCallsBitmapAndReset());
   engine_->FocusOut();
@@ -213,17 +232,21 @@ TEST_F(InputMethodEngineTest, TestSwitching_Password_3rd_Party) {
   EXPECT_EQ(NONE, observer_->GetCallsBitmapAndReset());
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   // Focus change when enabled.
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->FocusOut();
   EXPECT_EQ(ONBLUR, observer_->GetCallsBitmapAndReset());
   FocusIn(ui::TEXT_INPUT_TYPE_PASSWORD);
   EXPECT_EQ(ONFOCUS, observer_->GetCallsBitmapAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
 }
 
 TEST_F(InputMethodEngineTest, TestSwitching_Password_Whitelisted) {
@@ -233,17 +256,36 @@ TEST_F(InputMethodEngineTest, TestSwitching_Password_Whitelisted) {
   EXPECT_EQ(NONE, observer_->GetCallsBitmapAndReset());
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   // Focus change when enabled.
   engine_->Enable(kTestImeComponentId);
   EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
   engine_->FocusOut();
   EXPECT_EQ(ONBLUR, observer_->GetCallsBitmapAndReset());
   FocusIn(ui::TEXT_INPUT_TYPE_PASSWORD);
   EXPECT_EQ(ONFOCUS, observer_->GetCallsBitmapAndReset());
   engine_->Disable();
   EXPECT_EQ(DEACTIVATED, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
+}
+
+// Tests input.ime.onReset API.
+TEST_F(InputMethodEngineTest, TestReset) {
+  CreateEngine(false);
+  // Enables the extension with focus.
+  engine_->Enable(kTestImeComponentId);
+  FocusIn(ui::TEXT_INPUT_TYPE_URL);
+  EXPECT_EQ(ACTIVATE | ONFOCUS, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
+
+  // Resets the engine.
+  engine_->Reset();
+  EXPECT_EQ(RESET, observer_->GetCallsBitmapAndReset());
+  EXPECT_EQ(kTestImeComponentId, observer_->GetEngineIdAndReset());
 }
 
 TEST_F(InputMethodEngineTest, TestHistograms) {

@@ -27,11 +27,11 @@
 #ifndef CanvasImageSource_h
 #define CanvasImageSource_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "platform/geometry/FloatSize.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -50,10 +50,10 @@ enum SourceImageStatus {
 
 class CORE_EXPORT CanvasImageSource {
  public:
-  virtual RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                                AccelerationHint,
-                                                SnapshotReason,
-                                                const FloatSize&) = 0;
+  virtual scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                                       AccelerationHint,
+                                                       SnapshotReason,
+                                                       const FloatSize&) = 0;
 
   // IMPORTANT: Result must be independent of whether destinationContext is
   // already tainted because this function may be used to determine whether
@@ -83,9 +83,6 @@ class CORE_EXPORT CanvasImageSource {
   virtual const KURL& SourceURL() const { return BlankURL(); }
   virtual bool IsOpaque() const { return false; }
   virtual bool IsAccelerated() const = 0;
-
-  virtual int SourceWidth() = 0;
-  virtual int SourceHeight() = 0;
 
  protected:
   virtual ~CanvasImageSource() {}

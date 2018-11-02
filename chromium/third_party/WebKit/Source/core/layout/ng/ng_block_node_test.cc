@@ -4,16 +4,13 @@
 
 #include "core/layout/ng/ng_block_node.h"
 
-#include "core/layout/LayoutTestHelper.h"
 #include "core/layout/MinMaxSize.h"
+#include "core/layout/ng/ng_layout_test.h"
 
 namespace blink {
 namespace {
-class NGBlockNodeForTest : public RenderingTest {
- public:
-  NGBlockNodeForTest() { RuntimeEnabledFeatures::SetLayoutNGEnabled(true); }
-  ~NGBlockNodeForTest() { RuntimeEnabledFeatures::SetLayoutNGEnabled(false); };
-};
+
+using NGBlockNodeForTest = NGLayoutTest;
 
 TEST_F(NGBlockNodeForTest, ChildInlineAndBlock) {
   SetBodyInnerHTML(R"HTML(
@@ -132,9 +129,9 @@ TEST_F(NGBlockNodeForTest, ChildOofBeforeInline) {
   )HTML");
   NGBlockNode container(ToLayoutBox(GetLayoutObjectByElementId("container")));
   NGLayoutInputNode child1 = container.FirstChild();
-  EXPECT_TRUE(child1 && child1.IsBlock());
+  EXPECT_TRUE(child1 && child1.IsInline());
   NGLayoutInputNode child2 = child1.NextSibling();
-  EXPECT_TRUE(child2 && child2.IsBlock());
+  EXPECT_EQ(child2, nullptr);
 }
 
 TEST_F(NGBlockNodeForTest, ChildOofAfterInline) {

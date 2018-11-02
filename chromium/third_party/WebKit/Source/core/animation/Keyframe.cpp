@@ -4,17 +4,36 @@
 
 #include "core/animation/Keyframe.h"
 
+#include "bindings/core/v8/V8ObjectBuilder.h"
+#include "core/animation/EffectModel.h"
 #include "core/animation/InvalidatableInterpolation.h"
 
 namespace blink {
 
-RefPtr<Interpolation> Keyframe::PropertySpecificKeyframe::CreateInterpolation(
+scoped_refptr<Interpolation>
+Keyframe::PropertySpecificKeyframe::CreateInterpolation(
     const PropertyHandle& property_handle,
     const Keyframe::PropertySpecificKeyframe& end) const {
   // const_cast to take refs.
   return InvalidatableInterpolation::Create(
       property_handle, const_cast<PropertySpecificKeyframe*>(this),
       const_cast<PropertySpecificKeyframe*>(&end));
+}
+
+void Keyframe::AddKeyframePropertiesToV8Object(
+    V8ObjectBuilder& object_builder) const {
+  object_builder.Add("offset", offset_);
+  object_builder.Add("easing", easing_->ToString());
+  if (composite_.has_value()) {
+    object_builder.AddString(
+        "composite",
+        EffectModel::CompositeOperationToString(composite_.value()));
+  }
+}
+
+bool Keyframe::CompareOffsets(const scoped_refptr<Keyframe>& a,
+                              const scoped_refptr<Keyframe>& b) {
+  return a->Offset() < b->Offset();
 }
 
 }  // namespace blink

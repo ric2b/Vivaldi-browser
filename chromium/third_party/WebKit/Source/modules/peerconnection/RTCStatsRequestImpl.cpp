@@ -43,7 +43,7 @@ RTCStatsRequestImpl::RTCStatsRequestImpl(ExecutionContext* context,
                                          MediaStreamTrack* selector)
     : ContextLifecycleObserver(context),
       success_callback_(callback),
-      component_(selector ? selector->Component() : 0),
+      component_(selector ? selector->Component() : nullptr),
       requester_(requester) {
   DCHECK(requester_);
 }
@@ -79,7 +79,7 @@ void RTCStatsRequestImpl::Clear() {
   requester_.Clear();
 }
 
-DEFINE_TRACE(RTCStatsRequestImpl) {
+void RTCStatsRequestImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(success_callback_);
   visitor->Trace(component_);
   visitor->Trace(requester_);

@@ -24,7 +24,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutBR.h"
 
 namespace blink {
@@ -45,7 +45,7 @@ bool HTMLBRElement::IsPresentationAttribute(const QualifiedName& name) const {
 void HTMLBRElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == clearAttr) {
     // If the string is empty, then don't add the clear property.
     // <br clear> and <br clear=""> are just treated like <br> by Gecko, Mac IE,

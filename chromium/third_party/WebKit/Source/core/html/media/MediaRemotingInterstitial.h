@@ -6,14 +6,13 @@
 #define MediaRemotingInterstitial_h
 
 #include "core/html/HTMLDivElement.h"
+#include "platform/Timer.h"
+#include "platform/WebTaskRunner.h"
 
 namespace blink {
 
 class HTMLImageElement;
 class HTMLVideoElement;
-class MediaRemotingExitButtonElement;
-class MediaRemotingCastMessageElement;
-class MediaRemotingCastIconElement;
 
 // Media Remoting UI. DOM structure looks like:
 //
@@ -21,12 +20,10 @@ class MediaRemotingCastIconElement;
 //     (-internal-media-remoting-interstitial)
 // +-HTMLImageElement
 // |    (-internal-media-remoting-background-image)
-// \-MediaRemotingCastIconElement
+// \-HTMLDivElement
 // |    (-internal-media-remoting-cast-icon)
-// \-MediaRemotingCastMessageElement
-// |    (-internal-media-remoting-cast-text-message)
-// \-MediaRemotingExitButtonElement
-//      (-internal-media-remoting-disable-button)
+// \-HTMLDivElement
+//      (-internal-media-remoting-cast-text-message)
 class MediaRemotingInterstitial final : public HTMLDivElement {
  public:
   explicit MediaRemotingInterstitial(HTMLVideoElement&);
@@ -45,7 +42,7 @@ class MediaRemotingInterstitial final : public HTMLDivElement {
 
   HTMLVideoElement& GetVideoElement() const { return *video_element_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   // Node override.
@@ -61,9 +58,8 @@ class MediaRemotingInterstitial final : public HTMLDivElement {
   TaskRunnerTimer<MediaRemotingInterstitial> toggle_insterstitial_timer_;
   Member<HTMLVideoElement> video_element_;
   Member<HTMLImageElement> background_image_;
-  Member<MediaRemotingExitButtonElement> exit_button_;
-  Member<MediaRemotingCastIconElement> cast_icon_;
-  Member<MediaRemotingCastMessageElement> cast_text_message_;
+  Member<HTMLDivElement> cast_icon_;
+  Member<HTMLDivElement> cast_text_message_;
 };
 
 }  // namespace blink

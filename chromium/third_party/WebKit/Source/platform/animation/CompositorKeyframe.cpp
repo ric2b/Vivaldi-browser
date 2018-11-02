@@ -8,7 +8,7 @@
 
 namespace blink {
 
-PassRefPtr<TimingFunction> CompositorKeyframe::GetTimingFunctionForTesting()
+scoped_refptr<TimingFunction> CompositorKeyframe::GetTimingFunctionForTesting()
     const {
   return CreateCompositorTimingFunctionFromCC(CcTimingFunction());
 }

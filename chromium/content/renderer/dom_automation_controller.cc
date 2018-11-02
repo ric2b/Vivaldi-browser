@@ -6,10 +6,10 @@
 
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
-#include "content/child/v8_value_converter_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/renderer/render_view_impl.h"
+#include "content/renderer/v8_value_converter_impl.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "third_party/WebKit/public/web/WebKit.h"
@@ -50,10 +50,7 @@ gin::ObjectTemplateBuilder DomAutomationController::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   return gin::Wrappable<DomAutomationController>::GetObjectTemplateBuilder(
              isolate)
-      .SetMethod("send", &DomAutomationController::SendMsg)
-      .SetMethod("setAutomationId", &DomAutomationController::SetAutomationId)
-      .SetMethod("sendJSON", &DomAutomationController::SendJSON)
-      .SetMethod("sendWithId", &DomAutomationController::SendWithId);
+      .SetMethod("send", &DomAutomationController::SendMsg);
 }
 
 void DomAutomationController::OnDestruct() {}
@@ -106,32 +103,7 @@ bool DomAutomationController::SendMsg(const gin::Arguments& args) {
   if (!value || !serializer.Serialize(*value))
     return false;
 
-  bool succeeded = Send(new FrameHostMsg_DomOperationResponse(
-      routing_id(), json));
-
-  return succeeded;
-}
-
-bool DomAutomationController::SendJSON(const std::string& json) {
-  if (!render_frame())
-    return false;
-
-  bool result = Send(new FrameHostMsg_DomOperationResponse(
-      routing_id(), json));
-
-  return result;
-}
-
-bool DomAutomationController::SendWithId(int automation_id,
-                                         const std::string& str) {
-  if (!render_frame())
-    return false;
-  return Send(
-      new FrameHostMsg_DomOperationResponse(routing_id(), str));
-}
-
-bool DomAutomationController::SetAutomationId(int automation_id) {
-  return true;
+  return Send(new FrameHostMsg_DomOperationResponse(routing_id(), json));
 }
 
 }  // namespace content

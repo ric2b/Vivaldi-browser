@@ -54,7 +54,7 @@ ThumbnailScore::ThumbnailScore(double score,
                                bool clipping,
                                bool top,
                                const Time& time)
-      : force_update(false), 
+    : force_update(false),
       boring_score(score),
       good_clipping(clipping),
       at_top(top),

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/guid.h"
@@ -85,9 +86,7 @@ AutofillProfileSyncableService::FromWebDataService(
 }
 
 AutofillProfileSyncableService::AutofillProfileSyncableService()
-    : webdata_backend_(NULL),
-      scoped_observer_(this) {
-}
+    : webdata_backend_(nullptr), scoped_observer_(this) {}
 
 syncer::SyncMergeResult
 AutofillProfileSyncableService::MergeDataAndStartSyncing(
@@ -227,7 +226,7 @@ syncer::SyncDataList AutofillProfileSyncableService::GetAllSyncData(
 }
 
 syncer::SyncError AutofillProfileSyncableService::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!sync_processor_.get()) {
@@ -407,6 +406,14 @@ bool AutofillProfileSyncableService::OverwriteProfileWithServerData(
     diff = true;
   }
 
+  // Update the validity state bitfield.
+  if (specifics.has_validity_state_bitfield() &&
+      specifics.validity_state_bitfield() !=
+          profile->GetValidityBitfieldValue()) {
+    profile->SetValidityFromBitfieldValue(specifics.validity_state_bitfield());
+    diff = true;
+  }
+
   if (static_cast<size_t>(specifics.use_count()) != profile->use_count()) {
     profile->set_use_count(specifics.use_count());
     diff = true;
@@ -471,6 +478,7 @@ void AutofillProfileSyncableService::WriteAutofillProfile(
       LimitData(
           UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY))));
   specifics->set_address_home_language_code(LimitData(profile.language_code()));
+  specifics->set_validity_state_bitfield(profile.GetValidityBitfieldValue());
 
   // TODO(estade): this should be set_email_address.
   specifics->add_email_address(
@@ -519,7 +527,7 @@ AutofillProfileSyncableService::CreateOrUpdateProfile(
 
   // New profile synced.
   std::unique_ptr<AutofillProfile> new_profile =
-      base::MakeUnique<AutofillProfile>(autofill_specifics.guid(),
+      std::make_unique<AutofillProfile>(autofill_specifics.guid(),
                                         autofill_specifics.origin());
   AutofillProfile* new_profile_ptr = new_profile.get();
   OverwriteProfileWithServerData(autofill_specifics, new_profile_ptr);
@@ -548,8 +556,9 @@ AutofillProfileSyncableService::CreateOrUpdateProfile(
                << ". Profile to be deleted " << local_profile->guid();
       profile_map->erase(it);
       break;
-    } else if (!local_profile->IsVerified() && !new_profile->IsVerified() &&
-               comparator.AreMergeable(*local_profile, *new_profile)) {
+    }
+    if (!local_profile->IsVerified() && !new_profile->IsVerified() &&
+        comparator.AreMergeable(*local_profile, *new_profile)) {
       // Add it to candidates for merge - if there is no profile with this guid
       // we will merge them.
       bundle->candidates_to_merge.insert(
@@ -588,7 +597,7 @@ void AutofillProfileSyncableService::ActOnChange(
       DCHECK(profiles_map_.find(change.data_model()->guid()) ==
              profiles_map_.end());
       profiles_.push_back(
-          base::MakeUnique<AutofillProfile>(*(change.data_model())));
+          std::make_unique<AutofillProfile>(*(change.data_model())));
       profiles_map_[change.data_model()->guid()] = profiles_.back().get();
       break;
     case AutofillProfileChange::UPDATE: {

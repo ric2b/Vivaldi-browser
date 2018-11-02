@@ -6,13 +6,13 @@
 #define NET_QUIC_CORE_QUIC_HEADERS_STREAM_H_
 
 #include <cstddef>
-#include <deque>
 #include <memory>
 
 #include "base/macros.h"
 #include "net/quic/core/quic_header_list.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_stream.h"
+#include "net/quic/platform/api/quic_containers.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/spdy/core/spdy_framer.h"
 
@@ -38,23 +38,16 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
   // Release underlying buffer if allowed.
   void MaybeReleaseSequencerBuffer();
 
-  void OnStreamFrameAcked(const QuicStreamFrame& frame,
+  void OnStreamFrameAcked(QuicStreamOffset offset,
+                          QuicByteCount data_length,
+                          bool fin_acked,
                           QuicTime::Delta ack_delay_time) override;
 
-  void OnStreamFrameRetransmitted(const QuicStreamFrame& frame) override;
+  void OnStreamFrameRetransmitted(QuicStreamOffset offset,
+                                  QuicByteCount data_length) override;
 
  private:
   friend class test::QuicHeadersStreamPeer;
-
-  // Override to store mapping from offset, length to ack_listener. This
-  // ack_listener is notified once data within [offset, offset + length] is
-  // acked or retransmitted.
-  QuicConsumedData WritevDataInner(
-      QuicIOVector iov,
-      QuicStreamOffset offset,
-      bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener)
-      override;
 
   // CompressedHeaderInfo includes simple information of a header, including
   // offset in headers stream, unacked length and ack listener of this header.
@@ -92,7 +85,7 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
   QuicSpdySession* spdy_session_;
 
   // Headers that have not been fully acked.
-  std::deque<CompressedHeaderInfo> unacked_headers_;
+  QuicDeque<CompressedHeaderInfo> unacked_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicHeadersStream);
 };

@@ -82,7 +82,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                      const FloatSize& accumulated_overscroll,
                      const FloatPoint& position_in_viewport,
                      const FloatSize& velocity_in_viewport,
-                     const WebScrollBoundaryBehavior&) override;
+                     const WebOverscrollBehavior&) override;
   bool ShouldReportDetailedMessageForSource(LocalFrame&,
                                             const String&) override;
   void AddMessageToConsole(LocalFrame*,
@@ -127,7 +127,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   DateTimeChooser* OpenDateTimeChooser(
       DateTimeChooserClient*,
       const DateTimeChooserParameters&) override;
-  void OpenFileChooser(LocalFrame*, RefPtr<FileChooser>) override;
+  void OpenFileChooser(LocalFrame*, scoped_refptr<FileChooser>) override;
   void EnumerateChosenDirectory(FileChooser*) override;
   void SetCursor(const Cursor&, LocalFrame*) override;
   void SetCursorOverridden(bool) override;
@@ -147,6 +147,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   // appropriate scroll optimizations can be chosen.
   void SetHasScrollEventHandlers(LocalFrame*, bool has_event_handlers) override;
   void SetNeedsLowLatencyInput(LocalFrame*, bool needs_low_latency) override;
+  void RequestUnbufferedInputEvents(LocalFrame*) override;
   void SetTouchAction(LocalFrame*, TouchAction) override;
 
   void AttachRootGraphicsLayer(GraphicsLayer*, LocalFrame* local_root) override;
@@ -215,16 +216,13 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void ShowUnhandledTapUIIfNeeded(WebTappedInfo&) override;
   void OnMouseDown(Node&) override;
   void DidUpdateBrowserControls() const override;
-  void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&) override;
+  void SetOverscrollBehavior(const WebOverscrollBehavior&) override;
 
   FloatSize ElasticOverscroll() const override;
 
-  void DidObserveNonGetFetchFromScript() const override;
-
   std::unique_ptr<WebFrameScheduler> CreateFrameScheduler(
-      BlameContext*) override;
-
-  double LastFrameTimeMonotonic() const override;
+      BlameContext*,
+      WebFrameScheduler::FrameType) override;
 
   void RegisterPopupOpeningObserver(PopupOpeningObserver*) override;
   void UnregisterPopupOpeningObserver(PopupOpeningObserver*) override;

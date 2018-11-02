@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_PRESENTATION_PRESENTATION_SERVICE_IMPL_H_
 #define CONTENT_BROWSER_PRESENTATION_PRESENTATION_SERVICE_IMPL_H_
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -25,7 +24,7 @@
 #include "content/public/browser/presentation_service_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/frame_navigate_params.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
 #include "url/gurl.h"
 
@@ -42,28 +41,39 @@ class RenderFrameHost;
 // related to the RFH via implementing WebContentsObserver.
 // This class is instantiated on-demand via Mojo's ConnectToRemoteService
 // from the renderer when the first presentation API request is handled.
+// This class currently handles requests from both controller and receiver
+// frames. The sequence of calls from a controller looks like the following:
+//   Create()
+//   SetClient()
+//   StartPresentation()
+//   SetPresentationConnection()
+//   ...
+// TODO(crbug.com/749327): Split the controller and receiver logic into separate
+// classes so that each is easier to reason about.
 class CONTENT_EXPORT PresentationServiceImpl
     : public blink::mojom::PresentationService,
       public WebContentsObserver,
       public PresentationServiceDelegate::Observer {
  public:
-  ~PresentationServiceImpl() override;
-
   using NewPresentationCallback =
       base::OnceCallback<void(const base::Optional<PresentationInfo>&,
                               const base::Optional<PresentationError>&)>;
 
-  // Static factory method to create an instance of PresentationServiceImpl.
-  // |render_frame_host|: The RFH the instance is associated with.
-  // |request|: The instance will be bound to this request. Used for Mojo setup.
-  static void CreateMojoService(
-      RenderFrameHost* render_frame_host,
-      mojo::InterfaceRequest<blink::mojom::PresentationService> request);
+  // Creates a PresentationServiceImpl using the given RenderFrameHost.
+  static std::unique_ptr<PresentationServiceImpl> Create(
+      RenderFrameHost* render_frame_host);
+
+  ~PresentationServiceImpl() override;
+
+  // Creates a binding between this object and |request|. Note that a
+  // PresentationServiceImpl instance can be bound to multiple requests.
+  void Bind(blink::mojom::PresentationServiceRequest request);
 
   // PresentationService implementation.
   void SetDefaultPresentationUrls(
       const std::vector<GURL>& presentation_urls) override;
   void SetClient(blink::mojom::PresentationServiceClientPtr client) override;
+  void SetReceiver(blink::mojom::PresentationReceiverPtr receiver) override;
   void ListenForScreenAvailability(const GURL& url) override;
   void StopListeningForScreenAvailability(const GURL& url) override;
   void StartPresentation(const std::vector<GURL>& presentation_urls,
@@ -83,10 +93,7 @@ class CONTENT_EXPORT PresentationServiceImpl
 
  private:
   friend class PresentationServiceImplTest;
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, Reset);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, ThisRenderFrameDeleted);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-      OtherRenderFrameDeleted);
+  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, OnDelegateDestroyed);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, DelegateFails);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
                            SetDefaultPresentationUrlsNoopsOnNonMainFrame);
@@ -146,6 +153,8 @@ class CONTENT_EXPORT PresentationServiceImpl
     DISALLOW_COPY_AND_ASSIGN(NewPresentationCallbackWrapper);
   };
 
+  // Note: Use |PresentationServiceImpl::Create| instead. This constructor
+  // should only be directly invoked in tests.
   // |render_frame_host|: The RFH this instance is associated with.
   // |web_contents|: The WebContents to observe.
   // |controller_delegate|: Where Presentation API requests are delegated to in
@@ -160,13 +169,8 @@ class CONTENT_EXPORT PresentationServiceImpl
       ControllerPresentationServiceDelegate* controller_delegate,
       ReceiverPresentationServiceDelegate* receiver_delegate);
 
-  // Creates a binding between this object and |request|.
-  void Bind(blink::mojom::PresentationServiceRequest request);
-
   // WebContentsObserver override.
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
-  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
-  void WebContentsDestroyed() override;
 
   // PresentationServiceDelegate::Observer
   void OnDelegateDestroyed() override;
@@ -211,7 +215,7 @@ class CONTENT_EXPORT PresentationServiceImpl
       const content::PresentationInfo& presentation_info,
       std::vector<content::PresentationConnectionMessage> messages);
 
-  // A callback registered to OffscreenPresentationManager when
+  // A callback registered to LocalPresentationManager when
   // the PresentationServiceImpl for the presentation receiver is initialized.
   // Calls |client_| to create a new PresentationConnection on receiver page.
   void OnReceiverConnectionAvailable(
@@ -255,6 +259,8 @@ class CONTENT_EXPORT PresentationServiceImpl
   // availability) to.
   blink::mojom::PresentationServiceClientPtr client_;
 
+  blink::mojom::PresentationReceiverPtr receiver_;
+
   std::vector<GURL> default_presentation_urls_;
 
   using ScreenAvailabilityListenerMap =
@@ -272,9 +278,8 @@ class CONTENT_EXPORT PresentationServiceImpl
   base::hash_map<int, linked_ptr<NewPresentationCallbackWrapper>>
       pending_reconnect_presentation_cbs_;
 
-  // RAII binding of |this| to an Presentation interface request.
-  // The binding is removed when binding_ is cleared or goes out of scope.
-  std::unique_ptr<mojo::Binding<blink::mojom::PresentationService>> binding_;
+  // RAII binding of |this| to PresentationService requests.
+  mojo::BindingSet<blink::mojom::PresentationService> bindings_;
 
   // ID of the RenderFrameHost this object is associated with.
   int render_process_id_;

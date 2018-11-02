@@ -86,6 +86,21 @@ void InspectorSession::DispatchProtocolMessage(const String& method,
   }
 }
 
+void InspectorSession::DispatchProtocolMessage(const String& message) {
+  DCHECK(!disposed_);
+  String method;
+  std::unique_ptr<protocol::DictionaryValue> parsedMessage;
+  if (!inspector_backend_dispatcher_->getCommandName(message, &method,
+                                                     &parsedMessage))
+    return;
+  if (v8_inspector::V8InspectorSession::canDispatchMethod(
+          ToV8InspectorStringView(method))) {
+    v8_session_->dispatchProtocolMessage(ToV8InspectorStringView(message));
+  } else {
+    inspector_backend_dispatcher_->dispatch(std::move(parsedMessage));
+  }
+}
+
 void InspectorSession::DidCommitLoadForLocalFrame(LocalFrame* frame) {
   for (size_t i = 0; i < agents_.size(); i++)
     agents_[i]->DidCommitLoadForLocalFrame(frame);
@@ -186,7 +201,7 @@ void InspectorSession::flushProtocolNotifications() {
   notification_queue_.clear();
 }
 
-DEFINE_TRACE(InspectorSession) {
+void InspectorSession::Trace(blink::Visitor* visitor) {
   visitor->Trace(instrumenting_agents_);
   visitor->Trace(agents_);
 }

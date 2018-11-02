@@ -25,7 +25,7 @@
 
 namespace blink {
 
-PassRefPtr<TransformOperation> TranslateTransformOperation::Blend(
+scoped_refptr<TransformOperation> TranslateTransformOperation::Blend(
     const TransformOperation* from,
     double progress,
     bool blend_to_identity) {
@@ -58,7 +58,7 @@ bool TranslateTransformOperation::CanBlendWith(
          other.GetType() == kTranslate3D;
 }
 
-PassRefPtr<TranslateTransformOperation>
+scoped_refptr<TranslateTransformOperation>
 TranslateTransformOperation::ZoomTranslate(double factor) {
   return Create(x_.Zoom(factor), y_.Zoom(factor), z_ * factor, type_);
 }

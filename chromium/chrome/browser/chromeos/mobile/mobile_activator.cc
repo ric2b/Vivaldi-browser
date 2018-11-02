@@ -104,7 +104,7 @@ std::string CellularConfigDocument::GetErrorMessage(const std::string& code) {
 }
 
 void CellularConfigDocument::LoadCellularConfigFile() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Load partner customization startup manifest if it is available.
   base::FilePath config_path(kCellularConfigPath);
@@ -134,7 +134,7 @@ bool CellularConfigDocument::LoadFromFile(const base::FilePath& config_path) {
   std::unique_ptr<base::Value> root =
       base::JSONReader::Read(config, base::JSON_ALLOW_TRAILING_COMMAS);
   DCHECK(root.get() != NULL);
-  if (!root.get() || root->GetType() != base::Value::Type::DICTIONARY) {
+  if (!root.get() || !root->is_dict()) {
     LOG(WARNING) << "Bad cellular config file";
     return false;
   }

@@ -48,9 +48,6 @@ namespace settings {
 
 namespace {
 
-// usb:// is 6 characters long.
-constexpr int kUsbSchemeLength = 6;
-
 constexpr char kIppScheme[] = "ipp";
 constexpr char kIppsScheme[] = "ipps";
 
@@ -208,7 +205,7 @@ std::unique_ptr<base::DictionaryValue> GetPrinterInfo(const Printer& printer) {
     // semantics breaks down a bit here.  From the user's point of view, the
     // entire host/path/query block is the printer address for USB.
     printer_info->SetString("printerAddress",
-                            printer.uri().substr(kUsbSchemeLength));
+                            printer.uri().substr(strlen("usb://")));
   } else {
     printer_info->SetString("printerAddress",
                             PrinterAddress(uri.host, uri.port));
@@ -236,6 +233,50 @@ std::string GetPrinterQueue(const base::DictionaryValue& printer_dict) {
   }
 
   return queue;
+}
+
+// Generates a Printer from |printer_dict| where |printer_dict| is a
+// CupsPrinterInfo representation.  If any of the required fields are missing,
+// returns nullptr.
+std::unique_ptr<chromeos::Printer> DictToPrinter(
+    const base::DictionaryValue& printer_dict) {
+  std::string printer_id;
+  std::string printer_name;
+  std::string printer_description;
+  std::string printer_manufacturer;
+  std::string printer_model;
+  std::string printer_make_and_model;
+  std::string printer_address;
+  std::string printer_protocol;
+
+  if (!printer_dict.GetString("printerId", &printer_id) ||
+      !printer_dict.GetString("printerName", &printer_name) ||
+      !printer_dict.GetString("printerDescription", &printer_description) ||
+      !printer_dict.GetString("printerManufacturer", &printer_manufacturer) ||
+      !printer_dict.GetString("printerModel", &printer_model) ||
+      !printer_dict.GetString("printerMakeAndModel", &printer_make_and_model) ||
+      !printer_dict.GetString("printerAddress", &printer_address) ||
+      !printer_dict.GetString("printerProtocol", &printer_protocol)) {
+    return nullptr;
+  }
+
+  std::string printer_queue = GetPrinterQueue(printer_dict);
+
+  std::string printer_uri =
+      printer_protocol + url::kStandardSchemeSeparator + printer_address;
+  if (!printer_queue.empty()) {
+    printer_uri += "/" + printer_queue;
+  }
+
+  auto printer = base::MakeUnique<chromeos::Printer>(printer_id);
+  printer->set_display_name(printer_name);
+  printer->set_description(printer_description);
+  printer->set_manufacturer(printer_manufacturer);
+  printer->set_model(printer_model);
+  printer->set_make_and_model(printer_make_and_model);
+  printer->set_uri(printer_uri);
+
+  return printer;
 }
 
 }  // namespace
@@ -295,6 +336,18 @@ void CupsPrintersHandler::RegisterMessages() {
       "addDiscoveredPrinter",
       base::Bind(&CupsPrintersHandler::HandleAddDiscoveredPrinter,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "cancelPrinterSetUp", base::Bind(&CupsPrintersHandler::HandleSetUpCancel,
+                                       base::Unretained(this)));
+}
+
+void CupsPrintersHandler::OnJavascriptAllowed() {
+  printers_manager_->AddObserver(this);
+  printers_manager_->Start();
+}
+
+void CupsPrintersHandler::OnJavascriptDisallowed() {
+  printers_manager_->RemoveObserver(this);
 }
 
 void CupsPrintersHandler::HandleGetCupsPrintersList(
@@ -475,37 +528,11 @@ void CupsPrintersHandler::HandleAddCupsPrinter(const base::ListValue* args) {
   const base::DictionaryValue* printer_dict = nullptr;
   CHECK(args->GetDictionary(0, &printer_dict));
 
-  std::string printer_id;
-  std::string printer_name;
-  std::string printer_description;
-  std::string printer_manufacturer;
-  std::string printer_model;
-  std::string printer_make_and_model;
-  std::string printer_address;
-  std::string printer_protocol;
-  CHECK(printer_dict->GetString("printerId", &printer_id));
-  CHECK(printer_dict->GetString("printerName", &printer_name));
-  CHECK(printer_dict->GetString("printerDescription", &printer_description));
-  CHECK(printer_dict->GetString("printerManufacturer", &printer_manufacturer));
-  CHECK(printer_dict->GetString("printerModel", &printer_model));
-  CHECK(
-      printer_dict->GetString("printerMakeAndModel", &printer_make_and_model));
-  CHECK(printer_dict->GetString("printerAddress", &printer_address));
-  CHECK(printer_dict->GetString("printerProtocol", &printer_protocol));
-
-  std::string printer_queue = GetPrinterQueue(*printer_dict);
-
-  std::string printer_uri =
-      printer_protocol + url::kStandardSchemeSeparator + printer_address;
-  if (!printer_queue.empty()) {
-    printer_uri += "/" + printer_queue;
-  }
-
-  // Validate uri before continuing.
+  std::unique_ptr<Printer> printer = DictToPrinter(*printer_dict);
   PrinterUri uri;
-  if (!ParseUri(printer_uri, &uri)) {
+  if (!printer || !ParseUri(printer->uri(), &uri)) {
     LOG(ERROR) << "Failed to parse printer";
-    OnAddPrinterError();
+    OnAddPrinterError(PrinterSetupResult::kFatalError);
     return;
   }
 
@@ -519,29 +546,21 @@ void CupsPrintersHandler::HandleAddCupsPrinter(const base::ListValue* args) {
   std::string printer_ppd_path;
   printer_dict->GetString("printerPPDPath", &printer_ppd_path);
 
-  Printer printer(printer_id);
-  printer.set_display_name(printer_name);
-  printer.set_description(printer_description);
-  printer.set_manufacturer(printer_manufacturer);
-  printer.set_model(printer_model);
-  printer.set_make_and_model(printer_make_and_model);
-  printer.set_uri(printer_uri);
-
   bool autoconf = false;
   printer_dict->GetBoolean("printerAutoconf", &autoconf);
 
   // Verify that the printer is autoconf or a valid ppd path is present.
   if (autoconf) {
-    printer.mutable_ppd_reference()->autoconf = true;
+    printer->mutable_ppd_reference()->autoconf = true;
   } else if (!printer_ppd_path.empty()) {
     RecordPpdSource(kUser);
     GURL tmp = net::FilePathToFileURL(base::FilePath(printer_ppd_path));
     if (!tmp.is_valid()) {
       LOG(ERROR) << "Invalid ppd path: " << printer_ppd_path;
-      OnAddPrinterError();
+      OnAddPrinterError(PrinterSetupResult::kInvalidPpd);
       return;
     }
-    printer.mutable_ppd_reference()->user_supplied_ppd_url = tmp.spec();
+    printer->mutable_ppd_reference()->user_supplied_ppd_url = tmp.spec();
   } else if (!ppd_manufacturer.empty() && !ppd_model.empty()) {
     RecordPpdSource(kScs);
     // Pull out the ppd reference associated with the selected manufacturer and
@@ -549,24 +568,24 @@ void CupsPrintersHandler::HandleAddCupsPrinter(const base::ListValue* args) {
     bool found = false;
     for (const auto& resolved_printer : resolved_printers_[ppd_manufacturer]) {
       if (resolved_printer.first == ppd_model) {
-        *printer.mutable_ppd_reference() = resolved_printer.second;
+        *printer->mutable_ppd_reference() = resolved_printer.second;
         found = true;
         break;
       }
     }
     if (!found) {
       LOG(ERROR) << "Failed to get ppd reference";
-      OnAddPrinterError();
+      OnAddPrinterError(PrinterSetupResult::kPpdNotFound);
       return;
     }
 
-    if (printer.make_and_model().empty()) {
+    if (printer->make_and_model().empty()) {
       // In lieu of more accurate information, populate the make and model
       // fields with the PPD information.
-      printer.set_manufacturer(ppd_manufacturer);
-      printer.set_model(ppd_model);
+      printer->set_manufacturer(ppd_manufacturer);
+      printer->set_model(ppd_model);
       // PPD Model names are actually make and model.
-      printer.set_make_and_model(ppd_model);
+      printer->set_make_and_model(ppd_model);
     }
   } else {
     // TODO(crbug.com/738514): Support PPD guessing for non-autoconf printers.
@@ -576,11 +595,11 @@ void CupsPrintersHandler::HandleAddCupsPrinter(const base::ListValue* args) {
   }
 
   printer_configurer_->SetUpPrinter(
-      printer, base::Bind(&CupsPrintersHandler::OnAddedSpecifiedPrinter,
-                          weak_factory_.GetWeakPtr(), printer));
+      *printer, base::Bind(&CupsPrintersHandler::OnAddedSpecifiedPrinter,
+                           weak_factory_.GetWeakPtr(), *printer));
 }
 
-bool CupsPrintersHandler::OnAddedPrinterCommon(const Printer& printer,
+void CupsPrintersHandler::OnAddedPrinterCommon(const Printer& printer,
                                                PrinterSetupResult result_code) {
   UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterSetupResult", result_code,
                             PrinterSetupResult::kMaxValue);
@@ -590,7 +609,7 @@ bool CupsPrintersHandler::OnAddedPrinterCommon(const Printer& printer,
                                 printer.GetProtocol(), Printer::kProtocolMax);
       printers_manager_->PrinterInstalled(printer);
       printers_manager_->UpdateConfiguredPrinter(printer);
-      return true;
+      return;
     case PrinterSetupResult::kPpdNotFound:
       LOG(WARNING) << "Could not locate requested PPD";
       break;
@@ -617,14 +636,14 @@ bool CupsPrintersHandler::OnAddedPrinterCommon(const Printer& printer,
   // Log an event that tells us this printer setup failed, so we can get
   // statistics about which printers are giving users difficulty.
   printers_manager_->RecordSetupAbandoned(printer);
-  return false;
 }
 
 void CupsPrintersHandler::OnAddedDiscoveredPrinter(
     const Printer& printer,
     PrinterSetupResult result_code) {
-  if (OnAddedPrinterCommon(printer, result_code)) {
-    FireWebUIListener("on-add-cups-printer", base::Value(true),
+  OnAddedPrinterCommon(printer, result_code);
+  if (result_code == PrinterSetupResult::kSuccess) {
+    FireWebUIListener("on-add-cups-printer", base::Value(result_code),
                       base::Value(printer.display_name()));
   } else {
     FireWebUIListener("on-manually-add-discovered-printer",
@@ -636,13 +655,14 @@ void CupsPrintersHandler::OnAddedDiscoveredPrinter(
 void CupsPrintersHandler::OnAddedSpecifiedPrinter(
     const Printer& printer,
     PrinterSetupResult result_code) {
-  FireWebUIListener("on-add-cups-printer",
-                    base::Value(OnAddedPrinterCommon(printer, result_code)),
+  OnAddedPrinterCommon(printer, result_code);
+  FireWebUIListener("on-add-cups-printer", base::Value(result_code),
                     base::Value(printer.display_name()));
 }
 
-void CupsPrintersHandler::OnAddPrinterError() {
-  FireWebUIListener("on-add-cups-printer", base::Value(false), base::Value(""));
+void CupsPrintersHandler::OnAddPrinterError(PrinterSetupResult result_code) {
+  FireWebUIListener("on-add-cups-printer", base::Value(result_code),
+                    base::Value(""));
 }
 
 void CupsPrintersHandler::HandleGetCupsPrinterManufacturers(
@@ -764,6 +784,16 @@ void CupsPrintersHandler::HandleStopDiscovery(const base::ListValue* args) {
   discovered_printers_.shrink_to_fit();
   automatic_printers_.shrink_to_fit();
   discovery_active_ = false;
+}
+
+void CupsPrintersHandler::HandleSetUpCancel(const base::ListValue* args) {
+  const base::DictionaryValue* printer_dict;
+  CHECK(args->GetDictionary(0, &printer_dict));
+
+  std::unique_ptr<Printer> printer = DictToPrinter(*printer_dict);
+  if (printer) {
+    printers_manager_->RecordSetupAbandoned(*printer);
+  }
 }
 
 void CupsPrintersHandler::OnPrintersChanged(

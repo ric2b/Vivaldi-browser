@@ -6,19 +6,19 @@
 #define ANDROID_WEBVIEW_BROWSER_PARENT_OUTPUT_SURFACE_H_
 
 #include "base/macros.h"
-#include "cc/output/output_surface.h"
+#include "components/viz/service/display/output_surface.h"
 
 namespace android_webview {
 class AwRenderThreadContextProvider;
 
-class ParentOutputSurface : public cc::OutputSurface {
+class ParentOutputSurface : public viz::OutputSurface {
  public:
   explicit ParentOutputSurface(
       scoped_refptr<AwRenderThreadContextProvider> context_provider);
   ~ParentOutputSurface() override;
 
   // OutputSurface overrides.
-  void BindToClient(cc::OutputSurfaceClient* client) override;
+  void BindToClient(viz::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
@@ -28,11 +28,11 @@ class ParentOutputSurface : public cc::OutputSurface {
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override;
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
   uint32_t GetFramebufferCopyTextureFormat() override;
-  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
+  viz::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;

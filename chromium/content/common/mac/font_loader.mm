@@ -21,20 +21,22 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
-#include "content/common/mac/font_descriptor.h"
 
 namespace content {
 namespace {
 
 std::unique_ptr<FontLoader::ResultInternal> LoadFontOnFileThread(
-    const FontDescriptor& font) {
-  base::ThreadRestrictions::AssertIOAllowed();
+    const base::string16& font_name,
+    const float font_point_size) {
+  base::AssertBlockingAllowed();
 
-  NSFont* font_to_encode = font.ToNSFont();
+  NSString* font_name_ns = base::SysUTF16ToNSString(font_name);
+  NSFont* font_to_encode =
+      [NSFont fontWithName:font_name_ns size:font_point_size];
 
   // Load appropriate NSFont.
   if (!font_to_encode) {
-    DLOG(ERROR) << "Failed to load font " << font.font_name;
+    DLOG(ERROR) << "Failed to load font " << font_name;
     return nullptr;
   }
 
@@ -51,7 +53,7 @@ std::unique_ptr<FontLoader::ResultInternal> LoadFontOnFileThread(
       base::mac::CFToNSCast(base::mac::CFCastStrict<CFURLRef>(
           CTFontCopyAttribute(ct_font, kCTFontURLAttribute))));
   if (![font_url isFileURL]) {
-    DLOG(ERROR) << "Failed to find font file for " << font.font_name;
+    DLOG(ERROR) << "Failed to find font file for " << font_name;
     return nullptr;
   }
 
@@ -70,17 +72,24 @@ std::unique_ptr<FontLoader::ResultInternal> LoadFontOnFileThread(
     return nullptr;
   }
 
-  auto result = base::MakeUnique<FontLoader::ResultInternal>();
+  auto result = std::make_unique<FontLoader::ResultInternal>();
 
   int32_t font_file_size_32 = static_cast<int32_t>(font_file_size_64);
-  if (!result->font_data.CreateAndMapAnonymous(font_file_size_32)) {
-    DLOG(ERROR) << "Failed to create shmem area for " << font.font_name;
+  result->font_data = mojo::SharedBufferHandle::Create(font_file_size_32);
+  if (!result->font_data.is_valid()) {
+    DLOG(ERROR) << "Failed to create shmem area for " << font_name;
+    return nullptr;
+  }
+
+  mojo::ScopedSharedBufferMapping mapping =
+      result->font_data->Map(font_file_size_32);
+  if (!mapping) {
+    DLOG(ERROR) << "Failed to create shmem mapping for " << font_name;
     return nullptr;
   }
 
   int32_t amt_read = base::ReadFile(
-      font_path, reinterpret_cast<char*>(result->font_data.memory()),
-      font_file_size_32);
+      font_path, static_cast<char*>(mapping.get()), font_file_size_32);
   if (amt_read != font_file_size_32) {
     DLOG(ERROR) << "Failed to read font data for " << font_path.value();
     return nullptr;
@@ -92,10 +101,10 @@ std::unique_ptr<FontLoader::ResultInternal> LoadFontOnFileThread(
   // ATS is deprecated. CoreText offers up the ATSFontRef typeface ID via
   // CTFontGetPlatformFont.
   result->font_id = CTFontGetPlatformFont(ct_font, nil);
-  DCHECK_NE(0u, result->font_id);
-
-  if (result->font_data_size == 0 || result->font_id == 0)
+  if (result->font_id == 0) {
+    DLOG(ERROR) << "Failed to get font id for " << font_path.value();
     return nullptr;
+  }
 
   return result;
 }
@@ -103,23 +112,27 @@ std::unique_ptr<FontLoader::ResultInternal> LoadFontOnFileThread(
 void ReplyOnUIThread(FontLoader::LoadedCallback callback,
                      std::unique_ptr<FontLoader::ResultInternal> result) {
   if (!result) {
-    std::move(callback).Run(0, base::SharedMemoryHandle(), 0);
+    std::move(callback).Run(0, mojo::ScopedSharedBufferHandle(), 0);
     return;
   }
 
   DCHECK_NE(0u, result->font_data_size);
   DCHECK_NE(0u, result->font_id);
 
-  base::SharedMemoryHandle handle = result->font_data.handle().Duplicate();
-  result->font_data.Unmap();
-  result->font_data.Close();
-  std::move(callback).Run(result->font_data_size, handle, result->font_id);
+  std::move(callback).Run(result->font_data_size, std::move(result->font_data),
+                          result->font_id);
 }
 
 }  // namespace
 
+FontLoader::ResultInternal::ResultInternal() = default;
+
+FontLoader::ResultInternal::~ResultInternal() = default;
+
 // static
-void FontLoader::LoadFont(const FontDescriptor& font, LoadedCallback callback) {
+void FontLoader::LoadFont(const base::string16& font_name,
+                          const float font_point_size,
+                          LoadedCallback callback) {
   // Tasks are triggered when font loading in the sandbox fails. Usually due to
   // a user installing a third-party font manager. See crbug.com/72727. Web page
   // rendering can't continue until a font is returned.
@@ -127,26 +140,21 @@ void FontLoader::LoadFont(const FontDescriptor& font, LoadedCallback callback) {
       base::MayBlock(), base::TaskPriority::USER_VISIBLE,
       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN};
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, kTraits, base::BindOnce(&LoadFontOnFileThread, font),
+      FROM_HERE, kTraits,
+      base::BindOnce(&LoadFontOnFileThread, font_name, font_point_size),
       base::BindOnce(&ReplyOnUIThread, std::move(callback)));
 }
 
 // static
-bool FontLoader::CGFontRefFromBuffer(base::SharedMemoryHandle font_data,
+bool FontLoader::CGFontRefFromBuffer(mojo::ScopedSharedBufferHandle font_data,
                                      uint32_t font_data_size,
                                      CGFontRef* out) {
   *out = NULL;
-
-  using base::SharedMemory;
-  DCHECK(SharedMemory::IsHandleValid(font_data));
-  DCHECK_GT(font_data_size, 0U);
-
-  SharedMemory shm(font_data, /*read_only=*/true);
-  if (!shm.Map(font_data_size))
+  mojo::ScopedSharedBufferMapping mapping = font_data->Map(font_data_size);
+  if (!mapping)
     return false;
 
-  NSData* data = [NSData dataWithBytes:shm.memory()
-                                length:font_data_size];
+  NSData* data = [NSData dataWithBytes:mapping.get() length:font_data_size];
   base::ScopedCFTypeRef<CGDataProviderRef> provider(
       CGDataProviderCreateWithCFData(base::mac::NSToCFCast(data)));
   if (!provider)
@@ -162,8 +170,9 @@ bool FontLoader::CGFontRefFromBuffer(base::SharedMemoryHandle font_data,
 
 // static
 std::unique_ptr<FontLoader::ResultInternal> FontLoader::LoadFontForTesting(
-    const FontDescriptor& font) {
-  return LoadFontOnFileThread(font);
+    const base::string16& font_name,
+    const float font_point_size) {
+  return LoadFontOnFileThread(font_name, font_point_size);
 }
 
 }  // namespace content

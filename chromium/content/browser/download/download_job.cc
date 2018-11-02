@@ -28,15 +28,33 @@ void DownloadJob::Cancel(bool user_cancel) {
 }
 
 void DownloadJob::Pause() {
+  is_paused_ = true;
+
+  DownloadFile* download_file = download_item_->download_file_.get();
+  if (download_file) {
+    GetDownloadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DownloadFile::Pause,
+                       // Safe because we control download file lifetime.
+                       base::Unretained(download_file)));
+  }
   if (request_handle_)
     request_handle_->PauseRequest();
-  is_paused_ = true;
 }
 
 void DownloadJob::Resume(bool resume_request) {
   is_paused_ = false;
   if (!resume_request)
     return;
+
+  DownloadFile* download_file = download_item_->download_file_.get();
+  if (download_file) {
+    GetDownloadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DownloadFile::Resume,
+                       // Safe because we control download file lifetime.
+                       base::Unretained(download_file)));
+  }
 
   if (request_handle_)
     request_handle_->ResumeRequest();
@@ -67,9 +85,10 @@ void DownloadJob::OnDownloadFileInitialized(
   callback.Run(result);
 }
 
-bool DownloadJob::AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
-                                int64_t offset,
-                                int64_t length) {
+bool DownloadJob::AddInputStream(
+    std::unique_ptr<DownloadManager::InputStream> stream,
+    int64_t offset,
+    int64_t length) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DownloadFile* download_file = download_item_->download_file_.get();
   if (!download_file)
@@ -79,9 +98,9 @@ bool DownloadJob::AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
   // deleted on the download task runner after download_file_ is nulled out.
   // So it's safe to use base::Unretained here.
   GetDownloadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&DownloadFile::AddByteStream,
+      FROM_HERE, base::BindOnce(&DownloadFile::AddInputStream,
                                 base::Unretained(download_file),
-                                base::Passed(&stream_reader), offset, length));
+                                std::move(stream), offset, length));
   return true;
 }
 

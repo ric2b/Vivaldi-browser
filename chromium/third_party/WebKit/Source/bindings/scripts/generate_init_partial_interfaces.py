@@ -13,10 +13,11 @@ import posixpath
 import sys
 
 from utilities import get_file_contents
-from utilities import idl_filename_to_interface_name
+from utilities import get_first_interface_name_from_idl
 from utilities import read_idl_files_list_from_file
 from utilities import should_generate_impl_file_from_idl
 from utilities import write_file
+from v8_utilities import build_basename
 
 
 _COPYRIGHT = """// Copyright 2014 The Chromium Authors. All rights reserved.
@@ -40,9 +41,15 @@ void InitPartialInterfacesInModules() {
 def parse_options():
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
-    parser.add_option('--idl-files-list', help="a text file containing the IDL file paths, so the command line doesn't exceed OS length limits.")
-    parser.add_option('--gyp-format-list', default=False, action='store_true', help="if specified, idl-files-list is newline separated. When unspecified, it's formatted as a Posix command line.")
+    parser.add_option('--idl-files-list',
+                      help='a text file containing the IDL file paths, so the command line doesn\'t exceed OS length limits.')
+    parser.add_option('--gyp-format-list', default=False, action='store_true',
+                      help='if specified, idl-files-list is newline separated. ' +
+                      'When unspecified, it\'s formatted as a Posix command line.')
     parser.add_option('--output')
+    # TODO(tkent): Remove the option after the great mv. crbug.com/760462
+    parser.add_option('--snake-case-generated-files',
+                      action='store_true', default=False)
 
     options, args = parser.parse_args()
     if options.output is None:
@@ -68,11 +75,11 @@ def extract_meta_data(file_paths):
         if not should_generate_impl_file_from_idl(idl_file_contents):
             continue
 
-        # Extract interface name from file name
-        interface_name = idl_filename_to_interface_name(file_path)
+        # Extract interface name from file content
+        basename = get_first_interface_name_from_idl(idl_file_contents)
 
         meta_data = {
-            'name': interface_name,
+            'basename': basename,
         }
         meta_data_list.append(meta_data)
 
@@ -85,11 +92,12 @@ def main():
     idl_file_names = read_idl_files_list_from_file(options.idl_files_list, is_gyp_format=options.gyp_format_list)
 
     meta_data_list = extract_meta_data(idl_file_names)
-    interface_names = ['V8%sPartial' % meta_data['name']
+    interface_names = ['V8%sPartial' % meta_data['basename']
                        for meta_data in meta_data_list]
     interface_names.sort()
 
-    includes = ['#include "bindings/modules/v8/%s.h"' % interface_name
+    includes = ['#include "bindings/modules/v8/%s"' %
+                build_basename(interface_name, options.snake_case_generated_files, ext='.h')
                 for interface_name in interface_names]
     initialize_calls = ['  %s::initialize();' % interface_name
                         for interface_name in interface_names]

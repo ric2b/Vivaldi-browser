@@ -29,8 +29,8 @@
 
 #include "core/css/SelectorChecker.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/CSSSelectorList.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
@@ -38,7 +38,6 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NthIndexCache.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/editing/FrameSelection.h"
@@ -46,18 +45,19 @@
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFrameElementBase.h"
-#include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLOptionElement.h"
-#include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLSlotElement.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/track/vtt/VTTElement.h"
+#include "core/html_names.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "core/style/ComputedStyle.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/wtf/AutoReset.h"
@@ -74,14 +74,14 @@ static bool IsFrameFocused(const Element& element) {
 }
 
 static bool MatchesSpatialNavigationFocusPseudoClass(const Element& element) {
-  return isHTMLOptionElement(element) &&
-         toHTMLOptionElement(element).SpatialNavigationFocused() &&
+  return IsHTMLOptionElement(element) &&
+         ToHTMLOptionElement(element).SpatialNavigationFocused() &&
          IsFrameFocused(element);
 }
 
 static bool MatchesListBoxPseudoClass(const Element& element) {
-  return isHTMLSelectElement(element) &&
-         !toHTMLSelectElement(element).UsesMenuList();
+  return IsHTMLSelectElement(element) &&
+         !ToHTMLSelectElement(element).UsesMenuList();
 }
 
 static bool MatchesTagName(const Element& element,
@@ -414,10 +414,13 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
       return kSelectorFailsAllSiblings;
 
     case CSSSelector::kShadowPseudo: {
-      if (RuntimeEnabledFeatures::
-              ShadowPseudoElementInCSSDynamicProfileEnabled()) {
-        if (!is_ua_rule_ && mode_ != kQueryingRules &&
-            context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
+      if (!is_ua_rule_ &&
+          context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
+        if (mode_ == kQueryingRules) {
+          UseCounter::Count(context.element->GetDocument(),
+                            WebFeature::kPseudoShadowInStaticProfile);
+        } else if (RuntimeEnabledFeatures::
+                       ShadowPseudoElementInCSSDynamicProfileEnabled()) {
           Deprecation::CountDeprecation(context.element->GetDocument(),
                                         WebFeature::kCSSSelectorPseudoShadow);
         }
@@ -437,9 +440,14 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
     }
 
     case CSSSelector::kShadowDeep: {
-      if (!is_ua_rule_ && mode_ != kQueryingRules) {
-        Deprecation::CountDeprecation(context.element->GetDocument(),
-                                      WebFeature::kCSSDeepCombinator);
+      if (!is_ua_rule_) {
+        if (mode_ == kQueryingRules) {
+          UseCounter::Count(context.element->GetDocument(),
+                            WebFeature::kDeepCombinatorInStaticProfile);
+        } else {
+          Deprecation::CountDeprecation(context.element->GetDocument(),
+                                        WebFeature::kCSSDeepCombinator);
+        }
       }
       if (ShadowRoot* root = context.element->ContainingShadowRoot()) {
         if (root->GetType() == ShadowRootType::kUserAgent)
@@ -985,18 +993,17 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.MatchesValidityPseudoClasses() &&
              !element.IsValidElement();
     case CSSSelector::kPseudoChecked: {
-      if (isHTMLInputElement(element)) {
-        HTMLInputElement& input_element = toHTMLInputElement(element);
+      if (auto* input_element = ToHTMLInputElementOrNull(element)) {
         // Even though WinIE allows checked and indeterminate to
         // co-exist, the CSS selector spec says that you can't be
         // both checked and indeterminate. We will behave like WinIE
         // behind the scenes and just obey the CSS spec here in the
         // test for matching the pseudo.
-        if (input_element.ShouldAppearChecked() &&
-            !input_element.ShouldAppearIndeterminate())
+        if (input_element->ShouldAppearChecked() &&
+            !input_element->ShouldAppearIndeterminate())
           return true;
-      } else if (isHTMLOptionElement(element) &&
-                 toHTMLOptionElement(element).Selected()) {
+      } else if (IsHTMLOptionElement(element) &&
+                 ToHTMLOptionElement(element).Selected()) {
         return true;
       }
       break;
@@ -1020,6 +1027,8 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         break;
       return true;
     }
+    case CSSSelector::kPseudoFullscreen:
+    // fall through
     case CSSSelector::kPseudoFullScreen:
       // While a Document is in the fullscreen state, and the document's current
       // fullscreen element is an element in the document, the 'full-screen'
@@ -1034,8 +1043,8 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.ContainsFullScreenElement();
     case CSSSelector::kPseudoVideoPersistent:
       DCHECK(is_ua_rule_);
-      return isHTMLVideoElement(element) &&
-             toHTMLVideoElement(element).IsPersistent();
+      return IsHTMLVideoElement(element) &&
+             ToHTMLVideoElement(element).IsPersistent();
     case CSSSelector::kPseudoVideoPersistentAncestor:
       DCHECK(is_ua_rule_);
       return element.ContainsPersistentVideo();

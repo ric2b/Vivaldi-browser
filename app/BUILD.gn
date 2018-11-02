@@ -1,6 +1,7 @@
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//build/config/locales.gni")
+import("//build/util/process_version.gni")
 
 import("resources/vivaldi_grit.gni")
 
@@ -67,4 +68,17 @@ action("write_translation_xml_generation_script") {
   outputs = [ "$root_out_dir/generate_translation_xml.py" ]
 
   args = rebase_path(outputs, root_out_dir) + locales + vivaldi_pending_locales
+}
+
+config("vivaldi_app_config") {
+  include_dirs = ["$target_gen_dir/vivaldi"]
+}
+
+process_version("vivaldi_icon") {
+  template_file = "vivaldi_icon.h.in"
+  output = "$root_gen_dir/app/vivaldi_icon.h"
+  extra_args = [
+    "-e",
+    "VIVALDI_RELEASE_KIND=\"$VIVALDI_RELEASE_KIND\"",
+  ]
 }

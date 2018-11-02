@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/app_list/views/contents_view.h"
@@ -67,6 +68,8 @@ ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
       contents_view_(contents_view),
       app_list_view_(app_list_view),
       weak_ptr_factory_(this) {
+  if (features::IsAppListFocusEnabled())
+    SetFocusBehavior(FocusBehavior::ALWAYS);
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
@@ -152,6 +155,14 @@ bool ExpandArrowView::OnKeyPressed(const ui::KeyEvent& event) {
   return true;
 }
 
+void ExpandArrowView::OnFocus() {
+  SetSelected(true);
+}
+
+void ExpandArrowView::OnBlur() {
+  SetSelected(false);
+}
+
 std::unique_ptr<views::InkDrop> ExpandArrowView::CreateInkDrop() {
   std::unique_ptr<views::InkDropImpl> ink_drop =
       Button::CreateDefaultInkDropImpl();
@@ -162,7 +173,7 @@ std::unique_ptr<views::InkDrop> ExpandArrowView::CreateInkDrop() {
 }
 
 std::unique_ptr<views::InkDropMask> ExpandArrowView::CreateInkDropMask() const {
-  return base::MakeUnique<views::CircleInkDropMask>(
+  return std::make_unique<views::CircleInkDropMask>(
       size(), GetLocalBounds().CenterPoint(), kInkDropRadius);
 }
 
@@ -171,7 +182,7 @@ std::unique_ptr<views::InkDropRipple> ExpandArrowView::CreateInkDropRipple()
   gfx::Point center = GetLocalBounds().CenterPoint();
   gfx::Rect bounds(center.x() - kInkDropRadius, center.y() - kInkDropRadius,
                    2 * kInkDropRadius, 2 * kInkDropRadius);
-  return base::MakeUnique<views::FloodFillInkDropRipple>(
+  return std::make_unique<views::FloodFillInkDropRipple>(
       size(), GetLocalBounds().InsetsFrom(bounds),
       GetInkDropCenterBasedOnLastEvent(), kInkDropRippleColor, 1.0f);
 }
@@ -256,7 +267,7 @@ void ExpandArrowView::TransitToFullscreenAllAppsState() {
   UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram, kExpandArrow,
                             kMaxPeekingToFullscreen);
   contents_view_->SetActiveState(AppListModel::STATE_APPS);
-  app_list_view_->SetState(AppListView::FULLSCREEN_ALL_APPS);
+  app_list_view_->SetState(AppListViewState::FULLSCREEN_ALL_APPS);
 }
 
 void ExpandArrowView::ScheduleHintingAnimation(bool is_first_time) {

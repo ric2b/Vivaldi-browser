@@ -8,7 +8,6 @@ import static org.junit.Assert.assertNotEquals;
 
 import android.support.test.filters.SmallTest;
 import android.util.Pair;
-import android.webkit.ConsoleMessage;
 import android.webkit.WebSettings;
 
 import org.junit.After;
@@ -18,10 +17,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.android_webview.AwConsoleMessage;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.util.CommonResources;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.net.test.util.TestWebServer;
 
 import java.util.ArrayList;
@@ -32,7 +34,10 @@ import java.util.List;
  * by the embedder via WebChromeClient.onConsoleMessage.
  */
 @RunWith(AwJUnit4ClassRunner.class)
+@CommandLineFlags.Add(ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1")
 public class ConsoleMessagesForBlockedLoadsTest {
+    public static final String SERVER_HOSTNAME = "example.test";
+
     @Rule
     public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
 
@@ -57,12 +62,13 @@ public class ConsoleMessagesForBlockedLoadsTest {
 
     private void startWebServer() throws Exception {
         mWebServer = TestWebServer.start();
+        mWebServer.setServerHost(SERVER_HOSTNAME);
     }
 
-    private ConsoleMessage getSingleErrorMessage() {
-        ConsoleMessage result = null;
-        for (ConsoleMessage m : mOnConsoleMessageHelper.getMessages()) {
-            if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+    private AwConsoleMessage getSingleErrorMessage() {
+        AwConsoleMessage result = null;
+        for (AwConsoleMessage m : mOnConsoleMessageHelper.getMessages()) {
+            if (m.messageLevel() == AwConsoleMessage.MESSAGE_LEVEL_ERROR) {
                 Assert.assertNull(result);
                 result = m;
             }
@@ -86,7 +92,7 @@ public class ConsoleMessagesForBlockedLoadsTest {
         mOnConsoleMessageHelper.clearMessages();
         mActivityTestRule.loadUrlSync(
                 mAwContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
-        ConsoleMessage errorMessage = getSingleErrorMessage();
+        AwConsoleMessage errorMessage = getSingleErrorMessage();
         assertNotEquals(errorMessage.message().indexOf(iframeUrl), -1);
     }
 
@@ -108,7 +114,7 @@ public class ConsoleMessagesForBlockedLoadsTest {
             mOnConsoleMessageHelper.clearMessages();
             mActivityTestRule.loadUrlSync(
                     mAwContents, mContentsClient.getOnPageFinishedHelper(), secureUrl);
-            ConsoleMessage errorMessage = getSingleErrorMessage();
+            AwConsoleMessage errorMessage = getSingleErrorMessage();
             assertNotEquals(errorMessage.message().indexOf(imageUrl), -1);
             assertNotEquals(errorMessage.message().indexOf(secureUrl), -1);
         } finally {
@@ -131,7 +137,7 @@ public class ConsoleMessagesForBlockedLoadsTest {
                 + "</xsl:template>"
                 + "</xsl:stylesheet>";
         final String iframeXslUrl = mWebServer.setResponse(
-                "/iframe.xsl", iframeXsl, null).replace("localhost", "127.0.0.1");
+                "/iframe.xsl", iframeXsl, null).replace(SERVER_HOSTNAME, "127.0.0.1");
         final String iframeXml =
                 "<?xml version='1.0' encoding='UTF-8'?>"
                 + "<?xml-stylesheet type='text/xsl' href='" + iframeXslUrl + "'?>"
@@ -144,7 +150,7 @@ public class ConsoleMessagesForBlockedLoadsTest {
         mOnConsoleMessageHelper.clearMessages();
         mActivityTestRule.loadUrlSync(
                 mAwContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
-        ConsoleMessage errorMessage = getSingleErrorMessage();
+        AwConsoleMessage errorMessage = getSingleErrorMessage();
         assertNotEquals(errorMessage.message().indexOf(iframeXslUrl), -1);
         assertNotEquals(errorMessage.message().indexOf(iframeXmlUrl), -1);
     }

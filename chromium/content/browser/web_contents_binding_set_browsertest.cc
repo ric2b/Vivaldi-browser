@@ -80,7 +80,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsBindingSetBrowserTest, OverrideForTesting) {
   WebContentsBindingSet::GetForWebContents<
       mojom::BrowserAssociatedInterfaceTestDriver>(web_contents)
       ->SetBinderForTesting(
-          base::MakeUnique<TestInterfaceBinder>(run_loop.QuitClosure()));
+          std::make_unique<TestInterfaceBinder>(run_loop.QuitClosure()));
 
   // Simulate an inbound request for the test interface. This should get routed
   // to the overriding binder and allow the test to complete.
@@ -89,7 +89,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsBindingSetBrowserTest, OverrideForTesting) {
       ->OnAssociatedInterfaceRequest(
           web_contents->GetMainFrame(),
           mojom::BrowserAssociatedInterfaceTestDriver::Name_,
-          mojo::MakeIsolatedRequest(&override_client).PassHandle());
+          mojo::MakeRequestAssociatedWithDedicatedPipe(&override_client)
+              .PassHandle());
   run_loop.Run();
 }
 
@@ -106,7 +107,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsBindingSetBrowserTest, CloseOnFrameDeletion) {
       ->OnAssociatedInterfaceRequest(
           web_contents->GetMainFrame(),
           mojom::WebContentsFrameBindingSetTest::Name_,
-          mojo::MakeIsolatedRequest(&override_client).PassHandle());
+          mojo::MakeRequestAssociatedWithDedicatedPipe(&override_client)
+              .PassHandle());
 
   base::RunLoop run_loop;
   override_client.set_connection_error_handler(run_loop.QuitClosure());
@@ -121,7 +123,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsBindingSetBrowserTest, CloseOnFrameDeletion) {
   // Verify that this message never reaches the binding for the old frame. If it
   // does, the impl will hit a DCHECK. The RunLoop terminates when the client is
   // disconnected.
-  override_client->Ping(base::Bind([] {}));
+  override_client->Ping(base::BindOnce([] {}));
   run_loop.Run();
 }
 

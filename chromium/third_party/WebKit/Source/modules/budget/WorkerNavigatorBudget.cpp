@@ -37,8 +37,7 @@ WorkerNavigatorBudget& WorkerNavigatorBudget::From(
 
 BudgetService* WorkerNavigatorBudget::budget(ExecutionContext* context) {
   if (!budget_) {
-    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
-    budget_ = BudgetService::Create(&thread->GetInterfaceProvider());
+    budget_ = BudgetService::Create(context->GetInterfaceProvider());
   }
   return budget_.Get();
 }
@@ -50,7 +49,7 @@ BudgetService* WorkerNavigatorBudget::budget(
   return WorkerNavigatorBudget::From(worker_navigator).budget(context);
 }
 
-DEFINE_TRACE(WorkerNavigatorBudget) {
+void WorkerNavigatorBudget::Trace(blink::Visitor* visitor) {
   visitor->Trace(budget_);
   Supplement<WorkerNavigator>::Trace(visitor);
 }

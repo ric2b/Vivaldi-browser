@@ -157,6 +157,15 @@ class NET_EXPORT NetworkQualityEstimatorParams {
     return upper_bound_http_rtt_transport_rtt_multiplier_;
   }
 
+  // Returns the number of transport RTT observations that should be available
+  // before the transport RTT estimate can be used to clamp the HTTP RTT
+  // estimate. Set to 5 by default which ensures that when the transport RTT
+  // is available only from the connection type, it is not used for computing
+  // the HTTP RTT estimate.
+  size_t http_rtt_transport_rtt_min_count() const {
+    return http_rtt_transport_rtt_min_count_;
+  }
+
   // Returns the minimum interval between successive computations of the
   // increase in transport RTT.
   base::TimeDelta increase_in_transport_rtt_logging_interval() const {
@@ -185,6 +194,41 @@ class NET_EXPORT NetworkQualityEstimatorParams {
   // network quality estimation.
   void SetUseSmallResponsesForTesting(bool use_small_responses);
 
+  // If an in-flight request does not receive any data for a duration longer
+  // than the value of this multiplier times the current HTTP RTT estimate, then
+  // the request should be considered as hanging. If this multiplier has a
+  // negative or a zero value, then none of the request should be considered as
+  // hanging.
+  int hanging_request_duration_http_rtt_multiplier() const {
+    return hanging_request_duration_http_rtt_multiplier_;
+  }
+
+  // An in-flight request may be marked as hanging only if it does not receive
+  // any data for at least this duration.
+  base::TimeDelta hanging_request_min_duration() const {
+    return hanging_request_min_duration_;
+  }
+
+  // Returns true if default values provided by the platform should be used for
+  // estimation. Set to false only for testing.
+  bool add_default_platform_observations() const {
+    return add_default_platform_observations_;
+  }
+
+  // Number of observations received after which the effective connection type
+  // should be recomputed.
+  size_t count_new_observations_received_compute_ect() const { return 50; }
+
+  // Maximum number of observations that can be held in a single
+  // ObservationBuffer.
+  size_t observation_buffer_size() const { return 300; }
+
+  // Minimun interval between consecutive notifications from socket
+  // watchers who live on the same thread as the network quality estimator.
+  base::TimeDelta socket_watchers_min_notification_interval() const {
+    return socket_watchers_min_notification_interval_;
+  }
+
  private:
   // Map containing all field trial parameters related to
   // NetworkQualityEstimator field trial.
@@ -200,9 +244,14 @@ class NET_EXPORT NetworkQualityEstimatorParams {
   const base::TimeDelta min_socket_watcher_notification_interval_;
   const double lower_bound_http_rtt_transport_rtt_multiplier_;
   const double upper_bound_http_rtt_transport_rtt_multiplier_;
+  const size_t http_rtt_transport_rtt_min_count_;
   const base::TimeDelta increase_in_transport_rtt_logging_interval_;
   const base::TimeDelta recent_time_threshold_;
   const base::TimeDelta historical_time_threshold_;
+  const int hanging_request_duration_http_rtt_multiplier_;
+  const base::TimeDelta hanging_request_min_duration_;
+  const bool add_default_platform_observations_;
+  const base::TimeDelta socket_watchers_min_notification_interval_;
 
   bool use_small_responses_;
 

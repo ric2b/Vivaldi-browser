@@ -5,9 +5,12 @@
 #include "core/paint/TextPainterBase.h"
 
 #include "core/dom/Document.h"
+#include "core/layout/TextDecorationOffsetBase.h"
+#include "core/layout/line/LineVerticalPositionType.h"
 #include "core/paint/AppliedDecorationPainter.h"
 #include "core/paint/BoxPainterBase.h"
 #include "core/paint/PaintInfo.h"
+#include "core/paint/SelectionPaintingUtils.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ShadowList.h"
 #include "platform/fonts/Font.h"
@@ -28,6 +31,7 @@ TextPainterBase::TextPainterBase(GraphicsContext& context,
       text_origin_(text_origin),
       text_bounds_(text_bounds),
       horizontal_(horizontal),
+      has_combined_text_(false),
       emphasis_mark_offset_(0),
       ellipsis_offset_(0) {}
 
@@ -60,7 +64,7 @@ void TextPainterBase::SetEmphasisMark(const AtomicString& emphasis_mark,
 // static
 void TextPainterBase::UpdateGraphicsContext(
     GraphicsContext& context,
-    const Style& text_style,
+    const TextPaintStyle& text_style,
     bool horizontal,
     GraphicsContextStateSaver& state_saver) {
   TextDrawingModeFlags mode = context.TextDrawingMode();
@@ -100,14 +104,13 @@ Color TextPainterBase::TextColorForWhiteBackground(Color text_color) {
 }
 
 // static
-TextPainterBase::Style TextPainterBase::TextPaintingStyle(
-    const Document& document,
-    const ComputedStyle& style,
-    const PaintInfo& paint_info) {
-  TextPainterBase::Style text_style;
+TextPaintStyle TextPainterBase::TextPaintingStyle(const Document& document,
+                                                  const ComputedStyle& style,
+                                                  const PaintInfo& paint_info) {
+  TextPaintStyle text_style;
   bool is_printing = paint_info.IsPrinting();
 
-  if (paint_info.phase == kPaintPhaseTextClip) {
+  if (paint_info.phase == PaintPhase::kTextClip) {
     // When we use the text as a clip, we only care about the alpha, thus we
     // make all the colors black.
     text_style.current_color = Color::kBlack;
@@ -115,7 +118,7 @@ TextPainterBase::Style TextPainterBase::TextPaintingStyle(
     text_style.stroke_color = Color::kBlack;
     text_style.emphasis_mark_color = Color::kBlack;
     text_style.stroke_width = style.TextStrokeWidth();
-    text_style.shadow = 0;
+    text_style.shadow = nullptr;
   } else {
     text_style.current_color = style.VisitedDependentColor(CSSPropertyColor);
     text_style.fill_color =
@@ -141,13 +144,20 @@ TextPainterBase::Style TextPainterBase::TextPaintingStyle(
       text_style.emphasis_mark_color =
           TextColorForWhiteBackground(text_style.emphasis_mark_color);
     }
-
-    // Text shadows are disabled when printing. http://crbug.com/258321
-    if (is_printing)
-      text_style.shadow = 0;
   }
 
   return text_style;
+}
+
+TextPaintStyle TextPainterBase::SelectionPaintingStyle(
+    const Document& document,
+    const ComputedStyle& style,
+    Node* node,
+    bool have_selection,
+    const PaintInfo& paint_info,
+    const TextPaintStyle& text_style) {
+  return SelectionPaintingUtils::SelectionPaintingStyle(
+      document, style, node, have_selection, text_style, paint_info);
 }
 
 void TextPainterBase::DecorationsStripeIntercepts(
@@ -173,13 +183,82 @@ void TextPainterBase::DecorationsStripeIntercepts(
   }
 }
 
+void TextPainterBase::PaintDecorationsExceptLineThrough(
+    const TextDecorationOffsetBase& decoration_offset,
+    const DecorationInfo& decoration_info,
+    const PaintInfo& paint_info,
+    const Vector<AppliedTextDecoration>& decorations,
+    const TextPaintStyle& text_style,
+    bool* has_line_through_decoration) {
+  GraphicsContext& context = paint_info.context;
+  GraphicsContextStateSaver state_saver(context);
+  UpdateGraphicsContext(context, text_style, horizontal_, state_saver);
+  context.SetStrokeThickness(decoration_info.thickness);
+
+  if (has_combined_text_)
+    context.ConcatCTM(Rotation(text_bounds_, kClockwise));
+
+  // text-underline-position may flip underline and overline.
+  ResolvedUnderlinePosition underline_position =
+      decoration_info.underline_position;
+  bool flip_underline_and_overline = false;
+  if (underline_position == ResolvedUnderlinePosition::kOver) {
+    flip_underline_and_overline = true;
+    underline_position = ResolvedUnderlinePosition::kUnder;
+  }
+
+  for (const AppliedTextDecoration& decoration : decorations) {
+    TextDecoration lines = decoration.Lines();
+    bool has_underline = EnumHasFlags(lines, TextDecoration::kUnderline);
+    bool has_overline = EnumHasFlags(lines, TextDecoration::kOverline);
+    if (flip_underline_and_overline)
+      std::swap(has_underline, has_overline);
+
+    if (has_underline && decoration_info.font_data) {
+      const int underline_offset = decoration_offset.ComputeUnderlineOffset(
+          underline_position, decoration_info.font_data->GetFontMetrics(),
+          decoration_info.thickness);
+      PaintDecorationUnderOrOverLine(context, decoration_info, decoration,
+                                     underline_offset,
+                                     decoration_info.double_offset);
+    }
+
+    if (has_overline) {
+      LineVerticalPositionType position =
+          flip_underline_and_overline ? LineVerticalPositionType::TopOfEmHeight
+                                      : LineVerticalPositionType::TextTop;
+      const int overline_offset =
+          decoration_offset.ComputeUnderlineOffsetForUnder(
+              decoration_info.thickness, position);
+      PaintDecorationUnderOrOverLine(context, decoration_info, decoration,
+                                     overline_offset,
+                                     -decoration_info.double_offset);
+    }
+
+    // We could instead build a vector of the TextDecoration instances needing
+    // line-through but this is a rare case so better to avoid vector overhead.
+    *has_line_through_decoration |=
+        EnumHasFlags(lines, TextDecoration::kLineThrough);
+  }
+
+  // Restore rotation as needed.
+  if (has_combined_text_)
+    context.ConcatCTM(Rotation(text_bounds_, kCounterclockwise));
+}
+
 void TextPainterBase::PaintDecorationsOnlyLineThrough(
     const DecorationInfo& decoration_info,
     const PaintInfo& paint_info,
-    const Vector<AppliedTextDecoration>& decorations) {
+    const Vector<AppliedTextDecoration>& decorations,
+    const TextPaintStyle& text_style) {
   GraphicsContext& context = paint_info.context;
   GraphicsContextStateSaver state_saver(context);
+  UpdateGraphicsContext(context, text_style, horizontal_, state_saver);
   context.SetStrokeThickness(decoration_info.thickness);
+
+  if (has_combined_text_)
+    context.ConcatCTM(Rotation(text_bounds_, kClockwise));
+
   for (const AppliedTextDecoration& decoration : decorations) {
     TextDecoration lines = decoration.Lines();
     if (EnumHasFlags(lines, TextDecoration::kLineThrough)) {
@@ -192,6 +271,10 @@ void TextPainterBase::PaintDecorationsOnlyLineThrough(
       decoration_painter.Paint();
     }
   }
+
+  // Restore rotation as needed.
+  if (has_combined_text_)
+    context.ConcatCTM(Rotation(text_bounds_, kCounterclockwise));
 }
 
 namespace {
@@ -310,8 +393,8 @@ void TextPainterBase::PaintDecorationUnderOrOverLine(
     float decoration_offset) {
   AppliedDecorationPainter decoration_painter(
       context, decoration_info, line_offset, decoration, decoration_offset, 1);
-  if (EnumHasFlags(decoration_info.style->GetTextDecorationSkip(),
-                   TextDecorationSkip::kInk)) {
+  if (decoration_info.style->TextDecorationSkipInk() ==
+      ETextDecorationSkipInk::kAuto) {
     FloatRect decoration_bounds = decoration_painter.Bounds();
     ClipDecorationsStripe(-decoration_info.baseline + decoration_bounds.Y() -
                               decoration_info.local_origin.Y(),

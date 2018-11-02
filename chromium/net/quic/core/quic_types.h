@@ -17,6 +17,7 @@
 namespace net {
 
 typedef uint16_t QuicPacketLength;
+typedef uint32_t QuicControlFrameId;
 typedef uint32_t QuicHeaderId;
 typedef uint32_t QuicStreamId;
 typedef uint64_t QuicByteCount;
@@ -86,7 +87,8 @@ enum TransmissionType : int8_t {
   LOSS_RETRANSMISSION,         // Retransmits due to loss detection.
   RTO_RETRANSMISSION,          // Retransmits due to retransmit time out.
   TLP_RETRANSMISSION,          // Tail loss probes.
-  LAST_TRANSMISSION_TYPE = TLP_RETRANSMISSION,
+  PROBING_RETRANSMISSION,      // Retransmission in order to probe bandwidth.
+  LAST_TRANSMISSION_TYPE = PROBING_RETRANSMISSION,
 };
 
 enum HasRetransmittableData : int8_t {
@@ -163,7 +165,7 @@ enum QuicPacketPublicFlags {
   // Bit 1: Is this packet a public reset packet?
   PACKET_PUBLIC_FLAGS_RST = 1 << 1,
 
-  // Bit 2: indicates the that public header includes a nonce.
+  // Bit 2: indicates the header includes a nonce.
   PACKET_PUBLIC_FLAGS_NONCE = 1 << 2,
 
   // Bit 3: indicates whether a ConnectionID is included.
@@ -208,14 +210,7 @@ enum QuicPacketPrivateFlags {
 // QUIC. Note that this is separate from the congestion feedback type -
 // some congestion control algorithms may use the same feedback type
 // (Reno and Cubic are the classic example for that).
-enum CongestionControlType {
-  kCubic,
-  kCubicBytes,
-  kReno,
-  kRenoBytes,
-  kBBR,
-  kPCC
-};
+enum CongestionControlType { kCubicBytes, kRenoBytes, kBBR, kPCC };
 
 enum LossDetectionType {
   kNack,          // Used to mimic TCP's loss detection.
@@ -262,6 +257,40 @@ enum StreamSendingState {
   // appended after all stream frames.
   FIN_AND_PADDING,
 };
+
+// Information about a newly acknowledged packet.
+struct AckedPacket {
+  AckedPacket(QuicPacketNumber packet_number,
+              QuicPacketLength bytes_acked,
+              QuicTime receive_timestamp)
+      : packet_number(packet_number),
+        bytes_acked(bytes_acked),
+        receive_timestamp(receive_timestamp) {}
+
+  QuicPacketNumber packet_number;
+  // Number of bytes sent in the packet that was acknowledged.
+  QuicPacketLength bytes_acked;
+  // The time |packet_number| was received by the peer, according to the
+  // optional timestamp the peer included in the ACK frame which acknowledged
+  // |packet_number|. Zero if no timestamp was available for this packet.
+  QuicTime receive_timestamp;
+};
+
+// A vector of acked packets.
+typedef std::vector<AckedPacket> AckedPacketVector;
+
+// Information about a newly lost packet.
+struct LostPacket {
+  LostPacket(QuicPacketNumber packet_number, QuicPacketLength bytes_lost)
+      : packet_number(packet_number), bytes_lost(bytes_lost) {}
+
+  QuicPacketNumber packet_number;
+  // Number of bytes sent in the packet that was lost.
+  QuicPacketLength bytes_lost;
+};
+
+// A vector of lost packets.
+typedef std::vector<LostPacket> LostPacketVector;
 
 }  // namespace net
 

@@ -20,6 +20,7 @@
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/events/mojo/event.mojom.h"
+#include "ui/gfx/native_widget_types.h"
 
 namespace display {
 class Display;
@@ -91,6 +92,9 @@ class AURA_EXPORT WindowManagerClient {
   // cleared when the mouse moves.
   virtual void SetCursorTouchVisible(bool enabled) = 0;
 
+  // Sends |event| to mus to be dispatched.
+  virtual void InjectEvent(const ui::Event& event, int64_t display_id) = 0;
+
   // Sets the list of keys which don't hide the cursor.
   virtual void SetKeyEventsThatDontHideCursor(
       std::vector<ui::mojom::EventMatcherPtr> cursor_key_list) = 0;
@@ -121,7 +125,8 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetDisplayConfiguration(
       const std::vector<display::Display>& displays,
       std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
-      int64_t primary_display_id) = 0;
+      int64_t primary_display_id,
+      const std::vector<display::Display>& mirrors) = 0;
 
   // Adds |display| as a new display moving |window_tree_host| to the new
   // display. This results in closing the previous display |window_tree_host|
@@ -147,6 +152,13 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called once to give the delegate access to functions only exposed to
   // the WindowManager.
   virtual void SetWindowManagerClient(WindowManagerClient* client) = 0;
+
+  // Called if the window server requires the window manager to manage the real
+  // accelerated widget. This is the case when mus expects the window manager to
+  // set up viz (instead of mus itself hosting viz).
+  virtual void OnWmAcceleratedWidgetAvailableForDisplay(
+      int64_t display_id,
+      gfx::AcceleratedWidget widget) = 0;
 
   // Called when the connection to mus has been fully established.
   virtual void OnWmConnected();
@@ -257,6 +269,10 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called when a client requests that its activation be given to another
   // window.
   virtual void OnWmDeactivateWindow(Window* window) = 0;
+
+  // Called when a client requests that a generic action be performed. |window|
+  // can never be null.
+  virtual void OnWmPerformAction(Window* window, const std::string& action);
 
   // Called when an event is blocked by a modal window. |window| is the modal
   // window that blocked the event.

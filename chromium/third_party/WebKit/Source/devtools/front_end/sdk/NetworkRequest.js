@@ -930,6 +930,14 @@ SDK.NetworkRequest = class extends Common.Object {
 
   /**
    * @override
+   * @return {!Promise<boolean>}
+   */
+  async contentEncoded() {
+    return (await this.contentData()).encoded;
+  }
+
+  /**
+   * @override
    * @return {!Promise<?string>}
    */
   async requestContent() {
@@ -944,7 +952,7 @@ SDK.NetworkRequest = class extends Common.Object {
    * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
    */
   searchInContent(query, caseSensitive, isRegex) {
-    return Promise.resolve([]);
+    return SDK.NetworkManager.searchInRequest(this, query, caseSensitive, isRegex);
   }
 
   /**

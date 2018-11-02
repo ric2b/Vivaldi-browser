@@ -7,17 +7,14 @@
 # third_party/WebKit/Source/bindings/core/v8/V8ContextSnapshot.{cpp|h}.
 # to speedup creating a V8 context and setting up around it.
 
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+
 import("//build/config/c++/c++.gni")
-import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//v8/snapshot_toolchain.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
-}
-
-declare_args() {
-  use_v8_context_snapshot = !is_chromeos && !is_android && !is_chromecast
 }
 
 if (is_android) {
@@ -40,9 +37,15 @@ group("v8_context_snapshot") {
   }
 }
 
+config("use_v8_context_snapshot") {
+  if (use_v8_context_snapshot) {
+    defines = [ "USE_V8_CONTEXT_SNAPSHOT" ]
+  }
+}
+
 if (use_v8_context_snapshot) {
   action("generate_v8_context_snapshot") {
-    script = "run.py"
+    script = "//build/gn_run_binary.py"
     output_file = "$root_out_dir/v8_context_snapshot.bin"
     output_path = rebase_path(output_file, root_build_dir)
 
@@ -71,10 +74,10 @@ if (use_v8_context_snapshot) {
   # disable it while taking a V8 snapshot.
   config("disable_icf") {
     visibility = [ ":*" ]  # Only targets in this file can depend on this.
-    if (use_gold || use_lld) {
+    if (is_win) {
+      ldflags = [ "/OPT:NOICF" ]  # link.exe, but also lld-link.exe.
+    } else if (use_gold || use_lld) {
       ldflags = [ "-Wl,--icf=none" ]
-    } else if (is_win) {
-      ldflags = [ "/OPT:NOICF" ]
     }
   }
 

@@ -1,0 +1,58 @@
+{% from 'templates/macros.tmpl' import license, source_files_for_generated_file %}
+{{license()}}
+
+{{source_files_for_generated_file(template_file, input_files)}}
+
+#ifndef RuntimeEnabledFeatures_h
+#define RuntimeEnabledFeatures_h
+
+#include <string>
+
+#include "platform/PlatformExport.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Forward.h"
+
+namespace blink {
+
+// A class that stores static enablers for all experimental features.
+
+class PLATFORM_EXPORT RuntimeEnabledFeatures {
+  STATIC_ONLY(RuntimeEnabledFeatures);
+ public:
+  class PLATFORM_EXPORT Backup {
+   public:
+    explicit Backup();
+    void Restore();
+
+   private:
+    {% for feature in standard_features %}
+    bool {{feature.class_member_name}};
+    {% endfor %}
+  };
+
+  {% for feature_set in feature_sets %}
+  static void Set{{feature_set|capitalize}}FeaturesEnabled(bool);
+  {% endfor %}
+  static void SetOriginTrialControlledFeaturesEnabled(bool);
+
+  static void SetFeatureEnabledFromString(const std::string& name, bool enabled);
+
+  {% for feature in features %}
+  {% if feature.custom %}
+  static bool {{feature.name}}Enabled();
+  {% else %}
+  static void Set{{feature.name}}Enabled(bool enabled) { is_{{feature.class_member_name}}enabled_ = enabled; }
+  static bool {{feature.name}}Enabled() { return {{feature.enabled_condition}}; }
+
+  {% endif %}
+  {% endfor %}
+
+ private:
+  {% for feature in standard_features %}
+  static bool is_{{feature.class_member_name}}enabled_;
+  {% endfor %}
+};
+
+} // namespace blink
+
+#endif // RuntimeEnabledFeatures_h

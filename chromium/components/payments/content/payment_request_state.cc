@@ -8,29 +8,38 @@
 #include <set>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/payments/content/content_payment_request_delegate.h"
+#include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_response_helper.h"
+#include "components/payments/content/service_worker_payment_app_factory.h"
+#include "components/payments/content/service_worker_payment_instrument.h"
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
-#include "components/payments/core/payment_request_delegate.h"
+#include "content/public/common/content_features.h"
 
 namespace payments {
 
 PaymentRequestState::PaymentRequestState(
+    content::WebContents* web_contents,
+    const GURL& top_level_origin,
+    const GURL& frame_origin,
     PaymentRequestSpec* spec,
     Delegate* delegate,
     const std::string& app_locale,
     autofill::PersonalDataManager* personal_data_manager,
-    PaymentRequestDelegate* payment_request_delegate,
+    ContentPaymentRequestDelegate* payment_request_delegate,
     JourneyLogger* journey_logger)
     : is_ready_to_pay_(false),
+      get_all_instruments_finished_(true),
       is_waiting_for_merchant_validation_(false),
       app_locale_(app_locale),
       spec_(spec),
@@ -41,31 +50,95 @@ PaymentRequestState::PaymentRequestState(
       selected_shipping_option_error_profile_(nullptr),
       selected_contact_profile_(nullptr),
       selected_instrument_(nullptr),
+      number_of_pending_sw_payment_instruments_(0),
       payment_request_delegate_(payment_request_delegate),
-      profile_comparator_(app_locale, *spec) {
-  PopulateProfileCache();
-  SetDefaultProfileSelections();
+      profile_comparator_(app_locale, *spec),
+      weak_ptr_factory_(this) {
+  if (base::FeatureList::IsEnabled(features::kServiceWorkerPaymentApps)) {
+    get_all_instruments_finished_ = false;
+    ServiceWorkerPaymentAppFactory::GetInstance()->GetAllPaymentApps(
+        web_contents,
+        payment_request_delegate_->GetPaymentManifestWebDataService(),
+        spec_->method_data(),
+        base::BindOnce(&PaymentRequestState::GetAllPaymentAppsCallback,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       web_contents->GetBrowserContext(), top_level_origin,
+                       frame_origin),
+        base::BindOnce([]() {
+          /* Nothing needs to be done after writing cache. This callback is used
+           * only in tests. */
+        }));
+  } else {
+    PopulateProfileCache();
+    SetDefaultProfileSelections();
+  }
   spec_->AddObserver(this);
 }
+
 PaymentRequestState::~PaymentRequestState() {}
+
+void PaymentRequestState::GetAllPaymentAppsCallback(
+    content::BrowserContext* context,
+    const GURL& top_level_origin,
+    const GURL& frame_origin,
+    content::PaymentAppProvider::PaymentApps apps) {
+  number_of_pending_sw_payment_instruments_ = apps.size();
+  if (number_of_pending_sw_payment_instruments_ == 0U) {
+    FinishedGetAllSWPaymentInstruments();
+    return;
+  }
+
+  for (auto& app : apps) {
+    std::unique_ptr<ServiceWorkerPaymentInstrument> instrument =
+        std::make_unique<ServiceWorkerPaymentInstrument>(
+            context, top_level_origin, frame_origin, spec_,
+            std::move(app.second));
+    instrument->ValidateCanMakePayment(
+        base::BindOnce(&PaymentRequestState::OnSWPaymentInstrumentValidated,
+                       weak_ptr_factory_.GetWeakPtr()));
+    available_instruments_.push_back(std::move(instrument));
+  }
+}
+
+void PaymentRequestState::OnSWPaymentInstrumentValidated(
+    ServiceWorkerPaymentInstrument* instrument,
+    bool result) {
+  // Remove service worker payment instruments failed on validation.
+  if (!result) {
+    for (size_t i = 0; i < available_instruments_.size(); i++) {
+      if (available_instruments_[i].get() == instrument) {
+        available_instruments_.erase(available_instruments_.begin() + i);
+        break;
+      }
+    }
+  }
+
+  if (--number_of_pending_sw_payment_instruments_ > 0)
+    return;
+
+  FinishedGetAllSWPaymentInstruments();
+}
+
+void PaymentRequestState::FinishedGetAllSWPaymentInstruments() {
+  PopulateProfileCache();
+  SetDefaultProfileSelections();
+
+  get_all_instruments_finished_ = true;
+  NotifyOnGetAllPaymentInstrumentsFinished();
+
+  // Fullfill the pending CanMakePayment call.
+  if (can_make_payment_callback_)
+    CheckCanMakePayment(std::move(can_make_payment_callback_));
+
+  // Fullfill the pending AreRequestedMethodsSupported call.
+  if (are_requested_methods_supported_callback_)
+    CheckRequestedMethodsSupported(
+        std::move(are_requested_methods_supported_callback_));
+}
 
 void PaymentRequestState::OnPaymentResponseReady(
     mojom::PaymentResponsePtr payment_response) {
   delegate_->OnPaymentResponseAvailable(std::move(payment_response));
-}
-
-void PaymentRequestState::OnAddressNormalized(
-    const autofill::AutofillProfile& normalized_profile) {
-  delegate_->OnShippingAddressSelected(
-      PaymentResponseHelper::GetMojomPaymentAddressFromAutofillProfile(
-          normalized_profile, app_locale_));
-}
-
-void PaymentRequestState::OnCouldNotNormalize(
-    const autofill::AutofillProfile& profile) {
-  // Since the phone number is formatted in either case, this profile should be
-  // used.
-  OnAddressNormalized(profile);
 }
 
 void PaymentRequestState::OnSpecUpdated() {
@@ -79,22 +152,48 @@ void PaymentRequestState::OnSpecUpdated() {
   UpdateIsReadyToPayAndNotifyObservers();
 }
 
-bool PaymentRequestState::CanMakePayment() const {
-  for (const auto& instrument : available_instruments_) {
-    if (instrument->IsValidForCanMakePayment()) {
-      // AddAutofillPaymentInstrument() filters out available instruments based
-      // on supported card networks (visa, amex) and types (credit, debit).
-      DCHECK(spec_->supported_card_networks_set().find(
-                 instrument->method_name()) !=
-             spec_->supported_card_networks_set().end());
-      return true;
-    }
+void PaymentRequestState::CanMakePayment(StatusCallback callback) {
+  if (!get_all_instruments_finished_) {
+    can_make_payment_callback_ = std::move(callback);
+    return;
   }
-  return false;
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PaymentRequestState::CheckCanMakePayment,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-bool PaymentRequestState::AreRequestedMethodsSupported() const {
-  return !spec_->supported_card_networks().empty();
+void PaymentRequestState::CheckCanMakePayment(StatusCallback callback) {
+  bool can_make_payment_value = false;
+  for (const auto& instrument : available_instruments_) {
+    if (instrument->IsValidForCanMakePayment()) {
+      can_make_payment_value = true;
+      break;
+    }
+  }
+  std::move(callback).Run(can_make_payment_value);
+}
+
+void PaymentRequestState::AreRequestedMethodsSupported(
+    StatusCallback callback) {
+  if (!get_all_instruments_finished_) {
+    are_requested_methods_supported_callback_ = std::move(callback);
+    return;
+  }
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PaymentRequestState::CheckRequestedMethodsSupported,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void PaymentRequestState::CheckRequestedMethodsSupported(
+    StatusCallback callback) {
+  DCHECK(get_all_instruments_finished_);
+
+  std::move(callback).Run(!spec_->supported_card_networks().empty() ||
+                          !available_instruments_.empty());
 }
 
 std::string PaymentRequestState::GetAuthenticatedEmail() const {
@@ -114,7 +213,7 @@ void PaymentRequestState::GeneratePaymentResponse() {
   DCHECK(is_ready_to_pay());
 
   // Once the response is ready, will call back into OnPaymentResponseReady.
-  response_helper_ = base::MakeUnique<PaymentResponseHelper>(
+  response_helper_ = std::make_unique<PaymentResponseHelper>(
       app_locale_, spec_, selected_instrument_, payment_request_delegate_,
       selected_shipping_profile_, selected_contact_profile_, this);
 }
@@ -163,7 +262,7 @@ void PaymentRequestState::AddAutofillPaymentInstrument(
 
   // AutofillPaymentInstrument makes a copy of |card| so it is effectively
   // owned by this object.
-  auto instrument = base::MakeUnique<AutofillPaymentInstrument>(
+  auto instrument = std::make_unique<AutofillPaymentInstrument>(
       basic_card_network, card, matches_merchant_card_type_exactly,
       shipping_profiles_, app_locale_, payment_request_delegate_);
   available_instruments_.push_back(std::move(instrument));
@@ -176,7 +275,7 @@ void PaymentRequestState::AddAutofillShippingProfile(
     bool selected,
     const autofill::AutofillProfile& profile) {
   profile_cache_.push_back(
-      base::MakeUnique<autofill::AutofillProfile>(profile));
+      std::make_unique<autofill::AutofillProfile>(profile));
   // TODO(tmartino): Implement deduplication rules specific to shipping
   // profiles.
   autofill::AutofillProfile* new_cached_profile = profile_cache_.back().get();
@@ -190,7 +289,7 @@ void PaymentRequestState::AddAutofillContactProfile(
     bool selected,
     const autofill::AutofillProfile& profile) {
   profile_cache_.push_back(
-      base::MakeUnique<autofill::AutofillProfile>(profile));
+      std::make_unique<autofill::AutofillProfile>(profile));
   autofill::AutofillProfile* new_cached_profile = profile_cache_.back().get();
   contact_profiles_.push_back(new_cached_profile);
 
@@ -216,15 +315,12 @@ void PaymentRequestState::SetSelectedShippingProfile(
   // The user should not be able to click on pay until the callback from the
   // merchant.
   is_waiting_for_merchant_validation_ = true;
-  UpdateIsReadyToPayAndNotifyObservers();
 
   // Start the normalization of the shipping address.
-  // Use the country code from the profile if it is set, otherwise infer it
-  // from the |app_locale_|.
-  std::string country_code = data_util::GetCountryCodeWithFallback(
-      selected_shipping_profile_, app_locale_);
-  payment_request_delegate_->GetAddressNormalizer()->StartAddressNormalization(
-      *selected_shipping_profile_, country_code, /*timeout_seconds=*/2, this);
+  payment_request_delegate_->GetAddressNormalizer()->NormalizeAddressAsync(
+      *selected_shipping_profile_, /*timeout_seconds=*/2,
+      base::BindOnce(&PaymentRequestState::OnAddressNormalized,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PaymentRequestState::SetSelectedContactProfile(
@@ -254,7 +350,7 @@ bool PaymentRequestState::IsPaymentAppInvoked() const {
   return !!response_helper_;
 }
 
-AddressNormalizer* PaymentRequestState::GetAddressNormalizer() {
+autofill::AddressNormalizer* PaymentRequestState::GetAddressNormalizer() {
   return payment_request_delegate_->GetAddressNormalizer();
 }
 
@@ -270,7 +366,7 @@ void PaymentRequestState::PopulateProfileCache() {
   // whenever Profiles are requested.
   for (size_t i = 0; i < profiles.size(); i++) {
     profile_cache_.push_back(
-        base::MakeUnique<autofill::AutofillProfile>(*profiles[i]));
+        std::make_unique<autofill::AutofillProfile>(*profiles[i]));
     raw_profiles_for_filtering.push_back(profile_cache_.back().get());
   }
 
@@ -307,15 +403,6 @@ void PaymentRequestState::PopulateProfileCache() {
       personal_data_manager_->GetCreditCardsToSuggest();
   for (autofill::CreditCard* card : cards)
     AddAutofillPaymentInstrument(/*selected=*/false, *card);
-
-  bool has_complete_instrument =
-      available_instruments().empty()
-          ? false
-          : available_instruments()[0]->IsCompleteForPayment();
-
-  journey_logger_->SetNumberOfSuggestionsShown(
-      JourneyLogger::Section::SECTION_PAYMENT_METHOD,
-      available_instruments().size(), has_complete_instrument);
 }
 
 void PaymentRequestState::SetDefaultProfileSelections() {
@@ -348,12 +435,26 @@ void PaymentRequestState::SetDefaultProfileSelections() {
                              ? nullptr
                              : first_complete_instrument->get();
   UpdateIsReadyToPayAndNotifyObservers();
+
+  bool has_complete_instrument =
+      available_instruments().empty()
+          ? false
+          : available_instruments()[0]->IsCompleteForPayment();
+
+  journey_logger_->SetNumberOfSuggestionsShown(
+      JourneyLogger::Section::SECTION_PAYMENT_METHOD,
+      available_instruments().size(), has_complete_instrument);
 }
 
 void PaymentRequestState::UpdateIsReadyToPayAndNotifyObservers() {
   is_ready_to_pay_ =
       ArePaymentDetailsSatisfied() && ArePaymentOptionsSatisfied();
   NotifyOnSelectedInformationChanged();
+}
+
+void PaymentRequestState::NotifyOnGetAllPaymentInstrumentsFinished() {
+  for (auto& observer : observers_)
+    observer.OnGetAllPaymentInstrumentsFinished();
 }
 
 void PaymentRequestState::NotifyOnSelectedInformationChanged() {
@@ -379,6 +480,14 @@ bool PaymentRequestState::ArePaymentOptionsSatisfied() {
     return false;
 
   return profile_comparator()->IsContactInfoComplete(selected_contact_profile_);
+}
+
+void PaymentRequestState::OnAddressNormalized(
+    bool success,
+    const autofill::AutofillProfile& normalized_profile) {
+  delegate_->OnShippingAddressSelected(
+      PaymentResponseHelper::GetMojomPaymentAddressFromAutofillProfile(
+          normalized_profile, app_locale_));
 }
 
 }  // namespace payments

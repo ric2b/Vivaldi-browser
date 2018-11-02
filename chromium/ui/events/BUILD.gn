@@ -112,6 +112,8 @@ component("events") {
     "event_dispatcher.h",
     "event_handler.cc",
     "event_handler.h",
+    "event_modifiers.cc",
+    "event_modifiers.h",
     "event_processor.cc",
     "event_processor.h",
     "event_rewriter.h",
@@ -134,6 +136,8 @@ component("events") {
     "null_event_targeter.h",
     "scoped_target_handler.cc",
     "scoped_target_handler.h",
+    "system_input_injector.cc",
+    "system_input_injector.h",
     "win/events_win.cc",
     "win/system_event_state_lookup.cc",
     "win/system_event_state_lookup.h",
@@ -170,7 +174,7 @@ component("events") {
     configs += [ "//build/config/linux:glib" ]
   }
 
-  if (use_ozone || (is_android && use_aura)) {
+  if (use_ozone) {
     sources += [ "events_default.cc" ]
   }
 
@@ -194,7 +198,7 @@ component("events") {
     ]
   }
 
-  if (is_win || is_mac || use_x11 || use_ozone || (is_android && use_aura)) {
+  if (is_win || is_mac || use_x11 || use_ozone) {
     sources -= [ "events_stub.cc" ]
   }
 
@@ -202,6 +206,9 @@ component("events") {
     sources += [
       "android/drag_event_android.cc",
       "android/drag_event_android.h",
+      "android/gesture_event_android.cc",
+      "android/gesture_event_android.h",
+      "android/gesture_event_type.h",
       "android/key_event_utils.cc",
       "android/key_event_utils.h",
       "android/motion_event_android.cc",
@@ -362,6 +369,7 @@ if (!is_ios) {
     sources = [
       "android/scroller_unittest.cc",
       "blink/blink_event_util_unittest.cc",
+      "blink/fling_booster_unittest.cc",
       "blink/input_handler_proxy_unittest.cc",
       "blink/input_scroll_elasticity_controller_unittest.cc",
       "blink/web_input_event_traits_unittest.cc",

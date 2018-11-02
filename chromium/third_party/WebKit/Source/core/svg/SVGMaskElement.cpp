@@ -23,7 +23,7 @@
 
 #include "core/svg/SVGMaskElement.h"
 
-#include "core/dom/StyleChangeReason.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/layout/svg/LayoutSVGResourceMasker.h"
 
 namespace blink {
@@ -75,7 +75,7 @@ inline SVGMaskElement::SVGMaskElement(Document& document)
   AddToPropertyMap(mask_content_units_);
 }
 
-DEFINE_TRACE(SVGMaskElement) {
+void SVGMaskElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);
@@ -91,7 +91,7 @@ DEFINE_NODE_FACTORY(SVGMaskElement)
 void SVGMaskElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == x_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),

@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "ui/message_center/message_center_export.h"
 #include "ui/views/context_menu_controller.h"
 
 namespace ui {
@@ -21,12 +22,11 @@ class MenuRunner;
 }  // namespace views
 
 namespace message_center {
-class MessageCenterController;
 
-class MessageViewContextMenuController : public views::ContextMenuController {
+class MESSAGE_CENTER_EXPORT MessageViewContextMenuController
+    : public views::ContextMenuController {
  public:
-  explicit MessageViewContextMenuController(
-      MessageCenterController* controller);
+  explicit MessageViewContextMenuController();
   ~MessageViewContextMenuController() override;
 
  private:
@@ -37,8 +37,6 @@ class MessageViewContextMenuController : public views::ContextMenuController {
 
   // Callback for MenuModelAdapter
   void OnMenuClosed();
-
-  MessageCenterController* controller_;
 
   std::unique_ptr<ui::MenuModel> menu_model_;
   std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;

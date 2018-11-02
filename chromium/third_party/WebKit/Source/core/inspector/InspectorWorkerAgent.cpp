@@ -30,10 +30,10 @@
 
 #include "core/inspector/InspectorWorkerAgent.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/Document.h"
 #include "core/inspector/InspectedFrames.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -230,7 +230,8 @@ void InspectorWorkerAgent::ConnectToProxy(WorkerInspectorProxy* proxy,
   session_id_to_connection_.Set(session_id, connection);
   connection_to_session_id_.Set(connection, session_id);
 
-  proxy->ConnectToInspector(connection, this);
+  proxy->ConnectToInspector(connection,
+                            inspected_frames_->InstrumentationToken(), this);
   DCHECK(GetFrontend());
   AttachedSessionIds()->setBoolean(session_id, true);
   GetFrontend()->attachedToTarget(session_id,
@@ -255,7 +256,7 @@ void InspectorWorkerAgent::DispatchMessageFromWorker(
                                            proxy->InspectorId());
 }
 
-DEFINE_TRACE(InspectorWorkerAgent) {
+void InspectorWorkerAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(connected_proxies_);
   visitor->Trace(inspected_frames_);
   InspectorBaseAgent::Trace(visitor);

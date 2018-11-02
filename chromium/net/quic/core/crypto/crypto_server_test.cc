@@ -57,7 +57,7 @@ const char kOldConfigId[] = "old-config-id";
 struct TestParams {
   TestParams(bool enable_stateless_rejects,
              bool use_stateless_rejects,
-             QuicVersionVector supported_versions)
+             QuicTransportVersionVector supported_versions)
       : enable_stateless_rejects(enable_stateless_rejects),
         use_stateless_rejects(use_stateless_rejects),
         supported_versions(std::move(supported_versions)) {}
@@ -66,8 +66,8 @@ struct TestParams {
     os << "  enable_stateless_rejects: " << p.enable_stateless_rejects
        << std::endl;
     os << "  use_stateless_rejects: " << p.use_stateless_rejects << std::endl;
-    os << "  versions: " << QuicVersionVectorToString(p.supported_versions)
-       << " }";
+    os << "  versions: "
+       << QuicTransportVersionVectorToString(p.supported_versions) << " }";
     return os;
   }
 
@@ -79,7 +79,7 @@ struct TestParams {
   // enable_stateless_rejects is false.
   bool use_stateless_rejects;
   // Versions supported by client and server.
-  QuicVersionVector supported_versions;
+  QuicTransportVersionVector supported_versions;
 };
 
 // Constructs various test permutations.
@@ -89,7 +89,8 @@ std::vector<TestParams> GetTestParams() {
   for (bool enable_stateless_rejects : kTrueFalse) {
     for (bool use_stateless_rejects : kTrueFalse) {
       // Start with all versions, remove highest on each iteration.
-      QuicVersionVector supported_versions = AllSupportedVersions();
+      QuicTransportVersionVector supported_versions =
+          AllSupportedTransportVersions();
       while (!supported_versions.empty()) {
         params.push_back(TestParams(enable_stateless_rejects,
                                     use_stateless_rejects, supported_versions));
@@ -118,8 +119,8 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
     config_.set_enable_serving_sct(true);
 
     client_version_ = supported_versions_.front();
-    client_version_string_ =
-        QuicTagToString(QuicVersionToQuicTag(client_version_));
+    client_version_string_ = QuicVersionLabelToString(
+        QuicVersionToQuicVersionLabel(client_version_));
 
     FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support =
         GetParam().enable_stateless_rejects;
@@ -215,11 +216,12 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   };
 
   void CheckServerHello(const CryptoHandshakeMessage& server_hello) {
-    QuicTagVector versions;
-    server_hello.GetTaglist(kVER, &versions);
+    QuicVersionLabelVector versions;
+    server_hello.GetVersionLabelList(kVER, &versions);
     ASSERT_EQ(supported_versions_.size(), versions.size());
     for (size_t i = 0; i < versions.size(); ++i) {
-      EXPECT_EQ(QuicVersionToQuicTag(supported_versions_[i]), versions[i]);
+      EXPECT_EQ(QuicVersionToQuicVersionLabel(supported_versions_[i]),
+                versions[i]);
     }
 
     QuicStringPiece address;
@@ -392,8 +394,8 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   MockRandom rand_for_id_generation_;
   MockClock clock_;
   QuicSocketAddress client_address_;
-  QuicVersionVector supported_versions_;
-  QuicVersion client_version_;
+  QuicTransportVersionVector supported_versions_;
+  QuicTransportVersion client_version_;
   string client_version_string_;
   QuicCryptoServerConfig config_;
   QuicCryptoServerConfigPeer peer_;
@@ -667,8 +669,8 @@ TEST_P(CryptoServerTest, DowngradeAttack) {
   }
   // Set the client's preferred version to a supported version that
   // is not the "current" version (supported_versions_.front()).
-  string bad_version =
-      QuicTagToString(QuicVersionToQuicTag(supported_versions_.back()));
+  string bad_version = QuicVersionLabelToString(
+      QuicVersionToQuicVersionLabel(supported_versions_.back()));
 
   CryptoHandshakeMessage msg = crypto_test_utils::CreateCHLO(
       {{"PDMD", "X509"}, {"VER\0", bad_version}}, kClientHelloMinimumSize);
@@ -1039,8 +1041,8 @@ class CryptoServerTestOldVersion : public CryptoServerTest {
  public:
   void SetUp() override {
     client_version_ = supported_versions_.back();
-    client_version_string_ =
-        QuicTagToString(QuicVersionToQuicTag(client_version_));
+    client_version_string_ = QuicVersionLabelToString(
+        QuicVersionToQuicVersionLabel(client_version_));
     CryptoServerTest::SetUp();
   }
 };

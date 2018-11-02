@@ -6,14 +6,17 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("gl") {
   sources = [
+    "context_lost_reason.mojom",
+    "gpu_host.mojom",
     "gpu_service.mojom",
   ]
 
   public_deps = [
+    "//components/arc/common:media",
     "//gpu/ipc/common:interfaces",
-    "//media/gpu/mojo:jpeg_decoder",
     "//media/mojo/interfaces",
     "//ui/gfx/geometry/mojo",
     "//ui/gfx/mojo",
+    "//url/mojo:url_mojom_gurl",
   ]
 }

@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
@@ -24,6 +25,7 @@
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
+#include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
@@ -64,9 +66,22 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
   DCHECK(event->IsKeyEvent());
   DCHECK(!(event->flags() & ui::EF_IS_SYNTHESIZED));
 
-  // The Caps Lock toggling has been removed from here, because now it is
-  // handled in accelerator controller.
-  // (see https://bugs.chromium.org/p/chromium/issues/detail?id=700705).
+  // For OS_CHROMEOS build of Chrome running on Linux, the IME keyboard cannot
+  // track the Caps Lock state by itself, so need to call SetCapsLockEnabled()
+  // method to reflect the Caps Lock state by the key event.
+  chromeos::input_method::InputMethodManager* manager =
+      chromeos::input_method::InputMethodManager::Get();
+  if (manager) {
+    chromeos::input_method::ImeKeyboard* keyboard = manager->GetImeKeyboard();
+    if (keyboard && event->type() == ET_KEY_PRESSED &&
+        event->key_code() != ui::VKEY_CAPITAL &&
+        keyboard->CapsLockIsEnabled() != event->IsCapsLockOn()) {
+      // Synchronize the keyboard state with event's state if they do not
+      // match. Do not synchronize for Caps Lock key because it is already
+      // handled in event rewriter.
+      keyboard->SetCapsLockEnabled(event->IsCapsLockOn());
+    }
+  }
 
   // If |context_| is not usable, then we can only dispatch the key event as is.
   // We only dispatch the key event to input method when the |context_| is an
@@ -74,23 +89,19 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
   // Note: We need to send the key event to ibus even if the |context_| is not
   // enabled, so that ibus can have a chance to enable the |context_|.
   if (!IsNonPasswordInputFieldFocused() || !GetEngine()) {
-    ui::EventDispatchDetails dispatch_details;
     if (event->type() == ET_KEY_PRESSED) {
       if (ExecuteCharacterComposer(*event)) {
         // Treating as PostIME event if character composer handles key event and
         // generates some IME event,
-        dispatch_details = ProcessKeyEventPostIME(event, true);
-        if (ack_callback)
-          std::move(ack_callback).Run(true);
-        return dispatch_details;
+        return ProcessKeyEventPostIME(
+            event, std::make_unique<AckCallback>(std::move(ack_callback)),
+            false, true);
       }
-      dispatch_details = ProcessUnfilteredKeyPressEvent(event);
-    } else {
-      dispatch_details = DispatchKeyEventPostIME(event);
+      return ProcessUnfilteredKeyPressEvent(
+          event, std::make_unique<AckCallback>(std::move(ack_callback)));
     }
-    if (ack_callback)
-      std::move(ack_callback).Run(false);
-    return dispatch_details;
+    return DispatchKeyEventPostIME(
+        event, std::make_unique<AckCallback>(std::move(ack_callback)));
   }
 
   handling_key_event_ = true;
@@ -103,7 +114,6 @@ ui::EventDispatchDetails InputMethodChromeOS::DispatchKeyEvent(
     GetEngine()->ProcessKeyEvent(*event, callback);
     return ui::EventDispatchDetails();
   }
-
   return ProcessKeyEventDone(event, std::move(ack_callback), false);
 }
 
@@ -136,14 +146,12 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventDone(
       is_handled = ExecuteCharacterComposer(*event);
     }
   }
-
-  if (ack_callback)
-    std::move(ack_callback).Run(is_handled);
-
   ui::EventDispatchDetails details;
-  if (event->type() == ET_KEY_PRESSED || event->type() == ET_KEY_RELEASED)
-    details = ProcessKeyEventPostIME(event, is_handled);
-
+  if (event->type() == ET_KEY_PRESSED || event->type() == ET_KEY_RELEASED) {
+    details = ProcessKeyEventPostIME(
+        event, std::make_unique<AckCallback>(std::move(ack_callback)), false,
+        is_handled);
+  }
   handling_key_event_ = false;
   return details;
 }
@@ -325,55 +333,62 @@ void InputMethodChromeOS::UpdateContextFocusState() {
 
 ui::EventDispatchDetails InputMethodChromeOS::ProcessKeyEventPostIME(
     ui::KeyEvent* event,
+    std::unique_ptr<AckCallback> ack_callback,
+    bool skip_process_filtered,
     bool handled) {
   TextInputClient* client = GetTextInputClient();
   if (!client) {
     // As ibus works asynchronously, there is a chance that the focused client
     // loses focus before this method gets called.
-    return DispatchKeyEventPostIME(event);
+    return DispatchKeyEventPostIME(event, std::move(ack_callback));
   }
 
   ui::EventDispatchDetails dispatch_details;
-  if (event->type() == ET_KEY_PRESSED && handled) {
-    dispatch_details = ProcessFilteredKeyPressEvent(event);
-    if (event->stopped_propagation()) {
-      ResetContext();
-      return dispatch_details;
-    }
-    if (dispatch_details.dispatcher_destroyed ||
-        dispatch_details.target_destroyed)
-      return dispatch_details;
-  }
+  if (event->type() == ET_KEY_PRESSED && handled && !skip_process_filtered)
+    return ProcessFilteredKeyPressEvent(event, std::move(ack_callback));
 
   // In case the focus was changed by the key event. The |context_| should have
   // been reset when the focused window changed.
-  if (client != GetTextInputClient())
+  if (client != GetTextInputClient()) {
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(false);
     return dispatch_details;
-
+  }
   if (HasInputMethodResult())
     ProcessInputMethodResult(event, handled);
 
   // In case the focus was changed when sending input method results to the
   // focused window.
-  if (client != GetTextInputClient())
+  if (client != GetTextInputClient()) {
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(false);
     return dispatch_details;
+  }
 
-  if (handled)
+  if (handled) {
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(true);
     return dispatch_details;  // IME handled the key event. do not forward.
+  }
 
   if (event->type() == ET_KEY_PRESSED)
-    return ProcessUnfilteredKeyPressEvent(event);
+    return ProcessUnfilteredKeyPressEvent(event, std::move(ack_callback));
 
   if (event->type() == ET_KEY_RELEASED)
-    return DispatchKeyEventPostIME(event);
-
+    return DispatchKeyEventPostIME(event, std::move(ack_callback));
   return dispatch_details;
 }
 
 ui::EventDispatchDetails InputMethodChromeOS::ProcessFilteredKeyPressEvent(
-    ui::KeyEvent* event) {
+    ui::KeyEvent* event,
+    std::unique_ptr<AckCallback> ack_callback) {
+  auto callback = std::make_unique<AckCallback>(base::Bind(
+      &InputMethodChromeOS::PostProcessFilteredKeyPressEvent,
+      weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
+      GetTextInputClient(), Passed(&ack_callback)));
+
   if (NeedInsertChar())
-    return DispatchKeyEventPostIME(event);
+    return DispatchKeyEventPostIME(event, std::move(callback));
 
   ui::KeyEvent fabricated_event(ET_KEY_PRESSED,
                                 VKEY_PROCESSKEY,
@@ -382,19 +397,52 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessFilteredKeyPressEvent(
                                 event->GetDomKey(),
                                 event->time_stamp());
   ui::EventDispatchDetails dispatch_details =
-      DispatchKeyEventPostIME(&fabricated_event);
+      DispatchKeyEventPostIME(&fabricated_event, std::move(callback));
   if (fabricated_event.stopped_propagation())
     event->StopPropagation();
   return dispatch_details;
 }
 
-ui::EventDispatchDetails InputMethodChromeOS::ProcessUnfilteredKeyPressEvent(
-    ui::KeyEvent* event) {
-  const TextInputClient* prev_client = GetTextInputClient();
-  ui::EventDispatchDetails dispatch_details = DispatchKeyEventPostIME(event);
-  if (event->stopped_propagation()) {
+void InputMethodChromeOS::PostProcessFilteredKeyPressEvent(
+    ui::KeyEvent* event,
+    TextInputClient* prev_client,
+    std::unique_ptr<AckCallback> ack_callback,
+    bool stopped_propagation) {
+  // In case the focus was changed by the key event.
+  if (GetTextInputClient() != prev_client)
+    return;
+
+  if (stopped_propagation) {
     ResetContext();
-    return dispatch_details;
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(true);
+    return;
+  }
+  ignore_result(
+      ProcessKeyEventPostIME(event, std::move(ack_callback), true, true));
+}
+
+ui::EventDispatchDetails InputMethodChromeOS::ProcessUnfilteredKeyPressEvent(
+    ui::KeyEvent* event,
+    std::unique_ptr<AckCallback> ack_callback) {
+  return DispatchKeyEventPostIME(
+      event,
+      std::make_unique<AckCallback>(base::Bind(
+          &InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent,
+          weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
+          GetTextInputClient(), Passed(&ack_callback))));
+}
+
+void InputMethodChromeOS::PostProcessUnfilteredKeyPressEvent(
+    ui::KeyEvent* event,
+    TextInputClient* prev_client,
+    std::unique_ptr<AckCallback> ack_callback,
+    bool stopped_propagation) {
+  if (stopped_propagation) {
+    ResetContext();
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(false);
+    return;
   }
 
   // We shouldn't dispatch the character anymore if the key event dispatch
@@ -405,8 +453,11 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessUnfilteredKeyPressEvent(
   //    page.
   // We should return here not to send the Tab key event to RWHV.
   TextInputClient* client = GetTextInputClient();
-  if (!client || client != prev_client)
-    return dispatch_details;
+  if (!client || client != prev_client) {
+    if (ack_callback && !ack_callback->is_null())
+      std::move(*ack_callback).Run(false);
+    return;
+  }
 
   // If a key event was not filtered by |context_| and |character_composer_|,
   // then it means the key event didn't generate any result text. So we need
@@ -414,7 +465,9 @@ ui::EventDispatchDetails InputMethodChromeOS::ProcessUnfilteredKeyPressEvent(
   uint16_t ch = event->GetCharacter();
   if (ch)
     client->InsertChar(*event);
-  return dispatch_details;
+
+  if (ack_callback && !ack_callback->is_null())
+    std::move(*ack_callback).Run(false);
 }
 
 void InputMethodChromeOS::ProcessInputMethodResult(ui::KeyEvent* event,

@@ -7,9 +7,9 @@
 #include <stddef.h>
 
 #include <list>
-#include <queue>
 #include <string>
 
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
@@ -47,10 +47,10 @@ class MockServiceWorkerResponseReader : public ServiceWorkerResponseReader {
 
   // ServiceWorkerResponseReader overrides
   void ReadInfo(HttpResponseInfoIOBuffer* info_buf,
-                const net::CompletionCallback& callback) override;
+                OnceCompletionCallback callback) override;
   void ReadData(net::IOBuffer* buf,
                 int buf_len,
-                const net::CompletionCallback& callback) override;
+                OnceCompletionCallback callback) override;
 
   // Test helpers. ExpectReadInfo() and ExpectReadData() give precise control
   // over both the data to be written and the result to return.
@@ -89,40 +89,40 @@ class MockServiceWorkerResponseReader : public ServiceWorkerResponseReader {
     int result;
   };
 
-  std::queue<ExpectedRead> expected_reads_;
+  base::queue<ExpectedRead> expected_reads_;
   scoped_refptr<net::IOBuffer> pending_buffer_;
   size_t pending_buffer_len_;
   scoped_refptr<HttpResponseInfoIOBuffer> pending_info_;
-  net::CompletionCallback pending_callback_;
+  OnceCompletionCallback pending_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(MockServiceWorkerResponseReader);
 };
 
 void MockServiceWorkerResponseReader::ReadInfo(
     HttpResponseInfoIOBuffer* info_buf,
-    const net::CompletionCallback& callback) {
+    OnceCompletionCallback callback) {
   DCHECK(!expected_reads_.empty());
   ExpectedRead expected = expected_reads_.front();
   EXPECT_TRUE(expected.info);
   if (expected.async) {
     pending_info_ = info_buf;
-    pending_callback_ = callback;
+    pending_callback_ = std::move(callback);
   } else {
     expected_reads_.pop();
     info_buf->response_data_size = expected.len;
-    callback.Run(expected.result);
+    std::move(callback).Run(expected.result);
   }
 }
 
 void MockServiceWorkerResponseReader::ReadData(
     net::IOBuffer* buf,
     int buf_len,
-    const net::CompletionCallback& callback) {
+    OnceCompletionCallback callback) {
   DCHECK(!expected_reads_.empty());
   ExpectedRead expected = expected_reads_.front();
   EXPECT_FALSE(expected.info);
   if (expected.async) {
-    pending_callback_ = callback;
+    pending_callback_ = std::move(callback);
     pending_buffer_ = buf;
     pending_buffer_len_ = static_cast<size_t>(buf_len);
   } else {
@@ -131,7 +131,7 @@ void MockServiceWorkerResponseReader::ReadData(
       size_t to_read = std::min(static_cast<size_t>(buf_len), expected.len);
       memcpy(buf->data(), expected.data, to_read);
     }
-    callback.Run(expected.result);
+    std::move(callback).Run(expected.result);
   }
 }
 
@@ -172,9 +172,9 @@ void MockServiceWorkerResponseReader::CompletePendingRead() {
   }
   pending_info_ = nullptr;
   pending_buffer_ = nullptr;
-  net::CompletionCallback callback = pending_callback_;
+  OnceCompletionCallback callback = std::move(pending_callback_);
   pending_callback_.Reset();
-  callback.Run(expected.result);
+  std::move(callback).Run(expected.result);
 }
 
 // A test implementation of ServiceWorkerResponseWriter.
@@ -209,10 +209,10 @@ class MockServiceWorkerResponseWriter : public ServiceWorkerResponseWriter {
 
   // ServiceWorkerResponseWriter overrides
   void WriteInfo(HttpResponseInfoIOBuffer* info_buf,
-                 const net::CompletionCallback& callback) override;
+                 OnceCompletionCallback callback) override;
   void WriteData(net::IOBuffer* buf,
                  int buf_len,
-                 const net::CompletionCallback& callback) override;
+                 OnceCompletionCallback callback) override;
 
   // Enqueue expected writes.
   void ExpectWriteInfoOk(size_t len, bool async);
@@ -238,19 +238,19 @@ class MockServiceWorkerResponseWriter : public ServiceWorkerResponseWriter {
     int result;
   };
 
-  std::queue<ExpectedWrite> expected_writes_;
+  base::queue<ExpectedWrite> expected_writes_;
 
   size_t info_written_;
   size_t data_written_;
 
-  net::CompletionCallback pending_callback_;
+  OnceCompletionCallback pending_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(MockServiceWorkerResponseWriter);
 };
 
 void MockServiceWorkerResponseWriter::WriteInfo(
     HttpResponseInfoIOBuffer* info_buf,
-    const net::CompletionCallback& callback) {
+    OnceCompletionCallback callback) {
   DCHECK(!expected_writes_.empty());
   ExpectedWrite write = expected_writes_.front();
   EXPECT_TRUE(write.is_info);
@@ -260,16 +260,16 @@ void MockServiceWorkerResponseWriter::WriteInfo(
   }
   if (!write.async) {
     expected_writes_.pop();
-    callback.Run(write.result);
+    std::move(callback).Run(write.result);
   } else {
-    pending_callback_ = callback;
+    pending_callback_ = std::move(callback);
   }
 }
 
 void MockServiceWorkerResponseWriter::WriteData(
     net::IOBuffer* buf,
     int buf_len,
-    const net::CompletionCallback& callback) {
+    OnceCompletionCallback callback) {
   DCHECK(!expected_writes_.empty());
   ExpectedWrite write = expected_writes_.front();
   EXPECT_FALSE(write.is_info);
@@ -279,9 +279,9 @@ void MockServiceWorkerResponseWriter::WriteData(
   }
   if (!write.async) {
     expected_writes_.pop();
-    callback.Run(write.result);
+    std::move(callback).Run(write.result);
   } else {
-    pending_callback_ = callback;
+    pending_callback_ = std::move(callback);
   }
 }
 
@@ -316,7 +316,7 @@ void MockServiceWorkerResponseWriter::CompletePendingWrite() {
   ExpectedWrite write = expected_writes_.front();
   DCHECK(write.async);
   expected_writes_.pop();
-  pending_callback_.Run(write.result);
+  std::move(pending_callback_).Run(write.result);
 }
 
 class ServiceWorkerCacheWriterTest : public ::testing::Test {
@@ -375,8 +375,8 @@ class ServiceWorkerCacheWriterTest : public ::testing::Test {
   }
 
   ServiceWorkerCacheWriter::OnWriteCompleteCallback CreateWriteCallback() {
-    return base::Bind(&ServiceWorkerCacheWriterTest::OnWriteComplete,
-                      base::Unretained(this));
+    return base::BindOnce(&ServiceWorkerCacheWriterTest::OnWriteComplete,
+                          base::Unretained(this));
   }
 
   void OnWriteComplete(net::Error error) {

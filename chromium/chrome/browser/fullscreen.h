@@ -9,7 +9,8 @@
 
 #include "build/build_config.h"
 
-// |display_id| is used in USE_ASH build config only, ignored otherwise.
-bool IsFullScreenMode(int64_t display_id);
+// Safe to call from cross-platform code; implementation is different for each
+// platform. Not implemented on Chrome OS.
+bool IsFullScreenMode();
 
 #endif  // CHROME_BROWSER_FULLSCREEN_H_

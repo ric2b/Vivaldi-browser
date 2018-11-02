@@ -6,12 +6,12 @@
 #define COMPONENTS_NTP_SNIPPETS_REMOTE_REMOTE_SUGGESTIONS_FETCHER_IMPL_H_
 
 #include <memory>
-#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "components/ntp_snippets/remote/json_request.h"
@@ -64,22 +64,6 @@ class RemoteSuggestionsFetcherImpl : public RemoteSuggestionsFetcher {
   }
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestAuthenticated);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestUnauthenticated);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestExcludedIds);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestNoUserClass);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestWithTwoLanguages);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestWithUILanguageOnly);
-  FRIEND_TEST_ALL_PREFIXES(ChromeReaderSnippetsFetcherTest,
-                           BuildRequestWithOtherLanguageOnly);
-  friend class ChromeReaderSnippetsFetcherTest;
-
   void FetchSnippetsNonAuthenticated(internal::JsonRequest::Builder builder,
                                      SnippetsAvailableCallback callback);
   void FetchSnippetsAuthenticated(internal::JsonRequest::Builder builder,
@@ -114,7 +98,7 @@ class RemoteSuggestionsFetcherImpl : public RemoteSuggestionsFetcher {
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
   // Stores requests that wait for an access token.
-  std::queue<
+  base::queue<
       std::pair<internal::JsonRequest::Builder, SnippetsAvailableCallback>>
       pending_requests_;
 

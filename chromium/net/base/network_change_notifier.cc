@@ -392,8 +392,8 @@ class NetworkChangeNotifier::HistogramWatcher : public ConnectionTypeObserver,
 // NetworkState is thread safe.
 class NetworkChangeNotifier::NetworkState {
  public:
-  NetworkState() {}
-  ~NetworkState() {}
+  NetworkState() = default;
+  ~NetworkState() = default;
 
   void GetDnsConfig(DnsConfig* config) const {
     base::AutoLock lock(lock_);
@@ -411,8 +411,7 @@ class NetworkChangeNotifier::NetworkState {
 };
 
 NetworkChangeNotifier::NetworkChangeCalculatorParams::
-    NetworkChangeCalculatorParams() {
-}
+    NetworkChangeCalculatorParams() = default;
 
 // Calculates NetworkChange signal from IPAddress and ConnectionType signals.
 class NetworkChangeNotifier::NetworkChangeCalculator
@@ -537,6 +536,11 @@ NetworkChangeNotifier* NetworkChangeNotifier::Create() {
 }
 
 // static
+bool NetworkChangeNotifier::HasNetworkChangeNotifier() {
+  return g_network_change_notifier != nullptr;
+}
+
+// static
 NetworkChangeNotifier::ConnectionType
 NetworkChangeNotifier::GetConnectionType() {
   return g_network_change_notifier ?
@@ -558,7 +562,8 @@ void NetworkChangeNotifier::GetMaxBandwidthAndConnectionType(
     ConnectionType* connection_type) {
   if (!g_network_change_notifier) {
     *connection_type = CONNECTION_UNKNOWN;
-    *max_bandwidth_mbps = GetMaxBandwidthForConnectionSubtype(SUBTYPE_UNKNOWN);
+    *max_bandwidth_mbps =
+        GetMaxBandwidthMbpsForConnectionSubtype(SUBTYPE_UNKNOWN);
     return;
   }
 
@@ -567,7 +572,7 @@ void NetworkChangeNotifier::GetMaxBandwidthAndConnectionType(
 }
 
 // static
-double NetworkChangeNotifier::GetMaxBandwidthForConnectionSubtype(
+double NetworkChangeNotifier::GetMaxBandwidthMbpsForConnectionSubtype(
     ConnectionSubtype subtype) {
   switch (subtype) {
     case SUBTYPE_GSM:
@@ -986,22 +991,21 @@ NetworkChangeNotifier::NetworkChangeNotifier(
     /*= NetworkChangeCalculatorParams()*/)
     : ip_address_observer_list_(
           new base::ObserverListThreadSafe<IPAddressObserver>(
-              base::ObserverListBase<IPAddressObserver>::NOTIFY_EXISTING_ONLY)),
+              base::ObserverListPolicy::EXISTING_ONLY)),
       connection_type_observer_list_(
           new base::ObserverListThreadSafe<ConnectionTypeObserver>(
-              base::ObserverListBase<
-                  ConnectionTypeObserver>::NOTIFY_EXISTING_ONLY)),
+              base::ObserverListPolicy::EXISTING_ONLY)),
       resolver_state_observer_list_(
           new base::ObserverListThreadSafe<DNSObserver>(
-              base::ObserverListBase<DNSObserver>::NOTIFY_EXISTING_ONLY)),
-      network_change_observer_list_(new base::ObserverListThreadSafe<
-                                    NetworkChangeObserver>(
-          base::ObserverListBase<NetworkChangeObserver>::NOTIFY_EXISTING_ONLY)),
-      max_bandwidth_observer_list_(new base::ObserverListThreadSafe<
-                                   MaxBandwidthObserver>(
-          base::ObserverListBase<MaxBandwidthObserver>::NOTIFY_EXISTING_ONLY)),
+              base::ObserverListPolicy::EXISTING_ONLY)),
+      network_change_observer_list_(
+          new base::ObserverListThreadSafe<NetworkChangeObserver>(
+              base::ObserverListPolicy::EXISTING_ONLY)),
+      max_bandwidth_observer_list_(
+          new base::ObserverListThreadSafe<MaxBandwidthObserver>(
+              base::ObserverListPolicy::EXISTING_ONLY)),
       network_observer_list_(new base::ObserverListThreadSafe<NetworkObserver>(
-          base::ObserverListBase<NetworkObserver>::NOTIFY_EXISTING_ONLY)),
+          base::ObserverListPolicy::EXISTING_ONLY)),
       network_state_(new NetworkState()),
       network_change_calculator_(new NetworkChangeCalculator(params)) {
   DCHECK(!g_network_change_notifier);
@@ -1030,8 +1034,8 @@ void NetworkChangeNotifier::GetCurrentMaxBandwidthAndConnectionType(
   *connection_type = GetCurrentConnectionType();
   *max_bandwidth_mbps =
       *connection_type == CONNECTION_NONE
-          ? GetMaxBandwidthForConnectionSubtype(SUBTYPE_NONE)
-          : GetMaxBandwidthForConnectionSubtype(SUBTYPE_UNKNOWN);
+          ? GetMaxBandwidthMbpsForConnectionSubtype(SUBTYPE_NONE)
+          : GetMaxBandwidthMbpsForConnectionSubtype(SUBTYPE_UNKNOWN);
 }
 
 bool NetworkChangeNotifier::AreNetworkHandlesCurrentlySupported() const {

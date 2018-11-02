@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/login_status.h"
+#include "ash/public/cpp/session_types.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "base/logging.h"
@@ -64,7 +65,7 @@ void TestSessionControllerClient::Reset() {
   controller_->SetSessionInfo(session_info_->Clone());
 
   if (!controller_->GetSigninScreenPrefService()) {
-    auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
+    auto pref_service = std::make_unique<TestingPrefServiceSimple>();
     Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
     controller_->SetSigninScreenPrefServiceForTest(std::move(pref_service));
   }
@@ -78,6 +79,12 @@ void TestSessionControllerClient::SetCanLockScreen(bool can_lock) {
 void TestSessionControllerClient::SetShouldLockScreenAutomatically(
     bool should_lock) {
   session_info_->should_lock_screen_automatically = should_lock;
+  controller_->SetSessionInfo(session_info_->Clone());
+}
+
+void TestSessionControllerClient::SetAddUserSessionPolicy(
+    AddUserSessionPolicy policy) {
+  session_info_->add_user_session_policy = policy;
   controller_->SetSessionInfo(session_info_->Clone());
 }
 
@@ -127,11 +134,18 @@ void TestSessionControllerClient::AddUserSession(
 
   if (provide_pref_service &&
       !controller_->GetUserPrefServiceForUser(account_id)) {
-    auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
-    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
-    controller_->ProvideUserPrefServiceForTest(account_id,
-                                               std::move(pref_service));
+    ProvidePrefServiceForUser(account_id);
   }
+}
+
+void TestSessionControllerClient::ProvidePrefServiceForUser(
+    const AccountId& account_id) {
+  DCHECK(!controller_->GetUserPrefServiceForUser(account_id));
+
+  auto pref_service = std::make_unique<TestingPrefServiceSimple>();
+  Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+  controller_->ProvideUserPrefServiceForTest(account_id,
+                                             std::move(pref_service));
 }
 
 void TestSessionControllerClient::UnlockScreen() {
@@ -140,6 +154,10 @@ void TestSessionControllerClient::UnlockScreen() {
 
 void TestSessionControllerClient::RequestLockScreen() {
   SetSessionState(session_manager::SessionState::LOCKED);
+}
+
+void TestSessionControllerClient::RequestSignOut() {
+  Reset();
 }
 
 void TestSessionControllerClient::SwitchActiveUser(

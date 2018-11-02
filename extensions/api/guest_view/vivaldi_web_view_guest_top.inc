@@ -6,8 +6,6 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/notification_types.h"
 
-#include "chrome/browser/ui/validation_message_bubble.h"
-
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 #include "chrome/browser/ui/tabs/tab_utils.h"

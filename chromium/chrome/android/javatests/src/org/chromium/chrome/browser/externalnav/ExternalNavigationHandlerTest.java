@@ -1385,10 +1385,11 @@ public class ExternalNavigationHandlerTest {
         }
 
         @Override
-        public void startIncognitoIntent(Intent intent, String referrerUrl, String fallbackUrl,
+        public boolean startIncognitoIntent(Intent intent, String referrerUrl, String fallbackUrl,
                 Tab tab, boolean needsToCloseTab, boolean proxy) {
             startActivityIntent = intent;
             startIncognitoIntentCalled = true;
+            return true;
         }
 
         @Override
@@ -1592,16 +1593,16 @@ public class ExternalNavigationHandlerTest {
 
             mDelegate.reset();
 
-            ExternalNavigationParams params = new ExternalNavigationParams.Builder(
-                    mUrl, mIsIncognito, mReferrerUrl,
-                    mPageTransition, mIsRedirect)
-                    .setApplicationMustBeInForeground(mChromeAppInForegroundRequired)
-                    .setRedirectHandler(mRedirectHandler)
-                    .setIsBackgroundTabNavigation(mIsBackgroundTabNavigation)
-                    .setIsMainFrame(true)
-                    .setWebApkPackageName(mWebApkPackageName)
-                    .setHasUserGesture(mHasUserGesture)
-                    .build();
+            ExternalNavigationParams params =
+                    new ExternalNavigationParams
+                            .Builder(mUrl, mIsIncognito, mReferrerUrl, mPageTransition, mIsRedirect)
+                            .setApplicationMustBeInForeground(mChromeAppInForegroundRequired)
+                            .setRedirectHandler(mRedirectHandler)
+                            .setIsBackgroundTabNavigation(mIsBackgroundTabNavigation)
+                            .setIsMainFrame(true)
+                            .setNativeClientPackageName(mWebApkPackageName)
+                            .setHasUserGesture(mHasUserGesture)
+                            .build();
             OverrideUrlLoadingResult result = mUrlHandler.shouldOverrideUrlLoading(params);
             boolean startActivityCalled = false;
             boolean startWebApkCalled = false;

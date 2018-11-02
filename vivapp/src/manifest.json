@@ -36,6 +36,7 @@
     "bookmarksPrivate",
     "browsingData",
     "calendar",
+    "contacts",
     "chrome://favicon/",
     "clipboardRead",
     "commandLinePrivate",

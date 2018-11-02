@@ -32,9 +32,7 @@
 
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
-#include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -53,15 +51,16 @@
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeProxy.h"
 #include "modules/serviceworkers/ServiceWorkerInstalledScriptsManager.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/SubstituteData.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -77,29 +76,36 @@ std::unique_ptr<WebEmbeddedWorker> WebEmbeddedWorker::Create(
     std::unique_ptr<WebServiceWorkerContextClient> client,
     std::unique_ptr<WebServiceWorkerInstalledScriptsManager>
         installed_scripts_manager,
-    mojo::ScopedMessagePipeHandle content_settings_handle) {
-  return WTF::MakeUnique<WebEmbeddedWorkerImpl>(
+    mojo::ScopedMessagePipeHandle content_settings_handle,
+    mojo::ScopedMessagePipeHandle interface_provider) {
+  return std::make_unique<WebEmbeddedWorkerImpl>(
       std::move(client), std::move(installed_scripts_manager),
-      WTF::MakeUnique<ServiceWorkerContentSettingsProxy>(
+      std::make_unique<ServiceWorkerContentSettingsProxy>(
           // Chrome doesn't use interface versioning.
           mojom::blink::WorkerContentSettingsProxyPtrInfo(
-              std::move(content_settings_handle), 0u)));
+              std::move(content_settings_handle), 0u)),
+      service_manager::mojom::blink::InterfaceProviderPtrInfo(
+          std::move(interface_provider),
+          service_manager::mojom::blink::InterfaceProvider::Version_));
 }
 
 WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
     std::unique_ptr<WebServiceWorkerContextClient> client,
     std::unique_ptr<WebServiceWorkerInstalledScriptsManager>
         installed_scripts_manager,
-    std::unique_ptr<ServiceWorkerContentSettingsProxy> content_settings_client)
+    std::unique_ptr<ServiceWorkerContentSettingsProxy> content_settings_client,
+    service_manager::mojom::blink::InterfaceProviderPtrInfo
+        interface_provider_info)
     : worker_context_client_(std::move(client)),
       content_settings_client_(std::move(content_settings_client)),
       worker_inspector_proxy_(WorkerInspectorProxy::Create()),
       pause_after_download_state_(kDontPauseAfterDownload),
-      waiting_for_debugger_state_(kNotWaitingForDebugger) {
+      waiting_for_debugger_state_(kNotWaitingForDebugger),
+      interface_provider_info_(std::move(interface_provider_info)) {
   if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
       installed_scripts_manager) {
     installed_scripts_manager_ =
-        WTF::MakeUnique<ServiceWorkerInstalledScriptsManager>(
+        std::make_unique<ServiceWorkerInstalledScriptsManager>(
             std::move(installed_scripts_manager));
   }
 }
@@ -135,9 +141,9 @@ void WebEmbeddedWorkerImpl::StartWorkerContext(
       WebEmbeddedWorkerStartData::kPauseAfterDownload)
     pause_after_download_state_ = kDoPauseAfterDownload;
 
-  shadow_page_ = WTF::MakeUnique<WorkerShadowPage>(this);
+  instrumentation_token_ = data.instrumentation_token;
+  shadow_page_ = std::make_unique<WorkerShadowPage>(this);
   WebSettings* settings = shadow_page_->GetSettings();
-  settings->SetDataSaverEnabled(worker_start_data_.data_saver_enabled);
 
   // Currently we block all mixed-content requests from a ServiceWorker.
   settings->SetStrictMixedContentChecking(true);
@@ -165,7 +171,7 @@ void WebEmbeddedWorkerImpl::TerminateWorkerContext() {
   }
   if (main_script_loader_) {
     main_script_loader_->Cancel();
-    main_script_loader_.Clear();
+    main_script_loader_ = nullptr;
     // This deletes 'this'.
     worker_context_client_->WorkerContextFailedToStart();
     return;
@@ -192,19 +198,17 @@ void WebEmbeddedWorkerImpl::ResumeAfterDownload() {
   StartWorkerThread();
 }
 
-void WebEmbeddedWorkerImpl::AttachDevTools(const WebString& host_id,
-                                           int session_id) {
+void WebEmbeddedWorkerImpl::AttachDevTools(int session_id) {
   WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent)
-    devtools_agent->Attach(host_id, session_id);
+    devtools_agent->Attach(session_id);
 }
 
-void WebEmbeddedWorkerImpl::ReattachDevTools(const WebString& host_id,
-                                             int session_id,
+void WebEmbeddedWorkerImpl::ReattachDevTools(int session_id,
                                              const WebString& saved_state) {
   WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent)
-    devtools_agent->Reattach(host_id, session_id, saved_state);
+    devtools_agent->Reattach(session_id, saved_state);
   ResumeStartup();
 }
 
@@ -296,8 +300,8 @@ void WebEmbeddedWorkerImpl::OnShadowPageInitialized() {
   main_script_loader_->LoadAsynchronously(
       *shadow_page_->GetDocument(), worker_start_data_.script_url,
       WebURLRequest::kRequestContextServiceWorker,
-      WebURLRequest::kFetchRequestModeSameOrigin,
-      WebURLRequest::kFetchCredentialsModeSameOrigin,
+      network::mojom::FetchRequestMode::kSameOrigin,
+      network::mojom::FetchCredentialsMode::kSameOrigin,
       worker_start_data_.address_space, WTF::Closure(),
       Bind(&WebEmbeddedWorkerImpl::OnScriptLoaderFinished,
            WTF::Unretained(this)));
@@ -323,6 +327,10 @@ void WebEmbeddedWorkerImpl::ResumeStartup() {
 WebDevToolsAgentClient::WebKitClientMessageLoop*
 WebEmbeddedWorkerImpl::CreateClientMessageLoop() {
   return worker_context_client_->CreateDevToolsMessageLoop();
+}
+
+const WebString& WebEmbeddedWorkerImpl::GetInstrumentationToken() {
+  return instrumentation_token_;
 }
 
 void WebEmbeddedWorkerImpl::OnScriptLoaderFinished() {
@@ -369,18 +377,12 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
     std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
         worker_context_client_->CreateServiceWorkerFetchContext();
     DCHECK(web_worker_fetch_context);
-    web_worker_fetch_context->SetDataSaverEnabled(shadow_page_->GetDocument()
-                                                      ->GetFrame()
-                                                      ->GetSettings()
-                                                      ->GetDataSaverEnabled());
     ProvideWorkerFetchContextToWorker(worker_clients,
                                       std::move(web_worker_fetch_context));
   }
 
-  WorkerThreadStartMode start_mode =
-      worker_inspector_proxy_->WorkerStartMode(document);
   std::unique_ptr<WorkerSettings> worker_settings =
-      WTF::MakeUnique<WorkerSettings>(document->GetSettings());
+      std::make_unique<WorkerSettings>(document->GetSettings());
 
   std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params;
   // |main_script_loader_| isn't created if the InstalledScriptsManager had the
@@ -391,30 +393,37 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
     SetContentSecurityPolicyAndReferrerPolicy(
         main_script_loader_->ReleaseContentSecurityPolicy(),
         main_script_loader_->GetReferrerPolicy());
-    global_scope_creation_params = WTF::MakeUnique<GlobalScopeCreationParams>(
+    global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, worker_start_data_.user_agent,
         main_script_loader_->SourceText(),
-        main_script_loader_->ReleaseCachedMetadata(), start_mode,
+        main_script_loader_->ReleaseCachedMetadata(),
         document->GetContentSecurityPolicy()->Headers().get(),
-        main_script_loader_->GetReferrerPolicy(), starter_origin,
-        worker_clients, main_script_loader_->ResponseAddressSpace(),
+        document->GetReferrerPolicy(), starter_origin, worker_clients,
+        main_script_loader_->ResponseAddressSpace(),
         main_script_loader_->OriginTrialTokens(), std::move(worker_settings),
-        static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options));
-    main_script_loader_.Clear();
+        static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options),
+        std::move(interface_provider_info_));
+    main_script_loader_ = nullptr;
   } else {
     // ContentSecurityPolicy and ReferrerPolicy are applied to |document| at
     // SetContentSecurityPolicyAndReferrerPolicy() before evaluating the main
     // script.
-    global_scope_creation_params = WTF::MakeUnique<GlobalScopeCreationParams>(
+    global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, worker_start_data_.user_agent,
-        "" /* SourceText */, nullptr /* CachedMetadata */, start_mode,
-        nullptr /* ContentSecurityPolicy */, "" /* ReferrerPolicy */,
+        "" /* SourceText */, nullptr /* CachedMetadata */,
+        nullptr /* ContentSecurityPolicy */, kReferrerPolicyDefault,
         starter_origin, worker_clients, worker_start_data_.address_space,
         nullptr /* OriginTrialTokens */, std::move(worker_settings),
-        static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options));
+        static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options),
+        std::move(interface_provider_info_));
   }
 
-  worker_thread_ = WTF::MakeUnique<ServiceWorkerThread>(
+  if (RuntimeEnabledFeatures::ServiceWorkerScriptFullCodeCacheEnabled()) {
+    global_scope_creation_params->v8_cache_options =
+        kV8CacheOptionsFullCodeWithoutHeatCheck;
+  }
+
+  worker_thread_ = std::make_unique<ServiceWorkerThread>(
       ThreadableLoadingContext::Create(*document),
       ServiceWorkerGlobalScopeProxy::Create(*this, *worker_context_client_),
       std::move(installed_scripts_manager_));
@@ -422,9 +431,12 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   // We have a dummy document here for loading but it doesn't really represent
   // the document/frame of associated document(s) for this worker. Here we
   // populate the task runners with default task runners of the main thread.
-  worker_thread_->Start(std::move(global_scope_creation_params),
-                        WorkerBackingThreadStartupData::CreateDefault(),
-                        ParentFrameTaskRunners::Create());
+  worker_thread_->Start(
+      std::move(global_scope_creation_params),
+      WorkerBackingThreadStartupData::CreateDefault(),
+      std::make_unique<GlobalScopeInspectorCreationParams>(
+          worker_inspector_proxy_->ShouldPauseOnWorkerStart(document)),
+      ParentFrameTaskRunners::Create());
 
   worker_inspector_proxy_->WorkerThreadCreated(document, worker_thread_.get(),
                                                worker_start_data_.script_url);

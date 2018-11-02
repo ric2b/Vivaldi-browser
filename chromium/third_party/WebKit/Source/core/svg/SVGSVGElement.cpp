@@ -23,18 +23,17 @@
 #include "core/svg/SVGSVGElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
-#include "core/css/CSSHelper.h"
+#include "core/css/CSSResolutionUnits.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/dom/events/EventListener.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/svg/LayoutSVGModelObject.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
@@ -53,6 +52,7 @@
 #include "core/svg/SVGViewElement.h"
 #include "core/svg/SVGViewSpec.h"
 #include "core/svg/animation/SMILTimeContainer.h"
+#include "core/svg_names.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/transforms/AffineTransform.h"
@@ -123,7 +123,7 @@ class SVGCurrentTranslateTearOff : public SVGPointTearOff {
 
   void CommitChange() override {
     DCHECK(contextElement());
-    toSVGSVGElement(contextElement())->UpdateUserTransform();
+    ToSVGSVGElement(contextElement())->UpdateUserTransform();
   }
 
  private:
@@ -228,7 +228,7 @@ bool SVGSVGElement::IsPresentationAttributeWithSVGDOM(
 void SVGSVGElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == x_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
@@ -317,7 +317,7 @@ static bool IntersectsAllowingEmpty(const FloatRect& r1, const FloatRect& r2) {
 static bool IsIntersectionOrEnclosureTarget(LayoutObject* layout_object) {
   return layout_object->IsSVGShape() || layout_object->IsSVGText() ||
          layout_object->IsSVGImage() ||
-         isSVGUseElement(*layout_object->GetNode());
+         IsSVGUseElement(*layout_object->GetNode());
 }
 
 bool SVGSVGElement::CheckIntersectionOrEnclosure(
@@ -559,7 +559,7 @@ void SVGSVGElement::pauseAnimations() {
 
 void SVGSVGElement::unpauseAnimations() {
   if (time_container_->IsPaused())
-    time_container_->Resume();
+    time_container_->Unpause();
 }
 
 bool SVGSVGElement::animationsPaused() const {
@@ -627,21 +627,19 @@ SVGPreserveAspectRatio* SVGSVGElement::CurrentPreserveAspectRatio() const {
 }
 
 FloatSize SVGSVGElement::CurrentViewportSize() const {
-  if (!GetLayoutObject())
+  const LayoutObject* layout_object = GetLayoutObject();
+  if (!layout_object)
     return FloatSize();
 
-  if (GetLayoutObject()->IsSVGRoot()) {
-    LayoutRect content_box_rect =
-        ToLayoutSVGRoot(GetLayoutObject())->ContentBoxRect();
-    return FloatSize(
-        content_box_rect.Width() / GetLayoutObject()->Style()->EffectiveZoom(),
-        content_box_rect.Height() /
-            GetLayoutObject()->Style()->EffectiveZoom());
+  if (layout_object->IsSVGRoot()) {
+    LayoutSize content_size = ToLayoutSVGRoot(layout_object)->ContentSize();
+    float zoom = layout_object->StyleRef().EffectiveZoom();
+    return FloatSize(content_size.Width() / zoom, content_size.Height() / zoom);
   }
 
   FloatRect viewport_rect =
       ToLayoutSVGViewportContainer(GetLayoutObject())->Viewport();
-  return FloatSize(viewport_rect.Width(), viewport_rect.Height());
+  return viewport_rect.Size();
 }
 
 bool SVGSVGElement::HasIntrinsicWidth() const {
@@ -716,10 +714,10 @@ void SVGSVGElement::SetupInitialView(const String& fragment_identifier,
 
   SetViewSpec(nullptr);
 
-  if (!isSVGViewElement(anchor_node))
+  if (!IsSVGViewElement(anchor_node))
     return;
 
-  SVGViewElement& view_element = toSVGViewElement(*anchor_node);
+  SVGViewElement& view_element = ToSVGViewElement(*anchor_node);
 
   // Spec: If the SVG fragment identifier addresses a 'view' element
   // within an SVG document (e.g., MyDrawing.svg#MyView) then the
@@ -756,7 +754,7 @@ void SVGSVGElement::FinishParsingChildren() {
   SendSVGLoadEventIfPossible();
 }
 
-DEFINE_TRACE(SVGSVGElement) {
+void SVGSVGElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);

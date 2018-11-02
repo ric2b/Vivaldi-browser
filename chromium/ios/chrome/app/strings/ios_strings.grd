@@ -183,6 +183,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_APPEX_PASSWORD_FORM_FILLED_SUCCESS" desc="Message displayed when an App Extension has successfully filled a sign-in form with username and password. [Length: 30em] [iOS only]">
         Forms filled.
       </message>
+      <message name="IDS_IOS_SHOW_ALL_PASSWORDS" desc="Button title in the keyboard accessory bar to open the list of all saved passwords. [Length: 20em] [iOS only]">
+        Show All...
+      </message>
       <message name="IDS_IOS_APPLICATION_SHORTCUT_NEWINCOGNITOTAB_TITLE" desc="Message when opening a New Incognito Tab from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to create a new Incognito tab.">
         New Incognito Tab
       </message>
@@ -420,15 +423,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_PAGE_SAVED_FOLDER" desc="Presented in an infobar when a bookmark is created. Specifies in which folder the bookmark was added. [Length: 30em.]">
         Bookmarked to <ph name="FOLDER_TITLE">$1<ex>My Folder</ex></ph>
       </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_DISMISS_BUTTON" desc="Title of the button displayed at the top of the bookmarks list to dismiss the promo. [Length: 20em.] [iOS only]">
-        No thanks
-      </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_SIGN_IN_BUTTON" desc="Title of the button displayed at the top of the bookmarks list to propose the user to sign in and sync bookmarks. [Length: 20em.] [iOS only]">
-        Sign in
-      </message>
-      <message name="IDS_IOS_BOOKMARK_PROMO_TITLE" desc="Title of the promo panel for the new bookmarks UI. [iOS only]">
-        Sync your bookmarks
-      </message>
       <message name="IDS_IOS_BOOKMARK_URL_FIELD_HEADER" desc="Title shown above URL field on Edit Bookmark screen. [Length: 20em]">
         URL
       </message>
@@ -470,6 +464,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_LAST_FOUR_WEEKS" desc="Label of a time range option. This is used to specify that the user wishes to clear their browsing data for the last 4 weeks. In titlecase. [Length: 22em] [iOS only]">
         Last 4 Weeks
+      </message>
+      <message name="IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_OLDER_THAN_30_DAYS" desc="Label of a time range option. This is used to specify that the user wishes to clear their browsing data that is older than 30 days. In titlecase. [Length: 22em] [iOS only]">
+        Older than 30 days
       </message>
       <message name="IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_PAST_DAY" desc="Label of a time range option. This is used to specify that the user wishes to clear their browsing data for the past day. In titlecase. [Length: 22em] [iOS only]">
         Past Day
@@ -537,28 +534,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_REMOVE" desc="The name of the Remove command in the Content Suggestions articles context menu">
         Remove
       </message>
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_SETTING_TITLE" desc="The title of the settings to toggle the articles suggestions on the NTP on/off">
+        Article Suggestions
+      </message>
       <message name="IDS_IOS_CONTENT_SETTINGS_TITLE" desc="Title for content settings dialog [Length: 29em] [iOS only]">
         Content Settings
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_DESCRIPTION" desc="Description for Contextual Search preference">
-        Learn about topics on websites without leaving the page. Touch to Search sends a word and its surrounding context to Google Search, returning definitions, pictures, search results, and other details.
-
-To adjust your search term, long press to select. To refine your search, slide the panel all the way up and touch the search box.
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_GOT_IT_BUTTON" desc="A button to confirm and dismiss opt out promo">
-        Allow
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_LEARN_MORE_URL" desc="URL for learning more about Contextual Search preference [iOS only]" translateable="false">
-        https://support.google.com/chrome/?p=ios_touch
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_PROMO_OPTOUT" desc="Text for the button the user clicks to opt out.">
-        No Thanks
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_SHORT_DESCRIPTION" desc="The text displayed on the contextual search opt-in promo">
-        Touch to Search sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
-      </message>
-      <message name="IDS_IOS_CONTEXTUAL_SEARCH_TITLE" desc="Name for the Contextual Search feature, which allows users to search for a term in a web page by tapping on it.">
-        Touch to Search
       </message>
       <message name="IDS_IOS_CONTEXT_MENU_SEARCHWEBFORIMAGE" desc="Context menu text for option to perform a search for image [Length: 25em] [iOS only]">
         Search <ph name="SEARCH_ENGINE">$1<ex>Google</ex></ph> for This Image
@@ -620,18 +600,6 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_FIRSTRUN_OPT_IN_ACCEPT_BUTTON" desc="User metrics opt-in acceptance button label [iOS only]">
         Accept &amp; Continue
       </message>
-      <message name="IDS_IOS_GENERATED_PASSWORD_ACCEPT" desc="The text of the button that accepts the generated password. [Length: 20em] [iOS only]">
-        Use Password
-      </message>
-      <message name="IDS_IOS_GENERATED_PASSWORD_PROMPT_DESCRIPTION" desc="The explanation text for the generated password prompt. [iOS only]">
-        Chrome will store this in your <ph name="BEGIN_LINK">BEGIN_LINK</ph>Google saved passwords<ph name="END_LINK">END_LINK</ph> and autofill it for you so you don't have to remember it yourself.
-      </message>
-      <message name="IDS_IOS_GENERATED_PASSWORD_PROMPT_TITLE" desc="The text of the button that accepts the generated password. [Length: 20em] [iOS only]">
-        Password Generated by Chrome
-      </message>
-      <message name="IDS_IOS_GENERATE_PASSWORD_LABEL" desc="Input accessory view label to generate a password. [Length: 20em] [iOS only]">
-        Generate Password
-      </message>
       <message name="IDS_IOS_GENERIC_PASSKIT_ERROR" desc="Generic error message on failure reading a PassKit object. [Length: 60em] [iOS only]">
         Sorry, your Pass cannot be installed to Passbook at this time.
       </message>
@@ -647,17 +615,8 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_GOOGLE_APPS_SM_SETTINGS" desc="Title for the view in Settings for managing Google apps specific settings. Translate 'Google Apps'. [Length: 15em] [iOS only]">
         Google Apps
       </message>
-      <message name="IDS_IOS_HISTORY_HAS_SYNCED_RESULTS" desc="The notification at the top of the history page indicating that it is showing visits synced from other devices.">
-        Showing history from your signed-in devices. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>.
-      </message>
-      <message name="IDS_IOS_HISTORY_NO_SYNCED_RESULTS" desc="The notification at the top of the history page indicating that it does not include visits from other devices.">
-        Showing history from this device. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more.<ph name="END_LINK">END_LINK</ph>
-      </message>
       <message name="IDS_IOS_HISTORY_OTHER_FORMS_OF_HISTORY" desc="The notification at the top of the history page indicating that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
         Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">BEGIN_LINK</ph>history.google.com<ph name="END_LINK">END_LINK</ph>.
-      </message>
-      <message name="IDS_IOS_HISTORY_SYNC_LEARN_MORE_URL" translateable="false">
-        https://support.google.com/chrome/?p=sync_history&amp;hl=[GRITLANGCODE]
       </message>
       <message name="IDS_IOS_HTTP_LOGIN_DIALOG_PASSWORD_PLACEHOLDER" desc="The placeholder text for the password on the http login dialog [Length: 20em] [iOS only]">
         Password
@@ -808,6 +767,9 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_IOS_OPTIONS_ACCOUNTS_GOOGLE_TITLE" desc="Title of the Google Activity Controls button on the accounts settings screen [Length: 50em]">
         Google Activity Controls
+      </message>
+      <message name="IDS_IOS_OPTIONS_ACCOUNTS_SYNC_ERROR" desc="Text informing the user that sync isn't working properly [iOS only] [60em]">
+        Sync isn't working. Tap to fix.
       </message>
       <message name="IDS_IOS_OPTIONS_ACCOUNTS_SYNC_IS_OFF" desc="Text informing the user that sync is off [iOS only] [60em]">
         Off
@@ -1071,14 +1033,11 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_RECENT_TABS_OPEN_ALL_MENU_OPTION" desc="Context menu option to open all tabs from a foreign session. [Length: 15em] [iOS only]">
         Open all
       </message>
-      <message name="IDS_IOS_RECENT_TABS_OTHER_DEVICES" desc="The name of the section informing the user on how to view tabs from other devices.[Length: 15em]">
-        Other devices
+      <message name="IDS_IOS_RECENT_TABS_OTHER_DEVICES" desc="The name of the section informing the user on how to view tabs from other devices.[Length: 25em]">
+        Other Devices
       </message>
       <message name="IDS_IOS_RECENT_TABS_RECENTLY_CLOSED" desc="The heading of the recently closed section in the recent tab panel. [Length: 35em] [iOS only]">
-        Recently closed
-      </message>
-      <message name="IDS_IOS_RECENT_TABS_SIGNIN_BUTTON" desc="Title of the Sign In button in the recent tabs screen. [Length: 20em]">
-        Sign in
+        Recently Closed
       </message>
       <message name="IDS_IOS_SAFE_MODE_AW_SNAP" desc="The title of the safe mode UI after multiple crashes.  This is intended to be a humorous exclamation of dismay. [Length: 30em]">
         Aw, Snap!
@@ -1573,21 +1532,51 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_COMPOSE_EMAIL_SETTING" desc="Title for the view and option to select a handler for mailto: URLs. [Length: 20em]">
         Compose Email
       </message>
-      <message name="IDS_IOS_CHOOSE_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
-        Create email with:
-      </message>
-      <message name="IDS_IOS_CHOOSE_DEFAULT_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
-        Choose Default Email App
-      </message>
       <message name="IDS_IOS_CHOOSE_EMAIL_APP" desc="Title for bottom sheet to choose an email client app when user taps on an URL that has a mailto: URL scheme. [Length 40em]">
         Choose Email App
-      </message>
-      <message name="IDS_IOS_CHOOSE_EMAIL_APP_HOW_TO_CHANGE" desc="Subtitle for action sheet to choose mailto:// handler with instructions on how to change the preference in the future. [Length: 80]">
-        You can change this preference any time in Chrome settings
       </message>
       <message name="IDS_IOS_CHOOSE_EMAIL_ASK_TOGGLE" desc="Title for toggle switch to set whether to ask user which Mail client app to use every time a mailto:// URL is tapped. [Length: 50]">
         Ask me which app to use every time
       </message>
-    </messages>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER" desc="Text on the bookmarks context bar to create new folder">
+        New Folder
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_DELETE" desc="Text on the bookmarks context bar for delete action">
+       Delete
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_SELECT" desc="Text on the bookmarks context bar for select action">
+        Select
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT" desc="Text on the bookmarks context bar for edit action">
+        Edit
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_MORE" desc="Text on the bookmarks context bar to show more context menu">
+        More...
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN" desc="Text on the bookmarks context menu to open all selected bookmarks">
+        Open All
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO" desc="Text on the bookmarks context menu to open selected bookmark in incognito">
+        Open in Incognito
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE" desc="Text on the bookmarks context menu to move selected bookmark">
+        Move
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT" desc="Text on the bookmarks context menu to edit selected bookmark">
+        Edit Bookmark
+      </message>
+       <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the bookmarks context menu to edit selected bookmark folder">
+        Edit Folder
+      </message>
+      <message name="IDS_IOS_OPEN_REPEATEDLY_ANOTHER_APP" desc="Alert to let the user know that the website is trying repeatedly to open another application. [iOS only]">
+          This website is repeatedly trying to open another application.
+      </message>
+      <message name="IDS_IOS_OPEN_REPEATEDLY_ANOTHER_APP_ALLOW" desc="Text on the button, when tapped will allow opening an external application. [iOS only]">
+          Allow
+      </message>
+      <message name="IDS_IOS_OPEN_REPEATEDLY_ANOTHER_APP_BLOCK" desc="Text on the button, when tapped will block opening an external application for this browsing session. [iOS only]">
+          Block
+      </message>
+   </messages>
   </release>
 </grit>

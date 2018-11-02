@@ -27,9 +27,9 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory.CustomTabNavigationDelegate;
-import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
@@ -59,8 +59,7 @@ public class CustomTabFromChromeExternalNavigationTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
 
         ChromePreferenceManager.getInstance().setCachedHerbFlavor(
                 ChromeSwitches.HERB_FLAVOR_ELDERBERRY);
@@ -83,9 +82,8 @@ public class CustomTabFromChromeExternalNavigationTest {
             public Intent call() throws Exception {
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                return ChromeLauncherActivity.createCustomTabActivityIntent(
-                        InstrumentationRegistry.getInstrumentation().getTargetContext(), intent,
-                        true);
+                return LaunchIntentDispatcher.createCustomTabActivityIntent(
+                        InstrumentationRegistry.getTargetContext(), intent, true);
             }
         });
 

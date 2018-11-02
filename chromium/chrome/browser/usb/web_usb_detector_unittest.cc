@@ -47,24 +47,17 @@ const char* kLandingPage_3 = "https://www.google.com/C";
 
 class WebUsbDetectorTest : public BrowserWithTestWindowTest {
  public:
-  WebUsbDetectorTest() : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+  WebUsbDetectorTest() {}
   ~WebUsbDetectorTest() override = default;
 
-  // Use the profile_manager_'s profile so that we can manage which one is most
-  // recently active.
   TestingProfile* CreateProfile() override {
-    return profile_manager_.CreateTestingProfile(kProfileName);
+    return profile_manager()->CreateTestingProfile(kProfileName);
   }
 
-  // Since the profile is owned by profile_manager_, we do not need to destroy
-  // it.
-  void DestroyProfile(TestingProfile* profile) override {}
-
   void SetUp() override {
-    ASSERT_TRUE(profile_manager_.SetUp());
     BrowserWithTestWindowTest::SetUp();
 #if defined(OS_CHROMEOS)
-    profile_manager_.SetLoggedIn(true);
+    profile_manager()->SetLoggedIn(true);
     chromeos::ProfileHelper::Get()->SetActiveUserIdForTesting(kProfileName);
 #endif
     BrowserList::SetLastActive(browser());
@@ -95,7 +88,6 @@ class WebUsbDetectorTest : public BrowserWithTestWindowTest {
  private:
   DISALLOW_COPY_AND_ASSIGN(WebUsbDetectorTest);
   std::unique_ptr<WebUsbDetector> web_usb_detector_;
-  TestingProfileManager profile_manager_;
 };
 
 TEST_F(WebUsbDetectorTest, UsbDeviceAddedAndRemoved) {
@@ -115,7 +107,7 @@ TEST_F(WebUsbDetectorTest, UsbDeviceAddedAndRemoved) {
       base::ASCIIToUTF16("Google Product A detected");
   EXPECT_EQ(expected_title, notification->title());
   base::string16 expected_message =
-      base::ASCIIToUTF16("Go to www.google.com/A to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message, notification->message());
   EXPECT_TRUE(notification->delegate() != nullptr);
 
@@ -293,7 +285,7 @@ TEST_F(WebUsbDetectorTest,
       base::ASCIIToUTF16("Google Product B detected");
   EXPECT_EQ(expected_title, notification->title());
   base::string16 expected_message =
-      base::ASCIIToUTF16("Go to www.google.com/B to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message, notification->message());
   EXPECT_TRUE(notification->delegate() != nullptr);
 
@@ -333,7 +325,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDevicesAddedAndRemoved) {
       base::ASCIIToUTF16("Google Product A detected");
   EXPECT_EQ(expected_title_1, notification_1->title());
   base::string16 expected_message_1 =
-      base::ASCIIToUTF16("Go to www.google.com/A to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_1, notification_1->message());
   EXPECT_TRUE(notification_1->delegate() != nullptr);
 
@@ -348,7 +340,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDevicesAddedAndRemoved) {
       base::ASCIIToUTF16("Google Product B detected");
   EXPECT_EQ(expected_title_2, notification_2->title());
   base::string16 expected_message_2 =
-      base::ASCIIToUTF16("Go to www.google.com/B to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_2, notification_2->message());
   EXPECT_TRUE(notification_2->delegate() != nullptr);
 
@@ -363,7 +355,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDevicesAddedAndRemoved) {
       base::ASCIIToUTF16("Google Product C detected");
   EXPECT_EQ(expected_title_3, notification_3->title());
   base::string16 expected_message_3 =
-      base::ASCIIToUTF16("Go to www.google.com/C to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_3, notification_3->message());
   EXPECT_TRUE(notification_3->delegate() != nullptr);
 
@@ -400,7 +392,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDeviceAddedAndRemovedDifferentOrder) {
       base::ASCIIToUTF16("Google Product A detected");
   EXPECT_EQ(expected_title_1, notification_1->title());
   base::string16 expected_message_1 =
-      base::ASCIIToUTF16("Go to www.google.com/A to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_1, notification_1->message());
   EXPECT_TRUE(notification_1->delegate() != nullptr);
 
@@ -412,7 +404,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDeviceAddedAndRemovedDifferentOrder) {
       base::ASCIIToUTF16("Google Product B detected");
   EXPECT_EQ(expected_title_2, notification_2->title());
   base::string16 expected_message_2 =
-      base::ASCIIToUTF16("Go to www.google.com/B to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_2, notification_2->message());
   EXPECT_TRUE(notification_2->delegate() != nullptr);
 
@@ -427,7 +419,7 @@ TEST_F(WebUsbDetectorTest, ThreeUsbDeviceAddedAndRemovedDifferentOrder) {
       base::ASCIIToUTF16("Google Product C detected");
   EXPECT_EQ(expected_title_3, notification_3->title());
   base::string16 expected_message_3 =
-      base::ASCIIToUTF16("Go to www.google.com/C to connect.");
+      base::ASCIIToUTF16("Go to www.google.com to connect.");
   EXPECT_EQ(expected_message_3, notification_3->message());
   EXPECT_TRUE(notification_3->delegate() != nullptr);
 

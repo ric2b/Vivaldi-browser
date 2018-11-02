@@ -4,11 +4,11 @@
 
 #include "content/browser/byte_stream.h"
 
-#include <deque>
 #include <set>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -17,8 +17,8 @@
 namespace content {
 namespace {
 
-typedef std::deque<std::pair<scoped_refptr<net::IOBuffer>, size_t> >
-ContentVector;
+using ContentVector =
+    base::circular_deque<std::pair<scoped_refptr<net::IOBuffer>, size_t>>;
 
 class ByteStreamReaderImpl;
 
@@ -185,7 +185,7 @@ ByteStreamWriterImpl::ByteStreamWriterImpl(
       my_lifetime_flag_(lifetime_flag),
       input_contents_size_(0),
       output_size_used_(0),
-      peer_(NULL) {
+      peer_(nullptr) {
   DCHECK(my_lifetime_flag_.get());
   my_lifetime_flag_->is_alive = true;
 }
@@ -313,7 +313,7 @@ ByteStreamReaderImpl::ByteStreamReaderImpl(
       received_status_(false),
       status_(0),
       unreported_consumed_bytes_(0),
-      peer_(NULL) {
+      peer_(nullptr) {
   DCHECK(my_lifetime_flag_.get());
   my_lifetime_flag_->is_alive = true;
 }

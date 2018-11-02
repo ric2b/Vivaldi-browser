@@ -12,9 +12,9 @@
 
 namespace chromeos {
 
-FakeArcOemCryptoClient::FakeArcOemCryptoClient() {}
+FakeArcOemCryptoClient::FakeArcOemCryptoClient() = default;
 
-FakeArcOemCryptoClient::~FakeArcOemCryptoClient() {}
+FakeArcOemCryptoClient::~FakeArcOemCryptoClient() = default;
 
 void FakeArcOemCryptoClient::Init(dbus::Bus* bus) {}
 
@@ -22,7 +22,7 @@ void FakeArcOemCryptoClient::BootstrapMojoConnection(
     base::ScopedFD fd,
     VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_FAILURE));
+      FROM_HERE, base::BindOnce(std::move(callback), false));
 }
 
 }  // namespace chromeos

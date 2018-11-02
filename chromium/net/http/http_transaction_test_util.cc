@@ -189,8 +189,7 @@ TestTransactionConsumer::TestTransactionConsumer(
   ++quit_counter_;
 }
 
-TestTransactionConsumer::~TestTransactionConsumer() {
-}
+TestTransactionConsumer::~TestTransactionConsumer() = default;
 
 void TestTransactionConsumer::Start(const HttpRequestInfo* request,
                                     const NetLogWithSource& net_log) {
@@ -263,12 +262,15 @@ MockNetworkTransaction::MockNetworkTransaction(RequestPriority priority,
       sent_bytes_(0),
       socket_log_id_(NetLogSource::kInvalidId),
       done_reading_called_(false),
+      reading_(false),
       weak_factory_(this) {}
 
 MockNetworkTransaction::~MockNetworkTransaction() {
   // Use request_ as in ~HttpNetworkTransaction to make sure its valid and not
-  // already freed by the consumer. See crbug.com/734037.
-  if (request_)
+  // already freed by the consumer. Only check till Read is invoked since
+  // HttpNetworkTransaction sets request_ to nullptr when Read is invoked.
+  // See crbug.com/734037.
+  if (request_ && !reading_)
     DCHECK(request_->load_flags >= 0);
 }
 
@@ -334,6 +336,7 @@ int MockNetworkTransaction::Read(net::IOBuffer* buf,
   DCHECK(t);
 
   CHECK(!done_reading_called_);
+  reading_ = true;
 
   int num = t->read_return_code;
 
@@ -554,7 +557,7 @@ MockNetworkLayer::MockNetworkLayer()
       clock_(nullptr) {
 }
 
-MockNetworkLayer::~MockNetworkLayer() {}
+MockNetworkLayer::~MockNetworkLayer() = default;
 
 void MockNetworkLayer::TransactionDoneReading() {
   CHECK(!done_reading_called_);

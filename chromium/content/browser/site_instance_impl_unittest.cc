@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/command_line.h"
@@ -47,7 +48,7 @@ const char kPrivilegedScheme[] = "privileged";
 
 class SiteInstanceTestBrowserClient : public TestContentBrowserClient {
  public:
-  explicit SiteInstanceTestBrowserClient()
+  SiteInstanceTestBrowserClient()
       : privileged_process_id_(-1),
         site_instance_delete_count_(0),
         browsing_instance_delete_count_(0) {
@@ -600,7 +601,7 @@ TEST_F(SiteInstanceTest, ProcessSharingByType) {
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
   for (size_t i = 0; i < kMaxRendererProcessCount; ++i)
     hosts.push_back(
-        base::MakeUnique<MockRenderProcessHost>(browser_context.get()));
+        std::make_unique<MockRenderProcessHost>(browser_context.get()));
 
   // Create some extension instances and make sure they share a process.
   scoped_refptr<SiteInstanceImpl> extension1_instance(
@@ -893,22 +894,23 @@ TEST_F(SiteInstanceTest, IsolatedOrigins) {
 
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
 
-  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin(isolated_foo_url)));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_foo_url)));
   EXPECT_TRUE(SiteInstance::IsSameWebSite(nullptr, foo_url, isolated_foo_url));
 
-  policy->AddIsolatedOrigin(url::Origin(isolated_foo_url));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(isolated_foo_url)));
-  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin(foo_url)));
-  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin(GURL("http://foo.com"))));
+  policy->AddIsolatedOrigins({url::Origin::Create(isolated_foo_url)});
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_foo_url)));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin::Create(foo_url)));
   EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://www.bar.com"))));
-  EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("https://isolated.foo.com"))));
+      policy->IsIsolatedOrigin(url::Origin::Create(GURL("http://foo.com"))));
   EXPECT_FALSE(policy->IsIsolatedOrigin(
-      url::Origin(GURL("http://isolated.foo.com:12345"))));
+      url::Origin::Create(GURL("http://www.bar.com"))));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("https://isolated.foo.com"))));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://isolated.foo.com:12345"))));
 
-  policy->AddIsolatedOrigin(url::Origin(isolated_bar_url));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(isolated_bar_url)));
+  policy->AddIsolatedOrigins({url::Origin::Create(isolated_bar_url)});
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_bar_url)));
 
   // IsSameWebSite should compare origins rather than sites if either URL is an
   // isolated origin.
@@ -950,8 +952,8 @@ TEST_F(SiteInstanceTest, IsolatedOrigins) {
       nullptr, isolated_filesystem_foo_url));
 
   // Cleanup.
-  policy->RemoveIsolatedOriginForTesting(url::Origin(isolated_foo_url));
-  policy->RemoveIsolatedOriginForTesting(url::Origin(isolated_bar_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(isolated_foo_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(isolated_bar_url));
 }
 
 // Check that only valid isolated origins are allowed to be registered.
@@ -960,36 +962,36 @@ TEST_F(SiteInstanceTest, IsValidIsolatedOrigin) {
   // unique origins.
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(url::Origin()));
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("invalid.url"))));
+      url::Origin::Create(GURL("invalid.url"))));
 
   // IP addresses are ok.
   EXPECT_TRUE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://127.0.0.1"))));
+      url::Origin::Create(GURL("http://127.0.0.1"))));
 
   // Hosts without a valid registry-controlled domain are disallowed.  This
   // includes hosts that are themselves a registry-controlled domain.
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://.com/"))));
+      url::Origin::Create(GURL("http://.com/"))));
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://.com./"))));
+      url::Origin::Create(GURL("http://.com./"))));
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://foo/"))));
+      url::Origin::Create(GURL("http://foo/"))));
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://co.uk/"))));
+      url::Origin::Create(GURL("http://co.uk/"))));
   EXPECT_TRUE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://foo.bar.baz/"))));
+      url::Origin::Create(GURL("http://foo.bar.baz/"))));
 
   // Scheme must be HTTP or HTTPS.
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL(kChromeUIScheme + std::string("://gpu")))));
+      url::Origin::Create(GURL(kChromeUIScheme + std::string("://gpu")))));
   EXPECT_TRUE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://a.com"))));
+      url::Origin::Create(GURL("http://a.com"))));
   EXPECT_TRUE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("https://b.co.uk"))));
+      url::Origin::Create(GURL("https://b.co.uk"))));
 
   // Trailing dot is disallowed.
   EXPECT_FALSE(IsolatedOriginUtil::IsValidIsolatedOrigin(
-      url::Origin(GURL("http://a.com."))));
+      url::Origin::Create(GURL("http://a.com."))));
 }
 
 TEST_F(SiteInstanceTest, SubdomainOnIsolatedSite) {
@@ -997,23 +999,23 @@ TEST_F(SiteInstanceTest, SubdomainOnIsolatedSite) {
   GURL foo_isolated_url("http://foo.isolated.com");
 
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->AddIsolatedOrigin(url::Origin(isolated_url));
+  policy->AddIsolatedOrigins({url::Origin::Create(isolated_url)});
 
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(isolated_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(foo_isolated_url)));
-  EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://unisolated.com"))));
-  EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://isolated.foo.com"))));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_url)));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(foo_isolated_url)));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://unisolated.com"))));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://isolated.foo.com"))));
   // Wrong scheme.
-  EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("https://foo.isolated.com"))));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("https://foo.isolated.com"))));
 
   // Appending a trailing dot to a URL should not bypass process isolation.
-  EXPECT_TRUE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://isolated.com."))));
-  EXPECT_TRUE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://foo.isolated.com."))));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://isolated.com."))));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://foo.isolated.com."))));
 
   // A new SiteInstance created for a subdomain on an isolated origin
   // should use the isolated origin's host and not its own host as the site
@@ -1031,13 +1033,13 @@ TEST_F(SiteInstanceTest, SubdomainOnIsolatedSite) {
 
   // Don't try to match subdomains on IP addresses.
   GURL isolated_ip("http://127.0.0.1");
-  policy->AddIsolatedOrigin(url::Origin(isolated_ip));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(isolated_ip)));
-  EXPECT_FALSE(
-      policy->IsIsolatedOrigin(url::Origin(GURL("http://42.127.0.0.1"))));
+  policy->AddIsolatedOrigins({url::Origin::Create(isolated_ip)});
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_ip)));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("http://42.127.0.0.1"))));
 
   // Cleanup.
-  policy->RemoveIsolatedOriginForTesting(url::Origin(isolated_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(isolated_url));
 }
 
 TEST_F(SiteInstanceTest, SubdomainOnIsolatedOrigin) {
@@ -1047,12 +1049,14 @@ TEST_F(SiteInstanceTest, SubdomainOnIsolatedOrigin) {
   GURL baz_isolated_foo_url("http://baz.isolated.foo.com");
 
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->AddIsolatedOrigin(url::Origin(isolated_foo_url));
+  policy->AddIsolatedOrigins({url::Origin::Create(isolated_foo_url)});
 
-  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin(foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(isolated_foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(bar_isolated_foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(baz_isolated_foo_url)));
+  EXPECT_FALSE(policy->IsIsolatedOrigin(url::Origin::Create(foo_url)));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_foo_url)));
+  EXPECT_TRUE(
+      policy->IsIsolatedOrigin(url::Origin::Create(bar_isolated_foo_url)));
+  EXPECT_TRUE(
+      policy->IsIsolatedOrigin(url::Origin::Create(baz_isolated_foo_url)));
 
   EXPECT_EQ(foo_url, SiteInstance::GetSiteForURL(nullptr, foo_url));
   EXPECT_EQ(isolated_foo_url,
@@ -1089,7 +1093,7 @@ TEST_F(SiteInstanceTest, SubdomainOnIsolatedOrigin) {
                                           bar_isolated_foo_url));
 
   // Cleanup.
-  policy->RemoveIsolatedOriginForTesting(url::Origin(isolated_foo_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(isolated_foo_url));
 }
 
 TEST_F(SiteInstanceTest, MultipleIsolatedOriginsWithCommonSite) {
@@ -1099,13 +1103,14 @@ TEST_F(SiteInstanceTest, MultipleIsolatedOriginsWithCommonSite) {
   GURL qux_baz_bar_foo_url("http://qux.baz.bar.foo.com");
 
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->AddIsolatedOrigin(url::Origin(foo_url));
-  policy->AddIsolatedOrigin(url::Origin(baz_bar_foo_url));
+  policy->AddIsolatedOrigins(
+      {url::Origin::Create(foo_url), url::Origin::Create(baz_bar_foo_url)});
 
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(bar_foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(baz_bar_foo_url)));
-  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin(qux_baz_bar_foo_url)));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(foo_url)));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(bar_foo_url)));
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(baz_bar_foo_url)));
+  EXPECT_TRUE(
+      policy->IsIsolatedOrigin(url::Origin::Create(qux_baz_bar_foo_url)));
 
   EXPECT_EQ(foo_url, SiteInstance::GetSiteForURL(nullptr, foo_url));
   EXPECT_EQ(foo_url, SiteInstance::GetSiteForURL(nullptr, bar_foo_url));
@@ -1137,8 +1142,54 @@ TEST_F(SiteInstanceTest, MultipleIsolatedOriginsWithCommonSite) {
                                           qux_baz_bar_foo_url));
 
   // Cleanup.
-  policy->RemoveIsolatedOriginForTesting(url::Origin(foo_url));
-  policy->RemoveIsolatedOriginForTesting(url::Origin(baz_bar_foo_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(foo_url));
+  policy->RemoveIsolatedOriginForTesting(url::Origin::Create(baz_bar_foo_url));
+}
+
+// Check that new SiteInstances correctly preserve the full URL that was used
+// to initialize their site URL.
+TEST_F(SiteInstanceTest, OriginalURL) {
+  GURL original_url("https://foo.com/");
+  GURL app_url("https://app.com/");
+  EffectiveURLContentBrowserClient modified_client(original_url, app_url);
+  ContentBrowserClient* regular_client =
+      SetBrowserClientForTesting(&modified_client);
+  std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
+
+  // New SiteInstance in a new BrowsingInstance with a predetermined URL.
+  {
+    scoped_refptr<SiteInstanceImpl> site_instance =
+        SiteInstanceImpl::CreateForURL(browser_context.get(), original_url);
+    EXPECT_EQ(app_url, site_instance->GetSiteURL());
+    EXPECT_EQ(original_url, site_instance->original_url());
+  }
+
+  // New related SiteInstance from an existing SiteInstance with a
+  // predetermined URL.
+  {
+    scoped_refptr<SiteInstanceImpl> bar_site_instance =
+        SiteInstanceImpl::CreateForURL(browser_context.get(),
+                                       GURL("https://bar.com/"));
+    scoped_refptr<SiteInstance> site_instance =
+        bar_site_instance->GetRelatedSiteInstance(original_url);
+    EXPECT_EQ(app_url, site_instance->GetSiteURL());
+    EXPECT_EQ(
+        original_url,
+        static_cast<SiteInstanceImpl*>(site_instance.get())->original_url());
+  }
+
+  // New SiteInstance with a lazily assigned site URL.
+  {
+    scoped_refptr<SiteInstanceImpl> site_instance =
+        SiteInstanceImpl::Create(browser_context.get());
+    EXPECT_FALSE(site_instance->HasSite());
+    EXPECT_TRUE(site_instance->original_url().is_empty());
+    site_instance->SetSite(original_url);
+    EXPECT_EQ(app_url, site_instance->GetSiteURL());
+    EXPECT_EQ(original_url, site_instance->original_url());
+  }
+
+  SetBrowserClientForTesting(regular_client);
 }
 
 }  // namespace content

@@ -33,15 +33,16 @@
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
-// This test verifies the Desktop implementation of Guest only.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if defined(OS_CHROMEOS)
+#error "This test verifies the Desktop implementation of Guest only."
+#endif
 
 namespace {
 
@@ -225,6 +226,7 @@ IN_PROC_BROWSER_TEST_F(ProfileWindowBrowserTest, GuestAppMenuLacksBookmarks) {
   EmptyAcceleratorHandler accelerator_handler;
   // Verify the normal browser has a bookmark menu.
   AppMenuModel model_normal_profile(&accelerator_handler, browser());
+  model_normal_profile.Init();
   EXPECT_NE(-1, model_normal_profile.GetIndexOfCommandId(IDC_BOOKMARKS_MENU));
 
   // Guest browser has no bookmark menu.
@@ -291,5 +293,3 @@ IN_PROC_BROWSER_TEST_F(ProfileWindowWebUIBrowserTest,
   EXPECT_TRUE(RunJavascriptTest("testPodFocused",
                                 base::Value(expected_path.AsUTF8Unsafe())));
 }
-
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

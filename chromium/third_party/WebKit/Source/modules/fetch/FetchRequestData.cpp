@@ -6,17 +6,17 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/ThreadableLoader.h"
-#include "modules/credentialmanager/PasswordCredential.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/BytesConsumer.h"
 #include "modules/fetch/FetchHeaderList.h"
-#include "platform/HTTPNames.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/network/http_names.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
+#include "third_party/WebKit/Source/modules/fetch/FormDataBytesConsumer.h"
 
 namespace blink {
 
@@ -33,7 +33,12 @@ FetchRequestData* FetchRequestData::Create(
   for (HTTPHeaderMap::const_iterator it = web_request.Headers().begin();
        it != web_request.Headers().end(); ++it)
     request->header_list_->Append(it->key, it->value);
-  if (web_request.GetBlobDataHandle()) {
+  if (scoped_refptr<EncodedFormData> body = web_request.Body()) {
+    request->SetBuffer(new BodyStreamBuffer(
+        script_state,
+        new FormDataBytesConsumer(ExecutionContext::From(script_state),
+                                  std::move(body))));
+  } else if (web_request.GetBlobDataHandle()) {
     request->SetBuffer(new BodyStreamBuffer(
         script_state,
         new BlobBytesConsumer(ExecutionContext::From(script_state),
@@ -49,6 +54,7 @@ FetchRequestData* FetchRequestData::Create(
   request->SetRedirect(web_request.RedirectMode());
   request->SetMIMEType(request->header_list_->ExtractMIMEType());
   request->SetIntegrity(web_request.Integrity());
+  request->SetKeepalive(web_request.Keepalive());
   return request;
 }
 
@@ -68,7 +74,7 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->response_tainting_ = response_tainting_;
   request->mime_type_ = mime_type_;
   request->integrity_ = integrity_;
-  request->attached_credential_ = attached_credential_;
+  request->keepalive_ = keepalive_;
   return request;
 }
 
@@ -102,20 +108,14 @@ FetchRequestData::FetchRequestData()
       context_(WebURLRequest::kRequestContextUnspecified),
       same_origin_data_url_flag_(false),
       referrer_(Referrer(ClientReferrerString(), kReferrerPolicyDefault)),
-      mode_(WebURLRequest::kFetchRequestModeNoCORS),
-      credentials_(WebURLRequest::kFetchCredentialsModeOmit),
-      cache_mode_(WebURLRequest::kFetchRequestCacheModeDefault),
+      mode_(network::mojom::FetchRequestMode::kNoCORS),
+      credentials_(network::mojom::FetchCredentialsMode::kOmit),
+      cache_mode_(mojom::FetchCacheMode::kDefault),
       redirect_(WebURLRequest::kFetchRedirectModeFollow),
-      response_tainting_(kBasicTainting) {}
+      response_tainting_(kBasicTainting),
+      keepalive_(false) {}
 
-void FetchRequestData::SetCredentials(
-    WebURLRequest::FetchCredentialsMode credentials) {
-  credentials_ = credentials;
-  if (credentials_ != WebURLRequest::kFetchCredentialsModePassword)
-    attached_credential_.Clear();
-}
-
-DEFINE_TRACE(FetchRequestData) {
+void FetchRequestData::Trace(blink::Visitor* visitor) {
   visitor->Trace(buffer_);
   visitor->Trace(header_list_);
 }

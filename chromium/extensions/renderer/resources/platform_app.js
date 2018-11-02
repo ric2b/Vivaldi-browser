@@ -170,7 +170,7 @@ function disableSetters(object, objectName, propertyNames, opt_messageSuffix) {
 // Vivaldi needs these.
 if (!isVivaldi) {
 disableMethods(Document.prototype, 'document', ['open', 'close']);
-disableMethods(HTMLDocument.prototype, 'document', ['clear']);
+disableMethods(Document.prototype, 'document', ['clear']);
 }
 
 // Replace evil Document methods with exception-throwing stubs.

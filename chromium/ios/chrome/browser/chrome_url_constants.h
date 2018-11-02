@@ -52,6 +52,7 @@ extern const char kChromeUINewTabHost[];
 extern const char kChromeUINTPTilesInternalsHost[];
 extern const char kChromeUIOfflineHost[];
 extern const char kChromeUIOmahaHost[];
+extern const char kChromeUIPasswordManagerInternalsHost[];
 extern const char kChromeUIPhysicalWebHost[];
 extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUIPolicyHost[];
@@ -107,5 +108,13 @@ extern const char kGoogleHistoryURL[];
 
 // Google my account URL for the sign-in confirmation screen.
 extern const char kGoogleMyAccountURL[];
+
+// URL used in referrer to signal that the navigation originates from the New
+// Tab page and thus should not be considered for Most Visited.
+extern const char kNewTabPageReferrerURL[];
+
+// URL used in referrer to signal that the navigation originates from Reading
+// List page and thus should not be considered for Most Visited.
+extern const char kReadingListReferrerURL[];
 
 #endif  // IOS_CHROME_BROWSER_CHROME_URL_CONSTANTS_H_

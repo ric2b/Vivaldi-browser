@@ -13,9 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task_scheduler/post_task.h"
 #include "components/update_client/component.h"
 #include "components/update_client/task_traits.h"
 #include "components/update_client/update_client.h"
@@ -32,13 +30,14 @@ ActionRunner::~ActionRunner() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
-void ActionRunner::Run(const Callback& run_complete) {
+void ActionRunner::Run(Callback run_complete) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  run_complete_ = run_complete;
+  run_complete_ = std::move(run_complete);
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&ActionRunner::Unpack, base::Unretained(this)));
+  base::CreateSequencedTaskRunnerWithTraits(kTaskTraits)
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&ActionRunner::Unpack, base::Unretained(this)));
 }
 
 void ActionRunner::Unpack() {
@@ -50,7 +49,7 @@ void ActionRunner::Unpack() {
   auto unpacker = base::MakeRefCounted<ComponentUnpacker>(key_hash_, file_path,
                                                           installer, nullptr);
   unpacker->Unpack(
-      base::Bind(&ActionRunner::UnpackComplete, base::Unretained(this)));
+      base::BindOnce(&ActionRunner::UnpackComplete, base::Unretained(this)));
 }
 
 void ActionRunner::UnpackComplete(const ComponentUnpacker::Result& result) {
@@ -59,11 +58,12 @@ void ActionRunner::UnpackComplete(const ComponentUnpacker::Result& result) {
 
     main_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(run_complete_, false, static_cast<int>(result.error),
-                       result.extended_error));
+        base::BindOnce(std::move(run_complete_), false,
+                       static_cast<int>(result.error), result.extended_error));
     return;
   }
 
+  unpack_path_ = result.unpack_path;
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&ActionRunner::RunCommand, base::Unretained(this),
@@ -73,8 +73,9 @@ void ActionRunner::UnpackComplete(const ComponentUnpacker::Result& result) {
 #if !defined(OS_WIN)
 
 void ActionRunner::RunCommand(const base::CommandLine& cmdline) {
-  main_task_runner_->PostTask(FROM_HERE,
-                              base::BindOnce(run_complete_, false, -1, 0));
+  base::DeleteFile(unpack_path_, true);
+  main_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(run_complete_), false, -1, 0));
 }
 
 base::CommandLine ActionRunner::MakeCommandLine(

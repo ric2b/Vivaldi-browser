@@ -93,7 +93,7 @@ QuicTimeWaitListManager::~QuicTimeWaitListManager() {
 
 void QuicTimeWaitListManager::AddConnectionIdToTimeWait(
     QuicConnectionId connection_id,
-    QuicVersion version,
+    QuicTransportVersion version,
     bool connection_rejected_statelessly,
     std::vector<std::unique_ptr<QuicEncryptedPacket>>* termination_packets) {
   if (connection_rejected_statelessly) {
@@ -127,14 +127,14 @@ bool QuicTimeWaitListManager::IsConnectionIdInTimeWait(
   return QuicContainsKey(connection_id_map_, connection_id);
 }
 
-QuicVersion QuicTimeWaitListManager::GetQuicVersionFromConnectionId(
+QuicTransportVersion QuicTimeWaitListManager::GetQuicVersionFromConnectionId(
     QuicConnectionId connection_id) {
   ConnectionIdMap::iterator it = connection_id_map_.find(connection_id);
   DCHECK(it != connection_id_map_.end());
   return (it->second).version;
 }
 
-void QuicTimeWaitListManager::OnCanWrite() {
+void QuicTimeWaitListManager::OnBlockedWriterCanWrite() {
   while (!pending_packets_queue_.empty()) {
     QueuedPacket* queued_packet = pending_packets_queue_.front().get();
     if (!WriteToWire(queued_packet)) {
@@ -180,12 +180,13 @@ void QuicTimeWaitListManager::ProcessPacket(
 
 void QuicTimeWaitListManager::SendVersionNegotiationPacket(
     QuicConnectionId connection_id,
-    const QuicVersionVector& supported_versions,
+    const QuicTransportVersionVector& supported_versions,
     const QuicSocketAddress& server_address,
     const QuicSocketAddress& client_address) {
-  SendOrQueuePacket(QuicMakeUnique<QueuedPacket>(
-      server_address, client_address, QuicFramer::BuildVersionNegotiationPacket(
-                                          connection_id, supported_versions)));
+  SendOrQueuePacket(
+      QuicMakeUnique<QueuedPacket>(server_address, client_address,
+                                   QuicFramer::BuildVersionNegotiationPacket(
+                                       connection_id, supported_versions)));
 }
 
 // Returns true if the number of packets received for this connection_id is a
@@ -200,9 +201,7 @@ void QuicTimeWaitListManager::SendPublicReset(
     const QuicSocketAddress& client_address,
     QuicConnectionId connection_id) {
   QuicPublicResetPacket packet;
-  packet.public_header.connection_id = connection_id;
-  packet.public_header.reset_flag = true;
-  packet.public_header.version_flag = false;
+  packet.connection_id = connection_id;
   // TODO(satyamshekhar): generate a valid nonce for this connection_id.
   packet.nonce_proof = 1010101;
   packet.client_address = client_address;
@@ -309,7 +308,7 @@ void QuicTimeWaitListManager::TrimTimeWaitListIfNeeded() {
 
 QuicTimeWaitListManager::ConnectionIdData::ConnectionIdData(
     int num_packets_,
-    QuicVersion version_,
+    QuicTransportVersion version_,
     QuicTime time_added_,
     bool connection_rejected_statelessly)
     : num_packets(num_packets_),
@@ -320,6 +319,6 @@ QuicTimeWaitListManager::ConnectionIdData::ConnectionIdData(
 QuicTimeWaitListManager::ConnectionIdData::ConnectionIdData(
     ConnectionIdData&& other) = default;
 
-QuicTimeWaitListManager::ConnectionIdData::~ConnectionIdData() {}
+QuicTimeWaitListManager::ConnectionIdData::~ConnectionIdData() = default;
 
 }  // namespace net

@@ -38,6 +38,7 @@
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebMediaConstraints.h"
 #include "public/platform/WebMediaStreamTrack.h"
 
 namespace blink {
@@ -91,6 +92,10 @@ class PLATFORM_EXPORT MediaStreamComponent final
   void SetMuted(bool muted) { muted_ = muted; }
   WebMediaStreamTrack::ContentHintType ContentHint() { return content_hint_; }
   void SetContentHint(WebMediaStreamTrack::ContentHintType);
+  const WebMediaConstraints& Constraints() const { return constraints_; }
+  void SetConstraints(const WebMediaConstraints& constraints) {
+    constraints_ = constraints;
+  }
   AudioSourceProvider* GetAudioSourceProvider() { return &source_provider_; }
   void SetSourceProvider(WebAudioSourceProvider* provider) {
     source_provider_.Wrap(provider);
@@ -102,7 +107,7 @@ class PLATFORM_EXPORT MediaStreamComponent final
   }
   void GetSettings(WebMediaStreamTrack::Settings&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   MediaStreamComponent(const String& id, MediaStreamSource*);
@@ -118,7 +123,7 @@ class PLATFORM_EXPORT MediaStreamComponent final
   class PLATFORM_EXPORT AudioSourceProviderImpl final
       : public AudioSourceProvider {
    public:
-    AudioSourceProviderImpl() : web_audio_source_provider_(0) {}
+    AudioSourceProviderImpl() : web_audio_source_provider_(nullptr) {}
 
     ~AudioSourceProviderImpl() override {}
 
@@ -141,6 +146,7 @@ class PLATFORM_EXPORT MediaStreamComponent final
   bool enabled_;
   bool muted_;
   WebMediaStreamTrack::ContentHintType content_hint_;
+  WebMediaConstraints constraints_;
   std::unique_ptr<TrackData> track_data_;
 };
 

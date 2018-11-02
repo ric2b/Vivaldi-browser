@@ -44,10 +44,6 @@ namespace internal {
 constexpr char kResourcePrefetchPredictorPrefetchingDurationHistogram[] =
     "ResourcePrefetchPredictor.PrefetchingDuration";
 
-const uint32_t kVersionedRemovedExperiment = 0x03ff25e3;
-const uint32_t kUnusedRemovedExperiment = 0xf7f77166;
-const uint32_t kNoStoreRemovedExperiment = 0xd90a199a;
-
 struct LastVisitTimeCompare {
   template <typename T>
   bool operator()(const T& lhs, const T& rhs) const {
@@ -60,15 +56,27 @@ struct LastVisitTimeCompare {
 class TestObserver;
 class ResourcePrefetcherManager;
 
+// Stores all values needed to trigger a preconnect/preresolve job to a single
+// origin.
+struct PreconnectRequest {
+  PreconnectRequest(const GURL& origin, int num_sockets);
+
+  GURL origin;
+  // A zero-value means that we need to preresolve a host only.
+  int num_sockets = 0;
+  bool allow_credentials = true;
+};
+
+// Stores a result of preconnect prediction. The |requests| vector is the main
+// result of prediction and other fields are used for histograms reporting.
 struct PreconnectPrediction {
   PreconnectPrediction();
   PreconnectPrediction(const PreconnectPrediction& other);
   ~PreconnectPrediction();
 
-  bool is_redirected;
+  bool is_redirected = false;
   std::string host;
-  std::vector<GURL> preconnect_origins;
-  std::vector<GURL> preresolve_hosts;
+  std::vector<PreconnectRequest> requests;
 };
 
 // Contains logic for learning what can be prefetched and for kicking off
@@ -140,6 +148,8 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
 
   // Returns true if prefetching data exists for the |main_frame_url|.
   virtual bool IsUrlPrefetchable(const GURL& main_frame_url) const;
+  // Returns true if preconnect data exists for the |main_frame_url|.
+  virtual bool IsUrlPreconnectable(const GURL& main_frame_url) const;
 
   // Returns true iff |resource| has sufficient confidence level and required
   // number of hits.
@@ -158,7 +168,8 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
 
   // Returns true iff there is OriginData that can be used for a |url| and fills
   // |prediction| with origins and hosts that need to be preconnected and
-  // preresolved respectively.
+  // preresolved respectively. |prediction| pointer may be nullptr to get return
+  // value only.
   virtual bool PredictPreconnectOrigins(const GURL& url,
                                         PreconnectPrediction* prediction) const;
 
@@ -185,6 +196,8 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, NavigationUrlNotInDB);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            NavigationUrlNotInDBAndDBFull);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           NavigationManyResourcesWithDifferentOrigins);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, RedirectUrlNotInDB);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, RedirectUrlInDB);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, OnMainFrameRequest);
@@ -264,6 +277,7 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
                      RedirectDataMap* redirect_data);
 
   void LearnOrigins(const std::string& host,
+                    const GURL& main_frame_origin,
                     const std::map<GURL, OriginRequestSummary>& summaries);
 
   // Reports database readiness metric defined as percentage of navigated hosts

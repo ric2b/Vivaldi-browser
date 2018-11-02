@@ -39,14 +39,11 @@ class ScriptValue;
 class ScriptState;
 class ExceptionState;
 
-class SQLResultSetRowList final
-    : public GarbageCollectedFinalized<SQLResultSetRowList>,
-      public ScriptWrappable {
+class SQLResultSetRowList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static SQLResultSetRowList* Create() { return new SQLResultSetRowList; }
-  DEFINE_INLINE_TRACE() {}
 
   const Vector<String>& ColumnNames() const { return columns_; }
   const Vector<SQLValue>& Values() const { return result_; }

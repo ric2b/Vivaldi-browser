@@ -165,10 +165,8 @@ void AwRenderFrameExt::DidCommitProvisionalLoad(
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   content::DocumentState* document_state =
       content::DocumentState::FromDocumentLoader(frame->GetDocumentLoader());
-  if (document_state->can_load_local_resources()) {
-    blink::WebSecurityOrigin origin = frame->GetDocument().GetSecurityOrigin();
-    origin.GrantLoadLocalResources();
-  }
+  if (document_state->can_load_local_resources())
+    frame->GetDocument().GrantLoadLocalResources();
 
   // Clear the cache when we cross site boundaries in the main frame.
   //
@@ -178,7 +176,7 @@ void AwRenderFrameExt::DidCommitProvisionalLoad(
   // renderer code to say "this navigation would have switched processes" would
   // be disruptive, so this clearing of the cache is the compromise.
   if (!frame->Parent()) {
-    url::Origin new_origin(frame->GetDocument().Url());
+    url::Origin new_origin = url::Origin::Create(frame->GetDocument().Url());
     if (!new_origin.IsSameOriginWith(last_origin_)) {
       last_origin_ = new_origin;
       blink::WebImageCache::Clear();

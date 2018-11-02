@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -21,7 +20,6 @@
 #include "net/base/address_family.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
-#include "net/base/sdch_manager.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
@@ -85,14 +83,6 @@ const short kNetErrors[] = {
 #define NET_ERROR(label, value) value,
 #include "net/base/net_error_list.h"
 #undef NET_ERROR
-};
-
-const StringToConstant kSdchProblems[] = {
-#define SDCH_PROBLEM_CODE(label, value) \
-  { #label, value }                     \
-  ,
-#include "net/base/sdch_problem_code_list.h"
-#undef SDCH_PROBLEM_CODE
 };
 
 const char* NetInfoSourceToString(NetInfoSource source) {
@@ -233,17 +223,6 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
     }
 
     constants_dict->Set("quicRstStreamError", std::move(dict));
-  }
-
-  // Add information on the relationship between SDCH problem codes and their
-  // symbolic names.
-  {
-    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-
-    for (const auto& problem : kSdchProblems)
-      dict->SetInteger(problem.name, problem.constant);
-
-    constants_dict->Set("sdchProblemCode", std::move(dict));
   }
 
   // Information about the relationship between event phase enums and their
@@ -465,18 +444,6 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     info_dict->Set("stats", std::move(stats_dict));
 
     net_info_dict->Set(NetInfoSourceToString(NET_INFO_HTTP_CACHE),
-                       std::move(info_dict));
-  }
-
-  if (info_sources & NET_INFO_SDCH) {
-    std::unique_ptr<base::Value> info_dict;
-    SdchManager* sdch_manager = context->sdch_manager();
-    if (sdch_manager) {
-      info_dict = sdch_manager->SdchInfoToValue();
-    } else {
-      info_dict.reset(new base::DictionaryValue());
-    }
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_SDCH),
                        std::move(info_dict));
   }
 

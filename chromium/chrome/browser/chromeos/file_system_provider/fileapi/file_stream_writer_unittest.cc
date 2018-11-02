@@ -16,6 +16,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "chrome/browser/chromeos/file_system_provider/service_factory.h"
@@ -39,6 +40,7 @@ namespace {
 const char kExtensionId[] = "mbflcebpggnecokmikipoihdbecnjfoj";
 const char kFileSystemId[] = "testing-file-system";
 const char kTextToWrite[] = "This is a test of FileStreamWriter.";
+const ProviderId kProviderId = ProviderId::CreateFromExtensionId(kExtensionId);
 
 // Pushes a value to the passed log vector.
 void LogValue(std::vector<int>* log, int value) {
@@ -72,14 +74,14 @@ class FileSystemProviderFileStreamWriter : public testing::Test {
     profile_ = profile_manager_->CreateTestingProfile("testing-profile");
 
     Service* service = Service::Get(profile_);  // Owned by its factory.
-    service->SetFileSystemFactoryForTesting(
-        base::Bind(&FakeProvidedFileSystem::Create));
+    service->SetExtensionProviderForTesting(
+        std::make_unique<FakeExtensionProvider>());
 
     const base::File::Error result = service->MountFileSystem(
-        kExtensionId, MountOptions(kFileSystemId, "Testing File System"));
+        kProviderId, MountOptions(kFileSystemId, "Testing File System"));
     ASSERT_EQ(base::File::FILE_OK, result);
     provided_file_system_ = static_cast<FakeProvidedFileSystem*>(
-        service->GetProvidedFileSystem(kExtensionId, kFileSystemId));
+        service->GetProvidedFileSystem(kProviderId, kFileSystemId));
     ASSERT_TRUE(provided_file_system_);
     const ProvidedFileSystemInfo& file_system_info =
         provided_file_system_->GetFileSystemInfo();

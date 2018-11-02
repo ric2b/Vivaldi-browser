@@ -50,7 +50,7 @@ void ExecuteCodeFunction::GetFileURLAndMaybeLocalizeInBackground(
     const std::string& extension_default_locale,
     bool might_require_localization,
     std::string* data) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // TODO(devlin): FilePathToFileURL() doesn't need to be done on a blocking
   // task runner, so we could do that on the UI thread and then avoid the hop
@@ -81,7 +81,7 @@ ExecuteCodeFunction::GetFileURLAndLocalizeComponentResourceInBackground(
     const base::FilePath& extension_path,
     const std::string& extension_default_locale,
     bool might_require_localization) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   GetFileURLAndMaybeLocalizeInBackground(
       extension_id, extension_path, extension_default_locale,
       might_require_localization, data.get());
@@ -221,7 +221,7 @@ bool ExecuteCodeFunction::LoadFile(const std::string& file) {
           resource_.relative_path(),
           &resource_id)) {
     base::StringPiece resource =
-        ResourceBundle::GetSharedInstance().GetRawDataResource(resource_id);
+        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(resource_id);
     std::unique_ptr<std::string> data(
         new std::string(resource.data(), resource.size()));
 

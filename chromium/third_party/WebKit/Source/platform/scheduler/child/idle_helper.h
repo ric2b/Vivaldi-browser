@@ -8,13 +8,17 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "platform/PlatformExport.h"
-#include "platform/scheduler/base/cancelable_closure_holder.h"
 #include "platform/scheduler/base/task_queue_selector.h"
+#include "platform/scheduler/child/cancelable_closure_holder.h"
 #include "platform/scheduler/child/scheduler_helper.h"
 #include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 
 namespace blink {
 namespace scheduler {
+namespace idle_helper_unittest {
+class BaseIdleHelperTest;
+class IdleHelperTest;
+}  // namespace idle_helper_unittest
 
 class SchedulerHelper;
 
@@ -72,14 +76,14 @@ class PLATFORM_EXPORT IdleHelper : public base::MessageLoop::TaskObserver,
 
   // Keep IdleHelper::IdlePeriodStateToString in sync with this enum.
   enum class IdlePeriodState {
-    NOT_IN_IDLE_PERIOD,
-    IN_SHORT_IDLE_PERIOD,
-    IN_LONG_IDLE_PERIOD,
-    IN_LONG_IDLE_PERIOD_WITH_MAX_DEADLINE,
-    IN_LONG_IDLE_PERIOD_PAUSED,
+    kNotInIdlePeriod,
+    kInShortIdlePeriod,
+    kInLongIdlePeriod,
+    kInLongIdlePeriodWithMaxDeadline,
+    kInLongIdlePeriodPaused,
     // Must be the last entry.
-    IDLE_PERIOD_STATE_COUNT,
-    FIRST_IDLE_PERIOD_STATE = NOT_IN_IDLE_PERIOD,
+    kIdlePeriodStateCount,
+    kFirstIdlePeriodState = kNotInIdlePeriod,
   };
 
   // The maximum length of an idle period.
@@ -149,8 +153,8 @@ class PLATFORM_EXPORT IdleHelper : public base::MessageLoop::TaskObserver,
   static const char* IdlePeriodStateToString(IdlePeriodState state);
 
  private:
-  friend class BaseIdleHelperTest;
-  friend class IdleHelperTest;
+  friend class idle_helper_unittest::BaseIdleHelperTest;
+  friend class idle_helper_unittest::IdleHelperTest;
 
   const scoped_refptr<TaskQueue>& idle_queue() const { return idle_queue_; }
 

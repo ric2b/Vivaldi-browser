@@ -4,7 +4,10 @@
 
 #include "components/payments/content/utility/payment_manifest_parser.h"
 
+#include "base/json/json_reader.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace payments {
 namespace {
@@ -16,12 +19,15 @@ void ExpectUnableToParsePaymentMethodManifest(const std::string& input) {
   std::vector<url::Origin> actual_supported_origins;
   bool actual_all_origins_supported = false;
 
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(input);
+
   PaymentManifestParser::ParsePaymentMethodManifestIntoVectors(
-      input, &actual_web_app_urls, &actual_supported_origins,
+      std::move(value), &actual_web_app_urls, &actual_supported_origins,
       &actual_all_origins_supported);
 
-  EXPECT_TRUE(actual_web_app_urls.empty());
-  EXPECT_TRUE(actual_supported_origins.empty());
+  EXPECT_TRUE(actual_web_app_urls.empty()) << actual_web_app_urls.front();
+  EXPECT_TRUE(actual_supported_origins.empty())
+      << actual_supported_origins.front();
   EXPECT_FALSE(actual_all_origins_supported);
 }
 
@@ -34,8 +40,10 @@ void ExpectParsedPaymentMethodManifest(
   std::vector<url::Origin> actual_supported_origins;
   bool actual_all_origins_supported = false;
 
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(input);
+
   PaymentManifestParser::ParsePaymentMethodManifestIntoVectors(
-      input, &actual_web_app_urls, &actual_supported_origins,
+      std::move(value), &actual_web_app_urls, &actual_supported_origins,
       &actual_all_origins_supported);
 
   EXPECT_EQ(expected_web_app_urls, actual_web_app_urls);
@@ -81,9 +89,19 @@ TEST(PaymentManifestParserTest, ListOfEmptyDefaultApplicationsIsMalformed) {
       "{\"default_applications\": [\"\"]}");
 }
 
+TEST(PaymentManifestParserTest, RelativeURLDefaultApplicationIsMalformed) {
+  ExpectUnableToParsePaymentMethodManifest(
+      "{\"default_applications\": [\"manifest.json\"]}");
+}
+
 TEST(PaymentManifestParserTest, DefaultApplicationsShouldNotHaveNulCharacters) {
   ExpectUnableToParsePaymentMethodManifest(
       "{\"default_applications\": [\"https://bobpay.com/app\0json\"]}");
+}
+
+TEST(PaymentManifestParserTest, DefaultApplicationsShouldBeUTF8) {
+  ExpectUnableToParsePaymentMethodManifest(
+      "{\"default_applications\":[\"https://b\x0f\x7f\xf0\xff!\"]}");
 }
 
 TEST(PaymentManifestParserTest, DefaultApplicationKeyShouldBeLowercase) {
@@ -130,6 +148,11 @@ TEST(PaymentManifestParserTest, SupportedOriginsShouldNotHaveNulCharacters) {
       "{\"supported_origins\": [\"https://bob\0pay.com\"]}");
 }
 
+TEST(PaymentManifestParserTest, SupportedOriginsShouldBeUTF8) {
+  ExpectUnableToParsePaymentMethodManifest(
+      "{\"supported_origins\":[\"https://b\x0f\x7f\xf0\xff!\"]}");
+}
+
 TEST(PaymentManifestParserTest, SupportedOriginsShouldBeHttps) {
   ExpectUnableToParsePaymentMethodManifest(
       "{\"supported_origins\": [\"http://bobpay.com\"]}");
@@ -162,6 +185,17 @@ TEST(PaymentManifestParserTest, WellFormedPaymentMethodManifestWithApps) {
       "\"https://alicepay.com/app.json\"]}",
       {GURL("https://bobpay.com/app.json"),
        GURL("https://alicepay.com/app.json")},
+      std::vector<url::Origin>(), false);
+}
+
+TEST(PaymentManifestParserTest,
+     WellFormedPaymentMethodManifestWithHttpLocalhostApps) {
+  ExpectParsedPaymentMethodManifest(
+      "{\"default_applications\": ["
+      "\"http://127.0.0.1:8080/app.json\","
+      "\"http://localhost:8081/app.json\"]}",
+      {GURL("http://127.0.0.1:8080/app.json"),
+       GURL("http://localhost:8081/app.json")},
       std::vector<url::Origin>(), false);
 }
 
@@ -203,8 +237,19 @@ TEST(PaymentManifestParserTest,
       "[\"https://charliepay.com\", \"https://evepay.com\"]}",
       {GURL("https://bobpay.com/app.json"),
        GURL("https://alicepay.com/app.json")},
-      {url::Origin(GURL("https://charliepay.com")),
-       url::Origin(GURL("https://evepay.com"))},
+      {url::Origin::Create(GURL("https://charliepay.com")),
+       url::Origin::Create(GURL("https://evepay.com"))},
+      false);
+}
+
+TEST(PaymentManifestParserTest,
+     WellFormedPaymentMethodManifestWithHttpLocalhostSupportedOrigins) {
+  ExpectParsedPaymentMethodManifest(
+      "{\"supported_origins\": [\"http://localhost:8080\", "
+      "\"http://127.0.0.1:8081\"]}",
+      std::vector<GURL>(),
+      {url::Origin::Create(GURL("http://localhost:8080")),
+       url::Origin::Create(GURL("http://127.0.0.1:8081"))},
       false);
 }
 
@@ -214,8 +259,8 @@ TEST(PaymentManifestParserTest,
       "{\"supported_origins\": [\"https://charliepay.com\", "
       "\"https://evepay.com\"]}",
       std::vector<GURL>(),
-      {url::Origin(GURL("https://charliepay.com")),
-       url::Origin(GURL("https://evepay.com"))},
+      {url::Origin::Create(GURL("https://charliepay.com")),
+       url::Origin::Create(GURL("https://evepay.com"))},
       false);
 }
 
@@ -229,9 +274,11 @@ TEST(PaymentManifestParserTest,
 // Web app manifest parsing:
 
 void ExpectUnableToParseWebAppManifest(const std::string& input) {
-  std::vector<mojom::WebAppManifestSectionPtr> actual_output =
-      PaymentManifestParser::ParseWebAppManifestIntoVector(input);
-  EXPECT_TRUE(actual_output.empty());
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(input);
+  std::vector<WebAppManifestSection> sections;
+  PaymentManifestParser::ParseWebAppManifestIntoVector(std::move(value),
+                                                       &sections);
+  EXPECT_TRUE(sections.empty());
 }
 
 void ExpectParsedWebAppManifest(
@@ -239,12 +286,14 @@ void ExpectParsedWebAppManifest(
     const std::string& expected_id,
     int64_t expected_min_version,
     const std::vector<std::vector<uint8_t>>& expected_fingerprints) {
-  std::vector<mojom::WebAppManifestSectionPtr> actual_output =
-      PaymentManifestParser::ParseWebAppManifestIntoVector(input);
-  ASSERT_EQ(1U, actual_output.size());
-  EXPECT_EQ(expected_id, actual_output.front()->id);
-  EXPECT_EQ(expected_min_version, actual_output.front()->min_version);
-  EXPECT_EQ(expected_fingerprints, actual_output.front()->fingerprints);
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(input);
+  std::vector<WebAppManifestSection> sections;
+  EXPECT_TRUE(PaymentManifestParser::ParseWebAppManifestIntoVector(
+      std::move(value), &sections));
+  ASSERT_EQ(1U, sections.size());
+  EXPECT_EQ(expected_id, sections.front().id);
+  EXPECT_EQ(expected_min_version, sections.front().min_version);
+  EXPECT_EQ(expected_fingerprints, sections.front().fingerprints);
 }
 
 TEST(PaymentManifestParserTest, NullContentIsMalformed) {
@@ -639,51 +688,55 @@ TEST(PaymentManifestParserTest, TwoDifferentSignaturesWellFormed) {
 }
 
 TEST(PaymentManifestParserTest, TwoRelatedApplicationsWellFormed) {
-  std::vector<mojom::WebAppManifestSectionPtr> actual_output =
-      PaymentManifestParser::ParseWebAppManifestIntoVector(
-          "{"
-          "  \"related_applications\": [{"
-          "    \"platform\": \"play\", "
-          "    \"id\": \"com.bobpay.app.dev\", "
-          "    \"min_version\": \"2\", "
-          "    \"fingerprints\": [{"
-          "      \"type\": \"sha256_cert\", "
-          "      \"value\": "
-          "\"00:01:02:03:04:05:06:07:08:09:A0:A1:A2:A3:A4:A5:A6:A7"
-          ":A8:A9:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:C0:C1\""
-          "    }]"
-          "  }, {"
-          "    \"platform\": \"play\", "
-          "    \"id\": \"com.bobpay.app.prod\", "
-          "    \"min_version\": \"1\", "
-          "    \"fingerprints\": [{"
-          "      \"type\": \"sha256_cert\", "
-          "      \"value\": "
-          "\"AA:01:02:03:04:05:06:07:08:09:A0:A1:A2:A3:A4:A5:A6:A7"
-          ":A8:A9:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:C0:C1\""
-          "    }]"
-          "  }]"
-          "}");
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(
+      "{"
+      "  \"related_applications\": [{"
+      "    \"platform\": \"play\", "
+      "    \"id\": \"com.bobpay.app.dev\", "
+      "    \"min_version\": \"2\", "
+      "    \"fingerprints\": [{"
+      "      \"type\": \"sha256_cert\", "
+      "      \"value\": "
+      "\"00:01:02:03:04:05:06:07:08:09:A0:A1:A2:A3:A4:A5:A6:A7"
+      ":A8:A9:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:C0:C1\""
+      "    }]"
+      "  }, {"
+      "    \"platform\": \"play\", "
+      "    \"id\": \"com.bobpay.app.prod\", "
+      "    \"min_version\": \"1\", "
+      "    \"fingerprints\": [{"
+      "      \"type\": \"sha256_cert\", "
+      "      \"value\": "
+      "\"AA:01:02:03:04:05:06:07:08:09:A0:A1:A2:A3:A4:A5:A6:A7"
+      ":A8:A9:B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:C0:C1\""
+      "    }]"
+      "  }]"
+      "}");
+  ASSERT_TRUE(value);
 
-  ASSERT_EQ(2U, actual_output.size());
+  std::vector<WebAppManifestSection> sections;
+  EXPECT_TRUE(PaymentManifestParser::ParseWebAppManifestIntoVector(
+      std::move(value), &sections));
 
-  EXPECT_EQ("com.bobpay.app.dev", actual_output.front()->id);
-  EXPECT_EQ(2, actual_output.front()->min_version);
+  ASSERT_EQ(2U, sections.size());
+
+  EXPECT_EQ("com.bobpay.app.dev", sections.front().id);
+  EXPECT_EQ(2, sections.front().min_version);
   EXPECT_EQ(
       std::vector<std::vector<uint8_t>>(
           {{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xA0,
             0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xB0, 0xB1,
             0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xC0, 0xC1}}),
-      actual_output.front()->fingerprints);
+      sections.front().fingerprints);
 
-  EXPECT_EQ("com.bobpay.app.prod", actual_output.back()->id);
-  EXPECT_EQ(1, actual_output.back()->min_version);
+  EXPECT_EQ("com.bobpay.app.prod", sections.back().id);
+  EXPECT_EQ(1, sections.back().min_version);
   EXPECT_EQ(
       std::vector<std::vector<uint8_t>>(
           {{0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xA0,
             0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xB0, 0xB1,
             0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xC0, 0xC1}}),
-      actual_output.back()->fingerprints);
+      sections.back().fingerprints);
 }
 
 }  // namespace

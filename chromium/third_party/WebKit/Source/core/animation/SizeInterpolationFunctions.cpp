@@ -14,13 +14,13 @@ namespace blink {
 
 class CSSSizeNonInterpolableValue : public NonInterpolableValue {
  public:
-  static RefPtr<CSSSizeNonInterpolableValue> Create(CSSValueID keyword) {
-    return AdoptRef(new CSSSizeNonInterpolableValue(keyword));
+  static scoped_refptr<CSSSizeNonInterpolableValue> Create(CSSValueID keyword) {
+    return base::AdoptRef(new CSSSizeNonInterpolableValue(keyword));
   }
 
-  static RefPtr<CSSSizeNonInterpolableValue> Create(
-      RefPtr<NonInterpolableValue> length_non_interpolable_value) {
-    return AdoptRef(new CSSSizeNonInterpolableValue(
+  static scoped_refptr<CSSSizeNonInterpolableValue> Create(
+      scoped_refptr<NonInterpolableValue> length_non_interpolable_value) {
+    return base::AdoptRef(new CSSSizeNonInterpolableValue(
         std::move(length_non_interpolable_value)));
   }
 
@@ -32,9 +32,9 @@ class CSSSizeNonInterpolableValue : public NonInterpolableValue {
 
   const NonInterpolableValue* LengthNonInterpolableValue() const {
     DCHECK(!IsKeyword());
-    return length_non_interpolable_value_.Get();
+    return length_non_interpolable_value_.get();
   }
-  RefPtr<NonInterpolableValue>& LengthNonInterpolableValue() {
+  scoped_refptr<NonInterpolableValue>& LengthNonInterpolableValue() {
     DCHECK(!IsKeyword());
     return length_non_interpolable_value_;
   }
@@ -48,13 +48,13 @@ class CSSSizeNonInterpolableValue : public NonInterpolableValue {
   }
 
   CSSSizeNonInterpolableValue(
-      RefPtr<NonInterpolableValue> length_non_interpolable_value)
+      scoped_refptr<NonInterpolableValue> length_non_interpolable_value)
       : keyword_(CSSValueInvalid),
         length_non_interpolable_value_(
             std::move(length_non_interpolable_value)) {}
 
   CSSValueID keyword_;
-  RefPtr<NonInterpolableValue> length_non_interpolable_value_;
+  scoped_refptr<NonInterpolableValue> length_non_interpolable_value_;
 };
 
 DEFINE_NON_INTERPOLABLE_VALUE_TYPE(CSSSizeNonInterpolableValue);
@@ -126,8 +126,8 @@ InterpolationValue SizeInterpolationFunctions::MaybeConvertCSSSizeSide(
 PairwiseInterpolationValue SizeInterpolationFunctions::MaybeMergeSingles(
     InterpolationValue&& start,
     InterpolationValue&& end) {
-  if (!NonInterpolableValuesAreCompatible(start.non_interpolable_value.Get(),
-                                          end.non_interpolable_value.Get()))
+  if (!NonInterpolableValuesAreCompatible(start.non_interpolable_value.get(),
+                                          end.non_interpolable_value.get()))
     return nullptr;
   return PairwiseInterpolationValue(std::move(start.interpolable_value),
                                     std::move(end.interpolable_value),
@@ -157,7 +157,7 @@ bool SizeInterpolationFunctions::NonInterpolableValuesAreCompatible(
 
 void SizeInterpolationFunctions::Composite(
     std::unique_ptr<InterpolableValue>& underlying_interpolable_value,
-    RefPtr<NonInterpolableValue>& underlying_non_interpolable_value,
+    scoped_refptr<NonInterpolableValue>& underlying_non_interpolable_value,
     double underlying_fraction,
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value) {

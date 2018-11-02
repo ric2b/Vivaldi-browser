@@ -178,6 +178,48 @@ void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
   }
 }
 
+void CalendarBackend::CreateCalendarEvents(
+    std::vector<calendar::EventRow> events,
+    std::shared_ptr<CreateEventsResult> result) {
+  int success_counter = 0;
+  int failed_counter = 0;
+
+  size_t count = events.size();
+
+  for (size_t i = 0; i < count; i++) {
+    EventRow ev = events[i];
+
+    EventID id = db_->CreateCalendarEvent(ev);
+
+    if (id) {
+      ev.set_id(id);
+
+      RecurrenceRow recurrence_row;
+      recurrence_row.set_event_id(id);
+
+      recurrence_row.set_recurrence_interval(ev.recurrence().interval);
+      recurrence_row.set_number_of_ocurrences(
+          ev.recurrence().number_of_occurrences);
+      recurrence_row.set_skip_count(ev.recurrence().skip_count);
+      recurrence_row.set_day_of_week(ev.recurrence().day_of_week);
+      recurrence_row.set_week_of_month(ev.recurrence().week_of_month);
+      recurrence_row.set_day_of_month(ev.recurrence().day_of_month);
+      recurrence_row.set_month_of_year(ev.recurrence().month_of_year);
+
+      db_->CreateRecurrenceEvent(recurrence_row);
+
+      success_counter++;
+    } else {
+      failed_counter++;
+    }
+  }
+
+  result->number_success = success_counter;
+  result->number_failed = failed_counter;
+  EventRow ev;
+  NotifyEventCreated(ev);
+}
+
 void CalendarBackend::CreateCalendarEvent(
     EventRow ev,
     std::shared_ptr<CreateEventResult> result) {

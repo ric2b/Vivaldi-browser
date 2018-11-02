@@ -127,8 +127,8 @@ template <class Traits>
 struct STRING {
   union {
     struct {
-      DWORD Length;
-      DWORD MaximumLength;
+      USHORT Length;
+      USHORT MaximumLength;
     };
     typename Traits::Pad padding_for_x64;
   };
@@ -152,7 +152,7 @@ struct RTL_USER_PROCESS_PARAMETERS {
   typename Traits::Pointer ConsoleHandle;
   union {
     DWORD ConsoleFlags;
-    typename Traits::Pad padding_for_x64;
+    typename Traits::Pad padding_for_x64_0;
   };
   typename Traits::Pointer StandardInput;
   typename Traits::Pointer StandardOutput;
@@ -170,12 +170,16 @@ struct RTL_USER_PROCESS_PARAMETERS {
   DWORD CountCharsY;
   DWORD FillAttribute;
   DWORD WindowFlags;
-  DWORD ShowWindowFlags;
+  union {
+    DWORD ShowWindowFlags;
+    typename Traits::Pad padding_for_x64_1;
+  };
   UNICODE_STRING<Traits> WindowTitle;
   UNICODE_STRING<Traits> DesktopInfo;
   UNICODE_STRING<Traits> ShellInfo;
   UNICODE_STRING<Traits> RuntimeData;
   RTL_DRIVE_LETTER_CURDIR<Traits> CurrentDirectores[32];  // sic.
+  ULONG EnvironmentSize;
 };
 
 template <class T>
@@ -285,7 +289,7 @@ struct PEB {
 template <class Traits>
 struct NT_TIB {
   union {
-    // See https://msdn.microsoft.com/en-us/library/dn424783.aspx.
+    // See https://msdn.microsoft.com/library/dn424783.aspx.
     typename Traits::Pointer Wow64Teb;
     struct {
       typename Traits::Pointer ExceptionList;
@@ -302,7 +306,7 @@ struct NT_TIB {
   };
 };
 
-// See https://msdn.microsoft.com/en-us/library/gg750647.aspx.
+// See https://msdn.microsoft.com/library/gg750647.aspx.
 template <class Traits>
 struct CLIENT_ID {
   typename Traits::Pointer UniqueProcess;
@@ -310,17 +314,17 @@ struct CLIENT_ID {
 };
 
 // This is a partial definition of the TEB, as we do not currently use many
-// fields of it. See http://www.nirsoft.net/kernel_struct/vista/TEB.html, and
-// the (arch-specific) definition of _TEB in winternl.h.
+// fields of it. See https://nirsoft.net/kernel_struct/vista/TEB.html, and the
+// (arch-specific) definition of _TEB in winternl.h.
 template <class Traits>
 struct TEB {
   NT_TIB<Traits> NtTib;
-  typename Traits::Pointer ProcessEnvironmentBlock;
+  typename Traits::Pointer EnvironmentPointer;
   CLIENT_ID<Traits> ClientId;
-
-  // Not identical to Reserved2 in winternl's _TEB because we define ClientId.
-  typename Traits::Pointer RemainderOfReserved2[397];
-
+  typename Traits::Pointer ActiveRpcHandle;
+  typename Traits::Pointer ThreadLocalStoragePointer;
+  typename Traits::Pointer ProcessEnvironmentBlock;
+  typename Traits::Pointer RemainderOfReserved2[399];
   BYTE Reserved3[1952];
   typename Traits::Pointer TlsSlots[64];
   BYTE Reserved4[8];
@@ -330,7 +334,7 @@ struct TEB {
   typename Traits::Pointer TlsExpansionSlots;
 };
 
-// See https://msdn.microsoft.com/en-us/library/gg750724.aspx.
+// See https://msdn.microsoft.com/library/gg750724.aspx.
 template <class Traits>
 struct SYSTEM_THREAD_INFORMATION {
   union {
@@ -396,7 +400,7 @@ struct VM_COUNTERS<internal::Traits64> {
   SIZE_T PrivateUsage;
 };
 
-// See http://undocumented.ntinternals.net/source/usermode/undocumented%20functions/system%20information/structures/system_process_information.html
+// https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/System%20Information/Structures/SYSTEM_PROCESS_INFORMATION.html
 template <class Traits>
 struct SYSTEM_PROCESS_INFORMATION {
   ULONG NextEntryOffset;
@@ -432,7 +436,7 @@ struct SYSTEM_PROCESS_INFORMATION {
   SYSTEM_THREAD_INFORMATION<Traits> Threads[1];
 };
 
-// http://undocumented.ntinternals.net/source/usermode/structures/thread_basic_information.html
+// https://undocumented.ntinternals.net/source/usermode/structures/THREAD_BASIC_INFORMATION.html
 template <class Traits>
 struct THREAD_BASIC_INFORMATION {
   union {

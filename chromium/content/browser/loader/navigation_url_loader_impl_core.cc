@@ -28,7 +28,7 @@ namespace content {
 
 NavigationURLLoaderImplCore::NavigationURLLoaderImplCore(
     const base::WeakPtr<NavigationURLLoaderImpl>& loader)
-    : loader_(loader), resource_handler_(nullptr) {
+    : loader_(loader), resource_handler_(nullptr), weak_factory_(this) {
   // This object is created on the UI thread but otherwise is accessed and
   // deleted on the IO thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -46,10 +46,8 @@ void NavigationURLLoaderImplCore::Start(
     std::unique_ptr<NavigationUIData> navigation_ui_data) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&NavigationURLLoaderImpl::NotifyRequestStarted, loader_,
-                     base::TimeTicks::Now()));
+  base::WeakPtr<NavigationURLLoaderImplCore> weak_this =
+      weak_factory_.GetWeakPtr();
 
   // The ResourceDispatcherHostImpl can be null in unit tests.
   if (ResourceDispatcherHostImpl::Get()) {
@@ -59,6 +57,15 @@ void NavigationURLLoaderImplCore::Start(
         std::move(navigation_ui_data), this, service_worker_handle_core,
         appcache_handle_core);
   }
+
+  // Careful, |this| could be destroyed at this point. Don't notify start if
+  // that's the case (i.e. the request failed).
+  if (!weak_this)
+    return;
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&NavigationURLLoaderImpl::NotifyRequestStarted, loader_,
+                     base::TimeTicks::Now()));
 }
 
 void NavigationURLLoaderImplCore::FollowRedirect() {
@@ -109,7 +116,7 @@ void NavigationURLLoaderImplCore::NotifyRequestRedirected(
 void NavigationURLLoaderImplCore::NotifyResponseStarted(
     ResourceResponse* response,
     std::unique_ptr<StreamHandle> body,
-    const SSLStatus& ssl_status,
+    const net::SSLInfo& ssl_info,
     std::unique_ptr<NavigationData> navigation_data,
     const GlobalRequestID& request_id,
     bool is_download,
@@ -131,7 +138,7 @@ void NavigationURLLoaderImplCore::NotifyResponseStarted(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&NavigationURLLoaderImpl::NotifyResponseStarted, loader_,
-                     response->DeepCopy(), base::Passed(&body), ssl_status,
+                     response->DeepCopy(), base::Passed(&body), ssl_info,
                      base::Passed(&navigation_data), request_id, is_download,
                      is_stream));
 }

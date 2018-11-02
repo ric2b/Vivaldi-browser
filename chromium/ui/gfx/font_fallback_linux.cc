@@ -19,6 +19,9 @@ namespace gfx {
 
 namespace {
 
+const char kFontFormatTrueType[] = "TrueType";
+const char kFontFormatCFF[] = "CFF";
+
 typedef std::map<std::string, std::vector<Font> > FallbackCache;
 base::LazyInstance<FallbackCache>::Leaky g_fallback_cache =
     LAZY_INSTANCE_INITIALIZER;
@@ -211,6 +214,18 @@ class CachedFontSet {
         continue;
       if (access(reinterpret_cast<char*>(c_filename), R_OK))
         continue;
+
+      // Take only supported font formats on board.
+      FcChar8* font_format;
+      if (FcPatternGetString(pattern, FC_FONTFORMAT, 0, &font_format) !=
+          FcResultMatch) {
+        continue;
+      }
+      if (font_format &&
+          strcmp(reinterpret_cast<char*>(font_format), kFontFormatTrueType) &&
+          strcmp(reinterpret_cast<char*>(font_format), kFontFormatCFF)) {
+        continue;
+      }
 
       // Make sure this font can tell us what characters it has glyphs for.
       FcCharSet* char_set;

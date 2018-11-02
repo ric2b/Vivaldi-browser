@@ -23,7 +23,6 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="159359590073980872">Cache i imazheve</translation>
 <translation id="1603914832182249871">(E fshehur)</translation>
-<translation id="1616206807336925449">Kjo shtesë nuk kërkon leje të veçanta.</translation>
 <translation id="1627276047960621195">Përshkruesit e skedarëve</translation>
 <translation id="1635033183663317347">E instaluar nga kujdestari juaj.</translation>
 <translation id="1682548588986054654">Dritare e fshehtë e re</translation>
@@ -80,7 +79,6 @@
 <translation id="2916745397441987255">Kërkoni shtesat</translation>
 <translation id="2932883381142163287">Sinjalizoj abuzimet</translation>
 <translation id="2941112035454246133">Ulët</translation>
-<translation id="2971033837577180453">&lt;span&gt; ID: &lt;/span&gt; <ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Përsërit</translation>
 <translation id="299483336428448530">E instaluar nga prindi juaj.</translation>
 <translation id="3003623123441819449">Cache CSS</translation>
@@ -91,7 +89,6 @@
 <translation id="3080207940057008665">Një program në kompjuterin tuaj shtoi një motiv që mund të ndryshojë funksionimin e Vivaldit.</translation>
 <translation id="3084548735795614657">Hidheni këtu për ta instaluar</translation>
 <translation id="3122464029669770682">Procesori</translation>
-<translation id="3149510190863420837">Chrome Apps</translation>
 <translation id="32279126412636473">Freskoj (⌘R)</translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar atë, zgjidhni një çelës privat që mund të përdoret përsëri.</translation>
 <translation id="3269093882174072735">Hap imazhin</translation>
@@ -257,7 +254,6 @@
 <translation id="6955446738988643816">Inspektoj faqen automatike</translation>
 <translation id="6974053822202609517">Nga e djathta në të majtë</translation>
 <translation id="6985276906761169321">ID:</translation>
-<translation id="7013485839273047434">Gjej shtesa të tjera</translation>
 <translation id="708060913198414444">K&amp;opjoj adresën e audios</translation>
 <translation id="7144878232160441200">Provoj përsëri</translation>
 <translation id="7175353351958621980">E hapur nga:</translation>
@@ -295,7 +291,6 @@
 <translation id="7947962633355574091">K&amp;opjoj adresën e videos</translation>
 <translation id="7965010376480416255">Memorja e shpërndarë</translation>
 <translation id="7966241909927244760">K&amp;opjoj adresën e imazhit</translation>
-<translation id="7967437925638594022">Shtesat &amp; aplikacionet</translation>
 <translation id="7978412674231730200">Çelësi privat</translation>
 <translation id="7982789257301363584">Rrjeti</translation>
 <translation id="7997826902155442747">Prioriteti i procesit</translation>

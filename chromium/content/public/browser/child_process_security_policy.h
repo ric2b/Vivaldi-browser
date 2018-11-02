@@ -195,10 +195,15 @@ class ChildProcessSecurityPolicy {
   virtual void GrantSendMidiSysExMessage(int child_id) = 0;
 
   // Returns true if the process is permitted to read and modify the data for
-  // the given origin. This is currently used for cookies and passwords.
-  // Does not affect cookies attached to or set by network requests.
-  // Only might return false if the --site-per-process flag is used.
-  virtual bool CanAccessDataForOrigin(int child_id, const GURL& gurl) = 0;
+  // the origin of |url|. This is currently used to protect data such as
+  // cookies, passwords, and local storage. Does not affect cookies attached to
+  // or set by network requests.
+  //
+  // This can only return false for processes locked to a particular origin,
+  // which can happen for any origin when the --site-per-process flag is used,
+  // or for isolated origins that require a dedicated process (see
+  // AddIsolatedOrigin).
+  virtual bool CanAccessDataForOrigin(int child_id, const GURL& url) = 0;
 
   // Returns true if GrantOrigin was called earlier with the same parameters.
   //
@@ -208,6 +213,31 @@ class ChildProcessSecurityPolicy {
   // check is superseded by a UI thread check.  See https://crbug.com/656752.
   virtual bool HasSpecificPermissionForOrigin(int child_id,
                                               const url::Origin& origin) = 0;
+
+  // This function will check whether |origin| requires process isolation, and
+  // if so, it will return true and put the most specific matching isolated
+  // origin into |result|.
+  //
+  // Such origins may be registered with the --isolate-origins command-line
+  // flag, via features::IsolateOrigins, via an IsolateOrigins enterprise
+  // policy, or by a content/ embedder using
+  // ContentBrowserClient::GetOriginsRequiringDedicatedProcess().
+  //
+  // If |origin| does not require process isolation, this function will return
+  // false, and |result| will be a unique origin. This means that neither
+  // |origin|, nor any origins for which |origin| is a subdomain, have been
+  // registered as isolated origins.
+  //
+  // For example, if both https://isolated.com/ and
+  // https://bar.foo.isolated.com/ are registered as isolated origins, then the
+  // values returned in |result| are:
+  //   https://isolated.com/             -->  https://isolated.com/
+  //   https://foo.isolated.com/         -->  https://isolated.com/
+  //   https://bar.foo.isolated.com/     -->  https://bar.foo.isolated.com/
+  //   https://baz.bar.foo.isolated.com/ -->  https://bar.foo.isolated.com/
+  //   https://unisolated.com/           -->  (unique origin)
+  virtual bool GetMatchingIsolatedOrigin(const url::Origin& origin,
+                                         url::Origin* result) = 0;
 };
 
 }  // namespace content

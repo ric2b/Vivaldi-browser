@@ -9,7 +9,6 @@
 <translation id="1175364870820465910">&amp;Prenta...</translation>
 <translation id="1181037720776840403">Fjarlægja</translation>
 <translation id="119944043368869598">Hreinsa allt</translation>
-<translation id="1238150413700645698">Varið efni</translation>
 <translation id="1368832886055348810">Vinstri til hægri</translation>
 <translation id="1465176863081977902">A&amp;frita veffang hljóðskrár</translation>
 <translation id="1476607407192946488">&amp;tungumálastillingar</translation>
@@ -43,14 +42,12 @@
 <translation id="2812989263793994277">Ekki sýna neinar myndir</translation>
 <translation id="2889064240420137087">Opna hlekk með...</translation>
 <translation id="2913331724188855103">Leyfa síðum að vista og lesa gögn úr vefkökum (mælt með)</translation>
-<translation id="2914303854539667666">Búa til lykilorð</translation>
 <translation id="2972581237482394796">&amp;Endurtaka</translation>
 <translation id="3021678814754966447">&amp;Skoða frumkóða ramma</translation>
 <translation id="3031601332414921114">Halda áfram að prenta</translation>
 <translation id="3036546437875325427">Virkja flass</translation>
 <translation id="3038675903128704560">Ekki leyfa neinni síðu að nota íforrit til þess að tengjast tölvunni þinni</translation>
 <translation id="3144647712221361880">Opna hlekk sem</translation>
-<translation id="3149510190863420837">Crome Öpp</translation>
 <translation id="3227137524299004712">Hljóðnemi</translation>
 <translation id="3280237271814976245">Vista &amp;sem...</translation>
 <translation id="3285322247471302225">Nýr &amp;flipi</translation>
@@ -102,8 +99,8 @@
 <translation id="5427459444770871191">Snúa &amp;réttsælis</translation>
 <translation id="5486561344817861625">Líkja eftir endurræsingu vafra</translation>
 <translation id="5509693895992845810">Vista &amp;Sem</translation>
-<translation id="5646376287012673985">Staðsetning</translation>
 <translation id="5649053991847567735">Sjálfvirkt niðurhal</translation>
+<translation id="5689516760719285838">Staðsetning</translation>
 <translation id="5764483294734785780">Vi&amp;sta hljóð sem...</translation>
 <translation id="577624874850706961">Leita að kökum</translation>
 <translation id="5804241973901381774">Leyfi</translation>
@@ -133,7 +130,6 @@
 <translation id="6886871292305414135">Opna hlekk í nýjum &amp;flipa</translation>
 <translation id="6943176775188458830">Hætta við prentun</translation>
 <translation id="6974053822202609517">Hægri til vinstri</translation>
-<translation id="7013485839273047434">Fá fleiri viðbætur</translation>
 <translation id="7030031465713069059">Vista lykilorð</translation>
 <translation id="708060913198414444">V&amp;ista veffang hljóðskrár</translation>
 <translation id="7309257895202129721">Sýna &amp;stjórntæki</translation>
@@ -152,7 +148,6 @@
 <translation id="7849264908733290972">Opna &amp;mynd í nýjum flipa</translation>
 <translation id="7947962633355574091">A&amp;frita veffang myndbands</translation>
 <translation id="7966241909927244760">A&amp;frita veffang myndar</translation>
-<translation id="7967437925638594022">Viðbætur &amp; Öpp</translation>
 <translation id="8018313076035239964">Hafðu stjórn á hvaða upplýsingar vefsíður geta notað og hvaða efni þær geta sýnt þér</translation>
 <translation id="8188120771410500975">&amp;Kanna stafsetningu textasvæða</translation>
 <translation id="8261506727792406068">Eyða</translation>

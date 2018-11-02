@@ -9,20 +9,21 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/common/search.mojom.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/renderer/instant_restricted_id_cache.h"
-#include "components/ntp_tiles/tile_source.h"
-#include "components/ntp_tiles/tile_visual_type.h"
+#include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
+// The renderer-side implementation of the embeddedSearch API (see
+// https://www.chromium.org/embeddedsearch).
 class SearchBox : public content::RenderFrameObserver,
                   public content::RenderFrameObserverTracker<SearchBox>,
                   public chrome::mojom::EmbeddedSearchClient {
@@ -53,14 +54,10 @@ class SearchBox : public content::RenderFrameObserver,
   void LogEvent(NTPLoggingEventType event);
 
   // Sends LogMostVisitedImpression to the browser.
-  void LogMostVisitedImpression(int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type);
+  void LogMostVisitedImpression(const ntp_tiles::NTPTileImpression& impression);
 
   // Sends LogMostVisitedNavigation to the browser.
-  void LogMostVisitedNavigation(int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type);
+  void LogMostVisitedNavigation(const ntp_tiles::NTPTileImpression& impression);
 
   // Sends ChromeIdentityCheck to the browser.
   void CheckIsUserSignedInToChromeAs(const base::string16& identity);
@@ -103,16 +100,15 @@ class SearchBox : public content::RenderFrameObserver,
   bool GetMostVisitedItemWithID(InstantRestrictedID most_visited_item_id,
                                 InstantMostVisitedItem* item) const;
 
-  // Sends SearchBoxPaste to the browser.
+  // Sends PasteAndOpenDropdown to the browser.
   void Paste(const base::string16& text);
 
-  const ThemeBackgroundInfo& GetThemeBackgroundInfo();
-  const EmbeddedSearchRequestParams& GetEmbeddedSearchRequestParams();
+  const ThemeBackgroundInfo& GetThemeBackgroundInfo() const;
 
-  // Sends ChromeViewHostMsg_StartCapturingKeyStrokes to the browser.
+  // Sends FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE) to the browser.
   void StartCapturingKeyStrokes();
 
-  // Sends ChromeViewHostMsg_StopCapturingKeyStrokes to the browser.
+  // Sends FocusOmnibox(OMNIBOX_FOCUS_NONE) to the browser.
   void StopCapturingKeyStrokes();
 
   // Sends UndoAllMostVisitedDeletions to the browser.
@@ -124,36 +120,28 @@ class SearchBox : public content::RenderFrameObserver,
   bool is_focused() const { return is_focused_; }
   bool is_input_in_progress() const { return is_input_in_progress_; }
   bool is_key_capture_enabled() const { return is_key_capture_enabled_; }
-  const InstantSuggestion& suggestion() const { return suggestion_; }
 
  private:
   // Overridden from content::RenderFrameObserver:
+  void DidCommitProvisionalLoad(bool is_new_navigation,
+                                bool is_same_document_navigation) override;
   void OnDestruct() override;
 
-  // Overridden from chrome::mojom::SearchBox:
+  // Overridden from chrome::mojom::EmbeddedSearchClient:
   void SetPageSequenceNumber(int page_seq_no) override;
-  void ChromeIdentityCheckResult(const base::string16& identity,
-                                 bool identity_match) override;
   void FocusChanged(OmniboxFocusState new_focus_state,
                     OmniboxFocusChangeReason reason) override;
-  void HistorySyncCheckResult(bool sync_history) override;
   void MostVisitedChanged(
       const std::vector<InstantMostVisitedItem>& items) override;
   void SetInputInProgress(bool input_in_progress) override;
-  void SetSuggestionToPrefetch(const InstantSuggestion& suggestion) override;
-  void Submit(const EmbeddedSearchRequestParams& params) override;
   void ThemeChanged(const ThemeBackgroundInfo& theme_info) override;
 
-  // Returns the current zoom factor of the render view or 1 on failure.
-  double GetZoom() const;
-
-  // Sets the searchbox values to their initial value.
-  void Reset();
+  void HistorySyncCheckResult(bool sync_history);
+  void ChromeIdentityCheckResult(const base::string16& identity,
+                                 bool identity_match);
 
   // Returns the URL of the Most Visited item specified by the |item_id|.
   GURL GetURLForMostVisitedItem(InstantRestrictedID item_id) const;
-
-  void Bind(chrome::mojom::EmbeddedSearchClientAssociatedRequest request);
 
   int page_seq_no_;
   bool is_focused_;
@@ -161,10 +149,10 @@ class SearchBox : public content::RenderFrameObserver,
   bool is_key_capture_enabled_;
   InstantRestrictedIDCache<InstantMostVisitedItem> most_visited_items_cache_;
   ThemeBackgroundInfo theme_info_;
-  EmbeddedSearchRequestParams embedded_search_request_params_;
-  InstantSuggestion suggestion_;
   chrome::mojom::EmbeddedSearchAssociatedPtr embedded_search_service_;
   mojo::AssociatedBinding<chrome::mojom::EmbeddedSearchClient> binding_;
+
+  base::WeakPtrFactory<SearchBox> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBox);
 };

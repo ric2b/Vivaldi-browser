@@ -2,13 +2,18 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//mojo/public/tools/bindings/mojom.gni")
+
 # C++ headers and sources that can be used outside ash.
-component("ash_public_cpp") {
+component("cpp") {
   sources = [
+    "accessibility_types.h",
     "app_types.h",
     "ash_pref_names.cc",
     "ash_pref_names.h",
     "ash_public_export.h",
+    "ash_switches.cc",
+    "ash_switches.h",
     "ash_typography.cc",
     "ash_typography.h",
     "config.h",
@@ -43,12 +48,14 @@ component("ash_public_cpp") {
     "shelf_types.h",
     "shell_window_ids.cc",
     "shell_window_ids.h",
-    "touchscreen_enabled_source.h",
-    "voice_interaction_state.h",
+    "stylus_utils.cc",
+    "stylus_utils.h",
     "window_pin_type.cc",
     "window_pin_type.h",
     "window_properties.cc",
     "window_properties.h",
+    "window_state_type.cc",
+    "window_state_type.h",
     "window_style.cc",
     "window_style.h",
   ]
@@ -61,6 +68,7 @@ component("ash_public_cpp") {
     "//skia/public/interfaces",
     "//ui/aura",
     "//ui/display",
+    "//ui/events/devices",
     "//ui/views",
     "//ui/views/mus",
   ]
@@ -73,6 +81,22 @@ component("ash_public_cpp") {
 
   allow_circular_includes_from =
       [ "//ash/public/interfaces:interfaces_internal" ]
+
+  output_name = "ash_public_cpp"
+}
+
+# Using a test service because the traits need to pass handles around. Revisit
+# this after Deserialize(Serialize()) API works with handles.
+mojom("test_interfaces") {
+  visibility = [ ":unit_tests" ]
+
+  sources = [
+    "shelf_struct_traits_test_service.mojom",
+  ]
+
+  public_deps = [
+    "//ash/public/interfaces:interfaces_internal",
+  ]
 }
 
 source_set("unit_tests") {
@@ -83,7 +107,8 @@ source_set("unit_tests") {
   ]
 
   deps = [
-    ":ash_public_cpp",
+    ":cpp",
+    ":test_interfaces",
     "//base",
     "//testing/gtest",
     "//ui/gfx:test_support",

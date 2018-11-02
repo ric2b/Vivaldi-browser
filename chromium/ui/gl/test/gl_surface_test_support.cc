@@ -20,7 +20,7 @@
 #endif
 
 #if defined(USE_X11)
-#include <X11/Xlib.h>
+#include "ui/gfx/x/x11.h"
 #endif
 
 namespace gl {
@@ -100,7 +100,7 @@ void GLSurfaceTestSupport::InitializeOneOffImplementation(
 
   // This method may be called multiple times in the same process to set up
   // bindings in different ways.
-  init::ShutdownGL();
+  init::ShutdownGL(false);
 
   bool gpu_service_logging = false;
   bool disable_gl_drawing = false;

@@ -120,6 +120,12 @@ namespace system.display {
     // (including the display being mirrored).
     DOMString mirroringSourceId;
 
+    // Chrome OS only. Identifiers of the displays to which the source display
+    // is being mirrored. Empty if no displays are being mirrored. This will be
+    // set to the same value for all displays. This must not include
+    // |mirroringSourceId|.
+    DOMString[] mirroringDestinationIds;
+
     // True if this is the primary display.
     boolean isPrimary;
 
@@ -132,6 +138,13 @@ namespace system.display {
     // True for all displays when in unified desktop mode. See documentation
     // for $(ref:enableUnifiedDesktop).
     boolean isUnified;
+
+    // True when the display is in tablet mode. This may be set for touch
+    // devices where hasAccelerometerSupport is true, e.g. when an app opens in
+    // tablet mode. The default value is false.
+    // Provided for ChromeOS Settings UI only. TODO(stevenjb): Remove when
+    // Settings switches to a mojo API.
+    [nodoc] boolean? isTabletMode;
 
     // The number of pixels per inch along the x-axis.
     double dpiX;
@@ -164,6 +177,11 @@ namespace system.display {
 
     // True if this display has a touch input device associated with it.
     boolean hasTouchSupport;
+
+    // True if this display has an accelerometer associated with it.
+    // Provided for ChromeOS Settings UI only. TODO(stevenjb): Remove when
+    // Settings switches to a mojo API. NOTE: The name of this may change.
+    [nodoc] boolean hasAccelerometerSupport;
   };
 
   dictionary DisplayProperties {

@@ -17,7 +17,6 @@
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
-#include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -45,7 +44,6 @@ struct FaviconURL;
 struct LoadCommittedDetails;
 struct PrunedDetails;
 struct Referrer;
-struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
 
 // An observer API implemented by classes which are interested in various page
@@ -61,8 +59,7 @@ struct ResourceRequestDetails;
 //
 // TODO(creis, jochen): Hide the fact that there are several RenderViewHosts
 // from the WebContentsObserver API. http://crbug.com/173325
-class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
-                                           public IPC::Sender {
+class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
  public:
   // Frames and Views ----------------------------------------------------------
 
@@ -260,11 +257,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void DidGetResourceResponseStart(
       const ResourceRequestDetails& details) {}
 
-  // This method is invoked when a redirect has been received for a resource
-  // request.
-  virtual void DidGetRedirectForResourceRequest(
-      const ResourceRedirectDetails& details) {}
-
   // This method is invoked when the extdata has been set (Vivaldi).
   virtual void ExtDataSet(WebContents* contents) {}
 
@@ -342,10 +334,10 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void FrameNameChanged(RenderFrameHost* render_frame_host,
                                 const std::string& name) {}
 
-  // This methods is invoked when the title of the WebContents is set. If the
-  // title was explicitly set, |explicit_set| is true, otherwise the title was
-  // synthesized and |explicit_set| is false.
-  virtual void TitleWasSet(NavigationEntry* entry, bool explicit_set) {}
+  // This method is invoked when the title of the WebContents is set. Note that
+  // |entry| may be null if the web page whose title changed has not yet had a
+  // NavigationEntry assigned to it.
+  virtual void TitleWasSet(NavigationEntry* entry) {}
 
   virtual void AppCacheAccessed(const GURL& manifest_url,
                                 bool blocked_by_policy) {}
@@ -442,9 +434,23 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   using MediaPlayerId = std::pair<RenderFrameHost*, int>;
   virtual void MediaStartedPlaying(const MediaPlayerInfo& video_type,
                                    const MediaPlayerId& id) {}
-  virtual void MediaStoppedPlaying(const MediaPlayerInfo& video_type,
-                                   const MediaPlayerId& id) {}
+  enum class MediaStoppedReason {
+    // The media was stopped for an unspecified reason.
+    kUnspecified,
+
+    // The media was stopped because it reached the end of the stream.
+    kReachedEndOfStream,
+  };
+  virtual void MediaStoppedPlaying(
+      const MediaPlayerInfo& video_type,
+      const MediaPlayerId& id,
+      WebContentsObserver::MediaStoppedReason reason) {}
   virtual void MediaResized(const gfx::Size& size, const MediaPlayerId& id) {}
+  // Invoked when media enters or exits fullscreen. We must use a heuristic
+  // to determine this as it is not trivial for media with custom controls.
+  // There is a slight delay between media entering or exiting fullscreen
+  // and it being detected.
+  virtual void MediaEffectivelyFullscreenChanged(bool is_fullscreen) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
 
   // Invoked when the renderer process changes the page scale factor.
@@ -487,10 +493,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   //                                    RenderFrameHost* render_frame_host);
   // TODO(https://crbug.com/758026): Delete this overload when possible.
   bool OnMessageReceived(const IPC::Message& message) override;
-
-  // IPC::Sender implementation.
-  bool Send(IPC::Message* message) override;
-  int routing_id() const;
 
   WebContents* web_contents() const;
 

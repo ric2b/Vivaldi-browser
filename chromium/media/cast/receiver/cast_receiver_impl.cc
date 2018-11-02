@@ -46,7 +46,7 @@ CastReceiverImpl::CastReceiverImpl(
       audio_codec_(audio_config.codec),
       video_codec_(video_config.codec) {}
 
-CastReceiverImpl::~CastReceiverImpl() {}
+CastReceiverImpl::~CastReceiverImpl() = default;
 
 void CastReceiverImpl::ReceivePacket(std::unique_ptr<Packet> packet) {
   const uint8_t* const data = &packet->front();
@@ -143,8 +143,8 @@ void CastReceiverImpl::DecodeEncodedVideoFrame(
     std::unique_ptr<EncodedFrame> encoded_frame) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   if (!encoded_frame) {
-    callback.Run(
-        make_scoped_refptr<VideoFrame>(NULL), base::TimeTicks(), false);
+    callback.Run(base::WrapRefCounted<VideoFrame>(NULL), base::TimeTicks(),
+                 false);
     return;
   }
 

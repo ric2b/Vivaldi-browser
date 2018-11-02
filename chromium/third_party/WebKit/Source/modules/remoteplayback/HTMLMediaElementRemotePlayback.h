@@ -5,7 +5,7 @@
 #ifndef HTMLMediaElementRemotePlayback_h
 #define HTMLMediaElementRemotePlayback_h
 
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
@@ -32,7 +32,7 @@ class MODULES_EXPORT HTMLMediaElementRemotePlayback final
   static HTMLMediaElementRemotePlayback& From(HTMLMediaElement&);
   static RemotePlayback* remote(HTMLMediaElement&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   static const char* SupplementName();

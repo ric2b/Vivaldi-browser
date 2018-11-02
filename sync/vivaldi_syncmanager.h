@@ -49,8 +49,10 @@ class VivaldiSyncManager : public ProfileSyncService,
 
   void Logout();
   void SetupComplete();
-  void PollServer();
   void ConfigureTypes(bool sync_everything, syncer::ModelTypeSet chosen_types);
+  VivaldiInvalidationService* invalidation_service() {
+    return invalidation_service_.get();
+  }
 
   void NotifyLoginDone();
   void NotifySyncStarted();
@@ -59,9 +61,6 @@ class VivaldiSyncManager : public ProfileSyncService,
   void NotifyLogoutDone();
   void NotifyAccessTokenRequested();
   void NotifyEncryptionPasswordRequested();
-
-  void StartPollingServer();
-  void PerformPollServer();
 
   static bool IsSyncEnabled() { return true; }
 
@@ -91,7 +90,6 @@ class VivaldiSyncManager : public ProfileSyncService,
   std::string password_;
   base::Time expiration_time_;
 
-  bool polling_posted_;
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
   std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
   std::shared_ptr<VivaldiInvalidationService> invalidation_service_;

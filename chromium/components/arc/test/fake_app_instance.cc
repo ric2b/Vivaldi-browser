@@ -10,9 +10,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -43,10 +44,15 @@ FakeAppInstance::FakeAppInstance(mojom::AppHost* app_host)
     : app_host_(app_host) {}
 FakeAppInstance::~FakeAppInstance() {}
 
-void FakeAppInstance::Init(mojom::AppHostPtr host_ptr) {
+void FakeAppInstance::InitDeprecated(mojom::AppHostPtr host_ptr) {
+  Init(std::move(host_ptr), base::BindOnce(&base::DoNothing));
+}
+
+void FakeAppInstance::Init(mojom::AppHostPtr host_ptr, InitCallback callback) {
   // ARC app instance calls RefreshAppList after Init() successfully. Call
   // RefreshAppList() here to keep the same behavior.
   RefreshAppList();
+  std::move(callback).Run();
 }
 
 void FakeAppInstance::RefreshAppList() {
@@ -63,14 +69,14 @@ void FakeAppInstance::LaunchAppDeprecated(
 void FakeAppInstance::LaunchApp(const std::string& package_name,
                                 const std::string& activity,
                                 int64_t display_id) {
-  launch_requests_.push_back(base::MakeUnique<Request>(package_name, activity));
+  launch_requests_.push_back(std::make_unique<Request>(package_name, activity));
 }
 
 void FakeAppInstance::RequestAppIcon(const std::string& package_name,
                                      const std::string& activity,
                                      mojom::ScaleFactor scale_factor) {
   icon_requests_.push_back(
-      base::MakeUnique<IconRequest>(package_name, activity, scale_factor));
+      std::make_unique<IconRequest>(package_name, activity, scale_factor));
 }
 
 void FakeAppInstance::SendRefreshAppList(
@@ -247,8 +253,8 @@ void FakeAppInstance::CanHandleResolutionDeprecated(
     const std::string& package_name,
     const std::string& activity,
     const gfx::Rect& dimension,
-    const CanHandleResolutionDeprecatedCallback& callback) {
-  callback.Run(true);
+    CanHandleResolutionDeprecatedCallback callback) {
+  std::move(callback).Run(true);
 }
 
 void FakeAppInstance::UninstallPackage(const std::string& package_name) {
@@ -256,12 +262,13 @@ void FakeAppInstance::UninstallPackage(const std::string& package_name) {
 }
 
 void FakeAppInstance::GetTaskInfo(int32_t task_id,
-                                  const GetTaskInfoCallback& callback) {
+                                  GetTaskInfoCallback callback) {
   TaskIdToInfo::const_iterator it = task_id_to_info_.find(task_id);
-  if (it != task_id_to_info_.end())
-    callback.Run(it->second->package_name(), it->second->activity());
-  else
-    callback.Run(std::string(), std::string());
+  if (it == task_id_to_info_.end()) {
+    std::move(callback).Run(std::string(), std::string());
+    return;
+  }
+  std::move(callback).Run(it->second->package_name(), it->second->activity());
 }
 
 void FakeAppInstance::SetTaskActive(int32_t task_id) {
@@ -293,7 +300,7 @@ void FakeAppInstance::InstallPackage(mojom::ArcPackageInfoPtr arcPackageInfo) {
 void FakeAppInstance::GetRecentAndSuggestedAppsFromPlayStore(
     const std::string& query,
     int32_t max_results,
-    const GetRecentAndSuggestedAppsFromPlayStoreCallback& callback) {
+    GetRecentAndSuggestedAppsFromPlayStoreCallback callback) {
   // Fake Play Store app info
   std::vector<arc::mojom::AppDiscoveryResultPtr> fake_apps;
 
@@ -328,8 +335,8 @@ void FakeAppInstance::GetRecentAndSuggestedAppsFromPlayStore(
         fake_icon_png_data,                             // icon_png_data
         base::StringPrintf("test.package.%d", i)));     // package_name
   }
-  callback.Run(arc::mojom::AppDiscoveryRequestState::SUCCESS,
-               std::move(fake_apps));
+  std::move(callback).Run(arc::mojom::AppDiscoveryRequestState::SUCCESS,
+                          std::move(fake_apps));
 }
 
 void FakeAppInstance::StartPaiFlow() {
@@ -349,14 +356,14 @@ void FakeAppInstance::LaunchIntent(const std::string& intent_uri,
 
 void FakeAppInstance::RequestIcon(const std::string& icon_resource_id,
                                   arc::mojom::ScaleFactor scale_factor,
-                                  const RequestIconCallback& callback) {
+                                  RequestIconCallback callback) {
   shortcut_icon_requests_.push_back(
-      base::MakeUnique<ShortcutIconRequest>(icon_resource_id, scale_factor));
+      std::make_unique<ShortcutIconRequest>(icon_resource_id, scale_factor));
 
   std::string png_data_as_string;
   if (GetFakeIcon(scale_factor, &png_data_as_string)) {
-    callback.Run(std::vector<uint8_t>(png_data_as_string.begin(),
-                                      png_data_as_string.end()));
+    std::move(callback).Run(std::vector<uint8_t>(png_data_as_string.begin(),
+                                                 png_data_as_string.end()));
   }
 }
 

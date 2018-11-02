@@ -21,12 +21,12 @@
 #ifndef SVGGradientElement_h
 #define SVGGradientElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedEnumeration.h"
 #include "core/svg/SVGAnimatedTransformList.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGURIReference.h"
 #include "core/svg/SVGUnitTypes.h"
+#include "core/svg_names.h"
 #include "platform/graphics/Gradient.h"
 #include "platform/heap/Handle.h"
 
@@ -62,7 +62,7 @@ class SVGGradientElement : public SVGElement, public SVGURIReference {
   const SVGGradientElement* ReferencedElement() const;
   void CollectCommonAttributes(GradientAttributes&) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   SVGGradientElement(const QualifiedName&, Document&);
@@ -74,9 +74,10 @@ class SVGGradientElement : public SVGElement, public SVGURIReference {
  private:
   bool NeedsPendingResourceHandling() const final { return false; }
 
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
 
   void ChildrenChanged(const ChildrenChange&) final;
 

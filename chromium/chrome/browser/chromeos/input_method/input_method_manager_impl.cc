@@ -12,9 +12,7 @@
 #include <sstream>
 #include <utility>
 
-#include "ash/ime/ime_controller.h"
 #include "ash/public/interfaces/ime_info.mojom.h"
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/hash.h"
@@ -897,6 +895,11 @@ void InputMethodManagerImpl::RecordInputMethodUsage(
 void InputMethodManagerImpl::AddObserver(
     InputMethodManager::Observer* observer) {
   observers_.AddObserver(observer);
+  observer->OnExtraInputEnabledStateChange(
+      base::FeatureList::IsEnabled(features::kEHVInputOnImeMenu),
+      features_enabled_state_ & InputMethodManager::FEATURE_EMOJI,
+      features_enabled_state_ & InputMethodManager::FEATURE_HANDWRITING,
+      features_enabled_state_ & InputMethodManager::FEATURE_VOICE);
 }
 
 void InputMethodManagerImpl::AddCandidateWindowObserver(
@@ -1275,21 +1278,36 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
     keyboard_controller->Reload();
 }
 
-bool InputMethodManagerImpl::IsEmojiHandwritingVoiceOnImeMenuEnabled() {
-  return base::FeatureList::IsEnabled(features::kEHVInputOnImeMenu);
-}
-
 void InputMethodManagerImpl::SetImeMenuFeatureEnabled(ImeMenuFeature feature,
                                                       bool enabled) {
+  const uint32_t original_state = features_enabled_state_;
   if (enabled)
     features_enabled_state_ |= feature;
   else
     features_enabled_state_ &= ~feature;
+  if (original_state != features_enabled_state_)
+    NotifyObserversImeExtraInputStateChange();
 }
 
 bool InputMethodManagerImpl::GetImeMenuFeatureEnabled(
     ImeMenuFeature feature) const {
   return features_enabled_state_ & feature;
+}
+
+void InputMethodManagerImpl::NotifyObserversImeExtraInputStateChange() {
+  for (auto& observer : observers_) {
+    const bool is_ehv_enabled =
+        base::FeatureList::IsEnabled(features::kEHVInputOnImeMenu);
+    const bool is_emoji_enabled =
+        (features_enabled_state_ & InputMethodManager::FEATURE_EMOJI);
+    const bool is_handwriting_enabled =
+        (features_enabled_state_ & InputMethodManager::FEATURE_HANDWRITING);
+    const bool is_voice_enabled =
+        (features_enabled_state_ & InputMethodManager::FEATURE_VOICE);
+    observer.OnExtraInputEnabledStateChange(is_ehv_enabled, is_emoji_enabled,
+                                            is_handwriting_enabled,
+                                            is_voice_enabled);
+  }
 }
 
 }  // namespace input_method

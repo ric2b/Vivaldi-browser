@@ -20,21 +20,19 @@
 #ifndef DOMMimeType_h
 #define DOMMimeType_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class DOMPlugin;
 class LocalFrame;
 
-class DOMMimeType final : public GarbageCollected<DOMMimeType>,
-                          public ScriptWrappable,
-                          public ContextClient {
+class DOMMimeType final : public ScriptWrappable, public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(DOMMimeType);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -49,7 +47,7 @@ class DOMMimeType final : public GarbageCollected<DOMMimeType>,
   const String& description() const;
   DOMPlugin* enabledPlugin() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   DOMMimeType(LocalFrame*, const MimeClassInfo&);

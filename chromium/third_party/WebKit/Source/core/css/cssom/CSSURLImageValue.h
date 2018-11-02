@@ -5,17 +5,24 @@
 #ifndef CSSURLImageValue_h
 #define CSSURLImageValue_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSStyleImageValue.h"
+#include "platform/bindings/ScriptState.h"
 
 namespace blink {
 
 class CORE_EXPORT CSSURLImageValue final : public CSSStyleImageValue {
-  WTF_MAKE_NONCOPYABLE(CSSURLImageValue);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSURLImageValue* Create(const AtomicString& url) {
-    return new CSSURLImageValue(CSSImageValue::Create(url));
+  static CSSURLImageValue* Create(ScriptState* script_state,
+                                  const AtomicString& url) {
+    const auto* execution_context = ExecutionContext::From(script_state);
+    DCHECK(execution_context);
+    // Use absolute URL for CSSImageValue but keep relative URL for
+    // getter and serialization.
+    return new CSSURLImageValue(CSSImageValue::Create(
+        url, execution_context->CompleteURL(url), Referrer()));
   }
   static CSSURLImageValue* Create(const CSSImageValue* image_value) {
     return new CSSURLImageValue(image_value);
@@ -23,13 +30,16 @@ class CORE_EXPORT CSSURLImageValue final : public CSSStyleImageValue {
 
   StyleValueType GetType() const override { return kURLImageType; }
 
-  const CSSValue* ToCSSValue() const override { return CssImageValue(); }
+  const CSSValue* ToCSSValue(SecureContextMode) const override {
+    return CssImageValue();
+  }
 
-  const String& url() const { return CssImageValue()->Url(); }
+  const String& url() const { return CssImageValue()->RelativeUrl(); }
 
  private:
   explicit CSSURLImageValue(const CSSImageValue* image_value)
       : CSSStyleImageValue(image_value) {}
+  DISALLOW_COPY_AND_ASSIGN(CSSURLImageValue);
 };
 
 }  // namespace blink

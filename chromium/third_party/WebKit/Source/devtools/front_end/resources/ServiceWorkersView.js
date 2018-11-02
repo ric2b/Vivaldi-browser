@@ -3,20 +3,52 @@
 // found in the LICENSE file.
 /**
  * @implements {SDK.SDKModelObserver<!SDK.ServiceWorkerManager>}
- * @unrestricted
  */
 Resources.ServiceWorkersView = class extends UI.VBox {
   constructor() {
     super(true);
+    this.registerRequiredCSS('resources/serviceWorkersView.css');
 
-    this._reportView = new UI.ReportView(Common.UIString('Service Workers'));
-    this._reportView.show(this.contentElement);
+    this._currentWorkersView = new UI.ReportView(Common.UIString('Service Workers'));
+    this._currentWorkersView.setBodyScrollable(false);
+    this.contentElement.classList.add('service-worker-list');
+    this._currentWorkersView.show(this.contentElement);
+    this._currentWorkersView.element.classList.add('service-workers-this-origin');
 
-    this._toolbar = this._reportView.createToolbar();
+    this._toolbar = this._currentWorkersView.createToolbar();
     this._toolbar.makeWrappable(false, true);
 
     /** @type {!Map<!SDK.ServiceWorkerRegistration, !Resources.ServiceWorkersView.Section>} */
     this._sections = new Map();
+
+    /** @type {?SDK.ServiceWorkerManager} */
+    this._manager = null;
+    /** @type {?SDK.SecurityOriginManager} */
+    this._securityOriginManager = null;
+
+    this._filterThrottler = new Common.Throttler(300);
+
+    this._otherWorkers = this.contentElement.createChild('div', 'service-workers-other-origin');
+    var filterElement = this._otherWorkers.createChild('div', 'service-worker-filter');
+    this._checkboxElement = filterElement.createChild('input', 'service-worker-filter-show-all-checkbox');
+    this._checkboxElement.type = 'checkbox';
+    this._checkboxElement.setAttribute('id', 'expand-all');
+    this._textElement = filterElement.createChild('label', 'service-worker-filter-label');
+    this._textElement.textContent = Common.UIString('Service workers from other domains');
+    this._textElement.setAttribute('for', 'expand-all');
+    this._checkboxElement.addEventListener('change', () => this._filterChanged());
+
+    var toolbar = new UI.Toolbar('service-worker-filter-toolbar', filterElement);
+    this._filter = new UI.ToolbarInput('Filter', 1);
+    this._filter.addEventListener(UI.ToolbarInput.Event.TextChanged, () => this._filterChanged());
+    toolbar.appendToolbarItem(this._filter);
+
+    this._otherWorkersView = new UI.ReportView();
+    this._otherWorkersView.setBodyScrollable(false);
+    this._otherWorkersView.show(this._otherWorkers);
+    this._otherWorkersView.element.classList.add('service-workers-for-other-origins');
+
+    this._updateCollapsedStyle();
 
     this._toolbar.appendToolbarItem(MobileThrottling.throttlingManager().createOfflineToolbarCheckbox());
     var updateOnReloadSetting = Common.settings.createSetting('serviceWorkerUpdateOnReload', false);
@@ -29,15 +61,11 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     var fallbackToNetwork = new UI.ToolbarSettingCheckbox(
         bypassServiceWorkerSetting, Common.UIString('Bypass Service Worker and load resources from the network'));
     this._toolbar.appendToolbarItem(fallbackToNetwork);
-    this._showAllCheckbox = new UI.ToolbarCheckbox(
-        Common.UIString('Show all'), Common.UIString('Show all Service Workers regardless of the origin'));
-    this._showAllCheckbox.setRightAligned(true);
-    this._showAllCheckbox.inputElement.addEventListener('change', this._updateSectionVisibility.bind(this), false);
-    this._toolbar.appendToolbarItem(this._showAllCheckbox);
 
     /** @type {!Map<!SDK.ServiceWorkerManager, !Array<!Common.EventTarget.EventDescriptor>>}*/
     this._eventListeners = new Map();
     SDK.targetManager.observeModels(SDK.ServiceWorkerManager, this);
+    this._updateListVisibility();
   }
 
   /**
@@ -58,8 +86,6 @@ Resources.ServiceWorkersView = class extends UI.VBox {
           SDK.ServiceWorkerManager.Events.RegistrationUpdated, this._registrationUpdated, this),
       this._manager.addEventListener(
           SDK.ServiceWorkerManager.Events.RegistrationDeleted, this._registrationDeleted, this),
-      this._manager.addEventListener(
-          SDK.ServiceWorkerManager.Events.RegistrationErrorAdded, this._registrationErrorAdded, this),
       this._securityOriginManager.addEventListener(
           SDK.SecurityOriginManager.Events.SecurityOriginAdded, this._updateSectionVisibility, this),
       this._securityOriginManager.addEventListener(
@@ -82,11 +108,38 @@ Resources.ServiceWorkersView = class extends UI.VBox {
   }
 
   _updateSectionVisibility() {
-    var securityOrigins = new Set(this._securityOriginManager.securityOrigins());
+    var hasOthers = false;
+    var hasThis = false;
+    var movedSections = [];
     for (var section of this._sections.values()) {
-      var visible = this._showAllCheckbox.checked() || securityOrigins.has(section._registration.securityOrigin);
-      section._section.element.classList.toggle('hidden', !visible);
+      var expectedView = this._getReportViewForOrigin(section._registration.securityOrigin);
+      hasOthers |= expectedView === this._otherWorkersView;
+      hasThis |= expectedView === this._currentWorkersView;
+      if (section._section.parentWidget() !== expectedView)
+        movedSections.push(section);
     }
+
+    for (var section of movedSections) {
+      var registration = section._registration;
+      this._removeRegistrationFromList(registration);
+      this._updateRegistration(registration, true);
+    }
+
+    var scorer = new Sources.FilePathScoreFunction(this._filter.value());
+    this._otherWorkersView.sortSections((a, b) => {
+      var cmp = scorer.score(b.title(), null) - scorer.score(a.title(), null);
+      return cmp === 0 ? a.title().localeCompare(b.title()) : cmp;
+    });
+    for (var section of this._sections.values()) {
+      if (section._section.parentWidget() === this._currentWorkersView ||
+          this._isRegistrationVisible(section._registration))
+        section._section.showWidget();
+      else
+        section._section.hideWidget();
+    }
+    this.contentElement.classList.toggle('service-worker-has-current', hasThis);
+    this._otherWorkers.classList.toggle('hidden', !hasOthers);
+    this._updateListVisibility();
   }
 
   /**
@@ -102,8 +155,7 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     var hasNonDeletedRegistrations = false;
     var securityOrigins = new Set(this._securityOriginManager.securityOrigins());
     for (var registration of this._manager.registrations().values()) {
-      var visible = this._showAllCheckbox.checked() || securityOrigins.has(registration.securityOrigin);
-      if (!visible)
+      if (!securityOrigins.has(registration.securityOrigin) && !this._isRegistrationVisible(registration))
         continue;
       if (!registration.canBeRemoved()) {
         hasNonDeletedRegistrations = true;
@@ -115,34 +167,38 @@ Resources.ServiceWorkersView = class extends UI.VBox {
       return;
 
     for (var registration of this._manager.registrations().values()) {
-      var visible = this._showAllCheckbox.checked() || securityOrigins.has(registration.securityOrigin);
-      if (visible && registration.canBeRemoved())
+      var visible = securityOrigins.has(registration.securityOrigin) || this._isRegistrationVisible(registration);
+      if (!visible && registration.canBeRemoved())
         this._removeRegistrationFromList(registration);
     }
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {string} origin
+   * @return {!UI.ReportView}
    */
-  _registrationErrorAdded(event) {
-    var registration = /** @type {!SDK.ServiceWorkerRegistration} */ (event.data['registration']);
-    var error = /** @type {!Protocol.ServiceWorker.ServiceWorkerErrorMessage} */ (event.data['error']);
-    var section = this._sections.get(registration);
-    if (!section)
-      return;
-    section._addError(error);
+  _getReportViewForOrigin(origin) {
+    if (this._securityOriginManager.securityOrigins().includes(origin))
+      return this._currentWorkersView;
+    else
+      return this._otherWorkersView;
   }
 
   /**
    * @param {!SDK.ServiceWorkerRegistration} registration
+   * @param {boolean=} skipUpdate
    */
-  _updateRegistration(registration) {
+  _updateRegistration(registration, skipUpdate) {
     var section = this._sections.get(registration);
     if (!section) {
-      section =
-          new Resources.ServiceWorkersView.Section(this._manager, this._reportView.appendSection(''), registration);
+      var title = Resources.ServiceWorkersView._displayScopeURL(registration.scopeURL);
+      section = new Resources.ServiceWorkersView.Section(
+          /** @type {!SDK.ServiceWorkerManager} */ (this._manager),
+          this._getReportViewForOrigin(registration.securityOrigin).appendSection(title), registration);
       this._sections.set(registration, section);
     }
+    if (skipUpdate)
+      return;
     this._updateSectionVisibility();
     section._scheduleUpdate();
   }
@@ -161,14 +217,56 @@ Resources.ServiceWorkersView = class extends UI.VBox {
   _removeRegistrationFromList(registration) {
     var section = this._sections.get(registration);
     if (section)
-      section._section.remove();
+      section._section.detach();
     this._sections.delete(registration);
+    this._updateSectionVisibility();
+  }
+
+  /**
+   * @param {!SDK.ServiceWorkerRegistration} registration
+   * @return {boolean}
+   */
+  _isRegistrationVisible(registration) {
+    var filterString = this._filter.value();
+    if (!filterString || !registration.scopeURL)
+      return true;
+
+    var regex = String.filterRegex(filterString);
+    return registration.scopeURL.match(regex);
+  }
+
+  _filterChanged() {
+    this._updateCollapsedStyle();
+    this._filterThrottler.schedule(() => Promise.resolve(this._updateSectionVisibility()));
+  }
+
+  _updateCollapsedStyle() {
+    var collapsed = !this._checkboxElement.checked;
+    this._otherWorkers.classList.toggle('service-worker-filter-collapsed', collapsed);
+    if (collapsed)
+      this._otherWorkersView.hideWidget();
+    else
+      this._otherWorkersView.showWidget();
+    this._otherWorkersView.setHeaderVisible(false);
+  }
+
+  /**
+   * @param {string} scopeURL
+   * @return {string}
+   */
+  static _displayScopeURL(scopeURL) {
+    var parsedURL = scopeURL.asParsedURL();
+    var path = parsedURL.path;
+    if (path.endsWith('/'))
+      path = path.substring(0, path.length - 1);
+    return parsedURL.host + path;
+  }
+
+  _updateListVisibility() {
+    this.contentElement.classList.toggle('service-worker-list-empty', this._sections.size === 0);
   }
 };
 
-/**
- * @unrestricted
- */
 Resources.ServiceWorkersView.Section = class {
   /**
    * @param {!SDK.ServiceWorkerManager} manager
@@ -179,38 +277,73 @@ Resources.ServiceWorkersView.Section = class {
     this._manager = manager;
     this._section = section;
     this._registration = registration;
+    /** @type {?symbol} */
+    this._fingerprint = null;
+    this._pushNotificationDataSetting =
+        Common.settings.createLocalSetting('pushData', Common.UIString('Test push message from DevTools.'));
+    this._syncTagNameSetting = Common.settings.createLocalSetting('syncTagName', 'test-tag-from-devtools');
 
     this._toolbar = section.createToolbar();
     this._toolbar.renderAsLinks();
     this._updateButton = new UI.ToolbarButton(Common.UIString('Update'), undefined, Common.UIString('Update'));
     this._updateButton.addEventListener(UI.ToolbarButton.Events.Click, this._updateButtonClicked, this);
     this._toolbar.appendToolbarItem(this._updateButton);
-    this._pushButton = new UI.ToolbarButton(Common.UIString('Emulate push event'), undefined, Common.UIString('Push'));
-    this._pushButton.addEventListener(UI.ToolbarButton.Events.Click, this._pushButtonClicked, this);
-    this._toolbar.appendToolbarItem(this._pushButton);
-    this._syncButton =
-        new UI.ToolbarButton(Common.UIString('Emulate background sync event'), undefined, Common.UIString('Sync'));
-    this._syncButton.addEventListener(UI.ToolbarButton.Events.Click, this._syncButtonClicked, this);
-    this._toolbar.appendToolbarItem(this._syncButton);
     this._deleteButton =
         new UI.ToolbarButton(Common.UIString('Unregister service worker'), undefined, Common.UIString('Unregister'));
     this._deleteButton.addEventListener(UI.ToolbarButton.Events.Click, this._unregisterButtonClicked, this);
     this._toolbar.appendToolbarItem(this._deleteButton);
 
     // Preserve the order.
-    this._section.appendField(Common.UIString('Source'));
-    this._section.appendField(Common.UIString('Status'));
-    this._section.appendField(Common.UIString('Clients'));
-    this._section.appendField(Common.UIString('Errors'));
-    this._errorsList = this._wrapWidget(this._section.appendRow());
-    this._errorsList.classList.add('service-worker-error-stack', 'monospace', 'hidden');
+    this._sourceField = this._wrapWidget(this._section.appendField(Common.UIString('Source')));
+    this._statusField = this._wrapWidget(this._section.appendField(Common.UIString('Status')));
+    this._clientsField = this._wrapWidget(this._section.appendField(Common.UIString('Clients')));
+    this._createPushNotificationField();
+    this._createSyncNotificationField();
 
     this._linkifier = new Components.Linkifier();
     /** @type {!Map<string, !Protocol.Target.TargetInfo>} */
     this._clientInfoCache = new Map();
-    for (var error of registration.errors)
-      this._addError(error);
     this._throttler = new Common.Throttler(500);
+  }
+
+  _createPushNotificationField() {
+    var form = this._wrapWidget(this._section.appendField(Common.UIString('Push')))
+                   .createChild('form', 'service-worker-editor-with-button');
+    var editorContainer = form.createChild('div', 'service-worker-notification-editor');
+    var button = UI.createTextButton(Common.UIString('Push'));
+    button.type = 'submit';
+    form.appendChild(button);
+
+    var editorOptions =
+        {lineNumbers: false, lineWrapping: true, autoHeight: true, padBottom: false, mimeType: 'application/json'};
+    var editor = new TextEditor.CodeMirrorTextEditor(editorOptions);
+    editor.setText(this._pushNotificationDataSetting.get());
+    editor.element.addEventListener('keydown', e => {
+      if (e.key === 'Tab')
+        e.consume(false);
+    }, true);
+    editor.show(editorContainer);
+    form.addEventListener('submit', e => {
+      this._push(editor.text() || '');
+      e.consume(true);
+    });
+  }
+
+  _createSyncNotificationField() {
+    var form = this._wrapWidget(this._section.appendField(Common.UIString('Sync')))
+                   .createChild('form', 'service-worker-editor-with-button');
+    var editor = form.createChild('input', 'source-code service-worker-notification-editor');
+    var button = UI.createTextButton(Common.UIString('Sync'));
+    button.type = 'submit';
+    form.appendChild(button);
+
+    editor.value = this._syncTagNameSetting.get();
+    editor.placeholder = Common.UIString('Sync tag');
+
+    form.addEventListener('submit', e => {
+      this._sync(true, editor.value || '');
+      e.consume(true);
+    });
   }
 
   _scheduleUpdate() {
@@ -233,6 +366,53 @@ Resources.ServiceWorkersView.Section = class {
   }
 
   /**
+   * @param {!Element} versionsStack
+   * @param {string} icon
+   * @param {string} label
+   * @return {!Element}
+   */
+  _addVersion(versionsStack, icon, label) {
+    var installingEntry = versionsStack.createChild('div', 'service-worker-version');
+    installingEntry.createChild('div', icon);
+    installingEntry.createChild('span').textContent = label;
+    return installingEntry;
+  }
+
+  /**
+   * @param {!SDK.ServiceWorkerVersion} version
+   */
+  _updateClientsField(version) {
+    this._clientsField.removeChildren();
+    this._section.setFieldVisible(Common.UIString('Clients'), version.controlledClients.length);
+    for (var client of version.controlledClients) {
+      var clientLabelText = this._clientsField.createChild('div', 'service-worker-client');
+      if (this._clientInfoCache.has(client)) {
+        this._updateClientInfo(
+            clientLabelText, /** @type {!Protocol.Target.TargetInfo} */ (this._clientInfoCache.get(client)));
+      }
+      this._manager.target().targetAgent().getTargetInfo(client).then(this._onClientInfo.bind(this, clientLabelText));
+    }
+  }
+
+  /**
+   * @param {!SDK.ServiceWorkerVersion} version
+   */
+  _updateSourceField(version) {
+    this._sourceField.removeChildren();
+    var fileName = Common.ParsedURL.extractName(version.scriptURL);
+    var name = this._sourceField.createChild('div', 'report-field-value-filename');
+    name.appendChild(Components.Linkifier.linkifyURL(version.scriptURL, {text: fileName}));
+    if (this._registration.errors.length) {
+      var errorsLabel = UI.createLabel(String(this._registration.errors.length), 'smallicon-error');
+      errorsLabel.classList.add('link');
+      errorsLabel.addEventListener('click', () => Common.console.show());
+      name.appendChild(errorsLabel);
+    }
+    this._sourceField.createChild('div', 'report-field-value-subtitle').textContent =
+        Common.UIString('Received %s', new Date(version.scriptResponseTime * 1000).toLocaleString());
+  }
+
+  /**
    * @return {!Promise}
    */
   _update() {
@@ -244,31 +424,24 @@ Resources.ServiceWorkersView.Section = class {
     this._toolbar.setEnabled(!this._registration.isDeleted);
 
     var versions = this._registration.versionsByMode();
-    var title = this._registration.isDeleted ? Common.UIString('%s - deleted', this._registration.scopeURL) :
-                                               this._registration.scopeURL;
+    var scopeURL = Resources.ServiceWorkersView._displayScopeURL(this._registration.scopeURL);
+    var title = this._registration.isDeleted ? Common.UIString('%s - deleted', scopeURL) : scopeURL;
     this._section.setTitle(title);
 
     var active = versions.get(SDK.ServiceWorkerVersion.Modes.Active);
     var waiting = versions.get(SDK.ServiceWorkerVersion.Modes.Waiting);
     var installing = versions.get(SDK.ServiceWorkerVersion.Modes.Installing);
+    var redundant = versions.get(SDK.ServiceWorkerVersion.Modes.Redundant);
 
-    var statusValue = this._wrapWidget(this._section.appendField(Common.UIString('Status')));
-    statusValue.removeChildren();
-    var versionsStack = statusValue.createChild('div', 'service-worker-version-stack');
+    this._statusField.removeChildren();
+    var versionsStack = this._statusField.createChild('div', 'service-worker-version-stack');
     versionsStack.createChild('div', 'service-worker-version-stack-bar');
 
     if (active) {
-      var scriptElement = this._section.appendField(Common.UIString('Source'));
-      scriptElement.removeChildren();
-      var fileName = Common.ParsedURL.extractName(active.scriptURL);
-      scriptElement.appendChild(Components.Linkifier.linkifyURL(active.scriptURL, {text: fileName}));
-      scriptElement.createChild('div', 'report-field-value-subtitle').textContent =
-          Common.UIString('Received %s', new Date(active.scriptResponseTime * 1000).toLocaleString());
-
-      var activeEntry = versionsStack.createChild('div', 'service-worker-version');
-      activeEntry.createChild('div', 'service-worker-active-circle');
-      activeEntry.createChild('span').textContent =
-          Common.UIString('#%s activated and is %s', active.id, active.runningStatus);
+      this._updateSourceField(active);
+      var activeEntry = this._addVersion(
+          versionsStack, 'service-worker-active-circle',
+          Common.UIString('#%s activated and is %s', active.id, active.runningStatus));
 
       if (active.isRunning() || active.isStarting()) {
         createLink(activeEntry, Common.UIString('stop'), this._stopButtonClicked.bind(this, active.id));
@@ -277,24 +450,17 @@ Resources.ServiceWorkersView.Section = class {
       } else if (active.isStartable()) {
         createLink(activeEntry, Common.UIString('start'), this._startButtonClicked.bind(this));
       }
-
-      var clientsList = this._wrapWidget(this._section.appendField(Common.UIString('Clients')));
-      clientsList.removeChildren();
-      this._section.setFieldVisible(Common.UIString('Clients'), active.controlledClients.length);
-      for (var client of active.controlledClients) {
-        var clientLabelText = clientsList.createChild('div', 'service-worker-client');
-        if (this._clientInfoCache.has(client)) {
-          this._updateClientInfo(
-              clientLabelText, /** @type {!Protocol.Target.TargetInfo} */ (this._clientInfoCache.get(client)));
-        }
-        this._manager.target().targetAgent().getTargetInfo(client).then(this._onClientInfo.bind(this, clientLabelText));
-      }
+      this._updateClientsField(active);
+    } else if (redundant) {
+      this._updateSourceField(redundant);
+      var activeEntry = this._addVersion(
+          versionsStack, 'service-worker-redundant-circle', Common.UIString('#%s is redundant', redundant.id));
+      this._updateClientsField(redundant);
     }
 
     if (waiting) {
-      var waitingEntry = versionsStack.createChild('div', 'service-worker-version');
-      waitingEntry.createChild('div', 'service-worker-waiting-circle');
-      waitingEntry.createChild('span').textContent = Common.UIString('#%s waiting to activate', waiting.id);
+      var waitingEntry = this._addVersion(
+          versionsStack, 'service-worker-waiting-circle', Common.UIString('#%s waiting to activate', waiting.id));
       createLink(waitingEntry, Common.UIString('skipWaiting'), this._skipButtonClicked.bind(this));
       waitingEntry.createChild('div', 'service-worker-subtitle').textContent =
           Common.UIString('Received %s', new Date(waiting.scriptResponseTime * 1000).toLocaleString());
@@ -302,25 +468,13 @@ Resources.ServiceWorkersView.Section = class {
         createLink(waitingEntry, Common.UIString('inspect'), this._inspectButtonClicked.bind(this, waiting.id));
     }
     if (installing) {
-      var installingEntry = versionsStack.createChild('div', 'service-worker-version');
-      installingEntry.createChild('div', 'service-worker-installing-circle');
-      installingEntry.createChild('span').textContent = Common.UIString('#%s installing', installing.id);
+      var installingEntry = this._addVersion(
+          versionsStack, 'service-worker-installing-circle', Common.UIString('#%s installing', installing.id));
       installingEntry.createChild('div', 'service-worker-subtitle').textContent =
           Common.UIString('Received %s', new Date(installing.scriptResponseTime * 1000).toLocaleString());
       if (!this._targetForVersionId(installing.id) && (installing.isRunning() || installing.isStarting()))
         createLink(installingEntry, Common.UIString('inspect'), this._inspectButtonClicked.bind(this, installing.id));
     }
-
-    this._section.setFieldVisible(Common.UIString('Errors'), !!this._registration.errors.length);
-    var errorsValue = this._wrapWidget(this._section.appendField(Common.UIString('Errors')));
-    var errorsLabel = UI.createLabel(String(this._registration.errors.length), 'smallicon-error');
-    errorsLabel.classList.add('service-worker-errors-label');
-    errorsValue.appendChild(errorsLabel);
-    this._moreButton = createLink(
-        errorsValue,
-        this._errorsList.classList.contains('hidden') ? Common.UIString('details') : Common.UIString('hide'),
-        this._moreErrorsButtonClicked.bind(this));
-    createLink(errorsValue, Common.UIString('clear'), this._clearErrorsButtonClicked.bind(this));
 
     /**
      * @param {!Element} parent
@@ -338,18 +492,6 @@ Resources.ServiceWorkersView.Section = class {
   }
 
   /**
-   * @param {!Protocol.ServiceWorker.ServiceWorkerErrorMessage} error
-   */
-  _addError(error) {
-    var target = this._targetForVersionId(error.versionId);
-    var message = this._errorsList.createChild('div');
-    if (this._errorsList.childElementCount > 100)
-      this._errorsList.firstElementChild.remove();
-    message.appendChild(this._linkifier.linkifyScriptLocation(target, null, error.sourceURL, error.lineNumber));
-    message.appendChild(UI.createLabel('#' + error.versionId + ': ' + error.errorMessage, 'smallicon-error'));
-  }
-
-  /**
    * @param {!Common.Event} event
    */
   _unregisterButtonClicked(event) {
@@ -364,19 +506,19 @@ Resources.ServiceWorkersView.Section = class {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {string} data
    */
-  _pushButtonClicked(event) {
-    var data = 'Test push message from DevTools.';
+  _push(data) {
+    this._pushNotificationDataSetting.set(data);
     this._manager.deliverPushMessage(this._registration.id, data);
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {boolean} lastChance
+   * @param {string} tag
    */
-  _syncButtonClicked(event) {
-    var tag = 'test-tag-from-devtools';
-    var lastChance = true;
+  _sync(lastChance, tag) {
+    this._syncTagNameSetting.set(tag);
     this._manager.dispatchSyncEvent(this._registration.id, tag, lastChance);
   }
 
@@ -427,20 +569,6 @@ Resources.ServiceWorkersView.Section = class {
    */
   _stopButtonClicked(versionId) {
     this._manager.stopWorker(versionId);
-  }
-
-  _moreErrorsButtonClicked() {
-    var newVisible = this._errorsList.classList.contains('hidden');
-    this._moreButton.textContent = newVisible ? Common.UIString('hide') : Common.UIString('details');
-    this._errorsList.classList.toggle('hidden', !newVisible);
-  }
-
-  _clearErrorsButtonClicked() {
-    this._errorsList.removeChildren();
-    this._registration.clearErrors();
-    this._scheduleUpdate();
-    if (!this._errorsList.classList.contains('hidden'))
-      this._moreErrorsButtonClicked();
   }
 
   /**

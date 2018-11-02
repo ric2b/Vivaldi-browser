@@ -6,7 +6,7 @@
 #define TrackListBase_h
 
 #include "core/dom/events/EventTarget.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/TrackEvent.h"
 #include "core/html/track/TrackEventInit.h"
 #include "platform/bindings/TraceWrapperMember.h"
@@ -59,10 +59,10 @@ class TrackListBase : public EventTargetWithInlineData {
       if (tracks_[i]->id() != track_id)
         continue;
 
-      tracks_[i]->SetMediaElement(0);
+      tracks_[i]->SetMediaElement(nullptr);
       ScheduleEvent(
           TrackEvent::Create(EventTypeNames::removetrack, tracks_[i].Get()));
-      tracks_.erase(i);
+      tracks_.EraseAt(i);
       return;
     }
     NOTREACHED();
@@ -70,7 +70,7 @@ class TrackListBase : public EventTargetWithInlineData {
 
   void RemoveAll() {
     for (const auto& track : tracks_)
-      track->SetMediaElement(0);
+      track->SetMediaElement(nullptr);
 
     tracks_.clear();
   }
@@ -79,13 +79,13 @@ class TrackListBase : public EventTargetWithInlineData {
     ScheduleEvent(Event::Create(EventTypeNames::change));
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(tracks_);
     visitor->Trace(media_element_);
     EventTargetWithInlineData::Trace(visitor);
   }
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS() {
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     for (auto track : tracks_) {
       visitor->TraceWrappers(track);
     }

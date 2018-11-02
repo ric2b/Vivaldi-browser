@@ -19,37 +19,35 @@
 namespace extensions {
 
 TEST(WebRequestEventDetailsTest, WhitelistedCopyForPublicSession) {
-  // Create original and copy, and populate them with some values.
+  // Create original, and populate it with some values.
   std::unique_ptr<WebRequestEventDetails> orig(new WebRequestEventDetails);
-  std::unique_ptr<WebRequestEventDetails> copy(new WebRequestEventDetails);
 
   const char* const safe_attributes[] = {
     "method", "requestId", "timeStamp", "type", "tabId", "frameId",
     "parentFrameId", "fromCache", "error", "ip", "statusLine", "statusCode"
   };
 
-  for (WebRequestEventDetails* ptr : {orig.get(), copy.get()}) {
-    ptr->render_process_id_ = 1;
-    ptr->render_frame_id_ = 2;
-    ptr->extra_info_spec_ = 3;
+  orig->render_process_id_ = 1;
+  orig->render_frame_id_ = 2;
+  orig->extra_info_spec_ = 3;
 
-    ptr->request_body_.reset(new base::DictionaryValue);
-    ptr->request_headers_.reset(new base::ListValue);
-    ptr->response_headers_.reset(new base::ListValue);
+  orig->request_body_.reset(new base::DictionaryValue);
+  orig->request_headers_.reset(new base::ListValue);
+  orig->response_headers_.reset(new base::ListValue);
 
-    for (const char* safe_attr : safe_attributes) {
-      ptr->dict_.SetString(safe_attr, safe_attr);
-    }
-
-    ptr->dict_.SetString("url", "http://www.foo.bar/baz");
-
-    // Add some extra dict_ values that should be filtered out.
-    ptr->dict_.SetString("requestBody", "request body value");
-    ptr->dict_.SetString("requestHeaders", "request headers value");
+  for (const char* safe_attr : safe_attributes) {
+    orig->dict_.SetString(safe_attr, safe_attr);
   }
 
-  // Filter the copy out then check that filtering really works.
-  copy->FilterForPublicSession();
+  orig->dict_.SetString("url", "http://www.foo.bar/baz");
+
+  // Add some extra dict_ values that should be filtered out.
+  orig->dict_.SetString("requestBody", "request body value");
+  orig->dict_.SetString("requestHeaders", "request headers value");
+
+  // Get a filtered copy then check that filtering really works.
+  std::unique_ptr<WebRequestEventDetails> copy =
+      orig->CreatePublicSessionCopy();
 
   EXPECT_EQ(orig->render_process_id_, copy->render_process_id_);
   EXPECT_EQ(orig->render_frame_id_, copy->render_frame_id_);
@@ -97,18 +95,18 @@ TEST(WebRequestEventDetailsTest, SetResponseHeaders) {
     WebRequestEventDetails details(request.get(), kFilter);
     details.SetResponseHeaders(request.get(), headers.get());
     std::unique_ptr<base::DictionaryValue> dict =
-        details.GetFilteredDict(kFilter);
-    base::Value* filtered_headers = dict->FindPath({"responseHeaders"});
+        details.GetFilteredDict(kFilter, nullptr, std::string(), false);
+    base::Value* filtered_headers = dict->FindKey("responseHeaders");
     ASSERT_TRUE(filtered_headers);
-    EXPECT_EQ(2u, filtered_headers->GetList().size());
+    ASSERT_EQ(2u, filtered_headers->GetList().size());
     EXPECT_EQ("Key1",
-              filtered_headers->GetList()[0].FindPath({"name"})->GetString());
+              filtered_headers->GetList()[0].FindKey("name")->GetString());
     EXPECT_EQ("Value1",
-              filtered_headers->GetList()[0].FindPath({"value"})->GetString());
+              filtered_headers->GetList()[0].FindKey("value")->GetString());
     EXPECT_EQ("X-Chrome-ID-Consistency-Response",
-              filtered_headers->GetList()[1].FindPath({"name"})->GetString());
+              filtered_headers->GetList()[1].FindKey("name")->GetString());
     EXPECT_EQ("Value2",
-              filtered_headers->GetList()[1].FindPath({"value"})->GetString());
+              filtered_headers->GetList()[1].FindKey("value")->GetString());
   }
 
   {
@@ -119,14 +117,14 @@ TEST(WebRequestEventDetailsTest, SetResponseHeaders) {
     WebRequestEventDetails gaia_details(gaia_request.get(), kFilter);
     gaia_details.SetResponseHeaders(gaia_request.get(), headers.get());
     std::unique_ptr<base::DictionaryValue> dict =
-        gaia_details.GetFilteredDict(kFilter);
-    base::Value* filtered_headers = dict->FindPath({"responseHeaders"});
+        gaia_details.GetFilteredDict(kFilter, nullptr, std::string(), false);
+    base::Value* filtered_headers = dict->FindKey("responseHeaders");
     ASSERT_TRUE(filtered_headers);
-    EXPECT_EQ(1u, filtered_headers->GetList().size());
+    ASSERT_EQ(1u, filtered_headers->GetList().size());
     EXPECT_EQ("Key1",
-              filtered_headers->GetList()[0].FindPath({"name"})->GetString());
+              filtered_headers->GetList()[0].FindKey("name")->GetString());
     EXPECT_EQ("Value1",
-              filtered_headers->GetList()[0].FindPath({"value"})->GetString());
+              filtered_headers->GetList()[0].FindKey("value")->GetString());
   }
 }
 

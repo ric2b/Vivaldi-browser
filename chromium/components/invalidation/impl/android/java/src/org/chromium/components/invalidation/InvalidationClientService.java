@@ -12,6 +12,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.os.Build;
 import android.os.Bundle;
 
 import com.google.ipc.invalidation.external.client.InvalidationListener.RegistrationState;
@@ -22,10 +23,10 @@ import com.google.ipc.invalidation.external.client.types.ObjectId;
 import com.google.protos.ipc.invalidation.Types.ClientType;
 
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
@@ -251,19 +252,21 @@ public class InvalidationClientService extends AndroidListener {
             return;
         }
 
-        // Attempt to retrieve a token for the user. This method will also invalidate
-        // invalidAuthToken if it is non-null.
-        AccountManagerFacade.get().getNewAuthToken(account, invalidAuthToken,
-                getOAuth2ScopeWithType(), new AccountManagerFacade.GetAuthTokenCallback() {
-                    @Override
-                    public void tokenAvailable(String token) {
-                        setAuthToken(InvalidationClientService.this.getApplicationContext(),
-                                pendingIntent, token, getOAuth2ScopeWithType());
-                    }
+        ThreadUtils.runOnUiThread(() -> {
+            // Attempt to retrieve a token for the user. This method will also invalidate
+            // invalidAuthToken if it is non-null.
+            AccountManagerFacade.get().getNewAuthToken(account, invalidAuthToken,
+                    getOAuth2ScopeWithType(), new AccountManagerFacade.GetAuthTokenCallback() {
+                        @Override
+                        public void tokenAvailable(String token) {
+                            setAuthToken(InvalidationClientService.this.getApplicationContext(),
+                                    pendingIntent, token, getOAuth2ScopeWithType());
+                        }
 
-                    @Override
-                    public void tokenUnavailable(boolean isTransientError) {}
-                });
+                        @Override
+                        public void tokenUnavailable(boolean isTransientError) {}
+                    });
+        });
     }
 
     @Override
@@ -546,7 +549,7 @@ public class InvalidationClientService extends AndroidListener {
     private void startServiceIfPossible(Intent intent) {
         // The use of background services is restricted when the application is not in foreground
         // for O. See crbug.com/680812.
-        if (BuildInfo.isAtLeastO()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 startService(intent);
             } catch (IllegalStateException exception) {

@@ -5,10 +5,13 @@
 #include "chrome/browser/extensions/api/tab_capture/offscreen_tab.h"
 
 #include <algorithm>
+#include <vector>
 
 #include "base/bind.h"
+#include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/media/router/receiver_presentation_service_delegate_impl.h"  // nogncheck
 #include "chrome/browser/profiles/profile.h"
@@ -21,6 +24,7 @@
 #include "content/public/common/web_preferences.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
+#include "third_party/WebKit/public/web/WebPresentationReceiverFlags.h"
 
 using content::WebContents;
 
@@ -36,6 +40,10 @@ const int kMaxOffscreenTabsPerExtension = 4;
 // offscreen tab has stopped, to automatically tear it down and free resources.
 const int kMaxSecondsToWaitForCapture = 60;
 const int kPollIntervalInSeconds = 1;
+
+typedef std::vector<content::BrowserContext*> BrowserContextList;
+static base::LazyInstance<BrowserContextList>::Leaky g_offscreen_profiles =
+    LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -54,6 +62,13 @@ OffscreenTabsOwner* OffscreenTabsOwner::Get(
   // CreateForWebContents() really means "create if not exists."
   CreateForWebContents(extension_web_contents);
   return FromWebContents(extension_web_contents);
+}
+
+// static
+bool OffscreenTabsOwner::IsOffscreenProfile(const Profile* profile) {
+  const BrowserContextList& offscreen_profiles = g_offscreen_profiles.Get();
+  return std::find(offscreen_profiles.begin(), offscreen_profiles.end(),
+                   profile) != offscreen_profiles.end();
 }
 
 OffscreenTab* OffscreenTabsOwner::OpenNewTab(
@@ -120,9 +135,11 @@ OffscreenTab::OffscreenTab(OffscreenTabsOwner* owner)
       content_capture_was_detected_(false),
       navigation_policy_(new NavigationPolicy) {
   DCHECK(profile_);
+  g_offscreen_profiles.Get().push_back(profile_.get());
 }
 
 OffscreenTab::~OffscreenTab() {
+  base::Erase(g_offscreen_profiles.Get(), profile_.get());
   DVLOG(1) << "Destroying OffscreenTab for start_url=" << start_url_.spec();
 }
 
@@ -135,8 +152,11 @@ void OffscreenTab::Start(const GURL& start_url,
            << initial_size.ToString() << " for start_url=" << start_url_.spec();
 
   // Create the WebContents to contain the off-screen tab's page.
-  offscreen_tab_web_contents_.reset(
-      WebContents::Create(WebContents::CreateParams(profile_.get())));
+  WebContents::CreateParams params(profile_.get());
+  if (!optional_presentation_id.empty())
+    params.starting_sandbox_flags = blink::kPresentationReceiverSandboxFlags;
+
+  offscreen_tab_web_contents_.reset(WebContents::Create(params));
   offscreen_tab_web_contents_->SetDelegate(this);
   WebContentsObserver::Observe(offscreen_tab_web_contents_.get());
 

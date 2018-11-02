@@ -22,11 +22,10 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
 #include "core/css/CSSImportRule.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/MediaList.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
@@ -34,7 +33,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
-#include "core/dom/StyleEngine.h"
 #include "core/frame/Deprecation.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/probe/CoreProbes.h"
@@ -51,7 +49,7 @@ class StyleSheetCSSRuleList final : public CSSRuleList {
     return new StyleSheetCSSRuleList(sheet);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(style_sheet_);
     CSSRuleList::Trace(visitor);
   }
@@ -74,8 +72,8 @@ static bool IsAcceptableCSSStyleSheetParent(const Node& parent_node) {
   // Only these nodes can be parents of StyleSheets, and they need to call
   // clearOwnerNode() when moved out of document. Note that destructor of
   // the nodes don't call clearOwnerNode() with Oilpan.
-  return parent_node.IsDocumentNode() || isHTMLLinkElement(parent_node) ||
-         isHTMLStyleElement(parent_node) || isSVGStyleElement(parent_node) ||
+  return parent_node.IsDocumentNode() || IsHTMLLinkElement(parent_node) ||
+         IsHTMLStyleElement(parent_node) || IsSVGStyleElement(parent_node) ||
          parent_node.getNodeType() == Node::kProcessingInstructionNode;
 }
 #endif
@@ -140,7 +138,7 @@ CSSStyleSheet::CSSStyleSheet(StyleSheetContents* contents,
   contents_->RegisterClient(this);
 }
 
-CSSStyleSheet::~CSSStyleSheet() {}
+CSSStyleSheet::~CSSStyleSheet() = default;
 
 void CSSStyleSheet::WillMutateRules() {
   // If we are the only client it is safe to mutate.
@@ -205,10 +203,11 @@ void CSSStyleSheet::setDisabled(bool disabled) {
   DidMutate();
 }
 
-void CSSStyleSheet::SetMediaQueries(RefPtr<MediaQuerySet> media_queries) {
+void CSSStyleSheet::SetMediaQueries(
+    scoped_refptr<MediaQuerySet> media_queries) {
   media_queries_ = std::move(media_queries);
   if (media_cssom_wrapper_ && media_queries_)
-    media_cssom_wrapper_->Reattach(media_queries_.Get());
+    media_cssom_wrapper_->Reattach(media_queries_.get());
 }
 
 bool CSSStyleSheet::MatchesMediaQueries(const MediaQueryEvaluator& evaluator) {
@@ -261,19 +260,25 @@ bool CSSStyleSheet::CanAccessRules() const {
     return true;
   if (allow_rule_access_from_origin_ &&
       document->GetSecurityOrigin()->CanAccess(
-          allow_rule_access_from_origin_.Get())) {
+          allow_rule_access_from_origin_.get())) {
     return true;
   }
   return false;
 }
 
-CSSRuleList* CSSStyleSheet::rules() {
-  return cssRules();
+CSSRuleList* CSSStyleSheet::rules(ExceptionState& exception_state) {
+  return cssRules(exception_state);
 }
 
 unsigned CSSStyleSheet::insertRule(const String& rule_string,
                                    unsigned index,
                                    ExceptionState& exception_state) {
+  if (!CanAccessRules()) {
+    exception_state.ThrowSecurityError(
+        "Cannot access StyleSheet to insertRule");
+    return 0;
+  }
+
   DCHECK(child_rule_cssom_wrappers_.IsEmpty() ||
          child_rule_cssom_wrappers_.size() == contents_->RuleCount());
 
@@ -314,6 +319,12 @@ unsigned CSSStyleSheet::insertRule(const String& rule_string,
 
 void CSSStyleSheet::deleteRule(unsigned index,
                                ExceptionState& exception_state) {
+  if (!CanAccessRules()) {
+    exception_state.ThrowSecurityError(
+        "Cannot access StyleSheet to deleteRule");
+    return;
+  }
+
   DCHECK(child_rule_cssom_wrappers_.IsEmpty() ||
          child_rule_cssom_wrappers_.size() == contents_->RuleCount());
 
@@ -335,8 +346,8 @@ void CSSStyleSheet::deleteRule(unsigned index,
 
   if (!child_rule_cssom_wrappers_.IsEmpty()) {
     if (child_rule_cssom_wrappers_[index])
-      child_rule_cssom_wrappers_[index]->SetParentStyleSheet(0);
-    child_rule_cssom_wrappers_.erase(index);
+      child_rule_cssom_wrappers_[index]->SetParentStyleSheet(nullptr);
+    child_rule_cssom_wrappers_.EraseAt(index);
   }
 }
 
@@ -363,9 +374,11 @@ int CSSStyleSheet::addRule(const String& selector,
   return addRule(selector, style, length(), exception_state);
 }
 
-CSSRuleList* CSSStyleSheet::cssRules() {
-  if (!CanAccessRules())
+CSSRuleList* CSSStyleSheet::cssRules(ExceptionState& exception_state) {
+  if (!CanAccessRules()) {
+    exception_state.ThrowSecurityError("Cannot access rules");
     return nullptr;
+  }
   if (!rule_list_cssom_wrapper_)
     rule_list_cssom_wrapper_ = StyleSheetCSSRuleList::Create(this);
   return rule_list_cssom_wrapper_.Get();
@@ -388,7 +401,7 @@ MediaList* CSSStyleSheet::media() const {
     return nullptr;
 
   if (!media_cssom_wrapper_)
-    media_cssom_wrapper_ = MediaList::Create(media_queries_.Get(),
+    media_cssom_wrapper_ = MediaList::Create(media_queries_.get(),
                                              const_cast<CSSStyleSheet*>(this));
   return media_cssom_wrapper_.Get();
 }
@@ -405,7 +418,7 @@ Document* CSSStyleSheet::OwnerDocument() const {
 }
 
 void CSSStyleSheet::SetAllowRuleAccessFromOrigin(
-    RefPtr<SecurityOrigin> allowed_origin) {
+    scoped_refptr<SecurityOrigin> allowed_origin) {
   allow_rule_access_from_origin_ = std::move(allowed_origin);
 }
 
@@ -440,7 +453,7 @@ void CSSStyleSheet::SetText(const String& text) {
   contents_->ParseString(text);
 }
 
-DEFINE_TRACE(CSSStyleSheet) {
+void CSSStyleSheet::Trace(blink::Visitor* visitor) {
   visitor->Trace(contents_);
   visitor->Trace(owner_node_);
   visitor->Trace(owner_rule_);

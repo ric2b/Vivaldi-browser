@@ -8,6 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/process/process_handle.h"
 #include "base/strings/stringprintf.h"
+#include "content/browser/download/download_create_info.h"
 #include "content/browser/download/download_interrupt_reasons_impl.h"
 #include "content/browser/download/download_stats.h"
 #include "content/public/browser/browser_thread.h"
@@ -52,7 +53,7 @@ int GetLoadFlags(DownloadUrlParameters* params, bool has_upload_data) {
 
 std::unique_ptr<net::HttpRequestHeaders> GetAdditionalRequestHeaders(
     DownloadUrlParameters* params) {
-  auto headers = base::MakeUnique<net::HttpRequestHeaders>();
+  auto headers = std::make_unique<net::HttpRequestHeaders>();
   if (params->offset() == 0 &&
       params->length() == DownloadSaveInfo::kLengthFullContent) {
     AppendExtraHeaders(headers.get(), params);
@@ -171,22 +172,10 @@ std::unique_ptr<ResourceRequest> CreateResourceRequest(
   request->referrer_policy = params->referrer().policy;
   request->download_to_file = true;
   request->allow_download = true;
+  request->is_main_frame = true;
 
-  if (params->render_process_host_id()) {
-    request->origin_pid = params->render_process_host_id();
-    RenderFrameHost* render_frame_host =
-        RenderFrameHost::FromID(params->render_process_host_id(),
-                                params->render_frame_host_routing_id());
-    RenderFrameHost* parent_frame = render_frame_host->GetParent();
-    if (parent_frame) {
-      request->parent_render_frame_id = parent_frame->GetRoutingID();
-      request->parent_is_main_frame = (parent_frame->GetParent() == nullptr);
-    } else {
-      request->is_main_frame = true;
-    }
-
+  if (params->render_process_host_id() >= 0)
     request->render_frame_id = params->render_frame_host_routing_id();
-  }
 
   bool has_upload_data = false;
   if (!params->post_body().empty()) {
@@ -212,8 +201,7 @@ std::unique_ptr<ResourceRequest> CreateResourceRequest(
   // Add additional request headers.
   std::unique_ptr<net::HttpRequestHeaders> headers =
       GetAdditionalRequestHeaders(params);
-  if (!headers->IsEmpty())
-    request->headers = headers->ToString();
+  request->headers.Swap(headers.get());
 
   return request;
 }
@@ -249,7 +237,7 @@ CreateURLRequestOnIOThread(DownloadUrlParameters* params) {
     DCHECK(params->prefer_cache());
     DCHECK_EQ("POST", params->method());
     std::vector<std::unique_ptr<net::UploadElementReader>> element_readers;
-    request->set_upload(base::MakeUnique<net::ElementsUploadDataStream>(
+    request->set_upload(std::make_unique<net::ElementsUploadDataStream>(
         std::move(element_readers), params->post_id()));
   }
 
@@ -274,7 +262,9 @@ CreateURLRequestOnIOThread(DownloadUrlParameters* params) {
 
 DownloadInterruptReason HandleSuccessfulServerResponse(
     const net::HttpResponseHeaders& http_headers,
-    DownloadSaveInfo* save_info) {
+    DownloadSaveInfo* save_info,
+    bool fetch_error_body) {
+  DownloadInterruptReason result = DOWNLOAD_INTERRUPT_REASON_NONE;
   switch (http_headers.response_code()) {
     case -1:  // Non-HTTP request.
     case net::HTTP_OK:
@@ -300,22 +290,22 @@ DownloadInterruptReason HandleSuccessfulServerResponse(
     // resource not being found since there is no entity to download.
 
     case net::HTTP_NOT_FOUND:
-      return DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT;
+      result = DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT;
       break;
 
     case net::HTTP_REQUESTED_RANGE_NOT_SATISFIABLE:
       // Retry by downloading from the start automatically:
       // If we haven't received data when we get this error, we won't.
-      return DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE;
+      result = DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE;
       break;
     case net::HTTP_UNAUTHORIZED:
     case net::HTTP_PROXY_AUTHENTICATION_REQUIRED:
       // Server didn't authorize this request.
-      return DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED;
+      result = DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED;
       break;
     case net::HTTP_FORBIDDEN:
       // Server forbids access to this resource.
-      return DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN;
+      result = DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN;
       break;
     default:  // All other errors.
       // Redirection and informational codes should have been handled earlier
@@ -325,8 +315,11 @@ DownloadInterruptReason HandleSuccessfulServerResponse(
       // This will change extensions::api::download::InterruptReason.
       DCHECK_NE(3, http_headers.response_code() / 100);
       DCHECK_NE(1, http_headers.response_code() / 100);
-      return DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED;
+      result = DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED;
   }
+
+  if (result != DOWNLOAD_INTERRUPT_REASON_NONE && !fetch_error_body)
+    return result;
 
   // The caller is expecting a partial response.
   if (save_info && (save_info->offset > 0 || save_info->length > 0)) {
@@ -334,11 +327,14 @@ DownloadInterruptReason HandleSuccessfulServerResponse(
       // Server should send partial content when "If-Match" or
       // "If-Unmodified-Since" check passes, and the range request header has
       // last byte position. e.g. "Range:bytes=50-99".
-      if (save_info->length != DownloadSaveInfo::kLengthFullContent)
+      if (save_info->length != DownloadSaveInfo::kLengthFullContent &&
+          !fetch_error_body)
         return DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT;
 
       // Requested a partial range, but received the entire response, when
       // the range request header is "Range:bytes={offset}-".
+      // The response can be HTTP 200 or other error code when
+      // |fetch_error_body| is true.
       save_info->offset = 0;
       save_info->hash_of_partial_file.clear();
       save_info->hash_state.reset();
@@ -371,6 +367,78 @@ DownloadInterruptReason HandleSuccessfulServerResponse(
     return DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT;
 
   return DOWNLOAD_INTERRUPT_REASON_NONE;
+}
+
+void HandleResponseHeaders(const net::HttpResponseHeaders* headers,
+                           DownloadCreateInfo* create_info) {
+  if (!headers)
+    return;
+
+  if (headers->HasStrongValidators()) {
+    // If we don't have strong validators as per RFC 7232 section 2, then
+    // we neither store nor use them for range requests.
+    if (!headers->EnumerateHeader(nullptr, "Last-Modified",
+                                  &create_info->last_modified))
+      create_info->last_modified.clear();
+    if (!headers->EnumerateHeader(nullptr, "ETag", &create_info->etag))
+      create_info->etag.clear();
+  }
+
+  // Grab the first content-disposition header.  There may be more than one,
+  // though as of this writing, the network stack ensures if there are, they
+  // are all duplicates.
+  headers->EnumerateHeader(nullptr, "Content-Disposition",
+                           &create_info->content_disposition);
+
+  // Parse the original mime type from the header, notice that actual mime type
+  // might be different due to mime type sniffing.
+  if (!headers->GetMimeType(&create_info->original_mime_type))
+    create_info->original_mime_type.clear();
+
+  // Content-Range is validated in HandleSuccessfulServerResponse.
+  // In RFC 7233, a single part 206 partial response must generate
+  // Content-Range. Accept-Range may be sent in 200 response to indicate the
+  // server can handle range request, but optional in 206 response.
+  create_info->accept_range =
+      headers->HasHeaderValue("Accept-Ranges", "bytes") ||
+      (headers->HasHeader("Content-Range") &&
+       headers->response_code() == net::HTTP_PARTIAL_CONTENT);
+}
+
+download::DownloadSource ToDownloadSource(
+    content::DownloadSource download_source) {
+  switch (download_source) {
+    case DownloadSource::UNKNOWN:
+      return download::DownloadSource::UNKNOWN;
+    case DownloadSource::NAVIGATION:
+      return download::DownloadSource::NAVIGATION;
+    case DownloadSource::DRAG_AND_DROP:
+      return download::DownloadSource::DRAG_AND_DROP;
+    case DownloadSource::MANUAL_RESUMPTION:
+      return download::DownloadSource::MANUAL_RESUMPTION;
+    case DownloadSource::AUTO_RESUMPTION:
+      return download::DownloadSource::AUTO_RESUMPTION;
+    case DownloadSource::FROM_RENDERER:
+      return download::DownloadSource::FROM_RENDERER;
+    case DownloadSource::EXTENSION_API:
+      return download::DownloadSource::EXTENSION_API;
+    case DownloadSource::EXTENSION_INSTALLER:
+      return download::DownloadSource::EXTENSION_INSTALLER;
+    case DownloadSource::PLUGIN:
+      return download::DownloadSource::PLUGIN;
+    case DownloadSource::PLUGIN_INSTALLER:
+      return download::DownloadSource::PLUGIN_INSTALLER;
+    case DownloadSource::INTERNAL_API:
+      return download::DownloadSource::INTERNAL_API;
+    case DownloadSource::SAVE_PACKAGE:
+      return download::DownloadSource::SAVE_PACKAGE;
+    case DownloadSource::OFFLINE_PAGE:
+      return download::DownloadSource::OFFLINE_PAGE;
+    case DownloadSource::COUNT:
+      break;
+  }
+  NOTREACHED();
+  return download::DownloadSource::UNKNOWN;
 }
 
 }  // namespace content

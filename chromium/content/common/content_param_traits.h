@@ -21,8 +21,8 @@
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/accessibility/ax_modes.h"
 
-namespace content {
-class MessagePort;
+namespace blink {
+class MessagePortChannel;
 }
 
 namespace IPC {
@@ -45,7 +45,6 @@ typedef const blink::WebInputEvent* WebInputEventPointer;
 template <>
 struct ParamTraits<WebInputEventPointer> {
   typedef WebInputEventPointer param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   // Note: upon read, the event has the lifetime of the message.
   static bool Read(const base::Pickle* m,
@@ -55,9 +54,8 @@ struct ParamTraits<WebInputEventPointer> {
 };
 
 template <>
-struct CONTENT_EXPORT ParamTraits<content::MessagePort> {
-  typedef content::MessagePort param_type;
-  static void GetSize(base::PickleSizer* sizer, const param_type& p);
+struct CONTENT_EXPORT ParamTraits<blink::MessagePortChannel> {
+  typedef blink::MessagePortChannel param_type;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m, base::PickleIterator* iter,
                    param_type* r);
@@ -67,7 +65,6 @@ struct CONTENT_EXPORT ParamTraits<content::MessagePort> {
 template <>
 struct CONTENT_EXPORT ParamTraits<ui::AXMode> {
   typedef ui::AXMode param_type;
-  static void GetSize(base::PickleSizer* sizer, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -78,7 +75,6 @@ struct CONTENT_EXPORT ParamTraits<ui::AXMode> {
 template <>
 struct CONTENT_EXPORT ParamTraits<scoped_refptr<storage::BlobHandle>> {
   typedef scoped_refptr<storage::BlobHandle> param_type;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

@@ -4,6 +4,6 @@ PRODUCT_FULLNAME=Vivaldi
 PRODUCT_SHORTNAME=Vivaldi
 PRODUCT_INSTALLER_FULLNAME=Vivaldi Installer
 PRODUCT_INSTALLER_SHORTNAME=Vivaldi Installer
-COPYRIGHT=Copyright 2017 Vivaldi Technologies AS. All rights reserved.
+COPYRIGHT=Copyright 2018 Vivaldi Technologies AS. All rights reserved.
 MAC_BUNDLE_ID=com.vivaldi.Vivaldi
 MAC_CREATOR_CODE=Vivl

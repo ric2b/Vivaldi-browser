@@ -67,18 +67,17 @@ class WebSettings {
     kV8CacheOptionsCode,
   };
 
-  enum class V8CacheStrategiesForCacheStorage {
-    kDefault,
-    kNone,
-    kNormal,
-    kAggressive,
-  };
-
   enum class ProgressBarCompletion {
     kLoadEvent,
     kResourcesBeforeDCL,
     kDOMContentLoaded,
     kResourcesBeforeDCLAndSameOriginIFrames
+  };
+
+  enum class SavePreviousDocumentResources {
+    kNever,
+    kUntilOnDOMContentLoaded,
+    kUntilOnLoad
   };
 
   // Selection strategy defines how the selection granularity changes when the
@@ -163,7 +162,6 @@ class WebSettings {
   virtual void SetCursiveFontFamily(const WebString&,
                                     UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetDNSPrefetchingEnabled(bool) = 0;
-  virtual void SetDataSaverEnabled(bool) = 0;
   virtual void SetDOMPasteAllowed(bool) = 0;
   virtual void SetDefaultFixedFontSize(int) = 0;
   virtual void SetDefaultFontSize(int) = 0;
@@ -179,7 +177,8 @@ class WebSettings {
   virtual void SetEnableTouchAdjustment(bool) = 0;
   virtual bool MultiTargetTapNotificationEnabled() = 0;
   virtual void SetMultiTargetTapNotificationEnabled(bool) = 0;
-  virtual void SetExperimentalWebGLEnabled(bool) = 0;
+  virtual void SetWebGL1Enabled(bool) = 0;
+  virtual void SetWebGL2Enabled(bool) = 0;
   virtual void SetFantasyFontFamily(const WebString&,
                                     UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetFixedFontFamily(const WebString&,
@@ -200,6 +199,8 @@ class WebSettings {
   virtual void SetLoadWithOverviewMode(bool) = 0;
   virtual void SetShouldReuseGlobalForUnownedMainFrame(bool) = 0;
   virtual void SetProgressBarCompletion(ProgressBarCompletion) = 0;
+  virtual void SetSavePreviousDocumentResources(
+      SavePreviousDocumentResources) = 0;
   virtual void SetLocalStorageEnabled(bool) = 0;
   virtual void SetMainFrameClipsContent(bool) = 0;
   virtual void SetMainFrameResizesAreOrientationChanges(bool) = 0;
@@ -221,7 +222,6 @@ class WebSettings {
   virtual void SetPictographFontFamily(const WebString&,
                                        UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetPluginsEnabled(bool) = 0;
-  virtual void SetEncryptedMediaEnabled(bool) = 0;
   virtual void SetPresentationReceiver(bool) = 0;
   virtual void SetAvailablePointerTypes(int) = 0;
   virtual void SetPrimaryPointerType(PointerType) = 0;
@@ -285,8 +285,6 @@ class WebSettings {
   virtual void SetUseWideViewport(bool) = 0;
   virtual void SetServeResourceFromCacheOnly(bool) = 0;
   virtual void SetV8CacheOptions(V8CacheOptions) = 0;
-  virtual void SetV8CacheStrategiesForCacheStorage(
-      V8CacheStrategiesForCacheStorage) = 0;
   virtual void SetValidationMessageTimerMagnification(int) = 0;
   virtual void SetViewportEnabled(bool) = 0;
   virtual void SetViewportMetaEnabled(bool) = 0;

@@ -6,7 +6,7 @@
 #define COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 
 #include "base/macros.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_holder.h"
 
 namespace arc {
 
@@ -14,37 +14,69 @@ namespace mojom {
 
 // Instead of including components/arc/common/arc_bridge.mojom.h, list all the
 // instance classes here for faster build.
+class AccessibilityHelperHost;
 class AccessibilityHelperInstance;
+class AppHost;
 class AppInstance;
+class AudioHost;
 class AudioInstance;
+class AuthHost;
 class AuthInstance;
+class BackupSettingsInstance;
+class BluetoothHost;
 class BluetoothInstance;
+class BootPhaseMonitorHost;
 class BootPhaseMonitorInstance;
 class CastReceiverInstance;
+class CertStoreHost;
+class CertStoreInstance;
+class ClipboardHost;
 class ClipboardInstance;
+class CrashCollectorHost;
 class CrashCollectorInstance;
+class EnterpriseReportingHost;
 class EnterpriseReportingInstance;
+class FileSystemHost;
 class FileSystemInstance;
+class ImeHost;
 class ImeInstance;
+class IntentHelperHost;
 class IntentHelperInstance;
+class KioskHost;
 class KioskInstance;
 class LockScreenInstance;
+class MetricsHost;
 class MetricsInstance;
+class MidisHost;
+class MidisInstance;
+class NetHost;
 class NetInstance;
+class NotificationsHost;
 class NotificationsInstance;
+class ObbMounterHost;
 class ObbMounterInstance;
+class OemCryptoHost;
 class OemCryptoInstance;
+class PolicyHost;
 class PolicyInstance;
+class PowerHost;
 class PowerInstance;
+class PrintHost;
 class PrintInstance;
 class ProcessInstance;
+class RotationLockInstance;
 class StorageManagerInstance;
 class TracingInstance;
+class TtsHost;
 class TtsInstance;
+class VideoHost;
 class VideoInstance;
+class VoiceInteractionArcHomeHost;
 class VoiceInteractionArcHomeInstance;
+class VoiceInteractionFrameworkHost;
 class VoiceInteractionFrameworkInstance;
 class VolumeMounterInstance;
+class WallpaperHost;
 class WallpaperInstance;
 
 }  // namespace mojom
@@ -56,104 +88,174 @@ class ArcBridgeService {
   ArcBridgeService();
   ~ArcBridgeService();
 
-  InstanceHolder<mojom::AccessibilityHelperInstance>* accessibility_helper() {
+  ConnectionHolder<mojom::AccessibilityHelperInstance,
+                   mojom::AccessibilityHelperHost>*
+  accessibility_helper() {
     return &accessibility_helper_;
   }
-  InstanceHolder<mojom::AppInstance>* app() { return &app_; }
-  InstanceHolder<mojom::AudioInstance>* audio() { return &audio_; }
-  InstanceHolder<mojom::AuthInstance>* auth() { return &auth_; }
-  InstanceHolder<mojom::BluetoothInstance>* bluetooth() { return &bluetooth_; }
-  InstanceHolder<mojom::BootPhaseMonitorInstance>* boot_phase_monitor() {
+  ConnectionHolder<mojom::AppInstance, mojom::AppHost>* app() { return &app_; }
+  ConnectionHolder<mojom::AudioInstance, mojom::AudioHost>* audio() {
+    return &audio_;
+  }
+  ConnectionHolder<mojom::AuthInstance, mojom::AuthHost>* auth() {
+    return &auth_;
+  }
+  ConnectionHolder<mojom::BackupSettingsInstance>* backup_settings() {
+    return &backup_settings_;
+  }
+  ConnectionHolder<mojom::BluetoothInstance, mojom::BluetoothHost>*
+  bluetooth() {
+    return &bluetooth_;
+  }
+  ConnectionHolder<mojom::BootPhaseMonitorInstance,
+                   mojom::BootPhaseMonitorHost>*
+  boot_phase_monitor() {
     return &boot_phase_monitor_;
   }
-  InstanceHolder<mojom::CastReceiverInstance>* cast_receiver() {
+  ConnectionHolder<mojom::CastReceiverInstance>* cast_receiver() {
     return &cast_receiver_;
   }
-  InstanceHolder<mojom::ClipboardInstance>* clipboard() { return &clipboard_; }
-  InstanceHolder<mojom::CrashCollectorInstance>* crash_collector() {
+  ConnectionHolder<mojom::CertStoreInstance, mojom::CertStoreHost>*
+  cert_store() {
+    return &cert_store_;
+  }
+  ConnectionHolder<mojom::ClipboardInstance, mojom::ClipboardHost>*
+  clipboard() {
+    return &clipboard_;
+  }
+  ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>*
+  crash_collector() {
     return &crash_collector_;
   }
-  InstanceHolder<mojom::EnterpriseReportingInstance>* enterprise_reporting() {
+  ConnectionHolder<mojom::EnterpriseReportingInstance,
+                   mojom::EnterpriseReportingHost>*
+  enterprise_reporting() {
     return &enterprise_reporting_;
   }
-  InstanceHolder<mojom::FileSystemInstance>* file_system() {
+  ConnectionHolder<mojom::FileSystemInstance, mojom::FileSystemHost>*
+  file_system() {
     return &file_system_;
   }
-  InstanceHolder<mojom::ImeInstance>* ime() { return &ime_; }
-  InstanceHolder<mojom::IntentHelperInstance>* intent_helper() {
+  ConnectionHolder<mojom::ImeInstance, mojom::ImeHost>* ime() { return &ime_; }
+  ConnectionHolder<mojom::IntentHelperInstance, mojom::IntentHelperHost>*
+  intent_helper() {
     return &intent_helper_;
   }
-  InstanceHolder<mojom::KioskInstance>* kiosk() { return &kiosk_; }
-  InstanceHolder<mojom::LockScreenInstance>* lock_screen() {
+  ConnectionHolder<mojom::KioskInstance, mojom::KioskHost>* kiosk() {
+    return &kiosk_;
+  }
+  ConnectionHolder<mojom::LockScreenInstance>* lock_screen() {
     return &lock_screen_;
   }
-  InstanceHolder<mojom::MetricsInstance>* metrics() { return &metrics_; }
-  InstanceHolder<mojom::NetInstance>* net() { return &net_; }
-  InstanceHolder<mojom::NotificationsInstance>* notifications() {
+  ConnectionHolder<mojom::MetricsInstance, mojom::MetricsHost>* metrics() {
+    return &metrics_;
+  }
+  ConnectionHolder<mojom::MidisInstance, mojom::MidisHost>* midis() {
+    return &midis_;
+  }
+  ConnectionHolder<mojom::NetInstance, mojom::NetHost>* net() { return &net_; }
+  ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>*
+  notifications() {
     return &notifications_;
   }
-  InstanceHolder<mojom::ObbMounterInstance>* obb_mounter() {
+  ConnectionHolder<mojom::ObbMounterInstance, mojom::ObbMounterHost>*
+  obb_mounter() {
     return &obb_mounter_;
   }
-  InstanceHolder<mojom::OemCryptoInstance>* oemcrypto() { return &oemcrypto_; }
-  InstanceHolder<mojom::PolicyInstance>* policy() { return &policy_; }
-  InstanceHolder<mojom::PowerInstance>* power() { return &power_; }
-  InstanceHolder<mojom::PrintInstance>* print() { return &print_; }
-  InstanceHolder<mojom::ProcessInstance>* process() { return &process_; }
-  InstanceHolder<mojom::StorageManagerInstance>* storage_manager() {
+  ConnectionHolder<mojom::OemCryptoInstance, mojom::OemCryptoHost>*
+  oemcrypto() {
+    return &oemcrypto_;
+  }
+  ConnectionHolder<mojom::PolicyInstance, mojom::PolicyHost>* policy() {
+    return &policy_;
+  }
+  ConnectionHolder<mojom::PowerInstance, mojom::PowerHost>* power() {
+    return &power_;
+  }
+  ConnectionHolder<mojom::PrintInstance, mojom::PrintHost>* print() {
+    return &print_;
+  }
+  ConnectionHolder<mojom::ProcessInstance>* process() { return &process_; }
+  ConnectionHolder<mojom::RotationLockInstance>* rotation_lock() {
+    return &rotation_lock_;
+  }
+  ConnectionHolder<mojom::StorageManagerInstance>* storage_manager() {
     return &storage_manager_;
   }
-  InstanceHolder<mojom::TracingInstance>* tracing() { return &tracing_; }
-  InstanceHolder<mojom::TtsInstance>* tts() { return &tts_; }
-  InstanceHolder<mojom::VideoInstance>* video() { return &video_; }
-  InstanceHolder<mojom::VoiceInteractionArcHomeInstance>*
+  ConnectionHolder<mojom::TracingInstance>* tracing() { return &tracing_; }
+  ConnectionHolder<mojom::TtsInstance, mojom::TtsHost>* tts() { return &tts_; }
+  ConnectionHolder<mojom::VideoInstance, mojom::VideoHost>* video() {
+    return &video_;
+  }
+  ConnectionHolder<mojom::VoiceInteractionArcHomeInstance,
+                   mojom::VoiceInteractionArcHomeHost>*
   voice_interaction_arc_home() {
     return &voice_interaction_arc_home_;
   }
-  InstanceHolder<mojom::VoiceInteractionFrameworkInstance>*
+  ConnectionHolder<mojom::VoiceInteractionFrameworkInstance,
+                   mojom::VoiceInteractionFrameworkHost>*
   voice_interaction_framework() {
     return &voice_interaction_framework_;
   }
-  InstanceHolder<mojom::VolumeMounterInstance>* volume_mounter() {
+  ConnectionHolder<mojom::VolumeMounterInstance>* volume_mounter() {
     return &volume_mounter_;
   }
-  InstanceHolder<mojom::WallpaperInstance>* wallpaper() { return &wallpaper_; }
+  ConnectionHolder<mojom::WallpaperInstance, mojom::WallpaperHost>*
+  wallpaper() {
+    return &wallpaper_;
+  }
 
  private:
-  InstanceHolder<mojom::AccessibilityHelperInstance> accessibility_helper_;
-  InstanceHolder<mojom::AppInstance> app_;
-  InstanceHolder<mojom::AudioInstance> audio_;
-  InstanceHolder<mojom::AuthInstance> auth_;
-  InstanceHolder<mojom::BluetoothInstance> bluetooth_;
-  InstanceHolder<mojom::BootPhaseMonitorInstance> boot_phase_monitor_;
-  InstanceHolder<mojom::CastReceiverInstance> cast_receiver_;
-  InstanceHolder<mojom::ClipboardInstance> clipboard_;
-  InstanceHolder<mojom::CrashCollectorInstance> crash_collector_;
-  InstanceHolder<mojom::EnterpriseReportingInstance> enterprise_reporting_;
-  InstanceHolder<mojom::FileSystemInstance> file_system_;
-  InstanceHolder<mojom::ImeInstance> ime_;
-  InstanceHolder<mojom::IntentHelperInstance> intent_helper_;
-  InstanceHolder<mojom::KioskInstance> kiosk_;
-  InstanceHolder<mojom::LockScreenInstance> lock_screen_;
-  InstanceHolder<mojom::MetricsInstance> metrics_;
-  InstanceHolder<mojom::NetInstance> net_;
-  InstanceHolder<mojom::NotificationsInstance> notifications_;
-  InstanceHolder<mojom::ObbMounterInstance> obb_mounter_;
-  InstanceHolder<mojom::OemCryptoInstance> oemcrypto_;
-  InstanceHolder<mojom::PolicyInstance> policy_;
-  InstanceHolder<mojom::PowerInstance> power_;
-  InstanceHolder<mojom::PrintInstance> print_;
-  InstanceHolder<mojom::ProcessInstance> process_;
-  InstanceHolder<mojom::StorageManagerInstance> storage_manager_;
-  InstanceHolder<mojom::TracingInstance> tracing_;
-  InstanceHolder<mojom::TtsInstance> tts_;
-  InstanceHolder<mojom::VideoInstance> video_;
-  InstanceHolder<mojom::VoiceInteractionArcHomeInstance>
+  ConnectionHolder<mojom::AccessibilityHelperInstance,
+                   mojom::AccessibilityHelperHost>
+      accessibility_helper_;
+  ConnectionHolder<mojom::AppInstance, mojom::AppHost> app_;
+  ConnectionHolder<mojom::AudioInstance, mojom::AudioHost> audio_;
+  ConnectionHolder<mojom::AuthInstance, mojom::AuthHost> auth_;
+  ConnectionHolder<mojom::BackupSettingsInstance> backup_settings_;
+  ConnectionHolder<mojom::BluetoothInstance, mojom::BluetoothHost> bluetooth_;
+  ConnectionHolder<mojom::BootPhaseMonitorInstance, mojom::BootPhaseMonitorHost>
+      boot_phase_monitor_;
+  ConnectionHolder<mojom::CastReceiverInstance> cast_receiver_;
+  ConnectionHolder<mojom::CertStoreInstance, mojom::CertStoreHost> cert_store_;
+  ConnectionHolder<mojom::ClipboardInstance, mojom::ClipboardHost> clipboard_;
+  ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>
+      crash_collector_;
+  ConnectionHolder<mojom::EnterpriseReportingInstance,
+                   mojom::EnterpriseReportingHost>
+      enterprise_reporting_;
+  ConnectionHolder<mojom::FileSystemInstance, mojom::FileSystemHost>
+      file_system_;
+  ConnectionHolder<mojom::ImeInstance, mojom::ImeHost> ime_;
+  ConnectionHolder<mojom::IntentHelperInstance, mojom::IntentHelperHost>
+      intent_helper_;
+  ConnectionHolder<mojom::KioskInstance, mojom::KioskHost> kiosk_;
+  ConnectionHolder<mojom::LockScreenInstance> lock_screen_;
+  ConnectionHolder<mojom::MetricsInstance, mojom::MetricsHost> metrics_;
+  ConnectionHolder<mojom::MidisInstance, mojom::MidisHost> midis_;
+  ConnectionHolder<mojom::NetInstance, mojom::NetHost> net_;
+  ConnectionHolder<mojom::NotificationsInstance, mojom::NotificationsHost>
+      notifications_;
+  ConnectionHolder<mojom::ObbMounterInstance, mojom::ObbMounterHost>
+      obb_mounter_;
+  ConnectionHolder<mojom::OemCryptoInstance, mojom::OemCryptoHost> oemcrypto_;
+  ConnectionHolder<mojom::PolicyInstance, mojom::PolicyHost> policy_;
+  ConnectionHolder<mojom::PowerInstance, mojom::PowerHost> power_;
+  ConnectionHolder<mojom::PrintInstance, mojom::PrintHost> print_;
+  ConnectionHolder<mojom::ProcessInstance> process_;
+  ConnectionHolder<mojom::RotationLockInstance> rotation_lock_;
+  ConnectionHolder<mojom::StorageManagerInstance> storage_manager_;
+  ConnectionHolder<mojom::TracingInstance> tracing_;
+  ConnectionHolder<mojom::TtsInstance, mojom::TtsHost> tts_;
+  ConnectionHolder<mojom::VideoInstance, mojom::VideoHost> video_;
+  ConnectionHolder<mojom::VoiceInteractionArcHomeInstance,
+                   mojom::VoiceInteractionArcHomeHost>
       voice_interaction_arc_home_;
-  InstanceHolder<mojom::VoiceInteractionFrameworkInstance>
+  ConnectionHolder<mojom::VoiceInteractionFrameworkInstance,
+                   mojom::VoiceInteractionFrameworkHost>
       voice_interaction_framework_;
-  InstanceHolder<mojom::VolumeMounterInstance> volume_mounter_;
-  InstanceHolder<mojom::WallpaperInstance> wallpaper_;
+  ConnectionHolder<mojom::VolumeMounterInstance> volume_mounter_;
+  ConnectionHolder<mojom::WallpaperInstance, mojom::WallpaperHost> wallpaper_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcBridgeService);
 };

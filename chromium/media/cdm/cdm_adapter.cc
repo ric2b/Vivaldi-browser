@@ -12,14 +12,17 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/cdm_initialized_promise.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/channel_layout.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
+#include "media/base/key_systems.h"
 #include "media/base/limits.h"
 #include "media/base/sample_format.h"
 #include "media/base/video_codecs.h"
@@ -27,7 +30,6 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
 #include "media/cdm/cdm_auxiliary_helper.h"
-#include "media/cdm/cdm_file_io.h"
 #include "media/cdm/cdm_helpers.h"
 #include "media/cdm/cdm_module.h"
 #include "media/cdm/cdm_wrapper.h"
@@ -36,6 +38,13 @@
 namespace media {
 
 namespace {
+
+// Constants for UMA reporting of file size (in KB) via
+// UMA_HISTOGRAM_CUSTOM_COUNTS. Note that the histogram is log-scaled (rather
+// than linear).
+constexpr int kSizeKBMin = 1;
+constexpr int kSizeKBMax = 512 * 1024;  // 512MB
+constexpr int kSizeKBBuckets = 100;
 
 cdm::HdcpVersion ToCdmHdcpVersion(HdcpVersion hdcp_version) {
   switch (hdcp_version) {
@@ -273,6 +282,27 @@ Decryptor::Status ToMediaDecryptorStatus(cdm::Status status) {
   return Decryptor::kError;
 }
 
+inline std::ostream& operator<<(std::ostream& out, cdm::Status status) {
+  switch (status) {
+    case cdm::kSuccess:
+      return out << "kSuccess";
+    case cdm::kNoKey:
+      return out << "kNoKey";
+    case cdm::kNeedMoreData:
+      return out << "kNeedMoreData";
+    case cdm::kDecryptError:
+      return out << "kDecryptError";
+    case cdm::kDecodeError:
+      return out << "kDecodeError";
+    case cdm::kInitializationError:
+      return out << "kInitializationError";
+    case cdm::kDeferredInitialization:
+      return out << "kDeferredInitialization";
+  }
+  NOTREACHED();
+  return out << "Invalid Status!";
+}
+
 SampleFormat ToMediaSampleFormat(cdm::AudioFormat format) {
   switch (format) {
     case cdm::kAudioFormatU8:
@@ -294,6 +324,25 @@ SampleFormat ToMediaSampleFormat(cdm::AudioFormat format) {
   NOTREACHED() << "Unexpected cdm::AudioFormat " << format;
   return kUnknownSampleFormat;
 }
+
+// Verify that OutputProtection types matches those in CDM interface.
+// Cannot use conversion function because these are used in bit masks.
+#define ASSERT_ENUM_EQ(media_enum, cdm_enum)                              \
+  static_assert(                                                          \
+      static_cast<int32_t>(media_enum) == static_cast<int32_t>(cdm_enum), \
+      "Mismatched enum: " #media_enum " != " #cdm_enum)
+
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::NONE, cdm::kLinkTypeNone);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::UNKNOWN, cdm::kLinkTypeUnknown);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::INTERNAL, cdm::kLinkTypeInternal);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::VGA, cdm::kLinkTypeVGA);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::HDMI, cdm::kLinkTypeHDMI);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::DVI, cdm::kLinkTypeDVI);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::DISPLAYPORT,
+               cdm::kLinkTypeDisplayPort);
+ASSERT_ENUM_EQ(OutputProtection::LinkTypes::NETWORK, cdm::kLinkTypeNetwork);
+ASSERT_ENUM_EQ(OutputProtection::ProtectionType::NONE, cdm::kProtectionNone);
+ASSERT_ENUM_EQ(OutputProtection::ProtectionType::HDCP, cdm::kProtectionHDCP);
 
 // Fill |input_buffer| based on the values in |encrypted|. |subsamples|
 // is used to hold some of the data. |input_buffer| will contain pointers
@@ -376,6 +425,28 @@ void* GetCdmHost(int host_interface_version, void* user_data) {
   }
 }
 
+void ReportSystemCodeUMA(const std::string& key_system, uint32_t system_code) {
+  // Sparse histogram macro does not cache the histogram, so it's safe to use
+  // macro with non-static histogram name here.
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      "Media.EME." + GetKeySystemNameForUMA(key_system) + ".SystemCode",
+      system_code);
+}
+
+// These are reported to UMA server. Do not renumber or reuse values.
+enum OutputProtectionStatus {
+  kQueried = 0,
+  kNoExternalLink = 1,
+  kAllExternalLinksProtected = 2,
+  // Note: Only add new values immediately before this line.
+  kStatusCount
+};
+
+void ReportOutputProtectionUMA(OutputProtectionStatus status) {
+  UMA_HISTOGRAM_ENUMERATION("Media.EME.OutputProtection", status,
+                            OutputProtectionStatus::kStatusCount);
+}
+
 }  // namespace
 
 // static
@@ -416,8 +487,6 @@ CdmAdapter::CdmAdapter(
       session_closed_cb_(session_closed_cb),
       session_keys_change_cb_(session_keys_change_cb),
       session_expiration_update_cb_(session_expiration_update_cb),
-      audio_samples_per_second_(0),
-      audio_channel_layout_(CHANNEL_LAYOUT_NONE),
       helper_(std::move(helper)),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       pool_(new AudioBufferMemoryPool()),
@@ -428,17 +497,27 @@ CdmAdapter::CdmAdapter(
   DCHECK(!session_keys_change_cb_.is_null());
   DCHECK(!session_expiration_update_cb_.is_null());
   DCHECK(helper_);
+
+  helper_->SetFileReadCB(
+      base::Bind(&CdmAdapter::OnFileRead, weak_factory_.GetWeakPtr()));
 }
 
-CdmAdapter::~CdmAdapter() {}
+CdmAdapter::~CdmAdapter() {
+  // Reject any outstanding promises and close all the existing sessions.
+  cdm_promise_adapter_.Clear();
+
+  if (audio_init_cb_)
+    audio_init_cb_.Run(false);
+  if (video_init_cb_)
+    video_init_cb_.Run(false);
+}
 
 CdmWrapper* CdmAdapter::CreateCdmInstance(const std::string& key_system) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  CreateCdmFunc create_cdm_func =
-      CdmModule::GetInstance()->GetCreateCdmFunc(key_system);
+  CreateCdmFunc create_cdm_func = CdmModule::GetInstance()->GetCreateCdmFunc();
   if (!create_cdm_func) {
-    DVLOG(1) << "Cannot get CreateCdmFunc for " + key_system;
+    LOG(ERROR) << "Failed to get CreateCdmFunc!";
     return nullptr;
   }
 
@@ -446,6 +525,16 @@ CdmWrapper* CdmAdapter::CreateCdmInstance(const std::string& key_system) {
                                        key_system.size(), GetCdmHost, this);
   DVLOG(1) << "CDM instance for " + key_system + (cdm ? "" : " could not be") +
                   " created.";
+
+  if (cdm) {
+    // The interface version is relatively small. So using normal histogram
+    // instead of a sparse histogram is okay. The following DCHECK asserts this.
+    DCHECK(cdm->GetInterfaceVersion() <= 30);
+    UMA_HISTOGRAM_ENUMERATION("Media.EME.CdmInterfaceVersion",
+                              cdm->GetInterfaceVersion(),
+                              cdm::ContentDecryptionModule::kVersion + 1);
+  }
+
   return cdm;
 }
 
@@ -579,6 +668,9 @@ void CdmAdapter::Decrypt(StreamType stream_type,
                          const scoped_refptr<DecoderBuffer>& encrypted,
                          const DecryptCB& decrypt_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+
+  TRACE_EVENT0("media", "CdmAdapter::Decrypt");
 
   cdm::InputBuffer input_buffer;
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -588,7 +680,7 @@ void CdmAdapter::Decrypt(StreamType stream_type,
   cdm::Status status = cdm_->Decrypt(input_buffer, decrypted_block.get());
 
   if (status != cdm::kSuccess) {
-    DVLOG(1) << __func__ << " failed with cdm::Error " << status;
+    DVLOG(1) << __func__ << ": status = " << status;
     decrypt_cb.Run(ToMediaDecryptorStatus(status), nullptr);
     return;
   }
@@ -623,8 +715,8 @@ void CdmAdapter::InitializeAudioDecoder(const AudioDecoderConfig& config,
 
   cdm::Status status = cdm_->InitializeAudioDecoder(cdm_decoder_config);
   if (status != cdm::kSuccess && status != cdm::kDeferredInitialization) {
-    // DCHECK(status == cdm::kSessionError); http://crbug.com/570486
-    DVLOG(1) << __func__ << " failed with cdm::Error " << status;
+    DCHECK(status == cdm::kInitializationError);
+    DVLOG(1) << __func__ << ": status = " << status;
     init_cb.Run(false);
     return;
   }
@@ -658,8 +750,8 @@ void CdmAdapter::InitializeVideoDecoder(const VideoDecoderConfig& config,
 
   cdm::Status status = cdm_->InitializeVideoDecoder(cdm_decoder_config);
   if (status != cdm::kSuccess && status != cdm::kDeferredInitialization) {
-    // DCHECK(status == cdm::kSessionError); http://crbug.com/570486
-    DVLOG(1) << __func__ << " failed with cdm::Error " << status;
+    DCHECK(status == cdm::kInitializationError);
+    DVLOG(1) << __func__ << ": status = " << status;
     init_cb.Run(false);
     return;
   }
@@ -679,6 +771,9 @@ void CdmAdapter::DecryptAndDecodeAudio(
     const scoped_refptr<DecoderBuffer>& encrypted,
     const AudioDecodeCB& audio_decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+
+  TRACE_EVENT0("media", "CdmAdapter::DecryptAndDecodeAudio");
 
   cdm::InputBuffer input_buffer;
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -690,7 +785,7 @@ void CdmAdapter::DecryptAndDecodeAudio(
 
   const Decryptor::AudioFrames empty_frames;
   if (status != cdm::kSuccess) {
-    DVLOG(1) << __func__ << " failed with cdm::Error " << status;
+    DVLOG(1) << __func__ << ": status = " << status;
     audio_decode_cb.Run(ToMediaDecryptorStatus(status), empty_frames);
     return;
   }
@@ -711,7 +806,9 @@ void CdmAdapter::DecryptAndDecodeVideo(
     const scoped_refptr<DecoderBuffer>& encrypted,
     const VideoDecodeCB& video_decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  DVLOG(3) << __func__ << " encrypted: " << encrypted->AsHumanReadableString();
+  DVLOG(3) << __func__ << ": " << encrypted->AsHumanReadableString();
+
+  TRACE_EVENT0("media", "CdmAdapter::DecryptAndDecodeVideo");
 
   cdm::InputBuffer input_buffer;
   std::vector<cdm::SubsampleEntry> subsamples;
@@ -722,7 +819,7 @@ void CdmAdapter::DecryptAndDecodeVideo(
       cdm_->DecryptAndDecodeFrame(input_buffer, video_frame.get());
 
   if (status != cdm::kSuccess) {
-    DVLOG(1) << __func__ << " failed with cdm::Error " << status;
+    DVLOG(1) << __func__ << ": status = " << status;
     video_decode_cb.Run(ToMediaDecryptorStatus(status), nullptr);
     return;
   }
@@ -801,6 +898,18 @@ void CdmAdapter::OnRejectPromise(uint32_t promise_id,
                                  uint32_t system_code,
                                  const char* error_message,
                                  uint32_t error_message_size) {
+  // This is the central place for library CDM promise rejection. Cannot report
+  // this in more generic classes like CdmPromise or CdmPromiseAdapter because
+  // they may be used multiple times in one promise chain that involves IPC.
+  ReportSystemCodeUMA(key_system_, system_code);
+
+  // UMA to help track file related errors. See http://crbug.com/410630
+  if (system_code == 0x27) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Media.EME.CdmFileIO.FileSizeKBOnError",
+                                last_read_file_size_kb_, kSizeKBMin, kSizeKBMax,
+                                kSizeKBBuckets);
+  }
+
   DCHECK(task_runner_->BelongsToCurrentThread());
   cdm_promise_adapter_.RejectPromise(
       promise_id, ToMediaExceptionType(exception), system_code,
@@ -940,55 +1049,95 @@ void CdmAdapter::EnableOutputProtection(uint32_t desired_protection_mask) {
 
   helper_->EnableProtection(
       desired_protection_mask,
-      base::BindOnce(&CdmAdapter::OnOutputProtectionRequestMade,
+      base::BindOnce(&CdmAdapter::OnEnableOutputProtectionDone,
                      weak_factory_.GetWeakPtr()));
 }
 
-void CdmAdapter::OnOutputProtectionRequestMade(bool /* success */) {
+void CdmAdapter::OnEnableOutputProtectionDone(bool success) {
   // CDM needs to call QueryOutputProtectionStatus() to see if it took effect
   // or not.
+  DVLOG(1) << __func__ << ": success = " << success;
 }
 
 void CdmAdapter::QueryOutputProtectionStatus() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  helper_->QueryStatus(base::Bind(&CdmAdapter::OnOutputProtectionStatus,
-                                  weak_factory_.GetWeakPtr()));
+  ReportOutputProtectionQuery();
+  helper_->QueryStatus(
+      base::Bind(&CdmAdapter::OnQueryOutputProtectionStatusDone,
+                 weak_factory_.GetWeakPtr()));
 }
 
-void CdmAdapter::OnOutputProtectionStatus(bool success,
-                                          uint32_t link_mask,
-                                          uint32_t protection_mask) {
-// Verify that the values in |link_mask| and |protection_mask| match what the
-// CDM expects.
-#define ASSERT_ENUM_EQ(media_enum, cdm_enum)                              \
-  static_assert(                                                          \
-      static_cast<int32_t>(media_enum) == static_cast<int32_t>(cdm_enum), \
-      "Mismatched enum: " #media_enum " != " #cdm_enum)
+void CdmAdapter::OnQueryOutputProtectionStatusDone(bool success,
+                                                   uint32_t link_mask,
+                                                   uint32_t protection_mask) {
+  // The bit mask definition must be consistent between media::OutputProtection
+  // and cdm::ContentDecryptionModule* interfaces. This is statically asserted
+  // by ASSERT_ENUM_EQs above.
 
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::NONE, cdm::kLinkTypeNone);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::UNKNOWN, cdm::kLinkTypeUnknown);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::INTERNAL, cdm::kLinkTypeInternal);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::VGA, cdm::kLinkTypeVGA);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::HDMI, cdm::kLinkTypeHDMI);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::DVI, cdm::kLinkTypeDVI);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::DISPLAYPORT,
-                 cdm::kLinkTypeDisplayPort);
-  ASSERT_ENUM_EQ(OutputProtection::LinkTypes::NETWORK, cdm::kLinkTypeNetwork);
+  // Return a query status of failure on error.
+  cdm::QueryResult query_result;
+  if (success) {
+    query_result = cdm::kQuerySucceeded;
+    ReportOutputProtectionQueryResult(link_mask, protection_mask);
+  } else {
+    DVLOG(1) << __func__ << ": query output protection status failed";
+    query_result = cdm::kQueryFailed;
+  }
 
-  ASSERT_ENUM_EQ(OutputProtection::ProtectionType::NONE, cdm::kProtectionNone);
-  ASSERT_ENUM_EQ(OutputProtection::ProtectionType::HDCP, cdm::kProtectionHDCP);
+  cdm_->OnQueryOutputProtectionStatus(query_result, link_mask, protection_mask);
+}
 
-  cdm_->OnQueryOutputProtectionStatus(
-      success ? cdm::kQuerySucceeded : cdm::kQueryFailed, link_mask,
-      protection_mask);
+void CdmAdapter::ReportOutputProtectionQuery() {
+  if (uma_for_output_protection_query_reported_)
+    return;
+
+  ReportOutputProtectionUMA(OutputProtectionStatus::kQueried);
+  uma_for_output_protection_query_reported_ = true;
+}
+
+void CdmAdapter::ReportOutputProtectionQueryResult(uint32_t link_mask,
+                                                   uint32_t protection_mask) {
+  DCHECK(uma_for_output_protection_query_reported_);
+
+  if (uma_for_output_protection_positive_result_reported_)
+    return;
+
+  // Report UMAs for output protection query result.
+
+  uint32_t external_links = (link_mask & ~cdm::kLinkTypeInternal);
+
+  if (!external_links) {
+    ReportOutputProtectionUMA(OutputProtectionStatus::kNoExternalLink);
+    uma_for_output_protection_positive_result_reported_ = true;
+    return;
+  }
+
+  const uint32_t kProtectableLinks =
+      cdm::kLinkTypeHDMI | cdm::kLinkTypeDVI | cdm::kLinkTypeDisplayPort;
+  bool is_unprotectable_link_connected =
+      (external_links & ~kProtectableLinks) != 0;
+  bool is_hdcp_enabled_on_all_protectable_links =
+      (protection_mask & cdm::kProtectionHDCP) != 0;
+
+  if (!is_unprotectable_link_connected &&
+      is_hdcp_enabled_on_all_protectable_links) {
+    ReportOutputProtectionUMA(
+        OutputProtectionStatus::kAllExternalLinksProtected);
+    uma_for_output_protection_positive_result_reported_ = true;
+    return;
+  }
+
+  // Do not report a negative result because it could be a false negative.
+  // Instead, we will calculate number of negatives using the total number of
+  // queries and positive results.
 }
 
 void CdmAdapter::OnDeferredInitializationDone(cdm::StreamType stream_type,
                                               cdm::Status decoder_status) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG_IF(1, decoder_status != cdm::kSuccess)
-      << __func__ << " failed with cdm::Error " << decoder_status;
+      << __func__ << ": status = " << decoder_status;
 
   switch (stream_type) {
     case cdm::kStreamTypeAudio:
@@ -1006,21 +1155,23 @@ void CdmAdapter::OnDeferredInitializationDone(cdm::StreamType stream_type,
 
 cdm::FileIO* CdmAdapter::CreateFileIO(cdm::FileIOClient* client) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
-  std::unique_ptr<CdmFileIO> file_io = helper_->CreateCdmFileIO(client);
-
-  // The CDM owns the returned object and must call FileIO::Close()
-  // to release it.
-  return file_io.release();
+  return helper_->CreateCdmFileIO(client);
 }
 
-void CdmAdapter::RequestStorageId() {
-  helper_->GetStorageId(
-      base::Bind(&CdmAdapter::OnStorageIdObtained, weak_factory_.GetWeakPtr()));
+void CdmAdapter::RequestStorageId(uint32_t version) {
+  if (version >= 0x80000000) {
+    // Versions 0x80000000 and above are reserved.
+    cdm_->OnStorageId(version, nullptr, 0);
+    return;
+  }
+
+  helper_->GetStorageId(version, base::Bind(&CdmAdapter::OnStorageIdObtained,
+                                            weak_factory_.GetWeakPtr()));
 }
 
-void CdmAdapter::OnStorageIdObtained(const std::vector<uint8_t>& storage_id) {
-  cdm_->OnStorageId(storage_id.data(), storage_id.size());
+void CdmAdapter::OnStorageIdObtained(uint32_t version,
+                                     const std::vector<uint8_t>& storage_id) {
+  cdm_->OnStorageId(version, storage_id.data(), storage_id.size());
 }
 
 bool CdmAdapter::AudioFramesDataToAudioFrames(
@@ -1080,6 +1231,19 @@ bool CdmAdapter::AudioFramesDataToAudioFrames(
   } while (bytes_left > 0);
 
   return true;
+}
+
+void CdmAdapter::OnFileRead(int file_size_bytes) {
+  DCHECK_GE(file_size_bytes, 0);
+  last_read_file_size_kb_ = file_size_bytes / 1024;
+
+  if (file_size_uma_reported_)
+    return;
+
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Media.EME.CdmFileIO.FileSizeKBOnFirstRead",
+                              last_read_file_size_kb_, kSizeKBMin, kSizeKBMax,
+                              kSizeKBBuckets);
+  file_size_uma_reported_ = true;
 }
 
 }  // namespace media

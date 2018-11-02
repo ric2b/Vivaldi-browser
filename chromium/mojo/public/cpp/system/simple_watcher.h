@@ -85,7 +85,7 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
     MANUAL,
   };
 
-  SimpleWatcher(const tracked_objects::Location& from_here,
+  SimpleWatcher(const base::Location& from_here,
                 ArmingPolicy arming_policy,
                 scoped_refptr<base::SequencedTaskRunner> runner =
                     base::SequencedTaskRunnerHandle::Get());
@@ -159,8 +159,8 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // state of the handle is placed in |*ready_state| if |ready_state| is
   // non-null.
   //
-  // If the watcher is successfully armed, this returns |MOJO_RESULT_OK| and
-  // |ready_result| and |ready_state| are ignored.
+  // If the watcher is successfully armed (or was already armed), this returns
+  // |MOJO_RESULT_OK| and |ready_result| and |ready_state| are ignored.
   MojoResult Arm(MojoResult* ready_result = nullptr,
                  HandleSignalsState* ready_state = nullptr);
 

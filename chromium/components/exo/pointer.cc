@@ -8,11 +8,11 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "components/exo/pointer_delegate.h"
-#include "components/exo/pointer_stylus_delegate.h"
+#include "components/exo/pointer_gesture_pinch_delegate.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -77,7 +77,7 @@ display::ManagedDisplayInfo GetCaptureDisplayInfo() {
 // Pointer, public:
 
 Pointer::Pointer(PointerDelegate* delegate)
-    : SurfaceTreeHost("ExoPointer", nullptr),
+    : SurfaceTreeHost("ExoPointer"),
       delegate_(delegate),
       cursor_(ui::CursorType::kNull),
       capture_scale_(GetCaptureDisplayInfo().device_scale_factor()),
@@ -96,6 +96,8 @@ Pointer::~Pointer() {
     focus_surface_->RemoveSurfaceObserver(this);
     focus_surface_->UnregisterCursorProvider(this);
   }
+  if (pinch_delegate_)
+    pinch_delegate_->OnPointerDestroying(this);
   auto* helper = WMHelper::GetInstance();
   helper->RemoveDisplayConfigurationObserver(this);
   helper->RemoveCursorObserver(this);
@@ -129,11 +131,8 @@ void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
   }
 
   // Early out if cursor did not change.
-  if (!cursor_changed) {
-    // Cursor scale or rotation may have changed.
-    UpdateCursor();
+  if (!cursor_changed)
     return;
-  }
 
   // If |SurfaceTreeHost::root_surface_| is set then asynchronously capture a
   // snapshot of cursor, otherwise cancel pending capture and immediately set
@@ -147,6 +146,10 @@ void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
   }
 }
 
+void Pointer::SetGesturePinchDelegate(PointerGesturePinchDelegate* delegate) {
+  pinch_delegate_ = delegate;
+}
+
 gfx::NativeCursor Pointer::GetCursor() {
   return cursor_;
 }
@@ -158,10 +161,8 @@ void Pointer::OnSurfaceCommit() {
   SurfaceTreeHost::OnSurfaceCommit();
 
   // Capture new cursor to reflect result of commit.
-  if (focus_surface_ && !host_window()->bounds().IsEmpty())
+  if (focus_surface_)
     CaptureCursor(hotspot_);
-
-  SubmitCompositorFrame();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,8 +170,7 @@ void Pointer::OnSurfaceCommit() {
 
 void Pointer::OnSurfaceDestroying(Surface* surface) {
   if (surface == focus_surface_) {
-    focus_surface_ = nullptr;
-    surface->RemoveSurfaceObserver(this);
+    SetFocus(nullptr, gfx::PointF(), 0);
     return;
   }
   if (surface == root_surface()) {
@@ -186,36 +186,16 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
 void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   Surface* target = GetEffectiveTargetForEvent(event);
 
-  // If target is different than the current pointer focus then we need to
-  // generate enter and leave events.
-  if (target != focus_surface_) {
-    // First generate a leave event if we currently have a target in focus.
-    if (focus_surface_) {
-      delegate_->OnPointerLeave(focus_surface_);
-      focus_surface_->RemoveSurfaceObserver(this);
-      // Require SetCursor() to be called and cursor to be re-defined in
-      // response to each OnPointerEnter() call.
-      focus_surface_->UnregisterCursorProvider(this);
-      focus_surface_ = nullptr;
-      cursor_ = ui::CursorType::kNull;
-      cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
-    }
-    // Second generate an enter event if focus moved to a new target.
-    if (target) {
-      delegate_->OnPointerEnter(target, event->location_f(),
-                                event->button_flags());
-      location_ = event->location_f();
-      focus_surface_ = target;
-      focus_surface_->AddSurfaceObserver(this);
-      focus_surface_->RegisterCursorProvider(this);
-    }
-    delegate_->OnPointerFrame();
-  }
+  // Update focus if target is different than the current pointer focus.
+  if (target != focus_surface_)
+    SetFocus(target, event->location_f(), event->button_flags());
 
   if (!focus_surface_)
     return;
 
-  if (event->IsMouseEvent() && event->type() != ui::ET_MOUSE_EXITED) {
+  if (event->IsMouseEvent() &&
+      event->type() != ui::ET_MOUSE_EXITED &&
+      event->type() != ui::ET_MOUSE_CAPTURE_CHANGED) {
     // Generate motion event if location changed. We need to check location
     // here as mouse movement can generate both "moved" and "entered" events
     // but OnPointerMotion should only be called if location changed since
@@ -293,21 +273,57 @@ void Pointer::OnScrollEvent(ui::ScrollEvent* event) {
   OnMouseEvent(event);
 }
 
+void Pointer::OnGestureEvent(ui::GestureEvent* event) {
+  // We don't want to handle gestures generated from touchscreen events,
+  // we handle touch events in touch.cc
+  if (event->details().device_type() != ui::GestureDeviceType::DEVICE_TOUCHPAD)
+    return;
+
+  if (!focus_surface_ || !pinch_delegate_)
+    return;
+
+  switch (event->type()) {
+    case ui::ET_GESTURE_PINCH_BEGIN:
+      pinch_delegate_->OnPointerPinchBegin(event->unique_touch_event_id(),
+                                           event->time_stamp(), focus_surface_);
+      delegate_->OnPointerFrame();
+      break;
+    case ui::ET_GESTURE_PINCH_UPDATE:
+      pinch_delegate_->OnPointerPinchUpdate(event->time_stamp(),
+                                            event->details().scale());
+      delegate_->OnPointerFrame();
+      break;
+    case ui::ET_GESTURE_PINCH_END:
+      pinch_delegate_->OnPointerPinchEnd(event->unique_touch_event_id(),
+                                         event->time_stamp());
+      delegate_->OnPointerFrame();
+      break;
+    default:
+      break;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-// WMHelper::CursorObserver overrides:
+// ui::client::CursorClientObserver overrides:
 
 void Pointer::OnCursorSizeChanged(ui::CursorSize cursor_size) {
-  if (focus_surface_)
+  if (!focus_surface_)
+    return;
+
+  if (cursor_ != ui::CursorType::kNull)
     UpdateCursor();
 }
 
 void Pointer::OnCursorDisplayChanged(const display::Display& display) {
-  if (focus_surface_)
+  if (!focus_surface_)
+    return;
+
+  if (cursor_ != ui::CursorType::kNull)
     UpdateCursor();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// WMHelper::DisplayConfigurationObserver overrides:
+// ash::WindowTreeHostManager::Observer overrides:
 
 void Pointer::OnDisplayConfigurationChanged() {
   UpdatePointerSurface(root_surface());
@@ -326,6 +342,31 @@ Surface* Pointer::GetEffectiveTargetForEvent(ui::Event* event) const {
     return nullptr;
 
   return delegate_->CanAcceptPointerEventsForSurface(target) ? target : nullptr;
+}
+
+void Pointer::SetFocus(Surface* surface,
+                       const gfx::PointF& location,
+                       int button_flags) {
+  // First generate a leave event if we currently have a target in focus.
+  if (focus_surface_) {
+    delegate_->OnPointerLeave(focus_surface_);
+    focus_surface_->RemoveSurfaceObserver(this);
+    // Require SetCursor() to be called and cursor to be re-defined in
+    // response to each OnPointerEnter() call.
+    focus_surface_->UnregisterCursorProvider(this);
+    focus_surface_ = nullptr;
+    cursor_ = ui::CursorType::kNull;
+    cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
+  }
+  // Second generate an enter event if focus moved to a new surface.
+  if (surface) {
+    delegate_->OnPointerEnter(surface, location, button_flags);
+    location_ = location;
+    focus_surface_ = surface;
+    focus_surface_->AddSurfaceObserver(this);
+    focus_surface_->RegisterCursorProvider(this);
+  }
+  delegate_->OnPointerFrame();
 }
 
 void Pointer::UpdatePointerSurface(Surface* surface) {
@@ -353,6 +394,9 @@ void Pointer::CaptureCursor(const gfx::Point& hotspot) {
   DCHECK(root_surface());
   DCHECK(focus_surface_);
 
+  // Submit compositor frame to be captured.
+  SubmitCompositorFrame();
+
   // Surface size is in DIPs, while layer size is in pseudo-DIP units that
   // depend on the DSF of the display mode. Scale the layer to capture the
   // surface at a constant pixel size, regardless of the primary display's
@@ -364,9 +408,11 @@ void Pointer::CaptureCursor(const gfx::Point& hotspot) {
   host_window()->SetTransform(gfx::GetScaleTransform(gfx::Point(), scale));
 
   std::unique_ptr<viz::CopyOutputRequest> request =
-      viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
-          &Pointer::OnCursorCaptured,
-          cursor_capture_weak_ptr_factory_.GetWeakPtr(), hotspot));
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          base::BindOnce(&Pointer::OnCursorCaptured,
+                         cursor_capture_weak_ptr_factory_.GetWeakPtr(),
+                         hotspot));
 
   request->set_source(cursor_capture_source_id_);
   host_window()->layer()->RequestCopyOfOutput(std::move(request));
@@ -377,14 +423,13 @@ void Pointer::OnCursorCaptured(const gfx::Point& hotspot,
   if (!focus_surface_)
     return;
 
-  if (result->IsEmpty()) {
-    cursor_bitmap_.reset();
-  } else {
-    DCHECK(result->HasBitmap());
-    cursor_bitmap_ = *result->TakeBitmap();
-    cursor_hotspot_ = hotspot;
-  }
+  // Only successful captures should update the cursor.
+  if (result->IsEmpty())
+    return;
 
+  cursor_bitmap_ = result->AsSkBitmap();
+  DCHECK(cursor_bitmap_.readyToDraw());
+  cursor_hotspot_ = hotspot;
   UpdateCursor();
 }
 

@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/cancellation_flag.h"
@@ -1082,8 +1081,8 @@ class ProxyResolverV8TracingFactoryImpl::CreateJob
   DISALLOW_COPY_AND_ASSIGN(CreateJob);
 };
 
-ProxyResolverV8TracingFactoryImpl::ProxyResolverV8TracingFactoryImpl() {
-}
+ProxyResolverV8TracingFactoryImpl::ProxyResolverV8TracingFactoryImpl() =
+    default;
 
 ProxyResolverV8TracingFactoryImpl::~ProxyResolverV8TracingFactoryImpl() {
   for (auto* job : jobs_) {
@@ -1114,7 +1113,7 @@ void ProxyResolverV8TracingFactoryImpl::RemoveJob(
 // static
 std::unique_ptr<ProxyResolverV8TracingFactory>
 ProxyResolverV8TracingFactory::Create() {
-  return base::WrapUnique(new ProxyResolverV8TracingFactoryImpl());
+  return std::make_unique<ProxyResolverV8TracingFactoryImpl>();
 }
 
 }  // namespace net

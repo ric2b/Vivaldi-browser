@@ -4,15 +4,17 @@
 
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
 
+#include <utility>
+
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/test/views_test_base.h"
 
 class AlertIndicatorButtonTest : public views::ViewsTestBase {
  public:
-  AlertIndicatorButtonTest() : controller_(nullptr), tab_strip_(nullptr) {}
+  AlertIndicatorButtonTest() {}
 
   ~AlertIndicatorButtonTest() override {}
 
@@ -20,7 +22,8 @@ class AlertIndicatorButtonTest : public views::ViewsTestBase {
     views::ViewsTestBase::SetUp();
 
     controller_ = new FakeBaseTabStripController;
-    tab_strip_ = new TabStrip(controller_);
+    tab_strip_ =
+        new TabStripImpl(std::unique_ptr<TabStripController>(controller_));
     controller_->set_tab_strip(tab_strip_);
     // The tab strip must be added to the view hierarchy for it to create the
     // buttons.
@@ -59,10 +62,10 @@ class AlertIndicatorButtonTest : public views::ViewsTestBase {
   }
 
   // Owned by TabStrip.
-  FakeBaseTabStripController* controller_;
+  FakeBaseTabStripController* controller_ = nullptr;
   // Owns |tab_strip_|.
   views::View parent_;
-  TabStrip* tab_strip_;
+  TabStripImpl* tab_strip_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
 
  private:
@@ -83,7 +86,7 @@ TEST_F(AlertIndicatorButtonTest, ButtonUpdateOnAudioStateAnimation) {
 
   TabRendererData start_media;
   start_media.alert_state = TabAlertState::AUDIO_PLAYING;
-  media_tab->SetData(start_media);
+  media_tab->SetData(std::move(start_media));
 
   // When audio starts, pinned inactive tab shows indicator.
   EXPECT_FALSE(showing_icon(media_tab));
@@ -92,7 +95,7 @@ TEST_F(AlertIndicatorButtonTest, ButtonUpdateOnAudioStateAnimation) {
 
   TabRendererData stop_media;
   stop_media.alert_state = TabAlertState::NONE;
-  media_tab->SetData(stop_media);
+  media_tab->SetData(std::move(stop_media));
 
   // When audio ends, pinned inactive tab fades out indicator.
   EXPECT_FALSE(showing_icon(media_tab));

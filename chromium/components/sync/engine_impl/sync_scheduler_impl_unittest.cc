@@ -122,9 +122,9 @@ class SyncSchedulerImplTest : public testing::Test {
     extensions_activity_ = new ExtensionsActivity();
 
     workers_.clear();
-    workers_.push_back(make_scoped_refptr(new FakeModelWorker(GROUP_UI)));
-    workers_.push_back(make_scoped_refptr(new FakeModelWorker(GROUP_DB)));
-    workers_.push_back(make_scoped_refptr(new FakeModelWorker(GROUP_PASSIVE)));
+    workers_.push_back(base::MakeRefCounted<FakeModelWorker>(GROUP_UI));
+    workers_.push_back(base::MakeRefCounted<FakeModelWorker>(GROUP_DB));
+    workers_.push_back(base::MakeRefCounted<FakeModelWorker>(GROUP_PASSIVE));
 
     connection_ = std::make_unique<MockConnectionManager>(directory(),
                                                           &cancelation_signal_);
@@ -1507,9 +1507,34 @@ TEST_F(SyncSchedulerImplTest, StartWhenNotConnected) {
   // Should save the nudge for until after the server is reachable.
   base::RunLoop().RunUntilIdle();
 
-  scheduler()->OnConnectionStatusChange();
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_WIFI);
   connection()->SetServerReachable();
   connection()->UpdateConnectionStatus();
+  base::RunLoop().RunUntilIdle();
+}
+
+// Test that when disconnect signal (CONNECTION_NONE) is received, normal sync
+// share is not called.
+TEST_F(SyncSchedulerImplTest, SyncShareNotCalledWhenDisconnected) {
+  // Set server unavailable, so SyncSchedulerImpl will try to fix connection
+  // error upon OnConnectionStatusChange().
+  connection()->SetServerNotReachable();
+  connection()->UpdateConnectionStatus();
+  EXPECT_CALL(*syncer(), NormalSyncShare(_, _, _))
+      .Times(1)
+      .WillOnce(
+          DoAll(Invoke(test_util::SimulateConnectionFailure), Return(false)));
+  StartSyncScheduler(base::Time());
+
+  scheduler()->ScheduleLocalNudge(ModelTypeSet(THEMES), FROM_HERE);
+  // The nudge fails because of the connection failure.
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate a disconnect signal. The scheduler should not retry the previously
+  // failed nudge.
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_NONE);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -1533,7 +1558,8 @@ TEST_F(SyncSchedulerImplTest, ServerConnectionChangeDuringBackoff) {
   ASSERT_TRUE(scheduler()->IsGlobalBackoff());
 
   // Before we run the scheduled canary, trigger a server connection change.
-  scheduler()->OnConnectionStatusChange();
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_WIFI);
   connection()->SetServerReachable();
   connection()->UpdateConnectionStatus();
   base::RunLoop().RunUntilIdle();
@@ -1565,7 +1591,8 @@ TEST_F(SyncSchedulerImplTest, ConnectionChangeCanaryPreemptedByNudge) {
   ASSERT_TRUE(scheduler()->IsGlobalBackoff());
 
   // Before we run the scheduled canary, trigger a server connection change.
-  scheduler()->OnConnectionStatusChange();
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_WIFI);
   PumpLoop();
   connection()->SetServerReachable();
   connection()->UpdateConnectionStatus();
@@ -1592,8 +1619,10 @@ TEST_F(SyncSchedulerImplTest, DoubleCanaryInConfigure) {
       base::Bind(&CallbackCounter::Callback, base::Unretained(&retry_counter)));
   scheduler()->ScheduleConfiguration(params);
 
-  scheduler()->OnConnectionStatusChange();
-  scheduler()->OnConnectionStatusChange();
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_WIFI);
+  scheduler()->OnConnectionStatusChange(
+      net::NetworkChangeNotifier::CONNECTION_WIFI);
 
   PumpLoop();  // Run the nudge, that will fail and schedule a quick retry.
 }

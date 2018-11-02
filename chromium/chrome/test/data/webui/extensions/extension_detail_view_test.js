@@ -7,11 +7,15 @@ cr.define('extension_detail_view_tests', function() {
   /** @enum {string} */
   var TestNames = {
     Layout: 'layout',
+    LayoutSource: 'layout of source section',
     ClickableElements: 'clickable elements',
     Indicator: 'indicator',
+    Warnings: 'warnings',
   };
 
-  suite('ExtensionItemTest', function() {
+  var suiteName = 'ExtensionDetailViewTest';
+
+  suite(suiteName, function() {
     /**
      * Extension item created before each test.
      * @type {extensions.Item}
@@ -26,10 +30,6 @@ cr.define('extension_detail_view_tests', function() {
 
     /** @type {extension_test_util.MockItemDelegate} */
     var mockDelegate;
-
-    suiteSetup(function() {
-      return PolymerTest.importHtml('chrome://extensions/item.html');
-    });
 
     // Initialize an extension item before each test.
     setup(function() {
@@ -51,7 +51,7 @@ cr.define('extension_detail_view_tests', function() {
     test(assert(TestNames.Layout), function() {
       Polymer.dom.flush();
 
-      extension_test_util.testIronIcons(item);
+      extension_test_util.testIcons(item);
 
       var testIsVisible = extension_test_util.isVisible.bind(null, item);
       expectTrue(testIsVisible('#close-button'));
@@ -68,11 +68,7 @@ cr.define('extension_detail_view_tests', function() {
         {key: 'runOnAllUrls', id: '#allow-on-all-sites'},
         {key: 'errorCollection', id: '#collect-errors'},
       ];
-      var isChecked = function(id) {
-        var el = item.$$(id);
-        assert(el, id);
-        return el.hasAttribute('checked');
-      };
+      var isChecked = id => item.$$(id).checked;
       for (let option of accessOptions) {
         expectTrue(extension_test_util.isVisible(item, option.id));
         expectFalse(isChecked(option.id), option.id);
@@ -110,8 +106,19 @@ cr.define('extension_detail_view_tests', function() {
       item.set('data.optionsPage', {openInTab: true, url: optionsUrl});
       expectTrue(testIsVisible('#extensions-options'));
 
-      // TODO(devlin): Add checks for homepage once it's added back to the
-      // mocks.
+      item.set('data.manifestHomePageUrl', 'http://example.com');
+      Polymer.dom.flush();
+      expectTrue(testIsVisible('#developerWebsite'));
+      item.set('data.manifestHomePageUrl', '');
+      Polymer.dom.flush();
+      expectFalse(testIsVisible('#developerWebsite'));
+
+      item.set('data.webStoreUrl', 'http://example.com');
+      Polymer.dom.flush();
+      expectTrue(testIsVisible('#viewInStore'));
+      item.set('data.webStoreUrl', '');
+      Polymer.dom.flush();
+      expectFalse(testIsVisible('#viewInStore'));
 
       expectFalse(testIsVisible('#id-section'));
       expectFalse(testIsVisible('#inspectable-views'));
@@ -122,28 +129,60 @@ cr.define('extension_detail_view_tests', function() {
       expectTrue(testIsVisible('#inspectable-views'));
     });
 
+    test(assert(TestNames.LayoutSource), function() {
+      item.set('data.location', 'FROM_STORE');
+      Polymer.dom.flush();
+      assertEquals('Chrome Web Store', item.$.source.textContent.trim());
+      assertFalse(extension_test_util.isVisible(item, '#load-path'));
+
+      item.set('data.location', 'THIRD_PARTY');
+      Polymer.dom.flush();
+      assertEquals('Added by a third-party', item.$.source.textContent.trim());
+      assertFalse(extension_test_util.isVisible(item, '#load-path'));
+
+      item.set('data.location', 'UNPACKED');
+      item.set('data.prettifiedPath', 'foo/bar/baz/');
+      Polymer.dom.flush();
+      assertEquals('Unpacked extension', item.$.source.textContent.trim());
+      // Test whether the load path is displayed for unpacked extensions.
+      assertTrue(extension_test_util.isVisible(item, '#load-path'));
+
+      item.set('data.location', 'UNKNOWN');
+      item.set('data.prettifiedPath', '');
+      // |locationText| is expected to always be set if location is UNKNOWN.
+      item.set('data.locationText', 'Foo');
+      Polymer.dom.flush();
+      assertEquals('Foo', item.$.source.textContent.trim());
+      assertFalse(extension_test_util.isVisible(item, '#load-path'));
+    });
+
     test(assert(TestNames.ClickableElements), function() {
       var optionsUrl =
           'chrome-extension://' + extensionData.id + '/options.html';
       item.set('data.optionsPage', {openInTab: true, url: optionsUrl});
+      item.set('data.prettifiedPath', 'foo/bar/baz/');
       Polymer.dom.flush();
+
       mockDelegate.testClickingCalls(
-          item.$$('#allow-incognito'), 'setItemAllowedIncognito',
+          item.$$('#allow-incognito').getLabel(), 'setItemAllowedIncognito',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
-          item.$$('#allow-on-file-urls'), 'setItemAllowedOnFileUrls',
+          item.$$('#allow-on-file-urls').getLabel(), 'setItemAllowedOnFileUrls',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
-          item.$$('#allow-on-all-sites'), 'setItemAllowedOnAllSites',
+          item.$$('#allow-on-all-sites').getLabel(), 'setItemAllowedOnAllSites',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
-          item.$$('#collect-errors'), 'setItemCollectsErrors',
+          item.$$('#collect-errors').getLabel(), 'setItemCollectsErrors',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
           item.$$('#extensions-options'), 'showItemOptionsPage',
-          [extensionData.id]);
+          [extensionData]);
       mockDelegate.testClickingCalls(
           item.$$('#remove-extension'), 'deleteItem', [extensionData.id]);
+      mockDelegate.testClickingCalls(
+          item.$$('#load-path > a[is=\'action-link\']'),
+          'showInFolder', [extensionData.id]);
     });
 
     test(assert(TestNames.Indicator), function() {
@@ -153,9 +192,66 @@ cr.define('extension_detail_view_tests', function() {
       Polymer.dom.flush();
       expectFalse(indicator.hidden);
     });
+
+    test(assert(TestNames.Warnings), function() {
+      var testWarningVisible = function(id, isVisible) {
+        var f = isVisible ? expectTrue : expectFalse;
+        f(extension_test_util.isVisible(item, id));
+      };
+
+      testWarningVisible('#corrupted-warning', false);
+      testWarningVisible('#suspicious-warning', false);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.disableReasons.corruptInstall', true);
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', true);
+      testWarningVisible('#suspicious-warning', false);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.disableReasons.suspiciousInstall', true);
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', true);
+      testWarningVisible('#suspicious-warning', true);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.blacklistText', 'This item is blacklisted');
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', true);
+      testWarningVisible('#suspicious-warning', true);
+      testWarningVisible('#blacklisted-warning', true);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.blacklistText', undefined);
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', true);
+      testWarningVisible('#suspicious-warning', true);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.disableReasons.updateRequired', true);
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', true);
+      testWarningVisible('#suspicious-warning', true);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', true);
+
+      item.set('data.disableReasons.corruptInstall', false);
+      item.set('data.disableReasons.suspiciousInstall', false);
+      item.set('data.disableReasons.updateRequired', false);
+      Polymer.dom.flush();
+      testWarningVisible('#corrupted-warning', false);
+      testWarningVisible('#suspicious-warning', false);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+    });
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

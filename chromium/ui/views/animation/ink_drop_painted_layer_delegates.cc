@@ -37,12 +37,9 @@ gfx::Vector2dF BasePaintedLayerDelegate::GetCenteringOffset() const {
   return gfx::RectF(GetPaintedBounds()).CenterPoint().OffsetFromOrigin();
 }
 
-void BasePaintedLayerDelegate::OnDelegatedFrameDamage(
-    const gfx::Rect& damage_rect_in_dip) {}
-
 void BasePaintedLayerDelegate::OnDeviceScaleFactorChanged(
-    float device_scale_factor) {}
-
+    float old_device_scale_factor,
+    float new_device_scale_factor) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 //

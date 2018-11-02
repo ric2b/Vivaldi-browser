@@ -13,18 +13,19 @@
 #include "base/run_loop.h"
 #include "base/win/iunknown_impl.h"
 #include "base/win/scoped_propvariant.h"
+#include "services/device/generic_sensor/fake_platform_sensor_and_provider.h"
 #include "services/device/generic_sensor/generic_sensor_consts.h"
 #include "services/device/generic_sensor/platform_sensor_provider_win.h"
 #include "services/device/public/interfaces/sensor_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::IsNull;
 using ::testing::NiceMock;
 using ::testing::NotNull;
-using ::testing::Return;
 using ::testing::WithArgs;
 
 namespace device {
@@ -193,7 +194,7 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
     sensor_ = new NiceMock<MockISensor>();
     sensor_collection_ = new NiceMock<MockISensorCollection>();
     sensor_manager_ = new NiceMock<MockISensorManager>();
-    base::win::ScopedComPtr<ISensorManager> manager;
+    Microsoft::WRL::ComPtr<ISensorManager> manager;
     sensor_manager_->QueryInterface(IID_PPV_ARGS(&manager));
 
     // Overrides default ISensorManager with mocked interface.
@@ -202,7 +203,7 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
   }
 
   void TearDown() override {
-    base::win::ScopedComPtr<ISensorManager> null_manager;
+    Microsoft::WRL::ComPtr<ISensorManager> null_manager;
     PlatformSensorProviderWin::GetInstance()->SetSensorManagerForTesting(
         null_manager);
   }
@@ -216,7 +217,7 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
   // Sensor creation is asynchronous, therefore inner loop is used to wait for
   // PlatformSensorProvider::CreateSensorCallback completion.
   scoped_refptr<PlatformSensor> CreateSensor(mojom::SensorType type) {
-    run_loop_ = base::MakeUnique<base::RunLoop>();
+    run_loop_ = std::make_unique<base::RunLoop>();
     PlatformSensorProviderWin::GetInstance()->CreateSensor(
         type, base::Bind(&PlatformSensorAndProviderTestWin::SensorCreated,
                          base::Unretained(this)));
@@ -232,9 +233,10 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
   bool StartListening(scoped_refptr<PlatformSensor> sensor,
                       PlatformSensor::Client* client,
                       const PlatformSensorConfiguration& config) {
-    run_loop_ = base::MakeUnique<base::RunLoop>();
+    run_loop_ = std::make_unique<base::RunLoop>();
     bool ret = sensor->StartListening(client, config);
-    run_loop_->Run();
+    if (ret)
+      run_loop_->Run();
     run_loop_ = nullptr;
     return ret;
   }
@@ -347,10 +349,10 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
 
     // MockISensorDataReport implements IUnknown that provides ref counting.
     // IUnknown::QueryInterface increases refcount if an object implements
-    // requested interface. ScopedComPtr wraps received interface and destructs
+    // requested interface. ComPtr wraps received interface and destructs
     // it when there are not more references.
     auto* mock_report = new NiceMock<MockISensorDataReport>();
-    base::win::ScopedComPtr<ISensorDataReport> data_report;
+    Microsoft::WRL::ComPtr<ISensorDataReport> data_report;
     mock_report->QueryInterface(IID_PPV_ARGS(&data_report));
 
     EXPECT_CALL(*mock_report, GetTimestamp(_))
@@ -376,38 +378,11 @@ class PlatformSensorAndProviderTestWin : public ::testing::Test {
   scoped_refptr<MockISensorManager> sensor_manager_;
   scoped_refptr<MockISensorCollection> sensor_collection_;
   scoped_refptr<MockISensor> sensor_;
-  base::win::ScopedComPtr<ISensorEvents> sensor_events_;
+  Microsoft::WRL::ComPtr<ISensorEvents> sensor_events_;
   base::MessageLoop message_loop_;
   scoped_refptr<PlatformSensor> platform_sensor_;
   // Inner run loop used to wait for async sensor creation callback.
   std::unique_ptr<base::RunLoop> run_loop_;
-};
-
-// Mock for PlatformSensor's client interface that is used to deliver
-// error and data changes notifications.
-class MockPlatformSensorClient : public PlatformSensor::Client {
- public:
-  MockPlatformSensorClient() = default;
-  explicit MockPlatformSensorClient(scoped_refptr<PlatformSensor> sensor)
-      : sensor_(sensor) {
-    if (sensor_)
-      sensor_->AddClient(this);
-
-    ON_CALL(*this, IsSuspended()).WillByDefault(Return(false));
-  }
-
-  ~MockPlatformSensorClient() override {
-    if (sensor_)
-      sensor_->RemoveClient(this);
-  }
-
-  // PlatformSensor::Client interface.
-  MOCK_METHOD1(OnSensorReadingChanged, void(mojom::SensorType type));
-  MOCK_METHOD0(OnSensorError, void());
-  MOCK_METHOD0(IsSuspended, bool());
-
- private:
-  scoped_refptr<PlatformSensor> sensor_;
 };
 
 // Tests that PlatformSensorManager returns null sensor when sensor
@@ -448,7 +423,7 @@ TEST_F(PlatformSensorAndProviderTestWin, StartFails) {
   auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_FALSE(sensor->StartListening(client.get(), configuration));
 }
@@ -476,7 +451,7 @@ TEST_F(PlatformSensorAndProviderTestWin, SensorStarted) {
   auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
 
@@ -494,7 +469,7 @@ TEST_F(PlatformSensorAndProviderTestWin, SensorRemoved) {
   auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorError()).Times(1);
@@ -509,7 +484,7 @@ TEST_F(PlatformSensorAndProviderTestWin, SensorStateChangedToError) {
   auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorError()).Times(1);
@@ -524,7 +499,7 @@ TEST_F(PlatformSensorAndProviderTestWin, SensorStateChangedToReady) {
   auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorError()).Times(0);
@@ -563,7 +538,7 @@ TEST_F(PlatformSensorAndProviderTestWin, CheckAccelerometerReadingConversion) {
   auto sensor = CreateSensor(SensorType::ACCELEROMETER);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorReadingChanged(sensor->GetType())).Times(1);
@@ -602,7 +577,7 @@ TEST_F(PlatformSensorAndProviderTestWin, CheckGyroscopeReadingConversion) {
   auto sensor = CreateSensor(SensorType::GYROSCOPE);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorReadingChanged(sensor->GetType())).Times(1);
@@ -624,9 +599,9 @@ TEST_F(PlatformSensorAndProviderTestWin, CheckGyroscopeReadingConversion) {
   base::RunLoop().RunUntilIdle();
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
-  EXPECT_THAT(buffer->reading.gyro.x, -x_ang_accel * kRadiansInDegrees);
-  EXPECT_THAT(buffer->reading.gyro.y, -y_ang_accel * kRadiansInDegrees);
-  EXPECT_THAT(buffer->reading.gyro.z, -z_ang_accel * kRadiansInDegrees);
+  EXPECT_THAT(buffer->reading.gyro.x, gfx::DegToRad(x_ang_accel));
+  EXPECT_THAT(buffer->reading.gyro.y, gfx::DegToRad(y_ang_accel));
+  EXPECT_THAT(buffer->reading.gyro.z, gfx::DegToRad(z_ang_accel));
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 }
 
@@ -642,7 +617,7 @@ TEST_F(PlatformSensorAndProviderTestWin, CheckMagnetometerReadingConversion) {
   auto sensor = CreateSensor(SensorType::MAGNETOMETER);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorReadingChanged(sensor->GetType())).Times(1);
@@ -664,9 +639,9 @@ TEST_F(PlatformSensorAndProviderTestWin, CheckMagnetometerReadingConversion) {
   base::RunLoop().RunUntilIdle();
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
-  EXPECT_THAT(buffer->reading.magn.x, -x_magn_field * kMicroteslaInMilligauss);
-  EXPECT_THAT(buffer->reading.magn.y, -y_magn_field * kMicroteslaInMilligauss);
-  EXPECT_THAT(buffer->reading.magn.z, -z_magn_field * kMicroteslaInMilligauss);
+  EXPECT_THAT(buffer->reading.magn.x, x_magn_field * kMicroteslaInMilligauss);
+  EXPECT_THAT(buffer->reading.magn.y, y_magn_field * kMicroteslaInMilligauss);
+  EXPECT_THAT(buffer->reading.magn.z, z_magn_field * kMicroteslaInMilligauss);
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 }
 
@@ -685,7 +660,7 @@ TEST_F(PlatformSensorAndProviderTestWin,
   auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorReadingChanged(sensor->GetType())).Times(1);
@@ -728,7 +703,7 @@ TEST_F(PlatformSensorAndProviderTestWin,
   auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
   EXPECT_TRUE(sensor);
 
-  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  auto client = std::make_unique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(StartListening(sensor, client.get(), configuration));
   EXPECT_CALL(*client, OnSensorReadingChanged(sensor->GetType())).Times(1);
@@ -755,9 +730,9 @@ TEST_F(PlatformSensorAndProviderTestWin,
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
 
-  EXPECT_THAT(buffer->reading.orientation_quat.x, -x);
-  EXPECT_THAT(buffer->reading.orientation_quat.y, -y);
-  EXPECT_THAT(buffer->reading.orientation_quat.z, -z);
+  EXPECT_THAT(buffer->reading.orientation_quat.x, x);
+  EXPECT_THAT(buffer->reading.orientation_quat.y, y);
+  EXPECT_THAT(buffer->reading.orientation_quat.z, z);
   EXPECT_THAT(buffer->reading.orientation_quat.w, w);
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 }

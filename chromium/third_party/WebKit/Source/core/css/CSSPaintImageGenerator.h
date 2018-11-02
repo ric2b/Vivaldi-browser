@@ -29,9 +29,10 @@ class CORE_EXPORT CSSPaintImageGenerator
   // registered and ready to use.
   class Observer : public GarbageCollectedFinalized<Observer> {
    public:
-    virtual ~Observer(){};
+    virtual ~Observer() = default;
+    ;
     virtual void PaintImageGeneratorReady() = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
 
   static CSSPaintImageGenerator* Create(const String& name,
@@ -47,9 +48,10 @@ class CORE_EXPORT CSSPaintImageGenerator
 
   // Invokes the CSS Paint API 'paint' callback. May return a nullptr
   // representing an invalid image if an error occurred.
-  virtual RefPtr<Image> Paint(const ImageResourceObserver&,
-                              const IntSize&,
-                              const CSSStyleValueVector*) = 0;
+  // The |container_size| is the container size with subpixel snapping.
+  virtual scoped_refptr<Image> Paint(const ImageResourceObserver&,
+                                     const IntSize& container_size,
+                                     const CSSStyleValueVector*) = 0;
 
   virtual const Vector<CSSPropertyID>& NativeInvalidationProperties() const = 0;
   virtual const Vector<AtomicString>& CustomInvalidationProperties() const = 0;
@@ -57,7 +59,7 @@ class CORE_EXPORT CSSPaintImageGenerator
   virtual const Vector<CSSSyntaxDescriptor>& InputArgumentTypes() const = 0;
   virtual bool IsImageGeneratorReady() const = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 }  // namespace blink

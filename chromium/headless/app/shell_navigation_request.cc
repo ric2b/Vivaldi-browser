@@ -18,7 +18,7 @@ ShellNavigationRequest::ShellNavigationRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
-ShellNavigationRequest::~ShellNavigationRequest() {}
+ShellNavigationRequest::~ShellNavigationRequest() = default;
 
 void ShellNavigationRequest::StartProcessing(base::Closure done_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -46,7 +46,7 @@ void ShellNavigationRequest::StartProcessingOnUiThread(
       ->GetNetwork()
       ->GetExperimental()
       ->ContinueInterceptedRequest(
-          headless::network::ContinueInterceptedRequestParams::Builder()
+          network::ContinueInterceptedRequestParams::Builder()
               .SetInterceptionId(interception_id)
               .Build(),
           base::Bind(&ShellNavigationRequest::ContinueInterceptedRequestResult,

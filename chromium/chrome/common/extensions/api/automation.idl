@@ -85,7 +85,8 @@
     colorWell,
     columnHeader,
     column,
-    comboBox,
+    comboBoxGrouping,
+    comboBoxMenuButton,
     complementary,
     contentInfo,
     date,
@@ -175,6 +176,7 @@
     table,
     term,
     textField,
+    textFieldWithComboBox,
     time,
     timer,
     titleBar,
@@ -395,6 +397,10 @@
     // is not available. The start and end indices are zero-based offsets
     // into the node's "name" string attribute.
     static Rect boundsForRange(long startIndex, long endIndex);
+
+    // The location (as a bounding box) of this node in global screen
+    // coordinates without applying any clipping from ancestors.
+    Rect? unclippedLocation;
 
     // The purpose of the node, other than the role, if any.
     DOMString? description;

@@ -65,6 +65,8 @@ source_set("renderer") {
     "bindings/event_emitter.h",
     "bindings/exception_handler.cc",
     "bindings/exception_handler.h",
+    "bindings/js_runner.cc",
+    "bindings/js_runner.h",
     "blob_native_handler.cc",
     "blob_native_handler.h",
     "chrome_setting.cc",
@@ -94,14 +96,16 @@ source_set("renderer") {
     "easy_unlock_proximity_required_stub.h",
     "event_bindings.cc",
     "event_bindings.h",
+    "event_bookkeeper.cc",
+    "event_bookkeeper.h",
     "extension_bindings_system.cc",
     "extension_bindings_system.h",
     "extension_frame_helper.cc",
     "extension_frame_helper.h",
-    "extension_helper.cc",
-    "extension_helper.h",
     "extension_injection_host.cc",
     "extension_injection_host.h",
+    "extension_js_runner.cc",
+    "extension_js_runner.h",
     "extension_port.cc",
     "extension_port.h",
     "extensions_render_frame_observer.cc",
@@ -114,6 +118,8 @@ source_set("renderer") {
     "file_system_natives.h",
     "gc_callback.cc",
     "gc_callback.h",
+    "gin_port.cc",
+    "gin_port.h",
     "guest_view/extensions_guest_view_container.cc",
     "guest_view/extensions_guest_view_container.h",
     "guest_view/extensions_guest_view_container_dispatcher.cc",
@@ -132,20 +138,30 @@ source_set("renderer") {
     "ipc_message_sender.h",
     "js_extension_bindings_system.cc",
     "js_extension_bindings_system.h",
+    "js_renderer_messaging_service.cc",
+    "js_renderer_messaging_service.h",
     "lazy_background_page_native_handler.cc",
     "lazy_background_page_native_handler.h",
     "logging_native_handler.cc",
     "logging_native_handler.h",
+    "message_target.cc",
+    "message_target.h",
     "messaging_bindings.cc",
     "messaging_bindings.h",
+    "messaging_util.cc",
+    "messaging_util.h",
     "module_system.cc",
     "module_system.h",
     "native_extension_bindings_system.cc",
     "native_extension_bindings_system.h",
     "native_handler.cc",
     "native_handler.h",
+    "native_renderer_messaging_service.cc",
+    "native_renderer_messaging_service.h",
     "object_backed_native_handler.cc",
     "object_backed_native_handler.h",
+    "one_time_message_handler.cc",
+    "one_time_message_handler.h",
     "process_info_native_handler.cc",
     "process_info_native_handler.h",
     "programmatic_script_injector.cc",
@@ -154,6 +170,8 @@ source_set("renderer") {
     "render_frame_observer_natives.h",
     "renderer_extension_registry.cc",
     "renderer_extension_registry.h",
+    "renderer_messaging_service.cc",
+    "renderer_messaging_service.h",
     "request_sender.cc",
     "request_sender.h",
     "resource_bundle_source_map.cc",
@@ -197,6 +215,8 @@ source_set("renderer") {
     "resources/web_request_custom_bindings.js",
     "runtime_custom_bindings.cc",
     "runtime_custom_bindings.h",
+    "runtime_hooks_delegate.cc",
+    "runtime_hooks_delegate.h",
     "safe_builtins.cc",
     "safe_builtins.h",
     "script_context.cc",
@@ -254,12 +274,7 @@ source_set("renderer") {
     "worker_thread_dispatcher.h",
   ]
 
-  configs += [
-    "//build/config:precompiled_headers",
-
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-  ]
+  configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
     "//chrome:resources",
@@ -273,7 +288,7 @@ source_set("renderer") {
     "//mojo/public/js",
     "//skia",
     "//third_party/WebKit/public:blink",
-    "//third_party/cld",
+    "//third_party/cld_3/src/src:cld_3",
   ]
 
   if (proprietary_codecs && enable_wifi_display) {
@@ -313,6 +328,42 @@ source_set("renderer") {
   }
 }
 
+static_library("unit_test_support") {
+  # Sources that are shared between chrome-based renderer unit tests and
+  # top-level extensions renderer unit tests.
+  testonly = true
+  sources = [
+    "bindings/api_binding_test.cc",
+    "bindings/api_binding_test.h",
+    "bindings/api_binding_test_util.cc",
+    "bindings/api_binding_test_util.h",
+    "bindings/test_js_runner.cc",
+    "bindings/test_js_runner.h",
+    "native_extension_bindings_system_test_base.cc",
+    "native_extension_bindings_system_test_base.h",
+    "send_message_tester.cc",
+    "send_message_tester.h",
+    "string_source_map.cc",
+    "string_source_map.h",
+    "test_v8_extension_configuration.cc",
+    "test_v8_extension_configuration.h",
+  ]
+
+  deps = [
+    ":renderer",
+    "//base",
+    "//components/crx_file",
+    "//content/public/child",
+    "//content/test:test_support",
+    "//extensions:test_support",
+    "//extensions/common",
+    "//gin",
+    "//gin:gin_test",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -325,10 +376,6 @@ source_set("unit_tests") {
     "bindings/api_binding_hooks_test_delegate.cc",
     "bindings/api_binding_hooks_test_delegate.h",
     "bindings/api_binding_js_util_unittest.cc",
-    "bindings/api_binding_test.cc",
-    "bindings/api_binding_test.h",
-    "bindings/api_binding_test_util.cc",
-    "bindings/api_binding_test_util.h",
     "bindings/api_binding_unittest.cc",
     "bindings/api_bindings_system_unittest.cc",
     "bindings/api_bindings_system_unittest.h",
@@ -348,27 +395,28 @@ source_set("unit_tests") {
     "event_unittest.cc",
     "feature_cache_unittest.cc",
     "gc_callback_unittest.cc",
+    "gin_port_unittest.cc",
     "json_schema_unittest.cc",
+    "messaging_util_unittest.cc",
     "messaging_utils_unittest.cc",
     "module_system_test.cc",
     "module_system_test.h",
     "module_system_unittest.cc",
-    "mojo/keep_alive_client_unittest.cc",
     "native_extension_bindings_system_unittest.cc",
+    "native_renderer_messaging_service_unittest.cc",
+    "one_time_message_handler_unittest.cc",
+    "runtime_hooks_delegate_unittest.cc",
     "safe_builtins_unittest.cc",
     "scoped_web_frame.cc",
     "scoped_web_frame.h",
     "script_context_set_unittest.cc",
     "script_context_unittest.cc",
-    "string_source_map.cc",
-    "string_source_map.h",
-    "test_v8_extension_configuration.cc",
-    "test_v8_extension_configuration.h",
     "utils_unittest.cc",
   ]
 
   deps = [
     ":renderer",
+    ":unit_test_support",
     "//base",
     "//base/test:test_support",
     "//components/crx_file:crx_file",
@@ -376,12 +424,9 @@ source_set("unit_tests") {
     "//content/test:test_support",
     "//extensions:extensions_renderer_resources",
     "//extensions:test_support",
-    "//gin:gin_test",
-
-    # TODO(brettw) these tests should not be including headers from browser.
-    "//extensions/browser",
     "//extensions/common",
     "//gin",
+    "//gin:gin_test",
     "//ipc:test_support",
     "//mojo/edk/js",
     "//testing/gmock",

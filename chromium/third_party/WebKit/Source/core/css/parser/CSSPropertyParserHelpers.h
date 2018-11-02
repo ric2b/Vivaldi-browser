@@ -6,12 +6,13 @@
 #define CSSPropertyParserHelpers_h
 
 #include "core/css/CSSCustomIdentValue.h"
+#include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/parser/CSSParserMode.h"
 #include "core/css/parser/CSSParserTokenRange.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/WebFeatureForward.h"
 #include "platform/Length.h"  // For ValueRange
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Optional.h"
@@ -19,7 +20,7 @@
 namespace blink {
 
 class CSSParserContext;
-class CSSProperty;
+class CSSPropertyValue;
 class CSSStringValue;
 class CSSURIValue;
 class CSSValuePair;
@@ -119,40 +120,42 @@ void AddProperty(CSSPropertyID resolved_property,
                  const CSSValue&,
                  bool important,
                  IsImplicitProperty,
-                 HeapVector<CSSProperty, 256>& properties);
+                 HeapVector<CSSPropertyValue, 256>& properties);
 
 void CountKeywordOnlyPropertyUsage(CSSPropertyID,
                                    const CSSParserContext&,
                                    CSSValueID);
 
-const CSSValue* ParseLonghandViaAPI(CSSPropertyID unresolved_property,
-                                    CSSPropertyID current_shorthand,
-                                    const CSSParserContext&,
-                                    CSSParserTokenRange&);
+const CSSValue* ParseLonghand(CSSPropertyID unresolved_property,
+                              CSSPropertyID current_shorthand,
+                              const CSSParserContext&,
+                              CSSParserTokenRange&);
 
-bool ConsumeShorthandVia2LonghandAPIs(const StylePropertyShorthand&,
-                                      bool important,
-                                      const CSSParserContext&,
-                                      CSSParserTokenRange&,
-                                      HeapVector<CSSProperty, 256>& properties);
-
-bool ConsumeShorthandVia4LonghandAPIs(const StylePropertyShorthand&,
-                                      bool important,
-                                      const CSSParserContext&,
-                                      CSSParserTokenRange&,
-                                      HeapVector<CSSProperty, 256>& properties);
-
-bool ConsumeShorthandGreedilyViaLonghandAPIs(
+bool ConsumeShorthandVia2Longhands(
     const StylePropertyShorthand&,
     bool important,
     const CSSParserContext&,
     CSSParserTokenRange&,
-    HeapVector<CSSProperty, 256>& properties);
+    HeapVector<CSSPropertyValue, 256>& properties);
+
+bool ConsumeShorthandVia4Longhands(
+    const StylePropertyShorthand&,
+    bool important,
+    const CSSParserContext&,
+    CSSParserTokenRange&,
+    HeapVector<CSSPropertyValue, 256>& properties);
+
+bool ConsumeShorthandGreedilyViaLonghands(
+    const StylePropertyShorthand&,
+    bool important,
+    const CSSParserContext&,
+    CSSParserTokenRange&,
+    HeapVector<CSSPropertyValue, 256>& properties);
 
 void AddExpandedPropertyForValue(CSSPropertyID prop_id,
                                  const CSSValue&,
                                  bool,
-                                 HeapVector<CSSProperty, 256>& properties);
+                                 HeapVector<CSSPropertyValue, 256>& properties);
 
 // Template implementations are at the bottom of the file for readability.
 
@@ -192,6 +195,8 @@ CSSValueList* ConsumeCommaSeparatedList(Func callback,
 }
 
 CSSValue* ConsumeTransformList(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeFilterFunctionList(CSSParserTokenRange&,
+                                    const CSSParserContext&);
 
 }  // namespace CSSPropertyParserHelpers
 

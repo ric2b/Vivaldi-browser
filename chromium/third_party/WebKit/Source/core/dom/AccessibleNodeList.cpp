@@ -5,7 +5,7 @@
 #include "core/dom/AccessibleNodeList.h"
 
 #include "core/dom/AccessibleNode.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -37,7 +37,7 @@ void AccessibleNodeList::RemoveOwner(AOMRelationListProperty property,
   for (size_t i = 0; i < owners_.size(); ++i) {
     auto& item = owners_[i];
     if (item.first == property && item.second == node) {
-      owners_.erase(i);
+      owners_.EraseAt(i);
       return;
     }
   }
@@ -68,7 +68,7 @@ void AccessibleNodeList::add(AccessibleNode* node, AccessibleNode* before) {
 
 void AccessibleNodeList::remove(int index) {
   if (index >= 0 && index < static_cast<int>(nodes_.size()))
-    nodes_.erase(index);
+    nodes_.EraseAt(index);
 }
 
 bool AccessibleNodeList::AnonymousIndexedSetter(unsigned index,
@@ -105,9 +105,10 @@ void AccessibleNodeList::NotifyChanged() {
     owner.second->OnRelationListChanged(owner.first);
 }
 
-DEFINE_TRACE(AccessibleNodeList) {
+void AccessibleNodeList::Trace(blink::Visitor* visitor) {
   visitor->Trace(nodes_);
   visitor->Trace(owners_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

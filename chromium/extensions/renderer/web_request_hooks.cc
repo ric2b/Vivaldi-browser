@@ -5,9 +5,10 @@
 #include "extensions/renderer/web_request_hooks.h"
 
 #include "base/values.h"
-#include "content/public/child/v8_value_converter.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/renderer/bindings/api_binding_hooks.h"
+#include "extensions/renderer/bindings/js_runner.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
@@ -20,7 +21,6 @@ WebRequestHooks::~WebRequestHooks() = default;
 
 bool WebRequestHooks::CreateCustomEvent(
     v8::Local<v8::Context> context,
-    const binding::RunJSFunctionSync& run_js_sync,
     const std::string& event_name,
     v8::Local<v8::Value>* event_out) {
   v8::Isolate* isolate = context->GetIsolate();
@@ -69,8 +69,18 @@ bool WebRequestHooks::CreateCustomEvent(
       extra_parameters_spec,
       // opt_eventOptions and opt_webViewInstanceId are ignored.
   };
-  *event_out =
-      run_js_sync.Run(get_event, context, arraysize(args), args).Get(isolate);
+
+  v8::TryCatch try_catch(isolate);
+  v8::Local<v8::Value> event;
+  if (!JSRunner::Get(context)
+           ->RunJSFunctionSync(get_event, context, arraysize(args), args)
+           .ToLocal(&event)) {
+    // TODO(devlin): Do we care about the error? In theory, this should never
+    // happen, so probably not.
+    event = v8::Undefined(isolate);
+  }
+
+  *event_out = event;
   return true;
 }
 

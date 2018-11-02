@@ -22,14 +22,13 @@ class PaymentAddress;
 class PaymentCompleter;
 class ScriptState;
 
-class MODULES_EXPORT PaymentResponse final
-    : public GarbageCollectedFinalized<PaymentResponse>,
-      public ScriptWrappable {
+class MODULES_EXPORT PaymentResponse final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(PaymentResponse);
 
  public:
   PaymentResponse(payments::mojom::blink::PaymentResponsePtr,
+                  PaymentAddress* shipping_address_,
                   PaymentCompleter*,
                   const String& requestId);
   virtual ~PaymentResponse();
@@ -47,7 +46,7 @@ class MODULES_EXPORT PaymentResponse final
 
   ScriptPromise complete(ScriptState*, const String& result = "");
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   String requestId_;

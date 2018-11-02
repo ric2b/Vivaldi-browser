@@ -9,6 +9,7 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/modules/v8/V8PaymentHandlerResponse.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "modules/payments/PaymentHandlerResponse.h"
 #include "modules/payments/PaymentHandlerUtils.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
@@ -25,7 +26,7 @@ PaymentRequestRespondWithObserver* PaymentRequestRespondWithObserver::Create(
 }
 
 void PaymentRequestRespondWithObserver::OnResponseRejected(
-    WebServiceWorkerResponseError error) {
+    mojom::ServiceWorkerResponseError error) {
   PaymentHandlerUtils::ReportResponseError(GetExecutionContext(),
                                            "PaymentRequestEvent", error);
 
@@ -44,7 +45,18 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
       ToIsolate(GetExecutionContext()), value, exception_state);
   if (exception_state.HadException()) {
     exception_state.ClearException();
-    OnResponseRejected(kWebServiceWorkerResponseErrorNoV8Instance);
+    OnResponseRejected(mojom::ServiceWorkerResponseError::kNoV8Instance);
+    return;
+  }
+
+  // Check payment response validity.
+  if (!response.hasMethodName() || !response.hasDetails()) {
+    GetExecutionContext()->AddConsoleMessage(
+        ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel,
+                               "'PaymentHandlerResponse.methodName' and "
+                               "'PaymentHandlerResponse.details' must not "
+                               "be empty in payment response."));
+    OnResponseRejected(mojom::ServiceWorkerResponseError::kUnknown);
     return;
   }
 
@@ -55,7 +67,11 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   if (!v8::JSON::Stringify(response.details().GetContext(),
                            response.details().V8Value().As<v8::Object>())
            .ToLocal(&details_value)) {
-    OnResponseRejected(kWebServiceWorkerResponseErrorUnknown);
+    GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource, kErrorMessageLevel,
+        "Failed to stringify PaymentHandlerResponse.details in payment "
+        "response."));
+    OnResponseRejected(mojom::ServiceWorkerResponseError::kUnknown);
     return;
   }
   web_data.stringified_details = ToCoreString(details_value);
@@ -76,7 +92,7 @@ PaymentRequestRespondWithObserver::PaymentRequestRespondWithObserver(
     WaitUntilObserver* observer)
     : RespondWithObserver(context, event_id, observer) {}
 
-DEFINE_TRACE(PaymentRequestRespondWithObserver) {
+void PaymentRequestRespondWithObserver::Trace(blink::Visitor* visitor) {
   RespondWithObserver::Trace(visitor);
 }
 

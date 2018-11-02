@@ -36,7 +36,7 @@ GestureInterpreter::GestureInterpreter(RendererProxy* renderer,
       true);
 }
 
-GestureInterpreter::~GestureInterpreter() {}
+GestureInterpreter::~GestureInterpreter() = default;
 
 void GestureInterpreter::SetInputMode(InputMode mode) {
   switch (mode) {
@@ -65,7 +65,9 @@ void GestureInterpreter::Zoom(float pivot_x,
                               GestureState state) {
   AbortAnimations();
   SetGestureInProgress(TouchInputStrategy::ZOOM, state != GESTURE_ENDED);
-  input_strategy_->HandleZoom({pivot_x, pivot_y}, scale, &viewport_);
+  if (viewport_.IsViewportReady()) {
+    input_strategy_->HandleZoom({pivot_x, pivot_y}, scale, &viewport_);
+  }
 }
 
 void GestureInterpreter::Pan(float translation_x, float translation_y) {
@@ -97,19 +99,31 @@ void GestureInterpreter::Drag(float x, float y, GestureState state) {
   bool is_dragging_mode = state != GESTURE_ENDED;
   SetGestureInProgress(TouchInputStrategy::DRAG, is_dragging_mode);
 
-  if (!input_strategy_->TrackTouchInput({x, y}, viewport_)) {
+  if (!viewport_.IsViewportReady() ||
+      !input_strategy_->TrackTouchInput({x, y}, viewport_)) {
     return;
   }
   ViewMatrix::Point cursor_position = input_strategy_->GetCursorPosition();
 
-  if (state == GESTURE_BEGAN) {
-    StartInputFeedback(cursor_position.x, cursor_position.y,
-                       TouchInputStrategy::DRAG_FEEDBACK);
+  switch (state) {
+    case GESTURE_BEGAN:
+      StartInputFeedback(cursor_position.x, cursor_position.y,
+                         TouchInputStrategy::DRAG_FEEDBACK);
+      input_stub_->SendMouseEvent(cursor_position.x, cursor_position.y,
+                                  protocol::MouseEvent_MouseButton_BUTTON_LEFT,
+                                  true);
+      break;
+    case GESTURE_CHANGED:
+      InjectCursorPosition(cursor_position.x, cursor_position.y);
+      break;
+    case GESTURE_ENDED:
+      input_stub_->SendMouseEvent(cursor_position.x, cursor_position.y,
+                                  protocol::MouseEvent_MouseButton_BUTTON_LEFT,
+                                  false);
+      break;
+    default:
+      NOTREACHED();
   }
-
-  input_stub_->SendMouseEvent(cursor_position.x, cursor_position.y,
-                              protocol::MouseEvent_MouseButton_BUTTON_LEFT,
-                              is_dragging_mode);
 }
 
 void GestureInterpreter::OneFingerFling(float velocity_x, float velocity_y) {
@@ -121,7 +135,8 @@ void GestureInterpreter::OneFingerFling(float velocity_x, float velocity_y) {
 void GestureInterpreter::Scroll(float x, float y, float dx, float dy) {
   AbortAnimations();
 
-  if (!input_strategy_->TrackTouchInput({x, y}, viewport_)) {
+  if (!viewport_.IsViewportReady() ||
+      !input_strategy_->TrackTouchInput({x, y}, viewport_)) {
     return;
   }
   ViewMatrix::Point cursor_position = input_strategy_->GetCursorPosition();
@@ -151,7 +166,9 @@ void GestureInterpreter::ProcessAnimations() {
 
 void GestureInterpreter::OnSurfaceSizeChanged(int width, int height) {
   viewport_.SetSurfaceSize(width, height);
-  input_strategy_->FocusViewportOnCursor(&viewport_);
+  if (viewport_.IsViewportReady()) {
+    input_strategy_->FocusViewportOnCursor(&viewport_);
+  }
 }
 
 void GestureInterpreter::OnDesktopSizeChanged(int width, int height) {
@@ -160,7 +177,8 @@ void GestureInterpreter::OnDesktopSizeChanged(int width, int height) {
 
 void GestureInterpreter::PanWithoutAbortAnimations(float translation_x,
                                                    float translation_y) {
-  if (input_strategy_->HandlePan({translation_x, translation_y},
+  if (viewport_.IsViewportReady() &&
+      input_strategy_->HandlePan({translation_x, translation_y},
                                  gesture_in_progress_, &viewport_)) {
     // Cursor position changed.
     ViewMatrix::Point cursor_position = input_strategy_->GetCursorPosition();
@@ -178,6 +196,9 @@ void GestureInterpreter::InjectCursorPosition(float x, float y) {
 }
 
 void GestureInterpreter::ScrollWithoutAbortAnimations(float dx, float dy) {
+  if (!viewport_.IsViewportReady()) {
+    return;
+  }
   ViewMatrix::Point desktopDelta =
       input_strategy_->MapScreenVectorToDesktop({dx, dy}, viewport_);
   input_stub_->SendMouseWheelEvent(desktopDelta.x, desktopDelta.y);
@@ -192,7 +213,8 @@ void GestureInterpreter::InjectMouseClick(
     float touch_x,
     float touch_y,
     protocol::MouseEvent_MouseButton button) {
-  if (!input_strategy_->TrackTouchInput({touch_x, touch_y}, viewport_)) {
+  if (!viewport_.IsViewportReady() ||
+      !input_strategy_->TrackTouchInput({touch_x, touch_y}, viewport_)) {
     return;
   }
   ViewMatrix::Point cursor_position = input_strategy_->GetCursorPosition();

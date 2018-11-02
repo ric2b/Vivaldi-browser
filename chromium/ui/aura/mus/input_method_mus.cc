@@ -91,20 +91,28 @@ ui::EventDispatchDetails InputMethodMus::DispatchKeyEvent(ui::KeyEvent* event) {
 }
 
 void InputMethodMus::OnTextInputTypeChanged(const ui::TextInputClient* client) {
-  if (IsTextInputClientFocused(client))
-    UpdateTextInputType();
   InputMethodBase::OnTextInputTypeChanged(client);
+  if (!IsTextInputClientFocused(client))
+    return;
+
+  UpdateTextInputType();
 
   if (input_method_)
     input_method_->OnTextInputTypeChanged(client->GetTextInputType());
 }
 
 void InputMethodMus::OnCaretBoundsChanged(const ui::TextInputClient* client) {
+  if (!IsTextInputClientFocused(client))
+    return;
+
   if (input_method_)
     input_method_->OnCaretBoundsChanged(client->GetCaretBounds());
 }
 
 void InputMethodMus::CancelComposition(const ui::TextInputClient* client) {
+  if (!IsTextInputClientFocused(client))
+    return;
+
   if (input_method_)
     input_method_->CancelComposition();
 }
@@ -151,7 +159,8 @@ void InputMethodMus::OnDidChangeFocusedClient(
   if (!focused)
     return;
 
-  text_input_client_ = base::MakeUnique<TextInputClientImpl>(focused);
+  text_input_client_ =
+      std::make_unique<TextInputClientImpl>(focused, delegate());
 
   // We are about to close the pipe with pending callbacks. Closing the pipe
   // results in none of the callbacks being run. We have to run the callbacks
@@ -161,7 +170,8 @@ void InputMethodMus::OnDidChangeFocusedClient(
   if (ime_driver_) {
     ui::mojom::StartSessionDetailsPtr details =
         ui::mojom::StartSessionDetails::New();
-    details->client = text_input_client_->CreateInterfacePtrAndBind();
+    details->client =
+        text_input_client_->CreateInterfacePtrAndBind().PassInterface();
     details->input_method_request = MakeRequest(&input_method_ptr_);
     input_method_ = input_method_ptr_.get();
     details->text_input_type = focused->GetTextInputType();
@@ -175,8 +185,8 @@ void InputMethodMus::OnDidChangeFocusedClient(
 
 void InputMethodMus::UpdateTextInputType() {
   ui::TextInputType type = GetTextInputType();
-  mojo::TextInputStatePtr state = mojo::TextInputState::New();
-  state->type = mojo::ConvertTo<mojo::TextInputType>(type);
+  ui::mojom::TextInputStatePtr state = ui::mojom::TextInputState::New();
+  state->type = mojo::ConvertTo<ui::mojom::TextInputType>(type);
   if (window_) {
     WindowPortMus* window_impl_mus = WindowPortMus::Get(window_);
     if (type != ui::TEXT_INPUT_TYPE_NONE)
@@ -203,23 +213,12 @@ void InputMethodMus::ProcessKeyEventCallback(
   std::unique_ptr<EventResultCallback> ack_callback =
       std::move(pending_callbacks_.front());
   pending_callbacks_.pop_front();
-  EventResult event_result;
-  if (!handled) {
-    // If not handled by IME, try dispatching the event to delegate to see if
-    // any client-side post-ime processing needs to be done. This includes cases
-    // like backspace, return key, etc.
-    std::unique_ptr<ui::Event> event_clone = ui::Event::Clone(event);
-    ignore_result(DispatchKeyEventPostIME(event_clone->AsKeyEvent()));
-    event_result =
-        event_clone->handled() ? EventResult::HANDLED : EventResult::UNHANDLED;
-  } else {
-    event_result = EventResult::HANDLED;
-  }
+
   // |ack_callback| can be null if the standard form of DispatchKeyEvent() is
   // called instead of the version which provides a callback. In mus+ash we
   // use the version with callback, but some unittests use the standard form.
   if (ack_callback)
-    ack_callback->Run(event_result);
+    ack_callback->Run(handled ? EventResult::HANDLED : EventResult::UNHANDLED);
 }
 
 }  // namespace aura

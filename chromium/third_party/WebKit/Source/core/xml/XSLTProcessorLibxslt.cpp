@@ -38,7 +38,6 @@
 #include "core/xml/XSLTUnicodeSort.h"
 #include "core/xml/parser/XMLDocumentParser.h"
 #include "platform/SharedBuffer.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -46,6 +45,7 @@
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/allocator/Partitions.h"
@@ -101,7 +101,7 @@ static xmlDocPtr DocLoaderFunc(const xmlChar* uri,
     case XSLT_LOAD_DOCUMENT: {
       xsltTransformContextPtr context = (xsltTransformContextPtr)ctxt;
       xmlChar* base = xmlNodeGetBase(context->document->doc, context->node);
-      KURL url(KURL(kParsedURLString, reinterpret_cast<const char*>(base)),
+      KURL url(KURL(reinterpret_cast<const char*>(base)),
                reinterpret_cast<const char*>(uri));
       xmlFree(base);
 
@@ -113,7 +113,7 @@ static xmlDocPtr DocLoaderFunc(const xmlChar* uri,
           RawResource::FetchSynchronously(params, g_global_resource_fetcher);
       if (!resource || !g_global_processor)
         return nullptr;
-      RefPtr<const SharedBuffer> data = resource->ResourceBuffer();
+      scoped_refptr<const SharedBuffer> data = resource->ResourceBuffer();
       if (!data)
         return nullptr;
 
@@ -144,8 +144,8 @@ static xmlDocPtr DocLoaderFunc(const xmlChar* uri,
       }
 
       xmlFreeParserCtxt(ctx);
-      xmlSetStructuredErrorFunc(0, 0);
-      xmlSetGenericErrorFunc(0, 0);
+      xmlSetStructuredErrorFunc(nullptr, nullptr);
+      xmlSetGenericErrorFunc(nullptr, nullptr);
 
       return doc;
     }
@@ -194,7 +194,7 @@ static int WriteToStringBuilder(void* context, const char* buffer, int len) {
 static bool SaveResultToString(xmlDocPtr result_doc,
                                xsltStylesheetPtr sheet,
                                String& result_string) {
-  xmlOutputBufferPtr output_buf = xmlAllocOutputBuffer(0);
+  xmlOutputBufferPtr output_buf = xmlAllocOutputBuffer(nullptr);
   if (!output_buf)
     return false;
 
@@ -246,7 +246,7 @@ static const char** XsltParamArrayFromParameterMap(
     parameter_array[index++] =
         AllocateParameterArray(parameter.value.Utf8().data());
   }
-  parameter_array[index] = 0;
+  parameter_array[index] = nullptr;
 
   return parameter_array;
 }
@@ -338,7 +338,7 @@ bool XSLTProcessor::TransformToString(Node* source_node,
   xsltStylesheetPtr sheet = XsltStylesheetPointer(document_.Get(), stylesheet_,
                                                   stylesheet_root_node_.Get());
   if (!sheet) {
-    SetXSLTLoadCallBack(0, 0, 0);
+    SetXSLTLoadCallBack(nullptr, nullptr, nullptr);
     stylesheet_ = nullptr;
     return false;
   }
@@ -384,8 +384,8 @@ bool XSLTProcessor::TransformToString(Node* source_node,
 
     const char** params = XsltParamArrayFromParameterMap(parameters_);
     xsltQuoteUserParams(transform_context, params);
-    xmlDocPtr result_doc =
-        xsltApplyStylesheetUser(sheet, source_doc, 0, 0, 0, transform_context);
+    xmlDocPtr result_doc = xsltApplyStylesheetUser(
+        sheet, source_doc, nullptr, nullptr, nullptr, transform_context);
 
     xsltFreeTransformContext(transform_context);
     xsltFreeSecurityPrefs(security_prefs);
@@ -403,7 +403,7 @@ bool XSLTProcessor::TransformToString(Node* source_node,
   }
 
   sheet->method = orig_method;
-  SetXSLTLoadCallBack(0, 0, 0);
+  SetXSLTLoadCallBack(nullptr, nullptr, nullptr);
   xsltFreeStylesheet(sheet);
   stylesheet_ = nullptr;
 

@@ -11,9 +11,10 @@ import android.os.Build;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.EditText;
 
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
@@ -105,6 +106,13 @@ public class RenderTestRule extends TestWatcher {
         }
     }
 
+    /**
+     * Constructor using {@code "chrome/test/data/android/render_tests"} as default golden folder.
+     */
+    public RenderTestRule() {
+        this("chrome/test/data/android/render_tests");
+    }
+
     public RenderTestRule(String goldenFolder) {
         // |goldenFolder| is relative to the src directory in the repository. |mGoldenFolder| will
         // be the folder on the test device.
@@ -181,6 +189,25 @@ public class RenderTestRule extends TestWatcher {
         }
     }
 
+    /**
+     * Searches the View hierarchy and modifies the Views to provide better stability in tests. For
+     * example it will disable the blinking cursor in EditTexts.
+     */
+    public static void sanitize(View view) {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            // Add more sanitizations as we discover more flaky attributes.
+            if (view instanceof ViewGroup) {
+                ViewGroup viewGroup = (ViewGroup) view;
+                for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                    sanitize(viewGroup.getChildAt(i));
+                }
+            } else if (view instanceof EditText) {
+                EditText editText = (EditText) view;
+                editText.setCursorVisible(false);
+            }
+        });
+    }
+
     @Override
     protected void finished(Description desc) {
         if (!onRenderTestDevice() && !mGoldenMissingIds.isEmpty()) {
@@ -197,14 +224,17 @@ public class RenderTestRule extends TestWatcher {
         if (!mGoldenMissingIds.isEmpty()) {
             sb.append("RenderTest Goldens missing for: ");
             sb.append(TextUtils.join(", ", mGoldenMissingIds));
+            sb.append(".");
         }
 
         if (!mMismatchIds.isEmpty()) {
             if (sb.length() != 0) sb.append(" ");
             sb.append("RenderTest Mismatches for: ");
             sb.append(TextUtils.join(", ", mMismatchIds));
+            sb.append(".");
         }
 
+        sb.append(" See RENDER_TESTS.md for how to fix this failure.");
         throw new RenderTestException(sb.toString());
     }
 

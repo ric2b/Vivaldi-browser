@@ -42,7 +42,7 @@ class CORE_EXPORT ColorChooser : public GarbageCollectedMixin {
  public:
   ColorChooser();
   virtual ~ColorChooser();
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  void Trace(blink::Visitor* visitor) override {}
 
   virtual void SetSelectedColor(const Color&) {}
   virtual void EndChooser() {}

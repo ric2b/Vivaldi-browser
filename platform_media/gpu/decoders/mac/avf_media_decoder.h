@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_DECODER_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_DECODER_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_DECODER_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_DECODER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
@@ -32,7 +35,7 @@ namespace media {
 class DataBuffer;
 }  // namespace media
 
-namespace content {
+namespace media {
 
 class AVFAudioTap;
 class IPCDataSource;
@@ -42,9 +45,9 @@ class AVFMediaDecoderClient {
   virtual ~AVFMediaDecoderClient() {}
 
   virtual void AudioSamplesReady(
-      const scoped_refptr<media::DataBuffer>& buffer) = 0;
+      const scoped_refptr<DataBuffer>& buffer) = 0;
   virtual void VideoFrameReady(
-      const scoped_refptr<media::DataBuffer>& buffer) = 0;
+      const scoped_refptr<DataBuffer>& buffer) = 0;
   virtual void StreamHasEnded() = 0;
 
   virtual bool HasAvailableCapacity() = 0;
@@ -118,7 +121,7 @@ class AVFMediaDecoder {
                         const AudioStreamBasicDescription& format);
   bool InitializeVideoOutput();
 
-  void AudioSamplesReady(const scoped_refptr<media::DataBuffer>& buffer);
+  void AudioSamplesReady(const scoped_refptr<DataBuffer>& buffer);
   void ReadFromVideoOutput(const CMTime& timestamp);
 
   void AutoSeekDone();
@@ -209,6 +212,6 @@ class AVFMediaDecoder {
   DISALLOW_COPY_AND_ASSIGN(AVFMediaDecoder);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_MEDIA_DECODER_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_MEDIA_DECODER_H_

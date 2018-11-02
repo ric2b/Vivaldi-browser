@@ -38,8 +38,7 @@ TEST(FlatMap, RangeConstructor) {
   flat_map<int, int>::value_type input_vals[] = {
       {1, 1}, {1, 2}, {1, 3}, {2, 1}, {2, 2}, {2, 3}, {3, 1}, {3, 2}, {3, 3}};
 
-  flat_map<int, int> first(std::begin(input_vals), std::end(input_vals),
-                           KEEP_FIRST_OF_DUPES);
+  flat_map<int, int> first(std::begin(input_vals), std::end(input_vals));
   EXPECT_THAT(first, ElementsAre(std::make_pair(1, 1), std::make_pair(2, 1),
                                  std::make_pair(3, 1)));
 
@@ -71,7 +70,7 @@ TEST(FlatMap, VectorConstructor) {
   using IntMap = flat_map<int, int>;
   {
     std::vector<IntPair> vect{{1, 1}, {1, 2}, {2, 1}};
-    IntMap map(std::move(vect), KEEP_FIRST_OF_DUPES);
+    IntMap map(std::move(vect));
     EXPECT_THAT(map, ElementsAre(IntPair(1, 1), IntPair(2, 1)));
   }
   {
@@ -84,8 +83,7 @@ TEST(FlatMap, VectorConstructor) {
 TEST(FlatMap, InitializerListConstructor) {
   {
     flat_map<int, int> cont(
-        {{1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {1, 2}, {10, 10}, {8, 8}},
-        KEEP_FIRST_OF_DUPES);
+        {{1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {1, 2}, {10, 10}, {8, 8}});
     EXPECT_THAT(cont, ElementsAre(std::make_pair(1, 1), std::make_pair(2, 2),
                                   std::make_pair(3, 3), std::make_pair(4, 4),
                                   std::make_pair(5, 5), std::make_pair(8, 8),
@@ -100,6 +98,12 @@ TEST(FlatMap, InitializerListConstructor) {
                                   std::make_pair(5, 5), std::make_pair(8, 8),
                                   std::make_pair(10, 10)));
   }
+}
+
+TEST(FlatMap, InitializerListAssignment) {
+  flat_map<int, int> cont;
+  cont = {{1, 1}, {2, 2}};
+  EXPECT_THAT(cont, ElementsAre(std::make_pair(1, 1), std::make_pair(2, 2)));
 }
 
 TEST(FlatMap, InsertFindSize) {
@@ -168,6 +172,171 @@ TEST(FlatMap, SubscriptMoveOnlyKey) {
   // Overwrite existing elements.
   m[MoveOnlyInt(1)] = 44;
   EXPECT_EQ(44, m[MoveOnlyInt(1)]);
+}
+
+// insert_or_assign(K&&, M&&)
+TEST(FlatMap, InsertOrAssignMoveOnlyKey) {
+  base::flat_map<MoveOnlyInt, MoveOnlyInt> m;
+
+  // Initial insertion should return an iterator to the element and set the
+  // second pair member to |true|. The inserted key and value should be moved
+  // from.
+  MoveOnlyInt key(1);
+  MoveOnlyInt val(22);
+  auto result = m.insert_or_assign(std::move(key), std::move(val));
+  EXPECT_EQ(1, result.first->first.data());
+  EXPECT_EQ(22, result.first->second.data());
+  EXPECT_TRUE(result.second);
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(0, key.data());  // moved from
+  EXPECT_EQ(0, val.data());  // moved from
+
+  // Second call with same key should result in an assignment, overwriting the
+  // old value. Assignment should be indicated by setting the second pair member
+  // to |false|. Only the inserted value should be moved from, the key should be
+  // left intact.
+  key = MoveOnlyInt(1);
+  val = MoveOnlyInt(44);
+  result = m.insert_or_assign(std::move(key), std::move(val));
+  EXPECT_EQ(1, result.first->first.data());
+  EXPECT_EQ(44, result.first->second.data());
+  EXPECT_FALSE(result.second);
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(1, key.data());  // not moved from
+  EXPECT_EQ(0, val.data());  // moved from
+
+  // Check that random insertion results in sorted range.
+  base::flat_map<MoveOnlyInt, int> map;
+  for (int i : {3, 1, 5, 6, 8, 7, 0, 9, 4, 2}) {
+    map.insert_or_assign(MoveOnlyInt(i), i);
+    EXPECT_TRUE(std::is_sorted(map.begin(), map.end()));
+  }
+}
+
+// insert_or_assign(const_iterator hint, K&&, M&&)
+TEST(FlatMap, InsertOrAssignMoveOnlyKeyWithHint) {
+  base::flat_map<MoveOnlyInt, MoveOnlyInt> m;
+
+  // Initial insertion should return an iterator to the element. The inserted
+  // key and value should be moved from.
+  MoveOnlyInt key(1);
+  MoveOnlyInt val(22);
+  auto result = m.insert_or_assign(m.end(), std::move(key), std::move(val));
+  EXPECT_EQ(1, result->first.data());
+  EXPECT_EQ(22, result->second.data());
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(0, key.data());  // moved from
+  EXPECT_EQ(0, val.data());  // moved from
+
+  // Second call with same key should result in an assignment, overwriting the
+  // old value. Only the inserted value should be moved from, the key should be
+  // left intact.
+  key = MoveOnlyInt(1);
+  val = MoveOnlyInt(44);
+  result = m.insert_or_assign(m.end(), std::move(key), std::move(val));
+  EXPECT_EQ(1, result->first.data());
+  EXPECT_EQ(44, result->second.data());
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(1, key.data());  // not moved from
+  EXPECT_EQ(0, val.data());  // moved from
+
+  // Check that random insertion results in sorted range.
+  base::flat_map<MoveOnlyInt, int> map;
+  for (int i : {3, 1, 5, 6, 8, 7, 0, 9, 4, 2}) {
+    map.insert_or_assign(map.end(), MoveOnlyInt(i), i);
+    EXPECT_TRUE(std::is_sorted(map.begin(), map.end()));
+  }
+}
+
+// try_emplace(K&&, Args&&...)
+TEST(FlatMap, TryEmplaceMoveOnlyKey) {
+  base::flat_map<MoveOnlyInt, std::pair<MoveOnlyInt, MoveOnlyInt>> m;
+
+  // Trying to emplace into an empty map should succeed. Insertion should return
+  // an iterator to the element and set the second pair member to |true|. The
+  // inserted key and value should be moved from.
+  MoveOnlyInt key(1);
+  MoveOnlyInt val1(22);
+  MoveOnlyInt val2(44);
+  // Test piecewise construction of mapped_type.
+  auto result = m.try_emplace(std::move(key), std::move(val1), std::move(val2));
+  EXPECT_EQ(1, result.first->first.data());
+  EXPECT_EQ(22, result.first->second.first.data());
+  EXPECT_EQ(44, result.first->second.second.data());
+  EXPECT_TRUE(result.second);
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(0, key.data());   // moved from
+  EXPECT_EQ(0, val1.data());  // moved from
+  EXPECT_EQ(0, val2.data());  // moved from
+
+  // Second call with same key should result in a no-op, returning an iterator
+  // to the existing element and returning false as the second pair member.
+  // Key and values that were attempted to be inserted should be left intact.
+  key = MoveOnlyInt(1);
+  auto paired_val = std::make_pair(MoveOnlyInt(33), MoveOnlyInt(55));
+  // Test construction of mapped_type from pair.
+  result = m.try_emplace(std::move(key), std::move(paired_val));
+  EXPECT_EQ(1, result.first->first.data());
+  EXPECT_EQ(22, result.first->second.first.data());
+  EXPECT_EQ(44, result.first->second.second.data());
+  EXPECT_FALSE(result.second);
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(1, key.data());                 // not moved from
+  EXPECT_EQ(33, paired_val.first.data());   // not moved from
+  EXPECT_EQ(55, paired_val.second.data());  // not moved from
+
+  // Check that random insertion results in sorted range.
+  base::flat_map<MoveOnlyInt, int> map;
+  for (int i : {3, 1, 5, 6, 8, 7, 0, 9, 4, 2}) {
+    map.try_emplace(MoveOnlyInt(i), i);
+    EXPECT_TRUE(std::is_sorted(map.begin(), map.end()));
+  }
+}
+
+// try_emplace(const_iterator hint, K&&, Args&&...)
+TEST(FlatMap, TryEmplaceMoveOnlyKeyWithHint) {
+  base::flat_map<MoveOnlyInt, std::pair<MoveOnlyInt, MoveOnlyInt>> m;
+
+  // Trying to emplace into an empty map should succeed. Insertion should return
+  // an iterator to the element. The inserted key and value should be moved
+  // from.
+  MoveOnlyInt key(1);
+  MoveOnlyInt val1(22);
+  MoveOnlyInt val2(44);
+  // Test piecewise construction of mapped_type.
+  auto result =
+      m.try_emplace(m.end(), std::move(key), std::move(val1), std::move(val2));
+  EXPECT_EQ(1, result->first.data());
+  EXPECT_EQ(22, result->second.first.data());
+  EXPECT_EQ(44, result->second.second.data());
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(0, key.data());   // moved from
+  EXPECT_EQ(0, val1.data());  // moved from
+  EXPECT_EQ(0, val2.data());  // moved from
+
+  // Second call with same key should result in a no-op, returning an iterator
+  // to the existing element. Key and values that were attempted to be inserted
+  // should be left intact.
+  key = MoveOnlyInt(1);
+  val1 = MoveOnlyInt(33);
+  val2 = MoveOnlyInt(55);
+  auto paired_val = std::make_pair(MoveOnlyInt(33), MoveOnlyInt(55));
+  // Test construction of mapped_type from pair.
+  result = m.try_emplace(m.end(), std::move(key), std::move(paired_val));
+  EXPECT_EQ(1, result->first.data());
+  EXPECT_EQ(22, result->second.first.data());
+  EXPECT_EQ(44, result->second.second.data());
+  EXPECT_EQ(1u, m.size());
+  EXPECT_EQ(1, key.data());                 // not moved from
+  EXPECT_EQ(33, paired_val.first.data());   // not moved from
+  EXPECT_EQ(55, paired_val.second.data());  // not moved from
+
+  // Check that random insertion results in sorted range.
+  base::flat_map<MoveOnlyInt, int> map;
+  for (int i : {3, 1, 5, 6, 8, 7, 0, 9, 4, 2}) {
+    map.try_emplace(map.end(), MoveOnlyInt(i), i);
+    EXPECT_TRUE(std::is_sorted(map.begin(), map.end()));
+  }
 }
 
 TEST(FlatMap, UsingTransparentCompare) {

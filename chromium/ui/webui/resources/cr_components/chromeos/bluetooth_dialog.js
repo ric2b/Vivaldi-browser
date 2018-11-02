@@ -36,8 +36,9 @@ Polymer({
       value: chrome.bluetoothPrivate,
     },
 
-    /** Dialog title */
-    title: String,
+    noCancel: Boolean,
+
+    dialogTitle: String,
 
     /**
      * Current Pairing device.

@@ -1,6 +1,7 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+import("//build/config/sanitizers/sanitizers.gni")
 
 config("protobuf_config") {
   include_dirs = [ "src" ]
@@ -151,8 +152,9 @@ if (is_component_build && is_desktop_linux) {
     sources = [
       "mirclient.cc",
     ]
-    ldflags = [ "-Wl,--version-script=" +
-                rebase_path("//third_party/protobuf/mirclient.map") ]
+    ldflags =
+        [ "-Wl,--version-script=" +
+          rebase_path("//third_party/protobuf/mirclient.map", root_build_dir) ]
     output_extension = "so.9"
   }
 }
@@ -168,6 +170,12 @@ component("protobuf_lite") {
     # correctly.
     ":protobuf_warnings",
   ]
+
+  # Remove Sanitizers and coverage for a performance boost when fuzzing. This is
+  # OK because the only fuzzers that use protobuf are libprotobuf-mutator based
+  # fuzzers, and they don't actually target the protobuf code, they just use it.
+  configs -= not_fuzzed_remove_configs
+  configs += [ "//build/config/sanitizers:not_fuzzed" ]
 
   if (is_win) {
     configs -= [ "//build/config/win:lean_and_mean" ]
@@ -215,6 +223,9 @@ static_library("protobuf_full") {
     # The traffic_annotation tool is not part of Chrome itself, and needs to
     # parse human-readable protobufs.
     "//tools/traffic_annotation/*",
+
+    # Chromecast requires descriptors and reflection.
+    "//chromecast/*",
   ]
 
   sources = protobuf_lite_sources + [
@@ -248,11 +259,8 @@ static_library("protobuf_full") {
               "src/google/protobuf/generated_message_reflection.cc",
               "src/google/protobuf/generated_message_reflection.h",
 
-              # gzip_stream.cc pulls in zlib, but it's not actually used by protoc, just
-              # by test code, so instead of compiling zlib for the host, let's just
-              # exclude this.
-              # "src/google/protobuf/io/gzip_stream.cc",
-              # "src/google/protobuf/io/gzip_stream.h",
+              "src/google/protobuf/io/gzip_stream.cc",
+              "src/google/protobuf/io/gzip_stream.h",
 
               "src/google/protobuf/io/printer.cc",
               "src/google/protobuf/io/printer.h",
@@ -347,6 +355,7 @@ static_library("protobuf_full") {
 
   deps = [
     "//build/config:exe_and_shlib_deps",
+    "//third_party/zlib",
   ]
 
   if (is_android) {
@@ -361,6 +370,13 @@ static_library("protobuf_full") {
     # correctly.
     ":protobuf_warnings",
   ]
+
+  # Remove coverage and Sanitizers other than ASan for a performance boost when
+  # fuzzing. ASan can't be removed here because of a bug preventing unsanitized
+  # code from using libc++, which protobuf_full uses.
+  configs -= not_fuzzed_remove_nonasan_configs
+  configs += [ "//build/config/sanitizers:not_fuzzed" ]
+
   if (is_win) {
     configs -= [ "//build/config/win:lean_and_mean" ]
   }
@@ -372,6 +388,8 @@ static_library("protobuf_full") {
   ]
 
   cflags = protobuf_lite_cflags
+
+  defines = [ "HAVE_ZLIB" ]
 }
 
 # Only compile the compiler for the host architecture.
@@ -602,6 +620,13 @@ if (current_toolchain == host_toolchain) {
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
 
+    if (is_win) {
+      # Work around incremental linking randomly creating corrupt binaries,
+      # crbug.com/644525.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs += [ "//build/config/win:no_incremental_linking" ]
+    }
+
     cflags = protobuf_lite_cflags
 
     deps = [
@@ -622,6 +647,13 @@ if (current_toolchain == host_toolchain) {
 
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    if (is_win) {
+      # Work around incremental linking randomly creating corrupt binaries,
+      # crbug.com/644525.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs += [ "//build/config/win:no_incremental_linking" ]
+    }
   }
 }
 
@@ -707,4 +739,60 @@ group("py_proto") {
   data += get_target_outputs(":copy_six")
   data += get_target_outputs(":copy_google_protobuf")
   data += get_target_outputs(":copy_google_protobuf_internal")
+}
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+
+  android_library("protobuf_lite_javalib") {
+    chromium_code = false
+    java_files = [
+      "java/core/src/main/java/com/google/protobuf/AbstractMessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/AbstractParser.java",
+      "java/core/src/main/java/com/google/protobuf/AbstractProtobufList.java",
+      "java/core/src/main/java/com/google/protobuf/BooleanArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ByteBufferWriter.java",
+      "java/core/src/main/java/com/google/protobuf/ByteOutput.java",
+      "java/core/src/main/java/com/google/protobuf/ByteString.java",
+      "java/core/src/main/java/com/google/protobuf/CodedInputStream.java",
+      "java/core/src/main/java/com/google/protobuf/CodedOutputStream.java",
+      "java/core/src/main/java/com/google/protobuf/DoubleArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ExperimentalApi.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionLite.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionRegistryFactory.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionRegistryLite.java",
+      "java/core/src/main/java/com/google/protobuf/FieldSet.java",
+      "java/core/src/main/java/com/google/protobuf/FloatArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/GeneratedMessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/IntArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/Internal.java",
+      "java/core/src/main/java/com/google/protobuf/InvalidProtocolBufferException.java",
+      "java/core/src/main/java/com/google/protobuf/LazyField.java",
+      "java/core/src/main/java/com/google/protobuf/LazyFieldLite.java",
+      "java/core/src/main/java/com/google/protobuf/LazyStringArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/LazyStringList.java",
+      "java/core/src/main/java/com/google/protobuf/LongArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/MapEntryLite.java",
+      "java/core/src/main/java/com/google/protobuf/MapFieldLite.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLiteOrBuilder.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLiteToString.java",
+      "java/core/src/main/java/com/google/protobuf/MutabilityOracle.java",
+      "java/core/src/main/java/com/google/protobuf/NioByteString.java",
+      "java/core/src/main/java/com/google/protobuf/Parser.java",
+      "java/core/src/main/java/com/google/protobuf/PrimitiveNonBoxingCollection.java",
+      "java/core/src/main/java/com/google/protobuf/ProtobufArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ProtocolStringList.java",
+      "java/core/src/main/java/com/google/protobuf/RopeByteString.java",
+      "java/core/src/main/java/com/google/protobuf/SmallSortedMap.java",
+      "java/core/src/main/java/com/google/protobuf/TextFormatEscaper.java",
+      "java/core/src/main/java/com/google/protobuf/UninitializedMessageException.java",
+      "java/core/src/main/java/com/google/protobuf/UnknownFieldSetLite.java",
+      "java/core/src/main/java/com/google/protobuf/UnmodifiableLazyStringList.java",
+      "java/core/src/main/java/com/google/protobuf/UnsafeByteOperations.java",
+      "java/core/src/main/java/com/google/protobuf/UnsafeUtil.java",
+      "java/core/src/main/java/com/google/protobuf/Utf8.java",
+      "java/core/src/main/java/com/google/protobuf/WireFormat.java",
+    ]
+  }
 }

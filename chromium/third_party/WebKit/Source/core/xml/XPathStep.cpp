@@ -27,13 +27,13 @@
 
 #include "core/xml/XPathStep.h"
 
-#include "core/XMLNSNames.h"
 #include "core/dom/Attr.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/xml/XPathParser.h"
 #include "core/xml/XPathUtil.h"
+#include "core/xmlns_names.h"
 
 namespace blink {
 namespace XPath {
@@ -50,7 +50,7 @@ Step::Step(Axis axis,
 
 Step::~Step() {}
 
-DEFINE_TRACE(Step) {
+void Step::Trace(blink::Visitor* visitor) {
   visitor->Trace(node_test_);
   visitor->Trace(predicates_);
   ParseNode::Trace(visitor);

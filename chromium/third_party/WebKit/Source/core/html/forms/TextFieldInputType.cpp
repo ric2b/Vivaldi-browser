@@ -32,17 +32,17 @@
 #include "core/html/forms/TextFieldInputType.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/TextEvent.h"
 #include "core/frame/LocalFrame.h"
-#include "core/html/FormData.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/FormData.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutDetailsMarker.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutTheme.h"
@@ -61,7 +61,7 @@ class DataListIndicatorElement final : public HTMLDivElement {
   inline DataListIndicatorElement(Document& document)
       : HTMLDivElement(document) {}
   inline HTMLInputElement* HostInput() const {
-    return toHTMLInputElement(OwnerShadowHost());
+    return ToHTMLInputElement(OwnerShadowHost());
   }
 
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override {
@@ -109,7 +109,7 @@ TextFieldInputType::TextFieldInputType(HTMLInputElement& element)
 
 TextFieldInputType::~TextFieldInputType() {}
 
-DEFINE_TRACE(TextFieldInputType) {
+void TextFieldInputType::Trace(blink::Visitor* visitor) {
   InputTypeView::Trace(visitor);
   InputType::Trace(visitor);
 }
@@ -251,12 +251,6 @@ void TextFieldInputType::ForwardEvent(Event* event) {
   }
 }
 
-void TextFieldInputType::HandleFocusEvent(Element* old_focused_node,
-                                          WebFocusType focus_type) {
-  InputTypeView::HandleFocusEvent(old_focused_node, focus_type);
-  GetElement().BeginEditing();
-}
-
 void TextFieldInputType::HandleBlurEvent() {
   InputTypeView::HandleBlurEvent();
   GetElement().EndEditing();
@@ -291,8 +285,7 @@ void TextFieldInputType::CreateShadowSubtree() {
   bool creates_container = should_have_spin_button ||
                            should_have_data_list_indicator || NeedsContainer();
 
-  TextControlInnerEditorElement* inner_editor =
-      TextControlInnerEditorElement::Create(document);
+  HTMLElement* inner_editor = GetElement().CreateInnerEditorElement();
   if (!creates_container) {
     shadow_root->AppendChild(inner_editor);
     return;
@@ -466,7 +459,7 @@ void TextFieldInputType::UpdatePlaceholderText() {
   if (!SupportsPlaceholder())
     return;
   HTMLElement* placeholder = GetElement().PlaceholderElement();
-  String placeholder_text = GetElement().StrippedPlaceholder();
+  String placeholder_text = GetElement().GetPlaceholderValue();
   if (placeholder_text.IsEmpty()) {
     if (placeholder)
       placeholder->remove(ASSERT_NO_EXCEPTION);
@@ -531,10 +524,8 @@ void TextFieldInputType::SpinButtonStepUp() {
 }
 
 void TextFieldInputType::UpdateView() {
-  if (!GetElement().SuggestedValue().IsNull()) {
-    GetElement().SetInnerEditorValue(GetElement().SuggestedValue());
-    GetElement().UpdatePlaceholderVisibility();
-  } else if (GetElement().NeedsToUpdateViewValue()) {
+  if (GetElement().SuggestedValue().IsEmpty() &&
+      GetElement().NeedsToUpdateViewValue()) {
     // Update the view only if needsToUpdateViewValue is true. It protects
     // an unacceptable view value from being overwritten with the DOM value.
     //

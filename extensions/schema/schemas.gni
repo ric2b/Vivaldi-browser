@@ -10,6 +10,7 @@ sources = [
   "bookmarks_private.json",
   "browser_action_utilities.json",
   "calendar.json",
+  "contacts.json",
   "devtools_private.json",
   "editcommand.json",
   "history_private.json",

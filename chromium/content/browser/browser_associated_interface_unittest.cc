@@ -47,13 +47,16 @@ class ProxyRunner : public IPC::Listener {
     std::unique_ptr<IPC::ChannelFactory> factory;
     if (for_server) {
       factory = IPC::ChannelMojo::CreateServerFactory(
-          std::move(pipe), ipc_task_runner);
+          std::move(pipe), ipc_task_runner,
+          base::ThreadTaskRunnerHandle::Get());
     } else {
       factory = IPC::ChannelMojo::CreateClientFactory(
-          std::move(pipe), ipc_task_runner);
+          std::move(pipe), ipc_task_runner,
+          base::ThreadTaskRunnerHandle::Get());
     }
-    channel_ = IPC::ChannelProxy::Create(
-        std::move(factory), this, ipc_task_runner);
+    channel_ =
+        IPC::ChannelProxy::Create(std::move(factory), this, ipc_task_runner,
+                                  base::ThreadTaskRunnerHandle::Get());
   }
 
   void ShutDown() { channel_.reset(); }
@@ -148,9 +151,7 @@ class TestClientRunner {
 
     driver->RequestQuit(base::MessageLoop::QuitWhenIdleClosure());
 
-    base::MessageLoop::ScopedNestableTaskAllower allow_nested_loops(
-        base::MessageLoop::current());
-    base::RunLoop().Run();
+    base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).Run();
 
     proxy.ShutDown();
     io_thread.Stop();

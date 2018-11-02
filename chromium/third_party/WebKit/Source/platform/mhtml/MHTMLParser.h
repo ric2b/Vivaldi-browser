@@ -31,10 +31,10 @@
 #ifndef MHTMLParser_h
 #define MHTMLParser_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/SharedBufferChunkReader.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace WTF {
@@ -51,7 +51,7 @@ class PLATFORM_EXPORT MHTMLParser final {
   STACK_ALLOCATED();
 
  public:
-  explicit MHTMLParser(PassRefPtr<const SharedBuffer>);
+  explicit MHTMLParser(scoped_refptr<const SharedBuffer>);
 
   HeapVector<Member<ArchiveResource>> ParseArchive();
 

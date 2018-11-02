@@ -27,6 +27,8 @@
 #define PlatformLocale_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "platform/DateComponents.h"
 #include "platform/Language.h"
 #include "platform/wtf/Allocator.h"
@@ -36,13 +38,12 @@
 namespace blink {
 
 class PLATFORM_EXPORT Locale {
-  WTF_MAKE_NONCOPYABLE(Locale);
   USING_FAST_MALLOC(Locale);
 
  public:
   static std::unique_ptr<Locale> Create(const String& locale_identifier);
   static Locale& DefaultLocale();
-  static void ResetDefautlLocale();
+  static void ResetDefaultLocale();
 
   String QueryString(WebLocalizedString::Name);
   String QueryString(WebLocalizedString::Name, const String& parameter);
@@ -185,6 +186,8 @@ class PLATFORM_EXPORT Locale {
   String negative_suffix_;
   String acceptable_number_characters_;
   bool has_locale_data_;
+
+  DISALLOW_COPY_AND_ASSIGN(Locale);
 };
 
 }  // namespace blink

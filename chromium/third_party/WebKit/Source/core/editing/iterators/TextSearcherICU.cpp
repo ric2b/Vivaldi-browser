@@ -28,6 +28,7 @@
 #include "core/editing/iterators/TextSearcherICU.h"
 
 #include <unicode/usearch.h>
+#include "base/macros.h"
 #include "platform/text/TextBreakIteratorInternalICU.h"
 #include "platform/wtf/text/CharacterNames.h"
 #include "platform/wtf/text/WTFString.h"
@@ -45,7 +46,7 @@ UStringSearch* CreateSearcher() {
       CurrentSearchLocaleID() + String("@collation=search");
   UStringSearch* searcher =
       usearch_open(&kNewlineCharacter, 1, &kNewlineCharacter, 1,
-                   search_collator_name.Utf8().data(), 0, &status);
+                   search_collator_name.Utf8().data(), nullptr, &status);
   DCHECK(status == U_ZERO_ERROR || status == U_USING_FALLBACK_WARNING ||
          status == U_USING_DEFAULT_WARNING)
       << status;
@@ -53,8 +54,6 @@ UStringSearch* CreateSearcher() {
 }
 
 class ICULockableSearcher {
-  WTF_MAKE_NONCOPYABLE(ICULockableSearcher);
-
  public:
   static UStringSearch* AcquireSearcher() {
     Instance().lock();
@@ -90,6 +89,8 @@ class ICULockableSearcher {
 #if DCHECK_IS_ON()
   bool locked_ = false;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(ICULockableSearcher);
 };
 
 }  // namespace

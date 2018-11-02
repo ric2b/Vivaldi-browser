@@ -15,6 +15,9 @@ if (is_android) {
 }
 
 source_set("base") {
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
   visibility = media_subcomponent_deps
   visibility += [ "//media" ]
 
@@ -123,6 +126,7 @@ source_set("base") {
     "decryptor.h",
     "demuxer.cc",
     "demuxer.h",
+    "demuxer_memory_limit.h",
     "demuxer_stream.cc",
     "demuxer_stream.h",
     "djb2.cc",
@@ -191,6 +195,7 @@ source_set("base") {
     "pipeline_impl.h",
     "pipeline_metadata.cc",
     "pipeline_metadata.h",
+    "pipeline_status.cc",
     "pipeline_status.h",
     "player_tracker.cc",
     "player_tracker.h",
@@ -255,6 +260,7 @@ source_set("base") {
     "video_frame_pool.h",
     "video_renderer.cc",
     "video_renderer.h",
+    "video_rotation.cc",
     "video_rotation.h",
     "video_types.cc",
     "video_types.h",
@@ -279,6 +285,7 @@ source_set("base") {
     "//gpu/command_buffer/common",
     "//ppapi/features",
     "//skia",
+    "//third_party/libaom:av1_features",
     "//third_party/libyuv",
     "//third_party/widevine/cdm:headers",
     "//ui/display:display",
@@ -307,7 +314,7 @@ source_set("base") {
     deps += [ "//third_party/libvpx" ]
   }
 
-  if (is_linux && use_x11) {
+  if (use_x11) {
     configs += [
       "//build/config/linux:x11",
       "//build/config/linux:xext",
@@ -340,6 +347,12 @@ source_set("base") {
   if (is_win) {
     deps += [ "//media/base/win" ]
   }
+
+  if (use_low_memory_buffer) {
+    sources += [ "demuxer_memory_limit_lowmem.cc" ]
+  } else {
+    sources += [ "demuxer_memory_limit.cc" ]
+  }
 }
 
 source_set("video_facing") {
@@ -364,6 +377,7 @@ static_library("test_support") {
     "//media:test_support",
     "//media/audio:test_support",
     "//media/base/android:test_support",
+    "//media/filters:test_support",
     "//media/formats:test_support",
     "//media/video:test_support",
   ]
@@ -410,6 +424,7 @@ static_library("test_support") {
     "//base/test:test_support",
     "//testing/gmock",
     "//ui/gfx:test_support",
+    "//url",
   ]
 }
 

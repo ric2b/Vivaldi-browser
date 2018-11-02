@@ -13,10 +13,6 @@
                flattenhtml="true" type="BINDATA" />
       <include name="IDR_PRINT_PREVIEW_JS" file="print_preview\print_preview.js"
                flattenhtml="true" type="BINDATA" />
-      <include name="IDR_UBER_FRAME_HTML" file="uber\uber_frame.html"
-               flattenhtml="true" type="BINDATA" />
-      <include name="IDR_UBER_FRAME_JS" file="uber\uber_frame.js"
-               flattenhtml="true" type="BINDATA" />
     </includes>
   </release>
 </grit>

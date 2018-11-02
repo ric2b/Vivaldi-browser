@@ -5,8 +5,10 @@
 #ifndef ASH_LOGIN_UI_LOGIN_TEST_BASE_H_
 #define ASH_LOGIN_UI_LOGIN_TEST_BASE_H_
 
+#include <memory>
+
 #include "ash/login/ui/login_data_dispatcher.h"
-#include "ash/public/interfaces/user_info.mojom.h"
+#include "ash/public/interfaces/login_user_info.mojom.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 
@@ -24,18 +26,24 @@ class LoginTestBase : public AshTestBase {
   LoginTestBase();
   ~LoginTestBase() override;
 
-  // Creates and displays a widget containing |content|.
-  void ShowWidgetWithContent(views::View* content);
+  // Sets the primary test widget. The widget can be retrieved using |widget()|.
+  // This can be used to make a wdiget scoped to the whole test, e.g. if the
+  // widget is created in a SetUp override.
+  // May be called at most once.
+  void SetWidget(std::unique_ptr<views::Widget> widget);
+  views::Widget* widget() const { return widget_.get(); }
 
-  views::Widget* widget() const { return widget_; }
+  // Creates a widget containing |content|. The created widget will initially be
+  // shown.
+  std::unique_ptr<views::Widget> CreateWidgetWithContent(views::View* content);
 
   // Utility method to create a new |mojom::UserInfoPtr| instance.
-  mojom::UserInfoPtr CreateUser(const std::string& name) const;
+  mojom::LoginUserInfoPtr CreateUser(const std::string& name) const;
 
   // Changes the active number of users. Fires an event on |data_dispatcher()|.
   void SetUserCount(size_t count);
 
-  const std::vector<ash::mojom::UserInfoPtr>& users() const { return users_; }
+  const std::vector<mojom::LoginUserInfoPtr>& users() const { return users_; }
 
   LoginDataDispatcher* data_dispatcher() { return &data_dispatcher_; }
 
@@ -45,10 +53,10 @@ class LoginTestBase : public AshTestBase {
  private:
   class WidgetDelegate;
 
-  views::Widget* widget_ = nullptr;
-  std::unique_ptr<WidgetDelegate> delegate_;
+  // The widget created using |ShowWidgetWithContent|.
+  std::unique_ptr<views::Widget> widget_;
 
-  std::vector<ash::mojom::UserInfoPtr> users_;
+  std::vector<mojom::LoginUserInfoPtr> users_;
 
   LoginDataDispatcher data_dispatcher_;
 

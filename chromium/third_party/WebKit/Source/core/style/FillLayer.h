@@ -25,6 +25,7 @@
 #ifndef FillLayer_h
 #define FillLayer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "core/style/StyleImage.h"
@@ -32,7 +33,6 @@
 #include "platform/LengthSize.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -282,7 +282,7 @@ class CORE_EXPORT FillLayer {
   static Length InitialFillYPosition(EFillLayerType) {
     return Length(0.0, kPercent);
   }
-  static StyleImage* InitialFillImage(EFillLayerType) { return 0; }
+  static StyleImage* InitialFillImage(EFillLayerType) { return nullptr; }
   static EMaskSourceType InitialFillMaskSourceType(EFillLayerType) {
     return kMaskAlpha;
   }

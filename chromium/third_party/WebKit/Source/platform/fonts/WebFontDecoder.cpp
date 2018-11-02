@@ -36,12 +36,12 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
-#include "third_party/harfbuzz-ng/src/hb.h"
 #include "third_party/ots/include/ots-memory-stream.h"
 #include "third_party/skia/include/core/SkStream.h"
 
+#include <hb.h>
 #include <stdarg.h>
 
 namespace blink {
@@ -218,12 +218,13 @@ sk_sp<SkTypeface> WebFontDecoder::Decode(SharedBuffer* buffer) {
   // TODO(fmalita): we can avoid this copy by processing into a
   // SkDynamicMemoryWStream-backed OTSStream.
   sk_sp<SkData> sk_data = SkData::MakeWithCopy(output.get(), decoded_length);
-  SkMemoryStream* stream = new SkMemoryStream(sk_data);
+  std::unique_ptr<SkStreamAsset> stream(new SkMemoryStream(sk_data));
 #if defined(OS_WIN)
   sk_sp<SkTypeface> typeface(
-      FontCache::GetFontCache()->FontManager()->createFromStream(stream));
+      FontCache::GetFontCache()->FontManager()->makeFromStream(
+          std::move(stream)));
 #else
-  sk_sp<SkTypeface> typeface = SkTypeface::MakeFromStream(stream);
+  sk_sp<SkTypeface> typeface = SkTypeface::MakeFromStream(stream.release());
 #endif
   if (!typeface) {
     SetErrorString("Not a valid font data");

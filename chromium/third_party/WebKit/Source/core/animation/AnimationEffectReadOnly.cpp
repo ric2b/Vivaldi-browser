@@ -119,7 +119,7 @@ void AnimationEffectReadOnly::getComputedTiming(
   computed_timing.setIterations(SpecifiedTiming().iteration_count);
 
   UnrestrictedDoubleOrString duration;
-  duration.setUnrestrictedDouble(IterationDuration() * 1000);
+  duration.SetUnrestrictedDouble(IterationDuration() * 1000);
   computed_timing.setDuration(duration);
 
   computed_timing.setDirection(
@@ -270,9 +270,10 @@ AnimationEffectTimingReadOnly* AnimationEffectReadOnly::timing() {
   return AnimationEffectTimingReadOnly::Create(this);
 }
 
-DEFINE_TRACE(AnimationEffectReadOnly) {
+void AnimationEffectReadOnly::Trace(blink::Visitor* visitor) {
   visitor->Trace(animation_);
   visitor->Trace(event_delegate_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

@@ -13,6 +13,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/i18n/message_formatter.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -85,6 +86,73 @@ constexpr int kExternalInstallLeftColumnWidth = 350;
 // Time delay before the install button is enabled after initial display.
 int g_install_delay_in_ms = 500;
 
+// A custom view to contain the ratings information (stars, ratings count, etc).
+// With screen readers, this will handle conveying the information properly
+// (i.e., "Rated 4.2 stars by 379 reviews" rather than "image image...379").
+class RatingsView : public views::View {
+ public:
+  RatingsView(double rating, int rating_count)
+      : rating_(rating), rating_count_(rating_count) {
+    set_id(ExtensionInstallDialogView::kRatingsViewId);
+    SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal));
+  }
+  ~RatingsView() override {}
+
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_STATIC_TEXT;
+    base::string16 accessible_text;
+    if (rating_count_ == 0) {
+      accessible_text = l10n_util::GetStringUTF16(
+          IDS_EXTENSION_PROMPT_NO_RATINGS_ACCESSIBLE_TEXT);
+    } else {
+      accessible_text = base::i18n::MessageFormatter::FormatWithNumberedArgs(
+          l10n_util::GetStringUTF16(
+              IDS_EXTENSION_PROMPT_RATING_ACCESSIBLE_TEXT),
+          rating_, rating_count_);
+    }
+    node_data->SetName(accessible_text);
+  }
+
+ private:
+  double rating_;
+  int rating_count_;
+
+  DISALLOW_COPY_AND_ASSIGN(RatingsView);
+};
+
+// A custom view for the ratings star image that will be ignored by screen
+// readers (since the RatingsView handles the context).
+class RatingStar : public views::ImageView {
+ public:
+  explicit RatingStar(const gfx::ImageSkia& image) { SetImage(image); }
+  ~RatingStar() override {}
+
+  // views::ImageView:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_IGNORED;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(RatingStar);
+};
+
+// A custom view for the ratings label that will be ignored by screen readers
+// (since the RatingsView handles the context).
+class RatingLabel : public views::Label {
+ public:
+  RatingLabel(const base::string16& text, int text_context)
+      : views::Label(text, text_context, views::style::STYLE_PRIMARY) {}
+  ~RatingLabel() override {}
+
+  // views::Label:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_IGNORED;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(RatingLabel);
+};
+
 // Get the appropriate indentation for an item if its parent is using bullet
 // points. If the parent is using bullets for its items, then a padding of one
 // unit will make the child item (which has no bullet) look like a sibling of
@@ -98,9 +166,7 @@ int GetLeftPaddingForBulletedItems(bool parent_bulleted) {
 
 void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
   views::View* parent = static_cast<views::View*>(data);
-  views::ImageView* image_view = new views::ImageView();
-  image_view->SetImage(*skia_image);
-  parent->AddChildView(image_view);
+  parent->AddChildView(new RatingStar(*skia_image));
 }
 
 // Creates a string for displaying |message| to the user. If it has to look
@@ -108,8 +174,8 @@ void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
 base::string16 PrepareForDisplay(const base::string16& message,
                                  bool bullet_point) {
   return bullet_point ? l10n_util::GetStringFUTF16(
-      IDS_EXTENSION_PERMISSION_LINE,
-      message) : message;
+                            IDS_EXTENSION_PERMISSION_LINE, message)
+                      : message;
 }
 
 void ShowExtensionInstallDialogImpl(
@@ -156,19 +222,12 @@ class CustomScrollableView : public views::View {
 }  // namespace
 
 BulletedView::BulletedView(views::View* view) {
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
   views::ColumnSet* column_set = layout->AddColumnSet(0);
-  column_set->AddColumn(views::GridLayout::CENTER,
-                        views::GridLayout::LEADING,
-                        0,
-                        views::GridLayout::FIXED,
-                        kBulletWidth,
-                        0);
-  column_set->AddColumn(views::GridLayout::LEADING,
-                        views::GridLayout::LEADING,
-                        0,
-                        views::GridLayout::USE_PREF,
+  column_set->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
+                        0, views::GridLayout::FIXED, kBulletWidth, 0);
+  column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
+                        0, views::GridLayout::USE_PREF,
                         0,  // No fixed width.
                         0);
   layout->StartRow(0, 0);
@@ -245,9 +304,8 @@ void ExtensionInstallDialogView::InitView() {
 
   if (prompt_->has_webstore_data()) {
     layout->StartRow(0, column_set_id);
-    views::View* rating = new views::View();
-    rating->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kHorizontal));
+    RatingsView* rating =
+        new RatingsView(prompt_->average_rating(), prompt_->rating_count());
     layout->AddView(rating);
     prompt_->AppendRatingStars(AddResourceIcon, rating);
 
@@ -259,8 +317,7 @@ void ExtensionInstallDialogView::InitView() {
       rating_text_context = user_count_text_context = CONTEXT_DEPRECATED_SMALL;
     }
     views::Label* rating_count =
-        new views::Label(prompt_->GetRatingCount(), rating_text_context,
-                         views::style::STYLE_PRIMARY);
+        new RatingLabel(prompt_->GetRatingCount(), rating_text_context);
     // Add some space between the stars and the rating count.
     rating_count->SetBorder(views::CreateEmptyBorder(0, 2, 0, 0));
     rating->AddChildView(rating_count);
@@ -290,8 +347,8 @@ void ExtensionInstallDialogView::InitView() {
   // Create the scrollable view which will contain the permissions and retained
   // files/devices. It will span the full content width.
   CustomScrollableView* scrollable = new CustomScrollableView();
-  views::GridLayout* scroll_layout = new views::GridLayout(scrollable);
-  scrollable->SetLayoutManager(scroll_layout);
+  views::GridLayout* scroll_layout =
+      views::GridLayout::CreateAndInstall(scrollable);
 
   views::ColumnSet* scrollable_column_set =
       scroll_layout->AddColumnSet(column_set_id);
@@ -446,17 +503,22 @@ views::GridLayout* ExtensionInstallDialogView::CreateLayout(
     int column_set_id) {
   container_ = new views::View();
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
-  const gfx::Insets content_insets =
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS);
+  const gfx::Insets dialog_insets =
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
+  // TODO(crbug.com/702196): Give this dialog a standard title and use
+  // ChromeLayoutProvider::GetDialogInsetsForContentType instead.
+  const gfx::Insets content_insets(
+      dialog_insets.top(), dialog_insets.left(),
+      provider->GetDistanceMetric(
+          views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_TEXT),
+      dialog_insets.right());
 
-  // This is views::GridLayout::CreatePanel(), but without a top or right
-  // margin. The empty dialog title will then become the top margin, and a
-  // padding column will be manually added to handle a right margin. This is
-  // done so that the extension icon can be shown on the right of the dialog
-  // title, but on the same y-axis, and the scroll view used to contain other
-  // content can have its scrollbar aligned with the right edge of the dialog.
-  views::GridLayout* layout = new views::GridLayout(container_);
-  container_->SetLayoutManager(layout);
+  // The empty dialog title will become the top margin, and a padding column
+  // will be manually added to handle a right margin. This is done so that the
+  // extension icon can be shown on the right of the dialog title, but on the
+  // same y-axis, and the scroll view used to contain other content can have its
+  // scrollbar aligned with the right edge of the dialog.
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(container_);
   container_->SetBorder(views::CreateEmptyBorder(0, content_insets.left(),
                                                  content_insets.bottom(), 0));
   AddChildView(container_);
@@ -617,7 +679,7 @@ void ExtensionInstallDialogView::VisibilityChanged(views::View* starting_from,
 
 void ExtensionInstallDialogView::EnableInstallButton() {
   install_button_enabled_ = true;
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
@@ -630,9 +692,7 @@ void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
 
 ExpandableContainerView::DetailsView::DetailsView(int horizontal_space,
                                                   bool parent_bulleted)
-    : layout_(new views::GridLayout(this)),
-      state_(0) {
-  SetLayoutManager(layout_);
+    : layout_(views::GridLayout::CreateAndInstall(this)), state_(0) {
   views::ColumnSet* column_set = layout_->AddColumnSet(0);
   const int padding = GetLeftPaddingForBulletedItems(parent_bulleted);
   column_set->AddPaddingColumn(0, padding);
@@ -675,8 +735,7 @@ ExpandableContainerView::ExpandableContainerView(
       more_details_(NULL),
       arrow_toggle_(NULL),
       expanded_(false) {
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
   int column_set_id = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(column_set_id);
   column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,

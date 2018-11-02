@@ -41,7 +41,7 @@ namespace URLTestHelpers {
 
 inline blink::KURL ToKURL(const std::string& url) {
   WTF::String wtf_string(url.c_str());
-  return blink::KURL(blink::kParsedURLString, wtf_string);
+  return blink::KURL(wtf_string);
 }
 
 // Avoid directly using these methods, instead please use ScopedMockedURL (or
@@ -53,6 +53,11 @@ inline blink::KURL ToKURL(const std::string& url) {
 // get the appropriate |basePath| and |filePath| for test data directories.
 //  - For the mock URL, fullURL == baseURL + fileName.
 //  - For the file path, filePath == basePath + ("/" +) fileName.
+//
+// TODO(kinuko,toyoshim): These helpers should take URLLoaderMockFactory as a
+// parameter, or maybe have static {Set,Get}URLLoaderMockFactory() methods
+// so that we can deprecate the platform's GetURLLoaderMockFactory().
+// (crbug.com/751425)
 
 // Registers from a base URL and a base file path, and returns a calculated full
 // URL.
@@ -67,6 +72,10 @@ void RegisterMockedURLLoad(
     const WebURL& full_url,
     const WebString& file_path,
     const WebString& mime_type = WebString::FromUTF8("text/html"));
+
+// Unregisters a URL that has been registered, so that the same URL can be
+// registered again from the another test.
+void RegisterMockedURLUnregister(const WebURL&);
 
 // Registers with a custom response.
 void RegisterMockedURLLoadWithCustomResponse(const WebURL& full_url,

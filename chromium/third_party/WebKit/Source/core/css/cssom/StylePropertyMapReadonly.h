@@ -5,9 +5,9 @@
 #ifndef StylePropertyMapReadonly_h
 #define StylePropertyMapReadonly_h
 
-#include "bindings/core/v8/CSSStyleValueOrCSSStyleValueSequence.h"
-#include "bindings/core/v8/CSSStyleValueOrCSSStyleValueSequenceOrString.h"
+#include "base/macros.h"
 #include "bindings/core/v8/Iterable.h"
+#include "bindings/core/v8/css_style_value_or_css_style_value_sequence.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/css/cssom/CSSStyleValue.h"
@@ -16,36 +16,33 @@
 namespace blink {
 
 class CORE_EXPORT StylePropertyMapReadonly
-    : public GarbageCollectedFinalized<StylePropertyMapReadonly>,
-      public ScriptWrappable,
+    : public ScriptWrappable,
       public PairIterable<String, CSSStyleValueOrCSSStyleValueSequence> {
   DEFINE_WRAPPERTYPEINFO();
-  WTF_MAKE_NONCOPYABLE(StylePropertyMapReadonly);
 
  public:
   typedef std::pair<String, CSSStyleValueOrCSSStyleValueSequence>
       StylePropertyMapEntry;
 
-  virtual ~StylePropertyMapReadonly() {}
+  virtual ~StylePropertyMapReadonly() = default;
 
-  virtual CSSStyleValue* get(const String& property_name, ExceptionState&);
-  virtual CSSStyleValueVector getAll(const String& property_name,
-                                     ExceptionState&);
-  virtual bool has(const String& property_name, ExceptionState&);
+  CSSStyleValue* get(const String& property_name, ExceptionState&);
+  CSSStyleValueVector getAll(const String& property_name, ExceptionState&);
+  bool has(const String& property_name, ExceptionState&);
 
   virtual Vector<String> getProperties() = 0;
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  protected:
   StylePropertyMapReadonly() = default;
 
-  virtual CSSStyleValueVector GetAllInternal(CSSPropertyID) = 0;
-  virtual CSSStyleValueVector GetAllInternal(
-      AtomicString custom_property_name) = 0;
+  virtual const CSSValue* GetProperty(CSSPropertyID) = 0;
+  virtual const CSSValue* GetCustomProperty(AtomicString) = 0;
 
   virtual HeapVector<StylePropertyMapEntry> GetIterationEntries() = 0;
   IterationSource* StartIteration(ScriptState*, ExceptionState&) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StylePropertyMapReadonly);
 };
 
 }  // namespace blink

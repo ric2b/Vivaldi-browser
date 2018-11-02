@@ -16,9 +16,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
+#include "base/json/json_file_value_serializer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "components/crx_file/id_util.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/update_client/component.h"
@@ -35,30 +37,6 @@
 #include "url/gurl.h"
 
 namespace update_client {
-
-namespace {
-
-// Produces an extension-like friendly id.
-std::string HexStringToID(const std::string& hexstr) {
-  std::string id;
-  for (size_t i = 0; i < hexstr.size(); ++i) {
-    int val = 0;
-    if (base::HexStringToInt(
-            base::StringPiece(hexstr.begin() + i, hexstr.begin() + i + 1),
-            &val)) {
-      id.append(1, val + 'a');
-    } else {
-      id.append(1, 'a');
-    }
-  }
-
-  DCHECK(crx_file::id_util::IdIsValid(id));
-
-  return id;
-}
-
-}  // namespace
-
 
 std::unique_ptr<net::URLFetcher> SendProtocolRequest(
     const GURL& url,
@@ -163,10 +141,10 @@ bool DeleteFileAndEmptyParentDirectory(const base::FilePath& filepath) {
 }
 
 std::string GetCrxComponentID(const CrxComponent& component) {
-  const size_t kCrxIdSize = 16;
-  CHECK_GE(component.pk_hash.size(), kCrxIdSize);
-  return HexStringToID(base::ToLowerASCII(
-      base::HexEncode(&component.pk_hash[0], kCrxIdSize)));
+  const std::string result = crx_file::id_util::GenerateIdFromHash(
+      &component.pk_hash[0], component.pk_hash.size());
+  DCHECK(crx_file::id_util::IdIsValid(result));
+  return result;
 }
 
 bool VerifyFileHash256(const base::FilePath& filepath,
@@ -246,9 +224,31 @@ void RemoveUnsecureUrls(std::vector<GURL>* urls) {
               urls->end());
 }
 
-CrxInstaller::Result InstallFunctionWrapper(base::Callback<bool()> callback) {
-  return CrxInstaller::Result(callback.Run() ? InstallError::NONE
-                                             : InstallError::GENERIC_ERROR);
+CrxInstaller::Result InstallFunctionWrapper(
+    base::OnceCallback<bool()> callback) {
+  return CrxInstaller::Result(std::move(callback).Run()
+                                  ? InstallError::NONE
+                                  : InstallError::GENERIC_ERROR);
+}
+
+// TODO(cpu): add a specific attribute check to a component json that the
+// extension unpacker will reject, so that a component cannot be installed
+// as an extension.
+std::unique_ptr<base::DictionaryValue> ReadManifest(
+    const base::FilePath& unpack_path) {
+  base::FilePath manifest =
+      unpack_path.Append(FILE_PATH_LITERAL("manifest.json"));
+  if (!base::PathExists(manifest))
+    return std::unique_ptr<base::DictionaryValue>();
+  JSONFileValueDeserializer deserializer(manifest);
+  std::string error;
+  std::unique_ptr<base::Value> root = deserializer.Deserialize(nullptr, &error);
+  if (!root.get())
+    return std::unique_ptr<base::DictionaryValue>();
+  if (!root->is_dict())
+    return std::unique_ptr<base::DictionaryValue>();
+  return std::unique_ptr<base::DictionaryValue>(
+      static_cast<base::DictionaryValue*>(root.release()));
 }
 
 }  // namespace update_client

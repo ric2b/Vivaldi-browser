@@ -6,9 +6,36 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
+#include "chrome/common/media_router/media_source_helper.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace media_router {
+
+namespace {
+
+PresentationUrlType GetPresentationUrlType(const GURL& url) {
+  if (url.SchemeIs(kDialPresentationUrlScheme))
+    return PresentationUrlType::kDial;
+  if (url.SchemeIs(kCastPresentationUrlScheme))
+    return PresentationUrlType::kCast;
+  if (url.SchemeIs(kCastDialPresentationUrlScheme))
+    return PresentationUrlType::kCastDial;
+  if (url.SchemeIs(kRemotePlaybackPresentationUrlScheme))
+    return PresentationUrlType::kRemotePlayback;
+  if (base::StartsWith(url.spec(), kLegacyCastPresentationUrlPrefix,
+                       base::CompareCase::INSENSITIVE_ASCII))
+    return PresentationUrlType::kCastLegacy;
+  if (url.SchemeIs(url::kHttpsScheme))
+    return PresentationUrlType::kHttps;
+  if (url.SchemeIs(url::kHttpScheme))
+    return PresentationUrlType::kHttp;
+  return PresentationUrlType::kOther;
+}
+
+}  // namespace
 
 MediaRouterMetrics::MediaRouterMetrics() {}
 MediaRouterMetrics::~MediaRouterMetrics() = default;
@@ -32,6 +59,8 @@ const char MediaRouterMetrics::kHistogramUiDialogLoadedWithData[] =
     "MediaRouter.Ui.Dialog.LoadedWithData";
 const char MediaRouterMetrics::kHistogramUiFirstAction[] =
     "MediaRouter.Ui.FirstAction";
+const char MediaRouterMetrics::kHistogramPresentationUrlType[] =
+    "MediaRouter.PresentationRequest.AvailabilityUrlType";
 
 // static
 void MediaRouterMetrics::RecordMediaRouterDialogOrigin(
@@ -80,24 +109,33 @@ void MediaRouterMetrics::RecordMediaRouterCastingSource(MediaCastMode source) {
   UMA_HISTOGRAM_SPARSE_SLOWLY(kHistogramMediaRouterCastingSource, source);
 }
 
+// static
 void MediaRouterMetrics::RecordMediaRouterFileFormat(
     const media::container_names::MediaContainerName format) {
   UMA_HISTOGRAM_ENUMERATION(kHistogramMediaRouterFileFormat, format,
                             media::container_names::CONTAINER_MAX);
 }
 
+// static
 void MediaRouterMetrics::RecordMediaRouterFileSize(int64_t size) {
   UMA_HISTOGRAM_MEMORY_LARGE_MB(kHistogramMediaRouterFileSize, size);
 }
 
 // static
 void MediaRouterMetrics::RecordDialParsingError(
-    chrome::mojom::DialParsingError parsing_error) {
-  DCHECK_LT(static_cast<int>(parsing_error),
-            static_cast<int>(chrome::mojom::DialParsingError::TOTAL_COUNT));
+    SafeDialDeviceDescriptionParser::ParsingError parsing_error) {
+  DCHECK_LT(parsing_error,
+            SafeDialDeviceDescriptionParser::ParsingError::kTotalCount);
   UMA_HISTOGRAM_ENUMERATION(
       kHistogramDialParsingError, parsing_error,
-      static_cast<int>(chrome::mojom::DialParsingError::TOTAL_COUNT));
+      SafeDialDeviceDescriptionParser::ParsingError::kTotalCount);
+}
+
+// static
+void MediaRouterMetrics::RecordPresentationUrlType(const GURL& url) {
+  PresentationUrlType type = GetPresentationUrlType(url);
+  UMA_HISTOGRAM_ENUMERATION(kHistogramPresentationUrlType, type,
+                            PresentationUrlType::kPresentationUrlTypeCount);
 }
 
 }  // namespace media_router

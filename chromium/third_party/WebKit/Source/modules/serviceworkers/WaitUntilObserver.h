@@ -22,7 +22,8 @@ class ScriptState;
 class MODULES_EXPORT WaitUntilObserver final
     : public GarbageCollectedFinalized<WaitUntilObserver> {
  public:
-  using PromiseSettledCallback = Function<void(const ScriptValue&)>;
+  using PromiseSettledCallback =
+      WTF::RepeatingFunction<void(const ScriptValue&)>;
 
   enum EventType {
     kAbortPayment,
@@ -66,7 +67,7 @@ class MODULES_EXPORT WaitUntilObserver final
       PromiseSettledCallback on_promise_fulfilled = PromiseSettledCallback(),
       PromiseSettledCallback on_promise_rejected = PromiseSettledCallback());
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class InternalsServiceWorker;

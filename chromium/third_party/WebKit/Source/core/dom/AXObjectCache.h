@@ -27,15 +27,18 @@
 #ifndef AXObjectCache_h
 #define AXObjectCache_h
 
+#include <memory>
+
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
-#include <memory>
 
 typedef unsigned AXID;
 
 namespace blink {
 
 class AbstractInlineTextBox;
+class AccessibleNode;
 class HTMLCanvasElement;
 class HTMLOptionElement;
 class HTMLSelectElement;
@@ -46,14 +49,13 @@ class LocalFrameView;
 class CORE_EXPORT AXObjectCache
     : public GarbageCollectedFinalized<AXObjectCache>,
       public ContextLifecycleObserver {
-  WTF_MAKE_NONCOPYABLE(AXObjectCache);
   USING_GARBAGE_COLLECTED_MIXIN(AXObjectCache);
 
  public:
   static AXObjectCache* Create(Document&);
 
   virtual ~AXObjectCache();
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   enum AXNotification {
     kAXActiveDescendantChanged,
@@ -96,12 +98,14 @@ class CORE_EXPORT AXObjectCache
   virtual void SelectionChanged(Node*) = 0;
   virtual void ChildrenChanged(Node*) = 0;
   virtual void ChildrenChanged(LayoutObject*) = 0;
+  virtual void ChildrenChanged(AccessibleNode*) = 0;
   virtual void CheckedStateChanged(Node*) = 0;
   virtual void ListboxOptionStateChanged(HTMLOptionElement*) = 0;
   virtual void ListboxSelectedChildrenChanged(HTMLSelectElement*) = 0;
   virtual void ListboxActiveIndexChanged(HTMLSelectElement*) = 0;
   virtual void RadiobuttonRemovedFromGroup(HTMLInputElement*) = 0;
 
+  virtual void Remove(AccessibleNode*) = 0;
   virtual void Remove(LayoutObject*) = 0;
   virtual void Remove(Node*) = 0;
   virtual void Remove(AbstractInlineTextBox*) = 0;
@@ -162,11 +166,11 @@ class CORE_EXPORT AXObjectCache
 
  private:
   static AXObjectCacheCreateFunction create_function_;
+  DISALLOW_COPY_AND_ASSIGN(AXObjectCache);
 };
 
 class CORE_EXPORT ScopedAXObjectCache {
   USING_FAST_MALLOC(ScopedAXObjectCache);
-  WTF_MAKE_NONCOPYABLE(ScopedAXObjectCache);
 
  public:
   static std::unique_ptr<ScopedAXObjectCache> Create(Document&);
@@ -179,6 +183,7 @@ class CORE_EXPORT ScopedAXObjectCache {
 
   Persistent<Document> document_;
   Persistent<AXObjectCache> cache_;
+  DISALLOW_COPY_AND_ASSIGN(ScopedAXObjectCache);
 };
 
 }  // namespace blink

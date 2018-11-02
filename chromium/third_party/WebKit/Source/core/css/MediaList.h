@@ -41,10 +41,10 @@ class MediaQuery;
 
 class CORE_EXPORT MediaQuerySet : public RefCounted<MediaQuerySet> {
  public:
-  static RefPtr<MediaQuerySet> Create() {
-    return AdoptRef(new MediaQuerySet());
+  static scoped_refptr<MediaQuerySet> Create() {
+    return base::AdoptRef(new MediaQuerySet());
   }
-  static RefPtr<MediaQuerySet> Create(const String& media_string);
+  static scoped_refptr<MediaQuerySet> Create(const String& media_string);
 
   bool Set(const String&);
   bool Add(const String&);
@@ -58,8 +58,8 @@ class CORE_EXPORT MediaQuerySet : public RefCounted<MediaQuerySet> {
 
   String MediaText() const;
 
-  RefPtr<MediaQuerySet> Copy() const {
-    return AdoptRef(new MediaQuerySet(*this));
+  scoped_refptr<MediaQuerySet> Copy() const {
+    return base::AdoptRef(new MediaQuerySet(*this));
   }
 
  private:
@@ -69,17 +69,16 @@ class CORE_EXPORT MediaQuerySet : public RefCounted<MediaQuerySet> {
   Vector<std::unique_ptr<MediaQuery>> queries_;
 };
 
-class MediaList final : public GarbageCollectedFinalized<MediaList>,
-                        public ScriptWrappable {
+class MediaList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MediaList* Create(RefPtr<MediaQuerySet> media_queries,
+  static MediaList* Create(scoped_refptr<MediaQuerySet> media_queries,
                            CSSStyleSheet* parent_sheet) {
     return new MediaList(std::move(media_queries), parent_sheet);
   }
 
-  static MediaList* Create(RefPtr<MediaQuerySet> media_queries,
+  static MediaList* Create(scoped_refptr<MediaQuerySet> media_queries,
                            CSSRule* parent_rule) {
     return new MediaList(std::move(media_queries), parent_rule);
   }
@@ -96,17 +95,17 @@ class MediaList final : public GarbageCollectedFinalized<MediaList>,
   CSSRule* ParentRule() const { return parent_rule_; }
   CSSStyleSheet* ParentStyleSheet() const { return parent_style_sheet_; }
 
-  const MediaQuerySet* Queries() const { return media_queries_.Get(); }
+  const MediaQuerySet* Queries() const { return media_queries_.get(); }
 
-  void Reattach(RefPtr<MediaQuerySet>);
+  void Reattach(scoped_refptr<MediaQuerySet>);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
-  MediaList(RefPtr<MediaQuerySet>, CSSStyleSheet* parent_sheet);
-  MediaList(RefPtr<MediaQuerySet>, CSSRule* parent_rule);
+  MediaList(scoped_refptr<MediaQuerySet>, CSSStyleSheet* parent_sheet);
+  MediaList(scoped_refptr<MediaQuerySet>, CSSRule* parent_rule);
 
-  RefPtr<MediaQuerySet> media_queries_;
+  scoped_refptr<MediaQuerySet> media_queries_;
   Member<CSSStyleSheet> parent_style_sheet_;
   Member<CSSRule> parent_rule_;
 };

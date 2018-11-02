@@ -32,7 +32,7 @@ class FileService::FileSystemObjects
     if (!lock_table_)
       lock_table_ = new filesystem::LockTable;
     mojo::MakeStrongBinding(
-        base::MakeUnique<FileSystem>(user_dir_, lock_table_),
+        std::make_unique<FileSystem>(user_dir_, lock_table_),
         std::move(request));
   }
 
@@ -74,15 +74,14 @@ class FileService::LevelDBServiceObjects
 };
 
 std::unique_ptr<service_manager::Service> CreateFileService() {
-  return base::MakeUnique<FileService>();
+  return std::make_unique<FileService>();
 }
 
 FileService::FileService()
     : file_service_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
       leveldb_service_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::WithBaseSyncPrimitives(),
-           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
+          {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
   registry_.AddInterface<leveldb::mojom::LevelDBService>(base::Bind(
       &FileService::BindLevelDBServiceRequest, base::Unretained(this)));
   registry_.AddInterface<mojom::FileSystem>(

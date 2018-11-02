@@ -27,10 +27,11 @@
 
 #include "core/dom/events/EventDispatcher.h"
 
+#include "base/memory/scoped_refptr.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/dom/events/EventDispatchMediator.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/dom/events/WindowEventContext.h"
 #include "core/events/MouseEvent.h"
@@ -43,20 +44,17 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
-DispatchEventResult EventDispatcher::DispatchEvent(
-    Node& node,
-    EventDispatchMediator* mediator) {
+DispatchEventResult EventDispatcher::DispatchEvent(Node& node, Event* event) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                "EventDispatcher::dispatchEvent");
 #if DCHECK_IS_ON()
   DCHECK(!EventDispatchForbiddenScope::IsEventDispatchForbidden());
 #endif
-  EventDispatcher dispatcher(node, &mediator->GetEvent());
-  return mediator->DispatchEvent(dispatcher);
+  EventDispatcher dispatcher(node, event);
+  return event->DispatchEvent(dispatcher);
 }
 
 EventDispatcher::EventDispatcher(Node& node, Event* event)
@@ -66,13 +64,11 @@ EventDispatcher::EventDispatcher(Node& node, Event* event)
   event_->InitEventPath(*node_);
 }
 
-void EventDispatcher::DispatchScopedEvent(Node& node,
-                                          EventDispatchMediator* mediator) {
+void EventDispatcher::DispatchScopedEvent(Node& node, Event* event) {
   // We need to set the target here because it can go away by the time we
   // actually fire the event.
-  mediator->GetEvent().SetTarget(
-      EventPath::EventTargetRespectingTargetRules(node));
-  ScopedEventQueue::Instance()->EnqueueEventDispatchMediator(mediator);
+  event->SetTarget(EventPath::EventTargetRespectingTargetRules(node));
+  ScopedEventQueue::Instance()->EnqueueEvent(event);
 }
 
 void EventDispatcher::DispatchSimulatedClick(
@@ -185,12 +181,6 @@ DispatchEventResult EventDispatcher::Dispatch() {
   }
   DispatchEventPostProcess(activation_target,
                            pre_dispatch_event_handler_result);
-
-  // Ensure that after event dispatch, the event's target object is the
-  // outermost shadow DOM boundary.
-  event_->SetTarget(event_->GetEventPath().GetWindowEventContext().Target());
-  event_->SetCurrentTarget(nullptr);
-
   return EventTarget::GetDispatchEventResult(*event_);
 }
 
@@ -271,7 +261,8 @@ inline void EventDispatcher::DispatchEventPostProcess(
   event_->SetStopImmediatePropagation(false);
   // 15. Set event’s eventPhase attribute to NONE.
   event_->SetEventPhase(0);
-  // 16. Set event’s currentTarget attribute to null.
+  // TODO(rakina): investigate this and move it to the bottom of step 16
+  // 17. Set event’s currentTarget attribute to null.
   event_->SetCurrentTarget(nullptr);
 
   bool is_click = event_->IsMouseEvent() &&
@@ -305,7 +296,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
   // TODO(dtapuska): Change this to a target SDK quirk crbug.com/643705
   if (!is_trusted_or_click && event_->IsMouseEvent() &&
       event_->type() == EventTypeNames::mousedown &&
-      isHTMLSelectElement(*node_)) {
+      IsHTMLSelectElement(*node_)) {
     if (Settings* settings = node_->GetDocument().GetSettings()) {
       is_trusted_or_click = settings->GetWideViewportQuirkEnabled();
     }
@@ -341,10 +332,15 @@ inline void EventDispatcher::DispatchEventPostProcess(
   // events to open select boxes.
   if (!event_->isTrusted() && event_->IsMouseEvent() &&
       event_->type() == EventTypeNames::mousedown &&
-      isHTMLSelectElement(*node_)) {
+      IsHTMLSelectElement(*node_)) {
     UseCounter::Count(node_->GetDocument(),
                       WebFeature::kUntrustedMouseDownEventDispatchedToSelect);
   }
+  // 16. If target's root is a shadow root, then set event's target attribute
+  // and event's relatedTarget to null.
+  event_->SetTarget(event_->GetEventPath().GetWindowEventContext().Target());
+  if (!event_->target())
+    event_->SetRelatedTargetIfExists(nullptr);
 }
 
 }  // namespace blink

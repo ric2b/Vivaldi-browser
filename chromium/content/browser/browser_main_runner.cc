@@ -13,13 +13,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/profiler/scoped_profile.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/trace_event.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/tracing/common/trace_config_file.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -48,7 +45,6 @@ namespace content {
 namespace {
 
 base::LazyInstance<base::AtomicFlag>::Leaky g_exited_main_message_loop;
-const char kMainThreadName[] = "CrBrowserMain";
 
 }  // namespace
 
@@ -65,14 +61,6 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
   int Initialize(const MainFunctionParams& parameters) override {
     SCOPED_UMA_HISTOGRAM_LONG_TIMER(
         "Startup.BrowserMainRunnerImplInitializeLongTime");
-
-    // TODO(vadimt, yiyaoliu): Remove all tracked_objects references below once
-    // crbug.com/453640 is fixed.
-    tracked_objects::ThreadData::InitializeThreadContext(kMainThreadName);
-    base::trace_event::AllocationContextTracker::SetCurrentThreadName(
-        kMainThreadName);
-    TRACK_SCOPED_REGION(
-        "Startup", "BrowserMainRunnerImpl::Initialize");
     TRACE_EVENT0("startup", "BrowserMainRunnerImpl::Initialize");
 
     // On Android we normally initialize the browser in a series of UI thread
@@ -222,9 +210,9 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
       if (base::RunLoop::IsRunningOnCurrentThread())
         base::RunLoop::QuitCurrentDeprecated();
   #endif
-      main_loop_.reset(NULL);
+      main_loop_.reset(nullptr);
 
-      notification_service_.reset(NULL);
+      notification_service_.reset(nullptr);
 
       is_shutdown_ = true;
     }

@@ -35,9 +35,10 @@ DOMMimeType::DOMMimeType(LocalFrame* frame,
                          const MimeClassInfo& mime_class_info)
     : ContextClient(frame), mime_class_info_(&mime_class_info) {}
 
-DEFINE_TRACE(DOMMimeType) {
-  ContextClient::Trace(visitor);
+void DOMMimeType::Trace(blink::Visitor* visitor) {
   visitor->Trace(mime_class_info_);
+  ScriptWrappable::Trace(visitor);
+  ContextClient::Trace(visitor);
 }
 
 const String& DOMMimeType::type() const {

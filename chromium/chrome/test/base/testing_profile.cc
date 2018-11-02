@@ -65,8 +65,8 @@
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_database_params.h"
-#include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/test/history_service_test_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/offline_pages/features/features.h"
@@ -147,28 +147,6 @@ namespace {
 
 // Default profile name
 const char kTestingProfile[] = "testing_profile";
-
-// Task used to make sure history has finished processing a request. Intended
-// for use with BlockUntilHistoryProcessesPendingRequests.
-
-class QuittingHistoryDBTask : public history::HistoryDBTask {
- public:
-  QuittingHistoryDBTask() {}
-
-  bool RunOnDBThread(history::HistoryBackend* backend,
-                     history::HistoryDatabase* db) override {
-    return true;
-  }
-
-  void DoneRunOnMainThread() override {
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
-  }
-
- private:
-  ~QuittingHistoryDBTask() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(QuittingHistoryDBTask);
-};
 
 class TestExtensionURLRequestContext : public net::URLRequestContext {
  public:
@@ -394,7 +372,7 @@ TestingProfile::TestingProfile(
 }
 
 void TestingProfile::CreateTempProfileDir() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   if (!temp_dir_.CreateUniqueTempDir()) {
     LOG(ERROR) << "Failed to create unique temporary directory.";
 
@@ -422,7 +400,7 @@ void TestingProfile::CreateTempProfileDir() {
 }
 
 void TestingProfile::Init() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   // If threads have been initialized, we should be on the UI thread.
   DCHECK(!content::BrowserThread::IsThreadInitialized(
              content::BrowserThread::UI) ||
@@ -575,7 +553,7 @@ TestingProfile::~TestingProfile() {
     content::RunAllPendingInMessageLoop(BrowserThread::IO);
   }
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ignore_result(temp_dir_.Delete());
 }
 
@@ -726,6 +704,12 @@ Profile* TestingProfile::GetOriginalProfile() {
   return this;
 }
 
+const Profile* TestingProfile::GetOriginalProfile() const {
+  if (original_profile_)
+    return original_profile_;
+  return this;
+}
+
 void TestingProfile::SetSupervisedUserId(const std::string& id) {
   supervised_user_id_ = id;
   if (!id.empty())
@@ -779,7 +763,7 @@ void TestingProfile::CreateTestingPrefService() {
   testing_prefs_ = new sync_preferences::TestingPrefServiceSyncable();
   prefs_.reset(testing_prefs_);
   user_prefs::UserPrefs::Set(this, prefs_.get());
-  chrome::RegisterUserProfilePrefs(testing_prefs_->registry());
+  RegisterUserProfilePrefs(testing_prefs_->registry());
 }
 
 void TestingProfile::CreatePrefServiceForSupervisedUser() {
@@ -789,7 +773,7 @@ void TestingProfile::CreatePrefServiceForSupervisedUser() {
   SupervisedUserSettingsService* supervised_user_settings =
       SupervisedUserSettingsServiceFactory::GetForProfile(this);
   scoped_refptr<PrefStore> supervised_user_prefs =
-      make_scoped_refptr(new SupervisedUserPrefStore(supervised_user_settings));
+      base::MakeRefCounted<SupervisedUserPrefStore>(supervised_user_settings);
 
   factory.set_supervised_user_prefs(supervised_user_prefs);
 
@@ -797,7 +781,7 @@ void TestingProfile::CreatePrefServiceForSupervisedUser() {
       new user_prefs::PrefRegistrySyncable);
 
   prefs_ = factory.CreateSyncable(registry.get());
-  chrome::RegisterUserProfilePrefs(registry.get());
+  RegisterUserProfilePrefs(registry.get());
   user_prefs::UserPrefs::Set(this, prefs_.get());
 }
 
@@ -919,30 +903,11 @@ void TestingProfile::BlockUntilHistoryProcessesPendingRequests() {
       HistoryServiceFactory::GetForProfile(this,
                                            ServiceAccessType::EXPLICIT_ACCESS);
   DCHECK(history_service);
-  DCHECK(base::MessageLoop::current());
-
-  base::CancelableTaskTracker tracker;
-  history_service->ScheduleDBTask(
-      std::unique_ptr<history::HistoryDBTask>(new QuittingHistoryDBTask()),
-      &tracker);
-  base::RunLoop().Run();
+  history::BlockUntilHistoryProcessesPendingRequests(history_service);
 }
 
 chrome_browser_net::Predictor* TestingProfile::GetNetworkPredictor() {
   return NULL;
-}
-
-DevToolsNetworkControllerHandle*
-TestingProfile::GetDevToolsNetworkControllerHandle() {
-  return NULL;
-}
-
-void TestingProfile::ClearNetworkingHistorySince(
-    base::Time time,
-    const base::Closure& completion) {
-  if (!completion.is_null()) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, completion);
-  }
 }
 
 GURL TestingProfile::GetHomePage() {
@@ -967,6 +932,10 @@ content::SSLHostStateDelegate* TestingProfile::GetSSLHostStateDelegate() {
 
 content::PermissionManager* TestingProfile::GetPermissionManager() {
   return NULL;
+}
+
+content::BackgroundFetchDelegate* TestingProfile::GetBackgroundFetchDelegate() {
+  return nullptr;
 }
 
 content::BackgroundSyncController*

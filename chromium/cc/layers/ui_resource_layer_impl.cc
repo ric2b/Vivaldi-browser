@@ -7,9 +7,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "cc/base/math_util.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace cc {
@@ -84,28 +84,32 @@ void UIResourceLayerImpl::SetVertexOpacity(const float vertex_opacity[4]) {
   NoteLayerPropertyChanged();
 }
 
-bool UIResourceLayerImpl::WillDraw(DrawMode draw_mode,
-                                  ResourceProvider* resource_provider) {
+bool UIResourceLayerImpl::WillDraw(
+    DrawMode draw_mode,
+    LayerTreeResourceProvider* resource_provider) {
   if (!ui_resource_id_ || draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE)
     return false;
   return LayerImpl::WillDraw(draw_mode, resource_provider);
 }
 
-void UIResourceLayerImpl::AppendQuads(
-    RenderPass* render_pass,
-    AppendQuadsData* append_quads_data) {
+void UIResourceLayerImpl::AppendQuads(viz::RenderPass* render_pass,
+                                      AppendQuadsData* append_quads_data) {
+  DCHECK(!bounds().IsEmpty());
+
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  PopulateSharedQuadState(shared_quad_state);
-
-  AppendDebugBorderQuad(render_pass, bounds(), shared_quad_state,
-                        append_quads_data);
-
-  if (!ui_resource_id_)
-    return;
 
   viz::ResourceId resource =
-      layer_tree_impl()->ResourceIdForUIResource(ui_resource_id_);
+      ui_resource_id_
+          ? layer_tree_impl()->ResourceIdForUIResource(ui_resource_id_)
+          : 0;
+  bool are_contents_opaque =
+      resource ? (layer_tree_impl()->IsUIResourceOpaque(ui_resource_id_) ||
+                  contents_opaque())
+               : false;
+  PopulateSharedQuadState(shared_quad_state, are_contents_opaque);
+  AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
+                        append_quads_data);
 
   if (!resource)
     return;
@@ -114,21 +118,15 @@ void UIResourceLayerImpl::AppendQuads(
   static const bool nearest_neighbor = false;
   static const bool premultiplied_alpha = true;
 
-  DCHECK(!bounds().IsEmpty());
-
-  bool opaque = layer_tree_impl()->IsUIResourceOpaque(ui_resource_id_) ||
-                contents_opaque();
-
   gfx::Rect quad_rect(bounds());
-  bool needs_blending = opaque ? false : true;
+  bool needs_blending = are_contents_opaque ? false : true;
   gfx::Rect visible_quad_rect =
       draw_properties().occlusion_in_content_space.GetUnoccludedContentRect(
           quad_rect);
   if (visible_quad_rect.IsEmpty())
     return;
 
-  TextureDrawQuad* quad =
-      render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+  auto* quad = render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
   quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect, needs_blending,
                resource, premultiplied_alpha, uv_top_left_, uv_bottom_right_,
                SK_ColorTRANSPARENT, vertex_opacity_, flipped, nearest_neighbor,
@@ -140,8 +138,8 @@ const char* UIResourceLayerImpl::LayerTypeAsString() const {
   return "cc::UIResourceLayerImpl";
 }
 
-std::unique_ptr<base::DictionaryValue> UIResourceLayerImpl::LayerTreeAsJson() {
-  std::unique_ptr<base::DictionaryValue> result = LayerImpl::LayerTreeAsJson();
+std::unique_ptr<base::DictionaryValue> UIResourceLayerImpl::LayerAsJson() {
+  std::unique_ptr<base::DictionaryValue> result = LayerImpl::LayerAsJson();
 
   result->Set("ImageBounds", MathUtil::AsValue(image_bounds_));
 

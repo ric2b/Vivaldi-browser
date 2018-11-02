@@ -30,14 +30,18 @@
 
 #include "core/page/ContextMenuClient.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
-#include "core/InputTypeNames.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/editing/EditingTriState.h"
 #include "core/editing/Editor.h"
+#include "core/editing/FrameSelection.h"
+#include "core/editing/ime/InputMethodController.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/markers/SpellCheckMarker.h"
 #include "core/editing/spellcheck/SpellChecker.h"
@@ -49,14 +53,16 @@
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAnchorElement.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/html_names.h"
 #include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
+#include "core/input_type_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/loader/DocumentLoader.h"
@@ -147,8 +153,8 @@ bool ContextMenuClient::ShouldShowContextMenuFromTouch(
 }
 
 static HTMLFormElement* AssociatedFormElement(HTMLElement& element) {
-  if (isHTMLFormElement(element))
-    return &toHTMLFormElement(element);
+  if (auto* form = ToHTMLFormElementOrNull(element))
+    return form;
   return element.formOwner();
 }
 
@@ -239,7 +245,7 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     }
   }
 
-  if (isHTMLCanvasElement(r.InnerNode())) {
+  if (IsHTMLCanvasElement(r.InnerNode())) {
     data.media_type = WebContextMenuData::kMediaTypeCanvas;
     data.has_image_contents = true;
   } else if (!r.AbsoluteImageURL().IsEmpty()) {
@@ -253,9 +259,9 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     data.is_placeholder_image =
         r.GetImage() && r.GetImage()->IsPlaceholderImage();
     if (data.has_image_contents &&
-        isHTMLImageElement(r.InnerNodeOrImageMapImage())) {
+        IsHTMLImageElement(r.InnerNodeOrImageMapImage())) {
       HTMLImageElement* image_element =
-          toHTMLImageElement(r.InnerNodeOrImageMapImage());
+          ToHTMLImageElement(r.InnerNodeOrImageMapImage());
       if (image_element && image_element->CachedImage()) {
         data.image_response = WrappedResourceResponse(
             image_element->CachedImage()->GetResponse());
@@ -267,9 +273,9 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     // We know that if absoluteMediaURL() is not empty, then this
     // is a media element.
     HTMLMediaElement* media_element = ToHTMLMediaElement(r.InnerNode());
-    if (isHTMLVideoElement(*media_element))
+    if (IsHTMLVideoElement(*media_element))
       data.media_type = WebContextMenuData::kMediaTypeVideo;
-    else if (isHTMLAudioElement(*media_element))
+    else if (IsHTMLAudioElement(*media_element))
       data.media_type = WebContextMenuData::kMediaTypeAudio;
 
     if (media_element->error())
@@ -293,8 +299,8 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
       data.media_flags |= WebContextMenuData::kMediaCanToggleControls;
     if (media_element->ShouldShowControls())
       data.media_flags |= WebContextMenuData::kMediaControls;
-  } else if (isHTMLObjectElement(*r.InnerNode()) ||
-             isHTMLEmbedElement(*r.InnerNode())) {
+  } else if (IsHTMLObjectElement(*r.InnerNode()) ||
+             IsHTMLEmbedElement(*r.InnerNode())) {
     LayoutObject* object = r.InnerNode()->GetLayoutObject();
     if (object && object->IsLayoutEmbeddedContent()) {
       PluginView* plugin_view = ToLayoutEmbeddedContent(object)->Plugin();
@@ -355,23 +361,26 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     // in that case. See https://crbug.com/534561
     WebSecurityOrigin origin = web_view_->MainFrame()->GetSecurityOrigin();
     if (!origin.IsNull())
-      data.page_url = KURL(kParsedURLString, origin.ToString());
+      data.page_url = KURL(origin.ToString());
   } else {
     data.page_url =
         UrlFromFrame(ToLocalFrame(web_view_->GetPage()->MainFrame()));
   }
 
-  if (selected_frame != web_view_->GetPage()->MainFrame()) {
+  if (selected_frame != web_view_->GetPage()->MainFrame())
     data.frame_url = UrlFromFrame(selected_frame);
-    HistoryItem* history_item =
-        selected_frame->Loader().GetDocumentLoader()->GetHistoryItem();
-    if (history_item)
-      data.frame_history_item = WebHistoryItem(history_item);
-  }
 
+  data.selection_start_offset = 0;
   // HitTestResult::isSelected() ensures clean layout by performing a hit test.
-  if (r.IsSelected())
+  // If source_type is |kMenuSourceAdjustSelectionReset| we know the original
+  // HitTestResult in SelectionController passed the inside check already, so
+  // let it pass.
+  if (r.IsSelected() || source_type == kMenuSourceAdjustSelectionReset) {
     data.selected_text = selected_frame->SelectedText();
+    WebRange range =
+        selected_frame->GetInputMethodController().GetSelectionOffsets();
+    data.selection_start_offset = range.StartOffset();
+  }
 
   if (r.IsContentEditable()) {
     data.is_editable = true;
@@ -388,9 +397,9 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
       Vector<String> suggestions;
       description.Split('\n', suggestions);
       data.dictionary_suggestions = suggestions;
-    } else if (selected_web_frame->TextCheckClient()) {
+    } else if (selected_web_frame->GetTextCheckerClient()) {
       int misspelled_offset, misspelled_length;
-      selected_web_frame->TextCheckClient()->CheckSpelling(
+      selected_web_frame->GetTextCheckerClient()->CheckSpelling(
           data.misspelled_word, misspelled_offset, misspelled_length,
           &data.dictionary_suggestions);
     }
@@ -398,7 +407,7 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     if (vivaldi::IsVivaldiRunning()) {
       // Collect information of input field so that we can use it to set up
       // correct menu content.
-      HTMLInputElement& inputElement = toHTMLInputElement(*r.InnerNode());
+      HTMLInputElement& inputElement = ToHTMLInputElement(*r.InnerNode());
       if (inputElement.HasClass()) {
         size_t size = inputElement.ClassNames().size();
         for (size_t i = 0; i < size; i++) {
@@ -410,24 +419,24 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
         }
       }
     }
-
-    HTMLFormElement* form = CurrentForm(selected_frame->Selection());
-    if (form && isHTMLInputElement(*r.InnerNode())) {
-      HTMLInputElement& selected_element = toHTMLInputElement(*r.InnerNode());
-      WebSearchableFormData ws = WebSearchableFormData(
-          WebFormElement(form), WebInputElement(&selected_element));
-      if (ws.Url().IsValid())
-        data.keyword_url = ws.Url();
-    }
   }
 
-  if (selected_frame->GetEditor().SelectionHasStyle(CSSPropertyDirection,
-                                                    "ltr") != kFalseTriState) {
+  auto* form = CurrentForm(selected_frame->Selection());
+  auto* selected_element = ToHTMLInputElementOrNull(r.InnerNode());
+  if (form && selected_element) {
+    WebSearchableFormData ws =
+        WebSearchableFormData(WebFormElement(form), selected_element);
+    if (ws.Url().IsValid())
+      data.vivaldi_keyword_url = ws.Url();
+  }
+
+  if (selected_frame->GetEditor().SelectionHasStyle(
+          CSSPropertyDirection, "ltr") != EditingTriState::kFalse) {
     data.writing_direction_left_to_right |=
         WebContextMenuData::kCheckableMenuItemChecked;
   }
-  if (selected_frame->GetEditor().SelectionHasStyle(CSSPropertyDirection,
-                                                    "rtl") != kFalseTriState) {
+  if (selected_frame->GetEditor().SelectionHasStyle(
+          CSSPropertyDirection, "rtl") != EditingTriState::kFalse) {
     data.writing_direction_right_to_left |=
         WebContextMenuData::kCheckableMenuItemChecked;
   }
@@ -438,9 +447,7 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
   // Filter out custom menu elements and add them into the data.
   PopulateCustomMenuItems(default_menu, &data);
 
-  if (isHTMLAnchorElement(r.URLElement())) {
-    HTMLAnchorElement* anchor = toHTMLAnchorElement(r.URLElement());
-
+  if (auto* anchor = ToHTMLAnchorElementOrNull(r.URLElement())) {
     // Extract suggested filename for saving file.
     data.suggested_filename = anchor->FastGetAttribute(HTMLNames::downloadAttr);
 
@@ -453,11 +460,10 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
   }
 
   // Find the input field type.
-  if (isHTMLInputElement(r.InnerNode())) {
-    HTMLInputElement* element = toHTMLInputElement(r.InnerNode());
-    if (element->type() == InputTypeNames::password)
+  if (auto* input = ToHTMLInputElementOrNull(r.InnerNode())) {
+    if (input->type() == InputTypeNames::password)
       data.input_field_type = WebContextMenuData::kInputFieldTypePassword;
-    else if (element->IsTextField())
+    else if (input->IsTextField())
       data.input_field_type = WebContextMenuData::kInputFieldTypePlainText;
     else
       data.input_field_type = WebContextMenuData::kInputFieldTypeOther;

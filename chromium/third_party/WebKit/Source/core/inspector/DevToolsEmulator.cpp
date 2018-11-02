@@ -13,13 +13,13 @@
 #include "core/input/EventHandler.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/loader/fetch/MemoryCache.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/web/WebSettings.h"
@@ -68,6 +68,7 @@ DevToolsEmulator::DevToolsEmulator(WebViewImpl* web_view)
       is_mobile_layout_theme_enabled_(false),
       original_default_minimum_page_scale_factor_(0),
       original_default_maximum_page_scale_factor_(0),
+      use_solid_color_scrollbar_(false),
       embedder_text_autosizing_enabled_(
           web_view->GetPage()->GetSettings().TextAutosizingEnabled()),
       embedder_device_scale_adjustment_(
@@ -106,7 +107,7 @@ DevToolsEmulator* DevToolsEmulator::Create(WebViewImpl* web_view_base) {
   return new DevToolsEmulator(web_view_base);
 }
 
-DEFINE_TRACE(DevToolsEmulator) {}
+void DevToolsEmulator::Trace(blink::Visitor* visitor) {}
 
 void DevToolsEmulator::SetTextAutosizingEnabled(bool enabled) {
   embedder_text_autosizing_enabled_ = enabled;
@@ -208,7 +209,8 @@ void DevToolsEmulator::EnableDeviceEmulation(
       emulation_params_.screen_position == params.screen_position &&
       emulation_params_.device_scale_factor == params.device_scale_factor &&
       emulation_params_.scale == params.scale &&
-      emulation_params_.viewport_offset == params.viewport_offset) {
+      emulation_params_.viewport_offset == params.viewport_offset &&
+      emulation_params_.viewport_scale == params.viewport_scale) {
     return;
   }
   if (emulation_params_.device_scale_factor != params.device_scale_factor ||
@@ -277,6 +279,10 @@ void DevToolsEmulator::EnableMobileEmulation() {
       RuntimeEnabledFeatures::MobileLayoutThemeEnabled();
   RuntimeEnabledFeatures::SetMobileLayoutThemeEnabled(true);
   ComputedStyle::InvalidateInitialStyle();
+  web_view_->GetPage()->GetSettings().SetForceAndroidOverlayScrollbar(true);
+  use_solid_color_scrollbar_ =
+      web_view_->GetPage()->GetSettings().GetUseSolidColorScrollbars();
+  web_view_->GetPage()->GetSettings().SetUseSolidColorScrollbars(true);
   web_view_->GetPage()->GetSettings().SetViewportStyle(
       WebViewportStyle::kMobile);
   web_view_->GetPage()->GetSettings().SetViewportEnabled(true);
@@ -312,6 +318,9 @@ void DevToolsEmulator::DisableMobileEmulation() {
   RuntimeEnabledFeatures::SetMobileLayoutThemeEnabled(
       is_mobile_layout_theme_enabled_);
   ComputedStyle::InvalidateInitialStyle();
+  web_view_->GetPage()->GetSettings().SetUseSolidColorScrollbars(
+      use_solid_color_scrollbar_);
+  web_view_->GetPage()->GetSettings().SetForceAndroidOverlayScrollbar(false);
   web_view_->GetPage()->GetSettings().SetViewportEnabled(false);
   web_view_->GetPage()->GetSettings().SetViewportMetaEnabled(false);
   web_view_->GetPage()->GetVisualViewport().InitializeScrollbars();

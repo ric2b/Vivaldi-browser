@@ -28,32 +28,35 @@ idl_lexer_parser_files = get_path_info([
                                          "blink_idl_parser.py",
                                        ],
                                        "abspath")
-idl_compiler_files = get_path_info([
-                                     "idl_compiler.py",
+idl_compiler_files =
+    get_path_info(
+        [
+          "idl_compiler.py",
 
-                                     # Blink IDL front end (ex-lexer/parser)
-                                     "idl_definitions.py",
-                                     "idl_reader.py",
-                                     "idl_types.py",
-                                     "idl_validator.py",
-                                     "interface_dependency_resolver.py",
+          # Blink IDL front end (ex-lexer/parser)
+          "idl_definitions.py",
+          "idl_reader.py",
+          "idl_types.py",
+          "idl_validator.py",
+          "interface_dependency_resolver.py",
 
-                                     # V8 code generator
-                                     "code_generator.py",
-                                     "code_generator_v8.py",
-                                     "code_generator_web_agent_api.py",
-                                     "v8_attributes.py",
-                                     "v8_callback_function.py",
-                                     "v8_callback_interface.py",
-                                     "v8_dictionary.py",
-                                     "v8_globals.py",
-                                     "v8_interface.py",
-                                     "v8_methods.py",
-                                     "v8_types.py",
-                                     "v8_union.py",
-                                     "v8_utilities.py",
-                                   ],
-                                   "abspath")
+          # V8 code generator
+          "code_generator.py",
+          "code_generator_v8.py",
+          "code_generator_web_agent_api.py",
+          "v8_attributes.py",
+          "v8_callback_function.py",
+          "v8_callback_interface.py",
+          "v8_dictionary.py",
+          "v8_globals.py",
+          "v8_interface.py",
+          "v8_methods.py",
+          "v8_types.py",
+          "v8_union.py",
+          "v8_utilities.py",
+          "//third_party/blink/tools/blinkpy/common/name_style_converter.py",
+        ],
+        "abspath")
 
 # Calls the compute_interfaces_info_individual script.
 #
@@ -76,7 +79,11 @@ template("compute_interfaces_info_individual") {
     ]
 
     response_file_contents = rebase_path(invoker.sources, root_build_dir)
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--cache-directory",
       rebase_path(bindings_scripts_output_dir, root_build_dir),
       "--idl-files-list",
@@ -195,17 +202,28 @@ template("idl_compiler") {
       outputs = []
       foreach(_source, sources) {
         _name_part = get_path_info(_source, "name")
-        outputs += [
-          "$output_dir/V8${_name_part}${output_name_suffix}.cpp",
-          "$output_dir/V8${_name_part}${output_name_suffix}.h",
-        ]
+        if (snake_case_source_files) {
+          outputs += [
+            "$output_dir/v8_${_name_part}${output_name_suffix}.cc",
+            "$output_dir/v8_${_name_part}${output_name_suffix}.h",
+          ]
+        } else {
+          outputs += [
+            "$output_dir/V8${_name_part}${output_name_suffix}.cpp",
+            "$output_dir/V8${_name_part}${output_name_suffix}.h",
+          ]
+        }
       }
 
       idl_files_list = "$target_gen_dir/${target_name}_file_list.tmp"
       write_file(idl_files_list, rebase_path(invoker.sources, root_build_dir))
       inputs += [ idl_files_list ]
 
-      args = [
+      args = []
+      if (snake_case_source_files) {
+        args += [ "--snake-case-generated-files" ]
+      }
+      args += [
         "--cache-dir",
         rebase_path(bindings_scripts_output_dir, root_build_dir),
         "--output-dir",
@@ -225,12 +243,23 @@ template("idl_compiler") {
       public_deps = _public_deps
 
       sources = invoker.sources
-      outputs = [
-        "$output_dir/V8{{source_name_part}}${output_name_suffix}.cpp",
-        "$output_dir/V8{{source_name_part}}${output_name_suffix}.h",
-      ]
+      if (snake_case_source_files) {
+        outputs = [
+          "$output_dir/v8_{{source_name_part}}${output_name_suffix}.cc",
+          "$output_dir/v8_{{source_name_part}}${output_name_suffix}.h",
+        ]
+      } else {
+        outputs = [
+          "$output_dir/V8{{source_name_part}}${output_name_suffix}.cpp",
+          "$output_dir/V8{{source_name_part}}${output_name_suffix}.h",
+        ]
+      }
 
-      args = [
+      args = []
+      if (snake_case_source_files) {
+        args += [ "--snake-case-generated-files" ]
+      }
+      args += [
         "--cache-dir",
         rebase_path(bindings_scripts_output_dir, root_build_dir),
         "--output-dir",
@@ -282,13 +311,24 @@ template("idl_impl") {
       rel_path = rebase_path(dict_idl, "//third_party/WebKit/Source")
       impl_dir = get_path_info(rel_path, "dir")
       idl_name = get_path_info(rel_path, "name")
-      outputs += [
-        "${dictionary_impl_output_dir}$impl_dir/$idl_name.cpp",
-        "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
-      ]
+      if (snake_case_source_files) {
+        outputs += [
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.cc",
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
+        ]
+      } else {
+        outputs += [
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.cpp",
+          "${dictionary_impl_output_dir}$impl_dir/$idl_name.h",
+        ]
+      }
     }
 
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--cache-dir",
       rebase_path(bindings_scripts_output_dir, root_build_dir),
       "--output-dir",
@@ -329,7 +369,11 @@ template("aggregate_generated_bindings") {
     outputs = invoker.outputs
 
     response_file_contents = rebase_path(inputs, root_build_dir)
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--component",
       invoker.component,
       "{{response_file_name}}",
@@ -418,16 +462,22 @@ template("generate_global_constructors") {
     output_dir = invoker.output_dir
     component = invoker.component
 
-    # generate outputs from invoker.interfaces.
+    # generate outputs from invoker.interfaces and invoker.basenames.
     output_idl_files = []
     output_header_files = []
+
+    # Need a variable due to a GN sytax restriction. We can't do "invoker.basenames[i]".
+    basename_list = invoker.basenames
+    i = 0
     foreach(interface, invoker.interfaces) {
+      basename = basename_list[i]
       args += [ interface ]
-      output_idl_file = "$output_dir/${interface}${component}Constructors.idl"
+      output_idl_file = "$output_dir/${basename}_${component}_constructors.idl"
       args += [ rebase_path(output_idl_file, root_build_dir) ]
       output_idl_files += [ output_idl_file ]
       output_header_files +=
-          [ "$output_dir/${interface}${component}Constructors.h" ]
+          [ "$output_dir/${basename}_${component}_constructors.h" ]
+      i += 1
     }
 
     outputs = output_idl_files + output_header_files
@@ -435,18 +485,18 @@ template("generate_global_constructors") {
   }
 }
 
-# Calls the generate_conditional_features script.
+# Calls the generate_origin_trial_features script.
 #
 # Parameters:
 #   sources = a list of source IDL files.
-#   component = component for which to generate conditional feature bindings
+#   component = component for which to generate origin trial feature bindings
 #       ("Core" or "Modules")
 #   output_dir = output directory to generate cpp file and header file.
 #   deps = dependencies
 #
-template("generate_conditional_features") {
+template("generate_origin_trial_features") {
   action(target_name) {
-    script = "//third_party/WebKit/Source/bindings/scripts/generate_conditional_features.py"
+    script = "//third_party/WebKit/Source/bindings/scripts/generate_origin_trial_features.py"
 
     # Write the file list to a unique temp file to avoid blowing out the
     # command line length limit.
@@ -455,12 +505,16 @@ template("generate_conditional_features") {
 
     inputs = [
                "//third_party/WebKit/Source/bindings/scripts/utilities.py",
-               "//third_party/WebKit/Source/bindings/templates/ConditionalFeaturesFor${invoker.component}.cpp.tmpl",
-               "//third_party/WebKit/Source/bindings/templates/ConditionalFeaturesFor${invoker.component}.h.tmpl",
+               "//third_party/WebKit/Source/bindings/templates/OriginTrialFeaturesFor${invoker.component}.cpp.tmpl",
+               "//third_party/WebKit/Source/bindings/templates/OriginTrialFeaturesFor${invoker.component}.h.tmpl",
                idl_files_list,
              ] + invoker.sources
 
-    args = [
+    args = []
+    if (snake_case_source_files) {
+      args += [ "--snake-case-generated-files" ]
+    }
+    args += [
       "--output-directory",
       rebase_path(invoker.output_dir, root_build_dir),
       "--info-dir",
@@ -474,8 +528,8 @@ template("generate_conditional_features") {
     ]
 
     outputs = [
-      "${invoker.output_dir}/ConditionalFeaturesFor${invoker.component}.cpp",
-      "${invoker.output_dir}/ConditionalFeaturesFor${invoker.component}.h",
+      "${invoker.output_dir}/OriginTrialFeaturesFor${invoker.component}.cpp",
+      "${invoker.output_dir}/OriginTrialFeaturesFor${invoker.component}.h",
     ]
 
     # TODO: This should not always require modules; For core features, this

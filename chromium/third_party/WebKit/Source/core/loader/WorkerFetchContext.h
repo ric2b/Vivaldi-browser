@@ -16,6 +16,7 @@ class ResourceFetcher;
 class SubresourceFilter;
 class WebTaskRunner;
 class WebURLLoader;
+class WebURLLoaderFactory;
 class WebWorkerFetchContext;
 class WorkerClients;
 class WorkerOrWorkletGlobalScope;
@@ -30,9 +31,7 @@ CORE_EXPORT void ProvideWorkerFetchContextToWorker(
 class WorkerFetchContext final : public BaseFetchContext {
  public:
   static WorkerFetchContext* Create(WorkerOrWorkletGlobalScope&);
-  virtual ~WorkerFetchContext();
-
-  RefPtr<WebTaskRunner> GetTaskRunner() { return loading_task_runner_; }
+  ~WorkerFetchContext() override;
 
   // BaseFetchContext implementation:
   KURL GetSiteForCookies() const override;
@@ -41,7 +40,8 @@ class WorkerFetchContext final : public BaseFetchContext {
   bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
-                               ResourceRequestBlockedReason) const override;
+                               ResourceRequestBlockedReason,
+                               Resource::Type) const override;
   bool ShouldBypassMainWorldCSP() const override;
   bool IsSVGImageChromeClient() const override;
   void CountUsage(WebFeature) const override;
@@ -54,6 +54,7 @@ class WorkerFetchContext final : public BaseFetchContext {
       SecurityViolationReportingPolicy) const override;
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
                                                  const KURL&) const override;
+  bool ShouldLoadNewResource(Resource::Type) const override { return true; }
   ReferrerPolicy GetReferrerPolicy() const override;
   String GetOutgoingReferrer() const override;
   const KURL& Url() const override;
@@ -65,7 +66,8 @@ class WorkerFetchContext final : public BaseFetchContext {
   // FetchContext implementation:
   SecurityOrigin* GetSecurityOrigin() const override;
   std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const ResourceRequest&) override;
+      const ResourceRequest&,
+      scoped_refptr<WebTaskRunner>) override;
   void PrepareRequest(ResourceRequest&, RedirectType) override;
   bool IsControlledByServiceWorker() const override;
   int ApplicationCacheHostID() const override;
@@ -74,6 +76,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   void DispatchWillSendRequest(unsigned long,
                                ResourceRequest&,
                                const ResourceResponse&,
+                               Resource::Type,
                                const FetchInitiatorInfo&) override;
   void DispatchDidReceiveResponse(unsigned long identifier,
                                   const ResourceResponse&,
@@ -100,8 +103,9 @@ class WorkerFetchContext final : public BaseFetchContext {
                                const FetchParameters::ResourceWidth&,
                                ResourceRequest&) override;
   void SetFirstPartyCookieAndRequestorOrigin(ResourceRequest&) override;
+  scoped_refptr<WebTaskRunner> GetLoadingTaskRunner() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   WorkerFetchContext(WorkerOrWorkletGlobalScope&,
@@ -109,9 +113,15 @@ class WorkerFetchContext final : public BaseFetchContext {
 
   Member<WorkerOrWorkletGlobalScope> global_scope_;
   std::unique_ptr<WebWorkerFetchContext> web_context_;
+  std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
   Member<SubresourceFilter> subresource_filter_;
   Member<ResourceFetcher> resource_fetcher_;
-  RefPtr<WebTaskRunner> loading_task_runner_;
+  scoped_refptr<WebTaskRunner> loading_task_runner_;
+
+  // The value of |save_data_enabled_| is read once per frame from
+  // NetworkStateNotifier, which is guarded by a mutex lock, and cached locally
+  // here for performance.
+  const bool save_data_enabled_;
 };
 
 }  // namespace blink

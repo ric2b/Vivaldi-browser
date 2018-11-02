@@ -34,7 +34,6 @@
 #include "platform/fonts/shaping/RunSegmenter.h"
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/Deque.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -42,7 +41,9 @@ namespace blink {
 class Font;
 class SimpleFontData;
 class HarfBuzzShaper;
-struct HolesQueueItem;
+struct ReshapeQueueItem;
+struct RangeData;
+struct BufferSlice;
 
 class PLATFORM_EXPORT HarfBuzzShaper final {
  public:
@@ -54,15 +55,15 @@ class PLATFORM_EXPORT HarfBuzzShaper final {
   // occur, such as at the beginning or end of lines or at element boundaries.
   // If given arbitrary positions the results are not guaranteed to be correct.
   // May be called multiple times; font and direction may vary between calls.
-  PassRefPtr<ShapeResult> Shape(const Font*,
-                                TextDirection,
-                                unsigned start,
-                                unsigned end) const;
+  scoped_refptr<ShapeResult> Shape(const Font*,
+                            TextDirection,
+                            unsigned start,
+                            unsigned end) const;
 
   // Shape the entire string with a single font and direction.
   // Equivalent to calling the range version with a start offset of zero and an
   // end offset equal to the length.
-  PassRefPtr<ShapeResult> Shape(const Font*, TextDirection) const;
+  scoped_refptr<ShapeResult> Shape(const Font*, TextDirection) const;
 
   const UChar* GetText() const { return text_; }
   unsigned TextLength() const { return text_length_; }
@@ -70,7 +71,6 @@ class PLATFORM_EXPORT HarfBuzzShaper final {
   ~HarfBuzzShaper() {}
 
  private:
-  struct RangeData;
 
   // Shapes a single seqment, as identified by the RunSegmenterRange parameter,
   // one or more times taking font fallback into account. The start and end
@@ -82,14 +82,23 @@ class PLATFORM_EXPORT HarfBuzzShaper final {
 
   void ExtractShapeResults(RangeData*,
                            bool& font_cycle_queued,
-                           const HolesQueueItem&,
+                           const ReshapeQueueItem&,
                            const SimpleFontData*,
                            UScriptCode,
+                           CanvasRotationInVertical,
                            bool is_last_resort,
                            ShapeResult*) const;
 
-  bool CollectFallbackHintChars(const Deque<HolesQueueItem>&,
+  bool CollectFallbackHintChars(const Deque<ReshapeQueueItem>&,
                                 Vector<UChar32>& hint) const;
+
+  void CommitGlyphs(RangeData*,
+                    const SimpleFontData* current_font,
+                    UScriptCode current_run_script,
+                    CanvasRotationInVertical,
+                    bool is_last_resort,
+                    const BufferSlice&,
+                    ShapeResult*) const;
 
   const UChar* text_;
   unsigned text_length_;

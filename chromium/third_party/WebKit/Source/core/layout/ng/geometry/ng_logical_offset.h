@@ -6,12 +6,14 @@
 #define NGLogicalOffset_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_writing_mode.h"
 #include "platform/LayoutUnit.h"
 #include "platform/text/TextDirection.h"
+#include "platform/text/WritingMode.h"
 
 namespace blink {
 
+struct NGLogicalDelta;
+struct NGLogicalSize;
 struct NGPhysicalOffset;
 struct NGPhysicalSize;
 
@@ -32,7 +34,7 @@ struct CORE_EXPORT NGLogicalOffset {
   // the same point.
   // @param outer_size the size of the rect (typically a fragment).
   // @param inner_size the size of the inner rect (typically a child fragment).
-  NGPhysicalOffset ConvertToPhysical(NGWritingMode,
+  NGPhysicalOffset ConvertToPhysical(WritingMode,
                                      TextDirection,
                                      NGPhysicalSize outer_size,
                                      NGPhysicalSize inner_size) const;
@@ -41,9 +43,10 @@ struct CORE_EXPORT NGLogicalOffset {
   bool operator!=(const NGLogicalOffset& other) const;
 
   NGLogicalOffset operator+(const NGLogicalOffset& other) const;
+  NGLogicalOffset operator+(const NGLogicalSize& size) const;
   NGLogicalOffset& operator+=(const NGLogicalOffset& other);
 
-  NGLogicalOffset operator-(const NGLogicalOffset& other) const;
+  NGLogicalDelta operator-(const NGLogicalOffset& other) const;
   NGLogicalOffset& operator-=(const NGLogicalOffset& other);
 
   bool operator>(const NGLogicalOffset& other) const;

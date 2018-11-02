@@ -19,8 +19,8 @@
 
 #include "core/svg/SVGFEDisplacementMapElement.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -61,7 +61,7 @@ inline SVGFEDisplacementMapElement::SVGFEDisplacementMapElement(
   AddToPropertyMap(y_channel_selector_);
 }
 
-DEFINE_TRACE(SVGFEDisplacementMapElement) {
+void SVGFEDisplacementMapElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(scale_);
   visitor->Trace(in1_);
   visitor->Trace(in2_);

@@ -15,11 +15,10 @@
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/chromeos_export.h"
-#include "net/cert/x509_certificate.h"
+#include "net/cert/scoped_nss_types.h"
 
 namespace net {
 class NSSCertDatabase;
-typedef std::vector<scoped_refptr<X509Certificate> > CertificateList;
 }
 
 namespace chromeos {
@@ -40,11 +39,9 @@ class CHROMEOS_EXPORT CertLoader {
   class Observer {
    public:
     // Called when the certificates, passed for convenience as |all_certs|,
-    // have completed loading. |initial_load| is true the first time this
-    // is called. It will be false if this is called because another slot has
-    // been added to CertLoader's data sources.
-    virtual void OnCertificatesLoaded(const net::CertificateList& all_certs,
-                                      bool initial_load) = 0;
+    // have completed loading.
+    virtual void OnCertificatesLoaded(
+        const net::ScopedCERTCertificateList& all_certs) = 0;
 
    protected:
     virtual ~Observer() {}
@@ -66,7 +63,7 @@ class CHROMEOS_EXPORT CertLoader {
   // hex string and sets |slot_id| to the id of the containing slot, or returns
   // an empty string and doesn't modify |slot_id| if the PKCS#11 id could not be
   // determined.
-  static std::string GetPkcs11IdAndSlotForCert(const net::X509Certificate& cert,
+  static std::string GetPkcs11IdAndSlotForCert(CERTCertificate* cert,
                                                int* slot_id);
 
   // Sets the NSS cert database which CertLoader should use to access system
@@ -90,7 +87,7 @@ class CHROMEOS_EXPORT CertLoader {
 
   // Returns true if |cert| is hardware backed. See also
   // ForceHardwareBackedForTesting().
-  static bool IsCertificateHardwareBacked(const net::X509Certificate* cert);
+  static bool IsCertificateHardwareBacked(CERTCertificate* cert);
 
   // Returns true when the certificate list has been requested but not loaded.
   // When two databases are in use (SetSystemNSSDB and SetUserNSSDB have both
@@ -108,16 +105,19 @@ class CHROMEOS_EXPORT CertLoader {
   // from the first (usually system) database have been loaded.
   bool initial_load_finished() const;
 
+  // Returns true if certificates from a user NSS database have been loaded.
+  bool user_cert_database_load_finished() const;
+
   // Returns all certificates. This will be empty until certificates_loaded() is
   // true.
-  const net::CertificateList& all_certs() const {
+  const net::ScopedCERTCertificateList& all_certs() const {
     DCHECK(thread_checker_.CalledOnValidThread());
     return all_certs_;
   }
 
   // Returns certificates from the system token. This will be empty until
   // certificates_loaded() is true.
-  const net::CertificateList& system_certs() const {
+  const net::ScopedCERTCertificateList& system_certs() const {
     DCHECK(thread_checker_.CalledOnValidThread());
     return system_certs_;
   }
@@ -137,14 +137,10 @@ class CHROMEOS_EXPORT CertLoader {
   void CacheUpdated();
 
   // Called if a certificate load task is finished.
-  void UpdateCertificates(net::CertificateList all_certs,
-                          net::CertificateList system_certs);
+  void UpdateCertificates(net::ScopedCERTCertificateList all_certs,
+                          net::ScopedCERTCertificateList system_certs);
 
-  void NotifyCertificatesLoaded(bool initial_load);
-
-  // True if the initial load of CertLoader is still pending. This is used to
-  // set the |initial_load| parameter when calling Observers.
-  bool pending_initial_load_;
+  void NotifyCertificatesLoaded();
 
   base::ObserverList<Observer> observers_;
 
@@ -154,10 +150,10 @@ class CHROMEOS_EXPORT CertLoader {
   std::unique_ptr<CertCache> user_cert_cache_;
 
   // Cached certificates loaded from the database(s).
-  net::CertificateList all_certs_;
+  net::ScopedCERTCertificateList all_certs_;
 
   // Cached certificates from system token.
-  net::CertificateList system_certs_;
+  net::ScopedCERTCertificateList system_certs_;
 
   base::ThreadChecker thread_checker_;
 

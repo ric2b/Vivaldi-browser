@@ -27,12 +27,12 @@
 #ifndef HTMLConstructionSite_h
 #define HTMLConstructionSite_h
 
+#include "base/macros.h"
 #include "core/dom/Document.h"
 #include "core/dom/ParserContentPolicy.h"
 #include "core/html/parser/HTMLElementStack.h"
 #include "core/html/parser/HTMLFormattingElementList.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -53,7 +53,7 @@ struct HTMLConstructionSiteTask {
   explicit HTMLConstructionSiteTask(Operation op)
       : operation(op), self_closing(false) {}
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(parent);
     visitor->Trace(next_child);
     visitor->Trace(child);
@@ -104,7 +104,6 @@ class HTMLFormElement;
 class HTMLParserReentryPermit;
 
 class HTMLConstructionSite final {
-  WTF_MAKE_NONCOPYABLE(HTMLConstructionSite);
   DISALLOW_NEW();
 
  public:
@@ -112,7 +111,7 @@ class HTMLConstructionSite final {
                        Document&,
                        ParserContentPolicy);
   ~HTMLConstructionSite();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void InitFragmentParsing(DocumentFragment*, Element* context_element);
 
@@ -221,7 +220,7 @@ class HTMLConstructionSite final {
 
   class RedirectToFosterParentGuard {
     STACK_ALLOCATED();
-    WTF_MAKE_NONCOPYABLE(RedirectToFosterParentGuard);
+    DISALLOW_COPY_AND_ASSIGN(RedirectToFosterParentGuard);
 
    public:
     RedirectToFosterParentGuard(HTMLConstructionSite& tree)
@@ -323,7 +322,7 @@ class HTMLConstructionSite final {
       return string_builder.IsEmpty();
     }
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
     Member<ContainerNode> parent;
     Member<Node> next_child;
@@ -343,6 +342,8 @@ class HTMLConstructionSite final {
   bool redirect_attach_to_foster_parent_;
 
   bool in_quirks_mode_;
+
+  DISALLOW_COPY_AND_ASSIGN(HTMLConstructionSite);
 };
 
 }  // namespace blink

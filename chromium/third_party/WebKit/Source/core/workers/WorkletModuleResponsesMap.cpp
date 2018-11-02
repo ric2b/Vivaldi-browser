@@ -4,7 +4,7 @@
 
 #include "core/workers/WorkletModuleResponsesMap.h"
 
-#include "core/loader/modulescript/ModuleScriptFetcher.h"
+#include "core/loader/modulescript/DocumentModuleScriptFetcher.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -28,10 +28,10 @@ class WorkletModuleResponsesMap::Entry final
   Entry() = default;
   ~Entry() = default;
 
-  void Fetch(const FetchParameters fetch_params, ResourceFetcher* fetcher) {
+  void Fetch(FetchParameters& fetch_params, ResourceFetcher* fetcher) {
     AdvanceState(State::kFetching);
-    module_fetcher_ = new ModuleScriptFetcher(fetch_params, fetcher, this);
-    module_fetcher_->Fetch();
+    module_fetcher_ = new DocumentModuleScriptFetcher(fetcher);
+    module_fetcher_->Fetch(fetch_params, this);
   }
 
   State GetState() const { return state_; }
@@ -50,13 +50,13 @@ class WorkletModuleResponsesMap::Entry final
   // https://drafts.css-houdini.org/worklets/#fetch-a-worklet-script
   void NotifyFetchFinished(
       const WTF::Optional<ModuleScriptCreationParams>& params,
-      ConsoleMessage* error_message) override {
+      const HeapVector<Member<ConsoleMessage>>& error_messages) override {
     // The entry can be disposed of during the resource fetch.
     if (state_ == State::kFailed)
       return;
 
     if (!params) {
-      // TODO(nhiroki): Add |error_message| to the context's message storage.
+      // TODO(nhiroki): Add |error_messages| to the context's message storage.
       NotifyFailure();
       return;
     }
@@ -82,7 +82,7 @@ class WorkletModuleResponsesMap::Entry final
     module_fetcher_.Clear();
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(module_fetcher_);
     visitor->Trace(clients_);
   }
@@ -106,7 +106,7 @@ class WorkletModuleResponsesMap::Entry final
 
   State state_ = State::kInitial;
 
-  Member<ModuleScriptFetcher> module_fetcher_;
+  Member<DocumentModuleScriptFetcher> module_fetcher_;
 
   WTF::Optional<ModuleScriptCreationParams> params_;
   HeapVector<Member<WorkletModuleResponsesMap::Client>> clients_;
@@ -122,7 +122,7 @@ WorkletModuleResponsesMap::WorkletModuleResponsesMap(ResourceFetcher* fetcher)
 // "To perform the fetch given request, perform the following steps:"
 // Step 1: "Let cache be the moduleResponsesMap."
 // Step 2: "Let url be request's url."
-void WorkletModuleResponsesMap::ReadEntry(const FetchParameters& fetch_params,
+void WorkletModuleResponsesMap::ReadEntry(FetchParameters& fetch_params,
                                           Client* client) {
   DCHECK(IsMainThread());
   if (!is_available_ || !IsValidURL(fetch_params.Url())) {
@@ -198,7 +198,7 @@ void WorkletModuleResponsesMap::Dispose() {
   entries_.clear();
 }
 
-DEFINE_TRACE(WorkletModuleResponsesMap) {
+void WorkletModuleResponsesMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetcher_);
   visitor->Trace(entries_);
 }

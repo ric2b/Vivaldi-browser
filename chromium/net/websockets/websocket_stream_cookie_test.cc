@@ -5,7 +5,6 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -129,7 +128,8 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
 
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
-  const url::Origin origin(GURL("http://www.example.com"));
+  const url::Origin origin =
+      url::Origin::Create(GURL("http://www.example.com"));
   const GURL site_for_cookies("http://www.example.com/");
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
@@ -161,7 +161,8 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
 
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
-  const url::Origin origin(GURL("http://www.example.com"));
+  const url::Origin origin =
+      url::Origin::Create(GURL("http://www.example.com"));
   const GURL site_for_cookies("http://www.example.com/");
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));

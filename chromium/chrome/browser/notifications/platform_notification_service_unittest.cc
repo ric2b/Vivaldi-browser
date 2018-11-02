@@ -4,15 +4,18 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/notifications/metrics/mock_notification_metrics_logger.h"
+#include "chrome/browser/notifications/metrics/notification_metrics_logger_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/notifications/web_notification_delegate.h"
@@ -42,6 +45,7 @@
 
 using content::NotificationResources;
 using content::PlatformNotificationData;
+using message_center::Notification;
 
 namespace {
 
@@ -53,12 +57,16 @@ const int kNotificationVibrationPattern[] = { 100, 200, 300 };
 class PlatformNotificationServiceTest : public testing::Test {
  public:
   void SetUp() override {
-    profile_manager_ = base::MakeUnique<TestingProfileManager>(
+    profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
     profile_ = profile_manager_->CreateTestingProfile("Miguel");
     display_service_tester_ =
-        base::MakeUnique<NotificationDisplayServiceTester>(profile_);
+        std::make_unique<NotificationDisplayServiceTester>(profile_);
+    mock_logger_ = static_cast<MockNotificationMetricsLogger*>(
+        NotificationMetricsLoggerFactory::GetInstance()
+            ->SetTestingFactoryAndUse(
+                profile_, &MockNotificationMetricsLogger::FactoryForTests));
   }
 
   void TearDown() override {
@@ -69,30 +77,17 @@ class PlatformNotificationServiceTest : public testing::Test {
   }
 
  protected:
-  // Displays a simple, fake notification. The close closure may be specified if
-  // desired.
-  void CreateSimplePageNotificationWithCloseClosure(
-      base::Closure* close_closure) {
-    PlatformNotificationData notification_data;
-    notification_data.title = base::ASCIIToUTF16("My Notification");
-    notification_data.body = base::ASCIIToUTF16("Hello, world!");
-
-    service()->DisplayNotification(
-        profile_, kNotificationId, GURL("https://chrome.com/"),
-        notification_data, NotificationResources(), close_closure);
-  }
-
   // Returns the Platform Notification Service these unit tests are for.
   PlatformNotificationServiceImpl* service() const {
     return PlatformNotificationServiceImpl::GetInstance();
   }
 
-  size_t GetNotificationCountForType(NotificationCommon::Type type) {
+  size_t GetNotificationCountForType(NotificationHandler::Type type) {
     return display_service_tester_->GetDisplayedNotificationsForType(type)
         .size();
   }
 
-  Notification GetDisplayedNotificationForType(NotificationCommon::Type type) {
+  Notification GetDisplayedNotificationForType(NotificationHandler::Type type) {
     std::vector<Notification> notifications =
         display_service_tester_->GetDisplayedNotificationsForType(type);
     DCHECK_EQ(1u, notifications.size());
@@ -107,38 +102,44 @@ class PlatformNotificationServiceTest : public testing::Test {
   TestingProfile* profile_;
 
   std::unique_ptr<NotificationDisplayServiceTester> display_service_tester_;
+
+  // Owned by the |profile_| as a keyed service.
+  MockNotificationMetricsLogger* mock_logger_;
 };
 
+TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentThenClose) {
+  PlatformNotificationData notification_data;
+  notification_data.title = base::ASCIIToUTF16("My Notification");
+  notification_data.body = base::ASCIIToUTF16("Hello, world!");
 
-TEST_F(PlatformNotificationServiceTest, DisplayPageCloseClosure) {
-  base::Closure close_closure;
-  CreateSimplePageNotificationWithCloseClosure(&close_closure);
+  service()->DisplayNotification(profile_, kNotificationId,
+                                 GURL("https://chrome.com/"), notification_data,
+                                 NotificationResources());
 
-  EXPECT_EQ(1u,
-            GetNotificationCountForType(NotificationCommon::NON_PERSISTENT));
+  EXPECT_EQ(1u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_NON_PERSISTENT));
 
-  ASSERT_FALSE(close_closure.is_null());
-  close_closure.Run();
+  service()->CloseNotification(profile_, kNotificationId);
 
-  EXPECT_EQ(0u,
-            GetNotificationCountForType(NotificationCommon::NON_PERSISTENT));
-  // Note that we cannot verify whether the closed event was called on the
-  // delegate given that it'd result in a use-after-free.
+  EXPECT_EQ(0u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_NON_PERSISTENT));
 }
 
-TEST_F(PlatformNotificationServiceTest, PersistentNotificationDisplay) {
+TEST_F(PlatformNotificationServiceTest, DisplayPersistentThenClose) {
   PlatformNotificationData notification_data;
   notification_data.title = base::ASCIIToUTF16("My notification's title");
   notification_data.body = base::ASCIIToUTF16("Hello, world!");
 
+  EXPECT_CALL(*mock_logger_, LogPersistentNotificationShown());
   service()->DisplayPersistentNotification(
       profile_, kNotificationId, GURL() /* service_worker_scope */,
       GURL("https://chrome.com/"), notification_data, NotificationResources());
 
-  ASSERT_EQ(1u, GetNotificationCountForType(NotificationCommon::PERSISTENT));
+  ASSERT_EQ(1u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_PERSISTENT));
 
-  Notification notification =
-      GetDisplayedNotificationForType(NotificationCommon::PERSISTENT);
+  Notification notification = GetDisplayedNotificationForType(
+      NotificationHandler::Type::WEB_PERSISTENT);
   EXPECT_EQ("https://chrome.com/", notification.origin_url().spec());
   EXPECT_EQ("My notification's title",
       base::UTF16ToUTF8(notification.title()));
@@ -146,10 +147,33 @@ TEST_F(PlatformNotificationServiceTest, PersistentNotificationDisplay) {
       base::UTF16ToUTF8(notification.message()));
 
   service()->ClosePersistentNotification(profile_, kNotificationId);
-  EXPECT_EQ(0u, GetNotificationCountForType(NotificationCommon::PERSISTENT));
+  EXPECT_EQ(0u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_PERSISTENT));
 }
 
-TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
+TEST_F(PlatformNotificationServiceTest, OnPersistentNotificationClick) {
+  EXPECT_CALL(*mock_logger_, LogPersistentNotificationClickWithoutPermission());
+  service()->OnPersistentNotificationClick(
+      profile_, "jskdcjdslkcjlds", GURL("https://example.com/"), base::nullopt,
+      base::nullopt, base::BindOnce(&base::DoNothing));
+}
+
+TEST_F(PlatformNotificationServiceTest, OnPersistentNotificationClosedByUser) {
+  EXPECT_CALL(*mock_logger_, LogPersistentNotificationClosedByUser());
+  service()->OnPersistentNotificationClose(
+      profile_, "some_random_id_123", GURL("https://example.com/"),
+      true /* by_user */, base::BindOnce(&base::DoNothing));
+}
+
+TEST_F(PlatformNotificationServiceTest,
+       OnPersistentNotificationClosedProgrammatically) {
+  EXPECT_CALL(*mock_logger_, LogPersistentNotificationClosedProgrammatically());
+  service()->OnPersistentNotificationClose(
+      profile_, "some_random_id_738", GURL("https://example.com/"),
+      false /* by_user */, base::BindOnce(&base::DoNothing));
+}
+
+TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentPropertiesMatch) {
   std::vector<int> vibration_pattern(
       kNotificationVibrationPattern,
       kNotificationVibrationPattern + arraysize(kNotificationVibrationPattern));
@@ -162,13 +186,13 @@ TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
 
   service()->DisplayNotification(profile_, kNotificationId,
                                  GURL("https://chrome.com/"), notification_data,
-                                 NotificationResources(), nullptr);
+                                 NotificationResources());
 
-  ASSERT_EQ(1u,
-            GetNotificationCountForType(NotificationCommon::NON_PERSISTENT));
+  ASSERT_EQ(1u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_NON_PERSISTENT));
 
-  Notification notification =
-      GetDisplayedNotificationForType(NotificationCommon::NON_PERSISTENT);
+  Notification notification = GetDisplayedNotificationForType(
+      NotificationHandler::Type::WEB_NON_PERSISTENT);
   EXPECT_EQ("https://chrome.com/", notification.origin_url().spec());
   EXPECT_EQ("My notification's title",
       base::UTF16ToUTF8(notification.title()));
@@ -181,7 +205,7 @@ TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
   EXPECT_TRUE(notification.silent());
 }
 
-TEST_F(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches) {
+TEST_F(PlatformNotificationServiceTest, DisplayPersistentPropertiesMatch) {
   std::vector<int> vibration_pattern(
       kNotificationVibrationPattern,
       kNotificationVibrationPattern + arraysize(kNotificationVibrationPattern));
@@ -202,14 +226,16 @@ TEST_F(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches) {
   NotificationResources notification_resources;
   notification_resources.action_icons.resize(notification_data.actions.size());
 
+  EXPECT_CALL(*mock_logger_, LogPersistentNotificationShown());
   service()->DisplayPersistentNotification(
       profile_, kNotificationId, GURL() /* service_worker_scope */,
       GURL("https://chrome.com/"), notification_data, notification_resources);
 
-  ASSERT_EQ(1u, GetNotificationCountForType(NotificationCommon::PERSISTENT));
+  ASSERT_EQ(1u, GetNotificationCountForType(
+                    NotificationHandler::Type::WEB_PERSISTENT));
 
-  Notification notification =
-      GetDisplayedNotificationForType(NotificationCommon::PERSISTENT);
+  Notification notification = GetDisplayedNotificationForType(
+      NotificationHandler::Type::WEB_PERSISTENT);
   EXPECT_EQ("https://chrome.com/", notification.origin_url().spec());
   EXPECT_EQ("My notification's title", base::UTF16ToUTF8(notification.title()));
   EXPECT_EQ("Hello, world!", base::UTF16ToUTF8(notification.message()));
@@ -313,10 +339,9 @@ TEST_F(PlatformNotificationServiceTest, CreateNotificationFromData) {
   GURL origin("https://chrome.com/");
 
   Notification notification = service()->CreateNotificationFromData(
-      profile_, GURL() /* service_worker_scope */, origin, notification_data,
-      NotificationResources(),
-      new WebNotificationDelegate(NotificationCommon::PERSISTENT, profile_,
-                                  "id", origin));
+      profile_, origin, "id", notification_data, NotificationResources(),
+      new WebNotificationDelegate(NotificationHandler::Type::WEB_PERSISTENT,
+                                  profile_, "id", origin));
   EXPECT_TRUE(notification.context_message().empty());
 
   // Create a mocked extension.
@@ -336,11 +361,11 @@ TEST_F(PlatformNotificationServiceTest, CreateNotificationFromData) {
   EXPECT_TRUE(registry->AddEnabled(extension));
 
   notification = service()->CreateNotificationFromData(
-      profile_, GURL() /* service_worker_scope */,
+      profile_,
       GURL("chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html"),
-      notification_data, NotificationResources(),
-      new WebNotificationDelegate(NotificationCommon::EXTENSION, profile_, "id",
-                                  origin));
+      "id", notification_data, NotificationResources(),
+      new WebNotificationDelegate(NotificationHandler::Type::EXTENSION,
+                                  profile_, "id", origin));
   EXPECT_EQ("NotificationTest",
             base::UTF16ToUTF8(notification.context_message()));
 }

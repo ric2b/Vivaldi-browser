@@ -30,13 +30,13 @@
 #ifndef InspectorLayerTreeAgent_h
 #define InspectorLayerTreeAgent_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/LayerTree.h"
 #include "core/page/PageOverlay.h"
 #include "platform/Timer.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -66,7 +66,7 @@ class CORE_EXPORT InspectorLayerTreeAgent final
   }
 
   ~InspectorLayerTreeAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   void Restore() override;
 
@@ -131,7 +131,7 @@ class CORE_EXPORT InspectorLayerTreeAgent final
   Member<InspectedFrames> inspected_frames_;
   Client* client_;
 
-  typedef HashMap<String, RefPtr<PictureSnapshot>> SnapshotById;
+  typedef HashMap<String, scoped_refptr<PictureSnapshot>> SnapshotById;
   SnapshotById snapshot_by_id_;
   bool suppress_layer_paint_events_;
 };

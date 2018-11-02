@@ -4,11 +4,11 @@
 
 #include "platform/graphics/compositing/PaintArtifactCompositor.h"
 
+#include <memory>
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/trees/layer_tree_host.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/compositing/ContentLayerClientImpl.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
@@ -21,6 +21,7 @@
 #include "platform/graphics/paint/ScrollHitTestDisplayItem.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
+#include "platform/runtime_enabled_features.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
@@ -86,12 +87,15 @@ void PaintArtifactCompositor::RemoveChildLayers() {
 
 std::unique_ptr<JSONObject> PaintArtifactCompositor::LayersAsJSON(
     LayerTreeFlags flags) const {
+  ContentLayerClientImpl::LayerAsJSONContext context(flags);
   std::unique_ptr<JSONArray> layers_json = JSONArray::Create();
   for (const auto& client : content_layer_clients_) {
-    layers_json->PushObject(client->LayerAsJSON(flags));
+    layers_json->PushObject(client->LayerAsJSON(context));
   }
   std::unique_ptr<JSONObject> json = JSONObject::Create();
   json->SetArray("layers", std::move(layers_json));
+  if (context.transforms_json)
+    json->SetArray("transforms", std::move(context.transforms_json));
   return json;
 }
 
@@ -175,13 +179,13 @@ PaintArtifactCompositor::ScrollHitTestLayerForPendingLayer(
   }
 
   // TODO(pdr): Add a helper for blink::FloatPoint to gfx::Vector2dF.
-  auto offset = scroll_node.Offset();
+  auto offset = scroll_node.ContainerRect().Location();
   layer_offset = gfx::Vector2dF(offset.X(), offset.Y());
   // TODO(pdr): The scroll layer's bounds are currently set to the clipped
   // container bounds but this does not include the border. We may want to
   // change this behavior to make non-composited and composited hit testing
   // match (see: crbug.com/753124).
-  auto bounds = scroll_node.ContainerBounds();
+  auto bounds = scroll_node.ContainerRect().Size();
   // Mark the layer as scrollable.
   // TODO(pdr): When SPV2 launches this parameter for bounds will not be needed.
   scroll_layer->SetScrollable(bounds);
@@ -204,7 +208,7 @@ PaintArtifactCompositor::ClientForPaintChunk(const PaintChunk& paint_chunk) {
       return std::move(client);
   }
 
-  auto client = WTF::MakeUnique<ContentLayerClientImpl>();
+  auto client = std::make_unique<ContentLayerClientImpl>();
   client->SetTracksRasterInvalidations(tracks_raster_invalidations_);
   return client;
 }
@@ -258,7 +262,8 @@ PaintArtifactCompositor::PendingLayer::PendingLayer(
     const PaintChunk& first_paint_chunk,
     bool chunk_requires_own_layer)
     : bounds(first_paint_chunk.bounds),
-      known_to_be_opaque(first_paint_chunk.known_to_be_opaque),
+      rect_known_to_be_opaque(
+          first_paint_chunk.known_to_be_opaque ? bounds : FloatRect()),
       backface_hidden(first_paint_chunk.properties.backface_hidden),
       property_tree_state(first_paint_chunk.properties.property_tree_state),
       requires_own_layer(chunk_requires_own_layer) {
@@ -273,13 +278,11 @@ void PaintArtifactCompositor::PendingLayer::Merge(const PendingLayer& guest) {
   FloatClipRect guest_bounds_in_home(guest.bounds);
   GeometryMapper::LocalToAncestorVisualRect(
       guest.property_tree_state, property_tree_state, guest_bounds_in_home);
-  FloatRect old_bounds = bounds;
   bounds.Unite(guest_bounds_in_home.Rect());
-  if (bounds != old_bounds)
-    known_to_be_opaque = false;
   // TODO(crbug.com/701991): Upgrade GeometryMapper.
   // If we knew the new bounds is enclosed by the mapped opaque region of
-  // the guest layer, we can deduce the merged layer being opaque too.
+  // the guest layer, we can deduce the merged layer being opaque too, and
+  // update rect_known_to_be_opaque accordingly.
 }
 
 static bool CanUpcastTo(const PropertyTreeState& guest,
@@ -310,7 +313,7 @@ void PaintArtifactCompositor::PendingLayer::Upcast(
   // region. To determine whether the layer is still opaque, we need to
   // query conservative opaque rect after mapping to an ancestor space,
   // which is not supported by GeometryMapper yet.
-  known_to_be_opaque = false;
+  rect_known_to_be_opaque = FloatRect();
 }
 
 static bool IsNonCompositingAncestorOf(
@@ -396,7 +399,10 @@ bool PaintArtifactCompositor::CanDecompositeEffect(
     return false;
   if (!CanUpcastTo(layer.property_tree_state,
                    PropertyTreeState(effect->LocalTransformSpace(),
-                                     effect->OutputClip(), effect)))
+                                     effect->OutputClip()
+                                         ? effect->OutputClip()
+                                         : layer.property_tree_state.Clip(),
+                                     effect)))
     return false;
   return true;
 }
@@ -505,9 +511,11 @@ void PaintArtifactCompositor::LayerizeGroup(
       PendingLayer& subgroup_layer = pending_layers[first_layer_in_subgroup];
       if (!CanDecompositeEffect(subgroup, subgroup_layer))
         continue;
-      subgroup_layer.Upcast(PropertyTreeState(subgroup->LocalTransformSpace(),
-                                              subgroup->OutputClip(),
-                                              &current_group));
+      subgroup_layer.Upcast(PropertyTreeState(
+          subgroup->LocalTransformSpace(),
+          subgroup->OutputClip() ? subgroup->OutputClip()
+                                 : subgroup_layer.property_tree_state.Clip(),
+          &current_group));
     }
     // At this point pendingLayers.back() is the either a layer from a
     // "decomposited" subgroup or a layer created from a chunk we just
@@ -657,20 +665,31 @@ void PaintArtifactCompositor::Update(
   for (auto& entry : synthesized_clip_cache_)
     entry.in_use = false;
 
-  for (const PendingLayer& pending_layer : pending_layers) {
+  for (auto& pending_layer : pending_layers) {
+    const auto& property_state = pending_layer.property_tree_state;
+    const auto* transform = property_state.Transform();
+    const auto* clip = property_state.Clip();
+
+    if (clip->LocalTransformSpace() == transform) {
+      // Limit layer bounds to hide the areas that will be never visible because
+      // of the clip.
+      pending_layer.bounds.Intersect(clip->ClipRect().Rect());
+    } else if (const auto* scroll = transform->ScrollNode()) {
+      // Limit layer bounds to the scroll range to hide the areas that will
+      // never be scrolled into the visible area.
+      pending_layer.bounds.Intersect(FloatRect(scroll->ContentsRect()));
+    }
+
     gfx::Vector2dF layer_offset;
     scoped_refptr<cc::Layer> layer = CompositedLayerForPendingLayer(
         paint_artifact, pending_layer, layer_offset, new_content_layer_clients,
         new_scroll_hit_test_layers);
 
-    auto property_state = pending_layer.property_tree_state;
-    const auto* transform = property_state.Transform();
     int transform_id =
         property_tree_manager.EnsureCompositorTransformNode(transform);
-    int clip_id =
-        property_tree_manager.EnsureCompositorClipNode(property_state.Clip());
+    int clip_id = property_tree_manager.EnsureCompositorClipNode(clip);
     int effect_id = property_tree_manager.SwitchToEffectNodeWithSynthesizedClip(
-        *property_state.Effect(), *property_state.Clip());
+        *property_state.Effect(), *clip);
     // The compositor scroll node is not directly stored in the property tree
     // state but can be created via the scroll offset translation node.
     const auto& scroll_translation =
@@ -711,8 +730,9 @@ void PaintArtifactCompositor::Update(
     layer->SetScrollTreeIndex(scroll_id);
     layer->SetClipTreeIndex(clip_id);
     layer->SetEffectTreeIndex(effect_id);
-
-    layer->SetContentsOpaque(pending_layer.known_to_be_opaque);
+    layer->SetContentsOpaque(pending_layer.rect_known_to_be_opaque.Contains(
+        FloatRect(EnclosingIntRect(pending_layer.bounds))));
+    layer->SetDoubleSided(!pending_layer.backface_hidden);
     layer->SetShouldCheckBackfaceVisibility(pending_layer.backface_hidden);
   }
   property_tree_manager.Finalize();
@@ -746,6 +766,20 @@ void PaintArtifactCompositor::Update(
     chunk.raster_invalidation_rects.clear();
     chunk.raster_invalidation_tracking.clear();
   }
+
+#if DCHECK_IS_ON()
+  if (VLOG_IS_ON(2)) {
+    static String s_previous_output;
+    LayerTreeFlags flags = VLOG_IS_ON(3) ? 0xffffffff : 0;
+    String new_output = LayersAsJSON(flags)->ToPrettyJSONString();
+    if (new_output != s_previous_output) {
+      LOG(ERROR) << "PaintArtifactCompositor::Update() done\n"
+                 << "Composited layers:\n"
+                 << new_output.Utf8().data();
+      s_previous_output = new_output;
+    }
+  }
+#endif
 }
 
 std::unique_ptr<WebLayer>
@@ -761,9 +795,10 @@ PaintArtifactCompositor::ExtraDataForTesting::ScrollHitTestWebLayerAt(
       scroll_hit_test_layers[index].get());
 }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 void PaintArtifactCompositor::ShowDebugData() {
-  LOG(ERROR) << LayersAsJSON(kLayerTreeIncludesDebugInfo)
+  LOG(ERROR) << LayersAsJSON(kLayerTreeIncludesDebugInfo |
+                             kLayerTreeIncludesPaintInvalidations)
                     ->ToPrettyJSONString()
                     .Utf8()
                     .data();

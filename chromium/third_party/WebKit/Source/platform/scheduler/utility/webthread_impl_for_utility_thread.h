@@ -6,7 +6,7 @@
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_UTILITY_WEBTHREAD_IMPL_FOR_UTILITY_THREAD_H_
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "public/platform/scheduler/child/webthread_base.h"
 
@@ -24,7 +24,7 @@ class PLATFORM_EXPORT WebThreadImplForUtilityThread
   PlatformThreadId ThreadId() const override;
 
   // WebThreadBase implementation.
-  base::SingleThreadTaskRunner* GetTaskRunner() const override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override;
   scheduler::SingleThreadIdleTaskRunner* GetIdleTaskRunner() const override;
   void Init() override;
 

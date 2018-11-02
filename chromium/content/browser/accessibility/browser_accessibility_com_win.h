@@ -75,11 +75,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   COM_INTERFACE_ENTRY_CHAIN(ui::AXPlatformNodeWin)
   END_COM_MAP()
 
-  // Represents a non-static text node in IAccessibleHypertext. This character
-  // is embedded in the response to IAccessibleText::get_text, indicating the
-  // position where a non-static text child object appears.
-  CONTENT_EXPORT static const base::char16 kEmbeddedCharacter;
-
   // Mappings from roles and states to human readable strings. Initialize
   // with |InitializeStringMaps|.
   static std::map<int32_t, base::string16> role_string_map;
@@ -101,11 +96,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   CONTENT_EXPORT STDMETHODIMP get_attributes(BSTR* attributes) override;
 
   CONTENT_EXPORT STDMETHODIMP scrollTo(enum IA2ScrollType scroll_type) override;
-
-  CONTENT_EXPORT STDMETHODIMP
-  scrollToPoint(enum IA2CoordinateType coordinate_type,
-                LONG x,
-                LONG y) override;
 
   //
   // IAccessibleApplication methods.
@@ -423,7 +413,7 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
 
   // |offset| could either be a text character or a child index in case of
   // non-text objects.
-  AXPlatformPosition::AXPositionInstance CreatePositionForSelectionAt(
+  BrowserAccessibilityPosition::AXPositionInstance CreatePositionForSelectionAt(
       int offset) const;
 
   // Public accessors (these do not have COM accessible accessors)
@@ -441,13 +431,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   base::string16 name() const { return win_attributes_->name; }
   base::string16 description() const { return win_attributes_->description; }
   base::string16 value() const { return win_attributes_->value; }
-
-  std::map<int32_t, int32_t>& hyperlink_offset_to_index() const {
-    return win_attributes_->hyperlink_offset_to_index;
-  }
-  std::vector<int32_t>& hyperlinks() const {
-    return win_attributes_->hyperlinks;
-  }
 
   // Setter and getter for the browser accessibility owner
   BrowserAccessibilityWin* owner() const { return owner_; }
@@ -487,6 +470,17 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   HRESULT GetStringAttributeAsBstr(ui::AXStringAttribute attribute,
                                    BSTR* value_bstr);
 
+  // Merges the given spelling attributes, i.e. document marker information,
+  // into the given text attributes starting at the given character offset. This
+  // is required for two reasons: 1. Document markers that are present on text
+  // leaves need to be propagated to their parent object for compatibility with
+  // Firefox. 2. Spelling markers need to overwrite any aria-invalid="false" in
+  // the text attributes.
+  static void MergeSpellingIntoTextAttributes(
+      const std::map<int, std::vector<base::string16>>& spelling_attributes,
+      int start_offset,
+      std::map<int, std::vector<base::string16>>* text_attributes);
+
   // Escapes characters in string attributes as required by the IA2 Spec.
   // It's okay for input to be the same as output.
   CONTENT_EXPORT static void SanitizeStringAttributeForIA2(
@@ -498,68 +492,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   // Sets the selection given a start and end offset in IA2 Hypertext.
   void SetIA2HypertextSelection(LONG start_offset, LONG end_offset);
 
-  //
-  // Helper methods for IA2 hyperlinks.
-  //
-  // Hyperlink is an IA2 misnomer. It refers to objects embedded within other
-  // objects, such as a numbered list within a contenteditable div.
-  // Also, in IA2, text that includes embedded objects is called hypertext.
-
-  // Returns true if the current object is an IA2 hyperlink.
-  bool IsHyperlink() const;
-  // Returns the hyperlink at the given text position, or nullptr if no
-  // hyperlink can be found.
-  BrowserAccessibilityComWin* GetHyperlinkFromHypertextOffset(int offset) const;
-
-  // Functions for retrieving offsets for hyperlinks and hypertext.
-  // Return -1 in case of failure.
-  int32_t GetHyperlinkIndexFromChild(
-      const BrowserAccessibilityComWin& child) const;
-  int32_t GetHypertextOffsetFromHyperlinkIndex(int32_t hyperlink_index) const;
-  int32_t GetHypertextOffsetFromChild(BrowserAccessibilityComWin& child);
-  int32_t GetHypertextOffsetFromDescendant(
-      const BrowserAccessibilityComWin& descendant) const;
-
-  // If the selection endpoint is either equal to or an ancestor of this object,
-  // returns endpoint_offset.
-  // If the selection endpoint is a descendant of this object, returns its
-  // offset. Otherwise, returns either 0 or the length of the hypertext
-  // depending on the direction of the selection.
-  // Returns -1 in case of unexpected failure, e.g. the selection endpoint
-  // cannot be found in the accessibility tree.
-  int GetHypertextOffsetFromEndpoint(
-      const BrowserAccessibilityComWin& endpoint_object,
-      int endpoint_offset) const;
-
-  //
-  // Selection helper functions.
-  //
-  // The following functions retrieve the endpoints of the current selection.
-  // First they check for a local selection found on the current control, e.g.
-  // when querying the selection on a textarea.
-  // If not found they retrieve the global selection found on the current frame.
-  int GetSelectionAnchor() const;
-  int GetSelectionFocus() const;
-  // Retrieves the selection offsets in the way required by the IA2 APIs.
-  // selection_start and selection_end are -1 when there is no selection active
-  // on this object.
-  // The greatest of the two offsets is one past the last character of the
-  // selection.)
-  void GetSelectionOffsets(int* selection_start, int* selection_end) const;
-
-
-  bool IsSameHypertextCharacter(size_t old_char_index, size_t new_char_index);
-  void ComputeHypertextRemovedAndInserted(int* start,
-                                          int* old_len,
-                                          int* new_len);
-
-  // If offset is a member of IA2TextSpecialOffsets this function updates the
-  // value of offset and returns, otherwise offset remains unchanged.
-  void HandleSpecialTextOffset(LONG* offset);
-
-  // Convert from a IA2TextBoundaryType to a ui::TextBoundaryType.
-  ui::TextBoundaryType IA2TextBoundaryToTextBoundary(IA2TextBoundaryType type);
-
   // Search forwards (direction == 1) or backwards (direction == -1)
   // from the given offset until the given boundary is found, and
   // return the offset of that boundary.
@@ -570,8 +502,7 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   // Searches forward from the given offset until the start of the next style
   // is found, or searches backward from the given offset until the start of the
   // current style is found.
-  LONG FindStartOfStyle(LONG start_offset,
-                        ui::TextBoundaryDirection direction) const;
+  LONG FindStartOfStyle(LONG start_offset, ui::TextBoundaryDirection direction);
 
   // ID refers to the node ID in the current tree, not the globally unique ID.
   // TODO(nektar): Could we use globally unique IDs everywhere?
@@ -605,21 +536,8 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
     // IAccessible2 attributes.
     std::vector<base::string16> ia2_attributes;
 
-    // Hypertext.
-    base::string16 hypertext;
-
     // Maps each style span to its start offset in hypertext.
     std::map<int, std::vector<base::string16>> offset_to_text_attributes;
-
-    // Maps an embedded character offset in |hypertext_| to an index in
-    // |hyperlinks_|.
-    std::map<int32_t, int32_t> hyperlink_offset_to_index;
-
-    // The unique id of a BrowserAccessibilityComWin for each hyperlink.
-    // TODO(nektar): Replace object IDs with child indices if we decide that
-    // we are not implementing IA2 hyperlinks for anything other than IA2
-    // Hypertext.
-    std::vector<int32_t> hyperlinks;
   };
 
   BrowserAccessibilityWin* owner_;

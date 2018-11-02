@@ -117,14 +117,14 @@ void DeleteFiles(std::vector<FileCreationInfo> files) {
 }
 
 struct EmptyFilesResult {
-  EmptyFilesResult() {}
+  EmptyFilesResult() = default;
   EmptyFilesResult(std::vector<FileCreationInfo> files,
                    File::Error file_error,
                    int64_t disk_availability)
       : files(std::move(files)),
         file_error(file_error),
         disk_availability(disk_availability) {}
-  ~EmptyFilesResult() {}
+  ~EmptyFilesResult() = default;
   EmptyFilesResult(EmptyFilesResult&& o) = default;
   EmptyFilesResult& operator=(EmptyFilesResult&& other) = default;
 
@@ -141,7 +141,7 @@ EmptyFilesResult CreateEmptyFiles(
     DiskSpaceFuncPtr disk_space_function,
     scoped_refptr<base::TaskRunner> file_task_runner,
     std::vector<base::FilePath> file_paths) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   File::Error dir_create_status = CreateBlobDirectory(blob_storage_dir);
   if (dir_create_status != File::FILE_OK) {
@@ -182,7 +182,7 @@ std::pair<FileCreationInfo, int64_t> CreateFileAndWriteItems(
     size_t total_size_bytes) {
   DCHECK_NE(0u, total_size_bytes);
   UMA_HISTOGRAM_MEMORY_KB("Storage.Blob.PageFileSize", total_size_bytes / 1024);
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   FileCreationInfo creation_info;
   creation_info.file_deletion_runner = std::move(file_task_runner);
@@ -272,7 +272,7 @@ uint64_t GetTotalSizeAndFileSizes(
 
 }  // namespace
 
-FileCreationInfo::FileCreationInfo() {}
+FileCreationInfo::FileCreationInfo() = default;
 FileCreationInfo::~FileCreationInfo() {
   if (file.IsValid()) {
     DCHECK(file_deletion_runner);
@@ -294,7 +294,7 @@ MemoryAllocation::~MemoryAllocation() {
     controller->RevokeMemoryAllocation(item_id, length);
 }
 
-BlobMemoryController::QuotaAllocationTask::~QuotaAllocationTask() {}
+BlobMemoryController::QuotaAllocationTask::~QuotaAllocationTask() = default;
 
 class BlobMemoryController::MemoryQuotaAllocationTask
     : public BlobMemoryController::QuotaAllocationTask {
@@ -399,7 +399,7 @@ class BlobMemoryController::FileQuotaAllocationTask
                    allocation_size_));
     controller_->RecordTracingCounters();
   }
-  ~FileQuotaAllocationTask() override {}
+  ~FileQuotaAllocationTask() override = default;
 
   void RunDoneCallback(std::vector<FileCreationInfo> file_info, bool success) {
     // Make sure we clear the weak pointers we gave to the caller beforehand.
@@ -512,7 +512,7 @@ BlobMemoryController::BlobMemoryController(
                      base::Unretained(this))),
       weak_factory_(this) {}
 
-BlobMemoryController::~BlobMemoryController() {}
+BlobMemoryController::~BlobMemoryController() = default;
 
 void BlobMemoryController::DisableFilePaging(base::File::Error reason) {
   UMA_HISTOGRAM_ENUMERATION("Storage.Blob.PagingDisabled", -reason,
@@ -793,7 +793,7 @@ size_t BlobMemoryController::CollectItemsForEviction(
     size_t size = base::checked_cast<size_t>(item->item()->length());
     populated_memory_items_bytes_ -= size;
     total_items_size += size;
-    output->push_back(make_scoped_refptr(item));
+    output->push_back(base::WrapRefCounted(item));
   }
   return total_items_size.ValueOrDie();
 }

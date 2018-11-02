@@ -4,12 +4,13 @@
 
 #include "chrome/browser/metrics/antivirus_metrics_provider_win.h"
 
+#include <windows.h>
 #include <iwscapi.h>
 #include <objbase.h>
 #include <stddef.h>
 #include <wbemidl.h>
-#include <windows.h>
 #include <wscapi.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <string>
@@ -26,18 +27,19 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
+#include "base/win/com_init_util.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_com_initializer.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_variant.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/channel_info.h"
-#include "components/metrics/proto/system_profile.pb.h"
 #include "components/variations/metrics_util.h"
 #include "components/version_info/version_info.h"
+#include "third_party/metrics_proto/system_profile.pb.h"
 
 namespace {
 
@@ -161,18 +163,26 @@ void AntiVirusMetricsProvider::ProvideSystemProfileMetrics(
 }
 
 void AntiVirusMetricsProvider::AsyncInit(const base::Closure& done_callback) {
-  base::PostTaskWithTraitsAndReplyWithResult(
+  // __uuidof(WSCProductList) expects to be run in an STA and CLSID_WbemLocator
+  // is fine with an STA or MTA. The COM STA task runner accomodates both of
+  // these requirements.
+  base::PostTaskAndReplyWithResult(
+      base::CreateCOMSTATaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
+          .get(),
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&AntiVirusMetricsProvider::GetAntiVirusProductsOnFileThread),
-      base::Bind(&AntiVirusMetricsProvider::GotAntiVirusProducts,
-                 weak_ptr_factory_.GetWeakPtr(), done_callback));
+      base::BindOnce(
+          &AntiVirusMetricsProvider::GetAntiVirusProductsOnCOMSTAThread),
+      base::BindOnce(&AntiVirusMetricsProvider::GotAntiVirusProducts,
+                     weak_ptr_factory_.GetWeakPtr(), done_callback));
 }
 
 // static
 std::vector<AntiVirusMetricsProvider::AvProduct>
-AntiVirusMetricsProvider::GetAntiVirusProductsOnFileThread() {
+AntiVirusMetricsProvider::GetAntiVirusProductsOnCOMSTAThread() {
+  base::win::AssertComApartmentType(base::win::ComApartmentType::STA);
+
   std::vector<AvProduct> av_products;
 
   ResultCode result = RESULT_GENERIC_FAILURE;
@@ -231,13 +241,9 @@ AntiVirusMetricsProvider::ResultCode
 AntiVirusMetricsProvider::FillAntiVirusProductsFromWSC(
     std::vector<AvProduct>* products) {
   std::vector<AvProduct> result_list;
-  base::ThreadRestrictions::AssertIOAllowed();
-  base::win::ScopedCOMInitializer com_initializer;
+  base::AssertBlockingAllowed();
 
-  if (!com_initializer.succeeded())
-    return RESULT_FAILED_TO_INITIALIZE_COM;
-
-  base::win::ScopedComPtr<IWSCProductList> product_list;
+  Microsoft::WRL::ComPtr<IWSCProductList> product_list;
   HRESULT result =
       CoCreateInstance(__uuidof(WSCProductList), nullptr, CLSCTX_INPROC_SERVER,
                        IID_PPV_ARGS(&product_list));
@@ -332,20 +338,16 @@ AntiVirusMetricsProvider::ResultCode
 AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
     std::vector<AvProduct>* products) {
   std::vector<AvProduct> result_list;
-  base::ThreadRestrictions::AssertIOAllowed();
-  base::win::ScopedCOMInitializer com_initializer;
+  base::AssertBlockingAllowed();
 
-  if (!com_initializer.succeeded())
-    return RESULT_FAILED_TO_INITIALIZE_COM;
-
-  base::win::ScopedComPtr<IWbemLocator> wmi_locator;
+  Microsoft::WRL::ComPtr<IWbemLocator> wmi_locator;
   HRESULT hr =
       ::CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
                          IID_PPV_ARGS(&wmi_locator));
   if (FAILED(hr))
     return RESULT_FAILED_TO_CREATE_INSTANCE;
 
-  base::win::ScopedComPtr<IWbemServices> wmi_services;
+  Microsoft::WRL::ComPtr<IWbemServices> wmi_services;
   hr = wmi_locator->ConnectServer(
       base::win::ScopedBstr(L"ROOT\\SecurityCenter2"), nullptr, nullptr,
       nullptr, 0, nullptr, nullptr, wmi_services.GetAddressOf());
@@ -362,7 +364,7 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
   // undocumented.
   base::win::ScopedBstr query_language(L"WQL");
   base::win::ScopedBstr query(L"SELECT * FROM AntiVirusProduct");
-  base::win::ScopedComPtr<IEnumWbemClassObject> enumerator;
+  Microsoft::WRL::ComPtr<IEnumWbemClassObject> enumerator;
 
   hr = wmi_services->ExecQuery(
       query_language, query,
@@ -374,7 +376,7 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
   // Iterate over the results of the WMI query. Each result will be an
   // AntiVirusProduct instance.
   while (true) {
-    base::win::ScopedComPtr<IWbemClassObject> class_object;
+    Microsoft::WRL::ComPtr<IWbemClassObject> class_object;
     ULONG items_returned = 0;
     hr = enumerator->Next(WBEM_INFINITE, 1, class_object.GetAddressOf(),
                           &items_returned);
@@ -469,7 +471,7 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
 
 void AntiVirusMetricsProvider::MaybeAddUnregisteredAntiVirusProducts(
     std::vector<AvProduct>* products) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Trusteer Rapport does not register with WMI or Security Center so do some
   // "best efforts" detection here.

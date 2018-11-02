@@ -74,9 +74,9 @@ h2 {
     background-color: #fff;
     border-color: #ddd;
     border-width: 0 0 1px 0;
-    height: 20px;
     line-height: 60px;
     margin: 20px 0;
+    min-height: 20px;
     padding: 0;
 }
 
@@ -98,4 +98,22 @@ h2 {
     height: 30px;
     margin-left: 20px;
     padding: 0 20px;
+}
+
+.example {
+    display: inline-block;
+    padding: 0 3px;
+}
+
+.dark {
+    background: black;
+    color: white;
+}
+
+.highlight {
+    opacity: .3;
+    z-index: 10;
+    top: -45px;
+    position: relative;
+    height: 2em;
 }

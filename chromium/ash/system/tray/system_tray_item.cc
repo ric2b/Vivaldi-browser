@@ -14,7 +14,7 @@ namespace ash {
 SystemTrayItem::SystemTrayItem(SystemTray* system_tray, UmaType uma_type)
     : system_tray_(system_tray), uma_type_(uma_type), restore_focus_(false) {}
 
-SystemTrayItem::~SystemTrayItem() {}
+SystemTrayItem::~SystemTrayItem() = default;
 
 views::View* SystemTrayItem::CreateTrayView(LoginStatus status) {
   return nullptr;
@@ -39,24 +39,23 @@ void SystemTrayItem::TransitionDetailedView() {
       FROM_HERE,
       base::TimeDelta::FromMilliseconds(kTrayDetailedViewTransitionDelayMs),
       base::Bind(&SystemTray::ShowDetailedView, base::Unretained(system_tray()),
-                 this, 0, true, BUBBLE_USE_EXISTING));
+                 this, 0, BUBBLE_USE_EXISTING));
 }
 
 void SystemTrayItem::UpdateAfterLoginStatusChange(LoginStatus status) {}
 
 void SystemTrayItem::UpdateAfterShelfAlignmentChange() {}
 
-void SystemTrayItem::ShowDetailedView(int for_seconds, bool activate) {
-  system_tray()->ShowDetailedView(this, for_seconds, activate,
-                                  BUBBLE_CREATE_NEW);
+void SystemTrayItem::ShowDetailedView(int for_seconds) {
+  system_tray()->ShowDetailedView(this, for_seconds, BUBBLE_CREATE_NEW);
 }
 
 void SystemTrayItem::SetDetailedViewCloseDelay(int for_seconds) {
   system_tray()->SetDetailedViewCloseDelay(for_seconds);
 }
 
-void SystemTrayItem::HideDetailedView(bool animate) {
-  system_tray()->HideDetailedView(this, animate);
+void SystemTrayItem::HideDetailedView() {
+  system_tray()->HideDetailedView(this);
 }
 
 bool SystemTrayItem::ShouldShowShelf() const {

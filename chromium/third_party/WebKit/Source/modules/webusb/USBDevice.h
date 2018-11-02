@@ -5,8 +5,8 @@
 #ifndef USBDevice_h
 #define USBDevice_h
 
-#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
 #include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -21,9 +21,7 @@ class ScriptState;
 class USBConfiguration;
 class USBControlTransferParameters;
 
-class USBDevice : public GarbageCollectedFinalized<USBDevice>,
-                  public ContextLifecycleObserver,
-                  public ScriptWrappable {
+class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(USBDevice);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -104,7 +102,7 @@ class USBDevice : public GarbageCollectedFinalized<USBDevice>,
   // ContextLifecycleObserver interface.
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   int FindConfigurationIndex(uint8_t configuration_value) const;
@@ -145,20 +143,20 @@ class USBDevice : public GarbageCollectedFinalized<USBDevice>,
                                      bool success);
   void AsyncControlTransferIn(ScriptPromiseResolver*,
                               device::mojom::blink::UsbTransferStatus,
-                              const Optional<Vector<uint8_t>>&);
+                              const Vector<uint8_t>&);
   void AsyncControlTransferOut(unsigned,
                                ScriptPromiseResolver*,
                                device::mojom::blink::UsbTransferStatus);
   void AsyncClearHalt(ScriptPromiseResolver*, bool success);
   void AsyncTransferIn(ScriptPromiseResolver*,
                        device::mojom::blink::UsbTransferStatus,
-                       const Optional<Vector<uint8_t>>&);
+                       const Vector<uint8_t>&);
   void AsyncTransferOut(unsigned,
                         ScriptPromiseResolver*,
                         device::mojom::blink::UsbTransferStatus);
   void AsyncIsochronousTransferIn(
       ScriptPromiseResolver*,
-      const Optional<Vector<uint8_t>>&,
+      const Vector<uint8_t>&,
       Vector<device::mojom::blink::UsbIsochronousPacketPtr>);
   void AsyncIsochronousTransferOut(
       ScriptPromiseResolver*,

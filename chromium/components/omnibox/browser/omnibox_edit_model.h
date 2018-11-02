@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -21,6 +20,7 @@
 #include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
@@ -85,7 +85,7 @@ class OmniboxEditModel {
                    std::unique_ptr<OmniboxClient> client);
   virtual ~OmniboxEditModel();
 
-  // TODO(beaudoin): Remove this accessor when the AutocompleteController has
+  // TODO(jdonnelly): Remove this accessor when the AutocompleteController has
   //     completely moved to OmniboxController.
   AutocompleteController* autocomplete_controller() const {
     return omnibox_controller_->autocomplete_controller();
@@ -95,8 +95,8 @@ class OmniboxEditModel {
     omnibox_controller_->set_popup_model(popup_model);
   }
 
-  // TODO: The edit and popup should be siblings owned by the LocationBarView,
-  // making this accessor unnecessary.
+  // TODO(jdonnelly): The edit and popup should be siblings owned by the
+  // LocationBarView, making this accessor unnecessary.
   // NOTE: popup_model() can be NULL for testing.
   OmniboxPopupModel* popup_model() const {
     return omnibox_controller_->popup_model();
@@ -110,9 +110,9 @@ class OmniboxEditModel {
   // the internal state appropriately.
   const State GetStateForTabSwitch();
 
-  // Resets the tab state, then restores local state from the saved |state|.
-  // |state| may be NULL if there is no saved state.
-  void RestoreState(const State* state);
+  // Resets the tab state, updates permanent_text_ to |url|, then restores local
+  // state from |state|. |state| may be NULL if there is no saved state.
+  void RestoreState(const base::string16& url, const State* state);
 
   // Returns the match for the current text. If the user has not edited the text
   // this is the match corresponding to the permanent text. Returns the
@@ -151,11 +151,10 @@ class OmniboxEditModel {
   // that state has changed.
   void SetInputInProgress(bool in_progress);
 
-  // Updates permanent_text_ to the current permanent text from the toolbar
-  // model.  Returns true if the permanent text changed and the change should be
-  // immediately user-visible, because either the user is not editing or the
-  // edit does not have focus.
-  bool UpdatePermanentText();
+  // Sets permanent_text_ to |text|. Returns true if the permanent text changed
+  // and the change should be immediately user-visible, because either the user
+  // is not editing or the edit does not have focus.
+  bool SetPermanentText(const base::string16& text);
 
   // Returns the URL corresponding to the permanent text.
   GURL PermanentURL() const;

@@ -7,27 +7,27 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/workers/WorkletPendingTasks.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/WTF.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
 namespace {
 
-WebURLRequest::FetchCredentialsMode ParseCredentialsOption(
+network::mojom::FetchCredentialsMode ParseCredentialsOption(
     const String& credentials_option) {
   if (credentials_option == "omit")
-    return WebURLRequest::kFetchCredentialsModeOmit;
+    return network::mojom::FetchCredentialsMode::kOmit;
   if (credentials_option == "same-origin")
-    return WebURLRequest::kFetchCredentialsModeSameOrigin;
+    return network::mojom::FetchCredentialsMode::kSameOrigin;
   if (credentials_option == "include")
-    return WebURLRequest::kFetchCredentialsModeInclude;
+    return network::mojom::FetchCredentialsMode::kInclude;
   NOTREACHED();
-  return WebURLRequest::kFetchCredentialsModeOmit;
+  return network::mojom::FetchCredentialsMode::kOmit;
 }
 
 }  // namespace
@@ -80,7 +80,8 @@ ScriptPromise Worklet::addModule(ScriptState* script_state,
   // parallel."
   // |kUnspecedLoading| is used here because this is a part of script module
   // loading.
-  TaskRunnerHelper::Get(TaskType::kUnspecedLoading, script_state)
+  ExecutionContext::From(script_state)
+      ->GetTaskRunner(TaskType::kUnspecedLoading)
       ->PostTask(
           BLINK_FROM_HERE,
           WTF::Bind(&Worklet::FetchAndInvokeScript, WrapPersistent(this),
@@ -95,7 +96,7 @@ void Worklet::ContextDestroyed(ExecutionContext* execution_context) {
     proxy->TerminateWorkletGlobalScope();
 }
 
-WorkletGlobalScopeProxy* Worklet::FindAvailableGlobalScope() const {
+WorkletGlobalScopeProxy* Worklet::FindAvailableGlobalScope() {
   DCHECK(IsMainThread());
   return proxies_.at(SelectGlobalScope());
 }
@@ -112,7 +113,7 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
 
   // Step 6: "Let credentialOptions be the credentials member of options."
   // TODO(nhiroki): Add tests for credentialOptions (https://crbug.com/710837).
-  WebURLRequest::FetchCredentialsMode credentials_mode =
+  network::mojom::FetchCredentialsMode credentials_mode =
       ParseCredentialsOption(options.credentials());
 
   // Step 7: "Let outsideSettings be the relevant settings object of this."
@@ -120,8 +121,8 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   // document's responsible event loop. In our implementation, we use the
   // document's UnspecedLoading task runner as that is what we commonly use for
   // module loading.
-  RefPtr<WebTaskRunner> outside_settings_task_runner =
-      TaskRunnerHelper::Get(TaskType::kUnspecedLoading, GetExecutionContext());
+  scoped_refptr<WebTaskRunner> outside_settings_task_runner =
+      GetExecutionContext()->GetTaskRunner(TaskType::kUnspecedLoading);
 
   // Step 8: "Let moduleResponsesMap be worklet's module responses map."
   WorkletModuleResponsesMap* module_responses_map = module_responses_map_;
@@ -159,14 +160,15 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   }
 }
 
-size_t Worklet::SelectGlobalScope() const {
+size_t Worklet::SelectGlobalScope() {
   DCHECK_EQ(GetNumberOfGlobalScopes(), 1u);
   return 0u;
 }
 
-DEFINE_TRACE(Worklet) {
+void Worklet::Trace(blink::Visitor* visitor) {
   visitor->Trace(proxies_);
   visitor->Trace(module_responses_map_);
+  ScriptWrappable::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
 }
 

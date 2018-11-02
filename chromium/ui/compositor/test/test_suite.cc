@@ -35,7 +35,9 @@ void CompositorTestSuite::Initialize() {
   gl::GLSurfaceTestSupport::InitializeOneOff();
 
 #if defined(USE_OZONE)
-  ui::OzonePlatform::InitializeForUI();
+  OzonePlatform::InitParams params;
+  params.single_process = true;
+  OzonePlatform::InitializeForUI(params);
 #endif
 
   gfx::RegisterPathProvider();
@@ -45,7 +47,7 @@ void CompositorTestSuite::Initialize() {
 #endif
 
   scoped_task_environment_ =
-      base::MakeUnique<base::test::ScopedTaskEnvironment>(
+      std::make_unique<base::test::ScopedTaskEnvironment>(
           base::test::ScopedTaskEnvironment::MainThreadType::UI);
 }
 

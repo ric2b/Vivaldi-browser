@@ -5,6 +5,7 @@
 #ifndef ThrowOnDynamicMarkupInsertionCountIncrementer_h
 #define ThrowOnDynamicMarkupInsertionCountIncrementer_h
 
+#include "base/macros.h"
 #include "core/dom/Document.h"
 #include "platform/wtf/Allocator.h"
 
@@ -12,12 +13,11 @@ namespace blink {
 
 class ThrowOnDynamicMarkupInsertionCountIncrementer {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(ThrowOnDynamicMarkupInsertionCountIncrementer);
 
  public:
   explicit ThrowOnDynamicMarkupInsertionCountIncrementer(Document* document)
       : count_(document ? &document->throw_on_dynamic_markup_insertion_count_
-                        : 0) {
+                        : nullptr) {
     if (!count_)
       return;
     ++(*count_);
@@ -31,6 +31,7 @@ class ThrowOnDynamicMarkupInsertionCountIncrementer {
 
  private:
   unsigned* count_;
+  DISALLOW_COPY_AND_ASSIGN(ThrowOnDynamicMarkupInsertionCountIncrementer);
 };
 
 }  // namespace blink

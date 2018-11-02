@@ -28,10 +28,9 @@
 #define TouchEvent_h
 
 #include "core/CoreExport.h"
-#include "core/dom/TouchList.h"
-#include "core/dom/events/EventDispatchMediator.h"
 #include "core/events/TouchEventInit.h"
 #include "core/events/UIEventWithKeyState.h"
+#include "core/input/TouchList.h"
 #include "platform/graphics/TouchAction.h"
 #include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebTouchEvent.h"
@@ -83,13 +82,13 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
 
   void DoneDispatchingEventAtCurrentTarget() override;
 
-  EventDispatchMediator* CreateMediator() override;
-
   const WebCoalescedInputEvent* NativeEvent() const {
     return native_event_.get();
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  DispatchEventResult DispatchEvent(EventDispatcher&) override;
+
+  virtual void Trace(blink::Visitor*);
 
  private:
   TouchEvent();
@@ -114,16 +113,6 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
   TouchAction current_touch_action_;
 
   std::unique_ptr<WebCoalescedInputEvent> native_event_;
-};
-
-class TouchEventDispatchMediator final : public EventDispatchMediator {
- public:
-  static TouchEventDispatchMediator* Create(TouchEvent*);
-
- private:
-  explicit TouchEventDispatchMediator(TouchEvent*);
-  TouchEvent& Event() const;
-  DispatchEventResult DispatchEvent(EventDispatcher&) const override;
 };
 
 DEFINE_EVENT_TYPE_CASTS(TouchEvent);

@@ -85,7 +85,7 @@ class CreateFileHelper final : public AsyncFileSystemCallbacks {
     int code_;
     Member<File> file_;
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(file_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(file_); }
 
    private:
     CreateFileResult() : failed_(false), code_(0) {}
@@ -108,7 +108,7 @@ class CreateFileHelper final : public AsyncFileSystemCallbacks {
   ~CreateFileHelper() override {}
 
   void DidCreateSnapshotFile(const FileMetadata& metadata,
-                             PassRefPtr<BlobDataHandle> snapshot) override {
+                             scoped_refptr<BlobDataHandle> snapshot) override {
     // We can't directly use the snapshot blob data handle because the content
     // type on it hasn't been set.  The |snapshot| param is here to provide a a
     // chain of custody thru thread bridging that is held onto until *after*
@@ -207,14 +207,14 @@ FileWriterSync* DOMFileSystemSync::CreateWriter(
                                  std::move(callbacks));
   if (error_code != FileError::kOK) {
     FileError::ThrowDOMException(exception_state, error_code);
-    return 0;
+    return nullptr;
   }
   return file_writer;
 }
 
-DEFINE_TRACE(DOMFileSystemSync) {
-  DOMFileSystemBase::Trace(visitor);
+void DOMFileSystemSync::Trace(blink::Visitor* visitor) {
   visitor->Trace(root_entry_);
+  DOMFileSystemBase::Trace(visitor);
 }
 
 }  // namespace blink

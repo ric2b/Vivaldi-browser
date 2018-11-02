@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "extensions/renderer/bindings/api_binding_hooks_delegate.h"
-#include "extensions/renderer/bindings/api_binding_types.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
@@ -25,7 +24,6 @@ class APIBindingHooksTestDelegate : public APIBindingHooksDelegate {
 
   using CustomEventFactory = base::Callback<v8::Local<v8::Value>(
       v8::Local<v8::Context>,
-      const binding::RunJSFunctionSync& run_js,
       const std::string& event_name)>;
 
   using RequestHandler = base::Callback<APIBindingHooks::RequestResult(
@@ -38,6 +36,9 @@ class APIBindingHooksTestDelegate : public APIBindingHooksDelegate {
                                                   v8::Local<v8::ObjectTemplate>,
                                                   const APITypeReferenceMap&)>;
 
+  using InstanceInitializer =
+      base::Callback<void(v8::Local<v8::Context>, v8::Local<v8::Object>)>;
+
   // Adds a custom |handler| for the method with the given |name|.
   void AddHandler(base::StringPiece name, const RequestHandler& handler);
 
@@ -46,9 +47,10 @@ class APIBindingHooksTestDelegate : public APIBindingHooksDelegate {
 
   void SetTemplateInitializer(const TemplateInitializer& initializer);
 
+  void SetInstanceInitializer(const InstanceInitializer& initializer);
+
   // APIBindingHooksDelegate:
   bool CreateCustomEvent(v8::Local<v8::Context> context,
-                         const binding::RunJSFunctionSync& run_js_sync,
                          const std::string& event_name,
                          v8::Local<v8::Value>* event_out) override;
   APIBindingHooks::RequestResult HandleRequest(
@@ -60,11 +62,14 @@ class APIBindingHooksTestDelegate : public APIBindingHooksDelegate {
   void InitializeTemplate(v8::Isolate* isolate,
                           v8::Local<v8::ObjectTemplate> object_template,
                           const APITypeReferenceMap& type_refs) override;
+  void InitializeInstance(v8::Local<v8::Context> context,
+                          v8::Local<v8::Object> instance) override;
 
  private:
   std::map<std::string, RequestHandler> request_handlers_;
   CustomEventFactory custom_event_;
   TemplateInitializer template_initializer_;
+  InstanceInitializer instance_initializer_;
 
   DISALLOW_COPY_AND_ASSIGN(APIBindingHooksTestDelegate);
 };

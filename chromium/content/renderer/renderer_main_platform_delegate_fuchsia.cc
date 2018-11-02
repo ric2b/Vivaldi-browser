@@ -16,10 +16,10 @@ void RendererMainPlatformDelegate::PlatformInitialize() {}
 void RendererMainPlatformDelegate::PlatformUninitialize() {}
 
 bool RendererMainPlatformDelegate::EnableSandbox() {
-  // TODO(fuchsia): Implement this for Fuchsia.
-  NOTREACHED() << "Sandbox support is currently unavailable. Run with "
-                  "--no-sandbox for now.";
-  return false;
+  // TODO(750938): Report NOTIMPLEMENTED() here until we re-enable sandboxing
+  // of sub-processes.
+  NOTIMPLEMENTED();
+  return true;
 }
 
 }  // namespace content

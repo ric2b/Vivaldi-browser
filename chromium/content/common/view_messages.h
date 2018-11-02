@@ -2,25 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_COMMON_VIEW_MESSAGES_H_
+#define CONTENT_COMMON_VIEW_MESSAGES_H_
+
 // IPC messages for page rendering.
-// Multiply-included message file, hence no include guard.
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <set>
+#include <string>
+#include <vector>
 
 #include "base/memory/shared_memory.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "cc/ipc/cc_param_traits.h"
-#include "cc/output/compositor_frame.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/date_time_suggestion.h"
 #include "content/common/frame_replication_state.h"
-#include "content/common/message_port.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/resize_params.h"
 #include "content/common/text_input_state.h"
@@ -31,7 +36,6 @@
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/renderer_preferences.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/three_d_api_types.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
@@ -49,8 +53,6 @@
 #include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
 #include "third_party/WebKit/public/web/WebPluginAction.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
-#include "third_party/WebKit/public/web/WebSharedWorkerCreationContextType.h"
-#include "third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
@@ -86,13 +88,11 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPopupType,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebScreenOrientationType,
                               blink::kWebScreenOrientationUndefined,
                               blink::WebScreenOrientationTypeLast)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebWorkerCreationError,
-                          blink::kWebWorkerCreationErrorLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTextDirection,
                           blink::WebTextDirection::kWebTextDirectionLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDisplayMode,
                           blink::WebDisplayMode::kWebDisplayModeLast)
-IPC_ENUM_TRAITS(content::MenuItem::Type)
+IPC_ENUM_TRAITS_MAX_VALUE(content::MenuItem::Type, content::MenuItem::TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::NavigationGesture,
                           content::NavigationGestureLast)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::PageZoom,
@@ -159,24 +159,12 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
-  IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
-  IPC_STRUCT_TRAITS_MEMBER(color_space)
-  IPC_STRUCT_TRAITS_MEMBER(icc_profile)
-  IPC_STRUCT_TRAITS_MEMBER(depth)
-  IPC_STRUCT_TRAITS_MEMBER(depth_per_component)
-  IPC_STRUCT_TRAITS_MEMBER(is_monochrome)
-  IPC_STRUCT_TRAITS_MEMBER(rect)
-  IPC_STRUCT_TRAITS_MEMBER(available_rect)
-  IPC_STRUCT_TRAITS_MEMBER(orientation_type)
-  IPC_STRUCT_TRAITS_MEMBER(orientation_angle)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
   IPC_STRUCT_TRAITS_MEMBER(screen_info)
   IPC_STRUCT_TRAITS_MEMBER(new_size)
   IPC_STRUCT_TRAITS_MEMBER(physical_backing_size)
   IPC_STRUCT_TRAITS_MEMBER(browser_controls_shrink_blink_size)
+  IPC_STRUCT_TRAITS_MEMBER(scroll_focused_node_into_view)
   IPC_STRUCT_TRAITS_MEMBER(top_controls_height)
   IPC_STRUCT_TRAITS_MEMBER(bottom_controls_height)
   IPC_STRUCT_TRAITS_MEMBER(local_surface_id)
@@ -227,6 +215,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(use_custom_colors)
   IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
   IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
+  IPC_STRUCT_TRAITS_MEMBER(enable_encrypted_media)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_min_port)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_max_port)
@@ -273,45 +262,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
   IPC_STRUCT_TRAITS_MEMBER(reply_to_request)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Params)
-  // URL for the worker script.
-  IPC_STRUCT_MEMBER(GURL, url)
-
-  // Name for a SharedWorker, otherwise empty string.
-  IPC_STRUCT_MEMBER(base::string16, name)
-
-  // Security policy used in the worker.
-  IPC_STRUCT_MEMBER(base::string16, content_security_policy)
-
-  // Security policy type used in the worker.
-  IPC_STRUCT_MEMBER(blink::WebContentSecurityPolicyType, security_policy_type)
-
-  // The ID of the parent document (unique within parent renderer).
-  IPC_STRUCT_MEMBER(unsigned long long, document_id)
-
-  // RenderFrame routing id used to send messages back to the parent.
-  IPC_STRUCT_MEMBER(int, render_frame_route_id)
-
-  // Address space of the context that created the worker.
-  IPC_STRUCT_MEMBER(blink::WebAddressSpace, creation_address_space)
-
-  // The type (secure or nonsecure) of the context that created the worker.
-  IPC_STRUCT_MEMBER(blink::WebSharedWorkerCreationContextType,
-                    creation_context_type)
-
-  // Whether Data-Saver is enabled or not.
-  IPC_STRUCT_MEMBER(bool, data_saver_enabled)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Reply)
-  // The route id for the created worker.
-  IPC_STRUCT_MEMBER(int, route_id)
-
-  // The error that occurred, if the browser failed to create the
-  // worker.
-  IPC_STRUCT_MEMBER(blink::WebWorkerCreationError, error)
-IPC_STRUCT_END()
-
 IPC_STRUCT_BEGIN(ViewHostMsg_DateTimeDialogValue_Params)
   IPC_STRUCT_MEMBER(ui::TextInputType, dialog_type)
   IPC_STRUCT_MEMBER(double, dialog_value)
@@ -329,7 +279,7 @@ IPC_STRUCT_BEGIN(ViewHostMsg_SelectionBounds_Params)
   IPC_STRUCT_MEMBER(bool, is_anchor_first)
 IPC_STRUCT_END()
 
-IPC_STRUCT_BEGIN(ViewHostMsg_UpdateRect_Params)
+IPC_STRUCT_BEGIN(ViewHostMsg_ResizeOrRepaint_ACK_Params)
   // The size of the RenderView when this message was generated.  This is
   // included so the host knows how large the view is from the perspective of
   // the renderer process.  This is necessary in case a resize operation is in
@@ -339,10 +289,10 @@ IPC_STRUCT_BEGIN(ViewHostMsg_UpdateRect_Params)
 
   // The following describes the various bits that may be set in flags:
   //
-  //   ViewHostMsg_UpdateRect_Flags::IS_RESIZE_ACK
+  //   ViewHostMsg_ResizeOrRepaint_ACK_Flags::IS_RESIZE_ACK
   //     Indicates that this is a response to a ViewMsg_Resize message.
   //
-  //   ViewHostMsg_UpdateRect_Flags::IS_REPAINT_ACK
+  //   ViewHostMsg_ResizeOrRepaint_ACK_Flags::IS_REPAINT_ACK
   //     Indicates that this is a response to a ViewMsg_Repaint message.
   //
   // If flags is zero, then this message corresponds to an unsolicited paint
@@ -350,6 +300,10 @@ IPC_STRUCT_BEGIN(ViewHostMsg_UpdateRect_Params)
   // which would indicate that this paint message is an ACK for multiple
   // request messages.
   IPC_STRUCT_MEMBER(int, flags)
+
+  // A unique monotonically increasing sequence number used to identify this
+  // ACK.
+  IPC_STRUCT_MEMBER(uint64_t, sequence_number)
 IPC_STRUCT_END()
 
 // Messages sent from the browser to the renderer.
@@ -384,12 +338,21 @@ IPC_MESSAGE_ROUTED1(ViewMsg_UpdateWebPreferences,
 // Expects a Close_ACK message when finished.
 IPC_MESSAGE_ROUTED0(ViewMsg_Close)
 
-// Tells the render view to change its size.  A ViewHostMsg_UpdateRect message
-// is generated in response provided new_size is not empty and not equal to
-// the view's current size.  The generated ViewHostMsg_UpdateRect message will
-// have the IS_RESIZE_ACK flag set. It also receives the resizer rect so that
-// we don't have to fetch it every time WebKit asks for it.
+// Tells the render view to change its size.  A ViewHostMsg_ResizeOrRepaint_ACK
+// message is generated in response provided new_size is not empty and not equal
+// to the view's current size.  The generated ViewHostMsg_ResizeOrRepaint_ACK
+// message will have the IS_RESIZE_ACK flag set. It also receives the resizer
+// rect so that we don't have to fetch it every time WebKit asks for it.
 IPC_MESSAGE_ROUTED1(ViewMsg_Resize, content::ResizeParams /* params */)
+
+// Tells the widget to use the provided viz::LocalSurfaceId to submit
+// CompositorFrames for autosize.
+IPC_MESSAGE_ROUTED5(ViewMsg_SetLocalSurfaceIdForAutoResize,
+                    uint64_t /* sequence_number */,
+                    gfx::Size /* min_size */,
+                    gfx::Size /* max_size */,
+                    content::ScreenInfo /* screen_info */,
+                    viz::LocalSurfaceId /* local_surface_id */)
 
 // Enables device emulation. See WebDeviceEmulationParams for description.
 IPC_MESSAGE_ROUTED1(ViewMsg_EnableDeviceEmulation,
@@ -605,6 +568,11 @@ IPC_MESSAGE_ROUTED1(ViewMsg_SetViewportIntersection,
 // Sets the inert bit on an out-of-process iframe.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetIsInert, bool /* inert */)
 
+// Toggles render throttling for an out-of-process iframe.
+IPC_MESSAGE_ROUTED2(ViewMsg_UpdateRenderThrottlingStatus,
+                    bool /* is_throttled */,
+                    bool /* subtree_throttled */)
+
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
 
@@ -662,10 +630,11 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateTargetURL,
 IPC_MESSAGE_ROUTED1(ViewHostMsg_DocumentAvailableInMainFrame,
                     bool /* uses_temporary_zoom_level */)
 
-// Sent to update part of the view.  In response to this message, the host
-// generates a ViewMsg_UpdateRect_ACK message.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateRect,
-                    ViewHostMsg_UpdateRect_Params)
+// Sent as an acknowledgement to a previous resize request. This indicates that
+// the compositor has received a frame from the renderer corresponding to the
+// previous reszie request.
+IPC_MESSAGE_ROUTED1(ViewHostMsg_ResizeOrRepaint_ACK,
+                    ViewHostMsg_ResizeOrRepaint_ACK_Params)
 
 IPC_MESSAGE_ROUTED0(ViewHostMsg_Focus)
 
@@ -685,26 +654,6 @@ IPC_SYNC_MESSAGE_CONTROL1_2(ViewHostMsg_ResolveProxy,
                             GURL /* url */,
                             bool /* result */,
                             std::string /* proxy list */)
-
-// A renderer sends this to the browser process when it wants to create a
-// worker.  The browser will create the worker process if necessary, and
-// will return the route id on in the reply on success.  On error returns
-// MSG_ROUTING_NONE and an error type.
-IPC_SYNC_MESSAGE_CONTROL1_1(ViewHostMsg_CreateWorker,
-                            ViewHostMsg_CreateWorker_Params,
-                            ViewHostMsg_CreateWorker_Reply)
-
-// A renderer sends this to the browser process when a document has been
-// detached. The browser will use this to constrain the lifecycle of worker
-// processes (SharedWorkers are shut down when their last associated document
-// is detached).
-IPC_MESSAGE_CONTROL1(ViewHostMsg_DocumentDetached, uint64_t /* document_id */)
-
-// A renderer sends this to the browser process when it wants to connect to a
-// worker.
-IPC_MESSAGE_CONTROL2(ViewHostMsg_ConnectToWorker,
-                     int32_t /* worker_route_id */,
-                     content::MessagePort /* port */)
 
 // Tells the browser that a specific Appcache manifest in the current page
 // was accessed.
@@ -728,13 +677,6 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_DidContentsPreferredSizeChange,
 // Notifies whether there are JavaScript touch event handlers or not.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_HasTouchEventHandlers,
                     bool /* has_handlers */)
-
-// A message from HTML-based UI.  When (trusted) Javascript calls
-// send(message, args), this message is sent to the browser.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_WebUISend,
-                    GURL /* source_url */,
-                    std::string  /* message */,
-                    base::ListValue /* args */)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // A renderer sends this to the browser process when it wants to access a PPAPI
@@ -834,22 +776,6 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowDisambiguationPopup,
 IPC_MESSAGE_ROUTED1(ViewHostMsg_FocusedNodeTouched,
                     bool /* editable */)
 
-// Message sent from the renderer to the browser when an HTML form has failed
-// validation constraints.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowValidationMessage,
-                    gfx::Rect /* anchor rectangle in root view coordinate */,
-                    base::string16 /* validation message */,
-                    base::string16 /* supplemental text */)
-
-// Message sent from the renderer to the browser when a HTML form validation
-// message should be hidden from view.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_HideValidationMessage)
-
-// Message sent from the renderer to the browser when the suggested co-ordinates
-// of the anchor for a HTML form validation message have changed.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_MoveValidationMessage,
-                    gfx::Rect /* anchor rectangle in root view coordinate */)
-
 // Sent once a paint happens after the first non empty layout. In other words,
 // after the frame widget has painted something.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstVisuallyNonEmptyPaint)
@@ -879,3 +805,5 @@ IPC_MESSAGE_ROUTED1(ViewMsg_GetRenderedTextCompleted, std::string)
 // Adding a new message? Stick to the sort order above: first platform
 // independent ViewMsg, then ifdefs for platform specific ViewMsg, then platform
 // independent ViewHostMsg, then ifdefs for platform specific ViewHostMsg.
+
+#endif  // CONTENT_COMMON_VIEW_MESSAGES_H_

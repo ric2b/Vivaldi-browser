@@ -28,6 +28,7 @@
 #include <algorithm>
 #include "core/animation/AnimationClock.h"
 #include "core/animation/DocumentTimeline.h"
+#include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
@@ -47,12 +48,11 @@ SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
       started_(false),
       paused_(false),
       document_order_indexes_dirty_(false),
-      wakeup_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &owner.GetDocument()),
-          this,
-          &SMILTimeContainer::WakeupTimerFired),
+      wakeup_timer_(owner.GetDocument().GetTaskRunner(TaskType::kUnspecedTimer),
+                    this,
+                    &SMILTimeContainer::WakeupTimerFired),
       animation_policy_once_timer_(
-          TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &owner.GetDocument()),
+          owner.GetDocument().GetTaskRunner(TaskType::kUnspecedTimer),
           this,
           &SMILTimeContainer::AnimationPolicyTimerFired),
       owner_svg_element_(&owner) {}
@@ -194,7 +194,7 @@ void SMILTimeContainer::Pause() {
   paused_ = true;
 }
 
-void SMILTimeContainer::Resume() {
+void SMILTimeContainer::Unpause() {
   if (!HandleAnimationPolicy(kRestartOnceTimer))
     return;
   DCHECK(IsPaused());
@@ -525,7 +525,7 @@ void SMILTimeContainer::AdvanceFrameForTesting() {
   SetElapsed(Elapsed() + kInitialFrameDelay);
 }
 
-DEFINE_TRACE(SMILTimeContainer) {
+void SMILTimeContainer::Trace(blink::Visitor* visitor) {
   visitor->Trace(scheduled_animations_);
   visitor->Trace(owner_svg_element_);
 }

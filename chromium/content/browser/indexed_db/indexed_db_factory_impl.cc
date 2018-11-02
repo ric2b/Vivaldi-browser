@@ -9,16 +9,20 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/default_clock.h"
-#include "base/time/time.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
+#include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
+#include "content/browser/indexed_db/indexed_db_leveldb_operations.h"
+#include "content/browser/indexed_db/indexed_db_metadata_coding.h"
 #include "content/browser/indexed_db/indexed_db_pre_close_task_queue.h"
 #include "content/browser/indexed_db/indexed_db_tombstone_sweeper.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
@@ -45,17 +49,54 @@ const int kTombstoneSweeperRoundIterations = 1000;
 // The maximum total iterations for the tombstone sweeper.
 const int kTombstoneSweeperMaxIterations = 10 * 1000 * 1000;
 
+constexpr const base::TimeDelta kMinEarliestOriginSweepFromNow =
+    base::TimeDelta::FromDays(1);
+static_assert(kMinEarliestOriginSweepFromNow <
+                  IndexedDBFactoryImpl::kMaxEarliestOriginSweepFromNow,
+              "Min < Max");
+
+constexpr const base::TimeDelta kMinEarliestGlobalSweepFromNow =
+    base::TimeDelta::FromMinutes(10);
+static_assert(kMinEarliestGlobalSweepFromNow <
+                  IndexedDBFactoryImpl::kMaxEarliestGlobalSweepFromNow,
+              "Min < Max");
+
+base::Time GenerateNextOriginSweepTime(base::Time now) {
+  uint64_t range =
+      IndexedDBFactoryImpl::kMaxEarliestOriginSweepFromNow.InMilliseconds() -
+      kMinEarliestOriginSweepFromNow.InMilliseconds();
+  int64_t rand_millis = kMinEarliestOriginSweepFromNow.InMilliseconds() +
+                        static_cast<int64_t>(base::RandGenerator(range));
+  return now + base::TimeDelta::FromMilliseconds(rand_millis);
+}
+
+base::Time GenerateNextGlobalSweepTime(base::Time now) {
+  uint64_t range =
+      IndexedDBFactoryImpl::kMaxEarliestGlobalSweepFromNow.InMilliseconds() -
+      kMinEarliestGlobalSweepFromNow.InMilliseconds();
+  int64_t rand_millis = kMinEarliestGlobalSweepFromNow.InMilliseconds() +
+                        static_cast<int64_t>(base::RandGenerator(range));
+  return now + base::TimeDelta::FromMilliseconds(rand_millis);
+}
+
+}  // namespace
+
 const base::Feature kIDBTombstoneStatistics{"IDBTombstoneStatistics",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kIDBTombstoneDeletion{"IDBTombstoneDeletion",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-}  // namespace
+constexpr const base::TimeDelta
+    IndexedDBFactoryImpl::kMaxEarliestGlobalSweepFromNow;
+constexpr const base::TimeDelta
+    IndexedDBFactoryImpl::kMaxEarliestOriginSweepFromNow;
 
-IndexedDBFactoryImpl::IndexedDBFactoryImpl(IndexedDBContextImpl* context)
-    : context_(context) {
-}
+IndexedDBFactoryImpl::IndexedDBFactoryImpl(IndexedDBContextImpl* context,
+                                           base::Clock* clock)
+    : context_(context),
+      clock_(clock),
+      earliest_sweep_(GenerateNextGlobalSweepTime(clock_->Now())) {}
 
 IndexedDBFactoryImpl::~IndexedDBFactoryImpl() {
 }
@@ -127,36 +168,63 @@ void IndexedDBFactoryImpl::MaybeStartPreCloseTasks(const Origin& origin) {
   if (!HasLastBackingStoreReference(origin))
     return;
 
+  base::ScopedClosureRunner maybe_close_backing_store_runner(
+      base::BindOnce(&IndexedDBFactoryImpl::MaybeCloseBackingStore,
+                     base::Unretained(this), origin));
+
+  base::Time now = clock_->Now();
+
+  // Check that the last sweep hasn't run too recently.
+  if (earliest_sweep_ > now)
+    return;
+
   bool tombstone_stats_enabled =
       base::FeatureList::IsEnabled(kIDBTombstoneStatistics);
   bool tombstone_deletion_enabled =
       base::FeatureList::IsEnabled(kIDBTombstoneDeletion);
 
-  if (tombstone_stats_enabled == tombstone_deletion_enabled) {
-    // We can't have both stats and deletion, so NOOP if both are enabled.
-    MaybeCloseBackingStore(origin);
+  // After this check, exactly one of the flags must be true.
+  if (tombstone_stats_enabled == tombstone_deletion_enabled)
     return;
-  }
+
   scoped_refptr<IndexedDBBackingStore> store = backing_store_map_[origin];
-  // TODO(next patch in this cl): Create logic about which tasks get put here.
-  // * Min time since last sweep,
-  // * Only one sweep at a time for a context (or globaly?)
+
+  base::Time origin_earliest_sweep;
+  leveldb::Status s =
+      indexed_db::GetEarliestSweepTime(store->db(), &origin_earliest_sweep);
+  // TODO(dmurph): Log this or report to UMA.
+  if (!s.ok())
+    return;
+
+  // This origin hasn't been swept too recently.
+  if (origin_earliest_sweep > now)
+    return;
+
+  // A sweep will happen now, so reset the sweep timers.
+  earliest_sweep_ = GenerateNextGlobalSweepTime(now);
+  scoped_refptr<LevelDBTransaction> txn =
+      IndexedDBClassFactory::Get()->CreateLevelDBTransaction(store->db());
+  indexed_db::SetEarliestSweepTime(txn.get(), GenerateNextOriginSweepTime(now));
+  s = txn->Commit();
+
+  // TODO(dmurph): Log this or report to UMA.
+  if (!s.ok())
+    return;
+
   std::list<std::unique_ptr<PreCloseTask>> tasks;
   IndexedDBTombstoneSweeper::Mode mode =
       tombstone_stats_enabled ? IndexedDBTombstoneSweeper::Mode::STATISTICS
                               : IndexedDBTombstoneSweeper::Mode::DELETION;
-  tasks.push_back(base::MakeUnique<IndexedDBTombstoneSweeper>(
+  tasks.push_back(std::make_unique<IndexedDBTombstoneSweeper>(
       mode, kTombstoneSweeperRoundIterations, kTombstoneSweeperMaxIterations,
       store->db()->db()));
   // TODO(dmurph): Add compaction task that compacts all indexes if we have
   // more than X deletions.
 
-  store->SetPreCloseTaskList(base::MakeUnique<IndexedDBPreCloseTaskQueue>(
-      std::move(tasks),
-      base::BindOnce(&IndexedDBFactoryImpl::MaybeCloseBackingStore, this,
-                     origin),
+  store->SetPreCloseTaskList(std::make_unique<IndexedDBPreCloseTaskQueue>(
+      std::move(tasks), maybe_close_backing_store_runner.Release(),
       base::TimeDelta::FromSeconds(kPreCloseTasksMaxRunPeriodSeconds),
-      base::MakeUnique<base::OneShotTimer>()));
+      std::make_unique<base::OneShotTimer>()));
   store->StartPreCloseTasks();
 }
 
@@ -205,8 +273,10 @@ leveldb::Status IndexedDBFactoryImpl::AbortTransactions(const Origin& origin) {
   }
 
   leveldb::Status get_names_status;
-  std::vector<base::string16> db_names =
-      backing_store->GetDatabaseNames(&get_names_status);
+  IndexedDBMetadataCoding metadata_coding;
+  std::vector<base::string16> db_names;
+  get_names_status = metadata_coding.ReadDatabaseNames(
+      backing_store->db(), backing_store->origin_identifier(), &db_names);
   if (!get_names_status.ok()) {
     return leveldb::Status::IOError(
         "Internal error getting origin database names for "
@@ -246,7 +316,7 @@ void IndexedDBFactoryImpl::ContextDestroyed() {
   }
   backing_store_map_.clear();
   backing_stores_with_active_blobs_.clear();
-  context_ = NULL;
+  context_ = nullptr;
 }
 
 void IndexedDBFactoryImpl::ReportOutstandingBlobs(const Origin& origin,
@@ -291,20 +361,23 @@ void IndexedDBFactoryImpl::GetDatabaseNames(
     return;
   }
 
-  std::vector<base::string16> names = backing_store->GetDatabaseNames(&s);
+  IndexedDBMetadataCoding metadata_coding;
+  std::vector<base::string16> names;
+  s = metadata_coding.ReadDatabaseNames(
+      backing_store->db(), backing_store->origin_identifier(), &names);
   if (!s.ok()) {
     DLOG(ERROR) << "Internal error getting database names";
     IndexedDBDatabaseError error(blink::kWebIDBDatabaseExceptionUnknownError,
                                  "Internal error opening backing store for "
                                  "indexedDB.webkitGetDatabaseNames.");
     callbacks->OnError(error);
-    backing_store = NULL;
+    backing_store = nullptr;
     if (s.IsCorruption())
       HandleBackingStoreCorruption(origin, error);
     return;
   }
   callbacks->OnSuccess(names);
-  backing_store = NULL;
+  backing_store = nullptr;
   ReleaseBackingStore(origin, false /* immediate */);
 }
 
@@ -344,14 +417,17 @@ void IndexedDBFactoryImpl::DeleteDatabase(
     return;
   }
 
-  std::vector<base::string16> names = backing_store->GetDatabaseNames(&s);
+  IndexedDBMetadataCoding metadata_coding;
+  std::vector<base::string16> names;
+  s = metadata_coding.ReadDatabaseNames(
+      backing_store->db(), backing_store->origin_identifier(), &names);
   if (!s.ok()) {
     DLOG(ERROR) << "Internal error getting database names";
     IndexedDBDatabaseError error(blink::kWebIDBDatabaseExceptionUnknownError,
                                  "Internal error opening backing store for "
                                  "indexedDB.deleteDatabase.");
     callbacks->OnError(error);
-    backing_store = NULL;
+    backing_store = nullptr;
     if (s.IsCorruption())
       HandleBackingStoreCorruption(origin, error);
     return;
@@ -359,14 +435,15 @@ void IndexedDBFactoryImpl::DeleteDatabase(
   if (!base::ContainsValue(names, name)) {
     const int64_t version = 0;
     callbacks->OnSuccess(version);
-    backing_store = NULL;
+    backing_store = nullptr;
     ReleaseBackingStore(origin, false /* immediate */);
     return;
   }
 
   scoped_refptr<IndexedDBDatabase> database;
-  std::tie(database, s) = IndexedDBDatabase::Create(name, backing_store.get(),
-                                                    this, unique_identifier);
+  std::tie(database, s) = IndexedDBDatabase::Create(
+      name, backing_store.get(), this,
+      std::make_unique<IndexedDBMetadataCoding>(), unique_identifier);
   if (!database.get()) {
     IndexedDBDatabaseError error(
         blink::kWebIDBDatabaseExceptionUnknownError,
@@ -374,7 +451,7 @@ void IndexedDBFactoryImpl::DeleteDatabase(
                      "indexedDB.deleteDatabase."));
     callbacks->OnError(error);
     if (s.IsCorruption()) {
-      backing_store = NULL;
+      backing_store = nullptr;
       HandleBackingStoreCorruption(origin, error);
     }
     return;
@@ -384,8 +461,8 @@ void IndexedDBFactoryImpl::DeleteDatabase(
   origin_dbs_.insert(std::make_pair(origin, database.get()));
   database->DeleteDatabase(callbacks, force_close);
   RemoveDatabaseFromMaps(unique_identifier);
-  database = NULL;
-  backing_store = NULL;
+  database = nullptr;
+  backing_store = nullptr;
   ReleaseBackingStore(origin, false /* immediate */);
 }
 
@@ -463,8 +540,11 @@ void IndexedDBFactoryImpl::HandleBackingStoreCorruption(
   //       so our corruption info file will remain.
   leveldb::Status s =
       IndexedDBBackingStore::DestroyBackingStore(path_base, saved_origin);
-  if (!s.ok())
-    DLOG(ERROR) << "Unable to delete backing store: " << s.ToString();
+  DLOG_IF(ERROR, !s.ok()) << "Unable to delete backing store: " << s.ToString();
+  UMA_HISTOGRAM_ENUMERATION(
+      "WebCore.IndexedDB.DestroyCorruptBackingStoreStatus",
+      leveldb_env::GetLevelDBStatusUMAValue(s),
+      leveldb_env::LEVELDB_STATUS_MAX);
 }
 
 bool IndexedDBFactoryImpl::IsDatabaseOpen(const Origin& origin,
@@ -510,10 +590,13 @@ scoped_refptr<IndexedDBBackingStore> IndexedDBFactoryImpl::OpenBackingStore(
 
   const auto& it2 = backing_store_map_.find(origin);
   if (it2 != backing_store_map_.end()) {
-    it2->second->close_timer()->Stop();
+    // Grab a refptr so the completion of the preclose task list doesn't close
+    // the backing store.
+    scoped_refptr<IndexedDBBackingStore> backing_store = it2->second;
+    backing_store->close_timer()->Stop();
     if (it2->second->pre_close_task_queue()) {
-      it2->second->pre_close_task_queue()->StopForNewConnection();
-      it2->second->SetPreCloseTaskList(nullptr);
+      backing_store->pre_close_task_queue()->StopForNewConnection();
+      backing_store->SetPreCloseTaskList(nullptr);
     }
     return it2->second;
   }
@@ -546,7 +629,7 @@ scoped_refptr<IndexedDBBackingStore> IndexedDBFactoryImpl::OpenBackingStore(
     return backing_store;
   }
 
-  return 0;
+  return nullptr;
 }
 
 void IndexedDBFactoryImpl::Open(
@@ -586,8 +669,9 @@ void IndexedDBFactoryImpl::Open(
       return;
     }
 
-    std::tie(database, s) = IndexedDBDatabase::Create(name, backing_store.get(),
-                                                      this, unique_identifier);
+    std::tie(database, s) = IndexedDBDatabase::Create(
+        name, backing_store.get(), this,
+        std::make_unique<IndexedDBMetadataCoding>(), unique_identifier);
     if (!database.get()) {
       DLOG(ERROR) << "Unable to create the database";
       IndexedDBDatabaseError error(blink::kWebIDBDatabaseExceptionUnknownError,
@@ -596,7 +680,8 @@ void IndexedDBFactoryImpl::Open(
                                                 "indexedDB.open."));
       connection->callbacks->OnError(error);
       if (s.IsCorruption()) {
-        backing_store = NULL;  // Closes the LevelDB so that it can be deleted
+        backing_store =
+            nullptr;  // Closes the LevelDB so that it can be deleted
         HandleBackingStoreCorruption(origin, error);
       }
       return;
@@ -629,6 +714,16 @@ size_t IndexedDBFactoryImpl::GetConnectionCount(const Origin& origin) const {
     count += it->second->ConnectionCount();
 
   return count;
+}
+
+void IndexedDBFactoryImpl::NotifyIndexedDBContentChanged(
+    const url::Origin& origin,
+    const base::string16& database_name,
+    const base::string16& object_store_name) {
+  if (!context_)
+    return;
+  context_->NotifyIndexedDBContentChanged(origin, database_name,
+                                          object_store_name);
 }
 
 }  // namespace content

@@ -4,6 +4,8 @@
 
 #include "modules/screen_orientation/ScreenOrientation.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
@@ -123,7 +125,7 @@ const WTF::AtomicString& ScreenOrientation::InterfaceName() const {
 
 ExecutionContext* ScreenOrientation::GetExecutionContext() const {
   if (!GetFrame())
-    return 0;
+    return nullptr;
   return GetFrame()->GetDocument();
 }
 
@@ -148,7 +150,7 @@ ScriptPromise ScreenOrientation::lock(ScriptState* state,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(state);
   ScriptPromise promise = resolver->Promise();
 
-  Document* document = GetFrame() ? GetFrame()->GetDocument() : 0;
+  Document* document = GetFrame() ? GetFrame()->GetDocument() : nullptr;
 
   if (!document || !Controller()) {
     DOMException* exception = DOMException::Create(
@@ -168,7 +170,7 @@ ScriptPromise ScreenOrientation::lock(ScriptState* state,
   }
 
   Controller()->lock(StringToOrientationLock(lock_string),
-                     WTF::MakeUnique<LockOrientationCallback>(resolver));
+                     std::make_unique<LockOrientationCallback>(resolver));
   return promise;
 }
 
@@ -181,12 +183,12 @@ void ScreenOrientation::unlock() {
 
 ScreenOrientationControllerImpl* ScreenOrientation::Controller() {
   if (!GetFrame())
-    return 0;
+    return nullptr;
 
   return ScreenOrientationControllerImpl::From(*GetFrame());
 }
 
-DEFINE_TRACE(ScreenOrientation) {
+void ScreenOrientation::Trace(blink::Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
   ContextClient::Trace(visitor);
 }

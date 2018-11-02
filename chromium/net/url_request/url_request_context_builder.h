@@ -56,9 +56,12 @@ class HttpUserAgentSettings;
 class HttpServerProperties;
 class NetworkQualityEstimator;
 class ProxyConfigService;
-struct ReportingPolicy;
 class URLRequestContext;
 class URLRequestInterceptor;
+
+#if BUILDFLAG(ENABLE_REPORTING)
+struct ReportingPolicy;
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
 // A URLRequestContextBuilder creates a single URLRequestContext. It provides
 // methods to manage various URLRequestContext components which should be called
@@ -120,7 +123,7 @@ class NET_EXPORT URLRequestContextBuilder {
   // Sets a name for this URLRequestContext. Currently the name is used in
   // MemoryDumpProvier to annotate memory usage. The name does not need to be
   // unique.
-  void set_name(const char* name) { name_ = name; }
+  void set_name(const std::string& name) { name_ = name; }
 
   // Sets whether Brotli compression is enabled.  Disabled by default;
   void set_enable_brotli(bool enable_brotli) { enable_brotli_ = enable_brotli; }
@@ -278,17 +281,6 @@ class NET_EXPORT URLRequestContextBuilder {
     transport_security_persister_path_ = transport_security_persister_path;
   }
 
-  // Sets whether the TransportSecurityPersister only reads persisted
-  // information, or also writes it. By default, it both reads and writes.
-  //
-  // TODO(mmenke): Consider removing this in favor of the above method. See:
-  // https://crbug.com/743251.
-  void set_transport_security_persister_readonly(
-      bool transport_security_persister_readonly) {
-    transport_security_persister_readonly_ =
-        transport_security_persister_readonly;
-  }
-
   void SetSpdyAndQuicEnabled(bool spdy_enabled,
                              bool quic_enabled);
 
@@ -302,17 +294,13 @@ class NET_EXPORT URLRequestContextBuilder {
 
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
 
-  // Makes the created URLRequestContext use a shared CertVerifier object.
-  // Should not be used it SetCertVerifier() is used. The consumer must ensure
-  // the CertVerifier outlives the URLRequestContext returned by the builder.
-  //
-  // TODO(mmenke): Figure out if consumers can use SetCertVerifier instead. See:
-  // https://crbug.com/743251.
-  void set_shared_cert_verifier(CertVerifier* shared_cert_verifier);
-
 #if BUILDFLAG(ENABLE_REPORTING)
   void set_reporting_policy(
       std::unique_ptr<net::ReportingPolicy> reporting_policy);
+
+  void set_network_error_logging_enabled(bool network_error_logging_enabled) {
+    network_error_logging_enabled_ = network_error_logging_enabled;
+  }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
   void SetInterceptors(std::vector<std::unique_ptr<URLRequestInterceptor>>
@@ -337,13 +325,6 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetCookieAndChannelIdStores(
       std::unique_ptr<CookieStore> cookie_store,
       std::unique_ptr<ChannelIDService> channel_id_service);
-
-  // Note that if SDCH is enabled without a policy object observing
-  // the SDCH manager and handling at least Get-Dictionary events, the
-  // result will be "Content-Encoding: sdch" advertisements, but no
-  // dictionaries fetches and no specific dictionaries advertised.
-  // SdchOwner in net/sdch/sdch_owner.h is a simple policy object.
-  void set_sdch_enabled(bool enable) { sdch_enabled_ = enable; }
 
   // Sets a specific HttpServerProperties for use in the
   // URLRequestContext rather than creating a default HttpServerPropertiesImpl.
@@ -375,7 +356,7 @@ class NET_EXPORT URLRequestContextBuilder {
       NetLog* net_log);
 
  private:
-  const char* name_;
+  std::string name_;
   bool enable_brotli_;
   NetworkQualityEstimator* network_quality_estimator_;
 
@@ -395,14 +376,12 @@ class NET_EXPORT URLRequestContextBuilder {
 #endif
   bool http_cache_enabled_;
   bool throttling_enabled_;
-  bool sdch_enabled_;
   bool cookie_store_set_by_client_;
 
   HttpCacheParams http_cache_params_;
   HttpNetworkSession::Params http_network_session_params_;
   CreateHttpTransactionFactoryCallback create_http_network_transaction_factory_;
   base::FilePath transport_security_persister_path_;
-  bool transport_security_persister_readonly_;
   NetLog* net_log_;
   std::unique_ptr<HostResolver> host_resolver_;
   net::HostResolver* shared_host_resolver_;
@@ -419,11 +398,11 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   HttpAuthHandlerFactory* shared_http_auth_handler_factory_;
   std::unique_ptr<CertVerifier> cert_verifier_;
-  CertVerifier* shared_cert_verifier_;
   std::unique_ptr<CTVerifier> ct_verifier_;
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<net::ReportingPolicy> reporting_policy_;
+  bool network_error_logging_enabled_;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
   std::vector<std::unique_ptr<URLRequestInterceptor>> url_request_interceptors_;
   CreateInterceptingJobFactory create_intercepting_job_factory_;

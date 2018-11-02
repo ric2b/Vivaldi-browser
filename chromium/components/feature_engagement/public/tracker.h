@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_FEATURE_ENGAGEMENT_PUBLIC_TRACKER_H_
 #define COMPONENTS_FEATURE_ENGAGEMENT_PUBLIC_TRACKER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -21,6 +23,19 @@
 #endif  // defined(OS_ANDROID)
 
 namespace feature_engagement {
+
+// A handle for the display lock. While this is unreleased, no in-product help
+// can be displayed.
+class DisplayLockHandle {
+ public:
+  typedef base::OnceClosure ReleaseCallback;
+  explicit DisplayLockHandle(ReleaseCallback callback);
+  ~DisplayLockHandle();
+
+ private:
+  ReleaseCallback release_callback_;
+  DISALLOW_COPY_AND_ASSIGN(DisplayLockHandle);
+};
 
 // The Tracker provides a backend for displaying feature
 // enlightenment or in-product help (IPH) with a clean and easy to use API to be
@@ -64,10 +79,25 @@ class Tracker : public KeyedService {
   // This function must be called whenever the triggering condition for a
   // specific feature happens. Returns true iff the display of the in-product
   // help must happen.
-  // If |true| is returned, the caller *must* call Dismissed() when display
+  // If |true| is returned, the caller *must* call Dismissed(...) when display
   // of feature enlightenment ends.
   virtual bool ShouldTriggerHelpUI(const base::Feature& feature)
       WARN_UNUSED_RESULT = 0;
+
+  // Invoking this is basically the same as being allowed to invoke
+  // ShouldTriggerHelpUI(...) without requiring to show the in-product help.
+  // This function may be called to inspect if the current state would allow the
+  // given |feature| to pass all its conditions and display the feature
+  // enlightenment.
+  //
+  // NOTE: It is still required to invoke ShouldTriggerHelpUI(...) if feature
+  // enlightenment should be shown.
+  //
+  // NOTE: It is not guaranteed that invoking ShouldTriggerHelpUI(...)
+  // after this would yield the same result. The state might change
+  // in-between the calls because time has passed, other events might have been
+  // triggered, and other state might have changed.
+  virtual bool WouldTriggerHelpUI(const base::Feature& feature) const = 0;
 
   // This function can be called to query if a particular |feature| meets its
   // particular precondition for triggering within the bounds of the current
@@ -78,11 +108,22 @@ class Tracker : public KeyedService {
   // This function can typically be used to ensure that expensive operations
   // for tracking other state related to in-product help do not happen if
   // in-product help has already been displayed for the given |feature|.
-  virtual TriggerState GetTriggerState(const base::Feature& feature) = 0;
+  virtual TriggerState GetTriggerState(const base::Feature& feature) const = 0;
 
   // Must be called after display of feature enlightenment finishes for a
   // particular |feature|.
   virtual void Dismissed(const base::Feature& feature) = 0;
+
+  // Acquiring a display lock means that no in-product help can be displayed
+  // while it is held. To release the lock, delete the handle.
+  // If in-product help is already displayed while the display lock is
+  // acquired, the lock is still handed out, but it will not dismiss the current
+  // in-product help. However, no new in-product help will be shown until all
+  // locks have been released. It is required to release the DisplayLockHandle
+  // once the lock should no longer be held.
+  // The DisplayLockHandle must be released on the main thread.
+  // This method returns nullptr if no handle could be retrieved.
+  virtual std::unique_ptr<DisplayLockHandle> AcquireDisplayLock() = 0;
 
   // Returns whether the tracker has been successfully initialized. During
   // startup, this will be false until the internal models have been loaded at
@@ -90,7 +131,7 @@ class Tracker : public KeyedService {
   // state will never change from initialized to uninitialized.
   // Callers can invoke AddOnInitializedCallback(...) to be notified when the
   // result of the initialization is ready.
-  virtual bool IsInitialized() = 0;
+  virtual bool IsInitialized() const = 0;
 
   // For features that trigger on startup, they can register a callback to
   // ensure that they are informed when the tracker has finished the

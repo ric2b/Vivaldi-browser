@@ -28,8 +28,8 @@ enum SquashingDisallowedReason {
   kSquashingDisallowedReasonScrollChildWithCompositedDescendants = 1 << 12,
   kSquashingDisallowedReasonSquashingLayerIsAnimating = 1 << 13,
   kSquashingDisallowedReasonRenderingContextMismatch = 1 << 14,
-  kSquashingDisallowedReasonNonTranslationTransform = 1 << 15,
-  kSquashingDisallowedReasonFragmentedContent = 1 << 16,
+  kSquashingDisallowedReasonFragmentedContent = 1 << 15,
+  kSquashingDisallowedReasonPrecedingLayerPrecludesSquashing = 1 << 16,
 };
 
 typedef unsigned SquashingDisallowedReasons;

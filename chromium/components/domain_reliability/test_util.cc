@@ -28,7 +28,7 @@ class MockTimer : public MockableTime::Timer {
   ~MockTimer() override {}
 
   // MockableTime::Timer implementation:
-  void Start(const tracked_objects::Location& posted_from,
+  void Start(const base::Location& posted_from,
              base::TimeDelta delay,
              const base::Closure& user_task) override {
     DCHECK(!user_task.is_null());
@@ -102,8 +102,12 @@ void MockUploader::UploadReport(const std::string& report_json,
   callback_.Run(report_json, max_upload_depth, upload_url, callback);
 }
 
-void MockUploader::set_discard_uploads(bool discard_uploads) {
+void MockUploader::SetDiscardUploads(bool discard_uploads) {
   discard_uploads_ = discard_uploads;
+}
+
+int MockUploader::GetDiscardedUploadCount() const {
+  return 0;
 }
 
 MockTime::MockTime()

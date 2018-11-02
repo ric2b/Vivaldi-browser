@@ -56,3 +56,10 @@ DISABLE(ServiceProcessStateTest, AutoRun)
 // Feature we do not use
 DISABLE_ALL(WebHistoryServiceTest)
 DISABLE(HistoryApiTest, Delete)
+
+// We are using a different geolocation API URL and key
+DISABLE(GeolocationBrowserTest, UrlWithApiKey)
+DISABLE(GeolocationNetworkProviderTest, EmptyApiKey)
+
+// We have changed values
+DISABLE(TopSitesImplTest, SetForcedTopSites)

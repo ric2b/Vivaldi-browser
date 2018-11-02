@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "ash/system/system_notifier.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -19,9 +21,6 @@ using base::UTF8ToUTF16;
 using namespace testing;
 
 namespace {
-
-const char* kTestUsers[] = {"test-user@gmail.com",
-                            "test-user1@gmail.com"};
 
 class UserAddingFinishObserver : public chromeos::UserAddingScreen::Observer {
  public:
@@ -62,7 +61,18 @@ class LoginStateNotificationBlockerChromeOSBrowserTest
       public message_center::MessageCenterObserver {
  public:
   LoginStateNotificationBlockerChromeOSBrowserTest()
-      : chromeos::LoginManagerTest(false) {}
+      : chromeos::LoginManagerTest(false) {
+    struct {
+      const char* email;
+      const char* gaia_id;
+    } const kTestUsers[] = {{"test-user@gmail.com", "1110001111"},
+                            {"test-user1@gmail.com", "1111111111"}};
+    for (size_t i = 0; i < arraysize(kTestUsers); ++i) {
+      test_users_.emplace_back(AccountId::FromUserEmailGaiaId(
+          kTestUsers[i].email, kTestUsers[i].gaia_id));
+    }
+  }
+
   ~LoginStateNotificationBlockerChromeOSBrowserTest() override {}
 
   void SetUpOnMainThread() override {
@@ -79,13 +89,31 @@ class LoginStateNotificationBlockerChromeOSBrowserTest
   // message_center::MessageCenterObserver:
   void OnBlockingStateChanged(
       message_center::NotificationBlocker* blocker) override {
-    state_changed_count_++;
+    ++state_changed_count_;
+
+    if (wait_loop_ && state_changed_count_ == expected_state_change_)
+      wait_loop_->Quit();
   }
 
   int GetStateChangedCountAndReset() {
     int result = state_changed_count_;
     state_changed_count_ = 0;
     return result;
+  }
+
+  void WaitForStateChangeAndReset(int expected_state_change) {
+    expected_state_change_ = expected_state_change;
+
+    if (state_changed_count_ != expected_state_change_) {
+      wait_loop_ = std::make_unique<base::RunLoop>();
+      wait_loop_->Run();
+      wait_loop_.reset();
+    }
+
+    EXPECT_EQ(expected_state_change_, state_changed_count_);
+
+    expected_state_change_ = 0;
+    state_changed_count_ = 0;
   }
 
   // Compares the number of notifications before and after adding a notification
@@ -96,7 +124,7 @@ class LoginStateNotificationBlockerChromeOSBrowserTest
         message_center::MessageCenter::Get()->GetPopupNotifications().size();
     std::string id("browser-id");
     message_center::MessageCenter::Get()->AddNotification(
-        base::MakeUnique<message_center::Notification>(
+        std::make_unique<message_center::Notification>(
             message_center::NOTIFICATION_TYPE_SIMPLE, id,
             UTF8ToUTF16("browser-title"), UTF8ToUTF16("browser-message"),
             gfx::Image(), UTF8ToUTF16("browser-source"), GURL(), notifier_id,
@@ -107,16 +135,21 @@ class LoginStateNotificationBlockerChromeOSBrowserTest
     return new_count == initial_count + 1;
   }
 
+  std::vector<AccountId> test_users_;
+
  private:
   int state_changed_count_ = 0;
+
+  std::unique_ptr<base::RunLoop> wait_loop_;
+  int expected_state_change_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(LoginStateNotificationBlockerChromeOSBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(LoginStateNotificationBlockerChromeOSBrowserTest,
                        PRE_BaseTest) {
-  RegisterUser(kTestUsers[0]);
-  RegisterUser(kTestUsers[1]);
+  RegisterUser(test_users_[0]);
+  RegisterUser(test_users_[1]);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -124,34 +157,35 @@ IN_PROC_BROWSER_TEST_F(LoginStateNotificationBlockerChromeOSBrowserTest,
                        BaseTest) {
   message_center::NotifierId notifier_id(
       message_center::NotifierId::APPLICATION, "test-notifier");
-  notifier_id.profile_id = kTestUsers[0];
+  notifier_id.profile_id = test_users_[0].GetUserEmail();
 
   // Logged in as a normal user.
-  LoginUser(kTestUsers[0]);
-  // Two session state changes for login:
-  //   LOGIN_PRIMARY -> LOGGED_IN_NOT_ACTIVE -> ACTIVE.
-  EXPECT_EQ(2, GetStateChangedCountAndReset());
+  LoginUser(test_users_[0]);
+
+  // One state change from LoginStateNotificationBloker plus one state change
+  // for the InactiveUserNotificationBlocker.
+  WaitForStateChangeAndReset(2);
   EXPECT_TRUE(ShouldShowNotificationAsPopup(notifier_id));
 
   // Multi-login user switch.
   UserAddingFinishObserver observer;
   chromeos::UserAddingScreen::Get()->Start();
-  content::RunAllPendingInMessageLoop();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetStateChangedCountAndReset());
   EXPECT_FALSE(ShouldShowNotificationAsPopup(notifier_id));
 
   // Multi-login user switch off.
   chromeos::UserAddingScreen::Get()->Cancel();
   observer.WaitUntilUserAddingFinishedOrCancelled();
-  content::RunAllPendingInMessageLoop();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetStateChangedCountAndReset());
   EXPECT_TRUE(ShouldShowNotificationAsPopup(notifier_id));
 }
 
 IN_PROC_BROWSER_TEST_F(LoginStateNotificationBlockerChromeOSBrowserTest,
                        PRE_AlwaysAllowedNotifier) {
-  RegisterUser(kTestUsers[0]);
-  RegisterUser(kTestUsers[1]);
+  RegisterUser(test_users_[0]);
+  RegisterUser(test_users_[1]);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -161,26 +195,27 @@ IN_PROC_BROWSER_TEST_F(LoginStateNotificationBlockerChromeOSBrowserTest,
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT,
       ash::system_notifier::kNotifierDisplay);
-  notifier_id.profile_id = kTestUsers[0];
+  notifier_id.profile_id = test_users_[0].GetUserEmail();
 
   // Logged in as a normal user.
-  LoginUser(kTestUsers[0]);
-  // Two session state changes for login:
-  //   LOGIN_PRIMARY -> LOGGED_IN_NOT_ACTIVE -> ACTIVE.
-  EXPECT_EQ(2, GetStateChangedCountAndReset());
+  LoginUser(test_users_[0]);
+
+  // One state change from LoginStateNotificationBloker plus one state change
+  // for the InactiveUserNotificationBlocker.
+  WaitForStateChangeAndReset(2);
   EXPECT_TRUE(ShouldShowNotificationAsPopup(notifier_id));
 
   // Multi-login user switch.
   UserAddingFinishObserver observer;
   chromeos::UserAddingScreen::Get()->Start();
-  content::RunAllPendingInMessageLoop();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetStateChangedCountAndReset());
   EXPECT_TRUE(ShouldShowNotificationAsPopup(notifier_id));
 
   // Multi-login user switch off.
   chromeos::UserAddingScreen::Get()->Cancel();
   observer.WaitUntilUserAddingFinishedOrCancelled();
-  content::RunAllPendingInMessageLoop();
+  content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetStateChangedCountAndReset());
   EXPECT_TRUE(ShouldShowNotificationAsPopup(notifier_id));
 }

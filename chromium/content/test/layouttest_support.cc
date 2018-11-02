@@ -9,32 +9,32 @@
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/test/pixel_test_output_surface.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/child/request_extra_data.h"
+#include "content/browser/shared_worker/shared_worker_service_impl.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/renderer.mojom.h"
+#include "content/common/unique_name_helper.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
 #include "content/renderer/fetchers/manifest_fetcher.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
-#include "content/renderer/history_entry.h"
-#include "content/renderer/history_serialization.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/layout_test_dependencies.h"
+#include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -53,10 +53,8 @@
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/events/blink/blink_event_util.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/test/icc_profiles.h"
@@ -105,13 +103,13 @@ using WebWidgetTestProxyType =
                                     bool>;
 using WebFrameTestProxyType =
     test_runner::WebFrameTestProxy<RenderFrameImpl,
-                                   const RenderFrameImpl::CreateParams&>;
+                                   RenderFrameImpl::CreateParams>;
 
 RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
                                        const mojom::CreateViewParams& params) {
   WebViewTestProxyType* render_view_proxy =
       new WebViewTestProxyType(compositor_deps, params);
-  if (g_view_test_proxy_callback == 0)
+  if (g_view_test_proxy_callback == nullptr)
     return render_view_proxy;
   g_view_test_proxy_callback.Get().Run(render_view_proxy, render_view_proxy);
   return render_view_proxy;
@@ -139,10 +137,10 @@ void RenderWidgetInitialized(RenderWidget* render_widget) {
   }
 }
 
-RenderFrameImpl* CreateWebFrameTestProxy(
-    const RenderFrameImpl::CreateParams& params) {
-  WebFrameTestProxyType* render_frame_proxy = new WebFrameTestProxyType(params);
-  if (g_frame_test_proxy_callback == 0)
+RenderFrameImpl* CreateWebFrameTestProxy(RenderFrameImpl::CreateParams params) {
+  WebFrameTestProxyType* render_frame_proxy =
+      new WebFrameTestProxyType(std::move(params));
+  if (g_frame_test_proxy_callback == nullptr)
     return render_frame_proxy;
   g_frame_test_proxy_callback.Get().Run(render_frame_proxy, render_frame_proxy);
   return render_frame_proxy;
@@ -158,12 +156,9 @@ float GetWindowToViewportScale(RenderWidget* render_widget) {
 // DirectWrite only has access to %WINDIR%\Fonts by default. For developer
 // side-loading, support kRegisterFontFiles to allow access to additional fonts.
 void RegisterSideloadedTypefaces(SkFontMgr* fontmgr) {
-  std::vector<std::string> files = switches::GetSideloadFontFiles();
-  for (std::vector<std::string>::const_iterator i(files.begin());
-       i != files.end();
-       ++i) {
-    SkTypeface* typeface = fontmgr->createFromFile(i->c_str());
-    blink::WebFontRendering::AddSideloadedFontForTesting(typeface);
+  for (const auto& file : switches::GetSideloadFontFiles()) {
+    blink::WebFontRendering::AddSideloadedFontForTesting(
+        fontmgr->makeFromFile(file.c_str()));
   }
 }
 #endif  // OS_WIN
@@ -308,7 +303,7 @@ class CopyRequestSwapPromise : public cc::SwapPromise {
     DCHECK(layer_tree_frame_sink_from_commit_);
   }
   void DidActivate() override {}
-  void WillSwap(cc::CompositorFrameMetadata*) override {
+  void WillSwap(viz::CompositorFrameMetadata*) override {
     layer_tree_frame_sink_from_commit_->RequestCopyOfOutput(
         std::move(copy_request_));
   }
@@ -350,15 +345,13 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
 
     viz::RendererSettings renderer_settings;
     base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-    renderer_settings.enable_color_correct_rendering =
-        base::FeatureList::IsEnabled(features::kColorCorrectRendering);
     renderer_settings.allow_antialiasing &=
         !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
     renderer_settings.highp_threshold_min = 2048;
 
     constexpr bool disable_display_vsync = false;
     constexpr double refresh_rate = 60.0;
-    auto layer_tree_frame_sink = base::MakeUnique<viz::TestLayerTreeFrameSink>(
+    auto layer_tree_frame_sink = std::make_unique<viz::TestLayerTreeFrameSink>(
         std::move(compositor_context_provider),
         std::move(worker_context_provider), nullptr /* shared_bitmap_manager */,
         gpu_memory_buffer_manager, renderer_settings, task_runner,
@@ -375,7 +368,7 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
     // may not have been created yet. Instead, we wait until OnCommit to find
     // the currently active LayerTreeFrameSink for the given RenderWidget
     // routing_id.
-    return base::MakeUnique<CopyRequestSwapPromise>(
+    return std::make_unique<CopyRequestSwapPromise>(
         std::move(request),
         base::Bind(
             &LayoutTestDependenciesImpl::FindLayerTreeFrameSink,
@@ -385,7 +378,7 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
   }
 
   // TestLayerTreeFrameSinkClient implementation.
-  std::unique_ptr<cc::OutputSurface> CreateDisplayOutputSurface(
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurface(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     // This is for an offscreen context for the compositor. So the default
@@ -402,27 +395,27 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
     const bool support_locking = false;
 
     auto context_provider =
-        make_scoped_refptr(new ui::ContextProviderCommandBuffer(
+        base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
             gpu_channel_, kGpuStreamIdDefault, kGpuStreamPriorityDefault,
             gpu::kNullSurfaceHandle,
             GURL("chrome://gpu/"
                  "LayoutTestDependenciesImpl::CreateOutputSurface"),
             automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
             attributes, nullptr,
-            ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING));
+            ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING);
     context_provider->BindToCurrentThread();
 
     bool flipped_output_surface = false;
-    return base::MakeUnique<cc::PixelTestOutputSurface>(
+    return std::make_unique<cc::PixelTestOutputSurface>(
         std::move(context_provider), flipped_output_surface);
   }
   void DisplayReceivedLocalSurfaceId(
       const viz::LocalSurfaceId& local_surface_id) override {}
   void DisplayReceivedCompositorFrame(
-      const cc::CompositorFrame& frame) override {}
+      const viz::CompositorFrame& frame) override {}
   void DisplayWillDrawAndSwap(
       bool will_draw_and_swap,
-      const cc::RenderPassList& render_passes) override {}
+      const viz::RenderPassList& render_passes) override {}
   void DisplayDidDrawAndSwap() override {}
 
  private:
@@ -442,7 +435,9 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
 
 void EnableRendererLayoutTestMode() {
   RenderThreadImpl::current()->set_layout_test_dependencies(
-      base::MakeUnique<LayoutTestDependenciesImpl>());
+      std::make_unique<LayoutTestDependenciesImpl>());
+
+  UniqueNameHelper::PreserveStableUniqueNameForTesting();
 
 #if defined(OS_WIN)
   RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite().get());
@@ -457,14 +452,14 @@ void EnableBrowserLayoutTestMode() {
   RenderWidgetHostImpl::DisableResizeAckCheckForTesting();
 }
 
+void TerminateAllSharedWorkersForTesting(base::OnceClosure callback) {
+  static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
+      ->TerminateAllWorkersForTesting(std::move(callback));
+}
+
 int GetLocalSessionHistoryLength(RenderView* render_view) {
   return static_cast<RenderViewImpl*>(render_view)->
       GetLocalSessionHistoryLengthForTesting();
-}
-
-void SyncNavigationState(RenderView* render_view) {
-  // TODO(creis): Add support for testing in OOPIF-enabled modes.
-  // See https://crbug.com/477150.
 }
 
 void SetFocusAndActivate(RenderView* render_view, bool enable) {
@@ -540,63 +535,6 @@ void EnableAutoResizeMode(RenderView* render_view,
 void DisableAutoResizeMode(RenderView* render_view, const WebSize& new_size) {
   static_cast<RenderViewImpl*>(render_view)->
       DisableAutoResizeForTesting(new_size);
-}
-
-// Returns True if node1 < node2.
-bool HistoryEntryCompareLess(HistoryEntry::HistoryNode* node1,
-                             HistoryEntry::HistoryNode* node2) {
-  base::string16 target1 = node1->item().Target().Utf16();
-  base::string16 target2 = node2->item().Target().Utf16();
-  return base::CompareCaseInsensitiveASCII(target1, target2) < 0;
-}
-
-std::string DumpHistoryItem(HistoryEntry::HistoryNode* node,
-                            int indent,
-                            bool is_current_index) {
-  std::string result;
-
-  const blink::WebHistoryItem& item = node->item();
-  if (is_current_index) {
-    result.append("curr->");
-    result.append(indent - 6, ' ');  // 6 == "curr->".length()
-  } else {
-    result.append(indent, ' ');
-  }
-
-  std::string url =
-      test_runner::NormalizeLayoutTestURL(item.UrlString().Utf8());
-  result.append(url);
-  if (!item.Target().IsEmpty()) {
-    result.append(" (in frame \"");
-    result.append(item.Target().Utf8());
-    result.append("\")");
-  }
-  result.append("\n");
-
-  std::vector<HistoryEntry::HistoryNode*> children = node->children();
-  if (!children.empty()) {
-    std::sort(children.begin(), children.end(), HistoryEntryCompareLess);
-    for (size_t i = 0; i < children.size(); ++i)
-      result += DumpHistoryItem(children[i], indent + 4, false);
-  }
-
-  return result;
-}
-
-std::string DumpBackForwardList(std::vector<PageState>& page_state,
-                                size_t current_index) {
-  std::string result;
-  result.append("\n============== Back Forward List ==============\n");
-  for (size_t index = 0; index < page_state.size(); ++index) {
-    std::unique_ptr<HistoryEntry> entry(
-        PageStateToHistoryEntry(page_state[index]));
-    result.append(
-        DumpHistoryItem(entry->root_history_node(),
-                        8,
-                        index == current_index));
-  }
-  result.append("===============================================\n");
-  return result;
 }
 
 void SchedulerRunIdleTasks(const base::Closure& callback) {

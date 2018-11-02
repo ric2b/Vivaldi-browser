@@ -5,12 +5,12 @@
 #include "core/paint/SVGMaskPainter.h"
 
 #include "core/layout/svg/LayoutSVGResourceMasker.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/graphics/paint/CompositingDisplayItem.h"
 #include "platform/graphics/paint/CompositingRecorder.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 
@@ -27,7 +27,7 @@ bool SVGMaskPainter::PrepareEffect(const LayoutObject& object,
   if (visual_rect.IsEmpty() || !mask_.GetElement()->HasChildren())
     return false;
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     context.GetPaintController().CreateAndAppend<BeginCompositingDisplayItem>(
         object, SkBlendMode::kSrcOver, 1, &visual_rect);
   }
@@ -48,41 +48,33 @@ void SVGMaskPainter::FinishEffect(const LayoutObject& object,
     CompositingRecorder mask_compositing(context, object, SkBlendMode::kDstIn,
                                          1, &visual_rect, mask_layer_filter);
     Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-      DCHECK(object.FirstFragment());
-      const auto* object_paint_properties =
-          object.FirstFragment()->PaintProperties();
-      DCHECK(object_paint_properties && object_paint_properties->Mask());
-      PaintChunkProperties properties(
-          context.GetPaintController().CurrentPaintChunkProperties());
-      properties.property_tree_state.SetEffect(object_paint_properties->Mask());
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+      const auto* properties = object.FirstFragment().PaintProperties();
+      DCHECK(properties && properties->Mask());
       scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                            object, properties);
+                                            properties->Mask(), object);
     }
 
-    DrawMaskForLayoutObject(context, object, object.ObjectBoundingBox(),
-                            visual_rect);
+    DrawMaskForLayoutObject(context, object, object.ObjectBoundingBox());
   }
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
     context.GetPaintController().EndItem<EndCompositingDisplayItem>(object);
 }
 
 void SVGMaskPainter::DrawMaskForLayoutObject(
     GraphicsContext& context,
     const LayoutObject& layout_object,
-    const FloatRect& target_bounding_box,
-    const FloatRect& target_visual_rect) {
+    const FloatRect& target_bounding_box) {
   AffineTransform content_transformation;
   sk_sp<const PaintRecord> record = mask_.CreatePaintRecord(
       content_transformation, target_bounding_box, context);
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          context, layout_object, DisplayItem::kSVGMask))
+  if (DrawingRecorder::UseCachedDrawingIfPossible(context, layout_object,
+                                                  DisplayItem::kSVGMask))
     return;
 
-  LayoutObjectDrawingRecorder drawing_recorder(
-      context, layout_object, DisplayItem::kSVGMask, target_visual_rect);
+  DrawingRecorder recorder(context, layout_object, DisplayItem::kSVGMask);
   context.Save();
   context.ConcatCTM(content_transformation);
   context.DrawRecord(std::move(record));

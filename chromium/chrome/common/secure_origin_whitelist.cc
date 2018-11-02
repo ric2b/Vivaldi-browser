@@ -8,9 +8,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "extensions/common/constants.h"
 
-std::vector<GURL> GetSecureOriginWhitelist() {
+namespace secure_origin_whitelist {
+
+std::vector<GURL> GetWhitelist() {
   std::vector<GURL> origins;
   // If kUnsafelyTreatInsecureOriginAsSecure option is given, then treat the
   // value as a comma-separated list of origins:
@@ -30,8 +34,15 @@ std::vector<GURL> GetSecureOriginWhitelist() {
   return origins;
 }
 
-std::set<std::string> GetSchemesBypassingSecureContextCheckWhitelist() {
+std::set<std::string> GetSchemesBypassingSecureContextCheck() {
   std::set<std::string> schemes;
   schemes.insert(extensions::kExtensionScheme);
   return schemes;
 }
+
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterStringPref(prefs::kUnsafelyTreatInsecureOriginAsSecure,
+                               /* default_value */ "");
+}
+
+}  // namespace secure_origin_whitelist

@@ -193,6 +193,14 @@ NSData* OSExchangeDataProviderMac::GetNSDataForType(NSString* type) const {
   return [pasteboard_->get() dataForType:type];
 }
 
+NSArray* OSExchangeDataProviderMac::GetAvailableTypes() const {
+  NSSet* supportedTypes = [NSSet setWithArray:SupportedPasteboardTypes()];
+  NSMutableSet* availableTypes =
+      [NSMutableSet setWithArray:[pasteboard_->get() types]];
+  [availableTypes unionSet:supportedTypes];
+  return [availableTypes allObjects];
+}
+
 // static
 std::unique_ptr<OSExchangeData>
 OSExchangeDataProviderMac::CreateDataFromPasteboard(NSPasteboard* pasteboard) {
@@ -201,7 +209,7 @@ OSExchangeDataProviderMac::CreateDataFromPasteboard(NSPasteboard* pasteboard) {
   for (NSPasteboardItem* item in [pasteboard pasteboardItems])
     ClipboardUtil::AddDataToPasteboard(provider->pasteboard_->get(), item);
 
-  return base::MakeUnique<OSExchangeData>(
+  return std::make_unique<OSExchangeData>(
       base::WrapUnique<OSExchangeData::Provider>(provider));
 }
 

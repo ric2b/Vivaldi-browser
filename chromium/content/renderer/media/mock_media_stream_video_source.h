@@ -37,8 +37,6 @@ class MockMediaStreamVideoSource : public MediaStreamVideoSource {
   // frame has been delivered.
   void DeliverVideoFrame(const scoped_refptr<media::VideoFrame>& frame);
 
-  void CompleteGetSupportedFormats();
-
   const media::VideoCaptureFormat& start_format() const { return format_; }
   int max_requested_height() const { return max_requested_height_; }
   int max_requested_width() const { return max_requested_width_; }
@@ -49,8 +47,19 @@ class MockMediaStreamVideoSource : public MediaStreamVideoSource {
     DoSetMutedState(muted_state);
   }
 
+  void EnableStopForRestart() { can_stop_for_restart_ = true; }
+  void DisableStopForRestart() { can_stop_for_restart_ = false; }
+
+  void EnableRestart() { can_restart_ = true; }
+  void DisableRestart() { can_restart_ = false; }
+
+  bool is_suspended() { return is_suspended_; }
+
   // Implements MediaStreamVideoSource.
   void RequestRefreshFrame() override;
+  base::Optional<media::VideoCaptureParams> GetCurrentCaptureParams()
+      const override;
+  void OnHasConsumers(bool has_consumers) override;
 
  protected:
   // Implements MediaStreamVideoSource.
@@ -58,6 +67,8 @@ class MockMediaStreamVideoSource : public MediaStreamVideoSource {
       const VideoCaptureDeliverFrameCB& frame_callback) override;
   void StopSourceImpl() override;
   base::Optional<media::VideoCaptureFormat> GetCurrentFormat() const override;
+  void StopSourceForRestartImpl() override;
+  void RestartSourceImpl(const media::VideoCaptureFormat& new_format) override;
 
  private:
   media::VideoCaptureFormat format_;
@@ -66,6 +77,10 @@ class MockMediaStreamVideoSource : public MediaStreamVideoSource {
   int max_requested_width_;
   double max_requested_frame_rate_;
   bool attempted_to_start_;
+  bool is_stopped_for_restart_ = false;
+  bool can_stop_for_restart_ = true;
+  bool can_restart_ = true;
+  bool is_suspended_ = false;
   VideoCaptureDeliverFrameCB frame_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(MockMediaStreamVideoSource);

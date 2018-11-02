@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "InternalsSpeechSynthesis.h"
+#include "modules/speech/testing/InternalsSpeechSynthesis.h"
 
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -55,8 +55,8 @@ void InternalsSpeechSynthesis::enableMockSpeechSynthesizer(
   if (!synthesis)
     return;
 
-  synthesis->SetPlatformSynthesizer(
-      PlatformSpeechSynthesizerMock::Create(synthesis));
+  synthesis->SetPlatformSynthesizer(PlatformSpeechSynthesizerMock::Create(
+      synthesis, ExecutionContext::From(script_state)));
 }
 
 }  // namespace blink

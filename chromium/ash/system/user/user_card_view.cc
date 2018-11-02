@@ -141,7 +141,7 @@ PublicAccountUserDetails::PublicAccountUserDetails() : learn_more_(nullptr) {
   DeterminePreferredSize();
 }
 
-PublicAccountUserDetails::~PublicAccountUserDetails() {}
+PublicAccountUserDetails::~PublicAccountUserDetails() = default;
 
 void PublicAccountUserDetails::Layout() {
   lines_.clear();
@@ -289,9 +289,6 @@ UserCardView::UserCardView(int user_index) : user_index_(user_index) {
   layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-
-  SetBackground(views::CreateThemedSolidBackground(
-      this, ui::NativeTheme::kColorId_BubbleBackground));
 
   Shell::Get()->media_controller()->AddObserver(this);
 

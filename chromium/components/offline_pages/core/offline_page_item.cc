@@ -7,7 +7,8 @@
 namespace offline_pages {
 
 OfflinePageItem::OfflinePageItem()
-    : file_size(0),
+    : offline_id(0),
+      file_size(0),
       access_count(0),
       flags(NO_FLAG),
       system_download_id(0),
@@ -81,6 +82,10 @@ bool OfflinePageItem::operator==(const OfflinePageItem& other) const {
          system_download_id == other.system_download_id &&
          file_missing_time == other.file_missing_time &&
          upgrade_attempt == other.upgrade_attempt && digest == digest;
+}
+
+bool OfflinePageItem::operator<(const OfflinePageItem& other) const {
+  return offline_id < other.offline_id;
 }
 
 }  // namespace offline_pages

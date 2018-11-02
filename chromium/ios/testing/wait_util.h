@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
+#include "base/compiler_specific.h"
 #import "base/ios/block_types.h"
 
 namespace testing {
@@ -26,10 +27,22 @@ extern const NSTimeInterval kWaitForDownloadTimeout;
 // Constant for timeout in seconds while waiting for a pageload to complete.
 extern const NSTimeInterval kWaitForPageLoadTimeout;
 
+// Constant for timeout in seconds while waiting for a generic action to
+// complete.
+extern const NSTimeInterval kWaitForActionTimeout;
+
+// Constant for timeout in seconds while waiting for cookies operations to
+// complete.
+extern const NSTimeInterval kWaitForCookiesTimeout;
+
+// Constant for timeout in seconds while waiting for a file operation to
+// complete.
+extern const NSTimeInterval kWaitForFileOperationTimeout;
+
 // Returns true when condition() becomes true, otherwise returns false after
 // |timeout|.
 bool WaitUntilConditionOrTimeout(NSTimeInterval timeout,
-                                 ConditionBlock condition);
+                                 ConditionBlock condition) WARN_UNUSED_RESULT;
 
 }  // namespace testing
 

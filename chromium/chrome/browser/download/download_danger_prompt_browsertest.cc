@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_danger_prompt.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,14 +17,15 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/database_manager.h"
 #include "content/public/test/mock_download_item.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_base_features.h"
 #include "url/gurl.h"
 
 using ::testing::_;
@@ -77,6 +79,12 @@ class DownloadDangerPromptTest
   ~DownloadDangerPromptTest() override {}
 
   void SetUp() override {
+    // TODO(crbug.com/630357): Remove parameterized testing for this class when
+    // secondary-ui-md is enabled by default on all platforms.
+    if (GetParam() == SecondaryUiMd::ENABLED)
+      scoped_feature_list_.InitAndEnableFeature(features::kSecondaryUiMd);
+    else
+      scoped_feature_list_.InitAndDisableFeature(features::kSecondaryUiMd);
     SafeBrowsingService::RegisterFactory(test_safe_browsing_factory_.get());
     InProcessBrowserTest::SetUp();
   }
@@ -84,13 +92,6 @@ class DownloadDangerPromptTest
   void TearDown() override {
     SafeBrowsingService::RegisterFactory(nullptr);
     InProcessBrowserTest::TearDown();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // TODO(crbug.com/630357): Remove parameterized testing for this class when
-    // secondary-ui-md is enabled by default on all platforms.
-    if (GetParam() == SecondaryUiMd::ENABLED)
-      command_line->AppendSwitch(switches::kExtendMdToSecondaryUi);
   }
 
   // Opens a new tab and waits for navigations to finish. If there are pending
@@ -206,6 +207,7 @@ class DownloadDangerPromptTest
   bool did_receive_callback_;
   std::unique_ptr<TestSafeBrowsingServiceFactory> test_safe_browsing_factory_;
   std::string expected_serialized_report_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadDangerPromptTest);
 };
@@ -340,5 +342,87 @@ INSTANTIATE_TEST_CASE_P(,
                         ::testing::Values(SecondaryUiMd::ENABLED,
                                           SecondaryUiMd::DISABLED),
                         &SecondaryUiMdStatusToString);
+
+// Class for testing interactive dialogs.
+class DownloadDangerPromptBrowserTest : public DialogBrowserTest {
+ protected:
+  enum InvocationType { USER_INITIATED, FROM_DOWNLOAD_API };
+  DownloadDangerPromptBrowserTest() : download_url_(kTestDownloadUrl) {}
+
+  void RunTest(content::DownloadDangerType danger_type,
+               InvocationType invocation_type) {
+    danger_type_ = danger_type;
+    invocation_type_ = invocation_type;
+
+    RunDialog();
+  }
+
+ private:
+  void ShowDialog(const std::string& name) override {
+    ON_CALL(download_, GetURL()).WillByDefault(ReturnRef(download_url_));
+    ON_CALL(download_, GetReferrerUrl())
+        .WillByDefault(ReturnRef(GURL::EmptyGURL()));
+    ON_CALL(download_, GetBrowserContext())
+        .WillByDefault(Return(browser()->profile()));
+    ON_CALL(download_, GetTargetFilePath())
+        .WillByDefault(ReturnRef(empty_file_path_));
+    ON_CALL(download_, IsDangerous()).WillByDefault(Return(true));
+    ON_CALL(download_, GetFileNameToReportUser())
+        .WillByDefault(Return(base::FilePath(FILE_PATH_LITERAL("evil.exe"))));
+
+    // Set up test-specific parameters
+    ON_CALL(download_, GetDangerType()).WillByDefault(Return(danger_type_));
+
+    DownloadDangerPrompt::Create(
+        &download_, browser()->tab_strip_model()->GetActiveWebContents(),
+        invocation_type_ == FROM_DOWNLOAD_API, DownloadDangerPrompt::OnDone());
+  }
+
+  const GURL download_url_;
+  const base::FilePath empty_file_path_;
+
+  content::DownloadDangerType danger_type_;
+  InvocationType invocation_type_;
+  content::MockDownloadItem download_;
+
+  DISALLOW_COPY_AND_ASSIGN(DownloadDangerPromptBrowserTest);
+};
+
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_DangerousFile) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, USER_INITIATED);
+}
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_DangerousFileFromApi) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, FROM_DOWNLOAD_API);
+}
+
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_DangerousUrl) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, USER_INITIATED);
+}
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_DangerousUrlFromApi) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, FROM_DOWNLOAD_API);
+}
+
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_UncommonContent) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, USER_INITIATED);
+}
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_UncommonContentFromApi) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, FROM_DOWNLOAD_API);
+}
+
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_PotentiallyUnwanted) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED, USER_INITIATED);
+}
+IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
+                       InvokeDialog_PotentiallyUnwantedFromApi) {
+  RunTest(content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED,
+          FROM_DOWNLOAD_API);
+}
 
 }  // namespace safe_browsing

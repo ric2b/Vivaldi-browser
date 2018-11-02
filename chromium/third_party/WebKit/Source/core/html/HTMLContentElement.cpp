@@ -26,7 +26,6 @@
 
 #include "core/html/HTMLContentElement.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/SelectorChecker.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/ElementShadow.h"
@@ -34,7 +33,7 @@
 #include "core/dom/QualifiedName.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -57,7 +56,7 @@ inline HTMLContentElement::HTMLContentElement(Document& document,
 
 HTMLContentElement::~HTMLContentElement() {}
 
-DEFINE_TRACE(HTMLContentElement) {
+void HTMLContentElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(filter_);
   V0InsertionPoint::Trace(visitor);
 }

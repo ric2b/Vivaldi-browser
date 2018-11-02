@@ -25,6 +25,7 @@ using calendar::RecurrenceInterval;
 namespace extensions {
 
 using vivaldi::calendar::Calendar;
+using vivaldi::calendar::CreateEventsResults;
 using vivaldi::calendar::OccurrenceInterval;
 using vivaldi::calendar::RecurrencePattern;
 
@@ -316,72 +317,60 @@ base::Time GetTime(double ms_from_epoch) {
              : base::Time::FromDoubleT(seconds_from_epoch);
 }
 
+calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {
+  calendar::EventRow row;
+  row.set_title(base::UTF8ToUTF16(event.title));
+
+  if (event.description.get()) {
+    row.set_description(base::UTF8ToUTF16(*event.description));
+  }
+
+  if (event.start.get()) {
+    row.set_start(GetTime(*event.start.get()));
+  }
+
+  if (event.end.get()) {
+    row.set_end(GetTime(*event.end.get()));
+  }
+
+  if (event.all_day.get()) {
+    row.set_all_day(*event.all_day.get());
+  }
+
+  if (event.is_recurring.get()) {
+    row.set_is_recurring(*event.is_recurring.get());
+  }
+
+  if (event.start_recurring.get()) {
+    row.set_start_recurring(GetTime(*event.start_recurring.get()));
+  }
+
+  if (event.end_recurring.get()) {
+    row.set_end_recurring(GetTime(*event.end_recurring.get()));
+  }
+
+  if (event.location.get()) {
+    row.set_location(base::UTF8ToUTF16(*event.location));
+  }
+
+  if (event.url.get()) {
+    row.set_url(base::UTF8ToUTF16(*event.url));
+  }
+
+  if (event.recurrence.get()) {
+    row.set_recurrence(GetEventRecurrence(*event.recurrence));
+  }
+
+  return row;
+}
+
 ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
   std::unique_ptr<vivaldi::calendar::EventCreate::Params> params(
       vivaldi::calendar::EventCreate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  calendar::EventRow createEvent;
-
-  base::string16 title;
-  title = base::UTF8ToUTF16(params->event.title);
-
-  createEvent.set_title(title);
-
-  if (params->event.description.get()) {
-    base::string16 description;
-    description = base::UTF8ToUTF16(*params->event.description);
-    createEvent.set_description(description);
-  }
-
-  if (params->event.start.get()) {
-    double start = *params->event.start.get();
-    createEvent.set_start(GetTime(start));
-  }
-
-  double end;
-  if (params->event.end.get()) {
-    end = *params->event.end.get();
-    createEvent.set_end(GetTime(end));
-  }
-
-  if (params->event.all_day.get()) {
-    bool all_day = *params->event.all_day.get();
-    createEvent.set_all_day(all_day);
-  }
-
-  if (params->event.is_recurring.get()) {
-    bool is_recurring =  *params->event.is_recurring.get();
-    createEvent.set_is_recurring(is_recurring);
-  }
-
-  if (params->event.start_recurring.get()) {
-    double start_recurring = *params->event.start_recurring.get();
-    createEvent.set_start_recurring(GetTime(start_recurring));
-  }
-
-  if (params->event.end_recurring.get()) {
-    double end_recurring = *params->event.end_recurring.get();
-    createEvent.set_end_recurring(GetTime(end_recurring));
-  }
-
-  base::string16 location;
-  if (params->event.location.get()) {
-    location = base::UTF8ToUTF16(*params->event.location);
-    createEvent.set_location(location);
-  }
-
-  base::string16 url;
-  if (params->event.url.get()) {
-    url = base::UTF8ToUTF16(*params->event.url);
-    createEvent.set_url(url);
-  }
-
-  if (params->event.recurrence.get()) {
-    createEvent.set_recurrence(GetEventRecurrence(*params->event.recurrence));
-  }
-
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+  calendar::EventRow createEvent = GetEventRow(params->event);
 
   model->CreateCalendarEvent(
       createEvent,
@@ -399,6 +388,49 @@ void CalendarEventCreateFunction::CreateEventComplete(
     Respond(ArgumentList(
         extensions::vivaldi::calendar::EventCreate::Results::Create(ev)));
   }
+}
+
+ExtensionFunction::ResponseAction CalendarEventsCreateFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::EventsCreate::Params> params(
+      vivaldi::calendar::EventsCreate::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  std::vector<vivaldi::calendar::CreateDetails>& events = params->events_list;
+  size_t count = events.size();
+  EXTENSION_FUNCTION_VALIDATE(count > 0);
+
+  std::vector<calendar::EventRow> event_rows;
+
+  for (size_t i = 0; i < count; ++i) {
+    vivaldi::calendar::CreateDetails& create_details = events[i];
+    calendar::EventRow createEvent = GetEventRow(create_details);
+    event_rows.push_back(createEvent);
+  }
+
+  model->CreateCalendarEvents(
+      event_rows,
+      base::Bind(&CalendarEventsCreateFunction::CreateEventsComplete, this),
+      &task_tracker_);
+
+  return RespondLater();
+}
+
+CreateEventsResults GetCreateEventsItem(
+    const calendar::CreateEventsResult& res) {
+  CreateEventsResults event_item;
+  event_item.created_count.reset(new int(res.number_success));
+  event_item.failed_count.reset(new int(res.number_failed));
+  return event_item;
+}
+
+void CalendarEventsCreateFunction::CreateEventsComplete(
+    std::shared_ptr<calendar::CreateEventsResult> results) {
+  CreateEventsResults return_results = GetCreateEventsItem(*results);
+  Respond(
+      ArgumentList(extensions::vivaldi::calendar::EventsCreate::Results::Create(
+          return_results)));
 }
 
 bool GetIdAsInt64(const base::string16& id_string, int64_t* id) {

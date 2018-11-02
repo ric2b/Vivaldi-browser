@@ -31,6 +31,8 @@
 #include "core/editing/VisibleUnits.h"
 
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/api/LayoutItem.h"
 
@@ -56,7 +58,7 @@ PositionTemplate<Strategy> StartOfParagraphAlgorithm(
     return PositionTemplate<Strategy>::BeforeNode(*start_node);
 
   Element* const start_block = EnclosingBlock(
-      PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(start_node),
+      PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(*start_node),
       kCannotCrossEditingBoundary);
   ContainerNode* const highest_root = HighestEditableRoot(position);
   const bool start_node_is_editable = HasEditableStyle(*start_node);
@@ -164,7 +166,7 @@ PositionTemplate<Strategy> EndOfParagraphAlgorithm(
     return PositionTemplate<Strategy>::AfterNode(*start_node);
 
   Element* const start_block = EnclosingBlock(
-      PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(start_node),
+      PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(*start_node),
       kCannotCrossEditingBoundary);
   ContainerNode* const highest_root = HighestEditableRoot(position);
   const bool start_node_is_editable = HasEditableStyle(*start_node);
@@ -331,10 +333,9 @@ bool IsStartOfParagraph(const VisiblePosition& pos,
                                                       boundary_crossing_rule);
 }
 
-bool IsStartOfParagraph(const VisiblePositionInFlatTree& pos,
-                        EditingBoundaryCrossingRule boundary_crossing_rule) {
+bool IsStartOfParagraph(const VisiblePositionInFlatTree& pos) {
   return IsStartOfParagraphAlgorithm<EditingInFlatTreeStrategy>(
-      pos, boundary_crossing_rule);
+      pos, kCannotCrossEditingBoundary);
 }
 
 bool IsEndOfParagraph(const VisiblePosition& pos,
@@ -343,10 +344,9 @@ bool IsEndOfParagraph(const VisiblePosition& pos,
                                                     boundary_crossing_rule);
 }
 
-bool IsEndOfParagraph(const VisiblePositionInFlatTree& pos,
-                      EditingBoundaryCrossingRule boundary_crossing_rule) {
+bool IsEndOfParagraph(const VisiblePositionInFlatTree& pos) {
   return IsEndOfParagraphAlgorithm<EditingInFlatTreeStrategy>(
-      pos, boundary_crossing_rule);
+      pos, kCannotCrossEditingBoundary);
 }
 
 // TODO(editing-dev): We should move |PreviousParagraphPosition()| to

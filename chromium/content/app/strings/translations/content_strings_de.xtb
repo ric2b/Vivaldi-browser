@@ -45,7 +45,7 @@
 <translation id="2723001399770238859">Audio</translation>
 <translation id="2746543609216772311">Verwenden Sie <ph name="MINIMUM_DATE_OR_TIME" /> oder einen späteren Wert.</translation>
 <translation id="2759744352195237655">Pop-up-Schaltfläche</translation>
-<translation id="2761667185364618470">Aktivieren Sie dieses Kästchen, wenn Sie fortfahren möchten.</translation>
+<translation id="2761667185364618470">Klicken Sie dieses Kästchen an, wenn Sie fortfahren möchten.</translation>
 <translation id="2896972712917208084">Optionsfeldgruppe</translation>
 <translation id="2908441821576996758">Geben Sie eine durch Kommas getrennte Liste der E-Mail-Adressen ein.</translation>
 <translation id="2940813599313844715">Objekt</translation>
@@ -119,6 +119,7 @@
 <translation id="6398862346408813489">Auswahlbereich für Monatsanzeige</translation>
 <translation id="6404546809543547843">Audio-Zeitachse</translation>
 <translation id="648732519525291180">Uhrzeitauswahl</translation>
+<translation id="6550675742724504774">Optionen</translation>
 <translation id="658823671542763450">Vollbildmodus aktivieren</translation>
 <translation id="663493177488814956">Feed</translation>
 <translation id="6637586476836377253">log</translation>
@@ -163,7 +164,6 @@
 <translation id="8451268428117625855">Wählen Sie eine Datei aus.</translation>
 <translation id="8461852803063341183">Optionsfeld</translation>
 <translation id="8511325616783751178">Drop-down-Schaltfläche</translation>
-<translation id="8519420564908284378">Auf beiden Bildschirmen wiedergeben</translation>
 <translation id="8534579021159131403">Minuten</translation>
 <translation id="8541249477527128034">Mediensteuerung</translation>
 <translation id="8583702881314752957">Definitionsliste</translation>

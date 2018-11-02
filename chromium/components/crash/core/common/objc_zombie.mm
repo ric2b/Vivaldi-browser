@@ -12,20 +12,13 @@
 
 #include <algorithm>
 
-#include "base/debug/crash_logging.h"
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
-#include "components/crash/core/common/crash_keys.h"
-
-#if !defined(OS_IOS) && (MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_6)
-// Apparently objc/runtime.h doesn't define this with the 10.6 SDK yet.
-// The docs say it exists since 10.6 however.
-OBJC_EXPORT void *objc_destructInstance(id obj);
-#endif
+#include "components/crash/core/common/crash_key.h"
 
 // Deallocated objects are re-classed as |CrZombie|.  No superclass
 // because then the class would have to override many/most of the
@@ -213,12 +206,16 @@ void ZombieObjectCrash(id object, SEL aSelector, SEL viaSelector) {
   }
 
   // Set a value for breakpad to report.
-  base::debug::SetCrashKeyValue(crash_keys::mac::kZombie, aString);
+  static crash_reporter::CrashKeyString<256> zombie_key("zombie");
+  zombie_key.Set(aString);
 
   // Encode trace into a breakpad key.
+  static crash_reporter::CrashKeyString<1024> zombie_trace_key(
+      "zombie_dealloc_bt");
   if (found) {
-    base::debug::SetCrashKeyFromAddresses(
-        crash_keys::mac::kZombieTrace, record.trace, record.traceDepth);
+    crash_reporter::SetCrashKeyStringToStackTrace(
+        &zombie_trace_key,
+        base::debug::StackTrace(record.trace, record.traceDepth));
   }
 
   // Log -dealloc backtrace in debug builds then crash with a useful

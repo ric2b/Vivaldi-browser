@@ -45,11 +45,11 @@ class ReadableStreamBytesConsumer::OnFulfilled final : public ScriptFunction {
       consumer_->OnRejected();
       return ScriptValue();
     }
-    consumer_->OnRead(V8Uint8Array::toImpl(value.As<v8::Object>()));
+    consumer_->OnRead(V8Uint8Array::ToImpl(value.As<v8::Object>()));
     return v;
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(consumer_);
     ScriptFunction::Trace(visitor);
   }
@@ -74,7 +74,7 @@ class ReadableStreamBytesConsumer::OnRejected final : public ScriptFunction {
     return v;
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(consumer_);
     ScriptFunction::Trace(visitor);
   }
@@ -115,14 +115,14 @@ BytesConsumer::Result ReadableStreamBytesConsumer::BeginRead(
   }
   if (!is_reading_) {
     is_reading_ = true;
-    ScriptState::Scope scope(script_state_.Get());
-    ScriptValue reader(script_state_.Get(),
+    ScriptState::Scope scope(script_state_.get());
+    ScriptValue reader(script_state_.get(),
                        reader_.NewLocal(script_state_->GetIsolate()));
     // The owner must retain the reader.
     DCHECK(!reader.IsEmpty());
-    ReadableStreamOperations::DefaultReaderRead(script_state_.Get(), reader)
-        .Then(OnFulfilled::CreateFunction(script_state_.Get(), this),
-              OnRejected::CreateFunction(script_state_.Get(), this));
+    ReadableStreamOperations::DefaultReaderRead(script_state_.get(), reader)
+        .Then(OnFulfilled::CreateFunction(script_state_.get(), this),
+              OnRejected::CreateFunction(script_state_.get(), this));
   }
   return Result::kShouldWait;
 }
@@ -164,7 +164,7 @@ BytesConsumer::Error ReadableStreamBytesConsumer::GetError() const {
   return Error("Failed to read from a ReadableStream.");
 }
 
-DEFINE_TRACE(ReadableStreamBytesConsumer) {
+void ReadableStreamBytesConsumer::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
   visitor->Trace(pending_buffer_);
   BytesConsumer::Trace(visitor);

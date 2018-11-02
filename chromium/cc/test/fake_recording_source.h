@@ -9,6 +9,7 @@
 
 #include "cc/base/region.h"
 #include "cc/layers/recording_source.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -77,7 +78,8 @@ class FakeRecordingSource : public RecordingSource {
     size_t painter_reported_memory_usage =
         client_.GetApproximateUnsharedMemoryUsage();
     UpdateAndExpandInvalidation(&invalidation, size_, new_recorded_viewport);
-    UpdateDisplayItemList(display_list, painter_reported_memory_usage);
+    UpdateDisplayItemList(display_list, painter_reported_memory_usage,
+                          recording_scale_factor_);
   }
 
   void add_draw_rect(const gfx::Rect& rect) {
@@ -136,6 +138,10 @@ class FakeRecordingSource : public RecordingSource {
   // DisplayItemList, it checks that the painted result matches the painted
   // result of |other|.
   bool EqualsTo(const FakeRecordingSource& other);
+
+  void SetRecordingScaleFactor(float recording_scale_factor) {
+    recording_scale_factor_ = recording_scale_factor;
+  }
 
  private:
   FakeContentLayerClient client_;

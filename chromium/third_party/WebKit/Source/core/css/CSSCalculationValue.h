@@ -90,7 +90,10 @@ class CSSCalcExpressionNode : public GarbageCollected<CSSCalcExpressionNode> {
   virtual CSSPrimitiveValue::UnitType TypeWithCalcResolved() const = 0;
   bool IsInteger() const { return is_integer_; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  bool IsNestedCalc() const { return is_nested_calc_; }
+  void SetIsNestedCalc() { is_nested_calc_ = true; }
+
+  virtual void Trace(blink::Visitor* visitor) {}
 
  protected:
   CSSCalcExpressionNode(CalculationCategory category, bool is_integer)
@@ -100,11 +103,13 @@ class CSSCalcExpressionNode : public GarbageCollected<CSSCalcExpressionNode> {
 
   CalculationCategory category_;
   bool is_integer_;
+  bool is_nested_calc_ = false;
 };
 
 class CORE_EXPORT CSSCalcValue : public GarbageCollected<CSSCalcValue> {
  public:
   static CSSCalcValue* Create(const CSSParserTokenRange&, ValueRange);
+  static CSSCalcValue* CreateSimplified(const CSSParserTokenRange&, ValueRange);
   static CSSCalcValue* Create(CSSCalcExpressionNode*,
                               ValueRange = kValueRangeAll);
 
@@ -116,7 +121,7 @@ class CORE_EXPORT CSSCalcValue : public GarbageCollected<CSSCalcValue> {
   static CSSCalcExpressionNode* CreateExpressionNode(double pixels,
                                                      double percent);
 
-  RefPtr<CalculationValue> ToCalcValue(
+  scoped_refptr<CalculationValue> ToCalcValue(
       const CSSToLengthConversionData& conversion_data) const {
     PixelsAndPercent value(0, 0);
     expression_->AccumulatePixelsAndPercent(conversion_data, value);
@@ -140,7 +145,7 @@ class CORE_EXPORT CSSCalcValue : public GarbageCollected<CSSCalcValue> {
   String CustomCSSText() const;
   bool Equals(const CSSCalcValue&) const;
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(expression_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(expression_); }
 
  private:
   CSSCalcValue(CSSCalcExpressionNode* expression, ValueRange range)

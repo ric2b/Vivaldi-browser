@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/payments/payment_request_util.h"
 
+#include "base/json/json_reader.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/sys_string_conversions.h"
@@ -12,14 +13,15 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/strings_util.h"
+#include "components/payments/core/web_payment_request.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
-#include "ios/web/public/payments/payment_request.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -27,6 +29,45 @@
 #endif
 
 namespace payment_request_util {
+
+namespace {
+
+// These are defined as part of the spec at:
+// https://w3c.github.io/payment-request/#paymentresponse-interface
+static const char kPaymentResponseDetails[] = "details";
+static const char kPaymentResponseId[] = "requestId";
+static const char kPaymentResponseMethodName[] = "methodName";
+static const char kPaymentResponsePayerEmail[] = "payerEmail";
+static const char kPaymentResponsePayerName[] = "payerName";
+static const char kPaymentResponsePayerPhone[] = "payerPhone";
+static const char kPaymentResponseShippingAddress[] = "shippingAddress";
+static const char kPaymentResponseShippingOption[] = "shippingOption";
+
+}  // namespace
+
+std::unique_ptr<base::DictionaryValue> PaymentResponseToDictionaryValue(
+    const payments::PaymentResponse& response) {
+  auto result = std::make_unique<base::DictionaryValue>();
+  result->SetString(kPaymentResponseId, response.payment_request_id);
+  result->SetString(kPaymentResponseMethodName, response.method_name);
+  // |details| is a json-serialized string. Parse it to a base::Value so that
+  // when |result| is converted to a JSON string, the "details" property won't
+  // get json-escaped.
+  std::unique_ptr<base::Value> details_value =
+      base::JSONReader().ReadToValue(response.details);
+  result->Set(kPaymentResponseDetails, details_value
+                                           ? std::move(details_value)
+                                           : std::make_unique<base::Value>());
+  result->Set(kPaymentResponseShippingAddress,
+              response.shipping_address
+                  ? response.shipping_address->ToDictionaryValue()
+                  : std::make_unique<base::Value>());
+  result->SetString(kPaymentResponseShippingOption, response.shipping_option);
+  result->SetString(kPaymentResponsePayerName, response.payer_name);
+  result->SetString(kPaymentResponsePayerEmail, response.payer_email);
+  result->SetString(kPaymentResponsePayerPhone, response.payer_phone);
+  return result;
+}
 
 NSString* GetNameLabelFromAutofillProfile(
     const autofill::AutofillProfile& profile) {
@@ -52,7 +93,7 @@ NSString* GetBillingAddressLabelFromAutofillProfile(
 
 NSString* GetPhoneNumberLabelFromAutofillProfile(
     const autofill::AutofillProfile& profile) {
-  base::string16 label = payments::data_util::GetFormattedPhoneNumberForDisplay(
+  base::string16 label = autofill::i18n::GetFormattedPhoneNumberForDisplay(
       profile, GetApplicationContext()->GetApplicationLocale());
   return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
 }

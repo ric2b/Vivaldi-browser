@@ -8,7 +8,6 @@
 #import <Foundation/Foundation.h>
 
 #include "base/mac/scoped_block.h"
-#import "breakpad/src/client/ios/BreakpadController.h"
 #include "components/metrics/metrics_service.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #include "ios/chrome/browser/application_context.h"
@@ -20,6 +19,7 @@
 #import "ios/chrome/test/ocmock/OCMockObject+BreakpadControllerTesting.h"
 #include "net/base/network_change_notifier.h"
 #include "testing/platform_test.h"
+#import "third_party/breakpad/breakpad/src/client/ios/BreakpadController.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 
@@ -92,9 +92,11 @@ int getExpectedValue(int number) {
   return 1;
 }
 
+using MetricsMediatorTest = PlatformTest;
+
 // Verifies that connectionTypeChanged correctly enables or disables the
 // uploading in the breakpad and in the metrics service.
-TEST(MetricsMediatorTest, connectionTypeChanged) {
+TEST_F(MetricsMediatorTest, connectionTypeChanged) {
   [[PreviousSessionInfo sharedInstance] setIsFirstSessionAfterUpgrade:NO];
   MetricsMediatorMock* mock_metrics_helper = [[MetricsMediatorMock alloc] init];
 
@@ -216,8 +218,10 @@ TEST_F(MetricsMediatorLogLaunchTest, logLaunchMetricsNoBackgroundDate) {
   verifySwizzleHasBeenCalled();
 }
 
+using MetricsMediatorNoFixtureTest = PlatformTest;
+
 // Tests that +logDateInUserDefaults logs the date in UserDefaults.
-TEST(MetricsMediatorNoFixtureTest, logDateInUserDefaultsTest) {
+TEST_F(MetricsMediatorNoFixtureTest, logDateInUserDefaultsTest) {
   // Setup.
   [[NSUserDefaults standardUserDefaults]
       removeObjectForKey:metrics_mediator::kAppEnteredBackgroundDateKey];
@@ -238,7 +242,9 @@ TEST(MetricsMediatorNoFixtureTest, logDateInUserDefaultsTest) {
 
 #pragma mark - processCrashReportsPresentAtStartup tests.
 
-class MetricsMediatorShutdownTypeTest : public testing::TestWithParam<int> {};
+class MetricsMediatorShutdownTypeTest
+    : public PlatformTest,
+      public testing::WithParamInterface<int> {};
 
 // Verifies that the Breakpad controller gets called appropriately when
 // processCrashReportsPresentAtStartup is invoked.

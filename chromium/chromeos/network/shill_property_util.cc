@@ -6,12 +6,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/i18n/encoding_detection.h"
 #include "base/i18n/icu_string_conversions.h"
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -197,12 +197,12 @@ std::unique_ptr<NetworkUIData> GetUIDataFromValue(
   if (!ui_data_value.GetAsString(&ui_data_str))
     return std::unique_ptr<NetworkUIData>();
   if (ui_data_str.empty())
-    return base::MakeUnique<NetworkUIData>();
+    return std::make_unique<NetworkUIData>();
   std::unique_ptr<base::DictionaryValue> ui_data_dict(
       chromeos::onc::ReadDictionaryFromJson(ui_data_str));
   if (!ui_data_dict)
     return std::unique_ptr<NetworkUIData>();
-  return base::MakeUnique<NetworkUIData>(*ui_data_dict);
+  return std::make_unique<NetworkUIData>(*ui_data_dict);
 }
 
 std::unique_ptr<NetworkUIData> GetUIDataFromProperties(
@@ -348,33 +348,6 @@ bool IsLoggableShillProperty(const std::string& key) {
     s_skip_properties->insert(shill::kPassphraseProperty);
   }
   return s_skip_properties->count(key) == 0;
-}
-
-bool GetHomeProviderFromProperty(const base::Value& value,
-                                 std::string* home_provider_id) {
-  const base::DictionaryValue* dict = NULL;
-  if (!value.GetAsDictionary(&dict))
-    return false;
-  std::string home_provider_country;
-  std::string home_provider_name;
-  dict->GetStringWithoutPathExpansion(shill::kOperatorCountryKey,
-                                      &home_provider_country);
-  dict->GetStringWithoutPathExpansion(shill::kOperatorNameKey,
-                                      &home_provider_name);
-  // Set home_provider_id
-  if (!home_provider_name.empty() && !home_provider_country.empty()) {
-    *home_provider_id = base::StringPrintf(
-        "%s (%s)", home_provider_name.c_str(), home_provider_country.c_str());
-  } else {
-    if (!dict->GetStringWithoutPathExpansion(shill::kOperatorCodeKey,
-                                             home_provider_id)) {
-      return false;
-    }
-    LOG(WARNING)
-        << "Provider name and country not defined, using code instead: "
-        << *home_provider_id;
-  }
-  return true;
 }
 
 }  // namespace shill_property_util

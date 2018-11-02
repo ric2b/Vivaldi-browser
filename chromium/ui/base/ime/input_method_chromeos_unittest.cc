@@ -4,16 +4,10 @@
 
 #include "ui/base/ime/input_method_chromeos.h"
 
-#include <X11/Xlib.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <memory>
-#undef Bool
-#undef FocusIn
-#undef FocusOut
-#undef None
-
 #include <cstring>
 
 #include "base/i18n/char_iterator.h"
@@ -34,6 +28,7 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/test/events_test_utils_x11.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/x/x11.h"
 
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
@@ -77,13 +72,19 @@ class TestableInputMethodChromeOS : public InputMethodChromeOS {
   };
 
   // Overridden from InputMethodChromeOS:
-  ui::EventDispatchDetails ProcessKeyEventPostIME(ui::KeyEvent* key_event,
-                                                  bool handled) override {
+  ui::EventDispatchDetails ProcessKeyEventPostIME(
+      ui::KeyEvent* key_event,
+      std::unique_ptr<AckCallback> ack_callback,
+      bool skip_process_filtered,
+      bool handled) override {
     ui::EventDispatchDetails details =
-        InputMethodChromeOS::ProcessKeyEventPostIME(key_event, handled);
-    process_key_event_post_ime_args_.event = key_event;
-    process_key_event_post_ime_args_.handled = handled;
-    ++process_key_event_post_ime_call_count_;
+        InputMethodChromeOS::ProcessKeyEventPostIME(
+            key_event, std::move(ack_callback), skip_process_filtered, handled);
+    if (!skip_process_filtered) {
+      process_key_event_post_ime_args_.event = key_event;
+      process_key_event_post_ime_args_.handled = handled;
+      ++process_key_event_post_ime_call_count_;
+    }
     return details;
   }
 
@@ -960,7 +961,7 @@ TEST_F(InputMethodChromeOSKeyEventTest, DeadKeyPressTest) {
                       0,
                       DomKey::DeadKeyFromCombiningCharacter('^'),
                       EventTimeForNow());
-  ime_->ProcessKeyEventPostIME(&eventA, true);
+  ime_->ProcessKeyEventPostIME(&eventA, nullptr, false, true);
 
   const ui::KeyEvent& key_event = dispatched_key_event_;
 

@@ -439,9 +439,16 @@ public class PageInfoPopup implements OnClickListener {
             mOpenOnlineButton.setVisibility(View.GONE);
         }
 
-        mInstantAppIntent = (mIsInternalPage || isShowingOfflinePage()) ? null
-                : InstantAppsHandler.getInstance().getInstantAppIntentForUrl(mFullUrl);
-        if (mInstantAppIntent == null) mInstantAppButton.setVisibility(View.GONE);
+        InstantAppsHandler instantAppsHandler = InstantAppsHandler.getInstance();
+        if (!mIsInternalPage && !isShowingOfflinePage()
+                && instantAppsHandler.isInstantAppAvailable(mFullUrl, false /* checkHoldback */,
+                           false /* includeUserPrefersBrowser */)) {
+            mInstantAppIntent = instantAppsHandler.getInstantAppIntentForUrl(mFullUrl);
+            RecordUserAction.record("Android.InstantApps.OpenInstantAppButtonShown");
+        } else {
+            mInstantAppIntent = null;
+            mInstantAppButton.setVisibility(View.GONE);
+        }
 
         // Create the dialog.
         mDialog = new Dialog(mContext) {
@@ -634,7 +641,7 @@ public class PageInfoPopup implements OnClickListener {
 
                 permissionIcon.setImageResource(R.drawable.exclamation_triangle);
                 permissionIcon.setColorFilter(ApiCompatibilityUtils.getColor(
-                        mContext.getResources(), R.color.page_info_popup_text_link));
+                        mContext.getResources(), R.color.google_blue_700));
 
                 permissionRow.setOnClickListener(this);
             }
@@ -716,9 +723,9 @@ public class PageInfoPopup implements OnClickListener {
             messageBuilder.append(" ");
             SpannableString detailsText =
                     new SpannableString(mContext.getString(R.string.details_link));
-            final ForegroundColorSpan blueSpan = new ForegroundColorSpan(
-                    ApiCompatibilityUtils.getColor(mContext.getResources(),
-                            R.color.page_info_popup_text_link));
+            final ForegroundColorSpan blueSpan =
+                    new ForegroundColorSpan(ApiCompatibilityUtils.getColor(
+                            mContext.getResources(), R.color.google_blue_700));
             detailsText.setSpan(
                     blueSpan, 0, detailsText.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
             messageBuilder.append(detailsText);
@@ -804,8 +811,6 @@ public class PageInfoPopup implements OnClickListener {
                     recordAction(PageInfoAction.PAGE_INFO_SITE_SETTINGS_OPENED);
                     Bundle fragmentArguments =
                             SingleWebsitePreferences.createFragmentArgsForSite(mFullUrl);
-                    fragmentArguments.putParcelable(SingleWebsitePreferences.EXTRA_WEB_CONTENTS,
-                            mTab.getWebContents());
                     Intent preferencesIntent = PreferencesLauncher.createIntentForSettingsPage(
                             mContext, SingleWebsitePreferences.class.getName());
                     preferencesIntent.putExtra(

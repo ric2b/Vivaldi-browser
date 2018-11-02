@@ -33,10 +33,10 @@ public class OAuth2TokenServiceTest {
 
     @Before
     public void setUp() throws Exception {
-        mContext = new AdvancedMockContext(
-                InstrumentationRegistry.getInstrumentation().getTargetContext());
-        mAccountManager = new FakeAccountManagerDelegate(mContext);
-        AccountManagerFacade.overrideAccountManagerFacadeForTests(mContext, mAccountManager);
+        mContext = new AdvancedMockContext(InstrumentationRegistry.getTargetContext());
+        mAccountManager = new FakeAccountManagerDelegate(
+                FakeAccountManagerDelegate.DISABLE_PROFILE_DATA_SOURCE);
+        AccountManagerFacade.overrideAccountManagerFacadeForTests(mAccountManager);
     }
 
     @After
@@ -62,7 +62,7 @@ public class OAuth2TokenServiceTest {
     public void testGetAccountsOneAccountRegistered() {
         Account account1 = AccountManagerFacade.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.builder(account1).build();
-        mAccountManager.addAccountHolderExplicitly(accountHolder1);
+        mAccountManager.addAccountHolderBlocking(accountHolder1);
 
         String[] sysAccounts = OAuth2TokenService.getSystemAccountNames();
         Assert.assertEquals("There should be one registered account", 1, sysAccounts.length);
@@ -79,10 +79,10 @@ public class OAuth2TokenServiceTest {
     public void testGetAccountsTwoAccountsRegistered() {
         Account account1 = AccountManagerFacade.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.builder(account1).build();
-        mAccountManager.addAccountHolderExplicitly(accountHolder1);
+        mAccountManager.addAccountHolderBlocking(accountHolder1);
         Account account2 = AccountManagerFacade.createAccountFromName("bar@gmail.com");
         AccountHolder accountHolder2 = AccountHolder.builder(account2).build();
-        mAccountManager.addAccountHolderExplicitly(accountHolder2);
+        mAccountManager.addAccountHolderBlocking(accountHolder2);
 
         String[] sysAccounts = OAuth2TokenService.getSystemAccountNames();
         Assert.assertEquals("There should be one registered account", 2, sysAccounts.length);
@@ -125,7 +125,7 @@ public class OAuth2TokenServiceTest {
                                               .hasBeenAccepted(oauth2Scope, true)
                                               .authToken(oauth2Scope, expectedToken)
                                               .build();
-        mAccountManager.addAccountHolderExplicitly(accountHolder);
+        mAccountManager.addAccountHolderBlocking(accountHolder);
 
         String accessToken = OAuth2TokenService.getOAuth2AccessTokenWithTimeout(
                 mContext, account, scope, 5, TimeUnit.SECONDS);

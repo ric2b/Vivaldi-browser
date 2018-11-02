@@ -21,11 +21,11 @@
 #ifndef WTF_VectorTraits_h
 #define WTF_VectorTraits_h
 
-#include "platform/wtf/RefPtr.h"
-#include "platform/wtf/TypeTraits.h"
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include "base/memory/scoped_refptr.h"
+#include "platform/wtf/TypeTraits.h"
 
 namespace WTF {
 
@@ -33,21 +33,25 @@ template <typename T>
 struct VectorTraitsBase {
   static const bool kNeedsDestruction = !IsTriviallyDestructible<T>::value;
 
-  static const bool kCanInitializeWithMemset =
-      IsTriviallyDefaultConstructible<T>::value;
+  static constexpr bool kCanInitializeWithMemset =
+      std::is_trivially_default_constructible<T>::value;
   // true iff memset(slot, 0, size) constructs an unused slot value that is
   // valid for Oilpan to trace and if the value needs destruction, its
   // destructor can be invoked over. The zero'ed value representing an unused
   // slot in the vector's backing storage; it does not have to be equal to
   // what its constructor(s) would create, only be valid for those two uses.
-  static const bool kCanClearUnusedSlotsWithMemset =
-      IsTriviallyDefaultConstructible<T>::value;
+  static constexpr bool kCanClearUnusedSlotsWithMemset =
+      std::is_trivially_constructible<T>::value &&
+      std::is_trivially_destructible<T>::value &&
+      std::is_trivially_copyable<T>::value;
 
-  static const bool kCanMoveWithMemcpy = IsTriviallyMoveAssignable<T>::value;
-  static const bool kCanCopyWithMemcpy = IsTriviallyCopyAssignable<T>::value;
-  static const bool kCanFillWithMemset =
-      IsTriviallyDefaultConstructible<T>::value && (sizeof(T) == sizeof(char));
-  static const bool kCanCompareWithMemcmp =
+  static constexpr bool kCanMoveWithMemcpy =
+      std::is_trivially_move_assignable<T>::value;
+  static constexpr bool kCanCopyWithMemcpy =
+      std::is_trivially_copy_assignable<T>::value;
+  static constexpr bool kCanFillWithMemset =
+      std::is_default_constructible<T>::value && (sizeof(T) == sizeof(char));
+  static constexpr bool kCanCompareWithMemcmp =
       std::is_scalar<T>::value;  // Types without padding.
 
   // Supports swapping elements using regular std::swap semantics.
@@ -80,7 +84,8 @@ struct SimpleClassVectorTraits : VectorTraitsBase<T> {
 // and moving with memcpy (and then not destructing the original) will totally
 // work.
 template <typename P>
-struct VectorTraits<RefPtr<P>> : SimpleClassVectorTraits<RefPtr<P>> {};
+struct VectorTraits<scoped_refptr<P>>
+    : SimpleClassVectorTraits<scoped_refptr<P>> {};
 
 template <typename P>
 struct VectorTraits<std::unique_ptr<P>>
@@ -90,11 +95,11 @@ struct VectorTraits<std::unique_ptr<P>>
   // copyable".
   static const bool kCanCopyWithMemcpy = false;
 };
-static_assert(VectorTraits<RefPtr<int>>::kCanInitializeWithMemset,
+static_assert(VectorTraits<scoped_refptr<int>>::kCanInitializeWithMemset,
               "inefficient RefPtr Vector");
-static_assert(VectorTraits<RefPtr<int>>::kCanMoveWithMemcpy,
+static_assert(VectorTraits<scoped_refptr<int>>::kCanMoveWithMemcpy,
               "inefficient RefPtr Vector");
-static_assert(VectorTraits<RefPtr<int>>::kCanCompareWithMemcmp,
+static_assert(VectorTraits<scoped_refptr<int>>::kCanCompareWithMemcmp,
               "inefficient RefPtr Vector");
 static_assert(VectorTraits<std::unique_ptr<int>>::kCanInitializeWithMemset,
               "inefficient std::unique_ptr Vector");
@@ -138,48 +143,48 @@ struct VectorTraits<std::pair<First, Second>> {
 
 }  // namespace WTF
 
-#define WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(ClassName)     \
-  namespace WTF {                                                         \
-  static_assert(!IsTriviallyDefaultConstructible<ClassName>::value ||     \
-                    !IsTriviallyMoveAssignable<ClassName>::value ||       \
-                    !std::is_scalar<ClassName>::value,                    \
-                "macro not needed");                                      \
-  template <>                                                             \
-  struct VectorTraits<ClassName> : SimpleClassVectorTraits<ClassName> {}; \
+#define WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(ClassName)         \
+  namespace WTF {                                                             \
+  static_assert(!std::is_trivially_default_constructible<ClassName>::value || \
+                    !std::is_trivially_move_assignable<ClassName>::value ||   \
+                    !std::is_scalar<ClassName>::value,                        \
+                "macro not needed");                                          \
+  template <>                                                                 \
+  struct VectorTraits<ClassName> : SimpleClassVectorTraits<ClassName> {};     \
   }
 
-#define WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(ClassName)         \
-  namespace WTF {                                                     \
-  static_assert(!IsTriviallyDefaultConstructible<ClassName>::value || \
-                    !IsTriviallyMoveAssignable<ClassName>::value,     \
-                "macro not needed");                                  \
-  template <>                                                         \
-  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {      \
-    static const bool kCanInitializeWithMemset = true;                \
-    static const bool kCanClearUnusedSlotsWithMemset = true;          \
-    static const bool kCanMoveWithMemcpy = true;                      \
-  };                                                                  \
+#define WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(ClassName)                 \
+  namespace WTF {                                                             \
+  static_assert(!std::is_trivially_default_constructible<ClassName>::value || \
+                    !std::is_trivially_move_assignable<ClassName>::value,     \
+                "macro not needed");                                          \
+  template <>                                                                 \
+  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {              \
+    static const bool kCanInitializeWithMemset = true;                        \
+    static const bool kCanClearUnusedSlotsWithMemset = true;                  \
+    static const bool kCanMoveWithMemcpy = true;                              \
+  };                                                                          \
   }
 
-#define WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(ClassName)                \
-  namespace WTF {                                                   \
-  static_assert(!IsTriviallyDefaultConstructible<ClassName>::value, \
-                "macro not needed");                                \
-  template <>                                                       \
-  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {    \
-    static const bool kCanInitializeWithMemset = true;              \
-    static const bool kCanClearUnusedSlotsWithMemset = true;        \
-  };                                                                \
+#define WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(ClassName)                        \
+  namespace WTF {                                                           \
+  static_assert(!std::is_trivially_default_constructible<ClassName>::value, \
+                "macro not needed");                                        \
+  template <>                                                               \
+  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {            \
+    static const bool kCanInitializeWithMemset = true;                      \
+    static const bool kCanClearUnusedSlotsWithMemset = true;                \
+  };                                                                        \
   }
 
-#define WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(ClassName)  \
-  namespace WTF {                                                   \
-  static_assert(!IsTriviallyDefaultConstructible<ClassName>::value, \
-                "macro not needed");                                \
-  template <>                                                       \
-  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {    \
-    static const bool kCanClearUnusedSlotsWithMemset = true;        \
-  };                                                                \
+#define WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(ClassName)          \
+  namespace WTF {                                                           \
+  static_assert(!std::is_trivially_default_constructible<ClassName>::value, \
+                "macro not needed");                                        \
+  template <>                                                               \
+  struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> {            \
+    static const bool kCanClearUnusedSlotsWithMemset = true;                \
+  };                                                                        \
   }
 
 using WTF::VectorTraits;

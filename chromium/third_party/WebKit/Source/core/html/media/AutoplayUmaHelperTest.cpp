@@ -5,10 +5,10 @@
 #include "core/html/media/AutoplayUmaHelper.h"
 
 #include "core/dom/Document.h"
-#include "core/html/HTMLMediaElement.h"
-#include "core/html/HTMLVideoElement.h"
 #include "core/html/media/AutoplayPolicy.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/html/media/HTMLVideoElement.h"
+#include "core/testing/PageTestBase.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,25 +36,21 @@ class MockAutoplayUmaHelper : public AutoplayUmaHelper {
   }
 };
 
-class AutoplayUmaHelperTest : public ::testing::Test {
+class AutoplayUmaHelperTest : public PageTestBase {
  protected:
-  Document& GetDocument() { return page_holder_->GetDocument(); }
-
   HTMLMediaElement& MediaElement() {
     Element* element = GetDocument().getElementById("video");
     DCHECK(element);
-    return toHTMLVideoElement(*element);
+    return ToHTMLVideoElement(*element);
   }
 
   MockAutoplayUmaHelper& UmaHelper() { return *uma_helper_; }
 
-  std::unique_ptr<DummyPageHolder>& PageHolder() { return page_holder_; }
-
  private:
   void SetUp() override {
-    page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-    GetDocument().documentElement()->setInnerHTML("<video id=video></video>",
-                                                  ASSERT_NO_EXCEPTION);
+    PageTestBase::SetUp();
+    GetDocument().documentElement()->SetInnerHTMLFromString(
+        "<video id=video></video>", ASSERT_NO_EXCEPTION);
     HTMLMediaElement& element = MediaElement();
     uma_helper_ = new MockAutoplayUmaHelper(&element);
     element.autoplay_policy_->autoplay_uma_helper_ = uma_helper_;
@@ -63,7 +59,6 @@ class AutoplayUmaHelperTest : public ::testing::Test {
 
   void TearDown() override { uma_helper_.Clear(); }
 
-  std::unique_ptr<DummyPageHolder> page_holder_;
   Persistent<MockAutoplayUmaHelper> uma_helper_;
 };
 
@@ -73,7 +68,7 @@ TEST_F(AutoplayUmaHelperTest, VisibilityChangeWhenUnload) {
   MediaElement().setMuted(true);
   UmaHelper().OnAutoplayInitiated(AutoplaySource::kMethod);
   UmaHelper().HandlePlayingEvent();
-  PageHolder().reset();
+  PageTestBase::TearDown();
   ::testing::Mock::VerifyAndClear(&UmaHelper());
 }
 

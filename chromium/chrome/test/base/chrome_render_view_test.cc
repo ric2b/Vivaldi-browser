@@ -133,11 +133,6 @@ void ChromeRenderViewTest::SetUp() {
 
 void ChromeRenderViewTest::TearDown() {
   base::RunLoop().RunUntilIdle();
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  ChromeExtensionsRendererClient* ext_client =
-      ChromeExtensionsRendererClient::GetInstance();
-  ext_client->GetExtensionDispatcherForTest()->OnRenderProcessShutdown();
-#endif
 
 #if defined(LEAK_SANITIZER)
   // Do this before shutting down V8 in RenderViewTest::TearDown().
@@ -169,16 +164,14 @@ void ChromeRenderViewTest::RegisterMainFrameRemoteInterfaces() {}
 void ChromeRenderViewTest::InitChromeContentRendererClient(
     ChromeContentRendererClient* client) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extension_dispatcher_delegate_.reset(
-      new ChromeExtensionsDispatcherDelegate());
   ChromeExtensionsRendererClient* ext_client =
       ChromeExtensionsRendererClient::GetInstance();
   ext_client->SetExtensionDispatcherForTest(
       base::MakeUnique<extensions::Dispatcher>(
-          extension_dispatcher_delegate_.get()));
+          std::make_unique<ChromeExtensionsDispatcherDelegate>()));
 #endif
 #if BUILDFLAG(ENABLE_SPELLCHECK)
-  client->SetSpellcheck(new SpellCheck());
+  client->SetSpellcheck(new SpellCheck(nullptr));
 #endif
 }
 

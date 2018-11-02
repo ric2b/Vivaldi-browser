@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/arc/fileapi/file_stream_forwarder.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/task_scheduler/task_traits.h"
@@ -140,7 +143,6 @@ void FileStreamForwarder::NotifyCompleted(bool result) {
   DCHECK(!callback_.is_null());
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::BindOnce(std::move(callback_), result));
-  callback_.Reset();  // Not to leave the callback in an undefined state.
 }
 
 }  // namespace arc

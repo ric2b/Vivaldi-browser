@@ -35,8 +35,6 @@
 #include "platform/mac/NSScrollerImpDetails.h"
 #include "platform/scroll/ScrollbarThemeMac.h"
 
-using namespace blink;
-
 namespace blink {
 
 static_assert(static_cast<NSScrollerStyle>(kScrollerStyleLegacy) ==
@@ -52,7 +50,7 @@ void WebScrollbarTheme::UpdateScrollbarsWithNSDefaults(
     ScrollerStyle preferred_scroller_style,
     bool redraw,
     WebScrollbarButtonsPlacement button_placement) {
-  ScrollbarTheme& theme = ScrollbarTheme::GetTheme();
+  ScrollbarTheme& theme = ScrollbarTheme::DeprecatedStaticGetTheme();
   if (theme.IsMockTheme())
     return;
 

@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -8,7 +9,7 @@
 
 #include "platform_media/common/mac/scoped_audio_queue_ref.h"
 
-namespace content {
+namespace media {
 
 namespace {
 
@@ -29,7 +30,7 @@ void InitializeAudioToolbox() {
   format.mSampleRate = 44100;
   format.mChannelsPerFrame = 2;
 
-  media::ScopedAudioQueueRef queue;
+  ScopedAudioQueueRef queue;
   AudioQueueNewOutput(&format, &DummyOutputCallback, nullptr, nullptr, nullptr,
                       0, queue.InitializeInto());
   if (queue) {
@@ -38,4 +39,4 @@ void InitializeAudioToolbox() {
   }
 }
 
-}  // namespace content
+}  // namespace media

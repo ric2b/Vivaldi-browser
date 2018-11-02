@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/atomic_sequence_num.h"
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/sessions/session_restore_observer.h"
@@ -127,7 +128,7 @@ class TabManagerStatsCollector final : public SessionRestoreObserver {
   void RecordSwapMetrics(SessionType type,
                          const std::string& metric_name,
                          uint64_t count,
-                         const base::TimeDelta& interval);
+                         base::TimeDelta interval);
 
   // Handles the situation when failing to update swap metrics.
   void OnUpdateSwapMetricsFailed();
@@ -138,9 +139,14 @@ class TabManagerStatsCollector final : public SessionRestoreObserver {
   // user navigates to a new page and |contents| is resused.
   void OnDidStartMainFrameNavigation(content::WebContents* contents);
 
-  // Called by TabManager when a tab finishes loading. Used as the signal to
+  // Called by TabManager when it decides to load the next tab. Used as the
+  // signal to record how often timeout happens. Timeout means it wants to start
+  // loading the next tab even though the previous tab is still loading.
+  void OnWillLoadNextBackgroundTab(bool timeout);
+
+  // Called by TabManager when a tab is considered loaded. Used as the signal to
   // record tab switch load time metrics for |contents|.
-  void OnDidStopLoading(content::WebContents* contents);
+  void OnTabIsLoaded(content::WebContents* contents);
 
   // Called by TabManager when a WebContents is destroyed. Used to clean up
   // |foreground_contents_switched_to_times_| if we were tracking this tab and
@@ -179,6 +185,9 @@ class TabManagerStatsCollector final : public SessionRestoreObserver {
   // not report swap metrics.
   void CreateAndInitSwapMetricsDriverIfNeeded(SessionType type);
 
+  // Update session and sequence information for UKM recording.
+  void UpdateSessionAndSequence();
+
   static const char
       kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration[];
   static const char
@@ -191,8 +200,12 @@ class TabManagerStatsCollector final : public SessionRestoreObserver {
   static const char kHistogramBackgroundTabOpeningTabPausedCount[];
   static const char kHistogramBackgroundTabOpeningTabLoadAutoStartedCount[];
   static const char kHistogramBackgroundTabOpeningTabLoadUserInitiatedCount[];
+  static const char kHistogramBackgroundTabOpeningTabLoadTimeout[];
   static const char kHistogramSessionOverlapSessionRestore[];
   static const char kHistogramSessionOverlapBackgroundTabOpening[];
+
+  int session_id_;
+  std::unique_ptr<base::AtomicSequenceNumber> sequence_;
 
   bool is_session_restore_loading_tabs_;
   bool is_in_background_tab_opening_session_;

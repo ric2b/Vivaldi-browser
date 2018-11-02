@@ -34,14 +34,13 @@ namespace {
 // settings page.
 bool IsChromeSettingsAppOrPopupWindow(Browser* browser) {
   DCHECK(browser);
-  TabStripModel* tab_strip = browser->tab_strip_model();
-  DCHECK_EQ(1, tab_strip->count());
-  const GURL gurl(tab_strip->GetWebContentsAt(0)->GetURL());
-  if (gurl.SchemeIs(content::kChromeUIScheme) &&
-      gurl.host().find(chrome::kChromeUISettingsHost) != std::string::npos) {
-    return true;
-  }
-  return false;
+  content::WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents)
+    return false;
+  const GURL& gurl = web_contents->GetURL();
+  return gurl.SchemeIs(content::kChromeUIScheme) &&
+         gurl.host_piece() == chrome::kChromeUISettingsHost;
 }
 
 }  // namespace
@@ -78,6 +77,12 @@ void SystemMenuModelBuilder::BuildMenu(ui::SimpleMenuModel* model) {
 
 void SystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
     ui::SimpleMenuModel* model) {
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  model->AddItemWithStringId(IDC_MINIMIZE_WINDOW, IDS_MINIMIZE_WINDOW_MENU);
+  model->AddItemWithStringId(IDC_MAXIMIZE_WINDOW, IDS_MAXIMIZE_WINDOW_MENU);
+  model->AddItemWithStringId(IDC_RESTORE_WINDOW, IDS_RESTORE_WINDOW_MENU);
+  model->AddSeparator(ui::NORMAL_SEPARATOR);
+#endif
   model->AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
   model->AddItemWithStringId(IDC_RESTORE_TAB, IDS_RESTORE_TAB);
   if (chrome::CanOpenTaskManager()) {
@@ -88,6 +93,8 @@ void SystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
   model->AddSeparator(ui::NORMAL_SEPARATOR);
   model->AddCheckItemWithStringId(IDC_USE_SYSTEM_TITLE_BAR,
                                   IDS_SHOW_WINDOW_DECORATIONS_MENU);
+  model->AddSeparator(ui::NORMAL_SEPARATOR);
+  model->AddItemWithStringId(IDC_CLOSE_WINDOW, IDS_CLOSE_WINDOW_MENU);
 #endif
   AppendTeleportMenu(model);
   // If it's a regular browser window with tabs, we don't add any more items,
@@ -144,10 +151,6 @@ void SystemMenuModelBuilder::AddFrameToggleItems(ui::SimpleMenuModel* model) {
 void SystemMenuModelBuilder::AppendTeleportMenu(ui::SimpleMenuModel* model) {
 #if defined(OS_CHROMEOS)
   DCHECK(browser()->window());
-  // If there is no manager, we are not in the proper multi user mode.
-  if (chrome::MultiUserWindowManager::GetMultiProfileMode() !=
-          chrome::MultiUserWindowManager::MULTI_PROFILE_MODE_SEPARATED)
-    return;
 
   // Don't show the menu for incognito windows.
   if (browser()->profile()->IsOffTheRecord())
@@ -162,8 +165,7 @@ void SystemMenuModelBuilder::AppendTeleportMenu(ui::SimpleMenuModel* model) {
 
   // If this does not belong to a profile or there is no window, or the window
   // is not owned by anyone, we don't show the menu addition.
-  chrome::MultiUserWindowManager* manager =
-      chrome::MultiUserWindowManager::GetInstance();
+  MultiUserWindowManager* manager = MultiUserWindowManager::GetInstance();
   const AccountId account_id =
       multi_user_util::GetAccountIdFromProfile(browser()->profile());
   aura::Window* window = browser()->window()->GetNativeWindow();

@@ -51,7 +51,7 @@ namespace {
 class TestDelegate : public views::WidgetDelegateView {
  public:
   explicit TestDelegate(bool system_modal) : system_modal_(system_modal) {}
-  ~TestDelegate() override {}
+  ~TestDelegate() override = default;
 
   // Overridden from views::WidgetDelegate:
   ui::ModalType GetModalType() const override {
@@ -68,7 +68,7 @@ class DeleteOnBlurDelegate : public aura::test::TestWindowDelegate,
                              public aura::client::FocusChangeObserver {
  public:
   DeleteOnBlurDelegate() : window_(NULL) {}
-  ~DeleteOnBlurDelegate() override {}
+  ~DeleteOnBlurDelegate() override = default;
 
   void SetWindow(aura::Window* window) {
     window_ = window;
@@ -181,32 +181,20 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   EXPECT_EQ(root_windows[1], panel->GetRootWindow());
   EXPECT_EQ(kShellWindowId_PanelContainer, panel->parent()->id());
 
-  if (Shell::GetAshConfig() == Config::MASH) {
-    // TODO(erg): Ignore this one part of the test when running mash. We would
-    // crash because the aura::Window |d2| created in the other block doesn't
-    // get deleted, and thus continues to contain a reference to its delegate,
-    // |delete_on_blur_delegate|, which is declared on the stack.
-    //
-    // Making this work requires building out enough of the display management
-    // system; notably the part where updating the display may cause focus
-    // changes. http://crbug.com/695632.
-    UpdateDisplay("600x600");
-  } else {
-    // Make sure a window that will delete itself when losing focus
-    // will not crash.
-    aura::WindowTracker tracker;
-    DeleteOnBlurDelegate delete_on_blur_delegate;
-    aura::Window* d2 = CreateTestWindowInShellWithDelegate(
-        &delete_on_blur_delegate, 0, gfx::Rect(50, 50, 100, 100));
-    delete_on_blur_delegate.SetWindow(d2);
-    aura::client::GetFocusClient(root_windows[0])->FocusWindow(d2);
-    tracker.Add(d2);
+  // Make sure a window that will delete itself when losing focus
+  // will not crash.
+  aura::WindowTracker tracker;
+  DeleteOnBlurDelegate delete_on_blur_delegate;
+  aura::Window* d2 = CreateTestWindowInShellWithDelegate(
+      &delete_on_blur_delegate, 0, gfx::Rect(50, 50, 100, 100));
+  delete_on_blur_delegate.SetWindow(d2);
+  aura::client::GetFocusClient(root_windows[0])->FocusWindow(d2);
+  tracker.Add(d2);
 
-    UpdateDisplay("600x600");
+  UpdateDisplay("600x600");
 
-    // d2 must have been deleted.
-    EXPECT_FALSE(tracker.Contains(d2));
-  }
+  // d2 must have been deleted.
+  EXPECT_FALSE(tracker.Contains(d2));
 
   EXPECT_EQ(root_windows[0], normal->GetNativeView()->GetRootWindow());
   EXPECT_EQ("100,20 100x100", normal->GetWindowBoundsInScreen().ToString());
@@ -296,36 +284,23 @@ TEST_F(RootWindowControllerTest, MoveWindows_Modal) {
 
 // Make sure lock related windows moves.
 TEST_F(RootWindowControllerTest, MoveWindows_LockWindowsInUnified) {
-  // TODO: requires unified desktop mode. http://crbug.com/581462.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   display_manager()->SetUnifiedDesktopEnabled(true);
 
   UpdateDisplay("500x500");
   const int kLockScreenWindowId = 1000;
-  const int kLockWallpaperWindowId = 1001;
 
   RootWindowController* controller = Shell::GetPrimaryRootWindowController();
 
   aura::Window* lock_container =
       controller->GetContainer(kShellWindowId_LockScreenContainer);
-  aura::Window* lock_wallpaper_container =
-      controller->GetContainer(kShellWindowId_LockScreenWallpaperContainer);
 
   views::Widget* lock_screen =
       CreateModalWidgetWithParent(gfx::Rect(10, 10, 100, 100), lock_container);
   lock_screen->GetNativeWindow()->set_id(kLockScreenWindowId);
   lock_screen->SetFullscreen(true);
 
-  views::Widget* lock_wallpaper = CreateModalWidgetWithParent(
-      gfx::Rect(10, 10, 100, 100), lock_wallpaper_container);
-  lock_wallpaper->GetNativeWindow()->set_id(kLockWallpaperWindowId);
-
   ASSERT_EQ(lock_screen->GetNativeWindow(),
             controller->GetRootWindow()->GetChildById(kLockScreenWindowId));
-  ASSERT_EQ(lock_wallpaper->GetNativeWindow(),
-            controller->GetRootWindow()->GetChildById(kLockWallpaperWindowId));
   EXPECT_EQ("0,0 500x500", lock_screen->GetNativeWindow()->bounds().ToString());
 
   // Switch to unified.
@@ -336,8 +311,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_LockWindowsInUnified) {
 
   ASSERT_EQ(lock_screen->GetNativeWindow(),
             controller->GetRootWindow()->GetChildById(kLockScreenWindowId));
-  ASSERT_EQ(lock_wallpaper->GetNativeWindow(),
-            controller->GetRootWindow()->GetChildById(kLockWallpaperWindowId));
   EXPECT_EQ("0,0 500x500", lock_screen->GetNativeWindow()->bounds().ToString());
 
   // Switch to mirror.
@@ -347,8 +320,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_LockWindowsInUnified) {
   controller = Shell::GetPrimaryRootWindowController();
   ASSERT_EQ(lock_screen->GetNativeWindow(),
             controller->GetRootWindow()->GetChildById(kLockScreenWindowId));
-  ASSERT_EQ(lock_wallpaper->GetNativeWindow(),
-            controller->GetRootWindow()->GetChildById(kLockWallpaperWindowId));
   EXPECT_EQ("0,0 500x500", lock_screen->GetNativeWindow()->bounds().ToString());
 
   // Switch to unified.
@@ -359,8 +330,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_LockWindowsInUnified) {
 
   ASSERT_EQ(lock_screen->GetNativeWindow(),
             controller->GetRootWindow()->GetChildById(kLockScreenWindowId));
-  ASSERT_EQ(lock_wallpaper->GetNativeWindow(),
-            controller->GetRootWindow()->GetChildById(kLockWallpaperWindowId));
   EXPECT_EQ("0,0 500x500", lock_screen->GetNativeWindow()->bounds().ToString());
 
   // Switch to single display.
@@ -372,8 +341,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_LockWindowsInUnified) {
 
   ASSERT_EQ(lock_screen->GetNativeWindow(),
             controller->GetRootWindow()->GetChildById(kLockScreenWindowId));
-  ASSERT_EQ(lock_wallpaper->GetNativeWindow(),
-            controller->GetRootWindow()->GetChildById(kLockWallpaperWindowId));
   EXPECT_EQ("0,0 600x500", lock_screen->GetNativeWindow()->bounds().ToString());
 }
 
@@ -674,8 +641,8 @@ TEST_F(RootWindowControllerTest, DontDeleteWindowsNotOwnedByParent) {
 class VirtualKeyboardRootWindowControllerTest
     : public RootWindowControllerTest {
  public:
-  VirtualKeyboardRootWindowControllerTest() {}
-  ~VirtualKeyboardRootWindowControllerTest() override {}
+  VirtualKeyboardRootWindowControllerTest() = default;
+  ~VirtualKeyboardRootWindowControllerTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -712,7 +679,7 @@ class MockTextInputClient : public ui::DummyTextInputClient {
 
 class TargetHitTestEventHandler : public ui::test::TestEventHandler {
  public:
-  TargetHitTestEventHandler() {}
+  TargetHitTestEventHandler() = default;
 
   // ui::test::TestEventHandler overrides.
   void OnMouseEvent(ui::MouseEvent* event) override {

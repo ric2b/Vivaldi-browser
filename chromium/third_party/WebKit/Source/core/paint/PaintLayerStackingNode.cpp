@@ -63,7 +63,7 @@ PaintLayerStackingNode::PaintLayerStackingNode(PaintLayer* layer)
 #if DCHECK_IS_ON()
       ,
       layer_list_mutation_allowed_(true),
-      stacking_parent_(0)
+      stacking_parent_(nullptr)
 #endif
 {
   is_stacked_ = GetLayoutObject().StyleRef().IsStacked();
@@ -78,7 +78,7 @@ PaintLayerStackingNode::~PaintLayerStackingNode() {
   if (!GetLayoutObject().DocumentBeingDestroyed()) {
     DCHECK(!IsInStackingParentZOrderLists());
 
-    UpdateStackingParentForZOrderLists(0);
+    UpdateStackingParentForZOrderLists(nullptr);
   }
 #endif
 }
@@ -103,7 +103,7 @@ void PaintLayerStackingNode::DirtyZOrderLists() {
   DCHECK(IsStackingContext());
 
 #if DCHECK_IS_ON()
-  UpdateStackingParentForZOrderLists(0);
+  UpdateStackingParentForZOrderLists(nullptr);
 #endif
 
   if (pos_z_order_list_)
@@ -157,7 +157,7 @@ void PaintLayerStackingNode::RebuildZOrderLists() {
       Element* child_element =
           (child->GetNode() && child->GetNode()->IsElementNode())
               ? ToElement(child->GetNode())
-              : 0;
+              : nullptr;
       if (child_element && child_element->IsInTopLayer()) {
         PaintLayer* layer = ToLayoutBoxModelObject(child)->Layer();
         // Create the buffer if it doesn't exist yet.
@@ -238,7 +238,7 @@ void PaintLayerStackingNode::StyleDidChange(const ComputedStyle* old_style) {
       old_style ? old_style->IsStackingContext() : false;
   int old_z_index = old_style ? old_style->ZIndex() : 0;
 
-  bool is_stacking_context = this->IsStackingContext();
+  bool is_stacking_context = IsStackingContext();
   bool should_be_stacked = GetLayoutObject().StyleRef().IsStacked();
   if (is_stacking_context == was_stacking_context &&
       is_stacked_ == should_be_stacked && old_z_index == ZIndex())
@@ -267,7 +267,7 @@ PaintLayerStackingNode* PaintLayerStackingNode::AncestorStackingContextNode()
     if (stacking_node->IsStackingContext())
       return stacking_node;
   }
-  return 0;
+  return nullptr;
 }
 
 LayoutBoxModelObject& PaintLayerStackingNode::GetLayoutObject() const {

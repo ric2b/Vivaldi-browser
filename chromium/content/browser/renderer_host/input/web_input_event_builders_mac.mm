@@ -195,6 +195,18 @@ ui::DomKey DomKeyFromEvent(NSEvent* event) {
   return ui::DomKey::UNIDENTIFIED;
 }
 
+blink::WebMouseEvent::Button ButtonFromPressedMouseButtons() {
+  NSUInteger pressed_buttons = [NSEvent pressedMouseButtons];
+
+  if (pressed_buttons & (1 << 0))
+    return blink::WebMouseEvent::Button::kLeft;
+  if (pressed_buttons & (1 << 1))
+    return blink::WebMouseEvent::Button::kRight;
+  if (pressed_buttons & (1 << 2))
+    return blink::WebMouseEvent::Button::kMiddle;
+  return blink::WebMouseEvent::Button::kNoButton;
+}
+
 }  // namespace
 
 blink::WebKeyboardEvent WebKeyboardEventBuilder::Build(NSEvent* event) {
@@ -296,6 +308,7 @@ blink::WebMouseEvent WebMouseEventBuilder::Build(
     case NSMouseMoved:
     case NSMouseEntered:
       event_type = blink::WebInputEvent::kMouseMove;
+      button = ButtonFromPressedMouseButtons();
       break;
     case NSLeftMouseDragged:
       event_type = blink::WebInputEvent::kMouseMove;
@@ -537,6 +550,13 @@ blink::WebGestureEvent WebGestureEventBuilder::Build(NSEvent* event,
       // The specific type of a gesture is not defined when the gesture begin
       // and end NSEvents come in. Leave them undefined. The caller will need
       // to specify them when the gesture is differentiated.
+      break;
+    case NSEventTypeScrollWheel:
+      // When building against the 10.11 SDK or later, and running on macOS
+      // 10.11+, Cocoa no longer sends separate Begin/End gestures for scroll
+      // events. However, it's convenient to use the same path as the older
+      // OSes, to avoid logic duplication. We just need to support building a
+      // dummy WebGestureEvent.
       break;
     default:
       NOTIMPLEMENTED();

@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/webui/extensions/extensions_ui.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -18,12 +20,16 @@
 #include "chrome/browser/ui/webui/extensions/install_extension_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/extensions_resources.h"
+#include "chrome/grit/extensions_resources_map.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -37,11 +43,15 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/ui/webui/extensions/chromeos/kiosk_apps_handler.h"
+#include "components/user_manager/user_manager.h"
 #endif
 
 namespace extensions {
 
 namespace {
+
+constexpr char kInDevModeKey[] = "inDevMode";
+constexpr char kLoadTimeClassesKey[] = "loadTimeClasses";
 
 class ExtensionWebUiTimer : public content::WebContentsObserver {
  public:
@@ -101,39 +111,65 @@ class ExtensionWebUiTimer : public content::WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(ExtensionWebUiTimer);
 };
 
-content::WebUIDataSource* CreateMdExtensionsSource() {
+std::string GetLoadTimeClasses(bool in_dev_mode) {
+  return in_dev_mode ? "in-dev-mode" : std::string();
+}
+
+content::WebUIDataSource* CreateMdExtensionsSource(bool in_dev_mode) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIExtensionsHost);
 
   source->SetJsonPath("strings.js");
 
   // Add common strings.
-  source->AddLocalizedString("close", IDS_CLOSE);
-  source->AddLocalizedString("ok", IDS_OK);
+  source->AddLocalizedString("add", IDS_ADD);
+  source->AddLocalizedString("back", IDS_ACCNAME_BACK);
   source->AddLocalizedString("cancel", IDS_CANCEL);
+  source->AddLocalizedString("close", IDS_CLOSE);
+  source->AddLocalizedString("confirm", IDS_CONFIRM);
+  source->AddLocalizedString("done", IDS_DONE);
+  source->AddLocalizedString("ok", IDS_OK);
 
   // Add extension-specific strings.
   source->AddLocalizedString("title",
                              IDS_MANAGE_EXTENSIONS_SETTING_WINDOWS_TITLE);
   source->AddLocalizedString("toolbarTitle", IDS_MD_EXTENSIONS_TOOLBAR_TITLE);
+  source->AddLocalizedString("mainMenu", IDS_MD_EXTENSIONS_MENU_BUTTON_LABEL);
   source->AddLocalizedString("search", IDS_MD_EXTENSIONS_SEARCH);
   // TODO(dpapad): Use a single merged string resource for "Clear search".
   source->AddLocalizedString("clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH);
-  source->AddLocalizedString("sidebarApps", IDS_MD_EXTENSIONS_SIDEBAR_APPS);
   source->AddLocalizedString("sidebarExtensions",
                              IDS_MD_EXTENSIONS_SIDEBAR_EXTENSIONS);
+  source->AddLocalizedString("appsTitle", IDS_MD_EXTENSIONS_APPS_TITLE);
   source->AddLocalizedString("noExtensionsOrApps",
                              IDS_MD_EXTENSIONS_NO_INSTALLED_ITEMS);
-  source->AddLocalizedString("noSearchResults",
-                             IDS_MD_EXTENSIONS_NO_SEARCH_RESULTS);
+  source->AddLocalizedString("noDescription", IDS_MD_EXTENSIONS_NO_DESCRIPTION);
+  // TODO(dschuyler): define "viewInStore" as IDS_MD_EXTENSIONS_VIEW_IN_STORE.
+  source->AddLocalizedString("viewInStore",
+                             IDS_APPLICATION_INFO_WEB_STORE_LINK);
+  // TODO(dschuyler): define "developerWebsite" as
+  // IDS_MD_EXTENSIONS_DEVELOPER_WEBSITE.
+  source->AddLocalizedString("developerWebsite",
+                             IDS_APPLICATION_INFO_HOMEPAGE_LINK);
+  source->AddLocalizedString("noSearchResults", IDS_SEARCH_NO_RESULTS);
+  source->AddLocalizedString("searchResults", IDS_SEARCH_RESULTS);
   source->AddLocalizedString("dropToInstall",
                              IDS_EXTENSIONS_INSTALL_DROP_TARGET);
   source->AddLocalizedString("errorsPageHeading",
                              IDS_MD_EXTENSIONS_ERROR_PAGE_HEADING);
-  source->AddLocalizedString("getMoreExtensions",
-                             IDS_MD_EXTENSIONS_SIDEBAR_GET_MORE_EXTENSIONS);
+  source->AddLocalizedString("anonymousFunction",
+                             IDS_MD_EXTENSIONS_ERROR_ANONYMOUS_FUNCTION);
+  source->AddLocalizedString("openInDevtool",
+                             IDS_MD_EXTENSIONS_ERROR_LAUNCH_DEVTOOLS);
+  source->AddLocalizedString("stackTrace", IDS_MD_EXTENSIONS_ERROR_STACK_TRACE);
+  // TODO(dpapad): Unify with Settings' IDS_SETTINGS_WEB_STORE.
+  source->AddLocalizedString("openChromeWebStore",
+                             IDS_MD_EXTENSIONS_SIDEBAR_OPEN_CHROME_WEB_STORE);
   source->AddLocalizedString("keyboardShortcuts",
                              IDS_MD_EXTENSIONS_SIDEBAR_KEYBOARD_SHORTCUTS);
+  source->AddLocalizedString("guestModeMessage", IDS_MD_EXTENSIONS_GUEST_MODE);
+  source->AddLocalizedString("incognitoInfoWarning",
+                             IDS_EXTENSIONS_INCOGNITO_WARNING);
   source->AddLocalizedString("itemId", IDS_MD_EXTENSIONS_ITEM_ID);
   source->AddLocalizedString("itemInspectViews",
                              IDS_MD_EXTENSIONS_ITEM_INSPECT_VIEWS);
@@ -153,8 +189,15 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_DEPENDENT_ENTRY);
   source->AddLocalizedString("itemDetails", IDS_MD_EXTENSIONS_ITEM_DETAILS);
   source->AddLocalizedString("itemErrors", IDS_MD_EXTENSIONS_ITEM_ERRORS);
+  source->AddLocalizedString("appIcon", IDS_MD_EXTENSIONS_APP_ICON);
+  source->AddLocalizedString("extensionIcon", IDS_MD_EXTENSIONS_EXTENSION_ICON);
   source->AddLocalizedString("itemIdHeading",
                              IDS_MD_EXTENSIONS_ITEM_ID_HEADING);
+  source->AddLocalizedString("extensionEnabled",
+                             IDS_MD_EXTENSIONS_EXTENSION_ENABLED);
+  source->AddLocalizedString("appEnabled", IDS_MD_EXTENSIONS_APP_ENABLED);
+  source->AddString("itemExtensionPath",
+                    l10n_util::GetStringUTF16(IDS_EXTENSIONS_PATH));
   source->AddLocalizedString("itemOff", IDS_MD_EXTENSIONS_ITEM_OFF);
   source->AddLocalizedString("itemOn", IDS_MD_EXTENSIONS_ITEM_ON);
   source->AddLocalizedString("itemOptions", IDS_MD_EXTENSIONS_ITEM_OPTIONS);
@@ -177,6 +220,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_ITEM_SOURCE_WEBSTORE);
   source->AddLocalizedString("itemVersion",
                              IDS_MD_EXTENSIONS_ITEM_VERSION);
+  // TODO(dpapad): Replace this with an Extensions specific string.
+  source->AddLocalizedString("itemSize", IDS_DIRECTORY_LISTING_SIZE);
   source->AddLocalizedString("itemAllowOnFileUrls",
                              IDS_EXTENSIONS_ALLOW_FILE_ACCESS);
   source->AddLocalizedString("itemAllowOnAllSites",
@@ -192,6 +237,7 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE,
           l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE)));
+  source->AddLocalizedString("learnMore", IDS_MD_EXTENSIONS_LEARN_MORE);
   source->AddLocalizedString(
       "loadErrorCouldNotLoadManifest",
       IDS_MD_EXTENSIONS_LOAD_ERROR_COULD_NOT_LOAD_MANIFEST);
@@ -238,6 +284,18 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME);
   source->AddLocalizedString("shortcutTypeAShortcut",
                              IDS_MD_EXTENSIONS_TYPE_A_SHORTCUT);
+  source->AddLocalizedString("shortcutIncludeStartModifier",
+                             IDS_MD_EXTENSIONS_INCLUDE_START_MODIFIER);
+  source->AddLocalizedString("shortcutTooManyModifiers",
+                             IDS_MD_EXTENSIONS_TOO_MANY_MODIFIERS);
+  source->AddLocalizedString("shortcutNeedCharacter",
+                             IDS_MD_EXTENSIONS_NEED_CHARACTER);
+  source->AddString(
+      "suspiciousInstallHelpUrl",
+      base::ASCIIToUTF16(google_util::AppendGoogleLocaleParam(
+                             GURL(chrome::kRemoveNonCWSExtensionURL),
+                             g_browser_process->GetApplicationLocale())
+                             .spec()));
   source->AddLocalizedString("toolbarDevMode",
                              IDS_MD_EXTENSIONS_DEVELOPER_MODE);
   source->AddLocalizedString("toolbarLoadUnpacked",
@@ -245,6 +303,11 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("toolbarPack", IDS_MD_EXTENSIONS_TOOLBAR_PACK);
   source->AddLocalizedString("toolbarUpdateNow",
                              IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_NOW);
+  source->AddLocalizedString("toolbarUpdateNowTooltip",
+                             IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_NOW_TOOLTIP);
+  source->AddLocalizedString(
+      "updateRequiredByPolicy",
+      IDS_MD_EXTENSIONS_DISABLED_UPDATE_REQUIRED_BY_POLICY);
   source->AddLocalizedString("viewBackgroundPage",
                              IDS_EXTENSIONS_BACKGROUND_PAGE);
   source->AddLocalizedString("viewIncognito",
@@ -253,77 +316,56 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_EXTENSIONS_VIEW_INACTIVE);
   source->AddLocalizedString("viewIframe",
                              IDS_EXTENSIONS_VIEW_IFRAME);
+#if defined(OS_CHROMEOS)
+  source->AddLocalizedString("manageKioskApp",
+                             IDS_MD_EXTENSIONS_MANAGE_KIOSK_APP);
+  source->AddLocalizedString("kioskAddApp", IDS_MD_EXTENSIONS_KIOSK_ADD_APP);
+  source->AddLocalizedString("kioskAddAppHint",
+                             IDS_MD_EXTENSIONS_KIOSK_ADD_APP_HINT);
+  source->AddLocalizedString("kioskEnableAutoLaunch",
+                             IDS_MD_EXTENSIONS_KIOSK_ENABLE_AUTO_LAUNCH);
+  source->AddLocalizedString("kioskDisableAutoLaunch",
+                             IDS_MD_EXTENSIONS_KIOSK_DISABLE_AUTO_LAUNCH);
+  source->AddLocalizedString("kioskAutoLaunch",
+                             IDS_MD_EXTENSIONS_KIOSK_AUTO_LAUNCH);
+  source->AddLocalizedString("kioskInvalidApp",
+                             IDS_MD_EXTENSIONS_KIOSK_INVALID_APP);
+  source->AddLocalizedString(
+      "kioskDisableBailout",
+      IDS_MD_EXTENSIONS_KIOSK_DISABLE_BAILOUT_SHORTCUT_LABEL);
+  source->AddLocalizedString(
+      "kioskDisableBailoutWarningTitle",
+      IDS_MD_EXTENSIONS_KIOSK_DISABLE_BAILOUT_SHORTCUT_WARNING_TITLE);
+  source->AddString(
+      "kioskDisableBailoutWarningBody",
+      l10n_util::GetStringFUTF16(
+          IDS_MD_EXTENSIONS_KIOSK_DISABLE_BAILOUT_SHORTCUT_WARNING_BODY,
+          l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME)));
+#endif
   source->AddString(
       "getMoreExtensionsUrl",
       base::ASCIIToUTF16(
           google_util::AppendGoogleLocaleParam(
               GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
               g_browser_process->GetApplicationLocale()).spec()));
+  source->AddString("installWarnings",
+                    l10n_util::GetStringUTF16(IDS_EXTENSIONS_INSTALL_WARNINGS));
 
-  source->AddResourcePath("code_section.html",
-                          IDR_MD_EXTENSIONS_CODE_SECTION_HTML);
-  source->AddResourcePath("code_section.js", IDR_MD_EXTENSIONS_CODE_SECTION_JS);
-  source->AddResourcePath("extensions.js", IDR_MD_EXTENSIONS_EXTENSIONS_JS);
-  source->AddResourcePath("drag_and_drop_handler.html",
-                          IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_HTML);
-  source->AddResourcePath("drag_and_drop_handler.js",
-                          IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_JS);
-  source->AddResourcePath("detail_view.html",
-                          IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML);
-  source->AddResourcePath("detail_view.js", IDR_MD_EXTENSIONS_DETAIL_VIEW_JS);
-  source->AddResourcePath("drop_overlay.html",
-                          IDR_MD_EXTENSIONS_DROP_OVERLAY_HTML);
-  source->AddResourcePath("drop_overlay.js", IDR_MD_EXTENSIONS_DROP_OVERLAY_JS);
-  source->AddResourcePath("error_page.html", IDR_MD_EXTENSIONS_ERROR_PAGE_HTML);
-  source->AddResourcePath("error_page.js", IDR_MD_EXTENSIONS_ERROR_PAGE_JS);
-  source->AddResourcePath("keyboard_shortcuts.html",
-                          IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML);
-  source->AddResourcePath("keyboard_shortcuts.js",
-                          IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_JS);
-  source->AddResourcePath("manager.html", IDR_MD_EXTENSIONS_MANAGER_HTML);
-  source->AddResourcePath("manager.js", IDR_MD_EXTENSIONS_MANAGER_JS);
-  source->AddResourcePath("icons.html", IDR_MD_EXTENSIONS_ICONS_HTML);
-  source->AddResourcePath("item.html", IDR_MD_EXTENSIONS_ITEM_HTML);
-  source->AddResourcePath("item.js", IDR_MD_EXTENSIONS_ITEM_JS);
-  source->AddResourcePath("item_list.html", IDR_MD_EXTENSIONS_ITEM_LIST_HTML);
-  source->AddResourcePath("item_list.js", IDR_MD_EXTENSIONS_ITEM_LIST_JS);
-  source->AddResourcePath("item_util.html", IDR_MD_EXTENSIONS_ITEM_UTIL_HTML);
-  source->AddResourcePath("item_util.js", IDR_MD_EXTENSIONS_ITEM_UTIL_JS);
-  source->AddResourcePath("load_error.html", IDR_MD_EXTENSIONS_LOAD_ERROR_HTML);
-  source->AddResourcePath("load_error.js", IDR_MD_EXTENSIONS_LOAD_ERROR_JS);
-  source->AddResourcePath("navigation_helper.html",
-                          IDR_MD_EXTENSIONS_NAVIGATION_HELPER_HTML);
-  source->AddResourcePath("navigation_helper.js",
-                          IDR_MD_EXTENSIONS_NAVIGATION_HELPER_JS);
-  source->AddResourcePath("options_dialog.html",
-                          IDR_MD_EXTENSIONS_OPTIONS_DIALOG_HTML);
-  source->AddResourcePath("options_dialog.js",
-                          IDR_MD_EXTENSIONS_OPTIONS_DIALOG_JS);
-  source->AddResourcePath("pack_dialog.html",
-                          IDR_MD_EXTENSIONS_PACK_DIALOG_HTML);
-  source->AddResourcePath("pack_dialog.js", IDR_MD_EXTENSIONS_PACK_DIALOG_JS);
-  source->AddResourcePath("pack_dialog_alert.html",
-                          IDR_MD_EXTENSIONS_PACK_DIALOG_ALERT_HTML);
-  source->AddResourcePath("pack_dialog_alert.js",
-                          IDR_MD_EXTENSIONS_PACK_DIALOG_ALERT_JS);
-  source->AddResourcePath("service.html", IDR_MD_EXTENSIONS_SERVICE_HTML);
-  source->AddResourcePath("service.js", IDR_MD_EXTENSIONS_SERVICE_JS);
-  source->AddResourcePath("shortcut_input.html",
-                          IDR_MD_EXTENSIONS_SHORTCUT_INPUT_HTML);
-  source->AddResourcePath("shortcut_input.js",
-                          IDR_MD_EXTENSIONS_SHORTCUT_INPUT_JS);
-  source->AddResourcePath("shortcut_util.html",
-                          IDR_EXTENSIONS_SHORTCUT_UTIL_HTML);
-  source->AddResourcePath("shortcut_util.js", IDR_EXTENSIONS_SHORTCUT_UTIL_JS);
-  source->AddResourcePath("sidebar.html", IDR_MD_EXTENSIONS_SIDEBAR_HTML);
-  source->AddResourcePath("sidebar.js", IDR_MD_EXTENSIONS_SIDEBAR_JS);
-  source->AddResourcePath("strings.html", IDR_MD_EXTENSIONS_STRINGS_HTML);
-  source->AddResourcePath("toolbar.html", IDR_MD_EXTENSIONS_TOOLBAR_HTML);
-  source->AddResourcePath("toolbar.js", IDR_MD_EXTENSIONS_TOOLBAR_JS);
-  source->AddResourcePath("view_manager.html",
-                          IDR_MD_EXTENSIONS_VIEW_MANAGER_HTML);
-  source->AddResourcePath("view_manager.js", IDR_MD_EXTENSIONS_VIEW_MANAGER_JS);
+  source->AddBoolean(kInDevModeKey, in_dev_mode);
+  source->AddString(kLoadTimeClassesKey, GetLoadTimeClasses(in_dev_mode));
+
+#if BUILDFLAG(OPTIMIZE_WEBUI)
+  source->AddResourcePath("crisper.js", IDR_MD_EXTENSIONS_CRISPER_JS);
+  source->SetDefaultResource(IDR_MD_EXTENSIONS_VULCANIZED_HTML);
+  source->UseGzip();
+#else
+  // Add all MD Extensions resources.
+  for (size_t i = 0; i < kExtensionsResourcesSize; ++i) {
+    source->AddResourcePath(kExtensionsResources[i].name,
+                            kExtensionsResources[i].value);
+  }
   source->SetDefaultResource(IDR_MD_EXTENSIONS_EXTENSIONS_HTML);
+#endif
 
   return source;
 }
@@ -352,7 +394,21 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
       base::FeatureList::IsEnabled(features::kMaterialDesignExtensions);
 
   if (is_md) {
-    source = CreateMdExtensionsSource();
+    in_dev_mode_.Init(
+        prefs::kExtensionsUIDeveloperMode, profile->GetPrefs(),
+        base::Bind(&ExtensionsUI::OnDevModeChanged, base::Unretained(this)));
+
+    source = CreateMdExtensionsSource(*in_dev_mode_);
+
+    source->AddBoolean(
+        "isGuest",
+#if defined(OS_CHROMEOS)
+        user_manager::UserManager::Get()->IsLoggedInAsGuest() ||
+            user_manager::UserManager::Get()->IsLoggedInAsPublicAccount());
+#else
+        profile->IsOffTheRecord());
+#endif
+
     auto install_extension_handler =
         base::MakeUnique<InstallExtensionHandler>();
     InstallExtensionHandler* handler = install_extension_handler.get();
@@ -380,23 +436,24 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
     web_ui->AddMessageHandler(std::move(install_extension_handler));
     install_handler->GetLocalizedValues(source);
 
-#if defined(OS_CHROMEOS)
-    auto kiosk_app_handler = base::MakeUnique<chromeos::KioskAppsHandler>(
-        chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
-            profile));
-    chromeos::KioskAppsHandler* kiosk_handler = kiosk_app_handler.get();
-    web_ui->AddMessageHandler(std::move(kiosk_app_handler));
-    kiosk_handler->GetLocalizedValues(source);
-#endif
-
     web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
   }
+
+#if defined(OS_CHROMEOS)
+  auto kiosk_app_handler = base::MakeUnique<chromeos::KioskAppsHandler>(
+      chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
+          profile));
+  chromeos::KioskAppsHandler* kiosk_handler = kiosk_app_handler.get();
+  web_ui->AddMessageHandler(std::move(kiosk_app_handler));
+  kiosk_handler->GetLocalizedValues(source);
+#endif
 
   // Need to allow <object> elements so that the <extensionoptions> browser
   // plugin can be loaded within chrome://extensions.
   source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
 
   content::WebUIDataSource::Add(profile, source);
+
   // Handles its own lifetime.
   new ExtensionWebUiTimer(web_ui->GetWebContents(), is_md);
 }
@@ -408,6 +465,17 @@ base::RefCountedMemory* ExtensionsUI::GetFaviconResourceBytes(
     ui::ScaleFactor scale_factor) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   return rb.LoadDataResourceBytesForScale(IDR_EXTENSIONS_FAVICON, scale_factor);
+}
+
+// Normally volatile data does not belong in loadTimeData, but in this case
+// prevents flickering on a very prominent surface (top of the landing page).
+void ExtensionsUI::OnDevModeChanged() {
+  auto update = std::make_unique<base::DictionaryValue>();
+  update->SetBoolean(kInDevModeKey, *in_dev_mode_);
+  update->SetString(kLoadTimeClassesKey, GetLoadTimeClasses(*in_dev_mode_));
+  content::WebUIDataSource::Update(Profile::FromWebUI(web_ui()),
+                                   chrome::kChromeUIExtensionsHost,
+                                   std::move(update));
 }
 
 }  // namespace extensions

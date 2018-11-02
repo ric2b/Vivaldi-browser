@@ -6,10 +6,10 @@
 #define CONTENT_BROWSER_WEBRTC_WEBRTC_INTERNALS_H_
 
 #include <memory>
-#include <queue>
 #include <string>
 
 #include "base/containers/hash_tables.h"
+#include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/weak_ptr.h"
@@ -208,6 +208,10 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
 
   // For managing select file dialog.
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+  enum class SelectionType {
+    kRtcEventLogs,
+    kAudioDebugRecordings
+  } selection_type_;
 
   // Diagnostic audio recording state.
   bool audio_debug_recordings_;
@@ -215,7 +219,6 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
 
   // Diagnostic event log recording state.
   bool event_log_recordings_;
-  bool selecting_event_log_;
   base::FilePath event_log_recordings_file_path_;
 
   // While |num_open_connections_| is greater than zero, request a wake lock
@@ -251,7 +254,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
     DISALLOW_COPY_AND_ASSIGN(PendingUpdate);
   };
 
-  std::queue<PendingUpdate> pending_updates_;
+  base::queue<PendingUpdate> pending_updates_;
   const int aggregate_updates_ms_;
 
   // Weak factory for this object that we use for bulking up updates.

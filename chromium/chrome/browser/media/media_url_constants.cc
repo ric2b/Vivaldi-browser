@@ -3,9 +3,6 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/media/media_url_constants.h"
+#include "installer/vivaldi_crash_urls.h"
 
-namespace chrome {
-
-const char kUploadURL[] = "https://clients2.google.com/cr/report";
-
-}  // namespace chrome
+const char kUploadURL[] = CRASH_REPORT_URL("/report");

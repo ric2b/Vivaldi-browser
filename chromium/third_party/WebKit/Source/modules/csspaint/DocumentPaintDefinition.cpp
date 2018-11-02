@@ -15,7 +15,8 @@ DocumentPaintDefinition::~DocumentPaintDefinition() {}
 
 bool DocumentPaintDefinition::RegisterAdditionalPaintDefinition(
     const CSSPaintDefinition& other) {
-  if (HasAlpha() != other.HasAlpha() ||
+  if (GetPaintRenderingContext2DSettings().alpha() !=
+          other.GetPaintRenderingContext2DSettings().alpha() ||
       NativeInvalidationProperties() != other.NativeInvalidationProperties() ||
       CustomInvalidationProperties() != other.CustomInvalidationProperties() ||
       InputArgumentTypes() != other.InputArgumentTypes())
@@ -24,7 +25,7 @@ bool DocumentPaintDefinition::RegisterAdditionalPaintDefinition(
   return true;
 }
 
-DEFINE_TRACE(DocumentPaintDefinition) {
+void DocumentPaintDefinition::Trace(blink::Visitor* visitor) {
   visitor->Trace(paint_definition_);
 }
 

@@ -4,10 +4,10 @@
 
 #include "core/css/parser/SizesAttributeParser.h"
 
-#include "core/MediaTypeNames.h"
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/css/parser/CSSTokenizer.h"
 #include "core/css/parser/SizesCalcParser.h"
+#include "core/media_type_names.h"
 
 namespace blink {
 
@@ -15,7 +15,8 @@ SizesAttributeParser::SizesAttributeParser(MediaValues* media_values,
                                            const String& attribute)
     : media_values_(media_values), length_(0), length_was_set_(false) {
   DCHECK(media_values_.Get());
-  is_valid_ = Parse(CSSTokenizer(attribute).TokenRange());
+  is_valid_ =
+      Parse(CSSParserTokenRange(CSSTokenizer(attribute).TokenizeToEOF()));
 }
 
 float SizesAttributeParser::length() {
@@ -80,7 +81,7 @@ bool SizesAttributeParser::Parse(CSSParserTokenRange range) {
     if (!CalculateLengthInPixels(
             range.MakeSubRange(length_token_start, length_token_end), length))
       continue;
-    RefPtr<MediaQuerySet> media_condition =
+    scoped_refptr<MediaQuerySet> media_condition =
         MediaQueryParser::ParseMediaCondition(
             range.MakeSubRange(media_condition_start, length_token_start));
     if (!media_condition || !MediaConditionMatches(*media_condition))

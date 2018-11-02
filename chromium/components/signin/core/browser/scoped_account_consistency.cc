@@ -8,10 +8,11 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/signin/core/common/signin_features.h"
+#include "components/signin/core/browser/signin_features.h"
 
 namespace signin {
 
@@ -26,6 +27,8 @@ ScopedAccountConsistency::ScopedAccountConsistency(
   DCHECK_EQ(AccountConsistencyMethod::kMirror, method);
   return;
 #endif
+
+  signin::SetGaiaOriginIsolatedCallback(base::Bind([] { return true; }));
 
   if (method == AccountConsistencyMethod::kDisabled) {
     scoped_feature_list_.InitAndDisableFeature(kAccountConsistencyFeature);
@@ -44,6 +47,16 @@ ScopedAccountConsistency::ScopedAccountConsistency(
       break;
     case AccountConsistencyMethod::kDiceFixAuthErrors:
       feature_value = kAccountConsistencyFeatureMethodDiceFixAuthErrors;
+      break;
+    case AccountConsistencyMethod::kDicePrepareMigration:
+      feature_value = kAccountConsistencyFeatureMethodDicePrepareMigration;
+      break;
+    case AccountConsistencyMethod::kDicePrepareMigrationChromeSyncEndpoint:
+      feature_value =
+          kAccountConsistencyFeatureMethodDicePrepareMigrationChromeSyncEndpoint;
+      break;
+    case AccountConsistencyMethod::kDiceMigration:
+      feature_value = kAccountConsistencyFeatureMethodDiceMigration;
       break;
     case AccountConsistencyMethod::kDice:
       feature_value = kAccountConsistencyFeatureMethodDice;

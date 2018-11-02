@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/window_animations.h"
@@ -46,7 +46,7 @@ SessionStateAnimator::AnimationSequence::AnimationSequence(
       invoke_callback_(false),
       callback_(std::move(callback)) {}
 
-SessionStateAnimator::AnimationSequence::~AnimationSequence() {}
+SessionStateAnimator::AnimationSequence::~AnimationSequence() = default;
 
 void SessionStateAnimator::AnimationSequence::EndSequence() {
   sequence_ended_ = true;
@@ -73,9 +73,9 @@ void SessionStateAnimator::AnimationSequence::CleanupIfSequenceCompleted() {
   }
 }
 
-SessionStateAnimator::SessionStateAnimator() {}
+SessionStateAnimator::SessionStateAnimator() = default;
 
-SessionStateAnimator::~SessionStateAnimator() {}
+SessionStateAnimator::~SessionStateAnimator() = default;
 
 base::TimeDelta SessionStateAnimator::GetDuration(
     SessionStateAnimator::AnimationSpeed speed) {

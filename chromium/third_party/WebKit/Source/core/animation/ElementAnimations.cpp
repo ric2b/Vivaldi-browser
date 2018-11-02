@@ -30,6 +30,8 @@
 
 #include "core/animation/ElementAnimations.h"
 
+#include "core/style/ComputedStyle.h"
+
 namespace blink {
 
 ElementAnimations::ElementAnimations() : animation_style_change_(false) {}
@@ -45,16 +47,16 @@ void ElementAnimations::UpdateAnimationFlags(ComputedStyle& style) {
     const KeyframeEffectReadOnly& effect =
         *ToKeyframeEffectReadOnly(animation.effect());
     if (effect.IsCurrent()) {
-      if (effect.Affects(PropertyHandle(CSSPropertyOpacity)))
+      if (effect.Affects(PropertyHandle(GetCSSPropertyOpacity())))
         style.SetHasCurrentOpacityAnimation(true);
-      if (effect.Affects(PropertyHandle(CSSPropertyTransform)) ||
-          effect.Affects(PropertyHandle(CSSPropertyRotate)) ||
-          effect.Affects(PropertyHandle(CSSPropertyScale)) ||
-          effect.Affects(PropertyHandle(CSSPropertyTranslate)))
+      if (effect.Affects(PropertyHandle(GetCSSPropertyTransform())) ||
+          effect.Affects(PropertyHandle(GetCSSPropertyRotate())) ||
+          effect.Affects(PropertyHandle(GetCSSPropertyScale())) ||
+          effect.Affects(PropertyHandle(GetCSSPropertyTranslate())))
         style.SetHasCurrentTransformAnimation(true);
-      if (effect.Affects(PropertyHandle(CSSPropertyFilter)))
+      if (effect.Affects(PropertyHandle(GetCSSPropertyFilter())))
         style.SetHasCurrentFilterAnimation(true);
-      if (effect.Affects(PropertyHandle(CSSPropertyBackdropFilter)))
+      if (effect.Affects(PropertyHandle(GetCSSPropertyBackdropFilter())))
         style.SetHasCurrentBackdropFilterAnimation(true);
     }
   }
@@ -62,22 +64,22 @@ void ElementAnimations::UpdateAnimationFlags(ComputedStyle& style) {
   if (style.HasCurrentOpacityAnimation()) {
     style.SetIsRunningOpacityAnimationOnCompositor(
         effect_stack_.HasActiveAnimationsOnCompositor(
-            PropertyHandle(CSSPropertyOpacity)));
+            PropertyHandle(GetCSSPropertyOpacity())));
   }
   if (style.HasCurrentTransformAnimation()) {
     style.SetIsRunningTransformAnimationOnCompositor(
         effect_stack_.HasActiveAnimationsOnCompositor(
-            PropertyHandle(CSSPropertyTransform)));
+            PropertyHandle(GetCSSPropertyTransform())));
   }
   if (style.HasCurrentFilterAnimation()) {
     style.SetIsRunningFilterAnimationOnCompositor(
         effect_stack_.HasActiveAnimationsOnCompositor(
-            PropertyHandle(CSSPropertyFilter)));
+            PropertyHandle(GetCSSPropertyFilter())));
   }
   if (style.HasCurrentBackdropFilterAnimation()) {
     style.SetIsRunningBackdropFilterAnimationOnCompositor(
         effect_stack_.HasActiveAnimationsOnCompositor(
-            PropertyHandle(CSSPropertyBackdropFilter)));
+            PropertyHandle(GetCSSPropertyBackdropFilter())));
   }
 }
 
@@ -86,9 +88,8 @@ void ElementAnimations::RestartAnimationOnCompositor() {
     entry.key->RestartAnimationOnCompositor();
 }
 
-DEFINE_TRACE(ElementAnimations) {
+void ElementAnimations::Trace(blink::Visitor* visitor) {
   visitor->Trace(css_animations_);
-  visitor->Trace(custom_compositor_animations_);
   visitor->Trace(effect_stack_);
   visitor->Trace(animations_);
 }
@@ -96,7 +97,7 @@ DEFINE_TRACE(ElementAnimations) {
 const ComputedStyle* ElementAnimations::BaseComputedStyle() const {
 #if !DCHECK_IS_ON()
   if (IsAnimationStyleChange())
-    return base_computed_style_.Get();
+    return base_computed_style_.get();
 #endif
   return nullptr;
 }

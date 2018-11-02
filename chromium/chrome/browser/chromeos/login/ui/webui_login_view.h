@@ -9,7 +9,7 @@
 #include <string>
 
 #include "ash/shell_observer.h"
-#include "ash/system/status_area_focus_observer.h"
+#include "ash/system/system_tray_focus_observer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
@@ -33,7 +33,7 @@ namespace views {
 class View;
 class WebView;
 class Widget;
-}
+}  // namespace views
 
 namespace chromeos {
 
@@ -49,7 +49,7 @@ class WebUILoginView : public views::View,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost,
                        public lock_screen_apps::FocusCyclerDelegate,
-                       public ash::StatusAreaFocusObserver {
+                       public ash::SystemTrayFocusObserver {
  public:
   struct WebViewSettings {
     // If true, this will check for and consume a preloaded views::WebView
@@ -100,10 +100,6 @@ class WebUILoginView : public views::View,
 
   // Returns instance of the OOBE WebUI.
   OobeUI* GetOobeUI();
-
-  // Opens proxy settings dialog for the network matching |network_id| or the
-  // default network if |network_id| is empty.
-  void OpenProxySettings(const std::string& network_id);
 
   // Called when WebUI is being shown after being initilized hidden.
   void OnPostponedShow();
@@ -156,8 +152,7 @@ class WebUILoginView : public views::View,
                                      aura::Window* root_window) override;
 
   // keyboard::KeyboardControllerObserver:
-  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
-  void OnKeyboardClosed() override;
+  void OnKeyboardAvailabilityChanging(bool is_available) override;
 
   // Overridden from content::WebContentsDelegate.
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
@@ -182,8 +177,8 @@ class WebUILoginView : public views::View,
   void UnregisterLockScreenAppFocusHandler() override;
   void HandleLockScreenAppFocusOut(bool reverse) override;
 
-  // Overridden from ash::StatusAreaFocusObserver.
-  void OnFocusOut(bool reverse) override;
+  // Overridden from ash::SystemTrayFocusObserver.
+  void OnFocusLeavingSystemTray(bool reverse) override;
 
   // Attempts to move focus to system tray. Returns whether the attempt was
   // successful (it might fail if the system tray is not visible).

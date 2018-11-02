@@ -144,7 +144,7 @@ class BuildSettings {
   std::vector<Item *> global_pools_;
   // </Vivaldi>
 
-  BuildSettings& operator=(const BuildSettings& other);  // Disallow.
+  DISALLOW_ASSIGN(BuildSettings);
 };
 
 #endif  // TOOLS_GN_BUILD_SETTINGS_H_

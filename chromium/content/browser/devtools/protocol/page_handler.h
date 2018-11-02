@@ -16,10 +16,11 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/output/compositor_frame_metadata.h"
+#include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/devtools_download_manager_delegate.h"
 #include "content/browser/devtools/protocol/page.h"
+#include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/readback_types.h"
@@ -39,6 +40,7 @@ struct WebDeviceEmulationParams;
 namespace content {
 
 class DevToolsAgentHostImpl;
+class NavigationRequest;
 class RenderFrameHostImpl;
 class WebContentsImpl;
 
@@ -58,33 +60,35 @@ class PageHandler : public DevToolsDomainHandler,
   static std::vector<PageHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
 
   void Wire(UberDispatcher* dispatcher) override;
-  void SetRenderFrameHost(RenderFrameHostImpl* host) override;
-  void OnSwapCompositorFrame(cc::CompositorFrameMetadata frame_metadata);
+  void SetRenderer(RenderProcessHost* process_host,
+                   RenderFrameHostImpl* frame_host) override;
+  void OnSwapCompositorFrame(viz::CompositorFrameMetadata frame_metadata);
   void OnSynchronousSwapCompositorFrame(
-      cc::CompositorFrameMetadata frame_metadata);
+      viz::CompositorFrameMetadata frame_metadata);
   void DidAttachInterstitialPage();
   void DidDetachInterstitialPage();
   bool screencast_enabled() const { return enabled_ && screencast_enabled_; }
   using JavaScriptDialogCallback =
-      base::Callback<void(bool, const base::string16&)>;
+      content::JavaScriptDialogManager::DialogClosedCallback;
   void DidRunJavaScriptDialog(const GURL& url,
                               const base::string16& message,
                               const base::string16& default_prompt,
                               JavaScriptDialogType dialog_type,
-                              const JavaScriptDialogCallback& callback);
+                              JavaScriptDialogCallback callback);
   void DidRunBeforeUnloadConfirm(const GURL& url,
-                                 const JavaScriptDialogCallback& callback);
+                                 JavaScriptDialogCallback callback);
   void DidCloseJavaScriptDialog(bool success, const base::string16& user_input);
+  void NavigationReset(NavigationRequest* navigation_request);
 
   Response Enable() override;
   Response Disable() override;
 
   Response Reload(Maybe<bool> bypassCache,
                   Maybe<std::string> script_to_evaluate_on_load) override;
-  Response Navigate(const std::string& url,
-                    Maybe<std::string> referrer,
-                    Maybe<std::string> transition_type,
-                    Page::FrameId* frame_id) override;
+  void Navigate(const std::string& url,
+                Maybe<std::string> referrer,
+                Maybe<std::string> transition_type,
+                std::unique_ptr<NavigateCallback> callback) override;
   Response StopLoading() override;
 
   using NavigationEntries = protocol::Array<Page::NavigationEntry>;
@@ -136,10 +140,10 @@ class PageHandler : public DevToolsDomainHandler,
   WebContentsImpl* GetWebContents();
   void NotifyScreencastVisibility(bool visible);
   void InnerSwapCompositorFrame();
-  void ScreencastFrameCaptured(cc::CompositorFrameMetadata metadata,
+  void ScreencastFrameCaptured(viz::CompositorFrameMetadata metadata,
                                const SkBitmap& bitmap,
                                ReadbackResponse response);
-  void ScreencastFrameEncoded(cc::CompositorFrameMetadata metadata,
+  void ScreencastFrameEncoded(viz::CompositorFrameMetadata metadata,
                               const base::Time& timestamp,
                               const std::string& data);
 
@@ -148,6 +152,7 @@ class PageHandler : public DevToolsDomainHandler,
       const std::string& format,
       int quality,
       const gfx::Size& original_view_size,
+      const gfx::Size& requested_image_size,
       const blink::WebDeviceEmulationParams& original_params,
       const gfx::Image& image);
 
@@ -166,8 +171,8 @@ class PageHandler : public DevToolsDomainHandler,
   int capture_every_nth_frame_;
   int capture_retry_count_;
   bool has_compositor_frame_metadata_;
-  cc::CompositorFrameMetadata next_compositor_frame_metadata_;
-  cc::CompositorFrameMetadata last_compositor_frame_metadata_;
+  viz::CompositorFrameMetadata next_compositor_frame_metadata_;
+  viz::CompositorFrameMetadata last_compositor_frame_metadata_;
   int session_id_;
   int frame_counter_;
   int frames_in_flight_;
@@ -178,6 +183,7 @@ class PageHandler : public DevToolsDomainHandler,
   NotificationRegistrar registrar_;
   JavaScriptDialogCallback pending_dialog_;
   scoped_refptr<DevToolsDownloadManagerDelegate> download_manager_delegate_;
+  std::unique_ptr<NavigateCallback> navigate_callback_;
   base::WeakPtrFactory<PageHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PageHandler);

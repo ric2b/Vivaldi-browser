@@ -6,6 +6,7 @@
 #define InterpolableValue_h
 
 #include <memory>
+
 #include "core/CoreExport.h"
 #include "core/animation/animatable/AnimatableValue.h"
 #include "platform/heap/Handle.h"
@@ -25,7 +26,6 @@ class CORE_EXPORT InterpolableValue {
   virtual bool IsNumber() const { return false; }
   virtual bool IsBool() const { return false; }
   virtual bool IsList() const { return false; }
-  virtual bool IsAnimatableValue() const { return false; }
 
   virtual bool Equals(const InterpolableValue&) const = 0;
   virtual std::unique_ptr<InterpolableValue> Clone() const = 0;
@@ -45,7 +45,6 @@ class CORE_EXPORT InterpolableValue {
   // Keep interpolate private, but allow calls within the hierarchy without
   // knowledge of type.
   friend class InterpolableNumber;
-  friend class InterpolableBool;
   friend class InterpolableList;
 
   friend class AnimationInterpolableValueTest;
@@ -85,7 +84,7 @@ class CORE_EXPORT InterpolableList : public InterpolableValue {
   // copy constructors and operator= for dll-exported classes.
   // Since InterpolableList is not copyable, automatically generated
   // operator= causes MSVC compiler error.
-  // However, we cannot use WTF_MAKE_NONCOPYABLE because InterpolableList
+  // However, we cannot use DISALLOW_COPY_AND_ASSIGN because InterpolableList
   // has its own copy constructor. So just delete operator= here.
   InterpolableList& operator=(const InterpolableList&) = delete;
 
@@ -131,42 +130,6 @@ class CORE_EXPORT InterpolableList : public InterpolableValue {
   Vector<std::unique_ptr<InterpolableValue>> values_;
 };
 
-// FIXME: Remove this when we can.
-class InterpolableAnimatableValue : public InterpolableValue {
- public:
-  static std::unique_ptr<InterpolableAnimatableValue> Create(
-      RefPtr<AnimatableValue> value) {
-    return WTF::WrapUnique(new InterpolableAnimatableValue(std::move(value)));
-  }
-
-  bool IsAnimatableValue() const final { return true; }
-  AnimatableValue* Value() const { return value_.Get(); }
-  bool Equals(const InterpolableValue&) const final {
-    NOTREACHED();
-    return false;
-  }
-  std::unique_ptr<InterpolableValue> Clone() const final {
-    return Create(value_);
-  }
-  std::unique_ptr<InterpolableValue> CloneAndZero() const final {
-    NOTREACHED();
-    return nullptr;
-  }
-  void Scale(double scale) final { NOTREACHED(); }
-  void ScaleAndAdd(double scale, const InterpolableValue& other) final {
-    NOTREACHED();
-  }
-
- private:
-  void Interpolate(const InterpolableValue& to,
-                   const double progress,
-                   InterpolableValue& result) const final;
-  RefPtr<AnimatableValue> value_;
-
-  InterpolableAnimatableValue(RefPtr<AnimatableValue> value)
-      : value_(std::move(value)) {}
-};
-
 DEFINE_TYPE_CASTS(InterpolableNumber,
                   InterpolableValue,
                   value,
@@ -177,11 +140,6 @@ DEFINE_TYPE_CASTS(InterpolableList,
                   value,
                   value->IsList(),
                   value.IsList());
-DEFINE_TYPE_CASTS(InterpolableAnimatableValue,
-                  InterpolableValue,
-                  value,
-                  value->IsAnimatableValue(),
-                  value.IsAnimatableValue());
 
 }  // namespace blink
 

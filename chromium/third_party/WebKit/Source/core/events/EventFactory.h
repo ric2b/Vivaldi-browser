@@ -27,10 +27,10 @@
 #define EventFactory_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
@@ -52,7 +52,7 @@ class EventFactoryBase {
 class EventFactory final : public EventFactoryBase {
  public:
   static std::unique_ptr<EventFactory> Create() {
-    return WTF::MakeUnique<EventFactory>();
+    return std::make_unique<EventFactory>();
   }
 
   Event* Create(ExecutionContext*, const String& event_type) override;

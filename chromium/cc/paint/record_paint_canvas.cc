@@ -165,27 +165,23 @@ void RecordPaintCanvas::clipPath(const SkPath& path,
   return;
 }
 
-bool RecordPaintCanvas::quickReject(const SkRect& rect) const {
-  return GetCanvas()->quickReject(rect);
-}
-
-bool RecordPaintCanvas::quickReject(const SkPath& path) const {
-  return GetCanvas()->quickReject(path);
-}
-
 SkRect RecordPaintCanvas::getLocalClipBounds() const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->getLocalClipBounds();
 }
 
 bool RecordPaintCanvas::getLocalClipBounds(SkRect* bounds) const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->getLocalClipBounds(bounds);
 }
 
 SkIRect RecordPaintCanvas::getDeviceClipBounds() const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->getDeviceClipBounds();
 }
 
 bool RecordPaintCanvas::getDeviceClipBounds(SkIRect* bounds) const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->getDeviceClipBounds(bounds);
 }
 
@@ -275,18 +271,18 @@ void RecordPaintCanvas::drawBitmap(const SkBitmap& bitmap,
   // TODO(enne): Move into base class?
   if (bitmap.drawsNothing())
     return;
-  drawImage(PaintImageBuilder()
+  drawImage(PaintImageBuilder::WithDefault()
                 .set_id(PaintImage::kNonLazyStableId)
                 .set_image(SkImage::MakeFromBitmap(bitmap))
                 .TakePaintImage(),
             left, top, flags);
 }
 
-void RecordPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,
+void RecordPaintCanvas::drawTextBlob(scoped_refptr<PaintTextBlob> blob,
                                      SkScalar x,
                                      SkScalar y,
                                      const PaintFlags& flags) {
-  list_->push<DrawTextBlobOp>(blob, x, y, flags);
+  list_->push<DrawTextBlobOp>(std::move(blob), x, y, flags);
 }
 
 void RecordPaintCanvas::drawPicture(sk_sp<const PaintRecord> record) {
@@ -295,10 +291,12 @@ void RecordPaintCanvas::drawPicture(sk_sp<const PaintRecord> record) {
 }
 
 bool RecordPaintCanvas::isClipEmpty() const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->isClipEmpty();
 }
 
 bool RecordPaintCanvas::isClipRect() const {
+  DCHECK(InitializedWithRecordingBounds());
   return GetCanvas()->isClipRect();
 }
 
@@ -333,6 +331,13 @@ SkNoDrawCanvas* RecordPaintCanvas::GetCanvas() {
   // which is incorrect.  SkRecorder cheats with private resetForNextCanvas.
   canvas_->clipRect(recording_bounds_, SkClipOp::kIntersect, false);
   return &*canvas_;
+}
+
+bool RecordPaintCanvas::InitializedWithRecordingBounds() const {
+  // If the RecordPaintCanvas is initialized with an empty bounds then
+  // the various clip related functions are not valid and should not
+  // be called.
+  return !recording_bounds_.isEmpty();
 }
 
 }  // namespace cc

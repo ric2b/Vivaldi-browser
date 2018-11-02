@@ -20,10 +20,12 @@
 @implementation KeyCommandsProvider
 
 - (NSArray*)keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
+                baseViewController:(UIViewController*)baseViewController
                         dispatcher:
                             (id<ApplicationCommands, BrowserCommands>)dispatcher
                        editingText:(BOOL)editingText {
   __weak id<KeyCommandsPlumbing> weakConsumer = consumer;
+  __weak UIViewController* weakBaseViewController = baseViewController;
   __weak id<ApplicationCommands, BrowserCommands> weakDispatcher = dispatcher;
 
   // Block to have the tab model open the tab at |index|, if there is one.
@@ -60,11 +62,16 @@
 
   // New tab blocks.
   void (^newTab)() = ^{
-    [weakDispatcher openNewTab:[OpenNewTabCommand command]];
+    OpenNewTabCommand* newTabCommand = [OpenNewTabCommand command];
+    newTabCommand.shouldFocusOmnibox = YES;
+    [weakDispatcher openNewTab:newTabCommand];
   };
 
   void (^newIncognitoTab)() = ^{
-    [weakDispatcher openNewTab:[OpenNewTabCommand incognitoTabCommand]];
+    OpenNewTabCommand* newIncognitoTabCommand =
+        [OpenNewTabCommand incognitoTabCommand];
+    newIncognitoTabCommand.shouldFocusOmnibox = YES;
+    [weakDispatcher openNewTab:newIncognitoTabCommand];
   };
 
   const int browseLeftDescriptionID = useRTLLayout
@@ -212,7 +219,9 @@
                            modifierFlags:UIKeyModifierCommand
                                    title:nil
                                   action:^{
-                                    [weakDispatcher showSettings];
+                                    [weakDispatcher
+                                        showSettingsFromViewController:
+                                            weakBaseViewController];
                                   }],
   ]];
 
@@ -304,6 +313,20 @@
       [UIKeyCommand
           cr_keyCommandWithInput:UIKeyInputRightArrow
                    modifierFlags:UIKeyModifierCommand | UIKeyModifierAlternate
+                           title:nil
+                          action:^{
+                            [weakConsumer focusNextTab];
+                          }],
+      [UIKeyCommand
+          cr_keyCommandWithInput:@"\t"
+                   modifierFlags:UIKeyModifierControl | UIKeyModifierShift
+                           title:nil
+                          action:^{
+                            [weakConsumer focusPreviousTab];
+                          }],
+      [UIKeyCommand
+          cr_keyCommandWithInput:@"\t"
+                   modifierFlags:UIKeyModifierControl
                            title:nil
                           action:^{
                             [weakConsumer focusNextTab];

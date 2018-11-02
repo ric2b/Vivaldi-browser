@@ -18,6 +18,7 @@
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -27,7 +28,7 @@ struct ServiceWorkerRegistrationInfo;
 
 // Represents the core of a service worker registration object. Other
 // registration derivatives (WebServiceWorkerRegistration etc) ultimately refer
-// to this class. This is refcounted via ServiceWorkerRegistrationHandle to
+// to this class. This is refcounted via ServiceWorkerRegistrationObjectHost to
 // facilitate multiple controllees being associated with the same registration.
 class CONTENT_EXPORT ServiceWorkerRegistration
     : public base::RefCounted<ServiceWorkerRegistration>,
@@ -45,14 +46,17 @@ class CONTENT_EXPORT ServiceWorkerRegistration
         ServiceWorkerRegistration* registration) {}
     virtual void OnRegistrationFinishedUninstalling(
         ServiceWorkerRegistration* registration) {}
+    virtual void OnRegistrationDeleted(
+        ServiceWorkerRegistration* registration) {}
     virtual void OnUpdateFound(
         ServiceWorkerRegistration* registration) {}
     virtual void OnSkippedWaiting(ServiceWorkerRegistration* registation) {}
   };
 
-  ServiceWorkerRegistration(const ServiceWorkerRegistrationOptions& options,
-                            int64_t registration_id,
-                            base::WeakPtr<ServiceWorkerContextCore> context);
+  ServiceWorkerRegistration(
+      const blink::mojom::ServiceWorkerRegistrationOptions& options,
+      int64_t registration_id,
+      base::WeakPtr<ServiceWorkerContextCore> context);
 
   int64_t id() const { return registration_id_; }
   const GURL& pattern() const { return pattern_; }
@@ -95,7 +99,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
     return active_version() || waiting_version();
   }
 
-  const NavigationPreloadState& navigation_preload_state() const {
+  const blink::mojom::NavigationPreloadState navigation_preload_state() const {
     return navigation_preload_state_;
   }
 
@@ -203,7 +207,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   bool is_uninstalling_;
   bool is_uninstalled_;
   bool should_activate_when_ready_;
-  NavigationPreloadState navigation_preload_state_;
+  blink::mojom::NavigationPreloadState navigation_preload_state_;
   base::Time last_update_check_;
   int64_t resources_total_size_bytes_;
 

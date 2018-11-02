@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_BROWSER_KEYBOARD_LOCK_KEYBOARD_LOCK_SERVICE_IMPL_H_
+#define CONTENT_BROWSER_KEYBOARD_LOCK_KEYBOARD_LOCK_SERVICE_IMPL_H_
+
 #include <string>
 #include <vector>
 
@@ -11,19 +14,28 @@
 
 namespace content {
 
+class RenderFrameHost;
+class WebContents;
+
 class CONTENT_EXPORT KeyboardLockServiceImpl
     : public blink::mojom::KeyboardLockService {
  public:
-  KeyboardLockServiceImpl();
+  explicit KeyboardLockServiceImpl(RenderFrameHost* render_frame_host);
   ~KeyboardLockServiceImpl() override;
 
   static void CreateMojoService(
+      RenderFrameHost* render_frame_host,
       blink::mojom::KeyboardLockServiceRequest request);
 
   // blink::mojom::KeyboardLockService implementations.
   void RequestKeyboardLock(const std::vector<std::string>& key_codes,
                            RequestKeyboardLockCallback callback) override;
   void CancelKeyboardLock() override;
+
+ private:
+  WebContents* const web_contents_;
 };
 
 }  // namespace
+
+#endif  // CONTENT_BROWSER_KEYBOARD_LOCK_KEYBOARD_LOCK_SERVICE_IMPL_H_

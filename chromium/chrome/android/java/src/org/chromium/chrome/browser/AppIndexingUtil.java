@@ -6,7 +6,6 @@ package org.chromium.chrome.browser;
 
 import android.os.SystemClock;
 import android.util.LruCache;
-import android.webkit.URLUtil;
 
 import org.chromium.base.Callback;
 import org.chromium.base.SysUtils;
@@ -16,6 +15,7 @@ import org.chromium.blink.mojom.document_metadata.CopylessPaste;
 import org.chromium.blink.mojom.document_metadata.WebPage;
 import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.services.service_manager.InterfaceProvider;
@@ -47,7 +47,7 @@ public class AppIndexingUtil {
      */
     public void extractCopylessPasteMetadata(final Tab tab) {
         final String url = tab.getUrl();
-        boolean isHttpOrHttps = URLUtil.isHttpsUrl(url) || URLUtil.isHttpUrl(url);
+        boolean isHttpOrHttps = UrlUtilities.isHttpOrHttps(url);
         if (!isEnabledForDevice() || tab.isIncognito() || !isHttpOrHttps) {
             return;
         }
@@ -76,22 +76,20 @@ public class AppIndexingUtil {
             if (copylessPaste == null) {
                 return;
             }
-            copylessPaste.getEntities(new CopylessPaste.GetEntitiesResponse() {
-                @Override
-                public void call(WebPage webpage) {
-                    putCacheEntry(url, webpage != null);
-                    if (sCallbackForTesting != null) {
-                        sCallbackForTesting.onResult(webpage);
-                    }
-                    if (webpage == null) return;
-                    getAppIndexingReporter().reportWebPage(webpage);
+            copylessPaste.getEntities(webpage -> {
+                copylessPaste.close();
+                putCacheEntry(url, webpage != null);
+                if (sCallbackForTesting != null) {
+                    sCallbackForTesting.onResult(webpage);
                 }
+                if (webpage == null) return;
+                getAppIndexingReporter().reportWebPage(webpage);
             });
         }
     }
 
     @VisibleForTesting
-    public static void setCallbackForTesting(Callback<WebPage> callback) {
+    static void setCallbackForTesting(Callback<WebPage> callback) {
         sCallbackForTesting = callback;
     }
 

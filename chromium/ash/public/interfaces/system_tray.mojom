@@ -122,18 +122,14 @@ interface SystemTrayClient {
   // connection (e.g. Cisco AnyConnect).
   ShowThirdPartyVpnCreate(string extension_id);
 
+  // Launches Arc VPN provider.
+  ShowArcVpnCreate(string app_id);
+
   // Shows settings related to networking. If |network_id| is empty, shows
   // general settings. Otherwise shows settings for the individual network.
   // On devices |network_id| is a GUID, but on Linux desktop and in tests it can
   // be any string.
   ShowNetworkSettings(string network_id);
-
-  // Shows UI for changing proxy settings.
-  ShowProxySettings();
-
-  // Attempts to sign out the user.
-  // TODO(jamescook): Migrate to a user or login service. crbug.com/665582
-  SignOut();
 
   // Attempts to restart the system for update.
   RequestRestartForUpdate();

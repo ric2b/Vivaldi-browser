@@ -94,6 +94,9 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
   ScopedJavaLocalRef<jstring> java_best_primary_icon_url =
       base::android::ConvertUTF8ToJavaString(env,
                                              info.best_primary_icon_url.spec());
+  ScopedJavaLocalRef<jstring> java_splash_screen_url =
+      base::android::ConvertUTF8ToJavaString(env,
+                                             info.splash_screen_url.spec());
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (!icon_bitmap.drawsNothing())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
@@ -109,7 +112,7 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
       env, java_webapp_id, java_url, java_scope_url, java_user_title, java_name,
       java_short_name, java_best_primary_icon_url, java_bitmap, info.display,
       info.orientation, info.source, info.theme_color, info.background_color,
-      callback_pointer);
+      java_splash_screen_url, callback_pointer);
 }
 
 // Adds a shortcut which opens in a browser tab to the launcher.
@@ -224,7 +227,7 @@ SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
     const SkBitmap& bitmap,
     const GURL& url,
     bool* is_generated) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> result;
@@ -309,9 +312,9 @@ void ShortcutHelper::RetrieveWebApks(const WebApkInfoCallback& callback) {
 // This callback should only ever be called when the shortcut was for a
 // webapp-capable site; otherwise, |splash_image_callback| will have never been
 // allocated and doesn't need to be run or deleted.
-void OnWebappDataStored(JNIEnv* env,
-                        const JavaParamRef<jclass>& clazz,
-                        jlong jsplash_image_callback) {
+void JNI_ShortcutHelper_OnWebappDataStored(JNIEnv* env,
+                                           const JavaParamRef<jclass>& clazz,
+                                           jlong jsplash_image_callback) {
   DCHECK(jsplash_image_callback);
   base::Closure* splash_image_callback =
       reinterpret_cast<base::Closure*>(jsplash_image_callback);
@@ -319,22 +322,23 @@ void OnWebappDataStored(JNIEnv* env,
   delete splash_image_callback;
 }
 
-void OnWebApksRetrieved(JNIEnv* env,
-                        const JavaParamRef<jclass>& clazz,
-                        const jlong jcallback_pointer,
-                        const JavaParamRef<jobjectArray>& jnames,
-                        const JavaParamRef<jobjectArray>& jshort_names,
-                        const JavaParamRef<jobjectArray>& jpackage_names,
-                        const JavaParamRef<jintArray>& jshell_apk_versions,
-                        const JavaParamRef<jintArray>& jversion_codes,
-                        const JavaParamRef<jobjectArray>& juris,
-                        const JavaParamRef<jobjectArray>& jscopes,
-                        const JavaParamRef<jobjectArray>& jmanifest_urls,
-                        const JavaParamRef<jobjectArray>& jmanifest_start_urls,
-                        const JavaParamRef<jintArray>& jdisplay_modes,
-                        const JavaParamRef<jintArray>& jorientations,
-                        const JavaParamRef<jlongArray>& jtheme_colors,
-                        const JavaParamRef<jlongArray>& jbackground_colors) {
+void JNI_ShortcutHelper_OnWebApksRetrieved(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const jlong jcallback_pointer,
+    const JavaParamRef<jobjectArray>& jnames,
+    const JavaParamRef<jobjectArray>& jshort_names,
+    const JavaParamRef<jobjectArray>& jpackage_names,
+    const JavaParamRef<jintArray>& jshell_apk_versions,
+    const JavaParamRef<jintArray>& jversion_codes,
+    const JavaParamRef<jobjectArray>& juris,
+    const JavaParamRef<jobjectArray>& jscopes,
+    const JavaParamRef<jobjectArray>& jmanifest_urls,
+    const JavaParamRef<jobjectArray>& jmanifest_start_urls,
+    const JavaParamRef<jintArray>& jdisplay_modes,
+    const JavaParamRef<jintArray>& jorientations,
+    const JavaParamRef<jlongArray>& jtheme_colors,
+    const JavaParamRef<jlongArray>& jbackground_colors) {
   DCHECK(jcallback_pointer);
   std::vector<std::string> names;
   base::android::AppendJavaStringArrayToStringVector(env, jnames, &names);

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/dom/Element.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/testing/sim/SimCompositor.h"
@@ -258,10 +259,11 @@ TEST_F(DeferredLoadingTest, DisplayNoneThenTwoScreensAway) {
   ExpectCount(WouldLoadReason::kCreated, 1);
   ExpectTotalCount(6);
 
-  main_resource->Write(
-      "<script>theFrame.style.top='200vh';"
-      "theFrame.style.position='absolute';"
-      "theFrame.style.display='block';</script>");
+  main_resource->Write(R"HTML(
+    <script>theFrame.style.top='200vh';
+    theFrame.style.position='absolute';
+    theFrame.style.display='block';</script>
+  )HTML");
   main_resource->Finish();
 
   CompositeFrame();
@@ -278,12 +280,13 @@ TEST_F(DeferredLoadingTest, DisplayNoneAsync) {
 
   CompositeFrame();
 
-  main_resource->Write(
-      "<script>frame = document.createElement('iframe');"
-      "frame.setAttribute('sandbox', true);"
-      "frame.style.display = 'none';"
-      "document.body.appendChild(frame);"
-      "</script>");
+  main_resource->Write(R"HTML(
+    <script>frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', true);
+    frame.style.display = 'none';
+    document.body.appendChild(frame);
+    </script>
+  )HTML");
   main_resource->Finish();
 
   CompositeFrame();

@@ -27,7 +27,6 @@
 
 #include "core/css/MediaQueryListListener.h"
 #include "core/dom/Document.h"
-#include "core/dom/FrameRequestCallback.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrameView.h"
@@ -44,7 +43,7 @@ std::pair<EventTarget*, StringImpl*> EventTargetKey(const Event* event) {
 ScriptedAnimationController::ScriptedAnimationController(Document* document)
     : document_(document), callback_collection_(document), suspend_count_(0) {}
 
-DEFINE_TRACE(ScriptedAnimationController) {
+void ScriptedAnimationController::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(callback_collection_);
   visitor->Trace(event_queue_);
@@ -52,11 +51,16 @@ DEFINE_TRACE(ScriptedAnimationController) {
   visitor->Trace(per_frame_events_);
 }
 
-void ScriptedAnimationController::Suspend() {
+void ScriptedAnimationController::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  visitor->TraceWrappers(callback_collection_);
+}
+
+void ScriptedAnimationController::Pause() {
   ++suspend_count_;
 }
 
-void ScriptedAnimationController::Resume() {
+void ScriptedAnimationController::Unpause() {
   // It would be nice to put an DCHECK(m_suspendCount > 0) here, but in WK1
   // resume() can be called even when suspend hasn't (if a tab was created in
   // the background).
@@ -71,7 +75,8 @@ void ScriptedAnimationController::DispatchEventsAndCallbacksForPrinting() {
 }
 
 ScriptedAnimationController::CallbackId
-ScriptedAnimationController::RegisterCallback(FrameRequestCallback* callback) {
+ScriptedAnimationController::RegisterCallback(
+    FrameRequestCallbackCollection::FrameCallback* callback) {
   CallbackId id = callback_collection_.RegisterCallback(callback);
   ScheduleAnimationIfNeeded();
   return id;
@@ -85,7 +90,7 @@ void ScriptedAnimationController::RunTasks() {
   Vector<WTF::Closure> tasks;
   tasks.swap(task_queue_);
   for (auto& task : tasks)
-    task();
+    std::move(task).Run();
 }
 
 void ScriptedAnimationController::DispatchEvents(

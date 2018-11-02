@@ -5,16 +5,14 @@
 #include "platform/graphics/RecordingImageBufferSurface.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
-#include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/testing/TestingPlatformSupport.h"
-#include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
@@ -28,9 +26,8 @@ namespace blink {
 class RecordingImageBufferSurfaceTest : public Test {
  protected:
   RecordingImageBufferSurfaceTest() {
-    auto test_surface = WTF::MakeUnique<RecordingImageBufferSurface>(
-        IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback,
-        kNonOpaque);
+    auto test_surface = std::make_unique<RecordingImageBufferSurface>(
+        IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
     test_surface_ = test_surface.get();
     // We create an ImageBuffer in order for the |test_surface| to be
     // properly initialized with a GraphicsContext
@@ -94,8 +91,8 @@ TEST_F(RecordingImageBufferSurfaceTest, testClearRect) {
   TestSurface()->GetRecord();
   PaintFlags clear_flags;
   clear_flags.setBlendMode(SkBlendMode::kClear);
-  Canvas()->drawRect(SkRect::MakeWH(TestSurface()->size().Width(),
-                                    TestSurface()->size().Height()),
+  Canvas()->drawRect(SkRect::MakeWH(TestSurface()->Size().Width(),
+                                    TestSurface()->Size().Height()),
                      clear_flags);
   TestSurface()->DidDraw(FloatRect(0, 0, 1, 1));
   TestSurface()->GetRecord();

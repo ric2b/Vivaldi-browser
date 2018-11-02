@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -299,9 +298,16 @@ struct MostVisitedURL {
   MostVisitedURL(const GURL& url,
                  const base::string16& title,
                  base::Time last_forced_time = base::Time());
+  MostVisitedURL(const GURL& url,
+                 const base::string16& title,
+                 const RedirectList& preceding_redirects);
   MostVisitedURL(const MostVisitedURL& other);
   MostVisitedURL(MostVisitedURL&& other) noexcept;
   ~MostVisitedURL();
+
+  // Initializes |redirects| from |preceding_redirects|, ensuring that |url| is
+  // always present as the last item.
+  void InitRedirects(const RedirectList& preceding_redirects);
 
   GURL url;
   base::string16 title;
@@ -356,7 +362,7 @@ struct HistoryAddPageArgs {
   //   HistoryAddPageArgs(
   //       GURL(), base::Time(), NULL, 0, GURL(),
   //       RedirectList(), ui::PAGE_TRANSITION_LINK,
-  //       SOURCE_BROWSED, false, true)
+  //       false, SOURCE_BROWSED, false, true)
   HistoryAddPageArgs();
   HistoryAddPageArgs(const GURL& url,
                      base::Time time,
@@ -365,6 +371,7 @@ struct HistoryAddPageArgs {
                      const GURL& referrer,
                      const RedirectList& redirects,
                      ui::PageTransition transition,
+                     bool hidden,
                      VisitSource source,
                      bool did_replace_entry,
                      bool consider_for_ntp_most_visited);
@@ -378,6 +385,7 @@ struct HistoryAddPageArgs {
   GURL referrer;
   RedirectList redirects;
   ui::PageTransition transition;
+  bool hidden;
   VisitSource visit_source;
   bool did_replace_entry;
   // Specifies whether a page visit should contribute to the Most Visited tiles
@@ -492,7 +500,7 @@ struct IconMapping {
   GURL icon_url;
 
   // The type of icon.
-  favicon_base::IconType icon_type = favicon_base::INVALID_ICON;
+  favicon_base::IconType icon_type = favicon_base::IconType::kInvalid;
 };
 
 // Defines a favicon bitmap and its associated pixel size.

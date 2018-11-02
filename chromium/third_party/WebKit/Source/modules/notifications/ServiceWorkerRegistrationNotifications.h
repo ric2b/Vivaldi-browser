@@ -6,6 +6,7 @@
 #define ServiceWorkerRegistrationNotifications_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "platform/Supplementable.h"
@@ -14,7 +15,6 @@
 #include "platform/heap/HeapAllocator.h"
 #include "platform/heap/Visitor.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "public/platform/modules/notifications/WebNotificationManager.h"
 
 namespace blink {
@@ -49,7 +49,7 @@ class ServiceWorkerRegistrationNotifications final
   // ContextLifecycleObserver interface.
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   ServiceWorkerRegistrationNotifications(ExecutionContext*,
@@ -62,7 +62,7 @@ class ServiceWorkerRegistrationNotifications final
 
   void PrepareShow(const WebNotificationData&,
                    std::unique_ptr<WebNotificationShowCallbacks>);
-  void DidLoadResources(PassRefPtr<SecurityOrigin>,
+  void DidLoadResources(scoped_refptr<SecurityOrigin>,
                         const WebNotificationData&,
                         std::unique_ptr<WebNotificationShowCallbacks>,
                         NotificationResourcesLoader*);

@@ -23,7 +23,7 @@
 #include "core/html/HTMLUListElement.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ bool HTMLUListElement::IsPresentationAttribute(
 void HTMLUListElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == typeAttr) {
     if (DeprecatedEqualIgnoringCase(value, "disc"))
       AddPropertyToPresentationAttributeStyle(style, CSSPropertyListStyleType,

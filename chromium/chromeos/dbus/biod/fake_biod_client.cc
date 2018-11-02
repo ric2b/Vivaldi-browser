@@ -4,10 +4,11 @@
 
 #include "chromeos/dbus/biod/fake_biod_client.h"
 
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "dbus/object_path.h"
@@ -40,9 +41,9 @@ struct FakeBiodClient::FakeRecord {
   std::vector<std::string> fake_fingerprint;
 };
 
-FakeBiodClient::FakeBiodClient() {}
+FakeBiodClient::FakeBiodClient() = default;
 
-FakeBiodClient::~FakeBiodClient() {}
+FakeBiodClient::~FakeBiodClient() = default;
 
 void FakeBiodClient::SendEnrollScanDone(const std::string& fingerprint,
                                         biod::ScanResult type_result,
@@ -131,7 +132,7 @@ void FakeBiodClient::StartEnrollSession(const std::string& user_id,
   // Create the enrollment with |user_id|, |label| and a empty fake fingerprint.
   current_record_path_ = dbus::ObjectPath(
       kRecordObjectPathPrefix + std::to_string(next_record_unique_id_++));
-  current_record_ = base::MakeUnique<FakeRecord>();
+  current_record_ = std::make_unique<FakeRecord>();
   current_record_->user_id = user_id;
   current_record_->label = label;
   current_session_ = FingerprintSession::ENROLL;
@@ -157,7 +158,7 @@ void FakeBiodClient::DestroyAllRecords(VoidDBusMethodCallback callback) {
   records_.clear();
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeBiodClient::StartAuthSession(const ObjectPathCallback& callback) {
@@ -186,7 +187,7 @@ void FakeBiodClient::CancelEnrollSession(VoidDBusMethodCallback callback) {
   current_session_ = FingerprintSession::NONE;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeBiodClient::EndAuthSession(VoidDBusMethodCallback callback) {
@@ -194,7 +195,7 @@ void FakeBiodClient::EndAuthSession(VoidDBusMethodCallback callback) {
 
   current_session_ = FingerprintSession::NONE;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeBiodClient::SetRecordLabel(const dbus::ObjectPath& record_path,
@@ -204,7 +205,7 @@ void FakeBiodClient::SetRecordLabel(const dbus::ObjectPath& record_path,
     records_[record_path]->label = label;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeBiodClient::RemoveRecord(const dbus::ObjectPath& record_path,
@@ -212,7 +213,7 @@ void FakeBiodClient::RemoveRecord(const dbus::ObjectPath& record_path,
   records_.erase(record_path);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), DBUS_METHOD_CALL_SUCCESS));
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeBiodClient::RequestRecordLabel(const dbus::ObjectPath& record_path,

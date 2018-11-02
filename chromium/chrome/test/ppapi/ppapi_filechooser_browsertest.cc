@@ -26,7 +26,7 @@
 #if defined(FULL_SAFE_BROWSING)
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "components/safe_browsing_db/test_database_manager.h"
+#include "components/safe_browsing/db/test_database_manager.h"
 #include "content/public/test/test_download_request_handler.h"
 
 using safe_browsing::DownloadProtectionService;
@@ -274,7 +274,7 @@ class PPAPIFileChooserTestWithSBService : public PPAPIFileChooserTest {
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_Open_Success) {
   const char kContents[] = "Hello from browser";
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
@@ -299,7 +299,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_Open_Cancel) {
 }
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_SaveAs_Success) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath suggested_filename = temp_dir.GetPath().AppendASCII("foo");
@@ -316,7 +316,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_SaveAs_Success) {
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest,
                        FileChooser_SaveAs_SafeDefaultName) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath suggested_filename = temp_dir.GetPath().AppendASCII("foo");
@@ -339,7 +339,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest,
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest,
                        FileChooser_SaveAs_UnsafeDefaultName) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath suggested_filename = temp_dir.GetPath().AppendASCII("foo");
@@ -374,7 +374,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_SaveAs_Cancel) {
 // file is created. This MOTW prevents the file being opened without due
 // security warnings if the file is executable.
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_Quarantine) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath suggested_filename = temp_dir.GetPath().AppendASCII("foo");
@@ -401,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTest, FileChooser_Quarantine) {
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTestWithSBService,
                        FileChooser_SaveAs_DangerousExecutable_Allowed) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   safe_browsing_test_configuration_.default_result =
       safe_browsing::DownloadCheckResult::DANGEROUS;
   safe_browsing_test_configuration_.result_map.insert(
@@ -458,7 +458,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTestWithSBService,
 
 IN_PROC_BROWSER_TEST_F(PPAPIFileChooserTestWithSBService,
                        FileChooser_Open_NotBlockedBySafeBrowsing) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   const char kContents[] = "Hello from browser";
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());

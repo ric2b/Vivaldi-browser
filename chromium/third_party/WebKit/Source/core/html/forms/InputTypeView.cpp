@@ -30,16 +30,16 @@
 
 #include "core/dom/ShadowRoot.h"
 #include "core/events/KeyboardEvent.h"
-#include "core/html/HTMLFormElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
 
 InputTypeView::~InputTypeView() {}
 
-DEFINE_TRACE(InputTypeView) {
+void InputTypeView::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
 }
 
@@ -91,8 +91,8 @@ LayoutObject* InputTypeView::CreateLayoutObject(
   return LayoutObject::CreateObject(&GetElement(), style);
 }
 
-RefPtr<ComputedStyle> InputTypeView::CustomStyleForLayoutObject(
-    RefPtr<ComputedStyle> original_style) {
+scoped_refptr<ComputedStyle> InputTypeView::CustomStyleForLayoutObject(
+    scoped_refptr<ComputedStyle> original_style) {
   return original_style;
 }
 
@@ -108,8 +108,6 @@ bool InputTypeView::HasCustomFocusLogic() const {
   return true;
 }
 
-void InputTypeView::HandleFocusEvent(Element*, WebFocusType) {}
-
 void InputTypeView::HandleBlurEvent() {}
 
 void InputTypeView::HandleFocusInEvent(Element*, WebFocusType) {}
@@ -117,6 +115,10 @@ void InputTypeView::HandleFocusInEvent(Element*, WebFocusType) {}
 void InputTypeView::StartResourceLoading() {}
 
 void InputTypeView::ClosePopupView() {}
+
+bool InputTypeView::NeedsShadowSubtree() const {
+  return true;
+}
 
 void InputTypeView::CreateShadowSubtree() {}
 
@@ -184,7 +186,7 @@ bool InputTypeView::HasBadInput() const {
   return false;
 }
 
-DEFINE_TRACE(ClickHandlingState) {
+void ClickHandlingState::Trace(blink::Visitor* visitor) {
   visitor->Trace(checked_radio_button);
   EventDispatchHandlingState::Trace(visitor);
 }

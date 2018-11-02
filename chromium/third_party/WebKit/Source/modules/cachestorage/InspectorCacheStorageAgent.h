@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/CacheStorage.h"
 #include "modules/ModulesExport.h"
@@ -18,15 +19,13 @@ class InspectedFrames;
 
 class MODULES_EXPORT InspectorCacheStorageAgent final
     : public InspectorBaseAgent<protocol::CacheStorage::Metainfo> {
-  WTF_MAKE_NONCOPYABLE(InspectorCacheStorageAgent);
-
  public:
   static InspectorCacheStorageAgent* Create(InspectedFrames* frames) {
     return new InspectorCacheStorageAgent(frames);
   }
 
   ~InspectorCacheStorageAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void requestCacheNames(const String& security_origin,
                          std::unique_ptr<RequestCacheNamesCallback>) override;
@@ -48,6 +47,8 @@ class MODULES_EXPORT InspectorCacheStorageAgent final
   explicit InspectorCacheStorageAgent(InspectedFrames*);
 
   Member<InspectedFrames> frames_;
+
+  DISALLOW_COPY_AND_ASSIGN(InspectorCacheStorageAgent);
 };
 
 }  // namespace blink

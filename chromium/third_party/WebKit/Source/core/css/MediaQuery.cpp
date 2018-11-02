@@ -29,9 +29,9 @@
 #include "core/css/MediaQuery.h"
 
 #include <memory>
-#include "core/MediaTypeNames.h"
 #include "core/css/MediaQueryExp.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/media_type_names.h"
 #include "platform/wtf/NonCopyingSort.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -74,16 +74,16 @@ static bool ExpressionCompare(const MediaQueryExp& a, const MediaQueryExp& b) {
 }
 
 std::unique_ptr<MediaQuery> MediaQuery::CreateNotAll() {
-  return WTF::MakeUnique<MediaQuery>(MediaQuery::kNot, MediaTypeNames::all,
-                                     ExpressionHeapVector());
+  return std::make_unique<MediaQuery>(MediaQuery::kNot, MediaTypeNames::all,
+                                      ExpressionHeapVector());
 }
 
 std::unique_ptr<MediaQuery> MediaQuery::Create(
     RestrictorType restrictor,
     String media_type,
     ExpressionHeapVector expressions) {
-  return WTF::MakeUnique<MediaQuery>(restrictor, std::move(media_type),
-                                     std::move(expressions));
+  return std::make_unique<MediaQuery>(restrictor, std::move(media_type),
+                                      std::move(expressions));
 }
 
 MediaQuery::MediaQuery(RestrictorType restrictor,
@@ -100,7 +100,7 @@ MediaQuery::MediaQuery(RestrictorType restrictor,
     MediaQueryExp exp = expressions_.at(i);
     CHECK(exp.IsValid());
     if (exp == key)
-      expressions_.erase(i);
+      expressions_.EraseAt(i);
     else
       key = exp;
   }
@@ -115,7 +115,7 @@ MediaQuery::MediaQuery(const MediaQuery& o)
     expressions_.push_back(o.expressions_[i]);
 }
 
-MediaQuery::~MediaQuery() {}
+MediaQuery::~MediaQuery() = default;
 
 // http://dev.w3.org/csswg/cssom/#compare-media-queries
 bool MediaQuery::operator==(const MediaQuery& other) const {

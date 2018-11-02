@@ -4,7 +4,7 @@
 
 #include "ui/aura/local/layer_tree_frame_sink_local.h"
 
-#include "cc/output/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -19,12 +19,16 @@ namespace aura {
 
 LayerTreeFrameSinkLocal::LayerTreeFrameSinkLocal(
     const viz::FrameSinkId& frame_sink_id,
-    viz::HostFrameSinkManager* host_frame_sink_manager)
+    viz::HostFrameSinkManager* host_frame_sink_manager,
+    const std::string& debug_label)
     : cc::LayerTreeFrameSink(nullptr, nullptr, nullptr, nullptr),
       frame_sink_id_(frame_sink_id),
       host_frame_sink_manager_(host_frame_sink_manager),
       weak_factory_(this) {
   host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
+#if DCHECK_IS_ON()
+  host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_, debug_label);
+#endif
 }
 
 LayerTreeFrameSinkLocal::~LayerTreeFrameSinkLocal() {
@@ -36,12 +40,12 @@ bool LayerTreeFrameSinkLocal::BindToClient(
   if (!cc::LayerTreeFrameSink::BindToClient(client))
     return false;
   DCHECK(!thread_checker_);
-  thread_checker_ = base::MakeUnique<base::ThreadChecker>();
+  thread_checker_ = std::make_unique<base::ThreadChecker>();
 
   support_ = host_frame_sink_manager_->CreateCompositorFrameSinkSupport(
       this, frame_sink_id_, false /* is_root */,
       true /* needs_sync_points */);
-  begin_frame_source_ = base::MakeUnique<viz::ExternalBeginFrameSource>(this);
+  begin_frame_source_ = std::make_unique<viz::ExternalBeginFrameSource>(this);
   client->SetBeginFrameSource(begin_frame_source_.get());
   return true;
 }
@@ -73,7 +77,8 @@ void LayerTreeFrameSinkLocal::SetLocalSurfaceId(
   local_surface_id_ = local_surface_id;
 }
 
-void LayerTreeFrameSinkLocal::SubmitCompositorFrame(cc::CompositorFrame frame) {
+void LayerTreeFrameSinkLocal::SubmitCompositorFrame(
+    viz::CompositorFrame frame) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
@@ -107,6 +112,23 @@ void LayerTreeFrameSinkLocal::DidReceiveCompositorFrameAck(
   client_->DidReceiveCompositorFrameAck();
 }
 
+void LayerTreeFrameSinkLocal::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {
+  DCHECK(thread_checker_);
+  DCHECK(thread_checker_->CalledOnValidThread());
+  client_->DidPresentCompositorFrame(presentation_token, time, refresh, flags);
+}
+
+void LayerTreeFrameSinkLocal::DidDiscardCompositorFrame(
+    uint32_t presentation_token) {
+  DCHECK(thread_checker_);
+  DCHECK(thread_checker_->CalledOnValidThread());
+  client_->DidDiscardCompositorFrame(presentation_token);
+}
+
 void LayerTreeFrameSinkLocal::OnBeginFrame(const viz::BeginFrameArgs& args) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
@@ -137,6 +159,12 @@ void LayerTreeFrameSinkLocal::OnNeedsBeginFrames(bool needs_begin_frames) {
 void LayerTreeFrameSinkLocal::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   surface_changed_callback_.Run(surface_info);
+}
+
+void LayerTreeFrameSinkLocal::OnFrameTokenChanged(uint32_t frame_token) {
+  // TODO(yiyix, fsamuel): Implement frame token propagation for
+  // LayerTreeFrameSinkLocal.
+  NOTREACHED();
 }
 
 }  // namespace aura

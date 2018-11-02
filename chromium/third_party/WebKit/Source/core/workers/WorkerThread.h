@@ -29,11 +29,13 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/ThreadableLoadingContext.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThreadStartupData.h"
+#include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThreadLifecycleContext.h"
 #include "core/workers/WorkerThreadLifecycleObserver.h"
 #include "platform/WaitableEvent.h"
@@ -42,9 +44,7 @@
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/Optional.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebThread.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -57,11 +57,7 @@ class WorkerInspectorController;
 class WorkerOrWorkletGlobalScope;
 class WorkerReportingProxy;
 struct GlobalScopeCreationParams;
-
-enum WorkerThreadStartMode {
-  kDontPauseWorkerGlobalScopeOnStart,
-  kPauseWorkerGlobalScopeOnStart
-};
+struct GlobalScopeInspectorCreationParams;
 
 // WorkerThread is a kind of WorkerBackingThread client. Each worker mechanism
 // can access the lower thread infrastructure via an implementation of this
@@ -88,7 +84,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
     kLastEnum,
   };
 
-  virtual ~WorkerThread();
+  ~WorkerThread() override;
 
   // Starts the underlying thread and creates the global scope. Called on the
   // main thread.
@@ -100,6 +96,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   // (https://crbug.com/710364)
   void Start(std::unique_ptr<GlobalScopeCreationParams>,
              const WTF::Optional<WorkerBackingThreadStartupData>&,
+             std::unique_ptr<GlobalScopeInspectorCreationParams>,
              ParentFrameTaskRunners*);
 
   // Closes the global scope and terminates the underlying thread. Called on the
@@ -170,31 +167,18 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
     return parent_frame_task_runners_.Get();
   }
 
-  scheduler::WorkerGlobalScopeScheduler* GetGlobalScopeScheduler() const {
-    return global_scope_scheduler_.get();
-  }
-
-  service_manager::InterfaceProvider& GetInterfaceProvider();
-
   // For ServiceWorkerScriptStreaming. Returns nullptr otherwise.
   virtual InstalledScriptsManager* GetInstalledScriptsManager() {
     return nullptr;
   }
 
+  // Can be called on both the main thread and the worker thread.
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType type) {
+    return global_scope_scheduler_->GetTaskRunner(type);
+  }
+
  protected:
   WorkerThread(ThreadableLoadingContext*, WorkerReportingProxy&);
-
-  // Factory method for creating a new worker context for the thread.
-  // Called on the worker thread.
-  virtual WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
-      std::unique_ptr<GlobalScopeCreationParams>) = 0;
-
-  // Returns true when this WorkerThread owns the associated
-  // WorkerBackingThread exclusively. If this function returns true, the
-  // WorkerThread initializes / shutdowns the backing thread. Otherwise
-  // workerBackingThread() should be initialized / shutdown properly
-  // out of this class.
-  virtual bool IsOwningBackingThread() const { return true; }
 
   // Official moment of creation of worker: when the worker thread is created.
   // (https://w3c.github.io/hr-time/#time-origin)
@@ -220,6 +204,18 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
     kReadyToShutdown,
   };
 
+  // Factory method for creating a new worker context for the thread.
+  // Called on the worker thread.
+  virtual WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
+      std::unique_ptr<GlobalScopeCreationParams>) = 0;
+
+  // Returns true when this WorkerThread owns the associated
+  // WorkerBackingThread exclusively. If this function returns true, the
+  // WorkerThread initializes / shutdowns the backing thread. Otherwise
+  // the backing thread should be initialized / shutdown properly out of this
+  // class.
+  virtual bool IsOwningBackingThread() const { return true; }
+
   // Posts a delayed task to forcibly terminate script execution in case the
   // normal shutdown sequence does not start within a certain time period.
   void ScheduleToTerminateScriptExecution();
@@ -240,7 +236,8 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   void InitializeSchedulerOnWorkerThread(WaitableEvent*);
   void InitializeOnWorkerThread(
       std::unique_ptr<GlobalScopeCreationParams>,
-      const WTF::Optional<WorkerBackingThreadStartupData>&);
+      const WTF::Optional<WorkerBackingThreadStartupData>&,
+      std::unique_ptr<GlobalScopeInspectorCreationParams>);
 
   // These are called in this order during worker thread termination.
   void PrepareForShutdownOnWorkerThread();
@@ -285,10 +282,6 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   WorkerReportingProxy& worker_reporting_proxy_;
 
   CrossThreadPersistent<ParentFrameTaskRunners> parent_frame_task_runners_;
-
-  // Mojo interface provider serving interface requests scoped to this worker
-  // context.
-  service_manager::InterfaceProvider interface_provider_;
 
   // Tasks managed by this scheduler are canceled when the global scope is
   // closed.

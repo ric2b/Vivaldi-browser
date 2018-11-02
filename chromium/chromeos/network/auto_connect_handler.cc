@@ -214,7 +214,7 @@ void AutoConnectHandler::CheckBestConnection() {
   connect_to_best_services_after_scan_ = true;
   if (!network_state_handler_->GetScanningByType(
           NetworkTypePattern::Primitive(shill::kTypeWifi))) {
-    network_state_handler_->RequestScan();
+    network_state_handler_->RequestScan(NetworkTypePattern::WiFi());
   }
 }
 
@@ -251,7 +251,7 @@ void AutoConnectHandler::DisconnectFromUnmanagedSharedWiFiNetworks() {
 
   NetworkStateHandler::NetworkStateList networks;
   network_state_handler_->GetVisibleNetworkListByType(
-      NetworkTypePattern::Wireless(), &networks);
+      NetworkTypePattern::WiFi(), &networks);
   for (const NetworkState* network : networks) {
     if (!(network->IsConnectingState() || network->IsConnectedState()))
       break;  // Connected and connecting networks are listed first.

@@ -19,7 +19,7 @@
 
 #include "core/svg/SVGFESpotLightElement.h"
 
-#include "core/SVGNames.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/Filter.h"
 #include "platform/graphics/filters/SpotLightSource.h"
 
@@ -30,7 +30,7 @@ inline SVGFESpotLightElement::SVGFESpotLightElement(Document& document)
 
 DEFINE_NODE_FACTORY(SVGFESpotLightElement)
 
-RefPtr<LightSource> SVGFESpotLightElement::GetLightSource(
+scoped_refptr<LightSource> SVGFESpotLightElement::GetLightSource(
     Filter* filter) const {
   return SpotLightSource::Create(filter->Resolve3dPoint(GetPosition()),
                                  filter->Resolve3dPoint(PointsAt()),

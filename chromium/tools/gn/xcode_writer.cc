@@ -13,7 +13,6 @@
 
 #include "base/environment.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -151,8 +150,8 @@ void AddPBXTargetDependency(const PBXTarget* base_pbxtarget,
                             PBXTarget* dependent_pbxtarget,
                             const PBXProject* project) {
   auto container_item_proxy =
-      base::MakeUnique<PBXContainerItemProxy>(project, base_pbxtarget);
-  auto dependency = base::MakeUnique<PBXTargetDependency>(
+      std::make_unique<PBXContainerItemProxy>(project, base_pbxtarget);
+  auto dependency = std::make_unique<PBXTargetDependency>(
       base_pbxtarget, std::move(container_item_proxy));
 
   dependent_pbxtarget->AddDependency(std::move(dependency));
@@ -282,7 +281,7 @@ void AddXCTestFilesToTestModuleTarget(const Target::FileList& xctest_file_list,
 
 class CollectPBXObjectsPerClassHelper : public PBXObjectVisitor {
  public:
-  CollectPBXObjectsPerClassHelper() {}
+  CollectPBXObjectsPerClassHelper() = default;
 
   void Visit(PBXObject* object) override {
     DCHECK(object);
@@ -400,7 +399,7 @@ XcodeWriter::XcodeWriter(const std::string& name) : name_(name) {
     name_.assign("all");
 }
 
-XcodeWriter::~XcodeWriter() {}
+XcodeWriter::~XcodeWriter() = default;
 
 // static
 bool XcodeWriter::FilterTargets(const BuildSettings* build_settings,

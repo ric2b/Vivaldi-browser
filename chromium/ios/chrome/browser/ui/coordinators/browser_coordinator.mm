@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/coordinators/browser_coordinator.h"
 
+#import "base/ios/block_types.h"
 #import "base/logging.h"
 #import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 
@@ -11,55 +12,133 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+// Enum class describing the current coordinator and consumer state.
+enum class ActivationState {
+  DEACTIVATED,  // The coordinator has been stopped or has never been started.
+                // its UIViewController has been fully dismissed.
+  ACTIVATING,   // The coordinator has been started, but its UIViewController
+                // hasn't finished being presented.
+  ACTIVATED,    // The coordinator has been started and its UIViewController has
+                // finished being presented.
+  DEACTIVATING,  // The coordinator has been stopped, but its UIViewController
+                 // hasn't finished being dismissed.
+};
+// Returns the presentation state to use after |current_state|.
+ActivationState GetNextActivationState(ActivationState current_state) {
+  switch (current_state) {
+    case ActivationState::DEACTIVATED:
+      return ActivationState::ACTIVATING;
+    case ActivationState::ACTIVATING:
+      return ActivationState::ACTIVATED;
+    case ActivationState::ACTIVATED:
+      return ActivationState::DEACTIVATING;
+    case ActivationState::DEACTIVATING:
+      return ActivationState::DEACTIVATED;
+  }
+}
+}
+
 @interface BrowserCoordinator ()
+// The coordinator's presentation state.
+@property(nonatomic, assign) ActivationState activationState;
 // Child coordinators owned by this object.
 @property(nonatomic, strong)
     NSMutableSet<BrowserCoordinator*>* childCoordinators;
 // Parent coordinator of this object, if any.
 @property(nonatomic, readwrite, weak) BrowserCoordinator* parentCoordinator;
-@property(nonatomic, readwrite) BOOL started;
-@property(nonatomic, readwrite) BOOL overlaying;
+
+// Updates |activationState| to the next appropriate value after the in-
+// progress transition animation finishes.  If there is no animation occurring,
+// the state is updated immediately.
+- (void)updateActivationStateAfterTransition;
+
 @end
 
 @implementation BrowserCoordinator
-
 @synthesize browser = _browser;
+@synthesize dispatcher = _dispatcher;
+@synthesize activationState = _activationState;
 @synthesize childCoordinators = _childCoordinators;
 @synthesize parentCoordinator = _parentCoordinator;
-@synthesize started = _started;
-@synthesize overlaying = _overlaying;
 
 - (instancetype)init {
   if (self = [super init]) {
+    _activationState = ActivationState::DEACTIVATED;
     _childCoordinators = [NSMutableSet set];
   }
   return self;
 }
 
-#pragma mark - Public API
-
-- (void)start {
-  if (self.started) {
-    return;
-  }
-  self.started = YES;
-  [self.parentCoordinator childCoordinatorDidStart:self];
-}
-
-- (void)stop {
-  if (!self.started) {
-    return;
-  }
-  [self.parentCoordinator childCoordinatorWillStop:self];
-  self.started = NO;
-  for (BrowserCoordinator* child in self.children) {
-    [child stop];
-  }
-}
-
 - (void)dealloc {
   for (BrowserCoordinator* child in self.children) {
     [self removeChildCoordinator:child];
+  }
+}
+
+#pragma mark - Accessors
+
+- (BOOL)isStarted {
+  return self.activationState == ActivationState::ACTIVATING ||
+         self.activationState == ActivationState::ACTIVATED;
+}
+
+- (void)setActivationState:(ActivationState)state {
+  if (_activationState == state)
+    return;
+  DCHECK_EQ(state, GetNextActivationState(_activationState))
+      << "Unexpected activation state.  Probably from calling |-stop| while"
+      << "ACTIVATING or |-start| while DEACTIVATING.";
+  _activationState = state;
+  if (_activationState == ActivationState::DEACTIVATED) {
+    [self viewControllerWasDeactivated];
+  } else if (_activationState == ActivationState::ACTIVATED) {
+    [self viewControllerWasActivated];
+  }
+}
+
+#pragma mark - Public API
+
+- (id)callableDispatcher {
+  return self.dispatcher;
+}
+
+- (void)start {
+  if (self.started)
+    return;
+  self.activationState = ActivationState::ACTIVATING;
+  [self.parentCoordinator childCoordinatorDidStart:self];
+  [self updateActivationStateAfterTransition];
+}
+
+- (void)stop {
+  if (!self.started)
+    return;
+  [self.parentCoordinator childCoordinatorWillStop:self];
+  self.activationState = ActivationState::DEACTIVATING;
+  for (BrowserCoordinator* child in self.children) {
+    [child stop];
+  }
+  [self updateActivationStateAfterTransition];
+}
+
+#pragma mark - Private
+
+- (void)updateActivationStateAfterTransition {
+  DCHECK(self.activationState == ActivationState::ACTIVATING ||
+         self.activationState == ActivationState::DEACTIVATING);
+  ActivationState nextState = GetNextActivationState(self.activationState);
+  id<UIViewControllerTransitionCoordinator> transitionCoordinator =
+      self.viewController.transitionCoordinator;
+  if (transitionCoordinator) {
+    __weak BrowserCoordinator* weakSelf = self;
+    [transitionCoordinator animateAlongsideTransition:nil
+                                           completion:^(id context) {
+                                             weakSelf.activationState =
+                                                 nextState;
+                                           }];
+  } else {
+    self.activationState = nextState;
   }
 }
 
@@ -80,52 +159,8 @@
   [self.childCoordinators addObject:childCoordinator];
   childCoordinator.parentCoordinator = self;
   childCoordinator.browser = self.browser;
+  childCoordinator.dispatcher = self.dispatcher;
   [childCoordinator wasAddedToParentCoordinator:self];
-}
-
-- (BrowserCoordinator*)overlayCoordinator {
-  if (self.overlaying)
-    return self;
-  for (BrowserCoordinator* child in self.children) {
-    BrowserCoordinator* overlay = child.overlayCoordinator;
-    if (overlay)
-      return overlay;
-  }
-  return nil;
-}
-
-- (void)addOverlayCoordinator:(BrowserCoordinator*)overlayCoordinator {
-  // If this object has no children, then add |overlayCoordinator| as a child
-  // and mark it as such.
-  if ([self canAddOverlayCoordinator:overlayCoordinator]) {
-    [self addChildCoordinator:overlayCoordinator];
-    overlayCoordinator.overlaying = YES;
-  } else if (self.childCoordinators.count == 1) {
-    [[self.childCoordinators anyObject]
-        addOverlayCoordinator:overlayCoordinator];
-  } else if (self.childCoordinators.count > 1) {
-    CHECK(NO) << "Coordinators with multiple children must explicitly "
-              << "handle -addOverlayCoordinator: or return NO to "
-              << "-canAddOverlayCoordinator:";
-  }
-  // If control reaches here, the terminal child of the coordinator hierarchy
-  // has returned NO to -canAddOverlayCoordinator, so no overlay can be added.
-  // This is by default a silent no-op.
-}
-
-- (void)removeOverlayCoordinator {
-  BrowserCoordinator* overlay = self.overlayCoordinator;
-  [overlay.parentCoordinator removeChildCoordinator:overlay];
-  overlay.overlaying = NO;
-}
-
-- (BOOL)canAddOverlayCoordinator:(BrowserCoordinator*)overlayCoordinator {
-  // By default, a hierarchy with an overlay can't add a new one.
-  // By default, coordinators with parents can't be added as overlays.
-  // By default, coordinators with no other children can add an overlay.
-  return self.overlayCoordinator == nil &&
-         overlayCoordinator.parentCoordinator == nil &&
-         self.childCoordinators.count == 0;
 }
 
 - (void)removeChildCoordinator:(BrowserCoordinator*)childCoordinator {
@@ -155,6 +190,14 @@
 }
 
 - (void)childCoordinatorWillStop:(BrowserCoordinator*)childCoordinator {
+  // Default implementation is a no-op.
+}
+
+- (void)viewControllerWasActivated {
+  // Default implementation is a no-op.
+}
+
+- (void)viewControllerWasDeactivated {
   // Default implementation is a no-op.
 }
 

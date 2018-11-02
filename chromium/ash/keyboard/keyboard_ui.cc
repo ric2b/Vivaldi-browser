@@ -4,13 +4,14 @@
 
 #include "ash/keyboard/keyboard_ui.h"
 
-#include "ash/accessibility_delegate.h"
+#include <memory>
+
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/keyboard/keyboard_ui_observer.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility_observer.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray_accessibility.h"
-#include "base/memory/ptr_util.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 namespace ash {
@@ -60,11 +61,11 @@ class KeyboardUIImpl : public KeyboardUI, public AccessibilityObserver {
   DISALLOW_COPY_AND_ASSIGN(KeyboardUIImpl);
 };
 
-KeyboardUI::~KeyboardUI() {}
+KeyboardUI::~KeyboardUI() = default;
 
 // static
 std::unique_ptr<KeyboardUI> KeyboardUI::Create() {
-  return base::WrapUnique(new KeyboardUIImpl);
+  return std::make_unique<KeyboardUIImpl>();
 }
 
 void KeyboardUI::AddObserver(KeyboardUIObserver* observer) {
@@ -75,6 +76,6 @@ void KeyboardUI::RemoveObserver(KeyboardUIObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-KeyboardUI::KeyboardUI() {}
+KeyboardUI::KeyboardUI() = default;
 
 }  // namespace ash

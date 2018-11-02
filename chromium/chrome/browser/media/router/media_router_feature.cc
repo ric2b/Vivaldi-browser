@@ -75,6 +75,7 @@ bool CastDiscoveryEnabled() {
 bool CastLocalMediaEnabled() {
   return base::FeatureList::IsEnabled(kEnableCastLocalMedia);
 }
+
 #endif
 
 }  // namespace media_router

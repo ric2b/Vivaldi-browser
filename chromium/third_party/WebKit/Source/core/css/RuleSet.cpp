@@ -30,7 +30,6 @@
 
 #include "core/css/RuleSet.h"
 
-#include "core/HTMLNames.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSSelectorList.h"
@@ -38,7 +37,7 @@
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/html/track/TextTrackCue.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/html_names.h"
 #include "platform/heap/HeapTerminatedArrayBuilder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -363,22 +362,22 @@ void RuleSet::CompactRules() {
   slotted_pseudo_element_rules_.ShrinkToFit();
 }
 
-DEFINE_TRACE(MinimalRuleData) {
+void MinimalRuleData::Trace(blink::Visitor* visitor) {
   visitor->Trace(rule_);
 }
 
-DEFINE_TRACE(RuleData) {
+void RuleData::Trace(blink::Visitor* visitor) {
   visitor->Trace(rule_);
 }
 
-DEFINE_TRACE(RuleSet::PendingRuleMaps) {
+void RuleSet::PendingRuleMaps::Trace(blink::Visitor* visitor) {
   visitor->Trace(id_rules);
   visitor->Trace(class_rules);
   visitor->Trace(tag_rules);
   visitor->Trace(shadow_pseudo_element_rules);
 }
 
-DEFINE_TRACE(RuleSet) {
+void RuleSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(id_rules_);
   visitor->Trace(class_rules_);
   visitor->Trace(tag_rules_);

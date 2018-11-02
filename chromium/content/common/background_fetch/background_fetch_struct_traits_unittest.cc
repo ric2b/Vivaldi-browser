@@ -40,7 +40,7 @@ TEST(BackgroundFetchStructTraitsTest, BackgroundFetchOptionsRoundtrip) {
       CreateIconDefinition("my_icon.png", "256x256", "image/png"),
       CreateIconDefinition("my_small_icon.jpg", "128x128", "image/jpg")};
   options.title = "My Background Fetch";
-  options.total_download_size = 9001;
+  options.download_total = 9001;
 
   BackgroundFetchOptions roundtrip_options;
   ASSERT_TRUE(blink::mojom::BackgroundFetchOptions::Deserialize(
@@ -54,34 +54,24 @@ TEST(BackgroundFetchStructTraitsTest, BackgroundFetchOptionsRoundtrip) {
   }
 
   EXPECT_EQ(roundtrip_options.title, options.title);
-  EXPECT_EQ(roundtrip_options.total_download_size, options.total_download_size);
+  EXPECT_EQ(roundtrip_options.download_total, options.download_total);
 }
 
 TEST(BackgroundFetchStructTraitsTest, BackgroundFetchRegistrationRoundTrip) {
   BackgroundFetchRegistration registration;
-  registration.id = "my_id";
-  registration.icons = {
-      CreateIconDefinition("my_icon.png", "256x256", "image/png"),
-      CreateIconDefinition("my_small_icon.jpg", "128x128", "image/jpg")};
-  registration.title = "My Background Fetch";
-  registration.total_download_size = 9001;
+  registration.developer_id = "my_id";
+  registration.unique_id = "7e57ab1e-c0de-a150-ca75-1e75f005ba11";
+  registration.download_total = 9001;
 
   BackgroundFetchRegistration roundtrip_registration;
   ASSERT_TRUE(blink::mojom::BackgroundFetchRegistration::Deserialize(
       blink::mojom::BackgroundFetchRegistration::Serialize(&registration),
       &roundtrip_registration));
 
-  EXPECT_EQ(roundtrip_registration.id, registration.id);
+  EXPECT_EQ(roundtrip_registration.developer_id, registration.developer_id);
+  EXPECT_EQ(roundtrip_registration.unique_id, registration.unique_id);
 
-  ASSERT_EQ(roundtrip_registration.icons.size(), registration.icons.size());
-  for (size_t i = 0; i < registration.icons.size(); ++i) {
-    EXPECT_TRUE(IconDefinitionsAreIdentical(registration.icons[i],
-                                            roundtrip_registration.icons[i]));
-  }
-
-  EXPECT_EQ(roundtrip_registration.title, registration.title);
-  EXPECT_EQ(roundtrip_registration.total_download_size,
-            registration.total_download_size);
+  EXPECT_EQ(roundtrip_registration.download_total, registration.download_total);
 }
 
 TEST(BackgroundFetchStructTraitsTest, IconDefinitionRoundtrip) {

@@ -30,6 +30,7 @@
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
+#include "third_party/webrtc/modules/audio_processing/include/audio_processing_statistics.h"
 #include "third_party/webrtc/modules/audio_processing/typing_detection.h"
 
 namespace content {
@@ -319,12 +320,17 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
   DCHECK(main_thread_runner_);
   capture_thread_checker_.DetachFromThread();
   render_thread_checker_.DetachFromThread();
+
+  // In unit tests not creating a message filter, |aec_dump_message_filter_|
+  // will be null. We can just ignore that below. Other unit tests and browser
+  // tests ensure that we do get the filter when we should.
+  aec_dump_message_filter_ = AecDumpMessageFilter::Get();
+
+  if (aec_dump_message_filter_)
+    override_aec3_ = aec_dump_message_filter_->GetOverrideAec3();
+
   InitializeAudioProcessingModule(properties);
 
-  aec_dump_message_filter_ = AecDumpMessageFilter::Get();
-  // In unit tests not creating a message filter, |aec_dump_message_filter_|
-  // will be NULL. We can just ignore that. Other unit tests and browser tests
-  // ensure that we do get the filter when we should.
   if (aec_dump_message_filter_.get())
     aec_dump_message_filter_->AddDelegate(this);
 
@@ -429,7 +435,7 @@ void MediaStreamAudioProcessor::Stop() {
 
   if (aec_dump_message_filter_.get()) {
     aec_dump_message_filter_->RemoveDelegate(this);
-    aec_dump_message_filter_ = NULL;
+    aec_dump_message_filter_ = nullptr;
   }
 
   if (!audio_processing_.get())
@@ -441,7 +447,7 @@ void MediaStreamAudioProcessor::Stop() {
 
   if (playout_data_source_) {
     playout_data_source_->RemovePlayoutSink(this);
-    playout_data_source_ = NULL;
+    playout_data_source_ = nullptr;
   }
 
   if (echo_information_)
@@ -507,13 +513,13 @@ void MediaStreamAudioProcessor::OnAec3Enable(bool enable) {
     // information then will not be properly updated.
     echo_information_.reset();
   } else {
-    echo_information_ = base::MakeUnique<EchoInformation>();
+    echo_information_ = std::make_unique<EchoInformation>();
   }
 }
 
 void MediaStreamAudioProcessor::OnIpcClosing() {
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
-  aec_dump_message_filter_ = NULL;
+  aec_dump_message_filter_ = nullptr;
 }
 
 // static
@@ -600,6 +606,15 @@ void MediaStreamAudioProcessor::GetStats(AudioProcessorStats* stats) {
   GetAudioProcessingStats(audio_processing_.get(), stats);
 }
 
+webrtc::AudioProcessorInterface::AudioProcessorStatistics
+MediaStreamAudioProcessor::GetStats(bool has_remote_tracks) {
+  AudioProcessorStatistics stats;
+  stats.typing_noise_detected =
+      (base::subtle::Acquire_Load(&typing_detected_) != false);
+  stats.apm_statistics = audio_processing_->GetStatistics(has_remote_tracks);
+  return stats;
+}
+
 void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     const AudioProcessingProperties& properties) {
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
@@ -659,10 +674,8 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   // If the experimental AGC is enabled, check for overridden config params.
   if (properties.goog_experimental_auto_gain_control) {
     auto startup_min_volume = GetStartupMinVolumeForAgc();
-    constexpr int kClippingLevelMin = 70;
-    // TODO(hlundin) Make this value default in WebRTC and clean up here.
-    config.Set<webrtc::ExperimentalAgc>(new webrtc::ExperimentalAgc(
-        true, startup_min_volume.value_or(0), kClippingLevelMin));
+    config.Set<webrtc::ExperimentalAgc>(
+        new webrtc::ExperimentalAgc(true, startup_min_volume.value_or(0)));
   }
 
   // Create and configure the webrtc::AudioProcessing.
@@ -684,7 +697,7 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     if (!apm_config.echo_canceller3.enabled) {
       // Prepare for logging echo information. If there are data remaining in
       // |echo_information_| we simply discard it.
-      echo_information_ = base::MakeUnique<EchoInformation>();
+      echo_information_ = std::make_unique<EchoInformation>();
     } else {
       // Do not log any echo information when AEC3 is active, as the echo
       // information then will not be properly updated.

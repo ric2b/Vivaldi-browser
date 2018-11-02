@@ -12,10 +12,10 @@
 
 #include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/macros.h"
+#include "chrome/browser/image_decoder.h"
 #include "components/arc/common/wallpaper.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
 class BrowserContext;
@@ -26,11 +26,10 @@ namespace arc {
 class ArcBridgeService;
 
 // Lives on the UI thread.
-class ArcWallpaperService
-    : public KeyedService,
-      public ash::WallpaperControllerObserver,
-      public InstanceHolder<mojom::WallpaperInstance>::Observer,
-      public mojom::WallpaperHost {
+class ArcWallpaperService : public KeyedService,
+                            public ash::WallpaperControllerObserver,
+                            public ConnectionObserver<mojom::WallpaperInstance>,
+                            public mojom::WallpaperHost {
  public:
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
@@ -41,22 +40,35 @@ class ArcWallpaperService
                       ArcBridgeService* bridge_service);
   ~ArcWallpaperService() override;
 
-  // InstanceHolder<mojom::WallpaperInstance>::Observer overrides.
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::WallpaperInstance> overrides.
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // mojom::WallpaperHost overrides.
-  // TODO(muyuanli): change callback prototype when use_new_wrapper_types is
-  // updated and merge them with the functions below.
   void SetWallpaper(const std::vector<uint8_t>& data,
                     int32_t wallpaper_id) override;
   void SetDefaultWallpaper() override;
-  void GetWallpaper(const GetWallpaperCallback& callback) override;
+  void GetWallpaper(GetWallpaperCallback callback) override;
 
   // WallpaperControllerObserver implementation.
   void OnWallpaperDataChanged() override;
 
+  class DecodeRequestSender {
+   public:
+    virtual ~DecodeRequestSender();
+
+    // Decodes image |data| and notifies the result to |request|.
+    virtual void SendDecodeRequest(ImageDecoder::ImageRequest* request,
+                                   const std::vector<uint8_t>& data) = 0;
+  };
+
+  // Replace a way to decode images for unittests. Originally it uses
+  // ImageDecoder which communicates with the external process.
+  void SetDecodeRequestSenderForTesting(
+      std::unique_ptr<DecodeRequestSender> sender);
+
  private:
+  friend class TestApi;
   class AndroidIdStore;
   class DecodeRequest;
   struct WallpaperIdPair;
@@ -68,9 +80,9 @@ class ArcWallpaperService
   void NotifyWallpaperChangedAndReset(int android_id);
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
-  mojo::Binding<mojom::WallpaperHost> binding_;
   std::unique_ptr<DecodeRequest> decode_request_;
   std::vector<WallpaperIdPair> id_pairs_;
+  std::unique_ptr<DecodeRequestSender> decode_request_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcWallpaperService);
 };

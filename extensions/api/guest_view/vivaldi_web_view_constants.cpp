@@ -6,7 +6,6 @@ namespace webview {
 
 const char kAttributeExtensionHost[] = "extensionhost";
 
-const char kEventRequestPageInfo[] = "webViewPrivate.onRequestPageInfo";
 const char kEventSSLStateChanged[] = "webViewPrivate.onSSLStateChanged";
 const char kEventTargetURLChanged[] = "webViewPrivate.onTargetURLChanged";
 const char kEventCreateSearch[] = "webViewPrivate.onCreateSearch";

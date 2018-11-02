@@ -25,7 +25,6 @@
 #include "net/http/http_response_headers.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_server.h"
-#include "net/proxy/proxy_service.h"
 
 namespace data_reduction_proxy {
 
@@ -73,7 +72,7 @@ void DataReductionProxyDelegate::InitializeOnIOThread(
 void DataReductionProxyDelegate::OnResolveProxy(
     const GURL& url,
     const std::string& method,
-    const net::ProxyService& proxy_service,
+    const net::ProxyRetryInfoMap& proxy_retry_info,
     net::ProxyInfo* result) {
   DCHECK(result);
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -99,11 +98,11 @@ void DataReductionProxyDelegate::OnResolveProxy(
       proxies_for_http.end());
 
   net::ProxyConfig proxy_config = configurator_->CreateProxyConfig(
-      !config_->secure_proxy_allowed(), proxies_for_http);
+      !config_->secure_proxy_allowed(), !config_->insecure_proxies_allowed(),
+      proxies_for_http);
 
-  OnResolveProxyHandler(url, method, proxy_config,
-                        proxy_service.proxy_retry_info(), *config_, io_data_,
-                        result);
+  OnResolveProxyHandler(url, method, proxy_config, proxy_retry_info, *config_,
+                        io_data_, result);
 
   if (!first_data_saver_request_recorded_ && !result->is_empty() &&
       config_->IsDataReductionProxy(result->proxy_server(), nullptr)) {
@@ -174,8 +173,10 @@ void DataReductionProxyDelegate::GetAlternativeProxy(
     return;
   }
 
-  if (!params::IsIncludedInQuicFieldTrial())
+  if (!params::IsIncludedInQuicFieldTrial()) {
+    RecordQuicProxyStatus(QUIC_PROXY_DISABLED_VIA_FIELD_TRIAL);
     return;
+  }
 
   if (!resolved_proxy_server.is_valid() || !resolved_proxy_server.is_https())
     return;
@@ -248,7 +249,7 @@ void OnResolveProxyHandler(
     net::ProxyInfo* result) {
   DCHECK(result->is_empty() || result->is_direct() ||
          !data_reduction_proxy_config.IsDataReductionProxy(
-             result->proxy_server(), NULL));
+             result->proxy_server(), nullptr));
 
   if (!util::EligibleForDataReductionProxy(*result, url, method))
     return;

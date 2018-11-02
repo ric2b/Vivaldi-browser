@@ -10,18 +10,27 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/prefs/pref_service.h"
+#import "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
+#import "ios/chrome/browser/history/history_tab_helper.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prerender/preload_controller_delegate.h"
+#import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
 #include "ios/chrome/browser/ui/prerender_final_status.h"
+#import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "net/base/mac/url_conversions.h"
@@ -55,7 +64,7 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
 }  // namespace
 
-@interface PreloadController (PrivateMethods)
+@interface PreloadController (PrivateMethods)<ManageAccountsDelegate>
 
 // Returns YES if prerendering is enabled.
 - (BOOL)isPrerenderingEnabled;
@@ -84,6 +93,10 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
   // The WebState used for prerendering.
   std::unique_ptr<web::WebState> webState_;
+
+  // The WebStateDelegateBridge used to register self as a CRWWebStateDelegate
+  // with the pre-rendered WebState.
+  std::unique_ptr<web::WebStateDelegateBridge> webStateDelegate_;
 
   // The URL that is prerendered in |webState_|.  This can be different from
   // the value returned by WebState last committed navigation item, for example
@@ -137,6 +150,7 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
         prefs::kNetworkPredictionWifiOnly);
     usingWWAN_ = net::NetworkChangeNotifier::IsConnectionCellular(
         net::NetworkChangeNotifier::GetConnectionType());
+    webStateDelegate_.reset(new web::WebStateDelegateBridge(self));
     observerBridge_.reset(new PrefObserverBridge(self));
     prefChangeRegistrar_.Init(browserState_->GetPrefs());
     observerBridge_->ObserveChangesForPreference(
@@ -206,6 +220,10 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   [self destroyPreviewContentsForReason:reason];
 }
 
+- (BOOL)isWebStatePrerendered:(web::WebState*)webState {
+  return webState && webState_.get() == webState;
+}
+
 - (std::unique_ptr<web::WebState>)releasePrerenderContents {
   successfulPrerendersPerSessionCount_++;
   UMA_HISTOGRAM_ENUMERATION(kPrerenderFinalStatusHistogramName,
@@ -214,13 +232,46 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   [self removeScheduledPrerenderRequests];
   prerenderedURL_ = GURL();
 
-  if (webState_) {
-    Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
-    [[tab webController] setNativeProvider:nil];
-    [tab setDelegate:nil];
+  if (!webState_)
+    return nullptr;
+
+  // Move the pre-rendered WebState to a local variable so that it will no
+  // longer be considered as pre-rendering (otherwise tab helpers may early
+  // exist when invoked).
+  std::unique_ptr<web::WebState> webState = std::move(webState_);
+  DCHECK(![self isWebStatePrerendered:webState.get()]);
+
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState.get());
+  [[tab webController] setNativeProvider:nil];
+  webState->SetShouldSuppressDialogs(false);
+  webState->SetDelegate(nullptr);
+
+  HistoryTabHelper::FromWebState(webState.get())
+      ->SetDelayHistoryServiceNotification(false);
+
+  if (AccountConsistencyService* accountConsistencyService =
+          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+              browserState_)) {
+    accountConsistencyService->RemoveWebStateHandler(webState.get());
   }
 
-  return std::move(webState_);
+  if ([tab loadFinished]) {
+    // If the page has finished loading, take a snapshot.  If the page is
+    // still loading, do nothing, as CRWWebController will automatically take
+    // a snapshot once the load completes.
+    [tab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
+
+    [[OmniboxGeolocationController sharedInstance] finishPageLoadForTab:tab
+                                                            loadSuccess:YES];
+
+    if (!webState->GetLastCommittedURL().SchemeIs(kChromeUIScheme)) {
+      base::RecordAction(base::UserMetricsAction("MobilePageLoaded"));
+    }
+  }
+
+  [tab setDelegate:nil];
+
+  return webState;
 }
 
 - (void)connectionTypeChanged:(net::NetworkChangeNotifier::ConnectionType)type {
@@ -324,9 +375,18 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   DCHECK(tab);
 
   [[tab webController] setNativeProvider:self];
+  webState_->SetDelegate(webStateDelegate_.get());
+  webState_->SetShouldSuppressDialogs(true);
   webState_->SetWebUsageEnabled(true);
-  [tab setIsPrerenderTab:YES];
   [tab setDelegate:self];
+  if (AccountConsistencyService* accountConsistencyService =
+          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+              browserState_)) {
+    accountConsistencyService->SetWebStateHandler(webState_.get(), self);
+  }
+
+  HistoryTabHelper::FromWebState(webState_.get())
+      ->SetDelayHistoryServiceNotification(true);
 
   web::NavigationManager::WebLoadParams loadParams(prerenderedURL_);
   loadParams.referrer = scheduledReferrer_;
@@ -355,6 +415,7 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
   Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
   [[tab webController] setNativeProvider:nil];
+  webState_->SetDelegate(nullptr);
   webState_.reset();
 
   prerenderedURL_ = GURL();
@@ -373,10 +434,38 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   scheduledURL_ = GURL();
 }
 
+#pragma mark - CRWWebStateDelegate
+
+- (void)webState:(web::WebState*)webState
+    didRequestHTTPAuthForProtectionSpace:(NSURLProtectionSpace*)protectionSpace
+                      proposedCredential:(NSURLCredential*)proposedCredential
+                       completionHandler:(void (^)(NSString* username,
+                                                   NSString* password))handler {
+  DCHECK([self isWebStatePrerendered:webState]);
+  [self schedulePrerenderCancel];
+  if (handler) {
+    handler(nil, nil);
+  }
+}
+
 #pragma mark - TabDelegate
 
 - (void)discardPrerender {
   [self schedulePrerenderCancel];
+}
+
+#pragma mark - ManageAccountsDelegate
+
+- (void)onManageAccounts {
+  [self discardPrerender];
+}
+
+- (void)onAddAccount {
+  [self discardPrerender];
+}
+
+- (void)onGoIncognito:(const GURL&)url {
+  [self discardPrerender];
 }
 
 @end

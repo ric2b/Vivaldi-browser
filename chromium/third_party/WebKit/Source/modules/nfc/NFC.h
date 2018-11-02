@@ -6,7 +6,7 @@
 #define NFC_h
 
 #include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/modules/v8/StringOrArrayBufferOrNFCMessage.h"
+#include "bindings/modules/v8/string_or_array_buffer_or_nfc_message.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "modules/nfc/MessageCallback.h"
@@ -22,8 +22,7 @@ class NFCPushOptions;
 using NFCPushMessage = StringOrArrayBufferOrNFCMessage;
 class NFCWatchOptions;
 
-class NFC final : public GarbageCollectedFinalized<NFC>,
-                  public ScriptWrappable,
+class NFC final : public ScriptWrappable,
                   public PageVisibilityObserver,
                   public ContextLifecycleObserver,
                   public device::mojom::blink::NFCClient {
@@ -62,7 +61,7 @@ class NFC final : public GarbageCollectedFinalized<NFC>,
   void PageVisibilityChanged() override;
 
   // Interface required by garbage collection.
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   // Returns boolean indicating whether NFC is supported in this context. If

@@ -24,25 +24,25 @@ class CORE_EXPORT WorkletModuleResponsesMapProxy
 
   static WorkletModuleResponsesMapProxy* Create(
       WorkletModuleResponsesMap*,
-      RefPtr<WebTaskRunner> outside_settings_task_runner,
-      RefPtr<WebTaskRunner> inside_settings_task_runner);
+      scoped_refptr<WebTaskRunner> outside_settings_task_runner,
+      scoped_refptr<WebTaskRunner> inside_settings_task_runner);
 
   void ReadEntry(const FetchParameters&, Client*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   WorkletModuleResponsesMapProxy(
       WorkletModuleResponsesMap*,
-      RefPtr<WebTaskRunner> outside_settings_task_runner,
-      RefPtr<WebTaskRunner> inside_settings_task_runner);
+      scoped_refptr<WebTaskRunner> outside_settings_task_runner,
+      scoped_refptr<WebTaskRunner> inside_settings_task_runner);
 
   void ReadEntryOnMainThread(std::unique_ptr<CrossThreadFetchParametersData>,
                              Client*);
 
   CrossThreadPersistent<WorkletModuleResponsesMap> module_responses_map_;
-  RefPtr<WebTaskRunner> outside_settings_task_runner_;
-  RefPtr<WebTaskRunner> inside_settings_task_runner_;
+  scoped_refptr<WebTaskRunner> outside_settings_task_runner_;
+  scoped_refptr<WebTaskRunner> inside_settings_task_runner_;
 };
 
 }  // namespace blink

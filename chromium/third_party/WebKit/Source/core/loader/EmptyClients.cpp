@@ -31,10 +31,10 @@
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/VisualViewport.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/FileChooser.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
@@ -55,9 +55,6 @@ void FillWithEmptyClients(Page::PageClients& page_clients) {
 
   DEFINE_STATIC_LOCAL(EmptyEditorClient, dummy_editor_client, ());
   page_clients.editor_client = &dummy_editor_client;
-
-  DEFINE_STATIC_LOCAL(EmptySpellCheckerClient, dummy_spell_checker_client, ());
-  page_clients.spell_checker_client = &dummy_spell_checker_client;
 }
 
 class EmptyPopupMenu : public PopupMenu {
@@ -71,40 +68,37 @@ class EmptyPopupMenu : public PopupMenu {
 class EmptyFrameScheduler : public WebFrameScheduler {
  public:
   EmptyFrameScheduler() { DCHECK(IsMainThread()); }
+
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType type) override {
+    return Platform::Current()->MainThread()->GetWebTaskRunner();
+  }
+
   void AddThrottlingObserver(ObserverType, Observer*) override {}
   void RemoveThrottlingObserver(ObserverType, Observer*) override {}
   void SetFrameVisible(bool) override {}
-  RefPtr<WebTaskRunner> LoadingTaskRunner() override;
-  RefPtr<WebTaskRunner> LoadingControlTaskRunner() override;
-  RefPtr<WebTaskRunner> ThrottleableTaskRunner() override;
-  RefPtr<WebTaskRunner> DeferrableTaskRunner() override;
-  RefPtr<WebTaskRunner> PausableTaskRunner() override;
-  RefPtr<WebTaskRunner> UnpausableTaskRunner() override;
+  bool IsFrameVisible() const override { return false; }
+  void SetPageVisible(bool) override {}
+  bool IsPageVisible() const override { return false; }
+  void SetPaused(bool) override {}
+  void SetCrossOrigin(bool) override {}
+  bool IsCrossOrigin() const override { return false; }
+  WebFrameScheduler::FrameType GetFrameType() const override {
+    return WebFrameScheduler::FrameType::kSubframe;
+  }
+  WebViewScheduler* GetWebViewScheduler() const override { return nullptr; }
+  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser() {
+    return WebScopedVirtualTimePauser();
+  }
+  void DidStartProvisionalLoad(bool is_main_frame) override {}
+  void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
+                                bool is_reload,
+                                bool is_main_frame) override {}
+  void OnFirstMeaningfulPaint() override {}
+  std::unique_ptr<ActiveConnectionHandle> OnActiveConnectionCreated() override {
+    return nullptr;
+  }
+  bool IsExemptFromBudgetBasedThrottling() const override { return false; }
 };
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::LoadingTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::LoadingControlTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::ThrottleableTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::DeferrableTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::PausableTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
-
-RefPtr<WebTaskRunner> EmptyFrameScheduler::UnpausableTaskRunner() {
-  return Platform::Current()->MainThread()->GetWebTaskRunner();
-}
 
 PopupMenu* EmptyChromeClient::OpenPopupMenu(LocalFrame&, HTMLSelectElement&) {
   return new EmptyPopupMenu();
@@ -124,7 +118,8 @@ DateTimeChooser* EmptyChromeClient::OpenDateTimeChooser(
 
 void EmptyChromeClient::OpenTextDataListChooser(HTMLInputElement&) {}
 
-void EmptyChromeClient::OpenFileChooser(LocalFrame*, RefPtr<FileChooser>) {}
+void EmptyChromeClient::OpenFileChooser(LocalFrame*,
+                                        scoped_refptr<FileChooser>) {}
 
 void EmptyChromeClient::AttachRootGraphicsLayer(GraphicsLayer* layer,
                                                 LocalFrame* local_root) {
@@ -139,8 +134,9 @@ String EmptyChromeClient::AcceptLanguages() {
 }
 
 std::unique_ptr<WebFrameScheduler> EmptyChromeClient::CreateFrameScheduler(
-    BlameContext*) {
-  return WTF::MakeUnique<EmptyFrameScheduler>();
+    BlameContext* blame_context,
+    WebFrameScheduler::FrameType frame_type) {
+  return std::make_unique<EmptyFrameScheduler>();
 }
 
 NavigationPolicy EmptyLocalFrameClient::DecidePolicyForNavigation(
@@ -165,11 +161,13 @@ DocumentLoader* EmptyLocalFrameClient::CreateDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
     const SubstituteData& substitute_data,
-    ClientRedirectPolicy client_redirect_policy) {
+    ClientRedirectPolicy client_redirect_policy,
+    const base::UnguessableToken& devtools_navigation_token) {
   DCHECK(frame);
 
   return DocumentLoader::Create(frame, request, substitute_data,
-                                client_redirect_policy);
+                                client_redirect_policy,
+                                devtools_navigation_token);
 }
 
 LocalFrame* EmptyLocalFrameClient::CreateFrame(const AtomicString&,
@@ -200,14 +198,9 @@ WebRemotePlaybackClient* EmptyLocalFrameClient::CreateWebRemotePlaybackClient(
   return nullptr;
 }
 
-TextCheckerClient& EmptyLocalFrameClient::GetTextCheckerClient() const {
-  DEFINE_STATIC_LOCAL(EmptyTextCheckerClient, client, ());
-  return client;
+WebTextCheckClient* EmptyLocalFrameClient::GetTextCheckerClient() const {
+  return nullptr;
 }
-
-void EmptyTextCheckerClient::RequestCheckingOfString(TextCheckingRequest*) {}
-
-void EmptyTextCheckerClient::CancelAllPendingRequests() {}
 
 std::unique_ptr<WebServiceWorkerProvider>
 EmptyLocalFrameClient::CreateServiceWorkerProvider() {

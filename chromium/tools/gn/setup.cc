@@ -5,7 +5,9 @@
 #include "tools/gn/setup.h"
 
 #include <stdlib.h>
+
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <utility>
 
@@ -42,7 +44,7 @@
 
 #include <cstdlib>
 
-extern const char kDotfile_Help[] =
+const char kDotfile_Help[] =
     R"(.gn file
 
   When gn starts, it will search the current directory and parent directories
@@ -297,8 +299,7 @@ Setup::Setup()
   loader_->set_task_runner(scheduler_.task_runner());
 }
 
-Setup::~Setup() {
-}
+Setup::~Setup() = default;
 
 bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
@@ -374,13 +375,14 @@ bool Setup::RunPostMessageLoop() {
   }
 
   if (!build_settings_.build_args().VerifyAllOverridesUsed(&err)) {
-    // TODO(brettw) implement a system to have a different marker for
-    // warnings. Until we have a better system, print the error but don't
-    // return failure unless requested on the command line.
-    err.PrintToStdout();
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kFailOnUnusedArgs))
+            switches::kFailOnUnusedArgs)) {
+      err.PrintToStdout();
       return false;
+    }
+    err.PrintNonfatalToStdout();
+    OutputString("\nThe build continued as if that argument was "
+                 "unspecified.\n\n");
     return true;
   }
 
@@ -456,7 +458,7 @@ bool Setup::FillArguments(const base::CommandLine& cmdline) {
 }
 
 bool Setup::FillArgsFromCommandLine(const std::string& args) {
-  args_input_file_.reset(new InputFile(SourceFile()));
+  args_input_file_ = std::make_unique<InputFile>(SourceFile());
   args_input_file_->SetContents(args);
   args_input_file_->set_friendly_name("the command-line \"--args\"");
   return FillArgsFromArgsInputFile();
@@ -486,7 +488,7 @@ bool Setup::FillArgsFromFile(SourceFile *arg_file,
   if (contents.empty())
     return true;  // Empty file, do nothing.
 
-  args_input_file_.reset(new InputFile(build_arg_source_file));
+  args_input_file_ = std::make_unique<InputFile>(build_arg_source_file);
   args_input_file_->SetContents(contents);
   args_input_file_->set_friendly_name(
       "build arg file (use \"gn args <out_dir>\" to edit)");
@@ -707,7 +709,7 @@ bool Setup::RunConfigFile() {
   if (scheduler_.verbose_logging())
     scheduler_.Log("Got dotfile", FilePathToUTF8(dotfile_name_));
 
-  dotfile_input_file_.reset(new InputFile(SourceFile("//.gn")));
+  dotfile_input_file_ = std::make_unique<InputFile>(SourceFile("//.gn"));
   if (!dotfile_input_file_->Load(dotfile_name_)) {
     Err(Location(), "Could not load dotfile.",
         "The file \"" + FilePathToUTF8(dotfile_name_) + "\" couldn't be loaded")
@@ -868,7 +870,8 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
       err.PrintToStdout();
       return false;
     }
-    std::unique_ptr<std::set<SourceFile>> whitelist(new std::set<SourceFile>);
+    std::unique_ptr<std::set<SourceFile>> whitelist =
+        std::make_unique<std::set<SourceFile>>();
     for (const auto& item : exec_script_whitelist_value->list_value()) {
       if (!item.VerifyTypeIs(Value::STRING, &err)) {
         err.PrintToStdout();

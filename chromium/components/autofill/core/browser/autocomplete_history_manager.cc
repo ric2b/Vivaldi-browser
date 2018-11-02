@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -44,7 +43,7 @@ AutocompleteHistoryManager::AutocompleteHistoryManager(
       database_(autofill_client->GetDatabase()),
       pending_query_handle_(0),
       query_id_(0),
-      external_delegate_(NULL),
+      external_delegate_(nullptr),
       autofill_client_(autofill_client) {
   DCHECK(autofill_client_);
 }
@@ -64,7 +63,7 @@ void AutocompleteHistoryManager::OnGetAutocompleteSuggestions(
   if (!autofill_client_->IsAutocompleteEnabled() ||
       form_control_type == "textarea" ||
       IsInAutofillSuggestionsDisabledExperiment()) {
-    SendSuggestions(NULL);
+    SendSuggestions(nullptr);
     return;
   }
 
@@ -141,12 +140,6 @@ void AutocompleteHistoryManager::SendSuggestions(
 void AutocompleteHistoryManager::OnWebDataServiceRequestDone(
     WebDataServiceBase::Handle h,
     std::unique_ptr<WDTypedResult> result) {
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/422460 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "422460 AutocompleteHistoryManager::OnWebDataServiceRequestDone"));
-
   DCHECK(pending_query_handle_);
   pending_query_handle_ = 0;
 
@@ -155,7 +148,7 @@ void AutocompleteHistoryManager::OnWebDataServiceRequestDone(
   // Linux due to NFS dismounting and causing sql failures.
   // See http://crbug.com/68783.
   if (!result) {
-    SendSuggestions(NULL);
+    SendSuggestions(nullptr);
     return;
   }
 

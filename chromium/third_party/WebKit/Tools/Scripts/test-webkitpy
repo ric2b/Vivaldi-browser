@@ -28,7 +28,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
 import sys
 
 from webkitpy.common import path_finder
@@ -36,20 +35,12 @@ path_finder.add_typ_dir_to_sys_path()
 
 import typ
 
-skip = []
-if sys.platform == 'win32':
-    # These test fail on win32. We could annotate some of these in
-    # class-level skips, but we don't support package/module-level skips.
-    # bugs.webkit.org/show_bug.cgi?id=54526 .
-    skip = [
-        'webkitpy.common.checkout.*',
-        'webkitpy.common.config.*',
-        'webkitpy.tool.*',
-        'webkitpy.w3c.*',
-        'webkitpy.layout_tests.layout_package.bot_test_expectations_unittest.*',
-    ]
 
-sys.exit(typ.main(top_level_dir=path_finder.get_scripts_dir(),
-                  skip=skip,
-                  path=[path_finder.get_webkitpy_thirdparty_dir()],
-                  win_multiprocessing='spawn'))
+def main():
+    return typ.main(top_level_dirs=[path_finder.get_scripts_dir(),
+                                    path_finder.get_blink_tools_dir()],
+                    path=[path_finder.get_webkitpy_thirdparty_dir()])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

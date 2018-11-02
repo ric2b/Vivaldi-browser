@@ -5,11 +5,9 @@
 #include "core/animation/CompositorMutatorImpl.h"
 
 #include "core/animation/CompositorAnimator.h"
-#include "core/animation/CustomCompositorAnimationManager.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/graphics/CompositorMutationsTarget.h"
 #include "platform/graphics/CompositorMutatorClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -24,16 +22,14 @@ void CreateCompositorMutatorClient(
     std::unique_ptr<CompositorMutatorClient>* ptr,
     WaitableEvent* done_event) {
   CompositorMutatorImpl* mutator = CompositorMutatorImpl::Create();
-  ptr->reset(new CompositorMutatorClient(mutator, mutator->AnimationManager()));
+  ptr->reset(new CompositorMutatorClient(mutator));
   mutator->SetClient(ptr->get());
   done_event->Signal();
 }
 
 }  // namespace
 
-CompositorMutatorImpl::CompositorMutatorImpl()
-    : animation_manager_(WTF::WrapUnique(new CustomCompositorAnimationManager)),
-      client_(nullptr) {}
+CompositorMutatorImpl::CompositorMutatorImpl() : client_(nullptr) {}
 
 std::unique_ptr<CompositorMutatorClient> CompositorMutatorImpl::CreateClient() {
   std::unique_ptr<CompositorMutatorClient> mutator_client;
@@ -58,25 +54,24 @@ CompositorMutatorImpl* CompositorMutatorImpl::Create() {
   return new CompositorMutatorImpl();
 }
 
-bool CompositorMutatorImpl::Mutate(double monotonic_time_now) {
-  TRACE_EVENT0("compositor-worker", "CompositorMutatorImpl::mutate");
-  bool need_to_reinvoke = false;
+void CompositorMutatorImpl::Mutate(
+    std::unique_ptr<CompositorMutatorInputState> state) {
+  TRACE_EVENT0("cc", "CompositorMutatorImpl::mutate");
   for (CompositorAnimator* animator : animators_) {
-    if (animator->Mutate(monotonic_time_now))
-      need_to_reinvoke = true;
+    animator->Mutate(*state);
   }
+}
 
-  return need_to_reinvoke;
+bool CompositorMutatorImpl::HasAnimators() {
+  return !animators_.IsEmpty();
 }
 
 void CompositorMutatorImpl::RegisterCompositorAnimator(
     CompositorAnimator* animator) {
   DCHECK(!IsMainThread());
-  TRACE_EVENT0("compositor-worker",
-               "CompositorMutatorImpl::registerCompositorAnimator");
+  TRACE_EVENT0("cc", "CompositorMutatorImpl::registerCompositorAnimator");
   DCHECK(!animators_.Contains(animator));
   animators_.insert(animator);
-  SetNeedsMutate();
 }
 
 void CompositorMutatorImpl::UnregisterCompositorAnimator(
@@ -85,10 +80,11 @@ void CompositorMutatorImpl::UnregisterCompositorAnimator(
   animators_.erase(animator);
 }
 
-void CompositorMutatorImpl::SetNeedsMutate() {
+void CompositorMutatorImpl::SetMutationUpdate(
+    std::unique_ptr<CompositorMutatorOutputState> state) {
   DCHECK(!IsMainThread());
-  TRACE_EVENT0("compositor-worker", "CompositorMutatorImpl::setNeedsMutate");
-  client_->SetNeedsMutate();
+  TRACE_EVENT0("compositor-worker", "CompositorMutatorImpl::SetMutationUpdate");
+  client_->SetMutationUpdate(std::move(state));
 }
 
 }  // namespace blink

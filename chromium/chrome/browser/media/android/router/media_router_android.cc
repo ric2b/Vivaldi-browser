@@ -127,14 +127,6 @@ void MediaRouterAndroid::SendRouteBinaryMessage(
   std::move(callback).Run(false);
 }
 
-void MediaRouterAndroid::AddIssue(const IssueInfo& issue_info) {
-  NOTIMPLEMENTED();
-}
-
-void MediaRouterAndroid::ClearIssue(const Issue::Id& issue_id) {
-  NOTIMPLEMENTED();
-}
-
 void MediaRouterAndroid::OnUserGesture() {
 }
 
@@ -144,11 +136,6 @@ void MediaRouterAndroid::SearchSinks(
     const std::string& search_input,
     const std::string& domain,
     MediaSinkSearchResponseCallback sink_callback) {
-  NOTIMPLEMENTED();
-}
-
-void MediaRouterAndroid::ProvideSinks(const std::string& provider_name,
-                                      std::vector<MediaSinkInternal> sinks) {
   NOTIMPLEMENTED();
 }
 
@@ -206,14 +193,6 @@ void MediaRouterAndroid::UnregisterMediaRoutesObserver(
   if (!routes_observers_.HasObserver(observer))
     return;
   routes_observers_.RemoveObserver(observer);
-}
-
-void MediaRouterAndroid::RegisterIssuesObserver(IssuesObserver* observer) {
-  NOTIMPLEMENTED();
-}
-
-void MediaRouterAndroid::UnregisterIssuesObserver(IssuesObserver* observer) {
-  NOTIMPLEMENTED();
 }
 
 void MediaRouterAndroid::RegisterRouteMessageObserver(

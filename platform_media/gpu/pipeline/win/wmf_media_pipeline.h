@@ -1,12 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_WMF_MEDIA_PIPELINE_H_
-#define CONTENT_COMMON_GPU_MEDIA_WMF_MEDIA_PIPELINE_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_WIN_WMF_MEDIA_PIPELINE_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_WIN_WMF_MEDIA_PIPELINE_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <mfidl.h>
 #include <d3d9.h>  // if included before |mfidl.h| breaks <propvarutil.h>
@@ -19,29 +21,30 @@
 #include <mfreadwrite.h>
 #include <propvarutil.h>
 
-#include <string>
-#include <unordered_map>
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
+#include "platform_media/gpu/pipeline/win/source_reader_worker.h"
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
-#include "base/win/scoped_comptr.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
-#include "platform_media/gpu/pipeline/win/source_reader_worker.h"
-#include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
 
-namespace content {
+#include <string>
+#include <unordered_map>
+#include <wrl/client.h>
+
+namespace media {
 
 class WMFByteStream;
 
 class WMFMediaPipeline : public PlatformMediaPipeline {
  public:
   WMFMediaPipeline(
-      media::DataSource* data_source,
+      DataSource* data_source,
       const AudioConfigChangedCB& audio_config_changed_cb,
       const VideoConfigChangedCB& video_config_changed_cb,
-      media::PlatformMediaDecodingMode preferred_video_decoding_mode,
+      PlatformMediaDecodingMode preferred_video_decoding_mode,
       const MakeGLContextCurrentCB& make_gl_context_current_cb);
   ~WMFMediaPipeline() override;
 
@@ -58,7 +61,9 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
 
   class AudioTimestampCalculator;
   struct Direct3DContext;
+#if defined(PLATFORM_MEDIA_HWA)
   class DXVAPictureBuffer;
+#endif
   struct InitializationResult;
 
   // Caller doesn't become an owner of object pointed-to by return value.
@@ -66,15 +71,15 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
       const MakeGLContextCurrentCB& make_gl_context_current_cb);
   static InitializationResult CreateSourceReader(
       const scoped_refptr<WMFByteStream>& byte_stream,
-      const base::win::ScopedComPtr<IMFAttributes>& attributes,
-      media::PlatformMediaDecodingMode preferred_decoding_mode);
+      const Microsoft::WRL::ComPtr<IMFAttributes>& attributes,
+      PlatformMediaDecodingMode preferred_decoding_mode);
   static bool CreateDXVASourceReader(
       const scoped_refptr<WMFByteStream>& byte_stream,
-      const base::win::ScopedComPtr<IMFAttributes>& attributes,
+      const Microsoft::WRL::ComPtr<IMFAttributes>& attributes,
       InitializationResult* result);
 
   bool CreateSourceReaderCallbackAndAttributes(
-      base::win::ScopedComPtr<IMFAttributes>* attributes);
+      Microsoft::WRL::ComPtr<IMFAttributes>* attributes);
 
   bool InitializeImpl(const std::string& mime_type,
                       const InitializeCB& initialize_cb);
@@ -83,30 +88,35 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   bool RetrieveStreamIndices();
   bool ConfigureStream(DWORD stream_index);
   bool ConfigureSourceReader();
-  bool HasMediaStream(media::PlatformMediaDataType type) const;
-  void SetNoMediaStream(media::PlatformMediaDataType type);
+  bool HasMediaStream(PlatformMediaDataType type) const;
+  void SetNoMediaStream(PlatformMediaDataType type);
   base::TimeDelta GetDuration();
   int GetBitrate(base::TimeDelta duration);
   bool GetStride(int* stride);
-  bool GetAudioDecoderConfig(media::PlatformAudioConfig* audio_config);
-  bool GetVideoDecoderConfig(media::PlatformVideoConfig* video_config);
-  void OnReadSample(media::MediaDataStatus status,
+  bool GetAudioDecoderConfig(PlatformAudioConfig* audio_config);
+  bool GetVideoDecoderConfig(PlatformVideoConfig* video_config);
+  void OnReadSample(MediaDataStatus status,
                     DWORD stream_index,
-                    const base::win::ScopedComPtr<IMFSample>& sample);
-  scoped_refptr<media::DataBuffer> CreateDataBuffer(
+                    const Microsoft::WRL::ComPtr<IMFSample>& sample);
+  scoped_refptr<DataBuffer> CreateDataBuffer(
       IMFSample* sample,
-      media::PlatformMediaDataType media_type);
-  scoped_refptr<media::DataBuffer> CreateDataBufferFromMemory(
-      IMFSample* sample);
-  scoped_refptr<media::DataBuffer> CreateDataBufferFromTexture(
+      PlatformMediaDataType media_type);
+  scoped_refptr<DataBuffer> CreateDataBufferFromMemory(
       IMFSample* sample);
 
+#if defined(PLATFORM_MEDIA_HWA)
+  scoped_refptr<DataBuffer> CreateDataBufferFromTexture(
+      IMFSample* sample);
+#endif
+
+#if defined(PLATFORM_MEDIA_HWA)
   // Caller doesn't become an owner of object pointed-to by return value.
   DXVAPictureBuffer* GetDXVAPictureBuffer(uint32_t texture_id);
+#endif
 
-  media::DataSource* data_source_;
+  DataSource* data_source_;
   scoped_refptr<WMFByteStream> byte_stream_;
-  base::win::ScopedComPtr<IMFSourceReaderCallback> source_reader_callback_;
+  Microsoft::WRL::ComPtr<IMFSourceReaderCallback> source_reader_callback_;
   platform_media::SourceReaderWorker source_reader_worker_;
 
   AudioConfigChangedCB audio_config_changed_cb_;
@@ -114,27 +124,29 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
 
   base::Thread source_reader_creation_thread_;
 
-  DWORD stream_indices_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  DWORD stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   GUID input_video_subtype_guid_;
 
   std::unique_ptr<AudioTimestampCalculator> audio_timestamp_calculator_;
 
-  media::PlatformVideoConfig video_config_;
+  PlatformVideoConfig video_config_;
   GUID source_reader_output_video_format_;
 
+#if defined(PLATFORM_MEDIA_HWA)
   MakeGLContextCurrentCB make_gl_context_current_cb_;
   EGLConfig egl_config_;
   std::unique_ptr<Direct3DContext> direct3d_context_;
   DXVAPictureBuffer* current_dxva_picture_buffer_;
   std::unordered_map<uint32_t, std::unique_ptr<DXVAPictureBuffer>>
       known_picture_buffers_;
+#endif
 
   ReadDataCB read_audio_data_cb_;
   ReadDataCB read_video_data_cb_;
 
-  scoped_refptr<media::DataBuffer>
-      pending_decoded_data_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  scoped_refptr<DataBuffer>
+      pending_decoded_data_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   // See |WMFDecoderImpl::get_stride_function_|.
   decltype(MFGetStrideForBitmapInfoHeader)* get_stride_function_;
@@ -143,6 +155,6 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   base::WeakPtrFactory<WMFMediaPipeline> weak_ptr_factory_;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_WMF_MEDIA_PIPELINE_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_WIN_WMF_MEDIA_PIPELINE_H_

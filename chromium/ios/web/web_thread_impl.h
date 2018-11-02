@@ -25,8 +25,6 @@ class WebThreadImpl : public WebThread, public base::Thread {
   WebThreadImpl(WebThread::ID identifier, base::MessageLoop* message_loop);
   ~WebThreadImpl() override;
 
-  static void ShutdownThreadPool();
-
  protected:
   void Init() override;
   void Run(base::RunLoop* run_loop) override;
@@ -41,14 +39,10 @@ class WebThreadImpl : public WebThread, public base::Thread {
   // The following are unique function names that makes it possible to tell
   // the thread id from the callstack alone in crash dumps.
   void UIThreadRun(base::RunLoop* run_loop);
-  void DBThreadRun(base::RunLoop* run_loop);
-  void FileThreadRun(base::RunLoop* run_loop);
-  void FileUserBlockingThreadRun(base::RunLoop* run_loop);
-  void CacheThreadRun(base::RunLoop* run_loop);
   void IOThreadRun(base::RunLoop* run_loop);
 
   static bool PostTaskHelper(WebThread::ID identifier,
-                             const tracked_objects::Location& from_here,
+                             const base::Location& from_here,
                              base::OnceClosure task,
                              base::TimeDelta delay,
                              bool nestable);
@@ -64,7 +58,6 @@ class WebThreadImpl : public WebThread, public base::Thread {
   friend class TestWebThreadBundle;
   friend class TestWebThreadBundleImpl;
   friend class WebTestSuiteListener;
-  static void FlushThreadPoolHelperForTesting();
 
   // The identifier of this thread.  Only one thread can exist with a given
   // identifier at a given time.

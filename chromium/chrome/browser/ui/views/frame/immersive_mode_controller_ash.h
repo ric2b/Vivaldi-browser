@@ -9,7 +9,6 @@
 
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller_delegate.h"
-#include "ash/wm/window_state_observer.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "content/public/browser/notification_observer.h"
@@ -26,7 +25,6 @@ class Window;
 class ImmersiveModeControllerAsh
     : public ImmersiveModeController,
       public ash::ImmersiveFullscreenControllerDelegate,
-      public ash::wm::WindowStateObserver,
       public content::NotificationObserver,
       public aura::WindowObserver {
  public:
@@ -73,10 +71,6 @@ class ImmersiveModeControllerAsh
   void SetVisibleFraction(double visible_fraction) override;
   std::vector<gfx::Rect> GetVisibleBoundsInScreen() const override;
 
-  // ash::wm::WindowStateObserver override:
-  void OnPostWindowStateTypeChange(ash::wm::WindowState* window_state,
-                                   ash::wm::WindowStateType old_type) override;
-
   // content::NotificationObserver override:
   void Observe(int type,
                const content::NotificationSource& source,
@@ -86,16 +80,15 @@ class ImmersiveModeControllerAsh
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
                                intptr_t old) override;
+  void OnWindowDestroying(aura::Window* window) override;
 
   std::unique_ptr<ash::ImmersiveFullscreenController> controller_;
 
-  // Not owned.
-  BrowserView* browser_view_;
-  aura::Window* native_window_;
+  BrowserView* browser_view_ = nullptr;
 
   // True if the observers for window restore and entering / exiting tab
   // fullscreen are enabled.
-  bool observers_enabled_;
+  bool observers_enabled_ = false;
 
   // The current visible bounds of the find bar, in screen coordinates. This is
   // an empty rect if the find bar is not visible.
@@ -103,7 +96,7 @@ class ImmersiveModeControllerAsh
 
   // The fraction of the TopContainerView's height which is visible. Zero when
   // the top-of-window views are not revealed.
-  double visible_fraction_;
+  double visible_fraction_ = 1.0;
 
   // When running in mash a widget is created to draw the top container. This
   // widget does not actually contain the top container, it just renders it.

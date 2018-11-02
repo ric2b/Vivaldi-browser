@@ -19,11 +19,11 @@ namespace blink {
 
 class SVGPathNonInterpolableValue : public NonInterpolableValue {
  public:
-  virtual ~SVGPathNonInterpolableValue() {}
+  ~SVGPathNonInterpolableValue() override {}
 
-  static RefPtr<SVGPathNonInterpolableValue> Create(
+  static scoped_refptr<SVGPathNonInterpolableValue> Create(
       Vector<SVGPathSegType>& path_seg_types) {
-    return AdoptRef(new SVGPathNonInterpolableValue(path_seg_types));
+    return base::AdoptRef(new SVGPathNonInterpolableValue(path_seg_types));
   }
 
   const Vector<SVGPathSegType>& PathSegTypes() const { return path_seg_types_; }
@@ -48,7 +48,8 @@ enum PathComponentIndex : unsigned {
 };
 
 InterpolationValue PathInterpolationFunctions::ConvertValue(
-    const SVGPathByteStream& byte_stream) {
+    const SVGPathByteStream& byte_stream,
+    CoordinateConversion coordinateConversion) {
   SVGPathByteStreamSource path_source(byte_stream);
   size_t length = 0;
   PathCoordinates current_coordinates;
@@ -60,7 +61,10 @@ InterpolationValue PathInterpolationFunctions::ConvertValue(
     interpolable_path_segs.push_back(
         SVGPathSegInterpolationFunctions::ConsumePathSeg(segment,
                                                          current_coordinates));
-    path_seg_types.push_back(segment.command);
+    SVGPathSegType seg_type = segment.command;
+    if (coordinateConversion == ForceAbsolute)
+      seg_type = ToAbsolutePathSegType(seg_type);
+    path_seg_types.push_back(seg_type);
     length++;
   }
 
@@ -79,12 +83,13 @@ InterpolationValue PathInterpolationFunctions::ConvertValue(
 }
 
 InterpolationValue PathInterpolationFunctions::ConvertValue(
-    const StylePath* style_path) {
+    const StylePath* style_path,
+    CoordinateConversion coordinateConversion) {
   if (style_path)
-    return ConvertValue(style_path->ByteStream());
+    return ConvertValue(style_path->ByteStream(), coordinateConversion);
 
   std::unique_ptr<SVGPathByteStream> empty_path = SVGPathByteStream::Create();
-  return ConvertValue(*empty_path);
+  return ConvertValue(*empty_path, ForceAbsolute);
 }
 
 class UnderlyingPathSegTypesChecker
@@ -128,7 +133,7 @@ InterpolationValue PathInterpolationFunctions::MaybeConvertNeutral(
                                   ->CloneAndZero());
   result->Set(kPathNeutralIndex, InterpolableNumber::Create(1));
   return InterpolationValue(std::move(result),
-                            underlying.non_interpolable_value.Get());
+                            underlying.non_interpolable_value.get());
 }
 
 static bool PathSegTypesMatch(const Vector<SVGPathSegType>& a,
@@ -183,7 +188,7 @@ void PathInterpolationFunctions::Composite(
   underlying_value_owner.MutableValue().interpolable_value->ScaleAndAdd(
       neutral_component, *value.interpolable_value);
   underlying_value_owner.MutableValue().non_interpolable_value =
-      value.non_interpolable_value.Get();
+      value.non_interpolable_value.get();
 }
 
 std::unique_ptr<SVGPathByteStream> PathInterpolationFunctions::AppliedValue(

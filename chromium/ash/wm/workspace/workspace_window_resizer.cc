@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,6 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace/two_step_edge_cycler.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/aura/client/window_types.h"
@@ -424,7 +424,7 @@ void WorkspaceWindowResizer::CompleteDrag() {
       if (details().window_component == HTCAPTION ||
           !AreBoundsValidSnappedBounds(window_state()->GetStateType(),
                                        GetTarget()->bounds())) {
-        // Set the window to WINDOW_STATE_TYPE_NORMAL but keep the
+        // Set the window to WindowStateType::NORMAL but keep the
         // window at the bounds that the user has moved/resized the
         // window to.
         window_state()->SaveCurrentBoundsForRestore();
@@ -895,7 +895,7 @@ void WorkspaceWindowResizer::UpdateSnapPhantomWindow(const gfx::Point& location,
 
   if (!snap_phantom_window_controller_) {
     snap_phantom_window_controller_ =
-        base::MakeUnique<PhantomWindowController>(GetTarget());
+        std::make_unique<PhantomWindowController>(GetTarget());
   }
   gfx::Rect phantom_bounds_in_screen(phantom_bounds);
   ::wm::ConvertRectToScreen(GetTarget()->parent(), &phantom_bounds_in_screen);
@@ -956,13 +956,13 @@ WorkspaceWindowResizer::SnapType WorkspaceWindowResizer::GetSnapType(
 }
 
 bool WorkspaceWindowResizer::AreBoundsValidSnappedBounds(
-    wm::WindowStateType snapped_type,
+    mojom::WindowStateType snapped_type,
     const gfx::Rect& bounds_in_parent) const {
-  DCHECK(snapped_type == wm::WINDOW_STATE_TYPE_LEFT_SNAPPED ||
-         snapped_type == wm::WINDOW_STATE_TYPE_RIGHT_SNAPPED);
+  DCHECK(snapped_type == mojom::WindowStateType::LEFT_SNAPPED ||
+         snapped_type == mojom::WindowStateType::RIGHT_SNAPPED);
   gfx::Rect snapped_bounds =
       ScreenUtil::GetDisplayWorkAreaBoundsInParent(GetTarget());
-  if (snapped_type == wm::WINDOW_STATE_TYPE_RIGHT_SNAPPED)
+  if (snapped_type == mojom::WindowStateType::RIGHT_SNAPPED)
     snapped_bounds.set_x(snapped_bounds.right() - bounds_in_parent.width());
   snapped_bounds.set_width(bounds_in_parent.width());
   return bounds_in_parent == snapped_bounds;

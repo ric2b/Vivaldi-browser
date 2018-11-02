@@ -11,8 +11,8 @@ import android.content.pm.PackageManager;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.test.MoreAsserts;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -49,8 +49,7 @@ public class OMADownloadHandlerTest {
     private static final String INSTALL_NOTIFY_URI = "http://test/test";
 
     private Context getTestContext() {
-        return new AdvancedMockContext(
-                InstrumentationRegistry.getInstrumentation().getTargetContext());
+        return new AdvancedMockContext(InstrumentationRegistry.getTargetContext());
     }
 
     /**
@@ -184,8 +183,7 @@ public class OMADownloadHandlerTest {
     @SmallTest
     @Feature({"Download"})
     public void testGetOpennableType() {
-        PackageManager pm =
-                InstrumentationRegistry.getInstrumentation().getContext().getPackageManager();
+        PackageManager pm = InstrumentationRegistry.getContext().getPackageManager();
         OMADownloadHandler.OMAInfo info = new OMADownloadHandler.OMAInfo();
         Assert.assertEquals(OMADownloadHandler.getOpennableType(pm, info), null);
 
@@ -236,8 +234,8 @@ public class OMADownloadHandlerTest {
         Assert.assertEquals(info.getValue(OMADownloadHandler.OMA_DESCRIPTION), "testjpg");
         Assert.assertEquals(info.getValue(OMADownloadHandler.OMA_NEXT_URL), "http://nexturl.html");
         List<String> types = info.getTypes();
-        MoreAsserts.assertContentsInAnyOrder(
-                types, "image/jpeg", OMADownloadHandler.OMA_DRM_MESSAGE_MIME);
+        Assert.assertThat(types,
+                Matchers.containsInAnyOrder("image/jpeg", OMADownloadHandler.OMA_DRM_MESSAGE_MIME));
     }
 
     /**
@@ -369,8 +367,8 @@ public class OMADownloadHandlerTest {
     @MediumTest
     @Feature({"Download"})
     public void testEnqueueOMADownloads() throws InterruptedException {
-        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        EmbeddedTestServer testServer =
+                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         Context context = getTestContext();
 
         OMADownloadHandler.OMAInfo omaInfo = new OMAInfo();

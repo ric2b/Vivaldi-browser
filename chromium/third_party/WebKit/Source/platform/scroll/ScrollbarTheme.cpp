@@ -26,7 +26,6 @@
 #include "platform/scroll/ScrollbarTheme.h"
 
 #include "build/build_config.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -35,6 +34,7 @@
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeMock.h"
 #include "platform/scroll/ScrollbarThemeOverlayMock.h"
@@ -212,13 +212,13 @@ void ScrollbarTheme::PaintScrollCorner(
     return;
 
   DrawingRecorder recorder(context, display_item_client,
-                           DisplayItem::kScrollbarCorner, corner_rect);
+                           DisplayItem::kScrollbarCorner);
 #if defined(OS_MACOSX)
   context.FillRect(corner_rect, Color::kWhite);
 #else
   Platform::Current()->ThemeEngine()->Paint(
       context.Canvas(), WebThemeEngine::kPartScrollbarCorner,
-      WebThemeEngine::kStateNormal, WebRect(corner_rect), 0);
+      WebThemeEngine::kStateNormal, WebRect(corner_rect), nullptr);
 #endif
 }
 
@@ -250,8 +250,8 @@ void ScrollbarTheme::PaintTickmarks(GraphicsContext& context,
           context, scrollbar, DisplayItem::kScrollbarTickmarks))
     return;
 
-  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarTickmarks,
-                           rect);
+  DrawingRecorder recorder(context, scrollbar,
+                           DisplayItem::kScrollbarTickmarks);
   GraphicsContextStateSaver state_saver(context);
   context.SetShouldAntialias(false);
 
@@ -394,7 +394,7 @@ void ScrollbarTheme::SplitTrack(const ScrollbarThemeClient& scrollbar,
   }
 }
 
-ScrollbarTheme& ScrollbarTheme::GetTheme() {
+ScrollbarTheme& ScrollbarTheme::DeprecatedStaticGetTheme() {
   if (ScrollbarTheme::MockScrollbarsEnabled()) {
     if (RuntimeEnabledFeatures::OverlayScrollbarsEnabled()) {
       DEFINE_STATIC_LOCAL(ScrollbarThemeOverlayMock, overlay_mock_theme, ());

@@ -24,6 +24,7 @@
 #include "chrome/browser/task_manager/sampling/task_manager_io_thread_helper.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
 #include "gpu/ipc/common/memory_stats.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 
 namespace task_manager {
 
@@ -41,9 +42,10 @@ class TaskManagerImpl : public TaskManagerInterface,
   void ActivateTask(TaskId task_id) override;
   bool IsTaskKillable(TaskId task_id) override;
   void KillTask(TaskId task_id) override;
-  double GetCpuUsage(TaskId task_id) const override;
+  double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
   base::Time GetStartTime(TaskId task_id) const override;
   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+  int64_t GetMemoryFootprintUsage(TaskId task_id) const override;
   int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
   int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
   int64_t GetSharedMemoryUsage(TaskId task_id) const override;
@@ -52,6 +54,7 @@ class TaskManagerImpl : public TaskManagerInterface,
                             bool* has_duplicates) const override;
   base::MemoryState GetMemoryState(TaskId task_id) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
+  int GetHardFaultsPerSecond(TaskId task_id) const override;
   int GetNaClDebugStubPort(TaskId task_id) const override;
   void GetGDIHandles(TaskId task_id,
                      int64_t* current,
@@ -108,14 +111,17 @@ class TaskManagerImpl : public TaskManagerInterface,
 
   void OnVideoMemoryUsageStatsUpdate(
       const gpu::VideoMemoryUsageStats& gpu_memory_stats);
+  void OnReceivedMemoryDump(
+      bool success,
+      memory_instrumentation::mojom::GlobalMemoryDumpPtr ptr);
 
   // task_manager::TaskManagerInterface:
   void Refresh() override;
   void StartUpdating() override;
   void StopUpdating() override;
 
-  // Lookup a task by its pid, child_id and possibly route_id.
-  Task* GetTaskByPidOrRoute(int pid, int child_id, int route_id) const;
+  // Lookup a task by child_id and possibly route_id.
+  Task* GetTaskByRoute(int child_id, int route_id) const;
 
   // Based on |param| the appropriate task will be updated by its network usage.
   // Returns true if it was able to match |param| to an existing task, returns
@@ -169,6 +175,10 @@ class TaskManagerImpl : public TaskManagerInterface,
   // This will be set to true while there are observers and the task manager is
   // running.
   bool is_running_;
+
+  // This is set to true while waiting for a global memory dump from
+  // memory_instrumentation.
+  bool waiting_for_memory_dump_;
 
   base::WeakPtrFactory<TaskManagerImpl> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(TaskManagerImpl);

@@ -85,13 +85,9 @@ class GoodiesDisplayerBrowserTest : public InProcessBrowserTest,
   // InProcessBrowserTest overrides.
   void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
     base::CommandLine default_command_line(base::CommandLine::NO_PROGRAM);
-    if (command_line->HasSwitch(switches::kMus)) {
-      default_command_line.AppendSwitch(switches::kMus);
-    } else if (command_line->HasSwitch(switches::kMusConfig)) {
-      default_command_line.AppendSwitchASCII(
-          switches::kMusConfig,
-          command_line->GetSwitchValueASCII(switches::kMusConfig));
-    }
+    const char* kSwitchesToCopy[] = {switches::kMash, switches::kMus};
+    default_command_line.CopySwitchesFrom(*command_line, kSwitchesToCopy,
+                                          arraysize(kSwitchesToCopy));
     InProcessBrowserTest::SetUpDefaultCommandLine(&default_command_line);
     if (NoFirstRunSpecified()) {  // --no-first-run is present by default.
       *command_line = default_command_line;

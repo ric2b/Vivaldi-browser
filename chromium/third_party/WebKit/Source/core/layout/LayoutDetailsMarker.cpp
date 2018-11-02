@@ -20,9 +20,9 @@
 
 #include "core/layout/LayoutDetailsMarker.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/html/HTMLElement.h"
+#include "core/html_names.h"
 #include "core/paint/DetailsMarkerPainter.h"
 
 namespace blink {
@@ -46,6 +46,9 @@ LayoutDetailsMarker::Orientation LayoutDetailsMarker::GetOrientation() const {
       if (Style()->IsLeftToRightDirection())
         return IsOpen() ? kRight : kDown;
       return IsOpen() ? kRight : kUp;
+    // TODO(layout-dev): Sideways-lr and sideways-rl are not yet supported.
+    default:
+      break;
   }
   NOTREACHED();
   return kRight;
@@ -61,11 +64,11 @@ bool LayoutDetailsMarker::IsOpen() const {
        layout_object = layout_object->Parent()) {
     if (!layout_object->GetNode())
       continue;
-    if (isHTMLDetailsElement(*layout_object->GetNode()))
+    if (IsHTMLDetailsElement(*layout_object->GetNode()))
       return !ToElement(layout_object->GetNode())
                   ->getAttribute(openAttr)
                   .IsNull();
-    if (isHTMLInputElement(*layout_object->GetNode()))
+    if (IsHTMLInputElement(*layout_object->GetNode()))
       return true;
   }
 

@@ -27,9 +27,7 @@
 #define FormatBlockCommand_h
 
 #include "core/dom/QualifiedName.h"
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/Position.h"
-#include "core/editing/VisiblePosition.h"
+#include "core/editing/Forward.h"
 #include "core/editing/commands/ApplyBlockElementCommand.h"
 
 namespace blink {

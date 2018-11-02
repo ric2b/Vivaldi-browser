@@ -106,6 +106,7 @@ class ProcessorEntityTrackerTest : public ::testing::Test {
   std::unique_ptr<ProcessorEntityTracker> CreateNew() {
     return ProcessorEntityTracker::CreateNew(kKey, kHash, "", ctime_);
   }
+
   std::unique_ptr<ProcessorEntityTracker> CreateNewWithEmptyStorageKey() {
     return ProcessorEntityTracker::CreateNew("", kHash, "", ctime_);
   }
@@ -116,6 +117,11 @@ class ProcessorEntityTrackerTest : public ::testing::Test {
         GenerateUpdate(*entity, kHash, kId, kName, kValue1, ctime_, 1));
     DCHECK(!entity->IsUnsynced());
     return entity;
+  }
+
+  std::unique_ptr<ProcessorEntityTracker> RestoreFromMetadata(
+      sync_pb::EntityMetadata* entity_metadata) {
+    return ProcessorEntityTracker::CreateFromMetadata(kKey, entity_metadata);
   }
 
   const base::Time ctime_;
@@ -196,7 +202,7 @@ TEST_F(ProcessorEntityTrackerTest, NewLocalItem) {
   EXPECT_EQ(entity->metadata().specifics_hash(), request.specifics_hash);
 
   // Ack the commit.
-  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 1));
+  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 1), false);
 
   EXPECT_EQ(kId, entity->metadata().server_id());
   EXPECT_FALSE(entity->metadata().is_deleted());
@@ -345,7 +351,7 @@ TEST_F(ProcessorEntityTrackerTest, LocalChange) {
   EXPECT_FALSE(entity->RequiresCommitRequest());
 
   // Ack the commit.
-  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 2));
+  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 2), false);
 
   EXPECT_EQ(1, entity->metadata().sequence_number());
   EXPECT_EQ(1, entity->metadata().acked_sequence_number());
@@ -410,7 +416,7 @@ TEST_F(ProcessorEntityTrackerTest, LocalDeletion) {
   EXPECT_EQ(entity->metadata().specifics_hash(), request.specifics_hash);
 
   // Ack the deletion.
-  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 2));
+  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 2), false);
 
   EXPECT_TRUE(entity->metadata().is_deleted());
   EXPECT_EQ(1, entity->metadata().sequence_number());
@@ -467,7 +473,7 @@ TEST_F(ProcessorEntityTrackerTest, LocalChangesInterleaved) {
   EXPECT_TRUE(entity->HasCommitData());
 
   // Ack the first commit.
-  entity->ReceiveCommitResponse(GenerateAckData(request_v1, kId, 2));
+  entity->ReceiveCommitResponse(GenerateAckData(request_v1, kId, 2), false);
 
   EXPECT_EQ(2, entity->metadata().sequence_number());
   EXPECT_EQ(1, entity->metadata().acked_sequence_number());
@@ -482,7 +488,7 @@ TEST_F(ProcessorEntityTrackerTest, LocalChangesInterleaved) {
   EXPECT_TRUE(entity->HasCommitData());
 
   // Ack the second commit.
-  entity->ReceiveCommitResponse(GenerateAckData(request_v2, kId, 3));
+  entity->ReceiveCommitResponse(GenerateAckData(request_v2, kId, 3), false);
 
   EXPECT_EQ(2, entity->metadata().sequence_number());
   EXPECT_EQ(2, entity->metadata().acked_sequence_number());
@@ -495,6 +501,46 @@ TEST_F(ProcessorEntityTrackerTest, LocalChangesInterleaved) {
   EXPECT_FALSE(entity->RequiresCommitData());
   EXPECT_FALSE(entity->CanClearMetadata());
   EXPECT_FALSE(entity->HasCommitData());
+}
+
+// Tests that updating entity id with commit response while next local change is
+// pending correctly updates that change's id and version.
+TEST_F(ProcessorEntityTrackerTest, NewLocalChangeUpdatedId) {
+  std::unique_ptr<ProcessorEntityTracker> entity = CreateNew();
+  // Create new local change. Make sure initial id is empty.
+  entity->MakeLocalChange(GenerateEntityData(kHash, kName, kValue1));
+
+  CommitRequestData request;
+  entity->InitializeCommitRequestData(&request);
+  EXPECT_TRUE(request.entity->id.empty());
+
+  // Before receiving commit response make local modification to the entity.
+  entity->MakeLocalChange(GenerateEntityData(kHash, kName, kValue2));
+  entity->ReceiveCommitResponse(GenerateAckData(request, kId, 1), false);
+
+  // Receiving commit response with valid id should update
+  // ProcessorEntityTracker. Consecutive commit requests should include updated
+  // id.
+  entity->InitializeCommitRequestData(&request);
+  EXPECT_EQ(kId, request.entity->id);
+  EXPECT_EQ(1, request.base_version);
+}
+
+// Tests that entity restored after restart accepts specifics that don't match
+// the ones passed originally to MakeLocalChange.
+TEST_F(ProcessorEntityTrackerTest, RestoredLocalChangeWithUpdatedSpecifics) {
+  // Create new entity and preserver its metadata.
+  std::unique_ptr<ProcessorEntityTracker> entity = CreateNew();
+  entity->MakeLocalChange(GenerateEntityData(kHash, kName, kValue1));
+  sync_pb::EntityMetadata entity_metadata = entity->metadata();
+
+  // Restore entity from metadata and emulate bridge passing different specifics
+  // to SetCommitData.
+  entity = RestoreFromMetadata(&entity_metadata);
+  auto entity_data = GenerateEntityData(kHash, kName, kValue2);
+  entity->SetCommitData(entity_data.get());
+
+  // No verification is necessary. SetCommitData shouldn't DCHECK.
 }
 
 }  // namespace syncer

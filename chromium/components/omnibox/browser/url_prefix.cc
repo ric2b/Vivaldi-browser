@@ -52,11 +52,12 @@ URLPrefix::URLPrefix(const base::string16& lower_prefix, size_t num_components)
 const URLPrefixes& URLPrefix::GetURLPrefixes() {
   CR_DEFINE_STATIC_LOCAL(URLPrefixes, prefixes, ());
   if (prefixes.empty()) {
-    prefixes.push_back(URLPrefix(base::ASCIIToUTF16("https://www."), 2));
+    // Keep this list in descending number of components.
     prefixes.push_back(URLPrefix(base::ASCIIToUTF16("http://www."), 2));
+    prefixes.push_back(URLPrefix(base::ASCIIToUTF16("https://www."), 2));
     prefixes.push_back(URLPrefix(base::ASCIIToUTF16("ftp://www."), 2));
-    prefixes.push_back(URLPrefix(base::ASCIIToUTF16("https://"), 1));
     prefixes.push_back(URLPrefix(base::ASCIIToUTF16("http://"), 1));
+    prefixes.push_back(URLPrefix(base::ASCIIToUTF16("https://"), 1));
     prefixes.push_back(URLPrefix(base::ASCIIToUTF16("ftp://"), 1));
     prefixes.push_back(URLPrefix(base::string16(), 0));
   }
@@ -96,7 +97,7 @@ size_t URLPrefix::GetInlineAutocompleteOffset(
             : BestURLPrefixInternal(lower_text, lower_fixed_up_input);
     matching_string = &fixed_up_input;
   }
-  return (best_prefix != NULL) ?
-      (best_prefix->prefix.length() + matching_string->length()) :
-      base::string16::npos;
+  return (best_prefix != nullptr)
+             ? (best_prefix->prefix.length() + matching_string->length())
+             : base::string16::npos;
 }

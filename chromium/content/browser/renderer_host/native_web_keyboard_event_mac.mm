@@ -57,7 +57,8 @@ NativeWebKeyboardEvent::NativeWebKeyboardEvent(blink::WebInputEvent::Type type,
       skip_in_browser(false) {}
 
 NativeWebKeyboardEvent::NativeWebKeyboardEvent(
-    const blink::WebKeyboardEvent& web_event)
+    const blink::WebKeyboardEvent& web_event,
+    gfx::NativeView native_view)
     : WebKeyboardEvent(web_event), os_event(nullptr), skip_in_browser(false) {
   NSEventType type = NSKeyUp;
   int flags = modifiersForEvent(web_event.GetModifiers());
@@ -89,7 +90,7 @@ NativeWebKeyboardEvent::NativeWebKeyboardEvent(
                                location:NSZeroPoint
                           modifierFlags:flags
                               timestamp:web_event.TimeStampSeconds()
-                           windowNumber:0
+                           windowNumber:[[native_view window] windowNumber]
                                 context:nil
                              characters:text
             charactersIgnoringModifiers:unmodified_text

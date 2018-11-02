@@ -5,7 +5,6 @@
 #include "content/public/app/content_main_delegate.h"
 
 #include "build/build_config.h"
-
 #include "content/public/gpu/content_gpu_client.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/utility/content_utility_client.h"
@@ -42,12 +41,12 @@ bool ContentMainDelegate::DelaySandboxInitialization(
   return false;
 }
 
-#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+#elif defined(OS_LINUX)
 
 void ContentMainDelegate::ZygoteStarting(
     std::vector<std::unique_ptr<ZygoteForkDelegate>>* delegates) {}
 
-#endif
+#endif  // defined(OS_LINUX)
 
 bool ContentMainDelegate::ShouldEnableProfilerRecording() {
   return false;
@@ -57,28 +56,13 @@ service_manager::ProcessType ContentMainDelegate::OverrideProcessType() {
   return service_manager::ProcessType::kDefault;
 }
 
-std::unique_ptr<base::Value> ContentMainDelegate::CreateServiceCatalog() {
-  return nullptr;
-}
-
 void ContentMainDelegate::AdjustServiceProcessCommandLine(
     const service_manager::Identity& identity,
     base::CommandLine* command_line) {}
 
-bool ContentMainDelegate::ShouldTerminateServiceManagerOnInstanceQuit(
-    const service_manager::Identity& identity,
-    int* exit_code) {
-  return false;
-}
-
 void ContentMainDelegate::OnServiceManagerInitialized(
     const base::Closure& quit_closure,
     service_manager::BackgroundServiceManager* service_manager) {}
-
-std::unique_ptr<service_manager::Service>
-ContentMainDelegate::CreateEmbeddedService(const std::string& service_name) {
-  return nullptr;
-}
 
 ContentBrowserClient* ContentMainDelegate::CreateContentBrowserClient() {
 #if defined(CHROME_MULTIPLE_DLL_CHILD)

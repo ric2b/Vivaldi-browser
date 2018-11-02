@@ -31,7 +31,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
-#include "core/page/ScopedPageSuspender.h"
+#include "core/page/ScopedPagePauser.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/network/NetworkHints.h"
@@ -39,7 +39,7 @@
 
 namespace blink {
 
-DEFINE_TRACE(ChromeClient) {
+void ChromeClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(last_mouse_over_node_);
   PlatformChromeClient::Trace(visitor);
 }
@@ -54,20 +54,29 @@ void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
   IntRect window = pending_rect;
 
   IntSize minimum_size = MinimumWindowSize();
+  IntSize size_for_constraining_move = minimum_size;
   // Let size 0 pass through, since that indicates default size, not minimum
   // size.
-  if (window.Width())
+  if (window.Width()) {
     window.SetWidth(std::min(std::max(minimum_size.Width(), window.Width()),
                              screen.Width()));
-  if (window.Height())
+    size_for_constraining_move.SetWidth(window.Width());
+  }
+  if (window.Height()) {
     window.SetHeight(std::min(std::max(minimum_size.Height(), window.Height()),
                               screen.Height()));
+    size_for_constraining_move.SetHeight(window.Height());
+  }
 
   // Constrain the window position within the valid screen area.
-  window.SetX(std::max(screen.X(),
-                       std::min(window.X(), screen.MaxX() - window.Width())));
-  window.SetY(std::max(screen.Y(),
-                       std::min(window.Y(), screen.MaxY() - window.Height())));
+  window.SetX(
+      std::max(screen.X(),
+               std::min(window.X(),
+                        screen.MaxX() - size_for_constraining_move.Width())));
+  window.SetY(
+      std::max(screen.Y(),
+               std::min(window.Y(),
+                        screen.MaxY() - size_for_constraining_move.Height())));
   SetWindowRect(window, frame);
 }
 
@@ -98,7 +107,7 @@ static bool OpenJavaScriptDialog(LocalFrame* frame,
   // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageSuspender suspender;
+  ScopedPagePauser pauser;
   probe::willRunJavaScriptDialog(frame);
   bool result = delegate();
   probe::didRunJavaScriptDialog(frame);
@@ -235,7 +244,7 @@ bool ChromeClient::Print(LocalFrame* frame) {
   // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageSuspender suspender;
+  ScopedPagePauser pauser;
 
   PrintDelegate(frame);
   return true;

@@ -50,7 +50,6 @@ namespace net {
 
 class CertVerifier;
 class CTVerifier;
-class SocketBIOAdapter;
 class SSLCertRequestInfo;
 class SSLInfo;
 
@@ -200,12 +199,12 @@ class SSLClientSocketImpl : public SSLClientSocket,
   bool IsRenegotiationAllowed() const;
 
   // Callbacks for operations with the private key.
-  ssl_private_key_result_t PrivateKeySignDigestCallback(uint8_t* out,
-                                                        size_t* out_len,
-                                                        size_t max_out,
-                                                        const EVP_MD* md,
-                                                        const uint8_t* in,
-                                                        size_t in_len);
+  ssl_private_key_result_t PrivateKeySignCallback(uint8_t* out,
+                                                  size_t* out_len,
+                                                  size_t max_out,
+                                                  uint16_t algorithm,
+                                                  const uint8_t* in,
+                                                  size_t in_len);
   ssl_private_key_result_t PrivateKeyCompleteCallback(uint8_t* out,
                                                       size_t* out_len,
                                                       size_t max_out);
@@ -305,7 +304,6 @@ class SSLClientSocketImpl : public SSLClientSocket,
   // session cache. i.e. sessions created with one value will not attempt to
   // resume on the socket with a different value.
   const std::string ssl_session_cache_shard_;
-  int ssl_session_cache_lookup_count_;
 
   enum State {
     STATE_NONE,

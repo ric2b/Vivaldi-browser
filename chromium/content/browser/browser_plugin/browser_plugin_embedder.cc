@@ -4,6 +4,7 @@
 
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 
+#include "content/browser/bad_message.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -46,24 +47,6 @@ void BrowserPluginEmbedder::DragLeftGuest(BrowserPluginGuest* guest) {
 }
 
 // static
-bool BrowserPluginEmbedder::NotifyScreenInfoChanged(
-    WebContents* guest_web_contents) {
-  if (guest_web_contents->GetRenderViewHost()) {
-    auto* render_widget_host = RenderWidgetHostImpl::From(
-        guest_web_contents->GetRenderViewHost()->GetWidget());
-    render_widget_host->NotifyScreenInfoChanged();
-  }
-
-  // Returns false to iterate over all guests.
-  return false;
-}
-
-void BrowserPluginEmbedder::ScreenInfoChanged() {
-  GetBrowserPluginGuestManager()->ForEachGuest(web_contents(), base::Bind(
-      &BrowserPluginEmbedder::NotifyScreenInfoChanged));
-}
-
-// static
 bool BrowserPluginEmbedder::CancelDialogs(WebContents* guest_web_contents) {
   static_cast<WebContentsImpl*>(guest_web_contents)
       ->CancelActiveAndPendingDialogs();
@@ -73,6 +56,9 @@ bool BrowserPluginEmbedder::CancelDialogs(WebContents* guest_web_contents) {
 }
 
 void BrowserPluginEmbedder::CancelGuestDialogs() {
+  if (!GetBrowserPluginGuestManager())
+    return;
+
   GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(), base::Bind(&BrowserPluginEmbedder::CancelDialogs));
 }
@@ -110,6 +96,9 @@ bool BrowserPluginEmbedder::DidSendScreenRectsCallback(
 }
 
 void BrowserPluginEmbedder::DidSendScreenRects() {
+  if (!GetBrowserPluginGuestManager())
+    return;
+
   GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(),
       base::Bind(&BrowserPluginEmbedder::DidSendScreenRectsCallback));
@@ -127,8 +116,12 @@ bool BrowserPluginEmbedder::OnMessageReceived(
   return handled;
 }
 
-void BrowserPluginEmbedder::DragSourceEndedAt(int client_x, int client_y,
-    int screen_x, int screen_y, blink::WebDragOperation operation) {
+void BrowserPluginEmbedder::DragSourceEndedAt(
+    float client_x,
+    float client_y,
+    float screen_x,
+    float screen_y,
+    blink::WebDragOperation operation) {
   if (guest_started_drag_) {
     gfx::Point guest_offset =
         guest_started_drag_->GetScreenCoordinates(gfx::Point());
@@ -157,6 +150,12 @@ void BrowserPluginEmbedder::OnAttach(
     RenderFrameHost* render_frame_host,
     int browser_plugin_instance_id,
     const BrowserPluginHostMsg_Attach_Params& params) {
+  if (!GetBrowserPluginGuestManager()) {
+    bad_message::ReceivedBadMessage(
+        render_frame_host->GetProcess(),
+        bad_message::BPE_UNEXPECTED_MESSAGE_BEFORE_BPGM_CREATION);
+    return;
+  }
   WebContents* guest_web_contents =
       GetBrowserPluginGuestManager()->GetGuestByInstanceID(
           render_frame_host->GetProcess()->GetID(),
@@ -200,6 +199,9 @@ bool BrowserPluginEmbedder::GuestRecentlyAudibleCallback(WebContents* guest) {
 }
 
 bool BrowserPluginEmbedder::WereAnyGuestsRecentlyAudible() {
+  if (!GetBrowserPluginGuestManager())
+    return false;
+
   return GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(),
       base::Bind(&BrowserPluginEmbedder::GuestRecentlyAudibleCallback));

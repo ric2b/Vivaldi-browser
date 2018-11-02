@@ -42,8 +42,7 @@ namespace XPath {
 struct EvaluationContext;
 }
 
-class XPathResult final : public GarbageCollected<XPathResult>,
-                          public ScriptWrappable {
+class XPathResult final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -81,7 +80,7 @@ class XPathResult final : public GarbageCollected<XPathResult>,
 
   const XPath::Value& GetValue() const { return value_; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   XPathResult(XPath::EvaluationContext&, const XPath::Value&);

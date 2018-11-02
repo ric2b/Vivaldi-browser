@@ -11,36 +11,31 @@
 
 namespace blink {
 
-class ScriptState;
 {% for forward_declaration in forward_declarations %}
 class {{forward_declaration}};
 {% endfor %}
 
-class {{exported}}{{cpp_class}} final : public GarbageCollectedFinalized<{{cpp_class}}>, public TraceWrapperBase {
+class {{exported}}{{cpp_class}} final : public CallbackFunctionBase {
  public:
-  static {{cpp_class}}* Create(ScriptState*, v8::Local<v8::Value> callback);
-
-  ~{{cpp_class}}() = default;
-
-  DEFINE_INLINE_TRACE() {}
-  DECLARE_TRACE_WRAPPERS();
-
-  bool call({{argument_declarations | join(', ')}});
-
-  v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
-    return callback_.NewLocal(isolate);
+  static {{cpp_class}}* Create(v8::Local<v8::Function> callback_function) {
+    return new {{cpp_class}}(callback_function);
   }
 
+  ~{{cpp_class}}() override = default;
+
+  // Performs "invoke".
+  // https://heycam.github.io/webidl/#es-invoking-callback-functions
+  v8::Maybe<{{return_cpp_type}}> Invoke({{argument_declarations | join(', ')}}) WARN_UNUSED_RESULT;
+
+{% if idl_type == 'void' %}
+  // Performs "invoke", and then reports an exception, if any, to the global
+  // error handler such as DevTools' console.
+  void InvokeAndReportException({{argument_declarations | join(', ')}});
+{% endif %}
+
  private:
-  {{cpp_class}}(ScriptState*, v8::Local<v8::Function>);
-
-  RefPtr<ScriptState> script_state_;
-  TraceWrapperV8Reference<v8::Function> callback_;
-};
-
-template <>
-struct NativeValueTraits<{{cpp_class}}> : public NativeValueTraitsBase<{{cpp_class}}> {
-  {{exported}}static {{cpp_class}}* NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  explicit {{cpp_class}}(v8::Local<v8::Function> callback_function)
+      : CallbackFunctionBase(callback_function) {}
 };
 
 }  // namespace blink

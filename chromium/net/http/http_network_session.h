@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/ref_counted.h"
@@ -84,12 +85,22 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     Params(const Params& other);
     ~Params();
 
+    enum class TcpFastOpenMode {
+      DISABLED,
+      // If true, TCP fast open will be used for all HTTPS connections.
+      ENABLED_FOR_SSL_ONLY,
+      // TCP fast open will be used for all HTTP/HTTPS connections.
+      // TODO(mmenke): With 0-RTT session resumption, does this option make
+      // sense?
+      ENABLED_FOR_ALL,
+    };
+
     bool enable_server_push_cancellation;
     HostMappingRules host_mapping_rules;
     bool ignore_certificate_errors;
     uint16_t testing_fixed_http_port;
     uint16_t testing_fixed_https_port;
-    bool enable_tcp_fast_open_for_ssl;
+    TcpFastOpenMode tcp_fast_open_mode;
     bool enable_user_alternate_protocol_ports;
 
     // Use SPDY ping frames to test for connection health after idle.
@@ -110,7 +121,7 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // QUIC runtime configuration options.
 
     // Versions of QUIC which may be used.
-    QuicVersionVector quic_supported_versions;
+    QuicTransportVersionVector quic_supported_versions;
     // User agent description to send in the QUIC handshake.
     std::string quic_user_agent_id;
     // Limit on the size of QUIC packets.
@@ -134,6 +145,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // Retry requests which fail with QUIC_PROTOCOL_ERROR, and mark QUIC
     // broken if the retry succeeds.
     bool retry_without_alt_svc_on_quic_errors;
+    // If true, alt-svc headers advertising QUIC in IETF format will be
+    // supported.
+    bool support_ietf_format_quic_altsvc;
     // If true, all QUIC sessions are closed when any local IP address changes.
     bool quic_close_sessions_on_ip_change;
     // Specifies QUIC idle connection state lifetime.
@@ -141,15 +155,32 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // Specifies the reduced ping timeout subsequent connections should use when
     // a connection was timed out with open streams.
     int quic_reduced_ping_timeout_seconds;
+    // Maximum time the session can be alive before crypto handshake is
+    // finished.
+    int quic_max_time_before_crypto_handshake_seconds;
+    // Maximum idle time before the crypto handshake has completed.
+    int quic_max_idle_time_before_crypto_handshake_seconds;
+    // If true, QUIC will attempt to explicitly use default network for sockets.
+    bool quic_connect_using_default_network;
     // If true, active QUIC sessions may be migrated onto a new network when
     // the platform indicates that the default network is changing.
     bool quic_migrate_sessions_on_network_change;
     // If true, active QUIC sessions experiencing poor connectivity may be
     // migrated onto a new network.
     bool quic_migrate_sessions_early;
+    // If true, connection migration v2 will be used to migrate existing
+    // sessions to network when the platform indicates that the default network
+    // is changing.
+    bool quic_migrate_sessions_on_network_change_v2;
+    // If true, connection migration v2 may be used to migrate active QUIC
+    // sessions to alternative network if current network connectivity is poor.
+    bool quic_migrate_sessions_early_v2;
     // If true, allows migration of QUIC connections to a server-specified
     // alternate server address.
     bool quic_allow_server_migration;
+    // If true, allows QUIC to use alternative services with a different
+    // hostname from the origin.
+    bool quic_allow_remote_alt_svc;
     // If true, bidirectional streams over QUIC will be disabled.
     bool quic_disable_bidirectional_streams;
     // If true, enable force HOL blocking.  For measurement purposes.
@@ -158,6 +189,8 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     bool quic_race_cert_verification;
     // If true, estimate the initial RTT for QUIC connections based on network.
     bool quic_estimate_initial_rtt;
+    // If non-empty, QUIC will only be spoken to hosts in this list.
+    base::flat_set<std::string> quic_host_whitelist;
 
     // Enable support for Token Binding.
     bool enable_token_binding;

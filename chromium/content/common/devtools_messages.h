@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_COMMON_DEVTOOLS_MESSAGES_H_
+#define CONTENT_COMMON_DEVTOOLS_MESSAGES_H_
+
 // Developer tools consist of the following parts:
 //
 // DevToolsAgent lives in the renderer of an inspected page and provides access
@@ -38,7 +41,6 @@
 //
 // This file describes developer tools message types.
 
-// Multiply-included message file, no standard include guard.
 #include <map>
 #include <string>
 
@@ -78,14 +80,11 @@ IPC_MESSAGE_ROUTED1(DevToolsClientMsg_DispatchOnInspectorFrontend,
 // These are messages sent from DevToolsClient to DevToolsAgent through the
 // browser.
 // Tells agent that there is a client host connected to it.
-IPC_MESSAGE_ROUTED2(DevToolsAgentMsg_Attach,
-                    std::string /* host_id */,
-                    int /* session_id */)
+IPC_MESSAGE_ROUTED1(DevToolsAgentMsg_Attach, int /* session_id */)
 
 // Tells agent that a client host was disconnected from another agent and
 // connected to this one.
-IPC_MESSAGE_ROUTED3(DevToolsAgentMsg_Reattach,
-                    std::string /* host_id */,
+IPC_MESSAGE_ROUTED2(DevToolsAgentMsg_Reattach,
                     int /* session_id */,
                     std::string /* agent_state */)
 
@@ -106,7 +105,8 @@ IPC_MESSAGE_ROUTED3(DevToolsAgentMsg_InspectElement,
                     int /* y */)
 
 // ACK for DevToolsAgentHostMsg_RequestNewWindow message.
-IPC_MESSAGE_ROUTED1(DevToolsAgentMsg_RequestNewWindow_ACK,
+IPC_MESSAGE_ROUTED2(DevToolsAgentMsg_RequestNewWindow_ACK,
+                    int /* session_id */,
                     bool /* success */)
 
 //-----------------------------------------------------------------------------
@@ -114,24 +114,8 @@ IPC_MESSAGE_ROUTED1(DevToolsAgentMsg_RequestNewWindow_ACK,
 
 // Requests new DevTools window being opened for frame in the same process
 // with given routing id.
-IPC_MESSAGE_ROUTED1(DevToolsAgentHostMsg_RequestNewWindow,
+IPC_MESSAGE_ROUTED2(DevToolsAgentHostMsg_RequestNewWindow,
+                    int /* session_id */,
                     int /* frame_route_id */)
 
-
-//-----------------------------------------------------------------------------
-// These are messages sent from the browser to the renderer.
-
-// RenderViewHostDelegate::RenderViewCreated method sends this message to a
-// new renderer to notify it that it will host developer tools UI and should
-// set up all neccessary bindings and create DevToolsClient instance that
-// will handle communication with inspected page DevToolsAgent.
-IPC_MESSAGE_ROUTED1(DevToolsMsg_SetupDevToolsClient,
-                    std::string /* compatibility script */)
-
-
-//-----------------------------------------------------------------------------
-// These are messages sent from the renderer to the browser.
-
-// Transport from Inspector frontend to frontend host.
-IPC_MESSAGE_ROUTED1(DevToolsHostMsg_DispatchOnEmbedder,
-                    std::string /* message */)
+#endif  // CONTENT_COMMON_DEVTOOLS_MESSAGES_H_

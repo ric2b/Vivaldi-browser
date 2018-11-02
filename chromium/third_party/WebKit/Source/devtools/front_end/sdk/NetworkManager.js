@@ -86,6 +86,22 @@ SDK.NetworkManager = class extends SDK.SDKModel {
 
   /**
    * @param {!SDK.NetworkRequest} request
+   * @param {string} query
+   * @param {boolean} caseSensitive
+   * @param {boolean} isRegex
+   * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
+   */
+  static async searchInRequest(request, query, caseSensitive, isRegex) {
+    var manager = SDK.NetworkManager.forRequest(request);
+    if (!manager)
+      return [];
+    var response = await manager._networkAgent.invoke_searchInResponseBody(
+        {requestId: request.requestId(), query: query, caseSensitive: caseSensitive, isRegex: isRegex});
+    return response.result || [];
+  }
+
+  /**
+   * @param {!SDK.NetworkRequest} request
    * @return {!Promise<!SDK.NetworkRequest.ContentData>}
    */
   static async requestContentData(request) {
@@ -125,6 +141,17 @@ SDK.NetworkManager = class extends SDK.SDKModel {
         return type[1];
     }
     return Protocol.Network.ConnectionType.Other;
+  }
+
+  /**
+   * @param {!Object} headers
+   * @return {!Object<string, string>}
+   */
+  static lowercaseHeaders(headers) {
+    var newHeaders = {};
+    for (var headerName in headers)
+      newHeaders[headerName.toLowerCase()] = headers[headerName];
+    return newHeaders;
   }
 
   /**
@@ -421,6 +448,7 @@ SDK.NetworkDispatcher = class {
    */
   responseReceived(requestId, loaderId, time, resourceType, response, frameId) {
     var networkRequest = this._inflightRequestsById[requestId];
+    var lowercaseHeaders = SDK.NetworkManager.lowercaseHeaders(response.headers);
     if (!networkRequest) {
       // We missed the requestWillBeSent.
       var eventData = {};
@@ -429,7 +457,7 @@ SDK.NetworkDispatcher = class {
       eventData.loaderId = loaderId;
       eventData.resourceType = resourceType;
       eventData.mimeType = response.mimeType;
-      var lastModifiedHeader = response.headers['last-modified'];
+      var lastModifiedHeader = lowercaseHeaders['last-modified'];
       eventData.lastModified = lastModifiedHeader ? new Date(lastModifiedHeader) : null;
       this._manager.dispatchEventToListeners(SDK.NetworkManager.Events.RequestUpdateDropped, eventData);
       return;
@@ -439,7 +467,7 @@ SDK.NetworkDispatcher = class {
     networkRequest.setResourceType(Common.resourceTypes[resourceType]);
 
     // net::ParsedCookie::kMaxCookieSize = 4096 (net/cookies/parsed_cookie.h)
-    if ('Set-Cookie' in response.headers && response.headers['Set-Cookie'].length > 4096) {
+    if ('set-cookie' in lowercaseHeaders && lowercaseHeaders['set-cookie'].length > 4096) {
       var message = Common.UIString(
           'Set-Cookie header is ignored in response from url: %s. Cookie length should be less than or equal to 4096 characters.',
           response.url);
@@ -654,19 +682,21 @@ SDK.NetworkDispatcher = class {
    * @override
    * @param {!Protocol.Network.InterceptionId} interceptionId
    * @param {!Protocol.Network.Request} request
+   * @param {!Protocol.Page.FrameId} frameId
    * @param {!Protocol.Page.ResourceType} resourceType
    * @param {boolean} isNavigationRequest
-   * @param {!Protocol.Network.Headers=} redirectHeaders
-   * @param {number=} redirectStatusCode
    * @param {string=} redirectUrl
    * @param {!Protocol.Network.AuthChallenge=} authChallenge
+   * @param {!Protocol.Network.ErrorReason=} responseErrorReason
+   * @param {number=} responseStatusCode
+   * @param {!Protocol.Network.Headers=} responseHeaders
    */
   requestIntercepted(
-      interceptionId, request, resourceType, isNavigationRequest, redirectHeaders, redirectStatusCode, redirectUrl,
-      authChallenge) {
-    SDK.multitargetNetworkManager._requestIntercepted(new SDK.InterceptedRequest(
-        this._manager.target().networkAgent(), interceptionId, request, resourceType, isNavigationRequest,
-        redirectHeaders, redirectStatusCode, redirectUrl, authChallenge));
+      interceptionId, request, frameId, resourceType, isNavigationRequest, redirectUrl, authChallenge,
+      responseErrorReason, responseStatusCode, responseHeaders) {
+    SDK.multitargetNetworkManager._requestIntercepted(new SDK.MultitargetNetworkManager.InterceptedRequest(
+        this._manager.target().networkAgent(), interceptionId, request, frameId, resourceType, isNavigationRequest,
+        redirectUrl, authChallenge, responseErrorReason, responseStatusCode, responseHeaders));
   }
 
   /**
@@ -768,8 +798,8 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
     this._effectiveBlockedURLs = [];
     this._updateBlockedPatterns();
 
-    /** @type {!Multimap<string, !SDK.RequestInterceptor>} */
-    this._requestInterceptorMap = new Multimap();
+    /** @type {!Multimap<!SDK.MultitargetNetworkManager.RequestInterceptor, !SDK.MultitargetNetworkManager.InterceptionPattern>} */
+    this._urlsForRequestInterceptor = new Multimap();
 
     SDK.targetManager.observeTargets(this, SDK.Target.Capability.Network);
   }
@@ -800,7 +830,7 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
     if (this._effectiveBlockedURLs.length)
       networkAgent.setBlockedURLs(this._effectiveBlockedURLs);
     if (this.isIntercepting())
-      networkAgent.setRequestInterceptionEnabled(true, this._requestInterceptorMap.keysArray());
+      networkAgent.setRequestInterception(this._urlsForRequestInterceptor.valuesArray());
     this._agents.add(networkAgent);
     if (this.isThrottling())
       this._updateNetworkConditions(networkAgent);
@@ -971,27 +1001,19 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
    * @return {boolean}
    */
   isIntercepting() {
-    return !!this._requestInterceptorMap.size;
+    return !!this._urlsForRequestInterceptor.size;
   }
 
   /**
-   * @param {!SDK.RequestInterceptor} requestInterceptor
-   * @param {!Set<string>=} oldPatterns
+   * @param {!Array<!SDK.MultitargetNetworkManager.InterceptionPattern>} patterns
+   * @param {!SDK.MultitargetNetworkManager.RequestInterceptor} requestInterceptor
    * @return {!Promise}
    */
-  _registerRequestInterceptor(requestInterceptor, oldPatterns) {
-    var newPatterns = requestInterceptor.enabled() ? requestInterceptor.patterns() : new Set();
-    var patternsToUnregister = new Set(oldPatterns);
-
-    for (var pattern of newPatterns) {
-      if (patternsToUnregister.has(pattern)) {
-        patternsToUnregister.delete(pattern);
-        continue;
-      }
-      this._requestInterceptorMap.set(pattern, requestInterceptor);
-    }
-    for (var pattern of patternsToUnregister)
-      this._requestInterceptorMap.delete(pattern, requestInterceptor);
+  setInterceptionHandlerForPatterns(patterns, requestInterceptor) {
+    // Note: requestInterceptors may recieve interception requests for patterns they did not subscribe to.
+    this._urlsForRequestInterceptor.deleteAll(requestInterceptor);
+    for (var newPattern of patterns)
+      this._urlsForRequestInterceptor.set(requestInterceptor, newPattern);
     return this._updateInterceptionPatternsOnNextTick();
   }
 
@@ -1009,30 +1031,24 @@ SDK.MultitargetNetworkManager = class extends Common.Object {
    * @return {!Promise}
    */
   _updateInterceptionPatterns() {
+    if (!Common.moduleSetting('cacheDisabled').get())
+      Common.moduleSetting('cacheDisabled').set(true);
     this._updatingInterceptionPatternsPromise = null;
     var promises = /** @type {!Array<!Promise>} */ ([]);
-    for (var agent of this._agents) {
-      // We do not allow '?' as a single character wild card for now.
-      var patterns = this._requestInterceptorMap.keysArray().map(pattern => pattern.replace(/([\\?])/g, '\\$1'));
-      promises.push(agent.setRequestInterceptionEnabled(this.isIntercepting(), patterns));
-    }
+    for (var agent of this._agents)
+      promises.push(agent.setRequestInterception(this._urlsForRequestInterceptor.valuesArray()));
     this.dispatchEventToListeners(SDK.MultitargetNetworkManager.Events.InterceptorsChanged);
     return Promise.all(promises);
   }
 
   /**
-   * @param {!SDK.InterceptedRequest} interceptedRequest
+   * @param {!SDK.MultitargetNetworkManager.InterceptedRequest} interceptedRequest
    */
   async _requestIntercepted(interceptedRequest) {
-    for (var pattern of this._requestInterceptorMap.keysArray()) {
-      if (!SDK.RequestInterceptor.patternMatchesUrl(pattern, interceptedRequest.request.url))
-        continue;
-      for (var requestInterceptor of this._requestInterceptorMap.get(pattern)) {
-        console.assert(requestInterceptor.enabled());
-        await requestInterceptor.handle(interceptedRequest);
-        if (interceptedRequest.hasResponded())
-          return;
-      }
+    for (var requestInterceptor of this._urlsForRequestInterceptor.keysArray()) {
+      await requestInterceptor(interceptedRequest);
+      if (interceptedRequest.hasResponded())
+        return;
     }
     if (!interceptedRequest.hasResponded())
       interceptedRequest.continueRequestWithoutChange();
@@ -1083,152 +1099,35 @@ SDK.MultitargetNetworkManager.Events = {
   InterceptorsChanged: Symbol('InterceptorsChanged')
 };
 
-/**
- * @type {!SDK.MultitargetNetworkManager}
- */
-SDK.multitargetNetworkManager;
-
-SDK.RequestInterceptor = class {
-  /**
-   * @param {boolean} enabled
-   * @param {!Set<string>=} patterns
-   */
-  constructor(enabled, patterns) {
-    this._enabled = enabled;
-    this._patterns = patterns || new Set();
-    if (enabled && this._patterns.size)
-      SDK.multitargetNetworkManager._registerRequestInterceptor(this);
-  }
-
-  /**
-   * @param {string} pattern
-   * @param {string} url
-   * @return {boolean}
-   */
-  static patternMatchesUrl(pattern, url) {
-    if (!pattern.length)
-      return false;
-    var parts = [];
-    var prevIndex = 0;
-    var index = indexOfWildOrEscape(0);
-    for (; index >= 0; index = indexOfWildOrEscape(index + 1)) {
-      if (pattern[index] === '\\') {
-        // Since we are removing the slash, there is no need to skip next character.
-        pattern = pattern.substring(0, index) + pattern.substring(index + 1);
-        continue;
-      }
-      parts.push(pattern.substring(prevIndex, index));
-      prevIndex = index + 1;
-    }
-    parts.push(pattern.substring(prevIndex));
-    // If a pattern is a wild card only it'll be an empty string.
-    var firstPart = parts.shift();
-    if (firstPart && !url.startsWith(firstPart))
-      return false;
-
-    // Check ending of url against pattern.
-    if (parts.length) {
-      var lastPart = parts.pop();
-      if (lastPart && !url.endsWith(lastPart))
-        return false;
-      url = url.substring(0, url.length - lastPart.length);
-    }
-
-    var pos = firstPart.length;
-    for (var part of parts) {
-      if (!part.length)
-        continue;
-      pos = url.indexOf(part, pos);
-      if (pos === -1)
-        return false;
-      pos += part.length;
-    }
-    return true;
-
-    /**
-     * @param {number} fromPosition
-     * @return {number}
-     */
-    function indexOfWildOrEscape(fromPosition) {
-      var wildPos = pattern.indexOf('*', fromPosition);
-      var slashPos = pattern.indexOf('\\', fromPosition);
-      if (wildPos === -1 || slashPos === -1)
-        return Math.max(wildPos, slashPos);
-      return Math.min(wildPos, slashPos);
-    }
-  }
-
-  /**
-   * @param {boolean} enabled
-   * @return {!Promise}
-   */
-  setEnabled(enabled) {
-    if (this._enabled === enabled)
-      return Promise.resolve();
-    this._enabled = enabled;
-    var oldPatterns = !enabled ? this._patterns : undefined;
-    return SDK.multitargetNetworkManager._registerRequestInterceptor(this, oldPatterns);
-  }
-
-  /**
-   * @param {!Set<string>} patterns
-   * @return {!Promise}
-   */
-  setPatterns(patterns) {
-    var oldPatterns = this._patterns;
-    this._patterns = patterns;
-    return SDK.multitargetNetworkManager._registerRequestInterceptor(this, oldPatterns);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  enabled() {
-    return this._enabled;
-  }
-
-  /**
-   * @return {!Set<string>}
-   */
-  patterns() {
-    return this._patterns;
-  }
-
-  /**
-   * @param {!SDK.InterceptedRequest} interceptedRequest
-   * @return {!Promise}
-   */
-  handle(interceptedRequest) {
-    throw 'Not implemented.';
-  }
-};
-
-SDK.InterceptedRequest = class {
+SDK.MultitargetNetworkManager.InterceptedRequest = class {
   /**
    * @param {!Protocol.NetworkAgent} networkAgent
    * @param {!Protocol.Network.InterceptionId} interceptionId
    * @param {!Protocol.Network.Request} request
+   * @param {!Protocol.Page.FrameId} frameId
    * @param {!Protocol.Page.ResourceType} resourceType
    * @param {boolean} isNavigationRequest
-   * @param {!Protocol.Network.Headers=} redirectHeaders
-   * @param {number=} redirectStatusCode
    * @param {string=} redirectUrl
    * @param {!Protocol.Network.AuthChallenge=} authChallenge
+   * @param {!Protocol.Network.ErrorReason=} responseErrorReason
+   * @param {number=} responseStatusCode
+   * @param {!Protocol.Network.Headers=} responseHeaders
    */
   constructor(
-      networkAgent, interceptionId, request, resourceType, isNavigationRequest, redirectHeaders, redirectStatusCode,
-      redirectUrl, authChallenge) {
+      networkAgent, interceptionId, request, frameId, resourceType, isNavigationRequest, redirectUrl, authChallenge,
+      responseErrorReason, responseStatusCode, responseHeaders) {
     this._networkAgent = networkAgent;
     this._interceptionId = interceptionId;
     this._hasResponded = false;
-
     this.request = request;
+    this.frameId = frameId;
     this.resourceType = resourceType;
     this.isNavigationRequest = isNavigationRequest;
-    this.redirectHeaders = redirectHeaders;
-    this.redirectStatusCode = redirectStatusCode;
     this.redirectUrl = redirectUrl;
     this.authChallenge = authChallenge;
+    this.responseErrorReason = responseErrorReason;
+    this.responseStatusCode = responseStatusCode;
+    this.responseHeaders = responseHeaders;
   }
 
   /**
@@ -1239,21 +1138,41 @@ SDK.InterceptedRequest = class {
   }
 
   /**
-   * @param {string} content
-   * @param {string} mimeType
+   * @param {!Blob} contentBlob
    */
-  continueRequestWithContent(content, mimeType) {
+  async continueRequestWithContent(contentBlob) {
     this._hasResponded = true;
     var headers = [
       'HTTP/1.1 200 OK',
       'Date: ' + (new Date()).toUTCString(),
       'Server: Chrome Devtools Request Interceptor',
       'Connection: closed',
-      'Content-Length: ' + content.length,
-      'Content-Type: ' + mimeType,
+      'Content-Length: ' + contentBlob.size,
+      'Content-Type: ' + contentBlob.type || 'text/x-unknown',
     ];
-    var encodedResponse = (headers.join('\r\n') + '\r\n\r\n' + content).toBase64();
+    var encodedResponse = await blobToBase64(new Blob([headers.join('\r\n'), '\r\n\r\n', contentBlob]));
     this._networkAgent.continueInterceptedRequest(this._interceptionId, undefined, encodedResponse);
+
+    /**
+     * @param {!Blob} blob
+     * @return {!Promise<string>}
+     */
+    async function blobToBase64(blob) {
+      var reader = new FileReader();
+      var fileContentsLoadedPromise = new Promise(resolve => reader.onloadend = resolve);
+      reader.readAsDataURL(blob);
+      await fileContentsLoadedPromise;
+      if (reader.error) {
+        console.error('Could not convert blob to base64.', reader.error);
+        return '';
+      }
+      var result = reader.result;
+      if (result === undefined) {
+        console.error('Could not convert blob to base64.');
+        return '';
+      }
+      return result.substring(result.indexOf(',') + 1);
+    }
   }
 
   continueRequestWithoutChange() {
@@ -1270,4 +1189,25 @@ SDK.InterceptedRequest = class {
     this._hasResponded = true;
     this._networkAgent.continueInterceptedRequest(this._interceptionId, errorReason);
   }
+
+  /**
+   * @return {!Promise<!SDK.NetworkRequest.ContentData>}
+   */
+  async responseBody() {
+    var response =
+        await this._networkAgent.invoke_getResponseBodyForInterception({interceptionId: this._interceptionId});
+    var error = response[Protocol.Error] || null;
+    return {error: error, content: error ? null : response.body, encoded: response.base64Encoded};
+  }
 };
+
+/** @typedef {!{urlPattern: string, interceptionStage: !Protocol.Network.InterceptionStage}} */
+SDK.MultitargetNetworkManager.InterceptionPattern;
+
+/** @typedef {!function(!SDK.MultitargetNetworkManager.InterceptedRequest):!Promise} */
+SDK.MultitargetNetworkManager.RequestInterceptor;
+
+/**
+ * @type {!SDK.MultitargetNetworkManager}
+ */
+SDK.multitargetNetworkManager;

@@ -74,6 +74,9 @@ void CreateTestPasswordForm(PasswordForm* form) {
       base::ASCIIToUTF16("Jerry_1"), base::ASCIIToUTF16("id1")));
   form->other_possible_usernames.push_back(PossibleUsernamePair(
       base::ASCIIToUTF16("Jerry_2"), base::ASCIIToUTF16("id2")));
+  form->all_possible_passwords.push_back(base::ASCIIToUTF16("pass1"));
+  form->all_possible_passwords.push_back(base::ASCIIToUTF16("pass2"));
+  form->form_has_autofilled_value = true;
   form->password_element = base::ASCIIToUTF16("password");
   form->password_value = base::ASCIIToUTF16("test");
   form->password_value_is_default = true;
@@ -93,9 +96,7 @@ void CreateTestPasswordForm(PasswordForm* form) {
       PasswordForm::GenerationUploadStatus::POSITIVE_SIGNAL_SENT;
   form->display_name = base::ASCIIToUTF16("test display name");
   form->icon_url = GURL("https://foo.com/icon.png");
-  form->federation_origin =
-      url::Origin::UnsafelyCreateOriginWithoutNormalization(
-          "http", "www.google.com", 80, "");
+  form->federation_origin = url::Origin::Create(GURL("http://wwww.google.com"));
   form->skip_zero_click = false;
   form->layout = PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP;
   form->was_parsed_using_autofill_predictions = false;

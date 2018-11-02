@@ -11,7 +11,7 @@
 namespace content {
 namespace {
 
-const int kVerboseLevel = 1;
+const int kWorkerVerboseLevel = 1;
 
 class CompletedByteStreamReader : public ByteStreamReader {
  public:
@@ -97,14 +97,15 @@ void DownloadWorker::Cancel(bool user_cancel) {
 
 void DownloadWorker::OnUrlDownloadStarted(
     std::unique_ptr<DownloadCreateInfo> create_info,
-    std::unique_ptr<UrlDownloadHandler::InputStream> input_stream,
+    std::unique_ptr<DownloadManager::InputStream> input_stream,
     const DownloadUrlParameters::OnStartedCallback& callback) {
   // |callback| is not used in subsequent requests.
   DCHECK(callback.is_null());
 
   // Destroy the request if user canceled.
   if (is_canceled_) {
-    VLOG(kVerboseLevel) << "Byte stream arrived after user cancel the request.";
+    VLOG(kWorkerVerboseLevel)
+        << "Byte stream arrived after user cancel the request.";
     create_info->request_handle->CancelRequest(is_user_cancel_);
     return;
   }
@@ -112,8 +113,9 @@ void DownloadWorker::OnUrlDownloadStarted(
   // TODO(xingliu): Add metric for error handling.
   if (create_info->result !=
       DownloadInterruptReason::DOWNLOAD_INTERRUPT_REASON_NONE) {
-    VLOG(kVerboseLevel) << "Parallel download sub-request failed. reason = "
-                        << create_info->result;
+    VLOG(kWorkerVerboseLevel)
+        << "Parallel download sub-request failed. reason = "
+        << create_info->result;
     input_stream->stream_reader_.reset(
         new CompletedByteStreamReader(create_info->result));
   }
@@ -122,7 +124,8 @@ void DownloadWorker::OnUrlDownloadStarted(
 
   // Pause the stream if user paused, still push the stream reader to the sink.
   if (is_paused_) {
-    VLOG(kVerboseLevel) << "Byte stream arrived after user pause the request.";
+    VLOG(kWorkerVerboseLevel)
+        << "Byte stream arrived after user pause the request.";
     Pause();
   }
 

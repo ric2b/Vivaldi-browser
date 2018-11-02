@@ -151,7 +151,7 @@ void CheckWallpaperCacheExists(const base::FilePath& path, bool* exists) {
 }
 
 std::string ReadFileInBackground(const base::FilePath& file) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   std::string manifest;
   if (!base::ReadFileToString(file, &manifest)) {
@@ -201,10 +201,9 @@ class ServicesCustomizationExternalLoader
         return;
     }
 
-    prefs_.reset(apps_.DeepCopy());
     VLOG(1) << "ServicesCustomization extension loader publishing "
             << apps_.size() << " apps.";
-    LoadFinished();
+    LoadFinished(apps_.CreateDeepCopy());
   }
 
  protected:

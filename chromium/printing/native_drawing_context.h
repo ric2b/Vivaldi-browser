@@ -9,18 +9,14 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
-#elif defined(USE_CAIRO)
-typedef struct _cairo cairo_t;
 #elif defined(OS_MACOSX)
 typedef struct CGContext* CGContextRef;
 #endif
 
-namespace skia {
+namespace printing {
 
 #if defined(OS_WIN)
 typedef HDC NativeDrawingContext;
-#elif defined(USE_CAIRO)
-typedef cairo_t* NativeDrawingContext;
 #elif defined(OS_MACOSX)
 typedef CGContextRef NativeDrawingContext;
 #else

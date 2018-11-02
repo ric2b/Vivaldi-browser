@@ -16,13 +16,13 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "cc/raster/scoped_gpu_raster.h"
 #include "cc/resources/memory_history.h"
 #include "cc/trees/frame_rate_counter.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -96,10 +96,9 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
   }
 
   auto resource = std::make_unique<ScopedResource>(resource_provider);
-  resource->Allocate(internal_content_bounds_,
-                     ResourceProvider::TEXTURE_HINT_IMMUTABLE_FRAMEBUFFER,
-                     resource_provider->best_render_buffer_format(),
-                     gfx::ColorSpace());
+  resource->Allocate(
+      internal_content_bounds_, viz::ResourceTextureHint::kFramebuffer,
+      resource_provider->best_render_buffer_format(), gfx::ColorSpace());
   resources_.push_back(std::move(resource));
 }
 
@@ -111,8 +110,9 @@ void HeadsUpDisplayLayerImpl::ReleaseUnmatchedSizeResources(
                 });
 }
 
-bool HeadsUpDisplayLayerImpl::WillDraw(DrawMode draw_mode,
-                                       ResourceProvider* resource_provider) {
+bool HeadsUpDisplayLayerImpl::WillDraw(
+    DrawMode draw_mode,
+    LayerTreeResourceProvider* resource_provider) {
   if (draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE)
     return false;
 
@@ -128,16 +128,15 @@ bool HeadsUpDisplayLayerImpl::WillDraw(DrawMode draw_mode,
   return LayerImpl::WillDraw(draw_mode, resource_provider);
 }
 
-void HeadsUpDisplayLayerImpl::AppendQuads(
-    RenderPass* render_pass,
-    AppendQuadsData* append_quads_data) {
+void HeadsUpDisplayLayerImpl::AppendQuads(viz::RenderPass* render_pass,
+                                          AppendQuadsData* append_quads_data) {
   if (!resources_.back()->id())
     return;
 
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   PopulateScaledSharedQuadState(shared_quad_state, internal_contents_scale_,
-                                internal_contents_scale_);
+                                internal_contents_scale_, contents_opaque());
 
   gfx::Rect quad_rect(internal_content_bounds_);
   bool needs_blending = contents_opaque() ? false : true;
@@ -148,8 +147,7 @@ void HeadsUpDisplayLayerImpl::AppendQuads(
   const float vertex_opacity[] = { 1.f, 1.f, 1.f, 1.f };
   bool flipped = false;
   bool nearest_neighbor = false;
-  TextureDrawQuad* quad =
-      render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+  auto* quad = render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
   quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect, needs_blending,
                resources_.back()->id(), premultiplied_alpha, uv_top_left,
                uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity, flipped,
@@ -161,7 +159,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     DrawMode draw_mode,
     ResourceProvider* resource_provider,
     viz::ContextProvider* context_provider,
-    const RenderPassList& list) {
+    const viz::RenderPassList& list) {
   if (draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE || !resources_.back()->id())
     return;
 
@@ -599,7 +597,7 @@ SkRect HeadsUpDisplayLayerImpl::DrawMemoryDisplay(SkCanvas* canvas,
   paint.setStyle(SkPaint::kFill_Style);
   paint.setColor(SkColorSetARGB(255, 0, 255, 0));
   canvas->drawArc(oval, 180, angle, true, paint);
-  paint.setShader(NULL);
+  paint.setShader(nullptr);
 
   return area;
 }
@@ -811,7 +809,7 @@ void HeadsUpDisplayLayerImpl::DrawDebugRects(
   }
 }
 
-void HeadsUpDisplayLayerImpl::EvictHudQuad(const RenderPassList& list) {
+void HeadsUpDisplayLayerImpl::EvictHudQuad(const viz::RenderPassList& list) {
   viz::ResourceId evict_resource_id = resources_.back()->id();
   // This iterates over the render pass list of quads to evict the hud quad
   // appended during render pass preparation. We need this eviction when we

@@ -24,9 +24,8 @@
 #include "core/html/HTMLScriptElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "core/HTMLNames.h"
+#include "bindings/core/v8/html_script_element_or_svg_script_element.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptLoader.h"
@@ -35,6 +34,7 @@
 #include "core/dom/events/Event.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -205,10 +205,6 @@ bool HTMLScriptElement::AllowInlineScriptForCSP(
       inline_type);
 }
 
-AtomicString HTMLScriptElement::InitiatorName() const {
-  return Element::localName();
-}
-
 Document& HTMLScriptElement::GetDocument() const {
   return Node::GetDocument();
 }
@@ -225,7 +221,7 @@ void HTMLScriptElement::DispatchErrorEvent() {
 void HTMLScriptElement::SetScriptElementForBinding(
     HTMLScriptElementOrSVGScriptElement& element) {
   if (!IsInV1ShadowTree())
-    element.setHTMLScriptElement(this);
+    element.SetHTMLScriptElement(this);
 }
 
 Element* HTMLScriptElement::CloneElementWithoutAttributesAndChildren() {
@@ -233,13 +229,14 @@ Element* HTMLScriptElement::CloneElementWithoutAttributesAndChildren() {
                                false);
 }
 
-DEFINE_TRACE(HTMLScriptElement) {
+void HTMLScriptElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(loader_);
   HTMLElement::Trace(visitor);
   ScriptElementBase::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLScriptElement) {
+void HTMLScriptElement::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(loader_);
   HTMLElement::TraceWrappers(visitor);
 }

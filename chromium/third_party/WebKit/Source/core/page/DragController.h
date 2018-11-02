@@ -43,6 +43,7 @@ class DragImage;
 struct DragSession;
 class DragState;
 class LocalFrame;
+class FloatRect;
 class FrameSelection;
 class HTMLInputElement;
 class Node;
@@ -84,7 +85,10 @@ class CORE_EXPORT DragController final
   static std::unique_ptr<DragImage> DragImageForSelection(const LocalFrame&,
                                                           float);
 
-  DECLARE_TRACE();
+  // Return the selection in the frame's coords, clipped to the visual viewport.
+  static FloatRect ClippedSelection(const LocalFrame&);
+
+  void Trace(blink::Visitor*);
 
  private:
   explicit DragController(Page*);
@@ -105,6 +109,8 @@ class CORE_EXPORT DragController final
 
   void MouseMovedIntoDocument(Document*);
 
+  // drag_location and drag_origin should be in the coordinate space of the
+  // LocalFrame's contents.
   void DoSystemDrag(DragImage*,
                     const IntPoint& drag_location,
                     const IntPoint& drag_origin,

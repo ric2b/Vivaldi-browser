@@ -107,13 +107,19 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'AlertsTest.testPromptShouldUseDefaultValueIfNoKeysSent',
     'UnexpectedAlertBehaviorTest.canAcceptUnhandledAlert',
     'UnexpectedAlertBehaviorTest.canSpecifyUnhandledAlertBehaviourUsingCapabilities',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1918
-    'WindowTest.testGetsThePositionOfTheCurrentWindow',
-    'WindowTest.testGetsTheSizeOfTheCurrentWindow',
-    'WindowTest.testSetsThePositionOfTheCurrentWindow',
-    'WindowTest.testSetsTheSizeOfTheCurrentWindowFromIframe',
-    'WindowTest.testSetsTheSizeOfTheCurrentWindowFromFrame',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=764519
+    'FrameSwitchingTest.testShouldBeAbleToClickInAFrameThatRewritesTopWindowLocation',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+    'PageLoadingTest.testShouldBeAbleToGetAFragmentOnTheCurrentPage',
 ]
+
+_REVISION_NEGATIVE_FILTER['63'] = (
+    _REVISION_NEGATIVE_FILTER['HEAD'] + [
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+        'MiscTest.testStimulatesStrangeOnloadInteractionInFirefox',
+	'PageLoadingTest.testShouldNotHangIfDocumentOpenCallIsNeverFollowedByDocumentCloseCall',
+    ]
+)
 
 _OS_NEGATIVE_FILTER = {}
 _OS_NEGATIVE_FILTER['win'] = [
@@ -257,6 +263,10 @@ _OS_NEGATIVE_FILTER['android:chrome_stable'] = (
         'ImplicitWaitTest.testShouldImplicitlyWaitForASingleElement',
          # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1960
         'CorrectEventFiringTest.testShouldFireMouseDownEventWhenClicking',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2076
+        'CorrectEventFiringTest.testShouldReportTheXAndYCoordinatesWhenClicking',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2077
+        'CorrectEventFiringTest.testShouldEmitClickEventWhenClickingOnATextInputElement',
     ]
 )
 

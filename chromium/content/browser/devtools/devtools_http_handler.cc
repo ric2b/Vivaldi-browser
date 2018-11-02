@@ -279,16 +279,13 @@ class DevToolsAgentHostClientImpl : public DevToolsAgentHostClient {
       agent_host_->DetachClient(this);
   }
 
-  void AgentHostClosed(DevToolsAgentHost* agent_host,
-                       bool replaced_with_another_client) override {
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(agent_host == agent_host_.get());
 
-    std::string message = base::StringPrintf(
+    std::string message =
         "{ \"method\": \"Inspector.detached\", "
-        "\"params\": { \"reason\": \"%s\"} }",
-        replaced_with_another_client ?
-            "replaced_with_devtools" : "target_closed");
+        "\"params\": { \"reason\": \"target_closed\"} }";
     DispatchProtocolMessage(agent_host, message);
 
     agent_host_ = nullptr;
@@ -497,9 +494,7 @@ void DevToolsHttpHandler::OnJsonRequest(
   std::string command;
   std::string target_id;
   if (!ParseJsonPath(path, &command, &target_id)) {
-    SendJson(connection_id,
-             net::HTTP_NOT_FOUND,
-             NULL,
+    SendJson(connection_id, net::HTTP_NOT_FOUND, nullptr,
              "Malformed query: " + info.path);
     return;
   }
@@ -547,7 +542,7 @@ void DevToolsHttpHandler::OnJsonRequest(
     scoped_refptr<DevToolsAgentHost> agent_host = nullptr;
     agent_host = delegate_->CreateNewTarget(url);
     if (!agent_host) {
-      SendJson(connection_id, net::HTTP_INTERNAL_SERVER_ERROR, NULL,
+      SendJson(connection_id, net::HTTP_INTERNAL_SERVER_ERROR, nullptr,
                "Could not create new page");
       return;
     }
@@ -562,20 +557,16 @@ void DevToolsHttpHandler::OnJsonRequest(
     scoped_refptr<DevToolsAgentHost> agent_host =
         DevToolsAgentHost::GetForId(target_id);
     if (!agent_host) {
-      SendJson(connection_id,
-               net::HTTP_NOT_FOUND,
-               NULL,
+      SendJson(connection_id, net::HTTP_NOT_FOUND, nullptr,
                "No such target id: " + target_id);
       return;
     }
 
     if (command == "activate") {
       if (agent_host->Activate()) {
-        SendJson(connection_id, net::HTTP_OK, NULL, "Target activated");
+        SendJson(connection_id, net::HTTP_OK, nullptr, "Target activated");
       } else {
-        SendJson(connection_id,
-                 net::HTTP_INTERNAL_SERVER_ERROR,
-                 NULL,
+        SendJson(connection_id, net::HTTP_INTERNAL_SERVER_ERROR, nullptr,
                  "Could not activate target id: " + target_id);
       }
       return;
@@ -583,19 +574,15 @@ void DevToolsHttpHandler::OnJsonRequest(
 
     if (command == "close") {
       if (agent_host->Close()) {
-        SendJson(connection_id, net::HTTP_OK, NULL, "Target is closing");
+        SendJson(connection_id, net::HTTP_OK, nullptr, "Target is closing");
       } else {
-        SendJson(connection_id,
-                 net::HTTP_INTERNAL_SERVER_ERROR,
-                 NULL,
+        SendJson(connection_id, net::HTTP_INTERNAL_SERVER_ERROR, nullptr,
                  "Could not close target id: " + target_id);
       }
       return;
     }
   }
-  SendJson(connection_id,
-           net::HTTP_NOT_FOUND,
-           NULL,
+  SendJson(connection_id, net::HTTP_NOT_FOUND, nullptr,
            "Unknown command: " + command);
   return;
 }

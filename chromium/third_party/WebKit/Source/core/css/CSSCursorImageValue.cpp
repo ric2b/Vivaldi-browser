@@ -38,7 +38,7 @@ CSSCursorImageValue::CSSCursorImageValue(const CSSValue& image_value,
   DCHECK(image_value.IsImageValue() || image_value.IsImageSetValue());
 }
 
-CSSCursorImageValue::~CSSCursorImageValue() {}
+CSSCursorImageValue::~CSSCursorImageValue() = default;
 
 String CSSCursorImageValue::CustomCSSText() const {
   StringBuilder result;
@@ -59,7 +59,7 @@ bool CSSCursorImageValue::Equals(const CSSCursorImageValue& other) const {
          DataEquivalent(image_value_, other.image_value_);
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSCursorImageValue) {
+void CSSCursorImageValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(image_value_);
   CSSValue::TraceAfterDispatch(visitor);
 }

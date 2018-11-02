@@ -46,7 +46,7 @@ PublicURLManager::PublicURLManager(ExecutionContext* context)
 String PublicURLManager::RegisterURL(ExecutionContext* context,
                                      URLRegistrable* registrable,
                                      const String& uuid) {
-  SecurityOrigin* origin = context->GetSecurityOrigin();
+  SecurityOrigin* origin = context->GetMutableSecurityOrigin();
   const KURL& url = BlobURL::CreatePublicURL(origin);
   DCHECK(!url.IsEmpty());
   const String& url_string = url.GetString();
@@ -80,7 +80,7 @@ void PublicURLManager::Revoke(const String& uuid) {
     URLMap& registered_urls = registry_url.value;
     for (auto& registered_url : registered_urls) {
       if (uuid == registered_url.value) {
-        KURL url(kParsedURLString, registered_url.key);
+        KURL url(registered_url.key);
         GetExecutionContext()->RemoveURLFromMemoryCache(url);
         registry->UnregisterURL(url);
         urls_to_remove.push_back(registered_url.key);
@@ -99,13 +99,13 @@ void PublicURLManager::ContextDestroyed(ExecutionContext*) {
   is_stopped_ = true;
   for (auto& registry_url : registry_to_url_) {
     for (auto& url : registry_url.value)
-      registry_url.key->UnregisterURL(KURL(kParsedURLString, url.key));
+      registry_url.key->UnregisterURL(KURL(url.key));
   }
 
   registry_to_url_.clear();
 }
 
-DEFINE_TRACE(PublicURLManager) {
+void PublicURLManager::Trace(blink::Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
 }
 

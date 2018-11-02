@@ -11,7 +11,18 @@
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 
-using InstallableTask = std::pair<InstallableParams, InstallableCallback>;
+struct InstallableTask {
+  InstallableTask();
+  InstallableTask(const InstallableParams& params,
+                  const InstallableCallback& callback);
+  InstallableTask(const InstallableTask& other);
+  ~InstallableTask();
+
+  InstallableTask& operator=(const InstallableTask& other);
+
+  InstallableParams params;
+  InstallableCallback callback;
+};
 
 // InstallableTaskQueue keeps track of pending tasks.
 class InstallableTaskQueue {
@@ -30,6 +41,9 @@ class InstallableTaskQueue {
 
   // Reports whether there are any tasks in the main list.
   bool HasCurrent() const;
+
+  // Reports whether there are any tasks in the paused list.
+  bool HasPaused() const;
 
   // Returns the currently active task.
   InstallableTask& Current();

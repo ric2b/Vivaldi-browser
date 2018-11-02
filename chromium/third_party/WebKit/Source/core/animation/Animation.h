@@ -32,6 +32,10 @@
 #define Animation_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
@@ -45,10 +49,8 @@
 #include "core/dom/events/EventTarget.h"
 #include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -86,7 +88,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
                            AnimationTimeline*,
                            ExceptionState&);
 
-  ~Animation();
+  ~Animation() override;
   void Dispose();
 
   // Returns whether the animation is finished.
@@ -187,7 +189,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
     return compositor_player_ ? compositor_player_->Player() : nullptr;
   }
 
-  bool Affects(const Element&, CSSPropertyID) const;
+  bool Affects(const Element&, const CSSProperty&) const;
 
   // Returns whether we should continue with the commit for this animation or
   // wait until next commit.
@@ -209,7 +211,11 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   void InvalidateKeyframeEffect(const TreeScope&);
 
-  DECLARE_VIRTUAL_TRACE();
+  bool IsNonCompositedCompositable() const {
+    return is_non_composited_compositable_;
+  }
+
+  void Trace(blink::Visitor*) override;
 
  protected:
   DispatchEventResult DispatchEventInternal(Event*) override;
@@ -292,10 +298,9 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   class CompositorState {
     USING_FAST_MALLOC(CompositorState);
-    WTF_MAKE_NONCOPYABLE(CompositorState);
 
    public:
-    CompositorState(Animation& animation)
+    explicit CompositorState(Animation& animation)
         : start_time(animation.start_time_),
           hold_time(animation.hold_time_),
           playback_rate(animation.playback_rate_),
@@ -306,6 +311,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
     double playback_rate;
     bool effect_changed;
     CompositorAction pending_action;
+    DISALLOW_COPY_AND_ASSIGN(CompositorState);
   };
 
   enum CompositorPendingChange {
@@ -341,7 +347,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
     void Detach();
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(animation_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(animation_); }
 
     CompositorAnimationPlayer* Player() const {
       return compositor_player_.get();
@@ -369,6 +375,15 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   bool state_is_being_updated_;
 
   bool effect_suppressed_;
+
+  // crbug.com/758439: In order to have better animation targeting metrics, we'd
+  // like to track whether there are main-thread animations which could be
+  // composited, but is not due to running experiment. This variable is
+  // initially false, it is set to be true after the call to
+  // "CheckCanStartAnimationOnCompositor" according to its return value. In
+  // other words, this bit is true only for an animation that hits the
+  // "Experiment group" for the experiment described in crbug.com/754471.
+  bool is_non_composited_compositable_ = false;
 
   FRIEND_TEST_ALL_PREFIXES(AnimationAnimationTest,
                            NoCompositeWithoutCompositedElementId);

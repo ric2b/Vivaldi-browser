@@ -30,28 +30,31 @@
 
 #include "core/css/resolver/StyleAdjuster.h"
 
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/resolver/StyleResolver.h"
+#include "core/css/resolver/StyleResolverState.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeComputedStyle.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTableCellElement.h"
-#include "core/html/HTMLTextAreaElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "core/svg/SVGSVGElement.h"
+#include "core/svg_names.h"
 #include "platform/Length.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/transforms/TransformOperations.h"
 #include "platform/wtf/Assertions.h"
 
@@ -129,7 +132,7 @@ static bool DoesNotInheritTextDecoration(const ComputedStyle& style,
          style.Display() == EDisplay::kWebkitInlineBox ||
          IsAtShadowBoundary(element) || style.IsFloating() ||
          style.HasOutOfFlowPosition() || IsOutermostSVGElement(element) ||
-         isHTMLRTElement(element);
+         IsHTMLRTElement(element);
 }
 
 // Certain elements (<a>, <font>) override text decoration colors.  "The font
@@ -139,7 +142,7 @@ static bool DoesNotInheritTextDecoration(const ComputedStyle& style,
 // The <a> behavior is non-standard.
 static bool OverridesTextDecorationColors(const Element* element) {
   return element &&
-         (isHTMLFontElement(element) || isHTMLAnchorElement(element));
+         (IsHTMLFontElement(element) || IsHTMLAnchorElement(element));
 }
 
 // FIXME: This helper is only needed because pseudoStyleForElement passes a null
@@ -181,7 +184,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
                                       HTMLElement& element) {
   // <div> and <span> are the most common elements on the web, we skip all the
   // work for them.
-  if (isHTMLDivElement(element) || isHTMLSpanElement(element))
+  if (IsHTMLDivElement(element) || IsHTMLSpanElement(element))
     return;
 
   if (IsHTMLTableCellElement(element)) {
@@ -197,13 +200,13 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (isHTMLImageElement(element)) {
-    if (toHTMLImageElement(element).IsCollapsed())
+  if (auto* image = ToHTMLImageElementOrNull(element)) {
+    if (image->IsCollapsed())
       style.SetDisplay(EDisplay::kNone);
     return;
   }
 
-  if (isHTMLTableElement(element)) {
+  if (IsHTMLTableElement(element)) {
     // Tables never support the -webkit-* values for text-align and will reset
     // back to the default.
     if (style.GetTextAlign() == ETextAlign::kWebkitLeft ||
@@ -213,7 +216,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (isHTMLFrameElement(element) || isHTMLFrameSetElement(element)) {
+  if (IsHTMLFrameElement(element) || IsHTMLFrameSetElement(element)) {
     // Frames and framesets never honor position:relative or position:absolute.
     // This is necessary to fix a crash where a site tries to position these
     // objects. They also never honor display.
@@ -230,7 +233,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (isHTMLRTElement(element)) {
+  if (IsHTMLRTElement(element)) {
     // Ruby text does not support float or position. This might change with
     // evolution of the specification.
     style.SetPosition(EPosition::kStatic);
@@ -238,19 +241,19 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (isHTMLLegendElement(element)) {
+  if (IsHTMLLegendElement(element)) {
     style.SetDisplay(EDisplay::kBlock);
     return;
   }
 
-  if (isHTMLMarqueeElement(element)) {
+  if (IsHTMLMarqueeElement(element)) {
     // For now, <marquee> requires an overflow clip to work properly.
     style.SetOverflowX(EOverflow::kHidden);
     style.SetOverflowY(EOverflow::kHidden);
     return;
   }
 
-  if (isHTMLTextAreaElement(element)) {
+  if (IsHTMLTextAreaElement(element)) {
     // Textarea considers overflow visible as auto.
     style.SetOverflowX(style.OverflowX() == EOverflow::kVisible
                            ? EOverflow::kAuto
@@ -392,16 +395,16 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   TouchAction inherited_action = parent_style.GetEffectiveTouchAction();
 
   bool is_svg_root = element && element->IsSVGElement() &&
-                     isSVGSVGElement(*element) && element->parentNode() &&
+                     IsSVGSVGElement(*element) && element->parentNode() &&
                      !element->parentNode()->IsSVGElement();
   bool is_replaced_canvas =
-      element && isHTMLCanvasElement(element) &&
+      element && IsHTMLCanvasElement(element) &&
       element->GetDocument().GetFrame() &&
       element->GetDocument().CanExecuteScripts(kNotAboutToExecuteScript);
   bool is_non_replaced_inline_elements =
       style.IsDisplayInlineType() &&
       !(style.IsDisplayReplacedType() || is_svg_root ||
-        isHTMLImageElement(element) || is_replaced_canvas);
+        IsHTMLImageElement(element) || is_replaced_canvas);
   bool is_table_row_or_column = style.IsDisplayTableRowOrColumnType();
   bool is_layout_object_needed =
       element && element->LayoutObjectIsNeeded(style);
@@ -471,15 +474,19 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   }
 }
 
-void StyleAdjuster::AdjustComputedStyle(
-    ComputedStyle& style,
-    const ComputedStyle& parent_style,
-    const ComputedStyle& layout_parent_style,
-    Element* element) {
-  if (style.Display() != EDisplay::kNone) {
-    if (element && element->IsHTMLElement())
-      AdjustStyleForHTMLElement(style, ToHTMLElement(*element));
+void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
+                                        Element* element) {
+  DCHECK(state.LayoutParentStyle());
+  DCHECK(state.ParentStyle());
+  ComputedStyle& style = state.MutableStyleRef();
+  const ComputedStyle& parent_style = *state.ParentStyle();
+  const ComputedStyle& layout_parent_style = *state.LayoutParentStyle();
 
+  if (style.Display() != EDisplay::kNone && element &&
+      element->IsHTMLElement()) {
+    AdjustStyleForHTMLElement(style, ToHTMLElement(*element));
+  }
+  if (style.Display() != EDisplay::kNone) {
     // Per the spec, position 'static' and 'relative' in the top layer compute
     // to 'absolute'.
     if (IsInTopLayer(element, style) &&
@@ -501,7 +508,7 @@ void StyleAdjuster::AdjustComputedStyle(
     AdjustStyleForFirstLetter(style);
 
     AdjustStyleForDisplay(style, layout_parent_style,
-                          element ? &element->GetDocument() : 0);
+                          element ? &element->GetDocument() : nullptr);
 
     // Paint containment forces a block formatting context, so we must coerce
     // from inline.  https://drafts.csswg.org/css-containment/#containment-paint
@@ -568,17 +575,17 @@ void StyleAdjuster::AdjustComputedStyle(
 
     // Only the root <svg> element in an SVG document fragment tree honors css
     // position.
-    if (!(isSVGSVGElement(*element) && element->parentNode() &&
+    if (!(IsSVGSVGElement(*element) && element->parentNode() &&
           !element->parentNode()->IsSVGElement()))
-      style.SetPosition(ComputedStyle::InitialPosition());
+      style.SetPosition(ComputedStyleInitialValues::InitialPosition());
 
     // SVG text layout code expects us to be a block-level style element.
-    if ((isSVGForeignObjectElement(*element) || isSVGTextElement(*element)) &&
+    if ((IsSVGForeignObjectElement(*element) || IsSVGTextElement(*element)) &&
         style.IsDisplayInlineType())
       style.SetDisplay(EDisplay::kBlock);
 
     // Columns don't apply to svg text elements.
-    if (isSVGTextElement(*element))
+    if (IsSVGTextElement(*element))
       style.ClearMultiCol();
   }
 
@@ -600,5 +607,24 @@ void StyleAdjuster::AdjustComputedStyle(
   }
 
   AdjustEffectiveTouchAction(style, parent_style, element);
+
+  bool is_media_control =
+      element && element->ShadowPseudoId().StartsWith("-webkit-media-controls");
+  if (is_media_control && style.Appearance() == kNoControlPart) {
+    // For compatibility reasons if the element is a media control and the
+    // -webkit-appearance is none then we should clear the background image.
+    if (!StyleResolver::HasAuthorBackground(state)) {
+      style.MutableBackgroundInternal().ClearImage();
+    }
+  }
+
+  // TODO(layout-dev): Once LayoutnG handles inline content editable, we should
+  // get rid of following code fragment.
+  if (RuntimeEnabledFeatures::LayoutNGEnabled() &&
+      style.UserModify() != EUserModify::kReadOnly &&
+      style.Display() == EDisplay::kInline &&
+      parent_style.UserModify() == EUserModify::kReadOnly) {
+    style.SetDisplay(EDisplay::kInlineBlock);
+  }
 }
 }  // namespace blink

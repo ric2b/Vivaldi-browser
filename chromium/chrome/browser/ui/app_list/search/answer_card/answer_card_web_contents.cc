@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/answer_card/answer_card_web_contents.h"
 
+#include <string>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/profiles/profile.h"
@@ -17,6 +19,7 @@
 #include "content/public/common/renderer_preferences.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -68,6 +71,10 @@ class SearchAnswerWebView : public views::WebView {
     AppListView::ExcludeWindowFromEventHandling(window);
 
     OnVisibilityEvent(false);
+    // Focus Behavior is originally set in WebView::SetWebContents, but
+    // overriden here because we do not want the webview to get focus.
+    if (features::IsAppListFocusEnabled())
+      SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   }
 
   void RemovedFromWidget() override {
@@ -158,6 +165,8 @@ AnswerCardWebContents::AnswerCardWebContents(Profile* profile)
 
 AnswerCardWebContents::~AnswerCardWebContents() {
   DetachFromHost();
+  web_contents_->SetDelegate(nullptr);
+  Observe(nullptr);
 }
 
 void AnswerCardWebContents::LoadURL(const GURL& url) {

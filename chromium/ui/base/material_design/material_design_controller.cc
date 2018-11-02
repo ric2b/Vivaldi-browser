@@ -9,6 +9,8 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_CHROMEOS)
@@ -25,14 +27,17 @@
 
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(OS_WIN)
+#include "base/win/win_util.h"
+#include "ui/base/win/hidden_window.h"
+#endif
+
 namespace ui {
 
 bool MaterialDesignController::is_mode_initialized_ = false;
 
 MaterialDesignController::Mode MaterialDesignController::mode_ =
     MaterialDesignController::MATERIAL_NORMAL;
-
-bool MaterialDesignController::include_secondary_ui_ = false;
 
 // static
 void MaterialDesignController::Initialize() {
@@ -46,6 +51,14 @@ void MaterialDesignController::Initialize() {
     SetMode(MATERIAL_NORMAL);
   } else if (switch_value == switches::kTopChromeMDMaterialHybrid) {
     SetMode(MATERIAL_HYBRID);
+  } else if (switch_value == switches::kTopChromeMDMaterialAuto) {
+#if defined(OS_WIN)
+    // TODO(girard): add support for switching between modes when
+    // the device switches to "tablet mode".
+    if (base::win::IsTabletDevice(nullptr, ui::GetHiddenWindow()))
+      SetMode(MATERIAL_HYBRID);
+#endif
+    SetMode(DefaultMode());
   } else {
     if (!switch_value.empty()) {
       LOG(ERROR) << "Invalid value='" << switch_value
@@ -54,9 +67,6 @@ void MaterialDesignController::Initialize() {
     }
     SetMode(DefaultMode());
   }
-
-  include_secondary_ui_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kExtendMdToSecondaryUi);
 }
 
 // static
@@ -67,7 +77,7 @@ MaterialDesignController::Mode MaterialDesignController::GetMode() {
 
 // static
 bool MaterialDesignController::IsSecondaryUiMaterial() {
-  return include_secondary_ui_;
+  return base::FeatureList::IsEnabled(features::kSecondaryUiMd);
 }
 
 // static

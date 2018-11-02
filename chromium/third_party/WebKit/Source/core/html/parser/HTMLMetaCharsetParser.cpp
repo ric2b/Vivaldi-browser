@@ -25,10 +25,10 @@
 
 #include "core/html/parser/HTMLMetaCharsetParser.h"
 
-#include "core/HTMLNames.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLParserOptions.h"
 #include "core/html/parser/HTMLTokenizer.h"
+#include "core/html_names.h"
 #include "platform/wtf/text/TextEncodingRegistry.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -37,7 +37,7 @@ namespace blink {
 using namespace HTMLNames;
 
 HTMLMetaCharsetParser::HTMLMetaCharsetParser()
-    : tokenizer_(HTMLTokenizer::Create(HTMLParserOptions(0))),
+    : tokenizer_(HTMLTokenizer::Create(HTMLParserOptions(nullptr))),
       assumed_codec_(NewTextCodec(Latin1Encoding())),
       in_head_section_(true),
       done_checking_(false) {}

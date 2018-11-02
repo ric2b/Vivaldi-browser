@@ -15,11 +15,15 @@ ConditionValidator::Result NeverConditionValidator::MeetsConditions(
     const FeatureConfig& config,
     const EventModel& event_model,
     const AvailabilityModel& availability_model,
+    const DisplayLockController& display_lock_controller,
     uint32_t current_day) const {
   return ConditionValidator::Result(false);
 }
 
-void NeverConditionValidator::NotifyIsShowing(const base::Feature& feature) {}
+void NeverConditionValidator::NotifyIsShowing(
+    const base::Feature& feature,
+    const FeatureConfig& config,
+    const std::vector<std::string>& all_feature_names) {}
 
 void NeverConditionValidator::NotifyDismissed(const base::Feature& feature) {}
 

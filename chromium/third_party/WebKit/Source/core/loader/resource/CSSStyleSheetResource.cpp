@@ -27,8 +27,8 @@
 #include "core/loader/resource/CSSStyleSheetResource.h"
 
 #include "core/css/StyleSheetContents.h"
+#include "core/frame/WebFeature.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
-#include "platform/HTTPNames.h"
 #include "platform/SharedBuffer.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/MemoryCache.h"
@@ -36,8 +36,11 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
+#include "platform/network/http_names.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityPolicy.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/TextEncoding.h"
 
 namespace blink {
@@ -59,7 +62,7 @@ CSSStyleSheetResource* CSSStyleSheetResource::CreateForTest(
     const KURL& url,
     const WTF::TextEncoding& encoding) {
   ResourceRequest request(url);
-  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  request.SetFetchCredentialsMode(network::mojom::FetchCredentialsMode::kOmit);
   ResourceLoaderOptions options;
   TextResourceDecoderOptions decoder_options(
       TextResourceDecoderOptions::kCSSContent, encoding);
@@ -73,8 +76,7 @@ CSSStyleSheetResource::CSSStyleSheetResource(
     : StyleSheetResource(resource_request,
                          kCSSStyleSheet,
                          options,
-                         decoder_options),
-      did_notify_first_data_(false) {}
+                         decoder_options) {}
 
 CSSStyleSheetResource::~CSSStyleSheetResource() {}
 
@@ -90,7 +92,7 @@ void CSSStyleSheetResource::SetParsedStyleSheetCache(
   UpdateDecodedSize();
 }
 
-DEFINE_TRACE(CSSStyleSheetResource) {
+void CSSStyleSheetResource::Trace(blink::Visitor* visitor) {
   visitor->Trace(parsed_style_sheet_cache_);
   StyleSheetResource::Trace(visitor);
 }
@@ -102,9 +104,6 @@ void CSSStyleSheetResource::DidAddClient(ResourceClient* c) {
   // 'c' if it is an instance of HTMLLinkElement. see the comment of
   // HTMLLinkElement::setCSSStyleSheet.
   Resource::DidAddClient(c);
-
-  if (HasClient(c) && did_notify_first_data_)
-    static_cast<StyleSheetResourceClient*>(c)->DidAppendFirstData(this);
 
   // |c| might be removed in didAppendFirstData, so ensure it is still a client.
   if (HasClient(c) && !IsLoading()) {
@@ -123,8 +122,9 @@ void CSSStyleSheetResource::DidAddClient(ResourceClient* c) {
 }
 
 const String CSSStyleSheetResource::SheetText(
+    const CSSParserContext* parser_context,
     MIMETypeCheck mime_type_check) const {
-  if (!CanUseSheet(mime_type_check))
+  if (!CanUseSheet(parser_context, mime_type_check))
     return String();
 
   // Use cached decoded sheet text when available
@@ -142,19 +142,7 @@ const String CSSStyleSheetResource::SheetText(
   return DecodedText();
 }
 
-void CSSStyleSheetResource::AppendData(const char* data, size_t length) {
-  Resource::AppendData(data, length);
-  if (did_notify_first_data_)
-    return;
-  ResourceClientWalker<StyleSheetResourceClient> w(Clients());
-  while (StyleSheetResourceClient* c = w.Next())
-    c->DidAppendFirstData(this);
-  did_notify_first_data_ = true;
-}
-
 void CSSStyleSheetResource::NotifyFinished() {
-  TriggerNotificationForFinishObservers();
-
   // Decode the data to find out the encoding and cache the decoded sheet text.
   if (Data())
     SetDecodedSheetText(DecodedText());
@@ -195,9 +183,37 @@ void CSSStyleSheetResource::DestroyDecodedDataForFailedRevalidation() {
   DestroyDecodedDataIfPossible();
 }
 
-bool CSSStyleSheetResource::CanUseSheet(MIMETypeCheck mime_type_check) const {
+bool CSSStyleSheetResource::CanUseSheet(const CSSParserContext* parser_context,
+                                        MIMETypeCheck mime_type_check) const {
   if (ErrorOccurred())
     return false;
+
+  // For `file:` URLs, we may need to be a little more strict than the below.
+  // Though we'll likely change this in the future, for the moment we're going
+  // to enforce a file-extension requirement on stylesheets loaded from `file:`
+  // URLs and see how far it gets us.
+  KURL sheet_url = GetResponse().Url();
+  if (sheet_url.IsLocalFile()) {
+    if (parser_context) {
+      parser_context->Count(WebFeature::kLocalCSSFile);
+    }
+    // Grab |sheet_url|'s filename's extension (if present), and check whether
+    // or not it maps to a `text/css` MIME type:
+    String extension;
+    int last_dot = sheet_url.LastPathComponent().ReverseFind('.');
+    if (last_dot != -1)
+      extension = sheet_url.LastPathComponent().Substring(last_dot + 1);
+    if (!EqualIgnoringASCIICase(
+            MIMETypeRegistry::GetMIMETypeForExtension(extension), "text/css")) {
+      if (parser_context) {
+        parser_context->CountDeprecation(
+            WebFeature::kLocalCSSFileExtensionRejected);
+      }
+      if (RuntimeEnabledFeatures::RequireCSSExtensionForFileEnabled()) {
+        return false;
+      }
+    }
+  }
 
   // This check exactly matches Firefox. Note that we grab the Content-Type
   // header directly because we want to see what the value is BEFORE content
@@ -215,7 +231,7 @@ bool CSSStyleSheetResource::CanUseSheet(MIMETypeCheck mime_type_check) const {
                                      "application/x-unknown-content-type");
 }
 
-StyleSheetContents* CSSStyleSheetResource::RestoreParsedStyleSheet(
+StyleSheetContents* CSSStyleSheetResource::CreateParsedStyleSheetFromCache(
     const CSSParserContext* context) {
   if (!parsed_style_sheet_cache_)
     return nullptr;
@@ -231,6 +247,15 @@ StyleSheetContents* CSSStyleSheetResource::RestoreParsedStyleSheet(
   // we parsed again.
   if (*parsed_style_sheet_cache_->ParserContext() != *context)
     return nullptr;
+
+  DCHECK(!parsed_style_sheet_cache_->IsLoading());
+
+  // If the stylesheet has a media query, we need to clone the cached sheet
+  // due to potential differences in the rule set.
+  if (RuntimeEnabledFeatures::CacheStyleSheetWithMediaQueriesEnabled() &&
+      parsed_style_sheet_cache_->HasMediaQueries()) {
+    return parsed_style_sheet_cache_->Copy();
+  }
 
   return parsed_style_sheet_cache_;
 }

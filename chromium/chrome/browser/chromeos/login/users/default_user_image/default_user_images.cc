@@ -26,6 +26,7 @@ namespace chromeos {
 namespace default_user_image {
 
 // Resource IDs of default user images.
+// clang-format off
 const int kDefaultImageResourceIDs[] = {
     IDR_LOGIN_DEFAULT_USER,
 
@@ -99,7 +100,13 @@ const int kDefaultImageResourceIDs[] = {
     IDR_LOGIN_DEFAULT_USER_63,
     IDR_LOGIN_DEFAULT_USER_64,
     IDR_LOGIN_DEFAULT_USER_65,
+    IDR_LOGIN_DEFAULT_USER_66,
+    IDR_LOGIN_DEFAULT_USER_67,
+    IDR_LOGIN_DEFAULT_USER_68,
+    IDR_LOGIN_DEFAULT_USER_69,
+    IDR_LOGIN_DEFAULT_USER_70,
 };
+// clang-format on
 
 const int kDefaultImagesCount = arraysize(kDefaultImageResourceIDs);
 
@@ -125,6 +132,7 @@ namespace {
 const char kDefaultUrlPrefix[] = "chrome://theme/IDR_LOGIN_DEFAULT_USER_";
 const char kZeroDefaultUrl[] = "chrome://theme/IDR_LOGIN_DEFAULT_USER";
 
+// clang-format off
 const int kDefaultImageAuthorIDs[] = {
     IDS_LOGIN_DEFAULT_USER_AUTHOR,
     IDS_LOGIN_DEFAULT_USER_AUTHOR_1,
@@ -161,9 +169,11 @@ const int kDefaultImageAuthorIDs[] = {
     IDS_LOGIN_DEFAULT_USER_AUTHOR_32,
     IDS_LOGIN_DEFAULT_USER_AUTHOR_33,
 };
+// clang-format on
 
 const int kDefaultImageAuthorMaxID = arraysize(kDefaultImageAuthorIDs);
 
+// clang-format off
 const int kDefaultImageWebsiteIDs[] = {
     IDS_LOGIN_DEFAULT_USER_WEBSITE,
     IDS_LOGIN_DEFAULT_USER_WEBSITE_1,
@@ -202,6 +212,7 @@ const int kDefaultImageWebsiteIDs[] = {
 };
 
 const int kDefaultImageWebsiteMaxID = arraysize(kDefaultImageWebsiteIDs);
+// clang-format on
 
 // IDs of default user image descriptions.
 const int kDefaultImageDescriptions[] = {
@@ -271,6 +282,11 @@ const int kDefaultImageDescriptions[] = {
     IDS_LOGIN_DEFAULT_USER_DESC_63,
     IDS_LOGIN_DEFAULT_USER_DESC_64,
     IDS_LOGIN_DEFAULT_USER_DESC_65,
+    IDS_LOGIN_DEFAULT_USER_DESC_66,
+    IDS_LOGIN_DEFAULT_USER_DESC_67,
+    IDS_LOGIN_DEFAULT_USER_DESC_68,
+    IDS_LOGIN_DEFAULT_USER_DESC_69,
+    IDS_LOGIN_DEFAULT_USER_DESC_70,
 };
 
 const int kDefaultImageDescriptionsMaxID = arraysize(kDefaultImageDescriptions);
@@ -322,7 +338,7 @@ bool IsDefaultImageUrl(const std::string& url, int* image_id) {
 
 const gfx::ImageSkia& GetDefaultImage(int index) {
   DCHECK(index >= 0 && index < kDefaultImagesCount);
-  return *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       kDefaultImageResourceIDs[index]);
 }
 

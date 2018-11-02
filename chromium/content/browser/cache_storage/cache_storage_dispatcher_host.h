@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "content/browser/bad_message.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/browser/cache_storage/cache_storage_index.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -46,8 +47,7 @@ class CONTENT_EXPORT CacheStorageDispatcherHost : public BrowserMessageFilter {
   friend class base::DeleteHelper<CacheStorageDispatcherHost>;
 
   typedef int32_t CacheID;  // TODO(jkarlin): Bump to 64 bit.
-  typedef std::map<CacheID, std::unique_ptr<CacheStorageCacheHandle>>
-      IDToCacheMap;
+  typedef std::map<CacheID, CacheStorageCacheHandle> IDToCacheMap;
   typedef std::map<std::string, std::list<storage::BlobDataHandle>>
       UUIDToBlobDataHandleList;
 
@@ -100,23 +100,22 @@ class CONTENT_EXPORT CacheStorageDispatcherHost : public BrowserMessageFilter {
   void OnCacheStorageHasCallback(int thread_id,
                                  int request_id,
                                  bool has_cache,
-                                 CacheStorageError error);
-  void OnCacheStorageOpenCallback(
-      int thread_id,
-      int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error);
+                                 blink::mojom::CacheStorageError error);
+  void OnCacheStorageOpenCallback(int thread_id,
+                                  int request_id,
+                                  CacheStorageCacheHandle cache_handle,
+                                  blink::mojom::CacheStorageError error);
   void OnCacheStorageDeleteCallback(int thread_id,
                                     int request_id,
                                     bool deleted,
-                                    CacheStorageError error);
+                                    blink::mojom::CacheStorageError error);
   void OnCacheStorageKeysCallback(int thread_id,
                                   int request_id,
                                   const CacheStorageIndex& cache_index);
   void OnCacheStorageMatchCallback(
       int thread_id,
       int request_id,
-      CacheStorageError error,
+      blink::mojom::CacheStorageError error,
       std::unique_ptr<ServiceWorkerResponse> response,
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle);
 
@@ -124,23 +123,23 @@ class CONTENT_EXPORT CacheStorageDispatcherHost : public BrowserMessageFilter {
   void OnCacheMatchCallback(
       int thread_id,
       int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error,
+      CacheStorageCacheHandle cache_handle,
+      blink::mojom::CacheStorageError error,
       std::unique_ptr<ServiceWorkerResponse> response,
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle);
   void OnCacheMatchAllCallbackAdapter(
       int thread_id,
       int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error,
+      CacheStorageCacheHandle cache_handle,
+      blink::mojom::CacheStorageError error,
       std::unique_ptr<ServiceWorkerResponse> response,
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle);
   void OnCacheMatchAllCallback(
       int thread_id,
       int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error,
-      std::unique_ptr<std::vector<ServiceWorkerResponse>> responses,
+      CacheStorageCacheHandle cache_handle,
+      blink::mojom::CacheStorageError error,
+      std::vector<ServiceWorkerResponse> responses,
       std::unique_ptr<CacheStorageCache::BlobDataHandles> blob_data_handles);
   void OnCacheMatchAll(int thread_id,
                        int request_id,
@@ -150,19 +149,20 @@ class CONTENT_EXPORT CacheStorageDispatcherHost : public BrowserMessageFilter {
   void OnCacheKeysCallback(
       int thread_id,
       int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error,
+      CacheStorageCacheHandle cache_handle,
+      blink::mojom::CacheStorageError error,
       std::unique_ptr<CacheStorageCache::Requests> requests);
-  void OnCacheBatchCallback(
-      int thread_id,
-      int request_id,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error);
+  void OnCacheBatchCallback(int thread_id,
+                            int request_id,
+                            CacheStorageCacheHandle cache_handle,
+                            blink::mojom::CacheStorageError error);
+
+  // Called when a bad message is detected while executing operations.
+  void OnBadMessage(bad_message::BadMessageReason reason);
 
   // Hangs onto a cache handle. Returns a unique cache_id. Call
   // DropCacheReference when the reference is no longer needed.
-  CacheID StoreCacheReference(
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle);
+  CacheID StoreCacheReference(CacheStorageCacheHandle cache_handle);
   void DropCacheReference(CacheID cache_id);
 
   // Stores blob handles while waiting for acknowledgement of receipt from the

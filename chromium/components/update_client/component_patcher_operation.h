@@ -18,6 +18,10 @@ namespace base {
 class DictionaryValue;
 }  // namespace base
 
+namespace service_manager {
+class Connector;
+}
+
 namespace update_client {
 
 extern const char kOp[];
@@ -27,7 +31,6 @@ extern const char kInput[];
 extern const char kPatch[];
 
 class CrxInstaller;
-class OutOfProcessPatcher;
 enum class UnpackerError;
 
 class DeltaUpdateOp : public base::RefCountedThreadSafe<DeltaUpdateOp> {
@@ -40,7 +43,7 @@ class DeltaUpdateOp : public base::RefCountedThreadSafe<DeltaUpdateOp> {
            const base::FilePath& input_dir,
            const base::FilePath& unpack_dir,
            const scoped_refptr<CrxInstaller>& installer,
-           const ComponentPatcher::Callback& callback);
+           ComponentPatcher::Callback callback);
 
  protected:
   virtual ~DeltaUpdateOp();
@@ -64,7 +67,7 @@ class DeltaUpdateOp : public base::RefCountedThreadSafe<DeltaUpdateOp> {
   // Subclasses must override DoRun to actually perform the patching operation.
   // They must call the provided callback when they have completed their
   // operations. In practice, the provided callback is always for "DoneRunning".
-  virtual void DoRun(const ComponentPatcher::Callback& callback) = 0;
+  virtual void DoRun(ComponentPatcher::Callback callback) = 0;
 
   // Callback given to subclasses for when they complete their operation.
   // Validates the output, and posts a task to the patching operation's
@@ -92,7 +95,7 @@ class DeltaUpdateOpCopy : public DeltaUpdateOp {
       const base::FilePath& input_dir,
       const scoped_refptr<CrxInstaller>& installer) override;
 
-  void DoRun(const ComponentPatcher::Callback& callback) override;
+  void DoRun(ComponentPatcher::Callback callback) override;
 
   base::FilePath input_abs_path_;
 
@@ -116,7 +119,7 @@ class DeltaUpdateOpCreate : public DeltaUpdateOp {
       const base::FilePath& input_dir,
       const scoped_refptr<CrxInstaller>& installer) override;
 
-  void DoRun(const ComponentPatcher::Callback& callback) override;
+  void DoRun(ComponentPatcher::Callback callback) override;
 
   base::FilePath patch_abs_path_;
 
@@ -129,10 +132,8 @@ class DeltaUpdateOpCreate : public DeltaUpdateOp {
 // unpacking directory.
 class DeltaUpdateOpPatch : public DeltaUpdateOp {
  public:
-  // |out_of_process_patcher| may be NULL.
-  DeltaUpdateOpPatch(
-      const std::string& operation,
-      const scoped_refptr<OutOfProcessPatcher>& out_of_process_patcher);
+  DeltaUpdateOpPatch(const std::string& operation,
+                     service_manager::Connector* connector);
 
  private:
   ~DeltaUpdateOpPatch() override;
@@ -143,23 +144,22 @@ class DeltaUpdateOpPatch : public DeltaUpdateOp {
       const base::FilePath& input_dir,
       const scoped_refptr<CrxInstaller>& installer) override;
 
-  void DoRun(const ComponentPatcher::Callback& callback) override;
+  void DoRun(ComponentPatcher::Callback callback) override;
 
   // |success_code| is the code that indicates a successful patch.
   // |result| is the code the patching operation returned.
-  void DonePatching(const ComponentPatcher::Callback& callback, int result);
+  void DonePatching(ComponentPatcher::Callback callback, int result);
 
   std::string operation_;
-  const scoped_refptr<OutOfProcessPatcher> out_of_process_patcher_;
+  service_manager::Connector* connector_;
   base::FilePath patch_abs_path_;
   base::FilePath input_abs_path_;
 
   DISALLOW_COPY_AND_ASSIGN(DeltaUpdateOpPatch);
 };
 
-DeltaUpdateOp* CreateDeltaUpdateOp(
-    const std::string& operation,
-    const scoped_refptr<OutOfProcessPatcher>& out_of_process_patcher);
+DeltaUpdateOp* CreateDeltaUpdateOp(const std::string& operation,
+                                   service_manager::Connector* connector);
 
 }  // namespace update_client
 

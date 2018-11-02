@@ -205,7 +205,7 @@ EventFactoryEvdev::CreateSystemInputInjector() {
   std::unique_ptr<DeviceEventDispatcherEvdev> proxy_dispatcher(
       new ProxyDeviceEventDispatcher(base::ThreadTaskRunnerHandle::Get(),
                                      weak_ptr_factory_.GetWeakPtr()));
-  return base::MakeUnique<InputInjectorEvdev>(std::move(proxy_dispatcher),
+  return std::make_unique<InputInjectorEvdev>(std::move(proxy_dispatcher),
                                               cursor_);
 }
 
@@ -247,22 +247,22 @@ void EventFactoryEvdev::DispatchMouseButtonEvent(
   if (params.allow_remap)
     button = button_map_.GetMappedButton(button);
 
-  int modifier = EVDEV_MODIFIER_NONE;
+  int modifier = MODIFIER_NONE;
   switch (button) {
     case BTN_LEFT:
-      modifier = EVDEV_MODIFIER_LEFT_MOUSE_BUTTON;
+      modifier = MODIFIER_LEFT_MOUSE_BUTTON;
       break;
     case BTN_RIGHT:
-      modifier = EVDEV_MODIFIER_RIGHT_MOUSE_BUTTON;
+      modifier = MODIFIER_RIGHT_MOUSE_BUTTON;
       break;
     case BTN_MIDDLE:
-      modifier = EVDEV_MODIFIER_MIDDLE_MOUSE_BUTTON;
+      modifier = MODIFIER_MIDDLE_MOUSE_BUTTON;
       break;
     case BTN_BACK:
-      modifier = EVDEV_MODIFIER_BACK_MOUSE_BUTTON;
+      modifier = MODIFIER_BACK_MOUSE_BUTTON;
       break;
     case BTN_FORWARD:
-      modifier = EVDEV_MODIFIER_FORWARD_MOUSE_BUTTON;
+      modifier = MODIFIER_FORWARD_MOUSE_BUTTON;
       break;
     default:
       return;
@@ -273,7 +273,7 @@ void EventFactoryEvdev::DispatchMouseButtonEvent(
   modifiers_.UpdateModifier(modifier, params.down);
   bool down = modifiers_.GetModifierFlags() & flag;
 
-  // Suppress nested clicks. EventModifiersEvdev counts presses, we only
+  // Suppress nested clicks. EventModifiers counts presses, we only
   // dispatch an event on 0-1 (first press) and 1-0 (last release) transitions.
   if (down == was_down)
     return;
@@ -334,9 +334,8 @@ void EventFactoryEvdev::DispatchTouchEvent(const TouchEventParams& params) {
   PointerDetails details = GetTransformedEventPointerDetails(params);
 
   // params.slot is guaranteed to be < kNumTouchEvdevSlots.
-  int touch_id = touch_id_generator_.GetGeneratedID(
-      params.device_id * kNumTouchEvdevSlots + params.slot);
-  details.id = touch_id;
+  int input_id = params.device_id * kNumTouchEvdevSlots + params.slot;
+  details.id = touch_id_generator_.GetGeneratedID(input_id);
   TouchEvent touch_event(params.type, gfx::Point(), params.timestamp, details,
                          modifiers_.GetModifierFlags() | params.flags,
                          /* angle */ 0.f);
@@ -346,7 +345,7 @@ void EventFactoryEvdev::DispatchTouchEvent(const TouchEventParams& params) {
   DispatchUiEvent(&touch_event);
 
   if (params.type == ET_TOUCH_RELEASED || params.type == ET_TOUCH_CANCELLED) {
-    touch_id_generator_.ReleaseGeneratedID(touch_event.pointer_details().id);
+    touch_id_generator_.ReleaseNumber(input_id);
   }
 }
 

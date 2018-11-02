@@ -15,6 +15,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "net/base/int128.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_packet_creator.h"
@@ -96,7 +97,11 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
                           const std::string& error_details,
                           ConnectionCloseSource source) override;
   void OnWriteBlocked() override;
-  void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
+  void OnSuccessfulVersionNegotiation(
+      const QuicTransportVersion& version) override;
+  void OnConnectivityProbeReceived(
+      const QuicSocketAddress& self_address,
+      const QuicSocketAddress& peer_address) override;
   void OnCanWrite() override;
   void OnCongestionWindowChange(QuicTime /*now*/) override {}
   void OnConnectionMigration(PeerAddressChangeType type) override {}
@@ -109,6 +114,7 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   bool HasPendingHandshake() const override;
   bool HasOpenDynamicStreams() const override;
   void OnPathDegrading() override;
+  bool AllowSelfAddressChange() const override;
 
   // QuicStreamFrameDataProducer
   bool WriteStreamData(QuicStreamId id,
@@ -132,15 +138,11 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // indicating if the fin bit was consumed.  This does not indicate the data
   // has been sent on the wire: it may have been turned into a packet and queued
   // if the socket was unexpectedly blocked.
-  // If provided, |ack_notifier_delegate| will be registered to be notified when
-  // we have seen ACKs for all packets resulting from this call.
-  virtual QuicConsumedData WritevData(
-      QuicStream* stream,
-      QuicStreamId id,
-      QuicIOVector iov,
-      QuicStreamOffset offset,
-      StreamSendingState state,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+  virtual QuicConsumedData WritevData(QuicStream* stream,
+                                      QuicStreamId id,
+                                      size_t write_length,
+                                      QuicStreamOffset offset,
+                                      StreamSendingState state);
 
   // Called by streams when they want to close the stream in both directions.
   virtual void SendRstStream(QuicStreamId id,
@@ -273,10 +275,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // Returns true if this stream should yield writes to another blocked stream.
   bool ShouldYield(QuicStreamId stream_id);
 
-  bool use_stream_notifier() const { return use_stream_notifier_; }
+  bool can_use_slices() const { return can_use_slices_; }
 
-  bool save_data_before_consumption() const {
-    return save_data_before_consumption_;
+  bool allow_multiple_acks_for_data() const {
+    return allow_multiple_acks_for_data_;
   }
 
  protected:
@@ -298,7 +300,7 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // Create a new stream to handle a locally-initiated stream.
   // Caller does not own the returned stream.
   // Returns nullptr if max streams have already been opened.
-  virtual QuicStream* CreateOutgoingDynamicStream(SpdyPriority priority) = 0;
+  virtual QuicStream* CreateOutgoingDynamicStream() = 0;
 
   // Return the reserved crypto stream.
   virtual QuicCryptoStream* GetMutableCryptoStream() = 0;
@@ -393,6 +395,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   virtual void HandleRstOnValidNonexistentStream(
       const QuicRstStreamFrame& frame);
 
+  // Returns a stateless reset token which will be included in the public reset
+  // packet.
+  virtual uint128 GetStatelessResetToken() const;
+
  private:
   friend class test::QuicSessionPeer;
 
@@ -486,11 +492,12 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
   // call stack of OnCanWrite.
   QuicStreamId currently_writing_stream_id_;
 
-  // This session is notified on every ack or loss.
-  const bool use_stream_notifier_;
+  // QUIC stream can take ownership of application data provided in reference
+  // counted memory to avoid data copy.
+  const bool can_use_slices_;
 
-  // Application data is saved before it is actually consumed.
-  const bool save_data_before_consumption_;
+  // Latched value of quic_reloadable_flag_quic_allow_multiple_acks_for_data2.
+  const bool allow_multiple_acks_for_data_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSession);
 };

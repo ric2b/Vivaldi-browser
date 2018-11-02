@@ -14,28 +14,27 @@
 #include "core/testing/sim/SimTest.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CharacterNames.h"
 
 namespace blink {
 
 class NGInlineLayoutTest : public SimTest {
  public:
-  RefPtr<NGConstraintSpace> ConstraintSpaceForElement(
-      LayoutNGBlockFlow* block_flow) {
+  scoped_refptr<NGConstraintSpace> ConstraintSpaceForElement(
+      LayoutBlockFlow* block_flow) {
     return NGConstraintSpaceBuilder(
-               FromPlatformWritingMode(block_flow->Style()->GetWritingMode()),
+               block_flow->Style()->GetWritingMode(),
                /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
         .SetAvailableSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetPercentageResolutionSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetTextDirection(block_flow->Style()->Direction())
-        .ToConstraintSpace(
-            FromPlatformWritingMode(block_flow->Style()->GetWritingMode()));
+        .ToConstraintSpace(block_flow->Style()->GetWritingMode());
   }
 };
 
 TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
-  RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
+  ScopedLayoutNGForTest layout_ng(true);
 
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
@@ -46,13 +45,12 @@ TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
   ASSERT_FALSE(Compositor().NeedsBeginFrame());
 
   Element* target = GetDocument().getElementById("target");
-  LayoutNGBlockFlow* block_flow =
-      ToLayoutNGBlockFlow(target->GetLayoutObject());
-  RefPtr<NGConstraintSpace> constraint_space =
+  LayoutBlockFlow* block_flow = ToLayoutBlockFlow(target->GetLayoutObject());
+  scoped_refptr<NGConstraintSpace> constraint_space =
       ConstraintSpaceForElement(block_flow);
   NGBlockNode node(block_flow);
 
-  RefPtr<NGLayoutResult> result =
+  scoped_refptr<NGLayoutResult> result =
       NGBlockLayoutAlgorithm(node, *constraint_space).Layout();
   EXPECT_TRUE(result);
 
@@ -61,7 +59,7 @@ TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
 }
 
 TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
-  RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
+  ScopedLayoutNGForTest layout_ng(true);
 
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
@@ -71,13 +69,12 @@ TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
   ASSERT_FALSE(Compositor().NeedsBeginFrame());
 
   Element* target = GetDocument().getElementById("target");
-  LayoutNGBlockFlow* block_flow =
-      ToLayoutNGBlockFlow(target->GetLayoutObject());
-  RefPtr<NGConstraintSpace> constraint_space =
+  LayoutBlockFlow* block_flow = ToLayoutBlockFlow(target->GetLayoutObject());
+  scoped_refptr<NGConstraintSpace> constraint_space =
       ConstraintSpaceForElement(block_flow);
   NGBlockNode node(block_flow);
 
-  RefPtr<NGLayoutResult> result =
+  scoped_refptr<NGLayoutResult> result =
       NGBlockLayoutAlgorithm(node, *constraint_space).Layout();
   EXPECT_TRUE(result);
 

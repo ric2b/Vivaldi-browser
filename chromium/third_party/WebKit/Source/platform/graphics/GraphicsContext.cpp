@@ -51,7 +51,6 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/effects/SkHighContrastFilter.h"
 #include "third_party/skia/include/effects/SkLumaColorFilter.h"
-#include "third_party/skia/include/effects/SkPictureImageFilter.h"
 #include "third_party/skia/include/effects/SkTableColorFilter.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "third_party/skia/include/utils/SkNullCanvas.h"
@@ -265,7 +264,7 @@ void GraphicsContext::BeginLayer(float opacity,
                                  SkBlendMode xfermode,
                                  const FloatRect* bounds,
                                  ColorFilter color_filter,
-                                 sk_sp<SkImageFilter> image_filter) {
+                                 sk_sp<PaintFilter> image_filter) {
   if (ContextDisabled())
     return;
 
@@ -351,17 +350,17 @@ void GraphicsContext::CompositeRecord(sk_sp<PaintRecord> record,
 
   PaintFlags flags;
   flags.setBlendMode(op);
+  flags.setFilterQuality(
+      static_cast<SkFilterQuality>(ImageInterpolationQuality()));
   canvas_->save();
-  SkRect source_bounds = src;
-  SkRect sk_bounds = dest;
-  SkMatrix transform;
-  transform.setRectToRect(source_bounds, sk_bounds, SkMatrix::kFill_ScaleToFit);
-  canvas_->concat(transform);
-  flags.setImageFilter(SkPictureImageFilter::MakeForLocalSpace(
-      ToSkPicture(record, source_bounds), source_bounds,
-      static_cast<SkFilterQuality>(ImageInterpolationQuality())));
-  canvas_->saveLayer(&source_bounds, &flags);
-  canvas_->restore();
+  canvas_->concat(
+      SkMatrix::MakeRectToRect(src, dest, SkMatrix::kFill_ScaleToFit));
+  canvas_->drawImage(PaintImageBuilder::WithDefault()
+                         .set_paint_record(record, RoundedIntRect(src),
+                                           PaintImage::GetNextContentId())
+                         .set_id(PaintImage::GetNextId())
+                         .TakePaintImage(),
+                     0, 0, &flags);
   canvas_->restore();
 }
 
@@ -523,6 +522,103 @@ void GraphicsContext::DrawInnerShadow(const FloatRoundedRect& rect,
   FillRectWithRoundedHole(outer_rect, rounded_hole, fill_color);
 }
 
+static void EnforceDotsAtEndpoints(GraphicsContext& context,
+                                   FloatPoint& p1,
+                                   FloatPoint& p2,
+                                   const int path_length,
+                                   const int width,
+                                   const PaintFlags& flags,
+                                   const bool is_vertical_line) {
+  // For narrow lines, we always want integral dot and dash sizes, and start
+  // and end points, to prevent anti-aliasing from erasing the dot effect.
+  // For 1-pixel wide lines, we must make one end a dash. Otherwise we have
+  // a little more scope to distribute the error. But we never want to reduce
+  // the size of the end dots because doing so makes corners of all-dotted
+  // paths look odd.
+  //
+  // There is no way to give custom start and end dash sizes or gaps to Skia,
+  // so if we need non-uniform gaps we need to draw the start, and maybe the
+  // end dot ourselves, and move the line start (and end) to the start/end of
+  // the second dot.
+  DCHECK_LE(width, 3);  // Width is max 3 according to StrokeIsDashed
+  int mod_4 = path_length % 4;
+  int mod_6 = path_length % 6;
+  // New start dot to be explicitly drawn, if needed, and the amount to grow the
+  // start dot and the offset for first gap.
+  bool use_start_dot = false;
+  int start_dot_growth = 0;
+  int start_line_offset = 0;
+  // New end dot to be explicitly drawn, if needed, and the amount to grow the
+  // second dot.
+  bool use_end_dot = false;
+  int end_dot_growth = 0;
+  if ((width == 1 && path_length % 2 == 0) || (width == 3 && mod_6 == 0)) {
+    // Cases where we add one pixel to the first dot.
+    use_start_dot = true;
+    start_dot_growth = 1;
+    start_line_offset = 1;
+  }
+  if ((width == 2 && (mod_4 == 0 || mod_4 == 1)) ||
+      (width == 3 && (mod_6 == 1 || mod_6 == 2))) {
+    // Cases where we drop 1 pixel from the start gap
+    use_start_dot = true;
+    start_line_offset = -1;
+  }
+  if ((width == 2 && mod_4 == 0) || (width == 3 && mod_6 == 1)) {
+    // Cases where we drop 1 pixel from the end gap
+    use_end_dot = true;
+  }
+  if ((width == 2 && mod_4 == 3) ||
+      (width == 3 && (mod_6 == 4 || mod_6 == 5))) {
+    // Cases where we add 1 pixel to the start gap
+    use_start_dot = true;
+    start_line_offset = 1;
+  }
+  if (width == 3 && mod_6 == 5) {
+    // Case where we add 1 pixel to the end gap and leave the end
+    // dot the same size.
+    use_end_dot = true;
+  } else if (width == 3 && mod_6 == 0) {
+    // Case where we add one pixel gap and one pixel to the dot at the end
+    use_end_dot = true;
+    end_dot_growth = 1;  // Moves the larger end pt for this case
+  }
+
+  if (use_start_dot || use_end_dot) {
+    PaintFlags fill_flags;
+    fill_flags.setColor(flags.getColor());
+    if (use_start_dot) {
+      SkRect start_dot;
+      if (is_vertical_line) {
+        start_dot.set(p1.X() - width / 2, p1.Y(), p1.X() + width - width / 2,
+                      p1.Y() + width + start_dot_growth);
+        p1.SetY(p1.Y() + (2 * width + start_line_offset));
+      } else {
+        start_dot.set(p1.X(), p1.Y() - width / 2,
+                      p1.X() + width + start_dot_growth,
+                      p1.Y() + width - width / 2);
+        p1.SetX(p1.X() + (2 * width + start_line_offset));
+      }
+      context.DrawRect(start_dot, fill_flags);
+    }
+    if (use_end_dot) {
+      SkRect end_dot;
+      if (is_vertical_line) {
+        end_dot.set(p2.X() - width / 2, p2.Y() - width - end_dot_growth,
+                    p2.X() + width - width / 2, p2.Y());
+        // Be sure to stop drawing before we get to the last dot
+        p2.SetY(p2.Y() - (width + end_dot_growth + 1));
+      } else {
+        end_dot.set(p2.X() - width - end_dot_growth, p2.Y() - width / 2, p2.X(),
+                    p2.Y() + width - width / 2);
+        // Be sure to stop drawing before we get to the last dot
+        p2.SetX(p2.X() - (width + end_dot_growth + 1));
+      }
+      context.DrawRect(end_dot, fill_flags);
+    }
+  }
+}
+
 void GraphicsContext::DrawLine(const IntPoint& point1, const IntPoint& point2) {
   if (ContextDisabled())
     return;
@@ -544,39 +640,31 @@ void GraphicsContext::DrawLine(const IntPoint& point1, const IntPoint& point2) {
   int length = SkScalarRoundToInt(disp.Width() + disp.Height());
   PaintFlags flags(ImmutableState()->StrokeFlags(length));
 
-  if (StrokeData::StrokeIsDashed(width, GetStrokeStyle())) {
-    // Do a rect fill of our endpoints.  This ensures we always have the
-    // appearance of being a border. We then draw the actual dotted/dashed
-    // line.
-    SkRect r1, r2;
-    r1.set(p1.X(), p1.Y(), p1.X() + width, p1.Y() + width);
-    r2.set(p2.X(), p2.Y(), p2.X() + width, p2.Y() + width);
-
-    if (is_vertical_line) {
-      r1.offset(-width / 2, 0);
-      r2.offset(-width / 2, -width);
+  if (pen_style == kDottedStroke) {
+    if (StrokeData::StrokeIsDashed(width, pen_style)) {
+      // We draw thin dotted lines as dashes and gaps that are always
+      // exactly the size of the width. When the length of the line is
+      // an odd multiple of the width, things work well because we get
+      // dots at each end of the line, but if the length is anything else,
+      // we get gaps or partial dots at the end of the line. Fix that by
+      // explicitly enforcing full dots at the ends of lines.
+      EnforceDotsAtEndpoints(*this, p1, p2, length, width, flags,
+                             is_vertical_line);
     } else {
-      r1.offset(0, -width / 2);
-      r2.offset(-width, -width / 2);
-    }
-    PaintFlags fill_flags;
-    fill_flags.setColor(flags.getColor());
-    DrawRect(r1, fill_flags);
-    DrawRect(r2, fill_flags);
-  } else if (GetStrokeStyle() == kDottedStroke) {
-    // We draw thick dotted lines with 0 length dash strokes and round endcaps,
-    // producing circles. The endcaps extend beyond the line's endpoints,
-    // so move the start and end in.
-    if (is_vertical_line) {
-      p1.SetY(p1.Y() + width / 2.f);
-      p2.SetY(p2.Y() - width / 2.f);
-    } else {
-      p1.SetX(p1.X() + width / 2.f);
-      p2.SetX(p2.X() - width / 2.f);
+      // We draw thick dotted lines with 0 length dash strokes and round
+      // endcaps, producing circles. The endcaps extend beyond the line's
+      // endpoints, so move the start and end in.
+      if (is_vertical_line) {
+        p1.SetY(p1.Y() + width / 2.f);
+        p2.SetY(p2.Y() - width / 2.f);
+      } else {
+        p1.SetX(p1.X() + width / 2.f);
+        p2.SetX(p2.X() - width / 2.f);
+      }
     }
   }
 
-  AdjustLineToPixelBoundaries(p1, p2, width, pen_style);
+  AdjustLineToPixelBoundaries(p1, p2, width);
   canvas_->drawLine(p1.X(), p1.Y(), p2.X(), p2.Y(),
                     ApplyHighContrastFilter(&flags));
 }
@@ -655,10 +743,8 @@ void GraphicsContext::DrawTextInternal(const Font& font,
   if (ContextDisabled())
     return;
 
-  if (font.DrawText(canvas_, text_info, point, device_scale_factor_,
-                    ApplyHighContrastFilter(&flags))) {
-    paint_controller_.SetTextPainted();
-  }
+  font.DrawText(canvas_, text_info, point, device_scale_factor_,
+                ApplyHighContrastFilter(&flags));
 }
 
 void GraphicsContext::DrawText(const Font& font,
@@ -669,7 +755,7 @@ void GraphicsContext::DrawText(const Font& font,
 }
 
 void GraphicsContext::DrawText(const Font& font,
-                               const TextFragmentPaintInfo& text_info,
+                               const NGTextFragmentPaintInfo& text_info,
                                const FloatPoint& point,
                                const PaintFlags& flags) {
   DrawTextInternal(font, text_info, point, flags);
@@ -688,7 +774,7 @@ void GraphicsContext::DrawTextPasses(const DrawTextFunc& draw_text) {
     PaintFlags stroke_flags(ImmutableState()->StrokeFlags());
     if (mode_flags & kTextModeFill) {
       // shadow was already applied during fill pass
-      stroke_flags.setLooper(0);
+      stroke_flags.setLooper(nullptr);
     }
     draw_text(stroke_flags);
   }
@@ -702,9 +788,8 @@ void GraphicsContext::DrawTextInternal(const Font& font,
     return;
 
   DrawTextPasses([&font, &text_info, &point, this](const PaintFlags& flags) {
-    if (font.DrawText(canvas_, text_info, point, device_scale_factor_,
-                      ApplyHighContrastFilter(&flags)))
-      paint_controller_.SetTextPainted();
+    font.DrawText(canvas_, text_info, point, device_scale_factor_,
+                  ApplyHighContrastFilter(&flags));
   });
 }
 
@@ -715,7 +800,7 @@ void GraphicsContext::DrawText(const Font& font,
 }
 
 void GraphicsContext::DrawText(const Font& font,
-                               const TextFragmentPaintInfo& text_info,
+                               const NGTextFragmentPaintInfo& text_info,
                                const FloatPoint& point) {
   DrawTextInternal(font, text_info, point);
 }
@@ -743,10 +828,11 @@ void GraphicsContext::DrawEmphasisMarks(const Font& font,
   DrawEmphasisMarksInternal(font, text_info, mark, point);
 }
 
-void GraphicsContext::DrawEmphasisMarks(const Font& font,
-                                        const TextFragmentPaintInfo& text_info,
-                                        const AtomicString& mark,
-                                        const FloatPoint& point) {
+void GraphicsContext::DrawEmphasisMarks(
+    const Font& font,
+    const NGTextFragmentPaintInfo& text_info,
+    const AtomicString& mark,
+    const FloatPoint& point) {
   DrawEmphasisMarksInternal(font, text_info, mark, point);
 }
 
@@ -783,6 +869,7 @@ void GraphicsContext::DrawHighlightForText(const Font& font,
 
 void GraphicsContext::DrawImage(
     Image* image,
+    Image::ImageDecodingMode decode_mode,
     const FloatRect& dest,
     const FloatRect* src_ptr,
     SkBlendMode op,
@@ -800,12 +887,13 @@ void GraphicsContext::DrawImage(
   if (ShouldApplyHighContrastFilterToImage(*image))
     image_flags.setColorFilter(high_contrast_filter_);
   image->Draw(canvas_, image_flags, dest, src, should_respect_image_orientation,
-              Image::kClampImageToSourceRect);
+              Image::kClampImageToSourceRect, decode_mode);
   paint_controller_.SetImagePainted();
 }
 
 void GraphicsContext::DrawImageRRect(
     Image* image,
+    Image::ImageDecodingMode decode_mode,
     const FloatRoundedRect& dest,
     const FloatRect& src_rect,
     SkBlendMode op,
@@ -814,7 +902,8 @@ void GraphicsContext::DrawImageRRect(
     return;
 
   if (!dest.IsRounded()) {
-    DrawImage(image, dest.Rect(), &src_rect, op, respect_orientation);
+    DrawImage(image, decode_mode, dest.Rect(), &src_rect, op,
+              respect_orientation);
     return;
   }
 
@@ -847,7 +936,8 @@ void GraphicsContext::DrawImageRRect(
     PaintCanvasAutoRestore auto_restore(canvas_, true);
     canvas_->clipRRect(dest, image_flags.isAntiAlias());
     image->Draw(canvas_, image_flags, dest.Rect(), src_rect,
-                respect_orientation, Image::kClampImageToSourceRect);
+                respect_orientation, Image::kClampImageToSourceRect,
+                decode_mode);
   }
 
   paint_controller_.SetImagePainted();
@@ -861,7 +951,7 @@ SkFilterQuality GraphicsContext::ComputeFilterQuality(
   if (Printing()) {
     resampling = kInterpolationNone;
   } else if (image->CurrentFrameIsLazyDecoded()) {
-    resampling = kInterpolationHigh;
+    resampling = kInterpolationDefault;
   } else {
     resampling = ComputeInterpolationQuality(
         SkScalarToFloat(src.Width()), SkScalarToFloat(src.Height()),
@@ -876,7 +966,7 @@ SkFilterQuality GraphicsContext::ComputeFilterQuality(
     }
   }
   return static_cast<SkFilterQuality>(
-      LimitInterpolationQuality(*this, resampling));
+      std::min(resampling, ImageInterpolationQuality()));
 }
 
 void GraphicsContext::DrawTiledImage(Image* image,
@@ -904,7 +994,9 @@ void GraphicsContext::DrawTiledImage(Image* image,
 
   if (h_rule == Image::kStretchTile && v_rule == Image::kStretchTile) {
     // Just do a scale.
-    DrawImage(image, dest, &src_rect, op);
+    // Since there is no way for the developer to specify decode behavior, use
+    // kSync by default.
+    DrawImage(image, Image::kSyncDecode, dest, &src_rect, op);
     return;
   }
 
@@ -1276,23 +1368,12 @@ void GraphicsContext::FillRectWithRoundedHole(
 
 void GraphicsContext::AdjustLineToPixelBoundaries(FloatPoint& p1,
                                                   FloatPoint& p2,
-                                                  float stroke_width,
-                                                  StrokeStyle pen_style) {
+                                                  float stroke_width) {
   // For odd widths, we add in 0.5 to the appropriate x/y so that the float
-  // arithmetic works out.  For example, with a border width of 3, WebKit will
+  // arithmetic works out.  For example, with a border width of 3, painting will
   // pass us (y1+y2)/2, e.g., (50+53)/2 = 103/2 = 51 when we want 51.5.  It is
   // always true that an even width gave us a perfect position, but an odd width
   // gave us a position that is off by exactly 0.5.
-  if (StrokeData::StrokeIsDashed(stroke_width, pen_style)) {
-    if (p1.X() == p2.X()) {
-      p1.SetY(p1.Y() + stroke_width);
-      p2.SetY(p2.Y() - stroke_width);
-    } else {
-      p1.SetX(p1.X() + stroke_width);
-      p2.SetX(p2.X() - stroke_width);
-    }
-  }
-
   if (static_cast<int>(stroke_width) % 2) {  // odd
     if (p1.X() == p2.X()) {
       // We're a vertical line.  Adjust our x.
@@ -1327,13 +1408,19 @@ sk_sp<SkColorFilter> GraphicsContext::WebCoreColorFilterToSkiaColorFilter(
   return nullptr;
 }
 
-bool GraphicsContext::ShouldApplyHighContrastFilterToImage(
-    const Image& image) const {
+bool GraphicsContext::ShouldApplyHighContrastFilterToImage(Image& image) {
   if (!high_contrast_filter_)
     return false;
 
-  return high_contrast_settings_.image_policy ==
-         HighContrastImagePolicy::kFilterAll;
+  switch (high_contrast_settings_.image_policy) {
+    case HighContrastImagePolicy::kFilterSmart:
+      return high_contrast_image_classifier_
+          .ShouldApplyHighContrastFilterToImage(image);
+    case HighContrastImagePolicy::kFilterAll:
+      return true;
+    default:
+      return false;
+  }
 }
 
 Color GraphicsContext::ApplyHighContrastFilter(const Color& input) const {

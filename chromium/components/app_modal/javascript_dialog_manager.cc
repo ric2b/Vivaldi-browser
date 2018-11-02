@@ -101,18 +101,53 @@ base::string16 JavaScriptDialogManager::GetTitle(
                                            &name))
     return base::UTF8ToUTF16(name);
 
-  // Otherwise, return the formatted URL. For non-standard URLs such as |data:|,
-  // just say "This page".
+  // Otherwise, return the formatted URL.
+  return GetTitleImpl(web_contents->GetURL(), alerting_frame_url);
+}
+
+namespace {
+
+// Unwraps an URL to get to an embedded URL.
+GURL UnwrapURL(const GURL& url) {
+  // GURL will unwrap filesystem:// URLs so ask it to do so.
+  const GURL* unwrapped_url = url.inner_url();
+  if (unwrapped_url)
+    return *unwrapped_url;
+
+  // GURL::inner_url() should unwrap blob: URLs but doesn't do so
+  // (https://crbug.com/690091). Therefore, do it manually.
+  //
+  // https://url.spec.whatwg.org/#origin defines the origin of a blob:// URL as
+  // the origin of the URL which results from parsing the "path", which boils
+  // down to everything after the scheme. GURL's 'GetContent()' gives us exactly
+  // that. See url::Origin()'s constructor.
+  if (url.SchemeIsBlob())
+    return GURL(url.GetContent());
+
+  return url;
+}
+
+}  // namespace
+
+// static
+base::string16 JavaScriptDialogManager::GetTitleImpl(
+    const GURL& parent_frame_url,
+    const GURL& alerting_frame_url) {
+  GURL unwrapped_parent_frame_url = UnwrapURL(parent_frame_url);
+  GURL unwrapped_alerting_frame_url = UnwrapURL(alerting_frame_url);
+
   bool is_same_origin_as_main_frame =
-      (web_contents->GetURL().GetOrigin() == alerting_frame_url.GetOrigin());
-  if (alerting_frame_url.IsStandard() && !alerting_frame_url.SchemeIsFile() &&
-      !alerting_frame_url.SchemeIsFileSystem()) {
+      (unwrapped_parent_frame_url.GetOrigin() ==
+       unwrapped_alerting_frame_url.GetOrigin());
+  if (unwrapped_alerting_frame_url.IsStandard() &&
+      !unwrapped_alerting_frame_url.SchemeIsFile()) {
 #if defined(OS_ANDROID)
     base::string16 url_string = url_formatter::FormatUrlForSecurityDisplay(
-        alerting_frame_url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+        unwrapped_alerting_frame_url,
+        url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
 #else
     base::string16 url_string = url_formatter::ElideHost(
-        alerting_frame_url, gfx::FontList(), kUrlElideWidth);
+        unwrapped_alerting_frame_url, gfx::FontList(), kUrlElideWidth);
 #endif
     return l10n_util::GetStringFUTF16(
         is_same_origin_as_main_frame ? IDS_JAVASCRIPT_MESSAGEBOX_TITLE
@@ -131,7 +166,7 @@ void JavaScriptDialogManager::RunJavaScriptDialog(
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    const DialogClosedCallback& callback,
+    DialogClosedCallback callback,
     bool* did_suppress_message) {
   *did_suppress_message = false;
 
@@ -188,21 +223,23 @@ void JavaScriptDialogManager::RunJavaScriptDialog(
       ShouldDisplaySuppressCheckbox(extra_data),
       false,  // is_before_unload_dialog
       false,  // is_reload
-      base::Bind(&JavaScriptDialogManager::OnDialogClosed,
-                 base::Unretained(this), web_contents, callback)));
+      base::BindOnce(&JavaScriptDialogManager::OnDialogClosed,
+                     base::Unretained(this), web_contents,
+                     std::move(callback))));
 }
 
 void JavaScriptDialogManager::RunBeforeUnloadDialog(
     content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     bool is_reload,
-    const DialogClosedCallback& callback) {
+    DialogClosedCallback callback) {
   ChromeJavaScriptDialogExtraData* extra_data =
       &javascript_dialog_extra_data_[web_contents];
 
   if (extra_data->suppress_javascript_messages_) {
     // If a site harassed the user enough for them to put it on mute, then it
     // lost its privilege to deny unloading.
-    callback.Run(true, base::string16());
+    std::move(callback).Run(true, base::string16());
     return;
   }
 
@@ -234,8 +271,9 @@ void JavaScriptDialogManager::RunBeforeUnloadDialog(
       ShouldDisplaySuppressCheckbox(extra_data),
       true,  // is_before_unload_dialog
       is_reload,
-      base::Bind(&JavaScriptDialogManager::OnBeforeUnloadDialogClosed,
-                 base::Unretained(this), web_contents, callback)));
+      base::BindOnce(&JavaScriptDialogManager::OnBeforeUnloadDialogClosed,
+                     base::Unretained(this), web_contents,
+                     std::move(callback))));
 }
 
 bool JavaScriptDialogManager::HandleJavaScriptDialog(
@@ -302,7 +340,7 @@ void JavaScriptDialogManager::OnBeforeUnloadDialogClosed(
       static_cast<int>(success ? StayVsLeave::LEAVE : StayVsLeave::STAY),
       static_cast<int>(StayVsLeave::MAX));
 
-  OnDialogClosed(web_contents, callback, success, user_input);
+  OnDialogClosed(web_contents, std::move(callback), success, user_input);
 }
 
 void JavaScriptDialogManager::OnDialogClosed(
@@ -317,7 +355,7 @@ void JavaScriptDialogManager::OnDialogClosed(
 
   last_close_time_ = base::TimeTicks::Now();
 
-  callback.Run(success, user_input);
+  std::move(callback).Run(success, user_input);
 }
 
 }  // namespace app_modal

@@ -36,7 +36,7 @@ CustomEvent::CustomEvent(ScriptState* script_state,
                          const AtomicString& type,
                          const CustomEventInit& initializer)
     : Event(type, initializer), detail_(this) {
-  world_ = RefPtr<DOMWrapperWorld>(script_state->World());
+  world_ = WrapRefCounted(&script_state->World());
   if (initializer.hasDetail()) {
     detail_.Set(initializer.detail().GetIsolate(),
                 initializer.detail().V8Value());
@@ -51,7 +51,7 @@ void CustomEvent::initCustomEvent(ScriptState* script_state,
                                   bool cancelable,
                                   const ScriptValue& script_value) {
   initEvent(type, can_bubble, cancelable);
-  world_ = RefPtr<DOMWrapperWorld>(script_state->World());
+  world_ = WrapRefCounted(&script_state->World());
   if (!IsBeingDispatched() && !script_value.IsEmpty())
     detail_.Set(script_value.GetIsolate(), script_value.V8Value());
 }
@@ -63,7 +63,7 @@ ScriptValue CustomEvent::detail(ScriptState* script_state) const {
   // Returns a clone of |detail_| if the world is different.
   if (!world_ || world_->GetWorldId() != script_state->World().GetWorldId()) {
     v8::Local<v8::Value> value = detail_.NewLocal(isolate);
-    RefPtr<SerializedScriptValue> serialized =
+    scoped_refptr<SerializedScriptValue> serialized =
         SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
     return ScriptValue(script_state, serialized->Deserialize(isolate));
   }
@@ -74,11 +74,11 @@ const AtomicString& CustomEvent::InterfaceName() const {
   return EventNames::CustomEvent;
 }
 
-DEFINE_TRACE(CustomEvent) {
+void CustomEvent::Trace(blink::Visitor* visitor) {
   Event::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(CustomEvent) {
+void CustomEvent::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(detail_);
   Event::TraceWrappers(visitor);
 }

@@ -11,6 +11,8 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
+#import "remoting/ios/app/remoting_theme.h"
+#import "remoting/ios/app/view_utils.h"
 
 // Applied on the left and right of the label.
 static const float kTitleMargin = 12.f;
@@ -26,20 +28,25 @@ static const float kTitleMargin = 12.f;
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
+    self.isAccessibilityElement = YES;
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.font = [MDCTypography body2Font];
-    _titleLabel.textColor = [UIColor whiteColor];
+    _titleLabel.textColor = RemotingTheme.hostListHeaderTitleColor;
     _titleLabel.backgroundColor = [UIColor clearColor];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:_titleLabel];
 
+    UILayoutGuide* safeAreaLayoutGuide =
+        remoting::SafeAreaLayoutGuideForView(self);
+
     [NSLayoutConstraint activateConstraints:@[
-      [[_titleLabel leadingAnchor] constraintEqualToAnchor:[self leadingAnchor]
-                                                  constant:kTitleMargin],
-      [[_titleLabel centerYAnchor]
-          constraintEqualToAnchor:[self centerYAnchor]],
-      [[_titleLabel trailingAnchor]
-          constraintEqualToAnchor:[self trailingAnchor]
+      [_titleLabel.leadingAnchor
+          constraintEqualToAnchor:safeAreaLayoutGuide.leadingAnchor
+                         constant:kTitleMargin],
+      [_titleLabel.centerYAnchor
+          constraintEqualToAnchor:safeAreaLayoutGuide.centerYAnchor],
+      [_titleLabel.trailingAnchor
+          constraintEqualToAnchor:safeAreaLayoutGuide.trailingAnchor
                          constant:-kTitleMargin],
     ]];
   }
@@ -52,6 +59,7 @@ static const float kTitleMargin = 12.f;
 
 - (void)setText:(NSString*)text {
   _titleLabel.text = text;
+  self.accessibilityLabel = text;
 }
 
 @end

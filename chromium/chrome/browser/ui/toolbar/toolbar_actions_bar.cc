@@ -9,7 +9,6 @@
 
 #include "base/auto_reset.h"
 #include "base/location.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -321,34 +320,13 @@ void ToolbarActionsBar::CreateActions() {
     return;
 
   {
-    // TODO(robliao): Remove ScopedTracker below once https://crbug.com/463337
-    // is fixed.
-    tracked_objects::ScopedTracker tracking_profile1(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("ToolbarActionsBar::CreateActions1"));
     // We don't redraw the view while creating actions.
     base::AutoReset<bool> layout_resetter(&suppress_layout_, true);
 
     // Get the toolbar actions.
     toolbar_actions_ = model_->CreateActions(browser_, this);
-    if (!model_->is_highlighting()) {
-      // TODO(robliao): Remove ScopedTracker below once https://crbug.com/463337
-      // is fixed.
-      tracked_objects::ScopedTracker tracking_profile2(
-          FROM_HERE_WITH_EXPLICIT_FUNCTION(
-              "ToolbarActionsBar::CreateActions2"));
-    }
-
-    if (!toolbar_actions_.empty()) {
-      // TODO(robliao): Remove ScopedTracker below once https://crbug.com/463337
-      // is fixed.
-      tracked_objects::ScopedTracker tracking_profile3(
-          FROM_HERE_WITH_EXPLICIT_FUNCTION(
-              "ToolbarActionsBar::CreateActions3"));
+    if (!toolbar_actions_.empty())
       ReorderActions();
-    }
-
-    tracked_objects::ScopedTracker tracking_profile4(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("ToolbarActionsBar::CreateActions4"));
 
     for (size_t i = 0; i < toolbar_actions_.size(); ++i)
       delegate_->AddViewForAction(toolbar_actions_[i].get(), i);
@@ -635,6 +613,17 @@ void ToolbarActionsBar::OnToolbarActionAdded(
   ResizeDelegate(gfx::Tween::LINEAR);
 }
 
+void ToolbarActionsBar::OnToolbarActionLoadFailed() {
+  // When an extension is re-uploaded, it is first unloaded from Chrome. At this
+  // point, the extension's icon is initially removed from the toolbar, leaving
+  // an empty slot in the toolbar. Then the (newer version of the) extension is
+  // loaded, and its icon populates the empty slot.
+  //
+  // If the extension failed to load, then the empty slot should be removed and
+  // hence we resize the toolbar.
+  ResizeDelegate(gfx::Tween::EASE_OUT);
+}
+
 void ToolbarActionsBar::OnToolbarActionRemoved(const std::string& action_id) {
   ToolbarActions::iterator iter = toolbar_actions_.begin();
   while (iter != toolbar_actions_.end() && (*iter)->GetId() != action_id)
@@ -766,12 +755,6 @@ void ToolbarActionsBar::OnToolbarModelInitialized() {
   // We shouldn't have any actions before the model is initialized.
   CHECK(toolbar_actions_.empty());
   CreateActions();
-
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/463337 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "ToolbarActionsBar::OnToolbarModelInitialized"));
   ResizeDelegate(gfx::Tween::EASE_OUT);
 }
 

@@ -52,7 +52,7 @@ class SyncCallback: public disk_cache::FileIOCallback {
         end_event_type_(end_event_type) {
     entry_->IncrementIoCount();
   }
-  ~SyncCallback() override {}
+  ~SyncCallback() override = default;
 
   void OnFileIOComplete(int bytes_copied) override;
   void Discard();
@@ -1047,7 +1047,7 @@ int EntryImpl::InternalReadData(int index, int offset,
 
   SyncCallback* io_callback = NULL;
   if (!callback.is_null()) {
-    io_callback = new SyncCallback(make_scoped_refptr(this), buf, callback,
+    io_callback = new SyncCallback(base::WrapRefCounted(this), buf, callback,
                                    net::NetLogEventType::ENTRY_READ_DATA);
   }
 

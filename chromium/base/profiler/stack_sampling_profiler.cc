@@ -59,7 +59,7 @@ StackSamplingProfiler::Module::Module(uintptr_t base_address,
                                       const FilePath& filename)
     : base_address(base_address), id(id), filename(filename) {}
 
-StackSamplingProfiler::Module::~Module() {}
+StackSamplingProfiler::Module::~Module() = default;
 
 // StackSamplingProfiler::Frame -----------------------------------------------
 
@@ -67,7 +67,7 @@ StackSamplingProfiler::Frame::Frame(uintptr_t instruction_pointer,
                                     size_t module_index)
     : instruction_pointer(instruction_pointer), module_index(module_index) {}
 
-StackSamplingProfiler::Frame::~Frame() {}
+StackSamplingProfiler::Frame::~Frame() = default;
 
 StackSamplingProfiler::Frame::Frame()
     : instruction_pointer(0), module_index(kUnknownModuleIndex) {
@@ -75,11 +75,11 @@ StackSamplingProfiler::Frame::Frame()
 
 // StackSamplingProfiler::Sample ----------------------------------------------
 
-StackSamplingProfiler::Sample::Sample() {}
+StackSamplingProfiler::Sample::Sample() = default;
 
 StackSamplingProfiler::Sample::Sample(const Sample& sample) = default;
 
-StackSamplingProfiler::Sample::~Sample() {}
+StackSamplingProfiler::Sample::~Sample() = default;
 
 StackSamplingProfiler::Sample::Sample(const Frame& frame) {
   frames.push_back(std::move(frame));
@@ -90,12 +90,12 @@ StackSamplingProfiler::Sample::Sample(const std::vector<Frame>& frames)
 
 // StackSamplingProfiler::CallStackProfile ------------------------------------
 
-StackSamplingProfiler::CallStackProfile::CallStackProfile() {}
+StackSamplingProfiler::CallStackProfile::CallStackProfile() = default;
 
 StackSamplingProfiler::CallStackProfile::CallStackProfile(
     CallStackProfile&& other) = default;
 
-StackSamplingProfiler::CallStackProfile::~CallStackProfile() {}
+StackSamplingProfiler::CallStackProfile::~CallStackProfile() = default;
 
 StackSamplingProfiler::CallStackProfile&
 StackSamplingProfiler::CallStackProfile::operator=(CallStackProfile&& other) =
@@ -151,7 +151,7 @@ class StackSamplingProfiler::SamplingThread : public Thread {
           callback(callback),
           finished(finished),
           native_sampler(std::move(sampler)) {}
-    ~CollectionContext() {}
+    ~CollectionContext() = default;
 
     // An identifier for the profiler associated with this collection, used to
     // uniquely identify the collection to outside interests.
@@ -231,9 +231,12 @@ class StackSamplingProfiler::SamplingThread : public Thread {
 
   // Finishes a collection and reports collected data via callback. Returns
   // the new collection params, if a new collection should be started. The
-  // |collection| should already have been removed from |active_collections_|
-  // by the caller, as this is needed to avoid flakyness in unit tests.
-  Optional<SamplingParams> FinishCollection(CollectionContext* collection);
+  // collection's |finished| waitable event will be signalled if no new params
+  // are available or |allow_collection_restart| is false. The |collection|
+  // should already have been removed from |active_collections_| by the caller,
+  // as this is needed to avoid flakyness in unit tests.
+  Optional<SamplingParams> FinishCollection(CollectionContext* collection,
+                                            bool allow_collection_restart);
 
   // Records a single sample of a collection.
   void RecordSample(CollectionContext* collection);
@@ -481,7 +484,8 @@ StackSamplingProfiler::SamplingThread::GetTaskRunnerOnSamplingThread() {
 
 Optional<StackSamplingProfiler::SamplingParams>
 StackSamplingProfiler::SamplingThread::FinishCollection(
-    CollectionContext* collection) {
+    CollectionContext* collection,
+    bool allow_collection_restart) {
   DCHECK_EQ(GetThreadId(), PlatformThread::CurrentId());
   DCHECK_EQ(0u, active_collections_.count(collection->profiler_id));
 
@@ -504,9 +508,12 @@ StackSamplingProfiler::SamplingThread::FinishCollection(
 
   // Run the associated callback, passing the collected profiles.
   Optional<SamplingParams> new_params = callback.Run(std::move(profiles));
+  if (!allow_collection_restart)
+    new_params.reset();
 
-  // Signal that this collection is finished.
-  finished->Signal();
+  // Signal that this collection is finished if it shouldn't be rescheduled.
+  if (!new_params.has_value())
+    finished->Signal();
 
   return new_params;
 }
@@ -599,7 +606,7 @@ void StackSamplingProfiler::SamplingThread::RemoveCollectionTask(int id) {
   size_t count = active_collections_.erase(id);
   DCHECK_EQ(1U, count);
 
-  FinishCollection(collection.get());
+  FinishCollection(collection.get(), false);
   ScheduleShutdownIfIdle();
 }
 
@@ -641,7 +648,7 @@ void StackSamplingProfiler::SamplingThread::PerformCollectionTask(int id) {
 
   // All capturing has completed so finish the collection. If no new params
   // are returned, a new collection should not be started.
-  Optional<SamplingParams> new_params = FinishCollection(collection);
+  Optional<SamplingParams> new_params = FinishCollection(collection, true);
   if (!new_params.has_value()) {
     // By not adding it to the task queue, the collection will "expire" (i.e.
     // no further work will be done).

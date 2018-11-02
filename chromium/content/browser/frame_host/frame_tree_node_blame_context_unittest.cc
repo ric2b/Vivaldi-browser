@@ -4,6 +4,11 @@
 
 #include "content/browser/frame_host/frame_tree_node_blame_context.h"
 
+#include <algorithm>
+#include <memory>
+#include <set>
+#include <string>
+
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/trace_event_analyzer.h"
@@ -15,7 +20,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
+#include "third_party/WebKit/common/frame_policy.h"
 
 namespace content {
 
@@ -131,11 +136,13 @@ class FrameTreeNodeBlameContextTest : public RenderViewHostImplTestHarness {
     int consumption = 0;
     for (int child_num = 1; shape[consumption++] == '('; ++child_num) {
       int child_id = self_id * 10 + child_num;
-      tree()->AddFrame(node, process_id(), child_id,
-                       blink::WebTreeScopeType::kDocument, std::string(),
-                       base::StringPrintf("uniqueName%d", child_id),
-                       blink::WebSandboxFlags::kNone,
-                       ParsedFeaturePolicyHeader(), FrameOwnerProperties());
+      tree()->AddFrame(
+          node, process_id(), child_id,
+          TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+          blink::WebTreeScopeType::kDocument, std::string(),
+          base::StringPrintf("uniqueName%d", child_id), false,
+          base::UnguessableToken::Create(), blink::FramePolicy(),
+          FrameOwnerProperties());
       FrameTreeNode* child = node->child_at(child_num - 1);
       consumption += CreateSubframes(child, child_id, shape + consumption);
     }

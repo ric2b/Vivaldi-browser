@@ -6,7 +6,7 @@
 
 import cStringIO
 import calendar
-import collections
+import contextlib
 import datetime
 import gzip
 import json
@@ -43,18 +43,17 @@ def _SaveSizeInfoToFile(size_info, file_obj):
   _LogSize(file_obj, 'header')  # For libchrome: 570 bytes.
 
   # Store a single copy of all paths and have them referenced by index.
-  # Using an OrderedDict makes the indices more repetitive (better compression).
-  path_tuples = collections.OrderedDict.fromkeys(
-      (s.object_path, s.source_path) for s in size_info.raw_symbols)
-  for i, key in enumerate(path_tuples):
-    path_tuples[key] = i
-  file_obj.write('%d\n' % len(path_tuples))
-  file_obj.writelines('%s\t%s\n' % pair for pair in path_tuples)
+  unique_path_tuples = sorted(set(
+      (s.object_path, s.source_path) for s in size_info.raw_symbols))
+  path_tuples = dict.fromkeys(unique_path_tuples)
+  for i, tup in enumerate(unique_path_tuples):
+    path_tuples[tup] = i
+  file_obj.write('%d\n' % len(unique_path_tuples))
+  file_obj.writelines('%s\t%s\n' % pair for pair in unique_path_tuples)
   _LogSize(file_obj, 'paths')  # For libchrome, adds 200kb.
 
   # Symbol counts by section.
-  by_section = size_info.raw_symbols.GroupedBySectionName().Sorted(
-      key=lambda s:(s[0].IsBss(), s[0].address, s.full_name))
+  by_section = size_info.raw_symbols.GroupedBySectionName()
   file_obj.write('%s\n' % '\t'.join(g.name for g in by_section))
   file_obj.write('%s\n' % '\t'.join(str(len(g)) for g in by_section))
 
@@ -151,6 +150,9 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
           flags_part = parts[1]
 
       full_name = parts[0]
+      # Use a bit less RAM by using the same instance for this common string.
+      if full_name == models.STRING_LITERAL_NAME:
+        full_name = models.STRING_LITERAL_NAME
       flags = int(flags_part, 16) if flags_part else 0
       num_aliases = int(aliases_part, 16) if aliases_part else 0
 
@@ -185,10 +187,18 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
                          size_path=size_path)
 
 
+@contextlib.contextmanager
+def _OpenGzipForWrite(path):
+  # Open in a way that doesn't set any gzip header fields.
+  with open(path, 'wb') as f:
+    with gzip.GzipFile(filename='', mode='wb', fileobj=f, mtime=0) as fz:
+      yield fz
+
+
 def SaveSizeInfo(size_info, path):
   """Saves |size_info| to |path}."""
   if os.environ.get('SUPERSIZE_MEASURE_GZIP') == '1':
-    with gzip.open(path, 'wb') as f:
+    with _OpenGzipForWrite(path) as f:
       _SaveSizeInfoToFile(size_info, f)
   else:
     # It is seconds faster to do gzip in a separate step. 6s -> 3.5s.
@@ -197,7 +207,7 @@ def SaveSizeInfo(size_info, path):
 
     logging.debug('Serialization complete. Gzipping...')
     stringio.seek(0)
-    with gzip.open(path, 'wb') as f:
+    with _OpenGzipForWrite(path) as f:
       shutil.copyfileobj(stringio, f)
 
 

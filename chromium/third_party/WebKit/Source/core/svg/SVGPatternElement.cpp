@@ -22,8 +22,8 @@
 
 #include "core/svg/SVGPatternElement.h"
 
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/layout/svg/LayoutSVGResourcePattern.h"
 #include "core/svg/PatternAttributes.h"
 #include "platform/transforms/AffineTransform.h"
@@ -71,7 +71,7 @@ inline SVGPatternElement::SVGPatternElement(Document& document)
   AddToPropertyMap(pattern_content_units_);
 }
 
-DEFINE_TRACE(SVGPatternElement) {
+void SVGPatternElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);
@@ -90,7 +90,7 @@ DEFINE_NODE_FACTORY(SVGPatternElement)
 void SVGPatternElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == SVGNames::patternTransformAttr) {
     AddPropertyToPresentationAttributeStyle(
         style, CSSPropertyTransform,
@@ -204,10 +204,10 @@ void SVGPatternElement::CollectPatternAttributes(
         current->HrefString(), GetTreeScope());
 
     // Only consider attached SVG pattern elements.
-    if (!isSVGPatternElement(ref_node) || !ref_node->GetLayoutObject())
+    if (!IsSVGPatternElement(ref_node) || !ref_node->GetLayoutObject())
       break;
 
-    current = toSVGPatternElement(ref_node);
+    current = ToSVGPatternElement(ref_node);
 
     // Cycle detection
     if (processed_patterns.Contains(current))

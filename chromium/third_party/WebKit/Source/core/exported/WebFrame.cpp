@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include "bindings/core/v8/WindowProxyManager.h"
-#include "core/HTMLNames.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/exported/WebRemoteFrameImpl.h"
@@ -18,12 +17,13 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html_names.h"
 #include "core/page/Page.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrameOwnerProperties.h"
-#include "public/web/WebSandboxFlags.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 
 namespace blink {
 
@@ -120,7 +120,7 @@ bool WebFrame::Swap(WebFrame* frame) {
     ToWebRemoteFrameImpl(frame)->InitializeCoreFrame(*page, owner, name);
   }
 
-  if (parent_ && old_frame->HasReceivedUserGesture())
+  if (parent_ && old_frame->HasBeenActivated())
     ToCoreFrame(*frame)->UpdateUserActivationInFrameTree();
 
   ToCoreFrame(*frame)->GetWindowProxyManager()->SetGlobalProxies(
@@ -142,7 +142,7 @@ WebSecurityOrigin WebFrame::GetSecurityOrigin() const {
 
 void WebFrame::SetFrameOwnerPolicy(
     WebSandboxFlags flags,
-    const blink::WebParsedFeaturePolicy& container_policy) {
+    const blink::ParsedFeaturePolicy& container_policy) {
   // At the moment, this is only used to replicate sandbox flags and container
   // policy for frames with a remote owner.
   RemoteFrameOwner* owner = ToRemoteFrameOwner(ToCoreFrame(*this)->Owner());
@@ -237,7 +237,7 @@ void WebFrame::AppendChild(WebFrame* child) {
 }
 
 void WebFrame::RemoveChild(WebFrame* child) {
-  child->parent_ = 0;
+  child->parent_ = nullptr;
 
   if (first_child_ == child)
     first_child_ = child->next_sibling_;
@@ -249,7 +249,7 @@ void WebFrame::RemoveChild(WebFrame* child) {
   else
     child->next_sibling_->previous_sibling_ = child->previous_sibling_;
 
-  child->previous_sibling_ = child->next_sibling_ = 0;
+  child->previous_sibling_ = child->next_sibling_ = nullptr;
 
   ToCoreFrame(*this)->Tree().InvalidateScopedChildCount();
   ToCoreFrame(*this)->GetPage()->DecrementSubframeCount();
@@ -284,12 +284,12 @@ WebFrame* WebFrame::TraverseNext() const {
   return nullptr;
 }
 
-WebFrame* WebFrame::FromFrameOwnerElement(const WebElement& web_element) {
-  Element* element = web_element;
+WebFrame* WebFrame::FromFrameOwnerElement(const WebNode& web_node) {
+  Node* node = web_node;
 
-  if (!element->IsFrameOwnerElement())
+  if (!node->IsFrameOwnerElement())
     return nullptr;
-  return FromFrame(ToHTMLFrameOwnerElement(element)->ContentFrame());
+  return FromFrame(ToHTMLFrameOwnerElement(node)->ContentFrame());
 }
 
 bool WebFrame::IsLoading() const {
@@ -300,7 +300,7 @@ bool WebFrame::IsLoading() const {
 
 WebFrame* WebFrame::FromFrame(Frame* frame) {
   if (!frame)
-    return 0;
+    return nullptr;
 
   if (frame->IsLocalFrame())
     return WebLocalFrameImpl::FromFrame(ToLocalFrame(*frame));
@@ -309,16 +309,16 @@ WebFrame* WebFrame::FromFrame(Frame* frame) {
 
 WebFrame::WebFrame(WebTreeScopeType scope)
     : scope_(scope),
-      parent_(0),
-      previous_sibling_(0),
-      next_sibling_(0),
-      first_child_(0),
-      last_child_(0),
-      opener_(0),
+      parent_(nullptr),
+      previous_sibling_(nullptr),
+      next_sibling_(nullptr),
+      first_child_(nullptr),
+      last_child_(nullptr),
+      opener_(nullptr),
       opened_frame_tracker_(new OpenedFrameTracker) {}
 
 WebFrame::~WebFrame() {
-  opened_frame_tracker_.reset(0);
+  opened_frame_tracker_.reset(nullptr);
 }
 
 void WebFrame::TraceFrame(Visitor* visitor, WebFrame* frame) {

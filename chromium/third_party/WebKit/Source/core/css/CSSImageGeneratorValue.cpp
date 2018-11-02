@@ -41,7 +41,7 @@ using cssvalue::ToCSSRadialGradientValue;
 CSSImageGeneratorValue::CSSImageGeneratorValue(ClassType class_type)
     : CSSValue(class_type) {}
 
-CSSImageGeneratorValue::~CSSImageGeneratorValue() {}
+CSSImageGeneratorValue::~CSSImageGeneratorValue() = default;
 
 void CSSImageGeneratorValue::AddClient(const ImageResourceObserver* client,
                                        const IntSize& size) {
@@ -115,29 +115,31 @@ Image* CSSImageGeneratorValue::GetImage(const ImageResourceObserver* client,
 }
 
 void CSSImageGeneratorValue::PutImage(const IntSize& size,
-                                      RefPtr<Image> image) {
+                                      scoped_refptr<Image> image) {
   images_.insert(size, std::move(image));
 }
 
-RefPtr<Image> CSSImageGeneratorValue::GetImage(
+scoped_refptr<Image> CSSImageGeneratorValue::GetImage(
     const ImageResourceObserver& client,
     const Document& document,
     const ComputedStyle& style,
-    const IntSize& size) {
+    const IntSize& container_size) {
   switch (GetClassType()) {
     case kCrossfadeClass:
-      return ToCSSCrossfadeValue(this)->GetImage(client, document, style, size);
+      return ToCSSCrossfadeValue(this)->GetImage(client, document, style,
+                                                 container_size);
     case kLinearGradientClass:
       return ToCSSLinearGradientValue(this)->GetImage(client, document, style,
-                                                      size);
+                                                      container_size);
     case kPaintClass:
-      return ToCSSPaintValue(this)->GetImage(client, document, style, size);
+      return ToCSSPaintValue(this)->GetImage(client, document, style,
+                                             container_size);
     case kRadialGradientClass:
       return ToCSSRadialGradientValue(this)->GetImage(client, document, style,
-                                                      size);
+                                                      container_size);
     case kConicGradientClass:
       return ToCSSConicGradientValue(this)->GetImage(client, document, style,
-                                                     size);
+                                                     container_size);
     default:
       NOTREACHED();
   }

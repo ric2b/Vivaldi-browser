@@ -10,13 +10,13 @@
 #include "chrome/browser/chromeos/arc/process/arc_process_service.h"
 
 #include <algorithm>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/process/process.h"
@@ -114,7 +114,7 @@ void UpdateNspidToPidMap(
 
   // Enumerate all processes under ARC init and create nspid -> pid map.
   if (arc_init_pid != kNullProcessId) {
-    std::queue<ProcessId> queue;
+    base::queue<ProcessId> queue;
     std::unordered_set<ProcessId> visited;
     queue.push(arc_init_pid);
     while (!queue.empty()) {
@@ -275,7 +275,7 @@ bool ArcProcessService::RequestAppProcessList(
   // process list, it can produce a lot of logspam when the board is ARC-ready
   // but the user has not opted into ARC. This redundant check avoids that
   // logspam.
-  if (!instance_ready_)
+  if (!connection_ready_)
     return false;
 
   mojom::ProcessInstance* process_instance = ARC_GET_INSTANCE_FOR_METHOD(
@@ -301,15 +301,15 @@ void ArcProcessService::OnReceiveProcessList(
       callback);
 }
 
-void ArcProcessService::OnInstanceReady() {
+void ArcProcessService::OnConnectionReady() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   task_runner_->PostTask(FROM_HERE, base::BindOnce(&Reset, nspid_to_pid_));
-  instance_ready_ = true;
+  connection_ready_ = true;
 }
 
-void ArcProcessService::OnInstanceClosed() {
+void ArcProcessService::OnConnectionClosed() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  instance_ready_ = false;
+  connection_ready_ = false;
 }
 
 inline ArcProcessService::NSPidToPidMap::NSPidToPidMap() {}

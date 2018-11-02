@@ -6,12 +6,12 @@
 #define CompositorMutatorImpl_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/animation/CompositorAnimator.h"
-#include "core/animation/CustomCompositorAnimationManager.h"
 #include "platform/graphics/CompositorMutator.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/HeapAllocator.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -26,24 +26,20 @@ class CompositorMutatorClient;
 // Owned by the control thread (unless threaded compositing is disabled).
 // Should be accessed only on the compositor thread.
 class CORE_EXPORT CompositorMutatorImpl final : public CompositorMutator {
-  WTF_MAKE_NONCOPYABLE(CompositorMutatorImpl);
-
  public:
   static std::unique_ptr<CompositorMutatorClient> CreateClient();
   static CompositorMutatorImpl* Create();
 
   // CompositorMutator implementation.
-  bool Mutate(double monotonic_time_now) override;
+  void Mutate(std::unique_ptr<CompositorMutatorInputState>) override;
+  // TODO(majidvp): Remove when timeline inputs are known.
+  bool HasAnimators() override;
 
   void RegisterCompositorAnimator(CompositorAnimator*);
   void UnregisterCompositorAnimator(CompositorAnimator*);
 
-  void SetNeedsMutate();
-
+  void SetMutationUpdate(std::unique_ptr<CompositorMutatorOutputState>);
   void SetClient(CompositorMutatorClient* client) { client_ = client; }
-  CustomCompositorAnimationManager* AnimationManager() {
-    return animation_manager_.get();
-  }
 
  private:
   CompositorMutatorImpl();
@@ -52,8 +48,8 @@ class CORE_EXPORT CompositorMutatorImpl final : public CompositorMutator {
       HashSet<CrossThreadPersistent<CompositorAnimator>>;
   CompositorAnimators animators_;
 
-  std::unique_ptr<CustomCompositorAnimationManager> animation_manager_;
   CompositorMutatorClient* client_;
+  DISALLOW_COPY_AND_ASSIGN(CompositorMutatorImpl);
 };
 
 }  // namespace blink

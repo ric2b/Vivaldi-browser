@@ -5,6 +5,8 @@
 #include "core/editing/SelectionTemplate.h"
 
 #include <ostream>  // NOLINT
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "platform/wtf/Assertions.h"
 
 namespace blink {
@@ -49,13 +51,13 @@ bool SelectionTemplate<Strategy>::operator!=(
 }
 
 template <typename Strategy>
-DEFINE_TRACE(SelectionTemplate<Strategy>) {
+void SelectionTemplate<Strategy>::Trace(blink::Visitor* visitor) {
   visitor->Trace(base_);
   visitor->Trace(extent_);
 }
 
 template <typename Strategy>
-const PositionTemplate<Strategy>& SelectionTemplate<Strategy>::Base() const {
+PositionTemplate<Strategy> SelectionTemplate<Strategy>::Base() const {
   DCHECK(AssertValid());
   DCHECK(!base_.IsOrphan()) << base_;
   return base_;
@@ -68,7 +70,7 @@ Document* SelectionTemplate<Strategy>::GetDocument() const {
 }
 
 template <typename Strategy>
-const PositionTemplate<Strategy>& SelectionTemplate<Strategy>::Extent() const {
+PositionTemplate<Strategy> SelectionTemplate<Strategy>::Extent() const {
   DCHECK(AssertValid());
   DCHECK(!extent_.IsOrphan()) << extent_;
   return extent_;
@@ -88,11 +90,7 @@ template <typename Strategy>
 bool SelectionTemplate<Strategy>::IsValidFor(const Document& document) const {
   if (IsNone())
     return true;
-  if (base_.GetDocument() != document)
-    return false;
-  if (extent_.GetDocument() != document)
-    return false;
-  return !base_.IsOrphan() && !extent_.IsOrphan();
+  return base_.IsValidFor(document) && extent_.IsValidFor(document);
 }
 
 template <typename Strategy>
@@ -146,14 +144,14 @@ void SelectionTemplate<Strategy>::ShowTreeForThis() const {
 #endif
 
 template <typename Strategy>
-const PositionTemplate<Strategy>&
-SelectionTemplate<Strategy>::ComputeEndPosition() const {
+PositionTemplate<Strategy> SelectionTemplate<Strategy>::ComputeEndPosition()
+    const {
   return IsBaseFirst() ? extent_ : base_;
 }
 
 template <typename Strategy>
-const PositionTemplate<Strategy>&
-SelectionTemplate<Strategy>::ComputeStartPosition() const {
+PositionTemplate<Strategy> SelectionTemplate<Strategy>::ComputeStartPosition()
+    const {
   return IsBaseFirst() ? base_ : extent_;
 }
 
@@ -411,8 +409,29 @@ SelectionTemplate<
   selection_.ResetDirectionCache();
 }
 
+SelectionInDOMTree ConvertToSelectionInDOMTree(
+    const SelectionInFlatTree& selection_in_flat_tree) {
+  return SelectionInDOMTree::Builder()
+      .SetAffinity(selection_in_flat_tree.Affinity())
+      .SetBaseAndExtent(ToPositionInDOMTree(selection_in_flat_tree.Base()),
+                        ToPositionInDOMTree(selection_in_flat_tree.Extent()))
+      .SetIsDirectional(selection_in_flat_tree.IsDirectional())
+      .Build();
+}
+
+SelectionInFlatTree ConvertToSelectionInFlatTree(
+    const SelectionInDOMTree& selection) {
+  return SelectionInFlatTree::Builder()
+      .SetAffinity(selection.Affinity())
+      .SetBaseAndExtent(ToPositionInFlatTree(selection.Base()),
+                        ToPositionInFlatTree(selection.Extent()))
+      .SetIsDirectional(selection.IsDirectional())
+      .Build();
+}
+
 template <typename Strategy>
-DEFINE_TRACE(SelectionTemplate<Strategy>::InvalidSelectionResetter) {
+void SelectionTemplate<Strategy>::InvalidSelectionResetter::Trace(
+    blink::Visitor* visitor) {
   visitor->Trace(document_);
 }
 

@@ -97,6 +97,8 @@ source_set("api") {
     "//extensions/browser:browser_sources",
     "//extensions/common/api",
     "//extensions/strings",
+    "//services/device/public/cpp/hid",
+    "//services/device/public/interfaces",
   ]
 
   # TODO(michaelpg): Move these deps to the individual APIs that require them.
@@ -105,8 +107,6 @@ source_set("api") {
     "//components/storage_monitor",
     "//device/base",
     "//device/bluetooth",
-    "//device/hid",
-    "//device/serial",
   ]
 
   if (is_chromeos) {
@@ -117,9 +117,13 @@ source_set("api") {
       "lock_screen_data/lock_screen_data_api.h",
       "lock_screen_data/lock_screen_item_storage.cc",
       "lock_screen_data/lock_screen_item_storage.h",
+      "lock_screen_data/lock_screen_value_store_migrator.h",
+      "lock_screen_data/lock_screen_value_store_migrator_impl.cc",
+      "lock_screen_data/lock_screen_value_store_migrator_impl.h",
       "lock_screen_data/operation_result.h",
       "media_perception_private/conversion_utils.cc",
       "media_perception_private/conversion_utils.h",
+      "media_perception_private/media_perception_api_delegate.h",
       "media_perception_private/media_perception_api_manager.cc",
       "media_perception_private/media_perception_api_manager.h",
       "media_perception_private/media_perception_private_api.cc",
@@ -152,7 +156,6 @@ json_schema_api("api_registration") {
 
   deps = [
     ":api",
-    "//device/serial",
     "//extensions/common/api",
     "//skia",
   ]

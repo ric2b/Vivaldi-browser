@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/pepper/content_browser_pepper_host_factory.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
@@ -53,7 +52,7 @@ using ppapi::TCPSocketVersion;
 
 namespace {
 
-size_t g_num_instances = 0;
+size_t g_num_tcp_filter_instances = 0;
 
 }  // namespace
 
@@ -78,7 +77,7 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
       rcvbuf_size_(0),
       sndbuf_size_(0),
       address_index_(0),
-      socket_(new net::TCPSocket(NULL, NULL, net::NetLogSource())),
+      socket_(new net::TCPSocket(nullptr, nullptr, net::NetLogSource())),
       ssl_context_helper_(host->ssl_context_helper()),
       pending_accept_(false),
       pending_read_on_unthrottle_(false),
@@ -88,7 +87,7 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
   DCHECK(host);
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  ++g_num_instances;
+  ++g_num_tcp_filter_instances;
   host_->AddInstanceObserver(instance_, this);
   if (!host->GetRenderFrameIDsForInstance(
           instance, &render_process_id_, &render_frame_id_)) {
@@ -106,7 +105,7 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
       render_process_id_(0),
       render_frame_id_(0),
       host_(host),
-      factory_(NULL),
+      factory_(nullptr),
       instance_(instance),
       state_(TCPSocketState::CONNECTED),
       end_of_file_reached_(false),
@@ -126,7 +125,7 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
   DCHECK_NE(version, ppapi::TCP_SOCKET_VERSION_1_0);
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  ++g_num_instances;
+  ++g_num_tcp_filter_instances;
   host_->AddInstanceObserver(instance_, this);
   if (!host->GetRenderFrameIDsForInstance(
           instance, &render_process_id_, &render_frame_id_)) {
@@ -142,12 +141,12 @@ PepperTCPSocketMessageFilter::~PepperTCPSocketMessageFilter() {
     socket_->Close();
   if (ssl_socket_)
     ssl_socket_->Disconnect();
-  --g_num_instances;
+  --g_num_tcp_filter_instances;
 }
 
 // static
 size_t PepperTCPSocketMessageFilter::GetNumInstances() {
-  return g_num_instances;
+  return g_num_tcp_filter_instances;
 }
 
 scoped_refptr<base::TaskRunner>
@@ -167,7 +166,7 @@ PepperTCPSocketMessageFilter::OverrideTaskRunnerForMessage(
     case PpapiHostMsg_TCPSocket_SetOption::ID:
       return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   }
-  return NULL;
+  return nullptr;
 }
 
 int32_t PepperTCPSocketMessageFilter::OnResourceMessageReceived(
@@ -223,11 +222,9 @@ int32_t PepperTCPSocketMessageFilter::OnMsgBind(
     return PP_ERROR_NOACCESS;
   }
 
-  if (!pepper_socket_utils::CanUseSocketAPIs(external_plugin_,
-                                             false /* private_api */,
-                                             NULL,
-                                             render_process_id_,
-                                             render_frame_id_)) {
+  if (!pepper_socket_utils::CanUseSocketAPIs(
+          external_plugin_, false /* private_api */, nullptr,
+          render_process_id_, render_frame_id_)) {
     return PP_ERROR_NOACCESS;
   }
 
@@ -799,11 +796,6 @@ void PepperTCPSocketMessageFilter::OnConnectCompleted(
     int net_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // TODO(rvargas): Remove ScopedTracker below once crbug.com/462784 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "462784 PepperTCPSocketMessageFilter::OnConnectCompleted"));
-
   if (!state_.IsPending(TCPSocketState::CONNECT)) {
     DCHECK(state_.state() == TCPSocketState::CLOSED);
     SendConnectError(context, PP_ERROR_FAILED);
@@ -854,7 +846,7 @@ void PepperTCPSocketMessageFilter::OnConnectCompleted(
     // We have to recreate |socket_| because it doesn't allow a second connect
     // attempt. We won't lose any state such as bound address or set options,
     // because in the private or v1.0 API, connect must be the first operation.
-    socket_.reset(new net::TCPSocket(NULL, NULL, net::NetLogSource()));
+    socket_.reset(new net::TCPSocket(nullptr, nullptr, net::NetLogSource()));
 
     if (address_index_ + 1 < address_list_.size()) {
       DCHECK_EQ(version_, ppapi::TCP_SOCKET_VERSION_PRIVATE);
@@ -906,7 +898,7 @@ void PepperTCPSocketMessageFilter::OnReadCompleted(
   } else {
     SendReadError(context, NetErrorToPepperError(net_result));
   }
-  read_buffer_ = NULL;
+  read_buffer_ = nullptr;
 }
 
 void PepperTCPSocketMessageFilter::OnWriteCompleted(
@@ -931,8 +923,8 @@ void PepperTCPSocketMessageFilter::OnWriteCompleted(
   else
     SendWriteReply(context, NetErrorToPepperError(net_result));
 
-  write_buffer_ = NULL;
-  write_buffer_base_ = NULL;
+  write_buffer_ = nullptr;
+  write_buffer_base_ = nullptr;
 }
 
 void PepperTCPSocketMessageFilter::OnListenCompleted(

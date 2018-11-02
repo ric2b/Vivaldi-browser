@@ -6,16 +6,19 @@
 #define FetchResponseData_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "public/platform/WebCORS.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-blink.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -26,20 +29,7 @@ class WebServiceWorkerResponse;
 
 class MODULES_EXPORT FetchResponseData final
     : public GarbageCollectedFinalized<FetchResponseData> {
-  WTF_MAKE_NONCOPYABLE(FetchResponseData);
-
  public:
-  // "A response has an associated type which is one of basic, CORS, default,
-  // error, opaque, and opaqueredirect. Unless stated otherwise, it is
-  // default."
-  enum Type {
-    kBasicType,
-    kCORSType,
-    kDefaultType,
-    kErrorType,
-    kOpaqueType,
-    kOpaqueRedirectType
-  };
   // "A response can have an associated termination reason which is one of
   // end-user abort, fatal, and timeout."
   enum TerminationReason {
@@ -71,7 +61,7 @@ class MODULES_EXPORT FetchResponseData final
 
   FetchResponseData* Clone(ScriptState*);
 
-  Type GetType() const { return type_; }
+  network::mojom::FetchResponseType GetType() const { return type_; }
   const KURL* Url() const;
   unsigned short Status() const { return status_; }
   AtomicString StatusMessage() const { return status_message_; }
@@ -116,12 +106,14 @@ class MODULES_EXPORT FetchResponseData final
   void PopulateWebServiceWorkerResponse(
       WebServiceWorkerResponse& /* response */);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
-  FetchResponseData(Type, unsigned short, AtomicString);
+  FetchResponseData(network::mojom::FetchResponseType,
+                    unsigned short,
+                    AtomicString);
 
-  Type type_;
+  network::mojom::FetchResponseType type_;
   std::unique_ptr<TerminationReason> termination_reason_;
   Vector<KURL> url_list_;
   unsigned short status_;
@@ -133,6 +125,8 @@ class MODULES_EXPORT FetchResponseData final
   Time response_time_;
   String cache_storage_cache_name_;
   WebHTTPHeaderSet cors_exposed_header_names_;
+
+  DISALLOW_COPY_AND_ASSIGN(FetchResponseData);
 };
 
 }  // namespace blink

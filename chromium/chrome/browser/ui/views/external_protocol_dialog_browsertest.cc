@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/external_protocol_dialog.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -40,7 +41,7 @@ class ExternalProtocolDialogTestApi {
 }  // namespace test
 
 // Wrapper dialog delegate that sets |called|, |accept|, |cancel|, and
-// |dont_block| bools based on what is called by the ExternalProtocolDialog.
+// |remember| bools based on what is called by the ExternalProtocolDialog.
 class TestExternalProtocolDialogDelegate
     : public ExternalProtocolDialogDelegate {
  public:
@@ -49,36 +50,24 @@ class TestExternalProtocolDialogDelegate
                                      int routing_id,
                                      bool* called,
                                      bool* accept,
-                                     bool* cancel,
-                                     bool* dont_block)
+                                     bool* remember)
       : ExternalProtocolDialogDelegate(url, render_process_host_id, routing_id),
         called_(called),
         accept_(accept),
-        cancel_(cancel),
-        dont_block_(dont_block) {}
+        remember_(remember) {}
 
   // ExternalProtocolDialogDelegate:
-  void DoAccept(const GURL& url, bool dont_block) const override {
+  void DoAccept(const GURL& url, bool remember) const override {
     // Don't call the base impl because it will actually launch |url|.
     *called_ = true;
     *accept_ = true;
-    *cancel_ = false;
-    *dont_block_ = dont_block;
-  }
-
-  void DoCancel(const GURL& url, bool dont_block) const override {
-    // Don't call the base impl because it will actually launch |url|.
-    *called_ = true;
-    *accept_ = false;
-    *cancel_ = true;
-    *dont_block_ = dont_block;
+    *remember_ = remember;
   }
 
  private:
   bool* called_;
   bool* accept_;
-  bool* cancel_;
-  bool* dont_block_;
+  bool* remember_;
 
   DISALLOW_COPY_AND_ASSIGN(TestExternalProtocolDialogDelegate);
 };
@@ -91,13 +80,15 @@ class ExternalProtocolDialogBrowserTest : public DialogBrowserTest {
   void ShowDialog(const std::string& name = "") override {
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    int render_process_host_id = web_contents->GetRenderProcessHost()->GetID();
-    int routing_id = web_contents->GetRenderViewHost()->GetRoutingID();
+    int render_view_process_id =
+        web_contents->GetRenderViewHost()->GetProcess()->GetID();
+    int render_view_routing_id =
+        web_contents->GetRenderViewHost()->GetRoutingID();
     dialog_ = new ExternalProtocolDialog(
         base::MakeUnique<TestExternalProtocolDialogDelegate>(
-            GURL("telnet://12345"), render_process_host_id, routing_id,
-            &called_, &accept_, &cancel_, &dont_block_),
-        render_process_host_id, routing_id);
+            GURL("telnet://12345"), render_view_process_id,
+            render_view_routing_id, &called_, &accept_, &remember_),
+        render_view_process_id, render_view_routing_id);
   }
 
   void SetChecked(bool checked) {
@@ -110,8 +101,7 @@ class ExternalProtocolDialogBrowserTest : public DialogBrowserTest {
   ExternalProtocolDialog* dialog_ = nullptr;
   bool called_ = false;
   bool accept_ = false;
-  bool cancel_ = false;
-  bool dont_block_ = false;
+  bool remember_ = false;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ExternalProtocolDialogBrowserTest);
@@ -122,10 +112,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest, TestAccept) {
   EXPECT_TRUE(dialog_->Accept());
   EXPECT_TRUE(called_);
   EXPECT_TRUE(accept_);
-  EXPECT_FALSE(cancel_);
-  EXPECT_FALSE(dont_block_);
-  histogram_tester_.ExpectBucketCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 0 /* false */, 1);
+  EXPECT_FALSE(remember_);
   histogram_tester_.ExpectBucketCount(
       ExternalProtocolHandler::kHandleStateMetric,
       ExternalProtocolHandler::LAUNCH, 1);
@@ -138,10 +125,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest,
   EXPECT_TRUE(dialog_->Accept());
   EXPECT_TRUE(called_);
   EXPECT_TRUE(accept_);
-  EXPECT_FALSE(cancel_);
-  EXPECT_TRUE(dont_block_);
-  histogram_tester_.ExpectBucketCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 1 /* true */, 1);
+  EXPECT_TRUE(remember_);
   histogram_tester_.ExpectBucketCount(
       ExternalProtocolHandler::kHandleStateMetric,
       ExternalProtocolHandler::CHECKED_LAUNCH, 1);
@@ -150,12 +134,9 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest,
 IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest, TestCancel) {
   ShowDialog();
   EXPECT_TRUE(dialog_->Cancel());
-  EXPECT_TRUE(called_);
+  EXPECT_FALSE(called_);
   EXPECT_FALSE(accept_);
-  EXPECT_TRUE(cancel_);
-  EXPECT_FALSE(dont_block_);
-  histogram_tester_.ExpectBucketCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 0 /* false */, 1);
+  EXPECT_FALSE(remember_);
   histogram_tester_.ExpectBucketCount(
       ExternalProtocolHandler::kHandleStateMetric,
       ExternalProtocolHandler::DONT_LAUNCH, 1);
@@ -166,47 +147,38 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest,
   ShowDialog();
   SetChecked(true);
   EXPECT_TRUE(dialog_->Cancel());
-  EXPECT_TRUE(called_);
+  EXPECT_FALSE(called_);
   EXPECT_FALSE(accept_);
-  EXPECT_TRUE(cancel_);
-  EXPECT_TRUE(dont_block_);
-  histogram_tester_.ExpectBucketCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 1 /* true */, 1);
+  EXPECT_FALSE(remember_);
   histogram_tester_.ExpectBucketCount(
       ExternalProtocolHandler::kHandleStateMetric,
-      ExternalProtocolHandler::CHECKED_DONT_LAUNCH, 1);
+      ExternalProtocolHandler::DONT_LAUNCH, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest, TestClose) {
-  // Closing the dialog should always call DoCancel() with |dont_block| = false.
+  // Closing the dialog should be the same as canceling, except for histograms.
   ShowDialog();
   EXPECT_TRUE(dialog_->Close());
-  EXPECT_TRUE(called_);
+  EXPECT_FALSE(called_);
   EXPECT_FALSE(accept_);
-  EXPECT_TRUE(cancel_);
-  EXPECT_FALSE(dont_block_);
-  // No histogram data
-  histogram_tester_.ExpectTotalCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 0);
-  histogram_tester_.ExpectTotalCount(
-      ExternalProtocolHandler::kHandleStateMetric, 0);
+  EXPECT_FALSE(remember_);
+  histogram_tester_.ExpectBucketCount(
+      ExternalProtocolHandler::kHandleStateMetric,
+      ExternalProtocolHandler::DONT_LAUNCH, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest,
                        TestCloseWithChecked) {
-  // Closing the dialog should always call DoCancel() with |dont_block| = false.
+  // Closing the dialog should be the same as canceling, except for histograms.
   ShowDialog();
   SetChecked(true);
   EXPECT_TRUE(dialog_->Close());
-  EXPECT_TRUE(called_);
+  EXPECT_FALSE(called_);
   EXPECT_FALSE(accept_);
-  EXPECT_TRUE(cancel_);
-  EXPECT_FALSE(dont_block_);
-  // No histogram data
-  histogram_tester_.ExpectTotalCount(
-      ExternalProtocolHandler::kRememberCheckboxMetric, 0);
-  histogram_tester_.ExpectTotalCount(
-      ExternalProtocolHandler::kHandleStateMetric, 0);
+  EXPECT_FALSE(remember_);
+  histogram_tester_.ExpectBucketCount(
+      ExternalProtocolHandler::kHandleStateMetric,
+      ExternalProtocolHandler::DONT_LAUNCH, 1);
 }
 
 // Invokes a dialog that asks the user if an external application is allowed to

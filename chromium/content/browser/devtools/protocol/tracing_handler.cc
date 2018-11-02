@@ -4,7 +4,13 @@
 
 #include "content/browser/devtools/protocol/tracing_handler.h"
 
+#include <algorithm>
 #include <cmath>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
@@ -22,6 +28,7 @@
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
+#include "services/resource_coordinator/public/interfaces/tracing/tracing_constants.mojom.h"
 
 namespace content {
 namespace protocol {
@@ -71,27 +78,28 @@ std::unique_ptr<base::Value> ConvertDictKeyStyle(const base::Value& value) {
   return value.CreateDeepCopy();
 }
 
-class DevToolsTraceSinkProxy : public TracingController::TraceDataSink {
+class DevToolsTraceEndpointProxy : public TracingController::TraceDataEndpoint {
  public:
-  explicit DevToolsTraceSinkProxy(base::WeakPtr<TracingHandler> handler)
+  explicit DevToolsTraceEndpointProxy(base::WeakPtr<TracingHandler> handler)
       : tracing_handler_(handler) {}
 
-  void AddTraceChunk(const std::string& chunk) override {
+  void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
     if (TracingHandler* h = tracing_handler_.get())
-      h->OnTraceDataCollected(chunk);
+      h->OnTraceDataCollected(std::move(chunk));
   }
-  void Close() override {
+  void ReceiveTraceFinalContents(
+      std::unique_ptr<const base::DictionaryValue> metadata) override {
     if (TracingHandler* h = tracing_handler_.get())
       h->OnTraceComplete();
   }
 
  private:
-  ~DevToolsTraceSinkProxy() override {}
+  ~DevToolsTraceEndpointProxy() override {}
 
   base::WeakPtr<TracingHandler> tracing_handler_;
 };
 
-class DevToolsStreamEndpoint : public TraceDataEndpoint {
+class DevToolsStreamEndpoint : public TracingController::TraceDataEndpoint {
  public:
   explicit DevToolsStreamEndpoint(
       base::WeakPtr<TracingHandler> handler,
@@ -145,13 +153,14 @@ void TracingHandler::Wire(UberDispatcher* dispatcher) {
 
 Response TracingHandler::Disable() {
   if (did_initiate_recording_)
-    StopTracing(scoped_refptr<TracingController::TraceDataSink>());
+    StopTracing(nullptr, "");
   return Response::OK();
 }
 
-void TracingHandler::OnTraceDataCollected(const std::string& trace_fragment) {
+void TracingHandler::OnTraceDataCollected(
+    std::unique_ptr<std::string> trace_fragment) {
   const std::string valid_trace_fragment =
-      UpdateTraceDataBuffer(trace_fragment);
+      UpdateTraceDataBuffer(*trace_fragment);
   if (valid_trace_fragment.empty())
     return;
 
@@ -161,15 +170,16 @@ void TracingHandler::OnTraceDataCollected(const std::string& trace_fragment) {
       "{ \"method\": \"Tracing.dataCollected\", \"params\": { \"value\": [");
   const size_t messageSuffixSize = 10;
   message.reserve(message.size() + valid_trace_fragment.size() +
-                  messageSuffixSize);
-  message += valid_trace_fragment;
+                  messageSuffixSize - trace_data_buffer_state_.offset);
+  message.append(valid_trace_fragment.c_str() +
+                 trace_data_buffer_state_.offset);
   message += "] } }";
   frontend_->sendRawNotification(message);
 }
 
 void TracingHandler::OnTraceComplete() {
   if (!trace_data_buffer_state_.data.empty())
-    OnTraceDataCollected("");
+    OnTraceDataCollected(std::make_unique<std::string>(""));
 
   DCHECK(trace_data_buffer_state_.data.empty());
   DCHECK_EQ(0u, trace_data_buffer_state_.pos);
@@ -183,13 +193,24 @@ void TracingHandler::OnTraceComplete() {
 std::string TracingHandler::UpdateTraceDataBuffer(
     const std::string& trace_fragment) {
   size_t end = 0;
+  size_t last_open = 0;
   TraceDataBufferState& state = trace_data_buffer_state_;
+  state.offset = 0;
+  bool update_offset = state.open_braces == 0;
   for (; state.pos < trace_fragment.size(); ++state.pos) {
     char c = trace_fragment[state.pos];
     switch (c) {
       case '{':
-        if (!state.in_string && !state.slashed)
+        if (!state.in_string && !state.slashed) {
           state.open_braces++;
+          if (state.open_braces == 1) {
+            last_open = state.data.size() + state.pos;
+            if (update_offset) {
+              state.offset = last_open;
+              update_offset = false;
+            }
+          }
+        }
         break;
       case '}':
         if (!state.in_string && !state.slashed) {
@@ -219,13 +240,9 @@ std::string TracingHandler::UpdateTraceDataBuffer(
   // Next starting position is usually 0 except when we are in the middle of
   // processing a unicode character, i.e. \uxxxx.
   state.pos -= trace_fragment.size();
-  std::string complete_str = state.data + trace_fragment;
 
-  // Skip over commas between objects so that the next valid prefix does not
-  // start with a comma.
-  size_t next_start = complete_str.find('{', end);
-  state.data =
-      next_start == std::string::npos ? "" : complete_str.substr(next_start);
+  std::string complete_str = state.data + trace_fragment;
+  state.data = complete_str.substr(std::max(end, last_open));
 
   complete_str.resize(end);
   return complete_str;
@@ -300,16 +317,17 @@ void TracingHandler::End(std::unique_ptr<EndCallback> callback) {
     return;
   }
 
-  scoped_refptr<TracingController::TraceDataSink> sink;
+  scoped_refptr<TracingController::TraceDataEndpoint> endpoint;
   if (return_as_stream_) {
-    sink = TracingControllerImpl::CreateJSONSink(new DevToolsStreamEndpoint(
-        weak_factory_.GetWeakPtr(), io_context_->CreateTempFileBackedStream()));
+    endpoint = new DevToolsStreamEndpoint(
+        weak_factory_.GetWeakPtr(), io_context_->CreateTempFileBackedStream());
+    StopTracing(endpoint, "");
   } else {
     // Reset the trace data buffer state.
     trace_data_buffer_state_ = TracingHandler::TraceDataBufferState();
-    sink = new DevToolsTraceSinkProxy(weak_factory_.GetWeakPtr());
+    endpoint = new DevToolsTraceEndpointProxy(weak_factory_.GetWeakPtr());
+    StopTracing(endpoint, tracing::mojom::kChromeTraceEventLabel);
   }
-  StopTracing(sink);
   // If inspected target is a render process Tracing.end will be handled by
   // tracing agent in the renderer.
   if (target_ == Renderer)
@@ -379,11 +397,7 @@ void TracingHandler::OnMemoryDumpFinished(
 Response TracingHandler::RecordClockSyncMarker(const std::string& sync_id) {
   if (!IsTracing())
     return Response::Error("Tracing is not started");
-
-  TracingControllerImpl::GetInstance()->RecordClockSyncMarker(
-      sync_id,
-      base::trace_event::TracingAgent::RecordClockSyncMarkerCallback());
-
+  TRACE_EVENT_CLOCK_SYNC_RECEIVER(sync_id);
   return Response::OK();
 }
 
@@ -406,9 +420,10 @@ void TracingHandler::SetupTimer(double usage_reporting_interval) {
 }
 
 void TracingHandler::StopTracing(
-    const scoped_refptr<TracingController::TraceDataSink>& trace_data_sink) {
+    const scoped_refptr<TracingController::TraceDataEndpoint>& endpoint,
+    const std::string& agent_label) {
   buffer_usage_poll_timer_.reset();
-  TracingController::GetInstance()->StopTracing(trace_data_sink);
+  TracingController::GetInstance()->StopTracing(endpoint, agent_label);
   did_initiate_recording_ = false;
 }
 

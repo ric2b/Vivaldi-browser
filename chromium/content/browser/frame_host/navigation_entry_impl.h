@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
@@ -103,7 +104,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
 #if defined(OS_ANDROID)
   void SetDataURLAsString(
       scoped_refptr<base::RefCountedString> data_url) override;
-  const scoped_refptr<const base::RefCountedString> GetDataURLAsString()
+  const scoped_refptr<const base::RefCountedString>& GetDataURLAsString()
       const override;
 #endif
   void SetReferrer(const Referrer& referrer) override;
@@ -211,6 +212,10 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
     return frame_tree_.get();
   }
 
+  // Finds the TreeNode associated with |frame_tree_node|, if any.
+  NavigationEntryImpl::TreeNode* GetTreeNode(
+      FrameTreeNode* frame_tree_node) const;
+
   // Finds the TreeNode associated with |frame_tree_node_id| to add or update
   // its FrameNavigationEntry.  A new FrameNavigationEntry is added if none
   // exists, or else the existing one (which might be shared with other
@@ -252,7 +257,12 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   // |frame_tree_node|, and all of their children. There should be at most one,
   // since collisions are avoided but leave old FrameNavigationEntries in the
   // tree after their frame has been detached.
-  void ClearStaleFrameEntriesForNewFrame(FrameTreeNode* frame_tree_node);
+  //
+  // If |only_if_different_position| is specified, then the removal is only
+  // done if the found FNE is in a different tree position than the
+  // |frame_tree_node|.
+  void RemoveEntryForFrame(FrameTreeNode* frame_tree_node,
+                           bool only_if_different_position);
 
   void set_unique_id(int unique_id) {
     unique_id_ = unique_id;
@@ -409,16 +419,12 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
     return has_user_gesture_;
   }
 
-  void set_has_user_gesture (bool has_user_gesture) {
+  void set_has_user_gesture(bool has_user_gesture) {
     has_user_gesture_ = has_user_gesture;
   }
 #endif
 
  private:
-  // Finds the TreeNode associated with |frame_tree_node|, if any.
-  NavigationEntryImpl::TreeNode* FindFrameEntry(
-      FrameTreeNode* frame_tree_node) const;
-
   // WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
   // Session/Tab restore save portions of this class so that it can be recreated
   // later. If you add a new field that needs to be persisted you'll have to

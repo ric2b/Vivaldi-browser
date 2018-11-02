@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -23,8 +24,7 @@ class MockInputFileManager {
  public:
   typedef base::Callback<void(const ParseNode*)> Callback;
 
-  MockInputFileManager() {
-  }
+  MockInputFileManager() = default;
 
   LoaderImpl::AsyncLoadFileCallback GetCallback();
 
@@ -68,8 +68,8 @@ LoaderImpl::AsyncLoadFileCallback MockInputFileManager::GetCallback() {
 // Sets a given response for a given source file.
 void MockInputFileManager::AddCannedResponse(const SourceFile& source_file,
                                              const std::string& source) {
-  std::unique_ptr<CannedResult> canned(new CannedResult);
-  canned->input_file.reset(new InputFile(source_file));
+  std::unique_ptr<CannedResult> canned = std::make_unique<CannedResult>();
+  canned->input_file = std::make_unique<InputFile>(source_file);
   canned->input_file->SetContents(source);
 
   // Tokenize.

@@ -26,11 +26,11 @@
 #ifndef SimplifiedBackwardsTextIterator_h
 #define SimplifiedBackwardsTextIterator_h
 
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/Position.h"
+#include "core/editing/Forward.h"
 #include "core/editing/iterators/BackwardsTextBuffer.h"
 #include "core/editing/iterators/FullyClippedStateStack.h"
 #include "core/editing/iterators/TextIteratorBehavior.h"
+#include "core/editing/iterators/TextIteratorTextState.h"
 #include "platform/heap/Heap.h"
 
 namespace blink {
@@ -45,21 +45,25 @@ class CORE_TEMPLATE_CLASS_EXPORT SimplifiedBackwardsTextIteratorAlgorithm {
   STACK_ALLOCATED();
 
  public:
+  // Note: Usage of |behavior| should be limited, e.g.
+  //  - EmitsObjectReplacementCharacter
+  //  - StopsOnFormControls
+  // Please ask editing-dev if you want to use other behaviors.
   SimplifiedBackwardsTextIteratorAlgorithm(
       const EphemeralRangeTemplate<Strategy>&,
       const TextIteratorBehavior& = TextIteratorBehavior());
 
-  bool AtEnd() const { return !position_node_ || should_stop_; }
+  bool AtEnd() const { return !text_state_.PositionNode() || should_stop_; }
   void Advance();
 
-  int length() const { return text_length_; }
+  int length() const { return text_state_.length(); }
 
   // Note: |characterAt()| returns characters in the reversed order, since
   // the iterator is backwards. For example, if the current text is "abc",
   // then |characterAt(0)| returns 'c'.
   UChar CharacterAt(unsigned index) const;
 
-  Node* GetNode() const { return node_; }
+  const Node* GetNode() const { return node_; }
 
   // Calculate the minimum |actualLength >= minLength| such that code units
   // with offset range [position, position + actualLength) are whole code
@@ -69,61 +73,45 @@ class CORE_TEMPLATE_CLASS_EXPORT SimplifiedBackwardsTextIteratorAlgorithm {
                  int min_length) const;
   int CopyTextTo(BackwardsTextBuffer* output, int position = 0) const;
 
-  Node* StartContainer() const;
+  const Node* StartContainer() const;
   int EndOffset() const;
   PositionTemplate<Strategy> StartPosition() const;
   PositionTemplate<Strategy> EndPosition() const;
 
-  bool IsInTextSecurityMode() const;
-
  private:
-  void Init(Node* start_node, Node* end_node, int start_offset, int end_offset);
+  void Init(const Node* start_node,
+            const Node* end_node,
+            int start_offset,
+            int end_offset);
   void ExitNode();
   bool HandleTextNode();
   LayoutText* HandleFirstLetter(int& start_offset, int& offset_in_node);
   bool HandleReplacedElement();
   bool HandleNonTextNode();
-  void EmitCharacter(UChar, Node*, int start_offset, int end_offset);
-  bool AdvanceRespectingRange(Node*);
+  void EmitCharacter(UChar, const Node*, int start_offset, int end_offset);
+  bool AdvanceRespectingRange(const Node*);
 
   bool IsBetweenSurrogatePair(int position) const;
 
-  // Prepend code units with offset range [position, position + copyLength)
-  // to the output buffer.
-  void CopyCodeUnitsTo(BackwardsTextBuffer* output,
-                       int position,
-                       int copy_length) const;
+  TextIteratorBehavior behavior_;
+
+  // Contains state of emitted text.
+  TextIteratorTextState text_state_;
 
   // Current position, not necessarily of the text being returned, but position
   // as we walk through the DOM tree.
-  Member<Node> node_;
+  Member<const Node> node_;
   int offset_;
   bool handled_node_;
   bool handled_children_;
   FullyClippedStateStackAlgorithm<Strategy> fully_clipped_stack_;
 
   // End of the range.
-  Member<Node> start_node_;
+  Member<const Node> start_node_;
   int start_offset_;
   // Start of the range.
-  Member<Node> end_node_;
+  Member<const Node> end_node_;
   int end_offset_;
-
-  // The current text and its position, in the form to be returned from the
-  // iterator.
-  Member<Node> position_node_;
-  int position_start_offset_;
-  int position_end_offset_;
-
-  // We're interested in the range [m_textOffset, m_textOffset + m_textLength)
-  // of m_textContainer.
-  String text_container_;
-  int text_offset_;
-  int text_length_;
-
-  // Used for whitespace characters that aren't in the DOM, so we can point at
-  // them.
-  UChar single_character_buffer_;
 
   // Whether m_node has advanced beyond the iteration range (i.e. m_startNode).
   bool have_passed_start_node_;
@@ -131,15 +119,9 @@ class CORE_TEMPLATE_CLASS_EXPORT SimplifiedBackwardsTextIteratorAlgorithm {
   // Should handle first-letter layoutObject in the next call to handleTextNode.
   bool should_handle_first_letter_;
 
-  // Used when the iteration should stop if form controls are reached.
-  bool stops_on_form_controls_;
-
   // Used when m_stopsOnFormControls is set to determine if the iterator should
   // keep advancing.
   bool should_stop_;
-
-  // Used in pasting inside password field.
-  bool emits_original_text_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT

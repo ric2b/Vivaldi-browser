@@ -28,10 +28,10 @@
 
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/text/StringBuilder.h"
-#include "public/web/WebSandboxFlags.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 
 namespace blink {
 
@@ -47,37 +47,37 @@ SandboxFlags ParseSandboxPolicy(const SpaceSplitString& policy,
   for (unsigned index = 0; index < length; index++) {
     // Turn off the corresponding sandbox flag if it's set as "allowed".
     String sandbox_token(policy[index]);
-    if (DeprecatedEqualIgnoringCase(sandbox_token, "allow-same-origin")) {
+    if (EqualIgnoringASCIICase(sandbox_token, "allow-same-origin")) {
       flags &= ~kSandboxOrigin;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token, "allow-forms")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-forms")) {
       flags &= ~kSandboxForms;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token, "allow-scripts")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-scripts")) {
       flags &= ~kSandboxScripts;
       flags &= ~kSandboxAutomaticFeatures;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token,
-                                           "allow-top-navigation")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-top-navigation")) {
       flags &= ~kSandboxTopNavigation;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token, "allow-popups")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-popups")) {
       flags &= ~kSandboxPopups;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token,
-                                           "allow-pointer-lock")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-pointer-lock")) {
       flags &= ~kSandboxPointerLock;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token,
-                                           "allow-orientation-lock")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token,
+                                      "allow-orientation-lock")) {
       flags &= ~kSandboxOrientationLock;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token,
-                                           "allow-popups-to-escape-sandbox")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token,
+                                      "allow-popups-to-escape-sandbox")) {
       flags &= ~kSandboxPropagatesToAuxiliaryBrowsingContexts;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token, "allow-modals")) {
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-modals")) {
       flags &= ~kSandboxModals;
-    } else if (DeprecatedEqualIgnoringCase(sandbox_token,
-                                           "allow-presentation")) {
-      flags &= ~kSandboxPresentation;
-    } else if (DeprecatedEqualIgnoringCase(
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-presentation")) {
+      flags &= ~kSandboxPresentationController;
+    } else if (EqualIgnoringASCIICase(
                    sandbox_token, "allow-top-navigation-by-user-activation") &&
                RuntimeEnabledFeatures::
                    TopNavByUserActivationInSandboxEnabled()) {
       flags &= ~kSandboxTopNavigationByUserActivation;
+    } else if (EqualIgnoringASCIICase(sandbox_token, "allow-downloads") &&
+               RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled()) {
+      flags &= ~kSandboxDownloads;
     } else {
       token_errors.Append(token_errors.IsEmpty() ? "'" : ", '");
       token_errors.Append(sandbox_token);
@@ -112,5 +112,10 @@ STATIC_ASSERT_ENUM(WebSandboxFlags::kOrientationLock, kSandboxOrientationLock);
 STATIC_ASSERT_ENUM(WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts,
                    kSandboxPropagatesToAuxiliaryBrowsingContexts);
 STATIC_ASSERT_ENUM(WebSandboxFlags::kModals, kSandboxModals);
+STATIC_ASSERT_ENUM(WebSandboxFlags::kPresentationController,
+                   kSandboxPresentationController);
+STATIC_ASSERT_ENUM(WebSandboxFlags::kTopNavigationByUserActivation,
+                   kSandboxTopNavigationByUserActivation);
+STATIC_ASSERT_ENUM(WebSandboxFlags::kDownloads, kSandboxDownloads);
 
 }  // namespace blink

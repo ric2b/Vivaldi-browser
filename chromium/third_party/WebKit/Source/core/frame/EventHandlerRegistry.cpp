@@ -247,13 +247,15 @@ void EventHandlerRegistry::NotifyHasHandlersChanged(
       page_->GetChromeClient().SetNeedsLowLatencyInput(frame,
                                                        has_active_handlers);
     // Fall through.
+    case kTouchAction:
     case kTouchStartOrMoveEventBlocking:
     case kTouchStartOrMoveEventPassive:
     case kPointerEvent:
       page_->GetChromeClient().SetEventListenerProperties(
           frame, WebEventListenerClass::kTouchStartOrMove,
           GetWebEventListenerProperties(
-              HasEventHandlers(kTouchStartOrMoveEventBlocking) ||
+              HasEventHandlers(kTouchAction) ||
+                  HasEventHandlers(kTouchStartOrMoveEventBlocking) ||
                   HasEventHandlers(kTouchStartOrMoveEventBlockingLowLatency),
               HasEventHandlers(kTouchStartOrMoveEventPassive) ||
                   HasEventHandlers(kPointerEvent)));
@@ -281,13 +283,14 @@ void EventHandlerRegistry::NotifyDidAddOrRemoveEventHandlerTarget(
   ScrollingCoordinator* scrolling_coordinator =
       page_->GetScrollingCoordinator();
   if (scrolling_coordinator &&
-      (handler_class == kTouchStartOrMoveEventBlocking ||
+      (handler_class == kTouchAction ||
+       handler_class == kTouchStartOrMoveEventBlocking ||
        handler_class == kTouchStartOrMoveEventBlockingLowLatency)) {
     scrolling_coordinator->TouchEventTargetRectsDidChange();
   }
 }
 
-DEFINE_TRACE(EventHandlerRegistry) {
+void EventHandlerRegistry::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
   visitor->template RegisterWeakMembers<
       EventHandlerRegistry, &EventHandlerRegistry::ClearWeakMembers>(this);
@@ -323,7 +326,8 @@ void EventHandlerRegistry::DocumentDetached(Document& document) {
     for (const auto& event_target : *targets) {
       if (Node* node = event_target.key->ToNode()) {
         for (Document* doc = &node->GetDocument(); doc;
-             doc = doc->LocalOwner() ? &doc->LocalOwner()->GetDocument() : 0) {
+             doc = doc->LocalOwner() ? &doc->LocalOwner()->GetDocument()
+                                     : nullptr) {
           if (doc == &document) {
             targets_to_remove.push_back(event_target.key);
             break;

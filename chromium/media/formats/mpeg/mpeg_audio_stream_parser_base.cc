@@ -60,7 +60,7 @@ MPEGAudioStreamParserBase::MPEGAudioStreamParserBase(uint32_t start_code_mask,
       audio_codec_(audio_codec),
       codec_delay_(codec_delay) {}
 
-MPEGAudioStreamParserBase::~MPEGAudioStreamParserBase() {}
+MPEGAudioStreamParserBase::~MPEGAudioStreamParserBase() = default;
 
 void MPEGAudioStreamParserBase::Init(
     const InitCB& init_cb,
@@ -210,6 +210,8 @@ int MPEGAudioStreamParserBase::ParseFrame(const uint8_t* data,
     config_.Initialize(audio_codec_, kSampleFormatF32, channel_layout,
                        sample_rate, extra_data, Unencrypted(),
                        base::TimeDelta(), codec_delay_);
+    if (audio_codec_ == kCodecAAC)
+      config_.disable_discard_decoder_delay();
 
     base::TimeDelta base_timestamp;
     if (timestamp_helper_)

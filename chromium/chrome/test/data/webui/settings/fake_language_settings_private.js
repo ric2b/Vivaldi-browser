@@ -183,6 +183,72 @@ cr.define('settings', function() {
     }
 
     /**
+     * Enables/Disables translation for the given language.
+     * This respectively removes/adds the language to the blocked set in the
+     * preferences.
+     * @param {string} languageCode
+     * @param {boolean} enable
+     */
+    setEnableTranslationForLanguage(languageCode, enable) {
+      var index =
+          this.settingsPrefs_.prefs.translate_blocked_languages.value.indexOf(
+              languageCode);
+      if (enable) {
+        if (index == -1)
+          return;
+        this.settingsPrefs_.splice(
+            'prefs.translate_blocked_languages.value', index, 1);
+      } else {
+        if (index != -1)
+          return;
+        this.settingsPrefs_.push(
+            'prefs.translate_blocked_languages.value', languageCode);
+      }
+    }
+
+    /**
+     * Moves a language inside the language list.
+     * Movement is determined by the |moveType| parameter.
+     * @param {string} languageCode
+     * @param {chrome.languageSettingsPrivate.MoveType} moveType
+     */
+    moveLanguage(languageCode, moveType) {
+      let languageCodes = this.settingsPrefs_.prefs.intl.accept_languages.value;
+      let languages = languageCodes.split(',');
+      const index = languages.indexOf(languageCode);
+
+      if (moveType == chrome.languageSettingsPrivate.MoveType.TOP) {
+        if (index < 1)
+          return;
+
+        languages.splice(index, 1);
+        languages.unshift(languageCode);
+      } else if (moveType == chrome.languageSettingsPrivate.MoveType.UP) {
+        if (index < 1)
+          return;
+
+        let temp = languages[index - 1];
+        languages[index - 1] = languageCode;
+        languages[index] = temp;
+      } else if (moveType == chrome.languageSettingsPrivate.MoveType.DOWN) {
+        if (index == -1 || index == languages.length - 1)
+          return;
+
+        let temp = languages[index + 1];
+        languages[index + 1] = languageCode;
+        languages[index] = temp;
+      }
+
+      languageCodes = languages.join(',');
+      this.settingsPrefs_.set(
+          'prefs.intl.accept_languages.value', languageCodes);
+      if (cr.isChromeOS) {
+        this.settingsPrefs_.set(
+            'prefs.settings.language.preferred_languages.value', languageCodes);
+      }
+    }
+
+    /**
      * Gets the current status of the chosen spell check dictionaries.
      * @param {function(!Array<
      *     !chrome.languageSettingsPrivate.SpellcheckDictionaryStatus>):void}
@@ -257,7 +323,7 @@ cr.define('settings', function() {
       var prefPath = 'prefs.settings.language.preload_engines.value';
       var enabledInputMethods = this.settingsPrefs_.get(prefPath).split(',');
       enabledInputMethods.push(inputMethodId);
-      this.settingsPrefs_.set(prefPath, enabledInputMethods.join(','))
+      this.settingsPrefs_.set(prefPath, enabledInputMethods.join(','));
     }
 
     /**

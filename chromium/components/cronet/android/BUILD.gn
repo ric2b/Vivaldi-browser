@@ -274,8 +274,6 @@ android_library("cronet_api_java") {
   ]
 
   srcjar_deps = cronet_api_srcjar_deps
-
-  run_findbugs_override = true
 }
 
 cronet_impl_common_java_srcjar_deps = [
@@ -404,8 +402,6 @@ android_library("cronet_sample_apk_java") {
     "//base:base_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
   ]
-
-  run_findbugs_override = true
 }
 
 android_apk("cronet_sample_apk") {
@@ -421,7 +417,6 @@ android_apk("cronet_sample_apk") {
     "//third_party/jsr-305:jsr_305_javalib",
   ]
 
-  run_findbugs_override = true
   proguard_enabled = true
   proguard_configs = [
     "$target_gen_dir/cronet_impl_native_proguard.cfg",
@@ -457,11 +452,12 @@ instrumentation_test_apk("cronet_sample_test_apk") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//net/android:net_java_test_support",
+    "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
   ]
   additional_apks = [ "//net/android:net_test_support_apk" ]
 
-  run_findbugs_override = true
   proguard_enabled = true
 }
 
@@ -475,7 +471,6 @@ generate_jni("cronet_tests_jni_headers") {
     "test/src/org/chromium/net/MockUrlRequestJobFactory.java",
     "test/src/org/chromium/net/NativeTestServer.java",
     "test/src/org/chromium/net/QuicTestServer.java",
-    "test/src/org/chromium/net/SdchObserver.java",
     "test/src/org/chromium/net/TestUploadDataStreamHandler.java",
   ]
   jni_package = "cronet_tests"
@@ -500,7 +495,6 @@ shared_library("cronet_tests") {
     "test/mock_url_request_job_factory.cc",
     "test/native_test_server.cc",
     "test/quic_test_server.cc",
-    "test/sdch_test_util.cc",
     "test/test_upload_data_stream_handler.cc",
     "test/test_upload_data_stream_handler.h",
   ]
@@ -545,7 +539,6 @@ android_library("cronet_test_apk_java") {
     "test/src/org/chromium/net/MockUrlRequestJobFactory.java",
     "test/src/org/chromium/net/NativeTestServer.java",
     "test/src/org/chromium/net/QuicTestServer.java",
-    "test/src/org/chromium/net/SdchObserver.java",
     "test/src/org/chromium/net/TestFilesInstaller.java",
     "test/src/org/chromium/net/TestUploadDataStreamHandler.java",
   ]
@@ -556,15 +549,14 @@ android_library("cronet_test_apk_java") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//net/android:net_java_test_support",
+    "//third_party/junit",
     "//third_party/netty4:netty_all_java",
   ]
-
-  run_findbugs_override = true
 }
 
 cronet_smoketests_platform_only_common_srcs = [
   "test/smoketests/src/org/chromium/net/smoke/ChromiumPlatformOnlyTestSupport.java",
-  "test/smoketests/src/org/chromium/net/smoke/CronetSmokeTestCase.java",
+  "test/smoketests/src/org/chromium/net/smoke/CronetSmokeTestRule.java",
   "test/smoketests/src/org/chromium/net/smoke/HttpTestServer.java",
   "test/smoketests/src/org/chromium/net/smoke/SmokeTestRequestCallback.java",
   "test/smoketests/src/org/chromium/net/smoke/TestSupport.java",
@@ -572,7 +564,7 @@ cronet_smoketests_platform_only_common_srcs = [
 
 cronet_smoketests_native_common_srcs = cronet_smoketests_platform_only_common_srcs + [
                                          "test/smoketests/src/org/chromium/net/smoke/ChromiumNativeTestSupport.java",
-                                         "test/smoketests/src/org/chromium/net/smoke/NativeCronetTestCase.java",
+                                         "test/smoketests/src/org/chromium/net/smoke/NativeCronetTestRule.java",
                                        ]
 
 android_library("cronet_smoketests_native_java") {
@@ -586,7 +578,9 @@ android_library("cronet_smoketests_native_java") {
     ":cronet_api_java",
     ":cronet_test_apk_java",
     "//base:base_java",
+    "//base:base_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
     "//third_party/netty4:netty_all_java",
   ]
 }
@@ -613,19 +607,13 @@ android_assets("cronet_test_apk_assets") {
     "test/assets/test/redirect_invalid_scheme.html.mock-http-headers",
     "test/assets/test/set_cookie.html",
     "test/assets/test/set_cookie.html.mock-http-headers",
-    "test/assets/test/sdch/dict/LeQxM80O",
-    "test/assets/test/sdch/dict/LeQxM80O.mock-http-headers",
-    "test/assets/test/sdch/index",
-    "test/assets/test/sdch/index.mock-http-headers",
-    "test/assets/test/sdch/LeQxM80O_encoded",
-    "test/assets/test/sdch/LeQxM80O_encoded.mock-http-headers",
     "test/assets/test/secureproxychecksuccess.txt",
     "test/assets/test/secureproxychecksuccess.txt.mock-http-headers",
     "test/assets/test/success.txt",
     "test/assets/test/success.txt.mock-http-headers",
   ]
 
-  # Maintain directory structure. Example entry: "test/sdch/index".
+  # Maintain directory structure.
   renaming_destinations = rebase_path(renaming_sources, "test/assets")
 }
 
@@ -654,8 +642,6 @@ android_apk("cronet_test_apk") {
     "cronet_impl_common_proguard.cfg",
     "cronet_impl_platform_proguard.cfg",
   ]
-
-  run_findbugs_override = true
 }
 
 android_library("cronet_javatests") {
@@ -667,10 +653,10 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/BrotliTest.java",
     "test/javatests/src/org/chromium/net/Criteria.java",
     "test/javatests/src/org/chromium/net/CronetEngineBuilderTest.java",
-    "test/javatests/src/org/chromium/net/CronetTestBase.java",
+    "test/javatests/src/org/chromium/net/CronetStressTest.java",
     "test/javatests/src/org/chromium/net/CronetTestCommon.java",
     "test/javatests/src/org/chromium/net/CronetTestRule.java",
-    "test/javatests/src/org/chromium/net/CronetTestBaseTest.java",
+    "test/javatests/src/org/chromium/net/CronetTestRuleTest.java",
     "test/javatests/src/org/chromium/net/CronetUploadTest.java",
     "test/javatests/src/org/chromium/net/CronetUrlRequestContextTest.java",
     "test/javatests/src/org/chromium/net/CronetUrlRequestTest.java",
@@ -683,7 +669,6 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/PkpTest.java",
     "test/javatests/src/org/chromium/net/QuicTest.java",
     "test/javatests/src/org/chromium/net/RequestFinishedInfoTest.java",
-    "test/javatests/src/org/chromium/net/SdchTest.java",
     "test/javatests/src/org/chromium/net/TestBidirectionalStreamCallback.java",
     "test/javatests/src/org/chromium/net/TestDrivenDataProvider.java",
     "test/javatests/src/org/chromium/net/TestNetworkQualityRttListener.java",
@@ -714,8 +699,6 @@ android_library("cronet_javatests") {
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
   ]
-
-  run_findbugs_override = true
 }
 
 instrumentation_test_apk("cronet_test_instrumentation_apk") {
@@ -744,8 +727,6 @@ instrumentation_test_apk("cronet_test_instrumentation_apk") {
   proguard_enabled = true
 
   proguard_configs = [ "test/proguard.cfg" ]
-
-  run_findbugs_override = true
 }
 
 android_resources("cronet_smoketests_platform_only_apk_resources") {
@@ -759,7 +740,9 @@ android_library("cronet_smoketests_platform_only_java") {
   java_files = [ "test/smoketests/src/org/chromium/net/smoke/PlatformOnlyEngineTest.java" ] + cronet_smoketests_platform_only_common_srcs
   deps = [
     ":cronet_api_java",
+    "//base:base_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
     "//third_party/netty4:netty_all_java",
   ]
 }
@@ -782,7 +765,6 @@ android_apk("cronet_smoketests_platform_only_apk") {
     ":cronet_impl_platform_java",
     ":cronet_smoketests_platform_only_apk_resources",
   ]
-  run_findbugs_override = true
 }
 
 instrumentation_test_apk(
@@ -799,7 +781,6 @@ instrumentation_test_apk(
   proguard_enabled = true
 
   proguard_configs = [ "test/proguard.cfg" ]
-  run_findbugs_override = true
 }
 
 android_library("cronet_smoketests_missing_native_library_java") {
@@ -809,7 +790,9 @@ android_library("cronet_smoketests_missing_native_library_java") {
     ":cronet_api_java",
     ":cronet_test_apk_java",
     "//base:base_java",
+    "//base:base_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
     "//third_party/netty4:netty_all_java",
   ]
 }
@@ -832,8 +815,6 @@ android_apk("cronet_smoketests_missing_native_library_apk") {
     "cronet_impl_common_proguard.cfg",
     "cronet_impl_platform_proguard.cfg",
   ]
-
-  run_findbugs_override = true
 }
 
 instrumentation_test_apk(
@@ -849,8 +830,6 @@ instrumentation_test_apk(
   proguard_enabled = true
 
   proguard_configs = [ "test/proguard.cfg" ]
-
-  run_findbugs_override = true
 }
 
 android_library("cronet_perf_test_apk_java") {
@@ -866,8 +845,6 @@ android_library("cronet_perf_test_apk_java") {
     ":cronet_test_apk_java",
     "//base:base_java",
   ]
-
-  run_findbugs_override = true
 }
 
 android_apk("cronet_perf_test_apk") {
@@ -886,7 +863,6 @@ android_apk("cronet_perf_test_apk") {
     "//base:base_java",
   ]
 
-  run_findbugs_override = true
   proguard_enabled = true
   proguard_configs = [
     "$target_gen_dir/cronet_impl_native_proguard.cfg",
@@ -911,6 +887,7 @@ test("cronet_unittests") {
     ":cronet_static",
     "//base",
     "//base/test:test_support",
+    "//components/cronet/native:cronet_native_impl_tests",
     "//components/metrics",
     "//components/prefs:test_support",
     "//net",
@@ -1218,9 +1195,9 @@ action("generate_javadoc") {
     rebase_path(depfile, root_build_dir),
     "--stamp",
     rebase_path(_stamp_file, root_build_dir),
-    "--lib-java-dir",
-    rebase_path("$root_build_dir/lib.java/components/cronet/android",
-                root_build_dir),
+
+    "--android-sdk-jar",
+    rebase_path(android_sdk_jar, root_build_dir),
 
     # JavaDoc is generated from Cronet's API source jar.
     "--input-src-jar",

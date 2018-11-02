@@ -76,9 +76,14 @@ bool IsValidFeatureOrFieldTrialName(const std::string& name) {
 
 }  // namespace
 
-FeatureList::FeatureList() {}
+#if DCHECK_IS_ON() && defined(SYZYASAN)
+const Feature kSyzyAsanDCheckIsFatalFeature{"DcheckIsFatal",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(SYZYASAN)
 
-FeatureList::~FeatureList() {}
+FeatureList::FeatureList() = default;
+
+FeatureList::~FeatureList() = default;
 
 void FeatureList::InitializeFromCommandLine(
     const std::string& enable_features,
@@ -224,7 +229,11 @@ bool FeatureList::IsEnabled(const Feature& feature) {
 
 // static
 FieldTrial* FeatureList::GetFieldTrial(const Feature& feature) {
-  return GetInstance()->GetAssociatedFieldTrial(feature);
+  if (!g_instance) {
+    g_initialized_from_accessor = true;
+    return nullptr;
+  }
+  return g_instance->GetAssociatedFieldTrial(feature);
 }
 
 // static

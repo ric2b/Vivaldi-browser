@@ -16,6 +16,7 @@
 #include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
+#include "content/browser/renderer_host/media/audio_output_authorization_handler.h"
 #include "content/browser/renderer_host/media/audio_output_delegate_impl.h"
 #include "content/browser/renderer_host/media/audio_sync_reader.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
@@ -34,13 +35,6 @@ using media::AudioManager;
 namespace content {
 
 namespace {
-
-void UMALogDeviceAuthorizationTime(base::TimeTicks auth_start_time) {
-  UMA_HISTOGRAM_CUSTOM_TIMES("Media.Audio.OutputDeviceAuthorizationTime",
-                             base::TimeTicks::Now() - auth_start_time,
-                             base::TimeDelta::FromMilliseconds(1),
-                             base::TimeDelta::FromMilliseconds(5000), 50);
-}
 
 // Check that the routing ID references a valid RenderFrameHost, and run
 // |callback| on the IO thread with true if the ID is valid.
@@ -63,18 +57,15 @@ AudioRendererHost::AudioRendererHost(int render_process_id,
                                      media::AudioManager* audio_manager,
                                      media::AudioSystem* audio_system,
                                      AudioMirroringManager* mirroring_manager,
-                                     MediaStreamManager* media_stream_manager,
-                                     const std::string& salt)
+                                     MediaStreamManager* media_stream_manager)
     : BrowserMessageFilter(AudioMsgStart),
       render_process_id_(render_process_id),
       audio_manager_(audio_manager),
       mirroring_manager_(mirroring_manager),
       media_stream_manager_(media_stream_manager),
-      salt_(salt),
       authorization_handler_(audio_system,
                              media_stream_manager,
-                             render_process_id_,
-                             salt) {
+                             render_process_id_) {
   DCHECK(audio_manager_);
 }
 
@@ -113,7 +104,6 @@ void AudioRendererHost::OnStreamCreated(
   }
 
   base::SyncSocket::TransitDescriptor socket_descriptor;
-  size_t shared_memory_size = shared_memory->requested_size();
 
   base::SharedMemoryHandle foreign_memory_handle =
       shared_memory->handle().Duplicate();
@@ -125,9 +115,8 @@ void AudioRendererHost::OnStreamCreated(
     return;
   }
 
-  Send(new AudioMsg_NotifyStreamCreated(
-      stream_id, foreign_memory_handle, socket_descriptor,
-      base::checked_cast<uint32_t>(shared_memory_size)));
+  Send(new AudioMsg_NotifyStreamCreated(stream_id, foreign_memory_handle,
+                                        socket_descriptor));
 }
 
 void AudioRendererHost::OnStreamError(int stream_id) {
@@ -203,7 +192,8 @@ void AudioRendererHost::AuthorizationCompleted(
     const std::string& device_id_for_renderer) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  UMALogDeviceAuthorizationTime(auth_start_time);
+  AudioOutputAuthorizationHandler::UMALogDeviceAuthorizationTime(
+      auth_start_time);
 
   auto auth_data = authorizations_.find(stream_id);
   if (auth_data == authorizations_.end())

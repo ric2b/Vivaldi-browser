@@ -32,7 +32,7 @@
 #include "bindings/modules/v8/V8BindingForModules.h"
 #include "bindings/modules/v8/V8IDBRequest.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/IndexedDBNames.h"
+#include "modules/indexed_db_names.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBObjectStore.h"
@@ -76,12 +76,13 @@ IDBCursor::IDBCursor(std::unique_ptr<WebIDBCursor> backend,
 
 IDBCursor::~IDBCursor() {}
 
-DEFINE_TRACE(IDBCursor) {
+void IDBCursor::Trace(blink::Visitor* visitor) {
   visitor->Trace(request_);
   visitor->Trace(source_);
   visitor->Trace(transaction_);
   visitor->Trace(key_);
   visitor->Trace(primary_key_);
+  ScriptWrappable::Trace(visitor);
 }
 
 // Keep the request's wrapper alive as long as the cursor's wrapper is alive,
@@ -167,9 +168,9 @@ void IDBCursor::advance(unsigned count, ExceptionState& exception_state) {
   backend_->Advance(count, request_->CreateWebCallbacks().release());
 }
 
-void IDBCursor::continueFunction(ScriptState* script_state,
-                                 const ScriptValue& key_value,
-                                 ExceptionState& exception_state) {
+void IDBCursor::Continue(ScriptState* script_state,
+                         const ScriptValue& key_value,
+                         ExceptionState& exception_state) {
   IDB_TRACE("IDBCursor::continueRequestSetup");
   IDBRequest::AsyncTraceState metrics("IDBCursor::continue");
 
@@ -310,8 +311,8 @@ void IDBCursor::Continue(IDBKey* key,
                      request_->CreateWebCallbacks().release());
 }
 
-IDBRequest* IDBCursor::deleteFunction(ScriptState* script_state,
-                                      ExceptionState& exception_state) {
+IDBRequest* IDBCursor::Delete(ScriptState* script_state,
+                              ExceptionState& exception_state) {
   IDB_TRACE("IDBCursor::deleteRequestSetup");
   IDBRequest::AsyncTraceState metrics("IDBCursor::delete");
   if (!transaction_->IsActive()) {
@@ -364,7 +365,7 @@ void IDBCursor::PostSuccessHandlerCallback() {
 }
 
 void IDBCursor::Close() {
-  value_.Clear();
+  value_ = nullptr;
   request_.Clear();
   backend_.reset();
 }
@@ -388,10 +389,10 @@ ScriptValue IDBCursor::value(ScriptState* script_state) {
     value = IDBAny::CreateUndefined();
   } else if (object_store->autoIncrement() &&
              !object_store->IdbKeyPath().IsNull()) {
-    RefPtr<IDBValue> idb_value = IDBValue::Create(value_.Get(), primary_key_,
-                                                  object_store->IdbKeyPath());
+    scoped_refptr<IDBValue> idb_value = IDBValue::Create(
+        value_.get(), primary_key_, object_store->IdbKeyPath());
 #if DCHECK_IS_ON()
-    AssertPrimaryKeyValidOrInjectable(script_state, idb_value.Get());
+    AssertPrimaryKeyValidOrInjectable(script_state, idb_value.get());
 #endif  // DCHECK_IS_ON()
     value = IDBAny::Create(std::move(idb_value));
   } else {
@@ -409,7 +410,7 @@ ScriptValue IDBCursor::source(ScriptState* script_state) const {
 
 void IDBCursor::SetValueReady(IDBKey* key,
                               IDBKey* primary_key,
-                              RefPtr<IDBValue> value) {
+                              scoped_refptr<IDBValue> value) {
   key_ = key;
   key_dirty_ = true;
 

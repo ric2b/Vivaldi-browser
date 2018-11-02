@@ -34,6 +34,7 @@ using ::testing::_;
 using ::testing::AtLeast;
 using ::testing::Mock;
 using ::testing::NiceMock;
+using ::testing::StrictMock;
 using base::ASCIIToUTF16;
 using base::WeakPtr;
 
@@ -52,10 +53,11 @@ class MockAutofillExternalDelegate : public AutofillExternalDelegate {
   bool RemoveSuggestion(const base::string16& value, int identifier) override {
     return true;
   }
-  void ClearPreviewedForm() override {}
   base::WeakPtr<AutofillExternalDelegate> GetWeakPtr() {
     return AutofillExternalDelegate::GetWeakPtr();
   }
+
+  MOCK_METHOD0(ClearPreviewedForm, void());
 };
 
 class MockAutofillClient : public autofill::TestAutofillClient {
@@ -473,6 +475,19 @@ TEST_F(AutofillPopupControllerUnitTest, GetOrCreate) {
 
   // Hide the test_controller to delete it.
   test_controller->DoHide();
+
+  test_controller = new NiceMock<TestAutofillPopupController>(
+      delegate.GetWeakPtr(), gfx::RectF());
+  EXPECT_CALL(*test_controller, Hide()).Times(0);
+
+  const base::WeakPtr<AutofillPopupControllerImpl> controller4 =
+      AutofillPopupControllerImpl::GetOrCreate(
+          test_controller->GetWeakPtr(), delegate.GetWeakPtr(), nullptr,
+          nullptr, bounds, base::i18n::UNKNOWN_DIRECTION);
+  EXPECT_EQ(bounds,
+            static_cast<const AutofillPopupController*>(controller4.get())
+                ->element_bounds());
+  delete test_controller;
 }
 
 TEST_F(AutofillPopupControllerUnitTest, ProperlyResetController) {
@@ -489,6 +504,24 @@ TEST_F(AutofillPopupControllerUnitTest, ProperlyResetController) {
           NULL, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
   EXPECT_FALSE(controller->selected_line());
   EXPECT_EQ(0, controller->GetLineCount());
+}
+
+TEST_F(AutofillPopupControllerUnitTest, HidingClearsPreview) {
+  // Create a new controller, because hiding destroys it and we can't destroy it
+  // twice.
+  ContentAutofillDriverFactory* factory =
+      ContentAutofillDriverFactory::FromWebContents(web_contents());
+  ContentAutofillDriver* driver =
+      factory->DriverForFrame(web_contents()->GetMainFrame());
+  StrictMock<MockAutofillExternalDelegate> delegate(driver->autofill_manager(),
+                                                    driver);
+  StrictMock<TestAutofillPopupController>* test_controller =
+      new StrictMock<TestAutofillPopupController>(delegate.GetWeakPtr(),
+                                                  gfx::RectF());
+
+  EXPECT_CALL(delegate, ClearPreviewedForm());
+  // Hide() also deletes the object itself.
+  test_controller->DoHide();
 }
 
 #if !defined(OS_ANDROID)

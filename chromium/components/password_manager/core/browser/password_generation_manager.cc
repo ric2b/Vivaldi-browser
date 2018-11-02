@@ -46,10 +46,11 @@ void PasswordGenerationManager::DetectFormsEligibleForGeneration(
     const AutofillField* generation_field = nullptr;
     const AutofillField* confirmation_field = nullptr;
     for (const std::unique_ptr<AutofillField>& field : *form) {
-      if (field->server_type() == autofill::ACCOUNT_CREATION_PASSWORD ||
-          field->server_type() == autofill::NEW_PASSWORD) {
+      if (field->overall_server_type() == autofill::ACCOUNT_CREATION_PASSWORD ||
+          field->overall_server_type() == autofill::NEW_PASSWORD) {
         generation_field = field.get();
-      } else if (field->server_type() == autofill::CONFIRMATION_PASSWORD) {
+      } else if (field->overall_server_type() ==
+                 autofill::CONFIRMATION_PASSWORD) {
         confirmation_field = field.get();
       }
     }
@@ -83,21 +84,12 @@ bool PasswordGenerationManager::IsGenerationEnabled() const {
     return false;
   }
 
-  // Don't consider sync enabled if the user has a custom passphrase. See
-  // http://crbug.com/358998 for more details.
-  if (client_->GetPasswordSyncState() != SYNCING_NORMAL_ENCRYPTION) {
-    if (logger) {
-      if (client_->GetPasswordSyncState() == NOT_SYNCING_PASSWORDS)
-        logger->LogMessage(Logger::STRING_GENERATION_DISABLED_NO_SYNC);
-      else if (client_->GetPasswordSyncState() ==
-               SYNCING_WITH_CUSTOM_PASSPHRASE)
-        logger->LogMessage(
-            Logger::STRING_GENERATION_DISABLED_CUSTOM_PASSPHRASE);
-    }
-    return false;
-  }
+  if (client_->GetPasswordSyncState() != NOT_SYNCING_PASSWORDS)
+    return true;
+  if (logger)
+    logger->LogMessage(Logger::STRING_GENERATION_DISABLED_NO_SYNC);
 
-  return true;
+  return false;
 }
 
 void PasswordGenerationManager::CheckIfFormClassifierShouldRun() {

@@ -41,11 +41,11 @@ class StyleDifference;
 // instead. Keep the allocation logic, only allocating a new object if needed.
 class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
  public:
-  static RefPtr<SVGComputedStyle> Create() {
-    return AdoptRef(new SVGComputedStyle);
+  static scoped_refptr<SVGComputedStyle> Create() {
+    return base::AdoptRef(new SVGComputedStyle);
   }
-  RefPtr<SVGComputedStyle> Copy() const {
-    return AdoptRef(new SVGComputedStyle(*this));
+  scoped_refptr<SVGComputedStyle> Copy() const {
+    return base::AdoptRef(new SVGComputedStyle(*this));
   }
   CORE_EXPORT ~SVGComputedStyle();
 
@@ -85,7 +85,7 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
   static SVGPaintType InitialStrokePaintType() { return SVG_PAINTTYPE_NONE; }
   static Color InitialStrokePaintColor() { return Color(); }
   static String InitialStrokePaintUri() { return String(); }
-  static RefPtr<SVGDashArray> InitialStrokeDashArray();
+  static scoped_refptr<SVGDashArray> InitialStrokeDashArray();
   static Length InitialStrokeDashOffset() { return Length(kFixed); }
   static float InitialStrokeMiterLimit() { return 4; }
   static UnzoomedLength InitialStrokeWidth() {
@@ -150,7 +150,7 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
   void SetPaintOrder(EPaintOrder val) {
     svg_inherited_flags.paint_order = (int)val;
   }
-  void SetD(RefPtr<StylePath> d) {
+  void SetD(scoped_refptr<StylePath> d) {
     if (!(geometry->d == d))
       geometry.Access()->d = std::move(d);
   }
@@ -238,7 +238,7 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
     }
   }
 
-  void SetStrokeDashArray(RefPtr<SVGDashArray> dash_array) {
+  void SetStrokeDashArray(scoped_refptr<SVGDashArray> dash_array) {
     if (*stroke->dash_array != *dash_array)
       stroke.Access()->dash_array = std::move(dash_array);
   }
@@ -355,7 +355,7 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
   const SVGPaintType& StrokePaintType() const { return stroke->paint_type; }
   const Color& StrokePaintColor() const { return stroke->paint_color; }
   const String& StrokePaintUri() const { return stroke->paint_uri; }
-  SVGDashArray* StrokeDashArray() const { return stroke->dash_array.Get(); }
+  SVGDashArray* StrokeDashArray() const { return stroke->dash_array.get(); }
   float StrokeMiterLimit() const { return stroke->miter_limit; }
   const UnzoomedLength& StrokeWidth() const { return stroke->width; }
   const Length& StrokeDashOffset() const { return stroke->dash_offset; }
@@ -367,7 +367,7 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
   const Length& BaselineShiftValue() const {
     return misc->baseline_shift_value;
   }
-  StylePath* D() const { return geometry->d.Get(); }
+  StylePath* D() const { return geometry->d.get(); }
   const Length& Cx() const { return geometry->cx; }
   const Length& Cy() const { return geometry->cy; }
   const Length& X() const { return geometry->x; }
@@ -436,8 +436,6 @@ class SVGComputedStyle : public RefCounted<SVGComputedStyle> {
   bool HasVisibleStroke() const {
     return HasStroke() && !StrokeWidth().IsZero();
   }
-  bool HasSquareCapStyle() const { return CapStyle() == kSquareCap; }
-  bool HasMiterJoinStyle() const { return JoinStyle() == kMiterJoin; }
   bool HasFill() const { return FillPaintType() != SVG_PAINTTYPE_NONE; }
 
  protected:

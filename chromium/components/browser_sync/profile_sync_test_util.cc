@@ -6,18 +6,21 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/engine/sequenced_model_worker.h"
 #include "components/sync/engine/ui_model_worker.h"
+#include "components/sync/model/model_type_store_test_util.h"
 #include "net/url_request/url_request_test_util.h"
 
 namespace browser_sync {
@@ -92,7 +95,7 @@ BundleSyncClient::BundleSyncClient(
       db_thread_(db_thread),
       file_thread_(file_thread),
       history_service_(history_service) {
-  DCHECK_EQ(!!db_thread_, !!file_thread_);
+  EXPECT_EQ(!!db_thread_, !!file_thread_);
 }
 
 BundleSyncClient::~BundleSyncClient() = default;
@@ -126,7 +129,8 @@ scoped_refptr<syncer::ModelSafeWorker>
 BundleSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
   if (!db_thread_)
     return FakeSyncClient::CreateModelWorkerForGroup(group);
-  DCHECK(file_thread_) << "DB thread was specified but FILE thread was not.";
+  EXPECT_TRUE(file_thread_)
+      << "DB thread was specified but FILE thread was not.";
   switch (group) {
     case syncer::GROUP_DB:
       return new syncer::SequencedModelWorker(db_thread_, syncer::GROUP_DB);
@@ -172,6 +176,7 @@ void RegisterPrefsForProfileSyncService(
   AccountTrackerService::RegisterPrefs(registry);
   SigninManagerBase::RegisterProfilePrefs(registry);
   SigninManagerBase::RegisterPrefs(registry);
+  signin::RegisterAccountConsistencyProfilePrefs(registry);
 }
 
 ProfileSyncServiceBundle::SyncClientBuilder::~SyncClientBuilder() = default;
@@ -237,6 +242,7 @@ ProfileSyncServiceBundle::ProfileSyncServiceBundle()
       url_request_context_(new net::TestURLRequestContextGetter(
           base::ThreadTaskRunnerHandle::Get())) {
   RegisterPrefsForProfileSyncService(pref_service_.registry());
+  signin::SetGaiaOriginIsolatedCallback(base::Bind([] { return true; }));
   auth_service_.set_auto_post_fetch_response_on_message_loop(true);
   account_tracker_.Initialize(&signin_client_);
   signin_manager_.Initialize(&pref_service_);
@@ -256,11 +262,13 @@ ProfileSyncService::InitParams ProfileSyncServiceBundle::CreateBasicInitParams(
   init_params.oauth2_token_service = auth_service();
   init_params.network_time_update_callback =
       base::Bind(&EmptyNetworkTimeUpdate);
-  CHECK(base_directory_.CreateUniqueTempDir());
+  EXPECT_TRUE(base_directory_.CreateUniqueTempDir());
   init_params.base_directory = base_directory_.GetPath();
   init_params.url_request_context = url_request_context();
   init_params.debug_identifier = "dummyDebugName";
   init_params.channel = version_info::Channel::UNKNOWN;
+  init_params.model_type_store_factory =
+      syncer::ModelTypeStoreTestUtil::FactoryForInMemoryStoreForTest();
 
   return init_params;
 }

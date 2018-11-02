@@ -8,11 +8,12 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/image_cursors_set.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
+#include "services/ui/ws/cursor_location_manager.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
@@ -31,8 +32,7 @@ namespace test {
 namespace {
 
 ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
-  ClientWindowId client_id;
-  for (ClientSpecificId id = 1;; ++id) {
+  for (ClientSpecificId id = kEmbedTreeWindowId;; ++id) {
     // Used the id of the client in the upper bits to simplify things.
     const ClientWindowId client_id = ClientWindowId(tree->id(), id);
     if (!tree->GetWindowByClientId(client_id))
@@ -47,6 +47,7 @@ display::ViewportMetrics MakeViewportMetrics(const display::Display& display) {
   display::ViewportMetrics metrics;
   metrics.bounds_in_pixels.set_size(pixel_size);
   metrics.device_scale_factor = display.device_scale_factor();
+  metrics.ui_scale_factor = 1;
   return metrics;
 }
 
@@ -59,9 +60,9 @@ class TestThreadedImageCursorsFactory : public ThreadedImageCursorsFactory {
   std::unique_ptr<ThreadedImageCursors> CreateCursors() override {
     if (!resource_runner_) {
       resource_runner_ = base::ThreadTaskRunnerHandle::Get();
-      image_cursors_set_ = base::MakeUnique<ui::ImageCursorsSet>();
+      image_cursors_set_ = std::make_unique<ui::ImageCursorsSet>();
     }
-    return base::MakeUnique<ws::ThreadedImageCursors>(
+    return std::make_unique<ws::ThreadedImageCursors>(
         resource_runner_, image_cursors_set_->GetWeakPtr());
   }
 
@@ -109,10 +110,15 @@ int64_t TestScreenManager::AddDisplay(const display::Display& input_display) {
   return display_id;
 }
 
-void TestScreenManager::ModifyDisplay(const display::Display& display) {
+void TestScreenManager::ModifyDisplay(
+    const display::Display& display,
+    const base::Optional<display::ViewportMetrics>& metrics) {
   DCHECK(display_ids_.count(display.id()) == 1);
   screen_->display_list().UpdateDisplay(display);
-  delegate_->OnDisplayModified(display, MakeViewportMetrics(display));
+  if (metrics)
+    delegate_->OnDisplayModified(display, *metrics);
+  else
+    delegate_->OnDisplayModified(display, MakeViewportMetrics(display));
 }
 
 void TestScreenManager::RemoveDisplay(int64_t display_id) {
@@ -128,7 +134,7 @@ void TestScreenManager::Init(display::ScreenManagerDelegate* delegate) {
   // Reset everything.
   display_ids_.clear();
   display::Screen::SetScreenInstance(nullptr);
-  screen_ = base::MakeUnique<display::ScreenBase>();
+  screen_ = std::make_unique<display::ScreenBase>();
   display::Screen::SetScreenInstance(screen_.get());
 }
 
@@ -148,7 +154,7 @@ std::unique_ptr<PlatformDisplay>
 TestPlatformDisplayFactory::CreatePlatformDisplay(
     ServerWindow* root_window,
     const display::ViewportMetrics& metrics) {
-  return base::MakeUnique<TestPlatformDisplay>(metrics, cursor_storage_);
+  return std::make_unique<TestPlatformDisplay>(metrics, cursor_storage_);
 }
 
 // WindowTreeTestApi  ---------------------------------------------------------
@@ -189,6 +195,10 @@ int EventDispatcherTestApi::NumberPointerTargetsForWindow(
   return count;
 }
 
+bool EventDispatcherTestApi::IsObservingWindow(ServerWindow* window) {
+  return ed_->observed_windows_.count(window) > 0;
+}
+
 // TestDisplayBinding ---------------------------------------------------------
 
 WindowTree* TestDisplayBinding::CreateWindowTree(ServerWindow* root) {
@@ -211,6 +221,10 @@ void TestWindowManager::OnConnect() {
   connect_count_++;
 }
 
+void TestWindowManager::WmOnAcceleratedWidgetForDisplay(
+    int64_t display,
+    gpu::SurfaceHandle surface_handle) {}
+
 void TestWindowManager::WmNewDisplayAdded(
     const display::Display& display,
     ui::mojom::WindowDataPtr root,
@@ -230,7 +244,7 @@ void TestWindowManager::WmSetModalType(uint32_t window_id, ui::ModalType type) {
 
 void TestWindowManager::WmCreateTopLevelWindow(
     uint32_t change_id,
-    ClientSpecificId requesting_client_id,
+    const viz::FrameSinkId& frame_sink_id,
     const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
   got_create_top_level_window_ = true;
   change_id_ = change_id;
@@ -268,6 +282,11 @@ void TestWindowManager::WmStackAbove(uint32_t change_id,
                                      uint32_t below_id) {}
 
 void TestWindowManager::WmStackAtTop(uint32_t change_id, uint32_t window_id) {}
+
+void TestWindowManager::WmPerformWmAction(uint32_t window_id,
+                                          const std::string& action) {
+  last_wm_action_ = action;
+}
 
 void TestWindowManager::OnAccelerator(uint32_t ack_id,
                                       uint32_t accelerator_id,
@@ -399,12 +418,16 @@ void TestWindowTreeClient::OnWindowSharedPropertyChanged(
   tracker_.OnWindowSharedPropertyChanged(window, name, new_data);
 }
 
-void TestWindowTreeClient::OnWindowInputEvent(uint32_t event_id,
-                                              uint32_t window,
-                                              int64_t display_id,
-                                              std::unique_ptr<ui::Event> event,
-                                              bool matches_pointer_watcher) {
-  tracker_.OnWindowInputEvent(window, *event.get(), matches_pointer_watcher);
+void TestWindowTreeClient::OnWindowInputEvent(
+    uint32_t event_id,
+    uint32_t window,
+    int64_t display_id,
+    const gfx::PointF& event_location_in_screen_pixel_layout,
+    std::unique_ptr<ui::Event> event,
+    bool matches_pointer_watcher) {
+  tracker_.OnWindowInputEvent(window, *event.get(), display_id,
+                              event_location_in_screen_pixel_layout,
+                              matches_pointer_watcher);
 }
 
 void TestWindowTreeClient::OnPointerEventObserved(
@@ -480,7 +503,7 @@ TestWindowTreeBinding::~TestWindowTreeBinding() {}
 
 mojom::WindowManager* TestWindowTreeBinding::GetWindowManager() {
   if (!window_manager_.get())
-    window_manager_ = base::MakeUnique<TestWindowManager>();
+    window_manager_ = std::make_unique<TestWindowManager>();
   return window_manager_.get();
 }
 void TestWindowTreeBinding::SetIncomingMethodCallProcessingPaused(bool paused) {
@@ -489,7 +512,7 @@ void TestWindowTreeBinding::SetIncomingMethodCallProcessingPaused(bool paused) {
 
 mojom::WindowTreeClient* TestWindowTreeBinding::CreateClientForShutdown() {
   DCHECK(!client_after_reset_);
-  client_after_reset_ = base::MakeUnique<TestWindowTreeClient>();
+  client_after_reset_ = std::make_unique<TestWindowTreeClient>();
   return client_after_reset_.get();
 }
 
@@ -497,8 +520,22 @@ mojom::WindowTreeClient* TestWindowTreeBinding::CreateClientForShutdown() {
 
 TestWindowServerDelegate::TestWindowServerDelegate()
     : threaded_image_cursors_factory_(
-          base::MakeUnique<TestThreadedImageCursorsFactory>()) {}
+          std::make_unique<TestThreadedImageCursorsFactory>()) {}
 TestWindowServerDelegate::~TestWindowServerDelegate() {}
+
+TestWindowTreeBinding* TestWindowServerDelegate::Embed(WindowTree* tree,
+                                                       ServerWindow* window,
+                                                       int flags) {
+  mojom::WindowTreeClientPtr client;
+  mojom::WindowTreeClientRequest client_request = mojo::MakeRequest(&client);
+  ClientWindowId client_window_id;
+  if (!tree->IsWindowKnown(window, &client_window_id))
+    return nullptr;
+
+  tree->Embed(client_window_id, std::move(client), flags);
+  last_client()->Bind(std::move(client_request));
+  return last_binding();
+}
 
 void TestWindowServerDelegate::StartDisplayInit() {}
 
@@ -514,7 +551,7 @@ TestWindowServerDelegate::CreateWindowTreeBinding(
     mojom::WindowTreeRequest* tree_request,
     mojom::WindowTreeClientPtr* client) {
   std::unique_ptr<TestWindowTreeBinding> binding =
-      base::MakeUnique<TestWindowTreeBinding>(tree);
+      std::make_unique<TestWindowTreeBinding>(tree);
   bindings_.push_back(binding.get());
   return std::move(binding);
 }
@@ -545,10 +582,11 @@ WindowServerTestHelper::WindowServerTestHelper()
     : cursor_(ui::CursorType::kNull), platform_display_factory_(&cursor_) {
   // Some tests create their own message loop, for example to add a task runner.
   if (!base::MessageLoop::current())
-    message_loop_ = base::MakeUnique<base::MessageLoop>();
+    message_loop_ = std::make_unique<base::MessageLoop>();
   PlatformDisplay::set_factory_for_testing(&platform_display_factory_);
-  window_server_ = base::MakeUnique<WindowServer>(&window_server_delegate_);
-  std::unique_ptr<GpuHost> gpu_host = base::MakeUnique<TestGpuHost>();
+  window_server_ = std::make_unique<WindowServer>(&window_server_delegate_,
+                                                  true /* should_host_viz */);
+  std::unique_ptr<GpuHost> gpu_host = std::make_unique<TestGpuHost>();
   window_server_->SetGpuHost(std::move(gpu_host));
   window_server_delegate_.set_window_server(window_server_.get());
 }
@@ -576,7 +614,7 @@ WindowEventTargetingHelper::~WindowEventTargetingHelper() {}
 ServerWindow* WindowEventTargetingHelper::CreatePrimaryTree(
     const gfx::Rect& root_window_bounds,
     const gfx::Rect& window_bounds) {
-  WindowTree* wm_tree = window_server()->GetTreeWithId(1);
+  WindowTree* wm_tree = window_server()->GetTreeWithId(kWindowManagerClientId);
   const ClientWindowId embed_window_id(wm_tree->id(),
                                        next_primary_tree_window_id_++);
   EXPECT_TRUE(wm_tree->NewWindow(embed_window_id, ServerWindow::Properties()));
@@ -609,7 +647,7 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
     ServerWindow** window) {
   WindowTree* tree1 = window_server()->GetTreeWithRoot(embed_window);
   ASSERT_TRUE(tree1 != nullptr);
-  const ClientWindowId child1_id(tree1->id(), 1);
+  const ClientWindowId child1_id(tree1->id(), kEmbedTreeWindowId);
   ASSERT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
   ServerWindow* child1 = tree1->GetWindowByClientId(child1_id);
   ASSERT_TRUE(child1);
@@ -725,6 +763,18 @@ void TestPlatformDisplay::SetCursorConfig(display::Display::Rotation rotation,
 
 // -----------------------------------------------------------------------------
 
+CursorLocationManagerTestApi::CursorLocationManagerTestApi(
+    CursorLocationManager* cursor_location_manager)
+    : cursor_location_manager_(cursor_location_manager) {}
+
+CursorLocationManagerTestApi::~CursorLocationManagerTestApi() = default;
+
+base::subtle::Atomic32 CursorLocationManagerTestApi::current_cursor_location() {
+  return cursor_location_manager_->current_cursor_location_;
+}
+
+// -----------------------------------------------------------------------------
+
 void AddWindowManager(WindowServer* window_server,
                       const UserId& user_id,
                       bool automatically_create_display_roots) {
@@ -775,7 +825,8 @@ ServerWindow* NewWindowInTree(WindowTree* tree, ClientWindowId* client_id) {
 
 ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
                                         ServerWindow* parent,
-                                        ClientWindowId* client_id) {
+                                        ClientWindowId* client_id,
+                                        const gfx::Rect& bounds) {
   if (!parent)
     return nullptr;
   ClientWindowId parent_client_id;
@@ -788,9 +839,16 @@ ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
     return nullptr;
   if (!tree->AddWindow(parent_client_id, client_window_id))
     return nullptr;
+  ServerWindow* window = tree->GetWindowByClientId(client_window_id);
+  window->SetBounds(bounds);
   if (client_id)
     *client_id = client_window_id;
-  return tree->GetWindowByClientId(client_window_id);
+  return window;
+}
+
+gfx::Point Atomic32ToPoint(base::subtle::Atomic32 atomic) {
+  return gfx::Point(static_cast<int16_t>(atomic >> 16),
+                    static_cast<int16_t>(atomic & 0xFFFF));
 }
 
 }  // namespace test

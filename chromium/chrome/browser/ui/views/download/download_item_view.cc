@@ -250,7 +250,7 @@ void DownloadItemView::OnExtractIconComplete(gfx::Image* icon_bitmap) {
 void DownloadItemView::MaybeSubmitDownloadToFeedbackService(
     DownloadCommands::Command download_command) {
   PrefService* prefs = shelf_->browser()->profile()->GetPrefs();
-  if (model_.MightBeMalicious() && model_.ShouldAllowDownloadFeedback() &&
+  if (model_.ShouldAllowDownloadFeedback() &&
       !shelf_->browser()->profile()->IsOffTheRecord()) {
     if (safe_browsing::ExtendedReportingPrefExists(*prefs)) {
       SubmitDownloadWhenFeedbackServiceEnabled(
@@ -440,6 +440,7 @@ bool DownloadItemView::OnMouseDragged(const ui::MouseEvent& event) {
       views::Widget* widget = GetWidget();
       DragDownloadItem(download(), icon,
                        widget ? widget->GetNativeView() : nullptr);
+      RecordDownloadShelfDragEvent(DownloadShelfDragEvent::STARTED);
     }
   } else if (ExceededDragThreshold(event.location() - drag_start_point_)) {
     dragging_ = true;
@@ -601,8 +602,9 @@ void DownloadItemView::ButtonPressed(views::Button* sender,
           ExperienceSamplingEvent::kProceed);
       sampling_event_.reset();
     }
-    // This will change the state and notify us.
-    download()->ValidateDangerousDownload();
+    // This will call ValidateDangerousDownload(), change download state and
+    // notify us.
+    MaybeSubmitDownloadToFeedbackService(DownloadCommands::KEEP);
     return;
   }
 

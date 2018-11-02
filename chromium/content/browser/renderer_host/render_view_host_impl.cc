@@ -83,11 +83,11 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/base/touch/touch_device.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_features.h"
@@ -214,6 +214,7 @@ RenderViewHostImpl::RenderViewHostImpl(
       sudden_termination_allowed_(false),
       render_view_termination_status_(base::TERMINATION_STATUS_STILL_RUNNING),
       updating_web_preferences_(false),
+      has_notified_about_creation_(false),
       weak_factory_(this) {
   DCHECK(instance_.get());
   CHECK(delegate_);  // http://crbug.com/82827
@@ -268,6 +269,7 @@ SiteInstanceImpl* RenderViewHostImpl::GetSiteInstance() const {
 bool RenderViewHostImpl::CreateRenderView(
     int opener_frame_route_id,
     int proxy_route_id,
+    const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_frame_state,
     bool window_was_created_with_opener) {
   TRACE_EVENT0("renderer_host,navigation",
@@ -308,6 +310,8 @@ bool RenderViewHostImpl::CreateRenderView(
     RenderFrameHostImpl* main_rfh = RenderFrameHostImpl::FromID(
         GetProcess()->GetID(), main_frame_routing_id_);
     DCHECK(main_rfh);
+    main_rfh->BindInterfaceProviderRequest(
+        mojo::MakeRequest(&params->main_frame_interface_provider));
     RenderWidgetHostImpl* main_rwh = main_rfh->GetRenderWidgetHost();
     params->main_frame_widget_routing_id = main_rwh->GetRoutingID();
   }
@@ -326,23 +330,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params->min_size = GetWidget()->min_size_for_auto_resize();
   params->max_size = GetWidget()->max_size_for_auto_resize();
   params->page_zoom_level = delegate_->GetPendingPageZoomLevel();
-
-  bool force_srgb_image_decode_color_space = false;
-  // When color correct rendering is enabled, the image_decode_color_space
-  // parameter should not be used (and all users of it should be using sRGB).
-  if (base::FeatureList::IsEnabled(features::kColorCorrectRendering))
-    force_srgb_image_decode_color_space = true;
-  if (force_srgb_image_decode_color_space) {
-    gfx::ColorSpace::CreateSRGB().GetICCProfile(
-        &params->image_decode_color_space);
-  } else {
-    if (display::Display::HasForceColorProfile()) {
-      display::Display::GetForcedColorProfile().GetICCProfile(
-          &params->image_decode_color_space);
-    } else {
-      params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
-    }
-  }
+  params->devtools_main_frame_token = devtools_frame_token;
 
   GetWidget()->GetResizeParams(&params->initial_size);
   GetWidget()->SetInitialRenderSizeParams(params->initial_size);
@@ -350,7 +338,7 @@ bool RenderViewHostImpl::CreateRenderView(
   GetProcess()->GetRendererInterface()->CreateView(std::move(params));
 
   // Let our delegate know that we created a RenderView.
-  delegate_->RenderViewCreated(this);
+  DispatchRenderViewCreated();
 
   // Since this method can create the main RenderFrame in the renderer process,
   // set the proper state on its corresponding RenderFrameHost.
@@ -395,29 +383,26 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.databases_enabled =
       !command_line.HasSwitch(switches::kDisableDatabases);
 
-  prefs.experimental_webgl_enabled =
-      GpuProcessHost::gpu_enabled() &&
-      !command_line.HasSwitch(switches::kDisable3DAPIs) &&
-      !command_line.HasSwitch(switches::kDisableExperimentalWebGL);
+  prefs.webgl1_enabled = !command_line.HasSwitch(switches::kDisable3DAPIs) &&
+                         !command_line.HasSwitch(switches::kDisableWebGL);
+  prefs.webgl2_enabled = !command_line.HasSwitch(switches::kDisable3DAPIs) &&
+                         !command_line.HasSwitch(switches::kDisableWebGL) &&
+                         !command_line.HasSwitch(switches::kDisableWebGL2);
 
   prefs.pepper_3d_enabled =
       !command_line.HasSwitch(switches::kDisablePepper3d);
 
   prefs.flash_3d_enabled =
-      GpuProcessHost::gpu_enabled() &&
       !command_line.HasSwitch(switches::kDisableFlash3d);
   prefs.flash_stage3d_enabled =
-      GpuProcessHost::gpu_enabled() &&
       !command_line.HasSwitch(switches::kDisableFlashStage3d);
   prefs.flash_stage3d_baseline_enabled =
-      GpuProcessHost::gpu_enabled() &&
       !command_line.HasSwitch(switches::kDisableFlashStage3d);
 
   prefs.allow_file_access_from_file_urls =
       command_line.HasSwitch(switches::kAllowFileAccessFromFiles);
 
   prefs.accelerated_2d_canvas_enabled =
-      GpuProcessHost::gpu_enabled() &&
       !command_line.HasSwitch(switches::kDisableAccelerated2dCanvas);
   prefs.antialiased_2d_canvas_disabled =
       command_line.HasSwitch(switches::kDisable2dCanvasAntialiasing);
@@ -437,6 +422,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   prefs.use_solid_color_scrollbars = true;
 #endif  // defined(OS_ANDROID)
+
+  prefs.save_previous_document_resources = GetSavePreviousDocumentResources();
 
   std::string autoplay_policy = media::GetEffectiveAutoplayPolicy(command_line);
   if (autoplay_policy == switches::autoplay::kNoUserGestureRequiredPolicy) {
@@ -518,9 +505,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.main_frame_resizes_are_orientation_changes =
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
-  prefs.color_correct_rendering_enabled =
-      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
-
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
 
@@ -560,6 +544,28 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
+}
+
+void RenderViewHostImpl::DispatchRenderViewCreated() {
+  if (has_notified_about_creation_)
+    return;
+
+  // Only send RenderViewCreated if there is a current or pending main frame
+  // RenderFrameHost (current or pending).  Don't send notifications if this is
+  // an inactive RVH that is either used by subframe RFHs or not used by any
+  // RFHs at all (e.g., when created for the opener chain).
+  //
+  // While it would be nice to uniformly dispatch RenderViewCreated for all
+  // cases, some existing code (e.g., ExtensionViewHost) assumes it won't
+  // hear RenderViewCreated for a RVH created for an OOPIF.
+  //
+  // TODO(alexmos, creis): Revisit this as part of migrating RenderViewCreated
+  // usage to RenderFrameCreated.  See https://crbug.com/763548.
+  if (!GetMainFrame())
+    return;
+
+  delegate_->RenderViewCreated(this);
+  has_notified_about_creation_ = true;
 }
 
 void RenderViewHostImpl::ClosePage() {
@@ -623,7 +629,21 @@ int RenderViewHostImpl::GetRoutingID() const {
 }
 
 RenderFrameHost* RenderViewHostImpl::GetMainFrame() {
-  return RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_routing_id_);
+  // If the RenderViewHost is active, it should always have a main frame
+  // RenderFrameHost.  If it is inactive, it could've been created for a
+  // pending main frame navigation, in which case it will transition to active
+  // once that navigation commits. In this case, return the pending main frame
+  // RenderFrameHost, as that's expected by certain code paths,
+  // such as RenderViewHostImpl::SetUIProperty().  If there's no pending main
+  // frame navigation, return nullptr.
+  //
+  // TODO(alexmos, creis): Migrate these code paths to use RenderFrameHost APIs
+  // and remove this fallback.  See https://crbug.com/763548.
+  if (is_active()) {
+    return RenderFrameHost::FromID(GetProcess()->GetID(),
+                                   main_frame_routing_id_);
+  }
+  return delegate_->GetPendingMainFrame();
 }
 
 void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
@@ -922,12 +942,30 @@ void RenderViewHostImpl::LoadImageAt(int x, int y) {
 
 void RenderViewHostImpl::ExecuteMediaPlayerActionAtLocation(
   const gfx::Point& location, const blink::WebMediaPlayerAction& action) {
+  // TODO(wjmaclean): See if coordinate transforms need to be done for OOPIFs
+  // and guest views. https://crbug.com/776807
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen@vivaldi.com). See above comment, I assume this will soon
+    // become redundant. Added for Ch64.
+    gfx::PointF local_location_f =
+        GetWidget()->GetView()->TransformRootPointToViewCoordSpace(
+            gfx::PointF(location.x(), location.y()));
+    gfx::Point local_location(local_location_f.x(), local_location_f.y());
+    Send(new ViewMsg_MediaPlayerActionAt(GetRoutingID(), local_location, action));
+  } else {
   Send(new ViewMsg_MediaPlayerActionAt(GetRoutingID(), location, action));
+  }
 }
 
 void RenderViewHostImpl::ExecutePluginActionAtLocation(
   const gfx::Point& location, const blink::WebPluginAction& action) {
-  Send(new ViewMsg_PluginActionAt(GetRoutingID(), location, action));
+  // TODO(wjmaclean): See if this needs to be done for OOPIFs as well.
+  // https://crbug.com/776807
+  gfx::PointF local_location_f =
+      GetWidget()->GetView()->TransformRootPointToViewCoordSpace(
+          gfx::PointF(location.x(), location.y()));
+  gfx::Point local_location(local_location_f.x(), local_location_f.y());
+  Send(new ViewMsg_PluginActionAt(GetRoutingID(), local_location, action));
 }
 
 void RenderViewHostImpl::NotifyMoveOrResizeStarted() {

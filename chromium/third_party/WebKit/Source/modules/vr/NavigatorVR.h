@@ -15,12 +15,12 @@
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Noncopyable.h"
-#include "public/platform/WebVector.h"
 
 namespace blink {
 
 class Document;
 class Navigator;
+class VR;
 class VRController;
 
 class MODULES_EXPORT NavigatorVR final
@@ -34,8 +34,13 @@ class MODULES_EXPORT NavigatorVR final
  public:
   static NavigatorVR* From(Document&);
   static NavigatorVR& From(Navigator&);
-  virtual ~NavigatorVR();
+  ~NavigatorVR() override;
 
+  // Latest API
+  static VR* vr(Navigator&);
+  VR* vr();
+
+  // Legacy API
   static ScriptPromise getVRDisplays(ScriptState*, Navigator&);
   ScriptPromise getVRDisplays(ScriptState*);
 
@@ -57,7 +62,7 @@ class MODULES_EXPORT NavigatorVR final
   void DidRemoveEventListener(LocalDOMWindow*, const AtomicString&) override;
   void DidRemoveAllEventListeners(LocalDOMWindow*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   friend class VRDisplay;
@@ -69,6 +74,7 @@ class MODULES_EXPORT NavigatorVR final
 
   void FireVRDisplayPresentChange(VRDisplay*);
 
+  Member<VR> vr_;
   Member<VRController> controller_;
 
   // Whether this page is listening for vrdisplayactivate event.

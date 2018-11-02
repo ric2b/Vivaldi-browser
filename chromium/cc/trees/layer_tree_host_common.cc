@@ -55,9 +55,9 @@ LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting::
                                         device_transform,
                                         1.f,
                                         1.f,
-                                        NULL,
-                                        NULL,
-                                        NULL) {}
+                                        nullptr,
+                                        nullptr,
+                                        nullptr) {}
 
 LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting::
     CalcDrawPropsMainInputsForTesting(Layer* root_layer,
@@ -108,11 +108,11 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               device_transform,
                               device_scale_factor,
                               1.f,
-                              NULL,
-                              NULL,
-                              NULL,
+                              nullptr,
+                              nullptr,
+                              nullptr,
                               gfx::Vector2dF(),
-                              NULL,
+                              nullptr,
                               std::numeric_limits<int>::max() / 2,
                               false,
                               render_surface_list,
@@ -402,8 +402,7 @@ static void ComputeInitialRenderSurfaceList(
   }
 }
 
-static void ComputeSurfaceContentRects(LayerTreeImpl* layer_tree_impl,
-                                       PropertyTrees* property_trees,
+static void ComputeSurfaceContentRects(PropertyTrees* property_trees,
                                        RenderSurfaceList* render_surface_list,
                                        int max_texture_size) {
   // Walk the list backwards, accumulating each surface's content rect into its
@@ -480,8 +479,8 @@ static void CalculateRenderSurfaceLayerList(
   // produce a final list that omits empty surfaces.
   ComputeInitialRenderSurfaceList(layer_tree_impl, property_trees,
                                   &initial_render_surface_list);
-  ComputeSurfaceContentRects(layer_tree_impl, property_trees,
-                             &initial_render_surface_list, max_texture_size);
+  ComputeSurfaceContentRects(property_trees, &initial_render_surface_list,
+                             max_texture_size);
   ComputeListOfNonEmptySurfaces(layer_tree_impl, property_trees,
                                 &initial_render_surface_list,
                                 render_surface_list);

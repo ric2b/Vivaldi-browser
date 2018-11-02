@@ -40,6 +40,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 
 namespace chromeos {
@@ -53,7 +54,7 @@ const int kGracePeriodMs = 24 * 60 * 60 * 1000;    // 24 hours.
 const int kOneKilobyte = 1 << 10;                  // 1 kB in bytes.
 
 base::TimeDelta ReadTimeDeltaFromFile(const base::FilePath& path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   base::ScopedFD fd(
       HANDLE_EINTR(open(path.value().c_str(), O_RDONLY | O_NOFOLLOW)));
   if (!fd.is_valid())
@@ -85,7 +86,7 @@ AutomaticRebootManager::SystemEventTimes GetSystemEventTimes() {
 }
 
 void SaveUpdateRebootNeededUptime() {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   const base::TimeDelta kZeroTimeDelta;
 
   base::FilePath update_reboot_needed_uptime_file;
@@ -110,7 +111,7 @@ void SaveUpdateRebootNeededUptime() {
     return;
 
   std::string update_reboot_needed_uptime =
-      base::DoubleToString(uptime.InSecondsF());
+      base::NumberToString(uptime.InSecondsF());
   base::WriteFileDescriptor(fd.get(), update_reboot_needed_uptime.c_str(),
                             update_reboot_needed_uptime.size());
 }
@@ -407,7 +408,8 @@ void AutomaticRebootManager::Reboot() {
   login_screen_idle_timer_.reset();
   grace_start_timer_.reset();
   grace_end_timer_.reset();
-  DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
+  DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+      power_manager::REQUEST_RESTART_OTHER, "automatic reboot manager");
 }
 
 }  // namespace system

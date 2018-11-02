@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -36,7 +37,8 @@ const int kTestDataSize = kMessages * kMessageSize;
 
 class RateLimiter {
  public:
-  virtual ~RateLimiter() { };
+  virtual ~RateLimiter() = default;
+  ;
   // Returns true if the new packet needs to be dropped, false otherwise.
   virtual bool DropNextPacket() = 0;
 };
@@ -51,7 +53,7 @@ class LeakyBucket : public RateLimiter {
         last_update_(base::TimeTicks::Now()) {
   }
 
-  ~LeakyBucket() override {}
+  ~LeakyBucket() override = default;
 
   bool DropNextPacket() override {
     base::TimeTicks now = base::TimeTicks::Now();
@@ -80,7 +82,7 @@ class FakeSocket : public P2PDatagramSocket {
       : rate_limiter_(NULL),
         latency_ms_(0) {
   }
-  ~FakeSocket() override {}
+  ~FakeSocket() override = default;
 
   void AppendInputPacket(const std::vector<char>& data) {
     if (rate_limiter_ && rate_limiter_->DropNextPacket())
@@ -149,7 +151,7 @@ class FakeSocket : public P2PDatagramSocket {
   int read_buffer_size_;
   net::CompletionCallback read_callback_;
 
-  std::deque<std::vector<char> > incoming_packets_;
+  base::circular_deque<std::vector<char>> incoming_packets_;
 
   FakeSocket* peer_socket_;
   RateLimiter* rate_limiter_;
@@ -187,7 +189,7 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
   }
 
  protected:
-  virtual ~TCPChannelTester() {}
+  virtual ~TCPChannelTester() = default;
 
   void Done() {
     done_ = true;

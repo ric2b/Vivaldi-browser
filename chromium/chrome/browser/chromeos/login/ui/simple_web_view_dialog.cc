@@ -12,7 +12,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/ui/captive_portal_window_proxy.h"
-#include "chrome/browser/command_updater.h"
+#include "chrome/browser/command_updater_impl.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -67,8 +67,7 @@ class ToolbarRowView : public views::View {
             views::View* forward,
             views::View* reload,
             views::View* location_bar) {
-    GridLayout* layout = new GridLayout(this);
-    SetLayoutManager(layout);
+    GridLayout* layout = GridLayout::CreateAndInstall(this);
 
     const int related_horizontal_spacing =
         ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -133,7 +132,7 @@ SimpleWebViewDialog::SimpleWebViewDialog(Profile* profile)
       location_bar_(NULL),
       web_view_(NULL),
       bubble_model_delegate_(new StubBubbleModelDelegate) {
-  command_updater_.reset(new CommandUpdater(this));
+  command_updater_.reset(new CommandUpdaterImpl(this));
   command_updater_->UpdateCommandEnabled(IDC_BACK, true);
   command_updater_->UpdateCommandEnabled(IDC_FORWARD, true);
   command_updater_->UpdateCommandEnabled(IDC_STOP, true);
@@ -193,8 +192,8 @@ void SimpleWebViewDialog::Init() {
   forward_->set_id(VIEW_ID_FORWARD_BUTTON);
 
   // Location bar.
-  location_bar_ = new LocationBarView(NULL, profile_, command_updater_.get(),
-                                      this, true);
+  location_bar_ =
+      new LocationBarView(NULL, profile_, command_updater_.get(), this, true);
 
   // Reload button.
   reload_ = new ReloadButton(profile_, command_updater_.get());
@@ -210,8 +209,7 @@ void SimpleWebViewDialog::Init() {
   toolbar_row->Init(back_, forward_, reload_, location_bar_);
 
   // Layout.
-  GridLayout* layout = new GridLayout(this);
-  SetLayoutManager(layout);
+  GridLayout* layout = GridLayout::CreateAndInstall(this);
 
   views::ColumnSet* column_set = layout->AddColumnSet(0);
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1,
@@ -275,7 +273,7 @@ void SimpleWebViewDialog::NavigationStateChanged(
 }
 
 void SimpleWebViewDialog::LoadingStateChanged(WebContents* source,
-    bool to_different_document) {
+                                              bool to_different_document) {
   bool is_loading = source->IsLoading();
   UpdateReload(is_loading && to_different_document, false);
   command_updater_->UpdateCommandEnabled(IDC_STOP, is_loading);
@@ -302,9 +300,8 @@ content::WebContents* SimpleWebViewDialog::GetActiveWebContents() const {
   return web_view_->web_contents();
 }
 
-void SimpleWebViewDialog::ExecuteCommandWithDisposition(
-    int id,
-    WindowOpenDisposition) {
+void SimpleWebViewDialog::ExecuteCommandWithDisposition(int id,
+                                                        WindowOpenDisposition) {
   WebContents* web_contents = web_view_->web_contents();
   switch (id) {
     case IDC_BACK:

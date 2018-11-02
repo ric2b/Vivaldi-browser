@@ -5,12 +5,10 @@
 #include "net/dns/mdns_client_impl.h"
 
 #include <algorithm>
-#include <queue>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
@@ -49,8 +47,8 @@ void MDnsSocketFactoryImpl::CreateSockets(
   for (size_t i = 0; i < interfaces.size(); ++i) {
     DCHECK(interfaces[i].second == ADDRESS_FAMILY_IPV4 ||
            interfaces[i].second == ADDRESS_FAMILY_IPV6);
-    std::unique_ptr<DatagramServerSocket> socket(
-        CreateAndBindMDnsSocket(interfaces[i].second, interfaces[i].first));
+    std::unique_ptr<DatagramServerSocket> socket(CreateAndBindMDnsSocket(
+        interfaces[i].second, interfaces[i].first, nullptr));
     if (socket)
       sockets->push_back(std::move(socket));
   }
@@ -64,8 +62,7 @@ MDnsConnection::SocketHandler::SocketHandler(
       response_(dns_protocol::kMaxMulticastSize),
       send_in_progress_(false) {}
 
-MDnsConnection::SocketHandler::~SocketHandler() {
-}
+MDnsConnection::SocketHandler::~SocketHandler() = default;
 
 int MDnsConnection::SocketHandler::Start() {
   IPEndPoint end_point;
@@ -137,16 +134,15 @@ MDnsConnection::MDnsConnection(MDnsConnection::Delegate* delegate)
     : delegate_(delegate), weak_ptr_factory_(this) {
 }
 
-MDnsConnection::~MDnsConnection() {
-}
+MDnsConnection::~MDnsConnection() = default;
 
 bool MDnsConnection::Init(MDnsSocketFactory* socket_factory) {
   std::vector<std::unique_ptr<DatagramServerSocket>> sockets;
   socket_factory->CreateSockets(&sockets);
 
   for (std::unique_ptr<DatagramServerSocket>& socket : sockets) {
-    socket_handlers_.push_back(base::WrapUnique(
-        new MDnsConnection::SocketHandler(std::move(socket), this)));
+    socket_handlers_.push_back(std::make_unique<MDnsConnection::SocketHandler>(
+        std::move(socket), this));
   }
 
   // All unbound sockets need to be bound before processing untrusted input.
@@ -206,8 +202,7 @@ MDnsClientImpl::Core::Core(base::Clock* clock, base::Timer* timer)
       connection_(new MDnsConnection(this)) {
 }
 
-MDnsClientImpl::Core::~Core() {
-}
+MDnsClientImpl::Core::~Core() = default;
 
 bool MDnsClientImpl::Core::Init(MDnsSocketFactory* socket_factory) {
   return connection_->Init(socket_factory);
@@ -430,8 +425,7 @@ MDnsClientImpl::MDnsClientImpl(std::unique_ptr<base::Clock> clock,
                                std::unique_ptr<base::Timer> timer)
     : clock_(std::move(clock)), cleanup_timer_(std::move(timer)) {}
 
-MDnsClientImpl::~MDnsClientImpl() {
-}
+MDnsClientImpl::~MDnsClientImpl() = default;
 
 bool MDnsClientImpl::StartListening(MDnsSocketFactory* socket_factory) {
   DCHECK(!core_.get());

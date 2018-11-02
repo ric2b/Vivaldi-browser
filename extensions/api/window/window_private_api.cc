@@ -14,28 +14,28 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using extensions::vivaldi::window_private::WindowState;
 
 namespace extensions {
 
 VivaldiWindowsAPI::VivaldiWindowsAPI(content::BrowserContext* context)
-  : browser_context_(context) {
+    : browser_context_(context) {
   BrowserList::GetInstance()->AddObserver(this);
 }
 
-VivaldiWindowsAPI::~VivaldiWindowsAPI() { }
+VivaldiWindowsAPI::~VivaldiWindowsAPI() {}
 
 void VivaldiWindowsAPI::Shutdown() {
   BrowserList::GetInstance()->RemoveObserver(this);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiWindowsAPI> >::
-DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>*
@@ -63,16 +63,16 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
 
 ui::WindowShowState ConvertToWindowShowState(WindowState state) {
   switch (state) {
-  case WindowState::WINDOW_STATE_NORMAL:
-    return ui::SHOW_STATE_NORMAL;
-  case WindowState::WINDOW_STATE_MINIMIZED:
-    return ui::SHOW_STATE_MINIMIZED;
-  case WindowState::WINDOW_STATE_MAXIMIZED:
-    return ui::SHOW_STATE_MAXIMIZED;
-  case WindowState::WINDOW_STATE_FULLSCREEN:
-    return ui::SHOW_STATE_FULLSCREEN;
-  case WindowState::WINDOW_STATE_NONE:
-    return ui::SHOW_STATE_DEFAULT;
+    case WindowState::WINDOW_STATE_NORMAL:
+      return ui::SHOW_STATE_NORMAL;
+    case WindowState::WINDOW_STATE_MINIMIZED:
+      return ui::SHOW_STATE_MINIMIZED;
+    case WindowState::WINDOW_STATE_MAXIMIZED:
+      return ui::SHOW_STATE_MAXIMIZED;
+    case WindowState::WINDOW_STATE_FULLSCREEN:
+      return ui::SHOW_STATE_FULLSCREEN;
+    case WindowState::WINDOW_STATE_NONE:
+      return ui::SHOW_STATE_DEFAULT;
   }
   NOTREACHED();
   return ui::SHOW_STATE_DEFAULT;
@@ -81,30 +81,38 @@ ui::WindowShowState ConvertToWindowShowState(WindowState state) {
 VivaldiBrowserWindow::WindowType ConvertToVivaldiWindowType(
     vivaldi::window_private::WindowType type) {
   switch (type) {
-  case vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL:
-    return VivaldiBrowserWindow::WindowType::NORMAL;
-  case vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS:
-    return VivaldiBrowserWindow::WindowType::SETTINGS;
-  case vivaldi::window_private::WindowType::WINDOW_TYPE_NONE:
-    return VivaldiBrowserWindow::WindowType::NORMAL;
+    case vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL:
+      return VivaldiBrowserWindow::WindowType::NORMAL;
+    case vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS:
+      return VivaldiBrowserWindow::WindowType::SETTINGS;
+    case vivaldi::window_private::WindowType::WINDOW_TYPE_NONE:
+      return VivaldiBrowserWindow::WindowType::NORMAL;
   }
   NOTREACHED();
   return VivaldiBrowserWindow::WindowType::NORMAL;
 }
 
 bool WindowPrivateCreateFunction::RunAsync() {
-  std::unique_ptr<vivaldi::window_private::Create::Params>
-      params(vivaldi::window_private::Create::Params::Create(
-          *args_));
+  std::unique_ptr<vivaldi::window_private::Create::Params> params(
+      vivaldi::window_private::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int top = 0;
   int left = 0;
+  int min_width = 0;
+  int min_height = 0;
+
   if (params->options.bounds.top.get()) {
     top = *params->options.bounds.top.get();
   }
   if (params->options.bounds.left.get()) {
     left = *params->options.bounds.left.get();
+  }
+  if (params->options.bounds.min_width.get()) {
+    min_width = *params->options.bounds.min_width.get();
+  }
+  if (params->options.bounds.min_height.get()) {
+    min_height= *params->options.bounds.min_height.get();
   }
   bool incognito = false;
   bool focused = true;
@@ -126,15 +134,13 @@ bool WindowPrivateCreateFunction::RunAsync() {
     ext_data = *params->options.ext_data.get();
   }
   type = params->type;
-  Profile *profile = GetProfile();
+  Profile* profile = GetProfile();
   if (incognito) {
     profile = profile->GetOffTheRecordProfile();
   } else {
     profile = profile->GetOriginalProfile();
   }
-  gfx::Rect bounds(left,
-                   top,
-                   params->options.bounds.width,
+  gfx::Rect bounds(left, top, params->options.bounds.width,
                    params->options.bounds.height);
   Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
 
@@ -149,17 +155,18 @@ bool WindowPrivateCreateFunction::RunAsync() {
         window_decoration ? AppWindow::FRAME_CHROME : AppWindow::FRAME_NONE;
   } else {
     if (GetProfile()->GetPrefs()->GetBoolean(
-            vivaldiprefs::kVivaldiUseNativeWindowDecoration)) {
+            vivaldiprefs::kWindowsUseNativeDecoration)) {
       app_params.frame = extensions::AppWindow::FRAME_CHROME;
     } else {
       app_params.frame = extensions::AppWindow::FRAME_NONE;
     }
   }
   app_params.content_spec.bounds = bounds;
+  app_params.content_spec.minimum_size = gfx::Size(min_width, min_height);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
-          nullptr, params->url, app_params);
+      VivaldiBrowserWindow::CreateVivaldiBrowserWindow(nullptr, params->url,
+                                                       app_params);
 
   create_params.initial_bounds = bounds;
   create_params.initial_show_state = ui::SHOW_STATE_DEFAULT;
@@ -180,13 +187,13 @@ bool WindowPrivateCreateFunction::RunAsync() {
     tab_url = "about:blank";
   }
   content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
-                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+                                   WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                   ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
   browser->OpenURL(urlparams);
 
   // TODO(pettern): If we ever need to open unfocused windows, we need to
   // add a new method for open delayed and unfocused.
-//  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
+  //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
   results_ = vivaldi::window_private::Create::Results::Create(
       browser->session_id().id());
 
@@ -196,12 +203,12 @@ bool WindowPrivateCreateFunction::RunAsync() {
 
 bool WindowPrivateGetCurrentIdFunction::RunAsync() {
   Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-    dispatcher()->GetAssociatedWebContents());
+      dispatcher()->GetAssociatedWebContents());
 
   DCHECK(browser);
   if (browser) {
     results_ = vivaldi::window_private::GetCurrentId::Results::Create(
-      browser->session_id().id());
+        browser->session_id().id());
     SendResponse(true);
     return true;
   }
@@ -210,21 +217,18 @@ bool WindowPrivateGetCurrentIdFunction::RunAsync() {
 }
 
 bool WindowPrivateSetStateFunction::RunAsync() {
-  std::unique_ptr<vivaldi::window_private::SetState::Params>
-    params(vivaldi::window_private::SetState::Params::Create(
-      *args_));
+  std::unique_ptr<vivaldi::window_private::SetState::Params> params(
+      vivaldi::window_private::SetState::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   WindowController* controller;
   if (!windows_util::GetWindowFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
           &controller, &error_)) {
-    results_ =
-      vivaldi::window_private::SetState::Results::Create(false);
+    results_ = vivaldi::window_private::SetState::Results::Create(false);
     SendResponse(false);
     return true;
   }
-  ui::WindowShowState show_state =
-    ConvertToWindowShowState(params->state);
+  ui::WindowShowState show_state = ConvertToWindowShowState(params->state);
 
   bool was_fullscreen = controller->window()->IsFullscreen();
   if (show_state != ui::SHOW_STATE_FULLSCREEN &&
@@ -232,24 +236,24 @@ bool WindowPrivateSetStateFunction::RunAsync() {
     controller->SetFullscreenMode(false, extension()->url());
 
   switch (show_state) {
-  case ui::SHOW_STATE_MINIMIZED:
-    controller->window()->Minimize();
-    break;
-  case ui::SHOW_STATE_MAXIMIZED:
-    controller->window()->Maximize();
-    break;
-  case ui::SHOW_STATE_FULLSCREEN:
-    controller->SetFullscreenMode(true, extension()->url());
-    break;
-  case ui::SHOW_STATE_NORMAL:
-    if (was_fullscreen) {
-      controller->SetFullscreenMode(false, extension()->url());
-    } else {
-      controller->window()->Restore();
-    }
-    break;
-  default:
-    break;
+    case ui::SHOW_STATE_MINIMIZED:
+      controller->window()->Minimize();
+      break;
+    case ui::SHOW_STATE_MAXIMIZED:
+      controller->window()->Maximize();
+      break;
+    case ui::SHOW_STATE_FULLSCREEN:
+      controller->SetFullscreenMode(true, extension()->url());
+      break;
+    case ui::SHOW_STATE_NORMAL:
+      if (was_fullscreen) {
+        controller->SetFullscreenMode(false, extension()->url());
+      } else {
+        controller->window()->Restore();
+      }
+      break;
+    default:
+      break;
   }
   SendResponse(true);
   return true;

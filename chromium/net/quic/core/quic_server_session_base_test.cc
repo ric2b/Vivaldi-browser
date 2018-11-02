@@ -90,14 +90,13 @@ class TestServerSession : public QuicServerSessionBase {
     return stream;
   }
 
-  QuicSpdyStream* CreateOutgoingDynamicStream(SpdyPriority priority) override {
+  QuicSpdyStream* CreateOutgoingDynamicStream() override {
     if (!ShouldCreateOutgoingDynamicStream()) {
       return nullptr;
     }
 
     QuicSpdyStream* stream = new QuicSimpleServerStream(
         GetNextOutgoingStreamId(), this, response_cache_);
-    stream->SetPriority(priority);
     ActivateStream(QuicWrapUnique(stream));
     return stream;
   }
@@ -117,7 +116,8 @@ class TestServerSession : public QuicServerSessionBase {
 
 const size_t kMaxStreamsForTest = 10;
 
-class QuicServerSessionBaseTest : public QuicTestWithParam<QuicVersion> {
+class QuicServerSessionBaseTest
+    : public QuicTestWithParam<QuicTransportVersion> {
  protected:
   QuicServerSessionBaseTest()
       : QuicServerSessionBaseTest(crypto_test_utils::ProofSourceForTesting()) {}
@@ -139,7 +139,7 @@ class QuicServerSessionBaseTest : public QuicTestWithParam<QuicVersion> {
 
     connection_ = new StrictMock<MockQuicConnection>(
         &helper_, &alarm_factory_, Perspective::IS_SERVER,
-        SupportedVersions(GetParam()));
+        SupportedTransportVersions(GetParam()));
     session_.reset(new TestServerSession(
         config_, connection_, &owner_, &stream_helper_, &crypto_config_,
         &compressed_certs_cache_, &response_cache_));
@@ -191,7 +191,7 @@ MATCHER_P(EqualsProto, network_params, "") {
 
 INSTANTIATE_TEST_CASE_P(Tests,
                         QuicServerSessionBaseTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
 TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
   // Open a stream, then reset it.
   // Send two bytes of payload to open it.
@@ -201,7 +201,7 @@ TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
   EXPECT_EQ(1u, session_->GetNumOpenIncomingStreams());
 
   // Send a reset (and expect the peer to send a RST in response).
-  QuicRstStreamFrame rst1(GetNthClientInitiatedId(0),
+  QuicRstStreamFrame rst1(kInvalidControlFrameId, GetNthClientInitiatedId(0),
                           QUIC_ERROR_PROCESSING_STREAM, 0);
   EXPECT_CALL(owner_, OnRstStreamReceived(_)).Times(1);
   EXPECT_CALL(*connection_, SendRstStream(GetNthClientInitiatedId(0),
@@ -219,7 +219,7 @@ TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
 
 TEST_P(QuicServerSessionBaseTest, NeverOpenStreamDueToReset) {
   // Send a reset (and expect the peer to send a RST in response).
-  QuicRstStreamFrame rst1(GetNthClientInitiatedId(0),
+  QuicRstStreamFrame rst1(kInvalidControlFrameId, GetNthClientInitiatedId(0),
                           QUIC_ERROR_PROCESSING_STREAM, 0);
   EXPECT_CALL(owner_, OnRstStreamReceived(_)).Times(1);
   EXPECT_CALL(*connection_, SendRstStream(GetNthClientInitiatedId(0),
@@ -248,7 +248,7 @@ TEST_P(QuicServerSessionBaseTest, AcceptClosedStream) {
   EXPECT_EQ(2u, session_->GetNumOpenIncomingStreams());
 
   // Send a reset (and expect the peer to send a RST in response).
-  QuicRstStreamFrame rst(GetNthClientInitiatedId(0),
+  QuicRstStreamFrame rst(kInvalidControlFrameId, GetNthClientInitiatedId(0),
                          QUIC_ERROR_PROCESSING_STREAM, 0);
   EXPECT_CALL(owner_, OnRstStreamReceived(_)).Times(1);
   EXPECT_CALL(*connection_, SendRstStream(GetNthClientInitiatedId(0),
@@ -570,7 +570,7 @@ class StreamMemberLifetimeTest : public QuicServerSessionBaseTest {
 
 INSTANTIATE_TEST_CASE_P(StreamMemberLifetimeTests,
                         StreamMemberLifetimeTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
 
 // Trigger an operation which causes an async invocation of
 // ProofSource::GetProof.  Delay the completion of the operation until after the
@@ -580,11 +580,11 @@ TEST_P(StreamMemberLifetimeTest, Basic) {
   FLAGS_quic_reloadable_flag_quic_use_cheap_stateless_rejects = true;
 
   const QuicClock* clock = helper_.GetClock();
-  QuicVersion version = AllSupportedVersions().front();
+  QuicTransportVersion version = AllSupportedTransportVersions().front();
   CryptoHandshakeMessage chlo = crypto_test_utils::GenerateDefaultInchoateCHLO(
       clock, version, &crypto_config_);
   chlo.SetVector(kCOPT, QuicTagVector{kSREJ});
-  std::vector<QuicVersion> packet_version_list = {version};
+  std::vector<QuicTransportVersion> packet_version_list = {version};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
       1, true, false, 1,
       string(chlo.GetSerialized(Perspective::IS_CLIENT)

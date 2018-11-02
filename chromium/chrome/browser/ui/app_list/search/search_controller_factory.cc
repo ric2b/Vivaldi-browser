@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
@@ -24,7 +25,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/arc/arc_util.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/search/mixer.h"
 #include "ui/app_list/search_controller.h"
@@ -38,8 +38,7 @@ namespace app_list {
 namespace {
 
 // Maximum number of results to show in each mixer group.
-constexpr size_t kMaxAppsGroupResults = 8;
-constexpr size_t kMaxAppsGroupResultsFullscreen = 6;
+constexpr size_t kMaxAppsGroupResults = 6;
 constexpr size_t kMaxOmniboxResults = 4;
 constexpr size_t kMaxWebstoreResults = 2;
 constexpr size_t kMaxSuggestionsResults = 6;
@@ -84,17 +83,11 @@ std::unique_ptr<SearchController> CreateSearchController(
   // a query turns up very few results, the mixer may take more than this
   // maximum from a particular group.
 
-  const bool is_fullscreen_app_list_enabled =
-      features::IsFullscreenAppListEnabled();
-
   // For fullscreen app list, apps should be at top, answer card in the middle
   // and other search results in the bottom. So set boost 10.0, 5.0, 0.0
   // respectively.
   size_t answer_card_group_id = controller->AddGroup(1, 1.0, 5.0);
-  size_t apps_group_id = controller->AddGroup(
-      is_fullscreen_app_list_enabled ? kMaxAppsGroupResultsFullscreen
-                                     : kMaxAppsGroupResults,
-      1.0, is_fullscreen_app_list_enabled ? 10.0 : 0.0);
+  size_t apps_group_id = controller->AddGroup(kMaxAppsGroupResults, 1.0, 10.0);
   size_t omnibox_group_id = controller->AddGroup(kMaxOmniboxResults, 1.0, 0.0);
   size_t webstore_group_id =
       controller->AddGroup(kMaxWebstoreResults, 0.4, 0.0);

@@ -104,8 +104,7 @@ Polymer({
         var map = new Map();
         if (settings.routes.FONTS) {
           map.set(
-              settings.routes.FONTS.path,
-              '#customize-fonts-subpage-trigger .subpage-arrow');
+              settings.routes.FONTS.path, '#customize-fonts-subpage-trigger');
         }
         return map;
       },
@@ -198,12 +197,11 @@ Polymer({
   },
 
   /**
-   * URL for either current theme or the theme gallery.
-   * @return {string}
+   * Open URL for either current theme or the theme gallery.
    * @private
    */
-  getThemeHref_: function() {
-    return this.themeUrl_ || loadTimeData.getString('themesGalleryUrl');
+  openThemeUrl_: function() {
+    window.open(this.themeUrl_ || loadTimeData.getString('themesGalleryUrl'));
   },
 
   // <if expr="chromeos">

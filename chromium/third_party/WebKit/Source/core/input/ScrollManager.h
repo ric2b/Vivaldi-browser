@@ -6,6 +6,8 @@
 #define ScrollManager_h
 
 #include <deque>
+
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/page/EventWithHitTestResults.h"
 #include "platform/geometry/LayoutSize.h"
@@ -33,11 +35,9 @@ class WebGestureEvent;
 // classes and they call into this class for doing the work.
 class CORE_EXPORT ScrollManager
     : public GarbageCollectedFinalized<ScrollManager> {
-  WTF_MAKE_NONCOPYABLE(ScrollManager);
-
  public:
   explicit ScrollManager(LocalFrame&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void Clear();
 
@@ -67,8 +67,6 @@ class CORE_EXPORT ScrollManager
                       ScrollGranularity,
                       Node* starting_node,
                       Node* mouse_press_node);
-
-  void SetFrameWasScrolledByUser();
 
   // TODO(crbug.com/616491): Consider moving all gesture related functions to
   // another class.
@@ -116,10 +114,11 @@ class CORE_EXPORT ScrollManager
 
   // scroller_size is set only when scrolling non root scroller.
   void ComputeScrollRelatedMetrics(
-      uint32_t* non_composited_main_thread_scrolling_reasons,
-      int* scroller_size,
-      bool* scroller_size_updated);
+      uint32_t* non_composited_main_thread_scrolling_reasons);
   void RecordScrollRelatedMetrics(const WebGestureDevice);
+
+  WebGestureEvent SynthesizeGestureScrollBegin(
+      const WebGestureEvent& update_event);
 
   // NOTE: If adding a new field to this class please ensure that it is
   // cleared in |ScrollManager::clear()|.
@@ -152,6 +151,8 @@ class CORE_EXPORT ScrollManager
 
   LayoutSize
       offset_from_resize_corner_;  // In the coords of m_resizeScrollableArea.
+
+  DISALLOW_COPY_AND_ASSIGN(ScrollManager);
 };
 
 }  // namespace blink

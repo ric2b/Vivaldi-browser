@@ -75,6 +75,17 @@ bool PlatformSensor::StopListening(Client* client,
   return UpdateSensorInternal(config_map_);
 }
 
+bool PlatformSensor::StopListening(Client* client) {
+  DCHECK(client);
+  auto client_entry = config_map_.find(client);
+  if (client_entry == config_map_.end())
+    return false;
+
+  config_map_.erase(client_entry);
+
+  return UpdateSensorInternal(config_map_);
+}
+
 void PlatformSensor::UpdateSensor() {
   UpdateSensorInternal(config_map_);
 }
@@ -87,11 +98,7 @@ void PlatformSensor::AddClient(Client* client) {
 void PlatformSensor::RemoveClient(Client* client) {
   DCHECK(client);
   clients_.RemoveObserver(client);
-  auto client_entry = config_map_.find(client);
-  if (client_entry != config_map_.end()) {
-    config_map_.erase(client_entry);
-    UpdateSensorInternal(config_map_);
-  }
+  StopListening(client);
 }
 
 bool PlatformSensor::GetLatestReading(SensorReading* result) {
@@ -99,23 +106,27 @@ bool PlatformSensor::GetLatestReading(SensorReading* result) {
     const auto* buffer = static_cast<const device::SensorReadingSharedBuffer*>(
         shared_buffer_mapping_.get());
     shared_buffer_reader_ =
-        base::MakeUnique<SensorReadingSharedBufferReader>(buffer);
+        std::make_unique<SensorReadingSharedBufferReader>(buffer);
   }
 
   return shared_buffer_reader_->GetReading(result);
 }
 
-void PlatformSensor::UpdateSensorReading(const SensorReading& reading) {
+void PlatformSensor::UpdateSharedBufferAndNotifyClients(
+    const SensorReading& reading) {
+  UpdateSharedBuffer(reading);
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&PlatformSensor::NotifySensorReadingChanged,
+                                    weak_factory_.GetWeakPtr()));
+}
+
+void PlatformSensor::UpdateSharedBuffer(const SensorReading& reading) {
   ReadingBuffer* buffer =
       static_cast<ReadingBuffer*>(shared_buffer_mapping_.get());
   auto& seqlock = buffer->seqlock.value();
   seqlock.WriteBegin();
   buffer->reading = reading;
   seqlock.WriteEnd();
-
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&PlatformSensor::NotifySensorReadingChanged,
-                                    weak_factory_.GetWeakPtr()));
 }
 
 void PlatformSensor::NotifySensorReadingChanged() {
@@ -138,18 +149,28 @@ bool PlatformSensor::UpdateSensorInternal(const ConfigMap& configurations) {
 
     const auto& conf_list = pair.second;
     for (const auto& configuration : conf_list) {
-      if (!optimal_configuration || configuration > *optimal_configuration) {
+      if (!optimal_configuration || configuration > *optimal_configuration)
         optimal_configuration = &configuration;
-      }
     }
   }
 
   if (!optimal_configuration) {
+    is_active_ = false;
     StopSensor();
+    UpdateSharedBuffer(SensorReading());
     return true;
   }
 
-  return StartSensor(*optimal_configuration);
+  is_active_ = StartSensor(*optimal_configuration);
+  return is_active_;
+}
+
+bool PlatformSensor::IsActiveForTesting() const {
+  return is_active_;
+}
+
+auto PlatformSensor::GetConfigMapForTesting() const -> const ConfigMap& {
+  return config_map_;
 }
 
 }  // namespace device

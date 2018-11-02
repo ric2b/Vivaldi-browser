@@ -49,14 +49,18 @@ static const unsigned char* g_tracing_enabled = nullptr;
     TRACE_STYLE_INVALIDATOR_INVALIDATION_SELECTORPART(                \
         element, reason, invalidationSet, singleSelectorPart);
 
+// static
+void InvalidationSetDeleter::Destruct(const InvalidationSet* obj) {
+  obj->Destroy();
+}
+
 void InvalidationSet::CacheTracingFlag() {
   g_tracing_enabled = TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
       TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"));
 }
 
 InvalidationSet::InvalidationSet(InvalidationType type)
-    : ref_count_(1),
-      type_(type),
+    : type_(type),
       all_descendants_might_be_invalid_(false),
       invalidates_self_(false),
       custom_pseudo_invalid_(false),
@@ -122,8 +126,20 @@ bool InvalidationSet::InvalidatesTagName(Element& element) const {
 void InvalidationSet::Combine(const InvalidationSet& other) {
   CHECK(is_alive_);
   CHECK(other.is_alive_);
-  CHECK_NE(&other, this);
   CHECK_EQ(GetType(), other.GetType());
+
+  if (IsSelfInvalidationSet()) {
+    // We should never modify the SelfInvalidationSet singleton. When
+    // aggregating the contents from another invalidation set into an
+    // invalidation set which only invalidates self, we instantiate a new
+    // DescendantInvalidation set before calling Combine(). We still may end up
+    // here if we try to combine two references to the singleton set.
+    DCHECK(other.IsSelfInvalidationSet());
+    return;
+  }
+
+  CHECK_NE(&other, this);
+
   if (GetType() == kInvalidateSiblings) {
     SiblingInvalidationSet& siblings = ToSiblingInvalidationSet(*this);
     const SiblingInvalidationSet& other_siblings =
@@ -138,8 +154,11 @@ void InvalidationSet::Combine(const InvalidationSet& other) {
       siblings.EnsureDescendants().Combine(*other_siblings.Descendants());
   }
 
-  if (other.InvalidatesSelf())
+  if (other.InvalidatesSelf()) {
     SetInvalidatesSelf();
+    if (other.IsSelfInvalidationSet())
+      return;
+  }
 
   // No longer bother combining data structures, since the whole subtree is
   // deemed invalid.
@@ -184,7 +203,7 @@ void InvalidationSet::Combine(const InvalidationSet& other) {
   }
 }
 
-void InvalidationSet::Destroy() {
+void InvalidationSet::Destroy() const {
   if (IsDescendantInvalidationSet())
     delete ToDescendantInvalidationSet(this);
   else
@@ -258,6 +277,21 @@ void InvalidationSet::SetWholeSubtreeInvalid() {
   attributes_ = nullptr;
 }
 
+namespace {
+
+scoped_refptr<DescendantInvalidationSet> CreateSelfInvalidationSet() {
+  auto new_set = DescendantInvalidationSet::Create();
+  new_set->SetInvalidatesSelf();
+  return new_set;
+}
+
+}  // namespace
+
+InvalidationSet* InvalidationSet::SelfInvalidationSet() {
+  DEFINE_STATIC_REF(InvalidationSet, singleton_, CreateSelfInvalidationSet());
+  return singleton_;
+}
+
 void InvalidationSet::ToTracedValue(TracedValue* value) const {
   value->BeginDictionary();
 
@@ -316,7 +350,7 @@ void InvalidationSet::Show() const {
 #endif  // NDEBUG
 
 SiblingInvalidationSet::SiblingInvalidationSet(
-    RefPtr<DescendantInvalidationSet> descendants)
+    scoped_refptr<DescendantInvalidationSet> descendants)
     : InvalidationSet(kInvalidateSiblings),
       max_direct_adjacent_selectors_(1),
       descendant_invalidation_set_(std::move(descendants)) {}

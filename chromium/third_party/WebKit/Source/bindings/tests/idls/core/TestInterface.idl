@@ -33,7 +33,6 @@
 
 [
     ActiveScriptWrappable,
-    DependentLifetime,
     Custom=LegacyCallAsFunction,
     DoNotCheckConstants,
     ImplementedAs=TestInterfaceImplementation,
@@ -56,6 +55,7 @@
     attribute unrestricted float unrestrictedFloatAttribute;
     attribute TestEnum testEnumAttribute;
     attribute DOMStringOrDouble stringOrDoubleAttribute;
+    attribute [EnforceRange] long withExtendedAttributeStringAttribute;
     [ImplementedAs=CapitalImplementation] attribute Implementation uncapitalAttribute;
     [RuntimeEnabled=FeatureName] attribute long conditionalLongAttribute;
     [RuntimeEnabled=FeatureName] readonly attribute long conditionalReadOnlyLongAttribute;

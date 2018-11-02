@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -31,14 +32,14 @@ class TestTaskRunner : public base::SingleThreadTaskRunner {
         task_ready_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                     base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
-  bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
                                   base::OnceClosure task,
                                   base::TimeDelta delay) override {
     NOTREACHED();
     return false;
   }
 
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     {
@@ -112,7 +113,7 @@ class TestTaskRunner : public base::SingleThreadTaskRunner {
 
   // Protect |tasks_|.
   base::Lock lock_;
-  std::queue<base::OnceClosure> tasks_;
+  base::queue<base::OnceClosure> tasks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestTaskRunner);
 };

@@ -11,12 +11,11 @@ cr.define('print_preview', function() {
       super([
         'getInitialSettings',
         'getPrinters',
-        'getExtensionPrinters',
         'getPreview',
-        'getPrivetPrinters',
         'getPrinterCapabilities',
         'hidePreview',
         'print',
+        'saveAppState',
         'setupPrinter',
       ]);
 
@@ -35,7 +34,7 @@ cr.define('print_preview', function() {
 
       /**
        * @private {!Map<string,
-       *                !Promise<!print_preview.PrinterCapabilitiesResponse>}
+       *                !Promise<!print_preview.CapabilitiesResponse>}
        *     A map from destination IDs to the responses to be sent when
        *     |getPrinterCapabilities| is called for the ID.
        */
@@ -66,15 +65,11 @@ cr.define('print_preview', function() {
     }
 
     /** @override */
-    getPrinters() {
-      this.methodCalled('getPrinters');
-      return Promise.resolve(this.localDestinationInfos_);
-    }
-
-    /** @override */
-    getExtensionPrinters() {
-      this.methodCalled('getExtensionPrinters');
-      return Promise.resolve(true);
+    getPrinters(type) {
+      this.methodCalled('getPrinters', type);
+      cr.webUIListenerCallback(
+          'printers-added', type, this.localDestinationInfos_);
+      return Promise.resolve();
     }
 
     /** @override */
@@ -88,18 +83,18 @@ cr.define('print_preview', function() {
         requestId: requestId,
       });
       if (destination.id == this.badPrinterId_) {
-        var rejectString = print_preview.PreviewArea.EventType.SETTINGS_INVALID;
+        let rejectString = print_preview.PreviewArea.EventType.SETTINGS_INVALID;
         rejectString = rejectString.substring(
             rejectString.lastIndexOf('.') + 1, rejectString.length);
         return Promise.reject(rejectString);
       }
-      var pageRanges = printTicketStore.pageRange.getDocumentPageRanges();
+      const pageRanges = printTicketStore.pageRange.getDocumentPageRanges();
       if (pageRanges.length == 0) {  // assume full length document, 1 page.
         cr.webUIListenerCallback('page-count-ready', 1, requestId, 100);
         cr.webUIListenerCallback('page-preview-ready', 0, 0, requestId);
       } else {
-        var pages = pageRanges.reduce(function(soFar, range) {
-          for (var page = range.from; page <= range.to; page++) {
+        const pages = pageRanges.reduce(function(soFar, range) {
+          for (let page = range.from; page <= range.to; page++) {
             soFar.push(page);
           }
           return soFar;
@@ -121,8 +116,8 @@ cr.define('print_preview', function() {
     }
 
     /** @override */
-    getPrinterCapabilities(printerId) {
-      this.methodCalled('getPrinterCapabilities', printerId);
+    getPrinterCapabilities(printerId, type) {
+      this.methodCalled('getPrinterCapabilities', printerId, type);
       return this.localDestinationCapabilities_.get(printerId);
     }
 
@@ -130,7 +125,6 @@ cr.define('print_preview', function() {
     print(
       destination,
       printTicketStore,
-      cloudPrintInterface,
       documentInfo,
       opt_isOpenPdfInPreview,
       opt_showSystemDialog
@@ -138,7 +132,6 @@ cr.define('print_preview', function() {
       this.methodCalled('print', {
         destination: destination,
         printTicketStore: printTicketStore,
-        cloudPrintInterface: cloudPrintInterface,
         documentInfo: documentInfo,
         openPdfInPreview: opt_isOpenPdfInPreview || false,
         showSystemDialog: opt_showSystemDialog || false,
@@ -166,7 +159,9 @@ cr.define('print_preview', function() {
     recordInHistogram() {}
 
     /** @override */
-    saveAppState() {}
+    saveAppState(appState) {
+      this.methodCalled('saveAppState', appState);
+    }
 
     /**
      * @param {!print_preview.NativeInitialSettings} settings The settings
@@ -185,14 +180,14 @@ cr.define('print_preview', function() {
     }
 
     /**
-     * @param {!print_preview.PrinterCapabilitiesResponse} response The
+     * @param {!print_preview.CapabilitiesResponse} response The
      *     response to send for the destination whose ID is in the response.
      * @param {boolean?} opt_reject Whether to reject the callback for this
      *     destination. Defaults to false (will resolve callback) if not
      *     provided.
      */
     setLocalDestinationCapabilities(response, opt_reject) {
-      this.localDestinationCapabilities_.set(response.printerId,
+      this.localDestinationCapabilities_.set(response.printer.deviceName,
           opt_reject ? Promise.reject() : Promise.resolve(response));
     }
 

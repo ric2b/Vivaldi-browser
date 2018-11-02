@@ -55,8 +55,8 @@ class CORE_EXPORT EventListener
 
   ListenerType GetType() const { return type_; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {}
+  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {}
 
  protected:
   explicit EventListener(ListenerType type) : type_(type) {}

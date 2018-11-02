@@ -34,10 +34,18 @@ viz_component("common") {
   sources = [
     "display/renderer_settings.cc",
     "display/renderer_settings.h",
+    "features.cc",
+    "features.h",
     "frame_sinks/begin_frame_args.cc",
     "frame_sinks/begin_frame_args.h",
     "frame_sinks/begin_frame_source.cc",
     "frame_sinks/begin_frame_source.h",
+    "frame_sinks/copy_output_request.cc",
+    "frame_sinks/copy_output_request.h",
+    "frame_sinks/copy_output_result.cc",
+    "frame_sinks/copy_output_result.h",
+    "frame_sinks/copy_output_util.cc",
+    "frame_sinks/copy_output_util.h",
     "frame_sinks/delay_based_time_source.cc",
     "frame_sinks/delay_based_time_source.h",
     "gl_helper.cc",
@@ -48,6 +56,7 @@ viz_component("common") {
     "gl_helper_scaling.h",
     "gpu/context_cache_controller.cc",
     "gpu/context_cache_controller.h",
+    "gpu/context_lost_observer.h",
     "gpu/context_provider.cc",
     "gpu/context_provider.h",
     "gpu/in_process_context_provider.cc",
@@ -56,27 +65,57 @@ viz_component("common") {
     "gpu/vulkan_in_process_context_provider.cc",
     "gpu/vulkan_in_process_context_provider.h",
     "hit_test/aggregated_hit_test_region.h",
-    "quads/copy_output_request.cc",
-    "quads/copy_output_request.h",
-    "quads/copy_output_result.cc",
-    "quads/copy_output_result.h",
-    "quads/release_callback.h",
+    "quads/compositor_frame.cc",
+    "quads/compositor_frame.h",
+    "quads/compositor_frame_metadata.cc",
+    "quads/compositor_frame_metadata.h",
+    "quads/content_draw_quad_base.cc",
+    "quads/content_draw_quad_base.h",
+    "quads/debug_border_draw_quad.cc",
+    "quads/debug_border_draw_quad.h",
+    "quads/draw_quad.cc",
+    "quads/draw_quad.h",
+    "quads/largest_draw_quad.cc",
+    "quads/largest_draw_quad.h",
+    "quads/picture_draw_quad.cc",
+    "quads/picture_draw_quad.h",
+    "quads/render_pass.cc",
+    "quads/render_pass.h",
+    "quads/render_pass_draw_quad.cc",
+    "quads/render_pass_draw_quad.h",
+    "quads/selection.h",
     "quads/shared_bitmap.cc",
     "quads/shared_bitmap.h",
     "quads/shared_quad_state.cc",
     "quads/shared_quad_state.h",
-    "quads/single_release_callback.cc",
-    "quads/single_release_callback.h",
-    "quads/texture_mailbox.cc",
-    "quads/texture_mailbox.h",
+    "quads/solid_color_draw_quad.cc",
+    "quads/solid_color_draw_quad.h",
+    "quads/stream_video_draw_quad.cc",
+    "quads/stream_video_draw_quad.h",
+    "quads/surface_draw_quad.cc",
+    "quads/surface_draw_quad.h",
+    "quads/texture_draw_quad.cc",
+    "quads/texture_draw_quad.h",
+    "quads/tile_draw_quad.cc",
+    "quads/tile_draw_quad.h",
+    "quads/yuv_video_draw_quad.cc",
+    "quads/yuv_video_draw_quad.h",
     "resources/buffer_to_texture_target_map.cc",
     "resources/buffer_to_texture_target_map.h",
     "resources/platform_color.h",
+    "resources/release_callback.h",
+    "resources/resource.cc",
+    "resources/resource.h",
+    "resources/resource_fence.h",
     "resources/resource_id.h",
     "resources/resource_settings.cc",
     "resources/resource_settings.h",
+    "resources/resource_texture_hint.h",
+    "resources/resource_type.h",
     "resources/returned_resource.h",
     "resources/shared_bitmap_manager.h",
+    "resources/single_release_callback.cc",
+    "resources/single_release_callback.h",
     "resources/transferable_resource.cc",
     "resources/transferable_resource.h",
     "surfaces/frame_sink_id.cc",
@@ -106,11 +145,12 @@ viz_component("common") {
   ]
 
   deps = [
+    "//base",
+
     # TODO(staraz): cc/base was added because SharedQuadState includes
     # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
     "//cc/base",
-
-    "//base",
+    "//cc/paint",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
@@ -120,9 +160,11 @@ viz_component("common") {
     "//gpu/vulkan:features",
     "//mojo/public/cpp/bindings",
     "//skia",
+    "//third_party/libyuv",
     "//ui/gfx:color_space",
     "//ui/gfx:geometry_skia",
     "//ui/gfx/geometry",
+    "//ui/latency",
   ]
 
   public_deps = [
@@ -137,8 +179,12 @@ viz_source_set("unit_tests") {
   testonly = true
   sources = [
     "frame_sinks/begin_frame_args_unittest.cc",
+    "frame_sinks/copy_output_util_unittest.cc",
     "frame_sinks/delay_based_time_source_unittest.cc",
     "gl_helper_unittest.cc",
+    "gpu/context_cache_controller_unittest.cc",
+    "quads/draw_quad_unittest.cc",
+    "quads/render_pass_unittest.cc",
     "resources/buffer_to_texture_target_map_unittest.cc",
     "resources/platform_color_unittest.cc",
     "surfaces/surface_sequence_generator_unittest.cc",
@@ -148,12 +194,14 @@ viz_source_set("unit_tests") {
   deps = [
     ":common",
     "//base/test:test_support",
+    "//cc:test_support",
     "//components/viz/test:test_support",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/ipc/common:surface_handle_type",
     "//media",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 }
@@ -185,5 +233,21 @@ viz_test("viz_benchmark") {
 
   data_deps = [
     "//third_party/mesa:osmesa",
+  ]
+}
+
+viz_source_set("perf_tests") {
+  testonly = true
+  sources = [
+    "quads/draw_quad_perftest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//cc/base",
+    "//skia",
+    "//testing/gtest",
+    "//testing/perf",
   ]
 }

@@ -42,6 +42,7 @@ include_rules = [
   "+ppapi",
   "+printing",
   "+sandbox",
+  "+services/proxy_resolver/public/interfaces",
   "+services/service_manager/embedder",
   "+skia",
 
@@ -73,6 +74,7 @@ include_rules = [
   "+third_party/webrtc",
   "+third_party/webrtc_overrides",
   "+third_party/zlib/google",
+  "+third_party/WebKit/common",
   "+third_party/WebKit/public",
 
   "+ui/accelerated_widget_mac",

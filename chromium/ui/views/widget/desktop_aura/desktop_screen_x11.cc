@@ -4,12 +4,7 @@
 
 #include "ui/views/widget/desktop_aura/desktop_screen_x11.h"
 
-#include <X11/extensions/Xrandr.h>
-#include <X11/Xlib.h>
-
-// It clashes with out RootWindow.
-#undef RootWindow
-
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -29,6 +24,8 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/switches.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/views/linux_ui/linux_ui.h"
@@ -37,6 +34,31 @@
 #include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
 
 namespace {
+
+// static
+gfx::ICCProfile GetICCProfileFromBestMonitor() {
+  gfx::ICCProfile icc_profile;
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
+    return icc_profile;
+  Atom property = gfx::GetAtom("_ICC_PROFILE");
+  if (property != x11::None) {
+    Atom prop_type = x11::None;
+    int prop_format = 0;
+    unsigned long nitems = 0;
+    unsigned long nbytes = 0;
+    char* property_data = NULL;
+    if (XGetWindowProperty(
+            gfx::GetXDisplay(), DefaultRootWindow(gfx::GetXDisplay()), property,
+            0, 0x1FFFFFFF /* MAXINT32 / 4 */, x11::False, AnyPropertyType,
+            &prop_type, &prop_format, &nitems, &nbytes,
+            reinterpret_cast<unsigned char**>(&property_data)) ==
+        x11::Success) {
+      icc_profile = gfx::ICCProfile::FromData(property_data, nitems);
+      XFree(property_data);
+    }
+  }
+  return icc_profile;
+}
 
 double GetDeviceScaleFactor() {
   float device_scale_factor = 1.0f;
@@ -287,6 +309,7 @@ DesktopScreenX11::DesktopScreenX11(
 }
 
 std::vector<display::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
+  DCHECK(has_xrandr_);
   std::vector<display::Display> displays;
   gfx::XScopedPtr<
       XRRScreenResources,
@@ -379,7 +402,7 @@ std::vector<display::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
       // TODO(ccameron): Populate this based on this specific display.
       // http://crbug.com/735613
       if (!display::Display::HasForceColorProfile()) {
-        gfx::ICCProfile icc_profile = gfx::ICCProfile::FromBestMonitor();
+        gfx::ICCProfile icc_profile = GetICCProfileFromBestMonitor();
         icc_profile.HistogramDisplay(display.id());
         display.set_color_space(icc_profile.GetColorSpace());
       }
@@ -403,7 +426,10 @@ void DesktopScreenX11::RestartDelayedConfigurationTask() {
 
 void DesktopScreenX11::UpdateDisplays() {
   std::vector<display::Display> old_displays = displays_;
-  SetDisplaysInternal(BuildDisplaysFromXRandRInfo());
+  if (has_xrandr_)
+    SetDisplaysInternal(BuildDisplaysFromXRandRInfo());
+  else
+    SetDisplaysInternal(GetFallbackDisplayList());
   change_notifier_.NotifyDisplaysChanged(old_displays, displays_);
 }
 

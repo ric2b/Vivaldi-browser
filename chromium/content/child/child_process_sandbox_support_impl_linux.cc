@@ -15,7 +15,8 @@
 #include "base/posix/unix_domain_socket.h"
 #include "base/sys_byteorder.h"
 #include "base/trace_event/trace_event.h"
-#include "content/common/sandbox_linux/sandbox_linux.h"
+#include "content/public/common/common_sandbox_support_linux.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/linux/WebFallbackFont.h"
@@ -29,13 +30,14 @@ void GetFallbackFontForCharacter(int32_t character,
   TRACE_EVENT0("sandbox_ipc", "GetFontFamilyForCharacter");
 
   base::Pickle request;
-  request.WriteInt(LinuxSandbox::METHOD_GET_FALLBACK_FONT_FOR_CHAR);
+  request.WriteInt(
+      service_manager::SandboxLinux::METHOD_GET_FALLBACK_FONT_FOR_CHAR);
   request.WriteInt(character);
   request.WriteString(preferred_locale);
 
   uint8_t buf[512];
   const ssize_t n = base::UnixDomainSocket::SendRecvMsg(
-      GetSandboxFD(), buf, sizeof(buf), NULL, request);
+      GetSandboxFD(), buf, sizeof(buf), nullptr, request);
 
   std::string family_name;
   std::string filename;
@@ -78,7 +80,7 @@ void GetRenderStyleForStrike(const char* family,
     return;
 
   base::Pickle request;
-  request.WriteInt(LinuxSandbox::METHOD_GET_STYLE_FOR_STRIKE);
+  request.WriteInt(service_manager::SandboxLinux::METHOD_GET_STYLE_FOR_STRIKE);
   request.WriteString(family);
   request.WriteBool(bold);
   request.WriteBool(italic);
@@ -86,7 +88,7 @@ void GetRenderStyleForStrike(const char* family,
 
   uint8_t buf[512];
   const ssize_t n = base::UnixDomainSocket::SendRecvMsg(
-      GetSandboxFD(), buf, sizeof(buf), NULL, request);
+      GetSandboxFD(), buf, sizeof(buf), nullptr, request);
   if (n == -1)
     return;
 
@@ -117,7 +119,7 @@ int MatchFontWithFallback(const std::string& face,
   TRACE_EVENT0("sandbox_ipc", "MatchFontWithFallback");
 
   base::Pickle request;
-  request.WriteInt(LinuxSandbox::METHOD_MATCH_WITH_FALLBACK);
+  request.WriteInt(service_manager::SandboxLinux::METHOD_MATCH_WITH_FALLBACK);
   request.WriteString(face);
   request.WriteBool(bold);
   request.WriteBool(italic);

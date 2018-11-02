@@ -13,8 +13,10 @@
 #include "core/style/ComputedStyle.h"
 #include "core/style/ShadowList.h"
 #include "platform/fonts/Font.h"
+#include "platform/fonts/NGTextFragmentPaintInfo.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/paint/PaintController.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/text/CharacterNames.h"
 
@@ -23,18 +25,22 @@ namespace blink {
 void NGTextPainter::Paint(unsigned start_offset,
                           unsigned end_offset,
                           unsigned length,
-                          const Style& text_style) {
+                          const TextPaintStyle& text_style) {
   GraphicsContextStateSaver state_saver(graphics_context_, false);
   UpdateGraphicsContext(text_style, state_saver);
   // TODO(layout-dev): Handle combine text here or elsewhere.
   PaintInternal<kPaintText>(start_offset, end_offset, length);
 
-  // TODO(layout-dev): Handle emphasis marks.
+  if (!emphasis_mark_.IsEmpty()) {
+    if (text_style.emphasis_mark_color != text_style.fill_color)
+      graphics_context_.SetFillColor(text_style.emphasis_mark_color);
+    PaintInternal<kPaintEmphasisMark>(start_offset, end_offset, length);
+  }
 }
 
 template <NGTextPainter::PaintInternalStep step>
 void NGTextPainter::PaintInternalFragment(
-    TextFragmentPaintInfo& fragment_paint_info,
+    NGTextFragmentPaintInfo& fragment_paint_info,
     unsigned from,
     unsigned to) {
   DCHECK(from <= fragment_paint_info.text.length());
@@ -51,6 +57,9 @@ void NGTextPainter::PaintInternalFragment(
     DCHECK(step == kPaintText);
     graphics_context_.DrawText(font_, fragment_paint_info,
                                FloatPoint(text_origin_));
+    // TODO(npm): Check that there are non-whitespace characters. See
+    // crbug.com/788444.
+    graphics_context_.GetPaintController().SetTextPainted();
   }
 }
 
@@ -62,28 +71,33 @@ void NGTextPainter::PaintInternal(unsigned start_offset,
   if (!fragment_.TextShapeResult())
     return;
 
-  unsigned offset = 0;
-  TextFragmentPaintInfo fragment_paint_info = {
-      fragment_.Text(), TextDirection::kLtr, offset, fragment_.Text().length(),
-      fragment_.TextShapeResult()};
+  NGTextFragmentPaintInfo paint_info = fragment_.PaintInfo();
 
   if (start_offset <= end_offset) {
-    PaintInternalFragment<Step>(fragment_paint_info, start_offset, end_offset);
+    PaintInternalFragment<Step>(paint_info, start_offset, end_offset);
   } else {
-    if (end_offset > 0) {
-      PaintInternalFragment<Step>(fragment_paint_info, ellipsis_offset_,
-                                  end_offset);
-    }
-    if (start_offset < truncation_point) {
-      PaintInternalFragment<Step>(fragment_paint_info, start_offset,
-                                  truncation_point);
-    }
+    if (end_offset > 0)
+      PaintInternalFragment<Step>(paint_info, ellipsis_offset_, end_offset);
+    if (start_offset < truncation_point)
+      PaintInternalFragment<Step>(paint_info, start_offset, truncation_point);
   }
 }
 
 void NGTextPainter::ClipDecorationsStripe(float upper,
                                           float stripe_width,
-                                          float dilation) {}
+                                          float dilation) {
+  if (!fragment_.Length() || !fragment_.TextShapeResult())
+    return;
+
+  NGTextFragmentPaintInfo fragment_paint_info = fragment_.PaintInfo();
+  Vector<Font::TextIntercept> text_intercepts;
+  font_.GetTextIntercepts(
+      fragment_paint_info, graphics_context_.DeviceScaleFactor(),
+      graphics_context_.FillFlags(),
+      std::make_tuple(upper, upper + stripe_width), text_intercepts);
+
+  DecorationsStripeIntercepts(upper, stripe_width, dilation, text_intercepts);
+}
 
 void NGTextPainter::PaintEmphasisMarkForCombinedText() {}
 

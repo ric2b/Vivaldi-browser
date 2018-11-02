@@ -242,15 +242,15 @@ bool CertUsesWeakHash(SecCertificateRef cert_handle) {
 
   const CSSM_OID* alg_oid = &sig_algorithm->algorithm;
 
-  return (CSSMOIDEqual(alg_oid, &CSSMOID_MD2WithRSA) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_MD4WithRSA) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_MD5WithRSA) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA_OIW) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_CMS) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_JDK) ||
-          CSSMOIDEqual(alg_oid, &CSSMOID_ECDSA_WithSHA1));
+  return (x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_MD2WithRSA) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_MD4WithRSA) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_MD5WithRSA) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA_OIW) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_CMS) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_JDK) ||
+          x509_util::CSSMOIDEqual(alg_oid, &CSSMOID_ECDSA_WithSHA1));
 }
 
 // Returns true if the intermediates (excluding trusted certificates) use a
@@ -745,7 +745,8 @@ int VerifyWithGivenFlags(X509Certificate* cert,
     }
 
     ScopedCFTypeRef<CFMutableArrayRef> cert_array(
-        x509_util::CreateSecCertificateArrayForX509Certificate(cert));
+        x509_util::CreateSecCertificateArrayForX509Certificate(
+            cert, x509_util::InvalidIntermediateBehavior::kIgnore));
     if (!cert_array) {
       verify_result->cert_status |= CERT_STATUS_INVALID;
       return ERR_CERT_INVALID;

@@ -32,7 +32,6 @@
 #ifndef SliderThumbElement_h
 #define SliderThumbElement_h
 
-#include "core/HTMLNames.h"
 #include "core/html/HTMLDivElement.h"
 #include "platform/wtf/Forward.h"
 
@@ -65,7 +64,7 @@ class SliderThumbElement final : public HTMLDivElement {
   bool IsDisabledFormControl() const override;
   bool MatchesReadOnlyPseudoClass() const override;
   bool MatchesReadWritePseudoClass() const override;
-  Node* FocusDelegate() override;
+  const Node* FocusDelegate() const override;
   void StartDragging();
 
   bool

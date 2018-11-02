@@ -19,7 +19,6 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/tracked_objects.h"
 #include "components/sync/driver/async_directory_type_controller_mock.h"
 #include "components/sync/driver/data_type_controller_mock.h"
 #include "components/sync/driver/fake_sync_client.h"
@@ -71,8 +70,7 @@ class SharedChangeProcessorMock : public SharedChangeProcessor {
   }
   MOCK_METHOD0(Disconnect, bool());
   MOCK_METHOD2(ProcessSyncChanges,
-               SyncError(const tracked_objects::Location&,
-                         const SyncChangeList&));
+               SyncError(const base::Location&, const SyncChangeList&));
   MOCK_CONST_METHOD2(GetAllSyncDataReturnError,
                      SyncError(ModelType, SyncDataList*));
   MOCK_METHOD0(GetSyncCount, int());
@@ -88,7 +86,7 @@ class SharedChangeProcessorMock : public SharedChangeProcessor {
  protected:
   virtual ~SharedChangeProcessorMock() { DCHECK(!connect_return_); }
   MOCK_METHOD2(OnUnrecoverableError,
-               void(const tracked_objects::Location&, const std::string&));
+               void(const base::Location&, const std::string&));
 
  private:
   base::WeakPtr<SyncableService> connect_return_;
@@ -137,7 +135,7 @@ class AsyncDirectoryTypeControllerFake : public AsyncDirectoryTypeController {
   }
 
  protected:
-  bool PostTaskOnModelThread(const tracked_objects::Location& from_here,
+  bool PostTaskOnModelThread(const base::Location& from_here,
                              const base::Closure& task) override {
     if (blocked_) {
       pending_tasks_.push_back(PendingTask(from_here, task));
@@ -157,11 +155,10 @@ class AsyncDirectoryTypeControllerFake : public AsyncDirectoryTypeController {
 
  private:
   struct PendingTask {
-    PendingTask(const tracked_objects::Location& from_here,
-                const base::Closure& task)
+    PendingTask(const base::Location& from_here, const base::Closure& task)
         : from_here(from_here), task(task) {}
 
-    tracked_objects::Location from_here;
+    base::Location from_here;
     base::Closure task;
   };
 

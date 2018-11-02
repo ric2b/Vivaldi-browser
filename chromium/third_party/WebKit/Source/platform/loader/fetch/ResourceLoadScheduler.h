@@ -5,12 +5,13 @@
 #ifndef ResourceLoadScheduler_h
 #define ResourceLoadScheduler_h
 
+#include <set>
 #include "platform/WebFrameScheduler.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/Resource.h"
-#include "platform/wtf/Deque.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/wtf/HashSet.h"
 
 namespace blink {
@@ -23,7 +24,7 @@ class PLATFORM_EXPORT ResourceLoadSchedulerClient
   // Called when the request is granted to run.
   virtual void Run() = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  void Trace(blink::Visitor* visitor) override {}
 };
 
 // The ResourceLoadScheduler provides a unified per-frame infrastructure to
@@ -50,19 +51,54 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // be scheduled within the call.
   enum class ReleaseOption { kReleaseOnly, kReleaseAndSchedule };
 
+  // A class to pass traffic report hints on calling Release().
+  class TrafficReportHints {
+   public:
+    // |encoded_data_length| is payload size in bytes sent over the network.
+    // |decoded_body_length| is received resource data size in bytes.
+    TrafficReportHints(int64_t encoded_data_length, int64_t decoded_body_length)
+        : valid_(true),
+          encoded_data_length_(encoded_data_length),
+          decoded_body_length_(decoded_body_length) {}
+
+    // Takes a shared instance to represent an invalid instance that will be
+    // used when a caller don't want to report traffic, i.e. on a failure.
+    static PLATFORM_EXPORT TrafficReportHints& InvalidInstance();
+
+    bool IsValid() const { return valid_; }
+
+    int64_t encoded_data_length() const {
+      DCHECK(valid_);
+      return encoded_data_length_;
+    }
+    int64_t decoded_body_length() const {
+      DCHECK(valid_);
+      return decoded_body_length_;
+    }
+
+   private:
+    // Default constructor makes an invalid instance that won't be recorded.
+    TrafficReportHints() = default;
+
+    bool valid_ = false;
+    int64_t encoded_data_length_ = 0;
+    int64_t decoded_body_length_ = 0;
+  };
+
   // Returned on Request(). Caller should need to return it via Release().
   using ClientId = uint64_t;
 
   static constexpr ClientId kInvalidClientId = 0u;
 
-  static constexpr size_t kOutstandingUnlimited = 0u;
+  static constexpr size_t kOutstandingUnlimited =
+      std::numeric_limits<size_t>::max();
 
   static ResourceLoadScheduler* Create(FetchContext* context = nullptr) {
     return new ResourceLoadScheduler(context ? context
                                              : &FetchContext::NullInstance());
   }
-  ~ResourceLoadScheduler() {}
-  DECLARE_TRACE();
+  ~ResourceLoadScheduler();
+  void Trace(blink::Visitor*);
 
   // Stops all operations including observing throttling signals.
   // ResourceLoadSchedulerClient::Run() will not be called once this method is
@@ -73,22 +109,76 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // ResourceLoadSchedulerClient::Run(), but it is guaranteed that ClientId is
   // populated before ResourceLoadSchedulerClient::Run() is called, so that the
   // caller can call Release() with the assigned ClientId correctly.
-  void Request(ResourceLoadSchedulerClient*, ThrottleOption, ClientId*);
+  void Request(ResourceLoadSchedulerClient*,
+               ThrottleOption,
+               ResourceLoadPriority,
+               int intra_priority,
+               ClientId*);
+
+  // Updates the priority information of the given client. This function may
+  // initiate a new resource loading.
+  void SetPriority(ClientId, ResourceLoadPriority, int intra_priority);
 
   // ResourceLoadSchedulerClient should call this method when the loading is
   // finished, or canceled. This method can be called in a pre-finalization
   // step, bug the ReleaseOption must be kReleaseOnly in such a case.
-  bool Release(ClientId, ReleaseOption);
+  // TrafficReportHints is for reporting histograms.
+  // TrafficReportHints::InvalidInstance() can be used to omit reporting.
+  bool Release(ClientId, ReleaseOption, const TrafficReportHints&);
 
   // Sets outstanding limit for testing.
   void SetOutstandingLimitForTesting(size_t limit);
 
   void OnNetworkQuiet();
 
+  // Returns whether we can throttle a request with the given priority.
+  // This function returns false when RendererSideResourceScheduler is disabled.
+  bool IsThrottablePriority(ResourceLoadPriority) const;
+
   // WebFrameScheduler::Observer overrides:
   void OnThrottlingStateChanged(WebFrameScheduler::ThrottlingState) override;
 
  private:
+  class TrafficMonitor;
+
+  class ClientIdWithPriority {
+   public:
+    struct Compare {
+      bool operator()(const ClientIdWithPriority& x,
+                      const ClientIdWithPriority& y) const {
+        if (x.priority != y.priority)
+          return x.priority > y.priority;
+        if (x.intra_priority != y.intra_priority)
+          return x.intra_priority > y.intra_priority;
+        return x.client_id < y.client_id;
+      }
+    };
+
+    ClientIdWithPriority(ClientId client_id,
+                         WebURLRequest::Priority priority,
+                         int intra_priority)
+        : client_id(client_id),
+          priority(priority),
+          intra_priority(intra_priority) {}
+
+    const ClientId client_id;
+    const WebURLRequest::Priority priority;
+    const int intra_priority;
+  };
+
+  struct ClientWithPriority : public GarbageCollected<ClientWithPriority> {
+    ClientWithPriority(ResourceLoadSchedulerClient* client,
+                       ResourceLoadPriority priority,
+                       int intra_priority)
+        : client(client), priority(priority), intra_priority(intra_priority) {}
+
+    void Trace(blink::Visitor* visitor) { visitor->Trace(client); }
+
+    Member<ResourceLoadSchedulerClient> client;
+    ResourceLoadPriority priority;
+    int intra_priority;
+  };
+
   ResourceLoadScheduler(FetchContext*);
 
   // Generates the next ClientId.
@@ -131,14 +221,21 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
     kInitial,
     kThrottled,
     kNotThrottled,
-    kPartiallyThrottled
+    kPartiallyThrottled,
+    kStopped,
   };
   ThrottlingHistory throttling_history_ = ThrottlingHistory::kInitial;
+  WebFrameScheduler::ThrottlingState frame_scheduler_throttling_state_ =
+      WebFrameScheduler::ThrottlingState::kNotThrottled;
 
   // Holds clients that haven't been granted, and are waiting for a grant.
-  HeapHashMap<ClientId, Member<ResourceLoadSchedulerClient>>
-      pending_request_map_;
-  Deque<ClientId> pending_request_queue_;
+  HeapHashMap<ClientId, Member<ClientWithPriority>> pending_request_map_;
+  // We use std::set here because WTF doesn't have its counterpart.
+  std::set<ClientIdWithPriority, ClientIdWithPriority::Compare>
+      pending_requests_;
+
+  // Holds an internal class instance to monitor and report traffic.
+  std::unique_ptr<TrafficMonitor> traffic_monitor_;
 
   // Holds FetchContext reference to contact WebFrameScheduler.
   Member<FetchContext> context_;

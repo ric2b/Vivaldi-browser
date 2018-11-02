@@ -26,10 +26,10 @@
 
 #include "core/layout/LayoutTable.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLTableElement.h"
+#include "core/html_names.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTableCaption.h"
@@ -45,7 +45,7 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/TablePaintInvalidator.h"
 #include "core/paint/TablePainter.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -103,9 +103,9 @@ void LayoutTable::StyleDidChange(StyleDifference diff,
     // explicit width is specified on the table. Auto width implies auto table
     // layout.
     if (Style()->IsFixedTableLayout())
-      table_layout_ = WTF::MakeUnique<TableLayoutAlgorithmFixed>(this);
+      table_layout_ = std::make_unique<TableLayoutAlgorithmFixed>(this);
     else
-      table_layout_ = WTF::MakeUnique<TableLayoutAlgorithmAuto>(this);
+      table_layout_ = std::make_unique<TableLayoutAlgorithmAuto>(this);
   }
 
   if (!old_style)
@@ -131,7 +131,7 @@ static inline void ResetSectionPointerIfNotBefore(LayoutTableSection*& ptr,
   while (o && o != ptr)
     o = o->PreviousSibling();
   if (!o)
-    ptr = 0;
+    ptr = nullptr;
 }
 
 static inline bool NeedsTableSection(LayoutObject* object) {
@@ -224,7 +224,7 @@ void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
 
   if (before_child && !before_child->IsTableSection() &&
       NeedsTableSection(before_child))
-    before_child = 0;
+    before_child = nullptr;
 
   LayoutTableSection* section =
       LayoutTableSection::CreateAnonymousWithParent(this);
@@ -243,7 +243,7 @@ void LayoutTable::RemoveCaption(const LayoutTableCaption* old_caption) {
   if (index == kNotFound)
     return;
 
-  captions_.erase(index);
+  captions_.EraseAt(index);
 }
 
 void LayoutTable::InvalidateCachedColumns() {
@@ -304,7 +304,9 @@ void LayoutTable::UpdateLogicalWidth() {
         MinimumValueForLength(Style()->MarginStart(), available_logical_width);
     LayoutUnit margin_end =
         MinimumValueForLength(Style()->MarginEnd(), available_logical_width);
-    LayoutUnit margin_total = margin_start + margin_end;
+    LayoutUnit margin_total = RuntimeEnabledFeatures::LayoutNGEnabled()
+                                  ? LayoutUnit()
+                                  : margin_start + margin_end;
 
     // Subtract out our margins to get the available content width.
     LayoutUnit available_content_logical_width =
@@ -312,7 +314,8 @@ void LayoutTable::UpdateLogicalWidth() {
             .ClampNegativeToZero();
     if (ShrinkToAvoidFloats() && cb->IsLayoutBlockFlow() &&
         ToLayoutBlockFlow(cb)->ContainsFloats() &&
-        !has_perpendicular_containing_block)
+        !has_perpendicular_containing_block &&
+        !RuntimeEnabledFeatures::LayoutNGEnabled())
       available_content_logical_width = ShrinkLogicalWidthToAvoidFloats(
           margin_start, margin_end, ToLayoutBlockFlow(cb));
 
@@ -389,7 +392,7 @@ LayoutUnit LayoutTable::ConvertStyleLogicalWidthToComputedWidth(
   // HTML tables' width styles already include borders and paddings, but CSS
   // tables' width styles do not.
   LayoutUnit borders;
-  bool is_css_table = !isHTMLTableElement(GetNode());
+  bool is_css_table = !IsHTMLTableElement(GetNode());
   if (is_css_table && style_logical_width.IsSpecified() &&
       style_logical_width.IsPositive() &&
       Style()->BoxSizing() == EBoxSizing::kContentBox) {
@@ -417,7 +420,7 @@ LayoutUnit LayoutTable::ConvertStyleLogicalHeightToComputedHeight(
     LayoutUnit borders = LayoutUnit();
     // FIXME: We cannot apply box-sizing: content-box on <table> which other
     // browsers allow.
-    if (isHTMLTableElement(GetNode()) ||
+    if (IsHTMLTableElement(GetNode()) ||
         Style()->BoxSizing() == EBoxSizing::kBorderBox) {
       borders = border_and_padding;
     }
@@ -533,18 +536,14 @@ void LayoutTable::DistributeExtraLogicalHeight(int extra_logical_height) {
     extra_logical_height -=
         section->DistributeExtraLogicalHeightToRows(extra_logical_height);
 
-  // crbug.com/690087: We really would like to enable this ASSERT to ensure that
-  // all the extra space has been distributed.
-  // However our current distribution algorithm does not round properly and thus
-  // we can have some remaining height.
-  // DCHECK(!topSection() || !extraLogicalHeight);
+  DCHECK(!FirstBody() || !extra_logical_height);
 }
 
 void LayoutTable::SimplifiedNormalFlowLayout() {
   // FIXME: We should walk through the items in the tree in tree order to do the
   // layout here instead of walking through individual parts of the tree.
   // crbug.com/442737
-  for (auto& caption : captions_)
+  for (auto*& caption : captions_)
     caption->LayoutIfNeeded();
 
   for (LayoutTableSection* section = TopSection(); section;
@@ -557,8 +556,9 @@ void LayoutTable::SimplifiedNormalFlowLayout() {
   }
 }
 
-bool LayoutTable::RecalcChildOverflowAfterStyleChange() {
-  DCHECK(ChildNeedsOverflowRecalcAfterStyleChange());
+bool LayoutTable::RecalcOverflowAfterStyleChange() {
+  if (!ChildNeedsOverflowRecalcAfterStyleChange())
+    return false;
   ClearChildNeedsOverflowRecalcAfterStyleChange();
 
   // If the table sections we keep pointers to have gone away then the table
@@ -569,11 +569,8 @@ bool LayoutTable::RecalcChildOverflowAfterStyleChange() {
   bool children_overflow_changed = false;
   for (LayoutTableSection* section = TopSection(); section;
        section = SectionBelow(section)) {
-    if (!section->ChildNeedsOverflowRecalcAfterStyleChange())
-      continue;
     children_overflow_changed =
-        section->RecalcChildOverflowAfterStyleChange() ||
-        children_overflow_changed;
+        section->RecalcOverflowAfterStyleChange() || children_overflow_changed;
   }
   return RecalcPositionedDescendantsOverflowAfterStyleChange() ||
          children_overflow_changed;
@@ -623,8 +620,8 @@ void LayoutTable::UpdateLayout() {
       LayoutCaption(*captions_[i], layouter);
     }
 
-    LayoutTableSection* top_section = this->TopSection();
-    LayoutTableSection* bottom_section = this->BottomSection();
+    LayoutTableSection* top_section = TopSection();
+    LayoutTableSection* bottom_section = BottomSection();
 
     // This is the border-before edge of the "table box", relative to the "table
     // wrapper box", i.e. right after all top captions.
@@ -656,44 +653,50 @@ void LayoutTable::UpdateLayout() {
 
     // Lay out table footer to get its raw height. This will help us decide
     // if we can repeat it in each page/column.
-    if (LayoutTableSection* section = Footer()) {
-      if (section->GetPaginationBreakability() != kAllowAnyBreaks) {
-        section->LayoutIfNeeded();
-        int section_logical_height = section->CalcRowLogicalHeight();
-        section->SetLogicalHeight(LayoutUnit(section_logical_height));
+    LayoutTableSection* footer = Footer();
+    if (footer) {
+      if (footer->GetPaginationBreakability() != kAllowAnyBreaks) {
+        footer->LayoutIfNeeded();
+        int footer_logical_height = footer->CalcRowLogicalHeight();
+        footer->SetLogicalHeight(LayoutUnit(footer_logical_height));
       }
-      section->DetermineIfFooterGroupShouldRepeat();
-      if (section->IsRepeatingFooterGroup()) {
-        LayoutUnit offset_for_table_footers =
-            state.HeightOffsetForTableFooters();
-        offset_for_table_footers += section->LogicalHeight();
-        SetRowOffsetFromRepeatingFooter(offset_for_table_footers);
-      }
+      footer->DetermineIfFooterGroupShouldRepeat();
     }
 
     // Lay out table header group.
-    if (LayoutTableSection* section = Header()) {
-      LayoutSection(*section, layouter, section_logical_left,
+    LayoutTableSection* header = Header();
+    if (header) {
+      LayoutSection(*header, layouter, section_logical_left,
                     table_height_changing);
-      if (state.IsPaginated() && IsPageLogicalHeightKnown()) {
-        // If the repeating header group allows at least one row of content,
-        // then store the offset for other sections to offset their rows
-        // against.
-        if (section->IsRepeatingHeaderGroup()) {
-          LayoutUnit offset_for_table_headers =
-              state.HeightOffsetForTableHeaders();
-          offset_for_table_headers += section->LogicalHeight();
-          // Don't include any strut in the header group - we only want the
-          // height from its content.
-          if (LayoutTableRow* row = section->FirstRow())
-            offset_for_table_headers -= row->PaginationStrut();
-          SetRowOffsetFromRepeatingHeader(offset_for_table_headers);
-        }
-      }
     }
 
-    state.SetHeightOffsetForTableHeaders(RowOffsetFromRepeatingHeader());
-    state.SetHeightOffsetForTableFooters(RowOffsetFromRepeatingFooter());
+    LayoutUnit original_offset_for_table_headers =
+        state.HeightOffsetForTableHeaders();
+    LayoutUnit offset_for_table_headers = original_offset_for_table_headers;
+    LayoutUnit original_offset_for_table_footers =
+        state.HeightOffsetForTableFooters();
+    LayoutUnit offset_for_table_footers = original_offset_for_table_footers;
+    if (state.IsPaginated() && IsPageLogicalHeightKnown()) {
+      // If the repeating header group allows at least one row of content,
+      // then store the offset for other sections to offset their rows
+      // against.
+      if (header && header->IsRepeatingHeaderGroup()) {
+        offset_for_table_headers += header->LogicalHeight();
+        // Don't include any strut in the header group - we only want the
+        // height from its content.
+        if (LayoutTableRow* row = header->FirstRow())
+          offset_for_table_headers -= row->PaginationStrut();
+        SetRowOffsetFromRepeatingHeader(offset_for_table_headers);
+      }
+
+      if (footer && footer->IsRepeatingFooterGroup()) {
+        offset_for_table_footers += footer->LogicalHeight();
+        SetRowOffsetFromRepeatingFooter(offset_for_table_footers);
+      }
+    }
+    state.SetHeightOffsetForTableHeaders(offset_for_table_headers);
+    state.SetHeightOffsetForTableFooters(offset_for_table_footers);
+
     // Lay out table body groups, and column groups.
     for (LayoutObject* child = FirstChild(); child;
          child = child->NextSibling()) {
@@ -710,8 +713,8 @@ void LayoutTable::UpdateLayout() {
       }
     }
     // Reset these so they don't affect the layout of footers or captions.
-    state.SetHeightOffsetForTableHeaders(LayoutUnit());
-    state.SetHeightOffsetForTableFooters(LayoutUnit());
+    state.SetHeightOffsetForTableHeaders(original_offset_for_table_headers);
+    state.SetHeightOffsetForTableFooters(original_offset_for_table_footers);
 
     // Change logical width according to any collapsed columns.
     Vector<int> col_collapsed_width;
@@ -1273,7 +1276,7 @@ LayoutTableSection* LayoutTable::SectionAbove(
   RecalcSectionsIfNeeded();
 
   if (section == head_)
-    return 0;
+    return nullptr;
 
   LayoutObject* prev_section =
       section == foot_ ? LastChild() : section->PreviousSibling();
@@ -1321,8 +1324,13 @@ LayoutTableSection* LayoutTable::BottomSection() const {
   if (foot_)
     return foot_;
 
+  if (head_ && !first_body_)
+    return head_;
+
   for (LayoutObject* child = LastChild(); child;
        child = child->PreviousSibling()) {
+    if (child == head_)
+      continue;
     if (child->IsTableSection())
       return ToLayoutTableSection(child);
   }
@@ -1438,7 +1446,7 @@ LayoutUnit LayoutTable::FirstLineBoxBaseline() const {
 
   RecalcSectionsIfNeeded();
 
-  const LayoutTableSection* top_non_empty_section = this->TopNonEmptySection();
+  const LayoutTableSection* top_non_empty_section = TopNonEmptySection();
   if (!top_non_empty_section)
     return LayoutUnit(-1);
 
@@ -1459,6 +1467,14 @@ LayoutUnit LayoutTable::FirstLineBoxBaseline() const {
 LayoutRect LayoutTable::OverflowClipRect(
     const LayoutPoint& location,
     OverlayScrollbarClipBehavior overlay_scrollbar_clip_behavior) const {
+  if (ShouldCollapseBorders()) {
+    // Though the outer halves of the collapsed borders are considered as the
+    // the border area of the table by means of the box model, they are actually
+    // contents of the table and should not be clipped off. The overflow clip
+    // rect is BorderBoxRect() + location.
+    return LayoutRect(location, Size());
+  }
+
   LayoutRect rect =
       LayoutBlock::OverflowClipRect(location, overlay_scrollbar_clip_behavior);
 
@@ -1527,7 +1543,7 @@ bool LayoutTable::NodeAtPoint(HitTestResult& result,
 
 LayoutTable* LayoutTable::CreateAnonymousWithParent(
     const LayoutObject* parent) {
-  RefPtr<ComputedStyle> new_style =
+  scoped_refptr<ComputedStyle> new_style =
       ComputedStyle::CreateAnonymousStyleWithDisplay(
           parent->StyleRef(),
           parent->IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
@@ -1639,6 +1655,11 @@ void LayoutTable::UpdateCollapsedOuterBorders() const {
   if (collapsed_outer_borders_valid_)
     return;
 
+  // Something needs our collapsed borders before we've calculated them. Return
+  // the old ones.
+  if (NeedsSectionRecalc())
+    return;
+
   collapsed_outer_borders_valid_ = true;
   if (!ShouldCollapseBorders())
     return;
@@ -1666,16 +1687,14 @@ void LayoutTable::UpdateCollapsedOuterBorders() const {
 
   // The table's after outer border width is the maximum after outer border
   // widths of all cells in the last row. See the CSS 2.1 spec, section 17.6.2.
-  // TODO(crbug.com/764525): Because of the bug, bottom_section can be null when
-  // top_section is not null. See LayoutTableTest.OutOfOrderHeadAndBody.
-  if (const auto* bottom_section = BottomNonEmptySection()) {
-    unsigned row = bottom_section->NumRows() - 1;
-    unsigned bottom_cols = bottom_section->NumCols(row);
-    for (unsigned col = 0; col < bottom_cols; ++col) {
-      if (const auto* cell = bottom_section->PrimaryCellAt(row, col)) {
-        collapsed_outer_border_after_ = std::max(
-            collapsed_outer_border_after_, cell->CollapsedOuterBorderAfter());
-      }
+  const auto* bottom_section = BottomNonEmptySection();
+  DCHECK(bottom_section);
+  unsigned row = bottom_section->NumRows() - 1;
+  unsigned bottom_cols = bottom_section->NumCols(row);
+  for (unsigned col = 0; col < bottom_cols; ++col) {
+    if (const auto* cell = bottom_section->PrimaryCellAt(row, col)) {
+      collapsed_outer_border_after_ = std::max(
+          collapsed_outer_border_after_, cell->CollapsedOuterBorderAfter());
     }
   }
 

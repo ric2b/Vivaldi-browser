@@ -30,11 +30,10 @@
 
 #include "public/web/WebFormElement.h"
 
-#include "core/HTMLNames.h"
-#include "core/html/HTMLFormControlElement.h"
-#include "core/html/HTMLFormElement.h"
-#include "core/html/HTMLInputElement.h"
-#include "platform/wtf/RefPtr.h"
+#include "core/html/forms/HTMLFormControlElement.h"
+#include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/HTMLInputElement.h"
+#include "core/html_names.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebFormControlElement.h"
@@ -75,7 +74,7 @@ void WebFormElement::GetFormControlElements(
 WebFormElement::WebFormElement(HTMLFormElement* e) : WebElement(e) {}
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebFormElement,
-                           isHTMLFormElement(ConstUnwrap<Node>()));
+                           IsHTMLFormElement(ConstUnwrap<Node>()));
 
 WebFormElement& WebFormElement::operator=(HTMLFormElement* e) {
   private_ = e;
@@ -83,7 +82,7 @@ WebFormElement& WebFormElement::operator=(HTMLFormElement* e) {
 }
 
 WebFormElement::operator HTMLFormElement*() const {
-  return toHTMLFormElement(private_.Get());
+  return ToHTMLFormElement(private_.Get());
 }
 
 }  // namespace blink

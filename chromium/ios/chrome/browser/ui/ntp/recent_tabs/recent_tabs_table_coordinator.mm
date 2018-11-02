@@ -15,15 +15,16 @@
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_bridges.h"
+#import "ios/chrome/browser/sync/synced_sessions_bridge.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/closed_tabs_observer_bridge.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_view_controller.h"
-#import "ios/chrome/browser/ui/sync/synced_sessions_bridge.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 @interface RecentTabsTableCoordinator ()<
+    ClosedTabsObserving,
     SyncedSessionsObserver,
     RecentTabsTableViewControllerDelegate> {
   std::unique_ptr<synced_sessions::SyncedSessionsObserverBridge>
@@ -103,16 +104,16 @@
   [self refreshSessionsView];
 }
 
-#pragma mark - Exposed to the ClosedTabsObserverBridge
+#pragma mark - Exposed to the ClosedTabsObserving
 
-- (void)reloadClosedTabsList {
+- (void)tabRestoreServiceChanged:(sessions::TabRestoreService*)service {
   sessions::TabRestoreService* restoreService =
       IOSChromeTabRestoreServiceFactory::GetForBrowserState(_browserState);
   restoreService->LoadTabsFromLastSession();
   [_tableViewController refreshRecentlyClosedTabs];
 }
 
-- (void)tabRestoreServiceDestroyed {
+- (void)tabRestoreServiceDestroyed:(sessions::TabRestoreService*)service {
   [_tableViewController setTabRestoreService:nullptr];
 }
 

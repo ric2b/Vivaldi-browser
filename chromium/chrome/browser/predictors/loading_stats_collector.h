@@ -43,6 +43,14 @@ constexpr char kResourcePrefetchPredictorPrefetchMissesSize[] =
     "ResourcePrefetchPredictor.PrefetchMissesSizeKB";
 constexpr char kResourcePrefetchPredictorRedirectStatusHistogram[] =
     "ResourcePrefetchPredictor.RedirectStatus";
+constexpr char kLoadingPredictorPreconnectLearningPrecision[] =
+    "LoadingPredictor.PreconnectLearningPrecision";
+constexpr char kLoadingPredictorPreconnectLearningRecall[] =
+    "LoadingPredictor.PreconnectLearningRecall";
+constexpr char kLoadingPredictorPreconnectLearningCount[] =
+    "LoadingPredictor.PreconnectLearningCount";
+constexpr char kLoadingPredictorPreconnectLearningRedirectStatus[] =
+    "LoadingPredictor.PreconnectLearningRedirectStatus";
 constexpr char kLoadingPredictorPreresolveHitsPercentage[] =
     "LoadingPredictor.PreresolveHitsPercentage";
 constexpr char kLoadingPredictorPreconnectHitsPercentage[] =
@@ -51,6 +59,8 @@ constexpr char kLoadingPredictorPreresolveCount[] =
     "LoadingPredictor.PreresolveCount";
 constexpr char kLoadingPredictorPreconnectCount[] =
     "LoadingPredictor.PreconnectCount";
+constexpr char kLoadingPredictorSubresourceConnectDuration[] =
+    "LoadingPredictor.SubresourceConnectDuration";
 }  // namespace internal
 
 // Accumulates data from different speculative actions and collates this data

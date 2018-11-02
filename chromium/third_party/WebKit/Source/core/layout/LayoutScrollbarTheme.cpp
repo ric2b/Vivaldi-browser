@@ -127,7 +127,7 @@ void LayoutScrollbarTheme::PaintScrollCorner(
     return;
 
   DrawingRecorder recorder(context, display_item_client,
-                           DisplayItem::kScrollbarCorner, corner_rect);
+                           DisplayItem::kScrollbarCorner);
   // FIXME: Implement.
   context.FillRect(corner_rect, Color::kWhite);
 }
@@ -170,7 +170,8 @@ void LayoutScrollbarTheme::PaintThumb(GraphicsContext& context,
 void LayoutScrollbarTheme::PaintTickmarks(GraphicsContext& context,
                                           const Scrollbar& scrollbar,
                                           const IntRect& rect) {
-  ScrollbarTheme::GetTheme().PaintTickmarks(context, scrollbar, rect);
+  ScrollbarTheme::DeprecatedStaticGetTheme().PaintTickmarks(context, scrollbar,
+                                                            rect);
 }
 
 }  // namespace blink

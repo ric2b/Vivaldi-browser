@@ -7,8 +7,6 @@
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_test.h"
 
-using ::testing::Eq;
-
 namespace net {
 namespace {
 
@@ -24,12 +22,6 @@ TEST_F(SimpleBufferAllocatorTest, NewDelete) {
 TEST_F(SimpleBufferAllocatorTest, DeleteNull) {
   SimpleBufferAllocator alloc;
   alloc.Delete(nullptr);
-}
-
-TEST_F(SimpleBufferAllocatorTest, StoreInUniqueStreamBuffer) {
-  SimpleBufferAllocator alloc;
-  UniqueStreamBuffer buf = NewStreamBuffer(&alloc, 4);
-  buf.reset();
 }
 
 }  // namespace

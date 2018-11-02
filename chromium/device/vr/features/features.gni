@@ -5,13 +5,16 @@
 import("//build/config/chromecast_build.gni")
 
 declare_args() {
-  # Enable WebVR support by default on Android
-  # Still requires command line flag to access API
-  # TODO(bshe): Enable for other architecture too. Currently we only support arm
-  # and arm64.
-  enable_vr = is_android && (current_cpu == "arm" || current_cpu == "arm64") &&
-              !is_chromecast
-  enable_openvr = false
+  # TODO(733935): Enable for other Android architectures too. Currently we only
+  # support arm and arm64.
+  enable_gvr_services = is_android && !is_chromecast &&
+                        (current_cpu == "arm" || current_cpu == "arm64")
+  enable_openvr = is_win
+}
+
+declare_args() {
+  # Enable VR device support whenever VR device SDK(s) are supported.
+  enable_vr = enable_gvr_services || enable_openvr
 
   # Whether to include VR extras like test APKs in non-VR-specific targets
   include_vr_data = false

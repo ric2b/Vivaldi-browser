@@ -5,54 +5,36 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 #define CHROME_BROWSER_UI_BROWSER_INSTANT_CONTROLLER_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/search/instant_service_observer.h"
+#include "chrome/browser/search/search_engine_base_url_tracker.h"
 #include "chrome/browser/ui/search/instant_controller.h"
-#include "chrome/browser/ui/search/search_model_observer.h"
 
 class Browser;
 class Profile;
 
-namespace content {
-class WebContents;
-}
-
-class BrowserInstantController : public SearchModelObserver,
-                                 public InstantServiceObserver {
+// BrowserInstantController is responsible for reloading any Instant tabs (which
+// today just means NTPs) when the default search provider changes. This can
+// happen when the user chooses a different default search engine, or when the
+// Google base URL changes while Google is the default search engine.
+class BrowserInstantController {
  public:
   explicit BrowserInstantController(Browser* browser);
-  ~BrowserInstantController() override;
-
-  // Commits the current Instant. This is intended for use from OpenCurrentURL.
-  void OpenInstant(WindowOpenDisposition disposition, const GURL& url);
-
-  // Returns the Profile associated with the Browser that owns this object.
-  Profile* profile() const;
-
-  InstantController* instant() { return &instant_; }
-
-  // Invoked by |instant_| to get the currently active tab.
-  content::WebContents* GetActiveWebContents() const;
-
-  // Invoked by |browser_| when the active tab changes.
-  void ActiveTabChanged();
-
-  // Invoked by |browser_| when the active tab is about to be deactivated.
-  void TabDeactivated(content::WebContents* contents);
+  ~BrowserInstantController();
 
  private:
-  // SearchModelObserver:
-  void ModelChanged(SearchModel::Origin old_origin,
-                    SearchModel::Origin new_origin) override;
+  void OnSearchEngineBaseURLChanged(
+      SearchEngineBaseURLTracker::ChangeReason change_reason);
 
-  // InstantServiceObserver:
-  void DefaultSearchProviderChanged(
-      bool google_base_url_domain_changed) override;
+  Profile* profile() const;
 
   Browser* const browser_;
 
   InstantController instant_;
+
+  std::unique_ptr<SearchEngineBaseURLTracker> search_engine_base_url_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserInstantController);
 };

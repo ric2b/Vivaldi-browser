@@ -12,11 +12,13 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
@@ -30,6 +32,7 @@
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/cursor_utils.h"
 #include "content/renderer/drop_data_builder.h"
+#include "content/renderer/mash_util.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/sad_plugin.h"
 #include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
@@ -45,6 +48,11 @@
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
+#if defined(USE_AURA)
+#include "content/renderer/mus/mus_embedded_frame.h"
+#include "content/renderer/mus/renderer_window_tree_client.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 using blink::WebPluginContainer;
@@ -54,10 +62,12 @@ using blink::WebURL;
 using blink::WebVector;
 
 namespace {
+
 using PluginContainerMap =
     std::map<blink::WebPluginContainer*, content::BrowserPlugin*>;
 static base::LazyInstance<PluginContainerMap>::DestructorAtExit
     g_plugin_container_map = LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
 
 namespace content {
@@ -92,13 +102,12 @@ BrowserPlugin::BrowserPlugin(
 
   if (delegate_)
     delegate_->SetElementInstanceID(browser_plugin_instance_id_);
+
+  enable_surface_synchronization_ = features::IsSurfaceSynchronizationEnabled();
 }
 
 BrowserPlugin::~BrowserPlugin() {
   Detach();
-
-  if (compositing_helper_.get())
-    compositing_helper_->OnContainerDestroy();
 
   if (delegate_) {
     delegate_->DidDestroyElement();
@@ -114,8 +123,13 @@ bool BrowserPlugin::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_AdvanceFocus, OnAdvanceFocus)
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_GuestGone, OnGuestGone)
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_GuestReady, OnGuestReady)
+    IPC_MESSAGE_HANDLER(BrowserPluginMsg_ResizeDueToAutoResize,
+                        OnResizeDueToAutoResize)
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_SetCursor, OnSetCursor)
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_SetMouseLock, OnSetMouseLock)
+#if defined(USE_AURA)
+    IPC_MESSAGE_HANDLER(BrowserPluginMsg_SetMusEmbedToken, OnSetMusEmbedToken)
+#endif
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_SetTooltipText, OnSetTooltipText)
     IPC_MESSAGE_HANDLER(BrowserPluginMsg_ShouldAcceptTouchEvents,
                         OnShouldAcceptTouchEvents)
@@ -129,13 +143,15 @@ void BrowserPlugin::OnSetChildFrameSurface(
     int browser_plugin_instance_id,
     const viz::SurfaceInfo& surface_info,
     const viz::SurfaceSequence& sequence) {
-  if (!attached())
+  if (!attached() || IsRunningWithMus())
     return;
 
-  EnableCompositing(true);
-  DCHECK(compositing_helper_.get());
-  compositing_helper_->SetPrimarySurfaceInfo(surface_info);
-  compositing_helper_->SetFallbackSurfaceInfo(surface_info, sequence);
+  if (!enable_surface_synchronization_) {
+    compositing_helper_->SetPrimarySurfaceId(surface_info.id(),
+                                             frame_rect().size());
+  }
+  compositing_helper_->SetFallbackSurfaceId(surface_info.id(),
+                                            frame_rect().size(), sequence);
 }
 
 void BrowserPlugin::SendSatisfySequence(const viz::SurfaceSequence& sequence) {
@@ -159,7 +175,7 @@ void BrowserPlugin::Attach() {
   BrowserPluginHostMsg_Attach_Params attach_params;
   attach_params.focused = ShouldGuestBeFocused();
   attach_params.visible = visible_;
-  attach_params.view_rect = view_rect();
+  attach_params.frame_rect = frame_rect();
   attach_params.is_full_page_plugin = false;
   if (Container()) {
     blink::WebLocalFrame* frame = Container()->GetDocument().GetFrame();
@@ -171,6 +187,14 @@ void BrowserPlugin::Attach() {
             ->GetDocument()
             .IsPluginDocument();
   }
+#if defined(USE_AURA)
+  if (pending_embed_token_) {
+    base::Optional<base::UnguessableToken> embed_token =
+        std::move(pending_embed_token_);
+    CreateMusWindowAndEmbed(*embed_token);
+  }
+#endif
+
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_Attach(
       render_frame_routing_id_,
       browser_plugin_instance_id_,
@@ -190,6 +214,9 @@ void BrowserPlugin::Attach() {
           ui::AX_EVENT_CHILDREN_CHANGED);
     }
   }
+
+  sent_resize_params_ = base::nullopt;
+  WasResized();
 }
 
 void BrowserPlugin::Detach() {
@@ -198,13 +225,81 @@ void BrowserPlugin::Detach() {
 
   attached_ = false;
   guest_crashed_ = false;
-  EnableCompositing(false);
+  compositing_helper_->OnContainerDestroy();
 
   BrowserPluginManager::Get()->Send(
       new BrowserPluginHostMsg_Detach(browser_plugin_instance_id_));
 }
 
 void BrowserPlugin::DidCommitCompositorFrame() {
+}
+
+#if defined(USE_AURA)
+void BrowserPlugin::CreateMusWindowAndEmbed(
+    const base::UnguessableToken& embed_token) {
+  RenderFrameImpl* render_frame =
+      RenderFrameImpl::FromRoutingID(render_frame_routing_id_);
+  if (!render_frame) {
+    pending_embed_token_ = embed_token;
+    return;
+  }
+  RendererWindowTreeClient* renderer_window_tree_client =
+      RendererWindowTreeClient::Get(
+          render_frame->GetRenderWidget()->routing_id());
+  DCHECK(renderer_window_tree_client);
+  mus_embedded_frame_ =
+      renderer_window_tree_client->CreateMusEmbeddedFrame(this, embed_token);
+  if (attached() && local_surface_id_.is_valid()) {
+    mus_embedded_frame_->SetWindowBounds(local_surface_id_,
+                                         FrameRectInPixels());
+  }
+}
+#endif
+
+void BrowserPlugin::WasResized() {
+  bool size_changed = !sent_resize_params_ ||
+                      sent_resize_params_->frame_rect.size() !=
+                          pending_resize_params_.frame_rect.size() ||
+                      sent_resize_params_->sequence_number !=
+                          pending_resize_params_.sequence_number;
+
+  bool synchronized_params_changed =
+      !sent_resize_params_ || size_changed ||
+      sent_resize_params_->screen_info != pending_resize_params_.screen_info;
+
+  if (synchronized_params_changed)
+    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+
+  if (enable_surface_synchronization_ && frame_sink_id_.is_valid()) {
+    compositing_helper_->SetPrimarySurfaceId(
+        viz::SurfaceId(frame_sink_id_, local_surface_id_), frame_rect().size());
+  }
+
+  bool position_changed =
+      !sent_resize_params_ || sent_resize_params_->frame_rect.origin() !=
+                                  pending_resize_params_.frame_rect.origin();
+  bool resize_params_changed = synchronized_params_changed || position_changed;
+
+  if (resize_params_changed && attached()) {
+    // Let the browser know about the updated view rect.
+    BrowserPluginManager::Get()->Send(
+        new BrowserPluginHostMsg_UpdateResizeParams(
+            browser_plugin_instance_id_, frame_rect(), screen_info(),
+            auto_size_sequence_number(), local_surface_id_));
+  }
+
+  if (delegate_ && size_changed)
+    delegate_->DidResizeElement(frame_rect().size());
+
+  if (resize_params_changed && attached())
+    sent_resize_params_ = pending_resize_params_;
+
+#if defined(USE_AURA)
+  if (IsRunningWithMus() && mus_embedded_frame_) {
+    mus_embedded_frame_->SetWindowBounds(local_surface_id_,
+                                         FrameRectInPixels());
+  }
+#endif
 }
 
 void BrowserPlugin::OnAdvanceFocus(int browser_plugin_instance_id,
@@ -219,13 +314,21 @@ void BrowserPlugin::OnAdvanceFocus(int browser_plugin_instance_id,
 
 void BrowserPlugin::OnGuestGone(int browser_plugin_instance_id) {
   guest_crashed_ = true;
-
-  EnableCompositing(true);
   compositing_helper_->ChildFrameGone();
 }
 
-void BrowserPlugin::OnGuestReady(int browser_plugin_instance_id) {
+void BrowserPlugin::OnGuestReady(int browser_plugin_instance_id,
+                                 const viz::FrameSinkId& frame_sink_id) {
   guest_crashed_ = false;
+  frame_sink_id_ = frame_sink_id;
+  sent_resize_params_ = base::nullopt;
+  WasResized();
+}
+
+void BrowserPlugin::OnResizeDueToAutoResize(int browser_plugin_instance_id,
+                                            uint64_t sequence_number) {
+  pending_resize_params_.sequence_number = sequence_number;
+  WasResized();
 }
 
 void BrowserPlugin::OnSetCursor(int browser_plugin_instance_id,
@@ -254,6 +357,20 @@ void BrowserPlugin::OnSetMouseLock(int browser_plugin_instance_id,
   }
 }
 
+#if defined(USE_AURA)
+void BrowserPlugin::OnSetMusEmbedToken(
+    int instance_id,
+    const base::UnguessableToken& embed_token) {
+  DCHECK(IsRunningWithMus());
+  if (!attached_) {
+    pending_embed_token_ = embed_token;
+  } else {
+    pending_embed_token_.reset();
+    CreateMusWindowAndEmbed(embed_token);
+  }
+}
+#endif
+
 void BrowserPlugin::OnSetTooltipText(int instance_id,
                                      const base::string16& tooltip_text) {
   // Show tooltip text by setting the BrowserPlugin's |title| attribute.
@@ -267,6 +384,19 @@ void BrowserPlugin::OnShouldAcceptTouchEvents(int browser_plugin_instance_id,
         accept ? WebPluginContainer::kTouchEventRequestTypeRaw
                : WebPluginContainer::kTouchEventRequestTypeNone);
   }
+}
+
+gfx::Rect BrowserPlugin::FrameRectInPixels() const {
+  const float device_scale_factor = GetDeviceScaleFactor();
+  return gfx::Rect(
+      gfx::ScaleToFlooredPoint(frame_rect().origin(), device_scale_factor),
+      gfx::ScaleToCeiledSize(frame_rect().size(), device_scale_factor));
+}
+
+float BrowserPlugin::GetDeviceScaleFactor() const {
+  return RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
+      ->GetRenderWidget()
+      ->GetOriginalDeviceScaleFactor();
 }
 
 void BrowserPlugin::UpdateInternalInstanceId() {
@@ -285,6 +415,11 @@ void BrowserPlugin::UpdateGuestFocusState(blink::WebFocusType focus_type) {
   bool should_be_focused = ShouldGuestBeFocused();
     BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetFocus(
         browser_plugin_instance_id_, should_be_focused, focus_type));
+}
+
+void BrowserPlugin::ScreenInfoChanged(const ScreenInfo& screen_info) {
+  pending_resize_params_.screen_info = screen_info;
+  WasResized();
 }
 
 bool BrowserPlugin::ShouldGuestBeFocused() const {
@@ -317,29 +452,18 @@ bool BrowserPlugin::Initialize(WebPluginContainer* container) {
   // Defer attach call so that if there's any pending browser plugin
   // destruction, then it can progress first.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&BrowserPlugin::UpdateInternalInstanceId,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&BrowserPlugin::UpdateInternalInstanceId,
+                                weak_ptr_factory_.GetWeakPtr()));
+
+  compositing_helper_.reset(ChildFrameCompositingHelper::CreateForBrowserPlugin(
+      weak_ptr_factory_.GetWeakPtr()));
+
+  RenderWidget* render_widget =
+      RenderFrameImpl::FromWebFrame(container_->GetDocument().GetFrame())
+          ->GetRenderWidget();
+  pending_resize_params_.screen_info = render_widget->screen_info();
+
   return true;
-}
-
-void BrowserPlugin::EnableCompositing(bool enable) {
-  bool enabled = !!compositing_helper_.get();
-  if (enabled == enable)
-    return;
-
-  if (enable) {
-    DCHECK(!compositing_helper_.get());
-    if (!compositing_helper_.get()) {
-      compositing_helper_ = ChildFrameCompositingHelper::CreateForBrowserPlugin(
-          weak_ptr_factory_.GetWeakPtr());
-    }
-  }
-
-  if (!enable) {
-    DCHECK(compositing_helper_.get());
-    compositing_helper_->OnContainerDestroy();
-    compositing_helper_ = nullptr;
-  }
 }
 
 void BrowserPlugin::Destroy() {
@@ -393,12 +517,11 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
                                    const WebRect& clip_rect,
                                    const WebRect& unobscured_rect,
                                    bool is_visible) {
-  gfx::Rect old_view_rect = view_rect_;
   // NOTE(andre@vivaldi.com) : This was proposed by WillyYu.
   // See https://github.com/WillyYu/vivaldi_1.7/
   blink::WebElement element = container_->GetElement();
   blink::WebString tab_id_wstr = element.GetAttribute("tab_id");
-  if (!old_view_rect.IsEmpty() && !is_visible && !tab_id_wstr.IsEmpty()) {
+  if (!frame_rect().IsEmpty() && !is_visible && !tab_id_wstr.IsEmpty()) {
     return;
   }
 
@@ -408,13 +531,11 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
   // We will use the local root's RenderWidget to convert coordinates to Window.
   // If this local root belongs to an OOPIF, on the browser side we will have to
   // consider the displacement of the child frame in root window.
-  RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
-      ->GetRenderWidget()
-      ->ConvertViewportToWindow(&rect_in_css);
-  // gisli@vivalid.com:  keep track of old pos.
-  int old_x = view_rect_.x();
-  int old_y = view_rect_.y();
-  view_rect_ = rect_in_css;
+  RenderWidget* render_widget =
+      RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
+          ->GetRenderWidget();
+  render_widget->ConvertViewportToWindow(&rect_in_css);
+  gfx::Rect _frame_rect = rect_in_css;
 
   if (!ready_) {
     if (delegate_)
@@ -422,24 +543,9 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
     ready_ = true;
   }
 
-  bool rect_size_changed = view_rect_.size() != old_view_rect.size();
-  if (delegate_ && rect_size_changed)
-    delegate_->DidResizeElement(view_rect_.size());
-
-  if (!attached())
-    return;
-
-  // gisli@vivaldi.com: Also fire update geometry if the pos changes.  Note: the
-  // BrowserPluginGuest seems to assume that all the geometry changes are pos
-  // changes, so there is some mismatch here.
-  if ((!delegate_ && rect_size_changed) ||
-      view_rect_.origin() != old_view_rect.origin() ||
-      old_x != plugin_rect_in_viewport.x || old_y != plugin_rect_in_viewport.y) {
-    // Let the browser know about the updated view rect.
-    BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_UpdateGeometry(
-        browser_plugin_instance_id_, view_rect_));
-    return;
-  }
+  pending_resize_params_.frame_rect = _frame_rect;
+  pending_resize_params_.screen_info = render_widget->screen_info();
+  WasResized();
 }
 
 void BrowserPlugin::UpdateFocus(bool focused, blink::WebFocusType focus_type) {
@@ -455,8 +561,7 @@ void BrowserPlugin::UpdateVisibility(bool visible) {
   if (!attached())
     return;
 
-  if (compositing_helper_.get())
-    compositing_helper_->UpdateVisibility(visible);
+  compositing_helper_->UpdateVisibility(visible);
 
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetVisibility(
       browser_plugin_instance_id_,
@@ -528,8 +633,8 @@ blink::WebInputEventResult BrowserPlugin::HandleInputEvent(
 bool BrowserPlugin::HandleDragStatusUpdate(blink::WebDragStatus drag_status,
                                            const blink::WebDragData& drag_data,
                                            blink::WebDragOperationsMask mask,
-                                           const blink::WebPoint& position,
-                                           const blink::WebPoint& screen) {
+                                           const blink::WebFloatPoint& position,
+                                           const blink::WebFloatPoint& screen) {
   // NOTE(andre@vivaldi.com) : We have opened up to accept cross-site, same-page
   // frames drag and drop, and this causes the state-machine to break down in
   // Blink. The drag and drop functionality is implemented via renderwidgets
@@ -678,5 +783,21 @@ bool BrowserPlugin::HandleMouseLockedInputEvent(
                                                 &event));
   return true;
 }
+
+#if defined(USE_AURA)
+void BrowserPlugin::OnMusEmbeddedFrameSurfaceChanged(
+    const viz::SurfaceInfo& surface_info) {
+  if (!attached_)
+    return;
+
+  compositing_helper_->SetFallbackSurfaceId(
+      surface_info.id(), frame_rect().size(), viz::SurfaceSequence());
+}
+
+void BrowserPlugin::OnMusEmbeddedFrameSinkIdAllocated(
+    const viz::FrameSinkId& frame_sink_id) {
+  OnGuestReady(browser_plugin_instance_id_, frame_sink_id);
+}
+#endif
 
 }  // namespace content

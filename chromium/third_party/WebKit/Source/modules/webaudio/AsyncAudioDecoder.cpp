@@ -25,8 +25,8 @@
 
 #include "modules/webaudio/AsyncAudioDecoder.h"
 
-#include "bindings/modules/v8/DecodeErrorCallback.h"
-#include "bindings/modules/v8/DecodeSuccessCallback.h"
+#include "bindings/modules/v8/v8_decode_error_callback.h"
+#include "bindings/modules/v8/v8_decode_success_callback.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/BaseAudioContext.h"
@@ -42,8 +42,8 @@ namespace blink {
 
 void AsyncAudioDecoder::DecodeAsync(DOMArrayBuffer* audio_data,
                                     float sample_rate,
-                                    DecodeSuccessCallback* success_callback,
-                                    DecodeErrorCallback* error_callback,
+                                    V8DecodeSuccessCallback* success_callback,
+                                    V8DecodeErrorCallback* error_callback,
                                     ScriptPromiseResolver* resolver,
                                     BaseAudioContext* context) {
   DCHECK(IsMainThread());
@@ -64,12 +64,12 @@ void AsyncAudioDecoder::DecodeAsync(DOMArrayBuffer* audio_data,
 void AsyncAudioDecoder::DecodeOnBackgroundThread(
     DOMArrayBuffer* audio_data,
     float sample_rate,
-    DecodeSuccessCallback* success_callback,
-    DecodeErrorCallback* error_callback,
+    V8DecodeSuccessCallback* success_callback,
+    V8DecodeErrorCallback* error_callback,
     ScriptPromiseResolver* resolver,
     BaseAudioContext* context) {
   DCHECK(!IsMainThread());
-  RefPtr<AudioBus> bus = CreateBusFromInMemoryAudioFile(
+  scoped_refptr<AudioBus> bus = CreateBusFromInMemoryAudioFile(
       audio_data->Data(), audio_data->ByteLength(), false, sample_rate);
 
   // Decoding is finished, but we need to do the callbacks on the main thread.
@@ -85,17 +85,19 @@ void AsyncAudioDecoder::DecodeOnBackgroundThread(
                         WrapCrossThreadPersistent(audio_data),
                         WrapCrossThreadPersistent(success_callback),
                         WrapCrossThreadPersistent(error_callback),
-                        std::move(bus), WrapCrossThreadPersistent(resolver),
+                        WTF::RetainedRef(std::move(bus)),
+                        WrapCrossThreadPersistent(resolver),
                         WrapCrossThreadPersistent(context)));
   }
 }
 
-void AsyncAudioDecoder::NotifyComplete(DOMArrayBuffer*,
-                                       DecodeSuccessCallback* success_callback,
-                                       DecodeErrorCallback* error_callback,
-                                       AudioBus* audio_bus,
-                                       ScriptPromiseResolver* resolver,
-                                       BaseAudioContext* context) {
+void AsyncAudioDecoder::NotifyComplete(
+    DOMArrayBuffer*,
+    V8DecodeSuccessCallback* success_callback,
+    V8DecodeErrorCallback* error_callback,
+    AudioBus* audio_bus,
+    ScriptPromiseResolver* resolver,
+    BaseAudioContext* context) {
   DCHECK(IsMainThread());
 
   AudioBuffer* audio_buffer = AudioBuffer::CreateFromAudioBus(audio_bus);

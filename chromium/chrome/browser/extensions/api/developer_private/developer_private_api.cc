@@ -56,6 +56,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/drop_data.h"
 #include "extensions/browser/api/file_handlers/app_file_handler_util.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -85,6 +86,7 @@
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/text/bytes_formatting.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -121,6 +123,8 @@ const char kCannotRepairPolicyExtension[] =
 
 const char kUnpackedAppsFolder[] = "apps_target";
 const char kManifestFile[] = "manifest.json";
+
+base::FilePath* g_drop_path_for_testing = nullptr;
 
 ExtensionService* GetExtensionService(content::BrowserContext* context) {
   return ExtensionSystem::Get(context)->extension_service();
@@ -193,6 +197,29 @@ std::unique_ptr<developer::ProfileInfo> CreateProfileInfo(Profile* profile) {
   return info;
 }
 
+// Creates a developer::LoadError from the provided data.
+developer::LoadError CreateLoadError(
+    const base::FilePath& file_path,
+    const std::string& error,
+    size_t line_number,
+    const std::string& manifest,
+    const DeveloperPrivateAPI::UnpackedRetryId& retry_guid) {
+  base::FilePath prettified_path = path_util::PrettifyPath(file_path);
+
+  SourceHighlighter highlighter(manifest, line_number);
+  developer::LoadError response;
+  response.error = error;
+  response.path = base::UTF16ToUTF8(prettified_path.LossyDisplayName());
+  response.retry_guid = retry_guid;
+
+  response.source = std::make_unique<developer::ErrorFileSource>();
+  response.source->before_highlight = highlighter.GetBeforeFeature();
+  response.source->highlight = highlighter.GetFeature();
+  response.source->after_highlight = highlighter.GetAfterFeature();
+
+  return response;
+}
+
 }  // namespace
 
 namespace ChoosePath = api::developer_private::ChoosePath;
@@ -201,7 +228,8 @@ namespace PackDirectory = api::developer_private::PackDirectory;
 namespace Reload = api::developer_private::Reload;
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<DeveloperPrivateAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_developer_private_api_factory =
+        LAZY_INSTANCE_INITIALIZER;
 
 class DeveloperPrivateAPI::WebContentsTracker
     : public content::WebContentsObserver {
@@ -215,7 +243,7 @@ class DeveloperPrivateAPI::WebContentsTracker
 
   void WebContentsDestroyed() override {
     if (api_)
-      api_->allowed_unpacked_paths_.erase(web_contents());
+      api_->web_contents_data_.erase(web_contents());
     delete this;
   }
 
@@ -224,10 +252,15 @@ class DeveloperPrivateAPI::WebContentsTracker
   DISALLOW_COPY_AND_ASSIGN(WebContentsTracker);
 };
 
+DeveloperPrivateAPI::WebContentsData::WebContentsData() = default;
+DeveloperPrivateAPI::WebContentsData::~WebContentsData() = default;
+DeveloperPrivateAPI::WebContentsData::WebContentsData(WebContentsData&& other) =
+    default;
+
 // static
 BrowserContextKeyedAPIFactory<DeveloperPrivateAPI>*
 DeveloperPrivateAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_developer_private_api_factory.Pointer();
 }
 
 // static
@@ -450,21 +483,16 @@ DeveloperPrivateAPI::UnpackedRetryId DeveloperPrivateAPI::AddUnpackedPath(
     const base::FilePath& path) {
   DCHECK(web_contents);
   last_unpacked_directory_ = path;
-  IdToPathMap& paths = allowed_unpacked_paths_[web_contents];
-  if (paths.empty()) {
-    // This is the first we've added this WebContents. Track its lifetime so we
-    // can clean up the paths when it is destroyed.
-    // WebContentsTracker manages its own lifetime.
-    new WebContentsTracker(weak_factory_.GetWeakPtr(), web_contents);
-  } else {
-    auto existing = std::find_if(
-        paths.begin(), paths.end(),
-        [path](const std::pair<std::string, base::FilePath>& entry) {
-          return entry.second == path;
-        });
-    if (existing != paths.end())
-      return existing->first;
-  }
+  WebContentsData* data = GetOrCreateWebContentsData(web_contents);
+  IdToPathMap& paths = data->allowed_unpacked_paths;
+  auto existing =
+      std::find_if(paths.begin(), paths.end(),
+                   [path](const std::pair<std::string, base::FilePath>& entry) {
+                     return entry.second == path;
+                   });
+  if (existing != paths.end())
+    return existing->first;
+
   UnpackedRetryId id = base::GenerateGUID();
   paths[id] = path;
   return id;
@@ -473,19 +501,52 @@ DeveloperPrivateAPI::UnpackedRetryId DeveloperPrivateAPI::AddUnpackedPath(
 base::FilePath DeveloperPrivateAPI::GetUnpackedPath(
     content::WebContents* web_contents,
     const UnpackedRetryId& id) const {
-  auto iter = allowed_unpacked_paths_.find(web_contents);
-  if (iter == allowed_unpacked_paths_.end())
+  const WebContentsData* data = GetWebContentsData(web_contents);
+  if (!data)
     return base::FilePath();
-  const IdToPathMap& paths = iter->second;
+  const IdToPathMap& paths = data->allowed_unpacked_paths;
   auto path_iter = paths.find(id);
   if (path_iter == paths.end())
     return base::FilePath();
   return path_iter->second;
 }
 
+void DeveloperPrivateAPI::SetDraggedPath(content::WebContents* web_contents,
+                                         const base::FilePath& dragged_path) {
+  WebContentsData* data = GetOrCreateWebContentsData(web_contents);
+  data->dragged_path = dragged_path;
+}
+
+base::FilePath DeveloperPrivateAPI::GetDraggedPath(
+    content::WebContents* web_contents) const {
+  const WebContentsData* data = GetWebContentsData(web_contents);
+  return data ? data->dragged_path : base::FilePath();
+}
+
 void DeveloperPrivateAPI::RegisterNotifications() {
   EventRouter::Get(profile_)->RegisterObserver(
       this, developer::OnItemStateChanged::kEventName);
+}
+
+const DeveloperPrivateAPI::WebContentsData*
+DeveloperPrivateAPI::GetWebContentsData(
+    content::WebContents* web_contents) const {
+  auto iter = web_contents_data_.find(web_contents);
+  return iter == web_contents_data_.end() ? nullptr : &iter->second;
+}
+
+DeveloperPrivateAPI::WebContentsData*
+DeveloperPrivateAPI::GetOrCreateWebContentsData(
+    content::WebContents* web_contents) {
+  auto iter = web_contents_data_.find(web_contents);
+  if (iter != web_contents_data_.end())
+    return &iter->second;
+
+  // This is the first we've added this WebContents. Track its lifetime so we
+  // can clean up the paths when it is destroyed.
+  // WebContentsTracker manages its own lifetime.
+  new WebContentsTracker(weak_factory_.GetWeakPtr(), web_contents);
+  return &web_contents_data_[web_contents];
 }
 
 DeveloperPrivateAPI::~DeveloperPrivateAPI() {}
@@ -611,6 +672,48 @@ void DeveloperPrivateGetExtensionInfoFunction::OnInfosGenerated(
                        : OneArgument(list[0].ToValue()));
 }
 
+DeveloperPrivateGetExtensionSizeFunction::
+    DeveloperPrivateGetExtensionSizeFunction() {}
+
+DeveloperPrivateGetExtensionSizeFunction::
+    ~DeveloperPrivateGetExtensionSizeFunction() {}
+
+ExtensionFunction::ResponseAction
+DeveloperPrivateGetExtensionSizeFunction::Run() {
+  std::unique_ptr<developer::GetExtensionSize::Params> params(
+      developer::GetExtensionSize::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const Extension* extension = GetExtensionById(params->id);
+  if (!extension)
+    return RespondNow(Error(kNoSuchExtensionError));
+
+  // TODO(dpapad): Share this logic with
+  // chrome/browser/ui/views/apps/app_info_dialog/app_info_summary_panel.cc.
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&base::ComputeDirectorySize, extension->path()),
+      base::BindOnce(
+          &DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated,
+          this /* refcounted */));
+
+  return RespondLater();
+}
+
+void DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated(
+    int64_t size_in_bytes) {
+  base::string16 response;
+
+  const int one_mebibyte_in_bytes = 1024 * 1024;
+  if (size_in_bytes < one_mebibyte_in_bytes) {
+    response = l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_SIZE_SMALL_LABEL);
+  } else {
+    response =
+        ui::FormatBytesWithUnits(size_in_bytes, ui::DATA_UNITS_MEBIBYTE, true);
+  }
+  Respond(OneArgument(std::make_unique<base::Value>(response)));
+}
+
 DeveloperPrivateGetItemsInfoFunction::DeveloperPrivateGetItemsInfoFunction() {}
 DeveloperPrivateGetItemsInfoFunction::~DeveloperPrivateGetItemsInfoFunction() {}
 
@@ -693,7 +796,14 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
   const Extension* extension = GetExtensionById(update.extension_id);
   if (!extension)
     return RespondNow(Error(kNoSuchExtensionError));
-  if (!user_gesture())
+
+  // The chrome://extensions page uses toggles which, when dragged, do not
+  // invoke a user gesture. Work around this for the chrome://extensions page.
+  // TODO(dpapad): Remove this exemption when sliding a toggle counts as a
+  // gesture.
+  bool allowed =
+      source_context_type() == Feature::WEBUI_CONTEXT || user_gesture();
+  if (!allowed)
     return RespondNow(Error(kRequiresUserGestureError));
 
   if (update.file_access) {
@@ -734,6 +844,8 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+DeveloperPrivateReloadFunction::DeveloperPrivateReloadFunction()
+    : registry_observer_(this), error_reporter_observer_(this) {}
 DeveloperPrivateReloadFunction::~DeveloperPrivateReloadFunction() {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateReloadFunction::Run() {
@@ -744,9 +856,19 @@ ExtensionFunction::ResponseAction DeveloperPrivateReloadFunction::Run() {
   if (!extension)
     return RespondNow(Error(kNoSuchExtensionError));
 
-  bool fail_quietly = params->options &&
-                      params->options->fail_quietly &&
-                      *params->options->fail_quietly;
+  reloading_extension_path_ = extension->path();
+
+  bool fail_quietly = false;
+  bool wait_for_completion = false;
+  if (params->options) {
+    fail_quietly =
+        params->options->fail_quietly && *params->options->fail_quietly;
+    // We only wait for completion for unpacked extensions, since they are the
+    // only extensions for which we can show actionable feedback to the user.
+    wait_for_completion = params->options->populate_error_for_unpacked &&
+                          *params->options->populate_error_for_unpacked &&
+                          Manifest::IsUnpackedLocation(extension->location());
+  }
 
   ExtensionService* service = GetExtensionService(browser_context());
   if (fail_quietly)
@@ -754,9 +876,73 @@ ExtensionFunction::ResponseAction DeveloperPrivateReloadFunction::Run() {
   else
     service->ReloadExtension(params->extension_id);
 
-  // TODO(devlin): We shouldn't return until the extension has finished trying
-  // to reload (and then we could also return the error).
-  return RespondNow(NoArguments());
+  if (!wait_for_completion)
+    return RespondNow(NoArguments());
+
+  // Balanced in ClearObservers(), which is called from the first observer
+  // method to be called with the appropriate extension (or shutdown).
+  AddRef();
+  error_reporter_observer_.Add(ExtensionErrorReporter::GetInstance());
+  registry_observer_.Add(ExtensionRegistry::Get(browser_context()));
+
+  return RespondLater();
+}
+
+void DeveloperPrivateReloadFunction::OnExtensionLoaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension) {
+  if (extension->path() == reloading_extension_path_) {
+    // Reload succeeded!
+    Respond(NoArguments());
+    ClearObservers();
+  }
+}
+
+void DeveloperPrivateReloadFunction::OnShutdown(ExtensionRegistry* registry) {
+  Respond(Error("Shutting down."));
+  ClearObservers();
+}
+
+void DeveloperPrivateReloadFunction::OnLoadFailure(
+    content::BrowserContext* browser_context,
+    const base::FilePath& file_path,
+    const std::string& error) {
+  if (file_path == reloading_extension_path_) {
+    // Reload failed - create an error to pass back to the extension.
+    ExtensionLoaderHandler::GetManifestError(
+        error, file_path,
+        // TODO(devlin): Update GetManifestError to take a OnceCallback.
+        base::BindRepeating(&DeveloperPrivateReloadFunction::OnGotManifestError,
+                            this));  // Creates a reference.
+    ClearObservers();
+  }
+}
+
+void DeveloperPrivateReloadFunction::OnGotManifestError(
+    const base::FilePath& file_path,
+    const std::string& error,
+    size_t line_number,
+    const std::string& manifest) {
+  DeveloperPrivateAPI::UnpackedRetryId retry_guid =
+      DeveloperPrivateAPI::Get(browser_context())
+          ->AddUnpackedPath(GetSenderWebContents(), reloading_extension_path_);
+  // Respond to the caller with the load error, which allows the caller to retry
+  // reloading through developerPrivate.loadUnpacked().
+  // TODO(devlin): This is weird. Really, we should allow retrying through this
+  // function instead of through loadUnpacked(), but
+  // ExtensionService::ReloadExtension doesn't behave well with an extension
+  // that failed to reload, and untangling that mess is quite significant.
+  // See https://crbug.com/792277.
+  Respond(OneArgument(
+      CreateLoadError(file_path, error, line_number, manifest, retry_guid)
+          .ToValue()));
+}
+
+void DeveloperPrivateReloadFunction::ClearObservers() {
+  registry_observer_.RemoveAll();
+  error_reporter_observer_.RemoveAll();
+
+  Release();  // Balanced in Run().
 }
 
 DeveloperPrivateShowPermissionsDialogFunction::
@@ -821,6 +1007,17 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
     return RespondLater();
   }
 
+  if (params->options && params->options->use_dragged_path &&
+      *params->options->use_dragged_path) {
+    DeveloperPrivateAPI* api = DeveloperPrivateAPI::Get(browser_context());
+    base::FilePath path = api->GetDraggedPath(web_contents);
+    if (path.empty())
+      return RespondNow(Error("No dragged path"));
+    AddRef();  // Balanced in FileSelected.
+    FileSelected(path);
+    return RespondLater();
+  }
+
   if (!ShowPicker(ui::SelectFileDialog::SELECT_FOLDER,
                   l10n_util::GetStringUTF16(IDS_EXTENSION_LOAD_FROM_DIRECTORY),
                   ui::SelectFileDialog::FileTypeInfo(),
@@ -875,20 +1072,50 @@ void DeveloperPrivateLoadUnpackedFunction::OnGotManifestError(
     size_t line_number,
     const std::string& manifest) {
   DCHECK(!retry_guid_.empty());
-  base::FilePath prettified_path = path_util::PrettifyPath(file_path);
+  Respond(OneArgument(
+      CreateLoadError(file_path, error, line_number, manifest, retry_guid_)
+          .ToValue()));
+}
 
-  SourceHighlighter highlighter(manifest, line_number);
-  developer::LoadError response;
-  response.error = error;
-  response.path = base::UTF16ToUTF8(prettified_path.LossyDisplayName());
-  response.retry_guid = retry_guid_;
+DeveloperPrivateNotifyDragInstallInProgressFunction::
+    DeveloperPrivateNotifyDragInstallInProgressFunction() = default;
+DeveloperPrivateNotifyDragInstallInProgressFunction::
+    ~DeveloperPrivateNotifyDragInstallInProgressFunction() = default;
 
-  response.source = base::MakeUnique<developer::ErrorFileSource>();
-  response.source->before_highlight = highlighter.GetBeforeFeature();
-  response.source->highlight = highlighter.GetFeature();
-  response.source->after_highlight = highlighter.GetAfterFeature();
+ExtensionFunction::ResponseAction
+DeveloperPrivateNotifyDragInstallInProgressFunction::Run() {
+  content::WebContents* web_contents = GetSenderWebContents();
+  if (!web_contents)
+    return RespondNow(Error(kCouldNotFindWebContentsError));
 
-  Respond(OneArgument(response.ToValue()));
+  const base::FilePath* file_path = nullptr;
+  if (g_drop_path_for_testing) {
+    file_path = g_drop_path_for_testing;
+  } else {
+    content::DropData* drop_data = web_contents->GetDropData();
+    if (!drop_data)
+      return RespondNow(Error("No current drop data."));
+
+    if (drop_data->filenames.empty())
+      return RespondNow(Error("No files being dragged."));
+
+    const ui::FileInfo& file_info = drop_data->filenames.front();
+    file_path = &file_info.path;
+  }
+
+  DCHECK(file_path);
+  // Note(devlin): we don't do further validation that the file is a directory
+  // here. This is validated in the JS, but if that fails, then trying to load
+  // the file as an unpacked extension will also fail (reasonably gracefully).
+  DeveloperPrivateAPI::Get(browser_context())
+      ->SetDraggedPath(web_contents, *file_path);
+  return RespondNow(NoArguments());
+}
+
+// static
+void DeveloperPrivateNotifyDragInstallInProgressFunction::SetDropPathForTesting(
+    base::FilePath* file_path) {
+  g_drop_path_for_testing = file_path;
 }
 
 bool DeveloperPrivateChooseEntryFunction::ShowPicker(

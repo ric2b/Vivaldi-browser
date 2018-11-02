@@ -31,6 +31,7 @@
 @class NSURLRequest;
 @class NSURLResponse;
 @protocol CRWWebViewNavigationProxy;
+@class UIViewController;
 
 namespace net {
 class HttpResponseHeaders;
@@ -41,6 +42,7 @@ namespace web {
 class BrowserState;
 struct ContextMenuParams;
 struct FaviconURL;
+struct FormActivityParams;
 struct LoadCommittedDetails;
 class NavigationContext;
 class NavigationManager;
@@ -65,7 +67,7 @@ class WebUIIOS;
 class WebStateImpl : public WebState, public NavigationManagerDelegate {
  public:
   // Constructor for WebStateImpls created for new sessions.
-  WebStateImpl(const CreateParams& params);
+  explicit WebStateImpl(const CreateParams& params);
   // Constructor for WebStatesImpls created for deserialized sessions
   WebStateImpl(const CreateParams& params, CRWSessionStorage* session_storage);
   ~WebStateImpl() override;
@@ -77,14 +79,13 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // Notifies the observers that a navigation has started.
   void OnNavigationStarted(web::NavigationContext* context);
 
-  // Notifies the observers that a navigation has finished.
+  // Notifies the observers that a navigation has finished. For same-document
+  // navigations notifies the observers about favicon URLs update using
+  // candidates received in OnFaviconUrlUpdated.
   void OnNavigationFinished(web::NavigationContext* context);
 
   // Called when page title was changed.
   void OnTitleChanged();
-
-  // Called when the visible security state of the page changes.
-  void OnVisibleSecurityStateChange();
 
   // Called when a dialog or child window open request was suppressed.
   void OnDialogSuppressed();
@@ -108,11 +109,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void OnDocumentSubmitted(const std::string& form_name, bool user_initiated);
 
   // Called when form activity is registered.
-  void OnFormActivityRegistered(const std::string& form_name,
-                                const std::string& field_name,
-                                const std::string& type,
-                                const std::string& value,
-                                bool input_missing);
+  void OnFormActivityRegistered(const FormActivityParams& params);
 
   // Called when new FaviconURL candidates are received.
   void OnFaviconUrlUpdated(const std::vector<FaviconURL>& candidates);
@@ -167,6 +164,19 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // allowed to continue by asking its policy deciders. Defaults to true.
   bool ShouldAllowResponse(NSURLResponse* response, bool for_main_frame);
 
+  // Determines whether the given link with |link_url| should show a preview on
+  // force touch.
+  bool ShouldPreviewLink(const GURL& link_url);
+  // Called when the user performs a peek action on a link with |link_url| with
+  // force touch. Returns a view controller shown as a pop-up. Uses Webkit's
+  // default preview behavior when it returns nil.
+  UIViewController* GetPreviewingViewController(const GURL& link_url);
+  // Called when the user performs a pop action on the preview on force touch.
+  // |previewing_view_controller| is the view controller that is popped.
+  // It should display |previewing_view_controller| inside the app.
+  void CommitPreviewingViewController(
+      UIViewController* previewing_view_controller);
+
   // WebState:
   WebStateDelegate* GetDelegate() override;
   void SetDelegate(WebStateDelegate* delegate) override;
@@ -197,6 +207,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   bool IsLoading() const override;
   double GetLoadingProgress() const override;
   bool IsCrashed() const override;
+  bool IsVisible() const override;
   bool IsEvicted() const override;
   bool IsBeingDestroyed() const override;
   const GURL& GetVisibleURL() const override;
@@ -205,20 +216,22 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void ShowTransientContentView(CRWContentView* content_view) override;
   bool IsShowingWebInterstitial() const override;
   WebInterstitial* GetWebInterstitial() const override;
-  void OnPasswordInputShownOnHttp() override;
-  void OnCreditCardInputShownOnHttp() override;
   void AddScriptCommandCallback(const ScriptCommandCallback& callback,
                                 const std::string& command_prefix) override;
   void RemoveScriptCommandCallback(const std::string& command_prefix) override;
   id<CRWWebViewProxy> GetWebViewProxy() const override;
   WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
+  void DidChangeVisibleSecurityState() override;
   void BindInterfaceRequestFromMainFrame(
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool HasOpener() const override;
+  void SetHasOpener(bool has_opener) override;
   void TakeSnapshot(const SnapshotCallback& callback,
                     CGSize target_size) const override;
   base::WeakPtr<WebState> AsWeakPtr() override;
+  void AddObserver(WebStateObserver* observer) override;
+  void RemoveObserver(WebStateObserver* observer) override;
 
   // Adds |interstitial|'s view to the web controller's content view.
   void ShowWebInterstitial(WebInterstitialImpl* interstitial);
@@ -262,7 +275,8 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // NavigationManagerDelegate:
   void ClearTransientContent() override;
   void RecordPageStateInNavigationItem() override;
-  void UpdateHtml5HistoryState() override;
+  void OnGoToIndexSameDocumentNavigation(
+      NavigationInitiationType type) override;
   void WillChangeUserAgentType() override;
   void WillLoadCurrentItemWithUrl(const GURL&) override;
   void LoadCurrentItem() override;
@@ -282,8 +296,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   id<CRWWebViewNavigationProxy> GetWebViewNavigationProxy() const override;
 
  protected:
-  void AddObserver(WebStateObserver* observer) override;
-  void RemoveObserver(WebStateObserver* observer) override;
   void AddPolicyDecider(WebStatePolicyDecider* decider) override;
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override;
 
@@ -298,6 +310,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Returns true if |web_controller_| has been set.
   bool Configured() const;
+
+  // Restores session history into the navigation manager.
+  void RestoreSessionStorage(CRWSessionStorage* session_storage);
 
   // Delegate, not owned by this object.
   WebStateDelegate* delegate_;
@@ -360,6 +375,16 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Mojo interface registry for this WebState.
   std::unique_ptr<WebStateInterfaceProvider> web_state_interface_provider_;
+
+  // Cached session history when web usage is disabled. It is used to restore
+  // history into WKWebView when web usage is re-enabled.
+  base::scoped_nsobject<CRWSessionStorage> cached_session_storage_;
+
+  // Favicons URLs received in OnFaviconUrlUpdated.
+  // WebStateObserver:FaviconUrlUpdated must be called for same-document
+  // navigations, so this cache will be used to avoid running expensive favicon
+  // fetching JavaScript.
+  std::vector<web::FaviconURL> cached_favicon_urls_;
 
   DISALLOW_COPY_AND_ASSIGN(WebStateImpl);
 };

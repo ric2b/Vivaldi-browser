@@ -10,19 +10,20 @@
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/SVGPaintContext.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/ScopedInterpolationQuality.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintRecord.h"
 
 namespace blink {
 
 void SVGImagePainter::Paint(const PaintInfo& paint_info) {
-  if (paint_info.phase != kPaintPhaseForeground ||
+  if (paint_info.phase != PaintPhase::kForeground ||
       layout_svg_image_.Style()->Visibility() != EVisibility::kVisible ||
       !layout_svg_image_.ImageResource()->HasImage())
     return;
@@ -41,19 +42,19 @@ void SVGImagePainter::Paint(const PaintInfo& paint_info) {
     SVGPaintContext paint_context(layout_svg_image_,
                                   paint_info_before_filtering);
     if (paint_context.ApplyClipMaskAndFilterIfNecessary() &&
-        !LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+        !DrawingRecorder::UseCachedDrawingIfPossible(
             paint_context.GetPaintInfo().context, layout_svg_image_,
             paint_context.GetPaintInfo().phase)) {
-      LayoutObjectDrawingRecorder recorder(
-          paint_context.GetPaintInfo().context, layout_svg_image_,
-          paint_context.GetPaintInfo().phase, bounding_box);
+      DrawingRecorder recorder(paint_context.GetPaintInfo().context,
+                               layout_svg_image_,
+                               paint_context.GetPaintInfo().phase);
       PaintForeground(paint_context.GetPaintInfo());
     }
   }
 
   if (layout_svg_image_.Style()->OutlineWidth()) {
     PaintInfo outline_paint_info(paint_info_before_filtering);
-    outline_paint_info.phase = kPaintPhaseSelfOutlineOnly;
+    outline_paint_info.phase = PaintPhase::kSelfOutlineOnly;
     ObjectPainter(layout_svg_image_)
         .PaintOutline(outline_paint_info, LayoutPoint(bounding_box.Location()));
   }
@@ -65,28 +66,26 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
   if (image_viewport_size.IsEmpty())
     return;
 
-  RefPtr<Image> image = image_resource->GetImage(image_viewport_size);
+  scoped_refptr<Image> image = image_resource->GetImage(image_viewport_size);
   FloatRect dest_rect = layout_svg_image_.ObjectBoundingBox();
   FloatRect src_rect(0, 0, image->width(), image->height());
 
   SVGImageElement* image_element =
-      toSVGImageElement(layout_svg_image_.GetElement());
+      ToSVGImageElement(layout_svg_image_.GetElement());
   image_element->preserveAspectRatio()->CurrentValue()->TransformRect(dest_rect,
                                                                       src_rect);
-  InterpolationQuality interpolation_quality =
-      layout_svg_image_.StyleRef().GetInterpolationQuality();
-  InterpolationQuality previous_interpolation_quality =
-      paint_info.context.ImageInterpolationQuality();
-  paint_info.context.SetImageInterpolationQuality(interpolation_quality);
-  paint_info.context.DrawImage(image.Get(), dest_rect, &src_rect);
-  paint_info.context.SetImageInterpolationQuality(
-      previous_interpolation_quality);
+  ScopedInterpolationQuality interpolation_quality_scope(
+      paint_info.context,
+      layout_svg_image_.StyleRef().GetInterpolationQuality());
+  Image::ImageDecodingMode decode_mode =
+      image_element->GetDecodingModeForPainting(image->paint_image_id());
+  paint_info.context.DrawImage(image.get(), decode_mode, dest_rect, &src_rect);
 }
 
 FloatSize SVGImagePainter::ComputeImageViewportSize() const {
   DCHECK(layout_svg_image_.ImageResource()->HasImage());
 
-  if (toSVGImageElement(layout_svg_image_.GetElement())
+  if (ToSVGImageElement(layout_svg_image_.GetElement())
           ->preserveAspectRatio()
           ->CurrentValue()
           ->Align() != SVGPreserveAspectRatio::kSvgPreserveaspectratioNone)
@@ -104,13 +103,12 @@ FloatSize SVGImagePainter::ComputeImageViewportSize() const {
   // Avoid returning the size of the broken image.
   if (cached_image->ErrorOccurred())
     return FloatSize();
-
-  if (cached_image->GetImage()->IsSVGImage()) {
-    return ToSVGImage(cached_image->GetImage())
-        ->ConcreteObjectSize(layout_svg_image_.ObjectBoundingBox().Size());
+  Image* image = cached_image->GetImage();
+  if (image->IsSVGImage()) {
+    return ToSVGImage(image)->ConcreteObjectSize(
+        layout_svg_image_.ObjectBoundingBox().Size());
   }
-
-  return FloatSize(cached_image->GetImage()->Size());
+  return FloatSize(image->Size());
 }
 
 }  // namespace blink

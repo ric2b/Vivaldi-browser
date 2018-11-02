@@ -10,6 +10,7 @@
 #include "chrome/browser/profile_resetter/triggered_profile_resetter.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -20,7 +21,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "net/base/url_util.h"
-#include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -31,7 +31,8 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "chrome/grit/locale_settings.h"
-#include "prefs/vivaldi_pref_names.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 
@@ -81,6 +82,7 @@ StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
   standard_params.is_signin_in_progress =
       signin_manager && signin_manager->AuthInProgress();
   standard_params.is_supervised_user = profile->IsSupervised();
+  standard_params.is_force_signin_enabled = signin_util::IsForceSigninEnabled();
 
 #if defined(OS_WIN)
   // Windows 10 has unique onboarding policies and content.
@@ -136,8 +138,10 @@ StartupTabs StartupTabProviderImpl::GetWelcomeBackTabs(
       }  // else fall through below.
 #endif   // defined(OS_WIN)
     case StartupBrowserCreator::WelcomeBackPage::kWelcomeStandard:
-      if (CanShowWelcome(profile->IsSyncAllowed(), profile->IsSupervised()))
+      if (CanShowWelcome(profile->IsSyncAllowed(), profile->IsSupervised(),
+                         signin_util::IsForceSigninEnabled())) {
         tabs.emplace_back(GetWelcomePageUrl(false), false);
+      }
       break;
   }
   return tabs;
@@ -182,7 +186,7 @@ StartupTabs StartupTabProviderImpl::GetPreferencesTabs(
     if (pref.type == SessionStartupPref::VIVALDI_HOMEPAGE) {
       StartupTabs tabs;
       GURL url(
-          profile->GetPrefs()->GetString(vivaldiprefs::kVivaldiHomepage));
+          profile->GetPrefs()->GetString(vivaldiprefs::kHomepage));
       tabs.push_back(StartupTab(url, false));
       return tabs;
     }
@@ -201,8 +205,9 @@ StartupTabs StartupTabProviderImpl::GetNewTabPageTabs(
 
 // static
 bool StartupTabProviderImpl::CanShowWelcome(bool is_signin_allowed,
-                                            bool is_supervised_user) {
-  return is_signin_allowed && !is_supervised_user;
+                                            bool is_supervised_user,
+                                            bool is_force_signin_enabled) {
+  return is_signin_allowed && !is_supervised_user && !is_force_signin_enabled;
 }
 
 // static
@@ -221,7 +226,8 @@ StartupTabs StartupTabProviderImpl::GetStandardOnboardingTabsForState(
   // Ref. VB-26089.
   if (vivaldi::IsVivaldiRunning() && !params.is_first_run)
     return tabs;
-  if (CanShowWelcome(params.is_signin_allowed, params.is_supervised_user) &&
+  if (CanShowWelcome(params.is_signin_allowed, params.is_supervised_user,
+                     params.is_force_signin_enabled) &&
       ShouldShowWelcomeForOnboarding(params.has_seen_welcome_page,
                                      params.is_signed_in,
                                      params.is_signin_in_progress)) {

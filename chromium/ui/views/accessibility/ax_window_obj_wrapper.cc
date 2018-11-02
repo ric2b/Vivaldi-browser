@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/focus_client.h"
@@ -57,7 +58,11 @@ void AXWindowObjWrapper::GetChildren(
 
 void AXWindowObjWrapper::Serialize(ui::AXNodeData* out_node_data) {
   out_node_data->id = GetID();
-  out_node_data->role = is_alert_ ? ui::AX_ROLE_ALERT : ui::AX_ROLE_WINDOW;
+  ui::AXRole role = window_->GetProperty(ui::kAXRoleOverride);
+  if (role != ui::AX_ROLE_NONE)
+    out_node_data->role = role;
+  else
+    out_node_data->role = is_alert_ ? ui::AX_ROLE_ALERT : ui::AX_ROLE_WINDOW;
   out_node_data->AddStringAttribute(ui::AX_ATTR_NAME,
                                     base::UTF16ToUTF8(window_->GetTitle()));
   if (!window_->IsVisible())
@@ -107,9 +112,11 @@ void AXWindowObjWrapper::OnWindowHierarchyChanged(
     AXAuraObjCache::GetInstance()->Remove(params.target, params.old_parent);
 }
 
-void AXWindowObjWrapper::OnWindowBoundsChanged(aura::Window* window,
-                                               const gfx::Rect& old_bounds,
-                                               const gfx::Rect& new_bounds) {
+void AXWindowObjWrapper::OnWindowBoundsChanged(
+    aura::Window* window,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (window != window_)
     return;
 
@@ -117,6 +124,10 @@ void AXWindowObjWrapper::OnWindowBoundsChanged(aura::Window* window,
 
   Widget* widget = Widget::GetWidgetForNativeView(window);
   if (widget) {
+    AXAuraObjCache::GetInstance()->FireEvent(
+        AXAuraObjCache::GetInstance()->GetOrCreate(widget),
+        ui::AX_EVENT_LOCATION_CHANGED);
+
     views::View* root_view = widget->GetRootView();
     if (root_view)
       root_view->NotifyAccessibilityEvent(ui::AX_EVENT_LOCATION_CHANGED, true);

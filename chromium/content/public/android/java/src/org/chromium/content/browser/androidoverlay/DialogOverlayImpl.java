@@ -33,6 +33,10 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
     // Runnable that we'll run when the overlay notifies us that it's been released.
     private Runnable mReleasedRunnable;
 
+    // Runnable that will release |mDialogCore| when posted to mOverlayHandler.  We keep this
+    // separately from mDialogCore itself so that we can call it after we've discarded the latter.
+    private Runnable mReleaseCoreRunnable;
+
     private final ThreadHoppingHost mHoppingHost;
 
     private DialogOverlayCore mDialogCore;
@@ -69,7 +73,8 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
 
         // Register to get token updates.  Note that this may not call us back directly, since
         // |mDialogCore| hasn't been initialized yet.
-        mNativeHandle = nativeInit(config.routingToken.high, config.routingToken.low);
+        mNativeHandle = nativeInit(
+                config.routingToken.high, config.routingToken.low, config.powerEfficient);
 
         if (mNativeHandle == 0) {
             mClient.onDestroyed();
@@ -96,6 +101,13 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
                 });
             }
         });
+
+        mReleaseCoreRunnable = new Runnable() {
+            @Override
+            public void run() {
+                dialogCore.release();
+            }
+        };
     }
 
     // AndroidOverlay impl.
@@ -112,19 +124,12 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
         // that the client calls it.
 
         // Allow surfaceDestroyed to proceed, if it's waiting.
-        mHoppingHost.onCleanup();
+        mHoppingHost.onClose();
 
-        // Notify |mDialogCore| that it has been released.  This might not be called if it notifies
-        // us that it's been destroyed.  We still might send it in that case if the client closes
-        // the connection before we find out that it's been destroyed on the overlay thread.
-        if (mDialogCore != null) {
-            final DialogOverlayCore dialogCore = mDialogCore;
-            mOverlayHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    dialogCore.release();
-                }
-            });
+        // Notify |mDialogCore| that it has been released.
+        if (mReleaseCoreRunnable != null) {
+            mOverlayHandler.post(mReleaseCoreRunnable);
+            mReleaseCoreRunnable = null;
 
             // Note that we might get messagaes from |mDialogCore| after this, since they might be
             // dispatched before |r| arrives.  Clearing |mDialogCore| causes us to ignore them.
@@ -207,8 +212,16 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
     // DialogOverlayCore.Host impl.
     // Due to threading issues, |mHoppingHost| doesn't forward this.
     @Override
-    public void waitForCleanup() {
+    public void waitForClose() {
         assert false : "Not reached";
+    }
+
+    // DialogOverlayCore.Host impl
+    @Override
+    public void enforceClose() {
+        // Pretend that the client closed us, even if they didn't.  It's okay if this is called more
+        // than once.  The client might have already called it, or might call it later.
+        close();
     }
 
     /**
@@ -262,6 +275,17 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
     }
 
     /**
+     * Callback from native to tell us that the power-efficient state has changed.
+     */
+    @CalledByNative
+    private void onPowerEfficientState(boolean isPowerEfficient) {
+        ThreadUtils.assertOnUiThread();
+        if (mDialogCore == null) return;
+        if (mClient == null) return;
+        mClient.onPowerEfficientState(isPowerEfficient);
+    }
+
+    /**
      * Unregister for callbacks, unregister any surface that we have, and forget about
      * |mDialogCore|.  Multiple calls are okay.
      */
@@ -293,7 +317,7 @@ public class DialogOverlayImpl implements AndroidOverlay, DialogOverlayCore.Host
      * handle that should be provided to nativeDestroy.  This will not call back with a window token
      * immediately.  Call nativeCompleteInit() for the initial token.
      */
-    private native long nativeInit(long high, long low);
+    private native long nativeInit(long high, long low, boolean isPowerEfficient);
 
     /**
      * Notify the native side that we are ready for token / dismissed callbacks.  This may result in

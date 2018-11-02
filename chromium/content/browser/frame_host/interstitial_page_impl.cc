@@ -4,6 +4,8 @@
 
 #include "content/browser/frame_host/interstitial_page_impl.h"
 
+#include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -18,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -130,7 +133,7 @@ InterstitialPage* InterstitialPage::GetInterstitialPage(
   InterstitialPageMap::const_iterator iter =
       g_web_contents_to_interstitial_page->find(web_contents);
   if (iter == g_web_contents_to_interstitial_page->end())
-    return NULL;
+    return nullptr;
 
   return iter->second;
 }
@@ -159,20 +162,21 @@ InterstitialPageImpl::InterstitialPageImpl(
       should_discard_pending_nav_entry_(new_navigation),
       enabled_(true),
       action_taken_(NO_ACTION),
-      render_view_host_(NULL),
+      render_view_host_(nullptr),
       // TODO(nasko): The InterstitialPageImpl will need to provide its own
       // NavigationControllerImpl to the Navigator, which is separate from
       // the WebContents one, so we can enforce no navigation policy here.
       // While we get the code to a point to do this, pass NULL for it.
       // TODO(creis): We will also need to pass delegates for the RVHM as we
       // start to use it.
-      frame_tree_(base::MakeUnique<FrameTree>(
+      frame_tree_(std::make_unique<FrameTree>(
           new InterstitialPageNavigatorImpl(this, controller_),
           this,
           this,
           this,
           static_cast<WebContentsImpl*>(web_contents))),
-      original_child_id_(web_contents->GetRenderProcessHost()->GetID()),
+      original_child_id_(
+          web_contents->GetRenderViewHost()->GetProcess()->GetID()),
       original_rvh_id_(web_contents->GetRenderViewHost()->GetRoutingID()),
       should_revert_web_contents_title_(false),
       resource_dispatcher_host_notified_(false),
@@ -213,7 +217,7 @@ void InterstitialPageImpl::Show() {
       // So we should not discard that new pending navigation entry.
       // See http://crbug.com/9791
       if (new_navigation_ && interstitial->new_navigation_)
-        interstitial->should_discard_pending_nav_entry_= false;
+        interstitial->should_discard_pending_nav_entry_ = false;
       interstitial->DontProceed();
     }
   }
@@ -298,7 +302,7 @@ void InterstitialPageImpl::Hide() {
                                 weak_ptr_factory_.GetWeakPtr()));
   bool has_focus = render_view_host_->GetWidget()->GetView() &&
                    render_view_host_->GetWidget()->GetView()->HasFocus();
-  render_view_host_ = NULL;
+  render_view_host_ = nullptr;
   frame_tree_->root()->ResetForNewProcess();
   controller_->delegate()->DetachInterstitialPage(has_focus);
   // Let's revert to the original title if necessary.
@@ -316,7 +320,7 @@ void InterstitialPageImpl::Hide() {
 
   // Clear the WebContents pointer, because it may now be deleted.
   // This signifies that we are in the process of shutting down.
-  web_contents_ = NULL;
+  web_contents_ = nullptr;
 }
 
 void InterstitialPageImpl::Observe(
@@ -592,7 +596,7 @@ WebContents* InterstitialPageImpl::web_contents() const {
 
 RenderViewHostImpl* InterstitialPageImpl::CreateRenderViewHost() {
   if (!enabled())
-    return NULL;
+    return nullptr;
 
   // Interstitial pages don't want to share the session storage so we mint a
   // new one.
@@ -618,7 +622,7 @@ RenderViewHostImpl* InterstitialPageImpl::CreateRenderViewHost() {
 
 WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   if (!enabled() || !create_view_)
-    return NULL;
+    return nullptr;
   WebContentsView* wcv =
       static_cast<WebContentsImpl*>(web_contents())->GetView();
   RenderWidgetHostViewBase* view =
@@ -627,10 +631,9 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   render_view_host_->GetMainFrame()->AllowBindings(
       BINDINGS_POLICY_DOM_AUTOMATION);
 
-  render_view_host_->CreateRenderView(MSG_ROUTING_NONE,
-                                      MSG_ROUTING_NONE,
-                                      FrameReplicationState(),
-                                      false);
+  render_view_host_->CreateRenderView(MSG_ROUTING_NONE, MSG_ROUTING_NONE,
+                                      base::UnguessableToken::Create(),
+                                      FrameReplicationState(), false);
   controller_->delegate()->RenderFrameForInterstitialPageCreated(
       frame_tree_->root()->current_frame_host());
   view->SetSize(web_contents()->GetContainerBounds().size());
@@ -1013,15 +1016,6 @@ void InterstitialPageImpl::GetScreenInfo(ScreenInfo* screen_info) {
   }
 
   web_contents_impl->GetView()->GetScreenInfo(screen_info);
-}
-
-void InterstitialPageImpl::UpdateDeviceScaleFactor(double device_scale_factor) {
-  WebContentsImpl* web_contents_impl =
-      static_cast<WebContentsImpl*>(web_contents_);
-  if (!web_contents_impl)
-    return;
-
-  web_contents_impl->UpdateDeviceScaleFactor(device_scale_factor);
 }
 
 RenderWidgetHostInputEventRouter* InterstitialPageImpl::GetInputEventRouter() {

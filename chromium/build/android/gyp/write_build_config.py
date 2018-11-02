@@ -37,7 +37,8 @@ from util import md5_check
 
 
 # Types that should never be used as a dependency of another build config.
-_ROOT_TYPES = ('android_apk', 'deps_dex', 'java_binary', 'resource_rewriter')
+_ROOT_TYPES = ('android_apk', 'deps_dex', 'java_binary', 'junit_binary',
+               'resource_rewriter')
 # Types that should not allow code deps to pass through.
 _RESOURCE_TYPES = ('android_assets', 'android_resources')
 
@@ -150,16 +151,20 @@ def _MergeAssets(all_assets):
   """Merges all assets from the given deps.
 
   Returns:
-    A tuple of lists: (compressed, uncompressed)
-    Each tuple entry is a list of "srcPath:zipPath". srcPath is the path of the
-    asset to add, and zipPath is the location within the zip (excluding assets/
-    prefix)
+    A tuple of: (compressed, uncompressed, locale_paks)
+    |compressed| and |uncompressed| are lists of "srcPath:zipPath". srcPath is
+    the path of the asset to add, and zipPath is the location within the zip
+    (excluding assets/ prefix).
+    |locale_paks| is a set of all zipPaths that have been marked as
+    treat_as_locale_paks=true.
   """
   compressed = {}
   uncompressed = {}
+  locale_paks = set()
   for asset_dep in all_assets:
     entry = asset_dep['assets']
-    disable_compression = entry.get('disable_compression', False)
+    disable_compression = entry.get('disable_compression')
+    treat_as_locale_paks = entry.get('treat_as_locale_paks')
     dest_map = uncompressed if disable_compression else compressed
     other_map = compressed if disable_compression else uncompressed
     outputs = entry.get('outputs', [])
@@ -170,6 +175,8 @@ def _MergeAssets(all_assets):
       # deps of the same target override previous ones.
       other_map.pop(dest, 0)
       dest_map[dest] = src
+      if treat_as_locale_paks:
+        locale_paks.add(dest)
 
   def create_list(asset_map):
     ret = ['%s:%s' % (src, dest) for dest, src in asset_map.iteritems()]
@@ -177,7 +184,7 @@ def _MergeAssets(all_assets):
     ret.sort()
     return ret
 
-  return create_list(compressed), create_list(uncompressed)
+  return create_list(compressed), create_list(uncompressed), locale_paks
 
 
 def _ResolveGroups(configs):
@@ -236,11 +243,11 @@ def _CreateJavaLibrariesList(library_paths):
   return ('{%s}' % ','.join(['"%s"' % s[3:-3] for s in library_paths]))
 
 
-def _CreateLocalePaksAssetJavaList(assets):
+def _CreateLocalePaksAssetJavaList(assets, locale_paks):
   """Returns a java literal array from a list of assets in the form src:dst."""
-  names_only = (a.split(':')[1][:-4] for a in assets if a.endswith('.pak'))
-  locales_only = (a for a in names_only if '-' in a or len(a) == 2)
-  return '{%s}' % ','.join(sorted('"%s"' % a for a in locales_only))
+  asset_paths = [a.split(':')[1] for a in assets]
+  return '{%s}' % ','.join(
+      sorted('"%s"' % a[:-4] for a in asset_paths if a in locale_paks))
 
 
 def main(argv):
@@ -253,6 +260,9 @@ def main(argv):
   parser.add_option(
       '--deps-configs',
       help='List of paths for dependency\'s build_config files. ')
+  parser.add_option(
+      '--classpath-deps-configs',
+      help='List of paths for classpath dependency\'s build_config files. ')
 
   # android_resources options
   parser.add_option('--srcjar', help='Path to target\'s resources srcjar.')
@@ -272,6 +282,8 @@ def main(argv):
                     help='List of asset custom destinations.')
   parser.add_option('--disable-asset-compression', action='store_true',
                     help='Whether to disable asset compression.')
+  parser.add_option('--treat-as-locale-paks', action='store_true',
+      help='Consider the assets as locale paks in BuildConfig.java')
 
   # java library options
   parser.add_option('--jar-path', help='Path to target\'s jar output.')
@@ -307,8 +319,10 @@ def main(argv):
   parser.add_option('--secondary-abi-shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for secondary '
                          'abi shared libraries.')
-  parser.add_option('--enable-relocation-packing',
-                    help='Whether relocation packing is enabled.')
+  parser.add_option('--non-native-packed-relocations',
+                    action='store_true', default=False,
+                    help='Whether relocation packing was applied using the '
+                         'Android relocation_packer tool.')
 
   # apk options
   parser.add_option('--apk-path', help='Path to the target\'s apk output.')
@@ -339,16 +353,16 @@ def main(argv):
 
   required_options_map = {
       'java_binary': ['build_config', 'jar_path'],
+      'junit_binary': ['build_config', 'jar_path'],
       'java_library': ['build_config', 'jar_path'],
       'java_prebuilt': ['build_config', 'jar_path'],
       'android_assets': ['build_config'],
       'android_resources': ['build_config', 'resources_zip'],
-      'android_apk': ['build_config', 'jar_path', 'dex_path', 'resources_zip'],
+      'android_apk': ['build_config', 'jar_path', 'dex_path'],
       'deps_dex': ['build_config', 'dex_path'],
       'dist_jar': ['build_config'],
       'resource_rewriter': ['build_config'],
       'group': ['build_config'],
-      'junit_binary': ['build_config'],
   }
   required_options = required_options_map.get(options.type)
   if not required_options:
@@ -370,8 +384,8 @@ def main(argv):
           '--supports-android is required when using --requires-android')
 
   direct_deps_config_paths = build_utils.ParseGnList(options.deps_configs)
-  direct_deps_config_paths = _FilterDepsPaths(direct_deps_config_paths,
-                                              options.type)
+  direct_deps_config_paths = _FilterDepsPaths(
+      direct_deps_config_paths, options.type)
 
   deps = Deps(direct_deps_config_paths)
   all_inputs = deps.AllConfigPaths()
@@ -416,7 +430,8 @@ def main(argv):
   if options.android_manifest:
     deps_info['android_manifest'] = options.android_manifest
 
-  if options.type in ('java_binary', 'java_library', 'android_apk'):
+  if options.type in (
+      'java_binary', 'junit_binary', 'java_library', 'android_apk'):
     if options.java_sources_file:
       deps_info['java_sources_file'] = options.java_sources_file
     if options.bundled_srcjars:
@@ -449,7 +464,8 @@ def main(argv):
       all_java_sources.append(options.java_sources_file)
     config['jni']['all_source'] = all_java_sources
 
-  if (options.type in ('java_binary', 'java_library')):
+  if options.type in (
+      'java_binary', 'junit_binary', 'java_library', 'dist_jar'):
     deps_info['requires_android'] = options.requires_android
     deps_info['supports_android'] = options.supports_android
 
@@ -467,7 +483,8 @@ def main(argv):
         raise Exception('Not all deps support the Android platform: '
             + str(deps_not_support_android))
 
-  if options.type in ('java_binary', 'java_library', 'android_apk'):
+  if options.type in (
+      'java_binary', 'junit_binary', 'java_library', 'android_apk'):
     deps_info['jar_path'] = options.jar_path
     if options.type == 'android_apk' or options.supports_android:
       deps_info['dex_path'] = options.dex_path
@@ -476,10 +493,11 @@ def main(argv):
       deps_info['incremental_apk_path'] = options.incremental_apk_path
       deps_info['incremental_install_json_path'] = (
           options.incremental_install_json_path)
-      deps_info['enable_relocation_packing'] = options.enable_relocation_packing
+      deps_info['non_native_packed_relocations'] = str(
+          options.non_native_packed_relocations)
 
   requires_javac_classpath = options.type in (
-      'java_binary', 'java_library', 'android_apk', 'dist_jar')
+      'java_binary', 'junit_binary', 'java_library', 'android_apk', 'dist_jar')
   requires_full_classpath = (
       options.type == 'java_prebuilt' or requires_javac_classpath)
 
@@ -487,20 +505,19 @@ def main(argv):
     # Classpath values filled in below (after applying tested_apk_config).
     config['javac'] = {}
 
-  if options.type in ('java_binary', 'java_library'):
-    # Only resources might have srcjars (normal srcjar targets are listed in
-    # srcjar_deps). A resource's srcjar contains the R.java file for those
-    # resources, and (like Android's default build system) we allow a library to
-    # refer to the resources in any of its dependents.
+  if options.type == 'java_library':
+    # android_resources targets use this srcjars field to expose R.java files.
+    # Since there is no java_library associated with an android_resources(),
+    # Each java_library recompiles the R.java files.
+    # junit_binary and android_apk create their own R.java srcjars, so should
+    # not pull them in from deps here.
     config['javac']['srcjars'] = [
         c['srcjar'] for c in all_resources_deps if 'srcjar' in c]
 
     # Used to strip out R.class for android_prebuilt()s.
-    if options.type == 'java_library':
-      config['javac']['resource_packages'] = [
-          c['package_name'] for c in all_resources_deps if 'package_name' in c]
-
-  if options.type == 'android_apk':
+    config['javac']['resource_packages'] = [
+        c['package_name'] for c in all_resources_deps if 'package_name' in c]
+  elif options.type in ('android_apk', 'java_binary', 'junit_binary'):
     # Apks will get their resources srcjar explicitly passed to the java step
     config['javac']['srcjars'] = []
     # Gradle may need to generate resources for some apks.
@@ -523,6 +540,8 @@ def main(argv):
           build_utils.ParseGnList(options.asset_renaming_destinations))
     if options.disable_asset_compression:
       deps_info['assets']['disable_compression'] = True
+    if options.treat_as_locale_paks:
+      deps_info['assets']['treat_as_locale_paks'] = True
 
   if options.type == 'android_resources':
     deps_info['resources_zip'] = options.resources_zip
@@ -567,27 +586,40 @@ def main(argv):
     config['resources'] = {}
     config['resources']['dependency_zips'] = [
         c['resources_zip'] for c in all_resources_deps]
-    config['resources']['extra_package_names'] = []
-    config['resources']['extra_r_text_files'] = []
+    extra_package_names = []
+    extra_r_text_files = []
+    if options.type != 'android_resources':
+      extra_package_names = [
+          c['package_name'] for c in all_resources_deps if 'package_name' in c]
+      extra_r_text_files = [
+          c['r_text'] for c in all_resources_deps if 'r_text' in c]
 
-  if options.type == 'android_apk' or options.type == 'resource_rewriter':
-    config['resources']['extra_package_names'] = [
-        c['package_name'] for c in all_resources_deps if 'package_name' in c]
-    config['resources']['extra_r_text_files'] = [
-        c['r_text'] for c in all_resources_deps if 'r_text' in c]
+    config['resources']['extra_package_names'] = extra_package_names
+    config['resources']['extra_r_text_files'] = extra_r_text_files
 
   if options.type in ['android_apk', 'deps_dex']:
     deps_dex_files = [c['dex_path'] for c in all_library_deps]
 
   if requires_javac_classpath:
-    javac_classpath = [c['jar_path'] for c in direct_library_deps]
-  if requires_full_classpath:
-    java_full_classpath = [c['jar_path'] for c in all_library_deps]
-
+    extra_jars = []
     if options.extra_classpath_jars:
-      extra_jars = build_utils.ParseGnList(options.extra_classpath_jars)
+      extra_jars += build_utils.ParseGnList(options.extra_classpath_jars)
+
+    if options.classpath_deps_configs:
+      config_paths = build_utils.ParseGnList(options.classpath_deps_configs)
+      classpath_deps = Deps(_FilterDepsPaths(config_paths, options.type))
+      extra_jars += [
+          c['jar_path'] for c in classpath_deps.Direct('java_library')]
+
+    javac_classpath = [c['jar_path'] for c in direct_library_deps]
+    if requires_full_classpath:
+      java_full_classpath = [c['jar_path'] for c in all_library_deps]
+
+    if extra_jars:
       deps_info['extra_classpath_jars'] = extra_jars
-      javac_classpath += extra_jars
+      javac_classpath += [p for p in extra_jars if p not in javac_classpath]
+      java_full_classpath += [
+          p for p in extra_jars if p not in java_full_classpath]
 
   # The java code for an instrumentation test apk is assembled differently for
   # ProGuard vs. non-ProGuard.
@@ -639,12 +671,14 @@ def main(argv):
     deps_info['proguard_configs'] = (
         build_utils.ParseGnList(options.proguard_configs))
 
-  if options.type == 'android_apk':
+  if options.type in ('android_apk', 'dist_jar'):
     deps_info['proguard_enabled'] = options.proguard_enabled
     deps_info['proguard_info'] = options.proguard_info
     config['proguard'] = {}
     proguard_config = config['proguard']
-    proguard_config['input_paths'] = [options.jar_path] + java_full_classpath
+    proguard_config['input_paths'] = list(java_full_classpath)
+    if options.jar_path:
+      proguard_config['input_paths'].insert(0, options.jar_path)
     extra_jars = set()
     lib_configs = set()
     for c in all_library_deps:
@@ -715,12 +749,12 @@ def main(argv):
       'java_libraries_list': java_libraries_list,
       'secondary_abi_java_libraries_list': secondary_abi_java_libraries_list,
     }
-    config['assets'], config['uncompressed_assets'] = (
+    config['assets'], config['uncompressed_assets'], locale_paks = (
         _MergeAssets(deps.All('android_assets')))
-    config['compressed_locales_java_list'] = (
-        _CreateLocalePaksAssetJavaList(config['assets']))
-    config['uncompressed_locales_java_list'] = (
-        _CreateLocalePaksAssetJavaList(config['uncompressed_assets']))
+    config['compressed_locales_java_list'] = _CreateLocalePaksAssetJavaList(
+        config['assets'], locale_paks)
+    config['uncompressed_locales_java_list'] = _CreateLocalePaksAssetJavaList(
+        config['uncompressed_assets'], locale_paks)
 
     config['extra_android_manifests'] = filter(None, (
         d.get('android_manifest') for d in all_resources_deps))

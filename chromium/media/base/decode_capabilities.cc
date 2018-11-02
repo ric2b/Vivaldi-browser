@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "media/base/media_switches.h"
+#include "third_party/libaom/av1_features.h"
 #include "ui/display/display_switches.h"
 
 #if !defined(MEDIA_DISABLE_LIBVPX)
@@ -22,15 +23,12 @@ extern "C" {
 namespace media {
 
 bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
-  bool color_management =
-      base::FeatureList::IsEnabled(features::kHighDynamicRange) ||
-      base::FeatureList::IsEnabled(media::kVideoColorManagement);
   switch (color_space.primaries) {
     case media::VideoColorSpace::PrimaryID::EBU_3213_E:
     case media::VideoColorSpace::PrimaryID::INVALID:
       return false;
 
-    // Transfers supported without color management.
+    // Transfers supported before color management.
     case media::VideoColorSpace::PrimaryID::BT709:
     case media::VideoColorSpace::PrimaryID::UNSPECIFIED:
     case media::VideoColorSpace::PrimaryID::BT470M:
@@ -45,13 +43,11 @@ bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
     case media::VideoColorSpace::PrimaryID::SMPTEST428_1:
     case media::VideoColorSpace::PrimaryID::SMPTEST431_2:
     case media::VideoColorSpace::PrimaryID::SMPTEST432_1:
-      if (!color_management)
-        return false;
       break;
   }
 
   switch (color_space.transfer) {
-    // Transfers supported without color management.
+    // Transfers supported before color management.
     case media::VideoColorSpace::TransferID::UNSPECIFIED:
     case media::VideoColorSpace::TransferID::GAMMA22:
     case media::VideoColorSpace::TransferID::BT709:
@@ -72,8 +68,6 @@ bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
     case media::VideoColorSpace::TransferID::IEC61966_2_4:
     case media::VideoColorSpace::TransferID::SMPTEST428_1:
     case media::VideoColorSpace::TransferID::ARIB_STD_B67:
-      if (!color_management)
-        return false;
       break;
 
     // Never supported.
@@ -82,7 +76,7 @@ bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
   }
 
   switch (color_space.matrix) {
-    // Supported without color management.
+    // Supported before color management.
     case media::VideoColorSpace::MatrixID::BT709:
     case media::VideoColorSpace::MatrixID::UNSPECIFIED:
     case media::VideoColorSpace::MatrixID::BT470BG:
@@ -97,8 +91,6 @@ bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
     case media::VideoColorSpace::MatrixID::YCOCG:
     case media::VideoColorSpace::MatrixID::YDZDX:
     case media::VideoColorSpace::MatrixID::BT2020_CL:
-      if (!color_management)
-        return false;
       break;
 
     // Never supported.
@@ -172,6 +164,14 @@ bool IsSupportedAudioConfig(const AudioConfig& config) {
 // specific logic for Android (move from MimeUtilIntenral).
 bool IsSupportedVideoConfig(const VideoConfig& config) {
   switch (config.codec) {
+    case media::kCodecAV1:
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+      return base::FeatureList::IsEnabled(kAv1Decoder) &&
+             IsColorSpaceSupported(config.color_space);
+#else
+      return false;
+#endif
+
     case media::kCodecVP9:
       // Color management required for HDR to not look terrible.
       return IsColorSpaceSupported(config.color_space) &&

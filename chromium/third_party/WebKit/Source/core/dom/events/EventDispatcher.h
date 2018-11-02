@@ -28,15 +28,14 @@
 #ifndef EventDispatcher_h
 #define EventDispatcher_h
 
-#include "core/dom/SimulatedClickOptions.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/events/EventDispatchResult.h"
+#include "core/dom/events/SimulatedClickOptions.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class Event;
-class EventDispatchMediator;
 class EventDispatchHandlingState;
 class LocalFrameView;
 class Node;
@@ -44,7 +43,7 @@ class Node;
 class EventDispatchHandlingState
     : public GarbageCollected<EventDispatchHandlingState> {
  public:
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 enum EventDispatchContinuation { kContinueDispatching, kDoneDispatching };
@@ -53,8 +52,8 @@ class EventDispatcher {
   STACK_ALLOCATED();
 
  public:
-  static DispatchEventResult DispatchEvent(Node&, EventDispatchMediator*);
-  static void DispatchScopedEvent(Node&, EventDispatchMediator*);
+  static DispatchEventResult DispatchEvent(Node&, Event*);
+  static void DispatchScopedEvent(Node&, Event*);
 
   static void DispatchSimulatedClick(Node&,
                                      Event* underlying_event,

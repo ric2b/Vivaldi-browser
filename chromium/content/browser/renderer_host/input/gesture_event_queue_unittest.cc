@@ -21,8 +21,8 @@
 #include "base/time/time.h"
 #include "content/browser/renderer_host/input/input_router_config_helper.h"
 #include "content/browser/renderer_host/input/touchpad_tap_suppression_controller.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/blink/blink_features.h"
@@ -90,6 +90,7 @@ class GestureEventQueueTest : public testing::Test,
   }
 
   void OnGestureEventAck(const GestureEventWithLatencyInfo& event,
+                         InputEventAckSource ack_source,
                          InputEventAckState ack_result) override {
     ++acked_gesture_event_count_;
     last_acked_event_ = event.event;
@@ -147,7 +148,8 @@ class GestureEventQueueTest : public testing::Test,
 
   void SendInputEventACK(WebInputEvent::Type type,
                          InputEventAckState ack) {
-    queue()->ProcessGestureAck(ack, type, ui::LatencyInfo());
+    queue()->ProcessGestureAck(InputEventAckSource::COMPOSITOR_THREAD, ack,
+                               type, ui::LatencyInfo());
   }
 
   void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
@@ -1174,20 +1176,19 @@ TEST_F(GestureEventQueueTest, DebounceEndsWithFlingStartEvent) {
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(0U, GetAndResetSentGestureEventCount());
-  EXPECT_EQ(5U, GestureEventQueueSize());
+  EXPECT_EQ(4U, GestureEventQueueSize());
   EXPECT_EQ(0U, GestureEventDebouncingQueueSize());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(0U, GetAndResetSentGestureEventCount());
   EXPECT_EQ(5U, GestureEventQueueSize());
-  EXPECT_EQ(1U, GestureEventDebouncingQueueSize());
+  EXPECT_EQ(0U, GestureEventDebouncingQueueSize());
 
   // Verify that the coalescing queue contains the correct events.
   WebInputEvent::Type expected[] = {
       WebInputEvent::kGestureScrollUpdate, WebInputEvent::kGestureScrollEnd,
-      WebInputEvent::kGestureFlingStart, WebInputEvent::kGestureScrollBegin,
-      WebInputEvent::kGestureScrollUpdate};
+      WebInputEvent::kGestureFlingStart, WebInputEvent::kGestureScrollBegin};
 
   for (unsigned i = 0; i < sizeof(expected) / sizeof(WebInputEvent::Type);
       i++) {

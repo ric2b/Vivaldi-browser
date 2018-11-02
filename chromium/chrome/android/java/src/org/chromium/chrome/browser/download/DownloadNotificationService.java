@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.download;
 
+import static android.app.DownloadManager.ACTION_NOTIFICATION_CLICKED;
+
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.DownloadManager;
@@ -22,6 +24,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.shapes.OvalShape;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,14 +35,12 @@ import android.util.Pair;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -52,7 +53,6 @@ import org.chromium.chrome.browser.notifications.NotificationBuilderFactory;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
-import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -151,45 +151,7 @@ public class DownloadNotificationService extends Service {
      */
     @VisibleForTesting
     static boolean useForegroundService() {
-        return BuildInfo.isAtLeastO();
-    }
-
-    /**
-     * Checks to see if the summary notification is alone and, if so, hides it.  If the summary
-     * notification thinks it's in the foreground, this will start the service with the goal of
-     * shutting it down.  That is because if the service is in the foreground it's not possible to
-     * stop it through the notification manager.
-     * @param removedNotificationId The id of the notification that was just removed or {@code -1}
-     *                              if this does not apply.
-     */
-    @TargetApi(Build.VERSION_CODES.M)
-    public static void hideDanglingSummaryNotification(Context context, int removedNotificationId) {
-        if (!useForegroundService()) return;
-
-        NotificationManager manager =
-                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (hasDownloadNotifications(manager, removedNotificationId)) return;
-
-        StatusBarNotification summary = getSummaryNotification(manager);
-        if (summary == null) return;
-
-        boolean isForeground =
-                (summary.getNotification().flags & Notification.FLAG_FOREGROUND_SERVICE) != 0;
-
-        if (BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                        .isStartupSuccessfullyCompleted()) {
-            RecordHistogram.recordBooleanHistogram(
-                    "MobileDownload.Notification.FixingSummaryLeak", isForeground);
-        }
-
-        if (isForeground) {
-            // If it is a foreground notification, we are in a bad state.  We don't have any
-            // other download notifications, but we can't close the summary.  Try to start
-            // up the service and quit through that path?
-            startDownloadNotificationService(context, new Intent(ACTION_DOWNLOAD_FAIL_SAFE));
-        } else {
-            manager.cancel(NotificationConstants.NOTIFICATION_ID_DOWNLOAD_SUMMARY);
-        }
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
     }
 
     /**
@@ -376,8 +338,8 @@ public class DownloadNotificationService extends Service {
         // This notification should not actually be shown.  But if it is, set the click intent to
         // open downloads home.
         // TODO(dtrainor): Only do this if we have no transient downloads.
-        Intent downloadHomeIntent = buildActionIntent(
-                context, DownloadManager.ACTION_NOTIFICATION_CLICKED, null, false);
+        Intent downloadHomeIntent =
+                buildActionIntent(context, ACTION_NOTIFICATION_CLICKED, null, false);
         builder.setContentIntent(PendingIntent.getBroadcast(context,
                 NotificationConstants.NOTIFICATION_ID_DOWNLOAD_SUMMARY, downloadHomeIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT));
@@ -422,6 +384,10 @@ public class DownloadNotificationService extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
+        // Record instance of task removed.
+        DownloadNotificationUmaHelper.recordServiceStoppedHistogram(
+                DownloadNotificationUmaHelper.ServiceStopped.TASK_REMOVED, false);
+
         super.onTaskRemoved(rootIntent);
         // If we've lost all Activities, cancel the off the record downloads and validate that we
         // should still be showing any download notifications at all.
@@ -429,6 +395,14 @@ public class DownloadNotificationService extends Service {
             cancelOffTheRecordDownloads();
             hideSummaryNotificationIfNecessary(-1);
         }
+    }
+
+    @Override
+    public void onLowMemory() {
+        // Record instance of service with low memory.
+        DownloadNotificationUmaHelper.recordServiceStoppedHistogram(
+                DownloadNotificationUmaHelper.ServiceStopped.LOW_MEMORY, false /*withForeground*/);
+        super.onLowMemory();
     }
 
     @Override
@@ -446,6 +420,10 @@ public class DownloadNotificationService extends Service {
 
     @Override
     public void onDestroy() {
+        // Record instance of service being destroyed.
+        DownloadNotificationUmaHelper.recordServiceStoppedHistogram(
+                DownloadNotificationUmaHelper.ServiceStopped.DESTROYED, false /* withForeground */);
+
         updateNotificationsForShutdown();
         rescheduleDownloads();
         super.onDestroy();
@@ -459,6 +437,10 @@ public class DownloadNotificationService extends Service {
         if (useForegroundService() && intent != null) startForegroundInternal();
 
         if (intent == null) {
+            // Record instance of service restarting.
+            DownloadNotificationUmaHelper.recordServiceStoppedHistogram(
+                    DownloadNotificationUmaHelper.ServiceStopped.START_STICKY, false);
+
             // Intent is only null during a process restart because of returning START_STICKY.  In
             // this case cancel the off the record notifications and put the normal notifications
             // into a pending state, then try to restart.  Finally validate that we are actually
@@ -472,7 +454,7 @@ public class DownloadNotificationService extends Service {
             hideSummaryNotificationIfNecessary(-1);
         } else if (isDownloadOperationIntent(intent)) {
             handleDownloadOperation(intent);
-            DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).cancelTask();
+            DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).cancel();
             // Limit the number of auto resumption attempts in case Chrome falls into a vicious
             // cycle.
             if (ACTION_DOWNLOAD_RESUME_ALL.equals(intent.getAction())) {
@@ -537,36 +519,9 @@ public class DownloadNotificationService extends Service {
         return hasDownloadNotifications(mNotificationManager, notificationIdToIgnore);
     }
 
-    @VisibleForTesting
-    void updateSummaryIconInternal(
-            int removedNotificationId, Pair<Integer, Notification> addedNotification) {
-        updateSummaryIcon(mContext, mNotificationManager, removedNotificationId, addedNotification);
-    }
-
     private void rescheduleDownloads() {
-        // Cancel any existing task.  If we have any downloads to resume we'll reschedule another
-        // one.
-        DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).cancelTask();
-        List<DownloadSharedPreferenceEntry> entries = mDownloadSharedPreferenceHelper.getEntries();
-        if (entries.isEmpty()) return;
-
-        boolean scheduleAutoResumption = false;
-        boolean allowMeteredConnection = false;
-        for (int i = 0; i < entries.size(); ++i) {
-            DownloadSharedPreferenceEntry entry = entries.get(i);
-            if (entry.isAutoResumable) {
-                scheduleAutoResumption = true;
-                if (entry.canDownloadWhileMetered) {
-                    allowMeteredConnection = true;
-                    break;
-                }
-            }
-        }
-
-        if (scheduleAutoResumption && mNumAutoResumptionAttemptLeft > 0) {
-            DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).schedule(
-                    allowMeteredConnection);
-        }
+        if (mNumAutoResumptionAttemptLeft <= 0) return;
+        DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).scheduleIfNecessary();
     }
 
     @VisibleForTesting
@@ -670,8 +625,7 @@ public class DownloadNotificationService extends Service {
      *                               here if there is a notification that should be assumed gone.
      *                               Or pass -1 if no notification fits that criteria.
      */
-    @SuppressWarnings("NewApi")
-    @SuppressLint("NewApi")
+    @SuppressLint("NewApi") // useForegroundService guards StatusBarNotification.getNotification
     boolean hideSummaryNotificationIfNecessary(int notificationIdToIgnore) {
         if (mDownloadsInProgress.size() > 0) return false;
 
@@ -715,6 +669,10 @@ public class DownloadNotificationService extends Service {
         // will shut down.  That is okay because they will only unbind from us when they are ok with
         // us going away (e.g. we shouldn't be unbound while in the foreground).
         stopSelf();
+
+        // Record instance of service being stopped intentionally.
+        DownloadNotificationUmaHelper.recordServiceStoppedHistogram(
+                DownloadNotificationUmaHelper.ServiceStopped.STOPPED, false /* withForeground */);
         return true;
     }
 
@@ -838,8 +796,8 @@ public class DownloadNotificationService extends Service {
 
         if (!isTransient) {
             // Clicking on an in-progress download sends the user to see all their downloads.
-            Intent downloadHomeIntent = buildActionIntent(
-                    mContext, DownloadManager.ACTION_NOTIFICATION_CLICKED, null, isOffTheRecord);
+            Intent downloadHomeIntent =
+                    buildActionIntent(mContext, ACTION_NOTIFICATION_CLICKED, null, isOffTheRecord);
             builder.setContentIntent(PendingIntent.getBroadcast(mContext, notificationId,
                     downloadHomeIntent, PendingIntent.FLAG_UPDATE_CURRENT));
         }
@@ -893,7 +851,11 @@ public class DownloadNotificationService extends Service {
     public void notifyDownloadCanceled(ContentId id) {
         DownloadSharedPreferenceEntry entry =
                 mDownloadSharedPreferenceHelper.getDownloadSharedPreferenceEntry(id);
-        if (entry == null) return;
+        if (entry == null) {
+            // In case notifyDownloadCanceled was called after the entry has already been removed.
+            stopTrackingInProgressDownload(id, hasDownloadNotificationsInternal(-1));
+            return;
+        }
         cancelNotification(entry.notificationId, id);
     }
 
@@ -915,8 +877,12 @@ public class DownloadNotificationService extends Service {
             notifyDownloadFailed(id, fileName, icon);
             return;
         }
-        // If download is already paused, do nothing.
-        if (entry != null && !entry.isAutoResumable) return;
+        // Download is already paused.
+        if (entry != null && !entry.isAutoResumable) {
+            // Shutdown the service in case it was restarted unnecessarily.
+            stopTrackingInProgressDownload(id, true);
+            return;
+        }
         boolean canDownloadWhileMetered = entry == null ? false : entry.canDownloadWhileMetered;
         // If download is interrupted due to network disconnection, show download pending state.
         if (isAutoResumable) {
@@ -933,8 +899,8 @@ public class DownloadNotificationService extends Service {
         int notificationId = entry == null ? getNotificationId(id) : entry.notificationId;
         if (!isTransient) {
             // Clicking on an in-progress download sends the user to see all their downloads.
-            Intent downloadHomeIntent = buildActionIntent(
-                    mContext, DownloadManager.ACTION_NOTIFICATION_CLICKED, null, false);
+            Intent downloadHomeIntent =
+                    buildActionIntent(mContext, ACTION_NOTIFICATION_CLICKED, null, false);
             builder.setContentIntent(PendingIntent.getBroadcast(mContext, notificationId,
                     downloadHomeIntent, PendingIntent.FLAG_UPDATE_CURRENT));
         }
@@ -989,7 +955,7 @@ public class DownloadNotificationService extends Service {
         if (isOpenable) {
             Intent intent = null;
             if (LegacyHelpers.isLegacyDownload(id)) {
-                intent = new Intent(DownloadManager.ACTION_NOTIFICATION_CLICKED);
+                intent = new Intent(ACTION_NOTIFICATION_CLICKED);
                 long[] idArray = {systemDownloadId};
                 intent.putExtra(DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS, idArray);
                 intent.putExtra(EXTRA_DOWNLOAD_FILE_PATH, filePath);
@@ -1163,7 +1129,8 @@ public class DownloadNotificationService extends Service {
         final DownloadSharedPreferenceEntry entry = getDownloadEntryFromIntent(intent);
         if (entry == null
                 && !(id != null && LegacyHelpers.isLegacyOfflinePage(id)
-                           && TextUtils.equals(intent.getAction(), ACTION_DOWNLOAD_OPEN))) {
+                           && TextUtils.equals(intent.getAction(), ACTION_DOWNLOAD_OPEN))
+                && !(TextUtils.equals(intent.getAction(), ACTION_NOTIFICATION_CLICKED))) {
             handleDownloadOperationForMissingNotification(intent);
             hideSummaryNotificationIfNecessary(-1);
             return;
@@ -1211,8 +1178,8 @@ public class DownloadNotificationService extends Service {
                 OfflineContentAggregatorNotificationBridgeUiFactory.instance();
 
                 DownloadServiceDelegate downloadServiceDelegate =
-                        ACTION_DOWNLOAD_OPEN.equals(intent.getAction()) ? null
-                                                                        : getServiceDelegate(id);
+                        isDownloadOpenOrNotificationClickedAction(intent) ? null
+                                                                          : getServiceDelegate(id);
                 if (ACTION_DOWNLOAD_CANCEL.equals(intent.getAction())) {
                     // TODO(qinmin): Alternatively, we can delete the downloaded content on
                     // SD card, and remove the download ID from the SharedPreferences so we
@@ -1240,15 +1207,15 @@ public class DownloadNotificationService extends Service {
                     resumeAllPendingDownloads();
                 } else if (ACTION_DOWNLOAD_OPEN.equals(intent.getAction())) {
                     ContentId id = getContentIdFromIntent(intent);
-                    if (LegacyHelpers.isLegacyOfflinePage(id)) {
-                        OfflinePageDownloadBridge.openDownloadedPage(id);
-                    } else if (id != null) {
+                    if (id != null) {
                         OfflineContentAggregatorNotificationBridgeUiFactory.instance().openItem(id);
                     }
+                } else if (ACTION_NOTIFICATION_CLICKED.equals(intent.getAction())) {
+                    openDownload(mContext, intent);
                 } else {
                     Log.e(TAG, "Unrecognized intent action.", intent);
                 }
-                if (!ACTION_DOWNLOAD_OPEN.equals(intent.getAction())) {
+                if (!isDownloadOpenOrNotificationClickedAction(intent)) {
                     downloadServiceDelegate.destroyServiceDelegate();
                 }
 
@@ -1264,6 +1231,44 @@ public class DownloadNotificationService extends Service {
             Log.e(TAG, "Unable to load native library.", e);
             ChromeApplication.reportStartupErrorAndExit(e);
         }
+    }
+
+    private boolean isDownloadOpenOrNotificationClickedAction(Intent intent) {
+        return ACTION_DOWNLOAD_OPEN.equals(intent.getAction())
+                || ACTION_NOTIFICATION_CLICKED.equals(intent.getAction());
+    }
+
+    /**
+     * Called to open a particular download item.  Falls back to opening Download Home.
+     * @param context Context of the receiver.
+     * @param intent Intent from the android DownloadManager.
+     */
+    private void openDownload(final Context context, Intent intent) {
+        long ids[] =
+                intent.getLongArrayExtra(DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS);
+        if (ids == null || ids.length == 0) {
+            DownloadManagerService.openDownloadsPage(context);
+            return;
+        }
+
+        long id = ids[0];
+        Uri uri = DownloadManagerDelegate.getContentUriFromDownloadManager(context, id);
+        if (uri == null) {
+            DownloadManagerService.openDownloadsPage(context);
+            return;
+        }
+
+        String downloadFilename = IntentUtils.safeGetStringExtra(
+                intent, DownloadNotificationService.EXTRA_DOWNLOAD_FILE_PATH);
+        boolean isSupportedMimeType = IntentUtils.safeGetBooleanExtra(
+                intent, DownloadNotificationService.EXTRA_IS_SUPPORTED_MIME_TYPE, false);
+        boolean isOffTheRecord = IntentUtils.safeGetBooleanExtra(
+                intent, DownloadNotificationService.EXTRA_IS_OFF_THE_RECORD, false);
+        String originalUrl = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_ORIGINATING_URI);
+        String referrer = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_REFERRER);
+        ContentId contentId = DownloadNotificationService.getContentIdFromIntent(intent);
+        DownloadManagerService.openDownloadedContent(context, downloadFilename, isSupportedMimeType,
+                isOffTheRecord, contentId.id, id, originalUrl, referrer);
     }
 
     /**
@@ -1305,9 +1310,6 @@ public class DownloadNotificationService extends Service {
      * @return delegate for interactions with the entry
      */
     DownloadServiceDelegate getServiceDelegate(ContentId id) {
-        if (LegacyHelpers.isLegacyOfflinePage(id)) {
-            return OfflinePageDownloadBridge.getDownloadServiceDelegate();
-        }
         if (LegacyHelpers.isLegacyDownload(id)) {
             return DownloadManagerService.getDownloadManagerService();
         }
@@ -1342,6 +1344,10 @@ public class DownloadNotificationService extends Service {
                 LegacyHelpers.isLegacyOfflinePage(id) ? NotificationUmaTracker.DOWNLOAD_PAGES
                                                       : NotificationUmaTracker.DOWNLOAD_FILES,
                 ChannelDefinitions.CHANNEL_ID_DOWNLOADS);
+
+        // Record number of other notifications when there's a new notification.
+        DownloadNotificationUmaHelper.recordExistingNotificationsCountHistogram(
+                mDownloadSharedPreferenceHelper.getEntries().size(), false /* withForeground */);
     }
 
     /**
@@ -1356,7 +1362,8 @@ public class DownloadNotificationService extends Service {
         if (!ACTION_DOWNLOAD_CANCEL.equals(intent.getAction())
                 && !ACTION_DOWNLOAD_RESUME.equals(intent.getAction())
                 && !ACTION_DOWNLOAD_PAUSE.equals(intent.getAction())
-                && !ACTION_DOWNLOAD_OPEN.equals(intent.getAction())) {
+                && !ACTION_DOWNLOAD_OPEN.equals(intent.getAction())
+                && !ACTION_NOTIFICATION_CLICKED.equals(intent.getAction())) {
             return false;
         }
 

@@ -13,6 +13,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/win/scoped_handle.h"
 #include "sandbox/win/src/crosscall_server.h"
 #include "sandbox/win/src/job.h"
@@ -95,6 +96,5 @@ class BrokerServicesBase final : public BrokerServices,
 };
 
 }  // namespace sandbox
-
 
 #endif  // SANDBOX_WIN_SRC_BROKER_SERVICES_H_

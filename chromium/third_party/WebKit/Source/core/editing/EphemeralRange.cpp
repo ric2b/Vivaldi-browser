@@ -38,9 +38,9 @@ EphemeralRangeTemplate<Strategy>::EphemeralRangeTemplate(
     return;
   }
   DCHECK(end_position_.IsNotNull());
+  DCHECK(start_position_.IsValidFor(*start_position_.GetDocument()));
+  DCHECK(end_position_.IsValidFor(*end_position_.GetDocument()));
   DCHECK_EQ(start_position_.GetDocument(), end_position_.GetDocument());
-  DCHECK(start_position_.IsConnected());
-  DCHECK(end_position_.IsConnected());
   DCHECK_LE(start_position_, end_position_);
 }
 
@@ -158,6 +158,30 @@ template <typename Strategy>
 bool EphemeralRangeTemplate<Strategy>::IsValid() const {
   return true;
 }
+#endif
+
+#ifndef NDEBUG
+
+template <typename Strategy>
+void EphemeralRangeTemplate<Strategy>::ShowTreeForThis() const {
+  if (IsNull()) {
+    LOG(INFO) << "<null range>" << std::endl;
+    return;
+  }
+  LOG(INFO) << std::endl
+            << StartPosition()
+                   .AnchorNode()
+                   ->ToMarkedTreeString(StartPosition().AnchorNode(), "S",
+                                        EndPosition().AnchorNode(), "E")
+                   .Utf8()
+                   .data()
+            << "start: "
+            << StartPosition().ToAnchorTypeAndOffsetString().Utf8().data()
+            << std::endl
+            << "end: "
+            << EndPosition().ToAnchorTypeAndOffsetString().Utf8().data();
+}
+
 #endif
 
 Range* CreateRange(const EphemeralRange& range) {

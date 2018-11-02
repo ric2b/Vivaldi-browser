@@ -147,7 +147,7 @@ static bool RemoveListenerFromVector(
   }
   *registered_listener = *it;
   *index_of_removed_listener = it - begin;
-  listener_vector->erase(*index_of_removed_listener);
+  listener_vector->EraseAt(*index_of_removed_listener);
   return true;
 }
 
@@ -164,7 +164,7 @@ bool EventListenerMap::Remove(const AtomicString& event_type,
           entries_[i].second.Get(), listener, options,
           index_of_removed_listener, registered_listener);
       if (entries_[i].second->IsEmpty())
-        entries_.erase(i);
+        entries_.EraseAt(i);
       return was_removed;
     }
   }
@@ -188,10 +188,10 @@ static void CopyListenersNotCreatedFromMarkupToTarget(
     EventListenerVector* listener_vector,
     EventTarget* target) {
   for (auto& event_listener : *listener_vector) {
-    if (event_listener.Listener()->WasCreatedFromMarkup())
+    if (event_listener.Callback()->WasCreatedFromMarkup())
       continue;
     AddEventListenerOptionsResolved options = event_listener.Options();
-    target->addEventListener(event_type, event_listener.Listener(), options);
+    target->addEventListener(event_type, event_listener.Callback(), options);
   }
 }
 
@@ -205,11 +205,12 @@ void EventListenerMap::CopyEventListenersNotCreatedFromMarkupToTarget(
   }
 }
 
-DEFINE_TRACE(EventListenerMap) {
+void EventListenerMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(entries_);
 }
 
-DEFINE_TRACE_WRAPPERS(EventListenerMap) {
+void EventListenerMap::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   // Trace wrappers in entries_.
   for (auto& entry : entries_) {
     for (auto& listener : *entry.second) {

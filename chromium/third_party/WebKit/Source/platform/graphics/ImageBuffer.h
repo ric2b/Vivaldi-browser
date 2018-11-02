@@ -29,6 +29,7 @@
 #define ImageBuffer_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
@@ -40,7 +41,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "platform/wtf/typed_arrays/Uint8ClampedArray.h"
@@ -62,11 +62,8 @@ namespace blink {
 
 class DrawingBuffer;
 class GraphicsContext;
-class ImageBufferClient;
 class IntPoint;
 class IntRect;
-
-enum Multiply { kPremultiplied, kUnmultiplied };
 
 class PLATFORM_EXPORT ImageBuffer {
   WTF_MAKE_NONCOPYABLE(ImageBuffer);
@@ -75,7 +72,6 @@ class PLATFORM_EXPORT ImageBuffer {
  public:
   static std::unique_ptr<ImageBuffer> Create(
       const IntSize&,
-      OpacityMode = kNonOpaque,
       ImageInitializationMode = kInitializeImagePixels,
       const CanvasColorParams& = CanvasColorParams());
   static std::unique_ptr<ImageBuffer> Create(
@@ -83,10 +79,8 @@ class PLATFORM_EXPORT ImageBuffer {
 
   virtual ~ImageBuffer();
 
-  void SetClient(ImageBufferClient* client) { client_ = client; }
-
   static bool CanCreateImageBuffer(const IntSize&);
-  const IntSize& size() const { return surface_->size(); }
+  const IntSize& Size() const { return surface_->Size(); }
   bool IsAccelerated() const { return surface_->IsAccelerated(); }
   bool IsRecording() const { return surface_->IsRecording(); }
   void SetHasExpensiveOp() { surface_->SetHasExpensiveOp(); }
@@ -106,10 +100,6 @@ class PLATFORM_EXPORT ImageBuffer {
   }
   void SetIsHidden(bool hidden) { surface_->SetIsHidden(hidden); }
 
-  // Called by subclasses of ImageBufferSurface to install a new canvas object.
-  // Virtual for mocking
-  virtual void ResetCanvas(PaintCanvas*) const;
-
   PaintCanvas* Canvas() const;
   void DisableDeferral(DisableDeferralReason) const;
 
@@ -117,23 +107,17 @@ class PLATFORM_EXPORT ImageBuffer {
   void FinalizeFrame();
   void DoPaintInvalidation(const FloatRect& dirty_rect);
 
-  bool WritePixels(const SkImageInfo&,
-                   const void* pixels,
-                   size_t row_bytes,
-                   int x,
-                   int y);
-
   void WillOverwriteCanvas() { surface_->WillOverwriteCanvas(); }
 
-  bool GetImageData(Multiply, const IntRect&, WTF::ArrayBufferContents&) const;
+  bool GetImageData(const IntRect&,
+                    WTF::ArrayBufferContents&,
+                    bool* is_gpu_readback_invoked = nullptr) const;
 
-  void PutByteArray(Multiply,
-                    const unsigned char* source,
+  void PutByteArray(const unsigned char* source,
                     const IntSize& source_size,
                     const IntRect& source_rect,
                     const IntPoint& dest_point);
 
-  AffineTransform BaseTransform() const { return AffineTransform(); }
   WebLayer* PlatformLayer() const;
 
   // Destroys the TEXTURE_2D binding for the active texture unit of the passed
@@ -150,13 +134,7 @@ class PLATFORM_EXPORT ImageBuffer {
   bool CopyRenderingResultsFromDrawingBuffer(DrawingBuffer*,
                                              SourceDrawingBuffer);
 
-  void Flush(FlushReason);     // Process deferred draw commands immediately.
-  void FlushGpu(FlushReason);  // Like flush(), but flushes all the way down to
-                               // the GPU context if the surface is accelerated.
-
-  void NotifySurfaceInvalid();
-
-  PassRefPtr<StaticBitmapImage> NewImageSnapshot(
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot(
       AccelerationHint = kPreferNoAcceleration,
       SnapshotReason = kSnapshotReasonUnknown) const;
 
@@ -164,17 +142,11 @@ class PLATFORM_EXPORT ImageBuffer {
 
   void Draw(GraphicsContext&, const FloatRect&, const FloatRect*, SkBlendMode);
 
-  void UpdateGPUMemoryUsage() const;
-  static intptr_t GetGlobalGPUMemoryUsage() { return global_gpu_memory_usage_; }
-  static unsigned GetGlobalAcceleratedImageBufferCount() {
-    return global_accelerated_image_buffer_count_;
-  }
-  intptr_t GetGPUMemoryUsage() { return gpu_memory_usage_; }
-
-  void DisableAcceleration();
   void SetSurface(std::unique_ptr<ImageBufferSurface>);
 
-  void SetNeedsCompositingUpdate();
+  // TODO(xlai): This function is an intermediate step making canvas element
+  // have reference to Canvas2DLayerBridge. See crbug.com/776806.
+  void OnCanvasDisposed();
 
   WeakPtrFactory<ImageBuffer> weak_ptr_factory_;
 
@@ -189,14 +161,6 @@ class PLATFORM_EXPORT ImageBuffer {
   };
   mutable SnapshotState snapshot_state_;
   std::unique_ptr<ImageBufferSurface> surface_;
-  ImageBufferClient* client_;
-
-  mutable bool gpu_readback_invoked_in_current_frame_;
-  int gpu_readback_successive_frames_;
-
-  mutable intptr_t gpu_memory_usage_;
-  static intptr_t global_gpu_memory_usage_;
-  static unsigned global_accelerated_image_buffer_count_;
 };
 
 struct ImageDataBuffer {

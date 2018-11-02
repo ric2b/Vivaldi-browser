@@ -9,6 +9,7 @@ namespace prefs {
 
 extern const char kAcceptLanguages[];
 extern const char kApplicationLocale[];
+extern const char kArticlesForYouEnabled[];
 extern const char kBrowserStateInfoCache[];
 extern const char kBrowserStateLastUsed[];
 extern const char kBrowserStatesLastActive[];
@@ -23,6 +24,7 @@ extern const char kHttpServerProperties[];
 extern const char kIosBookmarkFolderDefault[];
 extern const char kIosBookmarkPromoAlreadySeen[];
 extern const char kIosBookmarkSigninPromoDisplayedCount[];
+extern const char kIosSettingsPromoAlreadySeen[];
 extern const char kIosSettingsSigninPromoDisplayedCount[];
 extern const char kIosPhysicalWebEnabled[];
 extern const char kLastSessionExitedCleanly[];

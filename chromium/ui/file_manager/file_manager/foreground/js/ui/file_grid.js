@@ -84,10 +84,9 @@ FileGrid.decorate = function(
 
   self.itemConstructor = function(entry) {
     var item = self.ownerDocument.createElement('li');
-    FileGrid.Item.decorate(
-        item,
-        entry,
-        /** @type {FileGrid} */ (self));
+    item.__proto__ = FileGrid.Item.prototype;
+    item = /** @type {!FileGrid.Item} */ (item);
+    self.decorateThumbnail_(item, entry);
     return item;
   };
 
@@ -133,6 +132,25 @@ FileGrid.prototype.setListThumbnailLoader = function(listThumbnailLoader) {
     this.listThumbnailLoader_.setHighPriorityRange(
         this.beginIndex_, this.endIndex_);
   }
+};
+
+/**
+ * Returns the element containing the thumbnail of a certain list item as
+ * background image.
+ * @param {number} index The index of the item containing the desired thumbnail.
+ * @return {?Element} The element containing the thumbnail, or null, if an error
+ *     occurred.
+ */
+FileGrid.prototype.getThumbnail = function(index) {
+  var listItem = this.getListItemByIndex(index);
+  if (!listItem) {
+    return null;
+  }
+  var container = listItem.querySelector('.img-container');
+  if (!container) {
+    return null;
+  }
+  return container.querySelector('.thumbnail');
 };
 
 /**
@@ -786,18 +804,13 @@ Object.defineProperty(FileGrid.Item.prototype, 'label', {
 });
 
 /**
- * @param {Element} li List item element.
- * @param {!Entry} entry File entry.
- * @param {FileGrid} grid Owner.
+ * @override
  */
-FileGrid.Item.decorate = function(li, entry, grid) {
-  li.__proto__ = FileGrid.Item.prototype;
-  li = /** @type {!FileGrid.Item} */ (li);
-  grid.decorateThumbnail_(li, entry);
-
+FileGrid.Item.prototype.decorate = function() {
+  cr.ui.ListItem.prototype.decorate.apply(this);
   // Override the default role 'listitem' to 'option' to match the parent's
   // role (listbox).
-  li.setAttribute('role', 'option');
+  this.setAttribute('role', 'option');
 };
 
 /**

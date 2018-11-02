@@ -6,14 +6,11 @@
 #define THIRD_PARTY_LIBXML_CHROMIUM_LIBXML_UTILS_H_
 #pragma once
 
+#include <map>
 #include <string>
 
 #include "libxml/xmlreader.h"
 #include "libxml/xmlwriter.h"
-
-// Converts a libxml xmlChar* into a UTF-8 std::string.
-// NULL inputs produce an empty string.
-std::string XmlStringToStdString(const xmlChar* xmlstring);
 
 // libxml uses a global error function pointer for reporting errors.
 // A ScopedXmlErrorFunc object lets you change the global error pointer
@@ -62,10 +59,12 @@ class XmlReader {
   int Depth() { return xmlTextReaderDepth(reader_); }
 
   // Returns the "local" name of the current node.
+  // For a tag like <foo:bar>, this is the string "bar".
+  std::string NodeName();
+
+  // Returns the name of the current node.
   // For a tag like <foo:bar>, this is the string "foo:bar".
-  std::string NodeName() {
-    return XmlStringToStdString(xmlTextReaderConstLocalName(reader_));
-  }
+  std::string NodeFullName();
 
   // When pointing at a tag, retrieves the value of an attribute.
   // Returns false on failure.
@@ -73,8 +72,35 @@ class XmlReader {
   // returns true and |value| is set to "a".
   bool NodeAttribute(const char* name, std::string* value);
 
+  // Populates |attributes| with all the attributes of the current tag and
+  // returns true. Note that namespace declarations are not reported.
+  // Returns false if there are no attributes in the current tag.
+  bool GetAllNodeAttributes(std::map<std::string, std::string>* attributes);
+
+  // Populates |namespaces| with all the namespaces (prefix/URI pairs) declared
+  // in the current tag and returns true. Note that the default namespace, if
+  // declared in the tag, is populated with an empty prefix.
+  // Returns false if there are no namespaces declared in the current tag.
+  bool GetAllDeclaredNamespaces(std::map<std::string, std::string>* namespaces);
+
+  // Sets |content| to the content of the current node if it is a #text/#cdata
+  // node.
+  // Returns true if the current node is a #text/#cdata node, false otherwise.
+  bool GetTextIfTextElement(std::string* content);
+  bool GetTextIfCDataElement(std::string* content);
+
   // Returns true if the node is a closing element (e.g. </foo>).
   bool IsClosingElement();
+
+  // Returns true if the current node is an empty (self-closing) element (e.g.
+  // <foo/>).
+  bool IsEmptyElement();
+
+  // Returns true if the current node is a white-space node.
+  bool IsWhiteSpace();
+
+  // Returns true if the current node is a comment (e.g. <!-- comment -->).
+  bool IsComment();
 
   // Helper functions not provided by libxml ----------------------------------
 
@@ -163,11 +189,7 @@ class XmlWriter {
   // Helper functions not provided by xmlTextWriter ---------------------------
 
   // Returns the string that has been written to the buffer.
-  std::string GetWrittenString() {
-    if (buffer_ == NULL)
-      return "";
-    return XmlStringToStdString(buffer_->content);
-  }
+  std::string GetWrittenString();
 
  private:
   // The underlying libxml xmlTextWriter.

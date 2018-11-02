@@ -72,6 +72,28 @@ void FakeCentral::SetNextGATTDiscoveryResponse(
   std::move(callback).Run(true);
 }
 
+bool FakeCentral::AllResponsesConsumed() {
+  return std::all_of(devices_.begin(), devices_.end(), [](const auto& e) {
+    // static_cast is safe because the parent class's devices_ is only
+    // populated via this FakeCentral, and only with FakePeripherals.
+    FakePeripheral* fake_peripheral =
+        static_cast<FakePeripheral*>(e.second.get());
+    return fake_peripheral->AllResponsesConsumed();
+  });
+}
+
+void FakeCentral::SimulateGATTDisconnection(
+    const std::string& address,
+    SimulateGATTDisconnectionCallback callback) {
+  FakePeripheral* fake_peripheral = GetFakePeripheral(address);
+  if (fake_peripheral == nullptr) {
+    std::move(callback).Run(false);
+  }
+
+  fake_peripheral->SimulateGATTDisconnection();
+  std::move(callback).Run(true);
+}
+
 void FakeCentral::SimulateGATTServicesChanged(
     const std::string& address,
     SimulateGATTServicesChangedCallback callback) {
@@ -178,6 +200,24 @@ void FakeCentral::SetNextWriteCharacteristicResponse(
   }
 
   fake_remote_gatt_characteristic->SetNextWriteResponse(gatt_code);
+  std::move(callback).Run(true);
+}
+
+void FakeCentral::SetNextSubscribeToNotificationsResponse(
+    uint16_t gatt_code,
+    const std::string& characteristic_id,
+    const std::string& service_id,
+    const std::string& peripheral_address,
+    SetNextSubscribeToNotificationsResponseCallback callback) {
+  FakeRemoteGattCharacteristic* fake_remote_gatt_characteristic =
+      GetFakeRemoteGattCharacteristic(peripheral_address, service_id,
+                                      characteristic_id);
+  if (fake_remote_gatt_characteristic == nullptr) {
+    std::move(callback).Run(false);
+  }
+
+  fake_remote_gatt_characteristic->SetNextSubscribeToNotificationsResponse(
+      gatt_code);
   std::move(callback).Run(true);
 }
 
@@ -359,7 +399,7 @@ void FakeCentral::RemovePairingDelegateInternal(
   NOTREACHED();
 }
 
-FakeCentral::~FakeCentral() {}
+FakeCentral::~FakeCentral() = default;
 
 FakePeripheral* FakeCentral::GetFakePeripheral(
     const std::string& peripheral_address) const {
@@ -368,6 +408,8 @@ FakePeripheral* FakeCentral::GetFakePeripheral(
     return nullptr;
   }
 
+  // static_cast is safe because the parent class's devices_ is only
+  // populated via this FakeCentral, and only with FakePeripherals.
   return static_cast<FakePeripheral*>(device_iter->second.get());
 }
 
@@ -379,6 +421,8 @@ FakeRemoteGattService* FakeCentral::GetFakeRemoteGattService(
     return nullptr;
   }
 
+  // static_cast is safe because FakePeripheral is only populated with
+  // FakeRemoteGattServices.
   return static_cast<FakeRemoteGattService*>(
       fake_peripheral->GetGattService(service_id));
 }
@@ -393,6 +437,8 @@ FakeRemoteGattCharacteristic* FakeCentral::GetFakeRemoteGattCharacteristic(
     return nullptr;
   }
 
+  // static_cast is safe because FakeRemoteGattService is only populated with
+  // FakeRemoteGattCharacteristics.
   return static_cast<FakeRemoteGattCharacteristic*>(
       fake_remote_gatt_service->GetCharacteristic(characteristic_id));
 }
@@ -409,6 +455,8 @@ FakeRemoteGattDescriptor* FakeCentral::GetFakeRemoteGattDescriptor(
     return nullptr;
   }
 
+  // static_cast is safe because FakeRemoteGattCharacteristic is only populated
+  // with FakeRemoteGattDescriptors.
   return static_cast<FakeRemoteGattDescriptor*>(
       fake_remote_gatt_characteristic->GetDescriptor(descriptor_id));
 }

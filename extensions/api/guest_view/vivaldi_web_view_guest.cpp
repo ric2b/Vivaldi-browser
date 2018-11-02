@@ -13,17 +13,17 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/insecure_content_renderer.mojom.h"
 #include "chrome/common/render_messages.h"
 #include "components/guest_view/browser/guest_view_event.h"
@@ -57,7 +57,6 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "prefs/vivaldi_gen_prefs.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/vivaldi_browser_window.h"
 
@@ -66,9 +65,10 @@
 #endif
 
 #include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/associated_interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 
 #if defined(OS_LINUX) || defined(OS_MACOSX)
 // Vivaldi addition: only define mouse gesture for OSX & linux
@@ -272,48 +272,54 @@ void WebViewGuest::InitListeners() {
 
 void WebViewGuest::ToggleFullscreenModeForTab(
     content::WebContents* web_contents,
-    bool enter_fullscreen) {
-  bool state_changed = enter_fullscreen != is_fullscreen_;
+    bool enter_fullscreen,
+    bool skip_window_state) {
+  if (enter_fullscreen == is_fullscreen_)
+    return;
+  is_fullscreen_ = enter_fullscreen;
 
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetBoolean("enterFullscreen", enter_fullscreen);
+  DispatchEventToView(base::WrapUnique(
+      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
 
-  is_fullscreen_ = enter_fullscreen;
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (!browser)
     return;
 
-  VivaldiBrowserWindow* app_win = static_cast<VivaldiBrowserWindow*>(browser->window());
-  if (app_win) {
-    ui::WindowShowState current_window_state = app_win->GetRestoredState();
 #if defined(USE_AURA)
-    PrefService* pref_service =
+  PrefService* pref_service =
       Profile::FromBrowserContext(web_contents->GetBrowserContext())
-      ->GetPrefs();
-    bool hide_cursor =
-      pref_service->GetBoolean(vivaldiprefs::kHideMouseCursorInFullscreen);
-    if (hide_cursor && enter_fullscreen) {
-      aura::Window* window =
+          ->GetPrefs();
+  bool hide_cursor =
+      pref_service->GetBoolean(vivaldiprefs::kWebpagesFullScreenHideMouse);
+  if (hide_cursor && enter_fullscreen) {
+    aura::Window* window =
         static_cast<aura::Window*>(web_contents->GetNativeView());
-      cursor_hider_.reset(new CursorHider(window->GetRootWindow()));
-    } else {
-      cursor_hider_.reset(nullptr);
-    }
+    cursor_hider_.reset(new CursorHider(window->GetRootWindow()));
+  } else {
+    cursor_hider_.reset(nullptr);
+  }
 #endif  // USE_AURA
-    if (enter_fullscreen) {
-      window_state_prior_to_fullscreen_ = current_window_state;
-      app_win->SetFullscreen(true);
-    } else {
-      switch (window_state_prior_to_fullscreen_) {
+
+  if (skip_window_state)
+    return;
+
+  VivaldiBrowserWindow* app_win =
+      static_cast<VivaldiBrowserWindow*>(browser->window());
+  if (!app_win)
+    return;
+
+  if (enter_fullscreen) {
+    ui::WindowShowState current_window_state = app_win->GetRestoredState();
+    window_state_prior_to_fullscreen_ = current_window_state;
+    app_win->SetFullscreen(true);
+  } else {
+    switch (window_state_prior_to_fullscreen_) {
       case ui::SHOW_STATE_MAXIMIZED:
       case ui::SHOW_STATE_NORMAL:
       case ui::SHOW_STATE_DEFAULT:
-        // If state did not change we had a plugin that came out of
-        // fullscreen. Only HTML-element fullscreen changes the appwindow
-        // state.
-        if (state_changed) {
-          app_win->Restore();
-        }
+        app_win->Restore();
         break;
       case ui::SHOW_STATE_FULLSCREEN:
         app_win->SetFullscreen(true);
@@ -321,37 +327,7 @@ void WebViewGuest::ToggleFullscreenModeForTab(
       default:
         NOTREACHED() << "uncovered state";
         break;
-      }
     }
-  }
-  if (state_changed) {
-    DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
-  }
-}
-
-void WebViewGuest::ShowValidationMessage(content::WebContents* web_contents,
-                                         const gfx::Rect& anchor_in_root_view,
-                                         const base::string16& main_text,
-                                         const base::string16& sub_text) {
-  validation_message_bubble_ =
-      TabDialogs::FromWebContents(web_contents)
-          ->ShowValidationMessage(anchor_in_root_view, main_text, sub_text);
-}
-
-void WebViewGuest::HideValidationMessage(content::WebContents* web_contents) {
-  if (validation_message_bubble_)
-    validation_message_bubble_->CloseValidationMessage();
-}
-
-void WebViewGuest::MoveValidationMessage(content::WebContents* web_contents,
-                                         const gfx::Rect& anchor_in_root_view) {
-  if (!validation_message_bubble_)
-    return;
-  content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
-  if (rwhv) {
-    validation_message_bubble_->SetPositionRelativeToAnchor(
-        rwhv->GetRenderWidgetHost(), anchor_in_root_view);
   }
 }
 
@@ -387,7 +363,7 @@ void WebViewGuest::SetVisible(bool is_visible) {
       // will make sure that the memory usage is on-par with what Chrome use.
       // See VB-671 for more information and comments.
       web_cache::WebCacheManager::GetInstance()->ObserveActivity(
-          web_contents()->GetRenderProcessHost()->GetID());
+          web_contents()->GetMainFrame()->GetProcess()->GetID());
     }
     if (!is_visible && widgethostview->IsShowing()) {
       widgethostview->Hide();
@@ -461,8 +437,9 @@ bool WebViewGuest::EmbedsFullscreenWidget() const {
   return web_contents()->GetFullscreenRenderWidgetHostView() == NULL;
 }
 
-void WebViewGuest::SetIsFullscreen(bool is_fullscreen) {
-  is_fullscreen_ = is_fullscreen;
+void WebViewGuest::SetIsFullscreen(bool is_fullscreen, bool skip_window_state) {
+  SetFullscreenState(is_fullscreen);
+  ToggleFullscreenModeForTab(web_contents(), is_fullscreen, skip_window_state);
 }
 
 void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
@@ -506,7 +483,8 @@ bool WebViewGuest::IsRockerGesturesEnabled() const {
   PrefService* pref_service =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
           ->GetPrefs();
-  return pref_service->GetBoolean(vivaldiprefs::kRockerGesturesEnabled);
+  return pref_service->GetBoolean(
+      vivaldiprefs::kMouseGesturesRockerGesturesEnabled);
 }
 
 bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
@@ -792,9 +770,10 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   navigate_params.source_contents = web_contents();
   chrome::Navigate(&navigate_params);
 
+  if (!browser->is_vivaldi()){
   if (active)
     navigate_params.target_contents->SetInitialFocus();
-
+  }
   if (navigate_params.target_contents) {
     content::RenderFrameHost* host =
         navigate_params.target_contents->GetMainFrame();
@@ -803,14 +782,6 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
     client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
   }
-}
-
-bool WebViewGuest::RequestPageInfo(const GURL& url) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->Set(webview::kTargetURL, base::WrapUnique(new base::Value(url.spec())));
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args))));
-  return true;
 }
 
 void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
@@ -868,8 +839,31 @@ void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type,
       new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
 }
 
+
 void WebViewGuest::AllowRunningInsecureContent() {
+
+  MixedContentSettingsTabHelper* mixed_content_settings =
+    MixedContentSettingsTabHelper::FromWebContents(web_contents());
+  if (mixed_content_settings) {
+    // Update browser side settings to allow active mixed content.
+    mixed_content_settings->AllowRunningOfInsecureContent();
+  }
+
   web_contents()->ForEachFrame(base::Bind(&SetAllowRunningInsecureContent));
+}
+
+bool WebViewGuest::ShouldAllowRunningInsecureContent(
+  WebContents* web_contents,
+  bool allowed_per_prefs,
+  const url::Origin& origin,
+  const GURL& resource_url) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (browser) {
+    return browser->ShouldAllowRunningInsecureContent(
+      web_contents, allowed_per_prefs, origin, resource_url);
+  } else {
+    return false;
+  }
 }
 
 void WebViewGuest::OnMouseEnter() {

@@ -48,7 +48,7 @@ class SSLErrorUI {
   virtual ~SSLErrorUI();
 
   virtual void PopulateStringsForHTML(base::DictionaryValue* load_time_data);
-  virtual void HandleCommand(SecurityInterstitialCommands command);
+  virtual void HandleCommand(SecurityInterstitialCommand command);
 
  protected:
   const net::SSLInfo& ssl_info() const;
@@ -68,7 +68,7 @@ class SSLErrorUI {
   // Set by the |display_options|.
   const bool requested_strict_enforcement_;
   const bool soft_override_enabled_;  // UI provides a button to dismiss error.
-  const bool hard_override_enabled_;  // Dismissing allowed, but no button.
+  const bool hard_override_enabled_;  // Dismissing allowed without button.
 
   ControllerClient* controller_;
   bool user_made_decision_;  // Whether the user made a choice in the UI.

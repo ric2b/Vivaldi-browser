@@ -60,7 +60,7 @@ void CreateNativeAudioMediaStreamTrack(
 }
 
 void CreateNativeVideoMediaStreamTrack(blink::WebMediaStreamTrack track) {
-  DCHECK(track.GetTrackData() == NULL);
+  DCHECK(track.GetTrackData() == nullptr);
   blink::WebMediaStreamSource source = track.Source();
   DCHECK_EQ(source.GetType(), blink::WebMediaStreamSource::kTypeVideo);
   MediaStreamVideoSource* native_source =
@@ -154,14 +154,6 @@ void MediaStreamCenter::DidDisableMediaStreamTrack(
     native_track->SetEnabled(false);
 }
 
-bool MediaStreamCenter::DidStopMediaStreamTrack(
-    const blink::WebMediaStreamTrack& track) {
-  DVLOG(1) << "MediaStreamCenter::didStopMediaStreamTrack";
-  MediaStreamTrack* native_track = MediaStreamTrack::GetTrack(track);
-  native_track->Stop();
-  return true;
-}
-
 blink::WebAudioSourceProvider*
 MediaStreamCenter::CreateWebAudioSourceFromMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
@@ -180,23 +172,6 @@ MediaStreamCenter::CreateWebAudioSourceFromMediaStreamTrack(
   // WebAudioMediaStreamSink since it's not specific to any particular source.
   // http://crbug.com/577874
   return new WebRtcLocalAudioSourceProvider(track);
-}
-
-void MediaStreamCenter::DidStopLocalMediaStream(
-    const blink::WebMediaStream& stream) {
-  DVLOG(1) << "MediaStreamCenter::didStopLocalMediaStream";
-
-  // TODO(perkj): MediaStream::Stop is being deprecated. But for the moment we
-  // need to support both MediaStream::Stop and MediaStreamTrack::Stop.
-  blink::WebVector<blink::WebMediaStreamTrack> audio_tracks;
-  stream.AudioTracks(audio_tracks);
-  for (size_t i = 0; i < audio_tracks.size(); ++i)
-    DidStopMediaStreamTrack(audio_tracks[i]);
-
-  blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
-  stream.VideoTracks(video_tracks);
-  for (size_t i = 0; i < video_tracks.size(); ++i)
-    DidStopMediaStreamTrack(video_tracks[i]);
 }
 
 void MediaStreamCenter::DidStopMediaStreamSource(

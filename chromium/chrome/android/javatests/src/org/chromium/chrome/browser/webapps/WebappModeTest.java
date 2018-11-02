@@ -78,21 +78,20 @@ public class WebappModeTest {
     private Intent createIntent(String id, String url, String title, String icon, boolean addMac) {
         Intent intent = new Intent();
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setPackage(
-                InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageName());
+        intent.setPackage(InstrumentationRegistry.getTargetContext().getPackageName());
         intent.setAction(WebappLauncherActivity.ACTION_START_WEBAPP);
         if (addMac) {
             // Needed for security reasons.  If the MAC is excluded, the URL of the webapp is opened
             // in a browser window, instead.
-            String mac = ShortcutHelper.getEncodedMac(
-                    InstrumentationRegistry.getInstrumentation().getTargetContext(), url);
+            String mac =
+                    ShortcutHelper.getEncodedMac(InstrumentationRegistry.getTargetContext(), url);
             intent.putExtra(ShortcutHelper.EXTRA_MAC, mac);
         }
 
         WebappInfo webappInfo = WebappInfo.create(id, url, null, new WebappInfo.Icon(icon), title,
                 null, WebDisplayMode.STANDALONE, ScreenOrientationValues.PORTRAIT,
                 ShortcutSource.UNKNOWN, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
-                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false /* isIconGenerated */,
+                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, null, false /* isIconGenerated */,
                 false /* forceNavigation */);
         webappInfo.setWebappIntentExtras(intent);
 
@@ -103,7 +102,7 @@ public class WebappModeTest {
             boolean addMac) {
         Intent intent = createIntent(id, url, title, icon, addMac);
 
-        InstrumentationRegistry.getInstrumentation().getTargetContext().startActivity(intent);
+        InstrumentationRegistry.getTargetContext().startActivity(intent);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         ApplicationTestUtils.waitUntilChromeInForeground();
     }
@@ -204,7 +203,7 @@ public class WebappModeTest {
         final int webappTabId = firstActivity.getActivityTab().getId();
 
         // Return home.
-        final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        final Context context = InstrumentationRegistry.getTargetContext();
         ApplicationTestUtils.fireHomeScreenIntent(context);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 

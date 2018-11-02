@@ -7,9 +7,9 @@
 
 #include <memory>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_service_impl.h"
-#include "ui/app_list/app_list_model.h"
 
 class AppListPresenterService;
 
@@ -18,7 +18,8 @@ class AppListPresenterImpl;
 }
 
 namespace base {
-template <typename T> struct DefaultSingletonTraits;
+template <typename T>
+struct DefaultSingletonTraits;
 }
 
 class AppListControllerDelegateAsh;
@@ -39,6 +40,10 @@ class AppListServiceAsh : public AppListServiceImpl {
   // Non-ash AppListService that is responsible for handling this.
   // TODO(calamity): Ash shouldn't observe the ProfileAttributesStorage at all.
   void OnProfileWillBeRemoved(const base::FilePath& profile_path) override;
+
+  AppListPresenterService* app_list_presenter_service() {
+    return app_list_presenter_service_.get();
+  }
 
  private:
   friend struct base::DefaultSingletonTraits<AppListServiceAsh>;

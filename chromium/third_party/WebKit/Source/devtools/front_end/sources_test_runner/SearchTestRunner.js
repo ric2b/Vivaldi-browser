@@ -140,9 +140,7 @@ SourcesTestRunner.replaceAndDumpChange = function(sourceFrame, searchConfig, rep
   }
 };
 
-TestRunner.initAsync(async function() {
-  await TestRunner.evaluateInPagePromise(`
-    if (window.GCController)
-      GCController.collect();
-  `);
-});
+TestRunner.deprecatedInitAsync(`
+  if (window.GCController)
+    GCController.collect();
+`);

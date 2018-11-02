@@ -21,12 +21,12 @@
 #ifndef CSSImageValue_h
 #define CSSImageValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSValue.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/weborigin/Referrer.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -37,19 +37,24 @@ class ComputedStyle;
 
 class CORE_EXPORT CSSImageValue : public CSSValue {
  public:
-  static CSSImageValue* Create(const KURL& url, StyleImage* image = 0) {
+  static CSSImageValue* Create(const KURL& url, StyleImage* image = nullptr) {
     return Create(url.GetString(), url, Referrer(), image);
+  }
+  static CSSImageValue* Create(const AtomicString& relative_url,
+                               const KURL& absolute_url,
+                               StyleImage* image = nullptr) {
+    return Create(relative_url, absolute_url, Referrer(), image);
   }
   static CSSImageValue* Create(const String& raw_value,
                                const KURL& url,
                                const Referrer& referrer,
-                               StyleImage* image = 0) {
+                               StyleImage* image = nullptr) {
     return Create(AtomicString(raw_value), url, referrer, image);
   }
   static CSSImageValue* Create(const AtomicString& raw_value,
                                const KURL& url,
                                const Referrer& referrer,
-                               StyleImage* image = 0) {
+                               StyleImage* image = nullptr) {
     return new CSSImageValue(raw_value, url, referrer, image);
   }
   static CSSImageValue* Create(const AtomicString& absolute_url) {
@@ -68,6 +73,7 @@ class CORE_EXPORT CSSImageValue : public CSSValue {
       CrossOriginAttributeValue = kCrossOriginAttributeNotSet);
 
   const String& Url() const { return absolute_url_; }
+  const String& RelativeUrl() const { return relative_url_; }
 
   const Referrer& GetReferrer() const { return referrer_; }
 
@@ -82,12 +88,16 @@ class CORE_EXPORT CSSImageValue : public CSSValue {
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const;
 
   CSSImageValue* ValueWithURLMadeAbsolute() const {
-    return Create(KURL(kParsedURLString, absolute_url_), cached_image_.Get());
+    return Create(KURL(absolute_url_), cached_image_.Get());
+  }
+
+  CSSImageValue* Clone() const {
+    return Create(relative_url_, KURL(absolute_url_), cached_image_.Get());
   }
 
   void SetInitiator(const AtomicString& name) { initiator_name_ = name; }
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
   void RestoreCachedResourceIfNeeded(const Document&) const;
 
  private:

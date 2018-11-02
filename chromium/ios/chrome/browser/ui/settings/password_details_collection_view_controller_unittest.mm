@@ -86,8 +86,7 @@ const int kDeleteButtonItem = 0;
 class PasswordDetailsCollectionViewControllerTest
     : public CollectionViewControllerTest {
  protected:
-  PasswordDetailsCollectionViewControllerTest()
-      : thread_bundle_(web::TestWebThreadBundle::REAL_DB_THREAD) {
+  PasswordDetailsCollectionViewControllerTest() {
     origin_ = kSite;
     form_.username_value = base::SysNSStringToUTF16(kUsername);
     form_.password_value = base::SysNSStringToUTF16(kPassword);
@@ -207,7 +206,8 @@ TEST_F(PasswordDetailsCollectionViewControllerTest,
   constexpr int kFederatedDeleteButtonItem = 0;
 
   form_.password_value.clear();
-  form_.federation_origin = url::Origin(GURL("https://famous.provider.net"));
+  form_.federation_origin =
+      url::Origin::Create(GURL("https://famous.provider.net"));
   CreateController();
   CheckController();
   EXPECT_EQ(4, NumberOfSections());

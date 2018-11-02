@@ -52,14 +52,26 @@ void GlRenderer::RenderFrame() {
   glClearColor(1 - fraction, fraction, 0.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  surface_->SwapBuffersAsync(base::Bind(&GlRenderer::PostRenderFrameTask,
-                                        weak_ptr_factory_.GetWeakPtr()));
+  if (surface_->SupportsAsyncSwap()) {
+    surface_->SwapBuffersAsync(base::Bind(&GlRenderer::PostRenderFrameTask,
+                                          weak_ptr_factory_.GetWeakPtr()),
+                               base::Bind(&GlRenderer::OnPresentation,
+                                          weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    PostRenderFrameTask(surface_->SwapBuffers(base::Bind(
+        &GlRenderer::OnPresentation, weak_ptr_factory_.GetWeakPtr())));
+  }
 }
 
 void GlRenderer::PostRenderFrameTask(gfx::SwapResult result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&GlRenderer::RenderFrame, weak_ptr_factory_.GetWeakPtr()));
+}
+
+void GlRenderer::OnPresentation(const gfx::PresentationFeedback& feedback) {
+  DCHECK(surface_->SupportsPresentationCallback());
+  LOG_IF(ERROR, feedback.timestamp.is_null()) << "Last frame is discarded!";
 }
 
 }  // namespace ui

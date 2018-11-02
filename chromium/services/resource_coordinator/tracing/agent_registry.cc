@@ -29,10 +29,11 @@ AgentRegistry::AgentEntry::AgentEntry(size_t id,
       agent_(std::move(agent)),
       label_(label),
       type_(type),
-      supports_explicit_clock_sync_(supports_explicit_clock_sync) {
+      supports_explicit_clock_sync_(supports_explicit_clock_sync),
+      is_tracing_(false) {
   DCHECK(!label.empty());
   agent_.set_connection_error_handler(base::BindRepeating(
-      &AgentRegistry::AgentEntry::OnConnectionError, base::Unretained(this)));
+      &AgentRegistry::AgentEntry::OnConnectionError, AsWeakPtr()));
 }
 
 AgentRegistry::AgentEntry::~AgentEntry() = default;
@@ -119,7 +120,7 @@ void AgentRegistry::RegisterAgent(mojom::AgentPtr agent,
                                   mojom::TraceDataType type,
                                   bool supports_explicit_clock_sync) {
   auto id = next_agent_id_++;
-  auto entry = base::MakeUnique<AgentEntry>(id, this, std::move(agent), label,
+  auto entry = std::make_unique<AgentEntry>(id, this, std::move(agent), label,
                                             type, supports_explicit_clock_sync);
   if (!agent_initialization_callback_.is_null())
     agent_initialization_callback_.Run(entry.get());

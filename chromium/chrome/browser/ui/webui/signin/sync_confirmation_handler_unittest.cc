@@ -58,12 +58,11 @@ class TestingOneClickSigninSyncStarter : public OneClickSigninSyncStarter {
                                    const std::string& email,
                                    const std::string& password,
                                    const std::string& refresh_token,
+                                   signin_metrics::AccessPoint access_point,
+                                   signin_metrics::Reason signin_reason,
                                    ProfileMode profile_mode,
                                    StartSyncMode start_mode,
-                                   content::WebContents* web_contents,
                                    ConfirmationRequired display_confirmation,
-                                   const GURL& current_url,
-                                   const GURL& continue_url,
                                    Callback callback)
       : OneClickSigninSyncStarter(profile,
                                   browser,
@@ -71,12 +70,11 @@ class TestingOneClickSigninSyncStarter : public OneClickSigninSyncStarter {
                                   email,
                                   password,
                                   refresh_token,
+                                  access_point,
+                                  signin_reason,
                                   profile_mode,
                                   start_mode,
-                                  web_contents,
                                   display_confirmation,
-                                  current_url,
-                                  continue_url,
                                   callback) {}
 
  protected:
@@ -108,9 +106,11 @@ class SyncConfirmationHandlerTest : public BrowserWithTestWindowTest {
     // SigninManager.
     new TestingOneClickSigninSyncStarter(
         profile(), browser(), "gaia", "foo@example.com", "password",
-        "refresh_token", OneClickSigninSyncStarter::CURRENT_PROFILE,
-        OneClickSigninSyncStarter::SYNC_WITH_DEFAULT_SETTINGS, nullptr,
-        OneClickSigninSyncStarter::NO_CONFIRMATION, GURL(), GURL(),
+        "refresh_token", signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+        signin_metrics::Reason::REASON_UNKNOWN_REASON,
+        OneClickSigninSyncStarter::CURRENT_PROFILE,
+        OneClickSigninSyncStarter::SYNC_WITH_DEFAULT_SETTINGS,
+        OneClickSigninSyncStarter::NO_CONFIRMATION,
         OneClickSigninSyncStarter::Callback());
   }
 
@@ -157,13 +157,10 @@ class SyncConfirmationHandlerTest : public BrowserWithTestWindowTest {
     return new DialogTestBrowserWindow;
   }
 
-  TestingProfile* CreateProfile() override {
-    TestingProfile::Builder builder;
-    builder.AddTestingFactory(AccountFetcherServiceFactory::GetInstance(),
-                              FakeAccountFetcherServiceBuilder::BuildForTests);
-    builder.AddTestingFactory(
-        SigninManagerFactory::GetInstance(), BuildFakeSigninManagerBase);
-    return builder.Build().release();
+  TestingProfile::TestingFactories GetTestingFactories() override {
+    return {{AccountFetcherServiceFactory::GetInstance(),
+             FakeAccountFetcherServiceBuilder::BuildForTests},
+            {SigninManagerFactory::GetInstance(), BuildFakeSigninManagerBase}};
   }
 
  protected:
@@ -198,8 +195,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReady) {
   // clearFocus since the image URL is known before showing the dialog.
   EXPECT_EQ("sync.confirmation.setUserImageURL",
             web_ui()->call_data()[0]->function_name());
-  EXPECT_TRUE(
-      web_ui()->call_data()[0]->arg1()->IsType(base::Value::Type::STRING));
+  EXPECT_TRUE(web_ui()->call_data()[0]->arg1()->is_string());
   std::string passed_picture_url;
   EXPECT_TRUE(
       web_ui()->call_data()[0]->arg1()->GetAsString(&passed_picture_url));
@@ -238,8 +234,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReadyLater) {
   // setUserImageURL is called with the default placeholder image.
   EXPECT_EQ("sync.confirmation.setUserImageURL",
             web_ui()->call_data()[0]->function_name());
-  EXPECT_TRUE(
-      web_ui()->call_data()[0]->arg1()->IsType(base::Value::Type::STRING));
+  EXPECT_TRUE(web_ui()->call_data()[0]->arg1()->is_string());
   std::string passed_picture_url;
   EXPECT_TRUE(
       web_ui()->call_data()[0]->arg1()->GetAsString(&passed_picture_url));
@@ -252,8 +247,7 @@ TEST_F(SyncConfirmationHandlerTest, TestSetImageIfPrimaryAccountReadyLater) {
 
   EXPECT_EQ("sync.confirmation.setUserImageURL",
             web_ui()->call_data()[2]->function_name());
-  EXPECT_TRUE(
-      web_ui()->call_data()[2]->arg1()->IsType(base::Value::Type::STRING));
+  EXPECT_TRUE(web_ui()->call_data()[2]->arg1()->is_string());
   EXPECT_TRUE(
       web_ui()->call_data()[2]->arg1()->GetAsString(&passed_picture_url));
 

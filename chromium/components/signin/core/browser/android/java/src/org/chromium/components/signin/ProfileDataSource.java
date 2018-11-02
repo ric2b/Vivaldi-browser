@@ -17,15 +17,26 @@ public interface ProfileDataSource {
      * Immutable holder for profile data.
      */
     class ProfileData {
+        private final String mAccountName;
         private final @Nullable Bitmap mAvatar;
         private final @Nullable String mFullName;
         private final @Nullable String mGivenName;
 
-        public ProfileData(
-                @Nullable Bitmap avatar, @Nullable String fullName, @Nullable String givenName) {
+        public ProfileData(String accountName, @Nullable Bitmap avatar, @Nullable String fullName,
+                @Nullable String givenName) {
+            assert accountName != null;
+            this.mAccountName = accountName;
             this.mAvatar = avatar;
             this.mFullName = fullName;
             this.mGivenName = givenName;
+        }
+
+        /**
+         * Gets the account email address.
+         * @return the account name.
+         */
+        public String getAccountName() {
+            return mAccountName;
         }
 
         /**

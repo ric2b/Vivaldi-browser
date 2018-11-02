@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 
 namespace gin {
-class V8Platform;
+class V8BackgroundTaskRunner;
 }
 
 namespace content {
@@ -32,13 +32,10 @@ namespace content {
 class BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 }  // namespace content
 
-namespace tracked_objects {
-class Location;
-}
-
 namespace base {
 
 class HistogramBase;
+class Location;
 
 // Interface for a task scheduler and static methods to manage the instance used
 // by the post_task.h API.
@@ -54,19 +51,31 @@ class HistogramBase;
 class BASE_EXPORT TaskScheduler {
  public:
   struct BASE_EXPORT InitParams {
+    enum class SharedWorkerPoolEnvironment {
+      // Use the default environment (no environment).
+      DEFAULT,
+#if defined(OS_WIN)
+      // Place the worker in a COM MTA.
+      COM_MTA,
+#endif  // defined(OS_WIN)
+    };
+
     InitParams(
         const SchedulerWorkerPoolParams& background_worker_pool_params_in,
         const SchedulerWorkerPoolParams&
             background_blocking_worker_pool_params_in,
         const SchedulerWorkerPoolParams& foreground_worker_pool_params_in,
         const SchedulerWorkerPoolParams&
-            foreground_blocking_worker_pool_params_in);
+            foreground_blocking_worker_pool_params_in,
+        SharedWorkerPoolEnvironment shared_worker_pool_environment_in =
+            SharedWorkerPoolEnvironment::DEFAULT);
     ~InitParams();
 
     SchedulerWorkerPoolParams background_worker_pool_params;
     SchedulerWorkerPoolParams background_blocking_worker_pool_params;
     SchedulerWorkerPoolParams foreground_worker_pool_params;
     SchedulerWorkerPoolParams foreground_blocking_worker_pool_params;
+    SharedWorkerPoolEnvironment shared_worker_pool_environment;
   };
 
   // Destroying a TaskScheduler is not allowed in production; it is always
@@ -80,11 +89,10 @@ class BASE_EXPORT TaskScheduler {
 
   // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
   // For one off tasks that don't require a TaskRunner.
-  virtual void PostDelayedTaskWithTraits(
-      const tracked_objects::Location& from_here,
-      const TaskTraits& traits,
-      OnceClosure task,
-      TimeDelta delay) = 0;
+  virtual void PostDelayedTaskWithTraits(const Location& from_here,
+                                         const TaskTraits& traits,
+                                         OnceClosure task,
+                                         TimeDelta delay) = 0;
 
   // Returns a TaskRunner whose PostTask invocations result in scheduling tasks
   // using |traits|. Tasks may run in any order and in parallel.
@@ -169,6 +177,10 @@ class BASE_EXPORT TaskScheduler {
   // afterwards. CHECKs on failure. For tests, prefer
   // base::test::ScopedTaskEnvironment (ensures isolation).
   static void CreateAndStartWithDefaultParams(StringPiece name);
+
+  // Same as CreateAndStartWithDefaultParams() but allows callers to split the
+  // Create() and StartWithDefaultParams() calls.
+  void StartWithDefaultParams();
 #endif  // !defined(OS_NACL)
 
   // Creates a ready to start task scheduler. |name| is used to label threads
@@ -198,7 +210,7 @@ class BASE_EXPORT TaskScheduler {
   static TaskScheduler* GetInstance();
 
  private:
-  friend class gin::V8Platform;
+  friend class gin::V8BackgroundTaskRunner;
   friend class content::BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 
   // Returns the maximum number of non-single-threaded non-blocked tasks posted

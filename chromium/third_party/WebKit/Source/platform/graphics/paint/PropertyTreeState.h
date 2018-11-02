@@ -28,23 +28,19 @@ class PLATFORM_EXPORT PropertyTreeState {
   bool HasDirectCompositingReasons() const;
 
   const TransformPaintPropertyNode* Transform() const {
-    return transform_.Get();
+    return transform_.get();
   }
-  void SetTransform(RefPtr<const TransformPaintPropertyNode> node) {
+  void SetTransform(scoped_refptr<const TransformPaintPropertyNode> node) {
     transform_ = std::move(node);
   }
 
-  const ClipPaintPropertyNode* Clip() const {
-    return clip_.Get();
-  }
-  void SetClip(RefPtr<const ClipPaintPropertyNode> node) {
+  const ClipPaintPropertyNode* Clip() const { return clip_.get(); }
+  void SetClip(scoped_refptr<const ClipPaintPropertyNode> node) {
     clip_ = std::move(node);
   }
 
-  const EffectPaintPropertyNode* Effect() const {
-    return effect_.Get();
-  }
-  void SetEffect(RefPtr<const EffectPaintPropertyNode> node) {
+  const EffectPaintPropertyNode* Effect() const { return effect_.get(); }
+  void SetEffect(scoped_refptr<const EffectPaintPropertyNode> node) {
     effect_ = std::move(node);
   }
 
@@ -55,13 +51,6 @@ class PLATFORM_EXPORT PropertyTreeState {
   // default instance is returned.
   const CompositorElementId GetCompositorElementId(
       const CompositorElementIdSet& element_ids) const;
-
-  // See PaintPropertyNode::Changed().
-  bool Changed(const PropertyTreeState& relative_to_state) const {
-    return Transform()->Changed(*relative_to_state.Transform()) ||
-           Clip()->Changed(*relative_to_state.Clip()) ||
-           Effect()->Changed(*relative_to_state.Effect());
-  }
 
   void ClearChangedToRoot() const {
     Transform()->ClearChangedToRoot();
@@ -75,9 +64,9 @@ class PLATFORM_EXPORT PropertyTreeState {
 #endif
 
  private:
-  RefPtr<const TransformPaintPropertyNode> transform_;
-  RefPtr<const ClipPaintPropertyNode> clip_;
-  RefPtr<const EffectPaintPropertyNode> effect_;
+  scoped_refptr<const TransformPaintPropertyNode> transform_;
+  scoped_refptr<const ClipPaintPropertyNode> clip_;
+  scoped_refptr<const EffectPaintPropertyNode> effect_;
 };
 
 inline bool operator==(const PropertyTreeState& a, const PropertyTreeState& b) {

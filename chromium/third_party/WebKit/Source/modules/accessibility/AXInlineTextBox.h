@@ -41,10 +41,10 @@ class AXInlineTextBox final : public AXObject {
   WTF_MAKE_NONCOPYABLE(AXInlineTextBox);
 
  private:
-  AXInlineTextBox(PassRefPtr<AbstractInlineTextBox>, AXObjectCacheImpl&);
+  AXInlineTextBox(scoped_refptr<AbstractInlineTextBox>, AXObjectCacheImpl&);
 
  public:
-  static AXInlineTextBox* Create(PassRefPtr<AbstractInlineTextBox>,
+  static AXInlineTextBox* Create(scoped_refptr<AbstractInlineTextBox>,
                                  AXObjectCacheImpl&);
 
  protected:
@@ -61,7 +61,8 @@ class AXInlineTextBox final : public AXObject {
   void GetWordBoundaries(Vector<AXRange>&) const override;
   void GetRelativeBounds(AXObject** out_container,
                          FloatRect& out_bounds_in_container,
-                         SkMatrix44& out_container_transform) const override;
+                         SkMatrix44& out_container_transform,
+                         bool* clips_children = nullptr) const override;
   AXObject* ComputeParent() const override;
   AccessibilityTextDirection GetTextDirection() const override;
   Node* GetNode() const override;
@@ -69,7 +70,7 @@ class AXInlineTextBox final : public AXObject {
   AXObject* PreviousOnLine() const override;
 
  private:
-  RefPtr<AbstractInlineTextBox> inline_text_box_;
+  scoped_refptr<AbstractInlineTextBox> inline_text_box_;
 
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
 };

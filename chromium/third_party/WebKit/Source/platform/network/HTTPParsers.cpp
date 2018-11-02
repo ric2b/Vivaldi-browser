@@ -32,13 +32,14 @@
 
 #include "platform/network/HTTPParsers.h"
 
+#include <memory>
 #include "net/http/http_content_disposition.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "platform/HTTPNames.h"
 #include "platform/json/JSONParser.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/network/HeaderFieldTokenizer.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/Suborigin.h"
 #include "platform/wtf/DateMath.h"
 #include "platform/wtf/MathExtras.h"
@@ -484,8 +485,13 @@ ReflectedXSSDisposition ParseXSSProtectionHeader(const String& header,
 }
 
 ContentTypeOptionsDisposition ParseContentTypeOptionsHeader(
-    const String& header) {
-  if (header.StripWhiteSpace().DeprecatedLower() == "nosniff")
+    const String& value) {
+  if (value.IsEmpty())
+    return kContentTypeOptionsNone;
+
+  Vector<String> results;
+  value.Split(",", results);
+  if (results[0].StripWhiteSpace().LowerASCII() == "nosniff")
     return kContentTypeOptionsNosniff;
   return kContentTypeOptionsNone;
 }
@@ -828,7 +834,7 @@ bool ParseContentRangeHeaderFor206(const String& content_range,
 std::unique_ptr<ServerTimingHeaderVector> ParseServerTimingHeader(
     const String& headerValue) {
   std::unique_ptr<ServerTimingHeaderVector> headers =
-      WTF::MakeUnique<ServerTimingHeaderVector>();
+      std::make_unique<ServerTimingHeaderVector>();
 
   if (!headerValue.IsNull()) {
     DCHECK(headerValue.Is8Bit());
@@ -840,20 +846,25 @@ std::unique_ptr<ServerTimingHeaderVector> ParseServerTimingHeader(
         break;
       }
 
-      double value = 0.0;
-      String description = "";
-      if (tokenizer.Consume('=')) {
-        StringView valueOutput;
-        if (tokenizer.ConsumeToken(Mode::kNormal, valueOutput)) {
-          value = valueOutput.ToString().ToDouble();
+      ServerTimingHeader header(name.ToString());
+
+      while (tokenizer.Consume(';')) {
+        StringView parameter_name;
+        if (!tokenizer.ConsumeToken(Mode::kNormal, parameter_name)) {
+          break;
+        }
+
+        if (tokenizer.Consume('=')) {
+          String value;
+          if (!tokenizer.ConsumeTokenOrQuotedString(Mode::kNormal, value)) {
+            break;
+          }
+
+          header.SetParameter(parameter_name, value);
         }
       }
-      if (tokenizer.Consume(';')) {
-        tokenizer.ConsumeTokenOrQuotedString(Mode::kNormal, description);
-      }
 
-      headers->push_back(WTF::MakeUnique<ServerTimingHeader>(
-          name.ToString(), value, description));
+      headers->push_back(std::make_unique<ServerTimingHeader>(header));
 
       if (!tokenizer.Consume(',')) {
         break;

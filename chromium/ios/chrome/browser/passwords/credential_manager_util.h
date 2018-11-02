@@ -12,8 +12,6 @@ namespace web {
 class WebState;
 }
 
-namespace credential_manager {
-
 // Keys for obtaining common Credential's fields from DictionaryValue
 // representing the Credential. Keys below correspond to JavaScript
 // Credential object fields as follows:
@@ -61,9 +59,6 @@ extern const char kMediationRequirementOptional[];
 extern const char kCredentialTypePassword[];
 extern const char kCredentialTypeFederated[];
 
-// TODO(crbug.com/435048): For ParseCredentialDictionary method, add ability to
-// pass an error message back to the caller.
-
 // Returns value of Parse* methods below is false if |json| is invalid, which
 // means it is missing required fields, contains fields of wrong type or
 // unexpected values. Otherwise return value is true.
@@ -82,14 +77,14 @@ bool ParseFederations(const base::DictionaryValue& json,
 bool ParseCredentialType(const base::DictionaryValue& json,
                          password_manager::CredentialType* credential_type);
 // Parses dictionary representing JavaScript Credential object into
-// CredentialInfo.
+// CredentialInfo. If parsing fails, reason message is stored in |reason|.
+// |reason| can be null, then it is ignored.
 bool ParseCredentialDictionary(const base::DictionaryValue& json,
-                               password_manager::CredentialInfo* credential);
+                               password_manager::CredentialInfo* credential,
+                               std::string* reason);
 
 // Checks if |web_state|'s content is a secure HTML. This is done in order to
 // ignore API calls from insecure context.
 bool WebStateContentIsSecureHtml(const web::WebState* web_state);
-
-}  // namespace credential_manager
 
 #endif  // IOS_CHROME_BROWSER_PASSWORDS_CREDENTIAL_MANAGER_UTIL_H_

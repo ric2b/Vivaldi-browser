@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -24,12 +25,17 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/url_pattern_set.h"
 #include "services/preferences/public/cpp/dictionary_value_update.h"
 #include "services/preferences/public/cpp/scoped_pref_update.h"
 
 class ExtensionPrefValueMap;
 class PrefService;
+
+namespace base {
+class Clock;
+}
 
 namespace content {
 class BrowserContext;
@@ -80,21 +86,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
     DELAY_REASON_WAIT_FOR_IDLE = 2,
     DELAY_REASON_WAIT_FOR_IMPORTS = 3,
     DELAY_REASON_WAIT_FOR_OS_UPDATE = 4,
-  };
-
-  // Creates base::Time classes. The default implementation is just to return
-  // the current time, but tests can inject alternative implementations.
-  class TimeProvider {
-   public:
-    TimeProvider();
-
-    virtual ~TimeProvider();
-
-    // By default, returns the current time (base::Time::Now()).
-    virtual base::Time GetCurrentTime() const;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(TimeProvider);
   };
 
   // Wrappers around a prefs::ScopedDictionaryPrefUpdate, which allow us to
@@ -169,7 +160,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
       ExtensionPrefValueMap* extension_pref_value_map,
       bool extensions_disabled,
       const std::vector<ExtensionPrefsObserver*>& early_observers,
-      std::unique_ptr<TimeProvider> time_provider);
+      std::unique_ptr<base::Clock> clock);
 
   ~ExtensionPrefs() override;
 
@@ -202,21 +193,21 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Called when an extension is installed, so that prefs get created.
   // If |page_ordinal| is invalid then a page will be found for the App.
   // |install_flags| are a bitmask of extension::InstallFlags.
+  // |dnr_ruleset_checksum| is the checksum for the indexed ruleset
+  // corresponding to the Declarative Net Request API.
   void OnExtensionInstalled(const Extension* extension,
                             Extension::State initial_state,
                             const syncer::StringOrdinal& page_ordinal,
                             int install_flags,
-                            const std::string& install_parameter);
-  // OnExtensionInstalled with no install flags.
+                            const std::string& install_parameter,
+                            const base::Optional<int>& dnr_ruleset_checksum);
+  // OnExtensionInstalled with no install flags and |dnr_ruleset_checksum|.
   void OnExtensionInstalled(const Extension* extension,
                             Extension::State initial_state,
                             const syncer::StringOrdinal& page_ordinal,
                             const std::string& install_parameter) {
-    OnExtensionInstalled(extension,
-                         initial_state,
-                         page_ordinal,
-                         kInstallFlagNone,
-                         install_parameter);
+    OnExtensionInstalled(extension, initial_state, page_ordinal,
+                         kInstallFlagNone, install_parameter, base::nullopt);
   }
 
   // Called when an extension is uninstalled, so that prefs get cleaned up.
@@ -447,12 +438,14 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // to install it.
   //
   // |install_flags| are a bitmask of extension::InstallFlags.
-  void SetDelayedInstallInfo(const Extension* extension,
-                             Extension::State initial_state,
-                             int install_flags,
-                             DelayReason delay_reason,
-                             const syncer::StringOrdinal& page_ordinal,
-                             const std::string& install_parameter);
+  void SetDelayedInstallInfo(
+      const Extension* extension,
+      Extension::State initial_state,
+      int install_flags,
+      DelayReason delay_reason,
+      const syncer::StringOrdinal& page_ordinal,
+      const std::string& install_parameter,
+      const base::Optional<int>& dnr_ruleset_checksum = base::nullopt);
 
   // Removes any delayed install information we have for the given
   // |extension_id|. Returns true if there was info to remove; false otherwise.
@@ -564,6 +557,16 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   bool NeedsSync(const std::string& extension_id) const;
   void SetNeedsSync(const std::string& extension_id, bool needs_sync);
 
+  // Returns false if there is no ruleset checksum corresponding to
+  // |extension_id|. On success, returns true and populates
+  // |dnr_ruleset_checksum|.
+  bool GetDNRRulesetChecksum(const ExtensionId& extension_id,
+                             int* dnr_ruleset_checksum) const;
+
+  // When called before the ExtensionService is created, alerts that are
+  // normally suppressed in first run will still trigger.
+  static void SetRunAlertsInFirstRunForTest();
+
   // Add extension to the |extension_pref_value_map_|.
   // This was added because of Vivaldi being added via |ComponentLoader|.
   void RegisterAndLoadExtPrefsForVivaldi();
@@ -585,7 +588,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
                  PrefService* prefs,
                  const base::FilePath& root_dir,
                  ExtensionPrefValueMap* extension_pref_value_map,
-                 std::unique_ptr<TimeProvider> time_provider,
+                 std::unique_ptr<base::Clock> clock,
                  bool extensions_disabled,
                  const std::vector<ExtensionPrefsObserver*>& early_observers);
 
@@ -686,6 +689,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
       Extension::State initial_state,
       int install_flags,
       const std::string& install_parameter,
+      const base::Optional<int>& dnr_ruleset_checksum,
       prefs::DictionaryValueUpdate* extension_dict) const;
 
   void InitExtensionControlledPrefs(ExtensionPrefValueMap* value_map);
@@ -712,7 +716,7 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Weak pointer, owned by BrowserContext.
   ExtensionPrefValueMap* extension_pref_value_map_;
 
-  std::unique_ptr<TimeProvider> time_provider_;
+  std::unique_ptr<base::Clock> clock_;
 
   bool extensions_disabled_;
 

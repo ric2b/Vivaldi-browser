@@ -10,13 +10,13 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "ui/views/controls/animated_icon_view.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/view.h"
-#include "ui/views/widget/widget_observer.h"
 
 class AppMenu;
 class AppMenuModel;
@@ -31,9 +31,7 @@ class ToolbarView;
 // The app menu button lives in the top right of the main browser window. It
 // shows three dots and animates to a hamburger-ish icon when there's a need to
 // alert the user. Clicking displays the app menu.
-class AppMenuButton : public views::MenuButton,
-                      public TabStripModelObserver,
-                      public views::WidgetObserver {
+class AppMenuButton : public views::MenuButton, public TabStripModelObserver {
  public:
   explicit AppMenuButton(ToolbarView* toolbar_view);
   ~AppMenuButton() override;
@@ -41,6 +39,8 @@ class AppMenuButton : public views::MenuButton,
   void SetSeverity(AppMenuIconController::IconType type,
                    AppMenuIconController::Severity severity,
                    bool animate);
+
+  AppMenuIconController::Severity severity() { return severity_; }
 
   // Shows the app menu. |for_drop| indicates whether the menu is opened for a
   // drag-and-drop operation.
@@ -50,6 +50,10 @@ class AppMenuButton : public views::MenuButton,
   void CloseMenu();
 
   AppMenu* app_menu_for_testing() { return menu_.get(); }
+
+  // Sets the background to a prominent color if |is_prominent| is true. This is
+  // used for an experimental UI for In-Product Help.
+  void SetIsProminent(bool is_prominent);
 
   // Whether the app/hotdogs menu is currently showing.
   bool IsMenuShowing() const;
@@ -79,19 +83,17 @@ class AppMenuButton : public views::MenuButton,
   // to make the focus rectangle centered.
   void SetTrailingMargin(int margin);
 
-  // Animates the icon if possible. The icon will not animate if the severity
-  // level is none, |animation_| is nullptr or |should_use_new_icon_| is false.
-  void AnimateIconIfPossible();
-
-  // Shows the IncognitoWindowPromo when the
-  // IncognitoWindowFeatureEngagementTracker calls for it.
-  void ShowPromo();
-
   // Opens the app menu immediately during a drag-and-drop operation.
   // Used only in testing.
   static bool g_open_app_immediately_for_testing;
 
  private:
+  // Animates the icon if possible. The icon will not animate if the severity
+  // level is none, |animation_| is nullptr or |should_use_new_icon_| is false.
+  // If |should_delay_animation_| and |with_delay| is true, then delay the
+  // animation.
+  void AnimateIconIfPossible(bool with_delay);
+
   // views::MenuButton:
   const char* GetClassName() const override;
   std::unique_ptr<views::LabelButtonBorder> CreateDefaultBorder()
@@ -106,9 +108,6 @@ class AppMenuButton : public views::MenuButton,
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   void OnDragExited() override;
   int OnPerformDrop(const ui::DropTargetEvent& event) override;
-
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override;
 
   AppMenuIconController::Severity severity_ =
       AppMenuIconController::Severity::NONE;
@@ -131,17 +130,19 @@ class AppMenuButton : public views::MenuButton,
   // removed.
   views::AnimatedIconView* new_icon_ = nullptr;
 
+  // Used to delay the animation. Not used if |should_delay_animation_| is
+  // false.
+  base::Timer animation_delay_timer_;
+
   // True if the app menu should use the new animated icon.
   bool should_use_new_icon_ = false;
+
+  // True if the kAnimatedAppMenuIcon feature's "HasDelay" param is true.
+  bool should_delay_animation_ = false;
 
   // Any trailing margin to be applied. Used when the browser is in
   // a maximized state to extend to the full window width.
   int margin_trailing_ = 0;
-
-  // Observes the IncognitoWindowPromo's Widget.  Used to tell whether the promo
-  // is open and get called back when it closes.
-  ScopedObserver<views::Widget, WidgetObserver>
-      incognito_window_promo_observer_{this};
 
   // Used to spawn weak pointers for delayed tasks to open the overflow menu.
   base::WeakPtrFactory<AppMenuButton> weak_factory_{this};

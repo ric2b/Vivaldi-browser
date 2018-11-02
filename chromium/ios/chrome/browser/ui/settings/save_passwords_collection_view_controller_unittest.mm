@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
@@ -19,6 +18,7 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
 #import "ios/chrome/browser/ui/settings/password_details_collection_view_controller.h"
+#import "ios/testing/wait_util.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,8 +34,7 @@ namespace {
 class SavePasswordsCollectionViewControllerTest
     : public CollectionViewControllerTest {
  protected:
-  SavePasswordsCollectionViewControllerTest()
-      : thread_bundle_(web::TestWebThreadBundle::REAL_DB_THREAD) {}
+  SavePasswordsCollectionViewControllerTest() = default;
 
   void SetUp() override {
     TestChromeBrowserState::Builder test_cbs_builder;
@@ -70,7 +69,7 @@ class SavePasswordsCollectionViewControllerTest
   }
 
   // Creates and adds a saved password form.
-  void AddSavedForm() {
+  void AddSavedForm1() {
     auto form = base::MakeUnique<autofill::PasswordForm>();
     form->origin = GURL("http://www.example.com/accounts/LoginAuth");
     form->action = GURL("http://www.example.com/accounts/Login");
@@ -80,6 +79,23 @@ class SavePasswordsCollectionViewControllerTest
     form->password_value = base::ASCIIToUTF16("test");
     form->submit_element = base::ASCIIToUTF16("signIn");
     form->signon_realm = "http://www.example.com/";
+    form->preferred = false;
+    form->scheme = autofill::PasswordForm::SCHEME_HTML;
+    form->blacklisted_by_user = false;
+    AddPasswordForm(std::move(form));
+  }
+
+  // Creates and adds a saved password form.
+  void AddSavedForm2() {
+    auto form = base::MakeUnique<autofill::PasswordForm>();
+    form->origin = GURL("http://www.example2.com/accounts/LoginAuth");
+    form->action = GURL("http://www.example2.com/accounts/Login");
+    form->username_element = base::ASCIIToUTF16("Email");
+    form->username_value = base::ASCIIToUTF16("test@egmail.com");
+    form->password_element = base::ASCIIToUTF16("Passwd");
+    form->password_value = base::ASCIIToUTF16("test");
+    form->submit_element = base::ASCIIToUTF16("signIn");
+    form->signon_realm = "http://www.example2.com/";
     form->preferred = false;
     form->scheme = autofill::PasswordForm::SCHEME_HTML;
     form->blacklisted_by_user = false;
@@ -134,7 +150,7 @@ TEST_F(SavePasswordsCollectionViewControllerTest, TestInitialization) {
 
 // Tests adding one item in saved password section.
 TEST_F(SavePasswordsCollectionViewControllerTest, AddSavedPasswords) {
-  AddSavedForm();
+  AddSavedForm1();
   EXPECT_EQ(3, NumberOfSections());
   EXPECT_EQ(1, NumberOfItemsInSection(2));
 }
@@ -149,7 +165,7 @@ TEST_F(SavePasswordsCollectionViewControllerTest, AddBlacklistedPasswords) {
 // Tests adding one item in saved password section, and two items in blacklisted
 // password section.
 TEST_F(SavePasswordsCollectionViewControllerTest, AddSavedAndBlacklisted) {
-  AddSavedForm();
+  AddSavedForm1();
   AddBlacklistedForm1();
   AddBlacklistedForm2();
 
@@ -161,9 +177,48 @@ TEST_F(SavePasswordsCollectionViewControllerTest, AddSavedAndBlacklisted) {
   EXPECT_EQ(2, NumberOfItemsInSection(3));
 }
 
+// Tests the order in which the saved passwords are displayed.
+TEST_F(SavePasswordsCollectionViewControllerTest, TestSavedPasswordsOrder) {
+  AddSavedForm2();
+  CheckTextCellTitleAndSubtitle(@"example2.com", @"test@egmail.com", 2, 0);
+
+  AddSavedForm1();
+  CheckTextCellTitleAndSubtitle(@"example.com", @"test@egmail.com", 2, 0);
+  CheckTextCellTitleAndSubtitle(@"example2.com", @"test@egmail.com", 2, 1);
+}
+
+// Tests the order in which the blacklisted passwords are displayed.
+TEST_F(SavePasswordsCollectionViewControllerTest,
+       TestBlacklistedPasswordsOrder) {
+  AddBlacklistedForm2();
+  CheckTextCellTitle(@"secret2.com", 2, 0);
+
+  AddBlacklistedForm1();
+  CheckTextCellTitle(@"secret.com", 2, 0);
+  CheckTextCellTitle(@"secret2.com", 2, 1);
+}
+
+// Tests displaying passwords in the saved passwords section when there are
+// duplicates in the password store.
+TEST_F(SavePasswordsCollectionViewControllerTest, AddSavedDuplicates) {
+  AddSavedForm1();
+  AddSavedForm1();
+  EXPECT_EQ(3, NumberOfSections());
+  EXPECT_EQ(1, NumberOfItemsInSection(2));
+}
+
+// Tests displaying passwords in the blacklisted passwords section when there
+// are duplicates in the password store.
+TEST_F(SavePasswordsCollectionViewControllerTest, AddBlacklistedDuplicates) {
+  AddBlacklistedForm1();
+  AddBlacklistedForm1();
+  EXPECT_EQ(3, NumberOfSections());
+  EXPECT_EQ(1, NumberOfItemsInSection(2));
+}
+
 // Tests deleting items from saved passwords and blacklisted passwords sections.
 TEST_F(SavePasswordsCollectionViewControllerTest, DeleteItems) {
-  AddSavedForm();
+  AddSavedForm1();
   AddBlacklistedForm1();
   AddBlacklistedForm2();
 
@@ -172,9 +227,45 @@ TEST_F(SavePasswordsCollectionViewControllerTest, DeleteItems) {
     this->DeleteItem(i, j, ^{
       completionCalled = YES;
     });
-    base::test::ios::WaitUntilCondition(^bool() {
-      return completionCalled;
+    EXPECT_TRUE(testing::WaitUntilConditionOrTimeout(
+        testing::kWaitForUIElementTimeout, ^bool() {
+          return completionCalled;
+        }));
+  };
+
+  // Delete item in save passwords section.
+  deleteItemWithWait(2, 0);
+  EXPECT_EQ(3, NumberOfSections());
+  // Section 2 should now be the blacklisted passwords section, and should still
+  // have both its items.
+  EXPECT_EQ(2, NumberOfItemsInSection(2));
+
+  // Delete item in blacklisted passwords section.
+  deleteItemWithWait(2, 0);
+  EXPECT_EQ(1, NumberOfItemsInSection(2));
+  deleteItemWithWait(2, 0);
+  // There should be no password sections remaining.
+  EXPECT_EQ(2, NumberOfSections());
+}
+
+// Tests deleting items from saved passwords and blacklisted passwords sections
+// when there are duplicates in the store.
+TEST_F(SavePasswordsCollectionViewControllerTest, DeleteItemsWithDuplicates) {
+  AddSavedForm1();
+  AddSavedForm1();
+  AddBlacklistedForm1();
+  AddBlacklistedForm1();
+  AddBlacklistedForm2();
+
+  void (^deleteItemWithWait)(int, int) = ^(int i, int j) {
+    __block BOOL completionCalled = NO;
+    this->DeleteItem(i, j, ^{
+      completionCalled = YES;
     });
+    EXPECT_TRUE(testing::WaitUntilConditionOrTimeout(
+        testing::kWaitForUIElementTimeout, ^bool() {
+          return completionCalled;
+        }));
   };
 
   // Delete item in save passwords section.
@@ -202,8 +293,13 @@ TEST_F(SavePasswordsCollectionViewControllerTest, PropagateDeletionToStore) {
   form.username_value = base::ASCIIToUTF16("test@egmail.com");
   form.password_element = base::ASCIIToUTF16("Passwd");
   form.password_value = base::ASCIIToUTF16("test");
+  form.submit_element = base::ASCIIToUTF16("signIn");
   form.signon_realm = "http://www.example.com/";
   form.scheme = autofill::PasswordForm::SCHEME_HTML;
+  form.blacklisted_by_user = false;
+
+  AddPasswordForm(std::make_unique<autofill::PasswordForm>(form));
+
   EXPECT_CALL(GetMockStore(), RemoveLogin(form));
   [save_password_controller deletePassword:form];
 }

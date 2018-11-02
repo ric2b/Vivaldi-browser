@@ -5,10 +5,11 @@
 #include "net/base/network_activity_monitor.h"
 
 #include <stdint.h>
+
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -96,7 +97,7 @@ void IncrementBytesSent(uint64_t bytes) {
 TEST_F(NetworkActivityMontiorTest, Threading) {
   std::vector<std::unique_ptr<base::Thread>> threads;
   for (size_t i = 0; i < 3; ++i) {
-    threads.push_back(std::make_unique<base::Thread>(base::SizeTToString(i)));
+    threads.push_back(std::make_unique<base::Thread>(base::NumberToString(i)));
     ASSERT_TRUE(threads.back()->Start());
   }
 

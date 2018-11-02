@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -47,6 +48,7 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/dpi.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/views/drag_utils.h"
@@ -132,6 +134,13 @@ std::string TabsPrivateAPI::ShortcutText(
     base::snprintf(buf, 4, "F%d", event.windows_key_code - ui::VKEY_F1 + 1);
     shortcutText += buf;
 
+  } else if (event.windows_key_code >= ui::VKEY_NUMPAD0 &&
+             event.windows_key_code <= ui::VKEY_NUMPAD9) {
+    char buf[8];
+    base::snprintf(buf, 8, "Numpad%d",
+                   event.windows_key_code - ui::VKEY_NUMPAD0);
+    shortcutText += buf;
+
   // Enter is somehow not covered anywhere else.
   } else if (event.windows_key_code == ui::VKEY_RETURN) {
     shortcutText += "Enter";
@@ -140,7 +149,22 @@ std::string TabsPrivateAPI::ShortcutText(
   } else if (event.windows_key_code == ui::VKEY_BACK) {
     shortcutText += "Backspace";
   } else {
+#if defined(OS_MACOSX)
+  // This is equivalent to js event.code and deals with a few
+  // MacOS keyboard shortcuts like cmd+alt+n that fall through
+  // in some languages, i.e. AcceleratorToString returns a blank.
+  // Cmd+Alt shortcuts seem to be the only case where this fallback
+  // is required.
+  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kAltKey &&
+      event.GetModifiers() & content::NativeWebKeyboardEvent::kMetaKey) {
+    shortcutText += ui::DomCodeToUsLayoutCharacter(
+        static_cast<ui::DomCode>(event.dom_code), 0);
+  } else {
     shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
+  }
+#else
+    shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
+#endif // OS_MACOSX
   }
   return shortcutText;
 }
@@ -148,14 +172,23 @@ std::string TabsPrivateAPI::ShortcutText(
 void TabsPrivateAPI::SendKeyboardShortcutEvent(
     const content::NativeWebKeyboardEvent& event) {
   int key_code = event.windows_key_code;
+  std::string shortcut_text = ShortcutText(event);
+
+  // If the event wasn't prevented we'll get a rawKeyDown event. In some
+  // exceptional cases we'll never get that, so we let these through
+  // unconditionally
+  std::vector<std::string> exceptions = {"Up", "Down", "Shift+Delete",
+                                         "Meta+Shift+V", "Esc"};
+  int exception_found = std::find(exceptions.begin(), exceptions.end(),
+                                  shortcut_text) != exceptions.end();
 
   // Don't send if event contains only modifiers.
   if (key_code != ui::VKEY_CONTROL && key_code != ui::VKEY_SHIFT &&
       key_code != ui::VKEY_MENU) {
-    if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
-
+    if (event.GetType() == blink::WebInputEvent::kRawKeyDown ||
+        exception_found) {
       std::unique_ptr<base::ListValue> args =
-          vivaldi::tabs_private::OnKeyboardShortcut::Create(ShortcutText(event));
+          vivaldi::tabs_private::OnKeyboardShortcut::Create(shortcut_text);
 
       event_router_->DispatchEvent(
           extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -477,7 +510,7 @@ void VivaldiPrivateTabObserver::CaptureTab(
     bool full_page,
     const CaptureTabDoneCallback& callback) {
   VivaldiViewMsg_RequestThumbnailForFrame_Params param;
-  gfx::Rect rect = web_contents()->GetViewBounds();
+  gfx::Rect rect = web_contents()->GetContainerBounds();
 
   param.callback_id = SessionTabHelper::IdForTab(web_contents());
   if (full_page) {

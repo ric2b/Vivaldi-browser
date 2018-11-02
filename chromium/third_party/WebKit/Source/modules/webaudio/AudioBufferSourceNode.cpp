@@ -62,8 +62,8 @@ AudioBufferSourceHandler::AudioBufferSourceHandler(
                                   node,
                                   sample_rate),
       buffer_(nullptr),
-      playback_rate_(playback_rate),
-      detune_(detune),
+      playback_rate_(&playback_rate),
+      detune_(&detune),
       is_looping_(false),
       did_set_looping_(false),
       loop_start_(0),
@@ -81,12 +81,12 @@ AudioBufferSourceHandler::AudioBufferSourceHandler(
   Initialize();
 }
 
-PassRefPtr<AudioBufferSourceHandler> AudioBufferSourceHandler::Create(
+scoped_refptr<AudioBufferSourceHandler> AudioBufferSourceHandler::Create(
     AudioNode& node,
     float sample_rate,
     AudioParamHandler& playback_rate,
     AudioParamHandler& detune) {
-  return AdoptRef(
+  return base::AdoptRef(
       new AudioBufferSourceHandler(node, sample_rate, playback_rate, detune));
 }
 
@@ -399,7 +399,7 @@ void AudioBufferSourceHandler::SetBuffer(AudioBuffer* buffer,
 
   // The context must be locked since changing the buffer can re-configure the
   // number of channels that are output.
-  BaseAudioContext::AutoLocker context_locker(Context());
+  BaseAudioContext::GraphAutoLocker context_locker(Context());
 
   // This synchronizes with process().
   MutexLocker process_locker(process_lock_);
@@ -655,9 +655,12 @@ AudioBufferSourceNode::AudioBufferSourceNode(BaseAudioContext& context)
     : AudioScheduledSourceNode(context),
       playback_rate_(AudioParam::Create(context,
                                         kParamTypeAudioBufferSourcePlaybackRate,
+                                        "AudioBufferSource.playbackRate",
                                         1.0)),
-      detune_(
-          AudioParam::Create(context, kParamTypeAudioBufferSourceDetune, 0.0)) {
+      detune_(AudioParam::Create(context,
+                                 kParamTypeAudioBufferSourceDetune,
+                                 "AudioBufferSource.detune",
+                                 0.0)) {
   SetHandler(AudioBufferSourceHandler::Create(*this, context.sampleRate(),
                                               playback_rate_->Handler(),
                                               detune_->Handler()));
@@ -698,7 +701,7 @@ AudioBufferSourceNode* AudioBufferSourceNode::Create(
   return node;
 }
 
-DEFINE_TRACE(AudioBufferSourceNode) {
+void AudioBufferSourceNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(playback_rate_);
   visitor->Trace(detune_);
   AudioScheduledSourceNode::Trace(visitor);

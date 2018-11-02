@@ -22,13 +22,13 @@ Test support code (TestFooDelegate, FooControllerTestApi, etc.) lives in the
 same directory as the class under test (e.g. //ash/foo rather than //ash/test).
 Test code uses namespace ash; there is no special "test" namespace.
 
-Mus+ash
+Mustash
 ----------
 Ash is transitioning to use the mus window server and gpu process, found in
 //services/ui. Ash continues to use aura, but aura is backed by mus. Code to
-support mus is found in //ash/mus. There should be relatively few differences
-between the pure aura and the aura-mus versions of ash. Ash can by run in mus
-mode by passing the --mus command line flag.
+support mus is found in the ash directory. There should be relatively few
+differences between the pure aura and the aura-mus versions of ash. Ash can by
+run in mus mode by passing the --mus command line flag.
 
 Ash is also transitioning to run as a mojo service in its own process. This
 means that code in chrome cannot call into ash directly, but must use the mojo
@@ -37,6 +37,58 @@ interfaces in //ash/public/interfaces.
 Out-of-process Ash is referred to as "mash" (mojo ash). In-process ash is
 referred to as "classic ash". Ash can run in either mode depending on the
 --mash command line flag.
+
+In the few cases where chrome code is allowed to call into ash (e.g. code that
+will only ever run in classic ash) the #include lines have "// mash-ok"
+appended. This makes it easier to use grep to determine which parts of chrome
+have not yet been adapted to mash.
+
+Mustash Tests
+-----
+ash_unittests --mus runs the test suite in mus mode. ash_unittests --mash runs
+in mash mode. Some tests will fail because the underlying code has not yet been
+ported to work with mash. We use filter files to skip these tests, because it
+makes it easier to run the entire suite without the filter to see what passes.
+
+To simulate what the bots run (e.g. to check if you broke an existing test that
+works under mash) you can run:
+
+`ash_unittests --mash --test-launcher-filter-file=testing/buildbot/filters/ash_unittests_mash.filter`
+
+Any new feature you add (and its tests) should work under mash. If your test
+cannot pass under mash due to some dependency being broken you may add the test
+to the filter file. Make sure there is a bug for the underlying issue and cite
+it in the filter file.
+
+Prefs
+-----
+Ash supports both per-user prefs and device-wide prefs. These are called
+"profile prefs" and "local state" to match the naming conventions in chrome. Ash
+also supports "signin screen" prefs, bound to a special profile that allows
+users to toggle features like spoken feedback at the login screen.
+
+Local state prefs are loaded asynchronously during startup. User prefs are
+loaded asynchronously after login, and after adding a multiprofile user. Code
+that wants to observe prefs must wait until they are loaded. See
+ShellObserver::OnLocalStatePrefServiceInitialized() and
+SessionObserver::OnActiveUserPrefServiceChanged(). All PrefService objects exist
+for the lifetime of the login session, including the signin prefs.
+
+Pref names are in //ash/public/cpp so that code in chrome can also use the
+names. Prefs are registered in the classes that use them because those classes
+have the best knowledge of default values.
+
+All PrefService instances in ash are backed by the mojo preferences service.
+This means an update to a pref is asynchronous between code in ash and code in
+chrome. For example, if code in chrome changes a pref value then immediately
+calls a C++ function in ash, that ash function may not see the new value yet.
+(This pattern only happens in the classic ash configuration; code in chrome
+cannot call directly into the ash process in the mash config.)
+
+Prefs are either "owned" by ash or by chrome browser. New prefs used by ash
+should be owned by ash. See NightLightController and LogoutButtonTray for
+examples of ash-owned prefs. See //services/preferences/README.md for details of
+pref ownership and "foreign" prefs.
 
 Historical notes
 ----------------

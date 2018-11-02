@@ -7,18 +7,24 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol SigninPresenter;
+@class SigninPromoViewConfigurator;
+@class SigninPromoViewMediator;
+
 namespace ios {
 class ChromeBrowserState;
 }  // namespace ios
-
-namespace user_prefs {
-class PrefRegistrySyncable;
-}  // namespace user_prefs
 
 @protocol BookmarkPromoControllerDelegate
 
 // Controls the state of the promo.
 - (void)promoStateChanged:(BOOL)promoEnabled;
+
+// Configures the sign-in promo view using |configurator|, and reloads the view
+// needed.
+- (void)configureSigninPromoWithConfigurator:
+            (SigninPromoViewConfigurator*)configurator
+                             identityChanged:(BOOL)identityChanged;
 
 @end
 
@@ -30,23 +36,20 @@ class PrefRegistrySyncable;
 
 // Holds the current state of the promo. When the promo state change, it will
 // call the promoStateChanged: selector on the delegate.
-@property(nonatomic, assign) BOOL promoState;
+@property(nonatomic) BOOL shouldShowSigninPromo;
 
-// Registers the feature preferences.
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
+@property(nonatomic, readonly) SigninPromoViewMediator* signinPromoViewMediator;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             delegate:
-                                (id<BookmarkPromoControllerDelegate>)delegate;
-
-// Presents the sign-in UI.
-- (void)showSignIn;
+                                (id<BookmarkPromoControllerDelegate>)delegate
+                           presenter:(id<SigninPresenter>)presenter;
 
 // Hides the promo cell. It won't be presented again on this profile.
 - (void)hidePromoCell;
 
-// Updates the promo state based on the sign-in state of the user.
-- (void)updatePromoState;
+// Updates |shouldShowSigninPromo| based on the sign-in state of the user.
+- (void)updateShouldShowSigninPromo;
 
 @end
 

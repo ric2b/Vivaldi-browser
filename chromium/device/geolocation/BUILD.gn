@@ -13,28 +13,22 @@ component("geolocation") {
   defines = [ "DEVICE_GEOLOCATION_IMPLEMENTATION" ]
 
   sources = [
-    "access_token_store.h",
     "empty_wifi_data_provider.cc",
     "empty_wifi_data_provider.h",
     "geolocation_config.cc",
     "geolocation_config.h",
     "geolocation_context.cc",
     "geolocation_context.h",
-    "geolocation_delegate.cc",
-    "geolocation_delegate.h",
     "geolocation_export.h",
     "geolocation_impl.cc",
     "geolocation_impl.h",
     "geolocation_provider.h",
     "geolocation_provider_impl.cc",
     "geolocation_provider_impl.h",
-    "geoposition.cc",
-    "geoposition.h",
     "location_api_adapter_android.cc",
     "location_api_adapter_android.h",
     "location_arbitrator.cc",
     "location_arbitrator.h",
-    "location_provider.h",
     "location_provider_android.cc",
     "location_provider_android.h",
     "network_location_provider.cc",
@@ -64,21 +58,19 @@ component("geolocation") {
 
   deps = [
     "//base",
-    "//google_apis:google_apis",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
     "//net",
     "//ui/gfx",
   ]
   public_deps = [
+    "//device/geolocation/public/cpp",
     "//device/geolocation/public/interfaces",
   ]
   if (is_android) {
     sources -= [
       "network_location_provider.cc",
       "network_location_provider.h",
-      "network_location_request.cc",
-      "network_location_request.h",
     ]
     deps += [ ":geolocation_jni_headers" ]
   }
@@ -156,17 +148,14 @@ source_set("test_support") {
   testonly = true
 
   sources = [
-    "fake_access_token_store.cc",
-    "fake_access_token_store.h",
     "fake_location_provider.cc",
     "fake_location_provider.h",
-    "mock_location_provider.cc",
-    "mock_location_provider.h",
   ]
   public_deps = [
     ":geolocation",
   ]
   deps = [
+    "//device/geolocation/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -191,6 +180,8 @@ source_set("unittests") {
     ":test_support",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//device/geolocation/public/cpp",
+    "//device/geolocation/public/interfaces",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",

@@ -14,8 +14,8 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/payments/content/payment_request_spec.h"
+#include "components/payments/content/test_content_payment_request_delegate.h"
 #include "components/payments/core/journey_logger.h"
-#include "components/payments/core/test_payment_request_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
@@ -41,6 +41,7 @@ class PaymentRequestStateTest : public testing::Test,
   ~PaymentRequestStateTest() override {}
 
   // PaymentRequestState::Observer:
+  void OnGetAllPaymentInstrumentsFinished() override {}
   void OnSelectedInformationChanged() override {
     num_on_selected_information_changed_called_++;
   }
@@ -59,12 +60,14 @@ class PaymentRequestStateTest : public testing::Test,
       mojom::PaymentDetailsPtr details,
       std::vector<mojom::PaymentMethodDataPtr> method_data) {
     // The spec will be based on the |options| and |details| passed in.
-    spec_ = base::MakeUnique<PaymentRequestSpec>(
+    spec_ = std::make_unique<PaymentRequestSpec>(
         std::move(options), std::move(details), std::move(method_data),
         /*observer=*/nullptr, "en-US");
-    state_ = base::MakeUnique<PaymentRequestState>(
-        spec_.get(), this, "en-US", &test_personal_data_manager_,
-        &test_payment_request_delegate_, &journey_logger_);
+    state_ = std::make_unique<PaymentRequestState>(
+        nullptr /* context */, GURL("https://example.com"),
+        GURL("https://example.com/pay"), spec_.get(), this, "en-US",
+        &test_personal_data_manager_, &test_payment_request_delegate_,
+        &journey_logger_);
     state_->AddObserver(this);
   }
 
@@ -108,7 +111,7 @@ class PaymentRequestStateTest : public testing::Test,
   }
 
   autofill::AutofillProfile* test_address() { return &address_; }
-  TestPaymentRequestDelegate* test_payment_request_delegate() {
+  TestContentPaymentRequestDelegate* test_payment_request_delegate() {
     return &test_payment_request_delegate_;
   }
 
@@ -119,7 +122,7 @@ class PaymentRequestStateTest : public testing::Test,
   mojom::PaymentResponsePtr payment_response_;
   mojom::PaymentAddressPtr selected_shipping_address_;
   autofill::TestPersonalDataManager test_personal_data_manager_;
-  TestPaymentRequestDelegate test_payment_request_delegate_;
+  TestContentPaymentRequestDelegate test_payment_request_delegate_;
   JourneyLogger journey_logger_;
 
   // Test data.
@@ -133,7 +136,8 @@ TEST_F(PaymentRequestStateTest, CanMakePayment) {
 
   // CanMakePayment returns true because the method data requires Visa, and the
   // user has a Visa card on file.
-  EXPECT_TRUE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_TRUE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest, CanMakePayment_CannotMakePayment) {
@@ -148,7 +152,8 @@ TEST_F(PaymentRequestStateTest, CanMakePayment_CannotMakePayment) {
 
   // CanMakePayment returns false because the method data requires MasterCard,
   // and the user doesn't have such an instrument.
-  EXPECT_FALSE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_FALSE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest, CanMakePayment_OnlyBasicCard) {
@@ -163,7 +168,8 @@ TEST_F(PaymentRequestStateTest, CanMakePayment_OnlyBasicCard) {
 
   // CanMakePayment returns true because the method data supports everything,
   // and the user has at least one instrument.
-  EXPECT_TRUE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_TRUE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest, CanMakePayment_BasicCard_SpecificAvailable) {
@@ -179,7 +185,8 @@ TEST_F(PaymentRequestStateTest, CanMakePayment_BasicCard_SpecificAvailable) {
 
   // CanMakePayment returns true because the method data supports visa, and the
   // user has a Visa instrument.
-  EXPECT_TRUE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_TRUE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest,
@@ -196,7 +203,8 @@ TEST_F(PaymentRequestStateTest,
 
   // CanMakePayment returns false because the method data supports jcb, and the
   // user has a JCB instrument, but it's invalid.
-  EXPECT_FALSE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_FALSE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest, CanMakePayment_BasicCard_SpecificUnavailable) {
@@ -212,7 +220,8 @@ TEST_F(PaymentRequestStateTest, CanMakePayment_BasicCard_SpecificUnavailable) {
 
   // CanMakePayment returns false because the method data supports mastercard,
   // and the user doesn't have such an instrument.
-  EXPECT_FALSE(state()->CanMakePayment());
+  state()->CanMakePayment(base::BindOnce(
+      [](bool can_make_payment) { EXPECT_FALSE(can_make_payment); }));
 }
 
 TEST_F(PaymentRequestStateTest, ReadyToPay_DefaultSelections) {
@@ -228,11 +237,11 @@ TEST_F(PaymentRequestStateTest, ReadyToPay_DefaultSelections) {
   EXPECT_FALSE(state()->is_ready_to_pay());
 
   state()->SetSelectedShippingProfile(test_address());
-  EXPECT_EQ(1, num_on_selected_information_changed_called());
+  EXPECT_EQ(0, num_on_selected_information_changed_called());
 
   // Simulate that the merchant has validated the shipping address change.
   spec()->UpdateWith(CreateDefaultDetails());
-  EXPECT_EQ(2, num_on_selected_information_changed_called());
+  EXPECT_EQ(1, num_on_selected_information_changed_called());
 
   // Not ready to pay since there's no selected shipping option.
   EXPECT_FALSE(state()->is_ready_to_pay());
@@ -242,7 +251,7 @@ TEST_F(PaymentRequestStateTest, ReadyToPay_DefaultSelections) {
   auto details = CreateDefaultDetails();
   details->shipping_options[0]->selected = true;
   spec()->UpdateWith(std::move(details));
-  EXPECT_EQ(3, num_on_selected_information_changed_called());
+  EXPECT_EQ(2, num_on_selected_information_changed_called());
   EXPECT_TRUE(state()->is_ready_to_pay());
 }
 
@@ -299,19 +308,19 @@ TEST_F(PaymentRequestStateTest, SelectedShippingAddressMessage_Normalized) {
   // Select an address, nothing should happen until the normalization is
   // completed and the merchant has validated the address.
   state()->SetSelectedShippingProfile(test_address());
-  EXPECT_EQ(1, num_on_selected_information_changed_called());
+  EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
   // Complete the normalization.
   test_payment_request_delegate()
       ->test_address_normalizer()
       ->CompleteAddressNormalization();
-  EXPECT_EQ(1, num_on_selected_information_changed_called());
+  EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
   // Simulate that the merchant has validated the shipping address change.
   spec()->UpdateWith(CreateDefaultDetails());
-  EXPECT_EQ(2, num_on_selected_information_changed_called());
+  EXPECT_EQ(1, num_on_selected_information_changed_called());
   // Not ready to pay because there's no selected shipping option.
   EXPECT_FALSE(state()->is_ready_to_pay());
 
@@ -353,19 +362,19 @@ TEST_F(PaymentRequestStateTest, JaLatnShippingAddress) {
   profile.set_language_code("ja-Latn");
 
   state()->SetSelectedShippingProfile(&profile);
-  EXPECT_EQ(1, num_on_selected_information_changed_called());
+  EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
   // Complete the normalization.
   test_payment_request_delegate()
       ->test_address_normalizer()
       ->CompleteAddressNormalization();
-  EXPECT_EQ(1, num_on_selected_information_changed_called());
+  EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
   // Simulate that the merchant has validated the shipping address change.
   spec()->UpdateWith(CreateDefaultDetails());
-  EXPECT_EQ(2, num_on_selected_information_changed_called());
+  EXPECT_EQ(1, num_on_selected_information_changed_called());
   // Not ready to pay because there's no selected shipping option.
   EXPECT_FALSE(state()->is_ready_to_pay());
 

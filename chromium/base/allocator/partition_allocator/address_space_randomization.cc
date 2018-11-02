@@ -6,17 +6,10 @@
 
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/spin_lock.h"
+#include "base/lazy_instance.h"
+#include "base/rand_util.h"
 #include "build/build_config.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#include "base/win/windows_version.h"
-#else
-#include <sys/time.h>
-#include <unistd.h>
-#endif
-
-// VersionHelpers.h must be included after windows.h.
 #if defined(OS_WIN)
 #include <VersionHelpers.h>
 #endif
@@ -36,6 +29,8 @@ struct ranctx {
   uint32_t d;
 };
 
+static LazyInstance<ranctx>::Leaky s_ranctx = LAZY_INSTANCE_INITIALIZER;
+
 #define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
 
 uint32_t ranvalInternal(ranctx* x) {
@@ -52,50 +47,44 @@ uint32_t ranvalInternal(ranctx* x) {
 uint32_t ranval(ranctx* x) {
   subtle::SpinLock::Guard guard(x->lock);
   if (UNLIKELY(!x->initialized)) {
-    x->initialized = true;
-    char c;
-    uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&c));
-    uint32_t pid;
-    uint32_t usec;
-#if defined(OS_WIN)
-    pid = GetCurrentProcessId();
-    SYSTEMTIME st;
-    GetSystemTime(&st);
-    usec = static_cast<uint32_t>(st.wMilliseconds * 1000);
-#else
-    pid = static_cast<uint32_t>(getpid());
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    usec = static_cast<uint32_t>(tv.tv_usec);
-#endif
-    seed ^= pid;
-    seed ^= usec;
-    x->a = 0xf1ea5eed;
-    x->b = x->c = x->d = seed;
-    for (int i = 0; i < 20; ++i) {
-      (void)ranvalInternal(x);
-    }
-  }
-  uint32_t ret = ranvalInternal(x);
-  return ret;
-}
+    const uint64_t r1 = RandUint64();
+    const uint64_t r2 = RandUint64();
 
-static struct ranctx s_ranctx;
+    x->a = static_cast<uint32_t>(r1);
+    x->b = static_cast<uint32_t>(r1 >> 32);
+    x->c = static_cast<uint32_t>(r2);
+    x->d = static_cast<uint32_t>(r2 >> 32);
+
+    x->initialized = true;
+  }
+
+  return ranvalInternal(x);
+}
 
 }  // namespace
 
-// Calculates a random preferred mapping address. In calculating an address, we
-// balance good ASLR against not fragmenting the address space too badly.
+void SetRandomPageBaseSeed(int64_t seed) {
+  ranctx* x = s_ranctx.Pointer();
+  subtle::SpinLock::Guard guard(x->lock);
+  // Set RNG to initial state.
+  x->initialized = true;
+  x->a = x->b = static_cast<uint32_t>(seed);
+  x->c = x->d = static_cast<uint32_t>(seed >> 32);
+}
+
 void* GetRandomPageBase() {
-  uintptr_t random;
-  random = static_cast<uintptr_t>(ranval(&s_ranctx));
-#if defined(ARCH_CPU_X86_64)
-  random <<= 32UL;
-  random |= static_cast<uintptr_t>(ranval(&s_ranctx));
-// This address mask gives a low likelihood of address space collisions. We
-// handle the situation gracefully if there is a collision.
-#if defined(OS_WIN)
-  random &= 0x3ffffffffffUL;
+  uintptr_t random = static_cast<uintptr_t>(ranval(s_ranctx.Pointer()));
+
+#if defined(ARCH_CPU_64_BITS)
+  random <<= 32ULL;
+  random |= static_cast<uintptr_t>(ranval(s_ranctx.Pointer()));
+
+// The kASLRMask and kASLROffset constants will be suitable for the
+// OS and build configuration.
+#if defined(MEMORY_TOOL_REPLACES_ALLOCATOR) || defined(OS_POSIX)
+  random &= internal::kASLRMask;
+  random += internal::kASLROffset;
+#else   // defined(OS_WIN)
   // Windows >= 8.1 has the full 47 bits. Use them where available.
   static bool windows_81 = false;
   static bool windows_81_initialized = false;
@@ -104,38 +93,29 @@ void* GetRandomPageBase() {
     windows_81_initialized = true;
   }
   if (!windows_81) {
-    random += 0x10000000000UL;
+    random &= internal::kASLRMaskBefore8_10;
+  } else {
+    random &= internal::kASLRMask;
   }
-#elif defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
-  // This range is copied from the TSan source, but works for all tools.
-  random &= 0x007fffffffffUL;
-  random += 0x7e8000000000UL;
-#else
-  // Linux and OS X support the full 47-bit user space of x64 processors.
-  random &= 0x3fffffffffffUL;
-#endif
-#elif defined(ARCH_CPU_ARM64)
-  // ARM64 on Linux has 39-bit user space.
-  random &= 0x3fffffffffUL;
-  random += 0x1000000000UL;
-#else  // !defined(ARCH_CPU_X86_64) && !defined(ARCH_CPU_ARM64)
+  random += internal::kASLROffset;
+#endif  // defined(OS_WIN)
+#else   // defined(ARCH_CPU_32_BITS)
 #if defined(OS_WIN)
   // On win32 host systems the randomization plus huge alignment causes
   // excessive fragmentation. Plus most of these systems lack ASLR, so the
   // randomization isn't buying anything. In that case we just skip it.
   // TODO(jschuh): Just dump the randomization when HE-ASLR is present.
-  static BOOL isWow64 = -1;
-  if (isWow64 == -1 && !IsWow64Process(GetCurrentProcess(), &isWow64))
-    isWow64 = FALSE;
-  if (!isWow64)
+  static BOOL is_wow64 = -1;
+  if (is_wow64 == -1 && !IsWow64Process(GetCurrentProcess(), &is_wow64))
+    is_wow64 = FALSE;
+  if (!is_wow64)
     return nullptr;
 #endif  // defined(OS_WIN)
-  // This is a good range on Windows, Linux and Mac.
-  // Allocates in the 0.5-1.5GB region.
-  random &= 0x3fffffff;
-  random += 0x20000000;
-#endif  // defined(ARCH_CPU_X86_64)
-  random &= kPageAllocationGranularityBaseMask;
+  random &= internal::kASLRMask;
+  random += internal::kASLROffset;
+#endif  // defined(ARCH_CPU_32_BITS)
+
+  DCHECK_EQ(0ULL, (random & kPageAllocationGranularityOffsetMask));
   return reinterpret_cast<void*>(random);
 }
 

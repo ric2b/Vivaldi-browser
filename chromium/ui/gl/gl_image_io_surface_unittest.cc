@@ -14,16 +14,13 @@
 namespace gl {
 namespace {
 
-// These values are picked so that RGB -> YUV on the CPU converted back to RGB
-// on the GPU produces the original RGB values without any error. Note that
-// some values will be off-by-one.
-const uint8_t kYuvImageColor[] = {0x30, 0x40, 0x10, 0xFF};
+const uint8_t kImageColor[] = {0x30, 0x40, 0x10, 0xFF};
 
 template <gfx::BufferFormat format>
 class GLImageIOSurfaceTestDelegate {
  public:
   scoped_refptr<GLImage> CreateImage(const gfx::Size& size) const {
-    scoped_refptr<GLImageIOSurface> image(new GLImageIOSurface(
+    scoped_refptr<GLImageIOSurface> image(GLImageIOSurface::Create(
         size, GLImageIOSurface::GetInternalFormatForTesting(format)));
     IOSurfaceRef surface_ref = gfx::CreateIOSurface(size, format);
     bool rv =
@@ -34,7 +31,7 @@ class GLImageIOSurfaceTestDelegate {
 
   scoped_refptr<GLImage> CreateSolidColorImage(const gfx::Size& size,
                                                const uint8_t color[4]) const {
-    scoped_refptr<GLImageIOSurface> image(new GLImageIOSurface(
+    scoped_refptr<GLImageIOSurface> image(GLImageIOSurface::Create(
         size, GLImageIOSurface::GetInternalFormatForTesting(format)));
     IOSurfaceRef surface_ref = gfx::CreateIOSurface(size, format);
     IOReturn status = IOSurfaceLock(surface_ref, 0, nullptr);
@@ -57,7 +54,12 @@ class GLImageIOSurfaceTestDelegate {
   }
 
   unsigned GetTextureTarget() const { return GL_TEXTURE_RECTANGLE_ARB; }
-  const uint8_t* GetImageColor() { return kYuvImageColor; }
+
+  const uint8_t* GetImageColor() { return kImageColor; }
+
+  int GetAdmissibleError() const {
+    return format == gfx::BufferFormat::YUV_420_BIPLANAR ? 1 : 0;
+  }
 };
 
 using GLImageTestTypes = testing::Types<

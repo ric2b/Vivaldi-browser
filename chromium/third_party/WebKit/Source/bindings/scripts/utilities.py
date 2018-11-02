@@ -13,14 +13,19 @@ import re
 import shlex
 import string
 import subprocess
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..',
+                             'third_party', 'blink', 'tools'))
+from blinkpy.common.name_style_converter import NameStyleConverter
 
 
 KNOWN_COMPONENTS = frozenset(['core', 'modules'])
 KNOWN_COMPONENTS_WITH_TESTING = frozenset(['core', 'modules', 'testing'])
 
 
-def idl_filename_to_interface_name(idl_filename):
-    # interface name is the root of the basename: InterfaceName.idl
+def idl_filename_to_basename(idl_filename):
+    """Returns the basename without the extension."""
     return os.path.splitext(os.path.basename(idl_filename))[0]
 
 
@@ -123,7 +128,7 @@ class ComponentInfoProviderCore(ComponentInfoProvider):
         return self._component_info['union_types']
 
     def include_path_for_union_types(self, union_type):
-        name = shorten_union_name(union_type)
+        name = to_snake_case(shorten_union_name(union_type))
         return 'bindings/core/v8/%s.h' % name
 
     @property
@@ -178,8 +183,8 @@ class ComponentInfoProviderModules(ComponentInfoProvider):
                                  in self._component_info_core['union_types']]
         name = shorten_union_name(union_type)
         if union_type.name in core_union_type_names:
-            return 'bindings/core/v8/%s.h' % name
-        return 'bindings/modules/v8/%s.h' % name
+            return 'bindings/core/v8/%s.h' % to_snake_case(name)
+        return 'bindings/modules/v8/%s.h' % to_snake_case(name)
 
     @property
     def callback_functions(self):
@@ -360,7 +365,7 @@ def should_generate_impl_file_from_idl(file_contents):
     return bool(match)
 
 
-def match_interface_extended_attributes_from_idl(file_contents):
+def match_interface_extended_attributes_and_name_from_idl(file_contents):
     # Strip comments
     # re.compile needed b/c Python 2.6 doesn't support flags in re.sub
     single_line_comment_re = re.compile(r'//.*$', flags=re.MULTILINE)
@@ -369,17 +374,17 @@ def match_interface_extended_attributes_from_idl(file_contents):
     file_contents = re.sub(block_comment_re, '', file_contents)
 
     match = re.search(
-        r'\[([^[]*)\]\s*'
-        r'(interface|callback\s+interface|partial\s+interface)\s+'
-        r'\w+\s*'
+        r'(?:\[([^[]*)\]\s*)?'
+        r'(interface|callback\s+interface|partial\s+interface|dictionary)\s+'
+        r'(\w+)\s*'
         r'(:\s*\w+\s*)?'
         r'{',
         file_contents, flags=re.DOTALL)
     return match
 
 def get_interface_extended_attributes_from_idl(file_contents):
-    match = match_interface_extended_attributes_from_idl(file_contents)
-    if not match:
+    match = match_interface_extended_attributes_and_name_from_idl(file_contents)
+    if not match or not match.group(1):
         return {}
 
     extended_attributes_string = match.group(1)
@@ -397,8 +402,8 @@ def get_interface_extended_attributes_from_idl(file_contents):
 
 
 def get_interface_exposed_arguments(file_contents):
-    match = match_interface_extended_attributes_from_idl(file_contents)
-    if not match:
+    match = match_interface_extended_attributes_and_name_from_idl(file_contents)
+    if not match or not match.group(1):
         return None
 
     extended_attributes_string = match.group(1)
@@ -411,6 +416,13 @@ def get_interface_exposed_arguments(file_contents):
         arguments.append({'exposed': exposed, 'runtime_enabled': runtime_enabled})
 
     return arguments
+
+
+def get_first_interface_name_from_idl(file_contents):
+    match = match_interface_extended_attributes_and_name_from_idl(file_contents)
+    if match:
+        return match.group(3)
+    return None
 
 
 # Workaround for crbug.com/611437 and crbug.com/711464
@@ -441,6 +453,12 @@ def shorten_union_name(union_type):
         raise Exception('crbug.com/711464: The union name %s is too long. '
                         'Please add an alias to shorten_union_name()' % name)
     return name
+
+
+def to_snake_case(name):
+    if name.lower() == name:
+        return name
+    return NameStyleConverter(name).to_snake_case()
 
 
 def format_remove_duplicates(text, patterns):

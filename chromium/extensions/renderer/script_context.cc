@@ -11,10 +11,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "content/public/child/v8_value_converter.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
@@ -104,6 +104,7 @@ ScriptContext::ScriptContext(const v8::Local<v8::Context>& v8_context,
       context_type_(context_type),
       effective_extension_(effective_extension),
       effective_context_type_(effective_context_type),
+      context_id_(base::UnguessableToken::Create()),
       safe_builtins_(this),
       isolate_(v8_context->GetIsolate()),
       runner_(new Runner(this)) {
@@ -458,7 +459,8 @@ std::string ScriptContext::GetStackTraceAsString() const {
 v8::Local<v8::Value> ScriptContext::RunScript(
     v8::Local<v8::String> name,
     v8::Local<v8::String> code,
-    const RunScriptExceptionHandler& exception_handler) {
+    const RunScriptExceptionHandler& exception_handler,
+    v8::ScriptCompiler::NoCacheReason no_cache_reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
   v8::EscapableHandleScope handle_scope(isolate());
   v8::Context::Scope context_scope(v8_context());
@@ -479,8 +481,12 @@ v8::Local<v8::Value> ScriptContext::RunScript(
   try_catch.SetCaptureMessage(true);
   v8::ScriptOrigin origin(
       v8_helpers::ToV8StringUnsafe(isolate(), internal_name.c_str()));
+  v8::ScriptCompiler::Source script_source(code, origin);
   v8::Local<v8::Script> script;
-  if (!v8::Script::Compile(v8_context(), code, &origin).ToLocal(&script)) {
+  if (!v8::ScriptCompiler::Compile(v8_context(), &script_source,
+                                   v8::ScriptCompiler::kNoCompileOptions,
+                                   no_cache_reason)
+           .ToLocal(&script)) {
     exception_handler.Run(try_catch);
     return v8::Undefined(isolate());
   }

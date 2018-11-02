@@ -5,7 +5,6 @@
 #include "components/password_manager/core/browser/hash_password_manager.h"
 
 #include "base/base64.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -24,6 +23,16 @@ namespace password_manager {
 bool HashPasswordManager::SavePasswordHash(const base::string16& password) {
   if (!prefs_)
     return false;
+
+  base::Optional<SyncPasswordData> current_sync_password_data =
+      RetrievePasswordHash();
+  // If it is the same password, no need to save password hash again.
+  if (current_sync_password_data.has_value() &&
+      password_manager_util::CalculateSyncPasswordHash(
+          password, current_sync_password_data->salt) ==
+          current_sync_password_data->hash) {
+    return true;
+  }
 
   std::string salt = CreateRandomSalt();
   std::string hash = base::Uint64ToString(
@@ -78,7 +87,7 @@ std::string HashPasswordManager::CreateRandomSalt() {
 
 std::string HashPasswordManager::LengthAndSaltToString(const std::string& salt,
                                                        size_t password_length) {
-  return base::SizeTToString(password_length) + kSeparator + salt;
+  return base::NumberToString(password_length) + kSeparator + salt;
 }
 
 void HashPasswordManager::StringToLengthAndSalt(const std::string& s,

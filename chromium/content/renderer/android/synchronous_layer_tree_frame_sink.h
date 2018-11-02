@@ -15,12 +15,12 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/layer_tree_frame_sink.h"
-#include "cc/output/managed_memory_policy.h"
+#include "cc/trees/layer_tree_frame_sink.h"
+#include "cc/trees/managed_memory_policy.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/service/display/display_client.h"
-#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "ipc/ipc_message.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/transform.h"
 
 class SkCanvas;
@@ -49,7 +49,7 @@ class SynchronousLayerTreeFrameSinkClient {
   virtual void DidActivatePendingTree() = 0;
   virtual void Invalidate() = 0;
   virtual void SubmitCompositorFrame(uint32_t layer_tree_frame_sink_id,
-                                     cc::CompositorFrame frame) = 0;
+                                     viz::CompositorFrame frame) = 0;
 
  protected:
   virtual ~SynchronousLayerTreeFrameSinkClient() {}
@@ -65,7 +65,7 @@ class SynchronousLayerTreeFrameSinkClient {
 // to a fixed thread when BindToClient is called.
 class SynchronousLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
-      public viz::CompositorFrameSinkSupportClient {
+      public viz::mojom::CompositorFrameSinkClient {
  public:
   SynchronousLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> context_provider,
@@ -85,7 +85,7 @@ class SynchronousLayerTreeFrameSink
   // cc::LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* sink_client) override;
   void DetachFromClient() override;
-  void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(viz::CompositorFrame frame) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void Invalidate() override;
 
@@ -95,14 +95,17 @@ class SynchronousLayerTreeFrameSink
                     const gfx::Transform& transform_for_tile_priority);
   void DemandDrawSw(SkCanvas* canvas);
 
-  // viz::CompositorFrameSinkSupportClient implementation.
+  // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
-                       const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
  private:
@@ -148,7 +151,7 @@ class SynchronousLayerTreeFrameSink
     void DisplayOutputSurfaceLost() override {}
     void DisplayWillDrawAndSwap(
         bool will_draw_and_swap,
-        const cc::RenderPassList& render_passes) override {}
+        const viz::RenderPassList& render_passes) override {}
     void DisplayDidDrawAndSwap() override {}
   };
 

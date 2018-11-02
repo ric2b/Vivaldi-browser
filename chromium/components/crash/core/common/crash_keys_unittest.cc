@@ -15,11 +15,13 @@
 #include "base/format_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "components/crash/core/common/crash_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class CrashKeysTest : public testing::Test {
  public:
   void SetUp() override {
+    crash_reporter::InitializeCrashKeys();
     self_ = this;
     base::debug::SetCrashKeyReportingFunctions(
         &SetCrashKeyValue, &ClearCrashKey);
@@ -40,7 +42,7 @@ class CrashKeysTest : public testing::Test {
 
   void TearDown() override {
     base::debug::ResetCrashLoggingForTesting();
-    self_ = NULL;
+    self_ = nullptr;
   }
 
   bool HasCrashKey(const std::string& key) {
@@ -75,7 +77,7 @@ class CrashKeysTest : public testing::Test {
   std::map<std::string, std::string> keys_;
 };
 
-CrashKeysTest* CrashKeysTest::self_ = NULL;
+CrashKeysTest* CrashKeysTest::self_ = nullptr;
 
 TEST_F(CrashKeysTest, Switches) {
   ASSERT_TRUE(InitSwitchesCrashKeys());

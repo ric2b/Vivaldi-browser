@@ -30,15 +30,12 @@
 //   --enable-pixel-output-in-tests --run-manual
 //   --gtest_filter=MediaRouterE2EBrowserTest.<test case name>
 //   --enable-logging=stderr
-//   --whitelisted-extension-id=enhhojjnijigcajfphajepfemndkmdlo
 //   --ui-test-action-timeout=200000
-//   --media-router=1
 
 namespace {
 // URL to launch Castv2Player_Staging app on Chromecast
 const char kCastAppPresentationUrl[] =
-    "https://google.com/cast#__castAppId__=BE6E4473/"
-    "__castClientId__=143692175507258981";
+    "cast:BE6E4473?clientId=143692175507258981";
 const char kVideo[] = "video";
 const char kBearVP9Video[] = "bear-vp9.webm";
 const char kPlayer[] = "player.html";
@@ -146,8 +143,8 @@ IN_PROC_BROWSER_TEST_F(MediaRouterE2EBrowserTest, MANUAL_TabMirroring) {
   int tab_id = SessionTabHelper::IdForTab(web_contents);
 
   // Wait for 30 seconds to make sure the route is stable.
-  CreateMediaRoute(MediaSourceForTab(tab_id), url::Origin(GURL(kOrigin)),
-                   web_contents);
+  CreateMediaRoute(MediaSourceForTab(tab_id),
+                   url::Origin::Create(GURL(kOrigin)), web_contents);
   Wait(base::TimeDelta::FromSeconds(30));
 
   // Wait for 10 seconds to make sure route has been stopped.
@@ -158,7 +155,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterE2EBrowserTest, MANUAL_TabMirroring) {
 IN_PROC_BROWSER_TEST_F(MediaRouterE2EBrowserTest, MANUAL_CastApp) {
   // Wait for 30 seconds to make sure the route is stable.
   CreateMediaRoute(MediaSourceForPresentationUrl(GURL(kCastAppPresentationUrl)),
-                   url::Origin(GURL(kOrigin)), nullptr);
+                   url::Origin::Create(GURL(kOrigin)), nullptr);
   Wait(base::TimeDelta::FromSeconds(30));
 
   // Wait for 10 seconds to make sure route has been stopped.

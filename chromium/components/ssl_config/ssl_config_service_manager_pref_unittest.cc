@@ -292,12 +292,11 @@ TEST_F(SSLConfigServiceManagerPrefTest, TLS13VariantFeatureExperiment) {
   EXPECT_EQ(net::kTLS13VariantExperiment, ssl_config.tls13_variant);
 }
 
-// Tests that Record Type Experiment TLS 1.3 can be enabled via field trials.
-TEST_F(SSLConfigServiceManagerPrefTest,
-       TLS13VariantFeatureRecordTypeExperiment) {
+// Tests that Experiment2 TLS 1.3 can be enabled via field trials.
+TEST_F(SSLConfigServiceManagerPrefTest, TLS13VariantFeatureExperiment2) {
   // Toggle the field trial.
   variations::testing::VariationParamsManager variation_params(
-      "TLS13Variant", {{"variant", "record-type"}});
+      "TLS13Variant", {{"variant", "experiment2"}});
 
   TestingPrefServiceSimple local_state;
   SSLConfigServiceManager::RegisterPrefs(local_state.registry());
@@ -311,15 +310,14 @@ TEST_F(SSLConfigServiceManagerPrefTest,
   SSLConfig ssl_config;
   config_service->GetSSLConfig(&ssl_config);
   EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_3, ssl_config.version_max);
-  EXPECT_EQ(net::kTLS13VariantRecordTypeExperiment, ssl_config.tls13_variant);
+  EXPECT_EQ(net::kTLS13VariantExperiment2, ssl_config.tls13_variant);
 }
 
-// Tests that No SessionID Experiment TLS 1.3 can be enabled via field trials.
-TEST_F(SSLConfigServiceManagerPrefTest,
-       TLS13VariantFeatureNoSessionIDExperiment) {
+// Tests that Experiment3 TLS 1.3 can be enabled via field trials.
+TEST_F(SSLConfigServiceManagerPrefTest, TLS13VariantFeatureExperiment3) {
   // Toggle the field trial.
   variations::testing::VariationParamsManager variation_params(
-      "TLS13Variant", {{"variant", "no-session-id"}});
+      "TLS13Variant", {{"variant", "experiment3"}});
 
   TestingPrefServiceSimple local_state;
   SSLConfigServiceManager::RegisterPrefs(local_state.registry());
@@ -333,7 +331,7 @@ TEST_F(SSLConfigServiceManagerPrefTest,
   SSLConfig ssl_config;
   config_service->GetSSLConfig(&ssl_config);
   EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_3, ssl_config.version_max);
-  EXPECT_EQ(net::kTLS13VariantNoSessionIDExperiment, ssl_config.tls13_variant);
+  EXPECT_EQ(net::kTLS13VariantExperiment3, ssl_config.tls13_variant);
 }
 
 // Tests that the SSLVersionMax preference overwites the TLS 1.3 variant

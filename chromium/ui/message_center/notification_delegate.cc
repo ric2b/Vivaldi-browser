@@ -14,8 +14,6 @@ void NotificationDelegate::Display() {}
 
 void NotificationDelegate::Close(bool by_user) {}
 
-bool NotificationDelegate::HasClickedListener() { return false; }
-
 void NotificationDelegate::Click() {}
 
 void NotificationDelegate::ButtonClick(int button_index) {}
@@ -25,13 +23,9 @@ void NotificationDelegate::ButtonClickWithReply(int button_index,
   NOTIMPLEMENTED();
 }
 
-bool NotificationDelegate::SettingsClick() {
-  return false;
-}
+void NotificationDelegate::SettingsClick() {}
 
-bool NotificationDelegate::ShouldDisplaySettingsButton() {
-  return false;
-}
+void NotificationDelegate::DisableNotification() {}
 
 // HandleNotificationClickedDelegate:
 
@@ -41,10 +35,6 @@ HandleNotificationClickedDelegate::HandleNotificationClickedDelegate(
 }
 
 HandleNotificationClickedDelegate::~HandleNotificationClickedDelegate() {}
-
-bool HandleNotificationClickedDelegate::HasClickedListener() {
-  return !closure_.is_null();
-}
 
 void HandleNotificationClickedDelegate::Click() {
   if (!closure_.is_null())
@@ -64,10 +54,6 @@ HandleNotificationButtonClickDelegate::
 void HandleNotificationButtonClickDelegate::ButtonClick(int button_index) {
   if (!button_callback_.is_null())
     button_callback_.Run(button_index);
-}
-
-bool NotificationDelegate::ShouldDisplayOverFullscreen() const {
-  return false;
 }
 
 }  // namespace message_center

@@ -5,14 +5,15 @@
 #ifndef WebServiceWorkerRegistration_h
 #define WebServiceWorkerRegistration_h
 
+#include <memory>
+
 #include "public/platform/WebCallbacks.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerError.h"
-#include <memory>
+#include "public/platform/modules/serviceworker/service_worker_registration.mojom-shared.h"
 
 namespace blink {
 
-class WebServiceWorkerProvider;
 class WebServiceWorkerRegistrationProxy;
 struct WebNavigationPreloadState;
 
@@ -51,23 +52,21 @@ class WebServiceWorkerRegistration {
   virtual void ProxyStopped() {}
 
   virtual WebURL Scope() const { return WebURL(); }
+  virtual mojom::ServiceWorkerUpdateViaCache UpdateViaCache() const {
+    return mojom::ServiceWorkerUpdateViaCache::kImports;
+  }
   virtual int64_t RegistrationId() const = 0;
-  virtual void Update(WebServiceWorkerProvider*,
-                      std::unique_ptr<WebServiceWorkerUpdateCallbacks>) {}
+  virtual void Update(std::unique_ptr<WebServiceWorkerUpdateCallbacks>) {}
   virtual void Unregister(
-      WebServiceWorkerProvider*,
       std::unique_ptr<WebServiceWorkerUnregistrationCallbacks>) {}
 
   virtual void EnableNavigationPreload(
       bool enable,
-      WebServiceWorkerProvider*,
       std::unique_ptr<WebEnableNavigationPreloadCallbacks>) {}
   virtual void GetNavigationPreloadState(
-      WebServiceWorkerProvider*,
       std::unique_ptr<WebGetNavigationPreloadStateCallbacks>) {}
   virtual void SetNavigationPreloadHeader(
       const WebString& value,
-      WebServiceWorkerProvider*,
       std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks>) {}
 };
 

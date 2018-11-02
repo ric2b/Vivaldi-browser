@@ -29,10 +29,8 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
@@ -426,8 +424,6 @@ public class SearchEngineAdapter extends BaseAdapter
             String url = TemplateUrlService.getInstance().getSearchEngineUrlFromTemplateUrl(
                     toKeyword(mSelectedSearchEnginePosition));
             Bundle fragmentArgs = SingleWebsitePreferences.createFragmentArgsForSite(url);
-            fragmentArgs.putBoolean(SingleWebsitePreferences.EXTRA_LOCATION,
-                    locationEnabled((TemplateUrl) getItem(mSelectedSearchEnginePosition)));
             settingsIntent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
             mContext.startActivity(settingsIntent);
         }
@@ -464,11 +460,7 @@ public class SearchEngineAdapter extends BaseAdapter
         ContentSetting locationPermission = locationSettings.getContentSetting();
         if (locationPermission != ContentSetting.ASK) return true;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONSISTENT_OMNIBOX_GEOLOCATION)) {
-            return WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(url, false);
-        }
-
-        return GeolocationHeader.isGeoHeaderEnabledForUrl(url, false);
+        return WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(url, false);
     }
 
     private boolean locationEnabled(TemplateUrl templateUrl) {
@@ -479,12 +471,8 @@ public class SearchEngineAdapter extends BaseAdapter
         ContentSetting locationPermission = locationSettings.getContentSetting();
         if (locationPermission == ContentSetting.ASK) {
             // Handle the case where the geoHeader being sent when no permission has been specified.
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONSISTENT_OMNIBOX_GEOLOCATION)) {
-                if (WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(url, false)) {
-                    return WebsitePreferenceBridge.getDSEGeolocationSetting();
-                }
-            } else if (GeolocationHeader.isGeoHeaderEnabledForUrl(url, false)) {
-                return true;
+            if (WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(url, false)) {
+                return WebsitePreferenceBridge.getDSEGeolocationSetting();
             }
         }
 

@@ -9,17 +9,24 @@
 #include "base/memory/ref_counted.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "content/common/content_export.h"
-#include "content/common/feature_policy/feature_policy.h"
+#include "content/public/common/screen_info.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/web/WebRemoteFrame.h"
 #include "third_party/WebKit/public/web/WebRemoteFrameClient.h"
 #include "url/origin.h"
 
+#if defined(USE_AURA)
+#include "content/renderer/mus/mus_embedded_frame_delegate.h"
+#endif
+
 namespace blink {
+struct FramePolicy;
 struct WebRect;
+struct WebRemoteScrollProperties;
 }
 
 namespace viz {
@@ -36,6 +43,10 @@ class RenderWidget;
 struct ContentSecurityPolicyHeader;
 struct FrameOwnerProperties;
 struct FrameReplicationState;
+
+#if defined(USE_AURA)
+class MusEmbeddedFrame;
+#endif
 
 // When a page's frames are rendered by multiple processes, each renderer has a
 // full copy of the frame tree. It has full RenderFrames for the frames it is
@@ -59,6 +70,9 @@ struct FrameReplicationState;
 // RenderFrame is created for it.
 class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
                                         public IPC::Sender,
+#if defined(USE_AURA)
+                                        public MusEmbeddedFrameDelegate,
+#endif
                                         public blink::WebRemoteFrameClient {
  public:
   // This method should be used to create a RenderFrameProxy, which will replace
@@ -111,6 +125,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // when a compositor frame has committed.
   void DidCommitCompositorFrame();
 
+  // Out-of-process child frames receive a signal from RenderWidget when the
+  // ScreenInfo has changed.
+  void OnScreenInfoChanged(const ScreenInfo& screen_info);
+
   // Pass replicated information, such as security origin, to this
   // RenderFrameProxy's WebRemoteFrame.
   void SetReplicatedState(const FrameReplicationState& state);
@@ -129,6 +147,25 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // Returns the widget used for the local frame root.
   RenderWidget* render_widget() { return render_widget_; }
 
+#if defined(USE_AURA)
+  void SetMusEmbeddedFrame(
+      std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame);
+#endif
+
+  void WasResized();
+
+  const gfx::Rect& frame_rect() const {
+    return pending_resize_params_.frame_rect;
+  }
+
+  const ScreenInfo& screen_info() const {
+    return pending_resize_params_.screen_info;
+  }
+
+  uint64_t auto_size_sequence_number() const {
+    return pending_resize_params_.sequence_number;
+  }
+
   // blink::WebRemoteFrameClient implementation:
   void FrameDetached(DetachType type) override;
   void ForwardPostMessage(blink::WebLocalFrame* sourceFrame,
@@ -142,6 +179,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       const blink::WebRect& viewportIntersection) override;
   void VisibilityChanged(bool visible) override;
   void SetIsInert(bool) override;
+  void UpdateRenderThrottlingStatus(bool is_throttled,
+                                    bool subtree_throttled) override;
   void DidChangeOpener(blink::WebFrame* opener) override;
   void AdvanceFocus(blink::WebFocusType type,
                     blink::WebLocalFrame* source) override;
@@ -157,7 +196,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
             RenderViewImpl* render_view,
             RenderWidget* render_widget);
 
-  void ResendFrameRects();
+  void ResendResizeParams();
+
+  void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
+                            const viz::SurfaceSequence& sequence);
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -171,9 +213,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnUpdateOpener(int opener_routing_id);
   void OnViewChanged(const viz::FrameSinkId& frame_sink_id);
   void OnDidStopLoading();
-  void OnDidUpdateFramePolicy(
-      blink::WebSandboxFlags flags,
-      const ParsedFeaturePolicyHeader& container_policy);
+  void OnDidUpdateFramePolicy(const blink::FramePolicy& frame_policy);
+  void OnDidSetActiveSandboxFlags(blink::WebSandboxFlags active_sandbox_flags);
   void OnDispatchLoad();
   void OnCollapse(bool collapsed);
   void OnDidUpdateName(const std::string& name, const std::string& unique_name);
@@ -188,6 +229,18 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnSetFocusedFrame();
   void OnWillEnterFullscreen();
   void OnSetHasReceivedUserGesture();
+  void OnScrollRectToVisible(
+      const gfx::Rect& rect_to_scroll,
+      const blink::WebRemoteScrollProperties& properties);
+  void OnResizeDueToAutoResize(uint64_t sequence_number);
+
+#if defined(USE_AURA)
+  // MusEmbeddedFrameDelegate
+  void OnMusEmbeddedFrameSurfaceChanged(
+      const viz::SurfaceInfo& surface_info) override;
+  void OnMusEmbeddedFrameSinkIdAllocated(
+      const viz::FrameSinkId& frame_sink_id) override;
+#endif
 
   // The routing ID by which this RenderFrameProxy is known.
   const int routing_id_;
@@ -199,17 +252,37 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // Stores the WebRemoteFrame we are associated with.
   blink::WebRemoteFrame* web_frame_;
   std::string unique_name_;
-  scoped_refptr<ChildFrameCompositingHelper> compositing_helper_;
+  std::unique_ptr<ChildFrameCompositingHelper> compositing_helper_;
 
   RenderViewImpl* render_view_;
   RenderWidget* render_widget_;
 
-  gfx::Rect frame_rect_;
+  // TODO(fsamuel): We might want to unify this with content::ResizeParams.
+  // TODO(fsamuel): Most RenderFrameProxys don't host viz::Surfaces and
+  // therefore don't care to synchronize ResizeParams with viz::LocalSurfaceIds.
+  // Perhaps this can be moved to ChildFrameCompositingHelper?
+  struct ResizeParams {
+    gfx::Rect frame_rect;
+    ScreenInfo screen_info;
+    uint64_t sequence_number = 0lu;
+  };
+
+  // The last ResizeParams sent to the browser process, if any.
+  base::Optional<ResizeParams> sent_resize_params_;
+
+  // The current set of ResizeParams. This may or may not match
+  // |sent_resize_params_|.
+  ResizeParams pending_resize_params_;
+
   viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
   viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
 
   bool enable_surface_synchronization_ = false;
+
+#if defined(USE_AURA)
+  std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxy);
 };

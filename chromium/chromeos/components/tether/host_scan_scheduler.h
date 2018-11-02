@@ -5,49 +5,23 @@
 #ifndef CHROMEOS_COMPONENTS_TETHER_HOST_SCAN_SCHEDULER_H
 #define CHROMEOS_COMPONENTS_TETHER_HOST_SCAN_SCHEDULER_H
 
-#include "chromeos/components/tether/host_scanner.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "base/macros.h"
 
 namespace chromeos {
 
-class NetworkStateHandler;
-
 namespace tether {
 
-// Schedules scans for Tether hosts. One of three events begin a scan attempt:
-//
-//   (1) NetworkStateHandler requests a Tether network scan.
-//   (2) The device loses its Internet connection.
-//   (3) The user has just logged in or has just resumed using the device after
-//       it had been sleeping/suspended, and the device does not have an
-//       Internet connection. Note: It is the responsibility of the owner of
-//       HostScanScheduler to inform it of user login via UserLoggedIn().
-class HostScanScheduler : public NetworkStateHandlerObserver,
-                          public HostScanner::Observer {
+// Schedules scans for Tether hosts.
+class HostScanScheduler {
  public:
-  HostScanScheduler(NetworkStateHandler* network_state_handler,
-                    HostScanner* host_scanner);
-  ~HostScanScheduler() override;
+  HostScanScheduler() {}
+  virtual ~HostScanScheduler() {}
 
-  void ScheduleScan();
-
-  // NetworkStateHandlerObserver:
-  void DefaultNetworkChanged(const NetworkState* network) override;
-  void ScanRequested() override;
-
-  // HostScanner::Observer:
-  void ScanFinished() override;
+  // Schedules a scan to run immediately. If a scan is already active, this
+  // function is a no-op.
+  virtual void ScheduleScan() = 0;
 
  private:
-  friend class HostScanSchedulerTest;
-
-  void EnsureScan();
-  bool IsNetworkConnectingOrConnected(const NetworkState* network);
-  bool IsTetherNetworkConnectingOrConnected();
-
-  NetworkStateHandler* network_state_handler_;
-  HostScanner* host_scanner_;
-
   DISALLOW_COPY_AND_ASSIGN(HostScanScheduler);
 };
 

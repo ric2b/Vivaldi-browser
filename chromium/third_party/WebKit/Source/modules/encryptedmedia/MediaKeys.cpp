@@ -26,12 +26,12 @@
 #include "modules/encryptedmedia/MediaKeys.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
@@ -41,7 +41,7 @@
 #include "platform/Timer.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
-#include "platform/wtf/RefPtr.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "public/platform/WebEncryptedMediaKeyInformation.h"
 
@@ -88,7 +88,7 @@ class MediaKeys::PendingAction final
                              min_hdcp_version);
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(result_);
     visitor->Trace(data_);
   }
@@ -147,7 +147,7 @@ class SetCertificateResultPromise
         exception_code, system_code, error_message);
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(media_keys_);
     ContentDecryptionModuleResultPromise::Trace(visitor);
   }
@@ -179,7 +179,7 @@ class GetStatusForPolicyResultPromise
     Resolve(EncryptedMediaUtils::ConvertKeyStatusToString(key_status));
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(media_keys_);
     ContentDecryptionModuleResultPromise::Trace(visitor);
   }
@@ -206,7 +206,7 @@ MediaKeys::MediaKeys(
       cdm_(std::move(cdm)),
       media_element_(nullptr),
       reserved_for_media_element_(false),
-      timer_(TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, context),
+      timer_(context->GetTaskRunner(TaskType::kMiscPlatformAPI),
              this,
              &MediaKeys::TimerFired) {
   DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")";
@@ -286,7 +286,7 @@ ScriptPromise MediaKeys::setServerCertificate(
   pending_actions_.push_back(PendingAction::CreatePendingSetServerCertificate(
       result, server_certificate_buffer));
   if (!timer_.IsActive())
-    timer_.StartOneShot(0, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   // 6. Return promise.
   return promise;
@@ -327,7 +327,7 @@ ScriptPromise MediaKeys::getStatusForPolicy(
   pending_actions_.push_back(
       PendingAction::CreatePendingGetStatusForPolicy(result, min_hdcp_version));
   if (!timer_.IsActive())
-    timer_.StartOneShot(0, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   // Return promise.
   return promise;
@@ -402,9 +402,10 @@ WebContentDecryptionModule* MediaKeys::ContentDecryptionModule() {
   return cdm_.get();
 }
 
-DEFINE_TRACE(MediaKeys) {
+void MediaKeys::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_actions_);
   visitor->Trace(media_element_);
+  ScriptWrappable::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
 }
 

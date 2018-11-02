@@ -10,11 +10,13 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -42,9 +44,13 @@ public class WebappLauncherActivity extends Activity {
 
     private static final String TAG = "webapps";
 
+    /** Timestamp of Activity creation for tracking how long it takes to complete. */
+    private long mCreateTime;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mCreateTime = SystemClock.elapsedRealtime();
         launchActivity();
         ApiCompatibilityUtils.finishAndRemoveTask(this);
     }
@@ -88,14 +94,16 @@ public class WebappLauncherActivity extends Activity {
             if (validWebApk && (webappSource == ShortcutSource.UNKNOWN)) {
                 source = getWebApkSource(webappInfo);
             }
-            LaunchMetrics.recordHomeScreenLaunchIntoStandaloneActivity(webappUrl, source);
+            LaunchMetrics.recordHomeScreenLaunchIntoStandaloneActivity(
+                    webappUrl, source, webappInfo.displayMode());
 
             // Add all information needed to launch WebappActivity without {@link
             // WebappActivity#sWebappInfoMap} to launch intent. When the Android OS has killed a
             // WebappActivity and the user selects the WebappActivity from "Android Recents" the
             // WebappActivity is launched without going through WebappLauncherActivity first.
             WebappActivity.addWebappInfo(webappInfo.id(), webappInfo);
-            Intent launchIntent = createWebappLaunchIntent(webappInfo, webappSource, validWebApk);
+            Intent launchIntent = createWebappLaunchIntent(webappInfo, validWebApk);
+            IntentHandler.addTimestampToIntent(launchIntent, mCreateTime);
             startActivity(launchIntent);
             return;
         }
@@ -165,7 +173,7 @@ public class WebappLauncherActivity extends Activity {
      * @param isWebApk If true, launch the app as a WebApkActivity.  If false, launch the app as
      *                 a WebappActivity.
      */
-    private Intent createWebappLaunchIntent(WebappInfo info, int source, boolean isWebApk) {
+    public static Intent createWebappLaunchIntent(WebappInfo info, boolean isWebApk) {
         String activityName = isWebApk ? WebApkActivity.class.getName()
                 : WebappActivity.class.getName();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
@@ -193,7 +201,7 @@ public class WebappLauncherActivity extends Activity {
 
         // Create an intent to launch the Webapp in an unmapped WebappActivity.
         Intent launchIntent = new Intent();
-        launchIntent.setClassName(this, activityName);
+        launchIntent.setClassName(ContextUtils.getApplicationContext(), activityName);
         info.setWebappIntentExtras(launchIntent);
 
         // On L+, firing intents with the exact same data should relaunch a particular

@@ -11,14 +11,9 @@
 
 namespace media {
 
-MojoCdmServiceContext::MojoCdmServiceContext() : weak_ptr_factory_(this) {}
+MojoCdmServiceContext::MojoCdmServiceContext() = default;
 
-MojoCdmServiceContext::~MojoCdmServiceContext() {
-}
-
-base::WeakPtr<MojoCdmServiceContext> MojoCdmServiceContext::GetWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
-}
+MojoCdmServiceContext::~MojoCdmServiceContext() = default;
 
 void MojoCdmServiceContext::RegisterCdm(int cdm_id,
                                         MojoCdmService* cdm_service) {

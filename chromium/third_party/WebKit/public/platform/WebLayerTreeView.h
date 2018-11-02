@@ -33,10 +33,9 @@
 #include "WebEventListenerProperties.h"
 #include "WebFloatPoint.h"
 #include "WebImageLayer.h"
-#include "WebScrollBoundaryBehavior.h"
+#include "WebOverscrollBehavior.h"
 #include "WebSize.h"
 #include "base/callback.h"
-#include "cc/output/swap_promise.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 
 #include "third_party/skia/include/core/SkImage.h"
@@ -138,7 +137,7 @@ class WebLayerTreeView {
 
   // Set the browser's behavior when overscroll happens, e.g. whether to glow
   // or navigate.
-  virtual void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&) {}
+  virtual void SetOverscrollBehavior(const WebOverscrollBehavior&) {}
 
   // Flow control and scheduling ---------------------------------------
 
@@ -224,7 +223,7 @@ class WebLayerTreeView {
   virtual void RequestBeginMainFrameNotExpected(bool new_state) {}
 
   virtual void RequestDecode(const PaintImage& image,
-                             const base::Callback<void(bool)>& callback) {}
+                             base::OnceCallback<void(bool)> callback) {}
 };
 
 }  // namespace blink

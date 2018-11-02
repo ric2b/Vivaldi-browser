@@ -24,11 +24,11 @@ namespace {
 constexpr base::TimeDelta kDisconnectTetheringRequestTime =
     base::TimeDelta::FromSeconds(3);
 
-class TestObserver : public DisconnectTetheringOperation::Observer {
+class TestObserver final : public DisconnectTetheringOperation::Observer {
  public:
   TestObserver() : success_(false) {}
 
-  virtual ~TestObserver() {}
+  virtual ~TestObserver() = default;
 
   std::string last_device_id() { return last_device_id_; }
 

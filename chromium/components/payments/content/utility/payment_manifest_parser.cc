@@ -4,26 +4,30 @@
 
 #include "components/payments/content/utility/payment_manifest_parser.h"
 
-#include <stddef.h>
-
-#include <memory>
+#include <algorithm>
 #include <utility>
 
-#include "base/json/json_reader.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/values.h"
 #include "components/payments/content/utility/fingerprint_parser.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "content/public/common/service_manager_connection.h"
+#include "net/base/url_util.h"
+#include "services/data_decoder/public/cpp/safe_json_parser.h"
 #include "url/url_constants.h"
 
 namespace payments {
 namespace {
 
-const size_t kMaximumNumberOfEntries = 100U;
+const size_t kMaximumNumberOfItems = 100U;
+
 const char* const kDefaultApplications = "default_applications";
+const char* const kHttpPrefix = "http://";
+const char* const kHttpsPrefix = "https://";
 const char* const kSupportedOrigins = "supported_origins";
 
 // Parses the "default_applications": ["https://some/url"] from |dict| into
@@ -40,25 +44,32 @@ bool ParseDefaultApplications(base::DictionaryValue* dict,
   }
 
   size_t apps_number = list->GetSize();
-  if (apps_number > kMaximumNumberOfEntries) {
+  if (apps_number > kMaximumNumberOfItems) {
     LOG(ERROR) << "\"" << kDefaultApplications << "\" must contain at most "
-               << kMaximumNumberOfEntries << " entries.";
+               << kMaximumNumberOfItems << " entries.";
     return false;
   }
 
-  std::string item;
   for (size_t i = 0; i < apps_number; ++i) {
-    if (!list->GetString(i, &item) && item.empty()) {
+    std::string item;
+    if (!list->GetString(i, &item) || item.empty() ||
+        !base::IsStringUTF8(item) ||
+        !(base::StartsWith(item, kHttpsPrefix, base::CompareCase::SENSITIVE) ||
+          base::StartsWith(item, kHttpPrefix, base::CompareCase::SENSITIVE))) {
       LOG(ERROR) << "Each entry in \"" << kDefaultApplications
-                 << "\" must be a string.";
+                 << "\" must be UTF8 string that starts with \"" << kHttpsPrefix
+                 << "\" or \"" << kHttpPrefix << "\" (for localhost).";
       web_app_manifest_urls->clear();
       return false;
     }
 
     GURL url(item);
-    if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme)) {
+    if (!url.is_valid() || !(url.SchemeIs(url::kHttpsScheme) ||
+                             (url.SchemeIs(url::kHttpScheme) &&
+                              net::IsLocalhost(url.HostNoBracketsPiece())))) {
       LOG(ERROR) << "\"" << item << "\" entry in \"" << kDefaultApplications
-                 << "\" is not a valid URL with HTTPS scheme.";
+                 << "\" is not a valid URL with HTTPS scheme and is not a "
+                    "valid localhost URL with HTTP scheme.";
       web_app_manifest_urls->clear();
       return false;
     }
@@ -81,17 +92,19 @@ bool ParseSupportedOrigins(base::DictionaryValue* dict,
 
   *all_origins_supported = false;
 
-  std::string item;
-  if (dict->GetString(kSupportedOrigins, &item)) {
-    if (item != "*") {
-      LOG(ERROR) << "\"" << item << "\" is not a valid value for \""
-                 << kSupportedOrigins
-                 << "\". Must be either \"*\" or a list of origins.";
-      return false;
-    }
+  {
+    std::string item;
+    if (dict->GetString(kSupportedOrigins, &item)) {
+      if (item != "*") {
+        LOG(ERROR) << "\"" << item << "\" is not a valid value for \""
+                   << kSupportedOrigins
+                   << "\". Must be either \"*\" or a list of RFC6454 origins.";
+        return false;
+      }
 
-    *all_origins_supported = true;
-    return true;
+      *all_origins_supported = true;
+      return true;
+    }
   }
 
   base::ListValue* list = nullptr;
@@ -110,41 +123,120 @@ bool ParseSupportedOrigins(base::DictionaryValue* dict,
   }
 
   for (size_t i = 0; i < supported_origins_number; ++i) {
-    if (!list->GetString(i, &item) && item.empty()) {
+    std::string item;
+    if (!list->GetString(i, &item) || item.empty() ||
+        !base::IsStringUTF8(item) ||
+        !(base::StartsWith(item, kHttpsPrefix, base::CompareCase::SENSITIVE) ||
+          base::StartsWith(item, kHttpPrefix, base::CompareCase::SENSITIVE))) {
       LOG(ERROR) << "Each entry in \"" << kSupportedOrigins
-                 << "\" must be a string.";
+                 << "\" must be UTF8 string that starts with \"" << kHttpsPrefix
+                 << "\" or \"" << kHttpPrefix << "\" (for localhost).";
       supported_origins->clear();
       return false;
     }
 
     GURL url(item);
-    if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme) ||
+    if (!url.is_valid() ||
+        !(url.SchemeIs(url::kHttpsScheme) ||
+          (url.SchemeIs(url::kHttpScheme) &&
+           net::IsLocalhost(url.HostNoBracketsPiece()))) ||
         url.path() != "/" || url.has_query() || url.has_ref() ||
         url.has_username() || url.has_password()) {
       LOG(ERROR) << "\"" << item << "\" entry in \"" << kSupportedOrigins
-                 << "\" is not a valid origin with HTTPS scheme.";
+                 << "\" is not a valid origin with HTTPS scheme and is not a "
+                    "valid localhost origin with HTTP scheme.";
       supported_origins->clear();
       return false;
     }
 
-    supported_origins->push_back(url::Origin(url));
+    supported_origins->push_back(url::Origin::Create(url));
   }
 
   return true;
 }
 
+// An object that allows both SafeJsonParser's callbacks (error/success) to run
+// the same callback provided to ParsePaymentMethodManifest/ParseWebAppManifest.
+// (since Callbacks are movable type, that callback has to be shared)
+template <typename Callback>
+class JsonParserCallback
+    : public base::RefCounted<JsonParserCallback<Callback>> {
+ public:
+  JsonParserCallback(
+      base::Callback<void(Callback, std::unique_ptr<base::Value>)>
+          parser_callback,
+      Callback client_callback)
+      : parser_callback_(std::move(parser_callback)),
+        client_callback_(std::move(client_callback)) {}
+
+  void OnSuccess(std::unique_ptr<base::Value> value) {
+    std::move(parser_callback_)
+        .Run(std::move(client_callback_), std::move(value));
+  }
+
+  void OnError(const std::string& error_message) {
+    std::move(parser_callback_)
+        .Run(std::move(client_callback_), /*value=*/nullptr);
+  }
+
+ private:
+  friend class base::RefCounted<JsonParserCallback>;
+  ~JsonParserCallback() = default;
+
+  base::Callback<void(Callback, std::unique_ptr<base::Value>)> parser_callback_;
+  Callback client_callback_;
+};
+
 }  // namespace
 
-// static
-void PaymentManifestParser::Create(
-    mojom::PaymentManifestParserRequest request) {
-  mojo::MakeStrongBinding(base::MakeUnique<PaymentManifestParser>(),
-                          std::move(request));
+PaymentManifestParser::PaymentManifestParser() : weak_factory_(this) {}
+
+PaymentManifestParser::~PaymentManifestParser() = default;
+
+void PaymentManifestParser::ParsePaymentMethodManifest(
+    const std::string& content,
+    PaymentMethodCallback callback) {
+  parse_payment_callback_counter_++;
+  DCHECK_GE(10U, parse_payment_callback_counter_);
+
+  scoped_refptr<JsonParserCallback<PaymentMethodCallback>> json_callback =
+      new JsonParserCallback<PaymentMethodCallback>(
+          base::Bind(&PaymentManifestParser::OnPaymentMethodParse,
+                     weak_factory_.GetWeakPtr()),
+          std::move(callback));
+
+  data_decoder::SafeJsonParser::Parse(
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      content,
+      base::Bind(&JsonParserCallback<PaymentMethodCallback>::OnSuccess,
+                 json_callback),
+      base::Bind(&JsonParserCallback<PaymentMethodCallback>::OnError,
+                 json_callback));
+}
+
+void PaymentManifestParser::ParseWebAppManifest(const std::string& content,
+                                                WebAppCallback callback) {
+  parse_webapp_callback_counter_++;
+  DCHECK_GE(10U, parse_webapp_callback_counter_);
+
+  scoped_refptr<JsonParserCallback<WebAppCallback>> parser_callback =
+      new JsonParserCallback<WebAppCallback>(
+          base::Bind(&PaymentManifestParser::OnWebAppParse,
+                     weak_factory_.GetWeakPtr()),
+          std::move(callback));
+
+  data_decoder::SafeJsonParser::Parse(
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      content,
+      base::Bind(&JsonParserCallback<WebAppCallback>::OnSuccess,
+                 parser_callback),
+      base::Bind(&JsonParserCallback<WebAppCallback>::OnError,
+                 parser_callback));
 }
 
 // static
 void PaymentManifestParser::ParsePaymentMethodManifestIntoVectors(
-    const std::string& input,
+    std::unique_ptr<base::Value> value,
     std::vector<GURL>* web_app_manifest_urls,
     std::vector<url::Origin>* supported_origins,
     bool* all_origins_supported) {
@@ -153,12 +245,6 @@ void PaymentManifestParser::ParsePaymentMethodManifestIntoVectors(
   DCHECK(all_origins_supported);
 
   *all_origins_supported = false;
-
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(input));
-  if (!value) {
-    LOG(ERROR) << "Payment method manifest must be in JSON format.";
-    return;
-  }
 
   std::unique_ptr<base::DictionaryValue> dict =
       base::DictionaryValue::From(std::move(value));
@@ -180,26 +266,20 @@ void PaymentManifestParser::ParsePaymentMethodManifestIntoVectors(
 }
 
 // static
-std::vector<mojom::WebAppManifestSectionPtr>
-PaymentManifestParser::ParseWebAppManifestIntoVector(const std::string& input) {
-  std::vector<mojom::WebAppManifestSectionPtr> output;
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(input));
-  if (!value) {
-    LOG(ERROR) << "Web app manifest must be in JSON format.";
-    return output;
-  }
-
+bool PaymentManifestParser::ParseWebAppManifestIntoVector(
+    std::unique_ptr<base::Value> value,
+    std::vector<WebAppManifestSection>* output) {
   std::unique_ptr<base::DictionaryValue> dict =
       base::DictionaryValue::From(std::move(value));
   if (!dict) {
     LOG(ERROR) << "Web app manifest must be a JSON dictionary.";
-    return output;
+    return false;
   }
 
   base::ListValue* list = nullptr;
   if (!dict->GetList("related_applications", &list)) {
     LOG(ERROR) << "\"related_applications\" must be a list.";
-    return output;
+    return false;
   }
 
   size_t related_applications_size = list->GetSize();
@@ -207,8 +287,8 @@ PaymentManifestParser::ParseWebAppManifestIntoVector(const std::string& input) {
     base::DictionaryValue* related_application = nullptr;
     if (!list->GetDictionary(i, &related_application) || !related_application) {
       LOG(ERROR) << "\"related_applications\" must be a list of dictionaries.";
-      output.clear();
-      return output;
+      output->clear();
+      return false;
     }
 
     std::string platform;
@@ -217,12 +297,12 @@ PaymentManifestParser::ParseWebAppManifestIntoVector(const std::string& input) {
       continue;
     }
 
-    if (output.size() >= kMaximumNumberOfEntries) {
+    if (output->size() >= kMaximumNumberOfItems) {
       LOG(ERROR) << "\"related_applications\" must contain at most "
-                 << kMaximumNumberOfEntries
+                 << kMaximumNumberOfItems
                  << " entries with \"platform\": \"play\".";
-      output.clear();
-      return output;
+      output->clear();
+      return false;
     }
 
     const char* const kId = "id";
@@ -235,39 +315,38 @@ PaymentManifestParser::ParseWebAppManifestIntoVector(const std::string& input) {
                     "\"related_applications\" must contain \""
                  << kId << "\", \"" << kMinVersion << "\", and \""
                  << kFingerprints << "\".";
-      return output;
+      return false;
     }
 
-    mojom::WebAppManifestSectionPtr section =
-        mojom::WebAppManifestSection::New();
-    section->min_version = 0;
+    WebAppManifestSection section;
+    section.min_version = 0;
 
-    if (!related_application->GetString(kId, &section->id) ||
-        section->id.empty() || !base::IsStringASCII(section->id)) {
+    if (!related_application->GetString(kId, &section.id) ||
+        section.id.empty() || !base::IsStringASCII(section.id)) {
       LOG(ERROR) << "\"" << kId << "\" must be a non-empty ASCII string.";
-      output.clear();
-      return output;
+      output->clear();
+      return false;
     }
 
     std::string min_version;
     if (!related_application->GetString(kMinVersion, &min_version) ||
         min_version.empty() || !base::IsStringASCII(min_version) ||
-        !base::StringToInt64(min_version, &section->min_version)) {
+        !base::StringToInt64(min_version, &section.min_version)) {
       LOG(ERROR) << "\"" << kMinVersion
                  << "\" must be a string convertible into a number.";
-      output.clear();
-      return output;
+      output->clear();
+      return false;
     }
 
     base::ListValue* fingerprints_list = nullptr;
     if (!related_application->GetList(kFingerprints, &fingerprints_list) ||
         fingerprints_list->empty() ||
-        fingerprints_list->GetSize() > kMaximumNumberOfEntries) {
+        fingerprints_list->GetSize() > kMaximumNumberOfItems) {
       LOG(ERROR) << "\"" << kFingerprints
                  << "\" must be a non-empty list of at most "
-                 << kMaximumNumberOfEntries << " items.";
-      output.clear();
-      return output;
+                 << kMaximumNumberOfItems << " items.";
+      output->clear();
+      return false;
     }
 
     size_t fingerprints_size = fingerprints_list->GetSize();
@@ -285,49 +364,54 @@ PaymentManifestParser::ParseWebAppManifestIntoVector(const std::string& input) {
         LOG(ERROR) << "Each entry in \"" << kFingerprints
                    << "\" must be a dictionary with \"type\": "
                       "\"sha256_cert\" and a non-empty ASCII string \"value\".";
-        output.clear();
-        return output;
+        output->clear();
+        return false;
       }
 
       std::vector<uint8_t> hash =
           FingerprintStringToByteArray(fingerprint_value);
       if (hash.empty()) {
-        output.clear();
-        return output;
+        output->clear();
+        return false;
       }
 
-      section->fingerprints.push_back(hash);
+      section.fingerprints.push_back(hash);
     }
 
-    output.push_back(std::move(section));
+    output->push_back(section);
   }
 
-  return output;
+  return true;
 }
 
-PaymentManifestParser::PaymentManifestParser() {}
+void PaymentManifestParser::OnPaymentMethodParse(
+    PaymentMethodCallback callback,
+    std::unique_ptr<base::Value> value) {
+  parse_payment_callback_counter_--;
 
-PaymentManifestParser::~PaymentManifestParser() {}
-
-void PaymentManifestParser::ParsePaymentMethodManifest(
-    const std::string& content,
-    ParsePaymentMethodManifestCallback callback) {
   std::vector<GURL> web_app_manifest_urls;
   std::vector<url::Origin> supported_origins;
   bool all_origins_supported = false;
+  ParsePaymentMethodManifestIntoVectors(
+      std::move(value), &web_app_manifest_urls, &supported_origins,
+      &all_origins_supported);
 
-  ParsePaymentMethodManifestIntoVectors(content, &web_app_manifest_urls,
-                                        &supported_origins,
-                                        &all_origins_supported);
-
+  // Can trigger synchronous deletion of this object, so can't access any of the
+  // member variables after this block.
   std::move(callback).Run(web_app_manifest_urls, supported_origins,
                           all_origins_supported);
 }
 
-void PaymentManifestParser::ParseWebAppManifest(
-    const std::string& content,
-    ParseWebAppManifestCallback callback) {
-  std::move(callback).Run(ParseWebAppManifestIntoVector(content));
+void PaymentManifestParser::OnWebAppParse(WebAppCallback callback,
+                                          std::unique_ptr<base::Value> value) {
+  parse_webapp_callback_counter_--;
+
+  std::vector<WebAppManifestSection> manifest;
+  ParseWebAppManifestIntoVector(std::move(value), &manifest);
+
+  // Can trigger synchronous deletion of this object, so can't access any of the
+  // member variables after this block.
+  std::move(callback).Run(manifest);
 }
 
 }  // namespace payments

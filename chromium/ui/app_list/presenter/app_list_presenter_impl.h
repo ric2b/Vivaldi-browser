@@ -21,6 +21,10 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget_observer.h"
 
+namespace ui {
+class AnimationMetricsReporter;
+}
+
 namespace app_list {
 class AppListView;
 class AppListViewDelegate;
@@ -105,7 +109,8 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // aura::WindowObserver overrides:
   void OnWindowBoundsChanged(aura::Window* root,
                              const gfx::Rect& old_bounds,
-                             const gfx::Rect& new_bounds) override;
+                             const gfx::Rect& new_bounds,
+                             ui::PropertyChangeReason reason) override;
 
   // ui::ImplicitAnimationObserver overrides:
   void OnImplicitAnimationsCompleted() override;
@@ -119,6 +124,7 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   void SelectedPageChanged(int old_selected, int new_selected) override;
   void TransitionStarted() override;
   void TransitionChanged() override;
+  void TransitionEnded() override;
 
   // The factory for the presenter's delegate.
   std::unique_ptr<AppListPresenterDelegateFactory> factory_;
@@ -142,11 +148,12 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // Whether should schedule snap back animation.
   bool should_snap_back_ = false;
 
-  // Whether the fullscreen app list feature is enabled;
-  const bool is_fullscreen_app_list_enabled_;
-
   // The app list interface pointer; used for reporting visibility changes.
   mojom::AppListPtr app_list_;
+
+  // Metric reporter for state change animations.
+  const std::unique_ptr<ui::AnimationMetricsReporter>
+      state_animation_metrics_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListPresenterImpl);
 };

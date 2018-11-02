@@ -29,9 +29,12 @@
 #include "modules/fetch/ResponseInit.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebURLResponse.h"
+#include "public/platform/modules/cache_storage/cache_storage.mojom-blink.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
 #include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using blink::mojom::CacheStorageError;
 
 namespace blink {
 
@@ -55,10 +58,10 @@ class ScopedFetcherForTests final
     ++fetch_count_;
     if (expected_url_) {
       String fetched_url;
-      if (request_info.isRequest())
-        EXPECT_EQ(*expected_url_, request_info.getAsRequest()->url());
+      if (request_info.IsRequest())
+        EXPECT_EQ(*expected_url_, request_info.GetAsRequest()->url());
       else
-        EXPECT_EQ(*expected_url_, request_info.getAsUSVString());
+        EXPECT_EQ(*expected_url_, request_info.GetAsUSVString());
     }
 
     if (response_) {
@@ -84,7 +87,7 @@ class ScopedFetcherForTests final
 
   int FetchCount() const { return fetch_count_; }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(response_);
     GlobalFetch::ScopedFetcher::Trace(visitor);
   }
@@ -103,11 +106,11 @@ class ScopedFetcherForTests final
 // specific caches.
 class ErrorWebCacheForTests : public WebServiceWorkerCache {
  public:
-  ErrorWebCacheForTests(const WebServiceWorkerCacheError error)
+  ErrorWebCacheForTests(const CacheStorageError error)
       : error_(error),
-        expected_url_(0),
-        expected_query_params_(0),
-        expected_batch_operations_(0) {}
+        expected_url_(nullptr),
+        expected_query_params_(nullptr),
+        expected_batch_operations_(nullptr) {}
 
   std::string GetAndClearLastErrorWebCacheMethodCalled() {
     std::string old = last_error_web_cache_method_called_;
@@ -220,7 +223,7 @@ class ErrorWebCacheForTests : public WebServiceWorkerCache {
     EXPECT_EQ(expected_query_params.cache_name, query_params.cache_name);
   }
 
-  const WebServiceWorkerCacheError error_;
+  const CacheStorageError error_;
 
   const String* expected_url_;
   const QueryParams* expected_query_params_;
@@ -232,7 +235,7 @@ class ErrorWebCacheForTests : public WebServiceWorkerCache {
 class NotImplementedErrorCache : public ErrorWebCacheForTests {
  public:
   NotImplementedErrorCache()
-      : ErrorWebCacheForTests(kWebServiceWorkerCacheErrorNotImplemented) {}
+      : ErrorWebCacheForTests(CacheStorageError::kErrorNotImplemented) {}
 };
 
 class CacheStorageTest : public ::testing::Test {
@@ -257,7 +260,7 @@ class CacheStorageTest : public ::testing::Test {
     DummyExceptionStateForTesting exception_state;
     Request* request = Request::Create(GetScriptState(), url, exception_state);
     EXPECT_FALSE(exception_state.HadException());
-    return exception_state.HadException() ? 0 : request;
+    return exception_state.HadException() ? nullptr : request;
   }
 
   // Convenience methods for testing the returned promises.
@@ -341,13 +344,13 @@ class CacheStorageTest : public ::testing::Test {
 
 RequestInfo StringToRequestInfo(const String& value) {
   RequestInfo info;
-  info.setUSVString(value);
+  info.SetUSVString(value);
   return info;
 }
 
 RequestInfo RequestToRequestInfo(Request* value) {
   RequestInfo info;
-  info.setRequest(value);
+  info.SetRequest(value);
   return info;
 }
 
@@ -368,14 +371,14 @@ TEST_F(CacheStorageTest, Basics) {
   EXPECT_EQ(kNotImplementedString, GetRejectString(match_promise));
 
   cache = CreateCache(fetcher, test_cache = new ErrorWebCacheForTests(
-                                   kWebServiceWorkerCacheErrorNotFound));
+                                   CacheStorageError::kErrorNotFound));
   match_promise = cache->match(GetScriptState(), StringToRequestInfo(url),
                                options, exception_state);
   ScriptValue script_value = GetResolveValue(match_promise);
   EXPECT_TRUE(script_value.IsUndefined());
 
   cache = CreateCache(fetcher, test_cache = new ErrorWebCacheForTests(
-                                   kWebServiceWorkerCacheErrorExists));
+                                   CacheStorageError::kErrorExists));
   match_promise = cache->match(GetScriptState(), StringToRequestInfo(url),
                                options, exception_state);
   EXPECT_EQ("InvalidAccessError: Entry already exists.",
@@ -480,7 +483,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
 
   WebServiceWorkerResponse web_response;
   std::vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, url));
+  url_list.push_back(KURL(url));
   web_response.SetURLList(url_list);
   Response* response = Response::Create(GetScriptState(), web_response);
 
@@ -497,13 +500,13 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
   test_cache->SetExpectedBatchOperations(&expected_delete_operations);
 
   ScriptPromise delete_result =
-      cache->deleteFunction(GetScriptState(), RequestToRequestInfo(request),
-                            options, exception_state);
+      cache->Delete(GetScriptState(), RequestToRequestInfo(request), options,
+                    exception_state);
   EXPECT_EQ("dispatchBatch",
             test_cache->GetAndClearLastErrorWebCacheMethodCalled());
   EXPECT_EQ(kNotImplementedString, GetRejectString(delete_result));
 
-  ScriptPromise string_delete_result = cache->deleteFunction(
+  ScriptPromise string_delete_result = cache->Delete(
       GetScriptState(), StringToRequestInfo(url), options, exception_state);
   EXPECT_EQ("dispatchBatch",
             test_cache->GetAndClearLastErrorWebCacheMethodCalled());
@@ -562,7 +565,7 @@ TEST_F(CacheStorageTest, MatchResponseTest) {
 
   WebServiceWorkerResponse web_response;
   std::vector<KURL> url_list;
-  url_list.push_back(KURL(kParsedURLString, response_url));
+  url_list.push_back(KURL(response_url));
   web_response.SetURLList(url_list);
   web_response.SetResponseType(network::mojom::FetchResponseType::kDefault);
 
@@ -574,7 +577,7 @@ TEST_F(CacheStorageTest, MatchResponseTest) {
                    exception_state);
   ScriptValue script_value = GetResolveValue(result);
   Response* response =
-      V8Response::toImplWithTypeCheck(GetIsolate(), script_value.V8Value());
+      V8Response::ToImplWithTypeCheck(GetIsolate(), script_value.V8Value());
   ASSERT_TRUE(response);
   EXPECT_EQ(response_url, response->url());
 }
@@ -606,8 +609,8 @@ TEST_F(CacheStorageTest, KeysResponseTest) {
   expected_urls[1] = url2;
 
   WebVector<WebServiceWorkerRequest> web_requests(size_t(2));
-  web_requests[0].SetURL(KURL(kParsedURLString, url1));
-  web_requests[1].SetURL(KURL(kParsedURLString, url2));
+  web_requests[0].SetURL(KURL(url1));
+  web_requests[1].SetURL(KURL(url2));
 
   Cache* cache = CreateCache(fetcher, new KeysTestCache(web_requests));
 
@@ -660,11 +663,9 @@ TEST_F(CacheStorageTest, MatchAllAndBatchResponseTest) {
   expected_urls[1] = url2;
 
   WebVector<WebServiceWorkerResponse> web_responses(size_t(2));
-  web_responses[0].SetURLList(
-      std::vector<KURL>({KURL(kParsedURLString, url1)}));
+  web_responses[0].SetURLList(std::vector<KURL>({KURL(url1)}));
   web_responses[0].SetResponseType(network::mojom::FetchResponseType::kDefault);
-  web_responses[1].SetURLList(
-      std::vector<KURL>({KURL(kParsedURLString, url2)}));
+  web_responses[1].SetURLList(std::vector<KURL>({KURL(url2)}));
   web_responses[1].SetResponseType(network::mojom::FetchResponseType::kDefault);
 
   Cache* cache =
@@ -688,9 +689,9 @@ TEST_F(CacheStorageTest, MatchAllAndBatchResponseTest) {
       EXPECT_EQ(expected_urls[i], response->url());
   }
 
-  result = cache->deleteFunction(GetScriptState(),
-                                 StringToRequestInfo("http://some.url/"),
-                                 options, exception_state);
+  result =
+      cache->Delete(GetScriptState(), StringToRequestInfo("http://some.url/"),
+                    options, exception_state);
   script_value = GetResolveValue(result);
   EXPECT_TRUE(script_value.V8Value()->IsBoolean());
   EXPECT_EQ(true, script_value.V8Value().As<v8::Boolean>()->Value());

@@ -4,23 +4,23 @@
 
 #include "mojo/edk/system/channel.h"
 
-#include <magenta/processargs.h>
-#include <magenta/status.h>
-#include <magenta/syscalls.h>
-#include <mxio/limits.h>
-#include <mxio/util.h>
+#include <fdio/limits.h>
+#include <fdio/util.h>
+#include <zircon/processargs.h>
+#include <zircon/status.h>
+#include <zircon/syscalls.h>
 #include <algorithm>
-#include <deque>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/files/scoped_file.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
 
 namespace mojo {
 namespace edk {
@@ -31,29 +31,40 @@ const size_t kMaxBatchReadCapacity = 256 * 1024;
 
 bool UnwrapPlatformHandle(ScopedPlatformHandle handle,
                           Channel::Message::HandleInfoEntry* info_out,
-                          PlatformHandleVector* handles_out) {
+                          std::vector<ScopedPlatformHandle>* handles_out) {
   DCHECK(handle.get().is_valid());
 
   if (!handle.get().is_valid_fd()) {
     *info_out = {0u, 0u};
-    handles_out->emplace_back(handle.release());
+    handles_out->emplace_back(std::move(handle));
     return true;
   }
 
-  // Each MXIO file descriptor is implemented using one or more native resources
+  // Each FDIO file descriptor is implemented using one or more native resources
   // and can be un-wrapped into a set of |handle| and |info| pairs, with |info|
-  // consisting of an MXIO-defined type & arguments (see magenta/processargs.h).
-  mx_handle_t handles[MXIO_MAX_HANDLES] = {};
-  uint32_t info[MXIO_MAX_HANDLES] = {};
-  mx_status_t result = mxio_transfer_fd(handle.get().as_fd(), 0, handles, info);
-  DCHECK_LE(result, MXIO_MAX_HANDLES);
-  if (result <= 0) {
-    DLOG(ERROR) << "mxio_transfer_fd: " << mx_status_get_string(result);
-    return false;
+  // consisting of an FDIO-defined type & arguments (see zircon/processargs.h).
+  //
+  // We try to transfer the FD, but if that fails (for example if the file has
+  // already been dup()d into another FD) we may need to clone.
+  zx_handle_t handles[FDIO_MAX_HANDLES] = {};
+  uint32_t info[FDIO_MAX_HANDLES] = {};
+  zx_status_t result = fdio_transfer_fd(handle.get().as_fd(), 0, handles, info);
+  if (result > 0) {
+    // On success, the fd in |handle| has been transferred and is no longer
+    // valid. Release from the ScopedPlatformHandle to avoid close()ing an
+    // invalid handle.
+    ignore_result(handle.release());
+  } else if (result == ZX_ERR_UNAVAILABLE) {
+    // No luck, try cloning instead.
+    result = fdio_clone_fd(handle.get().as_fd(), 0, handles, info);
   }
 
-  // The supplied file-descriptor was released by mxio_transfer_fd().
-  ignore_result(handle.release());
+  if (result <= 0) {
+    DLOG(ERROR) << "fdio_transfer_fd(" << handle.get().as_fd()
+                << "): " << zx_status_get_string(result);
+    return false;
+  }
+  DCHECK_LE(result, FDIO_MAX_HANDLES);
 
   // We assume here that only the |PA_HND_TYPE| of the |info| really matters,
   // and that that is the same for all the underlying handles.
@@ -61,7 +72,7 @@ bool UnwrapPlatformHandle(ScopedPlatformHandle handle,
   for (int i = 0; i < result; ++i) {
     DCHECK_EQ(PA_HND_TYPE(info[0]), PA_HND_TYPE(info[i]));
     DCHECK_EQ(0u, PA_HND_SUBTYPE(info[i]));
-    handles_out->push_back(PlatformHandle::ForHandle(handles[i]));
+    handles_out->emplace_back(PlatformHandle::ForHandle(handles[i]));
   }
 
   return true;
@@ -69,33 +80,33 @@ bool UnwrapPlatformHandle(ScopedPlatformHandle handle,
 
 ScopedPlatformHandle WrapPlatformHandles(
     Channel::Message::HandleInfoEntry info,
-    std::deque<base::ScopedMxHandle>* handles) {
+    base::circular_deque<base::ScopedZxHandle>* handles) {
   ScopedPlatformHandle out_handle;
   if (!info.type) {
     out_handle.reset(PlatformHandle::ForHandle(handles->front().release()));
     handles->pop_front();
   } else {
-    if (info.count > MXIO_MAX_HANDLES)
+    if (info.count > FDIO_MAX_HANDLES)
       return ScopedPlatformHandle();
 
     // Fetch the required number of handles from |handles| and set up type info.
-    mx_handle_t fd_handles[MXIO_MAX_HANDLES] = {};
-    uint32_t fd_infos[MXIO_MAX_HANDLES] = {};
+    zx_handle_t fd_handles[FDIO_MAX_HANDLES] = {};
+    uint32_t fd_infos[FDIO_MAX_HANDLES] = {};
     for (int i = 0; i < info.count; ++i) {
       fd_handles[i] = (*handles)[i].get();
       fd_infos[i] = PA_HND(info.type, 0);
     }
 
-    // Try to wrap the handles into an MXIO file descriptor.
+    // Try to wrap the handles into an FDIO file descriptor.
     base::ScopedFD out_fd;
-    mx_status_t result =
-        mxio_create_fd(fd_handles, fd_infos, info.count, out_fd.receive());
-    if (result != MX_OK) {
-      DLOG(ERROR) << "mxio_create_fd: " << mx_status_get_string(result);
+    zx_status_t result =
+        fdio_create_fd(fd_handles, fd_infos, info.count, out_fd.receive());
+    if (result != ZX_OK) {
+      DLOG(ERROR) << "fdio_create_fd: " << zx_status_get_string(result);
       return ScopedPlatformHandle();
     }
 
-    // The handles are owned by MXIO now, so |release()| them before removing
+    // The handles are owned by FDIO now, so |release()| them before removing
     // the entries from |handles|.
     for (int i = 0; i < info.count; ++i) {
       ignore_result(handles->front().release());
@@ -142,26 +153,23 @@ class MessageView {
     offset_ += num_bytes;
   }
 
-  ScopedPlatformHandleVectorPtr TakeHandles() {
-    if (handles_) {
-      // We can only pass Fuchsia handles via IPC, so unwrap any MXIO file-
-      // descriptors in |handles_| into the underlying handles, and serialize
-      // the metadata, if any, into the extra header.
-      auto* handles_info = reinterpret_cast<Channel::Message::HandleInfoEntry*>(
-          message_->mutable_extra_header());
-      memset(handles_info, 0, message_->extra_header_size());
+  std::vector<ScopedPlatformHandle> TakeHandles() {
+    if (handles_.empty())
+      return std::vector<ScopedPlatformHandle>();
 
-      ScopedPlatformHandleVectorPtr in_handles(std::move(handles_));
+    // We can only pass Fuchsia handles via IPC, so unwrap any FDIO file-
+    // descriptors in |handles_| into the underlying handles, and serialize the
+    // metadata, if any, into the extra header.
+    auto* handles_info = reinterpret_cast<Channel::Message::HandleInfoEntry*>(
+        message_->mutable_extra_header());
+    memset(handles_info, 0, message_->extra_header_size());
 
-      handles_.reset(new PlatformHandleVector);
-      handles_->reserve(in_handles->size());
-      for (size_t i = 0; i < in_handles->size(); i++) {
-        ScopedPlatformHandle old_handle((*in_handles)[i]);
-        (*in_handles)[i] = PlatformHandle();
-        if (!UnwrapPlatformHandle(std::move(old_handle), &handles_info[i],
-                                  handles_.get()))
-          return nullptr;
-      }
+    std::vector<ScopedPlatformHandle> in_handles = std::move(handles_);
+    handles_.reserve(in_handles.size());
+    for (size_t i = 0; i < in_handles.size(); i++) {
+      if (!UnwrapPlatformHandle(std::move(in_handles[i]), &handles_info[i],
+                                &handles_))
+        return std::vector<ScopedPlatformHandle>();
     }
     return std::move(handles_);
   }
@@ -169,14 +177,14 @@ class MessageView {
  private:
   Channel::MessagePtr message_;
   size_t offset_;
-  ScopedPlatformHandleVectorPtr handles_;
+  std::vector<ScopedPlatformHandle> handles_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageView);
 };
 
 class ChannelFuchsia : public Channel,
                        public base::MessageLoop::DestructionObserver,
-                       public base::MessageLoopForIO::MxHandleWatcher {
+                       public base::MessageLoopForIO::ZxHandleWatcher {
  public:
   ChannelFuchsia(Delegate* delegate,
                  ConnectionParams connection_params,
@@ -226,10 +234,11 @@ class ChannelFuchsia : public Channel,
     leak_handle_ = true;
   }
 
-  bool GetReadPlatformHandles(size_t num_handles,
-                              const void* extra_header,
-                              size_t extra_header_size,
-                              ScopedPlatformHandleVectorPtr* handles) override {
+  bool GetReadPlatformHandles(
+      size_t num_handles,
+      const void* extra_header,
+      size_t extra_header_size,
+      std::vector<ScopedPlatformHandle>* handles) override {
     DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
     if (num_handles > std::numeric_limits<uint16_t>::max())
       return false;
@@ -244,7 +253,7 @@ class ChannelFuchsia : public Channel,
     if (handles_info_size > extra_header_size)
       return false;
 
-    // Some caller-supplied handles may be MXIO file-descriptors, which were
+    // Some caller-supplied handles may be FDIO file-descriptors, which were
     // un-wrapped to more than one native platform resource handle for transfer.
     // We may therefore need to expect more than |num_handles| handles to have
     // been accumulated in |incoming_handles_|, based on the handle info.
@@ -257,10 +266,9 @@ class ChannelFuchsia : public Channel,
     if (incoming_handles_.size() < num_raw_handles)
       return true;
 
-    handles->reset(new PlatformHandleVector);
-    (*handles)->reserve(num_handles);
+    handles->reserve(num_handles);
     for (size_t i = 0; i < num_handles; ++i) {
-      (*handles)->push_back(
+      handles->emplace_back(
           WrapPlatformHandles(handles_info[i], &incoming_handles_).release());
     }
     return true;
@@ -277,10 +285,10 @@ class ChannelFuchsia : public Channel,
     base::MessageLoop::current()->AddDestructionObserver(this);
 
     read_watch_.reset(
-        new base::MessageLoopForIO::MxHandleWatchController(FROM_HERE));
-    base::MessageLoopForIO::current()->WatchMxHandle(
+        new base::MessageLoopForIO::ZxHandleWatchController(FROM_HERE));
+    base::MessageLoopForIO::current()->WatchZxHandle(
         handle_.get().as_handle(), true /* persistent */,
-        MX_CHANNEL_READABLE | MX_CHANNEL_PEER_CLOSED, read_watch_.get(), this);
+        ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED, read_watch_.get(), this);
   }
 
   void ShutDownOnIOThread() {
@@ -302,13 +310,13 @@ class ChannelFuchsia : public Channel,
       ShutDownOnIOThread();
   }
 
-  // base::MessageLoopForIO::MxHandleWatcher:
-  void OnMxHandleSignalled(mx_handle_t handle, mx_signals_t signals) override {
+  // base::MessageLoopForIO::ZxHandleWatcher:
+  void OnZxHandleSignalled(zx_handle_t handle, zx_signals_t signals) override {
     DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
     CHECK_EQ(handle, handle_.get().as_handle());
-    DCHECK((MX_CHANNEL_READABLE | MX_CHANNEL_PEER_CLOSED) & signals);
+    DCHECK((ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED) & signals);
 
-    // We always try to read message(s), even if MX_CHANNEL_PEER_CLOSED, since
+    // We always try to read message(s), even if ZX_CHANNEL_PEER_CLOSED, since
     // the peer may have closed while messages were still unread, in the pipe.
 
     bool validation_error = false;
@@ -323,14 +331,14 @@ class ChannelFuchsia : public Channel,
 
       uint32_t bytes_read = 0;
       uint32_t handles_read = 0;
-      mx_handle_t handles[MX_CHANNEL_MAX_MSG_HANDLES] = {};
+      zx_handle_t handles[ZX_CHANNEL_MAX_MSG_HANDLES] = {};
 
-      mx_status_t read_result = mx_channel_read(
+      zx_status_t read_result = zx_channel_read(
           handle_.get().as_handle(), 0, buffer, handles, buffer_capacity,
           arraysize(handles), &bytes_read, &handles_read);
-      if (read_result == MX_OK) {
+      if (read_result == ZX_OK) {
         for (size_t i = 0; i < handles_read; ++i) {
-          incoming_handles_.push_back(base::ScopedMxHandle(handles[i]));
+          incoming_handles_.push_back(base::ScopedZxHandle(handles[i]));
         }
         total_bytes_read += bytes_read;
         if (!OnReadComplete(bytes_read, &next_read_size)) {
@@ -338,14 +346,14 @@ class ChannelFuchsia : public Channel,
           validation_error = true;
           break;
         }
-      } else if (read_result == MX_ERR_BUFFER_TOO_SMALL) {
+      } else if (read_result == ZX_ERR_BUFFER_TOO_SMALL) {
         DCHECK_LE(handles_read, arraysize(handles));
         next_read_size = bytes_read;
-      } else if (read_result == MX_ERR_SHOULD_WAIT) {
+      } else if (read_result == ZX_ERR_SHOULD_WAIT) {
         break;
       } else {
-        DLOG_IF(ERROR, read_result != MX_ERR_PEER_CLOSED)
-            << "mx_channel_read: " << mx_status_get_string(read_result);
+        DLOG_IF(ERROR, read_result != ZX_ERR_PEER_CLOSED)
+            << "zx_channel_read: " << zx_status_get_string(read_result);
         read_error = true;
         break;
       }
@@ -368,41 +376,35 @@ class ChannelFuchsia : public Channel,
     do {
       message_view.advance_data_offset(write_bytes);
 
-      ScopedPlatformHandleVectorPtr outgoing_handles =
+      std::vector<ScopedPlatformHandle> outgoing_handles =
           message_view.TakeHandles();
-      size_t handles_count = 0;
-      mx_handle_t handles[MX_CHANNEL_MAX_MSG_HANDLES] = {};
-      if (outgoing_handles) {
-        DCHECK_LE(outgoing_handles->size(), arraysize(handles));
+      zx_handle_t handles[ZX_CHANNEL_MAX_MSG_HANDLES] = {};
+      size_t handles_count = outgoing_handles.size();
 
-        handles_count = outgoing_handles->size();
-        for (size_t i = 0; i < handles_count; ++i) {
-          DCHECK(outgoing_handles->data()[i].is_valid_handle());
-          handles[i] = outgoing_handles->data()[i].as_handle();
-        }
+      DCHECK_LE(handles_count, arraysize(handles));
+      for (size_t i = 0; i < handles_count; ++i) {
+        DCHECK(outgoing_handles[i].is_valid());
+        handles[i] = outgoing_handles[i].get().as_handle();
       }
 
       write_bytes = std::min(message_view.data_num_bytes(),
-                             static_cast<size_t>(MX_CHANNEL_MAX_MSG_BYTES));
-      mx_status_t result =
-          mx_channel_write(handle_.get().as_handle(), 0, message_view.data(),
+                             static_cast<size_t>(ZX_CHANNEL_MAX_MSG_BYTES));
+      zx_status_t result =
+          zx_channel_write(handle_.get().as_handle(), 0, message_view.data(),
                            write_bytes, handles, handles_count);
-      if (result != MX_OK) {
-        // TODO(fuchsia): Handle MX_ERR_SHOULD_WAIT flow-control errors, once
+      if (result != ZX_OK) {
+        // TODO(fuchsia): Handle ZX_ERR_SHOULD_WAIT flow-control errors, once
         // the platform starts generating them. See crbug.com/754084.
-        DLOG_IF(ERROR, result != MX_ERR_PEER_CLOSED)
-            << "WriteNoLock(mx_channel_write): "
-            << mx_status_get_string(result);
+        DLOG_IF(ERROR, result != ZX_ERR_PEER_CLOSED)
+            << "WriteNoLock(zx_channel_write): "
+            << zx_status_get_string(result);
         return false;
       }
 
-      if (outgoing_handles) {
-        // |handles| have been transferred to the peer process, so clear them to
-        // avoid them being double-closed.
-        for (auto& outgoing_handle : *outgoing_handles) {
-          outgoing_handle = PlatformHandle();
-        }
-      }
+      // |handles| have been transferred to the peer process, so release()
+      // them, to avoid them being double-closed.
+      for (auto& outgoing_handle : outgoing_handles)
+        ignore_result(outgoing_handle.release());
     } while (write_bytes < message_view.data_num_bytes());
 
     return true;
@@ -415,8 +417,8 @@ class ChannelFuchsia : public Channel,
   scoped_refptr<base::TaskRunner> io_task_runner_;
 
   // These members are only used on the IO thread.
-  std::unique_ptr<base::MessageLoopForIO::MxHandleWatchController> read_watch_;
-  std::deque<base::ScopedMxHandle> incoming_handles_;
+  std::unique_ptr<base::MessageLoopForIO::ZxHandleWatchController> read_watch_;
+  base::circular_deque<base::ScopedZxHandle> incoming_handles_;
   bool leak_handle_ = false;
 
   base::Lock write_lock_;

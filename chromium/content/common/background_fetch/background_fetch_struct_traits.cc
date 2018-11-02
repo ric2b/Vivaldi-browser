@@ -19,7 +19,7 @@ bool StructTraits<blink::mojom::BackgroundFetchOptionsDataView,
   if (!data.ReadIcons(&options->icons) || !data.ReadTitle(&options->title))
     return false;
 
-  options->total_download_size = data.total_download_size();
+  options->download_total = data.download_total();
   return true;
 }
 
@@ -28,13 +28,15 @@ bool StructTraits<blink::mojom::BackgroundFetchRegistrationDataView,
                   content::BackgroundFetchRegistration>::
     Read(blink::mojom::BackgroundFetchRegistrationDataView data,
          content::BackgroundFetchRegistration* registration) {
-  if (!data.ReadId(&registration->id) ||
-      !data.ReadIcons(&registration->icons) ||
-      !data.ReadTitle(&registration->title)) {
+  if (!data.ReadDeveloperId(&registration->developer_id) ||
+      !data.ReadUniqueId(&registration->unique_id)) {
     return false;
   }
 
-  registration->total_download_size = data.total_download_size();
+  registration->upload_total = data.upload_total();
+  registration->uploaded = data.uploaded();
+  registration->download_total = data.download_total();
+  registration->downloaded = data.downloaded();
   return true;
 }
 

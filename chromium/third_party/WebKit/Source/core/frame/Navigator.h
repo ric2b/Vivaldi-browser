@@ -35,12 +35,11 @@ namespace blink {
 
 class LocalFrame;
 
-class CORE_EXPORT Navigator final : public GarbageCollected<Navigator>,
+class CORE_EXPORT Navigator final : public ScriptWrappable,
                                     public NavigatorConcurrentHardware,
                                     public NavigatorID,
                                     public NavigatorLanguage,
                                     public NavigatorOnLine,
-                                    public ScriptWrappable,
                                     public DOMWindowClient,
                                     public Supplementable<Navigator> {
   DEFINE_WRAPPERTYPEINFO();
@@ -52,17 +51,21 @@ class CORE_EXPORT Navigator final : public GarbageCollected<Navigator>,
   // NavigatorCookies
   bool cookieEnabled() const;
 
+  bool webdriver() const { return true; }
+
   float deviceMemory() const;
   String productSub() const;
   String vendor() const;
   String vendorSub() const;
 
+  String platform() const override;
   String userAgent() const override;
 
   // NavigatorLanguage
   Vector<String> languages() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   explicit Navigator(LocalFrame*);

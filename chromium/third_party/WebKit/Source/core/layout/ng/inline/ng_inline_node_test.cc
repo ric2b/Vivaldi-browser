@@ -4,13 +4,14 @@
 
 #include "core/layout/ng/inline/ng_inline_node.h"
 
-#include "core/layout/LayoutTestHelper.h"
 #include "core/layout/ng/inline/ng_inline_layout_algorithm.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "core/layout/ng/inline/ng_physical_text_fragment.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_layout_result.h"
+#include "core/layout/ng/ng_layout_test.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/style/ComputedStyle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -23,61 +24,62 @@ class NGInlineNodeForTest : public NGInlineNode {
 
   String& Text() { return MutableData()->text_content_; }
   Vector<NGInlineItem>& Items() { return MutableData()->items_; }
+  static Vector<NGInlineItem>& Items(NGInlineNodeData& data) {
+    return data.items_;
+  }
 
   void Append(const String& text,
               const ComputedStyle* style = nullptr,
               LayoutObject* layout_object = nullptr) {
-    unsigned start = Data().text_content_.length();
-    MutableData()->text_content_.append(text);
-    MutableData()->items_.push_back(NGInlineItem(NGInlineItem::kText, start,
-                                                 start + text.length(), style,
-                                                 layout_object));
-    MutableData()->is_empty_inline_ = false;
+    NGInlineNodeData* data = MutableData();
+    unsigned start = data->text_content_.length();
+    data->text_content_.append(text);
+    data->items_.push_back(NGInlineItem(NGInlineItem::kText, start,
+                                        start + text.length(), style,
+                                        layout_object));
+    data->is_empty_inline_ = false;
   }
 
   void Append(UChar character) {
-    MutableData()->text_content_.append(character);
-    unsigned end = Data().text_content_.length();
-    MutableData()->items_.push_back(
+    NGInlineNodeData* data = MutableData();
+    data->text_content_.append(character);
+    unsigned end = data->text_content_.length();
+    data->items_.push_back(
         NGInlineItem(NGInlineItem::kBidiControl, end - 1, end, nullptr));
-    MutableData()->is_bidi_enabled_ = true;
-    MutableData()->is_empty_inline_ = false;
+    data->is_bidi_enabled_ = true;
+    data->is_empty_inline_ = false;
   }
 
   void ClearText() {
-    MutableData()->text_content_ = String();
-    MutableData()->items_.clear();
-    MutableData()->is_empty_inline_ = true;
+    NGInlineNodeData* data = MutableData();
+    data->text_content_ = String();
+    data->items_.clear();
+    data->is_empty_inline_ = true;
   }
 
   void SegmentText() {
-    MutableData()->is_bidi_enabled_ = true;
-    NGInlineNode::SegmentText();
+    NGInlineNodeData* data = MutableData();
+    data->is_bidi_enabled_ = true;
+    NGInlineNode::SegmentText(data);
   }
 
-  using NGInlineNode::CollectInlines;
-  using NGInlineNode::ShapeText;
+  void CollectInlines() { NGInlineNode::CollectInlines(MutableData()); }
+  void ShapeText() { NGInlineNode::ShapeText(MutableData()); }
 };
 
-class NGInlineNodeTest : public RenderingTest {
+class NGInlineNodeTest : public NGLayoutTest {
  protected:
   void SetUp() override {
-    RenderingTest::SetUp();
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
+    NGLayoutTest::SetUp();
     style_ = ComputedStyle::Create();
     style_->GetFont().Update(nullptr);
-  }
-
-  void TearDown() override {
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(false);
-    RenderingTest::TearDown();
   }
 
   void SetupHtml(const char* id, String html) {
     SetBodyInnerHTML(html);
     layout_block_flow_ = ToLayoutNGBlockFlow(GetLayoutObjectByElementId(id));
     layout_object_ = layout_block_flow_->FirstChild();
-    style_ = layout_object_->Style();
+    style_ = layout_object_ ? layout_object_->Style() : nullptr;
   }
 
   void UseLayoutObjectAndAhem() {
@@ -95,27 +97,33 @@ class NGInlineNodeTest : public RenderingTest {
     return node;
   }
 
-  void CreateLine(NGInlineNode node,
-                  Vector<RefPtr<const NGPhysicalTextFragment>>* fragments_out) {
+  void CreateLine(
+      NGInlineNode node,
+      Vector<scoped_refptr<const NGPhysicalTextFragment>>* fragments_out) {
     NGPhysicalSize icb_size(LayoutUnit(200), LayoutUnit(200));
 
-    RefPtr<NGConstraintSpace> constraint_space =
-        NGConstraintSpaceBuilder(kHorizontalTopBottom, icb_size)
-            .ToConstraintSpace(kHorizontalTopBottom);
-    RefPtr<NGLayoutResult> result =
+    scoped_refptr<NGConstraintSpace> constraint_space =
+        NGConstraintSpaceBuilder(WritingMode::kHorizontalTb, icb_size)
+            .ToConstraintSpace(WritingMode::kHorizontalTb);
+    scoped_refptr<NGLayoutResult> result =
         NGInlineLayoutAlgorithm(node, *constraint_space).Layout();
 
-    const NGPhysicalBoxFragment* container =
-        ToNGPhysicalBoxFragment(result->PhysicalFragment().Get());
-    EXPECT_EQ(container->Children().size(), 1u);
     const NGPhysicalLineBoxFragment* line =
-        ToNGPhysicalLineBoxFragment(container->Children()[0].Get());
+        ToNGPhysicalLineBoxFragment(result->PhysicalFragment().get());
     for (const auto& child : line->Children()) {
-      fragments_out->push_back(ToNGPhysicalTextFragment(child.Get()));
+      fragments_out->push_back(ToNGPhysicalTextFragment(child.get()));
     }
   }
 
-  RefPtr<const ComputedStyle> style_;
+  Vector<NGInlineItem>& Items() {
+    NGInlineNodeData* data = layout_block_flow_->GetNGInlineNodeData();
+    CHECK(data);
+    return NGInlineNodeForTest::Items(*data);
+  }
+
+  void ForceLayout() { GetDocument().body()->OffsetTop(); }
+
+  scoped_refptr<const ComputedStyle> style_;
   LayoutNGBlockFlow* layout_block_flow_ = nullptr;
   LayoutObject* layout_object_ = nullptr;
   FontCachePurgePreventer purge_preventer_;
@@ -288,7 +296,7 @@ static NGInlineNodeForTest CreateBidiIsolateNode(NGInlineNodeForTest node,
 
 TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
   NGInlineNodeForTest node = CreateInlineNode();
-  node = CreateBidiIsolateNode(node, style_.Get(), layout_object_);
+  node = CreateBidiIsolateNode(node, style_.get(), layout_object_);
   Vector<NGInlineItem>& items = node.Items();
   ASSERT_EQ(9u, items.size());
   TEST_ITEM_OFFSET_DIR(items[0], 0u, 6u, TextDirection::kLtr);
@@ -310,13 +318,13 @@ TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
 
 TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
   UseLayoutObjectAndAhem();
-  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->SetLineHeight(Length(1, kFixed));
   style->GetFont().Update(nullptr);
   NGInlineNodeForTest node = CreateInlineNode();
-  node = CreateBidiIsolateNode(node, style.Get(), layout_object_);
+  node = CreateBidiIsolateNode(node, style.get(), layout_object_);
   node.ShapeText();
-  Vector<RefPtr<const NGPhysicalTextFragment>> fragments;
+  Vector<scoped_refptr<const NGPhysicalTextFragment>> fragments;
   CreateLine(node, &fragments);
   ASSERT_EQ(5u, fragments.size());
   TEST_TEXT_FRAGMENT(fragments[0], 0u, 0u, 6u, TextDirection::kLtr);
@@ -344,6 +352,169 @@ TEST_F(NGInlineNodeTest, MinMaxSizeElementBoundary) {
   // boundary between "B" and "C" but no break opportunities.
   EXPECT_EQ(20, sizes.min_size);
   EXPECT_EQ(60, sizes.max_size);
+}
+
+TEST_F(NGInlineNodeTest, InvalidateAddSpan) {
+  SetupHtml("t", "<div id=t>before</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* parent = ToElement(layout_block_flow_->GetNode());
+  Element* span = GetDocument().createElement("span");
+  parent->appendChild(span);
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, open/close items should be added.
+  ForceLayout();
+  EXPECT_EQ(item_count_before + 2, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateRemoveSpan) {
+  SetupHtml("t", "<div id=t><span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->remove();
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateAddInnerSpan) {
+  SetupHtml("t", "<div id=t><span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* parent = GetElementById("x");
+  ASSERT_TRUE(parent);
+  Element* span = GetDocument().createElement("span");
+  parent->appendChild(span);
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, open/close items should be added.
+  ForceLayout();
+  EXPECT_EQ(item_count_before + 2, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateRemoveInnerSpan) {
+  SetupHtml("t", "<div id=t><span><span id=x></span></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->remove();
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateSetText) {
+  SetupHtml("t", "<div id=t>before</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  LayoutText* text = ToLayoutText(layout_block_flow_->FirstChild());
+  text->SetText(String("after").Impl());
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateSetTextWithOffset) {
+  SetupHtml("t", "<div id=t>before</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  LayoutText* text = ToLayoutText(layout_block_flow_->FirstChild());
+  text->SetTextWithOffset(String("after").Impl(), 1, 4);
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateAddAbsolute) {
+  SetupHtml("t",
+            "<style>span { position: absolute; }</style>"
+            "<div id=t>before</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* parent = ToElement(layout_block_flow_->GetNode());
+  Element* span = GetDocument().createElement("span");
+  parent->appendChild(span);
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, an OOF item should be added.
+  ForceLayout();
+  EXPECT_EQ(item_count_before + 1, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateRemoveAbsolute) {
+  SetupHtml("t",
+            "<style>span { position: absolute; }</style>"
+            "<div id=t>before<span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->remove();
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateChangeToAbsolute) {
+  SetupHtml("t",
+            "<style>#y { position: absolute; }</style>"
+            "<div id=t>before<span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->SetIdAttribute("y");
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, an open/close items should be replaced with an
+  // OOF item.
+  ForceLayout();
+  EXPECT_EQ(item_count_before - 1, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateChangeFromAbsolute) {
+  SetupHtml("t",
+            "<style>#x { position: absolute; }</style>"
+            "<div id=t>before<span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->SetIdAttribute("y");
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, an OOF item should be replaced with open/close
+  // items..
+  ForceLayout();
+  EXPECT_EQ(item_count_before + 1, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateAddFloat) {
+  SetupHtml("t",
+            "<style>span { float: left; }</style>"
+            "<div id=t>before</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  unsigned item_count_before = Items().size();
+
+  Element* parent = ToElement(layout_block_flow_->GetNode());
+  Element* span = GetDocument().createElement("span");
+  parent->appendChild(span);
+
+  // NeedsCollectInlines() is marked during the layout.
+  // By re-collecting inlines, an float item should be added.
+  ForceLayout();
+  EXPECT_EQ(item_count_before + 1, Items().size());
+}
+
+TEST_F(NGInlineNodeTest, InvalidateRemoveFloat) {
+  SetupHtml("t",
+            "<style>span { float: left; }</style>"
+            "<div id=t>before<span id=x></span></div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  span->remove();
+  EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
 }
 
 }  // namespace blink

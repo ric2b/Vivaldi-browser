@@ -11,10 +11,6 @@
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/common/features.h"
 
-namespace ash {
-class ShelfModel;
-}
-
 namespace aura {
 class UserActivityForwarder;
 }
@@ -23,12 +19,12 @@ namespace ui {
 class UserActivityDetector;
 }
 
+class AccessibilityControllerClient;
 class AshInit;
 class CastConfigClientMediaRouter;
-class ChromeLauncherController;
 class ChromeNewWindowClient;
 class ChromeShellContentState;
-class LockScreenClient;
+class LoginScreenClient;
 class ImeControllerClient;
 class ImmersiveContextMus;
 class ImmersiveHandlerFactoryMus;
@@ -57,6 +53,8 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   void PostMainMessageLoopRun() override;
 
  private:
+  std::unique_ptr<AccessibilityControllerClient>
+      accessibility_controller_client_;
   std::unique_ptr<ChromeShellContentState> chrome_shell_content_state_;
   std::unique_ptr<CastConfigClientMediaRouter> cast_config_client_media_router_;
   std::unique_ptr<MediaClient> media_client_;
@@ -69,12 +67,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<VolumeController> volume_controller_;
   std::unique_ptr<VpnListForwarder> vpn_list_forwarder_;
   std::unique_ptr<AshInit> ash_init_;
-  std::unique_ptr<LockScreenClient> lock_screen_client_;
-
-  // These are only used in Mash; corresponding instances are owned by Ash's
-  // ShelfController and ChromeShellDelegate in classic Ash.
-  std::unique_ptr<ash::ShelfModel> chrome_shelf_model_;
-  std::unique_ptr<ChromeLauncherController> chrome_launcher_controller_;
+  std::unique_ptr<LoginScreenClient> login_screen_client_;
 
   // Used only for mash.
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;

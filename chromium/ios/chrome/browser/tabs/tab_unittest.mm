@@ -23,6 +23,7 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/chrome_url_util.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/history/history_tab_helper.h"
 #import "ios/chrome/browser/snapshots/snapshot_manager.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -111,11 +112,13 @@ const char kValidFilenameUrl[] = "http://www.hostname.com/filename.pdf";
 @end
 
 @implementation ExternalAppLauncherMock
-typedef BOOL (^openURLBlockType)(const GURL&, BOOL);
+typedef BOOL (^openURLBlockType)(const GURL&, const GURL&, BOOL);
 
-- (BOOL)openURL:(const GURL&)url linkClicked:(BOOL)linkClicked {
+- (BOOL)requestToOpenURL:(const GURL&)url
+           sourcePageURL:(const GURL&)sourceURL
+             linkClicked:(BOOL)linkClicked {
   return static_cast<openURLBlockType>([self blockForSelector:_cmd])(
-      url, linkClicked);
+      url, sourceURL, linkClicked);
 }
 @end
 
@@ -151,8 +154,7 @@ HistoryQueryResultsObserver::~HistoryQueryResultsObserver() {}
 class TabTest : public BlockCleanupTest {
  public:
   TabTest()
-      : thread_bundle_(web::TestWebThreadBundle::REAL_FILE_THREAD),
-        scoped_browser_state_manager_(
+      : scoped_browser_state_manager_(
             base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())),
         web_state_impl_(nullptr) {}
 
@@ -188,6 +190,7 @@ class TabTest : public BlockCleanupTest {
     [[[static_cast<OCMockObject*>(mock_web_controller_) stub]
         andReturn:web_controller_view_] view];
     TabIdTabHelper::CreateForWebState(web_state_impl_.get());
+    HistoryTabHelper::CreateForWebState(web_state_impl_.get());
     LegacyTabHelper::CreateForWebState(web_state_impl_.get());
     tab_ = LegacyTabHelper::GetTabForWebState(web_state_impl_.get());
     web::NavigationManager::WebLoadParams load_params(
@@ -213,14 +216,11 @@ class TabTest : public BlockCleanupTest {
   void BrowseTo(const GURL& userUrl, const GURL& redirectUrl, NSString* title) {
     DCHECK_EQ(tab_.webState, web_state_impl_.get());
 
-    [tab_ webWillAddPendingURL:userUrl transition:ui::PAGE_TRANSITION_TYPED];
     std::unique_ptr<web::NavigationContext> context1 =
         web::NavigationContextImpl::CreateNavigationContext(
             web_state_impl_.get(), userUrl,
             ui::PageTransition::PAGE_TRANSITION_TYPED, false);
     web_state_impl_->OnNavigationStarted(context1.get());
-    [tab_ webWillAddPendingURL:redirectUrl
-                    transition:ui::PAGE_TRANSITION_CLIENT_REDIRECT];
 
     web::Referrer empty_referrer;
     [tab_ navigationManagerImpl]->AddPendingItem(
@@ -409,18 +409,25 @@ TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
 }
 
 TEST_F(TabTest, SnapshotIsNotRemovedDuringShutdown) {
-  GetApplicationContext()->SetIsShuttingDown();
   id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
   tab_.snapshotManager = mockSnapshotManager;
   [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
   web_state_impl_.reset();
 }
 
-TEST_F(TabTest, ClosingWebStateRemovesSnapshot) {
+TEST_F(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
   id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
   tab_.snapshotManager = mockSnapshotManager;
+  [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
   web_state_impl_.reset();
+}
+
+TEST_F(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
+  id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
+  tab_.snapshotManager = mockSnapshotManager;
+  [tab_ removeSnapshot];
   [[mockSnapshotManager verify] removeImageWithSessionID:[OCMArg any]];
+  web_state_impl_.reset();
 }
 
 }  // namespace

@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/circular_deque.h"
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -110,7 +111,7 @@ class VideoRendererImplTest : public testing::Test {
                        scoped_refptr<DecoderBuffer>(new DecoderBuffer(0))));
   }
 
-  virtual ~VideoRendererImplTest() {}
+  virtual ~VideoRendererImplTest() = default;
 
   void Initialize() {
     InitializeWithLowDelay(false);
@@ -519,7 +520,7 @@ class VideoRendererImplTest : public testing::Test {
   // Run during DecodeRequested() to unblock WaitForPendingDecode().
   base::Closure wait_for_pending_decode_cb_;
 
-  std::deque<std::pair<DecodeStatus, scoped_refptr<VideoFrame>>>
+  base::circular_deque<std::pair<DecodeStatus, scoped_refptr<VideoFrame>>>
       decode_results_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoRendererImplTest);
@@ -794,8 +795,8 @@ TEST_F(VideoRendererImplTest, ComplexityBasedBufferingRealtimeIncapable) {
 
 class TestMemoryPressureMonitor : public base::MemoryPressureMonitor {
  public:
-  TestMemoryPressureMonitor() {}
-  ~TestMemoryPressureMonitor() override {}
+  TestMemoryPressureMonitor() = default;
+  ~TestMemoryPressureMonitor() override = default;
 
   MemoryPressureLevel GetCurrentPressureLevel() override {
     return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE;

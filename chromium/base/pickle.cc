@@ -53,7 +53,7 @@ template<typename Type>
 inline const char* PickleIterator::GetReadPointerAndAdvance() {
   if (sizeof(Type) > end_index_ - read_index_) {
     read_index_ = end_index_;
-    return NULL;
+    return nullptr;
   }
   const char* current_read_ptr = payload_ + read_index_;
   Advance(sizeof(Type));
@@ -64,7 +64,7 @@ const char* PickleIterator::GetReadPointerAndAdvance(int num_bytes) {
   if (num_bytes < 0 ||
       end_index_ - read_index_ < static_cast<size_t>(num_bytes)) {
     read_index_ = end_index_;
-    return NULL;
+    return nullptr;
   }
   const char* current_read_ptr = payload_ + read_index_;
   Advance(num_bytes);
@@ -77,7 +77,7 @@ inline const char* PickleIterator::GetReadPointerAndAdvance(
   // Check for int32_t overflow.
   int num_bytes;
   if (!CheckMul(num_elements, size_element).AssignIfValid(&num_bytes))
-    return NULL;
+    return nullptr;
   return GetReadPointerAndAdvance(num_bytes);
 }
 
@@ -191,7 +191,7 @@ bool PickleIterator::ReadStringPiece16(StringPiece16* result) {
 
 bool PickleIterator::ReadData(const char** data, int* length) {
   *length = 0;
-  *data = 0;
+  *data = nullptr;
 
   if (!ReadInt(length))
     return false;
@@ -207,52 +207,14 @@ bool PickleIterator::ReadBytes(const char** data, int length) {
   return true;
 }
 
-PickleSizer::PickleSizer() {}
+Pickle::Attachment::Attachment() = default;
 
-PickleSizer::~PickleSizer() {}
-
-void PickleSizer::AddString(const StringPiece& value) {
-  AddInt();
-  AddBytes(static_cast<int>(value.size()));
-}
-
-void PickleSizer::AddString16(const StringPiece16& value) {
-  AddInt();
-  AddBytes(static_cast<int>(value.size() * sizeof(char16)));
-}
-
-void PickleSizer::AddData(int length) {
-  CHECK_GE(length, 0);
-  AddInt();
-  AddBytes(length);
-}
-
-void PickleSizer::AddBytes(int length) {
-  payload_size_ += bits::Align(length, sizeof(uint32_t));
-}
-
-void PickleSizer::AddAttachment() {
-  // From IPC::Message::WriteAttachment
-  AddInt();
-}
-
-template <size_t length> void PickleSizer::AddBytesStatic() {
-  DCHECK_LE(length, static_cast<size_t>(std::numeric_limits<int>::max()));
-  AddBytes(length);
-}
-
-template void PickleSizer::AddBytesStatic<2>();
-template void PickleSizer::AddBytesStatic<4>();
-template void PickleSizer::AddBytesStatic<8>();
-
-Pickle::Attachment::Attachment() {}
-
-Pickle::Attachment::~Attachment() {}
+Pickle::Attachment::~Attachment() = default;
 
 // Payload is uint32_t aligned.
 
 Pickle::Pickle()
-    : header_(NULL),
+    : header_(nullptr),
       header_size_(sizeof(Header)),
       capacity_after_header_(0),
       write_offset_(0) {
@@ -263,7 +225,7 @@ Pickle::Pickle()
 }
 
 Pickle::Pickle(int header_size)
-    : header_(NULL),
+    : header_(nullptr),
       header_size_(bits::Align(header_size, sizeof(uint32_t))),
       capacity_after_header_(0),
       write_offset_(0) {
@@ -289,11 +251,11 @@ Pickle::Pickle(const char* data, int data_len)
 
   // If there is anything wrong with the data, we're not going to use it.
   if (!header_size_)
-    header_ = NULL;
+    header_ = nullptr;
 }
 
 Pickle::Pickle(const Pickle& other)
-    : header_(NULL),
+    : header_(nullptr),
       header_size_(other.header_size_),
       capacity_after_header_(0),
       write_offset_(other.write_offset_) {
@@ -311,12 +273,12 @@ Pickle& Pickle::operator=(const Pickle& other) {
     return *this;
   }
   if (capacity_after_header_ == kCapacityReadOnly) {
-    header_ = NULL;
+    header_ = nullptr;
     capacity_after_header_ = 0;
   }
   if (header_size_ != other.header_size_) {
     free(header_);
-    header_ = NULL;
+    header_ = nullptr;
     header_size_ = other.header_size_;
   }
   Resize(other.header_->payload_size);
@@ -326,28 +288,24 @@ Pickle& Pickle::operator=(const Pickle& other) {
   return *this;
 }
 
-bool Pickle::WriteString(const StringPiece& value) {
-  if (!WriteInt(static_cast<int>(value.size())))
-    return false;
-
-  return WriteBytes(value.data(), static_cast<int>(value.size()));
+void Pickle::WriteString(const StringPiece& value) {
+  WriteInt(static_cast<int>(value.size()));
+  WriteBytes(value.data(), static_cast<int>(value.size()));
 }
 
-bool Pickle::WriteString16(const StringPiece16& value) {
-  if (!WriteInt(static_cast<int>(value.size())))
-    return false;
-
-  return WriteBytes(value.data(),
-                    static_cast<int>(value.size()) * sizeof(char16));
+void Pickle::WriteString16(const StringPiece16& value) {
+  WriteInt(static_cast<int>(value.size()));
+  WriteBytes(value.data(), static_cast<int>(value.size()) * sizeof(char16));
 }
 
-bool Pickle::WriteData(const char* data, int length) {
-  return length >= 0 && WriteInt(length) && WriteBytes(data, length);
+void Pickle::WriteData(const char* data, int length) {
+  DCHECK_GE(length, 0);
+  WriteInt(length);
+  WriteBytes(data, length);
 }
 
-bool Pickle::WriteBytes(const void* data, int length) {
+void Pickle::WriteBytes(const void* data, int length) {
   WriteBytesCommon(data, length);
-  return true;
 }
 
 void Pickle::Reserve(size_t length) {
@@ -402,10 +360,10 @@ const char* Pickle::FindNext(size_t header_size,
                              const char* end) {
   size_t pickle_size = 0;
   if (!PeekNext(header_size, start, end, &pickle_size))
-    return NULL;
+    return nullptr;
 
   if (pickle_size > static_cast<size_t>(end - start))
-    return NULL;
+    return nullptr;
 
   return start + pickle_size;
 }

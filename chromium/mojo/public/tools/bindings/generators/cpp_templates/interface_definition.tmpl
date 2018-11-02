@@ -10,7 +10,7 @@
   serialization_context.TakeHandlesFromMessage({{message}});
   bool success = true;
 {%-   for param in struct.packed.packed_fields_in_ordinal_order %}
-  {{param.field.kind|cpp_wrapper_type}} p_{{param.field.name}}{};
+  {{param.field.kind|cpp_wrapper_call_type}} p_{{param.field.name}}{};
 {%-   endfor %}
   {{struct.name}}DataView input_data_view({{params}}, &serialization_context);
   {{struct_macros.deserialize(struct, "input_data_view", "p_%s", "success")}}
@@ -62,7 +62,7 @@ class {{class_name}}_{{method.name}}_HandleSyncResponse
   {{class_name}}_{{method.name}}_HandleSyncResponse(
       bool* result
 {%-       for param in method.response_parameters -%}
-      , {{param.kind|cpp_wrapper_type}}* out_{{param.name}}
+      , {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}
 {%-       endfor %})
       : result_(result)
 {%-       for param in method.response_parameters -%}
@@ -74,7 +74,7 @@ class {{class_name}}_{{method.name}}_HandleSyncResponse
  private:
   bool* result_;
 {%-       for param in method.response_parameters %}
-  {{param.kind|cpp_wrapper_type}}* out_{{param.name}}_;
+  {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}_;
 {%-       endfor -%}
   DISALLOW_COPY_AND_ASSIGN({{class_name}}_{{method.name}}_HandleSyncResponse);
 };
@@ -144,7 +144,7 @@ bool {{proxy_name}}::{{method.name}}(
       new {{class_name}}_{{method.name}}_HandleSyncResponse(
           &result
 {%-     for param in method.response_parameters -%}
-          , param_{{param.name}}
+          , out_param_{{param.name}}
 {%-     endfor %}));
   ignore_result(receiver_->AcceptWithResponder(&message, std::move(responder)));
   return result;
@@ -216,7 +216,9 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
       // Is the Service destroying the callback without running it
       // and without first closing the pipe?
       responder_->DCheckInvalid("The callback passed to "
-          "{{class_name}}::{{method.name}}() was never run.");
+          "{{class_name}}::{{method.name}}() was never run. It should either "
+          "be run before destruction, or else destroyed after first closing "
+          "the pipe.");
     }
 #endif
     // If the Callback was dropped then deleting the responder will close
@@ -253,6 +255,9 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
 
 bool {{class_name}}_{{method.name}}_ForwardToCallback::Accept(
     mojo::Message* message) {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
   mojo::internal::MessageDispatchContext dispatch_context(message);
 {%-     if method|method_supports_lazy_serialization %}
   if (!message->is_serialized()) {
@@ -299,6 +304,9 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
       response_params_description, "kFlags", "message")}}
 {%-   endif %}
 
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message.name());
+#endif
   message.set_request_id(request_id_);
   ignore_result(responder_->Accept(&message));
   // TODO(darin): Accept() returning false indicates a malformed message, and
@@ -311,6 +319,9 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
 {%-   if method.sync %}
 bool {{class_name}}_{{method.name}}_HandleSyncResponse::Accept(
     mojo::Message* message) {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
 {%-     if method|method_supports_lazy_serialization %}
   if (!message->is_serialized()) {
     auto context =
@@ -364,6 +375,9 @@ bool {{class_name}}StubDispatch::Accept(
   switch (message->header()->name) {
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
 {%-     if method.response_parameters == None %}
       mojo::internal::MessageDispatchContext context(message);
 {%-       if method|method_supports_lazy_serialization %}
@@ -413,6 +427,9 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
   switch (message->header()->name) {
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
 {%-     if method.response_parameters != None %}
       mojo::internal::MessageDispatchContext context(message);
 {%-       if method|method_supports_lazy_serialization %}
@@ -478,6 +495,9 @@ bool {{class_name}}RequestValidator::Accept(mojo::Message* message) {
   switch (message->header()->name) {
 {%- for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
 {%-   if method.response_parameters != None %}
       if (!mojo::internal::ValidateMessageIsRequestExpectingResponse(
               message, &validation_context)) {
@@ -524,6 +544,9 @@ bool {{class_name}}ResponseValidator::Accept(mojo::Message* message) {
   switch (message->header()->name) {
 {%- for method in interface.methods if method.response_parameters != None %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+#endif
       if (!mojo::internal::ValidateMessagePayload<
                internal::{{class_name}}_{{method.name}}_ResponseParams_Data>(
                     message, &validation_context)) {
@@ -558,3 +581,38 @@ void {{interface.name}}InterceptorForTesting::{{method.name}}({{interface_macros
   );
 }
 {%- endfor %}
+
+{#--- Async wait helper for testing #}
+{{interface.name}}AsyncWaiter::{{interface.name}}AsyncWaiter(
+    {{interface.name}}* proxy) : proxy_(proxy) {}
+
+{{interface.name}}AsyncWaiter::~{{interface.name}}AsyncWaiter() = default;
+
+{%  for method in interface.methods if method.response_parameters != None -%}
+void {{interface.name}}AsyncWaiter::{{method.name}}(
+    {{interface_macros.declare_sync_method_params("", method)}}) {
+  base::RunLoop loop;
+  proxy_->{{method.name}}(
+{%-   for param in method.parameters -%}
+      std::move({{param.name}}),
+{%-   endfor %}
+      base::Bind(
+          [](base::RunLoop* loop
+{%-   for param in method.response_parameters -%},
+             {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}
+{%    endfor -%}
+{%-   for param in method.response_parameters -%},
+             {{param.kind|cpp_wrapper_param_type}} {{param.name}}
+{%-   endfor %}) {
+{%-   for param in method.response_parameters -%}
+            *out_{{param.name}} = std::move({{param.name}});
+{%-   endfor %}
+            loop->Quit();
+          },
+          &loop
+{%-   for param in method.response_parameters -%},
+          out_{{param.name}}
+{%-   endfor %}));
+  loop.Run();
+}
+{% endfor %}

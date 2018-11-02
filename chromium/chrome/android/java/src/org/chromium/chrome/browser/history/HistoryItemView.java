@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.history;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.support.annotation.VisibleForTesting;
 import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
@@ -15,7 +16,9 @@ import android.view.View;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
@@ -51,8 +54,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> implements 
         int iconColor = ApiCompatibilityUtils.getColor(
                 getResources(), R.color.default_favicon_background_color);
         mIconGenerator = new RoundedIconGenerator(mDisplayedIconSize, mDisplayedIconSize,
-                FeatureUtilities.isChromeHomeModernEnabled() ? mDisplayedIconSize / 2
-                                                             : mCornerRadius,
+                FeatureUtilities.isChromeHomeEnabled() ? mDisplayedIconSize / 2 : mCornerRadius,
                 iconColor, textSize);
         mEndPadding = context.getResources().getDimensionPixelSize(
                 R.dimen.selectable_list_layout_row_padding);
@@ -142,19 +144,21 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> implements 
      */
     public void setRemoveButtonVisible(boolean visible) {
         mRemoveButtonVisible = visible;
-        if (!PrefServiceBridge.getInstance().canDeleteBrowsingHistory()) return;
+        if (!PrefServiceBridge.getInstance().getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY))
+            return;
 
         mRemoveButton.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     @Override
-    protected void onClick() {
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    public void onClick() {
         if (getItem() != null) getItem().open();
     }
 
     @Override
-    public void onLargeIconAvailable(Bitmap icon, int fallbackColor,
-            boolean isFallbackColorDefault) {
+    public void onLargeIconAvailable(Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
+            @IconType int iconType) {
         // TODO(twellington): move this somewhere that can be shared with bookmarks.
         if (icon == null) {
             mIconGenerator.setBackgroundColor(fallbackColor);
@@ -178,8 +182,9 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> implements 
 
     private void updateRemoveButtonVisibility() {
         int removeButtonVisibility =
-                !PrefServiceBridge.getInstance().canDeleteBrowsingHistory() ? View.GONE
-                        : mRemoveButtonVisible ? View.VISIBLE : View.INVISIBLE;
+                !PrefServiceBridge.getInstance().getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY)
+                ? View.GONE
+                : mRemoveButtonVisible ? View.VISIBLE : View.INVISIBLE;
         mRemoveButton.setVisibility(removeButtonVisibility);
 
         int endPadding = removeButtonVisibility == View.GONE ? mEndPadding : 0;

@@ -31,6 +31,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -58,7 +59,6 @@
 #include "net/proxy/proxy_config_service_android.h"
 #include "net/proxy/proxy_service.h"
 #include "net/quic/core/quic_versions.h"
-#include "net/sdch/sdch_owner.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -166,7 +166,7 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
   }
 
   bool OnCanSetCookie(const net::URLRequest& request,
-                      const std::string& cookie_line,
+                      const net::CanonicalCookie& cookie,
                       net::CookieOptions* options) override {
     // Disallow saving cookies by default.
     return false;
@@ -335,6 +335,8 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   DCHECK(!is_context_initialized_);
   DCHECK(proxy_config_service_);
 
+  base::DisallowBlocking();
+
   // TODO(mmenke):  Add method to have the builder enable SPDY.
   net::URLRequestContextBuilder context_builder;
 
@@ -361,8 +363,6 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     std::unique_ptr<net::NetworkQualityEstimatorParams> nqe_params =
         base::MakeUnique<net::NetworkQualityEstimatorParams>(
             std::map<std::string, std::string>());
-    nqe_params->set_persistent_cache_reading_enabled(
-        config->nqe_persistent_caching_enabled);
     if (config->nqe_forced_effective_connection_type) {
       nqe_params->SetForcedEffectiveConnectionType(
           config->nqe_forced_effective_connection_type.value());
@@ -417,14 +417,6 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   if (config->load_disable_cache)
     default_load_flags_ |= net::LOAD_DISABLE_CACHE;
 
-  if (config->enable_sdch) {
-    DCHECK(context_->sdch_manager());
-    sdch_owner_.reset(
-        new net::SdchOwner(context_->sdch_manager(), context_.get()));
-    if (cronet_prefs_manager_)
-      cronet_prefs_manager_->SetupSdchPersistence(sdch_owner_.get());
-  }
-
   if (config->enable_quic) {
     for (const auto& quic_hint : config->quic_hints) {
       if (quic_hint->host.empty()) {
@@ -460,7 +452,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
           static_cast<uint16_t>(quic_hint->alternate_port));
       context_->http_server_properties()->SetQuicAlternativeService(
           quic_server, alternative_service, base::Time::Max(),
-          net::QuicVersionVector());
+          net::QuicTransportVersionVector());
     }
   }
 
@@ -522,9 +514,13 @@ void CronetURLRequestContextAdapter::Destroy(
   // Stick network_thread_ in a local, as |this| may be destroyed from the
   // network thread before delete network_thread is called.
   base::Thread* network_thread = network_thread_;
+  // Transfer ownership of |file_thread_| to local variable |file_thread|, so
+  // the underlying thread object is not deleted when |this| is destroyed.
+  base::Thread* file_thread = file_thread_.release();
   GetNetworkTaskRunner()->DeleteSoon(FROM_HERE, this);
   // Deleting thread stops it after all tasks are completed.
   delete network_thread;
+  delete file_thread;
 }
 
 net::URLRequestContext* CronetURLRequestContextAdapter::GetURLRequestContext() {
@@ -535,7 +531,7 @@ net::URLRequestContext* CronetURLRequestContextAdapter::GetURLRequestContext() {
 }
 
 void CronetURLRequestContextAdapter::PostTaskToNetworkThread(
-    const tracked_objects::Location& posted_from,
+    const base::Location& posted_from,
     const base::Closure& callback) {
   GetNetworkTaskRunner()->PostTask(
       posted_from, base::Bind(&CronetURLRequestContextAdapter::
@@ -729,8 +725,11 @@ void CronetURLRequestContextAdapter::StartNetLogToBoundedFileOnNetworkThread(
   // just pass a file path.
   base::FilePath file_path =
       base::FilePath(dir_path).AppendASCII("netlog.json");
-  if (!base::PathIsWritable(file_path)) {
-    LOG(ERROR) << "Path is not writable: " << file_path.value();
+  {
+    base::ScopedAllowBlocking allow_blocking;
+    if (!base::PathIsWritable(file_path)) {
+      LOG(ERROR) << "Path is not writable: " << file_path.value();
+    }
   }
 
   net_log_file_observer_ = net::FileNetLogObserver::CreateBounded(
@@ -775,7 +774,7 @@ CronetURLRequestContextAdapter::GetNetLogInfo() const {
 }
 
 // Create a URLRequestContextConfig from the given parameters.
-static jlong CreateRequestContextConfig(
+static jlong JNI_CronetUrlRequestContext_CreateRequestContextConfig(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller,
     const JavaParamRef<jstring>& juser_agent,
@@ -783,7 +782,6 @@ static jlong CreateRequestContextConfig(
     jboolean jquic_enabled,
     const JavaParamRef<jstring>& jquic_default_user_agent_id,
     jboolean jhttp2_enabled,
-    jboolean jsdch_enabled,
     jboolean jbrotli_enabled,
     jboolean jdisable_cache,
     jint jhttp_cache_mode,
@@ -796,7 +794,7 @@ static jlong CreateRequestContextConfig(
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
       jquic_enabled,
       ConvertNullableJavaStringToUTF8(env, jquic_default_user_agent_id),
-      jhttp2_enabled, jsdch_enabled, jbrotli_enabled,
+      jhttp2_enabled, jbrotli_enabled,
       static_cast<URLRequestContextConfig::HttpCacheType>(jhttp_cache_mode),
       jhttp_cache_max_size, jdisable_cache,
       ConvertNullableJavaStringToUTF8(env, jstorage_path),
@@ -811,12 +809,13 @@ static jlong CreateRequestContextConfig(
 }
 
 // Add a QUIC hint to a URLRequestContextConfig.
-static void AddQuicHint(JNIEnv* env,
-                        const JavaParamRef<jclass>& jcaller,
-                        jlong jurl_request_context_config,
-                        const JavaParamRef<jstring>& jhost,
-                        jint jport,
-                        jint jalternate_port) {
+static void JNI_CronetUrlRequestContext_AddQuicHint(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    jlong jurl_request_context_config,
+    const JavaParamRef<jstring>& jhost,
+    jint jport,
+    jint jalternate_port) {
   URLRequestContextConfig* config =
       reinterpret_cast<URLRequestContextConfig*>(jurl_request_context_config);
   config->quic_hints.push_back(
@@ -831,13 +830,14 @@ static void AddQuicHint(JNIEnv* env,
 // |jinclude_subdomains| indicates if pin should be applied to subdomains.
 // |jexpiration_time| is the time that the pin expires, in milliseconds since
 // Jan. 1, 1970, midnight GMT.
-static void AddPkp(JNIEnv* env,
-                   const JavaParamRef<jclass>& jcaller,
-                   jlong jurl_request_context_config,
-                   const JavaParamRef<jstring>& jhost,
-                   const JavaParamRef<jobjectArray>& jhashes,
-                   jboolean jinclude_subdomains,
-                   jlong jexpiration_time) {
+static void JNI_CronetUrlRequestContext_AddPkp(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    jlong jurl_request_context_config,
+    const JavaParamRef<jstring>& jhost,
+    const JavaParamRef<jobjectArray>& jhashes,
+    jboolean jinclude_subdomains,
+    jlong jexpiration_time) {
   URLRequestContextConfig* config =
       reinterpret_cast<URLRequestContextConfig*>(jurl_request_context_config);
   std::unique_ptr<URLRequestContextConfig::Pkp> pkp(
@@ -869,9 +869,10 @@ static void AddPkp(JNIEnv* env,
 
 // Creates RequestContextAdater if config is valid URLRequestContextConfig,
 // returns 0 otherwise.
-static jlong CreateRequestContextAdapter(JNIEnv* env,
-                                         const JavaParamRef<jclass>& jcaller,
-                                         jlong jconfig) {
+static jlong JNI_CronetUrlRequestContext_CreateRequestContextAdapter(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    jlong jconfig) {
   std::unique_ptr<URLRequestContextConfig> context_config(
       reinterpret_cast<URLRequestContextConfig*>(jconfig));
 
@@ -880,16 +881,18 @@ static jlong CreateRequestContextAdapter(JNIEnv* env,
   return reinterpret_cast<jlong>(context_adapter);
 }
 
-static jint SetMinLogLevel(JNIEnv* env,
-                           const JavaParamRef<jclass>& jcaller,
-                           jint jlog_level) {
+static jint JNI_CronetUrlRequestContext_SetMinLogLevel(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& jcaller,
+    jint jlog_level) {
   jint old_log_level = static_cast<jint>(logging::GetMinLogLevel());
   // MinLogLevel is global, shared by all URLRequestContexts.
   logging::SetMinLogLevel(static_cast<int>(jlog_level));
   return old_log_level;
 }
 
-static ScopedJavaLocalRef<jbyteArray> GetHistogramDeltas(
+static ScopedJavaLocalRef<jbyteArray>
+JNI_CronetUrlRequestContext_GetHistogramDeltas(
     JNIEnv* env,
     const JavaParamRef<jclass>& jcaller) {
   DCHECK(base::StatisticsRecorder::IsActive());

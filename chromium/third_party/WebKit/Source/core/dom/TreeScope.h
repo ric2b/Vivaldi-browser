@@ -83,9 +83,9 @@ class CORE_EXPORT TreeScope : public GarbageCollectedMixin {
   void RemoveImageMap(HTMLMapElement*);
   HTMLMapElement* GetImageMap(const String& url) const;
 
-  Element* ElementFromPoint(int x, int y) const;
-  Element* HitTestPoint(int x, int y, const HitTestRequest&) const;
-  HeapVector<Member<Element>> ElementsFromPoint(int x, int y) const;
+  Element* ElementFromPoint(double x, double y) const;
+  Element* HitTestPoint(double x, double y, const HitTestRequest&) const;
+  HeapVector<Member<Element>> ElementsFromPoint(double x, double y) const;
   HeapVector<Member<Element>> ElementsFromHitTestResult(HitTestResult&) const;
 
   DOMSelection* GetSelection() const;
@@ -120,7 +120,7 @@ class CORE_EXPORT TreeScope : public GarbageCollectedMixin {
 
   Element* GetElementByAccessKey(const String& key) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   ScopedStyleResolver* GetScopedStyleResolver() const {
     return scoped_style_resolver_.Get();
@@ -172,9 +172,9 @@ inline bool TreeScope::ContainsMultipleElementsWithId(
 DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(TreeScope)
 
 HitTestResult HitTestInDocument(
-    const Document*,
-    int x,
-    int y,
+    Document*,
+    double x,
+    double y,
     const HitTestRequest& = HitTestRequest::kReadOnly |
                             HitTestRequest::kActive);
 

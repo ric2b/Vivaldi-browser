@@ -27,8 +27,6 @@
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
 #include "chrome/renderer/web_apps.h"
 #include "components/translate/content/renderer/translate_helper.h"
-#include "content/public/common/associated_interface_provider.h"
-#include "content/public/common/associated_interface_registry.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
@@ -37,6 +35,8 @@
 #include "printing/features/features.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -52,6 +52,10 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/renderer/searchbox/searchbox_extension.h"
+#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "components/printing/common/print_messages.h"
@@ -72,6 +76,7 @@ static const size_t kMaxIndexChars = 65535;
 
 // Constants for UMA statistic collection.
 static const char kTranslateCaptureText[] = "Translate.CaptureText";
+static const char kTranslatePageCaptured[] = "Translate.PageCaptured";
 
 // For a page that auto-refreshes, we still show the bubble, if
 // the refresh delay is less than this value (in seconds).
@@ -126,36 +131,21 @@ ChromeRenderFrameObserver::ChromeRenderFrameObserver(
     : content::RenderFrameObserver(render_frame),
       translate_helper_(nullptr),
       phishing_classifier_(nullptr) {
-  registry_.AddInterface(
-      base::Bind(&ChromeRenderFrameObserver::OnImageContextMenuRendererRequest,
-                 base::Unretained(this)));
-  registry_.AddInterface(
-      base::Bind(&ChromeRenderFrameObserver::OnThumbnailCapturerRequest,
-                 base::Unretained(this)));
-
-  // Don't do anything else for subframes.
-  if (!render_frame->IsMainFrame())
-    return;
   render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
       base::Bind(&ChromeRenderFrameObserver::OnRenderFrameObserverRequest,
                  base::Unretained(this)));
+  // Don't do anything else for subframes.
+  if (!render_frame->IsMainFrame())
+    return;
+
 #if defined(SAFE_BROWSING_CSD)
-  registry_.AddInterface(
-      base::Bind(&ChromeRenderFrameObserver::OnPhishingDetectorRequest,
-                 base::Unretained(this)));
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kDisableClientSidePhishingDetection))
     SetClientSidePhishingDetection(true);
 #endif
-#if !defined(OS_ANDROID)
-  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
-      base::Bind(&ChromeRenderFrameObserver::OnWebUITesterRequest,
-                 base::Unretained(this)));
-#endif
   translate_helper_ = new translate::TranslateHelper(
-      render_frame, chrome::ISOLATED_WORLD_ID_TRANSLATE,
-      extensions::kExtensionScheme);
+      render_frame, ISOLATED_WORLD_ID_TRANSLATE, extensions::kExtensionScheme);
 }
 
 ChromeRenderFrameObserver::~ChromeRenderFrameObserver() {
@@ -259,7 +249,6 @@ void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
         break;
       }
   }
-
   callback.Run(thumbnail_data, original_size);
 }
 
@@ -313,23 +302,23 @@ void ChromeRenderFrameObserver::OnGetWebApplicationInfo() {
                                                        web_app_info));
 }
 
-#if defined(SAFE_BROWSING_CSD)
 void ChromeRenderFrameObserver::SetClientSidePhishingDetection(
     bool enable_phishing_detection) {
+#if defined(SAFE_BROWSING_CSD)
   phishing_classifier_ =
       enable_phishing_detection
           ? safe_browsing::PhishingClassifierDelegate::Create(render_frame(),
                                                               nullptr)
           : nullptr;
-}
 #endif
+}
 
-#if !defined(OS_ANDROID)
 void ChromeRenderFrameObserver::ExecuteWebUIJavaScript(
     const base::string16& javascript) {
+#if !defined(OS_ANDROID)
   webui_javascript_.push_back(javascript);
-}
 #endif
+}
 
 void ChromeRenderFrameObserver::DidFinishLoad() {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
@@ -369,7 +358,7 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
 
   base::debug::SetCrashKeyValue(
       crash_keys::kViewCount,
-      base::SizeTToString(content::RenderView::GetRenderViewCount()));
+      base::NumberToString(content::RenderView::GetRenderViewCount()));
 
 #if !defined(OS_ANDROID)
   if ((render_frame()->GetEnabledBindings() &
@@ -379,6 +368,15 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
     webui_javascript_.clear();
   }
 #endif
+}
+
+void ChromeRenderFrameObserver::DidClearWindowObject() {
+#if !defined(OS_ANDROID)
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kInstantProcess))
+    SearchBoxExtension::Install(render_frame()->GetWebFrame());
+#endif  // !defined(OS_ANDROID)
 }
 
 void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
@@ -419,8 +417,10 @@ void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
 
   // We should run language detection only once. Parsing finishes before
   // the page loads, so let's pick that timing.
-  if (translate_helper_ && capture_type == PRELIMINARY_CAPTURE)
+  if (translate_helper_ && capture_type == PRELIMINARY_CAPTURE) {
+    SCOPED_UMA_HISTOGRAM_TIMER(kTranslatePageCaptured);
     translate_helper_->PageCaptured(contents);
+  }
 
   TRACE_EVENT0("renderer", "ChromeRenderFrameObserver::CapturePageText");
 
@@ -454,33 +454,9 @@ void ChromeRenderFrameObserver::OnDestruct() {
   delete this;
 }
 
-void ChromeRenderFrameObserver::OnImageContextMenuRendererRequest(
-    chrome::mojom::ImageContextMenuRendererRequest request) {
-  image_context_menu_renderer_bindings_.AddBinding(this, std::move(request));
-}
-
-#if defined(SAFE_BROWSING_CSD)
-void ChromeRenderFrameObserver::OnPhishingDetectorRequest(
-    chrome::mojom::PhishingDetectorRequest request) {
-  phishing_detector_bindings_.AddBinding(this, std::move(request));
-}
-#endif
-
-#if !defined(OS_ANDROID)
-void ChromeRenderFrameObserver::OnWebUITesterRequest(
-    chrome::mojom::WebUITesterAssociatedRequest request) {
-  web_ui_tester_bindings_.AddBinding(this, std::move(request));
-}
-#endif
-
-void ChromeRenderFrameObserver::OnThumbnailCapturerRequest(
-    chrome::mojom::ThumbnailCapturerRequest request) {
-  thumbnail_capturer_bindings_.AddBinding(this, std::move(request));
-}
-
 void ChromeRenderFrameObserver::OnRenderFrameObserverRequest(
     chrome::mojom::ChromeRenderFrameAssociatedRequest request) {
-  window_features_client_bindings_.AddBinding(this, std::move(request));
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void ChromeRenderFrameObserver::SetWindowFeatures(

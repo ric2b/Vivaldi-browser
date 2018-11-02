@@ -21,12 +21,12 @@ class TargetPolicy {
   // exactly like the CreateProcess API does. See the comment at the top of
   // process_thread_dispatcher.cc for more details.
   enum SubSystem {
-    SUBSYS_FILES,             // Creation and opening of files and pipes.
-    SUBSYS_NAMED_PIPES,       // Creation of named pipes.
-    SUBSYS_PROCESS,           // Creation of child processes.
-    SUBSYS_REGISTRY,          // Creation and opening of registry keys.
-    SUBSYS_SYNC,              // Creation of named sync objects.
-    SUBSYS_WIN32K_LOCKDOWN    // Win32K Lockdown related policy.
+    SUBSYS_FILES,           // Creation and opening of files and pipes.
+    SUBSYS_NAMED_PIPES,     // Creation of named pipes.
+    SUBSYS_PROCESS,         // Creation of child processes.
+    SUBSYS_REGISTRY,        // Creation and opening of registry keys.
+    SUBSYS_SYNC,            // Creation of named sync objects.
+    SUBSYS_WIN32K_LOCKDOWN  // Win32K Lockdown related policy.
   };
 
   // Allowable semantics when a rule is matched.
@@ -172,9 +172,6 @@ class TargetPolicy {
   // than the current level, the sandbox will fail to start.
   virtual ResultCode SetDelayedIntegrityLevel(IntegrityLevel level) = 0;
 
-  // Sets a capability to be enabled for the sandboxed process' AppContainer.
-  virtual ResultCode SetCapability(const wchar_t* sid) = 0;
-
   // Sets the LowBox token for sandboxed process. This is mutually exclusive
   // with SetAppContainer method.
   virtual ResultCode SetLowBox(const wchar_t* sid) = 0;
@@ -225,7 +222,8 @@ class TargetPolicy {
   //   "c:\\documents and settings\\vince\\*.dmp"
   //   "c:\\documents and settings\\*\\crashdumps\\*.dmp"
   //   "c:\\temp\\app_log_?????_chrome.txt"
-  virtual ResultCode AddRule(SubSystem subsystem, Semantics semantics,
+  virtual ResultCode AddRule(SubSystem subsystem,
+                             Semantics semantics,
                              const wchar_t* pattern) = 0;
 
   // Adds a dll that will be unloaded in the target process before it gets
@@ -234,8 +232,8 @@ class TargetPolicy {
   virtual ResultCode AddDllToUnload(const wchar_t* dll_name) = 0;
 
   // Adds a handle that will be closed in the target process after lockdown.
-  // A NULL value for handle_name indicates all handles of the specified type.
-  // An empty string for handle_name indicates the handle is unnamed.
+  // A nullptr value for handle_name indicates all handles of the specified
+  // type. An empty string for handle_name indicates the handle is unnamed.
   virtual ResultCode AddKernelObjectToClose(const wchar_t* handle_type,
                                             const wchar_t* handle_name) = 0;
 
@@ -252,9 +250,11 @@ class TargetPolicy {
   virtual void SetEnableOPMRedirection() = 0;
   // Enable OPM API emulation when in Win32k lockdown.
   virtual bool GetEnableOPMRedirection() = 0;
+
+ protected:
+  ~TargetPolicy() {}
 };
 
 }  // namespace sandbox
-
 
 #endif  // SANDBOX_WIN_SRC_SANDBOX_POLICY_H_

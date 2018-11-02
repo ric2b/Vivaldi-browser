@@ -30,15 +30,12 @@
 #include <memory>
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorTaskRunner.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
-#include "core/origin_trials/OriginTrialContext.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/GlobalScopeCreationParams.h"
-#include "core/workers/InstalledScriptsManager.h"
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
@@ -46,12 +43,12 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "platform/bindings/Microtask.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "platform/scheduler/child/worker_global_scope_scheduler.h"
 #include "platform/weborigin/KURL.h"
@@ -60,8 +57,8 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -71,12 +68,6 @@ namespace {
 
 // TODO(nhiroki): Adjust the delay based on UMA.
 constexpr TimeDelta kForcibleTerminationDelay = TimeDelta::FromSeconds(2);
-
-void ForwardInterfaceRequest(const std::string& name,
-                             mojo::ScopedMessagePipeHandle handle) {
-  Platform::Current()->GetInterfaceProvider()->GetInterface(name.c_str(),
-                                                            std::move(handle));
-}
 
 }  // namespace
 
@@ -108,6 +99,8 @@ WorkerThread::~WorkerThread() {
 void WorkerThread::Start(
     std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params,
     const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data,
+    std::unique_ptr<GlobalScopeInspectorCreationParams>
+        global_scope_inspector_creation_params,
     ParentFrameTaskRunners* parent_frame_task_runners) {
   DCHECK(IsMainThread());
   DCHECK(!parent_frame_task_runners_);
@@ -125,10 +118,11 @@ void WorkerThread::Start(
 
   GetWorkerBackingThread().BackingThread().PostTask(
       BLINK_FROM_HERE,
-      CrossThreadBind(&WorkerThread::InitializeOnWorkerThread,
-                      CrossThreadUnretained(this),
-                      WTF::Passed(std::move(global_scope_creation_params)),
-                      thread_startup_data));
+      CrossThreadBind(
+          &WorkerThread::InitializeOnWorkerThread, CrossThreadUnretained(this),
+          WTF::Passed(std::move(global_scope_creation_params)),
+          thread_startup_data,
+          WTF::Passed(std::move(global_scope_inspector_creation_params))));
 }
 
 void WorkerThread::Terminate() {
@@ -232,7 +226,7 @@ void WorkerThread::AppendDebuggerTask(CrossThreadClosure task) {
     if (GetIsolate() && thread_state_ != ThreadState::kReadyToShutdown)
       inspector_task_runner_->InterruptAndRunAllTasksDontWait(GetIsolate());
   }
-  TaskRunnerHelper::Get(TaskType::kUnthrottled, this)
+  GetTaskRunner(TaskType::kUnthrottled)
       ->PostTask(BLINK_FROM_HERE,
                  CrossThreadBind(
                      &WorkerThread::PerformDebuggerTaskDontWaitOnWorkerThread,
@@ -245,14 +239,14 @@ void WorkerThread::StartRunningDebuggerTasksOnPauseOnWorkerThread() {
     worker_inspector_controller_->FlushProtocolNotifications();
   paused_in_debugger_ = true;
   ThreadDebugger::IdleStarted(GetIsolate());
-  CrossThreadClosure task;
   do {
-    task =
+    CrossThreadClosure task =
         inspector_task_runner_->TakeNextTask(InspectorTaskRunner::kWaitForTask);
-    if (task)
-      task();
+    if (!task)
+      break;
+    std::move(task).Run();
     // Keep waiting until execution is resumed.
-  } while (task && paused_in_debugger_);
+  } while (paused_in_debugger_);
   ThreadDebugger::IdleFinished(GetIsolate());
 }
 
@@ -308,19 +302,12 @@ ExitCode WorkerThread::GetExitCodeForTesting() {
   return exit_code_;
 }
 
-service_manager::InterfaceProvider& WorkerThread::GetInterfaceProvider() {
-  // TODO(https://crbug.com/734210): Instead of forwarding to the process-wide
-  // interface provider a worker-specific interface provider pipe should be
-  // passed in as part of the WorkerThreadStartupData.
-  return interface_provider_;
-}
-
 WorkerThread::WorkerThread(ThreadableLoadingContext* loading_context,
                            WorkerReportingProxy& worker_reporting_proxy)
     : time_origin_(MonotonicallyIncreasingTime()),
       worker_thread_id_(GetNextWorkerThreadId()),
       forcible_termination_delay_(kForcibleTerminationDelay),
-      inspector_task_runner_(WTF::MakeUnique<InspectorTaskRunner>()),
+      inspector_task_runner_(std::make_unique<InspectorTaskRunner>()),
       loading_context_(loading_context),
       worker_reporting_proxy_(worker_reporting_proxy),
       shutdown_event_(WTF::WrapUnique(
@@ -330,8 +317,6 @@ WorkerThread::WorkerThread(ThreadableLoadingContext* loading_context,
   DCHECK(IsMainThread());
   MutexLocker lock(ThreadSetMutex());
   WorkerThreads().insert(this);
-  interface_provider_.Forward(
-      ConvertToBaseCallback(WTF::Bind(&ForwardInterfaceRequest)));
 }
 
 void WorkerThread::ScheduleToTerminateScriptExecution() {
@@ -391,73 +376,26 @@ void WorkerThread::InitializeSchedulerOnWorkerThread(
       static_cast<scheduler::WebThreadImplForWorkerScheduler&>(
           GetWorkerBackingThread().BackingThread().PlatformThread());
   global_scope_scheduler_ =
-      WTF::MakeUnique<scheduler::WorkerGlobalScopeScheduler>(
+      std::make_unique<scheduler::WorkerGlobalScopeScheduler>(
           web_thread_for_worker.GetWorkerScheduler());
   waitable_event->Signal();
 }
 
 void WorkerThread::InitializeOnWorkerThread(
     std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params,
-    const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data) {
+    const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data,
+    std::unique_ptr<GlobalScopeInspectorCreationParams>
+        global_scope_inspector_creation_params) {
   DCHECK(IsCurrentThread());
   DCHECK_EQ(ThreadState::kNotStarted, thread_state_);
 
   KURL script_url = global_scope_creation_params->script_url;
-  // TODO(nhiroki): Rename WorkerThreadStartMode to GlobalScopeStartMode.
-  // (https://crbug.com/710364)
-  WorkerThreadStartMode start_mode = global_scope_creation_params->start_mode;
-  V8CacheOptions v8_cache_options =
-      global_scope_creation_params->v8_cache_options;
 
-  String source_code;
-  std::unique_ptr<Vector<char>> cached_meta_data;
-  bool should_terminate = false;
-  if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
-      GetInstalledScriptsManager() &&
-      GetInstalledScriptsManager()->IsScriptInstalled(script_url)) {
-    // GetScriptData blocks until the script is received from the browser.
-    InstalledScriptsManager::ScriptData script_data;
-    InstalledScriptsManager::ScriptStatus status =
-        GetInstalledScriptsManager()->GetScriptData(script_url, &script_data);
-
-    // If an error occurred in the browser process while trying to read the
-    // installed script, the worker thread will terminate after initialization
-    // of the global scope since PrepareForShutdownOnWorkerThread() assumes the
-    // global scope has already been initialized.
-    switch (status) {
-      case InstalledScriptsManager::ScriptStatus::kTaken:
-        // InstalledScriptsManager::ScriptStatus::kTaken should not be returned
-        // since requesting the main script should be the first and no script
-        // has been taken until here.
-        NOTREACHED();
-      case InstalledScriptsManager::ScriptStatus::kFailed:
-        should_terminate = true;
-        break;
-      case InstalledScriptsManager::ScriptStatus::kSuccess:
-        DCHECK(source_code.IsEmpty());
-        DCHECK(!cached_meta_data);
-        source_code = script_data.TakeSourceText();
-        cached_meta_data = script_data.TakeMetaData();
-
-        global_scope_creation_params->content_security_policy_raw_headers =
-            script_data.GetContentSecurityPolicyResponseHeaders();
-        global_scope_creation_params->referrer_policy =
-            script_data.GetReferrerPolicy();
-        global_scope_creation_params->origin_trial_tokens =
-            script_data.CreateOriginTrialTokens();
-        // This may block until CSP and referrer policy are set on the main
-        // thread.
-        worker_reporting_proxy_.DidLoadInstalledScript(
-            global_scope_creation_params->content_security_policy_raw_headers
-                .value(),
-            global_scope_creation_params->referrer_policy);
-        break;
-    }
-  } else {
-    source_code = std::move(global_scope_creation_params->source_code);
-    cached_meta_data =
-        std::move(global_scope_creation_params->cached_meta_data);
-  }
+  // TODO(nhiroki): Separate these fields from GlobalScopeCreationParams because
+  // these are used not for creating a global scope but for evaluating a script.
+  String source_code = std::move(global_scope_creation_params->source_code);
+  std::unique_ptr<Vector<char>> cached_meta_data =
+      std::move(global_scope_creation_params->cached_meta_data);
 
   {
     MutexLocker lock(thread_state_mutex_);
@@ -489,23 +427,31 @@ void WorkerThread::InitializeOnWorkerThread(
     SetThreadState(lock, ThreadState::kRunning);
   }
 
-  if (start_mode == kPauseWorkerGlobalScopeOnStart)
+  if (global_scope_inspector_creation_params->pause_on_start ==
+      WorkerInspectorProxy::PauseOnWorkerStart::kPause) {
     StartRunningDebuggerTasksOnPauseOnWorkerThread();
+  }
 
-  if (CheckRequestedToTerminateOnWorkerThread() || should_terminate) {
+  if (CheckRequestedToTerminateOnWorkerThread()) {
     // Stop further worker tasks from running after this point. WorkerThread
     // was requested to terminate before initialization or during running
-    // debugger tasks, or loading the installed main script
-    // failed. PerformShutdownOnWorkerThread() will be called soon.
+    // debugger tasks. PerformShutdownOnWorkerThread() will be called soon.
     PrepareForShutdownOnWorkerThread();
     return;
   }
 
+  // Worklet will evaluate the script later via Worklet.addModule().
   // TODO(nhiroki): Start module loading for workers here.
   // (https://crbug.com/680046)
+  if (GlobalScope()->IsWorkletGlobalScope())
+    return;
+  WorkerThreadDebugger* debugger = WorkerThreadDebugger::From(GetIsolate());
+  debugger->ExternalAsyncTaskStarted(
+      global_scope_inspector_creation_params->stack_id);
   GlobalScope()->EvaluateClassicScript(script_url, std::move(source_code),
-                                       std::move(cached_meta_data),
-                                       v8_cache_options);
+                                       std::move(cached_meta_data));
+  debugger->ExternalAsyncTaskStarted(
+      global_scope_inspector_creation_params->stack_id);
 }
 
 void WorkerThread::PrepareForShutdownOnWorkerThread() {
@@ -569,7 +515,7 @@ void WorkerThread::PerformDebuggerTaskOnWorkerThread(CrossThreadClosure task) {
         CustomCountHistogram, scoped_us_counter,
         ("WorkerThread.DebuggerTask.Time", 0, 10000000, 50));
     ScopedUsHistogramTimer timer(scoped_us_counter);
-    task();
+    std::move(task).Run();
   }
   ThreadDebugger::IdleStarted(GetIsolate());
   {
@@ -583,7 +529,7 @@ void WorkerThread::PerformDebuggerTaskDontWaitOnWorkerThread() {
   CrossThreadClosure task = inspector_task_runner_->TakeNextTask(
       InspectorTaskRunner::kDontWaitForTask);
   if (task)
-    task();
+    std::move(task).Run();
 }
 
 void WorkerThread::SetThreadState(const MutexLocker& lock,

@@ -3,23 +3,6 @@
 // found in the LICENSE file.
 
 /**
- * Sets 'hidden' property of a cr.ui.Command instance and dispatches
- * 'hiddenChange' event manually so that associated cr.ui.MenuItem can handle
- * the event.
- * TODO(fukino): Remove this workaround when crbug.com/481941 is fixed.
- *
- * @param {boolean} value New value of hidden property.
- */
-cr.ui.Command.prototype.setHidden = function(value) {
-  if (value === this.hidden)
-    return;
-
-  var oldValue = this.hidden;
-  this.hidden = value;
-  cr.dispatchPropertyChange(this, 'hidden', value, oldValue);
-};
-
-/**
  * A command.
  * @interface
  */
@@ -365,17 +348,17 @@ var CommandHandler = function(fileManager, selectionHandler) {
       this.updateAvailability.bind(this));
 
   chrome.commandLinePrivate.hasSwitch(
-      'enable-external-drive-rename', function(enabled) {
-        CommandHandler.IS_EXTERNAL_DISK_RENAME_ENABLED_ = enabled;
+      'enable-zip-archiver-packer', function(enabled) {
+        CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ = enabled;
       }.bind(this));
 };
 
 /**
- * Supported disk file system types for renaming.
+ * A flag that determines whether zip archiver - packer is enabled or no.
  * @type {boolean}
  * @private
  */
-CommandHandler.IS_EXTERNAL_DISK_RENAME_ENABLED_ = false;
+CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ = false;
 
 /**
  * Supported disk file system types for renaming.
@@ -459,9 +442,15 @@ CommandHandler.COMMANDS_['unmount'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager The file manager instance.
    */
   execute: function(event, fileManager) {
-    var errorCallback = function() {
-      fileManager.ui.alertDialog.showHtml(
-          '', str('UNMOUNT_FAILED'), null, null, null);
+    /** @param {VolumeManagerCommon.VolumeType=} opt_volumeType */
+    var errorCallback = function(opt_volumeType) {
+      if (opt_volumeType === VolumeManagerCommon.VolumeType.REMOVABLE) {
+        fileManager.ui.alertDialog.showHtml(
+            '', str('UNMOUNT_FAILED'), null, null, null);
+      } else {
+        fileManager.ui.alertDialog.showHtml(
+            '', str('UNMOUNT_PROVIDED_FAILED'), null, null, null);
+      }
     };
 
     var volumeInfo =
@@ -472,7 +461,8 @@ CommandHandler.COMMANDS_['unmount'] = /** @type {Command} */ ({
       return;
     }
 
-    fileManager.volumeManager.unmount(volumeInfo, function() {}, errorCallback);
+    fileManager.volumeManager.unmount(volumeInfo, function() {
+    }, errorCallback.bind(null, volumeInfo.volumeType));
   },
   /**
    * @param {!Event} event Command event.
@@ -983,26 +973,23 @@ CommandHandler.COMMANDS_['rename'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   canExecute: function(event, fileManager) {
-    // TODO(klemenko): Remove flag below when 274041 gets implemented.
-    if (CommandHandler.IS_EXTERNAL_DISK_RENAME_ENABLED_) {
-      // Check if it is removable drive
-      var root = CommandUtil.getCommandEntry(event.target);
-      // |root| is null for unrecognized volumes. Do not enable rename command
-      // for such volumes because they need to be formatted prior to rename.
-      if (root != null) {
-        var location = root && fileManager.volumeManager.getLocationInfo(root);
-        var volumeInfo = fileManager.volumeManager.getVolumeInfo(root);
-        var writable = location && !location.isReadOnly;
-        var removable =
-            location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
-        var canExecute = removable && writable && volumeInfo &&
-            CommandHandler.RENAME_DISK_FILE_SYSYTEM_SUPPORT_.indexOf(
-                volumeInfo.diskFileSystemType) > -1;
-        event.canExecute = canExecute;
-        event.command.setHidden(!removable);
-        if (removable)
-          return;
-      }
+    // Check if it is removable drive
+    var root = CommandUtil.getCommandEntry(event.target);
+    // |root| is null for unrecognized volumes. Do not enable rename command
+    // for such volumes because they need to be formatted prior to rename.
+    if (root != null) {
+      var location = root && fileManager.volumeManager.getLocationInfo(root);
+      var volumeInfo = fileManager.volumeManager.getVolumeInfo(root);
+      var writable = location && !location.isReadOnly;
+      var removable = location &&
+          location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
+      var canExecute = removable && writable && volumeInfo &&
+          CommandHandler.RENAME_DISK_FILE_SYSYTEM_SUPPORT_.indexOf(
+              volumeInfo.diskFileSystemType) > -1;
+      event.canExecute = canExecute;
+      event.command.setHidden(!removable);
+      if (removable)
+        return;
     }
 
     // Check if it is file or folder
@@ -1312,9 +1299,21 @@ CommandHandler.COMMANDS_['zip-selection'] = /** @type {Command} */ ({
     var dirEntry = fileManager.getCurrentDirectoryEntry();
     if (!dirEntry)
       return;
-    var selectionEntries = fileManager.getSelection().entries;
-    fileManager.fileOperationManager.zipSelection(
-        /** @type {!DirectoryEntry} */ (dirEntry), selectionEntries);
+
+    if (CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_) {
+      fileManager.taskController.getFileTasks()
+          .then(function(tasks) {
+            tasks.execute(FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID);
+          })
+          .catch(function(error) {
+            if (error)
+              console.error(error.stack || error);
+          });
+    } else {
+      var selectionEntries = fileManager.getSelection().entries;
+      fileManager.fileOperationManager.zipSelection(
+          /** @type {!DirectoryEntry} */ (dirEntry), selectionEntries);
+    }
   },
   /**
    * @param {!Event} event Command event.
@@ -1323,10 +1322,14 @@ CommandHandler.COMMANDS_['zip-selection'] = /** @type {Command} */ ({
   canExecute: function(event, fileManager) {
     var dirEntry = fileManager.getCurrentDirectoryEntry();
     var selection = fileManager.getSelection();
+
+    var isOnEligibleLocation = CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ ?
+        true :
+        !fileManager.directoryModel.isOnDrive();
+
     event.canExecute = dirEntry && !fileManager.directoryModel.isReadOnly() &&
-        !fileManager.directoryModel.isOnDrive() &&
-        !fileManager.directoryModel.isOnMTP() && selection &&
-        selection.totalCount > 0;
+        !fileManager.directoryModel.isOnMTP() && isOnEligibleLocation &&
+        selection && selection.totalCount > 0;
   }
 });
 
@@ -1697,7 +1700,7 @@ CommandHandler.COMMANDS_['set-wallpaper'] = /** @type {Command} */ ({
           reject(fileReader.error);
         };
         fileReader.readAsArrayBuffer(blob);
-      })
+      });
     }).then(function(/** @type {!ArrayBuffer} */ arrayBuffer) {
       return new Promise(function(resolve, reject) {
         chrome.wallpaper.setWallpaper({

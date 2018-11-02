@@ -22,8 +22,8 @@ TestContextSupport::~TestContextSupport() {}
 void TestContextSupport::FlushPendingWork() {}
 
 void TestContextSupport::SignalSyncToken(const gpu::SyncToken& sync_token,
-                                         const base::Closure& callback) {
-  sync_point_callbacks_.push_back(callback);
+                                         base::OnceClosure callback) {
+  sync_point_callbacks_.push_back(std::move(callback));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&TestContextSupport::CallAllSyncPointCallbacks,
                                 weak_ptr_factory_.GetWeakPtr()));
@@ -34,8 +34,8 @@ bool TestContextSupport::IsSyncTokenSignaled(const gpu::SyncToken& sync_token) {
 }
 
 void TestContextSupport::SignalQuery(uint32_t query,
-                                     const base::Closure& callback) {
-  sync_point_callbacks_.push_back(callback);
+                                     base::OnceClosure callback) {
+  sync_point_callbacks_.push_back(std::move(callback));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&TestContextSupport::CallAllSyncPointCallbacks,
                                 weak_ptr_factory_.GetWeakPtr()));
@@ -49,12 +49,12 @@ void TestContextSupport::CallAllSyncPointCallbacks() {
   if (out_of_order_callbacks_) {
     for (size_t i = size; i > 0; --i) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, sync_point_callbacks_[i - 1]);
+          FROM_HERE, std::move(sync_point_callbacks_[i - 1]));
     }
   } else {
     for (size_t i = 0; i < size; ++i) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                    sync_point_callbacks_[i]);
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, std::move(sync_point_callbacks_[i]));
     }
   }
   sync_point_callbacks_.clear();
@@ -92,10 +92,9 @@ uint64_t TestContextSupport::ShareGroupTracingGUID() const {
 }
 
 void TestContextSupport::SetErrorMessageCallback(
-    const base::Callback<void(const char*, int32_t)>& callback) {}
+    base::RepeatingCallback<void(const char*, int32_t)> callback) {}
 
-void TestContextSupport::AddLatencyInfo(
-    const std::vector<ui::LatencyInfo>& latency_info) {}
+void TestContextSupport::SetSnapshotRequested() {}
 
 bool TestContextSupport::ThreadSafeShallowLockDiscardableTexture(
     uint32_t texture_id) {

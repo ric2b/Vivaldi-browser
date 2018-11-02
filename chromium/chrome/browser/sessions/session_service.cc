@@ -14,6 +14,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
@@ -906,7 +907,7 @@ bool SessionService::ShouldTrackBrowser(Browser* browser) const {
       !browser->is_trusted_source()) {
     return false;
   }
-  if (!ShouldTrackVivaldiBrowser(browser)) {
+  if (vivaldi::IsVivaldiRunning() && !ShouldTrackVivaldiBrowser(browser)) {
     return false;
   }
   return ShouldRestoreWindowOfType(WindowTypeForBrowserType(browser->type()),
@@ -942,6 +943,22 @@ sessions::BaseSessionService* SessionService::GetBaseSessionServiceForTest() {
 
 /* static */
 bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  std::unique_ptr<base::Value> json =
+      base::JSONReader::Read(browser->ext_data(), options);
+  base::DictionaryValue* dict = NULL;
+  std::string window_type;
+  if (json && json->GetAsDictionary(&dict)) {
+    dict->GetString("windowType", &window_type);
+    // Don't track popup windows (like settings) in the session.
+    // We have "", "popup" and "settings".
+    // TODO(pettern): Popup windows still rely on extData, this
+    // should go away and we should use the type sent to the apis
+    // instead.
+    if (window_type == "popup" || window_type == "settings") {
+      return false;
+    }
+  }
   if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
       VivaldiBrowserWindow::WindowType::NORMAL) {
     return true;

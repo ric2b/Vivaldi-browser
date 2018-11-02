@@ -27,6 +27,7 @@ class PLATFORM_EXPORT DisplayItemClient {
   // Tests if this DisplayItemClient object has been created and has not been
   // deleted yet.
   bool IsAlive() const;
+  static String SafeDebugName(const DisplayItemClient&, bool known_to_be_safe);
 #else
   DisplayItemClient() {}
   virtual ~DisplayItemClient() {}
@@ -46,6 +47,14 @@ class PLATFORM_EXPORT DisplayItemClient {
   virtual LayoutUnit VisualRectOutsetForRasterEffects() const {
     return LayoutUnit();
   }
+
+  // The rect that needs to be invalidated partially in this client. It's in the
+  // same coordinate space as VisualRect().
+  virtual LayoutRect PartialInvalidationRect() const { return LayoutRect(); }
+
+  // Called by PaintController::CommitNewDisplayItems() for all clients after
+  // painting.
+  virtual void ClearPartialInvalidationRect() const {}
 
   // This is declared here instead of in LayoutObject for verifying the
   // condition in DrawingRecorder.

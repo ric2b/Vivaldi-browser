@@ -9,13 +9,12 @@
 #include <map>
 #include <memory>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/app_list/test/test_search_result.h"
 #include "ui/app_list/views/search_result_view.h"
@@ -29,8 +28,7 @@ namespace {
 int kDefaultSearchItems = 5;
 }  // namespace
 
-class SearchResultListViewTest : public views::ViewsTestBase,
-                                 public testing::WithParamInterface<bool> {
+class SearchResultListViewTest : public views::ViewsTestBase {
  public:
   SearchResultListViewTest() = default;
   ~SearchResultListViewTest() override = default;
@@ -38,11 +36,6 @@ class SearchResultListViewTest : public views::ViewsTestBase,
   // Overridden from testing::Test:
   void SetUp() override {
     views::ViewsTestBase::SetUp();
-    if (!GetParam()) {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kEnableFullscreenAppList);
-    }
-
     view_.reset(new SearchResultListView(nullptr, &view_delegate_));
     view_->SetResults(view_delegate_.GetModel()->results());
   }
@@ -71,7 +64,7 @@ class SearchResultListViewTest : public views::ViewsTestBase,
     AppListModel::SearchResults* results = GetResults();
     for (int i = 0; i < kDefaultSearchItems; ++i) {
       std::unique_ptr<TestSearchResult> result =
-          base::MakeUnique<TestSearchResult>();
+          std::make_unique<TestSearchResult>();
       result->set_display_type(SearchResult::DISPLAY_LIST);
       result->set_title(base::UTF8ToUTF16(base::StringPrintf("Result %d", i)));
       if (i < 2)
@@ -98,7 +91,7 @@ class SearchResultListViewTest : public views::ViewsTestBase,
   void ResetSelectedIndex() { view_->SetSelectedIndex(0); }
 
   void AddTestResultAtIndex(int index) {
-    GetResults()->Add(base::MakeUnique<TestSearchResult>());
+    GetResults()->Add(std::make_unique<TestSearchResult>());
   }
 
   void DeleteResultAt(int index) { GetResults()->DeleteAt(index); }
@@ -129,16 +122,12 @@ class SearchResultListViewTest : public views::ViewsTestBase,
  private:
   AppListTestViewDelegate view_delegate_;
   std::unique_ptr<SearchResultListView> view_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultListViewTest);
 };
 
-// Instantiate the Boolean which is used to toggle the Fullscreen app list in
-// the parameterized tests.
-INSTANTIATE_TEST_CASE_P(, SearchResultListViewTest, testing::Bool());
-
-TEST_P(SearchResultListViewTest, Basic) {
+// TODO(crbug.com/766807): Remove the test once the new focus model is stable.
+TEST_F(SearchResultListViewTest, DISABLED_Basic) {
   SetUpSearchResults();
 
   const int results = GetResultCount();
@@ -176,7 +165,8 @@ TEST_P(SearchResultListViewTest, Basic) {
   EXPECT_EQ(results - 1, GetSelectedIndex());
 }
 
-TEST_P(SearchResultListViewTest, AutoLaunch) {
+// TODO(crbug.com/781407) Re-enable the test once voice search is back.
+TEST_F(SearchResultListViewTest, DISABLED_AutoLaunch) {
   SetLongAutoLaunchTimeout();
   SetUpSearchResults();
 
@@ -191,7 +181,8 @@ TEST_P(SearchResultListViewTest, AutoLaunch) {
   EXPECT_EQ(base::TimeDelta(), GetAutoLaunchTimeout());
 }
 
-TEST_P(SearchResultListViewTest, CancelAutoLaunch) {
+// TODO(crbug.com/781407) Re-enable the test once voice search is back.
+TEST_F(SearchResultListViewTest, DISABLED_CancelAutoLaunch) {
   SetLongAutoLaunchTimeout();
   SetUpSearchResults();
 
@@ -212,7 +203,7 @@ TEST_P(SearchResultListViewTest, CancelAutoLaunch) {
   EXPECT_TRUE(IsAutoLaunching());
 }
 
-TEST_P(SearchResultListViewTest, SpokenFeedback) {
+TEST_F(SearchResultListViewTest, SpokenFeedback) {
   SetUpSearchResults();
 
   // Result 0 has a detail text. Expect that the detail is appended to the
@@ -225,7 +216,7 @@ TEST_P(SearchResultListViewTest, SpokenFeedback) {
             GetResultViewAt(2)->ComputeAccessibleName());
 }
 
-TEST_P(SearchResultListViewTest, ModelObservers) {
+TEST_F(SearchResultListViewTest, ModelObservers) {
   SetUpSearchResults();
   ExpectConsistent();
 
@@ -252,7 +243,7 @@ TEST_P(SearchResultListViewTest, ModelObservers) {
 
 // Regression test for http://crbug.com/402859 to ensure ProgressBar is
 // initialized properly in SearchResultListView::SetResult().
-TEST_P(SearchResultListViewTest, ProgressBar) {
+TEST_F(SearchResultListViewTest, ProgressBar) {
   SetUpSearchResults();
 
   GetResults()->GetItemAt(0)->SetIsInstalling(true);

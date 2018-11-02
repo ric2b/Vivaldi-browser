@@ -24,18 +24,6 @@ namespace net {
 
 namespace {
 
-X509Certificate::PickleType GetPickleTypeForVersion(int version) {
-  switch (version) {
-    case 1:
-      return X509Certificate::PICKLETYPE_SINGLE_CERTIFICATE;
-    case 2:
-      return X509Certificate::PICKLETYPE_CERTIFICATE_CHAIN_V2;
-    case 3:
-    default:
-      return X509Certificate::PICKLETYPE_CERTIFICATE_CHAIN_V3;
-  }
-}
-
 bool KeyExchangeGroupIsValid(int ssl_connection_status) {
   // TLS 1.3 and later always treat the field correctly.
   if (SSLConnectionStatusToVersion(ssl_connection_status) >=
@@ -58,7 +46,7 @@ enum {
   RESPONSE_INFO_VERSION = 3,
 
   // The minimum version supported for deserializing response info.
-  RESPONSE_INFO_MINIMUM_VERSION = 1,
+  RESPONSE_INFO_MINIMUM_VERSION = 3,
 
   // We reserve up to 8 bits for the version number.
   RESPONSE_INFO_VERSION_MASK = 0xFF,
@@ -132,56 +120,12 @@ HttpResponseInfo::HttpResponseInfo()
       unused_since_prefetch(false),
       connection_info(CONNECTION_INFO_UNKNOWN) {}
 
-HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs)
-    : was_cached(rhs.was_cached),
-      cache_entry_status(rhs.cache_entry_status),
-      server_data_unavailable(rhs.server_data_unavailable),
-      network_accessed(rhs.network_accessed),
-      was_fetched_via_spdy(rhs.was_fetched_via_spdy),
-      was_alpn_negotiated(rhs.was_alpn_negotiated),
-      was_fetched_via_proxy(rhs.was_fetched_via_proxy),
-      proxy_server(rhs.proxy_server),
-      did_use_http_auth(rhs.did_use_http_auth),
-      unused_since_prefetch(rhs.unused_since_prefetch),
-      socket_address(rhs.socket_address),
-      alpn_negotiated_protocol(rhs.alpn_negotiated_protocol),
-      connection_info(rhs.connection_info),
-      request_time(rhs.request_time),
-      response_time(rhs.response_time),
-      auth_challenge(rhs.auth_challenge),
-      cert_request_info(rhs.cert_request_info),
-      ssl_info(rhs.ssl_info),
-      headers(rhs.headers),
-      vary_data(rhs.vary_data),
-      metadata(rhs.metadata) {}
+HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs) = default;
 
-HttpResponseInfo::~HttpResponseInfo() {
-}
+HttpResponseInfo::~HttpResponseInfo() = default;
 
-HttpResponseInfo& HttpResponseInfo::operator=(const HttpResponseInfo& rhs) {
-  was_cached = rhs.was_cached;
-  cache_entry_status = rhs.cache_entry_status;
-  server_data_unavailable = rhs.server_data_unavailable;
-  network_accessed = rhs.network_accessed;
-  was_fetched_via_spdy = rhs.was_fetched_via_spdy;
-  proxy_server = rhs.proxy_server;
-  was_alpn_negotiated = rhs.was_alpn_negotiated;
-  was_fetched_via_proxy = rhs.was_fetched_via_proxy;
-  did_use_http_auth = rhs.did_use_http_auth;
-  unused_since_prefetch = rhs.unused_since_prefetch;
-  socket_address = rhs.socket_address;
-  alpn_negotiated_protocol = rhs.alpn_negotiated_protocol;
-  connection_info = rhs.connection_info;
-  request_time = rhs.request_time;
-  response_time = rhs.response_time;
-  auth_challenge = rhs.auth_challenge;
-  cert_request_info = rhs.cert_request_info;
-  ssl_info = rhs.ssl_info;
-  headers = rhs.headers;
-  vary_data = rhs.vary_data;
-  metadata = rhs.metadata;
-  return *this;
-}
+HttpResponseInfo& HttpResponseInfo::operator=(const HttpResponseInfo& rhs) =
+    default;
 
 bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
                                       bool* response_truncated) {
@@ -217,8 +161,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
 
   // Read ssl-info
   if (flags & RESPONSE_INFO_HAS_CERT) {
-    X509Certificate::PickleType type = GetPickleTypeForVersion(version);
-    ssl_info.cert = X509Certificate::CreateFromPickle(&iter, type);
+    ssl_info.cert = X509Certificate::CreateFromPickle(&iter);
     if (!ssl_info.cert.get())
       return false;
   }
@@ -274,17 +217,13 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
 
   // Read socket_address.
   std::string socket_address_host;
-  if (iter.ReadString(&socket_address_host)) {
-    // If the host was written, we always expect the port to follow.
-    uint16_t socket_address_port;
-    if (!iter.ReadUInt16(&socket_address_port))
-      return false;
-    socket_address = HostPortPair(socket_address_host, socket_address_port);
-  } else if (version > 1) {
-    // socket_address was not always present in version 1 of the response
-    // info, so we don't fail if it can't be read.
+  if (!iter.ReadString(&socket_address_host))
     return false;
-  }
+  // If the host was written, we always expect the port to follow.
+  uint16_t socket_address_port;
+  if (!iter.ReadUInt16(&socket_address_port))
+    return false;
+  socket_address = HostPortPair(socket_address_host, socket_address_port);
 
   // Read protocol-version.
   if (flags & RESPONSE_INFO_HAS_ALPN_NEGOTIATED_PROTOCOL) {
@@ -446,6 +385,8 @@ bool HttpResponseInfo::DidUseQuic() const {
     case CONNECTION_INFO_QUIC_39:
     case CONNECTION_INFO_QUIC_40:
     case CONNECTION_INFO_QUIC_41:
+    case CONNECTION_INFO_QUIC_42:
+    case CONNECTION_INFO_QUIC_43:
       return true;
     case NUM_OF_CONNECTION_INFOS:
       NOTREACHED();
@@ -498,6 +439,10 @@ std::string HttpResponseInfo::ConnectionInfoToString(
       return "http/2+quic/40";
     case CONNECTION_INFO_QUIC_41:
       return "http/2+quic/41";
+    case CONNECTION_INFO_QUIC_42:
+      return "http/2+quic/42";
+    case CONNECTION_INFO_QUIC_43:
+      return "http/2+quic/43";
     case CONNECTION_INFO_HTTP0_9:
       return "http/0.9";
     case CONNECTION_INFO_HTTP1_0:

@@ -4,11 +4,12 @@
 
 #include "base/android/library_loader/library_loader_hooks.h"
 
-#include "base/android/command_line_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/library_loader/library_load_from_apk_status_codes.h"
 #include "base/android/library_loader/library_prefetcher.h"
 #include "base/at_exit.h"
+#include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "jni/LibraryLoader_jni.h"
@@ -84,9 +85,9 @@ void RecordLibraryPreloaderRendereHistogram() {
   }
 }
 
-} // namespace
+}  // namespace
 
-static void RegisterChromiumAndroidLinkerRendererHistogram(
+static void JNI_LibraryLoader_RegisterChromiumAndroidLinkerRendererHistogram(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     jboolean requested_shared_relro,
@@ -103,7 +104,7 @@ static void RegisterChromiumAndroidLinkerRendererHistogram(
   g_renderer_library_load_time_ms = library_load_time_ms;
 }
 
-static void RecordChromiumAndroidLinkerBrowserHistogram(
+static void JNI_LibraryLoader_RecordChromiumAndroidLinkerBrowserHistogram(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     jboolean is_using_browser_shared_relros,
@@ -134,7 +135,7 @@ static void RecordChromiumAndroidLinkerBrowserHistogram(
                       base::TimeDelta::FromMilliseconds(library_load_time_ms));
 }
 
-static void RecordLibraryPreloaderBrowserHistogram(
+static void JNI_LibraryLoader_RecordLibraryPreloaderBrowserHistogram(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     jint status) {
@@ -143,7 +144,7 @@ static void RecordLibraryPreloaderBrowserHistogram(
       status);
 }
 
-static void RegisterLibraryPreloaderRendererHistogram(
+static void JNI_LibraryLoader_RegisterLibraryPreloaderRendererHistogram(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     jint status) {
@@ -165,22 +166,19 @@ void SetLibraryLoadedHook(LibraryLoadedHook* func) {
   g_registration_callback = func;
 }
 
-static void InitCommandLine(
+static jboolean JNI_LibraryLoader_LibraryLoaded(
     JNIEnv* env,
-    const JavaParamRef<jobject>& jcaller,
-    const JavaParamRef<jobjectArray>& init_command_line) {
-  InitNativeCommandLineFromJavaArray(env, init_command_line);
-}
+    const JavaParamRef<jobject>& jcaller) {
+  if (CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kMadviseRandomExecutableCode)) {
+    NativeLibraryPrefetcher::MadviseRandomText();
+  }
 
-static jboolean LibraryLoaded(JNIEnv* env,
-                              const JavaParamRef<jobject>& jcaller) {
-  if (g_native_initialization_hook && !g_native_initialization_hook()) {
+  if (g_native_initialization_hook && !g_native_initialization_hook())
     return false;
-  }
-  if (g_registration_callback == NULL) {
-    return true;
-  }
-  return g_registration_callback(env, NULL);
+  if (g_registration_callback && !g_registration_callback(env, nullptr))
+    return false;
+  return true;
 }
 
 void LibraryLoaderExitHook() {
@@ -190,23 +188,29 @@ void LibraryLoaderExitHook() {
   }
 }
 
-static jboolean ForkAndPrefetchNativeLibrary(
+static jboolean JNI_LibraryLoader_ForkAndPrefetchNativeLibrary(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
   return NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary();
 }
 
-static jint PercentageOfResidentNativeLibraryCode(
+static jint JNI_LibraryLoader_PercentageOfResidentNativeLibraryCode(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
   return NativeLibraryPrefetcher::PercentageOfResidentNativeLibraryCode();
+}
+
+static void JNI_LibraryLoader_PeriodicallyCollectResidency(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  return NativeLibraryPrefetcher::PeriodicallyCollectResidency();
 }
 
 void SetVersionNumber(const char* version_number) {
   g_library_version_number = strdup(version_number);
 }
 
-ScopedJavaLocalRef<jstring> GetVersionNumber(
+ScopedJavaLocalRef<jstring> JNI_LibraryLoader_GetVersionNumber(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
   return ConvertUTF8ToJavaString(env, g_library_version_number);

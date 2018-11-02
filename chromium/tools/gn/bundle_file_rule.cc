@@ -20,7 +20,7 @@ BundleFileRule::BundleFileRule(const Target* bundle_data_target,
 
 BundleFileRule::BundleFileRule(const BundleFileRule& other) = default;
 
-BundleFileRule::~BundleFileRule() {}
+BundleFileRule::~BundleFileRule() = default;
 
 SourceFile BundleFileRule::ApplyPatternToSource(
     const Settings* settings,
@@ -34,6 +34,9 @@ SourceFile BundleFileRule::ApplyPatternToSource(
         break;
       case SUBSTITUTION_BUNDLE_ROOT_DIR:
         output_path.append(bundle_data.root_dir().value());
+        break;
+      case SUBSTITUTION_BUNDLE_CONTENTS_DIR:
+        output_path.append(bundle_data.contents_dir().value());
         break;
       case SUBSTITUTION_BUNDLE_RESOURCES_DIR:
         output_path.append(bundle_data.resources_dir().value());

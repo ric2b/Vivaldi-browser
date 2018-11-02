@@ -6,128 +6,73 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
-#include "base/memory/singleton.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
-
-#if !defined(OS_ANDROID)
-#include "chrome/grit/generated_resources.h"
-#include "content/public/browser/utility_process_host.h"
-#include "content/public/browser/utility_process_host_client.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "ui/base/l10n/l10n_util.h"
-#else  // defined(OS_ANDROID)
+#include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "net/proxy/mojo_proxy_resolver_factory_impl.h"
-#endif  // !defined(OS_ANDROID)
 
 namespace {
-const int kUtilityProcessIdleTimeoutSeconds = 5;
+
+void BindConnectorOnUIThread(service_manager::mojom::ConnectorRequest request) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindConnectorRequest(std::move(request));
 }
 
-// static
-ChromeMojoProxyResolverFactory* ChromeMojoProxyResolverFactory::GetInstance() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  return base::Singleton<
-      ChromeMojoProxyResolverFactory,
-      base::LeakySingletonTraits<ChromeMojoProxyResolverFactory>>::get();
-}
+}  // namespace
 
 ChromeMojoProxyResolverFactory::ChromeMojoProxyResolverFactory() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 }
 
 ChromeMojoProxyResolverFactory::~ChromeMojoProxyResolverFactory() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 }
 
-std::unique_ptr<base::ScopedClosureRunner>
-ChromeMojoProxyResolverFactory::CreateResolver(
+proxy_resolver::mojom::ProxyResolverFactoryPtr
+ChromeMojoProxyResolverFactory::CreateWithStrongBinding() {
+  proxy_resolver::mojom::ProxyResolverFactoryPtr proxy_resolver_factory;
+  mojo::MakeStrongBinding(std::make_unique<ChromeMojoProxyResolverFactory>(),
+                          mojo::MakeRequest(&proxy_resolver_factory));
+  return proxy_resolver_factory;
+}
+
+void ChromeMojoProxyResolverFactory::CreateResolver(
     const std::string& pac_script,
-    mojo::InterfaceRequest<net::interfaces::ProxyResolver> req,
-    net::interfaces::ProxyResolverFactoryRequestClientPtr client) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!resolver_factory_)
-    CreateFactory();
+    proxy_resolver::mojom::ProxyResolverRequest req,
+    proxy_resolver::mojom::ProxyResolverFactoryRequestClientPtr client) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  if (!resolver_factory_) {
-    // If factory creation failed, close |req|'s message pipe, which should
-    // cause a connection error.
-    req = nullptr;
-    return nullptr;
-  }
-  idle_timer_.Stop();
-  num_proxy_resolvers_++;
-  resolver_factory_->CreateResolver(pac_script, std::move(req),
-                                    std::move(client));
-  return base::MakeUnique<base::ScopedClosureRunner>(
-      base::Bind(&ChromeMojoProxyResolverFactory::OnResolverDestroyed,
-                 base::Unretained(this)));
+  InitServiceManagerConnector();
+
+  // Bind a ProxyResolverFactory backed by the proxy resolver service, have it
+  // create a ProxyResolverFactory and then destroy the factory, to avoid
+  // keeping the service alive after all resolvers have been destroyed.
+  proxy_resolver::mojom::ProxyResolverFactoryPtr resolver_factory;
+  service_manager_connector_->BindInterface(
+      proxy_resolver::mojom::kProxyResolverServiceName,
+      mojo::MakeRequest(&resolver_factory));
+  resolver_factory->CreateResolver(pac_script, std::move(req),
+                                   std::move(client));
 }
 
-void ChromeMojoProxyResolverFactory::CreateFactory() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!resolver_factory_);
+void ChromeMojoProxyResolverFactory::InitServiceManagerConnector() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-#if defined(OS_ANDROID)
-  mojo::MakeStrongBinding(base::MakeUnique<net::MojoProxyResolverFactoryImpl>(),
-                          mojo::MakeRequest(&resolver_factory_));
-#else   // !defined(OS_ANDROID)
-  DCHECK(!weak_utility_process_host_);
-
-  DVLOG(1) << "Attempting to create utility process for proxy resolver";
-  content::UtilityProcessHost* utility_process_host =
-      content::UtilityProcessHost::Create(
-          scoped_refptr<content::UtilityProcessHostClient>(),
-          base::ThreadTaskRunnerHandle::Get());
-  utility_process_host->SetName(
-      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_PROXY_RESOLVER_NAME));
-  bool process_started = utility_process_host->Start();
-  if (process_started) {
-    BindInterface(utility_process_host, &resolver_factory_);
-    weak_utility_process_host_ = utility_process_host->AsWeakPtr();
-  } else {
-    LOG(ERROR) << "Unable to connect to utility process";
+  if (service_manager_connector_)
     return;
-  }
-#endif  // defined(OS_ANDROID)
 
-  resolver_factory_.set_connection_error_handler(base::Bind(
-      &ChromeMojoProxyResolverFactory::DestroyFactory, base::Unretained(this)));
-}
-
-void ChromeMojoProxyResolverFactory::DestroyFactory() {
-  resolver_factory_.reset();
-#if !defined(OS_ANDROID)
-  delete weak_utility_process_host_.get();
-  weak_utility_process_host_.reset();
-#endif
-}
-
-void ChromeMojoProxyResolverFactory::OnResolverDestroyed() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK_GT(num_proxy_resolvers_, 0u);
-  if (--num_proxy_resolvers_ == 0) {
-    // When all proxy resolvers have been destroyed, the proxy resolver factory
-    // is no longer needed. However, new proxy resolvers may be created
-    // shortly after being destroyed (e.g. due to a network change).
-    //
-    // On desktop, where a utility process is used, if the utility process is
-    // shut down immediately, this would cause unnecessary process churn, so
-    // wait for an idle timeout before shutting down the proxy resolver utility
-    // process.
-    idle_timer_.Start(
-        FROM_HERE,
-        base::TimeDelta::FromSeconds(kUtilityProcessIdleTimeoutSeconds), this,
-        &ChromeMojoProxyResolverFactory::OnIdleTimeout);
-  }
-}
-
-void ChromeMojoProxyResolverFactory::OnIdleTimeout() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK_EQ(num_proxy_resolvers_, 0u);
-  DestroyFactory();
+  // The existing ServiceManagerConnection retrieved with
+  // ServiceManagerConnection::GetForProcess() lives on the UI thread, so we
+  // can't access it from here. We create our own connector so it can be used
+  // right away and will bind it on the UI thread.
+  service_manager::mojom::ConnectorRequest request;
+  service_manager_connector_ = service_manager::Connector::Create(&request);
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&BindConnectorOnUIThread, base::Passed(&request)));
 }

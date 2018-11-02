@@ -10,7 +10,6 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
@@ -18,6 +17,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -27,10 +27,10 @@
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/safebrowsing.pb.h"
-#include "components/safe_browsing_db/util.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/safebrowsing.pb.h"
+#include "components/safe_browsing/db/util.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -130,13 +130,9 @@ class LocalSafeBrowsingDatabaseManager
                          Client* client) override;
   bool CheckResourceUrl(const GURL& url, Client* client) override;
   AsyncMatch CheckCsdWhitelistUrl(const GURL& url, Client* client) override;
-  bool MatchCsdWhitelistUrl(const GURL& url) override;
   bool MatchMalwareIP(const std::string& ip_address) override;
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
   bool MatchDownloadWhitelistString(const std::string& str) override;
-  bool MatchModuleWhitelistString(const std::string& str) override;
-  bool IsMalwareKillSwitchOn() override;
-  bool IsCsdWhitelistKillSwitchOn() override;
   void CancelCheck(Client* client) override;
   void StartOnIOThread(net::URLRequestContextGetter* request_context_getter,
                        const V4ProtocolConfig& config) override;
@@ -155,6 +151,7 @@ class LocalSafeBrowsingDatabaseManager
   void HandleGetHashResults(SafeBrowsingCheck* check,
                             const std::vector<SBFullHashResult>& full_hashes,
                             const base::TimeDelta& cache_lifetime);
+  bool MatchCsdWhitelistUrl(const GURL& url);  // deprecated
 
   friend class base::RefCountedThreadSafe<LocalSafeBrowsingDatabaseManager>;
   friend class SafeBrowsingServerTest;
@@ -359,9 +356,6 @@ class LocalSafeBrowsingDatabaseManager
   // Indicate if the unwanted software blacklist should be enabled.
   bool enable_unwanted_software_blacklist_;
 
-  // Indicate if the module whitelist should be enabled.
-  bool enable_module_whitelist_;
-
   // The sequenced task runner for running safe browsing database operations.
   scoped_refptr<base::SequencedTaskRunner> safe_browsing_task_runner_;
 
@@ -376,7 +370,7 @@ class LocalSafeBrowsingDatabaseManager
   // is true, nothing on the IO thread should access the database.
   bool closing_database_;
 
-  std::deque<QueuedCheck> queued_checks_;
+  base::circular_deque<QueuedCheck> queued_checks_;
 
   // Timeout to use for safe browsing checks.
   base::TimeDelta check_timeout_;

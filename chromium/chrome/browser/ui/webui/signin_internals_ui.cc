@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/hash.h"
-#include "base/profiler/scoped_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
@@ -17,7 +16,8 @@
 #include "components/grit/components_resources.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/signin_features.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -30,7 +30,7 @@ content::WebUIDataSource* CreateSignInInternalsHTMLSource() {
   source->SetJsonPath("strings.js");
   source->AddResourcePath("signin_internals.js", IDR_SIGNIN_INTERNALS_INDEX_JS);
   source->SetDefaultResource(IDR_SIGNIN_INTERNALS_INDEX_HTML);
-  source->UseGzip(std::unordered_set<std::string>());
+  source->UseGzip();
   return source;
 }
 
@@ -46,7 +46,7 @@ SignInInternalsUI::SignInInternalsUI(content::WebUI* web_ui)
     if (about_signin_internals)
       about_signin_internals->AddSigninObserver(this);
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-    if (signin::IsAccountConsistencyDiceEnabled()) {
+    if (signin::IsDiceEnabledForProfile(profile->GetPrefs())) {
       web_ui->AddMessageHandler(
           base::MakeUnique<SigninDiceInternalsHandler>(profile));
     }
@@ -106,12 +106,6 @@ bool SignInInternalsUI::OverrideHandleWebUIMessage(
 
 void SignInInternalsUI::OnSigninStateChanged(
     const base::DictionaryValue* info) {
-  // TODO(robliao): Remove ScopedTracker below once https://crbug.com/422460 is
-  // fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "422460 SignInInternalsUI::OnSigninStateChanged"));
-
   web_ui()->CallJavascriptFunctionUnsafe(
       "chrome.signin.onSigninInfoChanged.fire", *info);
 }

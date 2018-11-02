@@ -34,8 +34,7 @@
 @implementation FramedBrowserWindow
 
 + (CGFloat)browserFrameViewPaintHeight {
-  return chrome::ShouldUseFullSizeContentView() ? chrome::kTabStripHeight
-                                                : 60.0;
+  return chrome::kTabStripHeight;
 }
 
 + (NSUInteger)defaultStyleMask {
@@ -85,6 +84,14 @@
 
 - (BOOL)_isTitleHidden {
   return shouldHideTitle_;
+}
+
+- (BOOL)makeFirstResponder:(NSResponder*)responder {
+  BrowserWindowController* bwc =
+      base::mac::ObjCCastStrict<BrowserWindowController>(
+          [self windowController]);
+  [bwc firstResponderUpdated:responder];
+  return [super makeFirstResponder:responder];
 }
 
 // This method is called whenever a window is moved in order to ensure it fits

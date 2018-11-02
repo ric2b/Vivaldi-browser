@@ -15,6 +15,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/sequence_checker.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/network/managed_state.h"
 #include "chromeos/network/network_handler.h"
@@ -25,11 +26,8 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
-class Value;
-}
-
-namespace tracked_objects {
 class Location;
+class Value;
 }
 
 namespace chromeos {
@@ -94,9 +92,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Add/remove observers.
   void AddObserver(NetworkStateHandlerObserver* observer,
-                   const tracked_objects::Location& from_here);
+                   const base::Location& from_here);
   void RemoveObserver(NetworkStateHandlerObserver* observer,
-                      const tracked_objects::Location& from_here);
+                      const base::Location& from_here);
 
   // Returns the state for technology |type|. Only
   // NetworkTypePattern::Primitive, ::Mobile, ::Ethernet, and ::Tether are
@@ -164,8 +162,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
   const NetworkState* DefaultNetwork() const;
 
   // Returns the primary connected network of matching |type|, otherwise NULL.
-  const NetworkState* ConnectedNetworkByType(
-      const NetworkTypePattern& type) const;
+  const NetworkState* ConnectedNetworkByType(const NetworkTypePattern& type);
 
   // Like ConnectedNetworkByType() but returns a connecting network or NULL.
   const NetworkState* ConnectingNetworkByType(
@@ -178,8 +175,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Returns the aa:bb formatted hardware (MAC) address for the first connected
   // network matching |type|, or an empty string if none is connected.
-  std::string FormattedHardwareAddressForType(
-      const NetworkTypePattern& type) const;
+  std::string FormattedHardwareAddressForType(const NetworkTypePattern& type);
 
   // Convenience method to call GetNetworkListByType(visible=true).
   void GetVisibleNetworkListByType(const NetworkTypePattern& type,
@@ -294,8 +290,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
                            DeviceStateList* list) const;
 
   // Requests a network scan. This may trigger updates to the network
-  // list, which will trigger the appropriate observer calls.
-  void RequestScan();
+  // list, which will trigger the appropriate observer calls. If |type| is
+  // Cellular, a mobile network scan will be requested if supported.
+  void RequestScan(const NetworkTypePattern& type);
 
   // Requests an update for an existing NetworkState, e.g. after configuring
   // a network. This is a no-op if an update request is already pending. To
@@ -426,7 +423,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // * Visible non-wifi networks
   // * Visible wifi networks
   // * Hidden (wifi) networks
-  void SortNetworkList();
+  // If |ensure_cellular| is true, call EnsureCellularNetwork (which may
+  // remove a network from the list).
+  void SortNetworkList(bool ensure_cellular);
 
   // Updates UMA stats. Called once after all requested networks are updated.
   void UpdateNetworkStats();
@@ -438,6 +437,12 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Ensure a valid GUID for NetworkState.
   void UpdateGuid(NetworkState* network);
+
+  // Cellular networks may not have an associated Shill Service (e.g. when the
+  // SIM is locked or a mobile network is not available). To simplify the UI,
+  // if a Cellular Device exists |cellular_networks| will be modified to contain
+  // exactly one network, creating a default network if necessary.
+  void EnsureCellularNetwork(ManagedStateList* cellular_networks);
 
   // Sends NetworkListChanged() to observers and logs an event.
   void NotifyNetworkListChanged();
@@ -460,7 +465,8 @@ class CHROMEOS_EXPORT NetworkStateHandler
   ManagedStateList* GetManagedList(ManagedState::ManagedType type);
 
   // Helper function to notify observers. Calls CheckDefaultNetworkChanged().
-  void OnNetworkConnectionStateChanged(NetworkState* network);
+  // Returns true if NotifyDefaultNetworkChanged() was called.
+  bool OnNetworkConnectionStateChanged(NetworkState* network);
 
   // Notifies observers when the default network or its properties change.
   void NotifyDefaultNetworkChanged(const NetworkState* default_network);
@@ -476,6 +482,11 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Called whenever Device.Scanning state transitions to false.
   void NotifyScanCompleted(const DeviceState* device);
+
+  // Helper function to log property updated events.
+  void LogPropertyUpdated(const ManagedState* network,
+                          const std::string& key,
+                          const base::Value& value);
 
   // Returns one technology type for |type|. This technology will be the
   // highest priority technology in the type pattern.
@@ -547,6 +558,11 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Ensure that Shutdown() gets called exactly once.
   bool did_shutdown_ = false;
+
+  // Ensure that we do not delete any networks while notifying observers.
+  bool notifying_network_observers_ = false;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(NetworkStateHandler);
 };

@@ -7,6 +7,8 @@
 #include <string>
 #include <utility>
 
+#include "ash/app_list/model/search/tokenized_string.h"
+#include "ash/app_list/model/search/tokenized_string_match.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/string_util.h"
@@ -20,8 +22,6 @@
 #include "chrome/browser/ui/app_list/search/search_webstore_result.h"
 #include "chrome/browser/ui/app_list/search/webstore/webstore_result.h"
 #include "extensions/common/extension_urls.h"
-#include "ui/app_list/search/tokenized_string.h"
-#include "ui/app_list/search/tokenized_string_match.h"
 #include "url/gurl.h"
 
 namespace app_list {
@@ -67,6 +67,9 @@ WebstoreProvider::~WebstoreProvider() {}
 
 void WebstoreProvider::Start(bool /*is_voice_query*/,
                              const base::string16& query) {
+  if (webstore_search_)
+    webstore_search_->Stop();
+
   ClearResults();
   if (!IsValidQuery(query)) {
     query_.clear();
@@ -97,11 +100,6 @@ void WebstoreProvider::Start(bool /*is_voice_query*/,
   // Add a placeholder result which when clicked will run the user's query in a
   // browser. This placeholder is removed when the search results arrive.
   Add(base::MakeUnique<SearchWebstoreResult>(profile_, controller_, query_));
-}
-
-void WebstoreProvider::Stop() {
-  if (webstore_search_)
-    webstore_search_->Stop();
 }
 
 void WebstoreProvider::StartQuery() {

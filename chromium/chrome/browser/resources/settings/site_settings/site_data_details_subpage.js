@@ -5,6 +5,20 @@
 (function() {
 'use strict';
 
+var categoryLabels = {
+  app_cache: loadTimeData.getString('cookieAppCache'),
+  cache_storage: loadTimeData.getString('cookieCacheStorage'),
+  channel_id: loadTimeData.getString('cookieChannelId'),
+  database: loadTimeData.getString('cookieDatabaseStorage'),
+  file_system: loadTimeData.getString('cookieFileSystem'),
+  flash_lso: loadTimeData.getString('cookieFlashLso'),
+  indexed_db: loadTimeData.getString('cookieDatabaseStorage'),
+  local_storage: loadTimeData.getString('cookieLocalStorage'),
+  service_worker: loadTimeData.getString('cookieServiceWorker'),
+  shared_worker: loadTimeData.getString('cookieSharedWorker'),
+  media_license: loadTimeData.getString('cookieMediaLicense'),
+};
+
 /**
  * 'site-data-details-subpage' Display cookie contents.
  */
@@ -36,17 +50,16 @@ Polymer({
 
   /**
    * The browser proxy used to retrieve and change cookies.
-   * @private {?settings.SiteSettingsPrefsBrowserProxy}
+   * @private {?settings.LocalDataBrowserProxy}
    */
   browserProxy_: null,
 
   /** @override */
   ready: function() {
-    this.browserProxy_ =
-        settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
+    this.browserProxy_ = settings.LocalDataBrowserProxyImpl.getInstance();
 
     this.addWebUIListener(
-        'onTreeItemRemoved', this.getCookieDetails_.bind(this));
+        'on-tree-item-removed', this.getCookieDetails_.bind(this));
   },
 
   /**
@@ -59,7 +72,7 @@ Polymer({
         settings.routes.SITE_SETTINGS_DATA_DETAILS)
       return;
     var site = settings.getQueryParameters().get('site');
-    if (!site || site == this.site_)
+    if (!site)
       return;
     this.site_ = site;
     this.pageTitle = loadTimeData.getStringF('siteSettingsCookieSubpage', site);
@@ -119,7 +132,9 @@ Polymer({
     // cookie to differentiate them.
     if (item.type == 'cookie')
       return item.title;
-    return getCookieDataCategoryText(item.type, item.totalUsage);
+    if (item.type == 'quota')
+      return item.totalUsage;
+    return categoryLabels[item.type];
   },
 
   /**

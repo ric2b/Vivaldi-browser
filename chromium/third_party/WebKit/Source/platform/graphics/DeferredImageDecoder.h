@@ -33,6 +33,7 @@
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
 #include "third_party/skia/include/core/SkRWBuffer.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -48,10 +49,11 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   USING_FAST_MALLOC(DeferredImageDecoder);
 
  public:
-  static std::unique_ptr<DeferredImageDecoder> Create(RefPtr<SharedBuffer> data,
-                                                      bool data_complete,
-                                                      ImageDecoder::AlphaOption,
-                                                      const ColorBehavior&);
+  static std::unique_ptr<DeferredImageDecoder> Create(
+      scoped_refptr<SharedBuffer> data,
+      bool data_complete,
+      ImageDecoder::AlphaOption,
+      const ColorBehavior&);
 
   static std::unique_ptr<DeferredImageDecoder> CreateForTesting(
       std::unique_ptr<ImageDecoder>);
@@ -62,8 +64,8 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
 
   sk_sp<PaintImageGenerator> CreateGenerator(size_t index);
 
-  PassRefPtr<SharedBuffer> Data();
-  void SetData(PassRefPtr<SharedBuffer> data, bool all_data_received);
+  scoped_refptr<SharedBuffer> Data();
+  void SetData(scoped_refptr<SharedBuffer> data, bool all_data_received);
 
   bool IsSizeAvailable();
   bool HasEmbeddedColorSpace() const;
@@ -74,9 +76,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   void ClearCacheExceptFrame(size_t index);
   bool FrameHasAlphaAtIndex(size_t index) const;
   bool FrameIsReceivedAtIndex(size_t index) const;
-  // Duration is reported in seconds.
-  // TODO(vmpstr): Use something like TimeDelta here.
-  float FrameDurationAtIndex(size_t index) const;
+  TimeDelta FrameDurationAtIndex(size_t index) const;
   ImageOrientation OrientationAtIndex(size_t index) const;
   bool HotSpot(IntPoint&) const;
 
@@ -84,12 +84,12 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   explicit DeferredImageDecoder(std::unique_ptr<ImageDecoder> metadata_decoder);
 
   friend class DeferredImageDecoderTest;
-  ImageFrameGenerator* FrameGenerator() { return frame_generator_.Get(); }
+  ImageFrameGenerator* FrameGenerator() { return frame_generator_.get(); }
 
   void ActivateLazyDecoding();
   void PrepareLazyDecodedFrames();
 
-  void SetDataInternal(RefPtr<SharedBuffer> data,
+  void SetDataInternal(scoped_refptr<SharedBuffer> data,
                        bool all_data_received,
                        bool push_data_to_decoder);
 
@@ -111,7 +111,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
 
   // Caches frame state information.
   Vector<DeferredFrameData> frame_data_;
-  RefPtr<ImageFrameGenerator> frame_generator_;
+  scoped_refptr<ImageFrameGenerator> frame_generator_;
 };
 
 }  // namespace blink

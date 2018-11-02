@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/search_result.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
@@ -19,10 +21,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/search/history_types.h"
 #include "ui/app_list/search_provider.h"
-#include "ui/app_list/search_result.h"
 
 namespace app_list {
 namespace test {
@@ -48,7 +48,7 @@ class TestSearchResult : public SearchResult {
   void Open(int event_flags) override {}
   void InvokeAction(int action_index, int event_flags) override {}
   std::unique_ptr<SearchResult> Duplicate() const override {
-    return base::MakeUnique<TestSearchResult>(id(), relevance());
+    return std::make_unique<TestSearchResult>(id(), relevance());
   }
 
   // For reference equality testing. (Addresses cannot be used to test reference
@@ -94,7 +94,6 @@ class TestSearchProvider : public SearchProvider {
       Add(std::unique_ptr<SearchResult>(result));
     }
   }
-  void Stop() override {}
 
   void set_prefix(const std::string& prefix) { prefix_ = prefix; }
   void set_display_type(SearchResult::DisplayType display_type) {
@@ -124,9 +123,9 @@ class MixerTest : public testing::Test {
   void SetUp() override {
     results_.reset(new AppListModel::SearchResults);
 
-    providers_.push_back(base::MakeUnique<TestSearchProvider>("app"));
-    providers_.push_back(base::MakeUnique<TestSearchProvider>("omnibox"));
-    providers_.push_back(base::MakeUnique<TestSearchProvider>("webstore"));
+    providers_.push_back(std::make_unique<TestSearchProvider>("app"));
+    providers_.push_back(std::make_unique<TestSearchProvider>("omnibox"));
+    providers_.push_back(std::make_unique<TestSearchProvider>("webstore"));
 
     is_voice_query_ = false;
 
@@ -147,10 +146,8 @@ class MixerTest : public testing::Test {
   void RunQuery() {
     const base::string16 query;
 
-    for (size_t i = 0; i < providers_.size(); ++i) {
+    for (size_t i = 0; i < providers_.size(); ++i)
       providers_[i]->Start(is_voice_query_, query);
-      providers_[i]->Stop();
-    }
 
     mixer_->MixAndPublish(is_voice_query_, known_results_, kMaxSearchResults);
   }

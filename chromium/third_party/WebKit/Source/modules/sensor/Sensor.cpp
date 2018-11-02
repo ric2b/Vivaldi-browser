@@ -6,12 +6,13 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "modules/sensor/SensorErrorEvent.h"
 #include "modules/sensor/SensorProviderProxy.h"
+#include "platform/LayoutTestSupport.h"
+#include "public/platform/TaskType.h"
 #include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 #include "services/device/public/interfaces/sensor.mojom-blink.h"
 
@@ -30,12 +31,8 @@ Sensor::Sensor(ExecutionContext* execution_context,
       type_(type),
       state_(SensorState::kIdle),
       last_reported_timestamp_(0.0) {
-  // Check secure context.
-  String error_message;
-  if (!execution_context->IsSecureContext(error_message)) {
-    exception_state.ThrowSecurityError(error_message);
-    return;
-  }
+  // [SecureContext] in idl.
+  DCHECK(execution_context->IsSecureContext());
 
   // Check top-level browsing context.
   if (!ToDocument(execution_context)->domWindow()->GetFrame() ||
@@ -83,9 +80,16 @@ bool Sensor::activated() const {
   return state_ == SensorState::kActivated;
 }
 
+bool Sensor::hasReading() const {
+  if (!IsActivated())
+    return false;
+  DCHECK(sensor_proxy_);
+  return sensor_proxy_->reading().timestamp() != 0.0;
+}
+
 DOMHighResTimeStamp Sensor::timestamp(ScriptState* script_state,
                                       bool& is_null) const {
-  if (!CanReturnReadings()) {
+  if (!hasReading()) {
     is_null = true;
     return 0.0;
   }
@@ -101,11 +105,16 @@ DOMHighResTimeStamp Sensor::timestamp(ScriptState* script_state,
   DCHECK(sensor_proxy_);
   is_null = false;
 
+  if (LayoutTestSupport::IsRunningLayoutTest()) {
+    // In layout tests Performance.now() * 0.001 is passed to the shared buffer.
+    return sensor_proxy_->reading().timestamp() * 1000;
+  }
+
   return performance->MonotonicTimeToDOMHighResTimeStamp(
       sensor_proxy_->reading().timestamp());
 }
 
-DEFINE_TRACE(Sensor) {
+void Sensor::Trace(blink::Visitor* visitor) {
   visitor->Trace(sensor_proxy_);
   ActiveScriptWrappable::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
@@ -191,12 +200,14 @@ void Sensor::OnSensorReadingChanged() {
     // possible modifications of SensorProxy::observers_ container
     // while it is being iterated through.
     pending_reading_notification_ =
-        TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+        GetExecutionContext()
+            ->GetTaskRunner(TaskType::kSensor)
             ->PostCancellableTask(BLINK_FROM_HERE,
                                   std::move(sensor_reading_changed));
   } else {
     pending_reading_notification_ =
-        TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+        GetExecutionContext()
+            ->GetTaskRunner(TaskType::kSensor)
             ->PostDelayedCancellableTask(
                 BLINK_FROM_HERE, std::move(sensor_reading_changed),
                 WTF::TimeDelta::FromSecondsD(waitingTime));
@@ -222,7 +233,8 @@ void Sensor::OnAddConfigurationRequestCompleted(bool result) {
     return;
 
   pending_activated_notification_ =
-      TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+      GetExecutionContext()
+          ->GetTaskRunner(TaskType::kSensor)
           ->PostCancellableTask(
               BLINK_FROM_HERE,
               WTF::Bind(&Sensor::NotifyActivated, WrapWeakPersistent(this)));
@@ -300,7 +312,8 @@ void Sensor::HandleError(ExceptionCode code,
   auto error =
       DOMException::Create(code, sanitized_message, unsanitized_message);
   pending_error_notification_ =
-      TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+      GetExecutionContext()
+          ->GetTaskRunner(TaskType::kSensor)
           ->PostCancellableTask(
               BLINK_FROM_HERE,
               WTF::Bind(&Sensor::NotifyError, WrapWeakPersistent(this),
@@ -317,12 +330,13 @@ void Sensor::NotifyActivated() {
   DCHECK_EQ(state_, SensorState::kActivating);
   state_ = SensorState::kActivated;
 
-  if (CanReturnReadings()) {
+  if (hasReading()) {
     // If reading has already arrived, send initial 'reading' notification
     // right away.
     DCHECK(!pending_reading_notification_.IsActive());
     pending_reading_notification_ =
-        TaskRunnerHelper::Get(TaskType::kSensor, GetExecutionContext())
+        GetExecutionContext()
+            ->GetTaskRunner(TaskType::kSensor)
             ->PostCancellableTask(
                 BLINK_FROM_HERE,
                 WTF::Bind(&Sensor::NotifyReading, WrapWeakPersistent(this)));
@@ -335,13 +349,6 @@ void Sensor::NotifyError(DOMException* error) {
   DCHECK_NE(state_, SensorState::kIdle);
   state_ = SensorState::kIdle;
   DispatchEvent(SensorErrorEvent::Create(EventTypeNames::error, error));
-}
-
-bool Sensor::CanReturnReadings() const {
-  if (!IsActivated())
-    return false;
-  DCHECK(sensor_proxy_);
-  return sensor_proxy_->reading().timestamp() != 0.0;
 }
 
 bool Sensor::IsIdleOrErrored() const {

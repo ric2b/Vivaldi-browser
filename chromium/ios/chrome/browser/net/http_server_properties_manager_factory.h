@@ -5,29 +5,24 @@
 #ifndef IOS_CHROME_BROWSER_NET_HTTP_SERVER_PROPERTIES_MANAGER_FACTORY_H_
 #define IOS_CHROME_BROWSER_NET_HTTP_SERVER_PROPERTIES_MANAGER_FACTORY_H_
 
-#include "base/macros.h"
+#include <memory>
 
-class PrefService;
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "components/prefs/writeable_pref_store.h"
 
 namespace net {
 class HttpServerPropertiesManager;
 class NetLog;
 }
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
-
 // Class for registration and creation of HttpServerPropertiesManager
 class HttpServerPropertiesManagerFactory {
  public:
   // Create an instance of HttpServerPropertiesManager.
-  static net::HttpServerPropertiesManager* CreateManager(
-      PrefService* pref_service,
+  static std::unique_ptr<net::HttpServerPropertiesManager> CreateManager(
+      scoped_refptr<WriteablePrefStore> pref_store,
       net::NetLog* net_log);
-
-  // Register prefs for properties managed by HttpServerPropertiesManager.
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HttpServerPropertiesManagerFactory);

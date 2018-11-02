@@ -25,7 +25,7 @@ enum DocumentReadyState { "loading", "interactive", "complete" };
 
 
 // https://w3c.github.io/page-visibility/#visibility-states-and-the-visibilitystate-enum
-enum VisibilityState { "hidden", "visible", "prerender", "unloaded" };
+enum VisibilityState { "hidden", "visible", "prerender"};
 
 // https://wicg.github.io/cors-rfc1918/#feature-detect
 enum AddressSpace { "local", "private", "public" };
@@ -33,6 +33,7 @@ enum AddressSpace { "local", "private", "public" };
 typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
 // https://dom.spec.whatwg.org/#interface-document
+// https://html.spec.whatwg.org/multipage/dom.html#documents
 
 [
     Constructor(),
@@ -117,11 +118,16 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [ImplementedAs=currentScriptForBinding] readonly attribute HTMLOrSVGScriptElement? currentScript;
 
     // dynamic markup insertion
-    // FIXME: There are two open() methods in the spec.
-    [Custom, CEReactions, CustomElementCallbacks, RaisesException, MeasureAs=DocumentOpen] void open();
+    [CallWith=EnteredWindow, CEReactions, CustomElementCallbacks, RaisesException, MeasureAs=DocumentOpen] Document open(optional DOMString type = "text/html", optional DOMString replace = "");
+    [CallWith=(CurrentWindow,EnteredWindow), RaisesException, MeasureAs=DocumentOpen] Window open(USVString url, DOMString name, DOMString features);
     [CEReactions, RaisesException] void close();
     [CallWith=EnteredWindow, CEReactions, CustomElementCallbacks, RaisesException] void write(DOMString... text);
     [CallWith=EnteredWindow, CEReactions, CustomElementCallbacks, RaisesException] void writeln(DOMString... text);
+
+    // TrustedTypes variants of the above.
+    // TODO(mkwst): Write a spec for this.
+    [RuntimeEnabled=TrustedDOMTypes, CallWith=EnteredWindow, CEReactions, CustomElementCallbacks, RaisesException] void write(TrustedHTML text);
+    [RuntimeEnabled=TrustedDOMTypes, CallWith=EnteredWindow, CEReactions, CustomElementCallbacks, RaisesException] void writeln(TrustedHTML text);
 
     // user interaction
     readonly attribute Window? defaultView;
@@ -139,17 +145,26 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     // HTML obsolete features
     // https://html.spec.whatwg.org/#Document-partial
 
-    // FIXME: *Color are on HTMLDocument.
-
     [Measure] readonly attribute HTMLCollection anchors;
     [Measure] readonly attribute HTMLCollection applets;
 
-    // FIXME: clear(), captureEvents(), releaseEvents() and all are on HTMLDocument.
+    [CEReactions, CustomElementCallbacks] attribute [TreatNullAs=EmptyString] DOMString fgColor;
+    [CEReactions, CustomElementCallbacks] attribute [TreatNullAs=EmptyString] DOMString linkColor;
+    [CEReactions, CustomElementCallbacks] attribute [TreatNullAs=EmptyString] DOMString vlinkColor;
+    [CEReactions, CustomElementCallbacks] attribute [TreatNullAs=EmptyString] DOMString alinkColor;
+    [CEReactions, CustomElementCallbacks] attribute [TreatNullAs=EmptyString] DOMString bgColor;
+
+    [MeasureAs=DocumentClear] void clear();
+    [MeasureAs=DocumentCaptureEvents] void captureEvents();
+    [MeasureAs=DocumentReleaseEvents] void releaseEvents();
+
+    // FIXME: all should not be [Replaceable].
+    [Replaceable, MeasureAs=DocumentAll] readonly attribute HTMLAllCollection all;
 
     // CSS Object Model (CSSOM)
     // https://drafts.csswg.org/cssom/#extensions-to-the-document-interface
     attribute DOMString? selectedStylesheetSet;
-    readonly attribute DOMString? preferredStylesheetSet;
+    [MeasureAs=DocumentGetPreferredStylesheetSet] readonly attribute DOMString? preferredStylesheetSet;
 
     readonly attribute Element? scrollingElement;
 
@@ -195,6 +210,13 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
     // Non-standard APIs
     [MeasureAs=DocumentCaretRangeFromPoint] Range caretRangeFromPoint([Default=Undefined] optional long x, [Default=Undefined] optional long y);
+
+
+    // https://wicg.github.io/feature-policy
+    // TODO(iclelland): add spec for JS exposure in the spec for Feature Policy.
+    // Please refer to this doc for more details for now:
+    // https://docs.google.com/a/chromium.org/document/d/1wvk3cXkblNnbkMcsKayseK-k0SMGiP9b9fQFgfpqQpc/edit?usp=sharing
+    [RuntimeEnabled=FeaturePolicyJavaScriptInterface] readonly attribute Policy policy;
 
     // Deprecated prefixed page visibility API.
     // TODO(davidben): This is a property so attaching a deprecation warning results in false positives when outputting

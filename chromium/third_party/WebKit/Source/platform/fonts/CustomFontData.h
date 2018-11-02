@@ -21,16 +21,16 @@
 #ifndef CustomFontData_h
 #define CustomFontData_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class PLATFORM_EXPORT CustomFontData : public RefCounted<CustomFontData> {
  public:
-  static RefPtr<CustomFontData> Create() {
-    return AdoptRef(new CustomFontData());
+  static scoped_refptr<CustomFontData> Create() {
+    return base::AdoptRef(new CustomFontData());
   }
 
   virtual ~CustomFontData() {}

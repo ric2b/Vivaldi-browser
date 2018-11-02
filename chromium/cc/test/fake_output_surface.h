@@ -11,17 +11,17 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
-#include "cc/output/output_surface.h"
-#include "cc/output/output_surface_frame.h"
-#include "cc/output/software_output_device.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_gles2_interface.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/output_surface_frame.h"
+#include "components/viz/service/display/software_output_device.h"
 
 namespace cc {
 
-class FakeOutputSurface : public OutputSurface {
+class FakeOutputSurface : public viz::OutputSurface {
  public:
   ~FakeOutputSurface() override;
 
@@ -37,7 +37,7 @@ class FakeOutputSurface : public OutputSurface {
   }
 
   static std::unique_ptr<FakeOutputSurface> CreateSoftware(
-      std::unique_ptr<SoftwareOutputDevice> software_device) {
+      std::unique_ptr<viz::SoftwareOutputDevice> software_device) {
     return base::WrapUnique(new FakeOutputSurface(std::move(software_device)));
   }
 
@@ -53,12 +53,12 @@ class FakeOutputSurface : public OutputSurface {
     capabilities_.max_frames_pending = max;
   }
 
-  OutputSurfaceFrame* last_sent_frame() { return last_sent_frame_.get(); }
+  viz::OutputSurfaceFrame* last_sent_frame() { return last_sent_frame_.get(); }
   size_t num_sent_frames() { return num_sent_frames_; }
 
-  OutputSurfaceClient* client() { return client_; }
+  viz::OutputSurfaceClient* client() { return client_; }
 
-  void BindToClient(OutputSurfaceClient* client) override;
+  void BindToClient(viz::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override;
@@ -68,12 +68,12 @@ class FakeOutputSurface : public OutputSurface {
                const gfx::ColorSpace& color_space,
                bool has_alpha,
                bool use_stencil) override;
-  void SwapBuffers(OutputSurfaceFrame frame) override;
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override {}
   bool SurfaceIsSuspendForRecycle() const override;
-  OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
+  viz::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
@@ -83,7 +83,7 @@ class FakeOutputSurface : public OutputSurface {
     framebuffer_format_ = format;
   }
 
-  void SetOverlayCandidateValidator(OverlayCandidateValidator* validator) {
+  void SetOverlayCandidateValidator(viz::OverlayCandidateValidator* validator) {
     overlay_candidate_validator_ = validator;
   }
 
@@ -107,21 +107,21 @@ class FakeOutputSurface : public OutputSurface {
   explicit FakeOutputSurface(
       scoped_refptr<viz::ContextProvider> context_provider);
   explicit FakeOutputSurface(
-      std::unique_ptr<SoftwareOutputDevice> software_device);
+      std::unique_ptr<viz::SoftwareOutputDevice> software_device);
 
-  OutputSurfaceClient* client_ = nullptr;
-  std::unique_ptr<OutputSurfaceFrame> last_sent_frame_;
+  viz::OutputSurfaceClient* client_ = nullptr;
+  std::unique_ptr<viz::OutputSurfaceFrame> last_sent_frame_;
   size_t num_sent_frames_ = 0;
   bool has_external_stencil_test_ = false;
   bool suspended_for_recycle_ = false;
   GLint framebuffer_ = 0;
   GLenum framebuffer_format_ = 0;
-  OverlayCandidateValidator* overlay_candidate_validator_ = nullptr;
+  viz::OverlayCandidateValidator* overlay_candidate_validator_ = nullptr;
   gfx::ColorSpace last_reshape_color_space_;
   gfx::Rect last_set_draw_rectangle_;
 
  private:
-  void SwapBuffersAck();
+  void SwapBuffersAck(uint64_t swap_id);
 
   base::WeakPtrFactory<FakeOutputSurface> weak_ptr_factory_;
 };

@@ -42,6 +42,10 @@ class FakeCentral : public mojom::FakeCentral, public device::BluetoothAdapter {
       const std::string& address,
       uint16_t code,
       SetNextGATTDiscoveryResponseCallback callback) override;
+  bool AllResponsesConsumed();
+  void SimulateGATTDisconnection(
+      const std::string& address,
+      SimulateGATTDisconnectionCallback callback) override;
   void SimulateGATTServicesChanged(
       const std::string& address,
       SimulateGATTServicesChangedCallback callback) override;
@@ -71,6 +75,12 @@ class FakeCentral : public mojom::FakeCentral, public device::BluetoothAdapter {
       const std::string& peripheral_address,
       SetNextReadCharacteristicResponseCallback callback) override;
   void SetNextWriteCharacteristicResponse(
+      uint16_t gatt_code,
+      const std::string& characteristic_id,
+      const std::string& service_id,
+      const std::string& peripheral_address,
+      SetNextWriteCharacteristicResponseCallback callback) override;
+  void SetNextSubscribeToNotificationsResponse(
       uint16_t gatt_code,
       const std::string& characteristic_id,
       const std::string& service_id,

@@ -75,21 +75,26 @@ TEST_F('PasswordsAndFormsBrowserTest', 'uiTests', function() {
       CrSettingsPrefs.deferInitialization = true;
       var prefs = document.createElement('settings-prefs');
       prefs.initialize(new settings.FakeSettingsPrivate([
-            {
-              key: 'autofill.enabled',
-              type: chrome.settingsPrivate.PrefType.BOOLEAN,
-              value: autofill,
-            },
-            {
-              key: 'credentials_enable_service',
-              type: chrome.settingsPrivate.PrefType.BOOLEAN,
-              value: passwords,
-            },
-            {
-              key: 'credentials_enable_autosignin',
-              type: chrome.settingsPrivate.PrefType.BOOLEAN,
-              value: true,
-            },
+        {
+          key: 'autofill.enabled',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: autofill,
+        },
+        {
+          key: 'autofill.credit_card_enabled',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: true,
+        },
+        {
+          key: 'credentials_enable_service',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: passwords,
+        },
+        {
+          key: 'credentials_enable_autosignin',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: true,
+        },
       ]));
 
       CrSettingsPrefs.initialized.then(function() {
@@ -186,7 +191,10 @@ TEST_F('PasswordsAndFormsBrowserTest', 'uiTests', function() {
         passwordManager.lastCallback.addSavedPasswordListChangedListener(list);
         Polymer.dom.flush();
 
-        assertEquals(list, element.$$('#passwordSection').savedPasswords);
+        assertDeepEquals(
+            list,
+            element.$$('#passwordSection')
+                .savedPasswords.map(entry => entry.entry));
 
         // The callback is coming from the manager, so the element shouldn't
         // have additional calls to the manager after the base expectations.

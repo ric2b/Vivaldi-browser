@@ -50,7 +50,7 @@ class MutablePolicyValueStore : public PolicyValueStore {
   explicit MutablePolicyValueStore(const base::FilePath& path)
       : PolicyValueStore(
             kTestExtensionId,
-            make_scoped_refptr(new SettingsObserverList()),
+            base::MakeRefCounted<SettingsObserverList>(),
             base::MakeUnique<LeveldbValueStore>(kDatabaseUMAClientName, path)) {
   }
   ~MutablePolicyValueStore() override {}
@@ -117,7 +117,7 @@ class PolicyValueStoreTest : public testing::Test {
         FROM_HERE,
         base::Bind(&PolicyValueStoreTest::SetCurrentPolicyOnBackendSequence,
                    base::Unretained(this), base::Passed(policies.DeepCopy())));
-    content::RunAllBlockingPoolTasksUntilIdle();
+    content::RunAllTasksUntilIdle();
   }
 
   void SetCurrentPolicyOnBackendSequence(
@@ -145,11 +145,11 @@ TEST_F(PolicyValueStoreTest, DontProvideRecommendedPolicies) {
   SetCurrentPolicy(policies);
 
   ValueStore::ReadResult result = store_->Get();
-  ASSERT_TRUE(result->status().ok());
-  EXPECT_EQ(1u, result->settings().size());
+  ASSERT_TRUE(result.status().ok());
+  EXPECT_EQ(1u, result.settings().size());
   base::Value* value = NULL;
-  EXPECT_FALSE(result->settings().Get("may", &value));
-  EXPECT_TRUE(result->settings().Get("must", &value));
+  EXPECT_FALSE(result.settings().Get("may", &value));
+  EXPECT_TRUE(result.settings().Get("must", &value));
   EXPECT_EQ(expected, *value);
 }
 
@@ -157,17 +157,17 @@ TEST_F(PolicyValueStoreTest, ReadOnly) {
   ValueStore::WriteOptions options = ValueStore::DEFAULTS;
 
   base::Value string_value("value");
-  EXPECT_FALSE(store_->Set(options, "key", string_value)->status().ok());
+  EXPECT_FALSE(store_->Set(options, "key", string_value).status().ok());
 
   base::DictionaryValue dict;
   dict.SetString("key", "value");
-  EXPECT_FALSE(store_->Set(options, dict)->status().ok());
+  EXPECT_FALSE(store_->Set(options, dict).status().ok());
 
-  EXPECT_FALSE(store_->Remove("key")->status().ok());
+  EXPECT_FALSE(store_->Remove("key").status().ok());
   std::vector<std::string> keys;
   keys.push_back("key");
-  EXPECT_FALSE(store_->Remove(keys)->status().ok());
-  EXPECT_FALSE(store_->Clear()->status().ok());
+  EXPECT_FALSE(store_->Remove(keys).status().ok());
+  EXPECT_FALSE(store_->Clear().status().ok());
 }
 
 TEST_F(PolicyValueStoreTest, NotifyOnChanges) {

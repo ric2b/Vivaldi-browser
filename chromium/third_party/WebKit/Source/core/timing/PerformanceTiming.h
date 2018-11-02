@@ -43,6 +43,7 @@ class DocumentLoadTiming;
 class DocumentLoader;
 class DocumentParserTiming;
 class DocumentTiming;
+class InteractiveDetector;
 class LocalFrame;
 class PaintTiming;
 class ResourceLoadTiming;
@@ -50,10 +51,8 @@ class ScriptState;
 class ScriptValue;
 
 // Legacy support for NT1(https://www.w3.org/TR/navigation-timing/).
-class CORE_EXPORT PerformanceTiming final
-    : public GarbageCollected<PerformanceTiming>,
-      public ScriptWrappable,
-      public DOMWindowClient {
+class CORE_EXPORT PerformanceTiming final : public ScriptWrappable,
+                                            public DOMWindowClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(PerformanceTiming);
 
@@ -100,6 +99,15 @@ class CORE_EXPORT PerformanceTiming final
   // The time of the first 'meaningful' paint, A meaningful paint is a paint
   // where the page's primary content is visible.
   unsigned long long FirstMeaningfulPaint() const;
+  // The first time the page is considered 'interactive'. This is determined
+  // using heuristics based on main thread and network activity.
+  unsigned long long PageInteractive() const;
+  // The time of when we detect the page is interactive. There is a delay
+  // between when the page was interactive and when we were able to detect it.
+  unsigned long long PageInteractiveDetection() const;
+  // The time of when a significant input event happened that may cause
+  // observers to discard the value of Time to Interactive.
+  unsigned long long FirstInputInvalidatingInteractive() const;
 
   unsigned long long ParseStart() const;
   unsigned long long ParseStop() const;
@@ -113,7 +121,7 @@ class CORE_EXPORT PerformanceTiming final
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   unsigned long long MonotonicTimeToIntegerMilliseconds(double) const;
   double IntegerMillisecondsToMonotonicTime(unsigned long long) const;
@@ -128,6 +136,7 @@ class CORE_EXPORT PerformanceTiming final
   DocumentLoader* GetDocumentLoader() const;
   DocumentLoadTiming* GetDocumentLoadTiming() const;
   ResourceLoadTiming* GetResourceLoadTiming() const;
+  InteractiveDetector* GetInteractiveDetector() const;
 };
 
 }  // namespace blink

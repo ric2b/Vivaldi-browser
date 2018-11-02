@@ -4,13 +4,14 @@
 
 #include "modules/sensor/SensorProxy.h"
 
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/page/FocusController.h"
 #include "modules/sensor/SensorProviderProxy.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "services/device/public/cpp/generic_sensor/sensor_traits.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace blink {
 
@@ -27,10 +28,10 @@ SensorProxy::SensorProxy(SensorType sensor_type,
       client_binding_(this),
       state_(SensorProxy::kUninitialized),
       suspended_(false),
-      polling_timer_(TaskRunnerHelper::Get(TaskType::kSensor,
-                                           provider->GetSupplementable()),
-                     this,
-                     &SensorProxy::OnPollingTimer) {}
+      polling_timer_(
+          provider->GetSupplementable()->GetTaskRunner(TaskType::kSensor),
+          this,
+          &SensorProxy::OnPollingTimer) {}
 
 SensorProxy::~SensorProxy() {}
 
@@ -38,7 +39,7 @@ void SensorProxy::Dispose() {
   client_binding_.Close();
 }
 
-DEFINE_TRACE(SensorProxy) {
+void SensorProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(observers_);
   visitor->Trace(provider_);
   PageVisibilityObserver::Trace(visitor);
@@ -236,8 +237,9 @@ void SensorProxy::UpdatePollingStatus() {
   if (ShouldProcessReadings()) {
     // TODO(crbug/721297) : We need to find out an algorithm for resulting
     // polling frequency.
-    polling_timer_.StartRepeating(1 / active_frequencies_.back(),
-                                  BLINK_FROM_HERE);
+    polling_timer_.StartRepeating(
+        WTF::TimeDelta::FromSecondsD(1 / active_frequencies_.back()),
+        BLINK_FROM_HERE);
   } else {
     polling_timer_.Stop();
   }
@@ -248,7 +250,7 @@ void SensorProxy::UpdateSuspendedStatus() {
     return;
 
   bool page_visible =
-      GetPage()->VisibilityState() == kPageVisibilityStateVisible;
+      GetPage()->VisibilityState() == mojom::PageVisibilityState::kVisible;
 
   LocalFrame* focused_frame = GetPage()->GetFocusController().FocusedFrame();
   bool main_frame_focused =
@@ -270,8 +272,11 @@ void SensorProxy::RemoveActiveFrequency(double frequency) {
     return;
   }
 
-  active_frequencies_.erase(std::distance(active_frequencies_.begin(), it));
+  active_frequencies_.erase(it);
   UpdatePollingStatus();
+
+  if (active_frequencies_.IsEmpty())
+    reading_ = device::SensorReading();
 }
 
 void SensorProxy::AddActiveFrequency(double frequency) {

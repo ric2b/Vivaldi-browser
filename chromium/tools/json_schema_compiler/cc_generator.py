@@ -43,7 +43,6 @@ class _Generator(object):
       .Append()
       .Append(self._util_cc_helper.GetIncludePath())
       .Append('#include "base/logging.h"')
-      .Append('#include "base/memory/ptr_util.h"')
       .Append('#include "base/strings/string_number_conversions.h"')
       .Append('#include "base/strings/utf_string_conversions.h"')
       .Append('#include "base/values.h"')
@@ -632,15 +631,12 @@ class _Generator(object):
       maybe_namespace = ''
       if type_.property_type == PropertyType.REF:
         maybe_namespace = '%s::' % underlying_type.namespace.unix_name
-      return 'base::MakeUnique<base::Value>(%sToString(%s))' % (
+      return 'std::make_unique<base::Value>(%sToString(%s))' % (
           maybe_namespace, var)
     elif underlying_type.property_type == PropertyType.BINARY:
       if is_ptr:
-        vardot = var + '->'
-      else:
-        vardot = var + '.'
-      return ('base::Value::CreateWithCopiedBuffer('
-              '%sdata(), %ssize())' % (vardot, vardot))
+        var = '*%s' % var
+      return 'std::make_unique<base::Value>(%s)' % var
     elif underlying_type.property_type == PropertyType.ARRAY:
       return '%s' % self._util_cc_helper.CreateValueFromArray(
           var,
@@ -649,9 +645,9 @@ class _Generator(object):
       if is_ptr:
         var = '*%s' % var
       if underlying_type.property_type == PropertyType.STRING:
-        return 'base::MakeUnique<base::Value>(%s)' % var
+        return 'std::make_unique<base::Value>(%s)' % var
       else:
-        return 'base::MakeUnique<base::Value>(%s)' % var
+        return 'std::make_unique<base::Value>(%s)' % var
     else:
       raise NotImplementedError('Conversion of %s to base::Value not '
                                 'implemented' % repr(type_.type_))
@@ -1015,7 +1011,7 @@ class _Generator(object):
       c.Append('// static')
     maybe_namespace = '' if cpp_namespace is None else '%s::' % cpp_namespace
 
-    c.Sblock('std::string %sToString(%s enum_param) {' %
+    c.Sblock('const char* %sToString(%s enum_param) {' %
                  (maybe_namespace, classname))
     c.Sblock('switch (enum_param) {')
     for enum_value in self._type_helper.FollowRef(type_).enum_values:

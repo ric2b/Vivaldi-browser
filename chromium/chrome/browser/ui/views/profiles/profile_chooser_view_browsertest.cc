@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -24,110 +25,184 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/profiles/user_manager_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/scoped_account_consistency.h"
+#include "components/signin/core/browser/signin_pref_names.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/webview/webview.h"
 
+#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#endif
+
 namespace {
 
-Profile* CreateTestingProfile(const std::string& profile_name) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+Profile* CreateTestingProfile(const base::FilePath& path) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   size_t starting_number_of_profiles = profile_manager->GetNumberOfProfiles();
 
-  base::FilePath path;
-  PathService::Get(chrome::DIR_USER_DATA, &path);
-  path = path.AppendASCII(profile_name);
   if (!base::PathExists(path) && !base::CreateDirectory(path))
     NOTREACHED() << "Could not create directory at " << path.MaybeAsASCII();
 
   Profile* profile =
-      Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
+      Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   profile_manager->RegisterTestingProfile(profile, true, false);
   EXPECT_EQ(starting_number_of_profiles + 1,
             profile_manager->GetNumberOfProfiles());
   return profile;
 }
 
+Profile* CreateTestingProfile(const std::string& profile_name) {
+  base::FilePath path;
+  PathService::Get(chrome::DIR_USER_DATA, &path);
+  path = path.AppendASCII(profile_name);
+  return CreateTestingProfile(path);
+}
+
 Profile* CreateProfileOutsideUserDataDir() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::FilePath path;
   if (!base::CreateNewTempDirectory(base::FilePath::StringType(), &path))
     NOTREACHED() << "Could not create directory at " << path.MaybeAsASCII();
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   Profile* profile =
-      Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
+      Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   profile_manager->RegisterTestingProfile(profile, true, false);
   return profile;
 }
 
-// Set up the profiles to enable Lock. Takes as parameter a profile that will be
-// signed in, and also creates a supervised user (necessary for lock).
-void SetupProfilesForLock(Profile* signed_in) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  const char signed_in_email[] = "me@google.com";
-
-  // Set up the |signed_in| profile.
-  ProfileAttributesStorage* storage =
-      &g_browser_process->profile_manager()->GetProfileAttributesStorage();
+// Turns a normal profile into one that's signed in.
+void AddAccountToProfile(Profile* profile, const char* signed_in_email) {
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
   ProfileAttributesEntry* entry_signed_in;
-  ASSERT_TRUE(storage->GetProfileAttributesWithPath(signed_in->GetPath(),
-                                                    &entry_signed_in));
+  ASSERT_TRUE(storage.GetProfileAttributesWithPath(profile->GetPath(),
+                                                   &entry_signed_in));
   entry_signed_in->SetAuthInfo("12345", base::UTF8ToUTF16(signed_in_email));
-  signed_in->GetPrefs()->SetString(prefs::kGoogleServicesHostedDomain,
-                                   "google.com");
+  profile->GetPrefs()->SetString(prefs::kGoogleServicesHostedDomain,
+                                 "google.com");
+}
+
+// Set up the profiles to enable Lock. Takes as parameter a profile that will be
+// signed in, and also creates a supervised user (necessary for lock), then
+// returns the supervised user profile.
+Profile* SetupProfilesForLock(Profile* signed_in) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  constexpr char kEmail[] = "me@google.com";
+  AddAccountToProfile(signed_in, kEmail);
 
   // Create the |supervised| profile, which is supervised by |signed_in|.
   ProfileAttributesEntry* entry_supervised;
   Profile* supervised = CreateTestingProfile("supervised");
-  ASSERT_TRUE(storage->GetProfileAttributesWithPath(supervised->GetPath(),
-                                                    &entry_supervised));
-  entry_supervised->SetSupervisedUserId(signed_in_email);
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
+  EXPECT_TRUE(storage.GetProfileAttributesWithPath(supervised->GetPath(),
+                                                   &entry_supervised));
+  entry_supervised->SetSupervisedUserId(kEmail);
+  supervised->GetPrefs()->SetString(prefs::kSupervisedUserId, kEmail);
 
   // |signed_in| should now be lockable.
   EXPECT_TRUE(profiles::IsLockAvailable(signed_in));
+  return supervised;
 }
 
 }  // namespace
 
-class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
+class ProfileChooserViewExtensionsTest
+    : public SupportsTestDialog<ExtensionBrowserTest> {
  public:
   ProfileChooserViewExtensionsTest() {}
   ~ProfileChooserViewExtensionsTest() override {}
 
+  // SupportsTestDialog:
+  void ShowDialog(const std::string& name) override {
+    constexpr char kSignedIn[] = "SignedIn";
+    constexpr char kMultiProfile[] = "MultiProfile";
+    constexpr char kGuest[] = "Guest";
+    constexpr char kManageAccountLink[] = "ManageAccountLink";
+    constexpr char kSupervisedOwner[] = "SupervisedOwner";
+    constexpr char kSupervisedUser[] = "SupervisedUser";
+
+    Browser* target_browser = browser();
+    std::unique_ptr<signin::ScopedAccountConsistency>
+        scoped_account_consistency;
+
+    if (name == kSignedIn || name == kManageAccountLink) {
+      constexpr char kEmail[] = "verylongemailfortesting@gmail.com";
+      AddAccountToProfile(target_browser->profile(), kEmail);
+    }
+    if (name == kMultiProfile) {
+      ProfileManager* profile_manager = g_browser_process->profile_manager();
+      CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
+      CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
+    }
+    if (name == kGuest) {
+      content::WindowedNotificationObserver browser_creation_observer(
+          chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+          content::NotificationService::AllSources());
+      profiles::SwitchToGuestProfile(ProfileManager::CreateCallback());
+      browser_creation_observer.Wait();
+
+      Profile* guest = g_browser_process->profile_manager()->GetProfileByPath(
+          ProfileManager::GetGuestProfilePath());
+      EXPECT_TRUE(guest);
+      target_browser = chrome::FindAnyBrowser(guest, true);
+    }
+    if (name == kManageAccountLink) {
+      scoped_account_consistency =
+          std::make_unique<signin::ScopedAccountConsistency>(
+              signin::AccountConsistencyMethod::kMirror);
+    }
+    Profile* supervised = nullptr;
+    if (name == kSupervisedOwner || name == kSupervisedUser) {
+      supervised = SetupProfilesForLock(target_browser->profile());
+    }
+    if (name == kSupervisedUser) {
+      profiles::SwitchToProfile(supervised->GetPath(), false,
+                                ProfileManager::CreateCallback(),
+                                ProfileMetrics::ICON_AVATAR_BUBBLE);
+      EXPECT_TRUE(supervised);
+      target_browser = chrome::FindAnyBrowser(supervised, true);
+    }
+    OpenProfileChooserView(target_browser);
+  }
+
  protected:
-  void SetUp() override {
-    ExtensionBrowserTest::SetUp();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionBrowserTest::SetUpCommandLine(command_line);
-  }
-
   void OpenProfileChooserView(Browser* browser) {
+    ProfileChooserView::close_on_deactivate_for_testing_ = false;
+#if defined(OS_MACOSX) && !BUILDFLAG(MAC_VIEWS_BROWSER)
+    // Show the avatar bubble via API on macOS until |mac_views_browser| is
+    // enabled.
+    browser->window()->ShowAvatarBubbleFromAvatarButton(
+        BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
+        signin::ManageAccountsParams(),
+        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN, true);
+#else
     BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
     views::View* button = browser_view->frame()->GetNewAvatarMenuButton();
     if (!button)
       NOTREACHED() << "NewAvatarButton not found.";
 
-    ProfileChooserView::close_on_deactivate_for_testing_ = false;
-
     ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
     button->OnMousePressed(e);
+#endif  // defined(OS_MACOSX) && !BUILDFLAG(MAC_VIEWS_BROWSER)
+
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(ProfileChooserView::IsShowing());
 
@@ -180,8 +255,17 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(ProfileChooserViewExtensionsTest);
 };
 
+#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
+#define MAYBE_NoProfileChooserOnOutsideUserDataDirProfiles \
+  NoProfileChooserOnOutsideUserDataDirProfiles
+#else
+// Test fails on macOS as |ProfileImpl::GetSSLConfigService| is not yet
+// initialized when creating the browser - see http://crbug.com/795688 .
+#define MAYBE_NoProfileChooserOnOutsideUserDataDirProfiles \
+  DISABLED_NoProfileChooserOnOutsideUserDataDirProfiles
+#endif
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-    NoProfileChooserOnOutsideUserDataDirProfiles) {
+                       MAYBE_NoProfileChooserOnOutsideUserDataDirProfiles) {
   // Test that the profile chooser view does not show when avatar menu is not
   // available. This can be repro'ed with a profile path outside user_data_dir.
   // crbug.com/527505
@@ -303,7 +387,7 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
   UserManager::AddOnUserManagerShownCallbackForTesting(runner->QuitClosure());
 
   // Create a different profile and then lock it.
-  Profile *signed_in = CreateTestingProfile("signed_in");
+  Profile* signed_in = CreateTestingProfile("signed_in");
   SetupProfilesForLock(signed_in);
   extensions::ExtensionSystem::Get(signed_in)->InitForRegularProfile(true);
   Browser* browser_to_lock = CreateBrowser(signed_in);
@@ -323,4 +407,108 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
 
   // We need to hide the User Manager or else the process can't die.
   UserManager::Hide();
+}
+
+// Profile chooser view should close when a tab is added.
+// Regression test for http://crbug.com/792845
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       CloseBubbleOnTadAdded) {
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  ASSERT_EQ(1, tab_strip->count());
+  ASSERT_EQ(0, tab_strip->active_index());
+
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+  AddTabAtIndex(1, GURL("https://test_url.com"),
+                ui::PageTransition::PAGE_TRANSITION_LINK);
+  EXPECT_EQ(1, tab_strip->active_index());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(ProfileChooserView::IsShowing());
+}
+
+// Profile chooser view should close when active tab is changed.
+// Regression test for http://crbug.com/792845
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       CloseBubbleOnActiveTabChanged) {
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  AddTabAtIndex(1, GURL("https://test_url.com"),
+                ui::PageTransition::PAGE_TRANSITION_LINK);
+  ASSERT_EQ(2, tab_strip->count());
+  ASSERT_EQ(1, tab_strip->active_index());
+
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+  tab_strip->ActivateTabAt(0, false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(ProfileChooserView::IsShowing());
+}
+
+// Profile chooser view should close when active tab is closed.
+// Regression test for http://crbug.com/792845
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       CloseBubbleOnActiveTabClosed) {
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  AddTabAtIndex(1, GURL("https://test_url.com"),
+                ui::PageTransition::PAGE_TRANSITION_LINK);
+  ASSERT_EQ(2, tab_strip->count());
+  ASSERT_EQ(1, tab_strip->active_index());
+
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+  tab_strip->CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(ProfileChooserView::IsShowing());
+}
+
+// Profile chooser view should close when the last tab is closed.
+// Regression test for http://crbug.com/792845
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       CloseBubbleOnLastTabClosed) {
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  ASSERT_EQ(1, tab_strip->count());
+  ASSERT_EQ(0, tab_strip->active_index());
+
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+  tab_strip->CloseWebContentsAt(0, TabStripModel::CLOSE_NONE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(ProfileChooserView::IsShowing());
+}
+
+// Shows a non-signed in profile with no others.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeDialog_default) {
+  RunDialog();
+}
+
+// Shows a signed in profile with no others.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       InvokeDialog_SignedIn) {
+  RunDialog();
+}
+
+// Shows the |ProfileChooserView| with three different profiles.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       InvokeDialog_MultiProfile) {
+  RunDialog();
+}
+
+// Shows the |ProfileChooserView| during a Guest browsing session.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeDialog_Guest) {
+  RunDialog();
+}
+
+// Shows the manage account link, which appears when account consistency is
+// enabled for signed-in accounts.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       InvokeDialog_ManageAccountLink) {
+  RunDialog();
+}
+
+// Shows the |ProfileChooserView| from a signed-in account that has a supervised
+// user profile attached.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       InvokeDialog_SupervisedOwner) {
+  RunDialog();
+}
+
+// Shows the |ProfileChooserView| when a supervised user is the active profile.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       InvokeDialog_SupervisedUser) {
+  RunDialog();
 }

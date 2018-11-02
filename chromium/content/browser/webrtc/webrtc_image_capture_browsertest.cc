@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/webrtc/webrtc_webcam_browsertest.h"
 #include "content/public/common/content_switches.h"
@@ -30,6 +31,16 @@ namespace content {
 #define MAYBE_GrabFrame DISABLED_GrabFrame
 #define MAYBE_GetTrackCapabilities DISABLED_GetTrackCapabilities
 #define MAYBE_GetTrackSettings DISABLED_GetTrackSettings
+#define MAYBE_ManipulateZoom DISABLED_ManipulateZoom
+#elif defined(OS_ANDROID)
+// TODO(chfremer): Re-enable test on Android as soon as the cause for
+// https://crbug.com/793859 is understood and fixed.
+#define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
+#define MAYBE_GetPhotoSettings GetPhotoSettings
+#define MAYBE_TakePhoto TakePhoto
+#define MAYBE_GrabFrame GrabFrame
+#define MAYBE_GetTrackCapabilities GetTrackCapabilities
+#define MAYBE_GetTrackSettings GetTrackSettings
 #define MAYBE_ManipulateZoom DISABLED_ManipulateZoom
 #else
 #define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
@@ -132,7 +143,13 @@ class WebRtcImageCaptureSucceedsBrowserTest
       public testing::WithParamInterface<
           std::tuple<TargetCamera, TargetVideoCaptureStack>> {
  public:
-  WebRtcImageCaptureSucceedsBrowserTest() = default;
+  WebRtcImageCaptureSucceedsBrowserTest() {
+    if (std::get<1>(GetParam()).use_video_capture_service) {
+      scoped_feature_list_.InitAndEnableFeature(
+          video_capture::kMojoVideoCapture);
+    }
+  }
+
   ~WebRtcImageCaptureSucceedsBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -143,10 +160,6 @@ class WebRtcImageCaptureSucceedsBrowserTest
           switches::kUseFakeDeviceForMediaStream);
       ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseFakeDeviceForMediaStream));
-    }
-    if (std::get<1>(GetParam()).use_video_capture_service) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kEnableFeatures, video_capture::kMojoVideoCapture.name);
     }
   }
 
@@ -161,6 +174,11 @@ class WebRtcImageCaptureSucceedsBrowserTest
     }
     return WebRtcImageCaptureBrowserTestBase::RunImageCaptureTestCase(command);
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebRtcImageCaptureSucceedsBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureSucceedsBrowserTest,
@@ -219,17 +237,27 @@ class WebRtcImageCaptureCustomConfigFakeDeviceBrowserTest
     : public WebRtcImageCaptureBrowserTestBase,
       public testing::WithParamInterface<TargetVideoCaptureStack> {
  public:
+  WebRtcImageCaptureCustomConfigFakeDeviceBrowserTest() {
+    if (GetParam().use_video_capture_service) {
+      scoped_feature_list_.InitAndEnableFeature(
+          video_capture::kMojoVideoCapture);
+    }
+  }
+
+  ~WebRtcImageCaptureCustomConfigFakeDeviceBrowserTest() override {}
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebRtcImageCaptureBrowserTestBase::SetUpCommandLine(command_line);
 
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kUseFakeDeviceForMediaStream,
         std::string("config=") + FakeDeviceConfigTraits::config());
-    if (GetParam().use_video_capture_service) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kEnableFeatures, video_capture::kMojoVideoCapture.name);
-    }
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebRtcImageCaptureCustomConfigFakeDeviceBrowserTest);
 };
 
 struct GetPhotoStateFailsConfigTraits {

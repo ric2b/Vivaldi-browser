@@ -7,7 +7,6 @@
 
 #include "base/memory/ref_counted.h"
 #include "platform/PlatformExport.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/paint/DisplayItem.h"
 
 namespace cc {
@@ -44,8 +43,8 @@ class PLATFORM_EXPORT ForeignLayerDisplayItem final : public DisplayItem {
                                   WebDisplayItemList*) const override;
   bool DrawsContent() const override;
   bool Equals(const DisplayItem&) const override;
-#ifndef NDEBUG
-  void DumpPropertiesAsDebugString(StringBuilder&) const override;
+#if DCHECK_IS_ON()
+  void PropertiesAsJSON(JSONObject&) const override;
 #endif
 
  private:

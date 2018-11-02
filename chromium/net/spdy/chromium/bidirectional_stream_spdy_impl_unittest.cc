@@ -4,10 +4,7 @@
 
 #include "net/spdy/chromium/bidirectional_stream_spdy_impl.h"
 
-#include <memory>
-
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -239,7 +236,8 @@ class BidirectionalStreamSpdyImplTest : public testing::TestWithParam<bool> {
         key_(host_port_pair_, ProxyServer::Direct(), PRIVACY_MODE_DISABLED),
         ssl_data_(SSLSocketDataProvider(ASYNC, OK)) {
     ssl_data_.next_proto = kProtoHTTP2;
-    ssl_data_.cert = ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+    ssl_data_.ssl_info.cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
   }
 
  protected:
@@ -255,7 +253,7 @@ class BidirectionalStreamSpdyImplTest : public testing::TestWithParam<bool> {
                    size_t reads_count,
                    MockWrite* writes,
                    size_t writes_count) {
-    ASSERT_TRUE(ssl_data_.cert.get());
+    ASSERT_TRUE(ssl_data_.ssl_info.cert.get());
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_data_);
     sequenced_data_ = std::make_unique<SequencedSocketData>(
         reads, reads_count, writes, writes_count);
@@ -301,7 +299,7 @@ TEST_F(BidirectionalStreamSpdyImplTest, SimplePostRequest) {
   request_info.method = "POST";
   request_info.url = default_url_;
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                       base::SizeTToString(kBodyDataSize));
+                                       base::NumberToString(kBodyDataSize));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   auto delegate = std::make_unique<TestDelegateBase>(
@@ -401,7 +399,7 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterStreamFailed) {
   request_info.method = "POST";
   request_info.url = default_url_;
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                       base::SizeTToString(kBodyDataSize * 3));
+                                       base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   auto delegate = std::make_unique<TestDelegateBase>(
@@ -424,8 +422,7 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterStreamFailed) {
   // BidirectionalStreamSpdyStreamJob does not count the bytes sent for |rst|
   // because it is sent after SpdyStream::Delegate::OnClose is called.
   EXPECT_EQ(CountWriteBytes(writes, 1), delegate->GetTotalSentBytes());
-  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
-            delegate->GetTotalReceivedBytes());
+  EXPECT_EQ(0, delegate->GetTotalReceivedBytes());
 }
 
 INSTANTIATE_TEST_CASE_P(BidirectionalStreamSpdyImplTests,
@@ -453,7 +450,7 @@ TEST_P(BidirectionalStreamSpdyImplTest, RstWithNoErrorBeforeSendIsComplete) {
   request_info.method = "POST";
   request_info.url = default_url_;
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
-                                       base::SizeTToString(kBodyDataSize * 3));
+                                       base::NumberToString(kBodyDataSize * 3));
 
   scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
   auto delegate = std::make_unique<TestDelegateBase>(

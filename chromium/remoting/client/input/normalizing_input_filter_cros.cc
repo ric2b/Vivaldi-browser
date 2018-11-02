@@ -94,12 +94,16 @@ NormalizingInputFilterCros::NormalizingInputFilterCros(
       previous_mouse_x_(-1),
       previous_mouse_y_(-1) {}
 
-NormalizingInputFilterCros::~NormalizingInputFilterCros() {}
+NormalizingInputFilterCros::~NormalizingInputFilterCros() = default;
 
 void NormalizingInputFilterCros::InjectKeyEvent(
-    const protocol::KeyEvent& event) {
-  DCHECK(event.has_usb_keycode());
-  DCHECK(event.has_pressed());
+    const protocol::KeyEvent& event_arg) {
+  DCHECK(event_arg.has_usb_keycode());
+  DCHECK(event_arg.has_pressed());
+
+  // ChromeOS doesn't have a concept of num lock, so unset the field.
+  protocol::KeyEvent event(event_arg);
+  event.clear_num_lock_state();
 
   if (event.pressed()) {
     ProcessKeyDown(event);

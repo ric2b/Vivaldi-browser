@@ -11,6 +11,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
@@ -23,8 +24,10 @@
 #include "net/disk_cache/disk_cache_test_util.h"
 #include "net/disk_cache/memory/mem_backend_impl.h"
 #include "net/disk_cache/simple/simple_backend_impl.h"
+#include "net/disk_cache/simple/simple_file_tracker.h"
 #include "net/disk_cache/simple/simple_index.h"
 #include "net/test/gtest_util.h"
+#include "net/test/net_test_suite.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -35,8 +38,7 @@ DiskCacheTest::DiskCacheTest() {
   cache_path_ = temp_dir_.GetPath();
 }
 
-DiskCacheTest::~DiskCacheTest() {
-}
+DiskCacheTest::~DiskCacheTest() = default;
 
 bool DiskCacheTest::CopyTestCache(const std::string& name) {
   base::FilePath path;
@@ -63,7 +65,7 @@ DiskCacheTestWithCache::TestIterator::TestIterator(
     std::unique_ptr<disk_cache::Backend::Iterator> iterator)
     : iterator_(std::move(iterator)) {}
 
-DiskCacheTestWithCache::TestIterator::~TestIterator() {}
+DiskCacheTestWithCache::TestIterator::~TestIterator() = default;
 
 int DiskCacheTestWithCache::TestIterator::OpenNextEntry(
     disk_cache::Entry** next_entry) {
@@ -73,6 +75,10 @@ int DiskCacheTestWithCache::TestIterator::OpenNextEntry(
 }
 
 DiskCacheTestWithCache::DiskCacheTestWithCache()
+    : DiskCacheTestWithCache(NetTestSuite::GetScopedTaskEnvironment()) {}
+
+DiskCacheTestWithCache::DiskCacheTestWithCache(
+    base::test::ScopedTaskEnvironment* scoped_task_env)
     : cache_impl_(NULL),
       simple_cache_impl_(NULL),
       mem_cache_(NULL),
@@ -86,9 +92,10 @@ DiskCacheTestWithCache::DiskCacheTestWithCache()
       new_eviction_(false),
       first_cleanup_(true),
       integrity_(true),
-      use_current_thread_(false) {}
+      use_current_thread_(false),
+      scoped_task_env_(scoped_task_env) {}
 
-DiskCacheTestWithCache::~DiskCacheTestWithCache() {}
+DiskCacheTestWithCache::~DiskCacheTestWithCache() = default;
 
 void DiskCacheTestWithCache::InitCache() {
   if (memory_only_)
@@ -276,17 +283,21 @@ void DiskCacheTestWithCache::AddDelay() {
 }
 
 void DiskCacheTestWithCache::TearDown() {
-  base::RunLoop().RunUntilIdle();
-  disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
-  base::RunLoop().RunUntilIdle();
+  scoped_task_env_->RunUntilIdle();
   cache_.reset();
 
   if (!memory_only_ && !simple_cache_mode_ && integrity_) {
     EXPECT_TRUE(CheckCacheIntegrity(cache_path_, new_eviction_, mask_));
   }
-  base::RunLoop().RunUntilIdle();
-  disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
+  scoped_task_env_->RunUntilIdle();
+  if (simple_cache_mode_ && simple_file_tracker_)
+    EXPECT_TRUE(simple_file_tracker_->IsEmptyForTesting());
+
   DiskCacheTest::TearDown();
+
+  // We are documented as not keeping this past TearDown, and net_perftests
+  // is written under this assumption.
+  scoped_task_env_ = nullptr;
 }
 
 void DiskCacheTestWithCache::InitMemoryCache() {
@@ -316,10 +327,13 @@ void DiskCacheTestWithCache::CreateBackend(uint32_t flags) {
 
   if (simple_cache_mode_) {
     net::TestCompletionCallback cb;
-    std::unique_ptr<disk_cache::SimpleBackendImpl> simple_backend(
-        new disk_cache::SimpleBackendImpl(
-            cache_path_, /* cleanup_tracker = */ nullptr, size_, type_, runner,
-            /*net_log = */ nullptr));
+    if (!simple_file_tracker_)
+      simple_file_tracker_ = std::make_unique<disk_cache::SimpleFileTracker>();
+    std::unique_ptr<disk_cache::SimpleBackendImpl> simple_backend =
+        std::make_unique<disk_cache::SimpleBackendImpl>(
+            cache_path_, /* cleanup_tracker = */ nullptr,
+            simple_file_tracker_.get(), size_, type_, runner,
+            /*net_log = */ nullptr);
     int rv = simple_backend->Init(cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     simple_cache_impl_ = simple_backend.get();

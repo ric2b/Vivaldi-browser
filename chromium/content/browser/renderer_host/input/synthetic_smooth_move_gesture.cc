@@ -12,12 +12,6 @@
 namespace content {
 namespace {
 
-gfx::Vector2d FloorTowardZero(const gfx::Vector2dF& vector) {
-  int x = vector.x() > 0 ? floor(vector.x()) : ceil(vector.x());
-  int y = vector.y() > 0 ? floor(vector.y()) : ceil(vector.y());
-  return gfx::Vector2d(x, y);
-}
-
 gfx::Vector2d CeilFromZero(const gfx::Vector2dF& vector) {
   int x = vector.x() > 0 ? ceil(vector.x()) : floor(vector.x());
   int y = vector.y() > 0 ? ceil(vector.y()) : floor(vector.y());
@@ -157,36 +151,41 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelInputEvents(
       }
       ComputeNextMoveSegment();
       state_ = MOVING;
-      // Fall through to forward the first event.
+      break;
     case MOVING: {
-      // Even though WebMouseWheelEvents take floating point deltas,
-      // internally the scroll position is stored as an integer. We therefore
-      // keep track of the discrete delta which is consistent with the
-      // internal scrolling state. This ensures that when the gesture has
-      // finished we've scrolled exactly the specified distance.
       base::TimeTicks event_timestamp = ClampTimestamp(timestamp);
-      gfx::Vector2dF current_move_segment_total_delta =
-          GetPositionDeltaAtTime(event_timestamp);
-      gfx::Vector2d delta_discrete =
-          FloorTowardZero(current_move_segment_total_delta -
-                          current_move_segment_total_delta_discrete_);
+      gfx::Vector2dF delta = GetPositionDeltaAtTime(event_timestamp) -
+                             current_move_segment_total_delta_;
 
-      blink::WebMouseWheelEvent::Phase phase =
-          needs_scroll_begin_ ? blink::WebMouseWheelEvent::kPhaseBegan
-                              : blink::WebMouseWheelEvent::kPhaseChanged;
-      // Only send wheel events if they have non-zero deltas.
-      if (delta_discrete.x() || delta_discrete.y()) {
-        ForwardMouseWheelEvent(target, delta_discrete, phase, event_timestamp);
-        if (phase == blink::WebMouseWheelEvent::kPhaseBegan)
-          needs_scroll_begin_ = false;
+      // Android MotionEvents that carry mouse wheel ticks and the tick
+      // granularity. Since it's not easy to change this granularity, it means
+      // we can only scroll in terms of number of these ticks. Note also: if
+      // the delta is smaller than one tick size we wont send an event or
+      // accumulate it in current_move_segment_total_delta_ so that we don't
+      // consider that delta applied. If we did, slow scrolls would be entirely
+      // lost since we'd send 0 ticks in each event but assume delta was
+      // applied.
+      int pixels_per_wheel_tick = target->GetMouseWheelMinimumGranularity();
+      if (pixels_per_wheel_tick) {
+        int wheel_ticks_x = static_cast<int>(delta.x() / pixels_per_wheel_tick);
+        int wheel_ticks_y = static_cast<int>(delta.y() / pixels_per_wheel_tick);
+        delta = gfx::Vector2dF(wheel_ticks_x * pixels_per_wheel_tick,
+                               wheel_ticks_y * pixels_per_wheel_tick);
       }
-      current_move_segment_total_delta_discrete_ += delta_discrete;
+
+      if (delta.x() || delta.y()) {
+        blink::WebMouseWheelEvent::Phase phase =
+            needs_scroll_begin_ ? blink::WebMouseWheelEvent::kPhaseBegan
+                                : blink::WebMouseWheelEvent::kPhaseChanged;
+        ForwardMouseWheelEvent(target, delta, phase, event_timestamp);
+        current_move_segment_total_delta_ += delta;
+        needs_scroll_begin_ = false;
+      }
 
       if (FinishedCurrentMoveSegment(event_timestamp)) {
         if (!IsLastMoveSegment()) {
-          current_move_segment_total_delta_discrete_ = gfx::Vector2d();
+          current_move_segment_total_delta_ = gfx::Vector2dF();
           ComputeNextMoveSegment();
-          ForwardMouseWheelInputEvents(timestamp, target);
         } else {
           state_ = DONE;
           // Forward a wheel event with phase ended and zero deltas.
@@ -316,6 +315,9 @@ gfx::Vector2dF SyntheticSmoothMoveGesture::GetPositionDeltaAtTime(
     const base::TimeTicks& timestamp) const {
   // Make sure the final delta is correct. Using the computation below can lead
   // to issues with floating point precision.
+  // TODO(bokan): This comment makes it sound like we have pixel perfect
+  // precision. In fact, gestures can accumulate a significant amount of
+  // error (e.g. due to snapping to physical pixels on each event).
   if (FinishedCurrentMoveSegment(timestamp))
     return params_.distances[current_move_segment_];
 

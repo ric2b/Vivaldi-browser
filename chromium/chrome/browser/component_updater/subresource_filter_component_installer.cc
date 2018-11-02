@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
@@ -32,37 +33,39 @@ const char kSubresourceFilterSetFetcherManifestName[] =
 
 // static
 const char
-    SubresourceFilterComponentInstallerTraits::kManifestRulesetFormatKey[] =
+    SubresourceFilterComponentInstallerPolicy::kManifestRulesetFormatKey[] =
         "ruleset_format";
 
 // static
-const int SubresourceFilterComponentInstallerTraits::kCurrentRulesetFormat = 1;
+const int SubresourceFilterComponentInstallerPolicy::kCurrentRulesetFormat = 1;
 
-SubresourceFilterComponentInstallerTraits::
-    SubresourceFilterComponentInstallerTraits() {}
+SubresourceFilterComponentInstallerPolicy::
+    SubresourceFilterComponentInstallerPolicy() {}
 
-SubresourceFilterComponentInstallerTraits::
-    ~SubresourceFilterComponentInstallerTraits() {}
+SubresourceFilterComponentInstallerPolicy::
+    ~SubresourceFilterComponentInstallerPolicy() {}
 
-bool SubresourceFilterComponentInstallerTraits::
+bool SubresourceFilterComponentInstallerPolicy::
     SupportsGroupPolicyEnabledComponentUpdates() const {
   return false;
 }
 
 // Public data is delivered via this component, no need for encryption.
-bool SubresourceFilterComponentInstallerTraits::RequiresNetworkEncryption()
+bool SubresourceFilterComponentInstallerPolicy::RequiresNetworkEncryption()
     const {
   return false;
 }
 
 update_client::CrxInstaller::Result
-SubresourceFilterComponentInstallerTraits::OnCustomInstall(
+SubresourceFilterComponentInstallerPolicy::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
   return update_client::CrxInstaller::Result(0);  // Nothing custom here.
 }
 
-void SubresourceFilterComponentInstallerTraits::ComponentReady(
+void SubresourceFilterComponentInstallerPolicy::OnCustomUninstall() {}
+
+void SubresourceFilterComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
     std::unique_ptr<base::DictionaryValue> manifest) {
@@ -89,29 +92,29 @@ void SubresourceFilterComponentInstallerTraits::ComponentReady(
 }
 
 // Called during startup and installation before ComponentReady().
-bool SubresourceFilterComponentInstallerTraits::VerifyInstallation(
+bool SubresourceFilterComponentInstallerPolicy::VerifyInstallation(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) const {
   return base::PathExists(install_dir);
 }
 
 base::FilePath
-SubresourceFilterComponentInstallerTraits::GetRelativeInstallDir() const {
+SubresourceFilterComponentInstallerPolicy::GetRelativeInstallDir() const {
   return base::FilePath(subresource_filter::kTopLevelDirectoryName)
       .Append(subresource_filter::kUnindexedRulesetBaseDirectoryName);
 }
 
-void SubresourceFilterComponentInstallerTraits::GetHash(
+void SubresourceFilterComponentInstallerPolicy::GetHash(
     std::vector<uint8_t>* hash) const {
   hash->assign(std::begin(kPublicKeySHA256), std::end(kPublicKeySHA256));
 }
 
-std::string SubresourceFilterComponentInstallerTraits::GetName() const {
+std::string SubresourceFilterComponentInstallerPolicy::GetName() const {
   return kSubresourceFilterSetFetcherManifestName;
 }
 
 // static
-std::string SubresourceFilterComponentInstallerTraits::GetInstallerTag() {
+std::string SubresourceFilterComponentInstallerPolicy::GetInstallerTag() {
   const std::string ruleset_flavor =
       subresource_filter::GetEnabledConfigurations()
           ->lexicographically_greatest_ruleset_flavor()
@@ -133,7 +136,7 @@ std::string SubresourceFilterComponentInstallerTraits::GetInstallerTag() {
 }
 
 update_client::InstallerAttributes
-SubresourceFilterComponentInstallerTraits::GetInstallerAttributes() const {
+SubresourceFilterComponentInstallerPolicy::GetInstallerAttributes() const {
   update_client::InstallerAttributes attributes;
   std::string installer_tag = GetInstallerTag();
   if (!installer_tag.empty())
@@ -142,7 +145,7 @@ SubresourceFilterComponentInstallerTraits::GetInstallerAttributes() const {
 }
 
 std::vector<std::string>
-SubresourceFilterComponentInstallerTraits::GetMimeTypes() const {
+SubresourceFilterComponentInstallerPolicy::GetMimeTypes() const {
   return std::vector<std::string>();
 }
 
@@ -151,12 +154,10 @@ void RegisterSubresourceFilterComponent(ComponentUpdateService* cus) {
           subresource_filter::kSafeBrowsingSubresourceFilter)) {
     return;
   }
-  std::unique_ptr<ComponentInstallerTraits> traits(
-      new SubresourceFilterComponentInstallerTraits());
-  // |cus| will take ownership of |installer| during installer->Register(cus).
-  DefaultComponentInstaller* installer =
-      new DefaultComponentInstaller(std::move(traits));
-  installer->Register(cus, base::Closure());
+
+  auto installer = base::MakeRefCounted<ComponentInstaller>(
+      std::make_unique<SubresourceFilterComponentInstallerPolicy>());
+  installer->Register(cus, base::OnceClosure());
 }
 
 }  // namespace component_updater

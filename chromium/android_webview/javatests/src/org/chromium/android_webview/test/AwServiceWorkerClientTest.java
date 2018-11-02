@@ -111,7 +111,6 @@ public class AwServiceWorkerClientTest {
     // Verify that WebView ServiceWorker code can properly handle resource loading errors
     // that happened in ServiceWorker fetches.
     @Test
-    @DisabledTest(message = "Disable for flakyness http://crbug.com/676422")
     @SmallTest
     public void testFetchResourceLoadingError() throws Throwable {
         final String fullIndexUrl = mWebServer.setResponse("/index.html", INDEX_HTML, null);

@@ -10,6 +10,8 @@
 #include "chromeos/login/login_state.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/resource_request_info.h"
+#include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/api/web_request/web_request_api_constants.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/info_map.h"
@@ -53,7 +55,7 @@ bool IsSensitiveURL(const GURL& url,
   bool sensitive_chrome_url = false;
   const char kGoogleCom[] = "google.com";
   const char kClient[] = "clients";
-  url::Origin origin(url);
+  url::Origin origin = url::Origin::Create(url);
   if (origin.DomainIs(kGoogleCom)) {
     base::StringPiece host = url.host_piece();
     while (host.ends_with("."))
@@ -94,6 +96,14 @@ bool IsSensitiveURL(const GURL& url,
                             base::StartsWith(url.path_piece(), "/webstore",
                                              base::CompareCase::SENSITIVE));
   }
+
+  if (is_request_from_browser_or_webui_renderer) {
+    sensitive_chrome_url =
+        sensitive_chrome_url ||
+        extensions::ExtensionsAPIClient::Get()->ShouldHideBrowserNetworkRequest(
+            url);
+  }
+
   return sensitive_chrome_url || extension_urls::IsWebstoreUpdateUrl(url) ||
          extension_urls::IsBlacklistUpdateUrl(url) ||
          extension_urls::IsSafeBrowsingUrl(origin, url.path_piece());
@@ -210,4 +220,21 @@ PermissionsData::AccessType WebRequestPermissions::CanExtensionAccessURL(
   }
 
   return access;
+}
+
+// static
+bool WebRequestPermissions::CanExtensionAccessInitiator(
+    const extensions::InfoMap* extension_info_map,
+    const extensions::ExtensionId extension_id,
+    const base::Optional<url::Origin>& initiator,
+    int tab_id,
+    bool crosses_incognito) {
+  PermissionsData::AccessType access = PermissionsData::ACCESS_ALLOWED;
+  if (initiator) {
+    access = CanExtensionAccessURL(
+        extension_info_map, extension_id, initiator->GetURL(), tab_id,
+        crosses_incognito, WebRequestPermissions::REQUIRE_HOST_PERMISSION,
+        base::nullopt);
+  }
+  return access == PermissionsData::ACCESS_ALLOWED;
 }

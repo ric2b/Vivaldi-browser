@@ -1,6 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -27,8 +27,16 @@ HRESULT AutoPropVariant::ToInt32(int* ret) {
   return PropVariantToInt32(var, ret);
 }
 
+SourceReaderWorker::SourceReaderWorker() {
+
+}
+
+SourceReaderWorker::~SourceReaderWorker() {
+
+}
+
 void SourceReaderWorker::SetReader(
-    const base::win::ScopedComPtr<IMFSourceReader>& source_reader) {
+    const Microsoft::WRL::ComPtr<IMFSourceReader>& source_reader) {
   source_reader_ = source_reader;
 }
 
@@ -62,7 +70,7 @@ HRESULT SourceReaderWorker::SetCurrentPosition(AutoPropVariant & position) {
 
 HRESULT SourceReaderWorker::GetCurrentMediaType(
     DWORD index,
-    base::win::ScopedComPtr<IMFMediaType> & media_type) {
+    Microsoft::WRL::ComPtr<IMFMediaType> & media_type) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << ": index " << index;
 
@@ -77,7 +85,7 @@ HRESULT SourceReaderWorker::GetCurrentMediaType(
 
 HRESULT SourceReaderWorker::SetCurrentMediaType(
     DWORD index,
-    base::win::ScopedComPtr<IMFMediaType> & media_type) {
+    Microsoft::WRL::ComPtr<IMFMediaType> & media_type) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << ": index " << index;
 
@@ -93,7 +101,7 @@ HRESULT SourceReaderWorker::SetCurrentMediaType(
 
 HRESULT SourceReaderWorker::GetNativeMediaType(
     DWORD index,
-    base::win::ScopedComPtr<IMFMediaType> & media_type) {
+    Microsoft::WRL::ComPtr<IMFMediaType> & media_type) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << ": index " << index;
 

@@ -100,7 +100,7 @@ class CORE_EXPORT TextTrack : public EventTargetWithInlineData,
   void removeCue(TextTrackCue*, ExceptionState&);
 
   void CueWillChange(TextTrackCue*);
-  void CueDidChange(TextTrackCue*);
+  void CueDidChange(TextTrackCue*, bool update_cue_index);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(cuechange);
 
@@ -125,9 +125,9 @@ class CORE_EXPORT TextTrack : public EventTargetWithInlineData,
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  protected:
   TextTrack(const AtomicString& kind,

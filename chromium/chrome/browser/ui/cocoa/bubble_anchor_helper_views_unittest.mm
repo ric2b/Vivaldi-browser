@@ -6,8 +6,9 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
@@ -18,7 +19,8 @@ namespace {
 constexpr int kHorizOffset = 210;
 constexpr int kVertOffset = 320;
 
-class TestBubbleDialogDelegateView : public views::BubbleDialogDelegateView {
+class TestBubbleDialogDelegateView final
+    : public views::BubbleDialogDelegateView {
  public:
   explicit TestBubbleDialogDelegateView(views::BubbleBorder::Arrow arrow)
       : BubbleDialogDelegateView(nullptr, arrow) {
@@ -58,9 +60,8 @@ using BubbleAnchorHelperViewsTest = views::ViewsTestBase;
 // resize of the parent window.
 TEST_F(BubbleAnchorHelperViewsTest, AnchoringFixed) {
   // Use MD anchoring since the arithmetic is simpler (no arrows).
-  ui::test::MaterialDesignControllerTestAPI md_test_api(
-      ui::MaterialDesignController::MATERIAL_NORMAL);
-  md_test_api.SetSecondaryUiMaterial(true);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kSecondaryUiMd);
 
   // Released when closed.
   NSRect parent_frame = NSMakeRect(100, 200, 300, 400);

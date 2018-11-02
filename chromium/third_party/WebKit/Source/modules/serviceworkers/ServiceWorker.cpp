@@ -39,10 +39,9 @@
 #include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "platform/bindings/ScriptState.h"
-#include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerState.h"
+#include "public/platform/modules/serviceworker/service_worker_state.mojom-blink.h"
 
 namespace blink {
 
@@ -51,7 +50,7 @@ const AtomicString& ServiceWorker::InterfaceName() const {
 }
 
 void ServiceWorker::postMessage(ScriptState* script_state,
-                                PassRefPtr<SerializedScriptValue> message,
+                                scoped_refptr<SerializedScriptValue> message,
                                 const MessagePortArray& ports,
                                 ExceptionState& exception_state) {
   ServiceWorkerContainerClient* client =
@@ -64,23 +63,22 @@ void ServiceWorker::postMessage(ScriptState* script_state,
   }
 
   // Disentangle the port in preparation for sending it to the remote context.
-  MessagePortChannelArray channels = MessagePort::DisentanglePorts(
+  auto channels = MessagePort::DisentanglePorts(
       ExecutionContext::From(script_state), ports, exception_state);
   if (exception_state.HadException())
     return;
-  if (handle_->ServiceWorker()->GetState() == kWebServiceWorkerStateRedundant) {
+  if (handle_->ServiceWorker()->GetState() ==
+      mojom::blink::ServiceWorkerState::kRedundant) {
     exception_state.ThrowDOMException(kInvalidStateError,
                                       "ServiceWorker is in redundant state.");
     return;
   }
 
   WebString message_string = message->ToWireString();
-  WebMessagePortChannelArray web_channels =
-      MessagePort::ToWebMessagePortChannelArray(std::move(channels));
   handle_->ServiceWorker()->PostMessage(
       client->Provider(), message_string,
       WebSecurityOrigin(GetExecutionContext()->GetSecurityOrigin()),
-      std::move(web_channels));
+      std::move(channels));
 }
 
 void ServiceWorker::InternalsTerminate() {
@@ -97,24 +95,23 @@ String ServiceWorker::scriptURL() const {
 
 String ServiceWorker::state() const {
   switch (handle_->ServiceWorker()->GetState()) {
-    case kWebServiceWorkerStateUnknown:
+    case mojom::blink::ServiceWorkerState::kUnknown:
       // The web platform should never see this internal state
       NOTREACHED();
       return "unknown";
-    case kWebServiceWorkerStateInstalling:
+    case mojom::blink::ServiceWorkerState::kInstalling:
       return "installing";
-    case kWebServiceWorkerStateInstalled:
+    case mojom::blink::ServiceWorkerState::kInstalled:
       return "installed";
-    case kWebServiceWorkerStateActivating:
+    case mojom::blink::ServiceWorkerState::kActivating:
       return "activating";
-    case kWebServiceWorkerStateActivated:
+    case mojom::blink::ServiceWorkerState::kActivated:
       return "activated";
-    case kWebServiceWorkerStateRedundant:
+    case mojom::blink::ServiceWorkerState::kRedundant:
       return "redundant";
-    default:
-      NOTREACHED();
-      return g_null_atom;
   }
+  NOTREACHED();
+  return g_null_atom;
 }
 
 ServiceWorker* ServiceWorker::From(
@@ -127,7 +124,7 @@ bool ServiceWorker::HasPendingActivity() const {
   if (was_stopped_)
     return false;
   return handle_->ServiceWorker()->GetState() !=
-         kWebServiceWorkerStateRedundant;
+         mojom::blink::ServiceWorkerState::kRedundant;
 }
 
 void ServiceWorker::ContextDestroyed(ExecutionContext*) {
@@ -161,7 +158,7 @@ ServiceWorker::ServiceWorker(ExecutionContext* execution_context,
 
 ServiceWorker::~ServiceWorker() {}
 
-DEFINE_TRACE(ServiceWorker) {
+void ServiceWorker::Trace(blink::Visitor* visitor) {
   AbstractWorker::Trace(visitor);
 }
 

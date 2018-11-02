@@ -21,12 +21,12 @@
 
 #include "core/svg/SVGFEImageElement.h"
 
-#include "core/SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/svg/SVGPreserveAspectRatio.h"
 #include "core/svg/graphics/filters/SVGFEImage.h"
+#include "core/svg_names.h"
 #include "platform/graphics/Image.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -49,7 +49,7 @@ SVGFEImageElement::~SVGFEImageElement() {
   ClearImageResource();
 }
 
-DEFINE_TRACE(SVGFEImageElement) {
+void SVGFEImageElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(preserve_aspect_ratio_);
   visitor->Trace(cached_image_);
   visitor->Trace(target_id_observer_);
@@ -58,9 +58,10 @@ DEFINE_TRACE(SVGFEImageElement) {
 }
 
 bool SVGFEImageElement::CurrentFrameHasSingleSecurityOrigin() const {
-  if (cached_image_ && cached_image_->GetImage())
-    return cached_image_->GetImage()->CurrentFrameHasSingleSecurityOrigin();
-
+  if (cached_image_) {
+    if (Image* image = cached_image_->GetImage())
+      return image->CurrentFrameHasSingleSecurityOrigin();
+  }
   return true;
 }
 
@@ -141,7 +142,7 @@ void SVGFEImageElement::ImageNotifyFinished(ImageResourceContent*) {
     return;
 
   Element* parent = parentElement();
-  if (!parent || !isSVGFilterElement(parent) || !parent->GetLayoutObject())
+  if (!parent || !IsSVGFilterElement(parent) || !parent->GetLayoutObject())
     return;
 
   if (LayoutObject* layout_object = this->GetLayoutObject())
@@ -151,7 +152,7 @@ void SVGFEImageElement::ImageNotifyFinished(ImageResourceContent*) {
 FilterEffect* SVGFEImageElement::Build(SVGFilterBuilder*, Filter* filter) {
   if (cached_image_) {
     // Don't use the broken image icon on image loading errors.
-    RefPtr<Image> image =
+    scoped_refptr<Image> image =
         cached_image_->ErrorOccurred() ? nullptr : cached_image_->GetImage();
     return FEImage::CreateWithImage(filter, image,
                                     preserve_aspect_ratio_->CurrentValue());

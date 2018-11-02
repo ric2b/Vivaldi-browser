@@ -31,8 +31,8 @@
 #include "modules/filesystem/FileSystemCallbacks.h"
 
 #include <memory>
+
 #include "core/dom/ExecutionContext.h"
-#include "core/fileapi/BlobCallback.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileError.h"
 #include "core/html/VoidCallback.h"
@@ -44,6 +44,7 @@
 #include "modules/filesystem/Entry.h"
 #include "modules/filesystem/EntryCallback.h"
 #include "modules/filesystem/ErrorCallback.h"
+#include "modules/filesystem/FileCallback.h"
 #include "modules/filesystem/FileEntry.h"
 #include "modules/filesystem/FileSystemCallback.h"
 #include "modules/filesystem/FileWriterBase.h"
@@ -80,7 +81,7 @@ void FileSystemCallbacksBase::DidFail(int code) {
 
 bool FileSystemCallbacksBase::ShouldScheduleCallback() const {
   return !ShouldBlockUntilCompletion() && execution_context_ &&
-         execution_context_->IsContextSuspended();
+         execution_context_->IsContextPaused();
 }
 
 template <typename CB, typename CBArg>
@@ -143,7 +144,7 @@ ScriptErrorCallback* ScriptErrorCallback::Wrap(ErrorCallback* callback) {
   return new ScriptErrorCallback(callback);
 }
 
-DEFINE_TRACE(ScriptErrorCallback) {
+void ScriptErrorCallback::Trace(blink::Visitor* visitor) {
   ErrorCallbackBase::Trace(visitor);
   visitor->Trace(callback_);
 }
@@ -368,7 +369,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> SnapshotFileCallback::Create(
     DOMFileSystemBase* filesystem,
     const String& name,
     const KURL& url,
-    BlobCallback* success_callback,
+    FileCallback* success_callback,
     ErrorCallbackBase* error_callback,
     ExecutionContext* context) {
   return WTF::WrapUnique(new SnapshotFileCallback(
@@ -378,7 +379,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> SnapshotFileCallback::Create(
 SnapshotFileCallback::SnapshotFileCallback(DOMFileSystemBase* filesystem,
                                            const String& name,
                                            const KURL& url,
-                                           BlobCallback* success_callback,
+                                           FileCallback* success_callback,
                                            ErrorCallbackBase* error_callback,
                                            ExecutionContext* context)
     : FileSystemCallbacksBase(error_callback, filesystem, context),
@@ -388,7 +389,7 @@ SnapshotFileCallback::SnapshotFileCallback(DOMFileSystemBase* filesystem,
 
 void SnapshotFileCallback::DidCreateSnapshotFile(
     const FileMetadata& metadata,
-    PassRefPtr<BlobDataHandle> snapshot) {
+    scoped_refptr<BlobDataHandle> snapshot) {
   if (!success_callback_)
     return;
 

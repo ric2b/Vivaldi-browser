@@ -22,8 +22,10 @@
 #ifndef TextBreakIterator_h
 #define TextBreakIterator_h
 
+#include "base/macros.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/CharacterNames.h"
 #include "platform/wtf/text/Unicode.h"
 
 #include <unicode/brkiter.h>
@@ -62,6 +64,9 @@ PLATFORM_EXPORT void ReleaseLineBreakIterator(TextBreakIterator*);
 PLATFORM_EXPORT TextBreakIterator* SentenceBreakIterator(const UChar*,
                                                          int length);
 
+// Before calling this, check if the iterator is not at the end. Otherwise,
+// it may not work as expected.
+// See https://ssl.icu-project.org/trac/ticket/13447 .
 PLATFORM_EXPORT bool IsWordTextBreak(TextBreakIterator*);
 
 const int kTextBreakDone = -1;
@@ -85,15 +90,37 @@ enum class LineBreakType {
   kKeepAll,
 };
 
+// Determines break opportunities around collapsible space characters (space,
+// newline, and tabulation characters.)
+enum class BreakSpaceType {
+  // Break before collapsible space characters.
+  // This is a specialized optimization for CSS, where leading/trailing spaces
+  // in each line are removed, and thus breaking before spaces can save
+  // computing hanging spaces.
+  kBefore,
+
+  // Break before space characters, but after newline and tabulation characters.
+  // This is for CSS line breaking as in |kBefore|, but when whitespace
+  // collapsing is already applied to the target string.
+  kBeforeSpace,
+
+  // Break after collapsible space characters.
+  // When 'white-space:pre-wrap', or when in editing, leaging/trailing spaces
+  // need to be preserved, and that the |kBefore| optimization cannot work.
+  // This mode is compatible with UAX#14/ICU. http://unicode.org/reports/tr14/
+  kAfter,
+};
+
 PLATFORM_EXPORT std::ostream& operator<<(std::ostream&, LineBreakType);
+PLATFORM_EXPORT std::ostream& operator<<(std::ostream&, BreakSpaceType);
 
 class PLATFORM_EXPORT LazyLineBreakIterator final {
   STACK_ALLOCATED();
 
  public:
   LazyLineBreakIterator()
-      : iterator_(0),
-        cached_prior_context_(0),
+      : iterator_(nullptr),
+        cached_prior_context_(nullptr),
         cached_prior_context_length_(0),
         break_type_(LineBreakType::kNormal) {
     ResetPriorContext();
@@ -104,8 +131,8 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
                         LineBreakType break_type = LineBreakType::kNormal)
       : string_(string),
         locale_(locale),
-        iterator_(0),
-        cached_prior_context_(0),
+        iterator_(nullptr),
+        cached_prior_context_(nullptr),
         cached_prior_context_length_(0),
         break_type_(break_type) {
     ResetPriorContext();
@@ -172,7 +199,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
     const UChar* prior_context =
         prior_context_length
             ? &prior_context_[kPriorContextCapacity - prior_context_length]
-            : 0;
+            : nullptr;
     if (!iterator_) {
       if (string_.Is8Bit())
         iterator_ = AcquireLineBreakIterator(
@@ -209,18 +236,8 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
 
   LineBreakType BreakType() const { return break_type_; }
   void SetBreakType(LineBreakType break_type) { break_type_ = break_type; }
-
-  // By default, this class breaks before spaces. This is a specialized
-  // optimization for CSS, where leading/trailing spaces in each line are
-  // removed, and thus breaking before spaces can save computing hanging spaces.
-  //
-  // When 'white-space:pre-wrap', or when in editing, leaging/trailing spaces
-  // need to be preserved, and this optimization needs to be disabled. This mode
-  // is compatible with UAX#14/ICU. http://unicode.org/reports/tr14/
-  bool BreakAfterSpace() const { return break_after_space_; }
-  void SetBreakAfterSpace(bool break_after_space) {
-    break_after_space_ = break_after_space;
-  }
+  BreakSpaceType BreakSpace() const { return break_space_; }
+  void SetBreakSpace(BreakSpaceType break_space) { break_space_ = break_space; }
 
   inline bool IsBreakable(int pos,
                           int& next_breakable,
@@ -246,16 +263,21 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   // Returns the break opportunity at or before |offset|.
   unsigned PreviousBreakOpportunity(unsigned offset, unsigned min = 0) const;
 
+  static bool IsBreakableSpace(UChar ch) {
+    return ch == kSpaceCharacter || ch == kTabulationCharacter ||
+           ch == kNewlineCharacter;
+  }
+
  private:
   void ReleaseIterator() const {
     if (iterator_)
       ReleaseLineBreakIterator(iterator_);
-    iterator_ = 0;
-    cached_prior_context_ = 0;
+    iterator_ = nullptr;
+    cached_prior_context_ = nullptr;
     cached_prior_context_length_ = 0;
   }
 
-  template <typename CharacterType, LineBreakType, bool>
+  template <typename CharacterType, LineBreakType, BreakSpaceType>
   int NextBreakablePosition(int pos, const CharacterType* str) const;
   template <typename CharacterType, LineBreakType>
   int NextBreakablePosition(int pos, const CharacterType* str) const;
@@ -272,7 +294,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   mutable const UChar* cached_prior_context_;
   mutable unsigned cached_prior_context_length_;
   LineBreakType break_type_;
-  bool break_after_space_ = false;
+  BreakSpaceType break_space_ = BreakSpaceType::kBefore;
 };
 
 // Iterates over "extended grapheme clusters", as defined in UAX #29.
@@ -282,7 +304,6 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
 
 class PLATFORM_EXPORT NonSharedCharacterBreakIterator final {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(NonSharedCharacterBreakIterator);
 
  public:
   explicit NonSharedCharacterBreakIterator(const String&);
@@ -328,6 +349,8 @@ class PLATFORM_EXPORT NonSharedCharacterBreakIterator final {
 
   // For 16 bit strings, we use a TextBreakIterator.
   TextBreakIterator* iterator_;
+
+  DISALLOW_COPY_AND_ASSIGN(NonSharedCharacterBreakIterator);
 };
 
 // Counts the number of grapheme clusters. A surrogate pair or a sequence

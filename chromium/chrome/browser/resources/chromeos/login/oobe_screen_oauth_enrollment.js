@@ -272,6 +272,8 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
         }]);
       }
 
+      $('oauth-enroll-auth-view').partition = data.webviewPartitionName;
+
       $('login-header-bar').signinUIState = SIGNIN_UI_STATE.ENROLLMENT;
       $('progress-dots').hidden = true;
       this.classList.remove('saml');
@@ -282,8 +284,9 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
       gaiaParams.gaiaPath = 'embedded/setup/chromeos';
       gaiaParams.isNewGaiaFlow = true;
       gaiaParams.needPassword = false;
+      gaiaParams.hl = data.hl;
       if (data.management_domain) {
-        gaiaParams.enterpriseDomain = data.management_domain;
+        gaiaParams.enterpriseEnrollmentDomain = data.management_domain;
         gaiaParams.emailDomain = data.management_domain;
       }
       gaiaParams.flow = data.flow;
@@ -322,9 +325,10 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
      * Shows a success card for attestation-based enrollment that shows
      * which domain the device was enrolled into.
      */
-    showAttestationBasedEnrollmentSuccess: function(device, enterpriseDomain) {
+    showAttestationBasedEnrollmentSuccess: function(
+        device, enterpriseEnrollmentDomain) {
       $('oauth-enroll-abe-success-card').innerHTML = loadTimeData.getStringF(
-          'oauthEnrollAbeSuccess', device, enterpriseDomain);
+          'oauthEnrollAbeSuccess', device, enterpriseEnrollmentDomain);
       this.showStep(STEP_ABE_SUCCESS);
     },
 

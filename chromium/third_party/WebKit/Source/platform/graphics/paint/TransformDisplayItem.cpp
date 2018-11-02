@@ -21,13 +21,10 @@ void BeginTransformDisplayItem::AppendToWebDisplayItemList(
   list->AppendTransformItem(AffineTransformToSkMatrix(transform_));
 }
 
-#ifndef NDEBUG
-void BeginTransformDisplayItem::DumpPropertiesAsDebugString(
-    WTF::StringBuilder& string_builder) const {
-  PairedBeginDisplayItem::DumpPropertiesAsDebugString(string_builder);
-  string_builder.Append(WTF::String::Format(
-      ", transform: [%lf,%lf,%lf,%lf,%lf,%lf]", transform_.A(), transform_.B(),
-      transform_.C(), transform_.D(), transform_.E(), transform_.F()));
+#if DCHECK_IS_ON()
+void BeginTransformDisplayItem::PropertiesAsJSON(JSONObject& json) const {
+  PairedBeginDisplayItem::PropertiesAsJSON(json);
+  json.SetString("transform", transform_.ToString());
 }
 #endif
 

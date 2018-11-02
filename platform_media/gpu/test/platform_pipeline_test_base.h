@@ -1,5 +1,7 @@
-#ifndef MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H
-#define MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H
+#ifndef PLATFORM_MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H_
+#define PLATFORM_MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "base/files/file_path.h"
 #include "base/test/scoped_task_environment.h"
@@ -17,7 +19,9 @@ public:
  PlatformPipelineTestBase();
  virtual ~PlatformPipelineTestBase();
 protected:
+#if defined(PLATFORM_MEDIA_HWA)
   class DecodingMockVDA;
+#endif
 
   Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
                                   base::test::ScopedTaskEnvironment & task_environment_,
@@ -36,10 +40,12 @@ protected:
 
   std::unique_ptr<MockGpuVideoAcceleratorFactories>
       mock_video_accelerator_factories_;
+#if defined(PLATFORM_MEDIA_HWA)
   std::unique_ptr<DecodingMockVDA> mock_vda_;
+#endif
   base::FilePath filepath_;
 };
 
 }
 
-#endif // MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H
+#endif // PLATFORM_MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H_

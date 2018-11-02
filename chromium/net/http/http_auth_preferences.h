@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "net/base/net_export.h"
 #include "url/gurl.h"
 
@@ -22,14 +23,25 @@ class URLSecurityManager;
 // them accessible from the IO thread.
 class NET_EXPORT HttpAuthPreferences {
  public:
-  HttpAuthPreferences(const std::vector<std::string>& auth_schemes
+  // Simplified ctor with empty |auth_schemes|, empty |gssapi_library_name|, and
+  // |allow_gssapi_library_load| set to true.
+  HttpAuthPreferences();
+
 #if defined(OS_POSIX) && !defined(OS_ANDROID)
-                      ,
-                      const std::string& gssapi_library_name
+  // Simplified ctor with empty |gssapi_library_name| and
+  // |allow_gssapi_library_load| set to true.
+  // On platforms where this is not available, the ctor below is already
+  // equivalent to this.
+  explicit HttpAuthPreferences(const std::vector<std::string>& auth_schemes);
 #endif
+
+  HttpAuthPreferences(const std::vector<std::string>& auth_schemes
 #if defined(OS_CHROMEOS)
                       ,
                       bool allow_gssapi_library_load
+#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+                      ,
+                      const std::string& gssapi_library_name
 #endif
                       );
   virtual ~HttpAuthPreferences();
@@ -37,14 +49,15 @@ class NET_EXPORT HttpAuthPreferences {
   virtual bool IsSupportedScheme(const std::string& scheme) const;
   virtual bool NegotiateDisableCnameLookup() const;
   virtual bool NegotiateEnablePort() const;
+#if defined(OS_POSIX)
+  virtual bool NtlmV2Enabled() const;
+#endif
 #if defined(OS_ANDROID)
   virtual std::string AuthAndroidNegotiateAccountType() const;
-#endif
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
-  virtual std::string GssapiLibraryName() const;
-#endif
-#if defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS)
   virtual bool AllowGssapiLibraryLoad() const;
+#elif defined(OS_POSIX)
+  virtual std::string GssapiLibraryName() const;
 #endif
   virtual bool CanUseDefaultCredentials(const GURL& auth_origin) const;
   virtual bool CanDelegate(const GURL& auth_origin) const;
@@ -57,9 +70,15 @@ class NET_EXPORT HttpAuthPreferences {
     negotiate_enable_port_ = negotiate_enable_port;
   }
 
-  void set_server_whitelist(const std::string& server_whitelist);
+#if defined(OS_POSIX)
+  void set_ntlm_v2_enabled(bool ntlm_v2_enabled) {
+    ntlm_v2_enabled_ = ntlm_v2_enabled;
+  }
+#endif
 
-  void set_delegate_whitelist(const std::string& delegate_whitelist);
+  void SetServerWhitelist(const std::string& server_whitelist);
+
+  void SetDelegateWhitelist(const std::string& delegate_whitelist);
 
 #if defined(OS_ANDROID)
   void set_auth_android_negotiate_account_type(
@@ -75,21 +94,25 @@ class NET_EXPORT HttpAuthPreferences {
   bool negotiate_disable_cname_lookup_;
   bool negotiate_enable_port_;
 
+#if defined(OS_POSIX)
+  bool ntlm_v2_enabled_;
+#endif
+
 #if defined(OS_ANDROID)
   std::string auth_android_negotiate_account_type_;
-#endif
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
+#elif defined(OS_CHROMEOS)
+  const bool allow_gssapi_library_load_;
+#elif defined(OS_POSIX)
   // GSSAPI library name cannot change after startup, since changing it
   // requires unloading the existing GSSAPI library, which could cause all
   // sorts of problems for, for example, active Negotiate transactions.
   const std::string gssapi_library_name_;
 #endif
-#if defined(OS_CHROMEOS)
-  bool allow_gssapi_library_load_;
-#endif
+
   std::unique_ptr<URLSecurityManager> security_manager_;
   DISALLOW_COPY_AND_ASSIGN(HttpAuthPreferences);
 };
 
 }  // namespace net
+
 #endif  // NET_HTTP_HTTP_AUTH_PREFERENCES_H_

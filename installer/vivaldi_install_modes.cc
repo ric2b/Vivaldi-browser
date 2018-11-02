@@ -39,7 +39,12 @@ const InstallConstants kInstallModes[] = {
         L"Vivaldi HTML Document",                  // ProgID description.
         L"{9C142C0C-124C-4467-B117-EBCC62801D7B}",  // Active Setup GUID.
         L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}",  // CommandExecuteImpl CLSID.
-        L"",  // Empty default channel name since no update integration.
+        {0xBCA9D37C,
+        0xCA60,
+        0x4160,
+        {0x91, 0x15, 0x97, 0xA0, 0x0F, 0x24, 0x70,
+         0x2D}},  // Toast Activator CLSID.
+        L"",      // Empty default channel name since no update integration.
         ChannelStrategy::UNSUPPORTED,
         true,  // Supports system-level installs.
         true,   // Supports in-product set as default browser UX.

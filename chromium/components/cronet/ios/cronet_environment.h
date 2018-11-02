@@ -123,6 +123,22 @@ class CronetEnvironment {
   base::SingleThreadTaskRunner* GetFileThreadRunnerForTesting() const;
 
  private:
+  // Extends the base thread class to add the Cronet specific cleanup logic.
+  class CronetNetworkThread : public base::Thread {
+   public:
+    CronetNetworkThread(const std::string& name,
+                        cronet::CronetEnvironment* cronet_environment);
+
+   protected:
+    ~CronetNetworkThread() override;
+    void CleanUp() override;
+
+   private:
+    cronet::CronetEnvironment* const cronet_environment_;
+
+    DISALLOW_COPY_AND_ASSIGN(CronetNetworkThread);
+  };
+
   // Performs initialization tasks that must happen on the network thread.
   void InitializeOnNetworkThread();
 
@@ -130,7 +146,7 @@ class CronetEnvironment {
   base::SingleThreadTaskRunner* GetNetworkThreadTaskRunner();
 
   // Runs a closure on the network thread.
-  void PostToNetworkThread(const tracked_objects::Location& from_here,
+  void PostToNetworkThread(const base::Location& from_here,
                            const base::Closure& task);
 
   // Helper methods that start/stop net logging on the network thread.
@@ -150,7 +166,10 @@ class CronetEnvironment {
 
   std::string getDefaultQuicUserAgentId() const;
 
-  void PrepareForDestroyOnNetworkThread();
+  // Prepares the Cronet environment to be destroyed. The method must be
+  // executed on the network thread. No other tasks should be posted to the
+  // network thread after calling this method.
+  void CleanUpOnNetworkThread();
 
   bool http2_enabled_;
   bool quic_enabled_;

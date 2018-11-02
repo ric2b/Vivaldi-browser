@@ -10,9 +10,9 @@
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/paint/PaintArtifact.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -140,10 +140,11 @@ TEST_P(LocalFrameViewTest, NoOverflowInIncrementVisuallyNonEmptyPixelCount) {
 // overflow layer would always be valid.
 TEST_P(LocalFrameViewTest,
        ViewportConstrainedObjectsHandledCorrectlyDuringLayout) {
-  SetBodyInnerHTML(
-      "<style>.container { height: 200%; }"
-      "#sticky { position: sticky; top: 0; height: 50px; }</style>"
-      "<div class='container'><div id='sticky'></div></div>");
+  SetBodyInnerHTML(R"HTML(
+    <style>.container { height: 200%; }
+    #sticky { position: sticky; top: 0; height: 50px; }</style>
+    <div class='container'><div id='sticky'></div></div>
+  )HTML");
 
   LayoutBoxModelObject* sticky = ToLayoutBoxModelObject(
       GetDocument().getElementById("sticky")->GetLayoutObject());
@@ -164,14 +165,15 @@ TEST_P(LocalFrameViewTest, StyleChangeUpdatesViewportConstrainedObjects) {
   if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return;
 
-  SetBodyInnerHTML(
-      "<style>.container { height: 200%; }"
-      "#sticky1 { position: sticky; top: 0; height: 50px; }"
-      "#sticky2 { position: sticky; height: 50px; }</style>"
-      "<div class='container'>"
-      "  <div id='sticky1'></div>"
-      "  <div id='sticky2'></div>"
-      "</div>");
+  SetBodyInnerHTML(R"HTML(
+    <style>.container { height: 200%; }
+    #sticky1 { position: sticky; top: 0; height: 50px; }
+    #sticky2 { position: sticky; height: 50px; }</style>
+    <div class='container'>
+      <div id='sticky1'></div>
+      <div id='sticky2'></div>
+    </div>
+  )HTML");
 
   LayoutBoxModelObject* sticky1 = ToLayoutBoxModelObject(
       GetDocument().getElementById("sticky1")->GetLayoutObject());
@@ -234,8 +236,7 @@ TEST_P(LocalFrameViewTest, UpdateLifecyclePhasesForPrintingDetachedFrame) {
             ChildDocument().Lifecycle().GetState());
   if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     auto* child_layout_view = ChildDocument().GetLayoutView();
-    ASSERT_TRUE(child_layout_view->FirstFragment());
-    EXPECT_TRUE(child_layout_view->FirstFragment()->PaintProperties());
+    EXPECT_TRUE(child_layout_view->FirstFragment().PaintProperties());
   } else {
     EXPECT_TRUE(ChildDocument().View()->PreTranslation());
   }

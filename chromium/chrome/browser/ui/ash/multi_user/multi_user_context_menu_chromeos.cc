@@ -13,8 +13,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_warning_dialog.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/session_controller_client.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -24,8 +25,6 @@
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
-
-namespace chromeos {
 
 namespace {
 
@@ -48,16 +47,30 @@ class MultiUserContextMenuChromeos : public ui::SimpleMenuModel,
 };
 
 MultiUserContextMenuChromeos::MultiUserContextMenuChromeos(aura::Window* window)
-    : ui::SimpleMenuModel(this),
-      window_(window) {
-}
+    : ui::SimpleMenuModel(this), window_(window) {}
 
 void MultiUserContextMenuChromeos::ExecuteCommand(int command_id,
                                                   int event_flags) {
   ExecuteVisitDesktopCommand(command_id, window_);
 }
+
+void OnAcceptTeleportWarning(const AccountId& account_id,
+                             aura::Window* window_,
+                             bool accepted,
+                             bool no_show_again) {
+  if (!accepted)
+    return;
+
+  PrefService* pref = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  pref->SetBoolean(prefs::kMultiProfileWarningShowDismissed, no_show_again);
+
+  ash::MultiProfileUMA::RecordTeleportAction(
+      ash::MultiProfileUMA::TELEPORT_WINDOW_CAPTION_MENU);
+
+  MultiUserWindowManager::GetInstance()->ShowWindowForUser(window_, account_id);
+}
+
 }  // namespace
-}  // namespace chromeos
 
 std::unique_ptr<ui::MenuModel> CreateMultiUserContextMenu(
     aura::Window* window) {
@@ -67,13 +80,11 @@ std::unique_ptr<ui::MenuModel> CreateMultiUserContextMenu(
 
   if (logged_in_users.size() > 1u) {
     // If this window is not owned, we don't show the menu addition.
-    chrome::MultiUserWindowManager* manager =
-        chrome::MultiUserWindowManager::GetInstance();
+    MultiUserWindowManager* manager = MultiUserWindowManager::GetInstance();
     const AccountId& account_id = manager->GetWindowOwner(window);
     if (!account_id.is_valid() || !window)
       return model;
-    chromeos::MultiUserContextMenuChromeos* menu =
-        new chromeos::MultiUserContextMenuChromeos(window);
+    auto* menu = new MultiUserContextMenuChromeos(window);
     model.reset(menu);
     for (size_t user_index = 1; user_index < logged_in_users.size();
          ++user_index) {
@@ -89,19 +100,6 @@ std::unique_ptr<ui::MenuModel> CreateMultiUserContextMenu(
   return model;
 }
 
-void OnAcceptTeleportWarning(const AccountId& account_id,
-                             aura::Window* window_,
-                             bool no_show_again) {
-  PrefService* pref = ProfileManager::GetActiveUserProfile()->GetPrefs();
-  pref->SetBoolean(prefs::kMultiProfileWarningShowDismissed, no_show_again);
-
-  ash::MultiProfileUMA::RecordTeleportAction(
-      ash::MultiProfileUMA::TELEPORT_WINDOW_CAPTION_MENU);
-
-  chrome::MultiUserWindowManager::GetInstance()->ShowWindowForUser(window_,
-                                                                   account_id);
-}
-
 void ExecuteVisitDesktopCommand(int command_id, aura::Window* window) {
   switch (command_id) {
     case IDC_VISIT_DESKTOP_OF_LRU_USER_2:
@@ -113,25 +111,26 @@ void ExecuteVisitDesktopCommand(int command_id, aura::Window* window) {
       const AccountId account_id =
           logged_in_users[IDC_VISIT_DESKTOP_OF_LRU_USER_2 == command_id ? 1 : 2]
               ->GetAccountId();
-      base::Callback<void(bool)> on_accept =
+      base::OnceCallback<void(bool, bool)> on_accept =
           base::Bind(&OnAcceptTeleportWarning, account_id, window);
 
       // Don't show warning dialog if any logged in user in multi-profiles
       // session dismissed it.
       for (user_manager::UserList::const_iterator it = logged_in_users.begin();
-           it != logged_in_users.end();
-           ++it) {
+           it != logged_in_users.end(); ++it) {
         if (multi_user_util::GetProfileFromAccountId((*it)->GetAccountId())
                 ->GetPrefs()
                 ->GetBoolean(prefs::kMultiProfileWarningShowDismissed)) {
           bool active_user_show_option =
-              ProfileManager::GetActiveUserProfile()->
-              GetPrefs()->GetBoolean(prefs::kMultiProfileWarningShowDismissed);
-          on_accept.Run(active_user_show_option);
+              ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+                  prefs::kMultiProfileWarningShowDismissed);
+          std::move(on_accept).Run(true, active_user_show_option);
           return;
         }
       }
-      chromeos::ShowMultiprofilesWarningDialog(on_accept);
+
+      SessionControllerClient::Get()->ShowTeleportWarningDialog(
+          std::move(on_accept));
       return;
     }
     default:

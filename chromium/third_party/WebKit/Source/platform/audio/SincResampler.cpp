@@ -139,12 +139,13 @@ void SincResampler::ConsumeSource(float* buffer,
     return;
 
   // Wrap the provided buffer by an AudioBus for use by the source provider.
-  RefPtr<AudioBus> bus = AudioBus::Create(1, number_of_source_frames, false);
+  scoped_refptr<AudioBus> bus =
+      AudioBus::Create(1, number_of_source_frames, false);
 
   // FIXME: Find a way to make the following const-correct:
   bus->SetChannelMemory(0, buffer, number_of_source_frames);
 
-  source_provider_->ProvideInput(bus.Get(), number_of_source_frames);
+  source_provider_->ProvideInput(bus.get(), number_of_source_frames);
 }
 
 namespace {
@@ -464,6 +465,7 @@ void SincResampler::Process(AudioSourceProvider* source_provider,
         }
 #endif
       }
+#undef CONVOLVE_ONE_SAMPLE
 
       // Linearly interpolate the two "convolutions".
       double result = (1.0 - kernel_interpolation_factor) * sum1 +

@@ -15,28 +15,21 @@ source_set("prerender") {
   ]
 
   deps = [
-    ":provider",
     "//base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/prefs",
+    "//components/signin/ios/browser",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/geolocation:geolocation_internal",
+    "//ios/chrome/browser/history:tab_helper",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/signin",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/web",
-    "//ui/base",
-    "//url",
-  ]
-}
-
-source_set("provider") {
-  sources = [
-    "preload_provider.h",
-  ]
-  deps = [
     "//ui/base",
     "//url",
   ]

@@ -57,7 +57,7 @@
 <translation id="310520048233152454">Introduce una URL</translation>
 <translation id="3175736971608411871">temporizador</translation>
 <translation id="3199563858620722075">cuadro combinado</translation>
-<translation id="3450233048674729344">El valor debe inferior o igual a <ph name="MAXIMUM" /></translation>
+<translation id="3450233048674729344">El valor debe ser inferior o igual a <ph name="MAXIMUM" /></translation>
 <translation id="3486220673238053218">definición</translation>
 <translation id="3557673793733683882">encabezado <ph name="HEADING_LEVEL" /></translation>
 <translation id="3639613635497528239">número de segundos restantes de la película</translation>
@@ -119,6 +119,7 @@
 <translation id="6398862346408813489">Mostrar panel para seleccionar el mes</translation>
 <translation id="6404546809543547843">control deslizante de duración de audio</translation>
 <translation id="648732519525291180">selector de hora</translation>
+<translation id="6550675742724504774">Configuración</translation>
 <translation id="658823671542763450">activar pantalla completa</translation>
 <translation id="663493177488814956">feed</translation>
 <translation id="6637586476836377253">registro</translation>
@@ -163,7 +164,6 @@
 <translation id="8451268428117625855">Selecciona un archivo</translation>
 <translation id="8461852803063341183">botón de selección</translation>
 <translation id="8511325616783751178">botón desplegable</translation>
-<translation id="8519420564908284378">Reproducir en ambas pantallas</translation>
 <translation id="8534579021159131403">Minutos</translation>
 <translation id="8541249477527128034">control de medios</translation>
 <translation id="8583702881314752957">lista de definiciones</translation>

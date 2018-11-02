@@ -15,15 +15,14 @@ namespace payments {
 
 class PaymentMethodViewControllerTest : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentMethodViewControllerTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_no_shipping_test.html") {}
+  PaymentMethodViewControllerTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentMethodViewControllerTest);
 };
 
 IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest, OneCardSelected) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
   AddAutofillProfile(billing_profile);
   autofill::CreditCard card = autofill::test::GetCreditCard();
@@ -50,6 +49,7 @@ IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest, OneCardSelected) {
 
 IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest,
                        OneCardSelectedOutOfMany) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
   AddAutofillProfile(billing_profile);
 
@@ -90,7 +90,7 @@ IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest,
       static_cast<int>(DialogViewID::CHECKMARK_VIEW));
   EXPECT_FALSE(checkmark_view2->visible());
 
-  ResetEventObserver(DialogEvent::BACK_NAVIGATION);
+  ResetEventWaiter(DialogEvent::BACK_NAVIGATION);
   // Simulate selecting the second card.
   ClickOnDialogViewAndWait(list_view->child_at(1));
 
@@ -101,7 +101,7 @@ IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest,
   list_view = dialog_view()->GetViewByID(
       static_cast<int>(DialogViewID::PAYMENT_METHOD_SHEET_LIST_VIEW));
 
-  ResetEventObserver(DialogEvent::BACK_NAVIGATION);
+  ResetEventWaiter(DialogEvent::BACK_NAVIGATION);
   // Clicking on the second card again should not modify any state, and should
   // return to the main payment sheet.
   ClickOnDialogViewAndWait(list_view->child_at(1));
@@ -111,6 +111,7 @@ IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest, EditButtonOpensEditor) {
+  NavigateTo("/payment_request_no_shipping_test.html");
   AddCreditCard(autofill::test::GetCreditCard());
 
   InvokePaymentRequestUI();
@@ -124,7 +125,7 @@ IN_PROC_BROWSER_TEST_F(PaymentMethodViewControllerTest, EditButtonOpensEditor) {
   views::View* edit_button = list_view->child_at(0)->GetViewByID(
       static_cast<int>(DialogViewID::EDIT_ITEM_BUTTON));
 
-  ResetEventObserver(DialogEvent::CREDIT_CARD_EDITOR_OPENED);
+  ResetEventWaiter(DialogEvent::CREDIT_CARD_EDITOR_OPENED);
   ClickOnDialogViewAndWait(edit_button);
 }
 

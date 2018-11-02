@@ -9,8 +9,9 @@
 
 #include <vector>
 
-#include "cc/base/render_surface_filters.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_op_buffer.h"
+#include "cc/paint/render_surface_filters.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -38,8 +39,7 @@ WebDisplayItemListImpl::~WebDisplayItemListImpl() = default;
 
 void WebDisplayItemListImpl::AppendDrawingItem(
     const blink::WebRect& visual_rect,
-    sk_sp<const cc::PaintOpBuffer> record,
-    const blink::WebRect& record_bounds) {
+    sk_sp<const cc::PaintOpBuffer> record) {
   display_item_list_->StartPaint();
   display_item_list_->push<cc::DrawRecordOp>(std::move(record));
   display_item_list_->EndPaintOfUnpaired(visual_rect);
@@ -200,6 +200,10 @@ void WebDisplayItemListImpl::AppendRestore() {
   display_item_list_->StartPaint();
   display_item_list_->push<cc::RestoreOp>();
   display_item_list_->EndPaintOfPairedEnd();
+}
+
+cc::DisplayItemList* WebDisplayItemListImpl::GetCcDisplayItemList() {
+  return display_item_list_.get();
 }
 
 }  // namespace cc_blink

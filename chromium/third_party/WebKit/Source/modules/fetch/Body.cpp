@@ -5,11 +5,12 @@
 #include "modules/fetch/Body.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
-#include "core/html/FormData.h"
+#include "core/html/forms/FormData.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "core/url/URLSearchParams.h"
@@ -18,8 +19,6 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/network/ParsedContentType.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebDataConsumerHandle.h"
 
 namespace blink {
@@ -41,7 +40,7 @@ class BodyConsumerBase : public GarbageCollectedFinalized<BodyConsumerBase>,
         Resolver()->GetScriptState()->GetIsolate(), "Failed to fetch"));
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(resolver_);
     FetchDataLoader::Client::Trace(visitor);
   }
@@ -58,7 +57,7 @@ class BodyBlobConsumer final : public BodyConsumerBase {
       : BodyConsumerBase(resolver) {}
 
   void DidFetchDataLoadedBlobHandle(
-      PassRefPtr<BlobDataHandle> blob_data_handle) override {
+      scoped_refptr<BlobDataHandle> blob_data_handle) override {
     Resolver()->Resolve(Blob::Create(std::move(blob_data_handle)));
   }
 };
@@ -291,10 +290,14 @@ bool Body::HasPendingActivity() const {
 Body::Body(ExecutionContext* context) : ContextClient(context) {}
 
 ScriptPromise Body::RejectInvalidConsumption(ScriptState* script_state) {
-  if (IsBodyLocked() || bodyUsed())
+  const bool used = bodyUsed();
+  if (IsBodyLocked() || used) {
     return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), "Already read"));
+        script_state,
+        V8ThrowException::CreateTypeError(
+            script_state->GetIsolate(),
+            used ? "body stream already read" : "body stream is locked"));
+  }
   return ScriptPromise();
 }
 

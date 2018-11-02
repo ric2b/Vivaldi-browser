@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/process/process.h"
+#include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/sync/base/model_type.h"
@@ -294,7 +295,7 @@ class SyncTest : public InProcessBrowserTest {
  private:
   // Handles Profile creation for given index. Profile's path and type is
   // determined at runtime based on server type.
-  void CreateProfile(int index);
+  bool CreateProfile(int index);
 
   // Callback for MakeProfileForUISignin() method. It runs the quit_closure once
   // profile is created successfully.
@@ -460,6 +461,9 @@ class SyncTest : public InProcessBrowserTest {
   // The contents to be written to a profile's Preferences file before the
   // Profile object is created. If empty, no preexisting file will be written.
   std::string preexisting_preferences_file_contents_;
+
+  // Disable extension install verification.
+  extensions::ScopedInstallVerifierBypassForTest ignore_install_verification_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncTest);
 };

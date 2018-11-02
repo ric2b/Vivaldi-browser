@@ -41,7 +41,6 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerSettings.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -189,11 +188,6 @@ bool MixedContentChecker::IsMixedContent(SecurityOrigin* security_origin,
   bool is_allowed = url.ProtocolIs("blob") || url.ProtocolIs("filesystem") ||
                     SecurityOrigin::IsSecure(url) ||
                     SecurityOrigin::Create(url)->IsPotentiallyTrustworthy();
-  // TODO(mkwst): Remove this once 'localhost' is no longer considered
-  // potentially trustworthy.
-  if (is_allowed && url.ProtocolIs("http") &&
-      NetworkUtils::IsLocalHostname(url.Host(), nullptr))
-    is_allowed = false;
   return !is_allowed;
 }
 

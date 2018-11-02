@@ -5,10 +5,9 @@
 #ifndef REMOTING_PROTOCOL_SDP_MESSAGE_H_
 #define REMOTING_PROTOCOL_SDP_MESSAGE_H_
 
+#include <map>
 #include <string>
 #include <vector>
-
-#include "base/macros.h"
 
 namespace remoting {
 namespace protocol {
@@ -38,20 +37,21 @@ class SdpMessage {
   bool AddCodecParameter(const std::string& codec,
                          const std::string& parameters_to_add);
 
+  // Prefers |codec| in current session description. Returns false if |codec| is
+  // not found.
+  bool PreferVideoCodec(const std::string& codec);
+
  private:
-  // Finds the line of the form "a=rtpmap:<payload_type> <codec>/.." with the
-  // specified |codec|. Sets |line_num| to line number and |payload_type| to the
-  // payload type from that line. Returns false if the codec wasn't found.
-  bool FindCodec(const std::string& codec,
-                 int* line_num,
-                 std::string* payload_type) const;
+  // Finds the lines of the form "a=rtpmap:<payload_type> <codec>/.." with the
+  // specified |codec| and returns a list of the matching payload types with
+  // their line numbers.
+  std::vector<std::pair<int, std::string>> FindCodec(
+      const std::string& codec) const;
 
   std::vector<std::string> sdp_lines_;
 
   bool has_audio_ = false;
   bool has_video_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(SdpMessage);
 };
 
 }  // namespace protocol

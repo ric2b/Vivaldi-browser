@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -16,7 +17,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chromeos/cryptohome/async_method_caller.h"
@@ -56,9 +57,9 @@ KioskAppLaunchError::Error LoginFailureToKioskAppLaunchError(
 ////////////////////////////////////////////////////////////////////////////////
 // KioskProfileLoader::CryptohomedChecker ensures cryptohome daemon is up
 // and running by issuing an IsMounted call. If the call does not go through
-// and chromeos::DBUS_METHOD_CALL_SUCCESS is not returned, it will retry after
-// some time out and at the maximum five times before it gives up. Upon
-// success, it resumes the launch by logging in as a kiosk mode account.
+// and base::nullopt is not returned, it will retry after some time out and at
+// the maximum five times before it gives up. Upon success, it resumes the
+// launch by logging in as a kiosk mode account.
 
 class KioskProfileLoader::CryptohomedChecker
     : public base::SupportsWeakPtr<CryptohomedChecker> {
@@ -102,18 +103,17 @@ class KioskProfileLoader::CryptohomedChecker
         base::Bind(&CryptohomedChecker::OnCryptohomeIsMounted, AsWeakPtr()));
   }
 
-  void OnCryptohomeIsMounted(chromeos::DBusMethodCallStatus call_status,
-                             bool is_mounted) {
-    if (call_status != chromeos::DBUS_METHOD_CALL_SUCCESS) {
+  void OnCryptohomeIsMounted(base::Optional<bool> is_mounted) {
+    if (!is_mounted.has_value()) {
       Retry();
       return;
     }
 
-    if (is_mounted)
+    if (!is_mounted.value())
       SYSLOG(ERROR) << "Cryptohome is mounted before launching kiosk app.";
 
     // Proceed only when cryptohome is not mounded or running on dev box.
-    if (!is_mounted || !base::SysInfo::IsRunningOnChromeOS())
+    if (!is_mounted.value() || !base::SysInfo::IsRunningOnChromeOS())
       ReportCheckResult(KioskAppLaunchError::NONE);
     else
       ReportCheckResult(KioskAppLaunchError::ALREADY_MOUNTED);

@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
+#import "ios/chrome/browser/ui/history/history_base_feature.h"
 #include "ios/chrome/browser/ui/history/history_entries_status_item.h"
 #include "ios/chrome/browser/ui/history/history_entry_inserter.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
@@ -101,9 +102,8 @@ const CGFloat kSeparatorInset = 10;
 @property(nonatomic, copy) NSString* currentQuery;
 // Coordinator for displaying context menus for history entries.
 @property(nonatomic, strong) ContextMenuCoordinator* contextMenuCoordinator;
-// Type of displayed history entries. Entries can be synced or local, or there
-// may be no history entries.
-@property(nonatomic, assign) HistoryEntriesStatus entriesType;
+// YES if there are no results to show.
+@property(nonatomic, assign) BOOL empty;
 // YES if the history panel should show a notice about additional forms of
 // browsing history.
 @property(nonatomic, assign)
@@ -120,14 +120,20 @@ const CGFloat kSeparatorInset = 10;
 // recent results are fetched, otherwise the results more recent than the
 // previous query will be returned.
 - (void)fetchHistoryForQuery:(NSString*)query continuation:(BOOL)continuation;
+// Updates various elements after history items have been deleted from the
+// CollectionView.
+- (void)updateCollectionViewAfterDeletingEntries;
 // Updates header section to provide relevant information about the currently
 // displayed history entries.
 - (void)updateEntriesStatusMessage;
 // Removes selected items from the visible collection, but does not delete them
 // from browser history.
 - (void)removeSelectedItemsFromCollection;
-// Removes all items in the collection that are not included in entries.
+// Selects all items in the collection that are not included in entries.
 - (void)filterForHistoryEntries:(NSArray*)entries;
+// Deletes all items in the collection which indexes are included in indexArray,
+// needs to be run inside a performBatchUpdates block.
+- (void)deleteItemsFromCollectionViewModelWithIndex:(NSArray*)indexArray;
 // Adds loading indicator to the top of the history collection, if one is not
 // already present.
 - (void)addLoadingIndicator;
@@ -148,7 +154,7 @@ const CGFloat kSeparatorInset = 10;
 @synthesize entryInserter = _entryInserter;
 @synthesize currentQuery = _currentQuery;
 @synthesize contextMenuCoordinator = _contextMenuCoordinator;
-@synthesize entriesType = _entriesType;
+@synthesize empty = _empty;
 @synthesize shouldShowNoticeAboutOtherFormsOfBrowsingHistory =
     _shouldShowNoticeAboutOtherFormsOfBrowsingHistory;
 @synthesize loading = _loading;
@@ -173,6 +179,9 @@ const CGFloat kSeparatorInset = 10;
     _browserState = browserState;
     _delegate = delegate;
     _URLLoader = loader;
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
+    // Consider moving the other complex code out of the initializer as well.
     [self loadModel];
     // Add initial info section as header.
     [self.collectionViewModel
@@ -180,7 +189,7 @@ const CGFloat kSeparatorInset = 10;
     _entryInserter =
         [[HistoryEntryInserter alloc] initWithModel:self.collectionViewModel];
     _entryInserter.delegate = self;
-    _entriesType = NO_ENTRIES;
+    _empty = YES;
     [self showHistoryMatchingQuery:nil];
   }
   return self;
@@ -215,10 +224,6 @@ const CGFloat kSeparatorInset = 10;
 - (void)setSearching:(BOOL)searching {
   _searching = searching;
   [self updateEntriesStatusMessage];
-}
-
-- (BOOL)hasHistoryEntries {
-  return self.entriesType != NO_ENTRIES;
 }
 
 - (BOOL)hasSelectedEntries {
@@ -359,50 +364,87 @@ const CGFloat kSeparatorInset = 10;
 
   // If there are no results and no URLs have been loaded, report that no
   // history entries were found.
-  if (results.empty() && !self.hasHistoryEntries) {
-    DCHECK(self.entriesType == NO_ENTRIES);
+  if (results.empty() && self.isEmpty) {
     [self updateEntriesStatusMessage];
     [self.delegate historyCollectionViewControllerDidChangeEntries:self];
     return;
   }
 
   self.finishedLoading = queryResultsInfo.reached_beginning;
-  self.entriesType =
-      queryResultsInfo.has_synced_results ? SYNCED_ENTRIES : LOCAL_ENTRIES;
+  self.empty = NO;
 
   // Header section should be updated outside of batch updates, otherwise
   // loading indicator removal will not be observed.
   [self updateEntriesStatusMessage];
 
-  NSMutableArray* filterResults = [NSMutableArray array];
-  NSString* searchQuery =
-      [base::SysUTF16ToNSString(queryResultsInfo.search_text) copy];
-  [self.collectionView performBatchUpdates:^{
-    // There should always be at least a header section present.
-    DCHECK([[self collectionViewModel] numberOfSections]);
-    for (const BrowsingHistoryService::HistoryEntry& entry : results) {
-      HistoryEntryItem* item =
-          [[HistoryEntryItem alloc] initWithType:ItemTypeHistoryEntry
-                                    historyEntry:entry
-                                    browserState:_browserState
-                                        delegate:self];
-      [self.entryInserter insertHistoryEntryItem:item];
-      if ([self isSearching] || self.filterQueryResult) {
-        [filterResults addObject:item];
+  if (base::FeatureList::IsEnabled(kHistoryBatchUpdatesFilter)) {
+    NSMutableArray* resultsItems = [NSMutableArray array];
+    NSString* searchQuery =
+        [base::SysUTF16ToNSString(queryResultsInfo.search_text) copy];
+    [self.collectionView performBatchUpdates:^{
+      // There should always be at least a header section present.
+      DCHECK([[self collectionViewModel] numberOfSections]);
+      for (const BrowsingHistoryService::HistoryEntry& entry : results) {
+        HistoryEntryItem* item =
+            [[HistoryEntryItem alloc] initWithType:ItemTypeHistoryEntry
+                                      historyEntry:entry
+                                      browserState:_browserState
+                                          delegate:self];
+        [resultsItems addObject:item];
+      }
+      [self.delegate historyCollectionViewControllerDidChangeEntries:self];
+      if (([self isSearching] && [searchQuery length] > 0 &&
+           [self.currentQuery isEqualToString:searchQuery]) ||
+          self.filterQueryResult) {
+        // If in search mode, filter out entries that are not part of the
+        // search result.
+        [self filterForHistoryEntries:resultsItems];
+        NSArray* deletedIndexPaths =
+            self.collectionView.indexPathsForSelectedItems;
+        [self deleteItemsFromCollectionViewModelWithIndex:deletedIndexPaths];
+        self.filterQueryResult = NO;
+      }
+      // Wait to insert until after the deletions are done, this is needed
+      // because performBatchUpdates processes deletion indexes first, and then
+      // inserts.
+      for (HistoryEntryItem* item in resultsItems) {
+        [self.entryInserter insertHistoryEntryItem:item];
       }
     }
-    [self.delegate historyCollectionViewControllerDidChangeEntries:self];
-  }
-      completion:^(BOOL) {
-        if (([self isSearching] && [searchQuery length] > 0 &&
-             [self.currentQuery isEqualToString:searchQuery]) ||
-            self.filterQueryResult) {
-          // If in search mode, filter out entries that are not part of the
-          // search result.
-          [self filterForHistoryEntries:filterResults];
-          self.filterQueryResult = NO;
+        completion:^(BOOL) {
+          [self updateCollectionViewAfterDeletingEntries];
+        }];
+  } else {
+    NSMutableArray* filterResults = [NSMutableArray array];
+    NSString* searchQuery =
+        [base::SysUTF16ToNSString(queryResultsInfo.search_text) copy];
+    [self.collectionView performBatchUpdates:^{
+      // There should always be at least a header section present.
+      DCHECK([[self collectionViewModel] numberOfSections]);
+      for (const BrowsingHistoryService::HistoryEntry& entry : results) {
+        HistoryEntryItem* item =
+            [[HistoryEntryItem alloc] initWithType:ItemTypeHistoryEntry
+                                      historyEntry:entry
+                                      browserState:_browserState
+                                          delegate:self];
+        [self.entryInserter insertHistoryEntryItem:item];
+        if ([self isSearching] || self.filterQueryResult) {
+          [filterResults addObject:item];
         }
-      }];
+      }
+      [self.delegate historyCollectionViewControllerDidChangeEntries:self];
+    }
+        completion:^(BOOL) {
+          if (([self isSearching] && [searchQuery length] > 0 &&
+               [self.currentQuery isEqualToString:searchQuery]) ||
+              self.filterQueryResult) {
+            // If in search mode, filter out entries that are not part of the
+            // search result.
+            [self filterForHistoryEntries:filterResults];
+            self.filterQueryResult = NO;
+          }
+        }];
+  }
 }
 
 - (void)shouldShowNoticeAboutOtherFormsOfBrowsingHistory:
@@ -560,7 +602,7 @@ const CGFloat kSeparatorInset = 10;
 - (void)fetchHistoryForQuery:(NSString*)query continuation:(BOOL)continuation {
   self.loading = YES;
   // Add loading indicator if no items are shown.
-  if (!self.hasHistoryEntries && !self.isSearching) {
+  if (self.isEmpty && !self.isSearching) {
     [self addLoadingIndicator];
   }
 
@@ -584,9 +626,18 @@ const CGFloat kSeparatorInset = 10;
   }
 }
 
+- (void)updateCollectionViewAfterDeletingEntries {
+  // If only the header section remains, there are no history entries.
+  if ([self.collectionViewModel numberOfSections] == 1) {
+    self.empty = YES;
+  }
+  [self updateEntriesStatusMessage];
+  [self.delegate historyCollectionViewControllerDidChangeEntries:self];
+}
+
 - (void)updateEntriesStatusMessage {
   CollectionViewItem* entriesStatusItem = nil;
-  if (!self.hasHistoryEntries) {
+  if (self.isEmpty) {
     CollectionViewTextItem* noResultsItem =
         [[CollectionViewTextItem alloc] initWithType:ItemTypeEntriesStatus];
     noResultsItem.text =
@@ -597,13 +648,7 @@ const CGFloat kSeparatorInset = 10;
     HistoryEntriesStatusItem* historyEntriesStatusItem =
         [[HistoryEntriesStatusItem alloc] initWithType:ItemTypeEntriesStatus];
     historyEntriesStatusItem.delegate = self;
-    AuthenticationService* authService =
-        AuthenticationServiceFactory::GetForBrowserState(_browserState);
-    BOOL signedIn = authService->IsAuthenticated();
-
-    historyEntriesStatusItem.hidden =
-        self.isSearching || (!signedIn && self.hasHistoryEntries);
-    historyEntriesStatusItem.entriesStatus = self.entriesType;
+    historyEntriesStatusItem.hidden = self.isSearching;
     historyEntriesStatusItem.showsOtherBrowsingDataNotice =
         _shouldShowNoticeAboutOtherFormsOfBrowsingHistory;
     entriesStatusItem = historyEntriesStatusItem;
@@ -637,27 +682,51 @@ const CGFloat kSeparatorInset = 10;
 
 - (void)removeSelectedItemsFromCollection {
   NSArray* deletedIndexPaths = self.collectionView.indexPathsForSelectedItems;
-  [self.collectionView performBatchUpdates:^{
-    [self collectionView:self.collectionView
-        willDeleteItemsAtIndexPaths:deletedIndexPaths];
-    [self.collectionView deleteItemsAtIndexPaths:deletedIndexPaths];
+  if (base::FeatureList::IsEnabled(kHistoryBatchUpdatesFilter)) {
+    NSArray* deletedIndexPaths = self.collectionView.indexPathsForSelectedItems;
+    [self.collectionView performBatchUpdates:^{
+      [self deleteItemsFromCollectionViewModelWithIndex:deletedIndexPaths];
+    }
+        completion:^(BOOL) {
+          [self updateCollectionViewAfterDeletingEntries];
+        }];
+  } else {
+    [self.collectionView performBatchUpdates:^{
+      [self collectionView:self.collectionView
+          willDeleteItemsAtIndexPaths:deletedIndexPaths];
+      [self.collectionView deleteItemsAtIndexPaths:deletedIndexPaths];
 
-    // Remove any empty sections, except the header section.
-    for (int section = self.collectionView.numberOfSections - 1; section > 0;
-         --section) {
-      if (![self.collectionViewModel numberOfItemsInSection:section]) {
-        [self.entryInserter removeSection:section];
+      // Remove any empty sections, except the header section.
+      for (int section = self.collectionView.numberOfSections - 1; section > 0;
+           --section) {
+        if (![self.collectionViewModel numberOfItemsInSection:section]) {
+          [self.entryInserter removeSection:section];
+        }
       }
     }
+        completion:^(BOOL) {
+          // If only the header section remains, there are no history entries.
+          if ([self.collectionViewModel numberOfSections] == 1) {
+            self.empty = YES;
+          }
+          [self updateEntriesStatusMessage];
+          [self.delegate historyCollectionViewControllerDidChangeEntries:self];
+        }];
   }
-      completion:^(BOOL) {
-        // If only the header section remains, there are no history entries.
-        if ([self.collectionViewModel numberOfSections] == 1) {
-          self.entriesType = NO_ENTRIES;
-        }
-        [self updateEntriesStatusMessage];
-        [self.delegate historyCollectionViewControllerDidChangeEntries:self];
-      }];
+}
+
+- (void)deleteItemsFromCollectionViewModelWithIndex:(NSArray*)indexArray {
+  [self collectionView:self.collectionView
+      willDeleteItemsAtIndexPaths:indexArray];
+  [self.collectionView deleteItemsAtIndexPaths:indexArray];
+
+  // Remove any empty sections, except the header section.
+  for (int section = self.collectionView.numberOfSections - 1; section > 0;
+       --section) {
+    if (![self.collectionViewModel numberOfItemsInSection:section]) {
+      [self.entryInserter removeSection:section];
+    }
+  }
 }
 
 - (void)filterForHistoryEntries:(NSArray*)entries {
@@ -684,7 +753,10 @@ const CGFloat kSeparatorInset = 10;
       }
     }
   }
-  [self removeSelectedItemsFromCollection];
+  // If kHistoryBatchUpdatesFilter is not enabled the selected items will not be
+  // removed from the collection at this time.
+  if (!base::FeatureList::IsEnabled(kHistoryBatchUpdatesFilter))
+    [self removeSelectedItemsFromCollection];
 }
 
 - (void)addLoadingIndicator {

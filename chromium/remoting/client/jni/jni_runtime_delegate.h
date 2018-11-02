@@ -6,6 +6,7 @@
 #define REMOTING_CLIENT_JNI_JNI_RUNTIME_DELEGATE_H_
 
 #include <jni.h>
+#include <memory>
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
@@ -42,6 +43,7 @@ class JniRuntimeDelegate : public ChromotingClientRuntime::Delegate {
   void RuntimeWillShutdown() override;
   void RuntimeDidShutdown() override;
   void RequestAuthTokenForLogger() override;
+  OAuthTokenGetter* token_getter() override;
 
  private:
   JniRuntimeDelegate();
@@ -57,6 +59,7 @@ class JniRuntimeDelegate : public ChromotingClientRuntime::Delegate {
   void DetachFromVmAndSignal(base::WaitableEvent* waiter);
 
   ChromotingClientRuntime* runtime_;
+  std::unique_ptr<OAuthTokenGetter> token_getter_;
 
   friend struct base::DefaultSingletonTraits<JniRuntimeDelegate>;
 

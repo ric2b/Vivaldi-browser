@@ -6,21 +6,22 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:chrome="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/status_card_view"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="end"
     android:orientation="vertical"
     android:padding="@dimen/snippets_padding"
-    android:background="@drawable/card_single">
+    android:background="@drawable/card_single" >
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/status_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textColor="@color/snippets_headline_text_color"
-        chrome:leading="24dp" />
+        android:textAppearance="@style/BlackTitle1"
+        chrome:leading="24dp"
+        tools:text="Status card title"/>
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/status_body"
@@ -29,20 +30,18 @@
         android:layout_marginTop="8dp"
         android:textSize="14sp"
         android:textColor="@color/snippets_text_color"
-        chrome:leading="20dp" />
+        chrome:leading="20dp"
+        tools:text="Status card body can be over multiple lines and quite wide" />
 
-    <!-- Negative marginEnd to balance the parent's padding. Buttons are
-         supposed to have 8dp margin while we have a 16dp margin at the parent
-         level. -->
     <Button
-      android:id="@+id/status_action_button"
-      style="@style/ButtonCompatBorderless"
-      android:layout_marginTop="16dp"
-      android:layout_marginEnd="-8dp"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:textAllCaps="true"
-      android:textColor="@color/light_active_color"
-      android:textSize="15sp" />
+        style="@style/SuggestionCardAction"
+        android:id="@+id/status_action_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="-6dp"
+        android:layout_marginStart="-8dp"
+        android:layout_marginEnd="-8dp"
+        tools:text="Action" />
 
 </LinearLayout>

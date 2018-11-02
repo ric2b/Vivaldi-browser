@@ -5,6 +5,7 @@
 #ifndef CSSRotation_h
 #define CSSRotation_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSNumericValue.h"
 #include "core/css/cssom/CSSTransformComponent.h"
 
@@ -17,7 +18,6 @@ class ExceptionState;
 // "transform".
 // See CSSRotation.idl for more information about this class.
 class CORE_EXPORT CSSRotation final : public CSSTransformComponent {
-  WTF_MAKE_NONCOPYABLE(CSSRotation);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -50,9 +50,9 @@ class CORE_EXPORT CSSRotation final : public CSSTransformComponent {
   // Internal methods - from CSSTransformComponent.
   TransformComponentType GetType() const final { return kRotationType; }
   const DOMMatrix* AsMatrix(ExceptionState&) const final;
-  const CSSFunctionValue* ToCSSValue() const final;
+  const CSSFunctionValue* ToCSSValue(SecureContextMode) const final;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(angle_);
     CSSTransformComponent::Trace(visitor);
   }
@@ -65,6 +65,7 @@ class CORE_EXPORT CSSRotation final : public CSSTransformComponent {
   double x_;
   double y_;
   double z_;
+  DISALLOW_COPY_AND_ASSIGN(CSSRotation);
 };
 
 }  // namespace blink

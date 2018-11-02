@@ -31,8 +31,8 @@
 #include "core/css/CSSCalculationValue.h"
 
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSToLengthConversionData.h"
-#include "core/css/StylePropertySet.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/style/ComputedStyle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,9 +60,10 @@ void TestAccumulatePixelsAndPercent(
 CSSLengthArray& SetLengthArray(CSSLengthArray& length_array, String text) {
   for (double& x : length_array.values)
     x = 0;
-  MutableStylePropertySet* property_set =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
-  property_set->SetProperty(CSSPropertyLeft, text);
+  MutableCSSPropertyValueSet* property_set =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
+  property_set->SetProperty(CSSPropertyLeft, text, /* important */ false,
+                            SecureContextMode::kInsecureContext);
   ToCSSPrimitiveValue(property_set->GetPropertyCSSValue(CSSPropertyLeft))
       ->AccumulateLengthArray(length_array);
   return length_array;
@@ -77,9 +78,9 @@ bool LengthArraysEqual(CSSLengthArray& a, CSSLengthArray& b) {
 }
 
 TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
-  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->SetEffectiveZoom(5);
-  CSSToLengthConversionData conversion_data(style.Get(), style.Get(),
+  CSSToLengthConversionData conversion_data(style.get(), style.get(),
                                             LayoutViewItem(nullptr),
                                             style->EffectiveZoom());
 
@@ -146,47 +147,27 @@ TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
 }
 
 TEST(CSSCalculationValue, RefCount) {
-  RefPtr<CalculationValue> calc =
+  scoped_refptr<CalculationValue> calc =
       CalculationValue::Create(PixelsAndPercent(1, 2), kValueRangeAll);
-  Length length_a(calc);
-  EXPECT_EQ(calc->RefCount(), 2);
 
-  Length length_b;
-  length_b = length_a;
-  EXPECT_EQ(calc->RefCount(), 3);
+  // FIXME: Test the Length construction without using the ref count value.
 
-  Length length_c(calc);
-  length_c = length_a;
-  EXPECT_EQ(calc->RefCount(), 4);
+  EXPECT_TRUE(calc->HasOneRef());
+  {
+    Length length_a(calc);
+    EXPECT_FALSE(calc->HasOneRef());
 
-  Length length_d(
-      CalculationValue::Create(PixelsAndPercent(1, 2), kValueRangeAll));
-  length_d = length_a;
-  EXPECT_EQ(calc->RefCount(), 5);
-}
-
-TEST(CSSCalculationValue, RefCountLeak) {
-  RefPtr<CalculationValue> calc =
-      CalculationValue::Create(PixelsAndPercent(1, 2), kValueRangeAll);
-  Length length_a(calc);
-
-  Length length_b = length_a;
-  for (int i = 0; i < 100; ++i)
+    Length length_b;
     length_b = length_a;
-  EXPECT_EQ(calc->RefCount(), 3);
 
-  Length length_c(length_a);
-  for (int i = 0; i < 100; ++i)
+    Length length_c(calc);
     length_c = length_a;
-  EXPECT_EQ(calc->RefCount(), 4);
 
-  Length length_d(calc);
-  for (int i = 0; i < 100; ++i)
+    Length length_d(
+        CalculationValue::Create(PixelsAndPercent(1, 2), kValueRangeAll));
     length_d = length_a;
-  EXPECT_EQ(calc->RefCount(), 5);
-
-  length_d = Length();
-  EXPECT_EQ(calc->RefCount(), 4);
+  }
+  EXPECT_TRUE(calc->HasOneRef());
 }
 
 TEST(CSSCalculationValue, AddToLengthUnitValues) {

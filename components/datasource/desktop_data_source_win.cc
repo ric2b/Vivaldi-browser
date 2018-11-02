@@ -3,11 +3,12 @@
 #include "components/datasource/desktop_data_source_win.h"
 
 #include <Shobjidl.h>
+#include <wrl/client.h>
+
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/scoped_co_mem.h"
-#include "base/win/scoped_comptr.h"
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/skia_utils_win.h"
 
@@ -21,7 +22,7 @@ bool DesktopWallpaperDataClassHandlerWin::GetData(
     const content::URLDataSource::GotDataCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  base::win::ScopedComPtr<IDesktopWallpaper> desktop_w;
+  Microsoft::WRL::ComPtr<IDesktopWallpaper> desktop_w;
   HRESULT hr = CoCreateInstance(__uuidof(DesktopWallpaper), nullptr,
                                 CLSCTX_ALL, IID_PPV_ARGS(&desktop_w));
   if (FAILED(hr)) {

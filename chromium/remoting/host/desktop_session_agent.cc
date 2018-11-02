@@ -62,7 +62,7 @@ DesktopSessionClipboardStub::DesktopSessionClipboardStub(
     scoped_refptr<DesktopSessionAgent> desktop_session_agent)
     : desktop_session_agent_(desktop_session_agent) {}
 
-DesktopSessionClipboardStub::~DesktopSessionClipboardStub() {}
+DesktopSessionClipboardStub::~DesktopSessionClipboardStub() = default;
 
 void DesktopSessionClipboardStub::InjectClipboardEvent(
     const protocol::ClipboardEvent& event) {
@@ -154,7 +154,7 @@ class SharedMemoryFactoryImpl : public webrtc::SharedMemoryFactory {
 
 }  // namespace
 
-DesktopSessionAgent::Delegate::~Delegate() {}
+DesktopSessionAgent::Delegate::~Delegate() = default;
 
 DesktopSessionAgent::DesktopSessionAgent(
     scoped_refptr<AutoThreadTaskRunner> audio_capture_task_runner,
@@ -402,7 +402,8 @@ mojo::ScopedMessagePipeHandle DesktopSessionAgent::Start(
 
   mojo::MessagePipe pipe;
   network_channel_ = IPC::ChannelProxy::Create(
-      pipe.handle0.release(), IPC::Channel::MODE_SERVER, this, io_task_runner_);
+      pipe.handle0.release(), IPC::Channel::MODE_SERVER, this, io_task_runner_,
+      base::ThreadTaskRunnerHandle::Get());
   return std::move(pipe.handle1);
 }
 

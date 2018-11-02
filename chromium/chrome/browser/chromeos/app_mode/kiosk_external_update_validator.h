@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_EXTERNAL_UPDATE_VALIDATOR_H_
 #define CHROME_BROWSER_CHROMEOS_APP_MODE_KIOSK_EXTERNAL_UPDATE_VALIDATOR_H_
 
+#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -23,7 +24,7 @@ namespace chromeos {
 // WeakPtr.
 class KioskExternalUpdateValidatorDelegate {
  public:
-  virtual void OnExtenalUpdateUnpackSuccess(
+  virtual void OnExternalUpdateUnpackSuccess(
       const std::string& app_id,
       const std::string& version,
       const std::string& min_browser_version,
@@ -52,11 +53,13 @@ class KioskExternalUpdateValidator
 
   // SandboxedUnpackerClient overrides.
   void OnUnpackFailure(const extensions::CrxInstallError& error) override;
-  void OnUnpackSuccess(const base::FilePath& temp_dir,
-                       const base::FilePath& extension_dir,
-                       std::unique_ptr<base::DictionaryValue> original_manifest,
-                       const extensions::Extension* extension,
-                       const SkBitmap& install_icon) override;
+  void OnUnpackSuccess(
+      const base::FilePath& temp_dir,
+      const base::FilePath& extension_dir,
+      std::unique_ptr<base::DictionaryValue> original_manifest,
+      const extensions::Extension* extension,
+      const SkBitmap& install_icon,
+      const base::Optional<int>& dnr_ruleset_checksum) override;
 
   // Task runner for executing file I/O tasks.
   const scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;

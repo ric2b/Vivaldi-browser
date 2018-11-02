@@ -15,6 +15,7 @@
 #include "snapshot/minidump/module_snapshot_minidump.h"
 
 #include "minidump/minidump_extensions.h"
+#include "snapshot/minidump/minidump_annotation_reader.h"
 #include "snapshot/minidump/minidump_simple_string_dictionary_reader.h"
 #include "snapshot/minidump/minidump_string_list_reader.h"
 
@@ -135,6 +136,12 @@ ModuleSnapshotMinidump::AnnotationsSimpleMap() const {
   return annotations_simple_map_;
 }
 
+std::vector<AnnotationSnapshot> ModuleSnapshotMinidump::AnnotationObjects()
+    const {
+  INITIALIZATION_STATE_DCHECK_VALID(initialized_);
+  return annotation_objects_;
+}
+
 std::set<CheckedRange<uint64_t>> ModuleSnapshotMinidump::ExtraMemoryRanges()
     const {
   INITIALIZATION_STATE_DCHECK_VALID(initialized_);
@@ -186,10 +193,21 @@ bool ModuleSnapshotMinidump::InitializeModuleCrashpadInfo(
     return false;
   }
 
-  return ReadMinidumpSimpleStringDictionary(
-      file_reader,
-      minidump_module_crashpad_info.simple_annotations,
-      &annotations_simple_map_);
+  if (!ReadMinidumpSimpleStringDictionary(
+          file_reader,
+          minidump_module_crashpad_info.simple_annotations,
+          &annotations_simple_map_)) {
+    return false;
+  }
+
+  if (!ReadMinidumpAnnotationList(
+          file_reader,
+          minidump_module_crashpad_info.annotation_objects,
+          &annotation_objects_)) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace internal

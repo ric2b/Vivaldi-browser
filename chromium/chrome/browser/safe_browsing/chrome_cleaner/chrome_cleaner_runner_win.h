@@ -25,9 +25,8 @@
 namespace safe_browsing {
 
 // Class responsible for launching the cleaner process and waiting for its
-// completion when the InBrowserCleanerUI feature is enabled. This object is
-// also responsible for starting the ChromePromptImpl object on the IO thread
-// and controlling its lifetime.
+// completion. This object is also responsible for starting the ChromePromptImpl
+// object on the IO thread and controlling its lifetime.
 //
 // Expected lifecycle of a ChromeCleanerRunner:
 //
@@ -125,7 +124,7 @@ class ChromeCleanerRunner
       chrome_cleaner::mojom::ChromePromptRequest chrome_prompt_request);
 
   // Callbacks received from the Mojo interface.
-  void OnPromptUser(std::unique_ptr<std::set<base::FilePath>> files_to_delete,
+  void OnPromptUser(ChromeCleanerScannerResults&& scanner_results,
                     chrome_cleaner::mojom::ChromePrompt::PromptUserCallback
                         prompt_user_callback);
   void OnConnectionClosed();

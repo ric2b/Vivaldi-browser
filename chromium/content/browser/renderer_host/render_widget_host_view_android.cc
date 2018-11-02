@@ -25,19 +25,19 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/surface_layer.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/latency_info_swap_promise.h"
+#include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
-#include "components/viz/common/quads/copy_output_request.h"
-#include "components/viz/common/quads/copy_output_result.h"
-#include "components/viz/common/quads/single_release_callback.h"
+#include "components/viz/common/gpu/context_lost_observer.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
-#include "content/browser/android/composited_touch_handle_drawable.h"
 #include "content/browser/android/content_view_core.h"
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/android/overscroll_controller_android.h"
@@ -49,7 +49,6 @@
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
@@ -65,6 +64,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/input_messages.h"
 #include "content/common/site_isolation_policy.h"
@@ -79,7 +79,6 @@
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_start.h"
 #include "skia/ext/image_operations.h"
@@ -91,8 +90,9 @@
 #include "ui/android/window_android_compositor.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/events/android/gesture_event_android.h"
+#include "ui/events/android/gesture_event_type.h"
 #include "ui/events/android/motion_event_android.h"
-#include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -135,9 +135,11 @@ class PendingReadbackLock : public base::RefCounted<PendingReadbackLock> {
 using base::android::ApplicationState;
 using base::android::ApplicationStatusListener;
 
-class GLHelperHolder {
+class GLHelperHolder : public viz::ContextLostObserver {
  public:
   static GLHelperHolder* Create();
+
+  ~GLHelperHolder() override;
 
   viz::GLHelper* gl_helper() { return gl_helper_.get(); }
   bool IsLost() {
@@ -150,9 +152,12 @@ class GLHelperHolder {
 
  private:
   GLHelperHolder();
+
   void Initialize();
-  void OnContextLost();
   void OnApplicationStatusChanged(ApplicationState new_state);
+
+  // viz::ContextLostObserver implementation.
+  void OnContextLost() override;
 
   scoped_refptr<ui::ContextProviderCommandBuffer> provider_;
   std::unique_ptr<viz::GLHelper> gl_helper_;
@@ -171,6 +176,11 @@ GLHelperHolder::GLHelperHolder()
            base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES) ||
           (ApplicationStatusListener::GetState() ==
            base::android::APPLICATION_STATE_HAS_PAUSED_ACTIVITIES)) {}
+
+GLHelperHolder::~GLHelperHolder() {
+  if (provider_)
+    provider_->RemoveObserver(this);
+}
 
 GLHelperHolder* GLHelperHolder::Create() {
   GLHelperHolder* holder = new GLHelperHolder;
@@ -221,14 +231,14 @@ void GLHelperHolder::Initialize() {
       gpu::kNullSurfaceHandle, url, automatic_flushes, support_locking, limits,
       attributes, nullptr,
       ui::command_buffer_metrics::BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
-  if (!provider_->BindToCurrentThread())
+  auto result = provider_->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
     return;
   provider_->ContextGL()->TraceBeginCHROMIUM(
       "gpu_toplevel",
       base::StringPrintf("CmdBufferImageTransportFactory-%p", provider_.get())
           .c_str());
-  provider_->SetLostContextCallback(
-      base::Bind(&GLHelperHolder::OnContextLost, base::Unretained(this)));
+  provider_->AddObserver(this);
   gl_helper_.reset(
       new viz::GLHelper(provider_->ContextGL(), provider_->ContextSupport()));
 
@@ -240,6 +250,8 @@ void GLHelperHolder::Initialize() {
 void GLHelperHolder::ReleaseIfPossible() {
   if (!has_running_or_paused_activities_ && !g_pending_readback_lock) {
     gl_helper_.reset();
+    if (provider_)
+      provider_->RemoveObserver(this);
     provider_ = nullptr;
     // Make sure this will get recreated on next use.
     DCHECK(IsLost());
@@ -337,7 +349,7 @@ std::unique_ptr<ui::TouchSelectionController> CreateSelectionController(
   config.enable_longpress_drag_selection =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableLongpressDragSelection);
-  return base::MakeUnique<ui::TouchSelectionController>(client, config);
+  return std::make_unique<ui::TouchSelectionController>(client, config);
 }
 
 gfx::RectF GetSelectionRect(const ui::TouchSelectionController& controller) {
@@ -365,14 +377,15 @@ void PrepareTextureCopyOutputResult(
       base::Bind(callback, SkBitmap(), READBACK_FAILED));
   TRACE_EVENT0("cc",
                "RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult");
-  if (!result->HasTexture() || result->IsEmpty() || result->size().IsEmpty())
+  if (result->IsEmpty())
     return;
-  viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
-  result->TakeTexture(&texture_mailbox, &release_callback);
-  DCHECK(texture_mailbox.IsTexture());
-  if (!texture_mailbox.IsTexture())
-    return;
+  DCHECK_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
+
+  gpu::Mailbox mailbox = result->GetTextureResult()->mailbox;
+  gpu::SyncToken sync_token = result->GetTextureResult()->sync_token;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback =
+      result->TakeTextureOwnership();
+
   viz::GLHelper* gl_helper = GetPostReadbackGLHelper();
   if (!gl_helper)
     return;
@@ -400,8 +413,8 @@ void PrepareTextureCopyOutputResult(
   ignore_result(scoped_callback_runner.Release());
 
   gl_helper->CropScaleReadbackAndCleanMailbox(
-      texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
-      gfx::Rect(result->size()), output_size_in_pixel, pixels, color_type,
+      mailbox, sync_token, result->size(), output_size_in_pixel, pixels,
+      color_type,
       base::Bind(&CopyFromCompositingSurfaceFinished, callback,
                  base::Passed(&release_callback), base::Passed(&bitmap),
                  start_time, readback_lock),
@@ -424,12 +437,9 @@ bool FloatEquals(float a, float b) {
 }
 
 void WakeUpGpu(GpuProcessHost* host) {
-  if (!host)
-    return;
-  GpuDataManagerImpl* gpu_data = GpuDataManagerImpl::GetInstance();
-  if (gpu_data &&
-      gpu_data->IsDriverBugWorkaroundActive(gpu::WAKE_UP_GPU_BEFORE_DRAWING))
+  if (host && host->wake_up_gpu_before_drawing()) {
     host->gpu_service()->WakeUpGpu();
+  }
 }
 
 }  // namespace
@@ -457,11 +467,12 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       is_in_vr_(false),
       content_view_core_(nullptr),
       ime_adapter_android_(nullptr),
+      popup_zoomer_(nullptr),
       selection_popup_controller_(nullptr),
       text_suggestion_host_(nullptr),
       background_color_(SK_ColorWHITE),
       cached_background_color_(SK_ColorWHITE),
-      view_(this),
+      view_(this, ui::ViewAndroid::LayoutType::MATCH_PARENT),
       gesture_provider_(ui::GetGestureProviderConfig(
                             ui::GestureProviderConfigType::CURRENT_PLATFORM),
                         this),
@@ -472,12 +483,14 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       observing_root_window_(false),
       prev_top_shown_pix_(0.f),
       prev_bottom_shown_pix_(0.f),
+      page_scale_(1.f),
+      min_page_scale_(1.f),
+      max_page_scale_(1.f),
       mouse_wheel_phase_handler_(widget_host, this),
       weak_ptr_factory_(this) {
   // Set the layer which will hold the content layer for this view. The content
   // layer is managed by the DelegatedFrameHost.
   view_.SetLayer(cc::Layer::Create());
-  view_.SetLayout(ui::ViewAndroid::LayoutParams::MatchParent());
 
   if (using_browser_compositor_) {
     viz::FrameSinkId frame_sink_id =
@@ -496,7 +509,7 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
 
   host_->SetView(this);
   touch_selection_controller_client_manager_ =
-      base::MakeUnique<TouchSelectionControllerClientManagerAndroid>(this);
+      std::make_unique<TouchSelectionControllerClientManagerAndroid>(this);
   SetContentViewCore(content_view_core);
 
   CreateOverscrollControllerIfPossible();
@@ -506,8 +519,6 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
 }
 
 RenderWidgetHostViewAndroid::~RenderWidgetHostViewAndroid() {
-  if (content_view_core_)
-    content_view_core_->RemoveObserver(this);
   SetContentViewCore(NULL);
   DCHECK(!ime_adapter_android_);
   DCHECK(ack_callbacks_.empty());
@@ -670,12 +681,6 @@ void RenderWidgetHostViewAndroid::OnShowUnhandledTapUIIfNeeded(int x_dip,
                                                                int y_dip) {
   if (!selection_popup_controller_ || !content_view_core_)
     return;
-  // Validate the coordinates are within the viewport.
-  // TODO(jinsukkim): Get viewport size from ViewAndroid.
-  gfx::Size viewport_size = content_view_core_->GetViewportSizeDip();
-  if (x_dip < 0 || x_dip > viewport_size.width() ||
-      y_dip < 0 || y_dip > viewport_size.height())
-    return;
   selection_popup_controller_->OnShowUnhandledTapUIIfNeeded(
       x_dip, y_dip, view_.GetDipScale());
 }
@@ -693,7 +698,7 @@ gfx::Rect RenderWidgetHostViewAndroid::GetViewBounds() const {
   if (!content_view_core_)
     return default_bounds_;
 
-  gfx::Size size(content_view_core_->GetViewSize());
+  gfx::Size size(view_.GetSize());
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableOSKOverscroll)) {
     size.Enlarge(0, view_.GetSystemWindowInsetBottom() / view_.GetDipScale());
@@ -706,7 +711,7 @@ gfx::Size RenderWidgetHostViewAndroid::GetVisibleViewportSize() const {
   if (!content_view_core_)
     return default_bounds_.size();
 
-  return content_view_core_->GetViewSize();
+  return view_.GetSize();
 }
 
 gfx::Size RenderWidgetHostViewAndroid::GetPhysicalBackingSize() const {
@@ -722,26 +727,42 @@ gfx::Size RenderWidgetHostViewAndroid::GetPhysicalBackingSize() const {
 }
 
 bool RenderWidgetHostViewAndroid::DoBrowserControlsShrinkBlinkSize() const {
-  // Whether or not Blink's viewport size should be shrunk by the height of the
-  // URL-bar.
-  return content_view_core_ &&
-         content_view_core_->DoBrowserControlsShrinkBlinkSize();
+  RenderWidgetHostDelegate* delegate = host_->delegate();
+  if (!delegate)
+    return false;
+
+  RenderViewHostDelegateView* delegate_view = delegate->GetDelegateView();
+  return delegate_view ? delegate_view->DoBrowserControlsShrinkBlinkSize()
+                       : false;
 }
 
 float RenderWidgetHostViewAndroid::GetTopControlsHeight() const {
-  if (!content_view_core_)
-    return default_bounds_.x();
+  RenderWidgetHostDelegate* delegate = host_->delegate();
+  if (!delegate)
+    return 0.f;
 
-  // The height of the browser controls.
-  return content_view_core_->GetTopControlsHeightDip();
+  RenderViewHostDelegateView* delegate_view = delegate->GetDelegateView();
+  return delegate_view ? delegate_view->GetTopControlsHeight() : 0.f;
 }
 
 float RenderWidgetHostViewAndroid::GetBottomControlsHeight() const {
-  if (!content_view_core_)
+  RenderWidgetHostDelegate* delegate = host_->delegate();
+  if (!delegate)
     return 0.f;
 
-  // The height of the browser controls.
-  return content_view_core_->GetBottomControlsHeightDip();
+  RenderViewHostDelegateView* delegate_view = delegate->GetDelegateView();
+  return delegate_view ? delegate_view->GetBottomControlsHeight() : 0.f;
+}
+
+int RenderWidgetHostViewAndroid::GetMouseWheelMinimumGranularity() const {
+  if (!content_view_core_)
+    return 0;
+
+  // On Android, mouse wheel MotionEvents specify the number of ticks and how
+  // many pixels each tick scrolls. This multiplier is specified by device
+  // metrics (See RenderCoordinates::mWheelScrollFactor) so the minimum
+  // granularity will be the size of this tick multiplier.
+  return content_view_core_->GetMouseWheelMinimumGranularity();
 }
 
 void RenderWidgetHostViewAndroid::UpdateCursor(const WebCursor& cursor) {
@@ -850,8 +871,8 @@ viz::SurfaceId RenderWidgetHostViewAndroid::SurfaceIdForTesting() const {
 
 viz::FrameSinkId RenderWidgetHostViewAndroid::FrameSinkIdAtPoint(
     viz::SurfaceHittestDelegate* delegate,
-    const gfx::Point& point,
-    gfx::Point* transformed_point) {
+    const gfx::PointF& point,
+    gfx::PointF* transformed_point) {
   if (!delegated_frame_host_)
     return viz::FrameSinkId();
 
@@ -859,15 +880,15 @@ viz::FrameSinkId RenderWidgetHostViewAndroid::FrameSinkIdAtPoint(
   DCHECK_GT(scale_factor, 0);
   // The surface hittest happens in device pixels, so we need to convert the
   // |point| from DIPs to pixels before hittesting.
-  gfx::Point point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
+  gfx::PointF point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
 
   viz::SurfaceId surface_id = delegated_frame_host_->SurfaceId();
   if (surface_id.is_valid()) {
     viz::SurfaceHittest hittest(delegate,
                                 GetFrameSinkManager()->surface_manager());
     gfx::Transform target_transform;
-    surface_id = hittest.GetTargetSurfaceAtPoint(surface_id, point_in_pixels,
-                                                 &target_transform);
+    surface_id = hittest.GetTargetSurfaceAtPoint(
+        surface_id, gfx::ToFlooredPoint(point_in_pixels), &target_transform);
     *transformed_point = point_in_pixels;
     if (surface_id.is_valid())
       target_transform.TransformPoint(transformed_point);
@@ -907,9 +928,9 @@ void RenderWidgetHostViewAndroid::ProcessGestureEvent(
 }
 
 bool RenderWidgetHostViewAndroid::TransformPointToLocalCoordSpace(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     const viz::SurfaceId& original_surface,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   if (!delegated_frame_host_)
     return false;
 
@@ -917,7 +938,7 @@ bool RenderWidgetHostViewAndroid::TransformPointToLocalCoordSpace(
   DCHECK_GT(scale_factor, 0);
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
-  gfx::Point point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
+  gfx::PointF point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
 
   viz::SurfaceId surface_id = delegated_frame_host_->SurfaceId();
   if (!surface_id.is_valid())
@@ -938,9 +959,9 @@ bool RenderWidgetHostViewAndroid::TransformPointToLocalCoordSpace(
 }
 
 bool RenderWidgetHostViewAndroid::TransformPointToCoordSpaceForView(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   if (target_view == this || !delegated_frame_host_) {
     *transformed_point = point;
     return true;
@@ -962,6 +983,24 @@ RenderWidgetHostViewAndroid::GetWeakPtrAndroid() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
+bool RenderWidgetHostViewAndroid::OnGestureEvent(
+    const ui::GestureEventAndroid& event) {
+  std::unique_ptr<blink::WebGestureEvent> web_event;
+  if (event.delta() < 0.f) {
+    // Negative delta indicates zoom reset.
+    float delta = min_page_scale_ / page_scale_;
+    web_event = ui::CreateWebGestureEventFromGestureEventAndroid(
+        ui::GestureEventAndroid(event.type(), event.location(),
+                                event.screen_location(), event.time(), delta));
+  } else {
+    web_event = ui::CreateWebGestureEventFromGestureEventAndroid(event);
+  }
+  if (!web_event)
+    return false;
+  SendGestureEvent(*web_event);
+  return true;
+}
+
 bool RenderWidgetHostViewAndroid::OnTouchEvent(
     const ui::MotionEventAndroid& event) {
   RecordToolTypeForActionDown(event);
@@ -977,7 +1016,7 @@ bool RenderWidgetHostViewAndroid::OnTouchEvent(
   // Receiving any other touch event before the double-tap timeout expires
   // cancels opening the spellcheck menu.
   if (text_suggestion_host_)
-    text_suggestion_host_->StopSpellCheckMenuTimer();
+    text_suggestion_host_->StopSuggestionMenuTimer();
 
   // If a browser-based widget consumes the touch event, it's critical that
   // touch event interception be disabled. This avoids issues with
@@ -999,6 +1038,9 @@ bool RenderWidgetHostViewAndroid::OnTouchEvent(
 
   blink::WebTouchEvent web_event = ui::CreateWebTouchEventFromMotionEvent(
       event, result.moved_beyond_slop_region);
+  if (web_event.GetType() == blink::WebInputEvent::kUndefined)
+    return false;
+
   ui::LatencyInfo latency_info(ui::SourceEventType::TOUCH);
   latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
   if (host_->delegate()->GetInputEventRouter()) {
@@ -1208,6 +1250,10 @@ void RenderWidgetHostViewAndroid::ReclaimResources(
     SendReclaimCompositorResources(false /* is_swap_ack */);
 }
 
+void RenderWidgetHostViewAndroid::OnFrameTokenChanged(uint32_t frame_token) {
+  OnFrameTokenChangedForView(frame_token);
+}
+
 void RenderWidgetHostViewAndroid::DidCreateNewRendererCompositorFrameSink(
     viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   if (!delegated_frame_host_) {
@@ -1242,7 +1288,8 @@ void RenderWidgetHostViewAndroid::EvictFrameIfNecessary() {
 
 void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
   if (!delegated_frame_host_) {
     DCHECK(!using_browser_compositor_);
     return;
@@ -1251,11 +1298,11 @@ void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
   DCHECK(!frame.render_pass_list.empty());
 
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+  viz::RenderPass* root_pass = frame.render_pass_list.back().get();
   current_surface_size_ = root_pass->output_rect.size();
   bool is_transparent = root_pass->has_transparent_background;
 
-  cc::CompositorFrameMetadata metadata = frame.metadata.Clone();
+  viz::CompositorFrameMetadata metadata = frame.metadata.Clone();
 
   bool has_content = !current_surface_size_.IsEmpty();
 
@@ -1326,7 +1373,7 @@ void RenderWidgetHostViewAndroid::ClearCompositorFrame() {
 }
 
 void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
-    cc::CompositorFrameMetadata frame_metadata) {
+    viz::CompositorFrameMetadata frame_metadata) {
   if (!content_view_core_)
     return;
 
@@ -1384,15 +1431,15 @@ void RenderWidgetHostViewAndroid::MoveCaret(const gfx::PointF& position) {
 
 void RenderWidgetHostViewAndroid::MoveRangeSelectionExtent(
     const gfx::PointF& extent) {
-  DCHECK(content_view_core_);
-  content_view_core_->MoveRangeSelectionExtent(extent);
+  DCHECK(selection_popup_controller_);
+  selection_popup_controller_->MoveRangeSelectionExtent(extent);
 }
 
 void RenderWidgetHostViewAndroid::SelectBetweenCoordinates(
     const gfx::PointF& base,
     const gfx::PointF& extent) {
-  DCHECK(content_view_core_);
-  content_view_core_->SelectBetweenCoordinates(base, extent);
+  DCHECK(selection_popup_controller_);
+  selection_popup_controller_->SelectBetweenCoordinates(base, extent);
 }
 
 void RenderWidgetHostViewAndroid::OnSelectionEvent(
@@ -1425,22 +1472,17 @@ void RenderWidgetHostViewAndroid::SetSelectionControllerClientForTesting(
 
 std::unique_ptr<ui::TouchHandleDrawable>
 RenderWidgetHostViewAndroid::CreateDrawable() {
-  DCHECK(content_view_core_);
   if (!using_browser_compositor_) {
     if (!sync_compositor_)
       return nullptr;
     return std::unique_ptr<ui::TouchHandleDrawable>(
         sync_compositor_->client()->CreateDrawable());
   }
-  base::android::ScopedJavaLocalRef<jobject> activityContext =
-      content_view_core_->GetContext();
-  // If activityContext is null then Application context is used instead on
-  // the java side in CompositedTouchHandleDrawable.
-  return std::unique_ptr<ui::TouchHandleDrawable>(
-      new CompositedTouchHandleDrawable(
-          content_view_core_->GetViewAndroid()->GetLayer(), view_.GetDipScale(),
-          activityContext));
+  DCHECK(selection_popup_controller_);
+  return selection_popup_controller_->CreateTouchHandleDrawable();
 }
+
+void RenderWidgetHostViewAndroid::DidScroll() {}
 
 void RenderWidgetHostViewAndroid::SynchronousCopyContents(
     const gfx::Rect& src_subrect_in_pixel,
@@ -1485,16 +1527,21 @@ RenderWidgetHostViewAndroid::GetWebContentsAccessibilityAndroid() const {
 }
 
 void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
-    const cc::CompositorFrameMetadata& frame_metadata,
+    const viz::CompositorFrameMetadata& frame_metadata,
     bool is_transparent) {
   bool is_mobile_optimized = IsMobileOptimizedFrame(frame_metadata);
   gesture_provider_.SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
 
   float dip_scale = view_.GetDipScale();
-  float top_controls_pix = frame_metadata.top_controls_height * dip_scale;
+  float to_pix = IsUseZoomForDSFEnabled() ? 1.f : dip_scale;
+  float top_controls_pix = frame_metadata.top_controls_height * to_pix;
+  // |top_content_offset| is its CSS pixels * DSF if --use-zoom-for-dsf is
+  // enabled. Otherwise, it is in CSS pixels.
+  // Note that the height of browser control is not affected by page scale
+  // factor. Thus, |top_content_offset| in CSS pixels is also in DIP pixels.
   float top_content_offset = frame_metadata.top_controls_height *
                              frame_metadata.top_controls_shown_ratio;
-  float top_shown_pix = top_content_offset * dip_scale;
+  float top_shown_pix = top_content_offset * to_pix;
 
   if (ime_adapter_android_)
     ime_adapter_android_->UpdateFrameInfo(frame_metadata.selection.start,
@@ -1530,8 +1577,12 @@ void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
   UpdateBackgroundColor(is_transparent ? SK_ColorTRANSPARENT
                                        : frame_metadata.root_background_color);
 
-  view_.UpdateFrameInfo({frame_metadata.scrollable_viewport_size,
-                         frame_metadata.page_scale_factor, top_content_offset});
+  // ViewAndroid::content_offset() must be in CSS scale
+  float top_content_offset_css = IsUseZoomForDSFEnabled()
+                                     ? top_content_offset / dip_scale
+                                     : top_content_offset;
+  view_.UpdateFrameInfo(
+      {frame_metadata.scrollable_viewport_size, top_content_offset});
 
   bool top_changed = !FloatEquals(top_shown_pix, prev_top_shown_pix_);
   if (top_changed) {
@@ -1540,7 +1591,7 @@ void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
     prev_top_shown_pix_ = top_shown_pix;
   }
 
-  float bottom_controls_pix = frame_metadata.bottom_controls_height * dip_scale;
+  float bottom_controls_pix = frame_metadata.bottom_controls_height * to_pix;
   float bottom_shown_pix =
       bottom_controls_pix * frame_metadata.bottom_controls_shown_ratio;
   bool bottom_changed = !FloatEquals(bottom_shown_pix, prev_bottom_shown_pix_);
@@ -1550,13 +1601,17 @@ void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
     prev_bottom_shown_pix_ = bottom_shown_pix;
   }
 
-  // All offsets and sizes are in CSS pixels.
+  page_scale_ = frame_metadata.page_scale_factor;
+  min_page_scale_ = frame_metadata.min_page_scale_factor;
+  max_page_scale_ = frame_metadata.max_page_scale_factor;
+
+  // All offsets and sizes except |top_shown_pix| are in CSS pixels.
   content_view_core_->UpdateFrameInfo(
       frame_metadata.root_scroll_offset, frame_metadata.page_scale_factor,
-      gfx::Vector2dF(frame_metadata.min_page_scale_factor,
-                     frame_metadata.max_page_scale_factor),
-      frame_metadata.root_layer_size, frame_metadata.scrollable_viewport_size,
-      top_content_offset, top_shown_pix, top_changed, is_mobile_optimized);
+      frame_metadata.min_page_scale_factor,
+      frame_metadata.max_page_scale_factor, frame_metadata.root_layer_size,
+      frame_metadata.scrollable_viewport_size, top_content_offset_css,
+      top_shown_pix, top_changed, is_mobile_optimized);
 
   EvictFrameIfNecessary();
 }
@@ -1864,9 +1919,11 @@ void RenderWidgetHostViewAndroid::SendMouseEvent(
   blink::WebInputEvent::Type webMouseEventType =
       ui::ToWebMouseEventType(motion_event.GetAction());
 
+  if (webMouseEventType == blink::WebInputEvent::kUndefined)
+    return;
+
   if (webMouseEventType == blink::WebInputEvent::kMouseDown)
-    UpdateLeftClickCount(action_button, motion_event.GetX(0),
-                         motion_event.GetY(0));
+    UpdateMouseState(action_button, motion_event.GetX(0), motion_event.GetY(0));
 
   int click_count = 0;
 
@@ -1877,12 +1934,7 @@ void RenderWidgetHostViewAndroid::SendMouseEvent(
                       : 1;
 
   blink::WebMouseEvent mouse_event = WebMouseEventBuilder::Build(
-      webMouseEventType,
-      ui::EventTimeStampToSeconds(motion_event.GetEventTime()),
-      motion_event.GetX(0), motion_event.GetY(0), motion_event.GetFlags(),
-      click_count, motion_event.GetPointerId(0), motion_event.GetPressure(0),
-      motion_event.GetOrientation(0), motion_event.GetTiltX(0),
-      motion_event.GetTiltY(0), action_button, motion_event.GetToolType(0));
+      motion_event, webMouseEventType, click_count, action_button);
 
   if (!host_ || !host_->delegate())
     return;
@@ -1895,9 +1947,9 @@ void RenderWidgetHostViewAndroid::SendMouseEvent(
   }
 }
 
-void RenderWidgetHostViewAndroid::UpdateLeftClickCount(int action_button,
-                                                       float mousedown_x,
-                                                       float mousedown_y) {
+void RenderWidgetHostViewAndroid::UpdateMouseState(int action_button,
+                                                   float mousedown_x,
+                                                   float mousedown_y) {
   if (action_button != ui::MotionEventAndroid::BUTTON_PRIMARY) {
     // Reset state if middle or right button was pressed.
     left_click_count_ = 0;
@@ -1946,8 +1998,10 @@ void RenderWidgetHostViewAndroid::SendGestureEvent(
   if (overscroll_controller_)
     overscroll_controller_->Enable();
 
-  if (!host_ || !host_->delegate())
+  if (!host_ || !host_->delegate() ||
+      event.GetType() == blink::WebInputEvent::kUndefined) {
     return;
+  }
 
   // We let the touch selection controller see gesture events here, since they
   // may be routed and not make it to FilterInputEvent().
@@ -2098,26 +2152,24 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
   if (content_view_core != content_view_core_) {
     touch_selection_controller_.reset();
     RunAckCallbacks();
-    // TODO(yusufo) : Get rid of the below conditions and have a better handling
-    // for resizing after crbug.com/628302 is handled.
-    bool is_size_initialized = !content_view_core
-        || content_view_core->GetViewportSizeDip().width() != 0
-        || content_view_core->GetViewportSizeDip().height() != 0;
-    if (content_view_core_ || is_size_initialized)
-      resize = true;
     if (content_view_core_) {
-      content_view_core_->RemoveObserver(this);
       view_.RemoveObserver(this);
       view_.RemoveFromParent();
       view_.GetLayer()->RemoveFromParent();
     }
     if (content_view_core) {
-      content_view_core->AddObserver(this);
       view_.AddObserver(this);
       ui::ViewAndroid* parent_view = content_view_core->GetViewAndroid();
       parent_view->AddChild(&view_);
       parent_view->GetLayer()->AddChild(view_.GetLayer());
     }
+    // TODO(yusufo) : Get rid of the below conditions and have a better handling
+    // for resizing after crbug.com/628302 is handled.
+    bool is_size_initialized = !content_view_core ||
+                               view_.GetSize().width() != 0 ||
+                               view_.GetSize().height() != 0;
+    if (content_view_core_ || is_size_initialized)
+      resize = true;
     content_view_core_ = content_view_core;
   }
 
@@ -2167,9 +2219,7 @@ bool RenderWidgetHostViewAndroid::OnMouseEvent(
 
 bool RenderWidgetHostViewAndroid::OnMouseWheelEvent(
     const ui::MotionEventAndroid& event) {
-  SendMouseWheelEvent(WebMouseWheelEventBuilder::Build(
-      event.ticks_x(), event.ticks_y(), event.GetTickMultiplier(),
-      event.time_sec(), event.GetX(0), event.GetY(0)));
+  SendMouseWheelEvent(WebMouseWheelEventBuilder::Build(event));
   return true;
 }
 
@@ -2416,13 +2466,13 @@ void RenderWidgetHostViewAndroid::CreateOverscrollControllerIfPossible() {
   if (!compositor)
     return;
 
-  overscroll_controller_ = base::MakeUnique<OverscrollControllerAndroid>(
+  overscroll_controller_ = std::make_unique<OverscrollControllerAndroid>(
       overscroll_refresh_handler, compositor, view_.GetDipScale());
 }
 
 void RenderWidgetHostViewAndroid::SetOverscrollControllerForTesting(
     ui::OverscrollRefreshHandler* overscroll_refresh_handler) {
-  overscroll_controller_ = base::MakeUnique<OverscrollControllerAndroid>(
+  overscroll_controller_ = std::make_unique<OverscrollControllerAndroid>(
       overscroll_refresh_handler, view_.GetWindowAndroid()->GetCompositor(),
       view_.GetDipScale());
 }

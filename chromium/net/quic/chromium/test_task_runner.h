@@ -22,14 +22,18 @@ namespace test {
 
 typedef base::TestPendingTask PostedTask;
 
-class TestTaskRunner : public base::TaskRunner {
+class TestTaskRunner : public base::SequencedTaskRunner {
  public:
   explicit TestTaskRunner(MockClock* clock);
 
   // base::TaskRunner implementation.
-  bool PostDelayedTask(const tracked_objects::Location& from_here,
+  bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override;
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
+                                  base::OnceClosure task,
+                                  base::TimeDelta delay) override;
+
   bool RunsTasksInCurrentSequence() const override;
 
   const std::vector<PostedTask>& GetPostedTasks() const;

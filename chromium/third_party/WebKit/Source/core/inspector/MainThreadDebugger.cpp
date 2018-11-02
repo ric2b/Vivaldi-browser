@@ -73,10 +73,6 @@ namespace blink {
 
 namespace {
 
-int FrameId(LocalFrame& frame) {
-  return WeakIdentifierMap<LocalFrame>::Identifier(&frame);
-}
-
 Mutex& CreationMutex() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, ());
   return mutex;
@@ -97,7 +93,7 @@ MainThreadDebugger* MainThreadDebugger::instance_ = nullptr;
 
 MainThreadDebugger::MainThreadDebugger(v8::Isolate* isolate)
     : ThreadDebugger(isolate),
-      task_runner_(WTF::MakeUnique<InspectorTaskRunner>()),
+      task_runner_(std::make_unique<InspectorTaskRunner>()),
       paused_(false) {
   MutexLocker locker(CreationMutex());
   DCHECK(!instance_);
@@ -214,7 +210,7 @@ void MainThreadDebugger::ExceptionThrown(ExecutionContext* context,
 
 int MainThreadDebugger::ContextGroupId(LocalFrame* frame) {
   LocalFrame& local_frame_root = frame->LocalFrameRoot();
-  return FrameId(local_frame_root);
+  return WeakIdentifierMap<LocalFrame>::Identifier(&local_frame_root);
 }
 
 MainThreadDebugger* MainThreadDebugger::Instance() {
@@ -358,7 +354,7 @@ void MainThreadDebugger::installAdditionalCommandLineAPI(
 static Node* SecondArgumentAsNode(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (info.Length() > 1) {
-    if (Node* node = V8Node::toImplWithTypeCheck(info.GetIsolate(), info[1]))
+    if (Node* node = V8Node::ToImplWithTypeCheck(info.GetIsolate(), info[1]))
       return node;
   }
   ExecutionContext* execution_context =

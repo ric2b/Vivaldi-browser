@@ -7,9 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <queue>
-
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -20,6 +19,7 @@
 #include "content/renderer/accessibility/blink_ax_enum_conversion.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_view_impl.h"
+#include "third_party/WebKit/public/platform/TaskType.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -80,7 +80,20 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
   BlinkAXTreeSerializer serializer(&tree_source);
   serializer.set_max_node_count(kMaxSnapshotNodeCount);
-  serializer.SerializeChanges(context.Root(), response);
+
+  if (serializer.SerializeChanges(context.Root(), response))
+    return;
+
+  // It's possible for the page to fail to serialize the first time due to
+  // aria-owns rearranging the page while it's being scanned. Try a second
+  // time.
+  *response = AXContentTreeUpdate();
+  if (serializer.SerializeChanges(context.Root(), response))
+    return;
+
+  // It failed again. Clear the response object because it might have errors.
+  *response = AXContentTreeUpdate();
+  LOG(WARNING) << "Unable to serialize accessibility tree.";
 }
 
 RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame,
@@ -271,12 +284,24 @@ void RenderAccessibilityImpl::HandleAXEvent(
     }
   }
 
+  // If a select tag is opened or closed, all the children must be updated
+  // because their visibility may have changed.
+  if (obj.Role() == blink::kWebAXRoleMenuListPopup &&
+      event == ui::AX_EVENT_CHILDREN_CHANGED) {
+    WebAXObject popup_like_object = obj.ParentObject();
+    if (!popup_like_object.IsDetached()) {
+      serializer_.DeleteClientSubtree(popup_like_object);
+      HandleAXEvent(popup_like_object, ui::AX_EVENT_CHILDREN_CHANGED);
+    }
+  }
+
   // Add the accessibility object to our cache and ensure it's valid.
   AccessibilityHostMsg_EventParams acc_event;
   acc_event.id = obj.AxID();
   acc_event.event_type = event;
 
-  if (blink::WebUserGestureIndicator::IsProcessingUserGesture())
+  if (blink::WebUserGestureIndicator::IsProcessingUserGesture(
+          render_frame_->GetWebFrame()))
     acc_event.event_from = ui::AX_EVENT_FROM_USER;
   else if (during_action_)
     acc_event.event_from = ui::AX_EVENT_FROM_ACTION;
@@ -292,14 +317,23 @@ void RenderAccessibilityImpl::HandleAXEvent(
   }
   pending_events_.push_back(acc_event);
 
+  // Don't send accessibility events for frames that are not in the frame tree
+  // yet (i.e., provisional frames used for remote-to-local navigations, which
+  // haven't committed yet).  Doing so might trigger layout, which may not work
+  // correctly for those frames.  The events should be sent once such a frame
+  // commits.
+  if (!render_frame_->in_frame_tree())
+    return;
+
   if (!ack_pending_ && !weak_factory_.HasWeakPtrs()) {
     // When no accessibility events are in-flight post a task to send
     // the events to the browser. We use PostTask so that we can queue
     // up additional events.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&RenderAccessibilityImpl::SendPendingAccessibilityEvents,
-                   weak_factory_.GetWeakPtr()));
+    render_frame_->GetTaskRunner(blink::TaskType::kUnspecedTimer)
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(
+                       &RenderAccessibilityImpl::SendPendingAccessibilityEvents,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -326,7 +360,7 @@ void RenderAccessibilityImpl::OnPluginRootNodeUpdated() {
   if (!root.UpdateLayoutAndCheckValidity())
     return;
 
-  std::queue<WebAXObject> objs_to_explore;
+  base::queue<WebAXObject> objs_to_explore;
   objs_to_explore.push(root);
   while (objs_to_explore.size()) {
     WebAXObject obj = objs_to_explore.front();
@@ -350,7 +384,7 @@ void RenderAccessibilityImpl::OnPluginRootNodeUpdated() {
 }
 
 WebDocument RenderAccessibilityImpl::GetMainDocument() {
-  if (render_frame_ && render_frame_->GetWebFrame())
+  if (render_frame_->GetWebFrame())
     return render_frame_->GetWebFrame()->GetDocument();
   return WebDocument();
 }
@@ -456,7 +490,7 @@ void RenderAccessibilityImpl::SendLocationChanges() {
 
   // Do a breadth-first explore of the whole blink AX tree.
   base::hash_map<int, ui::AXRelativeBounds> new_locations;
-  std::queue<WebAXObject> objs_to_explore;
+  base::queue<WebAXObject> objs_to_explore;
   objs_to_explore.push(root);
   while (objs_to_explore.size()) {
     WebAXObject obj = objs_to_explore.front();
@@ -620,7 +654,11 @@ void RenderAccessibilityImpl::OnHitTest(const gfx::Point& point,
       data.HasContentIntAttribute(
           AX_CONTENT_ATTR_CHILD_BROWSER_PLUGIN_INSTANCE_ID)) {
     Send(new AccessibilityHostMsg_ChildFrameHitTestResult(
-        routing_id(), point, obj.AxID(), event_to_fire));
+        routing_id(), point,
+        data.GetContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID),
+        data.GetContentIntAttribute(
+            AX_CONTENT_ATTR_CHILD_BROWSER_PLUGIN_INSTANCE_ID),
+        event_to_fire));
     return;
   }
 

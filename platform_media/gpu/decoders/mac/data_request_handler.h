@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_DATA_REQUEST_HANDLER_H_
-#define CONTENT_COMMON_GPU_MEDIA_DATA_REQUEST_HANDLER_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_MAC_DATA_REQUEST_HANDLER_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_MAC_DATA_REQUEST_HANDLER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <algorithm>
 
@@ -18,7 +21,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 
-namespace content {
+namespace media {
 
 class IPCDataSource;
 
@@ -111,6 +114,6 @@ class MEDIA_EXPORT DataRequestHandler
   DISALLOW_COPY_AND_ASSIGN(DataRequestHandler);
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_DATA_REQUEST_HANDLER_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_MAC_DATA_REQUEST_HANDLER_H_

@@ -24,6 +24,10 @@
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace web {
 
 namespace {
@@ -99,6 +103,7 @@ class TestUI : public WebUIIOSController {
     source->AddResourcePath("mojo_bindings.js", IDR_IOS_MOJO_BINDINGS_JS);
     source->AddResourcePath("mojo_test.mojom.js", IDR_MOJO_TEST_MOJO_JS);
     source->SetDefaultResource(IDR_MOJO_TEST_HTML);
+    source->UseGzip();
 
     web::WebState* web_state = web_ui->GetWebState();
     web::WebUIIOSDataSource::Add(web_state->GetBrowserState(), source);
@@ -176,7 +181,6 @@ class WebUIMojoTest : public WebIntTest {
 // |TestUIHandler| successfully receives "ack" message from WebUI page.
 TEST_F(WebUIMojoTest, MessageExchange) {
   @autoreleasepool {
-    web_state()->SetWebUsageEnabled(true);
     web_state()->GetView();  // WebState won't load URL without view.
     GURL url(url::SchemeHostPort(kTestWebUIScheme, kTestWebUIURLHost, 0)
                  .Serialize());

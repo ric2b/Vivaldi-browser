@@ -10,17 +10,18 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_features.h"
 #include "chrome/browser/ui/views/feature_promos/new_tab_promo_bubble_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "chrome/grit/generated_resources.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/feature_engagement/test/mock_tracker.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -38,22 +39,9 @@ MATCHER_P(IsFeature, feature, "") {
   return arg.name == feature.name;
 }
 
-class MockTracker : public Tracker {
- public:
-  MockTracker() = default;
-  MOCK_METHOD1(NotifyEvent, void(const std::string& event));
-  TriggerState GetTriggerState(const base::Feature& feature) override {
-    return Tracker::TriggerState::HAS_NOT_BEEN_DISPLAYED;
-  }
-  MOCK_METHOD1(ShouldTriggerHelpUI, bool(const base::Feature& feature));
-  MOCK_METHOD1(Dismissed, void(const base::Feature& feature));
-  MOCK_METHOD0(IsInitialized, bool());
-  void AddOnInitializedCallback(OnInitializedCallback callback) override {}
-};
-
 std::unique_ptr<KeyedService> BuildTestTrackerFactory(
     content::BrowserContext* context) {
-  return base::MakeUnique<testing::StrictMock<MockTracker>>();
+  return base::MakeUnique<testing::StrictMock<test::MockTracker>>();
 }
 
 class NewTabTrackerBrowserTest : public InProcessBrowserTest {
@@ -68,8 +56,11 @@ class NewTabTrackerBrowserTest : public InProcessBrowserTest {
     // Ensure all initialization is finished.
     base::RunLoop().RunUntilIdle();
 
-    feature_engagement_tracker_ = static_cast<MockTracker*>(
+    feature_engagement_tracker_ = static_cast<test::MockTracker*>(
         TrackerFactory::GetForBrowserContext(browser()->profile()));
+    ON_CALL(*feature_engagement_tracker_, GetTriggerState(testing::_))
+        .WillByDefault(testing::Return(
+            feature_engagement::Tracker::TriggerState::HAS_NOT_BEEN_DISPLAYED));
 
     EXPECT_CALL(*feature_engagement_tracker_, IsInitialized())
         .WillOnce(::testing::Return(true));
@@ -82,18 +73,26 @@ class NewTabTrackerBrowserTest : public InProcessBrowserTest {
 
  protected:
   // Owned by the Profile.
-  MockTracker* feature_engagement_tracker_;
+  test::MockTracker* feature_engagement_tracker_;
 };
 
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(NewTabTrackerBrowserTest, TestShowPromo) {
+  // This test reaches into the tab strip internals.
+  if (IsExperimentalTabStripEnabled())
+    return;
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
   // Bypassing the 2 hour active session time requirement.
   EXPECT_CALL(*feature_engagement_tracker_,
               NotifyEvent(events::kNewTabSessionTimeMet));
-  NewTabTrackerFactory::GetInstance()
-      ->GetForProfile(browser()->profile())
-      ->OnSessionTimeMet();
+  auto* new_tab_tracker =
+      NewTabTrackerFactory::GetInstance()->GetForProfile(browser()->profile());
+  new_tab_tracker->OnSessionTimeMet();
+  new_tab_tracker
+      ->UseDefaultForChromeVariationConfigurationReleaseTimeForTesting();
 
   // Navigate in the omnibox.
   EXPECT_CALL(*feature_engagement_tracker_,
@@ -113,24 +112,22 @@ IN_PROC_BROWSER_TEST_F(NewTabTrackerBrowserTest, TestShowPromo) {
       .WillRepeatedly(::testing::Return(false));
   chrome::FocusLocationBar(browser());
 
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->tabstrip()
-                  ->new_tab_button()
-                  ->new_tab_promo()
-                  ->GetWidget()
-                  ->IsVisible());
+  // At the top this test should be a no-op if the experimental controller is
+  // used. Otherwise, we know the cast from TabStrip->TabStripImpl is safe.
+  TabStripImpl* tab_strip = BrowserView::GetBrowserViewForBrowser(browser())
+                                ->tabstrip()
+                                ->AsTabStripImpl();
+  ASSERT_TRUE(tab_strip);
+
+  EXPECT_TRUE(
+      tab_strip->new_tab_button()->new_tab_promo()->GetWidget()->IsVisible());
 
   // Tracker::Dismissed() must be invoked when the promo is closed. This will
   // clear the flag for whether there is any in-product help being displayed.
   EXPECT_CALL(*feature_engagement_tracker_,
               Dismissed(IsFeature(kIPHNewTabFeature)));
 
-  BrowserView::GetBrowserViewForBrowser(browser())
-      ->tabstrip()
-      ->new_tab_button()
-      ->new_tab_promo()
-      ->GetWidget()
-      ->Close();
+  tab_strip->new_tab_button()->new_tab_promo()->GetWidget()->Close();
 }
 
 }  // namespace feature_engagement

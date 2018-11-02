@@ -29,7 +29,6 @@ const char kIndentSymbol = '+';
 const int kIndentSymbolCount = 2;
 const char kSkipString[] = "@NO_DUMP";
 const char kSkipChildren[] = "@NO_CHILDREN_DUMP";
-const char kChildrenDictAttr[] = "children";
 
 }  // namespace
 
@@ -40,41 +39,42 @@ AccessibilityTreeFormatter::AccessibilityTreeFormatter()
 AccessibilityTreeFormatter::~AccessibilityTreeFormatter() {
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatter::BuildAccessibilityTree(BrowserAccessibility* root) {
-  CHECK(root);
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  RecursiveBuildAccessibilityTree(*root, dict.get());
-  return dict;
-}
-
 void AccessibilityTreeFormatter::FormatAccessibilityTree(
     BrowserAccessibility* root, base::string16* contents) {
   std::unique_ptr<base::DictionaryValue> dict = BuildAccessibilityTree(root);
   RecursiveFormatAccessibilityTree(*(dict.get()), contents);
 }
 
-void AccessibilityTreeFormatter::RecursiveBuildAccessibilityTree(
-    const BrowserAccessibility& node, base::DictionaryValue* dict) {
-  AddProperties(node, dict);
+void AccessibilityTreeFormatter::FormatAccessibilityTree(
+    const base::DictionaryValue& dict,
+    base::string16* contents) {
+  RecursiveFormatAccessibilityTree(dict, contents);
+}
 
-  auto children = base::MakeUnique<base::ListValue>();
-
-  for (size_t i = 0; i < ChildCount(node); ++i) {
-    BrowserAccessibility* child_node = GetChild(node, i);
-    std::unique_ptr<base::DictionaryValue> child_dict(
-        new base::DictionaryValue);
-    RecursiveBuildAccessibilityTree(*child_node, child_dict.get());
-    children->Append(std::move(child_dict));
+std::unique_ptr<base::DictionaryValue>
+AccessibilityTreeFormatter::FilterAccessibilityTree(
+    const base::DictionaryValue& dict) {
+  auto filtered_dict = std::make_unique<base::DictionaryValue>();
+  ProcessTreeForOutput(dict, filtered_dict.get());
+  const base::ListValue* children;
+  if (dict.GetList(kChildrenDictAttr, &children) && !children->empty()) {
+    const base::DictionaryValue* child_dict;
+    auto filtered_children = std::make_unique<base::ListValue>();
+    for (size_t i = 0; i < children->GetSize(); i++) {
+      children->GetDictionary(i, &child_dict);
+      auto filtered_child = FilterAccessibilityTree(*child_dict);
+      filtered_children->Append(std::move(filtered_child));
+    }
+    filtered_dict->Set(kChildrenDictAttr, std::move(filtered_children));
   }
-  dict->Set(kChildrenDictAttr, std::move(children));
+  return filtered_dict;
 }
 
 void AccessibilityTreeFormatter::RecursiveFormatAccessibilityTree(
     const base::DictionaryValue& dict, base::string16* contents, int depth) {
   base::string16 indent = base::string16(depth * kIndentSymbolCount,
                                          kIndentSymbol);
-  base::string16 line = indent + ToString(dict);
+  base::string16 line = indent + ProcessTreeForOutput(dict);
   if (line.find(base::ASCIIToUTF16(kSkipString)) != base::string16::npos)
     return;
 
@@ -89,7 +89,8 @@ void AccessibilityTreeFormatter::RecursiveFormatAccessibilityTree(
     return;
 
   const base::ListValue* children;
-  dict.GetList(kChildrenDictAttr, &children);
+  if (!dict.GetList(kChildrenDictAttr, &children))
+    return;
   const base::DictionaryValue* child_dict;
   for (size_t i = 0; i < children->GetSize(); i++) {
     children->GetDictionary(i, &child_dict);
@@ -100,17 +101,6 @@ void AccessibilityTreeFormatter::RecursiveFormatAccessibilityTree(
 void AccessibilityTreeFormatter::SetFilters(
     const std::vector<Filter>& filters) {
   filters_ = filters;
-}
-
-uint32_t AccessibilityTreeFormatter::ChildCount(
-    const BrowserAccessibility& node) const {
-  return node.PlatformChildCount();
-}
-
-BrowserAccessibility* AccessibilityTreeFormatter::GetChild(
-    const BrowserAccessibility& node,
-    uint32_t i) const {
-  return node.PlatformGetChild(i);
 }
 
 // static
@@ -149,20 +139,23 @@ base::string16 AccessibilityTreeFormatter::FormatCoordinates(
   return base::UTF8ToUTF16(xy_str);
 }
 
-void AccessibilityTreeFormatter::WriteAttribute(
-    bool include_by_default, const std::string& attr, base::string16* line) {
-  WriteAttribute(include_by_default, base::UTF8ToUTF16(attr), line);
+bool AccessibilityTreeFormatter::WriteAttribute(bool include_by_default,
+                                                const std::string& attr,
+                                                base::string16* line) {
+  return WriteAttribute(include_by_default, base::UTF8ToUTF16(attr), line);
 }
 
-void AccessibilityTreeFormatter::WriteAttribute(
-    bool include_by_default, const base::string16& attr, base::string16* line) {
+bool AccessibilityTreeFormatter::WriteAttribute(bool include_by_default,
+                                                const base::string16& attr,
+                                                base::string16* line) {
   if (attr.empty())
-    return;
+    return false;
   if (!MatchesFilters(attr, include_by_default))
-    return;
+    return false;
   if (!line->empty())
     *line += base::ASCIIToUTF16(" ");
   *line += attr;
+  return true;
 }
 
 }  // namespace content

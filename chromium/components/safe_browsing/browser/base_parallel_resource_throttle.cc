@@ -6,50 +6,113 @@
 
 #include <utility>
 
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/safe_browsing/browser/browser_url_loader_throttle.h"
 #include "components/safe_browsing/browser/url_checker_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_request.h"
+#include "content/public/common/resource_response.h"
 #include "net/http/http_request_headers.h"
 #include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request.h"
 
 namespace safe_browsing {
 
-void BaseParallelResourceThrottle::URLLoaderThrottleDelegateImpl::
-    CancelWithError(int error_code) {
-  owner_->CancelResourceLoad();
-}
+class BaseParallelResourceThrottle::URLLoaderThrottleHolder
+    : public content::URLLoaderThrottle::Delegate {
+ public:
+  URLLoaderThrottleHolder(BaseParallelResourceThrottle* owner,
+                          std::unique_ptr<BrowserURLLoaderThrottle> throttle)
+      : owner_(owner), throttle_(std::move(throttle)) {
+    throttle_->set_delegate(this);
+  }
+  ~URLLoaderThrottleHolder() override = default;
 
-void BaseParallelResourceThrottle::URLLoaderThrottleDelegateImpl::Resume() {
-  owner_->Resume();
-}
+  BrowserURLLoaderThrottle* throttle() const { return throttle_.get(); }
+  uint32_t inside_delegate_calls() const { return inside_delegate_calls_; }
+
+  // content::URLLoaderThrottle::Delegate implementation:
+  void CancelWithError(int error_code) override {
+    if (!owner_)
+      return;
+
+    ScopedDelegateCall scoped_delegate_call(this);
+    owner_->MayDeferCancelResourceLoad();
+  }
+
+  void Resume() override {
+    if (!owner_)
+      return;
+
+    ScopedDelegateCall scoped_delegate_call(this);
+    owner_->ResumeResourceLoad();
+  }
+
+  void Detach() {
+    owner_ = nullptr;
+  }
+
+ private:
+  class ScopedDelegateCall {
+   public:
+    explicit ScopedDelegateCall(URLLoaderThrottleHolder* holder)
+        : holder_(holder) {
+      holder_->inside_delegate_calls_++;
+    }
+    ~ScopedDelegateCall() { holder_->inside_delegate_calls_--; }
+
+   private:
+    URLLoaderThrottleHolder* const holder_;
+    DISALLOW_COPY_AND_ASSIGN(ScopedDelegateCall);
+  };
+
+  BaseParallelResourceThrottle* owner_;
+  uint32_t inside_delegate_calls_ = 0;
+  std::unique_ptr<BrowserURLLoaderThrottle> throttle_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLLoaderThrottleHolder);
+};
 
 BaseParallelResourceThrottle::BaseParallelResourceThrottle(
     const net::URLRequest* request,
     content::ResourceType resource_type,
     scoped_refptr<UrlCheckerDelegate> url_checker_delegate)
-    : request_(request),
-      resource_type_(resource_type),
-      url_loader_throttle_delegate_(this),
-      net_event_logger_(&request->net_log()) {
+    : request_(request), resource_type_(resource_type) {
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request_);
-  url_loader_throttle_ = BrowserURLLoaderThrottle::MaybeCreate(
+  auto throttle = BrowserURLLoaderThrottle::MaybeCreate(
       std::move(url_checker_delegate), info->GetWebContentsGetterForRequest());
-  url_loader_throttle_->set_delegate(&url_loader_throttle_delegate_);
-  url_loader_throttle_->set_net_event_logger(&net_event_logger_);
+  url_loader_throttle_holder_ =
+      std::make_unique<URLLoaderThrottleHolder>(this, std::move(throttle));
 }
 
-BaseParallelResourceThrottle::~BaseParallelResourceThrottle() = default;
+BaseParallelResourceThrottle::~BaseParallelResourceThrottle() {
+  if (url_loader_throttle_holder_->inside_delegate_calls() > 0) {
+    // The BrowserURLLoaderThrottle owned by |url_loader_throttle_holder_| is
+    // calling into this object. In this case, delay destruction of
+    // |url_loader_throttle_holder_|, so that the BrowserURLLoaderThrottle
+    // doesn't need to worry about any delegate calls may destroy it
+    // synchronously.
+    url_loader_throttle_holder_->Detach();
+
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+        FROM_HERE, std::move(url_loader_throttle_holder_));
+  }
+}
 
 void BaseParallelResourceThrottle::WillStartRequest(bool* defer) {
+  throttle_in_band_ = true;
+  if (should_cancel_on_notification_) {
+    CancelResourceLoad();
+    return;
+  }
+
   content::ResourceRequest resource_request;
 
   net::HttpRequestHeaders full_headers;
   resource_request.headers = request_->GetFullRequestHeaders(&full_headers)
-                                 ? full_headers.ToString()
-                                 : request_->extra_request_headers().ToString();
+                                 ? full_headers
+                                 : request_->extra_request_headers();
 
   resource_request.load_flags = request_->load_flags();
   resource_request.resource_type = resource_type_;
@@ -61,27 +124,67 @@ void BaseParallelResourceThrottle::WillStartRequest(bool* defer) {
   resource_request.url = request_->url();
   resource_request.method = request_->method();
 
-  url_loader_throttle_->WillStartRequest(resource_request, defer);
+  url_loader_throttle_holder_->throttle()->WillStartRequest(resource_request,
+                                                            defer);
   DCHECK(!*defer);
+  throttle_in_band_ = false;
 }
 
 void BaseParallelResourceThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     bool* defer) {
-  url_loader_throttle_->WillRedirectRequest(redirect_info, defer);
+  throttle_in_band_ = true;
+  if (should_cancel_on_notification_) {
+    CancelResourceLoad();
+    return;
+  }
+
+  url_loader_throttle_holder_->throttle()->WillRedirectRequest(redirect_info,
+                                                               defer);
   DCHECK(!*defer);
+  throttle_in_band_ = false;
 }
 
 void BaseParallelResourceThrottle::WillProcessResponse(bool* defer) {
-  url_loader_throttle_->WillProcessResponse(defer);
+  throttle_in_band_ = true;
+  if (should_cancel_on_notification_) {
+    CancelResourceLoad();
+    return;
+  }
+
+  url_loader_throttle_holder_->throttle()->WillProcessResponse(
+      GURL(), content::ResourceResponseHead(), defer);
+  if (!*defer)
+    throttle_in_band_ = false;
 }
 
 const char* BaseParallelResourceThrottle::GetNameForLogging() const {
   return "BaseParallelResourceThrottle";
 }
 
+bool BaseParallelResourceThrottle::MustProcessResponseBeforeReadingBody() {
+  // The response body should not be cached before SafeBrowsing confirms that it
+  // is safe to do so.
+  return true;
+}
+
 void BaseParallelResourceThrottle::CancelResourceLoad() {
+  DCHECK(throttle_in_band_);
+  throttle_in_band_ = false;
   Cancel();
+}
+
+void BaseParallelResourceThrottle::ResumeResourceLoad() {
+  DCHECK(throttle_in_band_);
+  throttle_in_band_ = false;
+  Resume();
+}
+
+void BaseParallelResourceThrottle::MayDeferCancelResourceLoad() {
+  if (!throttle_in_band_)
+    should_cancel_on_notification_ = true;
+  else
+    CancelResourceLoad();
 }
 
 }  // namespace safe_browsing

@@ -56,14 +56,22 @@ void LayoutSVGEllipse::UpdateShapeFromElement() {
   if (!radii_.IsEmpty()) {
     // Fall back to LayoutSVGShape and path-based hit detection if the ellipse
     // has a non-scaling or discontinuous stroke.
-    if (HasNonScalingStroke() || !HasContinuousStroke()) {
+    // However, only use LayoutSVGShape bounding-box calculations for the
+    // non-scaling stroke case, since the computation below should be accurate
+    // for the other cases.
+    if (HasNonScalingStroke()) {
       LayoutSVGShape::UpdateShapeFromElement();
       use_path_fallback_ = true;
       return;
     }
+    if (!HasContinuousStroke()) {
+      CreatePath();
+      use_path_fallback_ = true;
+    }
   }
 
-  ClearPath();
+  if (!use_path_fallback_)
+    ClearPath();
 
   fill_bounding_box_ =
       FloatRect(center_.X() - radii_.Width(), center_.Y() - radii_.Height(),
@@ -71,8 +79,6 @@ void LayoutSVGEllipse::UpdateShapeFromElement() {
   stroke_bounding_box_ = fill_bounding_box_;
   if (Style()->SvgStyle().HasStroke())
     stroke_bounding_box_.Inflate(StrokeWidth() / 2);
-  if (GetElement())
-    GetElement()->SetNeedsResizeObserverUpdate();
 }
 
 void LayoutSVGEllipse::CalculateRadiiAndCenter() {
@@ -84,7 +90,7 @@ void LayoutSVGEllipse::CalculateRadiiAndCenter() {
       length_context.ValueForLength(Style()->SvgStyle().Cy(), StyleRef(),
                                     SVGLengthMode::kHeight));
 
-  if (isSVGCircleElement(*GetElement())) {
+  if (IsSVGCircleElement(*GetElement())) {
     float radius = length_context.ValueForLength(
         Style()->SvgStyle().R(), StyleRef(), SVGLengthMode::kOther);
     radii_ = FloatSize(radius, radius);

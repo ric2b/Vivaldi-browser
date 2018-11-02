@@ -6,11 +6,11 @@
 
 #include <string.h>
 
-#include <deque>
 #include <memory>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -46,9 +46,6 @@ struct RTCTimestamps {
       : media_timestamp_(media_timestamp), rtp_timestamp(rtp_timestamp) {}
   const base::TimeDelta media_timestamp_;
   const int32_t rtp_timestamp;
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(RTCTimestamps);
 };
 
 webrtc::VideoCodecType ProfileToWebRtcVideoCodecType(
@@ -68,23 +65,14 @@ webrtc::VideoCodecType ProfileToWebRtcVideoCodecType(
 // Returns true if successful.
 bool GetRTPFragmentationHeaderH264(webrtc::RTPFragmentationHeader* header,
                                    const uint8_t* data, uint32_t length) {
-  media::H264Parser parser;
-  parser.SetStream(data, length);
-
   std::vector<media::H264NALU> nalu_vector;
-  while (true) {
-    media::H264NALU nalu;
-    const media::H264Parser::Result result = parser.AdvanceToNextNALU(&nalu);
-    if (result == media::H264Parser::kOk) {
-      nalu_vector.push_back(nalu);
-    } else if (result == media::H264Parser::kEOStream) {
-      break;
-    } else {
-      DLOG(ERROR) << "Unexpected H264 parser result";
-      return false;
-    }
+  if (!media::H264Parser::ParseNALUs(data, length, &nalu_vector)) {
+    // H264Parser::ParseNALUs() has logged the errors already.
+    return false;
   }
 
+  // TODO(zijiehe): Find a right place to share the following logic between
+  // //content and //remoting.
   header->VerifyAndAllocateFragmentationHeader(nalu_vector.size());
   for (size_t i = 0; i < nalu_vector.size(); ++i) {
     header->fragmentationOffset[i] = nalu_vector[i].data - data;
@@ -184,7 +172,7 @@ class RTCVideoEncoder::Impl
   ~Impl() override;
 
   // Logs the |error| and |str| sent from |location| and NotifyError()s forward.
-  void LogAndNotifyError(const tracked_objects::Location& location,
+  void LogAndNotifyError(const base::Location& location,
                          const std::string& str,
                          media::VideoEncodeAccelerator::Error error);
 
@@ -235,7 +223,7 @@ class RTCVideoEncoder::Impl
 
   // Used to match the encoded frame timestamp with WebRTC's given RTP
   // timestamp.
-  std::deque<RTCTimestamps> pending_timestamps_;
+  base::circular_deque<RTCTimestamps> pending_timestamps_;
 
   // Indicates that timestamp match failed and we should no longer attempt
   // matching.
@@ -589,7 +577,7 @@ void RTCVideoEncoder::Impl::NotifyError(
 RTCVideoEncoder::Impl::~Impl() { DCHECK(!video_encoder_); }
 
 void RTCVideoEncoder::Impl::LogAndNotifyError(
-    const tracked_objects::Location& location,
+    const base::Location& location,
     const std::string& str,
     media::VideoEncodeAccelerator::Error error) {
   static const char* const kErrorNames[] = {
@@ -613,7 +601,7 @@ void RTCVideoEncoder::Impl::EncodeOneFrame() {
   // input_next_frame_* state before we hand off the VideoFrame to the VEA.
   const webrtc::VideoFrame* next_frame = input_next_frame_;
   const bool next_frame_keyframe = input_next_frame_keyframe_;
-  input_next_frame_ = NULL;
+  input_next_frame_ = nullptr;
   input_next_frame_keyframe_ = false;
 
   if (!video_encoder_) {
@@ -712,8 +700,8 @@ void RTCVideoEncoder::Impl::SignalAsyncWaiter(int32_t retval) {
   DCHECK(thread_checker_.CalledOnValidThread());
   *async_retval_ = retval;
   async_waiter_->Signal();
-  async_retval_ = NULL;
-  async_waiter_ = NULL;
+  async_retval_ = nullptr;
+  async_waiter_ = nullptr;
 }
 
 bool RTCVideoEncoder::Impl::IsBitrateTooHigh(uint32_t bitrate) {
@@ -917,7 +905,7 @@ int32_t RTCVideoEncoder::Release() {
       FROM_HERE,
       base::BindOnce(&RTCVideoEncoder::Impl::Destroy, impl_, &release_waiter));
   release_waiter.Wait();
-  impl_ = NULL;
+  impl_ = nullptr;
   return WEBRTC_VIDEO_CODEC_OK;
 }
 

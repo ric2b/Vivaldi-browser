@@ -24,8 +24,8 @@
 #include "core/layout/LayoutFieldset.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
-#include "core/html/HTMLLegendElement.h"
+#include "core/html/forms/HTMLLegendElement.h"
+#include "core/html_names.h"
 #include "core/paint/FieldsetPainter.h"
 
 namespace blink {
@@ -142,7 +142,7 @@ LayoutBox* LayoutFieldset::FindInFlowLegend() const {
     if (legend->IsFloatingOrOutOfFlowPositioned())
       continue;
 
-    if (isHTMLLegendElement(legend->GetNode()))
+    if (IsHTMLLegendElement(legend->GetNode()))
       return ToLayoutBox(legend);
   }
   return nullptr;

@@ -471,8 +471,8 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
 void GuestViewBase::DidDetach() {
   GuestViewManager::FromBrowserContext(browser_context_)->DetachGuest(this);
   StopTrackingEmbedderZoomLevel();
-  owner_web_contents()->Send(new GuestViewMsg_GuestDetached(
-      element_instance_id_));
+  owner_web_contents()->GetRenderViewHost()->Send(
+      new GuestViewMsg_GuestDetached(element_instance_id_));
   element_instance_id_ = kInstanceIDNone;
   if (ShouldDestroyOnDetach())
     Destroy(true);
@@ -480,10 +480,6 @@ void GuestViewBase::DidDetach() {
 
 WebContents* GuestViewBase::GetOwnerWebContents() const {
   return owner_web_contents_;
-}
-
-void GuestViewBase::GuestSizeChanged(const gfx::Size& new_size) {
-  UpdateGuestSize(new_size, auto_size_enabled_);
 }
 
 const GURL& GuestViewBase::GetOwnerSiteURL() const {
@@ -680,14 +676,13 @@ void GuestViewBase::ActivateContents(WebContents* web_contents) {
 }
 
 void GuestViewBase::ContentsMouseEvent(WebContents* source,
-                                       const gfx::Point& location,
                                        bool motion,
                                        bool exited) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
   embedder_web_contents()->GetDelegate()->ContentsMouseEvent(
-      embedder_web_contents(), location, motion, exited);
+      embedder_web_contents(), motion, exited);
 }
 
 void GuestViewBase::ContentsZoomChange(bool zoom_in) {
@@ -729,7 +724,7 @@ content::ColorChooser* GuestViewBase::OpenColorChooser(
 
 void GuestViewBase::ResizeDueToAutoResize(WebContents* web_contents,
                                           const gfx::Size& new_size) {
-  guest_host_->GuestResizeDueToAutoResize(new_size);
+  UpdateGuestSize(new_size, auto_size_enabled_);
 }
 
 void GuestViewBase::RunFileChooser(content::RenderFrameHost* render_frame_host,
@@ -968,16 +963,16 @@ void GuestViewBase::StartTrackingEmbedderZoomLevel() {
 }
 
 void GuestViewBase::StopTrackingEmbedderZoomLevel() {
-  // NOTE(arnar@vivaldi.com): Removed the !attached() condition
-  // ZoomController oberserver were never removed for discarded tabs
-  if (/*!attached() ||*/ !ZoomPropagatesFromEmbedderToGuest())
-    return;
+  // TODO(wjmaclean): Remove the observer any time the GuestWebView transitions
+  // from propagating to not-propagating the zoom from the embedder.
 
   auto* embedder_zoom_controller =
       zoom::ZoomController::FromWebContents(owner_web_contents());
   // Chrome Apps do not have a ZoomController.
   if (!embedder_zoom_controller)
     return;
+
+  // It is safe to remove an observer that was never registed.
   embedder_zoom_controller->RemoveObserver(this);
 }
 

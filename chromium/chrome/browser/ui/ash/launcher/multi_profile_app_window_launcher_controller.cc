@@ -59,8 +59,14 @@ void MultiProfileAppWindowLauncherController::ActiveUserChanged(
     if (multi_user_util::IsProfileFromActiveUser(profile) &&
         !IsRegisteredApp(app_window->GetNativeWindow()) &&
         (app_window->GetBaseWindow()->IsMinimized() ||
-         app_window->GetNativeWindow()->IsVisible()))
+         app_window->GetNativeWindow()->IsVisible())) {
+      if (app_window->window_type_is_panel()) {
+        // Panels are not registered; show by restoring the shelf item type.
+        app_window->GetNativeWindow()->SetProperty<int>(ash::kShelfItemTypeKey,
+                                                        ash::TYPE_APP_PANEL);
+      }
       RegisterApp(app_window);
+    }
   }
 }
 
@@ -82,7 +88,7 @@ void MultiProfileAppWindowLauncherController::OnAppWindowAdded(
   // app to teleport to the current user's desktop, teleport this window now.
   if (!multi_user_util::IsProfileFromActiveUser(profile) &&
       UserHasAppOnActiveDesktop(app_window)) {
-    chrome::MultiUserWindowManager::GetInstance()->ShowWindowForUser(
+    MultiUserWindowManager::GetInstance()->ShowWindowForUser(
         app_window->GetNativeWindow(), multi_user_util::GetCurrentAccountId());
   }
 
@@ -144,8 +150,7 @@ bool MultiProfileAppWindowLauncherController::UserHasAppOnActiveDesktop(
   content::BrowserContext* app_context = app_window->browser_context();
   DCHECK(!app_context->IsOffTheRecord());
   const AccountId current_account_id = multi_user_util::GetCurrentAccountId();
-  chrome::MultiUserWindowManager* manager =
-      chrome::MultiUserWindowManager::GetInstance();
+  MultiUserWindowManager* manager = MultiUserWindowManager::GetInstance();
   for (extensions::AppWindow* other_window : app_window_list_) {
     DCHECK(!other_window->browser_context()->IsOffTheRecord());
     if (manager->IsWindowOnDesktopOfUser(other_window->GetNativeWindow(),

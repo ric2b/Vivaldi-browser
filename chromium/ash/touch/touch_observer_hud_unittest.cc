@@ -4,10 +4,11 @@
 
 #include "ash/touch/touch_observer_hud.h"
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/touch/touch_devices_controller.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/touch/touch_hud_projection.h"
 #include "ash/touch_hud/touch_hud_renderer.h"
@@ -20,11 +21,19 @@
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+namespace {
+
+void SetTouchHudProjectionEnabled(bool enabled) {
+  Shell::Get()->touch_devices_controller()->SetTouchHudProjectionEnabled(
+      enabled);
+}
+
+}  // namespace
 
 class TouchHudTestBase : public AshTestBase {
  public:
-  TouchHudTestBase() {}
-  ~TouchHudTestBase() override {}
+  TouchHudTestBase() = default;
+  ~TouchHudTestBase() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -197,8 +206,8 @@ class TouchHudTestBase : public AshTestBase {
 
 class TouchHudDebugTest : public TouchHudTestBase {
  public:
-  TouchHudDebugTest() {}
-  ~TouchHudDebugTest() override {}
+  TouchHudDebugTest() = default;
+  ~TouchHudDebugTest() override = default;
 
   void SetUp() override {
     // Add ash-touch-hud flag to enable debug touch HUD. This flag should be set
@@ -261,16 +270,8 @@ class TouchHudDebugTest : public TouchHudTestBase {
 
 class TouchHudProjectionTest : public TouchHudTestBase {
  public:
-  TouchHudProjectionTest() {}
-  ~TouchHudProjectionTest() override {}
-
-  void EnableTouchHudProjection() {
-    Shell::Get()->SetTouchHudProjectionEnabled(true);
-  }
-
-  void DisableTouchHudProjection() {
-    Shell::Get()->SetTouchHudProjectionEnabled(false);
-  }
+  TouchHudProjectionTest() = default;
+  ~TouchHudProjectionTest() override = default;
 
   TouchHudProjection* GetInternalTouchHudProjection() {
     return GetInternalRootController()->touch_hud_projection();
@@ -473,7 +474,7 @@ TEST_F(TouchHudProjectionTest, TouchMoveRelease) {
   SetupSingleDisplay();
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 
-  EnableTouchHudProjection();
+  SetTouchHudProjectionEnabled(true);
   EXPECT_NE(static_cast<TouchHudProjection*>(NULL),
             GetInternalTouchHudProjection());
   EXPECT_EQ(0, GetInternalTouchPointsCount());
@@ -487,8 +488,8 @@ TEST_F(TouchHudProjectionTest, TouchMoveRelease) {
   SendTouchEventToInternalHud(ui::ET_TOUCH_RELEASED, gfx::Point(10, 20), 1);
   EXPECT_EQ(0, GetInternalTouchPointsCount());
 
-  // Disabling projection touch HUD shoud remove it without crashing.
-  DisableTouchHudProjection();
+  // Disabling projection touch HUD should remove it without crashing.
+  SetTouchHudProjectionEnabled(false);
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 }
 
@@ -498,7 +499,7 @@ TEST_F(TouchHudProjectionTest, TouchMoveCancel) {
   SetupSingleDisplay();
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 
-  EnableTouchHudProjection();
+  SetTouchHudProjectionEnabled(true);
   EXPECT_NE(static_cast<TouchHudProjection*>(NULL),
             GetInternalTouchHudProjection());
   EXPECT_EQ(0, GetInternalTouchPointsCount());
@@ -512,8 +513,8 @@ TEST_F(TouchHudProjectionTest, TouchMoveCancel) {
   SendTouchEventToInternalHud(ui::ET_TOUCH_CANCELLED, gfx::Point(10, 20), 1);
   EXPECT_EQ(0, GetInternalTouchPointsCount());
 
-  // Disabling projection touch HUD shoud remove it without crashing.
-  DisableTouchHudProjection();
+  // Disabling projection touch HUD should remove it without crashing.
+  SetTouchHudProjectionEnabled(false);
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 }
 
@@ -522,7 +523,7 @@ TEST_F(TouchHudProjectionTest, DoubleTouch) {
   SetupSingleDisplay();
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 
-  EnableTouchHudProjection();
+  SetTouchHudProjectionEnabled(true);
   EXPECT_NE(static_cast<TouchHudProjection*>(NULL),
             GetInternalTouchHudProjection());
   EXPECT_EQ(0, GetInternalTouchPointsCount());
@@ -545,8 +546,8 @@ TEST_F(TouchHudProjectionTest, DoubleTouch) {
   SendTouchEventToInternalHud(ui::ET_TOUCH_RELEASED, gfx::Point(20, 20), 2);
   EXPECT_EQ(0, GetInternalTouchPointsCount());
 
-  // Disabling projection touch HUD shoud remove it without crashing.
-  DisableTouchHudProjection();
+  // Disabling projection touch HUD should remove it without crashing.
+  SetTouchHudProjectionEnabled(false);
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 }
 
@@ -556,7 +557,7 @@ TEST_F(TouchHudProjectionTest, DisableWhileTouching) {
   SetupSingleDisplay();
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 
-  EnableTouchHudProjection();
+  SetTouchHudProjectionEnabled(true);
   EXPECT_NE(static_cast<TouchHudProjection*>(NULL),
             GetInternalTouchHudProjection());
   EXPECT_EQ(0, GetInternalTouchPointsCount());
@@ -564,8 +565,8 @@ TEST_F(TouchHudProjectionTest, DisableWhileTouching) {
   SendTouchEventToInternalHud(ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), 1);
   EXPECT_EQ(1, GetInternalTouchPointsCount());
 
-  // Disabling projection touch HUD shoud remove it without crashing.
-  DisableTouchHudProjection();
+  // Disabling projection touch HUD should remove it without crashing.
+  SetTouchHudProjectionEnabled(false);
   EXPECT_EQ(NULL, GetInternalTouchHudProjection());
 }
 

@@ -4,7 +4,7 @@
 
 #include "core/html/media/MediaControls.h"
 
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 
 namespace blink {
 
@@ -15,7 +15,7 @@ HTMLMediaElement& MediaControls::MediaElement() const {
   return *media_element_;
 }
 
-DEFINE_TRACE(MediaControls) {
+void MediaControls::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_element_);
 }
 

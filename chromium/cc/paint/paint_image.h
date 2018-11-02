@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "cc/paint/frame_metadata.h"
+#include "cc/paint/image_animation_count.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/skia_paint_image_generator.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -27,6 +28,7 @@ using PaintRecord = PaintOpBuffer;
 class CC_PAINT_EXPORT PaintImage {
  public:
   using Id = int;
+  using AnimationSequenceId = uint32_t;
 
   // A ContentId is used to identify the content for which images which can be
   // lazily generated (generator/record backed images). As opposed to Id, which
@@ -38,26 +40,25 @@ class CC_PAINT_EXPORT PaintImage {
   // An id that can be used for all non-lazy images. Note that if an image is
   // not lazy, it does not mean that this id must be used; one can still use
   // GetNextId to generate a stable id for such images.
-  static const Id kNonLazyStableId = -1;
+  static const Id kNonLazyStableId;
 
   // The default frame index to use if no index is provided. For multi-frame
   // images, this would imply the first frame of the animation.
-  static const size_t kDefaultFrameIndex = 0;
+  static const size_t kDefaultFrameIndex;
+
+  static const Id kInvalidId;
 
   class CC_PAINT_EXPORT FrameKey {
    public:
-    FrameKey(Id paint_image_id,
-             ContentId content_id,
-             size_t frame_index,
-             gfx::Rect subset_rect);
+    FrameKey(ContentId content_id, size_t frame_index, gfx::Rect subset_rect);
     bool operator==(const FrameKey& other) const;
     bool operator!=(const FrameKey& other) const;
 
     uint64_t hash() const { return hash_; }
     std::string ToString() const;
+    size_t frame_index() const { return frame_index_; }
 
    private:
-    Id paint_image_id_;
     ContentId content_id_;
     size_t frame_index_;
     // TODO(khushalsagar): Remove this when callers take care of subsetting.
@@ -74,6 +75,24 @@ class CC_PAINT_EXPORT PaintImage {
 
   enum class AnimationType { ANIMATED, VIDEO, STATIC };
   enum class CompletionState { DONE, PARTIALLY_DONE };
+  enum class DecodingMode {
+    // No preference has been specified. The compositor may choose to use sync
+    // or async decoding. See CheckerImageTracker for the default behaviour.
+    kUnspecified,
+
+    // It's preferred to display this image synchronously with the rest of the
+    // content updates, skipping any heuristics.
+    kSync,
+
+    // Async is preferred. The compositor may decode async if it meets the
+    // heuristics used to avoid flickering (for instance vetoing of multipart
+    // response, animated, partially loaded images) and would be performant. See
+    // CheckerImageTracker for all heuristics used.
+    kAsync
+  };
+
+  // Returns the more conservative mode out of the two given ones.
+  static DecodingMode GetConservative(DecodingMode one, DecodingMode two);
 
   static Id GetNextId();
   static ContentId GetNextContentId();
@@ -86,11 +105,8 @@ class CC_PAINT_EXPORT PaintImage {
   PaintImage& operator=(const PaintImage& other);
   PaintImage& operator=(PaintImage&& other);
 
-  // Makes a new PaintImage representing a subset of the original image. The
-  // subset must be non-empty and lie within the image bounds.
-  PaintImage MakeSubset(const gfx::Rect& subset) const;
-
   bool operator==(const PaintImage& other) const;
+  bool operator!=(const PaintImage& other) const { return !(*this == other); }
 
   // Returns the smallest size that is at least as big as the requested_size
   // such that we can decode to exactly that scale. If the requested size is
@@ -115,13 +131,21 @@ class CC_PAINT_EXPORT PaintImage {
   // is texture backed.
   bool Decode(void* memory,
               SkImageInfo* info,
-              sk_sp<SkColorSpace> color_space) const;
+              sk_sp<SkColorSpace> color_space,
+              size_t frame_index) const;
 
   Id stable_id() const { return id_; }
   const sk_sp<SkImage>& GetSkImage() const;
   AnimationType animation_type() const { return animation_type_; }
   CompletionState completion_state() const { return completion_state_; }
   bool is_multipart() const { return is_multipart_; }
+  int repetition_count() const { return repetition_count_; }
+  bool ShouldAnimate() const;
+  size_t frame_index() const { return frame_index_; }
+  AnimationSequenceId reset_animation_sequence_id() const {
+    return reset_animation_sequence_id_;
+  }
+  DecodingMode decoding_mode() const { return decoding_mode_; }
 
   // TODO(vmpstr): Don't get the SkImage here if you don't need to.
   uint32_t unique_id() const { return GetSkImage()->uniqueID(); }
@@ -130,7 +154,6 @@ class CC_PAINT_EXPORT PaintImage {
   int width() const { return GetSkImage()->width(); }
   int height() const { return GetSkImage()->height(); }
   SkColorSpace* color_space() const { return GetSkImage()->colorSpace(); }
-  size_t frame_index() const { return frame_index_; }
 
   // Returns a unique id for the pixel data for the frame at |frame_index|. Used
   // only for lazy-generated images.
@@ -143,12 +166,26 @@ class CC_PAINT_EXPORT PaintImage {
   // Returns the total number of frames known to exist in this image.
   size_t FrameCount() const;
 
+  // Returns an SkImage for the frame at |index|.
+  sk_sp<SkImage> GetSkImageForFrame(size_t index) const;
+
   std::string ToString() const;
 
  private:
   static const ContentId kInvalidContentId = -1;
   friend class PaintImageBuilder;
   FRIEND_TEST_ALL_PREFIXES(PaintImageTest, Subsetting);
+
+  bool DecodeFromGenerator(void* memory,
+                           SkImageInfo* info,
+                           sk_sp<SkColorSpace> color_space,
+                           size_t frame_index) const;
+  bool DecodeFromSkImage(void* memory,
+                         SkImageInfo* info,
+                         sk_sp<SkColorSpace> color_space,
+                         size_t frame_index) const;
+  void CreateSkImage();
+  PaintImage MakeSubset(const gfx::Rect& subset) const;
 
   sk_sp<SkImage> sk_image_;
 
@@ -161,6 +198,7 @@ class CC_PAINT_EXPORT PaintImage {
   Id id_ = 0;
   AnimationType animation_type_ = AnimationType::STATIC;
   CompletionState completion_state_ = CompletionState::DONE;
+  int repetition_count_ = kAnimationNone;
 
   // If non-empty, holds the subset of this image relative to the original image
   // at the origin.
@@ -172,11 +210,21 @@ class CC_PAINT_EXPORT PaintImage {
   // Whether the data fetched for this image is a part of a multpart response.
   bool is_multipart_ = false;
 
-  // |sk_image_id_| is the id used when constructing an SkImage representation
-  // for a generator backed image.
-  // TODO(khushalsagar): Remove the use of this uniqueID. See crbug.com/753639.
-  uint32_t sk_image_id_ = SkiaPaintImageGenerator::kNeedNewImageUniqueID;
-  mutable sk_sp<SkImage> cached_sk_image_;
+  // An incrementing sequence number maintained by the painter to indicate if
+  // this animation should be reset in the compositor. Incrementing this number
+  // will reset this animation in the compositor for the first frame which has a
+  // recording with a PaintImage storing the updated sequence id.
+  AnimationSequenceId reset_animation_sequence_id_ = 0u;
+
+  DecodingMode decoding_mode_ = DecodingMode::kSync;
+
+  // The |cached_sk_image_| can be derived/created from other inputs present in
+  // the PaintImage but we always construct it at creation time for 2 reasons:
+  // 1) This ensures that the underlying SkImage is shared across PaintImage
+  //    copies, which is necessary to allow reuse of decodes from this image in
+  //    skia's cache.
+  // 2) Ensures that accesses to it are thread-safe.
+  sk_sp<SkImage> cached_sk_image_;
 };
 
 }  // namespace cc

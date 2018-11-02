@@ -49,7 +49,7 @@ class RecordingProofVerifier : public ProofVerifier {
       const string& hostname,
       const uint16_t port,
       const string& server_config,
-      QuicVersion quic_version,
+      QuicTransportVersion transport_version,
       QuicStringPiece chlo_hash,
       const std::vector<string>& certs,
       const string& cert_sct,
@@ -83,9 +83,10 @@ class RecordingProofVerifier : public ProofVerifier {
       return QUIC_SUCCESS;
     }
 
-    return verifier_->VerifyProof(
-        hostname, port, server_config, quic_version, chlo_hash, certs, cert_sct,
-        signature, context, error_details, details, std::move(callback));
+    return verifier_->VerifyProof(hostname, port, server_config,
+                                  transport_version, chlo_hash, certs, cert_sct,
+                                  signature, context, error_details, details,
+                                  std::move(callback));
   }
 
   QuicAsyncStatus VerifyCertChain(
@@ -113,7 +114,7 @@ class MockableQuicClientEpollNetworkHelper
     : public QuicClientEpollNetworkHelper {
  public:
   using QuicClientEpollNetworkHelper::QuicClientEpollNetworkHelper;
-  ~MockableQuicClientEpollNetworkHelper() override {}
+  ~MockableQuicClientEpollNetworkHelper() override = default;
 
   void ProcessPacket(const QuicSocketAddress& self_address,
                      const QuicSocketAddress& peer_address,
@@ -164,7 +165,7 @@ class MockableQuicClientEpollNetworkHelper
 MockableQuicClient::MockableQuicClient(
     QuicSocketAddress server_address,
     const QuicServerId& server_id,
-    const QuicVersionVector& supported_versions,
+    const QuicTransportVersionVector& supported_versions,
     EpollServer* epoll_server)
     : MockableQuicClient(server_address,
                          server_id,
@@ -176,7 +177,7 @@ MockableQuicClient::MockableQuicClient(
     QuicSocketAddress server_address,
     const QuicServerId& server_id,
     const QuicConfig& config,
-    const QuicVersionVector& supported_versions,
+    const QuicTransportVersionVector& supported_versions,
     EpollServer* epoll_server)
     : MockableQuicClient(server_address,
                          server_id,
@@ -189,7 +190,7 @@ MockableQuicClient::MockableQuicClient(
     QuicSocketAddress server_address,
     const QuicServerId& server_id,
     const QuicConfig& config,
-    const QuicVersionVector& supported_versions,
+    const QuicTransportVersionVector& supported_versions,
     EpollServer* epoll_server,
     std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClient(
@@ -247,18 +248,20 @@ void MockableQuicClient::set_track_last_incoming_packet(bool track) {
   mockable_network_helper()->set_track_last_incoming_packet(track);
 }
 
-QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
-                               const string& server_hostname,
-                               const QuicVersionVector& supported_versions)
+QuicTestClient::QuicTestClient(
+    QuicSocketAddress server_address,
+    const string& server_hostname,
+    const QuicTransportVersionVector& supported_versions)
     : QuicTestClient(server_address,
                      server_hostname,
                      QuicConfig(),
                      supported_versions) {}
 
-QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
-                               const string& server_hostname,
-                               const QuicConfig& config,
-                               const QuicVersionVector& supported_versions)
+QuicTestClient::QuicTestClient(
+    QuicSocketAddress server_address,
+    const string& server_hostname,
+    const QuicConfig& config,
+    const QuicTransportVersionVector& supported_versions)
     : client_(new MockableQuicClient(server_address,
                                      QuicServerId(server_hostname,
                                                   server_address.port(),
@@ -269,11 +272,12 @@ QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
   Initialize();
 }
 
-QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
-                               const string& server_hostname,
-                               const QuicConfig& config,
-                               const QuicVersionVector& supported_versions,
-                               std::unique_ptr<ProofVerifier> proof_verifier)
+QuicTestClient::QuicTestClient(
+    QuicSocketAddress server_address,
+    const string& server_hostname,
+    const QuicConfig& config,
+    const QuicTransportVersionVector& supported_versions,
+    std::unique_ptr<ProofVerifier> proof_verifier)
     : client_(new MockableQuicClient(server_address,
                                      QuicServerId(server_hostname,
                                                   server_address.port(),
@@ -285,7 +289,7 @@ QuicTestClient::QuicTestClient(QuicSocketAddress server_address,
   Initialize();
 }
 
-QuicTestClient::QuicTestClient() {}
+QuicTestClient::QuicTestClient() = default;
 
 QuicTestClient::~QuicTestClient() {
   for (std::pair<QuicStreamId, QuicSpdyClientStream*> stream : open_streams_) {
@@ -358,9 +362,7 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
   if (stream == nullptr) {
     return 0;
   }
-  if (client()->session()->save_data_before_consumption()) {
-    QuicStreamPeer::set_ack_listener(stream, ack_listener);
-  }
+  QuicStreamPeer::set_ack_listener(stream, ack_listener);
 
   ssize_t ret = 0;
   if (headers != nullptr) {
@@ -397,14 +399,6 @@ ssize_t QuicTestClient::SendMessage(const SpdyHeaderBlock& headers,
                                     bool fin) {
   // Always force creation of a stream for SendMessage.
   latest_created_stream_ = nullptr;
-  // If we're not connected, try to find an sni hostname.
-  if (!connected()) {
-    QuicUrl url(SpdyUtils::GetUrlFromHeaderBlock(headers));
-    if (override_sni_set_) {
-      client_->set_server_id(
-          QuicServerId(override_sni_, url.port(), PRIVACY_MODE_DISABLED));
-    }
-  }
 
   ssize_t ret = GetOrCreateStreamAndSendRequest(&headers, body, fin, nullptr);
   WaitForWriteToFlush();
@@ -536,6 +530,13 @@ void QuicTestClient::Connect() {
   if (!connect_attempted_) {
     client_->Initialize();
   }
+
+  // If we've been asked to override SNI, set it now
+  if (override_sni_set_) {
+    client_->set_server_id(
+        QuicServerId(override_sni_, address().port(), PRIVACY_MODE_DISABLED));
+  }
+
   client_->Connect();
   connect_attempted_ = true;
 }
@@ -759,7 +760,7 @@ QuicTestClient::TestClientDataToResend::TestClientDataToResend(
       test_client_(test_client),
       ack_listener_(std::move(ack_listener)) {}
 
-QuicTestClient::TestClientDataToResend::~TestClientDataToResend() {}
+QuicTestClient::TestClientDataToResend::~TestClientDataToResend() = default;
 
 void QuicTestClient::TestClientDataToResend::Resend() {
   test_client_->GetOrCreateStreamAndSendRequest(headers_.get(), body_, fin_,
@@ -801,7 +802,7 @@ QuicTestClient::PerStreamState::PerStreamState(
       bytes_written(bytes_written),
       response_body_size(response_body_size) {}
 
-QuicTestClient::PerStreamState::~PerStreamState() {}
+QuicTestClient::PerStreamState::~PerStreamState() = default;
 
 bool QuicTestClient::PopulateHeaderBlockFromUrl(const string& uri,
                                                 SpdyHeaderBlock* headers) {

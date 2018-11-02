@@ -14,16 +14,17 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 import zipfile
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 import devil_chromium
 from devil.utils import cmd_helper
 from play_services import utils
+from py_utils import tempfile_ext
 from pylib import constants
 from pylib.constants import host_paths
 from pylib.utils import logging_utils
+from pylib.utils import maven_downloader
 
 sys.path.append(os.path.join(host_paths.DIR_SOURCE_ROOT, 'build'))
 import find_depot_tools  # pylint: disable=import-error,unused-import
@@ -47,10 +48,11 @@ CONFIG_DEFAULT_PATH = os.path.join(host_paths.DIR_SOURCE_ROOT, 'build',
 
 LICENSE_FILE_NAME = 'LICENSE'
 ZIP_FILE_NAME = 'google_play_services_library.zip'
-GMS_PACKAGE_ID = 'extras;google;m2repository'  # used by sdk manager
 
 LICENSE_PATTERN = re.compile(r'^Pkg\.License=(?P<text>.*)$', re.MULTILINE)
 
+COM_GOOGLE_ANDROID_GMS = os.path.join('com', 'google', 'android', 'gms')
+EXTRAS_GOOGLE_M2REPOSITORY = os.path.join('extras', 'google', 'm2repository')
 
 def main(raw_args):
   parser = argparse.ArgumentParser(
@@ -71,7 +73,7 @@ def main(raw_args):
   # SDK Update arguments
   parser_sdk = subparsers.add_parser(
       'sdk',
-      help='get the latest Google Play services SDK using Android SDK Manager',
+      help='get the latest Google Play services SDK using Maven',
       description=UpdateSdk.__doc__,
       formatter_class=utils.DefaultsRawHelpFormatter)
   parser_sdk.set_defaults(func=UpdateSdk)
@@ -103,6 +105,10 @@ def AddBasicArguments(parser):
   instead of `foo.py --debug upload --force`
   '''
 
+  parser.add_argument('--config',
+                      help='JSON Configuration file',
+                      default=CONFIG_DEFAULT_PATH)
+
   parser.add_argument('--sdk-root',
                       help='base path to the Android SDK tools root',
                       default=constants.ANDROID_SDK_ROOT)
@@ -116,10 +122,6 @@ def AddBucketArguments(parser):
   parser.add_argument('--bucket',
                       help='name of the bucket where the files are stored',
                       default=GMS_CLOUD_STORAGE)
-
-  parser.add_argument('--config',
-                      help='JSON Configuration file',
-                      default=CONFIG_DEFAULT_PATH)
 
   parser.add_argument('--dry-run',
                       action='store_true',
@@ -173,11 +175,9 @@ def Download(args):
                                         config.version_number,
                                         args.dry_run)
 
-  tmp_root = tempfile.mkdtemp()
-  try:
+  with tempfile_ext.NamedTemporaryDirectory() as tmp_root:
     # setup the destination directory
-    if not os.path.isdir(paths.package):
-      os.makedirs(paths.package)
+    _MakeDirIfAbsent(paths.package)
 
     # download license file from bucket/{version_number}/license.sha1
     new_license = os.path.join(tmp_root, LICENSE_FILE_NAME)
@@ -228,17 +228,22 @@ def Download(args):
                     'An error occurred while installing the new version in '
                     'the SDK directory: %s ', e)
       return -3
-  finally:
-    shutil.rmtree(tmp_root)
 
   return 0
 
 
+def _MakeDirIfAbsent(path):
+  try:
+    os.makedirs(path)
+  except OSError as e:
+    if e.errno != os.errno.EEXIST:
+      raise
+
+
 def UpdateSdk(args):
   '''
-  Uses the Android SDK Manager to download the latest Google Play services SDK
-  locally. Its usual installation path is
-  //third_party/android_tools/sdk/extras/google/m2repository
+  Uses Maven to download the latest Google Play Services SDK. Its installation
+  path is //third_party/android_tools/sdk/extras/google/m2repository.
   '''
 
   # This should function should not run on bots and could fail for many user
@@ -246,20 +251,18 @@ def UpdateSdk(args):
   # disable breakpad to avoid spamming the logs.
   breakpad.IS_ENABLED = False
 
-  # `android update sdk` fails if the library is not installed yet, but it does
-  # not allow to install it from scratch using the command line. We then create
-  # a fake outdated installation.
-  paths = PlayServicesPaths(args.sdk_root, 'no_version_number', [])
-  if not os.path.isfile(paths.source_prop):
-    if not os.path.exists(os.path.dirname(paths.source_prop)):
-      os.makedirs(os.path.dirname(paths.source_prop))
-    with open(paths.source_prop, 'w') as prop_file:
-      prop_file.write('Pkg.Revision=0.0.0\n')
+  config = utils.ConfigParser(args.config)
+  target_repo = os.path.join(args.sdk_root, EXTRAS_GOOGLE_M2REPOSITORY)
 
-  sdk_manager = os.path.join(args.sdk_root, 'tools', 'bin', 'sdkmanager')
-  cmd_helper.Call([sdk_manager, GMS_PACKAGE_ID])
-  # If no update is needed, it still returns successfully so we just do nothing
+  # Remove the old SDK.
+  # TODO(https://crbug.com/778650) not everything should be deleted.
+  shutil.rmtree(target_repo, ignore_errors=True)
 
+  downloader = maven_downloader.MavenDownloader()
+  artifact_list = [
+      'com.google.android.gms:{}:{}:aar'.format(client, config.version_number)
+      for client in config.clients]
+  downloader.Install(target_repo, artifact_list)
   return 0
 
 
@@ -282,8 +285,7 @@ def Upload(args):
                             config.clients)
   logging.debug('-- Loaded paths --\n%s\n------------------', paths)
 
-  tmp_root = tempfile.mkdtemp()
-  try:
+  with tempfile_ext.NamedTemporaryDirectory() as tmp_root:
     new_lib_zip = os.path.join(tmp_root, ZIP_FILE_NAME)
     new_license = os.path.join(tmp_root, LICENSE_FILE_NAME)
 
@@ -302,8 +304,6 @@ def Upload(args):
                                     LICENSE_FILE_NAME + '.sha1')
     shutil.copy(new_lib_zip + '.sha1', new_lib_zip_sha1)
     shutil.copy(new_license + '.sha1', new_license_sha1)
-  finally:
-    shutil.rmtree(tmp_root)
 
   logging.info('Update to version %s complete', config.version_number)
   return 0
@@ -475,11 +475,10 @@ class PlayServicesPaths(object):
     client_names: names of client libraries to be uploaded. See
         utils.ConfigParser for more info.
     '''
-    relative_package = os.path.join('extras', 'google', 'm2repository')
     self.sdk_root = sdk_root
     self.version_number = version_number
 
-    self.package = os.path.join(sdk_root, relative_package)
+    self.package = os.path.join(sdk_root, EXTRAS_GOOGLE_M2REPOSITORY)
     self.lib_zip_sha1 = os.path.join(self.package, ZIP_FILE_NAME + '.sha1')
     self.license = os.path.join(self.package, LICENSE_FILE_NAME)
     self.source_prop = os.path.join(self.package, 'source.properties')
@@ -487,8 +486,8 @@ class PlayServicesPaths(object):
     self.client_paths = []
     for client in client_names:
       self.client_paths.append(os.path.join(
-              self.package, 'com', 'google', 'android', 'gms', client,
-              version_number, '%s-%s.aar' % (client, version_number)))
+          self.package, COM_GOOGLE_ANDROID_GMS, client, version_number,
+          '{}-{}.aar'.format(client, version_number)))
 
   def __repr__(self):
     return ("\nsdk_root: " + self.sdk_root +

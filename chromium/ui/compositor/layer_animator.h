@@ -5,10 +5,10 @@
 #ifndef UI_COMPOSITOR_LAYER_ANIMATOR_H_
 #define UI_COMPOSITOR_LAYER_ANIMATOR_H_
 
-#include <deque>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
@@ -37,6 +37,7 @@ class Transform;
 
 namespace ui {
 class Compositor;
+class ImplicitAnimationObserver;
 class Layer;
 class LayerAnimationSequence;
 class LayerAnimationDelegate;
@@ -175,7 +176,15 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator>,
   // property (animations remain in the queue until they complete, so this
   // includes running animations).
   bool IsAnimatingProperty(
-      LayerAnimationElement::AnimatableProperty property) const;
+      LayerAnimationElement::AnimatableProperty property) const {
+    return IsAnimatingOnePropertyOf(property);
+  }
+
+  // Returns true if there is an animation in the queue that animates at least
+  // one of the given property (animations remain in the queue until they
+  // complete, so this includes running animations).
+  bool IsAnimatingOnePropertyOf(
+      LayerAnimationElement::AnimatableProperties properties) const;
 
   // Stops animating the given property. No effect if there is no running
   // animation for the given property. Skips to the final state of the
@@ -191,10 +200,17 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator>,
   // animations and notifies all observers.
   void AbortAllAnimations() { StopAnimatingInternal(true); }
 
-  // These functions are used for adding or removing observers from the observer
-  // list. The observers are notified when animations end.
+  // Adds/remove |observer| from the observer list. Observers are notified when
+  // animations are scheduled, start, end or are aborted. They may also be
+  // notified when they're attached/detached from a LayerAnimationSequence (see
+  // LayerAnimationObserver).
   void AddObserver(LayerAnimationObserver* observer);
   void RemoveObserver(LayerAnimationObserver* observer);
+
+  void AddOwnedObserver(
+      std::unique_ptr<ImplicitAnimationObserver> animation_observer);
+  void RemoveAndDestroyOwnedObserver(
+      ImplicitAnimationObserver* animation_observer);
 
   // Called when a threaded animation is actually started.
   void OnThreadedAnimationStarted(base::TimeTicks monotonic_time,
@@ -260,8 +276,9 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator>,
     // Copy and assign are allowed.
   };
 
-  typedef std::vector<RunningAnimation> RunningAnimations;
-  typedef std::deque<linked_ptr<LayerAnimationSequence> > AnimationQueue;
+  using RunningAnimations = std::vector<RunningAnimation>;
+  using AnimationQueue =
+      base::circular_deque<linked_ptr<LayerAnimationSequence>>;
 
   // Finishes all animations by either advancing them to their final state or by
   // aborting them.
@@ -414,6 +431,8 @@ class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator>,
   // Observers are notified when layer animations end, are scheduled or are
   // aborted.
   base::ObserverList<LayerAnimationObserver> observers_;
+
+  std::vector<std::unique_ptr<ImplicitAnimationObserver>> owned_observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerAnimator);
 };

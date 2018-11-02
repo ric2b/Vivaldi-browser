@@ -11,11 +11,11 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/bind_interface_helpers.h"
-#include "content/public/common/sandbox_type.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 namespace base {
 class FilePath;
@@ -23,6 +23,7 @@ class SequencedTaskRunner;
 }
 
 namespace content {
+class BrowserMessageFilter;
 class UtilityProcessHostClient;
 struct ChildProcessData;
 
@@ -59,12 +60,7 @@ class UtilityProcessHost : public IPC::Sender {
 
   // Make the process run with a specific sandbox type, or unsandboxed if
   // SANDBOX_TYPE_NO_SANDBOX is specified.
-  virtual void SetSandboxType(SandboxType sandbox_type) = 0;
-
-#if defined(OS_WIN)
-  // Make the process run elevated.
-  virtual void ElevatePrivileges() = 0;
-#endif
+  virtual void SetSandboxType(service_manager::SandboxType sandbox_type) = 0;
 
   // Returns information about the utility child process.
   virtual const ChildProcessData& GetData() = 0;
@@ -82,6 +78,9 @@ class UtilityProcessHost : public IPC::Sender {
 
   // Set the name of the process to appear in the task manager.
   virtual void SetName(const base::string16& name) = 0;
+
+  // Adds an IPC message filter.
+  virtual void AddFilter(BrowserMessageFilter* filter) = 0;
 };
 
 };  // namespace content

@@ -15,7 +15,6 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -58,10 +57,8 @@ Label::Label(const base::string16& text, int text_context, int text_style)
   SetLineHeight(style::GetLineHeight(text_context, text_style));
 
   // If an explicit style is given, ignore color changes due to the NativeTheme.
-  if (text_style != style::STYLE_PRIMARY) {
-    SetEnabledColor(
-        style::GetColor(text_context, text_style, GetNativeTheme()));
-  }
+  if (text_style != style::STYLE_PRIMARY)
+    SetEnabledColor(style::GetColor(*this, text_context, text_style));
 }
 
 Label::Label(const base::string16& text, const CustomFont& font)
@@ -283,7 +280,7 @@ bool Label::SetSelectable(bool value) {
   if (!IsSelectionSupported())
     return false;
 
-  selection_controller_ = base::MakeUnique<SelectionController>(this);
+  selection_controller_ = std::make_unique<SelectionController>(this);
   return true;
 }
 
@@ -354,8 +351,17 @@ gfx::Size Label::GetMinimumSize() const {
     size.set_width(gfx::Canvas::GetStringWidth(
         base::string16(gfx::kEllipsisUTF16), font_list()));
   }
-  if (!multi_line())
-    size.SetToMin(GetTextSize());
+
+  if (!multi_line()) {
+    if (elide_behavior_ == gfx::NO_ELIDE) {
+      // If elision is disabled on single-line Labels, use text size as minimum.
+      // This is OK because clients can use |gfx::ElideBehavior::TRUNCATE|
+      // to get a non-eliding Label that should size itself less aggressively.
+      size.SetToMax(GetTextSize());
+    } else {
+      size.SetToMin(GetTextSize());
+    }
+  }
   size.Enlarge(GetInsets().width(), GetInsets().height());
   return size;
 }
@@ -516,11 +522,6 @@ void Label::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 void Label::OnPaint(gfx::Canvas* canvas) {
   View::OnPaint(canvas);
   if (is_first_paint_text_) {
-    // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
-    // fixed.
-    tracked_objects::ScopedTracker tracking_profile(
-        FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 First PaintText()"));
-
     is_first_paint_text_ = false;
     PaintText(canvas);
   } else {
@@ -662,8 +663,10 @@ bool Label::CanHandleAccelerators() const {
          View::CanHandleAccelerators();
 }
 
-void Label::OnDeviceScaleFactorChanged(float device_scale_factor) {
-  View::OnDeviceScaleFactorChanged(device_scale_factor);
+void Label::OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                       float new_device_scale_factor) {
+  View::OnDeviceScaleFactorChanged(old_device_scale_factor,
+                                   new_device_scale_factor);
   // When the device scale factor is changed, some font rendering parameters is
   // changed (especially, hinting). The bounding box of the text has to be
   // re-computed based on the new parameters. See crbug.com/441439
@@ -1007,7 +1010,7 @@ void Label::ApplyTextColors() const {
 void Label::UpdateColorsFromTheme(const ui::NativeTheme* theme) {
   if (!enabled_color_set_) {
     requested_enabled_color_ =
-        style::GetColor(text_context_, style::STYLE_PRIMARY, theme);
+        style::GetColor(*this, text_context_, style::STYLE_PRIMARY);
   }
   if (!background_color_set_) {
     background_color_ =

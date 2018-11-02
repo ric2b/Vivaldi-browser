@@ -90,32 +90,57 @@ bool HardwareDisplayPlaneManager::Initialize(DrmDevice* drm) {
   uint32_t num_planes = plane_resources->count_planes;
   std::set<uint32_t> plane_ids;
   for (uint32_t i = 0; i < num_planes; ++i) {
+    // TODO(hoegsberg) crbug.com/763760: We've rolled back the
+    // downstream, incompatible drmModeGetPlane2 ioctl for now while
+    // we update libdrm to the upstream per-plane IN_FORMATS property
+    // API. This drops support for compressed and tiled framebuffers
+    // in the interim, but once the buildroots and SDKs have pulled in
+    // the new libdrm we'll add it back by reading the property.
     ScopedDrmPlanePtr drm_plane(
-        drmModeGetPlane2(drm->get_fd(), plane_resources->planes[i]));
+        drmModeGetPlane(drm->get_fd(), plane_resources->planes[i]));
     if (!drm_plane) {
       PLOG(ERROR) << "Failed to get plane " << i;
       return false;
     }
 
-    uint32_t formats_size = drm_plane->count_formats;
-    uint32_t format_modifiers_size = drm_plane->count_format_modifiers;
+    ScopedDrmObjectPropertyPtr drm_plane_properties(drmModeObjectGetProperties(
+        drm->get_fd(), plane_resources->planes[i], DRM_MODE_OBJECT_PLANE));
+
+    std::vector<uint32_t> supported_formats;
+    std::vector<drm_format_modifier> supported_format_modifiers;
+
+    if (drm_plane_properties) {
+      for (uint32_t j = 0; j < drm_plane_properties->count_props; j++) {
+        ScopedDrmPropertyPtr property(
+            drmModeGetProperty(drm->get_fd(), drm_plane_properties->props[j]));
+        if (strcmp(property->name, "IN_FORMATS") == 0) {
+          ScopedDrmPropertyBlobPtr blob(drmModeGetPropertyBlob(
+              drm->get_fd(), drm_plane_properties->prop_values[j]));
+
+          auto* data = static_cast<const uint8_t*>(blob->data);
+          auto* header = reinterpret_cast<const drm_format_modifier_blob*>(data);
+          auto* formats =
+              reinterpret_cast<const uint32_t*>(data + header->formats_offset);
+          auto* modifiers = reinterpret_cast<const drm_format_modifier*>(
+              data + header->modifiers_offset);
+
+          for (uint32_t k = 0; k < header->count_formats; k++)
+            supported_formats.push_back(formats[k]);
+          for (uint32_t k = 0; k < header->count_modifiers; k++)
+            supported_format_modifiers.push_back(modifiers[k]);
+        }
+      }
+    }
+
+    if (supported_formats.empty()) {
+      uint32_t formats_size = drm_plane->count_formats;
+      for (uint32_t j = 0; j < formats_size; j++)
+        supported_formats.push_back(drm_plane->formats[j]);
+    }
+
     plane_ids.insert(drm_plane->plane_id);
     std::unique_ptr<HardwareDisplayPlane> plane(
         CreatePlane(drm_plane->plane_id, drm_plane->possible_crtcs));
-
-    std::vector<uint32_t> supported_formats(formats_size);
-    for (uint32_t j = 0; j < formats_size; j++)
-      supported_formats[j] = drm_plane->formats[j];
-
-    std::vector<drm_format_modifier> supported_format_modifiers(
-        format_modifiers_size);
-    for (uint32_t j = 0; j < format_modifiers_size; j++)
-      supported_format_modifiers[j] = drm_plane->format_modifiers[j];
-    std::sort(supported_format_modifiers.begin(),
-              supported_format_modifiers.end(),
-              [](drm_format_modifier l, drm_format_modifier r) {
-                return l.modifier < r.modifier;
-              });
 
     if (plane->Initialize(drm, supported_formats, supported_format_modifiers,
                           false, false)) {

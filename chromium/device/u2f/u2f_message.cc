@@ -4,7 +4,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "device/u2f/u2f_packet.h"
-#include "net/base/io_buffer.h"
 
 #include "u2f_message.h"
 
@@ -13,7 +12,7 @@ namespace device {
 // static
 std::unique_ptr<U2fMessage> U2fMessage::Create(
     uint32_t channel_id,
-    Type type,
+    U2fCommandType type,
     const std::vector<uint8_t>& data) {
   if (data.size() > kMaxMessageSize)
     return nullptr;
@@ -44,7 +43,7 @@ U2fMessage::U2fMessage(std::unique_ptr<U2fInitPacket> init_packet,
 }
 
 U2fMessage::U2fMessage(uint32_t channel_id,
-                       Type type,
+                       U2fCommandType type,
                        const std::vector<uint8_t>& data)
     : packets_(), remaining_size_(), channel_id_(channel_id) {
   size_t remaining_bytes = data.size();
@@ -81,7 +80,7 @@ U2fMessage::U2fMessage(uint32_t channel_id,
   }
 }
 
-U2fMessage::~U2fMessage() {}
+U2fMessage::~U2fMessage() = default;
 
 std::list<std::unique_ptr<U2fPacket>>::const_iterator U2fMessage::begin() {
   return packets_.cbegin();
@@ -91,15 +90,13 @@ std::list<std::unique_ptr<U2fPacket>>::const_iterator U2fMessage::end() {
   return packets_.cend();
 }
 
-scoped_refptr<net::IOBufferWithSize> U2fMessage::PopNextPacket() {
+std::vector<uint8_t> U2fMessage::PopNextPacket() {
+  std::vector<uint8_t> data;
   if (NumPackets() > 0) {
-    scoped_refptr<net::IOBufferWithSize> data =
-        packets_.front()->GetSerializedData();
-
+    data = packets_.front()->GetSerializedData();
     packets_.pop_front();
-    return data;
   }
-  return nullptr;
+  return data;
 }
 
 bool U2fMessage::AddContinuationPacket(const std::vector<uint8_t>& buf) {

@@ -61,7 +61,7 @@ WebSocketTransportConnectJob::WebSocketTransportConnectJob(
       had_ipv4_(false),
       had_ipv6_(false) {}
 
-WebSocketTransportConnectJob::~WebSocketTransportConnectJob() {}
+WebSocketTransportConnectJob::~WebSocketTransportConnectJob() = default;
 
 LoadState WebSocketTransportConnectJob::GetLoadState() const {
   LoadState load_state = LOAD_STATE_RESOLVING_HOST;
@@ -386,7 +386,8 @@ void WebSocketTransportClientSocketPool::RequestSockets(
     const std::string& group_name,
     const void* params,
     int num_sockets,
-    const NetLogWithSource& net_log) {
+    const NetLogWithSource& net_log,
+    HttpRequestInfo::RequestMotivation motivation) {
   NOTIMPLEMENTED();
 }
 
@@ -692,7 +693,8 @@ WebSocketTransportClientSocketPool::ConnectJobDelegate::ConnectJobDelegate(
     WebSocketTransportClientSocketPool* owner)
     : owner_(owner) {}
 
-WebSocketTransportClientSocketPool::ConnectJobDelegate::~ConnectJobDelegate() {}
+WebSocketTransportClientSocketPool::ConnectJobDelegate::~ConnectJobDelegate() =
+    default;
 
 void
 WebSocketTransportClientSocketPool::ConnectJobDelegate::OnConnectJobComplete(
@@ -717,6 +719,6 @@ WebSocketTransportClientSocketPool::StalledRequest::StalledRequest(
 WebSocketTransportClientSocketPool::StalledRequest::StalledRequest(
     const StalledRequest& other) = default;
 
-WebSocketTransportClientSocketPool::StalledRequest::~StalledRequest() {}
+WebSocketTransportClientSocketPool::StalledRequest::~StalledRequest() = default;
 
 }  // namespace net

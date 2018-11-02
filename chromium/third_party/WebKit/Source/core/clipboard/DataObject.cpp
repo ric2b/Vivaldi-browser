@@ -89,7 +89,7 @@ DataObjectItem* DataObject::Item(unsigned long index) {
 void DataObject::DeleteItem(unsigned long index) {
   if (index >= length())
     return;
-  item_list_.erase(index);
+  item_list_.EraseAt(index);
   NotifyItemListChanged();
 }
 
@@ -131,7 +131,7 @@ void DataObject::ClearData(const String& type) {
     if (item_list_[i]->Kind() == DataObjectItem::kStringKind &&
         item_list_[i]->GetType() == type) {
       // Per the spec, type must be unique among all items of kind 'string'.
-      item_list_.erase(i);
+      item_list_.EraseAt(i);
       NotifyItemListChanged();
       return;
     }
@@ -233,7 +233,7 @@ void DataObject::AddFilename(const String& filename,
       File::CreateForUserProvidedFile(filename, display_name), file_system_id));
 }
 
-void DataObject::AddSharedBuffer(RefPtr<SharedBuffer> buffer,
+void DataObject::AddSharedBuffer(scoped_refptr<SharedBuffer> buffer,
                                  const KURL& source_url,
                                  const String& filename_extension,
                                  const AtomicString& content_disposition) {
@@ -281,7 +281,7 @@ void DataObject::NotifyItemListChanged() const {
     observer->OnItemListChanged();
 }
 
-DEFINE_TRACE(DataObject) {
+void DataObject::Trace(blink::Visitor* visitor) {
   visitor->Trace(item_list_);
   visitor->Trace(observers_);
   Supplementable<DataObject>::Trace(visitor);

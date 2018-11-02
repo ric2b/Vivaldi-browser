@@ -17,11 +17,12 @@ namespace blink {
 
 class SVGTransformNonInterpolableValue : public NonInterpolableValue {
  public:
-  virtual ~SVGTransformNonInterpolableValue() {}
+  ~SVGTransformNonInterpolableValue() override {}
 
-  static RefPtr<SVGTransformNonInterpolableValue> Create(
+  static scoped_refptr<SVGTransformNonInterpolableValue> Create(
       Vector<SVGTransformType>& transform_types) {
-    return AdoptRef(new SVGTransformNonInterpolableValue(transform_types));
+    return base::AdoptRef(
+        new SVGTransformNonInterpolableValue(transform_types));
   }
 
   const Vector<SVGTransformType>& TransformTypes() const {

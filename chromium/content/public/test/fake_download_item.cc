@@ -181,6 +181,31 @@ bool FakeDownloadItem::IsTransient() const {
   return is_transient_;
 }
 
+void FakeDownloadItem::SetIsDone(bool is_done) {
+  is_done_ = is_done;
+}
+
+bool FakeDownloadItem::IsDone() const {
+  return is_done_;
+}
+
+void FakeDownloadItem::SetETag(const std::string& etag) {
+  etag_ = etag;
+}
+
+const std::string& FakeDownloadItem::GetETag() const {
+  return etag_;
+}
+
+void FakeDownloadItem::SetLastModifiedTime(
+    const std::string& last_modified_time) {
+  last_modified_time_ = last_modified_time;
+}
+
+const std::string& FakeDownloadItem::GetLastModifiedTime() const {
+  return last_modified_time_;
+}
+
 // The methods below are not supported and are not expected to be called.
 void FakeDownloadItem::ValidateDangerousDownload() {
   NOTREACHED();
@@ -206,7 +231,7 @@ void FakeDownloadItem::Cancel(bool user_cancel) {
 }
 
 void FakeDownloadItem::Remove() {
-  NOTREACHED();
+  removed_ = true;
 }
 
 void FakeDownloadItem::OpenDownload() {
@@ -229,11 +254,6 @@ bool FakeDownloadItem::IsTemporary() const {
 bool FakeDownloadItem::CanResume() const {
   NOTREACHED();
   return false;
-}
-
-bool FakeDownloadItem::IsDone() const {
-  NOTREACHED();
-  return true;
 }
 
 const GURL& FakeDownloadItem::GetReferrerUrl() const {
@@ -284,16 +304,6 @@ bool FakeDownloadItem::HasUserGesture() const {
 ui::PageTransition FakeDownloadItem::GetTransitionType() const {
   NOTREACHED();
   return ui::PageTransition();
-}
-
-const std::string& FakeDownloadItem::GetLastModifiedTime() const {
-  NOTREACHED();
-  return dummy_string;
-}
-
-const std::string& FakeDownloadItem::GetETag() const {
-  NOTREACHED();
-  return dummy_string;
 }
 
 bool FakeDownloadItem::IsSavePackageDownload() const {

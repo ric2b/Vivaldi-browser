@@ -8,14 +8,16 @@
 
 // Force all multi-include optional files to be included again.
 #undef CHROME_COMMON_COMMON_PARAM_TRAITS_MACROS_H_
-#undef COMPONENTS_AUTOFILL_CONTENT_COMMON_AUTOFILL_PARAM_TRAITS_MACROS_H_
 #undef COMPONENTS_NACL_COMMON_NACL_TYPES_PARAM_TRAITS_H_
+#undef COMPONENTS_TRACING_COMMON_TRACING_MESSAGES_H_
 #undef CONTENT_COMMON_CONTENT_PARAM_TRAITS_MACROS_H_
 #undef CONTENT_COMMON_FRAME_PARAM_MACROS_H_
 #undef CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_MACROS_H_
 
+#include "components/nacl/common/features.h"
+
 #include "chrome/common/all_messages.h"
-#if !defined(DISABLE_NACL)
+#if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/common/nacl_host_messages.h"
 #endif
 #include "components/guest_view/common/guest_view_message_generator.h"

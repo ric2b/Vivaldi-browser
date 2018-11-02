@@ -476,7 +476,12 @@ void Notes_Model::Remove(const Notes_Node* node) {
   DCHECK(loaded_);
   DCHECK(node);
   DCHECK(!is_root_node(node));
-  RemoveAndDeleteNode(AsMutable(node));
+
+  const Notes_Node* parent = node->parent();
+  DCHECK(parent);
+  int index = parent->GetIndexOf(node);
+
+  RemoveAndDeleteNode(AsMutable(parent), index, AsMutable(node));
 }
 
 void Notes_Model::RemoveAllUserNotes() {
@@ -513,7 +518,7 @@ bool Notes_Model::IsNotesNoLock(const GURL& url) {
           nodes_ordered_by_url_set_.end());
 }
 
-void Notes_Model::RemoveNode(Notes_Node* node) {
+void Notes_Model::RemoveNodeTreeFromURLSet(Notes_Node* node) {
   if (!loaded_ || !node || is_permanent_node(node)) {
     NOTREACHED();
     return;
@@ -526,35 +531,42 @@ void Notes_Model::RemoveNode(Notes_Node* node) {
 
   // Recurse through children.
   for (int i = node->child_count() - 1; i >= 0; --i)
-    RemoveNode(node->GetChild(i));
+    RemoveNodeTreeFromURLSet(node->GetChild(i));
 }
 
 void Notes_Model::RemoveNodeFromURLSet(Notes_Node* node) {
   // NOTE: this is called in such a way that url_lock_ is already held. As
   // such, this doesn't explicitly grab the lock.
   NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.find(node);
-  DCHECK(i != nodes_ordered_by_url_set_.end());
   // i points to the first node with the URL, advance until we find the
   // node we're removing.
-  while (*i != node)
+  while (i != nodes_ordered_by_url_set_.end() && *i != node)
     ++i;
-  nodes_ordered_by_url_set_.erase(i);
+
+  if (i != nodes_ordered_by_url_set_.end())
+    nodes_ordered_by_url_set_.erase(i);
 }
 
-void Notes_Model::RemoveAndDeleteNode(Notes_Node* node_ptr) {
-  std::unique_ptr<Notes_Node> node;
+bool Notes_Model::Remove(Notes_Node* parent, int index) {
+  if (!parent)
+    return false;
+  Notes_Node* node = parent->GetChild(index);
+  RemoveAndDeleteNode(parent, index, node);
+  return true;
+}
 
-  const Notes_Node* parent = node_ptr->parent();
-  DCHECK(parent);
-  int index = parent->GetIndexOf(node_ptr);
+void Notes_Model::RemoveAndDeleteNode(Notes_Node* parent,
+                                      int index,
+                                      Notes_Node* node_ptr) {
+  std::unique_ptr<Notes_Node> node;
 
   for (auto& observer : observers_)
     observer.OnWillRemoveNotes(this, parent, index, node_ptr);
 
   {
     base::AutoLock url_lock(url_lock_);
-    RemoveNode(node_ptr);
-    node = AsMutable(parent)->Remove(node_ptr);
+    RemoveNodeTreeFromURLSet(node_ptr);
+    node = parent->Remove(node_ptr);
   }
 
   if (store_.get())
@@ -600,16 +612,6 @@ const Notes_Node* GetNodeByID(const Notes_Node* node, int64_t id) {
       return result;
   }
   return NULL;
-}
-
-bool Notes_Model::Remove(Notes_Node* parent, int index) {
-  if (!parent)
-    return false;
-  Notes_Node* node = parent->GetChild(index);
-  std::unique_ptr<Notes_Node> deadnode = parent->Remove(node);
-  if (store_.get())
-    store_->ScheduleSave();
-  return true;
 }
 
 bool Notes_Model::Move(const Notes_Node* node,

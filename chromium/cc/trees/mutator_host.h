@@ -25,6 +25,7 @@ namespace cc {
 class MutatorEvents;
 class MutatorHostClient;
 class LayerTreeMutator;
+class ScrollTree;
 
 // A MutatorHost owns all the animation and mutation effects.
 // There is just one MutatorHost for LayerTreeHost on main renderer thread
@@ -58,22 +59,15 @@ class MutatorHost {
   virtual bool NeedsTickAnimations() const = 0;
 
   virtual bool ActivateAnimations() = 0;
-  virtual bool TickAnimations(base::TimeTicks monotonic_time) = 0;
+  // TODO(smcgruer): Once we only tick scroll-based animations on scroll, we
+  // don't need to pass the scroll tree in here.
+  virtual bool TickAnimations(base::TimeTicks monotonic_time,
+                              const ScrollTree& scroll_tree) = 0;
   // Tick animations that depends on scroll offset.
-  virtual void TickScrollAnimations(base::TimeTicks monotonic_time) = 0;
+  virtual void TickScrollAnimations(base::TimeTicks monotonic_time,
+                                    const ScrollTree& scroll_tree) = 0;
   virtual bool UpdateAnimationState(bool start_ready_animations,
                                     MutatorEvents* events) = 0;
-
-  // Returns a callback which is responsible for applying layer tree mutations
-  // to DOM elements. The callback are transfered to main thread when we begin
-  // main frame and should only be invoked on the main thread.
-  //
-  // TODO(majidvp): http://crbug.com/756539 Eliminate this. Once we implement
-  // syncing animation local times from animation worklet to cc then we should
-  // not directly send mutations to main thread and eliminate of this method.
-  // Instead the animation local times should be send to main thread via
-  // existing cc->main plumbing for animations which is |SetAnimationEvents|.
-  virtual base::Closure TakeMutations() = 0;
 
   virtual std::unique_ptr<MutatorEvents> CreateEvents() = 0;
   virtual void SetAnimationEvents(std::unique_ptr<MutatorEvents> events) = 0;
@@ -102,13 +96,6 @@ class MutatorHost {
   virtual bool HasAnyAnimationTargetingProperty(
       ElementId element_id,
       TargetProperty::Type property) const = 0;
-
-  virtual bool HasTransformAnimationThatInflatesBounds(
-      ElementId element_id) const = 0;
-
-  virtual bool TransformAnimationBoundsForBox(ElementId element_id,
-                                              const gfx::BoxF& box,
-                                              gfx::BoxF* bounds) const = 0;
 
   virtual bool HasOnlyTranslationTransforms(
       ElementId element_id,
@@ -139,6 +126,10 @@ class MutatorHost {
       base::TimeDelta delayed_by) = 0;
 
   virtual void ScrollAnimationAbort() = 0;
+
+  virtual size_t CompositedAnimationsCount() const = 0;
+  virtual size_t MainThreadAnimationsCount() const = 0;
+  virtual size_t MainThreadCompositableAnimationsCount() const = 0;
 };
 
 class MutatorEvents {

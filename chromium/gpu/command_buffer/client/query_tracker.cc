@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "base/atomicops.h"
+#include "base/containers/circular_deque.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
@@ -77,7 +78,7 @@ bool QuerySyncManager::Alloc(QuerySyncManager::QueryInfo* info) {
       return false;
     }
     QuerySync* syncs = static_cast<QuerySync*>(mem);
-    buckets_.push_back(base::MakeUnique<Bucket>(syncs, shm_id, shm_offset));
+    buckets_.push_back(std::make_unique<Bucket>(syncs, shm_id, shm_offset));
     bucket = buckets_.back().get();
   }
 
@@ -111,8 +112,7 @@ void QuerySyncManager::Free(const QuerySyncManager::QueryInfo& info) {
 }
 
 void QuerySyncManager::Shrink(CommandBufferHelper* helper) {
-  std::deque<std::unique_ptr<Bucket>> new_buckets;
-  bool has_token = false;
+  base::circular_deque<std::unique_ptr<Bucket>> new_buckets;
   uint32_t token = 0;
   while (!buckets_.empty()) {
     std::unique_ptr<Bucket>& bucket = buckets_.front();
@@ -124,7 +124,6 @@ void QuerySyncManager::Shrink(CommandBufferHelper* helper) {
         // access the shared memory after current commands, so we can
         // free-pending-token.
         token = helper->InsertToken();
-        has_token = true;
         mapped_memory_->FreePendingToken(bucket->syncs, token);
       } else {
         new_buckets.push_back(std::move(bucket));
@@ -276,7 +275,7 @@ QueryTracker::Query* QueryTracker::CreateQuery(GLuint id, GLenum target) {
   if (!query_sync_manager_.Alloc(&info)) {
     return nullptr;
   }
-  auto query = base::MakeUnique<Query>(id, target, info);
+  auto query = std::make_unique<Query>(id, target, info);
   Query* query_ptr = query.get();
   std::pair<QueryIdMap::iterator, bool> result =
       queries_.emplace(id, std::move(query));

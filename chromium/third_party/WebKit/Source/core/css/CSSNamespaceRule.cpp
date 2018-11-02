@@ -14,7 +14,7 @@ CSSNamespaceRule::CSSNamespaceRule(StyleRuleNamespace* namespace_rule,
                                    CSSStyleSheet* parent)
     : CSSRule(parent), namespace_rule_(namespace_rule) {}
 
-CSSNamespaceRule::~CSSNamespaceRule() {}
+CSSNamespaceRule::~CSSNamespaceRule() = default;
 
 String CSSNamespaceRule::cssText() const {
   StringBuilder result;
@@ -36,7 +36,7 @@ AtomicString CSSNamespaceRule::prefix() const {
   return namespace_rule_->Prefix();
 }
 
-DEFINE_TRACE(CSSNamespaceRule) {
+void CSSNamespaceRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(namespace_rule_);
   CSSRule::Trace(visitor);
 }

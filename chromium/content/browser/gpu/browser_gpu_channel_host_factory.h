@@ -24,18 +24,11 @@ namespace content {
 class BrowserGpuMemoryBufferManager;
 
 class CONTENT_EXPORT BrowserGpuChannelHostFactory
-    : public gpu::GpuChannelHostFactory,
-      public gpu::GpuChannelEstablishFactory {
+    : public gpu::GpuChannelEstablishFactory {
  public:
   static void Initialize(bool establish_gpu_channel);
   static void Terminate();
   static BrowserGpuChannelHostFactory* instance() { return instance_; }
-
-  // Overridden from gpu::GpuChannelHostFactory:
-  bool IsMainThread() override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetIOThreadTaskRunner() override;
-  std::unique_ptr<base::SharedMemory> AllocateSharedMemory(
-      size_t size) override;
 
   gpu::GpuChannelHost* GetGpuChannel();
   int GetGpuChannelId() { return gpu_client_id_; }
@@ -49,7 +42,8 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   // shutdown.
   void EstablishGpuChannel(
       const gpu::GpuChannelEstablishedCallback& callback) override;
-  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
+  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync(
+      bool* connection_error) override;
   void SetForceAllowAccessToGpu(bool) override {}
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
@@ -61,17 +55,19 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   ~BrowserGpuChannelHostFactory() override;
 
   void GpuChannelEstablished();
+  void RestartTimeout();
 
   static void InitializeShaderDiskCacheOnIO(int gpu_client_id,
                                             const base::FilePath& cache_dir);
 
   const int gpu_client_id_;
   const uint64_t gpu_client_tracing_id_;
-  std::unique_ptr<base::WaitableEvent> shutdown_event_;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
   std::unique_ptr<BrowserGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   scoped_refptr<EstablishRequest> pending_request_;
   std::vector<gpu::GpuChannelEstablishedCallback> established_callbacks_;
+
+  base::OneShotTimer timeout_;
 
   static BrowserGpuChannelHostFactory* instance_;
 

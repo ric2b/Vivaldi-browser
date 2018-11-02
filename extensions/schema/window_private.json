@@ -184,40 +184,7 @@
       {
         "name": "onMinimized",
         "type": "function",
-        "description": "Fired when the window becomes minimized.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          }
-        ]
-      },
-      {
-        "name": "onMaximized",
-        "type": "function",
-        "description": "Fired when the window becomes maximized.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          }
-        ]
-      },
-      {
-        "name": "onRestored",
-        "type": "function",
-        "description": "Fired when the window becomes restored.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          }
-        ]
-      },
-      {
-        "name": "onFullscreen",
-        "type": "function",
-        "description": "Fired when the window changes full screen status.",
+        "description": "Fired when the window changes minimized status.",
         "parameters": [
           {
             "type": "integer",
@@ -226,7 +193,39 @@
           {
             "type": "boolean",
             "name": "enabled",
-            "description": "true if the window became full screen, otherwise false."
+            "description": "Changed minimized state."
+          }
+        ]
+      },
+      {
+        "name": "onMaximized",
+        "type": "function",
+        "description": "Fired when the window changes maximized status.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "enabled",
+            "description": "Changed maximized state."
+          }
+        ]
+      },
+      {
+        "name": "onFullscreen",
+        "type": "function",
+        "description": "Fired when the window changes fullscreen status.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "enabled",
+            "description": "Changed fullscreen state."
           }
         ]
       }

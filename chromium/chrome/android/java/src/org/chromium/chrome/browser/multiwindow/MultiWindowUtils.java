@@ -23,12 +23,10 @@ import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.util.IntentUtils;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
 
@@ -38,7 +36,8 @@ import javax.annotation.Nullable;
  * Thread-safe: This class may be accessed from any thread.
  */
 public class MultiWindowUtils implements ActivityStateListener {
-    private static AtomicReference<MultiWindowUtils> sInstance = new AtomicReference<>();
+    // getInstance() is called early in start-up, so there is not point in lazily initializing it.
+    private static final MultiWindowUtils sInstance = AppHooks.get().createMultiWindowUtils();
 
     // Used to keep track of whether ChromeTabbedActivity2 is running. A tri-state Boolean is
     // used in case both activities die in the background and MultiWindowUtils is recreated.
@@ -47,13 +46,10 @@ public class MultiWindowUtils implements ActivityStateListener {
     private boolean mIsInMultiWindowModeForTesting;
 
     /**
-     * Returns the singleton instance of MultiWindowUtils, creating it if needed.
+     * Returns the singleton instance of MultiWindowUtils.
      */
     public static MultiWindowUtils getInstance() {
-        if (sInstance.get() == null) {
-            sInstance.compareAndSet(null, AppHooks.get().createMultiWindowUtils());
-        }
-        return sInstance.get();
+        return sInstance;
     }
 
     /**
@@ -91,11 +87,11 @@ public class MultiWindowUtils implements ActivityStateListener {
             // If a second ChromeTabbedActivity is created, MultiWindowUtils needs to listen for
             // activity state changes to facilitate determining which ChromeTabbedActivity should
             // be used for intents.
-            ApplicationStatus.registerStateListenerForAllActivities(sInstance.get());
+            ApplicationStatus.registerStateListenerForAllActivities(sInstance);
             return ChromeTabbedActivity.class;
         } else if (current instanceof ChromeTabbedActivity) {
             mTabbedActivity2TaskRunning = true;
-            ApplicationStatus.registerStateListenerForAllActivities(sInstance.get());
+            ApplicationStatus.registerStateListenerForAllActivities(sInstance);
             return ChromeTabbedActivity2.class;
         } else {
             return null;
@@ -115,6 +111,15 @@ public class MultiWindowUtils implements ActivityStateListener {
             Intent intent, Activity activity, Class<? extends Activity> targetActivity) {
         intent.setClass(activity, targetActivity);
         intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+
+        // Remove LAUNCH_ADJACENT flag if we want to start CTA, but it's already running.
+        // If arleady running CTA was started via .Main activity alias, starting it again with
+        // LAUNCH_ADJACENT will create another CTA instance with just a single tab. There doesn't
+        // seem to be a reliable way to check if an activity was started via an alias, so we're
+        // removing the flag if any CTA instance is running. See crbug.com/771516 for details.
+        if (targetActivity.equals(ChromeTabbedActivity.class) && isPrimaryTabbedActivityRunning()) {
+            intent.setFlags(intent.getFlags() & ~Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+        }
 
         // Let Chrome know that this intent is from Chrome, so that it does not close the app when
         // the user presses 'back' button.
@@ -234,6 +239,11 @@ public class MultiWindowUtils implements ActivityStateListener {
         for (AppTask task : appTasks) {
             if (task.getTaskInfo() == null || task.getTaskInfo().baseActivity == null) continue;
             String baseActivity = task.getTaskInfo().baseActivity.getClassName();
+
+            if (TextUtils.equals(baseActivity, ChromeTabbedActivity.MAIN_LAUNCHER_ACTIVITY_NAME)) {
+                baseActivity = ChromeTabbedActivity.class.getName();
+            }
+
             if (TextUtils.equals(baseActivity, className)) return true;
         }
         return false;
@@ -267,21 +277,32 @@ public class MultiWindowUtils implements ActivityStateListener {
     }
 
     /**
-     * @param activity The {@link Activity} to check.
-     * @return Whether or not {@code activity} should run in pre-N Samsung multi-instance mode.
+     * @return Whether ChromeTabbedActivity (exact activity, not a subclass of) is currently
+     *         running.
      */
-    public boolean shouldRunInLegacyMultiInstanceMode(ChromeLauncherActivity activity) {
+    private static boolean isPrimaryTabbedActivityRunning() {
+        for (WeakReference<Activity> reference : ApplicationStatus.getRunningActivities()) {
+            Activity activity = reference.get();
+            if (activity == null) continue;
+            if (activity.getClass().equals(ChromeTabbedActivity.class)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * @return Whether or not activity should run in pre-N Samsung multi-instance mode.
+     */
+    public boolean shouldRunInLegacyMultiInstanceMode(Activity activity, Intent intent) {
         return Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP
-                && TextUtils.equals(activity.getIntent().getAction(), Intent.ACTION_MAIN)
-                && isLegacyMultiWindow(activity)
-                && activity.isChromeBrowserActivityRunning();
+                && TextUtils.equals(intent.getAction(), Intent.ACTION_MAIN)
+                && isLegacyMultiWindow(activity) && isPrimaryTabbedActivityRunning();
     }
 
     /**
      * Makes |intent| able to support multi-instance in pre-N Samsung multi-window mode.
      */
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public void makeLegacyMultiInstanceIntent(ChromeLauncherActivity activity, Intent intent) {
+    public void makeLegacyMultiInstanceIntent(Activity activity, Intent intent) {
         if (isLegacyMultiWindow(activity)) {
             if (TextUtils.equals(ChromeTabbedActivity.class.getName(),
                     intent.getComponent().getClassName())) {

@@ -28,6 +28,7 @@ const int ExclusiveAccessBubble::kPositionCheckHz = 10;
 const int ExclusiveAccessBubble::kSlideInRegionHeightPx = 4;
 const int ExclusiveAccessBubble::kSlideInDurationMs = 350;
 const int ExclusiveAccessBubble::kSlideOutDurationMs = 700;
+const int ExclusiveAccessBubble::kQuickSlideOutDurationMs = 150;
 const int ExclusiveAccessBubble::kPopupTopPx = 45;
 const int ExclusiveAccessBubble::kSimplifiedPopupTopPx = 45;
 
@@ -140,8 +141,7 @@ void ExclusiveAccessBubble::CheckMousePosition() {
     // of screen).
     if (!hide_timeout_.IsRunning())
       Hide();
-  } else if (cursor_pos.y() < kSlideInRegionHeightPx &&
-             CanMouseTriggerSlideIn()) {
+  } else if (cursor_pos.y() < kSlideInRegionHeightPx && CanTriggerOnMouse()) {
     Show();
   } else if (IsAnimating()) {
     // The cursor is not idle and either it's in the slide-in region or it's in

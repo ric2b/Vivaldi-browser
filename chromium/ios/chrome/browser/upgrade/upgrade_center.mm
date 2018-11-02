@@ -18,7 +18,6 @@
 #include "components/infobars/core/infobar_manager.h"
 #include "components/version_info/version_info.h"
 #import "ios/chrome/browser/open_url_util.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -94,8 +93,7 @@ class UpgradeInfoBarDelegate : public ConfirmInfoBarDelegate {
 
   gfx::Image GetIcon() const override {
     if (icon_.IsEmpty()) {
-      icon_ = gfx::Image([UIImage imageNamed:@"infobar_update"],
-                         base::scoped_policy::RETAIN);
+      icon_ = gfx::Image([UIImage imageNamed:@"infobar_update"]);
     }
     return icon_;
   }

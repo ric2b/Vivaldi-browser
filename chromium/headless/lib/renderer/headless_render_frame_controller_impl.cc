@@ -21,10 +21,11 @@ HeadlessRenderFrameControllerImpl::HeadlessRenderFrameControllerImpl(
       base::Unretained(this)));
 }
 
-HeadlessRenderFrameControllerImpl::~HeadlessRenderFrameControllerImpl() {}
+HeadlessRenderFrameControllerImpl::~HeadlessRenderFrameControllerImpl() =
+    default;
 
 void HeadlessRenderFrameControllerImpl::OnRenderFrameControllerRequest(
-    headless::HeadlessRenderFrameControllerRequest request) {
+    HeadlessRenderFrameControllerRequest request) {
   headless_render_frame_controller_bindings_.AddBinding(this,
                                                         std::move(request));
 }
@@ -111,8 +112,7 @@ void HeadlessRenderFrameControllerImpl::OnDestruct() {
   delete this;
 }
 
-headless::TabSocketPtr&
-HeadlessRenderFrameControllerImpl::EnsureTabSocketPtr() {
+TabSocketPtr& HeadlessRenderFrameControllerImpl::EnsureTabSocketPtr() {
   if (!tab_socket_ptr_.is_bound()) {
     render_frame_->GetRemoteInterfaces()->GetInterface(
         mojo::MakeRequest(&tab_socket_ptr_));

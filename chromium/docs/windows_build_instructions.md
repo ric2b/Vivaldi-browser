@@ -1,6 +1,6 @@
 # Checking out and Building Chromium for Windows
 
-There are instructions for other platforms linked from the 
+There are instructions for other platforms linked from the
 [get the code](get_the_code.md) page.
 
 ## Instructions for Google Employees
@@ -16,37 +16,32 @@ Are you a Google employee? See
   recommended.
 * At least 100GB of free disk space on an NTFS-formatted hard drive. FAT32
   will not work, as some of the Git packfiles are larger than 4GB.
-* Visual Studio 2015 Update 3, see below (no other version is supported).
+* An appropriate version of Visual Studio, as described below.
 * Windows 7 or newer.
 
 ## Setting up Windows
 
 ### Visual Studio
 
-As of December 8, 2016 Chromium requires Visual Studio 2015, with the 14393
-Windows SDK to build.
+As of September, 2017 (R503915) Chromium requires Visual Studio 2017 update 3.2
+with the 15063 (Creators Update) Windows SDK or later to build. Visual Studio
+Community Edition should work if its license is appropriate for you. You must
+install the "Desktop development with C++" component and the "MFC and ATL
+support" sub-component. This can be done from the command line by passing these
+arguments to the Visual Studio installer that you download:
+```shell
+--add Microsoft.VisualStudio.Workload.NativeDesktop
+    --add Microsoft.VisualStudio.Component.VC.ATLMFC --includeRecommended
+```
+You must have the Windows 10 SDK installed, version 10.0.15063 or later.
+The 10.0.15063 SDK initially had errors but the 10.0.15063.468 version works
+well. Most of this will be installed by Visual Studio.
 
-Install Visual Studio 2015 Update 3 or later - Community Edition
-should work if its license is appropriate for you. Use the Custom Install option
-and select:
-
-- Visual C++, which will select three sub-categories including MFC
-- Universal Windows Apps Development Tools > Tools (1.4.1) and Windows 10 SDK
-  (10.0.14393)
-
-You must have the 14393 Windows SDK installed - the 15063 SDK has errors and
-cannot be used to compile Chrome. It is okay to have multiple SDK versions
-installed as long as 14393 is one of them. The installer can be found in the
-[Windows SDK archive](https://developer.microsoft.com/en-us/windows/downloads/sdk-archive).
-
-When installing the 14393 Windows SDK choose Debugging Tools For Windows in
-order to get windbg and cdb. The latter is required for the build to succeed as
-some tests use it for symbolizing crash dumps.
-
-If the Windows SDK was installed via the Visual Studio installer, the Debugging
+If the Windows 10 SDK was installed via the Visual Studio installer, the Debugging
 Tools can be installed by going to: Control Panel → Programs →
-Programs and Features → Select the "Windows Software Development Kit" v14393 →
-Change → Change → Check "Debugging Tools For Windows" → Change.
+Programs and Features → Select the "Windows Software Development Kit" →
+Change → Change → Check "Debugging Tools For Windows" → Change. Or, you can
+download the standalone SDK installer and use it to install the Debugging Tools.
 
 ## Install `depot_tools`
 
@@ -56,11 +51,11 @@ and extract it somewhere.
 *** note
 **Warning:** **DO NOT** use drag-n-drop or copy-n-paste extract from Explorer,
 this will not extract the hidden “.git” folder which is necessary for
-depot_tools to autoupdate itself. You can use “Extract all…” from the 
+depot_tools to autoupdate itself. You can use “Extract all…” from the
 context menu though.
 ***
 
-Add depot_tools to the start of your PATH (must be ahead of any installs of 
+Add depot_tools to the start of your PATH (must be ahead of any installs of
 Python). Assuming you unzipped the bundle to C:\src\depot_tools, open:
 
 Control Panel → System and Security → System → Advanced system settings
@@ -87,9 +82,9 @@ the code, including msysgit and python.
 * If you see strange errors with the file system on the first run of gclient,
   you may want to [disable Windows Indexing](http://tortoisesvn.tigris.org/faq.html#cantmove2).
 
-After running gclient open a command prompt and type `where python` and 
-confirm that the depot_tools `python.bat` comes ahead of any copies of 
-python.exe. Failing to ensure this can lead to overbuilding when 
+After running gclient open a command prompt and type `where python` and
+confirm that the depot_tools `python.bat` comes ahead of any copies of
+python.exe. Failing to ensure this can lead to overbuilding when
 using gn - see [crbug.com/611087](https://crbug.com/611087).
 
 ## Get the code
@@ -214,8 +209,6 @@ support incremental linking for more targets. Note that if you set this but
 don't' set enable_nacl = false then build times may get worse.
 * `remove_webcore_debug_symbols = true` - turn off source-level debugging for
 blink to reduce build times, appropriate if you don't plan to debug blink.
-* `win_linker_timing = true` - this should not generally be set but can be
-helpful when trying to understand build times or incremental linking failures.
 
 In addition, Google employees should consider using goma, a distributed
 compilation system. Detailed information is available internally but the
@@ -285,7 +278,7 @@ $ gclient sync
 
 The first command updates the primary Chromium source repository and rebases
 any of your local branches on top of tip-of-tree (aka the Git branch `origin/master`).
-If you don't want to use this script, you can also just use `git pull` or 
+If you don't want to use this script, you can also just use `git pull` or
 other common Git commands to update the repo.
 
 The second command syncs the subrepositories to the appropriate versions and

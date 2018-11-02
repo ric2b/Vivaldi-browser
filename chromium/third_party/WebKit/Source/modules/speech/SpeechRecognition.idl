@@ -29,7 +29,6 @@
     ActiveScriptWrappable,
     Constructor,
     ConstructorCallWith=ExecutionContext,
-    DependentLifetime,
     NoInterfaceObject
 ] interface SpeechRecognition : EventTarget {
     // recognition parameters
@@ -38,9 +37,6 @@
     attribute boolean continuous;
     attribute boolean interimResults;
     attribute unsigned long maxAlternatives;
-
-    // Speech Recognition with WebRTC. https://crbug.com/408940
-    [RuntimeEnabled=MediaStreamSpeech] attribute MediaStreamTrack? audioTrack;
 
     // methods to drive the speech interaction
     [RaisesException, Measure] void start();

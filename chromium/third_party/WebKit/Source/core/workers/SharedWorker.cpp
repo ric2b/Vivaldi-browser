@@ -61,9 +61,7 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
 
   MessageChannel* channel = MessageChannel::Create(context);
   worker->port_ = channel->port1();
-  std::unique_ptr<WebMessagePortChannel> remote_port =
-      channel->port2()->Disentangle();
-  DCHECK(remote_port);
+  MessagePortChannel remote_port = channel->port2()->Disentangle();
 
   // We don't currently support nested workers, so workers can only be created
   // from documents.
@@ -75,8 +73,8 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
     return nullptr;
   }
 
-  KURL script_url = worker->ResolveURL(
-      url, exception_state, WebURLRequest::kRequestContextSharedWorker);
+  KURL script_url = ResolveURL(context, url, exception_state,
+                               WebURLRequest::kRequestContextSharedWorker);
   if (script_url.IsEmpty())
     return nullptr;
 
@@ -98,7 +96,7 @@ bool SharedWorker::HasPendingActivity() const {
   return is_being_connected_;
 }
 
-DEFINE_TRACE(SharedWorker) {
+void SharedWorker::Trace(blink::Visitor* visitor) {
   visitor->Trace(port_);
   AbstractWorker::Trace(visitor);
   Supplementable<SharedWorker>::Trace(visitor);

@@ -24,7 +24,4 @@ declare_overrides() {
 
   # Don't need this normally
   chrome_pgo_phase = 0
-
-  # TODO(yngve): Enable in PGO style builds
-  allow_posix_link_time_opt = false
 }

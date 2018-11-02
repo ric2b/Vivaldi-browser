@@ -8,6 +8,12 @@
 
 #### ADB Debugging
 
+The adb executable exists within the Android SDK:
+
+```shell
+third_party/android_tools/sdk/platform-tools/adb
+```
+
 In order to allow the ADB to connect to the device, you must enable USB
 debugging:
 
@@ -34,12 +40,6 @@ If this option is greyed out, stay awake is probably disabled by policy. In that
 case, get another device or log in with a normal, unmanaged account (because the
 tests will break in exciting ways if stay awake is off).
 
-#### Enable Asserts
-
-```
-adb shell setprop debug.assert 1
-```
-
 #### Disable Verify Apps
 
 You may see a dialog like [this
@@ -63,13 +63,7 @@ with `INSTALL_FAILED_NO_MATCHING_ABIS`.
 
 1.  Enable Intel Virtualization support in the BIOS.
 
-2.  Set up your environment:
-
-    ```shell
-    . build/android/envsetup.sh
-    ```
-
-3.  Install emulator deps:
+2.  Install emulator deps:
 
     ```shell
     build/android/install_emulator_deps.py --api-level=23
@@ -81,7 +75,7 @@ with `INSTALL_FAILED_NO_MATCHING_ABIS`.
     Note that this is a different SDK download than the Android SDK in the
     chromium source checkout (i.e. `src/third_party/android_emulator_sdk`).
 
-4.  Run the avd.py script. To start up _num_ emulators use -n. For non-x86 use
+3.  Run the avd.py script. To start up _num_ emulators use -n. For non-x86 use
     --abi.
 
     ```shell
@@ -206,14 +200,22 @@ run the test.
 
 ```shell
 # Build the test suite.
-ninja -C out/my_build chrome_junit_tests
+ninja -C out/Default chrome_junit_tests
 
 # Run the test suite.
-BUILDTYPE=my_build build/android/test_runner.py junit -s chrome_junit_tests -vvv
+out/Default/run_chrome_junit_tests
 
 # Run a subset of tests. You might need to pass the package name for some tests.
-BUILDTYPE=my_build build/android/test_runner.py junit -s chrome_junit_tests -vvv
--f "org.chromium.chrome.browser.media.*"
+out/Default/run_chrome_junit_tests -f "org.chromium.chrome.browser.media.*"
+```
+
+### Debugging
+
+Similar to [debugging apk targets](android_debugging_instructions.md#debugging-java):
+
+```shell
+out/Default/bin/run_chrome_junit_tests --wait-for-java-debugger
+out/Default/bin/run_chrome_junit_tests --wait-for-java-debugger  # Specify custom port via --debug-socket=9999
 ```
 
 ## Gtests
@@ -301,6 +303,25 @@ out/Debug/bin/run_content_shell_test_apk -A Feature=Navigation
 
 You might want to add stars `*` to each as a regular expression, e.g.
 `*`AddressDetectionTest`*`
+
+### Debugging
+
+Similar to [debugging apk targets](android_debugging_instructions.md#debugging-java):
+
+```shell
+out/Debug/bin/run_content_shell_test_apk --wait-for-java-debugger
+```
+
+### Deobfuscating Java Stacktraces
+
+If running with `is_debug=false`, Java stacks from logcat need to be fixed up:
+
+```shell
+out/Release/bin/java_deobfuscate out/Release/apks/ChromePublicTest.apk.mapping < stacktrace.txt
+```
+
+Any stacks produced by test runner output will already be deobfuscated.
+
 
 ## Running Blink Layout Tests
 

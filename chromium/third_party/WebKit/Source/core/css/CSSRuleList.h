@@ -22,9 +22,10 @@
 #ifndef CSSRuleList_h
 #define CSSRuleList_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -32,10 +33,8 @@ namespace blink {
 class CSSRule;
 class CSSStyleSheet;
 
-class CSSRuleList : public GarbageCollected<CSSRuleList>,
-                    public ScriptWrappable {
+class CSSRuleList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
-  WTF_MAKE_NONCOPYABLE(CSSRuleList);
 
  public:
   virtual unsigned length() const = 0;
@@ -43,10 +42,11 @@ class CSSRuleList : public GarbageCollected<CSSRuleList>,
 
   virtual CSSStyleSheet* GetStyleSheet() const = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-
  protected:
-  CSSRuleList() {}
+  CSSRuleList() = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CSSRuleList);
 };
 
 class StaticCSSRuleList final : public CSSRuleList {
@@ -55,9 +55,9 @@ class StaticCSSRuleList final : public CSSRuleList {
 
   HeapVector<Member<CSSRule>>& Rules() { return rules_; }
 
-  CSSStyleSheet* GetStyleSheet() const override { return 0; }
+  CSSStyleSheet* GetStyleSheet() const override { return nullptr; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   StaticCSSRuleList();
@@ -77,7 +77,7 @@ class LiveCSSRuleList final : public CSSRuleList {
     return new LiveCSSRuleList(rule);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(rule_);
     CSSRuleList::Trace(visitor);
   }

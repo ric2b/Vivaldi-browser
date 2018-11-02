@@ -143,13 +143,14 @@ base::string16 ChromeWebClient::GetLocalizedString(int message_id) const {
 base::StringPiece ChromeWebClient::GetDataResource(
     int resource_id,
     ui::ScaleFactor scale_factor) const {
-  return ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
+  return ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
       resource_id, scale_factor);
 }
 
 base::RefCountedMemory* ChromeWebClient::GetDataResourceBytes(
     int resource_id) const {
-  return ResourceBundle::GetSharedInstance().LoadDataResourceBytes(resource_id);
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytes(
+      resource_id);
 }
 
 void ChromeWebClient::GetAdditionalWebUISchemes(
@@ -167,8 +168,7 @@ NSString* ChromeWebClient::GetEarlyPageScript(
   NSMutableArray* scripts = [NSMutableArray array];
   [scripts addObject:GetPageScript(@"chrome_bundle")];
 
-  if (base::FeatureList::IsEnabled(
-          credential_manager::features::kCredentialManager)) {
+  if (base::FeatureList::IsEnabled(features::kCredentialManager)) {
     [scripts addObject:GetPageScript(@"credential_manager")];
   }
 
@@ -192,8 +192,4 @@ void ChromeWebClient::AllowCertificateError(
   // or web_state used to fetch offline content in Reading List.
   IOSSSLErrorHandler::HandleSSLError(web_state, cert_error, info, request_url,
                                      overridable, callback);
-}
-
-bool ChromeWebClient::IsSlimNavigationManagerEnabled() const {
-  return experimental_flags::IsSlimNavigationManagerEnabled();
 }

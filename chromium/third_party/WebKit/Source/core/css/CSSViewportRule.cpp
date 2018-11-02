@@ -30,8 +30,8 @@
 
 #include "core/css/CSSViewportRule.h"
 
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -41,7 +41,7 @@ CSSViewportRule::CSSViewportRule(StyleRuleViewport* viewport_rule,
                                  CSSStyleSheet* sheet)
     : CSSRule(sheet), viewport_rule_(viewport_rule) {}
 
-CSSViewportRule::~CSSViewportRule() {}
+CSSViewportRule::~CSSViewportRule() = default;
 
 CSSStyleDeclaration* CSSViewportRule::style() const {
   if (!properties_cssom_wrapper_)
@@ -73,7 +73,7 @@ void CSSViewportRule::Reattach(StyleRuleBase* rule) {
     properties_cssom_wrapper_->Reattach(viewport_rule_->MutableProperties());
 }
 
-DEFINE_TRACE(CSSViewportRule) {
+void CSSViewportRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(viewport_rule_);
   visitor->Trace(properties_cssom_wrapper_);
   CSSRule::Trace(visitor);

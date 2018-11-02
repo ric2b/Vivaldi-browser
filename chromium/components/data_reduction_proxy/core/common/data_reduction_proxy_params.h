@@ -6,10 +6,12 @@
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_COMMON_DATA_REDUCTION_PROXY_PARAMS_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
+#include "base/time/time.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "url/gurl.h"
 
@@ -63,9 +65,6 @@ const char* GetLoFiFlagFieldTrialName();
 // Returns true if this client is part of the field trial that should enable
 // server experiments for the data reduction proxy.
 bool IsIncludedInServerExperimentsFieldTrial();
-
-// Returns true if this client is part of the tamper detection experiment.
-bool IsIncludedInTamperDetectionExperiment();
 
 // Returns true if this client has any of the values to enable Lo-Fi mode for
 // the "data-reduction-proxy-lo-fi" command line switch. This includes the
@@ -128,9 +127,14 @@ GURL GetConfigServiceURL();
 // command line.
 bool ShouldForceEnableDataReductionProxy();
 
-// Whether the blacklist should be used for server Lo-Fi and server Lite Page
-// instead of the prefs-based rules.
-bool IsBlackListEnabledForServerPreviews();
+// Returns whether the proxy should be bypassed for requests that are proxied
+// but missing the via header based on if the connection is cellular.
+bool ShouldBypassMissingViaHeader(bool connection_is_cellular);
+
+// Returns the range of acceptable bypass lengths for requests that are proxied
+// but missing the via header based on if the connection is cellular.
+std::pair<base::TimeDelta, base::TimeDelta>
+GetMissingViaHeaderBypassDurationRange(bool connection_is_cellular);
 
 // The current LitePage experiment blacklist version.
 int LitePageVersion();

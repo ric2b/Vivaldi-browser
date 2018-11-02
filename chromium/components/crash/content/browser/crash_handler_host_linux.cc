@@ -33,12 +33,12 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "breakpad/src/client/linux/handler/exception_handler.h"
-#include "breakpad/src/client/linux/minidump_writer/linux_dumper.h"
-#include "breakpad/src/client/linux/minidump_writer/minidump_writer.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/breakpad_linux_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/breakpad/breakpad/src/client/linux/handler/exception_handler.h"
+#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/linux_dumper.h"
+#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/minidump_writer.h"
 
 #if defined(OS_ANDROID) && !defined(__LP64__)
 #include <sys/linux-syscalls.h>
@@ -162,7 +162,7 @@ void CrashHandlerHostLinux::OnFileCanReadWithoutBlocking(int fd) {
   //
   // The message sender is in components/crash/content/app/breakpad_linux.cc.
 
-  struct msghdr msg = {0};
+  struct msghdr msg = {nullptr};
   struct iovec iov[kCrashIovSize];
 
   auto crash_context = base::MakeUnique<char[]>(kCrashContextSize);
@@ -170,7 +170,8 @@ void CrashHandlerHostLinux::OnFileCanReadWithoutBlocking(int fd) {
   auto asan_report = base::MakeUnique<char[]>(kMaxAsanReportSize + 1);
 #endif
 
-  auto crash_keys = base::MakeUnique<CrashKeyStorage>();
+  auto crash_keys =
+      base::MakeUnique<crash_reporter::internal::TransitionalCrashKeyStorage>();
   google_breakpad::SerializedNonAllocatingMap* serialized_crash_keys;
   size_t crash_keys_size = crash_keys->Serialize(
       const_cast<const google_breakpad::SerializedNonAllocatingMap**>(
@@ -311,7 +312,8 @@ void CrashHandlerHostLinux::FindCrashingThreadAndDump(
     pid_t crashing_pid,
     const std::string& expected_syscall_data,
     std::unique_ptr<char[]> crash_context,
-    std::unique_ptr<CrashKeyStorage> crash_keys,
+    std::unique_ptr<crash_reporter::internal::TransitionalCrashKeyStorage>
+        crash_keys,
 #if defined(ADDRESS_SANITIZER)
     std::unique_ptr<char[]> asan_report,
 #endif
@@ -403,7 +405,7 @@ void CrashHandlerHostLinux::FindCrashingThreadAndDump(
 void CrashHandlerHostLinux::WriteDumpFile(BreakpadInfo* info,
                                           std::unique_ptr<char[]> crash_context,
                                           pid_t crashing_pid) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // Set |info->distro| here because base::GetLinuxDistro() needs to run on a
   // blocking sequence.
@@ -463,7 +465,7 @@ void CrashHandlerHostLinux::QueueCrashDumpTask(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // Send the done signal to the process: it can exit now.
-  struct msghdr msg = {0};
+  struct msghdr msg = {nullptr};
   struct iovec done_iov;
   done_iov.iov_base = const_cast<char*>("\x42");
   done_iov.iov_len = 1;

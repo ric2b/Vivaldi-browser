@@ -4,7 +4,6 @@
 
 #include "net/nqe/socket_watcher_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "net/nqe/socket_watcher.h"
 
@@ -18,16 +17,18 @@ SocketWatcherFactory::SocketWatcherFactory(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     base::TimeDelta min_notification_interval,
     OnUpdatedRTTAvailableCallback updated_rtt_observation_callback,
+    ShouldNotifyRTTCallback should_notify_rtt_callback,
     base::TickClock* tick_clock)
     : task_runner_(std::move(task_runner)),
       min_notification_interval_(min_notification_interval),
       allow_rtt_private_address_(false),
       updated_rtt_observation_callback_(updated_rtt_observation_callback),
+      should_notify_rtt_callback_(should_notify_rtt_callback),
       tick_clock_(tick_clock) {
   DCHECK(tick_clock_);
 }
 
-SocketWatcherFactory::~SocketWatcherFactory() {}
+SocketWatcherFactory::~SocketWatcherFactory() = default;
 
 std::unique_ptr<SocketPerformanceWatcher>
 SocketWatcherFactory::CreateSocketPerformanceWatcher(
@@ -36,7 +37,12 @@ SocketWatcherFactory::CreateSocketPerformanceWatcher(
   return std::make_unique<SocketWatcher>(
       protocol, address_list, min_notification_interval_,
       allow_rtt_private_address_, task_runner_,
-      updated_rtt_observation_callback_, tick_clock_);
+      updated_rtt_observation_callback_, should_notify_rtt_callback_,
+      tick_clock_);
+}
+
+void SocketWatcherFactory::SetTickClockForTesting(base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
 }
 
 }  // namespace internal

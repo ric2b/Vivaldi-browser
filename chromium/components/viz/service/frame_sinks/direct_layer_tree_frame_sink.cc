@@ -5,8 +5,8 @@
 #include "components/viz/service/frame_sinks/direct_layer_tree_frame_sink.h"
 
 #include "base/bind.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
@@ -66,12 +66,6 @@ bool DirectLayerTreeFrameSink::BindToClient(
   if (!cc::LayerTreeFrameSink::BindToClient(client))
     return false;
 
-  // We want the Display's output surface to hear about lost context, and since
-  // this shares a context with it, we should not be listening for lost context
-  // callbacks on the context here.
-  if (auto* cp = context_provider())
-    cp->SetLostContextCallback(base::Closure());
-
   constexpr bool is_root = true;
   support_ = support_manager_->CreateCompositorFrameSinkSupport(
       this, frame_sink_id_, is_root,
@@ -96,8 +90,7 @@ void DirectLayerTreeFrameSink::DetachFromClient() {
   cc::LayerTreeFrameSink::DetachFromClient();
 }
 
-void DirectLayerTreeFrameSink::SubmitCompositorFrame(
-    cc::CompositorFrame frame) {
+void DirectLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
   DCHECK_LE(BeginFrameArgs::kStartingFrameNumber,
             frame.metadata.begin_frame_ack.sequence_number);
@@ -129,7 +122,7 @@ void DirectLayerTreeFrameSink::DisplayOutputSurfaceLost() {
 
 void DirectLayerTreeFrameSink::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    const cc::RenderPassList& render_passes) {
+    const RenderPassList& render_passes) {
   // This notification is not relevant to our client outside of tests.
 }
 
@@ -145,6 +138,19 @@ void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAck(
   client_->DidReceiveCompositorFrameAck();
 }
 
+void DirectLayerTreeFrameSink::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {
+  client_->DidPresentCompositorFrame(presentation_token, time, refresh, flags);
+}
+
+void DirectLayerTreeFrameSink::DidDiscardCompositorFrame(
+    uint32_t presentation_token) {
+  client_->DidDiscardCompositorFrame(presentation_token);
+}
+
 void DirectLayerTreeFrameSink::OnBeginFrame(const BeginFrameArgs& args) {
   begin_frame_source_->OnBeginFrame(args);
 }
@@ -154,18 +160,16 @@ void DirectLayerTreeFrameSink::ReclaimResources(
   client_->ReclaimResources(resources);
 }
 
-void DirectLayerTreeFrameSink::WillDrawSurface(
-    const LocalSurfaceId& local_surface_id,
-    const gfx::Rect& damage_rect) {
-  // TODO(staraz): Implement this.
-}
-
 void DirectLayerTreeFrameSink::OnBeginFramePausedChanged(bool paused) {
   begin_frame_source_->OnSetBeginFrameSourcePaused(paused);
 }
 
 void DirectLayerTreeFrameSink::OnNeedsBeginFrames(bool needs_begin_frame) {
   support_->SetNeedsBeginFrame(needs_begin_frame);
+}
+
+void DirectLayerTreeFrameSink::OnContextLost() {
+  // The display will be listening for OnContextLost(). Do nothing here.
 }
 
 }  // namespace viz

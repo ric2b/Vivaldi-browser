@@ -39,6 +39,7 @@ class UkmRecorder;
 
 namespace autofill {
 
+class AddressNormalizer;
 class AutofillPopupDelegate;
 class AutofillWebDataService;
 class CardUnmaskDelegate;
@@ -106,6 +107,9 @@ class AutofillClient : public RiskDataLoader {
 
   // Gets the UKM service associated with this client (for metrics).
   virtual ukm::UkmRecorder* GetUkmRecorder() = 0;
+
+  // Gets an AddressNormalizer instance (can be null).
+  virtual AddressNormalizer* GetAddressNormalizer() = 0;
 
   // Gets the SaveCardBubbleController instance associated with the client.
   // May return nullptr if the save card bubble has not been shown yet.
@@ -179,6 +183,10 @@ class AutofillClient : public RiskDataLoader {
   virtual void DidFillOrPreviewField(
       const base::string16& autofilled_value,
       const base::string16& profile_full_name) = 0;
+
+  // Inform the client that the user interacted with a non-secure credit card
+  // field.
+  virtual void DidInteractWithNonsecureCreditCardInput() = 0;
 
   // If the context is secure.
   virtual bool IsContextSecure() = 0;

@@ -10,21 +10,9 @@ cr.define('extension_load_error_tests', function() {
     CodeSection: 'Code Section',
   };
 
-  /**
-   * @implements {extensions.LoadErrorDelegate}
-   * @extends {extension_test_util.ClickMock}
-   * @constructor
-   */
-  function MockDelegate() {}
+  var suiteName = 'ExtensionLoadErrorTests';
 
-  MockDelegate.prototype = {
-    __proto__: extension_test_util.ClickMock.prototype,
-
-    /** @override */
-    retryLoadUnpacked: function() {},
-  };
-
-  suite('ExtensionLoadErrorTests', function() {
+  suite(suiteName, function() {
     /** @type {extensions.LoadError} */
     var loadError;
 
@@ -41,7 +29,7 @@ cr.define('extension_load_error_tests', function() {
 
     setup(function() {
       PolymerTest.clearBody();
-      mockDelegate = new MockDelegate();
+      mockDelegate = new extensions.TestService();
       loadError = new extensions.LoadError();
       loadError.delegate = mockDelegate;
       loadError.loadError = stubLoadError;
@@ -59,13 +47,15 @@ cr.define('extension_load_error_tests', function() {
       loadError.show();
       expectTrue(isDialogVisible());
 
-      mockDelegate.testClickingCalls(
-          loadError.$$('.action-button'), 'retryLoadUnpacked', [fakeGuid]);
-      expectFalse(isDialogVisible());
+      MockInteractions.tap(loadError.$$('.action-button'));
+      return mockDelegate.whenCalled('retryLoadUnpacked').then(arg => {
+        expectEquals(fakeGuid, arg);
+        expectFalse(isDialogVisible());
 
-      loadError.show();
-      MockInteractions.tap(loadError.$$('.cancel-button'));
-      expectFalse(isDialogVisible());
+        loadError.show();
+        MockInteractions.tap(loadError.$$('.cancel-button'));
+        expectFalse(isDialogVisible());
+      });
     });
 
     test(assert(TestNames.CodeSection), function() {
@@ -86,6 +76,7 @@ cr.define('extension_load_error_tests', function() {
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

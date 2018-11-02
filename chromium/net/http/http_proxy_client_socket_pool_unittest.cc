@@ -92,7 +92,7 @@ class HttpProxyClientSocketPoolTest
     session_ = CreateNetworkSession();
   }
 
-  virtual ~HttpProxyClientSocketPoolTest() {}
+  virtual ~HttpProxyClientSocketPoolTest() = default;
 
   // Initializes the field trial paramters for the field trial that determines
   // connection timeout based on the network quality.
@@ -173,14 +173,11 @@ class HttpProxyClientSocketPoolTest
       bool tunnel,
       ProxyDelegate* proxy_delegate) {
     return scoped_refptr<HttpProxySocketParams>(new HttpProxySocketParams(
-        CreateHttpProxyParams(),
-        CreateHttpsProxyParams(),
-        std::string(),
+        CreateHttpProxyParams(), CreateHttpsProxyParams(),
+        QUIC_VERSION_UNSUPPORTED, std::string(),
         HostPortPair("www.google.com", tunnel ? 443 : 80),
-        session_->http_auth_cache(),
-        session_->http_auth_handler_factory(),
-        session_->spdy_session_pool(),
-        tunnel,
+        session_->http_auth_cache(), session_->http_auth_handler_factory(),
+        session_->spdy_session_pool(), session_->quic_stream_factory(), tunnel,
         proxy_delegate));
   }
 
@@ -323,7 +320,7 @@ TEST_P(HttpProxyClientSocketPoolTest, NeedAuth) {
       CreateMockWrite(req, 0, ASYNC), CreateMockWrite(rst, 2, ASYNC),
   };
   SpdyHeaderBlock resp_block;
-  resp_block[spdy_util_.GetStatusKey()] = "407";
+  resp_block[kHttp2StatusHeader] = "407";
   resp_block["proxy-authenticate"] = "Basic realm=\"MyRealm1\"";
 
   SpdySerializedFrame resp(

@@ -25,7 +25,7 @@ MojoCdmFactory::MojoCdmFactory(
   DCHECK(interface_factory_);
 }
 
-MojoCdmFactory::~MojoCdmFactory() {}
+MojoCdmFactory::~MojoCdmFactory() = default;
 
 void MojoCdmFactory::Create(
     const std::string& key_system,
@@ -61,7 +61,7 @@ void MojoCdmFactory::Create(
 #endif
 
   mojom::ContentDecryptionModulePtr cdm_ptr;
-  interface_factory_->CreateCdm(mojo::MakeRequest(&cdm_ptr));
+  interface_factory_->CreateCdm(key_system, mojo::MakeRequest(&cdm_ptr));
 
   MojoCdm::Create(key_system, security_origin, cdm_config, std::move(cdm_ptr),
                   session_message_cb, session_closed_cb, session_keys_change_cb,

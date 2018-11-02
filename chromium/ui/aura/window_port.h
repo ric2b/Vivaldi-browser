@@ -44,7 +44,8 @@ class AURA_EXPORT WindowPort {
   // Called from Window::Init().
   virtual void OnPreInit(Window* window) = 0;
 
-  virtual void OnDeviceScaleFactorChanged(float device_scale_factor) = 0;
+  virtual void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                          float new_device_scale_factor) = 0;
 
   // Called when a window is being added as a child. |child| may already have
   // a parent, but its parent is not the Window this WindowPort is associated
@@ -104,6 +105,9 @@ class AURA_EXPORT WindowPort {
   virtual void OnWillRemoveWindowFromRootWindow() = 0;
 
   virtual void OnEventTargetingPolicyChanged() = 0;
+
+  // See description of function with same name in transient_window_client.
+  virtual bool ShouldRestackTransientChildren() = 0;
 
  protected:
   // Returns the WindowPort associated with a Window.

@@ -37,7 +37,7 @@ FakeSecurityKeyIpcServer::FakeSecurityKeyIpcServer(
       channel_closed_callback_(channel_closed_callback),
       weak_factory_(this) {}
 
-FakeSecurityKeyIpcServer::~FakeSecurityKeyIpcServer() {}
+FakeSecurityKeyIpcServer::~FakeSecurityKeyIpcServer() = default;
 
 void FakeSecurityKeyIpcServer::SendRequest(const std::string& message_data) {
   send_message_callback_.Run(connection_id_, message_data);
@@ -83,7 +83,7 @@ bool FakeSecurityKeyIpcServer::CreateChannel(
               mojo::edk::TransportProtocol::kLegacy,
               mojo::edk::CreateServerHandle(channel_handle, options)))
           .release(),
-      this);
+      this, base::ThreadTaskRunnerHandle::Get());
   EXPECT_NE(nullptr, ipc_channel_);
   return ipc_channel_->Connect();
 }

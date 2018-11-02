@@ -20,12 +20,16 @@ enum DatabaseError {
 enum BatchOperationType {
   PUT_KEY,
   DELETE_KEY,
-  DELETE_PREFIXED_KEY
+  DELETE_PREFIXED_KEY,
+  // |key| is source prefixed key, |value| is destination prefixed key.
+  COPY_PREFIXED_KEY
 };
 
+// TODO(dmurph): change to a union type for value population.
 struct BatchedOperation {
   BatchOperationType type;
   array<uint8> key;
+  // Populated for operations of types PUT_KEY and COPY_PREFIXED_KEY.
   array<uint8>? value;
 };
 
@@ -41,30 +45,31 @@ enum SharedReadCache {
 
 // Options which control the behavior of a database. (This struct corresponds
 // with the struct in leveldb's options.h.)
+//
+// Note: This struct does not have default values. The values are set by a
+// struct trait which copies values to/from a leveldb_env::Options instance.
 struct OpenOptions {
   // TODO(erg): Find all comparators and copy them into the service.
 
   // If true, the database will be created if it is missing.
-  bool create_if_missing = false;
+  bool create_if_missing;
 
   // If true, an error is raised if the database already exists.
-  bool error_if_exists = false;
+  bool error_if_exists;
 
   // If true, the implementation will do aggressive checking of the
   // data it is processing and will stop early if it detects any
   // errors.
-  bool paranoid_checks = false;
+  bool paranoid_checks;
 
-  // Default size is 4 megabytes.
-  uint64 write_buffer_size = 4194304;
+  // Amount of data to build up in memory (backed by an unsorted log
+  // on disk) before converting to a sorted on-disk file.
+  uint64 write_buffer_size;
 
-  // Number of open files that can be used by the DB. (Note: we globally set
-  // the default here to 80 instead of leveldb's default 1000 because we don't
-  // want to consume all file descriptors. See
-  // https://code.google.com/p/chromium/issues/detail?id=227313#c11 for
-  // details.)
-  int32 max_open_files = 80;
+  // Number of open files that can be used by the DB.
+  int32 max_open_files;
 
+  // The shared read cache to use.
   SharedReadCache shared_block_read_cache = SharedReadCache.Default;
 };
 
@@ -109,12 +114,24 @@ interface LevelDBDatabase {
   DeletePrefixed(array<uint8> key_prefix) => (DatabaseError status);
 
   // Atomically performs all |operations|.
+  // The DELETE_PREFIXED_KEY applies to all keys that exist before these
+  // operations execute. If a 'put' operation precedes a delete prefix, then it
+  // will only be deleted if it was a previously-populated key in the database.
+  // The COPY_PREFIXED_KEY operations will always ignore all other changes in
+  // the operations batch. It will not copy records that were inserted earlier
+  // in the operations list.
   Write(array<BatchedOperation> operations) => (DatabaseError status);
 
   Get(array<uint8> key) => (DatabaseError status, array<uint8> value);
 
   GetPrefixed(array<uint8> key_prefix)
       => (DatabaseError status, array<KeyValue> data);
+
+  // Copies all data from the source prefix to the destination prefix. Useful
+  // for deep copies.
+  CopyPrefixed(array<uint8> source_key_prefix,
+               array<uint8> destination_key_prefix)
+      => (DatabaseError status);
 
   // Snapshots -------------------------------------------------------------
 

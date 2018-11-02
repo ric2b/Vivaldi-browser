@@ -17,7 +17,6 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
-#include "net/base/sdch_manager.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_cache.h"
@@ -45,14 +44,14 @@ URLRequestContext::URLRequestContext()
       http_transaction_factory_(nullptr),
       job_factory_(nullptr),
       throttler_manager_(nullptr),
-      backoff_manager_(nullptr),
-      sdch_manager_(nullptr),
       network_quality_estimator_(nullptr),
+#if BUILDFLAG(ENABLE_REPORTING)
       reporting_service_(nullptr),
       network_error_logging_delegate_(nullptr),
+#endif  // BUILDFLAG(ENABLE_REPORTING)
       enable_brotli_(false),
       check_cleartext_permitted_(false),
-      name_(nullptr),
+      name_("unknown"),
       largest_outstanding_requests_count_seen_(0) {
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "URLRequestContext", base::ThreadTaskRunnerHandle::Get());
@@ -83,12 +82,12 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_http_transaction_factory(other->http_transaction_factory_);
   set_job_factory(other->job_factory_);
   set_throttler_manager(other->throttler_manager_);
-  set_backoff_manager(other->backoff_manager_);
-  set_sdch_manager(other->sdch_manager_);
   set_http_user_agent_settings(other->http_user_agent_settings_);
   set_network_quality_estimator(other->network_quality_estimator_);
+#if BUILDFLAG(ENABLE_REPORTING)
   set_reporting_service(other->reporting_service_);
   set_network_error_logging_delegate(other->network_error_logging_delegate_);
+#endif  // BUILDFLAG(ENABLE_REPORTING)
   set_enable_brotli(other->enable_brotli_);
   set_check_cleartext_permitted(other->check_cleartext_permitted_);
 }
@@ -172,14 +171,11 @@ void URLRequestContext::AssertNoURLRequests() const {
 bool URLRequestContext::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  if (!name_)
-    name_ = "unknown";
-
   SSLClientSocketImpl::DumpSSLClientSessionMemoryStats(pmd);
 
   std::string dump_name =
-      base::StringPrintf("net/url_request_context/%s/0x%" PRIxPTR, name_,
-                         reinterpret_cast<uintptr_t>(this));
+      base::StringPrintf("net/url_request_context/%s/0x%" PRIxPTR,
+                         name_.c_str(), reinterpret_cast<uintptr_t>(this));
   base::trace_event::MemoryAllocatorDump* dump =
       pmd->CreateAllocatorDump(dump_name);
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
@@ -194,8 +190,6 @@ bool URLRequestContext::OnMemoryDump(
     if (http_cache)
       http_cache->DumpMemoryStats(pmd, dump->absolute_name());
   }
-  if (sdch_manager_)
-    sdch_manager_->DumpMemoryStats(pmd, dump_name);
   return true;
 }
 

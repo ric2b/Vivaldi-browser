@@ -27,12 +27,12 @@
 #define BiquadProcessor_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/AudioParam.h"
 #include "platform/audio/AudioDSPKernel.h"
 #include "platform/audio/AudioDSPKernelProcessor.h"
 #include "platform/audio/Biquad.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -92,10 +92,10 @@ class BiquadProcessor final : public AudioDSPKernelProcessor {
  private:
   FilterType type_;
 
-  RefPtr<AudioParamHandler> parameter1_;
-  RefPtr<AudioParamHandler> parameter2_;
-  RefPtr<AudioParamHandler> parameter3_;
-  RefPtr<AudioParamHandler> parameter4_;
+  scoped_refptr<AudioParamHandler> parameter1_;
+  scoped_refptr<AudioParamHandler> parameter2_;
+  scoped_refptr<AudioParamHandler> parameter3_;
+  scoped_refptr<AudioParamHandler> parameter4_;
 
   // so DSP kernels know when to re-compute coefficients
   bool filter_coefficients_dirty_;

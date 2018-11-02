@@ -28,6 +28,21 @@ source_set("sad_tab") {
   libs = [ "UIKit.framework" ]
 }
 
+source_set("coordinator") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "sad_tab_legacy_coordinator.h",
+    "sad_tab_legacy_coordinator.mm",
+  ]
+  deps = [
+    ":sad_tab",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/web",
+    "//ios/chrome/browser/web:tab_helper_delegates",
+    "//ios/web",
+  ]
+}
+
 source_set("eg_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -40,11 +55,11 @@ source_set("eg_tests") {
     "//base",
     "//components/strings",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui/tools_menu",
+    "//ios/chrome/browser/ui/tools_menu/public",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/third_party/earl_grey",
+    "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/web/public/test/http_server",
     "//ui/base",
   ]

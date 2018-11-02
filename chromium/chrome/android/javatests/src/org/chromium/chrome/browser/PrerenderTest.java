@@ -8,7 +8,6 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
-import android.test.MoreAsserts;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -55,8 +54,7 @@ public class PrerenderTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
     }
 
     @After
@@ -113,7 +111,7 @@ public class PrerenderTest {
         PrerenderTestHelper.prerenderUrl(testUrl, tab);
 
         // Make sure the current tab title is NOT from the prerendered page.
-        MoreAsserts.assertNotEqual(newTitle, tab.getTitle());
+        Assert.assertNotEquals(newTitle, tab.getTitle());
 
         TabTitleObserver observer = new TabTitleObserver(tab, newTitle);
 

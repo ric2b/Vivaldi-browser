@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -44,13 +44,13 @@
 #include "gpu/ipc/service/switches.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
+#include "services/service_manager/sandbox/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
-#include "ui/gfx/color_space_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/ozone/public/ozone_switches.h"
 #include "ui/wm/core/wm_core_switches.h"
@@ -76,6 +76,10 @@ void DeriveCommandLine(const GURL& start_url,
   DCHECK_NE(&base_command_line, command_line);
 
   static const char* const kForwardSwitches[] = {
+    service_manager::switches::kDisableSeccompFilterSandbox,
+    service_manager::switches::kDisableSetuidSandbox,
+    service_manager::switches::kGpuSandboxAllowSysVShm,
+    service_manager::switches::kGpuSandboxFailuresFatal,
     ::switches::kBlinkSettings,
     ::switches::kDisable2dCanvasImageChromium,
     ::switches::kDisableAccelerated2dCanvas,
@@ -88,7 +92,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableGpu,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
-    ::switches::kUsePassthroughCmdDecoder,
+    ::switches::kUseCmdDecoder,
     ::switches::kDisableGpuWatchdog,
     ::switches::kDisableGpuCompositing,
     ::switches::kDisableGpuRasterization,
@@ -97,9 +101,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisablePreferCompositingToLCDText,
     ::switches::kDisablePanelFitting,
     ::switches::kDisableRGBA4444Textures,
-    ::switches::kDisableSeccompFilterSandbox,
-    ::switches::kDisableSetuidSandbox,
-    ::switches::kDisableSlimmingPaintInvalidation,
     ::switches::kDisableThreadedScrolling,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableZeroCopy,
@@ -120,8 +121,8 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnablePinch,
     ::switches::kEnablePreferCompositingToLCDText,
     ::switches::kEnableRGBA4444Textures,
+    ::switches::kEnableSlimmingPaintV175,
     ::switches::kEnableSlimmingPaintV2,
-    ::switches::kEnableSlimmingPaintInvalidation,
     ::switches::kEnableTouchDragDrop,
     ::switches::kEnableUnifiedDesktop,
     ::switches::kEnableUseZoomForDSF,
@@ -138,8 +139,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kForceGpuRasterization,
     ::switches::kGpuRasterizationMSAASampleCount,
     ::switches::kGpuStartupDialog,
-    ::switches::kGpuSandboxAllowSysVShm,
-    ::switches::kGpuSandboxFailuresFatal,
     ::switches::kGpuSandboxStartEarly,
     ::switches::kNoSandbox,
     ::switches::kNumRasterThreads,
@@ -156,7 +155,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kTopChromeMD,
     ::switches::kTraceToConsole,
     ::switches::kUIDisablePartialSwap,
-    ::switches::kUIPrioritizeInGpuProcess,
 #if defined(USE_CRAS)
     ::switches::kUseCras,
 #endif
@@ -174,14 +172,14 @@ void DeriveCommandLine(const GURL& start_url,
 #endif
     ::switches::kDisableVaapiAcceleratedVideoEncode,
     ::switches::kOzonePlatform,
-    app_list::switches::kDisableSyncAppList,
-    app_list::switches::kEnableSyncAppList,
     ash::switches::kAshEnableTabletMode,
     ash::switches::kAshForceEnableStylusTools,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
     ash::switches::kAuraLegacyPowerButton,
     ash::switches::kForceClamshellPowerButton,
+    ash::switches::kShowViewsLogin,
+    ash::switches::kShowWebUiLock,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,
@@ -217,21 +215,18 @@ void DeriveCommandLine(const GURL& start_url,
     chromeos::switches::kHasChromeOSKeyboard,
     chromeos::switches::kLoginProfile,
     chromeos::switches::kNaturalScrollDefault,
-    chromeos::switches::kShowMdLogin,
     chromeos::switches::kShowNonMdLogin,
     chromeos::switches::kSystemInDevMode,
     policy::switches::kDeviceManagementUrl,
     wm::switches::kWindowAnimationsDisabled,
   };
-  command_line->CopySwitchesFrom(base_command_line,
-                                 kForwardSwitches,
+  command_line->CopySwitchesFrom(base_command_line, kForwardSwitches,
                                  arraysize(kForwardSwitches));
 
   if (start_url.is_valid())
     command_line->AppendArg(start_url.spec());
 
-  for (base::DictionaryValue::Iterator it(new_switches);
-       !it.IsAtEnd();
+  for (base::DictionaryValue::Iterator it(new_switches); !it.IsAtEnd();
        it.Advance()) {
     std::string value;
     CHECK(it.value().GetAsString(&value));
@@ -263,7 +258,7 @@ class ChromeRestartRequest
   void RestartJob();
 
   // Called when RestartJob D-Bus method call is complete.
-  void OnRestartJob(base::ScopedFD local_auth_fd, DBusMethodCallStatus status);
+  void OnRestartJob(base::ScopedFD local_auth_fd, bool result);
 
   const std::vector<std::string> argv_;
   base::OneShotTimer timer_;
@@ -288,9 +283,8 @@ void ChromeRestartRequest::Start() {
   // just kills us so settings may be lost. See http://crosbug.com/13102
   g_browser_process->FlushLocalStateAndReply(
       base::BindOnce(&ChromeRestartRequest::RestartJob, AsWeakPtr()));
-  timer_.Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(3), this,
-      &ChromeRestartRequest::RestartJob);
+  timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(3), this,
+               &ChromeRestartRequest::RestartJob);
 }
 
 void ChromeRestartRequest::RestartJob() {
@@ -321,7 +315,7 @@ void ChromeRestartRequest::RestartJob() {
 }
 
 void ChromeRestartRequest::OnRestartJob(base::ScopedFD local_auth_fd,
-                                        DBusMethodCallStatus status) {
+                                        bool result) {
   // Now that the call is complete, local_auth_fd can be closed and discarded,
   // which will happen automatically when it goes out of scope.
   VLOG(1) << "OnRestartJob";

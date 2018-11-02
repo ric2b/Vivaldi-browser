@@ -19,10 +19,11 @@ using base::android::ScopedJavaLocalRef;
 
 namespace content {
 
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& obj,
-                  jlong high,
-                  jlong low) {
+static jlong JNI_DialogOverlayImpl_Init(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj,
+                                        jlong high,
+                                        jlong low,
+                                        jboolean power_efficient) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   RenderFrameHostImpl* rfhi =
@@ -50,14 +51,26 @@ static jlong Init(JNIEnv* env,
   if (web_contents_impl->HasPersistentVideo())
     return 0;
 
+  // If we require a power-efficient overlay, then approximate that with "is
+  // fullscreen".  The reason is that we want to be somewhat sure that we don't
+  // have more layers than HWC can support, else SurfaceFlinger will fall back
+  // to GLES composition.  In fullscreen mode, the android status bar is hidden,
+  // as is the nav bar (if present).  The chrome activity surface also gets
+  // hidden when possible.
+  if (power_efficient && !web_contents_impl->IsFullscreen())
+    return 0;
+
   return reinterpret_cast<jlong>(
-      new DialogOverlayImpl(obj, rfhi, web_contents_impl));
+      new DialogOverlayImpl(obj, rfhi, web_contents_impl, power_efficient));
 }
 
 DialogOverlayImpl::DialogOverlayImpl(const JavaParamRef<jobject>& obj,
                                      RenderFrameHostImpl* rfhi,
-                                     WebContents* web_contents)
-    : WebContentsObserver(web_contents), rfhi_(rfhi) {
+                                     WebContents* web_contents,
+                                     bool power_efficient)
+    : WebContentsObserver(web_contents),
+      rfhi_(rfhi),
+      power_efficient_(power_efficient) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(rfhi_);
 
@@ -177,6 +190,21 @@ void DialogOverlayImpl::WebContentsDestroyed() {
   Stop();
 }
 
+void DialogOverlayImpl::DidToggleFullscreenModeForTab(bool entered_fullscreen,
+                                                      bool will_cause_resize) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // If the caller doesn't care about power-efficient overlays, then don't send
+  // any callbacks about state change.
+  if (!power_efficient_)
+    return;
+
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = obj_.get(env);
+  if (!obj.is_null())
+    Java_DialogOverlayImpl_onPowerEfficientState(env, obj, entered_fullscreen);
+}
+
 void DialogOverlayImpl::OnAttachedToWindow() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
@@ -198,16 +226,17 @@ void DialogOverlayImpl::OnDetachedFromWindow() {
     Java_DialogOverlayImpl_onWindowToken(env, obj, nullptr);
 }
 
-static jint RegisterSurface(JNIEnv* env,
-                            const base::android::JavaParamRef<jclass>& jcaller,
-                            const JavaParamRef<jobject>& surface) {
+static jint JNI_DialogOverlayImpl_RegisterSurface(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jclass>& jcaller,
+    const JavaParamRef<jobject>& surface) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return gpu::GpuSurfaceTracker::Get()->AddSurfaceForNativeWidget(
       gpu::GpuSurfaceTracker::SurfaceRecord(gfx::kNullAcceleratedWidget,
                                             surface.obj()));
 }
 
-static void UnregisterSurface(
+static void JNI_DialogOverlayImpl_UnregisterSurface(
     JNIEnv* env,
     const base::android::JavaParamRef<jclass>& jcaller,
     jint surface_id) {
@@ -215,7 +244,8 @@ static void UnregisterSurface(
   gpu::GpuSurfaceTracker::Get()->RemoveSurface(surface_id);
 }
 
-static ScopedJavaLocalRef<jobject> LookupSurfaceForTesting(
+static ScopedJavaLocalRef<jobject>
+JNI_DialogOverlayImpl_LookupSurfaceForTesting(
     JNIEnv* env,
     const base::android::JavaParamRef<jclass>& jcaller,
     jint surfaceId) {

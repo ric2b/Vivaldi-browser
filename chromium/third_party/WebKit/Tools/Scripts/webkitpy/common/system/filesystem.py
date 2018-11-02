@@ -61,9 +61,10 @@ class FileSystem(object):
         return os.path.realpath(path)
 
     def path_to_module(self, module_name):
-        """A wrapper for all calls to __file__ to allow easy unit testing."""
+        """Returns the absolute path of a module."""
         # FIXME: This is the only use of sys in this file. It's possible this function should move elsewhere.
-        return sys.modules[module_name].__file__  # __file__ is always an absolute path.
+        # __file__ is not always an absolute path in Python <3.4 (https://bugs.python.org/issue18416).
+        return self.abspath(sys.modules[module_name].__file__)
 
     def expanduser(self, path):
         return os.path.expanduser(path)
@@ -193,7 +194,7 @@ class FileSystem(object):
     def normpath(self, path):
         return os.path.normpath(path)
 
-    def open_binary_tempfile(self, suffix):
+    def open_binary_tempfile(self, suffix=''):
         """Create, open, and return a binary temp file. Returns a tuple of the file and the name."""
         temp_fd, temp_name = tempfile.mkstemp(suffix)
         f = os.fdopen(temp_fd, 'wb')
@@ -213,6 +214,12 @@ class FileSystem(object):
     def write_binary_file(self, path, contents):
         with file(path, 'wb') as f:
             f.write(contents)
+
+    def open_text_tempfile(self, suffix=''):
+        """Create, open, and return a text temp file. Returns a tuple of the file and the name."""
+        _, temp_name = tempfile.mkstemp(suffix)
+        f = codecs.open(temp_name, 'w', 'utf8')
+        return f, temp_name
 
     def open_text_file_for_reading(self, path):
         # Note: There appears to be an issue with the returned file objects

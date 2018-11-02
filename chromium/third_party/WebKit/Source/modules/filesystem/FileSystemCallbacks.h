@@ -43,16 +43,16 @@ namespace blink {
 
 class DOMFileSystemBase;
 class DirectoryReaderBase;
-class BlobCallback;
 class EntriesCallback;
 class EntryCallback;
 class ErrorCallback;
+class ExecutionContext;
+class FileCallback;
 class FileMetadata;
 class FileSystemCallback;
 class FileWriterBase;
 class FileWriterBaseCallback;
 class MetadataCallback;
-class ExecutionContext;
 class VoidCallback;
 
 // Passed to DOMFileSystem implementations that may report errors. Subclasses
@@ -61,7 +61,7 @@ class VoidCallback;
 class ErrorCallbackBase : public GarbageCollectedFinalized<ErrorCallbackBase> {
  public:
   virtual ~ErrorCallbackBase() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
   virtual void Invoke(FileError::ErrorCode) = 0;
 };
 
@@ -102,8 +102,8 @@ class FileSystemCallbacksBase : public AsyncFileSystemCallbacks {
 class ScriptErrorCallback final : public ErrorCallbackBase {
  public:
   static ScriptErrorCallback* Wrap(ErrorCallback*);
-  virtual ~ScriptErrorCallback() {}
-  DECLARE_VIRTUAL_TRACE();
+  ~ScriptErrorCallback() override {}
+  void Trace(blink::Visitor*) override;
 
   void Invoke(FileError::ErrorCode) override;
 
@@ -231,22 +231,22 @@ class SnapshotFileCallback final : public FileSystemCallbacksBase {
   static std::unique_ptr<AsyncFileSystemCallbacks> Create(DOMFileSystemBase*,
                                                           const String& name,
                                                           const KURL&,
-                                                          BlobCallback*,
+                                                          FileCallback*,
                                                           ErrorCallbackBase*,
                                                           ExecutionContext*);
-  virtual void DidCreateSnapshotFile(const FileMetadata&,
-                                     PassRefPtr<BlobDataHandle> snapshot);
+  void DidCreateSnapshotFile(const FileMetadata&,
+                             scoped_refptr<BlobDataHandle> snapshot) override;
 
  private:
   SnapshotFileCallback(DOMFileSystemBase*,
                        const String& name,
                        const KURL&,
-                       BlobCallback*,
+                       FileCallback*,
                        ErrorCallbackBase*,
                        ExecutionContext*);
   String name_;
   KURL url_;
-  Persistent<BlobCallback> success_callback_;
+  Persistent<FileCallback> success_callback_;
 };
 
 class VoidCallbacks final : public FileSystemCallbacksBase {

@@ -83,6 +83,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     self.collectionViewAccessibilityIdentifier =
         @"block_popups_settings_view_controller";
 
+    // TODO(crbug.com/764578): Instance methods should not be called from
+    // initializer.
     [self populateExceptionsList];
     [self updateEditButton];
     [self loadModel];
@@ -177,6 +179,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
     // Remove the site from |_exceptions|.
     _exceptions.Remove(urlIndex, NULL);
   }
+
+  // Update the edit button appearance, in case all exceptions were removed.
+  [self updateEditButton];
 
   // Must call super at the end of the child implementation.
   [super collectionView:collectionView willDeleteItemsAtIndexPaths:indexPaths];

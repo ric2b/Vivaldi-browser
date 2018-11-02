@@ -10,7 +10,7 @@ package org.chromium.chrome.browser;
  */
 public abstract class ChromeSwitches {
     // Switches used from Java.  Please continue switch style used Chrome where
-    // options-have-hypens and are_not_split_with_underscores.
+    // options-have-hyphens and are_not_split_with_underscores.
 
     /** Mimic a low end device */
     public static final String ENABLE_ACCESSIBILITY_TAB_SWITCHER =
@@ -126,20 +126,6 @@ public abstract class ChromeSwitches {
     public static final String ENABLE_HUNG_RENDERER_INFOBAR = "enable-hung-renderer-infobar";
 
     /**
-     * Enables Web Notification custom layouts.
-     * Native switch - switches::kEnableWebNotificationCustomLayouts
-     */
-    public static final String ENABLE_WEB_NOTIFICATION_CUSTOM_LAYOUTS =
-            "enable-web-notification-custom-layouts";
-
-    /**
-     * Disables Web Notification custom layouts.
-     * Native switch - switches::kDisableWebNotificationCustomLayouts
-     */
-    public static final String DISABLE_WEB_NOTIFICATION_CUSTOM_LAYOUTS =
-            "disable-web-notification-custom-layouts";
-
-    /**
      * Determines which of the Herb prototypes is being tested.
      * See about:flags for descriptions.
      */
@@ -164,6 +150,9 @@ public abstract class ChromeSwitches {
     public static final String ALWAYS_EXTRACT_WEBAPK_RUNTIME_DEX_ON_STARTUP =
             "always-extract-webapk-dex-on-startup";
 
+    /** Treats all WebAPKs as valid - useful only for local testing. */
+    public static final String SKIP_WEBAPK_VERIFICATION = "skip-webapk-verification";
+
     /**
      * Forces a check for whether the WebAPK's Web Manifest has changed each time that a WebAPK is
      * launched.
@@ -180,8 +169,14 @@ public abstract class ChromeSwitches {
     /** Switch for enabling "restricted area" swipe logic for Chrome Home. */
     public static final String CHROME_HOME_SWIPE_LOGIC_RESTRICT_AREA = "restrict-area";
 
-    /** Switch for enabling "button only" swipe logic for Chrome Home. */
-    public static final String CHROME_HOME_SWIPE_LOGIC_BUTTON_ONLY = "button-only";
+    /**
+     * Switch for enabling "velocity" swipe logic for Chrome Home. This means the flings will not
+     * open the sheet; the user must slide up the sheet relatively slowly.
+     */
+    public static final String CHROME_HOME_SWIPE_LOGIC_VELOCITY = "velocity";
+
+    /** Switch for enabling the Chrome Home Survey. */
+    public static final String CHROME_HOME_FORCE_ENABLE_SURVEY = "force-enable-chrome-home-survey";
 
     // Prevent instantiation.
     private ChromeSwitches() {}

@@ -13,7 +13,6 @@
 #include "components/data_reduction_proxy/proto/data_store.pb.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
@@ -27,11 +26,11 @@ data_reduction_proxy::DataStore::Status LevelDbToDRPStoreStatus(
     leveldb::Status leveldb_status) {
   if (leveldb_status.ok())
     return data_reduction_proxy::DataStore::Status::OK;
-  else if (leveldb_status.IsNotFound())
+  if (leveldb_status.IsNotFound())
     return data_reduction_proxy::DataStore::Status::NOT_FOUND;
-  else if (leveldb_status.IsCorruption())
+  if (leveldb_status.IsCorruption())
     return data_reduction_proxy::DataStore::Status::CORRUPTED;
-  else if (leveldb_status.IsIOError())
+  if (leveldb_status.IsIOError())
     return data_reduction_proxy::DataStore::Status::IO_ERROR;
 
   return data_reduction_proxy::DataStore::Status::MISC_ERROR;

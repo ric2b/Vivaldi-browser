@@ -7,8 +7,8 @@
 
 #include "base/time/time.h"
 #include "content/public/common/request_context_frame_type.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerClientType.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -20,14 +20,15 @@ namespace content {
 // constructor to fill the properties.
 struct ServiceWorkerClientInfo {
   ServiceWorkerClientInfo();
-  ServiceWorkerClientInfo(const std::string& client_uuid,
-                          blink::WebPageVisibilityState page_visibility_state,
-                          bool is_focused,
-                          const GURL& url,
-                          RequestContextFrameType frame_type,
-                          base::TimeTicks last_focus_time,
-                          base::TimeTicks create_time,
-                          blink::WebServiceWorkerClientType client_type);
+  ServiceWorkerClientInfo(
+      const std::string& client_uuid,
+      blink::mojom::PageVisibilityState page_visibility_state,
+      bool is_focused,
+      const GURL& url,
+      RequestContextFrameType frame_type,
+      base::TimeTicks last_focus_time,
+      base::TimeTicks create_time,
+      blink::mojom::ServiceWorkerClientType client_type);
   ServiceWorkerClientInfo(const ServiceWorkerClientInfo& other);
 
   // Returns whether the instance is empty.
@@ -38,13 +39,13 @@ struct ServiceWorkerClientInfo {
   bool IsValid() const;
 
   std::string client_uuid;
-  blink::WebPageVisibilityState page_visibility_state;
+  blink::mojom::PageVisibilityState page_visibility_state;
   bool is_focused;
   GURL url;
   RequestContextFrameType frame_type;
   base::TimeTicks last_focus_time;
   base::TimeTicks create_time;
-  blink::WebServiceWorkerClientType client_type;
+  blink::mojom::ServiceWorkerClientType client_type;
 };
 
 }  // namespace content

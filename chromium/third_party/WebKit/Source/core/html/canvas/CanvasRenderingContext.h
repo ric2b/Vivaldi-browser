@@ -26,6 +26,7 @@
 #ifndef CanvasRenderingContext_h
 #define CanvasRenderingContext_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
@@ -34,7 +35,6 @@
 #include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/ColorBehavior.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/StringHash.h"
 #include "public/platform/WebThread.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
@@ -48,7 +48,6 @@ class ImageData;
 class ImageBitmap;
 class WebLayer;
 
-constexpr const char* kLegacyCanvasColorSpaceName = "legacy-srgb";
 constexpr const char* kSRGBCanvasColorSpaceName = "srgb";
 constexpr const char* kRec2020CanvasColorSpaceName = "rec2020";
 constexpr const char* kP3CanvasColorSpaceName = "p3";
@@ -58,11 +57,8 @@ constexpr const char* kRGB10A2CanvasPixelFormatName = "10-10-10-2";
 constexpr const char* kRGBA12CanvasPixelFormatName = "12-12-12-12";
 constexpr const char* kF16CanvasPixelFormatName = "float16";
 
-class CORE_EXPORT CanvasRenderingContext
-    : public GarbageCollectedFinalized<CanvasRenderingContext>,
-      public ScriptWrappable,
-      public WebThread::TaskObserver {
-  WTF_MAKE_NONCOPYABLE(CanvasRenderingContext);
+class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
+                                           public WebThread::TaskObserver {
   USING_PRE_FINALIZER(CanvasRenderingContext, Dispose);
 
  public:
@@ -87,15 +83,15 @@ class CORE_EXPORT CanvasRenderingContext
   static ContextType ContextTypeFromId(const String& id);
   static ContextType ResolveContextTypeAliases(ContextType);
 
-  CanvasRenderingContextHost* host() const { return host_; }
+  CanvasRenderingContextHost* Host() const { return host_; }
 
   WTF::String ColorSpaceAsString() const;
   WTF::String PixelFormatAsString() const;
 
-  const CanvasColorParams& color_params() const { return color_params_; }
+  const CanvasColorParams& ColorParams() const { return color_params_; }
 
-  virtual RefPtr<StaticBitmapImage> GetImage(AccelerationHint,
-                                             SnapshotReason) const = 0;
+  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint,
+                                                    SnapshotReason) const = 0;
   virtual ImageData* ToImageData(SnapshotReason reason) { return nullptr; }
   virtual ContextType GetContextType() const = 0;
   virtual bool IsComposited() const = 0;
@@ -148,7 +144,7 @@ class CORE_EXPORT CanvasRenderingContext
   virtual bool Is2d() const { return false; }
   virtual void RestoreCanvasMatrixClipStack(PaintCanvas*) const {}
   virtual void Reset() {}
-  virtual void clearRect(double x, double y, double width, double height) {}
+  virtual void ClearRect(double x, double y, double width, double height) {}
   virtual void DidSetSurfaceSize() {}
   virtual void SetShouldAntialias(bool) {}
   virtual unsigned HitRegionsCount() const { return 0; }
@@ -172,7 +168,7 @@ class CORE_EXPORT CanvasRenderingContext
     NOTREACHED();
     return nullptr;
   }
-  virtual int ExternallyAllocatedBytesPerPixel() {
+  virtual int ExternallyAllocatedBufferCountPerPixel() {
     NOTREACHED();
     return 0;
   }
@@ -192,11 +188,12 @@ class CORE_EXPORT CanvasRenderingContext
     return creation_attributes_;
   }
 
+  virtual void Trace(blink::Visitor*);
+  virtual void Stop() = 0;
+
  protected:
   CanvasRenderingContext(CanvasRenderingContextHost*,
                          const CanvasContextCreationAttributes&);
-  DECLARE_VIRTUAL_TRACE();
-  virtual void Stop() = 0;
 
  private:
   void Dispose();
@@ -207,6 +204,8 @@ class CORE_EXPORT CanvasRenderingContext
   CanvasColorParams color_params_;
   CanvasContextCreationAttributes creation_attributes_;
   bool finalize_frame_scheduled_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(CanvasRenderingContext);
 };
 
 }  // namespace blink

@@ -32,6 +32,7 @@
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/host_port_pair.h"
@@ -83,7 +84,7 @@ class OCSPIOLoop {
   }
 
   // Called from worker thread.
-  void PostTaskToIOLoop(const tracked_objects::Location& from_here,
+  void PostTaskToIOLoop(const base::Location& from_here,
                         const base::Closure& task);
 
   void AddRequest(OCSPRequestSession* request);
@@ -477,7 +478,7 @@ class OCSPServerSession {
  public:
   OCSPServerSession(const char* host, PRUint16 port)
       : host_and_port_(host, port) {}
-  ~OCSPServerSession() {}
+  ~OCSPServerSession() = default;
 
   OCSPRequestSession* CreateRequest(const char* http_protocol_variant,
                                     const char* path_and_query_string,
@@ -540,8 +541,8 @@ void OCSPIOLoop::Shutdown() {
   pthread_mutex_unlock(&g_request_context_lock);
 }
 
-void OCSPIOLoop::PostTaskToIOLoop(
-    const tracked_objects::Location& from_here, const base::Closure& task) {
+void OCSPIOLoop::PostTaskToIOLoop(const base::Location& from_here,
+                                  const base::Closure& task) {
   base::AutoLock autolock(lock_);
   if (io_loop_)
     io_loop_->task_runner()->PostTask(from_here, task);

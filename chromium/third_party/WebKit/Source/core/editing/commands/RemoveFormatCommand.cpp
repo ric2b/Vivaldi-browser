@@ -27,14 +27,15 @@
 #include "core/editing/commands/RemoveFormatCommand.h"
 
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
 #include "core/frame/LocalFrame.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -56,18 +57,18 @@ static bool IsElementForRemoveFormatCommand(const Element* element) {
 }
 
 void RemoveFormatCommand::DoApply(EditingState* editing_state) {
-  LocalFrame* frame = GetDocument().GetFrame();
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
 
-  if (!frame->Selection()
-           .ComputeVisibleSelectionInDOMTreeDeprecated()
-           .IsNonOrphanedCaretOrRange())
+  // TODO(editing-dev): Stop accessing FrameSelection in edit commands.
+  LocalFrame* frame = GetDocument().GetFrame();
+  const VisibleSelection selection =
+      frame->Selection().ComputeVisibleSelectionInDOMTree();
+  if (selection.IsNone() || !selection.IsValidFor(GetDocument()))
     return;
 
   // Get the default style for this editable root, it's the style that we'll
   // give the content that we're operating on.
-  Element* root = frame->Selection()
-                      .ComputeVisibleSelectionInDOMTreeDeprecated()
-                      .RootEditableElement();
+  Element* root = selection.RootEditableElement();
   EditingStyle* default_style = EditingStyle::Create(root);
 
   // We want to remove everything but transparent background.

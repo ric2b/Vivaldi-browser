@@ -22,7 +22,10 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/infobars/core/infobar.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_features.h"
+#include "components/previews/core/previews_logger.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -39,6 +42,7 @@ const char kMinStalenessParamName[] = "min_staleness_in_minutes";
 const char kMaxStalenessParamName[] = "max_staleness_in_minutes";
 const int kMinStalenessParamDefaultValue = 5;
 const int kMaxStalenessParamDefaultValue = 1440;
+static const char kPreviewInfobarEventType[] = "InfoBar";
 
 void RecordPreviewsInfoBarAction(
     previews::PreviewsType previews_type,
@@ -58,26 +62,17 @@ void RecordStaleness(PreviewsInfoBarDelegate::PreviewsInfoBarTimestamp value) {
                             PreviewsInfoBarDelegate::TIMESTAMP_INDEX_BOUNDARY);
 }
 
-// Increments the prefs-based opt out information for data reduction proxy when
-// the user is not already transitioned to the PreviewsBlackList.
-void IncrementDataReductionProxyPrefs(content::WebContents* web_contents) {
-  auto* data_reduction_proxy_settings =
-      DataReductionProxyChromeSettingsFactory::GetForBrowserContext(
-          web_contents->GetBrowserContext());
-  data_reduction_proxy_settings->IncrementLoFiUserRequestsForImages();
-}
-
 // Reloads the content of the page without previews.
 void ReloadWithoutPreviews(previews::PreviewsType previews_type,
                            content::WebContents* web_contents) {
   switch (previews_type) {
     case previews::PreviewsType::LITE_PAGE:
     case previews::PreviewsType::OFFLINE:
-      // Prevent LoFi and lite page modes from showing after reload.
-      // TODO(ryansturm): rename DISABLE_LOFI_MODE to DISABLE_PREVIEWS.
-      // crbug.com/707272
+    case previews::PreviewsType::AMP_REDIRECTION:
+    case previews::PreviewsType::NOSCRIPT:
+      // Prevent previews and lite page modes from showing after reload.
       web_contents->GetController().Reload(
-          content::ReloadType::DISABLE_LOFI_MODE, true);
+          content::ReloadType::DISABLE_PREVIEWS, true);
       break;
     case previews::PreviewsType::LOFI:
       web_contents->ReloadLoFiImages();
@@ -115,7 +110,8 @@ void PreviewsInfoBarDelegate::Create(
     base::Time previews_freshness,
     bool is_data_saver_user,
     bool is_reload,
-    const OnDismissPreviewsInfobarCallback& on_dismiss_callback) {
+    const OnDismissPreviewsInfobarCallback& on_dismiss_callback,
+    previews::PreviewsUIService* previews_ui_service) {
   PreviewsInfoBarTabHelper* infobar_tab_helper =
       PreviewsInfoBarTabHelper::FromWebContents(web_contents);
   InfoBarService* infobar_service =
@@ -140,15 +136,17 @@ void PreviewsInfoBarDelegate::Create(
       infobar_service->CreateConfirmInfoBar(std::move(delegate)));
 #endif
 
-  infobars::InfoBar* infobar =
-      infobar_service->AddInfoBar(std::move(infobar_ptr));
+  infobar_service->AddInfoBar(std::move(infobar_ptr));
 
-  if (infobar && (previews_type == previews::PreviewsType::LITE_PAGE ||
-                  previews_type == previews::PreviewsType::LOFI)) {
-    auto* data_reduction_proxy_settings =
-        DataReductionProxyChromeSettingsFactory::GetForBrowserContext(
-            web_contents->GetBrowserContext());
-    data_reduction_proxy_settings->IncrementLoFiUIShown();
+  if (previews_ui_service) {
+    // Not in incognito mode or guest mode.
+    previews_ui_service->previews_logger()->LogMessage(
+        kPreviewInfobarEventType,
+        previews::GetDescriptionForInfoBarDescription(previews_type),
+        web_contents->GetController()
+            .GetLastCommittedEntry()
+            ->GetRedirectChain()[0] /* GURL */,
+        base::Time::Now());
   }
 
   RecordPreviewsInfoBarAction(previews_type, INFOBAR_SHOWN);
@@ -231,12 +229,6 @@ bool PreviewsInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
       InfoBarService::WebContentsFromInfoBar(infobar());
 
   InformPLMOfOptOut(web_contents);
-
-  if ((previews_type_ == previews::PreviewsType::LITE_PAGE ||
-       previews_type_ == previews::PreviewsType::LOFI) &&
-      !data_reduction_proxy::params::IsBlackListEnabledForServerPreviews()) {
-    IncrementDataReductionProxyPrefs(web_contents);
-  }
 
   ReloadWithoutPreviews(previews_type_, web_contents);
 

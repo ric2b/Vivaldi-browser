@@ -54,12 +54,11 @@ public class HTTPSTabsOpenedFromExternalAppTest {
     public void testReferrerPolicyHttpReferrerHttpsNavigationsPolicyDefault()
             throws InterruptedException {
         mTestServer = EmbeddedTestServer.createAndStartHTTPSServer(
-                InstrumentationRegistry.getInstrumentation().getContext(),
-                ServerCertificate.CERT_OK);
+                InstrumentationRegistry.getContext(), ServerCertificate.CERT_OK);
         try {
             String url = mTestServer.getURL("/chrome/test/data/android/about.html");
             TabsOpenedFromExternalAppTest.launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                    WebReferrerPolicy.WEB_REFERRER_POLICY_DEFAULT, HTTP_REFERRER, HTTP_REFERRER);
+                    WebReferrerPolicy.DEFAULT, HTTP_REFERRER, HTTP_REFERRER);
         } finally {
             if (mTestServer != null) mTestServer.stopAndDestroyServer();
         }

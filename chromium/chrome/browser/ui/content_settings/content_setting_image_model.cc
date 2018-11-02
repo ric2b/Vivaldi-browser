@@ -120,11 +120,12 @@ struct ContentSettingsImageDetails {
 };
 
 const ContentSettingsImageDetails kImageDetails[] = {
-    {CONTENT_SETTINGS_TYPE_COOKIES, kCookieIcon, IDS_BLOCKED_COOKIES_TITLE, 0,
-     IDS_ACCESSED_COOKIES_TITLE},
-    {CONTENT_SETTINGS_TYPE_IMAGES, kImageIcon, IDS_BLOCKED_IMAGES_TITLE, 0, 0},
-    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, kCodeIcon, IDS_BLOCKED_JAVASCRIPT_TITLE,
-     0, 0},
+    {CONTENT_SETTINGS_TYPE_COOKIES, kCookieIcon, IDS_BLOCKED_COOKIES_MESSAGE, 0,
+     IDS_ACCESSED_COOKIES_MESSAGE},
+    {CONTENT_SETTINGS_TYPE_IMAGES, kImageIcon, IDS_BLOCKED_IMAGES_MESSAGE, 0,
+     0},
+    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, kCodeIcon,
+     IDS_BLOCKED_JAVASCRIPT_MESSAGE, 0, 0},
     {CONTENT_SETTINGS_TYPE_PLUGINS, kExtensionIcon, IDS_BLOCKED_PLUGINS_MESSAGE,
      IDS_BLOCKED_PLUGIN_EXPLANATORY_TEXT, 0},
     {CONTENT_SETTINGS_TYPE_POPUPS, kWebIcon, IDS_BLOCKED_POPUPS_TOOLTIP,
@@ -132,7 +133,8 @@ const ContentSettingsImageDetails kImageDetails[] = {
     {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, kMixedContentIcon,
      IDS_BLOCKED_DISPLAYING_INSECURE_CONTENT, 0, 0},
     {CONTENT_SETTINGS_TYPE_PPAPI_BROKER, kExtensionIcon,
-     IDS_BLOCKED_PPAPI_BROKER_TITLE, 0, IDS_ALLOWED_PPAPI_BROKER_TITLE},
+     IDS_BLOCKED_PPAPI_BROKER_MESSAGE, 0, IDS_ALLOWED_PPAPI_BROKER_MESSAGE},
+    {CONTENT_SETTINGS_TYPE_SOUND, kTabAudioIcon, IDS_BLOCKED_SOUND_TITLE, 0, 0},
 };
 
 // The ordering of the models here influences the order in which icons are
@@ -151,6 +153,7 @@ constexpr ContentSettingsType kContentTypeIconOrder[] = {
     CONTENT_SETTINGS_TYPE_ADS,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
+    CONTENT_SETTINGS_TYPE_SOUND,
 };
 
 const ContentSettingsImageDetails* GetImageDetails(ContentSettingsType type) {
@@ -544,20 +547,20 @@ void ContentSettingDownloadsImageModel::UpdateFromWebContents(
   if (!download_request_limiter)
     return;
 
-  switch (download_request_limiter->GetDownloadStatus(web_contents)) {
-    case DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS:
+  switch (download_request_limiter->GetDownloadUiStatus(web_contents)) {
+    case DownloadRequestLimiter::DOWNLOAD_UI_ALLOWED:
       set_visible(true);
       set_icon(kFileDownloadIcon, gfx::kNoneIcon);
       set_explanatory_string_id(0);
       set_tooltip(l10n_util::GetStringUTF16(IDS_ALLOWED_DOWNLOAD_TITLE));
       return;
-    case DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED:
+    case DownloadRequestLimiter::DOWNLOAD_UI_BLOCKED:
       set_visible(true);
       set_icon(kFileDownloadIcon, kBlockedBadgeIcon);
       set_explanatory_string_id(IDS_BLOCKED_DOWNLOADS_EXPLANATION);
       set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_DOWNLOAD_TITLE));
       return;
-    default:
+    case DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT:
       // No need to show icon otherwise.
       return;
   }
@@ -565,13 +568,7 @@ void ContentSettingDownloadsImageModel::UpdateFromWebContents(
 
 // Base class ------------------------------------------------------------------
 
-gfx::Image ContentSettingImageModel::GetIcon(SkColor nearby_text_color) const {
-#if defined(OS_MACOSX)
-  SkColor icon_color = nearby_text_color;
-#else
-  SkColor icon_color = color_utils::DeriveDefaultIconColor(nearby_text_color);
-#endif
-
+gfx::Image ContentSettingImageModel::GetIcon(SkColor icon_color) const {
   return gfx::Image(
       gfx::CreateVectorIconWithBadge(*icon_, 16, icon_color, *icon_badge_));
 }

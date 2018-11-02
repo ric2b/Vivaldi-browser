@@ -80,6 +80,7 @@ var availableTests = [
   },
   function requestNetworkScan() {
     chrome.networkingPrivate.requestNetworkScan();
+    chrome.networkingPrivate.requestNetworkScan('Cellular');
     chrome.test.succeed();
   },
   function startConnect() {
@@ -126,6 +127,10 @@ var availableTests = [
     var simState = { requirePin: true, currentPin: '1111', newPin: '1234' };
     chrome.networkingPrivate.setCellularSimState(
         kGuid, simState, callbackPass(callbackResult));
+  },
+  function selectCellularMobileNetwork() {
+    chrome.networkingPrivate.selectCellularMobileNetwork(
+        kGuid, 'fakeId', callbackPass(callbackResult));
   },
   function getGlobalPolicy() {
     chrome.networkingPrivate.getGlobalPolicy(callbackPass(callbackResult));

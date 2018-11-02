@@ -96,7 +96,8 @@ chrome.automation.RoleType = {
   COLOR_WELL: 'colorWell',
   COLUMN_HEADER: 'columnHeader',
   COLUMN: 'column',
-  COMBO_BOX: 'comboBox',
+  COMBO_BOX_GROUPING: 'comboBoxGrouping',
+  COMBO_BOX_MENU_BUTTON: 'comboBoxMenuButton',
   COMPLEMENTARY: 'complementary',
   CONTENT_INFO: 'contentInfo',
   DATE: 'date',
@@ -186,6 +187,7 @@ chrome.automation.RoleType = {
   TABLE: 'table',
   TERM: 'term',
   TEXT_FIELD: 'textField',
+  TEXT_FIELD_WITH_COMBO_BOX: 'textFieldWithComboBox',
   TIME: 'time',
   TIMER: 'timer',
   TITLE_BAR: 'titleBar',
@@ -427,6 +429,14 @@ chrome.automation.AutomationNode.prototype.location;
  * @see https://developer.chrome.com/extensions/automation#method-boundsForRange
  */
 chrome.automation.AutomationNode.prototype.boundsForRange = function(startIndex, endIndex) {};
+
+/**
+ * The location (as a bounding box) of this node in global screen coordinates.
+ * This is the same as location but not clipped by ancestors.
+ * @type {(!chrome.automation.Rect|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-unclippedLocation
+ */
+chrome.automation.AutomationNode.prototype.unclippedLocation;
 
 /**
  * The purpose of the node, other than the role, if any.

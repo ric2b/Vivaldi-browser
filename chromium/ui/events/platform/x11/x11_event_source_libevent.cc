@@ -4,9 +4,6 @@
 
 #include "ui/events/platform/x11/x11_event_source_libevent.h"
 
-#include <X11/Xlib.h>
-#include <X11/extensions/XInput2.h>
-
 #include <memory>
 
 #include "base/memory/ptr_util.h"
@@ -16,6 +13,7 @@
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/events/x/events_x_utils.h"
+#include "ui/gfx/x/x11.h"
 
 namespace ui {
 
@@ -23,10 +21,10 @@ namespace {
 
 std::unique_ptr<TouchEvent> CreateTouchEvent(EventType event_type,
                                              const XEvent& xev) {
-  std::unique_ptr<TouchEvent> event = base::MakeUnique<TouchEvent>(
+  std::unique_ptr<TouchEvent> event = std::make_unique<TouchEvent>(
       event_type, EventLocationFromXEvent(xev), EventTimeFromXEvent(xev),
       ui::PointerDetails(
-          ui::EventPointerType::POINTER_TYPE_TOUCH, GetTouchIdFromXEvent(xev),
+          GetTouchPointerTypeFromXEvent(xev), GetTouchIdFromXEvent(xev),
           GetTouchRadiusXFromXEvent(xev), GetTouchRadiusYFromXEvent(xev),
           GetTouchForceFromXEvent(xev)));
 
@@ -44,19 +42,19 @@ std::unique_ptr<ui::Event> TranslateXI2EventToEvent(const XEvent& xev) {
   switch (event_type) {
     case ET_KEY_PRESSED:
     case ET_KEY_RELEASED:
-      return base::MakeUnique<KeyEvent>(event_type,
+      return std::make_unique<KeyEvent>(event_type,
                                         KeyboardCodeFromXKeyEvent(&xev),
                                         EventFlagsFromXEvent(xev));
     case ET_MOUSE_PRESSED:
     case ET_MOUSE_MOVED:
     case ET_MOUSE_DRAGGED:
     case ET_MOUSE_RELEASED:
-      return base::MakeUnique<MouseEvent>(
+      return std::make_unique<MouseEvent>(
           event_type, EventLocationFromXEvent(xev),
           EventSystemLocationFromXEvent(xev), EventTimeFromXEvent(xev),
           EventFlagsFromXEvent(xev), GetChangedMouseButtonFlagsFromXEvent(xev));
     case ET_MOUSEWHEEL:
-      return base::MakeUnique<MouseWheelEvent>(
+      return std::make_unique<MouseWheelEvent>(
           GetMouseWheelOffsetFromXEvent(xev), EventLocationFromXEvent(xev),
           EventSystemLocationFromXEvent(xev), EventTimeFromXEvent(xev),
           EventFlagsFromXEvent(xev), GetChangedMouseButtonFlagsFromXEvent(xev));
@@ -65,7 +63,7 @@ std::unique_ptr<ui::Event> TranslateXI2EventToEvent(const XEvent& xev) {
       float x_offset, y_offset, x_offset_ordinal, y_offset_ordinal;
       GetFlingDataFromXEvent(xev, &x_offset, &y_offset, &x_offset_ordinal,
                              &y_offset_ordinal, nullptr);
-      return base::MakeUnique<ScrollEvent>(
+      return std::make_unique<ScrollEvent>(
           event_type, EventLocationFromXEvent(xev), EventTimeFromXEvent(xev),
           EventFlagsFromXEvent(xev), x_offset, y_offset, x_offset_ordinal,
           y_offset_ordinal, 0);
@@ -75,7 +73,7 @@ std::unique_ptr<ui::Event> TranslateXI2EventToEvent(const XEvent& xev) {
       int finger_count;
       GetScrollOffsetsFromXEvent(xev, &x_offset, &y_offset, &x_offset_ordinal,
                                  &y_offset_ordinal, &finger_count);
-      return base::MakeUnique<ScrollEvent>(
+      return std::make_unique<ScrollEvent>(
           event_type, EventLocationFromXEvent(xev), EventTimeFromXEvent(xev),
           EventFlagsFromXEvent(xev), x_offset, y_offset, x_offset_ordinal,
           y_offset_ordinal, finger_count);
@@ -99,27 +97,27 @@ std::unique_ptr<ui::Event> TranslateXEventToEvent(const XEvent& xev) {
   switch (xev.type) {
     case LeaveNotify:
     case EnterNotify:
-      return base::MakeUnique<MouseEvent>(ET_MOUSE_MOVED,
+      return std::make_unique<MouseEvent>(EventTypeFromXEvent(xev),
                                           EventLocationFromXEvent(xev),
                                           EventSystemLocationFromXEvent(xev),
                                           EventTimeFromXEvent(xev), flags, 0);
 
     case KeyPress:
     case KeyRelease:
-      return base::MakeUnique<KeyEvent>(EventTypeFromXEvent(xev),
+      return std::make_unique<KeyEvent>(EventTypeFromXEvent(xev),
                                         KeyboardCodeFromXKeyEvent(&xev), flags);
 
     case ButtonPress:
     case ButtonRelease: {
       switch (EventTypeFromXEvent(xev)) {
         case ET_MOUSEWHEEL:
-          return base::MakeUnique<MouseWheelEvent>(
+          return std::make_unique<MouseWheelEvent>(
               GetMouseWheelOffsetFromXEvent(xev), EventLocationFromXEvent(xev),
               EventSystemLocationFromXEvent(xev), EventTimeFromXEvent(xev),
               flags, 0);
         case ET_MOUSE_PRESSED:
         case ET_MOUSE_RELEASED:
-          return base::MakeUnique<MouseEvent>(
+          return std::make_unique<MouseEvent>(
               EventTypeFromXEvent(xev), EventLocationFromXEvent(xev),
               EventSystemLocationFromXEvent(xev), EventTimeFromXEvent(xev),
               flags, GetChangedMouseButtonFlagsFromXEvent(xev));
@@ -156,17 +154,25 @@ X11EventSourceLibevent* X11EventSourceLibevent::GetInstance() {
 
 void X11EventSourceLibevent::AddXEventDispatcher(XEventDispatcher* dispatcher) {
   dispatchers_xevent_.AddObserver(dispatcher);
+  PlatformEventDispatcher* event_dispatcher =
+      dispatcher->GetPlatformEventDispatcher();
+  if (event_dispatcher)
+    AddPlatformEventDispatcher(event_dispatcher);
 }
 
 void X11EventSourceLibevent::RemoveXEventDispatcher(
     XEventDispatcher* dispatcher) {
   dispatchers_xevent_.RemoveObserver(dispatcher);
+  PlatformEventDispatcher* event_dispatcher =
+      dispatcher->GetPlatformEventDispatcher();
+  if (event_dispatcher)
+    RemovePlatformEventDispatcher(event_dispatcher);
 }
 
 void X11EventSourceLibevent::ProcessXEvent(XEvent* xevent) {
   std::unique_ptr<ui::Event> translated_event = TranslateXEventToEvent(*xevent);
   if (translated_event) {
-    DispatchEvent(translated_event.get());
+    DispatchPlatformEvent(translated_event.get(), xevent);
   } else {
     // Only if we can't translate XEvent into ui::Event, try to dispatch XEvent
     // directly to XEventDispatchers.
@@ -185,6 +191,25 @@ void X11EventSourceLibevent::AddEventWatcher() {
       fd, true, base::MessagePumpLibevent::WATCH_READ, &watcher_controller_,
       this);
   initialized_ = true;
+}
+
+void X11EventSourceLibevent::DispatchPlatformEvent(const PlatformEvent& event,
+                                                   XEvent* xevent) {
+  // First, tell the XEventDispatchers, which can have
+  // PlatformEventDispatcher, an ui::Event is going to be sent next.
+  // It must make a promise to handle next translated |event| sent by
+  // PlatformEventSource based on a XID in |xevent| tested in
+  // CheckCanDispatchNextPlatformEvent(). This is needed because it is not
+  // possible to access |event|'s associated NativeEvent* and check if it is the
+  // event's target window (XID).
+  for (XEventDispatcher& dispatcher : dispatchers_xevent_)
+    dispatcher.CheckCanDispatchNextPlatformEvent(xevent);
+
+  DispatchEvent(event);
+
+  // Explicitly reset a promise to handle next translated event.
+  for (XEventDispatcher& dispatcher : dispatchers_xevent_)
+    dispatcher.PlatformEventDispatchFinished();
 }
 
 void X11EventSourceLibevent::DispatchXEventToXEventDispatchers(XEvent* xevent) {

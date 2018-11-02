@@ -23,6 +23,8 @@
 #include <windows.h>
 #include <security.h>
 #include "net/http/http_auth_sspi_win.h"
+#elif defined(NTLM_PORTABLE)
+#include "net/ntlm/ntlm_client.h"
 #endif
 
 #include <string>
@@ -70,6 +72,10 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
   };
 
 #if defined(NTLM_PORTABLE)
+  // A function that returns the time as the number of 100 nanosecond ticks
+  // since Jan 1, 1601 (UTC).
+  typedef uint64_t (*GetMSTimeProc)();
+
   // A function that generates n random bytes in the output buffer.
   typedef void (*GenerateRandomProc)(uint8_t* output, size_t n);
 
@@ -81,25 +87,30 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
   // GetHostName functions.
   class ScopedProcSetter {
    public:
-    ScopedProcSetter(GenerateRandomProc random_proc,
+    ScopedProcSetter(GetMSTimeProc ms_time_proc,
+                     GenerateRandomProc random_proc,
                      HostNameProc host_name_proc) {
+      old_ms_time_proc_ = SetGetMSTimeProc(ms_time_proc);
       old_random_proc_ = SetGenerateRandomProc(random_proc);
       old_host_name_proc_ = SetHostNameProc(host_name_proc);
     }
 
     ~ScopedProcSetter() {
+      SetGetMSTimeProc(old_ms_time_proc_);
       SetGenerateRandomProc(old_random_proc_);
       SetHostNameProc(old_host_name_proc_);
     }
 
    private:
+    GetMSTimeProc old_ms_time_proc_;
     GenerateRandomProc old_random_proc_;
     HostNameProc old_host_name_proc_;
   };
 #endif
 
 #if defined(NTLM_PORTABLE)
-  HttpAuthHandlerNTLM();
+  explicit HttpAuthHandlerNTLM(
+      const HttpAuthPreferences* http_auth_preferences);
 #endif
 #if defined(NTLM_SSPI)
   HttpAuthHandlerNTLM(SSPILibrary* sspi_library,
@@ -130,31 +141,32 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
   ~HttpAuthHandlerNTLM() override;
 
 #if defined(NTLM_PORTABLE)
-  // For unit tests to override the GenerateRandom and GetHostName functions.
-  // Returns the old function.
+  // For unit tests to override the GetMSTime, GenerateRandom and GetHostName
+  // functions. Returns the old function.
+  static GetMSTimeProc SetGetMSTimeProc(GetMSTimeProc proc);
   static GenerateRandomProc SetGenerateRandomProc(GenerateRandomProc proc);
   static HostNameProc SetHostNameProc(HostNameProc proc);
+
+  // Given an input token received from the server, generate the next output
+  // token to be sent to the server.
+  ntlm::Buffer GetNextToken(const ntlm::Buffer& in_token);
 #endif
 
   // Parse the challenge, saving the results into this instance.
   HttpAuth::AuthorizationResult ParseChallenge(
       HttpAuthChallengeTokenizer* tok, bool initial_challenge);
 
-  // Given an input token received from the server, generate the next output
-  // token to be sent to the server.
-  int GetNextToken(const void* in_token,
-                   uint32_t in_token_len,
-                   void** out_token,
-                   uint32_t* out_token_len);
-
   // Create an NTLM SPN to identify the |origin| server.
   static std::string CreateSPN(const GURL& origin);
 
 #if defined(NTLM_SSPI)
   HttpAuthSSPI auth_sspi_;
+#elif defined(NTLM_PORTABLE)
+  ntlm::NtlmClient ntlm_client_;
 #endif
 
 #if defined(NTLM_PORTABLE)
+  static GetMSTimeProc get_ms_time_proc_;
   static GenerateRandomProc generate_random_proc_;
   static HostNameProc get_host_name_proc_;
 #endif

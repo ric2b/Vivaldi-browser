@@ -19,9 +19,11 @@
 
 #include <memory>
 #include "base/command_line.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/message_loop/message_loop.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "platform/SharedBuffer.h"
 #include "platform/image-decoders/ImageDecoder.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "ui/gfx/test/icc_profiles.h"
@@ -174,13 +176,13 @@ static double GetCurrentTime() {
 
 static double GetCurrentTime() {
   struct timeval now;
-  gettimeofday(&now, 0);
+  gettimeofday(&now, nullptr);
   return now.tv_sec + now.tv_usec * (1.0 / 1000000.0);
 }
 
 #endif
 
-PassRefPtr<SharedBuffer> ReadFile(const char* file_name) {
+scoped_refptr<SharedBuffer> ReadFile(const char* file_name) {
   FILE* fp = fopen(file_name, "rb");
   if (!fp) {
     fprintf(stderr, "Can't open file %s\n", file_name);
@@ -207,10 +209,10 @@ PassRefPtr<SharedBuffer> ReadFile(const char* file_name) {
 bool DecodeImageData(SharedBuffer* data,
                      bool color_correction,
                      size_t packet_size) {
-  std::unique_ptr<ImageDecoder> decoder = ImageDecoder::Create(
-      data, true, ImageDecoder::kAlphaPremultiplied,
-      color_correction ? ColorBehavior::TransformToTargetForTesting()
-                       : ColorBehavior::Ignore());
+  std::unique_ptr<ImageDecoder> decoder =
+      ImageDecoder::Create(data, true, ImageDecoder::kAlphaPremultiplied,
+                           color_correction ? ColorBehavior::TransformToSRGB()
+                                            : ColorBehavior::Ignore());
   if (!packet_size) {
     bool all_data_received = true;
     decoder->SetData(data, all_data_received);
@@ -224,7 +226,7 @@ bool DecodeImageData(SharedBuffer* data,
     return !decoder->Failed();
   }
 
-  RefPtr<SharedBuffer> packet_data = SharedBuffer::Create();
+  scoped_refptr<SharedBuffer> packet_data = SharedBuffer::Create();
   size_t position = 0;
   size_t next_frame_to_decode = 0;
   while (true) {
@@ -236,7 +238,7 @@ bool DecodeImageData(SharedBuffer* data,
     position += length;
 
     bool all_data_received = position == data->size();
-    decoder->SetData(packet_data.Get(), all_data_received);
+    decoder->SetData(packet_data.get(), all_data_received);
 
     size_t frame_count = decoder->FrameCount();
     for (; next_frame_to_decode < frame_count; ++next_frame_to_decode) {
@@ -264,8 +266,6 @@ int Main(int argc, char* argv[]) {
 
   if (argc >= 2 && strcmp(argv[1], "--color-correct") == 0) {
     apply_color_correction = (--argc, ++argv, true);
-    gfx::ICCProfile profile = gfx::ICCProfileForTestingColorSpin();
-    ColorBehavior::SetGlobalTargetColorProfile(profile);
   }
 
   if (argc < 2) {
@@ -279,7 +279,7 @@ int Main(int argc, char* argv[]) {
 
   size_t iterations = 1;
   if (argc >= 3) {
-    char* end = 0;
+    char* end = nullptr;
     iterations = strtol(argv[2], &end, 10);
     if (*end != '\0' || !iterations) {
       fprintf(stderr,
@@ -292,7 +292,7 @@ int Main(int argc, char* argv[]) {
 
   size_t packet_size = 0;
   if (argc >= 4) {
-    char* end = 0;
+    char* end = nullptr;
     packet_size = strtol(argv[3], &end, 10);
     if (*end != '\0') {
       fprintf(stderr,
@@ -314,8 +314,8 @@ int Main(int argc, char* argv[]) {
   // Read entire file content to data, and consolidate the SharedBuffer data
   // segments into one, contiguous block of memory.
 
-  RefPtr<SharedBuffer> data = ReadFile(argv[1]);
-  if (!data.Get() || !data->size()) {
+  scoped_refptr<SharedBuffer> data = ReadFile(argv[1]);
+  if (!data.get() || !data->size()) {
     fprintf(stderr, "Error reading image data from [%s]\n", argv[1]);
     exit(2);
   }
@@ -324,7 +324,7 @@ int Main(int argc, char* argv[]) {
 
   // Warm-up: throw out the first iteration for more consistent results.
 
-  if (!DecodeImageData(data.Get(), apply_color_correction, packet_size)) {
+  if (!DecodeImageData(data.get(), apply_color_correction, packet_size)) {
     fprintf(stderr, "Image decode failed [%s]\n", argv[1]);
     exit(3);
   }
@@ -336,7 +336,7 @@ int Main(int argc, char* argv[]) {
   for (size_t i = 0; i < iterations; ++i) {
     double start_time = GetCurrentTime();
     bool decoded =
-        DecodeImageData(data.Get(), apply_color_correction, packet_size);
+        DecodeImageData(data.get(), apply_color_correction, packet_size);
     double elapsed_time = GetCurrentTime() - start_time;
     total_time += elapsed_time;
     if (!decoded) {
@@ -355,5 +355,7 @@ int Main(int argc, char* argv[]) {
 }  // namespace blink
 
 int main(int argc, char* argv[]) {
+  base::MessageLoop message_loop;
+  mojo::edk::Init();
   return blink::Main(argc, argv);
 }

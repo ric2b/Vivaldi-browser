@@ -5,16 +5,15 @@
 #include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
 
 #include <stddef.h>
-#include <X11/Xutil.h>
 
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 
 namespace views {
 
-X11TopmostWindowFinder::X11TopmostWindowFinder() : toplevel_(None) {
-}
+X11TopmostWindowFinder::X11TopmostWindowFinder() : toplevel_(x11::None) {}
 
 X11TopmostWindowFinder::~X11TopmostWindowFinder() {
 }
@@ -93,7 +92,7 @@ bool X11TopmostWindowFinder::ShouldStopIteratingAtLocalProcessWindow(
       aura::client::GetScreenPositionClient(window->GetRootWindow());
   gfx::Point window_loc(screen_loc_in_pixels_);
   screen_position_client->ConvertPointFromScreen(window, &window_loc);
-  return XPointInRegion(shape, window_loc.x(), window_loc.y()) == True;
+  return XPointInRegion(shape, window_loc.x(), window_loc.y()) == x11::True;
 }
 
 }  // namespace views

@@ -25,13 +25,13 @@
 #include "core/html/HTMLTableSectionElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTableRowElement.h"
+#include "core/html_names.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ inline HTMLTableSectionElement::HTMLTableSectionElement(
 
 DEFINE_ELEMENT_FACTORY_WITH_TAGNAME(HTMLTableSectionElement)
 
-const StylePropertySet*
+const CSSPropertyValueSet*
 HTMLTableSectionElement::AdditionalPresentationAttributeStyle() {
   if (HTMLTableElement* table = FindParentTable())
     return table->AdditionalGroupStyle(true);

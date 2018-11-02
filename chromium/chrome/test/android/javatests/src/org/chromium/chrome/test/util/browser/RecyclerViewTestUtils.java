@@ -39,6 +39,11 @@ public final class RecyclerViewTestUtils {
                     return false;
                 }
 
+                if (!viewHolder.itemView.isShown()) {
+                    updateFailureReason("The view is not visible for position " + position + ".");
+                    return false;
+                }
+
                 return true;
             }
         });
@@ -89,6 +94,16 @@ public final class RecyclerViewTestUtils {
                     return false;
                 }
 
+                if (recyclerView.isDirty()) {
+                    updateFailureReason("The recycler view is dirty.");
+                    return false;
+                }
+
+                if (recyclerView.isLayoutRequested()) {
+                    updateFailureReason("The recycler view has layout requested.");
+                    return false;
+                }
+
                 return true;
             }
         });
@@ -104,5 +119,27 @@ public final class RecyclerViewTestUtils {
     public static RecyclerView.ViewHolder scrollToView(RecyclerView recyclerView, int position) {
         ThreadUtils.runOnUiThreadBlocking(() -> recyclerView.scrollToPosition(position));
         return waitForView(recyclerView, position);
+    }
+
+    /**
+     * Scrolls the {@link RecyclerView} to the bottom.
+     */
+    public static void scrollToBottom(RecyclerView recyclerView) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                // Scroll to bottom.
+                recyclerView.scrollToPosition(recyclerView.getAdapter().getItemCount() - 1);
+            }
+        });
+
+        CriteriaHelper.pollUiThread(new Criteria(){
+            @Override
+            public boolean isSatisfied() {
+                // Wait until we can scroll no further.
+                // A positive parameter checks scrolling down, a negative one scrolling up.
+                return !recyclerView.canScrollVertically(1);
+            }
+        });
     }
 }

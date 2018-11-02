@@ -45,6 +45,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/zygote_host_linux.h"
@@ -381,7 +382,7 @@ void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
   if (!contents)
     return;
 
-  base::ProcessHandle pid = contents->GetRenderProcessHost()->GetHandle();
+  base::ProcessHandle pid = contents->GetMainFrame()->GetProcess()->GetHandle();
   AdjustFocusedTabScore(pid);
 }
 
@@ -422,11 +423,10 @@ void TabManagerDelegate::ScheduleEarlyOomPrioritiesAdjustment() {
 
 // If able to get the list of ARC procsses, prioritize tabs and apps as a whole.
 // Otherwise try to kill tabs only.
-void TabManagerDelegate::LowMemoryKill(
-    TabManager::DiscardTabCondition condition) {
+void TabManagerDelegate::LowMemoryKill(DiscardReason reason) {
   LoadTabListAndArcProcesses(
       tab_manager_, base::BindOnce(&TabManagerDelegate::LowMemoryKillImpl,
-                                   weak_ptr_factory_.GetWeakPtr(), condition));
+                                   weak_ptr_factory_.GetWeakPtr(), reason));
 }
 
 int TabManagerDelegate::GetCachedOomScore(ProcessHandle process_handle) {
@@ -608,10 +608,10 @@ bool TabManagerDelegate::KillArcProcess(const int nspid) {
 }
 
 bool TabManagerDelegate::KillTab(const TabStats& tab_stats,
-                                 TabManager::DiscardTabCondition condition) {
+                                 DiscardReason reason) {
   // Check |tab_manager_| is alive before taking tabs into consideration.
-  return tab_manager_ && tab_manager_->CanDiscardTab(tab_stats) &&
-         tab_manager_->DiscardTabById(tab_stats.tab_contents_id, condition);
+  return tab_manager_ && tab_manager_->CanDiscardTab(tab_stats, reason) &&
+         tab_manager_->DiscardTabById(tab_stats.id, reason);
 }
 
 chromeos::DebugDaemonClient* TabManagerDelegate::GetDebugDaemonClient() {
@@ -619,7 +619,7 @@ chromeos::DebugDaemonClient* TabManagerDelegate::GetDebugDaemonClient() {
 }
 
 void TabManagerDelegate::LowMemoryKillImpl(
-    TabManager::DiscardTabCondition condition,
+    DiscardReason reason,
     const TabStatsList& tab_list,
     const std::vector<arc::ArcProcess>& arc_processes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -629,19 +629,24 @@ void TabManagerDelegate::LowMemoryKillImpl(
       GetSortedCandidates(tab_list, arc_processes);
 
   // TODO(semenzato): decide if TargetMemoryToFreeKB is doing real
-  // I/O and if it is, move to I/O thread.
-  int target_memory_to_free_kb = mem_stat_->TargetMemoryToFreeKB();
-  const TimeTicks now = TimeTicks::Now();
+  // I/O and if it is, move to I/O thread (crbug.com/778703).
+  int target_memory_to_free_kb = 0;
+  {
+    base::ScopedAllowBlocking allow_blocking;
+    target_memory_to_free_kb = mem_stat_->TargetMemoryToFreeKB();
+  }
 
   MEMORY_LOG(ERROR) << "List of low memory kill candidates "
                        "(sorted from low priority to high priority):";
   for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
     MEMORY_LOG(ERROR) << *it;
   }
+
   // Kill processes until the estimated amount of freed memory is sufficient to
   // bring the system memory back to a normal level.
   // The list is sorted by descending importance, so we go through the list
   // backwards.
+  const TimeTicks now = TimeTicks::Now();
   for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
     MEMORY_LOG(ERROR) << "Target memory to free: " << target_memory_to_free_kb
                       << " KB";
@@ -686,7 +691,7 @@ void TabManagerDelegate::LowMemoryKillImpl(
       // So |estimated_memory_freed_kb| is an over-estimation.
       int estimated_memory_freed_kb =
           mem_stat_->EstimatedMemoryFreedKB(it->tab()->renderer_handle);
-      if (KillTab(*it->tab(), condition)) {
+      if (KillTab(*it->tab(), reason)) {
         target_memory_to_free_kb -= estimated_memory_freed_kb;
         memory::MemoryKillsMonitor::LogLowMemoryKill("TAB",
                                                      estimated_memory_freed_kb);

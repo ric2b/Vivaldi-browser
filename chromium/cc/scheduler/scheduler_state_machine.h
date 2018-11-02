@@ -154,7 +154,7 @@ class CC_EXPORT SchedulerStateMachine {
   // Indicates that the system has entered and left a BeginImplFrame callback.
   // The scheduler will not draw more than once in a given BeginImplFrame
   // callback nor send more than one BeginMainFrame message.
-  void OnBeginImplFrame(uint32_t source_id, uint64_t sequence_number);
+  void OnBeginImplFrame(uint64_t source_id, uint64_t sequence_number);
   // Indicates that the scheduler has entered the draw phase. The scheduler
   // will not draw more than once in a single draw phase.
   // TODO(sunnyps): Rename OnBeginImplFrameDeadline to OnDraw or similar.
@@ -301,13 +301,12 @@ class CC_EXPORT SchedulerStateMachine {
 
   bool ShouldPerformImplSideInvalidation() const;
   bool CouldCreatePendingTree() const;
+  bool ShouldDeferInvalidatingForMainFrame() const;
 
   bool ShouldTriggerBeginImplFrameDeadlineImmediately() const;
   bool ShouldBlockDeadlineIndefinitely() const;
 
-  // True if we need to force activations to make forward progress.
-  // TODO(sunnyps): Rename this to ShouldAbortCurrentFrame or similar.
-  bool PendingActivationsShouldBeForced() const;
+  bool ShouldAbortCurrentFrame() const;
 
   bool ShouldBeginLayerTreeFrameSinkCreation() const;
   bool ShouldDraw() const;
@@ -337,6 +336,15 @@ class CC_EXPORT SchedulerStateMachine {
   int last_frame_number_draw_performed_ = -1;
   int last_frame_number_begin_main_frame_sent_ = -1;
   int last_frame_number_invalidate_layer_tree_frame_sink_performed_ = -1;
+
+  // Inputs from the last impl frame that are required for decisions made in
+  // this impl frame. The values from the last frame are cached before being
+  // reset in OnBeginImplFrame.
+  struct FrameEvents {
+    bool commit_had_no_updates = false;
+    bool did_commit_during_frame = false;
+  };
+  FrameEvents last_frame_events_;
 
   // These are used to ensure that an action only happens once per frame,
   // deadline, etc.

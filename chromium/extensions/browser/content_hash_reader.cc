@@ -73,12 +73,19 @@ bool ContentHashReader::Init() {
 
   have_computed_hashes_ = true;
 
+  // Extensions sometimes request resources that do not have an entry in
+  // verified_contents.json. This can happen when an extension sends an XHR to a
+  // resource.
   if (!verified_contents.HasTreeHashRoot(relative_path_)) {
-    // Extension is requesting a non-existent resource that does not have an
-    // entry in verified_contents.json. This can happen when an extension sends
-    // XHR to its non-existent resource. This should not result in content
-    // verification failure.
-    file_missing_from_verified_contents_ = true;
+    // Making a request to a non-existent resource should not result in
+    // content verification failure.
+    // TODO(proberge): The relative_path_.empty() check should be moved higher
+    // in the execution flow for performance wins by saving on costly IO
+    // operations and calculations.
+    if (relative_path_.empty() ||
+        !base::PathExists(extension_root_.Append(relative_path_)))
+      file_missing_from_verified_contents_ = true;
+
     return false;
   }
 

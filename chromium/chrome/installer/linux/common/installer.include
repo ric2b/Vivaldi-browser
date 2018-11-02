@@ -1,3 +1,25 @@
+# Shows the output of a given command only on failure, or when VERBOSE is set.
+log_cmd() {
+  if [ "${VERBOSE:-}" ]; then
+    "$@"
+  else
+    # Record $- into a separate variable because it gets reset in the subshell.
+    FORWARD_SHELL_OPTS=$-
+    ERREXIT=$(echo ${FORWARD_SHELL_OPTS} | grep -o e || true)
+    set +${ERREXIT}
+    CMD_OUTPUT=$("$@" 2>&1)
+    ERRCODE=$?
+    set -${ERREXIT}
+    if [ ${ERRCODE} -ne 0 ]; then
+      echo "$@"
+      echo "${CMD_OUTPUT}"
+      if [ ${ERREXIT} ]; then
+        exit ${ERRCODE}
+      fi
+    fi
+  fi
+}
+
 # Recursively replace @@include@@ template variables with the referenced file,
 # and write the resulting text to stdout.
 process_template_includes() {
@@ -51,6 +73,7 @@ process_template() (
   TMPLINCL="$(process_template_includes "$TMPLIN")"
   sed \
     -e "s#@@PACKAGE@@#${PACKAGE}#g" \
+    -e "s#@@PACKAGE_ORIG@@#${PACKAGE_ORIG}#g" \
     -e "s#@@PACKAGE_FILENAME@@#${PACKAGE_FILENAME}#g" \
     -e "s#@@PROGNAME@@#${PROGNAME}#g" \
     -e "s#@@CHANNEL@@#${CHANNEL}#g" \
@@ -67,8 +90,6 @@ process_template() (
     -e "s#@@PREDEPENDS@@#${PREDEPENDS}#g" \
     -e "s#@@DEPENDS@@#${DEPENDS}#g" \
     -e "s#@@PROVIDES@@#${PROVIDES}#g" \
-    -e "s#@@REPLACES@@#${REPLACES}#g" \
-    -e "s#@@CONFLICTS@@#${CONFLICTS}#g" \
     -e "s#@@ARCHITECTURE@@#${ARCHITECTURE}#g" \
     -e "s#@@MAINTNAME@@#${MAINTNAME}#g" \
     -e "s#@@MAINTMAIL@@#${MAINTMAIL}#g" \
@@ -77,6 +98,8 @@ process_template() (
     -e "s#@@SHORTDESC@@#${SHORTDESC}#g" \
     -e "s#@@FULLDESC@@#${FULLDESC}#g" \
     -e "s#@@USR_BIN_SYMLINK_NAME@@#${USR_BIN_SYMLINK_NAME:-}#g" \
+    -e "s#@@LOGO_RESOURCES_PNG@@#${LOGO_RESOURCES_PNG}#g" \
+    -e "s#@@LOGO_RESOURCE_XPM@@#${LOGO_RESOURCE_XPM}#g" \
     > "$TMPLOUT" <<< "$TMPLINCL"
 )
 
@@ -104,22 +127,17 @@ get_version_info() {
 }
 
 stage_install_common() {
-  echo "Staging common install files in '${STAGEDIR}'..."
+  log_cmd echo "Staging common install files in '${STAGEDIR}'..."
 
-  # TODO(mmoss) This assumes we built the static binaries. To support shared
-  # builds, we probably want an install target in scons so it can give us all
-  # the right files. See also:
-  # http://code.google.com/p/chromium/issues/detail?id=4451
-  #
+  # Note: Changes here may also need to be applied to ChromeOS's
+  # chromite/lib/chrome_util.py.
+
+  # Note: This only supports static binaries and does not work when the GN
+  # is_component_build flag is true.
+
   # app
-  # We need to add the debug link so gdb knows to look for the symbols.
-  STRIPTEMP=$(mktemp -d -t deb.strip.XXXXXX) || exit 1
-  DEBUGFILE="${STRIPTEMP}/${PROGNAME}.debug"
-  STRIPPEDFILE="${STRIPTEMP}/${PROGNAME}.stripped"
-  "${BUILDDIR}/installer/common/eu-strip" -o "${STRIPPEDFILE}" -f "${DEBUGFILE}" "${BUILDDIR}/${PROGNAME}"
+  STRIPPEDFILE="${BUILDDIR}/${PROGNAME}.stripped"
   install -m 755 "${STRIPPEDFILE}" "${STAGEDIR}/${INSTALLDIR}/${PROGNAME}-bin"
-  rm "${DEBUGFILE}" "${STRIPPEDFILE}"
-  rm -rf "${STRIPTEMP}"
 
   # resources
   install -m 644 "${BUILDDIR}/resources.pak" "${STAGEDIR}/${INSTALLDIR}/"
@@ -144,35 +162,57 @@ stage_install_common() {
     install -m 644 "${BUILDDIR}/features.json" "${STAGEDIR}/${INSTALLDIR}/"
   fi
 
-  # ICU data file; only necessary when icu_use_data_file_flag is set to 1
-  # in build/common.gypi.
+  # ICU data file; Necessary when the GN icu_use_data_file flag is true.
   install -m 644 "${BUILDDIR}/icudtl.dat" "${STAGEDIR}/${INSTALLDIR}/"
 
-  # V8 snapshot files; only necessary when v8_use_external_startup_data is
-  # set to 1 in build/common.gypi.
-  if [ -f "${BUILDDIR}/natives_blob.bin" ]; then
-    install -m 644 "${BUILDDIR}/natives_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
-    install -m 644 "${BUILDDIR}/snapshot_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
+  # V8 snapshot files; Necessary when the GN v8_use_external_startup_data flag
+  # is true.
+  install -m 644 "${BUILDDIR}/natives_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
+  install -m 644 "${BUILDDIR}/snapshot_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
+
+  # V8 context snapshot file; it will replace V8's snapshot_blob.bin
+  # TODO(peria): Remove snapshot_blob.bin when dependencies are resolved.
+  if [ -f "${BUILDDIR}/v8_context_snapshot.bin" ]; then
+    install -m 644 "${BUILDDIR}/v8_context_snapshot.bin" "${STAGEDIR}/${INSTALLDIR}/"
   fi
 
   # sandbox
   # Rename sandbox binary with hyphen instead of underscore because that's what
+  # the code looks for. Originally, the SCons build system may have had a bug
+  # where it did not support hyphens, so this is stuck as is to avoid breaking
+  # anyone who expects the build artifact to have the underscore.
   # the code looks for, but the build targets can't use hyphens (scons bug?)
-  install -m 4755 -s "${BUILDDIR}/chrome_sandbox" \
-    "${STAGEDIR}/${INSTALLDIR}/vivaldi-sandbox"
+  buildfile="${BUILDDIR}/chrome_sandbox"
+  strippedfile="${buildfile}.stripped"
+  debugfile="${buildfile}.debug"
+  "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
+  install -m 4755 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${PROGNAME}-sandbox"
 
   # l10n paks
-  cp -a "${BUILDDIR}/locales" "${STAGEDIR}/${INSTALLDIR}/"
+  install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/locales/"
+  find "${BUILDDIR}/locales" -type f -name '*.pak' -exec \
+    cp -a '{}' "${STAGEDIR}/${INSTALLDIR}/locales/" \;
   find "${STAGEDIR}/${INSTALLDIR}/locales" -type f -exec chmod 644 '{}' \;
-  find "${STAGEDIR}/${INSTALLDIR}/locales" -type d -exec chmod 755 '{}' \;
 
   # ffmpeg libs
-  install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/lib"
-  install -m 644 -s "${BUILDDIR}/lib/libffmpeg.so" "${STAGEDIR}/${INSTALLDIR}/lib/"
+  if [ -f "${BUILDDIR}/lib/libffmpeg.so" ]; then
+    for file in libffmpeg.so; do
+      buildfile="${BUILDDIR}/lib/${file}"
+      strippedfile="${buildfile}.stripped"
+      debugfile="${buildfile}.debug"
+      "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
+      install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/lib"
+      install -m 644 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/lib/${file}"
+    done
+  fi
 
   # Widevine CDM.
   if [ -f "${BUILDDIR}/libwidevinecdmadapter.so" ]; then
-    install -m 644 -s "${BUILDDIR}/libwidevinecdmadapter.so" "${STAGEDIR}/${INSTALLDIR}/"
+    buildfile="${BUILDDIR}/libwidevinecdmadapter.so"
+    strippedfile="${buildfile}.stripped"
+    debugfile="${buildfile}.debug"
+    "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
+    install -m ${SHLIB_PERMS} "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/libwidevinecdmadapter.so"
     # Don't deploy the stub, link to Google Chrome's.
     ln -s "/opt/google/chrome/libwidevinecdm.so" \
       "${STAGEDIR}/${INSTALLDIR}/libwidevinecdm.so"
@@ -195,14 +235,16 @@ stage_install_common() {
   fi
 
   # ANGLE
-  if [ "${CHANNEL}" != "stable" ]; then
-    for file in libEGL.so libGLESv2.so; do
-      buildfile="${BUILDDIR}/${file}"
-      strippedfile="${buildfile}.stripped"
-      debugfile="${buildfile}.debug"
-      "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
-      install -m 644 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${file}"
-    done
+  if [ -f "${BUILDDIR}/libEGL.so" ]; then
+    if [ "${CHANNEL}" != "stable" ]; then
+      for file in libEGL.so libGLESv2.so; do
+        buildfile="${BUILDDIR}/${file}"
+        strippedfile="${buildfile}.stripped"
+        debugfile="${buildfile}.debug"
+        "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
+        install -m ${SHLIB_PERMS} "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${file}"
+      done
+    fi
   fi
 
   # SwiftShader
@@ -213,31 +255,28 @@ stage_install_common() {
       strippedfile="${buildfile}.stripped"
       debugfile="${buildfile}.debug"
       "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
-      install -m 644 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/swiftshader/${file}"
+      install -m ${SHLIB_PERMS} "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/swiftshader/${file}"
     done
   fi
 
   # libc++
   if [ -f "${BUILDDIR}/lib/libc++.so" ]; then
     install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/lib/"
-    install -m 644 -s "${BUILDDIR}/lib/libc++.so" "${STAGEDIR}/${INSTALLDIR}/lib/"
+    install -m ${SHLIB_PERMS} -s "${BUILDDIR}/lib/libc++.so" "${STAGEDIR}/${INSTALLDIR}/lib/"
   fi
-
 
   # nacl_helper and nacl_helper_bootstrap
   # Don't use "-s" (strip) because this runs binutils "strip", which
   # mangles the special ELF program headers of nacl_helper_bootstrap.
   # Explicitly use eu-strip instead, because it doesn't have that problem.
   for file in nacl_helper nacl_helper_bootstrap; do
-    STRIPTEMP=$(mktemp -d -t deb.strip.XXXXXX) || exit 1
     buildfile="${BUILDDIR}/${file}"
     if [ -f "${buildfile}" ]; then
-      strippedfile="${STRIPTEMP}/${file}.stripped"
-      debugfile="${STRIPTEMP}/${file}.debug"
+      strippedfile="${buildfile}.stripped"
+      debugfile="${buildfile}.debug"
       "${BUILDDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
       install -m 755 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${file}"
     fi
-    rm -rf "${STRIPTEMP}"
   done
   # Don't use "-s" (strip) because this would use the Linux toolchain to
   # strip the NaCl binary, which has the potential to break it.  It
@@ -262,18 +301,31 @@ stage_install_common() {
   process_template "${BUILDDIR}/installer/common/wrapper" \
     "${STAGEDIR}/${INSTALLDIR}/${PACKAGE}"
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/${PACKAGE}"
-  if [ ! -f "${STAGEDIR}/${INSTALLDIR}/vivaldi" ]; then
+  if [ ! -f "${STAGEDIR}/${INSTALLDIR}/${PACKAGE_ORIG}" ]; then
     ln -sn "${INSTALLDIR}/${PACKAGE}" \
-      "${STAGEDIR}/${INSTALLDIR}/vivaldi"
+      "${STAGEDIR}/${INSTALLDIR}/${PACKAGE_ORIG}"
   fi
   ln -snf "${INSTALLDIR}/${PACKAGE}" \
     "${STAGEDIR}/usr/bin/${USR_BIN_SYMLINK_NAME}"
 
   # app icons
-  install -m 644 \
-    "${BUILDDIR}/installer/theme/product_logo_"*.png \
-    "${BUILDDIR}/installer/theme/product_logo_32.xpm" \
-    "${STAGEDIR}/${INSTALLDIR}/"
+  local icon_regex=".*product_logo_[0-9]\+\."
+  if [ "$BRANDING" = "google_chrome" ]; then
+    if [ "$CHANNEL" = "beta" ]; then
+      icon_regex=".*product_logo_[0-9]\+_beta\."
+    elif [ "$CHANNEL" = "unstable" ]; then
+      icon_regex=".*product_logo_[0-9]\+_dev\."
+    fi
+  fi
+  LOGO_RESOURCES_PNG=$(find "${BUILDDIR}/installer/theme/" \
+    -regextype sed -regex "${icon_regex}png" -printf "%f ")
+  LOGO_RESOURCE_XPM=$(find "${BUILDDIR}/installer/theme/" \
+    -regextype sed -regex "${icon_regex}xpm" -printf "%f")
+  for logo in ${LOGO_RESOURCES_PNG} ${LOGO_RESOURCE_XPM}; do
+    install -m 644 \
+      "${BUILDDIR}/installer/theme/${logo}" \
+      "${STAGEDIR}/${INSTALLDIR}/"
+  done
 
   # desktop integration
   process_template "${BUILDDIR}/installer/common/appdata.xml.template" \
@@ -289,15 +341,79 @@ stage_install_common() {
 
   # documentation
   if [ -f "${BUILDDIR}/${PROGNAME}.1" ]; then
-  install -m 755 "${BUILDDIR}/${PROGNAME}.1" \
-    "${STAGEDIR}/usr/share/man/man1/${PACKAGE}.1"
+  process_template "${BUILDDIR}/installer/common/manpage.1.in" \
+    "${STAGEDIR}/usr/share/man/man1/${USR_BIN_SYMLINK_NAME}.1"
+  gzip -9n "${STAGEDIR}/usr/share/man/man1/${USR_BIN_SYMLINK_NAME}.1"
+  chmod 644 "${STAGEDIR}/usr/share/man/man1/${USR_BIN_SYMLINK_NAME}.1.gz"
+  # The stable channel allows launching the app without the "-stable"
+  # suffix like the other channels.  Create a linked man page for the
+  # app-without-the-channel case.
+  if [ ! -f "${STAGEDIR}/usr/share/man/man1/${PACKAGE}.1.gz" ]; then
+    ln -s "${USR_BIN_SYMLINK_NAME}.1.gz" \
+      "${STAGEDIR}/usr/share/man/man1/${PACKAGE}.1.gz"
+  fi
   fi
 
-  # Lastly, check to make sure all the ELF binaries are stripped.
-  UNSTRIPPED=$(find "${STAGEDIR}${INSTALLDIR}/" -type f | xargs file |
+  # Check to make sure all the ELF binaries are stripped.
+  UNSTRIPPED=$(find "${STAGEDIR}/${INSTALLDIR}/" -type f | xargs file |
       grep ELF | grep -c "not stripped" || true)
   if [ "${UNSTRIPPED}" != "0" ]; then
     echo "ERROR: Found ${UNSTRIPPED} unstripped ELF files." 1>&2
     exit 1
   fi
+
+  # Make sure ELF binaries live in INSTALLDIR exclusively.
+  ELF_OUTSIDE_INSTALLDIR=$(find "${STAGEDIR}/" -not -path \
+    "${STAGEDIR}${INSTALLDIR}/*" -type f | xargs file -b |
+    grep -ce "^ELF" || true)
+  if [ "${ELF_OUTSIDE_INSTALLDIR}" -ne 0 ]; then
+    echo "ERROR: Found ${ELF_OUTSIDE_INSTALLDIR} ELF binaries" \
+      "outside of ${INSTALLDIR}" 1>&2
+    exit 1
+  fi
+
+  # Verify file permissions.
+  for file in $(find "${STAGEDIR}" -mindepth 1); do
+    local actual_perms=$(stat -c "%a" "${file}")
+    local file_type="$(file -b "${file}")"
+    local base_name=$(basename "${file}")
+    if [[ "${file_type}" = "directory"* ]]; then
+      local expected_perms=755
+    elif [[ "${file_type}" = *"symbolic link"* ]]; then
+      if [[ "$(readlink ${file})" = "/"* ]]; then
+        # Absolute symlink.
+        local expect_exists="${STAGEDIR}/$(readlink "${file}")"
+      else
+        # Relative symlink.
+        local expect_exists="$(dirname "${file}")/$(readlink "${file}")"
+      fi
+      if [ ! -f "${expect_exists}" ] && [[ "${file}" != *"libwidevinecdm.so" ]]; then
+        echo "Broken symlink: ${file}" 1>&2
+        exit 1
+      fi
+      local expected_perms=777
+    elif [ "${base_name}" = "libffmpeg.so" ]; then
+      local expected_perms=644
+    elif [ "${base_name}" = "vivaldi-sandbox" ]; then
+      local expected_perms=4755
+    elif [[ "${base_name}" = "nacl_irt_"*".nexe" ]]; then
+      local expected_perms=644
+    elif [[ "${file_type}" = *"shell script"* ]]; then
+      local expected_perms=755
+    elif [[ "${file_type}" = ELF* ]]; then
+      if [[ "${base_name}" = *".so" ]]; then
+        local expected_perms=${SHLIB_PERMS}
+      else
+        local expected_perms=755
+      fi
+    else
+      # Regular data file.
+      local expected_perms=644
+    fi
+    if [ ${expected_perms} -ne ${actual_perms} ]; then
+      echo Expected permissions on ${base_name} to be \
+        ${expected_perms}, but they were ${actual_perms} 1>&2
+      exit 1
+    fi
+  done
 }

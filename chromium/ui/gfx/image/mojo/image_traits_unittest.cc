@@ -15,6 +15,7 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/image/image_unittest_util.h"
+#include "ui/gfx/image/mojo/image_skia_struct_traits.h"
 #include "ui/gfx/image/mojo/image_traits_test_service.mojom.h"
 
 namespace gfx {
@@ -39,6 +40,7 @@ class TestImageSkiaSource : public ImageSkiaSource {
   DISALLOW_COPY_AND_ASSIGN(TestImageSkiaSource);
 };
 
+// Revisit this after Deserialize(Serialize()) API works with handles.
 class ImageTraitsTest : public testing::Test,
                         public mojom::ImageTraitsTestService {
  public:
@@ -133,7 +135,7 @@ TEST_F(ImageTraitsTest, NullImageSkia) {
 
 TEST_F(ImageTraitsTest, ImageSkiaRepsAreCreatedAsNeeded) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
+  ImageSkia image(std::make_unique<TestImageSkiaSource>(kSize), kSize);
   EXPECT_FALSE(image.isNull());
   EXPECT_TRUE(image.image_reps().empty());
 
@@ -146,7 +148,7 @@ TEST_F(ImageTraitsTest, ImageSkiaRepsAreCreatedAsNeeded) {
 
 TEST_F(ImageTraitsTest, ImageSkia) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
+  ImageSkia image(std::make_unique<TestImageSkiaSource>(kSize), kSize);
   image.GetRepresentation(1.0f);
   image.GetRepresentation(2.0f);
 
@@ -158,7 +160,7 @@ TEST_F(ImageTraitsTest, ImageSkia) {
 
 TEST_F(ImageTraitsTest, EmptyRepPreserved) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
+  ImageSkia image(std::make_unique<TestImageSkiaSource>(kSize), kSize);
   image.GetRepresentation(1.0f);
 
   SkBitmap empty_bitmap;
@@ -173,7 +175,7 @@ TEST_F(ImageTraitsTest, EmptyRepPreserved) {
 
 TEST_F(ImageTraitsTest, ImageSkiaWithOperations) {
   const gfx::Size kSize(32, 32);
-  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
+  ImageSkia image(std::make_unique<TestImageSkiaSource>(kSize), kSize);
 
   const gfx::Size kNewSize(16, 16);
   ImageSkia resized = ImageSkiaOperations::CreateResizedImage(

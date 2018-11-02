@@ -22,14 +22,15 @@
 #include "media/gpu/h264_dpb.h"
 #include "media/gpu/shared_memory_region.h"
 
+#define VLOGF(level) VLOG(level) << __func__ << "(): "
 #define DVLOGF(level) DVLOG(level) << __func__ << "(): "
 
-#define NOTIFY_ERROR(error, msg)                          \
-  do {                                                    \
-    SetState(kError);                                     \
-    LOG(ERROR) << msg;                                    \
-    LOG(ERROR) << "Calling NotifyError(" << error << ")"; \
-    NotifyError(error);                                   \
+#define NOTIFY_ERROR(error, msg)                        \
+  do {                                                  \
+    SetState(kError);                                   \
+    VLOGF(1) << msg;                                    \
+    VLOGF(1) << "Calling NotifyError(" << error << ")"; \
+    NotifyError(error);                                 \
   } while (0)
 
 namespace media {
@@ -42,6 +43,9 @@ const size_t kMinSurfacesToEncode = 2;
 // Subjectively chosen.
 const size_t kNumInputBuffers = 4;
 const size_t kMaxNumReferenceFrames = 4;
+
+// TODO(owenlin): Adjust the value after b/71367113 is fixed.
+const size_t kExtraOutputBufferSize = 32768;  // bytes
 
 // We need up to kMaxNumReferenceFrames surfaces for reference, plus one
 // for input and one for encode (which will be added to the set of reference
@@ -139,9 +143,8 @@ VaapiVideoEncodeAccelerator::VaapiVideoEncodeAccelerator()
       encoder_thread_("VAVEAEncoderThread"),
       child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_this_ptr_factory_(this) {
-  DVLOGF(4);
+  VLOGF(2);
   weak_this_ = weak_this_ptr_factory_.GetWeakPtr();
-
   max_ref_idx_l0_size_ = kMaxNumReferenceFrames;
   qp_ = kDefaultQP;
   idr_period_ = kIDRPeriod;
@@ -150,7 +153,7 @@ VaapiVideoEncodeAccelerator::VaapiVideoEncodeAccelerator()
 }
 
 VaapiVideoEncodeAccelerator::~VaapiVideoEncodeAccelerator() {
-  DVLOGF(4);
+  VLOGF(2);
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK(!encoder_thread_.IsRunning());
 }
@@ -165,11 +168,11 @@ bool VaapiVideoEncodeAccelerator::Initialize(
   DCHECK(!encoder_thread_.IsRunning());
   DCHECK_EQ(state_, kUninitialized);
 
-  DVLOGF(1) << "Initializing VAVEA, input_format: "
-            << VideoPixelFormatToString(format)
-            << ", input_visible_size: " << input_visible_size.ToString()
-            << ", output_profile: " << GetProfileName(output_profile)
-            << ", initial_bitrate: " << initial_bitrate;
+  VLOGF(2) << "Initializing VAVEA, input_format: "
+           << VideoPixelFormatToString(format)
+           << ", input_visible_size: " << input_visible_size.ToString()
+           << ", output_profile: " << GetProfileName(output_profile)
+           << ", initial_bitrate: " << initial_bitrate;
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
   client_ = client_ptr_factory_->GetWeakPtr();
@@ -180,20 +183,19 @@ bool VaapiVideoEncodeAccelerator::Initialize(
                            return profile.profile == output_profile;
                          });
   if (profile == profiles.end()) {
-    DVLOGF(1) << "Unsupported output profile "
-              << GetProfileName(output_profile);
+    VLOGF(1) << "Unsupported output profile " << GetProfileName(output_profile);
     return false;
   }
   if (input_visible_size.width() > profile->max_resolution.width() ||
       input_visible_size.height() > profile->max_resolution.height()) {
-    DVLOGF(1) << "Input size too big: " << input_visible_size.ToString()
-              << ", max supported size: " << profile->max_resolution.ToString();
+    VLOGF(1) << "Input size too big: " << input_visible_size.ToString()
+             << ", max supported size: " << profile->max_resolution.ToString();
     return false;
   }
 
   if (format != PIXEL_FORMAT_I420) {
-    DVLOGF(1) << "Unsupported input format: "
-              << VideoPixelFormatToString(format);
+    VLOGF(1) << "Unsupported input format: "
+             << VideoPixelFormatToString(format);
     return false;
   }
 
@@ -206,7 +208,7 @@ bool VaapiVideoEncodeAccelerator::Initialize(
                           RoundUpToPowerOf2(visible_size_.height(), 16));
   mb_width_ = coded_size_.width() / 16;
   mb_height_ = coded_size_.height() / 16;
-  output_buffer_byte_size_ = coded_size_.GetArea();
+  output_buffer_byte_size_ = coded_size_.GetArea() + kExtraOutputBufferSize;
 
   UpdateRates(initial_bitrate, kDefaultFramerate);
 
@@ -214,13 +216,13 @@ bool VaapiVideoEncodeAccelerator::Initialize(
       VaapiWrapper::CreateForVideoCodec(VaapiWrapper::kEncode, output_profile,
                                         base::Bind(&ReportToUMA, VAAPI_ERROR));
   if (!vaapi_wrapper_.get()) {
-    DVLOGF(1) << "Failed initializing VAAPI for profile "
-              << GetProfileName(output_profile);
+    VLOGF(1) << "Failed initializing VAAPI for profile "
+             << GetProfileName(output_profile);
     return false;
   }
 
   if (!encoder_thread_.Start()) {
-    LOG(ERROR) << "Failed to start encoder thread";
+    VLOGF(1) << "Failed to start encoder thread";
     return false;
   }
   encoder_thread_task_runner_ = encoder_thread_.task_runner();
@@ -236,7 +238,7 @@ bool VaapiVideoEncodeAccelerator::Initialize(
 void VaapiVideoEncodeAccelerator::InitializeTask() {
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kUninitialized);
-  DVLOGF(4);
+  VLOGF(2);
 
   va_surface_release_cb_ = BindToCurrentLoop(
       base::Bind(&VaapiVideoEncodeAccelerator::RecycleVASurfaceID,
@@ -518,7 +520,7 @@ bool VaapiVideoEncodeAccelerator::SubmitHeadersIfNeeded() {
 
 bool VaapiVideoEncodeAccelerator::ExecuteEncode() {
   DCHECK(current_pic_);
-  DVLOGF(3) << "Encoding frame_num: " << current_pic_->frame_num;
+  DVLOGF(4) << "Encoding frame_num: " << current_pic_->frame_num;
   return vaapi_wrapper_->ExecuteAndDestroyPendingBuffers(
       current_encode_job_->input_surface->id());
 }
@@ -535,38 +537,50 @@ void VaapiVideoEncodeAccelerator::TryToReturnBitstreamBuffer() {
   if (state_ != kEncoding)
     return;
 
-  if (submitted_encode_jobs_.empty() || available_bitstream_buffers_.empty())
-    return;
+  while (!submitted_encode_jobs_.empty()) {
+    linked_ptr<EncodeJob> encode_job = submitted_encode_jobs_.front();
+    // An null job indicates a flush command.
+    if (encode_job == nullptr) {
+      submitted_encode_jobs_.pop();
+      DVLOGF(2) << "FlushDone";
+      DCHECK(flush_callback_);
+      child_task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(std::move(flush_callback_), true));
+      continue;
+    }
 
-  linked_ptr<BitstreamBufferRef> buffer = available_bitstream_buffers_.front();
-  available_bitstream_buffers_.pop();
+    if (available_bitstream_buffers_.empty())
+      break;
+    auto buffer = available_bitstream_buffers_.front();
 
-  uint8_t* target_data = reinterpret_cast<uint8_t*>(buffer->shm->memory());
+    available_bitstream_buffers_.pop();
+    submitted_encode_jobs_.pop();
 
-  linked_ptr<EncodeJob> encode_job = submitted_encode_jobs_.front();
-  submitted_encode_jobs_.pop();
+    uint8_t* target_data = reinterpret_cast<uint8_t*>(buffer->shm->memory());
 
-  size_t data_size = 0;
-  if (!vaapi_wrapper_->DownloadAndDestroyCodedBuffer(
-          encode_job->coded_buffer, encode_job->input_surface->id(),
-          target_data, buffer->shm->size(), &data_size)) {
-    NOTIFY_ERROR(kPlatformFailureError, "Failed downloading coded buffer");
-    return;
+    size_t data_size = 0;
+    if (!vaapi_wrapper_->DownloadAndDestroyCodedBuffer(
+            encode_job->coded_buffer, encode_job->input_surface->id(),
+            target_data, buffer->shm->size(), &data_size)) {
+      NOTIFY_ERROR(kPlatformFailureError, "Failed downloading coded buffer");
+      return;
+    }
+
+    DVLOGF(4) << "Returning bitstream buffer "
+              << (encode_job->keyframe ? "(keyframe)" : "")
+              << " id: " << buffer->id << " size: " << data_size;
+
+    child_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&Client::BitstreamBufferReady, client_, buffer->id,
+                   data_size, encode_job->keyframe, encode_job->timestamp));
+    break;
   }
-
-  DVLOGF(3) << "Returning bitstream buffer "
-            << (encode_job->keyframe ? "(keyframe)" : "")
-            << " id: " << buffer->id << " size: " << data_size;
-
-  child_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&Client::BitstreamBufferReady, client_, buffer->id, data_size,
-                 encode_job->keyframe, encode_job->timestamp));
 }
 
 void VaapiVideoEncodeAccelerator::Encode(const scoped_refptr<VideoFrame>& frame,
                                          bool force_keyframe) {
-  DVLOGF(3) << "Frame timestamp: " << frame->timestamp().InMilliseconds()
+  DVLOGF(4) << "Frame timestamp: " << frame->timestamp().InMilliseconds()
             << " force_keyframe: " << force_keyframe;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
@@ -698,7 +712,7 @@ void VaapiVideoEncodeAccelerator::UseOutputBitstreamBufferTask(
 void VaapiVideoEncodeAccelerator::RequestEncodingParametersChange(
     uint32_t bitrate,
     uint32_t framerate) {
-  DVLOGF(2) << "bitrate: " << bitrate << " framerate: " << framerate;
+  VLOGF(2) << "bitrate: " << bitrate << " framerate: " << framerate;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
   encoder_thread_task_runner_->PostTask(
@@ -722,7 +736,7 @@ void VaapiVideoEncodeAccelerator::UpdateRates(uint32_t bitrate,
 void VaapiVideoEncodeAccelerator::RequestEncodingParametersChangeTask(
     uint32_t bitrate,
     uint32_t framerate) {
-  DVLOGF(2) << "bitrate: " << bitrate << " framerate: " << framerate;
+  VLOGF(2) << "bitrate: " << bitrate << " framerate: " << framerate;
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(state_, kUninitialized);
 
@@ -748,6 +762,28 @@ void VaapiVideoEncodeAccelerator::RequestEncodingParametersChangeTask(
   encoding_parameters_changed_ = true;
 }
 
+void VaapiVideoEncodeAccelerator::Flush(FlushCallback flush_callback) {
+  DVLOGF(2);
+  DCHECK(child_task_runner_->BelongsToCurrentThread());
+  if (flush_callback_) {
+    NOTIFY_ERROR(kIllegalStateError, "There is a pending flush");
+    std::move(flush_callback).Run(false);
+    return;
+  }
+  flush_callback_ = std::move(flush_callback);
+  encoder_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&VaapiVideoEncodeAccelerator::FlushTask,
+                            base::Unretained(this)));
+}
+
+void VaapiVideoEncodeAccelerator::FlushTask() {
+  DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
+
+  // Insert an null job to indicate a flush command.
+  submitted_encode_jobs_.push(linked_ptr<EncodeJob>(nullptr));
+  TryToReturnBitstreamBuffer();
+}
+
 void VaapiVideoEncodeAccelerator::Destroy() {
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
@@ -763,11 +799,14 @@ void VaapiVideoEncodeAccelerator::Destroy() {
     encoder_thread_.Stop();
   }
 
+  if (flush_callback_)
+    std::move(flush_callback_).Run(false);
+
   delete this;
 }
 
 void VaapiVideoEncodeAccelerator::DestroyTask() {
-  DVLOGF(2);
+  VLOGF(2);
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   SetState(kError);
 }
@@ -1037,7 +1076,7 @@ void VaapiVideoEncodeAccelerator::SetState(State state) {
     return;
   }
 
-  DVLOGF(1) << "setting state to: " << state;
+  VLOGF(2) << "setting state to: " << state;
   state_ = state;
 }
 

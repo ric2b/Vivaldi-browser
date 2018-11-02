@@ -26,6 +26,7 @@
 #ifndef Supplementable_h
 #define Supplementable_h
 
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashMap.h"
@@ -87,16 +88,26 @@ namespace blink {
 // the method could easily cause racy condition.
 //
 // Note that reattachThread() does nothing if assertion is not enabled.
-//
 
 template <typename T>
 class Supplementable;
 
+// Supplement<T>-specific version of TraceWrapperBase class. In order to support
+// wrapper-tracing from Supplementable<T> to Supplement<T> (especially when
+// crossing core/modules boundary), Supplement<T> needs to be wrapper-traceable.
+// This class provides a common API for all subclasses of Supplement<T> to
+// support wrapper-tracing.
+class PLATFORM_EXPORT TraceWrapperBaseForSupplement {
+ public:
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {}
+};
+
 template <typename T>
-class Supplement : public GarbageCollectedMixin {
+class Supplement : public GarbageCollectedMixin,
+                   public TraceWrapperBaseForSupplement {
  public:
   // TODO(haraken): Remove the default constructor.
-  // All Supplement objects should be instantiated with m_host.
+  // All Supplement objects should be instantiated with |supplementable_|.
   Supplement() {}
 
   explicit Supplement(T& supplementable) : supplementable_(&supplementable) {}
@@ -112,26 +123,26 @@ class Supplement : public GarbageCollectedMixin {
     supplementable.ProvideSupplement(key, supplement);
   }
 
-  static Supplement<T>* From(Supplementable<T>& supplementable,
+  static Supplement<T>* From(const Supplementable<T>& supplementable,
                              const char* key) {
     return supplementable.RequireSupplement(key);
   }
 
-  static Supplement<T>* From(Supplementable<T>* supplementable,
+  static Supplement<T>* From(const Supplementable<T>* supplementable,
                              const char* key) {
-    return supplementable ? supplementable->RequireSupplement(key) : 0;
+    return supplementable ? supplementable->RequireSupplement(key) : nullptr;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(supplementable_); }
+  virtual void Trace(blink::Visitor* visitor) {
+    visitor->Trace(supplementable_);
+  }
 
  private:
   Member<T> supplementable_;
 };
 
-// Supplementable<T> inherits from GarbageCollectedMixin virtually
-// to allow ExecutionContext to derive from two GC mixin classes.
 template <typename T>
-class Supplementable : public virtual GarbageCollectedMixin {
+class Supplementable : public GarbageCollectedMixin {
   WTF_MAKE_NONCOPYABLE(Supplementable);
 
  public:
@@ -149,7 +160,7 @@ class Supplementable : public virtual GarbageCollectedMixin {
     this->supplements_.erase(key);
   }
 
-  Supplement<T>* RequireSupplement(const char* key) {
+  Supplement<T>* RequireSupplement(const char* key) const {
 #if DCHECK_IS_ON()
     DCHECK_EQ(attached_thread_id_, CurrentThread());
 #endif
@@ -162,11 +173,16 @@ class Supplementable : public virtual GarbageCollectedMixin {
 #endif
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(supplements_); }
+  virtual void Trace(blink::Visitor* visitor) { visitor->Trace(supplements_); }
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+    for (const auto& supplement : supplements_.Values())
+      visitor->TraceWrappers(supplement);
+  }
 
  protected:
-  using SupplementMap =
-      HeapHashMap<const char*, Member<Supplement<T>>, PtrHash<const char>>;
+  using SupplementMap = HeapHashMap<const char*,
+                                    TraceWrapperMember<Supplement<T>>,
+                                    PtrHash<const char>>;
   SupplementMap supplements_;
 
   Supplementable()

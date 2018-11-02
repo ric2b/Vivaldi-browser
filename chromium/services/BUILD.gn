@@ -19,6 +19,11 @@ service_test("services_unittests") {
   # section below. If you are unsure, contact blundell@chromium.org.
   deps = [
     "//services/identity:tests",
+    "//services/network/public/cpp:tests",
+  ]
+
+  data_deps = [
+    "//testing/buildbot/filters:services_unittests_filters",
   ]
 
   if (!is_ios) {
@@ -26,8 +31,10 @@ service_test("services_unittests") {
       "//services/data_decoder:tests",
       "//services/device:tests",
       "//services/preferences:tests",
+      "//services/proxy_resolver:tests",
       "//services/resource_coordinator:tests",
       "//services/shape_detection:tests",
+      "//services/viz",
       "//services/viz/privileged/interfaces:unit_tests",
       "//services/viz/public/cpp/compositing:tests",
     ]
@@ -53,6 +60,7 @@ service_test("services_unittests") {
 
   if (is_android) {
     deps += [
+      "//services/data_decoder/public/cpp/android:safe_json_java",
       "//services/device:java",
 
       # Some tests need to initialize V8.
@@ -89,6 +97,7 @@ catalog("services_unittests_catalog") {
       "//services/preferences:tests_catalog",
       "//services/resource_coordinator:tests_catalog",
       "//services/video_capture:tests_catalog",
+      "//services/viz:tests_catalog",
     ]
   }
 

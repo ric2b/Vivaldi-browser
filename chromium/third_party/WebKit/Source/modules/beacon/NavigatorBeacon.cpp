@@ -5,14 +5,14 @@
 #include "modules/beacon/NavigatorBeacon.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/modules/v8/ArrayBufferViewOrBlobOrStringOrFormData.h"
+#include "bindings/modules/v8/array_buffer_view_or_blob_or_string_or_form_data.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/FormData.h"
+#include "core/html/forms/FormData.h"
 #include "core/loader/PingLoader.h"
 #include "core/typed_arrays/DOMArrayBufferView.h"
 #include "platform/bindings/ScriptState.h"
@@ -25,7 +25,7 @@ NavigatorBeacon::NavigatorBeacon(Navigator& navigator)
 
 NavigatorBeacon::~NavigatorBeacon() {}
 
-DEFINE_TRACE(NavigatorBeacon) {
+void NavigatorBeacon::Trace(blink::Visitor* visitor) {
   Supplement<Navigator>::Trace(visitor);
 }
 
@@ -114,12 +114,12 @@ bool NavigatorBeacon::SendBeaconImpl(
   size_t beacon_size = 0;
   bool allowed;
 
-  if (data.isArrayBufferView()) {
+  if (data.IsArrayBufferView()) {
     allowed =
         PingLoader::SendBeacon(GetSupplementable()->GetFrame(), allowance, url,
-                               data.getAsArrayBufferView().View(), beacon_size);
-  } else if (data.isBlob()) {
-    Blob* blob = data.getAsBlob();
+                               data.GetAsArrayBufferView().View(), beacon_size);
+  } else if (data.IsBlob()) {
+    Blob* blob = data.GetAsBlob();
     if (!FetchUtils::IsCORSSafelistedContentType(AtomicString(blob->type()))) {
       UseCounter::Count(context,
                         WebFeature::kSendBeaconWithNonSimpleContentType);
@@ -134,12 +134,12 @@ bool NavigatorBeacon::SendBeaconImpl(
     }
     allowed = PingLoader::SendBeacon(GetSupplementable()->GetFrame(), allowance,
                                      url, blob, beacon_size);
-  } else if (data.isString()) {
+  } else if (data.IsString()) {
     allowed = PingLoader::SendBeacon(GetSupplementable()->GetFrame(), allowance,
-                                     url, data.getAsString(), beacon_size);
-  } else if (data.isFormData()) {
+                                     url, data.GetAsString(), beacon_size);
+  } else if (data.IsFormData()) {
     allowed = PingLoader::SendBeacon(GetSupplementable()->GetFrame(), allowance,
-                                     url, data.getAsFormData(), beacon_size);
+                                     url, data.GetAsFormData(), beacon_size);
   } else {
     allowed = PingLoader::SendBeacon(GetSupplementable()->GetFrame(), allowance,
                                      url, String(), beacon_size);

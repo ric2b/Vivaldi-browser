@@ -29,7 +29,6 @@
 #include "content/browser/renderer_host/input/input_router_client.h"
 #include "content/browser/renderer_host/input/mock_input_disposition_handler.h"
 #include "content/browser/renderer_host/input/mock_input_router_client.h"
-#include "content/browser/renderer_host/input/mock_widget_input_handler.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
@@ -39,8 +38,10 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/mock_widget_input_handler.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -67,12 +68,11 @@ namespace {
 bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
   return ui::WebInputEventTraits::ShouldBlockEventStream(
       event,
-      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents),
       base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 }
 
 WebInputEvent& GetEventWithType(WebInputEvent::Type type) {
-  WebInputEvent* event = NULL;
+  WebInputEvent* event = nullptr;
   if (WebInputEvent::IsMouseEventType(type)) {
     static WebMouseEvent mouse;
     event = &mouse;
@@ -94,22 +94,6 @@ WebInputEvent& GetEventWithType(WebInputEvent::Type type) {
   return *event;
 }
 
-void CallCallback(mojom::WidgetInputHandler::DispatchEventCallback callback,
-                  InputEventAckState state) {
-  std::move(callback).Run(InputEventAckSource::COMPOSITOR_THREAD,
-                          ui::LatencyInfo(), state, base::nullopt,
-                          base::nullopt);
-}
-
-void CallCallbackWithTouchAction(
-    mojom::WidgetInputHandler::DispatchEventCallback callback,
-    InputEventAckState state,
-    cc::TouchAction touch_action) {
-  std::move(callback).Run(InputEventAckSource::COMPOSITOR_THREAD,
-                          ui::LatencyInfo(), state, base::nullopt,
-                          touch_action);
-}
-
 enum WheelScrollingMode {
   kWheelScrollingModeNone,
   kWheelScrollLatching,
@@ -126,9 +110,14 @@ class MockInputRouterImplClient : public InputRouterImplClient {
     return &widget_input_handler_;
   }
 
-  std::vector<MockWidgetInputHandler::DispatchedEvent>
-  GetAndResetDispatchedEvents() {
-    return widget_input_handler_.GetAndResetDispatchedEvents();
+  void OnImeCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) override {}
+
+  void OnImeCancelComposition() override {}
+
+  MockWidgetInputHandler::MessageVector GetAndResetDispatchedMessages() {
+    return widget_input_handler_.GetAndResetDispatchedMessages();
   }
 
   InputEventAckState FilterInputEvent(
@@ -193,6 +182,9 @@ class MockInputRouterImplClient : public InputRouterImplClient {
   int in_flight_event_count() const {
     return input_router_client_.in_flight_event_count();
   }
+  int last_in_flight_event_type() const {
+    return input_router_client_.last_in_flight_event_type();
+  }
   void set_allow_send_event(bool allow) {
     input_router_client_.set_allow_send_event(allow);
   }
@@ -207,51 +199,33 @@ class MockInputRouterImplClient : public InputRouterImplClient {
 class InputRouterImplTest : public testing::Test {
  public:
   InputRouterImplTest(
-      bool raf_aligned_touch = true,
       WheelScrollingMode wheel_scrolling_mode = kWheelScrollLatching)
       : wheel_scroll_latching_enabled_(wheel_scrolling_mode !=
                                        kWheelScrollingModeNone),
         scoped_task_environment_(
             base::test::ScopedTaskEnvironment::MainThreadType::UI) {
-    if (raf_aligned_touch && wheel_scrolling_mode == kAsyncWheelEvents) {
-      feature_list_.InitWithFeatures({features::kRafAlignedTouchInputEvents,
-                                      features::kTouchpadAndWheelScrollLatching,
-                                      features::kAsyncWheelEvents},
-                                     {});
-    } else if (raf_aligned_touch &&
-               wheel_scrolling_mode == kWheelScrollLatching) {
-      feature_list_.InitWithFeatures(
-          {features::kRafAlignedTouchInputEvents,
-           features::kTouchpadAndWheelScrollLatching},
-          {features::kAsyncWheelEvents});
-    } else if (raf_aligned_touch &&
-               wheel_scrolling_mode == kWheelScrollingModeNone) {
-      feature_list_.InitWithFeatures({features::kRafAlignedTouchInputEvents},
-                                     {features::kTouchpadAndWheelScrollLatching,
-                                      features::kAsyncWheelEvents});
-    } else if (!raf_aligned_touch &&
-               wheel_scrolling_mode == kAsyncWheelEvents) {
+    if (wheel_scrolling_mode == kAsyncWheelEvents) {
       feature_list_.InitWithFeatures({features::kTouchpadAndWheelScrollLatching,
                                       features::kAsyncWheelEvents},
-                                     {features::kRafAlignedTouchInputEvents});
-    } else if (!raf_aligned_touch &&
-               wheel_scrolling_mode == kWheelScrollLatching) {
+                                     {});
+    } else if (wheel_scrolling_mode == kWheelScrollLatching) {
       feature_list_.InitWithFeatures(
           {features::kTouchpadAndWheelScrollLatching},
-          {features::kRafAlignedTouchInputEvents, features::kAsyncWheelEvents});
-    } else {  // !raf_aligned_touch && wheel_scroll_latching ==
-              // kWheelScrollingModeNone.
+          {features::kAsyncWheelEvents});
+    } else if (wheel_scrolling_mode == kWheelScrollingModeNone) {
       feature_list_.InitWithFeatures({},
-                                     {features::kRafAlignedTouchInputEvents,
-                                      features::kTouchpadAndWheelScrollLatching,
+                                     {features::kTouchpadAndWheelScrollLatching,
                                       features::kAsyncWheelEvents});
     }
+
+    vsync_feature_list_.InitAndEnableFeature(
+        features::kVsyncAlignedInputEvents);
   }
 
   ~InputRouterImplTest() override {}
 
  protected:
-  using DispatchedEvents = std::vector<MockWidgetInputHandler::DispatchedEvent>;
+  using DispatchedMessages = MockWidgetInputHandler::MessageVector;
   // testing::Test
   void SetUp() override {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -429,20 +403,17 @@ class InputRouterImplTest : public testing::Test {
         ViewHostMsg_HasTouchEventHandlers(0, has_handlers));
   }
 
-  void OnSetTouchAction(cc::TouchAction touch_action) {
-    input_router_->OnMessageReceived(
-        InputHostMsg_SetTouchAction(0, touch_action));
-  }
+  void CancelTouchTimeout() { input_router_->CancelTouchTimeout(); }
 
   void OnSetWhiteListedTouchAction(cc::TouchAction white_listed_touch_action,
                                    uint32_t unique_touch_event_id,
                                    InputEventAckState ack_result) {
-    input_router_->OnMessageReceived(InputHostMsg_SetWhiteListedTouchAction(
-        0, white_listed_touch_action, unique_touch_event_id, ack_result));
+    input_router_->SetWhiteListedTouchAction(white_listed_touch_action,
+                                             unique_touch_event_id, ack_result);
   }
 
-  DispatchedEvents GetAndResetDispatchedEvents() {
-    return client_->GetAndResetDispatchedEvents();
+  DispatchedMessages GetAndResetDispatchedMessages() {
+    return client_->GetAndResetDispatchedMessages();
   }
 
   static void RunTasksAndWait(base::TimeDelta delay) {
@@ -463,26 +434,21 @@ class InputRouterImplTest : public testing::Test {
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   SyntheticWebTouchEvent touch_event_;
 
+  base::test::ScopedFeatureList vsync_feature_list_;
   base::test::ScopedFeatureList feature_list_;
-};
-
-class InputRouterImplRafAlignedTouchDisabledTest : public InputRouterImplTest {
- public:
-  InputRouterImplRafAlignedTouchDisabledTest()
-      : InputRouterImplTest(false, kWheelScrollingModeNone) {}
 };
 
 class InputRouterImplWheelScrollLatchingDisabledTest
     : public InputRouterImplTest {
  public:
   InputRouterImplWheelScrollLatchingDisabledTest()
-      : InputRouterImplTest(true, kWheelScrollingModeNone) {}
+      : InputRouterImplTest(kWheelScrollingModeNone) {}
 };
 
 class InputRouterImplAsyncWheelEventEnabledTest : public InputRouterImplTest {
  public:
   InputRouterImplAsyncWheelEventEnabledTest()
-      : InputRouterImplTest(true, kAsyncWheelEvents) {}
+      : InputRouterImplTest(kAsyncWheelEvents) {}
 };
 
 TEST_F(InputRouterImplTest, HandledInputEvent) {
@@ -492,8 +458,8 @@ TEST_F(InputRouterImplTest, HandledInputEvent) {
   SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
 
   // Make sure no input event is sent to the renderer.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(0u, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(0u, dispatched_messages.size());
 
   // OnKeyboardEventAck should be triggered without actual ack.
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
@@ -506,8 +472,8 @@ TEST_F(InputRouterImplTest, ClientCanceledKeyboardEvent) {
   SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
 
   // Make sure no input event is sent to the renderer.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(0u, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(0u, dispatched_messages.size());
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
   // Simulate a keyboard event that should be dropped.
@@ -515,8 +481,8 @@ TEST_F(InputRouterImplTest, ClientCanceledKeyboardEvent) {
   SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
 
   // Make sure no input event is sent to the renderer, and no ack is sent.
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(0u, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(0u, dispatched_messages.size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
 }
 
@@ -527,10 +493,11 @@ TEST_F(InputRouterImplTest, HandleKeyEventsWeSent) {
   SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
 
   // Make sure we sent the input event to the renderer.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(WebInputEvent::kRawKeyDown,
             disposition_handler_->acked_keyboard_event().GetType());
@@ -558,120 +525,88 @@ TEST_F(InputRouterImplTest, CoalescesWheelEvents) {
   SimulateWheelEventWithPhase(WebMouseWheelEvent::kPhaseEnded);  // enqueued
 
   // Check that only the first event was sent.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   const WebMouseWheelEvent* wheel_event =
       static_cast<const WebMouseWheelEvent*>(
-          dispatched_events.at(0).event_->web_event.get());
+          dispatched_messages[0]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(0, wheel_event->delta_x);
   EXPECT_EQ(-5, wheel_event->delta_y);
 
   // Check that the ACK sends the second message immediately.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   // The coalesced events can queue up a delayed ack
   // so that additional input events can be processed before
   // we turn off coalescing.
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   wheel_event = static_cast<const WebMouseWheelEvent*>(
-      dispatched_events.at(0).event_->web_event.get());
+      dispatched_messages[0]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(8, wheel_event->delta_x);
   EXPECT_EQ(-10 + -6, wheel_event->delta_y);  // coalesced
 
   // Ack the second event (which had the third coalesced into it).
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   wheel_event = static_cast<const WebMouseWheelEvent*>(
-      dispatched_events.at(0).event_->web_event.get());
+      dispatched_messages[0]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(9, wheel_event->delta_x);
   EXPECT_EQ(-7, wheel_event->delta_y);
 
   // Ack the fourth event.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   wheel_event = static_cast<const WebMouseWheelEvent*>(
-      dispatched_events.at(0).event_->web_event.get());
+      dispatched_messages[0]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(0, wheel_event->delta_x);
   EXPECT_EQ(-10, wheel_event->delta_y);
 
   // Ack the fifth event.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   wheel_event = static_cast<const WebMouseWheelEvent*>(
-      dispatched_events.at(0).event_->web_event.get());
+      dispatched_messages[0]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(0, wheel_event->delta_x);
   EXPECT_EQ(0, wheel_event->delta_y);
   EXPECT_EQ(WebMouseWheelEvent::kPhaseEnded, wheel_event->phase);
 
   // After the final ack, the queue should be empty.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(0u, dispatched_events.size());
-}
-
-// Tests that touch-events are queued properly.
-TEST_F(InputRouterImplRafAlignedTouchDisabledTest, TouchEventQueue) {
-  OnHasTouchEventHandlers(true);
-
-  PressTouchPoint(1, 1);
-  SendTouchEvent();
-  EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1u, dispatched_events.size());
-  EXPECT_FALSE(TouchEventQueueEmpty());
-
-  // The second touch should not be sent since one is already in queue.
-  MoveTouchPoint(0, 5, 5);
-  SendTouchEvent();
-  EXPECT_FALSE(client_->GetAndResetFilterEventCalled());
-  EXPECT_EQ(0u, GetAndResetDispatchedEvents().size());
-  EXPECT_FALSE(TouchEventQueueEmpty());
-
-  // Receive an ACK for the first touch-event.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_FALSE(TouchEventQueueEmpty());
-  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(WebInputEvent::kTouchStart,
-            disposition_handler_->acked_touch_event().event.GetType());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_TRUE(TouchEventQueueEmpty());
-  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(WebInputEvent::kTouchMove,
-            disposition_handler_->acked_touch_event().event.GetType());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(0u, dispatched_messages.size());
 }
 
 // Tests that touch-events are sent properly.
@@ -681,34 +616,34 @@ TEST_F(InputRouterImplTest, TouchEventQueue) {
   PressTouchPoint(1, 1);
   SendTouchEvent();
   EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
-  DispatchedEvents touch_start_event = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_start_event.size());
+  DispatchedMessages touch_start_event = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_start_event.size());
+  ASSERT_TRUE(touch_start_event[0]->ToEvent());
   EXPECT_FALSE(TouchEventQueueEmpty());
 
   // The second touch should be sent right away.
   MoveTouchPoint(0, 5, 5);
   SendTouchEvent();
-  DispatchedEvents touch_move_event = GetAndResetDispatchedEvents();
+  DispatchedMessages touch_move_event = GetAndResetDispatchedMessages();
   EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
-  EXPECT_EQ(1U, touch_move_event.size());
+  ASSERT_EQ(1U, touch_move_event.size());
+  ASSERT_TRUE(touch_move_event[0]->ToEvent());
   EXPECT_FALSE(TouchEventQueueEmpty());
 
   // Receive an ACK for the first touch-event.
-  CallCallback(std::move(touch_start_event.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_start_event[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_FALSE(TouchEventQueueEmpty());
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(WebInputEvent::kTouchStart,
             disposition_handler_->acked_touch_event().event.GetType());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
-  CallCallback(std::move(touch_move_event.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_move_event[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_TRUE(TouchEventQueueEmpty());
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(WebInputEvent::kTouchMove,
             disposition_handler_->acked_touch_event().event.GetType());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 }
 
 // Tests that the touch-queue is emptied after a page stops listening for touch
@@ -716,7 +651,7 @@ TEST_F(InputRouterImplTest, TouchEventQueue) {
 TEST_F(InputRouterImplTest, TouchEventQueueFlush) {
   OnHasTouchEventHandlers(true);
   EXPECT_TRUE(client_->has_touch_handler());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   EXPECT_TRUE(TouchEventQueueEmpty());
 
   // Send a touch-press event.
@@ -725,21 +660,22 @@ TEST_F(InputRouterImplTest, TouchEventQueueFlush) {
   MoveTouchPoint(0, 2, 2);
   MoveTouchPoint(0, 3, 3);
   EXPECT_FALSE(TouchEventQueueEmpty());
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
   // The page stops listening for touch-events. Note that flushing is deferred
   // until the outstanding ack is received.
   OnHasTouchEventHandlers(false);
   EXPECT_FALSE(client_->has_touch_handler());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   EXPECT_FALSE(TouchEventQueueEmpty());
 
   // After the ack, the touch-event queue should be empty, and none of the
   // flushed touch-events should have been sent to the renderer.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   EXPECT_TRUE(TouchEventQueueEmpty());
 }
 
@@ -753,53 +689,60 @@ TEST_F(InputRouterImplTest, UnhandledWheelEvent) {
                                            WebMouseWheelEvent::kPhaseChanged);
 
   // Check that only the first event was sent.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
   // Indicate that the wheel event was unhandled.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-  dispatched_events = GetAndResetDispatchedEvents();
+  dispatched_messages = GetAndResetDispatchedMessages();
 
-  // There should be a ScrollBegin, MouseWheel sent.
-  EXPECT_EQ(2U, dispatched_events.size());
+  // GestureEventQueue allows multiple in-flight events, so there should be a
+  // ScrollBegin, ScrollUpdate, and MouseWheel sent.
+  ASSERT_EQ(3U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
 
   ASSERT_EQ(WebInputEvent::kGestureScrollBegin,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
+  ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
+            dispatched_messages[1]->ToEvent()->Event()->web_event->GetType());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(1).event_->web_event->GetType());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+            dispatched_messages[2]->ToEvent()->Event()->web_event->GetType());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Check that the ack for ScrollBegin, MouseWheel were
   // processed.
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(disposition_handler_->acked_wheel_event().delta_y, -5);
 
-  DispatchedEvents gesture_scroll_update = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, gesture_scroll_update.size());
-  CallCallback(std::move(gesture_scroll_update.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  // Ack the gesture scroll update event.
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
   // Ack the mouse wheel event.
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[2]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
 
   // Check that the correct unhandled wheel event was received.
   EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
             disposition_handler_->acked_wheel_event_state());
   EXPECT_EQ(disposition_handler_->acked_wheel_event().delta_y, -10);
 
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Check that the ack for ScrollUpdate were processed.
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
@@ -814,67 +757,77 @@ TEST_F(InputRouterImplWheelScrollLatchingDisabledTest, UnhandledWheelEvent) {
                                            WebMouseWheelEvent::kPhaseChanged);
 
   // Check that only the first event was sent.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
   // Indicate that the wheel event was unhandled.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-  dispatched_events = GetAndResetDispatchedEvents();
+  dispatched_messages = GetAndResetDispatchedMessages();
 
-  // Check that the ack for MouseWheel and GestureScrollBegin
-  // was processed.
+  // Check that the ack for MouseWheel and GestureScrollBegin was processed.
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(disposition_handler_->acked_wheel_event().delta_y, -5);
 
-  // There should be a ScrollBegin, ScrollUpdate and MouseWheel sent.
-  EXPECT_EQ(3U, dispatched_events.size());
+  // There should be a ScrollBegin, ScrollUpdate, ScrollEnd and MouseWheel sent.
+  ASSERT_EQ(4U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[3]->ToEvent());
 
   ASSERT_EQ(WebInputEvent::kGestureScrollBegin,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
-            dispatched_events.at(1).event_->web_event->GetType());
+            dispatched_messages[1]->ToEvent()->Event()->web_event->GetType());
+  ASSERT_EQ(WebInputEvent::kGestureScrollEnd,
+            dispatched_messages[2]->ToEvent()->Event()->web_event->GetType());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(2).event_->web_event->GetType());
+            dispatched_messages[3]->ToEvent()->Event()->web_event->GetType());
 
   // Ack the ScrollUpdate
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
-  // Check that the ack for ScrollBegin, ScrollUpdate were
-  // processed.
+  // Check that the ack for ScrollUpdate and ScrollEnd was processed.
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
 
-  // The GestureScrollUpdate ACK releases the GestureScrollEnd.
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  // The GestureScrollEnd should have already been processed.
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
   // Ack the MouseWheel.
-  CallCallback(std::move(dispatched_events.at(2).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[3]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
+  // Check that the ack for MouseWheel and GestureScrollBegin was processed.
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
 
-  // There should be a ScrollBegin and ScrollUpdate sent.
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
+  // There should be a ScrollBegin, ScrollUpdate and ScrollEnd sent.
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(3U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
   ASSERT_EQ(WebInputEvent::kGestureScrollBegin,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
   ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
-            dispatched_events.at(1).event_->web_event->GetType());
+            dispatched_messages[1]->ToEvent()->Event()->web_event->GetType());
+  ASSERT_EQ(WebInputEvent::kGestureScrollEnd,
+            dispatched_messages[2]->ToEvent()->Event()->web_event->GetType());
 
   // Check that the correct unhandled wheel event was received.
   EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
             disposition_handler_->acked_wheel_event_state());
   EXPECT_EQ(disposition_handler_->acked_wheel_event().delta_y, -10);
 
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  // The GestureScrollUpdate ACK releases the GestureScrollEnd.
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  // The GestureScrollEnd should have already been processed.
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
-  // Check that the ack for the ScrollUpdate and ScrollEnd
-  // were processed.
+  // Check that the ack for the ScrollUpdate and ScrollEnd were processed.
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
 }
 
@@ -886,32 +839,38 @@ TEST_F(InputRouterImplAsyncWheelEventEnabledTest, UnhandledWheelEvent) {
                               WebMouseWheelEvent::kPhaseChanged);
 
   // Check that only the first event was sent.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
   // Indicate that the wheel event was unhandled.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-  // There should be a ScrollBegin and second MouseWheel sent.
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
+  // There should be a ScrollBegin, ScrollUpdate, second MouseWheel, and second
+  // ScrollUpdate sent.
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(4U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[3]->ToEvent());
   ASSERT_EQ(WebInputEvent::kGestureScrollBegin,
-            dispatched_events.at(0).event_->web_event->GetType());
+            dispatched_messages[0]->ToEvent()->Event()->web_event->GetType());
+  ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
+            dispatched_messages[1]->ToEvent()->Event()->web_event->GetType());
   ASSERT_EQ(WebInputEvent::kMouseWheel,
-            dispatched_events.at(1).event_->web_event->GetType());
+            dispatched_messages[2]->ToEvent()->Event()->web_event->GetType());
+  ASSERT_EQ(WebInputEvent::kGestureScrollUpdate,
+            dispatched_messages[3]->ToEvent()->Event()->web_event->GetType());
 
   // Indicate that the GestureScrollBegin event was consumed.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Check that the ack for the first MouseWheel, ScrollBegin, and the second
   // MouseWheel were processed.
   EXPECT_EQ(3U, disposition_handler_->GetAndResetAckCount());
-
-  // There should be a ScrollUpdate sent.
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
 
   // The last acked wheel event should be the second one since the input router
   // has already sent the immediate ack for the second wheel event.
@@ -919,13 +878,23 @@ TEST_F(InputRouterImplAsyncWheelEventEnabledTest, UnhandledWheelEvent) {
   EXPECT_EQ(INPUT_EVENT_ACK_STATE_IGNORED,
             disposition_handler_->acked_wheel_event_state());
 
-  // Ack the gesture scroll update.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  // Ack the first gesture scroll update.
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
-  // Check that the ack for the coalesced ScrollUpdate were processed.
+  // Check that the ack for the first ScrollUpdate were processed.
   EXPECT_EQ(
-      -15,
+      -5,
+      disposition_handler_->acked_gesture_event().data.scroll_update.delta_y);
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+
+  // Ack the second gesture scroll update.
+  dispatched_messages[3]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+
+  // Check that the ack for the second ScrollUpdate were processed.
+  EXPECT_EQ(
+      -10,
       disposition_handler_->acked_gesture_event().data.scroll_update.delta_y);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 }
@@ -943,23 +912,25 @@ TEST_F(InputRouterImplTest, TouchTypesIgnoringAck) {
   // Precede the TouchCancel with an appropriate TouchStart;
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   ASSERT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   ASSERT_EQ(0, client_->in_flight_event_count());
 
   // The TouchCancel has no callback.
   CancelTouchPoint(0);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(0, client_->in_flight_event_count());
   EXPECT_FALSE(HasPendingEvents());
-  EXPECT_FALSE(dispatched_events.at(0).callback_);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_FALSE(dispatched_messages[0]->ToEvent()->HasCallback());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_FALSE(HasPendingEvents());
 }
@@ -985,22 +956,23 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAck) {
     WebInputEvent::Type type = eventTypes[i];
     if (ShouldBlockEventStream(GetEventWithType(type))) {
       SimulateGestureEvent(type, blink::kWebGestureDeviceTouchscreen);
-      DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
+      DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
 
       if (type == WebInputEvent::kGestureScrollUpdate)
-        EXPECT_EQ(2U, dispatched_events.size());
+        EXPECT_EQ(2U, dispatched_messages.size());
       else
-        EXPECT_EQ(1U, dispatched_events.size());
+        EXPECT_EQ(1U, dispatched_messages.size());
       EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
       EXPECT_EQ(1, client_->in_flight_event_count());
       EXPECT_TRUE(HasPendingEvents());
+      ASSERT_TRUE(
+          dispatched_messages[dispatched_messages.size() - 1]->ToEvent());
 
-      CallCallback(
-          std::move(
-              dispatched_events.at(dispatched_events.size() - 1).callback_),
-          INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+      dispatched_messages[dispatched_messages.size() - 1]
+          ->ToEvent()
+          ->CallCallback(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-      EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+      EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
       EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
       EXPECT_EQ(0, client_->in_flight_event_count());
       EXPECT_FALSE(HasPendingEvents());
@@ -1008,7 +980,7 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAck) {
     }
 
     SimulateGestureEvent(type, blink::kWebGestureDeviceTouchscreen);
-    EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+    EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
     EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
     EXPECT_EQ(0, client_->in_flight_event_count());
     EXPECT_FALSE(HasPendingEvents());
@@ -1023,16 +995,17 @@ TEST_F(InputRouterImplTest, MouseTypesIgnoringAck) {
     WebInputEvent::Type type = static_cast<WebInputEvent::Type>(i);
 
     SimulateMouseEvent(type, 0, 0);
-    DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-    EXPECT_EQ(1U, dispatched_events.size());
+    DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+    ASSERT_EQ(1U, dispatched_messages.size());
+    ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
     if (ShouldBlockEventStream(GetEventWithType(type))) {
       EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
       EXPECT_EQ(1, client_->in_flight_event_count());
 
-      CallCallback(std::move(dispatched_events.at(0).callback_),
-                   INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-      EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+      dispatched_messages[0]->ToEvent()->CallCallback(
+          INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+      EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
       EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
       EXPECT_EQ(0, client_->in_flight_event_count());
     } else {
@@ -1065,78 +1038,95 @@ TEST_F(InputRouterImplTest, RequiredEventAckTypes) {
     ASSERT_TRUE(ShouldBlockEventStream(GetEventWithType(required_ack_type)));
   }
 }
-// Test that GestureShowPress, GestureTapDown and GestureTapCancel events don't
-// wait for ACKs.
+
 TEST_F(InputRouterImplTest, GestureTypesIgnoringAckInterleaved) {
-  // Interleave a few events that do and do not ignore acks, ensuring that
-  // ack-ignoring events aren't dispatched until all prior events which observe
-  // their ack disposition have been dispatched.
+  // Interleave a few events that do and do not ignore acks. All gesture events
+  // should be dispatched immediately, but the acks will be blocked on blocking
+  // events.
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(0, client_->in_flight_event_count());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  // Should have sent |kTouchScrollStarted| and |kGestureScrollUpdate|.
+  EXPECT_EQ(2U, dispatched_messages.size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+            client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureTapDown,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+            client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  DispatchedMessages temp_dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, temp_dispatched_messages.size());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
 
   SimulateGestureEvent(WebInputEvent::kGestureShowPress,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(2, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+            client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  temp_dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, temp_dispatched_messages.size());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(3, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+            client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureTapCancel,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(3, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+            client_->last_in_flight_event_type());
 
-  // Now ack each ack-respecting event. Ack-ignoring events should not be
-  // dispatched until all prior events which observe ack disposition have been
-  // fired, at which point they should be sent immediately.  They should also
-  // have no effect on the in-flight event count.
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
+  // Now ack each ack-respecting event. Should see in-flight event count
+  // decreasing and additional acks coming back.
+  // Ack the first GestureScrollUpdate, note that |at(0)| is TouchScrollStarted.
+  ASSERT_EQ(4U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[3]->ToEvent());
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(2, client_->in_flight_event_count());
+
+  // Ack the second GestureScrollUpdate
+  dispatched_messages[2]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
 
-  // Ack the GestureScrollUpdate
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
-  EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(1, client_->in_flight_event_count());
-
-  // Ack the GestureScrollUpdate
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  // Ack the last GestureScrollUpdate
+  dispatched_messages[3]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(2U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(0, client_->in_flight_event_count());
 }
@@ -1146,17 +1136,16 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAckInterleaved) {
 TEST_F(InputRouterImplTest, GestureShowPressIsInOrder) {
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
   // GesturePinchBegin ignores its ack.
   SimulateGestureEvent(WebInputEvent::kGesturePinchBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
   // GesturePinchUpdate waits for an ack.
@@ -1164,29 +1153,38 @@ TEST_F(InputRouterImplTest, GestureShowPressIsInOrder) {
   // to the renderer (in contrast to the TrackpadPinchUpdate test).
   SimulateGestureEvent(WebInputEvent::kGesturePinchUpdate,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(1, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+            client_->last_in_flight_event_type());
+
+  // GestureShowPress will be sent immediately since GestureEventQueue allows
+  // multiple in-flight events. However the acks will be blocked on outstanding
+  // in-flight events.
+  SimulateGestureEvent(WebInputEvent::kGestureShowPress,
+                       blink::kWebGestureDeviceTouchscreen);
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
+  EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(1, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+            client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureShowPress,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
-  // The ShowPress, though it ignores ack, is still stuck in the queue
-  // behind the PinchUpdate which requires an ack.
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(1, client_->in_flight_event_count());
+  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+            client_->last_in_flight_event_type());
 
-  SimulateGestureEvent(WebInputEvent::kGestureShowPress,
-                       blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
-  // ShowPress has entered the queue.
-  EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
-
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  // Now that the Tap has been ACKed, the ShowPress events should receive
-  // synthetic acks, and fire immediately.
-  EXPECT_EQ(2U, GetAndResetDispatchedEvents().size());
+  // Ack the GesturePinchUpdate to release two GestureShowPress ack.
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(3U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(0, client_->in_flight_event_count());
 }
 
 // Test that touch ack timeout behavior is properly configured for
@@ -1201,25 +1199,26 @@ TEST_F(InputRouterImplTest, TouchAckTimeoutConfigured) {
   PressTouchPoint(1, 1);
   SendTouchEvent();
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   RunTasksAndWait(base::TimeDelta::FromMilliseconds(kDesktopTimeoutMs + 1));
 
   // The timed-out event should have been ack'ed.
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
   // Ack'ing the timed-out event should fire a TouchCancel.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
 
   // The remainder of the touch sequence should be dropped.
   ReleaseTouchPoint(0);
   SendTouchEvent();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   ASSERT_TRUE(TouchEventTimeoutEnabled());
 
   // A mobile-optimized site should use the mobile timeout. For this test that
@@ -1234,31 +1233,35 @@ TEST_F(InputRouterImplTest, TouchAckTimeoutConfigured) {
   OnHasTouchEventHandlers(true);
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event2 = GetAndResetDispatchedEvents();
+  DispatchedMessages touch_press_event2 = GetAndResetDispatchedMessages();
   EXPECT_EQ(1U, touch_press_event2.size());
-  OnSetTouchAction(cc::kTouchActionPanY);
   EXPECT_TRUE(TouchEventTimeoutEnabled());
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents touch_release_event2 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_release_event2.size());
-  CallCallback(std::move(touch_press_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_release_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages touch_release_event2 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_release_event2.size());
+  ASSERT_TRUE(touch_release_event2[0]->ToEvent());
+  touch_press_event2[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_release_event2[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event3 = GetAndResetDispatchedEvents();
-  OnSetTouchAction(cc::kTouchActionNone);
+  DispatchedMessages touch_press_event3 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, touch_press_event3.size());
+  ASSERT_TRUE(touch_press_event3[0]->ToEvent());
+  CancelTouchTimeout();
   EXPECT_FALSE(TouchEventTimeoutEnabled());
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents touch_release_event3 = GetAndResetDispatchedEvents();
-  CallCallback(std::move(touch_press_event3.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_release_event3.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages touch_release_event3 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, touch_release_event3.size());
+  ASSERT_TRUE(touch_release_event3[0]->ToEvent());
+  touch_press_event3[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_release_event3[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // As the touch-action is reset by a new touch sequence, the timeout behavior
   // should be restored.
@@ -1280,46 +1283,49 @@ TEST_F(InputRouterImplTest,
   // Start a touch sequence.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
   // kTouchActionNone should disable the timeout.
-  OnSetTouchAction(cc::kTouchActionNone);
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  CancelTouchTimeout();
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_FALSE(TouchEventTimeoutEnabled());
 
   MoveTouchPoint(0, 1, 2);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
+  dispatched_messages = GetAndResetDispatchedMessages();
   EXPECT_FALSE(TouchEventTimeoutEnabled());
-  EXPECT_EQ(1U, dispatched_events.size());
+  EXPECT_EQ(1U, dispatched_messages.size());
 
   // Delay the move ack. The timeout should not fire.
   RunTasksAndWait(base::TimeDelta::FromMilliseconds(kDesktopTimeoutMs + 1));
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
 
   // End the touch sequence.
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_TRUE(TouchEventTimeoutEnabled());
   disposition_handler_->GetAndResetAckCount();
-  GetAndResetDispatchedEvents();
+  GetAndResetDispatchedMessages();
 
   // Start another touch sequence.  This should restore the touch timeout.
   PressTouchPoint(1, 1);
   SendTouchEvent();
   EXPECT_TRUE(TouchEventTimeoutEnabled());
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
 
   // Wait for the touch ack timeout to fire.
@@ -1335,68 +1341,72 @@ TEST_F(InputRouterImplTest, TouchActionResetBeforeEventReachesRenderer) {
   // Sequence 1.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_press_event1.size());
-  OnSetTouchAction(cc::kTouchActionNone);
+  DispatchedMessages touch_press_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_press_event1.size());
+  ASSERT_TRUE(touch_press_event1[0]->ToEvent());
+  CancelTouchTimeout();
   MoveTouchPoint(0, 50, 50);
   SendTouchEvent();
-  DispatchedEvents touch_move_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_move_event1.size());
+  DispatchedMessages touch_move_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_move_event1.size());
+  ASSERT_TRUE(touch_move_event1[0]->ToEvent());
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents touch_release_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_release_event1.size());
+  DispatchedMessages touch_release_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_release_event1.size());
+  ASSERT_TRUE(touch_release_event1[0]->ToEvent());
 
   // Sequence 2.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event2 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_press_event2.size());
+  DispatchedMessages touch_press_event2 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_press_event2.size());
+  ASSERT_TRUE(touch_press_event2[0]->ToEvent());
   MoveTouchPoint(0, 50, 50);
   SendTouchEvent();
-  DispatchedEvents touch_move_event2 = GetAndResetDispatchedEvents();
+  DispatchedMessages touch_move_event2 = GetAndResetDispatchedMessages();
   EXPECT_EQ(1U, touch_move_event2.size());
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents touch_release_event2 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_release_event2.size());
+  DispatchedMessages touch_release_event2 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_release_event2.size());
+  ASSERT_TRUE(touch_release_event2[0]->ToEvent());
 
-  CallCallback(std::move(touch_press_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_move_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_press_event1[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+  touch_move_event1[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Ensure touch action is still none, as the next touch start hasn't been
   // acked yet. ScrollBegin and ScrollEnd don't require acks.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
   // This allows the next touch sequence to start.
-  CallCallback(std::move(touch_release_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_release_event1[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Ensure touch action has been set to auto, as a new touch sequence has
   // started.
-  CallCallback(std::move(touch_press_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_move_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  touch_press_event2[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_move_event2[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  DispatchedEvents gesture_scroll_begin = GetAndResetDispatchedEvents();
+  DispatchedMessages gesture_scroll_begin = GetAndResetDispatchedMessages();
   EXPECT_EQ(1U, gesture_scroll_begin.size());
-  CallCallback(std::move(gesture_scroll_begin.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  gesture_scroll_begin[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
-  CallCallback(std::move(touch_release_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
+  touch_release_event2[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 }
 
 // Test that TouchActionFilter::ResetTouchAction is called when a new touch
@@ -1407,59 +1417,64 @@ TEST_F(InputRouterImplTest, TouchActionResetWhenTouchHasNoConsumer) {
   // Sequence 1.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_press_event1.size());
+  DispatchedMessages touch_press_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_press_event1.size());
+  ASSERT_TRUE(touch_press_event1[0]->ToEvent());
   MoveTouchPoint(0, 50, 50);
   SendTouchEvent();
-  DispatchedEvents touch_move_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_move_event1.size());
-  OnSetTouchAction(cc::kTouchActionNone);
-  CallCallback(std::move(touch_press_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_move_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages touch_move_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_move_event1.size());
+  ASSERT_TRUE(touch_move_event1[0]->ToEvent());
+  CancelTouchTimeout();
+  touch_press_event1[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+  touch_move_event1[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents touch_release_event1 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_move_event1.size());
+  DispatchedMessages touch_release_event1 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_release_event1.size());
+  ASSERT_TRUE(touch_release_event1[0]->ToEvent());
 
   // Sequence 2
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents touch_press_event2 = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, touch_press_event2.size());
+  DispatchedMessages touch_press_event2 = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, touch_press_event2.size());
+  ASSERT_TRUE(touch_press_event2[0]->ToEvent());
   MoveTouchPoint(0, 50, 50);
   SendTouchEvent();
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  EXPECT_EQ(2U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(2U, GetAndResetDispatchedMessages().size());
 
   // Ensure we have touch-action:none. ScrollBegin and ScrollEnd don't require
   // acks.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
-  CallCallback(std::move(touch_release_event1.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(touch_press_event2.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  touch_release_event1[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  touch_press_event2[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 
   // Ensure touch action has been set to auto, as the touch had no consumer.
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
 }
 
 // Test that TouchActionFilter::ResetTouchAction is called when the touch
@@ -1471,28 +1486,32 @@ TEST_F(InputRouterImplTest, TouchActionResetWhenTouchHandlerRemoved) {
   SendTouchEvent();
   MoveTouchPoint(0, 50, 50);
   SendTouchEvent();
-  OnSetTouchAction(cc::kTouchActionNone);
+  CancelTouchTimeout();
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(3U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(3U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
 
   // Ensure we have touch-action:none, suppressing scroll events.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
-  CallCallback(std::move(dispatched_events.at(2).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[2]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
   // Sequence without a touch handler. Note that in this case, the view may not
   // necessarily forward touches to the router (as no touch handler exists).
@@ -1502,13 +1521,14 @@ TEST_F(InputRouterImplTest, TouchActionResetWhenTouchHandlerRemoved) {
   // removed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
 }
 
 // Tests that async touch-moves are ack'd from the browser side.
@@ -1518,31 +1538,33 @@ TEST_F(InputRouterImplTest, AsyncTouchMoveAckedImmediately) {
   PressTouchPoint(1, 1);
   SendTouchEvent();
   EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   EXPECT_FALSE(TouchEventQueueEmpty());
 
   // Receive an ACK for the first touch-event.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchscreen);
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(2U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(2U, GetAndResetDispatchedMessages().size());
 
   // Now send an async move.
   MoveTouchPoint(0, 5, 5);
   SendTouchEvent();
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
 }
 
 // Test that the double tap gesture depends on the touch action of the first
@@ -1553,12 +1575,13 @@ TEST_F(InputRouterImplTest, DoubleTapGestureDependsOnFirstTap) {
   // Sequence 1.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  OnSetTouchAction(cc::kTouchActionNone);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-
+  CancelTouchTimeout();
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
   ReleaseTouchPoint(0);
   SendTouchEvent();
 
@@ -1574,124 +1597,52 @@ TEST_F(InputRouterImplTest, DoubleTapGestureDependsOnFirstTap) {
   // none.
   SimulateGestureEvent(WebInputEvent::kGestureTapUnconfirmed,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(4U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(4U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[2]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[3]->ToEvent());
   // This test will become invalid if GestureTap stops requiring an ack.
   ASSERT_TRUE(
       ShouldBlockEventStream(GetEventWithType(WebInputEvent::kGestureTap)));
   EXPECT_EQ(3, client_->in_flight_event_count());
 
-  CallCallback(std::move(dispatched_events.at(3).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[3]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(2, client_->in_flight_event_count());
 
   // This tap gesture is dropped, since the GestureTapUnconfirmed was turned
   // into a tap.
   SimulateGestureEvent(WebInputEvent::kGestureTap,
                        blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
 
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 
   // Second Tap.
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
+  EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureTapDown,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
 
   // Although the touch-action is now auto, the double tap still won't be
   // dispatched, because the first tap occured when the touch-action was none.
   SimulateGestureEvent(WebInputEvent::kGestureDoubleTap,
                        blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, dispatched_messages.size());
   // This test will become invalid if GestureDoubleTap stops requiring an ack.
   ASSERT_TRUE(ShouldBlockEventStream(
       GetEventWithType(WebInputEvent::kGestureDoubleTap)));
-  EXPECT_EQ(1, client_->in_flight_event_count());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(0, client_->in_flight_event_count());
-}
-
-// Test that the double tap gesture depends on the touch action of the first
-// tap.
-TEST_F(InputRouterImplRafAlignedTouchDisabledTest,
-       DoubleTapGestureDependsOnFirstTap) {
-  OnHasTouchEventHandlers(true);
-
-  // Sequence 1.
-  PressTouchPoint(1, 1);
-  SendTouchEvent();
-  OnSetTouchAction(cc::kTouchActionNone);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-
-  ReleaseTouchPoint(0);
-  SendTouchEvent();
-
-  // Sequence 2
-  PressTouchPoint(1, 1);
-  SendTouchEvent();
-
-  // First tap.
-  SimulateGestureEvent(WebInputEvent::kGestureTapDown,
-                       blink::kWebGestureDeviceTouchscreen);
-
-  // The GestureTapUnconfirmed is converted into a tap, as the touch action is
-  // none.
-  SimulateGestureEvent(WebInputEvent::kGestureTapUnconfirmed,
-                       blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(3U, dispatched_events.size());
-  // This test will become invalid if GestureTap stops requiring an ack.
-  ASSERT_TRUE(
-      ShouldBlockEventStream(GetEventWithType(WebInputEvent::kGestureTap)));
-  EXPECT_EQ(2, client_->in_flight_event_count());
-  CallCallback(std::move(dispatched_events.at(2).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-
-  EXPECT_EQ(1, client_->in_flight_event_count());
-
-  // This tap gesture is dropped, since the GestureTapUnconfirmed was turned
-  // into a tap.
-  SimulateGestureEvent(WebInputEvent::kGestureTap,
-                       blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(0U, GetAndResetDispatchedEvents().size());
-
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  ASSERT_EQ(WebInputEvent::kTouchStart,
-            dispatched_events.at(0).event_->web_event->GetType());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-
-  // Second Tap.
-  SimulateGestureEvent(WebInputEvent::kGestureTapDown,
-                       blink::kWebGestureDeviceTouchscreen);
-  EXPECT_EQ(1U, GetAndResetDispatchedEvents().size());
-
-  // Although the touch-action is now auto, the double tap still won't be
-  // dispatched, because the first tap occured when the touch-action was none.
-  SimulateGestureEvent(WebInputEvent::kGestureDoubleTap,
-                       blink::kWebGestureDeviceTouchscreen);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  // This test will become invalid if GestureDoubleTap stops requiring an ack.
-  ASSERT_TRUE(ShouldBlockEventStream(
-      GetEventWithType(WebInputEvent::kGestureDoubleTap)));
-  EXPECT_EQ(1, client_->in_flight_event_count());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  ASSERT_EQ(1, client_->in_flight_event_count());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(0, client_->in_flight_event_count());
 }
 
@@ -1705,10 +1656,11 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
                                   blink::kWebGestureDeviceTouchpad);
 
   // Verify we actually sent a special wheel event to the renderer.
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   const WebInputEvent* input_event =
-      dispatched_events.at(0).event_->web_event.get();
+      dispatched_messages[0]->ToEvent()->Event()->web_event.get();
   ASSERT_EQ(WebInputEvent::kGesturePinchUpdate, input_event->GetType());
   const WebGestureEvent* gesture_event =
       static_cast<const WebGestureEvent*>(input_event);
@@ -1717,8 +1669,8 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
   EXPECT_EQ(20, gesture_event->global_x);
   EXPECT_EQ(25, gesture_event->global_y);
 
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
   // Check that the correct unhandled pinch event was received.
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
@@ -1734,14 +1686,15 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
   // Second a second pinch event.
   SimulateGesturePinchUpdateEvent(0.3f, 20, 25, 0,
                                   blink::kWebGestureDeviceTouchpad);
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  input_event = dispatched_events.at(0).event_->web_event.get();
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  input_event = dispatched_messages[0]->ToEvent()->Event()->web_event.get();
   ASSERT_EQ(WebInputEvent::kGesturePinchUpdate, input_event->GetType());
   gesture_event = static_cast<const WebGestureEvent*>(input_event);
 
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Check that the correct HANDLED pinch event was received.
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
@@ -1755,57 +1708,83 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
 
 // Test proper handling of touchpad Gesture{Pinch,Scroll}Update sequences.
 TEST_F(InputRouterImplTest, TouchpadPinchAndScrollUpdate) {
-  // The first scroll should be sent immediately.
+  // All gesture events should be sent immediately.
   SimulateGestureScrollUpdateEvent(1.5f, 0.f, 0,
                                    blink::kWebGestureDeviceTouchpad);
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
                        blink::kWebGestureDeviceTouchpad);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  EXPECT_EQ(1, client_->in_flight_event_count());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(2U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  ASSERT_TRUE(dispatched_messages[1]->ToEvent());
+  EXPECT_EQ(2, client_->in_flight_event_count());
 
-  // Subsequent scroll and pinch events should remain queued, coalescing as
-  // more trackpad events arrive.
+  // Subsequent scroll and pinch events will also be sent immediately.
   SimulateGesturePinchUpdateEvent(1.5f, 20, 25, 0,
                                   blink::kWebGestureDeviceTouchpad);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
-  EXPECT_EQ(1, client_->in_flight_event_count());
+  DispatchedMessages temp_dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, temp_dispatched_messages.size());
+  ASSERT_TRUE(temp_dispatched_messages[0]->ToEvent());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
+  EXPECT_EQ(3, client_->in_flight_event_count());
 
   SimulateGestureScrollUpdateEvent(1.5f, 1.5f, 0,
                                    blink::kWebGestureDeviceTouchpad);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
-  EXPECT_EQ(1, client_->in_flight_event_count());
+  temp_dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, temp_dispatched_messages.size());
+  ASSERT_TRUE(temp_dispatched_messages[0]->ToEvent());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
+  EXPECT_EQ(4, client_->in_flight_event_count());
 
   SimulateGesturePinchUpdateEvent(1.5f, 20, 25, 0,
                                   blink::kWebGestureDeviceTouchpad);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
-  EXPECT_EQ(1, client_->in_flight_event_count());
+  temp_dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, temp_dispatched_messages.size());
+  ASSERT_TRUE(temp_dispatched_messages[0]->ToEvent());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
+  EXPECT_EQ(5, client_->in_flight_event_count());
 
   SimulateGestureScrollUpdateEvent(0.f, 1.5f, 0,
                                    blink::kWebGestureDeviceTouchpad);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
-  EXPECT_EQ(1, client_->in_flight_event_count());
+  temp_dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, temp_dispatched_messages.size());
+  ASSERT_TRUE(temp_dispatched_messages[0]->ToEvent());
+  dispatched_messages.emplace_back(std::move(temp_dispatched_messages.at(0)));
+  EXPECT_EQ(6, client_->in_flight_event_count());
 
-  // Ack'ing the first scroll should trigger both the coalesced scroll and the
-  // coalesced pinch events (which is sent to the renderer as a wheel event).
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
+  // Ack'ing events should decrease in-flight event count.
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(2U, dispatched_events.size());
-  EXPECT_EQ(2, client_->in_flight_event_count());
+  EXPECT_EQ(5, client_->in_flight_event_count());
 
   // Ack the second scroll.
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
+  dispatched_messages[1]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(4, client_->in_flight_event_count());
+
+  // Ack the pinch event.
+  dispatched_messages[2]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(3, client_->in_flight_event_count());
+
+  // Ack the scroll event.
+  dispatched_messages[3]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(2, client_->in_flight_event_count());
+
+  // Ack the pinch event.
+  dispatched_messages[4]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
 
-  // Ack the wheel event.
-  CallCallback(std::move(dispatched_events.at(1).callback_),
-               INPUT_EVENT_ACK_STATE_CONSUMED);
-  ASSERT_EQ(0U, GetAndResetDispatchedEvents().size());
+  // Ack the scroll event.
+  dispatched_messages[5]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(0, client_->in_flight_event_count());
 }
@@ -1818,7 +1797,7 @@ void InputRouterImplTest::OverscrollDispatch() {
   overscroll.latest_overscroll_delta = gfx::Vector2dF(-7, 0);
   overscroll.current_fling_velocity = gfx::Vector2dF(-1, 0);
 
-  input_router_->OnMessageReceived(InputHostMsg_DidOverscroll(0, overscroll));
+  input_router_->DidOverscroll(overscroll);
   DidOverscrollParams client_overscroll = client_->GetAndResetOverscroll();
   EXPECT_EQ(overscroll.accumulated_overscroll,
             client_overscroll.accumulated_overscroll);
@@ -1835,13 +1814,14 @@ void InputRouterImplTest::OverscrollDispatch() {
   SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 0,
                                            0, 3, 0, 0, false,
                                            WebMouseWheelEvent::kPhaseBegan);
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
-  std::move(dispatched_events.at(0).callback_)
-      .Run(InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
-           INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
-           DidOverscrollParams(wheel_overscroll), base::nullopt);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_NOT_CONSUMED, DidOverscrollParams(wheel_overscroll),
+      base::nullopt);
 
   client_overscroll = client_->GetAndResetOverscroll();
   EXPECT_EQ(wheel_overscroll.accumulated_overscroll,
@@ -1880,32 +1860,35 @@ TEST_F(InputRouterImplTest, TouchValidationPassesWithFilteredInputEvents) {
   OnHasTouchEventHandlers(true);
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 
   // This event will be filtered out, since no consumer exists.
   ReleaseTouchPoint(1);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(0U, dispatched_events.size());
+  dispatched_messages = GetAndResetDispatchedMessages();
+  EXPECT_EQ(0U, dispatched_messages.size());
 
   // If the validator didn't see the filtered out release event, it will crash
   // now, upon seeing a press for a touch which it believes to be still pressed.
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallback(std::move(dispatched_events.at(0).callback_),
-               INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 }
 
 TEST_F(InputRouterImplTest, TouchActionInCallback) {
@@ -1914,11 +1897,12 @@ TEST_F(InputRouterImplTest, TouchActionInCallback) {
   // Send a touchstart
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  DispatchedEvents dispatched_events = GetAndResetDispatchedEvents();
-  EXPECT_EQ(1U, dispatched_events.size());
-  CallCallbackWithTouchAction(std::move(dispatched_events.at(0).callback_),
-                              INPUT_EVENT_ACK_STATE_CONSUMED,
-                              cc::TouchAction::kTouchActionNone);
+  DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
   ASSERT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(cc::TouchAction::kTouchActionNone,
             input_router_->AllowedTouchAction());
@@ -1937,10 +1921,10 @@ class InputRouterImplScaleEventTest : public InputRouterImplTest {
 
   template <typename T>
   const T* GetSentWebInputEvent() {
-    EXPECT_EQ(1u, dispatched_events_.size());
+    EXPECT_EQ(1u, dispatched_messages_.size());
 
     return static_cast<const T*>(
-        dispatched_events_.at(0).event_->web_event.get());
+        dispatched_messages_[0]->ToEvent()->Event()->web_event.get());
   }
 
   template <typename T>
@@ -1948,12 +1932,12 @@ class InputRouterImplScaleEventTest : public InputRouterImplTest {
     return static_cast<const T*>(client_->last_filter_event());
   }
 
-  void UpdateDispatchedEvents() {
-    dispatched_events_ = GetAndResetDispatchedEvents();
+  void UpdateDispatchedMessages() {
+    dispatched_messages_ = GetAndResetDispatchedMessages();
   }
 
  protected:
-  DispatchedEvents dispatched_events_;
+  DispatchedMessages dispatched_messages_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InputRouterImplScaleEventTest);
@@ -1967,7 +1951,7 @@ class InputRouterImplScaleMouseEventTest
   void RunMouseEventTest(const std::string& name, WebInputEvent::Type type) {
     SCOPED_TRACE(name);
     SimulateMouseEvent(type, 10, 10);
-    UpdateDispatchedEvents();
+    UpdateDispatchedMessages();
     const WebMouseEvent* sent_event = GetSentWebInputEvent<WebMouseEvent>();
     EXPECT_EQ(20, sent_event->PositionInWidget().x);
     EXPECT_EQ(20, sent_event->PositionInWidget().y);
@@ -1993,7 +1977,7 @@ TEST_F(InputRouterImplScaleMouseEventTest, ScaleMouseEventTest) {
 TEST_F(InputRouterImplScaleEventTest, ScaleMouseWheelEventTest) {
   SimulateWheelEventWithPhase(5, 5, 10, 10, 0, false,
                               WebMouseWheelEvent::kPhaseBegan);
-  UpdateDispatchedEvents();
+  UpdateDispatchedMessages();
 
   const WebMouseWheelEvent* sent_event =
       GetSentWebInputEvent<WebMouseWheelEvent>();
@@ -2067,22 +2051,22 @@ class InputRouterImplScaleTouchEventTest
 
   void FlushTouchEvent(WebInputEvent::Type type) {
     SendTouchEvent();
-    UpdateDispatchedEvents();
-    EXPECT_EQ(1u, dispatched_events_.size());
-    if (dispatched_events_.at(0).callback_) {
-      CallCallback(std::move(dispatched_events_.at(0).callback_),
-                   INPUT_EVENT_ACK_STATE_CONSUMED);
-    }
+    UpdateDispatchedMessages();
+    ASSERT_EQ(1u, dispatched_messages_.size());
+    ASSERT_TRUE(dispatched_messages_[0]->ToEvent());
+    dispatched_messages_[0]->ToEvent()->CallCallback(
+        INPUT_EVENT_ACK_STATE_CONSUMED);
     ASSERT_TRUE(TouchEventQueueEmpty());
   }
 
   void ReleaseTouchPointAndAck(int index) {
     ReleaseTouchPoint(index);
     SendTouchEvent();
-    UpdateDispatchedEvents();
-    EXPECT_EQ(1u, dispatched_events_.size());
-    CallCallback(std::move(dispatched_events_.at(0).callback_),
-                 INPUT_EVENT_ACK_STATE_CONSUMED);
+    UpdateDispatchedMessages();
+    ASSERT_EQ(1u, dispatched_messages_.size());
+    ASSERT_TRUE(dispatched_messages_[0]->ToEvent());
+    dispatched_messages_[0]->ToEvent()->CallCallback(
+        INPUT_EVENT_ACK_STATE_CONSUMED);
   }
 
  private:
@@ -2191,12 +2175,11 @@ class InputRouterImplScaleGestureEventTest
   }
 
   void FlushGestureEvent(WebInputEvent::Type type) {
-    UpdateDispatchedEvents();
-    EXPECT_EQ(1u, dispatched_events_.size());
-    if (dispatched_events_.at(0).callback_) {
-      CallCallback(std::move(dispatched_events_.at(0).callback_),
-                   INPUT_EVENT_ACK_STATE_CONSUMED);
-    }
+    UpdateDispatchedMessages();
+    ASSERT_EQ(1u, dispatched_messages_.size());
+    ASSERT_TRUE(dispatched_messages_[0]->ToEvent());
+    dispatched_messages_[0]->ToEvent()->CallCallback(
+        INPUT_EVENT_ACK_STATE_CONSUMED);
   }
 
   void TestLocationInSentEvent(const WebGestureEvent* sent_event,

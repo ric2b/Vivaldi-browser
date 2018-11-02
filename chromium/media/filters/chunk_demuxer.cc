@@ -30,11 +30,35 @@
 
 using base::TimeDelta;
 
+// This macro determines which SourceBufferStream member various
+// ChunkDemuxerStream methods use based on the buffering API |range_api_| set at
+// construction time. See https://crbug.com/718641.
+#define SBSTREAM_IS_SET                                          \
+  (range_api_ == RangeApi::kLegacyByDts ? stream_dts_ != nullptr \
+                                        : stream_pts_ != nullptr)
+
+#define SBSTREAM_OP(operation)                                   \
+  (range_api_ == RangeApi::kLegacyByDts ? stream_dts_->operation \
+                                        : stream_pts_->operation)
+
+#define SBSTREAM_RESET(config, log)                                     \
+  {                                                                     \
+    if (range_api_ == RangeApi::kLegacyByDts) {                         \
+      stream_dts_.reset(                                                \
+          new SourceBufferStream<SourceBufferRangeByDts>(config, log)); \
+    } else {                                                            \
+      stream_pts_.reset(                                                \
+          new SourceBufferStream<SourceBufferRangeByPts>(config, log)); \
+    }                                                                   \
+  }
+
 namespace media {
 
 ChunkDemuxerStream::ChunkDemuxerStream(Type type,
-                                       MediaTrack::Id media_track_id)
+                                       MediaTrack::Id media_track_id,
+                                       RangeApi range_api)
     : type_(type),
+      range_api_(range_api),
       liveness_(DemuxerStream::LIVENESS_UNKNOWN),
       media_track_id_(media_track_id),
       state_(UNINITIALIZED),
@@ -84,7 +108,7 @@ bool ChunkDemuxerStream::IsSeekWaitingForData() const {
   // SourceBufferState::IsSeekWaitingForData().
   DCHECK_NE(type_, DemuxerStream::TEXT);
 
-  return stream_->IsSeekPending();
+  return SBSTREAM_OP(IsSeekPending());
 }
 
 void ChunkDemuxerStream::Seek(TimeDelta time) {
@@ -94,7 +118,7 @@ void ChunkDemuxerStream::Seek(TimeDelta time) {
   DCHECK(state_ == UNINITIALIZED || state_ == RETURNING_ABORT_FOR_READS)
       << state_;
 
-  stream_->Seek(time);
+  SBSTREAM_OP(Seek(time));
 }
 
 bool ChunkDemuxerStream::Append(const StreamParser::BufferQueue& buffers) {
@@ -103,7 +127,7 @@ bool ChunkDemuxerStream::Append(const StreamParser::BufferQueue& buffers) {
 
   base::AutoLock auto_lock(lock_);
   DCHECK_NE(state_, SHUTDOWN);
-  if (!stream_->Append(buffers)) {
+  if (!SBSTREAM_OP(Append(buffers))) {
     DVLOG(1) << "ChunkDemuxerStream::Append() : stream append failed";
     return false;
   }
@@ -117,7 +141,7 @@ bool ChunkDemuxerStream::Append(const StreamParser::BufferQueue& buffers) {
 void ChunkDemuxerStream::Remove(TimeDelta start, TimeDelta end,
                                 TimeDelta duration) {
   base::AutoLock auto_lock(lock_);
-  stream_->Remove(start, end, duration);
+  SBSTREAM_OP(Remove(start, end, duration));
 }
 
 bool ChunkDemuxerStream::EvictCodedFrames(base::TimeDelta media_time,
@@ -131,14 +155,14 @@ bool ChunkDemuxerStream::EvictCodedFrames(base::TimeDelta media_time,
   // to collect unnecessary data that is earlier than the GOP containing
   // |media_time|.
   if (!is_enabled_)
-    stream_->Seek(media_time);
+    SBSTREAM_OP(Seek(media_time));
 
   // Note: The direct conversion from PTS to DTS is safe here, since we don't
   // need to know currentTime precisely for GC. GC only needs to know which GOP
   // currentTime points to.
   DecodeTimestamp media_time_dts =
       DecodeTimestamp::FromPresentationTime(media_time);
-  return stream_->GarbageCollectIfNeeded(media_time_dts, newDataSize);
+  return SBSTREAM_OP(GarbageCollectIfNeeded(media_time_dts, newDataSize));
 }
 
 void ChunkDemuxerStream::OnMemoryPressure(
@@ -146,13 +170,13 @@ void ChunkDemuxerStream::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level,
     bool force_instant_gc) {
   base::AutoLock auto_lock(lock_);
-  return stream_->OnMemoryPressure(media_time, memory_pressure_level,
-                                   force_instant_gc);
+  return SBSTREAM_OP(
+      OnMemoryPressure(media_time, memory_pressure_level, force_instant_gc));
 }
 
 void ChunkDemuxerStream::OnSetDuration(TimeDelta duration) {
   base::AutoLock auto_lock(lock_);
-  stream_->OnSetDuration(duration);
+  SBSTREAM_OP(OnSetDuration(duration));
 }
 
 Ranges<TimeDelta> ChunkDemuxerStream::GetBufferedRanges(
@@ -169,7 +193,7 @@ Ranges<TimeDelta> ChunkDemuxerStream::GetBufferedRanges(
     return text_range;
   }
 
-  Ranges<TimeDelta> range = stream_->GetBufferedTime();
+  Ranges<TimeDelta> range = SBSTREAM_OP(GetBufferedTime());
 
   if (range.size() == 0u)
     return range;
@@ -183,23 +207,24 @@ Ranges<TimeDelta> ChunkDemuxerStream::GetBufferedRanges(
 }
 
 TimeDelta ChunkDemuxerStream::GetHighestPresentationTimestamp() const {
-  return stream_->GetHighestPresentationTimestamp();
+  return SBSTREAM_OP(GetHighestPresentationTimestamp());
 }
 
 TimeDelta ChunkDemuxerStream::GetBufferedDuration() const {
-  return stream_->GetBufferedDuration();
+  return SBSTREAM_OP(GetBufferedDuration());
 }
 
 size_t ChunkDemuxerStream::GetBufferedSize() const {
-  return stream_->GetBufferedSize();
+  return SBSTREAM_OP(GetBufferedSize());
 }
 
-void ChunkDemuxerStream::OnStartOfCodedFrameGroup(
-    DecodeTimestamp start_timestamp) {
-  DVLOG(2) << "ChunkDemuxerStream::OnStartOfCodedFrameGroup("
-           << start_timestamp.InSecondsF() << ")";
+void ChunkDemuxerStream::OnStartOfCodedFrameGroup(DecodeTimestamp start_dts,
+                                                  base::TimeDelta start_pts) {
+  DVLOG(2) << "ChunkDemuxerStream::OnStartOfCodedFrameGroup(dts "
+           << start_dts.InSecondsF() << ", pts " << start_pts.InSecondsF()
+           << ")";
   base::AutoLock auto_lock(lock_);
-  stream_->OnStartOfCodedFrameGroup(start_timestamp);
+  SBSTREAM_OP(OnStartOfCodedFrameGroup(start_dts, start_pts));
 }
 
 bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
@@ -207,7 +232,7 @@ bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
   DCHECK(config.IsValidConfig());
   DCHECK_EQ(type_, AUDIO);
   base::AutoLock auto_lock(lock_);
-  if (!stream_) {
+  if (!SBSTREAM_IS_SET) {
     DCHECK_EQ(state_, UNINITIALIZED);
 
     // FLAC in MSE here is only supported if in ISOBMFF, which has feature flag.
@@ -222,11 +247,11 @@ bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
         config.codec() == kCodecMP3 || config.codec() == kCodecAAC ||
         config.codec() == kCodecVorbis || config.codec() == kCodecFLAC;
 
-    stream_.reset(new SourceBufferStream(config, media_log));
+    SBSTREAM_RESET(config, media_log);
     return true;
   }
 
-  return stream_->UpdateAudioConfig(config);
+  return SBSTREAM_OP(UpdateAudioConfig(config));
 }
 
 bool ChunkDemuxerStream::UpdateVideoConfig(const VideoDecoderConfig& config,
@@ -235,32 +260,32 @@ bool ChunkDemuxerStream::UpdateVideoConfig(const VideoDecoderConfig& config,
   DCHECK_EQ(type_, VIDEO);
   base::AutoLock auto_lock(lock_);
 
-  if (!stream_) {
+  if (!SBSTREAM_IS_SET) {
     DCHECK_EQ(state_, UNINITIALIZED);
-    stream_.reset(new SourceBufferStream(config, media_log));
+    SBSTREAM_RESET(config, media_log);
     return true;
   }
 
-  return stream_->UpdateVideoConfig(config);
+  return SBSTREAM_OP(UpdateVideoConfig(config));
 }
 
 void ChunkDemuxerStream::UpdateTextConfig(const TextTrackConfig& config,
                                           MediaLog* media_log) {
   DCHECK_EQ(type_, TEXT);
   base::AutoLock auto_lock(lock_);
-  DCHECK(!stream_);
+  DCHECK(!SBSTREAM_IS_SET);
   DCHECK_EQ(state_, UNINITIALIZED);
-  stream_.reset(new SourceBufferStream(config, media_log));
+  SBSTREAM_RESET(config, media_log);
 }
 
 void ChunkDemuxerStream::MarkEndOfStream() {
   base::AutoLock auto_lock(lock_);
-  stream_->MarkEndOfStream();
+  SBSTREAM_OP(MarkEndOfStream());
 }
 
 void ChunkDemuxerStream::UnmarkEndOfStream() {
   base::AutoLock auto_lock(lock_);
-  stream_->UnmarkEndOfStream();
+  SBSTREAM_OP(UnmarkEndOfStream());
 }
 
 // DemuxerStream methods.
@@ -292,23 +317,19 @@ AudioDecoderConfig ChunkDemuxerStream::audio_decoder_config() {
   CHECK_EQ(type_, AUDIO);
   base::AutoLock auto_lock(lock_);
   // Trying to track down crash. http://crbug.com/715761
-  CHECK(stream_);
-  return stream_->GetCurrentAudioDecoderConfig();
+  CHECK(SBSTREAM_IS_SET);
+  return SBSTREAM_OP(GetCurrentAudioDecoderConfig());
 }
 
 VideoDecoderConfig ChunkDemuxerStream::video_decoder_config() {
   CHECK_EQ(type_, VIDEO);
   base::AutoLock auto_lock(lock_);
   // Trying to track down crash. http://crbug.com/715761
-  CHECK(stream_);
-  return stream_->GetCurrentVideoDecoderConfig();
+  CHECK(SBSTREAM_IS_SET);
+  return SBSTREAM_OP(GetCurrentVideoDecoderConfig());
 }
 
 bool ChunkDemuxerStream::SupportsConfigChanges() { return true; }
-
-VideoRotation ChunkDemuxerStream::video_rotation() {
-  return VIDEO_ROTATION_0;
-}
 
 bool ChunkDemuxerStream::IsEnabled() const {
   base::AutoLock auto_lock(lock_);
@@ -323,8 +344,8 @@ void ChunkDemuxerStream::SetEnabled(bool enabled, base::TimeDelta timestamp) {
 
   is_enabled_ = enabled;
   if (enabled) {
-    DCHECK(stream_);
-    stream_->Seek(timestamp);
+    DCHECK(SBSTREAM_IS_SET);
+    SBSTREAM_OP(Seek(timestamp));
   } else if (!read_cb_.is_null()) {
     DVLOG(1) << "Read from disabled stream, returning EOS";
     base::ResetAndReturn(&read_cb_).Run(kOk,
@@ -343,11 +364,11 @@ void ChunkDemuxerStream::SetStreamStatusChangeCB(
 TextTrackConfig ChunkDemuxerStream::text_track_config() {
   CHECK_EQ(type_, TEXT);
   base::AutoLock auto_lock(lock_);
-  return stream_->GetCurrentTextTrackConfig();
+  return SBSTREAM_OP(GetCurrentTextTrackConfig());
 }
 
 void ChunkDemuxerStream::SetStreamMemoryLimit(size_t memory_limit) {
-  stream_->set_memory_limit(memory_limit);
+  SBSTREAM_OP(set_memory_limit(memory_limit));
 }
 
 void ChunkDemuxerStream::SetLiveness(Liveness liveness) {
@@ -363,7 +384,7 @@ void ChunkDemuxerStream::ChangeState_Locked(State state) {
   state_ = state;
 }
 
-ChunkDemuxerStream::~ChunkDemuxerStream() {}
+ChunkDemuxerStream::~ChunkDemuxerStream() = default;
 
 void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
   lock_.AssertAcquired();
@@ -377,8 +398,8 @@ void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
       NOTREACHED();
       return;
     case RETURNING_DATA_FOR_READS:
-      switch (stream_->GetNextBuffer(&buffer)) {
-        case SourceBufferStream::kSuccess:
+      switch (SBSTREAM_OP(GetNextBuffer(&buffer))) {
+        case SourceBufferStreamStatus::kSuccess:
           status = DemuxerStream::kOk;
           DVLOG(2) << __func__ << ": returning kOk, type " << type_ << ", dts "
                    << buffer->GetDecodeTimestamp().InSecondsF() << ", pts "
@@ -386,18 +407,18 @@ void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
                    << buffer->duration().InSecondsF() << ", key "
                    << buffer->is_key_frame();
           break;
-        case SourceBufferStream::kNeedBuffer:
+        case SourceBufferStreamStatus::kNeedBuffer:
           // Return early without calling |read_cb_| since we don't have
           // any data to return yet.
           DVLOG(2) << __func__ << ": returning kNeedBuffer, type " << type_;
           return;
-        case SourceBufferStream::kEndOfStream:
+        case SourceBufferStreamStatus::kEndOfStream:
           status = DemuxerStream::kOk;
           buffer = StreamParserBuffer::CreateEOSBuffer();
           DVLOG(2) << __func__ << ": returning kOk with EOS buffer, type "
                    << type_;
           break;
-        case SourceBufferStream::kConfigChange:
+        case SourceBufferStreamStatus::kConfigChange:
           status = kConfigChanged;
           buffer = NULL;
           DVLOG(2) << __func__ << ": returning kConfigChange, type " << type_;
@@ -440,9 +461,13 @@ ChunkDemuxer::ChunkDemuxer(
       liveness_(DemuxerStream::LIVENESS_UNKNOWN),
       detected_audio_track_count_(0),
       detected_video_track_count_(0),
-      detected_text_track_count_(0) {
+      detected_text_track_count_(0),
+      buffering_by_pts_(base::FeatureList::IsEnabled(kMseBufferByPts)) {
   DCHECK(!open_cb_.is_null());
   DCHECK(!encrypted_media_init_data_cb_.is_null());
+  MEDIA_LOG(INFO, media_log_)
+      << GetDisplayName()
+      << (buffering_by_pts_ ? ": buffering by PTS" : ": buffering by DTS");
 }
 
 std::string ChunkDemuxer::GetDisplayName() const {
@@ -452,7 +477,7 @@ std::string ChunkDemuxer::GetDisplayName() const {
 void ChunkDemuxer::Initialize(DemuxerHost* host,
                               const PipelineStatusCB& init_cb,
                               bool enable_text_tracks) {
-  DVLOG(1) << "Init()";
+  DVLOG(1) << "Init(), buffering_by_pts_=" << buffering_by_pts_;
 
   base::AutoLock auto_lock(lock_);
   if (state_ == SHUTDOWN) {
@@ -636,10 +661,12 @@ ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
     return ChunkDemuxer::kNotSupported;
   }
 
-  std::unique_ptr<FrameProcessor> frame_processor(
-      new FrameProcessor(base::Bind(&ChunkDemuxer::IncreaseDurationIfNecessary,
-                                    base::Unretained(this)),
-                         media_log_));
+  std::unique_ptr<FrameProcessor> frame_processor(new FrameProcessor(
+      base::Bind(&ChunkDemuxer::IncreaseDurationIfNecessary,
+                 base::Unretained(this)),
+      media_log_,
+      buffering_by_pts_ ? ChunkDemuxerStream::RangeApi::kNewByPts
+                        : ChunkDemuxerStream::RangeApi::kLegacyByDts));
 
   std::unique_ptr<SourceBufferState> source_state(new SourceBufferState(
       std::move(stream_parser), std::move(frame_processor),
@@ -746,8 +773,10 @@ void ChunkDemuxer::OnEnabledAudioTracksChanged(
   base::AutoLock auto_lock(lock_);
   std::set<ChunkDemuxerStream*> enabled_streams;
   for (const auto& id : track_ids) {
-    ChunkDemuxerStream* stream = track_id_to_demux_stream_map_[id];
-    DCHECK(stream);
+    auto it = track_id_to_demux_stream_map_.find(id);
+    if (it == track_id_to_demux_stream_map_.end())
+      continue;
+    ChunkDemuxerStream* stream = it->second;
     DCHECK_EQ(DemuxerStream::AUDIO, stream->type());
     // TODO(servolk): Remove after multiple enabled audio tracks are supported
     // by the media::RendererImpl.
@@ -779,9 +808,12 @@ void ChunkDemuxer::OnSelectedVideoTrackChanged(
   base::AutoLock auto_lock(lock_);
   ChunkDemuxerStream* selected_stream = nullptr;
   if (track_id) {
-    selected_stream = track_id_to_demux_stream_map_[*track_id];
-    DCHECK(selected_stream);
-    DCHECK_EQ(DemuxerStream::VIDEO, selected_stream->type());
+    auto it = track_id_to_demux_stream_map_.find(*track_id);
+    if (it != track_id_to_demux_stream_map_.end()) {
+      selected_stream = it->second;
+      DCHECK(selected_stream);
+      DCHECK_EQ(DemuxerStream::VIDEO, selected_stream->type());
+    }
   }
 
   // First disable all streams that need to be disabled and then enable the
@@ -1258,7 +1290,10 @@ ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
   }
 
   std::unique_ptr<ChunkDemuxerStream> stream =
-      base::MakeUnique<ChunkDemuxerStream>(type, media_track_id);
+      base::MakeUnique<ChunkDemuxerStream>(
+          type, media_track_id,
+          (buffering_by_pts_ ? ChunkDemuxerStream::RangeApi::kNewByPts
+                             : ChunkDemuxerStream::RangeApi::kLegacyByDts));
   DCHECK(track_id_to_demux_stream_map_.find(media_track_id) ==
          track_id_to_demux_stream_map_.end());
   track_id_to_demux_stream_map_[media_track_id] = stream.get();

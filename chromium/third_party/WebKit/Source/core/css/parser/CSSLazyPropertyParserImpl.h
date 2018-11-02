@@ -5,10 +5,9 @@
 #ifndef CSSLazyPropertyParserImpl_h
 #define CSSLazyPropertyParserImpl_h
 
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/css/parser/CSSTokenizer.h"
-#include "platform/wtf/Vector.h"
 
 namespace blink {
 
@@ -17,18 +16,18 @@ class CSSLazyParsingState;
 // This class is responsible for lazily parsing a single CSS declaration list.
 class CSSLazyPropertyParserImpl : public CSSLazyPropertyParser {
  public:
-  CSSLazyPropertyParserImpl(CSSParserTokenRange block, CSSLazyParsingState*);
+  CSSLazyPropertyParserImpl(size_t offset, CSSLazyParsingState*);
 
   // CSSLazyPropertyParser:
-  StylePropertySet* ParseProperties() override;
+  CSSPropertyValueSet* ParseProperties() override;
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(lazy_state_);
     CSSLazyPropertyParser::Trace(visitor);
   }
 
  private:
-  Vector<CSSParserToken> tokens_;
+  size_t offset_;
   Member<CSSLazyParsingState> lazy_state_;
 };
 

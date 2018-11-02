@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
@@ -82,12 +84,11 @@ class WebContentsImplBrowserTest : public ContentBrowserTest {
 // they are correct, after the LoadNotificationDetails object is deleted.
 class LoadStopNotificationObserver : public WindowedNotificationObserver {
  public:
-  LoadStopNotificationObserver(NavigationController* controller)
+  explicit LoadStopNotificationObserver(NavigationController* controller)
       : WindowedNotificationObserver(NOTIFICATION_LOAD_STOP,
                                      Source<NavigationController>(controller)),
         session_index_(-1),
-        controller_(NULL) {
-  }
+        controller_(nullptr) {}
   void Observe(int type,
                const NotificationSource& source,
                const NotificationDetails& details) override {
@@ -163,8 +164,9 @@ class RenderViewSizeObserver : public WebContentsObserver {
   }
 
   // WebContentsObserver:
-  void RenderViewCreated(RenderViewHost* rvh) override {
-    rwhv_create_size_ = rvh->GetWidget()->GetView()->GetViewBounds().size();
+  void RenderFrameCreated(RenderFrameHost* rfh) override {
+    if (!rfh->GetParent())
+      rwhv_create_size_ = rfh->GetView()->GetViewBounds().size();
   }
 
   void DidStartNavigation(NavigationHandle* navigation_handle) override {
@@ -417,10 +419,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 // in subsequent tests.
 class RenderFrameCreatedObserver : public WebContentsObserver {
  public:
-  RenderFrameCreatedObserver(Shell* shell)
-      : WebContentsObserver(shell->web_contents()),
-        last_rfh_(NULL) {
-  }
+  explicit RenderFrameCreatedObserver(Shell* shell)
+      : WebContentsObserver(shell->web_contents()), last_rfh_(nullptr) {}
 
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override {
     last_rfh_ = render_frame_host;
@@ -519,7 +519,7 @@ namespace {
 
 class DidGetResourceResponseStartObserver : public WebContentsObserver {
  public:
-  DidGetResourceResponseStartObserver(Shell* shell)
+  explicit DidGetResourceResponseStartObserver(Shell* shell)
       : WebContentsObserver(shell->web_contents()), shell_(shell) {
     shell->web_contents()->SetDelegate(&delegate_);
     EXPECT_FALSE(shell->web_contents()->IsWaitingForResponse());
@@ -566,7 +566,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
 struct LoadProgressDelegateAndObserver : public WebContentsDelegate,
                                          public WebContentsObserver {
-  LoadProgressDelegateAndObserver(Shell* shell)
+  explicit LoadProgressDelegateAndObserver(Shell* shell)
       : WebContentsObserver(shell->web_contents()),
         did_start_loading(false),
         did_stop_loading(false) {
@@ -687,7 +687,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 struct FirstVisuallyNonEmptyPaintObserver : public WebContentsObserver {
-  FirstVisuallyNonEmptyPaintObserver(Shell* shell)
+  explicit FirstVisuallyNonEmptyPaintObserver(Shell* shell)
       : WebContentsObserver(shell->web_contents()),
         did_fist_visually_non_empty_paint_(false) {}
 
@@ -743,7 +743,7 @@ class WebDisplayModeDelegate : public WebContentsDelegate {
   DISALLOW_COPY_AND_ASSIGN(WebDisplayModeDelegate);
 };
 
-}
+}  // namespace
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -774,7 +774,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
 // See WebContentsImplBrowserTest.ChangePageScale.
 class MockPageScaleObserver : public WebContentsObserver {
  public:
-  MockPageScaleObserver(Shell* shell)
+  explicit MockPageScaleObserver(Shell* shell)
       : WebContentsObserver(shell->web_contents()),
         got_page_scale_update_(false) {
     // Once OnPageScaleFactorChanged is called, quit the run loop.
@@ -1119,7 +1119,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
                            JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
-                           const DialogClosedCallback& callback,
+                           DialogClosedCallback callback,
                            bool* did_suppress_message) override {
     last_message_ = base::UTF16ToUTF8(message_text);
     *did_suppress_message = true;
@@ -1128,9 +1128,10 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   };
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
+                             RenderFrameHost* render_frame_host,
                              bool is_reload,
-                             const DialogClosedCallback& callback) override {
-    callback.Run(true, base::string16());
+                             DialogClosedCallback callback) override {
+    std::move(callback).Run(true, base::string16());
     message_loop_runner_->Quit();
   }
 
@@ -1261,7 +1262,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(web_contents->GetMainFrame());
   EXPECT_TRUE(web_contents->GetMainFrame()->IsRenderFrameLive());
   EXPECT_TRUE(web_contents->GetController().IsInitialBlankNavigation());
-  int renderer_id = web_contents->GetRenderProcessHost()->GetID();
+  int renderer_id = web_contents->GetMainFrame()->GetProcess()->GetID();
 
   TestNavigationObserver same_tab_observer(web_contents.get(), 1);
   NavigationController::LoadURLParams params(url);
@@ -1271,7 +1272,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   same_tab_observer.Wait();
 
   // Check that pre-warmed process is used.
-  EXPECT_EQ(renderer_id, web_contents->GetRenderProcessHost()->GetID());
+  EXPECT_EQ(renderer_id, web_contents->GetMainFrame()->GetProcess()->GetID());
   EXPECT_EQ(1, web_contents->GetController().GetEntryCount());
   NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
@@ -1301,7 +1302,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(web_contents->GetMainFrame());
   EXPECT_TRUE(web_contents->GetMainFrame()->IsRenderFrameLive());
   EXPECT_TRUE(web_contents->GetController().IsInitialBlankNavigation());
-  int renderer_id = web_contents->GetRenderProcessHost()->GetID();
+  int renderer_id = web_contents->GetMainFrame()->GetProcess()->GetID();
 
   TestNavigationObserver same_tab_observer(web_contents.get(), 1);
   NavigationController::LoadURLParams params(web_ui_url);
@@ -1311,7 +1312,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   same_tab_observer.Wait();
 
   // Check that pre-warmed process isn't used.
-  EXPECT_NE(renderer_id, web_contents->GetRenderProcessHost()->GetID());
+  EXPECT_NE(renderer_id, web_contents->GetMainFrame()->GetProcess()->GetID());
   EXPECT_EQ(1, web_contents->GetController().GetEntryCount());
   NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
@@ -1523,9 +1524,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
       ResourceDispatcherHostImpl::Get()->delegate();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ResourceDispatcherHost::SetDelegate,
-                 base::Unretained(ResourceDispatcherHostImpl::Get()),
-                 &new_delegate));
+      base::BindOnce(&ResourceDispatcherHost::SetDelegate,
+                     base::Unretained(ResourceDispatcherHostImpl::Get()),
+                     &new_delegate));
 
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL kUrl(embedded_test_server()->GetURL("/simple_page.html"));
@@ -1548,9 +1549,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ResourceDispatcherHost::SetDelegate,
-                 base::Unretained(ResourceDispatcherHostImpl::Get()),
-                 old_delegate));
+      base::BindOnce(&ResourceDispatcherHost::SetDelegate,
+                     base::Unretained(ResourceDispatcherHostImpl::Get()),
+                     old_delegate));
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -1624,82 +1625,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   wc->SetDelegate(nullptr);
   wc->SetJavaScriptDialogManagerForTesting(nullptr);
-}
-
-class FormBubbleDelegate : public WebContentsDelegate {
- public:
-  FormBubbleDelegate() = default;
-
-  void WaitUntilShown() {
-    while (!is_visible_) {
-      message_loop_runner_ = new MessageLoopRunner;
-      message_loop_runner_->Run();
-    }
-  }
-
-  void WaitUntilHidden() {
-    while (is_visible_) {
-      message_loop_runner_ = new MessageLoopRunner;
-      message_loop_runner_->Run();
-    }
-  }
-
- private:
-  void ShowValidationMessage(WebContents* web_contents,
-                             const gfx::Rect& anchor_in_root_view,
-                             const base::string16& main_text,
-                             const base::string16& sub_text) override {
-    is_visible_ = true;
-    if (message_loop_runner_)
-      message_loop_runner_->Quit();
-  }
-
-  void HideValidationMessage(WebContents* web_contents) override {
-    is_visible_ = false;
-    if (message_loop_runner_)
-      message_loop_runner_->Quit();
-  }
-
-  bool is_visible_ = false;
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
-};
-
-// TODO(tkent): Remove this test when we remove the browser-side validation
-// bubble implementation. crbug.com/739091
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DISABLED_NavigationHidesFormValidationBubble) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  EXPECT_TRUE(NavigateToURL(
-      shell(), embedded_test_server()->GetURL("a.com", "/title1.html")));
-
-  // Start listening for requests to show or hide the form validation bubble.
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  FormBubbleDelegate bubble_delegate;
-  web_contents->SetDelegate(&bubble_delegate);
-
-  // Trigger a form validation bubble and verify that the bubble is shown.
-  std::string script = R"(
-      var input_field = document.createElement('input');
-      input_field.required = true;
-      var form = document.createElement('form');
-      form.appendChild(input_field);
-      document.body.appendChild(form);
-
-      setTimeout(function() {
-              input_field.setCustomValidity('Custom validity message');
-              input_field.reportValidity();
-          },
-          0);
-      )";
-  ASSERT_TRUE(ExecuteScript(web_contents, script));
-  bubble_delegate.WaitUntilShown();
-
-  // Navigate to another page and verify that the form validation bubble is
-  // hidden.
-  EXPECT_TRUE(NavigateToURL(
-      shell(), embedded_test_server()->GetURL("b.com", "/title2.html")));
-  bubble_delegate.WaitUntilHidden();
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,

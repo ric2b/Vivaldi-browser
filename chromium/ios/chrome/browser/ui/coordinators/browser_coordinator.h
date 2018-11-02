@@ -8,6 +8,18 @@
 #import <UIKit/UIKit.h>
 
 class Browser;
+@class CommandDispatcher;
+
+// Enum for defining the "mode" of the coordinator -- the way that its view
+// controller is positioned in the view controller hierarchy. There's no
+// property in the base class for this value, but subclasses may define a 'mode'
+// property if they need to vary behavior or configuration based on the mode. In
+// that case, the default should always be UNDEFINED.
+typedef NS_ENUM(NSInteger, BrowserCoordinatorMode) {
+  UNDEFINED = 0,
+  PRESENTED,  // The view controller is presented.
+  CONTAINED   // The view controller is contained.
+};
 
 // An object that manages a UI component via a view controller.
 // This is the public interface to this class; subclasses should also import
@@ -20,6 +32,14 @@ class Browser;
 // coordinators added to it. This is a weak pointer, and setting this property
 // doesn't transfer ownership of the browser.
 @property(nonatomic, assign) Browser* browser;
+
+// The dispatcher this object should use to register and send commands.
+// By default this is populated with the parent coordinator's dispatcher.
+@property(nonatomic, strong) CommandDispatcher* dispatcher;
+
+// self.dispatcher cast to |id|. Subclasses should redefine this property
+// to conform to whatever protocols its view controllers and mediators expect.
+@property(nonatomic, readonly) id callableDispatcher;
 
 // The basic lifecycle methods for coordinators are -start and -stop. These
 // implementations notify the parent coordinator when this coordinator did start

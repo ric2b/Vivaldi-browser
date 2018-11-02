@@ -4,9 +4,8 @@
 
 #include "chrome/browser/notifications/notification_permission_context.h"
 
-#include <deque>
-
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -22,6 +21,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "url/gurl.h"
 
 namespace {
@@ -37,7 +37,7 @@ class VisibilityTimerTabHelper
 
   // Runs |task| after the WebContents has been visible for a consecutive
   // duration of at least |visible_delay|.
-  void PostTaskAfterVisibleDelay(const tracked_objects::Location& from_here,
+  void PostTaskAfterVisibleDelay(const base::Location& from_here,
                                  const base::Closure& task,
                                  base::TimeDelta visible_delay,
                                  const PermissionRequestID& id);
@@ -62,6 +62,10 @@ class VisibilityTimerTabHelper
     Task(const PermissionRequestID& id, std::unique_ptr<base::Timer> timer)
         : id(id), timer(std::move(timer)) {}
 
+    // Move-only.
+    Task(Task&&) noexcept = default;
+    Task(const Task&) = delete;
+
     Task& operator=(Task&& other) {
       id = other.id;
       timer = std::move(other.timer);
@@ -70,11 +74,8 @@ class VisibilityTimerTabHelper
 
     PermissionRequestID id;
     std::unique_ptr<base::Timer> timer;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Task);
   };
-  std::deque<Task> task_queue_;
+  base::circular_deque<Task> task_queue_;
 
   DISALLOW_COPY_AND_ASSIGN(VisibilityTimerTabHelper);
 };
@@ -86,11 +87,11 @@ VisibilityTimerTabHelper::VisibilityTimerTabHelper(
     is_visible_ = false;
   } else {
     switch (contents->GetMainFrame()->GetVisibilityState()) {
-      case blink::kWebPageVisibilityStateHidden:
-      case blink::kWebPageVisibilityStatePrerender:
+      case blink::mojom::PageVisibilityState::kHidden:
+      case blink::mojom::PageVisibilityState::kPrerender:
         is_visible_ = false;
         break;
-      case blink::kWebPageVisibilityStateVisible:
+      case blink::mojom::PageVisibilityState::kVisible:
         is_visible_ = true;
         break;
     }
@@ -98,7 +99,7 @@ VisibilityTimerTabHelper::VisibilityTimerTabHelper(
 }
 
 void VisibilityTimerTabHelper::PostTaskAfterVisibleDelay(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const base::Closure& task,
     base::TimeDelta visible_delay,
     const PermissionRequestID& id) {
@@ -156,16 +157,11 @@ void VisibilityTimerTabHelper::RunTask(const base::Closure& task) {
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(VisibilityTimerTabHelper);
 
-NotificationPermissionContext::NotificationPermissionContext(
-    Profile* profile,
-    ContentSettingsType content_settings_type)
+NotificationPermissionContext::NotificationPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
-                            content_settings_type,
-                            blink::WebFeaturePolicyFeature::kNotFound),
-      weak_factory_ui_thread_(this) {
-  DCHECK(content_settings_type == CONTENT_SETTINGS_TYPE_NOTIFICATIONS ||
-         content_settings_type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING);
-}
+                            CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                            blink::FeaturePolicyFeature::kNotFound),
+      weak_factory_ui_thread_(this) {}
 
 NotificationPermissionContext::~NotificationPermissionContext() {}
 

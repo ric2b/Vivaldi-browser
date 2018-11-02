@@ -6,11 +6,12 @@
 
 #include <gtk/gtk.h>
 
+#include "chrome/browser/ui/libgtkui/gtk3_background_painter.h"
 #include "chrome/browser/ui/libgtkui/gtk_util.h"
 #include "ui/base/glib/scoped_gobject.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_source.h"
-#include "ui/views/resources/grit/views_resources.h"
+#include "ui/views/widget/widget.h"
 
 namespace libgtkui {
 
@@ -28,9 +29,8 @@ const char* ButtonStyleClassFromButtonType(
     case chrome::FrameButtonDisplayType::kMinimize:
       return "minimize";
     case chrome::FrameButtonDisplayType::kMaximize:
-      return "maximize";
     case chrome::FrameButtonDisplayType::kRestore:
-      return "restore";
+      return "maximize";
     case chrome::FrameButtonDisplayType::kClose:
       return "close";
     default:
@@ -97,12 +97,6 @@ gfx::Insets MarginFromStyleContext(GtkStyleContext* context,
   return InsetsFromGtkBorder(margin);
 }
 
-int DefaultMonitorScaleFactor() {
-  GdkScreen* screen = gdk_screen_get_default();
-  return gdk_screen_get_monitor_scale_factor(
-      screen, gdk_screen_get_primary_monitor(screen));
-}
-
 ScopedGObject<GdkPixbuf> LoadNavButtonIcon(chrome::FrameButtonDisplayType type,
                                            GtkStyleContext* button_context,
                                            int scale) {
@@ -149,10 +143,8 @@ void CalculateUnscaledButtonSize(chrome::FrameButtonDisplayType type,
   ScopedGObject<GdkPixbuf> icon_pixbuf =
       LoadNavButtonIcon(type, button_context, 1);
 
-  const int monitor_scale = DefaultMonitorScaleFactor();
-
-  gfx::Size icon_size(gdk_pixbuf_get_width(icon_pixbuf) / monitor_scale,
-                      gdk_pixbuf_get_height(icon_pixbuf) / monitor_scale);
+  gfx::Size icon_size(gdk_pixbuf_get_width(icon_pixbuf),
+                      gdk_pixbuf_get_height(icon_pixbuf));
   auto image_context =
       AppendCssNodeToStyleContext(button_context, "GtkImage#image");
   gfx::Size image_size = GetMinimumWidgetSize(icon_size, nullptr, image_context,
@@ -162,6 +154,17 @@ void CalculateUnscaledButtonSize(chrome::FrameButtonDisplayType type,
                                       GTK_STATE_FLAG_NORMAL);
   *button_margin =
       MarginFromStyleContext(button_context, GTK_STATE_FLAG_NORMAL);
+}
+
+ScopedStyleContext CreateHeaderContext() {
+  return GetStyleContextFromCss("GtkHeaderBar#headerbar.header-bar.titlebar");
+}
+
+ScopedStyleContext CreateAvatarButtonContext(GtkStyleContext* header_context) {
+  return AppendCssNodeToStyleContext(
+      header_context, GtkVersionCheck(3, 20)
+                          ? "GtkButton#button.image-button.toggle"
+                          : "GtkToggleButton#button.image-button");
 }
 
 class NavButtonImageSource : public gfx::ImageSkiaSource {
@@ -254,15 +257,11 @@ NavButtonProviderGtk3::~NavButtonProviderGtk3() {}
 void NavButtonProviderGtk3::RedrawImages(int top_area_height,
                                          bool maximized,
                                          bool active) {
-  auto header_context =
-      GetStyleContextFromCss("GtkHeaderBar#headerbar.header-bar.titlebar");
+  auto header_context = CreateHeaderContext();
 
   GtkBorder header_padding;
   gtk_style_context_get_padding(header_context, GTK_STATE_FLAG_NORMAL,
                                 &header_padding);
-  GtkBorder header_border;
-  gtk_style_context_get_border(header_context, GTK_STATE_FLAG_NORMAL,
-                               &header_border);
 
   double scale = 1.0f;
   std::map<chrome::FrameButtonDisplayType, gfx::Size> button_sizes;
@@ -280,40 +279,40 @@ void NavButtonProviderGtk3::RedrawImages(int top_area_height,
                                       button_margins[type].top() +
                                       button_margins[type].bottom();
 
-    int needed_height = header_border.top + header_padding.top +
-                        button_unconstrained_height + header_padding.bottom +
-                        header_border.bottom;
+    int needed_height = header_padding.top + button_unconstrained_height +
+                        header_padding.bottom;
 
     if (needed_height > top_area_height)
       scale =
           std::min(scale, static_cast<double>(top_area_height) / needed_height);
   }
 
+  top_area_spacing_ = InsetsFromGtkBorder(header_padding);
   top_area_spacing_ =
-      InsetsFromGtkBorder(header_padding) + InsetsFromGtkBorder(header_border);
-  top_area_spacing_ = gfx::Insets(scale * top_area_spacing_.top() + 0.5f,
-                                  scale * top_area_spacing_.left() + 0.5f,
-                                  scale * top_area_spacing_.bottom() + 0.5f,
-                                  scale * top_area_spacing_.right() + 0.5f);
+      gfx::Insets(std::round(scale * top_area_spacing_.top()),
+                  std::round(scale * top_area_spacing_.left()),
+                  std::round(scale * top_area_spacing_.bottom()),
+                  std::round(scale * top_area_spacing_.right()));
 
-  inter_button_spacing_ = scale * kHeaderSpacing + 0.5f;
+  inter_button_spacing_ = std::round(scale * kHeaderSpacing);
 
   for (auto type : display_types) {
     double button_height =
         scale * (button_sizes[type].height() + button_margins[type].top() +
                  button_margins[type].bottom());
     double available_height =
-        top_area_height - scale * ((header_padding.top + header_padding.bottom +
-                                    header_border.top + header_border.bottom));
+        top_area_height - scale * (header_padding.top + header_padding.bottom);
     double scaled_button_offset = (available_height - button_height) / 2;
 
     gfx::Size size = button_sizes[type];
-    size = gfx::Size(scale * size.width() + 0.5f, scale * size.height() + 0.5f);
+    size = gfx::Size(std::round(scale * size.width()),
+                     std::round(scale * size.height()));
     gfx::Insets margin = button_margins[type];
-    margin = gfx::Insets(
-        scale * (header_border.top + header_padding.top + margin.top()) +
-            scaled_button_offset + 0.5f,
-        0, scale * margin.left() + 0.5f, scale * margin.right() + 0.5f);
+    margin =
+        gfx::Insets(std::round(scale * (header_padding.top + margin.top()) +
+                               scaled_button_offset),
+                    std::round(scale * margin.left()), 0,
+                    std::round(scale * margin.right()));
 
     button_margins_[type] = margin;
 
@@ -348,6 +347,81 @@ gfx::Insets NavButtonProviderGtk3::GetTopAreaSpacing() const {
 
 int NavButtonProviderGtk3::GetInterNavButtonSpacing() const {
   return inter_button_spacing_;
+}
+
+std::unique_ptr<views::Background>
+NavButtonProviderGtk3::CreateAvatarButtonBackground(
+    const views::Button* avatar_button) const {
+  auto header_context = CreateHeaderContext();
+  auto button_context = CreateAvatarButtonContext(header_context);
+  return std::make_unique<Gtk3BackgroundPainter>(avatar_button,
+                                                 std::move(button_context));
+}
+
+void NavButtonProviderGtk3::CalculateCaptionButtonLayout(
+    const gfx::Size& content_size,
+    int top_area_height,
+    gfx::Size* caption_button_size,
+    gfx::Insets* caption_button_spacing) const {
+  auto header_context = CreateHeaderContext();
+  gfx::InsetsF header_padding =
+      PaddingFromStyleContext(header_context, GTK_STATE_FLAG_NORMAL);
+
+  auto button_context = CreateAvatarButtonContext(header_context);
+  gfx::InsetsF button_padding =
+      PaddingFromStyleContext(button_context, GTK_STATE_FLAG_NORMAL);
+  gfx::InsetsF button_border =
+      BorderFromStyleContext(button_context, GTK_STATE_FLAG_NORMAL);
+  gfx::InsetsF button_margin =
+      MarginFromStyleContext(button_context, GTK_STATE_FLAG_NORMAL);
+
+  float content_width = content_size.width();
+  float content_height = content_size.height();
+  if (GtkVersionCheck(3, 20)) {
+    int min_width, min_height;
+    gtk_style_context_get(button_context, GTK_STATE_FLAG_NORMAL, "min-width",
+                          &min_width, "min-height", &min_height, NULL);
+    content_width = std::max(content_width, static_cast<float>(min_width));
+    content_height = std::max(content_height, static_cast<float>(min_height));
+  }
+
+  gfx::InsetsF scalable_insets =
+      header_padding + button_padding + button_border + button_margin;
+  float scalable_height =
+      scalable_insets.top() + scalable_insets.bottom() + content_height;
+
+  float scale = scalable_height > top_area_height && scalable_height != 0
+                    ? top_area_height / scalable_height
+                    : 1.0f;
+  header_padding = header_padding.Scale(scale);
+  button_padding = button_padding.Scale(scale);
+  button_border = button_border.Scale(scale);
+  button_margin = button_margin.Scale(scale);
+  // Don't scale |content_width| down if the button is wide.
+  if (content_width <= content_height)
+    content_width *= scale;
+  content_height *= scale;
+
+  float button_height = content_height + button_border.top() +
+                        button_border.bottom() + button_padding.top() +
+                        button_padding.bottom();
+  float button_height_with_margin =
+      button_height + button_margin.top() + button_margin.bottom();
+  float shiftable_region_start = header_padding.top();
+  float shiftable_region_end = top_area_height - header_padding.bottom();
+  float button_offset_in_shiftable_region =
+      (shiftable_region_end - shiftable_region_start -
+       button_height_with_margin) /
+      2;
+
+  *caption_button_size = gfx::Size(
+      std::round(content_width + button_border.left() + button_border.right() +
+                 button_padding.left() + button_padding.right()),
+      std::round(button_height));
+  *caption_button_spacing = gfx::Insets(
+      std::round(shiftable_region_start + button_margin.top() +
+                 button_offset_in_shiftable_region),
+      std::round(button_margin.left()), 0, std::round(button_margin.right()));
 }
 
 }  // namespace libgtkui

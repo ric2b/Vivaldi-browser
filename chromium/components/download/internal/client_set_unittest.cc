@@ -7,8 +7,8 @@
 #include <algorithm>
 
 #include "base/memory/ptr_util.h"
-#include "components/download/internal/test/empty_client.h"
 #include "components/download/public/clients.h"
+#include "components/download/public/test/empty_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace download {
@@ -32,7 +32,8 @@ TEST(DownloadServiceClientSetTest, TestGetRegisteredClients) {
   client_map->insert(std::make_pair(DownloadClient::TEST, std::move(client)));
   ClientSet clients(std::move(client_map));
 
-  std::set<DownloadClient> expected_set = {DownloadClient::TEST};
+  std::set<DownloadClient> expected_set = {DownloadClient::TEST,
+                                           DownloadClient::DEBUGGING};
   std::set<DownloadClient> actual_set = clients.GetRegisteredClients();
 
   EXPECT_EQ(expected_set.size(), actual_set.size());

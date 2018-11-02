@@ -7,15 +7,13 @@
 namespace blink {
 
 SerializedColorParams::SerializedColorParams()
-    : color_space_(SerializedColorSpace::kLegacy),
+    : color_space_(SerializedColorSpace::kSRGB),
       pixel_format_(SerializedPixelFormat::kRGBA8),
+      opacity_mode_(SerializedOpacityMode::kNonOpaque),
       storage_format_(SerializedImageDataStorageFormat::kUint8Clamped) {}
 
 SerializedColorParams::SerializedColorParams(CanvasColorParams color_params) {
-  switch (color_params.color_space()) {
-    case kLegacyCanvasColorSpace:
-      color_space_ = SerializedColorSpace::kLegacy;
-      break;
+  switch (color_params.ColorSpace()) {
     case kSRGBCanvasColorSpace:
       color_space_ = SerializedColorSpace::kSRGB;
       break;
@@ -27,7 +25,7 @@ SerializedColorParams::SerializedColorParams(CanvasColorParams color_params) {
       break;
   }
 
-  switch (color_params.pixel_format()) {
+  switch (color_params.PixelFormat()) {
     case kRGBA8CanvasPixelFormat:
     case kRGB10A2CanvasPixelFormat:
     case kRGBA12CanvasPixelFormat:
@@ -37,6 +35,10 @@ SerializedColorParams::SerializedColorParams(CanvasColorParams color_params) {
       pixel_format_ = SerializedPixelFormat::kF16;
       break;
   }
+
+  opacity_mode_ = SerializedOpacityMode::kNonOpaque;
+  if (color_params.GetOpacityMode() == blink::kOpaque)
+    opacity_mode_ = SerializedOpacityMode::kOpaque;
   storage_format_ = SerializedImageDataStorageFormat::kUint8Clamped;
 }
 
@@ -60,18 +62,18 @@ SerializedColorParams::SerializedColorParams(
 SerializedColorParams::SerializedColorParams(
     SerializedColorSpace color_space,
     SerializedPixelFormat pixel_format,
+    SerializedOpacityMode opacity_mode,
     SerializedImageDataStorageFormat storage_format) {
   SetSerializedColorSpace(color_space);
   SetSerializedPixelFormat(pixel_format);
+  SetSerializedOpacityMode(opacity_mode);
   SetSerializedImageDataStorageFormat(storage_format);
 }
 
 CanvasColorParams SerializedColorParams::GetCanvasColorParams() const {
-  CanvasColorSpace color_space = kLegacyCanvasColorSpace;
+  CanvasColorSpace color_space = kSRGBCanvasColorSpace;
   switch (color_space_) {
-    case SerializedColorSpace::kLegacy:
-      color_space = kLegacyCanvasColorSpace;
-      break;
+    case SerializedColorSpace::kLegacyObsolete:
     case SerializedColorSpace::kSRGB:
       color_space = kSRGBCanvasColorSpace;
       break;
@@ -86,11 +88,14 @@ CanvasColorParams SerializedColorParams::GetCanvasColorParams() const {
   CanvasPixelFormat pixel_format = kRGBA8CanvasPixelFormat;
   if (pixel_format_ == SerializedPixelFormat::kF16)
     pixel_format = kF16CanvasPixelFormat;
-  return CanvasColorParams(color_space, pixel_format);
+  blink::OpacityMode opacity_mode = blink::kNonOpaque;
+  if (opacity_mode_ == SerializedOpacityMode::kOpaque)
+    opacity_mode = blink::kOpaque;
+  return CanvasColorParams(color_space, pixel_format, opacity_mode);
 }
 
 CanvasColorSpace SerializedColorParams::GetColorSpace() const {
-  return GetCanvasColorParams().color_space();
+  return GetCanvasColorParams().ColorSpace();
 }
 
 ImageDataStorageFormat SerializedColorParams::GetStorageFormat() const {
@@ -116,6 +121,11 @@ void SerializedColorParams::SetSerializedPixelFormat(
   pixel_format_ = pixel_format;
 }
 
+void SerializedColorParams::SetSerializedOpacityMode(
+    SerializedOpacityMode opacity_mode) {
+  opacity_mode_ = opacity_mode;
+}
+
 void SerializedColorParams::SetSerializedImageDataStorageFormat(
     SerializedImageDataStorageFormat storage_format) {
   storage_format_ = storage_format;
@@ -127,6 +137,10 @@ SerializedColorSpace SerializedColorParams::GetSerializedColorSpace() const {
 
 SerializedPixelFormat SerializedColorParams::GetSerializedPixelFormat() const {
   return pixel_format_;
+}
+
+SerializedOpacityMode SerializedColorParams::GetSerializedOpacityMode() const {
+  return opacity_mode_;
 }
 
 SerializedImageDataStorageFormat

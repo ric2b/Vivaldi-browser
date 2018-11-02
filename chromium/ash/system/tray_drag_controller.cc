@@ -7,6 +7,7 @@
 #include "ash/shell.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ui/app_list/presenter/app_list.h"
 
 namespace ash {
 
@@ -14,11 +15,6 @@ TrayDragController::TrayDragController(Shelf* shelf) : shelf_(shelf) {}
 
 void TrayDragController::ProcessGestureEvent(ui::GestureEvent* event,
                                              TrayBackgroundView* tray_view) {
-  if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
-    Shell::Get()->DismissAppList();
-    return;
-  }
-
   if (!Shell::Get()
            ->tablet_mode_controller()
            ->IsTabletModeWindowManagerEnabled() ||
@@ -26,11 +22,21 @@ void TrayDragController::ProcessGestureEvent(ui::GestureEvent* event,
     return;
   }
 
+  // Disable the tray view swiping if the app list is opened.
+  if (Shell::Get()->app_list()->IsVisible())
+    return;
+
   tray_view_ = tray_view;
   is_on_bubble_ = event->target() != tray_view;
   if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN) {
-    if (StartGestureDrag(*event))
-      event->SetHandled();
+    StartGestureDrag(*event);
+
+    // Should not handle the event if the scroll sequence begins to scroll
+    // upward on the tray view, let the shelf handle the event instead.
+    if (!is_on_bubble_ && event->details().scroll_y_hint() > 0)
+      return;
+
+    event->SetHandled();
     return;
   }
 
@@ -55,32 +61,29 @@ void TrayDragController::ProcessGestureEvent(ui::GestureEvent* event,
   tray_view_->CloseBubble();
 }
 
-bool TrayDragController::StartGestureDrag(const ui::GestureEvent& gesture) {
+void TrayDragController::StartGestureDrag(const ui::GestureEvent& gesture) {
   if (!is_on_bubble_) {
-    // Dragging happens on the tray view. Close the bubble if there is already
-    // one opened. And return false to let shelf handle the event.
-    if (tray_view_->GetBubbleView()) {
-      tray_view_->CloseBubble();
-      return false;
-    }
+    // Dragging on the tray view when the tray bubble is opened should do
+    // nothing.
+    if (tray_view_->GetBubbleView())
+      return;
 
-    // If the scroll sequence begins to scroll downward, return false so that
-    // the event will instead by handled by the shelf.
+    // Should not open the tray bubble if the scroll sequence begins to scroll
+    // downward. The event will instead handled by the shelf.
     if (gesture.details().scroll_y_hint() > 0)
-      return false;
+      return;
 
     tray_view_->ShowBubble(true /* show_by_click */);
   }
 
   if (!tray_view_->GetBubbleView())
-    return false;
+    return;
 
   is_in_drag_ = true;
   gesture_drag_amount_ = 0.f;
   tray_bubble_bounds_ =
       tray_view_->GetBubbleView()->GetWidget()->GetWindowBoundsInScreen();
   UpdateBubbleBounds();
-  return true;
 }
 
 void TrayDragController::UpdateGestureDrag(const ui::GestureEvent& gesture) {

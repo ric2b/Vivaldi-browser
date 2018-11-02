@@ -53,6 +53,24 @@ void AddRouteDetailsStrings(content::WebUIDataSource* html_source) {
       "currentTimeLabel", IDS_MEDIA_ROUTER_ROUTE_DETAILS_CURRENT_TIME_LABEL);
   html_source->AddLocalizedString(
       "durationLabel", IDS_MEDIA_ROUTER_ROUTE_DETAILS_DURATION_LABEL);
+  html_source->AddLocalizedString(
+      "hangoutsLocalPresentTitle",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_HANGOUTS_LOCAL_PRESENT_TITLE);
+  html_source->AddLocalizedString(
+      "hangoutsLocalPresentSubtitle",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_HANGOUTS_LOCAL_PRESENT_SUBTITLE);
+  html_source->AddLocalizedString(
+      "alwaysUseMirroringTitle",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_ALWAYS_USE_MIRRORING_TITLE);
+  html_source->AddLocalizedString(
+      "fullscreenVideosDropdownTitle",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_FULLSCREEN_VIDEOS_DROPDOWN_TITLE);
+  html_source->AddLocalizedString(
+      "fullscreenVideosRemoteScreen",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_FULLSCREEN_VIDEOS_REMOTE_SCREEN);
+  html_source->AddLocalizedString(
+      "fullscreenVideosBothScreens",
+      IDS_MEDIA_ROUTER_ROUTE_DETAILS_FULLSCREEN_VIDEOS_BOTH_SCREENS);
 }
 
 void AddIssuesStrings(content::WebUIDataSource* html_source) {

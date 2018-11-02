@@ -97,10 +97,12 @@
     bottom: 10px;
     color: white;
     border-radius: 2px;
+    border: 0;
     padding: 3px 3px 2px;
     background-color: rgba(255, 255, 255, 0.2);
     align-items: center;
     transition: right .05s ease-out, left .05s ease-out, bottom .05s ease-out, top .05s ease-out;
+    cursor: pointer;
 }
 
 .spectrum-contrast-info.contrast-unknown .value {
@@ -486,6 +488,10 @@
     z-index: 14;
     transition: transform 200ms cubic-bezier(0, 0, 0.2, 1), visibility 0s 200ms;
     border-top: 1px solid #dadada;
+    visibility: hidden;
+}
+
+.palette-panel-showing > .controls-container {
     visibility: hidden;
 }
 

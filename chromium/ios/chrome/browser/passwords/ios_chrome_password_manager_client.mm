@@ -10,7 +10,10 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/password_manager/core/browser/log_manager.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_manager.h"
+#include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/core/browser/signin_manager_base.h"
@@ -18,6 +21,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#include "ios/chrome/browser/passwords/password_manager_internals_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -54,9 +58,14 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
           this,
           base::Bind(&GetSyncService, delegate_.browserState),
           base::Bind(&GetSigninManager, delegate_.browserState)),
-      ukm_source_id_(0) {
+      ukm_source_id_(0),
+      helper_(this) {
   saving_passwords_enabled_.Init(
       password_manager::prefs::kCredentialsEnableService, GetPrefs());
+  log_manager_ = password_manager::LogManager::Create(
+      ios::PasswordManagerInternalsServiceFactory::GetForBrowserState(
+          delegate_.browserState),
+      base::Closure());
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
@@ -111,6 +120,11 @@ bool IOSChromePasswordManagerClient::IsIncognito() const {
   return (delegate_.browserState)->IsOffTheRecord();
 }
 
+const password_manager::PasswordManager*
+IOSChromePasswordManagerClient::GetPasswordManager() const {
+  return delegate_.passwordManager;
+}
+
 PrefService* IOSChromePasswordManagerClient::GetPrefs() {
   return (delegate_.browserState)->GetPrefs();
 }
@@ -123,15 +137,25 @@ PasswordStore* IOSChromePasswordManagerClient::GetPasswordStore() const {
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-    const GURL& origin) {}
+    const GURL& origin) {
+  DCHECK(!local_forms.empty());
+  helper_.NotifyUserAutoSignin();
+  [delegate_ showAutosigninNotification:std::move(local_forms[0])];
+}
 
 void IOSChromePasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
-    std::unique_ptr<autofill::PasswordForm> form) {}
+    std::unique_ptr<autofill::PasswordForm> form) {
+  helper_.NotifyUserCouldBeAutoSignedIn(std::move(form));
+}
 
 void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
-    const autofill::PasswordForm& form) {}
+    const autofill::PasswordForm& form) {
+  helper_.NotifySuccessfulLoginWithExistingPassword(form);
+}
 
-void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {}
+void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
+  helper_.NotifyStorePasswordCalled();
+}
 
 void IOSChromePasswordManagerClient::ForceSavePassword() {
   NOTIMPLEMENTED();
@@ -151,6 +175,11 @@ const GURL& IOSChromePasswordManagerClient::GetLastCommittedEntryURL() const {
 const password_manager::CredentialsFilter*
 IOSChromePasswordManagerClient::GetStoreResultFilter() const {
   return &credentials_filter_;
+}
+
+const password_manager::LogManager*
+IOSChromePasswordManagerClient::GetLogManager() const {
+  return log_manager_.get();
 }
 
 ukm::UkmRecorder* IOSChromePasswordManagerClient::GetUkmRecorder() {
@@ -177,4 +206,13 @@ IOSChromePasswordManagerClient::GetMetricsRecorder() {
     metrics_recorder_.emplace(GetUkmRecorder(), source_id, ukm_source_url_);
   }
   return metrics_recorder_.value();
+}
+
+void IOSChromePasswordManagerClient::PromptUserToEnableAutosignin() {
+  // TODO(crbug.com/435048): Implement this method.
+}
+
+password_manager::PasswordManager*
+IOSChromePasswordManagerClient::GetPasswordManager() {
+  return delegate_.passwordManager;
 }

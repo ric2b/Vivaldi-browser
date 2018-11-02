@@ -10,21 +10,21 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/ranges.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_host.h"
-#include "cc/animation/animation_player.h"
+#include "cc/animation/animation_ticker.h"
 #include "cc/animation/keyframed_animation_curve.h"
 #include "cc/animation/transform_operations.h"
-#include "cc/base/filter_operations.h"
-#include "cc/base/math_util.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/box_f.h"
 
 namespace cc {
 
 scoped_refptr<ElementAnimations> ElementAnimations::Create() {
-  return make_scoped_refptr(new ElementAnimations());
+  return base::WrapRefCounted(new ElementAnimations());
 }
 
 ElementAnimations::ElementAnimations()
@@ -32,8 +32,7 @@ ElementAnimations::ElementAnimations()
       element_id_(),
       has_element_in_active_list_(false),
       has_element_in_pending_list_(false),
-      needs_push_properties_(false),
-      needs_update_impl_client_state_(false) {}
+      needs_push_properties_(false) {}
 
 ElementAnimations::~ElementAnimations() {}
 
@@ -49,7 +48,7 @@ void ElementAnimations::InitAffectedElementTypes() {
   DCHECK(element_id_);
   DCHECK(animation_host_);
 
-  UpdatePlayersTickingState(UpdateTickingType::FORCE);
+  UpdateTickersTickingState(UpdateTickingType::FORCE);
 
   DCHECK(animation_host_->mutator_host_client());
   if (animation_host_->mutator_host_client()->IsElementInList(
@@ -92,7 +91,7 @@ void ElementAnimations::ClearAffectedElementTypes() {
   }
   set_has_element_in_pending_list(false);
 
-  RemovePlayersFromTicking();
+  RemoveTickersFromTicking();
 }
 
 void ElementAnimations::ElementRegistered(ElementId element_id,
@@ -100,7 +99,7 @@ void ElementAnimations::ElementRegistered(ElementId element_id,
   DCHECK_EQ(element_id_, element_id);
 
   if (!has_element_in_any_list())
-    UpdatePlayersTickingState(UpdateTickingType::FORCE);
+    UpdateTickersTickingState(UpdateTickingType::FORCE);
 
   if (list_type == ElementListType::ACTIVE)
     set_has_element_in_active_list(true);
@@ -117,19 +116,21 @@ void ElementAnimations::ElementUnregistered(ElementId element_id,
     set_has_element_in_pending_list(false);
 
   if (!has_element_in_any_list())
-    RemovePlayersFromTicking();
+    RemoveTickersFromTicking();
 }
 
-void ElementAnimations::AddPlayer(AnimationPlayer* player) {
-  players_list_.AddObserver(player);
+void ElementAnimations::AddTicker(AnimationTicker* ticker) {
+  tickers_list_.AddObserver(ticker);
+  ticker->BindElementAnimations(this);
 }
 
-void ElementAnimations::RemovePlayer(AnimationPlayer* player) {
-  players_list_.RemoveObserver(player);
+void ElementAnimations::RemoveTicker(AnimationTicker* ticker) {
+  tickers_list_.RemoveObserver(ticker);
+  ticker->UnbindElementAnimations();
 }
 
 bool ElementAnimations::IsEmpty() const {
-  return !players_list_.might_have_observers();
+  return !tickers_list_.might_have_observers();
 }
 
 void ElementAnimations::SetNeedsPushProperties() {
@@ -144,35 +145,32 @@ void ElementAnimations::PushPropertiesTo(
     return;
   needs_push_properties_ = false;
 
-  // Update impl client state.
-  if (needs_update_impl_client_state_)
-    element_animations_impl->UpdateClientAnimationState();
-  needs_update_impl_client_state_ = false;
+  element_animations_impl->UpdateClientAnimationState();
 }
 
-void ElementAnimations::UpdatePlayersTickingState(
+void ElementAnimations::UpdateTickersTickingState(
     UpdateTickingType update_ticking_type) const {
-  for (auto& player : players_list_)
-    player.UpdateTickingState(update_ticking_type);
+  for (auto& ticker : tickers_list_)
+    ticker.UpdateTickingState(update_ticking_type);
 }
 
-void ElementAnimations::RemovePlayersFromTicking() const {
-  for (auto& player : players_list_)
-    player.RemoveFromTicking();
+void ElementAnimations::RemoveTickersFromTicking() const {
+  for (auto& ticker : tickers_list_)
+    ticker.RemoveFromTicking();
 }
 
 void ElementAnimations::NotifyAnimationStarted(const AnimationEvent& event) {
   DCHECK(!event.is_impl_only);
-  for (auto& player : players_list_) {
-    if (player.NotifyAnimationStarted(event))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.NotifyAnimationStarted(event))
       break;
   }
 }
 
 void ElementAnimations::NotifyAnimationFinished(const AnimationEvent& event) {
   DCHECK(!event.is_impl_only);
-  for (auto& player : players_list_) {
-    if (player.NotifyAnimationFinished(event))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.NotifyAnimationFinished(event))
       break;
   }
 }
@@ -181,58 +179,33 @@ void ElementAnimations::NotifyAnimationTakeover(const AnimationEvent& event) {
   DCHECK(!event.is_impl_only);
   DCHECK(event.target_property == TargetProperty::SCROLL_OFFSET);
 
-  for (auto& player : players_list_)
-    player.NotifyAnimationTakeover(event);
+  for (auto& ticker : tickers_list_)
+    ticker.NotifyAnimationTakeover(event);
 }
 
 void ElementAnimations::NotifyAnimationAborted(const AnimationEvent& event) {
   DCHECK(!event.is_impl_only);
 
-  for (auto& player : players_list_) {
-    if (player.NotifyAnimationAborted(event))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.NotifyAnimationAborted(event))
       break;
   }
 
   UpdateClientAnimationState();
 }
 
-bool ElementAnimations::HasTransformAnimationThatInflatesBounds() const {
-  for (auto& player : players_list_) {
-    if (player.HasTransformAnimationThatInflatesBounds())
-      return true;
-  }
-  return false;
-}
-
-bool ElementAnimations::TransformAnimationBoundsForBox(
-    const gfx::BoxF& box,
-    gfx::BoxF* bounds) const {
-  *bounds = gfx::BoxF();
-
-  for (auto& player : players_list_) {
-    if (!player.HasTransformAnimationThatInflatesBounds())
-      continue;
-    gfx::BoxF player_bounds;
-    bool success = player.TransformAnimationBoundsForBox(box, &player_bounds);
-    if (!success)
-      return false;
-    bounds->Union(player_bounds);
-  }
-  return true;
-}
-
 bool ElementAnimations::HasOnlyTranslationTransforms(
     ElementListType list_type) const {
-  for (auto& player : players_list_) {
-    if (!player.HasOnlyTranslationTransforms(list_type))
+  for (auto& ticker : tickers_list_) {
+    if (!ticker.HasOnlyTranslationTransforms(list_type))
       return false;
   }
   return true;
 }
 
 bool ElementAnimations::AnimationsPreserveAxisAlignment() const {
-  for (auto& player : players_list_) {
-    if (!player.AnimationsPreserveAxisAlignment())
+  for (auto& ticker : tickers_list_) {
+    if (!ticker.AnimationsPreserveAxisAlignment())
       return false;
   }
   return true;
@@ -242,13 +215,13 @@ bool ElementAnimations::AnimationStartScale(ElementListType list_type,
                                             float* start_scale) const {
   *start_scale = 0.f;
 
-  for (auto& player : players_list_) {
-    float player_start_scale = 0.f;
-    bool success = player.AnimationStartScale(list_type, &player_start_scale);
+  for (auto& ticker : tickers_list_) {
+    float ticker_start_scale = 0.f;
+    bool success = ticker.AnimationStartScale(list_type, &ticker_start_scale);
     if (!success)
       return false;
     // Union: a maximum.
-    *start_scale = std::max(*start_scale, player_start_scale);
+    *start_scale = std::max(*start_scale, ticker_start_scale);
   }
 
   return true;
@@ -258,36 +231,31 @@ bool ElementAnimations::MaximumTargetScale(ElementListType list_type,
                                            float* max_scale) const {
   *max_scale = 0.f;
 
-  for (auto& player : players_list_) {
-    float player_max_scale = 0.f;
-    bool success = player.MaximumTargetScale(list_type, &player_max_scale);
+  for (auto& ticker : tickers_list_) {
+    float ticker_max_scale = 0.f;
+    bool success = ticker.MaximumTargetScale(list_type, &ticker_max_scale);
     if (!success)
       return false;
     // Union: a maximum.
-    *max_scale = std::max(*max_scale, player_max_scale);
+    *max_scale = std::max(*max_scale, ticker_max_scale);
   }
 
   return true;
 }
 
 bool ElementAnimations::ScrollOffsetAnimationWasInterrupted() const {
-  for (auto& player : players_list_) {
-    if (player.scroll_offset_animation_was_interrupted())
+  for (auto& ticker : tickers_list_) {
+    if (ticker.scroll_offset_animation_was_interrupted())
       return true;
   }
   return false;
-}
-
-void ElementAnimations::SetNeedsUpdateImplClientState() {
-  needs_update_impl_client_state_ = true;
-  SetNeedsPushProperties();
 }
 
 void ElementAnimations::NotifyClientFloatAnimated(float opacity,
                                                   int target_property_id,
                                                   Animation* animation) {
   DCHECK(animation->target_property_id() == TargetProperty::OPACITY);
-  opacity = MathUtil::ClampToRange(opacity, 0.0f, 1.0f);
+  opacity = base::ClampToRange(opacity, 0.0f, 1.0f);
   if (AnimationAffectsActiveElements(animation))
     OnOpacityAnimated(ElementListType::ACTIVE, opacity);
   if (AnimationAffectsPendingElements(animation))
@@ -338,12 +306,12 @@ void ElementAnimations::UpdateClientAnimationState() {
   pending_state_.Clear();
   active_state_.Clear();
 
-  for (auto& player : players_list_) {
-    PropertyAnimationState player_pending_state, player_active_state;
-    player.GetPropertyAnimationState(&player_pending_state,
-                                     &player_active_state);
-    pending_state_ |= player_pending_state;
-    active_state_ |= player_active_state;
+  for (auto& ticker : tickers_list_) {
+    PropertyAnimationState ticker_pending_state, ticker_active_state;
+    ticker.GetPropertyAnimationState(&ticker_pending_state,
+                                     &ticker_active_state);
+    pending_state_ |= ticker_pending_state;
+    active_state_ |= ticker_active_state;
   }
 
   TargetProperties allowed_properties = GetPropertiesMaskForAnimationState();
@@ -370,8 +338,8 @@ void ElementAnimations::UpdateClientAnimationState() {
 }
 
 bool ElementAnimations::HasTickingAnimation() const {
-  for (auto& player : players_list_) {
-    if (player.HasTickingAnimation())
+  for (auto& ticker : tickers_list_) {
+    if (ticker.HasTickingAnimation())
       return true;
   }
 
@@ -379,8 +347,8 @@ bool ElementAnimations::HasTickingAnimation() const {
 }
 
 bool ElementAnimations::HasAnyAnimation() const {
-  for (auto& player : players_list_) {
-    if (player.has_any_animation())
+  for (auto& ticker : tickers_list_) {
+    if (ticker.has_any_animation())
       return true;
   }
 
@@ -389,8 +357,8 @@ bool ElementAnimations::HasAnyAnimation() const {
 
 bool ElementAnimations::HasAnyAnimationTargetingProperty(
     TargetProperty::Type property) const {
-  for (auto& player : players_list_) {
-    if (player.GetAnimation(property))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.GetAnimation(property))
       return true;
   }
   return false;
@@ -399,8 +367,8 @@ bool ElementAnimations::HasAnyAnimationTargetingProperty(
 bool ElementAnimations::IsPotentiallyAnimatingProperty(
     TargetProperty::Type target_property,
     ElementListType list_type) const {
-  for (auto& player : players_list_) {
-    if (player.IsPotentiallyAnimatingProperty(target_property, list_type))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.IsPotentiallyAnimatingProperty(target_property, list_type))
       return true;
   }
 
@@ -410,8 +378,8 @@ bool ElementAnimations::IsPotentiallyAnimatingProperty(
 bool ElementAnimations::IsCurrentlyAnimatingProperty(
     TargetProperty::Type target_property,
     ElementListType list_type) const {
-  for (auto& player : players_list_) {
-    if (player.IsCurrentlyAnimatingProperty(target_property, list_type))
+  for (auto& ticker : tickers_list_) {
+    if (ticker.IsCurrentlyAnimatingProperty(target_property, list_type))
       return true;
   }
 

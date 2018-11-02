@@ -5,6 +5,7 @@
 #import "ui/views/controls/menu/menu_runner_impl_cocoa.h"
 
 #include "base/mac/sdk_forward_declarations.h"
+#import "base/message_loop/message_pump_mac.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/models/menu_model.h"
@@ -27,7 +28,7 @@ const CGFloat kNativeCheckmarkWidth = 18;
 const CGFloat kNativeMenuItemHeight = 18;
 
 // Returns the first item in |menu_controller|'s menu that will be checked.
-NSMenuItem* FirstCheckedItem(MenuController* menu_controller) {
+NSMenuItem* FirstCheckedItem(MenuControllerCocoa* menu_controller) {
   for (NSMenuItem* item in [[menu_controller menu] itemArray]) {
     if ([menu_controller model]->IsItemCheckedAt([item tag]))
       return item;
@@ -132,8 +133,8 @@ MenuRunnerImplCocoa::MenuRunnerImplCocoa(
       delete_after_run_(false),
       closing_event_time_(base::TimeTicks()),
       on_menu_closed_callback_(on_menu_closed_callback) {
-  menu_controller_.reset(
-      [[MenuController alloc] initWithModel:menu useWithPopUpButtonCell:NO]);
+  menu_controller_.reset([[MenuControllerCocoa alloc] initWithModel:menu
+                                             useWithPopUpButtonCell:NO]);
   [menu_controller_ setPostItemSelectedAsTask:YES];
 }
 
@@ -163,6 +164,9 @@ void MenuRunnerImplCocoa::RunMenuAt(Widget* parent,
   DCHECK(parent);
   closing_event_time_ = base::TimeTicks();
   running_ = true;
+
+  // Ensure the UI can update while the menu is fading out.
+  base::ScopedPumpMessagesInPrivateModes pump_private;
 
   NSWindow* window = parent->GetNativeWindow();
   if (run_types & MenuRunner::CONTEXT_MENU) {

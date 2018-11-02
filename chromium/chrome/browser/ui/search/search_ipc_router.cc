@@ -16,8 +16,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/child_process_host.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 
 namespace {
 
@@ -43,7 +43,7 @@ class EmbeddedSearchClientFactoryImpl
     DCHECK(web_contents);
     DCHECK(binding);
     // Before we are connected to a frame we throw away all messages.
-    mojo::MakeIsolatedRequest(&embedded_search_client_);
+    mojo::MakeRequestAssociatedWithDedicatedPipe(&embedded_search_client_);
   }
 
   chrome::mojom::EmbeddedSearchClient* GetEmbeddedSearchClient() override {
@@ -108,30 +108,6 @@ void SearchIPCRouter::OnNavigationEntryCommitted() {
   embedded_search_client()->SetPageSequenceNumber(commit_counter_);
 }
 
-void SearchIPCRouter::SendChromeIdentityCheckResult(
-    const base::string16& identity,
-    bool identity_match) {
-  if (!policy_->ShouldProcessChromeIdentityCheck())
-    return;
-
-  embedded_search_client()->ChromeIdentityCheckResult(identity, identity_match);
-}
-
-void SearchIPCRouter::SendHistorySyncCheckResult(bool sync_history) {
-  if (!policy_->ShouldProcessHistorySyncCheck())
-    return;
-
-  embedded_search_client()->HistorySyncCheckResult(sync_history);
-}
-
-void SearchIPCRouter::SetSuggestionToPrefetch(
-    const InstantSuggestion& suggestion) {
-  if (!policy_->ShouldSendSetSuggestionToPrefetch())
-    return;
-
-  embedded_search_client()->SetSuggestionToPrefetch(suggestion);
-}
-
 void SearchIPCRouter::SetInputInProgress(bool input_in_progress) {
   if (!policy_->ShouldSendSetInputInProgress(is_active_tab_))
     return;
@@ -161,13 +137,6 @@ void SearchIPCRouter::SendThemeBackgroundInfo(
     return;
 
   embedded_search_client()->ThemeChanged(theme_info);
-}
-
-void SearchIPCRouter::Submit(const EmbeddedSearchRequestParams& params) {
-  if (!policy_->ShouldSubmitQuery())
-    return;
-
-  embedded_search_client()->Submit(params);
 }
 
 void SearchIPCRouter::OnTabActivated() {
@@ -233,9 +202,7 @@ void SearchIPCRouter::LogEvent(int page_seq_no,
 
 void SearchIPCRouter::LogMostVisitedImpression(
     int page_seq_no,
-    int position,
-    ntp_tiles::TileSource tile_source,
-    ntp_tiles::TileVisualType tile_type) {
+    const ntp_tiles::NTPTileImpression& impression) {
   if (page_seq_no != commit_counter_)
     return;
 
@@ -243,14 +210,12 @@ void SearchIPCRouter::LogMostVisitedImpression(
   if (!policy_->ShouldProcessLogEvent())
     return;
 
-  delegate_->OnLogMostVisitedImpression(position, tile_source, tile_type);
+  delegate_->OnLogMostVisitedImpression(impression);
 }
 
 void SearchIPCRouter::LogMostVisitedNavigation(
     int page_seq_no,
-    int position,
-    ntp_tiles::TileSource tile_source,
-    ntp_tiles::TileVisualType tile_type) {
+    const ntp_tiles::NTPTileImpression& impression) {
   if (page_seq_no != commit_counter_)
     return;
 
@@ -258,7 +223,7 @@ void SearchIPCRouter::LogMostVisitedNavigation(
   if (!policy_->ShouldProcessLogEvent())
     return;
 
-  delegate_->OnLogMostVisitedNavigation(position, tile_source, tile_type);
+  delegate_->OnLogMostVisitedNavigation(impression);
 }
 
 void SearchIPCRouter::PasteAndOpenDropdown(int page_seq_no,
@@ -272,25 +237,28 @@ void SearchIPCRouter::PasteAndOpenDropdown(int page_seq_no,
   delegate_->PasteIntoOmnibox(text);
 }
 
-void SearchIPCRouter::ChromeIdentityCheck(int page_seq_no,
-                                          const base::string16& identity) {
-  if (page_seq_no != commit_counter_)
-    return;
+void SearchIPCRouter::ChromeIdentityCheck(
+    int page_seq_no,
+    const base::string16& identity,
+    ChromeIdentityCheckCallback callback) {
+  bool result = false;
+  if (page_seq_no == commit_counter_ &&
+      policy_->ShouldProcessChromeIdentityCheck()) {
+    result = delegate_->ChromeIdentityCheck(identity);
+  }
 
-  if (!policy_->ShouldProcessChromeIdentityCheck())
-    return;
-
-  delegate_->OnChromeIdentityCheck(identity);
+  std::move(callback).Run(result);
 }
 
-void SearchIPCRouter::HistorySyncCheck(int page_seq_no) {
-  if (page_seq_no != commit_counter_)
-    return;
+void SearchIPCRouter::HistorySyncCheck(int page_seq_no,
+                                       HistorySyncCheckCallback callback) {
+  bool result = false;
+  if (page_seq_no == commit_counter_ &&
+      policy_->ShouldProcessHistorySyncCheck()) {
+    result = delegate_->HistorySyncCheck();
+  }
 
-  if (!policy_->ShouldProcessHistorySyncCheck())
-    return;
-
-  delegate_->OnHistorySyncCheck();
+  std::move(callback).Run(result);
 }
 
 void SearchIPCRouter::set_delegate_for_testing(Delegate* delegate) {

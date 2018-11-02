@@ -21,7 +21,7 @@
 #include "base/test/histogram_tester.h"
 #include "net/base/auth.h"
 #include "net/base/request_priority.h"
-#include "net/base/sdch_observer.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_transaction_test_util.h"
@@ -46,7 +46,6 @@
 #include "url/url_constants.h"
 
 #if defined(OS_ANDROID)
-#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "jni/AndroidNetworkLibraryTestUtil_jni.h"
 #endif
@@ -76,6 +75,14 @@ const char kSimpleHeadMockWrite[] =
     "Accept-Encoding: gzip, deflate\r\n"
     "Accept-Language: en-us,fr\r\n\r\n";
 
+const char kTrustAnchorRequestHistogram[] =
+    "Net.Certificate.TrustAnchor.Request";
+
+const char kCTComplianceHistogramName[] =
+    "Net.CertificateTransparency.RequestComplianceStatus";
+const char kCTRequiredHistogramName[] =
+    "Net.CertificateTransparency.CTRequiredRequestComplianceStatus";
+
 // Inherit from URLRequestHttpJob to expose the priority and some
 // other hidden functions.
 class TestURLRequestHttpJob : public URLRequestHttpJob {
@@ -86,7 +93,7 @@ class TestURLRequestHttpJob : public URLRequestHttpJob {
                           request->context()->http_user_agent_settings()),
         use_null_source_stream_(false) {}
 
-  ~TestURLRequestHttpJob() override {}
+  ~TestURLRequestHttpJob() override = default;
 
   // URLRequestJob implementation:
   std::unique_ptr<SourceStream> SetUpSourceStream() override {
@@ -179,30 +186,168 @@ TEST_F(URLRequestHttpJobSetUpSourceTest, UnknownEncoding) {
   EXPECT_EQ("Test Content", delegate_.data_received());
 }
 
-// Received a malformed SDCH encoded response when there is no SdchManager.
-TEST_F(URLRequestHttpJobSetUpSourceTest, SdchNotAdvertisedGotSdchResponse) {
+class URLRequestHttpJobWithProxy {
+ public:
+  explicit URLRequestHttpJobWithProxy(
+      std::unique_ptr<ProxyService> proxy_service)
+      : proxy_service_(std::move(proxy_service)),
+        context_(new TestURLRequestContext(true)) {
+    context_->set_client_socket_factory(&socket_factory_);
+    context_->set_network_delegate(&network_delegate_);
+    context_->set_proxy_service(proxy_service_.get());
+    context_->Init();
+  }
+
+  MockClientSocketFactory socket_factory_;
+  TestNetworkDelegate network_delegate_;
+  std::unique_ptr<ProxyService> proxy_service_;
+  std::unique_ptr<TestURLRequestContext> context_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(URLRequestHttpJobWithProxy);
+};
+
+// Tests that when proxy is not used, the proxy server is set correctly on the
+// URLRequest.
+TEST(URLRequestHttpJobWithProxy, TestFailureWithoutProxy) {
+  URLRequestHttpJobWithProxy http_job_with_proxy(nullptr);
+
   MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
-  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
-                               "Content-Encoding: sdch\r\n"
-                               "Content-Length: 12\r\n\r\n"),
-                      MockRead("Test Content")};
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_CONNECTION_RESET)};
 
   StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
                                        arraysize(writes));
-  socket_factory_.AddSocketDataProvider(&socket_data);
+  http_job_with_proxy.socket_factory_.AddSocketDataProvider(&socket_data);
 
-  // This test expects TestURLRequestContexts to have no SdchManager.
-  DCHECK(!context_.sdch_manager());
-
+  TestDelegate delegate;
   std::unique_ptr<URLRequest> request =
-      context_.CreateRequest(GURL("http://www.example.com"), DEFAULT_PRIORITY,
-                             &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
-  auto job = std::make_unique<TestURLRequestHttpJob>(request.get());
-  test_job_interceptor_->set_main_intercept_job(std::move(job));
-  request->Start();
+      http_job_with_proxy.context_->CreateRequest(
+          GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate,
+          TRAFFIC_ANNOTATION_FOR_TESTS);
 
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
   base::RunLoop().Run();
-  EXPECT_EQ(ERR_CONTENT_DECODING_FAILED, delegate_.request_status());
+
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_CONNECTION_RESET));
+  EXPECT_EQ(ProxyServer::Direct(), request->proxy_server());
+  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_EQ(0, request->received_response_content_length());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            request->GetTotalSentBytes());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            http_job_with_proxy.network_delegate_.total_network_bytes_sent());
+  EXPECT_EQ(
+      CountReadBytes(reads, arraysize(reads)),
+      http_job_with_proxy.network_delegate_.total_network_bytes_received());
+}
+
+// Tests that when one proxy is in use and the connection to the proxy server
+// fails, the proxy server is still set correctly on the URLRequest.
+TEST(URLRequestHttpJobWithProxy, TestSuccessfulWithOneProxy) {
+  const char kSimpleProxyGetMockWrite[] =
+      "GET http://www.example.com/ HTTP/1.1\r\n"
+      "Host: www.example.com\r\n"
+      "Proxy-Connection: keep-alive\r\n"
+      "User-Agent:\r\n"
+      "Accept-Encoding: gzip, deflate\r\n"
+      "Accept-Language: en-us,fr\r\n\r\n";
+
+  const ProxyServer proxy_server =
+      ProxyServer::FromURI("http://origin.net:80", ProxyServer::SCHEME_HTTP);
+
+  std::unique_ptr<ProxyService> proxy_service =
+      ProxyService::CreateFixedFromPacResult(proxy_server.ToPacString());
+
+  MockWrite writes[] = {MockWrite(kSimpleProxyGetMockWrite)};
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_CONNECTION_RESET)};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+
+  URLRequestHttpJobWithProxy http_job_with_proxy(std::move(proxy_service));
+  http_job_with_proxy.socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request =
+      http_job_with_proxy.context_->CreateRequest(
+          GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate,
+          TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
+  base::RunLoop().Run();
+
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_CONNECTION_RESET));
+  // When request fails due to proxy connection errors, the proxy server should
+  // still be set on the |request|.
+  EXPECT_EQ(proxy_server, request->proxy_server());
+  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_EQ(0, request->received_response_content_length());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            request->GetTotalSentBytes());
+  EXPECT_EQ(0, request->GetTotalReceivedBytes());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            http_job_with_proxy.network_delegate_.total_network_bytes_sent());
+  EXPECT_EQ(
+      0, http_job_with_proxy.network_delegate_.total_network_bytes_received());
+}
+
+// Tests that when two proxies are in use and the connection to the first proxy
+// server fails, the proxy server is set correctly on the URLRequest.
+TEST(URLRequestHttpJobWithProxy,
+     TestContentLengthSuccessfulRequestWithTwoProxies) {
+  const ProxyServer proxy_server =
+      ProxyServer::FromURI("http://origin.net:80", ProxyServer::SCHEME_HTTP);
+
+  // Connection to |proxy_server| would fail. Request should be fetched over
+  // DIRECT.
+  std::unique_ptr<ProxyService> proxy_service =
+      ProxyService::CreateFixedFromPacResult(
+          proxy_server.ToPacString() + "; " +
+          ProxyServer::Direct().ToPacString());
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content"), MockRead(ASYNC, OK)};
+
+  MockConnect mock_connect_1(SYNCHRONOUS, ERR_CONNECTION_RESET);
+  StaticSocketDataProvider connect_data_1;
+  connect_data_1.set_connect_data(mock_connect_1);
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+
+  URLRequestHttpJobWithProxy http_job_with_proxy(std::move(proxy_service));
+  http_job_with_proxy.socket_factory_.AddSocketDataProvider(&connect_data_1);
+  http_job_with_proxy.socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request =
+      http_job_with_proxy.context_->CreateRequest(
+          GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate,
+          TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(delegate.request_status(), IsOk());
+  EXPECT_EQ(ProxyServer::Direct(), request->proxy_server());
+  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_EQ(12, request->received_response_content_length());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            request->GetTotalSentBytes());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
+  EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
+            http_job_with_proxy.network_delegate_.total_network_bytes_sent());
+  EXPECT_EQ(
+      CountReadBytes(reads, arraysize(reads)),
+      http_job_with_proxy.network_delegate_.total_network_bytes_received());
 }
 
 class URLRequestHttpJobTest : public ::testing::Test {
@@ -221,37 +366,6 @@ class URLRequestHttpJobTest : public ::testing::Test {
     req_ =
         context_.CreateRequest(GURL("http://www.example.com"), DEFAULT_PRIORITY,
                                &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
-  }
-
-  bool TransactionAcceptsSdchEncoding() {
-    base::WeakPtr<MockNetworkTransaction> transaction(
-        network_layer_.last_transaction());
-    EXPECT_TRUE(transaction);
-    if (!transaction) return false;
-
-    const HttpRequestInfo* request_info = transaction->request();
-    EXPECT_TRUE(request_info);
-    if (!request_info) return false;
-
-    std::string encoding_headers;
-    bool get_success = request_info->extra_headers.GetHeader(
-        "Accept-Encoding", &encoding_headers);
-    EXPECT_TRUE(get_success);
-    if (!get_success) return false;
-
-    // This check isn't wrapped with EXPECT* macros because different
-    // results from this function may be expected in different tests.
-    for (const std::string& token :
-         base::SplitString(encoding_headers, ", ", base::KEEP_WHITESPACE,
-                           base::SPLIT_WANT_NONEMPTY)) {
-      if (base::EqualsCaseInsensitiveASCII(token, "sdch"))
-        return true;
-    }
-    return false;
-  }
-
-  void EnableSdch() {
-    context_.SetSdchManager(std::make_unique<SdchManager>());
   }
 
   MockNetworkLayer network_layer_;
@@ -852,6 +966,300 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   }
 }
 
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobRecordsTrustAnchorHistograms) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  // Simulate a certificate chain issued by "C=US, O=Google Trust Services LLC,
+  // CN=GTS Root R4". This publicly-trusted root was chosen as it was included
+  // in 2017 and is not anticipated to be removed from all supported platforms
+  // for a few decades.
+  // Note: The actual cert in |cert| does not matter for this testing.
+  SHA256HashValue leaf_hash = {{0}};
+  SHA256HashValue intermediate_hash = {{1}};
+  SHA256HashValue root_hash = {
+      {0x98, 0x47, 0xe5, 0x65, 0x3e, 0x5e, 0x9e, 0x84, 0x75, 0x16, 0xe5,
+       0xcb, 0x81, 0x86, 0x06, 0xaa, 0x75, 0x44, 0xa1, 0x9b, 0xe6, 0x7f,
+       0xd7, 0x36, 0x6d, 0x50, 0x69, 0x88, 0xe8, 0xd8, 0x43, 0x47}};
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(HashValue(leaf_hash));
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(
+      HashValue(intermediate_hash));
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(HashValue(root_hash));
+
+  const base::HistogramBase::Sample kGTSRootR4HistogramID = 486;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 0);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 1);
+  histograms.ExpectUniqueSample(kTrustAnchorRequestHistogram,
+                                kGTSRootR4HistogramID, 1);
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobDoesNotRecordTrustAnchorHistogramsWhenNoNetworkLoad) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  // Simulate a request loaded from a non-network source, such as a disk
+  // cache.
+  ssl_socket_data.ssl_info.public_key_hashes.clear();
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 0);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 0);
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobRecordsMostSpecificTrustAnchorHistograms) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  // Simulate a certificate chain issued by "C=US, O=Google Trust Services LLC,
+  // CN=GTS Root R4". This publicly-trusted root was chosen as it was included
+  // in 2017 and is not anticipated to be removed from all supported platforms
+  // for a few decades.
+  // Note: The actual cert in |cert| does not matter for this testing.
+  SHA256HashValue leaf_hash = {{0}};
+  SHA256HashValue intermediate_hash = {{1}};
+  SHA256HashValue gts_root_r3_hash = {
+      {0x41, 0x79, 0xed, 0xd9, 0x81, 0xef, 0x74, 0x74, 0x77, 0xb4, 0x96,
+       0x26, 0x40, 0x8a, 0xf4, 0x3d, 0xaa, 0x2c, 0xa7, 0xab, 0x7f, 0x9e,
+       0x08, 0x2c, 0x10, 0x60, 0xf8, 0x40, 0x96, 0x77, 0x43, 0x48}};
+  SHA256HashValue gts_root_r4_hash = {
+      {0x98, 0x47, 0xe5, 0x65, 0x3e, 0x5e, 0x9e, 0x84, 0x75, 0x16, 0xe5,
+       0xcb, 0x81, 0x86, 0x06, 0xaa, 0x75, 0x44, 0xa1, 0x9b, 0xe6, 0x7f,
+       0xd7, 0x36, 0x6d, 0x50, 0x69, 0x88, 0xe8, 0xd8, 0x43, 0x47}};
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(HashValue(leaf_hash));
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(
+      HashValue(intermediate_hash));
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(
+      HashValue(gts_root_r3_hash));
+  ssl_socket_data.ssl_info.public_key_hashes.push_back(
+      HashValue(gts_root_r4_hash));
+
+  const base::HistogramBase::Sample kGTSRootR3HistogramID = 485;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 0);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectTotalCount(kTrustAnchorRequestHistogram, 1);
+  histograms.ExpectUniqueSample(kTrustAnchorRequestHistogram,
+                                kGTSRootR3HistogramID, 1);
+}
+
+// Tests that the CT compliance histogram is recorded, even if CT is not
+// required.
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobRecordsCTComplianceHistograms) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  ssl_socket_data.ssl_info.is_issued_by_known_root = true;
+  ssl_socket_data.ssl_info.ct_policy_compliance_required = false;
+  ssl_socket_data.ssl_info.ct_policy_compliance =
+      ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectUniqueSample(
+      kCTComplianceHistogramName,
+      static_cast<int32_t>(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS),
+      1);
+  // CTRequiredRequestComplianceStatus should *not* have been recorded because
+  // it is only recorded for requests which are required to be compliant.
+  histograms.ExpectTotalCount(kCTRequiredHistogramName, 0);
+}
+
+// Tests that the CT compliance histograms are not recorded for
+// locally-installed trust anchors.
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobDoesNotRecordCTComplianceHistogramsForLocalRoot) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  ssl_socket_data.ssl_info.is_issued_by_known_root = false;
+  ssl_socket_data.ssl_info.ct_policy_compliance_required = false;
+  ssl_socket_data.ssl_info.ct_policy_compliance =
+      ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectTotalCount(kCTComplianceHistogramName, 0);
+  histograms.ExpectTotalCount(kCTRequiredHistogramName, 0);
+}
+
+// Tests that the CT compliance histogram is recorded when CT is required but
+// not compliant.
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobRecordsCTRequiredHistogram) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  ssl_socket_data.ssl_info.is_issued_by_known_root = true;
+  ssl_socket_data.ssl_info.ct_policy_compliance_required = true;
+  ssl_socket_data.ssl_info.ct_policy_compliance =
+      ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectUniqueSample(
+      kCTComplianceHistogramName,
+      static_cast<int32_t>(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS),
+      1);
+  histograms.ExpectUniqueSample(
+      kCTRequiredHistogramName,
+      static_cast<int32_t>(ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS),
+      1);
+}
+
+// Tests that the CT compliance histograms are not recorded when there is an
+// unrelated certificate error.
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestHttpJobDoesNotRecordCTHistogramWithCertError) {
+  SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
+  ssl_socket_data.ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+  ssl_socket_data.ssl_info.is_issued_by_known_root = true;
+  ssl_socket_data.ssl_info.ct_policy_compliance_required = true;
+  ssl_socket_data.ssl_info.ct_policy_compliance =
+      ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS;
+  ssl_socket_data.ssl_info.cert_status = net::CERT_STATUS_DATE_INVALID;
+
+  socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data);
+
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  base::HistogramTester histograms;
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("https://www.example.com/"), DEFAULT_PRIORITY, &delegate,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->Start();
+  base::RunLoop().Run();
+  EXPECT_THAT(delegate.request_status(), IsOk());
+
+  histograms.ExpectTotalCount(kCTComplianceHistogramName, 0);
+  histograms.ExpectTotalCount(kCTRequiredHistogramName, 0);
+}
+
 TEST_F(URLRequestHttpJobTest, TestCancelWhileReadingCookies) {
   DelayedCookieMonster cookie_monster;
   TestURLRequestContext context(true);
@@ -910,26 +1318,6 @@ TEST_F(URLRequestHttpJobTest, SetTransactionPriority) {
 
   req_->SetPriority(HIGHEST);
   EXPECT_EQ(HIGHEST, network_layer_.last_transaction()->priority());
-}
-
-// Confirm we do advertise SDCH encoding in the case of a GET.
-TEST_F(URLRequestHttpJobTest, SdchAdvertisementGet) {
-  EnableSdch();
-  req_->set_method("GET");  // Redundant with default.
-  test_job_interceptor_->set_main_intercept_job(
-      std::make_unique<TestURLRequestHttpJob>(req_.get()));
-  req_->Start();
-  EXPECT_TRUE(TransactionAcceptsSdchEncoding());
-}
-
-// Confirm we don't advertise SDCH encoding in the case of a POST.
-TEST_F(URLRequestHttpJobTest, SdchAdvertisementPost) {
-  EnableSdch();
-  req_->set_method("POST");
-  test_job_interceptor_->set_main_intercept_job(
-      std::make_unique<TestURLRequestHttpJob>(req_.get()));
-  req_->Start();
-  EXPECT_FALSE(TransactionAcceptsSdchEncoding());
 }
 
 TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectTest) {
@@ -993,119 +1381,6 @@ TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectTest) {
   }
 }
 
-class MockSdchObserver : public SdchObserver {
- public:
-  MockSdchObserver() {}
-  MOCK_METHOD2(OnDictionaryAdded,
-               void(const GURL& request_url, const std::string& server_hash));
-  MOCK_METHOD1(OnDictionaryRemoved, void(const std::string& server_hash));
-  MOCK_METHOD1(OnDictionaryUsed, void(const std::string& server_hash));
-  MOCK_METHOD2(OnGetDictionary,
-               void(const GURL& request_url, const GURL& dictionary_url));
-  MOCK_METHOD0(OnClearDictionaries, void());
-};
-
-class URLRequestHttpJobWithSdchSupportTest : public ::testing::Test {
- protected:
-  URLRequestHttpJobWithSdchSupportTest() : context_(true) {
-    auto params = std::make_unique<HttpNetworkSession::Params>();
-    context_.set_http_network_session_params(std::move(params));
-    context_.set_client_socket_factory(&socket_factory_);
-    context_.Init();
-  }
-
-  MockClientSocketFactory socket_factory_;
-  TestURLRequestContext context_;
-};
-
-// Received a malformed SDCH encoded response that has no valid dictionary id.
-TEST_F(URLRequestHttpJobWithSdchSupportTest,
-       SdchAdvertisedGotMalformedSdchResponse) {
-  MockWrite writes[] = {
-      MockWrite("GET / HTTP/1.1\r\n"
-                "Host: www.example.com\r\n"
-                "Connection: keep-alive\r\n"
-                "User-Agent:\r\n"
-                "Accept-Encoding: gzip, deflate, sdch\r\n"
-                "Accept-Language: en-us,fr\r\n\r\n")};
-  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
-                               "Content-Encoding: sdch\r\n"
-                               "Content-Length: 12\r\n\r\n"),
-                      MockRead("Test Content")};
-
-  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
-                                       arraysize(writes));
-  socket_factory_.AddSocketDataProvider(&socket_data);
-
-  MockSdchObserver sdch_observer;
-  SdchManager sdch_manager;
-  sdch_manager.AddObserver(&sdch_observer);
-  context_.set_sdch_manager(&sdch_manager);
-  TestDelegate delegate;
-  std::unique_ptr<URLRequest> request =
-      context_.CreateRequest(GURL("http://www.example.com"), DEFAULT_PRIORITY,
-                             &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
-  request->Start();
-
-  base::RunLoop().Run();
-  // SdchPolicyDelegate::OnDictionaryIdError() detects that the response is
-  // malformed (missing dictionary), and will issue a pass-through of the raw
-  // response.
-  EXPECT_EQ(OK, delegate.request_status());
-  EXPECT_EQ("Test Content", delegate.data_received());
-  // Cleanup manager.
-  sdch_manager.RemoveObserver(&sdch_observer);
-}
-
-TEST_F(URLRequestHttpJobWithSdchSupportTest, GetDictionary) {
-  MockWrite writes[] = {
-      MockWrite("GET / HTTP/1.1\r\n"
-                "Host: example.com\r\n"
-                "Connection: keep-alive\r\n"
-                "User-Agent:\r\n"
-                "Accept-Encoding: gzip, deflate, sdch\r\n"
-                "Accept-Language: en-us,fr\r\n\r\n")};
-
-  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
-                               "Get-Dictionary: /sdch.dict\r\n"
-                               "Cache-Control: max-age=120\r\n"
-                               "Content-Length: 12\r\n\r\n"),
-                      MockRead("Test Content")};
-  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
-                                       arraysize(writes));
-  socket_factory_.AddSocketDataProvider(&socket_data);
-
-  MockSdchObserver sdch_observer;
-  SdchManager sdch_manager;
-  sdch_manager.AddObserver(&sdch_observer);
-  context_.set_sdch_manager(&sdch_manager);
-
-  // First response will be "from network" and we should have OnGetDictionary
-  // invoked.
-  GURL url("http://example.com");
-  EXPECT_CALL(sdch_observer,
-              OnGetDictionary(url, GURL("http://example.com/sdch.dict")));
-  TestDelegate delegate;
-  std::unique_ptr<URLRequest> request = context_.CreateRequest(
-      url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
-  request->Start();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_THAT(delegate.request_status(), IsOk());
-
-  // Second response should be from cache without notification of SdchObserver
-  TestDelegate delegate2;
-  std::unique_ptr<URLRequest> request2 = context_.CreateRequest(
-      url, DEFAULT_PRIORITY, &delegate2, TRAFFIC_ANNOTATION_FOR_TESTS);
-  request2->Start();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_THAT(delegate2.request_status(), IsOk());
-
-  // Cleanup manager.
-  sdch_manager.RemoveObserver(&sdch_observer);
-}
-
 class URLRequestHttpJobWithBrotliSupportTest : public ::testing::Test {
  protected:
   URLRequestHttpJobWithBrotliSupportTest()
@@ -1148,8 +1423,9 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, NoBrotliAdvertisementOverHttp) {
 TEST_F(URLRequestHttpJobWithBrotliSupportTest, BrotliAdvertisement) {
   net::SSLSocketDataProvider ssl_socket_data_provider(net::ASYNC, net::OK);
   ssl_socket_data_provider.next_proto = kProtoHTTP11;
-  ssl_socket_data_provider.cert =
+  ssl_socket_data_provider.ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "unittest.selfsigned.der");
+  ASSERT_TRUE(ssl_socket_data_provider.ssl_info.cert);
   socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data_provider);
 
   MockWrite writes[] = {
@@ -1185,19 +1461,30 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, BrotliAdvertisement) {
 TEST_F(URLRequestHttpJobTest, AndroidCleartextPermittedTest) {
   context_.set_check_cleartext_permitted(true);
 
-  struct TestCase {
+  static constexpr struct TestCase {
     const char* url;
     bool cleartext_permitted;
     bool should_block;
-  } cases[] = {
-      {"http://blocked.test/", true, false},
-      {"https://blocked.test/", true, false},
-      {"http://blocked.test/", false, true},
-      {"https://blocked.test/", false, false},
+    int expected_per_host_call_count;
+    int expected_default_call_count;
+  } kTestCases[] = {
+      {"http://unblocked.test/", true, false, 1, 0},
+      {"https://unblocked.test/", true, false, 0, 0},
+      {"http://blocked.test/", false, true, 1, 0},
+      {"https://blocked.test/", false, false, 0, 0},
+      // If determining the per-host cleartext policy causes an
+      // IllegalArgumentException (because the hostname is invalid),
+      // the default configuration should be applied, and the
+      // exception should not cause a JNI error.
+      {"http://./", false, true, 1, 1},
+      {"http://./", true, false, 1, 1},
+      // Even if the host name would be considered invalid, https
+      // schemes should not trigger cleartext policy checks.
+      {"https://./", false, false, 0, 0},
   };
 
-  for (const TestCase& test : cases) {
-    JNIEnv* env = base::android::AttachCurrentThread();
+  JNIEnv* env = base::android::AttachCurrentThread();
+  for (const TestCase& test : kTestCases) {
     Java_AndroidNetworkLibraryTestUtil_setUpSecurityPolicyForTesting(
         env, test.cleartext_permitted);
 
@@ -1208,16 +1495,19 @@ TEST_F(URLRequestHttpJobTest, AndroidCleartextPermittedTest) {
     request->Start();
     base::RunLoop().Run();
 
-    int sdk_int = base::android::BuildInfo::GetInstance()->sdk_int();
-    bool expect_blocked = (sdk_int >= base::android::SDK_VERSION_MARSHMALLOW &&
-                           test.should_block);
-    if (expect_blocked) {
+    if (test.should_block) {
       EXPECT_THAT(delegate.request_status(),
                   IsError(ERR_CLEARTEXT_NOT_PERMITTED));
     } else {
       // Should fail since there's no test server running
       EXPECT_THAT(delegate.request_status(), IsError(ERR_FAILED));
     }
+    EXPECT_EQ(
+        Java_AndroidNetworkLibraryTestUtil_getPerHostCleartextCheckCount(env),
+        test.expected_per_host_call_count);
+    EXPECT_EQ(
+        Java_AndroidNetworkLibraryTestUtil_getDefaultCleartextCheckCount(env),
+        test.expected_default_call_count);
   }
 }
 #endif

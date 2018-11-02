@@ -4,9 +4,9 @@
 
 #include "platform/scheduler/test/lazy_scheduler_message_loop_delegate_for_tests.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/default_tick_clock.h"
 
@@ -16,14 +16,14 @@ namespace scheduler {
 // static
 scoped_refptr<LazySchedulerMessageLoopDelegateForTests>
 LazySchedulerMessageLoopDelegateForTests::Create() {
-  return make_scoped_refptr(new LazySchedulerMessageLoopDelegateForTests());
+  return base::WrapRefCounted(new LazySchedulerMessageLoopDelegateForTests());
 }
 
 LazySchedulerMessageLoopDelegateForTests::
     LazySchedulerMessageLoopDelegateForTests()
     : message_loop_(base::MessageLoop::current()),
       thread_id_(base::PlatformThread::CurrentId()),
-      time_source_(base::MakeUnique<base::DefaultTickClock>()),
+      time_source_(std::make_unique<base::DefaultTickClock>()),
       pending_observer_(nullptr) {
   if (message_loop_)
     original_task_runner_ = message_loop_->task_runner();
@@ -68,7 +68,7 @@ bool LazySchedulerMessageLoopDelegateForTests::HasMessageLoop() const {
 }
 
 bool LazySchedulerMessageLoopDelegateForTests::PostDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   EnsureMessageLoop();
@@ -77,7 +77,7 @@ bool LazySchedulerMessageLoopDelegateForTests::PostDelayedTask(
 }
 
 bool LazySchedulerMessageLoopDelegateForTests::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta delay) {
   EnsureMessageLoop();

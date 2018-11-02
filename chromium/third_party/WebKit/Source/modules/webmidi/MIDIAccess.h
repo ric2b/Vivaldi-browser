@@ -32,6 +32,7 @@
 #define MIDIAccess_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "media/midi/midi_service.mojom-blink.h"
@@ -39,7 +40,6 @@
 #include "modules/webmidi/MIDIAccessInitializer.h"
 #include "modules/webmidi/MIDIAccessor.h"
 #include "modules/webmidi/MIDIAccessorClient.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
 
@@ -127,7 +127,7 @@ class MIDIAccess final : public EventTargetWithInlineData,
   // Eager finalization needed to promptly release m_accessor. Otherwise
   // its client back reference could end up being unsafely used during
   // the lazy sweeping phase.
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   MIDIAccess(std::unique_ptr<MIDIAccessor>,

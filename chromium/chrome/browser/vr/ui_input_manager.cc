@@ -6,8 +6,12 @@
 
 #include <algorithm>
 
+#include "base/containers/adapters.h"
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/model/controller_model.h"
+#include "chrome/browser/vr/model/reticle_model.h"
+#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 // TODO(tiborg): Remove include once we use a generic type to pass scroll/fling
 // gestures.
@@ -22,11 +26,8 @@ static constexpr gfx::PointF kInvalidTargetPoint =
                 std::numeric_limits<float>::max());
 static constexpr gfx::Point3F kOrigin = {0.0f, 0.0f, 0.0f};
 
-gfx::Point3F GetRayPoint(const gfx::Point3F& rayOrigin,
-                         const gfx::Vector3dF& rayVector,
-                         float scale) {
-  return rayOrigin + gfx::ScaleVector3d(rayVector, scale);
-}
+static constexpr float kControllerQuiescenceAngularThresholdDegrees = 3.5f;
+static constexpr float kControllerQuiescenceTemporalThresholdSeconds = 1.2f;
 
 bool IsScrollEvent(const GestureList& list) {
   if (list.empty()) {
@@ -44,63 +45,35 @@ bool IsScrollEvent(const GestureList& list) {
   return false;
 }
 
-bool GetTargetLocalPoint(const gfx::Vector3dF& eye_to_target,
-                         const UiElement& element,
-                         float max_distance_to_plane,
-                         gfx::PointF* out_target_local_point,
-                         gfx::Point3F* out_target_point,
-                         float* out_distance_to_plane) {
-  if (!element.GetRayDistance(kOrigin, eye_to_target, out_distance_to_plane)) {
-    return false;
+void HitTestElements(UiElement* root_element,
+                     ReticleModel* reticle_model,
+                     HitTestRequest* request) {
+  std::vector<const UiElement*> elements;
+  for (auto& element : *root_element) {
+    if (element.IsVisible()) {
+      elements.push_back(&element);
+    }
   }
 
-  if (*out_distance_to_plane < 0 ||
-      *out_distance_to_plane >= max_distance_to_plane) {
-    return false;
+  std::vector<const UiElement*> sorted =
+      UiRenderer::GetElementsInDrawOrder(elements);
+
+  for (const auto* element : base::Reversed(sorted)) {
+    if (!element->IsHitTestable()) {
+      continue;
+    }
+
+    HitTestResult result;
+    element->HitTest(*request, &result);
+    if (result.type != HitTestResult::Type::kHits) {
+      continue;
+    }
+
+    reticle_model->target_element_id = element->id();
+    reticle_model->target_local_point = result.local_hit_point;
+    reticle_model->target_point = result.hit_point;
+    break;
   }
-
-  *out_target_point =
-      GetRayPoint(kOrigin, eye_to_target, *out_distance_to_plane);
-  gfx::PointF unit_xy_point =
-      element.GetUnitRectangleCoordinates(*out_target_point);
-
-  out_target_local_point->set_x(0.5f + unit_xy_point.x());
-  out_target_local_point->set_y(0.5f - unit_xy_point.y());
-  return true;
-}
-
-void HitTestElements(UiElement* element,
-                     gfx::Vector3dF* out_eye_to_target,
-                     float* out_closest_element_distance,
-                     gfx::Point3F* out_target_point,
-                     UiElement** out_target_element,
-                     gfx::PointF* out_target_local_point) {
-  for (auto& child : element->children()) {
-    HitTestElements(child.get(), out_eye_to_target,
-                    out_closest_element_distance, out_target_point,
-                    out_target_element, out_target_local_point);
-  }
-
-  if (!element->IsHitTestable()) {
-    return;
-  }
-
-  gfx::PointF local_point;
-  gfx::Point3F plane_intersection_point;
-  float distance_to_plane;
-  if (!GetTargetLocalPoint(*out_eye_to_target, *element,
-                           *out_closest_element_distance, &local_point,
-                           &plane_intersection_point, &distance_to_plane)) {
-    return;
-  }
-  if (!element->HitTest(local_point)) {
-    return;
-  }
-
-  *out_closest_element_distance = distance_to_plane;
-  *out_target_point = plane_intersection_point;
-  *out_target_element = element;
-  *out_target_local_point = local_point;
 }
 
 }  // namespace
@@ -109,37 +82,37 @@ UiInputManager::UiInputManager(UiScene* scene) : scene_(scene) {}
 
 UiInputManager::~UiInputManager() {}
 
-void UiInputManager::HandleInput(const gfx::Vector3dF& laser_direction,
-                                 const gfx::Point3F& laser_origin,
-                                 ButtonState button_state,
-                                 GestureList* gesture_list,
-                                 gfx::Point3F* out_target_point,
-                                 UiElement** out_reticle_render_target) {
-  gfx::PointF target_local_point(kInvalidTargetPoint);
-  gfx::Vector3dF eye_to_target;
-  *out_reticle_render_target = nullptr;
-  GetVisualTargetElement(laser_direction, laser_origin, &eye_to_target,
-                         out_target_point, out_reticle_render_target,
-                         &target_local_point);
+void UiInputManager::HandleInput(base::TimeTicks current_time,
+                                 const ControllerModel& controller_model,
+                                 ReticleModel* reticle_model,
+                                 GestureList* gesture_list) {
+  UpdateQuiescenceState(current_time, controller_model);
+  reticle_model->target_element_id = 0;
+  reticle_model->target_local_point = kInvalidTargetPoint;
+  GetVisualTargetElement(controller_model, reticle_model);
 
   UiElement* target_element = nullptr;
   // TODO(vollick): this should be replaced with a formal notion of input
   // capture.
-  if (input_locked_element_) {
-    gfx::Point3F plane_intersection_point;
-    float distance_to_plane;
-    if (!GetTargetLocalPoint(eye_to_target, *input_locked_element_,
-                             2 * scene_->background_distance(),
-                             &target_local_point, &plane_intersection_point,
-                             &distance_to_plane)) {
-      target_local_point = kInvalidTargetPoint;
+  if (input_locked_element_id_) {
+    target_element = scene_->GetUiElementById(input_locked_element_id_);
+    if (target_element) {
+      HitTestRequest request;
+      request.ray_origin = kOrigin;
+      request.ray_target = reticle_model->target_point;
+      request.max_distance_to_plane = 2 * scene_->background_distance();
+      HitTestResult result;
+      target_element->HitTest(request, &result);
+      reticle_model->target_local_point = result.local_hit_point;
+      if (result.type == HitTestResult::Type::kNone) {
+        reticle_model->target_local_point = kInvalidTargetPoint;
+      }
     }
-    target_element = input_locked_element_;
   } else if (!in_scroll_ && !in_click_) {
     // TODO(vollick): support multiple dispatch. We may want to, for example,
     // dispatch raw events to several elements we hit (imagine nested horizontal
     // and vertical scrollers). Currently, we only dispatch to one "winner".
-    target_element = *out_reticle_render_target;
+    target_element = scene_->GetUiElementById(reticle_model->target_element_id);
     if (target_element && IsScrollEvent(*gesture_list)) {
       UiElement* ancestor = target_element;
       while (!ancestor->scrollable() && ancestor->parent()) {
@@ -151,12 +124,14 @@ void UiInputManager::HandleInput(const gfx::Vector3dF& laser_direction,
     }
   }
 
-  SendFlingCancel(gesture_list, target_local_point);
+  SendFlingCancel(gesture_list, reticle_model->target_local_point);
   // For simplicity, don't allow scrolling while clicking until we need to.
   if (!in_click_) {
-    SendScrollEnd(gesture_list, target_local_point, button_state);
-    if (!SendScrollBegin(target_element, gesture_list, target_local_point)) {
-      SendScrollUpdate(gesture_list, target_local_point);
+    SendScrollEnd(gesture_list, reticle_model->target_local_point,
+                  controller_model.touchpad_button_state);
+    if (!SendScrollBegin(target_element, gesture_list,
+                         reticle_model->target_local_point)) {
+      SendScrollUpdate(gesture_list, reticle_model->target_local_point);
     }
   }
 
@@ -166,19 +141,27 @@ void UiInputManager::HandleInput(const gfx::Vector3dF& laser_direction,
     return;
   }
   SendHoverLeave(target_element);
-  if (!SendHoverEnter(target_element, target_local_point)) {
-    SendHoverMove(target_local_point);
+  if (!SendHoverEnter(target_element, reticle_model->target_local_point)) {
+    SendHoverMove(reticle_model->target_local_point);
   }
-  SendButtonDown(target_element, target_local_point, button_state);
-  SendButtonUp(target_element, target_local_point, button_state);
+  SendButtonDown(target_element, reticle_model->target_local_point,
+                 controller_model.touchpad_button_state);
+  if (SendButtonUp(target_element, reticle_model->target_local_point,
+                   controller_model.touchpad_button_state)) {
+    target_element = scene_->GetUiElementById(reticle_model->target_element_id);
+    SendHoverLeave(target_element);
+    SendHoverEnter(target_element, reticle_model->target_local_point);
+  }
 
   previous_button_state_ =
-      (button_state == ButtonState::CLICKED) ? ButtonState::UP : button_state;
+      (controller_model.touchpad_button_state == ButtonState::CLICKED)
+          ? ButtonState::UP
+          : controller_model.touchpad_button_state;
 }
 
 void UiInputManager::SendFlingCancel(GestureList* gesture_list,
                                      const gfx::PointF& target_point) {
-  if (!fling_target_) {
+  if (!fling_target_id_) {
     return;
   }
   if (gesture_list->empty() || (gesture_list->front()->GetType() !=
@@ -187,10 +170,13 @@ void UiInputManager::SendFlingCancel(GestureList* gesture_list,
   }
 
   // Scrolling currently only supported on content window.
-  DCHECK(fling_target_->scrollable());
-  fling_target_->OnFlingCancel(std::move(gesture_list->front()), target_point);
+  UiElement* element = scene_->GetUiElementById(fling_target_id_);
+  if (element) {
+    DCHECK(element->scrollable());
+    element->OnFlingCancel(std::move(gesture_list->front()), target_point);
+  }
   gesture_list->erase(gesture_list->begin());
-  fling_target_ = nullptr;
+  fling_target_id_ = 0;
 }
 
 void UiInputManager::SendScrollEnd(GestureList* gesture_list,
@@ -199,7 +185,8 @@ void UiInputManager::SendScrollEnd(GestureList* gesture_list,
   if (!in_scroll_) {
     return;
   }
-  DCHECK_NE(input_locked_element_, nullptr);
+  DCHECK_GT(input_locked_element_id_, 0);
+  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
 
   if (previous_button_state_ != button_state &&
       (button_state == ButtonState::DOWN ||
@@ -208,7 +195,9 @@ void UiInputManager::SendScrollEnd(GestureList* gesture_list,
     DCHECK_EQ(gesture_list->front()->GetType(),
               blink::WebInputEvent::kGestureScrollEnd);
   }
-  DCHECK(input_locked_element_->scrollable());
+  if (element) {
+    DCHECK(element->scrollable());
+  }
   if (gesture_list->empty() || (gesture_list->front()->GetType() !=
                                     blink::WebInputEvent::kGestureScrollEnd &&
                                 gesture_list->front()->GetType() !=
@@ -218,16 +207,19 @@ void UiInputManager::SendScrollEnd(GestureList* gesture_list,
   DCHECK_LE(gesture_list->size(), 2LU);
   if (gesture_list->front()->GetType() ==
       blink::WebInputEvent::kGestureScrollEnd) {
-    input_locked_element_->OnScrollEnd(std::move(gesture_list->front()),
-                                       target_point);
+    if (element) {
+      element->OnScrollEnd(std::move(gesture_list->front()), target_point);
+    }
   } else {
     DCHECK_EQ(gesture_list->front()->GetType(),
               blink::WebInputEvent::kGestureFlingStart);
-    fling_target_ = input_locked_element_;
-    fling_target_->OnFlingStart(std::move(gesture_list->front()), target_point);
+    fling_target_id_ = input_locked_element_id_;
+    if (element) {
+      element->OnFlingStart(std::move(gesture_list->front()), target_point);
+    }
   }
   gesture_list->erase(gesture_list->begin());
-  input_locked_element_ = nullptr;
+  input_locked_element_id_ = 0;
   in_scroll_ = false;
 }
 
@@ -245,11 +237,9 @@ bool UiInputManager::SendScrollBegin(UiElement* target,
                                 blink::WebInputEvent::kGestureScrollBegin)) {
     return false;
   }
-  input_locked_element_ = target;
+  input_locked_element_id_ = target->id();
   in_scroll_ = true;
-
-  input_locked_element_->OnScrollBegin(std::move(gesture_list->front()),
-                                       target_point);
+  target->OnScrollBegin(std::move(gesture_list->front()), target_point);
   gesture_list->erase(gesture_list->begin());
   return true;
 }
@@ -259,38 +249,50 @@ void UiInputManager::SendScrollUpdate(GestureList* gesture_list,
   if (!in_scroll_) {
     return;
   }
-  DCHECK(input_locked_element_);
+  DCHECK(input_locked_element_id_);
   if (gesture_list->empty() || (gesture_list->front()->GetType() !=
                                 blink::WebInputEvent::kGestureScrollUpdate)) {
     return;
   }
   // Scrolling currently only supported on content window.
-  DCHECK(input_locked_element_->scrollable());
-  input_locked_element_->OnScrollUpdate(std::move(gesture_list->front()),
-                                        target_point);
+  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
+  if (element) {
+    DCHECK(element->scrollable());
+    element->OnScrollUpdate(std::move(gesture_list->front()), target_point);
+  }
   gesture_list->erase(gesture_list->begin());
 }
 
 void UiInputManager::SendHoverLeave(UiElement* target) {
-  if (!hover_target_ || (target == hover_target_)) {
+  if (!hover_target_id_) {
     return;
   }
-  hover_target_->OnHoverLeave();
-  hover_target_ = nullptr;
+  if (target && target->id() == hover_target_id_) {
+    return;
+  }
+  UiElement* element = scene_->GetUiElementById(hover_target_id_);
+  if (element) {
+    element->OnHoverLeave();
+  }
+  hover_target_id_ = 0;
 }
 
 bool UiInputManager::SendHoverEnter(UiElement* target,
                                     const gfx::PointF& target_point) {
-  if (!target || target == hover_target_) {
+  if (!target || target->id() == hover_target_id_) {
     return false;
   }
   target->OnHoverEnter(target_point);
-  hover_target_ = target;
+  hover_target_id_ = target->id();
   return true;
 }
 
 void UiInputManager::SendHoverMove(const gfx::PointF& target_point) {
-  if (!hover_target_) {
+  if (!hover_target_id_) {
+    return;
+  }
+  UiElement* element = scene_->GetUiElementById(hover_target_id_);
+  if (!element) {
     return;
   }
 
@@ -298,11 +300,11 @@ void UiInputManager::SendHoverMove(const gfx::PointF& target_point) {
   // moves for how noisy the controller is. It's almost impossible to click a
   // link without unintentionally starting a drag event. For this reason we
   // disable mouse moves, only delivering a down and up event.
-  if (hover_target_->name() == kContentQuad && in_click_) {
+  if (element->name() == kContentQuad && in_click_) {
     return;
   }
 
-  hover_target_->OnMove(target_point);
+  element->OnMove(target_point);
 }
 
 void UiInputManager::SendButtonDown(UiElement* target,
@@ -316,40 +318,41 @@ void UiInputManager::SendButtonDown(UiElement* target,
        button_state != ButtonState::CLICKED)) {
     return;
   }
-  input_locked_element_ = target;
   in_click_ = true;
   if (target) {
     target->OnButtonDown(target_point);
+    input_locked_element_id_ = target->id();
+  } else {
+    input_locked_element_id_ = 0;
   }
 }
 
-void UiInputManager::SendButtonUp(UiElement* target,
+bool UiInputManager::SendButtonUp(UiElement* target,
                                   const gfx::PointF& target_point,
                                   ButtonState button_state) {
   if (!in_click_) {
-    return;
+    return false;
   }
   if (previous_button_state_ == button_state ||
       (button_state != ButtonState::UP &&
        button_state != ButtonState::CLICKED)) {
-    return;
+    return false;
   }
   in_click_ = false;
-  if (!input_locked_element_) {
-    return;
+  if (!input_locked_element_id_) {
+    return false;
   }
-  DCHECK(input_locked_element_ == target);
-  input_locked_element_ = nullptr;
-  target->OnButtonUp(target_point);
+  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
+  if (element) {
+    target->OnButtonUp(target_point);
+  }
+  input_locked_element_id_ = 0;
+  return true;
 }
 
 void UiInputManager::GetVisualTargetElement(
-    const gfx::Vector3dF& laser_direction,
-    const gfx::Point3F& laser_origin,
-    gfx::Vector3dF* out_eye_to_target,
-    gfx::Point3F* out_target_point,
-    UiElement** out_target_element,
-    gfx::PointF* out_target_local_point) const {
+    const ControllerModel& controller_model,
+    ReticleModel* reticle_model) const {
   // If we place the reticle based on elements intersecting the controller beam,
   // we can end up with the reticle hiding behind elements, or jumping laterally
   // in the field of view. This is physically correct, but hard to use. For
@@ -365,17 +368,57 @@ void UiInputManager::GetVisualTargetElement(
   // that the sphere is centered at the controller, rather than the eye, for
   // simplicity.
   float distance = scene_->background_distance();
-  *out_target_point = GetRayPoint(laser_origin, laser_direction, distance);
-  *out_eye_to_target = *out_target_point - kOrigin;
-  out_eye_to_target->GetNormalized(out_eye_to_target);
+  reticle_model->target_point =
+      controller_model.laser_origin +
+      gfx::ScaleVector3d(controller_model.laser_direction, distance);
 
-  // Determine which UI element (if any) intersects the line between the eyes
-  // and the controller target position.
-  float closest_element_distance = (*out_target_point - kOrigin).Length();
+  // Determine which UI element (if any) intersects the line between the ray
+  // origin and the controller target position. The ray origin will typically be
+  // the world origin (roughly the eye) to make targeting with a real controller
+  // more intuitive. For testing, however, we occasionally hit test along the
+  // laser precisely since this geometric accuracy is important and we are not
+  // dealing with a physical controller.
+  float closest_element_distance =
+      (reticle_model->target_point - kOrigin).Length();
 
-  HitTestElements(&scene_->root_element(), out_eye_to_target,
-                  &closest_element_distance, out_target_point,
-                  out_target_element, out_target_local_point);
+  HitTestRequest request;
+  request.ray_origin =
+      hit_test_strategy_ == HitTestStrategy::PROJECT_TO_WORLD_ORIGIN
+          ? kOrigin
+          : controller_model.laser_origin;
+  request.ray_target = reticle_model->target_point;
+  request.max_distance_to_plane = closest_element_distance;
+  HitTestElements(&scene_->root_element(), reticle_model, &request);
+}
+
+void UiInputManager::UpdateQuiescenceState(
+    base::TimeTicks current_time,
+    const ControllerModel& controller_model) {
+  // Update quiescence state.
+  gfx::Point3F old_position;
+  gfx::Point3F old_forward_position(0, 0, -1);
+  last_significant_controller_transform_.TransformPoint(&old_position);
+  last_significant_controller_transform_.TransformPoint(&old_forward_position);
+  gfx::Vector3dF old_forward = old_forward_position - old_position;
+  old_forward.GetNormalized(&old_forward);
+  gfx::Point3F new_position;
+  gfx::Point3F new_forward_position(0, 0, -1);
+  controller_model.transform.TransformPoint(&new_position);
+  controller_model.transform.TransformPoint(&new_forward_position);
+  gfx::Vector3dF new_forward = new_forward_position - new_position;
+  new_forward.GetNormalized(&new_forward);
+
+  float angle = AngleBetweenVectorsInDegrees(old_forward, new_forward);
+  if (angle > kControllerQuiescenceAngularThresholdDegrees || in_click_ ||
+      in_scroll_) {
+    controller_quiescent_ = false;
+    last_significant_controller_transform_ = controller_model.transform;
+    last_significant_controller_update_time_ = current_time;
+  } else if ((current_time - last_significant_controller_update_time_)
+                 .InSecondsF() >
+             kControllerQuiescenceTemporalThresholdSeconds) {
+    controller_quiescent_ = true;
+  }
 }
 
 }  // namespace vr

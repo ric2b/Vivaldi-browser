@@ -42,14 +42,17 @@ class CSSGroupingRule : public CSSRule {
 
   CSSRuleList* cssRules() const override;
 
-  unsigned insertRule(const String& rule, unsigned index, ExceptionState&);
+  unsigned insertRule(const ExecutionContext*,
+                      const String& rule,
+                      unsigned index,
+                      ExceptionState&);
   void deleteRule(unsigned index, ExceptionState&);
 
   // For CSSRuleList
   unsigned length() const;
   CSSRule* Item(unsigned index) const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   CSSGroupingRule(StyleRuleGroup* group_rule, CSSStyleSheet* parent);

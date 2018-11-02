@@ -198,7 +198,11 @@ void WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete(
 
 WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction() {}
 
-WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {}
+WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
+  if (!did_respond()) {
+    SendInternalError();
+  }
+}
 
 bool WebViewPrivateGetThumbnailFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
@@ -259,7 +263,7 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
   }
   gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
   scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(url_, thumbnail_service.get()));
+      new thumbnails::ThumbnailingContext(url_, false, true));
   context->score.force_update = true;
 
   if (!context->url.is_valid()) {
@@ -341,7 +345,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
 
   scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(GURL(key_), thumbnail_service.get()));
+      new thumbnails::ThumbnailingContext(GURL(key_), false, true));
   context->score.force_update = true;
 
   if (!context->url.is_valid()) {
@@ -389,14 +393,14 @@ WebViewPrivateSetIsFullscreenFunction::WebViewPrivateSetIsFullscreenFunction() {
 
 WebViewPrivateSetIsFullscreenFunction::
     ~WebViewPrivateSetIsFullscreenFunction() {
-  Respond(NoArguments());
 }
 
 bool WebViewPrivateSetIsFullscreenFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::SetIsFullscreen::Params> params(
       vivaldi::web_view_private::SetIsFullscreen::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-  guest->SetIsFullscreen(params->is_fullscreen);
+  guest->SetIsFullscreen(params->is_fullscreen, params->skip_window_state);
+  SendResponse(true);
   return true;
 }
 

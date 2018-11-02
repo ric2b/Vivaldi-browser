@@ -104,13 +104,10 @@ bool LayoutSVGImage::UpdateBoundingBox() {
     object_bounding_box_.SetSize(CalculateObjectSize());
 
   if (old_object_bounding_box != object_bounding_box_) {
+    GetElement()->SetNeedsResizeObserverUpdate();
     SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
     needs_boundaries_update_ = true;
   }
-
-  if (GetElement())
-    GetElement()->SetNeedsResizeObserverUpdate();
-
   return old_object_bounding_box.Size() != object_bounding_box_.Size();
 }
 
@@ -127,7 +124,7 @@ void LayoutSVGImage::UpdateLayout() {
   bool update_parent_boundaries = false;
   if (needs_transform_update_) {
     local_transform_ =
-        toSVGImageElement(GetElement())
+        ToSVGImageElement(GetElement())
             ->CalculateTransform(SVGElement::kIncludeMotionTransform);
     needs_transform_update_ = false;
     update_parent_boundaries = true;
@@ -185,7 +182,9 @@ bool LayoutSVGImage::NodeAtFloatPoint(HitTestResult& result,
   return false;
 }
 
-void LayoutSVGImage::ImageChanged(WrappedImagePtr, const IntRect*) {
+void LayoutSVGImage::ImageChanged(WrappedImagePtr,
+                                  CanDeferInvalidation defer,
+                                  const IntRect*) {
   // Notify parent resources that we've changed. This also invalidates
   // references from resources (filters) that may have a cached
   // representation of this image/layout object.

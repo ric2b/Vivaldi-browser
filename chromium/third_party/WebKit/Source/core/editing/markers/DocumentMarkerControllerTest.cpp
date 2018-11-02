@@ -31,16 +31,17 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/markers/SuggestionMarker.h"
+#include "core/editing/markers/SuggestionMarkerProperties.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/html/HTMLElement.h"
 #include "core/testing/DummyPageHolder.h"
-#include "platform/wtf/RefPtr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -312,6 +313,22 @@ TEST_F(DocumentMarkerControllerTest, RemoveSpellingMarkersUnderWords) {
   EXPECT_EQ(DocumentMarker::kTextMatch, marker.GetType());
 }
 
+TEST_F(DocumentMarkerControllerTest, RemoveSuggestionMarkerByTag) {
+  SetBodyContent("<div contenteditable>foo</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  MarkerController().AddSuggestionMarker(
+      EphemeralRange(Position(text, 0), Position(text, 1)),
+      SuggestionMarkerProperties());
+
+  ASSERT_EQ(1u, MarkerController().Markers().size());
+  const SuggestionMarker& marker =
+      *ToSuggestionMarker(MarkerController().Markers()[0]);
+  MarkerController().RemoveSuggestionMarkerByTag(text, marker.Tag());
+  EXPECT_EQ(0u, MarkerController().Markers().size());
+}
+
 TEST_F(DocumentMarkerControllerTest, FirstMarkerIntersectingOffsetRange) {
   SetBodyContent("<div contenteditable>123456789</div>");
   GetDocument().UpdateStyleAndLayout();
@@ -446,13 +463,11 @@ TEST_F(DocumentMarkerControllerTest, SuggestionMarkersHaveUniqueTags) {
   Node* text = div->firstChild();
 
   MarkerController().AddSuggestionMarker(
-      EphemeralRange(Position(text, 0), Position(text, 1)), Vector<String>(),
-      Color::kBlack, Color::kBlack, StyleableMarker::Thickness::kThick,
-      Color::kBlack);
+      EphemeralRange(Position(text, 0), Position(text, 1)),
+      SuggestionMarkerProperties());
   MarkerController().AddSuggestionMarker(
-      EphemeralRange(Position(text, 0), Position(text, 1)), Vector<String>(),
-      Color::kBlack, Color::kBlack, StyleableMarker::Thickness::kThick,
-      Color::kBlack);
+      EphemeralRange(Position(text, 0), Position(text, 1)),
+      SuggestionMarkerProperties());
 
   EXPECT_EQ(2u, MarkerController().Markers().size());
   EXPECT_NE(ToSuggestionMarker(MarkerController().Markers()[0])->Tag(),

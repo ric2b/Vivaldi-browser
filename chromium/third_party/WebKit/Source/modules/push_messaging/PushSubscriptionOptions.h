@@ -16,9 +16,7 @@ class ExceptionState;
 class PushSubscriptionOptionsInit;
 struct WebPushSubscriptionOptions;
 
-class PushSubscriptionOptions final
-    : public GarbageCollected<PushSubscriptionOptions>,
-      public ScriptWrappable {
+class PushSubscriptionOptions final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -40,7 +38,7 @@ class PushSubscriptionOptions final
     return application_server_key_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit PushSubscriptionOptions(const WebPushSubscriptionOptions&);

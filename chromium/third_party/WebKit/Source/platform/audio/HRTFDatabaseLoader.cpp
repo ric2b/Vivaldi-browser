@@ -46,18 +46,18 @@ static LoaderMap& GetLoaderMap() {
   return *map;
 }
 
-PassRefPtr<HRTFDatabaseLoader>
+scoped_refptr<HRTFDatabaseLoader>
 HRTFDatabaseLoader::CreateAndLoadAsynchronouslyIfNecessary(float sample_rate) {
   DCHECK(IsMainThread());
 
-  RefPtr<HRTFDatabaseLoader> loader = GetLoaderMap().at(sample_rate);
+  scoped_refptr<HRTFDatabaseLoader> loader = GetLoaderMap().at(sample_rate);
   if (loader) {
     DCHECK_EQ(sample_rate, loader->DatabaseSampleRate());
     return loader;
   }
 
-  loader = AdoptRef(new HRTFDatabaseLoader(sample_rate));
-  GetLoaderMap().insert(sample_rate, loader.Get());
+  loader = base::AdoptRef(new HRTFDatabaseLoader(sample_rate));
+  GetLoaderMap().insert(sample_rate, loader.get());
   loader->LoadAsynchronously();
   return loader;
 }

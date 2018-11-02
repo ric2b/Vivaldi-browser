@@ -9,7 +9,6 @@
 #include <cctype>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -39,6 +38,7 @@
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/WebKit/public/platform/InterfaceRegistry.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
@@ -61,7 +61,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_win.h"
+#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_impl_win.h"
 #include "content/test/dwrite_font_fake_sender_win.h"
 #endif
 
@@ -124,7 +124,7 @@ class RendererBlinkPlatformImplTestOverrideImpl
 
   // Get rid of the dependency to the sandbox, which is not available in
   // RenderViewTest.
-  blink::WebSandboxSupport* GetSandboxSupport() override { return NULL; }
+  blink::WebSandboxSupport* GetSandboxSupport() override { return nullptr; }
 };
 
 RenderViewTest::RendererBlinkPlatformImplTestOverride::
@@ -143,8 +143,9 @@ RenderViewTest::RendererBlinkPlatformImplTestOverride::Get() const {
 
 void RenderViewTest::RendererBlinkPlatformImplTestOverride::Initialize() {
   renderer_scheduler_ = blink::scheduler::RendererScheduler::Create();
-  blink_platform_impl_.reset(
-      new RendererBlinkPlatformImplTestOverrideImpl(renderer_scheduler_.get()));
+  blink_platform_impl_ =
+      std::make_unique<RendererBlinkPlatformImplTestOverrideImpl>(
+          renderer_scheduler_.get());
 }
 
 void RenderViewTest::RendererBlinkPlatformImplTestOverride::Shutdown() {
@@ -152,8 +153,7 @@ void RenderViewTest::RendererBlinkPlatformImplTestOverride::Shutdown() {
   blink_platform_impl_->Shutdown();
 }
 
-RenderViewTest::RenderViewTest()
-    : view_(NULL) {
+RenderViewTest::RenderViewTest() {
   RenderFrameImpl::InstallCreateHook(&TestRenderFrame::CreateTestRenderFrame);
 }
 
@@ -226,17 +226,18 @@ void RenderViewTest::GoForward(const GURL& url, const PageState& state) {
 }
 
 void RenderViewTest::SetUp() {
-  test_io_thread_.reset(new base::TestIOThread(base::TestIOThread::kAutoStart));
-  ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
+  test_io_thread_ =
+      std::make_unique<base::TestIOThread>(base::TestIOThread::kAutoStart);
+  ipc_support_ = std::make_unique<mojo::edk::ScopedIPCSupport>(
       test_io_thread_->task_runner(),
-      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
+      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST);
 
   // Subclasses can set render_thread_ with their own implementation before
   // calling RenderViewTest::SetUp().
   // The render thread needs to exist before blink::Initialize. It also mirrors
   // the order on Chromium initialization.
   if (!render_thread_)
-    render_thread_.reset(new MockRenderThread());
+    render_thread_ = std::make_unique<MockRenderThread>();
   render_thread_->set_routing_id(kRouteId);
   render_thread_->set_new_window_routing_id(kNewWindowRouteId);
   render_thread_->set_new_window_main_frame_widget_routing_id(
@@ -246,7 +247,8 @@ void RenderViewTest::SetUp() {
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink_platform_impl_.Initialize();
-  blink::Initialize(blink_platform_impl_.Get());
+  blink::Initialize(blink_platform_impl_.Get(),
+                    blink::InterfaceRegistry::GetEmptyInterfaceRegistry());
 
   content_client_.reset(CreateContentClient());
   content_browser_client_.reset(CreateContentBrowserClient());
@@ -265,15 +267,16 @@ void RenderViewTest::SetUp() {
 #endif
 
 #if defined(OS_MACOSX)
-  autorelease_pool_.reset(new base::mac::ScopedNSAutoreleasePool());
+  autorelease_pool_ = std::make_unique<base::mac::ScopedNSAutoreleasePool>();
 #endif
-  command_line_.reset(new base::CommandLine(base::CommandLine::NO_PROGRAM));
-  field_trial_list_.reset(new base::FieldTrialList(nullptr));
+  command_line_ =
+      std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
+  field_trial_list_ = std::make_unique<base::FieldTrialList>(nullptr);
   // We don't use the descriptor here anyways so it's ok to pass -1.
   base::FieldTrialList::CreateTrialsFromCommandLine(
       *command_line_, switches::kFieldTrialHandle, -1);
-  params_.reset(new MainFunctionParams(*command_line_));
-  platform_.reset(new RendererMainPlatformDelegate(*params_));
+  params_ = std::make_unique<MainFunctionParams>(*command_line_);
+  platform_ = std::make_unique<RendererMainPlatformDelegate>(*params_);
   platform_->PlatformInitialize();
 
   // Setting flags and really doing anything with WebKit is fairly fragile and
@@ -292,36 +295,36 @@ void RenderViewTest::SetUp() {
   // ResourceBundle isn't initialized (since we have to use a diferent test
   // suite implementation than for content_unittests). For browser_tests, this
   // is already initialized.
-  if (!ui::ResourceBundle::HasSharedInstance())
+  if (!ui::ResourceBundle::HasSharedInstance()) {
     ui::ResourceBundle::InitSharedInstanceWithLocale(
-        "en-US", NULL, ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+        "en-US", nullptr, ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+  }
 
-  compositor_deps_.reset(new FakeCompositorDependencies);
-  mock_process_.reset(new MockRenderProcess);
+  compositor_deps_ = std::make_unique<FakeCompositorDependencies>();
+  mock_process_ = std::make_unique<MockRenderProcess>();
 
-  mojom::CreateViewParams view_params;
-  view_params.opener_frame_route_id = MSG_ROUTING_NONE;
-  view_params.window_was_created_with_opener = false;
-  view_params.renderer_preferences = RendererPreferences();
-  view_params.web_preferences = WebPreferences();
-  view_params.view_id = kRouteId;
-  view_params.main_frame_routing_id = kMainFrameRouteId;
-  view_params.main_frame_widget_routing_id = kMainFrameWidgetRouteId;
-  view_params.session_storage_namespace_id = kInvalidSessionStorageNamespaceId;
-  view_params.swapped_out = false;
-  view_params.replicated_frame_state = FrameReplicationState();
-  view_params.proxy_routing_id = MSG_ROUTING_NONE;
-  view_params.hidden = false;
-  view_params.never_visible = false;
-  view_params.initial_size = *InitialSizeParams();
-  view_params.enable_auto_resize = false;
-  view_params.min_size = gfx::Size();
-  view_params.max_size = gfx::Size();
+  mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
+  view_params->opener_frame_route_id = MSG_ROUTING_NONE;
+  view_params->window_was_created_with_opener = false;
+  view_params->renderer_preferences = RendererPreferences();
+  view_params->web_preferences = WebPreferences();
+  view_params->view_id = kRouteId;
+  view_params->main_frame_routing_id = kMainFrameRouteId;
+  mojo::MakeRequest(&view_params->main_frame_interface_provider);
+  view_params->main_frame_widget_routing_id = kMainFrameWidgetRouteId;
+  view_params->session_storage_namespace_id = kInvalidSessionStorageNamespaceId;
+  view_params->swapped_out = false;
+  view_params->replicated_frame_state = FrameReplicationState();
+  view_params->proxy_routing_id = MSG_ROUTING_NONE;
+  view_params->hidden = false;
+  view_params->never_visible = false;
+  view_params->initial_size = *InitialSizeParams();
+  view_params->enable_auto_resize = false;
+  view_params->min_size = gfx::Size();
+  view_params->max_size = gfx::Size();
 
-  // This needs to pass the mock render thread to the view.
-  RenderViewImpl* view = RenderViewImpl::Create(
-      compositor_deps_.get(), view_params, RenderWidget::ShowCallback());
-  view_ = view;
+  view_ = RenderViewImpl::Create(compositor_deps_.get(), std::move(view_params),
+                                 RenderWidget::ShowCallback());
 }
 
 void RenderViewTest::TearDown() {
@@ -335,7 +338,9 @@ void RenderViewTest::TearDown() {
 
   leak_detector->PrepareForLeakDetection(view_->GetWebView()->MainFrame());
 
-  view_ = NULL;
+  // |view_| is ref-counted and deletes itself during the RunUntilIdle() call
+  // below.
+  view_ = nullptr;
   mock_process_.reset();
 
   RenderThreadImpl::SetRendererBlinkPlatformImplForTesting(nullptr);
@@ -346,7 +351,7 @@ void RenderViewTest::TearDown() {
   base::RunLoop().RunUntilIdle();
 
 #if defined(OS_MACOSX)
-  autorelease_pool_.reset(NULL);
+  autorelease_pool_.reset();
 #endif
 
   leak_detector->CollectGarbageAndReport();
@@ -367,7 +372,7 @@ void RenderViewTest::OnLeakDetectionComplete(const Result& result) {
   EXPECT_EQ(0u, result.number_of_live_nodes);
   EXPECT_EQ(0u, result.number_of_live_layout_objects);
   EXPECT_EQ(0u, result.number_of_live_resources);
-  EXPECT_EQ(0u, result.number_of_live_suspendable_objects);
+  EXPECT_EQ(0u, result.number_of_live_pausable_objects);
   EXPECT_EQ(0u, result.number_of_live_script_promises);
   EXPECT_EQ(0u, result.number_of_live_frames);
   EXPECT_EQ(0u, result.number_of_live_v8_per_context_data);
@@ -401,31 +406,31 @@ void RenderViewTest::SendWebGestureEvent(
   SendInputEvent(gesture_event);
 }
 
-const char* const kGetCoordinatesScript =
-    "(function() {"
-    "  function GetCoordinates(elem) {"
-    "    if (!elem)"
-    "      return [ 0, 0];"
-    "    var coordinates = [ elem.offsetLeft, elem.offsetTop];"
-    "    var parent_coordinates = GetCoordinates(elem.offsetParent);"
-    "    coordinates[0] += parent_coordinates[0];"
-    "    coordinates[1] += parent_coordinates[1];"
-    "    return [ Math.round(coordinates[0]),"
-    "             Math.round(coordinates[1])];"
-    "  };"
-    "  var elem = document.getElementById('$1');"
-    "  if (!elem)"
-    "    return null;"
-    "  var bounds = GetCoordinates(elem);"
-    "  bounds[2] = Math.round(elem.offsetWidth);"
-    "  bounds[3] = Math.round(elem.offsetHeight);"
-    "  return bounds;"
-    "})();";
 gfx::Rect RenderViewTest::GetElementBounds(const std::string& element_id) {
+  static constexpr char kGetCoordinatesScript[] =
+      "(function() {"
+      "  function GetCoordinates(elem) {"
+      "    if (!elem)"
+      "      return [ 0, 0];"
+      "    var coordinates = [ elem.offsetLeft, elem.offsetTop];"
+      "    var parent_coordinates = GetCoordinates(elem.offsetParent);"
+      "    coordinates[0] += parent_coordinates[0];"
+      "    coordinates[1] += parent_coordinates[1];"
+      "    return [ Math.round(coordinates[0]),"
+      "             Math.round(coordinates[1])];"
+      "  };"
+      "  var elem = document.getElementById('$1');"
+      "  if (!elem)"
+      "    return null;"
+      "  var bounds = GetCoordinates(elem);"
+      "  bounds[2] = Math.round(elem.offsetWidth);"
+      "  bounds[3] = Math.round(elem.offsetHeight);"
+      "  return bounds;"
+      "})();";
   std::vector<std::string> params;
   params.push_back(element_id);
   std::string script =
-      base::ReplaceStringPlaceholders(kGetCoordinatesScript, params, NULL);
+      base::ReplaceStringPlaceholders(kGetCoordinatesScript, params, nullptr);
 
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope handle_scope(isolate);
@@ -528,7 +533,8 @@ void RenderViewTest::Reload(const GURL& url) {
       FrameMsg_UILoadMetricsReportType::NO_REPORT, GURL(), GURL(),
       PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
-      CSPDisposition::CHECK /* should_check_main_world_csp */);
+      CSPDisposition::CHECK /* should_check_main_world_csp */,
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   TestRenderFrame* frame =
       static_cast<TestRenderFrame*>(impl->GetMainRenderFrame());
@@ -646,7 +652,7 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
 }
 
 std::unique_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
-  auto initial_size = base::MakeUnique<ResizeParams>();
+  auto initial_size = std::make_unique<ResizeParams>();
   // Ensure the view has some size so tests involving scrolling bounds work.
   initial_size->new_size = gfx::Size(400, 300);
   initial_size->visible_viewport_size = gfx::Size(400, 300);
@@ -668,7 +674,8 @@ void RenderViewTest::GoToOffset(int offset,
       base::TimeTicks(), FrameMsg_UILoadMetricsReportType::NO_REPORT, GURL(),
       GURL(), PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
-      CSPDisposition::CHECK /* should_check_main_world_csp */);
+      CSPDisposition::CHECK /* should_check_main_world_csp */,
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   RequestNavigationParams request_params;
   request_params.page_state = state;
   request_params.nav_entry_id = pending_offset + 1;

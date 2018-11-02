@@ -27,7 +27,6 @@
 
 #include "core/css/CSSFontFace.h"
 #include "core/css/CSSFontSelector.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
@@ -42,7 +41,7 @@ CSSSegmentedFontFace::CSSSegmentedFontFace(
       first_non_css_connected_face_(font_faces_.end()),
       approximate_character_count_(0) {}
 
-CSSSegmentedFontFace::~CSSSegmentedFontFace() {}
+CSSSegmentedFontFace::~CSSSegmentedFontFace() = default;
 
 void CSSSegmentedFontFace::PruneTable() {
   // Make sure the glyph page tree prunes out all uses of this custom font.
@@ -92,7 +91,7 @@ void CSSSegmentedFontFace::RemoveFontFace(FontFace* font_face) {
   font_face->CssFontFace()->ClearSegmentedFontFace();
 }
 
-RefPtr<FontData> CSSSegmentedFontFace::GetFontData(
+scoped_refptr<FontData> CSSSegmentedFontFace::GetFontData(
     const FontDescription& font_description) {
   if (!IsValid())
     return nullptr;
@@ -102,7 +101,7 @@ RefPtr<FontData> CSSSegmentedFontFace::GetFontData(
   FontCacheKey key = font_description.CacheKey(FontFaceCreationParams(),
                                                font_selection_request);
 
-  RefPtr<SegmentedFontData>& font_data =
+  scoped_refptr<SegmentedFontData>& font_data =
       font_data_table_.insert(key, nullptr).stored_value->value;
   if (font_data && font_data->NumFaces()) {
     // No release, we have a reference to an object in the cache which should
@@ -127,14 +126,14 @@ RefPtr<FontData> CSSSegmentedFontFace::GetFontData(
        it != font_faces_.rend(); ++it) {
     if (!(*it)->CssFontFace()->IsValid())
       continue;
-    if (RefPtr<SimpleFontData> face_font_data =
+    if (scoped_refptr<SimpleFontData> face_font_data =
             (*it)->CssFontFace()->GetFontData(requested_font_description)) {
       DCHECK(!face_font_data->IsSegmented());
       if (face_font_data->IsCustomFont()) {
-        font_data->AppendFace(AdoptRef(new FontDataForRangeSet(
+        font_data->AppendFace(base::AdoptRef(new FontDataForRangeSet(
             std::move(face_font_data), (*it)->CssFontFace()->Ranges())));
       } else {
-        font_data->AppendFace(AdoptRef(new FontDataForRangeSetFromCache(
+        font_data->AppendFace(base::AdoptRef(new FontDataForRangeSetFromCache(
             std::move(face_font_data), (*it)->CssFontFace()->Ranges())));
       }
     }
@@ -192,7 +191,7 @@ void CSSSegmentedFontFace::Match(const String& text,
   }
 }
 
-DEFINE_TRACE(CSSSegmentedFontFace) {
+void CSSSegmentedFontFace::Trace(blink::Visitor* visitor) {
   visitor->Trace(first_non_css_connected_face_);
   visitor->Trace(font_faces_);
 }

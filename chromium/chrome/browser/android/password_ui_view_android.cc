@@ -36,11 +36,8 @@ Profile* PasswordUIViewAndroid::GetProfile() {
   return ProfileManager::GetLastUsedProfile();
 }
 
-void PasswordUIViewAndroid::ShowPassword(
-    size_t index,
-    const std::string& origin_url,
-    const std::string& username,
-    const base::string16& password_value) {
+void PasswordUIViewAndroid::ShowPassword(size_t index,
+                                         const base::string16& password_value) {
   NOTIMPLEMENTED();
 }
 
@@ -116,7 +113,7 @@ void PasswordUIViewAndroid::HandleRemoveSavedPasswordException(
   password_manager_presenter_.RemovePasswordException(index);
 }
 
-ScopedJavaLocalRef<jstring> GetAccountDashboardURL(
+ScopedJavaLocalRef<jstring> JNI_PasswordUIView_GetAccountDashboardURL(
     JNIEnv* env,
     const JavaParamRef<jclass>&) {
   return ConvertUTF8ToJavaString(
@@ -124,7 +121,8 @@ ScopedJavaLocalRef<jstring> GetAccountDashboardURL(
 }
 
 // static
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_PasswordUIView_Init(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj) {
   PasswordUIViewAndroid* controller = new PasswordUIViewAndroid(env, obj);
   return reinterpret_cast<intptr_t>(controller);
 }

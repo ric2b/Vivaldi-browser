@@ -154,10 +154,14 @@ class PasswordFormMetricsRecorder
   // relation to a given form. In contrast to UserAction, it is intended to be
   // extensible.
   enum class DetailedUserAction {
-    kUnknown = 0,
-
     // Interactions with password bubble.
     kEditedUsernameInBubble = 100,
+    kSelectedDifferentPasswordInBubble = 101,
+    kTriggeredManualFallbackForSaving = 102,
+    kTriggeredManualFallbackForUpdating = 103,
+
+    // Interactions with form.
+    kCorrectedUsernameInForm = 200,
   };
 
   // The maximum number of combinations of the ManagerAction, UserAction and
@@ -272,10 +276,6 @@ class PasswordFormMetricsRecorder
   int GetHistogramSampleForSuppressedAccounts(
       SuppressedAccountExistence best_matching_account) const;
 
-  // Returns true if an |action| should be recorded multiple times per life-cyle
-  // of a PasswordFormMetricsRecorder.
-  static bool IsRepeatedUserAction(DetailedUserAction action);
-
   // True if the main frame's visible URL, at the time this PasswordFormManager
   // was created, is secure.
   const bool is_main_frame_secure_;
@@ -322,9 +322,9 @@ class PasswordFormMetricsRecorder
   // Holds URL keyed metrics (UKMs) to be recorded on destruction.
   ukm::builders::PasswordForm ukm_entry_builder_;
 
-  // Set of observed user actions that are only recorded once for the lifetime
-  // of a PasswordFormMetricsRecorder.
-  std::set<DetailedUserAction> one_time_report_user_actions_;
+  // Counter for DetailedUserActions observed during the lifetime of a
+  // PasswordFormManager. Reported upon destruction.
+  std::map<DetailedUserAction, int64_t> detailed_user_actions_counts_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordFormMetricsRecorder);
 };

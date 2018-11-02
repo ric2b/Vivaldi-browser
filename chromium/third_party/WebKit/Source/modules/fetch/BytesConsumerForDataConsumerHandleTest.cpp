@@ -4,6 +4,8 @@
 
 #include "modules/fetch/BytesConsumerForDataConsumerHandle.h"
 
+#include <memory>
+
 #include "core/testing/DummyPageHolder.h"
 #include "modules/fetch/BytesConsumer.h"
 #include "modules/fetch/DataConsumerHandleTestUtil.h"
@@ -29,7 +31,7 @@ class BytesConsumerForDataConsumerHandleTest : public ::testing::Test {
 
  protected:
   BytesConsumerForDataConsumerHandleTest() : page_(DummyPageHolder::Create()) {}
-  ~BytesConsumerForDataConsumerHandleTest() {
+  ~BytesConsumerForDataConsumerHandleTest() override {
     ThreadState::Current()->CollectAllGarbage();
   }
   std::unique_ptr<DummyPageHolder> page_;
@@ -45,6 +47,7 @@ class MockBytesConsumerClient
     return new ::testing::StrictMock<MockBytesConsumerClient>();
   }
   MOCK_METHOD0(OnStateChange, void());
+  String DebugName() const override { return "MockBytesConsumerClient"; }
 
  protected:
   MockBytesConsumerClient() {}
@@ -60,12 +63,12 @@ class MockDataConsumerHandle final : public WebDataConsumerHandle {
                                                size_t*));
     MOCK_METHOD1(EndRead, WebDataConsumerHandle::Result(size_t));
 
-    DEFINE_INLINE_TRACE() {}
+    void Trace(blink::Visitor* visitor) {}
   };
 
   MockDataConsumerHandle() : proxy_(new MockReaderProxy) {}
   MockReaderProxy* Proxy() { return proxy_; }
-  const char* DebugName() const { return "MockDataConsumerHandle"; }
+  const char* DebugName() const override { return "MockDataConsumerHandle"; }
 
  private:
   class Reader final : public WebDataConsumerHandle::Reader {
@@ -86,7 +89,7 @@ class MockDataConsumerHandle final : public WebDataConsumerHandle {
 
   std::unique_ptr<WebDataConsumerHandle::Reader> ObtainReader(
       Client*) override {
-    return WTF::MakeUnique<Reader>(proxy_);
+    return std::make_unique<Reader>(proxy_);
   }
   Persistent<MockReaderProxy> proxy_;
 };

@@ -37,7 +37,7 @@ using content::DesktopMediaID;
 
 namespace {
 
-#if !defined(USE_ASH)
+#if !defined(OS_CHROMEOS)
 DesktopMediaID::Id AcceleratedWidgetToDesktopMediaId(
     gfx::AcceleratedWidget accelerated_widget) {
 #if defined(OS_WIN)
@@ -66,7 +66,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 
   SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kVertical,
-      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS),
+      provider->GetDialogInsetsForContentType(views::TEXT, views::CONTROL),
       provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   description_label_->SetMultiLine(true);
@@ -229,7 +229,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
         DesktopMediaID::TYPE_WINDOW, widget->GetNativeWindow());
 
     // Set native window ID if the windows is outside Ash.
-#if !defined(USE_ASH)
+#if !defined(OS_CHROMEOS)
     dialog_window_id.id = AcceleratedWidgetToDesktopMediaId(
         widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
 #endif
@@ -244,7 +244,7 @@ DesktopMediaPickerDialogView::~DesktopMediaPickerDialogView() {}
 void DesktopMediaPickerDialogView::TabSelectedAt(int index) {
   OnSourceTypeSwitched(index);
   list_views_[index]->RequestFocus();
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void DesktopMediaPickerDialogView::OnSourceTypeSwitched(int index) {
@@ -358,7 +358,7 @@ void DesktopMediaPickerDialogView::DeleteDelegate() {
 }
 
 void DesktopMediaPickerDialogView::OnSelectionChanged() {
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 void DesktopMediaPickerDialogView::OnDoubleClick() {

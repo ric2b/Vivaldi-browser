@@ -17,12 +17,9 @@
 class AccountId;
 class PrefService;
 
-namespace chromeos {
-class ScopedUserManagerEnabler;
-}
-
 namespace user_manager {
 
+class ScopedUserManager;
 class RemoveUserDelegate;
 
 // Interface for UserManagerBase - that provides base implementation for
@@ -51,6 +48,13 @@ class USER_MANAGER_EXPORT UserManager {
     virtual void OnUserProfileImageUpdated(const User& user,
                                            const gfx::ImageSkia& profile_image);
 
+    // Called when the child status of the given user has changed.
+    virtual void OnChildStatusChanged(const User& user);
+
+    // Called when any of the device cros settings which are responsible for
+    // user sign in are changed.
+    virtual void OnUsersSignInConstraintsChanged();
+
    protected:
     virtual ~Observer();
   };
@@ -69,9 +73,6 @@ class USER_MANAGER_EXPORT UserManager {
     // Called right before notifying on user change so that those who rely
     // on account_id hash would be accessing up-to-date value.
     virtual void ActiveUserHashChanged(const std::string& hash);
-
-    // Called when child status has changed.
-    virtual void UserChangedChildStatus(User* user);
 
    protected:
     virtual ~UserSessionStateObserver();
@@ -162,7 +163,8 @@ class USER_MANAGER_EXPORT UserManager {
   // |username_hash| is used to identify homedir mount point.
   virtual void UserLoggedIn(const AccountId& account_id,
                             const std::string& username_hash,
-                            bool browser_restart) = 0;
+                            bool browser_restart,
+                            bool is_child) = 0;
 
   // Switches to active user identified by |account_id|. User has to be logged
   // in.
@@ -252,10 +254,8 @@ class USER_MANAGER_EXPORT UserManager {
   virtual std::string GetUserDisplayEmail(
       const AccountId& account_id) const = 0;
 
-  // Saves user's type for user |account_id| into local state preferences.
-  // Ignored If there is no such user.
-  virtual void SaveUserType(const AccountId& account_id,
-                            const UserType& user_type) = 0;
+  // Saves user's type for |user| into local state preferences.
+  virtual void SaveUserType(const User* user) = 0;
 
   // Returns true if current user is an owner.
   virtual bool IsCurrentUserOwner() const = 0;
@@ -325,9 +325,7 @@ class USER_MANAGER_EXPORT UserManager {
   virtual void NotifyUserProfileImageUpdated(
       const User& user,
       const gfx::ImageSkia& profile_image) = 0;
-
-  // Changes the child status and notifies observers.
-  virtual void ChangeUserChildStatus(User* user, bool is_child) = 0;
+  virtual void NotifyUsersSignInConstraintsChanged() = 0;
 
   // Resets this profile to be regarded as if it has never been initialized
   // before. Used on profile wipe.
@@ -335,6 +333,19 @@ class USER_MANAGER_EXPORT UserManager {
 
   // Returns true if supervised users allowed.
   virtual bool AreSupervisedUsersAllowed() const = 0;
+
+  // Returns true if guest user is allowed.
+  virtual bool IsGuestSessionAllowed() const = 0;
+
+  // Returns true if the |user|, which has a GAIA account is allowed according
+  // to device settings and policies.
+  // Accept only users who has gaia account.
+  virtual bool IsGaiaUserAllowed(const User& user) const = 0;
+
+  // Returns true if |user| is allowed depending on device policies.
+  // Accepted user types: USER_TYPE_REGULAR, USER_TYPE_GUEST,
+  // USER_TYPE_SUPERVISED, USER_TYPE_CHILD.
+  virtual bool IsUserAllowed(const User& user) const = 0;
 
   // Returns "Local State" PrefService instance.
   virtual PrefService* GetLocalState() const = 0;
@@ -364,6 +375,9 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if |account_id| is supervised.
   virtual bool IsSupervisedAccountId(const AccountId& account_id) const = 0;
 
+  virtual bool IsDeviceLocalAccountMarkedForRemoval(
+      const AccountId& account_id) const = 0;
+
   // Returns true when the browser has crashed and restarted during the current
   // user's session.
   virtual bool HasBrowserRestarted() const = 0;
@@ -384,6 +398,11 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if |image_index| is a valid default user image index.
   virtual bool IsValidDefaultUserImageId(int image_index) const = 0;
 
+  UserType CalculateUserType(const AccountId& account_id,
+                             const User* user,
+                             bool browser_restart,
+                             bool is_child) const;
+
  protected:
   // Sets UserManager instance.
   static void SetInstance(UserManager* user_manager);
@@ -396,7 +415,7 @@ class USER_MANAGER_EXPORT UserManager {
   static UserManager* instance;
 
  private:
-  friend class chromeos::ScopedUserManagerEnabler;
+  friend class ScopedUserManager;
 
   // Same as Get() but doesn't won't crash is current instance is NULL.
   static UserManager* GetForTesting();

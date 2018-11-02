@@ -118,7 +118,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
 
   // ARIA attributes.
   void AriaDescribedbyElements(AXObjectVector&) const override;
-  void AriaLabelledbyElements(AXObjectVector&) const override;
   void AriaOwnsElements(AXObjectVector&) const override;
 
   bool AriaHasPopup() const override;
@@ -130,7 +129,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   // ARIA live-region features.
   const AtomicString& LiveRegionStatus() const override;
   const AtomicString& LiveRegionRelevant() const override;
-  bool LiveRegionAtomic() const override;
 
   // AX name calc.
   String TextAlternative(bool recursive,
@@ -212,8 +210,7 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   AXLayoutObject* GetUnignoredObjectFromNode(Node&) const;
 
   bool CanIgnoreTextAsEmpty() const;
-  bool CanIgnoreSpaceNextTo(Node*) const;
-  bool IsFocusableByDefault(Element*) const;
+  bool CanIgnoreSpaceNextTo(LayoutObject*, bool is_after) const;
   bool HasAriaCellRole(Element*) const;
 };
 

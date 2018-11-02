@@ -4,7 +4,8 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "components/arc/test/fake_bluetooth_instance.h"
 
 namespace arc {
@@ -27,7 +28,14 @@ FakeBluetoothInstance::LEDeviceFoundData::LEDeviceFoundData(
 
 FakeBluetoothInstance::LEDeviceFoundData::~LEDeviceFoundData() {}
 
-void FakeBluetoothInstance::Init(mojom::BluetoothHostPtr host_ptr) {}
+void FakeBluetoothInstance::InitDeprecated(mojom::BluetoothHostPtr host_ptr) {
+  Init(std::move(host_ptr), base::BindOnce(&base::DoNothing));
+}
+
+void FakeBluetoothInstance::Init(mojom::BluetoothHostPtr host_ptr,
+                                 InitCallback callback) {
+  std::move(callback).Run();
+}
 
 void FakeBluetoothInstance::OnAdapterProperties(
     mojom::BluetoothStatus status,
@@ -60,7 +68,7 @@ void FakeBluetoothInstance::OnLEDeviceFound(
     mojom::BluetoothAddressPtr addr,
     int32_t rssi,
     std::vector<mojom::BluetoothAdvertisingDataPtr> adv_data) {
-  le_device_found_data_.push_back(base::MakeUnique<LEDeviceFoundData>(
+  le_device_found_data_.push_back(std::make_unique<LEDeviceFoundData>(
       std::move(addr), rssi, std::move(adv_data)));
 }
 
@@ -80,7 +88,7 @@ void FakeBluetoothInstance::OnGetGattDB(
     mojom::BluetoothAddressPtr remote_addr,
     std::vector<mojom::BluetoothGattDBElementPtr> db) {
   gatt_db_result_.push_back(
-      base::MakeUnique<GattDBResult>(std::move(remote_addr), std::move(db)));
+      std::make_unique<GattDBResult>(std::move(remote_addr), std::move(db)));
 }
 
 void FakeBluetoothInstance::OnServicesRemoved(
@@ -99,19 +107,18 @@ void FakeBluetoothInstance::OnGattNotify(
     bool is_notify,
     const std::vector<uint8_t>& value) {}
 
-void FakeBluetoothInstance::RequestGattRead(
-    mojom::BluetoothAddressPtr address,
-    int32_t attribute_handle,
-    int32_t offset,
-    bool is_long,
-    const RequestGattReadCallback& callback) {}
+void FakeBluetoothInstance::RequestGattRead(mojom::BluetoothAddressPtr address,
+                                            int32_t attribute_handle,
+                                            int32_t offset,
+                                            bool is_long,
+                                            RequestGattReadCallback callback) {}
 
 void FakeBluetoothInstance::RequestGattWrite(
     mojom::BluetoothAddressPtr address,
     int32_t attribute_handle,
     int32_t offset,
     const std::vector<uint8_t>& value,
-    const RequestGattWriteCallback& callback) {}
+    RequestGattWriteCallback callback) {}
 
 void FakeBluetoothInstance::OnGetSdpRecords(
     mojom::BluetoothStatus status,

@@ -11,21 +11,16 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/payments/core/address_normalizer_impl.h"
-#include "components/payments/core/subkey_requester.h"
-#include "third_party/libaddressinput/chromium/chrome_address_validator.h"
+#include "components/autofill/core/browser/subkey_requester.h"
 
 namespace autofill {
 
 // Android wrapper of the PersonalDataManager which provides access from the
 // Java layer. Note that on Android, there's only a single profile, and
 // therefore a single instance of this wrapper.
-class PersonalDataManagerAndroid
-    : public PersonalDataManagerObserver,
-      public base::SupportsWeakPtr<PersonalDataManagerAndroid> {
+class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
  public:
   PersonalDataManagerAndroid(JNIEnv* env, jobject obj);
 
@@ -301,17 +296,16 @@ class PersonalDataManagerAndroid
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& region_code);
 
-  // Normalizes the address of the |jprofile| synchronously if the
-  // |jregion_code| rules have finished loading. Otherwise sets up the task to
-  // start the address normalization when the rules have finished loading. Also
-  // defines a time limit for the normalization, in which case the the
-  // |jdelegate| will be notified. If the rules are loaded before the timeout,
-  // |jdelegate| will receive the normalized profile.
+  // Normalizes the address of the |jprofile| synchronously if the region rules
+  // have finished loading. Otherwise sets up the task to start the address
+  // normalization when the rules have finished loading. Also defines a time
+  // limit for the normalization, in which case the the |jdelegate| will be
+  // notified. If the rules are loaded before the timeout, |jdelegate| will
+  // receive the normalized profile.
   void StartAddressNormalization(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jobject>& jprofile,
-      const base::android::JavaParamRef<jstring>& jregion_code,
       jint jtimeout_seconds,
       const base::android::JavaParamRef<jobject>& jdelegate);
 
@@ -383,11 +377,8 @@ class PersonalDataManagerAndroid
   // Pointer to the PersonalDataManager for the main profile.
   PersonalDataManager* personal_data_manager_;
 
-  // The address validator used to normalize addresses.
-  payments::AddressNormalizerImpl address_normalizer_;
-
   // Used for subkey request.
-  payments::SubKeyRequester subkey_requester_;
+  SubKeyRequester subkey_requester_;
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManagerAndroid);
 };

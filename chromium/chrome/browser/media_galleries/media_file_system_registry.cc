@@ -18,7 +18,6 @@
 #include "base/stl_util.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/browser/media_galleries/gallery_watch_manager.h"
-#include "chrome/browser/media_galleries/imported_media_gallery_registry.h"
 #include "chrome/browser/media_galleries/media_file_system_context.h"
 #include "chrome/browser/media_galleries/media_galleries_dialog_controller.h"
 #include "chrome/browser/media_galleries/media_galleries_histograms.h"
@@ -32,6 +31,7 @@
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
@@ -164,7 +164,7 @@ RPHReferenceManager::~RPHReferenceManager() {
 
 void RPHReferenceManager::ReferenceFromWebContents(
     content::WebContents* contents) {
-  RenderProcessHost* rph = contents->GetRenderProcessHost();
+  RenderProcessHost* rph = contents->GetMainFrame()->GetProcess();
   if (!base::ContainsKey(observer_map_, rph)) {
     observer_map_[rph] = base::MakeUnique<RPHObserver>(this, rph);
   }
@@ -242,7 +242,7 @@ void RPHReferenceManager::OnRenderProcessHostDestroyed(
 
 void RPHReferenceManager::OnWebContentsDestroyedOrNavigated(
     WebContents* contents) {
-  RenderProcessHost* rph = contents->GetRenderProcessHost();
+  RenderProcessHost* rph = contents->GetMainFrame()->GetProcess();
   auto rph_info = observer_map_.find(rph);
   DCHECK(rph_info != observer_map_.end());
 
@@ -667,11 +667,6 @@ class MediaFileSystemRegistry::MediaFileSystemContextImpl
   }
 
   void RevokeFileSystem(const std::string& fs_name) override {
-    ImportedMediaGalleryRegistry* imported_registry =
-        ImportedMediaGalleryRegistry::GetInstance();
-    if (imported_registry->RevokeImportedFilesystemOnUIThread(fs_name))
-      return;
-
     ExternalMountPoints::GetSystemInstance()->RevokeFileSystem(fs_name);
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
@@ -704,27 +699,9 @@ class MediaFileSystemRegistry::MediaFileSystemContextImpl
     CHECK(path.IsAbsolute());
     CHECK(!path.ReferencesParent());
 
-    // TODO(gbillock): refactor ImportedMediaGalleryRegistry to delegate this
-    // call tree, probably by having it figure out by device id what
-    // registration is needed, or having per-device-type handlers at the
-    // next higher level.
-    bool result = false;
-    if (StorageInfo::IsITunesDevice(device_id)) {
-      ImportedMediaGalleryRegistry* registry =
-          ImportedMediaGalleryRegistry::GetInstance();
-      result = registry->RegisterITunesFilesystemOnUIThread(fs_name, path);
-    } else if (StorageInfo::IsPicasaDevice(device_id)) {
-      ImportedMediaGalleryRegistry* registry =
-          ImportedMediaGalleryRegistry::GetInstance();
-      result = registry->RegisterPicasaFilesystemOnUIThread(fs_name, path);
-    } else {
-      result = ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
-          fs_name,
-          storage::kFileSystemTypeNativeMedia,
-          storage::FileSystemMountOption(),
-          path);
-    }
-    return result;
+    return ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
+        fs_name, storage::kFileSystemTypeNativeMedia,
+        storage::FileSystemMountOption(), path);
   }
 
   bool RegisterFileSystemForMTPDevice(const std::string& device_id,

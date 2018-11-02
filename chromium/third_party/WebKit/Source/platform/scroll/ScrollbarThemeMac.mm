@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollbarThemeMac.h"
 
 #include <Carbon/Carbon.h>
@@ -34,6 +33,7 @@
 #include "platform/mac/LocalCurrentGraphicsContext.h"
 #include "platform/mac/NSScrollerImpDetails.h"
 #include "platform/mac/ScrollAnimatorMac.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollbarThemeClient.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/RetainPtr.h"
@@ -46,8 +46,6 @@
 
 // FIXME: There are repainting problems due to Aqua scroll bar buttons' visual
 // overflow.
-
-using namespace blink;
 
 @interface NSColor (WebNSColorDetails)
 + (NSImage*)_linenPatternImage;
@@ -258,14 +256,14 @@ void ScrollbarThemeMac::PaintTrackBackground(GraphicsContext& context,
     return;
 
   DrawingRecorder recorder(context, scrollbar,
-                           DisplayItem::kScrollbarTrackBackground, rect);
+                           DisplayItem::kScrollbarTrackBackground);
 
   GraphicsContextStateSaver state_saver(context);
   context.Translate(rect.X(), rect.Y());
   LocalCurrentGraphicsContext local_context(context,
                                             IntRect(IntPoint(), rect.Size()));
 
-  CGRect frame_rect = scrollbar.FrameRect();
+  CGRect frame_rect = CGRect(scrollbar.FrameRect());
   ScrollbarPainter scrollbar_painter = PainterForScrollbar(scrollbar);
   [scrollbar_painter setEnabled:scrollbar.Enabled()];
   [scrollbar_painter setBoundsSize:NSSizeFromCGSize(frame_rect.size)];
@@ -283,10 +281,7 @@ void ScrollbarThemeMac::PaintThumb(GraphicsContext& context,
 
   // Expand dirty rect to allow for scroll thumb anti-aliasing in minimum thumb
   // size case.
-  IntRect dirty_rect = IntRect(rect);
-  dirty_rect.Inflate(1);
-  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarThumb,
-                           dirty_rect);
+  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarThumb);
 
   GraphicsContextStateSaver state_saver(context);
   context.Translate(rect.X(), rect.Y());
@@ -303,7 +298,7 @@ void ScrollbarThemeMac::PaintThumb(GraphicsContext& context,
     int thumb_width = [scrollbar_painter trackWidth];
     draw_rect.SetWidth(thumb_width);
   }
-  [scrollbar_painter setBoundsSize:NSSizeFromCGSize(draw_rect.Size())];
+  [scrollbar_painter setBoundsSize:NSSizeFromCGSize(CGSize(draw_rect.Size()))];
 
   [scrollbar_painter setDoubleValue:0];
   [scrollbar_painter setKnobProportion:1];
@@ -318,7 +313,7 @@ void ScrollbarThemeMac::PaintThumb(GraphicsContext& context,
   // will only cause the scrollbar to engorge when moved over the top of the
   // scrollbar area.
   [scrollbar_painter
-      setBoundsSize:NSSizeFromCGSize(scrollbar.FrameRect().Size())];
+      setBoundsSize:NSSizeFromCGSize(CGSize(scrollbar.FrameRect().Size()))];
   [scrollbar_painter setKnobAlpha:old_knob_alpha];
 }
 

@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/workers/WorkerThread.h"
+#include "core/inspector/ThreadDebugger.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
@@ -16,16 +16,19 @@ namespace blink {
 
 class ExecutionContext;
 class KURL;
+class WorkerThread;
 
 // A proxy for talking to the worker inspector on the worker thread.
 // All of these methods should be called on the main thread.
 class CORE_EXPORT WorkerInspectorProxy final
     : public GarbageCollectedFinalized<WorkerInspectorProxy> {
  public:
+  enum class PauseOnWorkerStart { kPause, kDontPause };
+
   static WorkerInspectorProxy* Create();
 
   ~WorkerInspectorProxy();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   class CORE_EXPORT PageInspector {
    public:
@@ -35,7 +38,10 @@ class CORE_EXPORT WorkerInspectorProxy final
                                            const String& message) = 0;
   };
 
-  WorkerThreadStartMode WorkerStartMode(ExecutionContext*);
+  // Returns whether WorkerThread should pause to run debugger tasks on its
+  // startup.
+  PauseOnWorkerStart ShouldPauseOnWorkerStart(ExecutionContext*);
+
   void WorkerThreadCreated(ExecutionContext*, WorkerThread*, const KURL&);
   void WorkerThreadTerminated();
   void DispatchMessageFromWorker(int session_id, const String&);
@@ -43,7 +49,9 @@ class CORE_EXPORT WorkerInspectorProxy final
                                    const String& message,
                                    std::unique_ptr<SourceLocation>);
 
-  void ConnectToInspector(int session_id, PageInspector*);
+  void ConnectToInspector(int session_id,
+                          const String& parent_instrumentation_token,
+                          PageInspector*);
   void DisconnectFromInspector(int session_id, PageInspector*);
   void SendMessageToInspector(int session_id, const String& message);
   void WriteTimelineStartedEvent(const String& tracing_session_id);
@@ -64,6 +72,22 @@ class CORE_EXPORT WorkerInspectorProxy final
   HashMap<int, PageInspector*> page_inspectors_;
   String url_;
   String inspector_id_;
+};
+
+struct CORE_EXPORT GlobalScopeInspectorCreationParams final {
+  WTF_MAKE_NONCOPYABLE(GlobalScopeInspectorCreationParams);
+  USING_FAST_MALLOC(GlobalScopeInspectorCreationParams);
+
+ public:
+  explicit GlobalScopeInspectorCreationParams(
+      WorkerInspectorProxy::PauseOnWorkerStart pause_on_start);
+  GlobalScopeInspectorCreationParams(
+      WorkerInspectorProxy::PauseOnWorkerStart pause_on_start,
+      const v8_inspector::V8StackTraceId&);
+  ~GlobalScopeInspectorCreationParams() = default;
+
+  WorkerInspectorProxy::PauseOnWorkerStart pause_on_start;
+  v8_inspector::V8StackTraceId stack_id;
 };
 
 }  // namespace blink

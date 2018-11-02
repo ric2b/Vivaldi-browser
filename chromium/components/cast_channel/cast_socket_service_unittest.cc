@@ -4,6 +4,7 @@
 
 #include "components/cast_channel/cast_socket_service.h"
 #include "base/test/mock_callback.h"
+#include "base/test/test_simple_task_runner.h"
 #include "components/cast_channel/cast_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 
@@ -22,9 +23,10 @@ namespace cast_channel {
 
 class CastSocketServiceTest : public testing::Test {
  public:
-  CastSocketServiceTest()
-      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
-        cast_socket_service_(new CastSocketService()) {}
+  CastSocketServiceTest() : cast_socket_service_(new CastSocketService()) {
+    cast_socket_service_->SetTaskRunnerForTest(
+        base::MakeRefCounted<base::TestSimpleTaskRunner>());
+  }
 
   CastSocket* AddSocket(std::unique_ptr<CastSocket> socket) {
     return cast_socket_service_->AddSocket(std::move(socket));
@@ -33,7 +35,6 @@ class CastSocketServiceTest : public testing::Test {
   void TearDown() override { cast_socket_service_ = nullptr; }
 
  protected:
-  content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<CastSocketService> cast_socket_service_;
   base::MockCallback<CastSocket::OnOpenCallback> mock_on_open_callback_;
   MockCastSocketObserver mock_observer_;
@@ -88,9 +89,10 @@ TEST_F(CastSocketServiceTest, TestOpenChannel) {
   EXPECT_CALL(mock_on_open_callback_, Run(mock_socket));
   EXPECT_CALL(*mock_socket, AddObserver(_));
 
-  cast_socket_service_->OpenSocket(ip_endpoint, nullptr /* net_log */,
-                                   mock_on_open_callback_.Get(),
-                                   &mock_observer_);
+  cast_socket_service_->AddObserver(&mock_observer_);
+  CastSocketOpenParams open_param(ip_endpoint, nullptr /* net_log */,
+                                  base::TimeDelta::FromSeconds(20));
+  cast_socket_service_->OpenSocket(open_param, mock_on_open_callback_.Get());
 }
 
 }  // namespace cast_channel

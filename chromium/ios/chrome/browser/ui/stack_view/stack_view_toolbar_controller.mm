@@ -13,6 +13,8 @@
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -41,7 +43,7 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
     _dispatcher = dispatcher;
     _stackViewToolbar =
         [[UIView alloc] initWithFrame:[self specificControlsArea]];
-    [_stackViewToolbar setAutoresizingMask:UIViewAutoresizingFlexibleHeight |
+    [_stackViewToolbar setAutoresizingMask:UIViewAutoresizingFlexibleTopMargin |
                                            UIViewAutoresizingFlexibleWidth];
 
     _openNewTabButton = [[NewTabButton alloc] initWithFrame:CGRectZero];
@@ -69,7 +71,7 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
         UIColorFromRGB(kBackgroundViewColor, kBackgroundViewColorAlpha);
 
     [_stackViewToolbar addSubview:_openNewTabButton];
-    [self.view addSubview:_stackViewToolbar];
+    [self.contentView addSubview:_stackViewToolbar];
 
     [[self stackButton] addTarget:_dispatcher
                            action:@selector(dismissTabSwitcher)
@@ -77,6 +79,8 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
   }
   return self;
 }
+
+#pragma mark - Private methods.
 
 - (NewTabButton*)openNewTabButton {
   return _openNewTabButton;
@@ -94,6 +98,8 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
                                        originPoint:center];
   [_dispatcher openNewTab:command];
 }
+
+#pragma mark - Overridden protected superclass methods.
 
 - (IBAction)recordUserMetrics:(id)sender {
   if (sender == _openNewTabButton)

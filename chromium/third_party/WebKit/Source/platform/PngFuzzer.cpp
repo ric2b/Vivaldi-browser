@@ -31,9 +31,9 @@ namespace blink {
 
 std::unique_ptr<ImageDecoder> CreateDecoder(
     ImageDecoder::AlphaOption alpha_option) {
-  return WTF::WrapUnique(new PNGImageDecoder(
-      alpha_option, ColorBehavior::TransformToTargetForTesting(),
-      ImageDecoder::kNoDecodedImageByteLimit));
+  return WTF::WrapUnique(
+      new PNGImageDecoder(alpha_option, ColorBehavior::TransformToSRGB(),
+                          ImageDecoder::kNoDecodedImageByteLimit));
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
@@ -42,7 +42,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // TODO (scroggo): Also test ImageDecoder::AlphaNotPremultiplied?
   auto decoder = CreateDecoder(ImageDecoder::kAlphaPremultiplied);
   const bool kAllDataReceived = true;
-  decoder->SetData(buffer.Get(), kAllDataReceived);
+  decoder->SetData(buffer.get(), kAllDataReceived);
   decoder->FrameCount();
   if (decoder->Failed())
     return 0;

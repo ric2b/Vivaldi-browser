@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,7 +34,6 @@
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gpu_preference.h"
-#include "ui/latency/latency_info.h"
 #include "url/gurl.h"
 
 struct GPUCreateCommandBufferConfig;
@@ -69,23 +67,22 @@ class GPU_EXPORT GpuCommandBufferStub
     virtual ~DestructionObserver() {}
   };
 
-  typedef base::Callback<void(const std::vector<ui::LatencyInfo>&)>
-      LatencyInfoCallback;
+  GpuCommandBufferStub(GpuChannel* channel,
+                       const GPUCreateCommandBufferConfig& init_params,
+                       CommandBufferId command_buffer_id,
+                       SequenceId sequence_id,
+                       int32_t stream_id,
+                       int32_t route_id);
+
+  ~GpuCommandBufferStub() override;
 
   // This must leave the GL context associated with the newly-created
   // GpuCommandBufferStub current, so the GpuChannel can initialize
   // the gpu::Capabilities.
-  static std::unique_ptr<GpuCommandBufferStub> Create(
-      GpuChannel* channel,
+  gpu::ContextResult Initialize(
       GpuCommandBufferStub* share_group,
       const GPUCreateCommandBufferConfig& init_params,
-      CommandBufferId command_buffer_id,
-      SequenceId sequence_id,
-      int32_t stream_id,
-      int32_t route_id,
       std::unique_ptr<base::SharedMemory> shared_state_shm);
-
-  ~GpuCommandBufferStub() override;
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -114,9 +111,11 @@ class GPU_EXPORT GpuCommandBufferStub
   void DidSwapBuffersComplete(SwapBuffersCompleteParams params) override;
   const gles2::FeatureInfo* GetFeatureInfo() const override;
   const GpuPreferences& GetGpuPreferences() const override;
-  void SetLatencyInfoCallback(const LatencyInfoCallback& callback) override;
+  void SetSnapshotRequestedCallback(const base::Closure& callback) override;
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
+  void BufferPresented(uint64_t swap_id,
+                       const gfx::PresentationFeedback& feedback) override;
 
   void AddFilter(IPC::MessageFilter* message_filter) override;
   int32_t GetRouteID() const override;
@@ -147,17 +146,6 @@ class GPU_EXPORT GpuCommandBufferStub
   void MarkContextLost();
 
  private:
-  GpuCommandBufferStub(GpuChannel* channel,
-                       const GPUCreateCommandBufferConfig& init_params,
-                       CommandBufferId command_buffer_id,
-                       SequenceId sequence_id,
-                       int32_t stream_id,
-                       int32_t route_id);
-
-  bool Initialize(GpuCommandBufferStub* share_group,
-                  const GPUCreateCommandBufferConfig& init_params,
-                  std::unique_ptr<base::SharedMemory> shared_state_shm);
-
   GpuMemoryManager* GetMemoryManager() const;
 
   void Destroy();
@@ -178,7 +166,7 @@ class GPU_EXPORT GpuCommandBufferStub
                                  IPC::Message* reply_message);
   void OnAsyncFlush(int32_t put_offset,
                     uint32_t flush_id,
-                    const std::vector<ui::LatencyInfo>& latency_info);
+                    bool snapshot_requested);
   void OnRegisterTransferBuffer(int32_t id,
                                 base::SharedMemoryHandle transfer_buffer,
                                 uint32_t size);
@@ -249,7 +237,7 @@ class GPU_EXPORT GpuCommandBufferStub
   uint32_t previous_processed_num_;
   base::TimeTicks last_idle_time_;
 
-  LatencyInfoCallback latency_info_callback_;
+  base::Closure snapshot_requested_callback_;
 
   GURL active_url_;
   size_t active_url_hash_;

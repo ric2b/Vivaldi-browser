@@ -8,6 +8,7 @@
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -45,11 +46,12 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
   DownloadDangerPromptViews(content::DownloadItem* item,
                             bool show_context,
                             const OnDone& done);
+  ~DownloadDangerPromptViews() override;
 
-  // DownloadDangerPrompt methods:
+  // DownloadDangerPrompt:
   void InvokeActionForTesting(Action action) override;
 
-  // views::DialogDelegate methods:
+  // views::DialogDelegate:
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   base::string16 GetWindowTitle() const override;
   void DeleteDelegate() override;
@@ -90,12 +92,14 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
       show_context_(show_context),
       done_(done),
       contents_view_(NULL) {
-  DCHECK(!done_.is_null());
   download_->AddObserver(this);
 
   contents_view_ = new views::View;
 
-  views::GridLayout* layout = views::GridLayout::CreatePanel(contents_view_);
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::TEXT, views::TEXT));
+  views::GridLayout* layout =
+      views::GridLayout::CreateAndInstall(contents_view_);
 
   views::ColumnSet* column_set = layout->AddColumnSet(0);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
@@ -120,6 +124,11 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
       item->GetBrowserContext()));
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::DOWNLOAD_DANGER_PROMPT);
+}
+
+DownloadDangerPromptViews::~DownloadDangerPromptViews() {
+  if (download_)
+    download_->RemoveObserver(this);
 }
 
 // DownloadDangerPrompt methods:

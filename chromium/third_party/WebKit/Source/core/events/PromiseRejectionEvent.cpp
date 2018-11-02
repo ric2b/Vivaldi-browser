@@ -13,7 +13,7 @@ PromiseRejectionEvent::PromiseRejectionEvent(
     const AtomicString& type,
     const PromiseRejectionEventInit& initializer)
     : Event(type, initializer),
-      world_(state->World()),
+      world_(&state->World()),
       promise_(this),
       reason_(this) {
   DCHECK(initializer.hasPromise());
@@ -32,7 +32,7 @@ void PromiseRejectionEvent::Dispose() {
   // (and touch the ScopedPersistents) after Oilpan starts lazy sweeping.
   promise_.Clear();
   reason_.Clear();
-  world_.Clear();
+  world_ = nullptr;
 }
 
 ScriptPromise PromiseRejectionEvent::promise(ScriptState* script_state) const {
@@ -62,11 +62,12 @@ bool PromiseRejectionEvent::CanBeDispatchedInWorld(
   return world_ && world_->GetWorldId() == world.GetWorldId();
 }
 
-DEFINE_TRACE(PromiseRejectionEvent) {
+void PromiseRejectionEvent::Trace(blink::Visitor* visitor) {
   Event::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(PromiseRejectionEvent) {
+void PromiseRejectionEvent::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(promise_);
   visitor->TraceWrappers(reason_);
 }

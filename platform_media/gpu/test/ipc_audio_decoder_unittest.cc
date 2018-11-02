@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is based on
@@ -21,12 +22,12 @@
 #include "base/mac/mac_util.h"
 #endif
 
-namespace content {
+namespace media {
 
 namespace {
-std::unique_ptr<media::IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
+std::unique_ptr<IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
     const scoped_refptr<base::SequencedTaskRunner>& decode_task_runner,
-    media::DataSource* data_source) {
+    DataSource* data_source) {
   return base::WrapUnique(new TestPipelineHost(data_source));
 }
 }  // namespace
@@ -34,41 +35,41 @@ std::unique_ptr<media::IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
 class IPCAudioDecoderTest : public testing::Test {
  public:
   IPCAudioDecoderTest() : decode_thread_(__FUNCTION__) {
-    if (!media::IPCAudioDecoder::IsAvailable())
+    if (!IPCFactory::IsAvailable())
       return;
 
     CHECK(decode_thread_.Start());
 
-    media::IPCAudioDecoder::Preinitialize(
+    IPCFactory::Preinitialize(
         base::Bind(&CreateIPCMediaPipelineHost), decode_thread_.task_runner(),
         decode_thread_.task_runner());
   }
 
   bool Initialize(const std::string& filename) {
-    if (!media::IPCAudioDecoder::IsAvailable()) {
+    if (!IPCFactory::IsAvailable()) {
       LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
                 << " IPCAudioDecoder not available on this platform"
                 << " skipping test";
       return false;
     }
 
-    data_ = media::ReadTestDataFile(filename);
-    protocol_.reset(new media::InMemoryUrlProtocol(data_->data(),
+    data_ = ReadTestDataFile(filename);
+    protocol_.reset(new InMemoryUrlProtocol(data_->data(),
                                                    data_->data_size(), false));
-    decoder_.reset(new media::IPCAudioDecoder(protocol_.get()));
+    decoder_.reset(new IPCAudioDecoder(protocol_.get()));
     return true;
   }
 
   // Reads the entire file provided to Initialize().
   void ReadAndVerify(const std::string& expected_audio_hash,
                      int expected_frames) {
-    std::vector<std::unique_ptr<media::AudioBus>> decoded_audio_packets;
+    std::vector<std::unique_ptr<AudioBus>> decoded_audio_packets;
     int actual_frames = decoder_->Read(&decoded_audio_packets);
-    std::unique_ptr<media::AudioBus> decoded_audio_data =
-        media::AudioBus::Create(decoder_->channels(), actual_frames);
+    std::unique_ptr<AudioBus> decoded_audio_data =
+        AudioBus::Create(decoder_->channels(), actual_frames);
     int dest_start_frame = 0;
     for (size_t k = 0; k < decoded_audio_packets.size(); ++k) {
-      const media::AudioBus* packet = decoded_audio_packets[k].get();
+      const AudioBus* packet = decoded_audio_packets[k].get();
       int frame_count = packet->frames();
       packet->CopyPartialFramesTo(0, frame_count, dest_start_frame,
                                   decoded_audio_data.get());
@@ -77,7 +78,7 @@ class IPCAudioDecoderTest : public testing::Test {
     ASSERT_LE(actual_frames, decoded_audio_data->frames());
     ASSERT_EQ(expected_frames, actual_frames);
 
-    media::AudioHash audio_hash;
+    AudioHash audio_hash;
     audio_hash.Update(decoded_audio_data.get(), actual_frames);
     EXPECT_EQ(expected_audio_hash, audio_hash.ToString());
   }
@@ -111,9 +112,9 @@ class IPCAudioDecoderTest : public testing::Test {
 
  private:
   base::Thread decode_thread_;
-  scoped_refptr<media::DecoderBuffer> data_;
-  std::unique_ptr<media::InMemoryUrlProtocol> protocol_;
-  std::unique_ptr<media::IPCAudioDecoder> decoder_;
+  scoped_refptr<DecoderBuffer> data_;
+  std::unique_ptr<InMemoryUrlProtocol> protocol_;
+  std::unique_ptr<IPCAudioDecoder> decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoderTest);
 };
@@ -165,4 +166,4 @@ TEST_F(IPCAudioDecoderTest, InvalidFile) {
   RunTestFailingInitialization("ten_byte_file");
 }
 
-}  // namespace content
+}  // namespace media

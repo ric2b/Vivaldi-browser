@@ -18,13 +18,18 @@ function setUp() {
   // Behavior of window.chrome depends on each test case. window.chrome should
   // be initialized properly inside each test function.
   window.chrome = {
+    commandLinePrivate: {
+      hasSwitch: function(name, callback) {
+        callback(false);
+      }
+    },
     runtime: {id: 'test-extension-id', lastError: null},
 
     storage: {
       onChanged: {addListener: function(callback) {}},
       local: {
         get: function(key, callback) {
-          callback({})
+          callback({});
         },
         set: function(value) {}
       }
@@ -58,7 +63,7 @@ function testExecuteEntryTask(callback) {
         getVolumeInfo: function() {
           return {
             volumeType: VolumeManagerCommon.VolumeType.DRIVE
-          }
+          };
         }
       },
       {
@@ -67,7 +72,11 @@ function testExecuteEntryTask(callback) {
         fileContextMenu:
             {defaultActionMenuItem: document.createElement('div')}
       },
-      new MockMetadataModel({}), {}, new cr.EventTarget(), null);
+      new MockMetadataModel({}), {
+        getCurrentRootType: function() {
+          return null;
+        }
+      }, new cr.EventTarget(), null);
 
   controller.executeEntryTask(fileSystem.entries['/test.png']);
   reportPromise(new Promise(function(fulfill) {
@@ -126,7 +135,11 @@ function createTaskController(selectionHandler) {
         fileContextMenu:
             {defaultActionMenuItem: document.createElement('div')}
       },
-      new MockMetadataModel({}), {}, selectionHandler, null);
+      new MockMetadataModel({}), {
+        getCurrentRootType: function() {
+          return null;
+        }
+      }, selectionHandler, null);
 }
 
 // TaskController.getFileTasks should not call fileManagerPrivate.getFileTasks

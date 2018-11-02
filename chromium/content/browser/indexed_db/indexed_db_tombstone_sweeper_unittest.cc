@@ -19,9 +19,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/env_chromium.h"
-#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/filter_policy.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
 
@@ -133,7 +131,7 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
   }
 
   void SetupMockDB() {
-    sweeper_ = base::MakeUnique<IndexedDBTombstoneSweeper>(
+    sweeper_ = std::make_unique<IndexedDBTombstoneSweeper>(
         GetParam(), kRoundIterations, kMaxIterations, &mock_db_);
     sweeper_->SetStartSeedsForTesting(0, 0, 0);
   }
@@ -141,7 +139,7 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
   void SetupRealDB() {
     comparator_.reset(new Comparator());
     in_memory_db_ = LevelDBDatabase::OpenInMemory(comparator_.get());
-    sweeper_ = base::MakeUnique<IndexedDBTombstoneSweeper>(
+    sweeper_ = std::make_unique<IndexedDBTombstoneSweeper>(
         GetParam(), kRoundIterations, kMaxIterations, in_memory_db_->db());
     sweeper_->SetStartSeedsForTesting(0, 0, 0);
   }

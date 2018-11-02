@@ -34,7 +34,6 @@
 #include "WebCommon.h"
 #include "base/logging.h"
 
-#include <algorithm>
 #include <vector>
 
 namespace blink {
@@ -82,6 +81,8 @@ class WebVector {
   WebVector(WebVector<T>&& other) { Swap(other); }
 
   WebVector(std::vector<T>&& other) : data_(std::move(other)) {}
+
+  std::vector<T> ReleaseVector() { return std::move(data_); }
 
   WebVector& operator=(const WebVector& other) {
     if (this != &other)

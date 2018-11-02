@@ -38,7 +38,7 @@ class LoadingDataCollectorTest : public testing::Test {
   }
 
   void SetUp() override {
-    content::RunAllBlockingPoolTasksUntilIdle();  // Runs the DB lookup.
+    content::RunAllTasksUntilIdle();  // Runs the DB lookup.
 
     url_request_job_factory_.Reset();
     url_request_context_.set_job_factory(&url_request_job_factory_);
@@ -122,6 +122,35 @@ TEST_F(LoadingDataCollectorTest, SummarizeResponseCachePolicy) {
   EXPECT_TRUE(URLRequestSummary::SummarizeResponse(*request_etag, &summary));
   EXPECT_TRUE(summary.has_validators);
   EXPECT_TRUE(summary.always_revalidate);
+}
+
+TEST_F(LoadingDataCollectorTest, SummarizeResponseConnectDuration) {
+  net::HttpResponseInfo response_info;
+  response_info.headers =
+      MakeResponseHeaders("HTTP/1.1 200 OK\n\nSome: Headers\n");
+  url_request_job_factory_.set_response_info(response_info);
+
+  net::LoadTimingInfo load_timing_info;
+  // These times must be after request start in CreateURLRequest().
+  auto block_on_connect =
+      base::TimeTicks::Now() + base::TimeDelta::FromSeconds(1);
+  load_timing_info.connect_timing.dns_start = block_on_connect;
+  load_timing_info.connect_timing.dns_end =
+      block_on_connect + base::TimeDelta::FromMilliseconds(100);
+  load_timing_info.connect_timing.connect_start =
+      block_on_connect + base::TimeDelta::FromMilliseconds(500);
+  load_timing_info.connect_timing.connect_end =
+      block_on_connect + base::TimeDelta::FromMilliseconds(700);
+  url_request_job_factory_.set_load_timing_info(load_timing_info);
+
+  GURL url("http://www.google.com/cat.png");
+  std::unique_ptr<net::URLRequest> request =
+      CreateURLRequest(url_request_context_, url, net::MEDIUM,
+                       content::RESOURCE_TYPE_IMAGE, true);
+
+  URLRequestSummary summary;
+  EXPECT_TRUE(URLRequestSummary::SummarizeResponse(*request, &summary));
+  EXPECT_EQ(base::TimeDelta::FromMilliseconds(300), summary.connect_duration);
 }
 
 TEST_F(LoadingDataCollectorTest, HandledResourceTypes) {
@@ -314,12 +343,56 @@ TEST_F(LoadingDataCollectorTest, ShouldRecordResponseSubresource) {
       LoadingDataCollector::ShouldRecordResponse(font_request_sub_frame.get()));
 }
 
+TEST_F(LoadingDataCollectorTest, ShouldRecordResourceFromMemoryCache) {
+  // Protocol.
+  EXPECT_TRUE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/cat.png"), content::RESOURCE_TYPE_IMAGE, ""));
+
+  EXPECT_TRUE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("https://www.google.com/cat.png"), content::RESOURCE_TYPE_IMAGE,
+      ""));
+
+  EXPECT_FALSE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("https://www.google.com:666/cat.png"), content::RESOURCE_TYPE_IMAGE,
+      ""));
+
+  EXPECT_FALSE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("file://www.google.com/cat.png"), content::RESOURCE_TYPE_IMAGE, ""));
+
+  // ResourceType.
+  EXPECT_FALSE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/frame.html"),
+      content::RESOURCE_TYPE_SUB_FRAME, ""));
+
+  EXPECT_TRUE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/comic-sans-ms.woff"),
+      content::RESOURCE_TYPE_FONT_RESOURCE, ""));
+
+  // From MIME Type.
+  EXPECT_TRUE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/cat.png"), content::RESOURCE_TYPE_PREFETCH,
+      "image/png"));
+
+  EXPECT_FALSE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/cat.png"), content::RESOURCE_TYPE_PREFETCH,
+      "image/my-wonderful-format"));
+
+  EXPECT_TRUE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/comic-sans-ms.woff"),
+      content::RESOURCE_TYPE_PREFETCH, "font/woff"));
+
+  EXPECT_FALSE(LoadingDataCollector::ShouldRecordResourceFromMemoryCache(
+      GURL("http://www.google.com/comic-sans-ms.woff"),
+      content::RESOURCE_TYPE_PREFETCH, "font/woff-woff"));
+}
+
 // Single navigation that will be recorded. Will check for duplicate
 // resources and also for number of resources saved.
 TEST_F(LoadingDataCollectorTest, SimpleNavigation) {
   URLRequestSummary main_frame =
       CreateURLRequestSummary(1, "http://www.google.com");
   collector_->RecordURLRequest(main_frame);
+  collector_->RecordURLResponse(main_frame);
   EXPECT_EQ(1U, collector_->inflight_navigations_.size());
 
   std::vector<URLRequestSummary> resources;
@@ -393,7 +466,9 @@ TEST_F(LoadingDataCollectorTest, SimpleRedirect) {
   URLRequestSummary fb3 = CreateRedirectRequestSummary(
       1, "http://facebook.com/google", "https://facebook.com/google");
   collector_->RecordURLRedirect(fb3);
-  NavigationID fb_end = CreateNavigationID(1, "https://facebook.com/google");
+  URLRequestSummary fb4 =
+      CreateURLRequestSummary(1, "https://facebook.com/google");
+  collector_->RecordURLResponse(fb4);
 
   EXPECT_CALL(
       *mock_predictor_,
@@ -401,7 +476,7 @@ TEST_F(LoadingDataCollectorTest, SimpleRedirect) {
           "https://facebook.com/google", "http://fb.com/google",
           std::vector<URLRequestSummary>()))));
 
-  collector_->RecordMainFrameLoadComplete(fb_end);
+  collector_->RecordMainFrameLoadComplete(fb4.navigation_id);
 }
 
 TEST_F(LoadingDataCollectorTest, OnMainFrameRequest) {
@@ -576,6 +651,7 @@ TEST_F(LoadingDataCollectorTest, TestRecordFirstContentfulPaint) {
   URLRequestSummary main_frame =
       CreateURLRequestSummary(1, "http://www.google.com");
   collector_->RecordURLRequest(main_frame);
+  collector_->RecordURLResponse(main_frame);
   EXPECT_EQ(1U, collector_->inflight_navigations_.size());
 
   URLRequestSummary resource1 = CreateURLRequestSummary(

@@ -14,7 +14,6 @@
 #include "core/html/HTMLScriptElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Crypto.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/text/Base64.h"
@@ -82,6 +81,7 @@ CSPDirectiveList::CSPDirectiveList(ContentSecurityPolicy* policy,
       strict_mixed_content_checking_enforced_(false),
       upgrade_insecure_requests_(false),
       treat_as_public_address_(false),
+      require_safe_types_(false),
       require_sri_for_(RequireSRIForToken::kNone),
       use_reporting_api_(false) {}
 
@@ -90,9 +90,10 @@ CSPDirectiveList* CSPDirectiveList::Create(
     const UChar* begin,
     const UChar* end,
     ContentSecurityPolicyHeaderType type,
-    ContentSecurityPolicyHeaderSource source) {
+    ContentSecurityPolicyHeaderSource source,
+    bool should_parse_wasm_eval) {
   CSPDirectiveList* directives = new CSPDirectiveList(policy, type, source);
-  directives->Parse(begin, end);
+  directives->Parse(begin, end, should_parse_wasm_eval);
 
   if (!directives->CheckEval(
           directives->OperativeDirective(directives->script_src_.Get()))) {
@@ -201,6 +202,10 @@ void CSPDirectiveList::ReportEvalViolation(
 
 bool CSPDirectiveList::CheckEval(SourceListDirective* directive) const {
   return !directive || directive->AllowEval();
+}
+
+bool CSPDirectiveList::CheckWasmEval(SourceListDirective* directive) const {
+  return !directive || directive->AllowWasmEval();
 }
 
 bool CSPDirectiveList::IsMatchingNoncePresent(SourceListDirective* directive,
@@ -395,6 +400,34 @@ bool CSPDirectiveList::CheckEvalAndReportViolation(
     suffix =
         " Note that 'script-src' was not explicitly set, so 'default-src' is "
         "used as a fallback.";
+
+  ReportEvalViolation(
+      directive->GetText(), ContentSecurityPolicy::DirectiveType::kScriptSrc,
+      console_message + "\"" + directive->GetText() + "\"." + suffix + "\n",
+      KURL(), script_state, exception_status,
+      directive->AllowReportSample() ? content : g_empty_string);
+  if (!IsReportOnly()) {
+    policy_->ReportBlockedScriptExecutionToInspector(directive->GetText());
+    return false;
+  }
+  return true;
+}
+
+bool CSPDirectiveList::CheckWasmEvalAndReportViolation(
+    SourceListDirective* directive,
+    const String& console_message,
+    ScriptState* script_state,
+    ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) const {
+  if (CheckWasmEval(directive))
+    return true;
+
+  String suffix = String();
+  if (directive == default_src_) {
+    suffix =
+        " Note that 'script-src' was not explicitly set, so 'default-src' is "
+        "used as a fallback.";
+  }
 
   ReportEvalViolation(
       directive->GetText(), ContentSecurityPolicy::DirectiveType::kScriptSrc,
@@ -611,8 +644,8 @@ bool CSPDirectiveList::AllowInlineScript(
   SourceListDirective* directive = OperativeDirective(script_src_.Get());
   if (IsMatchingNoncePresent(directive, nonce))
     return true;
-  if (element && isHTMLScriptElement(element) &&
-      !toHTMLScriptElement(element)->Loader()->IsParserInserted() &&
+  if (element && IsHTMLScriptElement(element) &&
+      !ToHTMLScriptElement(element)->Loader()->IsParserInserted() &&
       AllowDynamic()) {
     return true;
   }
@@ -664,6 +697,22 @@ bool CSPDirectiveList::AllowEval(
         script_state, exception_status, content);
   }
   return CheckEval(OperativeDirective(script_src_.Get()));
+}
+
+bool CSPDirectiveList::AllowWasmEval(
+    ScriptState* script_state,
+    SecurityViolationReportingPolicy reporting_policy,
+    ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) const {
+  if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
+    return CheckWasmEvalAndReportViolation(
+        OperativeDirective(script_src_.Get()),
+        "Refused to compile or instantiate WebAssembly module because "
+        "'wasm-eval' is not an allowed source of script in the following "
+        "Content Security Policy directive: ",
+        script_state, exception_status, content);
+  }
+  return CheckWasmEval(OperativeDirective(script_src_.Get()));
 }
 
 bool CSPDirectiveList::AllowPluginType(
@@ -951,7 +1000,9 @@ bool CSPDirectiveList::ShouldSendCSPHeader(Resource::Type type) const {
 // policy            = directive-list
 // directive-list    = [ directive *( ";" [ directive ] ) ]
 //
-void CSPDirectiveList::Parse(const UChar* begin, const UChar* end) {
+void CSPDirectiveList::Parse(const UChar* begin,
+                             const UChar* end,
+                             bool should_parse_wasm_eval) {
   header_ = String(begin, end - begin).StripWhiteSpace();
 
   if (begin == end)
@@ -1152,7 +1203,8 @@ void CSPDirectiveList::ParseAndAppendReportEndpoints(const String& value) {
 template <class CSPDirectiveType>
 void CSPDirectiveList::SetCSPDirective(const String& name,
                                        const String& value,
-                                       Member<CSPDirectiveType>& directive) {
+                                       Member<CSPDirectiveType>& directive,
+                                       bool should_parse_wasm_eval) {
   if (directive) {
     policy_->ReportDuplicateDirective(name);
     return;
@@ -1208,6 +1260,22 @@ void CSPDirectiveList::TreatAsPublicAddress(const String& name,
   }
   treat_as_public_address_ = true;
   policy_->TreatAsPublicAddress();
+  if (!value.IsEmpty())
+    policy_->ReportValueForEmptyDirective(name, value);
+}
+
+void CSPDirectiveList::RequireTrustedTypes(const String& name,
+                                           const String& value) {
+  if (IsReportOnly()) {
+    policy_->ReportInvalidInReportOnly(name);
+    return;
+  }
+  if (require_safe_types_) {
+    policy_->ReportDuplicateDirective(name);
+    return;
+  }
+  require_safe_types_ = true;
+  policy_->RequireTrustedTypes();
   if (!value.IsEmpty())
     policy_->ReportValueForEmptyDirective(name, value);
 }
@@ -1307,6 +1375,11 @@ void CSPDirectiveList::AddDirective(const String& name, const String& value) {
   } else if (type == ContentSecurityPolicy::DirectiveType::kReportTo &&
              policy_->ExperimentalFeaturesEnabled()) {
     ParseReportTo(name, value);
+  } else if (type ==
+                 ContentSecurityPolicy::DirectiveType::kRequireTrustedTypes &&
+             policy_->ExperimentalFeaturesEnabled() &&
+             RuntimeEnabledFeatures::TrustedDOMTypesEnabled()) {
+    RequireTrustedTypes(name, value);
   } else {
     policy_->ReportUnsupportedDirective(name);
   }
@@ -1457,7 +1530,7 @@ WebContentSecurityPolicy CSPDirectiveList::ExposeForNavigationalChecks() const {
   return policy;
 }
 
-DEFINE_TRACE(CSPDirectiveList) {
+void CSPDirectiveList::Trace(blink::Visitor* visitor) {
   visitor->Trace(policy_);
   visitor->Trace(plugin_types_);
   visitor->Trace(base_uri_);

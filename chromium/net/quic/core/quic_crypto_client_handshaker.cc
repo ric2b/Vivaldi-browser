@@ -191,7 +191,7 @@ void QuicCryptoClientHandshaker::HandleServerConfigUpdateMessage(
       crypto_config_->LookupOrCreate(server_id_);
   QuicErrorCode error = crypto_config_->ProcessServerConfigUpdate(
       server_config_update, session()->connection()->clock()->WallNow(),
-      session()->connection()->version(), chlo_hash_, cached,
+      session()->connection()->transport_version(), chlo_hash_, cached,
       crypto_negotiated_params_, &error_details);
 
   if (error != QUIC_NO_ERROR) {
@@ -372,7 +372,7 @@ void QuicCryptoClientHandshaker::DoSendCHLO(
     return;
   }
   CryptoUtils::HashHandshakeMessage(out, &chlo_hash_, Perspective::IS_CLIENT);
-  channel_id_sent_ = (channel_id_key_.get() != nullptr);
+  channel_id_sent_ = (channel_id_key_ != nullptr);
   if (cached->proof_verify_details()) {
     proof_handler_->OnProofVerifyDetailsAvailable(
         *cached->proof_verify_details());
@@ -441,7 +441,7 @@ void QuicCryptoClientHandshaker::DoReceiveREJ(
   string error_details;
   QuicErrorCode error = crypto_config_->ProcessRejection(
       *in, session()->connection()->clock()->WallNow(),
-      session()->connection()->version(), chlo_hash_, cached,
+      session()->connection()->transport_version(), chlo_hash_, cached,
       crypto_negotiated_params_, &error_details);
 
   if (error != QUIC_NO_ERROR) {
@@ -477,7 +477,7 @@ QuicAsyncStatus QuicCryptoClientHandshaker::DoVerifyProof(
 
   QuicAsyncStatus status = verifier->VerifyProof(
       server_id_.host(), server_id_.port(), cached->server_config(),
-      session()->connection()->version(), chlo_hash_, cached->certs(),
+      session()->connection()->transport_version(), chlo_hash_, cached->certs(),
       cached->cert_sct(), cached->signature(), verify_context_.get(),
       &verify_error_details_, &verify_details_,
       std::unique_ptr<ProofVerifierCallback>(proof_verify_callback));
@@ -503,7 +503,7 @@ void QuicCryptoClientHandshaker::DoVerifyProofComplete(
                         base::TimeTicks::Now() - proof_verify_start_time_);
   }
   if (!verify_ok_) {
-    if (verify_details_.get()) {
+    if (verify_details_) {
       proof_handler_->OnProofVerifyDetailsAvailable(*verify_details_);
     }
     if (num_client_hellos_ == 0) {
@@ -618,7 +618,7 @@ void QuicCryptoClientHandshaker::DoReceiveSHLO(
   string error_details;
   QuicErrorCode error = crypto_config_->ProcessServerHello(
       *in, session()->connection()->connection_id(),
-      session()->connection()->version(),
+      session()->connection()->transport_version(),
       session()->connection()->server_supported_versions(), cached,
       crypto_negotiated_params_, &error_details);
 

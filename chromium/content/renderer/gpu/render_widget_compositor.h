@@ -12,14 +12,16 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/output/managed_memory_policy.h"
-#include "cc/output/swap_promise.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "cc/trees/managed_memory_policy.h"
+#include "cc/trees/swap_promise.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "content/common/content_export.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/WebKit/public/platform/WebLayerTreeView.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -93,6 +95,9 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SetNeedsDisplayOnAllLayers();
   void SetRasterizeOnlyVisibleContent();
   void SetNeedsRedrawRect(gfx::Rect damage_rect);
+
+  bool IsSurfaceSynchronizationEnabled() const;
+
   // Like setNeedsRedraw but forces the frame to be drawn, without early-outs.
   // Redraw will be forced after the next commit
   void SetNeedsForcedRedraw();
@@ -121,6 +126,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SetContentSourceId(uint32_t source_id);
   void SetViewportSize(const gfx::Size& device_viewport_size,
                        const viz::LocalSurfaceId& local_surface_id);
+  void SetURLForUkm(const GURL& url);
 
   // WebLayerTreeView implementation.
   viz::FrameSinkId GetFrameSinkId() override;
@@ -180,10 +186,9 @@ class CONTENT_EXPORT RenderWidgetCompositor
                                 bool shrink) override;
   void SetBrowserControlsShownRatio(float) override;
   void RequestDecode(const PaintImage& image,
-                     const base::Callback<void(bool)>& callback) override;
+                     base::OnceCallback<void(bool)> callback) override;
 
-  void SetScrollBoundaryBehavior(
-      const blink::WebScrollBoundaryBehavior&) override;
+  void SetOverscrollBehavior(const blink::WebOverscrollBehavior&) override;
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override;
@@ -215,6 +220,10 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void DidLoseLayerTreeFrameSink() override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
 
+  const cc::LayerTreeSettings& GetLayerTreeSettings() const {
+    return layer_tree_host_->GetSettings();
+  }
+
  protected:
   friend class RenderViewImplScaleFactorTest;
 
@@ -231,7 +240,6 @@ class CONTENT_EXPORT RenderWidgetCompositor
   bool CompositeIsSynchronous() const;
   void SynchronouslyComposite();
 
-  bool attempt_software_fallback_ = false;
   RenderWidgetCompositorDelegate* const delegate_;
   CompositorDependencies* const compositor_deps_;
   const bool threaded_;
@@ -239,6 +247,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
   bool never_visible_;
   bool is_for_oopif_;
+
+  bool layer_tree_frame_sink_request_failed_while_invisible_ = false;
 
   blink::WebLayoutAndPaintAsyncCallback* layout_and_paint_async_callback_;
 

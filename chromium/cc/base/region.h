@@ -13,11 +13,17 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/skia_util.h"
 
+class SkPath;
+
 namespace base {
 class Value;
 namespace trace_event {
 class TracedValue;
 }
+}
+
+namespace gfx {
+class Vector2d;
 }
 
 namespace cc {
@@ -26,17 +32,20 @@ class SimpleEnclosedRegion;
 class CC_BASE_EXPORT Region {
  public:
   Region();
+  explicit Region(const SkRegion& region);
   Region(const Region& region);
   Region(const gfx::Rect& rect);  // NOLINT(runtime/explicit)
   ~Region();
 
   const Region& operator=(const gfx::Rect& rect);
   const Region& operator=(const Region& region);
+  const Region& operator+=(const gfx::Vector2d& offset);
 
   void Swap(Region* region);
   void Clear();
   bool IsEmpty() const;
   int GetRegionComplexity() const;
+  void GetBoundaryPath(SkPath* path) const;
 
   bool Contains(const gfx::Point& point) const;
   bool Contains(const gfx::Rect& rect) const;
@@ -97,6 +106,12 @@ inline bool operator==(const Region& a, const Region& b) {
 
 inline bool operator!=(const Region& a, const Region& b) {
   return !(a == b);
+}
+
+inline Region operator+(const Region& a, const gfx::Vector2d& b) {
+  Region result = a;
+  result += b;
+  return result;
 }
 
 inline Region SubtractRegions(const Region& a, const Region& b) {

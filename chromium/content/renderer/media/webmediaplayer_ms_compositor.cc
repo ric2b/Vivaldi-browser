@@ -19,7 +19,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/filters/video_renderer_algorithm.h"
-#include "media/renderers/skcanvas_video_renderer.h"
+#include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
@@ -37,7 +37,7 @@ namespace {
 // This function copies |frame| to a new I420 or YV12A media::VideoFrame.
 scoped_refptr<media::VideoFrame> CopyFrame(
     const scoped_refptr<media::VideoFrame>& frame,
-    media::SkCanvasVideoRenderer* video_renderer) {
+    media::PaintCanvasVideoRenderer* video_renderer) {
   scoped_refptr<media::VideoFrame> new_frame;
   if (frame->HasTextures()) {
     DCHECK(frame->format() == media::PIXEL_FORMAT_ARGB ||
@@ -75,16 +75,14 @@ scoped_refptr<media::VideoFrame> CopyFrame(
         (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
                                                      : libyuv::FOURCC_ARGB;
     libyuv::ConvertToI420(
-        static_cast<const uint8*>(pixmap.addr(0, 0)),
-        pixmap.getSafeSize64(),
+        static_cast<const uint8*>(pixmap.addr(0, 0)), pixmap.computeByteSize(),
         new_frame->visible_data(media::VideoFrame::kYPlane),
         new_frame->stride(media::VideoFrame::kYPlane),
         new_frame->visible_data(media::VideoFrame::kUPlane),
         new_frame->stride(media::VideoFrame::kUPlane),
         new_frame->visible_data(media::VideoFrame::kVPlane),
-        new_frame->stride(media::VideoFrame::kVPlane),
-        0 /* crop_x */, 0 /* crop_y */,
-        pixmap.width(), pixmap.height(),
+        new_frame->stride(media::VideoFrame::kVPlane), 0 /* crop_x */,
+        0 /* crop_y */, pixmap.width(), pixmap.height(),
         new_frame->visible_rect().width(), new_frame->visible_rect().height(),
         libyuv::kRotate0, source_pixel_format);
   } else {
@@ -464,7 +462,7 @@ void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal() {
   // there might be a finite number of available buffers. E.g, video that
   // originates from a video camera, HW decoded frames.
   scoped_refptr<media::VideoFrame> copied_frame =
-      CopyFrame(current_frame_ref, player_->GetSkCanvasVideoRenderer());
+      CopyFrame(current_frame_ref, player_->GetPaintCanvasVideoRenderer());
   // Copying frame can take time, so only set the copied frame if
   // |current_frame_| hasn't been changed.
   {

@@ -11,7 +11,6 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <memory>
 
 #include "base/macros.h"
@@ -69,7 +68,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   // and termination packets are expected.
   virtual void AddConnectionIdToTimeWait(
       QuicConnectionId connection_id,
-      QuicVersion version,
+      QuicTransportVersion version,
       bool connection_rejected_statelessly,
       std::vector<std::unique_ptr<QuicEncryptedPacket>>* termination_packets);
 
@@ -90,7 +89,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   // Called by the dispatcher when the underlying socket becomes writable again,
   // since we might need to send pending public reset packets which we didn't
   // send because the underlying socket was write blocked.
-  void OnCanWrite() override;
+  void OnBlockedWriterCanWrite() override;
 
   // Used to delete connection_id entries that have outlived their time wait
   // period.
@@ -101,8 +100,9 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   void TrimTimeWaitListIfNeeded();
 
   // Given a ConnectionId that exists in the time wait list, returns the
-  // QuicVersion associated with it.
-  QuicVersion GetQuicVersionFromConnectionId(QuicConnectionId connection_id);
+  // QuicTransportVersion associated with it.
+  QuicTransportVersion GetQuicVersionFromConnectionId(
+      QuicConnectionId connection_id);
 
   // The number of connections on the time-wait list.
   size_t num_connections() const { return connection_id_map_.size(); }
@@ -111,7 +111,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   // for |supported_versions| to |client_address| from |server_address|.
   virtual void SendVersionNegotiationPacket(
       QuicConnectionId connection_id,
-      const QuicVersionVector& supported_versions,
+      const QuicTransportVersionVector& supported_versions,
       const QuicSocketAddress& server_address,
       const QuicSocketAddress& client_address);
 
@@ -162,7 +162,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
   // connection_id.
   struct ConnectionIdData {
     ConnectionIdData(int num_packets_,
-                     QuicVersion version_,
+                     QuicTransportVersion version_,
                      QuicTime time_added_,
                      bool connection_rejected_statelessly);
 
@@ -172,7 +172,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
     ~ConnectionIdData();
 
     int num_packets;
-    QuicVersion version;
+    QuicTransportVersion version;
     QuicTime time_added;
     // These packets may contain CONNECTION_CLOSE frames, or SREJ messages.
     std::vector<std::unique_ptr<QuicEncryptedPacket>> termination_packets;
@@ -185,7 +185,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
 
   // Pending public reset packets that need to be sent out to the client
   // when we are given a chance to write by the dispatcher.
-  std::deque<std::unique_ptr<QueuedPacket>> pending_packets_queue_;
+  QuicDeque<std::unique_ptr<QueuedPacket>> pending_packets_queue_;
 
   // Time period for which connection_ids should remain in time wait state.
   const QuicTime::Delta time_wait_period_;

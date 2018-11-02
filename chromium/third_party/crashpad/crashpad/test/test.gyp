@@ -35,11 +35,19 @@
         'errors.h',
         'file.cc',
         'file.h',
-        'gtest_death_check.h',
+        'filesystem.cc',
+        'filesystem.h',
+        'gtest_death.h',
+        'gtest_disabled.cc',
+        'gtest_disabled.h',
         'hex_string.cc',
         'hex_string.h',
+        'linux/fake_ptrace_connection.cc',
+        'linux/fake_ptrace_connection.h',
         'mac/dyld.cc',
         'mac/dyld.h',
+        'mac/exception_swallower.cc',
+        'mac/exception_swallower.h',
         'mac/mach_errors.cc',
         'mac/mach_errors.h',
         'mac/mach_multiprocess.cc',
@@ -75,6 +83,9 @@
       },
       'conditions': [
         ['OS=="mac"', {
+          'dependencies': [
+            '../handler/handler.gyp:crashpad_handler_lib',
+          ],
           'link_settings': {
             'libraries': [
               '$(SDKROOT)/usr/lib/libbsm.dylib',
@@ -89,16 +100,12 @@
           },
         }],
       ],
-    },
-    {
-      'target_name': 'crashpad_gtest_main',
-      'type': 'static_library',
-      'dependencies': [
-        'crashpad_test',
-        '../third_party/gtest/gtest.gyp:gtest',
-      ],
-      'sources': [
-        'gtest_main.cc',
+      'target_conditions': [
+        ['OS=="android"', {
+          'sources/': [
+            ['include', '^linux/'],
+          ],
+        }],
       ],
     },
     {
@@ -108,9 +115,34 @@
         'crashpad_test',
         '../third_party/gtest/gmock.gyp:gmock',
         '../third_party/gtest/gtest.gyp:gtest',
+        '../third_party/mini_chromium/mini_chromium.gyp:base',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'defines': [
+        'CRASHPAD_TEST_LAUNCHER_GMOCK=1',
       ],
       'sources': [
-        'gmock_main.cc',
+        'gtest_main.cc',
+      ],
+    },
+    {
+      'target_name': 'crashpad_gtest_main',
+      'type': 'static_library',
+      'dependencies': [
+        'crashpad_test',
+        '../third_party/gtest/gtest.gyp:gtest',
+        '../third_party/mini_chromium/mini_chromium.gyp:base',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'defines': [
+        'CRASHPAD_TEST_LAUNCHER_GTEST=1',
+      ],
+      'sources': [
+        'gtest_main.cc',
       ],
     },
   ],

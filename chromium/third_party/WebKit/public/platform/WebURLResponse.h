@@ -196,6 +196,8 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void SetAppCacheManifestURL(const WebURL&);
 
   BLINK_PLATFORM_EXPORT void SetHasMajorCertificateErrors(bool);
+  BLINK_PLATFORM_EXPORT void SetIsLegacySymantecCert(bool);
+  BLINK_PLATFORM_EXPORT void SetCertValidityStart(base::Time);
 
   BLINK_PLATFORM_EXPORT void SetSecurityStyle(WebSecurityStyle);
 
@@ -216,9 +218,6 @@ class WebURLResponse {
   // ServiceWorkerResponseInfo::was_fetched_via_service_worker() for details.
   BLINK_PLATFORM_EXPORT bool WasFetchedViaServiceWorker() const;
   BLINK_PLATFORM_EXPORT void SetWasFetchedViaServiceWorker(bool);
-
-  // Flag whether this request was loaded using a foreign fetch service worker.
-  BLINK_PLATFORM_EXPORT void SetWasFetchedViaForeignFetch(bool);
 
   // Flag whether the fallback request with skip service worker flag was
   // required. See ServiceWorkerResponseInfo::was_fallback_required() for

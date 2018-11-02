@@ -14,8 +14,7 @@ namespace blink {
 class ExceptionState;
 class USBAlternateInterface;
 
-class USBEndpoint : public GarbageCollected<USBEndpoint>,
-                    public ScriptWrappable {
+class USBEndpoint : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -35,7 +34,7 @@ class USBEndpoint : public GarbageCollected<USBEndpoint>,
   String type() const;
   unsigned packetSize() const { return Info().packet_size; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   Member<const USBAlternateInterface> alternate_;

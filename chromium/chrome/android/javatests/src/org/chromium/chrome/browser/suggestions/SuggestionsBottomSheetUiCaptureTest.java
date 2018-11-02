@@ -4,13 +4,9 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.Espresso;
-import android.support.test.espresso.action.ViewActions;
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.espresso.matcher.ViewMatchers;
+import static org.chromium.chrome.test.BottomSheetTestRule.waitForWindowUpdates;
+
 import android.support.test.filters.MediumTest;
-import android.support.test.uiautomator.UiDevice;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -19,23 +15,23 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.ScreenShooter;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.NtpUiCaptureTestData;
+import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
-import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.ui.test.util.UiRestriction;
 
 /**
- * Tests for the appearance of Article Snippets.
+ * Tests for the appearance of the home sheet in different bottom sheet states.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
 public class SuggestionsBottomSheetUiCaptureTest {
     @Rule
-    public BottomSheetTestRule mActivityTestRule = new BottomSheetTestRule();
+    public SuggestionsBottomSheetTestRule mActivityRule = new SuggestionsBottomSheetTestRule();
+
     @Rule
     public SuggestionsDependenciesRule createSuggestions() {
         return new SuggestionsDependenciesRule(NtpUiCaptureTestData.createFactory());
@@ -44,48 +40,27 @@ public class SuggestionsBottomSheetUiCaptureTest {
     @Rule
     public ScreenShooter mScreenShooter = new ScreenShooter();
 
-    private static final int MAX_WINDOW_UPDATE_TIME_MS = 1000;
-
     @Before
     public void setup() throws InterruptedException {
-        mActivityTestRule.startMainActivityOnBlankPage();
-    }
-
-    private void setSheetState(final int position) {
-        mActivityTestRule.setSheetState(position, false);
-        waitForWindowUpdates();
-    }
-
-    private void waitForWindowUpdates() {
-        // Wait for update to start and finish.
-        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-        device.waitForWindowUpdate(null, MAX_WINDOW_UPDATE_TIME_MS);
-        device.waitForIdle(MAX_WINDOW_UPDATE_TIME_MS);
+        ChromePreferenceManager.getInstance().setNewTabPagePersonalizedSigninPromoDismissed(true);
+        mActivityRule.startMainActivityOnBlankPage();
     }
 
     @Test
     @MediumTest
     @Feature({"UiCatalogue"})
-    @ScreenShooter.Directory("Suggestions Bottom Sheet Position")
+    @ScreenShooter.Directory("SuggestionsBottomSheetPosition")
     public void testBottomSheetPosition() throws Exception {
-        setSheetState(BottomSheet.SHEET_STATE_HALF);
-        mScreenShooter.shoot("Half");
-        setSheetState(BottomSheet.SHEET_STATE_FULL);
-        mScreenShooter.shoot("Full");
-        setSheetState(BottomSheet.SHEET_STATE_PEEK);
-        mScreenShooter.shoot("Peek");
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"UiCatalogue"})
-    @ScreenShooter.Directory("Suggestions Context Menu")
-    public void testContextMenu() throws Exception {
-        // Needs to be "Full" to for this to work on small screens in landscape.
-        setSheetState(BottomSheet.SHEET_STATE_FULL);
-        Espresso.onView(ViewMatchers.withId(R.id.recycler_view))
-                .perform(RecyclerViewActions.actionOnItemAtPosition(2, ViewActions.longClick()));
+        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_HALF, false);
         waitForWindowUpdates();
-        mScreenShooter.shoot("Context_menu");
+        mScreenShooter.shoot("Half");
+
+        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
+        waitForWindowUpdates();
+        mScreenShooter.shoot("Full");
+
+        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
+        waitForWindowUpdates();
+        mScreenShooter.shoot("Peek");
     }
 }

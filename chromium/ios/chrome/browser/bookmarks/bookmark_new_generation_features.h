@@ -8,13 +8,10 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 
-namespace bookmark_new_generation {
-namespace features {
-
-// Used to control the state of the Credential Manager API feature.
+// Feature flag for the new bookmark UI.
 extern const base::Feature kBookmarkNewGeneration;
 
-}  // namespace features
-}  // namespace bookmark_new_generation
+// Feature flag for the new edit page and folder picker of the new bookmark UI.
+extern const base::Feature kBookmarkNewEditPage;
 
 #endif  // IOS_CHROME_BROWSER_BOOKMARKS_BOOKMARK_NEW_GENERATION_FEATURES_H

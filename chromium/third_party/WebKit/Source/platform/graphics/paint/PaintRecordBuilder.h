@@ -9,6 +9,7 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/paint/DisplayItemCacheSkipper.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintRecord.h"
@@ -30,32 +31,30 @@ class PLATFORM_EXPORT PaintRecordBuilder final : public DisplayItemClient {
   WTF_MAKE_NONCOPYABLE(PaintRecordBuilder);
 
  public:
-  // Constructs a new builder with the given bounds for the resulting recorded
-  // picture. If |metadata| is specified, that metadata is propagated to the
-  // builder's internal canvas. If |containingContext| is specified, the device
-  // scale factor, printing, and disabled state are propagated to the builder's
-  // internal context.
+  // Constructs a new builder for the resulting recorded picture. If |metadata|
+  // is specified, that metadata is propagated to the builder's internal canvas.
+  // If |containing_context| is specified, the device scale factor, printing,
+  // and disabled state are propagated to the builder's internal context.
   // If a PaintController is passed, it is used as the PaintController for
   // painting the picture (and hence we can use its cache). Otherwise, a new
   // PaintController is used for the duration of the picture building, which
   // therefore has no caching.
-  // If SPv2 is on, resets paint chunks to PropertyTreeState::root()
+  // In SPv175+ mode, resets paint chunks to PropertyTreeState::Root()
   // before beginning to record.
-  PaintRecordBuilder(const FloatRect& bounds,
-                     SkMetaData* = nullptr,
+  PaintRecordBuilder(SkMetaData* = nullptr,
                      GraphicsContext* containing_context = nullptr,
                      PaintController* = nullptr);
-  ~PaintRecordBuilder();
 
   GraphicsContext& Context() { return *context_; }
 
   // Returns a PaintRecord capturing all drawing performed on the builder's
-  // context since construction. If SPv2 is on, flattens all paint chunks
-  // into PropertyTreeState::root() space.
-  // In SPv2 mode, replays into the ancestor state given by |replayState|.
-  sk_sp<PaintRecord> EndRecording();
+  // context since construction.
+  // In SPv175+ mode, replays into the ancestor state given by |replay_state|.
+  sk_sp<PaintRecord> EndRecording(
+      const PropertyTreeState& replay_state = PropertyTreeState::Root());
 
   // Replays the recording directly into the given canvas.
+  // In SPv175+ mode, replays into the ancestor state given by |replay_state|.
   void EndRecording(
       PaintCanvas&,
       const PropertyTreeState& replay_state = PropertyTreeState::Root());
@@ -66,9 +65,9 @@ class PLATFORM_EXPORT PaintRecordBuilder final : public DisplayItemClient {
 
  private:
   PaintController* paint_controller_;
-  std::unique_ptr<PaintController> paint_controller_ptr_;
+  std::unique_ptr<PaintController> own_paint_controller_;
   std::unique_ptr<GraphicsContext> context_;
-  FloatRect bounds_;
+  Optional<DisplayItemCacheSkipper> cache_skipper_;
 };
 
 }  // namespace blink

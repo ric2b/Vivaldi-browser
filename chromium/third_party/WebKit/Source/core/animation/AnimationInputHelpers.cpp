@@ -5,14 +5,16 @@
 #include "core/animation/AnimationInputHelpers.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/SVGNames.h"
+#include "core/animation/PropertyHandle.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/parser/CSSVariableParser.h"
 #include "core/css/resolver/CSSToStyleMap.h"
+#include "core/dom/Document.h"
 #include "core/frame/Deprecation.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/animation/SVGSMILElement.h"
+#include "core/svg_names.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -27,6 +29,28 @@ static bool IsSVGPrefixed(const String& property) {
 static String RemoveSVGPrefix(const String& property) {
   DCHECK(IsSVGPrefixed(property));
   return property.Substring(kSVGPrefixLength);
+}
+
+static String CSSPropertyToKeyframeAttribute(CSSPropertyID property) {
+  DCHECK_NE(property, CSSPropertyInvalid);
+  DCHECK_NE(property, CSSPropertyVariable);
+
+  switch (property) {
+    case CSSPropertyFloat:
+      return "cssFloat";
+    case CSSPropertyOffset:
+      return "cssOffset";
+    default:
+      return getJSPropertyName(property);
+  }
+}
+
+static String PresentationAttributeToKeyframeAttribute(
+    CSSPropertyID presentation_attribute) {
+  StringBuilder builder;
+  builder.Append(kSVGPrefix, kSVGPrefixLength);
+  builder.Append(getPropertyName(presentation_attribute));
+  return builder.ToString();
 }
 
 CSSPropertyID AnimationInputHelpers::KeyframeAttributeToCSSProperty(
@@ -211,7 +235,7 @@ const QualifiedName* AnimationInputHelpers::KeyframeAttributeToSVGAttribute(
   return iter->value;
 }
 
-RefPtr<TimingFunction> AnimationInputHelpers::ParseTimingFunction(
+scoped_refptr<TimingFunction> AnimationInputHelpers::ParseTimingFunction(
     const String& string,
     Document* document,
     ExceptionState& exception_state) {
@@ -220,31 +244,16 @@ RefPtr<TimingFunction> AnimationInputHelpers::ParseTimingFunction(
     return nullptr;
   }
 
+  // Fallback to an insecure parsing mode if we weren't provided with a
+  // document.
+  SecureContextMode secure_context_mode =
+      document ? document->GetSecureContextMode()
+               : SecureContextMode::kInsecureContext;
   const CSSValue* value =
-      CSSParser::ParseSingleValue(CSSPropertyTransitionTimingFunction, string);
+      CSSParser::ParseSingleValue(CSSPropertyTransitionTimingFunction, string,
+                                  StrictCSSParserContext(secure_context_mode));
   if (!value || !value->IsValueList()) {
     DCHECK(!value || value->IsCSSWideKeyword());
-    if (document) {
-      if (string.StartsWith("function")) {
-        // Due to a bug in old versions of the web-animations-next
-        // polyfill, in some circumstances the string passed in here
-        // may be a Javascript function instead of the allowed values
-        // from the spec
-        // (http://w3c.github.io/web-animations/#dom-animationeffecttimingreadonly-easing)
-        // This bug was fixed in
-        // https://github.com/web-animations/web-animations-next/pull/423
-        // and we want to track how often it is still being hit. The
-        // linear case is special because 'linear' is the default value
-        // for easing. See http://crbug.com/601672
-        if (string == "function (a){return a}") {
-          UseCounter::Count(*document,
-                            WebFeature::kWebAnimationsEasingAsFunctionLinear);
-        } else {
-          UseCounter::Count(*document,
-                            WebFeature::kWebAnimationsEasingAsFunctionOther);
-        }
-      }
-    }
     exception_state.ThrowTypeError("'" + string +
                                    "' is not a valid value for easing");
     return nullptr;
@@ -256,6 +265,24 @@ RefPtr<TimingFunction> AnimationInputHelpers::ParseTimingFunction(
   }
   return CSSToStyleMap::MapAnimationTimingFunction(value_list->Item(0), true,
                                                    document);
+}
+
+String AnimationInputHelpers::PropertyHandleToKeyframeAttribute(
+    PropertyHandle property) {
+  if (property.IsCSSProperty()) {
+    return property.IsCSSCustomProperty()
+               ? property.CustomPropertyName()
+               : CSSPropertyToKeyframeAttribute(
+                     property.GetCSSProperty().PropertyID());
+  }
+
+  if (property.IsPresentationAttribute()) {
+    return PresentationAttributeToKeyframeAttribute(
+        property.PresentationAttribute().PropertyID());
+  }
+
+  DCHECK(property.IsSVGAttribute());
+  return property.SvgAttribute().LocalName();
 }
 
 }  // namespace blink

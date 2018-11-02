@@ -8,9 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
-
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -101,8 +100,9 @@ class MEDIA_EXPORT VideoRendererAlgorithm {
   // rendered yet.  If it has been rendered, the new frame will be dropped.
   //
   // EnqueueFrame() will compute the current start time and an estimated end
-  // time of the frame based on previous frames so that EffectiveFramesQueued()
-  // is relatively accurate immediately after this call.
+  // time of the frame based on previous frames or the value of
+  // VideoFrameMetadata::FRAME_DURATION if no previous frames, so that
+  // EffectiveFramesQueued() is relatively accurate immediately after this call.
   void EnqueueFrame(const scoped_refptr<VideoFrame>& frame);
 
   // Removes all frames from the |frame_queue_| and clears predictors.  The
@@ -278,7 +278,7 @@ class MEDIA_EXPORT VideoRendererAlgorithm {
   int out_of_order_frame_logs_ = 0;
 
   // Queue of incoming frames waiting for rendering.
-  using VideoFrameQueue = std::deque<ReadyFrame>;
+  using VideoFrameQueue = base::circular_deque<ReadyFrame>;
   VideoFrameQueue frame_queue_;
 
   // Handles cadence detection and frame cadence assignments.

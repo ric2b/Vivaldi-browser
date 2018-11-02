@@ -6,11 +6,11 @@
 
 #include <stdint.h>
 #include <limits>
-#include <queue>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -238,8 +238,8 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
     result->set_duration(base::TimeDelta::FromMicroseconds(
         bus->frames() * base::Time::kMicrosecondsPerSecond /
         config_.samples_per_second));
-    return make_scoped_refptr(
-        new media::DecoderBufferAdapter(config_.id, result));
+    return base::MakeRefCounted<media::DecoderBufferAdapter>(config_.id,
+                                                             result);
   }
 
   ::media::MediaLog media_log_;
@@ -248,7 +248,7 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
   OutputFormat output_format_;
   media::AudioConfig config_;
   std::unique_ptr<::media::AudioDecoder> decoder_;
-  std::queue<DecodeBufferCallbackPair> decode_queue_;
+  base::queue<DecodeBufferCallbackPair> decode_queue_;
   bool initialized_;
   std::unique_ptr<::media::ChannelMixer> mixer_;
   bool decode_pending_;

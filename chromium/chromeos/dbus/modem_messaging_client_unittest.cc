@@ -4,9 +4,13 @@
 
 #include "chromeos/dbus/modem_messaging_client.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
@@ -33,18 +37,6 @@ class MockSmsReceivedHandler {
   MOCK_METHOD2(Run, void(const dbus::ObjectPath &sms, bool complete));
 };
 
-// A mock DeleteCallback.
-class MockDeleteCallback {
- public:
-  MOCK_METHOD0(Run, void());
-};
-
-// A mock ListCallback.
-class MockListCallback {
- public:
-  MOCK_METHOD1(Run, void(const std::vector<dbus::ObjectPath>& result));
-};
-
 // D-Bus service name used by test.
 const char kServiceName[] = "service.name";
 // D-Bus object path used by test.
@@ -54,8 +46,7 @@ const char kObjectPath[] = "/object/path";
 
 class ModemMessagingClientTest : public testing::Test {
  public:
-  ModemMessagingClientTest() : response_(NULL),
-                               expected_result_(NULL) {}
+  ModemMessagingClientTest() : response_(NULL) {}
 
   void SetUp() override {
     // Create a mock bus.
@@ -70,13 +61,12 @@ class ModemMessagingClientTest : public testing::Test {
 
     // Set an expectation so mock_proxy's ConnectToSignal() will use
     // OnConnectToSignal() to run the callback.
-    EXPECT_CALL(*mock_proxy_.get(),
-                ConnectToSignal(modemmanager::kModemManager1MessagingInterface,
-                                modemmanager::kSMSAddedSignal,
-                                _,
-                                _))
+    EXPECT_CALL(
+        *mock_proxy_.get(),
+        DoConnectToSignal(modemmanager::kModemManager1MessagingInterface,
+                          modemmanager::kSMSAddedSignal, _, _))
         .WillRepeatedly(
-             Invoke(this, &ModemMessagingClientTest::OnConnectToSignal));
+            Invoke(this, &ModemMessagingClientTest::OnConnectToSignal));
 
     // Set an expectation so mock_bus's GetObjectProxy() for the given
     // service name and the object path will return mock_proxy_.
@@ -125,11 +115,6 @@ class ModemMessagingClientTest : public testing::Test {
         FROM_HERE, base::BindOnce(std::move(*callback), response_));
   }
 
-  // Checks the results of List.
-  void CheckResult(const std::vector<dbus::ObjectPath>& result) {
-    EXPECT_EQ(result, *expected_result_);
-  }
-
  protected:
   // The client to be tested.
   std::unique_ptr<ModemMessagingClient> client_;
@@ -145,8 +130,6 @@ class ModemMessagingClientTest : public testing::Test {
   dbus::ObjectPath expected_sms_path_;
   // Response returned by mock methods.
   dbus::Response* response_;
-  // Expected result of List method.
-  std::vector<dbus::ObjectPath>* expected_result_;
 
  private:
   // Used to implement the mock proxy.
@@ -154,12 +137,12 @@ class ModemMessagingClientTest : public testing::Test {
       const std::string& interface_name,
       const std::string& signal_name,
       const dbus::ObjectProxy::SignalCallback& signal_callback,
-      const dbus::ObjectProxy::OnConnectedCallback& on_connected_callback) {
+      dbus::ObjectProxy::OnConnectedCallback* on_connected_callback) {
     sms_received_callback_ = signal_callback;
     const bool success = true;
     message_loop_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(on_connected_callback, interface_name,
-                              signal_name, success));
+        FROM_HERE, base::BindOnce(std::move(*on_connected_callback),
+                                  interface_name, signal_name, success));
   }
 };
 
@@ -197,48 +180,52 @@ TEST_F(ModemMessagingClientTest, Delete) {
   expected_sms_path_ = kSmsPath;
   EXPECT_CALL(*mock_proxy_.get(), DoCallMethod(_, _, _))
       .WillOnce(Invoke(this, &ModemMessagingClientTest::OnDelete));
-  MockDeleteCallback callback;
-  EXPECT_CALL(callback, Run()).Times(1);
+
   // Create response.
   std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
   response_ = response.get();
   // Call Delete.
+  bool called = false;
   client_->Delete(kServiceName, dbus::ObjectPath(kObjectPath), kSmsPath,
-                  base::Bind(&MockDeleteCallback::Run,
-                             base::Unretained(&callback)));
+                  base::Bind([](bool* called) { *called = true; }, &called));
 
   // Run the message loop.
   base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(called);
 }
 
 TEST_F(ModemMessagingClientTest, List) {
   // Set expectations.
   EXPECT_CALL(*mock_proxy_.get(), DoCallMethod(_, _, _))
       .WillOnce(Invoke(this, &ModemMessagingClientTest::OnList));
-  MockListCallback callback;
-  EXPECT_CALL(callback, Run(_))
-      .WillOnce(Invoke(this, &ModemMessagingClientTest::CheckResult));
+
+  const std::vector<dbus::ObjectPath> kExpectedResult{
+      dbus::ObjectPath("/SMS/1"), dbus::ObjectPath("/SMS/2")};
+
   // Create response.
   std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
-  dbus::ObjectPath path1("/SMS/1");
-  dbus::ObjectPath path2("/SMS/2");
-  std::vector<dbus::ObjectPath> expected_result;
-  expected_result.push_back(path1);
-  expected_result.push_back(path2);
-
   dbus::MessageWriter writer(response.get());
-  writer.AppendArrayOfObjectPaths(expected_result);
+  writer.AppendArrayOfObjectPaths(kExpectedResult);
   response_ = response.get();
 
-  // Save expected result.
-  expected_result_ = &expected_result;
   // Call List.
-  client_->List(kServiceName, dbus::ObjectPath(kObjectPath),
-                base::Bind(&MockListCallback::Run,
-                           base::Unretained(&callback)));
+  base::Optional<std::vector<dbus::ObjectPath>> result;
+  client_->List(
+      kServiceName, dbus::ObjectPath(kObjectPath),
+      base::Bind(
+          [](base::Optional<std::vector<dbus::ObjectPath>>* result_out,
+             const std::vector<dbus::ObjectPath>& result) {
+            result_out->emplace(result);
+          },
+          &result));
 
   // Run the message loop.
   base::RunLoop().RunUntilIdle();
+
+  // TODO(crbug.com/784732): We should be able to skip explicit has_value()
+  // check.
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(kExpectedResult, result.value());
 }
 
 }  // namespace chromeos

@@ -14,9 +14,12 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -30,6 +33,7 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
+#include "net/dns/mock_host_resolver.h"
 #include "services/device/public/cpp/generic_sensor/platform_sensor_configuration.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
 #include "services/device/public/interfaces/constants.mojom.h"
@@ -296,7 +300,7 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
     switch (type) {
       case device::mojom::SensorType::ACCELEROMETER:
         if (accelerometer_is_available_) {
-          sensor = base::MakeUnique<FakeSensor>(
+          sensor = std::make_unique<FakeSensor>(
               device::mojom::SensorType::ACCELEROMETER);
           reading.accel.x = 4;
           reading.accel.y = 5;
@@ -305,7 +309,7 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
         break;
       case device::mojom::SensorType::LINEAR_ACCELERATION:
         if (linear_acceleration_sensor_is_available_) {
-          sensor = base::MakeUnique<FakeSensor>(
+          sensor = std::make_unique<FakeSensor>(
               device::mojom::SensorType::LINEAR_ACCELERATION);
           reading.accel.x = 1;
           reading.accel.y = 2;
@@ -314,7 +318,7 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
         break;
       case device::mojom::SensorType::GYROSCOPE:
         if (gyroscope_is_available_) {
-          sensor = base::MakeUnique<FakeSensor>(
+          sensor = std::make_unique<FakeSensor>(
               device::mojom::SensorType::GYROSCOPE);
           reading.gyro.x = 7;
           reading.gyro.y = 8;
@@ -359,6 +363,16 @@ class DeviceSensorBrowserTest : public ContentBrowserTest {
             base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void SetUpOnMainThread() override {
+    https_embedded_test_server_.reset(
+        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+    // Serve both a.com and b.com (and any other domain).
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(https_embedded_test_server_->InitializeAndListen());
+    content::SetupCrossSiteRedirector(https_embedded_test_server_.get());
+    https_embedded_test_server_->ServeFilesFromSourceDirectory(
+        "content/test/data/device_sensors");
+    https_embedded_test_server_->StartAcceptingConnections();
+
     // Initialize the RunLoops now that the main thread has been created.
     orientation_started_runloop_.reset(new base::RunLoop());
     orientation_stopped_runloop_.reset(new base::RunLoop());
@@ -374,6 +388,12 @@ class DeviceSensorBrowserTest : public ContentBrowserTest {
         base::BindOnce(&DeviceSensorBrowserTest::SetUpOnIOThread,
                        base::Unretained(this)));
     io_loop_finished_event_.Wait();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // HTTPS server only serves a valid cert for localhost, so this is needed
+    // to load pages from other hosts without an error.
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
   void SetUpFetcher() {
@@ -425,6 +445,7 @@ class DeviceSensorBrowserTest : public ContentBrowserTest {
 
   FakeDataFetcher* fetcher_;
   std::unique_ptr<FakeSensorProvider> sensor_provider_;
+  std::unique_ptr<net::EmbeddedTestServer> https_embedded_test_server_;
 
   // NOTE: These can only be initialized once the main thread has been created
   // and so must be pointers instead of plain objects.
@@ -513,8 +534,9 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest, MotionNullTest) {
   EXPECT_EQ("pass", shell()->web_contents()->GetLastCommittedURL().ref());
 }
 
+// Disabled due to flakiness: https://crbug.com/783891
 IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
-                       MotionOnlySomeSensorsAreAvailableTest) {
+                       DISABLED_MotionOnlySomeSensorsAreAvailableTest) {
   // The test page registers an event handler for motion events and
   // expects to get an event with only the gyroscope and linear acceleration
   // sensor values, because no accelerometer values can be provided.
@@ -551,6 +573,52 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest, NullTestWithAlert) {
   orientation_stopped_runloop_->Run();
   same_tab_observer.Wait();
   EXPECT_EQ("pass", shell()->web_contents()->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
+                       DeviceMotionCrossOriginIframeTest) {
+  // Main frame is on a.com, iframe is on b.com.
+  GURL main_frame_url =
+      https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
+  GURL iframe_url =
+      https_embedded_test_server_->GetURL("b.com", "/device_motion_test.html");
+
+  // Wait for the main frame, subframe, and the #pass/#fail commits.
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
+                                  "cross_origin_iframe", iframe_url));
+
+  navigation_observer.Wait();
+
+  content::RenderFrameHost* iframe =
+      ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+  ASSERT_TRUE(iframe);
+  EXPECT_EQ("pass", iframe->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
+                       DeviceOrientationCrossOriginIframeTest) {
+  // Main frame is on a.com, iframe is on b.com.
+  GURL main_frame_url =
+      https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
+  GURL iframe_url = https_embedded_test_server_->GetURL(
+      "b.com", "/device_orientation_test.html");
+
+  // Wait for the main frame, subframe, and the #pass/#fail commits.
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
+                                  "cross_origin_iframe", iframe_url));
+
+  navigation_observer.Wait();
+
+  content::RenderFrameHost* iframe =
+      ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+  ASSERT_TRUE(iframe);
+  EXPECT_EQ("pass", iframe->GetLastCommittedURL().ref());
 }
 
 }  //  namespace

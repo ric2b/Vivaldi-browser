@@ -13,30 +13,32 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/autofill/core/browser/address_normalization_manager.h"
+#include "components/autofill/core/browser/address_normalizer_impl.h"
 #include "components/autofill/core/browser/credit_card.h"
-#include "components/payments/core/address_normalization_manager.h"
-#include "components/payments/core/address_normalizer_impl.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_options_provider.h"
 #include "components/payments/core/payment_request_base_delegate.h"
 #include "components/payments/core/payments_profile_comparator.h"
+#include "components/payments/core/web_payment_request.h"
 #import "ios/chrome/browser/payments/ios_payment_instrument_finder.h"
 #import "ios/chrome/browser/payments/payment_response_helper.h"
-#include "ios/web/public/payments/payment_request.h"
 #include "url/gurl.h"
 
 namespace autofill {
+class AddressNormalizer;
 class AutofillProfile;
 class PersonalDataManager;
 class RegionDataLoader;
 }  // namespace autofill
 
 namespace payments {
-class AddressNormalizer;
 class AutofillPaymentInstrument;
 class CurrencyFormatter;
 class PaymentDetails;
+class PaymentDetailsModifier;
+class PaymentItem;
 class PaymentShippingOption;
 }  // namespace payments
 
@@ -72,10 +74,10 @@ requestFullCreditCard:(const autofill::CreditCard&)creditCard
 
 namespace payments {
 
-// Has a copy of web::PaymentRequest as provided by the page invoking the
-// PaymentRequest API. Also caches credit cards and addresses provided by the
-// |personal_data_manager| and manages shared resources and user selections for
-// the current PaymentRequest flow. It must be initialized with non-null
+// Has a copy of payments::WebPaymentRequest as provided by the page invoking
+// the PaymentRequest API. Also caches credit cards and addresses provided by
+// the |personal_data_manager| and manages shared resources and user selections
+// for the current PaymentRequest flow. It must be initialized with non-null
 // instances of |browser_state|, |web_state|, and |personal_data_manager| that
 // outlive this class.
 class PaymentRequest : public PaymentOptionsProvider,
@@ -94,7 +96,7 @@ class PaymentRequest : public PaymentOptionsProvider,
   };
 
   // |personal_data_manager| should not be null and should outlive this object.
-  PaymentRequest(const web::PaymentRequest& web_payment_request,
+  PaymentRequest(const payments::WebPaymentRequest& web_payment_request,
                  ios::ChromeBrowserState* browser_state,
                  web::WebState* web_state,
                  autofill::PersonalDataManager* personal_data_manager,
@@ -118,7 +120,7 @@ class PaymentRequest : public PaymentOptionsProvider,
       const autofill::CreditCard& credit_card,
       base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
           result_delegate) override;
-  AddressNormalizer* GetAddressNormalizer() override;
+  autofill::AddressNormalizer* GetAddressNormalizer() override;
   autofill::RegionDataLoader* GetRegionDataLoader() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   std::string GetAuthenticatedEmail() const override;
@@ -132,8 +134,9 @@ class PaymentRequest : public PaymentOptionsProvider,
 
   void set_updating(bool updating) { updating_ = updating; }
 
-  // Returns the web::PaymentRequest that was used to build this PaymentRequest.
-  const web::PaymentRequest& web_payment_request() const {
+  // Returns the payments::WebPaymentRequest that was used to build this
+  // instance.
+  const payments::WebPaymentRequest& web_payment_request() const {
     return web_payment_request_;
   }
 
@@ -144,6 +147,15 @@ class PaymentRequest : public PaymentOptionsProvider,
 
   // Returns the JourneyLogger for this instance.
   JourneyLogger& journey_logger() { return journey_logger_; }
+
+  // Returns the total object of this payment request, taking into account the
+  // applicable modifier for |selected_instrument|, if any.
+  const PaymentItem& GetTotal(PaymentInstrument* selected_instrument) const;
+
+  // Returns the display items for this payment request, taking into account the
+  // applicable modifier for |selected_instrument|, if any.
+  std::vector<PaymentItem> GetDisplayItems(
+      PaymentInstrument* selected_instrument) const;
 
   // Updates the payment details of the |web_payment_request_|. It also updates
   // the cached references to the shipping options in |web_payment_request_| as
@@ -163,7 +175,8 @@ class PaymentRequest : public PaymentOptionsProvider,
   CurrencyFormatter* GetOrCreateCurrencyFormatter();
 
   // Returns the AddressNormalizationManager for this instance.
-  virtual AddressNormalizationManager* GetAddressNormalizationManager();
+  virtual autofill::AddressNormalizationManager*
+  GetAddressNormalizationManager();
 
   // Adds |profile| to the list of cached profiles, updates the list of
   // available shipping and contact profiles, and returns a reference to the
@@ -278,6 +291,16 @@ class PaymentRequest : public PaymentOptionsProvider,
   // Returns whether the current PaymentRequest can be used to make a payment.
   bool CanMakePayment() const;
 
+  // Returns YES if there's a selected payment method. If shipping is requested,
+  // there must be a selected shipping address and a shipping option, otherwise
+  // returns NO. If contact info is requeted, there must be a selected contact
+  // info, otherwise returns NO.
+  bool IsAbleToPay();
+
+  // Returns YES if either payer's name, phone number, or email address are
+  // requested and NO otherwise.
+  bool RequestContactInfo();
+
   // Invokes the appropriate payment app for the selected payment method.
   void InvokePaymentApp(id<PaymentResponseHelperConsumer> consumer);
 
@@ -288,6 +311,11 @@ class PaymentRequest : public PaymentOptionsProvider,
   void RecordUseStats();
 
  protected:
+  // Returns the first applicable modifier in the Payment Request for the
+  // |selected_instrument|.
+  const PaymentDetailsModifier* GetApplicableModifier(
+      PaymentInstrument* selected_instrument) const;
+
   // Fetches the autofill profiles for this user from the PersonalDataManager,
   // and stores copies of them, owned by this PaymentRequest, in profile_cache_.
   void PopulateProfileCache();
@@ -336,9 +364,9 @@ class PaymentRequest : public PaymentOptionsProvider,
   // Whether there is a pending updateWith() call to update the payment request.
   bool updating_;
 
-  // The web::PaymentRequest object as provided by the page invoking the Payment
-  // Request API, owned by this object.
-  web::PaymentRequest web_payment_request_;
+  // The payments::WebPaymentRequest object as provided by the page invoking the
+  // Payment Request API, owned by this object.
+  payments::WebPaymentRequest web_payment_request_;
 
   // Never null and outlives this object.
   ios::ChromeBrowserState* browser_state_;
@@ -354,10 +382,10 @@ class PaymentRequest : public PaymentOptionsProvider,
   __weak id<PaymentRequestUIDelegate> payment_request_ui_delegate_;
 
   // The address normalizer to use for the duration of the Payment Request.
-  AddressNormalizerImpl address_normalizer_;
+  autofill::AddressNormalizerImpl address_normalizer_;
 
   // Used to normalize the shipping address and the contact info.
-  AddressNormalizationManager address_normalization_manager_;
+  autofill::AddressNormalizationManager address_normalization_manager_;
 
   // The currency formatter instance for this PaymentRequest flow.
   std::unique_ptr<CurrencyFormatter> currency_formatter_;

@@ -41,7 +41,7 @@ ErrorEvent::ErrorEvent()
     : sanitized_message_(),
       location_(SourceLocation::Create(String(), 0, 0, nullptr)),
       error_(this),
-      world_(DOMWrapperWorld::Current(v8::Isolate::GetCurrent())) {}
+      world_(&DOMWrapperWorld::Current(v8::Isolate::GetCurrent())) {}
 
 ErrorEvent::ErrorEvent(ScriptState* script_state,
                        const AtomicString& type,
@@ -49,7 +49,7 @@ ErrorEvent::ErrorEvent(ScriptState* script_state,
     : Event(type, initializer),
       sanitized_message_(),
       error_(this),
-      world_(script_state->World()) {
+      world_(&script_state->World()) {
   if (initializer.hasMessage())
     sanitized_message_ = initializer.message();
   location_ = SourceLocation::Create(
@@ -97,11 +97,11 @@ ScriptValue ErrorEvent::error(ScriptState* script_state) const {
   return ScriptValue(script_state, error_.NewLocal(script_state->GetIsolate()));
 }
 
-DEFINE_TRACE(ErrorEvent) {
+void ErrorEvent::Trace(blink::Visitor* visitor) {
   Event::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ErrorEvent) {
+void ErrorEvent::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(error_);
   Event::TraceWrappers(visitor);
 }

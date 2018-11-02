@@ -16,12 +16,12 @@
 #include <stddef.h>
 
 #include <algorithm>
-#include <deque>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -31,8 +31,8 @@
 #include "chrome/browser/safe_browsing/protocol_parser.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing_db/safebrowsing.pb.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/safebrowsing.pb.h"
+#include "components/safe_browsing/db/util.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
@@ -332,7 +332,7 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate {
   base::OneShotTimer timeout_timer_;
 
   // All chunk requests that need to be made.
-  std::deque<ChunkUrl> chunk_request_urls_;
+  base::circular_deque<ChunkUrl> chunk_request_urls_;
 
   std::map<const net::URLFetcher*,
            std::pair<std::unique_ptr<net::URLFetcher>, FullHashDetails>>

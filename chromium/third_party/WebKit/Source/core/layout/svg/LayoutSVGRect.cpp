@@ -43,7 +43,7 @@ void LayoutSVGRect::UpdateShapeFromElement() {
   fill_bounding_box_ = FloatRect();
   stroke_bounding_box_ = FloatRect();
   use_path_fallback_ = false;
-  SVGRectElement* rect = toSVGRectElement(GetElement());
+  SVGRectElement* rect = ToSVGRectElement(GetElement());
   DCHECK(rect);
 
   SVGLengthContext length_context(rect);
@@ -61,14 +61,21 @@ void LayoutSVGRect::UpdateShapeFromElement() {
   if (!bounding_box_size.IsEmpty()) {
     // Fallback to LayoutSVGShape and path-based hit detection if the rect
     // has rounded corners or a non-scaling or non-simple stroke.
+    // However, only use LayoutSVGShape bounding-box calculations for the
+    // non-scaling stroke case, since the computation below should be accurate
+    // for the other cases.
+    if (HasNonScalingStroke()) {
+      LayoutSVGShape::UpdateShapeFromElement();
+      use_path_fallback_ = true;
+      return;
+    }
     if (length_context.ValueForLength(StyleRef().SvgStyle().Rx(), StyleRef(),
                                       SVGLengthMode::kWidth) > 0 ||
         length_context.ValueForLength(StyleRef().SvgStyle().Ry(), StyleRef(),
                                       SVGLengthMode::kHeight) > 0 ||
-        HasNonScalingStroke() || !DefinitelyHasSimpleStroke()) {
-      LayoutSVGShape::UpdateShapeFromElement();
+        !DefinitelyHasSimpleStroke()) {
+      CreatePath();
       use_path_fallback_ = true;
-      return;
     }
   }
 
@@ -82,8 +89,6 @@ void LayoutSVGRect::UpdateShapeFromElement() {
   stroke_bounding_box_ = fill_bounding_box_;
   if (Style()->SvgStyle().HasStroke())
     stroke_bounding_box_.Inflate(StrokeWidth() / 2);
-  if (GetElement())
-    GetElement()->SetNeedsResizeObserverUpdate();
 }
 
 bool LayoutSVGRect::ShapeDependentStrokeContains(const FloatPoint& point) {
@@ -92,7 +97,7 @@ bool LayoutSVGRect::ShapeDependentStrokeContains(const FloatPoint& point) {
   // cases.
   if (use_path_fallback_ || !DefinitelyHasSimpleStroke()) {
     if (!HasPath())
-      LayoutSVGShape::UpdateShapeFromElement();
+      CreatePath();
     return LayoutSVGShape::ShapeDependentStrokeContains(point);
   }
 

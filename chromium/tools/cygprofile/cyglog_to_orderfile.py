@@ -8,9 +8,9 @@
 Given a log file and the binary being profiled, creates an orderfile.
 """
 
+import argparse
 import logging
 import multiprocessing
-import optparse
 import os
 import re
 import string
@@ -102,7 +102,7 @@ def _FindSymbolInfosAtOffset(offset_to_symbol_infos, offset):
     raise SymbolNotFoundException(offset)
 
 
-def _GetObjectFileNames(obj_dir):
+def GetObjectFileNames(obj_dir):
   """Returns the list of object files in a directory."""
   obj_files = []
   for (dirpath, _, filenames) in os.walk(obj_dir):
@@ -155,7 +155,7 @@ def GetSymbolToSectionsMapFromObjectFiles(obj_dir):
   Returns:
     A map {symbol_name: [section_name1, section_name2...]}
   """
-  object_files = _GetObjectFileNames(obj_dir)
+  object_files = GetObjectFileNames(obj_dir)
   symbol_to_sections_map = {}
   symbol_warnings = cygprofile_utils.WarningCollector(300)
   symbol_infos = _AllSymbolInfos(object_files)
@@ -174,8 +174,11 @@ def GetSymbolToSectionsMapFromObjectFiles(obj_dir):
                               ' unexpectedly in more than one section: ' +
                               ', '.join(symbol_to_sections_map[symbol]))
     elif not section.startswith('.text.'):
-      symbol_warnings.Write('Symbol ' + symbol +
-                            ' in incorrect section ' + section)
+      # Assembly functions have section ".text". These are all grouped together
+      # near the end of the orderfile via an explicit ".text" entry.
+      if section != '.text':
+        symbol_warnings.Write('Symbol ' + symbol +
+                              ' in incorrect section ' + section)
     else:
       # In most cases we expect just one item in this list, and maybe 4 or so in
       # the worst case.
@@ -244,40 +247,64 @@ def _OutputOrderfile(offsets, offset_to_symbol_infos, symbol_to_sections_map,
   return success
 
 
+def ReadReachedOffsets(filename):
+  """Reads and returns a list of reached offsets."""
+  with open(filename, 'r') as f:
+    offsets = [int(x.rstrip('\n')) for x in f.xreadlines()]
+  return offsets
+
+
+def CreateArgumentParser():
+  parser = argparse.ArgumentParser(
+      description='Creates an orderfile from profiles.')
+  parser.add_argument('--target-arch', required=False,
+                      choices=['arm', 'arm64', 'x86', 'x86_64', 'x64', 'mips'],
+                      help='The target architecture for libchrome.so')
+  parser.add_argument('--merged-cyglog', type=str, required=False,
+                      help='Path to the merged cyglog')
+  parser.add_argument('--reached-offsets', type=str, required=False,
+                      help='Path to the reached offsets')
+  parser.add_argument('--native-library', type=str, required=True,
+                      help='Path to the unstripped instrumented library')
+  parser.add_argument('--output', type=str, required=True,
+                      help='Output filename')
+  return parser
+
+
 def main():
-  parser = optparse.OptionParser(usage=
-      'usage: %prog [options] <merged_cyglog> <library> <output_filename>')
-  parser.add_option('--target-arch', action='store', dest='arch',
-                    choices=['arm', 'arm64', 'x86', 'x86_64', 'x64', 'mips'],
-                    help='The target architecture for libchrome.so')
-  options, argv = parser.parse_args(sys.argv)
-  if not options.arch:
-    options.arch = cygprofile_utils.DetectArchitecture()
-  if len(argv) != 4:
-    parser.print_help()
-    return 1
-  (log_filename, lib_filename, output_filename) = argv[1:]
-  symbol_extractor.SetArchitecture(options.arch)
+  parser = CreateArgumentParser()
+  args = parser.parse_args()
 
-  obj_dir = cygprofile_utils.GetObjDir(lib_filename)
+  assert bool(args.merged_cyglog) ^ bool(args.reached_offsets)
 
-  log_file_lines = map(string.rstrip, open(log_filename).readlines())
-  offsets = _ParseLogLines(log_file_lines)
+  if not args.target_arch:
+    args.arch = cygprofile_utils.DetectArchitecture()
+  symbol_extractor.SetArchitecture(args.target_arch)
+
+  obj_dir = cygprofile_utils.GetObjDir(args.native_library)
+
+  offsets = []
+  if args.merged_cyglog:
+    log_file_lines = map(string.rstrip, open(args.merged_cyglog).readlines())
+    offsets = _ParseLogLines(log_file_lines)
+  else:
+    offsets = ReadReachedOffsets(args.reached_offsets)
+  assert offsets
   _WarnAboutDuplicates(offsets)
 
-  offset_to_symbol_infos = _GroupLibrarySymbolInfosByOffset(lib_filename)
+  offset_to_symbol_infos = _GroupLibrarySymbolInfosByOffset(args.native_library)
   symbol_to_sections_map = GetSymbolToSectionsMapFromObjectFiles(obj_dir)
 
   success = False
   temp_filename = None
   output_file = None
   try:
-    (fd, temp_filename) = tempfile.mkstemp(dir=os.path.dirname(output_filename))
+    (fd, temp_filename) = tempfile.mkstemp(dir=os.path.dirname(args.output))
     output_file = os.fdopen(fd, 'w')
     ok = _OutputOrderfile(
         offsets, offset_to_symbol_infos, symbol_to_sections_map, output_file)
     output_file.close()
-    os.rename(temp_filename, output_filename)
+    os.rename(temp_filename, args.output)
     temp_filename = None
     success = ok
   finally:

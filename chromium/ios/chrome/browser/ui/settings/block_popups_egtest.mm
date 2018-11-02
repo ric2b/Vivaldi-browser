@@ -11,9 +11,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
-#import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
-#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
+#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
@@ -174,7 +172,7 @@ class ScopedBlockPopupsException {
   [ChromeEarlGrey waitForMainTabCount:1];
 
   // Request popup and make sure the popup opened in a new tab.
-  __unsafe_unretained NSError* error = nil;
+  NSError* error = nil;
   chrome_test_util::ExecuteJavaScript(kOpenPopupScript, &error);
   GREYAssert(!error, @"Error during script execution: %@", error);
   [ChromeEarlGrey waitForMainTabCount:2];
@@ -206,7 +204,7 @@ class ScopedBlockPopupsException {
   // Request popup, then make sure it was blocked and an infobar was displayed.
   // The window.open() call is run via async JS, so the infobar may not open
   // immediately.
-  __unsafe_unretained NSError* error = nil;
+  NSError* error = nil;
   chrome_test_util::ExecuteJavaScript(kOpenPopupScript, &error);
   GREYAssert(!error, @"Error during script execution: %@", error);
 

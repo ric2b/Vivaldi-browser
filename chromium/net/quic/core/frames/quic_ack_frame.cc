@@ -15,6 +15,10 @@ using std::min;
 
 namespace net {
 
+namespace {
+const QuicPacketNumber kMaxPrintRange = 128;
+}  // namespace
+
 PacketNumberQueue::const_iterator::const_iterator(const const_iterator& other) =
     default;
 PacketNumberQueue::const_iterator::const_iterator(const_iterator&& other) =
@@ -32,7 +36,7 @@ PacketNumberQueue::const_reverse_iterator::const_reverse_iterator(
 PacketNumberQueue::const_reverse_iterator::~const_reverse_iterator() {}
 
 PacketNumberQueue::const_iterator::const_iterator(
-    typename std::deque<Interval<QuicPacketNumber>>::const_iterator it)
+    typename QuicDeque<Interval<QuicPacketNumber>>::const_iterator it)
     : deque_it_(it), use_deque_it_(true) {}
 
 PacketNumberQueue::const_reverse_iterator::const_reverse_iterator(
@@ -41,7 +45,7 @@ PacketNumberQueue::const_reverse_iterator::const_reverse_iterator(
     : vector_it_(it), use_deque_it_(false) {}
 
 PacketNumberQueue::const_reverse_iterator::const_reverse_iterator(
-    const typename std::deque<
+    const typename QuicDeque<
         Interval<QuicPacketNumber>>::const_reverse_iterator& it)
     : deque_it_(it), use_deque_it_(true) {}
 
@@ -53,14 +57,15 @@ bool IsAwaitingPacket(const QuicAckFrame& ack_frame,
 }
 
 QuicAckFrame::QuicAckFrame()
-    : largest_observed(0), ack_delay_time(QuicTime::Delta::Infinite()) {}
+    : deprecated_largest_observed(0),
+      ack_delay_time(QuicTime::Delta::Infinite()) {}
 
 QuicAckFrame::QuicAckFrame(const QuicAckFrame& other) = default;
 
 QuicAckFrame::~QuicAckFrame() {}
 
 std::ostream& operator<<(std::ostream& os, const QuicAckFrame& ack_frame) {
-  os << "{ largest_observed: " << ack_frame.largest_observed
+  os << "{ largest_acked: " << LargestAcked(ack_frame)
      << ", ack_delay_time: " << ack_frame.ack_delay_time.ToMicroseconds()
      << ", packets: [ " << ack_frame.packets << " ]"
      << ", received_packets: [ ";
@@ -71,10 +76,26 @@ std::ostream& operator<<(std::ostream& os, const QuicAckFrame& ack_frame) {
   os << " ] }\n";
   return os;
 }
+
+QuicPacketNumber LargestAcked(const QuicAckFrame& frame) {
+  if (!FLAGS_quic_reloadable_flag_quic_deprecate_largest_observed) {
+    return frame.deprecated_largest_observed;
+  }
+
+  if (!frame.packets.Empty() &&
+      frame.packets.Max() != frame.deprecated_largest_observed) {
+    QUIC_BUG << "Peer last received packet: " << frame.packets.Max()
+             << " which is not equal to largest observed: "
+             << frame.deprecated_largest_observed;
+  }
+
+  return frame.packets.Empty() ? 0 : frame.packets.Max();
+}
+
 PacketNumberQueue::PacketNumberQueue()
-    : use_deque_(FLAGS_quic_reloadable_flag_quic_frames_deque2) {
+    : use_deque_(FLAGS_quic_reloadable_flag_quic_frames_deque3) {
   if (use_deque_) {
-    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_frames_deque2);
+    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_frames_deque3);
   }
 }
 
@@ -198,25 +219,9 @@ void PacketNumberQueue::AddRange(QuicPacketNumber lower,
           Interval<QuicPacketNumber>(lower, higher));
 
     } else {
-      // Iterating through the interval and adding packets one by one
-      QUIC_BUG << "In the slowpath of AddRange. Adding [" << lower << ", "
-               << higher << "), in a deque of size "
-               << packet_number_deque_.size() << ", whose largest element is "
-               << back.max() << " and smallest " << front.min() << ".\n";
-      // Check if the first and/or the last interval of the deque can be
-      // extended, which would reduce the compexity of the following for loop.
-      if (higher >= back.max()) {
-        packet_number_deque_.back().SetMax(higher);
-        higher = max(lower, back.min());
-      }
-      if (lower < front.min()) {
-        packet_number_deque_.front().SetMin(lower);
-        lower = min(higher, front.max());
-      }
-
-      for (size_t i = lower; i < higher; i++) {
-        PacketNumberQueue::Add(i);
-      }
+      // Ranges must be above or below all existing ranges.
+      QUIC_BUG << "AddRange only supports adding packets above or below the "
+               << "current min:" << Min() << " and max:" << Max();
     }
   } else {
     packet_number_intervals_.Add(lower, higher);
@@ -375,11 +380,28 @@ QuicPacketNumber PacketNumberQueue::LastIntervalLength() const {
   }
 }
 
+// Largest min...max range for packet numbers where we print the numbers
+// explicitly. If bigger than this, we print as a range  [a,d] rather
+// than [a b c d]
+
 std::ostream& operator<<(std::ostream& os, const PacketNumberQueue& q) {
   for (const Interval<QuicPacketNumber>& interval : q) {
-    for (QuicPacketNumber packet_number = interval.min();
-         packet_number < interval.max(); ++packet_number) {
-      os << packet_number << " ";
+    // Print as a range if there is a pathological condition.
+    if ((interval.min() >= interval.max()) ||
+        (interval.max() - interval.min() > kMaxPrintRange)) {
+      // If min>max, it's really a bug, so QUIC_BUG it to
+      // catch it in development.
+      QUIC_BUG_IF(interval.min() >= interval.max())
+          << "Ack Range minimum (" << interval.min() << "Not less than max ("
+          << interval.max() << ")";
+      // print range as min...max rather than full list.
+      // in the event of a bug, the list could be very big.
+      os << interval.min() << "..." << (interval.max() - 1) << " ";
+    } else {
+      for (QuicPacketNumber packet_number = interval.min();
+           packet_number < interval.max(); ++packet_number) {
+        os << packet_number << " ";
+      }
     }
   }
   return os;

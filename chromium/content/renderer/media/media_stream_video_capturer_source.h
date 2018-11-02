@@ -13,7 +13,6 @@
 #include "base/threading/thread_checker.h"
 #include "content/common/media/media_stream.mojom.h"
 #include "content/common/media/video_capture.h"
-#include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/media/media_stream_video_source.h"
 
 namespace media {
@@ -27,17 +26,15 @@ namespace content {
 // Render thread. Objects can be constructed either by indicating a |device| to
 // look for, or by plugging in a |source| constructed elsewhere.
 class CONTENT_EXPORT MediaStreamVideoCapturerSource
-    : public MediaStreamVideoSource,
-      public RenderFrameObserver {
+    : public MediaStreamVideoSource {
  public:
   MediaStreamVideoCapturerSource(
       const SourceStoppedCallback& stop_callback,
       std::unique_ptr<media::VideoCapturerSource> source);
   MediaStreamVideoCapturerSource(
       const SourceStoppedCallback& stop_callback,
-      const StreamDeviceInfo& device_info,
-      const media::VideoCaptureParams& capture_params,
-      RenderFrame* render_frame);
+      const MediaStreamDevice& device,
+      const media::VideoCaptureParams& capture_params);
   ~MediaStreamVideoCapturerSource() override;
 
  private:
@@ -55,13 +52,15 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   void StartSourceImpl(
       const VideoCaptureDeliverFrameCB& frame_callback) override;
   void StopSourceImpl() override;
+  void StopSourceForRestartImpl() override;
+  void RestartSourceImpl(const media::VideoCaptureFormat& new_format) override;
   base::Optional<media::VideoCaptureFormat> GetCurrentFormat() const override;
-
-  // RenderFrameObserver implementation.
-  void OnDestruct() final {}
+  base::Optional<media::VideoCaptureParams> GetCurrentCaptureParams()
+      const override;
 
   // Method to bind as RunningCallback in VideoCapturerSource::StartCapture().
-  void OnRunStateChanged(bool is_running);
+  void OnRunStateChanged(const media::VideoCaptureParams& new_capture_params,
+                         bool is_running);
 
   const mojom::MediaStreamDispatcherHostPtr& GetMediaStreamDispatcherHost();
 
@@ -70,12 +69,11 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   // The source that provides video frames.
   const std::unique_ptr<media::VideoCapturerSource> source_;
 
-  // Indicates whether the capture is in starting. It is set to true by
-  // StartSourceImpl() when starting the capture, and is reset after starting
-  // is completed.
-  bool is_capture_starting_ = false;
+  enum State { STARTING, STARTED, STOPPING_FOR_RESTART, RESTARTING, STOPPED };
+  State state_ = STOPPED;
 
   media::VideoCaptureParams capture_params_;
+  VideoCaptureDeliverFrameCB frame_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamVideoCapturerSource);
 };

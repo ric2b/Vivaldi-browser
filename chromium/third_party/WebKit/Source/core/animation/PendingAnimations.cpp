@@ -50,7 +50,7 @@ void PendingAnimations::Add(Animation* animation) {
 
   bool visible = document->GetPage() && document->GetPage()->IsPageVisible();
   if (!visible && !timer_.IsActive()) {
-    timer_.StartOneShot(0, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   }
 }
 
@@ -166,7 +166,7 @@ void PendingAnimations::NotifyCompositorAnimationStarted(
   }
 }
 
-DEFINE_TRACE(PendingAnimations) {
+void PendingAnimations::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_);
   visitor->Trace(waiting_for_compositor_animation_start_);
 }

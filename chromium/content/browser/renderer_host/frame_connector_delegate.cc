@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 
+#include "content/common/content_switches_internal.h"
+
 namespace content {
 
 RenderWidgetHostViewBase*
@@ -16,29 +18,25 @@ FrameConnectorDelegate::GetRootRenderWidgetHostView() {
   return nullptr;
 }
 
-gfx::Rect FrameConnectorDelegate::ChildFrameRect() {
-  return gfx::Rect();
-}
-
-gfx::Point FrameConnectorDelegate::TransformPointToRootCoordSpace(
-    const gfx::Point& point,
+gfx::PointF FrameConnectorDelegate::TransformPointToRootCoordSpace(
+    const gfx::PointF& point,
     const viz::SurfaceId& surface_id) {
-  return gfx::Point();
+  return gfx::PointF();
 }
 
 bool FrameConnectorDelegate::TransformPointToLocalCoordSpace(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     const viz::SurfaceId& original_surface,
     const viz::SurfaceId& local_surface_id,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   return false;
 }
 
 bool FrameConnectorDelegate::TransformPointToCoordSpaceForView(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
     const viz::SurfaceId& local_surface_id,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   return false;
 }
 
@@ -57,5 +55,29 @@ bool FrameConnectorDelegate::IsInert() const {
 bool FrameConnectorDelegate::IsHidden() const {
   return false;
 }
+
+bool FrameConnectorDelegate::IsThrottled() const {
+  return false;
+}
+
+bool FrameConnectorDelegate::IsSubtreeThrottled() const {
+  return false;
+}
+
+void FrameConnectorDelegate::SetRect(const gfx::Rect& frame_rect) {
+  if (use_zoom_for_device_scale_factor_) {
+    frame_rect_in_pixels_ = frame_rect;
+    frame_rect_in_dip_ = gfx::ScaleToEnclosingRect(
+        frame_rect, 1.f / screen_info_.device_scale_factor);
+  } else {
+    frame_rect_in_dip_ = frame_rect;
+    frame_rect_in_pixels_ =
+        gfx::ScaleToEnclosingRect(frame_rect, screen_info_.device_scale_factor);
+  }
+}
+
+FrameConnectorDelegate::FrameConnectorDelegate(
+    bool use_zoom_for_device_scale_factor)
+    : use_zoom_for_device_scale_factor_(use_zoom_for_device_scale_factor) {}
 
 }  // namespace content

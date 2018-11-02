@@ -4,11 +4,12 @@
 
 #include "ash/system/tray/system_tray.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/accessibility_delegate.h"
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/ash_view_ids.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -50,8 +51,8 @@ const char kVisibleRowsHistogramName[] =
 
 class ModalWidgetDelegate : public views::WidgetDelegateView {
  public:
-  ModalWidgetDelegate() {}
-  ~ModalWidgetDelegate() override {}
+  ModalWidgetDelegate() = default;
+  ~ModalWidgetDelegate() override = default;
 
   ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_SYSTEM; }
 
@@ -64,7 +65,7 @@ class KeyEventConsumerView : public views::View {
   KeyEventConsumerView() : number_of_consumed_key_events_(0) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
   }
-  ~KeyEventConsumerView() override {}
+  ~KeyEventConsumerView() override = default;
 
   // Overriden from views::View
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override {
@@ -88,8 +89,8 @@ class KeyEventConsumerView : public views::View {
 // TraybackgroundView / TrayDragController. crbug.com/745073
 class SystemTrayTest : public AshTestBase {
  public:
-  SystemTrayTest() {}
-  ~SystemTrayTest() override {}
+  SystemTrayTest() = default;
+  ~SystemTrayTest() override = default;
 
   // Swiping on the system tray and ends with finger released. Note, |start| is
   // based on the system tray or system tray bubble's coordinate space.
@@ -456,9 +457,8 @@ TEST_F(SystemTrayTest, NotRecordedtemsAreNotRecorded) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
-  TestSystemTrayItem* test_item =
-      new TestSystemTrayItem(SystemTrayItem::UMA_NOT_RECORDED);
-  tray->AddTrayItem(base::WrapUnique(test_item));
+  tray->AddTrayItem(
+      std::make_unique<TestSystemTrayItem>(SystemTrayItem::UMA_NOT_RECORDED));
 
   base::HistogramTester histogram_tester;
 
@@ -478,9 +478,9 @@ TEST_F(SystemTrayTest, NullDefaultViewIsNotRecorded) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
-  TestSystemTrayItem* test_item = new TestSystemTrayItem();
+  auto test_item = std::make_unique<TestSystemTrayItem>();
   test_item->set_has_views(false);
-  tray->AddTrayItem(base::WrapUnique(test_item));
+  tray->AddTrayItem(std::move(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -505,7 +505,7 @@ TEST_F(SystemTrayTest, VisibleDetailedViewsIsNotRecorded) {
 
   base::HistogramTester histogram_tester;
 
-  tray->ShowDetailedView(test_item, 0, false, BUBBLE_CREATE_NEW);
+  tray->ShowDetailedView(test_item, 0, BUBBLE_CREATE_NEW);
   RunAllPendingInMessageLoop();
 
   histogram_tester.ExpectTotalCount(kVisibleRowsHistogramName, 0);
@@ -531,7 +531,7 @@ TEST_F(SystemTrayTest, VisibleDefaultViewIsNotRecordedOnReshow) {
   histogram_tester.ExpectBucketCount(kVisibleRowsHistogramName,
                                      SystemTrayItem::UMA_TEST, 1);
 
-  tray->ShowDetailedView(test_item, 0, false, BUBBLE_USE_EXISTING);
+  tray->ShowDetailedView(test_item, 0, BUBBLE_USE_EXISTING);
   RunAllPendingInMessageLoop();
   histogram_tester.ExpectBucketCount(kVisibleRowsHistogramName,
                                      SystemTrayItem::UMA_TEST, 1);
@@ -693,7 +693,7 @@ TEST_F(SystemTrayTest, SystemTrayTestItems) {
   ASSERT_TRUE(detailed_item->default_view() != NULL);
 
   // Show the detailed view, ensure it's created and the default view destroyed.
-  tray->ShowDetailedView(detailed_item, 0, false, BUBBLE_CREATE_NEW);
+  tray->ShowDetailedView(detailed_item, 0, BUBBLE_CREATE_NEW);
   RunAllPendingInMessageLoop();
   ASSERT_TRUE(test_item->default_view() == NULL);
   ASSERT_TRUE(detailed_item->detailed_view() != NULL);
@@ -714,7 +714,7 @@ TEST_F(SystemTrayTest, SystemTrayNoViewItems) {
   no_view_item->set_has_views(false);
   tray->AddTrayItem(base::WrapUnique(no_view_item));
   tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
-  tray->ShowDetailedView(no_view_item, 0, false, BUBBLE_USE_EXISTING);
+  tray->ShowDetailedView(no_view_item, 0, BUBBLE_USE_EXISTING);
   RunAllPendingInMessageLoop();
 }
 
@@ -765,7 +765,7 @@ TEST_F(SystemTrayTest, DISABLED_BubbleCreationTypesTest) {
   views::Widget* widget = test_item->default_view()->GetWidget();
   gfx::Rect bubble_bounds = widget->GetWindowBoundsInScreen();
 
-  tray->ShowDetailedView(test_item, 0, true, BUBBLE_USE_EXISTING);
+  tray->ShowDetailedView(test_item, 0, BUBBLE_USE_EXISTING);
   RunAllPendingInMessageLoop();
 
   EXPECT_FALSE(test_item->default_view());
@@ -824,8 +824,7 @@ TEST_F(SystemTrayTest, PersistentBubble) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
-  TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(base::WrapUnique(test_item));
+  tray->AddTrayItem(std::make_unique<TestSystemTrayItem>());
 
   std::unique_ptr<views::Widget> widget(CreateTestWidget(
       nullptr, kShellWindowId_DefaultContainer, gfx::Rect(0, 0, 100, 100)));

@@ -8,6 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/common/frame_messages.h"
 #include "content/common/render_message_filter.mojom.h"
@@ -61,9 +62,45 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
     NOTREACHED();
   }
 
+  void DidGenerateCacheableMetadata(const GURL& url,
+                                    base::Time expected_response_time,
+                                    const std::vector<uint8_t>& data) override {
+    NOTREACHED();
+  }
+
+  void DidGenerateCacheableMetadataInCacheStorage(
+      const GURL& url,
+      base::Time expected_response_time,
+      const std::vector<uint8_t>& data,
+      const url::Origin& cache_storage_origin,
+      const std::string& cache_storage_cache_name) override {
+    NOTREACHED();
+  }
+
+  void HasGpuProcess(HasGpuProcessCallback callback) override {
+    std::move(callback).Run(false);
+  }
+
+  void SetThreadPriority(int32_t platform_thread_id,
+                         base::ThreadPriority thread_priority) override {}
+
+  void LoadFont(const base::string16& font_name,
+                const float font_size_point,
+                LoadFontCallback callback) override {
+    NOTREACHED();
+  }
+
  private:
   MockRenderThread* const thread_;
 };
+
+// Returns an InterfaceProvider that is safe to call into, but will not actually
+// service any interface requests.
+service_manager::mojom::InterfaceProviderPtrInfo CreateStubInterfaceProvider() {
+  ::service_manager::mojom::InterfaceProviderPtrInfo info;
+  mojo::MakeRequest(&info);
+  return info;
+}
 
 }  // namespace
 
@@ -116,7 +153,7 @@ bool MockRenderThread::Send(IPC::Message* msg) {
 }
 
 IPC::SyncChannel* MockRenderThread::GetChannel() {
-  return NULL;
+  return nullptr;
 }
 
 std::string MockRenderThread::GetLocale() {
@@ -124,7 +161,7 @@ std::string MockRenderThread::GetLocale() {
 }
 
 IPC::SyncMessageFilter* MockRenderThread::GetSyncMessageFilter() {
-  return NULL;
+  return nullptr;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -145,7 +182,7 @@ void MockRenderThread::AddFilter(IPC::MessageFilter* filter) {
   filter->OnFilterAdded(&sink());
   // Add this filter to a vector so the MockRenderThread::RemoveFilter function
   // can check if this filter is added.
-  filters_.push_back(make_scoped_refptr(filter));
+  filters_.push_back(base::WrapRefCounted(filter));
 }
 
 void MockRenderThread::RemoveFilter(IPC::MessageFilter* filter) {
@@ -218,21 +255,11 @@ bool MockRenderThread::ResolveProxy(const GURL& url, std::string* proxy_list) {
 }
 
 base::WaitableEvent* MockRenderThread::GetShutdownEvent() {
-  return NULL;
+  return nullptr;
 }
 
 int32_t MockRenderThread::GetClientId() {
   return 1;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-MockRenderThread::GetTimerTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-MockRenderThread::GetLoadingTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
 }
 
 void MockRenderThread::SetRendererProcessType(
@@ -277,8 +304,13 @@ void MockRenderThread::OnCreateWidget(int opener_id,
 // The Frame expects to be returned a valid route_id different from its own.
 void MockRenderThread::OnCreateChildFrame(
     const FrameHostMsg_CreateChildFrame_Params& params,
-    int* new_render_frame_id) {
+    int* new_render_frame_id,
+    mojo::MessagePipeHandle* new_interface_provider,
+    base::UnguessableToken* devtools_frame_token) {
   *new_render_frame_id = new_frame_routing_id_++;
+  *new_interface_provider =
+      CreateStubInterfaceProvider().PassHandle().release();
+  *devtools_frame_token = base::UnguessableToken::Create();
 }
 
 bool MockRenderThread::OnControlMessageReceived(const IPC::Message& msg) {
@@ -317,6 +349,7 @@ void MockRenderThread::OnCreateWindow(
     mojom::CreateNewWindowReply* reply) {
   reply->route_id = new_window_routing_id_;
   reply->main_frame_route_id = new_window_main_frame_routing_id_;
+  reply->main_frame_interface_provider = CreateStubInterfaceProvider();
   reply->main_frame_widget_route_id = new_window_main_frame_widget_routing_id_;
   reply->cloned_session_storage_namespace_id = 0;
 }

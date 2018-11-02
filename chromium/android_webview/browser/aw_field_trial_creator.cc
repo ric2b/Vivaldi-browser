@@ -16,7 +16,6 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/pref_names.h"
-#include "content/public/common/content_switches.h"
 
 namespace android_webview {
 namespace {
@@ -70,14 +69,11 @@ std::unique_ptr<PrefService> AwFieldTrialCreator::CreateLocalState() {
       base::MakeUnique<base::ListValue>());
 
   pref_service_factory_.set_user_prefs(
-      make_scoped_refptr(new InMemoryPrefStore()));
+      base::MakeRefCounted<InMemoryPrefStore>());
   return pref_service_factory_.Create(pref_registry.get());
 }
 
 void AwFieldTrialCreator::SetUpFieldTrials() {
-  if (!AwMetricsServiceClient::CheckSDKVersionForMetrics())
-    return;
-
   AwMetricsServiceClient::LoadOrCreateClientId();
 
   DCHECK(!field_trial_list_);

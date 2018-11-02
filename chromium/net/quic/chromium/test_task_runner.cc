@@ -17,13 +17,19 @@ TestTaskRunner::TestTaskRunner(MockClock* clock) : clock_(clock) {}
 
 TestTaskRunner::~TestTaskRunner() {}
 
-bool TestTaskRunner::PostDelayedTask(const tracked_objects::Location& from_here,
+bool TestTaskRunner::PostDelayedTask(const base::Location& from_here,
                                      base::OnceClosure task,
                                      base::TimeDelta delay) {
   EXPECT_GE(delay, base::TimeDelta());
   tasks_.push_back(PostedTask(from_here, std::move(task), clock_->NowInTicks(),
                               delay, base::TestPendingTask::NESTABLE));
   return false;
+}
+
+bool TestTaskRunner::PostNonNestableDelayedTask(const base::Location& from_here,
+                                                base::OnceClosure task,
+                                                base::TimeDelta delay) {
+  return PostDelayedTask(from_here, std::move(task), delay);
 }
 
 bool TestTaskRunner::RunsTasksInCurrentSequence() const {

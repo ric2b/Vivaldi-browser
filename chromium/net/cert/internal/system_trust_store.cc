@@ -11,12 +11,18 @@
 #include <Security/Security.h>
 #endif
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "build/build_config.h"
+#include "net/cert/internal/cert_errors.h"
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/trust_store_collection.h"
 #include "net/cert/internal/trust_store_in_memory.h"
 #include "net/cert/test_root_certs.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 
 #if defined(USE_NSS_CERTS)
 #include "crypto/nss_util.h"
@@ -27,6 +33,8 @@
 #include "net/cert/internal/trust_store_mac.h"
 #include "net/cert/known_roots_mac.h"
 #include "net/cert/x509_util_mac.h"
+#elif defined(OS_FUCHSIA)
+#include "third_party/boringssl/src/include/openssl/pool.h"
 #endif
 
 namespace net {
@@ -105,12 +113,21 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
 
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
 
-// TODO(eroman): Compose with test roots added via cert/test_roots.h
 class SystemTrustStoreMac : public BaseSystemTrustStore {
  public:
   explicit SystemTrustStoreMac() : trust_store_mac_(kSecPolicyAppleSSL) {
     InitializeKnownRoots();
     trust_store_.AddTrustStore(&trust_store_mac_);
+
+    // When running in test mode, also layer in the test-only root certificates.
+    //
+    // Note that this integration requires TestRootCerts::HasInstance() to be
+    // true by the time SystemTrustStoreMac is created - a limitation which is
+    // acceptable for the test-only code that consumes this.
+    if (TestRootCerts::HasInstance()) {
+      trust_store_.AddTrustStore(
+          TestRootCerts::GetInstance()->test_trust_store());
+    }
   }
 
   bool UsesSystemTrustStore() const override { return true; }
@@ -138,24 +155,65 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
 
 #elif defined(OS_FUCHSIA)
 
+namespace {
+
+constexpr char kRootCertsFileFuchsia[] = "/system/data/boringssl/cert.pem";
+
+class FuchsiaSystemCerts {
+ public:
+  FuchsiaSystemCerts() {
+    base::FilePath filename(kRootCertsFileFuchsia);
+    std::string certs_file;
+    if (!base::ReadFileToString(filename, &certs_file)) {
+      LOG(ERROR) << "Can't load root certificates from " << filename;
+      return;
+    }
+
+    CertificateList certs = X509Certificate::CreateCertificateListFromBytes(
+        certs_file.data(), certs_file.length(), X509Certificate::FORMAT_AUTO);
+
+    for (const auto& cert : certs) {
+      CertErrors errors;
+      auto parsed = ParsedCertificate::Create(
+          bssl::UniquePtr<CRYPTO_BUFFER>(
+              X509Certificate::DupOSCertHandle(cert->os_cert_handle())),
+          x509_util::DefaultParseCertificateOptions(), &errors);
+      CHECK(parsed) << errors.ToDebugString();
+      system_trust_store_.AddTrustAnchor(parsed);
+    }
+  }
+
+  TrustStoreInMemory* system_trust_store() { return &system_trust_store_; }
+
+ private:
+  TrustStoreInMemory system_trust_store_;
+};
+
+base::LazyInstance<FuchsiaSystemCerts>::Leaky g_root_certs_fuchsia =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
 class SystemTrustStoreFuchsia : public BaseSystemTrustStore {
  public:
   SystemTrustStoreFuchsia() {
+    trust_store_.AddTrustStore(g_root_certs_fuchsia.Get().system_trust_store());
     if (TestRootCerts::HasInstance()) {
       trust_store_.AddTrustStore(
           TestRootCerts::GetInstance()->test_trust_store());
     }
   }
 
-  bool UsesSystemTrustStore() const override { return false; }
+  bool UsesSystemTrustStore() const override { return true; }
 
   bool IsKnownRoot(const ParsedCertificate* trust_anchor) const override {
-    return false;
+    return g_root_certs_fuchsia.Get().system_trust_store()->Contains(
+        trust_anchor);
   }
 };
 
 std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
-  return base::MakeUnique<SystemTrustStoreFuchsia>();
+  return std::make_unique<SystemTrustStoreFuchsia>();
 }
 
 #else

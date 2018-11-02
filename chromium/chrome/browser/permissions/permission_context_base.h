@@ -16,13 +16,10 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "third_party/WebKit/public/platform/WebFeaturePolicyFeature.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
 
 #include <map>
 
-#if defined(OS_ANDROID)
-class PermissionQueueController;
-#endif
 class GURL;
 class PermissionRequestID;
 class Profile;
@@ -47,8 +44,6 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 //   - Define your new permission in the ContentSettingsType enum.
 //   - Create a class that inherits from PermissionContextBase and passes the
 //     new permission.
-//   - Inherit from PermissionInfobarDelegate and implement
-//     |GetMessageText|
 //   - Edit the PermissionRequestImpl methods to add the new text.
 //   - Hit several asserts for the missing plumbing and fix them :)
 // After this you can override several other methods to customize behavior,
@@ -62,7 +57,7 @@ class PermissionContextBase : public KeyedService {
  public:
   PermissionContextBase(Profile* profile,
                         ContentSettingsType content_settings_type,
-                        blink::WebFeaturePolicyFeature feature_policy_feature);
+                        blink::FeaturePolicyFeature feature_policy_feature);
   ~PermissionContextBase() override;
 
   // A field trial used to enable the global permissions kill switch.
@@ -75,9 +70,8 @@ class PermissionContextBase : public KeyedService {
   // PermissionContextBase can use it.
   static const char kPermissionsKillSwitchBlockedValue[];
 
-  // The renderer is requesting permission to push messages.
-  // When the answer to a permission request has been determined, |callback|
-  // should be called with the result.
+  // |callback| is called upon resolution of the request, but not if a prompt
+  // is shown and ignored.
   virtual void RequestPermission(content::WebContents* web_contents,
                                  const PermissionRequestID& id,
                                  const GURL& requesting_frame,
@@ -122,24 +116,14 @@ class PermissionContextBase : public KeyedService {
       const GURL& requesting_origin,
       const GURL& embedding_origin) const;
 
-  // Decide whether the permission should be granted.
-  // Calls PermissionDecided if permission can be decided non-interactively,
-  // or NotifyPermissionSet if permission decided by presenting an infobar.
+  // Called if generic checks (existing content setting, embargo, etc.) fail to
+  // resolve a permission request. The default implementation prompts the user.
   virtual void DecidePermission(content::WebContents* web_contents,
                                 const PermissionRequestID& id,
                                 const GURL& requesting_origin,
                                 const GURL& embedding_origin,
                                 bool user_gesture,
                                 const BrowserPermissionCallback& callback);
-
-  // Called when permission is granted without interactively asking the user.
-  void PermissionDecided(const PermissionRequestID& id,
-                         const GURL& requesting_origin,
-                         const GURL& embedding_origin,
-                         bool user_gesture,
-                         const BrowserPermissionCallback& callback,
-                         bool persist,
-                         ContentSetting content_setting);
 
   void OnPermissionRequestResponse(
         const PermissionRequestID& id,
@@ -151,6 +135,8 @@ class PermissionContextBase : public KeyedService {
         const std::string &user_input
         );
 
+  // Updates stored content setting if persist is set, updates tab indicators
+  // and runs the callback to finish the request.
   virtual void NotifyPermissionSet(const PermissionRequestID& id,
                                    const GURL& requesting_origin,
                                    const GURL& embedding_origin,
@@ -163,11 +149,6 @@ class PermissionContextBase : public KeyedService {
   virtual void UpdateTabContext(const PermissionRequestID& id,
                                 const GURL& requesting_origin,
                                 bool allowed) {}
-
-#if defined(OS_ANDROID)
-  // Return an instance of the infobar queue controller, creating it if needed.
-  PermissionQueueController* GetQueueController();
-#endif
 
   // Returns the profile associated with this permission context.
   Profile* profile() const;
@@ -185,8 +166,6 @@ class PermissionContextBase : public KeyedService {
   ContentSettingsType content_settings_type() const {
     return content_settings_type_;
   }
-
-  ContentSettingsType content_settings_storage_type() const;
 
  private:
   friend class PermissionContextBaseTests;
@@ -208,6 +187,15 @@ class PermissionContextBase : public KeyedService {
                                  const BrowserPermissionCallback& callback,
                                  bool permission_blocked);
 
+  // This is the callback for PermissionRequestImpl and is called once the user
+  // allows/blocks/dismisses a permission prompt.
+  void PermissionDecided(const PermissionRequestID& id,
+                         const GURL& requesting_origin,
+                         const GURL& embedding_origin,
+                         bool user_gesture,
+                         const BrowserPermissionCallback& callback,
+                         ContentSetting content_setting);
+
   // Called when the user has made a permission decision. This is a hook for
   // descendent classes to do appropriate things they might need to do when this
   // happens.
@@ -218,10 +206,7 @@ class PermissionContextBase : public KeyedService {
 
   Profile* profile_;
   const ContentSettingsType content_settings_type_;
-  const blink::WebFeaturePolicyFeature feature_policy_feature_;
-#if defined(OS_ANDROID)
-  std::unique_ptr<PermissionQueueController> permission_queue_controller_;
-#endif
+  const blink::FeaturePolicyFeature feature_policy_feature_;
   std::unordered_map<std::string, std::unique_ptr<PermissionRequest>>
       pending_requests_;
 

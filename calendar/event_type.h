@@ -227,6 +227,16 @@ class CreateEventResult {
   DISALLOW_COPY_AND_ASSIGN(CreateEventResult);
 };
 
+class CreateEventsResult {
+ public:
+  CreateEventsResult() = default;
+  int number_failed;
+  int number_success;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CreateEventsResult);
+};
+
 class UpdateEventResult {
  public:
   UpdateEventResult();

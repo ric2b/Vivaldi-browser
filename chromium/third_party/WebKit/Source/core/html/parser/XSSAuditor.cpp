@@ -27,9 +27,6 @@
 #include "core/html/parser/XSSAuditor.h"
 
 #include <memory>
-#include "core/HTMLNames.h"
-#include "core/SVGNames.h"
-#include "core/XLinkNames.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -40,9 +37,12 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/parser/XSSAuditorDelegate.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/MixedContentChecker.h"
+#include "core/svg_names.h"
+#include "core/xlink_names.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/text/DecodeEscapeSequences.h"
 #include "platform/wtf/ASCIICType.h"
@@ -425,6 +425,13 @@ void XSSAuditor::Init(Document* document,
          xss_protection_header == kBlockReflectedXSS) &&
         !report_url.IsEmpty()) {
       xss_protection_report_url = document->CompleteURL(report_url);
+      if (!SecurityOrigin::Create(xss_protection_report_url)
+               ->IsSameSchemeHostPort(document->GetSecurityOrigin())) {
+        error_details =
+            "reporting URL is not same scheme, host, and port as page";
+        xss_protection_header = kReflectedXSSInvalid;
+        xss_protection_report_url = KURL();
+      }
       if (MixedContentChecker::IsMixedContent(document->GetSecurityOrigin(),
                                               xss_protection_report_url)) {
         error_details = "insecure reporting URL for secure page";

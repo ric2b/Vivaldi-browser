@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Multiply-included message header, no traditional include guard.
+#ifndef CONTENT_COMMON_BROWSER_PLUGIN_BROWSER_PLUGIN_MESSAGES_H_
+#define CONTENT_COMMON_BROWSER_PLUGIN_BROWSER_PLUGIN_MESSAGES_H_
 
 #include <string>
 
 #include "base/process/process.h"
+#include "base/unguessable_token.h"
+#include "cc/ipc/cc_param_traits.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/common/edit_command.h"
 #include "content/public/common/drop_data.h"
+#include "content/public/common/screen_info.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
@@ -38,7 +42,7 @@ IPC_STRUCT_BEGIN(BrowserPluginHostMsg_Attach_Params)
   IPC_STRUCT_MEMBER(bool, focused)
   IPC_STRUCT_MEMBER(bool, visible)
   // The new size of the guest view.
-  IPC_STRUCT_MEMBER(gfx::Rect, view_rect)
+  IPC_STRUCT_MEMBER(gfx::Rect, frame_rect)
   // Whether the browser plugin is a full page plugin document.
   IPC_STRUCT_MEMBER(bool, is_full_page_plugin)
 IPC_STRUCT_END()
@@ -139,7 +143,7 @@ IPC_MESSAGE_CONTROL5(BrowserPluginHostMsg_DragStatusUpdate,
                      blink::WebDragStatus /* drag_status */,
                      content::DropData /* drop_data */,
                      blink::WebDragOperationsMask /* operation_mask */,
-                     gfx::Point /* plugin_location */)
+                     gfx::PointF /* plugin_location */)
 
 // Sends a PointerLock Lock ACK to the BrowserPluginGuest.
 IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_LockMouse_ACK,
@@ -151,9 +155,12 @@ IPC_MESSAGE_CONTROL1(BrowserPluginHostMsg_UnlockMouse_ACK,
                      int /* browser_plugin_instance_id */)
 
 // Sent when plugin's position has changed.
-IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_UpdateGeometry,
+IPC_MESSAGE_CONTROL5(BrowserPluginHostMsg_UpdateResizeParams,
                      int /* browser_plugin_instance_id */,
-                     gfx::Rect /* view_rect */)
+                     gfx::Rect /* frame_rect */,
+                     content::ScreenInfo /* screen_info */,
+                     uint64_t /* sequence_number */,
+                     viz::LocalSurfaceId /* local_surface_id */)
 
 IPC_MESSAGE_ROUTED2(BrowserPluginHostMsg_SatisfySequence,
                     int /* browser_plugin_instance_id */,
@@ -172,14 +179,21 @@ IPC_MESSAGE_ROUTED3(BrowserPluginHostMsg_RequireSequence,
 IPC_MESSAGE_CONTROL1(BrowserPluginMsg_GuestGone,
                      int /* browser_plugin_instance_id */)
 
-IPC_MESSAGE_CONTROL1(BrowserPluginMsg_GuestReady,
-                     int /* browser_plugin_instance_id */)
+IPC_MESSAGE_CONTROL2(BrowserPluginMsg_GuestReady,
+                     int /* browser_plugin_instance_id */,
+                     viz::FrameSinkId /* frame_sink_id */)
 
 // When the user tabs to the end of the tab stops of a guest, the browser
 // process informs the embedder to tab out of the browser plugin.
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_AdvanceFocus,
                      int /* browser_plugin_instance_id */,
                      bool /* reverse */)
+
+// When a guest resizes due to auto-resize, this message informs the
+// BrowserPlugin to request a new viz::LocalSurfaceId.
+IPC_MESSAGE_CONTROL2(BrowserPluginMsg_ResizeDueToAutoResize,
+                     int /* browser_plugin_instance_id */,
+                     uint64_t /* sequence_number */)
 
 // When the guest starts/stops listening to touch events, it needs to notify the
 // plugin in the embedder about it.
@@ -206,3 +220,14 @@ IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetMouseLock,
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetTooltipText,
                      int /* browser_plugin_instance_id */,
                      base::string16 /* tooltip_text */)
+
+#if defined(USE_AURA)
+// Sets the token that is used to embed the guest. |embed_token| is a token
+// that was generated from the window server and is expected to be supplied to
+// EmbedUsingToken().
+IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetMusEmbedToken,
+                     int /* browser_plugin_instance_id */,
+                     base::UnguessableToken /* embed_token */)
+#endif
+
+#endif  // CONTENT_COMMON_BROWSER_PLUGIN_BROWSER_PLUGIN_MESSAGES_H_

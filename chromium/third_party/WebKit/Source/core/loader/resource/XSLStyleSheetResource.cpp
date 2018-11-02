@@ -27,12 +27,12 @@
 #include "core/loader/resource/XSLStyleSheetResource.h"
 
 #include "core/loader/resource/StyleSheetResourceClient.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -88,8 +88,6 @@ void XSLStyleSheetResource::DidAddClient(ResourceClient* c) {
 }
 
 void XSLStyleSheetResource::NotifyFinished() {
-  TriggerNotificationForFinishObservers();
-
   if (Data())
     sheet_ = DecodedText();
 

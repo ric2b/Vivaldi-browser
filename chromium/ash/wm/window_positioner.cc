@@ -6,7 +6,7 @@
 
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
+#include "ash/shell_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
@@ -55,7 +55,8 @@ bool UseAutoWindowManager(const aura::Window* window) {
   if (disable_auto_positioning)
     return false;
   const wm::WindowState* window_state = wm::GetWindowState(window);
-  return !window_state->is_dragged() && window_state->window_position_managed();
+  return !window_state->is_dragged() &&
+         window_state->GetWindowPositionManaged();
 }
 
 // Check if a given |window| can be managed. This includes that its
@@ -66,7 +67,7 @@ bool WindowPositionCanBeManaged(const aura::Window* window) {
   if (disable_auto_positioning)
     return false;
   const wm::WindowState* window_state = wm::GetWindowState(window);
-  return window_state->window_position_managed() &&
+  return window_state->GetWindowPositionManaged() &&
          !window_state->IsMinimized() && !window_state->IsMaximized() &&
          !window_state->IsFullscreen() && !window_state->IsPinned() &&
          !window_state->bounds_changed_by_user();
@@ -196,7 +197,7 @@ aura::Window* GetReferenceWindow(const aura::Window* root_window,
     if (window != exclude &&
         window->type() == aura::client::WINDOW_TYPE_NORMAL &&
         window->GetRootWindow() == root_window && window->TargetVisibility() &&
-        wm::GetWindowState(window)->window_position_managed()) {
+        wm::GetWindowState(window)->GetWindowPositionManaged()) {
       if (found && found != window) {
         // no need to check !single_window because the function must have
         // been already returned in the "if (!single_window)" below.
@@ -248,7 +249,7 @@ void WindowPositioner::GetBoundsAndShowStateForNewWindow(
 
     if (show_state_in == ui::SHOW_STATE_DEFAULT) {
       const bool maximize_first_window_on_first_run =
-          ShellPort::Get()->IsForceMaximizeOnFirstRun();
+          Shell::Get()->shell_delegate()->IsForceMaximizeOnFirstRun();
       // We want to always open maximized on "small screens" or when policy
       // tells us to.
       const bool set_maximized =
@@ -401,7 +402,7 @@ WindowPositioner::WindowPositioner()
       last_popup_position_x_(0),
       last_popup_position_y_(0) {}
 
-WindowPositioner::~WindowPositioner() {}
+WindowPositioner::~WindowPositioner() = default;
 
 gfx::Rect WindowPositioner::GetDefaultWindowBounds(
     const display::Display& display) {

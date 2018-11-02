@@ -11,26 +11,27 @@
 
 #include "base/macros.h"
 #include "base/values.h"
-#include "components/component_updater/default_component_installer.h"
+#include "components/component_updater/component_installer.h"
 
 namespace base {
 class FilePath;
 }  // namespace base
 
 namespace component_updater {
-class SSLErrorAssistantComponentInstallerTraits
-    : public ComponentInstallerTraits {
+class SSLErrorAssistantComponentInstallerPolicy
+    : public ComponentInstallerPolicy {
  public:
-  SSLErrorAssistantComponentInstallerTraits() {}
-  ~SSLErrorAssistantComponentInstallerTraits() override {}
+  SSLErrorAssistantComponentInstallerPolicy() {}
+  ~SSLErrorAssistantComponentInstallerPolicy() override {}
 
  private:
-  // ComponentInstallerTraits methods:
+  // ComponentInstallerPolicy methods:
   bool SupportsGroupPolicyEnabledComponentUpdates() const override;
   bool RequiresNetworkEncryption() const override;
   update_client::CrxInstaller::Result OnCustomInstall(
       const base::DictionaryValue& manifest,
       const base::FilePath& install_dir) override;
+  void OnCustomUninstall() override;
   bool VerifyInstallation(const base::DictionaryValue& manifest,
                           const base::FilePath& install_dir) const override;
   void ComponentReady(const base::Version& version,
@@ -44,7 +45,7 @@ class SSLErrorAssistantComponentInstallerTraits
 
   static base::FilePath GetInstalledPath(const base::FilePath& base);
 
-  DISALLOW_COPY_AND_ASSIGN(SSLErrorAssistantComponentInstallerTraits);
+  DISALLOW_COPY_AND_ASSIGN(SSLErrorAssistantComponentInstallerPolicy);
 };
 
 void RegisterSSLErrorAssistantComponent(ComponentUpdateService* cus,

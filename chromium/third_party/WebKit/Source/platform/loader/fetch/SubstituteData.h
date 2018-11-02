@@ -26,58 +26,43 @@
 #ifndef SubstituteData_h
 #define SubstituteData_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/SharedBuffer.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
-
-enum SubstituteDataLoadPolicy { kLoadNormally, kForceSynchronousLoad };
 
 class SubstituteData {
   DISALLOW_NEW();
 
  public:
-  SubstituteData() : substitute_data_load_policy_(kLoadNormally) {}
+  SubstituteData() {}
 
-  SubstituteData(
-      RefPtr<SharedBuffer> content,
-      SubstituteDataLoadPolicy substitute_data_load_policy = kLoadNormally)
-      : SubstituteData(content,
-                       "text/html",
-                       "UTF-8",
-                       KURL(),
-                       substitute_data_load_policy) {}
+  SubstituteData(scoped_refptr<SharedBuffer> content)
+      : SubstituteData(content, "text/html", "UTF-8", KURL()) {}
 
-  SubstituteData(
-      RefPtr<SharedBuffer> content,
-      const AtomicString& mime_type,
-      const AtomicString& text_encoding,
-      const KURL& failing_url,
-      SubstituteDataLoadPolicy substitute_data_load_policy = kLoadNormally)
+  SubstituteData(scoped_refptr<SharedBuffer> content,
+                 const AtomicString& mime_type,
+                 const AtomicString& text_encoding,
+                 const KURL& failing_url)
       : content_(std::move(content)),
         mime_type_(mime_type),
         text_encoding_(text_encoding),
-        failing_url_(failing_url),
-        substitute_data_load_policy_(substitute_data_load_policy) {}
+        failing_url_(failing_url) {}
 
-  bool IsValid() const { return content_.Get(); }
+  bool IsValid() const { return content_.get(); }
 
-  SharedBuffer* Content() const { return content_.Get(); }
+  SharedBuffer* Content() const { return content_.get(); }
   const AtomicString& MimeType() const { return mime_type_; }
   const AtomicString& TextEncoding() const { return text_encoding_; }
   const KURL& FailingURL() const { return failing_url_; }
-  bool ForceSynchronousLoad() const {
-    return substitute_data_load_policy_ == kForceSynchronousLoad;
-  }
 
  private:
-  RefPtr<SharedBuffer> content_;
+  scoped_refptr<SharedBuffer> content_;
   AtomicString mime_type_;
   AtomicString text_encoding_;
   KURL failing_url_;
-  SubstituteDataLoadPolicy substitute_data_load_policy_;
 };
 
 }  // namespace blink

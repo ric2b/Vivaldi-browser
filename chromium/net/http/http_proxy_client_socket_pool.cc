@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/optional.h"
@@ -79,24 +78,33 @@ int32_t GetInt32Param(const std::string& param_name, int32_t default_value) {
 HttpProxySocketParams::HttpProxySocketParams(
     const scoped_refptr<TransportSocketParams>& transport_params,
     const scoped_refptr<SSLSocketParams>& ssl_params,
+    QuicTransportVersion quic_version,
     const std::string& user_agent,
     const HostPortPair& endpoint,
     HttpAuthCache* http_auth_cache,
     HttpAuthHandlerFactory* http_auth_handler_factory,
     SpdySessionPool* spdy_session_pool,
+    QuicStreamFactory* quic_stream_factory,
     bool tunnel,
     ProxyDelegate* proxy_delegate)
     : transport_params_(transport_params),
       ssl_params_(ssl_params),
+      quic_version_(quic_version),
       spdy_session_pool_(spdy_session_pool),
+      quic_stream_factory_(quic_stream_factory),
       user_agent_(user_agent),
       endpoint_(endpoint),
       http_auth_cache_(tunnel ? http_auth_cache : NULL),
       http_auth_handler_factory_(tunnel ? http_auth_handler_factory : NULL),
       tunnel_(tunnel),
       proxy_delegate_(proxy_delegate) {
-  DCHECK((transport_params.get() == NULL && ssl_params.get() != NULL) ||
-         (transport_params.get() != NULL && ssl_params.get() == NULL));
+  // If doing a QUIC proxy, |quic_version| must not be QUIC_VERSION_UNSUPPORTED,
+  // and |ssl_params| must be valid while |transport_params| is null.
+  // Otherwise, |quic_version| must be QUIC_VERSION_UNSUPPORTED, and exactly
+  // one of |transport_params| or |ssl_params| must be set.
+  DCHECK(quic_version_ == QUIC_VERSION_UNSUPPORTED
+             ? (bool)transport_params != (bool)ssl_params
+             : !transport_params && ssl_params);
 }
 
 const HostResolver::RequestInfo& HttpProxySocketParams::destination() const {
@@ -107,7 +115,7 @@ const HostResolver::RequestInfo& HttpProxySocketParams::destination() const {
   }
 }
 
-HttpProxySocketParams::~HttpProxySocketParams() {}
+HttpProxySocketParams::~HttpProxySocketParams() = default;
 
 HttpProxyConnectJob::HttpProxyConnectJob(
     const std::string& group_name,
@@ -137,16 +145,18 @@ HttpProxyConnectJob::HttpProxyConnectJob(
           ssl_pool,
           params->transport_params(),
           params->ssl_params(),
+          params->quic_version(),
           params->user_agent(),
           params->endpoint(),
           params->http_auth_cache(),
           params->http_auth_handler_factory(),
           params->spdy_session_pool(),
+          params->quic_stream_factory(),
           params->tunnel(),
           params->proxy_delegate(),
           this->net_log())) {}
 
-HttpProxyConnectJob::~HttpProxyConnectJob() {}
+HttpProxyConnectJob::~HttpProxyConnectJob() = default;
 
 LoadState HttpProxyConnectJob::GetLoadState() const {
   return client_socket_->GetConnectLoadState();
@@ -275,8 +285,7 @@ HttpProxyClientSocketPool::HttpProxyClientSocketPool(
     base_.AddLowerLayeredPool(ssl_pool_);
 }
 
-HttpProxyClientSocketPool::~HttpProxyClientSocketPool() {
-}
+HttpProxyClientSocketPool::~HttpProxyClientSocketPool() = default;
 
 int HttpProxyClientSocketPool::RequestSocket(const std::string& group_name,
                                              const void* socket_params,
@@ -296,11 +305,13 @@ void HttpProxyClientSocketPool::RequestSockets(
     const std::string& group_name,
     const void* params,
     int num_sockets,
-    const NetLogWithSource& net_log) {
+    const NetLogWithSource& net_log,
+    HttpRequestInfo::RequestMotivation motivation) {
   const scoped_refptr<HttpProxySocketParams>* casted_params =
       static_cast<const scoped_refptr<HttpProxySocketParams>*>(params);
 
-  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log);
+  base_.RequestSockets(group_name, *casted_params, num_sockets, net_log,
+                       motivation);
 }
 
 void HttpProxyClientSocketPool::CancelRequest(

@@ -6,7 +6,7 @@
 
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/events/EventListener.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/AudioTrackList.h"
 #include "core/html/track/VideoTrackList.h"
 #include "modules/encryptedmedia/HTMLMediaElementEncryptedMedia.h"
@@ -31,7 +31,7 @@ class MediaElementEventListener final : public EventListener {
   MediaElementEventListener(HTMLMediaElement*, MediaStream*);
   void UpdateSources(ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   // EventListener implementation.
@@ -59,9 +59,9 @@ void MediaElementEventListener::handleEvent(ExecutionContext* context,
   DCHECK(media_stream_);
 
   if (event->type() == EventTypeNames::ended) {
-    MediaStreamTrackVector tracks = media_stream_->getTracks();
+    const MediaStreamTrackVector tracks = media_stream_->getTracks();
     for (const auto& track : tracks) {
-      track->stopTrack(ASSERT_NO_EXCEPTION);
+      track->stopTrack(context);
       media_stream_->RemoveTrackByComponent(track->Component());
     }
 
@@ -70,6 +70,27 @@ void MediaElementEventListener::handleEvent(ExecutionContext* context,
   }
   if (event->type() != EventTypeNames::loadedmetadata)
     return;
+
+  // If |media_element_| is a MediaStream, clone the new tracks.
+  if (media_element_->GetLoadType() == WebMediaPlayer::kLoadTypeMediaStream) {
+    const MediaStreamTrackVector tracks = media_stream_->getTracks();
+    for (const auto& track : tracks) {
+      track->stopTrack(context);
+      media_stream_->RemoveTrackByComponent(track->Component());
+    }
+    MediaStreamDescriptor* const descriptor =
+        media_element_->currentSrc().IsEmpty()
+            ? media_element_->GetSrcObject()
+            : MediaStreamRegistry::Registry().LookupMediaStreamDescriptor(
+                  media_element_->currentSrc().GetString());
+    DCHECK(descriptor);
+    for (size_t i = 0; i < descriptor->NumberOfAudioComponents(); i++)
+      media_stream_->AddTrackByComponent(descriptor->AudioComponent(i));
+    for (size_t i = 0; i < descriptor->NumberOfVideoComponents(); i++)
+      media_stream_->AddTrackByComponent(descriptor->VideoComponent(i));
+    UpdateSources(context);
+    return;
+  }
 
   WebMediaStream web_stream;
   web_stream.Initialize(WebVector<WebMediaStreamTrack>(),
@@ -104,14 +125,15 @@ void MediaElementEventListener::UpdateSources(ExecutionContext* context) {
   for (auto track : media_stream_->getTracks())
     sources_.insert(track->Component()->Source());
 
-  if (!media_element_->IsMediaDataCORSSameOrigin(
+  if (!media_element_->currentSrc().IsEmpty() &&
+      !media_element_->IsMediaDataCORSSameOrigin(
           context->GetSecurityOrigin())) {
     for (auto source : sources_)
       MediaStreamCenter::Instance().DidStopMediaStreamSource(source);
   }
 }
 
-DEFINE_TRACE(MediaElementEventListener) {
+void MediaElementEventListener::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_element_);
   visitor->Trace(media_stream_);
   visitor->Trace(sources_);
@@ -122,6 +144,7 @@ DEFINE_TRACE(MediaElementEventListener) {
 
 // static
 MediaStream* HTMLMediaElementCapture::captureStream(
+    ScriptState* script_state,
     HTMLMediaElement& element,
     ExceptionState& exception_state) {
   // Avoid capturing from EME-protected Media Elements.
@@ -133,9 +156,9 @@ MediaStream* HTMLMediaElementCapture::captureStream(
     return nullptr;
   }
 
-  if (!(element.currentSrc().IsNull() && !element.GetSrcObject()) &&
-      !element.IsMediaDataCORSSameOrigin(
-          element.GetExecutionContext()->GetSecurityOrigin())) {
+  ExecutionContext* context = ExecutionContext::From(script_state);
+  if (!element.currentSrc().IsEmpty() &&
+      !element.IsMediaDataCORSSameOrigin(context->GetSecurityOrigin())) {
     exception_state.ThrowSecurityError(
         "Cannot capture from element with cross-origin data");
     return nullptr;
@@ -146,8 +169,7 @@ MediaStream* HTMLMediaElementCapture::captureStream(
                         WebVector<WebMediaStreamTrack>());
 
   // Create() duplicates the MediaStreamTracks inside |webStream|.
-  MediaStream* stream =
-      MediaStream::Create(element.GetExecutionContext(), web_stream);
+  MediaStream* stream = MediaStream::Create(context, web_stream);
 
   MediaElementEventListener* listener =
       new MediaElementEventListener(&element, stream);
@@ -157,12 +179,12 @@ MediaStream* HTMLMediaElementCapture::captureStream(
   // If |element| is actually playing a MediaStream, just clone it.
   if (element.GetLoadType() == WebMediaPlayer::kLoadTypeMediaStream) {
     MediaStreamDescriptor* const descriptor =
-        element.currentSrc().IsNull()
+        element.currentSrc().IsEmpty()
             ? element.GetSrcObject()
             : MediaStreamRegistry::Registry().LookupMediaStreamDescriptor(
                   element.currentSrc().GetString());
     DCHECK(descriptor);
-    return MediaStream::Create(element.GetExecutionContext(), descriptor);
+    return MediaStream::Create(context, descriptor);
   }
 
   if (element.HasVideo()) {
@@ -173,7 +195,7 @@ MediaStream* HTMLMediaElementCapture::captureStream(
     Platform::Current()->CreateHTMLAudioElementCapturer(
         &web_stream, element.GetWebMediaPlayer());
   }
-  listener->UpdateSources(element.GetExecutionContext());
+  listener->UpdateSources(context);
 
   // If element.currentSrc().isNull() then |stream| will have no tracks, those
   // will be added eventually afterwards via MediaElementEventListener.

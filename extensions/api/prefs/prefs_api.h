@@ -79,17 +79,6 @@ class VivaldiPrefsApiNotification : public KeyedService {
   DISALLOW_COPY_AND_ASSIGN(VivaldiPrefsApiNotification);
 };
 
-class PrefsToggleFunction : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("prefs.toggle", PREFS_TOGGLE)
-  PrefsToggleFunction() = default;
-
- private:
-  ~PrefsToggleFunction() override = default;
-  bool RunAsync() override;
-  DISALLOW_COPY_AND_ASSIGN(PrefsToggleFunction);
-};
-
 class PrefsGetFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.get", PREFS_GET)

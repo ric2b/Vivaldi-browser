@@ -16,7 +16,8 @@
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/EmptyClients.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
+#include "platform/testing/UseMockScrollbarSettings.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
@@ -27,7 +28,7 @@ class SingleChildLocalFrameClient final : public EmptyLocalFrameClient {
     return new SingleChildLocalFrameClient();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(child_);
     EmptyLocalFrameClient::Trace(visitor);
   }
@@ -51,7 +52,7 @@ class LocalFrameClientWithParent final : public EmptyLocalFrameClient {
     return new LocalFrameClientWithParent(parent);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(parent_);
     EmptyLocalFrameClient::Trace(visitor);
   }
@@ -66,7 +67,7 @@ class LocalFrameClientWithParent final : public EmptyLocalFrameClient {
   Member<LocalFrame> parent_;
 };
 
-class RenderingTest : public ::testing::Test {
+class RenderingTest : public PageTestBase, public UseMockScrollbarSettings {
   USING_FAST_MALLOC(RenderingTest);
 
  public:
@@ -75,56 +76,38 @@ class RenderingTest : public ::testing::Test {
   }
   virtual ChromeClient& GetChromeClient() const;
 
-  RenderingTest(LocalFrameClient* = nullptr);
-
-  // Load the 'Ahem' font to the LocalFrame.
-  // The 'Ahem' font is the only font whose font metrics is consistent across
-  // platforms, but it's not guaranteed to be available.
-  // See external/wpt/css/fonts/ahem/README for more about the 'Ahem' font.
-  static void LoadAhem(LocalFrame&);
+  explicit RenderingTest(LocalFrameClient* = nullptr);
 
  protected:
   void SetUp() override;
   void TearDown() override;
 
-  Document& GetDocument() const { return page_holder_->GetDocument(); }
   LayoutView& GetLayoutView() const {
     return *ToLayoutView(LayoutAPIShim::LayoutObjectFrom(
         GetDocument().View()->GetLayoutViewItem()));
   }
 
-  // Both sets the inner html and runs the document lifecycle.
-  void SetBodyInnerHTML(const String& html_content) {
-    GetDocument().body()->setInnerHTML(html_content, ASSERT_NO_EXCEPTION);
-    GetDocument().View()->UpdateAllLifecyclePhases();
-  }
-
   Document& ChildDocument() {
-    return *ToLocalFrame(page_holder_->GetFrame().Tree().FirstChild())
-                ->GetDocument();
+    return *ToLocalFrame(GetFrame().Tree().FirstChild())->GetDocument();
   }
 
   void SetChildFrameHTML(const String&);
 
   // Both enables compositing and runs the document lifecycle.
   void EnableCompositing() {
-    page_holder_->GetPage().GetSettings().SetAcceleratedCompositingEnabled(
-        true);
+    GetPage().GetSettings().SetAcceleratedCompositingEnabled(true);
     GetDocument().View()->SetParentVisible(true);
     GetDocument().View()->SetSelfVisible(true);
     GetDocument().View()->UpdateAllLifecyclePhases();
   }
 
   LayoutObject* GetLayoutObjectByElementId(const char* id) const {
-    Node* node = GetDocument().getElementById(id);
-    return node ? node->GetLayoutObject() : nullptr;
+    const auto* element = GetElementById(id);
+    return element ? element->GetLayoutObject() : nullptr;
   }
-
-  void LoadAhem();
 
  private:
   Persistent<LocalFrameClient> local_frame_client_;
-  std::unique_ptr<DummyPageHolder> page_holder_;
 };
 
 }  // namespace blink

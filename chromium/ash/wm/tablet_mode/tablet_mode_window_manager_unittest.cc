@@ -6,8 +6,7 @@
 
 #include <string>
 
-#include "ash/ash_switches.h"
-#include "ash/public/cpp/config.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -55,8 +54,8 @@ void SetShelfAutoHideBehaviorPref(int64_t display_id,
 
 class TabletModeWindowManagerTest : public AshTestBase {
  public:
-  TabletModeWindowManagerTest() {}
-  ~TabletModeWindowManagerTest() override {}
+  TabletModeWindowManagerTest() = default;
+  ~TabletModeWindowManagerTest() override = default;
 
   // Initialize parameters for test windows.  If |can_maximize| is not
   // set, |max_size| is the upper limiting size for the window,
@@ -561,8 +560,6 @@ std::string GetPlacementOverride(aura::Window* window) {
 // session restoration purposes.
 TEST_F(TabletModeWindowManagerTest, TestRestoreIntegrety) {
   gfx::Rect bounds(10, 10, 200, 50);
-  gfx::Size empty_size;
-  gfx::Rect empty_bounds;
   std::unique_ptr<aura::Window> normal_window(CreateWindowWithWidget(bounds));
   std::unique_ptr<aura::Window> maximized_window(
       CreateWindowWithWidget(bounds));
@@ -609,7 +606,6 @@ TEST_F(TabletModeWindowManagerTest, PreCreateWindowsDeleteWhileActive) {
     gfx::Rect rect2(10, 60, 200, 50);
     gfx::Rect rect3(20, 140, 100, 100);
     // Bounds for anything else.
-    gfx::Rect rect(80, 90, 100, 110);
     std::unique_ptr<aura::Window> w1(
         CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect1));
     std::unique_ptr<aura::Window> w2(
@@ -638,12 +634,12 @@ TEST_F(TabletModeWindowManagerTest, CreateWindowsAndDeleteWhileActive) {
     gfx::Rect rect1(10, 10, 200, 50);
     gfx::Rect rect2(10, 60, 200, 50);
     gfx::Rect rect3(20, 140, 100, 100);
-    std::unique_ptr<aura::Window> w1(CreateWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(10, 10, 200, 50)));
-    std::unique_ptr<aura::Window> w2(CreateWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(10, 60, 200, 50)));
+    std::unique_ptr<aura::Window> w1(
+        CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect1));
+    std::unique_ptr<aura::Window> w2(
+        CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect2));
     std::unique_ptr<aura::Window> w3(CreateFixedSizeNonMaximizableWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(20, 140, 100, 100)));
+        aura::client::WINDOW_TYPE_NORMAL, rect3));
     // Check that the windows got automatically maximized as well.
     EXPECT_EQ(3, manager->GetNumberOfManagedWindows());
     EXPECT_TRUE(wm::GetWindowState(w1.get())->IsMaximized());
@@ -1323,10 +1319,6 @@ TEST_F(TabletModeWindowManagerTest, ExitsOverview) {
 
 // Test that an edge swipe from the top will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromTop) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1367,10 +1359,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromTop) {
 
 // Test that an edge swipe from the bottom will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromBottom) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1405,10 +1393,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromBottom) {
 
 // Test that an edge touch press at the top will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtTop) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1445,10 +1429,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtTop) {
 
 // Test that an edge touch press at the bottom will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtBottom) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1498,10 +1478,10 @@ TEST_F(TabletModeWindowManagerTest, NoExitImmersiveModeWithEdgeSwipeFromTop) {
   wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
   window_state->OnWMEvent(&event);
   EXPECT_TRUE(window_state->IsFullscreen());
-  EXPECT_FALSE(window_state->in_immersive_fullscreen());
+  EXPECT_FALSE(window_state->IsInImmersiveFullscreen());
   EXPECT_EQ(window.get(), wm::GetActiveWindow());
 
-  window_state->set_in_immersive_fullscreen(true);
+  window_state->SetInImmersiveFullscreen(true);
 
   // Do an edge swipe top into screen.
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
@@ -1510,7 +1490,7 @@ TEST_F(TabletModeWindowManagerTest, NoExitImmersiveModeWithEdgeSwipeFromTop) {
 
   // It should have not exited full screen or immersive mode.
   EXPECT_TRUE(window_state->IsFullscreen());
-  EXPECT_TRUE(window_state->in_immersive_fullscreen());
+  EXPECT_TRUE(window_state->IsInImmersiveFullscreen());
 
   DestroyTabletModeWindowManager();
 }
@@ -1528,10 +1508,10 @@ TEST_F(TabletModeWindowManagerTest,
   wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
   window_state->OnWMEvent(&event);
   EXPECT_TRUE(window_state->IsFullscreen());
-  EXPECT_FALSE(window_state->in_immersive_fullscreen());
+  EXPECT_FALSE(window_state->IsInImmersiveFullscreen());
   EXPECT_EQ(window.get(), wm::GetActiveWindow());
-  window_state->set_in_immersive_fullscreen(true);
-  EXPECT_TRUE(window_state->in_immersive_fullscreen());
+  window_state->SetInImmersiveFullscreen(true);
+  EXPECT_TRUE(window_state->IsInImmersiveFullscreen());
 
   // Do an edge swipe bottom into screen.
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
@@ -1541,7 +1521,7 @@ TEST_F(TabletModeWindowManagerTest,
 
   // The window should still be full screen and immersive.
   EXPECT_TRUE(window_state->IsFullscreen());
-  EXPECT_TRUE(window_state->in_immersive_fullscreen());
+  EXPECT_TRUE(window_state->IsInImmersiveFullscreen());
 
   DestroyTabletModeWindowManager();
 }
@@ -1655,18 +1635,18 @@ namespace {
 
 class TestObserver : public wm::WindowStateObserver {
  public:
-  TestObserver() {}
-  ~TestObserver() override {}
+  TestObserver() = default;
+  ~TestObserver() override = default;
 
   // wm::WindowStateObserver:
   void OnPreWindowStateTypeChange(wm::WindowState* window_state,
-                                  wm::WindowStateType old_type) override {
+                                  mojom::WindowStateType old_type) override {
     pre_count_++;
     last_old_state_ = old_type;
   }
 
   void OnPostWindowStateTypeChange(wm::WindowState* window_state,
-                                   wm::WindowStateType old_type) override {
+                                   mojom::WindowStateType old_type) override {
     post_count_++;
     EXPECT_EQ(last_old_state_, old_type);
   }
@@ -1683,16 +1663,16 @@ class TestObserver : public wm::WindowStateObserver {
     return r;
   }
 
-  wm::WindowStateType GetLastOldStateAndReset() {
-    wm::WindowStateType r = last_old_state_;
-    last_old_state_ = wm::WINDOW_STATE_TYPE_DEFAULT;
+  mojom::WindowStateType GetLastOldStateAndReset() {
+    mojom::WindowStateType r = last_old_state_;
+    last_old_state_ = mojom::WindowStateType::DEFAULT;
     return r;
   }
 
  private:
   int pre_count_ = 0;
   int post_count_ = 0;
-  wm::WindowStateType last_old_state_ = wm::WINDOW_STATE_TYPE_DEFAULT;
+  mojom::WindowStateType last_old_state_ = mojom::WindowStateType::DEFAULT;
 
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
@@ -1725,27 +1705,27 @@ TEST_F(TabletModeWindowManagerTest, StateTypeChange) {
   window_state->OnWMEvent(&fullscreen_event);
   EXPECT_EQ(1, observer.GetPreCountAndReset());
   EXPECT_EQ(1, observer.GetPostCountAndReset());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_MAXIMIZED,
+  EXPECT_EQ(mojom::WindowStateType::MAXIMIZED,
             observer.GetLastOldStateAndReset());
 
   window_state->OnWMEvent(&maximize_event);
   EXPECT_EQ(1, observer.GetPreCountAndReset());
   EXPECT_EQ(1, observer.GetPostCountAndReset());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_FULLSCREEN,
+  EXPECT_EQ(mojom::WindowStateType::FULLSCREEN,
             observer.GetLastOldStateAndReset());
 
   wm::WMEvent minimize_event(wm::WM_EVENT_MINIMIZE);
   window_state->OnWMEvent(&minimize_event);
   EXPECT_EQ(1, observer.GetPreCountAndReset());
   EXPECT_EQ(1, observer.GetPostCountAndReset());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_MAXIMIZED,
+  EXPECT_EQ(mojom::WindowStateType::MAXIMIZED,
             observer.GetLastOldStateAndReset());
 
   wm::WMEvent restore_event(wm::WM_EVENT_NORMAL);
   window_state->OnWMEvent(&restore_event);
   EXPECT_EQ(1, observer.GetPreCountAndReset());
   EXPECT_EQ(1, observer.GetPostCountAndReset());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_MINIMIZED,
+  EXPECT_EQ(mojom::WindowStateType::MINIMIZED,
             observer.GetLastOldStateAndReset());
 
   window_state->RemoveObserver(&observer);

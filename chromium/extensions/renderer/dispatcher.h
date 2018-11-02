@@ -31,7 +31,6 @@
 #include "extensions/renderer/user_script_set_manager.h"
 #include "extensions/renderer/v8_schema_registry.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
 #include "v8/include/v8.h"
 
 class ChromeRenderViewTest;
@@ -67,7 +66,7 @@ struct PortId;
 class Dispatcher : public content::RenderThreadObserver,
                    public UserScriptSetManager::Observer {
  public:
-  explicit Dispatcher(DispatcherDelegate* delegate);
+  explicit Dispatcher(std::unique_ptr<DispatcherDelegate> delegate);
   ~Dispatcher() override;
 
   const ScriptContextSet& script_context_set() const {
@@ -75,8 +74,6 @@ class Dispatcher : public content::RenderThreadObserver,
   }
 
   V8SchemaRegistry* v8_schema_registry() { return v8_schema_registry_.get(); }
-
-  ContentWatcher* content_watcher() { return content_watcher_.get(); }
 
   const std::string& webview_partition_id() { return webview_partition_id_; }
 
@@ -136,9 +133,13 @@ class Dispatcher : public content::RenderThreadObserver,
                                 const std::string& function_name,
                                 const base::ListValue& args);
 
-  // Returns a list of (module name, resource id) pairs for the JS modules to
-  // add to the source map.
-  static std::vector<std::pair<const char*, int>> GetJsResources();
+  struct JsResourceInfo {
+    const char* name = nullptr;
+    int id = 0;
+    bool gzipped = false;
+  };
+  // Returns a list of resources for the JS modules to add to the source map.
+  static std::vector<JsResourceInfo> GetJsResources();
   static void RegisterNativeHandlers(ModuleSystem* module_system,
                                      ScriptContext* context,
                                      Dispatcher* dispatcher,
@@ -157,7 +158,6 @@ class Dispatcher : public content::RenderThreadObserver,
   // RenderThreadObserver implementation:
   bool OnControlMessageReceived(const IPC::Message& message) override;
   void IdleNotification() override;
-  void OnRenderProcessShutdown() override;
 
   void OnActivateExtension(const std::string& extension_id);
   void OnCancelSuspend(const std::string& extension_id);
@@ -246,9 +246,8 @@ class Dispatcher : public content::RenderThreadObserver,
   // |context|.
   void RequireGuestViewModules(ScriptContext* context);
 
-  // The delegate for this dispatcher. Not owned, but must extend beyond the
-  // Dispatcher's own lifetime.
-  DispatcherDelegate* delegate_;
+  // The delegate for this dispatcher to handle embedder-specific logic.
+  std::unique_ptr<DispatcherDelegate> delegate_;
 
   // True if the IdleNotification timer should be set.
   bool set_idle_notifications_;

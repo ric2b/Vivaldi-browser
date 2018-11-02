@@ -8,12 +8,12 @@
 #include <stdint.h>
 
 #include <algorithm>
-#include <deque>
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/gsm_sms_client.h"
@@ -29,11 +29,6 @@ namespace {
 // Not exposed/exported:
 const char kIndexKey[] = "index";
 
-// Keys from ModemManager1
-const char kModemManager1NumberKey[] = "Number";
-const char kModemManager1TextKey[] = "Text";
-const char kModemManager1TimestampKey[] = "Timestamp";
-
 // Maximum number of messages stored for RequestUpdate(true).
 const size_t kMaxReceivedMessages = 100;
 
@@ -48,8 +43,8 @@ const char NetworkSmsHandler::kTimestampKey[] = "timestamp";
 
 class NetworkSmsHandler::NetworkSmsDeviceHandler {
  public:
-  NetworkSmsDeviceHandler() {}
-  virtual ~NetworkSmsDeviceHandler() {}
+  NetworkSmsDeviceHandler() = default;
+  virtual ~NetworkSmsDeviceHandler() = default;
 
   virtual void RequestUpdate() = 0;
 };
@@ -197,7 +192,7 @@ class NetworkSmsHandler::ModemManager1NetworkSmsDeviceHandler
   bool deleting_messages_;
   bool retrieving_messages_;
   std::vector<dbus::ObjectPath> delete_queue_;
-  std::deque<dbus::ObjectPath> retrieval_queue_;
+  base::circular_deque<dbus::ObjectPath> retrieval_queue_;
   base::WeakPtrFactory<ModemManager1NetworkSmsDeviceHandler> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ModemManager1NetworkSmsDeviceHandler);
@@ -316,13 +311,14 @@ ModemManager1NetworkSmsDeviceHandler::MessageReceived(
   // key namaes.
   base::DictionaryValue new_dictionary;
   std::string text, number, timestamp;
-  if (dictionary.GetStringWithoutPathExpansion(kModemManager1NumberKey,
+  if (dictionary.GetStringWithoutPathExpansion(SMSClient::kSMSPropertyNumber,
                                                &number))
     new_dictionary.SetString(kNumberKey, number);
-  if (dictionary.GetStringWithoutPathExpansion(kModemManager1TextKey, &text))
+  if (dictionary.GetStringWithoutPathExpansion(SMSClient::kSMSPropertyText,
+                                               &text))
     new_dictionary.SetString(kTextKey, text);
   // TODO(jglasgow): consider normalizing timestamp.
-  if (dictionary.GetStringWithoutPathExpansion(kModemManager1TimestampKey,
+  if (dictionary.GetStringWithoutPathExpansion(SMSClient::kSMSPropertyTimestamp,
                                                &timestamp))
     new_dictionary.SetString(kTimestampKey, timestamp);
   host_->MessageReceived(new_dictionary);
@@ -410,7 +406,7 @@ void NetworkSmsHandler::ManagerPropertiesCallback(
   }
   const base::Value* value;
   if (!properties.GetWithoutPathExpansion(shill::kDevicesProperty, &value) ||
-      value->GetType() != base::Value::Type::LIST) {
+      !value->is_list()) {
     LOG(ERROR) << "NetworkSmsHandler: No list value for: "
                << shill::kDevicesProperty;
     return;
@@ -471,11 +467,11 @@ void NetworkSmsHandler::DevicePropertiesCallback(
   dbus::ObjectPath object_path(object_path_string);
   if (service_name == modemmanager::kModemManager1ServiceName) {
     device_handlers_.push_back(
-        base::MakeUnique<ModemManager1NetworkSmsDeviceHandler>(
+        std::make_unique<ModemManager1NetworkSmsDeviceHandler>(
             this, service_name, object_path));
   } else {
     device_handlers_.push_back(
-        base::MakeUnique<ModemManagerNetworkSmsDeviceHandler>(
+        std::make_unique<ModemManagerNetworkSmsDeviceHandler>(
             this, service_name, object_path));
   }
 }

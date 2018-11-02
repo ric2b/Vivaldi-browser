@@ -36,35 +36,39 @@ struct KnownReservedKey {
 
 // Contains all the known registry key by name and by handle.
 const KnownReservedKey kKnownKey[] = {
-    { L"HKEY_CLASSES_ROOT", HKEY_CLASSES_ROOT },
-    { L"HKEY_CURRENT_USER", HKEY_CURRENT_USER },
-    { L"HKEY_LOCAL_MACHINE", HKEY_LOCAL_MACHINE},
-    { L"HKEY_USERS", HKEY_USERS},
-    { L"HKEY_PERFORMANCE_DATA", HKEY_PERFORMANCE_DATA},
-    { L"HKEY_PERFORMANCE_TEXT", HKEY_PERFORMANCE_TEXT},
-    { L"HKEY_PERFORMANCE_NLSTEXT", HKEY_PERFORMANCE_NLSTEXT},
-    { L"HKEY_CURRENT_CONFIG", HKEY_CURRENT_CONFIG},
-    { L"HKEY_DYN_DATA", HKEY_DYN_DATA}
-};
+    {L"HKEY_CLASSES_ROOT", HKEY_CLASSES_ROOT},
+    {L"HKEY_CURRENT_USER", HKEY_CURRENT_USER},
+    {L"HKEY_LOCAL_MACHINE", HKEY_LOCAL_MACHINE},
+    {L"HKEY_USERS", HKEY_USERS},
+    {L"HKEY_PERFORMANCE_DATA", HKEY_PERFORMANCE_DATA},
+    {L"HKEY_PERFORMANCE_TEXT", HKEY_PERFORMANCE_TEXT},
+    {L"HKEY_PERFORMANCE_NLSTEXT", HKEY_PERFORMANCE_NLSTEXT},
+    {L"HKEY_CURRENT_CONFIG", HKEY_CURRENT_CONFIG},
+    {L"HKEY_DYN_DATA", HKEY_DYN_DATA}};
 
 // These functions perform case independent path comparisons.
 bool EqualPath(const base::string16& first, const base::string16& second) {
   return _wcsicmp(first.c_str(), second.c_str()) == 0;
 }
 
-bool EqualPath(const base::string16& first, size_t first_offset,
-               const base::string16& second, size_t second_offset) {
+bool EqualPath(const base::string16& first,
+               size_t first_offset,
+               const base::string16& second,
+               size_t second_offset) {
   return _wcsicmp(first.c_str() + first_offset,
                   second.c_str() + second_offset) == 0;
 }
 
 bool EqualPath(const base::string16& first,
-               const wchar_t* second, size_t second_len) {
+               const wchar_t* second,
+               size_t second_len) {
   return _wcsnicmp(first.c_str(), second, second_len) == 0;
 }
 
-bool EqualPath(const base::string16& first, size_t first_offset,
-               const wchar_t* second, size_t second_len) {
+bool EqualPath(const base::string16& first,
+               size_t first_offset,
+               const wchar_t* second,
+               size_t second_len) {
   return _wcsnicmp(first.c_str() + first_offset, second, second_len) == 0;
 }
 
@@ -164,7 +168,7 @@ HKEY GetReservedKeyFromName(const base::string16& name) {
       return kKnownKey[i].key;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 bool ResolveRegistryName(base::string16 name, base::string16* resolved_name) {
@@ -172,8 +176,8 @@ bool ResolveRegistryName(base::string16 name, base::string16* resolved_name) {
     if (name.find(kKnownKey[i].name) == 0) {
       HKEY key;
       DWORD disposition;
-      if (ERROR_SUCCESS != ::RegCreateKeyEx(kKnownKey[i].key, L"", 0, NULL, 0,
-                                            MAXIMUM_ALLOWED, NULL, &key,
+      if (ERROR_SUCCESS != ::RegCreateKeyEx(kKnownKey[i].key, L"", 0, nullptr,
+                                            0, MAXIMUM_ALLOWED, nullptr, &key,
                                             &disposition))
         return false;
 
@@ -210,8 +214,8 @@ DWORD IsReparsePoint(const base::string16& full_path) {
 
   bool added_implied_device = false;
   if (!has_drive) {
-      path = base::string16(kNTDotPrefix) + path;
-      added_implied_device = true;
+    path = base::string16(kNTDotPrefix) + path;
+    added_implied_device = true;
   }
 
   base::string16::size_type last_pos = base::string16::npos;
@@ -223,8 +227,7 @@ DWORD IsReparsePoint(const base::string16& full_path) {
     DWORD attributes = ::GetFileAttributes(path.c_str());
     if (INVALID_FILE_ATTRIBUTES == attributes) {
       DWORD error = ::GetLastError();
-      if (error != ERROR_FILE_NOT_FOUND &&
-          error != ERROR_PATH_NOT_FOUND &&
+      if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND &&
           error != ERROR_INVALID_NAME) {
         // Unexpected error.
         if (passed_once && added_implied_device &&
@@ -353,13 +356,13 @@ bool ConvertToLongPath(base::string16* native_path,
   DWORD size = MAX_PATH;
   std::unique_ptr<wchar_t[]> long_path_buf(new wchar_t[size]);
 
-  DWORD return_value = ::GetLongPathName(temp_path.c_str(), long_path_buf.get(),
-                                         size);
+  DWORD return_value =
+      ::GetLongPathName(temp_path.c_str(), long_path_buf.get(), size);
   while (return_value >= size) {
     size *= 2;
     long_path_buf.reset(new wchar_t[size]);
-    return_value = ::GetLongPathName(temp_path.c_str(), long_path_buf.get(),
-                                     size);
+    return_value =
+        ::GetLongPathName(temp_path.c_str(), long_path_buf.get(), size);
   }
 
   DWORD last_error = ::GetLastError();
@@ -407,7 +410,7 @@ bool ConvertToLongPath(base::string16* native_path,
 }
 
 bool GetPathFromHandle(HANDLE handle, base::string16* path) {
-  NtQueryObjectFunction NtQueryObject = NULL;
+  NtQueryObjectFunction NtQueryObject = nullptr;
   ResolveNTFunctionPtr("NtQueryObject", &NtQueryObject);
 
   OBJECT_NAME_INFORMATION initial_buffer;
@@ -415,8 +418,8 @@ bool GetPathFromHandle(HANDLE handle, base::string16* path) {
   ULONG size = sizeof(initial_buffer);
   // Query the name information a first time to get the size of the name.
   // Windows XP requires that the size of the buffer passed in here be != 0.
-  NTSTATUS status = NtQueryObject(handle, ObjectNameInformation, name, size,
-                                  &size);
+  NTSTATUS status =
+      NtQueryObject(handle, ObjectNameInformation, name, size, &size);
 
   std::unique_ptr<BYTE[]> name_ptr;
   if (size) {
@@ -431,16 +434,16 @@ bool GetPathFromHandle(HANDLE handle, base::string16* path) {
   if (STATUS_SUCCESS != status)
     return false;
 
-  path->assign(name->ObjectName.Buffer, name->ObjectName.Length /
-                                        sizeof(name->ObjectName.Buffer[0]));
+  path->assign(name->ObjectName.Buffer,
+               name->ObjectName.Length / sizeof(name->ObjectName.Buffer[0]));
   return true;
 }
 
 bool GetNtPathFromWin32Path(const base::string16& path,
                             base::string16* nt_path) {
-  HANDLE file = ::CreateFileW(path.c_str(), 0,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-    OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  HANDLE file = ::CreateFileW(
+      path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
   if (file == INVALID_HANDLE_VALUE)
     return false;
   bool rv = GetPathFromHandle(file, nt_path);
@@ -448,21 +451,24 @@ bool GetNtPathFromWin32Path(const base::string16& path,
   return rv;
 }
 
-bool WriteProtectedChildMemory(HANDLE child_process, void* address,
-                               const void* buffer, size_t length) {
+bool WriteProtectedChildMemory(HANDLE child_process,
+                               void* address,
+                               const void* buffer,
+                               size_t length) {
   // First, remove the protections.
   DWORD old_protection;
-  if (!::VirtualProtectEx(child_process, address, length,
-                          PAGE_WRITECOPY, &old_protection))
+  if (!::VirtualProtectEx(child_process, address, length, PAGE_WRITECOPY,
+                          &old_protection))
     return false;
 
   SIZE_T written;
-  bool ok = ::WriteProcessMemory(child_process, address, buffer, length,
-                                 &written) && (length == written);
+  bool ok =
+      ::WriteProcessMemory(child_process, address, buffer, length, &written) &&
+      (length == written);
 
   // Always attempt to restore the original protection.
-  if (!::VirtualProtectEx(child_process, address, length,
-                          old_protection, &old_protection))
+  if (!::VirtualProtectEx(child_process, address, length, old_protection,
+                          &old_protection))
     return false;
 
   return ok;
@@ -477,7 +483,7 @@ DWORD GetLastErrorFromNtStatus(NTSTATUS status) {
 // This function uses the undocumented PEB ImageBaseAddress field to extract
 // the base address of the new process.
 void* GetProcessBaseAddress(HANDLE process) {
-  NtQueryInformationProcessFunction query_information_process = NULL;
+  NtQueryInformationProcessFunction query_information_process = nullptr;
   ResolveNTFunctionPtr("NtQueryInformationProcess", &query_information_process);
   if (!query_information_process)
     return nullptr;
@@ -513,7 +519,7 @@ void* GetProcessBaseAddress(HANDLE process) {
 };  // namespace sandbox
 
 void ResolveNTFunctionPtr(const char* name, void* ptr) {
-  static volatile HMODULE ntdll = NULL;
+  static volatile HMODULE ntdll = nullptr;
 
   if (!ntdll) {
     HMODULE ntdll_local = ::GetModuleHandle(sandbox::kNtdllName);
@@ -522,7 +528,7 @@ void ResolveNTFunctionPtr(const char* name, void* ptr) {
     CHECK_NT(ntdll_peimage.VerifyMagic());
     // Race-safe way to set static ntdll.
     ::InterlockedCompareExchangePointer(
-        reinterpret_cast<PVOID volatile*>(&ntdll), ntdll_local, NULL);
+        reinterpret_cast<PVOID volatile*>(&ntdll), ntdll_local, nullptr);
   }
 
   CHECK_NT(ntdll);

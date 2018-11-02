@@ -32,11 +32,11 @@
 #ifndef ShapeResultInlineHeaders_h
 #define ShapeResultInlineHeaders_h
 
+#include <hb.h>
+#include <memory>
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-
-#include <hb.h>
 
 namespace blink {
 
@@ -58,12 +58,14 @@ struct ShapeResult::RunInfo {
  public:
   RunInfo(const SimpleFontData* font,
           hb_direction_t dir,
+          CanvasRotationInVertical canvas_rotation,
           hb_script_t script,
           unsigned start_index,
           unsigned num_glyphs,
           unsigned num_characters)
       : font_data_(const_cast<SimpleFontData*>(font)),
         direction_(dir),
+        canvas_rotation_(canvas_rotation),
         script_(script),
         glyph_data_(num_glyphs),
         start_index_(start_index),
@@ -73,6 +75,7 @@ struct ShapeResult::RunInfo {
   RunInfo(const RunInfo& other)
       : font_data_(other.font_data_),
         direction_(other.direction_),
+        canvas_rotation_(other.canvas_rotation_),
         script_(other.script_),
         glyph_data_(other.glyph_data_),
         start_index_(other.start_index_),
@@ -81,6 +84,9 @@ struct ShapeResult::RunInfo {
 
   bool Rtl() const { return HB_DIRECTION_IS_BACKWARD(direction_); }
   bool IsHorizontal() const { return HB_DIRECTION_IS_HORIZONTAL(direction_); }
+  CanvasRotationInVertical CanvasRotation() const { return canvas_rotation_; }
+  unsigned NextSafeToBreakOffset(unsigned) const;
+  unsigned PreviousSafeToBreakOffset(unsigned) const;
   float XPositionForVisualOffset(unsigned, AdjustMidCluster) const;
   float XPositionForOffset(unsigned, AdjustMidCluster) const;
   int CharacterIndexForXPosition(float, bool include_partial_glyphs) const;
@@ -122,9 +128,9 @@ struct ShapeResult::RunInfo {
           });
     }
 
-    auto run = base::MakeUnique<RunInfo>(font_data_.Get(), direction_, script_,
-                                         start_index_ + start, number_of_glyphs,
-                                         number_of_characters);
+    auto run = std::make_unique<RunInfo>(
+        font_data_.get(), direction_, canvas_rotation_, script_,
+        start_index_ + start, number_of_glyphs, number_of_characters);
 
     unsigned sub_glyph_index = 0;
     float total_advance = 0;
@@ -142,6 +148,12 @@ struct ShapeResult::RunInfo {
 
     run->width_ = total_advance;
     run->num_characters_ = number_of_characters;
+
+    for (unsigned i = 0; i < safe_break_offsets_.size(); i++) {
+      if (safe_break_offsets_[i] >= start && safe_break_offsets_[i] <= end)
+        run->safe_break_offsets_.push_back(safe_break_offsets_[i] - start);
+    }
+
     return run;
   }
 
@@ -199,10 +211,16 @@ struct ShapeResult::RunInfo {
         });
   }
 
-  RefPtr<SimpleFontData> font_data_;
+  scoped_refptr<SimpleFontData> font_data_;
   hb_direction_t direction_;
+  // For upright-in-vertical we need to tell the ShapeResultBloberizer to rotate
+  // the canvas back 90deg for this RunInfo.
+  CanvasRotationInVertical canvas_rotation_;
   hb_script_t script_;
   Vector<HarfBuzzRunGlyphData> glyph_data_;
+  // List of character indecies before which it's safe to break without
+  // reshaping.
+  Vector<uint16_t> safe_break_offsets_;
   unsigned start_index_;
   unsigned num_characters_;
   float width_;

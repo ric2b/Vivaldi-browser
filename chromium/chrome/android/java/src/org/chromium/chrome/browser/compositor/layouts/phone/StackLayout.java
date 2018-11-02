@@ -614,10 +614,10 @@ public class StackLayout extends Layout implements Animatable<StackLayout.Proper
     public void uiDoneClosingTab(long time, int id, boolean canUndo, boolean incognito) {
         // If homepage is enabled and there is a maximum of 1 tab in both models
         // (this is the last tab), the tab closure cannot be undone.
-        canUndo &= !(HomepageManager.isHomepageEnabled(getContext())
-                           && (mTabModelSelector.getModel(true).getCount()
-                                              + mTabModelSelector.getModel(false).getCount()
-                                      < 2));
+        canUndo &= !(HomepageManager.isHomepageEnabled()
+                && (mTabModelSelector.getModel(true).getCount()
+                                   + mTabModelSelector.getModel(false).getCount()
+                           < 2));
 
         // Propagate the tab closure to the model.
         TabModelUtils.closeTabById(mTabModelSelector.getModel(incognito), id, canUndo);
@@ -874,8 +874,7 @@ public class StackLayout extends Layout implements Animatable<StackLayout.Proper
         }
 
         float getTopHeightOffset() {
-            if (FeatureUtilities.isChromeHomeModernEnabled()) return MODERN_TOP_MARGIN_DP;
-            if (FeatureUtilities.isChromeHomeEnabled()) return 0;
+            if (FeatureUtilities.isChromeHomeEnabled()) return MODERN_TOP_MARGIN_DP;
             return (StackLayout.this.getHeight() - getHeightMinusBrowserControls())
                     * mStackOffsetYPercent;
         }

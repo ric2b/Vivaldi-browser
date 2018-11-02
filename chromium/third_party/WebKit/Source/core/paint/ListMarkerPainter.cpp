@@ -8,12 +8,14 @@
 #include "core/layout/LayoutListMarker.h"
 #include "core/layout/ListMarkerText.h"
 #include "core/layout/api/SelectionState.h"
+#include "core/paint/AdjustPaintOffsetScope.h"
 #include "core/paint/BoxModelObjectPainter.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
+#include "core/paint/SelectionPaintingUtils.h"
 #include "core/paint/TextPainter.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 
 namespace blink {
 
@@ -42,48 +44,53 @@ static inline void PaintSymbol(GraphicsContext& context,
 
 void ListMarkerPainter::Paint(const PaintInfo& paint_info,
                               const LayoutPoint& paint_offset) {
-  if (paint_info.phase != kPaintPhaseForeground)
+  if (paint_info.phase != PaintPhase::kForeground)
     return;
 
   if (layout_list_marker_.Style()->Visibility() != EVisibility::kVisible)
     return;
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_list_marker_, paint_info.phase))
     return;
 
-  LayoutPoint box_origin(paint_offset + layout_list_marker_.Location());
+  AdjustPaintOffsetScope adjustment(layout_list_marker_, paint_info,
+                                    paint_offset);
+  const auto& local_paint_info = adjustment.GetPaintInfo();
+  auto box_origin = adjustment.AdjustedPaintOffset();
   LayoutRect overflow_rect(layout_list_marker_.VisualOverflowRect());
   overflow_rect.MoveBy(box_origin);
 
-  IntRect pixel_snapped_overflow_rect = PixelSnappedIntRect(overflow_rect);
-  if (!paint_info.GetCullRect().IntersectsCullRect(overflow_rect))
+  if (!local_paint_info.GetCullRect().IntersectsCullRect(overflow_rect))
     return;
 
-  LayoutObjectDrawingRecorder recorder(paint_info.context, layout_list_marker_,
-                                       paint_info.phase,
-                                       pixel_snapped_overflow_rect);
+  DrawingRecorder recorder(local_paint_info.context, layout_list_marker_,
+                           local_paint_info.phase);
 
   LayoutRect box(box_origin, layout_list_marker_.Size());
 
   IntRect marker = layout_list_marker_.GetRelativeMarkerRect();
   marker.MoveBy(RoundedIntPoint(box_origin));
 
-  GraphicsContext& context = paint_info.context;
+  GraphicsContext& context = local_paint_info.context;
 
   if (layout_list_marker_.IsImage()) {
+    // Since there is no way for the developer to specify decode behavior, use
+    // kSync by default.
     context.DrawImage(
         layout_list_marker_.GetImage()
             ->GetImage(layout_list_marker_, layout_list_marker_.GetDocument(),
                        layout_list_marker_.StyleRef(), marker.Size())
-            .Get(),
-        marker);
+            .get(),
+        Image::kSyncDecode, marker);
     if (layout_list_marker_.GetSelectionState() != SelectionState::kNone) {
       LayoutRect sel_rect = layout_list_marker_.LocalSelectionRect();
       sel_rect.MoveBy(box_origin);
-      context.FillRect(
-          PixelSnappedIntRect(sel_rect),
-          layout_list_marker_.ListItem()->SelectionBackgroundColor());
+      Color selection_bg = SelectionPaintingUtils::SelectionBackgroundColor(
+          layout_list_marker_.ListItem()->GetDocument(),
+          layout_list_marker_.ListItem()->StyleRef(),
+          layout_list_marker_.ListItem()->GetNode());
+      context.FillRect(PixelSnappedIntRect(sel_rect), selection_bg);
     }
     return;
   }
@@ -171,6 +178,9 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
     context.DrawText(font, text_run_paint_info,
                      text_origin + IntSize(font.Width(suffix_run), 0));
   }
+  // TODO(npm): Check that there are non-whitespace characters. See
+  // crbug.com/788444.
+  context.GetPaintController().SetTextPainted();
 }
 
 }  // namespace blink

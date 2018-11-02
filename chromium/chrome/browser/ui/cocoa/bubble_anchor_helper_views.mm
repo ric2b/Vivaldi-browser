@@ -11,6 +11,8 @@
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
+#import "chrome/browser/ui/cocoa/location_bar/page_info_bubble_decoration.h"
+#import "chrome/browser/ui/cocoa/location_bar/save_credit_card_decoration.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -22,7 +24,7 @@ enum AnchorType { OBSERVE_PARENT, IGNORE_PARENT };
 // Self-deleting object that hosts Objective-C observers watching for parent
 // window resizes to reposition a bubble Widget. Deletes itself when the bubble
 // Widget closes.
-class BubbleAnchorHelper : public views::WidgetObserver {
+class BubbleAnchorHelper final : public views::WidgetObserver {
  public:
   BubbleAnchorHelper(views::BubbleDialogDelegateView* bubble,
                      LocationBarDecoration* decoration,
@@ -70,7 +72,7 @@ LocationBarDecoration* GetPageInfoDecoration(gfx::NativeWindow window) {
   BrowserWindowController* window_controller =
       [BrowserWindowController browserWindowControllerForWindow:window];
   LocationBarViewMac* location_bar = [window_controller locationBarBridge];
-  return location_bar ? location_bar->GetPageInfoDecoration() : nullptr;
+  return location_bar ? location_bar->page_info_decoration() : nullptr;
 }
 
 void KeepBubbleAnchored(views::BubbleDialogDelegateView* bubble,

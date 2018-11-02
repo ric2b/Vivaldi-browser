@@ -7,6 +7,7 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/browser/threat_details.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
@@ -41,6 +42,8 @@ AwSafeBrowsingBlockingPage::AwSafeBrowsingBlockingPage(
                        std::move(controller_client),
                        display_options),
       threat_details_in_progress_(false) {
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.Interstitial.Type", errorUiType,
+                            ErrorUiType::COUNT);
   if (errorUiType == ErrorUiType::QUIET_SMALL ||
       errorUiType == ErrorUiType::QUIET_GIANT) {
     set_sb_error_ui(base::MakeUnique<SafeBrowsingQuietErrorUI>(
@@ -98,6 +101,7 @@ void AwSafeBrowsingBlockingPage::ShowBlockingPage(
             pref_service->GetBoolean(
                 ::prefs::kSafeBrowsingProceedAnywayDisabled),
             false,                    // should_open_links_in_new_tab
+            false,                    // always_show_back_to_safety
             "cpn_safe_browsing_wv");  // help_center_article_link
 
     ErrorUiType errorType =

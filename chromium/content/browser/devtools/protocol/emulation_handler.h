@@ -24,7 +24,9 @@ class EmulationHandler : public DevToolsDomainHandler,
   ~EmulationHandler() override;
 
   void Wire(UberDispatcher* dispatcher) override;
-  void SetRenderFrameHost(RenderFrameHostImpl* host) override;
+  void SetRenderer(RenderProcessHost* process_host,
+                   RenderFrameHostImpl* frame_host) override;
+
   Response Disable() override;
 
   Response SetGeolocationOverride(Maybe<double> latitude,
@@ -48,7 +50,8 @@ class EmulationHandler : public DevToolsDomainHandler,
       Maybe<int> position_x,
       Maybe<int> position_y,
       Maybe<bool> dont_set_visible_size,
-      Maybe<Emulation::ScreenOrientation> screen_orientation) override;
+      Maybe<Emulation::ScreenOrientation> screen_orientation,
+      Maybe<protocol::Page::Viewport> viewport) override;
   Response ClearDeviceMetricsOverride() override;
 
   Response SetVisibleSize(int width, int height) override;

@@ -34,10 +34,10 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/ThreadSpecific.h"
+#include "platform/wtf/Time.h"
 #include "v8/include/v8.h"
 
 namespace blink {

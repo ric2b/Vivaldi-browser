@@ -36,7 +36,6 @@
 #include "media/cdm/api/content_decryption_module.h"
 #include "media/cdm/cdm_adapter.h"
 #include "media/cdm/cdm_auxiliary_helper.h"
-#include "media/cdm/cdm_file_io.h"
 #include "media/cdm/external_clear_key_test_helper.h"
 #include "media/cdm/mock_helpers.h"
 #include "media/cdm/simple_cdm_allocator.h"
@@ -59,7 +58,7 @@ MATCHER(NotEmpty, "") {
 MATCHER(IsJSONDictionary, "") {
   std::string result(arg.begin(), arg.end());
   std::unique_ptr<base::Value> root(base::JSONReader().ReadToValue(result));
-  return (root.get() && root->GetType() == base::Value::Type::DICTIONARY);
+  return (root.get() && root->type() == base::Value::Type::DICTIONARY);
 }
 MATCHER(IsNullTime, "") {
   return arg.is_null();
@@ -274,12 +273,15 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
 
       // Enable use of External Clear Key CDM.
       scoped_feature_list_.InitWithFeatures(
-          {media::kExternalClearKeyForTesting,
-           media::kSupportExperimentalCdmInterface},
-          {});
+          {media::kExternalClearKeyForTesting}, {});
 
       helper_.reset(new ExternalClearKeyTestHelper());
-      CdmModule::GetInstance()->SetCdmPathForTesting(helper_->LibraryPath());
+
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
+      CdmModule::GetInstance()->Initialize(helper_->LibraryPath(), {});
+#else
+      CdmModule::GetInstance()->Initialize(helper_->LibraryPath());
+#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
       std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
       std::unique_ptr<CdmAuxiliaryHelper> cdm_helper(
@@ -491,13 +493,6 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
         break;
     }
   }
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  std::unique_ptr<CdmFileIO> CreateCdmFileIO(cdm::FileIOClient* client) {
-    ADD_FAILURE() << "Should never be called";
-    return nullptr;
-  }
-#endif
 
   // Must be the first member to be initialized first and destroyed last.
   base::test::ScopedTaskEnvironment scoped_task_environment_;

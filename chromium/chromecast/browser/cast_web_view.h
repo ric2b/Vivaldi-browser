@@ -47,7 +47,9 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
               CastWebContentsManager* web_contents_manager,
               content::BrowserContext* browser_context,
               scoped_refptr<content::SiteInstance> site_instance,
-              bool transparent);
+              bool transparent,
+              bool allow_media_access,
+              bool is_headless);
   ~CastWebView() override;
 
   shell::CastContentWindow* window() const { return window_.get(); }
@@ -82,8 +84,10 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
       content::NavigationHandle* navigation_handle) override;
   void MediaStartedPlaying(const MediaPlayerInfo& media_info,
                            const MediaPlayerId& id) override;
-  void MediaStoppedPlaying(const MediaPlayerInfo& media_info,
-                           const MediaPlayerId& id) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& media_info,
+      const MediaPlayerId& id,
+      WebContentsObserver::MediaStoppedReason reason) override;
 
   // WebContentsDelegate implementation:
   content::WebContents* OpenURLFromTab(
@@ -93,6 +97,13 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
   void LoadingStateChanged(content::WebContents* source,
                            bool to_different_document) override;
   void ActivateContents(content::WebContents* contents) override;
+  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+                                  const GURL& security_origin,
+                                  content::MediaStreamType type) override;
+  void RequestMediaAccessPermission(
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      const content::MediaResponseCallback& callback) override;
 #if defined(OS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetContentVideoViewEmbedder()
       override;
@@ -107,6 +118,7 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
   std::unique_ptr<shell::CastContentWindow> window_;
   bool did_start_navigation_;
   base::TimeDelta shutdown_delay_;
+  bool allow_media_access_;
 
   base::WeakPtrFactory<CastWebView> weak_factory_;
 

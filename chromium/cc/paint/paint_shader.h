@@ -16,7 +16,7 @@
 #include "third_party/skia/include/core/SkShader.h"
 
 namespace cc {
-
+class ImageProvider;
 class PaintOpBuffer;
 using PaintRecord = PaintOpBuffer;
 
@@ -111,8 +111,12 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
     return image_;
   }
 
+  const sk_sp<PaintRecord>& paint_record() const { return record_; }
+  bool GetRasterizationTileRect(const SkMatrix& ctm, SkRect* tile_rect) const;
+
   SkShader::TileMode tx() const { return tx_; }
   SkShader::TileMode ty() const { return ty_; }
+  SkRect tile() const { return tile_; }
 
   bool IsOpaque() const;
 
@@ -122,15 +126,26 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   // shader is correct is hard.
   bool IsValid() const;
 
+  bool operator==(const PaintShader& other) const;
+  bool operator!=(const PaintShader& other) const { return !(*this == other); }
+
  private:
   friend class PaintFlags;
   friend class PaintOpReader;
   friend class PaintOpSerializationTestUtils;
   friend class PaintOpWriter;
+  friend class ScopedImageFlags;
+  FRIEND_TEST_ALL_PREFIXES(PaintShaderTest, DecodePaintRecord);
 
   explicit PaintShader(Type type);
 
   sk_sp<SkShader> GetSkShader() const;
+  void CreateSkShader(ImageProvider* = nullptr,
+                      const SkMatrix* raster_matrix = nullptr);
+
+  sk_sp<PaintShader> CreateDecodedPaintRecord(
+      const SkMatrix& ctm,
+      ImageProvider* image_provider) const;
 
   void SetColorsAndPositions(const SkColor* colors,
                              const SkScalar* positions,
@@ -166,7 +181,10 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   std::vector<SkColor> colors_;
   std::vector<SkScalar> positions_;
 
-  mutable sk_sp<SkShader> cached_shader_;
+  // The |cached_shader_| can be derived/creates from other inputs present in
+  // the PaintShader but we always construct it at creation time to ensure that
+  // accesses to it are thread-safe.
+  sk_sp<SkShader> cached_shader_;
 
   DISALLOW_COPY_AND_ASSIGN(PaintShader);
 };

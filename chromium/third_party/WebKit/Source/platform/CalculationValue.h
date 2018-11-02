@@ -31,19 +31,18 @@
 #ifndef CalculationValue_h
 #define CalculationValue_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/Length.h"
 #include "platform/LengthFunctions.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class PLATFORM_EXPORT CalculationValue : public RefCounted<CalculationValue> {
  public:
-  static PassRefPtr<CalculationValue> Create(PixelsAndPercent value,
-                                             ValueRange range) {
-    return AdoptRef(new CalculationValue(value, range));
+  static scoped_refptr<CalculationValue> Create(PixelsAndPercent value,
+                                                ValueRange range) {
+    return base::AdoptRef(new CalculationValue(value, range));
   }
 
   float Evaluate(float max_value) const {

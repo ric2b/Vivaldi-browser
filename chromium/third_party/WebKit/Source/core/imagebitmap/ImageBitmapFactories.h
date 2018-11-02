@@ -32,9 +32,9 @@
 #define ImageBitmapFactories_h
 
 #include <memory>
-#include "bindings/core/v8/ImageBitmapSource.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/image_bitmap_source.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -62,7 +62,8 @@ typedef HTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOr
 class ImageBitmapFactories final
     : public GarbageCollectedFinalized<ImageBitmapFactories>,
       public Supplement<LocalDOMWindow>,
-      public Supplement<WorkerGlobalScope> {
+      public Supplement<WorkerGlobalScope>,
+      public TraceWrapperBase {
   USING_GARBAGE_COLLECTED_MIXIN(ImageBitmapFactories);
 
  public:
@@ -91,7 +92,7 @@ class ImageBitmapFactories final
 
   virtual ~ImageBitmapFactories() {}
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  protected:
   static const char* SupplementName();
@@ -111,7 +112,7 @@ class ImageBitmapFactories final
     void LoadBlobAsync(ExecutionContext*, Blob*);
     ScriptPromise Promise() { return resolver_->Promise(); }
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
     ~ImageBitmapLoader() override {}
 
@@ -130,7 +131,7 @@ class ImageBitmapFactories final
 
     void ScheduleAsyncImageBitmapDecoding(DOMArrayBuffer*);
     void DecodeImageOnDecoderThread(
-        RefPtr<WebTaskRunner>,
+        scoped_refptr<WebTaskRunner>,
         DOMArrayBuffer*,
         const String& premultiply_alpha_option,
         const String& color_space_conversion_option);

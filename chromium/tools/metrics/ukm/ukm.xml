@@ -18,6 +18,18 @@ be describing additional metrics about the same event.
 
 <ukm-configuration>
 
+<event name="AbusiveExperienceHeuristic">
+  <summary>
+    Various metrics recording experiences which are commonly used for abusive
+    purposes.
+  </summary>
+  <metric name="DidTabUnder">
+    <summary>
+      True if the page attempted a tab-under navigation.
+    </summary>
+  </metric>
+</event>
+
 <event name="Autofill.CardUploadDecision">
   <owner>sebsg@chromium.org</owner>
   <metric name="UploadDecision">
@@ -279,6 +291,50 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Blink.UseCounter">
+  <owner>loonybear@chromium.org</owner>
+  <summary>
+    Collects data for a subset of UseCounter features. When UMA UseCounter data
+    shows a behaviour that is rare but too common to blindly change. This metric
+    should be used to reason about whether a breaking change is acceptable or
+    not.
+  </summary>
+  <metric name="Feature">
+    <summary>
+      Opt-in UseCounter feature.
+    </summary>
+  </metric>
+</event>
+
+<event name="Compositor.UserInteraction">
+  <owner>khushalsagar@chromium.org</owner>
+  <summary>
+    Metrics related to user interaction handled by the compositor. This includes
+    user gestures like scrolling, pinch-zoom and page-scale animations triggered
+    in response to a double-tap event. The length of the user interaction is
+    defined as the time the compositor is running an animation resulting from
+    user input.
+  </summary>
+  <metric name="CheckerboardedContentArea">
+    <summary>
+      The number of visible pixels per frame checkerboarded during this
+      interaction.
+    </summary>
+  </metric>
+  <metric name="CheckerboardedContentAreaRatio">
+    <summary>
+      The percentage of visible pixels per frame checkerboarded during this
+      interaction. This value should be between [0, 100].
+    </summary>
+  </metric>
+  <metric name="NumMissingTiles">
+    <summary>
+      The number of visible tiles per frame checkerboarded during this
+      interaction.
+    </summary>
+  </metric>
+</event>
+
 <event name="ContextualSearch">
   <owner>donnd@chromium.org</owner>
   <summary>
@@ -390,6 +446,34 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="CPUUsageMeasurement">
+  <owner>matthalp@google.com</owner>
+  <owner>oysteine@chromium.org</owner>
+  <summary>
+    A CPU usage measurement that corresponds to a tick in a CPU usage
+    time-series The tick interval is set as a FieldTrial parameter, which can be
+    obtained by cross referencing the UKM entry with the FieldTrial it was
+    launched with. There is also some metadata stored to determine how faitful
+    the CPU usage measurement is (e.g. NumberOfCoresidentTabs).
+  </summary>
+  <metric name="CPUUsage">
+    <summary>
+      CPU usage measurement.
+    </summary>
+  </metric>
+  <metric name="NumberOfCoresidentTabs">
+    <summary>
+      Number of co-resident tabs in all of the render processes a tab is
+      associated with when the CPU usage measurement is taken.
+    </summary>
+  </metric>
+  <metric name="Tick">
+    <summary>
+      Tick CPU Usage measurement was taken at.
+    </summary>
+  </metric>
+</event>
+
 <event name="Event.ScrollUpdate.Touch">
   <owner>nzolghadr@chromium.org</owner>
   <summary>
@@ -400,7 +484,8 @@ be describing additional metrics about the same event.
     <summary>
       The time in microseconds between the initial creation of a touch event and
       the start of the frame swap on the GPU service. If no swap was induced by
-      the event, no recording is made.
+      the event, no recording is made. The first GSU of every scrolling sequence
+      is excluded from this metric.
     </summary>
   </metric>
 </event>
@@ -418,6 +503,23 @@ be describing additional metrics about the same event.
       ScrollUpdate gesture event if that ScrollUpdate is the first such event in
       a given scroll gesture event sequence. If no swap was induced by the
       event, no recording is made.
+    </summary>
+  </metric>
+</event>
+
+<event name="Event.ScrollUpdate.Wheel">
+  <owner>nzolghadr@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Metrics related to a scroll action caused by the generated ScrollUpdate
+    gesture event.
+  </summary>
+  <metric name="TimeToScrollUpdateSwapBegin">
+    <summary>
+      The time in microseconds between the initial creation of a wheel event and
+      the start of the frame swap on the GPU service. If no swap was induced by
+      the event, no recording is made. The first GSU of every scrolling sequence
+      is excluded from this metric.
     </summary>
   </metric>
 </event>
@@ -514,6 +616,80 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Media.Autoplay.Attempt">
+  <owner>mlamouri@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when there is an attempt to autoplay (ie. no user gesture).
+    It will be recorded regardless of the result of this attempt.
+  </summary>
+  <metric name="AudioTrack">
+    <summary>
+      Whether the element had an audio track when autoplay was attempted.
+    </summary>
+  </metric>
+  <metric name="Muted">
+    <summary>
+      Whether the element was muted when autoplay was attempted.
+    </summary>
+  </metric>
+  <metric name="Source">
+    <summary>
+      Source of the autoplay attempt: 0 for attribute; 1 for play().
+    </summary>
+  </metric>
+  <metric name="UserGestureRequired">
+    <summary>
+      Whether a user gesture was required per autoplay rules at the time of
+      attempt. By definition there is no user gesture on the stack when the
+      attempt is registered.
+    </summary>
+  </metric>
+  <metric name="VideoTrack">
+    <summary>
+      Whether the element had a video track when autoplay was attempted.
+    </summary>
+  </metric>
+</event>
+
+<event name="Media.Autoplay.Muted.UnmuteAction">
+  <owner>mlamouri@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when there is an attempt to unmute an media that was
+    autoplaying following the rules of autoplay muted.
+  </summary>
+  <metric name="Result">
+    <summary>
+      0 means that the unmute failed because it happened without a user gesture.
+      1 means that it succeeded because it had a user gesture.
+    </summary>
+  </metric>
+  <metric name="Source">
+    <summary>
+      Similar to &quot;Source&quot; in &quot;Media.Autoplay.Attempt&quot; with
+      the addition of a value for both sources being used: 0 for attribute; 1
+      for play(); 2 for both attempted.
+    </summary>
+  </metric>
+</event>
+
+<event name="Media.Engagement.ShortPlaybackIgnored">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    The Media Engagement index stores the number of significant media playbacks
+    per origin and the number of audible players. From that we calculate a Media
+    Engagement Score.
+
+    Media with a short playback length is ignored so we are logging any time the
+    player is ignored with the length in msec. This will allow us to identify
+    whether sites are being penalized or there is abuse and allow us to tweak
+    the length considered &quot;short&quot;.
+  </summary>
+  <metric name="Length"/>
+</event>
+
 <event name="Media.Engagement.SessionFinished">
   <owner>beccahughes@chromium.org</owner>
   <owner>media-dev@chromium.org</owner>
@@ -529,8 +705,28 @@ be describing additional metrics about the same event.
   <metric name="Engagement.IsHigh"/>
   <metric name="Engagement.Score"/>
   <metric name="Playbacks.Delta"/>
+  <metric name="Playbacks.SecondsSinceLast"/>
   <metric name="Playbacks.Total"/>
+  <metric name="Player.Audible.Delta"/>
+  <metric name="Player.Audible.Total"/>
+  <metric name="Player.Significant.Delta"/>
+  <metric name="Player.Significant.Total"/>
   <metric name="Visits.Total"/>
+</event>
+
+<event name="Media.SiteMuted" singular="True">
+  <owner>steimel@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when a website tries to play audio but is muted by the sound
+    content setting.
+  </summary>
+  <metric name="MuteReason">
+    <summary>
+      Enum value giving the reason the site was muted. Defined as
+      |SoundContentSettingObserver::MuteReason|.
+    </summary>
+  </metric>
 </event>
 
 <event name="Media.WatchTime">
@@ -625,6 +821,14 @@ be describing additional metrics about the same event.
       means this was a SRC playback.
     </summary>
   </metric>
+  <metric name="IsTopFrame">
+    <summary>
+      Flag indicating whether the report comes from the top frame or some inner
+      frame. For privacy, metrics from inner frames are recorded with the top
+      frame's origin, so this flag helps separate top frame vs. embedded
+      playbacks.
+    </summary>
+  </metric>
   <metric name="LastPipelineStatus">
     <summary>
       media::PipelineStatus enum value. Always 0 if the playback succeeded; all
@@ -709,6 +913,109 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Media.VideoDecodePerfRecord">
+  <owner>chcunningham@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    A record of decoding performance metrics from a video playback with the
+    given stream characteristics (profile, resolution, fps). Also includes what
+    Media Capabilities API would claim for such a stream as a means of assessing
+    the API's accuracy.
+  </summary>
+  <metric name="Perf.ApiWouldClaimIsPowerEfficient">
+    <summary>
+      Boolean signaling whether MediaCapabilities would classify streams with
+      these characteristics as power efficient prior to considering this latest
+      record. MediaCapabilities prediction is accurate when this value matches
+      RecordIsPowerEfficient.
+    </summary>
+  </metric>
+  <metric name="Perf.ApiWouldClaimIsSmooth">
+    <summary>
+      Boolean signaling whether MediaCapabilities would classify streams with
+      these characteristics as smooth prior to considering this latest record.
+      MediaCapabilities prediction is accurate when this value matches
+      RecordIsSmooth.
+    </summary>
+  </metric>
+  <metric name="Perf.PastVideoFramesDecoded">
+    <summary>
+      Integer count of past video frames decoded for the given video type.
+    </summary>
+  </metric>
+  <metric name="Perf.PastVideoFramesDropped">
+    <summary>
+      Integer count of past video frames dropped for the given video type.
+    </summary>
+  </metric>
+  <metric name="Perf.PastVideoFramesPowerEfficient">
+    <summary>
+      Integer count of past video frames power efficient for the given video
+      type.
+    </summary>
+  </metric>
+  <metric name="Perf.RecordIsPowerEfficient">
+    <summary>
+      Boolean signaling whether MediaCapabilities would classify this isolated
+      playback record as power efficient.
+    </summary>
+  </metric>
+  <metric name="Perf.RecordIsSmooth">
+    <summary>
+      Boolean signaling whether MediaCapabilities would classify this isolated
+      playback record as smooth.
+    </summary>
+  </metric>
+  <metric name="Perf.VideoFramesDecoded">
+    <summary>
+      Integer count of the video frames decoded in this record.
+    </summary>
+  </metric>
+  <metric name="Perf.VideoFramesDropped">
+    <summary>
+      Integer count of the video frames dropped in this record. Should not
+      exceed VideoFramesDecoded.
+    </summary>
+  </metric>
+  <metric name="Perf.VideoFramesPowerEfficient">
+    <summary>
+      Integer count of the video frames decoded via power efficient means in
+      this record. Should not exceed VideoFramesDecoded.
+    </summary>
+  </metric>
+  <metric name="Video.CodecProfile">
+    <summary>
+      media::VideoCodecProfile enum value. Can be VIDEO_CODEC_PROFILE_UNKNOWN if
+      we don't know the audio codec.
+    </summary>
+  </metric>
+  <metric name="Video.FramesPerSecond">
+    <summary>
+      Integer representing video frames per second. This is the cadence of video
+      frames as described by stream timestamps multiplied by
+      HTMLMediaELement.playbackRate.
+    </summary>
+  </metric>
+  <metric name="Video.InTopFrame">
+    <summary>
+      Flag indicating whether the record comes from the top frame or some inner
+      frame. For privacy, metrics from inner frames are recorded with the top
+      frame's origin, so this flag helps separate top frame vs. embedded
+      playbacks.
+    </summary>
+  </metric>
+  <metric name="Video.NaturalHeight">
+    <summary>
+      Integer representing height of video natural size.
+    </summary>
+  </metric>
+  <metric name="Video.NaturalWidth">
+    <summary>
+      Integer representing width of video natural size.
+    </summary>
+  </metric>
+</event>
+
 <event name="Memory.Experimental">
   <owner>erikchen@chromium.org</owner>
   <summary>
@@ -722,6 +1029,12 @@ be describing additional metrics about the same event.
   <metric name="CommandBuffer">
     <summary>
       Measure of memory consumed by GL command buffer.
+    </summary>
+  </metric>
+  <metric name="IsVisible">
+    <summary>
+      Indicates whether the tab is visible or not at the time of metric
+      collection.
     </summary>
   </metric>
   <metric name="Malloc">
@@ -742,7 +1055,13 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="PrivateMemoryFootprint">
     <summary>
-      Measure of total memory consumed by process.
+      Measure of total private memory consumed by process.
+    </summary>
+  </metric>
+  <metric name="PrivateSwapFootprint">
+    <summary>
+      Measure of private swap memory consumed by a process. Available on Linux
+      and Android.
     </summary>
   </metric>
   <metric name="ProcessType">
@@ -757,9 +1076,36 @@ be describing additional metrics about the same event.
       Size of process' working set.
     </summary>
   </metric>
+  <metric name="SharedMemoryFootprint">
+    <summary>
+      Measure of total shared memory consumed by process.
+    </summary>
+  </metric>
+  <metric name="TimeSinceLastNavigation">
+    <summary>
+      The time in seconds since the Tab navigated. Only emitted for tabs that
+      are not sharing a process.
+    </summary>
+  </metric>
+  <metric name="TimeSinceLastVisibilityChange">
+    <summary>
+      The time in seconds since the Tab changed visibility. Only emitted for
+      tabs that are not sharing a process.
+    </summary>
+  </metric>
   <metric name="Total2.PrivateMemoryFootprint">
     <summary>
-      Measure of total memory consumed by all processes.
+      Measure of total private memory consumed by all processes.
+    </summary>
+  </metric>
+  <metric name="Total2.SharedMemoryFootprint">
+    <summary>
+      Measure of total shared memory consumed by all processes.
+    </summary>
+  </metric>
+  <metric name="Uptime">
+    <summary>
+      Process uptime.
     </summary>
   </metric>
   <metric name="V8">
@@ -827,6 +1173,13 @@ be describing additional metrics about the same event.
   <metric name="Navigation.PageTransition">
     <summary>
       The |ui::PageTransition| for the main frame navigation of this page load.
+    </summary>
+  </metric>
+  <metric name="Net.DownstreamKbpsEstimate.OnNavigationStart">
+    <owner>tbansal@chromium.org</owner>
+    <summary>
+      The downstream throughput (in kilobits per second) for this page load, at
+      the time the navigation for this page load was initiated.
     </summary>
   </metric>
   <metric name="Net.EffectiveConnectionType.OnNavigationStart">
@@ -1076,12 +1429,45 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="User.Action">
+    <obsolete>
+      Deprecated. Use new user actions (&quot;User.Action....&quot;) instead.
+    </obsolete>
     <summary>
       Records what the user does with all UI entry points of the password
       manager UI, like bubbles, context menus, forms, form fields, etc. in
       relation to a given form. Recorded values correspond to the enum
       PasswordFormMetricsRecorder::DetailedUserAction. In contrast to
       User.ActionSimplified, this metric is intended to be extended over time.
+    </summary>
+  </metric>
+  <metric name="User.Action.CorrectedUsernameInForm">
+    <summary>
+      Counts how many times the user corrected a username in a password form.
+      This is only populated if events happened.
+    </summary>
+  </metric>
+  <metric name="User.Action.EditedUsernameInBubble">
+    <summary>
+      Counts how many times the user edited a username in a password save/update
+      bubble. This is only populated if events happened.
+    </summary>
+  </metric>
+  <metric name="User.Action.SelectedDifferentPasswordInBubble">
+    <summary>
+      Counts how many times the user selected a different password in a
+      save/update bubble. This is only populated if events happened.
+    </summary>
+  </metric>
+  <metric name="User.Action.TriggeredManualFallbackForSaving">
+    <summary>
+      Counts how many times the user triggered the manual fallback for password
+      saving. This is only populated if events happened.
+    </summary>
+  </metric>
+  <metric name="User.Action.TriggeredManualFallbackForUpdating">
+    <summary>
+      Counts how many times the user triggered the manual fallback for password
+      updating. This is only populated if events happened.
     </summary>
   </metric>
   <metric name="User.ActionSimplified">
@@ -1176,6 +1562,30 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="ResponsivenessMeasurement">
+  <owner>npm@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Responsiveness metrics recorded once every 5 seconds.
+  </summary>
+  <metric name="ExpectedTaskQueueingDuration">
+    <summary>
+      Duration in MS for expected task queueing duration. The metric reflects
+      the responsiveness of a tab. A lower value means the tab will respond to
+      inputs faster. This metric is equal to
+      RendererScheduler.ExpectedTaskQueueingDuration of the main frame process.
+    </summary>
+  </metric>
+</event>
+
+<event name="Pepper.Broker" singular="True">
+  <owner>raymes@chromium.org</owner>
+  <summary>
+    Event recorded when a flash instance connects to the broker, resulting in a
+    channel being opened to the broker process.
+  </summary>
+</event>
+
 <event name="SubresourceFilter" singular="True">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
@@ -1200,6 +1610,21 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Tab.RendererOOM">
+  <owner>ssid@chromium.org</owner>
+  <summary>
+    Metrics about renderer OOM, recorded for each detected OOM of renderer
+    process.
+  </summary>
+  <metric name="TimeSinceLastNavigation">
+    <summary>
+      Duration in MS from when the main frame navigation was triggered to when
+      the tab crashed with OOM. Recorded only on Windows, Android and Chrome OS.
+      We do not have a way to detect OOMs reliably on Linux and Mac.
+    </summary>
+  </metric>
+</event>
+
 <event name="Translate">
   <owner>hamelphi@chromium.org</owner>
   <summary>
@@ -1215,34 +1640,6 @@ be describing additional metrics about the same event.
   <metric name="RankerVersion"/>
   <metric name="SourceLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"/>
   <metric name="TargetLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"/>
-</event>
-
-<event name="CPUUsageMeasurement">
-  <owner>matthalp@google.com</owner>
-  <owner>oysteine@chromium.org</owner>
-  <summary>
-    A CPU usage measurement that corresponds to a tick in a CPU usage
-    time-series The tick interval is set as a FieldTrial parameter, which can be
-    obtained by cross referencing the UKM entry with the FieldTrial it was
-    launched with. There is also some metadata stored to determine how faitful
-    the CPU usage measurement is (e.g. NumberOfCoresidentTabs).
-  </summary>
-  <metric name="CPUUsage">
-    <summary>
-      CPU usage measurement.
-    </summary>
-  </metric>
-  <metric name="NumberOfCoresidentTabs">
-    <summary>
-      Number of co-resident tabs in all of the render processes a tab is
-      associated with when the CPU usage measurement is taken.
-    </summary>
-  </metric>
-  <metric name="Tick">
-    <summary>
-      Tick CPU Usage measurement was taken at.
-    </summary>
-  </metric>
 </event>
 
 <event name="TabManager.Background.FirstAlertFired">
@@ -1327,6 +1724,391 @@ be describing additional metrics about the same event.
     <summary>
       Duration in MS from when the tab is backgrounded to when the title is
       updated.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Background.ForegroundedOrClosed">
+  <owner>chrisha@chromium.org</owner>
+  <owner>lpy@chromium.org</owner>
+  <summary>
+    Collects the duration in MS from when the tab is backgrounded to when it is
+    brought to foreground or closed.
+  </summary>
+  <metric name="IsForegrounded">
+    <summary>
+      Boolean value indicating whether or not it's triggered because the tab is
+      brought to foreground again.
+    </summary>
+  </metric>
+  <metric name="TimeFromBackgrounded">
+    <summary>
+      Duration in MS from when the tab is backgrounded to when it is brought to
+      foreground or closed.
+    </summary>
+  </metric>
+</event>
+
+<event
+    name="TabManager.BackgroundTabOpening.ForegroundTab.ExpectedTaskQueueingDurationInfo">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Collects the expected queueing duration of tasks and metadata for the
+    foreground tab during a background tab opening session (the duration of time
+    from when the browser starts to open background tabs until the time the
+    browser has finished loading those tabs or otherwise decided to stop loading
+    them). The event is not recorded when the session overlaps with session
+    restore. This event is sampled when there is only one backgrounded loading
+    or pending tab and all events are collected when there are 2 or more
+    backgrounded loading or pending tabs. In this way, we cap the volume while
+    keeping all interesting data. Therefore, aggregated tab counts over multiple
+    events are invalid.
+  </summary>
+  <metric name="BackgroundTabLoadingCount">
+    <summary>
+      Number of background tabs that are loading.
+    </summary>
+  </metric>
+  <metric name="BackgroundTabOpeningSessionId">
+    <summary>
+      The ID of this background tab opening session.
+    </summary>
+  </metric>
+  <metric name="BackgroundTabPendingCount">
+    <summary>
+      Number of background tabs that are pending.
+    </summary>
+  </metric>
+  <metric name="ExpectedTaskQueueingDuration">
+    <summary>
+      Duration in MS for expected task queueing duration. The metric reflects
+      the responsiveness of a tab. A lower value means the tab will respond to
+      inputs faster. This metric is equal to
+      RendererScheduler.ExpectedTaskQueueingDuration. It is emitted once for all
+      tasks in each 1000-ms window.
+    </summary>
+  </metric>
+  <metric name="SequenceId">
+    <summary>
+      The ID of this event's sequence in current background tab opening session.
+    </summary>
+  </metric>
+  <metric name="SystemTabCount">
+    <summary>
+      Number of all tabs of the system, which includes all browser windows.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Experimental.BackgroundTabOpening.TabSwitchLoadStopped"
+    singular="True">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Collects data when a tab is switched to from another tab and then finishes
+    loading in the foreground during a background tab opening session (the
+    duration of time from when the browser starts to open background tabs until
+    the time the browser has finished loading those tabs or otherwise decided to
+    stop loading them). The event is only recorded when a tab is switched to
+    from another tab within the same tabstrip. As a result, the initial
+    foreground tab is not included in this event since it was not switched to
+    from another tab. The event is not recorded when the session overlaps with
+    session restore.
+  </summary>
+  <metric name="BackgroundTabLoadingCount">
+    <summary>
+      Number of background tabs that are loading.
+    </summary>
+  </metric>
+  <metric name="BackgroundTabOpeningSessionId">
+    <summary>
+      The ID of this background tab opening session.
+    </summary>
+  </metric>
+  <metric name="BackgroundTabPendingCount">
+    <summary>
+      Number of background tabs that are pending.
+    </summary>
+  </metric>
+  <metric name="SequenceId">
+    <summary>
+      The ID of this event's sequence in current background tab opening session.
+    </summary>
+  </metric>
+  <metric name="SystemTabCount">
+    <summary>
+      Number of all tabs of the system, which includes all browser windows.
+    </summary>
+  </metric>
+  <metric name="TabSwitchLoadTime">
+    <summary>
+      Tab switch load time in MS. It is defined as the time between when the
+      user switches to a backround tab, and the time when that tab finishes
+      loading in the foreground. If the user switches away before the tab
+      finishes loading, a metric will not be recorded unless the user switches
+      back, in which case the tab switch load time is measured from that point
+      in time.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Experimental.SessionRestore.ForegroundTab.PageLoad"
+    singular="True">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Collects the tab counts for the foreground tab page load during session
+    restore. The event is not recorded when the session overlaps with background
+    tab opening. This event should be combined with PageLoad event for analysis.
+  </summary>
+  <metric name="SessionRestoreTabCount">
+    <summary>
+      Number of tabs that are restored.
+    </summary>
+  </metric>
+  <metric name="SystemTabCount">
+    <summary>
+      Number of all tabs of the system, which includes all browser windows.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.Experimental.SessionRestore.TabSwitchLoadStopped"
+    singular="True">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Collects data when a tab is switched to from another tab and then finishes
+    loading in the foreground during session restore The event is only recorded
+    when a tab is switched to from another tab within the same tabstrip. As a
+    result, the initial foreground tab is not included in this event since it
+    was not switched to from another tab. The event is not recorded when the
+    session overlaps with background tab opening.
+  </summary>
+  <metric name="SequenceId">
+    <summary>
+      The ID of this event's sequence in current session restore session.
+    </summary>
+  </metric>
+  <metric name="SessionRestoreSessionId">
+    <summary>
+      The ID of this session restore session.
+    </summary>
+  </metric>
+  <metric name="SessionRestoreTabCount">
+    <summary>
+      Number of tabs that are restored.
+    </summary>
+  </metric>
+  <metric name="SystemTabCount">
+    <summary>
+      Number of all tabs of the system, which includes all browser windows.
+    </summary>
+  </metric>
+  <metric name="TabSwitchLoadTime">
+    <summary>
+      Tab switch load time in MS. It is defined as the time between when the
+      user switches to a background tab, and the time when that tab finishes
+      loading in the foreground. If the user switches away before the tab
+      finishes loading, a metric will not be recorded unless the user switches
+      back, in which case the tab switch load time is measured from that point
+      in time.
+    </summary>
+  </metric>
+</event>
+
+<event
+    name="TabManager.SessionRestore.ForegroundTab.ExpectedTaskQueueingDurationInfo">
+  <owner>zhenw@chromium.org</owner>
+  <summary>
+    Collects the expected queueing duration of tasks and metadata for the
+    foreground tab during session restore. The event is not recorded when the
+    session overlaps with background tab opening. The event is not recorded when
+    there is only one restored tab, in which case, there is no background
+    restored tab and we are not interested at that. In this way, we cap the
+    volume while keeping all interesting data.
+  </summary>
+  <metric name="ExpectedTaskQueueingDuration">
+    <summary>
+      Duration in MS for expected task queueing duration. The metric reflects
+      the responsiveness of a tab. A lower value means the tab will respond to
+      inputs faster. This metric is equal to
+      RendererScheduler.ExpectedTaskQueueingDuration. It is emitted once for all
+      tasks in each 1000-ms window.
+    </summary>
+  </metric>
+  <metric name="SequenceId">
+    <summary>
+      The ID of this event's sequence in current session restore session.
+    </summary>
+  </metric>
+  <metric name="SessionRestoreSessionId">
+    <summary>
+      The ID of this session restore session.
+    </summary>
+  </metric>
+  <metric name="SessionRestoreTabCount">
+    <summary>
+      Number of tabs that are restored.
+    </summary>
+  </metric>
+  <metric name="SystemTabCount">
+    <summary>
+      Number of all tabs of the system, which includes all browser windows.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.TabLifetime" singular="True">
+  <owner>chrisha@chromium.org</owner>
+  <summary>
+    Collected when a tab is closed, at most once per source.
+  </summary>
+  <metric name="TimeSinceNavigation">
+    <summary>
+      The time when the tab was closed, expressed as the amount of time in MS
+      that has elapsed since the main frame navigation providing the content of
+      the tab.
+    </summary>
+  </metric>
+</event>
+
+<event name="UserActivity">
+  <owner>jiameng@chromium.org</owner>
+  <summary>
+    Collects user activity events after staying idle for a short period of time.
+  </summary>
+  <metric name="BatteryPercent">
+    <summary>
+      Percentage of battery, bucketed to 5 percents, i.e. [0, 5%) is mapped to
+      0, [5%, 10%) is mapped to 5 etc.
+    </summary>
+  </metric>
+  <metric name="DeviceMode">
+    <summary>
+      An enum representing the mode of the device, defined in
+      |chromeos::power::ml::UserActivityEvent::Feature::DeviceMode|
+    </summary>
+  </metric>
+  <metric name="DeviceType">
+    <summary>
+      An enum representing the type of the device, defined in
+      |chromeos::power::ml::UserActivityEvent::Feature::DeviceType|
+    </summary>
+  </metric>
+  <metric name="EventReason">
+    <summary>
+      An enum representing the reason of the event, defined in
+      |chromeos::power::ml::UserActivityEvent::Event::Reason|.
+    </summary>
+  </metric>
+  <metric name="EventType">
+    <summary>
+      An enum representing the type of the event, defined in
+      |chromeos::power::ml::UserActivityEvent::Event::Type|.
+    </summary>
+  </metric>
+  <metric name="LastActivityDay">
+    <summary>
+      An enum representing the last activity day of the week, defined in
+      |chromeos::power::ml::UserActivityEvent::Feature::DayOfWeek|.
+    </summary>
+  </metric>
+  <metric name="LastActivityTime">
+    <summary>
+      Last activity time as hours since midnight in the local time zone.
+    </summary>
+  </metric>
+  <metric name="LastUserActivityTime">
+    <summary>
+      Last user activity time as hours since midnight in the local time zone.
+    </summary>
+  </metric>
+  <metric name="OnBattery">
+    <summary>
+      Boolean value to represent whether the device is currently on battery
+      power.
+    </summary>
+  </metric>
+  <metric name="RecentTimeActive">
+    <summary>
+      Duration of activity in seconds up to last activity.
+    </summary>
+  </metric>
+  <metric name="TimeSinceLastKey">
+    <summary>
+      Time from last key event in seconds.
+    </summary>
+  </metric>
+  <metric name="TimeSinceLastMouse">
+    <summary>
+      Time from last mouse or touch event in seconds.
+    </summary>
+  </metric>
+</event>
+
+<event name="UserActivityId">
+  <owner>jiameng@chromium.org</owner>
+  <summary>
+    Records an activity that happened while a page was open.
+  </summary>
+  <metric name="ActivityId">
+    <summary>
+      The ID of the activity that happened while a page was open.
+    </summary>
+  </metric>
+</event>
+
+<event name="TabManager.TabMetrics">
+  <owner>michaelpg@chromium.org</owner>
+  <summary>
+    Collects tab information for a tab after navigations, activations and close
+    events.
+  </summary>
+  <metric name="ContentType">
+    <summary>
+      Enumeration for the MIME type of the page. Values are enumerated in
+      metrics::TabEvent::ContentType.
+    </summary>
+  </metric>
+  <metric name="HasFormEntry">
+    <summary>
+      Boolean value indicating whether the page has any user-input text.
+    </summary>
+  </metric>
+  <metric name="IsPinned">
+    <summary>
+      Boolean value indicating whether the tab is pinned in the tabstrip.
+    </summary>
+  </metric>
+  <metric name="KeyEventCount">
+    <summary>
+      Number of key events that were sent to the page.
+    </summary>
+  </metric>
+  <metric name="MouseEventCount">
+    <summary>
+      Number of mouse events that were sent to the page.
+    </summary>
+  </metric>
+  <metric name="SequenceId">
+    <summary>
+      The sequence of this event in the current session. Incremented by 1 each
+      time this event is logged to provide an ordering of events.
+    </summary>
+  </metric>
+  <metric name="SiteEngagementScore">
+    <summary>
+      Site engagement score in the range [0, 100], rounded down to a multiple of
+      10 to limit granularity.
+    </summary>
+  </metric>
+  <metric name="TouchEventCount">
+    <summary>
+      Number of touch events that were sent to the page.
+    </summary>
+  </metric>
+  <metric name="WasRecentlyAudible">
+    <summary>
+      Boolean value indicating whether the tab has played audio within the last
+      two seconds.
     </summary>
   </metric>
 </event>

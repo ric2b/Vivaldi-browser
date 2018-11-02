@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 if (is_android) {
@@ -48,10 +49,11 @@ static_library("browser") {
     "credentials_filter.h",
     "export/csv_writer.cc",
     "export/csv_writer.h",
+    "export/destination.h",
     "export/password_csv_writer.cc",
     "export/password_csv_writer.h",
-    "export/password_exporter.cc",
-    "export/password_exporter.h",
+    "export/password_manager_exporter.cc",
+    "export/password_manager_exporter.h",
     "form_fetcher.h",
     "form_fetcher_impl.cc",
     "form_fetcher_impl.h",
@@ -91,10 +93,14 @@ static_library("browser") {
     "password_form_user_action.h",
     "password_generation_manager.cc",
     "password_generation_manager.h",
+    "password_list_sorter.cc",
+    "password_list_sorter.h",
     "password_manager.cc",
     "password_manager.h",
     "password_manager_client.cc",
     "password_manager_client.h",
+    "password_manager_client_helper.cc",
+    "password_manager_client_helper.h",
     "password_manager_constants.cc",
     "password_manager_constants.h",
     "password_manager_driver.h",
@@ -135,6 +141,9 @@ static_library("browser") {
     "statistics_table.h",
     "suppressed_form_fetcher.cc",
     "suppressed_form_fetcher.h",
+    "ui/credential_provider_interface.h",
+    "ui/export_flow.h",
+    "ui/import_flow.h",
     "webdata/logins_table.cc",
     "webdata/logins_table.h",
     "webdata/logins_table_win.cc",
@@ -318,7 +327,7 @@ source_set("unit_tests") {
     "credential_manager_password_form_manager_unittest.cc",
     "export/csv_writer_unittest.cc",
     "export/password_csv_writer_unittest.cc",
-    "export/password_exporter_unittest.cc",
+    "export/password_manager_exporter_unittest.cc",
     "form_fetcher_impl_unittest.cc",
     "form_saver_impl_unittest.cc",
     "http_password_store_migrator_unittest.cc",
@@ -334,6 +343,7 @@ source_set("unit_tests") {
     "password_form_manager_unittest.cc",
     "password_form_metrics_recorder_unittest.cc",
     "password_generation_manager_unittest.cc",
+    "password_list_sorter_unittest.cc",
     "password_manager_metrics_recorder_unittest.cc",
     "password_manager_unittest.cc",
     "password_manager_util_unittest.cc",
@@ -394,4 +404,16 @@ source_set("unit_tests") {
     "//ui/base",
     "//url",
   ]
+}
+
+fuzzer_test("csv_reader_fuzzer") {
+  sources = [
+    "import/password_csv_reader_fuzzer.cc",
+  ]
+  deps = [
+    ":browser",
+    "//components/autofill/core/common:common",
+  ]
+  seed_corpus = "import/password_csv_reader_corpus"
+  dict = "import/password_csv_reader_fuzzer.dict"
 }

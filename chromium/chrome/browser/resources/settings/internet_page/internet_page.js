@@ -10,7 +10,8 @@
 Polymer({
   is: 'settings-internet-page',
 
-  behaviors: [I18nBehavior, settings.RouteObserverBehavior],
+  behaviors:
+      [I18nBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior],
 
   properties: {
     /**
@@ -89,6 +90,18 @@ Polymer({
       }
     },
 
+    /**
+     * List of Arc VPN providers.
+     * @type {!Array<!settings.ArcVpnProvider>}
+     * @private
+     */
+    arcVpnProviders_: {
+      type: Array,
+      value: function() {
+        return [];
+      }
+    },
+
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
@@ -112,6 +125,13 @@ Polymer({
   },
 
   // chrome.networkingPrivate listeners
+  /** @private {?function(!Array<string>)} */
+  networkListChangedListener_: null,
+
+  /** @private {?function(!Array<string>)} */
+  networksChangedListener_: null,
+
+  // chrome.management listeners
   /** @private {Function} */
   onExtensionAddedListener_: null,
 
@@ -121,8 +141,33 @@ Polymer({
   /** @private {Function} */
   onExtensionDisabledListener_: null,
 
+  /** @private  {settings.InternetPageBrowserProxy} */
+  browserProxy_: null,
+
+  /** @override */
+  created: function() {
+    this.browserProxy_ = settings.InternetPageBrowserProxyImpl.getInstance();
+  },
+
+  /** @override */
+  ready: function() {
+    this.browserProxy_.setUpdateArcVpnProvidersCallback(
+        this.onArcVpnProvidersReceived_.bind(this));
+    this.browserProxy_.requestArcVpnProviders();
+  },
+
   /** @override */
   attached: function() {
+    this.networkListChangedListener_ = this.networkListChangedListener_ ||
+        this.onNetworkListChanged_.bind(this);
+    this.networkingPrivate.onNetworkListChanged.addListener(
+        this.networkListChangedListener_);
+
+    this.networksChangedListener_ =
+        this.networksChangedListener_ || this.onNetworksChanged_.bind(this);
+    this.networkingPrivate.onNetworksChanged.addListener(
+        this.networksChangedListener_);
+
     this.onExtensionAddedListener_ =
         this.onExtensionAddedListener_ || this.onExtensionAdded_.bind(this);
     chrome.management.onInstalled.addListener(this.onExtensionAddedListener_);
@@ -146,6 +191,11 @@ Polymer({
 
   /** @override */
   detached: function() {
+    this.networkingPrivate.onNetworkListChanged.removeListener(
+        assert(this.networkListChangedListener_));
+    this.networkingPrivate.onNetworksChanged.removeListener(
+        assert(this.networksChangedListener_));
+
     chrome.management.onInstalled.removeListener(
         assert(this.onExtensionAddedListener_));
     chrome.management.onEnabled.removeListener(
@@ -233,13 +283,13 @@ Polymer({
    * @private
    */
   showConfig_: function(type, guid, name) {
-    var params = new URLSearchParams;
-    params.append('type', type);
-    if (guid)
-      params.append('guid', guid);
-    if (name)
-      params.append('name', name);
-    settings.navigateTo(settings.routes.NETWORK_CONFIG, params);
+    var configDialog =
+        /** @type {!InternetConfigElement} */ (this.$.configDialog);
+    configDialog.type =
+        /** @type {chrome.networkingPrivate.NetworkType} */ (type);
+    configDialog.guid = guid || '';
+    configDialog.name = name || '';
+    configDialog.open();
   },
 
   /**
@@ -261,11 +311,7 @@ Polymer({
    * @private
    */
   onShowNetworks_: function(event) {
-    this.detailType_ = event.detail.Type;
-    var params = new URLSearchParams;
-    params.append('type', event.detail.Type);
-    this.subpageType_ = event.detail.Type;
-    settings.navigateTo(settings.routes.INTERNET_NETWORKS, params);
+    this.showNetworksSubpage_(event.detail.Type);
   },
 
   /**
@@ -274,6 +320,20 @@ Polymer({
    */
   getNetworksPageTitle_: function() {
     return this.i18n('OncType' + this.subpageType_);
+  },
+
+  /**
+   * @param {string} type
+   * @return {string}
+   * @private
+   */
+  getAddNetworkClass_: function(type) {
+    if (loadTimeData.getBoolean('networkSettingsConfig')) {
+      if (type == CrOnc.Type.WI_FI)
+        return 'icon-add-wifi';
+      return 'icon-add-circle';
+    }
+    return 'icon-external';
   },
 
   /**
@@ -325,7 +385,10 @@ Polymer({
 
   /** @private */
   onAddVPNTap_: function() {
-    chrome.send('addNetwork', [CrOnc.Type.VPN]);
+    if (loadTimeData.getBoolean('networkSettingsConfig'))
+      this.showConfig_(CrOnc.Type.VPN);
+    else
+      chrome.send('addNetwork', [CrOnc.Type.VPN]);
   },
 
   /**
@@ -336,7 +399,24 @@ Polymer({
    */
   onAddThirdPartyVpnTap_: function(event) {
     var provider = event.model.item;
-    chrome.send('addNetwork', [CrOnc.Type.VPN, provider.ExtensionID]);
+    this.browserProxy_.addThirdPartyVpn(CrOnc.Type.VPN, provider.ExtensionID);
+  },
+
+  /** @private */
+  onAddArcVpnTap_: function() {
+    this.showNetworksSubpage_(CrOnc.Type.VPN);
+  },
+
+  /**
+   * @param {string} type
+   * @private
+   */
+  showNetworksSubpage_: function(type) {
+    this.detailType_ = type;
+    var params = new URLSearchParams;
+    params.append('type', type);
+    this.subpageType_ = type;
+    settings.navigateTo(settings.routes.INTERNET_NETWORKS, params);
   },
 
   /**
@@ -376,6 +456,45 @@ Polymer({
   },
 
   /**
+   * This event is triggered when the list of networks changes.
+   * |networkIds| contains the ids for all visible or configured networks.
+   * networkingPrivate.onNetworkListChanged event callback.
+   * @param {!Array<string>} networkIds
+   * @private
+   */
+  onNetworkListChanged_: function(networkIds) {
+    var event = new CustomEvent('network-list-changed', {detail: networkIds});
+    this.maybeDispatchEvent_('network-summary', event);
+    this.maybeDispatchEvent_('settings-internet-detail-page', event);
+    this.maybeDispatchEvent_('settings-internet-known-networks-page', event);
+    this.maybeDispatchEvent_('settings-internet-subpage', event);
+  },
+
+  /**
+   * This event is triggered when interesting properties of a network change.
+   * |networkIds| contains the ids for networks whose properties have changed.
+   * networkingPrivate.onNetworksChanged event callback.
+   * @param {!Array<string>} networkIds
+   * @private
+   */
+  onNetworksChanged_: function(networkIds) {
+    var event = new CustomEvent('networks-changed', {detail: networkIds});
+    this.maybeDispatchEvent_('network-summary', event);
+    this.maybeDispatchEvent_('settings-internet-detail-page', event);
+  },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  maybeDispatchEvent_: function(identifier, event) {
+    var element = this.$$(identifier);
+    if (!element)
+      return;
+    element.dispatchEvent(event);
+  },
+
+  /**
    * chrome.management.onInstalled or onEnabled event.
    * @param {!chrome.management.ExtensionInfo} extension
    * @private
@@ -397,6 +516,29 @@ Polymer({
         break;
       }
     }
+  },
+
+  /**
+   * Compares Arc VPN Providers based on LastlauchTime
+   * @param {!settings.ArcVpnProvider} arcVpnProvider1
+   * @param {!settings.ArcVpnProvider} arcVpnProvider2
+   * @private
+   */
+  compareArcVpnProviders_: function(arcVpnProvider1, arcVpnProvider2) {
+    if (arcVpnProvider1.LastLaunchTime > arcVpnProvider2.LastLaunchTime)
+      return -1;
+    if (arcVpnProvider1.LastLaunchTime < arcVpnProvider2.LastLaunchTime)
+      return 1;
+    return 0;
+  },
+
+  /**
+   * @param {?Array<!settings.ArcVpnProvider>} arcVpnProviders
+   * @private
+   */
+  onArcVpnProvidersReceived_: function(arcVpnProviders) {
+    arcVpnProviders.sort(this.compareArcVpnProviders_);
+    this.arcVpnProviders_ = arcVpnProviders;
   },
 
   /**

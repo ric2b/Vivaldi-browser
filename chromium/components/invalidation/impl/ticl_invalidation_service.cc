@@ -161,10 +161,9 @@ syncer::InvalidatorState TiclInvalidationService::GetInvalidatorState() const {
     DVLOG(2) << "GetInvalidatorState returning "
         << invalidator_->GetInvalidatorState();
     return invalidator_->GetInvalidatorState();
-  } else {
-    DVLOG(2) << "Invalidator currently stopped";
-    return syncer::TRANSIENT_INVALIDATION_ERROR;
   }
+  DVLOG(2) << "Invalidator currently stopped";
+  return syncer::TRANSIENT_INVALIDATION_ERROR;
 }
 
 std::string TiclInvalidationService::GetInvalidatorClientId() const {
@@ -190,7 +189,7 @@ void TiclInvalidationService::RequestDetailedStatus(
 
 void TiclInvalidationService::RequestAccessToken() {
   // Only one active request at a time.
-  if (access_token_request_ != NULL)
+  if (access_token_request_ != nullptr)
     return;
   request_access_token_retry_timer_.Stop();
   OAuth2TokenService::ScopeSet oauth2_scopes;
@@ -349,7 +348,7 @@ bool TiclInvalidationService::IsReadyToStart() {
 }
 
 bool TiclInvalidationService::IsStarted() const {
-  return invalidator_.get() != NULL;
+  return invalidator_.get() != nullptr;
 }
 
 void TiclInvalidationService::StartInvalidator(

@@ -10,6 +10,8 @@
 // UI Util containing functions that do not require Objective-C.
 
 // Running on an iPad?
+// TODO(crbug.com/330493): deprecated, use GetDeviceFormFactor() from
+// ui/base/device_form_factor.h instead.
 bool IsIPadIdiom();
 
 // Enum for arrays by UI idiom.
@@ -37,6 +39,10 @@ CGFloat CurrentScreenWidth();
 // Returns true if the device is an iPhone X.
 bool IsIPhoneX();
 
+// Returns whether the feature to force the toolbar to respect the safe area is
+// enabled.
+bool IsSafeAreaCompatibleToolbarEnabled();
+
 // Returns the height of the status bar, accounting for orientation.
 CGFloat StatusBarHeight();
 
@@ -62,6 +68,9 @@ CGRect CGRectCopyWithOrigin(CGRect rect, CGFloat x, CGFloat y);
 // Returns a square CGRect centered at |x|, |y| with a width of |width|.
 // Both the position and the size of the CGRect will be aligned to points.
 CGRect CGRectMakeAlignedAndCenteredAt(CGFloat x, CGFloat y, CGFloat width);
+
+// Returns whether |a| and |b| are within CGFloat's epsilon value.
+bool AreCGFloatsEqual(CGFloat a, CGFloat b);
 
 // This function is used to figure out how to resize an image from an
 // |originalSize| to a |targetSize|. It returns a |revisedTargetSize| of the

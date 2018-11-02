@@ -4,6 +4,8 @@
 
 #include "tools/gn/import_manager.h"
 
+#include <memory>
+
 #include "tools/gn/err.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
@@ -24,7 +26,8 @@ std::unique_ptr<Scope> UncachedImport(const Settings* settings,
   if (!node)
     return nullptr;
 
-  std::unique_ptr<Scope> scope(new Scope(settings->base_config()));
+  std::unique_ptr<Scope> scope =
+      std::make_unique<Scope>(settings->base_config());
   scope->set_source_dir(file.GetDir());
 
   // Don't allow ScopePerFileProvider to provide target-related variables.
@@ -48,8 +51,8 @@ std::unique_ptr<Scope> UncachedImport(const Settings* settings,
 }  // namespace
 
 struct ImportManager::ImportInfo {
-  ImportInfo() {}
-  ~ImportInfo() {}
+  ImportInfo() = default;
+  ~ImportInfo() = default;
 
   // This lock protects the unique_ptr. Once the scope is computed,
   // it is const and can be accessed read-only outside of the lock.
@@ -63,11 +66,9 @@ struct ImportManager::ImportInfo {
   Err load_result;
 };
 
-ImportManager::ImportManager() {
-}
+ImportManager::ImportManager() = default;
 
-ImportManager::~ImportManager() {
-}
+ImportManager::~ImportManager() = default;
 
 bool ImportManager::DoImport(const SourceFile& file,
                              const ParseNode* node_for_err,
@@ -80,7 +81,7 @@ bool ImportManager::DoImport(const SourceFile& file,
     base::AutoLock lock(imports_lock_);
     std::unique_ptr<ImportInfo>& info_ptr = imports_[file];
     if (!info_ptr)
-      info_ptr.reset(new ImportInfo);
+      info_ptr = std::make_unique<ImportInfo>();
 
     // Promote the ImportInfo to outside of the imports lock.
     import_info = info_ptr.get();

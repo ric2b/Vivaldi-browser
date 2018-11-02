@@ -6,12 +6,12 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include "ash/accessibility_delegate.h"
-#include "ash/accessibility_types.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
@@ -19,10 +19,12 @@
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_window_drag_controller.h"
+#include "ash/wm/overview/rounded_rect_view.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector_delegate.h"
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/panels/panel_layout_manager.h"
+#include "ash/wm/splitview/split_view_overview_overlay.h"
 #include "ash/wm/switchable_windows.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
@@ -101,38 +103,6 @@ struct WindowSelectorItemForRoot {
   const aura::Window* root_window;
 };
 
-// A View having rounded corners and a specified background color which is
-// only painted within the bounds defined by the rounded corners.
-// TODO(tdanderson): This duplicates code from RoundedImageView. Refactor these
-//                   classes and move into ui/views.
-class RoundedContainerView : public views::View {
- public:
-  RoundedContainerView(int corner_radius, SkColor background)
-      : corner_radius_(corner_radius), background_(background) {}
-
-  ~RoundedContainerView() override {}
-
-  void OnPaint(gfx::Canvas* canvas) override {
-    views::View::OnPaint(canvas);
-
-    SkScalar radius = SkIntToScalar(corner_radius_);
-    const SkScalar kRadius[8] = {radius, radius, radius, radius,
-                                 radius, radius, radius, radius};
-    SkPath path;
-    gfx::Rect bounds(size());
-    path.addRoundRect(gfx::RectToSkRect(bounds), kRadius);
-
-    canvas->ClipPath(path, true);
-    canvas->DrawColor(background_);
-  }
-
- private:
-  int corner_radius_;
-  SkColor background_;
-
-  DISALLOW_COPY_AND_ASSIGN(RoundedContainerView);
-};
-
 // Triggers a shelf visibility update on all root window controllers.
 void UpdateShelfVisibility() {
   for (aura::Window* root : Shell::GetAllRootWindows())
@@ -189,8 +159,8 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
 
   // Use |container| to specify the padding surrounding the text and to give
   // the textfield rounded corners.
-  views::View* container = new RoundedContainerView(kTextFilterCornerRadius,
-                                                    kTextFilterBackgroundColor);
+  views::View* container =
+      new RoundedRectView(kTextFilterCornerRadius, kTextFilterBackgroundColor);
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   const int text_height =
       std::max(kTextFilterIconSize,
@@ -269,9 +239,12 @@ WindowSelector::~WindowSelector() {
 void WindowSelector::Init(const WindowList& windows,
                           const WindowList& hide_windows) {
   hide_overview_windows_ =
-      base::MakeUnique<ScopedHideOverviewWindows>(std::move(hide_windows));
+      std::make_unique<ScopedHideOverviewWindows>(std::move(hide_windows));
   if (restore_focus_window_)
     restore_focus_window_->AddObserver(this);
+
+  if (SplitViewController::ShouldAllowSplitView())
+    split_view_overview_overlay_ = std::make_unique<SplitViewOverviewOverlay>();
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::sort(root_windows.begin(), root_windows.end(),
@@ -341,8 +314,8 @@ void WindowSelector::Init(const WindowList& windows,
   display::Screen::GetScreen()->AddObserver(this);
   base::RecordAction(base::UserMetricsAction("WindowSelector_Overview"));
   // Send an a11y alert.
-  Shell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
-      A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
+  Shell::Get()->accessibility_controller()->TriggerAccessibilityAlert(
+      mojom::AccessibilityAlert::WINDOW_OVERVIEW_MODE_ENTERED);
 
   UpdateShelfVisibility();
 }
@@ -495,6 +468,23 @@ void WindowSelector::SetBoundsForWindowGridsInScreenIgnoringWindow(
     grid->SetBoundsAndUpdatePositionsIgnoringWindow(bounds, ignored_item);
 }
 
+void WindowSelector::SetSplitViewOverviewOverlayIndicatorType(
+    IndicatorType indicator_type,
+    const gfx::Point& event_location) {
+  DCHECK(split_view_overview_overlay_);
+  split_view_overview_overlay_->SetIndicatorType(indicator_type,
+                                                 event_location);
+}
+
+WindowGrid* WindowSelector::GetGridWithRootWindow(aura::Window* root_window) {
+  for (std::unique_ptr<WindowGrid>& grid : grid_list_) {
+    if (grid->root_window() == root_window)
+      return grid.get();
+  }
+
+  return nullptr;
+}
+
 void WindowSelector::RemoveWindowSelectorItem(WindowSelectorItem* item) {
   if (item->GetWindow()->HasObserver(this)) {
     item->GetWindow()->RemoveObserver(this);
@@ -527,10 +517,21 @@ void WindowSelector::Drag(WindowSelectorItem* item,
   window_drag_controller_->Drag(location_in_screen);
 }
 
-void WindowSelector::CompleteDrag(WindowSelectorItem* item) {
+void WindowSelector::CompleteDrag(WindowSelectorItem* item,
+                                  const gfx::Point& location_in_screen) {
   DCHECK(window_drag_controller_.get());
   DCHECK_EQ(item, window_drag_controller_->item());
-  window_drag_controller_->CompleteDrag();
+  window_drag_controller_->CompleteDrag(location_in_screen);
+}
+
+void WindowSelector::ActivateDraggedWindow() {
+  DCHECK(window_drag_controller_.get());
+  window_drag_controller_->ActivateDraggedWindow();
+}
+
+void WindowSelector::ResetDraggedWindowGesture() {
+  DCHECK(window_drag_controller_.get());
+  window_drag_controller_->ResetGesture();
 }
 
 void WindowSelector::PositionWindows(bool animate) {
@@ -544,6 +545,7 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
     return false;
 
   switch (key_event.key_code()) {
+    case ui::VKEY_BROWSER_BACK:
     case ui::VKEY_ESCAPE:
       CancelSelection();
       break;
@@ -606,13 +608,11 @@ void WindowSelector::OnDisplayRemoved(const display::Display& display) {
 
 void WindowSelector::OnDisplayMetricsChanged(const display::Display& display,
                                              uint32_t metrics) {
-  // Re-calculate the bounds for the window grids and position all the windows.
-  for (std::unique_ptr<WindowGrid>& grid : grid_list_) {
-    SetBoundsForWindowGridsInScreen(
-        GetGridBoundsInScreen(const_cast<aura::Window*>(grid->root_window())));
-  }
-  PositionWindows(/* animate */ false);
-  RepositionTextFilterOnDisplayMetricsChange();
+  // For metrics changes that happen when the split view mode is active, the
+  // display bounds will be adjusted in OnSplitViewDividerPositionChanged().
+  if (Shell::Get()->IsSplitViewModeActive())
+    return;
+  OnDisplayBoundsChanged();
 }
 
 void WindowSelector::OnWindowHierarchyChanged(
@@ -736,14 +736,22 @@ void WindowSelector::OnSplitViewStateChanged(
     ResetFocusRestoreWindow(false);
   }
 
-  if (state == SplitViewController::BOTH_SNAPPED ||
-      state == SplitViewController::NO_SNAP) {
+  if (state == SplitViewController::BOTH_SNAPPED) {
     // If two windows were snapped to both sides of the screen, end overview
-    // mode. If split view mode was ended (e.g., one of the snapped window was
-    // closed or minimized / fullscreened / maximized), also end overview mode
-    // if overview mode is active.
+    // mode.
     CancelSelection();
+  } else {
+    // Otherwise adjust the overview window grid bounds if overview mode is
+    // active at the moment.
+    OnDisplayBoundsChanged();
+    for (auto& grid : grid_list_)
+      grid->UpdateCannotSnapWarningVisibility();
   }
+}
+
+void WindowSelector::OnSplitViewDividerPositionChanged() {
+  DCHECK(Shell::Get()->IsSplitViewModeActive());
+  OnDisplayBoundsChanged();
 }
 
 aura::Window* WindowSelector::GetTextFilterWidgetWindow() {
@@ -800,6 +808,18 @@ void WindowSelector::Move(Direction direction, bool animate) {
         (selected_grid_index_ + display_direction + grid_list_.size()) %
         grid_list_.size();
   }
+}
+
+void WindowSelector::OnDisplayBoundsChanged() {
+  // Re-calculate the bounds for the window grids and position all the windows.
+  for (std::unique_ptr<WindowGrid>& grid : grid_list_) {
+    SetBoundsForWindowGridsInScreen(
+        GetGridBoundsInScreen(const_cast<aura::Window*>(grid->root_window())));
+  }
+  PositionWindows(/* animate */ false);
+  RepositionTextFilterOnDisplayMetricsChange();
+  if (split_view_overview_overlay_)
+    split_view_overview_overlay_->OnDisplayBoundsChanged();
 }
 
 }  // namespace ash

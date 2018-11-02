@@ -10,7 +10,6 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "cc/base/math_util.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -24,6 +23,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "ui/gfx/geometry/angle_conversions.h"
 
 namespace {
 
@@ -83,7 +83,7 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
     NavigateToURL(shell(), data_url);
 
     RenderWidgetHostImpl* host = GetWidgetHost();
-    FrameWatcher frame_watcher(shell()->web_contents());
+    MainThreadFrameObserver observer(host);
     host->GetView()->SetSize(gfx::Size(400, 400));
 
     base::string16 ready_title(base::ASCIIToUTF16("ready"));
@@ -94,7 +94,7 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
     // otherwise the injection of the synthetic gestures may get
     // dropped because of MainThread/Impl thread sync of touch event
     // regions.
-    frame_watcher.WaitFrames(1);
+    observer.Wait();
   }
 
   // ContentBrowserTest:
@@ -130,12 +130,13 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
         new SyntheticSmoothScrollGesture(params));
     GetWidgetHost()->QueueSyntheticGesture(
         std::move(gesture),
-        base::Bind(&CompositedScrollingBrowserTest::OnSyntheticGestureCompleted,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &CompositedScrollingBrowserTest::OnSyntheticGestureCompleted,
+            base::Unretained(this)));
 
     // Runs until we get the OnSyntheticGestureCompleted callback
     runner_->Run();
-    runner_ = NULL;
+    runner_ = nullptr;
 
     return GetScrollTop();
   }
@@ -161,7 +162,7 @@ IN_PROC_BROWSER_TEST_F(CompositedScrollingBrowserTest,
   int scrollDistance =
       DoTouchScroll(gfx::Point(50, 150), gfx::Vector2d(0, 100));
   // The scroll distance is increased due to the rotation of the scroller.
-  EXPECT_EQ(std::floor(100 / std::cos(cc::MathUtil::Deg2Rad(30.f))) - 1,
+  EXPECT_EQ(std::floor(100 / std::cos(gfx::DegToRad(30.f))) - 1,
             scrollDistance);
 }
 

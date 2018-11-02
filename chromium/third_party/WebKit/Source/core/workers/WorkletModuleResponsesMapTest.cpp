@@ -57,10 +57,16 @@ class WorkletModuleResponsesMapTest : public ::testing::Test {
   void SetUp() override {
     platform_->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
     dummy_page_holder_ = DummyPageHolder::Create();
-    auto context =
+    auto* context =
         MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
     fetcher_ = ResourceFetcher::Create(context);
     map_ = new WorkletModuleResponsesMap(fetcher_);
+  }
+
+  void ReadEntry(const KURL& url, ClientImpl* client) {
+    ResourceRequest resource_request(url);
+    FetchParameters fetch_params(resource_request);
+    map_->ReadEntry(fetch_params, client);
   }
 
  protected:
@@ -71,25 +77,25 @@ class WorkletModuleResponsesMapTest : public ::testing::Test {
 };
 
 TEST_F(WorkletModuleResponsesMapTest, Basic) {
-  const KURL kUrl(kParsedURLString, "https://example.com/module.js");
+  const KURL kUrl("https://example.com/module.js");
   URLTestHelpers::RegisterMockedURLLoad(
       kUrl, testing::CoreTestDataPath("module.js"), "text/javascript");
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call initiates a fetch request.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[0]);
+  ReadEntry(kUrl, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls should wait for the
   // completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[1]);
+  ReadEntry(kUrl, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[2]);
+  ReadEntry(kUrl, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
 
   // Serve the fetch request. This should notify the waiting clients.
@@ -101,24 +107,24 @@ TEST_F(WorkletModuleResponsesMapTest, Basic) {
 }
 
 TEST_F(WorkletModuleResponsesMapTest, Failure) {
-  const KURL kUrl(kParsedURLString, "https://example.com/module.js");
+  const KURL kUrl("https://example.com/module.js");
   URLTestHelpers::RegisterMockedErrorURLLoad(kUrl);
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call initiates a fetch request.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[0]);
+  ReadEntry(kUrl, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls should wait for the
   // completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[1]);
+  ReadEntry(kUrl, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl)), clients[2]);
+  ReadEntry(kUrl, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
 
   // Serve the fetch request with 404. This should fail the waiting clients.
@@ -130,8 +136,8 @@ TEST_F(WorkletModuleResponsesMapTest, Failure) {
 }
 
 TEST_F(WorkletModuleResponsesMapTest, Isolation) {
-  const KURL kUrl1(kParsedURLString, "https://example.com/module?1.js");
-  const KURL kUrl2(kParsedURLString, "https://example.com/module?2.js");
+  const KURL kUrl1("https://example.com/module?1.js");
+  const KURL kUrl2("https://example.com/module?2.js");
   URLTestHelpers::RegisterMockedErrorURLLoad(kUrl1);
   URLTestHelpers::RegisterMockedURLLoad(
       kUrl2, testing::CoreTestDataPath("module.js"), "text/javascript");
@@ -139,26 +145,26 @@ TEST_F(WorkletModuleResponsesMapTest, Isolation) {
 
   // An initial read call for |kUrl1| initiates a fetch request.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl1)), clients[0]);
+  ReadEntry(kUrl1, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl1| should
   // wait for the completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl1)), clients[1]);
+  ReadEntry(kUrl1, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   // An initial read call for |kUrl2| initiates a fetch request.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl2)), clients[2]);
+  ReadEntry(kUrl2, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
   EXPECT_FALSE(clients[2]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl2| should
   // wait for the completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl2)), clients[3]);
+  ReadEntry(kUrl2, clients[3]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[3]->GetResult());
 
   // The read call for |kUrl2| should not affect the other entry for |kUrl1|.
@@ -180,28 +186,28 @@ TEST_F(WorkletModuleResponsesMapTest, InvalidURL) {
   const KURL kEmptyURL;
   ASSERT_TRUE(kEmptyURL.IsEmpty());
   ClientImpl* client1 = new ClientImpl;
-  map_->ReadEntry(FetchParameters(ResourceRequest(kEmptyURL)), client1);
+  ReadEntry(kEmptyURL, client1);
   EXPECT_EQ(ClientImpl::Result::kFailed, client1->GetResult());
   EXPECT_FALSE(client1->GetParams().has_value());
 
   const KURL kNullURL = NullURL();
   ASSERT_TRUE(kNullURL.IsNull());
   ClientImpl* client2 = new ClientImpl;
-  map_->ReadEntry(FetchParameters(ResourceRequest(kNullURL)), client2);
+  ReadEntry(kNullURL, client2);
   EXPECT_EQ(ClientImpl::Result::kFailed, client2->GetResult());
   EXPECT_FALSE(client2->GetParams().has_value());
 
-  const KURL kInvalidURL(kParsedURLString, String());
+  const KURL kInvalidURL;
   ASSERT_FALSE(kInvalidURL.IsValid());
   ClientImpl* client3 = new ClientImpl;
-  map_->ReadEntry(FetchParameters(ResourceRequest(kInvalidURL)), client3);
+  ReadEntry(kInvalidURL, client3);
   EXPECT_EQ(ClientImpl::Result::kFailed, client3->GetResult());
   EXPECT_FALSE(client3->GetParams().has_value());
 }
 
 TEST_F(WorkletModuleResponsesMapTest, Dispose) {
-  const KURL kUrl1(kParsedURLString, "https://example.com/module?1.js");
-  const KURL kUrl2(kParsedURLString, "https://example.com/module?2.js");
+  const KURL kUrl1("https://example.com/module?1.js");
+  const KURL kUrl2("https://example.com/module?2.js");
   URLTestHelpers::RegisterMockedURLLoad(
       kUrl1, testing::CoreTestDataPath("module.js"), "text/javascript");
   URLTestHelpers::RegisterMockedURLLoad(
@@ -211,27 +217,27 @@ TEST_F(WorkletModuleResponsesMapTest, Dispose) {
   // An initial read call for |kUrl1| creates a placeholder entry and asks the
   // client to fetch a module script.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl1)), clients[0]);
+  ReadEntry(kUrl1, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl1| should
   // wait for the completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl1)), clients[1]);
+  ReadEntry(kUrl1, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   // An initial read call for |kUrl2| also creates a placeholder entry and asks
   // the client to fetch a module script.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl2)), clients[2]);
+  ReadEntry(kUrl2, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
   EXPECT_FALSE(clients[2]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl2| should
   // wait for the completion.
   clients.push_back(new ClientImpl);
-  map_->ReadEntry(FetchParameters(ResourceRequest(kUrl2)), clients[3]);
+  ReadEntry(kUrl2, clients[3]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[3]->GetResult());
 
   // Dispose() should notify to all waiting clients.

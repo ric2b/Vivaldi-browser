@@ -22,12 +22,11 @@
 
 #include "core/svg/SVGAnimateElement.h"
 
-#include "core/XLinkNames.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/dom/Document.h"
 #include "core/dom/QualifiedName.h"
-#include "core/dom/StyleChangeReason.h"
 #include "core/svg/SVGAnimatedColor.h"
 #include "core/svg/SVGLength.h"
 #include "core/svg/SVGLengthList.h"
@@ -35,6 +34,7 @@
 #include "core/svg/SVGString.h"
 #include "core/svg/properties/SVGAnimatedProperty.h"
 #include "core/svg/properties/SVGProperty.h"
+#include "core/xlink_names.h"
 
 namespace blink {
 
@@ -189,7 +189,7 @@ void SVGAnimateElement::ResolveTargetProperty() {
   // also disallows the perfectly "valid" animation of 'className' on said
   // element. If SVGScriptElement.href is transitioned off of SVGAnimatedHref,
   // this can be removed.
-  if (isSVGScriptElement(*targetElement())) {
+  if (IsSVGScriptElement(*targetElement())) {
     type_ = kAnimatedUnknown;
     css_property_id_ = CSSPropertyInvalid;
   }
@@ -345,7 +345,7 @@ void SVGAnimateElement::CalculateAnimatedValue(float percentage,
   DCHECK_EQ(result_animation_element->GetAnimatedPropertyType(),
             GetAnimatedPropertyType());
 
-  if (isSVGSetElement(*this))
+  if (IsSVGSetElement(*this))
     percentage = 1;
 
   if (GetCalcMode() == kCalcModeDiscrete)
@@ -406,7 +406,7 @@ bool SVGAnimateElement::CalculateFromAndByValues(const String& from_string,
       !AnimatedPropertyTypeSupportsAddition())
     return false;
 
-  DCHECK(!isSVGSetElement(*this));
+  DCHECK(!IsSVGSetElement(*this));
 
   from_property_ = CreatePropertyForAnimation(from_string);
   from_property_value_type_ = PropertyValueType(AttributeName(), from_string);
@@ -461,7 +461,7 @@ void SVGAnimateElement::ClearAnimatedType() {
   if (IsAnimatingCSSProperty()) {
     // CSS properties animation code-path.
     if (should_apply) {
-      MutableStylePropertySet* property_set =
+      MutableCSSPropertyValueSet* property_set =
           target_element->EnsureAnimatedSMILStyleProperties();
       if (property_set->RemoveProperty(css_property_id_)) {
         target_element->SetNeedsStyleRecalc(
@@ -498,11 +498,12 @@ void SVGAnimateElement::ApplyResultsToTarget() {
     // CSS properties animation code-path.
     // Convert the result of the animation to a String and apply it as CSS
     // property on the target.
-    MutableStylePropertySet* property_set =
+    MutableCSSPropertyValueSet* property_set =
         targetElement()->EnsureAnimatedSMILStyleProperties();
     if (property_set
-            ->SetProperty(css_property_id_, animated_value_->ValueAsString(),
-                          false, 0)
+            ->SetProperty(
+                css_property_id_, animated_value_->ValueAsString(), false,
+                targetElement()->GetDocument().GetSecureContextMode(), nullptr)
             .did_change) {
       targetElement()->SetNeedsStyleRecalc(
           kLocalStyleChange,
@@ -588,7 +589,7 @@ void SVGAnimateElement::ResetAnimatedPropertyType() {
   ClearTargetProperty();
 }
 
-DEFINE_TRACE(SVGAnimateElement) {
+void SVGAnimateElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(from_property_);
   visitor->Trace(to_property_);
   visitor->Trace(to_at_end_of_duration_property_);

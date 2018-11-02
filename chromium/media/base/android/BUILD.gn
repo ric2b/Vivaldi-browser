@@ -35,8 +35,9 @@ if (is_android) {
       "media_codec_util.h",
       "media_drm_bridge.cc",
       "media_drm_bridge.h",
-      "media_drm_bridge_cdm_context.cc",
       "media_drm_bridge_cdm_context.h",
+      "media_drm_bridge_cdm_context_impl.cc",
+      "media_drm_bridge_cdm_context_impl.h",
       "media_drm_bridge_client.cc",
       "media_drm_bridge_client.h",
       "media_drm_bridge_delegate.cc",
@@ -98,6 +99,7 @@ if (is_android) {
       "//media:test_support",
       "//testing/gmock",
       "//testing/gtest",
+      "//third_party/libyuv",
       "//third_party/widevine/cdm:headers",
       "//ui/gfx:color_space",
     ]
@@ -111,6 +113,8 @@ if (is_android) {
       "mock_android_overlay.h",
       "mock_media_codec_bridge.cc",
       "mock_media_codec_bridge.h",
+      "mock_media_drm_bridge_cdm_context.cc",
+      "mock_media_drm_bridge_cdm_context.h",
       "test_destruction_observable.cc",
       "test_destruction_observable.h",
     ]
@@ -141,7 +145,6 @@ if (is_android) {
   java_cpp_enum("java_enums") {
     sources = [
       "media_codec_bridge.h",
-      "media_codec_bridge_impl.h",
       "media_codec_direction.h",
     ]
   }
@@ -168,6 +171,7 @@ if (is_android) {
       "java/src/org/chromium/media/CodecProfileLevelList.java",
       "java/src/org/chromium/media/MediaCodecBridge.java",
       "java/src/org/chromium/media/MediaCodecUtil.java",
+      "java/src/org/chromium/media/MediaCodecEncoder.java",
       "java/src/org/chromium/media/MediaDrmBridge.java",
       "java/src/org/chromium/media/MediaDrmSessionManager.java",
       "java/src/org/chromium/media/MediaDrmStorageBridge.java",

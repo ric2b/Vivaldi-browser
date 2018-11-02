@@ -9,7 +9,7 @@ using namespace clang;
 namespace {
 
 const char kClassMustLeftMostlyDeriveGC[] =
-    "[blink-gc] Class %0 must derive its GC base in the left-most position.";
+    "[blink-gc] Class %0 must derive from GarbageCollected in the left-most position.";
 
 const char kClassRequiresTraceMethod[] =
     "[blink-gc] Class %0 requires a trace method.";
@@ -59,9 +59,6 @@ const char kRefPtrToGCManagedClassNote[] =
 const char kReferencePtrToGCManagedClassNote[] =
     "[blink-gc] Reference pointer field %0 to a GC managed class"
     " declared here:";
-
-const char kOwnPtrToGCManagedClassNote[] =
-    "[blink-gc] OwnPtr field %0 to a GC managed class declared here:";
 
 const char kUniquePtrToGCManagedClassNote[] =
     "[blink-gc] std::unique_ptr field %0 to a GC managed class declared here:";
@@ -154,6 +151,14 @@ const char kTraceMethodOfStackAllocatedParentNote[] =
     "[blink-gc] The stack allocated class %0 provides an unnecessary "
     "trace method:";
 
+const char kUniquePtrUsedWithGC[] =
+    "[blink-gc] Disallowed use of %0 found; %1 is a garbage-collected type. "
+    "std::unique_ptr cannot hold garbage-collected objects.";
+
+const char kOptionalUsedWithGC[] =
+    "[blink-gc] Disallowed construction of %0 found; %1 is a garbage-collected "
+    "type. optional cannot hold garbage-collected objects.";
+
 } // namespace
 
 DiagnosticBuilder DiagnosticsReporter::ReportDiagnostic(
@@ -232,8 +237,6 @@ DiagnosticsReporter::DiagnosticsReporter(
       DiagnosticsEngine::Note, kRefPtrToGCManagedClassNote);
   diag_reference_ptr_to_gc_managed_class_note_ = diagnostic_.getCustomDiagID(
       DiagnosticsEngine::Note, kReferencePtrToGCManagedClassNote);
-  diag_own_ptr_to_gc_managed_class_note_ = diagnostic_.getCustomDiagID(
-      DiagnosticsEngine::Note, kOwnPtrToGCManagedClassNote);
   diag_unique_ptr_to_gc_managed_class_note_ = diagnostic_.getCustomDiagID(
       DiagnosticsEngine::Note, kUniquePtrToGCManagedClassNote);
   diag_member_to_gc_unmanaged_class_note_ = diagnostic_.getCustomDiagID(
@@ -264,6 +267,11 @@ DiagnosticsReporter::DiagnosticsReporter(
       DiagnosticsEngine::Note, kOverriddenNonVirtualTraceNote);
   diag_manual_dispatch_method_note_ = diagnostic_.getCustomDiagID(
       DiagnosticsEngine::Note, kManualDispatchMethodNote);
+
+  diag_unique_ptr_used_with_gc_ =
+      diagnostic_.getCustomDiagID(getErrorLevel(), kUniquePtrUsedWithGC);
+  diag_optional_used_with_gc_ =
+      diagnostic_.getCustomDiagID(getErrorLevel(), kOptionalUsedWithGC);
 }
 
 bool DiagnosticsReporter::hasErrorOccurred() const
@@ -342,8 +350,6 @@ void DiagnosticsReporter::ClassContainsInvalidFields(
       note = diag_ref_ptr_to_gc_managed_class_note_;
     } else if (error.second == CheckFieldsVisitor::kReferencePtrToGCManaged) {
       note = diag_reference_ptr_to_gc_managed_class_note_;
-    } else if (error.second == CheckFieldsVisitor::kOwnPtrToGCManaged) {
-      note = diag_own_ptr_to_gc_managed_class_note_;
     } else if (error.second == CheckFieldsVisitor::kUniquePtrToGCManaged) {
       note = diag_unique_ptr_to_gc_managed_class_note_;
     } else if (error.second == CheckFieldsVisitor::kMemberToGCUnmanaged) {
@@ -579,4 +585,20 @@ void DiagnosticsReporter::NoteOverriddenNonVirtualTrace(
   ReportDiagnostic(overridden->getLocStart(),
                    diag_overridden_non_virtual_trace_note_)
       << overridden;
+}
+
+void DiagnosticsReporter::UniquePtrUsedWithGC(
+    const clang::Expr* expr,
+    const clang::FunctionDecl* bad_function,
+    const clang::CXXRecordDecl* gc_type) {
+  ReportDiagnostic(expr->getLocStart(), diag_unique_ptr_used_with_gc_)
+      << bad_function << gc_type << expr->getSourceRange();
+}
+
+void DiagnosticsReporter::OptionalUsedWithGC(
+    const clang::Expr* expr,
+    const clang::CXXRecordDecl* optional,
+    const clang::CXXRecordDecl* gc_type) {
+  ReportDiagnostic(expr->getLocStart(), diag_optional_used_with_gc_)
+      << optional << gc_type << expr->getSourceRange();
 }

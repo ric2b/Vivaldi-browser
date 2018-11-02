@@ -35,6 +35,8 @@ typedef base::Callback<void(SocketPerformanceWatcherFactory::Protocol protocol,
                             const base::Optional<nqe::internal::IPHash>& host)>
     OnUpdatedRTTAvailableCallback;
 
+typedef base::Callback<bool(base::TimeTicks)> ShouldNotifyRTTCallback;
+
 }  // namespace
 
 namespace nqe {
@@ -53,12 +55,16 @@ class NET_EXPORT_PRIVATE SocketWatcher : public SocketPerformanceWatcher {
   // |allow_rtt_private_address| is true if |updated_rtt_observation_callback|
   // should be called when RTT observation from a socket connected to private
   // address is received. |tick_clock| is guaranteed to be non-null.
+  // |should_notify_rtt_callback| callback should be called back on
+  // |task_runner| by the created socket watchers to check if RTT observation
+  // should be taken and notified.
   SocketWatcher(SocketPerformanceWatcherFactory::Protocol protocol,
                 const AddressList& address_list,
                 base::TimeDelta min_notification_interval,
                 bool allow_rtt_private_address,
                 scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                 OnUpdatedRTTAvailableCallback updated_rtt_observation_callback,
+                ShouldNotifyRTTCallback should_notify_rtt_callback,
                 base::TickClock* tick_clock);
 
   ~SocketWatcher() override;
@@ -77,6 +83,10 @@ class NET_EXPORT_PRIVATE SocketWatcher : public SocketPerformanceWatcher {
   // Called every time a new RTT observation is available.
   OnUpdatedRTTAvailableCallback updated_rtt_observation_callback_;
 
+  // Called to determine if the RTT notification should be notified using
+  // |updated_rtt_observation_callback_|.
+  ShouldNotifyRTTCallback should_notify_rtt_callback_;
+
   // Minimum interval betweeen consecutive incoming notifications.
   const base::TimeDelta rtt_notifications_minimum_interval_;
 
@@ -90,6 +100,10 @@ class NET_EXPORT_PRIVATE SocketWatcher : public SocketPerformanceWatcher {
   base::TickClock* tick_clock_;
 
   base::ThreadChecker thread_checker_;
+
+  // True if the first RTT notification from the QUIC connection has been
+  // received.
+  bool first_quic_rtt_notification_received_;
 
   // A unique identifier for the remote host that this socket connects to.
   const base::Optional<IPHash> host_;

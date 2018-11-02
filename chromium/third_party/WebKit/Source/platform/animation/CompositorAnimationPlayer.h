@@ -6,9 +6,11 @@
 #define CompositorAnimationPlayer_h
 
 #include <memory>
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_player.h"
+#include "cc/animation/scroll_timeline.h"
+#include "cc/animation/worklet_animation_player.h"
 #include "platform/PlatformExport.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/wtf/Noncopyable.h"
@@ -20,6 +22,8 @@ class AnimationCurve;
 
 namespace blink {
 
+using CompositorScrollTimeline = cc::ScrollTimeline;
+
 class CompositorAnimation;
 class CompositorAnimationDelegate;
 
@@ -28,10 +32,12 @@ class PLATFORM_EXPORT CompositorAnimationPlayer : public cc::AnimationDelegate {
   WTF_MAKE_NONCOPYABLE(CompositorAnimationPlayer);
 
  public:
-  static std::unique_ptr<CompositorAnimationPlayer> Create() {
-    return WTF::WrapUnique(new CompositorAnimationPlayer());
-  }
+  static std::unique_ptr<CompositorAnimationPlayer> Create();
+  static std::unique_ptr<CompositorAnimationPlayer> CreateWorkletPlayer(
+      const String& name,
+      std::unique_ptr<CompositorScrollTimeline>);
 
+  explicit CompositorAnimationPlayer(scoped_refptr<cc::AnimationPlayer>);
   ~CompositorAnimationPlayer();
 
   cc::AnimationPlayer* CcAnimationPlayer() const;
@@ -52,8 +58,6 @@ class PLATFORM_EXPORT CompositorAnimationPlayer : public cc::AnimationDelegate {
   void AbortAnimation(int animation_id);
 
  private:
-  CompositorAnimationPlayer();
-
   // cc::AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
                               int target_property,

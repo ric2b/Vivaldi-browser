@@ -5,8 +5,8 @@
 #ifndef LinkStyle_h
 #define LinkStyle_h
 
+#include "core/css/StyleEngine.h"
 #include "core/dom/Node.h"
-#include "core/dom/StyleEngine.h"
 #include "core/html/LinkResource.h"
 #include "core/loader/resource/StyleSheetResource.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
@@ -38,7 +38,7 @@ class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
   void Process() override;
   void OwnerRemoved() override;
   bool HasLoaded() const override { return loaded_sheet_; }
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void StartLoadingDynamicSheet();
   void NotifyLoadedSheetAndAllCriticalSubresources(

@@ -4,9 +4,9 @@ include_rules = [
     "+base/allocator/partition_allocator/oom.h",
     "+base/bind.h",
     "+base/bind_helpers.h",
-    "+base/bit_cast.h",
     "+base/callback.h",
     "+base/callback_forward.h",
+    "+base/bit_cast.h",
     "+base/feature_list.h",
     "+base/files",
     "+base/guid.h",
@@ -19,6 +19,7 @@ include_rules = [
     "+base/metrics/histogram_macros.h",
     "+base/metrics/histogram_samples.h",
     "+base/metrics/sparse_histogram.h",
+    "+base/numerics/checked_math.h",
     "+base/numerics/safe_conversions.h",
     "+base/rand_util.h",
     "+base/run_loop.h",
@@ -61,3 +62,9 @@ include_rules = [
     "-core",
     "-modules",
 ]
+
+specific_include_rules = {
+    "WebURLError\.cpp": [
+        "+net/base/net_errors.h"
+     ]
+}

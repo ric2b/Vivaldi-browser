@@ -11,10 +11,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/local_auth.h"
+#include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 
 #include "sync/vivaldi_signin_client_factory.h"
 #include "sync/vivaldi_signin_manager.h"
@@ -68,7 +69,9 @@ KeyedService* VivaldiSigninManagerFactory::BuildServiceInstanceFor(
   SigninClient* client =
       VivaldiSigninClientFactory::GetInstance()->GetForProfile(profile);
   service = new VivaldiSigninManager(
-      client, AccountTrackerServiceFactory::GetForProfile(profile));
+      client,
+      AccountTrackerServiceFactory::GetForProfile(profile),
+      SigninErrorControllerFactory::GetForProfile(profile));
   service->Initialize(g_browser_process->local_state());
   for (auto& observer : observer_list_)
     observer.SigninManagerCreated(service);

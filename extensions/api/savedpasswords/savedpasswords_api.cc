@@ -91,8 +91,6 @@ void SavedpasswordsGetListFunction::SetPasswordExceptionList(
 
 void SavedpasswordsGetListFunction::ShowPassword(
     size_t index,
-    const std::string& origin_url,
-    const std::string& username,
     const base::string16& password_value) {}
 
 SavedpasswordsRemoveFunction::SavedpasswordsRemoveFunction()
@@ -117,8 +115,6 @@ Profile* SavedpasswordsRemoveFunction::GetProfile() {
 }
 void SavedpasswordsRemoveFunction::ShowPassword(
     size_t index,
-    const std::string& origin_url,
-    const std::string& username,
     const base::string16& password_value) {}
 
 void SavedpasswordsRemoveFunction::SetPasswordList(

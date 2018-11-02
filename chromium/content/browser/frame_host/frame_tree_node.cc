@@ -13,9 +13,9 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
@@ -25,7 +25,7 @@
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 
 namespace content {
 
@@ -137,6 +137,8 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
                              blink::WebTreeScopeType scope,
                              const std::string& name,
                              const std::string& unique_name,
+                             bool is_created_by_script,
+                             const base::UnguessableToken& devtools_frame_token,
                              const FrameOwnerProperties& frame_owner_properties)
     : frame_tree_(frame_tree),
       navigator_(navigator),
@@ -154,11 +156,11 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
           scope,
           name,
           unique_name,
-          blink::WebSandboxFlags::kNone,
           false /* should enforce strict mixed content checking */,
           false /* is a potentially trustworthy unique origin */,
           false /* has received a user gesture */),
-      pending_sandbox_flags_(blink::WebSandboxFlags::kNone),
+      is_created_by_script_(is_created_by_script),
+      devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
       loading_progress_(kLoadingProgressNotStarted),
       loaded_bytes_(0),
@@ -177,7 +179,22 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
 }
 
 FrameTreeNode::~FrameTreeNode() {
+  // Remove the children.  See https://crbug.com/612450 for explanation why we
+  // don't just call the std::vector::clear method.
   std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
+
+  // If the removed frame was created by a script, then its history entry will
+  // never be reused - we can save some memory by removing the history entry.
+  // See also https://crbug.com/784356.
+  if (is_created_by_script_ && parent_) {
+    NavigationEntryImpl* nav_entry = static_cast<NavigationEntryImpl*>(
+        navigator()->GetController()->GetLastCommittedEntry());
+    if (nav_entry) {
+      nav_entry->RemoveEntryForFrame(this,
+                                     /* only_if_different_position = */ false);
+    }
+  }
+
   frame_tree_->FrameRemoved(this);
   for (auto& observer : observers_)
     observer.OnFrameTreeNodeDestroyed(this);
@@ -255,6 +272,18 @@ void FrameTreeNode::ResetForNewProcess() {
   std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
 }
 
+void FrameTreeNode::ResetForNavigation() {
+  // Discard any CSP headers from the previous document.
+  replication_state_.accumulated_csp_headers.clear();
+  render_manager_.OnDidResetContentSecurityPolicy();
+
+  // Clear the declared feature policy for the frame.
+  replication_state_.feature_policy_header.clear();
+
+  // Clear any CSP-set sandbox flags in the frame.
+  UpdateActiveSandboxFlags(blink::WebSandboxFlags::kNone);
+}
+
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
   if (opener_) {
     opener_->RemoveObserver(opener_observer_.get());
@@ -264,7 +293,7 @@ void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
   opener_ = opener;
 
   if (opener_) {
-    opener_observer_ = base::MakeUnique<OpenerDestroyedObserver>(this, false);
+    opener_observer_ = std::make_unique<OpenerDestroyedObserver>(this, false);
     opener_->AddObserver(opener_observer_.get());
   }
 }
@@ -282,7 +311,7 @@ void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
 
   if (original_opener_) {
     original_opener_observer_ =
-        base::MakeUnique<OpenerDestroyedObserver>(this, true);
+        std::make_unique<OpenerDestroyedObserver>(this, true);
     original_opener_->AddObserver(original_opener_observer_.get());
   }
 }
@@ -343,12 +372,8 @@ void FrameTreeNode::SetFrameName(const std::string& name,
 }
 
 void FrameTreeNode::SetFeaturePolicyHeader(
-    const ParsedFeaturePolicyHeader& parsed_header) {
+    const blink::ParsedFeaturePolicy& parsed_header) {
   replication_state_.feature_policy_header = parsed_header;
-}
-
-void FrameTreeNode::ResetFeaturePolicyHeader() {
-  replication_state_.feature_policy_header.clear();
 }
 
 void FrameTreeNode::AddContentSecurityPolicies(
@@ -359,11 +384,6 @@ void FrameTreeNode::AddContentSecurityPolicies(
   render_manager_.OnDidAddContentSecurityPolicies(headers);
 }
 
-void FrameTreeNode::ResetCspHeaders() {
-  replication_state_.accumulated_csp_headers.clear();
-  render_manager_.OnDidResetContentSecurityPolicy();
-}
-
 void FrameTreeNode::SetInsecureRequestPolicy(
     blink::WebInsecureRequestPolicy policy) {
   if (policy == replication_state_.insecure_request_policy)
@@ -372,21 +392,16 @@ void FrameTreeNode::SetInsecureRequestPolicy(
   replication_state_.insecure_request_policy = policy;
 }
 
-void FrameTreeNode::SetPendingSandboxFlags(
-    blink::WebSandboxFlags sandbox_flags) {
-  pending_sandbox_flags_ = sandbox_flags;
+void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
+  pending_frame_policy_.sandbox_flags = frame_policy.sandbox_flags;
 
-  // Subframes should always inherit their parent's sandbox flags.
-  if (parent())
-    pending_sandbox_flags_ |= parent()->effective_sandbox_flags();
-}
-
-void FrameTreeNode::SetPendingContainerPolicy(
-    const ParsedFeaturePolicyHeader& container_policy) {
-  // This should only be called on subframes; container policy is not mutable on
-  // main frame.
-  DCHECK(!IsMainFrame());
-  pending_container_policy_ = container_policy;
+  if (parent()) {
+    // Subframes should always inherit their parent's sandbox flags.
+    pending_frame_policy_.sandbox_flags |= parent()->active_sandbox_flags();
+    // This is only applied on subframes; container policy is not mutable on
+    // main frame.
+    pending_frame_policy_.container_policy = frame_policy.container_policy;
+  }
 }
 
 bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
@@ -433,14 +448,18 @@ bool FrameTreeNode::IsLoading() const {
 }
 
 bool FrameTreeNode::CommitPendingFramePolicy() {
-  bool did_change_flags =
-      pending_sandbox_flags_ != replication_state_.sandbox_flags;
+  bool did_change_flags = pending_frame_policy_.sandbox_flags !=
+                          replication_state_.frame_policy.sandbox_flags;
   bool did_change_container_policy =
-      pending_container_policy_ != replication_state_.container_policy;
+      pending_frame_policy_.container_policy !=
+      replication_state_.frame_policy.container_policy;
   if (did_change_flags)
-    replication_state_.sandbox_flags = pending_sandbox_flags_;
+    replication_state_.frame_policy.sandbox_flags =
+        pending_frame_policy_.sandbox_flags;
   if (did_change_container_policy)
-    replication_state_.container_policy = pending_container_policy_;
+    replication_state_.frame_policy.container_policy =
+        pending_frame_policy_.container_policy;
+  UpdateActiveSandboxFlags(pending_frame_policy_.sandbox_flags);
   return did_change_flags || did_change_container_policy;
 }
 
@@ -483,6 +502,9 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state,
   if (!navigation_request_)
     return;
 
+  RenderFrameDevToolsAgentHost::OnResetNavigationRequest(
+      navigation_request_.get());
+
   // The renderer should be informed if the caller allows to do so and the
   // navigation came from a BeginNavigation IPC.
   int need_to_inform_renderer =
@@ -516,7 +538,6 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state,
     current_frame_host()->Send(
         new FrameMsg_DroppedNavigation(current_frame_host()->GetRoutingID()));
   }
-
 }
 
 bool FrameTreeNode::has_started_loading() const {
@@ -647,6 +668,19 @@ FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {
 
   NOTREACHED() << "FrameTreeNode not found in its parent's children.";
   return nullptr;
+}
+
+void FrameTreeNode::UpdateActiveSandboxFlags(
+    blink::WebSandboxFlags sandbox_flags) {
+  // TODO(iclelland): Kill the renderer if sandbox flags is not a subset of the
+  // currently effective sandbox flags from the frame. https://crbug.com/740556
+  blink::WebSandboxFlags original_flags =
+      replication_state_.active_sandbox_flags;
+  replication_state_.active_sandbox_flags =
+      sandbox_flags | effective_frame_policy().sandbox_flags;
+  // Notify any proxies if the flags have been changed.
+  if (replication_state_.active_sandbox_flags != original_flags)
+    render_manager()->OnDidSetActiveSandboxFlags();
 }
 
 void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,

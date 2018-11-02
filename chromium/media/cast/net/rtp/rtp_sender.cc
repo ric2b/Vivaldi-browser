@@ -20,7 +20,7 @@ namespace {
 PacketRef FastCopyPacket(const PacketRef& packet) {
   if (packet->HasOneRef())
     return packet;
-  return make_scoped_refptr(new base::RefCountedData<Packet>(packet->data));
+  return base::WrapRefCounted(new base::RefCountedData<Packet>(packet->data));
 }
 
 }  // namespace
@@ -35,7 +35,7 @@ RtpSender::RtpSender(
   config_.sequence_number = base::RandInt(0, 65535);
 }
 
-RtpSender::~RtpSender() {}
+RtpSender::~RtpSender() = default;
 
 bool RtpSender::Initialize(const CastTransportRtpConfig& config) {
   config_.ssrc = config.ssrc;

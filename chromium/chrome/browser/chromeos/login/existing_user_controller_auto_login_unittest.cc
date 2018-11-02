@@ -5,19 +5,20 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/ui/mock_login_display.h"
 #include "chrome/browser/chromeos/login/ui/mock_login_display_host.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -43,7 +44,7 @@ class ExistingUserControllerAutoLoginTest : public ::testing::Test {
   ExistingUserControllerAutoLoginTest()
       : local_state_(TestingBrowserProcess::GetGlobal()),
         mock_user_manager_(new MockUserManager()),
-        scoped_user_manager_(mock_user_manager_) {}
+        scoped_user_manager_(base::WrapUnique(mock_user_manager_)) {}
 
   void SetUp() override {
     mock_login_display_host_.reset(new MockLoginDisplayHost);
@@ -55,8 +56,7 @@ class ExistingUserControllerAutoLoginTest : public ::testing::Test {
         .WillOnce(Return(mock_login_display_));
 
     EXPECT_CALL(*mock_user_manager_, Shutdown()).Times(AnyNumber());
-    EXPECT_CALL(*mock_user_manager_, FindUser(_))
-        .WillRepeatedly(ReturnNull());
+    EXPECT_CALL(*mock_user_manager_, FindUser(_)).WillRepeatedly(ReturnNull());
     EXPECT_CALL(*mock_user_manager_, FindUser(auto_login_account_id_))
         .WillRepeatedly(Return(mock_user_manager_->CreatePublicAccountUser(
             auto_login_account_id_)));
@@ -75,10 +75,10 @@ class ExistingUserControllerAutoLoginTest : public ::testing::Test {
     CrosSettings::Get()->Set(kAccountsPrefDeviceLocalAccounts, accounts);
 
     // Prevent settings changes from auto-starting the timer.
-    existing_user_controller_->
-        local_account_auto_login_id_subscription_.reset();
-    existing_user_controller_->
-        local_account_auto_login_delay_subscription_.reset();
+    existing_user_controller_->local_account_auto_login_id_subscription_
+        .reset();
+    existing_user_controller_->local_account_auto_login_delay_subscription_
+        .reset();
   }
 
   const ExistingUserController* existing_user_controller() const {
@@ -93,8 +93,7 @@ class ExistingUserControllerAutoLoginTest : public ::testing::Test {
     CrosSettings::Get()->SetString(kAccountsPrefDeviceLocalAccountAutoLoginId,
                                    user_id);
     CrosSettings::Get()->SetInteger(
-        kAccountsPrefDeviceLocalAccountAutoLoginDelay,
-        delay);
+        kAccountsPrefDeviceLocalAccountAutoLoginDelay, delay);
   }
 
   // ExistingUserController private member accessors.
@@ -149,7 +148,7 @@ class ExistingUserControllerAutoLoginTest : public ::testing::Test {
   ScopedDeviceSettingsTestHelper device_settings_test_helper_;
   ScopedTestCrosSettings test_cros_settings_;
   MockUserManager* mock_user_manager_;
-  ScopedUserManagerEnabler scoped_user_manager_;
+  user_manager::ScopedUserManager scoped_user_manager_;
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
 
   // |existing_user_controller_| must be destroyed before

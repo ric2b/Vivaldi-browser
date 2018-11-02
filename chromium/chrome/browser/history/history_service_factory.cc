@@ -19,7 +19,7 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 
-#include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // static
 history::HistoryService* HistoryServiceFactory::GetForProfile(
@@ -87,7 +87,7 @@ KeyedService* HistoryServiceFactory::BuildServiceInstanceFor(
 
   Profile *profile = Profile::FromBrowserContext(context);
   int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
-      vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits);
+      vivaldiprefs::kHistoryDaysToKeepVisits);
 
   history::HistoryDatabaseParams param =
       history::HistoryDatabaseParamsForPath(profile->GetPath());

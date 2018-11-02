@@ -14,6 +14,14 @@ argument:
 json is written to that file in the format produced by
 common.parse_common_test_results.
 
+Optional argument:
+
+  --isolated-script-test-filter=[TEST_NAMES]
+
+is a double-colon-separated ("::") list of test names, to run just that subset
+of tests. This list is parsed by this harness and sent down via the
+--test-filter argument.
+
 This script is intended to be the base command invoked by the isolate,
 followed by a subsequent Python script. It could be generalized to
 invoke an arbitrary executable.
@@ -44,6 +52,9 @@ def main():
   parser.add_argument(
       '--isolated-script-test-output', type=str,
       required=True)
+  parser.add_argument(
+      '--isolated-script-test-filter', type=str,
+      required=False)
   parser.add_argument('--xvfb', help='Start xvfb.', action='store_true')
   args, rest_args = parser.parse_known_args()
   # Remove the chartjson extra arg until this script cares about chartjson
@@ -55,6 +66,11 @@ def main():
       rest_args.pop(index)
       break
     index += 1
+  if args.isolated_script_test_filter:
+    filter_list = common.extract_filter_list(args.isolated_script_test_filter)
+    # Need to convert this to a valid regex.
+    filter_regex = '(' + '|'.join(filter_list) + ')'
+    rest_args.append('--test-filter=' + filter_regex)
 
   xvfb_proc = None
   openbox_proc = None

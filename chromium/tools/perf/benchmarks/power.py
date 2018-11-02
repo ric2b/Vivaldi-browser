@@ -23,16 +23,6 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
     options.full_performance_mode = False
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/597656
-    if (possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
-      return True
-
-    # crbug.com/671631
-    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
-
-  @classmethod
   def Name(cls):
     return 'power.typical_10_mobile'
 
@@ -43,43 +33,7 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
     return StoryExpectations()
 
 
-@benchmark.Owner(emails=['erikchen@chromium.org'])
-class PowerScrollingTrivialPage(perf_benchmark.PerfBenchmark):
-  """Measure power consumption for some very simple pages."""
-  test = power.QuiescentPower
-  page_set = page_sets.TrivialSitesStorySet
-  SUPPORTED_PLATFORMS = [story.expectations.ALL_MAC]
-
-  @classmethod
-  def Name(cls):
-    return 'power.trivial_pages'
-
-  def GetExpectations(self):
-    class StoryExpectations(story.expectations.StoryExpectations):
-      def SetExpectations(self):
-        pass
-    return StoryExpectations()
-
-
-class PowerSteadyStatePages(perf_benchmark.PerfBenchmark):
-  """Measure power consumption for real web sites in steady state (no user
-  interactions)."""
-  test = power.QuiescentPower
-  page_set = page_sets.IdleAfterLoadingStories
-  SUPPORTED_PLATFORMS = [story.expectations.ALL_MAC]
-
-  @classmethod
-  def Name(cls):
-    return 'power.steady_state'
-
-  def GetExpectations(self):
-    class StoryExpectations(story.expectations.StoryExpectations):
-      def SetExpectations(self):
-        self.DisableStory('http://abcnews.go.com/', [story.expectations.ALL],
-                          'crbug.com/505990')
-    return StoryExpectations()
-
-
+@benchmark.Owner(emails=['charliea@chromium.org', 'rnephew@chromium.org'])
 class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
   """Idle platform benchmark.
 
@@ -102,10 +56,6 @@ class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
     ])
     return options
 
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return not possible_browser.platform.HasBattOrConnected()
-
   def CreateStorySet(self, options):
     return page_sets.IdleStorySet()
 
@@ -116,6 +66,9 @@ class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing disabled.
+        self.DisableBenchmark(
+            [story.expectations.ANDROID_NEXUS5,
+             story.expectations.ANDROID_NEXUS6,
+             story.expectations.ANDROID_NEXUS7,
+             story.expectations.ANDROID_ONE], 'crbug.com/773949')
     return StoryExpectations()
-

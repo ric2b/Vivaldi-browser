@@ -4,14 +4,28 @@
 
 package org.chromium.net.urlconnection;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import static org.chromium.net.CronetTestRule.getContext;
+
 import android.os.Build;
 import android.support.test.filters.SmallTest;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetEngine;
 import org.chromium.net.CronetException;
-import org.chromium.net.CronetTestBase;
+import org.chromium.net.CronetTestRule;
 import org.chromium.net.CronetTestRule.CompareDefaultWithCronet;
 import org.chromium.net.CronetTestRule.OnlyRunCronetHttpURLConnection;
 import org.chromium.net.MockUrlRequestJobFactory;
@@ -46,23 +60,27 @@ import java.util.regex.Pattern;
  * {@code OnlyRunCronetHttpURLConnection} only run Cronet's implementation.
  * See {@link CronetTestBase#runTest()} for details.
  */
-public class CronetHttpURLConnectionTest extends CronetTestBase {
+@RunWith(BaseJUnit4ClassRunner.class)
+public class CronetHttpURLConnectionTest {
+    @Rule
+    public final CronetTestRule mTestRule = new CronetTestRule();
+
     private CronetEngine mCronetEngine;
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
-        mCronetEngine = enableDiskCache(new CronetEngine.Builder(getContext())).build();
-        setStreamHandlerFactory(mCronetEngine);
+    @Before
+    public void setUp() throws Exception {
+        mCronetEngine = mTestRule.enableDiskCache(new CronetEngine.Builder(getContext())).build();
+        mTestRule.setStreamHandlerFactory(mCronetEngine);
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
-    @Override
-    protected void tearDown() throws Exception {
+    @After
+    public void tearDown() throws Exception {
         NativeTestServer.shutdownNativeTestServer();
-        super.tearDown();
+        mCronetEngine.shutdown();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -76,6 +94,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         urlConnection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -93,6 +112,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -107,6 +127,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -125,9 +146,11 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         } catch (SocketTimeoutException e) {
             // Expected
         }
+        connection.disconnect();
         mockUrlRequestJobFactory.shutdown();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -150,6 +173,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
      * {@code setFixedLengthStreamingMode} is called.
      * Regression test for crbug.com/582975.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -175,6 +199,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
      * {@code setChunkedStreamingMode} is called.
      * Regression test for crbug.com/582975.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -197,6 +222,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
     /**
      * Tests that using reflection to find {@code fixedContentLengthLong} works.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -222,6 +248,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -250,6 +277,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         urlConnection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -282,6 +310,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -305,6 +334,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         checkExceptionsAreThrown(urlConnection);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -327,6 +357,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         checkExceptionsAreThrown(urlConnection);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -339,6 +370,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -354,6 +386,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals("GET", TestUtil.getResponseAsString(urlConnection));
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     // TODO(xunjieli): Currently the wrapper does not throw an exception.
@@ -380,6 +413,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -396,6 +430,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -433,6 +468,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -451,6 +487,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -504,6 +541,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         conn.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -531,6 +569,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -555,6 +594,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -581,6 +621,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -607,10 +648,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
-    @SuppressFBWarnings({
-            "RANGE_ARRAY_OFFSET",
-            "RANGE_ARRAY_LENGTH"
-            })
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -647,6 +685,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         urlConnection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -675,6 +714,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         TestUtil.checkLargeData(responseData);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -704,6 +744,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
      * Tests batch reading on CronetInputStream when
      * {@link CronetHttpURLConnection#getMoreData} is called multiple times.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -746,6 +787,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         mockUrlRequestJobFactory.shutdown();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -766,6 +808,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertTrue(Arrays.equals(testInputBytes, actualOutput));
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -798,6 +841,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
      * Makes sure that disconnect while reading from InputStream, the message
      * loop does not block. Regression test for crbug.com/550605.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -828,7 +872,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             fail();
         } catch (IOException e) {
             // Expected.
-            if (!testingSystemHttpURLConnection()) {
+            if (!mTestRule.testingSystemHttpURLConnection()) {
                 assertEquals("disconnect() called", e.getMessage());
             }
         }
@@ -838,7 +882,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             fail();
         } catch (IOException e) {
             // Expected.
-            if (!testingSystemHttpURLConnection()) {
+            if (!mTestRule.testingSystemHttpURLConnection()) {
                 assertEquals("disconnect() called", e.getMessage());
             }
         }
@@ -848,6 +892,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
      * Makes sure that {@link UrlRequest.Callback#onFailed} exception is
      * propagated when calling read on the input stream.
      */
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -865,7 +910,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 b = in.read();
             }
             // On KitKat, the default implementation doesn't throw an error.
-            if (!testingSystemHttpURLConnection()) {
+            if (!mTestRule.testingSystemHttpURLConnection()) {
                 // Server closes the connection before EOF can be received.
                 fail();
             }
@@ -881,7 +926,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         try {
             in.read();
             // On KitKat, the default implementation doesn't throw an error.
-            if (!testingSystemHttpURLConnection()) {
+            if (!mTestRule.testingSystemHttpURLConnection()) {
                 fail();
             }
         } catch (IOException e) {
@@ -895,6 +940,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -911,6 +957,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -921,7 +968,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.setInstanceFollowRedirects(false);
         // Redirect following control broken in Android Marshmallow:
         // https://code.google.com/p/android/issues/detail?id=194495
-        if (!testingSystemHttpURLConnection() || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
+        if (!mTestRule.testingSystemHttpURLConnection()
+                || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
             assertEquals(302, connection.getResponseCode());
             assertEquals("Found", connection.getResponseMessage());
             assertEquals("/success.txt", connection.getHeaderField("Location"));
@@ -931,6 +979,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -941,7 +990,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 (HttpURLConnection) url.openConnection();
         // Redirect following control broken in Android Marshmallow:
         // https://code.google.com/p/android/issues/detail?id=194495
-        if (!testingSystemHttpURLConnection() || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
+        if (!mTestRule.testingSystemHttpURLConnection()
+                || Build.VERSION.SDK_INT != Build.VERSION_CODES.M) {
             assertEquals(302, connection.getResponseCode());
             assertEquals("Found", connection.getResponseMessage());
             assertEquals("/success.txt", connection.getHeaderField("Location"));
@@ -951,11 +1001,11 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
-    public void testDisableRedirectsGlobalAfterConnectionIsCreated()
-            throws Exception {
+    public void testDisableRedirectsGlobalAfterConnectionIsCreated() throws Exception {
         HttpURLConnection.setFollowRedirects(true);
         URL url = new URL(NativeTestServer.getFileURL("/redirect.html"));
         HttpURLConnection connection =
@@ -971,6 +1021,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -990,6 +1041,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -1001,7 +1053,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals(302, connection.getResponseCode());
         assertEquals("Found", connection.getResponseMessage());
         // Behavior changed in Android Marshmallow to not update the URL.
-        if (testingSystemHttpURLConnection() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (mTestRule.testingSystemHttpURLConnection()
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // Redirected port is randomized, verify everything but port.
             assertEquals(url.getProtocol(), connection.getURL().getProtocol());
             assertEquals(url.getHost(), connection.getURL().getHost());
@@ -1013,6 +1066,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -1058,6 +1112,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -1079,6 +1134,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
@@ -1102,6 +1158,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -1119,6 +1176,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -1170,6 +1228,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         connection.disconnect();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -1186,6 +1245,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 CacheSetting.USE_CACHE, ExpectedOutcome.SUCCESS);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
@@ -1199,6 +1259,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 CacheSetting.DONT_USE_CACHE, ExpectedOutcome.FAILURE);
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection

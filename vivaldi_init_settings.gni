@@ -27,6 +27,7 @@ declare_overrides() {
   use_jumbo_build = !is_mac || !is_component_build
 
   if (is_android) {
+    enable_gvr_services = false
     enable_vr = false
   }
 }

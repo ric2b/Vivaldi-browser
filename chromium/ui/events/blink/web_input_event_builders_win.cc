@@ -4,6 +4,8 @@
 
 #include "ui/events/blink/web_input_event_builders_win.h"
 
+#include <windowsx.h>
+
 #include "ui/display/win/screen_win.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event_utils.h"
@@ -17,64 +19,6 @@ namespace ui {
 
 static const unsigned long kDefaultScrollLinesPerWheelDelta = 3;
 static const unsigned long kDefaultScrollCharsPerWheelDelta = 1;
-
-WebKeyboardEvent WebKeyboardEventBuilder::Build(HWND hwnd,
-                                                UINT message,
-                                                WPARAM wparam,
-                                                LPARAM lparam,
-                                                double time_stamp) {
-  WebInputEvent::Type type = WebInputEvent::kUndefined;
-  bool is_system_key = false;
-  switch (message) {
-    case WM_SYSKEYDOWN:
-      is_system_key = true;
-    // fallthrough
-    case WM_KEYDOWN:
-      type = WebInputEvent::kRawKeyDown;
-      break;
-    case WM_SYSKEYUP:
-      is_system_key = true;
-    // fallthrough
-    case WM_KEYUP:
-      type = WebInputEvent::kKeyUp;
-      break;
-    case WM_IME_CHAR:
-      type = WebInputEvent::kChar;
-      break;
-    case WM_SYSCHAR:
-      is_system_key = true;
-    // fallthrough
-    case WM_CHAR:
-      type = WebInputEvent::kChar;
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  WebKeyboardEvent result(
-      type, ui::EventFlagsToWebEventModifiers(ui::GetModifiersFromKeyState()),
-      time_stamp);
-  result.is_system_key = is_system_key;
-  result.windows_key_code = static_cast<int>(wparam);
-  // Record the scan code (along with other context bits) for this key event.
-  result.native_key_code = static_cast<int>(lparam);
-
-  if (result.GetType() == WebInputEvent::kChar ||
-      result.GetType() == WebInputEvent::kRawKeyDown) {
-    result.text[0] = result.windows_key_code;
-    result.unmodified_text[0] = result.windows_key_code;
-  }
-  // NOTE: There doesn't seem to be a way to query the mouse button state in
-  // this case.
-
-  // Bit 30 of lParam represents the "previous key state". If set, the key was
-  // already down, therefore this is an auto-repeat. Only apply this to key
-  // down events, to match DOM semantics.
-  if ((result.GetType() == WebInputEvent::kRawKeyDown) && (lparam & 0x40000000))
-    result.SetModifiers(result.GetModifiers() | WebInputEvent::kIsAutoRepeat);
-
-  return result;
-}
 
 // WebMouseEvent --------------------------------------------------------------
 
@@ -169,16 +113,15 @@ WebMouseEvent WebMouseEventBuilder::Build(
   result.button = button;
 
   // set position fields:
-  result.SetPositionInWidget(static_cast<short>(LOWORD(lparam)),
-                             static_cast<short>(HIWORD(lparam)));
+  result.SetPositionInWidget(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
 
   POINT global_point = {result.PositionInWidget().x,
                         result.PositionInWidget().y};
   ClientToScreen(hwnd, &global_point);
 
   // We need to convert the global point back to DIP before using it.
-  gfx::Point dip_global_point = display::win::ScreenWin::ScreenToDIPPoint(
-      gfx::Point(global_point.x, global_point.y));
+  gfx::PointF dip_global_point = display::win::ScreenWin::ScreenToDIPPoint(
+      gfx::PointF(global_point.x, global_point.y));
 
   result.SetPositionInScreen(dip_global_point.x(), dip_global_point.y());
 
@@ -285,8 +228,7 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
     // Non-synthesized event; we can just read data off the event.
     key_state = GET_KEYSTATE_WPARAM(wparam);
 
-    result.SetPositionInScreen(static_cast<short>(LOWORD(lparam)),
-                               static_cast<short>(HIWORD(lparam)));
+    result.SetPositionInScreen(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
 
     // Currently we leave hasPreciseScrollingDeltas false, even for trackpad
     // scrolls that generate WM_MOUSEWHEEL, since we don't have a good way to

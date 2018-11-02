@@ -27,6 +27,7 @@
 #ifndef MessageChannel_h
 #define MessageChannel_h
 
+#include "core/CoreExport.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
@@ -35,8 +36,7 @@ namespace blink {
 class MessagePort;
 class ExecutionContext;
 
-class MessageChannel final : public GarbageCollected<MessageChannel>,
-                             public ScriptWrappable {
+class CORE_EXPORT MessageChannel final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -47,7 +47,7 @@ class MessageChannel final : public GarbageCollected<MessageChannel>,
   MessagePort* port1() const { return port1_; }
   MessagePort* port2() const { return port2_; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit MessageChannel(ExecutionContext*);

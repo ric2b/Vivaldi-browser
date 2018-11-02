@@ -13,6 +13,9 @@ const char kAcceptLanguages[] = "intl.accept_languages";
 // The application locale.
 const char kApplicationLocale[] = "intl.app_locale";
 
+// Boolean that is true when Suggest support is enabled.
+const char kArticlesForYouEnabled[] = "suggestions.articles_enabled";
+
 // A map of browser state data directory to cached information. This cache can
 // be used to display information about browser states without actually having
 // to load them.
@@ -61,13 +64,17 @@ const char kHttpServerProperties[] = "net.http_server_properties";
 const char kIosBookmarkFolderDefault[] = "ios.bookmark.default_folder";
 
 // Preference that hold a boolean indicating if the user has already dismissed
-// the bookmark promo dialog.
+// the sign-in promo in bookmark view.
 const char kIosBookmarkPromoAlreadySeen[] = "ios.bookmark.promo_already_seen";
 
 // Integer to represent the number of time the sign-in promo has been displayed
 // in the bookmark view.
 const char kIosBookmarkSigninPromoDisplayedCount[] =
     "ios.bookmark.signin_promo_displayed_count";
+
+// Preference that hold a boolean indicating if the user has already dismissed
+// the sign-in promo in settings view.
+const char kIosSettingsPromoAlreadySeen[] = "ios.settings.promo_already_seen";
 
 // Integer to represent the number of time the sign-in promo has been displayed
 // in the settings view.

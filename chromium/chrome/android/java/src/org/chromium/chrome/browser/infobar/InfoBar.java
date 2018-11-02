@@ -103,7 +103,10 @@ public abstract class InfoBar implements InfoBarView {
         return mView;
     }
 
-    /** If this returns true, the infobar contents will be replaced with a one-line layout. */
+    /**
+     * If this returns true, the infobar contents will be replaced with a one-line layout.
+     * When overriding this, also override {@link #getAccessibilityMessage}.
+     */
     protected boolean usesCompactLayout() {
         return false;
     }
@@ -133,23 +136,29 @@ public abstract class InfoBar implements InfoBarView {
     }
 
     /**
-     * Returns the accessibility message from the view to announce when this infobar is first shown.
+     * Returns the accessibility message to announce when this infobar is first shown.
+     * Override this if the InfoBar doesn't have {@link R.id.infobar_message}. It is usually the
+     * case when it is in CompactLayout.
      */
-    protected CharSequence getAccessibilityMessage(TextView messageView) {
-        return messageView.getText();
+    protected CharSequence getAccessibilityMessage(CharSequence defaultTitle) {
+        return defaultTitle == null ? "" : defaultTitle;
     }
 
     @Override
     public CharSequence getAccessibilityText() {
         if (mView == null) return "";
-        // Compact layout doesn't have a proper view to provide meaningful message, so we return a
-        // general message to let users know there is a bar on the bottom.
-        // TODO(googleo): Fetch the accessibility message from the compact layout.
-        if (usesCompactLayout()) return mContext.getString(R.string.bottom_bar_screen_position);
+
+        CharSequence title = null;
         TextView messageView = (TextView) mView.findViewById(R.id.infobar_message);
-        if (messageView == null) return "";
-        return getAccessibilityMessage(messageView)
-                + mContext.getString(R.string.bottom_bar_screen_position);
+        if (messageView != null) {
+            title = messageView.getText();
+        }
+        title = getAccessibilityMessage(title);
+        if (title.length() > 0) {
+            title = title + " ";
+        }
+        // TODO(crbug/773717): Avoid string concatenation due to i18n.
+        return title + mContext.getString(R.string.bottom_bar_screen_position);
     }
 
     @Override
@@ -179,6 +188,14 @@ public abstract class InfoBar implements InfoBarView {
             return true;
         }
         return false;
+    }
+
+    /**
+     * @return If the infobar is the front infobar (i.e. visible and not hidden behind other
+     *         infobars).
+     */
+    public boolean isFrontInfoBar() {
+        return mContainer.getFrontInfoBar() == this;
     }
 
     /**
@@ -216,9 +233,9 @@ public abstract class InfoBar implements InfoBarView {
 
     /**
      * Performs some action related to the button being clicked.
-     * @param action The type of action defined as ACTION_* in this class.
+     * @param action The type of action defined in {@link ActionType} in this class.
      */
-    protected void onButtonClicked(int action) {
+    protected void onButtonClicked(@ActionType int action) {
         if (mNativeInfoBarPtr != 0) nativeOnButtonClicked(mNativeInfoBarPtr, action);
     }
 

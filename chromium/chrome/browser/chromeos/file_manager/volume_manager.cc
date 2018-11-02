@@ -237,7 +237,7 @@ std::unique_ptr<Volume> Volume::CreateForProvidedFileSystem(
     MountContext mount_context) {
   std::unique_ptr<Volume> volume(new Volume());
   volume->file_system_id_ = file_system_info.file_system_id();
-  volume->extension_id_ = file_system_info.extension_id();
+  volume->provider_id_ = file_system_info.provider_id();
   switch (file_system_info.source()) {
     case extensions::SOURCE_FILE:
       volume->source_ = SOURCE_FILE;
@@ -550,14 +550,19 @@ void VolumeManager::OnDiskEvent(
       bool mounting = false;
       if (disk->mount_path().empty() && disk->has_media() &&
           !profile_->GetPrefs()->GetBoolean(prefs::kExternalStorageDisabled)) {
+        // TODO(crbug.com/774890): Remove |mount_label| when the issue gets
+        // resolved. Currently we suggest a mount point name, because in case
+        // when disk's name contains '#', content will not load in Files App.
+        std::string mount_label = disk->device_label();
+        std::replace(mount_label.begin(), mount_label.end(), '#', '_');
+
         // If disk is not mounted yet and it has media and there is no policy
         // forbidding external storage, give it a try.
         // Initiate disk mount operation. MountPath auto-detects the filesystem
         // format if the second argument is empty. The third argument (mount
         // label) is not used in a disk mount operation.
         disk_mount_manager_->MountPath(disk->device_path(), std::string(),
-                                       std::string(),
-                                       chromeos::MOUNT_TYPE_DEVICE,
+                                       mount_label, chromeos::MOUNT_TYPE_DEVICE,
                                        GetExternalStorageAccessMode(profile_));
         mounting = true;
       }
@@ -703,13 +708,6 @@ void VolumeManager::OnRenameEvent(
       }
       return;
     case chromeos::disks::DiskMountManager::RENAME_COMPLETED:
-      if (error_code != chromeos::RENAME_ERROR_NONE) {
-        for (auto& observer : observers_)
-          observer.OnRenameCompleted(device_path, false);
-
-        return;
-      }
-
       // Find previous mount point label if it exists
       std::string mount_label = "";
       auto disk_map_iter = disk_mount_manager_->disks().find(device_path);
@@ -720,17 +718,17 @@ void VolumeManager::OnRenameEvent(
                           .AsUTF8Unsafe();
       }
 
-      // If rename is completed successfully, try to mount the device.
-      // MountPath auto-detects filesystem format if second argument is
-      // empty. Third argument is a mount point name of the disk when it was
-      // first time mounted (to preserve mount point regardless of the volume
-      // name).
+      // Try to mount the device. MountPath auto-detects filesystem format if
+      // second argument is empty. Third argument is a mount point name of the
+      // disk when it was first time mounted (to preserve mount point regardless
+      // of the volume name).
       disk_mount_manager_->MountPath(device_path, std::string(), mount_label,
                                      chromeos::MOUNT_TYPE_DEVICE,
                                      GetExternalStorageAccessMode(profile_));
 
+      bool successfully_renamed = error_code == chromeos::RENAME_ERROR_NONE;
       for (auto& observer : observers_)
-        observer.OnRenameCompleted(device_path, true);
+        observer.OnRenameCompleted(device_path, successfully_renamed);
 
       return;
   }

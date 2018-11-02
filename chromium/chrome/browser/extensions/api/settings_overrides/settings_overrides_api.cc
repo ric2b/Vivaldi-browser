@@ -32,7 +32,8 @@ namespace extensions {
 namespace {
 
 base::LazyInstance<BrowserContextKeyedAPIFactory<SettingsOverridesAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_settings_overrides_api_factory =
+        LAZY_INSTANCE_INITIALIZER;
 
 const char kManyStartupPagesWarning[] = "* specifies more than 1 startup URL. "
     "All but the first will be ignored.";
@@ -72,10 +73,6 @@ std::unique_ptr<TemplateURLData> ConvertSearchProvider(
     data->suggestions_url =
         SubstituteInstallParam(*search_provider.suggest_url, install_parameter);
   }
-  if (search_provider.instant_url) {
-    data->instant_url =
-        SubstituteInstallParam(*search_provider.instant_url, install_parameter);
-  }
   if (search_provider.image_url) {
     data->image_url =
         SubstituteInstallParam(*search_provider.image_url, install_parameter);
@@ -85,8 +82,6 @@ std::unique_ptr<TemplateURLData> ConvertSearchProvider(
   if (search_provider.suggest_url_post_params)
     data->suggestions_url_post_params =
         *search_provider.suggest_url_post_params;
-  if (search_provider.instant_url_post_params)
-    data->instant_url_post_params = *search_provider.instant_url_post_params;
   if (search_provider.image_url_post_params)
     data->image_url_post_params = *search_provider.image_url_post_params;
   if (search_provider.favicon_url) {
@@ -126,7 +121,7 @@ SettingsOverridesAPI::~SettingsOverridesAPI() {
 
 BrowserContextKeyedAPIFactory<SettingsOverridesAPI>*
 SettingsOverridesAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_settings_overrides_api_factory.Pointer();
 }
 
 void SettingsOverridesAPI::SetPref(const std::string& extension_id,

@@ -26,14 +26,14 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
-#include "core/HTMLNames.h"
 #include "core/css/CSSImageValue.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/Document.h"
 #include "core/dom/FlatTreeTraversal.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "platform/weborigin/Referrer.h"
 
 namespace blink {
@@ -51,7 +51,7 @@ bool HTMLTablePartElement::IsPresentationAttribute(
 void HTMLTablePartElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == bgcolorAttr) {
     AddHTMLColorToStyle(style, CSSPropertyBackgroundColor, value);
   } else if (name == backgroundAttr) {
@@ -64,7 +64,8 @@ void HTMLTablePartElement::CollectStyleForPresentationAttribute(
           CSSImageValue::Create(url, GetDocument().CompleteURL(url),
                                 Referrer(GetDocument().OutgoingReferrer(),
                                          GetDocument().GetReferrerPolicy()));
-      style->SetProperty(CSSProperty(CSSPropertyBackgroundImage, *image_value));
+      style->SetProperty(
+          CSSPropertyValue(GetCSSPropertyBackgroundImage(), *image_value));
     }
   } else if (name == valignAttr) {
     if (DeprecatedEqualIgnoringCase(value, "top"))
@@ -109,9 +110,9 @@ void HTMLTablePartElement::CollectStyleForPresentationAttribute(
 
 HTMLTableElement* HTMLTablePartElement::FindParentTable() const {
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
-  while (parent && !isHTMLTableElement(*parent))
+  while (parent && !IsHTMLTableElement(*parent))
     parent = FlatTreeTraversal::Parent(*parent);
-  return toHTMLTableElement(parent);
+  return ToHTMLTableElement(parent);
 }
 
 }  // namespace blink

@@ -33,6 +33,26 @@
 #include "modules/gamepad/GamepadDispatcher.h"
 #include "modules/gamepad/GamepadEvent.h"
 #include "modules/gamepad/GamepadList.h"
+#include "public/platform/TaskType.h"
+
+namespace {
+
+void HasGamepadConnectionChanged(const String& old_id,
+                                 const String& new_id,
+                                 bool old_connected,
+                                 bool new_connected,
+                                 bool* gamepad_found,
+                                 bool* gamepad_lost) {
+  // If the gamepad ID changes, treat it as a disconnection and connection.
+  bool id_changed = old_connected && new_connected && old_id != new_id;
+
+  if (gamepad_found)
+    *gamepad_found = id_changed || (!old_connected && new_connected);
+  if (gamepad_lost)
+    *gamepad_lost = id_changed || (old_connected && !new_connected);
+}
+
+}  // namespace
 
 namespace blink {
 
@@ -40,16 +60,29 @@ template <typename T>
 static void SampleGamepad(unsigned index,
                           T& gamepad,
                           const device::Gamepad& device_gamepad) {
+  String old_id = gamepad.id();
+  bool old_was_connected = gamepad.connected();
+
   gamepad.SetId(device_gamepad.id);
-  gamepad.SetIndex(index);
   gamepad.SetConnected(device_gamepad.connected);
   gamepad.SetTimestamp(device_gamepad.timestamp);
-  gamepad.SetMapping(device_gamepad.mapping);
   gamepad.SetAxes(device_gamepad.axes_length, device_gamepad.axes);
   gamepad.SetButtons(device_gamepad.buttons_length, device_gamepad.buttons);
   gamepad.SetPose(device_gamepad.pose);
   gamepad.SetHand(device_gamepad.hand);
-  gamepad.SetDisplayId(device_gamepad.display_id);
+
+  bool newly_connected;
+  HasGamepadConnectionChanged(old_id, gamepad.id(), old_was_connected,
+                              gamepad.connected(), &newly_connected, nullptr);
+
+  // These fields are not expected to change and will only be written when the
+  // gamepad is newly connected.
+  if (newly_connected) {
+    gamepad.SetIndex(index);
+    gamepad.SetMapping(device_gamepad.mapping);
+    gamepad.SetVibrationActuator(device_gamepad.vibration_actuator);
+    gamepad.SetDisplayId(device_gamepad.display_id);
+  }
 }
 
 template <typename GamepadType, typename ListType>
@@ -67,14 +100,14 @@ static void SampleGamepads(ListType* into) {
       SampleGamepad(i, *gamepad, web_gamepad);
       into->Set(i, gamepad);
     } else {
-      into->Set(i, 0);
+      into->Set(i, nullptr);
     }
   }
 }
 
 NavigatorGamepad* NavigatorGamepad::From(Document& document) {
   if (!document.GetFrame() || !document.GetFrame()->DomWindow())
-    return 0;
+    return nullptr;
   Navigator& navigator = *document.GetFrame()->DomWindow()->navigator();
   return &From(navigator);
 }
@@ -94,26 +127,23 @@ GamepadList* NavigatorGamepad::getGamepads(Navigator& navigator) {
 }
 
 GamepadList* NavigatorGamepad::Gamepads() {
-  if (!gamepads_)
-    gamepads_ = GamepadList::Create();
-  if (StartUpdatingIfAttached())
-    SampleGamepads<Gamepad>(gamepads_.Get());
+  SampleAndCheckConnectedGamepads();
   return gamepads_.Get();
 }
 
-DEFINE_TRACE(NavigatorGamepad) {
+void NavigatorGamepad::Trace(blink::Visitor* visitor) {
   visitor->Trace(gamepads_);
+  visitor->Trace(gamepads_back_);
   visitor->Trace(pending_events_);
   visitor->Trace(dispatch_one_event_runner_);
   Supplement<Navigator>::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  DOMWindowClient::Trace(visitor);
   PlatformEventController::Trace(visitor);
 }
 
 bool NavigatorGamepad::StartUpdatingIfAttached() {
-  Document* document = static_cast<Document*>(GetExecutionContext());
   // The frame must be attached to start updating.
-  if (document && document->GetFrame()) {
+  if (GetFrame()) {
     StartUpdating();
     return true;
   }
@@ -122,61 +152,48 @@ bool NavigatorGamepad::StartUpdatingIfAttached() {
 
 void NavigatorGamepad::DidUpdateData() {
   // We should stop listening once we detached.
-  Document* document = static_cast<Document*>(GetExecutionContext());
-  DCHECK(document->GetFrame());
-  DCHECK(document->GetFrame()->DomWindow());
+  DCHECK(GetFrame());
+  DCHECK(DomWindow());
 
   // We register to the dispatcher before sampling gamepads so we need to check
   // if we actually have an event listener.
   if (!has_event_listener_)
     return;
 
-  if (document->IsContextDestroyed() || document->IsContextSuspended())
-    return;
-
-  const GamepadDispatcher::ConnectionChange& change =
-      GamepadDispatcher::Instance().LatestConnectionChange();
-
-  if (!gamepads_)
-    gamepads_ = GamepadList::Create();
-
-  Gamepad* gamepad = gamepads_->item(change.index);
-  if (!gamepad)
-    gamepad = Gamepad::Create();
-  SampleGamepad(change.index, *gamepad, change.pad);
-  gamepads_->Set(change.index, gamepad);
-
-  pending_events_.push_back(gamepad);
-  dispatch_one_event_runner_->RunAsync();
+  SampleAndCheckConnectedGamepads();
 }
 
 void NavigatorGamepad::DispatchOneEvent() {
-  Document* document = static_cast<Document*>(GetExecutionContext());
-  DCHECK(document->GetFrame());
-  DCHECK(document->GetFrame()->DomWindow());
+  DCHECK(DomWindow());
   DCHECK(!pending_events_.IsEmpty());
 
   Gamepad* gamepad = pending_events_.TakeFirst();
   const AtomicString& event_name = gamepad->connected()
                                        ? EventTypeNames::gamepadconnected
                                        : EventTypeNames::gamepaddisconnected;
-  document->GetFrame()->DomWindow()->DispatchEvent(
+  DomWindow()->DispatchEvent(
       GamepadEvent::Create(event_name, false, true, gamepad));
 
-  if (!pending_events_.IsEmpty())
+  if (!pending_events_.IsEmpty()) {
+    DCHECK(dispatch_one_event_runner_);
     dispatch_one_event_runner_->RunAsync();
+  }
 }
 
 NavigatorGamepad::NavigatorGamepad(Navigator& navigator)
     : Supplement<Navigator>(navigator),
-      ContextLifecycleObserver(
+      DOMWindowClient(navigator.DomWindow()),
+      PlatformEventController(
           navigator.GetFrame() ? navigator.GetFrame()->GetDocument() : nullptr),
-      PlatformEventController(navigator.GetFrame()),
-      dispatch_one_event_runner_(AsyncMethodRunner<NavigatorGamepad>::Create(
-          this,
-          &NavigatorGamepad::DispatchOneEvent)) {
-  if (navigator.GetFrame())
-    navigator.GetFrame()->DomWindow()->RegisterEventListenerObserver(this);
+      dispatch_one_event_runner_(
+          navigator.GetFrame() ? AsyncMethodRunner<NavigatorGamepad>::Create(
+                                     this,
+                                     &NavigatorGamepad::DispatchOneEvent,
+                                     navigator.GetFrame()->GetTaskRunner(
+                                         TaskType::kMiscPlatformAPI))
+                               : nullptr) {
+  if (navigator.DomWindow())
+    navigator.DomWindow()->RegisterEventListenerObserver(this);
 }
 
 NavigatorGamepad::~NavigatorGamepad() {}
@@ -185,17 +202,15 @@ const char* NavigatorGamepad::SupplementName() {
   return "NavigatorGamepad";
 }
 
-void NavigatorGamepad::ContextDestroyed(ExecutionContext*) {
-  StopUpdating();
-}
-
 void NavigatorGamepad::RegisterWithDispatcher() {
   GamepadDispatcher::Instance().AddController(this);
-  dispatch_one_event_runner_->Resume();
+  if (dispatch_one_event_runner_)
+    dispatch_one_event_runner_->Unpause();
 }
 
 void NavigatorGamepad::UnregisterWithDispatcher() {
-  dispatch_one_event_runner_->Suspend();
+  if (dispatch_one_event_runner_)
+    dispatch_one_event_runner_->Pause();
   GamepadDispatcher::Instance().RemoveController(this);
 }
 
@@ -211,10 +226,16 @@ static bool IsGamepadEvent(const AtomicString& event_type) {
 
 void NavigatorGamepad::DidAddEventListener(LocalDOMWindow*,
                                            const AtomicString& event_type) {
-  if (IsGamepadEvent(event_type)) {
-    if (GetPage() && GetPage()->IsPageVisible())
-      StartUpdatingIfAttached();
-    has_event_listener_ = true;
+  if (!IsGamepadEvent(event_type))
+    return;
+
+  bool first_event_listener = !has_event_listener_;
+  has_event_listener_ = true;
+
+  if (GetPage() && GetPage()->IsPageVisible()) {
+    StartUpdatingIfAttached();
+    if (first_event_listener)
+      SampleAndCheckConnectedGamepads();
   }
 }
 
@@ -233,46 +254,90 @@ void NavigatorGamepad::DidRemoveAllEventListeners(LocalDOMWindow*) {
 
 void NavigatorGamepad::DidRemoveGamepadEventListeners() {
   has_event_listener_ = false;
-  dispatch_one_event_runner_->Stop();
+  if (dispatch_one_event_runner_)
+    dispatch_one_event_runner_->Stop();
   pending_events_.clear();
+  StopUpdating();
+}
+
+void NavigatorGamepad::SampleAndCheckConnectedGamepads() {
+  if (StartUpdatingIfAttached()) {
+    if (!gamepads_)
+      gamepads_ = GamepadList::Create();
+    if (GetPage()->IsPageVisible() && has_event_listener_) {
+      if (!gamepads_back_)
+        gamepads_back_ = GamepadList::Create();
+
+      // Compare the current sample with the old data and enqueue connection
+      // events for any differences.
+      SampleGamepads<Gamepad>(gamepads_back_.Get());
+      if (CheckConnectedGamepads(gamepads_.Get(), gamepads_back_.Get())) {
+        // If we had any disconnected gamepads, we can't overwrite gamepads_
+        // because the Gamepad object from the old buffer is reused as the
+        // disconnection event and will be overwritten with new data. Instead,
+        // recreate the buffer.
+        gamepads_ = GamepadList::Create();
+      }
+      if (!pending_events_.IsEmpty()) {
+        DCHECK(dispatch_one_event_runner_);
+        dispatch_one_event_runner_->RunAsync();
+      }
+    }
+    SampleGamepads<Gamepad>(gamepads_.Get());
+  }
+}
+
+bool NavigatorGamepad::CheckConnectedGamepads(GamepadList* old_gamepads,
+                                              GamepadList* new_gamepads) {
+  int disconnection_count = 0;
+  for (unsigned i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
+    Gamepad* old_gamepad = old_gamepads ? old_gamepads->item(i) : nullptr;
+    Gamepad* new_gamepad = new_gamepads->item(i);
+    bool connected, disconnected;
+    CheckConnectedGamepad(old_gamepad, new_gamepad, &connected, &disconnected);
+
+    if (disconnected) {
+      old_gamepad->SetConnected(false);
+      pending_events_.push_back(old_gamepad);
+      disconnection_count++;
+    }
+    if (connected) {
+      pending_events_.push_back(new_gamepad);
+    }
+  }
+  return disconnection_count > 0;
+}
+
+void NavigatorGamepad::CheckConnectedGamepad(Gamepad* old_gamepad,
+                                             Gamepad* new_gamepad,
+                                             bool* gamepad_found,
+                                             bool* gamepad_lost) {
+  bool old_connected = old_gamepad && old_gamepad->connected();
+  bool new_connected = new_gamepad && new_gamepad->connected();
+  if (old_gamepad && new_gamepad) {
+    HasGamepadConnectionChanged(old_gamepad->id(), new_gamepad->id(),
+                                old_connected, new_connected, gamepad_found,
+                                gamepad_lost);
+    return;
+  }
+
+  if (gamepad_found)
+    *gamepad_found = new_connected;
+  if (gamepad_lost)
+    *gamepad_lost = old_connected;
 }
 
 void NavigatorGamepad::PageVisibilityChanged() {
   // Inform the embedder whether it needs to provide gamepad data for us.
   bool visible = GetPage()->IsPageVisible();
-  if (visible && (has_event_listener_ || gamepads_))
+  if (visible && (has_event_listener_ || gamepads_)) {
     StartUpdatingIfAttached();
-  else
+  } else {
     StopUpdating();
-
-  if (!visible || !has_event_listener_)
-    return;
-
-  // Tell the page what has changed. m_gamepads contains the state before we
-  // became hidden.  We create a new snapshot and compare them.
-  GamepadList* old_gamepads = gamepads_.Release();
-  Gamepads();
-  GamepadList* new_gamepads = gamepads_.Get();
-  DCHECK(new_gamepads);
-
-  for (unsigned i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
-    Gamepad* old_gamepad = old_gamepads ? old_gamepads->item(i) : 0;
-    Gamepad* new_gamepad = new_gamepads->item(i);
-    bool old_was_connected = old_gamepad && old_gamepad->connected();
-    bool new_is_connected = new_gamepad && new_gamepad->connected();
-    bool connected_gamepad_changed = old_was_connected && new_is_connected &&
-                                     old_gamepad->id() != new_gamepad->id();
-    if (connected_gamepad_changed || (old_was_connected && !new_is_connected)) {
-      old_gamepad->SetConnected(false);
-      pending_events_.push_back(old_gamepad);
-    }
-    if (connected_gamepad_changed || (!old_was_connected && new_is_connected)) {
-      pending_events_.push_back(new_gamepad);
-    }
   }
 
-  if (!pending_events_.IsEmpty())
-    dispatch_one_event_runner_->RunAsync();
+  if (visible && has_event_listener_)
+    SampleAndCheckConnectedGamepads();
 }
 
 }  // namespace blink

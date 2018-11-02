@@ -30,41 +30,39 @@
 #ifndef ThreadSafeRefCounted_h
 #define ThreadSafeRefCounted_h
 
-#include "base/atomic_ref_count.h"
+#include "base/memory/ref_counted.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/WTFExport.h"
 
 namespace WTF {
 
-class WTF_EXPORT ThreadSafeRefCountedBase {
-  WTF_MAKE_NONCOPYABLE(ThreadSafeRefCountedBase);
-  USING_FAST_MALLOC(ThreadSafeRefCountedBase);
+template <typename T, typename Traits>
+class ThreadSafeRefCounted;
 
- public:
-  ThreadSafeRefCountedBase() : ref_count_(1) {}
-
-  void Ref() { ref_count_.Increment(); }
-  bool HasOneRef() const { return ref_count_.IsOne(); }
-
- protected:
-  // Returns whether the pointer should be freed or not.
-  bool DerefBase() { return !ref_count_.Decrement(); }
-
- private:
-  base::AtomicRefCount ref_count_;
+template <typename T>
+struct DefaultThreadSafeRefCountedTraits {
+  static void Destruct(const T* x) {
+    WTF::ThreadSafeRefCounted<
+        T, DefaultThreadSafeRefCountedTraits>::DeleteInternal(x);
+  }
 };
 
-template <class T>
-class ThreadSafeRefCounted : public ThreadSafeRefCountedBase {
- public:
-  void Deref() {
-    if (DerefBase())
-      delete static_cast<T*>(this);
-  }
+template <typename T, typename Traits = DefaultThreadSafeRefCountedTraits<T>>
+class ThreadSafeRefCounted : public base::RefCountedThreadSafe<T, Traits> {
+  // Put |T| in here instead of |RefCounted| so the heap profiler reports |T|
+  // instead of |RefCounted<T>|. This does not affect overloading of operator
+  // new.
+  USING_FAST_MALLOC(T);
 
- protected:
-  ThreadSafeRefCounted() {}
+ public:
+  REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
+
+ private:
+  friend struct DefaultThreadSafeRefCountedTraits<T>;
+
+  template <typename U>
+  static void DeleteInternal(const U* x) {
+    delete x;
+  }
 };
 
 }  // namespace WTF

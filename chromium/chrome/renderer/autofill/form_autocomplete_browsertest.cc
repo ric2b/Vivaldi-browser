@@ -66,6 +66,10 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
                           const gfx::RectF& bounding_box,
                           base::TimeTicks timestamp) override {}
 
+  void TextFieldDidScroll(const FormData& form,
+                          const FormFieldData& field,
+                          const gfx::RectF& bounding_box) override {}
+
   void QueryFormFieldAutofill(int32_t id,
                               const FormData& form,
                               const FormFieldData& field,
@@ -148,8 +152,8 @@ void SimulateOnFillForm(autofill::AutofillAgent* autofill_agent,
 
   // This call is necessary to setup the autofill agent appropriate for the
   // user selection; simulates the menu actually popping up.
-  static_cast<autofill::PageClickListener*>(autofill_agent)
-      ->FormControlElementClicked(element.To<WebInputElement>(), false);
+  autofill_agent->FormControlElementClicked(element.To<WebInputElement>(),
+                                            false);
 
   FormData data;
   data.name = base::ASCIIToUTF16("name");
@@ -569,8 +573,8 @@ TEST_F(FormAutocompleteTest, AcceptDataListSuggestion) {
     WebInputElement* input_element = blink::ToWebInputElement(&element);
     ASSERT_TRUE(input_element);
     // Select this element in |autofill_agent_|.
-    static_cast<autofill::PageClickListener*>(autofill_agent_)
-        ->FormControlElementClicked(element.To<WebInputElement>(), false);
+    autofill_agent_->FormControlElementClicked(element.To<WebInputElement>(),
+                                               false);
 
     autofill_agent_->AcceptDataListSuggestion(kSuggestion);
     EXPECT_EQ(c.expected, input_element->Value().Utf8()) << "Case id: " << c.id;

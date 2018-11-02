@@ -49,10 +49,10 @@ void ShadowList::AdjustRectForShadow(FloatRect& rect) const {
   rect.Expand(RectOutsetsIncludingOriginal());
 }
 
-RefPtr<ShadowList> ShadowList::Blend(const ShadowList* from,
-                                     const ShadowList* to,
-                                     double progress,
-                                     const Color& current_color) {
+scoped_refptr<ShadowList> ShadowList::Blend(const ShadowList* from,
+                                            const ShadowList* to,
+                                            double progress,
+                                            const Color& current_color) {
   size_t from_length = from ? from->Shadows().size() : 0;
   size_t to_length = to ? to->Shadows().size() : 0;
   if (!from_length && !to_length)
@@ -68,8 +68,9 @@ RefPtr<ShadowList> ShadowList::Blend(const ShadowList* from,
 
   size_t max_length = std::max(from_length, to_length);
   for (size_t i = 0; i < max_length; ++i) {
-    const ShadowData* from_shadow = i < from_length ? &from->Shadows()[i] : 0;
-    const ShadowData* to_shadow = i < to_length ? &to->Shadows()[i] : 0;
+    const ShadowData* from_shadow =
+        i < from_length ? &from->Shadows()[i] : nullptr;
+    const ShadowData* to_shadow = i < to_length ? &to->Shadows()[i] : nullptr;
     if (!from_shadow)
       from_shadow = to_shadow->Style() == kInset ? &default_inset_shadow_data
                                                  : &default_shadow_data;

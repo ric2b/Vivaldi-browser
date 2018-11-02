@@ -22,8 +22,8 @@
 
 #include "core/svg/SVGLengthContext.h"
 
-#include "core/css/CSSHelper.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSResolutionUnits.h"
 #include "core/css/CSSToLengthConversionData.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/LocalFrameView.h"
@@ -285,6 +285,9 @@ float SVGLengthContext::ConvertValueToUserUnits(
     case CSSPrimitiveValue::UnitType::kMillimeters:
       user_units = value * kCssPixelsPerMillimeter;
       break;
+    case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+      user_units = value * kCssPixelsPerQuarterMillimeter;
+      break;
     case CSSPrimitiveValue::UnitType::kInches:
       user_units = value * kCssPixelsPerInch;
       break;
@@ -352,6 +355,8 @@ float SVGLengthContext::ConvertValueFromUserUnits(
       return value / kCssPixelsPerCentimeter;
     case CSSPrimitiveValue::UnitType::kMillimeters:
       return value / kCssPixelsPerMillimeter;
+    case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+      return value / kCssPixelsPerQuarterMillimeter;
     case CSSPrimitiveValue::UnitType::kInches:
       return value / kCssPixelsPerInch;
     case CSSPrimitiveValue::UnitType::kPoints:
@@ -433,16 +438,16 @@ bool SVGLengthContext::DetermineViewport(FloatSize& viewport_size) const {
 
   // Root <svg> element lengths are resolved against the top level viewport.
   if (context_->IsOutermostSVGSVGElement()) {
-    viewport_size = toSVGSVGElement(context_)->CurrentViewportSize();
+    viewport_size = ToSVGSVGElement(context_)->CurrentViewportSize();
     return true;
   }
 
   // Take size from nearest viewport element.
   SVGElement* viewport_element = context_->viewportElement();
-  if (!isSVGSVGElement(viewport_element))
+  if (!IsSVGSVGElement(viewport_element))
     return false;
 
-  const SVGSVGElement& svg = toSVGSVGElement(*viewport_element);
+  const SVGSVGElement& svg = ToSVGSVGElement(*viewport_element);
   viewport_size = svg.CurrentViewBoxRect().Size();
   if (viewport_size.IsEmpty())
     viewport_size = svg.CurrentViewportSize();

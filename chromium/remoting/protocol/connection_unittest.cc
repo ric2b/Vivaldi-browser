@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#define _USE_MATH_DEFINES // For VC++ to get M_PI. This has to be first.
-
 #include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/math_constants.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
@@ -58,8 +57,8 @@ ACTION_P(QuitRunLoop, run_loop) {
 class MockConnectionToHostEventCallback
     : public ConnectionToHost::HostEventCallback {
  public:
-  MockConnectionToHostEventCallback() {}
-  ~MockConnectionToHostEventCallback() override {}
+  MockConnectionToHostEventCallback() = default;
+  ~MockConnectionToHostEventCallback() override = default;
 
   MOCK_METHOD2(OnConnectionState,
                void(ConnectionToHost::State state, ErrorCode error));
@@ -71,8 +70,8 @@ class MockConnectionToHostEventCallback
 
 class TestScreenCapturer : public webrtc::DesktopCapturer {
  public:
-  TestScreenCapturer() {}
-  ~TestScreenCapturer() override {}
+  TestScreenCapturer() = default;
+  ~TestScreenCapturer() override = default;
 
   // webrtc::DesktopCapturer interface.
   void Start(Callback* callback) override {
@@ -134,8 +133,8 @@ static const int kTestAudioSignalFrequencyRightHz = 2000;
 
 class TestAudioSource : public AudioSource {
  public:
-  TestAudioSource() {}
-  ~TestAudioSource() override {}
+  TestAudioSource() = default;
+  ~TestAudioSource() override = default;
 
   // AudioSource interface.
   bool Start(const PacketCapturedCallback& callback) override {
@@ -150,7 +149,8 @@ class TestAudioSource : public AudioSource {
   static int16_t GetSampleValue(double pos, int frequency) {
     const int kMaxSampleValue = 32767;
     return static_cast<int>(
-        sin(pos * 2 * M_PI * frequency / kAudioSampleRate) * kMaxSampleValue +
+        sin(pos * 2 * base::kPiDouble * frequency / kAudioSampleRate) *
+            kMaxSampleValue +
         0.5);
   }
 
@@ -182,7 +182,7 @@ class TestAudioSource : public AudioSource {
 class FakeAudioPlayer : public AudioStub {
  public:
   FakeAudioPlayer() : weak_factory_(this) {}
-  ~FakeAudioPlayer() override {}
+  ~FakeAudioPlayer() override = default;
 
   // AudioStub interface.
   void ProcessAudioPacket(std::unique_ptr<AudioPacket> packet,

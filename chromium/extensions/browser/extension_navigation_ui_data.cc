@@ -7,6 +7,9 @@
 #include "content/public/browser/navigation_handle.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
+#include "app/vivaldi_apptools.h"
+#include "chrome/browser/ui/browser_finder.h"
+
 namespace extensions {
 
 ExtensionNavigationUIData::ExtensionNavigationUIData() {}
@@ -25,7 +28,16 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
 
   WebViewGuest* web_view =
       WebViewGuest::FromWebContents(navigation_handle->GetWebContents());
-  if (web_view) {
+
+  // NOTE(andre@vivaldi.com) : Vivaldi uses WebContents from the tabstrip in
+  // WebViewGuests and chrome.webRequest will look for webview specific filters
+  // if we identify the webcontents as webviews here.
+  Browser* browser =
+    chrome::FindBrowserWithWebContents(navigation_handle->GetWebContents());
+  bool id_as_webview =
+      !(vivaldi::IsVivaldiRunning() && browser && browser->is_type_tabbed());
+
+  if (web_view && id_as_webview) {
     is_web_view_ = true;
     web_view_instance_id_ = web_view->view_instance_id();
     web_view_rules_registry_id_ = web_view->rules_registry_id();

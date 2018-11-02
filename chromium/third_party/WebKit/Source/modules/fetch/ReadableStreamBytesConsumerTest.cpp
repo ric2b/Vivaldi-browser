@@ -8,7 +8,6 @@
 
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
-#include "core/dom/Document.h"
 #include "core/streams/ReadableStreamOperations.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/fetch/BytesConsumerTestUtil.h"
@@ -37,8 +36,9 @@ class MockClient : public GarbageCollectedFinalized<MockClient>,
  public:
   static MockClient* Create() { return new StrictMock<MockClient>(); }
   MOCK_METHOD0(OnStateChange, void());
+  String DebugName() const override { return "MockClient"; }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  protected:
   MockClient() = default;

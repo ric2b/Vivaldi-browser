@@ -4,6 +4,9 @@
 
 // IPC messages for the Cast transport API.
 
+#ifndef CHROME_COMMON_CAST_MESSAGES_H_
+#define CHROME_COMMON_CAST_MESSAGES_H_
+
 #include <stdint.h>
 
 #include "ipc/ipc_message_macros.h"
@@ -13,15 +16,14 @@
 #include "media/cast/net/rtcp/rtcp_defines.h"
 #include "net/base/ip_endpoint.h"
 
-#ifndef CHROME_COMMON_CAST_MESSAGES_H_
-#define CHROME_COMMON_CAST_MESSAGES_H_
+#ifndef INTERNAL_CHROME_COMMON_CAST_MESSAGES_H_
+#define INTERNAL_CHROME_COMMON_CAST_MESSAGES_H_
 
 namespace IPC {
 
 template<>
 struct ParamTraits<media::cast::RtpTimeTicks> {
   using param_type = media::cast::RtpTimeTicks;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -32,7 +34,6 @@ struct ParamTraits<media::cast::RtpTimeTicks> {
 template<>
 struct ParamTraits<media::cast::FrameId> {
   using param_type = media::cast::FrameId;
-  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -42,7 +43,7 @@ struct ParamTraits<media::cast::FrameId> {
 
 }  // namespace IPC
 
-#endif  // CHROME_COMMON_CAST_MESSAGES_H_
+#endif  // INTERNAL_CHROME_COMMON_CAST_MESSAGES_H_
 
 // Multiply-included message file, hence no include guard from here.
 
@@ -249,3 +250,5 @@ IPC_MESSAGE_CONTROL2(
 
 IPC_MESSAGE_CONTROL1(CastHostMsg_SendRtcpFromRtpReceiver,
                      int32_t /* channel id */)
+
+#endif  // CHROME_COMMON_CAST_MESSAGES_H_

@@ -27,7 +27,8 @@ class AccessibilityObjectModelTest
  protected:
   AXObjectCacheImpl* AXObjectCache() {
     GetDocument().GetSettings()->SetAccessibilityEnabled(true);
-    return static_cast<AXObjectCacheImpl*>(GetDocument().AxObjectCache());
+    return static_cast<AXObjectCacheImpl*>(
+        GetDocument().GetOrCreateAXObjectCache());
   }
 };
 
@@ -59,6 +60,7 @@ TEST_F(AccessibilityObjectModelTest, SetAccessibleNodeRole) {
   button->accessibleNode()->setRole("slider");
   EXPECT_EQ("slider", button->accessibleNode()->role());
 
+  axButton = cache->GetOrCreate(button);
   EXPECT_EQ(kSliderRole, axButton->RoleValue());
 }
 
@@ -78,7 +80,7 @@ TEST_F(AccessibilityObjectModelTest, AOMDoesNotReflectARIA) {
   auto* cache = AXObjectCache();
   ASSERT_NE(nullptr, cache);
   auto* axTextBox = cache->GetOrCreate(textbox);
-  EXPECT_EQ(kComboBoxRole, axTextBox->RoleValue());
+  EXPECT_EQ(kTextFieldWithComboBoxRole, axTextBox->RoleValue());
   AXNameFrom name_from;
   AXObject::AXObjectVector name_objects;
   EXPECT_EQ("Combo", axTextBox->GetName(name_from, &name_objects));
@@ -120,6 +122,7 @@ TEST_F(AccessibilityObjectModelTest, AOMPropertiesCanBeCleared) {
   button->accessibleNode()->setDisabled(false, false);
 
   // Assert that the AX object was affected by AOM properties.
+  axButton = cache->GetOrCreate(button);
   EXPECT_EQ(kRadioButtonRole, axButton->RoleValue());
   EXPECT_EQ("Radio", axButton->GetName(name_from, &name_objects));
   EXPECT_EQ(axButton->Restriction(), kNone);
@@ -130,6 +133,7 @@ TEST_F(AccessibilityObjectModelTest, AOMPropertiesCanBeCleared) {
   button->accessibleNode()->setDisabled(false, true);
 
   // The AX Object should now revert to ARIA.
+  axButton = cache->GetOrCreate(button);
   EXPECT_EQ(kCheckBoxRole, axButton->RoleValue());
   EXPECT_EQ("Check", axButton->GetName(name_from, &name_objects));
   EXPECT_EQ(axButton->Restriction(), kDisabled);
@@ -149,9 +153,13 @@ TEST_F(AccessibilityObjectModelTest, RangeProperties) {
   auto* cache = AXObjectCache();
   ASSERT_NE(nullptr, cache);
   auto* ax_slider = cache->GetOrCreate(slider);
-  EXPECT_EQ(-0.5f, ax_slider->MinValueForRange());
-  EXPECT_EQ(0.5f, ax_slider->MaxValueForRange());
-  EXPECT_EQ(0.1f, ax_slider->ValueForRange());
+  float value = 0.0f;
+  EXPECT_TRUE(ax_slider->MinValueForRange(&value));
+  EXPECT_EQ(-0.5f, value);
+  EXPECT_TRUE(ax_slider->MaxValueForRange(&value));
+  EXPECT_EQ(0.5f, value);
+  EXPECT_TRUE(ax_slider->ValueForRange(&value));
+  EXPECT_EQ(0.1f, value);
 }
 
 TEST_F(AccessibilityObjectModelTest, Level) {
@@ -190,13 +198,14 @@ TEST_F(AccessibilityObjectModelTest, ListItem) {
 TEST_F(AccessibilityObjectModelTest, Grid) {
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
-  main_resource.Complete(
-      "<div role=grid id=grid>"
-      "  <div role=row id=row>"
-      "    <div role=gridcell id=cell></div>"
-      "    <div role=gridcell id=cell2></div>"
-      "  </div>"
-      "</div>");
+  main_resource.Complete(R"HTML(
+    <div role=grid id=grid>
+      <div role=row id=row>
+        <div role=gridcell id=cell></div>
+        <div role=gridcell id=cell2></div>
+      </div>
+    </div>
+  )HTML");
 
   auto* grid = GetDocument().getElementById("grid");
   ASSERT_NE(nullptr, grid);
@@ -272,19 +281,20 @@ class SparseAttributeAdapter : public AXSparseAttributeClient {
 TEST_F(AccessibilityObjectModelTest, SparseAttributes) {
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
-  main_resource.Complete(
-      "<input id=target"
-      " aria-keyshortcuts=Ctrl+K"
-      " aria-roledescription=Widget"
-      " aria-activedescendant=active"
-      " aria-details=details"
-      " aria-errormessage=error>"
-      "<div id=active role=option></div>"
-      "<div id=active2 role=gridcell></div>"
-      "<div id=details role=contentinfo></div>"
-      "<div id=details2 role=form></div>"
-      "<div id=error role=article>Error</div>"
-      "<div id=error2 role=banner>Error 2</div>");
+  main_resource.Complete(R"HTML(
+    <input id=target
+     aria-keyshortcuts=Ctrl+K
+     aria-roledescription=Widget
+     aria-activedescendant=active
+     aria-details=details
+     aria-errormessage=error>
+    <div id=active role=option></div>
+    <div id=active2 role=gridcell></div>
+    <div id=details role=contentinfo></div>
+    <div id=details2 role=form></div>
+    <div id=error role=article>Error</div>
+    <div id=error2 role=banner>Error 2</div>
+  )HTML");
 
   auto* target = GetDocument().getElementById("target");
   auto* cache = AXObjectCache();
@@ -346,11 +356,12 @@ TEST_F(AccessibilityObjectModelTest, SparseAttributes) {
 TEST_F(AccessibilityObjectModelTest, LabeledBy) {
   SimRequest main_resource("https://example.com/", "text/html");
   LoadURL("https://example.com/");
-  main_resource.Complete(
-      "<input id=target aria-labelledby='l1 l2'>"
-      "<label id=l1>Label 1</label>"
-      "<label id=l2>Label 2</label>"
-      "<label id=l3>Label 3</label>");
+  main_resource.Complete(R"HTML(
+    <input id=target aria-labelledby='l1 l2'>
+    <label id=l1>Label 1</label>
+    <label id=l2>Label 2</label>
+    <label id=l3>Label 3</label>
+  )HTML");
 
   auto* target = GetDocument().getElementById("target");
   auto* l1 = GetDocument().getElementById("l1");

@@ -5,8 +5,8 @@
 #ifndef V0CustomElementMicrotaskDispatcher_h
 #define V0CustomElementMicrotaskDispatcher_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -15,8 +15,6 @@ class V0CustomElementCallbackQueue;
 
 class V0CustomElementMicrotaskDispatcher final
     : public GarbageCollected<V0CustomElementMicrotaskDispatcher> {
-  WTF_MAKE_NONCOPYABLE(V0CustomElementMicrotaskDispatcher);
-
  public:
   static V0CustomElementMicrotaskDispatcher& Instance();
 
@@ -24,7 +22,7 @@ class V0CustomElementMicrotaskDispatcher final
 
   bool ElementQueueIsEmpty() { return elements_.IsEmpty(); }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   V0CustomElementMicrotaskDispatcher();
@@ -39,6 +37,8 @@ class V0CustomElementMicrotaskDispatcher final
   enum { kQuiescent, kResolving, kDispatchingCallbacks } phase_;
 
   HeapVector<Member<V0CustomElementCallbackQueue>> elements_;
+
+  DISALLOW_COPY_AND_ASSIGN(V0CustomElementMicrotaskDispatcher);
 };
 
 }  // namespace blink

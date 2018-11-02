@@ -8,7 +8,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
+#import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/bubble_anchor_helper_views.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_controller.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
@@ -16,8 +17,15 @@
 #include "chrome/browser/ui/views/sync/profile_signin_confirmation_dialog_views.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
-#include "ui/base/material_design/material_design_controller.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
+
+namespace {
+
+gfx::Point ScreenPointFromBrowser(Browser* browser, NSPoint ns_point) {
+  return gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
+      browser->window()->GetNativeWindow(), ns_point));
+}
+}
 
 TabDialogsViewsMac::TabDialogsViewsMac(content::WebContents* contents)
     : TabDialogsCocoa(contents) {}
@@ -39,7 +47,7 @@ void TabDialogsViewsMac::ShowProfileSigninConfirmation(
 }
 
 void TabDialogsViewsMac::ShowManagePasswordsBubble(bool user_action) {
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (!chrome::ShowAllDialogsWithViewsToolkit()) {
     TabDialogsCocoa::ShowManagePasswordsBubble(user_action);
     return;
   }
@@ -63,8 +71,7 @@ void TabDialogsViewsMac::ShowManagePasswordsBubble(bool user_action) {
   BrowserWindowController* bwc =
       [BrowserWindowController browserWindowControllerForWindow:window];
   gfx::Point anchor_point =
-      gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
-          browser->window()->GetNativeWindow(), [bwc bookmarkBubblePoint]));
+      ScreenPointFromBrowser(browser, [bwc bookmarkBubblePoint]);
   gfx::NativeView parent =
       platform_util::GetViewForWindow(browser->window()->GetNativeWindow());
   DCHECK(parent);
@@ -83,9 +90,14 @@ void TabDialogsViewsMac::ShowManagePasswordsBubble(bool user_action) {
 
 void TabDialogsViewsMac::HideManagePasswordsBubble() {
   // Close toolkit-views bubble.
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (!chrome::ShowAllDialogsWithViewsToolkit()) {
     TabDialogsCocoa::HideManagePasswordsBubble();
     return;
   }
-  ManagePasswordsBubbleView::CloseCurrentBubble();
+  if (!ManagePasswordsBubbleView::manage_password_bubble())
+    return;
+  content::WebContents* bubble_web_contents =
+      ManagePasswordsBubbleView::manage_password_bubble()->web_contents();
+  if (web_contents() == bubble_web_contents)
+    ManagePasswordsBubbleView::CloseCurrentBubble();
 }

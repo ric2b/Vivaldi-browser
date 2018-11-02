@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright (c) 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,6 @@ class QUIC_EXPORT_PRIVATE Aes128Gcm12Decrypter : public AeadBaseDecrypter {
   Aes128Gcm12Decrypter();
   ~Aes128Gcm12Decrypter() override;
 
-  const char* cipher_name() const override;
   uint32_t cipher_id() const override;
 
  private:

@@ -43,13 +43,6 @@ imageset("Background") {
   ]
 }
 
-# TODO(yuweih): This target is used to exclude material design imagesets from
-# the internal app's source set, that are already pulled-in by other deps of the
-# internal app. We will need to redesign these once crbug.com/734054 is
-# resolved.
-group("system_icons") {
-}
-
 group("launchscreen_assets") {
   public_deps = [
     ":launchscreen_app_logo",
@@ -75,21 +68,20 @@ imageset("launchscreen_brand_name") {
   ]
 }
 
-bundle_data("remoting_icons") {
+appiconset("remoting_icons") {
   sources = [
-    "chromium/Icon-120.png",
-    "chromium/Icon-152.png",
-    "chromium/Icon-167.png",
-    "chromium/Icon-180.png",
-    "chromium/Icon-29.png",
-    "chromium/Icon-40.png",
-    "chromium/Icon-58.png",
-    "chromium/Icon-76.png",
-    "chromium/Icon-80.png",
-    "chromium/Icon-87.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
+    "chromium/AppIcon.appiconset/Contents.json",
+    "chromium/AppIcon.appiconset/Icon-1024.png",
+    "chromium/AppIcon.appiconset/Icon-120.png",
+    "chromium/AppIcon.appiconset/Icon-152.png",
+    "chromium/AppIcon.appiconset/Icon-167.png",
+    "chromium/AppIcon.appiconset/Icon-180.png",
+    "chromium/AppIcon.appiconset/Icon-29.png",
+    "chromium/AppIcon.appiconset/Icon-40.png",
+    "chromium/AppIcon.appiconset/Icon-58.png",
+    "chromium/AppIcon.appiconset/Icon-76.png",
+    "chromium/AppIcon.appiconset/Icon-80.png",
+    "chromium/AppIcon.appiconset/Icon-87.png",
   ]
 }
 

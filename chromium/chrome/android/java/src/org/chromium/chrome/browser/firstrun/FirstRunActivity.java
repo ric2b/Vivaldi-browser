@@ -6,31 +6,25 @@ package org.chromium.chrome.browser.firstrun;
 
 import android.app.Activity;
 import android.app.Fragment;
-import android.app.PendingIntent;
-import android.app.PendingIntent.CanceledException;
-import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.CallSuper;
+import android.support.annotation.StringRes;
 import android.text.TextUtils;
+import android.view.View;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
-import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
-import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
-import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
-import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.ui.base.LocalizationUtils;
 
 import java.lang.reflect.Constructor;
@@ -48,7 +42,7 @@ import java.util.concurrent.Callable;
  *   [Sign-in page]
  * The activity might be run more than once, e.g. 1) for ToS and sign-in, and 2) for intro.
  */
-public class FirstRunActivity extends AsyncInitializationActivity implements FirstRunPageDelegate {
+public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPageDelegate {
     /** Alerted about various events when FirstRunActivity performs them. */
     public interface FirstRunActivityObserver {
         /** See {@link #onFlowIsKnown}. */
@@ -66,29 +60,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         /** See {@link #abortFirstRunExperience}. */
         void onAbortFirstRunExperience();
     }
-
-    protected static final String TAG = "FirstRunActivity";
-
-    // Incoming parameters:
-    public static final String EXTRA_COMING_FROM_CHROME_ICON = "Extra.ComingFromChromeIcon";
-    public static final String EXTRA_USE_FRE_FLOW_SEQUENCER = "Extra.UseFreFlowSequencer";
-    public static final String EXTRA_START_LIGHTWEIGHT_FRE = "Extra.StartLightweightFRE";
-    public static final String EXTRA_CHROME_LAUNCH_INTENT = "Extra.FreChromeLaunchIntent";
-
-    static final String SHOW_WELCOME_PAGE = "ShowWelcome";
-    static final String SHOW_DATA_REDUCTION_PAGE = "ShowDataReduction";
-    static final String SHOW_SEARCH_ENGINE_PAGE = "ShowSearchEnginePage";
-    static final String SHOW_SIGNIN_PAGE = "ShowSignIn";
-
-    static final String POST_NATIVE_SETUP_NEEDED = "PostNativeSetupNeeded";
-
-    // Outgoing results:
-    public static final String RESULT_SIGNIN_ACCOUNT_NAME = "ResultSignInTo";
-    public static final String RESULT_SHOW_SIGNIN_SETTINGS = "ResultShowSignInSettings";
-    public static final String EXTRA_FIRST_RUN_ACTIVITY_RESULT = "Extra.FreActivityResult";
-    public static final String EXTRA_FIRST_RUN_COMPLETE = "Extra.FreComplete";
-
-    public static final boolean DEFAULT_METRICS_AND_CRASH_REPORTING = true;
 
     // UMA constants.
     private static final int SIGNIN_SETTINGS_DEFAULT_ACCOUNT = 0;
@@ -131,7 +102,13 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
 
     private FirstRunFlowSequencer mFirstRunFlowSequencer;
 
-    protected Bundle mFreProperties;
+    private Bundle mFreProperties;
+
+    /**
+     * Whether the first run activity was launched as a result of the user launching Chrome from the
+     * Android app list.
+     */
+    private boolean mLaunchedFromChromeIcon;
 
     private List<Callable<FirstRunPage>> mPages;
 
@@ -175,8 +152,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         }
 
         // An optional page to select a default search engine.
-        if (mFreProperties.getBoolean(SHOW_SEARCH_ENGINE_PAGE)
-                && mFirstRunFlowSequencer.shouldShowSearchEnginePage()) {
+        if (mFreProperties.getBoolean(SHOW_SEARCH_ENGINE_PAGE)) {
             mPages.add(pageOf(DefaultSearchEngineFirstRunFragment.class));
             mFreProgressStates.add(FRE_PROGRESS_DEFAULT_SEARCH_ENGINE_SHOWN);
             notifyAdapter = true;
@@ -196,12 +172,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     }
 
     @Override
-    protected boolean requiresFirstRunToBeCompleted(Intent intent) {
-        // The user is already in First Run.
-        return false;
-    }
-
-    @Override
     protected Bundle transformSavedInstanceStateForOnCreate(Bundle savedInstanceState) {
         // We pass null to Activity.onCreate() so that it doesn't automatically restore
         // the FragmentManager state - as that may cause fragments to be loaded that have
@@ -211,30 +181,28 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         return null;
     }
 
-    @Override
-    public void setContentView() {
-        Bundle savedInstanceState = getSavedInstanceState();
-        if (savedInstanceState != null) {
-            mFreProperties = savedInstanceState;
-        } else if (getIntent() != null) {
-            mFreProperties = getIntent().getExtras();
-        } else {
-            mFreProperties = new Bundle();
-        }
-
-        setFinishOnTouchOutside(true);
-
-        // Skip creating content view if it is to start a lightweight First Run Experience.
-        if (mFreProperties.getBoolean(FirstRunActivity.EXTRA_START_LIGHTWEIGHT_FRE)) {
-            return;
-        }
-
+    /**
+     * Creates the content view for this activity.
+     * The only thing subclasses can do is wrapping the view returned by super implementation
+     * in some extra layout.
+     */
+    @CallSuper
+    protected View createContentView() {
         mPager = new FirstRunViewPager(this);
         mPager.setId(R.id.fre_pager);
         mPager.setOffscreenPageLimit(3);
-        setContentView(mPager);
+        return mPager;
+    }
 
-        mFirstRunFlowSequencer = new FirstRunFlowSequencer(this, mFreProperties) {
+    @Override
+    public void setContentView() {
+        initializeStateFromLaunchData();
+
+        setFinishOnTouchOutside(true);
+
+        setContentView(createContentView());
+
+        mFirstRunFlowSequencer = new FirstRunFlowSequencer(this) {
             @Override
             public void onFlowIsKnown(Bundle freProperties) {
                 mFlowIsKnown = true;
@@ -312,11 +280,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         }
     }
 
-    @Override
-    public boolean shouldStartGpuProcess() {
-        return true;
-    }
-
     // Activity:
 
     @Override
@@ -336,12 +299,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putAll(mFreProperties);
-    }
-
-    @Override
     public void onRestoreInstanceState(Bundle state) {
         // Don't automatically restore state here. This is a counterpart to the override
         // of transformSavedInstanceStateForOnCreate() as the two need to be consistent.
@@ -353,20 +310,8 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        flushPersistentData();
-    }
-
-    @Override
     public void onStart() {
         super.onStart();
-        // Since the FRE may be shown before any tab is shown, mark that this is the point at
-        // which Chrome went to foreground. This is needed as otherwise an assert will be hit
-        // in UmaUtils.getForegroundStartTime() when recording the time taken to load the first
-        // page (which happens after native has been initialized possibly while FRE is still
-        // active).
-        UmaUtils.recordForegroundStartTime();
         stopProgressionIfNotAcceptedTermsOfService();
     }
 
@@ -431,9 +376,8 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
             recordFreProgressHistogram(FRE_PROGRESS_COMPLETED_NOT_SIGNED_IN);
         }
 
-        mFreProperties.putString(RESULT_SIGNIN_ACCOUNT_NAME, mResultSignInAccountName);
-        mFreProperties.putBoolean(RESULT_SHOW_SIGNIN_SETTINGS, mResultShowSignInSettings);
-        FirstRunFlowSequencer.markFlowAsCompleted(this, mFreProperties);
+        FirstRunFlowSequencer.markFlowAsCompleted(
+                mResultSignInAccountName, mResultShowSignInSettings);
 
         if (DataReductionPromoUtils.getDisplayedFreOrSecondRunPromo()) {
             if (DataReductionProxySettings.getInstance().isDataReductionProxyEnabled()) {
@@ -486,7 +430,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
 
     @Override
     public boolean didAcceptTermsOfService() {
-        boolean result = FirstRunUtils.didAcceptTermsOfService(getApplicationContext());
+        boolean result = FirstRunUtils.didAcceptTermsOfService();
         if (sObserver != null) sObserver.onAcceptTermsOfService();
         return result;
     }
@@ -502,49 +446,12 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         jumpToPage(mPager.getCurrentItem() + 1);
     }
 
-    protected void flushPersistentData() {
-        if (mNativeSideIsInitialized) {
-            ProfileManagerUtils.flushPersistentDataForAllProfiles();
+    /** Initialize local state from launch intent and from saved instance state. */
+    private void initializeStateFromLaunchData() {
+        if (getIntent() != null) {
+            mLaunchedFromChromeIcon =
+                    getIntent().getBooleanExtra(EXTRA_COMING_FROM_CHROME_ICON, false);
         }
-    }
-
-    /**
-     * Sends the PendingIntent included with the CHROME_LAUNCH_INTENT extra if it exists.
-     * @param complete Whether first run completed successfully.
-     * @return Whether a pending intent was sent.
-     */
-    protected final boolean sendPendingIntentIfNecessary(final boolean complete) {
-        PendingIntent pendingIntent = IntentUtils.safeGetParcelableExtra(getIntent(),
-                EXTRA_CHROME_LAUNCH_INTENT);
-        if (pendingIntent == null) return false;
-
-        Intent extraDataIntent = new Intent();
-        extraDataIntent.putExtra(FirstRunActivity.EXTRA_FIRST_RUN_ACTIVITY_RESULT, true);
-        extraDataIntent.putExtra(FirstRunActivity.EXTRA_FIRST_RUN_COMPLETE, complete);
-
-        try {
-            // After the PendingIntent has been sent, send a first run callback to custom tabs if
-            // necessary.
-            PendingIntent.OnFinished onFinished = new PendingIntent.OnFinished() {
-                @Override
-                public void onSendFinished(PendingIntent pendingIntent, Intent intent,
-                        int resultCode, String resultData, Bundle resultExtras) {
-                    if (ChromeLauncherActivity.isCustomTabIntent(intent)) {
-                        CustomTabsConnection.getInstance().sendFirstRunCallbackIfNecessary(
-                                intent, complete);
-                    }
-                }
-            };
-
-            // Use the PendingIntent to send the intent that originally launched Chrome. The intent
-            // will go back to the ChromeLauncherActivity, which will route it accordingly.
-            pendingIntent.send(this, complete ? Activity.RESULT_OK : Activity.RESULT_CANCELED,
-                    extraDataIntent, onFinished, null);
-            return true;
-        } catch (CanceledException e) {
-            Log.e(TAG, "Unable to send PendingIntent.", e);
-        }
-        return false;
     }
 
     /**
@@ -585,7 +492,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     }
 
     private void recordFreProgressHistogram(int state) {
-        if (mFreProperties.getBoolean(FirstRunActivity.EXTRA_COMING_FROM_CHROME_ICON)) {
+        if (mLaunchedFromChromeIcon) {
             sMobileFreProgressMainIntentHistogram.record(state);
         } else {
             sMobileFreProgressViewIntentHistogram.record(state);
@@ -608,7 +515,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     }
 
     @Override
-    public void showInfoPage(int url) {
+    public void showInfoPage(@StringRes int url) {
         CustomTabActivity.showInfoPage(
                 this, LocalizationUtils.substituteLocalePlaceholder(getString(url)));
     }

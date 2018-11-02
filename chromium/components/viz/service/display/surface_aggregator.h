@@ -12,24 +12,22 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/quads/draw_quad.h"
-#include "cc/quads/render_pass.h"
+#include "components/viz/common/quads/draw_quad.h"
+#include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/service/viz_service_export.h"
 #include "ui/gfx/color_space.h"
 
 namespace cc {
-class BlockingTaskRunner;
-class CompositorFrame;
 class DisplayResourceProvider;
-class SurfaceDrawQuad;
 }  // namespace cc
 
 namespace viz {
-
+class CompositorFrame;
 class Surface;
 class SurfaceClient;
+class SurfaceDrawQuad;
 class SurfaceManager;
 
 class VIZ_SERVICE_EXPORT SurfaceAggregator {
@@ -41,7 +39,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
                     bool aggregate_only_damaged);
   ~SurfaceAggregator();
 
-  cc::CompositorFrame Aggregate(const SurfaceId& surface_id);
+  CompositorFrame Aggregate(const SurfaceId& surface_id);
   void ReleaseResources(const SurfaceId& surface_id);
   SurfaceIndexMap& previous_contained_surfaces() {
     return previous_contained_surfaces_;
@@ -49,7 +47,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   void SetFullDamageForSurface(const SurfaceId& surface_id);
   void set_output_is_secure(bool secure) { output_is_secure_ = secure; }
 
-  // Set the color spaces for the created cc::RenderPasses, which is propagated
+  // Set the color spaces for the created RenderPasses, which is propagated
   // to the output surface.
   void SetOutputColorSpace(const gfx::ColorSpace& blending_color_space,
                            const gfx::ColorSpace& output_color_space);
@@ -85,49 +83,101 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
       valid_surface = 0;
       missing_surface = 0;
       no_active_frame = 0;
+      using_fallback_surface = 0;
     }
 
     // The surface exists and has an active frame.
     int valid_surface;
+
     // The surface doesn't exist.
     int missing_surface;
+
     // The surface exists but doesn't have an active frame.
     int no_active_frame;
+
+    // The primary surface is not available but the fallback
+    // is used.
+    int using_fallback_surface;
   };
 
   ClipData CalculateClipRect(const ClipData& surface_clip,
                              const ClipData& quad_clip,
                              const gfx::Transform& target_transform);
 
-  cc::RenderPassId RemapPassId(cc::RenderPassId surface_local_pass_id,
-                               const SurfaceId& surface_id);
+  RenderPassId RemapPassId(RenderPassId surface_local_pass_id,
+                           const SurfaceId& surface_id);
 
-  void HandleSurfaceQuad(const cc::SurfaceDrawQuad* surface_quad,
+  void HandleSurfaceQuad(const SurfaceDrawQuad* surface_quad,
+                         float parent_device_scale_factor,
+                         const FrameSinkId& parent_frame_sink_id,
                          const gfx::Transform& target_transform,
                          const ClipData& clip_rect,
-                         cc::RenderPass* dest_pass,
+                         RenderPass* dest_pass,
                          bool ignore_undamaged,
                          gfx::Rect* damage_rect_in_quad_space,
                          bool* damage_rect_in_quad_space_valid);
 
+  void EmitSurfaceContent(Surface* surface,
+                          float parent_device_scale_factor,
+                          const SharedQuadState* source_sqs,
+                          const gfx::Rect& rect,
+                          const gfx::Rect& source_visible_rect,
+                          const gfx::Transform& target_transform,
+                          const ClipData& clip_rect,
+                          bool stretch_content_to_fill_bounds,
+                          RenderPass* dest_pass,
+                          bool ignore_undamaged,
+                          gfx::Rect* damage_rect_in_quad_space,
+                          bool* damage_rect_in_quad_space_valid);
+
+  void EmitDefaultBackgroundColorQuad(const SurfaceDrawQuad* surface_quad,
+                                      const gfx::Transform& target_transform,
+                                      const ClipData& clip_rect,
+                                      RenderPass* dest_pass);
+
+  void EmitGutterQuadsIfNecessary(
+      const gfx::Rect& primary_rect,
+      const gfx::Rect& fallback_rect,
+      const SharedQuadState* primary_shared_quad_state,
+      const gfx::Transform& target_transform,
+      const ClipData& clip_rect,
+      SkColor background_color,
+      RenderPass* dest_pass);
+
+  void ReportMissingFallbackSurface(const SurfaceId& fallback_surface_id,
+                                    const Surface* fallback_surface);
+
   SharedQuadState* CopySharedQuadState(const SharedQuadState* source_sqs,
                                        const gfx::Transform& target_transform,
                                        const ClipData& clip_rect,
-                                       cc::RenderPass* dest_render_pass);
+                                       RenderPass* dest_render_pass);
+
+  SharedQuadState* CopyAndScaleSharedQuadState(
+      const SharedQuadState* source_sqs,
+      const gfx::Transform& scaled_quad_to_target_transform,
+      const gfx::Transform& target_transform,
+      const ClipData& clip_rect,
+      RenderPass* dest_render_pass,
+      float x_scale,
+      float y_scale);
+
   void CopyQuadsToPass(
-      const cc::QuadList& source_quad_list,
-      const cc::SharedQuadStateList& source_shared_quad_state_list,
+      const QuadList& source_quad_list,
+      const SharedQuadStateList& source_shared_quad_state_list,
+      const FrameSinkId& parent_frame_sink_id,
+      float parent_device_scale_factor,
       const std::unordered_map<ResourceId, ResourceId>& resource_to_child_map,
       const gfx::Transform& target_transform,
       const ClipData& clip_rect,
-      cc::RenderPass* dest_pass,
+      RenderPass* dest_pass,
       const SurfaceId& surface_id);
-  gfx::Rect PrewalkTree(const SurfaceId& surface_id,
+  gfx::Rect PrewalkTree(Surface* surface,
                         bool in_moved_pixel_surface,
                         int parent_pass,
+                        bool will_draw,
                         PrewalkResult* result);
   void CopyUndrawnSurfaces(PrewalkResult* prewalk);
-  void CopyPasses(const cc::CompositorFrame& frame, Surface* surface);
+  void CopyPasses(const CompositorFrame& frame, Surface* surface);
   void AddColorConversionPass();
 
   // Remove Surfaces that were referenced before but aren't currently
@@ -140,23 +190,22 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
 
   int ChildIdForSurface(Surface* surface);
   gfx::Rect DamageRectForSurface(const Surface* surface,
-                                 const cc::RenderPass& source,
+                                 const RenderPass& source,
                                  const gfx::Rect& full_rect) const;
 
   static void UnrefResources(base::WeakPtr<SurfaceClient> surface_client,
-                             const std::vector<ReturnedResource>& resources,
-                             cc::BlockingTaskRunner* main_thread_task_runner);
+                             const std::vector<ReturnedResource>& resources);
 
   SurfaceManager* manager_;
   cc::DisplayResourceProvider* provider_;
 
-  // Every Surface has its own cc::RenderPass ID namespace. This structure maps
-  // each source (SurfaceId, cc::RenderPass id) to a unified ID namespace that's
+  // Every Surface has its own RenderPass ID namespace. This structure maps
+  // each source (SurfaceId, RenderPass id) to a unified ID namespace that's
   // used in the aggregated frame. An entry is removed from the map if it's not
   // used for one output frame.
-  base::flat_map<std::pair<SurfaceId, cc::RenderPassId>, RenderPassInfo>
+  base::flat_map<std::pair<SurfaceId, RenderPassId>, RenderPassInfo>
       render_pass_allocator_map_;
-  cc::RenderPassId next_render_pass_id_;
+  RenderPassId next_render_pass_id_;
   const bool aggregate_only_damaged_;
   bool output_is_secure_;
 
@@ -168,7 +217,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   // passes. This space must always be valid.
   gfx::ColorSpace blending_color_space_ = gfx::ColorSpace::CreateSRGB();
   // The id for the final color conversion render pass.
-  cc::RenderPassId color_conversion_render_pass_id_ = 0;
+  RenderPassId color_conversion_render_pass_id_ = 0;
 
   base::flat_map<SurfaceId, int> surface_id_to_resource_child_id_;
 
@@ -189,23 +238,23 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   base::flat_set<SurfaceId> valid_surfaces_;
 
   // This is the pass list for the aggregated frame.
-  cc::RenderPassList* dest_pass_list_;
+  RenderPassList* dest_pass_list_;
 
   // This is the set of aggregated pass ids that are affected by filters that
   // move pixels.
-  base::flat_set<cc::RenderPassId> moved_pixel_passes_;
+  base::flat_set<RenderPassId> moved_pixel_passes_;
 
   // This is the set of aggregated pass ids that are drawn by copy requests, so
   // should not have their damage rects clipped to the root damage rect.
-  base::flat_set<cc::RenderPassId> copy_request_passes_;
+  base::flat_set<RenderPassId> copy_request_passes_;
 
   // This is the set of aggregated pass ids that has damage from contributing
   // content.
-  base::flat_set<cc::RenderPassId> contributing_content_damaged_passes_;
+  base::flat_set<RenderPassId> contributing_content_damaged_passes_;
 
   // This maps each aggregated pass id to the set of (aggregated) pass ids
-  // that its cc::RenderPassDrawQuads depend on
-  base::flat_map<cc::RenderPassId, base::flat_set<cc::RenderPassId>>
+  // that its RenderPassDrawQuads depend on
+  base::flat_map<RenderPassId, base::flat_set<RenderPassId>>
       render_pass_dependencies_;
 
   // The root damage rect of the currently-aggregating frame.

@@ -23,6 +23,7 @@ namespace {
 const char kClientSidePreviewsFieldTrial[] = "ClientSidePreviews";
 const char kClientLoFiFieldTrial[] = "PreviewsClientLoFi";
 const char kEnabled[] = "Enabled";
+const char kDisabled[] = "Disabled";
 
 // Verifies that we can enable offline previews via comand line.
 TEST(PreviewsExperimentsTest, TestCommandLineOfflinePage) {
@@ -57,7 +58,7 @@ TEST(PreviewsExperimentsTest, TestParamsForBlackListAndOffline) {
   EXPECT_EQ(base::TimeDelta::FromDays(7),
             params::OfflinePreviewFreshnessDuration());
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_2G,
-            params::DefaultEffectiveConnectionTypeThreshold());
+            params::GetECTThresholdForPreview(PreviewsType::OFFLINE));
   EXPECT_EQ(0, params::OfflinePreviewsVersion());
 
   base::FieldTrialList field_trial_list(nullptr);
@@ -93,7 +94,7 @@ TEST(PreviewsExperimentsTest, TestParamsForBlackListAndOffline) {
   EXPECT_EQ(base::TimeDelta::FromDays(12),
             params::OfflinePreviewFreshnessDuration());
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_4G,
-            params::DefaultEffectiveConnectionTypeThreshold());
+            params::GetECTThresholdForPreview(PreviewsType::OFFLINE));
   EXPECT_EQ(10, params::OfflinePreviewsVersion());
 
   variations::testing::ClearAllVariationParams();
@@ -107,8 +108,8 @@ TEST(PreviewsExperimentsTest, TestClientLoFiDisabledByDefault) {
 TEST(PreviewsExperimentsTest, TestClientLoFiExplicitlyDisabled) {
   base::FieldTrialList field_trial_list(nullptr);
   EXPECT_TRUE(
-      base::FieldTrialList::CreateFieldTrial(kClientLoFiFieldTrial, kEnabled));
-  EXPECT_TRUE(params::IsClientLoFiEnabled());
+      base::FieldTrialList::CreateFieldTrial(kClientLoFiFieldTrial, kDisabled));
+  EXPECT_FALSE(params::IsClientLoFiEnabled());
 }
 
 TEST(PreviewsExperimentsTest, TestClientLoFiEnabled) {

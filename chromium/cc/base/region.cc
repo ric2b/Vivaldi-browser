@@ -9,11 +9,14 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "cc/base/simple_enclosed_region.h"
+#include "ui/gfx/geometry/vector2d.h"
 
 namespace cc {
 
 Region::Region() {
 }
+
+Region::Region(const SkRegion& region) : skregion_(region) {}
 
 Region::Region(const Region& region)
     : skregion_(region.skregion_) {
@@ -36,6 +39,11 @@ const Region& Region::operator=(const Region& region) {
   return *this;
 }
 
+const Region& Region::operator+=(const gfx::Vector2d& offset) {
+  skregion_.translate(offset.x(), offset.y());
+  return *this;
+}
+
 void Region::Swap(Region* region) {
   region->skregion_.swap(skregion_);
 }
@@ -50,6 +58,10 @@ bool Region::IsEmpty() const {
 
 int Region::GetRegionComplexity() const {
   return skregion_.computeRegionComplexity();
+}
+
+void Region::GetBoundaryPath(SkPath* path) const {
+  skregion_.getBoundaryPath(path);
 }
 
 bool Region::Contains(const gfx::Point& point) const {

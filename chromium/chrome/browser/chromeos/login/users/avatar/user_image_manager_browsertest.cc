@@ -33,7 +33,6 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/cloud_external_data_manager_base_test_util.h"
@@ -62,6 +61,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
@@ -86,8 +86,10 @@ namespace {
 // Because policy is not needed in some tests it is better to use e-mails that
 // are definitely not enterprise. This lets us to avoid faking of policy fetch
 // procedure.
-const char kTestUser1[] = "test-user@gmail.com";
-const char kTestUser2[] = "test-user2@gmail.com";
+constexpr char kTestUser1[] = "test-user@gmail.com";
+constexpr char kTestUser1GaiaId[] = "1111111111";
+constexpr char kTestUser2[] = "test-user2@gmail.com";
+constexpr char kTestUser2GaiaId[] = "2222222222";
 
 policy::CloudPolicyStore* GetStoreForUser(const user_manager::User* user) {
   Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
@@ -174,7 +176,8 @@ class UserImageManagerTest : public LoginManagerTest,
   // Logs in |account_id|.
   void LogIn(const AccountId& account_id) {
     user_manager::UserManager::Get()->UserLoggedIn(
-        account_id, account_id.GetUserEmail(), false);
+        account_id, account_id.GetUserEmail(), false /* browser_restart */,
+        false /* is_child */);
   }
 
   // Verifies user image info.
@@ -249,10 +252,9 @@ class UserImageManagerTest : public LoginManagerTest,
             ->profile_downloader_.get();
     ASSERT_TRUE(profile_downloader);
 
-    static_cast<OAuth2TokenService::Consumer*>(profile_downloader)->
-        OnGetTokenSuccess(NULL,
-                          std::string(),
-                          base::Time::Now() + base::TimeDelta::FromDays(1));
+    static_cast<OAuth2TokenService::Consumer*>(profile_downloader)
+        ->OnGetTokenSuccess(NULL, std::string(),
+                            base::Time::Now() + base::TimeDelta::FromDays(1));
   }
 
   // Completes the download of the currently logged-in user's profile image.
@@ -266,9 +268,9 @@ class UserImageManagerTest : public LoginManagerTest,
     std::string profile_image_data;
     base::FilePath test_data_dir;
     ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
-    EXPECT_TRUE(ReadFileToString(
-        test_data_dir.Append("chromeos").Append("avatar1.jpg"),
-        &profile_image_data));
+    EXPECT_TRUE(
+        ReadFileToString(test_data_dir.Append("chromeos").Append("avatar1.jpg"),
+                         &profile_image_data));
 
     base::RunLoop run_loop;
     PrefChangeRegistrar pref_change_registrar;
@@ -277,8 +279,8 @@ class UserImageManagerTest : public LoginManagerTest,
     net::TestURLFetcher* fetcher = url_fetcher_factory->GetFetcherByID(0);
     ASSERT_TRUE(fetcher);
     fetcher->SetResponseString(profile_image_data);
-    fetcher->set_status(net::URLRequestStatus(net::URLRequestStatus::SUCCESS,
-                                              net::OK));
+    fetcher->set_status(
+        net::URLRequestStatus(net::URLRequestStatus::SUCCESS, net::OK));
     fetcher->set_response_code(200);
     fetcher->delegate()->OnURLFetchComplete(fetcher);
     run_loop.Run();
@@ -303,10 +305,12 @@ class UserImageManagerTest : public LoginManagerTest,
 
   std::unique_ptr<base::RunLoop> run_loop_;
 
-  const AccountId test_account_id1_ = AccountId::FromUserEmail(kTestUser1);
-  const AccountId test_account_id2_ = AccountId::FromUserEmail(kTestUser2);
+  const AccountId test_account_id1_ =
+      AccountId::FromUserEmailGaiaId(kTestUser1, kTestUser1GaiaId);
+  const AccountId test_account_id2_ =
+      AccountId::FromUserEmailGaiaId(kTestUser2, kTestUser2GaiaId);
   const AccountId enterprise_account_id_ =
-      AccountId::FromUserEmail(kEnterpriseUser1);
+      AccountId::FromUserEmailGaiaId(kEnterpriseUser1, kEnterpriseUser1GaiaId);
   const cryptohome::Identification cryptohome_id_ =
       cryptohome::Identification(enterprise_account_id_);
 
@@ -315,7 +319,7 @@ class UserImageManagerTest : public LoginManagerTest,
 };
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, PRE_SaveAndLoadUserImage) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
 
   // Setup a user with JPEG image.
   run_loop_.reset(new base::RunLoop);
@@ -347,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveAndLoadUserImage) {
 }
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, PRE_SaveUserDefaultImageIndex) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
 }
 
 // Verifies that SaveUserDefaultImageIndex() correctly sets and persists the
@@ -374,7 +378,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserDefaultImageIndex) {
 }
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, PRE_SaveUserImage) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
 }
 
 // Verifies that SaveUserImage() correctly sets and persists the chosen user
@@ -415,7 +419,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImage) {
 }
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, PRE_SaveUserImageFromFile) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
 }
 
 // Verifies that SaveUserImageFromFile() correctly sets and persists the chosen
@@ -485,7 +489,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromFile) {
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest,
                        PRE_SaveUserImageFromProfileImage) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -497,7 +501,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromProfileImage) {
   ASSERT_TRUE(user);
 
   UserImageManagerImpl::IgnoreProfileDataDownloadDelayForTesting();
-  LoginUser(test_account_id1_.GetUserEmail());
+  LoginUser(test_account_id1_);
   Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
   SeedAccountTrackerService(test_account_id1_, profile);
 
@@ -531,7 +535,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromProfileImage) {
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest,
                        PRE_ProfileImageDownloadDoesNotClobber) {
-  RegisterUser(test_account_id1_.GetUserEmail());
+  RegisterUser(test_account_id1_);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -549,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest,
       default_user_image::kFirstDefaultImageIndex);
 
   UserImageManagerImpl::IgnoreProfileDataDownloadDelayForTesting();
-  LoginUser(test_account_id1_.GetUserEmail());
+  LoginUser(test_account_id1_);
   Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
   SeedAccountTrackerService(test_account_id1_, profile);
 
@@ -606,26 +610,26 @@ class UserImageManagerPolicyTest : public UserImageManagerTest,
     UserImageManagerTest::SetUpOnMainThread();
 
     base::FilePath user_keys_dir;
-    ASSERT_TRUE(PathService::Get(chromeos::DIR_USER_POLICY_KEYS,
-                                 &user_keys_dir));
+    ASSERT_TRUE(
+        PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &user_keys_dir));
     const std::string sanitized_username =
         chromeos::CryptohomeClient::GetStubSanitizedUsername(cryptohome_id_);
     const base::FilePath user_key_file =
-        user_keys_dir.AppendASCII(sanitized_username)
-                     .AppendASCII("policy.pub");
+        user_keys_dir.AppendASCII(sanitized_username).AppendASCII("policy.pub");
     std::vector<uint8_t> user_key_bits;
     ASSERT_TRUE(user_policy_.GetSigningKey()->ExportPublicKey(&user_key_bits));
     ASSERT_TRUE(base::CreateDirectory(user_key_file.DirName()));
-    ASSERT_EQ(base::WriteFile(
-                  user_key_file,
-                  reinterpret_cast<const char*>(user_key_bits.data()),
-                  user_key_bits.size()),
-              static_cast<int>(user_key_bits.size()));
+    ASSERT_EQ(
+        base::WriteFile(user_key_file,
+                        reinterpret_cast<const char*>(user_key_bits.data()),
+                        user_key_bits.size()),
+        static_cast<int>(user_key_bits.size()));
     user_policy_.policy_data().set_username(
         enterprise_account_id_.GetUserEmail());
 
     policy_image_ = test::ImageLoader(test_data_dir_.Append(
-        test::kUserAvatarImage2RelativePath)).Load();
+                                          test::kUserAvatarImage2RelativePath))
+                        .Load();
     ASSERT_TRUE(policy_image_);
   }
 
@@ -668,7 +672,7 @@ class UserImageManagerPolicyTest : public UserImageManagerTest,
 };
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PRE_SetAndClear) {
-  RegisterUser(enterprise_account_id_.GetUserEmail());
+  RegisterUser(enterprise_account_id_);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -681,7 +685,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, DISABLED_SetAndClear) {
       user_manager::UserManager::Get()->FindUser(enterprise_account_id_);
   ASSERT_TRUE(user);
 
-  LoginUser(enterprise_account_id_.GetUserEmail());
+  LoginUser(enterprise_account_id_);
   base::RunLoop().RunUntilIdle();
 
   policy::CloudPolicyStore* store = GetStoreForUser(user);
@@ -759,7 +763,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, DISABLED_SetAndClear) {
 }
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PRE_PolicyOverridesUser) {
-  RegisterUser(enterprise_account_id_.GetUserEmail());
+  RegisterUser(enterprise_account_id_);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -771,7 +775,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PolicyOverridesUser) {
       user_manager::UserManager::Get()->FindUser(enterprise_account_id_);
   ASSERT_TRUE(user);
 
-  LoginUser(enterprise_account_id_.GetUserEmail());
+  LoginUser(enterprise_account_id_);
   base::RunLoop().RunUntilIdle();
 
   policy::CloudPolicyStore* store = GetStoreForUser(user);
@@ -823,7 +827,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PolicyOverridesUser) {
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest,
                        PRE_UserDoesNotOverridePolicy) {
-  RegisterUser(enterprise_account_id_.GetUserEmail());
+  RegisterUser(enterprise_account_id_);
   chromeos::StartupUtils::MarkOobeCompleted();
 }
 
@@ -835,7 +839,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, UserDoesNotOverridePolicy) {
       user_manager::UserManager::Get()->FindUser(enterprise_account_id_);
   ASSERT_TRUE(user);
 
-  LoginUser(enterprise_account_id_.GetUserEmail());
+  LoginUser(enterprise_account_id_);
   base::RunLoop().RunUntilIdle();
 
   policy::CloudPolicyStore* store = GetStoreForUser(user);

@@ -6,7 +6,6 @@ package org.chromium.chromoting.jni;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chromoting.CapabilityManager;
 import org.chromium.chromoting.InputStub;
 import org.chromium.chromoting.Preconditions;
@@ -41,7 +40,6 @@ public class Client implements InputStub {
     }
 
     // Suppress FindBugs warning, since |sClient| is only used on the UI thread.
-    @SuppressFBWarnings("LI_LAZY_INIT_STATIC")
     public void destroy() {
         if (sClient != null) {
             disconnectFromHost();
@@ -174,6 +172,7 @@ public class Client implements InputStub {
     /**
      * Moves the mouse cursor, possibly while clicking the specified (nonnegative) button.
      */
+    @Override
     public void sendMouseEvent(int x, int y, int whichButton, boolean buttonDown) {
         if (!mConnected) {
             return;
@@ -183,6 +182,7 @@ public class Client implements InputStub {
     }
 
     /** Injects a mouse-wheel event with delta values. */
+    @Override
     public void sendMouseWheelEvent(int deltaX, int deltaY) {
         if (!mConnected) {
             return;
@@ -195,6 +195,7 @@ public class Client implements InputStub {
      * Presses or releases the specified key. If scanCode is not zero then
      * keyCode is ignored.
      */
+    @Override
     public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
         if (!mConnected) {
             return false;
@@ -204,6 +205,7 @@ public class Client implements InputStub {
     }
 
     /** Sends TextEvent to the host. */
+    @Override
     public void sendTextEvent(String text) {
         if (!mConnected) {
             return;
@@ -213,6 +215,7 @@ public class Client implements InputStub {
     }
 
     /** Sends an array of TouchEvents to the host. */
+    @Override
     public void sendTouchEvent(TouchEventData.EventType eventType, TouchEventData[] data) {
         if (!mConnected) {
             return;

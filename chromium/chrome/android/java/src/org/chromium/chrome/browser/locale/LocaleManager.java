@@ -13,13 +13,13 @@ import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 
 import org.chromium.base.ActivityState;
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
@@ -101,7 +101,6 @@ public class LocaleManager {
     /**
      * @return An instance of the {@link LocaleManager}. This should only be called on UI thread.
      */
-    @SuppressFBWarnings("LI_LAZY_INIT_STATIC")
     @CalledByNative
     public static LocaleManager getInstance() {
         assert ThreadUtils.runningOnUiThread();
@@ -261,7 +260,8 @@ public class LocaleManager {
                 if (onSearchEngineFinalized != null) onSearchEngineFinalized.onResult(result);
             }
         };
-        if (TemplateUrlService.getInstance().isDefaultSearchManaged()) {
+        if (TemplateUrlService.getInstance().isDefaultSearchManaged()
+                || ApiCompatibilityUtils.isDemoUser(activity)) {
             finalizeInternalCallback.onResult(true);
             return;
         }
@@ -431,9 +431,8 @@ public class LocaleManager {
      * @return List of engines to show.
      */
     public List<TemplateUrl> getSearchEnginesForPromoDialog(@SearchEnginePromoType int promoType) {
-        TemplateUrlService instance = TemplateUrlService.getInstance();
-        assert instance.isLoaded();
-        return instance.getSearchEngines();
+        throw new IllegalStateException(
+                "Not applicable unless existing or new promos are required");
     }
 
     /** Set a LocaleManager to be used for testing. */
@@ -448,12 +447,6 @@ public class LocaleManager {
      * @param widgetPresent Whether there is at least one search widget on home screen.
      */
     public void recordLocaleBasedSearchWidgetMetrics(boolean widgetPresent) {}
-
-    // Deprecated.  Use hasCompletedSearchEnginePromo.
-    // TODO(tedchoc): Remove once downstream uses hasCompletedSearchEnginePromo.
-    public boolean hasShownSearchEnginePromo() {
-        return hasCompletedSearchEnginePromo();
-    }
 
     /**
      * @return Whether the search engine promo has been shown and the user selected a valid option

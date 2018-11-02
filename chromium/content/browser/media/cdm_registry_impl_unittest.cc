@@ -19,12 +19,15 @@
 
 namespace content {
 
-const char kTestKeySystemType[] = "test";
+const char kTestCdmName[] = "Test CDM";
+const char kTestCdmGuid[] = "62FE9C4B-384E-48FD-B28A-9F6F248BC8CC";
 const char kTestPath[] = "/aa/bb";
 const char kVersion1[] = "1.1.1.1";
 const char kVersion2[] = "1.1.1.2";
-const char kTestCodecs[] = "vp9,mp4";
+const char kTestCodecs[] = "vp9,avc1";
 const char kCodecDelimiter[] = ",";
+const char kTestKeySystem[] = "com.example.somesystem";
+const char kTestFileSystemId[] = "file_system_id";
 
 // For simplicity and to make failures easier to diagnose, this test uses
 // std::string instead of base::FilePath and std::vector<std::string>.
@@ -34,69 +37,80 @@ class CdmRegistryImplTest : public testing::Test {
   ~CdmRegistryImplTest() override {}
 
  protected:
-  void Register(const std::string& type,
+  void Register(const std::string& name,
                 const std::string& version,
                 const std::string& path,
-                const std::string& supported_codecs) {
+                const std::string& supported_codecs,
+                std::string supported_key_system,
+                bool supports_sub_key_systems = false) {
     const std::vector<std::string> codecs =
         base::SplitString(supported_codecs, kCodecDelimiter,
                           base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-    cdm_registry_.RegisterCdm(CdmInfo(type, base::Version(version),
-                                      base::FilePath::FromUTF8Unsafe(path),
-                                      codecs));
+    cdm_registry_.RegisterCdm(
+        CdmInfo(name, kTestCdmGuid, base::Version(version),
+                base::FilePath::FromUTF8Unsafe(path), kTestFileSystemId, codecs,
+                supported_key_system, supports_sub_key_systems));
   }
 
-  bool IsRegistered(const std::string& type, const std::string& version) {
+  bool IsRegistered(const std::string& name, const std::string& version) {
     for (const auto& cdm : cdm_registry_.GetAllRegisteredCdms()) {
-      if (cdm.type == type && cdm.version.GetString() == version)
+      if (cdm.name == name && cdm.version.GetString() == version)
         return true;
     }
     return false;
   }
 
-  std::vector<std::string> GetVersions(const std::string& type) {
+  std::vector<std::string> GetVersions(const std::string& guid) {
     std::vector<std::string> versions;
     for (const auto& cdm : cdm_registry_.GetAllRegisteredCdms()) {
-      if (cdm.type == type)
+      if (cdm.guid == guid)
         versions.push_back(cdm.version.GetString());
     }
     return versions;
   }
 
- private:
+ protected:
   CdmRegistryImpl cdm_registry_;
 };
 
-// Note that KeySystemService is a singleton, and thus the actions of
-// one test impact other tests. So each test defines a different key system
-// name to avoid conflicts.
-
 TEST_F(CdmRegistryImplTest, Register) {
-  Register(kTestKeySystemType, kVersion1, kTestPath, kTestCodecs);
-  EXPECT_TRUE(IsRegistered(kTestKeySystemType, kVersion1));
+  Register(kTestCdmName, kVersion1, kTestPath, kTestCodecs, kTestKeySystem,
+           true);
+  std::vector<CdmInfo> cdms = cdm_registry_.GetAllRegisteredCdms();
+  ASSERT_EQ(1u, cdms.size());
+  CdmInfo cdm = cdms[0];
+  EXPECT_EQ(kTestCdmName, cdm.name);
+  EXPECT_EQ(kVersion1, cdm.version.GetString());
+  EXPECT_EQ(kTestPath, cdm.path.MaybeAsASCII());
+  EXPECT_EQ(kTestFileSystemId, cdm.file_system_id);
+  EXPECT_EQ(2u, cdm.supported_codecs.size());
+  EXPECT_EQ("vp9", cdm.supported_codecs[0]);
+  EXPECT_EQ("avc1", cdm.supported_codecs[1]);
+  EXPECT_EQ(kTestKeySystem, cdm.supported_key_system);
+  EXPECT_TRUE(cdm.supports_sub_key_systems);
 }
 
 TEST_F(CdmRegistryImplTest, ReRegister) {
-  Register(kTestKeySystemType, kVersion1, "/bb/cc", "unknown");
-  EXPECT_TRUE(IsRegistered(kTestKeySystemType, kVersion1));
+  Register(kTestCdmName, kVersion1, "/bb/cc", "unknown", kTestKeySystem);
+  EXPECT_TRUE(IsRegistered(kTestCdmName, kVersion1));
 
   // Now register same key system with different values.
-  Register(kTestKeySystemType, kVersion1, kTestPath, kTestCodecs);
-  EXPECT_TRUE(IsRegistered(kTestKeySystemType, kVersion1));
+  Register(kTestCdmName, kVersion1, kTestPath, kTestCodecs, kTestKeySystem);
+  EXPECT_TRUE(IsRegistered(kTestCdmName, kVersion1));
 }
 
 TEST_F(CdmRegistryImplTest, MultipleVersions) {
-  Register(kTestKeySystemType, kVersion1, kTestPath, kTestCodecs);
-  Register(kTestKeySystemType, kVersion2, "/bb/cc", "unknown");
-  EXPECT_TRUE(IsRegistered(kTestKeySystemType, kVersion1));
-  EXPECT_TRUE(IsRegistered(kTestKeySystemType, kVersion2));
+  Register(kTestCdmName, kVersion1, kTestPath, kTestCodecs, kTestKeySystem);
+  Register(kTestCdmName, kVersion2, "/bb/cc", "unknown", kTestKeySystem);
+  EXPECT_TRUE(IsRegistered(kTestCdmName, kVersion1));
+  EXPECT_TRUE(IsRegistered(kTestCdmName, kVersion2));
 }
 
 TEST_F(CdmRegistryImplTest, NewVersionInsertedFirst) {
-  Register(kTestKeySystemType, kVersion1, kTestPath, kTestCodecs);
-  Register(kTestKeySystemType, kVersion2, "/bb/cc", "unknown");
+  Register(kTestCdmName, kVersion1, kTestPath, kTestCodecs, kTestKeySystem);
+  Register(kTestCdmName, kVersion2, "/bb/cc", "unknown", kTestKeySystem);
 
-  const std::vector<std::string> versions = GetVersions(kTestKeySystemType);
+  const std::vector<std::string> versions = GetVersions(kTestCdmGuid);
   EXPECT_EQ(2u, versions.size());
   EXPECT_EQ(kVersion2, versions[0]);
   EXPECT_EQ(kVersion1, versions[1]);

@@ -22,8 +22,13 @@ namespace {
 
 static const char kPerformanceAgentEnabled[] = "PerformanceAgentEnabled";
 
-static const char* kInstanceCounterNames[] = {
-#define INSTANCE_COUNTER_NAME(name) #name "Count",
+constexpr bool isPlural(const char* str, int len) {
+  return len > 1 && str[len - 2] == 's';
+}
+
+static constexpr const char* kInstanceCounterNames[] = {
+#define INSTANCE_COUNTER_NAME(name) \
+  (isPlural(#name, sizeof(#name)) ? #name : #name "s"),
     INSTANCE_COUNTERS_LIST(INSTANCE_COUNTER_NAME)
 #undef INSTANCE_COUNTER_NAME
 };
@@ -49,6 +54,7 @@ protocol::Response InspectorPerformanceAgent::enable() {
   instrumenting_agents_->addInspectorPerformanceAgent(this);
   Platform::Current()->CurrentThread()->AddTaskTimeObserver(this);
   task_start_time_ = 0;
+  script_start_time_ = 0;
   return Response::OK();
 }
 
@@ -84,8 +90,8 @@ Response InspectorPerformanceAgent::getMetrics(
   std::unique_ptr<protocol::Array<protocol::Performance::Metric>> result =
       protocol::Array<protocol::Performance::Metric>::create();
 
-  AppendMetric(result.get(), "Timestamp",
-               (TimeTicks::Now() - TimeTicks()).InSecondsF());
+  double now = (TimeTicks::Now() - TimeTicks()).InSecondsF();
+  AppendMetric(result.get(), "Timestamp", now);
 
   // Renderer instance counters.
   for (size_t i = 0; i < ARRAY_SIZE(kInstanceCounterNames); ++i) {
@@ -100,8 +106,14 @@ Response InspectorPerformanceAgent::getMetrics(
                static_cast<double>(recalc_style_count_));
   AppendMetric(result.get(), "LayoutDuration", layout_duration_);
   AppendMetric(result.get(), "RecalcStyleDuration", recalc_style_duration_);
-  AppendMetric(result.get(), "ScriptDuration", script_duration_);
-  AppendMetric(result.get(), "TaskDuration", task_duration_);
+  double script_duration = script_duration_;
+  if (script_start_time_)
+    script_duration += now - script_start_time_;
+  AppendMetric(result.get(), "ScriptDuration", script_duration);
+  double task_duration = task_duration_;
+  if (task_start_time_)
+    task_duration += now - task_start_time_;
+  AppendMetric(result.get(), "TaskDuration", task_duration);
 
   v8::HeapStatistics heap_statistics;
   V8PerIsolateData::MainThreadIsolate()->GetHeapStatistics(&heap_statistics);
@@ -135,22 +147,26 @@ void InspectorPerformanceAgent::ConsoleTimeStamp(const String& title) {
 
 void InspectorPerformanceAgent::Will(const probe::CallFunction& probe) {
   if (!script_call_depth_++)
-    probe.CaptureStartTime();
+    script_start_time_ = probe.CaptureStartTime();
 }
 
 void InspectorPerformanceAgent::Did(const probe::CallFunction& probe) {
-  if (!--script_call_depth_)
-    script_duration_ += probe.Duration();
+  if (--script_call_depth_)
+    return;
+  script_duration_ += probe.Duration();
+  script_start_time_ = 0;
 }
 
 void InspectorPerformanceAgent::Will(const probe::ExecuteScript& probe) {
   if (!script_call_depth_++)
-    probe.CaptureStartTime();
+    script_start_time_ = probe.CaptureStartTime();
 }
 
 void InspectorPerformanceAgent::Did(const probe::ExecuteScript& probe) {
-  if (!--script_call_depth_)
-    script_duration_ += probe.Duration();
+  if (--script_call_depth_)
+    return;
+  script_duration_ += probe.Duration();
+  script_start_time_ = 0;
 }
 
 void InspectorPerformanceAgent::Will(const probe::RecalculateStyle& probe) {
@@ -182,9 +198,10 @@ void InspectorPerformanceAgent::DidProcessTask(double start_time,
                                                double end_time) {
   if (task_start_time_ == start_time)
     task_duration_ += end_time - start_time;
+  task_start_time_ = 0;
 }
 
-DEFINE_TRACE(InspectorPerformanceAgent) {
+void InspectorPerformanceAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frames_);
   InspectorBaseAgent<protocol::Performance::Metainfo>::Trace(visitor);
 }

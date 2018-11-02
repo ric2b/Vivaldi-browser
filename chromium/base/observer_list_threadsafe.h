@@ -7,7 +7,9 @@
 
 #include <unordered_map>
 
+#include "base/base_export.h"
 #include "base/bind.h"
+#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -54,28 +56,51 @@
 namespace base {
 namespace internal {
 
-template <typename ObserverType, typename Method>
-struct Dispatcher;
+class BASE_EXPORT ObserverListThreadSafeBase
+    : public RefCountedThreadSafe<ObserverListThreadSafeBase> {
+ public:
+  ObserverListThreadSafeBase() = default;
 
-template <typename ObserverType, typename ReceiverType, typename... Params>
-struct Dispatcher<ObserverType, void(ReceiverType::*)(Params...)> {
-  static void Run(void(ReceiverType::* m)(Params...),
-                  Params... params, ObserverType* obj) {
-    (obj->*m)(std::forward<Params>(params)...);
-  }
+ protected:
+  template <typename ObserverType, typename Method>
+  struct Dispatcher;
+
+  template <typename ObserverType, typename ReceiverType, typename... Params>
+  struct Dispatcher<ObserverType, void (ReceiverType::*)(Params...)> {
+    static void Run(void (ReceiverType::*m)(Params...),
+                    Params... params,
+                    ObserverType* obj) {
+      (obj->*m)(std::forward<Params>(params)...);
+    }
+  };
+
+  struct NotificationDataBase {
+    NotificationDataBase(void* observer_list_in, const Location& from_here_in)
+        : observer_list(observer_list_in), from_here(from_here_in) {}
+
+    void* observer_list;
+    Location from_here;
+  };
+
+  virtual ~ObserverListThreadSafeBase() = default;
+
+  static LazyInstance<ThreadLocalPointer<const NotificationDataBase>>::Leaky
+      tls_current_notification_;
+
+ private:
+  friend class RefCountedThreadSafe<ObserverListThreadSafeBase>;
+
+  DISALLOW_COPY_AND_ASSIGN(ObserverListThreadSafeBase);
 };
 
 }  // namespace internal
 
 template <class ObserverType>
-class ObserverListThreadSafe
-    : public RefCountedThreadSafe<ObserverListThreadSafe<ObserverType>> {
+class ObserverListThreadSafe : public internal::ObserverListThreadSafeBase {
  public:
-  using NotificationType =
-      typename ObserverList<ObserverType>::NotificationType;
-
   ObserverListThreadSafe() = default;
-  explicit ObserverListThreadSafe(NotificationType type) : type_(type) {}
+  explicit ObserverListThreadSafe(ObserverListPolicy policy)
+      : policy_(policy) {}
 
   // Adds |observer| to the list. |observer| must not already be in the list.
   void AddObserver(ObserverType* observer) {
@@ -93,18 +118,20 @@ class ObserverListThreadSafe
     observers_[observer] = task_runner;
 
     // If this is called while a notification is being dispatched on this thread
-    // and |type_| is NOTIFY_ALL, |observer| must be notified (if a notification
-    // is being dispatched on another thread in parallel, the notification may
-    // or may not make it to |observer| depending on the outcome of the race to
+    // and |policy_| is ALL, |observer| must be notified (if a notification is
+    // being dispatched on another thread in parallel, the notification may or
+    // may not make it to |observer| depending on the outcome of the race to
     // |lock_|).
-    if (type_ == NotificationType::NOTIFY_ALL) {
-      const NotificationData* current_notification =
-          tls_current_notification_.Get();
-      if (current_notification) {
+    if (policy_ == ObserverListPolicy::ALL) {
+      const NotificationDataBase* current_notification =
+          tls_current_notification_.Get().Get();
+      if (current_notification && current_notification->observer_list == this) {
         task_runner->PostTask(
             current_notification->from_here,
-            BindOnce(&ObserverListThreadSafe<ObserverType>::NotifyWrapper, this,
-                     observer, *current_notification));
+            BindOnce(
+                &ObserverListThreadSafe<ObserverType>::NotifyWrapper, this,
+                observer,
+                *static_cast<const NotificationData*>(current_notification)));
       }
     }
   }
@@ -132,30 +159,30 @@ class ObserverListThreadSafe
   // all Observers have been Notified. The notification may still be pending
   // delivery.
   template <typename Method, typename... Params>
-  void Notify(const tracked_objects::Location& from_here,
-              Method m, Params&&... params) {
+  void Notify(const Location& from_here, Method m, Params&&... params) {
     Callback<void(ObserverType*)> method =
-        Bind(&internal::Dispatcher<ObserverType, Method>::Run,
-             m, std::forward<Params>(params)...);
+        Bind(&Dispatcher<ObserverType, Method>::Run, m,
+             std::forward<Params>(params)...);
 
     AutoLock lock(lock_);
     for (const auto& observer : observers_) {
       observer.second->PostTask(
           from_here,
           BindOnce(&ObserverListThreadSafe<ObserverType>::NotifyWrapper, this,
-                   observer.first, NotificationData(from_here, method)));
+                   observer.first, NotificationData(this, from_here, method)));
     }
   }
 
  private:
-  friend class RefCountedThreadSafe<ObserverListThreadSafe<ObserverType>>;
+  friend class RefCountedThreadSafe<ObserverListThreadSafeBase>;
 
-  struct NotificationData {
-    NotificationData(const tracked_objects::Location& from_here_in,
+  struct NotificationData : public NotificationDataBase {
+    NotificationData(ObserverListThreadSafe* observer_list_in,
+                     const Location& from_here_in,
                      const Callback<void(ObserverType*)>& method_in)
-        : from_here(from_here_in), method(method_in) {}
+        : NotificationDataBase(observer_list_in, from_here_in),
+          method(method_in) {}
 
-    tracked_objects::Location from_here;
     Callback<void(ObserverType*)> method;
   };
 
@@ -179,19 +206,20 @@ class ObserverListThreadSafe
     // Note: |tls_current_notification_| may not be nullptr if this runs in a
     // nested loop started by a notification callback. In that case, it is
     // important to save the previous value to restore it later.
-    const NotificationData* const previous_notification =
-        tls_current_notification_.Get();
-    tls_current_notification_.Set(&notification);
+    auto& tls_current_notification = tls_current_notification_.Get();
+    const NotificationDataBase* const previous_notification =
+        tls_current_notification.Get();
+    tls_current_notification.Set(&notification);
 
     // Invoke the callback.
     notification.method.Run(observer);
 
     // Reset the notification being dispatched on the current thread to its
     // previous value.
-    tls_current_notification_.Set(previous_notification);
+    tls_current_notification.Set(previous_notification);
   }
 
-  const NotificationType type_ = NotificationType::NOTIFY_ALL;
+  const ObserverListPolicy policy_ = ObserverListPolicy::ALL;
 
   // Synchronizes access to |observers_|.
   mutable Lock lock_;
@@ -200,9 +228,6 @@ class ObserverListThreadSafe
   // be notified.
   std::unordered_map<ObserverType*, scoped_refptr<SequencedTaskRunner>>
       observers_;
-
-  // Notification being dispatched on the current thread.
-  ThreadLocalPointer<const NotificationData> tls_current_notification_;
 
   DISALLOW_COPY_AND_ASSIGN(ObserverListThreadSafe);
 };

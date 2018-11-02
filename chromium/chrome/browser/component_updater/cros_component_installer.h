@@ -10,15 +10,11 @@
 #include <string>
 #include <vector>
 
-#include "build/build_config.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
+#include "components/component_updater/component_installer.h"
 #include "components/component_updater/component_updater_service.h"
-#include "components/component_updater/default_component_installer.h"
 #include "components/update_client/update_client.h"
 #include "crypto/sha2.h"
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/dbus/dbus_method_call_status.h"
-#endif  // defined(OS_CHROMEOS)
 
 //  Developer API usage:
 //  ...
@@ -32,11 +28,10 @@
 //  ...
 //  component_updater::CrOSComponent::LoadComponent(
 //            name,
-//            base::Bind(&LoadCallback));
+//            base::BindOnce(&LoadCallback));
 //
 namespace component_updater {
 
-#if defined(OS_CHROMEOS)
 struct ComponentConfig {
   std::string name;
   std::string env_version;
@@ -47,10 +42,10 @@ struct ComponentConfig {
   ~ComponentConfig();
 };
 
-class CrOSComponentInstallerTraits : public ComponentInstallerTraits {
+class CrOSComponentInstallerPolicy : public ComponentInstallerPolicy {
  public:
-  explicit CrOSComponentInstallerTraits(const ComponentConfig& config);
-  ~CrOSComponentInstallerTraits() override {}
+  explicit CrOSComponentInstallerPolicy(const ComponentConfig& config);
+  ~CrOSComponentInstallerPolicy() override {}
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CrOSComponentInstallerTest, IsCompatibleOrNot);
@@ -58,12 +53,13 @@ class CrOSComponentInstallerTraits : public ComponentInstallerTraits {
                            ComponentReadyCorrectManifest);
   FRIEND_TEST_ALL_PREFIXES(CrOSComponentInstallerTest,
                            ComponentReadyWrongManifest);
-  // The following methods override ComponentInstallerTraits.
+  // The following methods override ComponentInstallerPolicy.
   bool SupportsGroupPolicyEnabledComponentUpdates() const override;
   bool RequiresNetworkEncryption() const override;
   update_client::CrxInstaller::Result OnCustomInstall(
       const base::DictionaryValue& manifest,
       const base::FilePath& install_dir) override;
+  void OnCustomUninstall() override;
   bool VerifyInstallation(const base::DictionaryValue& manifest,
                           const base::FilePath& install_dir) const override;
   void ComponentReady(const base::Version& version,
@@ -81,7 +77,7 @@ class CrOSComponentInstallerTraits : public ComponentInstallerTraits {
   std::string env_version;
   uint8_t kSha2Hash_[crypto::kSHA256Length] = {};
 
-  DISALLOW_COPY_AND_ASSIGN(CrOSComponentInstallerTraits);
+  DISALLOW_COPY_AND_ASSIGN(CrOSComponentInstallerPolicy);
 };
 
 // This class contains functions used to register and install a component.
@@ -89,7 +85,7 @@ class CrOSComponent {
  public:
   static void LoadComponent(
       const std::string& name,
-      const base::Callback<void(const std::string&)>& load_callback);
+      base::OnceCallback<void(const std::string&)> load_callback);
 
   // Returns all installed components.
   static std::vector<ComponentConfig> GetInstalledComponents();
@@ -101,13 +97,12 @@ class CrOSComponent {
   CrOSComponent() {}
   static void RegisterResult(ComponentUpdateService* cus,
                              const std::string& id,
-                             const update_client::Callback& install_callback);
+                             update_client::Callback install_callback);
   static void InstallComponent(
       ComponentUpdateService* cus,
       const std::string& name,
-      const base::Callback<void(const std::string&)>& load_callback);
+      base::OnceCallback<void(const std::string&)> load_callback);
 };
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace component_updater
 

@@ -41,7 +41,7 @@ class BaseCheckableInputType : public InputType, public InputTypeView {
   USING_GARBAGE_COLLECTED_MIXIN(BaseCheckableInputType);
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
   using InputType::GetElement;
 
  protected:
@@ -50,6 +50,7 @@ class BaseCheckableInputType : public InputType, public InputTypeView {
         InputTypeView(element),
         is_in_click_handler_(false) {}
   void HandleKeydownEvent(KeyboardEvent*) override;
+  bool NeedsShadowSubtree() const override { return false; }
 
   bool is_in_click_handler_;
 

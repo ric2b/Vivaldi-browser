@@ -28,9 +28,10 @@ void VREyeParameters::Update(
   render_height_ = eye_parameters->renderHeight;
 }
 
-DEFINE_TRACE(VREyeParameters) {
+void VREyeParameters::Trace(blink::Visitor* visitor) {
   visitor->Trace(offset_);
   visitor->Trace(field_of_view_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

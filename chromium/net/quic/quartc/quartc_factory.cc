@@ -116,10 +116,46 @@ std::unique_ptr<QuartcSessionInterface> QuartcFactory::CreateQuartcSession(
   if (quartc_session_config.congestion_control ==
       QuartcCongestionControl::kBBR) {
     copt.push_back(kTBBR);
+
+    FLAGS_quic_reloadable_flag_quic_bbr_slower_startup = true;
+    FLAGS_quic_reloadable_flag_quic_bbr_fully_drain_queue = true;
+    FLAGS_quic_reloadable_flag_quic_bbr_less_probe_rtt = true;
+    for (const auto option : quartc_session_config.bbr_options) {
+      switch (option) {
+        case (QuartcBbrOptions::kSlowerStartup):
+          copt.push_back(kBBRS);
+          break;
+        case (QuartcBbrOptions::kFullyDrainQueue):
+          copt.push_back(kBBR3);
+          break;
+        case (QuartcBbrOptions::kReduceProbeRtt):
+          copt.push_back(kBBR6);
+          break;
+        case (QuartcBbrOptions::kSkipProbeRtt):
+          copt.push_back(kBBR7);
+          break;
+        case (QuartcBbrOptions::kSkipProbeRttAggressively):
+          copt.push_back(kBBR8);
+          break;
+        case (QuartcBbrOptions::kFillUpLinkDuringProbing):
+          quic_connection->set_fill_up_link_during_probing(true);
+          break;
+      }
+    }
   }
   QuicConfig quic_config;
   quic_config.SetConnectionOptionsToSend(copt);
   quic_config.SetClientConnectionOptions(copt);
+  if (quartc_session_config.max_time_before_crypto_handshake_secs > 0) {
+    quic_config.set_max_time_before_crypto_handshake(
+        QuicTime::Delta::FromSeconds(
+            quartc_session_config.max_time_before_crypto_handshake_secs));
+  }
+  if (quartc_session_config.max_idle_time_before_crypto_handshake_secs > 0) {
+    quic_config.set_max_idle_time_before_crypto_handshake(
+        QuicTime::Delta::FromSeconds(
+            quartc_session_config.max_idle_time_before_crypto_handshake_secs));
+  }
   return std::unique_ptr<QuartcSessionInterface>(new QuartcSession(
       std::move(quic_connection), quic_config,
       quartc_session_config.unique_remote_server_id, perspective,
@@ -140,7 +176,7 @@ std::unique_ptr<QuicConnection> QuartcFactory::CreateQuicConnection(
   return std::unique_ptr<QuicConnection>(new QuicConnection(
       dummy_id, dummy_address, this, /*QuicConnectionHelperInterface*/
       this /*QuicAlarmFactory*/, writer.release(), true /*own the writer*/,
-      perspective, AllSupportedVersions()));
+      perspective, AllSupportedTransportVersions()));
 }
 
 QuicAlarm* QuartcFactory::CreateAlarm(QuicAlarm::Delegate* delegate) {
@@ -151,6 +187,10 @@ QuicAlarm* QuartcFactory::CreateAlarm(QuicAlarm::Delegate* delegate) {
 QuicArenaScopedPtr<QuicAlarm> QuartcFactory::CreateAlarm(
     QuicArenaScopedPtr<QuicAlarm::Delegate> delegate,
     QuicConnectionArena* arena) {
+  if (arena != nullptr) {
+    return arena->New<QuartcAlarm>(GetClock(), task_runner_,
+                                   std::move(delegate));
+  }
   return QuicArenaScopedPtr<QuicAlarm>(
       new QuartcAlarm(GetClock(), task_runner_, std::move(delegate)));
 }
@@ -161,10 +201,6 @@ const QuicClock* QuartcFactory::GetClock() const {
 
 QuicRandom* QuartcFactory::GetRandomGenerator() {
   return QuicRandom::GetInstance();
-}
-
-QuicBufferAllocator* QuartcFactory::GetStreamFrameBufferAllocator() {
-  return &buffer_allocator_;
 }
 
 QuicBufferAllocator* QuartcFactory::GetStreamSendBufferAllocator() {

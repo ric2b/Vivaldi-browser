@@ -119,9 +119,6 @@ const char* GetNameForConnectionTypeInternal(
       return "None";
     case NetworkChangeNotifier::CONNECTION_BLUETOOTH:
       return "Bluetooth";
-    default:
-      NOTREACHED();
-      break;
   }
   return "";
 }
@@ -138,7 +135,7 @@ void ObtainDefaultObservations(
     DCHECK_EQ(nqe::internal::InvalidRTT(), default_observations[i].http_rtt());
     DCHECK_EQ(nqe::internal::InvalidRTT(),
               default_observations[i].transport_rtt());
-    DCHECK_EQ(nqe::internal::kInvalidThroughput,
+    DCHECK_EQ(nqe::internal::INVALID_RTT_THROUGHPUT,
               default_observations[i].downstream_throughput_kbps());
   }
 
@@ -242,7 +239,7 @@ void ObtainTypicalNetworkQualities(
               typical_network_quality[i].http_rtt());
     DCHECK_EQ(nqe::internal::InvalidRTT(),
               typical_network_quality[i].transport_rtt());
-    DCHECK_EQ(nqe::internal::kInvalidThroughput,
+    DCHECK_EQ(nqe::internal::INVALID_RTT_THROUGHPUT,
               typical_network_quality[i].downstream_throughput_kbps());
   }
 
@@ -295,21 +292,21 @@ void ObtainConnectionThresholds(
           // Set to the 66th percentile of 2G RTT observations on Android.
           base::TimeDelta::FromMilliseconds(2010),
           base::TimeDelta::FromMilliseconds(1870),
-          nqe::internal::kInvalidThroughput);
+          nqe::internal::INVALID_RTT_THROUGHPUT);
 
   default_effective_connection_type_thresholds[EFFECTIVE_CONNECTION_TYPE_2G] =
       nqe::internal::NetworkQuality(
           // Set to the 50th percentile of RTT observations on Android.
           base::TimeDelta::FromMilliseconds(1420),
           base::TimeDelta::FromMilliseconds(1280),
-          nqe::internal::kInvalidThroughput);
+          nqe::internal::INVALID_RTT_THROUGHPUT);
 
   default_effective_connection_type_thresholds[EFFECTIVE_CONNECTION_TYPE_3G] =
       nqe::internal::NetworkQuality(
           // Set to the 50th percentile of 3G RTT observations on Android.
           base::TimeDelta::FromMilliseconds(273),
           base::TimeDelta::FromMilliseconds(204),
-          nqe::internal::kInvalidThroughput);
+          nqe::internal::INVALID_RTT_THROUGHPUT);
 
   // Connection threshold should not be set for 4G effective connection type
   // since it is the fastest.
@@ -325,7 +322,7 @@ void ObtainConnectionThresholds(
     DCHECK_EQ(nqe::internal::InvalidRTT(), connection_thresholds[i].http_rtt());
     DCHECK_EQ(nqe::internal::InvalidRTT(),
               connection_thresholds[i].transport_rtt());
-    DCHECK_EQ(nqe::internal::kInvalidThroughput,
+    DCHECK_EQ(nqe::internal::INVALID_RTT_THROUGHPUT,
               connection_thresholds[i].downstream_throughput_kbps());
     if (effective_connection_type == EFFECTIVE_CONNECTION_TYPE_UNKNOWN)
       continue;
@@ -407,6 +404,10 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
               params_,
               "upper_bound_http_rtt_transport_rtt_multiplier",
               -1)),
+      http_rtt_transport_rtt_min_count_(
+          GetValueForVariationParam(params_,
+                                    "http_rtt_transport_rtt_min_count",
+                                    5)),
       increase_in_transport_rtt_logging_interval_(
           base::TimeDelta::FromMillisecondsD(
               GetDoubleValueForVariationParamWithDefaultValue(
@@ -423,6 +424,24 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
               params_,
               "historical_time_threshold",
               60000))),
+      hanging_request_duration_http_rtt_multiplier_(GetValueForVariationParam(
+          params_,
+          "hanging_request_duration_http_rtt_multiplier",
+          5)),
+      hanging_request_min_duration_(base::TimeDelta::FromMilliseconds(
+          GetValueForVariationParam(params_,
+                                    "hanging_request_min_duration_msec",
+                                    3000))),
+      add_default_platform_observations_(
+          GetStringValueForVariationParamWithDefaultValue(
+              params_,
+              "add_default_platform_observations",
+              "true") == "true"),
+      socket_watchers_min_notification_interval_(
+          base::TimeDelta::FromMilliseconds(GetValueForVariationParam(
+              params_,
+              "socket_watchers_min_notification_interval_msec",
+              200))),
       use_small_responses_(false) {
   DCHECK_LE(0.0, correlation_uma_logging_probability_);
   DCHECK_GE(1.0, correlation_uma_logging_probability_);
@@ -449,8 +468,7 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
   ObtainConnectionThresholds(params_, connection_thresholds_);
 }
 
-NetworkQualityEstimatorParams::~NetworkQualityEstimatorParams() {
-}
+NetworkQualityEstimatorParams::~NetworkQualityEstimatorParams() = default;
 
 void NetworkQualityEstimatorParams::SetUseSmallResponsesForTesting(
     bool use_small_responses) {

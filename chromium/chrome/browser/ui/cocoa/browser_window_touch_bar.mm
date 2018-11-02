@@ -13,6 +13,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/command_observer.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -122,20 +123,29 @@ ui::TouchBarAction TouchBarActionFromCommand(int command) {
 }
 
 // A class registered for C++ notifications. This is used to detect changes in
-// the home button preferences and update the Touch Bar.
-class HomePrefNotificationBridge {
+// the profile preferences and the back/forward commands.
+class BrowserTouchBarNotificationBridge : public CommandObserver {
  public:
-  explicit HomePrefNotificationBridge(BrowserWindowController* bwc)
-      : bwc_(bwc) {}
+  BrowserTouchBarNotificationBridge(BrowserWindowTouchBar* observer,
+                                    BrowserWindowController* bwc)
+      : observer_(observer), bwc_(bwc) {}
 
-  ~HomePrefNotificationBridge() {}
+  ~BrowserTouchBarNotificationBridge() override {}
 
   void UpdateTouchBar() { [bwc_ invalidateTouchBar]; }
 
+ protected:
+  // CommandObserver:
+  void EnabledStateChangedForCommand(int command, bool enabled) override {
+    DCHECK(command == IDC_BACK || command == IDC_FORWARD);
+    [observer_ updateBackForwardControl];
+  }
+
  private:
+  BrowserWindowTouchBar* observer_;  // Weak.
   BrowserWindowController* bwc_;  // Weak.
 
-  DISALLOW_COPY_AND_ASSIGN(HomePrefNotificationBridge);
+  DISALLOW_COPY_AND_ASSIGN(BrowserTouchBarNotificationBridge);
 };
 
 }  // namespace
@@ -152,8 +162,11 @@ class HomePrefNotificationBridge {
   // Used to monitor the optional home button pref.
   BooleanPrefMember showHomeButton_;
 
-  // Used to receive and handle notifications for the home button pref.
-  std::unique_ptr<HomePrefNotificationBridge> notificationBridge_;
+  // Used to listen for default search engine pref changes.
+  PrefChangeRegistrar profilePrefRegistrar_;
+
+  // Used to receive and handle notifications.
+  std::unique_ptr<BrowserTouchBarNotificationBridge> notificationBridge_;
 
   // The stop/reload button in the touch bar.
   base::scoped_nsobject<NSButton> reloadStopButton_;
@@ -171,10 +184,7 @@ class HomePrefNotificationBridge {
 // Sets up the back and forward segmented control.
 - (void)setupBackForwardControl;
 
-// Methods to update controls on the touch bar. Called when creating the
-// touch bar or the page load state has been updated.
-- (void)updateReloadStopButton;
-- (void)updateBackForwardControl;
+// Updates the starred button in the touch bar.
 - (void)updateStarredButton;
 
 // Creates and returns the search button.
@@ -190,15 +200,26 @@ class HomePrefNotificationBridge {
         browserWindowController:(BrowserWindowController*)bwc {
   if ((self = [self init])) {
     DCHECK(browser);
-    commandUpdater_ = browser->command_controller()->command_updater();
     browser_ = browser;
     bwc_ = bwc;
 
-    notificationBridge_.reset(new HomePrefNotificationBridge(bwc_));
+    notificationBridge_.reset(
+        new BrowserTouchBarNotificationBridge(self, bwc_));
+
+    commandUpdater_ = browser->command_controller();
+    commandUpdater_->AddCommandObserver(IDC_BACK, notificationBridge_.get());
+    commandUpdater_->AddCommandObserver(IDC_FORWARD, notificationBridge_.get());
+
     PrefService* prefs = browser->profile()->GetPrefs();
     showHomeButton_.Init(
         prefs::kShowHomeButton, prefs,
-        base::Bind(&HomePrefNotificationBridge::UpdateTouchBar,
+        base::Bind(&BrowserTouchBarNotificationBridge::UpdateTouchBar,
+                   base::Unretained(notificationBridge_.get())));
+
+    profilePrefRegistrar_.Init(prefs);
+    profilePrefRegistrar_.Add(
+        DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+        base::Bind(&BrowserTouchBarNotificationBridge::UpdateTouchBar,
                    base::Unretained(notificationBridge_.get())));
   }
 
@@ -401,24 +422,6 @@ class HomePrefNotificationBridge {
   backForwardControl_.reset([control retain]);
 }
 
-- (void)updateReloadStopButton {
-  const gfx::VectorIcon& icon =
-      isPageLoading_ ? kNavigateStopIcon : vector_icons::kReloadIcon;
-  int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
-  int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
-
-  if (!reloadStopButton_) {
-    reloadStopButton_.reset(
-        [CreateTouchBarButton(icon, self, commandId, tooltipId) retain]);
-    return;
-  }
-
-  [reloadStopButton_
-      setImage:CreateNSImageFromIcon(icon, kTouchBarDefaultIconColor)];
-  [reloadStopButton_ setTag:commandId];
-  [reloadStopButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
-}
-
 - (void)updateBackForwardControl {
   if (!backForwardControl_)
     [self setupBackForwardControl];
@@ -511,8 +514,43 @@ class HomePrefNotificationBridge {
 - (void)setIsPageLoading:(BOOL)isPageLoading {
   isPageLoading_ = isPageLoading;
   [self updateReloadStopButton];
-  [self updateBackForwardControl];
-  [self updateStarredButton];
+}
+
+@end
+
+// Private methods exposed for testing.
+@implementation BrowserWindowTouchBar (ExposedForTesting)
+
+- (void)updateReloadStopButton {
+  const gfx::VectorIcon& icon =
+      isPageLoading_ ? kNavigateStopIcon : vector_icons::kReloadIcon;
+  int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
+  int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
+
+  if (!reloadStopButton_) {
+    reloadStopButton_.reset(
+        [CreateTouchBarButton(icon, self, commandId, tooltipId) retain]);
+    return;
+  }
+
+  [reloadStopButton_
+      setImage:CreateNSImageFromIcon(icon, kTouchBarDefaultIconColor)];
+  [reloadStopButton_ setTag:commandId];
+  [reloadStopButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
+}
+
+- (NSButton*)reloadStopButton {
+  if (!reloadStopButton_)
+    [self updateReloadStopButton];
+
+  return reloadStopButton_.get();
+}
+
+- (NSSegmentedControl*)backForwardControl {
+  if (!backForwardControl_)
+    [self updateBackForwardControl];
+
+  return backForwardControl_.get();
 }
 
 @end

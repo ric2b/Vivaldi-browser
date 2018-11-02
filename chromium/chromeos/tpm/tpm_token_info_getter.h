@@ -12,9 +12,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_export.h"
-#include "chromeos/dbus/dbus_method_call_status.h"
+#include "chromeos/dbus/cryptohome_client.h"
 #include "components/signin/core/account_id/account_id.h"
 
 namespace base {
@@ -22,30 +23,13 @@ class TaskRunner;
 }
 
 namespace chromeos {
-class CryptohomeClient;
-}
-
-namespace chromeos {
-
-// Information retrieved from cryptohome by TPMTokenInfoGetter.
-// For invalid token |token_name| and |user_pin| will be empty, while
-// |token_slot_id| will be set to -1.
-struct TPMTokenInfo {
-  // Default constructor creates token info for disabled TPM.
-  TPMTokenInfo();
-  ~TPMTokenInfo();
-
-  bool tpm_is_enabled;
-  std::string token_name;
-  std::string user_pin;
-  int token_slot_id;
-};
 
 // Class for getting a user or the system TPM token info from cryptohome during
 // TPM token loading.
 class CHROMEOS_EXPORT TPMTokenInfoGetter {
  public:
-  using TPMTokenInfoCallback = base::Callback<void(const TPMTokenInfo& info)>;
+  using TpmTokenInfoCallback = base::OnceCallback<void(
+      base::Optional<CryptohomeClient::TpmTokenInfo> token_info)>;
 
   // Factory method for TPMTokenInfoGetter for a user token.
   static std::unique_ptr<TPMTokenInfoGetter> CreateForUserToken(
@@ -65,7 +49,7 @@ class CHROMEOS_EXPORT TPMTokenInfoGetter {
   // The object may get deleted before |callback| is called, which is equivalent
   // to cancelling the info getting (in which case |callback| will never get
   // called).
-  void Start(const TPMTokenInfoCallback& callback);
+  void Start(TpmTokenInfoCallback callback);
 
  private:
   enum Type {
@@ -95,12 +79,9 @@ class CHROMEOS_EXPORT TPMTokenInfoGetter {
   void RetryLater();
 
   // Cryptohome methods callbacks.
-  void OnTpmIsEnabled(DBusMethodCallStatus call_status,
-                      bool tpm_is_enabled);
-  void OnPkcs11GetTpmTokenInfo(DBusMethodCallStatus call_status,
-                               const std::string& token_name,
-                               const std::string& user_pin,
-                               int token_slot_id);
+  void OnTpmIsEnabled(base::Optional<bool> tpm_is_enabled);
+  void OnPkcs11GetTpmTokenInfo(
+      base::Optional<CryptohomeClient::TpmTokenInfo> token_info);
 
   // The task runner used to run delayed tasks when retrying failed Cryptohome
   // calls.
@@ -113,7 +94,7 @@ class CHROMEOS_EXPORT TPMTokenInfoGetter {
   // token.
   AccountId account_id_;
 
-  TPMTokenInfoCallback callback_;
+  TpmTokenInfoCallback callback_;
 
   // The current request delay before the next attempt to initialize the
   // TPM. Will be adapted after each attempt.

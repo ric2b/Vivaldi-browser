@@ -16,7 +16,6 @@
 <translation id="1368832886055348810">Left to Right</translation>
 <translation id="1546280085599573572">This extension has changed the page that is shown when you click the Home button.</translation>
 <translation id="1588438908519853928">Normal</translation>
-<translation id="1616206807336925449">This extension requires no special permissions.</translation>
 <translation id="1635033183663317347">Installed by your custodian.</translation>
 <translation id="1723824996674794290">&amp;New window</translation>
 <translation id="1729533290416704613">It also controls what page is shown when you search from the Omnibox.</translation>
@@ -106,7 +105,6 @@
 <translation id="4394049700291259645">Disable</translation>
 <translation id="4423482519432579560">&amp;Spellcheck</translation>
 <translation id="4522570452068850558">Details</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4557136421275541763">Warning:</translation>
 <translation id="4593021220803146968">&amp;Go to <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps and extensions can only be modified by the manager (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -141,7 +139,6 @@
 <translation id="5556459405103347317">Reload</translation>
 <translation id="5575473780076478375">Incognito Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">It also controls what page is shown when you click the Home button.</translation>
-<translation id="5646376287012673985">Location</translation>
 <translation id="5715711091495208045">Plug-in Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Sa&amp;ve audio as...</translation>
 <translation id="5780973441651030252">Process priority</translation>
@@ -184,16 +181,14 @@
 <translation id="6904344821472985372">Revoke file access</translation>
 <translation id="6943176775188458830">Cancel printing</translation>
 <translation id="6974053822202609517">Right to Left</translation>
-<translation id="7013485839273047434">Get more extensions</translation>
 <translation id="708060913198414444">C&amp;opy audio address</translation>
 <translation id="7144878232160441200">Retry</translation>
 <translation id="7206693748120342859">Downloading <ph name="PLUGIN_NAME" />...</translation>
-<translation id="7287143125007575591">Access denied</translation>
+<translation id="7287143125007575591">Access denied.</translation>
 <translation id="7309257895202129721">Show &amp;controls</translation>
 <translation id="7361297102842600584">Right-click to run <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Delete shortcut</translation>
 <translation id="7427348830195639090">Background Page: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">New Tab</translation>
 <translation id="7564847347806291057">End process</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
@@ -243,7 +238,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> is blocked by enterprise policy</translation>
 <translation id="9170848237812810038">&amp;Undo</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" added</translation>
-<translation id="9219103736887031265">Images</translation>
 <translation id="93766956588638423">Repair extension</translation>
 <translation id="994289308992179865">&amp;Loop</translation>
 <translation id="998747458861718449">I&amp;nspect</translation>

@@ -14,6 +14,34 @@
 
 namespace previews {
 
+enum class PreviewsType {
+  NONE = 0,
+
+  // The user is shown an offline page as a preview.
+  OFFLINE = 1,
+
+  // Replace images with placeholders.
+  LOFI = 2,
+
+  // The user is shown a server lite page.
+  LITE_PAGE = 3,
+
+  // AMP version of the page is shown as a preview.
+  AMP_REDIRECTION = 4,
+
+  // Preview that disables JavaScript for the navigation.
+  NOSCRIPT = 5,
+
+  // Insert new enum values here. Keep values sequential to allow looping from
+  // NONE+1 to LAST-1. Also add the enum to Previews.Types histogram suffix.
+  LAST = 6,
+};
+
+typedef std::vector<std::pair<PreviewsType, int>> PreviewsTypeList;
+
+// Gets the string representation of |type|.
+std::string GetStringNameForType(PreviewsType type);
+
 namespace params {
 
 // The maximum number of recent previews navigations the black list looks at to
@@ -48,21 +76,25 @@ base::TimeDelta SingleOptOutDuration();
 // shown as a preview.
 base::TimeDelta OfflinePreviewFreshnessDuration();
 
-// The threshold of EffectiveConnectionType above which previews will trigger by
-// default.
-net::EffectiveConnectionType DefaultEffectiveConnectionTypeThreshold();
+// The threshold of EffectiveConnectionType above which preview |type| will be
+// triggered.
+net::EffectiveConnectionType GetECTThresholdForPreview(
+    previews::PreviewsType type);
 
-// Whether offline previews are enabled.
+// Whether the preview type is enabled.
 bool IsOfflinePreviewsEnabled();
-
-// The blacklist version for offline previews.
-int OfflinePreviewsVersion();
-
-// Whether Client Lo-Fi previews are enabled.
 bool IsClientLoFiEnabled();
+bool IsAMPRedirectionPreviewEnabled();
+bool IsNoScriptPreviewsEnabled();
 
-// The blacklist version for Client Lo-Fi previews.
+// The blacklist version for each preview type.
+int OfflinePreviewsVersion();
 int ClientLoFiVersion();
+int AMPRedirectionPreviewsVersion();
+int NoScriptPreviewsVersion();
+
+// Whether server optimization hints are enabled.
+bool IsOptimizationHintsEnabled();
 
 // The threshold of EffectiveConnectionType above which Client Lo-Fi previews
 // should not be served.
@@ -72,28 +104,6 @@ net::EffectiveConnectionType EffectiveConnectionTypeThresholdForClientLoFi();
 std::vector<std::string> GetBlackListedHostsForClientLoFiFieldTrial();
 
 }  // namespace params
-
-enum class PreviewsType {
-  NONE = 0,
-
-  // The user is shown an offline page as a preview.
-  OFFLINE = 1,
-
-  // Replace images with placeholders.
-  LOFI = 2,
-
-  // The user is shown a server lite page.
-  LITE_PAGE = 3,
-
-  // Insert new enum values here. Keep values sequential to allow looping
-  // from NONE+1 to LAST-1.
-  LAST = 4,
-};
-
-typedef std::vector<std::pair<PreviewsType, int>> PreviewsTypeList;
-
-// Gets the string representation of |type|.
-std::string GetStringNameForType(PreviewsType type);
 
 }  // namespace previews
 

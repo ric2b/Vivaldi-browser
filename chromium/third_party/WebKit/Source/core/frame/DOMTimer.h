@@ -27,19 +27,19 @@
 #ifndef DOMTimer_h
 #define DOMTimer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScheduledAction.h"
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/frame/SuspendableTimer.h"
+#include "core/frame/PausableTimer.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class ExecutionContext;
 
 class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
-                                   public SuspendableTimer {
+                                   public PausableTimer {
   USING_GARBAGE_COLLECTED_MIXIN(DOMTimer);
 
  public:
@@ -47,13 +47,13 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
   // its ID.
   static int Install(ExecutionContext*,
                      ScheduledAction*,
-                     int timeout,
+                     TimeDelta timeout,
                      bool single_shot);
   static void RemoveByID(ExecutionContext*, int timeout_id);
 
   ~DOMTimer() override;
 
-  // SuspendableObject
+  // PausableObject
   void ContextDestroyed(ExecutionContext*) override;
 
   // Eager finalization is needed to promptly stop this Timer object.
@@ -61,7 +61,7 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
   // destruction (when lazily swept), but some of its members (m_action) may
   // already have been finalized & must not be accessed.
   EAGERLY_FINALIZE();
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void Stop() override;
 
@@ -70,7 +70,7 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
 
   static DOMTimer* Create(ExecutionContext* context,
                           ScheduledAction* action,
-                          int timeout,
+                          TimeDelta timeout,
                           bool single_shot,
                           int timeout_id) {
     return new DOMTimer(context, action, timeout, single_shot, timeout_id);
@@ -78,17 +78,17 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
 
   DOMTimer(ExecutionContext*,
            ScheduledAction*,
-           int interval,
+           TimeDelta interval,
            bool single_shot,
            int timeout_id);
   void Fired() override;
 
-  RefPtr<WebTaskRunner> TimerTaskRunner() const override;
+  scoped_refptr<WebTaskRunner> TimerTaskRunner() const override;
 
   int timeout_id_;
   int nesting_level_;
   Member<ScheduledAction> action_;
-  RefPtr<UserGestureToken> user_gesture_token_;
+  scoped_refptr<UserGestureToken> user_gesture_token_;
 };
 
 }  // namespace blink

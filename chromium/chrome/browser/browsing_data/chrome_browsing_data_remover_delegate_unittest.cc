@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -18,7 +19,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
@@ -86,14 +89,16 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/webapps/webapp_registry.h"
+#else
+#include "content/public/browser/host_zoom_map.h"
 #endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/scoped_user_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -186,10 +191,10 @@ class FakeCryptohomeClient : public chromeos::FakeCryptohomeClient {
       chromeos::attestation::AttestationKeyType key_type,
       const cryptohome::Identification& cryptohome_id,
       const std::string& key_prefix,
-      const chromeos::BoolDBusMethodCallback& callback) override {
+      chromeos::DBusMethodCallback<bool> callback) override {
     ++delete_keys_call_count_;
     chromeos::FakeCryptohomeClient::TpmAttestationDeleteKeys(
-        key_type, cryptohome_id, key_prefix, callback);
+        key_type, cryptohome_id, key_prefix, std::move(callback));
   }
 
   int delete_keys_call_count() const { return delete_keys_call_count_; }
@@ -396,7 +401,8 @@ class RemoveFaviconTester {
     SkBitmap bitmap;
     bitmap.allocN32Pixels(gfx::kFaviconSize, gfx::kFaviconSize);
     bitmap.eraseColor(SK_ColorBLUE);
-    favicon_service_->SetFavicons(page_url, page_url, favicon_base::FAVICON,
+    favicon_service_->SetFavicons({page_url}, page_url,
+                                  favicon_base::IconType::kFavicon,
                                   gfx::Image::CreateFrom1xBitmap(bitmap));
   }
 
@@ -407,9 +413,7 @@ class RemoveFaviconTester {
     base::RunLoop run_loop;
     quit_closure_ = run_loop.QuitClosure();
     favicon_service_->GetRawFaviconForPageURL(
-        page_url,
-        favicon_base::FAVICON,
-        gfx::kFaviconSize,
+        page_url, {favicon_base::IconType::kFavicon}, gfx::kFaviconSize,
         base::Bind(&RemoveFaviconTester::SaveResultAndQuit,
                    base::Unretained(this)),
         &tracker_);
@@ -443,6 +447,7 @@ class MockDomainReliabilityService : public DomainReliabilityService {
   ~MockDomainReliabilityService() override {}
 
   std::unique_ptr<DomainReliabilityMonitor> CreateMonitor(
+      scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> network_task_runner)
       override {
     NOTREACHED();
@@ -1422,7 +1427,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
       new testing::NiceMock<chromeos::MockUserManager>();
   mock_user_manager->SetActiveUser(
       AccountId::FromUserEmail("test@example.com"));
-  chromeos::ScopedUserManagerEnabler user_manager_enabler(mock_user_manager);
+  user_manager::ScopedUserManager user_manager_enabler(
+      base::WrapUnique(mock_user_manager));
 
   // Owned by DBusThreadManager.
   FakeCryptohomeClient* cryptohome_client = new FakeCryptohomeClient();
@@ -1856,6 +1862,59 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveAllClientHints) {
   ASSERT_EQ(0u, host_settings.size());
 }
 
+#if !defined(OS_ANDROID)
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveZoomLevel) {
+  content::HostZoomMap* zoom_map =
+      content::HostZoomMap::GetDefaultForBrowserContext(GetProfile());
+  zoom_map->SetStoreLastModified(true);
+
+  EXPECT_EQ(0u, zoom_map->GetAllZoomLevels().size());
+
+  base::SimpleTestClock test_clock;
+  zoom_map->SetClockForTesting(&test_clock);
+
+  base::Time now = base::Time::Now();
+  zoom_map->InitializeZoomLevelForHost(kTestRegisterableDomain1, 1.5,
+                                       now - base::TimeDelta::FromHours(5));
+  test_clock.SetNow(now - base::TimeDelta::FromHours(2));
+  zoom_map->SetZoomLevelForHost(kTestRegisterableDomain3, 2.0);
+  EXPECT_EQ(2u, zoom_map->GetAllZoomLevels().size());
+
+  // Remove everything created during the last hour.
+  BlockUntilBrowsingDataRemoved(
+      now - base::TimeDelta::FromHours(1), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+
+  // Nothing should be deleted as the zoomlevels were created earlier.
+  EXPECT_EQ(2u, zoom_map->GetAllZoomLevels().size());
+
+  test_clock.SetNow(now);
+  zoom_map->SetZoomLevelForHost(kTestRegisterableDomain3, 2.0);
+
+  // Remove everything changed during the last hour (domain3).
+  BlockUntilBrowsingDataRemoved(
+      now - base::TimeDelta::FromHours(1), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+
+  // Verify we still have the zoom_level for domain1.
+  auto levels = zoom_map->GetAllZoomLevels();
+  EXPECT_EQ(1u, levels.size());
+  EXPECT_EQ(kTestRegisterableDomain1, levels[0].host);
+
+  zoom_map->SetZoomLevelForHostAndScheme("chrome", "print", 4.0);
+  // Remove everything.
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+
+  // Host and scheme zoomlevels should not be affected.
+  levels = zoom_map->GetAllZoomLevels();
+  EXPECT_EQ(1u, levels.size());
+  EXPECT_EQ("chrome", levels[0].scheme);
+  EXPECT_EQ("print", levels[0].host);
+}
+#endif
+
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDurablePermission) {
   // Add our settings.
   HostContentSettingsMap* host_content_settings_map =
@@ -2189,8 +2248,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        LanguageHistogramClearedOnClearingCompleteHistory) {
   language::UrlLanguageHistogram* language_histogram =
-      UrlLanguageHistogramFactory::GetInstance()->GetForBrowserContext(
-          GetProfile());
+      UrlLanguageHistogramFactory::GetForBrowserContext(GetProfile());
 
   // Simulate browsing.
   for (int i = 0; i < 100; i++) {

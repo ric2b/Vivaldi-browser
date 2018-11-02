@@ -4,10 +4,13 @@
 
 #include "modules/storage/StorageNamespaceController.h"
 
+#include <memory>
+
 #include "core/frame/ContentSettingsClient.h"
 #include "modules/storage/InspectorDOMStorageAgent.h"
 #include "modules/storage/StorageNamespace.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebStorageNamespace.h"
 #include "public/web/WebViewClient.h"
 
@@ -30,7 +33,7 @@ StorageNamespaceController::StorageNamespaceController(WebViewClient* client)
 
 StorageNamespaceController::~StorageNamespaceController() {}
 
-DEFINE_TRACE(StorageNamespaceController) {
+void StorageNamespaceController::Trace(blink::Visitor* visitor) {
   Supplement<Page>::Trace(visitor);
   visitor->Trace(inspector_agent_);
 }
@@ -54,8 +57,9 @@ StorageNamespaceController::CreateSessionStorageNamespace() {
   if (!web_view_client_)
     return nullptr;
 
-  return WTF::WrapUnique(new StorageNamespace(
-      WTF::WrapUnique(web_view_client_->CreateSessionStorageNamespace())));
+  return std::make_unique<StorageNamespace>(
+      Platform::Current()->CreateSessionStorageNamespace(
+          web_view_client_->GetSessionStorageNamespaceId()));
 }
 
 bool StorageNamespaceController::CanAccessStorage(LocalFrame* frame,

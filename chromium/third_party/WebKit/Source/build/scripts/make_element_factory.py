@@ -42,6 +42,7 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
         'JSInterfaceName': {},
         'Conditional': {},
         'constructorNeedsCreatedByParser': {},
+        'interfaceHeaderDir': {},
         'interfaceName': {},
         'noConstructor': {},
         'noTypeHelpers': {},
@@ -56,12 +57,10 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
     def __init__(self, json5_file_paths):
         super(MakeElementFactoryWriter, self).__init__(json5_file_paths)
 
-        # FIXME: When we start using these element factories, we'll want to
-        # remove the "new" prefix and also have our base class generate
-        # *Names.h and *Names.cpp.
+        basename = self.namespace.lower() + '_element_factory'
         self._outputs.update({
-            (self.namespace + 'ElementFactory.h'): self.generate_factory_header,
-            (self.namespace + 'ElementFactory.cpp'): self.generate_factory_implementation,
+            (basename + '.h'): self.generate_factory_header,
+            (basename + '.cc'): self.generate_factory_implementation,
         })
 
         fallback_interface = self.tags_json5_file.metadata['fallbackInterfaceName'].strip('"')
@@ -73,6 +72,9 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
             tag['has_js_interface'] = self._has_js_interface(tag)
             tag['js_interface'] = self._js_interface(tag)
             tag['interface'] = self._interface(tag)
+            tag['interface_header'] = '%s/%s.h' % (
+                self._interface_header_dir(tag),
+                self.get_file_basename(tag['interface']))
             interface_counts[tag['interface']] += 1
 
         for tag in tags:
@@ -80,15 +82,17 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
 
         self._template_context.update({
             'fallback_interface': fallback_interface,
+            'fallback_interface_header': self.get_file_basename(
+                fallback_interface) + '.h',
             'fallback_js_interface': fallback_js_interface,
             'input_files': self._input_files,
         })
 
-    @template_expander.use_jinja('templates/ElementFactory.h.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/element_factory.h.tmpl', filters=filters)
     def generate_factory_header(self):
         return self._template_context
 
-    @template_expander.use_jinja('templates/ElementFactory.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/element_factory.cc.tmpl', filters=filters)
     def generate_factory_implementation(self):
         return self._template_context
 
@@ -112,6 +116,11 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
 
     def _has_js_interface(self, tag):
         return not tag['noConstructor'] and self._js_interface(tag) != ('%sElement' % self.namespace)
+
+    def _interface_header_dir(self, tag):
+        if tag['interfaceHeaderDir']:
+            return tag['interfaceHeaderDir']
+        return 'core/' + self.namespace.lower()
 
 
 if __name__ == "__main__":

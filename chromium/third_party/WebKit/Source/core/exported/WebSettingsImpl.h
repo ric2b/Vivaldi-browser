@@ -73,7 +73,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetCursiveFontFamily(const WebString&,
                             UScriptCode = USCRIPT_COMMON) override;
   void SetDNSPrefetchingEnabled(bool) override;
-  void SetDataSaverEnabled(bool) override;
   void SetDOMPasteAllowed(bool) override;
   void SetDefaultFixedFontSize(int) override;
   void SetDefaultFontSize(int) override;
@@ -89,7 +88,8 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetEnableTouchAdjustment(bool) override;
   bool MultiTargetTapNotificationEnabled() override;
   void SetMultiTargetTapNotificationEnabled(bool) override;
-  void SetExperimentalWebGLEnabled(bool) override;
+  void SetWebGL1Enabled(bool) override;
+  void SetWebGL2Enabled(bool) override;
   void SetFantasyFontFamily(const WebString&,
                             UScriptCode = USCRIPT_COMMON) override;
   void SetFixedFontFamily(const WebString&,
@@ -111,6 +111,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetLoadWithOverviewMode(bool) override;
   void SetShouldReuseGlobalForUnownedMainFrame(bool) override;
   void SetProgressBarCompletion(ProgressBarCompletion) override;
+  void SetSavePreviousDocumentResources(SavePreviousDocumentResources) override;
   void SetLocalStorageEnabled(bool) override;
   void SetMainFrameClipsContent(bool) override;
   void SetMainFrameResizesAreOrientationChanges(bool) override;
@@ -132,7 +133,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetPictographFontFamily(const WebString&,
                                UScriptCode = USCRIPT_COMMON) override;
   void SetPluginsEnabled(bool) override;
-  void SetEncryptedMediaEnabled(bool) override;
   void SetAvailablePointerTypes(int) override;
   void SetPrimaryPointerType(PointerType) override;
   void SetAvailableHoverTypes(int) override;
@@ -188,8 +188,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetUseWideViewport(bool) override;
   void SetServeResourceFromCacheOnly(bool) override;
   void SetV8CacheOptions(V8CacheOptions) override;
-  void SetV8CacheStrategiesForCacheStorage(
-      V8CacheStrategiesForCacheStorage) override;
   void SetValidationMessageTimerMagnification(int) override;
   void SetViewportEnabled(bool) override;
   void SetViewportMetaEnabled(bool) override;

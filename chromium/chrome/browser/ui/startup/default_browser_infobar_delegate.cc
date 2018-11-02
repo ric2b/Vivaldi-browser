@@ -77,7 +77,7 @@ void DefaultBrowserInfoBarDelegate::InfoBarDismissed() {
   action_taken_ = true;
   // |profile_| may be null in tests.
   if (profile_)
-    chrome::DefaultBrowserPromptDeclined(profile_);
+    DefaultBrowserPromptDeclined(profile_);
   base::RecordAction(base::UserMetricsAction("DefaultBrowserInfoBar_Dismiss"));
   UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
                             DISMISS_INFO_BAR,
@@ -115,8 +115,8 @@ bool DefaultBrowserInfoBarDelegate::Accept() {
   // The worker pointer is reference counted. While it is running, the
   // message loops of the FILE and UI thread will hold references to it
   // and it will be automatically freed once all its tasks have finished.
-  make_scoped_refptr(new shell_integration::DefaultBrowserWorker(
-                         shell_integration::DefaultWebClientWorkerCallback()))
+  base::MakeRefCounted<shell_integration::DefaultBrowserWorker>(
+      shell_integration::DefaultWebClientWorkerCallback())
       ->StartSetAsDefault();
   return true;
 }

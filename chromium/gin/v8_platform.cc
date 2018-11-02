@@ -8,48 +8,23 @@
 
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/bind.h"
+#include "base/bit_cast.h"
 #include "base/debug/stack_trace.h"
 #include "base/location.h"
+#include "base/rand_util.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gin/per_isolate_data.h"
+#include "gin/v8_background_task_runner.h"
 
 namespace gin {
 
 namespace {
 
-constexpr base::TaskTraits kBackgroundThreadTaskTraits = {
-    base::TaskPriority::USER_VISIBLE};
-
 base::LazyInstance<V8Platform>::Leaky g_v8_platform = LAZY_INSTANCE_INITIALIZER;
-
-void RunWithLocker(v8::Isolate* isolate, v8::Task* task) {
-  v8::Locker lock(isolate);
-  task->Run();
-}
-
-class IdleTaskWithLocker : public v8::IdleTask {
- public:
-  IdleTaskWithLocker(v8::Isolate* isolate, v8::IdleTask* task)
-      : isolate_(isolate), task_(task) {}
-
-  ~IdleTaskWithLocker() override = default;
-
-  // v8::IdleTask implementation.
-  void Run(double deadline_in_seconds) override {
-    v8::Locker lock(isolate_);
-    task_->Run(deadline_in_seconds);
-  }
-
- private:
-  v8::Isolate* isolate_;
-  std::unique_ptr<v8::IdleTask> task_;
-
-  DISALLOW_COPY_AND_ASSIGN(IdleTaskWithLocker);
-};
 
 void PrintStackTrace() {
   base::debug::StackTrace trace;
@@ -127,6 +102,57 @@ class EnabledStateObserverImpl final
 base::LazyInstance<EnabledStateObserverImpl>::Leaky g_trace_state_dispatcher =
     LAZY_INSTANCE_INITIALIZER;
 
+// TODO(skyostil): Deduplicate this with the clamper in Blink.
+class TimeClamper {
+ public:
+  static constexpr double kResolutionSeconds = 0.001;
+
+  TimeClamper() : secret_(base::RandUint64()) {}
+
+  double ClampTimeResolution(double time_seconds) const {
+    DCHECK_GE(time_seconds, 0);
+    // For each clamped time interval, compute a pseudorandom transition
+    // threshold. The reported time will either be the start of that interval or
+    // the next one depending on which side of the threshold |time_seconds| is.
+    double interval = floor(time_seconds / kResolutionSeconds);
+    double clamped_time = interval * kResolutionSeconds;
+    double tick_threshold = ThresholdFor(clamped_time);
+
+    if (time_seconds >= tick_threshold)
+      return (interval + 1) * kResolutionSeconds;
+    return clamped_time;
+  }
+
+ private:
+  inline double ThresholdFor(double clamped_time) const {
+    uint64_t time_hash = MurmurHash3(bit_cast<int64_t>(clamped_time) ^ secret_);
+    return clamped_time + kResolutionSeconds * ToDouble(time_hash);
+  }
+
+  static inline double ToDouble(uint64_t value) {
+    // Exponent for double values for [1.0 .. 2.0]
+    static const uint64_t kExponentBits = uint64_t{0x3FF0000000000000};
+    static const uint64_t kMantissaMask = uint64_t{0x000FFFFFFFFFFFFF};
+    uint64_t random = (value & kMantissaMask) | kExponentBits;
+    return bit_cast<double>(random) - 1;
+  }
+
+  static inline uint64_t MurmurHash3(uint64_t value) {
+    value ^= value >> 33;
+    value *= uint64_t{0xFF51AFD7ED558CCD};
+    value ^= value >> 33;
+    value *= uint64_t{0xC4CEB9FE1A85EC53};
+    value ^= value >> 33;
+    return value;
+  }
+
+  const uint64_t secret_;
+  DISALLOW_COPY_AND_ASSIGN(TimeClamper);
+};
+
+base::LazyInstance<TimeClamper>::Leaky g_time_clamper =
+    LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
 
 class V8Platform::TracingControllerImpl : public v8::TracingController {
@@ -195,7 +221,7 @@ V8Platform* V8Platform::Get() { return g_v8_platform.Pointer(); }
 
 V8Platform::V8Platform() : tracing_controller_(new TracingControllerImpl) {}
 
-V8Platform::~V8Platform() {}
+V8Platform::~V8Platform() = default;
 
 void V8Platform::OnCriticalMemoryPressure() {
 #if defined(OS_WIN)
@@ -205,61 +231,48 @@ void V8Platform::OnCriticalMemoryPressure() {
 #endif
 }
 
+std::shared_ptr<v8::TaskRunner> V8Platform::GetForegroundTaskRunner(
+    v8::Isolate* isolate) {
+  PerIsolateData* data = PerIsolateData::From(isolate);
+  return data->task_runner();
+}
+
+std::shared_ptr<v8::TaskRunner> V8Platform::GetBackgroundTaskRunner(
+    v8::Isolate* isolate) {
+  return std::make_shared<V8BackgroundTaskRunner>();
+}
+
 size_t V8Platform::NumberOfAvailableBackgroundThreads() {
-  return std::max(1, base::TaskScheduler::GetInstance()
-                         ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
-                             kBackgroundThreadTaskTraits));
+  return V8BackgroundTaskRunner::NumberOfAvailableBackgroundThreads();
 }
 
 void V8Platform::CallOnBackgroundThread(
     v8::Task* task,
     v8::Platform::ExpectedRuntime expected_runtime) {
-  base::PostTaskWithTraits(FROM_HERE, kBackgroundThreadTaskTraits,
-                           base::Bind(&v8::Task::Run, base::Owned(task)));
+  GetBackgroundTaskRunner(nullptr)->PostTask(std::unique_ptr<v8::Task>(task));
 }
 
 void V8Platform::CallOnForegroundThread(v8::Isolate* isolate, v8::Task* task) {
   PerIsolateData* data = PerIsolateData::From(isolate);
-  if (data->access_mode() == IsolateHolder::kUseLocker) {
-    data->task_runner()->PostTask(
-        FROM_HERE, base::Bind(RunWithLocker, base::Unretained(isolate),
-                              base::Owned(task)));
-  } else {
-    data->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&v8::Task::Run, base::Owned(task)));
-  }
+  data->task_runner()->PostTask(std::unique_ptr<v8::Task>(task));
 }
 
 void V8Platform::CallDelayedOnForegroundThread(v8::Isolate* isolate,
                                                v8::Task* task,
                                                double delay_in_seconds) {
   PerIsolateData* data = PerIsolateData::From(isolate);
-  if (data->access_mode() == IsolateHolder::kUseLocker) {
-    data->task_runner()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(RunWithLocker, base::Unretained(isolate), base::Owned(task)),
-        base::TimeDelta::FromSecondsD(delay_in_seconds));
-  } else {
-    data->task_runner()->PostDelayedTask(
-        FROM_HERE, base::Bind(&v8::Task::Run, base::Owned(task)),
-        base::TimeDelta::FromSecondsD(delay_in_seconds));
-  }
+  data->task_runner()->PostDelayedTask(std::unique_ptr<v8::Task>(task),
+                                       delay_in_seconds);
 }
 
 void V8Platform::CallIdleOnForegroundThread(v8::Isolate* isolate,
                                             v8::IdleTask* task) {
   PerIsolateData* data = PerIsolateData::From(isolate);
-  DCHECK(data->idle_task_runner());
-  if (data->access_mode() == IsolateHolder::kUseLocker) {
-    data->idle_task_runner()->PostIdleTask(
-        new IdleTaskWithLocker(isolate, task));
-  } else {
-    data->idle_task_runner()->PostIdleTask(task);
-  }
+  data->task_runner()->PostIdleTask(std::unique_ptr<v8::IdleTask>(task));
 }
 
 bool V8Platform::IdleTasksEnabled(v8::Isolate* isolate) {
-  return PerIsolateData::From(isolate)->idle_task_runner() != nullptr;
+  return PerIsolateData::From(isolate)->task_runner()->IdleTasksEnabled();
 }
 
 double V8Platform::MonotonicallyIncreasingTime() {
@@ -268,7 +281,8 @@ double V8Platform::MonotonicallyIncreasingTime() {
 }
 
 double V8Platform::CurrentClockTimeMillis() {
-  return base::Time::Now().ToJsTime();
+  double now_seconds = base::Time::Now().ToJsTime() / 1000;
+  return g_time_clamper.Get().ClampTimeResolution(now_seconds) * 1000;
 }
 
 v8::TracingController* V8Platform::GetTracingController() {

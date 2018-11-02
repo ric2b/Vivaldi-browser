@@ -14,9 +14,7 @@ namespace blink {
 
 class DOMRect;
 
-class MODULES_EXPORT DetectedBarcode final
-    : public GarbageCollectedFinalized<DetectedBarcode>,
-      public ScriptWrappable {
+class MODULES_EXPORT DetectedBarcode final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -26,7 +24,7 @@ class MODULES_EXPORT DetectedBarcode final
   const String& rawValue() const;
   DOMRect* boundingBox() const;
   const HeapVector<Point2D>& cornerPoints() const;
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   DetectedBarcode(String, DOMRect*, HeapVector<Point2D>);

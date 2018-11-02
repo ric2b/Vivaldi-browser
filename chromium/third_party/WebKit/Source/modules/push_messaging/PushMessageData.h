@@ -20,9 +20,7 @@ class DOMArrayBuffer;
 class ExceptionState;
 class ScriptState;
 
-class MODULES_EXPORT PushMessageData final
-    : public GarbageCollectedFinalized<PushMessageData>,
-      public ScriptWrappable {
+class MODULES_EXPORT PushMessageData final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -36,8 +34,6 @@ class MODULES_EXPORT PushMessageData final
   Blob* blob() const;
   ScriptValue json(ScriptState*, ExceptionState&) const;
   String text() const;
-
-  DECLARE_TRACE();
 
  private:
   PushMessageData(const char* data, unsigned bytes_size);

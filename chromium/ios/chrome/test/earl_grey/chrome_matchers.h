@@ -31,14 +31,6 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id);
 // accessibility trait UIAccessibilityTraitStaticText.
 id<GREYMatcher> StaticTextWithAccessibilityLabel(NSString* label);
 
-// Returns matcher for WKWebView containing a blocked |image_id|.  When blocked,
-// the image element will be smaller than actual image.
-id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id);
-
-// Returns matcher for WKWebView containing loaded image with |image_id|.  When
-// loaded, the image element will have the same size as actual image.
-id<GREYMatcher> WebViewContainingLoadedImage(std::string image_id);
-
 // Returns matcher for a cancel button.
 id<GREYMatcher> CancelButton();
 
@@ -82,6 +74,11 @@ id<GREYMatcher> ShowTabsButton();
 id<GREYMatcher> CollectionViewSwitchCell(NSString* accessibilityIdentifier,
                                          BOOL isOn);
 
+// Matcher for SyncSwitchCell.
+// TODO(crbug.com/684139): Update |is_on| to something more obvious from
+// callsites.
+id<GREYMatcher> SyncSwitchCell(NSString* accessibilityLabel, BOOL is_on);
+
 // Matcher for the Open in New Tab option in the context menu when long pressing
 // a link.
 id<GREYMatcher> OpenLinkInNewTabButton();
@@ -94,6 +91,9 @@ id<GREYMatcher> AccountConsistencySetupSigninButton();
 
 // Returns matcher for the account consistency confirmation button.
 id<GREYMatcher> AccountConsistencyConfirmationOkButton();
+
+// Returns matcher for the add account accounts button.
+id<GREYMatcher> AddAccountButton();
 
 // Returns matcher for the sign out accounts button.
 id<GREYMatcher> SignOutAccountsButton();
@@ -155,6 +155,44 @@ id<GREYMatcher> PaymentRequestView();
 
 // Returns matcher for the error confirmation view for payment request.
 id<GREYMatcher> PaymentRequestErrorView();
+
+// Returns matcher for the voice search button on the main Settings screen.
+id<GREYMatcher> VoiceSearchButton();
+
+// Returns matcher for the settings main menu view.
+id<GREYMatcher> SettingsCollectionView();
+
+// Returns matcher for the clear browsing history cell on the clear browsing
+// data panel.
+id<GREYMatcher> ClearBrowsingHistoryButton();
+
+// Returns matcher for the clear cookies cell on the clear browsing data panel.
+id<GREYMatcher> ClearCookiesButton();
+
+// Returns matcher for the clear cache cell on the clear browsing data panel.
+id<GREYMatcher> ClearCacheButton();
+
+// Returns matcher for the clear saved passwords cell on the clear browsing data
+// panel.
+id<GREYMatcher> ClearSavedPasswordsButton();
+
+// Returns matcher for the collection view of content suggestion.
+id<GREYMatcher> ContentSuggestionCollectionView();
+
+// Returns matcher for the warning message while filling in payment requests.
+id<GREYMatcher> WarningMessageView();
+
+// Returns matcher for the payment picker cell.
+id<GREYMatcher> PaymentRequestPickerRow();
+
+// Returns matcher for the payment request search bar.
+id<GREYMatcher> PaymentRequestPickerSearchBar();
+
+// Returns matcher for the bookmarks button on the Tools menu.
+id<GREYMatcher> BookmarksMenuButton();
+
+// Returns matcher for the recent tabs button on the Tools menu.
+id<GREYMatcher> RecentTabsMenuButton();
 
 }  // namespace chrome_test_util
 

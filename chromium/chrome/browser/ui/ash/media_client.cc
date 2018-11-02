@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/media_session.h"
@@ -33,6 +34,8 @@
 using ash::mojom::MediaCaptureState;
 
 namespace {
+
+MediaClient* g_media_client_ = nullptr;
 
 MediaCaptureState& operator|=(MediaCaptureState& lhs, MediaCaptureState rhs) {
   lhs = static_cast<MediaCaptureState>(static_cast<int>(lhs) |
@@ -140,10 +143,19 @@ MediaClient::MediaClient() : binding_(this), weak_ptr_factory_(this) {
   ash::mojom::MediaClientAssociatedPtrInfo ptr_info;
   binding_.Bind(mojo::MakeRequest(&ptr_info));
   media_controller_->SetClient(std::move(ptr_info));
+
+  DCHECK(!g_media_client_);
+  g_media_client_ = this;
 }
 
 MediaClient::~MediaClient() {
+  g_media_client_ = nullptr;
   MediaCaptureDevicesDispatcher::GetInstance()->RemoveObserver(this);
+}
+
+// static
+MediaClient* MediaClient::Get() {
+  return g_media_client_;
 }
 
 void MediaClient::HandleMediaNextTrack() {
@@ -193,6 +205,13 @@ void MediaClient::RequestCaptureState() {
   }
 
   media_controller_->NotifyCaptureState(std::move(state));
+}
+
+void MediaClient::SuspendMediaSessions() {
+  for (TabContentsIterator it; !it.done(); it.Next()) {
+    content::MediaSession::Get(*it)->Suspend(
+        content::MediaSession::SuspendType::SYSTEM);
+  }
 }
 
 void MediaClient::OnRequestUpdate(int render_process_id,

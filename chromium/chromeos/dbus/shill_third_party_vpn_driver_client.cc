@@ -7,6 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <map>
+#include <set>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "chromeos/dbus/shill_third_party_vpn_observer.h"
@@ -331,11 +334,9 @@ ShillThirdPartyVpnDriverClientImpl::GetHelperInfo(
 
 }  // namespace
 
-ShillThirdPartyVpnDriverClient::ShillThirdPartyVpnDriverClient() {
-}
+ShillThirdPartyVpnDriverClient::ShillThirdPartyVpnDriverClient() = default;
 
-ShillThirdPartyVpnDriverClient::~ShillThirdPartyVpnDriverClient() {
-}
+ShillThirdPartyVpnDriverClient::~ShillThirdPartyVpnDriverClient() = default;
 
 // static
 ShillThirdPartyVpnDriverClient* ShillThirdPartyVpnDriverClient::Create() {

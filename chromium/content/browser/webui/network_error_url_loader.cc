@@ -29,9 +29,9 @@ void StartNetworkErrorsURLLoader(const ResourceRequest& request,
     }
   }
 
-  ResourceRequestCompletionStatus request_complete_data;
-  request_complete_data.error_code = net_error;
-  client->OnComplete(request_complete_data);
+  network::URLLoaderCompletionStatus status;
+  status.error_code = net_error;
+  client->OnComplete(status);
 }
 
 }  // namespace content

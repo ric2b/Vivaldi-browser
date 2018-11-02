@@ -7,11 +7,11 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -20,12 +20,9 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
+class Location;
 class SingleThreadTaskRunner;
 }  // namespace base
-
-namespace tracked_objects {
-class Location;
-}  // namespace tracked_objects
 
 namespace remoting {
 namespace protocol {
@@ -142,7 +139,7 @@ class PairingRegistry : public base::RefCountedThreadSafe<PairingRegistry> {
   // Lets the tests override task posting to make all callbacks synchronous.
   virtual void PostTask(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      const tracked_objects::Location& from_here,
+      const base::Location& from_here,
       const base::Closure& task);
 
  private:
@@ -195,7 +192,7 @@ class PairingRegistry : public base::RefCountedThreadSafe<PairingRegistry> {
 
   std::unique_ptr<Delegate> delegate_;
 
-  std::queue<base::Closure> pending_requests_;
+  base::queue<base::Closure> pending_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(PairingRegistry);
 };

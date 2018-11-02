@@ -5,10 +5,24 @@
 #include "core/css/cssom/CSSUnitValue.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/css/CSSHelper.h"
+#include "core/css/CSSResolutionUnits.h"
+#include "core/css/cssom/CSSMathMax.h"
+#include "core/css/cssom/CSSMathMin.h"
+#include "core/css/cssom/CSSMathProduct.h"
+#include "core/css/cssom/CSSMathSum.h"
+#include "core/css/cssom/CSSNumericSumValue.h"
 #include "platform/wtf/MathExtras.h"
 
 namespace blink {
+
+namespace {
+
+CSSPrimitiveValue::UnitType ToCanonicalUnit(CSSPrimitiveValue::UnitType unit) {
+  return CSSPrimitiveValue::CanonicalUnitTypeForCategory(
+      CSSPrimitiveValue::UnitTypeToUnitCategory(unit));
+}
+
+}  // namespace
 
 CSSUnitValue* CSSUnitValue::Create(double value,
                                    const String& unit_name,
@@ -38,8 +52,10 @@ CSSUnitValue* CSSUnitValue::FromCSSValue(
 void CSSUnitValue::setUnit(const String& unit_name,
                            ExceptionState& exception_state) {
   CSSPrimitiveValue::UnitType unit = UnitFromName(unit_name);
-  if (!IsValidUnit(unit))
+  if (!IsValidUnit(unit)) {
     exception_state.ThrowTypeError("Invalid unit: " + unit_name);
+    return;
+  }
 
   unit_ = unit;
 }
@@ -77,11 +93,11 @@ CSSStyleValue::StyleValueType CSSUnitValue::GetType() const {
   return StyleValueType::kUnknownType;
 }
 
-const CSSValue* CSSUnitValue::ToCSSValue() const {
+const CSSValue* CSSUnitValue::ToCSSValue(SecureContextMode) const {
   return CSSPrimitiveValue::Create(value_, unit_);
 }
 
-CSSUnitValue* CSSUnitValue::to(CSSPrimitiveValue::UnitType unit) const {
+CSSUnitValue* CSSUnitValue::ConvertTo(CSSPrimitiveValue::UnitType unit) const {
   if (unit_ == unit)
     return Create(value_, unit_);
 
@@ -99,6 +115,22 @@ CSSUnitValue* CSSUnitValue::to(CSSPrimitiveValue::UnitType unit) const {
   return nullptr;
 }
 
+WTF::Optional<CSSNumericSumValue> CSSUnitValue::SumValue() const {
+  const auto canonical_unit = ToCanonicalUnit(unit_);
+  if (canonical_unit == CSSPrimitiveValue::UnitType::kUnknown)
+    return WTF::nullopt;
+
+  CSSNumericSumValue sum;
+  CSSNumericSumValue::UnitMap unit_map;
+  if (unit_ != CSSPrimitiveValue::UnitType::kNumber)
+    unit_map.insert(canonical_unit, 1);
+
+  sum.terms.emplace_back(
+      value_ * CSSPrimitiveValue::ConversionToCanonicalUnitsScaleFactor(unit_),
+      std::move(unit_map));
+  return sum;
+}
+
 double CSSUnitValue::ConvertFixedLength(
     CSSPrimitiveValue::UnitType unit) const {
   switch (unit_) {
@@ -108,6 +140,8 @@ double CSSUnitValue::ConvertFixedLength(
           return value_ / kCssPixelsPerCentimeter;
         case CSSPrimitiveValue::UnitType::kMillimeters:
           return value_ / kCssPixelsPerMillimeter;
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ / kCssPixelsPerQuarterMillimeter;
         case CSSPrimitiveValue::UnitType::kInches:
           return value_ / kCssPixelsPerInch;
         case CSSPrimitiveValue::UnitType::kPoints:
@@ -124,6 +158,8 @@ double CSSUnitValue::ConvertFixedLength(
           return value_ * kCssPixelsPerCentimeter;
         case CSSPrimitiveValue::UnitType::kMillimeters:
           return value_ * kMillimetersPerCentimeter;
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ * kQuarterMillimetersPerCentimeter;
         case CSSPrimitiveValue::UnitType::kInches:
           return value_ / kCentimetersPerInch;
         case CSSPrimitiveValue::UnitType::kPoints:
@@ -140,6 +176,9 @@ double CSSUnitValue::ConvertFixedLength(
           return value_ * kCssPixelsPerMillimeter;
         case CSSPrimitiveValue::UnitType::kCentimeters:
           return value_ / kMillimetersPerCentimeter;
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ *
+                 (kQuarterMillimetersPerCentimeter / kMillimetersPerCentimeter);
         case CSSPrimitiveValue::UnitType::kInches:
           return value_ / (kMillimetersPerCentimeter * kCentimetersPerInch);
         case CSSPrimitiveValue::UnitType::kPoints:
@@ -150,12 +189,35 @@ double CSSUnitValue::ConvertFixedLength(
           NOTREACHED();
           return 0;
       }
+    case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+      switch (unit) {
+        case CSSPrimitiveValue::UnitType::kPixels:
+          return value_ * kCssPixelsPerQuarterMillimeter;
+        case CSSPrimitiveValue::UnitType::kCentimeters:
+          return value_ / kQuarterMillimetersPerCentimeter;
+        case CSSPrimitiveValue::UnitType::kMillimeters:
+          return value_ /
+                 (kQuarterMillimetersPerCentimeter / kMillimetersPerCentimeter);
+        case CSSPrimitiveValue::UnitType::kInches:
+          return value_ /
+                 (kQuarterMillimetersPerCentimeter * kCentimetersPerInch);
+        case CSSPrimitiveValue::UnitType::kPoints:
+          return value_ * (kPointsPerInch / kQuarterMillimetersPerInch);
+        case CSSPrimitiveValue::UnitType::kPicas:
+          return value_ * (kPicasPerInch / kQuarterMillimetersPerInch);
+        default:
+          NOTREACHED();
+          return 0;
+      }
     case CSSPrimitiveValue::UnitType::kInches:
       switch (unit) {
         case CSSPrimitiveValue::UnitType::kPixels:
           return value_ * kCssPixelsPerInch;
         case CSSPrimitiveValue::UnitType::kMillimeters:
           return value_ * kCentimetersPerInch * kMillimetersPerCentimeter;
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ * kCentimetersPerInch *
+                 kQuarterMillimetersPerCentimeter;
         case CSSPrimitiveValue::UnitType::kCentimeters:
           return value_ * kCentimetersPerInch;
         case CSSPrimitiveValue::UnitType::kPoints:
@@ -172,6 +234,8 @@ double CSSUnitValue::ConvertFixedLength(
           return value_ * kCssPixelsPerPoint;
         case CSSPrimitiveValue::UnitType::kMillimeters:
           return value_ * (kMillimetersPerInch / kPointsPerInch);
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ * (kQuarterMillimetersPerInch / kPointsPerInch);
         case CSSPrimitiveValue::UnitType::kCentimeters:
           return value_ * (kCentimetersPerInch / kPointsPerInch);
         case CSSPrimitiveValue::UnitType::kInches:
@@ -188,6 +252,8 @@ double CSSUnitValue::ConvertFixedLength(
           return value_ * kCssPixelsPerPica;
         case CSSPrimitiveValue::UnitType::kMillimeters:
           return value_ * (kMillimetersPerInch / kPicasPerInch);
+        case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+          return value_ * (kQuarterMillimetersPerInch / kPicasPerInch);
         case CSSPrimitiveValue::UnitType::kCentimeters:
           return value_ * (kCentimetersPerInch / kPicasPerInch);
         case CSSPrimitiveValue::UnitType::kInches:
@@ -258,6 +324,14 @@ double CSSUnitValue::ConvertAngle(CSSPrimitiveValue::UnitType unit) const {
       NOTREACHED();
       return 0;
   }
+}
+
+bool CSSUnitValue::Equals(const CSSNumericValue& other) const {
+  if (!other.IsUnitValue())
+    return false;
+
+  const CSSUnitValue& other_unit_value = ToCSSUnitValue(other);
+  return value_ == other_unit_value.value_ && unit_ == other_unit_value.unit_;
 }
 
 }  // namespace blink

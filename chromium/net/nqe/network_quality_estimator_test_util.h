@@ -48,7 +48,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       const std::map<std::string, std::string>& variation_params,
       bool allow_local_host_requests_for_tests,
       bool allow_smaller_responses_for_tests,
-      bool add_default_platform_observations,
       std::unique_ptr<BoundTestNetLog> net_log);
 
   TestNetworkQualityEstimator(
@@ -56,7 +55,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       const std::map<std::string, std::string>& variation_params,
       bool allow_local_host_requests_for_tests,
       bool allow_smaller_responses_for_tests,
-      bool add_default_platform_observations,
       bool suppress_notifications_for_testing,
       std::unique_ptr<BoundTestNetLog> net_log);
 
@@ -116,7 +114,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       const base::TimeTicks& start_time,
       base::TimeDelta* http_rtt,
       base::TimeDelta* transport_rtt,
-      int32_t* downstream_throughput_kbps) const override;
+      int32_t* downstream_throughput_kbps,
+      size_t* observations_count) const override;
 
   void NotifyObserversOfRTTOrThroughputComputed() const override;
 
@@ -156,7 +155,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   // |set_recent_transport_rtt|. If the recent transport RTT has not been set,
   // then the base implementation is called.
   bool GetRecentTransportRTT(const base::TimeTicks& start_time,
-                             base::TimeDelta* rtt) const override;
+                             base::TimeDelta* rtt,
+                             size_t* observations_count) const override;
 
   void set_start_time_null_downlink_throughput_kbps(
       int32_t downlink_throughput_kbps) {
@@ -180,11 +180,11 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   // |set_rtt_estimate_internal|. If it has not been set, then the base
   // implementation is called.
   base::TimeDelta GetRTTEstimateInternal(
-      const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources,
       base::TimeTicks start_time,
       const base::Optional<NetworkQualityEstimator::Statistic>& statistic,
-      int percentile) const override;
+      nqe::internal::ObservationCategory observation_category,
+      int percentile,
+      size_t* observations_count) const override;
 
   void set_rtt_estimate_internal(base::TimeDelta value) {
     rtt_estimate_internal_ = value;
@@ -226,9 +226,17 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   // changed to |network_quality|.
   void NotifyObserversOfEffectiveConnectionType(EffectiveConnectionType type);
 
+  void SetTransportRTTAtastECTSampleCount(size_t count) {
+    transport_rtt_observation_count_last_ect_computation_ = count;
+  }
+
+  const NetworkQualityEstimatorParams* params() const;
+
   using NetworkQualityEstimator::SetTickClockForTesting;
   using NetworkQualityEstimator::OnConnectionTypeChanged;
-  using NetworkQualityEstimator::OnUpdatedRTTAvailable;
+  using NetworkQualityEstimator::OnUpdatedTransportRTTAvailable;
+  using NetworkQualityEstimator::AddAndNotifyObserversOfRTT;
+  using NetworkQualityEstimator::AddAndNotifyObserversOfThroughput;
 
  private:
   class LocalHttpTestServer : public EmbeddedTestServer {
@@ -288,6 +296,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
 
   // If true, notifications are not sent to any of the observers.
   const bool suppress_notifications_for_testing_;
+
+  base::Optional<size_t> transport_rtt_observation_count_last_ect_computation_;
 
   // Net log provided to network quality estimator.
   std::unique_ptr<net::BoundTestNetLog> net_log_;

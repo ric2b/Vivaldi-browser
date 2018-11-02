@@ -22,10 +22,12 @@ namespace ws {
 GpuClient::GpuClient(
     int client_id,
     gpu::GPUInfo* gpu_info,
+    gpu::GpuFeatureInfo* gpu_feature_info,
     viz::ServerGpuMemoryBufferManager* gpu_memory_buffer_manager,
     viz::mojom::GpuService* gpu_service)
     : client_id_(client_id),
       gpu_info_(gpu_info),
+      gpu_feature_info_(gpu_feature_info),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       gpu_service_(gpu_service),
       weak_factory_(this) {
@@ -35,12 +37,17 @@ GpuClient::GpuClient(
 
 GpuClient::~GpuClient() {
   gpu_memory_buffer_manager_->DestroyAllGpuMemoryBufferForClient(client_id_);
+  if (!establish_callback_.is_null()) {
+    establish_callback_.Run(client_id_, mojo::ScopedMessagePipeHandle(),
+                            gpu::GPUInfo(), gpu::GpuFeatureInfo());
+  }
 }
 
 void GpuClient::OnGpuChannelEstablished(
-    const EstablishGpuChannelCallback& callback,
     mojo::ScopedMessagePipeHandle channel_handle) {
-  callback.Run(client_id_, std::move(channel_handle), *gpu_info_);
+  base::ResetAndReturn(&establish_callback_)
+      .Run(client_id_, std::move(channel_handle), *gpu_info_,
+           *gpu_feature_info_);
 }
 
 // mojom::Gpu overrides:
@@ -50,20 +57,25 @@ void GpuClient::EstablishGpuChannel(
   // tracing id.
   const uint64_t client_tracing_id = 0;
   constexpr bool is_gpu_host = false;
+  if (!establish_callback_.is_null()) {
+    establish_callback_.Run(client_id_, mojo::ScopedMessagePipeHandle(),
+                            gpu::GPUInfo(), gpu::GpuFeatureInfo());
+  }
+  establish_callback_ = callback;
   gpu_service_->EstablishGpuChannel(
       client_id_, client_tracing_id, is_gpu_host,
       base::Bind(&GpuClient::OnGpuChannelEstablished,
-                 weak_factory_.GetWeakPtr(), callback));
+                 weak_factory_.GetWeakPtr()));
 }
 
 void GpuClient::CreateJpegDecodeAccelerator(
-    media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) {
+    media::mojom::JpegDecodeAcceleratorRequest jda_request) {
   gpu_service_->CreateJpegDecodeAccelerator(std::move(jda_request));
 }
 
 void GpuClient::CreateVideoEncodeAcceleratorProvider(
     media::mojom::VideoEncodeAcceleratorProviderRequest request) {
-  NOTIMPLEMENTED();
+  gpu_service_->CreateVideoEncodeAcceleratorProvider(std::move(request));
 }
 
 void GpuClient::CreateGpuMemoryBuffer(

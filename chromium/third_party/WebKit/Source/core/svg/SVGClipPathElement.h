@@ -21,7 +21,6 @@
 #ifndef SVGClipPathElement_h
 #define SVGClipPathElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedEnumeration.h"
 #include "core/svg/SVGGraphicsElement.h"
 #include "core/svg/SVGUnitTypes.h"
@@ -42,7 +41,7 @@ class SVGClipPathElement final : public SVGGraphicsElement {
 
   bool SupportsFocus() const override { return false; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGClipPathElement(Document&);

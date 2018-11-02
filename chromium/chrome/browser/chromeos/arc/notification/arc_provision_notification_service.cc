@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -24,7 +23,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "url/gurl.h"
 
 namespace arc {
@@ -33,7 +32,6 @@ namespace {
 
 constexpr char kManagedProvisionNotificationId[] = "arc_managed_provision";
 constexpr char kManagedProvisionNotifierId[] = "arc_managed_provision";
-constexpr char kManagedProvisionDisplaySource[] = "arc_managed_provision";
 
 class DelegateImpl : public ArcProvisionNotificationService::Delegate {
  public:
@@ -49,11 +47,10 @@ void DelegateImpl::ShowManagedProvisionNotification() {
       user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
   notifier_id.profile_id = account_id.GetUserEmail();
   message_center::RichNotificationData optional_fields;
-  optional_fields.clickable = false;
   optional_fields.never_timeout = true;
 
   message_center::MessageCenter::Get()->AddNotification(
-      base::MakeUnique<message_center::Notification>(
+      std::make_unique<message_center::Notification>(
           message_center::NOTIFICATION_TYPE_SIMPLE,
           kManagedProvisionNotificationId,
           l10n_util::GetStringUTF16(
@@ -63,8 +60,8 @@ void DelegateImpl::ShowManagedProvisionNotification() {
               ui::GetChromeOSDeviceName()),
           gfx::Image(ui::ResourceBundle::GetSharedInstance().GetImageNamed(
               IDR_ARC_PLAY_STORE_OPTIN_IN_PROGRESS_NOTIFICATION)),
-          base::UTF8ToUTF16(kManagedProvisionDisplaySource), GURL(),
-          notifier_id, optional_fields, nullptr));
+          l10n_util::GetStringUTF16(IDS_ARC_NOTIFICATION_DISPLAY_SOURCE),
+          GURL(), notifier_id, optional_fields, nullptr));
 }
 
 void DelegateImpl::RemoveManagedProvisionNotification() {
@@ -108,7 +105,7 @@ ArcProvisionNotificationService::ArcProvisionNotificationService(
     content::BrowserContext* context,
     ArcBridgeService* bridge_service)
     : ArcProvisionNotificationService(context,
-                                      base::MakeUnique<DelegateImpl>()) {}
+                                      std::make_unique<DelegateImpl>()) {}
 
 ArcProvisionNotificationService::~ArcProvisionNotificationService() {
   // Make sure no notification is left being shown.

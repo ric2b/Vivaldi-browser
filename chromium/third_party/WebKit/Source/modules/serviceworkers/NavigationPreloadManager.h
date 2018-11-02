@@ -13,9 +13,7 @@ namespace blink {
 
 class ServiceWorkerRegistration;
 
-class NavigationPreloadManager final
-    : public GarbageCollected<NavigationPreloadManager>,
-      public ScriptWrappable {
+class NavigationPreloadManager final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -29,7 +27,7 @@ class NavigationPreloadManager final
   ScriptPromise setHeaderValue(ScriptState*, const String& value);
   ScriptPromise getState(ScriptState*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit NavigationPreloadManager(ServiceWorkerRegistration*);

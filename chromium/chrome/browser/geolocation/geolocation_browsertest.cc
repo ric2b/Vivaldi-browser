@@ -34,13 +34,18 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "device/geolocation/geoposition.h"
+#include "device/geolocation/network_location_request.h"
+#include "device/geolocation/public/interfaces/geoposition.mojom.h"
+#include "google_apis/google_api_keys.h"
+#include "net/base/escape.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/url_request/test_url_fetcher_factory.h"
 
 namespace {
 
 std::string GetErrorCodePermissionDenied() {
-  return base::IntToString(device::Geoposition::ERROR_CODE_PERMISSION_DENIED);
+  return base::IntToString(static_cast<int>(
+      device::mojom::Geoposition::ErrorCode::PERMISSION_DENIED));
 }
 
 std::string RunScript(content::RenderFrameHost* render_frame_host,
@@ -165,6 +170,39 @@ class PermissionRequestObserver : public PermissionRequestManager::Observer {
   DISALLOW_COPY_AND_ASSIGN(PermissionRequestObserver);
 };
 
+// Observer that waits until a TestURLFetcher with the specified fetcher_id
+// starts, after which it is made available through .fetcher().
+class TestURLFetcherObserver : public net::TestURLFetcher::DelegateForTests {
+ public:
+  explicit TestURLFetcherObserver(int expected_fetcher_id)
+      : expected_fetcher_id_(expected_fetcher_id) {
+    factory_.SetDelegateForTests(this);
+  }
+  virtual ~TestURLFetcherObserver() {}
+
+  void Wait() { loop_.Run(); }
+
+  net::TestURLFetcher* fetcher() { return fetcher_; }
+
+  // net::TestURLFetcher::DelegateForTests:
+  void OnRequestStart(int fetcher_id) override {
+    if (fetcher_id == expected_fetcher_id_) {
+      fetcher_ = factory_.GetFetcherByID(fetcher_id);
+      fetcher_->SetDelegateForTests(nullptr);
+      factory_.SetDelegateForTests(nullptr);
+      loop_.Quit();
+    }
+  }
+  void OnChunkUpload(int fetcher_id) override {}
+  void OnRequestEnd(int fetcher_id) override {}
+
+ private:
+  const int expected_fetcher_id_;
+  net::TestURLFetcher* fetcher_ = nullptr;
+  net::TestURLFetcherFactory factory_;
+  base::RunLoop loop_;
+};
+
 }  // namespace
 
 
@@ -254,9 +292,6 @@ class GeolocationBrowserTest : public InProcessBrowserTest {
 
   // Convenience method to look up the number of queued permission requests.
   int GetRequestQueueSize(PermissionRequestManager* manager);
-
-  // Toggle whether the prompt decision should be persisted.
-  void TogglePersist(bool persist);
 
  private:
   // Calls watchPosition() in JavaScript and accepts or denies the resulting
@@ -390,9 +425,9 @@ void GeolocationBrowserTest::WatchPositionAndObservePermissionRequest(
 void GeolocationBrowserTest::ExpectPosition(double latitude, double longitude) {
   // Checks we have no error.
   ExpectValueFromScript("0", "geoGetLastError()");
-  ExpectValueFromScript(base::DoubleToString(latitude),
+  ExpectValueFromScript(base::NumberToString(latitude),
                         "geoGetLastPositionLatitude()");
-  ExpectValueFromScript(base::DoubleToString(longitude),
+  ExpectValueFromScript(base::NumberToString(longitude),
                         "geoGetLastPositionLongitude()");
 }
 
@@ -430,13 +465,6 @@ int GeolocationBrowserTest::GetRequestQueueSize(
   return static_cast<int>(manager->requests_.size());
 }
 
-void GeolocationBrowserTest::TogglePersist(bool persist) {
-  content::WebContents* web_contents =
-      current_browser()->tab_strip_model()->GetActiveWebContents();
-  PermissionRequestManager::FromWebContents(web_contents)
-      ->TogglePersist(persist);
-}
-
 // Tests ----------------------------------------------------------------------
 
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, DisplaysPrompt) {
@@ -456,6 +484,35 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, Geoposition) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
+}
+
+#if defined(OS_CHROMEOS)
+// ChromeOS fails to perform network geolocation when zero wifi networks are
+// detected in a scan: https://crbug.com/767300.
+#define MAYBE_UrlWithApiKey DISABLED_UrlWithApiKey
+#else
+#define MAYBE_UrlWithApiKey UrlWithApiKey
+#endif
+// Tests that Chrome makes a network geolocation request to the correct URL
+// including Google API key query param.
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_UrlWithApiKey) {
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+
+  // Unique ID (derived from Gerrit CL number):
+  device::NetworkLocationRequest::url_fetcher_id_for_tests = 675023;
+
+  // Intercept the URLFetcher from network geolocation request.
+  TestURLFetcherObserver observer(
+      device::NetworkLocationRequest::url_fetcher_id_for_tests);
+  ASSERT_TRUE(WatchPositionAndGrantPermission());
+  observer.Wait();
+  DCHECK(observer.fetcher());
+
+  // Verify full URL including Google API key.
+  const std::string expected_url =
+      "https://www.googleapis.com/geolocation/v1/geolocate?key=" +
+      net::EscapeQueryParamValue(google_apis::GetAPIKey(), true);
+  EXPECT_EQ(expected_url, observer.fetcher()->GetOriginalURL());
 }
 
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, ErrorOnPermissionDenied) {
@@ -539,46 +596,6 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoLeakFromOffTheRecord) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
-}
-
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TogglePersistGranted) {
-  // Initialize and turn persistence off.
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  TogglePersist(false);
-
-  ASSERT_TRUE(WatchPositionAndGrantPermission());
-  EXPECT_EQ(CONTENT_SETTING_ASK,
-            GetHostContentSettingsMap()->GetContentSetting(
-                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
-                std::string()));
-
-  // Expect the grant to be remembered at the blink layer, so a second request
-  // on this page doesn't create a request.
-  WatchPositionAndObservePermissionRequest(false);
-
-  // Navigate and ensure that a prompt is shown when we request again.
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  WatchPositionAndObservePermissionRequest(true);
-}
-
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TogglePersistBlocked) {
-  // Initialize and turn persistence off.
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  TogglePersist(false);
-
-  ASSERT_TRUE(WatchPositionAndDenyPermission());
-  EXPECT_EQ(CONTENT_SETTING_ASK,
-            GetHostContentSettingsMap()->GetContentSetting(
-                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
-                std::string()));
-
-  // Expect the page to make another request since we have not persisted the
-  // user's response.
-  WatchPositionAndObservePermissionRequest(true);
-
-  // Navigate and ensure that a prompt is shown when we request again.
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  WatchPositionAndObservePermissionRequest(true);
 }
 
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithFreshPosition) {

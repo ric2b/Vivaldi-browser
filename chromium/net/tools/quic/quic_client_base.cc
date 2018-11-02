@@ -16,15 +16,16 @@ using std::string;
 
 namespace net {
 
-QuicClientBase::NetworkHelper::~NetworkHelper() {}
+QuicClientBase::NetworkHelper::~NetworkHelper() = default;
 
-QuicClientBase::QuicClientBase(const QuicServerId& server_id,
-                               const QuicVersionVector& supported_versions,
-                               const QuicConfig& config,
-                               QuicConnectionHelperInterface* helper,
-                               QuicAlarmFactory* alarm_factory,
-                               std::unique_ptr<NetworkHelper> network_helper,
-                               std::unique_ptr<ProofVerifier> proof_verifier)
+QuicClientBase::QuicClientBase(
+    const QuicServerId& server_id,
+    const QuicTransportVersionVector& supported_versions,
+    const QuicConfig& config,
+    QuicConnectionHelperInterface* helper,
+    QuicAlarmFactory* alarm_factory,
+    std::unique_ptr<NetworkHelper> network_helper,
+    std::unique_ptr<ProofVerifier> proof_verifier)
     : server_id_(server_id),
       initialized_(false),
       local_port_(0),
@@ -40,7 +41,7 @@ QuicClientBase::QuicClientBase(const QuicServerId& server_id,
       connected_or_attempting_connect_(false),
       network_helper_(std::move(network_helper)) {}
 
-QuicClientBase::~QuicClientBase() {}
+QuicClientBase::~QuicClientBase() = default;
 
 bool QuicClientBase::Initialize() {
   num_sent_client_hellos_ = 0;

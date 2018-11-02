@@ -5,7 +5,7 @@
 #ifndef UI_DISPLAY_MANAGER_DISPLAY_MANAGER_UTILITIES_H_
 #define UI_DISPLAY_MANAGER_DISPLAY_MANAGER_UTILITIES_H_
 
-#include <set>
+#include <vector>
 
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
@@ -24,34 +24,33 @@ class ManagedDisplayMode;
 // Creates the display mode list for internal display
 // based on |native_mode|.
 DISPLAY_MANAGER_EXPORT ManagedDisplayInfo::ManagedDisplayModeList
-CreateInternalManagedDisplayModeList(
-    const scoped_refptr<ManagedDisplayMode>& native_mode);
+CreateInternalManagedDisplayModeList(const ManagedDisplayMode& native_mode);
+
+// Defines parameters needed to construct a ManagedDisplayMode for Unified
+// Desktop.
+struct UnifiedDisplayModeParam {
+  UnifiedDisplayModeParam(float dsf, float scale, bool is_default);
+
+  float device_scale_factor = 1.0f;
+
+  float display_bounds_scale = 1.0f;
+
+  bool is_default_mode = false;
+};
 
 // Creates the display mode list for unified display
 // based on |native_mode| and |scales|.
 DISPLAY_MANAGER_EXPORT ManagedDisplayInfo::ManagedDisplayModeList
 CreateUnifiedManagedDisplayModeList(
-    const scoped_refptr<ManagedDisplayMode>& native_mode,
-    const std::set<std::pair<float, float>>& dsf_scale_list);
-
-// Gets the display mode for |resolution|. Returns false if no display
-// mode matches the resolution, or the display is an internal display.
-DISPLAY_MANAGER_EXPORT scoped_refptr<ManagedDisplayMode>
-GetDisplayModeForResolution(const ManagedDisplayInfo& info,
-                            const gfx::Size& resolution);
-
-// Gets the display mode for the next valid UI scale. Returns false
-// if the display is not an internal display.
-DISPLAY_MANAGER_EXPORT scoped_refptr<ManagedDisplayMode>
-GetDisplayModeForNextUIScale(const ManagedDisplayInfo& info, bool up);
-
-// Gets the display mode for the next valid resolution. Returns false
-// if the display is an internal display.
-DISPLAY_MANAGER_EXPORT scoped_refptr<ManagedDisplayMode>
-GetDisplayModeForNextResolution(const ManagedDisplayInfo& info, bool up);
+    const ManagedDisplayMode& native_mode,
+    const std::vector<UnifiedDisplayModeParam>& modes_param_list);
 
 // Tests if the |info| has display mode that matches |ui_scale|.
 bool HasDisplayModeForUIScale(const ManagedDisplayInfo& info, float ui_scale);
+
+// Returns true if the first display should unconditionally be considered an
+// internal display.
+bool ForceFirstDisplayInternal();
 
 // Computes the bounds that defines the bounds between two displays.
 // Returns false if two displays do not intersect.

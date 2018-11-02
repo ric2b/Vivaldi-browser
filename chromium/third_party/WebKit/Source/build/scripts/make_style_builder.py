@@ -28,55 +28,60 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
+import types
 
 from core.css import css_properties
 import json5_generator
-from name_utilities import lower_first, upper_camel_case
+from name_utilities import lower_first
 import template_expander
 
 
-def apply_property_naming_defaults(property_):
-    def set_if_none(property_, key, value):
-        if property_[key] is None:
-            property_[key] = value
-
-    # TODO(shend): Use name_utilities for manipulating names.
-    # TODO(shend): Rearrange the code below to separate assignment and set_if_none
-    upper_camel = upper_camel_case(property_['name'])
-    set_if_none(property_, 'name_for_methods', upper_camel.replace('Webkit', ''))
-    name = property_['name_for_methods']
-    simple_type_name = str(property_['type_name']).split('::')[-1]
-    set_if_none(property_, 'type_name', 'E' + name)
-    set_if_none(property_, 'getter', name if simple_type_name != name else 'Get' + name)
-    set_if_none(property_, 'setter', 'Set' + name)
-    set_if_none(property_, 'inherited', False)
-    set_if_none(property_, 'initial', 'Initial' + name)
-
-    if property_['custom_all']:
-        property_['custom_initial'] = True
-        property_['custom_inherit'] = True
-        property_['custom_value'] = True
-    if property_['inherited']:
-        property_['is_inherited_setter'] = 'Set' + name + 'IsInherited'
-    property_['should_declare_functions'] = not property_['use_handlers_for'] and not property_['longhands'] \
-        and not property_['direction_aware'] and not property_['builder_skip'] \
+def calculate_apply_functions_to_declare(property_):
+    property_['should_declare_functions'] = \
+        not property_['longhands'] \
+        and not property_['direction_aware_options'] \
+        and not property_['builder_skip'] \
         and property_['is_property']
+    # Functions should only be used in StyleBuilder if the CSSProperty
+    # class is shared or not implemented yet (shared classes are denoted by
+    # property_class = "some string").
+    property_['use_property_class_in_stylebuilder'] = \
+        property_['should_declare_functions'] \
+        and not (property_['custom_apply_functions_initial'] or
+                 property_['custom_apply_functions_inherit'] or
+                 property_['custom_apply_functions_value']) \
+        and property_['property_class'] \
+        and isinstance(property_['property_class'], types.BooleanType)
+    if property_['custom_apply_functions_all']:
+        if (property_['upper_camel_name'] in
+                ['Clip', 'ColumnCount', 'ColumnGap', 'ColumnWidth', 'ZIndex']):
+            property_['use_property_class_in_stylebuilder'] = True
 
 
-class StyleBuilderWriter(css_properties.CSSProperties):
+class StyleBuilderWriter(json5_generator.Writer):
     filters = {
         'lower_first': lower_first,
     }
 
-    def __init__(self, json5_file_path):
-        super(StyleBuilderWriter, self).__init__(json5_file_path)
-        self._outputs = {('StyleBuilderFunctions.h'): self.generate_style_builder_functions_h,
-                         ('StyleBuilderFunctions.cpp'): self.generate_style_builder_functions_cpp,
-                         ('StyleBuilder.cpp'): self.generate_style_builder,
-                        }
+    def __init__(self, json5_file_paths):
+        super(StyleBuilderWriter, self).__init__([])
+        self._outputs = {
+            'StyleBuilderFunctions.h': self.generate_style_builder_functions_h,
+            'StyleBuilderFunctions.cpp':
+                self.generate_style_builder_functions_cpp,
+            'StyleBuilder.cpp': self.generate_style_builder,
+        }
 
-        for property in self._properties.values():
-            apply_property_naming_defaults(property)
+        self._json5_properties = css_properties.CSSProperties(json5_file_paths)
+        self._input_files = json5_file_paths
+        self._properties = self._json5_properties.longhands + \
+            self._json5_properties.shorthands
+        for property_ in self._properties:
+            calculate_apply_functions_to_declare(property_)
+
+    @property
+    def css_properties(self):
+        return self._json5_properties
 
     @template_expander.use_jinja('templates/StyleBuilderFunctions.h.tmpl',
                                  filters=filters)
@@ -92,13 +97,16 @@ class StyleBuilderWriter(css_properties.CSSProperties):
         return {
             'input_files': self._input_files,
             'properties': self._properties,
+            'properties_by_id': self._json5_properties.properties_by_id,
         }
 
-    @template_expander.use_jinja('templates/StyleBuilder.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja(
+        'templates/StyleBuilder.cpp.tmpl', filters=filters)
     def generate_style_builder(self):
         return {
             'input_files': self._input_files,
             'properties': self._properties,
+            'properties_by_id': self._json5_properties.properties_by_id,
         }
 
 

@@ -25,13 +25,17 @@
 #ifndef UserMediaController_h
 #define UserMediaController_h
 
+#include <memory>
+
 #include "core/frame/LocalFrame.h"
 #include "modules/mediastream/UserMediaClient.h"
 
 namespace blink {
 
+class ApplyConstraintsRequest;
 class MediaDevices;
 class MediaDevicesRequest;
+class MediaStreamComponent;
 class UserMediaRequest;
 
 class UserMediaController final
@@ -41,7 +45,7 @@ class UserMediaController final
 
  public:
   UserMediaController(LocalFrame&, std::unique_ptr<UserMediaClient>);
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   UserMediaClient* Client() const { return client_.get(); }
 
@@ -49,6 +53,8 @@ class UserMediaController final
   void CancelUserMediaRequest(UserMediaRequest*);
   void RequestMediaDevices(MediaDevicesRequest*);
   void SetMediaDeviceChangeObserver(MediaDevices*);
+  void ApplyConstraints(ApplyConstraintsRequest*);
+  void StopTrack(MediaStreamComponent*);
 
   static const char* SupplementName();
   static UserMediaController* From(LocalFrame* frame) {
@@ -77,6 +83,15 @@ inline void UserMediaController::RequestMediaDevices(
 inline void UserMediaController::SetMediaDeviceChangeObserver(
     MediaDevices* observer) {
   client_->SetMediaDeviceChangeObserver(observer);
+}
+
+inline void UserMediaController::ApplyConstraints(
+    ApplyConstraintsRequest* request) {
+  client_->ApplyConstraints(request);
+}
+
+inline void UserMediaController::StopTrack(MediaStreamComponent* track) {
+  client_->StopTrack(track);
 }
 
 }  // namespace blink

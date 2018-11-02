@@ -29,6 +29,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -70,7 +71,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
   }
 
   void TearDown() override {
-    IndexedDBClassFactory::SetIndexedDBClassFactoryGetter(NULL);
+    IndexedDBClassFactory::SetIndexedDBClassFactoryGetter(nullptr);
     ContentBrowserTest::TearDown();
   }
 
@@ -163,7 +164,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     PostTaskAndReplyWithResult(
         GetContext()->TaskRunner(), FROM_HERE,
         base::BindOnce(&IndexedDBContextImpl::GetOriginBlobFileCount,
-                       GetContext(), Origin(GURL("file:///"))),
+                       GetContext(), Origin::Create(GURL("file:///"))),
         base::BindOnce(&IndexedDBBrowserTest::DidGetBlobFileCount,
                        base::Unretained(this)));
     scoped_refptr<base::ThreadTestHelper> helper(
@@ -586,7 +587,7 @@ static void CorruptIndexedDBDatabase(
   signal_when_finished->Signal();
 }
 
-const std::string s_corrupt_db_test_prefix = "/corrupt/test/";
+static const char s_corrupt_db_test_prefix[] = "/corrupt/test/";
 
 static std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
     IndexedDBContextImpl* context,
@@ -596,7 +597,8 @@ static std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
     const net::test_server::HttpRequest& request) {
   std::string request_path;
   if (path.find(s_corrupt_db_test_prefix) != std::string::npos)
-    request_path = request.relative_url.substr(s_corrupt_db_test_prefix.size());
+    request_path = request.relative_url.substr(
+        std::string(s_corrupt_db_test_prefix).size());
   else
     return std::unique_ptr<net::test_server::HttpResponse>();
 
@@ -709,17 +711,18 @@ static std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
 IN_PROC_BROWSER_TEST_P(IndexedDBBrowserTest, OperationOnCorruptedOpenDatabase) {
   ASSERT_TRUE(embedded_test_server()->Started() ||
               embedded_test_server()->InitializeAndListen());
-  const Origin origin(embedded_test_server()->base_url());
+  const Origin origin = Origin::Create(embedded_test_server()->base_url());
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&CorruptDBRequestHandler, base::Unretained(GetContext()),
                  origin, s_corrupt_db_test_prefix, this));
   embedded_test_server()->StartAcceptingConnections();
 
-  std::string test_file = s_corrupt_db_test_prefix +
+  std::string test_file = std::string(s_corrupt_db_test_prefix) +
                           "corrupted_open_db_detection.html#" + GetParam();
   SimpleTest(embedded_test_server()->GetURL(test_file));
 
-  test_file = s_corrupt_db_test_prefix + "corrupted_open_db_recovery.html";
+  test_file =
+      std::string(s_corrupt_db_test_prefix) + "corrupted_open_db_recovery.html";
   SimpleTest(embedded_test_server()->GetURL(test_file));
 }
 
@@ -782,11 +785,12 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, PRE_VersionChangeCrashResilience) {
   NavigateAndWaitForTitle(shell(), "version_change_crash.html", "#part2",
                           "pass - part2 - crash me");
-  // If we actually crash here then googletest will not run the next step
-  // (VersionChangeCrashResilience) as an optimization. googletest's
-  // ASSERT_DEATH/EXIT fails to work properly (on Windows) due to how we
-  // implement the PRE_* test mechanism.
-  exit(0);
+  // Previously this test would abruptly terminate the browser process
+  // to ensure that the version update was not partially committed,
+  // which was possible in the very early implementation (circa 2011).
+  // This test no longer abruptly terminates the process, but the
+  // commit scheme has changed so it's not plausible any more anyway.
+  // TODO(jsbell): Delete or rename the test.
 }
 
 // Fails to cleanup GPU processes on swarming.
@@ -824,7 +828,7 @@ IN_PROC_BROWSER_TEST_F(
   base::string16 expected_title16(ASCIIToUTF16("setVersion(3) complete"));
   TitleWatcher title_watcher(new_shell->web_contents(), expected_title16);
 
-  shell()->web_contents()->GetRenderProcessHost()->Shutdown(0, true);
+  shell()->web_contents()->GetMainFrame()->GetProcess()->Shutdown(0, true);
   shell()->Close();
 
   EXPECT_EQ(expected_title16, title_watcher.WaitAndGetTitle());
@@ -833,7 +837,7 @@ IN_PROC_BROWSER_TEST_F(
 // Verify that a "close" event is fired at database connections when
 // the backing store is deleted.
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, ForceCloseEventTest) {
-  NavigateAndWaitForTitle(shell(), "force_close_event.html", NULL,
+  NavigateAndWaitForTitle(shell(), "force_close_event.html", nullptr,
                           "connection ready");
   // TODO(jsbell): Remove static_cast<> when overloads are eliminated.
   GetContext()->TaskRunner()->PostTask(

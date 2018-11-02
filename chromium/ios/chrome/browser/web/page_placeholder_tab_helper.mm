@@ -19,9 +19,9 @@ DEFINE_WEB_STATE_USER_DATA_KEY(PagePlaceholderTabHelper);
 PagePlaceholderTabHelper::PagePlaceholderTabHelper(
     web::WebState* web_state,
     id<PagePlaceholderTabHelperDelegate> delegate)
-    : web::WebStateObserver(web_state),
-      delegate_(delegate),
-      weak_factory_(this) {}
+    : delegate_(delegate), weak_factory_(this) {
+  web_state->AddObserver(this);
+}
 
 PagePlaceholderTabHelper::~PagePlaceholderTabHelper() {
   RemovePlaceholder();
@@ -44,6 +44,7 @@ void PagePlaceholderTabHelper::AddPlaceholderForNextNavigation() {
 }
 
 void PagePlaceholderTabHelper::DidStartNavigation(
+    web::WebState* web_state,
     web::NavigationContext* navigation_context) {
   if (add_placeholder_for_next_navigation_) {
     add_placeholder_for_next_navigation_ = false;
@@ -51,11 +52,13 @@ void PagePlaceholderTabHelper::DidStartNavigation(
   }
 }
 
-void PagePlaceholderTabHelper::PageLoaded(web::PageLoadCompletionStatus) {
+void PagePlaceholderTabHelper::PageLoaded(web::WebState* web_state,
+                                          web::PageLoadCompletionStatus) {
   RemovePlaceholder();
 }
 
-void PagePlaceholderTabHelper::WebStateDestroyed() {
+void PagePlaceholderTabHelper::WebStateDestroyed(web::WebState* web_state) {
+  web_state->RemoveObserver(this);
   RemovePlaceholder();
 }
 

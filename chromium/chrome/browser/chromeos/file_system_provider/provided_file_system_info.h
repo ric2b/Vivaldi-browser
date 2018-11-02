@@ -21,17 +21,50 @@ struct MountOptions {
   MountOptions(const std::string& file_system_id,
                const std::string& display_name);
 
+  MountOptions(const MountOptions& source);
+
   std::string file_system_id;
   std::string display_name;
   bool writable;
   bool supports_notify_tag;
   int opened_files_limit;
+  bool persistent;
+};
+
+class ProviderId {
+ public:
+  enum ProviderType : uint32_t { EXTENSION, NATIVE, INVALID };
+  ProviderId();
+
+  static ProviderId CreateFromExtensionId(const std::string& extension_id);
+  static ProviderId CreateFromNativeId(const std::string& native_id);
+
+  const std::string& GetIdUnsafe() const;
+  const std::string& GetExtensionId() const;
+  const std::string& GetNativeId() const;
+  std::string ToString() const;
+  ProviderType GetType() const;
+
+  bool operator==(const ProviderId& other) const;
+
+ private:
+  ProviderId(const std::string& internal_id, ProviderType provider_type);
+
+  std::string internal_id_;
+  ProviderType type_;
 };
 
 // Contains information about the provided file system instance.
 class ProvidedFileSystemInfo {
  public:
   ProvidedFileSystemInfo();
+
+  ProvidedFileSystemInfo(const ProviderId& provider_id,
+                         const MountOptions& mount_options,
+                         const base::FilePath& mount_path,
+                         bool configurable,
+                         bool watchable,
+                         extensions::FileSystemProviderSource source);
 
   ProvidedFileSystemInfo(const std::string& extension_id,
                          const MountOptions& mount_options,
@@ -44,7 +77,7 @@ class ProvidedFileSystemInfo {
 
   ~ProvidedFileSystemInfo();
 
-  const std::string& extension_id() const { return extension_id_; }
+  const ProviderId& provider_id() const { return provider_id_; }
   const std::string& file_system_id() const { return file_system_id_; }
   const std::string& display_name() const { return display_name_; }
   bool writable() const { return writable_; }
@@ -56,8 +89,8 @@ class ProvidedFileSystemInfo {
   extensions::FileSystemProviderSource source() const { return source_; }
 
  private:
-  // ID of the extension providing this file system.
-  std::string extension_id_;
+  // ID of the provider supplying this file system.
+  ProviderId provider_id_;
 
   // ID of the file system.
   std::string file_system_id_;

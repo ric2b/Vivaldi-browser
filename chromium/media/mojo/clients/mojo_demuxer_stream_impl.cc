@@ -24,7 +24,7 @@ MojoDemuxerStreamImpl::MojoDemuxerStreamImpl(
       stream_(stream),
       weak_factory_(this) {}
 
-MojoDemuxerStreamImpl::~MojoDemuxerStreamImpl() {}
+MojoDemuxerStreamImpl::~MojoDemuxerStreamImpl() = default;
 
 // This is called when our DemuxerStreamClient has connected itself and is
 // ready to receive messages.  Send an initial config and notify it that
@@ -45,8 +45,9 @@ void MojoDemuxerStreamImpl::Initialize(InitializeCallback callback) {
   }
 
   mojo::ScopedDataPipeConsumerHandle remote_consumer_handle;
-  mojo_decoder_buffer_writer_ =
-      MojoDecoderBufferWriter::Create(stream_->type(), &remote_consumer_handle);
+  mojo_decoder_buffer_writer_ = MojoDecoderBufferWriter::Create(
+      GetDefaultDecoderBufferConverterCapacity(stream_->type()),
+      &remote_consumer_handle);
 
   std::move(callback).Run(stream_->type(), std::move(remote_consumer_handle),
                           audio_config, video_config);

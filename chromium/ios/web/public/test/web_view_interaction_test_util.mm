@@ -19,6 +19,9 @@
 #endif
 
 using web::NavigationManager;
+using testing::WaitUntilConditionOrTimeout;
+using testing::kWaitForUIElementTimeout;
+using testing::kWaitForJSCompletionTimeout;
 
 namespace web {
 namespace test {
@@ -40,23 +43,25 @@ std::unique_ptr<base::Value> ExecuteJavaScript(web::WebState* web_state,
                                  did_finish = true;
                                }));
 
-  bool completed = testing::WaitUntilConditionOrTimeout(
-      testing::kWaitForJSCompletionTimeout, ^{
-        return did_finish;
-      });
+  bool completed = WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return did_finish;
+  });
   if (!completed) {
     return nullptr;
   }
 
   // As result is marked __block, this return call does a copy and not a move
   // (marking the variable as __block mean it is allocated in the block object
-  // and not the stack). Since the "return std::move()" pattern is discouraged
-  // use a local variable.
+  // and not the stack). Use an explicit move to a local variable.
   //
-  // Fixes the following compilation failure:
-  //   ../web_view_matchers.mm:ll:cc: error: call to implicitly-deleted copy
-  //       constructor of 'std::unique_ptr<base::Value>'
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
+  // Fixes the following compilation failures:
+  //   ../web_view_interaction_test_util.mm:58:10: error:
+  //       call to implicitly-deleted copy constructor of
+  //       'std::unique_ptr<base::Value>'
+  //
+  //   ../web_view_interaction_test_util.mm:58:10: error:
+  //       moving a local object in a return statement prevents copy elision
+  //       [-Werror,-Wpessimizing-move]
   std::unique_ptr<base::Value> stack_result = std::move(result);
   return stack_result;
 }
@@ -83,22 +88,21 @@ CGRect GetBoundingRectOfElementWithId(web::WebState* web_state,
 
   __block base::DictionaryValue const* rect = nullptr;
 
-  bool found =
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-        std::unique_ptr<base::Value> value =
-            ExecuteJavaScript(web_state, kGetBoundsScript);
-        base::DictionaryValue* dictionary = nullptr;
-        if (value && value->GetAsDictionary(&dictionary)) {
-          std::string error;
-          if (dictionary->GetString("error", &error)) {
-            DLOG(ERROR) << "Error getting rect: " << error << ", retrying..";
-          } else {
-            rect = dictionary->DeepCopy();
-            return true;
-          }
-        }
-        return false;
-      });
+  bool found = WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^{
+    std::unique_ptr<base::Value> value =
+        ExecuteJavaScript(web_state, kGetBoundsScript);
+    base::DictionaryValue* dictionary = nullptr;
+    if (value && value->GetAsDictionary(&dictionary)) {
+      std::string error;
+      if (dictionary->GetString("error", &error)) {
+        DLOG(ERROR) << "Error getting rect: " << error << ", retrying..";
+      } else {
+        rect = dictionary->DeepCopy();
+        return true;
+      }
+    }
+    return false;
+  });
 
   if (!found)
     return CGRectNull;
@@ -156,11 +160,11 @@ bool RunActionOnWebViewElementWithId(web::WebState* web_state,
                     element_found = [result boolValue];
                   }];
 
-  testing::WaitUntilConditionOrTimeout(testing::kWaitForJSCompletionTimeout, ^{
+  bool js_finished = WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
     return did_complete;
   });
 
-  return element_found;
+  return js_finished && element_found;
 }
 
 bool TapWebViewElementWithId(web::WebState* web_state,

@@ -82,14 +82,16 @@ bool DefaultAccessPolicy::CanDeleteWindow(const ServerWindow* window) const {
 
 bool DefaultAccessPolicy::CanGetWindowTree(const ServerWindow* window) const {
   return WasCreatedByThisClient(window) ||
-         delegate_->HasRootForAccessPolicy(window);
+         delegate_->HasRootForAccessPolicy(window) ||
+         delegate_->ShouldInterceptEventsForAccessPolicy(window);
 }
 
 bool DefaultAccessPolicy::CanDescendIntoWindowForWindowTree(
     const ServerWindow* window) const {
   return (WasCreatedByThisClient(window) &&
           !delegate_->IsWindowRootOfAnotherTreeForAccessPolicy(window)) ||
-         delegate_->HasRootForAccessPolicy(window);
+         delegate_->HasRootForAccessPolicy(window) ||
+         delegate_->ShouldInterceptEventsForAccessPolicy(window);
 }
 
 bool DefaultAccessPolicy::CanEmbed(const ServerWindow* window) const {
@@ -184,6 +186,11 @@ bool DefaultAccessPolicy::CanStackAtTop(const ServerWindow* window) const {
          delegate_->IsWindowCreatedByWindowManager(window);
 }
 
+bool DefaultAccessPolicy::CanPerformWmAction(const ServerWindow* window) const {
+  return WasCreatedByThisClient(window) ||
+         delegate_->HasRootForAccessPolicy(window);
+}
+
 bool DefaultAccessPolicy::CanSetCursorProperties(
     const ServerWindow* window) const {
   return WasCreatedByThisClient(window) ||
@@ -205,8 +212,33 @@ bool DefaultAccessPolicy::ShouldNotifyOnHierarchyChange(
     const ServerWindow* window,
     const ServerWindow** new_parent,
     const ServerWindow** old_parent) const {
-  if (!WasCreatedByThisClient(window))
+  if (!WasCreatedByThisClient(window)) {
+    // The window may have been exposed to the client because of
+    // ShouldInterceptEventsForAccessPolicy(). Notify the parent in this case,
+    // but the |old_parent| and/or |new_parent| may need to be updated.
+    if (delegate_->IsWindowKnownForAccessPolicy(window)) {
+      if (*old_parent && !delegate_->IsWindowKnownForAccessPolicy(*old_parent))
+        *old_parent = nullptr;
+      if (*new_parent &&
+          (!delegate_->IsWindowKnownForAccessPolicy(*new_parent) &&
+           delegate_->ShouldInterceptEventsForAccessPolicy(*new_parent))) {
+        *new_parent = nullptr;
+      }
+      return true;
+    }
+
+    // Let the client know about |window| if the client intercepts events for
+    // |new_parent|.
+    if (*new_parent &&
+        delegate_->ShouldInterceptEventsForAccessPolicy(*new_parent)) {
+      if (*old_parent &&
+          !delegate_->ShouldInterceptEventsForAccessPolicy(*old_parent)) {
+        *old_parent = nullptr;
+      }
+      return true;
+    }
     return false;
+  }
 
   if (*new_parent && !WasCreatedByThisClient(*new_parent) &&
       !delegate_->HasRootForAccessPolicy((*new_parent))) {
@@ -240,9 +272,9 @@ bool DefaultAccessPolicy::WasCreatedByThisClient(
 bool DefaultAccessPolicy::IsValidIdForNewWindow(
     const ClientWindowId& id) const {
   // Clients using DefaultAccessPolicy only see windows they have created (for
-  // the embed point they choose the id), so it's ok for clients to use whatever
-  // id they want.
-  return true;
+  // the embed point they choose the id), which should have the same client_id
+  // as the client_id_ since we should have already filled in the real one.
+  return base::checked_cast<ClientSpecificId>(id.client_id()) == client_id_;
 }
 
 }  // namespace ws

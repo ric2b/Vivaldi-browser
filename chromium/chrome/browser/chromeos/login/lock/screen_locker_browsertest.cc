@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -47,14 +48,10 @@ namespace {
 // An object that wait for lock state and fullscreen state.
 class Waiter : public content::NotificationObserver {
  public:
-  explicit Waiter(Browser* browser)
-      : browser_(browser),
-        running_(false) {
-    registrar_.Add(this,
-                   chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED,
+  explicit Waiter(Browser* browser) : browser_(browser), running_(false) {
+    registrar_.Add(this, chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED,
                    content::NotificationService::AllSources());
-    registrar_.Add(this,
-                   chrome::NOTIFICATION_FULLSCREEN_CHANGED,
+    registrar_.Add(this, chrome::NOTIFICATION_FULLSCREEN_CHANGED,
                    content::NotificationService::AllSources());
   }
 
@@ -99,8 +96,7 @@ namespace chromeos {
 
 class ScreenLockerTest : public InProcessBrowserTest {
  public:
-  ScreenLockerTest() : fake_session_manager_client_(NULL) {
-  }
+  ScreenLockerTest() : fake_session_manager_client_(NULL) {}
 
  protected:
   FakeSessionManagerClient* fake_session_manager_client_;
@@ -118,8 +114,12 @@ class ScreenLockerTest : public InProcessBrowserTest {
 
   // Verifies if LockScreenDismissed() was called once.
   bool VerifyLockScreenDismissed() {
-    return 1 == fake_session_manager_client_->
-                    notify_lock_screen_dismissed_call_count();
+    return 1 == fake_session_manager_client_
+                    ->notify_lock_screen_dismissed_call_count();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kLoginProfile, "user");
   }
 
  private:
@@ -132,16 +132,26 @@ class ScreenLockerTest : public InProcessBrowserTest {
         ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kLoginProfile, "user");
-  }
-
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> zero_duration_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenLockerTest);
 };
 
-IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
+class WebUiScreenLockerTest : public ScreenLockerTest {
+ public:
+  WebUiScreenLockerTest() = default;
+  ~WebUiScreenLockerTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ScreenLockerTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(ash::switches::kShowWebUiLock);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WebUiScreenLockerTest);
+};
+
+IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestBasic) {
   ScreenLocker::Show();
   std::unique_ptr<test::ScreenLockerTester> tester(ScreenLocker::GetTester());
   tester->EmulateWindowManagerReady();
@@ -173,8 +183,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
   // SessionManager to announce this over DBus.
   EXPECT_FALSE(tester->IsLocked());
   EXPECT_EQ(
-      1,
-      fake_session_manager_client_->notify_lock_screen_shown_call_count());
+      1, fake_session_manager_client_->notify_lock_screen_shown_call_count());
   EXPECT_EQ(session_manager::SessionState::ACTIVE,
             session_manager::SessionManager::Get()->session_state());
 
@@ -190,15 +199,15 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, LockScreenWhileAddingUser) {
 }
 
 // Test how locking the screen affects an active fullscreen window.
-IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
+IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestFullscreenExit) {
   // 1) If the active browser window is in fullscreen and the fullscreen window
   // does not have all the pixels (e.g. the shelf is auto hidden instead of
   // hidden), locking the screen should not exit fullscreen. The shelf is
   // auto hidden when in immersive fullscreen.
   std::unique_ptr<test::ScreenLockerTester> tester(ScreenLocker::GetTester());
   BrowserWindow* browser_window = browser()->window();
-  ash::wm::WindowState* window_state = ash::wm::GetWindowState(
-      browser_window->GetNativeWindow());
+  ash::wm::WindowState* window_state =
+      ash::wm::GetWindowState(browser_window->GetNativeWindow());
   {
     Waiter waiter(browser());
     browser()
@@ -207,7 +216,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
         ->ToggleBrowserFullscreenMode();
     waiter.Wait(false /* not locked */, true /* full screen */);
     EXPECT_TRUE(browser_window->IsFullscreen());
-    EXPECT_FALSE(window_state->hide_shelf_when_fullscreen());
+    EXPECT_FALSE(window_state->GetHideShelfWhenFullscreen());
     EXPECT_FALSE(tester->IsLocked());
   }
   {
@@ -216,7 +225,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
     tester->EmulateWindowManagerReady();
     waiter.Wait(true /* locked */, true /* full screen */);
     EXPECT_TRUE(browser_window->IsFullscreen());
-    EXPECT_FALSE(window_state->hide_shelf_when_fullscreen());
+    EXPECT_FALSE(window_state->GetHideShelfWhenFullscreen());
     EXPECT_TRUE(tester->IsLocked());
   }
   UserContext user_context(user_manager::StubAccountId());
@@ -252,7 +261,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
         ->EnterFullscreenModeForTab(web_contents, GURL());
     waiter.Wait(false /* not locked */, true /* fullscreen */);
     EXPECT_TRUE(browser_window->IsFullscreen());
-    EXPECT_TRUE(window_state->hide_shelf_when_fullscreen());
+    EXPECT_TRUE(window_state->GetHideShelfWhenFullscreen());
     EXPECT_FALSE(tester->IsLocked());
   }
   {
@@ -269,16 +278,15 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
   EXPECT_FALSE(tester->IsLocked());
 
   EXPECT_EQ(
-      2,
-      fake_session_manager_client_->notify_lock_screen_shown_call_count());
+      2, fake_session_manager_client_->notify_lock_screen_shown_call_count());
   EXPECT_EQ(
       2,
       fake_session_manager_client_->notify_lock_screen_dismissed_call_count());
 }
 
 void SimulateKeyPress(views::Widget* widget, ui::KeyboardCode key_code) {
-  ui_controls::SendKeyPress(widget->GetNativeWindow(),
-                            key_code, false, false, false, false);
+  ui_controls::SendKeyPress(widget->GetNativeWindow(), key_code, false, false,
+                            false, false);
 }
 
 void UnlockKeyPress(views::Widget* widget) {
@@ -293,9 +301,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestShowTwice) {
   ScreenLocker::Show();
   EXPECT_TRUE(tester->IsLocked());
   EXPECT_EQ(
-      2,
-      fake_session_manager_client_->notify_lock_screen_shown_call_count());
-
+      2, fake_session_manager_client_->notify_lock_screen_shown_call_count());
 
   // Close the locker to match expectations.
   ScreenLocker::Hide();
@@ -311,8 +317,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, DISABLED_TestEscape) {
   LockScreen(tester.get());
 
   EXPECT_EQ(
-      1,
-      fake_session_manager_client_->notify_lock_screen_shown_call_count());
+      1, fake_session_manager_client_->notify_lock_screen_shown_call_count());
 
   tester->SetPassword("password");
   EXPECT_EQ("password", tester->GetPassword());

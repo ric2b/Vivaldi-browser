@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "ash/accessibility_delegate.h"
-#include "ash/accessibility_types.h"
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/ime/ime_controller.h"
+#include "ash/public/cpp/accessibility_types.h"
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/system/ime_menu/ime_list_view.h"
@@ -17,15 +17,15 @@
 #include "ash/test/ash_test_base.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/keyboard/keyboard_util.h"
 
 namespace ash {
 
 class TrayIMETest : public AshTestBase {
  public:
-  TrayIMETest() {}
-  ~TrayIMETest() override {}
+  TrayIMETest() = default;
+  ~TrayIMETest() override = default;
 
   views::View* default_view() const { return default_view_.get(); }
 
@@ -113,30 +113,26 @@ void TrayIMETest::SuppressKeyboard() {
   DCHECK(!keyboard_suppressed_);
   keyboard_suppressed_ = true;
 
-  ui::DeviceDataManager* device_manager = ui::DeviceDataManager::GetInstance();
-  touchscreen_devices_to_restore_ = device_manager->GetTouchscreenDevices();
-  keyboard_devices_to_restore_ = device_manager->GetKeyboardDevices();
+  ui::InputDeviceManager* manager = ui::InputDeviceManager::GetInstance();
+  touchscreen_devices_to_restore_ = manager->GetTouchscreenDevices();
+  keyboard_devices_to_restore_ = manager->GetKeyboardDevices();
 
-  ui::DeviceHotplugEventObserver* manager =
-      ui::DeviceDataManager::GetInstance();
   std::vector<ui::TouchscreenDevice> screens;
-  screens.push_back(
-      ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
-                            "Touchscreen", gfx::Size(1024, 768), 0));
-  manager->OnTouchscreenDevicesUpdated(screens);
+  screens.emplace_back(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+                       "Touchscreen", gfx::Size(1024, 768), 0);
+  manager->SetTouchscreenDevicesForTesting(screens);
 
   std::vector<ui::InputDevice> keyboards;
   keyboards.push_back(ui::InputDevice(
       2, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard"));
-  manager->OnKeyboardDevicesUpdated(keyboards);
+  manager->SetKeyboardDevicesForTesting(keyboards);
 }
 
 void TrayIMETest::RestoreKeyboard() {
   DCHECK(keyboard_suppressed_);
-  ui::DeviceHotplugEventObserver* manager =
-      ui::DeviceDataManager::GetInstance();
-  manager->OnTouchscreenDevicesUpdated(touchscreen_devices_to_restore_);
-  manager->OnKeyboardDevicesUpdated(keyboard_devices_to_restore_);
+  ui::InputDeviceManager* manager = ui::InputDeviceManager::GetInstance();
+  manager->SetTouchscreenDevicesForTesting(touchscreen_devices_to_restore_);
+  manager->SetKeyboardDevicesForTesting(keyboard_devices_to_restore_);
 }
 
 void TrayIMETest::SetUp() {

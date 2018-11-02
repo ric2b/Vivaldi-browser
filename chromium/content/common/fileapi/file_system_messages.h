@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef CONTENT_COMMON_FILEAPI_FILE_SYSTEM_MESSAGES_H_
+#define CONTENT_COMMON_FILEAPI_FILE_SYSTEM_MESSAGES_H_
+
 // IPC messages for the file system.
-// Multiply-included message file, hence no include guard.
 
 #include <stdint.h>
 
@@ -30,7 +32,8 @@ IPC_STRUCT_TRAITS_BEGIN(storage::FileSystemInfo)
   IPC_STRUCT_TRAITS_MEMBER(mount_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS(storage::FileSystemType)
+IPC_ENUM_TRAITS_MAX_VALUE(storage::FileSystemType,
+                          storage::FileSystemType::kFileSystemTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(storage::QuotaLimitType, storage::kQuotaLimitTypeLast)
 
 // File system messages sent from the browser to the child process.
@@ -163,3 +166,5 @@ IPC_MESSAGE_CONTROL1(FileSystemHostMsg_DidReceiveSnapshotFile,
 IPC_SYNC_MESSAGE_CONTROL1_1(FileSystemHostMsg_SyncGetPlatformPath,
                             GURL /* file path */,
                             base::FilePath /* platform_path */)
+
+#endif  // CONTENT_COMMON_FILEAPI_FILE_SYSTEM_MESSAGES_H_

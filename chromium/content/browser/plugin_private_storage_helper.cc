@@ -125,8 +125,8 @@ void PluginPrivateDataByOriginChecker::CheckFilesOnIOThread() {
   filesystem_context_->OpenPluginPrivateFileSystem(
       origin_, storage::kFileSystemTypePluginPrivate, fsid_, plugin_name_,
       storage::OPEN_FILE_SYSTEM_FAIL_IF_NONEXISTENT,
-      base::Bind(&PluginPrivateDataByOriginChecker::OnFileSystemOpened,
-                 base::Unretained(this)));
+      base::BindOnce(&PluginPrivateDataByOriginChecker::OnFileSystemOpened,
+                     base::Unretained(this)));
 }
 
 void PluginPrivateDataByOriginChecker::OnFileSystemOpened(
@@ -146,7 +146,7 @@ void PluginPrivateDataByOriginChecker::OnFileSystemOpened(
   std::string root = storage::GetIsolatedFileSystemRootURIString(
       origin_, fsid_, ppapi::kPluginPrivateRootName);
   std::unique_ptr<storage::FileSystemOperationContext> operation_context =
-      base::MakeUnique<storage::FileSystemOperationContext>(
+      std::make_unique<storage::FileSystemOperationContext>(
           filesystem_context_);
   file_util->ReadDirectory(
       std::move(operation_context), filesystem_context_->CrackURL(GURL(root)),
@@ -185,7 +185,7 @@ void PluginPrivateDataByOriginChecker::OnDirectoryRead(
       DCHECK(!file.is_directory);  // Nested directories not implemented.
 
       std::unique_ptr<storage::FileSystemOperationContext> operation_context =
-          base::MakeUnique<storage::FileSystemOperationContext>(
+          std::make_unique<storage::FileSystemOperationContext>(
               filesystem_context_);
       storage::FileSystemURL file_url = filesystem_context_->CrackURL(
           GURL(root + StringTypeToString(file.name)));
@@ -242,7 +242,7 @@ void PluginPrivateDataByOriginChecker::DecrementTaskCount() {
   // If there are no more tasks in progress, then run |callback_| on the
   // proper thread.
   filesystem_context_->default_file_task_runner()->PostTask(
-      FROM_HERE, base::Bind(callback_, delete_this_origin_data_, origin_));
+      FROM_HERE, base::BindOnce(callback_, delete_this_origin_data_, origin_));
   delete this;
 }
 
@@ -323,8 +323,9 @@ void PluginPrivateDataDeletionHelper::CheckOriginsOnFileTaskRunner(
               decrement_callback);
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
-          base::Bind(&PluginPrivateDataByOriginChecker::CheckFilesOnIOThread,
-                     base::Unretained(helper)));
+          base::BindOnce(
+              &PluginPrivateDataByOriginChecker::CheckFilesOnIOThread,
+              base::Unretained(helper)));
 
       // |helper| will delete itself when it is done.
     }

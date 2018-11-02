@@ -32,7 +32,6 @@
 
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "modules/quota/DeprecatedStorageQuotaCallbacksImpl.h"
 #include "modules/quota/StorageErrorCallback.h"
 #include "modules/quota/StorageQuotaClient.h"
@@ -43,6 +42,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebStorageQuotaCallbacks.h"
 #include "public/platform/WebStorageQuotaType.h"
 #include "public/platform/WebTraceLocation.h"
@@ -62,7 +62,8 @@ void DeprecatedStorageQuota::queryUsageAndQuota(
   if (storage_type != kWebStorageQuotaTypeTemporary &&
       storage_type != kWebStorageQuotaTypePersistent) {
     // Unknown storage type is requested.
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;
@@ -70,7 +71,8 @@ void DeprecatedStorageQuota::queryUsageAndQuota(
 
   SecurityOrigin* security_origin = execution_context->GetSecurityOrigin();
   if (security_origin->IsUnique()) {
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;
@@ -96,7 +98,8 @@ void DeprecatedStorageQuota::requestQuota(
   if (storage_type != kWebStorageQuotaTypeTemporary &&
       storage_type != kWebStorageQuotaTypePersistent) {
     // Unknown storage type is requested.
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;
@@ -104,7 +107,8 @@ void DeprecatedStorageQuota::requestQuota(
 
   StorageQuotaClient* client = StorageQuotaClient::From(execution_context);
   if (!client) {
-    TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, script_state)
+    ExecutionContext::From(script_state)
+        ->GetTaskRunner(TaskType::kMiscPlatformAPI)
         ->PostTask(BLINK_FROM_HERE, StorageErrorCallback::CreateSameThreadTask(
                                         error_callback, kNotSupportedError));
     return;

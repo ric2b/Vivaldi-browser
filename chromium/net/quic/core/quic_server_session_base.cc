@@ -55,7 +55,7 @@ void QuicServerSessionBase::OnConfigNegotiated() {
   bandwidth_resumption_enabled_ =
       last_bandwidth_resumption || max_bandwidth_resumption;
 
-  if (connection()->version() < QUIC_VERSION_35) {
+  if (connection()->transport_version() < QUIC_VERSION_35) {
     set_server_push_enabled(
         ContainsQuicTag(config()->ReceivedConnectionOptions(), kSPSH));
   }
@@ -90,7 +90,7 @@ void QuicServerSessionBase::OnConnectionClosed(QuicErrorCode error,
   QuicSession::OnConnectionClosed(error, error_details, source);
   // In the unlikely event we get a connection close while doing an asynchronous
   // crypto event, make sure we cancel the callback.
-  if (crypto_stream_.get() != nullptr) {
+  if (crypto_stream_ != nullptr) {
     crypto_stream_->CancelOutstandingCallbacks();
   }
 }

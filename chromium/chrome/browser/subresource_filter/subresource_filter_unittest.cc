@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
@@ -9,7 +11,11 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/rappor/public/rappor_parameters.h"
 #include "components/rappor/test_rappor_service.h"
+#include "components/safe_browsing/db/util.h"
+#include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/subresource_filter/content/browser/content_activation_list_utils.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
@@ -152,19 +158,6 @@ TEST_F(SubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
             observer.GetSubframeLoadPolicy(disallowed_url).value());
 }
 
-TEST_F(SubresourceFilterTest, DisableRuleset_SubframeAllowed) {
-  subresource_filter::Configuration config(
-      subresource_filter::ActivationLevel::ENABLED,
-      subresource_filter::ActivationScope::ALL_SITES);
-  config.activation_options.should_disable_ruleset_rules = true;
-  scoped_configuration().ResetConfiguration(std::move(config));
-
-  GURL url("https://a.test");
-  ConfigureAsSubresourceFilterOnlyURL(url);
-  SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-}
-
 TEST_F(SubresourceFilterTest, RefreshMetadataOnActivation) {
   const GURL url("https://a.test");
   ConfigureAsSubresourceFilterOnlyURL(url);
@@ -227,28 +220,6 @@ TEST_F(SubresourceFilterTest, ToggleForceActivation) {
                                      kActionForcedActivationEnabled, 1);
 }
 
-// Ensure that forcing activation uses its own custom configuration without
-// inheriting any custom activation options.
-TEST_F(SubresourceFilterTest,
-       ForceActivation_DisableRuleset_SubframeDisallowed) {
-  subresource_filter::Configuration config(
-      subresource_filter::ActivationLevel::ENABLED,
-      subresource_filter::ActivationScope::ALL_SITES);
-  config.activation_options.should_disable_ruleset_rules = true;
-  scoped_configuration().ResetConfiguration(std::move(config));
-
-  const GURL url("https://a.test/");
-  ConfigureAsSubresourceFilterOnlyURL(url);
-  SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-
-  GetClient()->ToggleForceActivationInCurrentWebContents(true);
-  SimulateNavigateAndCommit(url, main_rfh());
-  // should_disable_ruleset_rules is not inherited by the forced activation
-  // configuration.
-  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-}
-
 TEST_F(SubresourceFilterTest, UIShown_LogsRappor) {
   rappor::TestRapporServiceImpl rappor_tester;
   TestingBrowserProcess::GetGlobal()->SetRapporServiceImpl(&rappor_tester);
@@ -269,21 +240,64 @@ TEST_F(SubresourceFilterTest, UIShown_LogsRappor) {
   EXPECT_EQ(url.host(), sample_string);
 }
 
-TEST_F(SubresourceFilterTest, AbusiveEnforcement_NoMetadata) {
+TEST_F(SubresourceFilterTest, NotifySafeBrowsing) {
+  typedef safe_browsing::SubresourceFilterType Type;
+  typedef safe_browsing::SubresourceFilterLevel Level;
+  const struct {
+    safe_browsing::SubresourceFilterMatch match;
+    subresource_filter::ActivationList expected_activation;
+    bool expected_warning;
+  } kTestCases[]{
+      {{}, subresource_filter::ActivationList::SUBRESOURCE_FILTER, false},
+      {{{{Type::ABUSIVE, Level::ENFORCE}}, base::KEEP_FIRST_OF_DUPES},
+       subresource_filter::ActivationList::NONE,
+       false},
+      {{{{Type::ABUSIVE, Level::WARN}}, base::KEEP_FIRST_OF_DUPES},
+       subresource_filter::ActivationList::NONE,
+       false},
+      {{{{Type::BETTER_ADS, Level::ENFORCE}}, base::KEEP_FIRST_OF_DUPES},
+       subresource_filter::ActivationList::BETTER_ADS,
+       false},
+      {{{{Type::BETTER_ADS, Level::WARN}}, base::KEEP_FIRST_OF_DUPES},
+       subresource_filter::ActivationList::BETTER_ADS,
+       true},
+      {{{{Type::BETTER_ADS, Level::ENFORCE}, {Type::ABUSIVE, Level::ENFORCE}},
+        base::KEEP_FIRST_OF_DUPES},
+       subresource_filter::ActivationList::BETTER_ADS,
+       false}};
+
+  const GURL url("https://example.test");
+  for (const auto& test_case : kTestCases) {
+    subresource_filter::TestSubresourceFilterObserver observer(web_contents());
+    auto threat_type =
+        safe_browsing::SBThreatType::SB_THREAT_TYPE_SUBRESOURCE_FILTER;
+    safe_browsing::ThreatMetadata metadata;
+    metadata.subresource_filter_match = test_case.match;
+    fake_safe_browsing_database()->AddBlacklistedUrl(url, threat_type,
+                                                     metadata);
+    SimulateNavigateAndCommit(url, main_rfh());
+    bool warning = false;
+    EXPECT_EQ(test_case.expected_activation,
+              subresource_filter::GetListForThreatTypeAndMetadata(
+                  threat_type, metadata, &warning));
+  }
+}
+
+TEST_F(SubresourceFilterTest, WarningSite_NoMetadata) {
   subresource_filter::Configuration config(
       subresource_filter::ActivationLevel::ENABLED,
       subresource_filter::ActivationScope::ACTIVATION_LIST,
-      subresource_filter::ActivationList::SUBRESOURCE_FILTER);
-  config.activation_options.should_disable_ruleset_rules = true;
-  config.activation_options.should_strengthen_popup_blocker = true;
-  config.activation_options.should_suppress_notifications = true;
-
+      subresource_filter::ActivationList::BETTER_ADS);
   scoped_configuration().ResetConfiguration(std::move(config));
+  const GURL url("https://example.test/");
+  safe_browsing::ThreatMetadata metadata;
+  metadata.subresource_filter_match
+      [safe_browsing::SubresourceFilterType::BETTER_ADS] =
+      safe_browsing::SubresourceFilterLevel::WARN;
+  auto threat_type =
+      safe_browsing::SBThreatType::SB_THREAT_TYPE_SUBRESOURCE_FILTER;
+  fake_safe_browsing_database()->AddBlacklistedUrl(url, threat_type, metadata);
 
-  GURL url("https://a.test");
-  ConfigureAsSubresourceFilterOnlyURL(url);
   SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
   EXPECT_EQ(nullptr, GetSettingsManager()->GetSiteMetadata(url));
-  EXPECT_FALSE(GetClient()->did_show_ui_for_navigation());
 }

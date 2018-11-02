@@ -106,14 +106,24 @@ class VIZ_COMMON_EXPORT BeginFrameObserverBase : public BeginFrameObserver {
 // all BeginFrameSources *must* provide.
 class VIZ_COMMON_EXPORT BeginFrameSource {
  public:
-  BeginFrameSource();
+  // This restart_id should be used for BeginFrameSources that don't have to
+  // worry about process restart. For example, if a BeginFrameSource won't
+  // generate and forward BeginFrameArgs to another process or the process can't
+  // crash then this constant is appropriate to use.
+  static constexpr uint32_t kNotRestartableId = 0;
+
+  // If the BeginFrameSource will generate BeginFrameArgs that are forwarded to
+  // another processes *and* this process has crashed then |restart_id| should
+  // be incremented. This ensures that |source_id_| is still unique after
+  // process restart.
+  explicit BeginFrameSource(uint32_t restart_id);
   virtual ~BeginFrameSource();
 
   // Returns an identifier for this BeginFrameSource. Guaranteed unique within a
   // process, but not across processes. This is used to create BeginFrames that
   // originate at this source. Note that BeginFrameSources may pass on
   // BeginFrames created by other sources, with different IDs.
-  uint32_t source_id() const { return source_id_; }
+  uint64_t source_id() const { return source_id_; }
 
   // BeginFrameObservers use DidFinishFrame to provide back pressure to a frame
   // source about frame processing (rather than toggling SetNeedsBeginFrames
@@ -133,7 +143,10 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
   virtual void AsValueInto(base::trace_event::TracedValue* state) const;
 
  private:
-  uint32_t source_id_;
+  // The higher 32 bits are used for a process restart id that changes if a
+  // process allocating BeginFrameSources has been restarted. The lower 32 bits
+  // are allocated from an atomic sequence.
+  uint64_t source_id_;
 
   DISALLOW_COPY_AND_ASSIGN(BeginFrameSource);
 };
@@ -141,6 +154,8 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
 // A BeginFrameSource that does nothing.
 class VIZ_COMMON_EXPORT StubBeginFrameSource : public BeginFrameSource {
  public:
+  StubBeginFrameSource();
+
   void DidFinishFrame(BeginFrameObserver* obs) override {}
   void AddObserver(BeginFrameObserver* obs) override {}
   void RemoveObserver(BeginFrameObserver* obs) override {}
@@ -150,6 +165,7 @@ class VIZ_COMMON_EXPORT StubBeginFrameSource : public BeginFrameSource {
 // A frame source which ticks itself independently.
 class VIZ_COMMON_EXPORT SyntheticBeginFrameSource : public BeginFrameSource {
  public:
+  explicit SyntheticBeginFrameSource(uint32_t restart_id);
   ~SyntheticBeginFrameSource() override;
 
   virtual void OnUpdateVSyncParameters(base::TimeTicks timebase,
@@ -198,8 +214,8 @@ class VIZ_COMMON_EXPORT DelayBasedBeginFrameSource
     : public SyntheticBeginFrameSource,
       public DelayBasedTimeSourceClient {
  public:
-  explicit DelayBasedBeginFrameSource(
-      std::unique_ptr<DelayBasedTimeSource> time_source);
+  DelayBasedBeginFrameSource(std::unique_ptr<DelayBasedTimeSource> time_source,
+                             uint32_t restart_id);
   ~DelayBasedBeginFrameSource() override;
 
   // BeginFrameSource implementation.

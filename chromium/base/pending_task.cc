@@ -5,21 +5,16 @@
 #include "base/pending_task.h"
 
 #include "base/message_loop/message_loop.h"
-#include "base/tracked_objects.h"
 
 namespace base {
 
-PendingTask::PendingTask(const tracked_objects::Location& posted_from,
-                         OnceClosure task)
-    : PendingTask(posted_from, std::move(task), TimeTicks(), true) {}
-
-PendingTask::PendingTask(const tracked_objects::Location& posted_from,
+PendingTask::PendingTask(const Location& posted_from,
                          OnceClosure task,
                          TimeTicks delayed_run_time,
-                         bool nestable)
-    : base::TrackingInfo(posted_from, delayed_run_time),
-      task(std::move(task)),
+                         Nestable nestable)
+    : task(std::move(task)),
       posted_from(posted_from),
+      delayed_run_time(delayed_run_time),
       sequence_num(0),
       nestable(nestable),
       is_high_res(false) {
@@ -38,8 +33,7 @@ PendingTask::PendingTask(const tracked_objects::Location& posted_from,
 
 PendingTask::PendingTask(PendingTask&& other) = default;
 
-PendingTask::~PendingTask() {
-}
+PendingTask::~PendingTask() = default;
 
 PendingTask& PendingTask::operator=(PendingTask&& other) = default;
 

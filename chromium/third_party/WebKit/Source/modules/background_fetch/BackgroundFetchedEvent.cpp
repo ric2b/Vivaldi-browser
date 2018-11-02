@@ -6,10 +6,10 @@
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "modules/EventModulesNames.h"
 #include "modules/background_fetch/BackgroundFetchBridge.h"
 #include "modules/background_fetch/BackgroundFetchSettledFetch.h"
 #include "modules/background_fetch/BackgroundFetchedEventInit.h"
+#include "modules/event_modules_names.h"
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
 #include "platform/bindings/ScriptState.h"
@@ -26,11 +26,13 @@ BackgroundFetchedEvent::BackgroundFetchedEvent(
 BackgroundFetchedEvent::BackgroundFetchedEvent(
     const AtomicString& type,
     const BackgroundFetchedEventInit& initializer,
+    const String& unique_id,
     const WebVector<WebBackgroundFetchSettledFetch>& fetches,
     ScriptState* script_state,
     WaitUntilObserver* observer,
     ServiceWorkerRegistration* registration)
     : BackgroundFetchEvent(type, initializer, observer),
+      unique_id_(unique_id),
       registration_(registration) {
   fetches_.ReserveInitialCapacity(fetches.size());
   for (const WebBackgroundFetchSettledFetch& fetch : fetches) {
@@ -56,12 +58,13 @@ ScriptPromise BackgroundFetchedEvent::updateUI(ScriptState* script_state,
     // method on a BackgroundFetchedEvent instance they created themselves.
     return ScriptPromise();
   }
+  DCHECK(!unique_id_.IsEmpty());
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
 
   BackgroundFetchBridge::From(registration_)
-      ->UpdateUI(id(), title,
+      ->UpdateUI(id(), unique_id_, title,
                  WTF::Bind(&BackgroundFetchedEvent::DidUpdateUI,
                            WrapPersistent(this), WrapPersistent(resolver)));
 
@@ -80,7 +83,7 @@ void BackgroundFetchedEvent::DidUpdateUI(
       resolver->Reject(DOMException::Create(
           kAbortError, "Failed to update UI due to I/O error."));
       return;
-    case mojom::blink::BackgroundFetchError::DUPLICATED_ID:
+    case mojom::blink::BackgroundFetchError::DUPLICATED_DEVELOPER_ID:
     case mojom::blink::BackgroundFetchError::INVALID_ARGUMENT:
       // Not applicable for this callback.
       break;
@@ -93,7 +96,7 @@ const AtomicString& BackgroundFetchedEvent::InterfaceName() const {
   return EventNames::BackgroundFetchedEvent;
 }
 
-DEFINE_TRACE(BackgroundFetchedEvent) {
+void BackgroundFetchedEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetches_);
   visitor->Trace(registration_);
   BackgroundFetchEvent::Trace(visitor);

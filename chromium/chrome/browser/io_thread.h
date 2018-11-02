@@ -41,10 +41,8 @@ class PrefRegistrySimple;
 class SystemNetworkContextManager;
 
 #if defined(OS_ANDROID)
-namespace chrome {
 namespace android {
 class ExternalDataUseObserver;
-}
 }
 #endif  // defined(OS_ANDROID)
 
@@ -54,6 +52,10 @@ class TreeStateTracker;
 
 namespace chrome_browser_net {
 class DnsProbeService;
+}
+
+namespace content {
+class URLRequestContextBuilderMojo;
 }
 
 namespace data_usage {
@@ -73,13 +75,11 @@ class CTLogVerifier;
 class HostResolver;
 class HttpAuthHandlerFactory;
 class HttpAuthPreferences;
-class LoggingNetworkChangeObserver;
 class NetworkQualityEstimator;
 class ProxyConfigService;
 class RTTAndThroughputEstimatesObserver;
 class SSLConfigService;
 class URLRequestContext;
-class URLRequestContextBuilderMojo;
 class URLRequestContextGetter;
 
 namespace ct {
@@ -95,10 +95,6 @@ class ChromeNetLog;
 namespace policy {
 class PolicyService;
 }  // namespace policy
-
-namespace test {
-class IOThreadPeer;
-}  // namespace test
 
 // Contains state associated with, initialized and cleaned up on, and
 // primarily used on, the IO thread.
@@ -134,7 +130,7 @@ class IOThread : public content::BrowserThreadDelegate {
     std::unique_ptr<data_usage::DataUseAggregator> data_use_aggregator;
 #if defined(OS_ANDROID)
     // An external observer of data use.
-    std::unique_ptr<chrome::android::ExternalDataUseObserver>
+    std::unique_ptr<android::ExternalDataUseObserver>
         external_data_use_observer;
 #endif  // defined(OS_ANDROID)
     std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs;
@@ -154,9 +150,6 @@ class IOThread : public content::BrowserThreadDelegate {
     // main frame load fails with a DNS error in order to provide more useful
     // information to the renderer so it can show a more specific error page.
     std::unique_ptr<chrome_browser_net::DnsProbeService> dns_probe_service;
-
-    // Enables Brotli Content-Encoding support
-    bool enable_brotli;
   };
 
   // |net_log| must either outlive the IOThread or be NULL.
@@ -223,12 +216,17 @@ class IOThread : public content::BrowserThreadDelegate {
   // |proxy_config_service| and sets a number of proxy-related options based on
   // prefs, policies, and the command line.
   void SetUpProxyConfigService(
-      net::URLRequestContextBuilderMojo* builder,
+      content::URLRequestContextBuilderMojo* builder,
       std::unique_ptr<net::ProxyConfigService> proxy_config_service) const;
 
- private:
-  friend class test::IOThreadPeer;
+  // Gets a pointer to the NetworkService. Can only be called on the UI thread.
+  // When out-of-process NetworkService is enabled, this is a reference to the
+  // NetworkService created through ServiceManager; when out-of-process
+  // NetworkService is not enabld, this is a Mojo interface to the IOThread's
+  // in-process NetworkService that lives on the IO thread.
+  content::mojom::NetworkService* GetNetworkServiceOnUIThread();
 
+ private:
   // BrowserThreadDelegate implementation, runs on the IO thread.
   // This handles initialization and destruction of state that must
   // live on the IO thread.
@@ -249,6 +247,9 @@ class IOThread : public content::BrowserThreadDelegate {
   void UpdateAndroidAuthNegotiateAccountType();
   void UpdateNegotiateDisableCnameLookup();
   void UpdateNegotiateEnablePort();
+#if defined(OS_POSIX)
+  void UpdateNtlmV2Enabled();
+#endif
 
   extensions::EventRouterForwarder* extension_event_router_forwarder() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -279,9 +280,6 @@ class IOThread : public content::BrowserThreadDelegate {
 
   Globals* globals_;
 
-  // Observer that logs network changes to the ChromeNetLog.
-  std::unique_ptr<net::LoggingNetworkChangeObserver> network_change_observer_;
-
   std::unique_ptr<certificate_transparency::TreeStateTracker> ct_tree_tracker_;
 
   BooleanPrefMember system_enable_referrers_;
@@ -298,13 +296,16 @@ class IOThread : public content::BrowserThreadDelegate {
   std::string auth_schemes_;
   BooleanPrefMember negotiate_disable_cname_lookup_;
   BooleanPrefMember negotiate_enable_port_;
+#if defined(OS_POSIX)
+  BooleanPrefMember ntlm_v2_enabled_;
+#endif
   StringPrefMember auth_server_whitelist_;
   StringPrefMember auth_delegate_whitelist_;
 
 #if defined(OS_ANDROID)
   StringPrefMember auth_android_negotiate_account_type_;
 #endif
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   // No PrefMember for the GSSAPI library name, since changing it after startup
   // requires unloading the existing GSSAPI library, which could cause all sorts
   // of problems for, for example, active Negotiate transactions.
@@ -336,6 +337,9 @@ class IOThread : public content::BrowserThreadDelegate {
 
   // True if QUIC is initially enabled.
   bool is_quic_allowed_on_init_;
+
+  content::mojom::NetworkServicePtr ui_thread_network_service_;
+  content::mojom::NetworkServiceRequest network_service_request_;
 
   base::WeakPtrFactory<IOThread> weak_factory_;
 

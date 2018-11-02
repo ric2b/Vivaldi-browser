@@ -37,7 +37,10 @@
       name: "aside",
       interfaceName: "HTMLElement",
     },
-    "audio",
+    {
+      name: "audio",
+      interfaceHeaderDir: "core/html/media",
+    },
     {
       name: "b",
       interfaceName: "HTMLElement",
@@ -73,7 +76,10 @@
       name: "br",
       interfaceName: "HTMLBRElement",
     },
-    "button",
+    {
+      name: "button",
+      interfaceHeaderDir: "core/html/forms",
+    },
     "canvas",
     {
       name: "caption",
@@ -114,6 +120,7 @@
     {
       name: "datalist",
       interfaceName: "HTMLDataListElement",
+      interfaceHeaderDir: "core/html/forms",
     },
     {
       name: "dd",
@@ -153,6 +160,7 @@
     {
       name: "fieldset",
       interfaceName: "HTMLFieldSetElement",
+      interfaceHeaderDir: "core/html/forms",
     },
     {
       name: "figcaption",
@@ -167,7 +175,10 @@
       name: "footer",
       interfaceName: "HTMLElement",
     },
-    "form",
+    {
+      name: "form",
+      interfaceHeaderDir: "core/html/forms",
+    },
     "frame",
     {
       name: "frameset",
@@ -231,6 +242,7 @@
     {
       name: "input",
       constructorNeedsCreatedByParser: true,
+      interfaceHeaderDir: "core/html/forms",
     },
     {
       name: "ins",
@@ -244,12 +256,18 @@
       name: "keygen",
       interfaceName: "HTMLUnknownElement",
     },
-    "label",
+    {
+      name: "label",
+      interfaceHeaderDir: "core/html/forms",
+    },
     {
       name: "layer",
       interfaceName: "HTMLElement",
     },
-    "legend",
+    {
+      name: "legend",
+      interfaceHeaderDir: "core/html/forms",
+    },
     {
       name: "li",
       interfaceName: "HTMLLIElement",
@@ -310,9 +328,16 @@
     {
       name: "optgroup",
       interfaceName: "HTMLOptGroupElement",
+      interfaceHeaderDir: "core/html/forms",
     },
-    "option",
-    "output",
+    {
+      name: "option",
+      interfaceHeaderDir: "core/html/forms",
+    },
+    {
+      name: "output",
+      interfaceHeaderDir: "core/html/forms",
+    },
     {
       name: "shadow",
       interfaceName: "HTMLShadowElement",
@@ -377,7 +402,10 @@
       name: "section",
       interfaceName: "HTMLElement",
     },
-    "select",
+    {
+      name: "select",
+      interfaceHeaderDir: "core/html/forms",
+    },      
     {
       name: "slot",
       interfaceName: "HTMLSlotElement",
@@ -426,6 +454,7 @@
     {
       name: "textarea",
       interfaceName: "HTMLTextAreaElement",
+      interfaceHeaderDir: "core/html/forms",
     },
     {
       name: "tfoot",
@@ -465,7 +494,10 @@
       name: "var",
       interfaceName: "HTMLElement",
     },
-    "video",
+    {
+      name: "video",
+      interfaceHeaderDir: "core/html/media",
+    },
     {
       name: "wbr",
       JSInterfaceName: "HTMLElement",

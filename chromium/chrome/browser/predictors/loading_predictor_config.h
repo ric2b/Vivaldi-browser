@@ -7,9 +7,16 @@
 
 #include <cstddef>
 
+#include "base/feature_list.h"
+
 class Profile;
 
 namespace predictors {
+
+extern const char kSpeculativePreconnectFeatureName[];
+extern const char kPreconnectMode[];
+extern const char kNoPreconnectMode[];
+extern const base::Feature kSpeculativePreconnectFeature;
 
 struct LoadingPredictorConfig;
 
@@ -18,8 +25,15 @@ struct LoadingPredictorConfig;
 bool IsLoadingPredictorEnabled(Profile* profile,
                                LoadingPredictorConfig* config);
 
+// Returns true if speculative preconnect is enabled, and initializes |config|,
+// if not nullptr.
+bool MaybeEnableSpeculativePreconnect(LoadingPredictorConfig* config);
+
+// Returns true if all other implementations of preconnect should be disabled.
+bool ShouldDisableOtherPreconnects();
+
 // Indicates what caused the page load hint.
-enum class HintOrigin { NAVIGATION, EXTERNAL };
+enum class HintOrigin { NAVIGATION, EXTERNAL, OMNIBOX };
 
 // Represents the config for the Loading predictor.
 struct LoadingPredictorConfig {
@@ -28,7 +42,7 @@ struct LoadingPredictorConfig {
   LoadingPredictorConfig(const LoadingPredictorConfig& other);
   ~LoadingPredictorConfig();
 
-  // The mode the prefetcher is running in. Forms a bit map.
+  // The mode the LoadingPredictor is running in. Forms a bit map.
   enum Mode {
     LEARNING = 1 << 0,
     PREFETCHING_FOR_NAVIGATION = 1 << 2,
@@ -84,12 +98,15 @@ struct LoadingPredictorConfig {
   // Maximum number of prefetches that can be inflight for a host for a single
   // navigation.
   size_t max_prefetches_inflight_per_host_per_navigation;
-  // True iff the predictor could use a url-based database.
+  // True iff the predictor can use a host-based subresources database.
+  bool is_host_learning_enabled;
+  // True iff the predictor can use a url-based subresources database.
   bool is_url_learning_enabled;
-  // True iff the predictor could use manifests.
-  bool is_manifests_enabled;
   // True iff origin-based learning is enabled.
   bool is_origin_learning_enabled;
+
+  // True iff all other implementations of preconnect should be disabled.
+  bool should_disable_other_preconnects;
 };
 
 }  // namespace predictors

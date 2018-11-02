@@ -37,11 +37,11 @@ class HeapProfilerSerializationState;
 
 enum HeapProfilingMode {
   kHeapProfilingModeDisabled,
-  kHeapProfilingModePseudo,
-  kHeapProfilingModeNative,
-  kHeapProfilingModeNoStack,
-  kHeapProfilingModeTaskProfiler,
-  kHeapProfilingModeInvalid
+  kHeapProfilingModeTaskProfiler,  // Per task counters for allocs and frees.
+  kHeapProfilingModeBackground,    // Pseudo stacks without default filtering.
+  kHeapProfilingModePseudo,  // Pseudo stacks with default filtering categories.
+  kHeapProfilingModeNative,  // Native stacks
+  kHeapProfilingModeInvalid  // Disabled permanently or unsupported.
 };
 
 // This is the interface exposed to the rest of the codebase to deal with
@@ -50,7 +50,7 @@ enum HeapProfilingMode {
 class BASE_EXPORT MemoryDumpManager {
  public:
   using RequestGlobalDumpFunction =
-      RepeatingCallback<void(const MemoryDumpRequestArgs& args)>;
+      RepeatingCallback<void(const GlobalMemoryDumpRequestArgs& args)>;
 
   static const char* const kTraceCategory;
 
@@ -140,10 +140,11 @@ class BASE_EXPORT MemoryDumpManager {
   // is specified.
   void EnableHeapProfilingIfNeeded();
 
-  // Enable heap profiling with specified |profiling_mode|. Disabling heap
-  // profiler will disable it permanently and cannot be enabled again. Noop if
-  // heap profiling was already enabled or permanently disabled.
-  void EnableHeapProfiling(HeapProfilingMode profiling_mode);
+  // Enable heap profiling with specified |profiling_mode|.
+  // Use kHeapProfilingModeDisabled to disable, but it can't be re-enabled then.
+  // Returns true if mode has been *changed* to the desired |profiling_mode|.
+  bool EnableHeapProfiling(HeapProfilingMode profiling_mode);
+  HeapProfilingMode GetHeapProfilingMode();
 
   // Lets tests see if a dump provider is registered.
   bool IsDumpProviderRegisteredForTesting(MemoryDumpProvider*);
@@ -180,8 +181,6 @@ class BASE_EXPORT MemoryDumpManager {
   friend struct DefaultSingletonTraits<MemoryDumpManager>;
   friend class MemoryDumpManagerTest;
 
-  enum class HeapProfilingState { DISABLED, ENABLED, DISABLED_PERMANENTLY };
-
   // Holds the state of a process memory dump that needs to be carried over
   // across task runners in order to fulfill an asynchronous CreateProcessDump()
   // request. At any time exactly one task runner owns a
@@ -216,7 +215,7 @@ class BASE_EXPORT MemoryDumpManager {
     // Callback passed to the initial call to CreateProcessDump().
     ProcessMemoryDumpCallback callback;
 
-    // The thread on which FinalizeDumpAndAddToTrace() (and hence |callback|)
+    // The thread on which FinishAsyncProcessDump() (and hence |callback|)
     // should be invoked. This is the thread on which the initial
     // CreateProcessDump() request was called.
     const scoped_refptr<SingleThreadTaskRunner> callback_task_runner;
@@ -241,7 +240,7 @@ class BASE_EXPORT MemoryDumpManager {
   static void SetInstanceForTesting(MemoryDumpManager* instance);
   static uint32_t GetDumpsSumKb(const std::string&, const ProcessMemoryDump*);
 
-  void FinalizeDumpAndAddToTrace(
+  void FinishAsyncProcessDump(
       std::unique_ptr<ProcessMemoryDumpAsyncState> pmd_async_state);
 
   // Lazily initializes dump_thread_ and returns its TaskRunner.
@@ -274,8 +273,19 @@ class BASE_EXPORT MemoryDumpManager {
   void GetDumpProvidersForPolling(
       std::vector<scoped_refptr<MemoryDumpProviderInfo>>*);
 
-  // Returns true if Initialize() has been called, false otherwise.
-  bool is_initialized() const { return !request_dump_function_.is_null(); }
+  // Initialize |heap_profiler_serialization_state_| when tracing and heap
+  // profiler are enabled.
+  void InitializeHeapProfilerStateIfNeededLocked();
+
+  // Sends OnHeapProfilingEnabled() notifcation to mdp ensuring OnMemoryDump()
+  // is not called at the same time.
+  void NotifyHeapProfilingEnabledLocked(
+      scoped_refptr<MemoryDumpProviderInfo> mdpinfo,
+      bool enabled);
+
+  bool can_request_global_dumps() const {
+    return !request_dump_function_.is_null();
+  }
 
   // An ordered set of registered MemoryDumpProviderInfo(s), sorted by task
   // runner affinity (MDPs belonging to the same task runners are adjacent).
@@ -306,10 +316,7 @@ class BASE_EXPORT MemoryDumpManager {
   // When true, calling |RegisterMemoryDumpProvider| is a no-op.
   bool dumper_registrations_ignored_for_testing_;
 
-  // Heap profiling can be enabled and disabled only once in the process.
-  // New memory dump providers should be told to enable heap profiling if state
-  // is ENABLED.
-  HeapProfilingState heap_profiling_state_;
+  HeapProfilingMode heap_profiling_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(MemoryDumpManager);
 };

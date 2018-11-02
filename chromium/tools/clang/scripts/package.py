@@ -25,7 +25,7 @@ LLVM_BOOTSTRAP_INSTALL_DIR = os.path.join(THIRD_PARTY_DIR,
                                           'llvm-bootstrap-install')
 LLVM_BUILD_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm-build')
 LLVM_RELEASE_DIR = os.path.join(LLVM_BUILD_DIR, 'Release+Asserts')
-LLVM_LTO_LLD_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm-lto-lld')
+EU_STRIP = os.path.join(THIRD_PARTY_DIR, 'eu-strip', 'bin', 'eu-strip')
 STAMP_FILE = os.path.join(LLVM_BUILD_DIR, 'cr_build_revision')
 
 
@@ -93,9 +93,7 @@ def GsutilArchiveExists(archive_name, platform):
 
 
 def MaybeUpload(args, archive_name, platform):
-  # We don't want to rewrite the file, if it already exists on the server,
-  # so -n option to gsutil is used. It will warn, if the upload was aborted.
-  gsutil_args = ['cp', '-n', '-a', 'public-read',
+  gsutil_args = ['cp', '-a', 'public-read',
                   '%s.tgz' % archive_name,
                   'gs://chromium-browser-clang-staging/%s/%s.tgz' %
                  (platform, archive_name)]
@@ -166,7 +164,7 @@ def main():
   args = parser.parse_args()
 
   # Check that the script is not going to upload a toolchain built from HEAD.
-  use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
+  use_head_revision = bool(int(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')))
   if args.upload and use_head_revision:
     print ("--upload and LLVM_FORCE_HEAD_REVISION could not be used "
            "at the same time.")
@@ -182,13 +180,6 @@ def main():
     platform = 'Win'
   else:
     platform = 'Linux_x64'
-
-  # Check if Google Cloud Storage already has the artifacts we want to build.
-  if args.upload and GsutilArchiveExists(pdir, platform):
-    print ('Desired toolchain revision %s is already available '
-           'in Google Cloud Storage:') % expected_stamp
-    print 'gs://chromium-browser-clang-staging/%s/%s.tgz' % (platform, pdir)
-    return 0
 
   with open('buildlog.txt', 'w') as log:
     Tee('Diff in llvm:\n', log)
@@ -255,10 +246,11 @@ def main():
                  'lib/libBlinkGCPlugin.' + so_ext,
                  ])
   if sys.platform == 'darwin':
-    want.extend([# Copy only the OSX and iossim (ASan and profile) runtime
-                 # libraries:
+    want.extend([# Copy only the OSX and iossim (ASan, fuzzer and profile)
+                 # runtime libraries:
                  'lib/clang/*/lib/darwin/*asan_osx*',
                  'lib/clang/*/lib/darwin/*asan_iossim*',
+                 'lib/clang/*/lib/darwin/*fuzzer*',
                  'lib/clang/*/lib/darwin/*profile_osx*',
                  'lib/clang/*/lib/darwin/*profile_iossim*',
                  # And the OSX and ios builtin libraries (iossim is lipo'd into
@@ -271,10 +263,11 @@ def main():
     want.append('bin/llvm-ar')
     want.append('bin/lld')
     # Copy only
-    # lib/clang/*/lib/linux/libclang_rt.{[atm]san,san,ubsan,profile}-*.a ,
+    # lib/clang/*/lib/linux/libclang_rt.{[atm]san,san,ubsan,fuzzer,profile}-*.a,
     # but not dfsan.
     want.extend(['lib/clang/*/lib/linux/*[atm]san*',
                  'lib/clang/*/lib/linux/*ubsan*',
+                 'lib/clang/*/lib/linux/*libclang_rt.fuzzer*',
                  'lib/clang/*/lib/linux/*libclang_rt.san*',
                  'lib/clang/*/lib/linux/*profile*',
                  'lib/clang/*/msan_blacklist.txt',
@@ -282,6 +275,7 @@ def main():
   elif sys.platform == 'win32':
     want.extend(['lib/clang/*/lib/windows/clang_rt.asan*.dll',
                  'lib/clang/*/lib/windows/clang_rt.asan*.lib',
+                 'lib/clang/*/lib/windows/clang_rt.ubsan*.lib',
                  ])
 
   for root, dirs, files in os.walk(LLVM_RELEASE_DIR):
@@ -302,7 +296,7 @@ def main():
         subprocess.call(['strip', '-x', dest])
       elif (sys.platform.startswith('linux') and
             os.path.splitext(f)[1] in ['.so', '.a']):
-        subprocess.call(['strip', '-g', dest])
+        subprocess.call([EU_STRIP, '-g', dest])
 
   # Set up symlinks.
   if sys.platform != 'win32':
@@ -331,16 +325,64 @@ def main():
 
   MaybeUpload(args, pdir, platform)
 
-  # Zip up llvm-objdump for sanitizer coverage.
+  # Zip up llvm-code-coverage for code coverage.
+  code_coverage_dir = 'llvm-code-coverage-' + stamp
+  shutil.rmtree(code_coverage_dir, ignore_errors=True)
+  os.makedirs(os.path.join(code_coverage_dir, 'bin'))
+  for filename in ['llvm-cov', 'llvm-profdata']:
+    shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', filename + exe_ext),
+                os.path.join(code_coverage_dir, 'bin'))
+  with tarfile.open(code_coverage_dir + '.tgz', 'w:gz') as tar:
+    tar.add(os.path.join(code_coverage_dir, 'bin'), arcname='bin',
+            filter=PrintTarProgress)
+  MaybeUpload(args, code_coverage_dir, platform)
+
+  # Zip up llvm-objdump and related tools for sanitizer coverage and Supersize.
   objdumpdir = 'llvmobjdump-' + stamp
   shutil.rmtree(objdumpdir, ignore_errors=True)
   os.makedirs(os.path.join(objdumpdir, 'bin'))
-  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'llvm-objdump' + exe_ext),
-              os.path.join(objdumpdir, 'bin'))
+  for filename in ['llvm-cxxfilt', 'llvm-nm', 'llvm-objdump', 'llvm-readobj']:
+    shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', filename + exe_ext),
+                os.path.join(objdumpdir, 'bin'))
+  llvmobjdump_stamp_file_base = 'llvmobjdump_build_revision'
+  llvmobjdump_stamp_file = os.path.join(objdumpdir, llvmobjdump_stamp_file_base)
+  with open(llvmobjdump_stamp_file, 'w') as f:
+    f.write(expected_stamp)
+    f.write('\n')
+  if sys.platform != 'win32':
+    os.symlink('llvm-readobj', os.path.join(objdumpdir, 'bin', 'llvm-readelf'))
   with tarfile.open(objdumpdir + '.tgz', 'w:gz') as tar:
     tar.add(os.path.join(objdumpdir, 'bin'), arcname='bin',
             filter=PrintTarProgress)
+    tar.add(llvmobjdump_stamp_file, arcname=llvmobjdump_stamp_file_base,
+            filter=PrintTarProgress)
   MaybeUpload(args, objdumpdir, platform)
+
+  # Zip up llvm-cfi-verify for CFI coverage.
+  cfiverifydir = 'llvmcfiverify-' + stamp
+  shutil.rmtree(cfiverifydir, ignore_errors=True)
+  os.makedirs(os.path.join(cfiverifydir, 'bin'))
+  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'llvm-cfi-verify' +
+                           exe_ext),
+              os.path.join(cfiverifydir, 'bin'))
+  with tarfile.open(cfiverifydir + '.tgz', 'w:gz') as tar:
+    tar.add(os.path.join(cfiverifydir, 'bin'), arcname='bin',
+            filter=PrintTarProgress)
+  MaybeUpload(args, cfiverifydir, platform)
+
+  # On Mac, lld isn't part of the main zip.  Upload it in a separate zip.
+  if sys.platform == 'darwin':
+    llddir = 'lld-' + stamp
+    shutil.rmtree(llddir, ignore_errors=True)
+    os.makedirs(os.path.join(llddir, 'bin'))
+    shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'lld'),
+                os.path.join(llddir, 'bin'))
+    os.symlink('lld', os.path.join(llddir, 'bin', 'lld-link'))
+    os.symlink('lld', os.path.join(llddir, 'bin', 'ld.lld'))
+    with tarfile.open(llddir + '.tgz', 'w:gz') as tar:
+      tar.add(os.path.join(llddir, 'bin'), arcname='bin',
+              filter=PrintTarProgress)
+    MaybeUpload(args, llddir, platform)
 
   # Zip up the translation_unit tool.
   translation_unit_dir = 'translation_unit-' + stamp

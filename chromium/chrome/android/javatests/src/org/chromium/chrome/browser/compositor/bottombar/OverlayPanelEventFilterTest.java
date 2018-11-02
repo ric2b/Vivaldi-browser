@@ -23,6 +23,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.OverlayPanelEventFilter;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content.browser.test.util.TestContentViewCore;
 
 /**
  * Class responsible for testing the OverlayPanelEventFilter.
@@ -103,7 +104,7 @@ public class OverlayPanelEventFilterTest {
     // StubbedContentViewCore
     // --------------------------------------------------------------------------------------------
 
-    private final class StubbedContentViewCore extends ContentViewCore {
+    private final class StubbedContentViewCore extends TestContentViewCore {
         public StubbedContentViewCore(Context context) {
             super(context, "");
         }
@@ -141,7 +142,7 @@ public class OverlayPanelEventFilterTest {
     // --------------------------------------------------------------------------------------------
 
     /**
-     * Mocks an OverlayPanel, so it doesn't create ContentViewCore.
+     * Mocks an OverlayPanel, so it doesn't create ContentViewCore or animations.
      */
     public final class MockOverlayPanel extends OverlayPanel {
         private boolean mWasTapDetectedOnPanel = false;
@@ -163,7 +164,7 @@ public class OverlayPanelEventFilterTest {
          */
         private class MockOverlayPanelContent extends OverlayPanelContent {
             public MockOverlayPanelContent() {
-                super(null, null, null);
+                super(null, null, null, 0);
             }
 
             @Override
@@ -177,6 +178,11 @@ public class OverlayPanelEventFilterTest {
 
         @Override
         protected void resizePanelContentViewCore(float width, float height) {}
+
+        @Override
+        protected void animatePanelTo(float height, long duration) {
+            // Do not create animations for tests.
+        }
 
         public boolean getWasTapDetected() {
             return mWasTapDetectedOnPanel;
@@ -220,7 +226,7 @@ public class OverlayPanelEventFilterTest {
 
     @Before
     public void setUp() throws Exception {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
 
         mDpToPx = context.getResources().getDisplayMetrics().density;
         mTouchSlopDp = ViewConfiguration.get(context).getScaledTouchSlop() / mDpToPx;

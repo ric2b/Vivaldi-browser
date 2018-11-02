@@ -29,7 +29,7 @@ int ReadFile(base::File* file,
 
 // Seeks the file, returns 0 on success, or errno on an error.
 int SeekFile(base::File* file, size_t offset) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   // lseek() instead of |file|'s method for errno.
   off_t result = lseek(file->GetPlatformFile(), offset, SEEK_SET);
   return result < 0 ? errno : 0;
@@ -65,7 +65,7 @@ int ArcContentFileSystemFileStreamReader::Read(
   file_system_operation_runner_util::OpenFileToReadOnIOThread(
       arc_url_,
       base::Bind(&ArcContentFileSystemFileStreamReader::OnOpenFile,
-                 weak_ptr_factory_.GetWeakPtr(), make_scoped_refptr(buffer),
+                 weak_ptr_factory_.GetWeakPtr(), base::WrapRefCounted(buffer),
                  buffer_length, callback));
   return net::ERR_IO_PENDING;
 }
@@ -88,7 +88,7 @@ void ArcContentFileSystemFileStreamReader::ReadInternal(
   DCHECK(file_->IsValid());
   base::PostTaskAndReplyWithResult(
       task_runner_.get(), FROM_HERE,
-      base::Bind(&ReadFile, file_.get(), make_scoped_refptr(buffer),
+      base::Bind(&ReadFile, file_.get(), base::WrapRefCounted(buffer),
                  buffer_length),
       base::Bind(&ArcContentFileSystemFileStreamReader::OnRead,
                  weak_ptr_factory_.GetWeakPtr(), callback));
@@ -153,7 +153,7 @@ void ArcContentFileSystemFileStreamReader::OnSeekFile(
       // Pipe is not seekable. Just consume the contents.
       const size_t kTemporaryBufferSize = 1024 * 1024;
       auto temporary_buffer =
-          make_scoped_refptr(new net::IOBufferWithSize(kTemporaryBufferSize));
+          base::MakeRefCounted<net::IOBufferWithSize>(kTemporaryBufferSize);
       ConsumeFileContents(buf, buffer_length, callback, temporary_buffer,
                           offset_);
       break;

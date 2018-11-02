@@ -17,13 +17,20 @@ core_global_constructors_original_interfaces = [
   "DedicatedWorkerGlobalScope",
 ]
 
+# The size and the order in the following list must match to the previous one.
+core_global_constructors_original_interface_basenames = [
+  "window",
+  "shared_worker_global_scope",
+  "dedicated_worker_global_scope",
+]
+
 # The interfaces aren't technically files, but we can treat them as file names
 # to get process_file_template to generate lists of IDL files corresponding
 # to each interface.
 core_global_constructors_generated_idl_files =
     process_file_template(
-        core_global_constructors_original_interfaces,
-        [ "$blink_core_output_dir/{{source_name_part}}CoreConstructors.idl" ])
+        core_global_constructors_original_interface_basenames,
+        [ "$blink_core_output_dir/{{source_name_part}}_core_constructors.idl" ])
 
 core_idl_files =
     get_path_info([
@@ -36,7 +43,6 @@ core_idl_files =
                     "animation/KeyframeEffect.idl",
                     "animation/KeyframeEffectReadOnly.idl",
                     "animation/ScrollTimeline.idl",
-                    "clipboard/Clipboard.idl",
                     "clipboard/DataTransfer.idl",
                     "clipboard/DataTransferItemList.idl",
                     "css/CSSConditionRule.idl",
@@ -67,6 +73,14 @@ core_idl_files =
                     "css/cssom/CSSImageValue.idl",
                     "css/cssom/CSSKeywordValue.idl",
                     "css/cssom/CSSMatrixComponent.idl",
+                    "css/cssom/CSSMathInvert.idl",
+                    "css/cssom/CSSMathMax.idl",
+                    "css/cssom/CSSMathMin.idl",
+                    "css/cssom/CSSMathNegate.idl",
+                    "css/cssom/CSSMathSum.idl",
+                    "css/cssom/CSSMathProduct.idl",
+                    "css/cssom/CSSMathValue.idl",
+                    "css/cssom/CSSNumericArray.idl",
                     "css/cssom/CSSNumericValue.idl",
                     "css/cssom/CSSPerspective.idl",
                     "css/cssom/CSSPositionValue.idl",
@@ -99,9 +113,7 @@ core_idl_files =
                     "dom/DocumentFragment.idl",
                     "dom/DocumentType.idl",
                     "dom/Element.idl",
-                    "dom/FrameRequestCallback.idl",
                     "dom/IdleDeadline.idl",
-                    "dom/IdleRequestCallback.idl",
                     "dom/Iterator.idl",
                     "dom/MessageChannel.idl",
                     "dom/MessagePort.idl",
@@ -112,18 +124,20 @@ core_idl_files =
                     "dom/NodeFilter.idl",
                     "dom/NodeIterator.idl",
                     "dom/NodeList.idl",
+                    "dom/Policy.idl",
                     "dom/ProcessingInstruction.idl",
                     "dom/Range.idl",
                     "dom/ShadowRoot.idl",
                     "dom/StaticRange.idl",
                     "dom/Text.idl",
-                    "dom/Touch.idl",
-                    "dom/TouchList.idl",
                     "dom/TreeWalker.idl",
                     "dom/XMLDocument.idl",
                     "dom/events/CustomEvent.idl",
                     "dom/events/Event.idl",
                     "dom/events/EventTarget.idl",
+                    "dom/trustedtypes/TrustedHTML.idl",
+                    "dom/trustedtypes/TrustedScriptURL.idl",
+                    "dom/trustedtypes/TrustedURL.idl",
                     "editing/Selection.idl",
                     "events/AnimationEvent.idl",
                     "events/AnimationPlaybackEvent.idl",
@@ -153,7 +167,6 @@ core_idl_files =
                     "events/UIEvent.idl",
                     "events/WheelEvent.idl",
                     "fileapi/Blob.idl",
-                    "fileapi/BlobCallback.idl",
                     "fileapi/File.idl",
                     "fileapi/FileList.idl",
                     "fileapi/FileReader.idl",
@@ -162,6 +175,7 @@ core_idl_files =
                     "frame/DeprecationReport.idl",
                     "frame/External.idl",
                     "frame/History.idl",
+                    "frame/InterventionReport.idl",
                     "frame/Location.idl",
                     "frame/Report.idl",
                     "frame/ReportBody.idl",
@@ -175,20 +189,16 @@ core_idl_files =
                     "geometry/DOMRect.idl",
                     "geometry/DOMRectList.idl",
                     "geometry/DOMRectReadOnly.idl",
-                    "html/FormData.idl",
                     "html/HTMLAllCollection.idl",
                     "html/HTMLAnchorElement.idl",
                     "html/HTMLAreaElement.idl",
-                    "html/HTMLAudioElement.idl",
                     "html/HTMLBRElement.idl",
                     "html/HTMLBaseElement.idl",
                     "html/HTMLBodyElement.idl",
-                    "html/HTMLButtonElement.idl",
                     "html/HTMLCollection.idl",
                     "html/HTMLContentElement.idl",
                     "html/HTMLDListElement.idl",
                     "html/HTMLDataElement.idl",
-                    "html/HTMLDataListElement.idl",
                     "html/HTMLDetailsElement.idl",
                     "html/HTMLDialogElement.idl",
                     "html/HTMLDirectoryElement.idl",
@@ -196,10 +206,7 @@ core_idl_files =
                     "html/HTMLDocument.idl",
                     "html/HTMLElement.idl",
                     "html/HTMLEmbedElement.idl",
-                    "html/HTMLFieldSetElement.idl",
                     "html/HTMLFontElement.idl",
-                    "html/HTMLFormControlsCollection.idl",
-                    "html/HTMLFormElement.idl",
                     "html/HTMLFrameElement.idl",
                     "html/HTMLFrameSetElement.idl",
                     "html/HTMLHRElement.idl",
@@ -208,8 +215,6 @@ core_idl_files =
                     "html/HTMLHtmlElement.idl",
                     "html/HTMLImageElement.idl",
                     "html/HTMLLIElement.idl",
-                    "html/HTMLLabelElement.idl",
-                    "html/HTMLLegendElement.idl",
                     "html/HTMLLinkElement.idl",
                     "html/HTMLMapElement.idl",
                     "html/HTMLMarqueeElement.idl",
@@ -219,10 +224,6 @@ core_idl_files =
                     "html/HTMLModElement.idl",
                     "html/HTMLOListElement.idl",
                     "html/HTMLObjectElement.idl",
-                    "html/HTMLOptGroupElement.idl",
-                    "html/HTMLOptionElement.idl",
-                    "html/HTMLOptionsCollection.idl",
-                    "html/HTMLOutputElement.idl",
                     "html/HTMLParagraphElement.idl",
                     "html/HTMLParamElement.idl",
                     "html/HTMLPictureElement.idl",
@@ -230,7 +231,6 @@ core_idl_files =
                     "html/HTMLProgressElement.idl",
                     "html/HTMLQuoteElement.idl",
                     "html/HTMLScriptElement.idl",
-                    "html/HTMLSelectElement.idl",
                     "html/HTMLShadowElement.idl",
                     "html/HTMLSlotElement.idl",
                     "html/HTMLSourceElement.idl",
@@ -243,19 +243,33 @@ core_idl_files =
                     "html/HTMLTableRowElement.idl",
                     "html/HTMLTableSectionElement.idl",
                     "html/HTMLTemplateElement.idl",
-                    "html/HTMLTextAreaElement.idl",
                     "html/HTMLTimeElement.idl",
                     "html/HTMLTitleElement.idl",
                     "html/HTMLTrackElement.idl",
                     "html/HTMLUListElement.idl",
                     "html/HTMLUnknownElement.idl",
                     "html/ImageData.idl",
-                    "html/RadioNodeList.idl",
                     "html/TextMetrics.idl",
                     "html/TimeRanges.idl",
-                    "html/ValidityState.idl",
                     "html/VoidCallback.idl",
                     "html/custom/CustomElementRegistry.idl",
+                    "html/forms/FormData.idl",
+                    "html/forms/HTMLButtonElement.idl",
+                    "html/forms/HTMLDataListElement.idl",
+                    "html/forms/HTMLFieldSetElement.idl",
+                    "html/forms/HTMLFormControlsCollection.idl",
+                    "html/forms/HTMLFormElement.idl",
+                    "html/forms/HTMLLabelElement.idl",
+                    "html/forms/HTMLLegendElement.idl",
+                    "html/forms/HTMLOptGroupElement.idl",
+                    "html/forms/HTMLOptionElement.idl",
+                    "html/forms/HTMLOptionsCollection.idl",
+                    "html/forms/HTMLOutputElement.idl",
+                    "html/forms/HTMLSelectElement.idl",
+                    "html/forms/HTMLTextAreaElement.idl",
+                    "html/forms/RadioNodeList.idl",
+                    "html/forms/ValidityState.idl",
+                    "html/media/HTMLAudioElement.idl",
                     "html/media/MediaError.idl",
                     "html/track/AudioTrackList.idl",
                     "html/track/TextTrack.idl",
@@ -268,6 +282,8 @@ core_idl_files =
                     "html/track/vtt/VTTRegion.idl",
                     "imagebitmap/ImageBitmap.idl",
                     "input/InputDeviceCapabilities.idl",
+                    "input/Touch.idl",
+                    "input/TouchList.idl",
                     "inspector/InspectorOverlayHost.idl",
                     "intersection_observer/IntersectionObserver.idl",
                     "intersection_observer/IntersectionObserverEntry.idl",
@@ -439,9 +455,9 @@ core_idl_with_modules_dependency_files =
                     "frame/Window.idl",
                     "html/HTMLCanvasElement.idl",
                     "html/HTMLIFrameElement.idl",
-                    "html/HTMLInputElement.idl",
-                    "html/HTMLMediaElement.idl",
-                    "html/HTMLVideoElement.idl",
+                    "html/forms/HTMLInputElement.idl",
+                    "html/media/HTMLMediaElement.idl",
+                    "html/media/HTMLVideoElement.idl",
                     "html/track/AudioTrack.idl",
                     "html/track/VideoTrack.idl",
                     "inspector/DevToolsHost.idl",
@@ -463,7 +479,7 @@ core_dependency_idl_files =
                     "css/FontFaceSource.idl",
                     "css/PropertyRegistration.idl",
                     "css/cssom/CSSUnitValues.idl",
-                    "css/cssom/WindowGetComputedStyle.idl",
+                    "css/cssom/ElementComputedStyleMap.idl",
                     "dom/ChildNode.idl",
                     "dom/DocumentOrShadowRoot.idl",
                     "dom/GlobalEventHandlers.idl",
@@ -474,7 +490,7 @@ core_dependency_idl_files =
                     "dom/events/EventListener.idl",
                     "events/NavigatorEvents.idl",
                     "fileapi/URLFileAPI.idl",
-                    "frame/NavigatorClipboard.idl",
+                    "frame/NavigatorAutomationInformation.idl",
                     "frame/NavigatorConcurrentHardware.idl",
                     "frame/NavigatorCookies.idl",
                     "frame/NavigatorID.idl",
@@ -511,7 +527,12 @@ core_typedefs_enums_only_idl_files =
                   "abspath")
 
 core_callback_function_idl_files =
-    get_path_info([ "dom/FunctionStringCallback.idl" ], "abspath")
+    get_path_info([
+                    "dom/FrameRequestCallback.idl",
+                    "dom/FunctionStringCallback.idl",
+                    "dom/IdleRequestCallback.idl",
+                  ],
+                  "abspath")
 
 core_dictionary_idl_files =
     get_path_info([
@@ -533,7 +554,6 @@ core_dictionary_idl_files =
                     "dom/IdleRequestOptions.idl",
                     "dom/MutationObserverInit.idl",
                     "dom/ShadowRootInit.idl",
-                    "dom/TouchInit.idl",
                     "dom/events/AddEventListenerOptions.idl",
                     "dom/events/CustomEventInit.idl",
                     "dom/events/EventInit.idl",
@@ -567,16 +587,19 @@ core_dictionary_idl_files =
                     "frame/ScrollIntoViewOptions.idl",
                     "frame/ScrollOptions.idl",
                     "frame/ScrollToOptions.idl",
+                    "geometry/DOMMatrix2DInit.idl",
                     "geometry/DOMMatrixInit.idl",
                     "geometry/DOMPointInit.idl",
                     "geometry/DOMQuadInit.idl",
                     "geometry/DOMRectInit.idl",
+                    "html/FocusOptions.idl",
                     "html/AssignedNodesOptions.idl",
                     "html/ImageDataColorSettings.idl",
                     "html/canvas/CanvasContextCreationAttributes.idl",
                     "html/track/TrackEventInit.idl",
                     "imagebitmap/ImageBitmapOptions.idl",
                     "input/InputDeviceCapabilitiesInit.idl",
+                    "input/TouchInit.idl",
                     "intersection_observer/IntersectionObserverInit.idl",
                     "mojo/MojoCreateDataPipeOptions.idl",
                     "mojo/MojoCreateDataPipeResult.idl",
@@ -605,6 +628,7 @@ core_testing_dictionary_idl_files =
                     "testing/InternalDictionary.idl",
                     "testing/InternalDictionaryDerived.idl",
                     "testing/InternalDictionaryDerivedDerived.idl",
+                    "testing/OriginTrialsTestDictionary.idl",
                   ],
                   "abspath")
 
@@ -637,13 +661,23 @@ webcore_testing_idl_with_modules_dependency_files =
 webcore_testing_dependency_idl_files =
     get_path_info([ "testing/OriginTrialsTestPartial.idl" ], "abspath")
 
-generated_webcore_testing_idl_files =
-    get_path_info(
-        [
-          "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
-          "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
-        ],
-        "abspath")
+if (snake_case_source_files) {
+  generated_webcore_testing_idl_files =
+      get_path_info(
+          [
+            "$blink_core_output_dir/testing/internal_runtime_flags.idl",
+            "$blink_core_output_dir/testing/internal_settings_generated.idl",
+          ],
+          "abspath")
+} else {
+  generated_webcore_testing_idl_files =
+      get_path_info(
+          [
+            "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
+            "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
+          ],
+          "abspath")
+}
 
 core_definition_idl_files = core_dictionary_idl_files + core_idl_files +
                             core_idl_with_modules_dependency_files

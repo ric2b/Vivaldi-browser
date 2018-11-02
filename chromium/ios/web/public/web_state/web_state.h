@@ -7,7 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -187,6 +189,10 @@ class WebState : public base::SupportsUserData {
   // (nothing loaded) and 1.0 (fully loaded).
   virtual double GetLoadingProgress() const = 0;
 
+  // Whether the WebState is visible. Returns true after WasShown() call and
+  // false after WasHidden() call.
+  virtual bool IsVisible() const = 0;
+
   // Returns true if the web process backing this WebState is believed to
   // currently be crashed.
   virtual bool IsCrashed() const = 0;
@@ -230,16 +236,6 @@ class WebState : public base::SupportsUserData {
   // Returns the currently visible WebInterstitial if one is shown.
   virtual WebInterstitial* GetWebInterstitial() const = 0;
 
-  // Called when the WebState has displayed a password field on an HTTP page.
-  // This method modifies the appropriate NavigationEntry's SSLStatus to record
-  // the sensitive input field, so that embedders can adjust the UI if desired.
-  virtual void OnPasswordInputShownOnHttp() = 0;
-
-  // Called when the WebState has displayed a credit card field on an HTTP page.
-  // This method modifies the appropriate NavigationEntry's SSLStatus to record
-  // the sensitive input field, so that embedders can adjust the UI if desired.
-  virtual void OnCreditCardInputShownOnHttp() = 0;
-
   // Callback used to handle script commands.
   // The callback must return true if the command was handled, and false
   // otherwise.
@@ -266,6 +262,15 @@ class WebState : public base::SupportsUserData {
   // Returns Mojo interface registry for this WebState.
   virtual WebStateInterfaceProvider* GetWebStateInterfaceProvider() = 0;
 
+  // Typically an embedder will:
+  //    - Implement this method to receive notification of changes to the page's
+  //      |VisibleSecurityState|, updating security UI (e.g. a lock icon) to
+  //      reflect the current security state of the page.
+  // ...and optionally:
+  //    - Invoke this method upon detection of an event that will change
+  //      the security state (e.g. a non-secure form element is edited).
+  virtual void DidChangeVisibleSecurityState() = 0;
+
  protected:
   // Binds |interface_pipe| to an implementation of |interface_name| that is
   // scoped to this WebState instance (if that such an implementation is
@@ -284,9 +289,10 @@ class WebState : public base::SupportsUserData {
                                       std::move(request.PassMessagePipe()));
   }
 
-  // Returns whether this WebState was created with an opener.  See
-  // CreateParams::created_with_opener for more details.
+  // Whether this WebState was created with an opener.
+  // See CreateParams::created_with_opener for more details.
   virtual bool HasOpener() const = 0;
+  virtual void SetHasOpener(bool has_opener) = 0;
 
   // Callback used to handle snapshots. The parameter is the snapshot image.
   typedef base::Callback<void(const gfx::Image&)> SnapshotCallback;
@@ -296,16 +302,14 @@ class WebState : public base::SupportsUserData {
   virtual void TakeSnapshot(const SnapshotCallback& callback,
                             CGSize target_size) const = 0;
 
- protected:
-  friend class WebStateObserver;
-  friend class WebStatePolicyDecider;
-
   // Adds and removes observers for page navigation notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be
   // sure to remove the observer before they go away.
-  // TODO(droger): Move these methods to WebStateImpl once it is in ios/.
   virtual void AddObserver(WebStateObserver* observer) = 0;
   virtual void RemoveObserver(WebStateObserver* observer) = 0;
+
+ protected:
+  friend class WebStatePolicyDecider;
 
   // Adds and removes policy deciders for navigation actions. The order in which
   // deciders are called is undefined, and will stop on the first decider that
@@ -323,6 +327,8 @@ class WebState : public base::SupportsUserData {
   // and only call must be in WebStateWeakPtrFactory. Please consult that class
   // for more details. Remove as part of http://crbug.com/556736.
   virtual base::WeakPtr<WebState> AsWeakPtr() = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(WebState);
 };
 
 }  // namespace web

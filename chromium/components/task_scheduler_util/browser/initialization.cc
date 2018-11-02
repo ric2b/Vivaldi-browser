@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 
+#include "build/build_config.h"
 #include "components/task_scheduler_util/common/variations_util.h"
 #include "components/variations/variations_associated_data.h"
 
@@ -24,8 +25,16 @@ GetBrowserTaskSchedulerInitParamsFromVariations() {
   if (!::variations::GetVariationParams(kFieldTrialName, &variation_params))
     return nullptr;
 
-  return GetTaskSchedulerInitParams(
-      "", variation_params, base::SchedulerBackwardCompatibility::INIT_COM_STA);
+  std::unique_ptr<base::TaskScheduler::InitParams> init_params =
+      GetTaskSchedulerInitParams(
+          "", variation_params, base::SchedulerBackwardCompatibility::DISABLED);
+#if defined(OS_WIN)
+  if (init_params) {
+    init_params->shared_worker_pool_environment =
+        base::TaskScheduler::InitParams::SharedWorkerPoolEnvironment::COM_MTA;
+  }
+#endif  // defined(OS_WIN)
+  return init_params;
 }
 
 }  // namespace task_scheduler_util

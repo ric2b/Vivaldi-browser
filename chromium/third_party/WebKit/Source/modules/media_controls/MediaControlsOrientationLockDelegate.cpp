@@ -5,21 +5,21 @@
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 
 #include "build/build_config.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Screen.h"
 #include "core/frame/ScreenOrientationController.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/page/ChromeClient.h"
 #include "modules/device_orientation/DeviceOrientationData.h"
 #include "modules/device_orientation/DeviceOrientationEvent.h"
 #include "modules/screen_orientation/ScreenOrientation.h"
 #include "modules/screen_orientation/ScreenScreenOrientation.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/MathExtras.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/modules/screen_orientation/WebLockOrientationCallback.h"
 
@@ -449,7 +449,8 @@ void MediaControlsOrientationLockDelegate::
   // is avoided by delaying unlocking long enough to ensure that Android has
   // detected the orientation change.
   lock_to_any_task_ =
-      TaskRunnerHelper::Get(TaskType::kMediaElementEvent, &GetDocument())
+      GetDocument()
+          .GetTaskRunner(TaskType::kMediaElementEvent)
           ->PostDelayedCancellableTask(
               BLINK_FROM_HERE,
               // Conceptually, this callback will unlock the screen orientation,
@@ -471,7 +472,7 @@ void MediaControlsOrientationLockDelegate::
               kLockToAnyDelay);
 }
 
-DEFINE_TRACE(MediaControlsOrientationLockDelegate) {
+void MediaControlsOrientationLockDelegate::Trace(blink::Visitor* visitor) {
   EventListener::Trace(visitor);
   visitor->Trace(video_element_);
 }

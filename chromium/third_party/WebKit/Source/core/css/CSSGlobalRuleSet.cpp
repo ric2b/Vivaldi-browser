@@ -5,10 +5,10 @@
 #include "core/css/CSSGlobalRuleSet.h"
 
 #include "core/css/CSSDefaultStyleSheets.h"
+#include "core/css/CSSSelectorWatch.h"
 #include "core/css/RuleSet.h"
-#include "core/dom/CSSSelectorWatch.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
-#include "core/dom/StyleEngine.h"
 
 namespace blink {
 
@@ -60,7 +60,7 @@ void CSSGlobalRuleSet::Dispose() {
   is_dirty_ = true;
 }
 
-DEFINE_TRACE(CSSGlobalRuleSet) {
+void CSSGlobalRuleSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(watched_selectors_rule_set_);
 }
 

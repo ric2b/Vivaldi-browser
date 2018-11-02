@@ -13,10 +13,12 @@
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/command_updater.h"
+#include "chrome/browser/command_updater_impl.h"
 #include "chrome/browser/search_engines/template_url_service_factory_test_util.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -28,7 +30,6 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/render_text.h"
 #include "ui/views/controls/textfield/textfield_test_api.h"
-#include "ui/views/test/views_test_base.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
@@ -181,7 +182,7 @@ class TestingOmniboxEditController : public ChromeOmniboxEditController {
 
 // OmniboxViewViewsTest -------------------------------------------------------
 
-class OmniboxViewViewsTest : public views::ViewsTestBase {
+class OmniboxViewViewsTest : public ChromeViewsTestBase {
  public:
   OmniboxViewViewsTest();
 
@@ -208,7 +209,7 @@ class OmniboxViewViewsTest : public views::ViewsTestBase {
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   TemplateURLServiceFactoryTestUtil util_;
-  CommandUpdater command_updater_;
+  CommandUpdaterImpl command_updater_;
   TestToolbarModel toolbar_model_;
   TestingOmniboxEditController omnibox_edit_controller_;
   std::unique_ptr<TestingOmniboxView> omnibox_view_;
@@ -236,7 +237,7 @@ void OmniboxViewViewsTest::SetAndEmphasizeText(const std::string& new_text,
 }
 
 void OmniboxViewViewsTest::SetUp() {
-  ViewsTestBase::SetUp();
+  ChromeViewsTestBase::SetUp();
 #if defined(OS_CHROMEOS)
   chromeos::input_method::InitializeForTesting(
       new chromeos::input_method::MockInputMethodManagerImpl);
@@ -257,7 +258,7 @@ void OmniboxViewViewsTest::TearDown() {
 #if defined(OS_CHROMEOS)
   chromeos::input_method::Shutdown();
 #endif
-  ViewsTestBase::TearDown();
+  ChromeViewsTestBase::TearDown();
 }
 
 // Actual tests ---------------------------------------------------------------

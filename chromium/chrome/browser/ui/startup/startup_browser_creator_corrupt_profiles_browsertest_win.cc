@@ -25,6 +25,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "content/public/test/test_launcher.h"
 
 namespace {
 
@@ -187,11 +188,8 @@ if (testing::UnitTest::GetInstance()->current_test_info()->name() == \
 
     // If control goes here, it means SetUpUserDataDirectory is not handled.
     // This is okay for PRE_ tests, but not acceptable for main tests.
-    if (base::StartsWith(
-            testing::UnitTest::GetInstance()->current_test_info()->name(),
-             "PRE_", base::CompareCase::SENSITIVE)) {
+    if (content::IsPreTest())
       return true;
-    }
 
     ADD_FAILURE() << "SetUpUserDataDirectory is not handled by the test.";
     return false;
@@ -273,7 +271,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorCorruptProfileTest,
   CloseBrowsersSynchronouslyForProfileBasePath("Profile 1");
   CreateAndSwitchToProfile("Profile 2");
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_TRUE(base::CreateDirectory(ProfileManager::GetGuestProfilePath()));
   ASSERT_TRUE(base::CreateDirectory(ProfileManager::GetSystemProfilePath()));
 }
@@ -303,7 +301,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorCorruptProfileTest,
   // Create the guest profile path, but not the system profile one. This will
   // make it impossible to create the system profile once the permissions are
   // locked down during setup.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_TRUE(base::CreateDirectory(ProfileManager::GetGuestProfilePath()));
 }
 
@@ -404,7 +402,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorCorruptProfileTest,
 // manager instead.
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorCorruptProfileTest,
                        PRE_DeletedProfileFallbackToUserManager) {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_TRUE(base::CreateDirectory(ProfileManager::GetGuestProfilePath()));
   ASSERT_TRUE(base::CreateDirectory(ProfileManager::GetSystemProfilePath()));
 }

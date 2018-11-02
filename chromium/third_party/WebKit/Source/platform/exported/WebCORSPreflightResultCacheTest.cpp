@@ -4,25 +4,21 @@
 
 #include "public/platform/WebCORSPreflightResultCache.h"
 
+#include "base/test/simple_test_tick_clock.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
 namespace test {
 
-static double current_time = 1000.0;
-
-static double MockTimeFunction() {
-  return current_time;
-}
-
 class TestWebCORSPreflightResultCache : public WebCORSPreflightResultCache {
  public:
-  TestWebCORSPreflightResultCache(){};
+  TestWebCORSPreflightResultCache() = default;
+  ~TestWebCORSPreflightResultCache() override = default;
 
   // Counts origins and urls in the cache. Thus with a single cache item, this
   // method would return 2. This is to tests whether we clean up the references
@@ -49,7 +45,7 @@ class WebCORSPreflightResultCacheTest : public ::testing::Test {
   std::unique_ptr<WebCORSPreflightResultCacheItem> CreateCacheItem(
       const AtomicString allow_methods,
       const AtomicString allow_headers,
-      WebURLRequest::FetchCredentialsMode credentials_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       const int max_age = -1) {
     HTTPHeaderMap response_header;
 
@@ -67,12 +63,14 @@ class WebCORSPreflightResultCacheTest : public ::testing::Test {
     WebString error_description;
     std::unique_ptr<WebCORSPreflightResultCacheItem> item =
         WebCORSPreflightResultCacheItem::Create(
-            credentials_mode, response_header, error_description);
+            credentials_mode, response_header, error_description, clock());
 
     EXPECT_TRUE(item);
 
     return item;
   }
+
+  base::SimpleTestTickClock* clock() { return &clock_; }
 
   // This is by no means a robust parser and works only for the headers strings
   // used in this tests.
@@ -91,6 +89,9 @@ class WebCORSPreflightResultCacheTest : public ::testing::Test {
 
     return header_map;
   }
+
+ private:
+  base::SimpleTestTickClock clock_;
 };
 
 TEST_F(WebCORSPreflightResultCacheTest, CacheTimeout) {
@@ -100,34 +101,32 @@ TEST_F(WebCORSPreflightResultCacheTest, CacheTimeout) {
 
   test::TestWebCORSPreflightResultCache cache;
 
-  TimeFunction previous = SetTimeFunctionsForTesting(test::MockTimeFunction);
-
   // Cache should be empty:
   EXPECT_EQ(0, cache.CacheSize());
 
   cache.AppendEntry(
       origin, url,
-      CreateCacheItem("POST", "", WebURLRequest::kFetchCredentialsModePassword,
-                      5));
+      CreateCacheItem("POST", "",
+                      network::mojom::FetchCredentialsMode::kInclude, 5));
   cache.AppendEntry(
       origin, other_url,
-      CreateCacheItem("POST", "", WebURLRequest::kFetchCredentialsModePassword,
-                      5));
+      CreateCacheItem("POST", "",
+                      network::mojom::FetchCredentialsMode::kInclude, 5));
 
   // Cache size should be 3 (counting origins and urls separately):
   EXPECT_EQ(3, cache.CacheSize());
 
   // Cache entry should still be valid:
   EXPECT_TRUE(cache.CanSkipPreflight(
-      origin, url, WebURLRequest::kFetchCredentialsModePassword, "POST",
+      origin, url, network::mojom::FetchCredentialsMode::kInclude, "POST",
       HTTPHeaderMap()));
 
   // Advance time by ten seconds:
-  test::current_time += 10;
+  clock()->Advance(TimeDelta::FromSeconds(10));
 
   // Cache entry should now be expired:
   EXPECT_FALSE(cache.CanSkipPreflight(
-      origin, url, WebURLRequest::kFetchCredentialsModePassword, "POST",
+      origin, url, network::mojom::FetchCredentialsMode::kInclude, "POST",
       HTTPHeaderMap()));
 
   // Cache size should be 2, with the expired entry removed by call to
@@ -136,14 +135,12 @@ TEST_F(WebCORSPreflightResultCacheTest, CacheTimeout) {
 
   // Cache entry should be expired:
   EXPECT_FALSE(cache.CanSkipPreflight(
-      origin, other_url, WebURLRequest::kFetchCredentialsModePassword, "POST",
+      origin, other_url, network::mojom::FetchCredentialsMode::kInclude, "POST",
       HTTPHeaderMap()));
 
   // Cache size should be 0, with the expired entry removed by call to
   // CanSkipPreflight():
   EXPECT_EQ(0, cache.CacheSize());
-
-  SetTimeFunctionsForTesting(previous);
 }
 
 TEST_F(WebCORSPreflightResultCacheTest, CacheSize) {
@@ -160,7 +157,7 @@ TEST_F(WebCORSPreflightResultCacheTest, CacheSize) {
   cache.AppendEntry(
       origin, url,
       CreateCacheItem("POST", "",
-                      WebURLRequest::kFetchCredentialsModePassword));
+                      network::mojom::FetchCredentialsMode::kInclude));
 
   // Cache size should be 2 (counting origins and urls separately):
   EXPECT_EQ(2, cache.CacheSize());
@@ -168,7 +165,7 @@ TEST_F(WebCORSPreflightResultCacheTest, CacheSize) {
   cache.AppendEntry(
       origin, other_url,
       CreateCacheItem("POST", "",
-                      WebURLRequest::kFetchCredentialsModePassword));
+                      network::mojom::FetchCredentialsMode::kInclude));
 
   // Cache size should now be 3 (1 origin, 2 urls):
   EXPECT_EQ(3, cache.CacheSize());
@@ -176,7 +173,7 @@ TEST_F(WebCORSPreflightResultCacheTest, CacheSize) {
   cache.AppendEntry(
       other_origin, url,
       CreateCacheItem("POST", "",
-                      WebURLRequest::kFetchCredentialsModePassword));
+                      network::mojom::FetchCredentialsMode::kInclude));
   // Cache size should now be 4 (4 origin, 3 urls):
   EXPECT_EQ(5, cache.CacheSize());
 }
@@ -185,74 +182,75 @@ TEST_F(WebCORSPreflightResultCacheTest, CanSkipPreflight) {
   const struct {
     const AtomicString allow_methods;
     const AtomicString allow_headers;
-    const WebURLRequest::FetchCredentialsMode cache_credentials_mode;
+    const network::mojom::FetchCredentialsMode cache_credentials_mode;
 
     const AtomicString request_method;
     const std::string request_headers;
-    const WebURLRequest::FetchCredentialsMode request_credentials_mode;
+    const network::mojom::FetchCredentialsMode request_credentials_mode;
 
     bool can_skip_preflight;
   } tests[] = {
       // Different methods:
-      {"OPTIONS", "", WebURLRequest::kFetchCredentialsModeOmit, "OPTIONS", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"GET", "", WebURLRequest::kFetchCredentialsModeOmit, "GET", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"HEAD", "", WebURLRequest::kFetchCredentialsModeOmit, "HEAD", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"POST", "", WebURLRequest::kFetchCredentialsModeOmit, "POST", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"PUT", "", WebURLRequest::kFetchCredentialsModeOmit, "PUT", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"DELETE", "", WebURLRequest::kFetchCredentialsModeOmit, "DELETE", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
+      {"OPTIONS", "", network::mojom::FetchCredentialsMode::kOmit, "OPTIONS",
+       "", network::mojom::FetchCredentialsMode::kOmit, true},
+      {"GET", "", network::mojom::FetchCredentialsMode::kOmit, "GET", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
+      {"HEAD", "", network::mojom::FetchCredentialsMode::kOmit, "HEAD", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
+      {"POST", "", network::mojom::FetchCredentialsMode::kOmit, "POST", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
+      {"PUT", "", network::mojom::FetchCredentialsMode::kOmit, "PUT", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
+      {"DELETE", "", network::mojom::FetchCredentialsMode::kOmit, "DELETE", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
 
       // Cache allowing multiple methods:
-      {"GET, PUT, DELETE", "", WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "", WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"GET, PUT, DELETE", "", WebURLRequest::kFetchCredentialsModeOmit, "PUT",
-       "", WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"GET, PUT, DELETE", "", WebURLRequest::kFetchCredentialsModeOmit,
-       "DELETE", "", WebURLRequest::kFetchCredentialsModeOmit, true},
+      {"GET, PUT, DELETE", "", network::mojom::FetchCredentialsMode::kOmit,
+       "GET", "", network::mojom::FetchCredentialsMode::kOmit, true},
+      {"GET, PUT, DELETE", "", network::mojom::FetchCredentialsMode::kOmit,
+       "PUT", "", network::mojom::FetchCredentialsMode::kOmit, true},
+      {"GET, PUT, DELETE", "", network::mojom::FetchCredentialsMode::kOmit,
+       "DELETE", "", network::mojom::FetchCredentialsMode::kOmit, true},
 
       // Methods not in cached preflight response:
-      {"GET", "", WebURLRequest::kFetchCredentialsModeOmit, "PUT", "",
-       WebURLRequest::kFetchCredentialsModeOmit, false},
-      {"GET, POST, DELETE", "", WebURLRequest::kFetchCredentialsModeOmit, "PUT",
-       "", WebURLRequest::kFetchCredentialsModeOmit, false},
+      {"GET", "", network::mojom::FetchCredentialsMode::kOmit, "PUT", "",
+       network::mojom::FetchCredentialsMode::kOmit, false},
+      {"GET, POST, DELETE", "", network::mojom::FetchCredentialsMode::kOmit,
+       "PUT", "", network::mojom::FetchCredentialsMode::kOmit, false},
 
       // Allowed headers:
-      {"GET", "X-MY-HEADER", WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "X-MY-HEADER:t", WebURLRequest::kFetchCredentialsModeOmit, true},
+      {"GET", "X-MY-HEADER", network::mojom::FetchCredentialsMode::kOmit, "GET",
+       "X-MY-HEADER:t", network::mojom::FetchCredentialsMode::kOmit, true},
       {"GET", "X-MY-HEADER, Y-MY-HEADER",
-       WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "X-MY-HEADER:t;Y-MY-HEADER:t", WebURLRequest::kFetchCredentialsModeOmit,
-       true},
+       network::mojom::FetchCredentialsMode::kOmit, "GET",
+       "X-MY-HEADER:t;Y-MY-HEADER:t",
+       network::mojom::FetchCredentialsMode::kOmit, true},
       {"GET", "x-my-header, Y-MY-HEADER",
-       WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "X-MY-HEADER:t;y-my-header:t", WebURLRequest::kFetchCredentialsModeOmit,
-       true},
+       network::mojom::FetchCredentialsMode::kOmit, "GET",
+       "X-MY-HEADER:t;y-my-header:t",
+       network::mojom::FetchCredentialsMode::kOmit, true},
 
       // Requested headers not in cached preflight response:
-      {"GET", "", WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "X-MY-HEADER:t", WebURLRequest::kFetchCredentialsModeOmit, false},
-      {"GET", "X-SOME-OTHER-HEADER", WebURLRequest::kFetchCredentialsModeOmit,
-       "GET", "X-MY-HEADER:t", WebURLRequest::kFetchCredentialsModeOmit, false},
-      {"GET", "X-MY-HEADER", WebURLRequest::kFetchCredentialsModeOmit, "GET",
-       "X-MY-HEADER:t;Y-MY-HEADER:t", WebURLRequest::kFetchCredentialsModeOmit,
-       false},
+      {"GET", "", network::mojom::FetchCredentialsMode::kOmit, "GET",
+       "X-MY-HEADER:t", network::mojom::FetchCredentialsMode::kOmit, false},
+      {"GET", "X-SOME-OTHER-HEADER",
+       network::mojom::FetchCredentialsMode::kOmit, "GET", "X-MY-HEADER:t",
+       network::mojom::FetchCredentialsMode::kOmit, false},
+      {"GET", "X-MY-HEADER", network::mojom::FetchCredentialsMode::kOmit, "GET",
+       "X-MY-HEADER:t;Y-MY-HEADER:t",
+       network::mojom::FetchCredentialsMode::kOmit, false},
 
       // Different credential modes:
-      {"GET", "", WebURLRequest::kFetchCredentialsModeInclude, "GET", "",
-       WebURLRequest::kFetchCredentialsModeOmit, true},
-      {"GET", "", WebURLRequest::kFetchCredentialsModeInclude, "GET", "",
-       WebURLRequest::kFetchCredentialsModeInclude, true},
+      {"GET", "", network::mojom::FetchCredentialsMode::kInclude, "GET", "",
+       network::mojom::FetchCredentialsMode::kOmit, true},
+      {"GET", "", network::mojom::FetchCredentialsMode::kInclude, "GET", "",
+       network::mojom::FetchCredentialsMode::kInclude, true},
 
       // Credential mode mismatch:
-      {"GET", "", WebURLRequest::kFetchCredentialsModeOmit, "GET", "",
-       WebURLRequest::kFetchCredentialsModeInclude, false},
-      {"GET", "", WebURLRequest::kFetchCredentialsModeOmit, "GET", "",
-       WebURLRequest::kFetchCredentialsModePassword, false},
+      {"GET", "", network::mojom::FetchCredentialsMode::kOmit, "GET", "",
+       network::mojom::FetchCredentialsMode::kInclude, false},
+      {"GET", "", network::mojom::FetchCredentialsMode::kOmit, "GET", "",
+       network::mojom::FetchCredentialsMode::kInclude, false},
   };
 
   for (const auto& test : tests) {

@@ -19,7 +19,7 @@ TEST(DriveAPIParserTest, AboutResourceParser) {
       test_util::LoadJSONFile("drive/about.json");
   ASSERT_TRUE(document.get());
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<AboutResource> resource(new AboutResource());
   EXPECT_TRUE(resource->Parse(*document));
 
@@ -36,7 +36,7 @@ TEST(DriveAPIParserTest, AppListParser) {
       test_util::LoadJSONFile("drive/applist.json");
   ASSERT_TRUE(document.get());
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<AppList> applist(new AppList);
   EXPECT_TRUE(applist->Parse(*document));
 
@@ -113,7 +113,7 @@ TEST(DriveAPIParserTest, TeamDriveResourceParser) {
       test_util::LoadJSONFile("drive/team_drive.json");
   ASSERT_TRUE(document.get());
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<TeamDriveResource> resource(new TeamDriveResource());
   EXPECT_TRUE(resource->Parse(*document));
 
@@ -141,7 +141,7 @@ TEST(DriveAPIParserTest, TeamDriveListParser) {
   ASSERT_TRUE(document.get());
   EXPECT_TRUE(TeamDriveList::HasTeamDriveListKind(*document));
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<TeamDriveList> resource(new TeamDriveList());
   EXPECT_TRUE(resource->Parse(*document));
   EXPECT_EQ(3U, resource->items().size());
@@ -155,7 +155,7 @@ TEST(DriveAPIParserTest, FileListParser) {
       test_util::LoadJSONFile("drive/filelist.json");
   ASSERT_TRUE(document.get());
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<FileList> filelist(new FileList);
   EXPECT_TRUE(filelist->Parse(*document));
 
@@ -191,6 +191,11 @@ TEST(DriveAPIParserTest, FileListParser) {
   ASSERT_TRUE(
       util::GetTimeFromString("2012-07-27T05:43:20.269Z", &modified_time));
   EXPECT_EQ(modified_time, file1.modified_date());
+
+  base::Time modified_by_me_time;
+  ASSERT_TRUE(util::GetTimeFromString("2012-07-27T05:30:20.269Z",
+                                      &modified_by_me_time));
+  EXPECT_EQ(modified_by_me_time, file1.modified_by_me_date());
 
   ASSERT_EQ(1U, file1.parents().size());
   EXPECT_EQ("0B4v7G8yEYAWHYW1OcExsUVZLABC", file1.parents()[0].file_id());
@@ -257,7 +262,7 @@ TEST(DriveAPIParserTest, ChangeListParser) {
       test_util::LoadJSONFile("drive/changelist.json");
   ASSERT_TRUE(document.get());
 
-  ASSERT_EQ(base::Value::Type::DICTIONARY, document->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, document->type());
   std::unique_ptr<ChangeList> changelist(new ChangeList);
   EXPECT_TRUE(changelist->Parse(*document));
 

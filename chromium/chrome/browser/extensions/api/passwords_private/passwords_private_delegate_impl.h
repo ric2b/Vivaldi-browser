@@ -7,7 +7,6 @@
 
 #include <stddef.h>
 
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +16,8 @@
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
+#include "chrome/browser/ui/passwords/password_access_authenticator.h"
+#include "chrome/browser/ui/passwords/password_manager_porter.h"
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
 #include "chrome/common/extensions/api/passwords_private.h"
@@ -44,19 +45,18 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void SendPasswordExceptionsList() override;
   void GetPasswordExceptionsList(
       const ExceptionEntriesCallback& callback) override;
-  void RemoveSavedPassword(
-      const std::string& origin_url, const std::string& username) override;
-  void RemovePasswordException(const std::string& exception_url) override;
-  void RequestShowPassword(const std::string& origin_url,
-                           const std::string& username,
+  void RemoveSavedPassword(size_t index) override;
+  void RemovePasswordException(size_t index) override;
+  void UndoRemoveSavedPasswordOrException() override;
+  void RequestShowPassword(size_t index,
                            content::WebContents* web_contents) override;
+  void ImportPasswords(content::WebContents* web_contents) override;
+  void ExportPasswords(content::WebContents* web_contents) override;
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
   void ShowPassword(
       size_t index,
-      const std::string& origin_url,
-      const std::string& username,
       const base::string16& plaintext_password) override;
   void SetPasswordList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
@@ -71,6 +71,10 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // KeyedService overrides:
   void Shutdown() override;
 
+  // Use this in tests to mock the OS-level reauthentication.
+  void SetOsReauthCallForTesting(
+      base::RepeatingCallback<bool()> os_reauth_call);
+
  private:
   // Called after the lists are fetched. Once both lists have been set, the
   // class is considered initialized and any queued functions (which could
@@ -81,18 +85,26 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // has been initialized or by deferring it until initialization has completed.
   void ExecuteFunction(const base::Closure& callback);
 
-  void RemoveSavedPasswordInternal(
-      const std::string& origin_url, const std::string& username);
-  void RemovePasswordExceptionInternal(const std::string& exception_url);
-  void RequestShowPasswordInternal(const std::string& origin_url,
-                                   const std::string& username,
+  void RemoveSavedPasswordInternal(size_t index);
+  void RemovePasswordExceptionInternal(size_t index);
+  void UndoRemoveSavedPasswordOrExceptionInternal();
+  void RequestShowPasswordInternal(size_t index,
                                    content::WebContents* web_contents);
+
+  // Triggers an OS-dependent UI to present OS account login challenge and
+  // returns true if the user passed that challenge.
+  bool OsReauthCall();
 
   // Not owned by this class.
   Profile* profile_;
 
   // Used to communicate with the password store.
   std::unique_ptr<PasswordManagerPresenter> password_manager_presenter_;
+
+  // Used to control the export and import flows.
+  std::unique_ptr<PasswordManagerPorter> password_manager_porter_;
+
+  PasswordAccessAuthenticator password_access_authenticator_;
 
   // The current list of entries/exceptions. Cached here so that when new
   // observers are added, this delegate can send the current lists without
@@ -117,14 +129,6 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // The WebContents used when invoking this API. Used to fetch the
   // NativeWindow for the window where the API was called.
   content::WebContents* web_contents_;
-
-  // Map from origin URL and username to the index of |password_list_| at which
-  // the corresponding entry resides.
-  std::map<std::string, size_t> login_pair_to_index_map_;
-
-  // Map from password exception URL to the index of |password_exception_list_|
-  // at which the correponding entry resides.
-  std::map<std::string, size_t> exception_url_to_index_map_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateDelegateImpl);
 };

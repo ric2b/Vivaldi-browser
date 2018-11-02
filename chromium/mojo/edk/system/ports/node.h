@@ -45,6 +45,22 @@ struct PortStatus {
 class MessageFilter;
 class NodeDelegate;
 
+// A Node maintains a collection of Ports (see port.h) indexed by unique 128-bit
+// addresses (names), performing routing and processing of events among the
+// Ports within the Node and to or from other Nodes in the system. Typically
+// (and practically, in all uses today) there is a single Node per system
+// process. Thus a Node boundary effectively models a process boundary.
+//
+// New Ports can be created uninitialized using CreateUninitializedPort (and
+// later initialized using InitializePort), or created in a fully initialized
+// state using CreatePortPair(). Initialized ports have exactly one conjugate
+// port which is the ultimate receiver of any user messages sent by that port.
+// See SendUserMessage().
+//
+// In addition to routing user message events, various control events are used
+// by Nodes to coordinate Port behavior and lifetime within and across Nodes.
+// See Event documentation for description of different types of events used by
+// a Node to coordinate behavior.
 class Node {
  public:
   enum class ShutdownPolicy {
@@ -211,24 +227,6 @@ class Node {
   const NodeName name_;
   const DelegateHolder delegate_;
 
-  // A wrapper structure for Port table entries. https://crbug.com/725605 likely
-  // indicates memory corruption stomping on the Port table, and there is no
-  // clue as to where the corruption is coming from. Changing the size of the
-  // map entry allocations should effectively work around the bug, as it did for
-  // https://crbug.com/740044.
-  struct PortTableEntry {
-    explicit PortTableEntry(scoped_refptr<Port> port);
-    PortTableEntry(const PortTableEntry&) = delete;
-    PortTableEntry(PortTableEntry&& other);
-    ~PortTableEntry();
-
-    PortTableEntry& operator=(const PortTableEntry&) = delete;
-    PortTableEntry& operator=(PortTableEntry&& other);
-
-    uint64_t sentinel_value_ = 0x1827364554637281ULL;
-    scoped_refptr<Port> port;
-  };
-
   // Guards |ports_|. This must never be acquired while an individual port's
   // lock is held on the same thread. Conversely, individual port locks may be
   // acquired while this one is held.
@@ -237,7 +235,7 @@ class Node {
   // destruction, it is also important to ensure that such events are never
   // destroyed while this (or any individual Port) lock is held.
   base::Lock ports_lock_;
-  std::unordered_map<PortName, PortTableEntry> ports_;
+  std::unordered_map<PortName, scoped_refptr<Port>> ports_;
 
   DISALLOW_COPY_AND_ASSIGN(Node);
 };

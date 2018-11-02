@@ -27,7 +27,6 @@
 #include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
-#include "chrome/browser/net/http_server_properties_manager_factory.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/quota_policy_channel_id_store.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_io_data.h"
@@ -52,13 +51,15 @@
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
-#include "components/previews/core/previews_io_data.h"
+#include "components/previews/content/previews_io_data.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/network_service.mojom.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
@@ -66,6 +67,7 @@
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
+#include "net/http/http_server_properties.h"
 #include "net/http/http_server_properties_manager.h"
 #include "net/reporting/reporting_feature.h"
 #include "net/reporting/reporting_policy.h"
@@ -121,9 +123,6 @@ ProfileImplIOData::Handle::~Handle() {
     io_data_->predictor_->ShutdownOnUIThread();
   }
 
-  if (io_data_->http_server_properties_manager_)
-    io_data_->http_server_properties_manager_->ShutdownOnPrefSequence();
-
   // io_data_->data_reduction_proxy_io_data() might be NULL if Init() was
   // never called.
   if (io_data_->data_reduction_proxy_io_data())
@@ -160,15 +159,9 @@ void ProfileImplIOData::Handle::Init(
   lazy_params->domain_reliability_monitor =
       std::move(domain_reliability_monitor);
 
-  PrefService* pref_service = profile_->GetPrefs();
-  lazy_params->http_server_properties_manager.reset(
-      chrome_browser_net::HttpServerPropertiesManagerFactory::CreateManager(
-          pref_service, g_browser_process->io_thread()->net_log()));
-  io_data_->http_server_properties_manager_ =
-      lazy_params->http_server_properties_manager.get();
-
   io_data_->lazy_params_.reset(lazy_params);
 
+  PrefService* pref_service = profile_->GetPrefs();
   // Keep track of profile path and cache sizes separately so we can use them
   // on demand when creating storage isolated URLRequestContextGetters.
   io_data_->profile_path_ = profile_path;
@@ -187,6 +180,7 @@ void ProfileImplIOData::Handle::Init(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
   PreviewsServiceFactory::GetForProfile(profile_)->Initialize(
       io_data_->previews_io_data(),
+      g_browser_process->optimization_guide_service(),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), profile_path);
 
   io_data_->set_data_reduction_proxy_io_data(
@@ -335,24 +329,6 @@ ProfileImplIOData::Handle::GetIsolatedMediaRequestContextGetter(
   return context;
 }
 
-DevToolsNetworkControllerHandle*
-ProfileImplIOData::Handle::GetDevToolsNetworkControllerHandle() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return io_data_->network_controller_handle();
-}
-
-void ProfileImplIOData::Handle::ClearNetworkingHistorySince(
-    base::Time time,
-    const base::Closure& completion) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  LazyInitialize();
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&ProfileImplIOData::ClearNetworkingHistorySinceOnIOThread,
-                     base::Unretained(io_data_), time, completion));
-}
-
 void ProfileImplIOData::Handle::LazyInitialize() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (initialized_)
@@ -404,7 +380,6 @@ ProfileImplIOData::LazyParams::~LazyParams() {}
 
 ProfileImplIOData::ProfileImplIOData()
     : ProfileIOData(Profile::REGULAR_PROFILE),
-      http_server_properties_manager_(NULL),
       app_cache_max_size_(0),
       app_media_cache_max_size_(0) {
 }
@@ -439,12 +414,6 @@ void ProfileImplIOData::InitializeInternal(
     content::URLRequestInterceptorScopedVector request_interceptors) const {
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
-
-  if (lazy_params_->http_server_properties_manager) {
-    lazy_params_->http_server_properties_manager->InitializeOnNetworkSequence();
-    builder->SetHttpServerProperties(
-        std::move(lazy_params_->http_server_properties_manager));
-  }
 
   builder->set_network_quality_estimator(
       io_thread_globals->network_quality_estimator.get());
@@ -498,6 +467,7 @@ void ProfileImplIOData::InitializeInternal(
       data_reduction_proxy_io_data()->CreateInterceptor());
   data_reduction_proxy_io_data()->SetDataUseAscriber(
       io_thread_globals->data_use_ascriber.get());
+  data_reduction_proxy_io_data()->SetPreviewsDecider(previews_io_data());
   SetUpJobFactoryDefaultsForBuilder(
       builder, std::move(request_interceptors),
       std::move(profile_params->protocol_handler_interceptor));
@@ -745,17 +715,4 @@ ProfileImplIOData::MaybeCreateReportingPolicy() {
     return std::unique_ptr<net::ReportingPolicy>();
 
   return base::MakeUnique<net::ReportingPolicy>();
-}
-
-void ProfileImplIOData::ClearNetworkingHistorySinceOnIOThread(
-    base::Time time,
-    const base::Closure& completion) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(initialized());
-
-  // Completes synchronously.
-  main_request_context()->transport_security_state()->DeleteAllDynamicDataSince(
-      time);
-  DCHECK(http_server_properties_manager_);
-  http_server_properties_manager_->Clear(completion);
 }

@@ -11,7 +11,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/tray/system_tray_bubble.h"
+#include "ash/system/tray/system_tray_view.h"
 #include "ash/system/tray/tray_background_view.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/view.h"
@@ -44,9 +46,12 @@ enum BubbleCreationType {
   BUBBLE_USE_EXISTING,  // Uses any existing bubble, or creates a new one.
 };
 
+// For historical reasons, SystemTray is both a controller and a view. It
+// manages all the SystemTrayItem controllers, creates icon views that appear in
+// the tray, creates the bubble menu and fills the menu with items. It is also
+// the view that contains the icons in the tray.
 class ASH_EXPORT SystemTray : public TrayBackgroundView {
  public:
-
   explicit SystemTray(Shelf* shelf);
   ~SystemTray() override;
 
@@ -77,16 +82,14 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // non-zero, then the view is automatically closed after the specified time.
   void ShowDetailedView(SystemTrayItem* item,
                         int close_delay_in_seconds,
-                        bool activate,
                         BubbleCreationType creation_type);
 
   // Continue showing the existing detailed view, if any, for |close_delay|
   // seconds.
   void SetDetailedViewCloseDelay(int close_delay);
 
-  // Hides the detailed view for |item|. If |animate| is false, disable
-  // the hiding animation for hiding |item|.
-  void HideDetailedView(SystemTrayItem* item, bool animate);
+  // Hides the detailed view for |item|.
+  void HideDetailedView(SystemTrayItem* item);
 
   // Updates the items when the login status of the system changes.
   void UpdateAfterLoginStatusChange(LoginStatus login_status);
@@ -102,7 +105,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   bool HasSystemBubble() const;
 
   // Returns true if the system_bubble_ exists and is of type |type|.
-  bool HasSystemBubbleType(SystemTrayBubble::BubbleType type);
+  bool HasSystemTrayType(SystemTrayView::SystemTrayType type);
 
   // Returns a pointer to the system bubble or NULL if none.
   SystemTrayBubble* GetSystemBubble();
@@ -116,6 +119,11 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
   // Returns TrayAudio object if present or null otherwise.
   TrayAudio* GetTrayAudio() const;
+
+  // Determines if it's ok to switch away from the currently active user. Screen
+  // casting may block this (or at least throw up a confirmation dialog). Calls
+  // |callback| with the result.
+  void CanSwitchAwayFromActiveUser(base::OnceCallback<void(bool)> callback);
 
   // TrayBackgroundView:
   void UpdateAfterShelfAlignmentChange() override;
@@ -145,7 +153,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
  private:
   friend class SystemTrayTestApi;
-  class ActivationObserver;
 
   // Activates the bubble and starts key navigation with the |key_event|.
   void ActivateAndStartNavigation(const ui::KeyEvent& key_event);
@@ -162,15 +169,12 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
   // Constructs or re-constructs |system_bubble_| and populates it with |items|.
   // Specify |change_tray_status| to true if want to change the tray background
-  // status. The bubble will be opened in inactive state. If |can_activate| is
-  // true, the bubble will be activated by one of following means. Specify
+  // status. The bubble will be opened in inactive state. Specify
   // |show_by_click| to true if |items| are shown by mouse or gesture click.
-  // * When alt/alt-tab acclerator is used to start navigation.
   // * When the bubble is opened by accelerator.
   // * When the tray item is set to be focused.
   void ShowItems(const std::vector<SystemTrayItem*>& items,
                  bool details,
-                 bool can_activate,
                  BubbleCreationType creation_type,
                  bool persistent,
                  bool show_by_click);
@@ -195,7 +199,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // Pointers to members of |items_|.
   SystemTrayItem* detailed_item_ = nullptr;
 
-  // Bubble for default and detailed views.
+  // Bubble for SystemTrayViews.
   std::unique_ptr<SystemBubbleWrapper> system_bubble_;
 
   // Keep track of the default view height so that when we create detailed
@@ -226,8 +230,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // A reference to the Screen share and capture item.
   ScreenTrayItem* screen_capture_tray_item_ = nullptr;  // not owned
   ScreenTrayItem* screen_share_tray_item_ = nullptr;    // not owned
-
-  std::unique_ptr<ActivationObserver> activation_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTray);
 };

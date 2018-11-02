@@ -74,8 +74,7 @@ class LayerControlView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(LayerControlView);
 };
 
-// Returns the color used to darken the wallpaper, needed by login, lock, OOBE
-// and add user screens.
+// Returns the color used to dim the wallpaper.
 SkColor GetWallpaperDarkenColor() {
   SkColor darken_color =
       Shell::Get()->wallpaper_controller()->GetProminentColor(
@@ -99,8 +98,8 @@ SkColor GetWallpaperDarkenColor() {
 //   - Disabling overview mode on mouse release.
 class PreEventDispatchHandler : public ui::EventHandler {
  public:
-  PreEventDispatchHandler() {}
-  ~PreEventDispatchHandler() override {}
+  PreEventDispatchHandler() = default;
+  ~PreEventDispatchHandler() override = default;
 
  private:
   // ui::EventHandler:
@@ -160,7 +159,7 @@ void WallpaperView::OnPaint(gfx::Canvas* canvas) {
     return;
 
   cc::PaintFlags flags;
-  if (Shell::Get()->session_controller()->IsUserSessionBlocked()) {
+  if (controller->ShouldApplyDimming()) {
     flags.setColorFilter(SkColorFilter::MakeModeFilter(
         GetWallpaperDarkenColor(), SkBlendMode::kDarken));
   }

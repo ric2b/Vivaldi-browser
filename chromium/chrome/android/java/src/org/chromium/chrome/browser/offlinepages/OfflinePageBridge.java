@@ -18,10 +18,7 @@ import org.chromium.components.offlinepages.DeletePageResult;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -38,7 +35,9 @@ public class OfflinePageBridge {
     public static final String SHARE_NAMESPACE = "share";
     public static final String CCT_NAMESPACE = "custom_tabs";
     public static final String DOWNLOAD_NAMESPACE = "download";
+    public static final String NTP_SUGGESTIONS_NAMESPACE = "ntp_suggestions";
     public static final String SUGGESTED_ARTICLES_NAMESPACE = "suggested_articles";
+    public static final String BROWSER_ACTIONS_NAMESPACE = "browser_actions";
 
     /**
      * Retrieves the OfflinePageBridge for the given profile, creating it the first time
@@ -178,7 +177,7 @@ public class OfflinePageBridge {
      * @param callback The callback to run when the operation completes.
      */
     @VisibleForTesting
-    void getAllPages(final Callback<List<OfflinePageItem>> callback) {
+    public void getAllPages(final Callback<List<OfflinePageItem>> callback) {
         List<OfflinePageItem> result = new ArrayList<>();
         nativeGetAllPages(mNativeOfflinePageBridge, result, callback);
     }
@@ -223,10 +222,10 @@ public class OfflinePageBridge {
      * @return A list of {@link OfflinePageItem} matching the provided namespace, or an empty list
      * if none exist.
      */
-    public void getPagesForNamespace(
+    public void getPagesByNamespace(
             final String namespace, final Callback<List<OfflinePageItem>> callback) {
         List<OfflinePageItem> result = new ArrayList<>();
-        nativeGetPagesForNamespace(mNativeOfflinePageBridge, result, namespace, callback);
+        nativeGetPagesByNamespace(mNativeOfflinePageBridge, result, namespace, callback);
     }
 
     /**
@@ -530,35 +529,6 @@ public class OfflinePageBridge {
         return nativeIsShowingDownloadButtonInErrorPage(mNativeOfflinePageBridge, webContents);
     }
 
-    private static class CheckPagesExistOfflineCallbackInternal {
-        private Callback<Set<String>> mCallback;
-
-        CheckPagesExistOfflineCallbackInternal(Callback<Set<String>> callback) {
-            mCallback = callback;
-        }
-
-        @CalledByNative("CheckPagesExistOfflineCallbackInternal")
-        public void onResult(String[] results) {
-            Set<String> resultSet = new HashSet<>();
-            Collections.addAll(resultSet, results);
-            mCallback.onResult(resultSet);
-        }
-    }
-
-    /**
-     * Returns via callback any urls in <code>urls</code> for which there exist offline pages.
-     *
-     * TODO(http://crbug.com/598006): Add metrics for preventing UI jank.
-     * TODO(http://crbug.com/693514): Now unused in production code. Can be removed.
-     */
-    public void checkPagesExistOffline(Set<String> urls, Callback<Set<String>> callback) {
-        String[] urlArray = urls.toArray(new String[urls.size()]);
-
-        CheckPagesExistOfflineCallbackInternal callbackInternal =
-                new CheckPagesExistOfflineCallbackInternal(callback);
-        nativeCheckPagesExistOffline(mNativeOfflinePageBridge, urlArray, callbackInternal);
-    }
-
     /** Tells the native side that a new tab has been added for this profile. */
     void registerRecentTab(int tabId) {
         nativeRegisterRecentTab(mNativeOfflinePageBridge, tabId);
@@ -622,6 +592,18 @@ public class OfflinePageBridge {
     @Nullable
     public OfflinePageItem getOfflinePage(WebContents webContents) {
         return nativeGetOfflinePage(mNativeOfflinePageBridge, webContents);
+    }
+
+    /**
+     * Queries the model for offline content that's been added since the given timestamp.
+     * @param timestamp Returned content must be newer than |timestamp|, a date represented as the
+     * number of millis since the Java epoch.
+     * @param callback Fired when the model check has been finished, with a String parameter that
+     * represents the source of the offline content.  The parameter will be the empty string if no
+     * fresh enough content is found.
+     */
+    public void checkForNewOfflineContent(long freshnessTimeMillis, Callback<String> callback) {
+        nativeCheckForNewOfflineContent(mNativeOfflinePageBridge, freshnessTimeMillis, callback);
     }
 
     /**
@@ -706,8 +688,6 @@ public class OfflinePageBridge {
     @VisibleForTesting
     native void nativeGetAllPages(long nativeOfflinePageBridge, List<OfflinePageItem> offlinePages,
             final Callback<List<OfflinePageItem>> callback);
-    private native void nativeCheckPagesExistOffline(long nativeOfflinePageBridge, Object[] urls,
-            CheckPagesExistOfflineCallbackInternal callback);
     private native void nativeRegisterRecentTab(long nativeOfflinePageBridge, int tabId);
     private native void nativeWillCloseTab(long nativeOfflinePageBridge, WebContents webContents);
     private native void nativeUnregisterRecentTab(long nativeOfflinePageBridge, int tabId);
@@ -727,7 +707,7 @@ public class OfflinePageBridge {
     native void nativeGetPagesByRequestOrigin(long nativeOfflinePageBridge,
             List<OfflinePageItem> result, String requestOrigin,
             Callback<List<OfflinePageItem>> callback);
-    native void nativeGetPagesForNamespace(long nativeOfflinePageBridge,
+    native void nativeGetPagesByNamespace(long nativeOfflinePageBridge,
             List<OfflinePageItem> result, String nameSpace,
             Callback<List<OfflinePageItem>> callback);
     @VisibleForTesting
@@ -756,4 +736,6 @@ public class OfflinePageBridge {
             long nativeOfflinePageBridge, WebContents webContents);
     private native OfflinePageItem nativeGetOfflinePage(
             long nativeOfflinePageBridge, WebContents webContents);
+    private native void nativeCheckForNewOfflineContent(
+            long nativeOfflinePageBridge, long freshnessTimeMillis, Callback<String> callback);
 }

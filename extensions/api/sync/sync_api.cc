@@ -12,18 +12,41 @@
 
 #include "base/i18n/time_formatting.h"
 #include "base/lazy_instance.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/invalidation/public/invalidator_state.h"
+#include "components/invalidation/public/object_id_invalidation_map.h"
+#include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
+#include "google/cacheinvalidation/include/types.h"
+#include "google/cacheinvalidation/types.pb.h"
+#include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_syncmanager.h"
 #include "sync/vivaldi_syncmanager_factory.h"
 
-using vivaldi::VivaldiSyncManagerFactory;
 using vivaldi::VivaldiSyncManager;
+using vivaldi::VivaldiSyncManagerFactory;
 
 namespace extensions {
+
+namespace {
+vivaldi::sync::SyncOperationResult SyncerErrorToOperationResult(
+    syncer::SyncerError syncer_error) {
+  switch (syncer_error) {
+    case syncer::SYNCER_OK:
+      return vivaldi::sync::SyncOperationResult::SYNC_OPERATION_RESULT_SUCCESS;
+    case syncer::UNSET:
+    case syncer::SERVER_MORE_TO_DOWNLOAD:
+    case syncer::DATATYPE_TRIGGERED_RETRY:
+      return vivaldi::sync::SyncOperationResult::SYNC_OPERATION_RESULT_PENDING;
+    default:
+      return vivaldi::sync::SyncOperationResult::SYNC_OPERATION_RESULT_FAILURE;
+  }
+}
+}  // anonymous namespace
 
 SyncEventRouter::SyncEventRouter(Profile* profile)
     : browser_context_(profile),
@@ -298,11 +321,10 @@ bool SyncGetStatusFunction::RunAsync() {
       sync_manager->IsEncryptEverythingEnabled();
   status_info.last_sync_time = base::UTF16ToUTF8(
       base::TimeFormatShortDateAndTime(cycle_snapshot.sync_start_time()));
-  status_info.last_commit_success =
-      cycle_snapshot.model_neutral_state().commit_result == syncer::SYNCER_OK;
-  status_info.last_download_updates_success =
-      cycle_snapshot.model_neutral_state().last_download_updates_result ==
-      syncer::SYNCER_OK;
+  status_info.last_commit_status = SyncerErrorToOperationResult(
+      cycle_snapshot.model_neutral_state().commit_result);
+  status_info.last_download_updates_status = SyncerErrorToOperationResult(
+      cycle_snapshot.model_neutral_state().last_download_updates_result);
   status_info.has_synced = cycle_snapshot.is_initialized();
 
   results_ = vivaldi::sync::GetStatus::Results::Create(status_info);
@@ -353,15 +375,59 @@ bool SyncLogoutFunction::RunAsync() {
   return true;
 }
 
-bool SyncPollServerFunction::RunAsync() {
+bool SyncUpdateNotificationClientStatusFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::UpdateNotificationClientStatus::Params> params(
+      vivaldi::sync::UpdateNotificationClientStatus::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
   if (!sync_manager) {
     error_ = "Sync manager is unavailable";
     return false;
   }
+  syncer::InvalidatorState state =
+      (params->status == vivaldi::sync::SyncNotificationClientStatus::
+                             SYNC_NOTIFICATION_CLIENT_STATUS_CONNECTED)
+          ? syncer::INVALIDATIONS_ENABLED
+          : syncer::DEFAULT_INVALIDATION_ERROR;
+  sync_manager->invalidation_service()->UpdateInvalidatorState(state);
 
-  sync_manager->PollServer();
+  // If notifications just got re-enabled, just invalidate everything to
+  // compensate for potentially missed notifications.
+  if (state == syncer::INVALIDATIONS_ENABLED) {
+    syncer::ObjectIdInvalidationMap invalidation_map =
+        syncer::ObjectIdInvalidationMap::InvalidateAll(
+            syncer::ModelTypeSetToObjectIdSet(syncer::ProtocolTypes()));
+    sync_manager->invalidation_service()->PerformInvalidation(invalidation_map);
+  }
+  SendResponse(true);
+  return true;
+}
+
+bool SyncNotificationReceivedFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::NotificationReceived::Params> params(
+      vivaldi::sync::NotificationReceived::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiSyncManager* sync_manager =
+      VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
+  DCHECK(sync_manager);
+
+  // Ignore notifications for changes sent by us.
+  if (params->client_id !=
+      sync_manager->invalidation_service()->GetInvalidatorClientId()) {
+    int64_t version;
+    base::StringToInt64(params->version, &version);
+    syncer::ObjectIdInvalidationMap invalidations;
+    invalidations.Insert(syncer::Invalidation::Init(
+        invalidation::ObjectId(ipc::invalidation::ObjectSource::CHROME_SYNC,
+                               params->notification_type),
+        version, ""));
+    sync_manager->invalidation_service()->PerformInvalidation(invalidations);
+  }
 
   SendResponse(true);
   return true;

@@ -34,7 +34,7 @@
 #include "core/events/ProgressEvent.h"
 #include "core/fileapi/Blob.h"
 #include "core/probe/CoreProbes.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/WebFileWriter.h"
 #include "public/platform/WebURL.h"
 
@@ -315,7 +315,7 @@ void FileWriter::Dispose() {
   ResetWriter();
 }
 
-DEFINE_TRACE(FileWriter) {
+void FileWriter::Trace(blink::Visitor* visitor) {
   visitor->Trace(error_);
   visitor->Trace(blob_being_written_);
   EventTargetWithInlineData::Trace(visitor);

@@ -47,6 +47,12 @@ mojom("interfaces") {
 }
 ```
 
+Ensure that any target that needs this interface depends on it, e.g. with a line like:
+
+```
+   deps += [ '//services/db/public/interfaces' ]
+```
+
 If we then build this target:
 
 ```
@@ -305,9 +311,9 @@ class Logger {
 
   virtual void Log(const std::string& message) = 0;
 
-  using GetTailCallback = base::Callback<void(const std::string& message)>;
+  using GetTailCallback = base::OnceCallback<void(const std::string& message)>;
 
-  virtual void GetTail(const GetTailCallback& callback) = 0;
+  virtual void GetTail(GetTailCallback callback) = 0;
 }
 
 }  // namespace mojom
@@ -335,8 +341,8 @@ class LoggerImpl : public sample::mojom::Logger {
     lines_.push_back(message);
   }
 
-  void GetTail(const GetTailCallback& callback) override {
-    callback.Run(lines_.back());
+  void GetTail(GetTailCallback callback) override {
+    std::move(callback).Run(lines_.back());
   }
 
  private:
@@ -354,7 +360,7 @@ void OnGetTail(const std::string& message) {
   LOG(ERROR) << "Tail was: " << message;
 }
 
-logger->GetTail(base::Bind(&OnGetTail));
+logger->GetTail(base::BindOnce(&OnGetTail));
 ```
 
 Behind the scenes, the implementation-side callback is actually serializing the
@@ -425,6 +431,15 @@ void LoggerImpl::OnError() {
 
 The use of `base::Unretained` is *safe* because the error handler will never be
 invoked beyond the lifetime of `binding_`, and `this` owns `binding_`.
+
+### A Note About Endpoint Lifetime and Callbacks
+Once a `mojo::InterfacePtr<T>` is destroyed, it is guaranteed that pending
+callbacks as well as the connection error handler (if registered) won't be
+called.
+
+Once a `mojo::Binding<T>` is destroyed, it is guaranteed that no more method
+calls are dispatched to the implementation and the connection error handler (if
+registered) won't be called.
 
 ### A Note About Ordering
 

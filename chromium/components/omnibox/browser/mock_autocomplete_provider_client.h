@@ -5,8 +5,10 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_MOCK_AUTOCOMPLETE_PROVIDER_CLIENT_H_
 #define COMPONENTS_OMNIBOX_BROWSER_MOCK_AUTOCOMPLETE_PROVIDER_CLIENT_H_
 
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -48,13 +50,6 @@ class MockAutocompleteProviderClient : public AutocompleteProviderClient {
       bool create_if_necessary) const override {
     return contextual_suggestions_service_.get();
   }
-  std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
-      KeywordProvider* keyword_provider) override {
-    return nullptr;
-  }
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override {
-    return nullptr;
-  }
 
   MOCK_CONST_METHOD0(GetSearchTermsData, const SearchTermsData&());
 
@@ -65,6 +60,13 @@ class MockAutocompleteProviderClient : public AutocompleteProviderClient {
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override {
     return nullptr;
   }
+  std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
+      KeywordProvider* keyword_provider) override {
+    return nullptr;
+  }
+  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override {
+    return nullptr;
+  }
 
   MOCK_CONST_METHOD0(GetAcceptLanguages, std::string());
   MOCK_METHOD0(GetEmbedderRepresentationOfAboutScheme, std::string());
@@ -73,6 +75,7 @@ class MockAutocompleteProviderClient : public AutocompleteProviderClient {
   MOCK_CONST_METHOD0(IsOffTheRecord, bool());
   MOCK_CONST_METHOD0(SearchSuggestEnabled, bool());
   MOCK_CONST_METHOD0(TabSyncEnabledAndUnencrypted, bool());
+  MOCK_CONST_METHOD0(IsAuthenticated, bool());
   MOCK_METHOD6(
       Classify,
       void(const base::string16& text,
@@ -85,6 +88,8 @@ class MockAutocompleteProviderClient : public AutocompleteProviderClient {
                void(history::KeywordID keyword_id, const base::string16& term));
   MOCK_METHOD1(PrefetchImage, void(const GURL& url));
 
+  bool IsTabOpenWithURL(const GURL& url) override { return false; }
+
   void set_template_url_service(std::unique_ptr<TemplateURLService> service) {
     template_url_service_ = std::move(service);
   }
@@ -96,4 +101,4 @@ class MockAutocompleteProviderClient : public AutocompleteProviderClient {
   DISALLOW_COPY_AND_ASSIGN(MockAutocompleteProviderClient);
 };
 
-#endif  // COMPONENTS_OMNIBOX_AUTOCOMPLETE_PROVIDER_CLIENT_H_
+#endif  // COMPONENTS_OMNIBOX_BROWSER_MOCK_AUTOCOMPLETE_PROVIDER_CLIENT_H_

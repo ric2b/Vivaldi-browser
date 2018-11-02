@@ -31,6 +31,7 @@
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager_delegate.h"
+#include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/web_contents.h"
@@ -56,7 +57,7 @@ class DownloadRequestData : public base::SupportsUserData::Data {
   static void Attach(net::URLRequest* request,
                      DownloadUrlParameters* download_parameters,
                      uint32_t download_id);
-  static DownloadRequestData* Get(net::URLRequest* request);
+  static DownloadRequestData* Get(const net::URLRequest* request);
   static void Detach(net::URLRequest* request);
 
   std::unique_ptr<DownloadSaveInfo> TakeSaveInfo() {
@@ -65,9 +66,11 @@ class DownloadRequestData : public base::SupportsUserData::Data {
   uint32_t download_id() const { return download_id_; }
   std::string guid() const { return guid_; }
   bool is_transient() const { return transient_; }
+  bool fetch_error_body() const { return fetch_error_body_; }
   const DownloadUrlParameters::OnStartedCallback& callback() const {
     return on_started_callback_;
   }
+  std::string request_origin() const { return request_origin_; }
 
  private:
   static const int kKey;
@@ -75,8 +78,10 @@ class DownloadRequestData : public base::SupportsUserData::Data {
   std::unique_ptr<DownloadSaveInfo> save_info_;
   uint32_t download_id_ = DownloadItem::kInvalidId;
   std::string guid_;
+  bool fetch_error_body_ = false;
   bool transient_ = false;
   DownloadUrlParameters::OnStartedCallback on_started_callback_;
+  std::string request_origin_;
 };
 
 // static
@@ -86,18 +91,20 @@ const int DownloadRequestData::kKey = 0;
 void DownloadRequestData::Attach(net::URLRequest* request,
                                  DownloadUrlParameters* parameters,
                                  uint32_t download_id) {
-  auto request_data = base::MakeUnique<DownloadRequestData>();
+  auto request_data = std::make_unique<DownloadRequestData>();
   request_data->save_info_.reset(
       new DownloadSaveInfo(parameters->GetSaveInfo()));
   request_data->download_id_ = download_id;
   request_data->guid_ = parameters->guid();
+  request_data->fetch_error_body_ = parameters->fetch_error_body();
   request_data->transient_ = parameters->is_transient();
   request_data->on_started_callback_ = parameters->callback();
+  request_data->request_origin_ = parameters->request_origin();
   request->SetUserData(&kKey, std::move(request_data));
 }
 
 // static
-DownloadRequestData* DownloadRequestData::Get(net::URLRequest* request) {
+DownloadRequestData* DownloadRequestData::Get(const net::URLRequest* request) {
   return static_cast<DownloadRequestData*>(request->GetUserData(&kKey));
 }
 
@@ -125,12 +132,22 @@ DownloadRequestCore::CreateRequestOnIOThread(uint32_t download_id,
   return request;
 }
 
+// static impl of DownloadRequestUtils
+std::string DownloadRequestUtils::GetRequestOriginFromRequest(
+    const net::URLRequest* request) {
+  DownloadRequestData* data = DownloadRequestData::Get(request);
+  if (data)
+    return data->request_origin();
+  return std::string();  // Empty string if data does not exist.
+}
+
 DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
                                          Delegate* delegate,
                                          bool is_parallel_request)
     : delegate_(delegate),
       request_(request),
       download_id_(DownloadItem::kInvalidId),
+      fetch_error_body_(false),
       transient_(false),
       bytes_read_(0),
       pause_count_(0),
@@ -153,8 +170,8 @@ DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
     connector->BindInterface(device::mojom::kServiceName,
                              mojo::MakeRequest(&wake_lock_provider));
     wake_lock_provider->GetWakeLockWithoutContext(
-        device::mojom::WakeLockType::PreventAppSuspension,
-        device::mojom::WakeLockReason::ReasonOther, "Download in progress",
+        device::mojom::WakeLockType::kPreventAppSuspension,
+        device::mojom::WakeLockReason::kOther, "Download in progress",
         mojo::MakeRequest(&wake_lock_));
 
     wake_lock_->RequestWakeLock();
@@ -165,6 +182,7 @@ DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
     save_info_ = request_data->TakeSaveInfo();
     download_id_ = request_data->download_id();
     guid_ = request_data->guid();
+    fetch_error_body_ = request_data->fetch_error_body();
     transient_ = request_data->is_transient();
     on_started_callback_ = request_data->callback();
     DownloadRequestData::Detach(request_);
@@ -185,8 +203,8 @@ std::unique_ptr<DownloadCreateInfo>
 DownloadRequestCore::CreateDownloadCreateInfo(DownloadInterruptReason result) {
   DCHECK(!started_);
   started_ = true;
-  std::unique_ptr<DownloadCreateInfo> create_info(new DownloadCreateInfo(
-      base::Time::Now(), request()->net_log(), std::move(save_info_)));
+  std::unique_ptr<DownloadCreateInfo> create_info(
+      new DownloadCreateInfo(base::Time::Now(), std::move(save_info_)));
 
   if (result == DOWNLOAD_INTERRUPT_REASON_NONE)
     create_info->remote_address = request()->GetSocketAddress().host();
@@ -200,6 +218,7 @@ DownloadRequestCore::CreateDownloadCreateInfo(DownloadInterruptReason result) {
   create_info->transient = transient_;
   create_info->response_headers = request()->response_headers();
   create_info->offset = create_info->save_info->offset;
+  create_info->fetch_error_body = fetch_error_body_;
   return create_info;
 }
 
@@ -213,7 +232,7 @@ bool DownloadRequestCore::OnResponseStarted(
   DownloadInterruptReason result =
       request()->response_headers()
           ? HandleSuccessfulServerResponse(*request()->response_headers(),
-                                           save_info_.get())
+                                           save_info_.get(), fetch_error_body_)
           : DOWNLOAD_INTERRUPT_REASON_NONE;
 
   if (request()->response_headers()) {
@@ -246,14 +265,6 @@ bool DownloadRequestCore::OnResponseStarted(
   // with main frames.
   request()->SetPriority(net::IDLE);
 
-  // If the content-length header is not present (or contains something other
-  // than numbers), the incoming content_length is -1 (unknown size).
-  // Set the content length to 0 to indicate unknown size to DownloadManager.
-  int64_t content_length = request()->GetExpectedContentSize() > 0
-                               ? request()->GetExpectedContentSize()
-                               : 0;
-  create_info->total_bytes = content_length;
-
   // Create the ByteStream for sending data to the download sink.
   std::unique_ptr<ByteStreamReader> stream_reader;
   CreateByteStream(base::ThreadTaskRunnerHandle::Get(), GetDownloadTaskRunner(),
@@ -268,35 +279,14 @@ bool DownloadRequestCore::OnResponseStarted(
 
   // Get the last modified time and etag.
   const net::HttpResponseHeaders* headers = request()->response_headers();
-  if (headers) {
-    if (headers->HasStrongValidators()) {
-      // If we don't have strong validators as per RFC 7232 section 2, then
-      // we neither store nor use them for range requests.
-      if (!headers->EnumerateHeader(nullptr, "Last-Modified",
-                                    &create_info->last_modified))
-        create_info->last_modified.clear();
-      if (!headers->EnumerateHeader(nullptr, "ETag", &create_info->etag))
-        create_info->etag.clear();
-    }
+  HandleResponseHeaders(headers, create_info.get());
 
-    // Grab the first content-disposition header.  There may be more than one,
-    // though as of this writing, the network stack ensures if there are, they
-    // are all duplicates.
-    headers->EnumerateHeader(nullptr, "Content-Disposition",
-                             &create_info->content_disposition);
-
-    if (!headers->GetMimeType(&create_info->original_mime_type))
-      create_info->original_mime_type.clear();
-
-    // Content-Range is validated in HandleSuccessfulServerResponse.
-    // In RFC 7233, a single part 206 partial response must generate
-    // Content-Range. Accept-Range may be sent in 200 response to indicate the
-    // server can handle range request, but optional in 206 response.
-    create_info->accept_range =
-        headers->HasHeaderValue("Accept-Ranges", "bytes") ||
-        (headers->HasHeader("Content-Range") &&
-         headers->response_code() == net::HTTP_PARTIAL_CONTENT);
-  }
+  // If the content-length header is not present (or contains something other
+  // than numbers), the incoming content_length is -1 (unknown size).
+  // Set the content length to 0 to indicate unknown size to DownloadManager.
+  create_info->total_bytes = request()->GetExpectedContentSize() > 0
+                                 ? request()->GetExpectedContentSize()
+                                 : 0;
 
   // GURL::GetOrigin() doesn't support getting the inner origin of a blob URL.
   // However, requesting a cross origin blob URL would have resulted in a
@@ -363,7 +353,7 @@ bool DownloadRequestCore::OnReadCompleted(int bytes_read, bool* defer) {
     last_stream_pause_time_ = base::TimeTicks::Now();
   }
 
-  read_buffer_ = NULL;  // Drop our reference.
+  read_buffer_ = nullptr;  // Drop our reference.
 
   if (pause_count_ > 0)
     *defer = was_deferred_ = true;

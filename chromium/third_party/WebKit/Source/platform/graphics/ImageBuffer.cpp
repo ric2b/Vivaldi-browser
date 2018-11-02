@@ -36,11 +36,9 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/RecordingImageBufferSurface.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
@@ -51,7 +49,7 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-encoders/ImageEncoder.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
-#include "platform/wtf/CheckedNumeric.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
@@ -78,12 +76,11 @@ std::unique_ptr<ImageBuffer> ImageBuffer::Create(
 
 std::unique_ptr<ImageBuffer> ImageBuffer::Create(
     const IntSize& size,
-    OpacityMode opacity_mode,
     ImageInitializationMode initialization_mode,
     const CanvasColorParams& color_params) {
   std::unique_ptr<ImageBufferSurface> surface(
       WTF::WrapUnique(new UnacceleratedImageBufferSurface(
-          size, opacity_mode, initialization_mode, color_params)));
+          size, initialization_mode, color_params)));
 
   if (!surface->IsValid())
     return nullptr;
@@ -93,24 +90,11 @@ std::unique_ptr<ImageBuffer> ImageBuffer::Create(
 ImageBuffer::ImageBuffer(std::unique_ptr<ImageBufferSurface> surface)
     : weak_ptr_factory_(this),
       snapshot_state_(kInitialSnapshotState),
-      surface_(std::move(surface)),
-      client_(0),
-      gpu_readback_invoked_in_current_frame_(false),
-      gpu_readback_successive_frames_(0),
-      gpu_memory_usage_(0) {
+      surface_(std::move(surface)) {
   surface_->SetImageBuffer(this);
-  UpdateGPUMemoryUsage();
 }
 
-intptr_t ImageBuffer::global_gpu_memory_usage_ = 0;
-unsigned ImageBuffer::global_accelerated_image_buffer_count_ = 0;
-
 ImageBuffer::~ImageBuffer() {
-  if (gpu_memory_usage_) {
-    DCHECK_GT(global_accelerated_image_buffer_count_, 0u);
-    global_accelerated_image_buffer_count_--;
-  }
-  ImageBuffer::global_gpu_memory_usage_ -= gpu_memory_usage_;
   surface_->SetImageBuffer(nullptr);
 }
 
@@ -134,35 +118,11 @@ void ImageBuffer::DisableDeferral(DisableDeferralReason reason) const {
   return surface_->DisableDeferral(reason);
 }
 
-bool ImageBuffer::WritePixels(const SkImageInfo& info,
-                              const void* pixels,
-                              size_t row_bytes,
-                              int x,
-                              int y) {
-  return surface_->WritePixels(info, pixels, row_bytes, x, y);
-}
-
 bool ImageBuffer::IsSurfaceValid() const {
   return surface_->IsValid();
 }
 
 void ImageBuffer::FinalizeFrame() {
-  if (IsAccelerated() &&
-      CanvasHeuristicParameters::kGPUReadbackForcesNoAcceleration &&
-      !RuntimeEnabledFeatures::Canvas2dFixedRenderingModeEnabled()) {
-    if (gpu_readback_invoked_in_current_frame_) {
-      gpu_readback_successive_frames_++;
-      gpu_readback_invoked_in_current_frame_ = false;
-    } else {
-      gpu_readback_successive_frames_ = 0;
-    }
-
-    if (gpu_readback_successive_frames_ >=
-        CanvasHeuristicParameters::kGPUReadbackMinSuccessiveFrames) {
-      DisableAcceleration();
-    }
-  }
-
   surface_->FinalizeFrame();
 }
 
@@ -174,17 +134,7 @@ bool ImageBuffer::RestoreSurface() const {
   return surface_->IsValid() || surface_->Restore();
 }
 
-void ImageBuffer::NotifySurfaceInvalid() {
-  if (client_)
-    client_->NotifySurfaceInvalid();
-}
-
-void ImageBuffer::ResetCanvas(PaintCanvas* canvas) const {
-  if (client_)
-    client_->RestoreCanvasMatrixClipStack(canvas);
-}
-
-PassRefPtr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
+scoped_refptr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
     AccelerationHint hint,
     SnapshotReason reason) const {
   if (snapshot_state_ == kInitialSnapshotState)
@@ -218,7 +168,7 @@ bool ImageBuffer::CopyToPlatformTexture(SnapshotReason reason,
   if (!IsSurfaceValid())
     return false;
 
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface_->NewImageSnapshot(kPreferAcceleration, reason);
   if (!image || !image->IsTextureBacked() || !image->IsValid())
     return false;
@@ -315,35 +265,22 @@ void ImageBuffer::Draw(GraphicsContext& context,
     return;
 
   FloatRect src_rect =
-      src_ptr ? *src_ptr : FloatRect(FloatPoint(), FloatSize(size()));
+      src_ptr ? *src_ptr : FloatRect(FloatPoint(), FloatSize(Size()));
   surface_->Draw(context, dest_rect, src_rect, op);
 }
 
-void ImageBuffer::Flush(FlushReason reason) {
-  if (surface_->Canvas()) {
-    surface_->Flush(reason);
-  }
-}
-
-void ImageBuffer::FlushGpu(FlushReason reason) {
-  if (surface_->Canvas()) {
-    surface_->FlushGpu(reason);
-  }
-}
-
-bool ImageBuffer::GetImageData(Multiply multiplied,
-                               const IntRect& rect,
-                               WTF::ArrayBufferContents& contents) const {
-  uint8_t bytes_per_pixel = surface_->color_params().BytesPerPixel();
+bool ImageBuffer::GetImageData(const IntRect& rect,
+                               WTF::ArrayBufferContents& contents,
+                               bool* is_gpu_readback_invoked) const {
+  uint8_t bytes_per_pixel = surface_->ColorParams().BytesPerPixel();
   CheckedNumeric<int> data_size = bytes_per_pixel;
-  data_size *= rect.Width();
-  data_size *= rect.Height();
+  data_size *= rect.Size().Area();
   if (!data_size.IsValid() ||
       data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
     return false;
 
   if (!IsSurfaceValid()) {
-    size_t alloc_size_in_bytes = rect.Width() * rect.Height() * bytes_per_pixel;
+    size_t alloc_size_in_bytes = rect.Size().Area() * bytes_per_pixel;
     auto data = WTF::ArrayBufferContents::CreateDataHandle(
         alloc_size_in_bytes, WTF::ArrayBufferContents::kZeroInitialize);
     if (!data)
@@ -356,7 +293,7 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
 
   DCHECK(Canvas());
 
-  RefPtr<StaticBitmapImage> snapshot = surface_->NewImageSnapshot(
+  scoped_refptr<StaticBitmapImage> snapshot = surface_->NewImageSnapshot(
       kPreferNoAcceleration, kSnapshotReasonGetImageData);
   if (!snapshot)
     return false;
@@ -364,9 +301,9 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
   const bool may_have_stray_area =
       surface_->IsAccelerated()  // GPU readback may fail silently
       || rect.X() < 0 || rect.Y() < 0 ||
-      rect.MaxX() > surface_->size().Width() ||
-      rect.MaxY() > surface_->size().Height();
-  size_t alloc_size_in_bytes = rect.Width() * rect.Height() * bytes_per_pixel;
+      rect.MaxX() > surface_->Size().Width() ||
+      rect.MaxY() > surface_->Size().Height();
+  size_t alloc_size_in_bytes = rect.Size().Area() * bytes_per_pixel;
   WTF::ArrayBufferContents::InitializationPolicy initialization_policy =
       may_have_stray_area ? WTF::ArrayBufferContents::kZeroInitialize
                           : WTF::ArrayBufferContents::kDontInitialize;
@@ -377,37 +314,32 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
   WTF::ArrayBufferContents result(std::move(data), alloc_size_in_bytes,
                                   WTF::ArrayBufferContents::kNotShared);
 
-  SkAlphaType alpha_type = (multiplied == kPremultiplied)
-                               ? kPremul_SkAlphaType
-                               : kUnpremul_SkAlphaType;
   SkColorType color_type =
-      (surface_->color_params().GetSkColorType() == kRGBA_F16_SkColorType)
+      (surface_->ColorParams().GetSkColorType() == kRGBA_F16_SkColorType)
           ? kRGBA_F16_SkColorType
           : kRGBA_8888_SkColorType;
-
-  SkImageInfo info = SkImageInfo::Make(
-      rect.Width(), rect.Height(), color_type, alpha_type,
-      surface_->color_params().GetSkColorSpaceForSkSurfaces());
-
-  // If color correct rendering is enabled but color canvas extensions is not,
-  // unpremul must be done in gamma encoded color space.
-  if (CanvasColorParams::ColorCorrectRenderingInSRGBOnly())
-    info = info.makeColorSpace(nullptr);
-  snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
-      info, result.Data(), bytes_per_pixel * rect.Width(), rect.X(), rect.Y());
-  gpu_readback_invoked_in_current_frame_ = true;
+  SkImageInfo info = SkImageInfo::Make(rect.Width(), rect.Height(), color_type,
+                                       kUnpremul_SkAlphaType);
+  sk_sp<SkImage> sk_image = snapshot->PaintImageForCurrentFrame().GetSkImage();
+  bool read_pixels_successful = sk_image->readPixels(
+      info, result.Data(), info.minRowBytes(), rect.X(), rect.Y());
+  DCHECK(read_pixels_successful ||
+         !sk_image->bounds().intersect(SkIRect::MakeXYWH(
+             rect.X(), rect.Y(), info.width(), info.height())));
+  if (is_gpu_readback_invoked) {
+    *is_gpu_readback_invoked = true;
+  }
   result.Transfer(contents);
   return true;
 }
 
-void ImageBuffer::PutByteArray(Multiply multiplied,
-                               const unsigned char* source,
+void ImageBuffer::PutByteArray(const unsigned char* source,
                                const IntSize& source_size,
                                const IntRect& source_rect,
                                const IntPoint& dest_point) {
   if (!IsSurfaceValid())
     return;
-  uint8_t bytes_per_pixel = surface_->color_params().BytesPerPixel();
+  uint8_t bytes_per_pixel = surface_->ColorParams().BytesPerPixel();
 
   DCHECK_GT(source_rect.Width(), 0);
   DCHECK_GT(source_rect.Height(), 0);
@@ -415,14 +347,14 @@ void ImageBuffer::PutByteArray(Multiply multiplied,
   int origin_x = source_rect.X();
   int dest_x = dest_point.X() + source_rect.X();
   DCHECK_GE(dest_x, 0);
-  DCHECK_LT(dest_x, surface_->size().Width());
+  DCHECK_LT(dest_x, surface_->Size().Width());
   DCHECK_GE(origin_x, 0);
   DCHECK_LT(origin_x, source_rect.MaxX());
 
   int origin_y = source_rect.Y();
   int dest_y = dest_point.Y() + source_rect.Y();
   DCHECK_GE(dest_y, 0);
-  DCHECK_LT(dest_y, surface_->size().Height());
+  DCHECK_LT(dest_y, surface_->Size().Height());
   DCHECK_GE(origin_y, 0);
   DCHECK_LT(origin_y, source_rect.MaxY());
 
@@ -439,16 +371,15 @@ void ImageBuffer::PutByteArray(Multiply multiplied,
     // behavior (memcpy) by pretending the write is opaque.
     alpha_type = kOpaque_SkAlphaType;
   } else {
-    alpha_type = (multiplied == kPremultiplied) ? kPremul_SkAlphaType
-                                                : kUnpremul_SkAlphaType;
+    alpha_type = kUnpremul_SkAlphaType;
   }
 
   SkImageInfo info;
-  if (surface_->color_params().GetSkColorSpaceForSkSurfaces()) {
+  if (surface_->ColorParams().GetSkColorSpaceForSkSurfaces()) {
     info = SkImageInfo::Make(
         source_rect.Width(), source_rect.Height(),
-        surface_->color_params().GetSkColorType(), alpha_type,
-        surface_->color_params().GetSkColorSpaceForSkSurfaces());
+        surface_->ColorParams().GetSkColorType(), alpha_type,
+        surface_->ColorParams().GetSkColorSpaceForSkSurfaces());
     if (info.colorType() == kN32_SkColorType)
       info = info.makeColorType(kRGBA_8888_SkColorType);
   } else {
@@ -458,49 +389,8 @@ void ImageBuffer::PutByteArray(Multiply multiplied,
   surface_->WritePixels(info, src_addr, src_bytes_per_row, dest_x, dest_y);
 }
 
-void ImageBuffer::UpdateGPUMemoryUsage() const {
-  if (this->IsAccelerated()) {
-    // If image buffer is accelerated, we should keep track of GPU memory usage.
-    int gpu_buffer_count = 2;
-    CheckedNumeric<intptr_t> checked_gpu_usage =
-        surface_->color_params().BytesPerPixel() * gpu_buffer_count;
-    checked_gpu_usage *= this->size().Width();
-    checked_gpu_usage *= this->size().Height();
-    intptr_t gpu_memory_usage =
-        checked_gpu_usage.ValueOrDefault(std::numeric_limits<intptr_t>::max());
-
-    if (!gpu_memory_usage_)  // was not accelerated before
-      global_accelerated_image_buffer_count_++;
-
-    global_gpu_memory_usage_ += (gpu_memory_usage - gpu_memory_usage_);
-    gpu_memory_usage_ = gpu_memory_usage;
-  } else if (gpu_memory_usage_) {
-    // In case of switching from accelerated to non-accelerated mode,
-    // the GPU memory usage needs to be updated too.
-    DCHECK_GT(global_accelerated_image_buffer_count_, 0u);
-    global_accelerated_image_buffer_count_--;
-    global_gpu_memory_usage_ -= gpu_memory_usage_;
-    gpu_memory_usage_ = 0;
-
-    if (client_)
-      client_->DidDisableAcceleration();
-  }
-}
-
-void ImageBuffer::DisableAcceleration() {
-  if (!IsAccelerated())
-    return;
-
-  // Create and configure a recording (unaccelerated) surface.
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new RecordingImageBufferSurface(
-          surface_->size(), RecordingImageBufferSurface::kAllowFallback,
-          surface_->GetOpacityMode(), surface_->color_params()));
-  SetSurface(std::move(surface));
-}
-
 void ImageBuffer::SetSurface(std::unique_ptr<ImageBufferSurface> surface) {
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface_->NewImageSnapshot(kPreferNoAcceleration, kSnapshotReasonPaint);
 
   // image can be null if alloaction failed in which case we should just
@@ -516,21 +406,23 @@ void ImageBuffer::SetSurface(std::unique_ptr<ImageBufferSurface> surface) {
         image->PaintImageForCurrentFrame().GetSkImage();
     // Must tear down AcceleratedStaticBitmapImage before calling
     // makeNonTextureImage()
-    image.Clear();
+    image = nullptr;
     image = StaticBitmapImage::Create(texture_image->makeNonTextureImage());
   }
+  SkPaint paint;
+  paint.setBlendMode(SkBlendMode::kSrc);
   surface->Canvas()->drawImage(image->PaintImageForCurrentFrame(), 0, 0);
+  if (surface->GetCanvasResourceHost()) {
+    surface->GetCanvasResourceHost()->RestoreCanvasMatrixClipStack(
+        surface->Canvas());
+  }
   surface->SetImageBuffer(this);
-  if (client_)
-    client_->RestoreCanvasMatrixClipStack(surface->Canvas());
   surface_ = std::move(surface);
-
-  UpdateGPUMemoryUsage();
 }
 
-void ImageBuffer::SetNeedsCompositingUpdate() {
-  if (client_)
-    client_->SetNeedsCompositingUpdate();
+void ImageBuffer::OnCanvasDisposed() {
+  if (surface_)
+    surface_->SetCanvasResourceHost(nullptr);
 }
 
 bool ImageDataBuffer::EncodeImage(const String& mime_type,

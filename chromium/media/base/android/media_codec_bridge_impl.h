@@ -22,13 +22,6 @@
 
 namespace media {
 
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.media
-enum class CodecType {
-  kAny,
-  kSecure,    // Note that all secure codecs are HW codecs.
-  kSoftware,  // In some cases hardware codecs could hang the GPU process.
-};
-
 // A bridge to a Java MediaCodec.
 class MEDIA_EXPORT MediaCodecBridgeImpl : public MediaCodecBridge {
  public:
@@ -113,7 +106,8 @@ class MEDIA_EXPORT MediaCodecBridgeImpl : public MediaCodecBridge {
  private:
   MediaCodecBridgeImpl(const std::string& mime,
                        CodecType codec_type,
-                       MediaCodecDirection direction);
+                       MediaCodecDirection direction,
+                       const base::android::JavaRef<jobject>& media_crypto);
 
   // Calls MediaCodec#start(). Returns whether it was successful.
   bool Start();

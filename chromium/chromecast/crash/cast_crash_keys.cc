@@ -37,6 +37,8 @@ size_t RegisterCastCrashKeys() {
       {gpu::crash_keys::kGPUDriverVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUPixelShaderVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUVertexShaderVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUVendor, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPURenderer, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUGLContextIsVirtual, ::crash_keys::kSmallSize},
 
       // content/:
@@ -49,15 +51,17 @@ size_t RegisterCastCrashKeys() {
       {"subresource_url", ::crash_keys::kLargeSize},
       {"total-discardable-memory-allocated", ::crash_keys::kSmallSize},
       {"input-event-filter-send-failure", ::crash_keys::kSmallSize},
-      // media/:
-      {::crash_keys::kBug464926CrashKey, ::crash_keys::kSmallSize},
       {"view-count", ::crash_keys::kSmallSize},
 
       // media/:
       {"zero-encode-details", ::crash_keys::kSmallSize},
 
-      // gin/:
-      {"v8-ignition", ::crash_keys::kSmallSize},
+      // Site isolation.  These keys help debug renderer kills such as
+      // https://crbug.com/773140.
+      {"requested_site_url", ::crash_keys::kSmallSize},
+      {"requested_origin", ::crash_keys::kSmallSize},
+      {"killed_process_origin_lock", ::crash_keys::kSmallSize},
+      {"site_isolation_mode", ::crash_keys::kSmallSize},
 
       // Temporary for https://crbug.com/626802.
       {"newframe_routing_id", ::crash_keys::kSmallSize},
@@ -68,11 +72,15 @@ size_t RegisterCastCrashKeys() {
       {"newframe_widget_hidden", ::crash_keys::kSmallSize},
       {"newframe_replicated_origin", ::crash_keys::kSmallSize},
 
-      // Temporary for https://crbug.com/612711.
-      {"aci_wrong_sp_extension_id", ::crash_keys::kSmallSize},
-
       // Temporary for https://crbug.com/685996.
       {"user-cloud-policy-manager-connect-trace", ::crash_keys::kMediumSize},
+
+      // TODO(sunnyps): Remove after fixing crbug.com/724999.
+      {"gl-context-set-current-stack-trace", ::crash_keys::kMediumSize},
+
+      // Accessibility keys. Temporary for http://crbug.com/765490.
+      {"ax_tree_error", ::crash_keys::kSmallSize},
+      {"ax_tree_update", ::crash_keys::kMediumSize},
   };
 
   return base::debug::InitCrashKeys(fixed_keys, arraysize(fixed_keys),

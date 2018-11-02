@@ -6,6 +6,7 @@
 
 #include "platform/WebFrameScheduler.h"
 #include "platform/wtf/Assertions.h"
+#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebTraceLocation.h"
 
 namespace blink {
@@ -23,7 +24,9 @@ class IdleTaskRunner : public WebThread::IdleTask {
   ~IdleTaskRunner() override {}
 
   // WebThread::IdleTask implementation.
-  void Run(double deadline_seconds) override { task_(deadline_seconds); }
+  void Run(double deadline_seconds) override {
+    std::move(task_).Run(deadline_seconds);
+  }
 
  private:
   WebScheduler::IdleTask task_;

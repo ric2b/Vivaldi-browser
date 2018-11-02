@@ -18,6 +18,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace chromeos {
 
@@ -57,14 +58,14 @@ certificate_provider::CertificateInfo CreateCertInfo(
   cert_info.certificate =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), cert_filename);
   EXPECT_TRUE(cert_info.certificate) << "Could not load " << cert_filename;
-  cert_info.supported_hashes.push_back(net::SSLPrivateKey::Hash::SHA256);
+  cert_info.supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA256);
 
   return cert_info;
 }
 
 bool IsKeyEqualToCertInfo(const certificate_provider::CertificateInfo& info,
                           net::SSLPrivateKey* key) {
-  return info.supported_hashes == key->GetDigestPreferences();
+  return info.supported_algorithms == key->GetAlgorithmPreferences();
 }
 
 bool ClientCertIdentityAlphabeticSorter(
@@ -94,9 +95,9 @@ class TestDelegate : public CertificateProviderService::Delegate {
   bool DispatchSignRequestToExtension(
       const std::string& extension_id,
       int sign_request_id,
-      net::SSLPrivateKey::Hash hash,
+      uint16_t algorithm,
       const scoped_refptr<net::X509Certificate>& certificate,
-      const std::string& input) override {
+      base::span<const uint8_t> input) override {
     EXPECT_EQ(expected_request_type_, RequestType::SIGN);
     last_sign_request_id_ = sign_request_id;
     last_extension_id_ = extension_id;
@@ -467,9 +468,11 @@ TEST_F(CertificateProviderServiceTest, SignRequest) {
 
   test_delegate_->ClearAndExpectRequest(TestDelegate::RequestType::SIGN);
 
+  std::string input = "any input data";
   std::vector<uint8_t> received_signature;
-  private_key->SignDigest(
-      net::SSLPrivateKey::Hash::SHA256, std::string("any input data"),
+  private_key->Sign(
+      SSL_SIGN_RSA_PKCS1_SHA256,
+      std::vector<uint8_t>(input.begin(), input.end()),
       base::Bind(&ExpectOKAndStoreSignature, &received_signature));
 
   task_runner_->RunUntilIdle();
@@ -503,10 +506,11 @@ TEST_F(CertificateProviderServiceTest, UnloadExtensionDuringSign) {
 
   test_delegate_->ClearAndExpectRequest(TestDelegate::RequestType::SIGN);
 
+  std::string input = "any input data";
   net::Error error = net::OK;
-  private_key->SignDigest(
-      net::SSLPrivateKey::Hash::SHA256, std::string("any input data"),
-      base::Bind(&ExpectEmptySignatureAndStoreError, &error));
+  private_key->Sign(SSL_SIGN_RSA_PKCS1_SHA256,
+                    std::vector<uint8_t>(input.begin(), input.end()),
+                    base::Bind(&ExpectEmptySignatureAndStoreError, &error));
 
   task_runner_->RunUntilIdle();
 

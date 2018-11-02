@@ -50,7 +50,7 @@ Polymer({
   },
 
   attached: function() {
-    var list = /** @type {IronListElement} */ (this.$.list);
+    const list = /** @type {IronListElement} */ (this.$.list);
     list.scrollTarget = this;
 
     this.watch('displayedIds_', function(state) {
@@ -70,6 +70,10 @@ Polymer({
     /** @private {function(!Event)} */
     this.boundOnHighlightItems_ = this.onHighlightItems_.bind(this);
     document.addEventListener('highlight-items', this.boundOnHighlightItems_);
+
+    Polymer.RenderStatus.afterNextRender(this, function() {
+      Polymer.IronA11yAnnouncer.requestAvailability();
+    });
   },
 
   detached: function() {
@@ -95,12 +99,12 @@ Polymer({
         return {id: id};
       });
     } else {
-      var splices = Polymer.ArraySplice.calculateSplices(
+      const splices = Polymer.ArraySplice.calculateSplices(
           /** @type {!Array<string>} */ (newValue),
           /** @type {!Array<string>} */ (oldValue));
       splices.forEach((splice) => {
         // TODO(calamity): Could use notifySplices to improve performance here.
-        var additions =
+        const additions =
             newValue.slice(splice.index, splice.index + splice.addedCount)
                 .map(function(id) {
                   return {id: id};
@@ -109,6 +113,10 @@ Polymer({
           'displayedList_', splice.index, splice.removed.length
         ].concat(additions));
       });
+
+      cr.sendWithPromise(
+            'getPluralString', 'listChanged', this.displayedList_.length)
+          .then((label) => this.fire('iron-announce', {text: label}));
     }
   },
 
@@ -123,8 +131,8 @@ Polymer({
    * @private
    */
   scrollToId_: function(itemId) {
-    var index = this.displayedIds_.indexOf(itemId);
-    var list = this.$.list;
+    const index = this.displayedIds_.indexOf(itemId);
+    const list = this.$.list;
     if (index >= 0 && index < list.firstVisibleIndex ||
         index > list.lastVisibleIndex) {
       list.scrollToIndex(index);
@@ -133,7 +141,7 @@ Polymer({
 
   /** @private */
   emptyListMessage_: function() {
-    var emptyListMessage = this.searchTerm_ ? 'noSearchResults' : 'emptyList';
+    const emptyListMessage = this.searchTerm_ ? 'noSearchResults' : 'emptyList';
     return loadTimeData.getString(emptyListMessage);
   },
 
@@ -174,18 +182,18 @@ Polymer({
     // Ensure that we only select items which are actually being displayed.
     // This should only matter if an unrelated update to the bookmark model
     // happens with the perfect timing to end up in a tracked batch update.
-    var toHighlight = /** @type {!Array<string>} */
+    const toHighlight = /** @type {!Array<string>} */
         (e.detail.filter((item) => this.displayedIds_.indexOf(item) != -1));
 
     assert(toHighlight.length > 0);
-    var leadId = toHighlight[0];
+    const leadId = toHighlight[0];
     this.dispatch(
         bookmarks.actions.selectAll(toHighlight, this.getState(), leadId));
 
     // Allow iron-list time to render additions to the list.
     this.async(function() {
       this.scrollToId_(leadId);
-      var leadIndex = this.displayedIds_.indexOf(leadId);
+      const leadIndex = this.displayedIds_.indexOf(leadId);
       assert(leadIndex != -1);
       this.$.list.focusItem(leadIndex);
     });
@@ -196,13 +204,13 @@ Polymer({
    * @private
    */
   onItemKeydown_: function(e) {
-    var handled = true;
-    var list = this.$.list;
-    var focusMoved = false;
-    var focusedIndex =
+    let handled = true;
+    const list = this.$.list;
+    let focusMoved = false;
+    let focusedIndex =
         this.getIndexForItemElement_(/** @type {HTMLElement} */ (e.target));
-    var oldFocusedIndex = focusedIndex;
-    var cursorModifier = cr.isMac ? e.metaKey : e.ctrlKey;
+    const oldFocusedIndex = focusedIndex;
+    const cursorModifier = cr.isMac ? e.metaKey : e.ctrlKey;
     if (e.key == 'ArrowUp') {
       focusedIndex--;
       focusMoved = true;
@@ -243,7 +251,7 @@ Polymer({
 
         // If the focus moved from something other than a Ctrl + move event,
         // update the selection.
-        var config = {
+        const config = {
           clear: !cursorModifier,
           range: e.shiftKey,
           toggle: false,

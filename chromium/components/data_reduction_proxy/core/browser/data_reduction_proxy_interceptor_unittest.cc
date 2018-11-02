@@ -173,9 +173,9 @@ TEST_F(DataReductionProxyInterceptorTest, MAYBE_TestJobFactoryChaining) {
   Init(std::move(factory1));
 
   net::TestDelegate d;
-  std::unique_ptr<net::URLRequest> req(
-      default_context_->CreateRequest(GURL("http://foo"), net::DEFAULT_PRIORITY,
-                                      &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> req(default_context_->CreateRequest(
+      GURL("http://foo.test"), net::DEFAULT_PRIORITY, &d,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
 
   req->Start();
   base::RunLoop().Run();
@@ -305,6 +305,7 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
     proxy_delegate_ = drp_test_context_->io_data()->CreateProxyDelegate();
     context_.set_proxy_delegate(proxy_delegate_.get());
     context_.Init();
+    drp_test_context_->DisableWarmupURLFetch();
     drp_test_context_->EnableDataReductionProxyWithSecureProxyCheckSuccess();
 
     // Three proxies should be available for use: primary, fallback, and direct.
@@ -457,7 +458,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, URLRedirectCycle) {
   EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
-  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_TRUE(request->proxy_server().is_direct());
   histogram_tester.ExpectTotalCount(
       "DataReductionProxy.BypassedBytes.URLRedirectCycle", 1);
 }
@@ -491,7 +492,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, ResponseWithBypassAndRetry) {
   EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
-  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_TRUE(request->proxy_server().is_direct());
   // The bypassed response should have been intercepted before the response was
   // processed, so only the final response after the retry should have been
   // processed.
@@ -538,7 +539,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithBypassAndRetry) {
   EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
-  EXPECT_FALSE(request->was_fetched_via_proxy());
+  EXPECT_TRUE(request->proxy_server().is_direct());
 
   // Each of the redirects should have been intercepted before being followed.
   EXPECT_EQ(0, delegate().received_redirect_count());

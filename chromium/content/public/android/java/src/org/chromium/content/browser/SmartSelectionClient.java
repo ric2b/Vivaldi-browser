@@ -4,12 +4,15 @@
 
 package org.chromium.content.browser;
 
+import android.os.Build;
 import android.support.annotation.IntDef;
 import android.text.TextUtils;
 import android.view.textclassifier.TextClassifier;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.content_public.browser.SelectionClient;
+import org.chromium.content_public.browser.SelectionMetricsLogger;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -40,32 +43,29 @@ public class SmartSelectionClient implements SelectionClient {
     // Used for surrounding text request.
     private static final int NUM_EXTRA_CHARS = 240;
 
-    // Is smart selection enabled?
-    private static boolean sEnabled;
-
     private long mNativeSmartSelectionClient;
     private SmartSelectionProvider mProvider;
-    private SmartSelectionProvider.ResultCallback mCallback;
-
-    public static void setEnabled(boolean enabled) {
-        sEnabled = enabled;
-    }
+    private ResultCallback mCallback;
+    private SmartSelectionMetricsLogger mSmartSelectionMetricLogger;
 
     /**
      * Creates the SmartSelectionClient. Returns null in case SmartSelectionProvider does not exist
      * in the system.
      */
-    public static SmartSelectionClient create(SmartSelectionProvider.ResultCallback callback,
-            WindowAndroid windowAndroid, WebContents webContents) {
-        if (!sEnabled) return null;
-        SmartSelectionProvider provider = new SmartSelectionProvider(callback, windowAndroid);
-        return new SmartSelectionClient(provider, callback, webContents);
+    public static SmartSelectionClient create(ResultCallback callback, WebContents webContents) {
+        WindowAndroid windowAndroid = webContents.getTopLevelNativeWindow();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || windowAndroid == null) return null;
+
+        return new SmartSelectionClient(callback, webContents, windowAndroid);
     }
 
-    private SmartSelectionClient(SmartSelectionProvider provider,
-            SmartSelectionProvider.ResultCallback callback, WebContents webContents) {
-        mProvider = provider;
+    private SmartSelectionClient(
+            ResultCallback callback, WebContents webContents, WindowAndroid windowAndroid) {
+        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        mProvider = new SmartSelectionProvider(callback, windowAndroid);
         mCallback = callback;
+        mSmartSelectionMetricLogger =
+                SmartSelectionMetricsLogger.create(windowAndroid.getContext().get());
         mNativeSmartSelectionClient = nativeInit(webContents);
     }
 
@@ -105,6 +105,11 @@ public class SmartSelectionClient implements SelectionClient {
     }
 
     @Override
+    public SelectionMetricsLogger getSelectionMetricsLogger() {
+        return mSmartSelectionMetricLogger;
+    }
+
+    @Override
     public void setTextClassifier(TextClassifier textClassifier) {
         mProvider.setTextClassifier(textClassifier);
     }
@@ -132,7 +137,7 @@ public class SmartSelectionClient implements SelectionClient {
     private void onSurroundingTextReceived(
             @RequestType int callbackData, String text, int start, int end) {
         if (!textHasValidSelection(text, start, end)) {
-            mCallback.onClassified(new SmartSelectionProvider.Result());
+            mCallback.onClassified(new Result());
             return;
         }
 

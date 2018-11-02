@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/resource_coordinator/discard_reason.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 
 namespace memory {
@@ -24,9 +25,8 @@ void ChromeMemoryCoordinatorDelegate::DiscardTab(bool skip_unload_handlers) {
 #if !defined(OS_ANDROID)
   if (g_browser_process->GetTabManager()) {
     g_browser_process->GetTabManager()->DiscardTab(
-        skip_unload_handlers
-            ? resource_coordinator::TabManager::kUrgentShutdown
-            : resource_coordinator::TabManager::kProactiveShutdown);
+        skip_unload_handlers ? resource_coordinator::DiscardReason::kUrgent
+                             : resource_coordinator::DiscardReason::kProactive);
   }
 #endif
 }

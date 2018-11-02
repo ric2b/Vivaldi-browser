@@ -12,7 +12,7 @@
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/objc_property_releaser.h"
+#include "base/mac/objc_release_properties.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
@@ -83,6 +83,9 @@ NSColor* DimTextColor(BOOL is_dark_theme) {
   return is_dark_theme
              ? skia::SkColorToSRGBNSColor(SkColorSetA(SK_ColorWHITE, 0x7F))
              : skia::SkColorToSRGBNSColor(SkColorSetRGB(0x64, 0x64, 0x64));
+}
+NSColor* InvisibleTextColor() {
+  return skia::SkColorToSRGBNSColor(SK_ColorTRANSPARENT);
 }
 NSColor* PositiveTextColor() {
   return skia::SkColorToSRGBNSColor(SkColorSetRGB(0x3d, 0x94, 0x00));
@@ -350,6 +353,10 @@ NSAttributedString* CreateClassifiedAttributedString(
       [attributedString addAttribute:NSForegroundColorAttributeName
                                value:DimTextColor(is_dark_theme)
                                range:range];
+    } else if (0 != (i->style & ACMatchClassification::INVISIBLE)) {
+      [attributedString addAttribute:NSForegroundColorAttributeName
+                               value:InvisibleTextColor()
+                               range:range];
     }
   }
 
@@ -358,9 +365,7 @@ NSAttributedString* CreateClassifiedAttributedString(
 
 }  // namespace
 
-@interface OmniboxPopupCellData () {
-  base::mac::ObjCPropertyReleaser propertyReleaser_OmniboxPopupCellData_;
-}
+@interface OmniboxPopupCellData ()
 @end
 
 @interface OmniboxPopupCell ()
@@ -421,8 +426,10 @@ NSAttributedString* CreateClassifiedAttributedString(
       if (!match.description.empty()) {
         // Swap the contents and description of non-search suggestions in
         // vertical layouts.
-        BOOL swapMatchText = base::FeatureList::IsEnabled(
-                                 omnibox::kUIExperimentVerticalLayout) &&
+        BOOL swapMatchText = (base::FeatureList::IsEnabled(
+                                  omnibox::kUIExperimentVerticalLayout) ||
+                              base::FeatureList::IsEnabled(
+                                  omnibox::kUIExperimentSwapTitleAndUrl)) &&
                              !AutocompleteMatch::IsSearchType(match.type);
 
         description_ = [CreateClassifiedAttributedString(
@@ -435,10 +442,13 @@ NSAttributedString* CreateClassifiedAttributedString(
           std::swap(contents_, description_);
       }
     }
-    propertyReleaser_OmniboxPopupCellData_.Init(self,
-                                                [OmniboxPopupCellData class]);
   }
   return self;
+}
+
+- (void)dealloc {
+  base::mac::ReleaseProperties(self);
+  [super dealloc];
 }
 
 - (instancetype)copyWithZone:(NSZone*)zone {

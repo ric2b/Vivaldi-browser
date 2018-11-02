@@ -97,13 +97,13 @@ TraceConfigFile::~TraceConfigFile() {}
 
 bool TraceConfigFile::ParseTraceConfigFileContent(const std::string& content) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(content));
-  if (!value || !value->IsType(base::Value::Type::DICTIONARY))
+  if (!value || !value->is_dict())
     return false;
 
   std::unique_ptr<base::DictionaryValue> dict(
       static_cast<base::DictionaryValue*>(value.release()));
 
-  base::DictionaryValue* trace_config_dict = NULL;
+  base::DictionaryValue* trace_config_dict = nullptr;
   if (!dict->GetDictionary(kTraceConfigParam, &trace_config_dict))
     return false;
 

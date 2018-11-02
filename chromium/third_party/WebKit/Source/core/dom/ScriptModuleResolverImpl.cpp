@@ -40,6 +40,16 @@ void ScriptModuleResolverImpl::UnregisterModuleScript(
   record_to_module_script_map_.erase(module_script->Record());
 }
 
+ModuleScript* ScriptModuleResolverImpl::GetHostDefined(
+    const ScriptModule& record) const {
+  const auto it = record_to_module_script_map_.find(record);
+  CHECK_NE(it, record_to_module_script_map_.end())
+      << "Failed to find ModuleScript corresponding to the "
+         "record.[[HostDefined]]";
+  CHECK(it->value);
+  return it->value;
+}
+
 ScriptModule ScriptModuleResolverImpl::Resolve(
     const String& specifier,
     const ScriptModule& referrer,
@@ -49,10 +59,7 @@ ScriptModule ScriptModuleResolverImpl::Resolve(
            << ", referrer.hash=" << ScriptModuleHash::GetHash(referrer) << ")";
 
   // Step 1. Let referencing module script be referencingModule.[[HostDefined]].
-  const auto it = record_to_module_script_map_.find(referrer);
-  CHECK_NE(it, record_to_module_script_map_.end())
-      << "Failed to find referrer ModuleScript corresponding to the record";
-  ModuleScript* referrer_module = it->value;
+  ModuleScript* referrer_module = GetHostDefined(referrer);
 
   // Step 2. Let moduleMap be referencing module script's settings object's
   // module map. Note: Blink finds out "module script's settings object"
@@ -73,9 +80,11 @@ ScriptModule ScriptModuleResolverImpl::Resolve(
 
   // Step 6. Assert: resolved module script is a module script (i.e., is not
   // null or "fetching").
-  // Step 7. Assert: resolved module script is not errored.
   DCHECK(module_script);
-  CHECK(!module_script->IsErrored());
+  // Step 7. Assert: resolved module script is not errored.
+  // The below CHECK doesn't hold until V8 forgets about instantiation errors.
+  // TODO(hiroshige,kouhei): Re-introduce the below CHECK once V8 is updated.
+  // CHECK(!module_script->IsErrored());
 
   // Step 8. Return resolved module script's module record.
   return module_script->Record();
@@ -87,7 +96,7 @@ void ScriptModuleResolverImpl::ContextDestroyed(ExecutionContext*) {
   record_to_module_script_map_.clear();
 }
 
-DEFINE_TRACE(ScriptModuleResolverImpl) {
+void ScriptModuleResolverImpl::Trace(blink::Visitor* visitor) {
   ScriptModuleResolver::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
   visitor->Trace(record_to_module_script_map_);

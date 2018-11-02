@@ -28,6 +28,9 @@ bool IsScreenCaptureMediaType(MediaStreamType type) {
           type == MEDIA_DESKTOP_VIDEO_CAPTURE);
 }
 
+// static
+const int MediaStreamDevice::kNoId = -1;
+
 MediaStreamDevice::MediaStreamDevice()
     : type(MEDIA_NO_SERVICE), video_facing(media::MEDIA_VIDEO_FACING_NONE) {}
 
@@ -75,27 +78,13 @@ MediaStreamDevice::MediaStreamDevice(const MediaStreamDevice& other) = default;
 
 MediaStreamDevice::~MediaStreamDevice() {}
 
-bool MediaStreamDevice::IsEqual(const MediaStreamDevice& second) const {
-  const media::AudioParameters& input_second = second.input;
-  return type == second.type && name == second.name && id == second.id &&
-         input.sample_rate() == input_second.sample_rate() &&
-         input.channel_layout() == input_second.channel_layout();
-}
-
-MediaStreamDevices::MediaStreamDevices() {}
-
-MediaStreamDevices::MediaStreamDevices(size_t count,
-                                       const MediaStreamDevice& value)
-    : std::vector<MediaStreamDevice>(count, value) {
-}
-
-const MediaStreamDevice* MediaStreamDevices::FindById(
-    const std::string& device_id) const {
-  for (const_iterator iter = begin(); iter != end(); ++iter) {
-    if (iter->id == device_id)
-      return &(*iter);
-  }
-  return NULL;
+bool MediaStreamDevice::IsSameDevice(
+    const MediaStreamDevice& other_device) const {
+  return type == other_device.type && name == other_device.name &&
+         id == other_device.id &&
+         input.sample_rate() == other_device.input.sample_rate() &&
+         input.channel_layout() == other_device.input.channel_layout() &&
+         session_id == other_device.session_id;
 }
 
 MediaStreamRequest::MediaStreamRequest(

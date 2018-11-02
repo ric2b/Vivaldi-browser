@@ -4,7 +4,7 @@
 
 import("//chromecast/chromecast.gni")
 
-source_set("key_systems") {
+cast_source_set("key_systems") {
   sources = [
     "key_systems_common.cc",
     "key_systems_common.h",
@@ -22,7 +22,7 @@ source_set("key_systems") {
   ]
 }
 
-source_set("base") {
+cast_source_set("base") {
   sources = [
     "audio_device_ids.cc",
     "audio_device_ids.h",
@@ -32,16 +32,12 @@ source_set("base") {
     "decrypt_context_impl_clearkey.h",
     "media_caps.cc",
     "media_caps.h",
-    "media_codec_support.cc",
-    "media_codec_support.h",
-    "media_resource_tracker.cc",
-    "media_resource_tracker.h",
+    "slew_volume.cc",
+    "slew_volume.h",
     "supported_codec_profile_levels_memo.cc",
     "supported_codec_profile_levels_memo.h",
     "video_mode_switcher.cc",
     "video_mode_switcher.h",
-    "video_plane_controller.cc",
-    "video_plane_controller.h",
   ]
 
   if (!is_android) {
@@ -53,6 +49,7 @@ source_set("base") {
 
   public_deps = [
     ":key_systems",
+    ":media_codec_support",
     "//chromecast/public/media",
   ]
 
@@ -62,6 +59,52 @@ source_set("base") {
     "//crypto",
     "//crypto:platform",
     "//media",
+    "//media:shared_memory_support",
     "//ui/gfx/geometry",
+  ]
+}
+
+cast_source_set("media_resource_tracker") {
+  sources = [
+    "media_resource_tracker.cc",
+    "media_resource_tracker.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media:libcast_media",
+  ]
+}
+
+cast_source_set("media_codec_support") {
+  sources = [
+    "media_codec_support.cc",
+    "media_codec_support.h",
+  ]
+
+  public_deps = [
+    "//chromecast/public/media",
+  ]
+
+  deps = [
+    "//base",
+    "//media",
+  ]
+}
+
+cast_source_set("video_plane_controller") {
+  sources = [
+    "video_plane_controller.cc",
+    "video_plane_controller.h",
+  ]
+
+  public_deps = [
+    "//chromecast/public",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/media:libcast_media",
   ]
 }

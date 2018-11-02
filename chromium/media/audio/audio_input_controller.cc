@@ -20,6 +20,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "media/audio/audio_io.h"
+#include "media/audio/audio_manager.h"
+#include "media/base/audio_bus.h"
 #include "media/base/user_input_monitor.h"
 
 namespace media {
@@ -109,28 +112,23 @@ class AudioInputController::AudioCallback
   explicit AudioCallback(AudioInputController* controller)
       : controller_(controller),
         weak_controller_(controller->weak_ptr_factory_.GetWeakPtr()) {}
-  ~AudioCallback() override {}
+  ~AudioCallback() override = default;
 
   bool received_callback() const { return received_callback_; }
   bool error_during_callback() const { return error_during_callback_; }
 
  private:
-  void OnData(AudioInputStream* stream,
-              const AudioBus* source,
+  void OnData(const AudioBus* source,
               base::TimeTicks capture_time,
               double volume) override {
-    TRACE_EVENT0("audio", "AC::OnData");
+    TRACE_EVENT1("audio", "AC::OnData", "capture time", capture_time);
 
     received_callback_ = true;
 
     DeliverDataToSyncWriter(source, capture_time, volume);
-
-#if BUILDFLAG(ENABLE_WEBRTC)
-    controller_->debug_recording_helper_.OnData(source);
-#endif
   }
 
-  void OnError(AudioInputStream* stream) override {
+  void OnError() override {
     error_during_callback_ = true;
     controller_->task_runner_->PostTask(
         FROM_HERE,
@@ -187,9 +185,6 @@ AudioInputController::AudioInputController(
       sync_writer_(sync_writer),
       type_(type),
       user_input_monitor_(user_input_monitor),
-#if BUILDFLAG(ENABLE_WEBRTC)
-      debug_recording_helper_(params, task_runner_, base::OnceClosure()),
-#endif
       weak_ptr_factory_(this) {
   DCHECK(creator_task_runner_.get());
   DCHECK(handler_);
@@ -248,8 +243,7 @@ scoped_refptr<AudioInputController> AudioInputController::CreateForStream(
     EventHandler* event_handler,
     AudioInputStream* stream,
     SyncWriter* sync_writer,
-    UserInputMonitor* user_input_monitor,
-    const AudioParameters& params) {
+    UserInputMonitor* user_input_monitor) {
   DCHECK(sync_writer);
   DCHECK(stream);
   DCHECK(event_handler);
@@ -261,11 +255,12 @@ scoped_refptr<AudioInputController> AudioInputController::CreateForStream(
                             user_input_monitor, VIRTUAL);
   }
 
-  // Create the AudioInputController object and ensure that it runs on
-  // the audio-manager thread.
-  scoped_refptr<AudioInputController> controller(
-      new AudioInputController(task_runner, event_handler, sync_writer,
-                               user_input_monitor, params, VIRTUAL));
+  // Create the AudioInputController object and ensure that it runs on the
+  // audio-manager thread. Note that the AudioParameters are irrelevant for this
+  // use case.
+  scoped_refptr<AudioInputController> controller(new AudioInputController(
+      task_runner, event_handler, sync_writer, user_input_monitor,
+      AudioParameters::UnavailableDeviceParams(), VIRTUAL));
 
   if (!controller->task_runner_->PostTask(
           FROM_HERE,
@@ -306,7 +301,7 @@ void AudioInputController::DoCreate(AudioManager* audio_manager,
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!stream_);
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioInputController.CreateTime");
-  handler_->OnLog(this, "AIC::DoCreate");
+  handler_->OnLog("AIC::DoCreate");
 
 #if defined(AUDIO_POWER_MONITORING)
   // We only do power measurements for UMA stats for low latency streams, and
@@ -329,18 +324,18 @@ void AudioInputController::DoCreateForStream(
     bool enable_agc) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!stream_);
-  handler_->OnLog(this, "AIC::DoCreateForStream");
+  handler_->OnLog("AIC::DoCreateForStream");
 
   if (!stream_to_control) {
     LogCaptureStartupResult(CAPTURE_STARTUP_CREATE_STREAM_FAILED);
-    handler_->OnError(this, STREAM_CREATE_ERROR);
+    handler_->OnError(STREAM_CREATE_ERROR);
     return;
   }
 
   if (!stream_to_control->Open()) {
     stream_to_control->Close();
     LogCaptureStartupResult(CAPTURE_STARTUP_OPEN_STREAM_FAILED);
-    handler_->OnError(this, STREAM_OPEN_ERROR);
+    handler_->OnError(STREAM_OPEN_ERROR);
     return;
   }
 
@@ -361,7 +356,7 @@ void AudioInputController::DoCreateForStream(
 
   // Send initial muted state along with OnCreated, to avoid races.
   is_muted_ = stream_->IsMuted();
-  handler_->OnCreated(this, is_muted_);
+  handler_->OnCreated(is_muted_);
 
   check_muted_state_timer_.Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kCheckMutedStateIntervalSeconds),
@@ -376,7 +371,7 @@ void AudioInputController::DoRecord() {
   if (!stream_ || audio_callback_)
     return;
 
-  handler_->OnLog(this, "AIC::DoRecord");
+  handler_->OnLog("AIC::DoRecord");
 
   if (user_input_monitor_) {
     user_input_monitor_->EnableKeyPressMonitoring();
@@ -433,30 +428,26 @@ void AudioInputController::DoClose() {
       }
     }
 
+    if (user_input_monitor_)
+      user_input_monitor_->DisableKeyPressMonitoring();
+
     audio_callback_.reset();
   } else {
     log_string =
         base::StringPrintf("%s recording never started", kLogStringPrefix);
   }
 
-  handler_->OnLog(this, log_string);
+  handler_->OnLog(log_string);
 
   stream_->Close();
   stream_ = nullptr;
 
   sync_writer_->Close();
 
-  if (user_input_monitor_)
-    user_input_monitor_->DisableKeyPressMonitoring();
-
 #if defined(AUDIO_POWER_MONITORING)
   // Send UMA stats if enabled.
   if (power_measurement_is_enabled_)
     LogSilenceState(silence_state_);
-#endif
-
-#if BUILDFLAG(ENABLE_WEBRTC)
-  debug_recording_helper_.DisableDebugRecording();
 #endif
 
   max_volume_ = 0.0;
@@ -465,7 +456,7 @@ void AudioInputController::DoClose() {
 
 void AudioInputController::DoReportError() {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  handler_->OnError(this, STREAM_ERROR);
+  handler_->OnError(STREAM_ERROR);
 }
 
 void AudioInputController::DoSetVolume(double volume) {
@@ -503,7 +494,7 @@ void AudioInputController::DoLogAudioLevels(float level_dbfs,
   const bool microphone_is_muted = stream_->IsMuted();
   if (microphone_is_muted) {
     LogMicrophoneMuteResult(MICROPHONE_IS_MUTED);
-    handler_->OnLog(this, "AIC::OnData: microphone is muted!");
+    handler_->OnLog("AIC::OnData: microphone is muted!");
     // Return early if microphone is muted. No need to adding logs and UMA stats
     // of audio levels if we know that the micropone is muted.
     return;
@@ -516,7 +507,7 @@ void AudioInputController::DoLogAudioLevels(float level_dbfs,
   static const float kSilenceThresholdDBFS = -72.24719896f;
   if (level_dbfs < kSilenceThresholdDBFS)
     log_string += " <=> low audio input level!";
-  handler_->OnLog(this, log_string);
+  handler_->OnLog(log_string);
 
   UpdateSilenceState(level_dbfs < kSilenceThresholdDBFS);
 
@@ -525,26 +516,7 @@ void AudioInputController::DoLogAudioLevels(float level_dbfs,
       "AIC::OnData: microphone volume=%d%%", microphone_volume_percent);
   if (microphone_volume_percent < kLowLevelMicrophoneLevelPercent)
     log_string += " <=> low microphone level!";
-  handler_->OnLog(this, log_string);
-#endif
-}
-
-void AudioInputController::EnableDebugRecording(
-    const base::FilePath& file_name) {
-#if BUILDFLAG(ENABLE_WEBRTC)
-  DCHECK(creator_task_runner_->BelongsToCurrentThread());
-  task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&AudioInputController::DoEnableDebugRecording,
-                                this, file_name));
-#endif
-}
-
-void AudioInputController::DisableDebugRecording() {
-#if BUILDFLAG(ENABLE_WEBRTC)
-  DCHECK(creator_task_runner_->BelongsToCurrentThread());
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&AudioInputController::DoDisableDebugRecording, this));
+  handler_->OnLog(log_string);
 #endif
 }
 
@@ -618,22 +590,9 @@ void AudioInputController::LogCallbackError() {
   }
 }
 
-#if BUILDFLAG(ENABLE_WEBRTC)
-void AudioInputController::DoEnableDebugRecording(
-    const base::FilePath& file_name) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  debug_recording_helper_.EnableDebugRecording(file_name);
-}
-
-void AudioInputController::DoDisableDebugRecording() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  debug_recording_helper_.DisableDebugRecording();
-}
-#endif  // BUILDFLAG(ENABLE_WEBRTC)
-
 void AudioInputController::LogMessage(const std::string& message) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  handler_->OnLog(this, message);
+  handler_->OnLog(message);
 }
 
 bool AudioInputController::CheckForKeyboardInput() {
@@ -684,7 +643,7 @@ void AudioInputController::CheckMutedState() {
   if (new_state != is_muted_) {
     is_muted_ = new_state;
     // We don't log OnMuted here, but leave that for AudioInputRendererHost.
-    handler_->OnMuted(this, is_muted_);
+    handler_->OnMuted(is_muted_);
   }
 }
 

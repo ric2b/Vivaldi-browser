@@ -37,11 +37,11 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -368,13 +368,14 @@ void SigninManagerAndroid::WipeData(Profile* profile,
   new ProfileDataRemover(profile, all_data, callback);
 }
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_SigninManager_Init(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj) {
   SigninManagerAndroid* signin_manager_android =
       new SigninManagerAndroid(env, obj);
   return reinterpret_cast<intptr_t>(signin_manager_android);
 }
 
-static jboolean ShouldLoadPolicyForUser(
+static jboolean JNI_SigninManager_ShouldLoadPolicyForUser(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& j_username) {
@@ -383,7 +384,7 @@ static jboolean ShouldLoadPolicyForUser(
   return !policy::BrowserPolicyConnector::IsNonEnterpriseUser(username);
 }
 
-static void IsUserManaged(
+static void JNI_SigninManager_IsUserManaged(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& j_username,
@@ -403,9 +404,8 @@ static void IsUserManaged(
       base::Bind(&UserManagementDomainFetched, callback));
 }
 
-base::android::ScopedJavaLocalRef<jstring>
-ExtractDomainName(
-    JNIEnv *env,
+base::android::ScopedJavaLocalRef<jstring> JNI_SigninManager_ExtractDomainName(
+    JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& j_email) {
   std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);

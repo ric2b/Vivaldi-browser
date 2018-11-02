@@ -65,7 +65,7 @@ class DesktopSessionProxy::IpcSharedBufferCore
   void* memory() { return shared_memory_.memory(); }
 
  private:
-  virtual ~IpcSharedBufferCore() {}
+  virtual ~IpcSharedBufferCore() = default;
   friend class base::RefCountedThreadSafe<IpcSharedBufferCore>;
 
   int id_;
@@ -222,9 +222,9 @@ bool DesktopSessionProxy::AttachToDesktop(
     return false;
 
   // Connect to the desktop process.
-  desktop_channel_ = IPC::ChannelProxy::Create(desktop_pipe,
-                                               IPC::Channel::MODE_CLIENT, this,
-                                               io_task_runner_.get());
+  desktop_channel_ = IPC::ChannelProxy::Create(
+      desktop_pipe, IPC::Channel::MODE_CLIENT, this, io_task_runner_.get(),
+      base::ThreadTaskRunnerHandle::Get());
 
   // Pass ID of the client (which is authenticated at this point) to the desktop
   // session agent and start the agent.

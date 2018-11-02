@@ -5,6 +5,7 @@
 #include "ash/wm/workspace/workspace_layout_manager.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "ash/keyboard/keyboard_observer_register.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -49,7 +50,7 @@ WorkspaceLayoutManager::WorkspaceLayoutManager(aura::Window* window)
   root_window_->AddObserver(this);
   display::Screen::GetScreen()->AddObserver(this);
   DCHECK(window->GetProperty(kSnapChildrenToPixelBoundary));
-  backdrop_controller_ = base::MakeUnique<BackdropController>(window_);
+  backdrop_controller_ = std::make_unique<BackdropController>(window_);
 }
 
 WorkspaceLayoutManager::~WorkspaceLayoutManager() {
@@ -134,13 +135,10 @@ void WorkspaceLayoutManager::SetChildBounds(aura::Window* child,
 
 void WorkspaceLayoutManager::OnKeyboardBoundsChanging(
     const gfx::Rect& new_bounds) {
-  // If new window behavior is disable or the keyboard is in sticky mode, change
-  // the work area.
+  // If the keyboard is in sticky mode, change the work area.
   const bool change_work_area =
-      (base::CommandLine::ForCurrentProcess()->HasSwitch(
-           ::switches::kDisableNewVirtualKeyboardBehavior) ||
-       (keyboard::KeyboardController::GetInstance() &&
-        keyboard::KeyboardController::GetInstance()->keyboard_locked()));
+      keyboard::KeyboardController::GetInstance() &&
+      keyboard::KeyboardController::GetInstance()->keyboard_locked();
   if (!change_work_area)
     return;
 
@@ -240,7 +238,8 @@ void WorkspaceLayoutManager::OnWindowDestroying(aura::Window* window) {
 void WorkspaceLayoutManager::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
-    const gfx::Rect& new_bounds) {
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (root_window_ == window) {
     const wm::WMEvent wm_event(wm::WM_EVENT_DISPLAY_BOUNDS_CHANGED);
     AdjustAllWindowsBoundsForWorkAreaChange(&wm_event);
@@ -250,16 +249,21 @@ void WorkspaceLayoutManager::OnWindowBoundsChanged(
 //////////////////////////////////////////////////////////////////////////////
 // WorkspaceLayoutManager, wm::ActivationChangeObserver implementation:
 
-void WorkspaceLayoutManager::OnWindowActivated(ActivationReason reason,
-                                               aura::Window* gained_active,
-                                               aura::Window* lost_active) {
+void WorkspaceLayoutManager::OnWindowActivating(ActivationReason reason,
+                                                aura::Window* gaining_active,
+                                                aura::Window* losing_active) {
   wm::WindowState* window_state =
-      gained_active ? wm::GetWindowState(gained_active) : nullptr;
+      gaining_active ? wm::GetWindowState(gaining_active) : nullptr;
   if (window_state && window_state->IsMinimized() &&
-      !gained_active->IsVisible()) {
+      !gaining_active->IsVisible()) {
     window_state->Unminimize();
     DCHECK(!window_state->IsMinimized());
   }
+}
+
+void WorkspaceLayoutManager::OnWindowActivated(ActivationReason reason,
+                                               aura::Window* gained_active,
+                                               aura::Window* lost_active) {
   UpdateFullscreenState();
   UpdateShelfVisibility();
 }
@@ -269,10 +273,10 @@ void WorkspaceLayoutManager::OnWindowActivated(ActivationReason reason,
 
 void WorkspaceLayoutManager::OnPostWindowStateTypeChange(
     wm::WindowState* window_state,
-    wm::WindowStateType old_type) {
+    mojom::WindowStateType old_type) {
   // Notify observers that fullscreen state may be changing.
   if (window_state->IsFullscreen() ||
-      old_type == wm::WINDOW_STATE_TYPE_FULLSCREEN) {
+      old_type == mojom::WindowStateType::FULLSCREEN) {
     UpdateFullscreenState();
   }
 

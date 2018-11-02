@@ -49,10 +49,7 @@ bool BrowserAccessibility::PlatformIsLeaf() const {
   // implementation details, but we want to expose them as leaves to platform
   // accessibility APIs because screen readers might be confused if they find
   // any children.
-  // Note that if a combo box, search box or text field are not native, they
-  // might present a menu of choices using aria-owns which should not be hidden
-  // from tree.
-  if (IsNativeTextControl() || IsTextOnlyObject())
+  if (IsPlainTextField() || IsTextOnlyObject())
     return true;
 
   // Roles whose children are only presentational according to the ARIA and
@@ -140,6 +137,7 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
 
 bool BrowserAccessibility::PlatformIsChildOfLeaf() const {
   BrowserAccessibility* ancestor = InternalGetParent();
+
   while (ancestor) {
     if (ancestor->PlatformIsLeaf())
       return true;
@@ -310,10 +308,6 @@ BrowserAccessibility* BrowserAccessibility::InternalGetParent() const {
   return nullptr;
 }
 
-int32_t BrowserAccessibility::GetIndexInParent() const {
-  return node_ ? node_->index_in_parent() : -1;
-}
-
 int32_t BrowserAccessibility::GetId() const {
   return node_ ? node_->id() : -1;
 }
@@ -339,8 +333,9 @@ gfx::Rect BrowserAccessibility::GetFrameBoundsRect() const {
   return RelativeToAbsoluteBounds(gfx::RectF(), true);
 }
 
-gfx::Rect BrowserAccessibility::GetPageBoundsRect() const {
-  return RelativeToAbsoluteBounds(gfx::RectF(), false);
+gfx::Rect BrowserAccessibility::GetPageBoundsRect(bool* offscreen,
+                                                  bool clip_bounds) const {
+  return RelativeToAbsoluteBounds(gfx::RectF(), false, offscreen, clip_bounds);
 }
 
 gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
@@ -351,7 +346,7 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
   // Standard text fields such as textarea have an embedded div inside them that
   // holds all the text.
   // TODO(nektar): This is fragile! Replace with code that flattens tree.
-  if (IsSimpleTextControl() && InternalChildCount() == 1)
+  if (IsPlainTextField() && InternalChildCount() == 1)
     return InternalGetChild(0)->GetPageBoundsForRange(start, len);
 
   if (GetRole() != ui::AX_ROLE_STATIC_TEXT) {
@@ -485,22 +480,20 @@ gfx::Rect BrowserAccessibility::GetScreenBoundsForRange(int start, int len)
 
 base::string16 BrowserAccessibility::GetValue() const {
   base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
-  // Some screen readers like Jaws and older versions of VoiceOver require a
-  // value to be set in text fields with rich content, even though the same
-  // information is available on the children.
-  if (value.empty() &&
-      (IsSimpleTextControl() || IsRichTextControl()) &&
-      !IsNativeTextControl())
-    value = GetInnerText();
+  // Some screen readers like Jaws and VoiceOver require a value to be set in
+  // text fields with rich content, even though the same information is
+  // available on the children.
+  if (value.empty() && IsRichTextField())
+    return GetInnerText();
   return value;
 }
 
 BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
     const gfx::Point& point) {
   // The best result found that's a child of this object.
-  BrowserAccessibility* child_result = NULL;
+  BrowserAccessibility* child_result = nullptr;
   // The best result that's an indirect descendant like grandchild, etc.
-  BrowserAccessibility* descendant_result = NULL;
+  BrowserAccessibility* descendant_result = nullptr;
 
   // Walk the children recursively looking for the BrowserAccessibility that
   // most tightly encloses the specified point. Walk backwards so that in
@@ -541,13 +534,8 @@ BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
 }
 
 void BrowserAccessibility::Destroy() {
-  // Allow the object to fire a TextRemoved notification.
-  manager()->NotifyAccessibilityEvent(
-      BrowserAccessibilityEvent::FromTreeChange,
-      ui::AX_EVENT_HIDE,
-      this);
-  node_ = NULL;
-  manager_ = NULL;
+  node_ = nullptr;
+  manager_ = nullptr;
 
   NativeReleaseReference();
 }
@@ -731,7 +719,7 @@ bool BrowserAccessibility::HasAction(ui::AXAction action_enum) const {
 }
 
 bool BrowserAccessibility::HasCaret() const {
-  if (IsSimpleTextControl() && HasIntAttribute(ui::AX_ATTR_TEXT_SEL_START) &&
+  if (IsPlainTextField() && HasIntAttribute(ui::AX_ATTR_TEXT_SEL_START) &&
       HasIntAttribute(ui::AX_ATTR_TEXT_SEL_END)) {
     return true;
   }
@@ -762,47 +750,20 @@ bool BrowserAccessibility::IsClickable() const {
   return ui::IsRoleClickable(GetRole());
 }
 
-bool BrowserAccessibility::IsNativeTextControl() const {
-  const std::string& html_tag = GetStringAttribute(ui::AX_ATTR_HTML_TAG);
-  if (html_tag == "input") {
-    std::string input_type;
-    if (!GetHtmlAttribute("type", &input_type))
-      return true;
-    return input_type.empty() || input_type == "email" ||
-           input_type == "password" || input_type == "search" ||
-           input_type == "tel" || input_type == "text" || input_type == "url" ||
-           input_type == "number";
-  }
-  return html_tag == "textarea";
+bool BrowserAccessibility::IsPlainTextField() const {
+  // We need to check both the role and editable state, because some ARIA text
+  // fields may in fact not be editable, whilst some editable fields might not
+  // have the role.
+  return !HasState(ui::AX_STATE_RICHLY_EDITABLE) &&
+         (GetRole() == ui::AX_ROLE_TEXT_FIELD ||
+          GetRole() == ui::AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX ||
+          GetRole() == ui::AX_ROLE_SEARCH_BOX ||
+          GetBoolAttribute(ui::AX_ATTR_EDITABLE_ROOT));
 }
 
-// In general we should use ui::IsEditField() instead if we want to check for
-// something that has a caret and the user can edit.
-// TODO(aleventhal) this name is confusing because it returns true for combobox,
-// and we should take a look at why a combobox is considered a text control. The
-// ARIA spec says a combobox would contain (but not be) a text field. It looks
-// like a mistake may have been made in that comboboxes have been considered a
-// kind of textbox. Find an appropriate name for this function, and consider
-// returning false for comboboxes it doesn't break existing websites.
-bool BrowserAccessibility::IsSimpleTextControl() const {
-  // Time fields, color wells and spinner buttons might also use text fields as
-  // constituent parts, but they are not considered text fields as a whole.
-  switch (GetRole()) {
-    case ui::AX_ROLE_COMBO_BOX:
-    case ui::AX_ROLE_SEARCH_BOX:
-      return true;
-    case ui::AX_ROLE_TEXT_FIELD:
-      return !HasState(ui::AX_STATE_RICHLY_EDITABLE);
-    default:
-      return false;
-  }
-}
-
-// Indicates if this object is at the root of a rich edit text control.
-bool BrowserAccessibility::IsRichTextControl() const {
-  return HasState(ui::AX_STATE_RICHLY_EDITABLE) &&
-         (!PlatformGetParent() ||
-          !PlatformGetParent()->HasState(ui::AX_STATE_RICHLY_EDITABLE));
+bool BrowserAccessibility::IsRichTextField() const {
+  return GetBoolAttribute(ui::AX_ATTR_EDITABLE_ROOT) &&
+         HasState(ui::AX_STATE_RICHLY_EDITABLE);
 }
 
 bool BrowserAccessibility::HasExplicitlyEmptyName() const {
@@ -838,12 +799,12 @@ std::vector<int> BrowserAccessibility::GetLineStartOffsets() const {
   return node()->GetOrComputeLineStartOffsets();
 }
 
-BrowserAccessibility::AXPlatformPositionInstance
+BrowserAccessibilityPosition::AXPositionInstance
 BrowserAccessibility::CreatePositionAt(int offset,
                                        ui::AXTextAffinity affinity) const {
   DCHECK(manager_);
-  return AXPlatformPosition::CreateTextPosition(manager_->ax_tree_id(), GetId(),
-                                                offset, affinity);
+  return BrowserAccessibilityPosition::CreateTextPosition(
+      manager_->ax_tree_id(), GetId(), offset, affinity);
 }
 
 base::string16 BrowserAccessibility::GetInnerText() const {
@@ -858,11 +819,13 @@ base::string16 BrowserAccessibility::GetInnerText() const {
 
 gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
     gfx::RectF bounds,
-    bool frame_only) const {
+    bool frame_only,
+    bool* offscreen,
+    bool clip_bounds) const {
   const BrowserAccessibility* node = this;
   while (node) {
-    bounds =
-        node->manager()->ax_tree()->RelativeToTreeBounds(node->node(), bounds);
+    bounds = node->manager()->ax_tree()->RelativeToTreeBounds(
+        node->node(), bounds, offscreen, clip_bounds);
 
     // On some platforms we need to unapply root scroll offsets.
     const BrowserAccessibility* root = node->manager()->GetRoot();
@@ -883,6 +846,12 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
   }
 
   return gfx::ToEnclosingRect(bounds);
+}
+
+bool BrowserAccessibility::IsOffscreen() const {
+  bool offscreen = false;
+  RelativeToAbsoluteBounds(gfx::RectF(), false, &offscreen);
+  return offscreen;
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetNativeViewAccessible() {
@@ -921,10 +890,18 @@ gfx::NativeWindow BrowserAccessibility::GetTopLevelWidget() {
 
 gfx::NativeViewAccessible BrowserAccessibility::GetParent() {
   auto* parent = PlatformGetParent();
-  if (!parent)
+  if (parent)
+    return parent->GetNativeViewAccessible();
+
+  if (!manager_)
     return nullptr;
 
-  return parent->GetNativeViewAccessible();
+  BrowserAccessibilityDelegate* delegate =
+      manager_->GetDelegateFromRootManager();
+  if (!delegate)
+    return nullptr;
+
+  return delegate->AccessibilityGetNativeViewAccessible();
 }
 
 int BrowserAccessibility::GetChildCount() {
@@ -971,6 +948,10 @@ ui::AXPlatformNode* BrowserAccessibility::GetFromNodeID(int32_t id) {
   return nullptr;
 }
 
+int BrowserAccessibility::GetIndexInParent() const {
+  return node_ ? node_->index_in_parent() : -1;
+}
+
 gfx::AcceleratedWidget
 BrowserAccessibility::GetTargetForNativeAccessibilityEvent() {
   BrowserAccessibilityDelegate* root_delegate =
@@ -989,6 +970,28 @@ bool BrowserAccessibility::AccessibilityPerformAction(
 
   if (data.action == ui::AX_ACTION_FOCUS) {
     manager_->SetFocus(*this);
+    return true;
+  }
+
+  if (data.action == ui::AX_ACTION_SCROLL_TO_POINT) {
+    // target_point is in screen coordinates.  We need to convert this to frame
+    // coordinates because that's what BrowserAccessiblity cares about.
+    gfx::Point target =
+        data.target_point -
+        manager_->GetRootManager()->GetViewBounds().OffsetFromOrigin();
+
+    manager_->ScrollToPoint(*this, target);
+    return true;
+  }
+
+  if (data.action == ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE) {
+    // target_rect is in screen coordinates.  We need to convert this to frame
+    // coordinates because that's what BrowserAccessiblity cares about.
+    gfx::Rect target =
+        data.target_rect -
+        manager_->GetRootManager()->GetViewBounds().OffsetFromOrigin();
+
+    manager_->ScrollToMakeVisible(*this, target);
     return true;
   }
 

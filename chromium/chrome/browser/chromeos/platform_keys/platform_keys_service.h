@@ -6,11 +6,11 @@
 #define CHROME_BROWSER_CHROMEOS_PLATFORM_KEYS_PLATFORM_KEYS_SERVICE_H_
 
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -203,18 +203,10 @@ class PlatformKeysService : public KeyedService {
                     const std::string& public_key_spki_der,
                     const std::string& error_message);
 
-  // Callback used by |GeneratedKey|.
-  // |public_key_spki_der| will contain the X.509 Subject Public Key Info  of
-  // the generated key in DER encoding. |task| points to the finished |Task|
-  // object.
-  void RegisteredGeneratedKey(const GenerateKeyCallback& callback,
-                              const std::string& public_key_spki_der,
-                              Task* task);
-
   content::BrowserContext* browser_context_;
   KeyPermissions key_permissions_;
   std::unique_ptr<SelectDelegate> select_delegate_;
-  std::queue<linked_ptr<Task>> tasks_;
+  base::queue<linked_ptr<Task>> tasks_;
   base::WeakPtrFactory<PlatformKeysService> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformKeysService);

@@ -127,6 +127,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AppSpecifics& proto) {
   VISIT(bookmark_app_icon_color);
   VISIT_REP(linked_app_icons);
   VISIT(bookmark_app_scope);
+  VISIT(bookmark_app_theme_color);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ArcPackageSpecifics& proto) {
@@ -190,6 +191,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_dependent_locality);
   VISIT(address_home_language_code);
   VISIT_REP(phone_home_whole_number);
+  VISIT(validity_state_bitfield);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::AutofillSpecifics& proto) {
@@ -718,15 +720,12 @@ VISIT_PROTO_FIELDS(const sync_pb::SearchEngineSpecifics& proto) {
   VISIT(suggestions_url);
   VISIT(prepopulate_id);
   VISIT(autogenerate_keyword);
-  VISIT(instant_url);
   VISIT(last_modified);
   VISIT(sync_guid);
   VISIT_REP(alternate_urls);
-  VISIT(search_terms_replacement_key);
   VISIT(image_url);
   VISIT(search_url_post_params);
   VISIT(suggestions_url_post_params);
-  VISIT(instant_url_post_params);
   VISIT(image_url_post_params);
   VISIT(new_tab_url);
 }
@@ -861,7 +860,6 @@ VISIT_PROTO_FIELDS(const sync_pb::TabNavigation& proto) {
   VISIT(navigation_chain_start);
   VISIT(navigation_chain_end);
   VISIT(global_id);
-  VISIT(search_terms);
   VISIT(favicon_url);
   VISIT_ENUM(blocked_state);
   VISIT_REP(content_pack_categories);
@@ -895,6 +893,14 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Translation& proto) {
   VISIT_ENUM(interaction);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::UserConsent& proto) {
+  VISIT(feature);
+  VISIT_REP(consent_grd_ids);
+  VISIT_REP(placeholder_replacements);
+  VISIT(locale);
+  VISIT_ENUM(status);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::TypeHint& proto) {
   VISIT(data_type_id);
   VISIT(has_valid_hint);
@@ -923,6 +929,7 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics& proto) {
   VISIT(field_trial_event);
   VISIT(language_detection_event);
   VISIT(translation_event);
+  VISIT(user_consent);
   VISIT(gaia_password_reuse_event);
 }
 

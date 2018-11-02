@@ -26,7 +26,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -43,7 +42,6 @@ import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
-import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.UnsupportedEncodingException;
 import java.util.concurrent.Callable;
@@ -129,8 +127,7 @@ public class UrlOverridingTest {
         filter.addDataScheme("market");
         mActivityMonitor = InstrumentationRegistry.getInstrumentation().addMonitor(
                 filter, new Instrumentation.ActivityResult(Activity.RESULT_OK, null), true);
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
     }
 
     @After
@@ -139,13 +136,13 @@ public class UrlOverridingTest {
     }
 
     private void loadUrlAndWaitForIntentUrl(final String url, boolean needClick,
-            boolean shouldLaunchExternalIntent, boolean isMainFrame) throws InterruptedException {
-        loadUrlAndWaitForIntentUrl(url, needClick, 0, shouldLaunchExternalIntent, url, isMainFrame);
+            boolean shouldLaunchExternalIntent) throws InterruptedException {
+        loadUrlAndWaitForIntentUrl(url, needClick, 0, shouldLaunchExternalIntent, url);
     }
 
     private void loadUrlAndWaitForIntentUrl(final String url, boolean needClick,
             int expectedNewTabCount, final boolean shouldLaunchExternalIntent,
-            final String expectedFinalUrl, boolean isMainFrame) throws InterruptedException {
+            final String expectedFinalUrl) throws InterruptedException {
         final CallbackHelper finishCallback = new CallbackHelper();
         final CallbackHelper failCallback = new CallbackHelper();
         final CallbackHelper newTabCallback = new CallbackHelper();
@@ -246,15 +243,15 @@ public class UrlOverridingTest {
                     }
                 }));
         Assert.assertEquals(1 + (hasFallbackUrl ? 1 : 0), finishCallback.getCallCount());
-        Assert.assertEquals(1, failCallback.getCallCount());
+        // failCallback can be called second time when the current tab is destroyed.
+        Assert.assertTrue(failCallback.getCallCount() >= 1);
     }
 
     @Test
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromTimer() throws InterruptedException {
-        loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PAGE), false, false, true);
+        loadUrlAndWaitForIntentUrl(mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PAGE), false, false);
     }
 
     @Test
@@ -262,8 +259,7 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromTimerInSubFrame() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PARENT_FRAME_PAGE), false,
-                false, false);
+                mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PARENT_FRAME_PAGE), false, false);
     }
 
     @Test
@@ -271,15 +267,14 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromUserGesture() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PAGE), true, true, true);
+                mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PAGE), true, true);
     }
 
     @Test
     @SmallTest
     public void testNavigationFromUserGestureInSubFrame() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PARENT_FRAME_PAGE), true,
-                true, false);
+                mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PARENT_FRAME_PAGE), true, true);
     }
 
     @Test
@@ -287,7 +282,7 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromXHRCallback() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PAGE), true, true, true);
+                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PAGE), true, true);
     }
 
     @Test
@@ -295,8 +290,7 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromXHRCallbackInSubFrame() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PARENT_FRAME_PAGE), true,
-                true, false);
+                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PARENT_FRAME_PAGE), true, true);
     }
 
     @Test
@@ -304,8 +298,8 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromXHRCallbackAndShortTimeout() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_SHORT_TIMEOUT_PAGE),
-                true, true, true);
+                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_SHORT_TIMEOUT_PAGE), true,
+                true);
     }
 
     @Test
@@ -313,8 +307,8 @@ public class UrlOverridingTest {
     @RetryOnFailure
     public void testNavigationFromXHRCallbackAndLongTimeout() throws InterruptedException {
         loadUrlAndWaitForIntentUrl(
-                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_LONG_TIMEOUT_PAGE),
-                true, false, true);
+                mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_LONG_TIMEOUT_PAGE), true,
+                false);
     }
 
     @Test
@@ -327,7 +321,7 @@ public class UrlOverridingTest {
                 NAVIGATION_WITH_FALLBACK_URL_PAGE + "?replace_text="
                 + Base64.encodeToString("PARAM_FALLBACK_URL".getBytes("utf-8"), Base64.URL_SAFE)
                 + ":" + Base64.encodeToString(fallbackUrl.getBytes("utf-8"), Base64.URL_SAFE));
-        loadUrlAndWaitForIntentUrl(originalUrl, true, 0, false, fallbackUrl, true);
+        loadUrlAndWaitForIntentUrl(originalUrl, true, 0, false, fallbackUrl);
     }
 
     @Test
@@ -355,16 +349,15 @@ public class UrlOverridingTest {
                 + Base64.encodeToString(base64FallbackUrl, Base64.URL_SAFE));
 
         // Fallback URL from a subframe will not trigger main or sub frame navigation.
-        loadUrlAndWaitForIntentUrl(originalUrl, true, false, false);
+        loadUrlAndWaitForIntentUrl(originalUrl, true, false);
     }
 
     @Test
     @SmallTest
-    @Restriction(UiRestriction.RESTRICTION_TYPE_TABLET)
     @RetryOnFailure
     public void testOpenWindowFromUserGesture() throws InterruptedException {
-        loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_USER_GESTURE_PAGE),
-                true, 1, true, null, true);
+        loadUrlAndWaitForIntentUrl(
+                mTestServer.getURL(OPEN_WINDOW_FROM_USER_GESTURE_PAGE), true, 1, true, null);
     }
 
     @Test
@@ -373,7 +366,7 @@ public class UrlOverridingTest {
     public void testRedirectionFromIntent() {
         Intent intent = new Intent(Intent.ACTION_VIEW,
                 Uri.parse(mTestServer.getURL(NAVIGATION_FROM_JAVA_REDIRECTION_PAGE)));
-        Context targetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context targetContext = InstrumentationRegistry.getTargetContext();
         intent.setClassName(targetContext, ChromeLauncherActivity.class.getName());
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         targetContext.startActivity(intent);

@@ -340,7 +340,7 @@ AnalysisCanvas::AnalysisCanvas(int width, int height)
       draw_op_count_(0),
       rejected_op_count_(0) {}
 
-AnalysisCanvas::~AnalysisCanvas() {}
+AnalysisCanvas::~AnalysisCanvas() = default;
 
 bool AnalysisCanvas::GetColorIfSolid(SkColor* color) const {
   if (is_transparent_) {
@@ -401,8 +401,6 @@ void AnalysisCanvas::onClipPath(const SkPath& path,
 bool doesCoverCanvas(const SkRRect& rr,
                      const SkMatrix& total_matrix,
                      const SkIRect& clip_device_bounds) {
-  const SkRect& bounding_rect = rr.rect();
-
   // We cannot handle non axis aligned rectangles at the moment.
   if (!total_matrix.isScaleTranslate()) {
     return false;

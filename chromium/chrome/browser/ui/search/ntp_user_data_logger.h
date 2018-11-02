@@ -7,14 +7,14 @@
 
 #include <stddef.h>
 
-#include <bitset>
+#include <array>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/common/search/ntp_logging_events.h"
-#include "components/ntp_tiles/tile_source.h"
-#include "components/ntp_tiles/tile_visual_type.h"
+#include "components/ntp_tiles/ntp_tile_impression.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -40,15 +40,11 @@ class NTPUserDataLogger
   // event happened.
   void LogEvent(NTPLoggingEventType event, base::TimeDelta time);
 
-  // Logs an impression on one of the NTP tiles by a given source.
-  void LogMostVisitedImpression(int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type);
+  // Logs an impression on one of the NTP tiles by given details.
+  void LogMostVisitedImpression(const ntp_tiles::NTPTileImpression& impression);
 
-  // Logs a navigation on one of the NTP tiles by a given source.
-  void LogMostVisitedNavigation(int position,
-                                ntp_tiles::TileSource tile_source,
-                                ntp_tiles::TileVisualType tile_type);
+  // Logs a navigation on one of the NTP tiles by a given impression.
+  void LogMostVisitedNavigation(const ntp_tiles::NTPTileImpression& impression);
 
  protected:
   explicit NTPUserDataLogger(content::WebContents* contents);
@@ -58,9 +54,10 @@ class NTPUserDataLogger
  private:
   friend class content::WebContentsUserData<NTPUserDataLogger>;
 
-  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestLoadTime);
-  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestLogMostVisitedImpression);
-  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestNumberOfTiles);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, ShouldRecordLoadTime);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, ShouldRecordNumberOfTiles);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest,
+                           ShouldRecordImpressionsAgainAfterNavigating);
 
   // Number of Most Visited elements on the NTP for logging purposes.
   static const int kNumMostVisited = 8;
@@ -81,29 +78,29 @@ class NTPUserDataLogger
   // the tab/shutting down Chrome), or when the user navigates to a URL.
   void EmitNtpStatistics(base::TimeDelta load_time);
 
+  void RecordDoodleImpression(base::TimeDelta time,
+                              bool is_cta,
+                              bool from_cache);
+
   // Records whether we have yet logged an impression for the tile at a given
-  // index. A typical NTP will log 8 impressions, but could record fewer for new
-  // users that haven't built up a history yet.
+  // index and if so the corresponding details. A typical NTP will log 8
+  // impressions, but could record fewer for new users that haven't built up a
+  // history yet.
   //
   // If something happens that causes the NTP to pull tiles from different
   // sources, such as signing in (switching from client to server tiles), then
   // only the impressions for the first source will be logged, leaving the
   // number of impressions for a source slightly out-of-sync with navigations.
-  std::bitset<kNumMostVisited> impression_was_logged_;
-
-  // Stores the tile source for each impression. Entries are only valid if the
-  // corresponding entry in |impression_was_logged_| is true.
-  std::vector<ntp_tiles::TileSource> impression_tile_source_;
-
-  // Stores the tile type for each impression. Entries are only valid if the
-  // corresponding entry in |impression_was_logged_| is true.
-  std::vector<ntp_tiles::TileVisualType> impression_tile_type_;
+  std::array<base::Optional<ntp_tiles::NTPTileImpression>, kNumMostVisited>
+      logged_impressions_;
 
   // The time we received the NTP_ALL_TILES_RECEIVED event.
   base::TimeDelta tiles_received_time_;
 
   // Whether we have already emitted NTP stats for this web contents.
   bool has_emitted_;
+
+  bool should_record_doodle_load_time_;
 
   // Are stats being logged during Chrome startup?
   bool during_startup_;

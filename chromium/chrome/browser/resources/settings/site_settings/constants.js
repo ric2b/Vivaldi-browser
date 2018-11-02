@@ -7,9 +7,9 @@ cr.exportPath('settings');
 /**
  * All possible contentSettingsTypes that we currently support configuring in
  * the UI. Both top-level categories and content settings that represent
- * individual permissions under Site Details should appear here. This is a
- * subset of the constants found in site_settings_helper.cc and the values
- * should be kept in sync.
+ * individual permissions under Site Details should appear here.
+ * This should be kept in sync with the |kContentSettingsTypeGroupNames| array
+ * in chrome/browser/ui/webui/site_settings_helper.cc
  * @enum {string}
  */
 settings.ContentSettingsTypes = {
@@ -30,10 +30,9 @@ settings.ContentSettingsTypes = {
   MIDI_DEVICES: 'midi-sysex',
   USB_DEVICES: 'usb-chooser-data',
   ZOOM_LEVELS: 'zoom-levels',
-  // <if expr="chromeos">
   PROTECTED_CONTENT: 'protectedContent',
-  // </if>
   ADS: 'ads',
+  CLIPBOARD: 'clipboard',
 };
 
 /**
@@ -58,13 +57,18 @@ settings.ContentSetting = {
  * @enum {string}
  */
 settings.SiteSettingSource = {
+  ADS_BLOCKED: 'ads-blocked',
+  ADS_FILTER_BLACKLIST: 'ads-filter-blacklist',
+  DEFAULT: 'default',
+  // This source is for the Protected Media Identifier / Protected Content
+  // content setting only, which is only available on ChromeOS.
+  DRM_DISABLED: 'drm-disabled',
   EMBARGO: 'embargo',
   EXTENSION: 'extension',
   INSECURE_ORIGIN: 'insecure-origin',
   KILL_SWITCH: 'kill-switch',
   POLICY: 'policy',
   PREFERENCE: 'preference',
-  DEFAULT: 'default',
 };
 
 /**

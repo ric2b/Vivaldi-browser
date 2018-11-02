@@ -33,6 +33,7 @@
 #include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/resize_observer/ResizeObservation.h"
 #include "core/resize_observer/ResizeObserver.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -42,6 +43,15 @@ struct SameSizeAsElementRareData : NodeRareData {
   void* pointers[1];
   Member<void*> members[14];
 };
+
+ElementRareData::ElementRareData(NodeRenderingData* node_layout_data)
+    : NodeRareData(node_layout_data), class_list_(nullptr) {
+  is_element_rare_data_ = true;
+}
+
+ElementRareData::~ElementRareData() {
+  DCHECK(!pseudo_element_data_);
+}
 
 CSSStyleDeclaration& ElementRareData::EnsureInlineCSSStyleDeclaration(
     Element* owner_element) {
@@ -58,6 +68,15 @@ InlineStylePropertyMap& ElementRareData::EnsureInlineStylePropertyMap(
   return *cssom_map_wrapper_;
 }
 
+void ElementRareData::SetComputedStyle(
+    scoped_refptr<ComputedStyle> computed_style) {
+  computed_style_ = std::move(computed_style);
+}
+
+void ElementRareData::ClearComputedStyle() {
+  computed_style_ = nullptr;
+}
+
 AttrNodeList& ElementRareData::EnsureAttrNodeList() {
   if (!attr_node_list_)
     attr_node_list_ = new AttrNodeList;
@@ -72,7 +91,7 @@ ElementRareData::EnsureResizeObserverData() {
   return *resize_observer_data_;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(ElementRareData) {
+void ElementRareData::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(dataset_);
   visitor->Trace(class_list_);
   visitor->Trace(shadow_);
@@ -90,7 +109,8 @@ DEFINE_TRACE_AFTER_DISPATCH(ElementRareData) {
   NodeRareData::TraceAfterDispatch(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS_AFTER_DISPATCH(ElementRareData) {
+void ElementRareData::TraceWrappersAfterDispatch(
+    const ScriptWrappableVisitor* visitor) const {
   if (attr_node_list_.Get()) {
     for (auto& attr : *attr_node_list_) {
       visitor->TraceWrappers(attr);

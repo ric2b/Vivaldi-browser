@@ -13,14 +13,14 @@ class _Grouper(object):
     self.groups = []
 
   def Add(self, name, group):
-    logging.debug('Computed %s', name)
+    logging.debug('Computed %s (%d syms)', name, len(group))
     sorted_group = group.Sorted()
     sorted_group.SetName(name)
     self.groups.append(sorted_group)
     return group.Inverted()
 
   def Finalize(self, remaining):
-    self.groups.sort(key=lambda s:(s.name.startswith('Other'), -s.pss))
+    self.groups.sort(key=lambda s:(s.name.startswith('Other'), -abs(s.pss)))
     if remaining:
       stars = remaining.Filter(lambda s: s.name.startswith('*'))
       if stars:
@@ -41,9 +41,23 @@ def _CategorizeByChromeComponent(symbols):
   # Put things that filter out a lot of symbols at the beginning where possible
   # to optimize speed.
   symbols = g.Add('WebRTC', symbols.WhereMatches(r'(?i)webrtc'))
-  symbols = g.Add('Skia', symbols.Filter(lambda s: 'skia/' in s.source_path))
-  symbols = g.Add('V8', symbols.Filter(
+  symbols = g.Add('v8', symbols.Filter(
       lambda s: s.source_path.startswith('v8/')))
+  symbols = g.Add('Skia', symbols.Filter(lambda s: 'skia/' in s.source_path))
+  symbols = g.Add('net', symbols.Filter(
+      lambda s: s.source_path.startswith('net/')))
+  symbols = g.Add('media', symbols.Filter(
+      lambda s: s.source_path.startswith('media/')))
+  symbols = g.Add('gpu', symbols.Filter(
+      lambda s: s.source_path.startswith('gpu/')))
+  symbols = g.Add('cc', symbols.Filter(
+      lambda s: s.source_path.startswith('cc/')))
+  symbols = g.Add('base', symbols.Filter(
+      lambda s: s.source_path.startswith('base/')))
+  symbols = g.Add('viz', symbols.Filter(
+      lambda s: s.source_path.startswith('components/viz')))
+  symbols = g.Add('ui/gfx', symbols.Filter(
+      lambda s: s.source_path.startswith('ui/gfx/')))
 
   # Next, put non-regex queries, since they're a bit faster.
   symbols = g.Add('ICU', symbols.Filter(lambda s: '/icu/' in s.source_path))
@@ -99,6 +113,8 @@ def _CategorizeGenerated(symbols):
   #     than having them be inline.
   symbols = g.Add('RegisterJNI', symbols.WhereFullNameMatches(
       r'Register.*JNIEnv\*\)|RegisteredMethods$'))
+  symbols = g.Add('gl_bindings_autogen',
+      symbols.WherePathMatches('gl_bindings_autogen'))
 
   symbols = symbols.WhereSourceIsGenerated()
   symbols = g.Add('Protocol Buffers', symbols.Filter(lambda s: (
@@ -118,6 +134,14 @@ def _CategorizeGenerated(symbols):
       'WebKit/Source/core' in s.object_path)))
   symbols = g.Add('Blink (Other)', symbols.Filter(lambda s: (
       'WebKit' in s.object_path or 'blink/' in s.object_path)))
+  symbols = g.Add('prepopulated_engines.cc', symbols.Filter(lambda s: (
+      'prepopulated_engines' in s.object_path)))
+  symbols = g.Add('Metrics-related code', symbols.Filter(lambda s: (
+      '/metrics/' in s.object_path)))
+  symbols = g.Add('gpu_driver_bug_list_autogen.cc', symbols.Filter(lambda s: (
+      'gpu_driver_bug_list' in s.object_path)))
+  symbols = g.Add('components/policy', symbols.Filter(lambda s: (
+      'components/policy' in s.object_path)))
 
   return g.Finalize(symbols)
 
@@ -130,7 +154,7 @@ class CannedQueries(object):
 
   def _SymbolsArg(self, arg):
     arg = arg if arg is not None else self._size_infos[-1]
-    if isinstance(arg, models.SizeInfo):
+    if isinstance(arg, (models.SizeInfo, models.DeltaSizeInfo)):
       arg = arg.symbols
     return arg
 
@@ -154,3 +178,10 @@ class CannedQueries(object):
     symbols = self._SymbolsArg(symbols)
     # GCC generates "_GLOBAL__" symbols. Clang generates "startup".
     return symbols.WhereNameMatches('^startup$|^_GLOBAL__')
+
+  def LargeFiles(self, symbols=None, min_size=50 * 1024):
+    """Lists source files that are larger than a certain size (default 50kb)."""
+    symbols = self._SymbolsArg(symbols)
+    # GCC generates "_GLOBAL__" symbols. Clang generates "startup".
+    return symbols.GroupedByPath(fallback=None).WherePssBiggerThan(
+        min_size).Sorted()

@@ -5,14 +5,18 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_unittest.h"
 
 #include "base/command_line.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
+#include "chrome/browser/extensions/extension_action_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -22,12 +26,32 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "ui/base/test/material_design_controller_test_api.h"
 
 namespace {
+
+using ActionType = extensions::ExtensionBuilder::ActionType;
+
+const extensions::Extension* GetExtensionByPath(
+    const extensions::ExtensionSet& extensions,
+    const base::FilePath& path) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::FilePath extension_path = base::MakeAbsoluteFilePath(path);
+  EXPECT_TRUE(!extension_path.empty());
+  for (const scoped_refptr<const extensions::Extension>& extension :
+       extensions) {
+    if (extension->path() == extension_path) {
+      return extension.get();
+    }
+  }
+  return nullptr;
+}
 
 // Verifies that the toolbar order matches for the given |actions_bar|. If the
 // order matches, the return value is empty; otherwise, it contains the error.
@@ -84,6 +108,35 @@ std::string VerifyToolbarOrderForBar(
   return error;
 }
 
+// The ToolbarActionErrorTestObserver is used to notify when an extension
+// failed to load.
+class ToolbarActionErrorTestObserver : public ExtensionErrorReporter::Observer {
+ public:
+  ToolbarActionErrorTestObserver() : extension_error_reporter_observer_(this) {
+    extension_error_reporter_observer_.Add(
+        ExtensionErrorReporter::GetInstance());
+  }
+
+  ~ToolbarActionErrorTestObserver() override {}
+
+  void WaitForOnLoadFailure() { run_loop_.Run(); }
+
+ private:
+  // ExtensionErrorReporter::Observer:
+  void OnLoadFailure(content::BrowserContext* browser_context,
+                     const base::FilePath& extension_path,
+                     const std::string& error) override {
+    run_loop_.Quit();
+  }
+
+  base::RunLoop run_loop_;
+
+  ScopedObserver<ExtensionErrorReporter, ExtensionErrorReporter::Observer>
+      extension_error_reporter_observer_;
+
+  DISALLOW_COPY_AND_ASSIGN(ToolbarActionErrorTestObserver);
+};
+
 }  // namespace
 
 ToolbarActionsBarUnitTest::ToolbarActionsBarUnitTest()
@@ -93,8 +146,7 @@ ToolbarActionsBarUnitTest::~ToolbarActionsBarUnitTest() {}
 
 void ToolbarActionsBarUnitTest::SetUp() {
   BrowserWithTestWindowTest::SetUp();
-  local_state_.reset(
-      new ScopedTestingLocalState(TestingBrowserProcess::GetGlobal()));
+  ExtensionErrorReporter::Init(true);
 
   // The toolbar typically displays extension icons, so create some extension
   // test infrastructure.
@@ -125,7 +177,6 @@ void ToolbarActionsBarUnitTest::TearDown() {
   overflow_browser_action_test_util_.reset();
   ToolbarActionsBar::disable_animations_for_testing_ = false;
   material_design_state_.reset();
-  local_state_.reset();
   BrowserWithTestWindowTest::TearDown();
 }
 
@@ -135,12 +186,13 @@ void ToolbarActionsBarUnitTest::ActivateTab(int index) {
 }
 
 scoped_refptr<const extensions::Extension>
-ToolbarActionsBarUnitTest::CreateAndAddExtension(
-    const std::string& name,
-    extensions::extension_action_test_util::ActionType action_type) {
+ToolbarActionsBarUnitTest::CreateAndAddExtension(const std::string& name,
+                                                 ActionType action_type) {
   scoped_refptr<const extensions::Extension> extension =
-      extensions::extension_action_test_util::CreateActionExtension(
-          name, action_type);
+      extensions::ExtensionBuilder(name)
+          .SetAction(action_type)
+          .SetLocation(extensions::Manifest::INTERNAL)
+          .Build();
   extensions::ExtensionSystem::Get(profile())->extension_service()->
       AddExtension(extension.get());
   return extension;
@@ -188,9 +240,8 @@ TEST_P(ToolbarActionsBarUnitTest, BasicToolbarActionsBarTest) {
   // Add three extensions to the profile; this is the easiest way to have
   // toolbar actions.
   for (int i = 0; i < 3; ++i) {
-    CreateAndAddExtension(
-        base::StringPrintf("extension %d", i),
-        extensions::extension_action_test_util::BROWSER_ACTION);
+    CreateAndAddExtension(base::StringPrintf("extension %d", i),
+                          ActionType::BROWSER_ACTION);
   }
 
   const ToolbarActionsBar::PlatformSettings& platform_settings =
@@ -294,9 +345,8 @@ TEST_P(ToolbarActionsBarUnitTest, BasicToolbarActionsBarTest) {
 
 TEST_P(ToolbarActionsBarUnitTest, ToolbarActionsReorderOnPrefChange) {
   for (int i = 0; i < 3; ++i) {
-    CreateAndAddExtension(
-        base::StringPrintf("extension %d", i),
-        extensions::extension_action_test_util::BROWSER_ACTION);
+    CreateAndAddExtension(base::StringPrintf("extension %d", i),
+                          ActionType::BROWSER_ACTION);
   }
   EXPECT_EQ(3u, toolbar_actions_bar()->GetIconCount());
   // Change the value of the toolbar preference.
@@ -327,9 +377,8 @@ TEST_P(ToolbarActionsBarUnitTest, ToolbarActionsReorderOnPrefChange) {
 TEST_P(ToolbarActionsBarUnitTest, TestHighlightMode) {
   std::vector<std::string> ids;
   for (int i = 0; i < 3; ++i) {
-    ids.push_back(CreateAndAddExtension(
-                      base::StringPrintf("extension %d", i),
-                      extensions::extension_action_test_util::BROWSER_ACTION)
+    ids.push_back(CreateAndAddExtension(base::StringPrintf("extension %d", i),
+                                        ActionType::BROWSER_ACTION)
                       ->id());
   }
   EXPECT_EQ(3u, toolbar_actions_bar()->GetIconCount());
@@ -406,9 +455,8 @@ TEST_P(ToolbarActionsBarUnitTest, TestActionFrameBounds) {
   // Initialization: 7 total extensions, with 3 visible per row in overflow.
   // Start with all visible on the main bar.
   for (int i = 0; i < kNumExtensions; ++i) {
-    CreateAndAddExtension(
-        base::StringPrintf("extension %d", i),
-        extensions::extension_action_test_util::BROWSER_ACTION);
+    CreateAndAddExtension(base::StringPrintf("extension %d", i),
+                          ActionType::BROWSER_ACTION);
   }
   toolbar_model()->SetVisibleIconCount(kNumExtensions);
   overflow_bar()->SetOverflowRowWidth(
@@ -463,9 +511,8 @@ TEST_P(ToolbarActionsBarUnitTest, TestStartAndEndIndexes) {
   const int kIconSpacing = GetLayoutConstant(TOOLBAR_STANDARD_SPACING);
 
   for (int i = 0; i < 3; ++i) {
-    CreateAndAddExtension(
-        base::StringPrintf("extension %d", i),
-        extensions::extension_action_test_util::BROWSER_ACTION);
+    CreateAndAddExtension(base::StringPrintf("extension %d", i),
+                          ActionType::BROWSER_ACTION);
   }
   // At the start, all icons should be present on the main bar, and no
   // overflow should be needed.
@@ -514,9 +561,7 @@ TEST_P(ToolbarActionsBarUnitTest, TestStartAndEndIndexes) {
 
 // Tests the logic for determining if the container needs an overflow menu item.
 TEST_P(ToolbarActionsBarUnitTest, TestNeedsOverflow) {
-  CreateAndAddExtension(
-      "extension 1",
-      extensions::extension_action_test_util::BROWSER_ACTION);
+  CreateAndAddExtension("extension 1", ActionType::BROWSER_ACTION);
   // One extension on the main bar, none overflowed. Overflow not needed.
   EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
   EXPECT_EQ(0u, overflow_bar()->GetIconCount());
@@ -560,9 +605,7 @@ TEST_P(ToolbarActionsBarUnitTest, TestNeedsOverflow) {
   // Add another extension and verify that if one is still in overflow when
   // another is popped out, we still need overflow.
   toolbar_actions_bar()->UndoPopOut();
-  CreateAndAddExtension(
-      "extension 2",
-      extensions::extension_action_test_util::BROWSER_ACTION);
+  CreateAndAddExtension("extension 2", ActionType::BROWSER_ACTION);
   toolbar_model()->SetVisibleIconCount(0u);
   {
     base::RunLoop run_loop;
@@ -571,4 +614,76 @@ TEST_P(ToolbarActionsBarUnitTest, TestNeedsOverflow) {
   }
   EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
   EXPECT_TRUE(toolbar_actions_bar()->NeedsOverflow());
+}
+
+// Tests that both the extension icon and its allocated slot in the toolbar are
+// removed when an extension is reloaded with manifest errors and therefore
+// fails to be loaded into Chrome,
+//
+// TODO(catmullings): Convert this from TEST_P to TEST_F since there is no test
+// parameter dependence.
+TEST_P(ToolbarActionsBarUnitTest, ReuploadExtensionFailed) {
+  ExtensionService* service =
+      extensions::ExtensionSystem::Get(profile())->extension_service();
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile());
+
+  extensions::TestExtensionDir ext_dir;
+  const char kManifest[] =
+      "{"
+      "  'name': 'Test',"
+      "  'version': '1',"
+      "  'manifest_version': 2"
+      "}";
+  ext_dir.WriteManifestWithSingleQuotes(kManifest);
+
+  scoped_refptr<extensions::UnpackedInstaller> installer =
+      extensions::UnpackedInstaller::Create(service);
+  installer->Load(ext_dir.UnpackedPath());
+  content::RunAllTasksUntilIdle();
+
+  EXPECT_EQ(1u, registry->enabled_extensions().size());
+  EXPECT_EQ(0u, registry->disabled_extensions().size());
+
+  const extensions::Extension* extension = GetExtensionByPath(
+      registry->enabled_extensions(), ext_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  // Ensure that the toolbar has the 1 icon for the extension loaded.
+  int width = toolbar_actions_bar()->GetFullSize().width();
+  EXPECT_EQ(width, toolbar_actions_bar()->GetFullSize().width());
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+
+  // Reload the extension again.
+  extensions::TestExtensionRegistryObserver registry_observer(registry);
+  service->ReloadExtension(extension->id());
+  ASSERT_TRUE(registry_observer.WaitForExtensionLoaded());
+
+  // Ensure that after reload, the toolbar still contains the 1 icon for the
+  // extension.
+  EXPECT_EQ(width, toolbar_actions_bar()->GetFullSize().width());
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+
+  // Replace the extension's valid manifest with one containing errors. In this
+  // case, the error is that both the 'browser_action' and 'page_action' keys
+  // are specified instead of only one.
+  const char kManifestWithErrors[] =
+      "{"
+      "  'name': 'Test',"
+      "  'version': '1',"
+      "  'manifest_version': 2,"
+      "  'page_action' : {},"
+      "  'browser_action' : {}"
+      "}";
+  ext_dir.WriteManifestWithSingleQuotes(kManifestWithErrors);
+
+  // Reload the extension again. Check that the updated extension cannot be
+  // loaded due to the manifest errors.
+  service->ReloadExtensionWithQuietFailure(extension->id());
+  base::RunLoop().RunUntilIdle();
+
+  // Since the extension is removed, its icon should no longer be in the
+  // toolbar.
+  EXPECT_EQ(0, toolbar_actions_bar()->GetFullSize().width());
+  EXPECT_EQ(0u, toolbar_actions_bar()->GetIconCount());
 }

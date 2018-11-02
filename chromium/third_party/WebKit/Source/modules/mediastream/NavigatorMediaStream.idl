@@ -19,9 +19,10 @@
 
 // https://w3c.github.io/mediacapture-main/#navigatorusermedia-interface-extensions
 
-partial interface Navigator {
+[
+    ImplementedAs=NavigatorMediaStream
+] partial interface Navigator {
     [RaisesException,
-     RuntimeEnabled=GetUserMedia,
      MeasureAs=GetUserMediaLegacy
     ] void getUserMedia(MediaStreamConstraints constraints,
                         NavigatorUserMediaSuccessCallback successCallback,

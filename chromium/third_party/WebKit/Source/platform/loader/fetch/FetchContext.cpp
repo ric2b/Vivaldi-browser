@@ -32,7 +32,6 @@
 
 #include "platform/PlatformProbeSink.h"
 #include "platform/probe/PlatformTraceEventsAgent.h"
-#include "public/platform/WebCachePolicy.h"
 
 namespace blink {
 
@@ -46,7 +45,7 @@ FetchContext::FetchContext() : platform_probe_sink_(new PlatformProbeSink) {
       new PlatformTraceEventsAgent);
 }
 
-DEFINE_TRACE(FetchContext) {
+void FetchContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(platform_probe_sink_);
 }
 
@@ -57,11 +56,11 @@ void FetchContext::DispatchDidChangeResourcePriority(unsigned long,
 void FetchContext::AddAdditionalRequestHeaders(ResourceRequest&,
                                                FetchResourceType) {}
 
-WebCachePolicy FetchContext::ResourceRequestCachePolicy(
+mojom::FetchCacheMode FetchContext::ResourceRequestCachePolicy(
     const ResourceRequest&,
     Resource::Type,
     FetchParameters::DeferOption defer) const {
-  return WebCachePolicy::kUseProtocolCachePolicy;
+  return mojom::FetchCacheMode::kDefault;
 }
 
 void FetchContext::PrepareRequest(ResourceRequest&, RedirectType) {}
@@ -69,6 +68,7 @@ void FetchContext::PrepareRequest(ResourceRequest&, RedirectType) {}
 void FetchContext::DispatchWillSendRequest(unsigned long,
                                            ResourceRequest&,
                                            const ResourceResponse&,
+                                           Resource::Type,
                                            const FetchInitiatorInfo&) {}
 
 void FetchContext::DispatchDidLoadResourceFromMemoryCache(
@@ -100,7 +100,6 @@ void FetchContext::DispatchDidFail(unsigned long,
                                    bool) {}
 
 void FetchContext::RecordLoadingActivity(
-    unsigned long,
     const ResourceRequest&,
     Resource::Type,
     const AtomicString& fetch_initiator_name) {}

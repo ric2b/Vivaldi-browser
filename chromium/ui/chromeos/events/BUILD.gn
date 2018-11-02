@@ -14,6 +14,7 @@ source_set("events") {
     "event_rewriter_chromeos.h",
     "keyboard_layout_util.cc",
     "keyboard_layout_util.h",
+    "modifier_key.h",
     "pref_names.cc",
     "pref_names.h",
   ]
@@ -26,7 +27,7 @@ source_set("events") {
     "//ui/events:dom_keycode_converter",
     "//ui/events/devices",
   ]
-  if (use_x11 || ozone_platform_x11) {
+  if (ozone_platform_x11) {
     deps += [
       "//ui/base/x",
       "//ui/events/keycodes:x11",

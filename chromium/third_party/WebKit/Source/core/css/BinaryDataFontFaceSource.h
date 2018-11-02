@@ -5,8 +5,8 @@
 #ifndef BinaryDataFontFaceSource_h
 #define BinaryDataFontFaceSource_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/css/CSSFontFaceSource.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -20,11 +20,11 @@ class BinaryDataFontFaceSource final : public CSSFontFaceSource {
   bool IsValid() const override;
 
  private:
-  RefPtr<SimpleFontData> CreateFontData(
+  scoped_refptr<SimpleFontData> CreateFontData(
       const FontDescription&,
       const FontSelectionCapabilities&) override;
 
-  RefPtr<FontCustomPlatformData> custom_platform_data_;
+  scoped_refptr<FontCustomPlatformData> custom_platform_data_;
 };
 
 }  // namespace blink

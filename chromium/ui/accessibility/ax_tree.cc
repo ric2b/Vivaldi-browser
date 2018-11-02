@@ -166,7 +166,9 @@ void AXTree::UpdateData(const AXTreeData& new_data) {
 }
 
 gfx::RectF AXTree::RelativeToTreeBounds(const AXNode* node,
-                                        gfx::RectF bounds) const {
+                                        gfx::RectF bounds,
+                                        bool* offscreen,
+                                        bool clip_bounds) const {
   // If |bounds| is uninitialized, which is not the same as empty,
   // start with the node bounds.
   if (bounds.width() == 0 && bounds.height() == 0) {
@@ -179,8 +181,9 @@ gfx::RectF AXTree::RelativeToTreeBounds(const AXNode* node,
         ui::AXNode* child = node->children()[i];
         bounds.Union(GetTreeBounds(child));
       }
-      if (bounds.width() > 0 && bounds.height() > 0)
+      if (bounds.width() > 0 && bounds.height() > 0) {
         return bounds;
+      }
     }
   } else {
     bounds.Offset(node->data().location.x(), node->data().location.y());
@@ -211,8 +214,13 @@ gfx::RectF AXTree::RelativeToTreeBounds(const AXNode* node,
     // The rationale is that it's not useful to the user for an object to
     // have no width or height and it's probably a bug; it's better to
     // reflect the bounds of the nearest ancestor rather than a 0x0 box.
-    if (bounds.width() == 0 && bounds.height() == 0)
+    // Tag this node as 'offscreen' because it has no true size, just a
+    // size inherited from the ancestor.
+    if (bounds.width() == 0 && bounds.height() == 0) {
       bounds.set_size(container_bounds.size());
+      if (offscreen != nullptr)
+        *offscreen |= true;
+    }
 
     int scroll_x = 0;
     int scroll_y = 0;
@@ -221,14 +229,77 @@ gfx::RectF AXTree::RelativeToTreeBounds(const AXNode* node,
       bounds.Offset(-scroll_x, -scroll_y);
     }
 
+    // Get the intersection between the bounds and the container.
+    gfx::RectF intersection = bounds;
+    intersection.Intersect(container_bounds);
+
+    // Calculate the clipped bounds to determine offscreen state.
+    gfx::RectF clipped = bounds;
+    // If this is the root web area, make sure we clip the node to fit.
+    // This is disabled as a bugfix for Chrome 63, see crbug.com/786164
+    // if (false) {
+    if (container->data().GetBoolAttribute(ui::AX_ATTR_CLIPS_CHILDREN)) {
+      if (!intersection.IsEmpty()) {
+        // We can simply clip it to the container.
+        clipped = intersection;
+      } else {
+        // Totally offscreen. Find the nearest edge or corner.
+        // Make the minimum dimension 1 instead of 0.
+        if (clipped.x() >= container_bounds.width()) {
+          clipped.set_x(container_bounds.width() - 1);
+          clipped.set_width(1);
+        } else if (clipped.x() + clipped.width() <= 0) {
+          clipped.set_x(0);
+          clipped.set_width(1);
+        }
+        if (clipped.y() >= container_bounds.height()) {
+          clipped.set_y(container_bounds.height() - 1);
+          clipped.set_height(1);
+        } else if (clipped.y() + clipped.height() <= 0) {
+          clipped.set_y(0);
+          clipped.set_height(1);
+        }
+      }
+    }
+
+    if (clip_bounds)
+      bounds = clipped;
+
+    if (container->data().GetBoolAttribute(ui::AX_ATTR_CLIPS_CHILDREN) &&
+        intersection.IsEmpty() && !clipped.IsEmpty()) {
+      // If it is offscreen with respect to its parent, and the node itself is
+      // not empty, label it offscreen.
+      // Here we are extending the definition of offscreen to include elements
+      // that are clipped by their parents in addition to those clipped by
+      // the rootWebArea.
+      // No need to update |offscreen| if |clipped| is not empty, because it
+      // should be false by default.
+      if (offscreen != nullptr)
+        *offscreen |= true;
+    }
+
     node = container;
   }
 
   return bounds;
 }
 
-gfx::RectF AXTree::GetTreeBounds(const AXNode* node) const {
-  return RelativeToTreeBounds(node, gfx::RectF());
+gfx::RectF AXTree::GetTreeBounds(const AXNode* node,
+                                 bool* offscreen,
+                                 bool clip_bounds) const {
+  return RelativeToTreeBounds(node, gfx::RectF(), offscreen, clip_bounds);
+}
+
+std::set<int32_t> AXTree::GetReverseRelations(AXIntAttribute attr,
+                                              int32_t dst_id) {
+  DCHECK(IsNodeIdIntAttribute(attr));
+  return int_reverse_relations_[attr][dst_id];
+}
+
+std::set<int32_t> AXTree::GetReverseRelations(AXIntListAttribute attr,
+                                              int32_t dst_id) {
+  DCHECK(IsNodeIdIntListAttribute(attr));
+  return intlist_reverse_relations_[attr][dst_id];
 }
 
 bool AXTree::Unserialize(const AXTreeUpdate& update) {
@@ -361,6 +432,7 @@ bool AXTree::UpdateNode(const AXNodeData& src,
     update_state->pending_nodes.erase(node);
     if (update_state->new_nodes.find(node) == update_state->new_nodes.end())
       CallNodeChangeCallbacks(node, src);
+    UpdateReverseRelations(node, src);
     node->SetData(src);
   } else {
     if (!is_new_root) {
@@ -372,6 +444,7 @@ bool AXTree::UpdateNode(const AXNodeData& src,
     update_state->new_root = CreateNode(NULL, src.id, 0, update_state);
     node = update_state->new_root;
     update_state->new_nodes.insert(node);
+    UpdateReverseRelations(node, src);
     node->SetData(src);
   }
 
@@ -492,6 +565,37 @@ void AXTree::CallNodeChangeCallbacks(AXNode* node, const AXNodeData& new_data) {
   CallIfAttributeValuesChanged(old_data.stringlist_attributes,
                                new_data.stringlist_attributes,
                                std::vector<std::string>(), stringlist_callback);
+}
+
+void AXTree::UpdateReverseRelations(AXNode* node, const AXNodeData& new_data) {
+  const AXNodeData& old_data = node->data();
+  int id = new_data.id;
+  auto int_callback = [this, node, id](AXIntAttribute attr, const int& old_int,
+                                       const int& new_int) {
+    if (!IsNodeIdIntAttribute(attr))
+      return;
+
+    int_reverse_relations_[attr][old_int].erase(id);
+    int_reverse_relations_[attr][new_int].insert(id);
+  };
+  CallIfAttributeValuesChanged(old_data.int_attributes, new_data.int_attributes,
+                               0, int_callback);
+
+  auto intlist_callback = [this, node, id](
+                              AXIntListAttribute attr,
+                              const std::vector<int32_t>& old_intlist,
+                              const std::vector<int32_t>& new_intlist) {
+    if (!IsNodeIdIntListAttribute(attr))
+      return;
+
+    for (int32_t old_id : old_intlist)
+      intlist_reverse_relations_[attr][old_id].erase(id);
+    for (int32_t new_id : new_intlist)
+      intlist_reverse_relations_[attr][new_id].insert(id);
+  };
+  CallIfAttributeValuesChanged(old_data.intlist_attributes,
+                               new_data.intlist_attributes,
+                               std::vector<int32_t>(), intlist_callback);
 }
 
 void AXTree::DestroySubtree(AXNode* node,

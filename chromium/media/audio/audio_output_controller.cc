@@ -15,7 +15,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
 #include "base/threading/platform_thread.h"
-#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/audio_timestamp_helper.h"
 
@@ -23,9 +22,67 @@ using base::TimeDelta;
 
 namespace media {
 namespace {
+
 // Time in seconds between two successive measurements of audio power levels.
 constexpr int kPowerMonitorLogIntervalSeconds = 15;
+
+// Used to log the result of rendering startup.
+// Elements in this enum should not be deleted or rearranged; the only
+// permitted operation is to add new elements before
+// STREAM_CREATION_RESULT_MAX and update STREAM_CREATION_RESULT_MAX.
+enum StreamCreationResult {
+  STREAM_CREATION_OK = 0,
+  STREAM_CREATION_CREATE_FAILED = 1,
+  STREAM_CREATION_OPEN_FAILED = 2,
+  STREAM_CREATION_RESULT_MAX = STREAM_CREATION_OPEN_FAILED,
+};
+
+void LogStreamCreationResult(bool for_device_change,
+                             StreamCreationResult result) {
+  if (for_device_change) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Media.AudioOutputController.ProxyStreamCreationResultForDeviceChange",
+        result, STREAM_CREATION_RESULT_MAX + 1);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Media.AudioOutputController.ProxyStreamCreationResult", result,
+        STREAM_CREATION_RESULT_MAX + 1);
+  }
+}
+
 }  // namespace
+
+AudioOutputController::ErrorStatisticsTracker::ErrorStatisticsTracker()
+    : on_more_io_data_called_(0) {
+  // WedgeCheck() will look to see if |on_more_io_data_called_| is true after
+  // the timeout expires and log this as a UMA stat. If the stream is
+  // paused/closed before the timer fires, nothing is logged.
+  wedge_timer_.Start(FROM_HERE, TimeDelta::FromSeconds(5), this,
+                     &ErrorStatisticsTracker::WedgeCheck);
+}
+
+AudioOutputController::ErrorStatisticsTracker::~ErrorStatisticsTracker() {
+  UMA_HISTOGRAM_BOOLEAN("Media.AudioOutputController.CallbackError",
+                        error_during_callback_);
+}
+
+void AudioOutputController::ErrorStatisticsTracker::RegisterError() {
+  error_during_callback_ = true;
+}
+
+void AudioOutputController::ErrorStatisticsTracker::OnMoreDataCalled() {
+  // Indicate that we haven't wedged (at least not indefinitely, WedgeCheck()
+  // may have already fired if OnMoreData() took an abnormal amount of time).
+  // Since this thread is the only writer of |on_more_io_data_called_| once the
+  // thread starts, it's safe to compare and then increment.
+  if (on_more_io_data_called_.IsZero())
+    on_more_io_data_called_.Increment();
+}
+
+void AudioOutputController::ErrorStatisticsTracker::WedgeCheck() {
+  UMA_HISTOGRAM_BOOLEAN("Media.AudioOutputControllerPlaybackStartupSuccess",
+                        on_more_io_data_called_.IsOne());
+}
 
 AudioOutputController::AudioOutputController(
     AudioManager* audio_manager,
@@ -47,7 +104,6 @@ AudioOutputController::AudioOutputController(
       power_monitor_(
           params.sample_rate(),
           TimeDelta::FromMilliseconds(kPowerMeasurementTimeConstantMillis)),
-      on_more_io_data_called_(0),
       weak_factory_for_errors_(this) {
   DCHECK(audio_manager);
   DCHECK(handler_);
@@ -113,8 +169,8 @@ void AudioOutputController::DoCreate(bool is_for_device_change) {
   DCHECK(message_loop_->BelongsToCurrentThread());
   SCOPED_UMA_HISTOGRAM_TIMER("Media.AudioOutputController.CreateTime");
   TRACE_EVENT0("audio", "AudioOutputController::DoCreate");
-  handler_->OnLog(base::StringPrintf("AOC::DoCreate (for device change: %s)",
-                                     is_for_device_change ? "yes" : "no"));
+  handler_->OnLog(is_for_device_change ? "AOC::DoCreate (for device change)"
+                                       : "AOC::DoCreate");
 
   // Close() can be called before DoCreate() is executed.
   if (state_ == kClosed)
@@ -128,16 +184,21 @@ void AudioOutputController::DoCreate(bool is_for_device_change) {
       audio_manager_->MakeAudioOutputStreamProxy(params_, output_device_id_);
   if (!stream_) {
     state_ = kError;
+    LogStreamCreationResult(is_for_device_change,
+                            STREAM_CREATION_CREATE_FAILED);
     handler_->OnControllerError();
     return;
   }
 
   if (!stream_->Open()) {
     DoStopCloseAndClearStream();
+    LogStreamCreationResult(is_for_device_change, STREAM_CREATION_OPEN_FAILED);
     state_ = kError;
     handler_->OnControllerError();
     return;
   }
+
+  LogStreamCreationResult(is_for_device_change, STREAM_CREATION_OK);
 
   // Everything started okay, so re-register for state change callbacks if
   // stream_ was created via AudioManager.
@@ -174,23 +235,9 @@ void AudioOutputController::DoPlay() {
     last_audio_level_log_time_ = base::TimeTicks::Now();
   }
 
-  stream_->Start(this);
+  stats_tracker_.emplace();
 
-  // For UMA tracking purposes, start the wedge detection timer.  This allows us
-  // to record statistics about the number of wedged playbacks in the field.
-  //
-  // WedgeCheck() will look to see if |on_more_io_data_called_| is true after
-  // the timeout expires.  Care must be taken to ensure the wedge check delay is
-  // large enough that the value isn't queried while OnMoreDataIO() is setting
-  // it.
-  //
-  // Timer self-manages its lifetime and WedgeCheck() will only record the UMA
-  // statistic if state is still kPlaying.  Additional Start() calls will
-  // invalidate the previous timer.
-  wedge_timer_.reset(new base::OneShotTimer());
-  wedge_timer_->Start(
-      FROM_HERE, TimeDelta::FromSeconds(5), this,
-      &AudioOutputController::WedgeCheck);
+  stream_->Start(this);
 
   handler_->OnControllerPlaying();
 }
@@ -199,8 +246,8 @@ void AudioOutputController::StopStream() {
   DCHECK(message_loop_->BelongsToCurrentThread());
 
   if (state_ == kPlaying) {
-    wedge_timer_.reset();
     stream_->Stop();
+    stats_tracker_.reset();
 
     if (will_monitor_audio_levels()) {
       LogAudioPowerLevel("StopStream");
@@ -266,8 +313,13 @@ void AudioOutputController::DoSetVolume(double volume) {
 
 void AudioOutputController::DoReportError() {
   DCHECK(message_loop_->BelongsToCurrentThread());
-  if (state_ != kClosed)
+  TRACE_EVENT0("audio", "AudioOutputController::DoReportError");
+  DLOG(ERROR) << "AudioOutputController::DoReportError";
+  if (state_ != kClosed) {
+    if (stats_tracker_)
+      stats_tracker_->RegisterError();
     handler_->OnControllerError();
+  }
 }
 
 int AudioOutputController::OnMoreData(base::TimeDelta delay,
@@ -276,12 +328,7 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
                                       AudioBus* dest) {
   TRACE_EVENT0("audio", "AudioOutputController::OnMoreData");
 
-  // Indicate that we haven't wedged (at least not indefinitely, WedgeCheck()
-  // may have already fired if OnMoreData() took an abnormal amount of time).
-  // Since this thread is the only writer of |on_more_io_data_called_| once the
-  // thread starts, its safe to compare and then increment.
-  if (on_more_io_data_called_.IsZero())
-    on_more_io_data_called_.Increment();
+  stats_tracker_->OnMoreDataCalled();
 
   sync_reader_->Read(dest);
 
@@ -303,6 +350,10 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
   }
 
   if (will_monitor_audio_levels()) {
+    // Note: this code path should never be hit when using bitstream streams.
+    // Scan doesn't expect compressed audio, so it may go out of bounds trying
+    // to read |frames| frames of PCM data.
+    CHECK(!params_.IsBitstreamFormat());
     power_monitor_.Scan(*dest, frames);
 
     const auto now = base::TimeTicks::Now();
@@ -369,6 +420,7 @@ void AudioOutputController::DoStopCloseAndClearStream() {
 
     StopStream();
     stream_->Close();
+    stats_tracker_.reset();
 
     if (stream_ == diverting_to_stream_)
       diverting_to_stream_ = NULL;
@@ -400,7 +452,7 @@ void AudioOutputController::OnDeviceChange() {
         return "closed";
       case AudioOutputController::kError:
         return "error";
-    };
+    }
     return "unknown";
   };
 
@@ -511,16 +563,6 @@ void AudioOutputController::DoStopDuplicating(AudioPushSink* to_stream) {
 std::pair<float, bool> AudioOutputController::ReadCurrentPowerAndClip() {
   DCHECK(will_monitor_audio_levels());
   return power_monitor_.ReadCurrentPowerAndClip();
-}
-
-void AudioOutputController::WedgeCheck() {
-  DCHECK(message_loop_->BelongsToCurrentThread());
-
-  // If we should be playing and we haven't, that's a wedge.
-  if (state_ == kPlaying) {
-    UMA_HISTOGRAM_BOOLEAN("Media.AudioOutputControllerPlaybackStartupSuccess",
-                          on_more_io_data_called_.IsOne());
-  }
 }
 
 }  // namespace media

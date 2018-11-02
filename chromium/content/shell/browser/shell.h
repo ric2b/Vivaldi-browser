@@ -81,6 +81,7 @@ class Shell : public WebContentsDelegate,
   void Close();
   void ShowDevTools();
   void CloseDevTools();
+  bool hide_toolbar() { return hide_toolbar_; }
 #if defined(OS_MACOSX)
   // Resizes the web content view to the given dimensions.
   void SizeTo(const gfx::Size& content_size);
@@ -232,7 +233,7 @@ class Shell : public WebContentsDelegate,
   void ToggleFullscreenModeForTab(WebContents* web_contents,
                                   bool enter_fullscreen);
   // WebContentsObserver
-  void TitleWasSet(NavigationEntry* entry, bool explicit_set) override;
+  void TitleWasSet(NavigationEntry* entry) override;
 
   void OnDevToolsWebContentsDestroyed();
 
@@ -270,6 +271,7 @@ class Shell : public WebContentsDelegate,
 #endif  // defined(USE_AURA)
 
   bool headless_;
+  bool hide_toolbar_;
 
   // A container of all the open windows. We use a vector so we can keep track
   // of ordering.

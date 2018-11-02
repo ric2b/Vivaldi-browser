@@ -37,8 +37,8 @@ class PLATFORM_EXPORT ClipDisplayItem final : public PairedBeginDisplayItem {
                                   WebDisplayItemList*) const override;
 
  private:
-#ifndef NDEBUG
-  void DumpPropertiesAsDebugString(WTF::StringBuilder&) const override;
+#if DCHECK_IS_ON()
+  void PropertiesAsJSON(JSONObject&) const override;
 #endif
   bool Equals(const DisplayItem& other) const final {
     return DisplayItem::Equals(other) &&

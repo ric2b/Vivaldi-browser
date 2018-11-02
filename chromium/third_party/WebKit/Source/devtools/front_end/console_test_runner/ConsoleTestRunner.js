@@ -197,6 +197,7 @@ ConsoleTestRunner.addConsoleViewSniffer = function(override, opt_sticky) {
  * @param {boolean=} dontForceMainContext
  */
 ConsoleTestRunner.evaluateInConsoleAndDump = function(code, callback, dontForceMainContext) {
+  callback = TestRunner.safeWrap(callback);
   /**
    * @param {string} text
    */
@@ -295,12 +296,16 @@ ConsoleTestRunner.dumpConsoleMessagesWithClasses = function(sortMessages) {
 
 ConsoleTestRunner.dumpConsoleClassesBrief = function() {
   var messageViews = Console.ConsoleView.instance()._visibleViewMessages;
-  for (var i = 0; i < messageViews.length; ++i)
-    TestRunner.addResult(messageViews[i].toMessageElement().className);
+  for (var i = 0; i < messageViews.length; ++i) {
+    var repeatText = messageViews[i].repeatCount() > 1 ? (' x' + messageViews[i].repeatCount()) : '';
+    TestRunner.addResult(messageViews[i].toMessageElement().className + repeatText);
+  }
 };
 
-ConsoleTestRunner.dumpConsoleCounters = function() {
+ConsoleTestRunner.dumpConsoleCounters = async function() {
   var counter = ConsoleCounters.WarningErrorCounter._instanceForTest;
+  if (counter._updatingForTest)
+    await TestRunner.addSnifferPromise(counter, '_updatedForTest');
   for (var index = 0; index < counter._titles.length; ++index)
     TestRunner.addResult(counter._titles[index]);
   ConsoleTestRunner.dumpConsoleClassesBrief();
@@ -544,4 +549,22 @@ ConsoleTestRunner.wrapListener = function(func) {
     func.apply(this, arguments);
   }
   return wrapper;
+};
+
+ConsoleTestRunner.dumpStackTraces = function() {
+  var viewMessages = Console.ConsoleView.instance()._visibleViewMessages;
+  for (var i = 0; i < viewMessages.length; ++i) {
+    var m = viewMessages[i].consoleMessage();
+    TestRunner.addResult(
+        'Message[' + i + ']: ' + Bindings.displayNameForURL(m.url || '') + ':' + m.line + ' ' + m.messageText);
+    var trace = m.stackTrace ? m.stackTrace.callFrames : null;
+    if (!trace) {
+      TestRunner.addResult('FAIL: no stack trace attached to message #' + i);
+    } else {
+      TestRunner.addResult('Stack Trace:\n');
+      TestRunner.addResult('  url: ' + trace[0].url);
+      TestRunner.addResult('  function: ' + trace[0].functionName);
+      TestRunner.addResult('  line: ' + trace[0].lineNumber);
+    }
+  }
 };

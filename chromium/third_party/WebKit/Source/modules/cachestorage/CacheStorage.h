@@ -22,8 +22,7 @@ namespace blink {
 class Cache;
 class WebServiceWorkerCacheStorage;
 
-class CacheStorage final : public GarbageCollectedFinalized<CacheStorage>,
-                           public ScriptWrappable {
+class CacheStorage final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(CacheStorage);
 
@@ -35,16 +34,14 @@ class CacheStorage final : public GarbageCollectedFinalized<CacheStorage>,
 
   ScriptPromise open(ScriptState*, const String& cache_name, ExceptionState&);
   ScriptPromise has(ScriptState*, const String& cache_name, ExceptionState&);
-  ScriptPromise deleteFunction(ScriptState*,
-                               const String& cache_name,
-                               ExceptionState&);
+  ScriptPromise Delete(ScriptState*, const String& cache_name, ExceptionState&);
   ScriptPromise keys(ScriptState*, ExceptionState&);
   ScriptPromise match(ScriptState*,
                       const RequestInfo&,
                       const CacheQueryOptions&,
                       ExceptionState&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   class Callbacks;

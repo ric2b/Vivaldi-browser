@@ -3,6 +3,9 @@
 <translationbundle lang="fi">
 <translation id="1002108253973310084">Havaittiin yhteensopimaton protokollaversio. Varmista, että molemmissa tietokoneissa on ohjelman uusimmat versiot, ja yritä uudelleen.</translation>
 <translation id="1050693411695664090">Huono</translation>
+<translation id="1059802506829356230">• Uudistettu ulkoasu
+• Parempi suorituskyky, reagointinopeus ja luotettavuus
+• Tuki äänen toistamiseen Windows- tai Linux-tietokoneista</translation>
 <translation id="1152528166145813711">Valitse…</translation>
 <translation id="1199593201721843963">Poista etäyhteydet käytöstä</translation>
 <translation id="1291443878853470558">Etäyhteydet on otettava käyttöön, jotta tietokonetta voidaan käyttää Chromotingin avulla.</translation>
@@ -71,6 +74,7 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="2509394361235492552">Yhdistetty isäntään <ph name="HOSTNAME" /></translation>
 <translation id="2512228156274966424">Huomaa: voit varmistaa kaikkien pikanäppäinten käytettävyyden, kun määrität Chrome-etäkäytön avautumaan ikkunassa.</translation>
 <translation id="2540992418118313681">Haluatko jakaa tämän tietokoneen niin, että toinen käyttäjä voi käyttää ja valvoa sitä?</translation>
+<translation id="2579271889603567289">Isäntä kaatui tai sen käynnistäminen epäonnistui.</translation>
 <translation id="2599300881200251572">Tämä palvelu mahdollistaa Chrome-etäkäytön asiakkaiden muodostamat yhteydet.</translation>
 <translation id="2647232381348739934">Chromoting-palvelu</translation>
 <translation id="2676780859508944670">Käsitellään…</translation>
@@ -81,6 +85,11 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="2841013758207633010">Aika</translation>
 <translation id="2851754573186462851">Chromium-sovellusten suoratoisto</translation>
 <translation id="2888969873284818612">Verkkovirhe. Käynnistämme sovelluksen uudelleen, kun laitteesi on seuraavan kerran yhteydessä verkkoon.</translation>
+<translation id="289405675947420287">Käytä tietokonettasi turvallisesti iOS-laitteella. Se on nopeaa, yksinkertaista ja maksutonta.
+
+• Lataa Chrome-etäkäyttösovellus Chrome Web Storesta tietokoneelle, jota haluat käyttää etäyhteydellä.
+• Asenna Chrome-etäkäyttöohjelmisto ja suorita asennus loppuun ohjeiden mukaisesti.
+• Avaa sovellus iOS-laitteellasi ja napauta verkkoon yhdistettyä tietokonetta, johon haluat muodostaa yhteyden.</translation>
 <translation id="2894654864775534701">Tämä tietokone on jaettu eri tilille.</translation>
 <translation id="2919669478609886916">Jaat tällä hetkellä tämän tietokoneen toisen käyttäjän kanssa. Haluatko jatkaa jakamista?</translation>
 <translation id="2921543551052660690">Olet aiemmin kirjautunut sisään käyttäjänä <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). Jos haluat käyttää tietokoneitasi tämän tilin kautta, <ph name="LINK_BEGIN" />kirjaudu Chromiumiin<ph name="LINK_END" /> kyseisellä tilillä ja asenna Chromoting uudelleen.</translation>
@@ -95,10 +104,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="3150823315463303127">Isäntä ei voinut lukea käytäntöä.</translation>
 <translation id="3194245623920924351">Chrome-etäkäyttö</translation>
 <translation id="3197730452537982411">Etäkäyttö</translation>
-<translation id="321944585103975186">• Uudistettu käyttöliittymä
-• Parempi suorituskyky, reagointinopeus ja luotettavuus
-• Tuki äänen toistamiseen Windows- tai Linux-tietokoneista
-• Parannettu näppäimistön tuki</translation>
 <translation id="324272851072175193">Lähetä nämä ohjeet sähköpostilla</translation>
 <translation id="3258789396564295715">Tähän tietokoneeseen voi muodostaa suojatun yhteyden Chrome-etäkäytön avulla.</translation>
 <translation id="3286521253923406898">Chromoting-isännän hallinta</translation>
@@ -112,12 +117,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="3385242214819933234">Isännän omistaja on virheellinen.</translation>
 <translation id="3403830762023901068">Käytäntöasetukset eivät salli tämän tietokoneen jakamista Chromoting-isäntänä. Ota yhteyttä järjestelmänvalvojaan.</translation>
 <translation id="3423542133075182604">Suojausavaimen etäkäyttöprosessi</translation>
-<translation id="3426467947138417795">Chrome-etäkäyttö
-Tietokoneen etäkäyttö
-Etäyhteys tietokoneeseen
-Tietokoneen käyttö etänä
-Etäkäyttö
-Etätuki</translation>
 <translation id="3581045510967524389">Verkkoon yhdistäminen ei onnistu. Varmista, että laitteesi on online-tilassa.</translation>
 <translation id="3596628256176442606">Tämä palvelu mahdollistaa Chromoting-asiakkaiden muodostamat yhteydet.</translation>
 <translation id="3606997049964069799">Et ole kirjautunut Chromiumiin. Kirjaudu sisään ja yritä uudelleen.</translation>
@@ -125,14 +124,8 @@ Etätuki</translation>
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Lisätietoja</translation>
 <translation id="3718805989288361841">Chrome-etäkäytön käytäntöasetuksissa on virhe. Ota yhteyttä järjestelmänvalvojaan.</translation>
+<translation id="3759645055923345178">Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla PIN- tai käyttökoodin.</translation>
 <translation id="3776024066357219166">Chrome-etäkäyttökerta on päättynyt.</translation>
-<translation id="3788372335219293587">Käytä tietokoneitasi turvallisesti iOS-laitteella. Se on nopeaa, yksinkertaista ja maksutonta.
-
-• Kun olet tietokoneella, jota haluat käyttää etänä, etsi Chrome-etäkäyttö-sovellus Chrome Web Storesta:  https://chrome.google.com/remotedesktop.
-• Asenna Chrome-etäkäyttö-ohjelmisto ja suorita asennus loppuun ohjeiden mukaisesti.
-• Avaa sovellus iOS-laitteellasi ja napauta online-tilassa olevaa tietokonetta, johon haluat muodostaa yhteyden.
-
-Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/SyrVzj).</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Myönnä käyttöoikeus Chrome-etäkäytön kautta vahvistamalla tilisi ja PIN-koodisi alla.</translation>
 <translation id="3897092660631435901">Valikko</translation>
@@ -172,9 +165,17 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="4660011489602794167">Näytä näppäimistö</translation>
 <translation id="4703302905453407178">Tarvittava osa ei toimi enää. Ilmoita tästä ongelmasta kehittäjille.</translation>
 <translation id="4703799847237267011">Chromoting-käyttökerta on päättynyt.</translation>
+<translation id="4706355010316049867">Chrome
+etäkäyttö
+etäyhteys
+käyttö
+tuki
+tietokone
+PC</translation>
 <translation id="4736223761657662401">Yhteyshistoria</translation>
 <translation id="4741792197137897469">Todennus epäonnistui. Kirjaudu uudelleen sisään Chromeen.</translation>
 <translation id="477305884757156764">Sovellus on liian hidas.</translation>
+<translation id="4784508858340177375">X-palvelin kaatui tai sen käynnistäminen epäonnistui.</translation>
 <translation id="4795786176190567663">Sinulla ei ole lupaa suorittaa tätä toimintoa.</translation>
 <translation id="4798680868612952294">Hiiriasetukset</translation>
 <translation id="4804818685124855865">Katkaise yhteys</translation>
@@ -215,6 +216,7 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="5773590752998175013">Laiteparin muodostamispäivä</translation>
 <translation id="579702532610384533">Yhdistä uudelleen</translation>
 <translation id="5810269635982033450">Näyttö toimii ohjauslevynä</translation>
+<translation id="5823658491130719298">Kun olet tietokoneella, jota haluat käyttää etänä, avaa Chrome ja siirry osoitteeseen <ph name="INSTALLATION_LINK" />.</translation>
 <translation id="5841343754884244200">Näyttöasetukset</translation>
 <translation id="5843054235973879827">Miksi tämä on turvallista?</translation>
 <translation id="5859141382851488196">Uusi ikkuna…</translation>
@@ -248,6 +250,7 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="6572345186230665992">Mac (OS X Mavericks 10.9 ja uudemmat)</translation>
 <translation id="6583902294974160967">Tuki</translation>
 <translation id="6612717000975622067">Lähetä Ctrl-Alt-Del</translation>
+<translation id="6654753848497929428">Jaa</translation>
 <translation id="6668065415969892472">PIN-koodi on päivitetty.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Kaikki oikeudet pidätetään.</translation>
 <translation id="6705482892455291412">Kun koodi on annettu, sinua pyydetään hyväksymään yhteys ja aloittamaan jakaminen.</translation>
@@ -271,9 +274,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="7144878232160441200">Yritä uudelleen</translation>
 <translation id="7149517134817561223">Sovellus, joka antaa komentoja Chromen etätyöpöytäisännälle.</translation>
 <translation id="7215059001581613786">Anna PIN-koodi, jossa on vähintään kuusi numeroa.</translation>
-<translation id="7237767047212540055">Kun olet tietokoneella, jota haluat käyttää etänä, avaa Chrome ja siirry osoitteeseen <ph name="INSTALLATION_LINK" />.
-Asenna Chrome-etäkäyttö-ohjelmisto ja suorita määritys loppuun ohjeiden mukaisesti.
-Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla PIN- tai käyttökoodin.</translation>
 <translation id="7312846573060934304">Isäntä on offline-tilassa.</translation>
 <translation id="7319983568955948908">Lopeta jakaminen</translation>
 <translation id="7401733114166276557">Chrome-etäkäyttö</translation>
@@ -292,6 +292,7 @@ Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla
 <translation id="7782471917492991422">Tarkista tietokoneen virranhallinta-asetukset ja varmista, että sitä ei ole määritetty siirtymään virransäästötilaan, kun sitä ei käytetä.</translation>
 <translation id="7810127880729796595">Näytä tilastot (yhteys: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Jotkin vaadittavat komponentit puuttuvat. Varmista, että käytät uusinta Chrome-versiota, ja yritä uudelleen.</translation>
+<translation id="7850909060902317210">Asenna Chrome-etäkäyttöohjelma ja viimeistele määritys näytöllä näkyvien ohjeiden mukaisesti.</translation>
 <translation id="7868137160098754906">Anna etätietokoneen PIN-koodi.</translation>
 <translation id="7869445566579231750">Sinulla ei ole lupaa suorittaa tätä sovellusta.</translation>
 <translation id="7895403300744144251">Etätietokoneen suojauskäytännöt eivät salli tililtäsi saapuvia yhteyksiä.</translation>
@@ -327,6 +328,7 @@ Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla
 <translation id="8642984861538780905">Kohtalainen</translation>
 <translation id="8712909229180978490">Tallennetut Google Drive -tiedostoni eivät näy verkossa.</translation>
 <translation id="8743328882720071828">Haluatko sallia sen, että <ph name="CLIENT_USERNAME" /> voi nähdä ja ohjata tietokonettasi?</translation>
+<translation id="8747048596626351634">Istunto kaatui tai sen käynnistäminen epäonnistui. Jos ~/.chrome-remote-desktop-session on olemassa etätietokoneella, varmista, että se käynnistää pitkäkestoisen etualaprosessin, esim. työpöytäympäristön tai ikkunanhallinnan.</translation>
 <translation id="8759753423332885148">Lisätietoja</translation>
 <translation id="8791202241915690908">Lataa Chromoting-isännän asennusohjelma</translation>
 <translation id="894763922177556086">Hyvä</translation>
@@ -335,6 +337,7 @@ Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla
 <translation id="8998327464021325874">Chrome-etäkäytön isännän hallinta</translation>
 <translation id="9016232822027372900">Yhdistä silti</translation>
 <translation id="906458777597946297">Suurenna ikkuna</translation>
+<translation id="9111855907838866522">Olet yhteydessä etälaitteeseesi. Avaa valikko koskettamalla näyttöä neljällä sormella.</translation>
 <translation id="9126115402994542723">Älä kysy PIN-koodia uudelleen yhdistettäessä tähän isäntään tältä laitteelta.</translation>
 <translation id="9149580767411232853">Pidä koko etätyöpöytä näkyvissä</translation>
 <translation id="9149992051684092333">Aloita työpöydän jakaminen antamalla käyttökoodi sinua avustavalle henkilölle.</translation>

@@ -25,9 +25,10 @@
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/bounded_label.h"
 #include "ui/message_center/views/constants.h"
-#include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/notification_button.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/padded_button.h"
@@ -48,6 +49,8 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
+namespace message_center {
+
 namespace {
 
 // Dimensions.
@@ -66,18 +69,13 @@ std::unique_ptr<views::Border> MakeTextBorder(int padding,
                                               int top,
                                               int bottom) {
   // Split the padding between the top and the bottom, then add the extra space.
-  return MakeEmptyBorder(padding / 2 + top,
-                         message_center::kTextLeftPadding,
-                         (padding + 1) / 2 + bottom,
-                         message_center::kTextRightPadding);
+  return MakeEmptyBorder(padding / 2 + top, kTextLeftPadding,
+                         (padding + 1) / 2 + bottom, kTextRightPadding);
 }
 
 // static
 std::unique_ptr<views::Border> MakeProgressBarBorder(int top, int bottom) {
-  return MakeEmptyBorder(top,
-                         message_center::kTextLeftPadding,
-                         bottom,
-                         message_center::kTextRightPadding);
+  return MakeEmptyBorder(top, kTextLeftPadding, bottom, kTextRightPadding);
 }
 
 // static
@@ -93,7 +91,7 @@ std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
 // message next to each other within a single column.
 class ItemView : public views::View {
  public:
-  explicit ItemView(const message_center::NotificationItem& item);
+  explicit ItemView(const NotificationItem& item);
   ~ItemView() override;
 
   // Overridden from views::View:
@@ -103,23 +101,23 @@ class ItemView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(ItemView);
 };
 
-ItemView::ItemView(const message_center::NotificationItem& item) {
-  SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
-                           message_center::kItemTitleToMessagePadding));
+ItemView::ItemView(const NotificationItem& item) {
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
+                                        gfx::Insets(),
+                                        kItemTitleToMessagePadding));
 
   views::Label* title = new views::Label(item.title);
   title->set_collapse_when_hidden(true);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title->SetEnabledColor(message_center::kRegularTextColor);
-  title->SetBackgroundColor(message_center::kRegularTextBackgroundColor);
+  title->SetEnabledColor(kRegularTextColor);
+  title->SetBackgroundColor(kRegularTextBackgroundColor);
   AddChildView(title);
 
   views::Label* message = new views::Label(item.message);
   message->set_collapse_when_hidden(true);
   message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  message->SetEnabledColor(message_center::kDimTextColor);
-  message->SetBackgroundColor(message_center::kDimTextBackgroundColor);
+  message->SetEnabledColor(kDimTextColor);
+  message->SetBackgroundColor(kDimTextBackgroundColor);
   AddChildView(message);
 
   PreferredSizeChanged();
@@ -136,8 +134,6 @@ void ItemView::SetVisible(bool visible) {
 }
 
 }  // namespace
-
-namespace message_center {
 
 // NotificationView ////////////////////////////////////////////////////////////
 
@@ -181,9 +177,9 @@ void NotificationView::CreateOrUpdateViews(const Notification& notification) {
   CreateOrUpdateActionButtonViews(notification);
 }
 
-NotificationView::NotificationView(MessageCenterController* controller,
+NotificationView::NotificationView(MessageViewDelegate* delegate,
                                    const Notification& notification)
-    : MessageView(controller, notification),
+    : MessageView(delegate, notification),
       clickable_(notification.clickable()) {
   // Create the top_view_, which collects into a vertical box all content
   // at the top of the notification (to the right of the icon) except for the
@@ -264,8 +260,7 @@ int NotificationView::GetHeightForWidth(int width) const {
   // icon if there is any space there (<http://crbug.com/232966>).
   if (content_height > kNotificationIconSize) {
     content_height =
-        std::max(content_height,
-                 kNotificationIconSize + message_center::kIconBottomPadding);
+        std::max(content_height, kNotificationIconSize + kIconBottomPadding);
   }
 
   return content_height + GetInsets().height();
@@ -289,8 +284,11 @@ void NotificationView::Layout() {
   // Top views.
   int top_height = top_view_->GetHeightForWidth(content_width);
   top_view_->SetBounds(insets.left(), insets.top(), content_width, top_height);
+// NOTE(jarle@vivaldi.com): Calling ShrinkTopmostLabel() causes a regression,
+// VB-34628 / crbug 789904. Remove #if-define when the Chromium bug is fixed.
+#if !defined(VIVALDI_BUILD)
   ShrinkTopmostLabel();
-
+#endif // VIVALDI_BUILD
   // Icon.
   icon_view_->SetBounds(insets.left(), insets.top(), kNotificationIconSize,
                         kNotificationIconSize);
@@ -300,9 +298,9 @@ void NotificationView::Layout() {
   int buttons_width = control_buttons_view_->GetPreferredSize().width();
   int buttons_height = control_buttons_view_->GetPreferredSize().height();
   control_buttons_bounds.set_x(control_buttons_bounds.right() - buttons_width -
-                               message_center::kControlButtonPadding);
+                               kControlButtonPadding);
   control_buttons_bounds.set_y(control_buttons_bounds.y() +
-                               message_center::kControlButtonPadding);
+                               kControlButtonPadding);
   control_buttons_bounds.set_width(buttons_width);
   control_buttons_bounds.set_height(buttons_height);
   control_buttons_view_->SetBoundsRect(control_buttons_bounds);
@@ -335,10 +333,8 @@ void NotificationView::ScrollRectToVisible(const gfx::Rect& rect) {
 }
 
 gfx::NativeCursor NotificationView::GetCursor(const ui::MouseEvent& event) {
-  if (!clickable_ || !controller()->HasClickedListener(notification_id()))
-    return views::View::GetCursor(event);
-
-  return views::GetNativeHandCursor();
+  return clickable_ ? views::GetNativeHandCursor()
+                    : views::View::GetCursor(event);
 }
 
 
@@ -372,7 +368,7 @@ void NotificationView::ButtonPressed(views::Button* sender,
   // See if the button pressed was an action button.
   for (size_t i = 0; i < action_buttons_.size(); ++i) {
     if (sender == action_buttons_[i]) {
-      controller()->ClickOnNotificationButton(id, i);
+      delegate()->ClickOnNotificationButton(id, i);
       return;
     }
   }
@@ -414,8 +410,7 @@ void NotificationView::CreateOrUpdateTitleView(
     title_view_ = new BoundedLabel(title, font_list);
     title_view_->SetLineHeight(kTitleLineHeight);
     title_view_->SetLineLimit(kMaxTitleLines);
-    title_view_->SetColors(message_center::kRegularTextColor,
-                           kRegularTextBackgroundColor);
+    title_view_->SetColors(kRegularTextColor, kRegularTextBackgroundColor);
     title_view_->SetBorder(MakeTextBorder(padding, 3, 0));
     top_view_->AddChildView(title_view_);
   } else {
@@ -441,8 +436,7 @@ void NotificationView::CreateOrUpdateMessageView(
     int padding = kMessageLineHeight - views::Label().font_list().GetHeight();
     message_view_ = new BoundedLabel(text);
     message_view_->SetLineHeight(kMessageLineHeight);
-    message_view_->SetColors(message_center::kRegularTextColor,
-                             kDimTextBackgroundColor);
+    message_view_->SetColors(kRegularTextColor, kDimTextBackgroundColor);
     message_view_->SetBorder(MakeTextBorder(padding, 4, 0));
     top_view_->AddChildView(message_view_);
   } else {
@@ -484,10 +478,9 @@ void NotificationView::CreateOrUpdateContextMessageView(
   if (!context_message_view_) {
     int padding = kMessageLineHeight - views::Label().font_list().GetHeight();
     context_message_view_ = new BoundedLabel(message);
-    context_message_view_->SetLineLimit(
-        message_center::kContextMessageLineLimit);
+    context_message_view_->SetLineLimit(kContextMessageLineLimit);
     context_message_view_->SetLineHeight(kMessageLineHeight);
-    context_message_view_->SetColors(message_center::kDimTextColor,
+    context_message_view_->SetColors(kDimTextColor,
                                      kContextTextBackgroundColor);
     context_message_view_->SetBorder(MakeTextBorder(padding, 4, 0));
     top_view_->AddChildView(context_message_view_);
@@ -510,7 +503,7 @@ void NotificationView::CreateOrUpdateProgressBarView(
   if (!progress_bar_view_) {
     progress_bar_view_ = new views::ProgressBar();
     progress_bar_view_->SetBorder(MakeProgressBarBorder(
-        message_center::kProgressBarTopPadding, kProgressBarBottomPadding));
+        kProgressBarTopPadding, kProgressBarBottomPadding));
     top_view_->AddChildView(progress_bar_view_);
   }
 
@@ -581,9 +574,9 @@ void NotificationView::CreateOrUpdateImageView(
     image_container_ = new views::View();
     image_container_->SetLayoutManager(new views::FillLayout());
     image_container_->SetBackground(
-        views::CreateSolidBackground(message_center::kImageBackgroundColor));
+        views::CreateSolidBackground(kImageBackgroundColor));
 
-    image_view_ = new message_center::ProportionalImageView(ideal_size);
+    image_view_ = new ProportionalImageView(ideal_size);
     image_container_->AddChildView(image_view_);
     bottom_view_->AddChildViewAt(image_container_, 0);
   }
@@ -591,13 +584,13 @@ void NotificationView::CreateOrUpdateImageView(
   DCHECK(image_view_);
   image_view_->SetImage(notification.image().AsImageSkia(), ideal_size);
 
-  gfx::Size scaled_size = message_center::GetImageSizeForContainerSize(
-      ideal_size, notification.image().Size());
-  image_view_->SetBorder(ideal_size != scaled_size
-                             ? views::CreateSolidBorder(
-                                   message_center::kNotificationImageBorderSize,
-                                   SK_ColorTRANSPARENT)
-                             : NULL);
+  gfx::Size scaled_size =
+      GetImageSizeForContainerSize(ideal_size, notification.image().Size());
+  image_view_->SetBorder(
+      ideal_size != scaled_size
+          ? views::CreateSolidBorder(kNotificationImageBorderSize,
+                                     SK_ColorTRANSPARENT)
+          : NULL);
 }
 
 void NotificationView::CreateOrUpdateActionButtonViews(
@@ -650,8 +643,7 @@ void NotificationView::CreateOrUpdateActionButtonViews(
 void NotificationView::UpdateControlButtonsVisibilityWithNotification(
     const Notification& notification) {
   control_buttons_view_->ShowSettingsButton(
-      notification.delegate() &&
-      notification.delegate()->ShouldDisplaySettingsButton());
+      notification.should_show_settings_button());
   control_buttons_view_->ShowCloseButton(!GetPinned());
   UpdateControlButtonsVisibility();
 }
@@ -690,18 +682,15 @@ int NotificationView::GetMessageLineLimit(int title_lines, int width) const {
     //   * 0 title lines: 5 max lines message.
     //   * 1 title line:  5 max lines message.
     //   * 2 title lines: 3 max lines message.
-    return std::max(
-        0,
-        message_center::kMessageExpandedLineLimit - line_reduction_from_title);
+    return std::max(0, kMessageExpandedLineLimit - line_reduction_from_title);
   }
 
-  int message_line_limit = message_center::kMessageCollapsedLineLimit;
+  int message_line_limit = kMessageCollapsedLineLimit;
 
   // Subtract any lines taken by the context message.
   if (context_message_view_) {
     message_line_limit -= context_message_view_->GetLinesForWidthAndLimit(
-        width,
-        message_center::kContextMessageLineLimit);
+        width, kContextMessageLineLimit);
   }
 
   // The effect from the title reduction here should be:

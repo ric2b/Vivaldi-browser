@@ -184,9 +184,9 @@ TEST_F(QuicCryptoClientConfigTest, InchoateChlo) {
   config.FillInchoateClientHello(server_id, QuicVersionMax(), &state, &rand,
                                  /* demand_x509_proof= */ true, params, &msg);
 
-  QuicTag cver;
-  EXPECT_EQ(QUIC_NO_ERROR, msg.GetUint32(kVER, &cver));
-  EXPECT_EQ(QuicVersionToQuicTag(QuicVersionMax()), cver);
+  QuicVersionLabel cver;
+  EXPECT_EQ(QUIC_NO_ERROR, msg.GetVersionLabel(kVER, &cver));
+  EXPECT_EQ(QuicVersionToQuicVersionLabel(QuicVersionMax()), cver);
   QuicStringPiece proof_nonce;
   EXPECT_TRUE(msg.GetStringPiece(kNONP, &proof_nonce));
   EXPECT_EQ(string(32, 'r'), proof_nonce);
@@ -294,26 +294,28 @@ TEST_F(QuicCryptoClientConfigTest, FillClientHello) {
                          nullptr,  // channel_id_key
                          params, &chlo, &error_details);
 
-  // Verify that certain QuicTags have been set correctly in the CHLO.
-  QuicTag cver;
-  EXPECT_EQ(QUIC_NO_ERROR, chlo.GetUint32(kVER, &cver));
-  EXPECT_EQ(QuicVersionToQuicTag(QuicVersionMax()), cver);
+  // Verify that the version label has been set correctly in the CHLO.
+  QuicVersionLabel cver;
+  EXPECT_EQ(QUIC_NO_ERROR, chlo.GetVersionLabel(kVER, &cver));
+  EXPECT_EQ(QuicVersionToQuicVersionLabel(QuicVersionMax()), cver);
 }
 
 TEST_F(QuicCryptoClientConfigTest, ProcessServerDowngradeAttack) {
-  QuicVersionVector supported_versions = AllSupportedVersions();
+  QuicTransportVersionVector supported_versions =
+      AllSupportedTransportVersions();
   if (supported_versions.size() == 1) {
     // No downgrade attack is possible if the client only supports one version.
     return;
   }
-  QuicTagVector supported_version_tags;
+
+  QuicTransportVersionVector supported_version_vector;
   for (size_t i = supported_versions.size(); i > 0; --i) {
-    supported_version_tags.push_back(
-        QuicVersionToQuicTag(supported_versions[i - 1]));
+    supported_version_vector.push_back(supported_versions[i - 1]);
   }
+
   CryptoHandshakeMessage msg;
   msg.set_tag(kSHLO);
-  msg.SetVector(kVER, supported_version_tags);
+  msg.SetVersionVector(kVER, supported_version_vector);
 
   QuicCryptoClientConfig::CachedState cached;
   QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params(
@@ -487,8 +489,8 @@ TEST_F(QuicCryptoClientConfigTest, ProcessReject) {
   QuicCryptoClientConfig config(crypto_test_utils::ProofVerifierForTesting());
   EXPECT_EQ(QUIC_NO_ERROR,
             config.ProcessRejection(rej, QuicWallTime::FromUNIXSeconds(0),
-                                    AllSupportedVersions().front(), "", &cached,
-                                    out_params, &error));
+                                    AllSupportedTransportVersions().front(), "",
+                                    &cached, out_params, &error));
   EXPECT_FALSE(cached.has_server_designated_connection_id());
   EXPECT_FALSE(cached.has_server_nonce());
 }
@@ -508,8 +510,8 @@ TEST_F(QuicCryptoClientConfigTest, ProcessRejectWithLongTTL) {
   QuicCryptoClientConfig config(crypto_test_utils::ProofVerifierForTesting());
   EXPECT_EQ(QUIC_NO_ERROR,
             config.ProcessRejection(rej, QuicWallTime::FromUNIXSeconds(0),
-                                    AllSupportedVersions().front(), "", &cached,
-                                    out_params, &error));
+                                    AllSupportedTransportVersions().front(), "",
+                                    &cached, out_params, &error));
   cached.SetProofValid();
   EXPECT_FALSE(cached.IsComplete(QuicWallTime::FromUNIXSeconds(long_ttl)));
   EXPECT_FALSE(
@@ -535,8 +537,8 @@ TEST_F(QuicCryptoClientConfigTest, ProcessStatelessReject) {
   QuicCryptoClientConfig config(crypto_test_utils::ProofVerifierForTesting());
   EXPECT_EQ(QUIC_NO_ERROR,
             config.ProcessRejection(rej, QuicWallTime::FromUNIXSeconds(0),
-                                    AllSupportedVersions().front(), "", &cached,
-                                    out_params, &error));
+                                    AllSupportedTransportVersions().front(), "",
+                                    &cached, out_params, &error));
   EXPECT_TRUE(cached.has_server_designated_connection_id());
   EXPECT_EQ(QuicEndian::NetToHost64(kConnectionId),
             cached.GetNextServerDesignatedConnectionId());
@@ -557,8 +559,8 @@ TEST_F(QuicCryptoClientConfigTest, BadlyFormattedStatelessReject) {
   QuicCryptoClientConfig config(crypto_test_utils::ProofVerifierForTesting());
   EXPECT_EQ(QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND,
             config.ProcessRejection(rej, QuicWallTime::FromUNIXSeconds(0),
-                                    AllSupportedVersions().front(), "", &cached,
-                                    out_params, &error));
+                                    AllSupportedTransportVersions().front(), "",
+                                    &cached, out_params, &error));
   EXPECT_FALSE(cached.has_server_designated_connection_id());
   EXPECT_EQ("Missing kRCID", error);
 }
@@ -568,12 +570,10 @@ TEST_F(QuicCryptoClientConfigTest, ServerNonceinSHLO) {
   CryptoHandshakeMessage msg;
   msg.set_tag(kSHLO);
   // Choose the latest version.
-  QuicVersionVector supported_versions;
-  QuicVersion version = AllSupportedVersions().front();
+  QuicTransportVersionVector supported_versions;
+  QuicTransportVersion version = AllSupportedTransportVersions().front();
   supported_versions.push_back(version);
-  QuicTagVector versions;
-  versions.push_back(QuicVersionToQuicTag(version));
-  msg.SetVector(kVER, versions);
+  msg.SetVersionVector(kVER, supported_versions);
 
   QuicCryptoClientConfig config(crypto_test_utils::ProofVerifierForTesting());
   QuicCryptoClientConfig::CachedState cached;

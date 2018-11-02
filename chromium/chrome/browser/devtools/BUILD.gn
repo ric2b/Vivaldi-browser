@@ -29,25 +29,78 @@ action("devtools_protocol_constants") {
   args += [ rebase_path(blink_protocol, root_build_dir) ]
 }
 
+if (!is_android) {
+  _inspector_protocol = "//third_party/inspector_protocol"
+  import("$_inspector_protocol/inspector_protocol.gni")
+
+  _protocol_generated = [
+    "protocol/browser.cc",
+    "protocol/browser.h",
+    "protocol/forward.h",
+    "protocol/page.cc",
+    "protocol/page.h",
+    "protocol/protocol.cc",
+    "protocol/protocol.h",
+  ]
+
+  if (is_chromeos) {
+    _protocol_generated += [
+      "protocol/window_manager.cc",
+      "protocol/window_manager.h",
+    ]
+  }
+
+  _concatenated_protocol_path =
+      "$root_gen_dir/chrome/browser/devtools/protocol.json"
+  action("concatenate_protocols") {
+    script = _inspector_protocol + "/ConcatenateProtocols.py"
+
+    deps = [
+      "//third_party/WebKit/Source/core/inspector:protocol_version",
+    ]
+
+    _blink_protocol_path = "$root_gen_dir/blink/core/inspector/protocol.json"
+    inputs = [
+      _blink_protocol_path,
+    ]
+    output_file = _concatenated_protocol_path
+    outputs = [
+      output_file,
+    ]
+
+    args = [ rebase_path(_blink_protocol_path, root_build_dir) ]
+    if (is_chromeos) {
+      inputs += [ "cros_protocol.json" ]
+      args += [ rebase_path("cros_protocol.json", root_build_dir) ]
+    }
+
+    args += [ rebase_path(output_file, root_build_dir) ]
+  }
+
+  inspector_protocol_generate("protocol_generated_sources") {
+    inspector_protocol_dir = _inspector_protocol
+    visibility = [ ":*" ]  # Only targets in this file can depend on this.
+    deps = [
+      ":concatenate_protocols",
+    ]
+    out_dir = target_gen_dir
+    config_file = "inspector_protocol_config.json"
+
+    protocol_path = rebase_path(_concatenated_protocol_path, root_build_dir)
+    config_values = [ "protocol.path=$protocol_path" ]
+
+    inputs = [
+      _concatenated_protocol_path,
+      "inspector_protocol_config.json",
+    ]
+
+    outputs = _protocol_generated
+  }
+}
+
 static_library("devtools") {
   # Note: new sources and deps should be generally added in (!is_android) below.
   sources = [
-    "devtools_network_conditions.cc",
-    "devtools_network_conditions.h",
-    "devtools_network_controller.cc",
-    "devtools_network_controller.h",
-    "devtools_network_controller_handle.cc",
-    "devtools_network_controller_handle.h",
-    "devtools_network_interceptor.cc",
-    "devtools_network_interceptor.h",
-    "devtools_network_protocol_handler.cc",
-    "devtools_network_protocol_handler.h",
-    "devtools_network_transaction.cc",
-    "devtools_network_transaction.h",
-    "devtools_network_transaction_factory.cc",
-    "devtools_network_transaction_factory.h",
-    "devtools_network_upload_data_stream.cc",
-    "devtools_network_upload_data_stream.h",
     "devtools_protocol.cc",
     "devtools_protocol.h",
   ]
@@ -83,6 +136,8 @@ static_library("devtools") {
     sources += [
       "chrome_devtools_manager_delegate.cc",
       "chrome_devtools_manager_delegate.h",
+      "chrome_devtools_session.cc",
+      "chrome_devtools_session.h",
       "device/adb/adb_client_socket.cc",
       "device/adb/adb_client_socket.h",
       "device/adb/adb_device_provider.cc",
@@ -144,6 +199,25 @@ static_library("devtools") {
         "device/cast_device_provider.h",
       ]
     }
+  }
+
+  if (!is_android) {
+    deps += [ ":protocol_generated_sources" ]
+    sources += [
+      "protocol/browser_handler.cc",
+      "protocol/browser_handler.h",
+      "protocol/page_handler.cc",
+      "protocol/page_handler.h",
+      "protocol_string.cc",
+      "protocol_string.h",
+    ]
+    if (is_chromeos) {
+      sources += [
+        "protocol/window_manager_handler.cc",
+        "protocol/window_manager_handler.h",
+      ]
+    }
+    sources += rebase_path(_protocol_generated, ".", target_gen_dir)
   }
 
   if (enable_extensions) {

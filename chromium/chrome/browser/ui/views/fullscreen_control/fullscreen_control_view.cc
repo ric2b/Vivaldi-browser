@@ -6,45 +6,70 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
-#include "chrome/grit/generated_resources.h"
+#include "base/callback.h"
+#include "cc/paint/paint_flags.h"
+#include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
-#include "ui/views/controls/button/label_button.h"
-#include "ui/views/layout/box_layout.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/controls/image_view.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace {
 
-// Spacing applied to all sides of the border of the control.
-constexpr int kSpacingInsetsAllSides = 10;
+// Partially-transparent background color.
+const SkColor kBackgroundColor = SkColorSetARGB(0xcc, 0x28, 0x2c, 0x32);
 
-// Spacing applied between controls of FullscreenControlView.
-constexpr int kBetweenChildSpacing = 10;
+constexpr int kCloseIconSize = 24;
+constexpr int kCircleButtonDiameter = 48;
+
+class CloseFullscreenButton : public views::Button {
+ public:
+  explicit CloseFullscreenButton(views::ButtonListener* listener)
+      : views::Button(listener) {
+    std::unique_ptr<views::ImageView> close_image_view =
+        std::make_unique<views::ImageView>();
+    close_image_view->SetImage(gfx::CreateVectorIcon(
+        vector_icons::kCloseIcon, kCloseIconSize, SK_ColorWHITE));
+    AddChildView(close_image_view.release());
+    SetLayoutManager(new views::FillLayout());
+  }
+
+ private:
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    // TODO(robliao): If we decide to move forward with this, use themes.
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(kBackgroundColor);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    float radius = kCircleButtonDiameter / 2.0f;
+    canvas->DrawCircle(gfx::PointF(radius, radius), radius, flags);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(CloseFullscreenButton);
+};
 
 }  // namespace
 
-FullscreenControlView::FullscreenControlView(BrowserView* browser_view)
-    : browser_view_(browser_view),
-      exit_fullscreen_button_(new views::LabelButton(
-          this,
-          l10n_util::GetStringUTF16(
-              IDS_FULLSCREEN_EXIT_CONTROL_EXIT_FULLSCREEN))) {
+FullscreenControlView::FullscreenControlView(
+    const base::RepeatingClosure& on_button_pressed)
+    : on_button_pressed_(on_button_pressed),
+      exit_fullscreen_button_(new CloseFullscreenButton(this)) {
   AddChildView(exit_fullscreen_button_);
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                        gfx::Insets(kSpacingInsetsAllSides),
-                                        kBetweenChildSpacing));
-  // TODO(robliao): If we decide to move forward with this, use themes.
-  SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
+  SetLayoutManager(new views::FillLayout());
+  exit_fullscreen_button_->SetPreferredSize(
+      gfx::Size(kCircleButtonDiameter, kCircleButtonDiameter));
 }
 
 FullscreenControlView::~FullscreenControlView() = default;
 
-void FullscreenControlView::SetFocusAndSelection(bool select_all) {}
-
 void FullscreenControlView::ButtonPressed(views::Button* sender,
                                           const ui::Event& event) {
-  if (sender == exit_fullscreen_button_)
-    browser_view_->ExitFullscreen();
+  if (sender == exit_fullscreen_button_ && on_button_pressed_)
+    on_button_pressed_.Run();
 }

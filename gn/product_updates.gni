@@ -56,6 +56,7 @@ if (is_win) {
     inputs -= [
       "$root_out_dir/chrome.dll",
       "$root_out_dir/chrome.exe",
+      "$root_out_dir/v8_context_snapshot.bin",
     ]
     inputs += [
       "$root_out_dir/vivaldi.dll",

@@ -35,14 +35,6 @@ class PLATFORM_EXPORT FetchUtils {
   // code, https://tools.ietf.org/html/rfc7231#section-6.3 . We opt to use
   // the Fetch term in naming the predicate.
   static bool IsOkStatus(int status) { return status >= 200 && status < 300; }
-
-  // Used by e.g. the CORS check algorithm to check if the FetchCredentialsMode
-  // should be treated as equivalent to "include" in the Fetch spec.
-  static bool ShouldTreatCredentialsModeAsInclude(
-      const WebURLRequest::FetchCredentialsMode credentials_mode) {
-    return credentials_mode == WebURLRequest::kFetchCredentialsModeInclude ||
-           credentials_mode == WebURLRequest::kFetchCredentialsModePassword;
-  }
 };
 
 }  // namespace blink

@@ -16,6 +16,7 @@
 #include "base/trace_event/trace_config_memory_test_util.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
+#include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -75,10 +76,9 @@ class MemoryTracingTest : public ContentBrowserTest {
       const MemoryDumpLevelOfDetail& level_of_detail,
       const base::Closure& closure) {
     uint32_t request_index = next_request_index_++;
-    memory_instrumentation::MemoryInstrumentation::
-        RequestGlobalDumpAndAppendToTraceCallback callback = base::Bind(
-            &MemoryTracingTest::OnGlobalMemoryDumpDone, base::Unretained(this),
-            base::ThreadTaskRunnerHandle::Get(), closure, request_index);
+    auto callback = base::Bind(
+        &MemoryTracingTest::OnGlobalMemoryDumpDone, base::Unretained(this),
+        base::ThreadTaskRunnerHandle::Get(), closure, request_index);
     if (from_renderer_thread) {
       PostTaskToInProcessRendererAndWait(base::Bind(
           &memory_instrumentation::MemoryInstrumentation::
@@ -132,9 +132,15 @@ class MemoryTracingTest : public ContentBrowserTest {
   }
 
   void DisableTracing() {
-    bool success = TracingController::GetInstance()->StopTracing(NULL);
+    base::RunLoop run_loop;
+    bool success = TracingController::GetInstance()->StopTracing(
+        TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
+            [](base::Closure quit_closure,
+               std::unique_ptr<const base::DictionaryValue> metadata,
+               base::RefCountedString* trace_str) { quit_closure.Run(); },
+            run_loop.QuitClosure())));
     EXPECT_TRUE(success);
-    base::RunLoop().RunUntilIdle();
+    run_loop.Run();
   }
 
   void RequestGlobalDumpAndWait(
@@ -155,7 +161,7 @@ class MemoryTracingTest : public ContentBrowserTest {
   }
 
   void Navigate(Shell* shell) {
-    NavigateToURL(shell, GetTestUrl("", "title.html"));
+    NavigateToURL(shell, GetTestUrl("", "title1.html"));
   }
 
   MOCK_METHOD2(OnMemoryDumpDone, void(uint32_t request_index, bool successful));
@@ -166,9 +172,9 @@ class MemoryTracingTest : public ContentBrowserTest {
   bool last_callback_success_;
 };
 
-// Ignore SingleProcessMemoryTracingTests for Google Chrome builds because
-// single-process is not supported on those builds.
-#if !defined(GOOGLE_CHROME_BUILD)
+// Run SingleProcessMemoryTracingTests only on Android, since these tests are
+// intended to give coverage to Android WebView.
+#if defined(OS_ANDROID)
 
 class SingleProcessMemoryTracingTest : public MemoryTracingTest {
  public:
@@ -195,10 +201,17 @@ IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest,
   DisableTracing();
 }
 
+// https://crbug.com/788788
+#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+#define MAYBE_RendererInitiatedSingleDump DISABLED_RendererInitiatedSingleDump
+#else
+#define MAYBE_RendererInitiatedSingleDump RendererInitiatedSingleDump
+#endif  // defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+
 // Checks that a memory dump initiated from a renderer thread ends up in a
 // single dump even in single process mode.
 IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest,
-                       RendererInitiatedSingleDump) {
+                       MAYBE_RendererInitiatedSingleDump) {
   Navigate(shell());
 
   EXPECT_CALL(*mock_dump_provider_, OnMemoryDump(_,_)).WillOnce(Return(true));
@@ -211,7 +224,14 @@ IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest,
   DisableTracing();
 }
 
-IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest, ManyInterleavedDumps) {
+// https://crbug.com/788788
+#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+#define MAYBE_ManyInterleavedDumps DISABLED_ManyInterleavedDumps
+#else
+#define MAYBE_ManyInterleavedDumps ManyInterleavedDumps
+#endif  // defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest,
+                       MAYBE_ManyInterleavedDumps) {
   Navigate(shell());
 
   EXPECT_CALL(*mock_dump_provider_, OnMemoryDump(_,_))
@@ -303,7 +323,7 @@ IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest, DISABLED_QueuedDumps) {
   DisableTracing();
 }
 
-#endif  // !defined(GOOGLE_CHROME_BUILD)
+#endif  // defined(OS_ANDROID)
 
 // Non-deterministic races under TSan. crbug.com/529678
 #if defined(THREAD_SANITIZER)

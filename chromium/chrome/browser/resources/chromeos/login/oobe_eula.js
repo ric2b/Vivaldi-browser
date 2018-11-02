@@ -64,7 +64,7 @@ Polymer({
    */
   updateLocalizedContent: function(event) {
     // This forces frame to reload.
-    this.$.crosEulaFrame.src = this.$.crosEulaFrame.src;
+    this.screen.loadEulaToWebview_(this.$.crosEulaFrame);
   },
 
   /**
@@ -99,8 +99,9 @@ Polymer({
    *
    * @private
    */
-  onUsageStatsHelpLinkClicked_: function() {
+  onUsageStatsHelpLinkClicked_: function(e) {
     chrome.send('eulaOnLearnMore');
+    e.stopPropagation();
   },
 
   /**

@@ -15,24 +15,40 @@ using blink::WebString;
 
 namespace content {
 
+namespace {
+const size_t kMaxMessageChunkSize = IPC::Channel::kMaximumMessageSize / 4;
+}
+
 EmbeddedWorkerDevToolsAgent::EmbeddedWorkerDevToolsAgent(
     blink::WebEmbeddedWorker* webworker,
     int route_id)
     : webworker_(webworker), route_id_(route_id) {
-  RenderThreadImpl::current()->AddEmbeddedWorkerRoute(route_id_, this);
+  RenderThreadImpl::current()->AddRoute(route_id_, this);
 }
 
 EmbeddedWorkerDevToolsAgent::~EmbeddedWorkerDevToolsAgent() {
-  RenderThreadImpl::current()->RemoveEmbeddedWorkerRoute(route_id_);
+  RenderThreadImpl::current()->RemoveRoute(route_id_);
 }
 
 void EmbeddedWorkerDevToolsAgent::SendMessage(IPC::Sender* sender,
                                               int session_id,
                                               int call_id,
-                                              const std::string& message,
-                                              const std::string& state_cookie) {
-  DevToolsAgent::SendChunkedProtocolMessage(sender, route_id_, session_id,
-                                            call_id, message, state_cookie);
+                                              std::string message,
+                                              std::string state_cookie) {
+  bool single_chunk = message.length() < kMaxMessageChunkSize;
+  for (size_t pos = 0; pos < message.length(); pos += kMaxMessageChunkSize) {
+    DevToolsMessageChunk chunk;
+    chunk.is_first = pos == 0;
+    chunk.message_size = pos == 0 ? message.size() : 0;
+    chunk.is_last = pos + kMaxMessageChunkSize >= message.length();
+    chunk.session_id = session_id;
+    chunk.call_id = chunk.is_last ? call_id : 0;
+    chunk.post_state = chunk.is_last ? std::move(state_cookie) : std::string();
+    chunk.data = single_chunk ? std::move(message)
+                              : message.substr(pos, kMaxMessageChunkSize);
+    sender->Send(new DevToolsClientMsg_DispatchOnInspectorFrontend(
+        route_id_, std::move(chunk)));
+  }
 }
 
 bool EmbeddedWorkerDevToolsAgent::OnMessageReceived(
@@ -49,16 +65,13 @@ bool EmbeddedWorkerDevToolsAgent::OnMessageReceived(
   return handled;
 }
 
-void EmbeddedWorkerDevToolsAgent::OnAttach(const std::string& host_id,
-                                           int session_id) {
-  webworker_->AttachDevTools(WebString::FromUTF8(host_id), session_id);
+void EmbeddedWorkerDevToolsAgent::OnAttach(int session_id) {
+  webworker_->AttachDevTools(session_id);
 }
 
-void EmbeddedWorkerDevToolsAgent::OnReattach(const std::string& host_id,
-                                             int session_id,
+void EmbeddedWorkerDevToolsAgent::OnReattach(int session_id,
                                              const std::string& state) {
-  webworker_->ReattachDevTools(WebString::FromUTF8(host_id), session_id,
-                               WebString::FromUTF8(state));
+  webworker_->ReattachDevTools(session_id, WebString::FromUTF8(state));
 }
 
 void EmbeddedWorkerDevToolsAgent::OnDetach(int session_id) {

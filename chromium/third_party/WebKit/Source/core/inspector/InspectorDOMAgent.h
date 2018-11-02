@@ -31,6 +31,7 @@
 #define InspectorDOMAgent_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/events/EventListenerMap.h"
 #include "core/inspector/InspectorBaseAgent.h"
@@ -39,7 +40,6 @@
 #include "platform/geometry/FloatQuad.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8-inspector.h"
@@ -86,7 +86,7 @@ class CORE_EXPORT InspectorDOMAgent final
                     InspectedFrames*,
                     v8_inspector::V8InspectorSession*);
   ~InspectorDOMAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   void Restore() override;
 
@@ -240,9 +240,6 @@ class CORE_EXPORT InspectorDOMAgent final
   static String DocumentURLString(Document*);
   static String DocumentBaseURLString(Document*);
 
-  std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>
-  ResolveNode(Node*, const String& object_group);
-
   InspectorHistory* History() { return history_.Get(); }
 
   // We represent embedded doms as a part of the same hierarchy. Hence we treat
@@ -254,7 +251,6 @@ class CORE_EXPORT InspectorDOMAgent final
   static unsigned InnerChildNodeCount(Node*);
   static Node* InnerParentNode(Node*);
   static bool IsWhitespace(Node*);
-  static v8::Local<v8::Value> NodeV8Value(v8::Local<v8::Context>, Node*);
   static void CollectNodes(Node* root,
                            int depth,
                            bool pierce,

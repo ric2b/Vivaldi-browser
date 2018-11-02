@@ -23,9 +23,10 @@
 
 #include "core/layout/LayoutListItem.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/FlatTreeTraversal.h"
+#include "core/html/HTMLLIElement.h"
 #include "core/html/HTMLOListElement.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutListMarker.h"
 #include "core/paint/ListItemPainter.h"
 #include "platform/wtf/SaturatedArithmetic.h"
@@ -39,9 +40,7 @@ using namespace HTMLNames;
 LayoutListItem::LayoutListItem(Element* element)
     : LayoutBlockFlow(element),
       marker_(nullptr),
-      has_explicit_value_(false),
-      is_value_up_to_date_(false),
-      not_in_list_(false) {
+      need_block_direction_align_(false) {
   SetInline(false);
 
   SetConsumesSubtreeChangeNotification();
@@ -88,13 +87,13 @@ void LayoutListItem::WillBeDestroyed() {
 void LayoutListItem::InsertedIntoTree() {
   LayoutBlockFlow::InsertedIntoTree();
 
-  UpdateListMarkerNumbers();
+  ListItemOrdinal::ItemInsertedOrRemoved(this);
 }
 
 void LayoutListItem::WillBeRemovedFromTree() {
   LayoutBlockFlow::WillBeRemovedFromTree();
 
-  UpdateListMarkerNumbers();
+  ListItemOrdinal::ItemInsertedOrRemoved(this);
 }
 
 void LayoutListItem::SubtreeDidChange() {
@@ -110,135 +109,9 @@ void LayoutListItem::SubtreeDidChange() {
     SetPreferredLogicalWidthsDirty();
 }
 
-static bool IsList(const Node& node) {
-  return isHTMLUListElement(node) || isHTMLOListElement(node);
-}
-
-// Returns the enclosing list with respect to the DOM order.
-static Node* EnclosingList(const LayoutListItem* list_item) {
-  Node* list_item_node = list_item->GetNode();
-  if (!list_item_node)
-    return nullptr;
-  Node* first_node = nullptr;
-  // We use parentNode because the enclosing list could be a ShadowRoot that's
-  // not Element.
-  for (Node* parent = FlatTreeTraversal::Parent(*list_item_node); parent;
-       parent = FlatTreeTraversal::Parent(*parent)) {
-    if (IsList(*parent))
-      return parent;
-    if (!first_node)
-      first_node = parent;
-  }
-
-  // If there's no actual <ul> or <ol> list element, then the first found
-  // node acts as our list for purposes of determining what other list items
-  // should be numbered as part of the same list.
-  return first_node;
-}
-
-// Returns the next list item with respect to the DOM order.
-static LayoutListItem* NextListItem(const Node* list_node,
-                                    const LayoutListItem* item = nullptr) {
-  if (!list_node)
-    return nullptr;
-
-  const Node* current = item ? item->GetNode() : list_node;
-  DCHECK(current);
-  DCHECK(!current->GetDocument().ChildNeedsDistributionRecalc());
-  current = LayoutTreeBuilderTraversal::Next(*current, list_node);
-
-  while (current) {
-    if (IsList(*current)) {
-      // We've found a nested, independent list: nothing to do here.
-      current =
-          LayoutTreeBuilderTraversal::NextSkippingChildren(*current, list_node);
-      continue;
-    }
-
-    LayoutObject* layout_object = current->GetLayoutObject();
-    if (layout_object && layout_object->IsListItem())
-      return ToLayoutListItem(layout_object);
-
-    // FIXME: Can this be optimized to skip the children of the elements without
-    // a layoutObject?
-    current = LayoutTreeBuilderTraversal::Next(*current, list_node);
-  }
-
-  return nullptr;
-}
-
-// Returns the previous list item with respect to the DOM order.
-static LayoutListItem* PreviousListItem(const Node* list_node,
-                                        const LayoutListItem* item) {
-  Node* current = item->GetNode();
-  DCHECK(current);
-  DCHECK(!current->GetDocument().ChildNeedsDistributionRecalc());
-  for (current = LayoutTreeBuilderTraversal::Previous(*current, list_node);
-       current && current != list_node;
-       current = LayoutTreeBuilderTraversal::Previous(*current, list_node)) {
-    LayoutObject* layout_object = current->GetLayoutObject();
-    if (!layout_object || (layout_object && !layout_object->IsListItem()))
-      continue;
-    Node* other_list = EnclosingList(ToLayoutListItem(layout_object));
-    // This item is part of our current list, so it's what we're looking for.
-    if (list_node == other_list)
-      return ToLayoutListItem(layout_object);
-    // We found ourself inside another list; lets skip the rest of it.
-    // Use nextIncludingPseudo() here because the other list itself may actually
-    // be a list item itself. We need to examine it, so we do this to counteract
-    // the previousIncludingPseudo() that will be done by the loop.
-    if (other_list)
-      current = LayoutTreeBuilderTraversal::Next(*other_list, list_node);
-  }
-  return nullptr;
-}
-
-void LayoutListItem::UpdateItemValuesForOrderedList(
-    const HTMLOListElement* list_node) {
-  DCHECK(list_node);
-
-  for (LayoutListItem* list_item = NextListItem(list_node); list_item;
-       list_item = NextListItem(list_node, list_item))
-    list_item->UpdateValue();
-}
-
-unsigned LayoutListItem::ItemCountForOrderedList(
-    const HTMLOListElement* list_node) {
-  DCHECK(list_node);
-
-  unsigned item_count = 0;
-  for (LayoutListItem* list_item = NextListItem(list_node); list_item;
-       list_item = NextListItem(list_node, list_item))
-    item_count++;
-
-  return item_count;
-}
-
-inline int LayoutListItem::CalcValue() const {
-  if (has_explicit_value_)
-    return explicit_value_;
-
-  Node* list = EnclosingList(this);
-  HTMLOListElement* o_list_element =
-      isHTMLOListElement(list) ? toHTMLOListElement(list) : nullptr;
-  int value_step = 1;
-  if (o_list_element && o_list_element->IsReversed())
-    value_step = -1;
-
-  // FIXME: This recurses to a possible depth of the length of the list.
-  // That's not good -- we need to change this to an iterative algorithm.
-  if (LayoutListItem* previous_item = PreviousListItem(list, this))
-    return ClampAdd(previous_item->Value(), value_step);
-
-  if (o_list_element)
-    return o_list_element->StartConsideringItemCount();
-
-  return 1;
-}
-
-void LayoutListItem::UpdateValueNow() const {
-  value_ = CalcValue();
-  is_value_up_to_date_ = true;
+int LayoutListItem::Value() const {
+  DCHECK(GetNode());
+  return ordinal_.Value(*GetNode());
 }
 
 bool LayoutListItem::IsEmpty() const {
@@ -257,11 +130,6 @@ static LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr,
     if (curr_child == marker)
       continue;
 
-    // Shouldn't add marker into Overflow box, instead, add marker
-    // into listitem
-    if (curr->HasOverflowClip())
-      break;
-
     if (curr_child->IsInline() &&
         (!curr_child->IsLayoutInline() ||
          curr->GeneratesLineBoxesForInlineChild(curr_child)))
@@ -270,13 +138,16 @@ static LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr,
     if (curr_child->IsFloating() || curr_child->IsOutOfFlowPositioned())
       continue;
 
+    if (curr->HasOverflowClip())
+      return curr;
+
     if (!curr_child->IsLayoutBlockFlow() ||
         (curr_child->IsBox() && ToLayoutBox(curr_child)->IsWritingModeRoot()))
-      break;
+      return curr_child;
 
     if (curr->IsListItem() && in_quirks_mode && curr_child->GetNode() &&
-        (isHTMLUListElement(*curr_child->GetNode()) ||
-         isHTMLOListElement(*curr_child->GetNode())))
+        (IsHTMLUListElement(*curr_child->GetNode()) ||
+         IsHTMLOListElement(*curr_child->GetNode())))
       break;
 
     LayoutObject* line_box =
@@ -288,20 +159,64 @@ static LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr,
   return nullptr;
 }
 
-void LayoutListItem::UpdateValue() {
-  if (!has_explicit_value_) {
-    is_value_up_to_date_ = false;
-    if (marker_)
-      marker_->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-          LayoutInvalidationReason::kListValueChange);
-  }
-}
-
 static LayoutObject* FirstNonMarkerChild(LayoutObject* parent) {
   LayoutObject* result = parent->SlowFirstChild();
   while (result && result->IsListMarker())
     result = result->NextSibling();
   return result;
+}
+
+// 1. Place marker as a child of <li>. Make sure don't share parent with empty
+// inline elements which don't gernerate inlineBox.
+// 2. Manage the logicalHeight of marker_container(marker's anonymous parent):
+// If marker is the only child of marker_container, set logicalHeight of
+// marker_container to 0px; else restore it to logicalHeight of <li>.
+bool LayoutListItem::PrepareForBlockDirectionAlign(
+    const LayoutObject* line_box_parent) {
+  LayoutObject* marker_parent = marker_->Parent();
+  // Deal with the situation of layout tree changed.
+  if (marker_parent && marker_parent->IsAnonymous()) {
+    // When list-position-style change from outside to inside, we need to
+    // restore logicalHeight. So add isinside().
+    if (marker_->IsInside() || marker_->NextSibling()) {
+      // Restore old marker_container logicalHeight.
+      if (marker_parent->MutableStyleRef().LogicalHeight().IsZero()) {
+        marker_parent->MutableStyleRef().SetLogicalHeight(
+            Style()->LogicalHeight());
+      }
+
+      // If marker_parent isn't the ancestor of line_box_parent, marker might
+      // generate a new empty line. We need to remove marker here.E.g:
+      // <li><span><div>text<div><span></li>
+      if (line_box_parent && !line_box_parent->IsDescendantOf(marker_parent)) {
+        marker_->Remove();
+        marker_parent = nullptr;
+      }
+    } else {
+      if (line_box_parent)
+        marker_parent->MutableStyleRef().SetLogicalHeight(Length(0, kFixed));
+    }
+  }
+
+  // Create marker_container, set its height to 0px, and add it to li.
+  if (!marker_parent) {
+    LayoutObject* before_child = FirstNonMarkerChild(this);
+    if (!marker_->IsInside() && before_child && before_child->IsLayoutBlock()) {
+      // Create marker_container and set its logicalHeight to 0px.
+      LayoutBlock* marker_container = CreateAnonymousBlock();
+      if (line_box_parent)
+        marker_container->MutableStyleRef().SetLogicalHeight(Length(0, kFixed));
+      marker_container->AddChild(marker_,
+                                 FirstNonMarkerChild(marker_container));
+      AddChild(marker_container, before_child);
+    } else {
+      AddChild(marker_, before_child);
+    }
+
+    marker_->UpdateMarginsAndContent();
+    return true;
+  }
+  return false;
 }
 
 bool LayoutListItem::UpdateMarkerLocation() {
@@ -312,6 +227,16 @@ bool LayoutListItem::UpdateMarkerLocation() {
   // position:static element that should be attached to LayoutListItem block.
   LayoutObject* line_box_parent =
       marker_->IsInside() ? this : GetParentOfFirstLineBox(this, marker_);
+
+  if (!marker_->IsInside() && line_box_parent &&
+      (line_box_parent->HasOverflowClip() ||
+       !line_box_parent->IsLayoutBlockFlow() ||
+       (line_box_parent->IsBox() &&
+        ToLayoutBox(line_box_parent)->IsWritingModeRoot())))
+    need_block_direction_align_ = true;
+  if (need_block_direction_align_)
+    return PrepareForBlockDirectionAlign(line_box_parent);
+
   if (!line_box_parent) {
     // If the marker is currently contained inside an anonymous box, then we
     // are the only item in that anonymous box (since no line box parent was
@@ -341,6 +266,61 @@ void LayoutListItem::AddOverflowFromChildren() {
   PositionListMarker();
 }
 
+// Align marker_inline_box in block direction according to line_box_root's
+// baseline.
+void LayoutListItem::AlignMarkerInBlockDirection() {
+  LayoutObject* line_box_parent = GetParentOfFirstLineBox(this, marker_);
+  if (!line_box_parent || !line_box_parent->IsBox())
+    return;
+
+  LayoutBox* line_box_parent_block = ToLayoutBox(line_box_parent);
+  // Don't align marker if line_box_parent has a different writing-mode.
+  // Just let marker positioned at the left-top of line_box_parent.
+  if (line_box_parent_block->IsWritingModeRoot())
+    return;
+
+  InlineBox* marker_inline_box = marker_->InlineBoxWrapper();
+  RootInlineBox& marker_root = marker_inline_box->Root();
+  if (line_box_parent_block->IsLayoutBlockFlow()) {
+    // If marker_ and line_box_parent_block share a same RootInlineBox, no need
+    // to align marker.
+    if (ToLayoutBlockFlow(line_box_parent_block)->FirstRootBox() ==
+        &marker_root)
+      return;
+  }
+
+  LayoutUnit offset = line_box_parent_block->FirstLineBoxBaseline();
+  if (offset != -1) {
+    for (LayoutBox* o = line_box_parent_block; o != this; o = o->ParentBox())
+      offset += o->LogicalTop();
+
+    // Compute marker_inline_box's baseline.
+    // We shouldn't use FirstLineBoxBaseline here. FirstLineBoxBaseline is
+    // the baseline of root. We should compute marker_inline_box's baseline
+    // instead. BaselinePosition is workable when marker is an image.
+    // However, when marker is text, BaselinePosition contains lineheight
+    // information. So use marker_font_metrics.Ascent when marker is text.
+    if (marker_->IsImage()) {
+      offset -= marker_inline_box->BaselinePosition(marker_root.BaselineType());
+    } else {
+      const SimpleFontData* marker_font_data =
+          marker_->Style(true)->GetFont().PrimaryFont();
+      if (marker_font_data) {
+        const FontMetrics& marker_font_metrics =
+            marker_font_data->GetFontMetrics();
+        offset -= marker_font_metrics.Ascent(marker_root.BaselineType());
+      }
+    }
+    offset -= marker_inline_box->LogicalTop();
+
+    for (LayoutBox* o = marker_->ParentBox(); o != this; o = o->ParentBox()) {
+      offset -= o->LogicalTop();
+    }
+
+    marker_inline_box->MoveInBlockDirection(offset);
+  }
+}
+
 void LayoutListItem::PositionListMarker() {
   if (marker_ && marker_->Parent() && marker_->Parent()->IsBox() &&
       !marker_->IsInside() && marker_->InlineBoxWrapper()) {
@@ -360,13 +340,25 @@ void LayoutListItem::PositionListMarker() {
     LayoutUnit line_top = root.LineTop();
     LayoutUnit line_bottom = root.LineBottom();
 
+    if (need_block_direction_align_)
+      AlignMarkerInBlockDirection();
+
+    // We figured out the inline position of the marker before laying out the
+    // line so that floats later in the line don't interfere with it. However
+    // if the line has shifted down then that position will be too far out.
+    // So we always take the lowest value of (1) the position of the marker
+    // if we calculate it now and (2) the inline position we calculated before
+    // laying out the line.
     // TODO(jchaffraix): Propagating the overflow to the line boxes seems
     // pretty wrong (https://crbug.com/554160).
     // FIXME: Need to account for relative positioning in the layout overflow.
     if (Style()->IsLeftToRightDirection()) {
-      marker_logical_left = marker_->LineOffset() - line_offset -
-                            PaddingStart() - BorderStart() +
-                            marker_->MarginStart();
+      LayoutUnit marker_line_offset =
+          std::min(marker_->LineOffset(),
+                   LogicalLeftOffsetForLine(marker_->LogicalTop(),
+                                            kDoNotIndentText, LayoutUnit()));
+      marker_logical_left = marker_line_offset - line_offset - PaddingStart() -
+                            BorderStart() + marker_->MarginStart();
       marker_->InlineBoxWrapper()->MoveInInlineDirection(
           marker_logical_left - marker_old_logical_left);
       for (InlineFlowBox* box = marker_->InlineBoxWrapper()->Parent(); box;
@@ -397,9 +389,12 @@ void LayoutListItem::PositionListMarker() {
           hit_self_painting_layer = true;
       }
     } else {
-      marker_logical_left = marker_->LineOffset() - line_offset +
-                            PaddingStart() + BorderStart() +
-                            marker_->MarginEnd();
+      LayoutUnit marker_line_offset =
+          std::max(marker_->LineOffset(),
+                   LogicalRightOffsetForLine(marker_->LogicalTop(),
+                                             kDoNotIndentText, LayoutUnit()));
+      marker_logical_left = marker_line_offset - line_offset + PaddingStart() +
+                            BorderStart() + marker_->MarginEnd();
       marker_->InlineBoxWrapper()->MoveInInlineDirection(
           marker_logical_left - marker_old_logical_left);
       for (InlineFlowBox* box = marker_->InlineBoxWrapper()->Parent(); box;
@@ -475,84 +470,11 @@ const String& LayoutListItem::MarkerText() const {
   return g_null_atom.GetString();
 }
 
-void LayoutListItem::ExplicitValueChanged() {
-  if (marker_)
-    marker_->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-        LayoutInvalidationReason::kListValueChange);
-  Node* list_node = EnclosingList(this);
-  for (LayoutListItem* item = this; item; item = NextListItem(list_node, item))
-    item->UpdateValue();
-}
-
-void LayoutListItem::SetExplicitValue(int value) {
-  DCHECK(GetNode());
-
-  if (has_explicit_value_ && explicit_value_ == value)
+void LayoutListItem::OrdinalValueChanged() {
+  if (!marker_)
     return;
-  explicit_value_ = value;
-  value_ = value;
-  has_explicit_value_ = true;
-  ExplicitValueChanged();
-}
-
-void LayoutListItem::ClearExplicitValue() {
-  DCHECK(GetNode());
-
-  if (!has_explicit_value_)
-    return;
-  has_explicit_value_ = false;
-  is_value_up_to_date_ = false;
-  ExplicitValueChanged();
-}
-
-void LayoutListItem::SetNotInList(bool not_in_list) {
-  not_in_list_ = not_in_list;
-}
-
-static LayoutListItem* PreviousOrNextItem(bool is_list_reversed,
-                                          Node* list,
-                                          LayoutListItem* item) {
-  return is_list_reversed ? PreviousListItem(list, item)
-                          : NextListItem(list, item);
-}
-
-void LayoutListItem::UpdateListMarkerNumbers() {
-  // If distribution recalc is needed, updateListMarkerNumber will be re-invoked
-  // after distribution is calculated.
-  if (GetNode()->GetDocument().ChildNeedsDistributionRecalc())
-    return;
-
-  Node* list_node = EnclosingList(this);
-  CHECK(list_node);
-
-  bool is_list_reversed = false;
-  HTMLOListElement* o_list_element =
-      isHTMLOListElement(list_node) ? toHTMLOListElement(list_node) : 0;
-  if (o_list_element) {
-    o_list_element->ItemCountChanged();
-    is_list_reversed = o_list_element->IsReversed();
-  }
-
-  // FIXME: The n^2 protection below doesn't help if the elements were inserted
-  // after the the list had already been displayed.
-
-  // Avoid an O(n^2) walk over the children below when they're all known to be
-  // attaching.
-  if (list_node->NeedsAttach())
-    return;
-
-  for (LayoutListItem* item =
-           PreviousOrNextItem(is_list_reversed, list_node, this);
-       item; item = PreviousOrNextItem(is_list_reversed, list_node, item)) {
-    if (!item->is_value_up_to_date_) {
-      // If an item has been marked for update before, we can safely
-      // assume that all the following ones have too.
-      // This gives us the opportunity to stop here and avoid
-      // marking the same nodes again.
-      break;
-    }
-    item->UpdateValue();
-  }
+  marker_->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+      LayoutInvalidationReason::kListValueChange);
 }
 
 }  // namespace blink

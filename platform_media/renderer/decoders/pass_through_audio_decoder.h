@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef MEDIA_FILTERS_PASS_THROUGH_AUDIO_DECODER_H_
-#define MEDIA_FILTERS_PASS_THROUGH_AUDIO_DECODER_H_
+#ifndef PLATFORM_MEDIA_RENDERER_DECODERS_PASS_THROUGH_AUDIO_DECODER_H_
+#define PLATFORM_MEDIA_RENDERER_DECODERS_PASS_THROUGH_AUDIO_DECODER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "media/base/audio_decoder.h"
 #include "platform_media/renderer/decoders/pass_through_decoder_impl.h"
@@ -34,4 +37,4 @@ class MEDIA_EXPORT PassThroughAudioDecoder : public AudioDecoder {
 
 }  // namespace media
 
-#endif  // MEDIA_FILTERS_PASS_THROUGH_AUDIO_DECODER_H_
+#endif  // PLATFORM_MEDIA_RENDERER_DECODERS_PASS_THROUGH_AUDIO_DECODER_H_

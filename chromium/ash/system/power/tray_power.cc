@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "ash/accessibility_delegate.h"
-#include "ash/ash_switches.h"
+#include "ash/accessibility/accessibility_delegate.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -51,7 +51,7 @@ class UsbNotificationDelegate : public message_center::NotificationDelegate {
   }
 
  private:
-  ~UsbNotificationDelegate() override {}
+  ~UsbNotificationDelegate() override = default;
 
   TrayPower* tray_power_;
 
@@ -100,7 +100,7 @@ class PowerTrayView : public TrayItemView {
     UpdateImage();
   }
 
-  ~PowerTrayView() override {}
+  ~PowerTrayView() override = default;
 
   // Overridden from views::View.
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {

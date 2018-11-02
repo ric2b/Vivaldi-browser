@@ -69,16 +69,16 @@ class FileChooserClient : public GarbageCollectedMixin {
   FileChooser* NewFileChooser(const WebFileChooserParams&);
 
  private:
-  RefPtr<FileChooser> chooser_;
+  scoped_refptr<FileChooser> chooser_;
 };
 
 class FileChooser : public RefCounted<FileChooser> {
  public:
-  static PassRefPtr<FileChooser> Create(FileChooserClient*,
-                                        const WebFileChooserParams&);
+  static scoped_refptr<FileChooser> Create(FileChooserClient*,
+                                           const WebFileChooserParams&);
   ~FileChooser();
 
-  void DisconnectClient() { client_ = 0; }
+  void DisconnectClient() { client_ = nullptr; }
 
   // FIXME: We should probably just pass file paths that could be virtual paths
   // with proper display names rather than passing structs.

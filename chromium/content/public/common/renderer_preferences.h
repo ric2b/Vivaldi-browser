@@ -94,10 +94,10 @@ struct CONTENT_EXPORT RendererPreferences {
   // Browser wants a look at all top-level navigation requests.
   bool browser_handles_all_top_level_requests;
 
-  // Cursor blink rate in seconds.
+  // Cursor blink rate.
   // Currently only changed from default on Linux.  Uses |gtk-cursor-blink|
   // from GtkSettings.
-  double caret_blink_interval;
+  base::TimeDelta caret_blink_interval;
 
   // Whether or not to set custom colors at all.
   bool use_custom_colors;
@@ -107,6 +107,11 @@ struct CONTENT_EXPORT RendererPreferences {
 
   // Set to true to indicate that the preference to set DNT to 1 is enabled.
   bool enable_do_not_track;
+
+  // Whether to allow the use of Encrypted Media Extensions (EME), except for
+  // the use of Clear Key key system which is always allowed as required by the
+  // spec.
+  bool enable_encrypted_media;
 
   // This is the IP handling policy override for WebRTC. The value must be one
   // of the strings defined in privacy.json. The allowed values are specified

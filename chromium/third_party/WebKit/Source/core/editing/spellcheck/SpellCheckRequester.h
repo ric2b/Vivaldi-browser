@@ -26,14 +26,14 @@
 #ifndef SpellCheckRequester_h
 #define SpellCheckRequester_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
+#include "core/editing/spellcheck/TextChecking.h"
 #include "platform/Timer.h"
-#include "platform/text/TextChecking.h"
 #include "platform/wtf/Deque.h"
-#include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -41,29 +41,33 @@ namespace blink {
 
 class LocalFrame;
 class SpellCheckRequester;
-class TextCheckerClient;
+class WebTextCheckClient;
 
-class CORE_EXPORT SpellCheckRequest final : public TextCheckingRequest {
+class CORE_EXPORT SpellCheckRequest
+    : public GarbageCollectedFinalized<SpellCheckRequest> {
  public:
+  static const int kUnrequestedTextCheckingSequence = -1;
+
   static SpellCheckRequest* Create(const EphemeralRange& checking_range,
                                    int request_number);
 
-  ~SpellCheckRequest() override;
+  ~SpellCheckRequest();
   void Dispose();
 
   Range* CheckingRange() const { return checking_range_; }
   Element* RootEditableElement() const { return root_editable_element_; }
 
   void SetCheckerAndSequence(SpellCheckRequester*, int sequence);
+  int Sequence() const { return sequence_; }
+  String GetText() const { return text_; }
 
-  const TextCheckingRequestData& Data() const override;
   bool IsValid() const;
-  void DidSucceed(const Vector<TextCheckingResult>&) override;
-  void DidCancel() override;
+  void DidSucceed(const Vector<TextCheckingResult>&);
+  void DidCancel();
 
   int RequestNumber() const { return request_number_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   SpellCheckRequest(Range* checking_range, const String&, int request_number);
@@ -71,21 +75,20 @@ class CORE_EXPORT SpellCheckRequest final : public TextCheckingRequest {
   Member<SpellCheckRequester> requester_;
   Member<Range> checking_range_;
   Member<Element> root_editable_element_;
-  TextCheckingRequestData request_data_;
+  int sequence_ = kUnrequestedTextCheckingSequence;
+  String text_;
   int request_number_;
 };
 
-class SpellCheckRequester final
+class CORE_EXPORT SpellCheckRequester final
     : public GarbageCollectedFinalized<SpellCheckRequester> {
-  WTF_MAKE_NONCOPYABLE(SpellCheckRequester);
-
  public:
   static SpellCheckRequester* Create(LocalFrame& frame) {
     return new SpellCheckRequester(frame);
   }
 
   ~SpellCheckRequester();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void RequestCheckingFor(const EphemeralRange&);
   void RequestCheckingFor(const EphemeralRange&, int request_num);
@@ -104,13 +107,14 @@ class SpellCheckRequester final
 
   explicit SpellCheckRequester(LocalFrame&);
 
-  TextCheckerClient& Client() const;
+  WebTextCheckClient* GetTextCheckerClient() const;
   void TimerFiredToProcessQueuedRequest(TimerBase*);
   void InvokeRequest(SpellCheckRequest*);
   void EnqueueRequest(SpellCheckRequest*);
+  bool EnsureValidRequestQueueFor(int sequence);
   void DidCheckSucceed(int sequence, const Vector<TextCheckingResult>&);
   void DidCheckCancel(int sequence);
-  void DidCheck(int sequence, const Vector<TextCheckingResult>&);
+  void DidCheck(int sequence);
 
   void ClearProcessingRequest();
 
@@ -130,6 +134,8 @@ class SpellCheckRequester final
 
   typedef HeapDeque<Member<SpellCheckRequest>> RequestQueue;
   RequestQueue request_queue_;
+
+  DISALLOW_COPY_AND_ASSIGN(SpellCheckRequester);
 };
 
 }  // namespace blink

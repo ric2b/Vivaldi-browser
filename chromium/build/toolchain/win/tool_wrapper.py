@@ -21,10 +21,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # A regex matching an argument corresponding to the output filename passed to
 # link.exe.
 _LINK_EXE_OUT_ARG = re.compile('/OUT:(?P<out>.+)$', re.IGNORECASE)
+_LINK_PDB_OUT_ARG = re.compile('/PDB:(?P<out>.+)$', re.IGNORECASE)
+_LINK_ERROR = re.compile('.* error LNK(\d+):')
+
+# Retry links when this error is hit, to try to deal with crbug.com/782660
+_LINKER_RETRY_ERRORS = 1201
+# Maximum number of linker retries.
+_LINKER_RETRIES = 3
 
 def main(args):
-  executor = WinTool()
-  exit_code = executor.Dispatch(args)
+  exit_code = WinTool().Dispatch(args)
   if exit_code is not None:
     sys.exit(exit_code)
 
@@ -159,52 +165,37 @@ class WinTool(object):
     #   Popen(['/bin/sh', '-c', args[0], args[1], ...])"
     # For that reason, since going through the shell doesn't seem necessary on
     # non-Windows don't do that there.
-    link = subprocess.Popen(args, shell=sys.platform == 'win32', env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # Read output one line at a time as it shows up to avoid OOM failures when
-    # GBs of output is produced.
-    for line in link.stdout:
-      if (not line.startswith('   Creating library ') and
-          not line.startswith('Generating code') and
-          not line.startswith('Finished generating code')):
-        print line
+    pdb_name = None
+    for arg in args:
+      m = _LINK_PDB_OUT_ARG.match(arg)
+      if m:
+        pdb_name = m.group('out')
+    for retry_count in range(_LINKER_RETRIES):
+      retry = False
+      link = subprocess.Popen(args, shell=sys.platform == 'win32', env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+      # Read output one line at a time as it shows up to avoid OOM failures when
+      # GBs of output is produced.
+      for line in link.stdout:
+        if (not line.startswith('   Creating library ') and
+            not line.startswith('Generating code') and
+            not line.startswith('Finished generating code')):
+          m = _LINK_ERROR.match(line)
+          if m:
+            error_code = int(m.groups()[0])
+            if error_code == _LINKER_RETRY_ERRORS:
+              print 'Retrying link due to error %d' % error_code
+              if pdb_name:
+                shutil.copyfile(pdb_name, pdb_name + 'failure_backup')
+              retry = True
+          print line,
+      result = link.wait()
+      if not retry:
+        break
+    if result == 0:
+      result = self.SignTarget(result, args)
 
-    return_code = link.wait()
-
-    if return_code == 0:
-      return_code = self.SignTarget(return_code, args)
-
-    return return_code
-
-  def ExecMidlWrapper(self, arch, outdir, tlb, h, dlldata, iid, proxy, idl,
-                      *flags):
-    """Filter noisy filenames output from MIDL compile step that isn't
-    quietable via command line flags.
-    """
-    args = ['midl', '/nologo'] + list(flags) + [
-        '/out', outdir,
-        '/tlb', tlb,
-        '/h', h,
-        '/dlldata', dlldata,
-        '/iid', iid,
-        '/proxy', proxy,
-        idl]
-    env = self._GetEnv(arch)
-    popen = subprocess.Popen(args, shell=True, env=env,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, _ = popen.communicate()
-    # Filter junk out of stdout, and write filtered versions. Output we want
-    # to filter is pairs of lines that look like this:
-    # Processing C:\Program Files (x86)\Microsoft SDKs\...\include\objidl.idl
-    # objidl.idl
-    lines = out.splitlines()
-    prefixes = ('Processing ', '64 bit Processing ')
-    processing = set(os.path.basename(x)
-                     for x in lines if x.startswith(prefixes))
-    for line in lines:
-      if not line.startswith(prefixes) and line not in processing:
-        print line
-    return popen.returncode
+    return result
 
   def ExecAsmWrapper(self, arch, *args):
     """Filter logo banner from invocations of asm.exe."""
@@ -223,19 +214,66 @@ class WinTool(object):
     return popen.returncode
 
   def ExecRcWrapper(self, arch, *args):
-    """Filter logo banner from invocations of rc.exe. Older versions of RC
-    don't support the /nologo flag."""
+    """Converts .rc files to .res files."""
     env = self._GetEnv(arch)
-    popen = subprocess.Popen(args, shell=True, env=env,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, _ = popen.communicate()
-    for line in out.splitlines():
-      if (not line.startswith('Microsoft (R) Windows (R) Resource Compiler') and
-          not line.startswith('Copy' + 'right (C' +
-                              ') Microsoft Corporation') and
-          line):
-        print line
-    return popen.returncode
+
+    # We run two resource compilers:
+    # 1. A custom one at build/toolchain/win/rc/rc.py which can run on
+    #    non-Windows, and which has /showIncludes support so we can track
+    #    dependencies (e.g. on .ico files) of .rc files.
+    # 2. On Windows, regular Microsoft rc.exe, to make sure rc.py produces
+    #    bitwise identical output.
+
+    # 1. Run our rc.py.
+    # Also pass /showIncludes to track dependencies of .rc files.
+    args = list(args)
+    rcpy_args = args[:]
+    rcpy_args[0:1] = [sys.executable, os.path.join(BASE_DIR, 'rc', 'rc.py')]
+    rcpy_res_output = rcpy_args[-2]
+    assert rcpy_res_output.startswith('/fo')
+    assert rcpy_res_output.endswith('.res')
+    if rcpy_res_output.endswith("setup.res"):
+      rc_res_output = rcpy_res_output
+      rcpy_res_output= rcpy_res_output+"_chr_rc"
+      rcpy_args[-2] = rcpy_res_output
+    else:
+      rc_res_output = rcpy_res_output + '_ms_rc'
+    args[-2] = rc_res_output
+    rcpy_args.append('/showIncludes')
+    #rc_exe_exit_code = subprocess.call(rcpy_args, env=env)
+    sys.path.insert(0,os.path.join(BASE_DIR, "rc"))
+    import rc
+    rc_exe_exit_code = rc.main(rcpy_args[2:], env=env)
+
+    if rc_exe_exit_code == 0:
+      # Since tool("rc") can't have deps, add deps on this script and on rc.py
+      # and its deps here, so that rc edges become dirty if rc.py changes.
+      print 'Note: including file: ../../chromium/build/toolchain/win/tool_wrapper.py'
+      print 'Note: including file: ../../chromium/build/toolchain/win/rc/rc.py'
+      print 'Note: including file: ../../chromium/build/toolchain/win/rc/linux64/rc.sha1'
+      print 'Note: including file: ../../chromium/build/toolchain/win/rc/mac/rc.sha1'
+      print 'Note: including file: ../../chromium/build/toolchain/win/rc/win/rc.exe.sha1'
+
+    # 2. Run Microsoft rc.exe.
+    if sys.platform == 'win32' and rc_exe_exit_code == 0:
+      popen = subprocess.Popen(args, shell=True, env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+      out, _ = popen.communicate()
+      # Filter logo banner from invocations of rc.exe. Older versions of RC
+      # don't support the /nologo flag.
+      for line in out.splitlines():
+        if (not line.startswith('Microsoft (R) Windows (R) Resource Compiler')
+            and not line.startswith('Copy' + 'right (C' +
+                                ') Microsoft Corporation')
+            and line):
+          print line
+      rc_exe_exit_code = popen.returncode
+      # Assert Microsoft rc.exe and rc.py produced identical .res files.
+      if rc_exe_exit_code == 0:
+        import filecmp
+        # Strip "/fo" prefix.
+        #assert filecmp.cmp(rc_res_output[3:], rcpy_res_output[3:])
+    return rc_exe_exit_code
 
   def ExecActionWrapper(self, arch, rspfile, *dirname):
     """Runs an action command line from a response file using the environment

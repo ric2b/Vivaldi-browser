@@ -6,36 +6,6 @@ import("//build/config/mac/mac_sdk.gni")
 import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
 
-component("sandbox") {
-  sources = [
-    "bootstrap_sandbox.cc",
-    "bootstrap_sandbox.h",
-    "launchd_interception_server.cc",
-    "launchd_interception_server.h",
-    "mach_message_server.cc",
-    "mach_message_server.h",
-    "message_server.h",
-    "os_compatibility.cc",
-    "os_compatibility.h",
-    "policy.cc",
-    "policy.h",
-    "pre_exec_delegate.cc",
-    "pre_exec_delegate.h",
-    "xpc.h",
-    "xpc_message_server.cc",
-    "xpc_message_server.h",
-  ]
-
-  defines = [ "SANDBOX_IMPLEMENTATION" ]
-  libs = [ "bsm" ]
-  public_deps = [
-    "//sandbox:sandbox_export",
-  ]
-  deps = [
-    "//base",
-  ]
-}
-
 proto_library("seatbelt_proto") {
   visibility = [ ":*" ]
   sources = [
@@ -47,6 +17,8 @@ component("seatbelt") {
   sources = [
     "sandbox_compiler.cc",
     "sandbox_compiler.h",
+    "sandbox_logging.cc",
+    "sandbox_logging.h",
     "seatbelt.cc",
     "seatbelt.h",
     "seatbelt_exec.cc",
@@ -58,20 +30,32 @@ component("seatbelt") {
     ":seatbelt_proto",
   ]
   public_deps = [
-    "//base",
     "//third_party/protobuf:protobuf_lite",
+  ]
+  defines = [ "SEATBELT_IMPLEMENTATION" ]
+}
+
+component("seatbelt_extension") {
+  sources = [
+    "seatbelt_extension.cc",
+    "seatbelt_extension.h",
+    "seatbelt_extension_token.cc",
+    "seatbelt_extension_token.h",
+  ]
+  libs = [ "sandbox" ]
+  public_deps = [
+    "//base",
   ]
   defines = [ "SEATBELT_IMPLEMENTATION" ]
 }
 
 test("sandbox_mac_unittests") {
   sources = [
-    "bootstrap_sandbox_unittest.mm",
-    "policy_unittest.cc",
+    "mojom/struct_traits_unittest.cc",
     "sandbox_mac_compiler_unittest.mm",
     "sandbox_mac_compiler_v2_unittest.mm",
     "sandbox_mac_seatbelt_exec_unittest.cc",
-    "xpc_message_server_unittest.cc",
+    "seatbelt_extension_unittest.cc",
   ]
 
   libs = [
@@ -80,11 +64,12 @@ test("sandbox_mac_unittests") {
   ]
 
   deps = [
-    ":sandbox",
     ":seatbelt",
+    ":seatbelt_extension",
     ":seatbelt_proto",
+    "mojom:test_interfaces",
     "//base",
-    "//base/test:run_all_unittests",
+    "//mojo/edk/test:run_all_unittests",
     "//testing/gtest",
   ]
 }

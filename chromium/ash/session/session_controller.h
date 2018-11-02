@@ -121,12 +121,13 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   // device (i.e. first time login on the device).
   bool IsUserFirstLogin() const;
 
-  // Returns true if the current user session is a kiosk session (either
-  // chrome app kiosk or ARC kiosk).
-  bool IsKioskSession() const;
-
   // Locks the screen. The locking happens asynchronously.
   void LockScreen();
+
+  // Requests signing out all users, ending the current session.
+  // NOTE: This should only be called from LockStateController, other callers
+  // should use LockStateController::RequestSignOut() instead.
+  void RequestSignOut();
 
   // Switches to another active user with |account_id| (if that user has
   // already signed in).
@@ -147,9 +148,12 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   PrefService* GetUserPrefServiceForUser(const AccountId& account_id);
 
   // Returns the PrefService for the last active user that had one or null if no
-  // PrefService connection has been successfully established. Returns the
-  // signin screen profile prefs when at the login screen.
-  PrefService* GetLastActiveUserPrefService();
+  // PrefService connection has been successfully established.
+  PrefService* GetLastActiveUserPrefService() const;
+
+  // Before login returns the signin screen profile prefs. After login returns
+  // the active user profile prefs. Returns null early during startup.
+  PrefService* GetActivePrefService() const;
 
   void AddObserver(SessionObserver* observer);
   void RemoveObserver(SessionObserver* observer);
@@ -172,6 +176,13 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   void NotifyChromeTerminating() override;
   void SetSessionLengthLimit(base::TimeDelta length_limit,
                              base::TimeTicks start_time) override;
+  void CanSwitchActiveUser(CanSwitchActiveUserCallback callback) override;
+  void ShowMultiprofilesIntroDialog(
+      ShowMultiprofilesIntroDialogCallback callback) override;
+  void ShowTeleportWarningDialog(
+      ShowTeleportWarningDialogCallback callback) override;
+  void ShowMultiprofilesSessionAbortedDialog(
+      const std::string& user_email) override;
 
   // Test helpers.
   void ClearUserSessionsForTest();
@@ -210,6 +221,8 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
       std::unique_ptr<PrefService> pref_service);
 
   // Bindings for mojom::SessionController interface.
+  // TODO(jamescook): This should be mojo::Binding<> but that causes crashes in
+  // browser test UserAddingScreenTest.AddingSeveralUsers.
   mojo::BindingSet<mojom::SessionController> bindings_;
 
   // Client interface to session manager code (chrome).

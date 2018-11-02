@@ -22,7 +22,7 @@ message SnippetProto {
   optional int64 publish_date = 5;
   optional int64 expiry_date = 6;
   optional float score = 7;
-  repeated SnippetSourceProto sources = 8;
+  optional SnippetSourceProto source = 8;
   optional bool dismissed = 9;
   optional int32 remote_category_id = 10;
   // The time when the snippet was fetched from the server.
@@ -38,6 +38,9 @@ message SnippetProto {
   // The values may be not consecutive. Must be set on the client. May be absent
   // in suggestions created before it was introduced.
   optional int32 rank = 13;
+
+  // Encoded as @ColorInt.
+  optional fixed32 image_dominant_color = 14;
 }
 
 message SnippetImageProto {

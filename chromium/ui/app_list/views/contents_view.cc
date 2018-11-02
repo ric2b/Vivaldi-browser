@@ -17,13 +17,11 @@
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/app_list/views/apps_container_view.h"
 #include "ui/app_list/views/apps_grid_view.h"
-#include "ui/app_list/views/custom_launcher_page_view.h"
 #include "ui/app_list/views/search_box_view.h"
 #include "ui/app_list/views/search_result_answer_card_view.h"
 #include "ui/app_list/views/search_result_list_view.h"
 #include "ui/app_list/views/search_result_page_view.h"
 #include "ui/app_list/views/search_result_tile_item_list_view.h"
-#include "ui/app_list/views/start_page_view.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -66,29 +64,11 @@ void ContentsView::Init(AppListModel* model) {
 
   AppListViewDelegate* view_delegate = app_list_main_view_->view_delegate();
 
-  std::vector<views::View*> custom_page_views =
-      view_delegate->CreateCustomPageWebViews(GetLocalBounds().size());
-  // Only add the first custom page view as STATE_CUSTOM_LAUNCHER_PAGE. Ignore
-  // any subsequent custom pages.
-  if (!custom_page_views.empty()) {
-    custom_page_view_ = new CustomLauncherPageView(custom_page_views[0]);
-
-    AddLauncherPage(custom_page_view_,
-                    AppListModel::STATE_CUSTOM_LAUNCHER_PAGE);
-  }
-
   apps_container_view_ = new AppsContainerView(app_list_main_view_, model);
 
-  // Start page is only for non-fullscreen app list.
-  if (is_fullscreen_app_list_enabled_) {
-    // Add |apps_container_view_| as STATE_START corresponding page for
-    // fullscreen app list.
-    AddLauncherPage(apps_container_view_, AppListModel::STATE_START);
-  } else {
-    start_page_view_ =
-        new StartPageView(app_list_main_view_, view_delegate, app_list_view_);
-    AddLauncherPage(start_page_view_, AppListModel::STATE_START);
-  }
+  // Add |apps_container_view_| as STATE_START corresponding page for
+  // fullscreen app list.
+  AddLauncherPage(apps_container_view_, AppListModel::STATE_START);
 
   // Search results UI.
   search_results_page_view_ = new SearchResultPageView();
@@ -97,12 +77,15 @@ void ContentsView::Init(AppListModel* model) {
   AppListModel::SearchResults* results = view_delegate->GetModel()->results();
 
   if (features::IsAnswerCardEnabled()) {
+    search_result_answer_card_view_ =
+        new SearchResultAnswerCardView(view_delegate);
     search_results_page_view_->AddSearchResultContainerView(
-        results, new SearchResultAnswerCardView(view_delegate));
+        results, search_result_answer_card_view_);
   }
 
   search_result_tile_item_list_view_ = new SearchResultTileItemListView(
-      GetSearchBoxView()->search_box(), view_delegate);
+      search_results_page_view_, GetSearchBoxView()->search_box(),
+      view_delegate);
   search_results_page_view_->AddSearchResultContainerView(
       results, search_result_tile_item_list_view_);
 
@@ -259,20 +242,6 @@ bool ContentsView::IsShowingSearchResults() const {
   return IsStateActive(AppListModel::STATE_SEARCH_RESULTS);
 }
 
-void ContentsView::NotifyCustomLauncherPageAnimationChanged(double progress,
-                                                            int current_page,
-                                                            int target_page) {
-  int custom_launcher_page_index =
-      GetPageIndexForState(AppListModel::STATE_CUSTOM_LAUNCHER_PAGE);
-  if (custom_launcher_page_index == target_page) {
-    app_list_main_view_->view_delegate()->CustomLauncherPageAnimationChanged(
-        progress);
-  } else if (custom_launcher_page_index == current_page) {
-    app_list_main_view_->view_delegate()->CustomLauncherPageAnimationChanged(
-        1 - progress);
-  }
-}
-
 void ContentsView::UpdatePageBounds() {
   // The bounds calculations will potentially be mid-transition (depending on
   // the state of the PaginationModel).
@@ -287,8 +256,6 @@ void ContentsView::UpdatePageBounds() {
       progress = transition.progress;
     }
   }
-
-  NotifyCustomLauncherPageAnimationChanged(progress, current_page, target_page);
 
   AppListModel::State current_state = GetStateForPageIndex(current_page);
   AppListModel::State target_state = GetStateForPageIndex(target_page);
@@ -325,28 +292,8 @@ void ContentsView::UpdateSearchBox(double progress,
   gfx::Rect search_box_rect =
       gfx::Tween::RectValueBetween(progress, search_box_from, search_box_to);
 
-  int original_z_height = from_page->GetSearchBoxZHeight();
-  int target_z_height = to_page->GetSearchBoxZHeight();
-
-  if (original_z_height != target_z_height) {
-    gfx::ShadowValue original_shadow = GetShadowForZHeight(original_z_height);
-    gfx::ShadowValue target_shadow = GetShadowForZHeight(target_z_height);
-
-    gfx::Vector2d offset(gfx::Tween::LinearIntValueBetween(
-                             progress, original_shadow.x(), target_shadow.x()),
-                         gfx::Tween::LinearIntValueBetween(
-                             progress, original_shadow.y(), target_shadow.y()));
-    search_box->SetShadow(gfx::ShadowValue(
-        offset,
-        gfx::Tween::LinearIntValueBetween(progress, original_shadow.blur(),
-                                          target_shadow.blur()),
-        gfx::Tween::ColorValueBetween(progress, original_shadow.color(),
-                                      target_shadow.color())));
-  }
-  if (is_fullscreen_app_list_enabled_) {
-    search_box->UpdateLayout(progress, current_state, target_state);
-    search_box->UpdateBackground(progress, current_state, target_state);
-  }
+  search_box->UpdateLayout(progress, current_state, target_state);
+  search_box->UpdateBackground(progress, current_state, target_state);
   search_box->GetWidget()->SetBounds(
       search_box->GetViewBoundsForSearchBoxContentsBounds(
           ConvertRectToWidget(search_box_rect)));
@@ -448,7 +395,7 @@ bool ContentsView::Back() {
         apps_container_view_->app_list_folder_view()->CloseFolderPage();
       } else {
         is_fullscreen_app_list_enabled_
-            ? app_list_view_->SetState(AppListView::CLOSED)
+            ? app_list_view_->Dismiss()
             : SetActiveState(AppListModel::STATE_START);
       }
       break;
@@ -484,13 +431,6 @@ void ContentsView::Layout() {
   // Immediately finish all current animations.
   pagination_model_.FinishAnimation();
 
-  double progress =
-      IsStateActive(AppListModel::STATE_CUSTOM_LAUNCHER_PAGE) ? 1 : 0;
-
-  // Notify the custom launcher page that the active page has changed.
-  app_list_main_view_->view_delegate()->CustomLauncherPageAnimationChanged(
-      progress);
-
   if (GetContentsBounds().IsEmpty())
     return;
 
@@ -513,6 +453,10 @@ void ContentsView::Layout() {
 }
 
 bool ContentsView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (features::IsAppListFocusEnabled())
+    return false;
+  // TODO(weidongg/766807) Remove this function when the flag is enabled by
+  // default.
   if (app_list_pages_[GetActivePageIndex()]->OnKeyPressed(event))
     return true;
   if (event.key_code() != ui::VKEY_TAB &&
@@ -552,6 +496,8 @@ void ContentsView::TransitionStarted() {}
 void ContentsView::TransitionChanged() {
   UpdatePageBounds();
 }
+
+void ContentsView::TransitionEnded() {}
 
 int ContentsView::GetDisplayHeight() const {
   return display::Screen::GetScreen()

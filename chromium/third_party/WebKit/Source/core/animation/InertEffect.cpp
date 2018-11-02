@@ -34,14 +34,14 @@
 
 namespace blink {
 
-InertEffect* InertEffect::Create(EffectModel* effect,
+InertEffect* InertEffect::Create(KeyframeEffectModelBase* effect,
                                  const Timing& timing,
                                  bool paused,
                                  double inherited_time) {
   return new InertEffect(effect, timing, paused, inherited_time);
 }
 
-InertEffect::InertEffect(EffectModel* model,
+InertEffect::InertEffect(KeyframeEffectModelBase* model,
                          const Timing& timing,
                          bool paused,
                          double inherited_time)
@@ -50,7 +50,7 @@ InertEffect::InertEffect(EffectModel* model,
       paused_(paused),
       inherited_time_(inherited_time) {}
 
-void InertEffect::Sample(Vector<RefPtr<Interpolation>>& result) const {
+void InertEffect::Sample(Vector<scoped_refptr<Interpolation>>& result) const {
   UpdateInheritedTime(inherited_time_, kTimingUpdateOnDemand);
   if (!IsInEffect()) {
     result.clear();
@@ -67,7 +67,7 @@ double InertEffect::CalculateTimeToEffectChange(bool, double, double) const {
   return std::numeric_limits<double>::infinity();
 }
 
-DEFINE_TRACE(InertEffect) {
+void InertEffect::Trace(blink::Visitor* visitor) {
   visitor->Trace(model_);
   AnimationEffectReadOnly::Trace(visitor);
 }

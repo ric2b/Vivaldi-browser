@@ -8,11 +8,12 @@
 #include <stdint.h>
 
 #include <memory>
-#include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/strings/string_piece_forward.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_export.h"
+#include "net/cert/internal/general_names.h"
 
 namespace net {
 
@@ -22,73 +23,18 @@ namespace der {
 class Input;
 }  // namespace der
 
-// Bitfield values for the GeneralName types defined in RFC 5280. The ordering
-// and exact values are not important, but match the order from the RFC for
-// convenience.
-enum GeneralNameTypes {
-  GENERAL_NAME_NONE = 0,
-  GENERAL_NAME_OTHER_NAME = 1 << 0,
-  GENERAL_NAME_RFC822_NAME = 1 << 1,
-  GENERAL_NAME_DNS_NAME = 1 << 2,
-  GENERAL_NAME_X400_ADDRESS = 1 << 3,
-  GENERAL_NAME_DIRECTORY_NAME = 1 << 4,
-  GENERAL_NAME_EDI_PARTY_NAME = 1 << 5,
-  GENERAL_NAME_UNIFORM_RESOURCE_IDENTIFIER = 1 << 6,
-  GENERAL_NAME_IP_ADDRESS = 1 << 7,
-  GENERAL_NAME_REGISTERED_ID = 1 << 8,
-};
-
-// Represents a GeneralNames structure. When processing GeneralNames, it is
-// often necessary to know which types of names were present, and to check
-// all the names of a certain type. Therefore, a bitfield of all the name
-// types is kept, and the names are split into members for each type. Only
-// name types that are handled by this code are stored (though all types are
-// recorded in the bitfield.)
-// TODO(mattm): move this to some other file?
-struct NET_EXPORT GeneralNames {
-  GeneralNames();
-  ~GeneralNames();
-
-  // Create a GeneralNames object representing the DER-encoded
-  // |general_names_tlv|. Returns nullptr on failure, and may fill |errors| with
-  // additional information. |errors| must be non-null.
-  static std::unique_ptr<GeneralNames> Create(
-      const der::Input& general_names_tlv,
-      CertErrors* errors);
-
-  // ASCII hostnames.
-  std::vector<std::string> dns_names;
-
-  // DER-encoded Name values (not including the Sequence tag).
-  std::vector<std::vector<uint8_t>> directory_names;
-
-  // iPAddresses as sequences of octets in network byte order. This will be
-  // populated if the GeneralNames represents a Subject Alternative Name.
-  std::vector<IPAddress> ip_addresses;
-
-  // iPAddress ranges, as <IP, prefix length> pairs. This will be populated
-  // if the GeneralNames represents a Name Constraints.
-  std::vector<std::pair<IPAddress, unsigned>> ip_address_ranges;
-
-  // Which name types were present, as a bitfield of GeneralNameTypes.
-  // Includes both the supported and unsupported types (although unsupported
-  // ones may not be recorded depending on the context, like non-critical name
-  // constraints.)
-  int present_name_types = GENERAL_NAME_NONE;
-};
-
 // Parses a NameConstraints extension value and allows testing whether names are
 // allowed under those constraints as defined by RFC 5280 section 4.2.1.10.
 class NET_EXPORT NameConstraints {
  public:
-
   ~NameConstraints();
 
   // Parses a DER-encoded NameConstraints extension and initializes this object.
   // |extension_value| should be the extnValue from the extension (not including
   // the OCTET STRING tag). |is_critical| should be true if the extension was
   // marked critical. Returns nullptr if parsing the the extension failed.
-  // The object lifetime is not bound to the lifetime of |extension_value| data.
+  // The object may reference data from |extension_value|, so is only valid as
+  // long as |extension_value| is.
   static std::unique_ptr<NameConstraints> Create(
       const der::Input& extension_value,
       bool is_critical,
@@ -109,7 +55,7 @@ class NET_EXPORT NameConstraints {
   // would not be permitted if "bar.com" is permitted and "foo.bar.com" is
   // excluded, while "*.baz.com" would only be permitted if "baz.com" is
   // permitted.
-  bool IsPermittedDNSName(const std::string& name) const;
+  bool IsPermittedDNSName(base::StringPiece name) const;
 
   // Returns true if the directoryName |name_rdn_sequence| is permitted.
   // |name_rdn_sequence| should be the DER-encoded RDNSequence value (not
@@ -133,7 +79,7 @@ class NET_EXPORT NameConstraints {
   // that name form appears in the subject field or subjectAltName
   // extension of a subsequent certificate, then the application MUST
   // either process the constraint or reject the certificate.
-  int ConstrainedNameTypes() const;
+  int constrained_name_types() const { return constrained_name_types_; }
 
  private:
   bool Parse(const der::Input& extension_value,
@@ -142,6 +88,7 @@ class NET_EXPORT NameConstraints {
 
   GeneralNames permitted_subtrees_;
   GeneralNames excluded_subtrees_;
+  int constrained_name_types_ = GENERAL_NAME_NONE;
 };
 
 }  // namespace net

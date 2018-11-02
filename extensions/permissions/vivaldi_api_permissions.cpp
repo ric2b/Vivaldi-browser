@@ -19,6 +19,7 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kAutoUpdate, "autoUpdate"},
       {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
       {APIPermission::kCalendar, "calendar"},
+      {APIPermission::kContacts, "contacts" },
       {APIPermission::kDevtoolsPrivate, "devtoolsPrivate"},
       {APIPermission::kEditCommand, "editcommand"},
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},

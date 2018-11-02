@@ -40,11 +40,14 @@ const CGFloat kTileWidth = 73;
   self = [super initWithFrame:CGRectZero];
   if (self) {
     UIVibrancyEffect* labelEffect;
-    if (base::ios::IsRunningOnIOS10OrLater()) {
+    if (@available(iOS 10, *)) {
       labelEffect = [UIVibrancyEffect widgetSecondaryVibrancyEffect];
-    } else {
+    }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+    else {
       labelEffect = [UIVibrancyEffect notificationCenterVibrancyEffect];
     }
+#endif
 
     UIVisualEffectView* titleLabelEffectView =
         [[UIVisualEffectView alloc] initWithEffect:labelEffect];

@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
@@ -53,7 +55,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/grit/components_scaled_resources.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
@@ -63,6 +64,7 @@
 #include "content/public/browser/web_contents.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/cocoa/animation_utils.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/tracking_area.h"
@@ -434,7 +436,7 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     // (see |-addSubviewToPermanentList:|) will be wiped out.
     permanentSubviews_.reset([[NSMutableArray alloc] init]);
 
-    ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     defaultFavicon_.reset(
         rb.GetNativeImageNamed(IDR_DEFAULT_FAVICON).CopyNSImage());
 
@@ -1251,9 +1253,7 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 - (void)setTabTitle:(TabController*)tab withContents:(WebContents*)contents {
   base::string16 title;
   if (contents)
-    title = contents->GetTitle();
-  if (title.empty())
-    title = l10n_util::GetStringUTF16(IDS_BROWSER_WINDOW_MAC_TAB_UNTITLED);
+    title = TabUIHelper::FromWebContents(contents)->GetTitle();
   [tab setTitle:base::SysUTF16ToNSString(title)];
 
   NSString* toolTip = base::SysUTF16ToNSString(chrome::AssembleTabTooltipText(
@@ -1322,6 +1322,13 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   [delegate_ onTabInsertedWithContents:contents inForeground:inForeground];
 }
 
+// Called when a notification is received from the model to close the tab with
+// the WebContents.
+- (void)tabClosingWithContents:(content::WebContents*)contents
+                       atIndex:(NSInteger)index {
+  wasHidingThrobberSet_.erase(contents);
+}
+
 // Called before |contents| is deactivated.
 - (void)tabDeactivatedWithContents:(content::WebContents*)contents {
   contents->StoreFocus();
@@ -1333,6 +1340,11 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
                previousContents:(content::WebContents*)oldContents
                         atIndex:(NSInteger)modelIndex
                          reason:(int)reason {
+  // It's possible for |newContents| to be null when the final tab in a tab
+  // strip is closed.
+  if (newContents && modelIndex != TabStripModel::kNoTab)
+    TabUIHelper::FromWebContents(newContents)->set_was_active_at_least_once();
+
   // Take closing tabs into account.
   if (oldContents) {
     int oldModelIndex =
@@ -1412,7 +1424,7 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   // Fake a tab changed notification to force tab titles and favicons to update.
   [self tabChangedWithContents:newContents
                        atIndex:modelIndex
-                    changeType:TabStripModelObserver::ALL];
+                    changeType:TabChangeType::kAll];
 }
 
 // Remove all knowledge about this tab and its associated controller, and remove
@@ -1564,25 +1576,29 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     return;
 
   static NSImage* throbberWaitingImage =
-      ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-          IDR_THROBBER_WAITING).CopyNSImage();
+      ui::ResourceBundle::GetSharedInstance()
+          .GetNativeImageNamed(IDR_THROBBER_WAITING)
+          .CopyNSImage();
   static NSImage* throbberWaitingIncognitoImage =
-      ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-          IDR_THROBBER_WAITING_INCOGNITO).CopyNSImage();
-  static NSImage* throbberLoadingImage =
-      ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-          IDR_THROBBER).CopyNSImage();
+      ui::ResourceBundle::GetSharedInstance()
+          .GetNativeImageNamed(IDR_THROBBER_WAITING_INCOGNITO)
+          .CopyNSImage();
+  static NSImage* throbberLoadingImage = ui::ResourceBundle::GetSharedInstance()
+                                             .GetNativeImageNamed(IDR_THROBBER)
+                                             .CopyNSImage();
   static NSImage* throbberLoadingIncognitoImage =
-      ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-          IDR_THROBBER_INCOGNITO).CopyNSImage();
+      ui::ResourceBundle::GetSharedInstance()
+          .GetNativeImageNamed(IDR_THROBBER_INCOGNITO)
+          .CopyNSImage();
   static NSImage* sadFaviconImage =
-      ResourceBundle::GetSharedInstance()
+      ui::ResourceBundle::GetSharedInstance()
           .GetNativeImageNamed(IDR_CRASH_SAD_FAVICON)
           .CopyNSImage();
 
   // Take closing tabs into account.
   NSInteger index = [self indexFromModelIndex:modelIndex];
   TabController* tabController = [tabArray_ objectAtIndex:index];
+  TabUIHelper* tabUIHelper = TabUIHelper::FromWebContents(contents);
 
   bool oldHasIcon = [tabController iconView] != nil;
   bool newHasIcon =
@@ -1614,12 +1630,33 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   if (oldState != newState)
     [tabController setLoadingState:newState];
 
-  // While loading, this function is called repeatedly with the same state.
-  // To avoid expensive unnecessary view manipulation, only make changes when
-  // the state is actually changing.  When loading is complete (kTabDone),
-  // every call to this function is significant.
-  if (newState == kTabDone || oldState != newState ||
-      oldHasIcon != newHasIcon) {
+  // Use TabUIHelper to determine if we would like to hide the throbber and
+  // override the favicon. We want to hide the throbber for 2 cases. 1) when a
+  // new tab is opened in the background and its initial navigation is delayed,
+  // and 2) when a tab is created by session restore. For the 1st one, there is
+  // no favicon available when the WebContents' initial navigation is delayed.
+  // So TabUIHelper will fetch the favicon from history if available and use
+  // that. For the 2nd case, TabUIhelper will return an empty favicon, so the
+  // WebContents' favicon is used.
+  //
+  // When the throbber should be shown, only make changes when the state is
+  // actually changing, to avoid expensive unnecessary view manipulation.
+  // Because while loading, this function is called repeatedly with the same
+  // state. When loading is complete (kTabDone), every call to this function is
+  // significant.
+  if (tabUIHelper->ShouldHideThrobber()) {
+    gfx::Image favicon = tabUIHelper->GetFavicon();
+    if (!favicon.IsEmpty()) {
+      [tabController setIconImage:favicon.AsNSImage()];
+    } else {
+      [tabController
+          setIconImage:[self iconImageForContents:contents atIndex:modelIndex]];
+    }
+    wasHidingThrobberSet_.insert(contents);
+  } else if (base::ContainsKey(wasHidingThrobberSet_, contents) ||
+             newState == kTabDone || oldState != newState ||
+             oldHasIcon != newHasIcon) {
+    wasHidingThrobberSet_.erase(contents);
     if (newHasIcon) {
       if (newState == kTabDone) {
         [tabController setIconImage:[self iconImageForContents:contents
@@ -1646,22 +1683,22 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 // throbber state, not anything else about the (partially) loading tab.
 - (void)tabChangedWithContents:(content::WebContents*)contents
                        atIndex:(NSInteger)modelIndex
-                    changeType:(TabStripModelObserver::TabChangeType)change {
+                    changeType:(TabChangeType)change {
   // Take closing tabs into account.
   NSInteger index = [self indexFromModelIndex:modelIndex];
 
   if (modelIndex == tabStripModel_->active_index())
     [delegate_ onTabChanged:change withContents:contents];
 
-  if (change == TabStripModelObserver::TITLE_NOT_LOADING) {
-    // TODO(sky): make this work.
+  TabController* tabController = [tabArray_ objectAtIndex:index];
+
+  if (change == TabChangeType::kTitleNotLoading) {
+    [tabController titleChangedNotLoading];
     // We'll receive another notification of the change asynchronously.
     return;
   }
 
-  TabController* tabController = [tabArray_ objectAtIndex:index];
-
-  if (change != TabStripModelObserver::LOADING_ONLY)
+  if (change != TabChangeType::kLoadingOnly)
     [self setTabTitle:tabController withContents:contents];
 
   [self updateIconsForContents:contents atIndex:modelIndex];
@@ -1724,14 +1761,25 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   [self layoutTabs];
 }
 
-- (void)tabNeedsAttentionAt:(NSInteger)modelIndex {
+- (void)tabBlockedStateChangedWithContents:(content::WebContents*)contents
+                                   atIndex:(NSInteger)modelIndex {
   // Take closing tabs into account.
   NSInteger index = [self indexFromModelIndex:modelIndex];
 
   TabController* tabController =
       base::mac::ObjCCastStrict<TabController>([tabArray_ objectAtIndex:index]);
 
-  [tabController setNeedsAttention];
+  [tabController setBlocked:tabStripModel_->IsTabBlocked(modelIndex)];
+}
+
+- (void)tabAtIndex:(NSInteger)modelIndex needsAttention:(bool)attention {
+  // Take closing tabs into account.
+  NSInteger index = [self indexFromModelIndex:modelIndex];
+
+  TabController* tabController =
+      base::mac::ObjCCastStrict<TabController>([tabArray_ objectAtIndex:index]);
+
+  [tabController setNeedsAttention:attention];
 }
 
 - (void)setFrame:(NSRect)frame ofTabView:(NSView*)view {

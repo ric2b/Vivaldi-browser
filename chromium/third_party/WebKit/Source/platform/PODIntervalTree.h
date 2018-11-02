@@ -85,7 +85,7 @@ class PODIntervalTree final : public PODRedBlackTree<PODInterval<T, UserData>> {
 
   PODIntervalTree() : PODRedBlackTree<IntervalType>() { Init(); }
 
-  explicit PODIntervalTree(PassRefPtr<PODArena> arena)
+  explicit PODIntervalTree(scoped_refptr<PODArena> arena)
       : PODRedBlackTree<IntervalType>(arena) {
     Init();
   }
@@ -129,7 +129,7 @@ class PODIntervalTree final : public PODRedBlackTree<PODInterval<T, UserData>> {
       return false;
     if (!this->Root())
       return true;
-    return CheckInvariantsFromNode(this->Root(), 0);
+    return CheckInvariantsFromNode(this->Root(), nullptr);
   }
 
  private:

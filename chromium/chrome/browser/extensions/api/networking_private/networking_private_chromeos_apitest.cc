@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
@@ -31,7 +32,9 @@
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_certificate_handler.h"
 #include "chromeos/network/network_handler.h"
+#include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/onc/onc_constants.h"
@@ -53,6 +56,7 @@
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/switches.h"
+#include "extensions/common/value_builder.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -67,8 +71,6 @@ using testing::Return;
 using testing::_;
 
 using chromeos::CryptohomeClient;
-using chromeos::DBUS_METHOD_CALL_SUCCESS;
-using chromeos::DBusMethodCallStatus;
 using chromeos::DBusThreadManager;
 using chromeos::NetworkPortalDetector;
 using chromeos::NetworkPortalDetectorTestImpl;
@@ -212,13 +214,6 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
   }
 
-  static void AssignString(std::string* out,
-                           DBusMethodCallStatus call_status,
-                           const std::string& result) {
-    CHECK_EQ(call_status, DBUS_METHOD_CALL_SUCCESS);
-    *out = result;
-  }
-
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionApiTest::SetUpCommandLine(command_line);
     // Whitelist the extension ID of the test extension.
@@ -245,7 +240,12 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     std::string userhash;
     DBusThreadManager::Get()->GetCryptohomeClient()->GetSanitizedUsername(
         cryptohome::Identification(user->GetAccountId()),
-        base::Bind(&AssignString, &userhash_));
+        base::BindOnce(
+            [](std::string* out, base::Optional<std::string> result) {
+              CHECK(result.has_value());
+              *out = std::move(result).value();
+            },
+            &userhash_));
     content::RunAllPendingInMessageLoop();
     CHECK(!userhash_.empty());
   }
@@ -494,14 +494,12 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   }
 
   bool SetupCertificates() {
-    scoped_refptr<net::X509Certificate> system_ca_cert =
-        net::ImportCertFromFile(net::GetTestCertsDirectory(),
-                                "client_1_ca.pem");
-    if (!system_ca_cert)
+    net::ScopedCERTCertificateList cert_list =
+        net::CreateCERTCertificateListFromFile(
+            net::GetTestCertsDirectory(), "client_1_ca.pem",
+            net::X509Certificate::FORMAT_AUTO);
+    if (cert_list.empty())
       return false;
-
-    net::CertificateList cert_list;
-    cert_list.push_back(std::move(system_ca_cert));
     // TODO(stevenjb): Figure out a simple way to import a test user cert.
 
     chromeos::NetworkHandler::Get()
@@ -609,6 +607,12 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, RequestNetworkScan) {
   EXPECT_TRUE(RunNetworkingSubtest("requestNetworkScan")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       RequestNetworkScanCellular) {
+  SetupCellular();
+  EXPECT_TRUE(RunNetworkingSubtest("requestNetworkScanCellular")) << message_;
+}
+
 // Properties are filtered and translated through
 // ShillToONCTranslator::TranslateWiFiWithState
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetProperties) {
@@ -619,6 +623,27 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
                        GetCellularProperties) {
   SetupCellular();
   EXPECT_TRUE(RunNetworkingSubtest("getPropertiesCellular")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       GetCellularPropertiesDefault) {
+  SetupCellular();
+  const chromeos::NetworkState* cellular =
+      chromeos::NetworkHandler::Get()
+          ->network_state_handler()
+          ->FirstNetworkByType(chromeos::NetworkTypePattern::Cellular());
+  ASSERT_TRUE(cellular);
+  std::string cellular_guid = std::string(kCellular1ServicePath) + "_guid";
+  EXPECT_EQ(cellular_guid, cellular->guid());
+  // Remove the Cellular service. This should create a default Cellular network.
+  service_test_->RemoveService(kCellular1ServicePath);
+  content::RunAllPendingInMessageLoop();
+  cellular = chromeos::NetworkHandler::Get()
+                 ->network_state_handler()
+                 ->FirstNetworkByType(chromeos::NetworkTypePattern::Cellular());
+  ASSERT_TRUE(cellular);
+  EXPECT_EQ(cellular_guid, cellular->guid());
+  EXPECT_TRUE(RunNetworkingSubtest("getPropertiesCellularDefault")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetState) {
@@ -868,6 +893,28 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, UnlockCellularSim) {
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, SetCellularSimState) {
   SetupCellular();
   EXPECT_TRUE(RunNetworkingSubtest("setCellularSimState")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       SelectCellularMobileNetwork) {
+  SetupCellular();
+  // Create fake list of found networks.
+  std::unique_ptr<base::ListValue> found_networks =
+      extensions::ListBuilder()
+          .Append(extensions::DictionaryBuilder()
+                      .Set(shill::kNetworkIdProperty, "network1")
+                      .Set(shill::kTechnologyProperty, "GSM")
+                      .Set(shill::kStatusProperty, "current")
+                      .Build())
+          .Append(extensions::DictionaryBuilder()
+                      .Set(shill::kNetworkIdProperty, "network2")
+                      .Set(shill::kTechnologyProperty, "GSM")
+                      .Set(shill::kStatusProperty, "available")
+                      .Build())
+          .Build();
+  device_test_->SetDeviceProperty(
+      kCellularDevicePath, shill::kFoundNetworksProperty, *found_networks);
+  EXPECT_TRUE(RunNetworkingSubtest("selectCellularMobileNetwork")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, CellularSimPuk) {

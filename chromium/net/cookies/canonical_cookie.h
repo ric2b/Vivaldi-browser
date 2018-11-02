@@ -55,6 +55,24 @@ class NET_EXPORT CanonicalCookie {
       const base::Time& creation_time,
       const CookieOptions& options);
 
+  // Create a canonical cookie based on sanitizing the passed inputs in the
+  // context of the passed URL.  Returns a null unique pointer if the inputs
+  // cannot be sanitized.  If a cookie is created, |cookie->IsCanonical()|
+  // will be true.
+  static std::unique_ptr<CanonicalCookie> CreateSanitizedCookie(
+      const GURL& url,
+      const std::string& name,
+      const std::string& value,
+      const std::string& domain,
+      const std::string& path,
+      base::Time creation_time,
+      base::Time expiration_time,
+      base::Time last_access_time,
+      bool secure,
+      bool http_only,
+      CookieSameSite same_site,
+      CookiePriority priority);
+
   const std::string& Name() const { return name_; }
   const std::string& Value() const { return value_; }
   const std::string& Domain() const { return domain_; }
@@ -106,6 +124,7 @@ class NET_EXPORT CanonicalCookie {
   void SetLastAccessDate(const base::Time& date) {
     last_access_date_ = date;
   }
+  void SetCreationDate(const base::Time& date) { creation_date_ = date; }
 
   // Returns true if the given |url_path| path-matches the cookie-path as
   // described in section 5.1.4 in RFC 6265.
@@ -159,10 +178,10 @@ class NET_EXPORT CanonicalCookie {
   // greater than the last access time.
   bool IsCanonical() const;
 
-  // Sets the creation date of the cookie to the specified value.  It
-  // is only valid to call this method if the existing creation date
-  // is null.
-  void SetCreationDate(base::Time new_creation_date);
+  // Returns the cookie line (e.g. "cookie1=value1; cookie2=value2") represented
+  // by |cookies|. The string is built in the same order as the given list.
+  static std::string BuildCookieLine(
+      const std::vector<CanonicalCookie>& cookies);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CanonicalCookieTest, TestPrefixHistograms);

@@ -12,12 +12,12 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "components/metrics/metrics_log.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_log.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
 using metrics::OmniboxEventProto;
 
@@ -68,6 +68,10 @@ OmniboxEventProto::Suggestion::ResultType AsOmniboxEventResultType(
       return OmniboxEventProto::Suggestion::PHYSICAL_WEB;
     case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW:
       return OmniboxEventProto::Suggestion::PHYSICAL_WEB_OVERFLOW;
+    case AutocompleteMatchType::TAB_SEARCH:
+      // TODO(crbug.com/46672): Create a specific type and move this result
+      // under it.
+      return OmniboxEventProto::Suggestion::UNKNOWN_RESULT_TYPE;
     case AutocompleteMatchType::VOICE_SUGGEST:
       // VOICE_SUGGEST matches are only used in Java and are not logged,
       // so we should never reach this case.

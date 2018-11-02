@@ -12,28 +12,11 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
+#include "ui/message_center/notification.h"
 
 class Browser;
 class Profile;
-
-// NotificationDelegate which does nothing, useful for testing when
-// the notification events are not important.
-class MockNotificationDelegate : public NotificationDelegate {
- public:
-  explicit MockNotificationDelegate(const std::string& id);
-
-  // NotificationDelegate interface.
-  std::string id() const override;
-
- private:
-  ~MockNotificationDelegate() override;
-
-  std::string id_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockNotificationDelegate);
-};
 
 class StubNotificationUIManager : public NotificationUIManager {
  public:
@@ -44,7 +27,8 @@ class StubNotificationUIManager : public NotificationUIManager {
   unsigned int GetNotificationCount() const;
 
   // Returns a reference to the notification at index |index|.
-  const Notification& GetNotificationAt(unsigned int index) const;
+  const message_center::Notification& GetNotificationAt(
+      unsigned int index) const;
 
   // Sets a one-shot callback that will be invoked when a notification has been
   // added to the Notification UI manager. Will be invoked on the UI thread.
@@ -57,15 +41,15 @@ class StubNotificationUIManager : public NotificationUIManager {
   bool SilentDismissById(const std::string& delegate_id, ProfileID profile_id);
 
   // NotificationUIManager implementation.
-  void Add(const Notification& notification, Profile* profile) override;
-  bool Update(const Notification& notification, Profile* profile) override;
-  const Notification* FindById(const std::string& delegate_id,
-                               ProfileID profile_id) const override;
+  void Add(const message_center::Notification& notification,
+           Profile* profile) override;
+  bool Update(const message_center::Notification& notification,
+              Profile* profile) override;
+  const message_center::Notification* FindById(
+      const std::string& delegate_id,
+      ProfileID profile_id) const override;
   bool CancelById(const std::string& delegate_id,
                   ProfileID profile_id) override;
-  std::set<std::string> GetAllIdsByProfileAndSourceOrigin(
-      ProfileID profile_id,
-      const GURL& source) override;
   std::set<std::string> GetAllIdsByProfile(ProfileID profile_id) override;
   bool CancelAllBySourceOrigin(const GURL& source_origin) override;
   bool CancelAllByProfile(ProfileID profile_id) override;
@@ -75,7 +59,7 @@ class StubNotificationUIManager : public NotificationUIManager {
   GURL& last_canceled_source() { return last_canceled_source_; }
 
  private:
-  using NotificationPair = std::pair<Notification, ProfileID>;
+  using NotificationPair = std::pair<message_center::Notification, ProfileID>;
   std::vector<NotificationPair> notifications_;
 
   base::Closure notification_added_callback_;
@@ -95,7 +79,7 @@ class FullscreenStateWaiter {
   void Wait();
 
  private:
-  Browser* browser_;
+  Browser* const browser_;
   bool desired_state_;
 
   DISALLOW_COPY_AND_ASSIGN(FullscreenStateWaiter);

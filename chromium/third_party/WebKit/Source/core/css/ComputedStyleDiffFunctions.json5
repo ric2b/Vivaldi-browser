@@ -76,7 +76,7 @@
                 "grid-row-start", "grid-row-end", "grid-column-start", "grid-column-end",
                 "column-gap", "column-width", "column-rule-style",
                 "column-rule-width", "column-rule-color", "ColumnRuleColorIsCurrentColor", "VisitedLinkColumnRuleColor",
-                "column-count", "ColumnAutoCount", "ColumnAutoWidth", "column-fill", "ColumnNormalGap", "column-span",],
+                "column-count", "HasAutoColumnCount", "HasAutoColumnWidth", "column-fill", "HasNormalColumnGap", "column-span",],
         methods_to_diff: [
           {
             method: "BorderLeftWidth()",
@@ -171,10 +171,6 @@
           {
             predicate: "a.OpacityChangedStackingContext(b)",
             field_dependencies: ["IsStackingContext", "opacity"]
-          },
-          {
-            predicate: "a.CounterDirectivesEqual(b)",
-            field_dependencies: ["CounterDirectives"]
           },
         ]
     },
@@ -326,14 +322,15 @@
         name: "DiffTransformData",
         fields_to_diff: ["transform", "translate", "rotate",
                     "scale", "offset-path", "offset-rotate", "transform-origin",
-                     "offset-position", "offset-anchor", "offset-distance"],
+                     "offset-position", "offset-anchor", "offset-distance",
+                     "transform-box"],
     },
     {
         name: "UpdatePropertySpecificDifferencesTransform",
         fields_to_diff: ["transform", "translate", "rotate",
                     "scale", "offset-path", "offset-rotate", "transform-origin",
                      "offset-position", "offset-anchor", "offset-distance", 
-                     "perspective", "perspective-origin"],
+                     "perspective", "perspective-origin", "transform-box"],
         methods_to_diff: [
           {
             // It's possible for the old and new style transform data to be equivalent
@@ -394,7 +391,7 @@
         fields_to_diff: ["color", "VisitedLinkColor", "text-decoration-line",
                 "text-decoration-style", "text-decoration-color",
                 "VisitedLinkTextDecorationColor", "TextEmphasisFill",
-                "text-underline-position", "text-decoration-skip", "AppliedTextDecorations"],
+                "text-underline-position", "text-decoration-skip-ink", "AppliedTextDecorations"],
         methods_to_diff: [
           {
             method: "HasSimpleUnderlineInternal()",

@@ -151,6 +151,27 @@ class CalendarEventCreateFunction : public CalendarAsyncFunction {
   DISALLOW_COPY_AND_ASSIGN(CalendarEventCreateFunction);
 };
 
+class CalendarEventsCreateFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.eventsCreate", CALENDAR_CREATEEVENTS)
+  CalendarEventsCreateFunction() = default;
+
+ protected:
+  ~CalendarEventsCreateFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the calendar function to provide results.
+  void CreateEventsComplete(
+      std::shared_ptr<calendar::CreateEventsResult> results);
+
+ private:
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(CalendarEventsCreateFunction);
+};
+
 class CalendarUpdateEventFunction : public CalendarFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("calendar.updateEvent", CALENDAR_UPDATEEVENT)

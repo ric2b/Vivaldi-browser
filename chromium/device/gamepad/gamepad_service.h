@@ -7,6 +7,8 @@
 
 #include <memory>
 #include <set>
+#include <unordered_map>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -14,6 +16,7 @@
 #include "base/memory/singleton.h"
 #include "device/gamepad/gamepad_export.h"
 #include "device/gamepad/gamepad_provider.h"
+#include "device/gamepad/public/interfaces/gamepad.mojom.h"
 
 namespace {
 class SingleThreadTaskRunner;
@@ -82,6 +85,22 @@ class DEVICE_GAMEPAD_EXPORT GamepadService
   // Called on IO thread when a gamepad is disconnected.
   void OnGamepadDisconnected(int index, const Gamepad& pad);
 
+  // Request playback of a haptic effect on the specified gamepad. Once effect
+  // playback is complete or is preempted by a different effect, the callback
+  // will be called.
+  void PlayVibrationEffectOnce(
+      int pad_index,
+      mojom::GamepadHapticEffectType,
+      mojom::GamepadEffectParametersPtr,
+      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback);
+
+  // Resets the state of the vibration actuator on the specified gamepad. If any
+  // effects are currently being played, they are preempted and vibration is
+  // stopped.
+  void ResetVibrationActuator(
+      int pad_index,
+      mojom::GamepadHapticsManager::ResetVibrationActuatorCallback);
+
  private:
   friend struct base::DefaultSingletonTraits<GamepadService>;
   friend class GamepadServiceTestConstructor;
@@ -125,6 +144,11 @@ class DEVICE_GAMEPAD_EXPORT GamepadService
   typedef std::set<ConsumerInfo> ConsumerSet;
   ConsumerSet consumers_;
 
+  typedef std::unordered_map<device::GamepadConsumer*, std::vector<bool>>
+      ConsumerConnectedStateMap;
+
+  ConsumerConnectedStateMap inactive_consumer_state_;
+
   int num_active_consumers_;
 
   bool gesture_callback_pending_;
@@ -132,6 +156,6 @@ class DEVICE_GAMEPAD_EXPORT GamepadService
   DISALLOW_COPY_AND_ASSIGN(GamepadService);
 };
 
-}  // namespace content
+}  // namespace device
 
 #endif  // DEVICE_GAMEPAD_GAMEPAD_SERVICE_H_

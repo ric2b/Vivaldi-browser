@@ -10,24 +10,28 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/task_queue_impl.h"
+#include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/test_time_source.h"
-#include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
 #include "platform/scheduler/renderer/budget_pool.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
+#include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::ElementsAre;
 
-namespace {
+namespace blink {
+namespace scheduler {
+// To avoid symbol collisions in jumbo builds.
+namespace task_queue_throttler_unittest {
+
 bool MessageLoopTaskCounter(size_t* count) {
   *count = *count + 1;
   return true;
@@ -39,12 +43,6 @@ void AddOneTask(size_t* count) {
   (*count)++;
 }
 
-}  // namespace
-
-namespace blink {
-namespace scheduler {
-
-namespace {
 void RunTenTimesTask(size_t* count, scoped_refptr<TaskQueue> timer_queue) {
   if (++(*count) < 10) {
     timer_queue->PostTask(FROM_HERE,
@@ -73,8 +71,6 @@ class AutoAdvancingTestClock : public base::SimpleTestTickClock {
   base::TimeDelta advancing_interval_;
 };
 
-}  // namespace
-
 class TaskQueueThrottlerTest : public ::testing::Test {
  public:
   TaskQueueThrottlerTest() {}
@@ -84,13 +80,13 @@ class TaskQueueThrottlerTest : public ::testing::Test {
     clock_ = CreateClock();
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
     mock_task_runner_ =
-        make_scoped_refptr(new cc::OrderedSimpleTaskRunner(clock_.get(), true));
-    delegate_ = SchedulerTqmDelegateForTest::Create(
-        mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
-    scheduler_.reset(new RendererSchedulerImpl(delegate_));
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), true);
+    scheduler_.reset(
+        new RendererSchedulerImpl(CreateTaskQueueManagerWithUnownedClockForTest(
+            nullptr, mock_task_runner_, clock_.get())));
     task_queue_throttler_ = scheduler_->task_queue_throttler();
     timer_queue_ = scheduler_->NewTimerTaskQueue(
-        MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
+        MainThreadTaskQueue::QueueType::kFrameThrottleable);
   }
 
   void TearDown() override {
@@ -127,17 +123,16 @@ class TaskQueueThrottlerTest : public ::testing::Test {
       return true;
     return task_queue_impl->GetFenceForTest() ==
            static_cast<internal::EnqueueOrder>(
-               internal::EnqueueOrderValues::BLOCKING_FENCE);
+               internal::EnqueueOrderValues::kBlockingFence);
   }
 
  protected:
   virtual std::unique_ptr<AutoAdvancingTestClock> CreateClock() {
-    return base::MakeUnique<AutoAdvancingTestClock>(base::TimeDelta());
+    return std::make_unique<AutoAdvancingTestClock>(base::TimeDelta());
   }
 
   std::unique_ptr<AutoAdvancingTestClock> clock_;
   scoped_refptr<cc::OrderedSimpleTaskRunner> mock_task_runner_;
-  scoped_refptr<SchedulerTqmDelegate> delegate_;
   std::unique_ptr<RendererSchedulerImpl> scheduler_;
   scoped_refptr<TaskQueue> timer_queue_;
   TaskQueueThrottler* task_queue_throttler_;  // NOT OWNED
@@ -157,7 +152,7 @@ class TaskQueueThrottlerWithAutoAdvancingTimeTest
 
  protected:
   std::unique_ptr<AutoAdvancingTestClock> CreateClock() override {
-    return base::MakeUnique<AutoAdvancingTestClock>(
+    return std::make_unique<AutoAdvancingTestClock>(
         auto_advance_time_interval_);
   }
 
@@ -745,7 +740,7 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
   std::vector<base::TimeTicks> run_times;
 
   scoped_refptr<TaskQueue> second_queue = scheduler_->NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
+      MainThreadTaskQueue::QueueType::kFrameThrottleable);
 
   CPUTimeBudgetPool* pool =
       task_queue_throttler_->CreateCPUTimeBudgetPool("test");
@@ -1071,7 +1066,7 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
 
   scoped_refptr<MainThreadTaskQueue> second_queue =
       scheduler_->NewTimerTaskQueue(
-          MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
+          MainThreadTaskQueue::QueueType::kFrameThrottleable);
 
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
   task_queue_throttler_->IncreaseThrottleRefCount(second_queue.get());
@@ -1107,7 +1102,7 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest, TwoBudgetPools) {
   std::vector<base::TimeTicks> run_times;
 
   scoped_refptr<TaskQueue> second_queue = scheduler_->NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
+      MainThreadTaskQueue::QueueType::kFrameThrottleable);
 
   CPUTimeBudgetPool* pool1 =
       task_queue_throttler_->CreateCPUTimeBudgetPool("test");
@@ -1234,12 +1229,12 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(1003),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(1006),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(1009),
-                  base::TimeTicks() + base::TimeDelta::FromMilliseconds(1012),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(2000),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(2003),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(2006),
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(2009),
-                  base::TimeTicks() + base::TimeDelta::FromMilliseconds(2012)));
+                  base::TimeTicks() + base::TimeDelta::FromMilliseconds(3000),
+                  base::TimeTicks() + base::TimeDelta::FromMilliseconds(3003)));
 }
 
 TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
@@ -1273,5 +1268,6 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(3003)));
 }
 
+}  // namespace task_queue_throttler_unittest
 }  // namespace scheduler
 }  // namespace blink

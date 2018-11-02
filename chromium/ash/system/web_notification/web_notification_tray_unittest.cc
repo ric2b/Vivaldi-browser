@@ -4,9 +4,12 @@
 
 #include "ash/system/web_notification/web_notification_tray.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
+#include "ash/message_center/message_center_bubble.h"
+#include "ash/message_center/message_center_view.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
@@ -17,11 +20,11 @@
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
-#include "ash/system/web_notification/message_center_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
-#include "base/memory/ptr_util.h"
+#include "ash/wm/window_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/display/display.h"
@@ -30,11 +33,12 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_style.h"
-#include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/ui_controller.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
@@ -86,14 +90,8 @@ class TestItem : public SystemTrayItem {
 
 class WebNotificationTrayTest : public AshTestBase {
  public:
-  WebNotificationTrayTest() {}
-  ~WebNotificationTrayTest() override {}
-
-  void TearDown() override {
-    GetMessageCenter()->RemoveAllNotifications(
-        false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
-    AshTestBase::TearDown();
-  }
+  WebNotificationTrayTest() = default;
+  ~WebNotificationTrayTest() override = default;
 
  protected:
   void AddNotification(const std::string& id) {
@@ -206,9 +204,9 @@ TEST_F(WebNotificationTrayTest, WebNotificationPopupBubble) {
   AddNotification("test_id5");
   EXPECT_TRUE(GetTray()->IsPopupVisible());
 
-  GetTray()->message_center_tray_->ShowMessageCenterBubble(
+  GetTray()->message_center_ui_controller_->ShowMessageCenterBubble(
       false /* show_by_click */);
-  GetTray()->message_center_tray_->HideMessageCenterBubble();
+  GetTray()->message_center_ui_controller_->HideMessageCenterBubble();
 
   EXPECT_FALSE(GetTray()->IsPopupVisible());
 }
@@ -217,20 +215,20 @@ using message_center::NotificationList;
 
 TEST_F(WebNotificationTrayTest, ManyMessageCenterNotifications) {
   // Add the max visible notifications +1, ensure the correct visible number.
-  size_t notifications_to_add =
-      message_center::kMaxVisibleMessageCenterNotifications + 1;
+  size_t notifications_to_add = MessageCenterView::kMaxVisibleNotifications + 1;
   for (size_t i = 0; i < notifications_to_add; ++i) {
     std::string id = base::StringPrintf("test_id%d", static_cast<int>(i));
     AddNotification(id);
   }
-  bool shown = GetTray()->message_center_tray_->ShowMessageCenterBubble(
-      false /* show_by_click */);
+  bool shown =
+      GetTray()->message_center_ui_controller_->ShowMessageCenterBubble(
+          false /* show_by_click */);
   EXPECT_TRUE(shown);
   RunAllPendingInMessageLoop();
   EXPECT_TRUE(GetTray()->message_center_bubble() != NULL);
   EXPECT_EQ(notifications_to_add, GetMessageCenter()->NotificationCount());
   EXPECT_EQ(
-      message_center::kMaxVisibleMessageCenterNotifications,
+      MessageCenterView::kMaxVisibleNotifications,
       GetTray()->GetMessageCenterBubbleForTest()->NumMessageViewsForTest());
 }
 
@@ -287,8 +285,7 @@ TEST_F(WebNotificationTrayTest, PopupShownOnBothDisplays) {
 // RootWindow's bound can be bigger than display::Display's work area so that
 // openingsystem tray doesn't affect at all the work area of popups.
 TEST_F(WebNotificationTrayTest, PopupAndSystemTray) {
-  TestItem* test_item = new TestItem;
-  GetSystemTray()->AddTrayItem(base::WrapUnique(test_item));
+  GetSystemTray()->AddTrayItem(std::make_unique<TestItem>());
 
   AddNotification("test_id");
   EXPECT_TRUE(GetTray()->IsPopupVisible());
@@ -325,8 +322,7 @@ TEST_F(WebNotificationTrayTest, PopupAndAutoHideShelf) {
 
   // Create the system tray during auto-hide.
   widget = CreateTestWidget();
-  TestItem* test_item = new TestItem;
-  GetSystemTray()->AddTrayItem(base::WrapUnique(test_item));
+  GetSystemTray()->AddTrayItem(std::make_unique<TestItem>());
   GetSystemTray()->ShowDefaultView(BUBBLE_CREATE_NEW,
                                    false /* show_by_click */);
   UpdateAutoHideStateNow();
@@ -354,7 +350,7 @@ TEST_F(WebNotificationTrayTest, PopupAndFullscreen) {
   // this is used by immersive fullscreen and forces the shelf to be auto
   // hidden.
   wm::GetWindowState(widget->GetNativeWindow())
-      ->set_hide_shelf_when_fullscreen(false);
+      ->SetHideShelfWhenFullscreen(false);
   widget->SetFullscreen(true);
   RunAllPendingInMessageLoop();
 
@@ -394,6 +390,99 @@ TEST_F(WebNotificationTrayTest, PopupAndSystemTrayMultiDisplay) {
                                    false /* show_by_click */);
   EXPECT_GT(bottom, GetPopupWorkAreaBottom());
   EXPECT_EQ(bottom_second, GetPopupWorkAreaBottomForTray(GetSecondaryTray()));
+}
+
+TEST_F(WebNotificationTrayTest, VisibleSmallIcon) {
+  EXPECT_EQ(0u, GetTray()->visible_small_icons_.size());
+  EXPECT_EQ(3, GetTray()->tray_container()->child_count());
+  std::unique_ptr<message_center::Notification> notification =
+      std::make_unique<message_center::Notification>(
+          message_center::NOTIFICATION_TYPE_SIMPLE, "test",
+          base::ASCIIToUTF16("Test System Notification"),
+          base::ASCIIToUTF16("Notification message body."), gfx::Image(),
+          base::ASCIIToUTF16("system"), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::NotifierType::SYSTEM_COMPONENT,
+              "test"),
+          message_center::RichNotificationData(), nullptr /* delegate */);
+  notification->set_small_image(gfx::test::CreateImage(18, 18));
+  GetMessageCenter()->AddNotification(std::move(notification));
+  RunAllPendingInMessageLoop();
+  EXPECT_EQ(1u, GetTray()->visible_small_icons_.size());
+  EXPECT_EQ(4, GetTray()->tray_container()->child_count());
+}
+
+TEST_F(WebNotificationTrayTest, QuietModeIcon) {
+  WebNotificationTray::DisableAnimationsForTest(true);
+
+  AddNotification("test");
+  RunAllPendingInMessageLoop();
+
+  // There is a notification, so no bell & quiet mode icons are shown.
+  EXPECT_FALSE(GetTray()->bell_icon_->visible());
+  EXPECT_FALSE(GetTray()->quiet_mode_icon_->visible());
+
+  GetMessageCenter()->SetQuietMode(true);
+  RunAllPendingInMessageLoop();
+
+  // If there is a notification, setting quiet mode shouldn't change tray icons.
+  EXPECT_FALSE(GetTray()->bell_icon_->visible());
+  EXPECT_FALSE(GetTray()->quiet_mode_icon_->visible());
+
+  GetMessageCenter()->SetQuietMode(false);
+  GetMessageCenter()->RemoveAllNotifications(
+      false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
+  RunAllPendingInMessageLoop();
+
+  // If there is no notification, bell icon should be shown.
+  EXPECT_TRUE(GetTray()->bell_icon_->visible());
+  EXPECT_FALSE(GetTray()->quiet_mode_icon_->visible());
+
+  GetMessageCenter()->SetQuietMode(true);
+  RunAllPendingInMessageLoop();
+
+  // If there is no notification and quiet mode is set, it should show quiet
+  // mode icon.
+  EXPECT_FALSE(GetTray()->bell_icon_->visible());
+  EXPECT_TRUE(GetTray()->quiet_mode_icon_->visible());
+
+  WebNotificationTray::DisableAnimationsForTest(false);
+}
+
+// Makes sure that the system tray bubble closes when another window is
+// activated, and does not crash regardless of the initial activation state.
+TEST_F(WebNotificationTrayTest, CloseOnActivation) {
+  WebNotificationTray* tray = GetTray();
+
+  // Show the web notification bubble.
+  tray->ShowBubble(false /* show_by_click */);
+  EXPECT_FALSE(tray->GetBubbleView()->GetWidget()->IsActive());
+
+  // Test 1: no crash when there's no active window to begin with.
+  EXPECT_FALSE(wm::GetActiveWindow());
+
+  // Showing a new window and activating it will close the system bubble.
+  std::unique_ptr<views::Widget> widget(CreateTestWidget());
+  EXPECT_TRUE(widget->IsActive());
+  EXPECT_FALSE(tray->message_center_bubble());
+
+  // Wait for bubble to actually close.
+  RunAllPendingInMessageLoop();
+
+  // Show a second widget.
+  std::unique_ptr<views::Widget> second_widget(CreateTestWidget());
+  EXPECT_TRUE(second_widget->IsActive());
+
+  // Re-show the system bubble.
+  tray->ShowBubble(false /* show_by_click */);
+  EXPECT_FALSE(tray->GetBubbleView()->GetWidget()->IsActive());
+
+  // Test 2: also no crash when there is a previously active window.
+  EXPECT_TRUE(wm::GetActiveWindow());
+
+  // Re-activate the first widget. The system bubble should hide again.
+  widget->Activate();
+  EXPECT_FALSE(tray->message_center_bubble());
 }
 
 }  // namespace ash

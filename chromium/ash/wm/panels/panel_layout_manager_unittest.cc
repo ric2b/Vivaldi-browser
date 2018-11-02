@@ -60,8 +60,8 @@ using aura::test::WindowIsAbove;
 
 class PanelLayoutManagerTest : public AshTestBase {
  public:
-  PanelLayoutManagerTest() {}
-  ~PanelLayoutManagerTest() override {}
+  PanelLayoutManagerTest() = default;
+  ~PanelLayoutManagerTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -116,7 +116,7 @@ class PanelLayoutManagerTest : public AshTestBase {
 
   void PanelInScreen(aura::Window* panel) {
     gfx::Rect panel_bounds = panel->GetBoundsInRootWindow();
-    gfx::Point root_point = gfx::Point(panel_bounds.x(), panel_bounds.y());
+    gfx::Point root_point = panel_bounds.origin();
     display::Display display =
         display::Screen::GetScreen()->GetDisplayNearestPoint(root_point);
 
@@ -265,7 +265,7 @@ class PanelLayoutManagerTextDirectionTest
       public testing::WithParamInterface<bool> {
  public:
   PanelLayoutManagerTextDirectionTest() : is_rtl_(GetParam()) {}
-  virtual ~PanelLayoutManagerTextDirectionTest() {}
+  virtual ~PanelLayoutManagerTextDirectionTest() = default;
 
   void SetUp() override {
     original_locale_ = base::i18n::GetConfiguredLocale();
@@ -542,10 +542,6 @@ TEST_F(PanelLayoutManagerTest, RemoveLeftPanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveMiddlePanel) {
-  // TODO: fails because of ShelfModel. http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -561,10 +557,6 @@ TEST_F(PanelLayoutManagerTest, RemoveMiddlePanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveRightPanel) {
-  // TODO: fails because of ShelfModel. http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -580,10 +572,6 @@ TEST_F(PanelLayoutManagerTest, RemoveRightPanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, RemoveNonActivePanel) {
-  // TODO: fails because of ShelfModel. http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect bounds(0, 0, 201, 201);
   std::unique_ptr<aura::Window> w1(CreatePanelWindow(bounds));
   std::unique_ptr<aura::Window> w2(CreatePanelWindow(bounds));
@@ -679,10 +667,6 @@ TEST_F(PanelLayoutManagerTest, MinimizeRestorePanel) {
 }
 
 TEST_F(PanelLayoutManagerTest, PanelMoveBetweenMultipleDisplays) {
-  // TODO: fails because of ShelfModel. http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   // Keep the displays wide so that shelves have enough space for launcher
   // buttons.
   UpdateDisplay("600x400,600x400");

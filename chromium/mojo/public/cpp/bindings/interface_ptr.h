@@ -24,7 +24,9 @@ namespace mojo {
 // A pointer to a local proxy of a remote Interface implementation. Uses a
 // message pipe to communicate with the remote implementation, and automatically
 // closes the pipe and deletes the proxy on destruction. The pointer must be
-// bound to a message pipe before the interface methods can be called.
+// bound to a message pipe before the interface methods can be called. Once a
+// pointer is destroyed, it is guaranteed that pending callbacks as well as the
+// connection error handler (if registered) won't be called.
 //
 // This class is thread hostile, as is the local proxy it manages, while bound
 // to a message pipe. All calls to this class or the proxy should be from the
@@ -39,6 +41,7 @@ class InterfacePtr {
  public:
   using InterfaceType = Interface;
   using PtrInfoType = InterfacePtrInfo<Interface>;
+  using Proxy = typename Interface::Proxy_;
 
   // Constructs an unbound InterfacePtr.
   InterfacePtr() {}
@@ -48,6 +51,8 @@ class InterfacePtr {
   InterfacePtr(InterfacePtr&& other) {
     internal_state_.Swap(&other.internal_state_);
   }
+
+  explicit InterfacePtr(PtrInfoType&& info) { Bind(std::move(info)); }
 
   // Takes over the binding of another InterfacePtr, and closes any message pipe
   // already bound to this pointer.
@@ -89,11 +94,11 @@ class InterfacePtr {
 
   // Returns a raw pointer to the local proxy. Caller does not take ownership.
   // Note that the local proxy is thread hostile, as stated above.
-  Interface* get() const { return internal_state_.instance(); }
+  Proxy* get() const { return internal_state_.instance(); }
 
   // Functions like a pointer to Interface. Must already be bound.
-  Interface* operator->() const { return get(); }
-  Interface& operator*() const { return *get(); }
+  Proxy* operator->() const { return get(); }
+  Proxy& operator*() const { return *get(); }
 
   // Returns the version number of the interface that the remote side supports.
   uint32_t version() const { return internal_state_.version(); }
@@ -122,8 +127,7 @@ class InterfacePtr {
   // stimulus.
   void FlushForTesting() { internal_state_.FlushForTesting(); }
 
-  // Closes the bound message pipe (if any) and returns the pointer to the
-  // unbound state.
+  // Closes the bound message pipe, if any.
   void reset() {
     State doomed;
     internal_state_.Swap(&doomed);

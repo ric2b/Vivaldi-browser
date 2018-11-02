@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
@@ -21,7 +20,21 @@
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "ui/gfx/geometry/rect.h"
 
-using bookmarks::BookmarkModel;
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#include "components/omnibox/browser/vector_icons.h"  // nogncheck
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icon_types.h"
+#endif
+
+namespace {
+
+size_t GetFaviconCacheSize() {
+  // Set cache size to twice the number of maximum results to avoid favicon
+  // refetches as the user types. Favicon fetches are uncached and can hit disk.
+  return 2 * AutocompleteResult::GetMaxMatches();
+}
+
+}  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // OmniboxPopupModel
@@ -30,10 +43,12 @@ const size_t OmniboxPopupModel::kNoMatch = static_cast<size_t>(-1);
 
 OmniboxPopupModel::OmniboxPopupModel(OmniboxPopupView* popup_view,
                                      OmniboxEditModel* edit_model)
-    : view_(popup_view),
+    : favicons_cache_(GetFaviconCacheSize()),
+      view_(popup_view),
       edit_model_(edit_model),
       selected_line_(kNoMatch),
       selected_line_state_(NORMAL),
+      has_selected_match_(false),
       weak_factory_(this) {
   edit_model->set_popup_model(this);
 }
@@ -117,15 +132,7 @@ void OmniboxPopupModel::SetSelectedLine(size_t line,
 
   line = std::min(line, result.size() - 1);
   const AutocompleteMatch& match = result.match_at(line);
-  if (reset_to_default) {
-    manually_selected_match_.Clear();
-  } else {
-    // Track the user's selection until they cancel it.
-    manually_selected_match_.destination_url = match.destination_url;
-    manually_selected_match_.provider_affinity = match.provider;
-    manually_selected_match_.is_history_what_you_typed_match =
-        match.type == AutocompleteMatchType::URL_WHAT_YOU_TYPED;
-  }
+  has_selected_match_ = !reset_to_default;
 
   if (line == selected_line_ && !force)
     return;  // Nothing else to do.
@@ -158,7 +165,7 @@ void OmniboxPopupModel::SetSelectedLine(size_t line,
   match.GetKeywordUIState(service, &keyword, &is_keyword_hint);
 
   if (reset_to_default) {
-    edit_model_->OnPopupDataChanged(match.inline_autocompletion, NULL,
+    edit_model_->OnPopupDataChanged(match.inline_autocompletion, nullptr,
                                     keyword, is_keyword_hint);
   } else {
     edit_model_->OnPopupDataChanged(match.fill_into_edit, &current_destination,
@@ -212,7 +219,7 @@ void OmniboxPopupModel::TryDeletingCurrentItem() {
   const AutocompleteMatch& match = result().match_at(selected_line_);
   if (match.SupportsDeletion()) {
     const size_t selected_line = selected_line_;
-    const bool was_temporary_text = !manually_selected_match_.empty();
+    const bool was_temporary_text = has_selected_match_;
 
     // This will synchronously notify both the edit and us that the results
     // have changed, causing both to revert to the default match.
@@ -231,13 +238,8 @@ void OmniboxPopupModel::TryDeletingCurrentItem() {
   }
 }
 
-gfx::Image OmniboxPopupModel::GetIconIfExtensionMatch(
-    const AutocompleteMatch& match) const {
-  return edit_model_->client()->GetIconIfExtensionMatch(match);
-}
-
 bool OmniboxPopupModel::IsStarredMatch(const AutocompleteMatch& match) const {
-  BookmarkModel* bookmark_model = edit_model_->client()->GetBookmarkModel();
+  auto* bookmark_model = edit_model_->client()->GetBookmarkModel();
   return bookmark_model && bookmark_model->IsBookmarked(match.destination_url);
 }
 
@@ -248,43 +250,8 @@ void OmniboxPopupModel::OnResultChanged() {
       kNoMatch : static_cast<size_t>(result.default_match() - result.begin());
   // There had better not be a nonempty result set with no default match.
   CHECK((selected_line_ != kNoMatch) || result.empty());
-  manually_selected_match_.Clear();
+  has_selected_match_ = false;
   selected_line_state_ = NORMAL;
-
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
-  // Update all match icons.
-  if (base::FeatureList::IsEnabled(
-          omnibox::kUIExperimentShowSuggestionFavicons)) {
-    favicon_task_tracker_.TryCancelAll();
-
-    if (result.size() != displayed_page_favicons_.size())
-      displayed_page_favicons_.resize(result.size());
-
-    for (size_t i = 0; i < result.size(); i++) {
-      const AutocompleteMatch& match = result.match_at(i);
-      if (AutocompleteMatch::IsSearchType(match.type)) {
-        // Clear any existing icon.
-        if (!displayed_page_favicons_[i].is_empty())
-          OnPageFaviconFetched(i, GURL(), gfx::Image());
-        continue;
-      }
-
-      // If we already show the correct favicon, skip refetching to avoid
-      // hitting the favicon database and to avoid flicker.
-      //
-      // TODO(tommycli): Investigate whether the fetching can be done in the
-      // autocomplete controller, which already has knowledge of whether and
-      // when the matches are changing.
-      if (match.destination_url == displayed_page_favicons_[i])
-        continue;
-
-      edit_model_->client()->GetFaviconForPageUrl(
-          &favicon_task_tracker_, match.destination_url,
-          base::Bind(&OmniboxPopupModel::OnPageFaviconFetched,
-                     weak_factory_.GetWeakPtr(), i, match.destination_url));
-    }
-  }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
   bool popup_was_open = view_->IsOpen();
   view_->UpdatePopupAppearance();
@@ -308,12 +275,59 @@ void OmniboxPopupModel::SetAnswerBitmap(const SkBitmap& bitmap) {
   view_->UpdatePopupAppearance();
 }
 
-void OmniboxPopupModel::OnPageFaviconFetched(size_t match_index,
-                                             const GURL& page_url,
-                                             const gfx::Image& icon) {
-  DCHECK_LT(match_index, displayed_page_favicons_.size());
-  DCHECK_NE(displayed_page_favicons_[match_index], page_url);
+// Android and iOS have their own platform-specific icon logic.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
+                                           SkColor vector_icon_color) {
+  gfx::Image extension_icon =
+      edit_model_->client()->GetIconIfExtensionMatch(match);
+  if (!extension_icon.IsEmpty())
+    return extension_icon;
 
-  displayed_page_favicons_[match_index] = page_url;
-  view_->SetMatchIcon(match_index, icon);
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentShowSuggestionFavicons) &&
+      !AutocompleteMatch::IsSearchType(match.type)) {
+    const GURL& page_url = match.destination_url;
+    auto cache_iterator = favicons_cache_.Get(page_url);
+    if (cache_iterator != favicons_cache_.end() &&
+        !cache_iterator->second.IsEmpty()) {
+      return cache_iterator->second;
+    }
+
+    // We don't have the favicon in the cache. We kick off the request, but
+    // don't early return. We proceed to return the vector icon for the match
+    // type. If and when we ever get the favicon back, we send a notification.
+    //
+    // Note: We're relying on GetFaviconForPageUrl to call the callback
+    // asynchronously. If the callback is called synchronously, the fetched
+    // favicon may get clobbered by the vector icon once this method returns.
+    edit_model_->client()->GetFaviconForPageUrl(
+        &favicon_task_tracker_, match.destination_url,
+        base::Bind(&OmniboxPopupModel::OnFaviconFetched,
+                   weak_factory_.GetWeakPtr(), match.destination_url));
+  }
+
+  const auto& vector_icon_type =
+      IsStarredMatch(match) ? omnibox::kStarIcon
+                            : AutocompleteMatch::TypeToVectorIcon(match.type);
+  return gfx::Image(
+      gfx::CreateVectorIcon(vector_icon_type, 16, vector_icon_color));
+}
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+
+void OmniboxPopupModel::OnFaviconFetched(const GURL& page_url,
+                                         const gfx::Image& icon) {
+  if (icon.IsEmpty())
+    return;
+
+  favicons_cache_.Put(page_url, icon);
+
+  // Notify all affected matches.
+  for (size_t i = 0; i < result().size(); ++i) {
+    auto& match = result().match_at(i);
+    if (!AutocompleteMatch::IsSearchType(match.type) &&
+        match.destination_url == page_url) {
+      view_->OnMatchIconUpdated(i);
+    }
+  }
 }

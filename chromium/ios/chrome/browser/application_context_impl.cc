@@ -16,7 +16,6 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
-#include "base/tracked_objects.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
@@ -42,7 +41,6 @@
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/ios_chrome_io_thread.h"
 #include "ios/chrome/browser/metrics/ios_chrome_metrics_services_manager_client.h"
-#include "ios/chrome/browser/net/crl_set_fetcher.h"
 #include "ios/chrome/browser/physical_web/create_physical_web_data_source.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
@@ -62,8 +60,7 @@ ApplicationContextImpl::ApplicationContextImpl(
     const base::CommandLine& command_line,
     const std::string& locale)
     : local_state_task_runner_(local_state_task_runner),
-      was_last_shutdown_clean_(false),
-      is_shutting_down_(false) {
+      was_last_shutdown_clean_(false) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 
@@ -77,7 +74,6 @@ ApplicationContextImpl::ApplicationContextImpl(
 
 ApplicationContextImpl::~ApplicationContextImpl() {
   DCHECK_EQ(this, GetApplicationContext());
-  tracked_objects::ThreadData::EnsureCleanupWasCalled(4);
   SetApplicationContext(nullptr);
 }
 
@@ -184,16 +180,6 @@ bool ApplicationContextImpl::WasLastShutdownClean() {
   return was_last_shutdown_clean_;
 }
 
-void ApplicationContextImpl::SetIsShuttingDown() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  is_shutting_down_ = true;
-}
-
-bool ApplicationContextImpl::IsShuttingDown() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return is_shutting_down_;
-}
-
 PrefService* ApplicationContextImpl::GetLocalState() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!local_state_)
@@ -296,14 +282,6 @@ ApplicationContextImpl::GetComponentUpdateService() {
             GetSystemURLRequestContext()));
   }
   return component_updater_.get();
-}
-
-CRLSetFetcher* ApplicationContextImpl::GetCRLSetFetcher() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!crl_set_fetcher_) {
-    crl_set_fetcher_ = new CRLSetFetcher;
-  }
-  return crl_set_fetcher_.get();
 }
 
 physical_web::PhysicalWebDataSource*

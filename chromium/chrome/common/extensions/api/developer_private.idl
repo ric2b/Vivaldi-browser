@@ -185,6 +185,11 @@ namespace developerPrivate {
     DOMString name;
   };
 
+  dictionary Permission {
+    DOMString message;
+    DOMString[] submessages;
+  };
+
   dictionary ExtensionInfo {
     boolean actionButtonHidden;
     DOMString? blacklistText;
@@ -204,12 +209,13 @@ namespace developerPrivate {
     Location location;
     DOMString? locationText;
     ManifestError[] manifestErrors;
+    DOMString manifestHomePageUrl;
     boolean mustRemainInstalled;
     DOMString name;
     boolean offlineEnabled;
     OptionsPage? optionsPage;
     DOMString? path;
-    DOMString[] permissions;
+    Permission[] permissions;
     DOMString? prettifiedPath;
     AccessModifier runOnAllUrls;
     RuntimeError[] runtimeErrors;
@@ -220,6 +226,7 @@ namespace developerPrivate {
     boolean userMayModify;
     DOMString version;
     ExtensionView[] views;
+    DOMString webStoreUrl;
   };
 
   dictionary ProfileInfo {
@@ -297,6 +304,11 @@ namespace developerPrivate {
     // If false, an alert dialog will show in the event of a reload error.
     // Defaults to false.
     boolean? failQuietly;
+
+    // If true, populates a LoadError for the response rather than setting
+    // lastError. Only relevant for unpacked extensions; it will be ignored for
+    // any other extension.
+    boolean? populateErrorForUnpacked;
   };
 
   dictionary LoadUnpackedOptions {
@@ -313,6 +325,11 @@ namespace developerPrivate {
     // associated with the identifier will be loaded, and the file chooser
     // will be skipped.
     DOMString? retryGuid;
+
+    // True if the function should try to load an extension from the drop data
+    // of the page. notifyDragInstallInProgress() needs to be called prior to
+    // this being used. This cannot be used with |retryGuid|.
+    boolean? useDraggedPath;
   };
 
   enum PackStatus {
@@ -477,12 +494,12 @@ namespace developerPrivate {
   callback ItemsInfoCallback = void (ItemInfo[] result);
   callback ProfileInfoCallback = void (ProfileInfo info);
   callback GetProjectsInfoCallback = void (ProjectInfo[] result);
-  callback PathCallback = void (DOMString path);
   callback PackCallback = void (PackDirectoryResponse response);
-  callback VoidCallback = void();
+  callback StringCallback = void (DOMString string);
   callback RequestFileSourceCallback =
       void (RequestFileSourceResponse response);
   callback LoadErrorCallback = void (optional LoadError error);
+  callback DragInstallInProgressCallback = void (DOMString loadGuid);
 
   interface Functions {
     // Runs auto update for extensions and apps immediately.
@@ -501,6 +518,11 @@ namespace developerPrivate {
     // |callback| : Called with the result.
     static void getExtensionInfo(DOMString id,
                                  optional ExtensionInfoCallback callback);
+
+    // Returns the size of a particular extension on disk (already formatted).
+    // |id| : The id of the extension.
+    // |callback| : Called with the result.
+    static void getExtensionSize(DOMString id, StringCallback callback);
 
     // Returns information of all the extensions and apps installed.
     // |includeDisabled| : include disabled items.
@@ -530,7 +552,7 @@ namespace developerPrivate {
     // |options| : Additional configuration parameters.
     static void reload(DOMString extensionId,
                        optional ReloadOptions options,
-                       optional VoidCallback callback);
+                       optional LoadErrorCallback callback);
 
     // Modifies an extension's current configuration.
     // |update| : The parameters for updating the extension's configuration.
@@ -544,11 +566,15 @@ namespace developerPrivate {
     static void loadUnpacked(optional LoadUnpackedOptions options,
                              optional LoadErrorCallback callback);
 
+    // Notifies the browser that a user began a drag in order to install an
+    // extension.
+    static void notifyDragInstallInProgress();
+
     // Loads an extension / app.
     // |directory| : The directory to load the extension from.
     static void loadDirectory(
         [instanceOf=DirectoryEntry] object directory,
-        PathCallback callback);
+        StringCallback callback);
 
     // Open Dialog to browse to an entry.
     // |selectType| : Select a file or a folder.
@@ -557,7 +583,7 @@ namespace developerPrivate {
     // |callback| : called with selected item's path.
     static void choosePath(SelectType selectType,
                            FileType fileType,
-                           PathCallback callback);
+                           StringCallback callback);
 
     // Pack an extension.
     // |rootPath| : The path of the extension.
@@ -581,7 +607,7 @@ namespace developerPrivate {
     static void openDevTools(OpenDevToolsProperties properties,
                              optional VoidCallback callback);
 
-    // Delete reported extension erors.
+    // Delete reported extension errors.
     // |properties| : The properties specifying the errors to remove.
     static void deleteExtensionErrors(
         DeleteExtensionErrorsProperties properties,

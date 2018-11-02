@@ -13,23 +13,26 @@
 namespace net {
 namespace test_server {
 
-HttpResponse::~HttpResponse() {
-}
+HttpResponse::~HttpResponse() = default;
 
 RawHttpResponse::RawHttpResponse(const std::string& headers,
                                  const std::string& contents)
     : headers_(headers), contents_(contents) {}
 
-RawHttpResponse::~RawHttpResponse() {}
+RawHttpResponse::~RawHttpResponse() = default;
 
 void RawHttpResponse::SendResponse(const SendBytesCallback& send,
                                    const SendCompleteCallback& done) {
   std::string response;
   if (!headers_.empty()) {
     response = headers_;
-    if (!base::EndsWith(response, "\n", base::CompareCase::SENSITIVE))
-      response += "\r\n";
-    response += "\r\n" + contents_;
+    // LocateEndOfHeadersHelper() searches for the first "\n\n" and "\n\r\n" as
+    // the end of the header.
+    std::size_t index = response.find_last_not_of("\r\n");
+    if (index != std::string::npos)
+      response.erase(index + 1);
+    response += "\n\n";
+    response += contents_;
   } else {
     response = contents_;
   }
@@ -43,8 +46,7 @@ void RawHttpResponse::AddHeader(const std::string& key_value_pair) {
 BasicHttpResponse::BasicHttpResponse() : code_(HTTP_OK) {
 }
 
-BasicHttpResponse::~BasicHttpResponse() {
-}
+BasicHttpResponse::~BasicHttpResponse() = default;
 
 std::string BasicHttpResponse::ToResponseString() const {
   // Response line with headers.

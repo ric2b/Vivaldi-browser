@@ -1,3 +1,4 @@
+import("//build/config/ui.gni")
 
 post_process_target("//chrome:chrome_initial") {
   deps += [ "//vivaldi/browser:vivaldi_version_info" ]

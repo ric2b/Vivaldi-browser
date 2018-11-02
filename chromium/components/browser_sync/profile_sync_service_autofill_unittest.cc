@@ -98,6 +98,8 @@ namespace browser_sync {
 namespace {
 
 void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(autofill::prefs::kAutofillCreditCardEnabled,
+                                true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillWalletImportEnabled,
                                 true);
@@ -105,6 +107,8 @@ void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 true);
   registry->RegisterIntegerPref(autofill::prefs::kAutofillLastVersionDeduped,
                                 atoi(version_info::GetVersionNumber().c_str()));
+  registry->RegisterDoublePref(autofill::prefs::kAutofillBillingCustomerNumber,
+                               0.0);
 }
 
 void RunAndSignal(const base::Closure& cb, WaitableEvent* event) {
@@ -706,7 +710,7 @@ class AddAutofillHelper {
 // Overload write transaction to use custom NotifyTransactionComplete
 class WriteTransactionTest : public WriteTransaction {
  public:
-  WriteTransactionTest(const tracked_objects::Location& from_here,
+  WriteTransactionTest(const base::Location& from_here,
                        WriterTag writer,
                        syncer::syncable::Directory* directory,
                        WaitableEvent* wait_for_syncapi)

@@ -26,11 +26,11 @@
 
 #include <algorithm>
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/TableConstants.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutTableCol.h"
 
 namespace blink {
@@ -53,7 +53,7 @@ bool HTMLTableColElement::IsPresentationAttribute(
 void HTMLTableColElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == widthAttr)
     AddHTMLLengthToStyle(style, CSSPropertyWidth, value);
   else
@@ -87,7 +87,7 @@ void HTMLTableColElement::ParseAttribute(
   }
 }
 
-const StylePropertySet*
+const CSSPropertyValueSet*
 HTMLTableColElement::AdditionalPresentationAttributeStyle() {
   if (!HasTagName(colgroupTag))
     return nullptr;

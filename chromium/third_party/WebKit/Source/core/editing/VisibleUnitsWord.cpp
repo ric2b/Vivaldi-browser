@@ -31,14 +31,9 @@
 #include "core/editing/VisibleUnits.h"
 
 #include "core/editing/EditingUtilities.h"
-#include "core/editing/iterators/BackwardsCharacterIterator.h"
-#include "core/editing/iterators/BackwardsTextBuffer.h"
-#include "core/editing/iterators/CharacterIterator.h"
-#include "core/editing/iterators/ForwardsTextBuffer.h"
-#include "core/editing/iterators/SimplifiedBackwardsTextIterator.h"
+#include "core/editing/VisiblePosition.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/TextBoundaries.h"
-#include "platform/text/TextBreakIterator.h"
 
 namespace blink {
 
@@ -67,7 +62,7 @@ PositionTemplate<Strategy> EndOfWordAlgorithm(
     EWordSide side) {
   DCHECK(c.IsValid()) << c;
   VisiblePositionTemplate<Strategy> p = c;
-  if (side == kLeftWordIfOnBoundary) {
+  if (side == kPreviousWordIfOnBoundary) {
     if (IsStartOfParagraph(c))
       return c.DeepEquivalent();
 
@@ -126,10 +121,8 @@ unsigned StartWordBoundary(
     return 0;
   }
   need_more_context = false;
-  int start, end;
   U16_BACK_1(characters, 0, offset);
-  FindWordBoundary(characters, length, offset, &start, &end);
-  return start;
+  return FindWordStartBoundary(characters, length, offset);
 }
 
 template <typename Strategy>
@@ -138,9 +131,9 @@ PositionTemplate<Strategy> StartOfWordAlgorithm(
     EWordSide side) {
   DCHECK(c.IsValid()) << c;
   // TODO(yosin) This returns a null VP for c at the start of the document
-  // and |side| == |LeftWordIfOnBoundary|
+  // and |side| == |kPreviousWordIfOnBoundary|
   VisiblePositionTemplate<Strategy> p = c;
-  if (side == kRightWordIfOnBoundary) {
+  if (side == kNextWordIfOnBoundary) {
     // at paragraph end, the startofWord is the current position
     if (IsEndOfParagraph(c))
       return c.DeepEquivalent();
@@ -160,7 +153,7 @@ Position EndOfWordPosition(const VisiblePosition& position, EWordSide side) {
 
 VisiblePosition EndOfWord(const VisiblePosition& position, EWordSide side) {
   return CreateVisiblePosition(EndOfWordPosition(position, side),
-                               VP_UPSTREAM_IF_POSSIBLE);
+                               TextAffinity::kUpstreamIfPossible);
 }
 
 PositionInFlatTree EndOfWordPosition(const VisiblePositionInFlatTree& position,
@@ -171,13 +164,14 @@ PositionInFlatTree EndOfWordPosition(const VisiblePositionInFlatTree& position,
 VisiblePositionInFlatTree EndOfWord(const VisiblePositionInFlatTree& position,
                                     EWordSide side) {
   return CreateVisiblePosition(EndOfWordPosition(position, side),
-                               VP_UPSTREAM_IF_POSSIBLE);
+                               TextAffinity::kUpstreamIfPossible);
 }
 
 VisiblePosition NextWordPosition(const VisiblePosition& c) {
   DCHECK(c.IsValid()) << c;
-  VisiblePosition next = CreateVisiblePosition(
-      NextBoundary(c, NextWordPositionBoundary), VP_UPSTREAM_IF_POSSIBLE);
+  VisiblePosition next =
+      CreateVisiblePosition(NextBoundary(c, NextWordPositionBoundary),
+                            TextAffinity::kUpstreamIfPossible);
   return HonorEditingBoundaryAtOrAfter(next, c.DeepEquivalent());
 }
 

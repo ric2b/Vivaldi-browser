@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <grit-part>
   <!-- Security summary strings -->
-  <!-- TODO(crbug.com/716305): Rename remaining IDS_PAGE_INFO_* strings to IDS_PAGE_INFO_* -->
   <message name="IDS_PAGE_INFO_SECURE_SUMMARY" desc="A short summary phrase at the top of the Page Info bubble (which shows when you click the lock icon) that indicates that the connection to the current website is secure.">
     Secure connection
   </message>
@@ -55,14 +54,15 @@
     The identity of this website has not been verified.
   </message>
 
-  <!-- Strings below are not used on iOS. -->
-  <if expr="not is_ios">
-
+  <if expr="chromeos">
     <!-- Administrator-provided certificate notifications -->
-    <!-- TODO(crbug.com/717802): Only include this on Chrome OS. -->
     <message name="IDS_CERT_POLICY_PROVIDED_CERT_MESSAGE" desc="Text that is displayed in the Page Info popup when using an administrator-provided certificate">
       You have accessed content using an administrator-provided certificate. Data you provide to <ph name="DOMAIN">$1<ex>www.google.com</ex></ph> can be intercepted by your administrator.
     </message>
+  </if>
+
+  <!-- Strings below are not used on iOS. -->
+  <if expr="not is_ios">
 
     <!-- Certificate exception decision UI (after clicking through an SSL certificate error) -->
     <!-- TODO(crbug.com/502473): Support revoking certificate overrides on iOS Page Info. -->
@@ -160,8 +160,20 @@
       <message name="IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK" desc="This appears in the Page Info bubble when a HTTPS site is loaded with an invalid certificate, e.g. https://wrong.host.badssl.com/. Text of the link that launches the Certificate Viewer.">
         Invalid
       </message>
-      <message name="IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP" desc="The text of the tooltip on IDS_PAGE_INFO_CERTIFICATE_VALID_LINK">
-        Issued by <ph name="ISSUER">$1<ex>Let's Encrypt X3</ex></ph>
+      <message name="IDS_PAGE_INFO_CERTIFICATE_BUTTON_TEXT" desc="Title of the certificate button in the Page Info bubble, shown when a HTTPS site is loaded. Clicking this button will show the certificate viewer.">
+        Certificate <ph name="CERTIFICATE_VALIDITY">$1<ex>(Invalid)</ex></ph>
+      </message>
+      <message name="IDS_PAGE_INFO_CERTIFICATE_VALID_PARENTHESIZED" desc="Button text used as part of IDS_PAGE_INFO_CERTIFICATE_BUTTON_TEXT when the Page Information bubble has been opened for a site with a valid certificate.">
+        (Valid)
+      </message>
+      <message name="IDS_PAGE_INFO_CERTIFICATE_INVALID_PARENTHESIZED" desc="Button text used as part of IDS_PAGE_INFO_CERTIFICATE_BUTTON_TEXT when the Page Information bubble has been opened for a site with an invalid certificate.">
+        (Invalid)
+      </message>
+      <message name="IDS_PAGE_INFO_CERTIFICATE_VALID_LINK_TOOLTIP" desc="The text of the tooltip on IDS_PAGE_INFO_CERTIFICATE_VALID_LINK.">
+        Show certificate (issued by <ph name="ISSUER">$1<ex>Let's Encrypt X3</ex></ph>)
+      </message>
+      <message name="IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK_TOOLTIP" desc="The text of the tooltip on IDS_PAGE_INFO_CERTIFICATE_INVALID_LINK.">
+        Show certificate
       </message>
     </if>
 
@@ -172,6 +184,15 @@
       </message>
       <message name="IDS_PAGE_INFO_NUM_COOKIES" desc="The label of the counts for allowed cookies that are in use on the page.">
         {NUM_COOKIES, plural, =1 {1 in use} other {# in use}}
+      </message>
+      <message name="IDS_PAGE_INFO_COOKIES_BUTTON_TEXT" desc="The label on a button in the Page Information Window that, when clicked, opens a dialog where cookies can be managed by the user.">
+          Cookies <ph name="NUM_COOKIES">$1<ex>(4 in use)</ex></ph>
+      </message>
+      <message name="IDS_PAGE_INFO_NUM_COOKIES_PARENTHESIZED" desc="The label of the counts for allowed cookies that are in use on the page. This text will be used in IDS_PAGE_INFO_COOKIES_BUTTON_TEXT.">
+        ({NUM_COOKIES, plural, =1 {1 in use} other {# in use}})
+      </message>
+      <message name="IDS_PAGE_INFO_COOKIES_TOOLTIP" desc="The text of the tooltip on IDS_PAGE_INFO_NUM_COOKIES.">
+        Show cookies
       </message>
     </if>
 
@@ -197,7 +218,7 @@
     <message name="IDS_PAGE_INFO_TYPE_FLASH" desc="The label used for Flash permissions in the Page Info popup.">
       Flash
     </message>
-    <message name="IDS_PAGE_INFO_TYPE_LOCATION" desc="The label used for location permission controls in the Page Info popup.">
+    <message name="IDS_PAGE_INFO_TYPE_LOCATION" desc="The label used for geolocation permission controls in the Page Info popup." meaning="Geolocation">
       Location
     </message>
     <message name="IDS_PAGE_INFO_TYPE_NOTIFICATIONS" desc="The label used for notifications permission controls in the Page Info popup.">
@@ -214,6 +235,9 @@
     </message>
     <message name="IDS_PAGE_INFO_TYPE_SOUND" desc="The label used for the sound permission controls in the Page Info popup.">
       Sound
+    </message>
+    <message name="IDS_PAGE_INFO_TYPE_CLIPBOARD" desc="The label used for the clipboard permission controls in the Page Info popup.">
+      Clipboard
     </message>
     <!-- TODO(crbug.com/716303): A few permissions are missing here. -->
 
@@ -270,6 +294,10 @@
       Block on this site
     </message>
 
+    <message name="IDS_PAGE_INFO_SELECTOR_TOOLTIP" desc="The text of the tooltip on the page info selector.">
+      Select permission for <ph name="PERMISSION_NAME">$1<ex>Location</ex></ph>
+    </message>
+
     <!-- UI for device access granted to the site using the device chooser (e.g. USB, Bluetooth) -->
     <message name="IDS_PAGE_INFO_USB_DEVICE_LABEL" desc="The label used to describe a USB device that the user has granted the site permission to access.">
       <ph name="DEVICE_NAME">$1<ex>Android Phone</ex></ph>
@@ -281,6 +309,9 @@
     <!-- Site settings link -->
     <message name="IDS_PAGE_INFO_SITE_SETTINGS_LINK" desc="This is the text of the link pointing to Chrome's Site Settings page. This appears at the bottom of the Permissions pane of the Page Information Window.">
       Site settings
+    </message>
+    <message name="IDS_PAGE_INFO_SITE_SETTINGS_TOOLTIP" desc="The text of the tooltip on IDS_PAGE_INFO_SITE_SETTINGS_LINK.">
+      Open site settings
     </message>
 
     <!-- Permission decision strings -->
@@ -319,19 +350,6 @@
       </message>
     </if>
 
-    <!-- VR browser -->
-    <message name="IDS_PAGE_INFO_VR_BROWSER_UNSUPPORTED_MODE" desc="This text is displayed as a large toast to inform the user that they cannot currently browse in VR and they will soon exit VR mode.">
-      This page contains features not yet supported in VR. Exiting...
-    </message>
-
-    <!-- WebVR -->
-    <message name="IDS_PAGE_INFO_INSECURE_WEBVR_CONTENT_TRANSIENT" desc="Text that is displayed temporarily as a large toast on first entering a WebVR page over non-secure transport.">
-      Your connection to this site is not private. To exit VR mode at any time, remove headset and press back.
-    </message>
-    <message name="IDS_PAGE_INFO_INSECURE_WEBVR_CONTENT_PERMANENT" desc="Text that is displayed in a small permanent notification on a WebVR page loaded over non-secure transport. (Should be short, does not need to be a complete sentence.)">
-      Not secure
-    </message>
-
     <!-- Password Protection -->
     <if expr="not is_android">
       <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if user has reuse their google password on current website.">
@@ -350,12 +368,23 @@
           You could lose access to your Google Account or experience identity theft. Chromium recommends changing your password now.
         </message>
       </if>
-      <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON" desc="The string used in the page info change password button.">
-        Help me fix this
-      </message>
-      <message name="IDS_PAGE_INFO_IGNORE_PASSWORD_WARNING_BUTTON" desc="The string used in the page info ignore password warning button.">
-        Ignore
-      </message>
+
+      <if expr="use_titlecase">
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON" desc="The string used in the page info change password button. Title case format.">
+          Help Me Fix This
+        </message>
+        <message name="IDS_PAGE_INFO_IGNORE_PASSWORD_WARNING_BUTTON" desc="The string used in the page info ignore password warning button. Title case format.">
+          Ignore
+        </message>
+      </if>
+      <if expr="not use_titlecase">
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON" desc="The string used in the page info change password button.">
+          Help me fix this
+        </message>
+        <message name="IDS_PAGE_INFO_IGNORE_PASSWORD_WARNING_BUTTON" desc="The string used in the page info ignore password warning button.">
+          Ignore
+        </message>
+      </if>
       <message name="IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON" desc="The string used in the page info whitelist password reuse button.">
         Site is legitimate
       </message>

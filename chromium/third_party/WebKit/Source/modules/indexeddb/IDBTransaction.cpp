@@ -30,7 +30,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/events/EventQueue.h"
-#include "modules/IndexedDBNames.h"
+#include "modules/indexed_db_names.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBEventDispatcher.h"
 #include "modules/indexeddb/IDBIndex.h"
@@ -82,29 +82,6 @@ IDBTransaction* IDBTransaction::CreateVersionChange(
                             old_metadata);
 }
 
-namespace {
-
-class DeactivateTransactionTask : public V8PerIsolateData::EndOfScopeTask {
- public:
-  static std::unique_ptr<DeactivateTransactionTask> Create(
-      IDBTransaction* transaction) {
-    return WTF::WrapUnique(new DeactivateTransactionTask(transaction));
-  }
-
-  void Run() override {
-    transaction_->SetActive(false);
-    transaction_.Clear();
-  }
-
- private:
-  explicit DeactivateTransactionTask(IDBTransaction* transaction)
-      : transaction_(transaction) {}
-
-  Persistent<IDBTransaction> transaction_;
-};
-
-}  // namespace
-
 IDBTransaction::IDBTransaction(ExecutionContext* execution_context,
                                int64_t id,
                                const HashSet<String>& scope,
@@ -140,7 +117,8 @@ IDBTransaction::IDBTransaction(ScriptState* script_state,
 
   DCHECK_EQ(state_, kActive);
   V8PerIsolateData::From(script_state->GetIsolate())
-      ->AddEndOfScopeTask(DeactivateTransactionTask::Create(this));
+      ->AddEndOfScopeTask(
+          WTF::Bind(&IDBTransaction::SetActive, WrapPersistent(this), false));
 
   database_->TransactionCreated(this);
 }
@@ -172,7 +150,7 @@ IDBTransaction::~IDBTransaction() {
   DCHECK(request_list_.IsEmpty() || !GetExecutionContext());
 }
 
-DEFINE_TRACE(IDBTransaction) {
+void IDBTransaction::Trace(blink::Visitor* visitor) {
   visitor->Trace(database_);
   visitor->Trace(open_db_request_);
   visitor->Trace(error_);
@@ -221,9 +199,9 @@ IDBObjectStore* IDBTransaction::objectStore(const String& name,
   }
 
   DCHECK(database_->Metadata().object_stores.Contains(object_store_id));
-  RefPtr<IDBObjectStoreMetadata> object_store_metadata =
+  scoped_refptr<IDBObjectStoreMetadata> object_store_metadata =
       database_->Metadata().object_stores.at(object_store_id);
-  DCHECK(object_store_metadata.Get());
+  DCHECK(object_store_metadata.get());
 
   IDBObjectStore* object_store =
       IDBObjectStore::Create(std::move(object_store_metadata), this);
@@ -233,7 +211,7 @@ IDBObjectStore* IDBTransaction::objectStore(const String& name,
   if (IsVersionChange()) {
     DCHECK(!object_store->IsNewlyCreated())
         << "Object store IDs are not assigned sequentially";
-    RefPtr<IDBObjectStoreMetadata> backup_metadata =
+    scoped_refptr<IDBObjectStoreMetadata> backup_metadata =
         object_store->Metadata().CreateCopy();
     old_store_metadata_.Set(object_store, std::move(backup_metadata));
   }
@@ -267,9 +245,9 @@ void IDBTransaction::ObjectStoreDeleted(const int64_t object_store_id,
     // revert the metadata change if the transaction aborts, in order to return
     // correct values from IDB{Database, Transaction}.objectStoreNames.
     DCHECK(database_->Metadata().object_stores.Contains(object_store_id));
-    RefPtr<IDBObjectStoreMetadata> metadata =
+    scoped_refptr<IDBObjectStoreMetadata> metadata =
         database_->Metadata().object_stores.at(object_store_id);
-    DCHECK(metadata.Get());
+    DCHECK(metadata.get());
     DCHECK_EQ(metadata->name, name);
     deleted_object_stores_.push_back(std::move(metadata));
   } else {
@@ -329,7 +307,7 @@ void IDBTransaction::IndexDeleted(IDBIndex* index) {
   }
 
   const IDBObjectStoreMetadata* old_store_metadata =
-      object_store_iterator->value.Get();
+      object_store_iterator->value.get();
   DCHECK(old_store_metadata);
   if (!old_store_metadata->indexes.Contains(index->Id())) {
     // The index's object store was created before this transaction, but the
@@ -600,7 +578,7 @@ void IDBTransaction::RevertDatabaseMetadata() {
 
   for (auto& it : old_store_metadata_) {
     IDBObjectStore* object_store = it.key;
-    RefPtr<IDBObjectStoreMetadata> old_metadata = it.value;
+    scoped_refptr<IDBObjectStoreMetadata> old_metadata = it.value;
 
     database_->RevertObjectStoreMetadata(old_metadata);
     object_store->RevertMetadata(old_metadata);

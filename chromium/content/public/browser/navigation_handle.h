@@ -13,6 +13,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/resource_request_body.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_info.h"
@@ -133,6 +134,12 @@ class CONTENT_EXPORT NavigationHandle {
   // |bool IsPost()| as opposed to |const std::string& GetMethod()| method.
   virtual bool IsPost() = 0;
 
+  // Returns the POST body associated with this navigation. This will be null
+  // for GET and/or other non-POST requests (or if a response to a POST request
+  // was a redirect that changed the method to GET - for example 302).
+  virtual const scoped_refptr<ResourceRequestBody>&
+  GetResourceRequestBody() = 0;
+
   // Returns a sanitized version of the referrer for this request.
   virtual const Referrer& GetReferrer() = 0;
 
@@ -231,6 +238,14 @@ class CONTENT_EXPORT NavigationHandle {
   // encountering a server redirect).
   virtual net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() = 0;
 
+  // Returns the SSLInfo for a request that succeeded or failed due to a
+  // certificate error. In the case of other request failures or of a non-secure
+  // scheme, returns an empty object.
+  virtual const net::SSLInfo& GetSSLInfo() = 0;
+
+  // Whether the failure for a certificate error should be fatal.
+  virtual bool ShouldSSLErrorsBeFatal() = 0;
+
   // Returns the ID of the URLRequest associated with this navigation. Can only
   // be called from NavigationThrottle::WillProcessResponse and
   // WebContentsObserver::ReadyToCommitNavigation.
@@ -238,6 +253,12 @@ class CONTENT_EXPORT NavigationHandle {
   // made. The transferred request's ID will not be tracked by the
   // NavigationHandle.
   virtual const GlobalRequestID& GetGlobalRequestID() = 0;
+
+  // Returns true if this navigation resulted in a download. Returns false if
+  // this navigation did not result in a download, or if download status is not
+  // yet known for this navigation.  Download status is determined for a
+  // navigation when processing final (post redirect) HTTP response headers.
+  virtual bool IsDownload() = 0;
 
   // Testing methods ----------------------------------------------------------
   //
@@ -274,6 +295,11 @@ class CONTENT_EXPORT NavigationHandle {
                                     bool new_method_is_post,
                                     const GURL& new_referrer_url,
                                     bool new_is_external_protocol) = 0;
+
+  // Simulates the network request failing.
+  virtual NavigationThrottle::ThrottleCheckResult CallWillFailRequestForTesting(
+      base::Optional<net::SSLInfo> ssl_info,
+      bool should_ssl_errors_be_fatal) = 0;
 
   // Simulates the reception of the network response.
   virtual NavigationThrottle::ThrottleCheckResult

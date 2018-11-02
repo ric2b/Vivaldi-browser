@@ -10,25 +10,23 @@
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebVector.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 
 namespace blink {
 
 class ExceptionState;
 class IDBDatabase;
-class IDBObserverCallback;
 class IDBObserverInit;
 class IDBTransaction;
+class V8IDBObserverCallback;
 
-class MODULES_EXPORT IDBObserver final : public GarbageCollected<IDBObserver>,
-                                         public ScriptWrappable {
+class MODULES_EXPORT IDBObserver final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IDBObserver* Create(IDBObserverCallback*);
+  static IDBObserver* Create(V8IDBObserverCallback*);
 
-  IDBObserverCallback* Callback() { return callback_; }
+  V8IDBObserverCallback* Callback() { return callback_; }
 
   // Implement the IDBObserver IDL.
   void observe(IDBDatabase*,
@@ -37,13 +35,13 @@ class MODULES_EXPORT IDBObserver final : public GarbageCollected<IDBObserver>,
                ExceptionState&);
   void unobserve(IDBDatabase*, ExceptionState&);
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
-  explicit IDBObserver(IDBObserverCallback*);
+  explicit IDBObserver(V8IDBObserverCallback*);
 
-  TraceWrapperMember<IDBObserverCallback> callback_;
+  TraceWrapperMember<V8IDBObserverCallback> callback_;
   HeapHashMap<int32_t, WeakMember<IDBDatabase>> observer_ids_;
 };
 

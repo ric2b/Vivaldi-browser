@@ -31,14 +31,13 @@
 #ifndef V0CustomElementProcessingStep_h
 #define V0CustomElementProcessingStep_h
 
+#include "base/macros.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
 class V0CustomElementProcessingStep
     : public GarbageCollectedFinalized<V0CustomElementProcessingStep> {
-  WTF_MAKE_NONCOPYABLE(V0CustomElementProcessingStep);
 
  public:
   V0CustomElementProcessingStep() {}
@@ -47,7 +46,9 @@ class V0CustomElementProcessingStep
   virtual void Dispatch(Element*) = 0;
   virtual bool IsCreatedCallback() const { return false; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
+
+  DISALLOW_COPY_AND_ASSIGN(V0CustomElementProcessingStep);
 };
 
 }  // namespace blink

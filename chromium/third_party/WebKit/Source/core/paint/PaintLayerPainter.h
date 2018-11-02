@@ -59,8 +59,6 @@ class CORE_EXPORT PaintLayerPainter {
 
   enum ClipState { kHasNotClipped, kHasClipped };
 
-  inline bool IsFixedPositionObjectInPagedMedia();
-
   // "For paged media, boxes with fixed positions are repeated on every page."
   // https://www.w3.org/TR/2011/REC-CSS2-20110607/visuren.html#fixed-positioning
   // Repeats singleFragmentIgnoredPagination of the fixed-position object in
@@ -143,14 +141,11 @@ class CORE_EXPORT PaintLayerPainter {
                           const ClipRect&,
                           const PaintLayerFlags&);
 
-  // Returns whether this layer should be painted during sofware painting (i.e.,
-  // not via calls from CompositedLayerMapping to draw into composited layers).
-  bool ShouldPaintLayerInSoftwareMode(const GlobalPaintFlags,
-                                      PaintLayerFlags paint_flags);
-
   // Returns true if the painted output of this PaintLayer and its children is
   // invisible and therefore can't impact painted output.
   bool PaintedOutputInvisible(const PaintLayerPaintingInfo&);
+
+  void AdjustForPaintOffsetTranslation(PaintLayerPaintingInfo&);
 
   PaintLayer& paint_layer_;
 };

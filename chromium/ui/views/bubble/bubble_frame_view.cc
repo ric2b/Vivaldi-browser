@@ -42,10 +42,10 @@ namespace views {
 namespace {
 
 // Background color of the footnote view.
-const SkColor kFootnoteBackgroundColor = SkColorSetRGB(245, 245, 245);
+constexpr SkColor kFootnoteBackgroundColor = SkColorSetRGB(250, 250, 250);
 
 // Color of the top border of the footnote.
-const SkColor kFootnoteBorderColor = SkColorSetRGB(229, 229, 229);
+constexpr SkColor kFootnoteBorderColor = SkColorSetRGB(235, 235, 235);
 
 // Get the |vertical| or horizontal amount that |available_bounds| overflows
 // |window_bounds|.
@@ -122,7 +122,7 @@ BubbleFrameView::~BubbleFrameView() {}
 // static
 std::unique_ptr<Label> BubbleFrameView::CreateDefaultTitleLabel(
     const base::string16& title_text) {
-  auto title = base::MakeUnique<Label>(title_text, style::CONTEXT_DIALOG_TITLE);
+  auto title = std::make_unique<Label>(title_text, style::CONTEXT_DIALOG_TITLE);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title->set_collapse_when_hidden(true);
   title->SetMultiLine(true);
@@ -134,7 +134,7 @@ Button* BubbleFrameView::CreateCloseButton(ButtonListener* listener) {
   ImageButton* close_button = nullptr;
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     close_button = CreateVectorImageButton(listener);
-    SetImageFromVectorIcon(close_button, vector_icons::kCloseIcon);
+    SetImageFromVectorIcon(close_button, vector_icons::kClose16Icon);
   } else {
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
     close_button = new ImageButton(listener);
@@ -452,7 +452,7 @@ void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   SetBorder(std::move(border));
 
   // Update the background, which relies on the border.
-  SetBackground(base::MakeUnique<views::BubbleBackground>(bubble_border_));
+  SetBackground(std::make_unique<views::BubbleBackground>(bubble_border_));
 }
 
 void BubbleFrameView::SetFootnoteView(View* view) {

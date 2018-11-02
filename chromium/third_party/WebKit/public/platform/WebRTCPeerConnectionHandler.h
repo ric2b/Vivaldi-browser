@@ -31,6 +31,7 @@
 #ifndef WebRTCPeerConnectionHandler_h
 #define WebRTCPeerConnectionHandler_h
 
+#include "WebRTCICECandidate.h"
 #include "WebRTCStats.h"
 #include "WebVector.h"
 
@@ -43,9 +44,7 @@ class WebRTCAnswerOptions;
 class WebRTCDTMFSenderHandler;
 class WebRTCDataChannelHandler;
 enum class WebRTCErrorType;
-class WebRTCICECandidate;
 class WebRTCOfferOptions;
-class WebRTCRtpReceiver;
 class WebRTCRtpSender;
 class WebRTCSessionDescription;
 class WebRTCSessionDescriptionRequest;
@@ -79,10 +78,12 @@ class WebRTCPeerConnectionHandler {
   virtual WebRTCErrorType SetConfiguration(const WebRTCConfiguration&) = 0;
 
   // DEPRECATED
-  virtual bool AddICECandidate(const WebRTCICECandidate&) { return false; }
+  virtual bool AddICECandidate(scoped_refptr<WebRTCICECandidate>) {
+    return false;
+  }
 
   virtual bool AddICECandidate(const WebRTCVoidRequest&,
-                               const WebRTCICECandidate&) {
+                               scoped_refptr<WebRTCICECandidate>) {
     return false;
   }
   virtual bool AddStream(const WebMediaStream&, const WebMediaConstraints&) = 0;
@@ -99,10 +100,6 @@ class WebRTCPeerConnectionHandler {
   // webrtc-layer senders, multiple |WebRTCRtpSender| objects referencing the
   // same webrtc-layer sender have the same |id|.
   virtual WebVector<std::unique_ptr<WebRTCRtpSender>> GetSenders() = 0;
-  // Gets receivers used by the peer connection. These are wrappers referencing
-  // webrtc-layer receivers, multiple |WebRTCRtpReceiver| objects referencing
-  // the same webrtc-layer receiver have the same |id|.
-  virtual WebVector<std::unique_ptr<WebRTCRtpReceiver>> GetReceivers() = 0;
   // Adds the track to the peer connection, returning the resulting sender on
   // success and null on failure.
   virtual std::unique_ptr<WebRTCRtpSender> AddTrack(

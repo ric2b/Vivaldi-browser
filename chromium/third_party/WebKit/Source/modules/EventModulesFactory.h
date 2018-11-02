@@ -6,9 +6,9 @@
 #define EventModulesFactory_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/events/EventFactory.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/AtomicString.h"
 
@@ -19,7 +19,7 @@ class Event;
 class EventModulesFactory final : public EventFactoryBase {
  public:
   static std::unique_ptr<EventModulesFactory> Create() {
-    return WTF::MakeUnique<EventModulesFactory>();
+    return std::make_unique<EventModulesFactory>();
   }
 
   Event* Create(ExecutionContext*, const String& event_type) override;

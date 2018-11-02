@@ -12,7 +12,7 @@
 namespace cc {
 
 scoped_refptr<AnimationTimeline> AnimationTimeline::Create(int id) {
-  return make_scoped_refptr(new AnimationTimeline(id));
+  return base::WrapRefCounted(new AnimationTimeline(id));
 }
 
 AnimationTimeline::AnimationTimeline(int id)
@@ -126,10 +126,9 @@ void AnimationTimeline::PushPropertiesToImplThread(
     AnimationTimeline* timeline_impl) {
   for (auto& kv : id_to_player_map_) {
     AnimationPlayer* player = kv.second.get();
-    if (player->needs_push_properties()) {
-      AnimationPlayer* player_impl = timeline_impl->GetPlayerById(player->id());
-      if (player_impl)
-        player->PushPropertiesTo(player_impl);
+    if (AnimationPlayer* player_impl =
+            timeline_impl->GetPlayerById(player->id())) {
+      player->PushPropertiesTo(player_impl);
     }
   }
 }

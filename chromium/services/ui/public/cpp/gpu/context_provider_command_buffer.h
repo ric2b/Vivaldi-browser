@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -27,6 +28,7 @@
 namespace gpu {
 class CommandBufferProxyImpl;
 class GpuChannelHost;
+struct GpuFeatureInfo;
 class TransferBuffer;
 namespace gles2 {
 class GLES2CmdHelper;
@@ -66,17 +68,17 @@ class ContextProviderCommandBuffer
   uint32_t GetCopyTextureInternalFormat();
 
   // viz::ContextProvider implementation.
-  bool BindToCurrentThread() override;
-  void DetachFromThread() override;
+  gpu::ContextResult BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
   viz::ContextCacheController* CacheController() override;
   void InvalidateGrContext(uint32_t state) override;
   base::Lock* GetLock() override;
-  gpu::Capabilities ContextCapabilities() override;
-  void SetLostContextCallback(
-      const LostContextCallback& lost_context_callback) override;
+  const gpu::Capabilities& ContextCapabilities() const override;
+  const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
+  void AddObserver(viz::ContextLostObserver* obs) override;
+  void RemoveObserver(viz::ContextLostObserver* obs) override;
 
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -104,12 +106,21 @@ class ContextProviderCommandBuffer
     friend class base::RefCountedThreadSafe<SharedProviders>;
     ~SharedProviders();
   };
+  void CheckValidThreadOrLockAcquired() const {
+#if DCHECK_IS_ON()
+    if (support_locking_) {
+      context_lock_.AssertAcquired();
+    } else {
+      DCHECK(context_thread_checker_.CalledOnValidThread());
+    }
+#endif
+  }
 
   base::ThreadChecker main_thread_checker_;
   base::ThreadChecker context_thread_checker_;
 
-  bool bind_succeeded_ = false;
-  bool bind_failed_ = false;
+  bool bind_tried_ = false;
+  gpu::ContextResult bind_result_;
 
   const int32_t stream_id_;
   const gpu::SchedulingPriority stream_priority_;
@@ -134,7 +145,7 @@ class ContextProviderCommandBuffer
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
   std::unique_ptr<viz::ContextCacheController> cache_controller_;
 
-  LostContextCallback lost_context_callback_;
+  base::ObserverList<viz::ContextLostObserver> observers_;
 };
 
 }  // namespace ui

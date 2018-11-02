@@ -24,9 +24,9 @@
 #ifndef HTMLPlugInElement_h
 #define HTMLPlugInElement_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/SharedPersistent.h"
 #include "v8/include/v8.h"
 
@@ -49,7 +49,7 @@ class CORE_EXPORT HTMLPlugInElement
 
  public:
   ~HTMLPlugInElement() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   bool HasPendingActivity() const final;
 
@@ -83,7 +83,7 @@ class CORE_EXPORT HTMLPlugInElement
   void RequestPluginCreationWithoutLayoutObjectIfPossible();
   void CreatePluginWithoutLayoutObject();
 
-  virtual Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy(
+  virtual ParsedFeaturePolicy ConstructContainerPolicy(
       Vector<String>* /* messages */,
       bool* /* old_syntax */) const;
 
@@ -100,9 +100,10 @@ class CORE_EXPORT HTMLPlugInElement
 
   // Element functions:
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
 
   virtual bool HasFallbackContent() const;
   virtual bool UseFallbackContent() const;

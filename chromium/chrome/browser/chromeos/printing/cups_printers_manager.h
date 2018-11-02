@@ -50,7 +50,7 @@ class CupsPrintersManager {
   // is not taken of any of the raw-pointer arguments.
   static std::unique_ptr<CupsPrintersManager> Create(
       SyncedPrintersManager* synced_printers_manager,
-      PrinterDetector* usb_printer_detector,
+      std::unique_ptr<PrinterDetector> usb_printer_detector,
       std::unique_ptr<PrinterDetector> zeroconf_printer_detector,
       scoped_refptr<PpdProvider> ppd_provider,
       PrinterEventTracker* event_tracker);
@@ -81,6 +81,12 @@ class CupsPrintersManager {
   // Add or remove observers.
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
+
+  // Allows CupsPrinterManager to begin receiving callbacks from the
+  // PrinterDetectors that it is observing. This method is meant to be called
+  // only once after CupsPrintersManager has been added as an observer to the
+  // appropriate PrinterDetector objects.
+  virtual void Start() = 0;
 
   // Record that the given printers has been installed in CUPS for usage.  If
   // |printer| is not a configured or enterprise printer, this will have the

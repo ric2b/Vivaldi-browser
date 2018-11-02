@@ -4,11 +4,11 @@
 
 #include "net/test/url_request/url_request_hanging_read_job.h"
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/http/http_response_headers.h"
@@ -27,8 +27,8 @@ GURL GetMockUrl(const std::string& scheme, const std::string& hostname) {
 
 class MockJobInterceptor : public URLRequestInterceptor {
  public:
-  MockJobInterceptor() {}
-  ~MockJobInterceptor() override {}
+  MockJobInterceptor() = default;
+  ~MockJobInterceptor() override = default;
 
   // URLRequestInterceptor implementation
   URLRequestJob* MaybeInterceptRequest(
@@ -58,7 +58,7 @@ void URLRequestHangingReadJob::Start() {
                             weak_factory_.GetWeakPtr()));
 }
 
-URLRequestHangingReadJob::~URLRequestHangingReadJob() {}
+URLRequestHangingReadJob::~URLRequestHangingReadJob() = default;
 
 int URLRequestHangingReadJob::ReadRawData(IOBuffer* buf, int buf_size) {
   // Make read hang. It never completes.

@@ -37,12 +37,11 @@
 #include "modules/ModulesExport.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
-#include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsClaimCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerStreamHandle.h"
+#include "public/platform/modules/serviceworker/service_worker_event_status.mojom-blink.h"
 
 namespace blink {
 
@@ -78,25 +77,23 @@ class MODULES_EXPORT ServiceWorkerGlobalScopeClient
   void SetCachedMetadata(const WebURL&, const char*, size_t);
   void ClearCachedMetadata(const WebURL&);
 
-  WebURL Scope() const;
-
   void DidHandleActivateEvent(int event_id,
-                              WebServiceWorkerEventResult,
+                              mojom::ServiceWorkerEventStatus,
                               double event_dispatch_time);
   void DidHandleBackgroundFetchAbortEvent(int event_id,
-                                          WebServiceWorkerEventResult,
+                                          mojom::ServiceWorkerEventStatus,
                                           double event_dispatch_time);
   void DidHandleBackgroundFetchClickEvent(int event_id,
-                                          WebServiceWorkerEventResult,
+                                          mojom::ServiceWorkerEventStatus,
                                           double event_dispatch_time);
   void DidHandleBackgroundFetchFailEvent(int event_id,
-                                         WebServiceWorkerEventResult,
+                                         mojom::ServiceWorkerEventStatus,
                                          double event_dispatch_time);
   void DidHandleBackgroundFetchedEvent(int event_id,
-                                       WebServiceWorkerEventResult,
+                                       mojom::ServiceWorkerEventStatus,
                                        double event_dispatch_time);
   void DidHandleExtendableMessageEvent(int event_id,
-                                       WebServiceWorkerEventResult,
+                                       mojom::ServiceWorkerEventStatus,
                                        double event_dispatch_time);
   void RespondToFetchEventWithNoResponse(int fetch_event_id,
                                          double event_dispatch_time);
@@ -117,35 +114,35 @@ class MODULES_EXPORT ServiceWorkerGlobalScopeClient
                                     const WebPaymentHandlerResponse&,
                                     double event_dispatch_time);
   void DidHandleFetchEvent(int fetch_event_id,
-                           WebServiceWorkerEventResult,
+                           mojom::ServiceWorkerEventStatus,
                            double event_dispatch_time);
   void DidHandleInstallEvent(int install_event_id,
-                             WebServiceWorkerEventResult,
+                             mojom::ServiceWorkerEventStatus,
                              double event_dispatch_time);
   void DidHandleNotificationClickEvent(int event_id,
-                                       WebServiceWorkerEventResult,
+                                       mojom::ServiceWorkerEventStatus,
                                        double event_dispatch_time);
   void DidHandleNotificationCloseEvent(int event_id,
-                                       WebServiceWorkerEventResult,
+                                       mojom::ServiceWorkerEventStatus,
                                        double event_dispatch_time);
   void DidHandlePushEvent(int push_event_id,
-                          WebServiceWorkerEventResult,
+                          mojom::ServiceWorkerEventStatus,
                           double event_dispatch_time);
   void DidHandleSyncEvent(int sync_event_id,
-                          WebServiceWorkerEventResult,
+                          mojom::ServiceWorkerEventStatus,
                           double event_dispatch_time);
   void DidHandleAbortPaymentEvent(int abort_payment_event_id,
-                                  WebServiceWorkerEventResult,
+                                  mojom::ServiceWorkerEventStatus,
                                   double event_dispatch_time);
   void DidHandleCanMakePaymentEvent(int payment_request_event_id,
-                                    WebServiceWorkerEventResult,
+                                    mojom::ServiceWorkerEventStatus,
                                     double event_dispatch_time);
   void DidHandlePaymentRequestEvent(int payment_request_event_id,
-                                    WebServiceWorkerEventResult,
+                                    mojom::ServiceWorkerEventStatus,
                                     double event_dispatch_time);
   void PostMessageToClient(const WebString& client_uuid,
                            const WebString& message,
-                           WebMessagePortChannelArray);
+                           Vector<MessagePortChannel>);
   void SkipWaiting(std::unique_ptr<WebServiceWorkerSkipWaitingCallbacks>);
   void Claim(std::unique_ptr<WebServiceWorkerClientsClaimCallbacks>);
   void Focus(const WebString& client_uuid,
@@ -153,14 +150,11 @@ class MODULES_EXPORT ServiceWorkerGlobalScopeClient
   void Navigate(const WebString& client_uuid,
                 const WebURL&,
                 std::unique_ptr<WebServiceWorkerClientCallbacks>);
-  void RegisterForeignFetchScopes(int install_event_id,
-                                  const WebVector<WebURL>& sub_scopes,
-                                  const WebVector<WebSecurityOrigin>&);
 
   static const char* SupplementName();
   static ServiceWorkerGlobalScopeClient* From(ExecutionContext*);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   WebServiceWorkerContextClient& client_;

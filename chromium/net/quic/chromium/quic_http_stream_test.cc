@@ -77,7 +77,7 @@ const uint16_t kDefaultServerPort = 443;
 
 class TestQuicConnection : public QuicConnection {
  public:
-  TestQuicConnection(const QuicVersionVector& versions,
+  TestQuicConnection(const QuicTransportVersionVector& versions,
                      QuicConnectionId connection_id,
                      IPEndPoint address,
                      QuicChromiumConnectionHelper* helper,
@@ -161,7 +161,8 @@ class QuicHttpStreamPeer {
   }
 };
 
-class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
+class QuicHttpStreamTest
+    : public ::testing::TestWithParam<QuicTransportVersion> {
  public:
   void CloseStream(QuicHttpStream* stream, int /*rv*/) { stream->Close(false); }
 
@@ -258,13 +259,12 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
     EXPECT_CALL(*send_algorithm_, InRecovery()).WillRepeatedly(Return(false));
     EXPECT_CALL(*send_algorithm_, InSlowStart()).WillRepeatedly(Return(false));
     EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _))
-        .WillRepeatedly(Return(true));
+        .Times(testing::AtLeast(1));
     EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
         .WillRepeatedly(Return(kMaxPacketSize));
     EXPECT_CALL(*send_algorithm_, PacingRate(_))
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
-    EXPECT_CALL(*send_algorithm_, TimeUntilSend(_, _))
-        .WillRepeatedly(Return(QuicTime::Delta::Zero()));
+    EXPECT_CALL(*send_algorithm_, CanSend(_)).WillRepeatedly(Return(true));
     EXPECT_CALL(*send_algorithm_, BandwidthEstimate())
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
     EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _)).Times(AnyNumber());
@@ -275,10 +275,11 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
         new QuicChromiumConnectionHelper(&clock_, &random_generator_));
     alarm_factory_.reset(new QuicChromiumAlarmFactory(runner_.get(), &clock_));
 
-    connection_ =
-        new TestQuicConnection(SupportedVersions(GetParam()), connection_id_,
-                               peer_addr_, helper_.get(), alarm_factory_.get(),
-                               new QuicChromiumPacketWriter(socket.get()));
+    connection_ = new TestQuicConnection(
+        SupportedTransportVersions(GetParam()), connection_id_, peer_addr_,
+        helper_.get(), alarm_factory_.get(),
+        new QuicChromiumPacketWriter(
+            socket.get(), base::ThreadTaskRunnerHandle::Get().get()));
     connection_->set_visitor(&visitor_);
     connection_->SetSendAlgorithm(send_algorithm_);
 
@@ -300,7 +301,11 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicServerId(kDefaultServerHostName, kDefaultServerPort,
                      PRIVACY_MODE_DISABLED),
-        /*require_confirmation=*/false, kQuicYieldAfterPacketsRead,
+        /*require_confirmation=*/false, /*migrate_session_early*/ false,
+        /*migrate_session_on_network_change*/ false,
+        /*migrate_session_early_v2*/ false,
+        /*migrate_session_on_network_change_v2*/ false,
+        kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
         "CONNECTION_UNKNOWN", dns_start, dns_end, &push_promise_index_, nullptr,
@@ -324,9 +329,6 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
     promised_response_["content-type"] = "text/plain";
 
     promise_url_ = SpdyUtils::GetUrlFromHeaderBlock(push_promise_);
-
-    serialized_push_promise_ =
-        SpdyUtils::SerializeUncompressedHeaders(push_promise_);
   }
 
   void SetRequest(const string& method,
@@ -566,7 +568,6 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
   SpdyHeaderBlock promised_response_;
   const QuicStreamId promise_id_;
   string promise_url_;
-  string serialized_push_promise_;
   const QuicStreamId stream_id_;
 
   const QuicConnectionId connection_id_;
@@ -584,7 +585,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
 
 INSTANTIATE_TEST_CASE_P(Version,
                         QuicHttpStreamTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
 
 TEST_P(QuicHttpStreamTest, RenewStreamForAuth) {
   Initialize();
@@ -1839,8 +1840,6 @@ TEST_P(QuicHttpStreamTest, ServerPushCrossOriginOK) {
 
   push_promise_[":authority"] = "mail.example.org";
   promise_url_ = SpdyUtils::GetUrlFromHeaderBlock(push_promise_);
-  serialized_push_promise_ =
-      SpdyUtils::SerializeUncompressedHeaders(push_promise_);
 
   ReceivePromise(promise_id_);
   EXPECT_NE(session_->GetPromisedByUrl(promise_url_), nullptr);
@@ -1910,8 +1909,6 @@ TEST_P(QuicHttpStreamTest, ServerPushCrossOriginFail) {
   // packet, but does it matter?
   push_promise_[":authority"] = "www.notexample.org";
   promise_url_ = SpdyUtils::GetUrlFromHeaderBlock(push_promise_);
-  serialized_push_promise_ =
-      SpdyUtils::SerializeUncompressedHeaders(push_promise_);
 
   ReceivePromise(promise_id_);
   // The promise will have been rejected because the cert doesn't
@@ -1932,8 +1929,6 @@ TEST_P(QuicHttpStreamTest, ServerPushVaryCheckOK) {
                                       net_log_.bound(), callback_.callback()));
 
   push_promise_["accept-encoding"] = "gzip";
-  serialized_push_promise_ =
-      SpdyUtils::SerializeUncompressedHeaders(push_promise_);
 
   // TODO(ckrasic) - could do this via constructing a PUSH_PROMISE
   // packet, but does it matter?
@@ -2025,8 +2020,6 @@ TEST_P(QuicHttpStreamTest, ServerPushVaryCheckFail) {
                                       net_log_.bound(), callback_.callback()));
 
   push_promise_["accept-encoding"] = "gzip";
-  serialized_push_promise_ =
-      SpdyUtils::SerializeUncompressedHeaders(push_promise_);
 
   // TODO(ckrasic) - could do this via constructing a PUSH_PROMISE
   // packet, but does it matter?

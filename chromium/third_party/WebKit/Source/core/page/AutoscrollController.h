@@ -26,6 +26,7 @@
 #ifndef AutoscrollController_h
 #define AutoscrollController_h
 
+#include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatSize.h"
@@ -66,7 +67,7 @@ class CORE_EXPORT AutoscrollController final
     : public GarbageCollected<AutoscrollController> {
  public:
   static AutoscrollController* Create(Page&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // Selection and drag-and-drop autoscroll.
   void Animate(double monotonic_frame_begin_time);
@@ -97,6 +98,9 @@ class CORE_EXPORT AutoscrollController final
  private:
   explicit AutoscrollController(Page&);
 
+  // For test.
+  bool IsAutoscrolling() const;
+
   Member<Page> page_;
   AutoscrollType autoscroll_type_ = kNoAutoscroll;
 
@@ -111,6 +115,9 @@ class CORE_EXPORT AutoscrollController final
   FloatPoint middle_click_autoscroll_start_pos_global_;
   FloatSize last_velocity_;
   MiddleClickMode middle_click_mode_ = kMiddleClickInitial;
+
+  FRIEND_TEST_ALL_PREFIXES(AutoscrollControllerTest,
+                           CrashWhenLayoutStopAnimationBeforeScheduleAnimation);
 };
 
 }  // namespace blink

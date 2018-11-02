@@ -59,14 +59,6 @@ static Node* NodeInsideFrame(Node* node) {
   return nullptr;
 }
 
-IntRect SmartClipData::RectInViewport() const {
-  return rect_in_viewport_;
-}
-
-const String& SmartClipData::ClipData() const {
-  return string_;
-}
-
 SmartClip::SmartClip(LocalFrame* frame) : frame_(frame) {}
 
 SmartClipData SmartClip::DataForRect(const IntRect& crop_rect_in_viewport) {
@@ -100,7 +92,6 @@ SmartClipData SmartClip::DataForRect(const IntRect& crop_rect_in_viewport) {
   }
 
   return SmartClipData(
-      best_node,
       frame_->GetDocument()->View()->ContentsToViewport(united_rects),
       collected_text.ToString());
 }
@@ -204,7 +195,7 @@ Node* SmartClip::FindBestOverlappingNode(Node* root_node,
 bool SmartClip::ShouldSkipBackgroundImage(Node* node) {
   DCHECK(node);
   // Apparently we're only interested in background images on spans and divs.
-  if (!isHTMLSpanElement(*node) && !isHTMLDivElement(*node))
+  if (!IsHTMLSpanElement(*node) && !IsHTMLDivElement(*node))
     return true;
 
   // This check actually makes a bit of sense. If you're going to sprite an

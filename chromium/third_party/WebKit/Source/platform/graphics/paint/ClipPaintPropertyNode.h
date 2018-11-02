@@ -31,19 +31,19 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
   // space.
   static ClipPaintPropertyNode* Root();
 
-  static PassRefPtr<ClipPaintPropertyNode> Create(
-      PassRefPtr<const ClipPaintPropertyNode> parent,
-      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+  static scoped_refptr<ClipPaintPropertyNode> Create(
+      scoped_refptr<const ClipPaintPropertyNode> parent,
+      scoped_refptr<const TransformPaintPropertyNode> local_transform_space,
       const FloatRoundedRect& clip_rect,
       CompositingReasons direct_compositing_reasons = kCompositingReasonNone) {
-    return AdoptRef(new ClipPaintPropertyNode(
+    return base::AdoptRef(new ClipPaintPropertyNode(
         std::move(parent), std::move(local_transform_space), clip_rect,
         direct_compositing_reasons));
   }
 
   bool Update(
-      PassRefPtr<const ClipPaintPropertyNode> parent,
-      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+      scoped_refptr<const ClipPaintPropertyNode> parent,
+      scoped_refptr<const TransformPaintPropertyNode> local_transform_space,
       const FloatRoundedRect& clip_rect) {
     bool parent_changed = PaintPropertyNode::Update(std::move(parent));
 
@@ -58,17 +58,17 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
   }
 
   const TransformPaintPropertyNode* LocalTransformSpace() const {
-    return local_transform_space_.Get();
+    return local_transform_space_.get();
   }
   const FloatRoundedRect& ClipRect() const { return clip_rect_; }
 
 #if DCHECK_IS_ON()
   // The clone function is used by FindPropertiesNeedingUpdate.h for recording
   // a clip node before it has been updated, to later detect changes.
-  PassRefPtr<ClipPaintPropertyNode> Clone() const {
-    return AdoptRef(new ClipPaintPropertyNode(Parent(), local_transform_space_,
-                                              clip_rect_,
-                                              direct_compositing_reasons_));
+  scoped_refptr<ClipPaintPropertyNode> Clone() const {
+    return base::AdoptRef(
+        new ClipPaintPropertyNode(Parent(), local_transform_space_, clip_rect_,
+                                  direct_compositing_reasons_));
   }
 
   // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
@@ -83,7 +83,7 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
   String ToTreeString() const;
 #endif
 
-  String ToString() const;
+  std::unique_ptr<JSONObject> ToJSON() const;
 
   bool HasDirectCompositingReasons() const {
     return direct_compositing_reasons_ != kCompositingReasonNone;
@@ -91,8 +91,8 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
 
  private:
   ClipPaintPropertyNode(
-      PassRefPtr<const ClipPaintPropertyNode> parent,
-      PassRefPtr<const TransformPaintPropertyNode> local_transform_space,
+      scoped_refptr<const ClipPaintPropertyNode> parent,
+      scoped_refptr<const TransformPaintPropertyNode> local_transform_space,
       const FloatRoundedRect& clip_rect,
       CompositingReasons direct_compositing_reasons)
       : PaintPropertyNode(std::move(parent)),
@@ -114,7 +114,7 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
     return *geometry_mapper_clip_cache_.get();
   }
 
-  RefPtr<const TransformPaintPropertyNode> local_transform_space_;
+  scoped_refptr<const TransformPaintPropertyNode> local_transform_space_;
   FloatRoundedRect clip_rect_;
   CompositingReasons direct_compositing_reasons_;
 

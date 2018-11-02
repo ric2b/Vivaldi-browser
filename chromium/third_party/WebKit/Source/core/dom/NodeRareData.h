@@ -22,6 +22,7 @@
 #ifndef NodeRareData_h
 #define NodeRareData_h
 
+#include "base/macros.h"
 #include "core/dom/MutationObserverRegistration.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "platform/bindings/TraceWrapperMember.h"
@@ -32,8 +33,6 @@ namespace blink {
 
 class NodeMutationObserverData final
     : public GarbageCollected<NodeMutationObserverData> {
-  WTF_MAKE_NONCOPYABLE(NodeMutationObserverData);
-
  public:
   static NodeMutationObserverData* Create() {
     return new NodeMutationObserverData;
@@ -64,15 +63,15 @@ class NodeMutationObserverData final
 
   void RemoveRegistration(MutationObserverRegistration* registration) {
     DCHECK(registry_.Contains(registration));
-    registry_.erase(registry_.Find(registration));
+    registry_.EraseAt(registry_.Find(registration));
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(registry_);
     visitor->Trace(transient_registry_);
   }
 
-  DEFINE_INLINE_TRACE_WRAPPERS() {
+  void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     for (auto registration : registry_) {
       visitor->TraceWrappers(registration);
     }
@@ -87,14 +86,13 @@ class NodeMutationObserverData final
   HeapVector<TraceWrapperMember<MutationObserverRegistration>> registry_;
   HeapHashSet<TraceWrapperMember<MutationObserverRegistration>>
       transient_registry_;
+  DISALLOW_COPY_AND_ASSIGN(NodeMutationObserverData);
 };
 
 DEFINE_TRAIT_FOR_TRACE_WRAPPERS(NodeMutationObserverData);
 
 class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
                      public NodeRareDataBase {
-  WTF_MAKE_NONCOPYABLE(NodeRareData);
-
  public:
   static NodeRareData* Create(NodeRenderingData* node_layout_data) {
     return new NodeRareData(node_layout_data);
@@ -150,13 +148,13 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
     kConnectedFrameCountBits = 10,  // Must fit Page::maxNumberOfFrames.
   };
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
-  DECLARE_TRACE_AFTER_DISPATCH();
+  void TraceAfterDispatch(blink::Visitor*);
   void FinalizeGarbageCollectedObject();
 
-  DECLARE_TRACE_WRAPPERS();
-  DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
+  void TraceWrappersAfterDispatch(const ScriptWrappableVisitor*) const;
 
  protected:
   explicit NodeRareData(NodeRenderingData* node_layout_data)
@@ -178,6 +176,7 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
 
  protected:
   unsigned is_element_rare_data_ : 1;
+  DISALLOW_COPY_AND_ASSIGN(NodeRareData);
 };
 
 DEFINE_TRAIT_FOR_TRACE_WRAPPERS(NodeRareData);

@@ -20,10 +20,12 @@
  *   BLUETOOTH_DEVICES: (undefined|!settings.Route),
  *   CERTIFICATES: (undefined|!settings.Route),
  *   CHANGE_PICTURE: (undefined|!settings.Route),
+ *   CHROME_CLEANUP: (undefined|!settings.Route),
  *   CLEAR_BROWSER_DATA: (undefined|!settings.Route),
  *   CLOUD_PRINTERS: (undefined|!settings.Route),
  *   CUPS_PRINTERS: (undefined|!settings.Route),
  *   DATETIME: (undefined|!settings.Route),
+ *   DATETIME_TIMEZONE_SUBPAGE: (undefined|!settings.Route),
  *   DEFAULT_BROWSER: (undefined|!settings.Route),
  *   DETAILED_BUILD_INFO: (undefined|!settings.Route),
  *   DEVICE: (undefined|!settings.Route),
@@ -45,7 +47,6 @@
  *   MANAGE_PASSWORDS: (undefined|!settings.Route),
  *   MANAGE_PROFILE: (undefined|!settings.Route),
  *   MULTIDEVICE: (undefined|!settings.Route),
- *   NETWORK_CONFIG: (undefined|!settings.Route),
  *   NETWORK_DETAIL: (undefined|!settings.Route),
  *   ON_STARTUP: (undefined|!settings.Route),
  *   PASSWORDS: (undefined|!settings.Route),
@@ -65,6 +66,7 @@
  *   SITE_SETTINGS_AUTOMATIC_DOWNLOADS: (undefined|!settings.Route),
  *   SITE_SETTINGS_BACKGROUND_SYNC: (undefined|!settings.Route),
  *   SITE_SETTINGS_CAMERA: (undefined|!settings.Route),
+ *   SITE_SETTINGS_CLIPBOARD: (undefined|!settings.Route),
  *   SITE_SETTINGS_COOKIES: (undefined|!settings.Route),
  *   SITE_SETTINGS_DATA_DETAILS: (undefined|!settings.Route),
  *   SITE_SETTINGS_FLASH: (undefined|!settings.Route),
@@ -135,7 +137,7 @@ cr.define('settings', function() {
 
       // |path| extends this route's path if it doesn't have a leading slash.
       // If it does have a leading slash, it's just set as the new route's URL.
-      var newUrl = path[0] == '/' ? path : this.path + '/' + path;
+      var newUrl = path[0] == '/' ? path : `${this.path}/${path}`;
 
       var route = new Route(newUrl);
       route.parent = this;
@@ -157,6 +159,15 @@ cr.define('settings', function() {
       var route = this.createChild(path);
       route.section = section;
       return route;
+    }
+
+    /**
+     * Returns the absolute path string for this Route, assuming this function
+     * has been called from within chrome://settings.
+     * @return {string}
+     */
+    getAbsolutePath() {
+      return window.location.origin + this.path;
     }
 
     /**
@@ -207,7 +218,6 @@ cr.define('settings', function() {
     // <if expr="chromeos">
     r.INTERNET = r.BASIC.createSection('/internet', 'internet');
     r.INTERNET_NETWORKS = r.INTERNET.createChild('/networks');
-    r.NETWORK_CONFIG = r.INTERNET.createChild('/networkConfig');
     r.NETWORK_DETAIL = r.INTERNET.createChild('/networkDetail');
     r.KNOWN_NETWORKS = r.INTERNET.createChild('/knownNetworks');
     r.BLUETOOTH = r.BASIC.createSection('/bluetooth', 'bluetooth');
@@ -281,10 +291,9 @@ cr.define('settings', function() {
         r.SITE_SETTINGS_ALL = r.SITE_SETTINGS.createChild('all');
         r.SITE_SETTINGS_SITE_DETAILS =
             r.SITE_SETTINGS_ALL.createChild('/content/siteDetails');
-      } else if (loadTimeData.getBoolean('enableSiteDetails')) {
+      } else {
         // When there is no "All Sites", pressing 'back' from "Site Details"
-        // should return to "Content Settings". This should only occur when
-        // |kSiteSettings| is off and |kSiteDetails| is on.
+        // should return to "Content Settings".
         r.SITE_SETTINGS_SITE_DETAILS =
             r.SITE_SETTINGS.createChild('/content/siteDetails');
       }
@@ -299,6 +308,7 @@ cr.define('settings', function() {
       r.SITE_SETTINGS_BACKGROUND_SYNC =
           r.SITE_SETTINGS.createChild('backgroundSync');
       r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
+      r.SITE_SETTINGS_CLIPBOARD = r.SITE_SETTINGS.createChild('clipboard');
       r.SITE_SETTINGS_COOKIES = r.SITE_SETTINGS.createChild('cookies');
       r.SITE_SETTINGS_SITE_DATA =
           r.SITE_SETTINGS_COOKIES.createChild('/siteData');
@@ -326,6 +336,8 @@ cr.define('settings', function() {
       // <if expr="chromeos">
       if (pageVisibility.dateTime !== false) {
         r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
+        r.DATETIME_TIMEZONE_SUBPAGE =
+            r.DATETIME.createChild('/dateTime/timeZone');
       }
       // </if>
 
@@ -371,6 +383,12 @@ cr.define('settings', function() {
         r.TRIGGERED_RESET_DIALOG =
             r.ADVANCED.createChild('/triggeredResetProfileSettings');
         r.TRIGGERED_RESET_DIALOG.isNavigableDialog = true;
+        // <if expr="_google_chrome and is_win">
+        // This should only be added if the feature is enabled.
+        if (loadTimeData.getBoolean('userInitiatedCleanupsEnabled')) {
+          r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
+        }
+        // </if>
       }
     }
 

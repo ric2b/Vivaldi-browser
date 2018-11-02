@@ -32,13 +32,13 @@
 #define FileReader_h
 
 #include <memory>
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 
@@ -72,7 +72,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
 
   ReadyState getReadyState() const { return state_; }
   DOMException* error() { return error_; }
-  void result(StringOrArrayBuffer& result_attribute) const;
+  void result(ScriptState*, StringOrArrayBuffer& result_attribute) const;
 
   // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
@@ -99,7 +99,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(loadend);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   class ThrottlingController;
@@ -126,7 +126,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   bool still_firing_events_;
 
   String blob_type_;
-  RefPtr<BlobDataHandle> blob_data_handle_;
+  scoped_refptr<BlobDataHandle> blob_data_handle_;
   FileReaderLoader::ReadType read_type_;
   String encoding_;
 

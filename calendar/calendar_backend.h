@@ -97,6 +97,11 @@ class CalendarBackend
   // Creates an Event
   void CreateCalendarEvent(EventRow ev,
                            std::shared_ptr<CreateEventResult> result);
+
+  // Creates multiple events
+  void CreateCalendarEvents(std::vector<calendar::EventRow> events,
+	  std::shared_ptr<CreateEventsResult> result);
+
   void GetAllEvents(std::shared_ptr<EventQueryResults> results);
   // Updates an event
   void UpdateEvent(EventID event_id,

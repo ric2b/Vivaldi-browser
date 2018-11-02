@@ -17,9 +17,10 @@ ResizeObserverEntry::ResizeObserverEntry(Element* target,
       FloatPoint(content_rect.Location()), FloatSize(content_rect.Size())));
 }
 
-DEFINE_TRACE(ResizeObserverEntry) {
+void ResizeObserverEntry::Trace(blink::Visitor* visitor) {
   visitor->Trace(target_);
   visitor->Trace(content_rect_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

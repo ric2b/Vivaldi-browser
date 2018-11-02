@@ -14,8 +14,7 @@ class Element;
 class DOMRectReadOnly;
 class LayoutRect;
 
-class ResizeObserverEntry final : public GarbageCollected<ResizeObserverEntry>,
-                                  public ScriptWrappable {
+class ResizeObserverEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -24,7 +23,7 @@ class ResizeObserverEntry final : public GarbageCollected<ResizeObserverEntry>,
   Element* target() const { return target_; }
   DOMRectReadOnly* contentRect() const { return content_rect_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   Member<Element> target_;

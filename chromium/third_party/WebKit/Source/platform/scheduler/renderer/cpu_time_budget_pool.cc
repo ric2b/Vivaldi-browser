@@ -9,8 +9,8 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
-#include "platform/scheduler/base/trace_helper.h"
 #include "platform/scheduler/renderer/task_queue_throttler.h"
+#include "platform/scheduler/util/tracing_helper.h"
 
 namespace blink {
 namespace scheduler {
@@ -74,6 +74,14 @@ void CPUTimeBudgetPool::SetReportingCallback(
 bool CPUTimeBudgetPool::CanRunTasksAt(base::TimeTicks moment,
                                       bool is_wake_up) const {
   return moment >= GetNextAllowedRunTime(moment);
+}
+
+base::Optional<base::TimeTicks> CPUTimeBudgetPool::GetTimeTasksCanRunUntil(
+    base::TimeTicks now,
+    bool is_wake_up) const {
+  if (CanRunTasksAt(now, is_wake_up))
+    return base::nullopt;
+  return base::TimeTicks();
 }
 
 base::TimeTicks CPUTimeBudgetPool::GetNextAllowedRunTime(
@@ -142,7 +150,7 @@ void CPUTimeBudgetPool::AsValueInto(base::trace_event::TracedValue* state,
 
   state->BeginArray("task_queues");
   for (TaskQueue* queue : associated_task_queues_) {
-    state->AppendString(trace_helper::PointerToString(queue));
+    state->AppendString(PointerToString(queue));
   }
   state->EndArray();
 

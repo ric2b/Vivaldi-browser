@@ -34,15 +34,15 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
+#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/cells/text_and_error_item.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_encryption_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_encryption_passphrase_collection_view_controller.h"
-#import "ios/chrome/browser/ui/sync/sync_util.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -212,6 +212,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _avatarCache = [[ResizedAvatarCache alloc] init];
     _identityServiceObserver.reset(
         new ChromeIdentityServiceObserverBridge(self));
+    // TODO(crbug.com/764578): -loadModel should not be called from
+    // initializer. A possible fix is to move this call to -viewDidLoad.
     [self loadModel];
   }
   return self;
@@ -590,8 +592,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
   }
 
-  GenericChromeCommand* command = GetSyncCommandForBrowserState(_browserState);
-  [self chromeExecuteCommand:command];
+  SyncSetupService::SyncServiceState syncState =
+      GetSyncStateForBrowserState(_browserState);
+  if (ShouldShowSyncSignin(syncState)) {
+    [self.dispatcher
+                showSignin:[[ShowSigninCommand alloc]
+                               initWithOperation:
+                                   AUTHENTICATION_OPERATION_REAUTHENTICATE
+                                     accessPoint:signin_metrics::AccessPoint::
+                                                     ACCESS_POINT_UNKNOWN]
+        baseViewController:self];
+  } else if (ShouldShowSyncSettings(syncState)) {
+    [self.dispatcher showSyncSettingsFromViewController:self];
+  } else if (ShouldShowSyncPassphraseSettings(syncState)) {
+    [self.dispatcher showSyncPassphraseSettingsFromViewController:self];
+  }
 }
 
 - (void)startSwitchAccountForIdentity:(ChromeIdentity*)identity

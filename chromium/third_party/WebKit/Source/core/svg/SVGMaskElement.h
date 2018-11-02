@@ -20,7 +20,6 @@
 #ifndef SVGMaskElement_h
 #define SVGMaskElement_h
 
-#include "core/SVGNames.h"
 #include "core/svg/SVGAnimatedEnumeration.h"
 #include "core/svg/SVGAnimatedLength.h"
 #include "core/svg/SVGElement.h"
@@ -48,7 +47,7 @@ class SVGMaskElement final : public SVGElement, public SVGTests {
     return mask_content_units_.Get();
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit SVGMaskElement(Document&);
@@ -56,9 +55,10 @@ class SVGMaskElement final : public SVGElement, public SVGTests {
   bool IsValid() const override { return SVGTests::IsValid(); }
   bool NeedsPendingResourceHandling() const override { return false; }
 
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
   void SvgAttributeChanged(const QualifiedName&) override;
   void ChildrenChanged(const ChildrenChange&) override;
 

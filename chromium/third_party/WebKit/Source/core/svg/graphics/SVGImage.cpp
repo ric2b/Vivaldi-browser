@@ -27,11 +27,12 @@
 
 #include "core/svg/graphics/SVGImage.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/animation/DocumentTimeline.h"
+#include "core/dom/DocumentParser.h"
 #include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/NodeTraversal.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -51,7 +52,7 @@
 #include "core/svg/graphics/SVGImageChromeClient.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/LengthFunctions.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -63,7 +64,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -149,13 +149,13 @@ bool SVGImage::CurrentFrameHasSingleSecurityOrigin() const {
   // Don't allow foreignObject elements or images that are not known to be
   // single-origin since these can leak cross-origin information.
   for (Node* node = root_element; node; node = FlatTreeTraversal::Next(*node)) {
-    if (isSVGForeignObjectElement(*node))
+    if (IsSVGForeignObjectElement(*node))
       return false;
-    if (isSVGImageElement(*node)) {
-      if (!toSVGImageElement(*node).CurrentFrameHasSingleSecurityOrigin())
+    if (auto* image = ToSVGImageElementOrNull(*node)) {
+      if (!image->CurrentFrameHasSingleSecurityOrigin())
         return false;
-    } else if (isSVGFEImageElement(*node)) {
-      if (!toSVGFEImageElement(*node).CurrentFrameHasSingleSecurityOrigin())
+    } else if (auto* fe_image = ToSVGFEImageElementOrNull(*node)) {
+      if (!fe_image->CurrentFrameHasSingleSecurityOrigin())
         return false;
     }
   }
@@ -315,8 +315,8 @@ void SVGImage::DrawForContainer(PaintCanvas* canvas,
 }
 
 PaintImage SVGImage::PaintImageForCurrentFrame() {
-  PaintImageBuilder builder;
-  InitPaintImageBuilder(builder);
+  auto builder =
+      CreatePaintImageBuilder().set_completion_state(completion_state());
   PopulatePaintRecordForCurrentFrameForContainer(builder, NullURL(), Size());
   return builder.TakePaintImage();
 }
@@ -339,11 +339,10 @@ void SVGImage::DrawPatternForContainer(GraphicsContext& context,
   FloatRect spaced_tile(tile);
   spaced_tile.Expand(FloatSize(repeat_spacing));
 
-  PaintRecordBuilder builder(spaced_tile, nullptr, &context);
-
+  PaintRecordBuilder builder(nullptr, &context);
   {
     DrawingRecorder recorder(builder.Context(), builder,
-                             DisplayItem::Type::kSVGImage, spaced_tile);
+                             DisplayItem::Type::kSVGImage);
     // When generating an expanded tile, make sure we don't draw into the
     // spacing area.
     if (tile != spaced_tile)
@@ -465,7 +464,8 @@ void SVGImage::Draw(
     const FloatRect& dst_rect,
     const FloatRect& src_rect,
     RespectImageOrientationEnum should_respect_image_orientation,
-    ImageClampingMode clamp_mode) {
+    ImageClampingMode clamp_mode,
+    ImageDecodingMode) {
   if (!page_)
     return;
 
@@ -491,10 +491,11 @@ sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const IntRect& bounds,
   // avoid setting timers from the latter.
   FlushPendingTimelineRewind();
 
-  PaintRecordBuilder builder(bounds, nullptr, nullptr, paint_controller_.get());
+  PaintRecordBuilder builder(nullptr, nullptr, paint_controller_.get());
 
   view->UpdateAllLifecyclePhasesExceptPaint();
-  view->Paint(builder.Context(), CullRect(bounds));
+  view->PaintWithLifecycleUpdate(builder.Context(), kGlobalPaintNormalPhase,
+                                 CullRect(bounds));
   DCHECK(!view->NeedsLayout());
 
   if (canvas) {
@@ -561,8 +562,7 @@ void SVGImage::FlushPendingTimelineRewind() {
   has_pending_timeline_rewind_ = false;
 }
 
-// FIXME: support CatchUpAnimation = CatchUp.
-void SVGImage::StartAnimation(CatchUpAnimation) {
+void SVGImage::StartAnimation() {
   SVGSVGElement* root_element = SvgRootElement(page_.Get());
   if (!root_element)
     return;
@@ -690,11 +690,11 @@ void SVGImage::LoadCompleted() {
       // Document::ImplicitClose(), we defer AsyncLoadCompleted() to avoid
       // potential bugs and timing dependencies around ImplicitClose() and
       // to make LoadEventFinished() true when AsyncLoadCompleted() is called.
-      TaskRunnerHelper::Get(TaskType::kUnspecedLoading,
-                            ToLocalFrame(page_->MainFrame()))
+      ToLocalFrame(page_->MainFrame())
+          ->GetTaskRunner(TaskType::kUnspecedLoading)
           ->PostTask(BLINK_FROM_HERE,
                      WTF::Bind(&SVGImage::NotifyAsyncLoadCompleted,
-                               RefPtr<SVGImage>(this)));
+                               scoped_refptr<SVGImage>(this)));
       break;
 
     case kDataChangedNotStarted:
@@ -766,54 +766,53 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
       page->GetSettings().SetDefaultFixedFontSize(
           default_settings.GetDefaultFixedFontSize());
     }
-    }
+  }
 
-    LocalFrame* frame = nullptr;
-    {
-      TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
-      DCHECK(!frame_client_);
-      frame_client_ = new SVGImageLocalFrameClient(this);
-      frame = LocalFrame::Create(frame_client_, *page, 0);
-      frame->SetView(LocalFrameView::Create(*frame));
-      frame->Init();
-    }
+  LocalFrame* frame = nullptr;
+  {
+    TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
+    DCHECK(!frame_client_);
+    frame_client_ = new SVGImageLocalFrameClient(this);
+    frame = LocalFrame::Create(frame_client_, *page, nullptr);
+    frame->SetView(LocalFrameView::Create(*frame));
+    frame->Init();
+  }
 
-    FrameLoader& loader = frame->Loader();
-    loader.ForceSandboxFlags(kSandboxAll);
+  FrameLoader& loader = frame->Loader();
+  loader.ForceSandboxFlags(kSandboxAll);
 
-    frame->View()->SetScrollbarsSuppressed(true);
-    // SVG Images will always synthesize a viewBox, if it's not available, and
-    // thus never see scrollbars.
-    frame->View()->SetCanHaveScrollbars(false);
-    // SVG Images are transparent.
-    frame->View()->SetBaseBackgroundColor(Color::kTransparent);
+  frame->View()->SetScrollbarsSuppressed(true);
+  // SVG Images will always synthesize a viewBox, if it's not available, and
+  // thus never see scrollbars.
+  frame->View()->SetCanHaveScrollbars(false);
+  // SVG Images are transparent.
+  frame->View()->SetBaseBackgroundColor(Color::kTransparent);
 
-    page_ = page;
+  page_ = page;
 
-    TRACE_EVENT0("blink", "SVGImage::dataChanged::load");
-    loader.Load(
-        FrameLoadRequest(0, ResourceRequest(BlankURL()),
-                         SubstituteData(Data(), AtomicString("image/svg+xml"),
-                                        AtomicString("UTF-8"), NullURL(),
-                                        kForceSynchronousLoad)));
+  TRACE_EVENT0("blink", "SVGImage::dataChanged::load");
 
-    // Set the concrete object size before a container size is available.
-    intrinsic_size_ = RoundedIntSize(ConcreteObjectSize(FloatSize(
-        LayoutReplaced::kDefaultWidth, LayoutReplaced::kDefaultHeight)));
+  frame->ForceSynchronousDocumentInstall("image/svg+xml", Data());
 
-    DCHECK(page_);
-    switch (load_state_) {
-      case kInDataChanged:
-        load_state_ = kWaitingForAsyncLoadCompletion;
-        return kSizeAvailableAndLoadingAsynchronously;
+  // Set the concrete object size before a container size is available.
+  intrinsic_size_ = RoundedIntSize(ConcreteObjectSize(FloatSize(
+      LayoutReplaced::kDefaultWidth, LayoutReplaced::kDefaultHeight)));
 
-      case kLoadCompleted:
-        return kSizeAvailable;
+  DCHECK(page_);
+  switch (load_state_) {
+    case kInDataChanged:
+      load_state_ = kWaitingForAsyncLoadCompletion;
+      return SvgRootElement(page_.Get())
+                 ? kSizeAvailableAndLoadingAsynchronously
+                 : kSizeUnavailable;
 
-      case kDataChangedNotStarted:
-      case kWaitingForAsyncLoadCompletion:
-        CHECK(false);
-        break;
+    case kLoadCompleted:
+      return SvgRootElement(page_.Get()) ? kSizeAvailable : kSizeUnavailable;
+
+    case kDataChangedNotStarted:
+    case kWaitingForAsyncLoadCompletion:
+      CHECK(false);
+      break;
   }
 
   NOTREACHED();

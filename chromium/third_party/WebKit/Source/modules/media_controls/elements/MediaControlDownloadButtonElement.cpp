@@ -4,13 +4,13 @@
 
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLAnchorElement.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/media/HTMLMediaElementControlsList.h"
 #include "core/html/media/HTMLMediaSource.h"
+#include "core/input_type_names.h"
 #include "core/page/Page.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/media_controls/MediaDownloadInProductHelpManager.h"
@@ -21,7 +21,6 @@ namespace blink {
 MediaControlDownloadButtonElement::MediaControlDownloadButtonElement(
     MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaDownloadButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-internal-media-controls-download-button"));
   SetIsWanted(false);
@@ -46,7 +45,7 @@ bool MediaControlDownloadButtonElement::ShouldDisplayDownloadButton() {
   }
 
   // Local files and blobs (including MSE) should not have a download button.
-  if (url.IsLocalFile() || url.ProtocolIs("blob"))
+  if (url.IsLocalFile())
     return false;
 
   // MediaStream can't be downloaded.
@@ -54,7 +53,7 @@ bool MediaControlDownloadButtonElement::ShouldDisplayDownloadButton() {
     return false;
 
   // MediaSource can't be downloaded.
-  if (HTMLMediaSource::Lookup(url))
+  if (MediaElement().HasMediaSource())
     return false;
 
   // HLS stream shouldn't have a download button.
@@ -85,7 +84,7 @@ bool MediaControlDownloadButtonElement::HasOverflowButton() const {
   return true;
 }
 
-DEFINE_TRACE(MediaControlDownloadButtonElement) {
+void MediaControlDownloadButtonElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(anchor_);
   MediaControlInputElement::Trace(visitor);
 }

@@ -32,7 +32,9 @@
 #include "crypto/scoped_test_nss_db.h"
 #include "net/base/net_errors.h"
 #include "net/cert/nss_cert_database_chromeos.h"
+#include "net/cert/pem_tokenizer.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util_nss.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -42,18 +44,18 @@ namespace chromeos {
 
 namespace {
 
-const char* kWifiStub = "wifi_stub";
-const char* kWifiSSID = "wifi_ssid";
-const char* kUserProfilePath = "user_profile";
-const char* kUserHash = "user_hash";
+constexpr char kWifiStub[] = "wifi_stub";
+constexpr char kWifiSSID[] = "wifi_ssid";
+constexpr char kUserProfilePath[] = "user_profile";
+constexpr char kUserHash[] = "user_hash";
 
 }  // namespace
 
 class ClientCertResolverTest : public testing::Test,
                                public ClientCertResolver::Observer {
  public:
-  ClientCertResolverTest() {}
-  ~ClientCertResolverTest() override {}
+  ClientCertResolverTest() = default;
+  ~ClientCertResolverTest() override = default;
 
   void SetUp() override {
     ASSERT_TRUE(test_nssdb_.is_open());
@@ -63,8 +65,6 @@ class ClientCertResolverTest : public testing::Test,
     test_nsscertdb_.reset(new net::NSSCertDatabaseChromeOS(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())),
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot()))));
-    test_nsscertdb_->SetSlowTaskRunnerForTest(
-        scoped_task_environment_.GetMainThreadTaskRunner());
 
     DBusThreadManager::Initialize();
     service_test_ =
@@ -101,23 +101,24 @@ class ClientCertResolverTest : public testing::Test,
     cert_loader_->SetUserNSSDB(test_nsscertdb_.get());
     if (test_client_cert_.get()) {
       int slot_id = 0;
-      const std::string pkcs11_id =
-          CertLoader::GetPkcs11IdAndSlotForCert(*test_client_cert_, &slot_id);
+      const std::string pkcs11_id = CertLoader::GetPkcs11IdAndSlotForCert(
+          test_client_cert_.get(), &slot_id);
       test_cert_id_ = base::StringPrintf("%i:%s", slot_id, pkcs11_id.c_str());
     }
   }
 
-  // Imports a client certificate. Its PKCS#11 ID is stored in |test_cert_id_|.
-  // If |import_issuer| is true, also imports the CA cert (stored as PEM in
-  // test_ca_cert_pem_) that issued the client certificate.
+  // Imports a client certificate. After a subsequent StartCertLoader()
+  // invocation, the PKCS#11 ID of the imported certificate will be stored in
+  // |test_cert_id_|.  If |import_issuer| is true, also imports the CA cert
+  // (stored as PEM in test_ca_cert_pem_) that issued the client certificate.
   void SetupTestCerts(const std::string& prefix, bool import_issuer) {
     // Load a CA cert.
-    net::CertificateList ca_cert_list = net::CreateCertificateListFromFile(
-        net::GetTestCertsDirectory(), prefix + "_ca.pem",
-        net::X509Certificate::FORMAT_AUTO);
+    net::ScopedCERTCertificateList ca_cert_list =
+        net::CreateCERTCertificateListFromFile(
+            net::GetTestCertsDirectory(), prefix + "_ca.pem",
+            net::X509Certificate::FORMAT_AUTO);
     ASSERT_TRUE(!ca_cert_list.empty());
-    net::X509Certificate::GetPEMEncoded(ca_cert_list[0]->os_cert_handle(),
-                                        &test_ca_cert_pem_);
+    net::x509_util::GetPEMEncoded(ca_cert_list[0].get(), &test_ca_cert_pem_);
     ASSERT_TRUE(!test_ca_cert_pem_.empty());
 
     if (import_issuer) {
@@ -129,19 +130,48 @@ class ClientCertResolverTest : public testing::Test,
     }
 
     // Import a client cert signed by that CA.
-    test_client_cert_ = net::ImportClientCertAndKeyFromFile(
-        net::GetTestCertsDirectory(), prefix + ".pem", prefix + ".pk8",
-        test_nssdb_.slot());
+    net::ImportClientCertAndKeyFromFile(net::GetTestCertsDirectory(),
+                                        prefix + ".pem", prefix + ".pk8",
+                                        test_nssdb_.slot(), &test_client_cert_);
     ASSERT_TRUE(test_client_cert_.get());
+  }
+
+  // Imports a client certificate with a subject CommonName encoded as
+  // PrintableString, but containing invalid characters. It is imported into the
+  // user slot. After a subsequent StartCertLoader() invocation, the PKCS#11 ID
+  // of the imported certificate will be stored in |test_cert_id_|.
+  void SetupTestCertWithBadPrintableString() {
+    base::FilePath certs_dir = net::GetTestNetDataDirectory().AppendASCII(
+        "parse_certificate_unittest");
+    ASSERT_TRUE(net::ImportSensitiveKeyFromFile(
+        certs_dir, "v3_certificate_template.pk8", test_nssdb_.slot()));
+
+    std::string file_data;
+    ASSERT_TRUE(base::ReadFileToString(
+        certs_dir.AppendASCII(
+            "subject_printable_string_containing_utf8_client_cert.pem"),
+        &file_data));
+
+    net::PEMTokenizer pem_tokenizer(file_data, {"CERTIFICATE"});
+    ASSERT_TRUE(pem_tokenizer.GetNext());
+    std::string cert_der(pem_tokenizer.data());
+    ASSERT_FALSE(pem_tokenizer.GetNext());
+
+    test_client_cert_ = net::x509_util::CreateCERTCertificateFromBytes(
+        reinterpret_cast<const uint8_t*>(cert_der.data()), cert_der.size());
+    ASSERT_TRUE(test_client_cert_);
+
+    ASSERT_TRUE(net::ImportClientCertToSlot(test_client_cert_.get(),
+                                            test_nssdb_.slot()));
   }
 
   void SetupTestCertInSystemToken(const std::string& prefix) {
     test_nsscertdb_->SetSystemSlot(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_system_nssdb_.slot())));
 
-    test_client_cert_ = net::ImportClientCertAndKeyFromFile(
+    net::ImportClientCertAndKeyFromFile(
         net::GetTestCertsDirectory(), prefix + ".pem", prefix + ".pk8",
-        test_system_nssdb_.slot());
+        test_system_nssdb_.slot(), &test_client_cert_);
     ASSERT_TRUE(test_client_cert_.get());
   }
 
@@ -191,9 +221,10 @@ class ClientCertResolverTest : public testing::Test,
   }
 
   // Sets up a policy with a certificate pattern that matches any client cert
-  // with a certain Issuer CN. It will match the test client cert.
+  // with a certain Issuer CN. It will match the test client cert imported by
+  // SetupTestCerts.
   void SetupPolicyMatchingIssuerCN(onc::ONCSource onc_source) {
-    const char* kTestPolicy =
+    const char* test_policy =
         "[ { \"GUID\": \"wifi_stub\","
         "    \"Name\": \"wifi_stub\","
         "    \"Type\": \"WiFi\","
@@ -215,7 +246,47 @@ class ClientCertResolverTest : public testing::Test,
     std::string error;
     std::unique_ptr<base::Value> policy_value =
         base::JSONReader::ReadAndReturnError(
-            kTestPolicy, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+            test_policy, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+    ASSERT_TRUE(policy_value) << error;
+
+    base::ListValue* policy = nullptr;
+    ASSERT_TRUE(policy_value->GetAsList(&policy));
+
+    std::string user_hash =
+        onc_source == onc::ONC_SOURCE_USER_POLICY ? kUserHash : "";
+    managed_config_handler_->SetPolicy(
+        onc_source, user_hash, *policy,
+        base::DictionaryValue() /* no global network config */);
+  }
+
+  // Sets up a policy with a certificate pattern that matches any client cert
+  // with a Subject Organization set to "Blar". It will match the test client
+  // cert imported by SetupTestCertWithBadPrintableString.
+  void SetupPolicyMatchingSubjectOrgForBadPrintableStringCert(
+      onc::ONCSource onc_source) {
+    const char* test_policy =
+        "[ { \"GUID\": \"wifi_stub\","
+        "    \"Name\": \"wifi_stub\","
+        "    \"Type\": \"WiFi\","
+        "    \"WiFi\": {"
+        "      \"Security\": \"WPA-EAP\","
+        "      \"SSID\": \"wifi_ssid\","
+        "      \"EAP\": {"
+        "        \"Outer\": \"EAP-TLS\","
+        "        \"ClientCertType\": \"Pattern\","
+        "        \"ClientCertPattern\": {"
+        "          \"Subject\": {"
+        "            \"Organization\": \"Blar\""
+        "          }"
+        "        }"
+        "      }"
+        "    }"
+        "} ]";
+
+    std::string error;
+    std::unique_ptr<base::Value> policy_value =
+        base::JSONReader::ReadAndReturnError(
+            test_policy, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
     ASSERT_TRUE(policy_value) << error;
 
     base::ListValue* policy = nullptr;
@@ -231,7 +302,7 @@ class ClientCertResolverTest : public testing::Test,
   void SetupCertificateConfigMatchingIssuerCN(
       onc::ONCSource onc_source,
       client_cert::ClientCertConfig* client_cert_config) {
-    const char* kTestOncPattern =
+    const char* test_onc_pattern =
         "{"
         "  \"Issuer\": {"
         "    \"CommonName\": \"B CA\""
@@ -239,8 +310,9 @@ class ClientCertResolverTest : public testing::Test,
         "}";
     std::string error;
     std::unique_ptr<base::Value> onc_pattern_value =
-        base::JSONReader::ReadAndReturnError(
-            kTestOncPattern, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+        base::JSONReader::ReadAndReturnError(test_onc_pattern,
+                                             base::JSON_ALLOW_TRAILING_COMMAS,
+                                             nullptr, &error);
     ASSERT_TRUE(onc_pattern_value) << error;
 
     base::DictionaryValue* onc_pattern_dict;
@@ -255,7 +327,7 @@ class ClientCertResolverTest : public testing::Test,
   // particular it will match the test client cert.
   void SetupPolicyMatchingIssuerPEM(onc::ONCSource onc_source,
                                     const std::string& identity) {
-    const char* kTestPolicyTemplate =
+    const char* test_policy_template =
         "[ { \"GUID\": \"wifi_stub\","
         "    \"Name\": \"wifi_stub\","
         "    \"Type\": \"WiFi\","
@@ -273,7 +345,7 @@ class ClientCertResolverTest : public testing::Test,
         "    }"
         "} ]";
     std::string policy_json = base::StringPrintf(
-        kTestPolicyTemplate, identity.c_str(), test_ca_cert_pem_.c_str());
+        test_policy_template, identity.c_str(), test_ca_cert_pem_.c_str());
 
     std::string error;
     std::unique_ptr<base::Value> policy_value =
@@ -327,7 +399,7 @@ class ClientCertResolverTest : public testing::Test,
   std::unique_ptr<NetworkConfigurationHandler> network_config_handler_;
   std::unique_ptr<ManagedNetworkConfigurationHandlerImpl>
       managed_config_handler_;
-  scoped_refptr<net::X509Certificate> test_client_cert_;
+  net::ScopedCERTCertificate test_client_cert_;
   std::string test_ca_cert_pem_;
   crypto::ScopedTestNSSDB test_nssdb_;
   crypto::ScopedTestNSSDB test_system_nssdb_;
@@ -361,6 +433,32 @@ TEST_F(ClientCertResolverTest, MatchIssuerCNWithoutIssuerInstalled) {
 
   SetupNetworkHandlers();
   SetupPolicyMatchingIssuerCN(onc::ONC_SOURCE_USER_POLICY);
+  scoped_task_environment_.RunUntilIdle();
+
+  network_properties_changed_count_ = 0;
+  StartCertLoader();
+  scoped_task_environment_.RunUntilIdle();
+
+  // Verify that the resolver positively matched the pattern in the policy with
+  // the test client cert and configured the network.
+  std::string pkcs11_id;
+  GetServiceProperty(shill::kEapCertIdProperty, &pkcs11_id);
+  EXPECT_EQ(test_cert_id_, pkcs11_id);
+  EXPECT_EQ(1, network_properties_changed_count_);
+}
+
+// Test that matching works on a certificate with invalid characters in a
+// PrintableString field. See crbug.com/788655.
+TEST_F(ClientCertResolverTest, MatchSubjectOrgOnBadPrintableStringCert) {
+  ASSERT_NO_FATAL_FAILURE(SetupTestCertWithBadPrintableString());
+
+  SetupWifi();
+  scoped_task_environment_.RunUntilIdle();
+
+  SetupNetworkHandlers();
+  ASSERT_NO_FATAL_FAILURE(
+      SetupPolicyMatchingSubjectOrgForBadPrintableStringCert(
+          onc::ONC_SOURCE_USER_POLICY));
   scoped_task_environment_.RunUntilIdle();
 
   network_properties_changed_count_ = 0;
@@ -594,6 +692,41 @@ TEST_F(ClientCertResolverTest, PopulateIdentityFromCert) {
   GetServiceProperty(shill::kEapIdentityProperty, &identity);
   EXPECT_EQ("upn-santest@ad.corp.example.com-suffix", identity);
   EXPECT_EQ(2, network_properties_changed_count_);
+}
+
+// Test for crbug.com/781276. A notification which results in no networks to be
+// resolved should not alter the state of IsAnyResolveTaskRunning().
+TEST_F(ClientCertResolverTest, TestResolveTaskQueued) {
+  // Set up ClientCertResolver and let it run initially
+  SetupTestCerts("client_1", true /* import issuer */);
+  StartCertLoader();
+  SetupWifi();
+  SetupNetworkHandlers();
+  SetupPolicyMatchingIssuerPEM(onc::ONC_SOURCE_USER_POLICY, "");
+  scoped_task_environment_.RunUntilIdle();
+
+  // Pretend that policy was applied, this shall queue a resolving task.
+  static_cast<NetworkPolicyObserver*>(client_cert_resolver_.get())
+      ->PolicyAppliedToNetwork(kWifiStub);
+  EXPECT_TRUE(client_cert_resolver_->IsAnyResolveTaskRunning());
+  // Pretend that the network list has changed. One resolving task should still
+  // be queued.
+  static_cast<NetworkStateHandlerObserver*>(client_cert_resolver_.get())
+      ->NetworkListChanged();
+  EXPECT_TRUE(client_cert_resolver_->IsAnyResolveTaskRunning());
+  // Pretend that certificates have changed. One resolving task should still be
+  // queued.
+  static_cast<CertLoader::Observer*>(client_cert_resolver_.get())
+      ->OnCertificatesLoaded(CertLoader::Get()->all_certs());
+  EXPECT_TRUE(client_cert_resolver_->IsAnyResolveTaskRunning());
+
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_FALSE(client_cert_resolver_->IsAnyResolveTaskRunning());
+  // Verify that the resolver positively matched the pattern in the policy with
+  // the test client cert and configured the network.
+  std::string pkcs11_id;
+  GetServiceProperty(shill::kEapCertIdProperty, &pkcs11_id);
+  EXPECT_EQ(test_cert_id_, pkcs11_id);
 }
 
 }  // namespace chromeos

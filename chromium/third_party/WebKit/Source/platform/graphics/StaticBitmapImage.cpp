@@ -15,9 +15,9 @@
 
 namespace blink {
 
-RefPtr<StaticBitmapImage> StaticBitmapImage::Create(
+scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
     sk_sp<SkImage> image,
-    WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper) {
+    WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper) {
   if (image->isTextureBacked()) {
     CHECK(context_provider_wrapper);
     return AcceleratedStaticBitmapImage::CreateFromSkImage(
@@ -26,7 +26,7 @@ RefPtr<StaticBitmapImage> StaticBitmapImage::Create(
   return UnacceleratedStaticBitmapImage::Create(image);
 }
 
-RefPtr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
+scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
   DCHECK(!image.GetSkImage()->isTextureBacked());
   return UnacceleratedStaticBitmapImage::Create(std::move(image));
 }
@@ -47,15 +47,23 @@ void StaticBitmapImage::DrawHelper(PaintCanvas* canvas,
                         WebCoreClampingModeToSkiaRectConstraint(clamp_mode));
 }
 
-RefPtr<StaticBitmapImage> StaticBitmapImage::ConvertToColorSpace(
+scoped_refptr<StaticBitmapImage> StaticBitmapImage::ConvertToColorSpace(
     sk_sp<SkColorSpace> target,
-    SkTransferFunctionBehavior premulBehavior) {
+    SkTransferFunctionBehavior transfer_function_behavior) {
   sk_sp<SkImage> skia_image = PaintImageForCurrentFrame().GetSkImage();
-  sk_sp<SkImage> converted_skia_image =
-      skia_image->makeColorSpace(target, premulBehavior);
-
-  if (skia_image == converted_skia_image)
+  sk_sp<SkColorSpace> src_color_space = skia_image->refColorSpace();
+  if (!src_color_space.get())
+    src_color_space = SkColorSpace::MakeSRGB();
+  sk_sp<SkColorSpace> dst_color_space = target;
+  if (!dst_color_space.get())
+    dst_color_space = SkColorSpace::MakeSRGB();
+  if (SkColorSpace::Equals(src_color_space.get(), dst_color_space.get()))
     return this;
+
+  sk_sp<SkImage> converted_skia_image =
+      skia_image->makeColorSpace(dst_color_space, transfer_function_behavior);
+  DCHECK(converted_skia_image.get());
+  DCHECK(skia_image.get() != converted_skia_image.get());
 
   return StaticBitmapImage::Create(converted_skia_image,
                                    ContextProviderWrapper());

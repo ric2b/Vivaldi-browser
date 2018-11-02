@@ -48,22 +48,22 @@ bool CompareParams(const std::pair<String, String>& a,
 
 URLSearchParams* URLSearchParams::Create(const URLSearchParamsInit& init,
                                          ExceptionState& exception_state) {
-  if (init.isUSVString()) {
-    const String& query_string = init.getAsUSVString();
+  if (init.IsUSVString()) {
+    const String& query_string = init.GetAsUSVString();
     if (query_string.StartsWith('?'))
       return new URLSearchParams(query_string.Substring(1));
     return new URLSearchParams(query_string);
   }
-  if (init.isUSVStringUSVStringRecord()) {
-    return URLSearchParams::Create(init.getAsUSVStringUSVStringRecord(),
+  if (init.IsUSVStringUSVStringRecord()) {
+    return URLSearchParams::Create(init.GetAsUSVStringUSVStringRecord(),
                                    exception_state);
   }
-  if (init.isUSVStringSequenceSequence()) {
-    return URLSearchParams::Create(init.getAsUSVStringSequenceSequence(),
+  if (init.IsUSVStringSequenceSequence()) {
+    return URLSearchParams::Create(init.GetAsUSVStringSequenceSequence(),
                                    exception_state);
   }
 
-  DCHECK(init.isNull());
+  DCHECK(init.IsNull());
   return new URLSearchParams(String());
 }
 
@@ -82,14 +82,13 @@ URLSearchParams* URLSearchParams::Create(const Vector<Vector<String>>& init,
     }
     instance->AppendWithoutUpdate(pair[0], pair[1]);
   }
-  instance->RunUpdateSteps();
   return instance;
 }
 
 URLSearchParams::URLSearchParams(const String& query_string, DOMURL* url_object)
     : url_object_(url_object) {
   if (!query_string.IsEmpty())
-    SetInput(query_string);
+    SetInputWithoutUpdate(query_string);
 }
 
 URLSearchParams* URLSearchParams::Create(
@@ -100,14 +99,14 @@ URLSearchParams* URLSearchParams::Create(
     return instance;
   for (const auto& item : init)
     instance->AppendWithoutUpdate(item.first, item.second);
-  instance->RunUpdateSteps();
   return instance;
 }
 
 URLSearchParams::~URLSearchParams() {}
 
-DEFINE_TRACE(URLSearchParams) {
+void URLSearchParams::Trace(blink::Visitor* visitor) {
   visitor->Trace(url_object_);
+  ScriptWrappable::Trace(visitor);
 }
 
 #if DCHECK_IS_ON()
@@ -130,7 +129,7 @@ static String DecodeString(String input) {
   return DecodeURLEscapeSequences(input.Replace('+', ' '));
 }
 
-void URLSearchParams::SetInput(const String& query_string) {
+void URLSearchParams::SetInputWithoutUpdate(const String& query_string) {
   params_.clear();
 
   size_t start = 0;
@@ -156,7 +155,6 @@ void URLSearchParams::SetInput(const String& query_string) {
     }
     start = name_value_end + 1;
   }
-  RunUpdateSteps();
 }
 
 String URLSearchParams::toString() const {
@@ -178,7 +176,7 @@ void URLSearchParams::append(const String& name, const String& value) {
 void URLSearchParams::deleteAllWithName(const String& name) {
   for (size_t i = 0; i < params_.size();) {
     if (params_[i].first == name)
-      params_.erase(i);
+      params_.EraseAt(i);
     else
       i++;
   }
@@ -221,7 +219,7 @@ void URLSearchParams::set(const String& name, const String& value) {
         params_[i++].second = value;
         found_match = true;
       } else {
-        params_.erase(i);
+        params_.EraseAt(i);
       }
     } else {
       i++;
@@ -246,7 +244,7 @@ void URLSearchParams::EncodeAsFormData(Vector<char>& encoded_data) const {
         EncodedFormData::kFormURLEncoded, FormDataEncoder::kDoNotNormalizeCRLF);
 }
 
-RefPtr<EncodedFormData> URLSearchParams::ToEncodedFormData() const {
+scoped_refptr<EncodedFormData> URLSearchParams::ToEncodedFormData() const {
   Vector<char> encoded_data;
   EncodeAsFormData(encoded_data);
   return EncodedFormData::Create(encoded_data.data(), encoded_data.size());

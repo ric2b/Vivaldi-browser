@@ -10,10 +10,18 @@
 
 namespace ui {
 
+class WaylandConnection;
+
 class WaylandKeyboard {
  public:
   WaylandKeyboard(wl_keyboard* keyboard, const EventDispatchCallback& callback);
   virtual ~WaylandKeyboard();
+
+  void set_connection(WaylandConnection* connection) {
+    connection_ = connection;
+  }
+
+  int modifiers() { return modifiers_; }
 
  private:
   // wl_keyboard_listener
@@ -49,9 +57,10 @@ class WaylandKeyboard {
                          int32_t rate,
                          int32_t delay);
 
+  WaylandConnection* connection_ = nullptr;
   wl::Object<wl_keyboard> obj_;
   EventDispatchCallback callback_;
-  uint8_t modifiers_ = 0;
+  int modifiers_ = 0;
 };
 
 }  // namespace ui

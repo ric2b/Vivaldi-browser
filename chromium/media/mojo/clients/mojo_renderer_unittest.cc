@@ -31,6 +31,8 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -58,15 +60,16 @@ void WaitFor(base::TimeDelta duration) {
 
 class MojoRendererTest : public ::testing::Test {
  public:
-  MojoRendererTest() {
+  MojoRendererTest()
+      : mojo_cdm_service_(&mojo_cdm_service_context_, &cdm_factory_),
+        cdm_binding_(&mojo_cdm_service_) {
     std::unique_ptr<StrictMock<MockRenderer>> mock_renderer(
         new StrictMock<MockRenderer>());
     mock_renderer_ = mock_renderer.get();
 
     mojom::RendererPtr remote_renderer;
     renderer_binding_ = MojoRendererService::Create(
-        mojo_cdm_service_context_.GetWeakPtr(), nullptr, nullptr,
-        std::move(mock_renderer),
+        &mojo_cdm_service_context_, nullptr, nullptr, std::move(mock_renderer),
         MojoRendererService::InitiateSurfaceRequestCB(),
         mojo::MakeRequest(&remote_renderer));
 
@@ -83,7 +86,7 @@ class MojoRendererTest : public ::testing::Test {
         .WillRepeatedly(Return(base::TimeDelta()));
   }
 
-  virtual ~MojoRendererTest() {}
+  virtual ~MojoRendererTest() = default;
 
   void Destroy() {
     mojo_renderer_.reset();
@@ -175,13 +178,10 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   void CreateCdm() {
-    mojo::MakeStrongBinding(
-        base::MakeUnique<MojoCdmService>(mojo_cdm_service_context_.GetWeakPtr(),
-                                         &cdm_factory_),
-        mojo::MakeRequest(&remote_cdm_));
+    cdm_binding_.Bind(mojo::MakeRequest(&remote_cdm_));
     remote_cdm_->Initialize(
-        kClearKeyKeySystem, "https://www.test.com",
-        mojom::CdmConfig::From(CdmConfig()),
+        kClearKeyKeySystem, url::Origin::Create(GURL("https://www.test.com")),
+        CdmConfig(),
         base::Bind(&MojoRendererTest::OnCdmCreated, base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
   }
@@ -214,11 +214,15 @@ class MojoRendererTest : public ::testing::Test {
   std::unique_ptr<StrictMock<MockDemuxerStream>> video_stream_;
   std::vector<DemuxerStream*> streams_;
 
+  // Service side bindings (declaration order is critical).
+  MojoCdmServiceContext mojo_cdm_service_context_;
+  DefaultCdmFactory cdm_factory_;
+  MojoCdmService mojo_cdm_service_;
+  mojo::Binding<mojom::ContentDecryptionModule> cdm_binding_;
+
   // Service side mocks and helpers.
   StrictMock<MockRenderer>* mock_renderer_;
-  MojoCdmServiceContext mojo_cdm_service_context_;
   RendererClient* remote_renderer_client_;
-  DefaultCdmFactory cdm_factory_;
 
   mojo::StrongBindingPtr<mojom::Renderer> renderer_binding_;
 

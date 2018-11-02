@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "base/files/file.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
@@ -53,12 +55,20 @@ class CONTENT_EXPORT ResourceRequestBody
                        uint64_t offset,
                        uint64_t length,
                        const base::Time& expected_modification_time);
+  // Appends the specified part of |file|. If |length| extends beyond the end of
+  // the file, it will be set to the end of the file.
+  void AppendRawFileRange(base::File file,
+                          const base::FilePath& file_path,
+                          uint64_t offset,
+                          uint64_t length,
+                          const base::Time& expected_modification_time);
 
   void AppendBlob(const std::string& uuid);
   void AppendFileSystemFileRange(const GURL& url,
                                  uint64_t offset,
                                  uint64_t length,
                                  const base::Time& expected_modification_time);
+  void AppendDataPipe(network::mojom::DataPipeGetterPtr data_pipe_getter);
 
   const std::vector<Element>* elements() const { return &elements_; }
   std::vector<Element>* elements_mutable() { return &elements_; }

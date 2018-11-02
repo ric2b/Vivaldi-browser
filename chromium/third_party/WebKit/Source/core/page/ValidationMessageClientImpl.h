@@ -51,7 +51,7 @@ class CORE_EXPORT ValidationMessageClientImpl final
   static ValidationMessageClientImpl* Create(WebViewImpl&);
   ~ValidationMessageClientImpl() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   ValidationMessageClientImpl(WebViewImpl&);
@@ -78,8 +78,6 @@ class CORE_EXPORT ValidationMessageClientImpl final
   WebViewImpl& web_view_;
   Member<const Element> current_anchor_;
   String message_;
-  IntRect last_anchor_rect_in_screen_;
-  float last_page_scale_factor_;
   double finish_time_;
   std::unique_ptr<TimerBase> timer_;
   std::unique_ptr<PageOverlay> overlay_;

@@ -47,17 +47,7 @@ class ChromeBrowserState;
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
     NS_UNAVAILABLE;
 
-// Reloads the closed tab list and updates the content of the tableView.
-- (void)reloadClosedTabsList;
-
-// Reloads the session data and updates the content of the tableView.
-- (void)reloadSessions;
-
-// Sets the tab restore service to null.
-- (void)tabRestoreServiceDestroyed;
-
-// TODO(crbug.com/708319): Expose the view controller in preparation for a full
-// view controller conversion.
+// The view controller managed by this coordinator.
 - (UIViewController*)viewController;
 
 @end

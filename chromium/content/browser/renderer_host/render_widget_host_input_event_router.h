@@ -18,7 +18,7 @@
 #include "components/viz/service/surfaces/surface_hittest_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base_observer.h"
 #include "content/common/content_export.h"
-#include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/geometry/vector2d_conversions.h"
 
 struct FrameHostMsg_HittestData_Params;
 
@@ -31,6 +31,7 @@ class WebTouchEvent;
 
 namespace gfx {
 class Point;
+class PointF;
 }
 
 namespace ui {
@@ -93,8 +94,8 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // will return nullptr and will not modify |transformed_point|.
   RenderWidgetHostImpl* GetRenderWidgetHostAtPoint(
       RenderWidgetHostViewBase* root_view,
-      const gfx::Point& point,
-      gfx::Point* transformed_point);
+      const gfx::PointF& point,
+      gfx::PointF* transformed_point);
 
   std::vector<RenderWidgetHostView*> GetRenderWidgetHostViewsForTests() const;
 
@@ -108,9 +109,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
     HittestDelegate(const std::unordered_map<viz::SurfaceId,
                                              HittestData,
                                              viz::SurfaceIdHash>& hittest_data);
-    bool RejectHitTarget(const cc::SurfaceDrawQuad* surface_quad,
+    bool RejectHitTarget(const viz::SurfaceDrawQuad* surface_quad,
                          const gfx::Point& point_in_quad_space) override;
-    bool AcceptHitTarget(const cc::SurfaceDrawQuad* surface_quad,
+    bool AcceptHitTarget(const viz::SurfaceDrawQuad* surface_quad,
                          const gfx::Point& point_in_quad_space) override;
 
     const std::unordered_map<viz::SurfaceId, HittestData, viz::SurfaceIdHash>&
@@ -133,6 +134,10 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   RenderWidgetHostViewBase* FindEventTarget(RenderWidgetHostViewBase* root_view,
                                             const gfx::Point& point,
                                             gfx::Point* transformed_point);
+
+  RenderWidgetHostViewBase* FindEventTarget(RenderWidgetHostViewBase* root_view,
+                                            const gfx::PointF& point,
+                                            gfx::PointF* transformed_point);
 
   void RouteTouchscreenGestureEvent(RenderWidgetHostViewBase* root_view,
                                     blink::WebGestureEvent* event,
@@ -191,6 +196,10 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            InputEventRouterGesturePreventDefaultTargetMapTest);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           InputEventRouterTouchpadGestureTargetTest);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessMouseWheelBrowserTest,
+                           InputEventRouterWheelTargetTest);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessMacBrowserTest,
                            InputEventRouterTouchpadGestureTargetTest);
 };
 

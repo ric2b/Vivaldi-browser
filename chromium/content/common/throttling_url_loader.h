@@ -31,13 +31,11 @@ class URLLoaderFactory;
 // interfaces. It applies a list of URLLoaderThrottle instances which could
 // defer, resume or cancel the URL loading. If the Mojo connection fails during
 // the request it is canceled with net::ERR_FAILED.
-class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
-                                           public URLLoaderThrottle::Delegate {
+class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient {
  public:
   // |factory| and |client| must stay alive during the lifetime of the returned
-  // object.
-  // Please note that the request may not start immediately since it could be
-  // deferred by throttles.
+  // object. Please note that the request may not start immediately since it
+  // could be deferred by throttles.
   static std::unique_ptr<ThrottlingURLLoader> CreateLoaderAndStart(
       mojom::URLLoaderFactory* factory,
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
@@ -47,8 +45,7 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
       const ResourceRequest& url_request,
       mojom::URLLoaderClient* client,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-          base::ThreadTaskRunnerHandle::Get());
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   using StartLoaderCallback =
       base::OnceCallback<void(mojom::URLLoaderRequest request,
@@ -60,11 +57,11 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
   static std::unique_ptr<ThrottlingURLLoader> CreateLoaderAndStart(
       StartLoaderCallback start_loader_callback,
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
+      int32_t routing_id,
       const ResourceRequest& url_request,
       mojom::URLLoaderClient* client,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-          base::ThreadTaskRunnerHandle::Get());
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   ~ThrottlingURLLoader() override;
 
@@ -74,7 +71,14 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
   // Disconnects the client connection and releases the URLLoader.
   void DisconnectClient();
 
+  // Sets the forwarding client to receive all subsequent notifications.
+  void set_forwarding_client(mojom::URLLoaderClient* client) {
+    forwarding_client_ = client;
+  }
+
  private:
+  class ForwardingThrottleDelegate;
+
   ThrottlingURLLoader(
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
       mojom::URLLoaderClient* client,
@@ -99,6 +103,19 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
                 const ResourceRequest& url_request,
                 scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
+  // Processes the result of a URLLoaderThrottle call, adding the throttle to
+  // the blocking set if it deferred and updating |*should_defer| accordingly.
+  // Returns |true| if the request should continue to be processed (regardless
+  // of whether it's been deferred) or |false| if it's been cancelled.
+  bool HandleThrottleResult(URLLoaderThrottle* throttle,
+                            bool throttle_deferred,
+                            bool* should_defer);
+
+  // Stops a given throttle from deferring the request. If this was not the last
+  // deferring throttle, the request remains deferred. Otherwise it resumes
+  // progress.
+  void StopDeferringForThrottle(URLLoaderThrottle* throttle);
+
   // mojom::URLLoaderClient implementation:
   void OnReceiveResponse(const ResourceResponseHead& response_head,
                          const base::Optional<net::SSLInfo>& ssl_info,
@@ -113,13 +130,15 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override;
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle body) override;
-  void OnComplete(const ResourceRequestCompletionStatus& status) override;
+  void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
   void OnClientConnectionError();
 
-  // URLLoaderThrottle::Delegate:
-  void CancelWithError(int error_code) override;
-  void Resume() override;
+  void CancelWithError(int error_code);
+  void Resume();
+
+  void PauseReadingBodyFromNet(URLLoaderThrottle* throttle);
+  void ResumeReadingBodyFromNet(URLLoaderThrottle* throttle);
 
   enum DeferredStage {
     DEFERRED_NONE,
@@ -131,8 +150,28 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
   bool loader_cancelled_ = false;
   bool is_synchronous_ = false;
 
-  std::unique_ptr<URLLoaderThrottle> throttle_;
+  struct ThrottleEntry {
+    ThrottleEntry(ThrottlingURLLoader* loader,
+                  std::unique_ptr<URLLoaderThrottle> the_throttle);
+    ThrottleEntry(ThrottleEntry&& other);
+    ~ThrottleEntry();
 
+    ThrottleEntry& operator=(ThrottleEntry&& other);
+
+    std::unique_ptr<ForwardingThrottleDelegate> delegate;
+    std::unique_ptr<URLLoaderThrottle> throttle;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(ThrottleEntry);
+  };
+
+  std::vector<ThrottleEntry> throttles_;
+  std::set<URLLoaderThrottle*> deferring_throttles_;
+  std::set<URLLoaderThrottle*> pausing_reading_body_from_net_throttles_;
+
+  // NOTE: This may point to a native implementation (instead of a Mojo proxy
+  // object). And it is possible that the implementation of |forwarding_client_|
+  // destroys this object synchronously when this object is calling into it.
   mojom::URLLoaderClient* forwarding_client_;
   mojo::Binding<mojom::URLLoaderClient> client_binding_;
 
@@ -198,6 +237,11 @@ class CONTENT_EXPORT ThrottlingURLLoader : public mojom::URLLoaderClient,
   std::unique_ptr<PriorityInfo> priority_info_;
 
   const net::NetworkTrafficAnnotationTag traffic_annotation_;
+
+  uint32_t inside_delegate_calls_ = 0;
+
+  // The latest request URL from where we expect a response
+  GURL response_url_;
 
   DISALLOW_COPY_AND_ASSIGN(ThrottlingURLLoader);
 };

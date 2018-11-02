@@ -7,16 +7,18 @@
  * @suppress {accessControls}
  */
 
+BindingsTestRunner.cleanupURL = function(url) {
+  if (!url.startsWith('debugger://'))
+    return url;
+
+  return url.replace(/VM\d+/g, 'VM[XXX]');
+};
+
 BindingsTestRunner.dumpWorkspace = function(previousSnapshot) {
   var uiSourceCodes = Workspace.workspace.uiSourceCodes().slice();
   var urls = uiSourceCodes.map(code => code.url());
 
-  urls = urls.map(url => {
-    if (!url.startsWith('debugger://'))
-      return url;
-
-    return url.replace(/VM\d+/g, 'VM[XXX]');
-  });
+  urls = urls.map(BindingsTestRunner.cleanupURL);
 
   urls.sort(String.caseInsensetiveComparator);
   var isAdded = new Array(urls.length).fill(false);
@@ -85,7 +87,7 @@ BindingsTestRunner.detachFrame = function(frameId, evalSourceURL) {
   if (evalSourceURL)
     evalSource += '//# sourceURL=' + evalSourceURL;
 
-  return TestRunner.evaluateInPagePromise(evalSource);
+  return TestRunner.evaluateInPageAnonymously(evalSource);
 
   function detachFrame(frameId) {
     var frame = document.getElementById(frameId);
@@ -114,7 +116,7 @@ BindingsTestRunner.attachShadowDOM = function(id, templateSelector, evalSourceUR
   if (evalSourceURL)
     evalSource += '//# sourceURL=' + evalSourceURL;
 
-  return TestRunner.evaluateInPagePromise(evalSource);
+  return TestRunner.evaluateInPageAnonymously(evalSource);
 
   function createShadowDOM(id, templateSelector) {
     var shadowHost = document.createElement('div');
@@ -135,7 +137,7 @@ BindingsTestRunner.detachShadowDOM = function(id, evalSourceURL) {
   if (evalSourceURL)
     evalSource += '//# sourceURL=' + evalSourceURL;
 
-  return TestRunner.evaluateInPagePromise(evalSource);
+  return TestRunner.evaluateInPageAnonymously(evalSource);
 
   function removeShadowDOM(id) {
     document.querySelector('#' + id).remove();
@@ -215,5 +217,6 @@ BindingsTestRunner.dumpLocation = function(liveLocation, hint) {
   }
 
   TestRunner.addResult(
-      prefix + uiLocation.uiSourceCode.url() + ':' + uiLocation.lineNumber + ':' + uiLocation.columnNumber);
+      prefix + BindingsTestRunner.cleanupURL(uiLocation.uiSourceCode.url()) + ':' + uiLocation.lineNumber + ':' +
+      uiLocation.columnNumber);
 };

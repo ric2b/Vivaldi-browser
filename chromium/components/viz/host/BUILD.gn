@@ -8,6 +8,8 @@ viz_component("host") {
   defines = [ "VIZ_HOST_IMPLEMENTATION" ]
 
   sources = [
+    "forwarding_compositing_mode_reporter_impl.cc",
+    "forwarding_compositing_mode_reporter_impl.h",
     "hit_test/hit_test_query.cc",
     "hit_test/hit_test_query.h",
     "host_frame_sink_client.h",
@@ -22,11 +24,10 @@ viz_component("host") {
 
   deps = [
     "//base",
-    "//cc/ipc:interfaces",
     "//components/viz/common",
     "//gpu/ipc/client",
     "//gpu/ipc/common",
-    "//services/ui/gpu/interfaces",
+    "//services/viz/privileged/interfaces",
     "//ui/base",
     "//ui/gfx",
 
@@ -49,7 +50,7 @@ viz_source_set("unit_tests") {
 
   sources = [
     "hit_test/hit_test_query_unittest.cc",
-    "host_frame_sink_manager_unittests.cc",
+    "host_frame_sink_manager_unittest.cc",
     "server_gpu_memory_buffer_manager_unittest.cc",
   ]
 
@@ -57,10 +58,10 @@ viz_source_set("unit_tests") {
     ":host",
     "//base",
     "//base/test:test_support",
-    "//cc/ipc:interfaces",
+    "//components/viz/test:test_support",
     "//gpu/ipc/host",
     "//mojo/public/cpp/bindings",
-    "//services/ui/gpu/interfaces",
+    "//services/viz/privileged/interfaces",
     "//services/viz/public/interfaces",
     "//testing/gmock",
     "//testing/gtest",

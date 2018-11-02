@@ -35,8 +35,7 @@
 
 namespace blink {
 
-class CORE_EXPORT DOMRectList final : public GarbageCollected<DOMRectList>,
-                                      public ScriptWrappable {
+class CORE_EXPORT DOMRectList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -53,7 +52,7 @@ class CORE_EXPORT DOMRectList final : public GarbageCollected<DOMRectList>,
   unsigned length() const;
   DOMRect* item(unsigned index);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   DOMRectList();

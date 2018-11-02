@@ -43,6 +43,7 @@ class CC_ANIMATION_EXPORT Animation {
     // This sentinel must be last.
     LAST_RUN_STATE = ABORTED_BUT_NEEDS_COMPLETION
   };
+  static std::string ToString(RunState);
 
   enum class Direction { NORMAL, REVERSE, ALTERNATE_NORMAL, ALTERNATE_REVERSE };
 
@@ -134,6 +135,8 @@ class CC_ANIMATION_EXPORT Animation {
   // of iterations, returns the relative time in the current iteration.
   base::TimeDelta TrimTimeToCurrentIteration(
       base::TimeTicks monotonic_time) const;
+
+  base::TimeTicks ConvertFromActiveTime(base::TimeDelta active_time) const;
 
   std::unique_ptr<Animation> CloneAndInitialize(
       RunState initial_run_state) const;

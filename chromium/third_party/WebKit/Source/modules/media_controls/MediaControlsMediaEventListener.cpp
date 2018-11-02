@@ -5,7 +5,7 @@
 #include "modules/media_controls/MediaControlsMediaEventListener.h"
 
 #include "core/dom/events/Event.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/TextTrackList.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/remoteplayback/AvailabilityCallbackWrapper.h"
@@ -38,6 +38,9 @@ void MediaControlsMediaEventListener::Attach() {
   GetMediaElement().addEventListener(EventTypeNames::keypress, this, false);
   GetMediaElement().addEventListener(EventTypeNames::keydown, this, false);
   GetMediaElement().addEventListener(EventTypeNames::keyup, this, false);
+  GetMediaElement().addEventListener(EventTypeNames::waiting, this, false);
+  GetMediaElement().addEventListener(EventTypeNames::progress, this, false);
+  GetMediaElement().addEventListener(EventTypeNames::loadeddata, this, false);
 
   // Listen to two different fullscreen events in order to make sure the new and
   // old APIs are handled.
@@ -162,6 +165,18 @@ void MediaControlsMediaEventListener::handleEvent(
     media_controls_->OnLoadedMetadata();
     return;
   }
+  if (event->type() == EventTypeNames::waiting) {
+    media_controls_->OnWaiting();
+    return;
+  }
+  if (event->type() == EventTypeNames::progress) {
+    media_controls_->OnLoadingProgress();
+    return;
+  }
+  if (event->type() == EventTypeNames::loadeddata) {
+    media_controls_->OnLoadedData();
+    return;
+  }
 
   // Fullscreen handling.
   if (event->type() == EventTypeNames::fullscreenchange ||
@@ -214,7 +229,7 @@ void MediaControlsMediaEventListener::OnRemotePlaybackAvailabilityChanged() {
   media_controls_->RefreshCastButtonVisibility();
 }
 
-DEFINE_TRACE(MediaControlsMediaEventListener) {
+void MediaControlsMediaEventListener::Trace(blink::Visitor* visitor) {
   EventListener::Trace(visitor);
   visitor->Trace(media_controls_);
 }

@@ -65,23 +65,31 @@ function cancelThirdPartyExpected() {
         event: "onBeforeRequest",
         details: {
           url: getURLOfHTMLWithThirdParty(),
-          frameUrl: getURLOfHTMLWithThirdParty()
+          frameUrl: getURLOfHTMLWithThirdParty(),
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
         }
       },
       { label: "onBeforeSendHeaders",
         event: "onBeforeSendHeaders",
-        details: {url: getURLOfHTMLWithThirdParty()}
+        details: {
+          url: getURLOfHTMLWithThirdParty(),
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
+        }
       },
       { label: "onSendHeaders",
         event: "onSendHeaders",
-        details: {url: getURLOfHTMLWithThirdParty()}
+        details: {
+          url: getURLOfHTMLWithThirdParty(),
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
+        }
       },
       { label: "onHeadersReceived",
         event: "onHeadersReceived",
         details: {
           url: getURLOfHTMLWithThirdParty(),
           statusLine: "HTTP/1.1 200 OK",
-          statusCode: 200
+          statusCode: 200,
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
         }
       },
       { label: "onResponseStarted",
@@ -91,7 +99,8 @@ function cancelThirdPartyExpected() {
           fromCache: false,
           ip: "127.0.0.1",
           statusCode: 200,
-          statusLine: "HTTP/1.1 200 OK"
+          statusLine: "HTTP/1.1 200 OK",
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
         }
       },
       { label: "onCompleted",
@@ -101,7 +110,8 @@ function cancelThirdPartyExpected() {
           ip: "127.0.0.1",
           url: getURLOfHTMLWithThirdParty(),
           statusCode: 200,
-          statusLine: "HTTP/1.1 200 OK"
+          statusLine: "HTTP/1.1 200 OK",
+          initiator: getServerDomain(initiators.BROWSER_INITIATED)
         }
       },
       { label: "img-onBeforeRequest",
@@ -109,7 +119,8 @@ function cancelThirdPartyExpected() {
         details: {
           type: "image",
           url: "http://non_existing_third_party.com/image.png",
-          frameUrl: getURLOfHTMLWithThirdParty()
+          frameUrl: getURLOfHTMLWithThirdParty(),
+          initiator: getServerDomain(initiators.WEB_INITIATED)
         }
       },
       { label: "img-onErrorOccurred",
@@ -118,7 +129,8 @@ function cancelThirdPartyExpected() {
           error: "net::ERR_BLOCKED_BY_CLIENT",
           fromCache: false,
           type: "image",
-          url: "http://non_existing_third_party.com/image.png"
+          url: "http://non_existing_third_party.com/image.png",
+          initiator: getServerDomain(initiators.WEB_INITIATED)
         }
       },
     ];
@@ -143,7 +155,8 @@ runTests([
           details: {
             url: getURLHttpWithHeaders(),
             fromCache: false,
-            error: "net::ERR_BLOCKED_BY_CLIENT"
+            error: "net::ERR_BLOCKED_BY_CLIENT",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],
@@ -185,13 +198,13 @@ runTests([
         { label: "onBeforeSendHeaders",
           event: "onBeforeSendHeaders",
           details: {
-            url: getURLHttpWithHeaders(),
+            url: getURLHttpWithHeaders()
           }
         },
         { label: "onSendHeaders",
           event: "onSendHeaders",
           details: {
-            url: getURLHttpWithHeaders(),
+            url: getURLHttpWithHeaders()
           }
         },
         { label: "onHeadersReceived",
@@ -267,7 +280,8 @@ runTests([
           event: "onBeforeRequest",
           details: {
             url: getURLOfHTMLWithThirdParty(),
-            frameUrl: getURLOfHTMLWithThirdParty()
+            frameUrl: getURLOfHTMLWithThirdParty(),
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
         { label: "onErrorOccurred",
@@ -275,7 +289,8 @@ runTests([
           details: {
             url: getURLOfHTMLWithThirdParty(),
             fromCache: false,
-            error: "net::ERR_BLOCKED_BY_CLIENT"
+            error: "net::ERR_BLOCKED_BY_CLIENT",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],
@@ -304,7 +319,8 @@ runTests([
           details: {
             type: "main_frame",
             url: getURLHttpComplex(),
-            frameUrl: getURLHttpComplex()
+            frameUrl: getURLHttpComplex(),
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           },
         },
         { label: "onBeforeRedirect",
@@ -315,6 +331,7 @@ runTests([
             fromCache: false,
             statusLine: "HTTP/1.1 307 Internal Redirect",
             statusCode: 307,
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
         { label: "onBeforeRequest-b",
@@ -323,6 +340,7 @@ runTests([
             type: "main_frame",
             url: getURLHttpSimple(),
             frameUrl: getURLHttpSimple(),
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           },
         },
         { label: "onCompleted",
@@ -333,6 +351,7 @@ runTests([
             fromCache: false,
             statusCode: 200,
             statusLine: "HTTP/1.1 200 OK",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],
@@ -360,6 +379,7 @@ runTests([
             fromCache: false,
             statusCode: 200,
             statusLine: "HTTP/1.1 200 OK",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
         // We cannot wait for onCompleted signals because these are not sent
@@ -376,6 +396,7 @@ runTests([
             statusLine: "HTTP/1.1 307 Internal Redirect",
             statusCode: 307,
             type: "image",
+            initiator: getServerDomain(initiators.WEB_INITIATED)
           }
         },
         { label: "onBeforeRedirect-2",
@@ -390,6 +411,7 @@ runTests([
             statusLine: "HTTP/1.1 307 Internal Redirect",
             statusCode: 307,
             type: "sub_frame",
+            initiator: getServerDomain(initiators.WEB_INITIATED)
           }
         },
       ],
@@ -418,7 +440,8 @@ runTests([
           details: {
             type: "main_frame",
             url: getURLHttpWithHeaders(),
-            frameUrl: getURLHttpWithHeaders()
+            frameUrl: getURLHttpWithHeaders(),
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           },
         },
         { label: "onBeforeRedirect",
@@ -430,6 +453,7 @@ runTests([
             statusCode: 302,
             fromCache: false,
             ip: "127.0.0.1",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
         { label: "onBeforeRequest-b",
@@ -438,6 +462,7 @@ runTests([
             type: "main_frame",
             url: getURLHttpSimple(),
             frameUrl: getURLHttpSimple(),
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           },
         },
         { label: "onCompleted",
@@ -448,6 +473,7 @@ runTests([
             fromCache: false,
             statusCode: 200,
             statusLine: "HTTP/1.1 200 OK",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],
@@ -475,6 +501,7 @@ runTests([
             fromCache: false,
             statusCode: 200,
             statusLine: "HTTP/1.1 200 OK",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],
@@ -498,7 +525,8 @@ runTests([
           details: {
             url: getURLHttpSimple(),
             fromCache: false,
-            error: "net::ERR_BLOCKED_BY_CLIENT"
+            error: "net::ERR_BLOCKED_BY_CLIENT",
+            initiator: getServerDomain(initiators.BROWSER_INITIATED)
           }
         },
       ],

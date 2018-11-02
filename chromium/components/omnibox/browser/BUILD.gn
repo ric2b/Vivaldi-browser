@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//device/vr/features/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//components/vector_icons/vector_icons.gni")
 
@@ -9,10 +11,17 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+buildflag_header("build_features") {
+  header = "features.h"
+  flags = [ "ENABLE_VR=$enable_vr" ]
+}
+
 aggregate_vector_icons("omnibox_vector_icons") {
   icon_directory = "vector_icons"
 
   icons = [
+    "blank.1x.icon",
+    "blank.icon",
     "calculator.1x.icon",
     "calculator.icon",
     "extension_app.1x.icon",
@@ -21,6 +30,7 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "keyword_search.icon",
     "star.1x.icon",
     "star.icon",
+    "tab.icon",
   ]
 }
 
@@ -48,12 +58,15 @@ static_library("browser") {
     "base_search_provider.h",
     "bookmark_provider.cc",
     "bookmark_provider.h",
+    "tailored_word_break_iterator.cc",
+    "tailored_word_break_iterator.h",
     "builtin_provider.cc",
     "builtin_provider.h",
     "clipboard_url_provider.cc",
     "clipboard_url_provider.h",
     "contextual_suggestions_service.cc",
     "contextual_suggestions_service.h",
+    "features.h",
     "history_match.cc",
     "history_match.h",
     "history_provider.cc",
@@ -134,10 +147,11 @@ static_library("browser") {
 
   public_deps = [
     "//components/history/core/browser",
-    "//components/metrics/proto",
     "//components/omnibox/common",
+    "//third_party/metrics_proto",
   ]
   deps = [
+    ":build_features",
     ":in_memory_url_index_cache_proto",
     "//base",
     "//base:i18n",
@@ -145,6 +159,7 @@ static_library("browser") {
     "//components/data_use_measurement/core",
     "//components/keyed_service/core",
     "//components/metrics",
+    "//components/navigation_metrics",
     "//components/open_from_clipboard",
     "//components/physical_web/data_source",
     "//components/pref_registry",
@@ -170,7 +185,7 @@ static_library("browser") {
     "//url",
   ]
 
-  if (!is_android && !is_ios) {
+  if ((!is_android || enable_vr) && !is_ios) {
     sources += get_target_outputs(":omnibox_vector_icons")
     deps += [
       ":omnibox_vector_icons",
@@ -217,6 +232,12 @@ static_library("test_support") {
     "mock_autocomplete_provider_client.h",
     "shortcuts_provider_test_util.cc",
     "shortcuts_provider_test_util.h",
+    "test_omnibox_client.cc",
+    "test_omnibox_client.h",
+    "test_omnibox_edit_controller.cc",
+    "test_omnibox_edit_controller.h",
+    "test_omnibox_view.cc",
+    "test_omnibox_view.h",
     "test_scheme_classifier.cc",
     "test_scheme_classifier.h",
   ]
@@ -229,11 +250,13 @@ static_library("test_support") {
     "//components/bookmarks/test",
     "//components/history/core/browser",
     "//components/history/core/test",
-    "//components/metrics/proto",
     "//components/search_engines",
+    "//components/sessions",
+    "//components/toolbar:test_support",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/metrics_proto",
     "//ui/base",
   ]
 }
@@ -258,6 +281,7 @@ source_set("unit_tests") {
   sources = [
     "answers_cache_unittest.cc",
     "autocomplete_input_unittest.cc",
+    "autocomplete_match_type_unittest.cc",
     "autocomplete_match_unittest.cc",
     "autocomplete_provider_unittest.cc",
     "autocomplete_result_unittest.cc",
@@ -265,12 +289,13 @@ source_set("unit_tests") {
     "bookmark_provider_unittest.cc",
     "builtin_provider_unittest.cc",
     "clipboard_url_provider_unittest.cc",
+    "history_provider_unittest.cc",
     "history_quick_provider_unittest.cc",
     "history_url_provider_unittest.cc",
     "in_memory_url_index_types_unittest.cc",
     "in_memory_url_index_unittest.cc",
     "keyword_provider_unittest.cc",
-    "omnibox_edit_unittest.cc",
+    "omnibox_edit_model_unittest.cc",
     "omnibox_field_trial_unittest.cc",
     "omnibox_popup_model_unittest.cc",
     "omnibox_view_unittest.cc",
@@ -280,6 +305,7 @@ source_set("unit_tests") {
     "shortcuts_database_unittest.cc",
     "shortcuts_provider_unittest.cc",
     "suggestion_answer_unittest.cc",
+    "tailored_word_break_iterator_unittest.cc",
     "titled_url_match_utils_unittest.cc",
     "url_prefix_unittest.cc",
     "zero_suggest_provider_unittest.cc",
@@ -301,7 +327,6 @@ source_set("unit_tests") {
     "//components/search_engines",
     "//components/sessions",
     "//components/strings",
-    "//components/toolbar:test_support",
     "//components/url_formatter",
     "//components/variations",
     "//net:test_support",

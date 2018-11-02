@@ -8,6 +8,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env_input_state_controller.h"
 #include "ui/aura/env_observer.h"
@@ -15,6 +16,7 @@
 #include "ui/aura/local/window_port_local.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
+#include "ui/aura/mus/system_input_injector_mus.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
@@ -43,6 +45,8 @@ base::LazyInstance<base::ThreadLocalPointer<Env>>::Leaky lazy_tls_ptr =
 Env::~Env() {
   if (is_os_exchange_data_provider_factory_)
     ui::OSExchangeDataProviderFactory::SetFactory(nullptr);
+  if (is_override_input_injector_factory_)
+    ui::SetSystemInputInjectorFactory(nullptr);
 
 #if defined(USE_OZONE)
   gfx::ClientNativePixmapFactory::ResetInstance();
@@ -83,10 +87,10 @@ Env* Env::GetInstanceDontCreate() {
 
 std::unique_ptr<WindowPort> Env::CreateWindowPort(Window* window) {
   if (mode_ == Mode::LOCAL)
-    return base::MakeUnique<WindowPortLocal>(window);
+    return std::make_unique<WindowPortLocal>(window);
 
   if (in_mus_shutdown_)
-    return base::MakeUnique<WindowPortForShutdown>();
+    return std::make_unique<WindowPortForShutdown>();
 
   DCHECK(window_tree_client_);
   WindowMusType window_mus_type;
@@ -104,7 +108,7 @@ std::unique_ptr<WindowPort> Env::CreateWindowPort(Window* window) {
       NOTREACHED();
   }
   // Use LOCAL as all other cases are created by WindowTreeClient explicitly.
-  return base::MakeUnique<WindowPortMus>(window_tree_client_, window_mus_type);
+  return std::make_unique<WindowPortMus>(window_tree_client_, window_mus_type);
 }
 
 void Env::AddObserver(EnvObserver* observer) {
@@ -141,6 +145,14 @@ void Env::SetWindowTreeClient(WindowTreeClient* window_tree_client) {
   window_tree_client_ = window_tree_client;
 }
 
+void Env::ScheduleEmbed(
+    ui::mojom::WindowTreeClientPtr client,
+    base::OnceCallback<void(const base::UnguessableToken&)> callback) {
+  DCHECK_EQ(Mode::MUS, mode_);
+  DCHECK(window_tree_client_);
+  window_tree_client_->ScheduleEmbed(std::move(client), std::move(callback));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Env, private:
 
@@ -163,6 +175,7 @@ Env::Env(Mode mode)
 void Env::Init() {
   if (mode_ == Mode::MUS) {
     EnableMusOSExchangeDataProvider();
+    EnableMusOverrideInputInjector();
 #if defined(USE_OZONE)
     // Required by all Aura-using clients of services/ui
     gfx::ClientNativePixmapFactory::SetInstance(native_pixmap_factory_.get());
@@ -191,6 +204,13 @@ void Env::EnableMusOSExchangeDataProvider() {
   if (!is_os_exchange_data_provider_factory_) {
     ui::OSExchangeDataProviderFactory::SetFactory(this);
     is_os_exchange_data_provider_factory_ = true;
+  }
+}
+
+void Env::EnableMusOverrideInputInjector() {
+  if (!is_override_input_injector_factory_) {
+    ui::SetSystemInputInjectorFactory(this);
+    is_override_input_injector_factory_ = true;
   }
 }
 
@@ -240,7 +260,11 @@ ui::EventTargeter* Env::GetEventTargeter() {
 }
 
 std::unique_ptr<ui::OSExchangeData::Provider> Env::BuildProvider() {
-  return base::MakeUnique<aura::OSExchangeDataProviderMus>();
+  return std::make_unique<aura::OSExchangeDataProviderMus>();
+}
+
+std::unique_ptr<ui::SystemInputInjector> Env::CreateSystemInputInjector() {
+  return std::make_unique<SystemInputInjectorMus>(window_tree_client_);
 }
 
 }  // namespace aura

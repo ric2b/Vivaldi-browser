@@ -31,6 +31,8 @@
 #include "core/loader/WorkerThreadableLoader.h"
 
 #include <memory>
+
+#include "base/debug/alias.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoadingContext.h"
 #include "core/timing/WorkerGlobalScopePerformance.h"
@@ -46,7 +48,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/debug/Alias.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -56,7 +58,7 @@ std::unique_ptr<Vector<char>> CreateVectorFromMemoryRegion(
     const char* data,
     unsigned data_length) {
   std::unique_ptr<Vector<char>> buffer =
-      WTF::MakeUnique<Vector<char>>(data_length);
+      std::make_unique<Vector<char>>(data_length);
   memcpy(buffer->data(), data, data_length);
   return buffer;
 }
@@ -66,7 +68,8 @@ std::unique_ptr<Vector<char>> CreateVectorFromMemoryRegion(
 class WorkerThreadableLoader::AsyncTaskForwarder final
     : public WorkerThreadableLoader::TaskForwarder {
  public:
-  explicit AsyncTaskForwarder(RefPtr<WebTaskRunner> worker_loading_task_runner)
+  explicit AsyncTaskForwarder(
+      scoped_refptr<WebTaskRunner> worker_loading_task_runner)
       : worker_loading_task_runner_(std::move(worker_loading_task_runner)) {
     DCHECK(IsMainThread());
   }
@@ -85,7 +88,7 @@ class WorkerThreadableLoader::AsyncTaskForwarder final
   void Abort() override { DCHECK(IsMainThread()); }
 
  private:
-  RefPtr<WebTaskRunner> worker_loading_task_runner_;
+  scoped_refptr<WebTaskRunner> worker_loading_task_runner_;
 };
 
 struct WorkerThreadableLoader::TaskWithLocation final {
@@ -106,8 +109,8 @@ struct WorkerThreadableLoader::TaskWithLocation final {
 class WorkerThreadableLoader::WaitableEventWithTasks final
     : public ThreadSafeRefCounted<WaitableEventWithTasks> {
  public:
-  static RefPtr<WaitableEventWithTasks> Create() {
-    return AdoptRef(new WaitableEventWithTasks);
+  static scoped_refptr<WaitableEventWithTasks> Create() {
+    return base::AdoptRef(new WaitableEventWithTasks);
   }
 
   void Signal() {
@@ -160,7 +163,8 @@ class WorkerThreadableLoader::WaitableEventWithTasks final
 class WorkerThreadableLoader::SyncTaskForwarder final
     : public WorkerThreadableLoader::TaskForwarder {
  public:
-  explicit SyncTaskForwarder(RefPtr<WaitableEventWithTasks> event_with_tasks)
+  explicit SyncTaskForwarder(
+      scoped_refptr<WaitableEventWithTasks> event_with_tasks)
       : event_with_tasks_(std::move(event_with_tasks)) {
     DCHECK(IsMainThread());
   }
@@ -184,7 +188,7 @@ class WorkerThreadableLoader::SyncTaskForwarder final
   }
 
  private:
-  RefPtr<WaitableEventWithTasks> event_with_tasks_;
+  scoped_refptr<WaitableEventWithTasks> event_with_tasks_;
 };
 
 WorkerThreadableLoader::WorkerThreadableLoader(
@@ -228,13 +232,13 @@ void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
         worker_global_scope_->OutgoingReferrer()));
   }
 
-  RefPtr<WaitableEventWithTasks> event_with_tasks;
+  scoped_refptr<WaitableEventWithTasks> event_with_tasks;
   if (blocking_behavior_ == kLoadSynchronously)
     event_with_tasks = WaitableEventWithTasks::Create();
 
   WorkerThread* worker_thread = worker_global_scope_->GetThread();
-  RefPtr<WebTaskRunner> worker_loading_task_runner = TaskRunnerHelper::Get(
-      TaskType::kUnspecedLoading, worker_global_scope_.Get());
+  scoped_refptr<WebTaskRunner> worker_loading_task_runner =
+      worker_global_scope_->GetTaskRunner(TaskType::kUnspecedLoading);
   parent_frame_task_runners_->Get(TaskType::kUnspecedLoading)
       ->PostTask(
           BLINK_FROM_HERE,
@@ -259,13 +263,13 @@ void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
     return;
   }
 
-  for (const auto& task : event_with_tasks->Take()) {
+  for (auto& task : event_with_tasks->Take()) {
     // Store the program counter where the task is posted from, and alias
     // it to ensure it is stored in the crash dump.
     const void* program_counter = task.location_.program_counter();
-    WTF::debug::Alias(&program_counter);
+    base::debug::Alias(&program_counter);
 
-    task.task_();
+    std::move(task.task_).Run();
   }
 }
 
@@ -300,6 +304,14 @@ void WorkerThreadableLoader::Cancel() {
   // clearClient() call ensures that.
   DidFail(ResourceError::CancelledError(KURL()));
   DCHECK(!client_);
+}
+
+void WorkerThreadableLoader::Detach() {
+  // NOTREACHED
+  // Currently only "synchronous" requests are using this class and we will
+  // deprecate it in the future. As this method cannot be called for such
+  // requests, we don't implement it.
+  CHECK(false);
 }
 
 void WorkerThreadableLoader::DidStart(
@@ -407,14 +419,14 @@ void WorkerThreadableLoader::DidReceiveResourceTiming(
   DCHECK(!IsMainThread());
   if (!client_)
     return;
-  RefPtr<ResourceTimingInfo> info(
+  scoped_refptr<ResourceTimingInfo> info(
       ResourceTimingInfo::Adopt(std::move(timing_data)));
   WorkerGlobalScopePerformance::performance(*worker_global_scope_)
       ->AddResourceTiming(*info);
   client_->DidReceiveResourceTiming(*info);
 }
 
-DEFINE_TRACE(WorkerThreadableLoader) {
+void WorkerThreadableLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(worker_global_scope_);
   ThreadableLoader::Trace(visitor);
 }
@@ -422,12 +434,12 @@ DEFINE_TRACE(WorkerThreadableLoader) {
 void WorkerThreadableLoader::MainThreadLoaderHolder::CreateAndStart(
     WorkerThreadableLoader* worker_loader,
     ThreadableLoadingContext* loading_context,
-    RefPtr<WebTaskRunner> worker_loading_task_runner,
+    scoped_refptr<WebTaskRunner> worker_loading_task_runner,
     WorkerThreadLifecycleContext* worker_thread_lifecycle_context,
     std::unique_ptr<CrossThreadResourceRequestData> request,
     const ThreadableLoaderOptions& options,
     const ResourceLoaderOptions& resource_loader_options,
-    RefPtr<WaitableEventWithTasks> event_with_tasks) {
+    scoped_refptr<WaitableEventWithTasks> event_with_tasks) {
   DCHECK(IsMainThread());
   TaskForwarder* forwarder;
   if (event_with_tasks)
@@ -624,7 +636,8 @@ void WorkerThreadableLoader::MainThreadLoaderHolder::ContextDestroyed(
   Cancel();
 }
 
-DEFINE_TRACE(WorkerThreadableLoader::MainThreadLoaderHolder) {
+void WorkerThreadableLoader::MainThreadLoaderHolder::Trace(
+    blink::Visitor* visitor) {
   visitor->Trace(forwarder_);
   visitor->Trace(main_thread_loader_);
   WorkerThreadLifecycleObserver::Trace(visitor);

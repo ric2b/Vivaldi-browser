@@ -24,7 +24,11 @@ bool NullEncrypter::SetNoncePrefix(QuicStringPiece nonce_prefix) {
   return nonce_prefix.empty();
 }
 
-bool NullEncrypter::EncryptPacket(QuicVersion version,
+bool NullEncrypter::SetIV(QuicStringPiece iv) {
+  return iv.empty();
+}
+
+bool NullEncrypter::EncryptPacket(QuicTransportVersion version,
                                   QuicPacketNumber /*packet_number*/,
                                   QuicStringPiece associated_data,
                                   QuicStringPiece plaintext,
@@ -36,7 +40,7 @@ bool NullEncrypter::EncryptPacket(QuicVersion version,
     return false;
   }
   uint128 hash;
-  if (version > QUIC_VERSION_36) {
+  if (version > QUIC_VERSION_35) {
     if (perspective_ == Perspective::IS_SERVER) {
       hash =
           QuicUtils::FNV1a_128_Hash_Three(associated_data, plaintext, "Server");

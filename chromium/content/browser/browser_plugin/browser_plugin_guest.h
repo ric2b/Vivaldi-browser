@@ -22,19 +22,21 @@
 
 #include <map>
 #include <memory>
-#include <queue>
 
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/common/edit_command.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/input_event_ack_state.h"
+#include "content/public/common/screen_info.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -56,6 +58,7 @@ class Range;
 }  // namespace gfx
 
 namespace viz {
+class LocalSurfaceId;
 class SurfaceId;
 class SurfaceInfo;
 struct SurfaceSequence;
@@ -72,6 +75,7 @@ class RenderWidgetHostViewBase;
 class SiteInstance;
 class WebContentsView;
 struct DropData;
+struct ScreenInfo;
 struct TextInputState;
 
 // A browser plugin guest provides functionality for WebContents to operate in
@@ -150,6 +154,12 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // within an embedder.
   int browser_plugin_instance_id() const { return browser_plugin_instance_id_; }
 
+  // Returns the ScreenInfo used by the guest to render.
+  const ScreenInfo& screen_info() const { return screen_info_; }
+
+  // Returns the current rect used by the guest to render.
+  const gfx::Rect& frame_rect() const { return frame_rect_; }
+
   // Set the instance id.
   void SetInstanceId(int instance_id);
 
@@ -165,11 +175,21 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   bool focused() const { return focused_; }
   bool visible() const { return guest_visible_; }
+
+  // Returns the viz::LocalSurfaceId propagated from the parent to be used by
+  // this guest.
+  const viz::LocalSurfaceId& local_surface_id() const {
+    return local_surface_id_;
+  }
+
   bool is_in_destruction() { return is_in_destruction_; }
 
   void UpdateVisibility();
 
   BrowserPluginGuestManager* GetBrowserPluginGuestManager() const;
+
+  void ResizeDueToAutoResize(const gfx::Size& new_size,
+                             uint64_t sequence_number);
 
   // WebContentsObserver implementation.
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
@@ -185,7 +205,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // GuestHost implementation.
   int LoadURLWithParams(
       const NavigationController::LoadURLParams& load_params) override;
-  void GuestResizeDueToAutoResize(const gfx::Size& new_size) override;
   void SizeContents(const gfx::Size& new_size) override;
   void WillDestroy() override;
 
@@ -230,8 +249,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // |message|.
   static bool ShouldForwardToBrowserPluginGuest(const IPC::Message& message);
 
-  void DragSourceEndedAt(int client_x, int client_y, int screen_x,
-      int screen_y, blink::WebDragOperation operation);
+  void DragSourceEndedAt(float client_x,
+                         float client_y,
+                         float screen_x,
+                         float screen_y,
+                         blink::WebDragOperation operation);
 
   // Called when the drag started by this guest ends at an OS-level.
   void EmbedderSystemDragEnded();
@@ -253,7 +275,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   void PointerLockPermissionResponse(bool allow);
 
-  gfx::Rect guest_window_rect(){return guest_window_rect_;}
+  gfx::Rect frame_rect(){return frame_rect_;}
 
   // The next function is virtual for test purposes.
   virtual void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
@@ -311,7 +333,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                           blink::WebDragStatus drag_status,
                           const DropData& drop_data,
                           blink::WebDragOperationsMask drag_mask,
-                          const gfx::Point& location);
+                          const gfx::PointF& location);
   // Instructs the guest to execute an edit command decoded in the embedder.
   void OnExecuteEditCommand(int instance_id,
                             const std::string& command);
@@ -348,7 +370,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void OnSetVisibility(int instance_id, bool visible);
   void OnUnlockMouse();
   void OnUnlockMouseAck(int instance_id);
-  void OnUpdateGeometry(int instance_id, const gfx::Rect& view_rect);
+  void OnUpdateResizeParams(int instance_id,
+                            const gfx::Rect& frame_rect,
+                            const ScreenInfo& screen_info,
+                            uint64_t sequence_number,
+                            const viz::LocalSurfaceId& local_surface_id);
 
   void OnTextInputStateChanged(const TextInputState& params);
   void OnImeSetComposition(
@@ -416,7 +442,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   // An identifier that uniquely identifies a browser plugin within an embedder.
   int browser_plugin_instance_id_;
-  gfx::Rect guest_window_rect_;
+  gfx::Rect frame_rect_;
   bool focused_;
   bool mouse_locked_;
   bool pending_lock_request_;
@@ -431,9 +457,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // prior to attachment if it is created via a call to window.open and
   // maintains a JavaScript reference to its opener.
   bool has_render_view_;
-
-  // Last seen size of guest contents (by SwapCompositorFrame).
-  gfx::Size last_seen_view_size_;
 
   bool is_in_destruction_;
 
@@ -460,7 +483,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   // This is a queue of messages that are destined to be sent to the embedder
   // once the guest is attached to a particular embedder.
-  std::deque<std::unique_ptr<IPC::Message>> pending_messages_;
+  base::circular_deque<std::unique_ptr<IPC::Message>> pending_messages_;
 
   BrowserPluginGuestDelegate* delegate_;
 
@@ -470,6 +493,9 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // means when we have --use-cross-process-frames-for-guests on, the
   // WebContents associated with this BrowserPluginGuest has OOPIF structure.
   bool can_use_cross_process_frames_;
+
+  viz::LocalSurfaceId local_surface_id_;
+  ScreenInfo screen_info_;
 
   // Vivaldi specific; we need to limit focus messages sent to one per change
   // per RenderWidgetHost.

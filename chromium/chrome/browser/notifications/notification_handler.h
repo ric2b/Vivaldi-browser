@@ -8,10 +8,11 @@
 #include <memory>
 #include <string>
 
-namespace base {
-class NullableString16;
-}
+#include "base/callback_forward.h"
+#include "base/optional.h"
+#include "base/strings/string16.h"
 
+class GURL;
 class Profile;
 
 // Interface that enables the different kind of notifications to process
@@ -19,33 +20,43 @@ class Profile;
 // notification type.
 class NotificationHandler {
  public:
-  virtual ~NotificationHandler() {}
+  // Type of notifications that a handler can be responsible for.
+  enum class Type {
+    WEB_PERSISTENT = 0,
+    WEB_NON_PERSISTENT = 1,
+    EXTENSION = 2,
+    TRANSIENT = 3,  // A generic type for any notification that does not outlive
+                    // the browser instance and is controlled by a
+                    // NotificationDelegate.
+    DOWNLOAD = 4,
+    MAX = DOWNLOAD,
+  };
 
-  // Called after displaying a toast in case the caller needs some processing.
-  virtual void OnShow(Profile* profile, const std::string& notification_id) = 0;
+  virtual ~NotificationHandler();
 
-  // Process notification close events.
+  // Called after a notification has been displayed.
+  virtual void OnShow(Profile* profile, const std::string& notification_id);
+
+  // Process notification close events. The |completed_closure| must be invoked
+  // on the UI thread once processing of the close event has been finished.
   virtual void OnClose(Profile* profile,
-                       const std::string& origin,
+                       const GURL& origin,
                        const std::string& notification_id,
-                       bool by_user) = 0;
+                       bool by_user,
+                       base::OnceClosure completed_closure);
 
-  // Process cliks to a notification or its buttons, depending on
-  // |action_index|.
+  // Process clicks on a notification or its buttons, depending on
+  // |action_index|. The |completed_closure| must be invoked on the UI thread
+  // once processing of the click event has been finished.
   virtual void OnClick(Profile* profile,
-                       const std::string& origin,
+                       const GURL& origin,
                        const std::string& notification_id,
-                       int action_index,
-                       const base::NullableString16& reply) = 0;
+                       const base::Optional<int>& action_index,
+                       const base::Optional<base::string16>& reply,
+                       base::OnceClosure completed_closure);
 
   // Open notification settings.
-  virtual void OpenSettings(Profile* profile) = 0;
-
-  // Whether a notification should be displayed if in full screen. This is
-  // ignored by native notifications since the decision is made by the
-  // underlying OS in that case.
-  virtual bool ShouldDisplayOnFullScreen(Profile* profile,
-                                         const std::string& origin) = 0;
+  virtual void OpenSettings(Profile* profile);
 };
 
 #endif  // CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_HANDLER_H_

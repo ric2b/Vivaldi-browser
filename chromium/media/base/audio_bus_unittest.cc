@@ -30,7 +30,7 @@ static const int kSampleRate = 48000;
 
 class AudioBusTest : public testing::Test {
  public:
-  AudioBusTest() {}
+  AudioBusTest() = default;
   ~AudioBusTest() override {
     for (size_t i = 0; i < data_.size(); ++i)
       base::AlignedFree(data_[i]);
@@ -518,6 +518,32 @@ TEST_F(AudioBusTest, ToInterleaved) {
     ASSERT_EQ(
         0, memcmp(test_array, kTestVectorFloat32, sizeof(kTestVectorFloat32)));
   }
+}
+
+TEST_F(AudioBusTest, ToInterleavedSanitized) {
+  // This is based on kTestVectorFloat32, but has some of the values outside of
+  // sanity.
+  static const float kTestVectorFloat32Invalid[kTestVectorSize] = {
+      -5.0f,
+      0.0f,
+      5.0f,
+      -1.0f,
+      0.5f,
+      -0.5f,
+      0.0f,
+      std::numeric_limits<float>::infinity(),
+      std::numeric_limits<float>::signaling_NaN(),
+      std::numeric_limits<float>::quiet_NaN()};
+  std::unique_ptr<AudioBus> bus =
+      AudioBus::Create(kTestVectorChannelCount, kTestVectorFrameCount);
+  bus->FromInterleaved<Float32SampleTypeTraits>(kTestVectorFloat32Invalid,
+                                                bus->frames());
+  // Verify FromInterleaved applied no sanity.
+  ASSERT_EQ(bus->channel(0)[0], kTestVectorFloat32Invalid[0]);
+  float test_array[arraysize(kTestVectorFloat32)];
+  bus->ToInterleaved<Float32SampleTypeTraits>(bus->frames(), test_array);
+  ASSERT_EQ(0,
+            memcmp(test_array, kTestVectorFloat32, sizeof(kTestVectorFloat32)));
 }
 
 // Verify ToInterleavedPartial() interleaves audio correctly.

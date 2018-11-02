@@ -88,7 +88,7 @@ PerformanceResourceTiming::PerformanceResourceTiming(
 PerformanceResourceTiming::~PerformanceResourceTiming() {}
 
 ResourceLoadTiming* PerformanceResourceTiming::GetResourceLoadTiming() const {
-  return timing_.Get();
+  return timing_.get();
 }
 
 bool PerformanceResourceTiming::AllowTimingDetails() const {
@@ -346,7 +346,7 @@ void PerformanceResourceTiming::BuildJSONValue(ScriptState* script_state,
   builder.Add("serverTiming", serverTiming);
 }
 
-DEFINE_TRACE(PerformanceResourceTiming) {
+void PerformanceResourceTiming::Trace(blink::Visitor* visitor) {
   visitor->Trace(serverTiming_);
   PerformanceEntry::Trace(visitor);
 }

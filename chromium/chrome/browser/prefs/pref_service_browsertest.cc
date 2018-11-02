@@ -90,12 +90,12 @@ IN_PROC_BROWSER_TEST_F(PreferenceServiceTest, Test) {
   JSONFileValueDeserializer deserializer(original_pref_file_);
   std::unique_ptr<base::Value> root;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     root = deserializer.Deserialize(NULL, NULL);
   }
 
   ASSERT_TRUE(root.get());
-  ASSERT_TRUE(root->IsType(base::Value::Type::DICTIONARY));
+  ASSERT_TRUE(root->is_dict());
 
   base::DictionaryValue* root_dict =
       static_cast<base::DictionaryValue*>(root.get());

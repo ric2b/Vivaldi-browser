@@ -4,7 +4,6 @@
 
 #include "ash/wm/workspace/workspace_window_resizer.h"
 
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
@@ -42,8 +41,8 @@ const int kRootHeight = 600;
 // A simple window delegate that returns the specified min size.
 class TestWindowDelegate : public aura::test::TestWindowDelegate {
  public:
-  TestWindowDelegate() {}
-  ~TestWindowDelegate() override {}
+  TestWindowDelegate() = default;
+  ~TestWindowDelegate() override = default;
 
   void set_min_size(const gfx::Size& size) { min_size_ = size; }
 
@@ -66,7 +65,7 @@ class TestWindowDelegate : public aura::test::TestWindowDelegate {
 class WorkspaceWindowResizerTest : public AshTestBase {
  public:
   WorkspaceWindowResizerTest() : workspace_resizer_(nullptr) {}
-  ~WorkspaceWindowResizerTest() override {}
+  ~WorkspaceWindowResizerTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -492,11 +491,6 @@ TEST_F(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_3_Compress) {
 // Tests that touch-dragging a window does not lock the mouse cursor
 // and therefore shows the cursor on a mousemove.
 TEST_F(WorkspaceWindowResizerTest, MouseMoveWithTouchDrag) {
-  // TODO: fails because mash doesn't support CursorManager.
-  // http://crbug.com/631103.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   window_->SetBounds(gfx::Rect(0, 300, 400, 300));
   window2_->SetBounds(gfx::Rect(400, 200, 100, 200));
 
@@ -662,7 +656,7 @@ TEST_F(WorkspaceWindowResizerTest, DragSnapped) {
   window_->Show();
   const wm::WMEvent snap_event(wm::WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&snap_event);
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());
   gfx::Rect snapped_bounds = window_->bounds();
   EXPECT_NE(snapped_bounds.ToString(), kInitialBounds.ToString());
   EXPECT_EQ(window_state->GetRestoreBoundsInParent().ToString(),
@@ -673,7 +667,7 @@ TEST_F(WorkspaceWindowResizerTest, DragSnapped) {
       CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
   resizer->Drag(CalculateDragPoint(*resizer, 10, 0), 0);
   resizer->CompleteDrag();
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_NORMAL, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::NORMAL, window_state->GetStateType());
   EXPECT_EQ("10,0 100x100", window_->bounds().ToString());
   EXPECT_FALSE(window_state->HasRestoreBounds());
 }
@@ -688,7 +682,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
 
   const wm::WMEvent snap_event(wm::WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&snap_event);
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());
   gfx::Rect snapped_bounds = window_->bounds();
   EXPECT_NE(snapped_bounds.ToString(), kInitialBounds.ToString());
   EXPECT_EQ(window_state->GetRestoreBoundsInParent().ToString(),
@@ -701,7 +695,8 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
         CreateResizerForTest(window_.get(), gfx::Point(), HTRIGHT));
     resizer->Drag(CalculateDragPoint(*resizer, 10, 0), 0);
     resizer->CompleteDrag();
-    EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+    EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED,
+              window_state->GetStateType());
     snapped_bounds.Inset(0, 0, -10, 0);
     EXPECT_EQ(snapped_bounds.ToString(), window_->bounds().ToString());
     EXPECT_EQ(window_state->GetRestoreBoundsInParent().ToString(),
@@ -716,7 +711,8 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
     resizer->Drag(CalculateDragPoint(*resizer, 0, -30), 0);
     resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
     resizer->CompleteDrag();
-    EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
+    EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED,
+              window_state->GetStateType());
     EXPECT_EQ(snapped_bounds.ToString(), window_->bounds().ToString());
     EXPECT_EQ(window_state->GetRestoreBoundsInParent().ToString(),
               kInitialBounds.ToString());
@@ -729,7 +725,7 @@ TEST_F(WorkspaceWindowResizerTest, ResizeSnapped) {
         CreateResizerForTest(window_.get(), gfx::Point(), HTBOTTOM));
     resizer->Drag(CalculateDragPoint(*resizer, 0, -10), 0);
     resizer->CompleteDrag();
-    EXPECT_EQ(wm::WINDOW_STATE_TYPE_NORMAL, window_state->GetStateType());
+    EXPECT_EQ(mojom::WindowStateType::NORMAL, window_state->GetStateType());
     gfx::Rect expected_bounds(snapped_bounds);
     expected_bounds.Inset(0, 0, 0, 10);
     EXPECT_EQ(expected_bounds.ToString(), window_->bounds().ToString());
@@ -792,11 +788,6 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottom) {
 
 // Makes sure we don't allow dragging on the work area with multidisplay.
 TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
-  // TODO: SetLayoutForCurrentDisplays() needs to ported to mash.
-  // http://crbug.com/698043.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("800x600,800x600");
   ASSERT_EQ(2, display::Screen::GetScreen()->GetNumDisplays());
 

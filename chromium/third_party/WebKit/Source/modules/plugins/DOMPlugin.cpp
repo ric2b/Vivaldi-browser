@@ -27,9 +27,10 @@ namespace blink {
 DOMPlugin::DOMPlugin(LocalFrame* frame, const PluginInfo& plugin_info)
     : ContextClient(frame), plugin_info_(&plugin_info) {}
 
-DEFINE_TRACE(DOMPlugin) {
-  ContextClient::Trace(visitor);
+void DOMPlugin::Trace(blink::Visitor* visitor) {
   visitor->Trace(plugin_info_);
+  ScriptWrappable::Trace(visitor);
+  ContextClient::Trace(visitor);
 }
 
 String DOMPlugin::name() const {
@@ -64,6 +65,19 @@ DOMMimeType* DOMPlugin::namedItem(const AtomicString& property_name) {
     return nullptr;
 
   return DOMMimeType::Create(GetFrame(), *mime);
+}
+
+void DOMPlugin::NamedPropertyEnumerator(Vector<String>& property_names,
+                                        ExceptionState&) const {
+  property_names.ReserveInitialCapacity(plugin_info_->GetMimeClassInfoSize());
+  for (const MimeClassInfo* mime_info : plugin_info_->Mimes()) {
+    property_names.UncheckedAppend(mime_info->Type());
+  }
+}
+
+bool DOMPlugin::NamedPropertyQuery(const AtomicString& property_name,
+                                   ExceptionState&) const {
+  return plugin_info_->GetMimeClassInfo(property_name);
 }
 
 }  // namespace blink

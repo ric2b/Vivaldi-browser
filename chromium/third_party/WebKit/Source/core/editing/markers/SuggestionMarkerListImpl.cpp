@@ -191,9 +191,20 @@ bool SuggestionMarkerListImpl::ShiftMarkersForNonSuggestionEditingOperation(
   return did_shift_marker;
 }
 
-DEFINE_TRACE(SuggestionMarkerListImpl) {
+void SuggestionMarkerListImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(markers_);
   DocumentMarkerList::Trace(visitor);
+}
+
+bool SuggestionMarkerListImpl::RemoveMarkerByTag(int32_t tag) {
+  for (auto it = markers_.begin(); it != markers_.end(); it++) {
+    if (ToSuggestionMarker(*it)->Tag() == tag) {
+      markers_.erase(it);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace blink

@@ -27,35 +27,38 @@
 #include "core/html/parser/HTMLConstructionSite.h"
 
 #include <limits>
-#include "core/HTMLElementFactory.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Comment.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
+#include "core/dom/Node.h"
 #include "core/dom/TemplateContentDocumentFragment.h"
 #include "core/dom/Text.h"
 #include "core/dom/ThrowOnDynamicMarkupInsertionCountIncrementer.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
-#include "core/html/FormAssociated.h"
-#include "core/html/HTMLFormElement.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLScriptElement.h"
+#include "core/html/HTMLStyleElement.h"
 #include "core/html/HTMLTemplateElement.h"
 #include "core/html/custom/CEReactionsScope.h"
 #include "core/html/custom/CustomElementDefinition.h"
 #include "core/html/custom/CustomElementDescriptor.h"
 #include "core/html/custom/CustomElementRegistry.h"
+#include "core/html/forms/FormAssociated.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "core/html/parser/AtomicHTMLToken.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLParserReentryPermit.h"
 #include "core/html/parser/HTMLStackItem.h"
 #include "core/html/parser/HTMLToken.h"
+#include "core/html_element_factory.h"
+#include "core/html_names.h"
 #include "core/loader/FrameLoader.h"
 #include "core/svg/SVGScriptElement.h"
 #include "platform/bindings/Microtask.h"
@@ -74,6 +77,10 @@ static inline void SetAttributes(Element* element,
   if (!ScriptingContentIsAllowed(parser_content_policy))
     element->StripScriptingAttributes(token->Attributes());
   element->ParserSetAttributes(token->Attributes());
+  if (token->HasDuplicateAttribute()) {
+    UseCounter::Count(element->GetDocument(), WebFeature::kDuplicatedAttribute);
+    element->SetHasDuplicateAttributes();
+  }
 }
 
 static bool HasImpliedEndTag(const HTMLStackItem* item) {
@@ -85,8 +92,8 @@ static bool HasImpliedEndTag(const HTMLStackItem* item) {
 }
 
 static bool ShouldUseLengthLimit(const ContainerNode& node) {
-  return !isHTMLScriptElement(node) && !isHTMLStyleElement(node) &&
-         !isSVGScriptElement(node);
+  return !IsHTMLScriptElement(node) && !IsHTMLStyleElement(node) &&
+         !IsSVGScriptElement(node);
 }
 
 static unsigned TextLengthLimitForContainer(const ContainerNode& node) {
@@ -99,8 +106,8 @@ static inline bool IsAllWhitespace(const String& string) {
 }
 
 static inline void Insert(HTMLConstructionSiteTask& task) {
-  if (isHTMLTemplateElement(*task.parent))
-    task.parent = toHTMLTemplateElement(task.parent.Get())->content();
+  if (auto* template_element = ToHTMLTemplateElementOrNull(*task.parent))
+    task.parent = template_element->content();
 
   // https://html.spec.whatwg.org/#insert-a-foreign-element
   // 3.1, (3) Push (pop) an element queue
@@ -369,7 +376,7 @@ HTMLConstructionSite::~HTMLConstructionSite() {
   DCHECK(pending_text_.IsEmpty());
 }
 
-DEFINE_TRACE(HTMLConstructionSite) {
+void HTMLConstructionSite::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(attachment_root_);
   visitor->Trace(head_);
@@ -666,7 +673,7 @@ void HTMLConstructionSite::InsertHTMLBodyElement(AtomicHTMLToken* token) {
 void HTMLConstructionSite::InsertHTMLFormElement(AtomicHTMLToken* token,
                                                  bool is_demoted) {
   auto* form_element =
-      toHTMLFormElement(CreateElement(token, xhtmlNamespaceURI));
+      ToHTMLFormElement(CreateElement(token, xhtmlNamespaceURI));
   if (!OpenElements()->HasTemplateInHTMLScope())
     form_ = form_element;
   form_element->SetDemoted(is_demoted);
@@ -752,9 +759,8 @@ void HTMLConstructionSite::InsertTextNode(const StringView& string,
     FindFosterSite(dummy_task);
 
   // FIXME: This probably doesn't need to be done both here and in insert(Task).
-  if (isHTMLTemplateElement(*dummy_task.parent))
-    dummy_task.parent =
-        toHTMLTemplateElement(dummy_task.parent.Get())->content();
+  if (auto* template_element = ToHTMLTemplateElementOrNull(*dummy_task.parent))
+    dummy_task.parent = template_element->content();
 
   // Unclear when parent != case occurs. Somehow we insert text into two
   // separate nodes while processing the same Token. The nextChild !=
@@ -814,8 +820,8 @@ CreateElementFlags HTMLConstructionSite::GetCreateElementFlags() const {
 }
 
 inline Document& HTMLConstructionSite::OwnerDocumentForCurrentNode() {
-  if (isHTMLTemplateElement(*CurrentNode()))
-    return toHTMLTemplateElement(CurrentElement())->content()->GetDocument();
+  if (auto* template_element = ToHTMLTemplateElementOrNull(*CurrentNode()))
+    return template_element->content()->GetDocument();
   return CurrentNode()->GetDocument();
 }
 
@@ -1073,7 +1079,7 @@ void HTMLConstructionSite::FosterParent(Node* node) {
   QueueTask(task);
 }
 
-DEFINE_TRACE(HTMLConstructionSite::PendingText) {
+void HTMLConstructionSite::PendingText::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent);
   visitor->Trace(next_child);
 }

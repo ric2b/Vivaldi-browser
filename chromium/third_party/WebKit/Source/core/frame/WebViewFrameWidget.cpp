@@ -8,6 +8,7 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/HitTestResult.h"
 #include "platform/exported/WebActiveGestureAnimation.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace blink {
 
@@ -100,10 +101,6 @@ void WebViewFrameWidget::SetCursorVisibilityState(bool is_visible) {
   return web_view_->SetCursorVisibilityState(is_visible);
 }
 
-bool WebViewFrameWidget::HasTouchEventHandlersAt(const WebPoint& point) {
-  return web_view_->HasTouchEventHandlersAt(point);
-}
-
 void WebViewFrameWidget::ApplyViewportDeltas(
     const WebFloatSize& visual_viewport_delta,
     const WebFloatSize& layout_viewport_delta,
@@ -130,26 +127,9 @@ void WebViewFrameWidget::SetFocus(bool enable) {
   return web_view_->SetFocus(enable);
 }
 
-WebRange WebViewFrameWidget::CompositionRange() {
-  return web_view_->CompositionRange();
-}
-
 bool WebViewFrameWidget::SelectionBounds(WebRect& anchor,
                                          WebRect& focus) const {
   return web_view_->SelectionBounds(anchor, focus);
-}
-
-bool WebViewFrameWidget::SelectionTextDirection(WebTextDirection& start,
-                                                WebTextDirection& end) const {
-  return web_view_->SelectionTextDirection(start, end);
-}
-
-bool WebViewFrameWidget::IsSelectionAnchorFirst() const {
-  return web_view_->IsSelectionAnchorFirst();
-}
-
-void WebViewFrameWidget::SetTextDirection(WebTextDirection direction) {
-  return web_view_->SetTextDirection(direction);
 }
 
 bool WebViewFrameWidget::IsAcceleratedCompositingActive() const {
@@ -181,7 +161,7 @@ void WebViewFrameWidget::UpdateBrowserControlsState(
 }
 
 void WebViewFrameWidget::SetVisibilityState(
-    WebPageVisibilityState visibility_state) {
+    mojom::PageVisibilityState visibility_state) {
   return web_view_->SetVisibilityState(visibility_state, false);
 }
 
@@ -242,17 +222,21 @@ CompositorAnimationHost* WebViewFrameWidget::AnimationHost() const {
   return web_view_->AnimationHost();
 }
 
+WebHitTestResult WebViewFrameWidget::HitTestResultAt(const WebPoint& point) {
+  return web_view_->HitTestResultAt(point);
+}
+
 HitTestResult WebViewFrameWidget::CoreHitTestResultAt(const WebPoint& point) {
   return web_view_->CoreHitTestResultAt(point);
 }
 
-DEFINE_TRACE(WebViewFrameWidget) {
+void WebViewFrameWidget::Trace(blink::Visitor* visitor) {
   visitor->Trace(main_frame_);
   WebFrameWidgetBase::Trace(visitor);
 }
 
 PageWidgetEventHandler* WebViewFrameWidget::GetPageWidgetEventHandler() {
-  return web_view_.Get();
+  return web_view_.get();
 }
 
 }  // namespace blink

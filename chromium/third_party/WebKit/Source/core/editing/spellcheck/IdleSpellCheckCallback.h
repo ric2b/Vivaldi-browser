@@ -5,10 +5,9 @@
 #ifndef IdleSpellCheckCallback_h
 #define IdleSpellCheckCallback_h
 
-#include "core/dom/IdleRequestCallback.h"
-#include "core/dom/SynchronousMutationObserver.h"
-#include "core/editing/EphemeralRange.h"
-#include "core/editing/Position.h"
+#include "core/dom/DocumentShutdownObserver.h"
+#include "core/dom/ScriptedIdleTaskController.h"
+#include "core/editing/Forward.h"
 #include "platform/Timer.h"
 
 namespace blink {
@@ -27,8 +26,8 @@ class SpellCheckRequester;
 
 // Main class for the implementation of idle time spell checker.
 class CORE_EXPORT IdleSpellCheckCallback final
-    : public IdleRequestCallback,
-      public SynchronousMutationObserver {
+    : public ScriptedIdleTaskController::IdleTask,
+      public DocumentShutdownObserver {
   DISALLOW_COPY_AND_ASSIGN(IdleSpellCheckCallback);
   USING_GARBAGE_COLLECTED_MIXIN(IdleSpellCheckCallback);
 
@@ -61,11 +60,11 @@ class CORE_EXPORT IdleSpellCheckCallback final
   void SkipColdModeTimerForTesting();
   int IdleCallbackHandle() const { return idle_callback_handle_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   explicit IdleSpellCheckCallback(LocalFrame&);
-  void handleEvent(IdleDeadline*) override;
+  void invoke(IdleDeadline*) override;
 
   LocalFrame& GetFrame() const { return *frame_; }
 
@@ -83,7 +82,7 @@ class CORE_EXPORT IdleSpellCheckCallback final
   void ColdModeTimerFired(TimerBase*);
   void ColdModeInvocation(IdleDeadline*);
 
-  // Implements |SynchronousMutationObserver|.
+  // Implements |DocumentShutdownObserver|.
   void ContextDestroyed(Document*) final;
 
   State state_;

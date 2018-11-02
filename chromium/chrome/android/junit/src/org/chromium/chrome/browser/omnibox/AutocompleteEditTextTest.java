@@ -25,6 +25,7 @@ import android.widget.LinearLayout;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 import org.mockito.MockitoAnnotations;
@@ -38,6 +39,8 @@ import org.robolectric.shadows.ShadowLog;
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,7 +62,7 @@ public class AutocompleteEditTextTest {
     private static final boolean TEST_ACCESSIBILITY = true;
 
     @Rule
-    public Features.Processor mProcessor = new Features.Processor();
+    public TestRule mProcessor = new Features.JUnitProcessor();
 
     private InOrder mInOrder;
     private TestAutocompleteEditText mAutocomplete;
@@ -235,15 +238,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_CommitTextWithSpannableModel() {
         internalTestAppend_CommitText();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_CommitTextWithoutSpannableModel() {
         internalTestAppend_CommitText();
     }
@@ -414,15 +415,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_SetComposingTextWithSpannableModel() {
         internalTestAppend_SetComposingText();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_SetComposingTextWithoutSpannableModel() {
         internalTestAppend_SetComposingText();
     }
@@ -580,15 +579,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_DispatchKeyEventWithSpannableModel() {
         internalTestAppend_DispatchKeyEvent();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_DispatchKeyEventWithoutSpannableModel() {
         internalTestAppend_DispatchKeyEvent();
     }
@@ -690,15 +687,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testDelete_CommitTextWithSpannableModel() {
         internalTestDelete_CommitText();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testDelete_CommitTextWithoutSpannableModel() {
         internalTestDelete_CommitText();
     }
@@ -796,8 +791,7 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testDelete_SetComposingTextWithSpannableModel() {
         // User types "hello".
         assertTrue(mInputConnection.setComposingText("hello", 1));
@@ -847,8 +841,7 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testDelete_SamsungKeyboardWithSpannableModel() {
         mAutocomplete.setKeyboardPackageName("com.sec.android.inputmethod");
         // User types "hello".
@@ -870,8 +863,7 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testDelete_SetComposingTextInBatchEditWithSpannableModel() {
         // User types "hello".
         assertTrue(mInputConnection.setComposingText("hello", 1));
@@ -926,15 +918,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testSelect_SelectAutocompleteWithSpannableModel() {
         internalTestSelect_SelectAutocomplete();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testSelect_SelectAutocompleteWithoutSpannableModel() {
         internalTestSelect_SelectAutocomplete();
     }
@@ -1004,15 +994,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testSelect_SelectUserTextWithSpannableModel() {
         internalTestSelect_SelectUserText();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testSelect_SelectUserTextWithoutSpannableModel() {
         internalTestSelect_SelectUserText();
     }
@@ -1089,15 +1077,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_AfterSelectAllWithSpannableModel() {
         internalTestAppend_AfterSelectAll();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testAppend_AfterSelectAllWithoutSpannableModel() {
         internalTestAppend_AfterSelectAll();
     }
@@ -1116,15 +1102,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testIgnoreAndGetWithSpannableModel() {
         internalTestIgnoreAndGet();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testIgnoreAndGetWithoutSpannableModel() {
         internalTestIgnoreAndGet();
     }
@@ -1143,8 +1127,7 @@ public class AutocompleteEditTextTest {
 
     // crbug.com/760013
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testOnSaveInstanceStateDoesNotCrash() {
         mInputConnection.setComposingText("h", 1);
         mAutocomplete.setAutocompleteText("h", "ello world");
@@ -1155,16 +1138,14 @@ public class AutocompleteEditTextTest {
 
     // crbug.com/759876
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testFocusInAndSelectAllWithSpannableModel() {
         internalTestFocusInAndSelectAll();
     }
 
     // crbug.com/759876
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testFocusInAndSelectAllWithoutSpannableModel() {
         internalTestFocusInAndSelectAll();
     }
@@ -1189,11 +1170,7 @@ public class AutocompleteEditTextTest {
 
         assertTrue(mAutocomplete.requestFocus());
 
-        if (isUsingSpannableModel()) {
-            verifyOnPopulateAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-                    url, "", 18, 18, 18, -1, -1);
-        }
-        mInOrder.verify(mVerifier).onUpdateSelection(len, len);
+        if (!isUsingSpannableModel()) mInOrder.verify(mVerifier).onUpdateSelection(len, len);
         verifyOnPopulateAccessibilityEvent(
                 AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED, url, "", 18, 18, 18, -1, -1);
         mInOrder.verify(mVerifier).onUpdateSelection(0, len);
@@ -1203,7 +1180,7 @@ public class AutocompleteEditTextTest {
                 AccessibilityEvent.TYPE_VIEW_FOCUSED, url, "", 2, -1, -1, -1, -1);
 
         if (isUsingSpannableModel()) {
-            assertVerifierCallCounts(2, 4);
+            assertVerifierCallCounts(1, 3);
         } else {
             assertVerifierCallCounts(2, 3);
         }
@@ -1211,15 +1188,13 @@ public class AutocompleteEditTextTest {
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testNonMatchingBatchEditWithSpannableModel() {
         internalNonMatchingBatchEdit();
     }
 
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = false))
+    @DisableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testNonMatchingBatchEditWithoutSpannableModel() {
         internalNonMatchingBatchEdit();
     }
@@ -1240,8 +1215,7 @@ public class AutocompleteEditTextTest {
 
     // crbug.com/768323
     @Test
-    @Features(@Features.Register(
-            value = ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE, enabled = true))
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
     public void testFocusLossHidesCursorWithSpannableModel() {
         assertTrue(mAutocomplete.isFocused());
         assertTrue(mAutocomplete.isCursorVisible());
@@ -1255,5 +1229,35 @@ public class AutocompleteEditTextTest {
         // Some IME operations may arrive after focus loss, but this should never show cursor.
         mInputConnection.getTextBeforeCursor(1, 0);
         assertFalse(mAutocomplete.isCursorVisible());
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
+    public void testBlacklistWithSpannableModel() {
+        mAutocomplete.setKeyboardPackageName("jp.co.sharp.android.iwnn");
+        // User types "h".
+        assertTrue(mInputConnection.commitText("h", 1));
+        assertFalse(mAutocomplete.shouldAutocomplete());
+    }
+
+    // crbug.com/783165
+    @Test
+    @EnableFeatures(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)
+    public void testSetTextAndSelect() {
+        // User types "h".
+        assertTrue(mInputConnection.commitText("h", 1));
+        assertTrue(mAutocomplete.shouldAutocomplete());
+        mAutocomplete.setAutocompleteText("h", "ello world");
+        mAutocomplete.setIgnoreTextChangesForAutocomplete(true);
+        mAutocomplete.setText("abcde");
+        mAutocomplete.setIgnoreTextChangesForAutocomplete(false);
+        assertEquals("abcde", mAutocomplete.getText().toString());
+
+        mAutocomplete.setSelection(0);
+
+        // Check the internal states are correct.
+        assertEquals("abcde", mAutocomplete.getText().toString());
+        assertEquals("abcde", mAutocomplete.getTextWithAutocomplete());
+        assertEquals("abcde", mAutocomplete.getTextWithoutAutocomplete());
     }
 }

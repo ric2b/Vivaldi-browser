@@ -20,8 +20,8 @@
 
 #include "core/svg/SVGFETileElement.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 #include "platform/graphics/filters/FETile.h"
 
 namespace blink {
@@ -32,7 +32,7 @@ inline SVGFETileElement::SVGFETileElement(Document& document)
   AddToPropertyMap(in1_);
 }
 
-DEFINE_TRACE(SVGFETileElement) {
+void SVGFETileElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(in1_);
   SVGFilterPrimitiveStandardAttributes::Trace(visitor);
 }

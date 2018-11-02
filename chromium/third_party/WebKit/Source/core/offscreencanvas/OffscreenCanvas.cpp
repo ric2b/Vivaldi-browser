@@ -7,9 +7,9 @@
 #include <memory>
 #include "core/css/CSSFontSelector.h"
 #include "core/css/OffscreenFontSelector.h"
+#include "core/css/StyleEngine.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/StyleEngine.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
@@ -18,12 +18,14 @@
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcherImpl.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
+#include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/image-encoders/ImageEncoderUtils.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/MathExtras.h"
@@ -113,7 +115,7 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
   return image;
 }
 
-RefPtr<Image> OffscreenCanvas::GetSourceImageForCanvas(
+scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint hint,
     SnapshotReason reason,
@@ -129,7 +131,7 @@ RefPtr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     *status = kZeroSizeCanvasSourceImageStatus;
     return nullptr;
   }
-  RefPtr<Image> image = context_->GetImage(hint, reason);
+  scoped_refptr<Image> image = context_->GetImage(hint, reason);
   if (!image) {
     *status = kInvalidSourceImageStatus;
   } else {
@@ -244,18 +246,30 @@ void OffscreenCanvas::DiscardImageBuffer() {
 
 ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
   if (!image_buffer_) {
+    bool is_accelerated_2d_canvas_blacklisted = true;
+    WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+        SharedGpuContext::ContextProviderWrapper();
+    if (context_provider_wrapper) {
+      const gpu::GpuFeatureInfo& gpu_feature_info =
+          context_provider_wrapper->ContextProvider()->GetGpuFeatureInfo();
+      if (gpu::kGpuFeatureStatusEnabled ==
+          gpu_feature_info
+              .status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS]) {
+        is_accelerated_2d_canvas_blacklisted = false;
+      }
+    }
+
     IntSize surface_size(width(), height());
-    OpacityMode opacity_mode =
-        context_->CreationAttributes().hasAlpha() ? kNonOpaque : kOpaque;
     std::unique_ptr<ImageBufferSurface> surface;
-    if (RuntimeEnabledFeatures::Accelerated2dCanvasEnabled()) {
-      surface.reset(
-          new AcceleratedImageBufferSurface(surface_size, opacity_mode));
+    if (RuntimeEnabledFeatures::Accelerated2dCanvasEnabled() &&
+        !is_accelerated_2d_canvas_blacklisted) {
+      surface.reset(new AcceleratedImageBufferSurface(surface_size,
+                                                      context_->ColorParams()));
     }
 
     if (!surface || !surface->IsValid()) {
       surface.reset(new UnacceleratedImageBufferSurface(
-          surface_size, opacity_mode, kInitializeImagePixels));
+          surface_size, kInitializeImagePixels, context_->ColorParams()));
     }
 
     image_buffer_ = ImageBuffer::Create(std::move(surface));
@@ -269,9 +283,8 @@ ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
   return image_buffer_.get();
 }
 
-ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
+ScriptPromise OffscreenCanvas::Commit(scoped_refptr<StaticBitmapImage> image,
                                       const SkIRect& damage_rect,
-                                      bool is_web_gl_software_rendering,
                                       ScriptState* script_state,
                                       ExceptionState& exception_state) {
   TRACE_EVENT0("blink", "OffscreenCanvas::Commit");
@@ -296,8 +309,6 @@ ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
       current_frame_ = std::move(image);
       // union of rects is necessary in case some frames are skipped.
       current_frame_damage_rect_.join(damage_rect);
-      current_frame_is_web_gl_software_rendering_ =
-          is_web_gl_software_rendering;
       context_->NeedsFinalizeFrame();
     }
   } else if (image) {
@@ -308,7 +319,6 @@ ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
     // resolved yet. (m_currentFrame==nullptr)
     current_frame_ = std::move(image);
     current_frame_damage_rect_.join(damage_rect);
-    current_frame_is_web_gl_software_rendering_ = is_web_gl_software_rendering;
   }
 
   return commit_promise_resolver_->Promise();
@@ -327,8 +337,7 @@ void OffscreenCanvas::DoCommit() {
   double commit_start_time = WTF::MonotonicallyIncreasingTime();
   DCHECK(current_frame_);
   GetOrCreateFrameDispatcher()->DispatchFrame(
-      std::move(current_frame_), commit_start_time, current_frame_damage_rect_,
-      current_frame_is_web_gl_software_rendering_);
+      std::move(current_frame_), commit_start_time, current_frame_damage_rect_);
   current_frame_damage_rect_ = SkIRect::MakeEmpty();
 }
 
@@ -389,14 +398,9 @@ ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* script_state,
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
-  Document* document =
-      ExecutionContext::From(script_state)->IsDocument()
-          ? static_cast<Document*>(ExecutionContext::From(script_state))
-          : nullptr;
-
   CanvasAsyncBlobCreator* async_creator = CanvasAsyncBlobCreator::Create(
       image_data->data(), encoding_mime_type, image_data->Size(), start_time,
-      document, resolver);
+      ExecutionContext::From(script_state), resolver);
 
   async_creator->ScheduleAsyncBlobCreation(options.quality());
 
@@ -410,7 +414,7 @@ FontSelector* OffscreenCanvas::GetFontSelector() {
   return ToWorkerGlobalScope(execution_context_)->GetFontSelector();
 }
 
-DEFINE_TRACE(OffscreenCanvas) {
+void OffscreenCanvas::Trace(blink::Visitor* visitor) {
   visitor->Trace(context_);
   visitor->Trace(execution_context_);
   visitor->Trace(commit_promise_resolver_);

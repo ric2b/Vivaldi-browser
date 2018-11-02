@@ -4,7 +4,6 @@
 
 #include "modules/device_orientation/DeviceOrientationAbsoluteController.h"
 
-#include "core/dom/Document.h"
 #include "core/frame/Settings.h"
 #include "modules/device_orientation/DeviceOrientationDispatcher.h"
 
@@ -73,7 +72,7 @@ const AtomicString& DeviceOrientationAbsoluteController::EventTypeName() const {
   return EventTypeNames::deviceorientationabsolute;
 }
 
-DEFINE_TRACE(DeviceOrientationAbsoluteController) {
+void DeviceOrientationAbsoluteController::Trace(blink::Visitor* visitor) {
   DeviceOrientationController::Trace(visitor);
 }
 

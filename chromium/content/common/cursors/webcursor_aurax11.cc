@@ -4,15 +4,13 @@
 
 #include "content/common/cursors/webcursor.h"
 
-#include <X11/cursorfont.h>
-#include <X11/Xcursor/Xcursor.h>
-#include <X11/Xlib.h>
 
 #include "base/logging.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_loader_x11.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/gfx/x/x11.h"
 
 namespace content {
 
@@ -32,14 +30,6 @@ ui::PlatformCursor WebCursor::GetPlatformCursor() {
 void WebCursor::InitPlatformData() {
   platform_cursor_ = 0;
   device_scale_factor_ = 1.f;
-}
-
-bool WebCursor::SerializePlatformData(base::Pickle* pickle) const {
-  return true;
-}
-
-bool WebCursor::DeserializePlatformData(base::PickleIterator* iter) {
-  return true;
 }
 
 bool WebCursor::IsPlatformDataEqual(const WebCursor& other) const {

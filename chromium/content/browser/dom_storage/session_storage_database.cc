@@ -17,7 +17,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
+#include "build/build_config.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
@@ -110,9 +112,11 @@ SessionStorageDatabase::SessionStorageDatabase(const base::FilePath& file_path)
 SessionStorageDatabase::~SessionStorageDatabase() {
 }
 
-void SessionStorageDatabase::ReadAreaValues(const std::string& namespace_id,
-                                            const GURL& origin,
-                                            DOMStorageValuesMap* result) {
+void SessionStorageDatabase::ReadAreaValues(
+    const std::string& namespace_id,
+    const std::vector<std::string>& original_permanent_namespace_ids,
+    const GURL& origin,
+    DOMStorageValuesMap* result) {
   // We don't create a database if it doesn't exist. In that case, there is
   // nothing to be added to the result.
   if (!LazyOpen(false))
@@ -131,6 +135,26 @@ void SessionStorageDatabase::ReadAreaValues(const std::string& namespace_id,
   if (GetMapForArea(namespace_id, origin.spec(), options, &exists, &map_id) &&
       exists)
     ReadMap(map_id, options, result, false);
+
+  if (exists) {
+    db_->ReleaseSnapshot(options.snapshot);
+    return;
+  }
+
+  // If the area does not exist, |namespace_id| might refer to a clone that
+  // is not yet created. Reading from the original database is expected to be
+  // consistent because tasks posted on commit sequence after clone did not
+  // run before capturing the snapshot.
+  for (const auto& original_db_id : original_permanent_namespace_ids) {
+    map_id.clear();
+    if (GetMapForArea(original_db_id, origin.spec(), options, &exists,
+                      &map_id) &&
+        exists) {
+      ReadMap(map_id, options, result, false);
+    }
+    if (exists)
+      break;
+  }
   db_->ReleaseSnapshot(options.snapshot);
 }
 
@@ -187,7 +211,8 @@ bool SessionStorageDatabase::CommitAreaChanges(
 }
 
 bool SessionStorageDatabase::CloneNamespace(
-    const std::string& namespace_id, const std::string& new_namespace_id) {
+    const std::string& namespace_id,
+    const std::string& new_namespace_id) {
   // Go through all origins in the namespace |namespace_id|, create placeholders
   // for them in |new_namespace_id|, and associate them with the existing maps.
 
@@ -336,31 +361,23 @@ bool SessionStorageDatabase::ReadNamespacesAndOrigins(
 
 void SessionStorageDatabase::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
-  std::string db_memory_usage;
-  {
-    base::AutoLock lock(db_lock_);
-    if (!db_)
-      return;
-
-    bool res =
-        db_->GetProperty("leveldb.approximate-memory-usage", &db_memory_usage);
-    DCHECK(res);
-  }
-
-  uint64_t size;
-  bool res = base::StringToUint64(db_memory_usage, &size);
-  DCHECK(res);
+  base::AutoLock lock(db_lock_);
+  if (!db_)
+    return;
+  // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
+  // an edge to the existing dump.
+  auto* tracker_dump =
+      leveldb_env::DBTracker::GetOrCreateAllocatorDump(pmd, db_.get());
+  if (!tracker_dump)
+    return;
 
   auto* mad = pmd->CreateAllocatorDump(
-      base::StringPrintf("dom_storage/session_storage_0x%" PRIXPTR,
+      base::StringPrintf("site_storage/session_storage_0x%" PRIXPTR,
                          reinterpret_cast<uintptr_t>(this)));
+  pmd->AddOwnershipEdge(mad->guid(), tracker_dump->guid());
   mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                 base::trace_event::MemoryAllocatorDump::kUnitsBytes, size);
-
-  // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
-  // an edge to avoid double counting.
-  pmd->AddSuballocation(mad->guid(),
-                        leveldb_env::DBTracker::GetMemoryDumpName(db_.get()));
+                 base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                 tracker_dump->GetSizeInternal());
 }
 
 bool SessionStorageDatabase::LazyOpen(bool create_if_needed) {
@@ -441,12 +458,20 @@ leveldb::Status SessionStorageDatabase::TryToOpen(
   // Default write_buffer_size is 4 MB but that might leave a 3.999
   // memory allocation in RAM from a log file recovery.
   options.write_buffer_size = 64 * 1024;
-  options.block_cache = leveldb_env::SharedWebBlockCache();
-  return leveldb_env::OpenDB(options, file_path_.AsUTF8Unsafe(), db);
+  options.block_cache = leveldb_chrome::GetSharedWebBlockCache();
+
+  std::string db_name = file_path_.AsUTF8Unsafe();
+#if defined(OS_ANDROID)
+  // On Android there is no support for session storage restoring, and since
+  // the restoring code is responsible for database cleanup, we must manually
+  // delete the old database here before we open it.
+  leveldb::DestroyDB(db_name, options);
+#endif
+  return leveldb_env::OpenDB(options, db_name, db);
 }
 
 bool SessionStorageDatabase::IsOpen() const {
-  return db_.get() != NULL;
+  return db_.get() != nullptr;
 }
 
 bool SessionStorageDatabase::CallerErrorCheck(bool ok) const {

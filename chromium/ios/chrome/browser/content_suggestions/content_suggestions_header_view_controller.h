@@ -16,8 +16,8 @@
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
 @protocol ContentSuggestionsCollectionSynchronizing;
+@protocol ContentSuggestionsCommands;
 @protocol ContentSuggestionsHeaderViewControllerDelegate;
-@protocol ContentSuggestionsHeaderViewControllerCommandHandler;
 @protocol OmniboxFocuser;
 @protocol UrlLoader;
 class ReadingListModel;
@@ -37,15 +37,14 @@ class ReadingListModel;
         dispatcher;
 @property(nonatomic, weak) id<ContentSuggestionsHeaderViewControllerDelegate>
     delegate;
-@property(nonatomic, weak)
-    id<ContentSuggestionsHeaderViewControllerCommandHandler>
-        commandHandler;
-@property(nonatomic, weak) id<ContentSuggestionsCollectionSynchronizing>
-    collectionSynchronizer;
+@property(nonatomic, weak) id<ContentSuggestionsCommands> commandHandler;
 @property(nonatomic, assign) ReadingListModel* readingListModel;
 
 // Whether the Google logo or doodle is being shown.
 @property(nonatomic, assign) BOOL logoIsShowing;
+
+// |YES| if a what's new promo can be displayed.
+@property(nonatomic, assign) BOOL promoCanShow;
 
 // |YES| if its view is visible.  When set to |NO| various UI updates are
 // ignored.

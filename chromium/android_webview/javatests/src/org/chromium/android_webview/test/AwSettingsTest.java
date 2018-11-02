@@ -18,9 +18,7 @@ import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
-import android.webkit.WebSettings.LayoutAlgorithm;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -30,15 +28,18 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.AwSettings.LayoutAlgorithm;
 import org.chromium.android_webview.AwWebResourceResponse;
-import org.chromium.android_webview.test.AwTestBase.TestDependencyFactory;
+import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
 import org.chromium.android_webview.test.TestAwContentsClient.DoUpdateVisitedHistoryHelper;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.ImagePageGenerator;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.android_webview.test.util.VideoTestUtil;
 import org.chromium.android_webview.test.util.VideoTestWebServer;
+import org.chromium.base.Callback;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -46,6 +47,7 @@ import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.HistoryUtils;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -63,6 +65,7 @@ import java.util.regex.Pattern;
  * application
  */
 @RunWith(AwJUnit4ClassRunner.class)
+@CommandLineFlags.Add(ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1")
 public class AwSettingsTest {
     @Rule
     public AwActivityTestRule mActivityTestRule =
@@ -994,9 +997,7 @@ public class AwSettingsTest {
         private float mOldFontSize;
     }
 
-    class AwSettingsLayoutAlgorithmTestHelper extends
-                                              AwSettingsTextAutosizingTestHelper<LayoutAlgorithm> {
-
+    class AwSettingsLayoutAlgorithmTestHelper extends AwSettingsTextAutosizingTestHelper<Integer> {
         AwSettingsLayoutAlgorithmTestHelper(
                 AwTestContainerView containerView,
                 TestAwContentsClient contentViewClient) throws Throwable {
@@ -1005,31 +1006,34 @@ public class AwSettingsTest {
             mAwSettings.setUseWideViewPort(true);
         }
 
+        @LayoutAlgorithm
         @Override
-        protected LayoutAlgorithm getAlteredValue() {
-            return LayoutAlgorithm.TEXT_AUTOSIZING;
+        protected Integer getAlteredValue() {
+            return AwSettings.LAYOUT_ALGORITHM_TEXT_AUTOSIZING;
         }
 
+        @LayoutAlgorithm
         @Override
-        protected LayoutAlgorithm getInitialValue() {
-            return LayoutAlgorithm.NARROW_COLUMNS;
+        protected Integer getInitialValue() {
+            return AwSettings.LAYOUT_ALGORITHM_NARROW_COLUMNS;
         }
 
+        @LayoutAlgorithm
         @Override
-        protected LayoutAlgorithm getCurrentValue() {
+        protected Integer getCurrentValue() {
             return mAwSettings.getLayoutAlgorithm();
         }
 
         @Override
-        protected void setCurrentValue(LayoutAlgorithm value) throws Throwable {
+        protected void setCurrentValue(@LayoutAlgorithm Integer value) throws Throwable {
             super.setCurrentValue(value);
             mAwSettings.setLayoutAlgorithm(value);
         }
 
         @Override
-        protected void doEnsureSettingHasValue(LayoutAlgorithm value) throws Throwable {
+        protected void doEnsureSettingHasValue(@LayoutAlgorithm Integer value) throws Throwable {
             final float actualFontSize = getActualFontSize();
-            if (value == LayoutAlgorithm.TEXT_AUTOSIZING) {
+            if (value == AwSettings.LAYOUT_ALGORITHM_TEXT_AUTOSIZING) {
                 Assert.assertFalse("Actual font size: " + actualFontSize,
                         actualFontSize == PARAGRAPH_FONT_SIZE);
             } else {
@@ -1094,7 +1098,7 @@ public class AwSettingsTest {
                 AwTestContainerView containerView,
                 TestAwContentsClient contentViewClient) throws Throwable {
             super(containerView, contentViewClient);
-            mAwSettings.setLayoutAlgorithm(LayoutAlgorithm.TEXT_AUTOSIZING);
+            mAwSettings.setLayoutAlgorithm(AwSettings.LAYOUT_ALGORITHM_TEXT_AUTOSIZING);
             // The initial font size can be adjusted by font autosizer depending on the page's
             // viewport width.
             mInitialActualFontSize = getActualFontSize();
@@ -1139,10 +1143,10 @@ public class AwSettingsTest {
         private static final String POPUP_ENABLED = "Popup enabled";
         private static final String POPUP_BLOCKED = "Popup blocked";
 
-        AwSettingsJavaScriptPopupsTestHelper(
-                AwTestContainerView containerView,
-                TestAwContentsClient contentViewClient) throws Throwable {
+        AwSettingsJavaScriptPopupsTestHelper(AwTestContainerView containerView,
+                TestAwContentsClient contentViewClient, boolean openTwice) throws Throwable {
             super(containerView, contentViewClient, true);
+            mOpenTwice = openTwice;
         }
 
         @Override
@@ -1182,11 +1186,16 @@ public class AwSettingsTest {
                     + "<script>"
                     + "    function tryOpenWindow() {"
                     + "        var newWindow = window.open('about:blank');"
+                    + (mOpenTwice ? "newWindow = window.open('about:blank');" : "")
                     + "        if (newWindow) {"
                     + "            if (newWindow === window) {"
-                    + "                newWindow.document.write("
-                    + "                    '<html><head><title>" + POPUP_ENABLED
+                    + "                if (newWindow.opener != null) {"
+                    + "                    newWindow.document.write("
+                    + "                        '<html><head><title>" + POPUP_ENABLED
                     + "</title></head></html>');"
+                    + "                } else {"
+                    + "                    newWindow.document.write('failed to set opener');"
+                    + "                }"
                     + "            } else {"
                     + "                document.title = '" + POPUP_ENABLED + "';"
                     + "            }"
@@ -1197,6 +1206,8 @@ public class AwSettingsTest {
                     + "</script></head>"
                     + "<body onload='tryOpenWindow()'></body></html>";
         }
+
+        private boolean mOpenTwice;
     }
 
     class AwSettingsCacheModeTestHelper extends AwSettingsTestHelper<Integer> {
@@ -1818,6 +1829,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @RetryOnFailure
     public void testDatabaseEnabled() throws Throwable {
         TestAwContentsClient client = new TestAwContentsClient();
         final AwTestContainerView testContainerView =
@@ -2259,10 +2271,10 @@ public class AwSettingsTest {
     @Feature({"AndroidWebView", "Preferences"})
     public void testJavaScriptPopupsWithTwoViews() throws Throwable {
         ViewPair views = createViews();
-        runPerViewSettingsTest(
-                new AwSettingsJavaScriptPopupsTestHelper(views.getContainer0(), views.getClient0()),
+        runPerViewSettingsTest(new AwSettingsJavaScriptPopupsTestHelper(
+                                       views.getContainer0(), views.getClient0(), false),
                 new AwSettingsJavaScriptPopupsTestHelper(
-                        views.getContainer1(), views.getClient1()));
+                        views.getContainer1(), views.getClient1(), false));
     }
 
     @Test
@@ -2278,10 +2290,21 @@ public class AwSettingsTest {
         });
         views.getClient0().getOnCreateWindowHelper().setReturnValue(true);
         views.getClient1().getOnCreateWindowHelper().setReturnValue(true);
-        runPerViewSettingsTest(
-                new AwSettingsJavaScriptPopupsTestHelper(views.getContainer0(), views.getClient0()),
+        runPerViewSettingsTest(new AwSettingsJavaScriptPopupsTestHelper(
+                                       views.getContainer0(), views.getClient0(), false),
                 new AwSettingsJavaScriptPopupsTestHelper(
-                        views.getContainer1(), views.getClient1()));
+                        views.getContainer1(), views.getClient1(), false));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Preferences"})
+    public void testJavaScriptPopupsOpenTwice() throws Throwable {
+        final ViewPair views = createViews();
+        runPerViewSettingsTest(new AwSettingsJavaScriptPopupsTestHelper(
+                                       views.getContainer0(), views.getClient0(), true),
+                new AwSettingsJavaScriptPopupsTestHelper(
+                        views.getContainer1(), views.getClient1(), true));
     }
 
     @Test
@@ -2849,8 +2872,8 @@ public class AwSettingsTest {
     public void testAllowMixedMode() throws Throwable {
         final TestAwContentsClient contentClient = new TestAwContentsClient() {
             @Override
-            public void onReceivedSslError(ValueCallback<Boolean> callback, SslError error) {
-                callback.onReceiveValue(true);
+            public void onReceivedSslError(Callback<Boolean> callback, SslError error) {
+                callback.onResult(true);
             }
         };
         final AwTestContainerView testContainerView =
@@ -2865,6 +2888,7 @@ public class AwSettingsTest {
         try {
             httpsServer = TestWebServer.startSsl();
             httpServer = TestWebServer.start();
+            httpServer.setServerHost("example.com");
 
             final String jsUrl = "/insecure.js";
             final String imageUrl = "/insecure.png";

@@ -65,7 +65,7 @@ identifier \"com.vivaldi.Vivaldi.canary\") \
 "
 
 codesign_cmd=(
-  codesign --sign "${codesign_id}" --keychain "${codesign_keychain}"
+  codesign -f --sign "${codesign_id}" --keychain "${codesign_keychain}"
   "${browser_app}"
   --options "${enforcement_flags_app}"
   # --resource-rules "${browser_app_rules}"

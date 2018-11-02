@@ -95,19 +95,17 @@ bool HasSufficientRecentFeedback(
 
 }  // anonymous namespace
 
-VideoCaptureOracle::VideoCaptureOracle(
-    base::TimeDelta min_capture_period,
-    const gfx::Size& max_frame_size,
-    media::ResolutionChangePolicy resolution_change_policy,
-    bool enable_auto_throttling)
+// static
+constexpr base::TimeDelta VideoCaptureOracle::kDefaultMinCapturePeriod;
+
+VideoCaptureOracle::VideoCaptureOracle(bool enable_auto_throttling)
     : auto_throttling_enabled_(enable_auto_throttling),
       next_frame_number_(0),
       source_is_dirty_(true),
       last_successfully_delivered_frame_number_(-1),
       num_frames_pending_(0),
-      smoothing_sampler_(min_capture_period),
-      content_sampler_(min_capture_period),
-      resolution_chooser_(max_frame_size, resolution_change_policy),
+      smoothing_sampler_(kDefaultMinCapturePeriod),
+      content_sampler_(kDefaultMinCapturePeriod),
       buffer_pool_utilization_(base::TimeDelta::FromMicroseconds(
           kBufferUtilizationEvaluationMicros)),
       estimated_capable_area_(base::TimeDelta::FromMicroseconds(
@@ -116,7 +114,20 @@ VideoCaptureOracle::VideoCaptureOracle(
           << (auto_throttling_enabled_ ? "enabled." : "disabled.");
 }
 
-VideoCaptureOracle::~VideoCaptureOracle() {
+VideoCaptureOracle::~VideoCaptureOracle() = default;
+
+void VideoCaptureOracle::SetMinCapturePeriod(base::TimeDelta period) {
+  DCHECK_GT(period, base::TimeDelta());
+  smoothing_sampler_.SetMinCapturePeriod(period);
+  content_sampler_.SetMinCapturePeriod(period);
+}
+
+void VideoCaptureOracle::SetCaptureSizeConstraints(
+    const gfx::Size& min_size,
+    const gfx::Size& max_size,
+    bool use_fixed_aspect_ratio) {
+  resolution_chooser_.SetConstraints(min_size, max_size,
+                                     use_fixed_aspect_ratio);
 }
 
 void VideoCaptureOracle::SetSourceSize(const gfx::Size& source_size) {
@@ -202,9 +213,8 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
     }
     const base::TimeDelta upper_bound =
         base::TimeDelta::FromMilliseconds(kUpperBoundDurationEstimateMicros);
-    duration_of_next_frame_ =
-        std::max(std::min(duration_of_next_frame_, upper_bound),
-                 smoothing_sampler_.min_capture_period());
+    duration_of_next_frame_ = std::max(
+        std::min(duration_of_next_frame_, upper_bound), min_capture_period());
   }
 
   // Update |capture_size_| and reset all feedback signal accumulators if
@@ -222,10 +232,6 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
 
   SetFrameTimestamp(next_frame_number_, event_time);
   return true;
-}
-
-int VideoCaptureOracle::next_frame_number() const {
-  return next_frame_number_;
 }
 
 void VideoCaptureOracle::RecordCapture(double pool_utilization) {
@@ -325,6 +331,19 @@ bool VideoCaptureOracle::CompleteCapture(int frame_number,
   }
 
   return true;
+}
+
+void VideoCaptureOracle::CancelAllCaptures() {
+  // The following is the desired behavior:
+  //
+  //   for (int i = num_frames_pending_; i > 0; --i) {
+  //     CompleteCapture(next_frame_number_ - i, false, nullptr);
+  //     --num_frames_pending_;
+  //   }
+  //
+  // ...which simplifies to:
+  num_frames_pending_ = 0;
+  source_is_dirty_ = true;
 }
 
 void VideoCaptureOracle::RecordConsumerFeedback(int frame_number,

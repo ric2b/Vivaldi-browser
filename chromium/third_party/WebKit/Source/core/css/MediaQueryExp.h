@@ -31,11 +31,10 @@
 
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
-#include "core/MediaFeatureNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValue.h"
+#include "core/css/media_feature_names.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 

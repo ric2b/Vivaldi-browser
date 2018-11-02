@@ -41,8 +41,8 @@
 #include "core/dom/events/MediaElementEventQueue.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/TimeRanges.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/html/track/AudioTrack.h"
 #include "core/html/track/AudioTrackList.h"
 #include "core/html/track/VideoTrack.h"
@@ -51,9 +51,10 @@
 #include "core/typed_arrays/DOMArrayBufferView.h"
 #include "modules/mediasource/MediaSource.h"
 #include "modules/mediasource/SourceBufferTrackBaseSupplement.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/MathExtras.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebSourceBuffer.h"
 
 #ifndef BLINK_SBLOG
@@ -108,14 +109,14 @@ SourceBuffer* SourceBuffer::Create(
     MediaElementEventQueue* async_event_queue) {
   SourceBuffer* source_buffer =
       new SourceBuffer(std::move(web_source_buffer), source, async_event_queue);
-  source_buffer->SuspendIfNeeded();
+  source_buffer->PauseIfNeeded();
   return source_buffer;
 }
 
 SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> web_source_buffer,
                            MediaSource* source,
                            MediaElementEventQueue* async_event_queue)
-    : SuspendableObject(source->GetExecutionContext()),
+    : PausableObject(source->GetExecutionContext()),
       web_source_buffer_(std::move(web_source_buffer)),
       source_(source),
       track_defaults_(TrackDefaultList::Create()),
@@ -129,12 +130,14 @@ SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> web_source_buffer,
       pending_append_data_offset_(0),
       append_buffer_async_part_runner_(AsyncMethodRunner<SourceBuffer>::Create(
           this,
-          &SourceBuffer::AppendBufferAsyncPart)),
+          &SourceBuffer::AppendBufferAsyncPart,
+          GetExecutionContext()->GetTaskRunner(TaskType::kMediaElementEvent))),
       pending_remove_start_(-1),
       pending_remove_end_(-1),
       remove_async_part_runner_(AsyncMethodRunner<SourceBuffer>::Create(
           this,
-          &SourceBuffer::RemoveAsyncPart)) {
+          &SourceBuffer::RemoveAsyncPart,
+          GetExecutionContext()->GetTaskRunner(TaskType::kMediaElementEvent))) {
   BLINK_SBLOG << __func__ << " this=" << this;
 
   DCHECK(web_source_buffer_);
@@ -1069,14 +1072,14 @@ bool SourceBuffer::HasPendingActivity() const {
   return source_;
 }
 
-void SourceBuffer::Suspend() {
-  append_buffer_async_part_runner_->Suspend();
-  remove_async_part_runner_->Suspend();
+void SourceBuffer::Pause() {
+  append_buffer_async_part_runner_->Pause();
+  remove_async_part_runner_->Pause();
 }
 
-void SourceBuffer::Resume() {
-  append_buffer_async_part_runner_->Resume();
-  remove_async_part_runner_->Resume();
+void SourceBuffer::Unpause() {
+  append_buffer_async_part_runner_->Unpause();
+  remove_async_part_runner_->Unpause();
 }
 
 void SourceBuffer::ContextDestroyed(ExecutionContext*) {
@@ -1085,7 +1088,7 @@ void SourceBuffer::ContextDestroyed(ExecutionContext*) {
 }
 
 ExecutionContext* SourceBuffer::GetExecutionContext() const {
-  return SuspendableObject::GetExecutionContext();
+  return PausableObject::GetExecutionContext();
 }
 
 const AtomicString& SourceBuffer::InterfaceName() const {
@@ -1337,7 +1340,7 @@ void SourceBuffer::AppendError() {
   source_->EndOfStreamAlgorithm(WebMediaSource::kEndOfStreamStatusDecodeError);
 }
 
-DEFINE_TRACE(SourceBuffer) {
+void SourceBuffer::Trace(blink::Visitor* visitor) {
   visitor->Trace(source_);
   visitor->Trace(track_defaults_);
   visitor->Trace(async_event_queue_);
@@ -1346,7 +1349,7 @@ DEFINE_TRACE(SourceBuffer) {
   visitor->Trace(audio_tracks_);
   visitor->Trace(video_tracks_);
   EventTargetWithInlineData::Trace(visitor);
-  SuspendableObject::Trace(visitor);
+  PausableObject::Trace(visitor);
 }
 
 }  // namespace blink

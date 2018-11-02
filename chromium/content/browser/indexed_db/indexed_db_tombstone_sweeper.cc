@@ -20,11 +20,6 @@ namespace {
 
 using StopReason = IndexedDBPreCloseTaskQueue::StopReason;
 
-// TODO(dmurph): Make common implementation in env_chromium.h
-base::StringPiece MakeStringPiece(const leveldb::Slice& s) {
-  return base::StringPiece(s.data(), s.size());
-}
-
 }  // namespace
 
 template <typename T>
@@ -231,11 +226,13 @@ void IndexedDBTombstoneSweeper::RecordUMAStats(
     size_histogram->Add(metrics_.seen_tombstones_size);
 
   // We put our max at 20 instead of 100 to reduce the number of buckets.
-  const static int kIndexPercentageBucketCount = 20;
-  LOCAL_HISTOGRAM_ENUMERATION(
-      "WebCore.IndexedDB.TombstoneSweeper.IndexScanPercent",
-      indices_scanned_ * kIndexPercentageBucketCount / total_indices_,
-      kIndexPercentageBucketCount + 1);
+  if (total_indices_ > 0) {
+    const static int kIndexPercentageBucketCount = 20;
+    LOCAL_HISTOGRAM_ENUMERATION(
+        "WebCore.IndexedDB.TombstoneSweeper.IndexScanPercent",
+        indices_scanned_ * kIndexPercentageBucketCount / total_indices_,
+        kIndexPercentageBucketCount + 1);
+  }
 }
 
 leveldb::Status IndexedDBTombstoneSweeper::FlushDeletions() {
@@ -387,9 +384,10 @@ bool IndexedDBTombstoneSweeper::IterateIndex(
 
   while (iterator_->Valid()) {
     leveldb::Slice key_slice = iterator_->key();
-    base::StringPiece index_key_str = MakeStringPiece(key_slice);
+    base::StringPiece index_key_str = leveldb_env::MakeStringPiece(key_slice);
     size_t key_size = index_key_str.size();
-    base::StringPiece index_value_str = MakeStringPiece(iterator_->value());
+    base::StringPiece index_value_str =
+        leveldb_env::MakeStringPiece(iterator_->value());
     size_t value_size = index_value_str.size();
     // See if we've reached the end of the current index or all indexes.
     sweep_state_.index_it_key.emplace(IndexDataKey());

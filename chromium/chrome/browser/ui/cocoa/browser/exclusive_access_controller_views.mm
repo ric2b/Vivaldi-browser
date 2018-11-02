@@ -112,7 +112,7 @@ void ExclusiveAccessController::UpdateUIForTabFullscreen(
 
 void ExclusiveAccessController::UpdateFullscreenToolbar() {
   [[controller_ fullscreenToolbarController]
-      updateToolbarStyleExitingTabFullscreen:NO];
+      layoutToolbarStyleIsExitingTabFullscreen:NO];
 }
 
 // See the Fullscreen terminology section and the (Fullscreen) interface
@@ -204,7 +204,7 @@ gfx::Rect ExclusiveAccessController::GetClientAreaBoundsInScreen() const {
   return gfx::ScreenRectFromNSRect([[controller_ window] frame]);
 }
 
-bool ExclusiveAccessController::IsImmersiveModeEnabled() {
+bool ExclusiveAccessController::IsImmersiveModeEnabled() const {
   return false;
 }
 
@@ -216,6 +216,10 @@ gfx::Rect ExclusiveAccessController::GetTopContainerBoundsInScreen() {
 void ExclusiveAccessController::DestroyAnyExclusiveAccessBubble() {
   Destroy();
   new_back_shortcut_bubble_.reset();
+}
+
+bool ExclusiveAccessController::CanTriggerOnMouse() const {
+  return true;
 }
 
 BrowserWindow* ExclusiveAccessController::GetBrowserWindow() const {

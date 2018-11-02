@@ -26,8 +26,8 @@
 #include "core/editing/commands/RemoveCSSPropertyCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSStyleDeclaration.h"
-#include "core/css/StylePropertySet.h"
 #include "core/dom/Element.h"
 #include "platform/wtf/Assertions.h"
 
@@ -46,7 +46,7 @@ RemoveCSSPropertyCommand::RemoveCSSPropertyCommand(Document& document,
 RemoveCSSPropertyCommand::~RemoveCSSPropertyCommand() {}
 
 void RemoveCSSPropertyCommand::DoApply(EditingState*) {
-  const StylePropertySet* style = element_->InlineStyle();
+  const CSSPropertyValueSet* style = element_->InlineStyle();
   if (!style)
     return;
 
@@ -57,16 +57,17 @@ void RemoveCSSPropertyCommand::DoApply(EditingState*) {
   // script. Setting to null string removes the property. We don't have internal
   // version of removeProperty.
   element_->style()->SetPropertyInternal(property_, String(), String(), false,
+                                         GetDocument().GetSecureContextMode(),
                                          IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void RemoveCSSPropertyCommand::DoUnapply() {
-  element_->style()->SetPropertyInternal(property_, String(), old_value_,
-                                         important_,
-                                         IGNORE_EXCEPTION_FOR_TESTING);
+  element_->style()->SetPropertyInternal(
+      property_, String(), old_value_, important_,
+      GetDocument().GetSecureContextMode(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
-DEFINE_TRACE(RemoveCSSPropertyCommand) {
+void RemoveCSSPropertyCommand::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
   SimpleEditCommand::Trace(visitor);
 }

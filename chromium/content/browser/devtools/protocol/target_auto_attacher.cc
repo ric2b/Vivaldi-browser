@@ -4,11 +4,14 @@
 
 #include "content/browser/devtools/protocol/target_auto_attacher.h"
 
+#include "base/containers/queue.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 namespace protocol {
@@ -112,7 +115,7 @@ void TargetAutoAttacher::UpdateFrames() {
   Hosts new_hosts;
   if (render_frame_host_) {
     FrameTreeNode* root = render_frame_host_->frame_tree_node();
-    std::queue<FrameTreeNode*> queue;
+    base::queue<FrameTreeNode*> queue;
     queue.push(root);
     while (!queue.empty()) {
       FrameTreeNode* node = queue.front();
@@ -134,7 +137,31 @@ void TargetAutoAttacher::UpdateFrames() {
 }
 
 void TargetAutoAttacher::AgentHostClosed(DevToolsAgentHost* host) {
-  auto_attached_hosts_.erase(make_scoped_refptr(host));
+  auto_attached_hosts_.erase(base::WrapRefCounted(host));
+}
+
+bool TargetAutoAttacher::ShouldThrottleFramesNavigation() {
+  return IsBrowserSideNavigationEnabled() && auto_attach_ &&
+         attach_to_frames_ && wait_for_debugger_on_start_;
+}
+
+DevToolsAgentHost* TargetAutoAttacher::AutoAttachToFrame(
+    NavigationHandle* navigation_handle) {
+  if (!ShouldThrottleFramesNavigation())
+    return nullptr;
+  if (!navigation_handle->GetRenderFrameHost() ||
+      !navigation_handle->GetRenderFrameHost()->IsCrossProcessSubframe()) {
+    return nullptr;
+  }
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      RenderFrameDevToolsAgentHost::GetOrCreateForDangling(
+          static_cast<NavigationHandleImpl*>(navigation_handle)
+              ->frame_tree_node());
+  if (auto_attached_hosts_.find(agent_host) != auto_attached_hosts_.end())
+    return nullptr;
+  attach_callback_.Run(agent_host.get(), true /* waiting_for_debugger */);
+  auto_attached_hosts_.insert(agent_host);
+  return agent_host.get();
 }
 
 void TargetAutoAttacher::ReattachServiceWorkers(bool waiting_for_debugger) {

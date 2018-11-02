@@ -1,14 +1,27 @@
 <!doctype html>
-<html dir="$i18n{textdirection}" lang="$i18n{language}">
+<html dir="$i18n{textdirection}" lang="$i18n{language}"
+    class="loading $i18n{loadTimeClasses}">
 <head>
   <meta charset="utf8">
   <title>$i18n{title}</title>
-  <link rel="import" href="chrome://resources/html/polymer.html">
-  <link rel="import" href="chrome://extensions/manager.html">
-  <link rel="stylesheet" href="chrome://resources/css/md_colors.css">
+<if expr="not optimize_webui">
+  <base href="chrome://extensions">
+</if>
   <style>
     html {
-      background: var(--md-background-color);
+      /* --md-background-color in disguise. Not using the var for increased
+       * performance. */
+      background-color: #f1f1f1;
+    }
+
+    .loading {
+      /* --google-blue-700 in disguise. Replaced when manager.html loads. */
+      border-top: 56px solid rgb(51, 103, 214);
+    }
+
+    /* Note: .in-dev-mode is applied by i18n{loadTimeClasses}. */
+    .loading.in-dev-mode {
+      border-top-width: 96px;
     }
 
     html,
@@ -16,15 +29,14 @@
       height: 100%;
       line-height: 154%;
       margin: 0;
+      overflow: hidden;
+      width: 100%;
     }
   </style>
 </head>
 <body>
   <extensions-manager></extensions-manager>
   <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
-  <link rel="import" href="chrome://resources/html/load_time_data.html">
-  <link rel="import" href="chrome://extensions/strings.html">
-  <link rel="import" href="chrome://extensions/service.html">
-  <script src="chrome://extensions/extensions.js"></script>
+  <link rel="import" href="manager.html">
 </body>
 </html>

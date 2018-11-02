@@ -16,13 +16,6 @@ class UkmRecorder;
 
 namespace payments {
 
-namespace internal {
-// Name constants are exposed here so they can be referenced from tests.
-extern const char kUKMCheckoutEventsEntryName[];
-extern const char kUKMCompletionStatusMetricName[];
-extern const char kUKMEventsMetricName[];
-}  // namespace internal
-
 // A class to keep track of different stats during a Payment Request journey. It
 // collects different metrics during the course of the checkout flow, like the
 // number of credit cards that the user added or edited. The metrics will be
@@ -228,9 +221,6 @@ class JourneyLogger {
   // Records the metric about the different events that happened during the
   // Payment Request.
   void RecordEventsMetric(CompletionStatus completion_status);
-
-  // Records the Payment Request Url Keyed Metrics.
-  void RecordUrlKeyedMetrics(CompletionStatus completion_status);
 
   // Returns whether this Payment Request was triggered (shown or skipped show).
   bool WasPaymentRequestTriggered();

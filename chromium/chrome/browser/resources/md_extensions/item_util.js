@@ -9,6 +9,7 @@ const SourceType = {
   POLICY: 'policy',
   SIDELOADED: 'sideloaded',
   UNPACKED: 'unpacked',
+  UNKNOWN: 'unknown',
 };
 
 cr.define('extensions', function() {
@@ -74,11 +75,19 @@ cr.define('extensions', function() {
             chrome.developerPrivate.ControllerType.POLICY) {
       return SourceType.POLICY;
     }
-    if (item.location == chrome.developerPrivate.Location.THIRD_PARTY)
-      return SourceType.SIDELOADED;
-    if (item.location == chrome.developerPrivate.Location.UNPACKED)
-      return SourceType.UNPACKED;
-    return SourceType.WEBSTORE;
+
+    switch (item.location) {
+      case chrome.developerPrivate.Location.THIRD_PARTY:
+        return SourceType.SIDELOADED;
+      case chrome.developerPrivate.Location.UNPACKED:
+        return SourceType.UNPACKED;
+      case chrome.developerPrivate.Location.UNKNOWN:
+        return SourceType.UNKNOWN;
+      case chrome.developerPrivate.Location.FROM_STORE:
+        return SourceType.WEBSTORE;
+    }
+
+    assertNotReached(item.location);
   }
 
   /**
@@ -95,6 +104,10 @@ cr.define('extensions', function() {
         return loadTimeData.getString('itemSourceUnpacked');
       case SourceType.WEBSTORE:
         return loadTimeData.getString('itemSourceWebstore');
+      case SourceType.UNKNOWN:
+        // Nothing to return. Calling code should use
+        // chrome.developerPrivate.ExtensionInfo's |locationText| instead.
+        return '';
     }
     assertNotReached();
   }
@@ -123,33 +136,10 @@ cr.define('extensions', function() {
     return label;
   }
 
-  /**
-   * Returns the list type that the item belongs to.
-   * @param {!chrome.developerPrivate.ExtensionInfo} item
-   * @return {extensions.ShowingType}
-   */
-  function getItemListType(item) {
-    const ExtensionType = chrome.developerPrivate.ExtensionType;
-    switch (item.type) {
-      case ExtensionType.HOSTED_APP:
-      case ExtensionType.LEGACY_PACKAGED_APP:
-      case ExtensionType.PLATFORM_APP:
-        return extensions.ShowingType.APPS;
-      case ExtensionType.EXTENSION:
-      case ExtensionType.SHARED_MODULE:
-        return extensions.ShowingType.EXTENSIONS;
-      case ExtensionType.THEME:
-        assertNotReached('Don\'t send themes to the chrome://extensions page');
-        break;
-    }
-    assertNotReached();
-  }
-
   return {
     isControlled: isControlled,
     isEnabled: isEnabled,
     userCanChangeEnablement: userCanChangeEnablement,
-    getItemListType: getItemListType,
     getItemSource: getItemSource,
     getItemSourceString: getItemSourceString,
     computeInspectableViewLabel: computeInspectableViewLabel

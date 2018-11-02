@@ -23,7 +23,7 @@ class PermissionServiceContext::PermissionSubscription {
   PermissionSubscription(PermissionServiceContext* context,
                          PermissionObserverPtr observer)
       : context_(context), observer_(std::move(observer)) {
-    observer_.set_connection_error_handler(base::Bind(
+    observer_.set_connection_error_handler(base::BindOnce(
         &PermissionSubscription::OnConnectionError, base::Unretained(this)));
   }
 
@@ -72,7 +72,7 @@ PermissionServiceContext::~PermissionServiceContext() {
 
 void PermissionServiceContext::CreateService(
     blink::mojom::PermissionServiceRequest request) {
-  services_.AddBinding(base::MakeUnique<PermissionServiceImpl>(this),
+  services_.AddBinding(std::make_unique<PermissionServiceImpl>(this),
                        std::move(request));
 }
 
@@ -85,7 +85,7 @@ void PermissionServiceContext::CreateSubscription(
     return;
 
   auto subscription =
-      base::MakeUnique<PermissionSubscription>(this, std::move(observer));
+      std::make_unique<PermissionSubscription>(this, std::move(observer));
   GURL requesting_origin(origin.Serialize());
   GURL embedding_origin = GetEmbeddingOrigin();
   int subscription_id =

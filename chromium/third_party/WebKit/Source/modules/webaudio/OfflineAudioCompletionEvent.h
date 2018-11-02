@@ -26,11 +26,10 @@
 #ifndef OfflineAudioCompletionEvent_h
 #define OfflineAudioCompletionEvent_h
 
+#include "base/memory/scoped_refptr.h"
 #include "modules/EventModules.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/OfflineAudioCompletionEventInit.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -53,7 +52,7 @@ class OfflineAudioCompletionEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   OfflineAudioCompletionEvent();

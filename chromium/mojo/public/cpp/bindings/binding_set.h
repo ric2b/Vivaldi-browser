@@ -123,6 +123,18 @@ class BindingSetBase {
     return true;
   }
 
+  // Swaps the interface implementation with a different one, to allow tests
+  // to modify behavior.
+  //
+  // Returns the existing interface implementation to the caller.
+  ImplPointerType SwapImplForTesting(BindingId id, ImplPointerType new_impl) {
+    auto it = bindings_.find(id);
+    if (it == bindings_.end())
+      return nullptr;
+
+    return it->second->SwapImplForTesting(new_impl);
+  }
+
   void CloseAllBindings() { bindings_.clear(); }
 
   bool empty() const { return bindings_.empty(); }
@@ -167,11 +179,11 @@ class BindingSetBase {
   // The returned callback must be called on the BindingSet's own sequence.
   ReportBadMessageCallback GetBadMessageCallback() {
     DCHECK(dispatch_context_);
-    return base::Bind(
-        [](const ReportBadMessageCallback& error_callback,
+    return base::BindOnce(
+        [](ReportBadMessageCallback error_callback,
            base::WeakPtr<BindingSetBase> binding_set, BindingId binding_id,
            const std::string& error) {
-          error_callback.Run(error);
+          std::move(error_callback).Run(error);
           if (binding_set)
             binding_set->RemoveBinding(binding_id);
         },
@@ -215,6 +227,10 @@ class BindingSetBase {
     }
 
     void FlushForTesting() { binding_.FlushForTesting(); }
+
+    ImplPointerType SwapImplForTesting(ImplPointerType new_impl) {
+      return binding_.SwapImplForTesting(new_impl);
+    }
 
    private:
     class DispatchFilter : public MessageReceiver {

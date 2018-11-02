@@ -18,8 +18,6 @@ class WebStateImpl;
 @interface Tab ()<CRWWebDelegate>
 
 - (OpenInController*)openInController;
-- (void)setShouldObserveInfoBarManager:(BOOL)shouldObserveInfoBarManager;
-- (void)setShouldObserveFaviconChanges:(BOOL)shouldObserveFaviconChanges;
 
 @end
 
@@ -27,8 +25,6 @@ class WebStateImpl;
 
 // Replaces the existing |externalAppLauncher_|.
 - (void)replaceExternalAppLauncher:(id)externalAppLauncher;
-
-- (FormInputAccessoryViewController*)inputAccessoryViewController;
 
 // Returns the Tab owning TabModel.
 - (TabModel*)parentTabModel;

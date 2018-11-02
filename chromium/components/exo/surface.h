@@ -14,12 +14,14 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "cc/base/region.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
+#include "components/exo/surface_delegate.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/transform.h"
@@ -30,19 +32,18 @@ class TracedValue;
 }
 }
 
-namespace cc {
-class CompositorFrame;
-}
-
 namespace gfx {
 class Path;
+}
+
+namespace viz {
+class CompositorFrame;
 }
 
 namespace exo {
 class Buffer;
 class LayerTreeFrameSinkHolder;
 class Pointer;
-class SurfaceDelegate;
 class SurfaceObserver;
 class Surface;
 
@@ -59,7 +60,7 @@ using CursorProvider = Pointer;
 
 // This class represents a rectangular area that is displayed on the screen.
 // It has a location, size and pixel contents.
-class Surface : public ui::PropertyHandler {
+class Surface final : public ui::PropertyHandler {
  public:
   using PropertyDeallocator = void (*)(int64_t value);
 
@@ -89,15 +90,20 @@ class Surface : public ui::PropertyHandler {
   // throttling redrawing operations, and driving animations.
   using PresentationCallback =
       base::Callback<void(base::TimeTicks presentation_time,
-                          base::TimeDelta refresh)>;
+                          base::TimeDelta refresh,
+                          uint32_t flags)>;
   void RequestPresentationCallback(const PresentationCallback& callback);
 
   // This sets the region of the surface that contains opaque content.
-  void SetOpaqueRegion(const SkRegion& region);
+  void SetOpaqueRegion(const cc::Region& region);
 
   // This sets the region of the surface that can receive pointer and touch
-  // events.
-  void SetInputRegion(const SkRegion& region);
+  // events. The region is clipped to the surface bounds.
+  void SetInputRegion(const cc::Region& region);
+
+  // This overrides the input region to the surface bounds with an outset.
+  // TODO(domlaskowski): Remove this once client-driven resizing is removed.
+  void SetInputOutset(int outset);
 
   // This sets the scaling factor used to interpret the contents of the buffer
   // attached to the surface. Note that if the scale is larger than 1, then you
@@ -116,6 +122,7 @@ class Surface : public ui::PropertyHandler {
   void SetSubSurfacePosition(Surface* sub_surface, const gfx::Point& position);
   void PlaceSubSurfaceAbove(Surface* sub_surface, Surface* reference);
   void PlaceSubSurfaceBelow(Surface* sub_surface, Surface* sibling);
+  void OnSubSurfaceCommit();
 
   // This sets the surface viewport for scaling.
   void SetViewport(const gfx::Size& viewport);
@@ -133,41 +140,56 @@ class Surface : public ui::PropertyHandler {
   // This sets the alpha value that will be applied to the whole surface.
   void SetAlpha(float alpha);
 
+  // Request that surface should have the specified frame type.
+  void SetFrame(SurfaceFrameType type);
+
+  // Request "parent" for surface.
+  void SetParent(Surface* parent, const gfx::Point& position);
+
   // Surface state (damage regions, attached buffers, etc.) is double-buffered.
   // A Commit() call atomically applies all pending state, replacing the
   // current state. Commit() is not guaranteed to be synchronous. See
   // CommitSurfaceHierarchy() below.
   void Commit();
 
-  // This will synchronously commit all pending state of the surface and its
-  // descendants by recursively calling CommitSurfaceHierarchy() for each
-  // sub-surface with pending state. Returns the bounding box of the surface
-  // and its descendants, in the local coordinate space of the surface.
-  gfx::Rect CommitSurfaceHierarchy(
+  // This will commit all pending state of the surface and its descendants by
+  // recursively calling CommitSurfaceHierarchy() for each sub-surface.
+  // If |synchronized| is set to false, then synchronized surfaces should not
+  // commit pending state.
+  void CommitSurfaceHierarchy(bool synchronized);
+
+  // This will append current callbacks for surface and its descendants to
+  // |frame_callbacks| and |presentation_callbacks|.
+  void AppendSurfaceHierarchyCallbacks(
       std::list<FrameCallback>* frame_callbacks,
       std::list<PresentationCallback>* presentation_callbacks);
 
+  // This will append contents for surface and its descendants to frame.
   void AppendSurfaceHierarchyContentsToFrame(
       const gfx::Point& origin,
       float device_scale_factor,
       LayerTreeFrameSinkHolder* frame_sink_holder,
-      cc::CompositorFrame* frame);
+      viz::CompositorFrame* frame);
 
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
 
-  // Returns the bounds of the current input region of surface.
-  gfx::Rect GetHitTestBounds() const;
+  // Returns true if surface should receive touch events.
+  bool IsTouchEnabled(Surface* surface) const;
 
-  // Returns true if |rect| intersects this surface's bounds.
-  bool HitTestRect(const gfx::Rect& rect) const;
+  // Returns false if the hit test region is empty.
+  bool HasHitTestRegion() const;
 
-  // Returns true if the current input region is different than the surface
-  // bounds.
-  bool HasHitTestMask() const;
+  // Returns true if |point| is inside the surface.
+  bool HitTest(const gfx::Point& point) const;
 
-  // Returns the current input region of surface in the form of a hit-test mask.
+  // Sets |mask| to the path that delineates the hit test region of the surface.
   void GetHitTestMask(gfx::Path* mask) const;
+
+  // Returns the current input region of surface in the form of a set of
+  // hit-test rects.
+  std::unique_ptr<aura::WindowTargeter::HitTestRects> GetHitTestShapeRects()
+      const;
 
   // Surface does not own cursor providers. It is the responsibility of the
   // caller to remove the cursor provider before it is destroyed.
@@ -196,8 +218,15 @@ class Surface : public ui::PropertyHandler {
   // Called when the begin frame source has changed.
   void SetBeginFrameSource(viz::BeginFrameSource* begin_frame_source);
 
-  // Returns the active contents size.
+  // Returns the active content size.
   const gfx::Size& content_size() const { return content_size_; }
+
+  // Returns the active content bounds for surface hierarchy. ie. the bounding
+  // box of the surface and its descendants, in the local coordinate space of
+  // the surface.
+  const gfx::Rect& surface_hierarchy_content_bounds() const {
+    return surface_hierarchy_content_bounds_;
+  }
 
   // Returns true if the associated window is in 'stylus-only' mode.
   bool IsStylusOnly();
@@ -212,7 +241,7 @@ class Surface : public ui::PropertyHandler {
   bool FillsBoundsOpaquely() const;
 
   bool HasPendingDamageForTesting(const gfx::Rect& damage) const {
-    return pending_damage_.contains(gfx::RectToSkIRect(damage));
+    return pending_damage_.Contains(damage);
   }
 
  private:
@@ -223,8 +252,9 @@ class Surface : public ui::PropertyHandler {
     bool operator==(const State& other);
     bool operator!=(const State& other) { return !(*this == other); }
 
-    SkRegion opaque_region;
-    SkRegion input_region;
+    cc::Region opaque_region;
+    cc::Region input_region;
+    int input_outset = 0;
     float buffer_scale = 1.0f;
     Transform buffer_transform = Transform::NORMAL;
     gfx::Size viewport;
@@ -242,10 +272,12 @@ class Surface : public ui::PropertyHandler {
 
     base::WeakPtr<Buffer>& buffer();
     const base::WeakPtr<Buffer>& buffer() const;
+    const gfx::Size& size() const;
     void Reset(base::WeakPtr<Buffer> buffer);
 
    private:
     base::WeakPtr<Buffer> buffer_;
+    gfx::Size size_;
 
     DISALLOW_COPY_AND_ASSIGN(BufferAttachment);
   };
@@ -265,13 +297,13 @@ class Surface : public ui::PropertyHandler {
   // the |frame|.
   void AppendContentsToFrame(const gfx::Point& origin,
                              float device_scale_factor,
-                             cc::CompositorFrame* frame);
+                             viz::CompositorFrame* frame);
 
   // Update surface content size base on current buffer size.
   void UpdateContentSize();
 
   // This returns true when the surface has some contents assigned to it.
-  bool has_contents() const { return !!current_buffer_.buffer(); }
+  bool has_contents() const { return !current_buffer_.size().IsEmpty(); }
 
   // This window has the layer which contains the Surface contents.
   std::unique_ptr<aura::Window> window_;
@@ -282,6 +314,9 @@ class Surface : public ui::PropertyHandler {
   // This is the size of the last committed contents.
   gfx::Size content_size_;
 
+  // This is the bounds of the last committed surface hierarchy contents.
+  gfx::Rect surface_hierarchy_content_bounds_;
+
   // This is true when Attach() has been called and new contents should take
   // effect next time Commit() is called.
   bool has_pending_contents_ = false;
@@ -290,11 +325,11 @@ class Surface : public ui::PropertyHandler {
   BufferAttachment pending_buffer_;
 
   // The damage region to schedule paint for when Commit() is called.
-  SkRegion pending_damage_;
+  cc::Region pending_damage_;
 
   // The damage region which will be used by
   // AppendSurfaceHierarchyContentsToFrame() to generate frame.
-  SkRegion damage_;
+  cc::Region damage_;
 
   // These lists contains the callbacks to notify the client when it is a good
   // time to start producing a new frame. These callbacks move to
@@ -302,6 +337,7 @@ class Surface : public ui::PropertyHandler {
   // |active_frame_callbacks_| when the effect of the Commit() is scheduled to
   // be drawn. They fire at the first begin frame notification after this.
   std::list<FrameCallback> pending_frame_callbacks_;
+  std::list<FrameCallback> frame_callbacks_;
 
   // These lists contains the callbacks to notify the client when surface
   // contents have been presented. These callbacks move to
@@ -311,12 +347,16 @@ class Surface : public ui::PropertyHandler {
   // after receiving VSync parameters update for the previous frame. They fire
   // at the next VSync parameters update after that.
   std::list<PresentationCallback> pending_presentation_callbacks_;
+  std::list<PresentationCallback> presentation_callbacks_;
 
   // This is the state that has yet to be committed.
   State pending_state_;
 
   // This is the state that has been committed.
   State state_;
+
+  // Cumulative input region of surface and its sub-surfaces.
+  cc::Region hit_test_region_;
 
   // The stack of sub-surfaces to take effect when Commit() is called.
   // Bottom-most sub-surface at the front of the list and top-most sub-surface

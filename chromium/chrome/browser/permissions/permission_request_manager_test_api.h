@@ -10,7 +10,6 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 
 class Browser;
-class Profile;
 
 namespace test {
 
@@ -25,9 +24,8 @@ class PermissionRequestManagerTestApi {
 
   // Add a "simple" permission request. One that uses PermissionRequestImpl,
   // such as for ContentSettingsType including MIDI_SYSEX, PUSH_MESSAGING,
-  // NOTIFICATIONS, GEOLOCATON, or PLUGINS. This can be called multiple times
-  // before a call to manager()->DisplayPendingRequests().
-  void AddSimpleRequest(Profile* profile, ContentSettingsType type);
+  // NOTIFICATIONS, GEOLOCATON, or PLUGINS.
+  void AddSimpleRequest(ContentSettingsType type);
 
   // Return the bubble window for the permission prompt or null if there is no
   // prompt currently showing.

@@ -67,7 +67,6 @@ void InitLabel(NSTextField* textField, const base::string16& text) {
   [textField setBezeled:NO];
   [textField setFont:LabelFont()];
   [[textField cell] setLineBreakMode:NSLineBreakByTruncatingTail];
-  [textField sizeToFit];
 }
 
 std::pair<CGFloat, CGFloat> GetResizedColumns(
@@ -95,6 +94,15 @@ NSSecureTextField* PasswordLabel(const base::string16& text) {
   base::scoped_nsobject<NSSecureTextField> textField(
       [[NSSecureTextField alloc] initWithFrame:NSZeroRect]);
   InitLabel(textField, text);
+  [textField sizeToFit];
+  return textField.autorelease();
+}
+
+NSTextField* Label(const base::string16& text) {
+  base::scoped_nsobject<NSTextField> textField(
+      [[NSTextField alloc] initWithFrame:NSZeroRect]);
+  InitLabel(textField, text);
+  [textField sizeToFit];
   return textField.autorelease();
 }
 
@@ -133,24 +141,22 @@ HyperlinkTextView* TitleBubbleLabelWithLink(const base::string16& text,
 HyperlinkTextView* TitleDialogLabelWithLink(const base::string16& text,
                                             gfx::Range range,
                                             id<NSTextViewDelegate> delegate) {
-  return LabelWithLink(
-      text, SK_ColorBLACK,
-      ResourceBundle::GetSharedInstance()
-          .GetFontList(chrome_style::kTitleFontStyle)
-          .GetPrimaryFont()
-          .GetNativeFont(),
-      range, delegate);
+  return LabelWithLink(text, SK_ColorBLACK,
+                       ui::ResourceBundle::GetSharedInstance()
+                           .GetFontList(chrome_style::kTitleFontStyle)
+                           .GetPrimaryFont()
+                           .GetNativeFont(),
+                       range, delegate);
 }
 
 HyperlinkTextView* LabelWithLink(const base::string16& text,
                                  SkColor color,
                                  gfx::Range range,
                                  id<NSTextViewDelegate> delegate) {
-  return LabelWithLink(
-      text, color,
-      ResourceBundle::GetSharedInstance()
-          .GetFontList(ResourceBundle::SmallFont)
-          .GetPrimaryFont()
-          .GetNativeFont(),
-      range, delegate);
+  return LabelWithLink(text, color,
+                       ui::ResourceBundle::GetSharedInstance()
+                           .GetFontList(ui::ResourceBundle::SmallFont)
+                           .GetPrimaryFont()
+                           .GetNativeFont(),
+                       range, delegate);
 }

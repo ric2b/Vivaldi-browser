@@ -30,7 +30,7 @@
 
 #include "core/css/CSSToLengthConversionData.h"
 
-#include "core/css/CSSHelper.h"
+#include "core/css/CSSResolutionUnits.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/style/ComputedStyle.h"
 
@@ -143,6 +143,9 @@ double CSSToLengthConversionData::ZoomedComputedPixels(
 
     case CSSPrimitiveValue::UnitType::kMillimeters:
       return value * kCssPixelsPerMillimeter * Zoom();
+
+    case CSSPrimitiveValue::UnitType::kQuarterMillimeters:
+      return value * kCssPixelsPerQuarterMillimeter * Zoom();
 
     case CSSPrimitiveValue::UnitType::kInches:
       return value * kCssPixelsPerInch * Zoom();

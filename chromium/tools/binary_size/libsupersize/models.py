@@ -44,26 +44,37 @@ METADATA_ELF_BUILD_ID = 'elf_build_id'
 METADATA_GN_ARGS = 'gn_args'
 METADATA_TOOL_PREFIX = 'tool_prefix'  # Path relative to SRC_ROOT.
 
-
+SECTION_BSS = '.bss'
+SECTION_DATA = '.data'
+SECTION_DATA_REL_RO = '.data.rel.ro'
+SECTION_DATA_REL_RO_LOCAL = '.data.rel.ro.local'
+SECTION_PAK_NONTRANSLATED = '.pak.nontranslated'
+SECTION_PAK_TRANSLATIONS = '.pak.translations'
+SECTION_RODATA = '.rodata'
+SECTION_TEXT = '.text'
 # Used by SymbolGroup when they contain a mix of sections.
-SECTION_NAME_MULTIPLE = '.*'
+SECTION_MULTIPLE = '.*'
 
 SECTION_NAME_TO_SECTION = {
-    '.bss': 'b',
-    '.data': 'd',
-    '.data.rel.ro.local': 'R',
-    '.data.rel.ro': 'R',
-    '.rodata': 'r',
-    '.text': 't',
-    SECTION_NAME_MULTIPLE: '*',
+    SECTION_BSS: 'b',
+    SECTION_DATA: 'd',
+    SECTION_DATA_REL_RO_LOCAL: 'R',
+    SECTION_DATA_REL_RO: 'R',
+    SECTION_PAK_NONTRANSLATED: 'P',
+    SECTION_PAK_TRANSLATIONS: 'p',
+    SECTION_RODATA: 'r',
+    SECTION_TEXT: 't',
+    SECTION_MULTIPLE: '*',
 }
 
 SECTION_TO_SECTION_NAME = collections.OrderedDict((
-    ('t', '.text'),
-    ('r', '.rodata'),
-    ('R', '.data.rel.ro'),
-    ('d', '.data'),
-    ('b', '.bss'),
+    ('t', SECTION_TEXT),
+    ('r', SECTION_RODATA),
+    ('R', SECTION_DATA_REL_RO),
+    ('d', SECTION_DATA),
+    ('b', SECTION_BSS),
+    ('p', SECTION_PAK_TRANSLATIONS),
+    ('P', SECTION_PAK_NONTRANSLATED),
 ))
 
 
@@ -81,6 +92,9 @@ DIFF_STATUS_CHANGED = 1
 DIFF_STATUS_ADDED = 2
 DIFF_STATUS_REMOVED = 3
 DIFF_PREFIX_BY_STATUS = ['= ', '~ ', '+ ', '- ']
+
+
+STRING_LITERAL_NAME = 'string literal'
 
 
 class SizeInfo(object):
@@ -108,7 +122,7 @@ class SizeInfo(object):
                size_path=None):
     if isinstance(raw_symbols, list):
       raw_symbols = SymbolGroup(raw_symbols)
-    self.section_sizes = section_sizes  # E.g. {'.text': 0}
+    self.section_sizes = section_sizes  # E.g. {SECTION_TEXT: 0}
     self.raw_symbols = raw_symbols
     self._symbols = symbols
     self.metadata = metadata or {}
@@ -117,7 +131,9 @@ class SizeInfo(object):
   @property
   def symbols(self):
     if self._symbols is None:
+      logging.debug('Clustering symbols')
       self._symbols = self.raw_symbols._Clustered()
+      logging.debug('Done clustering symbols')
     return self._symbols
 
   @symbols.setter
@@ -157,7 +173,9 @@ class DeltaSizeInfo(object):
   @property
   def symbols(self):
     if self._symbols is None:
+      logging.debug('Clustering symbols')
       self._symbols = self.raw_symbols._Clustered()
+      logging.debug('Done clustering symbols')
     return self._symbols
 
   @symbols.setter
@@ -174,15 +192,7 @@ class BaseSymbol(object):
 
   @property
   def section(self):
-    """Returns the one-letter section.
-
-    Mappings:
-      'b': '.bss'
-      'd': '.data'
-      'R': '.data.rel.ro'
-      'r': '.rodata'
-      't': '.text'
-    """
+    """Returns the one-letter section."""
     # Fallback to section_name if there is no short-form defined.
     return SECTION_NAME_TO_SECTION.get(self.section_name, self.section_name)
 
@@ -236,7 +246,11 @@ class BaseSymbol(object):
     return '{%s}' % ','.join(parts)
 
   def IsBss(self):
-    return self.section_name == '.bss'
+    return self.section_name == SECTION_BSS
+
+  def IsPak(self):
+    return (self.section_name == SECTION_PAK_TRANSLATIONS or
+        self.section_name == SECTION_PAK_NONTRANSLATED)
 
   def IsGroup(self):
     return False
@@ -247,6 +261,9 @@ class BaseSymbol(object):
   def IsGeneratedByToolchain(self):
     return '.' in self.name or (
         self.name.endswith(']') and not self.name.endswith('[]'))
+
+  def IsStringLiteral(self):
+    return self.full_name == STRING_LITERAL_NAME
 
   def IterLeafSymbols(self):
     yield self
@@ -475,7 +492,7 @@ class SymbolGroup(BaseSymbol):
     self.full_name = full_name if full_name is not None else name
     self.template_name = template_name if template_name is not None else name
     self.name = name or ''
-    self.section_name = section_name or SECTION_NAME_MULTIPLE
+    self.section_name = section_name or SECTION_MULTIPLE
     self.is_sorted = is_sorted
 
   def __repr__(self):
@@ -737,7 +754,7 @@ class SymbolGroup(BaseSymbol):
     """
     return self._CreateTransformed(
         self._filtered_symbols, filtered_symbols=self._symbols,
-        section_name=SECTION_NAME_MULTIPLE, is_sorted=False)
+        section_name=SECTION_MULTIPLE, is_sorted=False)
 
   def GroupedBy(self, func, min_count=0, group_factory=None):
     """Returns a SymbolGroup of SymbolGroups, indexed by |func|.
@@ -805,14 +822,17 @@ class SymbolGroup(BaseSymbol):
 
     The main function of clustering is to put symbols that were broken into
     multiple parts under a group so that they once again look like a single
-    symbol. It also groups together symbols like "** merge strings".
+    symbol. This is to prevent someone thinking that a symbol got smaller, when
+    all it did was get split into parts.
+
+    It also groups together "** symbol gap", since these are mostly just noise.
 
     To view created groups:
       Print(size_info.symbols.WhereIsGroup())
     """
     def cluster_func(symbol):
       name = symbol.full_name
-      if not name:
+      if not name or symbol.IsStringLiteral():
         # min_count=2 will ensure order is maintained while not being grouped.
         # "&" to distinguish from real symbol names, id() to ensure uniqueness.
         name = '&' + hex(id(symbol))
@@ -843,6 +863,30 @@ class SymbolGroup(BaseSymbol):
           cluster_func, min_count=2, group_factory=group_factory))
 
     return self._CreateTransformed(ret)
+
+  def GroupedByAliases(self, same_name_only=False, min_count=2):
+    """Groups by symbol.aliases (leaving non-aliases alone).
+
+    Useful when wanting an overview of symbol sizes without having their PSS
+    divided by number of aliases.
+
+    Args:
+      same_name_only: When True, groups only aliases with the same full_name
+                      (those that differ only by path).
+      min_count: Miniumum number of symbols for a group. If fewer than this many
+                 symbols end up in a group, they will not be put within a group.
+                 Use a negative value to omit symbols entirely rather than
+                 include them outside of a group.
+    """
+    def group_factory(_, symbols):
+      sym = symbols[0]
+      return self._CreateTransformed(
+          symbols, full_name=sym.full_name, template_name=sym.template_name,
+          name=sym.name, section_name=sym.section_name)
+
+    return self.GroupedBy(
+        lambda s: (same_name_only and s.full_name, id(s.aliases or s)),
+        min_count=min_count, group_factory=group_factory)
 
   def GroupedBySectionName(self):
     return self.GroupedBy(lambda s: s.section_name)
@@ -886,7 +930,7 @@ class SymbolGroup(BaseSymbol):
     return self.GroupedBy(extract_namespace, min_count=min_count)
 
   def GroupedByPath(self, depth=0, fallback='{no path}',
-                  fallback_to_object_path=True, min_count=0):
+                    fallback_to_object_path=True, min_count=0):
     """Groups by source_path.
 
     Due to path sharing (symbols where path looks like foo/bar/{shared}/3),
@@ -895,7 +939,8 @@ class SymbolGroup(BaseSymbol):
     Args:
       depth: When 0 (default), groups by entire path. When 1, groups by
              top-level directory, when 2, groups by top 2 directories, etc.
-      fallback: Use this value when no namespace exists.
+      fallback: Use this value when no path exists. Pass None here to omit
+             symbols that do not path information.
       fallback_to_object_path: When True (default), uses object_path when
              source_path is missing.
       min_count: Miniumum number of symbols for a group. If fewer than this many
@@ -908,6 +953,8 @@ class SymbolGroup(BaseSymbol):
       if fallback_to_object_path and not path:
         path = symbol.object_path
       path = path or fallback
+      if path is None:
+        return None
       # Group by base of foo/bar/{shared}/2
       shared_idx = path.find('{shared}')
       if shared_idx != -1:

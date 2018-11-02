@@ -59,6 +59,8 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
 
     this._initExcludePatterSetting();
 
+    /** @type {?function(?Persistence.IsolatedFileSystem)} */
+    this._fileSystemRequestResolve = null;
     this._fileSystemsLoadedPromise = this._requestFileSystems();
   }
 
@@ -93,8 +95,15 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
     }
   }
 
-  addFileSystem() {
-    InspectorFrontendHost.addFileSystem('');
+  /**
+   * @param {string=} type
+   * @return {!Promise<?Persistence.IsolatedFileSystem>}
+   */
+  addFileSystem(type) {
+    return new Promise(resolve => {
+      this._fileSystemRequestResolve = resolve;
+      InspectorFrontendHost.addFileSystem(type || '');
+    });
   }
 
   /**
@@ -120,7 +129,7 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
     var embedderPath = fileSystem.fileSystemPath;
     var fileSystemURL = Common.ParsedURL.platformPathToURL(fileSystem.fileSystemPath);
     var promise = Persistence.IsolatedFileSystem.create(
-        this, fileSystemURL, embedderPath, fileSystem.fileSystemName, fileSystem.rootURL);
+        this, fileSystemURL, embedderPath, fileSystem.type, fileSystem.fileSystemName, fileSystem.rootURL);
     return promise.then(storeFileSystem.bind(this));
 
     /**
@@ -140,13 +149,22 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
   /**
    * @param {!Common.Event} event
    */
-  _onFileSystemAdded(event) {
+  async _onFileSystemAdded(event) {
     var errorMessage = /** @type {string} */ (event.data['errorMessage']);
     var fileSystem = /** @type {?Persistence.IsolatedFileSystemManager.FileSystem} */ (event.data['fileSystem']);
-    if (errorMessage)
-      Common.console.error(errorMessage);
-    else if (fileSystem)
-      this._innerAddFileSystem(fileSystem, true);
+    if (errorMessage) {
+      Common.console.error(Common.UIString('Unable to add filesystem: %s', errorMessage));
+      if (!this._fileSystemRequestResolve)
+        return;
+      this._fileSystemRequestResolve.call(null, null);
+      this._fileSystemRequestResolve = null;
+    } else if (fileSystem) {
+      fileSystem = await this._innerAddFileSystem(fileSystem, true);
+      if (this._fileSystemRequestResolve) {
+        this._fileSystemRequestResolve.call(null, fileSystem);
+        this._fileSystemRequestResolve = null;
+      }
+    }
   }
 
   /**
@@ -167,12 +185,34 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
    * @param {!Common.Event} event
    */
   _onFileSystemFilesChanged(event) {
-    var paths = /** @type {!Persistence.IsolatedFileSystemManager.FilesChangedData} */ (event.data);
-    var urlPaths = {};
-    urlPaths.changed = paths.changed.map(embedderPath => Common.ParsedURL.platformPathToURL(embedderPath));
-    urlPaths.added = paths.added.map(embedderPath => Common.ParsedURL.platformPathToURL(embedderPath));
-    urlPaths.removed = paths.removed.map(embedderPath => Common.ParsedURL.platformPathToURL(embedderPath));
+    var urlPaths = {
+      changed: groupFilePathsIntoFileSystemPaths.call(this, event.data.changed),
+      added: groupFilePathsIntoFileSystemPaths.call(this, event.data.added),
+      removed: groupFilePathsIntoFileSystemPaths.call(this, event.data.removed)
+    };
+
     this.dispatchEventToListeners(Persistence.IsolatedFileSystemManager.Events.FileSystemFilesChanged, urlPaths);
+
+    /**
+     * @param {!Array<string>} embedderPaths
+     * @return {!Multimap<string, string>}
+     * @this {Persistence.IsolatedFileSystemManager}
+     */
+    function groupFilePathsIntoFileSystemPaths(embedderPaths) {
+      var paths = new Multimap();
+      for (var embedderPath of embedderPaths) {
+        var filePath = Common.ParsedURL.platformPathToURL(embedderPath);
+        for (var fileSystemPath of this._fileSystems.keys()) {
+          if (this._fileSystems.get(fileSystemPath).isFileExcluded(embedderPath))
+            continue;
+          var pathPrefix = fileSystemPath.endsWith('/') ? fileSystemPath : fileSystemPath + '/';
+          if (!filePath.startsWith(pathPrefix))
+            continue;
+          paths.set(fileSystemPath, filePath);
+        }
+      }
+      return paths;
+    }
   }
 
   /**
@@ -298,10 +338,10 @@ Persistence.IsolatedFileSystemManager = class extends Common.Object {
   }
 };
 
-/** @typedef {!{fileSystemName: string, rootURL: string, fileSystemPath: string}} */
+/** @typedef {!{type: string, fileSystemName: string, rootURL: string, fileSystemPath: string}} */
 Persistence.IsolatedFileSystemManager.FileSystem;
 
-/** @typedef {!{changed:!Array<string>, added:!Array<string>, removed:!Array<string>}} */
+/** @typedef {!{changed:!Multimap<string, string>, added:!Multimap<string, string>, removed:!Multimap<string, string>}} */
 Persistence.IsolatedFileSystemManager.FilesChangedData;
 
 /** @enum {symbol} */

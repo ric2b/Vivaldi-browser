@@ -5,6 +5,7 @@
 #import "ios/web/public/test/fakes/crw_test_web_state_observer.h"
 
 #include "base/memory/ptr_util.h"
+#include "ios/web/public/web_state/form_activity_params.h"
 #import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/web_state/navigation_context_impl.h"
 #include "net/http/http_response_headers.h"
@@ -23,6 +24,10 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 }
 
 @implementation CRWTestWebStateObserver {
+  // Arguments passed to |webStateWasShown:|.
+  std::unique_ptr<web::TestWasShownInfo> _wasShownInfo;
+  // Arguments passed to |webStateWasHidden:|.
+  std::unique_ptr<web::TestWasHiddenInfo> _wasHiddenInfo;
   // Arguments passed to |webState:didPruneNavigationItemsWithCount:|.
   std::unique_ptr<web::TestNavigationItemsPrunedInfo>
       _navigationItemsPrunedInfo;
@@ -34,8 +39,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   std::unique_ptr<web::TestCommitNavigationInfo> _commitNavigationInfo;
   // Arguments passed to |webState:didLoadPageWithSuccess:|.
   std::unique_ptr<web::TestLoadPageInfo> _loadPageInfo;
-  // Arguments passed to |webStateDidDismissInterstitial:|.
-  std::unique_ptr<web::TestDismissInterstitialInfo> _dismissInterstitialInfo;
   // Arguments passed to |webState:didChangeLoadingProgress:|.
   std::unique_ptr<web::TestChangeLoadingProgressInfo>
       _changeLoadingProgressInfo;
@@ -50,7 +53,7 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   // |webState:didSubmitDocumentWithFormNamed:userInitiated:|.
   std::unique_ptr<web::TestSubmitDocumentInfo> _submitDocumentInfo;
   // Arguments passed to
-  // |webState:didRegisterFormActivityWithFormNamed:fieldName:type:value:|.
+  // |webState:didRegisterFormActivity:|.
   std::unique_ptr<web::TestFormActivityInfo> _formActivityInfo;
   // Arguments passed to |webState:didUpdateFaviconURLCandidates|.
   std::unique_ptr<web::TestUpdateFaviconUrlCandidatesInfo>
@@ -63,6 +66,14 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   std::unique_ptr<web::TestStopLoadingInfo> _stopLoadingInfo;
   // Arguments passed to |webStateDidStartLoading:|.
   std::unique_ptr<web::TestStartLoadingInfo> _startLoadingInfo;
+}
+
+- (web::TestWasShownInfo*)wasShownInfo {
+  return _wasShownInfo.get();
+}
+
+- (web::TestWasHiddenInfo*)wasHiddenInfo {
+  return _wasHiddenInfo.get();
 }
 
 - (web::TestNavigationItemsPrunedInfo*)navigationItemsPrunedInfo {
@@ -83,10 +94,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 
 - (web::TestLoadPageInfo*)loadPageInfo {
   return _loadPageInfo.get();
-}
-
-- (web::TestDismissInterstitialInfo*)dismissInterstitialInfo {
-  return _dismissInterstitialInfo.get();
 }
 
 - (web::TestChangeLoadingProgressInfo*)changeLoadingProgressInfo {
@@ -135,6 +142,16 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 }
 
 #pragma mark CRWWebStateObserver methods -
+
+- (void)webStateWasShown:(web::WebState*)webState {
+  _wasShownInfo = std::make_unique<web::TestWasShownInfo>();
+  _wasShownInfo->web_state = webState;
+}
+
+- (void)webStateWasHidden:(web::WebState*)webState {
+  _wasHiddenInfo = std::make_unique<web::TestWasHiddenInfo>();
+  _wasHiddenInfo->web_state = webState;
+}
 
 - (void)webState:(web::WebState*)webState
     didPruneNavigationItemsWithCount:(size_t)pruned_item_count {
@@ -187,12 +204,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   _loadPageInfo->success = success;
 }
 
-- (void)webStateDidDismissInterstitial:(web::WebState*)webState {
-  _dismissInterstitialInfo =
-      base::MakeUnique<web::TestDismissInterstitialInfo>();
-  _dismissInterstitialInfo->web_state = webState;
-}
-
 - (void)webState:(web::WebState*)webState
     didChangeLoadingProgress:(double)progress {
   _changeLoadingProgressInfo =
@@ -227,18 +238,10 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 }
 
 - (void)webState:(web::WebState*)webState
-    didRegisterFormActivityWithFormNamed:(const std::string&)formName
-                               fieldName:(const std::string&)fieldName
-                                    type:(const std::string&)type
-                                   value:(const std::string&)value
-                            inputMissing:(BOOL)inputMissing {
+    didRegisterFormActivity:(const web::FormActivityParams&)params {
   _formActivityInfo = base::MakeUnique<web::TestFormActivityInfo>();
   _formActivityInfo->web_state = webState;
-  _formActivityInfo->form_name = formName;
-  _formActivityInfo->field_name = fieldName;
-  _formActivityInfo->type = type;
-  _formActivityInfo->value = value;
-  _formActivityInfo->input_missing = inputMissing;
+  _formActivityInfo->form_activity = params;
 }
 
 - (void)webState:(web::WebState*)webState

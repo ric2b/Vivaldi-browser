@@ -20,13 +20,21 @@ bool CompareReversedEntries(const std::unique_ptr<ReversedEntry>& lhs,
   return lhs->reversed_name < rhs->reversed_name;
 }
 
+// Returns true if the entry only configures HSTS with includeSubdomains.
+// Such entries, when written, can be represented more compactly, and thus
+// reduce the overall size of the trie.
+bool IsSimpleEntry(const TransportSecurityStateEntry* entry) {
+  return entry->force_https && entry->include_subdomains &&
+         entry->pinset.empty() && !entry->expect_ct && !entry->expect_staple;
+}
+
 }  // namespace
 
 ReversedEntry::ReversedEntry(std::vector<uint8_t> reversed_name,
                              const TransportSecurityStateEntry* entry)
     : reversed_name(reversed_name), entry(entry) {}
 
-ReversedEntry::~ReversedEntry() {}
+ReversedEntry::~ReversedEntry() = default;
 
 TrieWriter::TrieWriter(const HuffmanRepresentationTable& huffman_table,
                        const NameIDMap& expect_ct_report_uri_map,
@@ -39,7 +47,7 @@ TrieWriter::TrieWriter(const HuffmanRepresentationTable& huffman_table,
       pinsets_map_(pinsets_map),
       huffman_builder_(huffman_builder) {}
 
-TrieWriter::~TrieWriter() {}
+TrieWriter::~TrieWriter() = default;
 
 bool TrieWriter::WriteEntries(const TransportSecurityStateEntries& entries,
                               uint32_t* root_position) {
@@ -124,6 +132,13 @@ bool TrieWriter::WriteDispatchTables(ReversedEntries::iterator start,
 
 bool TrieWriter::WriteEntry(const TransportSecurityStateEntry* entry,
                             TrieBitBuffer* writer) {
+  if (IsSimpleEntry(entry)) {
+    writer->WriteBit(1);
+    return true;
+  } else {
+    writer->WriteBit(0);
+  }
+
   uint8_t include_subdomains = 0;
   if (entry->include_subdomains) {
     include_subdomains = 1;

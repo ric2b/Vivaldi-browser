@@ -15,11 +15,13 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_observer.h"
+#include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
+#include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/storage_monitor/storage_info.h"
@@ -180,8 +182,9 @@ class VolumeManagerTest : public testing::Test {
               file_system_provider_service_.get(),
               base::Bind(&ProfileEnvironment::GetFakeMtpStorageInfo,
                          base::Unretained(this)))) {
-      file_system_provider_service_->SetFileSystemFactoryForTesting(base::Bind(
-          &chromeos::file_system_provider::FakeProvidedFileSystem::Create));
+      file_system_provider_service_->SetExtensionProviderForTesting(
+          std::make_unique<
+              chromeos::file_system_provider::FakeExtensionProvider>());
     }
 
     Profile* profile() const { return profile_.get(); }
@@ -588,7 +591,8 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
 
   // Emulate system suspend and then resume.
   {
-    power_manager_client_->SendSuspendImminent();
+    power_manager_client_->SendSuspendImminent(
+        power_manager::SuspendImminent_Reason_OTHER);
     power_manager_client_->SendSuspendDone();
 
     // After resume, the device is unmounted and then mounted.
@@ -1021,7 +1025,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_CompletedFailed) {
   EXPECT_EQ("device1", event.device_path);
   EXPECT_FALSE(event.success);
 
-  EXPECT_EQ(0U, disk_mount_manager_->mount_requests().size());
+  EXPECT_EQ(1U, disk_mount_manager_->mount_requests().size());
 
   volume_manager()->RemoveObserver(&observer);
 }

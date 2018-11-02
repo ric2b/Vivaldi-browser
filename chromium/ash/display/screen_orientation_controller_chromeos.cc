@@ -4,8 +4,8 @@
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
 
-#include "ash/ash_switches.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -255,6 +255,11 @@ void ScreenOrientationController::SetLockToRotation(
     return;
 
   SetLockToOrientation(RotationToOrientation(rotation));
+}
+
+blink::WebScreenOrientationLockType
+ScreenOrientationController::GetCurrentOrientation() const {
+  return RotationToOrientation(current_rotation_);
 }
 
 void ScreenOrientationController::OnWindowActivated(
@@ -586,11 +591,6 @@ bool ScreenOrientationController::IsRotationAllowedInLockedState(
            rotation == display::Display::ROTATE_270;
   }
   return false;
-}
-
-blink::WebScreenOrientationLockType
-ScreenOrientationController::GetCurrentOrientationForTest() const {
-  return RotationToOrientation(current_rotation_);
 }
 
 bool ScreenOrientationController::CanRotateInLockedState() {

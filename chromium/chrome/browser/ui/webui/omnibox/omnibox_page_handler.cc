@@ -26,13 +26,13 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/url_database.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/search_engines/template_url.h"
 #include "content/public/browser/web_ui.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 using bookmarks::BookmarkModel;
 
@@ -178,7 +178,8 @@ bool OmniboxPageHandler::LookupIsTypedHost(const base::string16& host,
   history::URLDatabase* url_db = history_service->InMemoryDatabase();
   if (!url_db)
     return false;
-  *is_typed_host = url_db->IsTypedHost(base::UTF16ToUTF8(host));
+  *is_typed_host =
+      url_db->IsTypedHost(base::UTF16ToUTF8(host), /*scheme=*/nullptr);
   return true;
 }
 
@@ -199,12 +200,12 @@ void OmniboxPageHandler::StartOmniboxQuery(const std::string& input_string,
   ResetController();
   time_omnibox_started_ = base::Time::Now();
   input_ = AutocompleteInput(
-      base::UTF8ToUTF16(input_string), cursor_position, std::string(), GURL(),
-      base::string16(),
+      base::UTF8ToUTF16(input_string), cursor_position,
       static_cast<metrics::OmniboxEventProto::PageClassification>(
           page_classification),
-      prevent_inline_autocomplete, prefer_keyword, true, true, false,
       ChromeAutocompleteSchemeClassifier(profile_));
+  input_.set_prevent_inline_autocomplete(prevent_inline_autocomplete);
+  input_.set_prefer_keyword(prefer_keyword);
   controller_->Start(input_);
 }
 

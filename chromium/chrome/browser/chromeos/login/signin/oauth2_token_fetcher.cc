@@ -36,8 +36,7 @@ OAuth2TokenFetcher::OAuth2TokenFetcher(
   DCHECK(delegate);
 }
 
-OAuth2TokenFetcher::~OAuth2TokenFetcher() {
-}
+OAuth2TokenFetcher::~OAuth2TokenFetcher() {}
 
 void OAuth2TokenFetcher::StartExchangeFromCookies(
     const std::string& session_index,
@@ -59,7 +58,7 @@ void OAuth2TokenFetcher::StartExchangeFromCookies(
         base::TimeDelta::FromMilliseconds(kRequestRestartDelay));
     return;
   }
-  auth_fetcher_.StartCookieForOAuthLoginTokenExchangeWithDeviceId(
+  auth_fetcher_.DeprecatedStartCookieForOAuthLoginTokenExchangeWithDeviceId(
       session_index, signin_scoped_device_id);
 }
 
@@ -78,8 +77,7 @@ void OAuth2TokenFetcher::OnClientOAuthSuccess(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   VLOG(1) << "Got OAuth2 tokens!";
   retry_count_ = 0;
-  oauth_tokens_ = oauth_tokens;
-  delegate_->OnOAuth2TokensAvailable(oauth_tokens_);
+  delegate_->OnOAuth2TokensAvailable(oauth_tokens);
 }
 
 void OAuth2TokenFetcher::OnClientOAuthFailure(

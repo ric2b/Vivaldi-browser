@@ -16,21 +16,42 @@
 
 namespace offline_pages {
 
-// Status for sending prefetch request to the server.
+// Controls how to reschedule a background task.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.offlinepages
+enum class PrefetchBackgroundTaskRescheduleType {
+  // No reschedule.
+  NO_RESCHEDULE,
+  // Reschedules the task in the next available WiFi window after 15 minutes
+  // have passed.
+  RESCHEDULE_WITHOUT_BACKOFF,
+  // Reschedules the task with backoff included.
+  RESCHEDULE_WITH_BACKOFF,
+  // Reschedules the task due to the fact that it is killed due to the system
+  // constraint.
+  RESCHEDULE_DUE_TO_SYSTEM,
+  // Reschedules the task after 1 day.
+  SUSPEND
+};
+
+// Status for sending prefetch request to the server. This has a matching type
+// in enums.xml which must be adjusted if we add any new values here.
 enum class PrefetchRequestStatus {
   // Request completed successfully.
-  SUCCESS,
+  SUCCESS = 0,
   // Request failed due to to local network problem, unrelated to server load
   // levels. The caller will simply reschedule the retry in the next available
   // WiFi window after 15 minutes have passed.
-  SHOULD_RETRY_WITHOUT_BACKOFF,
+  SHOULD_RETRY_WITHOUT_BACKOFF = 1,
   // Request failed probably related to transient server problems. The caller
   // will reschedule the retry with backoff included.
-  SHOULD_RETRY_WITH_BACKOFF,
+  SHOULD_RETRY_WITH_BACKOFF = 2,
   // Request failed with error indicating that the server no longer knows how
   // to service a request. The caller will prevent network requests for the
   // period of 1 day.
-  SHOULD_SUSPEND
+  SHOULD_SUSPEND = 3,
+  // MAX should always be the last type
+  COUNT = SHOULD_SUSPEND + 1
 };
 
 // Status indicating the page rendering status in the server.
@@ -68,6 +89,10 @@ struct RenderPageInfo {
 // List of states a prefetch item can be at during its progress through the
 // prefetching process. They follow somewhat the order below, but some states
 // might be skipped.
+//
+// Changes to this enum must be reflected in the respective metrics enum named
+// OfflinePrefetchItemState in enums.xml. Use the exact same integer value for
+// each mirrored entry.
 enum class PrefetchItemState {
   // New request just received from the client.
   NEW_REQUEST = 0,
@@ -101,6 +126,8 @@ enum class PrefetchItemState {
   // to confirm that the same URL is not being repeatedly requested by its
   // client.
   ZOMBIE = 100,
+  // Max item state, needed for histograms
+  MAX = ZOMBIE
 };
 
 // Error codes used to identify the reason why a prefetch entry has finished
@@ -113,8 +140,8 @@ enum class PrefetchItemState {
 // MAX value if adding a new trailing item.
 //
 // Changes to this enum must be reflected in the respective metrics enum named
-// PrefetchItemErrorCode in enums.xml. Use the exact same integer value for each
-// mirrored entry.
+// OflinePrefetchItemErrorCode in enums.xml. Use the exact same integer value
+// for each mirrored entry.
 enum class PrefetchItemErrorCode {
   // The entry had gone through the pipeline and successfully completed
   // prefetching. Explicitly setting to 0 as that is the default value for the
@@ -143,6 +170,7 @@ enum class PrefetchItemErrorCode {
   STALE_AT_RECEIVED_GCM = 800,
   STALE_AT_RECEIVED_BUNDLE = 900,
   STALE_AT_DOWNLOADING = 1000,
+  STALE_AT_IMPORTING = 1050,
   STALE_AT_UNKNOWN = 1100,
   // Exceeded maximum retries for get operation request.
   GET_OPERATION_MAX_ATTEMPTS_REACHED = 1200,
@@ -152,8 +180,11 @@ enum class PrefetchItemErrorCode {
   DOWNLOAD_MAX_ATTEMPTS_REACHED = 1400,
   // Clock was set back too far in time.
   MAXIMUM_CLOCK_BACKWARD_SKEW_EXCEEDED = 1500,
+  // The archive importing was not completed probably due to that Chrome was
+  // killed before everything finishes.
+  IMPORT_LOST = 1600,
   // Note: Must always have the same value as the last actual entry.
-  MAX = MAXIMUM_CLOCK_BACKWARD_SKEW_EXCEEDED
+  MAX = IMPORT_LOST
 };
 
 // Callback invoked upon completion of a prefetch request.

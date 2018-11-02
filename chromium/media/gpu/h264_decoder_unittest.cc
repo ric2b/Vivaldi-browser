@@ -6,10 +6,10 @@
 #include <string.h>
 
 #include <memory>
-#include <queue>
 #include <string>
 
 #include "base/command_line.h"
+#include "base/containers/queue.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "media/base/test_data_util.h"
@@ -42,7 +42,7 @@ const std::string kHighFrame3 = "bear-320x192-high-frame-3.h264";
 
 class MockH264Accelerator : public H264Decoder::H264Accelerator {
  public:
-  MockH264Accelerator() {}
+  MockH264Accelerator() = default;
 
   MOCK_METHOD0(CreateH264Picture, scoped_refptr<H264Picture>());
   MOCK_METHOD1(SubmitDecode, bool(const scoped_refptr<H264Picture>& pic));
@@ -93,7 +93,7 @@ class H264DecoderTest : public ::testing::Test {
   MockH264Accelerator accelerator_;
 
  private:
-  std::queue<std::string> input_frame_files_;
+  base::queue<std::string> input_frame_files_;
   std::string bitstream_;
 };
 

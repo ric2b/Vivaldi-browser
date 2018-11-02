@@ -4,6 +4,7 @@
 
 #include "ui/app_list/presenter/app_list_presenter_impl.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
@@ -14,6 +15,7 @@
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -21,19 +23,30 @@
 namespace app_list {
 namespace {
 
-// The maximum shift in pixels when over-scroll happens.
-constexpr int kMaxOverScrollShift = 48;
-
 inline ui::Layer* GetLayer(views::Widget* widget) {
   return widget->GetNativeView()->layer();
 }
+
+class StateAnimationMetricsReporter : public ui::AnimationMetricsReporter {
+ public:
+  StateAnimationMetricsReporter() = default;
+  ~StateAnimationMetricsReporter() override = default;
+
+  void Report(int value) override {
+    UMA_HISTOGRAM_PERCENTAGE("Apps.StateTransition.AnimationSmoothness", value);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StateAnimationMetricsReporter);
+};
 
 }  // namespace
 
 AppListPresenterImpl::AppListPresenterImpl(
     std::unique_ptr<AppListPresenterDelegateFactory> factory)
     : factory_(std::move(factory)),
-      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
+      state_animation_metrics_reporter_(
+          std::make_unique<StateAnimationMetricsReporter>()) {
   DCHECK(factory_);
 }
 
@@ -54,8 +67,11 @@ aura::Window* AppListPresenterImpl::GetWindow() {
 }
 
 void AppListPresenterImpl::Show(int64_t display_id) {
-  if (is_visible_)
+  if (is_visible_) {
+    if (display_id != GetDisplayId())
+      Dismiss();
     return;
+  }
 
   is_visible_ = true;
   if (app_list_) {
@@ -131,6 +147,9 @@ void AppListPresenterImpl::SetAppList(mojom::AppListPtr app_list) {
 
 void AppListPresenterImpl::UpdateYPositionAndOpacity(int y_position_in_screen,
                                                      float background_opacity) {
+  if (!is_visible_)
+    return;
+
   if (view_)
     view_->UpdateYPositionAndOpacity(y_position_in_screen, background_opacity);
 }
@@ -138,7 +157,12 @@ void AppListPresenterImpl::UpdateYPositionAndOpacity(int y_position_in_screen,
 void AppListPresenterImpl::EndDragFromShelf(
     mojom::AppListState app_list_state) {
   if (view_) {
-    view_->SetState(AppListView::AppListState(app_list_state));
+    if (app_list_state == mojom::AppListState::CLOSED ||
+        view_->app_list_state() == AppListViewState::CLOSED) {
+      view_->Dismiss();
+    } else {
+      view_->SetState(AppListViewState(app_list_state));
+    }
     view_->SetIsInDrag(false);
     view_->DraggingLayout();
   }
@@ -188,37 +212,29 @@ void AppListPresenterImpl::ScheduleAnimation() {
   views::Widget* widget = view_->GetWidget();
   ui::Layer* layer = GetLayer(widget);
   layer->GetAnimator()->StopAnimating();
-  ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
   aura::Window* root_window = widget->GetNativeView()->GetRootWindow();
   const gfx::Vector2d offset =
       presenter_delegate_->GetVisibilityAnimationOffset(root_window);
   base::TimeDelta animation_duration =
       presenter_delegate_->GetVisibilityAnimationDuration(root_window,
                                                           is_visible_);
-  animation.SetTransitionDuration(animation_duration);
-  gfx::Rect target_bounds = is_fullscreen_app_list_enabled_
-                                ? widget->GetNativeView()->bounds()
-                                : widget->GetWindowBoundsInScreen();
-  if (is_fullscreen_app_list_enabled_) {
-    view_->StartCloseAnimation(animation_duration);
-    target_bounds.Offset(offset);
-  } else {
-    if (is_visible_) {
-      gfx::Rect start_bounds = gfx::Rect(target_bounds);
-      start_bounds.Offset(offset);
-      widget->SetBounds(start_bounds);
-    } else {
-      target_bounds.Offset(offset);
-    }
-  }
+  gfx::Rect target_bounds = widget->GetNativeView()->bounds();
+  target_bounds.Offset(offset);
+  widget->GetNativeView()->SetBounds(target_bounds);
+  gfx::Transform transform;
+  transform.Translate(-offset.x(), -offset.y());
+  layer->SetTransform(transform);
 
-  animation.AddObserver(this);
-  if (is_fullscreen_app_list_enabled_) {
-    widget->GetNativeView()->SetBounds(target_bounds);
-    return;
+  {
+    ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
+    animation.SetTransitionDuration(animation_duration);
+    animation.SetAnimationMetricsReporter(
+        state_animation_metrics_reporter_.get());
+    animation.AddObserver(this);
+
+    layer->SetTransform(gfx::Transform());
   }
-  layer->SetOpacity(is_visible_ ? 1.0 : 0.0);
-  widget->SetBounds(target_bounds);
+  view_->StartCloseAnimation(animation_duration);
 }
 
 int64_t AppListPresenterImpl::GetDisplayId() {
@@ -248,9 +264,11 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
 
 ////////////////////////////////////////////////////////////////////////////////
 // AppListPresenterImpl,  aura::WindowObserver implementation:
-void AppListPresenterImpl::OnWindowBoundsChanged(aura::Window* root,
-                                                 const gfx::Rect& old_bounds,
-                                                 const gfx::Rect& new_bounds) {
+void AppListPresenterImpl::OnWindowBoundsChanged(
+    aura::Window* root,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (presenter_delegate_)
     presenter_delegate_->UpdateBounds();
 }
@@ -294,52 +312,8 @@ void AppListPresenterImpl::SelectedPageChanged(int old_selected,
 
 void AppListPresenterImpl::TransitionStarted() {}
 
-void AppListPresenterImpl::TransitionChanged() {
-  // |view_| could be NULL when app list is closed with a running transition.
-  if (!view_)
-    return;
+void AppListPresenterImpl::TransitionChanged() {}
 
-  // Disable overscroll animation when the fullscreen app list feature is
-  // enabled.
-  if (is_fullscreen_app_list_enabled_)
-    return;
-
-  PaginationModel* pagination_model = view_->GetAppsPaginationModel();
-
-  const PaginationModel::Transition& transition =
-      pagination_model->transition();
-
-  if (pagination_model->is_valid_page(transition.target_page))
-    return;
-
-  views::Widget* widget = view_->GetWidget();
-  ui::LayerAnimator* widget_animator =
-      widget->GetNativeView()->layer()->GetAnimator();
-  if (!pagination_model->IsRevertingCurrentTransition()) {
-    // Update cached |view_bounds_| if it is the first over-scroll move and
-    // widget does not have running animations.
-    if (!should_snap_back_ && !widget_animator->is_animating())
-      view_bounds_ = widget->GetWindowBoundsInScreen();
-
-    const int current_page = pagination_model->selected_page();
-    const int dir = transition.target_page > current_page ? -1 : 1;
-
-    const double progress = 1.0 - pow(1.0 - transition.progress, 4);
-    const int shift = kMaxOverScrollShift * progress * dir;
-
-    gfx::Rect shifted(view_bounds_);
-    shifted.set_x(shifted.x() + shift);
-
-    widget->SetBounds(shifted);
-
-    should_snap_back_ = true;
-  } else if (should_snap_back_) {
-    should_snap_back_ = false;
-    ui::ScopedLayerAnimationSettings animation(widget_animator);
-    animation.SetTransitionDuration(
-        base::TimeDelta::FromMilliseconds(kOverscrollPageTransitionDurationMs));
-    widget->SetBounds(view_bounds_);
-  }
-}
+void AppListPresenterImpl::TransitionEnded() {}
 
 }  // namespace app_list

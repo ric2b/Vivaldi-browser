@@ -2,19 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 3
+// Next MinVersion: 4
 
 module arc.mojom;
 
+import "gfx.mojom";
 import "mojo/common/string16.mojom";
-import "screen_rect.mojom";
-
-// Represents the start and end unicode char indices of the selected
-// portion of the text [start, end).
-struct TextSelection {
-  int32 start_selection;
-  int32 end_selection;
-};
 
 // Represents view structure to be passed to ARC. The view
 // structure is synthesized from the AXStructure, which
@@ -24,7 +17,7 @@ struct TextSelection {
 // AccessibilitySnapshotNode.java used in Android Chromium.
 struct VoiceInteractionStructure {
   // Geometry of the view in pixels
-  ScreenRect rect;
+  Rect rect;
 
   // Text of the view.
   mojo.common.mojom.String16 text;
@@ -39,7 +32,7 @@ struct VoiceInteractionStructure {
   bool line_through;
 
   // Selected portion of the text.
-  TextSelection? selection;
+  Range? selection;
 
   // Fake Android view class name of the element.  Each node is assigned
   // a closest approximation of Android's views.
@@ -67,7 +60,11 @@ interface VoiceInteractionArcHomeHost {
 };
 
 // Connects with ArcHome.
-// Next method ID: 1
+// Next method ID: 2
 interface VoiceInteractionArcHomeInstance {
-  Init@0(VoiceInteractionArcHomeHost host_ptr);
+  // DEPRECATED: Please use Init@1 instead.
+  InitDeprecated@0(VoiceInteractionArcHomeHost host_ptr);
+
+  // Establishes full-duplex communication with the host.
+  [MinVersion=3] Init@1(VoiceInteractionArcHomeHost host_ptr) => ();
 };

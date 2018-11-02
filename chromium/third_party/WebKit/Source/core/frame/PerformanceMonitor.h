@@ -9,8 +9,8 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/timing/SubTaskAttribution.h"
-#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/scheduler/base/task_time_observer.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "public/platform/WebThread.h"
@@ -67,7 +67,7 @@ class CORE_EXPORT PerformanceMonitor final
                                         const String& text,
                                         double time,
                                         SourceLocation*) {}
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
 
   static void ReportGenericViolation(ExecutionContext*,
@@ -76,6 +76,8 @@ class CORE_EXPORT PerformanceMonitor final
                                      double time,
                                      std::unique_ptr<SourceLocation>);
   static double Threshold(ExecutionContext*, Violation);
+
+  void BypassLongCompileThresholdOnceForTesting();
 
   // Instrumenting methods.
   void Will(const probe::RecalculateStyle&);
@@ -96,18 +98,6 @@ class CORE_EXPORT PerformanceMonitor final
   void Will(const probe::V8Compile&);
   void Did(const probe::V8Compile&);
 
-  void WillSendRequest(ExecutionContext*,
-                       unsigned long,
-                       DocumentLoader*,
-                       ResourceRequest&,
-                       const ResourceResponse&,
-                       const FetchInitiatorInfo&);
-  void DidFailLoading(unsigned long, DocumentLoader*, const ResourceError&);
-  void DidFinishLoading(unsigned long,
-                        DocumentLoader*,
-                        double,
-                        int64_t,
-                        int64_t);
   void DomContentLoadedEventFired(LocalFrame*);
 
   void DocumentWriteFetchScript(Document*);
@@ -120,7 +110,7 @@ class CORE_EXPORT PerformanceMonitor final
   explicit PerformanceMonitor(LocalFrame*);
   ~PerformanceMonitor();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend class PerformanceMonitorTest;
@@ -143,7 +133,9 @@ class CORE_EXPORT PerformanceMonitor final
 
   void WillExecuteScript(ExecutionContext*);
   void DidExecuteScript();
-  void DidLoadResource();
+
+  void UpdateTaskAttribution(ExecutionContext*);
+  void UpdateTaskShouldBeReported(LocalFrame*);
 
   std::pair<String, DOMWindow*> SanitizedAttribution(
       const HeapHashSet<Member<Frame>>& frame_contexts,
@@ -164,14 +156,14 @@ class CORE_EXPORT PerformanceMonitor final
   Member<LocalFrame> local_root_;
   Member<ExecutionContext> task_execution_context_;
   bool task_has_multiple_contexts_ = false;
+  bool task_should_be_reported_ = false;
   using ClientThresholds = HeapHashMap<WeakMember<Client>, double>;
   HeapHashMap<Violation,
               Member<ClientThresholds>,
               typename DefaultHash<size_t>::Hash,
               WTF::UnsignedWithZeroKeyHashTraits<size_t>>
       subscriptions_;
-  double network_0_quiet_ = 0;
-  double network_2_quiet_ = 0;
+  bool bypass_long_compile_threshold_ = false;
 };
 
 }  // namespace blink

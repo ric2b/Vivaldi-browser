@@ -11,9 +11,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "cc/output/compositor_frame.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/test/fake_host_frame_sink_client.h"
+#include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "content/browser/compositor/surface_utils.h"
-#include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/renderer_host/offscreen_canvas_surface_impl.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -65,43 +68,16 @@ class StubOffscreenCanvasSurfaceClient
   DISALLOW_COPY_AND_ASSIGN(StubOffscreenCanvasSurfaceClient);
 };
 
-// Stub CompositorFrameSinkClient that does nothing.
-class StubCompositorFrameSinkClient
-    : public viz::mojom::CompositorFrameSinkClient {
- public:
-  StubCompositorFrameSinkClient() : binding_(this) {}
-  ~StubCompositorFrameSinkClient() override {}
-
-  viz::mojom::CompositorFrameSinkClientPtr GetInterfacePtr() {
-    viz::mojom::CompositorFrameSinkClientPtr client;
-    binding_.Bind(mojo::MakeRequest(&client));
-    return client;
-  }
-
- private:
-  // viz::mojom::CompositorFrameSinkClient:
-  void DidReceiveCompositorFrameAck(
-      const std::vector<viz::ReturnedResource>& resources) override {}
-  void OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) override {}
-  void OnBeginFramePausedChanged(bool paused) override {}
-  void ReclaimResources(
-      const std::vector<viz::ReturnedResource>& resources) override {}
-
-  mojo::Binding<viz::mojom::CompositorFrameSinkClient> binding_;
-
-  DISALLOW_COPY_AND_ASSIGN(StubCompositorFrameSinkClient);
-};
-
 // Create a CompositorFrame suitable to send over IPC.
-cc::CompositorFrame MakeCompositorFrame() {
-  cc::CompositorFrame frame;
+viz::CompositorFrame MakeCompositorFrame() {
+  viz::CompositorFrame frame;
   frame.metadata.begin_frame_ack.source_id =
       viz::BeginFrameArgs::kManualSourceId;
   frame.metadata.begin_frame_ack.sequence_number =
       viz::BeginFrameArgs::kStartingFrameNumber;
   frame.metadata.device_scale_factor = 1.0f;
 
-  auto render_pass = cc::RenderPass::Create();
+  auto render_pass = viz::RenderPass::Create();
   render_pass->id = 1;
   render_pass->output_rect = gfx::Rect(100, 100);
   frame.render_pass_list.push_back(std::move(render_pass));
@@ -146,33 +122,30 @@ class OffscreenCanvasProviderImplTest : public testing::Test {
 
  protected:
   void SetUp() override {
-#if !defined(OS_ANDROID)
-    ImageTransportFactory::InitializeForUnitTests(
-        base::MakeUnique<NoTransportImageTransportFactory>());
-#endif
-    host_frame_sink_manager_ = base::MakeUnique<viz::HostFrameSinkManager>();
+    host_frame_sink_manager_ = std::make_unique<viz::HostFrameSinkManager>();
 
     // The FrameSinkManagerImpl implementation is in-process here for tests.
-    frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>();
+    frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>();
     surface_utils::ConnectWithLocalFrameSinkManager(
         host_frame_sink_manager_.get(), frame_sink_manager_.get());
 
-    provider_ = base::MakeUnique<OffscreenCanvasProviderImpl>(
+    provider_ = std::make_unique<OffscreenCanvasProviderImpl>(
         host_frame_sink_manager_.get(), kRendererClientId);
+
+    host_frame_sink_manager_->RegisterFrameSinkId(kFrameSinkParent,
+                                                  &host_frame_sink_client_);
   }
   void TearDown() override {
     provider_.reset();
     frame_sink_manager_.reset();
     host_frame_sink_manager_.reset();
-#if !defined(OS_ANDROID)
-    ImageTransportFactory::Terminate();
-#endif
   }
 
  private:
   // A MessageLoop is required for mojo bindings which are used to
   // connect to graphics services.
   base::MessageLoop message_loop_;
+  viz::FakeHostFrameSinkClient host_frame_sink_client_;
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<OffscreenCanvasProviderImpl> provider_;
@@ -199,9 +172,9 @@ TEST_F(OffscreenCanvasProviderImplTest,
 
   // Mimic connection from the renderer main or worker thread to browser.
   viz::mojom::CompositorFrameSinkPtr compositor_frame_sink;
-  StubCompositorFrameSinkClient compositor_frame_sink_client;
+  viz::MockCompositorFrameSinkClient compositor_frame_sink_client;
   provider()->CreateCompositorFrameSink(
-      kFrameSinkA, compositor_frame_sink_client.GetInterfacePtr(),
+      kFrameSinkA, compositor_frame_sink_client.BindInterfacePtr(),
       mojo::MakeRequest(&compositor_frame_sink));
 
   // Renderer submits a CompositorFrame with |local_id|.
@@ -282,11 +255,11 @@ TEST_F(OffscreenCanvasProviderImplTest, ProviderClosesConnections) {
 TEST_F(OffscreenCanvasProviderImplTest, ClientConnectionWrongOrder) {
   // Mimic connection from the renderer main or worker thread.
   viz::mojom::CompositorFrameSinkPtr compositor_frame_sink;
-  StubCompositorFrameSinkClient compositor_frame_sink_client;
+  viz::MockCompositorFrameSinkClient compositor_frame_sink_client;
   // Try to connect CompositorFrameSink without first making
   // OffscreenCanvasSurface connection. This should fail.
   provider()->CreateCompositorFrameSink(
-      kFrameSinkA, compositor_frame_sink_client.GetInterfacePtr(),
+      kFrameSinkA, compositor_frame_sink_client.BindInterfacePtr(),
       mojo::MakeRequest(&compositor_frame_sink));
 
   // Observe connection errors on |compositor_frame_sink|.

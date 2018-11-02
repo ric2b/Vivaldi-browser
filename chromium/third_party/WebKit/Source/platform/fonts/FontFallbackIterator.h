@@ -5,12 +5,11 @@
 #ifndef FontFallbackIterator_h
 #define FontFallbackIterator_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/fonts/FontDataForRangeSet.h"
 #include "platform/fonts/FontFallbackPriority.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/Unicode.h"
 
@@ -26,36 +25,36 @@ class FontFallbackIterator : public RefCounted<FontFallbackIterator> {
   WTF_MAKE_NONCOPYABLE(FontFallbackIterator);
 
  public:
-  static PassRefPtr<FontFallbackIterator> Create(const FontDescription&,
-                                                 PassRefPtr<FontFallbackList>,
-                                                 FontFallbackPriority);
+  static scoped_refptr<FontFallbackIterator> Create(const FontDescription&,
+                                             scoped_refptr<FontFallbackList>,
+                                             FontFallbackPriority);
 
   bool HasNext() const { return fallback_stage_ != kOutOfLuck; };
 
   // Some system fallback APIs (Windows, Android) require a character, or a
   // portion of the string to be passed.  On Mac and Linux, we get a list of
   // fonts without passing in characters.
-  PassRefPtr<FontDataForRangeSet> Next(const Vector<UChar32>& hint_list);
+  scoped_refptr<FontDataForRangeSet> Next(const Vector<UChar32>& hint_list);
 
  private:
   FontFallbackIterator(const FontDescription&,
-                       PassRefPtr<FontFallbackList>,
+                       scoped_refptr<FontFallbackList>,
                        FontFallbackPriority);
   bool RangeSetContributesForHint(const Vector<UChar32> hint_list,
                                   const FontDataForRangeSet*);
   bool AlreadyLoadingRangeForHintChar(UChar32 hint_char);
   void WillUseRange(const AtomicString& family, const FontDataForRangeSet&);
 
-  PassRefPtr<FontDataForRangeSet> UniqueOrNext(
-      PassRefPtr<FontDataForRangeSet> candidate,
+  scoped_refptr<FontDataForRangeSet> UniqueOrNext(
+      scoped_refptr<FontDataForRangeSet> candidate,
       const Vector<UChar32>& hint_list);
 
-  PassRefPtr<SimpleFontData> FallbackPriorityFont(UChar32 hint);
-  PassRefPtr<SimpleFontData> UniqueSystemFontForHintList(
+  scoped_refptr<SimpleFontData> FallbackPriorityFont(UChar32 hint);
+  scoped_refptr<SimpleFontData> UniqueSystemFontForHintList(
       const Vector<UChar32>& hint_list);
 
   const FontDescription& font_description_;
-  RefPtr<FontFallbackList> font_fallback_list_;
+  scoped_refptr<FontFallbackList> font_fallback_list_;
   int current_font_data_index_;
   unsigned segmented_face_index_;
 
@@ -76,7 +75,7 @@ class FontFallbackIterator : public RefCounted<FontFallbackIterator> {
   // as returning a duplicate value causes a shaping run that won't return any
   // results.
   HashSet<uint32_t> unique_font_data_for_range_sets_returned_;
-  Vector<RefPtr<FontDataForRangeSet>> tracked_loading_range_sets_;
+  Vector<scoped_refptr<FontDataForRangeSet>> tracked_loading_range_sets_;
   FontFallbackPriority font_fallback_priority_;
 };
 

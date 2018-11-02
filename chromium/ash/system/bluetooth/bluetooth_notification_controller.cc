@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -86,7 +85,8 @@ BluetoothPairingNotificationDelegate::BluetoothPairingNotificationDelegate(
     const std::string& address)
     : adapter_(adapter), address_(address) {}
 
-BluetoothPairingNotificationDelegate::~BluetoothPairingNotificationDelegate() {}
+BluetoothPairingNotificationDelegate::~BluetoothPairingNotificationDelegate() =
+    default;
 
 void BluetoothPairingNotificationDelegate::Close(bool by_user) {
   VLOG(1) << "Pairing notification closed. by_user = " << by_user;

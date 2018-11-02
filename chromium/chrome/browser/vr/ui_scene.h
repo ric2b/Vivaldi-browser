@@ -10,17 +10,14 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/vr/color_scheme.h"
+#include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/elements/ui_element_iterator.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
 class TimeTicks;
 }  // namespace base
-
-namespace cc {
-class Animation;
-}  // namespace cc
 
 namespace gfx {
 class Vector3dF;
@@ -32,81 +29,65 @@ class UiElement;
 
 class UiScene {
  public:
-  enum Command {
-    ADD_ELEMENT,
-    UPDATE_ELEMENT,
-    REMOVE_ELEMENT,
-    ADD_ANIMATION,
-    REMOVE_ANIMATION,
-    CONFIGURE_SCENE,
-  };
-
   UiScene();
-  virtual ~UiScene();
+  ~UiScene();
 
   void AddUiElement(UiElementName parent, std::unique_ptr<UiElement> element);
 
-  void RemoveUiElement(int element_id);
-
-  // Add an animation to the scene, on element |element_id|.
-  void AddAnimation(int element_id, std::unique_ptr<cc::Animation> animation);
-
-  // Remove |animation_id| from element |element_id|.
-  void RemoveAnimation(int element_id, int animation_id);
+  std::unique_ptr<UiElement> RemoveUiElement(int element_id);
 
   // Handles per-frame updates, giving each element the opportunity to update,
   // if necessary (eg, for animations). NB: |current_time| is the shared,
   // absolute begin frame time.
-  void OnBeginFrame(const base::TimeTicks& current_time,
+  // Returns true if *anything* was updated.
+  bool OnBeginFrame(const base::TimeTicks& current_time,
                     const gfx::Vector3dF& look_at);
 
-  // This function gets called just before rendering the elements in the
-  // frame lifecycle. After this function, no element should be dirtied.
-  void PrepareToDraw();
+  // Returns true if any textures were redrawn.
+  bool UpdateTextures();
 
   UiElement& root_element();
 
   UiElement* GetUiElementById(int element_id) const;
   UiElement* GetUiElementByName(UiElementName name) const;
 
-  std::vector<const UiElement*> GetWorldElements() const;
-  std::vector<const UiElement*> GetOverlayElements() const;
-  std::vector<const UiElement*> GetViewportAwareElements() const;
+  typedef std::vector<const UiElement*> Elements;
+
+  Elements GetVisible2dBrowsingElements() const;
+  Elements GetVisible2dBrowsingOverlayElements() const;
+  Elements GetVisibleSplashScreenElements() const;
+  Elements GetVisibleWebVrOverlayForegroundElements() const;
+  Elements GetVisibleControllerElements() const;
+  Elements GetPotentiallyVisibleElements() const;
 
   float background_distance() const { return background_distance_; }
   void set_background_distance(float d) { background_distance_ = d; }
-  SkColor background_color() const { return background_color_; }
-  void set_background_color(SkColor color) { background_color_ = color; }
 
-  bool web_vr_rendering_enabled() const { return webvr_rendering_enabled_; }
-  void set_web_vr_rendering_enabled(bool enabled) {
-    webvr_rendering_enabled_ = enabled;
-  }
-  bool reticle_rendering_enabled() const { return reticle_rendering_enabled_; }
-  void set_reticle_rendering_enabled(bool enabled) {
-    reticle_rendering_enabled_ = enabled;
-  }
   int first_foreground_draw_phase() const {
     return first_foreground_draw_phase_;
   }
   void set_first_foreground_draw_phase(int phase) {
     first_foreground_draw_phase_ = phase;
   }
+  void set_dirty() { is_dirty_ = true; }
 
-  void OnGlInitialized();
+  void OnGlInitialized(SkiaSurfaceProvider* provider);
 
  private:
-  void Animate(const base::TimeTicks& current_time);
-
   std::unique_ptr<UiElement> root_element_;
-  ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
 
   float background_distance_ = 10.0f;
-  SkColor background_color_ = 0;
-  bool webvr_rendering_enabled_ = false;
-  bool reticle_rendering_enabled_ = true;
   bool gl_initialized_ = false;
   int first_foreground_draw_phase_ = 0;
+  bool initialized_scene_ = false;
+
+  // TODO(mthiesse): Convert everything that manipulates UI elements to
+  // bindings. Don't allow any code to go in and manipulate UI elements outside
+  // of bindings so that we can do a single pass and update everything and
+  // easily compute dirtiness.
+  bool is_dirty_ = false;
+
+  SkiaSurfaceProvider* provider_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);
 };

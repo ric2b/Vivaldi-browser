@@ -12,12 +12,16 @@
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "content/public/browser/bluetooth_chooser.h"
+#include "content/public/common/resource_type.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_prefs_observer.h"
 #include "extensions/common/view_type.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "ui/base/page_transition_types.h"
 
 class ExtensionFunctionRegistry;
+class GURL;
 class PrefService;
 
 namespace base {
@@ -54,12 +58,13 @@ class ExtensionPrefsObserver;
 class ExtensionApiFrameIdMap;
 class ExtensionApiFrameIdMapHelper;
 class ExtensionNavigationUIData;
+class ExtensionSet;
 class ExtensionSystem;
 class ExtensionSystemProvider;
 class ExtensionWebContentsObserver;
-class InfoMap;
 class KioskDelegate;
 class ProcessManagerDelegate;
+class ProcessMap;
 class RuntimeAPIDelegate;
 
 // Interface to allow the extensions module to make browser-process-specific
@@ -138,11 +143,16 @@ class ExtensionsBrowserClient {
   // Returns true if the embedder wants to allow a chrome-extension:// resource
   // request coming from renderer A to access a resource in an extension running
   // in renderer B. For example, Chrome overrides this to provide support for
-  // webview and dev tools. Called on the IO thread.
-  virtual bool AllowCrossRendererResourceLoad(net::URLRequest* request,
-                                              bool is_incognito,
-                                              const Extension* extension,
-                                              InfoMap* extension_info_map) = 0;
+  // webview and dev tools. May be called on either the UI or IO thread.
+  virtual bool AllowCrossRendererResourceLoad(
+      const GURL& url,
+      content::ResourceType resource_type,
+      ui::PageTransition page_transition,
+      int child_id,
+      bool is_incognito,
+      const Extension* extension,
+      const ExtensionSet& extensions,
+      const ProcessMap& process_map) = 0;
 
   // Returns the PrefService associated with |context|.
   virtual PrefService* GetPrefServiceForContext(
@@ -272,6 +282,16 @@ class ExtensionsBrowserClient {
 
   // Returns the locale used by the application.
   virtual std::string GetApplicationLocale() = 0;
+
+  // Returns whether |extension_id| is currently enabled.
+  // This will only return a valid answer for installed extensions (regardless
+  // of whether it is currently loaded or not) under the provided |context|.
+  // Loaded extensions return true if they are currently loaded or terminated.
+  // Unloaded extensions will return true if they are not blocked, disabled,
+  // blacklisted or uninstalled (for external extensions). The default return
+  // value of this function is false.
+  virtual bool IsExtensionEnabled(const std::string& extension_id,
+                                  content::BrowserContext* context) const;
 
   // Returns the single instance of |this|.
   static ExtensionsBrowserClient* Get();

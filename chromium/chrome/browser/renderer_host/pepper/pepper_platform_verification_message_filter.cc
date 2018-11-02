@@ -8,14 +8,34 @@
 #include "content/public/browser/browser_ppapi_host.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "media/media_features.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/dispatch_host_message.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
 
-namespace chrome {
+#if BUILDFLAG(ENABLE_CDM_STORAGE_ID)
+#include "chrome/browser/media/cdm_storage_id.h"
+#include "chrome/browser/media/media_storage_id_salt.h"
+#include "chrome/browser/profiles/profile.h"
+#endif
+
+namespace {
+
+#if BUILDFLAG(ENABLE_CDM_STORAGE_ID)
+std::vector<uint8_t> GetStorageIdSaltFromProfile(
+    content::RenderFrameHost* rfh) {
+  DCHECK(rfh);
+  Profile* profile =
+      Profile::FromBrowserContext(rfh->GetProcess()->GetBrowserContext());
+  return MediaStorageIdSalt::GetSalt(profile->GetPrefs());
+}
+#endif  // BUILDFLAG(ENABLE_CDM_STORAGE_ID)
+
+}  // namespace
 
 PepperPlatformVerificationMessageFilter::
     PepperPlatformVerificationMessageFilter(content::BrowserPpapiHost* host,
@@ -115,14 +135,31 @@ void PepperPlatformVerificationMessageFilter::ChallengePlatformCallback(
 
 int32_t PepperPlatformVerificationMessageFilter::OnGetStorageId(
     ppapi::host::HostMessageContext* context) {
-  // TODO(jrummell): Implement Storage ID. For now simply returns empty string.
-  // http://crbug.com/478960.
-  ppapi::host::ReplyMessageContext reply_context =
-      context->MakeReplyMessageContext();
-  reply_context.params.set_result(PP_OK);
-  SendReply(reply_context,
-            PpapiHostMsg_PlatformVerification_GetStorageIdReply(std::string()));
+#if BUILDFLAG(ENABLE_CDM_STORAGE_ID)
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(render_process_id_, render_frame_id_);
+  if (rfh) {
+    std::vector<uint8_t> salt = GetStorageIdSaltFromProfile(rfh);
+    DCHECK(salt.size());
+    ComputeStorageId(
+        salt, rfh->GetLastCommittedOrigin(),
+        base::BindOnce(
+            &PepperPlatformVerificationMessageFilter::GetStorageIdCallback,
+            this, context->MakeReplyMessageContext()));
+    return PP_OK_COMPLETIONPENDING;
+  }
+#endif  // BUILDFLAG(ENABLE_CDM_STORAGE_ID)
+
+  // Storage Id not available, so return empty buffer.
+  GetStorageIdCallback(context->MakeReplyMessageContext(),
+                       std::vector<uint8_t>());
   return PP_OK_COMPLETIONPENDING;
 }
 
-}  // namespace chrome
+void PepperPlatformVerificationMessageFilter::GetStorageIdCallback(
+    ppapi::host::ReplyMessageContext reply_context,
+    const std::vector<uint8_t>& storage_id) {
+  reply_context.params.set_result(PP_OK);
+  SendReply(reply_context,
+            PpapiHostMsg_PlatformVerification_GetStorageIdReply(storage_id));
+}

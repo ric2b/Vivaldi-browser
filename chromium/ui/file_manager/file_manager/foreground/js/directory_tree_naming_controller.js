@@ -127,19 +127,17 @@ DirectoryTreeNamingController.prototype.commitRename_ = function() {
   var entry = this.currentDirectoryItem_.entry;
   var newName = this.inputElement_.value;
 
-  // If new name is same with current name, do nothing.
-  if (newName === this.currentDirectoryItem_.label) {
+  // If new name is the same as current name or empty (only for removable
+  // devices), do nothing.
+  if (newName === this.currentDirectoryItem_.label ||
+      (newName.length == 0 && this.isRemovableRoot_)) {
     this.detach_();
     return;
   }
 
   if (this.isRemovableRoot_) {
     // Validate new name.
-    new Promise(entry.getParent.bind(entry))
-        .then(function(parentEntry) {
-          return util.validateExternalDriveName(
-              newName, assert(this.volumeInfo_));
-        }.bind(this))
+    util.validateExternalDriveName(newName, assert(this.volumeInfo_))
         .then(
             this.performExternalDriveRename_.bind(this, entry, newName),
             function(errorMessage) {

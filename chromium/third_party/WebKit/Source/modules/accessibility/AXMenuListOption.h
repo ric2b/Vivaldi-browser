@@ -26,7 +26,7 @@
 #ifndef AXMenuListOption_h
 #define AXMenuListOption_h
 
-#include "core/html/HTMLOptionElement.h"
+#include "core/html/forms/HTMLOptionElement.h"
 #include "modules/accessibility/AXMockObject.h"
 
 namespace blink {
@@ -45,7 +45,7 @@ class AXMenuListOption final : public AXMockObject {
 
  private:
   AXMenuListOption(HTMLOptionElement*, AXObjectCacheImpl&);
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   bool IsMenuListOption() const override { return true; }
 
@@ -65,7 +65,8 @@ class AXMenuListOption final : public AXMockObject {
 
   void GetRelativeBounds(AXObject** out_container,
                          FloatRect& out_bounds_in_container,
-                         SkMatrix44& out_container_transform) const override;
+                         SkMatrix44& out_container_transform,
+                         bool* clips_children = nullptr) const override;
   String TextAlternative(bool recursive,
                          bool in_aria_labelled_by_traversal,
                          AXObjectSet& visited,

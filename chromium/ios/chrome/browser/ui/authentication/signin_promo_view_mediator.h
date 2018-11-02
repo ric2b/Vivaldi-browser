@@ -11,19 +11,23 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_delegate.h"
 
 @class ChromeIdentity;
+@protocol SigninPresenter;
 @class SigninPromoViewConfigurator;
 @protocol SigninPromoViewConsumer;
 
 namespace ios {
 class ChromeBrowserState;
 
-// Enums for the sign-in promo view state.
+// Enums for the sign-in promo view state. Those states are sequential, with no
+// way to go backwards. All states can be skipped except |NeverVisible| and
+// |Invalid|.
 enum class SigninPromoViewState {
+  // Initial state. When -[SigninPromoViewMediator signinPromoViewRemoved]  is
+  // called with that state, no metrics is recorded.
+  NeverVisible = 0,
   // None of the buttons has been used yet.
-  Unused = 0,
-  // Sign-in is in progress.
-  SigninStarted,
-  // Sign-in buttons has been used at least once.
+  Unused,
+  // Sign-in buttons have been used at least once.
   UsedAtLeastOnce,
   // Sign-in promo has been closed.
   Closed,
@@ -31,6 +35,10 @@ enum class SigninPromoViewState {
   Invalid,
 };
 }  // namespace ios
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}  // namespace user_prefs
 
 // Class that monitors the available identities and creates
 // SigninPromoViewConfigurator. This class makes the link between the model and
@@ -43,10 +51,23 @@ enum class SigninPromoViewState {
 
 // Chrome identity used to configure the view in a warm state mode. Otherwise
 // contains nil.
-@property(nonatomic, readonly, strong) ChromeIdentity* defaultIdentity;
+@property(nonatomic, readonly) ChromeIdentity* defaultIdentity;
 
 // Sign-in promo view state.
 @property(nonatomic) ios::SigninPromoViewState signinPromoViewState;
+
+// YES if the sign-in interaction controller is shown.
+@property(nonatomic, readonly, getter=isSigninInProgress) BOOL signinInProgress;
+
+// Registers the feature preferences.
++ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
+
+// Tests if the sign-in promo view should be displayed according to the number
+// of times it has been displayed and if the user closed the sign-in promo view.
++ (BOOL)shouldDisplaySigninPromoViewWithAccessPoint:
+            (signin_metrics::AccessPoint)accessPoint
+                                       browserState:(ios::ChromeBrowserState*)
+                                                        browserState;
 
 // See -[SigninPromoViewMediator initWithBrowserState:].
 - (instancetype)init NS_UNAVAILABLE;
@@ -57,6 +78,7 @@ enum class SigninPromoViewState {
 // ACCESS_POINT_RECENT_TABS, ACCESS_POINT_TAB_SWITCHER are supported.
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                          accessPoint:(signin_metrics::AccessPoint)accessPoint
+                           presenter:(id<SigninPresenter>)presenter
     NS_DESIGNATED_INITIALIZER;
 
 - (SigninPromoViewConfigurator*)createConfigurator;
@@ -68,13 +90,13 @@ enum class SigninPromoViewState {
 // Called when the sign-in promo view is hidden.
 - (void)signinPromoViewHidden;
 
-// Called when the sign-in promo view is closed.
-- (void)signinPromoViewClosed;
-
 // Called when the sign-in promo view is removed from the view hierarchy (it or
 // one of its superviews is removed). The mediator should not be used after this
 // called.
 - (void)signinPromoViewRemoved;
+
+// Returns YES if the sign-in promo view is |Invalid|, |Closed| or |Invisible|.
+- (BOOL)isInvalidClosedOrNeverVisible;
 
 @end
 

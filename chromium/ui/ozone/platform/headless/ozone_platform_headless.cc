@@ -9,10 +9,11 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
-#include "ui/display/fake_display_delegate.h"
+#include "ui/display/manager/fake_display_delegate.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #include "ui/events/platform/platform_event_source.h"
+#include "ui/events/system_input_injector.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/headless/headless_surface_factory.h"
 #include "ui/ozone/platform/headless/headless_window.h"
@@ -22,7 +23,6 @@
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/ozone_switches.h"
-#include "ui/ozone/public/system_input_injector.h"
 
 namespace ui {
 
@@ -33,8 +33,8 @@ namespace {
 // sure that the PlatformEventSource has an instance while in unit tests.
 class HeadlessPlatformEventSource : public ui::PlatformEventSource {
  public:
-  HeadlessPlatformEventSource() {}
-  ~HeadlessPlatformEventSource() override {}
+  HeadlessPlatformEventSource() = default;
+  ~HeadlessPlatformEventSource() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HeadlessPlatformEventSource);
@@ -43,9 +43,9 @@ class HeadlessPlatformEventSource : public ui::PlatformEventSource {
 // OzonePlatform for headless mode
 class OzonePlatformHeadless : public OzonePlatform {
  public:
-  OzonePlatformHeadless(const base::FilePath& dump_file)
+  explicit OzonePlatformHeadless(const base::FilePath& dump_file)
       : file_path_(dump_file) {}
-  ~OzonePlatformHeadless() override {}
+  ~OzonePlatformHeadless() override = default;
 
   // OzonePlatform:
   ui::SurfaceFactoryOzone* GetSurfaceFactoryOzone() override {
@@ -69,33 +69,32 @@ class OzonePlatformHeadless : public OzonePlatform {
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       const gfx::Rect& bounds) override {
-    return base::WrapUnique<PlatformWindow>(
-        new HeadlessWindow(delegate, window_manager_.get(), bounds));
+    return std::make_unique<HeadlessWindow>(delegate, window_manager_.get(),
+                                            bounds);
   }
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {
-    return base::MakeUnique<display::FakeDisplayDelegate>();
+    return std::make_unique<display::FakeDisplayDelegate>();
   }
 
   void InitializeUI(const InitParams& params) override {
-    window_manager_.reset(new HeadlessWindowManager(file_path_));
-    window_manager_->Initialize();
-    surface_factory_.reset(new HeadlessSurfaceFactory(window_manager_.get()));
+    window_manager_ = std::make_unique<HeadlessWindowManager>();
+    surface_factory_ = std::make_unique<HeadlessSurfaceFactory>(file_path_);
     // This unbreaks tests that create their own.
     if (!PlatformEventSource::GetInstance())
-      platform_event_source_.reset(new HeadlessPlatformEventSource);
+      platform_event_source_ = std::make_unique<HeadlessPlatformEventSource>();
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        base::MakeUnique<StubKeyboardLayoutEngine>());
+        std::make_unique<StubKeyboardLayoutEngine>());
 
-    overlay_manager_.reset(new StubOverlayManager());
+    overlay_manager_ = std::make_unique<StubOverlayManager>();
     input_controller_ = CreateStubInputController();
-    cursor_factory_ozone_.reset(new BitmapCursorFactoryOzone);
+    cursor_factory_ozone_ = std::make_unique<BitmapCursorFactoryOzone>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
   }
 
   void InitializeGPU(const InitParams& params) override {
     if (!surface_factory_)
-      surface_factory_.reset(new HeadlessSurfaceFactory());
+      surface_factory_ = std::make_unique<HeadlessSurfaceFactory>(file_path_);
   }
 
  private:

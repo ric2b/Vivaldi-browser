@@ -9,20 +9,60 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/atomic_sequence_num.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/resource_coordinator/resource_coordinator_web_contents_observer.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
+#include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "content/public/browser/swap_metrics_driver.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace resource_coordinator {
 
 namespace {
 
 const char* kSessionTypeName[] = {"SessionRestore", "BackgroundTabOpening"};
+
+constexpr int kSamplingOdds = 10;
+
+// Only report a subset of this metric as the volume is too high.
+bool ShouldReportExpectedTaskQueueingDurationToUKM(
+    size_t background_tab_loading_count,
+    size_t background_tab_pending_count) {
+  size_t tab_count =
+      background_tab_loading_count + background_tab_pending_count;
+  DCHECK_GE(tab_count, 1u);
+
+  // We always collect this metric when we have 2 or more backgrounded loading
+  // or pending tabs (|tab_count|). And we sample the rest, i.e. when there is
+  // one tab loading in the background and no tabs pending, which is the less
+  // interesting majority. In this way, we cap the volume while keeping all
+  // interesting data.
+  if (tab_count > 1)
+    return true;
+
+  if (base::RandUint64() % kSamplingOdds == 0)
+    return true;
+
+  return false;
+}
+
+ukm::SourceId GetUkmSourceId(content::WebContents* contents) {
+  ResourceCoordinatorWebContentsObserver* observer =
+      ResourceCoordinatorWebContentsObserver::FromWebContents(contents);
+  if (!observer)
+    return ukm::kInvalidSourceId;
+
+  return observer->ukm_source_id();
+}
 
 }  // namespace
 
@@ -118,7 +158,7 @@ void TabManagerStatsCollector::RecordSwitchToTab(
       !base::ContainsKey(foreground_contents_switched_to_times_, new_contents));
   if (new_data->tab_loading_state() != TAB_IS_LOADED) {
     foreground_contents_switched_to_times_.insert(
-        std::make_pair(new_contents, base::TimeTicks::Now()));
+        std::make_pair(new_contents, NowTicks()));
   }
 }
 
@@ -131,16 +171,53 @@ void TabManagerStatsCollector::RecordExpectedTaskQueueingDuration(
   if (IsInOverlappedSession())
     return;
 
+  ukm::SourceId ukm_source_id = GetUkmSourceId(contents);
+
   if (is_session_restore_loading_tabs_) {
     UMA_HISTOGRAM_TIMES(
         kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration,
         queueing_time);
+
+    size_t restored_tab_count =
+        g_browser_process->GetTabManager()->restored_tab_count();
+    if (ukm_source_id != ukm::kInvalidSourceId && restored_tab_count > 1) {
+      ukm::builders::
+          TabManager_SessionRestore_ForegroundTab_ExpectedTaskQueueingDurationInfo(
+              ukm_source_id)
+              .SetExpectedTaskQueueingDuration(queueing_time.InMilliseconds())
+              .SetSequenceId(sequence_->GetNext())
+              .SetSessionRestoreSessionId(session_id_)
+              .SetSessionRestoreTabCount(restored_tab_count)
+              .SetSystemTabCount(
+                  g_browser_process->GetTabManager()->GetTabCount())
+              .Record(ukm::UkmRecorder::Get());
+    }
   }
 
   if (is_in_background_tab_opening_session_) {
     UMA_HISTOGRAM_TIMES(
         kHistogramBackgroundTabOpeningForegroundTabExpectedTaskQueueingDuration,
         queueing_time);
+
+    size_t background_tab_loading_count =
+        g_browser_process->GetTabManager()->GetBackgroundTabLoadingCount();
+    size_t background_tab_pending_count =
+        g_browser_process->GetTabManager()->GetBackgroundTabPendingCount();
+    if (ukm_source_id != ukm::kInvalidSourceId &&
+        ShouldReportExpectedTaskQueueingDurationToUKM(
+            background_tab_loading_count, background_tab_pending_count)) {
+      ukm::builders::
+          TabManager_BackgroundTabOpening_ForegroundTab_ExpectedTaskQueueingDurationInfo(
+              ukm_source_id)
+              .SetBackgroundTabLoadingCount(background_tab_loading_count)
+              .SetBackgroundTabOpeningSessionId(session_id_)
+              .SetBackgroundTabPendingCount(background_tab_pending_count)
+              .SetExpectedTaskQueueingDuration(queueing_time.InMilliseconds())
+              .SetSequenceId(sequence_->GetNext())
+              .SetSystemTabCount(
+                  g_browser_process->GetTabManager()->GetTabCount())
+              .Record(ukm::UkmRecorder::Get());
+    }
   }
 }
 
@@ -163,6 +240,7 @@ void TabManagerStatsCollector::RecordBackgroundTabCount() {
 
 void TabManagerStatsCollector::OnSessionRestoreStartedLoadingTabs() {
   DCHECK(!is_session_restore_loading_tabs_);
+  UpdateSessionAndSequence();
 
   CreateAndInitSwapMetricsDriverIfNeeded(SessionType::kSessionRestore);
 
@@ -184,6 +262,7 @@ void TabManagerStatsCollector::OnSessionRestoreFinishedLoadingTabs() {
 
 void TabManagerStatsCollector::OnBackgroundTabOpeningSessionStarted() {
   DCHECK(!is_in_background_tab_opening_session_);
+  UpdateSessionAndSequence();
   background_tab_count_stats_.Reset();
   CreateAndInitSwapMetricsDriverIfNeeded(SessionType::kBackgroundTabOpening);
 
@@ -222,11 +301,10 @@ void TabManagerStatsCollector::CreateAndInitSwapMetricsDriverIfNeeded(
     swap_metrics_driver_->InitializeMetrics();
 }
 
-void TabManagerStatsCollector::RecordSwapMetrics(
-    SessionType type,
-    const std::string& metric_name,
-    uint64_t count,
-    const base::TimeDelta& interval) {
+void TabManagerStatsCollector::RecordSwapMetrics(SessionType type,
+                                                 const std::string& metric_name,
+                                                 uint64_t count,
+                                                 base::TimeDelta interval) {
   base::HistogramBase* histogram = base::Histogram::FactoryGet(
       "TabManager.Experimental." + std::string(kSessionTypeName[type]) + "." +
           metric_name,
@@ -246,22 +324,56 @@ void TabManagerStatsCollector::OnDidStartMainFrameNavigation(
   foreground_contents_switched_to_times_.erase(contents);
 }
 
-void TabManagerStatsCollector::OnDidStopLoading(
-    content::WebContents* contents) {
+void TabManagerStatsCollector::OnWillLoadNextBackgroundTab(bool timeout) {
+  UMA_HISTOGRAM_BOOLEAN(kHistogramBackgroundTabOpeningTabLoadTimeout, timeout);
+}
+
+void TabManagerStatsCollector::OnTabIsLoaded(content::WebContents* contents) {
   if (!base::ContainsKey(foreground_contents_switched_to_times_, contents))
     return;
 
+  base::TimeDelta switch_load_time =
+      NowTicks() - foreground_contents_switched_to_times_[contents];
+  ukm::SourceId ukm_source_id = GetUkmSourceId(contents);
   if (is_session_restore_loading_tabs_ && !IsInOverlappedSession()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        kHistogramSessionRestoreTabSwitchLoadTime,
-        base::TimeTicks::Now() -
-            foreground_contents_switched_to_times_[contents]);
+    UMA_HISTOGRAM_MEDIUM_TIMES(kHistogramSessionRestoreTabSwitchLoadTime,
+                               switch_load_time);
+
+    if (ukm_source_id != ukm::kInvalidSourceId) {
+      ukm::builders::
+          TabManager_Experimental_SessionRestore_TabSwitchLoadStopped(
+              ukm_source_id)
+              .SetSequenceId(sequence_->GetNext())
+              .SetSessionRestoreSessionId(session_id_)
+              .SetSessionRestoreTabCount(
+                  g_browser_process->GetTabManager()->restored_tab_count())
+              .SetSystemTabCount(
+                  g_browser_process->GetTabManager()->GetTabCount())
+              .SetTabSwitchLoadTime(switch_load_time.InMilliseconds())
+              .Record(ukm::UkmRecorder::Get());
+    }
   }
   if (is_in_background_tab_opening_session_ && !IsInOverlappedSession()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        kHistogramBackgroundTabOpeningTabSwitchLoadTime,
-        base::TimeTicks::Now() -
-            foreground_contents_switched_to_times_[contents]);
+    UMA_HISTOGRAM_MEDIUM_TIMES(kHistogramBackgroundTabOpeningTabSwitchLoadTime,
+                               switch_load_time);
+
+    if (ukm_source_id != ukm::kInvalidSourceId) {
+      ukm::builders::
+          TabManager_Experimental_BackgroundTabOpening_TabSwitchLoadStopped(
+              ukm_source_id)
+              .SetBackgroundTabLoadingCount(
+                  g_browser_process->GetTabManager()
+                      ->GetBackgroundTabLoadingCount())
+              .SetBackgroundTabOpeningSessionId(session_id_)
+              .SetBackgroundTabPendingCount(
+                  g_browser_process->GetTabManager()
+                      ->GetBackgroundTabPendingCount())
+              .SetSequenceId(sequence_->GetNext())
+              .SetSystemTabCount(
+                  g_browser_process->GetTabManager()->GetTabCount())
+              .SetTabSwitchLoadTime(switch_load_time.InMilliseconds())
+              .Record(ukm::UkmRecorder::Get());
+    }
   }
 
   foreground_contents_switched_to_times_.erase(contents);
@@ -287,6 +399,14 @@ void TabManagerStatsCollector::ClearStatsWhenInOverlappedSession() {
 
   is_overlapping_session_restore_ = true;
   is_overlapping_background_tab_opening_ = true;
+}
+
+void TabManagerStatsCollector::UpdateSessionAndSequence() {
+  // This function is used by both SessionRestore and BackgroundTabOpening. This
+  // is fine because we do not report any metric when those two overlap.
+  static base::AtomicSequenceNumber session_seq;
+  session_id_ = session_seq.GetNext();
+  sequence_.reset(new base::AtomicSequenceNumber());
 }
 
 // static
@@ -339,6 +459,11 @@ const char TabManagerStatsCollector::
 const char TabManagerStatsCollector::
     kHistogramBackgroundTabOpeningTabLoadUserInitiatedCount[] =
         "TabManager.BackgroundTabOpening.TabLoadUserInitiatedCount";
+
+// static
+const char
+    TabManagerStatsCollector::kHistogramBackgroundTabOpeningTabLoadTimeout[] =
+        "TabManager.BackgroundTabOpening.TabLoadTimeout";
 
 // static
 const char TabManagerStatsCollector::kHistogramSessionOverlapSessionRestore[] =

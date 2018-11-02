@@ -141,6 +141,7 @@ struct ProcessData {
   ProcessData() = default;
   ProcessData(ProcessData&&) = default;
 
+  int64_t hard_fault_count;
   int64_t physical_bytes;
   base::Time start_time;
   base::TimeDelta cpu_time;
@@ -249,42 +250,25 @@ SharedSampler::~SharedSampler() {}
 
 int64_t SharedSampler::GetSupportedFlags() const {
   return REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
-         REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME;
+         REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME |
+         REFRESH_TYPE_HARD_FAULTS;
 }
 
-SharedSampler::Callbacks::Callbacks() {}
-
-SharedSampler::Callbacks::~Callbacks() {}
-
-SharedSampler::Callbacks::Callbacks(Callbacks&& other) {
-  on_idle_wakeups = std::move(other.on_idle_wakeups);
-  on_physical_memory = std::move(other.on_physical_memory);
-  on_start_time = std::move(other.on_start_time);
-  on_cpu_time = std::move(other.on_cpu_time);
-}
-
-void SharedSampler::RegisterCallbacks(
+void SharedSampler::RegisterCallback(
     base::ProcessId process_id,
-    const OnIdleWakeupsCallback& on_idle_wakeups,
-    const OnPhysicalMemoryCallback& on_physical_memory,
-    const OnStartTimeCallback& on_start_time,
-    const OnCpuTimeCallback& on_cpu_time) {
+    OnSamplingCompleteCallback on_sampling_complete) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (process_id == 0)
     return;
 
-  Callbacks callbacks;
-  callbacks.on_idle_wakeups = on_idle_wakeups;
-  callbacks.on_physical_memory = on_physical_memory;
-  callbacks.on_start_time = on_start_time;
-  callbacks.on_cpu_time = on_cpu_time;
-  bool result = callbacks_map_.insert(
-      std::make_pair(process_id, std::move(callbacks))).second;
+  bool result =
+      callbacks_map_.emplace(process_id, std::move(on_sampling_complete))
+          .second;
   DCHECK(result);
 }
 
-void SharedSampler::UnregisterCallbacks(base::ProcessId process_id) {
+void SharedSampler::UnregisterCallback(base::ProcessId process_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (process_id == 0)
@@ -329,19 +313,17 @@ void SharedSampler::ClearState() {
   previous_snapshot_.reset();
 }
 
-std::unique_ptr<SharedSampler::RefreshResults>
-SharedSampler::RefreshOnWorkerThread() {
+SharedSampler::AllSamplingResults SharedSampler::RefreshOnWorkerThread() {
   DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
 
-  std::unique_ptr<RefreshResults> results(new RefreshResults);
+  AllSamplingResults results;
 
   std::unique_ptr<ProcessDataSnapshot> snapshot = CaptureSnapshot();
   if (snapshot) {
     if (previous_snapshot_) {
-      MakeResultsFromTwoSnapshots(
-          *previous_snapshot_, *snapshot, results.get());
+      results = MakeResultsFromTwoSnapshots(*previous_snapshot_, *snapshot);
     } else {
-      MakeResultsFromSnapshot(*snapshot, results.get());
+      results = MakeResultsFromSnapshot(*snapshot);
     }
 
     previous_snapshot_ = std::move(snapshot);
@@ -431,6 +413,7 @@ std::unique_ptr<ProcessDataSnapshot> SharedSampler::CaptureSnapshot() {
         // not count context switches for threads that are missing in the most
         // recent snapshot.
         ProcessData process_data;
+        process_data.hard_fault_count = pi->HardFaultCount;
         process_data.physical_bytes =
             static_cast<int64_t>(pi->WorkingSetPrivateSize);
         process_data.start_time = ConvertTicksToTime(pi->CreateTime);
@@ -477,10 +460,9 @@ std::unique_ptr<ProcessDataSnapshot> SharedSampler::CaptureSnapshot() {
   return snapshot;
 }
 
-void SharedSampler::MakeResultsFromTwoSnapshots(
+SharedSampler::AllSamplingResults SharedSampler::MakeResultsFromTwoSnapshots(
     const ProcessDataSnapshot& prev_snapshot,
-    const ProcessDataSnapshot& snapshot,
-    RefreshResults* results) {
+    const ProcessDataSnapshot& snapshot) {
   // Time delta in seconds.
   double time_delta = (snapshot.timestamp - prev_snapshot.timestamp)
       .InSecondsF();
@@ -489,6 +471,8 @@ void SharedSampler::MakeResultsFromTwoSnapshots(
   // on map entries being ordered by Process ID.
   ProcessDataMap::const_iterator prev_iter = prev_snapshot.processes.begin();
 
+  AllSamplingResults results;
+  results.reserve(snapshot.processes.size());
   for (const auto& current_entry : snapshot.processes) {
     base::ProcessId process_id = current_entry.first;
     const ProcessData& process = current_entry.second;
@@ -497,9 +481,12 @@ void SharedSampler::MakeResultsFromTwoSnapshots(
         process_id, &prev_iter, prev_snapshot.processes.end());
 
     // Delta between the old snapshot and the new snapshot.
+    int64_t hard_faults_delta = 0;
     int idle_wakeups_delta;
 
     if (prev_snapshot_process) {
+      hard_faults_delta =
+          process.hard_fault_count - prev_snapshot_process->hard_fault_count;
       // Processes match between two snapshots. Diff context switches.
       idle_wakeups_delta =
           CountContextSwitchesDelta(*prev_snapshot_process, process);
@@ -509,34 +496,41 @@ void SharedSampler::MakeResultsFromTwoSnapshots(
       idle_wakeups_delta = CountContextSwitchesDelta(ProcessData(), process);
     }
 
-    RefreshResult result;
+    ProcessIdAndSamplingResult result;
     result.process_id = process_id;
-    result.idle_wakeups_per_second =
+    result.data.hard_faults_per_second =
+        static_cast<int>(round(hard_faults_delta / time_delta));
+    result.data.idle_wakeups_per_second =
         static_cast<int>(round(idle_wakeups_delta / time_delta));
-    result.physical_bytes = process.physical_bytes;
-    result.start_time = process.start_time;
-    result.cpu_time = process.cpu_time;
-    results->push_back(result);
+    result.data.physical_bytes = process.physical_bytes;
+    result.data.start_time = process.start_time;
+    result.data.cpu_time = process.cpu_time;
+    results.push_back(result);
   }
+
+  return results;
 }
 
-void SharedSampler::MakeResultsFromSnapshot(const ProcessDataSnapshot& snapshot,
-                                            RefreshResults* results) {
+SharedSampler::AllSamplingResults SharedSampler::MakeResultsFromSnapshot(
+    const ProcessDataSnapshot& snapshot) {
+  AllSamplingResults results;
+  results.reserve(snapshot.processes.size());
   for (const auto& pair : snapshot.processes) {
-    RefreshResult result;
+    ProcessIdAndSamplingResult result;
     result.process_id = pair.first;
     // Use 0 for Idle Wakeups / sec in this case. This is consistent with
     // ProcessMetrics::CalculateIdleWakeupsPerSecond implementation.
-    result.idle_wakeups_per_second = 0;
-    result.physical_bytes = pair.second.physical_bytes;
-    result.start_time = pair.second.start_time;
-    result.cpu_time = pair.second.cpu_time;
-    results->push_back(result);
+    result.data.hard_faults_per_second = 0;
+    result.data.idle_wakeups_per_second = 0;
+    result.data.physical_bytes = pair.second.physical_bytes;
+    result.data.start_time = pair.second.start_time;
+    result.data.cpu_time = pair.second.cpu_time;
+    results.push_back(result);
   }
+  return results;
 }
 
-void SharedSampler::OnRefreshDone(
-    std::unique_ptr<RefreshResults> refresh_results) {
+void SharedSampler::OnRefreshDone(AllSamplingResults refresh_results) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_NE(0, refresh_flags_);
 
@@ -544,12 +538,7 @@ void SharedSampler::OnRefreshDone(
 
   for (const auto& callback_entry : callbacks_map_) {
     base::ProcessId process_id = callback_entry.first;
-    // A sentinel value of -1 is used when the result isn't available.
-    // Task manager will use this to display '-'.
-    int idle_wakeups_per_second = -1;
-    int64_t physical_bytes = -1;
-    base::Time start_time;
-    base::TimeDelta cpu_time;
+    SamplingResult process_result;
 
     // Match refresh result by |process_id|.
     // This relies on refresh results being ordered by Process ID.
@@ -558,14 +547,11 @@ void SharedSampler::OnRefreshDone(
     // Chrome. It might be missing some entries too if there is a race condition
     // between getting process information on the worker thread and adding a
     // corresponding TaskGroup to the task manager.
-    for (; result_index < refresh_results->size(); ++result_index) {
-      const auto& result = (*refresh_results)[result_index];
+    for (; result_index < refresh_results.size(); ++result_index) {
+      const auto& result = refresh_results[result_index];
       if (result.process_id == process_id) {
         // Data matched in |refresh_results|.
-        idle_wakeups_per_second = result.idle_wakeups_per_second;
-        physical_bytes = result.physical_bytes;
-        start_time = result.start_time;
-        cpu_time = result.cpu_time;
+        process_result = std::move(result.data);
         ++result_index;
         break;
       }
@@ -576,29 +562,7 @@ void SharedSampler::OnRefreshDone(
       }
     }
 
-    if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_IDLE_WAKEUPS,
-                                                      refresh_flags_)) {
-      DCHECK(callback_entry.second.on_idle_wakeups);
-      callback_entry.second.on_idle_wakeups.Run(idle_wakeups_per_second);
-    }
-
-    if (TaskManagerObserver::IsResourceRefreshEnabled(
-        REFRESH_TYPE_PHYSICAL_MEMORY, refresh_flags_)) {
-      DCHECK(callback_entry.second.on_physical_memory);
-      callback_entry.second.on_physical_memory.Run(physical_bytes);
-    }
-
-    if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_START_TIME,
-                                                      refresh_flags_)) {
-      DCHECK(callback_entry.second.on_start_time);
-      callback_entry.second.on_start_time.Run(start_time);
-    }
-
-    if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_CPU_TIME,
-                                                      refresh_flags_)) {
-      DCHECK(callback_entry.second.on_cpu_time);
-      callback_entry.second.on_cpu_time.Run(cpu_time);
-    }
+    callback_entry.second.Run(std::move(process_result));
   }
 
   // Reset refresh_results_ to trigger RefreshOnWorkerThread next time Refresh

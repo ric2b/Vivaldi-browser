@@ -24,12 +24,13 @@ template class WorkletThreadHolder<AudioWorkletThread>;
 
 WebThread* AudioWorkletThread::s_backing_thread_ = nullptr;
 
+unsigned AudioWorkletThread::s_ref_count_ = 0;
+
 std::unique_ptr<AudioWorkletThread> AudioWorkletThread::Create(
     ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("audio-worklet"),
                "AudioWorkletThread::create");
-  DCHECK(IsMainThread());
   return WTF::WrapUnique(
       new AudioWorkletThread(loading_context, worker_reporting_proxy));
 }
@@ -37,9 +38,17 @@ std::unique_ptr<AudioWorkletThread> AudioWorkletThread::Create(
 AudioWorkletThread::AudioWorkletThread(
     ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy)
-    : WorkerThread(loading_context, worker_reporting_proxy) {}
+    : WorkerThread(loading_context, worker_reporting_proxy) {
+  DCHECK(IsMainThread());
+  if (++s_ref_count_ == 1)
+    EnsureSharedBackingThread();
+}
 
-AudioWorkletThread::~AudioWorkletThread() {}
+AudioWorkletThread::~AudioWorkletThread() {
+  DCHECK(IsMainThread());
+  if (--s_ref_count_ == 0)
+    ClearSharedBackingThread();
+}
 
 WorkerBackingThread& AudioWorkletThread::GetWorkerBackingThread() {
   return *WorkletThreadHolder<AudioWorkletThread>::GetInstance()->GetThread();
@@ -72,6 +81,8 @@ void AudioWorkletThread::EnsureSharedBackingThread() {
 
 void AudioWorkletThread::ClearSharedBackingThread() {
   DCHECK(IsMainThread());
+  DCHECK(s_backing_thread_);
+  DCHECK_EQ(s_ref_count_, 0u);
   WorkletThreadHolder<AudioWorkletThread>::ClearInstance();
   delete s_backing_thread_;
   s_backing_thread_ = nullptr;
@@ -85,25 +96,17 @@ WebThread* AudioWorkletThread::GetSharedBackingThread() {
 }
 
 void AudioWorkletThread::CreateSharedBackingThreadForTest() {
-  WorkletThreadHolder<AudioWorkletThread>::CreateForTest("AudioWorkletThread");
+  if (!s_backing_thread_)
+    s_backing_thread_ = Platform::Current()->CreateWebAudioThread().release();
+  WorkletThreadHolder<AudioWorkletThread>::CreateForTest(s_backing_thread_);
 }
 
 WorkerOrWorkletGlobalScope* AudioWorkletThread::CreateWorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("audio-worklet"),
                "AudioWorkletThread::createWorkerGlobalScope");
-
-  RefPtr<SecurityOrigin> security_origin =
-      SecurityOrigin::Create(creation_params->script_url);
-  if (creation_params->starter_origin_privilege_data) {
-    security_origin->TransferPrivilegesFrom(
-        std::move(creation_params->starter_origin_privilege_data));
-  }
-
-  return AudioWorkletGlobalScope::Create(
-      creation_params->script_url, creation_params->user_agent,
-      std::move(security_origin), this->GetIsolate(), this,
-      creation_params->worker_clients);
+  return AudioWorkletGlobalScope::Create(std::move(creation_params),
+                                         GetIsolate(), this);
 }
 
 }  // namespace blink

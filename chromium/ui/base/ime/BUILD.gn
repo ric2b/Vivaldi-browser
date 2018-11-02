@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -50,8 +51,6 @@ component("ime") {
     "chromeos/mock_ime_engine_handler.h",
     "composition_text.cc",
     "composition_text.h",
-    "composition_text_util_pango.cc",
-    "composition_text_util_pango.h",
     "ime_bridge.cc",
     "ime_bridge.h",
     "ime_engine_handler_interface.h",
@@ -132,13 +131,6 @@ component("ime") {
     ]
   }
 
-  if (use_aura && is_android) {
-    sources += [
-      "input_method_android.cc",
-      "input_method_android.h",
-    ]
-  }
-
   if (!is_chromeos && is_linux) {
     sources += [
       "linux/text_edit_command_auralinux.cc",
@@ -170,10 +162,9 @@ component("ime") {
     ]
   }
 
-  if (use_pango) {
+  if (use_pangocairo) {
     configs += [ "//build/config/linux/pangocairo" ]
-  } else {
-    sources -= [
+    sources += [
       "composition_text_util_pango.cc",
       "composition_text_util_pango.h",
     ]
@@ -192,13 +183,6 @@ component("ime") {
 
   if (is_mac) {
     libs = [ "AppKit.framework" ]
-  }
-
-  if (use_ozone) {
-    deps += [
-      "//ui/events/ozone:events_ozone_layout",
-      "//ui/ozone",
-    ]
   }
 
   if (is_fuchsia) {

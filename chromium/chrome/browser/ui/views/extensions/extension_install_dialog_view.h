@@ -39,6 +39,9 @@ class Link;
 class ExtensionInstallDialogView : public views::DialogDelegateView,
                                    public views::LinkListener {
  public:
+  // The views::View::id of the ratings section in the dialog.
+  static const int kRatingsViewId = 1;
+
   ExtensionInstallDialogView(
       Profile* profile,
       content::PageNavigator* navigator,
@@ -128,6 +131,7 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
 class BulletedView : public views::View {
  public:
   explicit BulletedView(views::View* view);
+
  private:
   DISALLOW_COPY_AND_ASSIGN(BulletedView);
 };

@@ -108,6 +108,10 @@ void SetExperimentIds(const base::ListValue& list) {
 
 // Begin Chromecast Feature definitions.
 
+// Allows applications to access media capture devices (webcams/microphones)
+// through getUserMedia API.
+const base::Feature kAllowUserMediaAccess{"allow_user_media_access",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 // Enables the use of QUIC in Cast-specific URLRequestContextGetters. See
 // chromecast/browser/url_request_context_factory.cc for usage.
 const base::Feature kEnableQuic{"enable_quic",
@@ -244,7 +248,7 @@ base::DictionaryValue GetOverriddenFeaturesForStorage(
         } else if (param_val.GetAsInteger(&ival)) {
           params->SetString(param_key, base::IntToString(ival));
         } else if (param_val.GetAsDouble(&dval)) {
-          params->SetString(param_key, base::DoubleToString(dval));
+          params->SetString(param_key, base::NumberToString(dval));
         } else if (param_val.GetAsString(&sval)) {
           params->SetString(param_key, sval);
         } else {

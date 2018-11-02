@@ -7,7 +7,7 @@
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_creation_screen.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 
@@ -24,7 +24,7 @@ SupervisedUserCreationScreen* GetScreen(LoginDisplayHost* host) {
   return result;
 }
 
-} // namespace
+}  // namespace
 
 SupervisedUserCreationFlow::SupervisedUserCreationFlow(
     const AccountId& manager_id)
@@ -107,8 +107,7 @@ bool SupervisedUserCreationFlow::HandlePasswordChangeDetected() {
   return true;
 }
 
-void SupervisedUserCreationFlow::LaunchExtraSteps(
-    Profile* profile) {
+void SupervisedUserCreationFlow::LaunchExtraSteps(Profile* profile) {
   // TODO(antrim): remove this output once crash is found.
   LOG(ERROR) << "LaunchExtraSteps for " << this << " host is " << host();
   logged_in_ = true;

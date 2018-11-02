@@ -50,10 +50,17 @@ bool DiscardableHandleBase::IsDeletedForTesting() const {
   return kHandleDeleted == base::subtle::NoBarrier_Load(AsAtomic());
 }
 
+scoped_refptr<Buffer> DiscardableHandleBase::BufferForTesting() const {
+  return buffer_;
+}
+
 volatile base::subtle::Atomic32* DiscardableHandleBase::AsAtomic() const {
   return reinterpret_cast<volatile base::subtle::Atomic32*>(
       buffer_->GetDataAddress(byte_offset_, sizeof(base::subtle::Atomic32)));
 }
+
+ClientDiscardableHandle::ClientDiscardableHandle()
+    : DiscardableHandleBase(nullptr, 0, 0) {}
 
 ClientDiscardableHandle::ClientDiscardableHandle(scoped_refptr<Buffer> buffer,
                                                  uint32_t byte_offset,
@@ -97,6 +104,16 @@ bool ClientDiscardableHandle::CanBeReUsed() const {
   return kHandleDeleted == base::subtle::Acquire_Load(AsAtomic());
 }
 
+// Creates an Id which is guaranteed to be unique among all live handles in a
+// ShareGroup. Created from the shared memory offset/id backing this handle.
+ClientDiscardableHandle::Id ClientDiscardableHandle::GetId() const {
+  DCHECK_GE(shm_id(), 0);
+
+  // This will never generate invalid (max uint64_t), as shm_id is signed.
+  return Id::FromUnsafeValue(static_cast<uint64_t>(shm_id()) << 32 |
+                             static_cast<uint64_t>(byte_offset()));
+}
+
 ServiceDiscardableHandle::ServiceDiscardableHandle(scoped_refptr<Buffer> buffer,
                                                    uint32_t byte_offset,
                                                    int32_t shm_id)
@@ -115,6 +132,11 @@ void ServiceDiscardableHandle::Unlock() {
   // No barrier is needed as all GPU process access happens on a single thread,
   // and communication of dependent data between the GPU process and the
   // renderer process happens across the command buffer and includes barriers.
+
+  // This check notifies a non-malicious caller that they've issued unbalanced
+  // lock/unlock calls.
+  DLOG_IF(ERROR, kHandleLockedStart > base::subtle::NoBarrier_Load(AsAtomic()));
+
   base::subtle::NoBarrier_AtomicIncrement(AsAtomic(), -1);
 }
 

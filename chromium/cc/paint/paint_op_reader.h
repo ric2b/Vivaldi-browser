@@ -26,14 +26,23 @@ class CC_PAINT_EXPORT PaintOpReader {
       valid_ = false;
   }
 
+  static void FixupMatrixPostSerialization(SkMatrix* matrix);
+  static bool ReadAndValidateOpHeader(const volatile void* input,
+                                      size_t input_size,
+                                      uint8_t* type,
+                                      uint32_t* skip);
+
   bool valid() const { return valid_; }
 
   void ReadData(size_t bytes, void* data);
   void ReadArray(size_t count, SkPoint* array);
+  void ReadSize(size_t* size);
 
   void Read(SkScalar* data);
-  void Read(size_t* data);
   void Read(uint8_t* data);
+  void Read(uint32_t* data);
+  void Read(uint64_t* data);
+  void Read(int32_t* data);
   void Read(SkRect* rect);
   void Read(SkIRect* rect);
   void Read(SkRRect* rect);
@@ -42,8 +51,10 @@ class CC_PAINT_EXPORT PaintOpReader {
   void Read(PaintFlags* flags);
   void Read(PaintImage* image);
   void Read(sk_sp<SkData>* data);
-  void Read(sk_sp<SkTextBlob>* blob);
+  void Read(scoped_refptr<PaintTextBlob>* blob);
   void Read(sk_sp<PaintShader>* shader);
+  void Read(SkMatrix* matrix);
+  void Read(SkColorType* color_type);
 
   void Read(SkClipOp* op) {
     uint8_t value = 0u;
@@ -66,12 +77,23 @@ class CC_PAINT_EXPORT PaintOpReader {
     *data = !!value;
   }
 
+  // Returns a pointer to the next block of memory of size |bytes|, and treats
+  // this memory as read (advancing the reader). Returns nullptr if |bytes|
+  // would exceed the available budfer.
+  const volatile void* ExtractReadableMemory(size_t bytes);
+
  private:
   template <typename T>
   void ReadSimple(T* val);
 
   template <typename T>
   void ReadFlattenable(sk_sp<T>* val);
+
+  void Read(std::vector<PaintTypeface>* typefaces);
+  void Read(const std::vector<PaintTypeface>& typefaces,
+            sk_sp<SkTextBlob>* blob);
+
+  void SetInvalid();
 
   // Attempts to align the memory to the given alignment. Returns false if there
   // is unsufficient bytes remaining to do this padding.

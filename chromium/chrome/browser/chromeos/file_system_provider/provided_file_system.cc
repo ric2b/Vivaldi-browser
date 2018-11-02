@@ -142,11 +142,13 @@ ProvidedFileSystem::ProvidedFileSystem(
       file_system_info_(file_system_info),
       notification_manager_(
           new NotificationManager(profile_, file_system_info_)),
-      request_manager_(new RequestManager(profile,
-                                          file_system_info.extension_id(),
-                                          notification_manager_.get())),
+      request_manager_(
+          new RequestManager(profile,
+                             file_system_info.provider_id().GetExtensionId(),
+                             notification_manager_.get())),
       watcher_queue_(1),
       weak_ptr_factory_(this) {
+  DCHECK_EQ(ProviderId::EXTENSION, file_system_info.provider_id().GetType());
 }
 
 ProvidedFileSystem::~ProvidedFileSystem() {
@@ -165,7 +167,8 @@ void ProvidedFileSystem::SetNotificationManagerForTesting(
     std::unique_ptr<NotificationManagerInterface> notification_manager) {
   notification_manager_ = std::move(notification_manager);
   request_manager_.reset(new RequestManager(
-      profile_, file_system_info_.extension_id(), notification_manager_.get()));
+      profile_, file_system_info_.provider_id().GetExtensionId(),
+      notification_manager_.get()));
 }
 
 AbortCallback ProvidedFileSystem::RequestUnmount(
@@ -403,7 +406,7 @@ AbortCallback ProvidedFileSystem::WriteFile(
       WRITE_FILE,
       base::WrapUnique<RequestManager::HandlerInterface>(
           new operations::WriteFile(event_router_, file_system_info_,
-                                    file_handle, make_scoped_refptr(buffer),
+                                    file_handle, base::WrapRefCounted(buffer),
                                     offset, length, callback)));
   if (!request_id) {
     callback.Run(base::File::FILE_ERROR_SECURITY);

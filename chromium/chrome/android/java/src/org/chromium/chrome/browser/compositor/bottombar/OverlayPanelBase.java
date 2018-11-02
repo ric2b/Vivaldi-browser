@@ -159,6 +159,13 @@ abstract class OverlayPanelBase {
     // ============================================================================================
 
     /**
+     * @return An Android {@link Context}.
+     */
+    public Context getContext() {
+        return mContext;
+    }
+
+    /**
      * Animates the Overlay Panel to its closed state.
      * @param reason The reason for the change of panel state.
      * @param animate If the panel should animate closed.
@@ -403,7 +410,7 @@ abstract class OverlayPanelBase {
     }
 
     /**
-     * @return The height of the Bar.
+     * @return The height of the Bar in dp.
      */
     public float getBarHeight() {
         return mBarHeight;
@@ -774,7 +781,8 @@ abstract class OverlayPanelBase {
      * @return Whether the Panel height matches the one from the given state.
      */
     protected boolean doesPanelHeightMatchState(PanelState state) {
-        return state == getPanelState() && getHeight() == getPanelHeightFromState(state);
+        return state == getPanelState()
+                && MathUtils.areFloatsEqual(getHeight(), getPanelHeightFromState(state));
     }
 
     // ============================================================================================

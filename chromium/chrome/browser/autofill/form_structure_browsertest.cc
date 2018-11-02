@@ -26,6 +26,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "content/public/common/content_switches.h"
 #include "url/gurl.h"
 
@@ -55,15 +56,22 @@ GURL HTMLToDataURI(const std::string& html) {
 
 const base::FilePath& GetTestDataDir() {
   CR_DEFINE_STATIC_LOCAL(base::FilePath, dir, ());
-  if (dir.empty())
-    PathService::Get(chrome::DIR_TEST_DATA, &dir);
+  if (dir.empty()) {
+    PathService::Get(base::DIR_SOURCE_ROOT, &dir);
+    dir = dir.AppendASCII("components");
+    dir = dir.AppendASCII("test");
+    dir = dir.AppendASCII("data");
+  }
   return dir;
 }
 
 const std::vector<base::FilePath> GetTestFiles() {
   base::FilePath dir;
   CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &dir));
-  dir = dir.AppendASCII("chrome/test/data/autofill")
+  dir = dir.AppendASCII("components")
+            .AppendASCII("test")
+            .AppendASCII("data")
+            .AppendASCII("autofill")
             .Append(kTestName)
             .AppendASCII("input");
   base::FileEnumerator input_files(dir, false, base::FileEnumerator::FILES);
@@ -79,6 +87,16 @@ const std::vector<base::FilePath> GetTestFiles() {
 #endif  // defined(OS_MACOSX)
 
   return files;
+}
+
+const std::set<base::FilePath::StringType>& GetFailingTestNames() {
+  // TODO(crbug.com/789944): Reenable these tests.
+  static std::set<base::FilePath::StringType>* failing_test_names =
+      new std::set<base::FilePath::StringType>{
+          FILE_PATH_LITERAL("067_register_rei.com.html"),
+          FILE_PATH_LITERAL("074_register_threadless.com.html"),
+      };
+  return *failing_test_names;
 }
 
 }  // namespace
@@ -98,7 +116,7 @@ class FormStructureBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Suppress most output logs because we can't really control the output for
     // arbitrary test sites.
-    command_line->AppendSwitch(switches::kDisableLogging);
+    command_line->AppendSwitchASCII(switches::kLoggingLevel, "2");
   }
 
   // DataDrivenTest:
@@ -115,8 +133,8 @@ class FormStructureBrowserTest
 
 FormStructureBrowserTest::FormStructureBrowserTest()
     : DataDrivenTest(GetTestDataDir()) {
-  feature_list_.InitAndEnableFeature(
-      autofill::kAutofillRationalizeFieldTypePredictions);
+  feature_list_.InitAndDisableFeature(
+      autofill::features::kAutofillEnforceMinRequiredFieldsForUpload);
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() {
@@ -159,7 +177,10 @@ std::string FormStructureBrowserTest::FormStructuresToString(
 IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
   // Prints the path of the test to be executed.
   LOG(INFO) << GetParam().MaybeAsASCII();
-  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName));
+  bool is_expected_to_pass =
+      !base::ContainsKey(GetFailingTestNames(), GetParam().BaseName().value());
+  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName),
+                       is_expected_to_pass);
 }
 
 INSTANTIATE_TEST_CASE_P(AllForms,

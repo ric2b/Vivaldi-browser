@@ -5,6 +5,7 @@
 #ifndef DeviceOrientationInspectorAgent_h
 #define DeviceOrientationInspectorAgent_h
 
+#include "base/macros.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/DeviceOrientation.h"
 #include "modules/ModulesExport.h"
@@ -16,12 +17,10 @@ class InspectedFrames;
 
 class MODULES_EXPORT DeviceOrientationInspectorAgent final
     : public InspectorBaseAgent<protocol::DeviceOrientation::Metainfo> {
-  WTF_MAKE_NONCOPYABLE(DeviceOrientationInspectorAgent);
-
  public:
   explicit DeviceOrientationInspectorAgent(InspectedFrames*);
   ~DeviceOrientationInspectorAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   // Protocol methods.
   protocol::Response setDeviceOrientationOverride(double,
@@ -37,6 +36,8 @@ class MODULES_EXPORT DeviceOrientationInspectorAgent final
   DeviceOrientationController* Controller();
 
   Member<InspectedFrames> inspected_frames_;
+
+  DISALLOW_COPY_AND_ASSIGN(DeviceOrientationInspectorAgent);
 };
 
 }  // namespace blink

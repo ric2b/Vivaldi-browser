@@ -1,16 +1,20 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
-#define MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
+#ifndef PLATFORM_MEDIA_RENDERER_DECODERS_IPC_AUDIO_DECODER_H_
+#define PLATFORM_MEDIA_RENDERER_DECODERS_IPC_AUDIO_DECODER_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
+#include "platform_media/renderer/decoders/ipc_factory.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -27,22 +31,9 @@ class FFmpegURLProtocol;
 // synchronization tricks in order to appear synchronous.
 class MEDIA_EXPORT IPCAudioDecoder {
  public:
-  // TODO(wdzierzanowski): Only necessary because this class currently
-  // interferes with AudioFileReaderTest (DNA-45771).
-  class MEDIA_EXPORT ScopedDisableForTesting {
-   public:
-    ScopedDisableForTesting();
-    ~ScopedDisableForTesting();
-  };
 
   explicit IPCAudioDecoder(FFmpegURLProtocol* protocol);
   ~IPCAudioDecoder();
-
-  static bool IsAvailable();
-  static void Preinitialize(
-      const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
-      const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
-      const scoped_refptr<base::SequencedTaskRunner>& media_task_runner);
 
   bool Initialize();
 
@@ -65,13 +56,17 @@ class MEDIA_EXPORT IPCAudioDecoder {
   void DataReady(DemuxerStream::Status status,
                  const scoped_refptr<DecoderBuffer>& buffer);
 
+  void RunCreatorOnMainThread(
+      DataSource* data_source,
+      std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host);
+
   std::unique_ptr<InMemoryDataSource> data_source_;
 
   int channels_;
   int sample_rate_;
   int number_of_frames_;
   int bytes_per_frame_;
-  media::SampleFormat sample_format_;
+  SampleFormat sample_format_;
   base::TimeDelta duration_;
 
   std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets_;
@@ -80,6 +75,8 @@ class MEDIA_EXPORT IPCAudioDecoder {
   std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
   base::WaitableEvent media_task_done_;
 
+  IPCFactory factory_;
+
   base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoder);
@@ -87,4 +84,4 @@ class MEDIA_EXPORT IPCAudioDecoder {
 
 }  // namespace media
 
-#endif  // MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
+#endif  // PLATFORM_MEDIA_RENDERER_DECODERS_IPC_AUDIO_DECODER_H_

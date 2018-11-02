@@ -5,11 +5,11 @@
 #ifndef Body_h
 #define Body_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/ModulesExport.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
@@ -27,8 +27,7 @@ class ScriptState;
 // spec only Response has it and Request has a byte stream defined in the
 // Encoding spec. The spec should be fixed shortly to be aligned with this
 // implementation.
-class MODULES_EXPORT Body : public GarbageCollected<Body>,
-                            public ScriptWrappable,
+class MODULES_EXPORT Body : public ScriptWrappable,
                             public ActiveScriptWrappable<Body>,
                             public ContextClient {
   WTF_MAKE_NONCOPYABLE(Body);
@@ -53,7 +52,10 @@ class MODULES_EXPORT Body : public GarbageCollected<Body>,
   // ScriptWrappable override.
   bool HasPendingActivity() const override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ContextClient::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    ScriptWrappable::Trace(visitor);
+    ContextClient::Trace(visitor);
+  }
 
  private:
   // TODO(e_hakkinen): Fix |MimeType()| to always contain parameters and

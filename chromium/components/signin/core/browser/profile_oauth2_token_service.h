@@ -14,6 +14,10 @@
 #include "google_apis/gaia/oauth2_token_service_delegate.h"
 #include "net/base/backoff_entry.h"
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 // ProfileOAuth2TokenService is a KeyedService that retrieves
 // OAuth2 access tokens for a given set of scopes using the OAuth2 login
 // refresh tokens.
@@ -35,6 +39,9 @@ class ProfileOAuth2TokenService : public OAuth2TokenService,
   ProfileOAuth2TokenService(
       std::unique_ptr<OAuth2TokenServiceDelegate> delegate);
   ~ProfileOAuth2TokenService() override;
+
+  // Registers per-profile prefs.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -60,6 +67,10 @@ class ProfileOAuth2TokenService : public OAuth2TokenService,
   // Returns a pointer to its instance of net::BackoffEntry or nullptr if there
   // is no such instance.
   const net::BackoffEntry* GetDelegateBackoffEntry();
+
+  void set_all_credentials_loaded_for_testing(bool loaded) {
+    all_credentials_loaded_ = loaded;
+  }
 
  private:
   void OnRefreshTokenAvailable(const std::string& account_id) override;

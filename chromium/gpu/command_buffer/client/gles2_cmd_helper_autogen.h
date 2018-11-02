@@ -2610,17 +2610,6 @@ void ProduceTextureDirectCHROMIUMImmediate(GLuint texture,
   }
 }
 
-void ConsumeTextureCHROMIUMImmediate(GLenum target, const GLbyte* mailbox) {
-  const uint32_t size =
-      gles2::cmds::ConsumeTextureCHROMIUMImmediate::ComputeSize();
-  gles2::cmds::ConsumeTextureCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::ConsumeTextureCHROMIUMImmediate>(size);
-  if (c) {
-    c->Init(target, mailbox);
-  }
-}
-
 void CreateAndConsumeTextureINTERNALImmediate(GLenum target,
                                               GLuint texture,
                                               const GLbyte* mailbox) {
@@ -2786,17 +2775,6 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
   if (c) {
     c->Init(contents_texture_id, background_color, edge_aa_mask, filter, shm_id,
             shm_offset);
-  }
-}
-
-void SetColorSpaceForScanoutCHROMIUM(GLuint texture_id,
-                                     GLuint shm_id,
-                                     GLuint shm_offset,
-                                     GLsizei color_space_size) {
-  gles2::cmds::SetColorSpaceForScanoutCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::SetColorSpaceForScanoutCHROMIUM>();
-  if (c) {
-    c->Init(texture_id, shm_id, shm_offset, color_space_size);
   }
 }
 
@@ -3305,14 +3283,10 @@ void BeginRasterCHROMIUM(GLuint texture_id,
 
 void RasterCHROMIUM(uint32_t list_shm_id,
                     uint32_t list_shm_offset,
-                    GLint x,
-                    GLint y,
-                    GLint w,
-                    GLint h,
                     uint32_t data_size) {
   gles2::cmds::RasterCHROMIUM* c = GetCmdSpace<gles2::cmds::RasterCHROMIUM>();
   if (c) {
-    c->Init(list_shm_id, list_shm_offset, x, y, w, h, data_size);
+    c->Init(list_shm_id, list_shm_offset, data_size);
   }
 }
 
@@ -3321,6 +3295,72 @@ void EndRasterCHROMIUM() {
       GetCmdSpace<gles2::cmds::EndRasterCHROMIUM>();
   if (c) {
     c->Init();
+  }
+}
+
+void CreateTransferCacheEntryCHROMIUM(GLuint64 handle_id,
+                                      GLuint handle_shm_id,
+                                      GLuint handle_shm_offset,
+                                      GLuint type,
+                                      GLuint data_shm_id,
+                                      GLuint data_shm_offset,
+                                      GLuint data_size) {
+  gles2::cmds::CreateTransferCacheEntryCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::CreateTransferCacheEntryCHROMIUM>();
+  if (c) {
+    c->Init(handle_id, handle_shm_id, handle_shm_offset, type, data_shm_id,
+            data_shm_offset, data_size);
+  }
+}
+
+void DeleteTransferCacheEntryCHROMIUM(GLuint64 handle_id) {
+  gles2::cmds::DeleteTransferCacheEntryCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::DeleteTransferCacheEntryCHROMIUM>();
+  if (c) {
+    c->Init(handle_id);
+  }
+}
+
+void UnlockTransferCacheEntryCHROMIUM(GLuint64 handle_id) {
+  gles2::cmds::UnlockTransferCacheEntryCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::UnlockTransferCacheEntryCHROMIUM>();
+  if (c) {
+    c->Init(handle_id);
+  }
+}
+
+void TexStorage2DImageCHROMIUM(GLenum target,
+                               GLenum internalFormat,
+                               GLsizei width,
+                               GLsizei height) {
+  gles2::cmds::TexStorage2DImageCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::TexStorage2DImageCHROMIUM>();
+  if (c) {
+    c->Init(target, internalFormat, width, height);
+  }
+}
+
+void SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
+                                   GLuint shm_id,
+                                   GLuint shm_offset,
+                                   GLsizei color_space_size) {
+  gles2::cmds::SetColorSpaceMetadataCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::SetColorSpaceMetadataCHROMIUM>();
+  if (c) {
+    c->Init(texture_id, shm_id, shm_offset, color_space_size);
+  }
+}
+
+void WindowRectanglesEXTImmediate(GLenum mode,
+                                  GLsizei count,
+                                  const GLint* box) {
+  const uint32_t size =
+      gles2::cmds::WindowRectanglesEXTImmediate::ComputeSize(count);
+  gles2::cmds::WindowRectanglesEXTImmediate* c =
+      GetImmediateCmdSpaceTotalSize<gles2::cmds::WindowRectanglesEXTImmediate>(
+          size);
+  if (c) {
+    c->Init(mode, count, box);
   }
 }
 

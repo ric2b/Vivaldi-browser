@@ -4,6 +4,7 @@
 <translation id="100812568230599391">Zmień styl wyświetlania na Przeplatany.</translation>
 <translation id="1012173283529841972">Element listy</translation>
 <translation id="1013742170491673792">srched</translation>
+<translation id="1022586497894531524">Korzystasz z czytnika ChromeVox po raz pierwszy? Pomoże Ci ten krótki samouczek.</translation>
 <translation id="1023866615269196768">Rozciągnięta.</translation>
 <translation id="1025074108959230262">Tryb przylegania wyłączony</translation>
 <translation id="1031961866430398710">następnie</translation>
@@ -29,12 +30,12 @@
 <translation id="1201402288615127009">Dalej</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox – niech Chrome przemówi</translation>
-<translation id="1226487719524433143">Jesteśmy ciekawi, co sądzisz o tych zmianach. Prześlij nam swoją opinię  – naciśnij klawisz wyszukiwania + A, a następnie I. Kliknij przycisk Dalej, by przejść do samouczka, w którym znajdziesz wszystko, co trzeba wiedzieć na początek.</translation>
+<translation id="1225437811932752266">Gratulacje! Znasz już podstawy korzystania z czytnika ChromeVox. Pamiętaj, że jego menu poleceń możesz otworzyć w każdej chwili, naciskając Wyszukaj + kropkę. Aby dowiedzieć się więcej o czytniku ChromeVox i systemie Chrome OS, zapoznaj się z artykułami poniżej.
+Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść do przycisku Zamknij, i kliknij go.</translation>
 <translation id="1229276918471378188">Poprzednie przejście</translation>
 <translation id="1237866625126425153">rdgrp</translation>
 <translation id="1251750620252348585">Następny nagłówek poziomu 6</translation>
 <translation id="1275718070701477396">Zaznaczone</translation>
-<translation id="1310230882256010289">Modernizacja mechanizmów wewnętrznych. Zasadniczo zmieniliśmy sposób działania ChromeVoxa. Możesz liczyć na większą wydajność, stabilność i zgodność ze standardami internetowymi.</translation>
 <translation id="1319608975892113573">Brak poprzedniego cytatu blokowego.</translation>
 <translation id="1321576897702511272">Ukryj pomoc dotyczącą ChromeVox</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> z <ph name="TOTAL" /></translation>
@@ -42,6 +43,7 @@
 <translation id="1339428534620983148">Poprzednia kolumna tabeli</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1346748346194534595">W prawo</translation>
+<translation id="135978014023467274">Czytnik ChromeVox został zaktualizowany do wersji 63.</translation>
 <translation id="136718599399906424">Następny wiersz tabeli</translation>
 <translation id="1377925789329510816">To jest ostatni nagłówek. Kliknij klawisz wyszukiwania + H, by wrócić do pierwszego nagłówka na tej stronie, lub klawisz wyszukiwania + Shift + H, by przejść do drugiego.</translation>
 <translation id="1383876407941801731">Szukaj</translation>
@@ -169,6 +171,7 @@
 <translation id="2770781857296573485">Otwórz poznawanie grup</translation>
 <translation id="2777845298774924149">Zamknięty</translation>
 <translation id="2781264313200109999">Początek linku</translation>
+<translation id="2784959586797362050">Jak zwykle, możesz nam bezpośrednio przesłać opinię, naciskając klawisz wyszukiwania + A, a potem I. Chętnie poznamy Twoje zdanie.</translation>
 <translation id="2800204403141299078">Nie ma więcej różnych elementów.</translation>
 <translation id="2800780099804980316">Brak poprzedniego nagłówka poziomu 1.</translation>
 <translation id="280499067616661124">ChromeVox – znajdź na stronie</translation>
@@ -225,8 +228,6 @@
 <translation id="3163593631834463955">Pusty nagłówek kolumny</translation>
 <translation id="316542773973815724">Nawigacja</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{spacja}few{# spacje}many{# spacji}other{# spaces}}</translation>
-<translation id="3183233191569362040">Gratulacje! Znasz już podstawy korzystania z czytnika ChromeVox Next (beta). Pamiętaj, że menu poleceń czytnika ChromeVox możesz otworzyć w każdej chwili, naciskając Wyszukaj + kropkę. Aby dowiedzieć się więcej o czytniku ChromeVox i systemie Chrome OS, przeczytaj poniższe artykuły.
-Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść do przycisku Zamknij, i kliknij go.</translation>
 <translation id="320961988183078793">wpisano: <ph name="TYPE" /></translation>
 <translation id="3223701887221307104"><ph name="NAME" />, karta</translation>
 <translation id="3226035351387556942">chk</translation>
@@ -236,6 +237,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3241638166094654466">Komórki w każdym wierszu:</translation>
 <translation id="3286390186030710347">Suwak</translation>
 <translation id="3299925995433437805">Brak następnego klikniętego linku.</translation>
+<translation id="3300348286427369683">Obsługa tekstu sformatowanego. ChromeVox obsługuje teraz pola tekstu sformatowanego, w tym między innymi polecenia nawigacyjne, kierowanie kursorem brajlowskim oraz wybór.</translation>
 <translation id="3307886118343381874">Przejdź na koniec tabeli.</translation>
 <translation id="3311969765485641742">Naciśnij Alt+Shift+A, by zobaczyć alerty</translation>
 <translation id="3312997241656799641">Następny kliknięty link</translation>
@@ -300,6 +302,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3458865416877308321"><ph name="NAME" />, przełącznik wyłączony</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, przycisk</translation>
 <translation id="3466530247399808663">Naciśnięcie niewłaściwego klawisza</translation>
+<translation id="3468959318854349468">Bez tytułu</translation>
 <translation id="3473644018603298796">zaznaczono <ph name="COUNT" /></translation>
 <translation id="3486232535569802404">Od <ph name="V1" /> do <ph name="V2" /></translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{prawy nawias kwadratowy}few{# prawe nawiasy kwadratowe}many{# prawych nawiasów kwadratowych}other{# right brackets}}</translation>
@@ -338,7 +341,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3909320334364316587">Poprzedni nagłówek poziomu 6</translation>
 <translation id="3914173277599553213">Wymagane</translation>
-<translation id="3951424903203718058">Korzystasz z czytnika ChromeVox Next po raz pierwszy? Pomoże Ci ten krótki samouczek.</translation>
+<translation id="3914732343065571127">Opis poleceń ChromeVoxa</translation>
 <translation id="3962990492275676168">Zacznij czytać od bieżącego miejsca</translation>
 <translation id="4004802134384979325">zaznaczone</translation>
 <translation id="4006140876663370126">img</translation>
@@ -409,7 +412,9 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="4601367666219428522">tab. <ph name="TABLENAME" /> <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">Ignorowanie następnego naciśnięcia klawisza</translation>
 <translation id="461613135510474570">Zdanie</translation>
+<translation id="463135993322337640">Naciśnij ChromeVox + O + N, by poznać nowe funkcje</translation>
 <translation id="4647836961514597010">Selektor kolorów</translation>
+<translation id="4660783501463101648">Klasyczny ChromeVox został usunięty. Przełącznik pozwalający na powrót do niego został usunięty.</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4688873778442829762">grd</translation>
@@ -429,10 +434,10 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="4827410568042294688">nie wybrano</translation>
 <translation id="4842108708071771135">Brak następnego cytatu blokowego.</translation>
 <translation id="4844625982113518938">Naciśnij dowolny klawisz, by poznać jego nazwę. Ctrl + W zamyka tryb informacyjny.</translation>
+<translation id="4846428657345567687">Witamy w czytniku ChromeVox</translation>
 <translation id="4846487886195635104">Koniec przekreślenia</translation>
 <translation id="4848993367330139335">tmr</translation>
 <translation id="4850023505158945298">Poprzedni taki sam element.</translation>
-<translation id="485011152882364255">W ChromeVox Next klawisz Wyszukaj jest klawiszem modyfikującym. Większość skrótów klawiszowych czytnika ChromeVox zaczyna się właśnie od niego. Do nawigacji używa się klawiszy strzałek.</translation>
 <translation id="4866956062845190338">rdmnuitm</translation>
 <translation id="4867316986324544967">Włącz rejestrowanie TTS</translation>
 <translation id="4877261390094455813">Wpisz zapytanie.</translation>
@@ -467,6 +472,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5098541983634824365">Opuszczasz siatkę.</translation>
 <translation id="5102981729317424850">Pasek narzędzi</translation>
 <translation id="5105050547967751155">rq</translation>
+<translation id="5106547198195128110">W tej wersji wprowadziliśmy wiele zmian. Poznaj nowe funkcje:</translation>
 <translation id="5110983769041734144">Brak poprzedniego pola formularza.</translation>
 <translation id="5111640677200759579">Nagłówek kolumny</translation>
 <translation id="5136967254288895616">Brak poprzedniego linku.</translation>
@@ -501,16 +507,14 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5444587279251314700">(aktywna)</translation>
 <translation id="5451268436205074266">punkty <ph name="DOT" /></translation>
 <translation id="5455441614648621694">Pomocniczy</translation>
-<translation id="5458780372341732962">Włącz czytnik ChromeVox Next (beta)</translation>
 <translation id="5485036206801896268">Brak poprzedniej grafiki.</translation>
 <translation id="5486947920110100234">Brak następnego punktu przejścia.</translation>
 <translation id="549602578321198708">Słowo</translation>
 <translation id="5500932716852106146">Brak poprzedniego pola tekstowego do edytowania.</translation>
 <translation id="5502713021410870035">wrzesień</translation>
 <translation id="5507663321906818013">Narzędzie debugowania</translation>
-<translation id="5518443085409638729">Podczas edytowania tekstu umieść kursor między znakami (jak w Mac OS X).</translation>
+<translation id="5518443085409638729">Podczas edytowania tekstu umieść kursor między znakami (jak w macOS X).</translation>
 <translation id="552195134157544755">Przycisk radiowy</translation>
-<translation id="5531530875187439488">Nowe ikony akustyczne. Zmodernizowaliśmy ten zbiór sygnałów dźwiękowych, by ułatwić przeglądanie internetu.</translation>
 <translation id="5534303576632885660">hdr</translation>
 <translation id="5546092960038624944">Brak poprzedniego nagłówka poziomu 5.</translation>
 <translation id="556042886152191864">Przycisk</translation>
@@ -537,7 +541,6 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5682113568322255809">Punkt orientacyjny</translation>
 <translation id="5683155931978483559">Poprzednie pole wyboru</translation>
 <translation id="5684277895745049190">Lista</translation>
-<translation id="5684905390246898631">Witamy w czytniku ChromeVox Next</translation>
 <translation id="5695831708991916435">Poniższe skróty nie są poleceniami czytnika ChromeVox, ale są bardzo przydatne podczas korzystania z Chrome.
 Aby przejść do następnego aktywnego elementu, np. przycisku lub linku, naciśnij klawisz Tab. Aby przejść do poprzedniego elementu, naciśnij Shift + Tab. 
 Aby otworzyć pole adresu (omnibox), naciśnij Ctrl + L. 
@@ -572,7 +575,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{równy}few{# znaki równości}many{# znaków równości}other{# equal signs}}</translation>
 <translation id="5939518447894949180">Resetuj</translation>
 <translation id="5948123859135882163">Włącz/wyłącz strukturalne lub semantyczne interpretowanie wyrażeń matematycznych</translation>
-<translation id="5948485979596965684">ChromeVox został zaktualizowany do nowej wersji głównej.</translation>
 <translation id="5955304353782037793">aplikacja</translation>
 <translation id="5956928062748260866">Okno dialogowe</translation>
 <translation id="5963413905009737549">Sekcja</translation>
@@ -587,6 +589,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="6065293622157674001">Początek błędu gramatycznego</translation>
 <translation id="6082768461603900813">Podstawowa nawigacja</translation>
 <translation id="6092707270915298410">Koniec linku</translation>
+<translation id="6118126368611144850">Aplikacje na Androida dla Chrome. Jeśli na urządzeniu masz zainstalowany Sklep Play, możesz sprawdzić, jak ChromeVox współpracuje z aplikacjami na Androida. Przekonaj się, jak działa eksperymentalna obsługa – pobierz Google Chrome Canary ze Sklepu Play.</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Koniec komórki.</translation>
 <translation id="6122013438240733403">btn</translation>
@@ -627,6 +630,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="6493991254603208962">Zmniejsz jasność</translation>
 <translation id="6508059270146105198">Przenieś wyświetlacz brajlowski na dół strony</translation>
 <translation id="6536864053412760904">Token MathML</translation>
+<translation id="6540201937398578274">W czytniku ChromeVox klawisz wyszukiwania jest klawiszem modyfikującym. Większość skrótów klawiszowych ChromeVoxa zaczyna się właśnie od niego. Do nawigacji używa się klawiszy strzałek.</translation>
 <translation id="6550720799683018100">Zmień bieżący układ klawiatury, wybierając opcję z listy poniżej.</translation>
 <translation id="6561818612645211875">Przejdź na początek bieżącego wiersza</translation>
 <translation id="6587021927234520429">Brak następnego nagłówka poziomu 4.</translation>
@@ -651,7 +655,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="6786800275320335305">Artykuł</translation>
 <translation id="6787839852456839824">Skróty klawiaturowe</translation>
 <translation id="6793101435925451627">lstbx</translation>
-<translation id="6818172019016005152">Włożyliśmy dużo pracy w ulepszanie ChromeVoxa. Oto nowe funkcje</translation>
 <translation id="6833103209700200188">Stopka</translation>
 <translation id="6871161210040114857">Ignorowanie wielkości liter.</translation>
 <translation id="6877435256196695200">Brak następnej grafiki.</translation>
@@ -669,7 +672,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7037042857287298941">Poprzednia lista</translation>
 <translation id="7041173719775863268">Zakończ wybieranie</translation>
 <translation id="7086377898680121060">Zwiększ jasność</translation>
-<translation id="7094527465295945904">Nowe powiązania klawiszy. Klawisz wyszukiwania jest teraz modyfikatorem ChromeVoxa, a kombinacje klawiszy zostały bardzo uproszczone.</translation>
 <translation id="7095834689119144465">Edytowanie tekstu, tylko liczby</translation>
 <translation id="7096001299300236431">Poprzedni plik multimedialny</translation>
 <translation id="7116595520562830928">multln</translation>
@@ -773,7 +775,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8066678206530322333">Baner</translation>
 <translation id="8076492880354921740">Karty</translation>
 <translation id="8091452896542422286">Odstęp</translation>
-<translation id="8104178626892949749">Naciśnij ChromeVox + O + N, by dowiedzieć się więcej o ChromeVox Next.</translation>
 <translation id="8110647606445335195">Brak punktów orientacyjnych ARIA.</translation>
 <translation id="8153880621934657047">Poza tabelą.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{podkreślenie}few{# znaki podkreślenia}many{# znaków podkreślenia}other{# underscores}}</translation>
@@ -783,7 +784,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8199231515320852133">Przeczytaj nagłówki bieżącej komórki</translation>
 <translation id="820417203470636242">Pusta komórka.</translation>
 <translation id="8215202828671303819">Wybór wielokrotny</translation>
-<translation id="8224171046658870249">Przełączono na ChromeVox Next</translation>
 <translation id="826991282343985864">w$1k$2</translation>
 <translation id="8276439074553447000">Przejdź do poprzedniego elementu, który można zaznaczyć</translation>
 <translation id="8278417001922463147">Nie ma poprzedniego artykułu.</translation>
@@ -828,7 +828,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8664519043722036194">sek.</translation>
 <translation id="867187640362843212">Nagłówek 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{kreska pionowa}few{# kreski pionowe}many{# kresek pionowych}other{# vertical pipes}}</translation>
-<translation id="8721861170709424373">Opis poleceń ChromeVox Next</translation>
 <translation id="8735450637152821465">Zacznij wybierać</translation>
 <translation id="8743786158317878347">otwórz treści strukturalne, na przykład tabele</translation>
 <translation id="8747966237988593539">Lista numerowana</translation>
@@ -881,7 +880,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="923331726185079994">ChromeVox został zaktualizowany</translation>
 <translation id="930275611743429116">Rozpocznij lub zakończ wybieranie.</translation>
 <translation id="948171205378458592">Zmniejsz tempo mowy</translation>
-<translation id="955917170449423694">Przełączono na klasyczną wersję ChromeVox</translation>
 <translation id="962913030769097253">Następny nagłówek poziomu 1</translation>
 <translation id="973955474346881951">Włącz/wyłącz tryb przylegania</translation>
 <translation id="976849232629612000">Brak elementów.</translation>

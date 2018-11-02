@@ -9,6 +9,7 @@
 #include "core/animation/SizeListPropertyFunctions.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -43,7 +44,7 @@ class UnderlyingSizeListChecker
     return true;
   }
 
-  RefPtr<const NonInterpolableList> underlying_list_;
+  scoped_refptr<const NonInterpolableList> underlying_list_;
 };
 
 class InheritedSizeListChecker

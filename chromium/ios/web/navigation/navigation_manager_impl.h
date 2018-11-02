@@ -111,6 +111,17 @@ class NavigationManagerImpl : public NavigationManager {
   // Returns the index of the previous item. Only used by SessionStorageBuilder.
   virtual int GetPreviousItemIndex() const = 0;
 
+  // Sets the index of the previous item. Only used by SessionStorageBuilder.
+  virtual void SetPreviousItemIndex(int previous_item_index) = 0;
+
+  // Updates navigation history (if applicable) after pushState.
+  // TODO(crbug.com/783382): This is a legacy method to maintain backward
+  // compatibility for PageLoad stat. Remove this method once PageLoad no longer
+  // depend on WebStateObserver::DidStartLoading.
+  virtual void AddPushStateItemIfNecessary(const GURL& url,
+                                           NSString* state_object,
+                                           ui::PageTransition transition) = 0;
+
   // Resets the transient url rewriter list.
   void RemoveTransientURLRewriters();
 
@@ -134,6 +145,16 @@ class NavigationManagerImpl : public NavigationManager {
   // TODO(crbug.com/661316): Make this private once all navigation code is moved
   // out of CRWWebController.
   NavigationItemImpl* GetCurrentItemImpl() const;
+
+  // Updates the pending or last committed navigation item after replaceState.
+  // TODO(crbug.com/783382): This is a legacy method to maintain backward
+  // compatibility for PageLoad stat. Remove this method once PageLoad no longer
+  // depend on WebStateObserver::DidStartLoading.
+  void UpdateCurrentItemForReplaceState(const GURL& url,
+                                        NSString* state_object);
+
+  // Same as GoToIndex(int), but allows renderer-initiated navigations.
+  void GoToIndex(int index, NavigationInitiationType initiation_type);
 
   // NavigationManager:
   NavigationItem* GetLastCommittedItem() const final;
@@ -194,7 +215,7 @@ class NavigationManagerImpl : public NavigationManager {
   virtual NavigationItemImpl* GetLastCommittedItemImpl() const = 0;
 
   // Subclass specific implementation to update session state.
-  virtual void FinishGoToIndex(int index) = 0;
+  virtual void FinishGoToIndex(int index, NavigationInitiationType type) = 0;
 
   // The primary delegate for this manager.
   NavigationManagerDelegate* delegate_;

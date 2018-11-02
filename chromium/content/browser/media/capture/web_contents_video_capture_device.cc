@@ -19,12 +19,14 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/cursor_renderer.h"
+#include "content/browser/media/capture/fake_webcontent_capture_machine.h"
 #include "content/browser/media/capture/web_contents_tracker.h"
 #include "content/browser/media/capture/window_activity_tracker.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -685,17 +687,33 @@ void WebContentsCaptureMachine::UpdateCaptureSize() {
   if (!view)
     return;
 
-  // Convert the view's size from the DIP coordinate space to the pixel
-  // coordinate space.  When the view is being rendered on a high-DPI display,
-  // this allows the high-resolution image detail to propagate through to the
-  // captured video.
-  const gfx::Size view_size = view->GetViewBounds().size();
-  const gfx::Size physical_size = gfx::ConvertSizeToPixel(
-      ui::GetScaleFactorForNativeView(view->GetNativeView()), view_size);
-  VLOG(1) << "Computed physical capture size (" << physical_size.ToString()
-          << ") from view size (" << view_size.ToString() << ").";
+  // The capture size is not the view's size in DIP coordinates, but instead
+  // based on the physical backing size. Thus, when a view is being rendered on
+  // a high-DPI display, the high-resolution image detail will propagate through
+  // in the captured video output.
+  const gfx::Size physical_size_pixels =
+      static_cast<RenderWidgetHostViewBase*>(view)->GetPhysicalBackingSize();
+  VLOG(1) << "Physical capture size pixels of view is "
+          << physical_size_pixels.ToString();
 
-  oracle_proxy_->UpdateCaptureSize(physical_size);
+  oracle_proxy_->UpdateCaptureSize(physical_size_pixels);
+}
+
+std::unique_ptr<media::VideoCaptureMachine> CreateVideoCaptureMachine(
+    int render_process_id,
+    int main_render_frame_id,
+    bool enable_auto_throttling) {
+  std::unique_ptr<media::VideoCaptureMachine> video_capture_machine;
+  if (render_process_id != DesktopMediaID::kFakeId &&
+      main_render_frame_id != DesktopMediaID::kFakeId) {
+    video_capture_machine.reset(new WebContentsCaptureMachine(
+        render_process_id, main_render_frame_id, enable_auto_throttling));
+  } else {  // For browser tests, to create a fake tab capturer.
+    video_capture_machine.reset(
+        new FakeWebContentCaptureMachine(enable_auto_throttling));
+  }
+
+  return video_capture_machine;
 }
 
 }  // namespace
@@ -705,10 +723,9 @@ WebContentsVideoCaptureDevice::WebContentsVideoCaptureDevice(
     int main_render_frame_id,
     bool enable_auto_throttling)
     : core_(new media::ScreenCaptureDeviceCore(
-          std::unique_ptr<media::VideoCaptureMachine>(
-              new WebContentsCaptureMachine(render_process_id,
-                                            main_render_frame_id,
-                                            enable_auto_throttling)))) {}
+          CreateVideoCaptureMachine(render_process_id,
+                                    main_render_frame_id,
+                                    enable_auto_throttling))) {}
 
 WebContentsVideoCaptureDevice::~WebContentsVideoCaptureDevice() {
   DVLOG(2) << "WebContentsVideoCaptureDevice@" << this << " destroying.";

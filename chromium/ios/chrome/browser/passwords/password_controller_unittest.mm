@@ -15,7 +15,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#import "base/test/ios/wait_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
@@ -25,10 +24,14 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/security_state/ios/ssl_status_input_event_data.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/js_password_manager.h"
+#import "ios/chrome/browser/passwords/password_form_filler.h"
+#include "ios/chrome/browser/passwords/test_helpers.h"
+#import "ios/testing/wait_util.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
@@ -38,6 +41,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
+#include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/OCMock/OCPartialMockObject.h"
 #include "url/gurl.h"
@@ -48,8 +52,12 @@
 
 using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
+using test_helpers::SetPasswordFormFillData;
 using testing::NiceMock;
 using testing::Return;
+using testing::kWaitForActionTimeout;
+using testing::kWaitForJSCompletionTimeout;
+using testing::WaitUntilConditionOrTimeout;
 using testing::_;
 
 namespace {
@@ -102,7 +110,6 @@ PasswordController* CreatePasswordController(
   if (weak_client)
     *weak_client = client.get();
   return [[PasswordController alloc] initWithWebState:web_state
-                                  passwordsUiDelegate:nil
                                                client:std::move(client)];
 }
 
@@ -160,7 +167,7 @@ class PasswordControllerTest : public web::WebTestWithWebState {
   void SetUp() override {
     web::WebTestWithWebState::SetUp();
     passwordController_ =
-        CreatePasswordController(web_state(), store_.get(), nullptr);
+        CreatePasswordController(web_state(), store_.get(), &weak_client_);
     @autoreleasepool {
       // Make sure the temporary array is released after SetUp finishes,
       // otherwise [passwordController_ suggestionProvider] will be retained
@@ -246,6 +253,8 @@ class PasswordControllerTest : public web::WebTestWithWebState {
   PasswordController* passwordController_;
 
   scoped_refptr<password_manager::MockPasswordStore> store_;
+
+  MockPasswordManagerClient* weak_client_;
 };
 
 struct PasswordFormTestData {
@@ -564,9 +573,10 @@ TEST_F(PasswordControllerTest, FLAKY_FindPasswordFormsInView) {
       block_was_called = YES;
       forms = result;
     }];
-    base::test::ios::WaitUntilCondition(^bool() {
-      return block_was_called;
-    });
+    EXPECT_TRUE(
+        WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
+          return block_was_called;
+        }));
     if (data.expected_form_found) {
       ASSERT_EQ(1U, forms.size());
       EXPECT_EQ(base::ASCIIToUTF16(data.expected_username_element),
@@ -662,42 +672,11 @@ TEST_F(PasswordControllerTest, FLAKY_GetSubmittedPasswordForm) {
     [passwordController_
         extractSubmittedPasswordForm:FormName(data.number_of_forms_to_submit)
                    completionHandler:completion_handler];
-    base::test::ios::WaitUntilCondition(^bool() {
-      return block_was_called;
-    });
+    EXPECT_TRUE(
+        WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
+          return block_was_called;
+        }));
   }
-}
-
-// Populates |form_data| with test values.
-void SetPasswordFormFillData(PasswordFormFillData& form_data,
-                             const std::string& origin,
-                             const std::string& action,
-                             const char* username_field,
-                             const char* username_value,
-                             const char* password_field,
-                             const char* password_value,
-                             const char* additional_username,
-                             const char* additional_password,
-                             bool wait_for_username) {
-  form_data.origin = GURL(origin);
-  form_data.action = GURL(action);
-  autofill::FormFieldData username;
-  username.name = base::UTF8ToUTF16(username_field);
-  username.value = base::UTF8ToUTF16(username_value);
-  form_data.username_field = username;
-  autofill::FormFieldData password;
-  password.name = base::UTF8ToUTF16(password_field);
-  password.value = base::UTF8ToUTF16(password_value);
-  form_data.password_field = password;
-  if (additional_username) {
-    autofill::PasswordAndRealm additional_password_data;
-    additional_password_data.password = base::UTF8ToUTF16(additional_password);
-    additional_password_data.realm.clear();
-    form_data.additional_logins.insert(
-        std::pair<base::string16, autofill::PasswordAndRealm>(
-            base::UTF8ToUTF16(additional_username), additional_password_data));
-  }
-  form_data.wait_for_username = wait_for_username;
 }
 
 // Test HTML page.  It contains several password forms.  Tests autofill
@@ -731,6 +710,10 @@ static NSString* kHtmlWithMultiplePasswordForms =
      "<form name=\"f6'\">"
      "<input id=\"un6'\" type='text' name=\"u6'\">"
      "<input id=\"pw6'\" type='password' name=\"p6'\">"
+     "</form>"
+     "<form>"
+     "<input id='un8' type='text'>"
+     "<input id='pw8' type='password'>"
      "</form>"
      "<iframe name='pf'></iframe>"
      "<script>"
@@ -867,7 +850,8 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
       NO,
       @""
     },
-    // No match because there are duplicate inputs in the form.
+    // There are inputs with duplicate names in the form, the first of them is
+    // filled.
     {
       base_url,
       base_url,
@@ -875,8 +859,8 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
       "test_user",
       "p3",
       "test_password",
-      NO,
-      @""
+      YES,
+      @"un3=test_user;pw3=test_password;"
     },
     // Basic test, but with quotes in the names and IDs.
     {
@@ -888,6 +872,18 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
       "test_password",
       YES,
       @"un6'=test_user;pw6'=test_password;"
+    },
+    // Fields don't have name attributes so id attribute is used for fields
+    // identification.
+    {
+      base_url,
+      base_url,
+      "un8",
+      "test_user",
+      "pw8",
+      "test_password",
+      YES,
+      @"un8=test_user;pw8=test_password;"
     },
   };
   // clang-format on
@@ -907,9 +903,10 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
                           block_was_called = YES;
                           EXPECT_EQ(data.should_succeed, success);
                         }];
-    base::test::ios::WaitUntilCondition(^bool() {
-      return block_was_called;
-    });
+    EXPECT_TRUE(
+        WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
+          return block_was_called;
+        }));
 
     id result = ExecuteJavaScript(kInputFieldValueVerificationScript);
     EXPECT_NSEQ(data.expected_result, result);
@@ -923,16 +920,17 @@ TEST_F(PasswordControllerTest, FindAndFillOnePasswordForm) {
             "<input id='pw' type='password' name='p'></form>");
   __block int call_counter = 0;
   __block int success_counter = 0;
-  [passwordController_ findAndFillPasswordForms:@"john.doe@gmail.com"
-                                       password:@"super!secret"
-                              completionHandler:^(BOOL complete) {
-                                ++call_counter;
-                                if (complete)
-                                  ++success_counter;
-                              }];
-  base::test::ios::WaitUntilCondition(^{
+  [passwordController_.passwordFormFiller
+      findAndFillPasswordForms:@"john.doe@gmail.com"
+                      password:@"super!secret"
+             completionHandler:^(BOOL complete) {
+               ++call_counter;
+               if (complete)
+                 ++success_counter;
+             }];
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
     return call_counter == 1;
-  });
+  }));
   EXPECT_EQ(1, success_counter);
   id result = ExecuteJavaScript(kInputFieldValueVerificationScript);
   EXPECT_NSEQ(@"un=john.doe@gmail.com;pw=super!secret;", result);
@@ -952,19 +950,20 @@ TEST_F(PasswordControllerTest, FindAndFillMultiplePasswordForms) {
             "<input id='p3' type='password' name='pw3'></form>");
   __block int call_counter = 0;
   __block int success_counter = 0;
-  [passwordController_ findAndFillPasswordForms:@"john.doe@gmail.com"
-                                       password:@"super!secret"
-                              completionHandler:^(BOOL complete) {
-                                ++call_counter;
-                                if (complete)
-                                  ++success_counter;
-                                LOG(INFO) << "HANDLER call " << call_counter
-                                          << " success " << success_counter;
-                              }];
+  [passwordController_.passwordFormFiller
+      findAndFillPasswordForms:@"john.doe@gmail.com"
+                      password:@"super!secret"
+             completionHandler:^(BOOL complete) {
+               ++call_counter;
+               if (complete)
+                 ++success_counter;
+               LOG(INFO) << "HANDLER call " << call_counter << " success "
+                         << success_counter;
+             }];
   // There should be 3 password forms and only 2 successfully filled forms.
-  base::test::ios::WaitUntilCondition(^{
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
     return call_counter == 3;
-  });
+  }));
   EXPECT_EQ(2, success_counter);
   id result = ExecuteJavaScript(kInputFieldValueVerificationScript);
   EXPECT_NSEQ(@"u2=john.doe@gmail.com;p2=super!secret;"
@@ -985,9 +984,9 @@ BOOL PasswordControllerTest::BasicFormFill(NSString* html) {
                         block_was_called = YES;
                         return_value = success;
                       }];
-  base::test::ios::WaitUntilCondition(^bool() {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
     return block_was_called;
-  });
+  }));
   return return_value;
 }
 
@@ -1029,15 +1028,28 @@ static NSString* kHtmlWithPasswordForm =
      "<input id='pw' type='password' name=\"p'\">"
      "</form>";
 
+// An HTML page containing two password forms.
+static NSString* kHtmlWithTwoPasswordForms =
+    @"<form id='f1'>"
+     "<input type='text' id='u1'"
+     "  onkeyup='window.onKeyUpCalled_=true'"
+     "  onchange='window.onChangeCalled_=true'>"
+     "<input type='password' id='p1'>"
+     "</form>"
+     "<form id='f2'>"
+     "<input type='text' id='u2'>"
+     "<input type='password' id='p2'>"
+     "</form>";
+
 // A script that resets indicators used to verify that custom event
 // handlers are triggered.  It also finds and the username and
 // password fields and caches them for future verification.
 static NSString* kUsernameAndPasswordTestPreparationScript =
     @"onKeyUpCalled_ = false;"
      "onChangeCalled_ = false;"
-     "username_ = document.getElementById('un');"
+     "username_ = document.getElementById('%@');"
      "username_.__gCrWebAutofilled = 'false';"
-     "password_ = document.getElementById('pw');"
+     "password_ = document.getElementById('%@');"
      "password_.__gCrWebAutofilled = 'false';";
 
 // A script that we run after autofilling forms.  It returns
@@ -1063,7 +1075,9 @@ struct SuggestionTestData {
 TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
   LoadHtml(kHtmlWithPasswordForm);
   const std::string base_url = BaseUrl();
-  ExecuteJavaScript(kUsernameAndPasswordTestPreparationScript);
+  ExecuteJavaScript(
+      [NSString stringWithFormat:kUsernameAndPasswordTestPreparationScript,
+                                 @"un", @"pw"]);
 
   // Initialize |form_data| with test data and an indicator that autofill
   // should not be performed while the user is entering the username so that
@@ -1081,9 +1095,9 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
                         // Verify that the fill reports failed.
                         EXPECT_FALSE(success);
                       }];
-  base::test::ios::WaitUntilCondition(^bool() {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
     return block_was_called;
-  });
+  }));
 
   // Verify that the form has not been autofilled.
   EXPECT_NSEQ(@"[]=, onkeyup=false, onchange=false",
@@ -1160,7 +1174,9 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
                  << "for description=" << data.description
                  << " and eval_scripts=" << data.eval_scripts);
     // Prepare the test.
-    ExecuteJavaScript(kUsernameAndPasswordTestPreparationScript);
+    ExecuteJavaScript(
+        [NSString stringWithFormat:kUsernameAndPasswordTestPreparationScript,
+                                   @"un", @"pw"]);
 
     for (NSString* script in data.eval_scripts) {
       // Trigger events.
@@ -1180,53 +1196,100 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
 
 // Tests that selecting a suggestion will fill the corresponding form and field.
 TEST_F(PasswordControllerTest, SelectingSuggestionShouldFillPasswordForm) {
-  LoadHtml(kHtmlWithPasswordForm);
+  LoadHtml(kHtmlWithTwoPasswordForms);
   const std::string base_url = BaseUrl();
-  ExecuteJavaScript(kUsernameAndPasswordTestPreparationScript);
 
-  // Initialize |form_data| with test data and an indicator that autofill
-  // should not be performed while the user is entering the username so that
-  // we can test with an initially-empty username field.
-  PasswordFormFillData form_data;
-  SetPasswordFormFillData(form_data, base_url, base_url, "u'", "user0", "p'",
-                          "password0", "abc", "def", true);
-  form_data.name = base::ASCIIToUTF16(FormName(0));
+  struct TestData {
+    const char* form_name;
+    const char* username_element;
+    const char* password_element;
+  } const kTestData[] = {{"f1", "u1", "p1"}, {"f2", "u2", "p2"}};
 
-  __block BOOL block_was_called = NO;
-  [passwordController_ fillPasswordForm:form_data
-                      completionHandler:^(BOOL success) {
-                        block_was_called = YES;
-                        // Verify that the fill reports failed.
-                        EXPECT_FALSE(success);
-                      }];
-  base::test::ios::WaitUntilCondition(^bool() {
-    return block_was_called;
-  });
+  // Send fill data to passwordController_.
+  for (size_t form_i = 0; form_i < arraysize(kTestData); ++form_i) {
+    // Initialize |form_data| with test data and an indicator that autofill
+    // should not be performed while the user is entering the username so that
+    // we can test with an initially-empty username field.
+    const auto& test_data = kTestData[form_i];
 
-  // Verify that the form has not been autofilled.
-  EXPECT_NSEQ(@"[]=, onkeyup=false, onchange=false",
-              ExecuteJavaScript(kUsernamePasswordVerificationScript));
+    PasswordFormFillData form_data;
+    SetPasswordFormFillData(
+        form_data, base_url, base_url, test_data.username_element, "user0",
+        test_data.password_element, "password0", "abc", "def", true);
+    form_data.name = base::ASCIIToUTF16(test_data.form_name);
 
-  // Tell PasswordController that a suggestion was selected. It should fill
-  // out the password form with the corresponding credentials.
-  FormSuggestion* suggestion = [FormSuggestion suggestionWithValue:@"abc"
-                                                displayDescription:nil
-                                                              icon:nil
-                                                        identifier:0];
+    __block BOOL block_was_called = NO;
+    [passwordController_ fillPasswordForm:form_data
+                        completionHandler:^(BOOL success) {
+                          block_was_called = YES;
+                          // Verify that the fill reports failed.
+                          EXPECT_FALSE(success);
+                        }];
+    EXPECT_TRUE(
+        WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
+          return block_was_called;
+        }));
+  }
 
-  block_was_called = NO;
-  SuggestionHandledCompletion completion = ^{
-    block_was_called = YES;
-    EXPECT_NSEQ(@"abc[]=def, onkeyup=false, onchange=false",
+  // Check that the right password form is filled on suggesion selection.
+  for (size_t form_i = 0; form_i < arraysize(kTestData); ++form_i) {
+    const auto& test_data = kTestData[form_i];
+    NSString* form_name = base::SysUTF8ToNSString(test_data.form_name);
+    NSString* username_element =
+        base::SysUTF8ToNSString(test_data.username_element);
+    NSString* password_element =
+        base::SysUTF8ToNSString(test_data.password_element);
+
+    // Prepare username and passwords for checking.
+    ExecuteJavaScript(
+        [NSString stringWithFormat:kUsernameAndPasswordTestPreparationScript,
+                                   username_element, password_element]);
+
+    // Verify that the form has not been autofilled.
+    EXPECT_NSEQ(@"[]=, onkeyup=false, onchange=false",
                 ExecuteJavaScript(kUsernamePasswordVerificationScript));
-  };
-  [passwordController_ didSelectSuggestion:suggestion
-                                  forField:@"u"
-                                      form:base::SysUTF8ToNSString(FormName(0))
-                         completionHandler:completion];
-  base::test::ios::WaitUntilCondition(^bool() {
-    return block_was_called;
-  });
+
+    // Emulate that the user clicks on the username field in the first form.
+    // That's required in order that PasswordController can identify which form
+    // should be filled.
+    __block BOOL block_was_called = NO;
+    [passwordController_
+        retrieveSuggestionsForForm:form_name
+                             field:username_element
+                         fieldType:@"text"
+                              type:@"focus"
+                        typedValue:@"abc"
+                          webState:web_state()
+                 completionHandler:^(NSArray* suggestions,
+                                     id<FormSuggestionProvider> provider) {
+                   EXPECT_EQ(1u, [suggestions count]);
+                   block_was_called = YES;
+                 }];
+    EXPECT_TRUE(block_was_called);
+
+    // Tell PasswordController that a suggestion was selected. It should fill
+    // out the password form with the corresponding credentials.
+    FormSuggestion* suggestion = [FormSuggestion suggestionWithValue:@"abc"
+                                                  displayDescription:nil
+                                                                icon:nil
+                                                          identifier:0];
+
+    block_was_called = NO;
+    SuggestionHandledCompletion completion = ^{
+      block_was_called = YES;
+      EXPECT_NSEQ(@"abc[]=def, onkeyup=false, onchange=false",
+                  ExecuteJavaScript(kUsernamePasswordVerificationScript));
+    };
+    [passwordController_
+        didSelectSuggestion:suggestion
+                   forField:@"u"
+                       form:base::SysUTF8ToNSString(FormName(0))
+          completionHandler:completion];
+    EXPECT_TRUE(
+        WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
+          return block_was_called;
+        }));
+  }
 }
 
 // Tests with invalid inputs.
@@ -1287,9 +1350,11 @@ TEST_F(PasswordControllerTest, CheckIncorrectData) {
   }
 }
 
+using PasswordControllerTestSimple = PlatformTest;
+
 // The test case below does not need the heavy fixture from above, but it
 // needs to use MockWebState.
-TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
+TEST_F(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
   base::test::ScopedTaskEnvironment task_environment;
   TestChromeBrowserState::Builder builder;
   std::unique_ptr<TestChromeBrowserState> browser_state(builder.Build());
@@ -1323,47 +1388,59 @@ TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
 }
 
 // Tests that an HTTP page without a password field does not update the SSL
-// status to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+// status to indicate |password_field_shown|.
 TEST_F(PasswordControllerTest, HTTPNoPassword) {
   LoadHtml(kHtmlWithoutPasswordForm, GURL("http://chromium.test"));
 
   web::SSLStatus ssl_status =
       web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  EXPECT_FALSE(ssl_status.content_status &
-               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  security_state::SSLStatusInputEventData* input_events =
+      static_cast<security_state::SSLStatusInputEventData*>(
+          ssl_status.user_data.get());
+  EXPECT_FALSE(input_events &&
+               input_events->input_events()->password_field_shown);
 }
 
 // Tests that an HTTP page with a password field updates the SSL status
-// to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+// to indicate |password_field_shown|.
 TEST_F(PasswordControllerTest, HTTPPassword) {
   LoadHtml(kHtmlWithPasswordForm, GURL("http://chromium.test"));
 
   web::SSLStatus ssl_status =
       web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  EXPECT_TRUE(ssl_status.content_status &
-              web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  security_state::SSLStatusInputEventData* input_events =
+      static_cast<security_state::SSLStatusInputEventData*>(
+          ssl_status.user_data.get());
+  ASSERT_TRUE(input_events);
+  EXPECT_TRUE(input_events->input_events()->password_field_shown);
 }
 
 // Tests that an HTTPS page without a password field does not update the SSL
-// status to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+// status to indicate |password_field_shown|.
 TEST_F(PasswordControllerTest, HTTPSNoPassword) {
   LoadHtml(kHtmlWithoutPasswordForm, GURL("https://chromium.test"));
 
   web::SSLStatus ssl_status =
       web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  EXPECT_FALSE(ssl_status.content_status &
-               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  security_state::SSLStatusInputEventData* input_events =
+      static_cast<security_state::SSLStatusInputEventData*>(
+          ssl_status.user_data.get());
+  EXPECT_FALSE(input_events &&
+               input_events->input_events()->password_field_shown);
 }
 
 // Tests that an HTTPS page with a password field does not update the SSL status
-// to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+// to indicate |password_field_shown|.
 TEST_F(PasswordControllerTest, HTTPSPassword) {
   LoadHtml(kHtmlWithPasswordForm, GURL("https://chromium.test"));
 
   web::SSLStatus ssl_status =
       web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  EXPECT_FALSE(ssl_status.content_status &
-               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  security_state::SSLStatusInputEventData* input_events =
+      static_cast<security_state::SSLStatusInputEventData*>(
+          ssl_status.user_data.get());
+  EXPECT_FALSE(input_events &&
+               input_events->input_events()->password_field_shown);
 }
 
 // Checks that when the user set a focus on a field of a password form which was
@@ -1414,7 +1491,53 @@ TEST_F(PasswordControllerTest, SendingToStoreDynamicallyAddedFormsOnFocus) {
   ExecuteJavaScript(kSetUsernameInFocusScript);
 
   // Wait until GetLogins is called.
-  base::test::ios::WaitUntilCondition(^bool() {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
     return *p_get_logins_called;
-  });
+  }));
+}
+
+// Tests that a touchend event from a button which contains in a password form
+// works as a submission indicator for this password form.
+TEST_F(PasswordControllerTest, TouchendAsSubmissionIndicator) {
+  const char* kHtml[] = {
+      "<html><body>"
+      "<form name='login_form' id='login_form'>"
+      "  <input type='text' name='username'>"
+      "  <input type='password' name='password'>"
+      "  <button id='submit_button' value='Submit'>"
+      "</form>"
+      "</body></html>",
+      "<html><body>"
+      "<form name='login_form' id='login_form'>"
+      "  <input type='text' name='username'>"
+      "  <input type='password' name='password'>"
+      "  <button id='back' value='Back'>"
+      "  <button id='submit_button' type='submit' value='Submit'>"
+      "</form>"
+      "</body></html>"};
+
+  MockLogManager log_manager;
+  EXPECT_CALL(*weak_client_, GetLogManager())
+      .WillRepeatedly(Return(&log_manager));
+
+  for (size_t i = 0; i < arraysize(kHtml); ++i) {
+    LoadHtml(base::SysUTF8ToNSString(kHtml[i]));
+    // Use a mock LogManager to detect that OnPasswordFormSubmitted has been
+    // called. TODO(crbug.com/598672): this is a hack, we should modularize the
+    // code better to allow proper unit-testing.
+    EXPECT_CALL(log_manager, IsLoggingActive()).WillRepeatedly(Return(true));
+    const char kExpectedMessage[] =
+        "Message: \"PasswordManager::ProvisionallySavePassword\"\n";
+    EXPECT_CALL(log_manager, LogSavePasswordProgress(kExpectedMessage));
+    EXPECT_CALL(log_manager,
+                LogSavePasswordProgress(testing::Ne(kExpectedMessage)))
+        .Times(testing::AnyNumber());
+
+    ExecuteJavaScript(
+        @"document.getElementsByName('username')[0].value = 'user1';"
+         "document.getElementsByName('password')[0].value = 'password1';"
+         "var e = new UIEvent('touchend');"
+         "document.getElementById('submit_button').dispatchEvent(e);");
+    testing::Mock::VerifyAndClearExpectations(&log_manager);
+  }
 }

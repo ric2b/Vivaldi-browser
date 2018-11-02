@@ -41,12 +41,6 @@ cr.define('print_preview', function() {
     this.userInfo_ = userInfo;
 
     /**
-     * Instance of native layer used to send metrics to C++ metrics handler.
-     * @private {!print_preview.NativeLayer}
-     */
-    this.nativeLayer_ = print_preview.NativeLayer.getInstance();
-
-    /**
      * Currently displayed printer sharing invitation.
      * @private {print_preview.Invitation}
      */
@@ -95,22 +89,13 @@ cr.define('print_preview', function() {
     this.addChild(this.recentList_);
 
     /**
-     * Destination list containing local destinations.
+     * Destination list containing all print destinations.
      * @private {!print_preview.DestinationList}
      */
-    this.localList_ = new print_preview.DestinationList(
-        this, loadTimeData.getString('localDestinationsTitle'),
-        loadTimeData.getBoolean('showLocalManageButton') ?
-            loadTimeData.getString('manage') :
-            null);
-    this.addChild(this.localList_);
-
-    /**
-     * Destination list containing cloud destinations.
-     * @private {!print_preview.DestinationList}
-     */
-    this.cloudList_ = new print_preview.CloudDestinationList(this);
-    this.addChild(this.cloudList_);
+    this.printList_ = new print_preview.DestinationList(
+        this, loadTimeData.getString('printDestinationsTitle'),
+        loadTimeData.getString('manage'));
+    this.addChild(this.printList_);
   }
 
   /**
@@ -121,13 +106,9 @@ cr.define('print_preview', function() {
     // Dispatched when user requests to sign-in into another Google account.
     ADD_ACCOUNT: 'print_preview.DestinationSearch.ADD_ACCOUNT',
 
-    // Dispatched when the user requests to manage their cloud destinations.
-    MANAGE_CLOUD_DESTINATIONS:
-        'print_preview.DestinationSearch.MANAGE_CLOUD_DESTINATIONS',
-
-    // Dispatched when the user requests to manage their local destinations.
-    MANAGE_LOCAL_DESTINATIONS:
-        'print_preview.DestinationSearch.MANAGE_LOCAL_DESTINATIONS',
+    // Dispatched when the user requests to manage their print destinations.
+    MANAGE_PRINT_DESTINATIONS:
+        'print_preview.DestinationSearch.MANAGE_PRINT_DESTINATIONS',
 
     // Dispatched when the user requests to sign-in to their Google account.
     SIGN_IN: 'print_preview.DestinationSearch.SIGN_IN'
@@ -151,7 +132,6 @@ cr.define('print_preview', function() {
         if (getIsVisible(this.getChildElement('.cloudprint-promo'))) {
           this.metrics_.record(
               print_preview.Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
-          this.nativeLayer_.recordAction('Signin_Impression_FromCloudPrint');
         }
         if (this.userInfo_.initialized)
           this.onUsersChanged_();
@@ -163,8 +143,7 @@ cr.define('print_preview', function() {
         this.invitationStore_.startLoadingInvitations();
       } else {
         // Collapse all destination lists
-        this.localList_.setIsShowAll(false);
-        this.cloudList_.setIsShowAll(false);
+        this.printList_.setIsShowAll(false);
         if (this.provisionalDestinationResolver_)
           this.provisionalDestinationResolver_.cancel();
         this.resetSearch_();
@@ -179,11 +158,14 @@ cr.define('print_preview', function() {
 
     /** Shows the Google Cloud Print promotion banner. */
     showCloudPrintPromo: function() {
-      setIsVisible(this.getChildElement('.cloudprint-promo'), true);
+      const cloudPrintPromoElement = this.getChildElement('.cloudprint-promo');
+      if (getIsVisible(cloudPrintPromoElement))
+        return;
+
+      setIsVisible(cloudPrintPromoElement, true);
       if (this.getIsVisible()) {
         this.metrics_.record(
             print_preview.Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
-        this.nativeLayer_.recordAction('Signin_Impression_FromCloudPrint');
       }
       this.reflowLists_();
     },
@@ -259,13 +241,9 @@ cr.define('print_preview', function() {
           this.updateInvitations_.bind(this));
 
       this.tracker.add(
-          this.localList_,
+          this.printList_,
           print_preview.DestinationList.EventType.ACTION_LINK_ACTIVATED,
-          this.onManageLocalDestinationsActivated_.bind(this));
-      this.tracker.add(
-          this.cloudList_,
-          print_preview.DestinationList.EventType.ACTION_LINK_ACTIVATED,
-          this.onManageCloudDestinationsActivated_.bind(this));
+          this.onManagePrintDestinationsActivated_.bind(this));
 
       this.tracker.add(
           this.userInfo_, print_preview.UserInfo.EventType.USERS_CHANGED,
@@ -287,8 +265,7 @@ cr.define('print_preview', function() {
     decorateInternal: function() {
       this.searchBox_.render(this.getChildElement('.search-box-container'));
       this.recentList_.render(this.getChildElement('.recent-list'));
-      this.localList_.render(this.getChildElement('.local-list'));
-      this.cloudList_.render(this.getChildElement('.cloud-list'));
+      this.printList_.render(this.getChildElement('.print-list'));
       this.getChildElement('.promo-text').innerHTML = loadTimeData.getStringF(
           'cloudPrintPromotion', '<a is="action-link" class="sign-in">',
           '</a>');
@@ -301,7 +278,7 @@ cr.define('print_preview', function() {
      * @private
      */
     getAvailableListsHeight_: function() {
-      var elStyle = window.getComputedStyle(this.getElement());
+      const elStyle = window.getComputedStyle(this.getElement());
       return this.getElement().offsetHeight -
           parseInt(elStyle.getPropertyValue('padding-top'), 10) -
           parseInt(elStyle.getPropertyValue('padding-bottom'), 10) -
@@ -318,8 +295,7 @@ cr.define('print_preview', function() {
      */
     filterLists_: function(query) {
       this.recentList_.updateSearchQuery(query);
-      this.localList_.updateSearchQuery(query);
-      this.cloudList_.updateSearchQuery(query);
+      this.printList_.updateSearchQuery(query);
     },
 
     /**
@@ -336,17 +312,15 @@ cr.define('print_preview', function() {
      * @private
      */
     renderDestinations_: function() {
-      var recentDestinations = [];
-      var localDestinations = [];
-      var cloudDestinations = [];
-      var unregisteredCloudDestinations = [];
+      const recentDestinations = this.destinationStore_.getRecentDestinations(
+          this.userInfo_.activeUser);
+      const localDestinations = [];
+      const cloudDestinations = [];
+      const unregisteredCloudDestinations = [];
 
-      var destinations =
+      const destinations =
           this.destinationStore_.destinations(this.userInfo_.activeUser);
       destinations.forEach(function(destination) {
-        if (destination.isRecent) {
-          recentDestinations.push(destination);
-        }
         if (destination.isLocal ||
             destination.origin == print_preview.DestinationOrigin.DEVICE) {
           localDestinations.push(destination);
@@ -367,17 +341,18 @@ cr.define('print_preview', function() {
         this.registerPromoShownMetricRecorded_ = true;
       }
 
-      var finalCloudDestinations =
+      const finalCloudDestinations =
           unregisteredCloudDestinations
               .slice(0, DestinationSearch.MAX_PROMOTED_UNREGISTERED_PRINTERS_)
               .concat(
                   cloudDestinations,
                   unregisteredCloudDestinations.slice(
                       DestinationSearch.MAX_PROMOTED_UNREGISTERED_PRINTERS_));
+      const finalPrintDestinations =
+          localDestinations.concat(finalCloudDestinations);
 
       this.recentList_.updateDestinations(recentDestinations);
-      this.localList_.updateDestinations(localDestinations);
-      this.cloudList_.updateDestinations(finalCloudDestinations);
+      this.printList_.updateDestinations(finalPrintDestinations);
     },
 
     /**
@@ -389,42 +364,39 @@ cr.define('print_preview', function() {
         return;
       }
 
-      var hasCloudList = getIsVisible(this.getChildElement('.cloud-list'));
-      var lists = [this.recentList_, this.localList_];
-      if (hasCloudList) {
-        lists.push(this.cloudList_);
-      }
-
-      var getListsTotalHeight = function(lists, counts) {
+      const lists = [this.recentList_, this.printList_];
+      const getListsTotalHeight = function(lists, counts) {
         return lists.reduce(function(sum, list, index) {
-          var container = list.getContainerElement();
+          const container = list.getContainerElement();
           return sum + list.getEstimatedHeightInPixels(counts[index]) +
               parseInt(window.getComputedStyle(container).paddingBottom, 10);
         }, 0);
       };
-      var getCounts = function(lists, count) {
+      const getCounts = function(lists, count) {
         return lists.map(function(list) {
           return count;
         });
       };
 
-      var availableHeight = this.getAvailableListsHeight_();
-      var listsEl = this.getChildElement('.lists');
+      const availableHeight = this.getAvailableListsHeight_();
+      const listsEl = this.getChildElement('.lists');
       listsEl.style.maxHeight = availableHeight + 'px';
 
-      var maxListLength = lists.reduce(function(prevCount, list) {
+      const maxListLength = lists.reduce(function(prevCount, list) {
         return Math.max(prevCount, list.getDestinationsCount());
       }, 0);
-      for (var i = 1; i <= maxListLength; i++) {
+
+      let i = 1;
+      for (; i <= maxListLength; i++) {
         if (getListsTotalHeight(lists, getCounts(lists, i)) > availableHeight) {
           i--;
           break;
         }
       }
-      var counts = getCounts(lists, i);
+      const counts = getCounts(lists, i);
       // Fill up the possible n-1 free slots left by the previous loop.
       if (getListsTotalHeight(lists, counts) < availableHeight) {
-        for (var countIndex = 0; countIndex < counts.length; countIndex++) {
+        for (let countIndex = 0; countIndex < counts.length; countIndex++) {
           counts[countIndex]++;
           if (getListsTotalHeight(lists, counts) > availableHeight) {
             counts[countIndex]--;
@@ -439,10 +411,10 @@ cr.define('print_preview', function() {
 
       // Set height of the list manually so that search filter doesn't change
       // lists height.
-      var listsHeight = getListsTotalHeight(lists, counts) + 'px';
+      const listsHeight = getListsTotalHeight(lists, counts) + 'px';
       if (listsHeight != listsEl.style.height) {
         // Try to close account select if there's a possibility it's open now.
-        var accountSelectEl = this.getChildElement('.account-select');
+        const accountSelectEl = this.getChildElement('.account-select');
         if (!accountSelectEl.disabled) {
           accountSelectEl.disabled = true;
           accountSelectEl.disabled = false;
@@ -457,13 +429,10 @@ cr.define('print_preview', function() {
      * @private
      */
     updateThrobbers_: function() {
-      this.localList_.setIsThrobberVisible(
-          this.destinationStore_.isLocalDestinationSearchInProgress);
-      this.cloudList_.setIsThrobberVisible(
-          this.destinationStore_.isCloudDestinationSearchInProgress);
+      this.printList_.setIsThrobberVisible(
+          this.destinationStore_.isPrintDestinationSearchInProgress);
       this.recentList_.setIsThrobberVisible(
-          this.destinationStore_.isLocalDestinationSearchInProgress &&
-          this.destinationStore_.isCloudDestinationSearchInProgress);
+          this.destinationStore_.isPrintDestinationSearchInProgress);
       this.reflowLists_();
     },
 
@@ -472,7 +441,7 @@ cr.define('print_preview', function() {
      * @private
      */
     updateInvitations_: function() {
-      var invitations = this.userInfo_.activeUser ?
+      const invitations = this.userInfo_.activeUser ?
           this.invitationStore_.invitations(this.userInfo_.activeUser) :
           [];
       if (invitations.length > 0) {
@@ -495,7 +464,7 @@ cr.define('print_preview', function() {
      * @private
      */
     showInvitation_: function(invitation) {
-      var invitationText = '';
+      let invitationText = '';
       if (invitation.asGroupManager) {
         invitationText = loadTimeData.getStringF(
             'groupPrinterSharingInviteText', HTMLEscape(invitation.sender),
@@ -508,7 +477,7 @@ cr.define('print_preview', function() {
       }
       this.getChildElement('.invitation-text').innerHTML = invitationText;
 
-      var acceptButton = this.getChildElement('.invitation-accept-button');
+      const acceptButton = this.getChildElement('.invitation-accept-button');
       acceptButton.textContent = loadTimeData.getString(
           invitation.asGroupManager ? 'acceptForGroup' : 'accept');
       acceptButton.disabled = !!this.invitationStore_.invitationInProgress;
@@ -524,17 +493,17 @@ cr.define('print_preview', function() {
      * @private
      */
     onUsersChanged_: function() {
-      var loggedIn = this.userInfo_.loggedIn;
+      const loggedIn = this.userInfo_.loggedIn;
       if (loggedIn) {
-        var accountSelectEl = this.getChildElement('.account-select');
+        const accountSelectEl = this.getChildElement('.account-select');
         accountSelectEl.innerHTML = '';
         this.userInfo_.users.forEach(function(account) {
-          var option = document.createElement('option');
+          const option = document.createElement('option');
           option.text = account;
           option.value = account;
           accountSelectEl.add(option);
         });
-        var option = document.createElement('option');
+        const option = document.createElement('option');
         option.text = loadTimeData.getString('addAccountTitle');
         option.value = '';
         accountSelectEl.add(option);
@@ -545,7 +514,6 @@ cr.define('print_preview', function() {
       }
 
       setIsVisible(this.getChildElement('.user-info'), loggedIn);
-      setIsVisible(this.getChildElement('.cloud-list'), loggedIn);
       setIsVisible(this.getChildElement('.cloudprint-promo'), !loggedIn);
       this.updateInvitations_();
     },
@@ -569,15 +537,9 @@ cr.define('print_preview', function() {
      * @private
      */
     onDestinationConfigureRequest_: function(event) {
-      var destination = event.detail.destination;
-      // Cloud Print Device printers are stored in the local list
-      // crbug.com/713831.
-      // TODO(crbug.com/416701): Upon resolution, update this.
-      var destinationItem =
-          (destination.isLocal ||
-           destination.origin == print_preview.DestinationOrigin.DEVICE) ?
-          this.localList_.getDestinationItem(destination.id) :
-          this.cloudList_.getDestinationItem(destination.id);
+      const destination = event.detail.destination;
+      const destinationItem =
+          this.printList_.getDestinationItem(destination.id);
       assert(
           destinationItem != null,
           'User does not select a valid destination item.');
@@ -610,12 +572,12 @@ cr.define('print_preview', function() {
           .then(
               response => {
                 this.destinationInConfiguring_ = null;
-                this.localList_.getDestinationItem(destination.id)
+                this.printList_.getDestinationItem(destination.id)
                     .onConfigureResolved(response);
               },
               () => {
                 this.destinationInConfiguring_ = null;
-                this.localList_.getDestinationItem(destination.id)
+                this.printList_.getDestinationItem(destination.id)
                     .onConfigureResolved(
                         {printerId: destination.id, success: false});
               });
@@ -650,7 +612,7 @@ cr.define('print_preview', function() {
             !!this.provisionalDestinationResolver_,
             'Unable to create provisional destination resolver');
 
-        var lastFocusedElement = document.activeElement;
+        const lastFocusedElement = document.activeElement;
         this.addChild(this.provisionalDestinationResolver_);
         this.provisionalDestinationResolver_.run(this.getElement())
             .then(resolvedDestination => {
@@ -688,14 +650,8 @@ cr.define('print_preview', function() {
      * @private
      */
     onDestinationStoreSelect_: function() {
-      var destinations =
-          this.destinationStore_.destinations(this.userInfo_.activeUser);
-      var recentDestinations = [];
-      destinations.forEach(function(destination) {
-        if (destination.isRecent) {
-          recentDestinations.push(destination);
-        }
-      });
+      const recentDestinations = this.destinationStore_.getRecentDestinations(
+          this.userInfo_.activeUser);
       this.recentList_.updateDestinations(recentDestinations);
       this.reflowLists_();
     },
@@ -725,23 +681,13 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * Called when the manage cloud printers action is activated.
+     * Called when the manage all printers action is activated.
      * @private
      */
-    onManageCloudDestinationsActivated_: function() {
+    onManagePrintDestinationsActivated_: function() {
       cr.dispatchSimpleEvent(
           this,
-          print_preview.DestinationSearch.EventType.MANAGE_CLOUD_DESTINATIONS);
-    },
-
-    /**
-     * Called when the manage local printers action is activated.
-     * @private
-     */
-    onManageLocalDestinationsActivated_: function() {
-      cr.dispatchSimpleEvent(
-          this,
-          print_preview.DestinationSearch.EventType.MANAGE_LOCAL_DESTINATIONS);
+          print_preview.DestinationSearch.EventType.MANAGE_PRINT_DESTINATIONS);
     },
 
     /**
@@ -761,8 +707,8 @@ cr.define('print_preview', function() {
      * @private
      */
     onAccountChange_: function() {
-      var accountSelectEl = this.getChildElement('.account-select');
-      var account =
+      const accountSelectEl = this.getChildElement('.account-select');
+      const account =
           accountSelectEl.options[accountSelectEl.selectedIndex].value;
       if (account) {
         this.userInfo_.activeUser = account;
@@ -773,7 +719,7 @@ cr.define('print_preview', function() {
       } else {
         cr.dispatchSimpleEvent(this, DestinationSearch.EventType.ADD_ACCOUNT);
         // Set selection back to the active user.
-        for (var i = 0; i < accountSelectEl.options.length; i++) {
+        for (let i = 0; i < accountSelectEl.options.length; i++) {
           if (accountSelectEl.options[i].value == this.userInfo_.activeUser) {
             accountSelectEl.selectedIndex = i;
             break;

@@ -31,7 +31,7 @@ public class SyncUserDataWiper {
         final Promise<Void> promise = new Promise<>();
 
         final BookmarkModel model = new BookmarkModel();
-        model.runAfterBookmarkModelLoaded(new Runnable() {
+        model.finishLoadingBookmarkModel(new Runnable() {
             @Override
             public void run() {
                 model.removeAllUserBookmarks();

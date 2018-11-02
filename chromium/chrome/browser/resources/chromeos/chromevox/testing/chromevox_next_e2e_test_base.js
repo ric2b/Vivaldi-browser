@@ -27,6 +27,12 @@ function ChromeVoxNextE2ETest() {
 
   // For tests, enable announcement of events we trigger via automation.
   DesktopAutomationHandler.announceActions = true;
+
+  this.originalOutputContextValues_ = {};
+  for (var role in Output.ROLE_INFO_) {
+    this.originalOutputContextValues_[role] =
+        Output.ROLE_INFO_[role]['outputContextFirst'];
+  }
 }
 
 ChromeVoxNextE2ETest.prototype = {
@@ -86,5 +92,21 @@ ChromeVoxNextE2ETest.prototype = {
   forceContextualLastOutput: function() {
     for (var role in Output.ROLE_INFO_)
       Output.ROLE_INFO_[role]['outputContextFirst'] = undefined;
+  },
+
+  /**
+   * Forces output to place context utterances at the beginning of output.
+   */
+  forceContextualFirstOutput: function() {
+    for (var role in Output.ROLE_INFO_)
+      Output.ROLE_INFO_[role]['outputContextFirst'] = true;
+  },
+
+  /** Resets contextual output values to their defaults. */
+  resetContextualOutput: function() {
+    for (var role in Output.ROLE_INFO_) {
+      Output.ROLE_INFO_[role]['outputContextFirst'] =
+          this.originalOutputContextValues_[role];
+    }
   }
 };

@@ -9,6 +9,8 @@ cr.define('extensions', function() {
   const KeyboardShortcuts = Polymer({
     is: 'extensions-keyboard-shortcuts',
 
+    behaviors: [CrContainerShadowBehavior, extensions.ItemBehavior],
+
     properties: {
       /** @type {Array<!chrome.developerPrivate.ExtensionInfo>} */
       items: Array,
@@ -21,6 +23,15 @@ cr.define('extensions', function() {
         type: Object,
         value: chrome.developerPrivate.CommandScope,
       },
+    },
+
+    listeners: {
+      'view-enter-start': 'onViewEnter_',
+    },
+
+    /** @private */
+    onViewEnter_: function() {
+      chrome.metricsPrivate.recordUserAction('Options_ExtensionCommands');
     },
 
     /**

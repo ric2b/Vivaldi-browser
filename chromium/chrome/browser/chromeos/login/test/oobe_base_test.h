@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/test/https_forwarder.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -23,7 +23,7 @@
 namespace content {
 class WebUI;
 class WindowedNotificationObserver;
-}
+}  // namespace content
 
 namespace extensions {
 class ScopedCurrentChannel;
@@ -96,6 +96,15 @@ class OobeBaseTest : public ExtensionApiTest {
   void ExecuteJsInSigninFrame(const std::string& js);
   void SetSignFormField(const std::string& field_id,
                         const std::string& field_value);
+
+  // Sets up fake gaia for the login code:
+  // - Maps |user_email| to |gaia_id|. If |gaia_id| is empty, |user_email| will
+  //   be mapped to kDefaultGaiaId in FakeGaia;
+  // - Issues a special all-scope access token associated with the test refresh
+  //   token;
+  void SetupFakeGaiaForLogin(const std::string& user_email,
+                             const std::string& gaia_id,
+                             const std::string& refresh_token);
 
   std::unique_ptr<FakeGaia> fake_gaia_;
   NetworkPortalDetectorTestImpl* network_portal_detector_;

@@ -167,6 +167,8 @@ Polymer({
    * @private
    */
   getStateText_: function(networkProperties) {
+    if (!networkProperties.ConnectionState)
+      return '';
     return this.i18n('Onc' + networkProperties.ConnectionState);
   },
 
@@ -216,6 +218,27 @@ Polymer({
   isCellular_: function(networkProperties) {
     return networkProperties.Type == CrOnc.Type.CELLULAR &&
         !!networkProperties.Cellular;
+  },
+
+  /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  showCellularSim_: function(networkProperties) {
+    return networkProperties.Type == CrOnc.Type.CELLULAR &&
+        !!networkProperties.Cellular &&
+        networkProperties.Cellular.Family != 'CDMA';
+  },
+
+  /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  showCellularChooseNetwork_: function(networkProperties) {
+    return networkProperties.Type == CrOnc.Type.CELLULAR &&
+        !!this.get('Cellular.SupportNetworkScan', this.networkProperties);
   },
 
   /**
@@ -290,6 +313,8 @@ Polymer({
     var onc = this.getEmptyNetworkProperties_();
     if (field == 'APN') {
       CrOnc.setTypeProperty(onc, 'APN', value);
+    } else if (field == 'SIMLockStatus') {
+      CrOnc.setTypeProperty(onc, 'SIMLockStatus', value);
     } else {
       console.error('Unexpected property change event: ' + field);
       return;
@@ -426,8 +451,11 @@ Polymer({
     var type = this.networkProperties.Type;
     if (type == CrOnc.Type.CELLULAR && !!this.networkProperties.Cellular) {
       fields.push(
+          'Cellular.HomeProvider.Name', 'Cellular.ServingOperator.Name',
           'Cellular.ActivationState', 'Cellular.RoamingState',
-          'RestrictedConnectivity', 'Cellular.ServingOperator.Name');
+          'RestrictedConnectivity', 'Cellular.MEID', 'Cellular.ESN',
+          'Cellular.ICCID', 'Cellular.IMEI', 'Cellular.IMSI', 'Cellular.MDN',
+          'Cellular.MIN');
     } else if (type == CrOnc.Type.WI_FI) {
       fields.push('RestrictedConnectivity');
     } else if (type == CrOnc.Type.WI_MAX) {

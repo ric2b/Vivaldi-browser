@@ -6,11 +6,11 @@
 #define WebServiceWorkerClientsInfo_h
 
 #include "public/platform/WebCallbacks.h"
-#include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebVector.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerClientType.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-shared.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom-shared.h"
 
 #include <memory>
 
@@ -20,18 +20,18 @@ struct WebServiceWorkerError;
 
 struct WebServiceWorkerClientInfo {
   WebServiceWorkerClientInfo()
-      : page_visibility_state(kWebPageVisibilityStateLast),
+      : page_visibility_state(mojom::PageVisibilityState::kLast),
         is_focused(false),
         frame_type(WebURLRequest::kFrameTypeNone),
-        client_type(kWebServiceWorkerClientTypeWindow) {}
+        client_type(mojom::ServiceWorkerClientType::kWindow) {}
 
   WebString uuid;
 
-  WebPageVisibilityState page_visibility_state;
+  mojom::PageVisibilityState page_visibility_state;
   bool is_focused;
   WebURL url;
   WebURLRequest::FrameType frame_type;
-  WebServiceWorkerClientType client_type;
+  mojom::ServiceWorkerClientType client_type;
 };
 
 struct WebServiceWorkerClientsInfo {

@@ -30,10 +30,10 @@
 
 #include "modules/quota/DOMWindowQuota.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/quota/DeprecatedStorageInfo.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -67,7 +67,7 @@ DeprecatedStorageInfo* DOMWindowQuota::webkitStorageInfo() const {
   return storage_info_.Get();
 }
 
-DEFINE_TRACE(DOMWindowQuota) {
+void DOMWindowQuota::Trace(blink::Visitor* visitor) {
   visitor->Trace(storage_info_);
   Supplement<LocalDOMWindow>::Trace(visitor);
 }

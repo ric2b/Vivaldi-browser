@@ -6,7 +6,7 @@
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_SELECTION_CONTROLLER_CLIENT_CHILD_FRAME_H_
 
 #include "base/macros.h"
-#include "cc/input/selection.h"
+#include "components/viz/common/quads/selection.h"
 #include "content/common/content_export.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 #include "ui/touch_selection/touch_selection_menu_runner.h"
@@ -33,7 +33,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
 
   void DidStopFlinging();
   void UpdateSelectionBoundsIfNeeded(
-      const cc::Selection<gfx::SelectionBound>& selection,
+      const viz::Selection<gfx::SelectionBound>& selection,
       float device_scale_factor);
 
  private:
@@ -46,6 +46,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
                                 const gfx::PointF& extent) override;
   void OnSelectionEvent(ui::SelectionEventType event) override;
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
+  void DidScroll() override;
 
   // ui::TouchSelectionMenuClient:
   bool IsCommandIdEnabled(int command_id) const override;
@@ -61,6 +62,8 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
   // The last selection bounds reported by the view.
   gfx::SelectionBound selection_start_;
   gfx::SelectionBound selection_end_;
+  // Keep track of the view origin as of the last time selection was updated.
+  gfx::Point view_origin_at_last_update_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchSelectionControllerClientChildFrame);
 };

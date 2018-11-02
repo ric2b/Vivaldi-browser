@@ -81,44 +81,50 @@
   # START chrome/browser section.
   "chrome/browser/browser_resources.grd": {
     "includes": [11000],
-    "structures": [11520],
+    "structures": [11470],
   },
   "chrome/browser/resources/component_extension_resources.grd": {
-    "includes": [11610],
-    "structures": [11860],
+    "includes": [11560],
+    "structures": [11810],
   },
   "chrome/browser/resources/invalidations_resources.grd": {
-    "includes": [11910],
+    "includes": [11860],
+  },
+  "chrome/browser/resources/md_extensions/extensions_resources_vulcanized.grd": {
+    "includes": [11900],
+  },
+  "chrome/browser/resources/md_extensions/extensions_resources.grd": {
+    "structures": [11910],
   },
   "chrome/browser/resources/net_internals_resources.grd": {
-    "includes": [11960],
+    "includes": [12000],
   },
-  "chrome/browser/resources/password_manager_internals_resources.grd": {
-    "includes": [12040],
+  "chrome/browser/resources/print_preview/print_preview_resources.grd": {
+    "structures": [12010],
   },
   "chrome/browser/resources/quota_internals_resources.grd": {
-    "includes": [12050],
+    "includes": [12110],
   },
   "chrome/browser/resources/settings/settings_resources_vulcanized.grd": {
-    "includes": [12070],
+    "includes": [12130],
   },
   "chrome/browser/resources/settings/settings_resources.grd": {
-    "structures": [12080],
+    "structures": [12140],
   },
   "chrome/browser/resources/sync_file_system_internals_resources.grd": {
-    "includes": [12580],
+    "includes": [12640],
   },
   "chrome/browser/resources/task_scheduler_internals/resources.grd": {
-    "includes": [12610],
+    "includes": [12670],
   },
   "chrome/browser/resources/translate_internals_resources.grd": {
-    "includes": [12620],
+    "includes": [12680],
   },
   "chrome/browser/resources/vr_shell_resources.grd": {
-    "includes": [12630],
+    "includes": [12690],
   },
   "chrome/browser/resources/webapks_ui_resources.grd": {
-    "includes": [12640],
+    "includes": [12700],
   },
   # END chrome/browser section.
 
@@ -372,6 +378,10 @@
 
   "third_party/libaddressinput/chromium/address_input_strings.grd": {
     "messages": [28700],
+  },
+
+  "mojo/public/js/mojo_bindings_resources.grd": {
+    "includes": [28800],
   },
   # END "everything else" section.
   # Everything but chrome/, components/, content/, and ios/

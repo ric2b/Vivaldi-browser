@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
-#ifndef MEDIA_FILTERS_PLATFORM_MEDIA_PIPELINE_TYPES_H_
-#define MEDIA_FILTERS_PLATFORM_MEDIA_PIPELINE_TYPES_H_
+#ifndef PLATFORM_MEDIA_COMMON_PLATFORM_MEDIA_PIPELINE_TYPES_H_
+#define PLATFORM_MEDIA_COMMON_PLATFORM_MEDIA_PIPELINE_TYPES_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include "media/base/sample_format.h"
 #include "media/base/video_frame.h"
@@ -25,9 +28,9 @@ enum PlatformMediaDataType {
 enum MediaDataStatus {
   kOk,
   kEOS,
-  kError,
+  kMediaError,
   kConfigChanged,
-  kMediaDataStatusCount,
+  kCount
 };
 
 // Order is important, be careful when adding new values.
@@ -53,14 +56,14 @@ struct PlatformAudioConfig {
            format != kUnknownSampleFormat;
   }
 
-  media::SampleFormat format;
+  SampleFormat format;
   int channel_count;
   int samples_per_second;
 };
 
 struct PlatformVideoConfig {
   struct Plane {
-    Plane() : stride(-1), offset(-1) {}
+    Plane() : stride(-1), offset(-1), size(-1) {}
 
     bool is_valid() const { return stride > 0 && offset >= 0 && size > 0; }
 
@@ -70,7 +73,7 @@ struct PlatformVideoConfig {
   };
 
   PlatformVideoConfig()
-      : rotation(VIDEO_ROTATION_0),
+      : rotation(VideoRotation::VIDEO_ROTATION_0),
         decoding_mode(PlatformMediaDecodingMode::SOFTWARE) {}
   PlatformVideoConfig(const PlatformVideoConfig& other) = default;
   ~PlatformVideoConfig() {}
@@ -93,4 +96,4 @@ struct PlatformVideoConfig {
 
 }  // namespace media
 
-#endif  // MEDIA_FILTERS_PLATFORM_MEDIA_PIPELINE_TYPES_H_
+#endif  // PLATFORM_MEDIA_COMMON_PLATFORM_MEDIA_PIPELINE_TYPES_H_

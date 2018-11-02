@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
+#include "base/threading/thread_restrictions.h"
 
 namespace {
 
@@ -84,6 +85,9 @@ bool Process::CanBackgroundProcesses() {
 // static
 void Process::TerminateCurrentProcessImmediately(int exit_code) {
   ::TerminateProcess(GetCurrentProcess(), exit_code);
+  // There is some ambiguity over whether the call above can return. Rather than
+  // hitting confusing crashes later on we should crash right here.
+  CHECK(false);
 }
 
 bool Process::IsValid() const {
@@ -132,16 +136,21 @@ bool Process::Terminate(int exit_code, bool wait) const {
   // exit_code cannot be implemented.
   DCHECK(IsValid());
   bool result = (::TerminateProcess(Handle(), exit_code) != FALSE);
-  if (result && wait) {
-    // The process may not end immediately due to pending I/O
-    if (::WaitForSingleObject(Handle(), 60 * 1000) != WAIT_OBJECT_0)
-      DPLOG(ERROR) << "Error waiting for process exit";
-  } else if (!result) {
-    DPLOG(ERROR) << "Unable to terminate process";
-  }
   if (result) {
-    base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(Pid(),
-                                                                   exit_code);
+    // The process may not end immediately due to pending I/O
+    if (wait && ::WaitForSingleObject(Handle(), 60 * 1000) != WAIT_OBJECT_0)
+      DPLOG(ERROR) << "Error waiting for process exit";
+    Exited(exit_code);
+  } else {
+    // The process can't be terminated, perhaps because it has already
+    // exited.
+    DPLOG(ERROR) << "Unable to terminate process";
+    if (::WaitForSingleObject(Handle(), 0) == WAIT_OBJECT_0) {
+      DWORD actual_exit;
+      Exited(::GetExitCodeProcess(Handle(), &actual_exit) ? actual_exit
+                                                          : exit_code);
+      result = true;
+    }
   }
   return result;
 }
@@ -152,6 +161,9 @@ bool Process::WaitForExit(int* exit_code) const {
 }
 
 bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
+  if (!timeout.is_zero())
+    internal::AssertBaseSyncPrimitivesAllowed();
+
   // Record the event that this thread is blocking upon (for hang diagnosis).
   base::debug::ScopedProcessWaitActivity process_activity(this);
 
@@ -167,9 +179,13 @@ bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   if (exit_code)
     *exit_code = temp_code;
 
-  base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(
-      Pid(), static_cast<int>(temp_code));
+  Exited(temp_code);
   return true;
+}
+
+void Process::Exited(int exit_code) const {
+  base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(Pid(),
+                                                                 exit_code);
 }
 
 bool Process::IsProcessBackgrounded() const {

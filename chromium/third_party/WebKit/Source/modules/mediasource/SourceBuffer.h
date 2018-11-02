@@ -32,12 +32,12 @@
 #define SourceBuffer_h
 
 #include <memory>
-#include "core/dom/SuspendableObject.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
+#include "core/dom/PausableObject.h"
 #include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "modules/EventTargetModules.h"
 #include "modules/mediasource/TrackDefaultList.h"
 #include "platform/AsyncMethodRunner.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebSourceBufferClient.h"
@@ -56,7 +56,7 @@ class WebSourceBuffer;
 
 class SourceBuffer final : public EventTargetWithInlineData,
                            public ActiveScriptWrappable<SourceBuffer>,
-                           public SuspendableObject,
+                           public PausableObject,
                            public WebSourceBufferClient {
   USING_GARBAGE_COLLECTED_MIXIN(SourceBuffer);
   DEFINE_WRAPPERTYPEINFO();
@@ -103,9 +103,9 @@ class SourceBuffer final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  // SuspendableObject
-  void Suspend() override;
-  void Resume() override;
+  // PausableObject
+  void Pause() override;
+  void Unpause() override;
   void ContextDestroyed(ExecutionContext*) override;
 
   // EventTarget interface
@@ -116,7 +116,7 @@ class SourceBuffer final : public EventTargetWithInlineData,
   bool InitializationSegmentReceived(const WebVector<MediaTrackInfo>&) override;
   void NotifyParseWarning(const ParseWarning) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   SourceBuffer(std::unique_ptr<WebSourceBuffer>,

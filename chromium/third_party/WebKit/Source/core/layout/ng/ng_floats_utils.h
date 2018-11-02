@@ -5,9 +5,9 @@
 #ifndef NGFloatsUtils_h
 #define NGFloatsUtils_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "platform/LayoutUnit.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -31,7 +31,6 @@ PositionFloat(LayoutUnit origin_block_offset,
               LayoutUnit parent_bfc_block_offset,
               NGUnpositionedFloat*,
               const NGConstraintSpace& parent_space,
-              LayoutUnit parent_inline_size,
               NGExclusionSpace* exclusion_space);
 
 // Positions the list of {@code unpositioned_floats}. Adds them as exclusions to
@@ -39,9 +38,8 @@ PositionFloat(LayoutUnit origin_block_offset,
 CORE_EXPORT const Vector<NGPositionedFloat> PositionFloats(
     LayoutUnit origin_block_offset,
     LayoutUnit container_block_offset,
-    const Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
+    const Vector<scoped_refptr<NGUnpositionedFloat>>& unpositioned_floats,
     const NGConstraintSpace& space,
-    LayoutUnit parent_inline_size,
     NGExclusionSpace* exclusion_space);
 
 }  // namespace blink

@@ -1,5 +1,4 @@
 include_rules = [
-  "+components/scheduler/child",
   "+content/child",
   "+content/network",
   "+content/public/utility",
@@ -7,5 +6,6 @@ include_rules = [
   "+services/service_manager",
   "+services/shape_detection",
   "+services/video_capture",
+  "+services/viz",
   "+sandbox/win/src",
 ]

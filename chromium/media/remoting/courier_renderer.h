@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -141,6 +142,11 @@ class CourierRenderer : public Renderer {
   // DemuxerStreamAdapters and record this information in the metrics.
   void MeasureAndRecordDataRates();
 
+  // Helper to check whether is waiting for data from the Demuxers while
+  // receiver is waiting for buffering. If yes, remoting will be continued even
+  // though the playback might be delayed or paused.
+  bool IsWaitingForDataFromDemuxers() const;
+
   State state_;
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
@@ -186,12 +192,14 @@ class CourierRenderer : public Renderer {
   // Stores all |current_media_time_| and the local time when updated in the
   // moving time window. This is used to check whether the playback duration
   // matches the update duration in the window.
-  std::deque<std::pair<base::TimeTicks, base::TimeDelta>> media_time_queue_;
+  base::circular_deque<std::pair<base::TimeTicks, base::TimeDelta>>
+      media_time_queue_;
 
   // Stores all updates on the number of video frames decoded/dropped, and the
   // local time when updated in the moving time window. This is used to check
   // whether too many video frames were dropped.
-  std::deque<std::tuple<base::TimeTicks, int, int>> video_stats_queue_;
+  base::circular_deque<std::tuple<base::TimeTicks, int, int>>
+      video_stats_queue_;
 
   // The total number of frames decoded/dropped in the time window.
   int sum_video_frames_decoded_ = 0;
@@ -208,6 +216,10 @@ class CourierRenderer : public Renderer {
   // A timer that polls the DemuxerStreamAdapters periodically to measure
   // the data flow rates for metrics.
   base::RepeatingTimer data_flow_poll_timer_;
+
+  // Indicates whether is waiting for data from the Demuxers while receiver
+  // reported buffer underflow.
+  bool receiver_is_blocked_on_local_demuxers_ = true;
 
   base::WeakPtrFactory<CourierRenderer> weak_factory_;
 

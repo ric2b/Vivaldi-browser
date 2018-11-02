@@ -158,16 +158,16 @@ void BrowsingHistoryBridge::HasOtherFormsOfBrowsingHistory(
     bool has_other_forms, bool has_synced_results) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_BrowsingHistoryBridge_hasOtherFormsOfBrowsingData(
-      env, j_history_service_obj_, has_other_forms, has_synced_results);
+      env, j_history_service_obj_, has_other_forms);
 }
 
 Profile* BrowsingHistoryBridge::GetProfile() {
   return profile_;
 }
 
-static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& obj,
-                  jboolean is_incognito) {
+static jlong JNI_BrowsingHistoryBridge_Init(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj,
+                                            jboolean is_incognito) {
   BrowsingHistoryBridge* bridge =
       new BrowsingHistoryBridge(env, obj, is_incognito);
   return reinterpret_cast<intptr_t>(bridge);

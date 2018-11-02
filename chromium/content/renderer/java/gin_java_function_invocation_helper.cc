@@ -10,7 +10,7 @@
 #include "base/values.h"
 #include "content/common/android/gin_java_bridge_errors.h"
 #include "content/common/android/gin_java_bridge_value.h"
-#include "content/public/child/v8_value_converter.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "content/renderer/java/gin_java_bridge_object.h"
 #include "content/renderer/java/gin_java_bridge_value_converter.h"
 
@@ -69,7 +69,7 @@ v8::Local<v8::Value> GinJavaFunctionInvocationHelper::Invoke(
       if (arg.get())
         arguments.Append(std::move(arg));
       else
-        arguments.Append(base::MakeUnique<base::Value>());
+        arguments.Append(std::make_unique<base::Value>());
     }
   }
 

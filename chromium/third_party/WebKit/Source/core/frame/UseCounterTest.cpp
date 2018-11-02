@@ -7,6 +7,7 @@
 #include "core/page/Page.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/testing/HistogramTester.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/KURL.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -23,9 +24,6 @@ const char kSVGFeaturesHistogramName[] = "Blink.UseCounter.SVGImage.Features";
 const char kSVGCSSHistogramName[] = "Blink.UseCounter.SVGImage.CSSProperties";
 const char kSVGAnimatedCSSHistogramName[] =
     "Blink.UseCounter.SVGImage.AnimatedCSSProperties";
-
-const char kLegacyFeaturesHistogramName[] = "WebCore.FeatureObserver";
-const char kLegacyCSSHistogramName[] = "WebCore.FeatureObserver.CSSProperties";
 
 // In practice, SVGs always appear to be loaded with an about:blank URL
 const char kSvgUrl[] = "about:blank";
@@ -53,7 +51,6 @@ class UseCounterTest : public ::testing::Test {
   LocalFrame* GetFrame() { return &dummy_->GetFrame(); }
   template <typename T>
   void HistogramBasicTest(const std::string& histogram,
-                          const std::string& legacy_histogram,
                           T item,
                           T second_item,
                           std::function<bool(T)> counted,
@@ -68,7 +65,6 @@ class UseCounterTest : public ::testing::Test {
 template <typename T>
 void UseCounterTest::HistogramBasicTest(
     const std::string& histogram,
-    const std::string& legacy_histogram,
     T item,
     T second_item,
     std::function<bool(T)> counted,
@@ -83,16 +79,10 @@ void UseCounterTest::HistogramBasicTest(
   count(item);
   EXPECT_TRUE(counted(item));
   histogram_tester_.ExpectUniqueSample(histogram, histogram_map(item), 1);
-  if (!legacy_histogram.empty()) {
-    histogram_tester_.ExpectTotalCount(legacy_histogram, 0);
-  }
 
   // Test that repeated measurements have no effect
   count(item);
   histogram_tester_.ExpectUniqueSample(histogram, histogram_map(item), 1);
-  if (!legacy_histogram.empty()) {
-    histogram_tester_.ExpectTotalCount(legacy_histogram, 0);
-  }
 
   // Test recording a different sample
   EXPECT_FALSE(counted(second_item));
@@ -101,9 +91,6 @@ void UseCounterTest::HistogramBasicTest(
   histogram_tester_.ExpectBucketCount(histogram, histogram_map(item), 1);
   histogram_tester_.ExpectBucketCount(histogram, histogram_map(second_item), 1);
   histogram_tester_.ExpectTotalCount(histogram, 2);
-  if (!legacy_histogram.empty()) {
-    histogram_tester_.ExpectTotalCount(legacy_histogram, 0);
-  }
 
   // After a page load, the histograms will be updated, even when the URL
   // scheme is internal
@@ -113,16 +100,6 @@ void UseCounterTest::HistogramBasicTest(
   histogram_tester_.ExpectBucketCount(histogram, page_visit_bucket, 1);
   histogram_tester_.ExpectTotalCount(histogram, 3);
 
-  // And verify the legacy histogram now looks the same
-  if (!legacy_histogram.empty()) {
-    histogram_tester_.ExpectBucketCount(legacy_histogram, histogram_map(item),
-                                        1);
-    histogram_tester_.ExpectBucketCount(legacy_histogram,
-                                        histogram_map(second_item), 1);
-    histogram_tester_.ExpectBucketCount(legacy_histogram, page_visit_bucket, 1);
-    histogram_tester_.ExpectTotalCount(legacy_histogram, 3);
-  }
-
   // Now a repeat measurement should get recorded again, exactly once
   EXPECT_FALSE(counted(item));
   count(item);
@@ -131,20 +108,8 @@ void UseCounterTest::HistogramBasicTest(
   histogram_tester_.ExpectBucketCount(histogram, histogram_map(item), 2);
   histogram_tester_.ExpectTotalCount(histogram, 4);
 
-  // And on the next page load, the legacy histogram will again be updated
-  did_commit_load(URLTestHelpers::ToKURL(url));
-  if (!legacy_histogram.empty()) {
-    histogram_tester_.ExpectBucketCount(legacy_histogram, histogram_map(item),
-                                        2);
-    histogram_tester_.ExpectBucketCount(legacy_histogram,
-                                        histogram_map(second_item), 1);
-    histogram_tester_.ExpectBucketCount(legacy_histogram, page_visit_bucket, 2);
-    histogram_tester_.ExpectTotalCount(legacy_histogram, 5);
-  }
-
   // For all histograms, no other histograms besides |histogram| should
-  // be affected. Legacy histograms are not included in the list because they
-  // soon will be removed.
+  // be affected.
   for (const std::string& unaffected_histogram :
        {kAnimatedCSSHistogramName, kCSSHistogramName,
         kExtensionFeaturesHistogramName, kFeaturesHistogramName,
@@ -174,8 +139,7 @@ void UseCounterTest::HistogramBasicTest(
 TEST_F(UseCounterTest, RecordingFeatures) {
   UseCounter use_counter;
   HistogramBasicTest<WebFeature>(
-      kFeaturesHistogramName, kLegacyFeaturesHistogramName, WebFeature::kFetch,
-      WebFeature::kFetchBodyStream,
+      kFeaturesHistogramName, WebFeature::kFetch, WebFeature::kFetchBodyStream,
       [&](WebFeature feature) -> bool {
         return use_counter.HasRecordedMeasurement(feature);
       },
@@ -189,8 +153,7 @@ TEST_F(UseCounterTest, RecordingFeatures) {
 TEST_F(UseCounterTest, RecordingCSSProperties) {
   UseCounter use_counter;
   HistogramBasicTest<CSSPropertyID>(
-      kCSSHistogramName, kLegacyCSSHistogramName, CSSPropertyFont,
-      CSSPropertyZoom,
+      kCSSHistogramName, CSSPropertyFont, CSSPropertyZoom,
       [&](CSSPropertyID property) -> bool {
         return use_counter.IsCounted(property);
       },
@@ -206,7 +169,7 @@ TEST_F(UseCounterTest, RecordingCSSProperties) {
 TEST_F(UseCounterTest, RecordingAnimatedCSSProperties) {
   UseCounter use_counter;
   HistogramBasicTest<CSSPropertyID>(
-      kAnimatedCSSHistogramName, "", CSSPropertyOpacity, CSSPropertyVariable,
+      kAnimatedCSSHistogramName, CSSPropertyOpacity, CSSPropertyVariable,
       [&](CSSPropertyID property) -> bool {
         return use_counter.IsCountedAnimatedCSS(property);
       },
@@ -220,8 +183,8 @@ TEST_F(UseCounterTest, RecordingAnimatedCSSProperties) {
 TEST_F(UseCounterTest, RecordingExtensions) {
   UseCounter use_counter(UseCounter::kExtensionContext);
   HistogramBasicTest<WebFeature>(
-      kExtensionFeaturesHistogramName, kLegacyFeaturesHistogramName,
-      WebFeature::kFetch, WebFeature::kFetchBodyStream,
+      kExtensionFeaturesHistogramName, WebFeature::kFetch,
+      WebFeature::kFetchBodyStream,
       [&](WebFeature feature) -> bool {
         return use_counter.HasRecordedMeasurement(feature);
       },
@@ -235,8 +198,7 @@ TEST_F(UseCounterTest, RecordingExtensions) {
 TEST_F(UseCounterTest, SVGImageContextFeatures) {
   UseCounter use_counter(UseCounter::kSVGImageContext);
   HistogramBasicTest<WebFeature>(
-      kSVGFeaturesHistogramName, kLegacyFeaturesHistogramName,
-      WebFeature::kSVGSMILAdditiveAnimation,
+      kSVGFeaturesHistogramName, WebFeature::kSVGSMILAdditiveAnimation,
       WebFeature::kSVGSMILAnimationElementTiming,
       [&](WebFeature feature) -> bool {
         return use_counter.HasRecordedMeasurement(feature);
@@ -251,8 +213,7 @@ TEST_F(UseCounterTest, SVGImageContextFeatures) {
 TEST_F(UseCounterTest, SVGImageContextCSSProperties) {
   UseCounter use_counter(UseCounter::kSVGImageContext);
   HistogramBasicTest<CSSPropertyID>(
-      kSVGCSSHistogramName, kLegacyCSSHistogramName, CSSPropertyFont,
-      CSSPropertyZoom,
+      kSVGCSSHistogramName, CSSPropertyFont, CSSPropertyZoom,
       [&](CSSPropertyID property) -> bool {
         return use_counter.IsCounted(property);
       },
@@ -268,7 +229,7 @@ TEST_F(UseCounterTest, SVGImageContextCSSProperties) {
 TEST_F(UseCounterTest, SVGImageContextAnimatedCSSProperties) {
   UseCounter use_counter(UseCounter::kSVGImageContext);
   HistogramBasicTest<CSSPropertyID>(
-      kSVGAnimatedCSSHistogramName, "", CSSPropertyOpacity, CSSPropertyVariable,
+      kSVGAnimatedCSSHistogramName, CSSPropertyOpacity, CSSPropertyVariable,
       [&](CSSPropertyID property) -> bool {
         return use_counter.IsCountedAnimatedCSS(property);
       },
@@ -414,19 +375,19 @@ TEST_F(UseCounterTest, MutedDocuments) {
   ExpectHistograms(histogram_tester_, 2, WebFeature::kFetch, 3,
                    CSSPropertyFontWeight, 3);
 
-  // Or empty URLs (a main frame with no Document)
+  // Nor are empty URLs (a main frame with no Document)
   use_counter.DidCommitLoad(NullURL());
   use_counter.RecordMeasurement(WebFeature::kFetch, *GetFrame());
   use_counter.Count(kHTMLStandardMode, CSSPropertyFontWeight);
   ExpectHistograms(histogram_tester_, 2, WebFeature::kFetch, 3,
                    CSSPropertyFontWeight, 3);
 
-  // But file URLs are
+  // Or file URLs
   use_counter.DidCommitLoad(URLTestHelpers::ToKURL("file:///c/autoexec.bat"));
   use_counter.RecordMeasurement(WebFeature::kFetch, *GetFrame());
   use_counter.Count(kHTMLStandardMode, CSSPropertyFontWeight);
-  ExpectHistograms(histogram_tester_, 3, WebFeature::kFetch, 4,
-                   CSSPropertyFontWeight, 4);
+  ExpectHistograms(histogram_tester_, 2, WebFeature::kFetch, 3,
+                   CSSPropertyFontWeight, 3);
 }
 
 class DeprecationTest : public ::testing::Test {
@@ -477,15 +438,12 @@ TEST_F(DeprecationTest, InspectorDisablesDeprecation) {
   EXPECT_TRUE(use_counter_.HasRecordedMeasurement(feature));
 }
 
-class FeaturePolicyDisabledDeprecationTest : public ::testing::Test {
+class FeaturePolicyDisabledDeprecationTest
+    : public ::testing::Test,
+      private ScopedFeaturePolicyForTest {
  public:
-  FeaturePolicyDisabledDeprecationTest() {
-    feature_policy_was_enabled = RuntimeEnabledFeatures::FeaturePolicyEnabled();
-    RuntimeEnabledFeatures::SetFeaturePolicyEnabled(false);
+  FeaturePolicyDisabledDeprecationTest() : ScopedFeaturePolicyForTest(false) {
     dummy_ = DummyPageHolder::Create();
-  }
-  ~FeaturePolicyDisabledDeprecationTest() {
-    RuntimeEnabledFeatures::SetFeaturePolicyEnabled(feature_policy_was_enabled);
   }
 
  protected:
@@ -493,17 +451,13 @@ class FeaturePolicyDisabledDeprecationTest : public ::testing::Test {
   UseCounter& GetUseCounter() { return dummy_->GetPage().GetUseCounter(); }
 
   std::unique_ptr<DummyPageHolder> dummy_;
-
- private:
-  bool feature_policy_was_enabled;
 };
 
 TEST_F(FeaturePolicyDisabledDeprecationTest,
        TestCountDeprecationFeaturePolicy) {
   // The specific feature we use here isn't important, but we need the
   // corresponding FP feature as well.
-  WebFeaturePolicyFeature policy_feature =
-      WebFeaturePolicyFeature::kGeolocation;
+  FeaturePolicyFeature policy_feature = FeaturePolicyFeature::kGeolocation;
   WebFeature feature =
       WebFeature::kGeolocationDisallowedByFeaturePolicyInCrossOriginIframe;
 

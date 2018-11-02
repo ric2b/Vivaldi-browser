@@ -260,6 +260,13 @@ base::TimeDelta DecoderStream<StreamType>::AverageDuration() const {
 }
 
 template <DemuxerStream::Type StreamType>
+void DecoderStream<StreamType>::DropFramesBefore(
+    base::TimeDelta start_timestamp) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  start_timestamp_ = start_timestamp;
+}
+
+template <DemuxerStream::Type StreamType>
 void DecoderStream<StreamType>::SelectDecoder() {
   // If we are already using DecryptingDemuxerStream (DDS), e.g. during
   // fallback, the |stream_| will always be clear. In this case, no need pass in
@@ -349,6 +356,11 @@ void DecoderStream<StreamType>::OnDecoderSelected(
                                  !!decrypting_demuxer_stream_);
   media_log_->SetStringProperty(GetStreamTypeString() + "_decoder",
                                 decoder_->GetDisplayName());
+
+  MEDIA_LOG(INFO, media_log_)
+      << "Selected " << decoder_->GetDisplayName() << " for "
+      << GetStreamTypeString() << " decoding, config: "
+      << StreamTraits::GetDecoderConfig(stream_).AsHumanReadableString();
 
   if (state_ == STATE_REINITIALIZING_DECODER) {
     CompleteDecoderReinitialization(true);
@@ -536,14 +548,16 @@ void DecoderStream<StreamType>::OnDecodeOutputReady(
   if (!reset_cb_.is_null())
     return;
 
-  decoder_produced_a_frame_ = true;
-  traits_.OnDecodeDone(output);
-
   // |decoder_| successfully decoded a frame. No need to keep buffers for a
   // fallback decoder.
   // Note: |fallback_buffers_| might still have buffers, and we will keep
   // reading from there before requesting new buffers from |stream_|.
   pending_buffers_.clear();
+
+  // If the frame should be dropped, exit early and decode another frame.
+  decoder_produced_a_frame_ = true;
+  if (traits_.OnDecodeDone(output) == PostDecodeAction::DROP)
+    return;
 
   if (!read_cb_.is_null()) {
     // If |ready_outputs_| was non-empty, the read would have already been
@@ -599,6 +613,14 @@ void DecoderStream<StreamType>::OnBufferReady(
   }
   DCHECK_EQ(buffer.get() != NULL, status == DemuxerStream::kOk) << status;
   pending_demuxer_read_ = false;
+
+  if (buffer && !buffer->end_of_stream() &&
+      buffer->timestamp() + buffer->duration() < start_timestamp_) {
+    // Tell decoders that we expect to discard the frame. Some decoders will use
+    // this information to skip expensive decoding operations.
+    buffer->set_discard_padding(
+        std::make_pair(kInfiniteDuration, base::TimeDelta()));
+  }
 
   // If parallel decode requests are supported, multiple read requests might
   // have been sent to the demuxer. The buffers might arrive while the decoder
@@ -680,6 +702,11 @@ void DecoderStream<StreamType>::OnBufferReady(
 
     const DecoderConfig& config = StreamTraits::GetDecoderConfig(stream_);
     traits_.OnConfigChanged(config);
+
+    MEDIA_LOG(INFO, media_log_)
+        << GetStreamTypeString()
+        << " decoder config changed midstream, new config: "
+        << config.AsHumanReadableString();
 
     if (!config_change_observer_cb_.is_null())
       config_change_observer_cb_.Run(config);

@@ -151,6 +151,9 @@ class AvSettings {
     // specification (CEC Table 30 in the HDMI 1.4a specification).
     virtual void OnKeyPressed(int key_code) = 0;
 
+    // This should be invoked when a key is released.
+    virtual void OnKeyReleased(int key_code) = 0;
+
    protected:
     ~Delegate() override {}
   };
@@ -255,6 +258,7 @@ class AvSettings {
 
   // Supported Electro-Optical Transfer Function (EOTF) reported by the device.
   // The values are according to Table 8 in CTA-861.3 (formerly CEA-861.3).
+  // GENERATED_JAVA_ENUM_PACKAGE: com.google.android.apps.mediashell.avsettings
   enum Eotf {
     EOTF_SDR = 1 << 0,
     EOTF_HDR = 1 << 1,
@@ -301,6 +305,7 @@ class AvSettings {
   virtual bool EnableWakeOnCast(bool enabled) = 0;
 
   // Supported HDR output modes.
+  // GENERATED_JAVA_ENUM_PACKAGE: com.google.android.apps.mediashell.avsettings
   enum HdrOutputType {
     HDR_OUTPUT_SDR,  // not HDR
     HDR_OUTPUT_HDR,  // HDR with static metadata

@@ -19,16 +19,18 @@
 #include "components/payments/core/features.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_method_data.h"
+#include "components/payments/core/payment_options.h"
 #include "components/payments/core/payment_shipping_option.h"
+#include "components/payments/core/web_payment_request.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #include "ios/chrome/browser/payments/test_payment_request.h"
-#include "ios/web/public/payments/payment_request.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -50,7 +52,7 @@ MATCHER_P(GuidMatches, guid, "") {
 
 namespace payments {
 
-class PaymentRequestTest : public testing::Test {
+class PaymentRequestTest : public PlatformTest {
  protected:
   PaymentRequestTest()
       : chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {}
@@ -68,11 +70,11 @@ class PaymentRequestTest : public testing::Test {
     return details;
   }
 
-  web::PaymentOptions CreatePaymentOptions(bool request_payer_name,
-                                           bool request_payer_phone,
-                                           bool request_payer_email,
-                                           bool request_shipping) {
-    web::PaymentOptions options;
+  PaymentOptions CreatePaymentOptions(bool request_payer_name,
+                                      bool request_payer_phone,
+                                      bool request_payer_email,
+                                      bool request_shipping) {
+    PaymentOptions options;
     options.request_payer_name = request_payer_name;
     options.request_payer_phone = request_payer_phone;
     options.request_payer_email = request_payer_email;
@@ -86,11 +88,10 @@ class PaymentRequestTest : public testing::Test {
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
 };
 
-// Tests that the payments::CurrencyFormatter is constructed with the correct
+// Tests that the CurrencyFormatter is constructed with the correct
 // currency code and currency system.
 TEST_F(PaymentRequestTest, CreatesCurrencyFormatterCorrectly) {
-
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   web_payment_request.details.total = base::MakeUnique<PaymentItem>();
@@ -126,7 +127,7 @@ TEST_F(PaymentRequestTest, CreatesCurrencyFormatterCorrectly) {
 
 // Tests that the accepted card networks are identified correctly.
 TEST_F(PaymentRequestTest, AcceptedPaymentNetworks) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentMethodData method_datum1;
@@ -147,11 +148,11 @@ TEST_F(PaymentRequestTest, AcceptedPaymentNetworks) {
 // Test that parsing supported methods (with invalid values and duplicates)
 // works as expected.
 TEST_F(PaymentRequestTest, SupportedMethods) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(payments::features::kWebPaymentsNativeApps);
+  feature_list.InitAndEnableFeature(features::kWebPaymentsNativeApps);
 
   PaymentMethodData method_datum1;
   method_datum1.supported_methods.push_back("visa");
@@ -178,11 +179,11 @@ TEST_F(PaymentRequestTest, SupportedMethods) {
 // Test that parsing supported methods in different method data entries (with
 // invalid values and duplicates) works as expected.
 TEST_F(PaymentRequestTest, SupportedMethods_MultipleEntries) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(payments::features::kWebPaymentsNativeApps);
+  feature_list.InitAndEnableFeature(features::kWebPaymentsNativeApps);
 
   PaymentMethodData method_datum1;
   method_datum1.supported_methods.push_back("visa");
@@ -214,7 +215,7 @@ TEST_F(PaymentRequestTest, SupportedMethods_MultipleEntries) {
 
 // Test that only specifying basic-card means that all are supported.
 TEST_F(PaymentRequestTest, SupportedMethods_OnlyBasicCard) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentMethodData method_datum1;
@@ -242,7 +243,7 @@ TEST_F(PaymentRequestTest, SupportedMethods_OnlyBasicCard) {
 // Test that specifying a method AND basic-card means that all are supported,
 // but with the method as first.
 TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_WithSpecificMethod) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentMethodData method_datum1;
@@ -270,7 +271,7 @@ TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_WithSpecificMethod) {
 // Test that specifying basic-card with a supported network (with previous
 // supported methods) will work as expected
 TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_Overlap) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentMethodData method_datum1;
@@ -297,7 +298,7 @@ TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_Overlap) {
 // Test that specifying basic-card with supported networks after specifying
 // some methods
 TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_WithSupportedNetworks) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentMethodData method_datum1;
@@ -319,7 +320,7 @@ TEST_F(PaymentRequestTest, SupportedMethods_BasicCard_WithSupportedNetworks) {
 // Tests that an autofill payment instrumnt e.g., credit cards can be added
 // to the list of available payment methods.
 TEST_F(PaymentRequestTest, AddAutofillPaymentInstrument) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   PaymentMethodData method_datum;
   method_datum.supported_methods.push_back("basic-card");
   method_datum.supported_networks.push_back("visa");
@@ -346,7 +347,7 @@ TEST_F(PaymentRequestTest, AddAutofillPaymentInstrument) {
 
 // Tests that a profile can be added to the list of available profiles.
 TEST_F(PaymentRequestTest, AddAutofillProfile) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   web_payment_request.options = CreatePaymentOptions(
       /*request_payer_name=*/true, /*request_payer_phone=*/true,
       /*request_payer_email=*/true, /*request_shipping=*/true);
@@ -373,7 +374,7 @@ TEST_F(PaymentRequestTest, AddAutofillProfile) {
 
 // Test that parsing shipping options works as expected.
 TEST_F(PaymentRequestTest, SelectedShippingOptions) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentDetails details;
@@ -409,7 +410,7 @@ TEST_F(PaymentRequestTest, SelectedShippingOptions) {
 
 // Tests that updating the payment details updates the total amount.
 TEST_F(PaymentRequestTest, UpdatePaymentDetailsNewTotal) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentDetails details;
@@ -435,7 +436,7 @@ TEST_F(PaymentRequestTest, UpdatePaymentDetailsNewTotal) {
 // Tests that updating the payment details with a PaymentDetails instance that
 // is missing the total amount, maintains the old total amount.
 TEST_F(PaymentRequestTest, UpdatePaymentDetailsNoTotal) {
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   autofill::TestPersonalDataManager personal_data_manager;
 
   PaymentDetails details;
@@ -458,7 +459,7 @@ TEST_F(PaymentRequestTest, UpdatePaymentDetailsNoTotal) {
 // Test that loading profiles when none are available works as expected.
 TEST_F(PaymentRequestTest, SelectedProfiles_NoProfiles) {
   autofill::TestPersonalDataManager personal_data_manager;
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   web_payment_request.details = CreateDetailsWithShippingOption();
   web_payment_request.options = CreatePaymentOptions(
       /*request_payer_name=*/true, /*request_payer_phone=*/true,
@@ -482,7 +483,7 @@ TEST_F(PaymentRequestTest, SelectedProfiles_Complete) {
   address2.set_use_count(15U);
   personal_data_manager.AddTestingProfile(&address2);
 
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   web_payment_request.details = CreateDetailsWithShippingOption();
   web_payment_request.options = CreatePaymentOptions(
       /*request_payer_name=*/true, /*request_payer_phone=*/true,
@@ -506,7 +507,7 @@ TEST_F(PaymentRequestTest, SelectedProfiles_Complete_NoShippingOption) {
   address.set_use_count(5U);
   personal_data_manager.AddTestingProfile(&address);
 
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   // No shipping options.
   web_payment_request.details = PaymentDetails();
   web_payment_request.options = CreatePaymentOptions(
@@ -536,7 +537,7 @@ TEST_F(PaymentRequestTest, SelectedProfiles_Incomplete) {
   address2.set_use_count(3U);
   personal_data_manager.AddTestingProfile(&address2);
 
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   web_payment_request.details = CreateDetailsWithShippingOption();
   web_payment_request.options = CreatePaymentOptions(
       /*request_payer_name=*/true, /*request_payer_phone=*/true,
@@ -570,7 +571,7 @@ TEST_F(PaymentRequestTest,
   address2.set_use_count(3U);
   personal_data_manager.AddTestingProfile(&address2);
 
-  web::PaymentRequest web_payment_request;
+  WebPaymentRequest web_payment_request;
   web_payment_request.details = CreateDetailsWithShippingOption();
   // The merchant doesn't care about the phone number.
   web_payment_request.options = CreatePaymentOptions(
@@ -593,7 +594,7 @@ TEST_F(PaymentRequestTest,
 // Test that loading payment methods when none are available works as expected.
 TEST_F(PaymentRequestTest, SelectedPaymentMethod_NoPaymentMethods) {
   autofill::TestPersonalDataManager personal_data_manager;
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   // No payment methods are selected because none are available!
@@ -613,7 +614,7 @@ TEST_F(PaymentRequestTest, SelectedPaymentMethod_ExpiredCard) {
   credit_card.SetExpirationYear(2016);  // Expired.
   credit_card.set_billing_address_id(billing_address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   // credit_card is selected because expired cards are valid for payment.
@@ -642,7 +643,7 @@ TEST_F(PaymentRequestTest, SelectedPaymentMethod_Complete) {
   personal_data_manager.AddTestingCreditCard(&credit_card2);
   credit_card2.set_billing_address_id(billing_address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   // credit_card2 is selected because it has the most use count (Frecency
@@ -669,7 +670,7 @@ TEST_F(PaymentRequestTest, SelectedPaymentMethod_Incomplete) {
   credit_card2.set_use_count(15U);
   personal_data_manager.AddTestingCreditCard(&credit_card2);
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   // Even though credit_card2 has more use counts, credit_card is selected
@@ -702,7 +703,7 @@ TEST_F(PaymentRequestTest, RecordUseStats_RequestShippingAndContactInfo) {
   personal_data_manager.AddTestingCreditCard(&credit_card);
   credit_card.set_billing_address_id(address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   TestPaymentRequest payment_request(web_payment_request,
@@ -739,7 +740,7 @@ TEST_F(PaymentRequestTest, RecordUseStats_SameShippingAndContactInfoProfile) {
   personal_data_manager.AddTestingCreditCard(&credit_card);
   credit_card.set_billing_address_id(address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
 
   TestPaymentRequest payment_request(web_payment_request,
@@ -774,7 +775,7 @@ TEST_F(PaymentRequestTest, RecordUseStats_RequestShippingOnly) {
   personal_data_manager.AddTestingCreditCard(&credit_card);
   credit_card.set_billing_address_id(address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
   web_payment_request.options.request_payer_name = false;
   web_payment_request.options.request_payer_email = false;
@@ -810,7 +811,7 @@ TEST_F(PaymentRequestTest, RecordUseStats_RequestContactInfoOnly) {
   personal_data_manager.AddTestingCreditCard(&credit_card);
   credit_card.set_billing_address_id(address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
   web_payment_request.options.request_shipping = false;
 
@@ -843,7 +844,7 @@ TEST_F(PaymentRequestTest, RecordUseStats_NoShippingOrContactInfoRequested) {
   personal_data_manager.AddTestingCreditCard(&credit_card);
   credit_card.set_billing_address_id(address.guid());
 
-  web::PaymentRequest web_payment_request =
+  WebPaymentRequest web_payment_request =
       payment_request_test_util::CreateTestWebPaymentRequest();
   web_payment_request.options.request_shipping = false;
   web_payment_request.options.request_payer_name = false;
@@ -867,6 +868,303 @@ TEST_F(PaymentRequestTest, RecordUseStats_NoShippingOrContactInfoRequested) {
       .Times(1);
 
   payment_request.RecordUseStats();
+}
+
+// Tests that the modifier should not get applied when the card network is not
+// supported.
+TEST_F(PaymentRequestTest, PaymentDetailsModifier_BasicCard_NetworkMismatch) {
+  autofill::TestPersonalDataManager personal_data_manager;
+  autofill::AutofillProfile address = autofill::test::GetFullProfile();
+  personal_data_manager.AddTestingProfile(&address);
+  autofill::CreditCard credit_card = autofill::test::GetCreditCard();  // Visa.
+  personal_data_manager.AddTestingCreditCard(&credit_card);
+  credit_card.set_billing_address_id(address.guid());
+
+  WebPaymentRequest web_payment_request =
+      payment_request_test_util::CreateTestWebPaymentRequest();
+  PaymentDetailsModifier modifier;
+  modifier.method_data.supported_methods.push_back("basic-card");
+  modifier.method_data.supported_networks.push_back("amex");
+  modifier.total = base::MakeUnique<payments::PaymentItem>();
+  modifier.total->label = "Discounted Total";
+  modifier.total->amount.value = "0.99";
+  modifier.total->amount.currency = "USD";
+  payments::PaymentItem additional_display_item;
+  additional_display_item.label = "Amex discount";
+  additional_display_item.amount.value = "-0.01";
+  additional_display_item.amount.currency = "USD";
+  modifier.additional_display_items.push_back(additional_display_item);
+  web_payment_request.details.modifiers.push_back(modifier);
+
+  TestPaymentRequest payment_request(web_payment_request,
+                                     chrome_browser_state_.get(), &web_state_,
+                                     &personal_data_manager);
+  AutofillPaymentInstrument* selected_payment_method =
+      static_cast<AutofillPaymentInstrument*>(
+          payment_request.selected_payment_method());
+  EXPECT_EQ("Total", payment_request.GetTotal(selected_payment_method).label);
+  EXPECT_EQ("1.00",
+            payment_request.GetTotal(selected_payment_method).amount.value);
+  ASSERT_EQ(1U,
+            payment_request.GetDisplayItems(selected_payment_method).size());
+}
+
+// Tests that the modifier should get applied when the card network is a match.
+TEST_F(PaymentRequestTest, PaymentDetailsModifier_BasicCard_NetworkMatch) {
+  autofill::TestPersonalDataManager personal_data_manager;
+  autofill::AutofillProfile address = autofill::test::GetFullProfile();
+  personal_data_manager.AddTestingProfile(&address);
+  autofill::CreditCard credit_card = autofill::test::GetCreditCard2();  // Amex.
+  personal_data_manager.AddTestingCreditCard(&credit_card);
+  credit_card.set_billing_address_id(address.guid());
+
+  WebPaymentRequest web_payment_request =
+      payment_request_test_util::CreateTestWebPaymentRequest();
+  PaymentDetailsModifier modifier;
+  modifier.method_data.supported_methods.push_back("basic-card");
+  modifier.method_data.supported_networks.push_back("amex");
+  modifier.total = base::MakeUnique<payments::PaymentItem>();
+  modifier.total->label = "Discounted Total";
+  modifier.total->amount.value = "0.99";
+  modifier.total->amount.currency = "USD";
+  payments::PaymentItem additional_display_item;
+  additional_display_item.label = "Amex discount";
+  additional_display_item.amount.value = "-0.01";
+  additional_display_item.amount.currency = "USD";
+  modifier.additional_display_items.push_back(additional_display_item);
+  web_payment_request.details.modifiers.push_back(modifier);
+
+  TestPaymentRequest payment_request(web_payment_request,
+                                     chrome_browser_state_.get(), &web_state_,
+                                     &personal_data_manager);
+  AutofillPaymentInstrument* selected_payment_method =
+      static_cast<AutofillPaymentInstrument*>(
+          payment_request.selected_payment_method());
+  EXPECT_EQ("Discounted Total",
+            payment_request.GetTotal(selected_payment_method).label);
+  EXPECT_EQ("0.99",
+            payment_request.GetTotal(selected_payment_method).amount.value);
+  ASSERT_EQ(2U,
+            payment_request.GetDisplayItems(selected_payment_method).size());
+  EXPECT_EQ("Subtotal",
+            payment_request.GetDisplayItems(selected_payment_method)[0].label);
+  EXPECT_EQ(
+      "1.00",
+      payment_request.GetDisplayItems(selected_payment_method)[0].amount.value);
+  EXPECT_EQ("Amex discount",
+            payment_request.GetDisplayItems(selected_payment_method)[1].label);
+  EXPECT_EQ(
+      "-0.01",
+      payment_request.GetDisplayItems(selected_payment_method)[1].amount.value);
+}
+
+// Tests that the modifier should not get applied when the card type is not
+// supported.
+TEST_F(PaymentRequestTest, PaymentDetailsModifier_BasicCard_TypeMismatch) {
+  autofill::TestPersonalDataManager personal_data_manager;
+  autofill::AutofillProfile address = autofill::test::GetFullProfile();
+  personal_data_manager.AddTestingProfile(&address);
+  autofill::CreditCard credit_card = autofill::test::GetCreditCard2();  // Amex.
+  personal_data_manager.AddTestingCreditCard(&credit_card);
+  credit_card.set_billing_address_id(address.guid());
+
+  WebPaymentRequest web_payment_request =
+      payment_request_test_util::CreateTestWebPaymentRequest();
+  PaymentDetailsModifier modifier;
+  modifier.method_data.supported_methods.push_back("basic-card");
+  modifier.method_data.supported_networks.push_back("amex");
+  modifier.method_data.supported_types.insert(
+      autofill::CreditCard::CARD_TYPE_CREDIT);
+  modifier.total = base::MakeUnique<payments::PaymentItem>();
+  modifier.total->label = "Discounted Total";
+  modifier.total->amount.value = "0.99";
+  modifier.total->amount.currency = "USD";
+  payments::PaymentItem additional_display_item;
+  additional_display_item.label = "Amex discount";
+  additional_display_item.amount.value = "-0.01";
+  additional_display_item.amount.currency = "USD";
+  modifier.additional_display_items.push_back(additional_display_item);
+  web_payment_request.details.modifiers.push_back(modifier);
+
+  TestPaymentRequest payment_request(web_payment_request,
+                                     chrome_browser_state_.get(), &web_state_,
+                                     &personal_data_manager);
+  AutofillPaymentInstrument* selected_payment_method =
+      static_cast<AutofillPaymentInstrument*>(
+          payment_request.selected_payment_method());
+  EXPECT_EQ("Total", payment_request.GetTotal(selected_payment_method).label);
+  EXPECT_EQ("1.00",
+            payment_request.GetTotal(selected_payment_method).amount.value);
+  ASSERT_EQ(1U,
+            payment_request.GetDisplayItems(selected_payment_method).size());
+}
+
+// Tests that the modifier should get applied when the card network and the type
+// are both a match.
+TEST_F(PaymentRequestTest,
+       PaymentDetailsModifier_BasicCard_NetworkAndTypeMatch) {
+  autofill::TestPersonalDataManager personal_data_manager;
+  autofill::AutofillProfile address = autofill::test::GetFullProfile();
+  personal_data_manager.AddTestingProfile(&address);
+  autofill::CreditCard credit_card = autofill::test::GetMaskedServerCardAmex();
+  credit_card.set_card_type(autofill::CreditCard::CardType::CARD_TYPE_CREDIT);
+  personal_data_manager.AddTestingCreditCard(&credit_card);
+  credit_card.set_billing_address_id(address.guid());
+
+  WebPaymentRequest web_payment_request =
+      payment_request_test_util::CreateTestWebPaymentRequest();
+  PaymentDetailsModifier modifier;
+  modifier.method_data.supported_methods.push_back("basic-card");
+  modifier.method_data.supported_networks.push_back("amex");
+  modifier.method_data.supported_types.insert(
+      autofill::CreditCard::CARD_TYPE_CREDIT);
+  modifier.total = base::MakeUnique<payments::PaymentItem>();
+  modifier.total->label = "Discounted Total";
+  modifier.total->amount.value = "0.99";
+  modifier.total->amount.currency = "USD";
+  payments::PaymentItem additional_display_item;
+  additional_display_item.label = "Amex discount";
+  additional_display_item.amount.value = "-0.01";
+  additional_display_item.amount.currency = "USD";
+  modifier.additional_display_items.push_back(additional_display_item);
+  web_payment_request.details.modifiers.push_back(modifier);
+
+  TestPaymentRequest payment_request(web_payment_request,
+                                     chrome_browser_state_.get(), &web_state_,
+                                     &personal_data_manager);
+  AutofillPaymentInstrument* selected_payment_method =
+      static_cast<AutofillPaymentInstrument*>(
+          payment_request.selected_payment_method());
+  EXPECT_EQ("Discounted Total",
+            payment_request.GetTotal(selected_payment_method).label);
+  EXPECT_EQ("0.99",
+            payment_request.GetTotal(selected_payment_method).amount.value);
+  ASSERT_EQ(2U,
+            payment_request.GetDisplayItems(selected_payment_method).size());
+  EXPECT_EQ("Subtotal",
+            payment_request.GetDisplayItems(selected_payment_method)[0].label);
+  EXPECT_EQ(
+      "1.00",
+      payment_request.GetDisplayItems(selected_payment_method)[0].amount.value);
+  EXPECT_EQ("Amex discount",
+            payment_request.GetDisplayItems(selected_payment_method)[1].label);
+  EXPECT_EQ(
+      "-0.01",
+      payment_request.GetDisplayItems(selected_payment_method)[1].amount.value);
+}
+
+// Tests that payment_request_util::RequestContactInfo returns true if payer's
+// name, phone number, or email address are requested and false otherwise.
+TEST_F(PaymentRequestTest, RequestContactInfo) {
+  autofill::TestPersonalDataManager personal_data_manager;
+
+  payments::WebPaymentRequest web_payment_request;
+
+  web_payment_request.options.request_payer_name = true;
+  web_payment_request.options.request_payer_phone = true;
+  web_payment_request.options.request_payer_email = true;
+  payments::TestPaymentRequest payment_request1(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request1.RequestContactInfo());
+
+  web_payment_request.options.request_payer_name = false;
+  payments::TestPaymentRequest payment_request2(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request2.RequestContactInfo());
+
+  web_payment_request.options.request_payer_phone = false;
+  payments::TestPaymentRequest payment_request3(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request3.RequestContactInfo());
+
+  web_payment_request.options.request_payer_email = false;
+  payments::TestPaymentRequest payment_request4(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_FALSE(payment_request4.RequestContactInfo());
+}
+
+// Tests the return value of payment_request_util::CanPay.
+TEST_F(PaymentRequestTest, CanPay) {
+  autofill::TestPersonalDataManager personal_data_manager;
+
+  payments::WebPaymentRequest web_payment_request;
+  payments::PaymentMethodData method_datum;
+  method_datum.supported_methods.push_back("basic-card");
+  method_datum.supported_networks.push_back("visa");
+  web_payment_request.method_data.push_back(method_datum);
+
+  // No selected payment method.
+  payments::TestPaymentRequest payment_request1(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_FALSE(payment_request1.IsAbleToPay());
+
+  autofill::AutofillProfile profile = autofill::test::GetFullProfile();
+  // Make the profile incomplete by removing the name and the phone number so
+  // that it is not selected as the default shipping address or contact info.
+  profile.SetInfo(autofill::AutofillType(autofill::NAME_FULL), base::string16(),
+                  "en-US");
+  profile.SetInfo(autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER),
+                  base::string16(), "en-US");
+  autofill::CreditCard card = autofill::test::GetCreditCard();  // Visa.
+  card.set_billing_address_id(profile.guid());
+  personal_data_manager.AddTestingProfile(&profile);
+  personal_data_manager.AddTestingCreditCard(&card);
+
+  // Has a selected payment method.
+  payments::TestPaymentRequest payment_request2(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request2.IsAbleToPay());
+
+  // No selected contact info.
+  web_payment_request.options.request_payer_phone = true;
+  payments::TestPaymentRequest payment_request3(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_FALSE(payment_request3.IsAbleToPay());
+
+  profile.SetInfo(autofill::AutofillType(autofill::PHONE_HOME_WHOLE_NUMBER),
+                  base::ASCIIToUTF16("16502111111"), "en-US");
+
+  // Has a selected contact info.
+  payments::TestPaymentRequest payment_request4(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request4.IsAbleToPay());
+
+  // No selected shipping address.
+  web_payment_request.options.request_shipping = true;
+  payments::TestPaymentRequest payment_request5(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_FALSE(payment_request5.IsAbleToPay());
+
+  profile.SetInfo(autofill::AutofillType(autofill::NAME_FULL),
+                  base::ASCIIToUTF16("John Doe"), "en-US");
+
+  // Has a selected shipping address, but no selected shipping option.
+  payments::TestPaymentRequest payment_request6(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_FALSE(payment_request6.IsAbleToPay());
+
+  std::vector<payments::PaymentShippingOption> shipping_options;
+  payments::PaymentShippingOption option;
+  option.id = "1";
+  option.selected = true;
+  shipping_options.push_back(std::move(option));
+  web_payment_request.details.shipping_options = std::move(shipping_options);
+
+  // Has a selected shipping address and a selected shipping option.
+  payments::TestPaymentRequest payment_request7(
+      web_payment_request, chrome_browser_state_.get(), &web_state_,
+      &personal_data_manager);
+  EXPECT_TRUE(payment_request7.IsAbleToPay());
 }
 
 }  // namespace payments

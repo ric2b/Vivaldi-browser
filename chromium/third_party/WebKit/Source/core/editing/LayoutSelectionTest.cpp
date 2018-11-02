@@ -6,8 +6,9 @@
 
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/ShadowRootInit.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "platform/wtf/Assertions.h"
@@ -61,11 +62,13 @@ static bool TestLayoutObjectState(LayoutObject* object,
   return true;
 }
 
-using IsTypeOf = Function<bool(const LayoutObject& layout_object)>;
-#define USING_LAYOUTOBJECT_FUNC(member_func)                               \
-  IsTypeOf member_func = WTF::Bind([](const LayoutObject& layout_object) { \
-    return layout_object.member_func();                                    \
-  })
+using IsTypeOf =
+    WTF::RepeatingFunction<bool(const LayoutObject& layout_object)>;
+using IsTypeOfSimple = bool(const LayoutObject& layout_object);
+#define USING_LAYOUTOBJECT_FUNC(member_func)                   \
+  static bool member_func(const LayoutObject& layout_object) { \
+    return layout_object.member_func();                        \
+  }
 
 USING_LAYOUTOBJECT_FUNC(IsLayoutBlock);
 USING_LAYOUTOBJECT_FUNC(IsLayoutBlockFlow);
@@ -73,6 +76,11 @@ USING_LAYOUTOBJECT_FUNC(IsLayoutInline);
 USING_LAYOUTOBJECT_FUNC(IsBR);
 USING_LAYOUTOBJECT_FUNC(IsListItem);
 USING_LAYOUTOBJECT_FUNC(IsListMarker);
+USING_LAYOUTOBJECT_FUNC(IsLayoutImage);
+USING_LAYOUTOBJECT_FUNC(IsLayoutButton);
+USING_LAYOUTOBJECT_FUNC(IsSVGRoot);
+USING_LAYOUTOBJECT_FUNC(IsSVGText);
+USING_LAYOUTOBJECT_FUNC(IsLayoutEmbeddedContent);
 
 static IsTypeOf IsLayoutTextFragmentOf(const String& text) {
   return WTF::Bind(
@@ -86,8 +94,12 @@ static IsTypeOf IsLayoutTextFragmentOf(const String& text) {
       text);
 }
 
+static bool IsSVGTSpan(const LayoutObject& layout_object) {
+  return layout_object.GetName() == String("LayoutSVGTSpan");
+}
+
 static bool TestLayoutObject(LayoutObject* object,
-                             const IsTypeOf& predicate,
+                             IsTypeOfSimple& predicate,
                              SelectionState state,
                              InvalidateOption invalidate) {
   if (!TestLayoutObjectState(object, state, invalidate))
@@ -98,17 +110,32 @@ static bool TestLayoutObject(LayoutObject* object,
   return true;
 }
 static bool TestLayoutObject(LayoutObject* object,
-                             const String& text,
+                             const IsTypeOf& predicate,
                              SelectionState state,
                              InvalidateOption invalidate) {
   if (!TestLayoutObjectState(object, state, invalidate))
     return false;
 
-  if (!object->IsText())
-    return false;
-  if (text != ToLayoutText(object)->GetText())
+  if (!predicate.Run(*object))
     return false;
   return true;
+}
+static bool TestLayoutObject(LayoutObject* object,
+                             const String& text,
+                             SelectionState state,
+                             InvalidateOption invalidate) {
+  return TestLayoutObject(
+      object,
+      WTF::Bind(
+          [](const String& text, const LayoutObject& object) {
+            if (!object.IsText())
+              return false;
+            if (text != ToLayoutText(object).GetText())
+              return false;
+            return true;
+          },
+          text),
+      state, invalidate);
 }
 
 #define TEST_NEXT(predicate, state, invalidate)                             \
@@ -127,7 +154,7 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObject) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
   TEST_NEXT(IsBR, kInside, ShouldInvalidate);
   TEST_NEXT("bar", kEnd, ShouldInvalidate);
@@ -143,7 +170,7 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectTruncateVisibilityHidden) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT("before", kNone, NotInvalidate);
   TEST_NEXT("foo", kStartAndEnd, ShouldInvalidate);
@@ -158,13 +185,15 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectBRs) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsBR, kStart, ShouldInvalidate);
   TEST_NEXT(IsBR, kInside, ShouldInvalidate);
   TEST_NEXT("foo", kInside, ShouldInvalidate);
   TEST_NEXT(IsBR, kInside, ShouldInvalidate);
   TEST_NEXT(IsBR, kEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_FALSE(Selection().LayoutSelectionStart().has_value());
+  EXPECT_FALSE(Selection().LayoutSelectionEnd().has_value());
 }
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObjectListStyleImage) {
@@ -177,46 +206,32 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectListStyleImage) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlockFlow, kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsListItem, kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsListItem, kContain, NotInvalidate);
   TEST_NEXT(IsListMarker, kNone, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
-  TEST_NEXT(IsListItem, kEnd, ShouldInvalidate);
+  TEST_NEXT(IsListItem, kContain, NotInvalidate);
   TEST_NEXT(IsListMarker, kNone, NotInvalidate);
   TEST_NEXT("bar", kEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
 }
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObjectCrossingShadowBoundary) {
-#ifndef NDEBUG
-  PrintLayoutTreeForDebug();
-#endif
-  SetBodyContent(
-      "foo<div id='host'>"
-      "<span slot='s1'>bar1</span><span slot='s2'>bar2</span>"
-      "</div>");
-  // TODO(yoichio): Move NodeTest::AttachShadowTo to EditingTestBase and use
-  // it.
-  ShadowRootInit shadow_root_init;
-  shadow_root_init.setMode("open");
-  ShadowRoot* const shadow_root =
-      GetDocument().QuerySelector("div")->attachShadow(
-          ToScriptStateForMainWorld(GetDocument().GetFrame()), shadow_root_init,
-          ASSERT_NO_EXCEPTION);
-  shadow_root->setInnerHTML(
-      "Foo<slot name='s2'></slot><slot name='s1'></slot>");
-
-  Selection().SetSelection(
-      SelectionInDOMTree::Builder()
-          .SetBaseAndExtent(Position(GetDocument().body(), 0),
-                            Position(GetDocument().QuerySelector("span"), 0))
-          .Build());
+  Selection().SetSelection(SetSelectionTextToBody(
+      "^foo"
+      "<div>"
+      "<template data-mode=open>"
+      "Foo<slot name=s2></slot><slot name=s1></slot>"
+      "</template>"
+      // Set selection at SPAN@0 instead of "bar1"@0
+      "<span slot=s1><!--|-->bar1</span><span slot=s2>bar2</span>"
+      "</div>"));
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlockFlow, kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlockFlow, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("Foo", kInside, ShouldInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT("bar2", kEnd, ShouldInvalidate);
@@ -237,10 +252,10 @@ TEST_F(LayoutSelectionTest,
                             Position(span->firstChild(), 3))
           .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlockFlow, kNone, NotInvalidate);
   TEST_NEXT("div1", kNone, NotInvalidate);
-  TEST_NEXT(IsLayoutBlockFlow, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlockFlow, kContain, NotInvalidate);
   TEST_NEXT("foo", kNone, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT("bar", kStartAndEnd, ShouldInvalidate);
@@ -255,10 +270,10 @@ TEST_F(LayoutSelectionTest,
           .Build());
   // This commit should not crash.
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlockFlow, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlockFlow, kContain, NotInvalidate);
   TEST_NEXT("div1", kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlockFlow, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlockFlow, kNone, NotInvalidate);
   TEST_NEXT("foo", kNone, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT("bar", kNone, ShouldInvalidate);
@@ -272,11 +287,11 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectLineWrap) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("bar\n", kStartAndEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
-  EXPECT_EQ(Selection().LayoutSelectionStart(), 0);
-  EXPECT_EQ(Selection().LayoutSelectionEnd(), 4);
+  EXPECT_EQ(0u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(4u, Selection().LayoutSelectionEnd());
 }
 
 TEST_F(LayoutSelectionTest, FirstLetter) {
@@ -287,7 +302,7 @@ TEST_F(LayoutSelectionTest, FirstLetter) {
                                .SelectAllChildren(*GetDocument().body())
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("f"), kStart, ShouldInvalidate);
@@ -296,35 +311,28 @@ TEST_F(LayoutSelectionTest, FirstLetter) {
 }
 
 TEST_F(LayoutSelectionTest, FirstLetterClearSeletion) {
-  SetBodyContent(
-      "<style>div::first-letter { color: red; }</style>"
-      "foo<div>bar</div>baz");
-  Node* foo = GetDocument().body()->firstChild()->nextSibling();
-  // <div>fo^o</div><div>bar</div>b|az
-  Selection().SetSelection(
-      SelectionInDOMTree::Builder()
-          .SetBaseAndExtent({foo, 2}, {foo->nextSibling()->nextSibling(), 1})
-          .Build());
+  InsertStyleElement("div::first-letter { color: red; }");
+  Selection().SetSelection(SetSelectionTextToBody("fo^o<div>bar</div>b|az"));
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kInside, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("b"), kInside, ShouldInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("ar"), kInside, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("baz", kEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
   Selection().ClearLayoutSelection();
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
   TEST_NEXT("foo", kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("b"), kNone, ShouldInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("ar"), kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
   TEST_NEXT("baz", kNone, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
 }
@@ -345,14 +353,14 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
                                .SetBaseAndExtent({foo, 2}, {baz, 1})
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kStartAndEnd, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kInside, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("b"), kInside, ShouldInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("ar"), kInside, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kEnd, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("baz", kEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
   // <div>foo</div><div>bar</div>ba^z|
@@ -360,37 +368,301 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
                                .SetBaseAndExtent({baz, 2}, {baz, 3})
                                .Build());
   Selection().CommitAppearanceIfNeeded();
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
   TEST_NEXT("foo", kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  // TODO(yoichio): Invalidating next LayoutBlock is flaky but it doesn't
+  // matter in wild because we don't paint selection gap. I will update
+  // invalidating propagation so this flakiness should be fixed as:
+  // TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
+  Next();
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("b"), kNone, ShouldInvalidate);
   TEST_NEXT(IsLayoutTextFragmentOf("ar"), kNone, ShouldInvalidate);
-  TEST_NEXT(IsLayoutBlock, kNone, ShouldInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("baz", kStartAndEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
 }
 
 TEST_F(LayoutSelectionTest, CommitAppearanceIfNeededNotCrash) {
-  SetBodyContent("<div id='host'><span>bar<span></div><div>baz</div>");
-  SetShadowContent("foo", "host");
-  UpdateAllLifecyclePhases();
-  // <div id='host'>
-  //   #shadow-root
-  //     foo
-  //   <span>|bar</span>
-  // </div>
-  // <div>baz^</div>
-  // |span| is not in flat tree.
-  Node* const span =
-      ToElement(GetDocument().QuerySelector("#host")->firstChild());
-  DCHECK(span);
-  Node* const baz = GetDocument().body()->firstChild()->nextSibling();
-  DCHECK(baz);
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SetBaseAndExtent({baz, 1}, {span, 0})
-                               .Build());
+  Selection().SetSelection(SetSelectionTextToBody(
+      "<div>"
+      "<template data-mode=open>foo</template>"
+      "<span>|bar<span>"  // <span> is not appeared in flat tree.
+      "</div>"
+      "<div>baz^</div>"));
   Selection().CommitAppearanceIfNeeded();
 }
+
+TEST_F(LayoutSelectionTest, SelectImage) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("^<img style=\"width:100px; height:100px\"/>|");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutImage, kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_FALSE(Selection().LayoutSelectionStart().has_value());
+  EXPECT_FALSE(Selection().LayoutSelectionEnd().has_value());
+}
+
+TEST_F(LayoutSelectionTest, MoveOnSameNode_Start) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("f^oo<span>b|ar</span>");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(1u, Selection().LayoutSelectionEnd());
+
+  // Paint virtually and clear ShouldInvalidate flag.
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, NotInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  // "fo^o<span>b|ar</span>"
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent({selection.Base().AnchorNode(), 2},
+                            selection.Extent())
+          .Build());
+  Selection().CommitAppearanceIfNeeded();
+  // Only "foo" should be invalidated.
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(2u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(1u, Selection().LayoutSelectionEnd());
+}
+
+TEST_F(LayoutSelectionTest, MoveOnSameNode_End) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("f^oo<span>b|ar</span>");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(1u, Selection().LayoutSelectionEnd());
+
+  // Paint virtually and clear ShouldInvalidate flag.
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, NotInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  // "fo^o<span>ba|r</span>"
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(selection.Base(),
+                            {selection.Extent().AnchorNode(), 2})
+          .Build());
+  Selection().CommitAppearanceIfNeeded();
+  // Only "bar" should be invalidated.
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, NotInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(2u, Selection().LayoutSelectionEnd());
+}
+
+TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody("f^oob|ar");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(4u, Selection().LayoutSelectionEnd());
+
+  // Paint virtually and clear ShouldInvalidate flag.
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  // "f^ooba|r"
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(selection.Base(),
+                            {selection.Extent().AnchorNode(), 5})
+          .Build());
+  Selection().CommitAppearanceIfNeeded();
+  // "foobar" should be invalidated.
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(5u, Selection().LayoutSelectionEnd());
+}
+
+TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd_Collapse) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody("f^oob|ar");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(4u, Selection().LayoutSelectionEnd());
+
+  // Paint virtually and clear ShouldInvalidate flag.
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  // "foo^|bar"
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .Collapse({selection.Base().AnchorNode(), 3})
+                               .Build());
+  Selection().CommitAppearanceIfNeeded();
+  // "foobar" should be invalidated.
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
+  TEST_NEXT("foobar", kNone, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_FALSE(Selection().LayoutSelectionStart().has_value());
+  EXPECT_FALSE(Selection().LayoutSelectionEnd().has_value());
+}
+
+TEST_F(LayoutSelectionTest, ContentEditableButton) {
+  SetBodyContent("<input type=button value=foo contenteditable>");
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .SelectAllChildren(*GetDocument().body())
+                               .Build());
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutButton, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+}
+
+TEST_F(LayoutSelectionTest, ClearSelection) {
+  Selection().SetSelection(SetSelectionTextToBody("<div>f^o|o</div>"));
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(2u, Selection().LayoutSelectionEnd());
+
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStartAndEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  Selection().ClearLayoutSelection();
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
+  TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
+  TEST_NEXT("foo", kNone, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_FALSE(Selection().LayoutSelectionStart().has_value());
+  EXPECT_FALSE(Selection().LayoutSelectionEnd().has_value());
+}
+
+TEST_F(LayoutSelectionTest, SVG) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("<svg><text x=10 y=10>fo^o|bar</text></svg>");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  // LayoutSVGText should be invalidate though it is kContain.
+  TEST_NEXT(IsSVGText, kContain, ShouldInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(2u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(3u, Selection().LayoutSelectionEnd());
+
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  TEST_NEXT(IsSVGText, kContain, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(selection.Base(),
+                            {selection.Extent().AnchorNode(), 4})
+          .Build());
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  TEST_NEXT(IsSVGText, kContain, ShouldInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(2u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(4u, Selection().LayoutSelectionEnd());
+}
+
+// crbug.com/781705
+TEST_F(LayoutSelectionTest, SVGAncestor) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody(
+      "<svg><text x=10 y=10><tspan>fo^o|bar</tspan></text></svg>");
+  Selection().SetSelection(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  // LayoutSVGText should be invalidated.
+  TEST_NEXT(IsSVGText, kContain, ShouldInvalidate);
+  TEST_NEXT(IsSVGTSpan, kNone, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(2u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(3u, Selection().LayoutSelectionEnd());
+
+  UpdateAllLifecyclePhases();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  TEST_NEXT(IsSVGText, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGTSpan, kNone, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(selection.Base(),
+                            {selection.Extent().AnchorNode(), 4})
+          .Build());
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
+  TEST_NEXT(IsSVGText, kContain, ShouldInvalidate);
+  TEST_NEXT(IsSVGTSpan, kNone, NotInvalidate);
+  TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(2u, Selection().LayoutSelectionStart());
+  EXPECT_EQ(4u, Selection().LayoutSelectionEnd());
+}
+
+TEST_F(LayoutSelectionTest, Embed) {
+  Selection().SetSelection(
+      SetSelectionTextToBody("^<embed type=foobar></embed>|"));
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutEmbeddedContent, kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+}
+
 }  // namespace blink

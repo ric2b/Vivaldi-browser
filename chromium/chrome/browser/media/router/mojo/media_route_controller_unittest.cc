@@ -12,6 +12,8 @@
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/mock_media_router.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_test.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -36,14 +38,19 @@ class MediaRouteControllerTest : public ::testing::Test {
   void SetUp() override {
     SetUpMockObjects();
 
-    auto controller =
-        base::MakeRefCounted<MediaRouteController>(kRouteId, &profile_);
-    mock_media_controller_.Bind(controller->CreateControllerRequest());
+    auto controller = CreateMediaRouteController();
+    auto result = controller->InitMojoInterfaces();
+    mock_media_controller_.Bind(std::move(result.first));
+    mojo_media_status_observer_ = std::move(result.second);
     observer_ = base::MakeUnique<MockMediaRouteControllerObserver>(
         std::move(controller));
   }
 
   void TearDown() override { observer_.reset(); }
+
+  virtual scoped_refptr<MediaRouteController> CreateMediaRouteController() {
+    return base::MakeRefCounted<MediaRouteController>(kRouteId, &profile_);
+  }
 
   scoped_refptr<MediaRouteController> GetController() const {
     return observer_->controller();
@@ -63,6 +70,7 @@ class MediaRouteControllerTest : public ::testing::Test {
   MockMediaRouter* router_ = nullptr;
   MockEventPageRequestManager* request_manager_ = nullptr;
   MockMediaController mock_media_controller_;
+  mojom::MediaStatusObserverPtr mojo_media_status_observer_;
   std::unique_ptr<MockMediaRouteControllerObserver> observer_;
 
  private:
@@ -78,6 +86,32 @@ class MediaRouteControllerTest : public ::testing::Test {
   }
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouteControllerTest);
+};
+
+class HangoutsMediaRouteControllerTest : public MediaRouteControllerTest {
+ public:
+  ~HangoutsMediaRouteControllerTest() override {}
+
+  void SetUp() override {
+    MediaRouteControllerTest::SetUp();
+    EXPECT_CALL(mock_media_controller_, ConnectHangoutsMediaRouteController());
+    base::RunLoop().RunUntilIdle();
+  }
+
+  scoped_refptr<MediaRouteController> CreateMediaRouteController() override {
+    return base::MakeRefCounted<HangoutsMediaRouteController>(kRouteId,
+                                                              &profile_);
+  }
+};
+
+class MirroringMediaRouteControllerTest : public MediaRouteControllerTest {
+ public:
+  ~MirroringMediaRouteControllerTest() override {}
+
+  scoped_refptr<MediaRouteController> CreateMediaRouteController() override {
+    return base::MakeRefCounted<MirroringMediaRouteController>(kRouteId,
+                                                               &profile_);
+  }
 };
 
 // Test that when Mojo connections are ready, calls to the Mojo controller go
@@ -149,22 +183,19 @@ TEST_F(MediaRouteControllerTest, NotifyMediaRouteControllerObservers) {
   MediaStatus status;
   status.title = "test media status";
 
-  // Get a mojo pointer for |controller_|, so that we can notify it of status
-  // updates via mojo.
-  mojom::MediaStatusObserverPtr mojo_observer =
-      GetController()->BindObserverPtr();
-
+  EXPECT_CALL(*observer_, OnMediaStatusUpdated(status));
   EXPECT_CALL(*observer1, OnMediaStatusUpdated(status));
   EXPECT_CALL(*observer2, OnMediaStatusUpdated(status));
-  mojo_observer->OnMediaStatusUpdated(status);
+  mojo_media_status_observer_->OnMediaStatusUpdated(status);
   base::RunLoop().RunUntilIdle();
 
   observer1.reset();
   auto observer3 = CreateObserver();
 
+  EXPECT_CALL(*observer_, OnMediaStatusUpdated(status));
   EXPECT_CALL(*observer2, OnMediaStatusUpdated(status));
   EXPECT_CALL(*observer3, OnMediaStatusUpdated(status));
-  mojo_observer->OnMediaStatusUpdated(status);
+  mojo_media_status_observer_->OnMediaStatusUpdated(status);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -184,6 +215,29 @@ TEST_F(MediaRouteControllerTest, DestroyControllerOnNoObservers) {
   EXPECT_CALL(*router_, DetachRouteController(kRouteId, controller)).Times(1);
   observer2.reset();
   EXPECT_TRUE(Mock::VerifyAndClearExpectations(router_));
+}
+
+TEST_F(HangoutsMediaRouteControllerTest, HangoutsCommands) {
+  auto controller = GetController();
+  auto* hangouts_controller =
+      HangoutsMediaRouteController::From(controller.get());
+  ASSERT_TRUE(hangouts_controller);
+
+  EXPECT_CALL(mock_media_controller_, SetLocalPresent(true));
+  hangouts_controller->SetLocalPresent(true);
+
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(MirroringMediaRouteControllerTest, MirroringCommands) {
+  auto controller = GetController();
+  auto* mirroring_controller =
+      MirroringMediaRouteController::From(controller.get());
+
+  mirroring_controller->SetMediaRemotingEnabled(false);
+  EXPECT_FALSE(mirroring_controller->media_remoting_enabled());
+  EXPECT_FALSE(
+      profile_.GetPrefs()->GetBoolean(prefs::kMediaRouterMediaRemotingEnabled));
 }
 
 }  // namespace media_router

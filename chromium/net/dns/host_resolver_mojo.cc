@@ -4,10 +4,10 @@
 
 #include "net/dns/host_resolver_mojo.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
@@ -54,7 +54,7 @@ class HostResolverMojo::RequestImpl : public HostResolver::Request {
  public:
   explicit RequestImpl(std::unique_ptr<Job> job) : job_(std::move(job)) {}
 
-  ~RequestImpl() override {}
+  ~RequestImpl() override = default;
 
   void ChangeRequestPriority(RequestPriority priority) override {}
 
@@ -148,7 +148,8 @@ void HostResolverMojo::Job::ReportResult(int32_t error,
   if (host_cache_) {
     base::TimeDelta ttl = base::TimeDelta::FromSeconds(
         error == OK ? kCacheEntryTTLSeconds : kNegativeCacheEntryTTLSeconds);
-    HostCache::Entry entry(error, *addresses_, ttl);
+    HostCache::Entry entry(error, *addresses_, HostCache::Entry::SOURCE_UNKNOWN,
+                           ttl);
     host_cache_->Set(key_, entry, base::TimeTicks::Now(), ttl);
   }
   if (binding_.is_bound())

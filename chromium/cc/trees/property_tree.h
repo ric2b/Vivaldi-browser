@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "cc/base/filter_operations.h"
 #include "cc/base/synced_property.h"
 #include "cc/cc_export.h"
 #include "cc/layers/layer_sticky_position_constraint.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -368,6 +368,7 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   void UpdateOpacities(EffectNode* node, EffectNode* parent_node);
   void UpdateIsDrawn(EffectNode* node, EffectNode* parent_node);
   void UpdateBackfaceVisibility(EffectNode* node, EffectNode* parent_node);
+  void UpdateHasMaskingChild(EffectNode* node, EffectNode* parent_node);
 
   // Stores copy requests, keyed by node id.
   std::unordered_multimap<int, std::unique_ptr<viz::CopyOutputRequest>>
@@ -457,7 +458,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void CopyCompleteTreeState(const ScrollTree& other);
 #endif
 
-  ScrollNode* FindNodeFromElementId(ElementId id);
+  const ScrollNode* FindNodeFromElementId(ElementId id) const;
 
  private:
   using ScrollOffsetMap = base::flat_map<ElementId, gfx::ScrollOffset>;

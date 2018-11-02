@@ -4,7 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_registration.h"
 
-#include <vector>
+#include <utility>
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -16,6 +16,7 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -38,7 +39,7 @@ ServiceWorkerVersionInfo GetVersionInfo(ServiceWorkerVersion* version) {
 }  // namespace
 
 ServiceWorkerRegistration::ServiceWorkerRegistration(
-    const ServiceWorkerRegistrationOptions& options,
+    const blink::mojom::ServiceWorkerRegistrationOptions& options,
     int64_t registration_id,
     base::WeakPtr<ServiceWorkerContextCore> context)
     : pattern_(options.scope),
@@ -51,7 +52,7 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(
       context_(context),
       task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK_NE(kInvalidServiceWorkerRegistrationId, registration_id);
+  DCHECK_NE(blink::mojom::kInvalidServiceWorkerRegistrationId, registration_id);
   DCHECK(context_);
   context_->AddLiveRegistration(this);
 }
@@ -177,15 +178,15 @@ void ServiceWorkerRegistration::UnsetVersionInternal(
     ChangedVersionAttributesMask* mask) {
   DCHECK(version);
   if (installing_version_.get() == version) {
-    installing_version_ = NULL;
+    installing_version_ = nullptr;
     mask->add(ChangedVersionAttributesMask::INSTALLING_VERSION);
   } else if (waiting_version_.get() == version) {
-    waiting_version_ = NULL;
+    waiting_version_ = nullptr;
     should_activate_when_ready_ = false;
     mask->add(ChangedVersionAttributesMask::WAITING_VERSION);
   } else if (active_version_.get() == version) {
     active_version_->RemoveListener(this);
-    active_version_ = NULL;
+    active_version_ = nullptr;
     mask->add(ChangedVersionAttributesMask::ACTIVE_VERSION);
   }
 }
@@ -228,9 +229,9 @@ void ServiceWorkerRegistration::ClearWhenReady() {
 
   context_->storage()->NotifyUninstallingRegistration(this);
   context_->storage()->DeleteRegistration(
-      id(),
-      pattern().GetOrigin(),
-      base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+      id(), pattern().GetOrigin(),
+      AdaptCallbackForRepeating(
+          base::BindOnce(&ServiceWorkerRegistration::OnDeleteFinished, this)));
 
   if (!active_version() || !active_version()->HasControllee())
     Clear();
@@ -352,8 +353,7 @@ void ServiceWorkerRegistration::ActivateWaitingVersion(bool delay) {
     // "1. Wait for exitingWorker to finish handling any in-progress requests."
     // This is already handled by IsReadyToActivate().
     // "2. Terminate exitingWorker."
-    exiting_version->StopWorker(
-        base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+    exiting_version->StopWorker(base::BindOnce(&base::DoNothing));
     // "3. Run the [[UpdateState]] algorithm passing exitingWorker and
     // "redundant" as the arguments."
     exiting_version->SetStatus(ServiceWorkerVersion::REDUNDANT);
@@ -397,31 +397,27 @@ void ServiceWorkerRegistration::ContinueActivation(
       ServiceWorkerMetrics::EventType::ACTIVATE,
       base::BindOnce(&ServiceWorkerRegistration::DispatchActivateEvent, this,
                      activating_version),
-      base::Bind(&ServiceWorkerRegistration::OnActivateEventFinished, this,
-                 activating_version));
+      base::BindOnce(&ServiceWorkerRegistration::OnActivateEventFinished, this,
+                     activating_version));
 }
 
 void ServiceWorkerRegistration::DeleteVersion(
     const scoped_refptr<ServiceWorkerVersion>& version) {
   DCHECK_EQ(id(), version->registration_id());
 
+  // Protect the registration since version->Doom() can stop |version|, which
+  // destroys start worker callbacks, which might be the only things holding a
+  // reference to |this|.
+  scoped_refptr<ServiceWorkerRegistration> protect(this);
+
   UnsetVersion(version.get());
-
-  for (std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator> it =
-           context_->GetProviderHostIterator();
-       !it->IsAtEnd(); it->Advance()) {
-    ServiceWorkerProviderHost* host = it->GetProviderHost();
-    if (host->controller() == version)
-      host->NotifyControllerLost();
-  }
-
   version->Doom();
 
   if (!active_version() && !waiting_version()) {
     // Delete the records from the db.
     context_->storage()->DeleteRegistration(
         id(), pattern().GetOrigin(),
-        base::Bind(&ServiceWorkerRegistration::OnDeleteFinished, this));
+        base::Bind(&ServiceWorkerRegistration::OnDeleteFinished, protect));
     // But not from memory if there is a version in the pipeline.
     // TODO(falken): Fix this logic. There could be a running register job for
     // this registration that hasn't set installing_version() yet.
@@ -516,8 +512,8 @@ void ServiceWorkerRegistration::OnActivateEventFinished(
 
 void ServiceWorkerRegistration::OnDeleteFinished(
     ServiceWorkerStatusCode status) {
-  // Intentionally empty completion callback, used to prevent
-  // |this| from being deleted until the storage method completes.
+  for (auto& listener : listeners_)
+    listener.OnRegistrationDeleted(this);
 }
 
 void ServiceWorkerRegistration::Clear() {

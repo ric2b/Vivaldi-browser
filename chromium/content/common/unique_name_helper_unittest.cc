@@ -98,8 +98,7 @@ class TestFrameAdapter : public UniqueNameHelper::FrameAdapter {
   // FrameState children is guaranteed to match the order of TestFrameAdapter
   // children.
   void PopulateLegacyFrameState(ExplodedFrameState* frame_state) const {
-    frame_state->target =
-        base::NullableString16(base::UTF8ToUTF16(GetLegacyName()), false);
+    frame_state->target = base::UTF8ToUTF16(GetLegacyName());
     frame_state->children.resize(children_.size());
     for (size_t i = 0; i < children_.size(); ++i)
       children_[i]->PopulateLegacyFrameState(&frame_state->children[i]);
@@ -108,13 +107,20 @@ class TestFrameAdapter : public UniqueNameHelper::FrameAdapter {
   // Recursively verify that FrameState and its children have matching unique
   // names to this TestFrameAdapter.
   void VerifyUpdatedFrameState(const ExplodedFrameState& frame_state) const {
-    EXPECT_EQ(GetUniqueName(), base::UTF16ToUTF8(frame_state.target.string()));
+    EXPECT_EQ(GetUniqueName(),
+              base::UTF16ToUTF8(frame_state.target.value_or(base::string16())));
 
     ASSERT_EQ(children_.size(), frame_state.children.size());
     for (size_t i = 0; i < children_.size(); ++i) {
       children_[i]->VerifyUpdatedFrameState(frame_state.children[i]);
     }
   }
+
+  void UpdateName(const std::string& new_name) {
+    unique_name_helper_.UpdateName(new_name);
+  }
+
+  void Freeze() { unique_name_helper_.Freeze(); }
 
  private:
   // Global toggle for the style of name to generate. Used to ensure that test
@@ -163,7 +169,7 @@ void VerifyPageStateForTargetUpdate(const TestFrameAdapter& main_frame) {
 
   // Version 24 is the last version with unlimited size unique names.
   std::string encoded_state;
-  EncodePageStateForTesting(in_state, 24, &encoded_state);
+  LegacyEncodePageStateForTesting(in_state, 24, &encoded_state);
 
   ExplodedPageState out_state;
   DecodePageState(encoded_state, &out_state);
@@ -405,6 +411,21 @@ TEST(UniqueNameHelper, GeneratedFramePathHashing) {
             frame_0_1_1_0_0.GetLegacyName());
 
   VerifyPageStateForTargetUpdate(main_frame);
+}
+
+TEST(UniqueNameHelper, UpdateName) {
+  TestFrameAdapter main_frame(nullptr, -1, "my main frame");
+  EXPECT_EQ("", main_frame.GetUniqueName());
+
+  TestFrameAdapter frame_0(&main_frame, 0, "name1");
+  EXPECT_EQ("name1", frame_0.GetUniqueName());
+
+  frame_0.UpdateName("name2");
+  EXPECT_EQ("name2", frame_0.GetUniqueName());
+
+  frame_0.Freeze();
+  frame_0.UpdateName("name3");
+  EXPECT_EQ("name2", frame_0.GetUniqueName());  // No change expected.
 }
 
 }  // namespace

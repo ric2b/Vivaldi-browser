@@ -33,8 +33,8 @@
 #include <algorithm>
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/MutationCallback.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/v8_mutation_callback.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationObserverRegistration.h"
@@ -52,11 +52,8 @@ class MutationObserver::V8DelegateImpl final
   USING_GARBAGE_COLLECTED_MIXIN(V8DelegateImpl);
 
  public:
-  static V8DelegateImpl* Create(v8::Isolate* isolate,
-                                MutationCallback* callback) {
-    ExecutionContext* execution_context =
-        ToExecutionContext(callback->v8Value(isolate)->CreationContext());
-
+  static V8DelegateImpl* Create(V8MutationCallback* callback,
+                                ExecutionContext* execution_context) {
     return new V8DelegateImpl(callback, execution_context);
   }
 
@@ -68,23 +65,25 @@ class MutationObserver::V8DelegateImpl final
                MutationObserver& observer) override {
     // https://dom.spec.whatwg.org/#notify-mutation-observers
     // step 5-4. specifies that the callback this value is a MutationObserver.
-    callback_->call(&observer, records, &observer);
+    callback_->InvokeAndReportException(&observer, records, &observer);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(callback_);
     MutationObserver::Delegate::Trace(visitor);
     ContextClient::Trace(visitor);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() { visitor->TraceWrappers(callback_); }
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+    visitor->TraceWrappers(callback_);
+  }
 
  private:
-  V8DelegateImpl(MutationCallback* callback,
+  V8DelegateImpl(V8MutationCallback* callback,
                  ExecutionContext* execution_context)
       : ContextClient(execution_context), callback_(callback) {}
 
-  TraceWrapperMember<MutationCallback> callback_;
+  TraceWrapperMember<V8MutationCallback> callback_;
 };
 
 static unsigned g_observer_priority = 0;
@@ -102,11 +101,11 @@ MutationObserver* MutationObserver::Create(Delegate* delegate) {
 }
 
 MutationObserver* MutationObserver::Create(ScriptState* script_state,
-                                           MutationCallback* callback) {
+                                           V8MutationCallback* callback) {
   DCHECK(IsMainThread());
+  ExecutionContext* execution_context = ExecutionContext::From(script_state);
   return new MutationObserver(
-      ExecutionContext::From(script_state),
-      V8DelegateImpl::Create(script_state->GetIsolate(), callback));
+      execution_context, V8DelegateImpl::Create(callback, execution_context));
 }
 
 MutationObserver::MutationObserver(ExecutionContext* execution_context,
@@ -291,7 +290,7 @@ HeapHashSet<Member<Node>> MutationObserver::GetObservedNodes() const {
 
 bool MutationObserver::ShouldBeSuspended() const {
   const ExecutionContext* execution_context = delegate_->GetExecutionContext();
-  return execution_context && execution_context->IsContextSuspended();
+  return execution_context && execution_context->IsContextPaused();
 }
 
 void MutationObserver::CancelInspectorAsyncTasks() {
@@ -356,6 +355,12 @@ void MutationObserver::DeliverMutations() {
 
   std::sort(observers.begin(), observers.end(), ObserverLessThan());
   for (const auto& observer : observers) {
+    if (!observer->GetExecutionContext()) {
+      // The observer's execution context is already gone, as active observers
+      // intentionally do not hold their execution context. Do nothing then.
+      continue;
+    }
+
     if (observer->ShouldBeSuspended())
       SuspendedMutationObservers().insert(observer);
     else
@@ -365,14 +370,16 @@ void MutationObserver::DeliverMutations() {
     slot->DispatchSlotChangeEvent();
 }
 
-DEFINE_TRACE(MutationObserver) {
+void MutationObserver::Trace(blink::Visitor* visitor) {
   visitor->Trace(delegate_);
   visitor->Trace(records_);
   visitor->Trace(registrations_);
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(MutationObserver) {
+void MutationObserver::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(delegate_);
   for (auto record : records_)
     visitor->TraceWrappers(record);

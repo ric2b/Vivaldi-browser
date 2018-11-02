@@ -7,14 +7,16 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/Settings.h"
+#include "core/frame/WebFeature.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/SubresourceFilter.h"
 #include "core/loader/private/FrameClientHintsPreferencesContext.h"
 #include "platform/exported/WrappedResourceRequest.h"
-#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/loader/fetch/ResourceLoadingLog.h"
+#include "platform/loader/fetch/fetch_initiator_type_names.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -57,7 +59,7 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequest(
   if (blocked_reason != ResourceRequestBlockedReason::kNone &&
       reporting_policy == SecurityViolationReportingPolicy::kReport) {
     DispatchDidBlockRequest(resource_request, options.initiator_info,
-                            blocked_reason);
+                            blocked_reason, type);
   }
   return blocked_reason;
 }
@@ -161,7 +163,7 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
   if (ShouldBlockRequestByInspector(resource_request.Url()))
     return ResourceRequestBlockedReason::kInspector;
 
-  SecurityOrigin* security_origin = options.security_origin.Get();
+  SecurityOrigin* security_origin = options.security_origin.get();
   if (!security_origin)
     security_origin = GetSecurityOrigin();
 
@@ -208,6 +210,15 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
         return ResourceRequestBlockedReason::kOrigin;
       }
       break;
+  }
+
+  // User Agent CSS stylesheets should only support loading images and should be
+  // restricted to data urls.
+  if (options.initiator_info.name == FetchInitiatorTypeNames::uacss) {
+    if (type == Resource::kImage && url.ProtocolIsData()) {
+      return ResourceRequestBlockedReason::kNone;
+    }
+    return ResourceRequestBlockedReason::kOther;
   }
 
   WebURLRequest::RequestContext request_context =
@@ -286,7 +297,33 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
   return ResourceRequestBlockedReason::kNone;
 }
 
-DEFINE_TRACE(BaseFetchContext) {
+ResourceRequestBlockedReason BaseFetchContext::CheckResponseNosniff(
+    WebURLRequest::RequestContext request_context,
+    const ResourceResponse& response) const {
+  bool sniffing_allowed =
+      ParseContentTypeOptionsHeader(response.HttpHeaderField(
+          HTTPNames::X_Content_Type_Options)) != kContentTypeOptionsNosniff;
+  if (sniffing_allowed)
+    return ResourceRequestBlockedReason::kNone;
+
+  String mime_type = response.HttpContentType();
+  if (request_context == WebURLRequest::kRequestContextStyle &&
+      !MIMETypeRegistry::IsSupportedStyleSheetMIMEType(mime_type)) {
+    AddConsoleMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, kErrorMessageLevel,
+        "Refused to apply style from '" + response.Url().ElidedString() +
+            "' because its MIME type ('" + mime_type + "') " +
+            "is not a supported stylesheet MIME type, and strict MIME checking "
+            "is enabled."));
+    return ResourceRequestBlockedReason::kContentType;
+  }
+  // TODO(mkwst): Move the 'nosniff' bit of 'AllowedByNosniff::MimeTypeAsScript'
+  // here alongside the style checks, and put its use counters somewhere else.
+
+  return ResourceRequestBlockedReason::kNone;
+}
+
+void BaseFetchContext::Trace(blink::Visitor* visitor) {
   FetchContext::Trace(visitor);
 }
 

@@ -5,15 +5,15 @@
 #include "core/html/forms/ExternalPopupMenu.h"
 
 #include <memory>
-#include "core/HTMLNames.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameImpl.h"
-#include "core/html/HTMLSelectElement.h"
+#include "core/html/forms/HTMLSelectElement.h"
 #include "core/html/forms/PopupMenu.h"
+#include "core/html_names.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/page/Page.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
@@ -25,27 +25,23 @@
 
 namespace blink {
 
-class ExternalPopupMenuDisplayNoneItemsTest : public ::testing::Test {
+class ExternalPopupMenuDisplayNoneItemsTest : public PageTestBase {
  public:
   ExternalPopupMenuDisplayNoneItemsTest() {}
 
  protected:
   void SetUp() override {
-    dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-    HTMLSelectElement* element =
-        HTMLSelectElement::Create(dummy_page_holder_->GetDocument());
+    PageTestBase::SetUp();
+    HTMLSelectElement* element = HTMLSelectElement::Create(GetDocument());
     // Set the 4th an 5th items to have "display: none" property
-    element->setInnerHTML(
+    element->SetInnerHTMLFromString(
         "<option><option><option><option style='display:none;'><option "
         "style='display:none;'><option><option>");
-    dummy_page_holder_->GetDocument().body()->AppendChild(element,
-                                                          ASSERT_NO_EXCEPTION);
+    GetDocument().body()->AppendChild(element, ASSERT_NO_EXCEPTION);
     owner_element_ = element;
-    dummy_page_holder_->GetDocument()
-        .UpdateStyleAndLayoutIgnorePendingStylesheets();
+    GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   }
 
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   Persistent<HTMLSelectElement> owner_element_;
 };
 
@@ -141,7 +137,7 @@ TEST_F(ExternalPopupMenuTest, PopupAccountsForVisualViewportTransform) {
   WebView()->Resize(WebSize(100, 100));
   WebView()->UpdateAllLifecyclePhases();
 
-  HTMLSelectElement* select = toHTMLSelectElement(
+  HTMLSelectElement* select = ToHTMLSelectElement(
       MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
@@ -170,7 +166,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndex) {
   RegisterMockedURLLoad("select.html");
   LoadFrame("select.html");
 
-  HTMLSelectElement* select = toHTMLSelectElement(
+  HTMLSelectElement* select = ToHTMLSelectElement(
       MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
@@ -190,7 +186,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndices) {
   RegisterMockedURLLoad("select.html");
   LoadFrame("select.html");
 
-  HTMLSelectElement* select = toHTMLSelectElement(
+  HTMLSelectElement* select = ToHTMLSelectElement(
       MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);
@@ -212,7 +208,7 @@ TEST_F(ExternalPopupMenuTest, DidAcceptIndicesClearSelect) {
   RegisterMockedURLLoad("select.html");
   LoadFrame("select.html");
 
-  HTMLSelectElement* select = toHTMLSelectElement(
+  HTMLSelectElement* select = ToHTMLSelectElement(
       MainFrame()->GetFrame()->GetDocument()->getElementById("select"));
   LayoutMenuList* menu_list = ToLayoutMenuList(select->GetLayoutObject());
   ASSERT_TRUE(menu_list);

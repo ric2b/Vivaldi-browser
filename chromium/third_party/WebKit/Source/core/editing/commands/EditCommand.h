@@ -54,7 +54,7 @@ class CORE_EXPORT EditCommand : public GarbageCollectedFinalized<EditCommand> {
   // |TypingCommand| will return the text of the last |m_commands|.
   virtual String TextDataForInputEvent() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   explicit EditCommand(Document&);
@@ -62,9 +62,6 @@ class CORE_EXPORT EditCommand : public GarbageCollectedFinalized<EditCommand> {
   Document& GetDocument() const { return *document_.Get(); }
   CompositeEditCommand* Parent() const { return parent_; }
 
-  // TODO(yosin) |isRenderedCharacter()| should be removed, and we should use
-  // |VisiblePosition::characterAfter()| and
-  // |VisiblePosition::characterBefore()|.
   static bool IsRenderedCharacter(const Position&);
 
  private:

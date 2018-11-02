@@ -4,8 +4,6 @@
 
 #include "content/renderer/media/audio_message_filter.h"
 
-#include <string>
-
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -45,18 +43,18 @@ class AudioMessageFilter::AudioOutputIPCImpl : public media::AudioOutputIPC {
   bool stream_created_;
 };
 
-AudioMessageFilter* AudioMessageFilter::g_filter = NULL;
+AudioMessageFilter* AudioMessageFilter::g_filter = nullptr;
 
 AudioMessageFilter::AudioMessageFilter(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
-    : sender_(NULL), io_task_runner_(io_task_runner) {
+    : sender_(nullptr), io_task_runner_(io_task_runner) {
   DCHECK(!g_filter);
   g_filter = this;
 }
 
 AudioMessageFilter::~AudioMessageFilter() {
   DCHECK_EQ(g_filter, this);
-  g_filter = NULL;
+  g_filter = nullptr;
 }
 
 // static
@@ -170,7 +168,7 @@ void AudioMessageFilter::OnFilterRemoved() {
 
 void AudioMessageFilter::OnChannelClosing() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
-  sender_ = NULL;
+  sender_ = nullptr;
 
   DLOG_IF(WARNING, !delegates_.IsEmpty())
       << "Not all audio devices have been closed.";
@@ -199,8 +197,7 @@ void AudioMessageFilter::OnDeviceAuthorized(
 void AudioMessageFilter::OnStreamCreated(
     int stream_id,
     base::SharedMemoryHandle handle,
-    base::SyncSocket::TransitDescriptor socket_descriptor,
-    uint32_t length) {
+    base::SyncSocket::TransitDescriptor socket_descriptor) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   WebRtcLogMessage(base::StringPrintf(
@@ -218,7 +215,7 @@ void AudioMessageFilter::OnStreamCreated(
     base::SyncSocket socket(socket_handle);
     return;
   }
-  delegate->OnStreamCreated(handle, socket_handle, length);
+  delegate->OnStreamCreated(handle, socket_handle);
 }
 
 void AudioMessageFilter::OnStreamError(int stream_id) {

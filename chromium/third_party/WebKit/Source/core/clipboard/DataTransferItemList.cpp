@@ -98,9 +98,10 @@ DataTransferItemList::DataTransferItemList(DataTransfer* data_transfer,
                                            DataObject* data_object)
     : data_transfer_(data_transfer), data_object_(data_object) {}
 
-DEFINE_TRACE(DataTransferItemList) {
+void DataTransferItemList::Trace(blink::Visitor* visitor) {
   visitor->Trace(data_transfer_);
   visitor->Trace(data_object_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

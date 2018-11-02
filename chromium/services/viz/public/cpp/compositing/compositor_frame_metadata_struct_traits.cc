@@ -14,9 +14,9 @@ namespace mojo {
 
 // static
 bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
-                  cc::CompositorFrameMetadata>::
+                  viz::CompositorFrameMetadata>::
     Read(viz::mojom::CompositorFrameMetadataDataView data,
-         cc::CompositorFrameMetadata* out) {
+         viz::CompositorFrameMetadata* out) {
   out->device_scale_factor = data.device_scale_factor();
   if (!data.ReadRootScrollOffset(&out->root_scroll_offset))
     return false;
@@ -40,6 +40,7 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   out->bottom_controls_shown_ratio = data.bottom_controls_shown_ratio();
   out->content_source_id = data.content_source_id();
   out->frame_token = data.frame_token();
+  out->presentation_token = data.presentation_token();
   out->root_background_color = data.root_background_color();
   out->can_activate_before_dependencies =
       data.can_activate_before_dependencies();

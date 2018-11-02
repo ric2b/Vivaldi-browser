@@ -23,8 +23,6 @@ APP_LIST_EXPORT extern const SkColor kSearchTextColor;
 
 APP_LIST_EXPORT extern const SkColor kLabelBackgroundColor;
 APP_LIST_EXPORT extern const SkColor kBottomSeparatorColor;
-APP_LIST_EXPORT extern const SkColor kBottomSeparatorColorFullScreen;
-
 APP_LIST_EXPORT extern const SkColor kDialogSeparatorColor;
 
 APP_LIST_EXPORT extern const SkColor kHighlightedColor;
@@ -42,7 +40,6 @@ APP_LIST_EXPORT extern const SkColor kResultDimmedTextColor;
 APP_LIST_EXPORT extern const SkColor kResultURLTextColor;
 
 APP_LIST_EXPORT extern const SkColor kGridTitleColor;
-APP_LIST_EXPORT extern const SkColor kGridTitleColorFullscreen;
 
 APP_LIST_EXPORT extern const int kGridTileWidth;
 APP_LIST_EXPORT extern const int kGridTileHeight;
@@ -55,17 +52,15 @@ APP_LIST_EXPORT extern const int kGridSelectedCornerRadius;
 
 APP_LIST_EXPORT extern const SkColor kFolderTitleColor;
 APP_LIST_EXPORT extern const SkColor kFolderTitleHintTextColor;
-APP_LIST_EXPORT extern const SkColor kFolderBubbleColor;
-APP_LIST_EXPORT extern const SkColor kFolderBubbleColorFullScreen;
 APP_LIST_EXPORT extern const SkColor kFolderShadowColor;
 APP_LIST_EXPORT extern const float kFolderBubbleOpacity;
-APP_LIST_EXPORT extern const float kFolderBubbleRadius;
-APP_LIST_EXPORT extern const float kFolderBubbleOffsetY;
+
+APP_LIST_EXPORT extern const int kFolderBackgroundBubbleRadius;
 
 APP_LIST_EXPORT extern const SkColor kCardBackgroundColor;
-APP_LIST_EXPORT extern const SkColor kCardBackgroundColorFullscreen;
 
 APP_LIST_EXPORT extern const int kPageTransitionDurationInMs;
+APP_LIST_EXPORT extern const int kPageTransitionDurationDampening;
 APP_LIST_EXPORT extern const int kOverscrollPageTransitionDurationMs;
 APP_LIST_EXPORT extern const int kFolderTransitionInDurationMs;
 APP_LIST_EXPORT extern const int kFolderTransitionOutDurationMs;
@@ -74,26 +69,24 @@ APP_LIST_EXPORT extern const gfx::Tween::Type kFolderFadeInTweenType;
 APP_LIST_EXPORT extern const gfx::Tween::Type kFolderFadeOutTweenType;
 
 APP_LIST_EXPORT extern const int kPreferredCols;
-APP_LIST_EXPORT extern const int kPreferredColsFullscreen;
 APP_LIST_EXPORT extern const int kPreferredRows;
-APP_LIST_EXPORT extern const int kPreferredRowsFullscreen;
 APP_LIST_EXPORT extern const int kGridIconDimension;
 
 APP_LIST_EXPORT extern const int kAppBadgeIconSize;
 APP_LIST_EXPORT extern const int kBadgeBackgroundRadius;
 
 APP_LIST_EXPORT extern const int kListIconSize;
-APP_LIST_EXPORT extern const int kListIconSizeFullscreen;
 APP_LIST_EXPORT extern const int kListBadgeIconSize;
-APP_LIST_EXPORT extern const int kListBadgeIconSizeFullscreen;
 APP_LIST_EXPORT extern const int kListBadgeIconOffsetX;
 APP_LIST_EXPORT extern const int kListBadgeIconOffsetY;
 APP_LIST_EXPORT extern const int kTileIconSize;
 
 APP_LIST_EXPORT extern const SkColor kIconColor;
 
-APP_LIST_EXPORT extern const size_t kNumStartPageTiles;
-APP_LIST_EXPORT extern const size_t kNumStartPageTilesFullscreen;
+APP_LIST_EXPORT extern const float kDragDropAppIconScale;
+APP_LIST_EXPORT extern const int kDragDropAppIconScaleTransitionInMs;
+
+APP_LIST_EXPORT extern const int kNumStartPageTiles;
 APP_LIST_EXPORT extern const size_t kMaxSearchResults;
 
 APP_LIST_EXPORT extern const size_t kExpandArrowTopPadding;
@@ -101,21 +94,21 @@ APP_LIST_EXPORT extern const size_t kExpandArrowTopPadding;
 APP_LIST_EXPORT extern const int kReorderDroppingCircleRadius;
 
 APP_LIST_EXPORT extern const int kAppsGridPadding;
-APP_LIST_EXPORT extern const int kAppsGridLeftRightPaddingFullscreen;
-APP_LIST_EXPORT extern const int kBottomSeparatorLeftRightPaddingFullScreen;
-APP_LIST_EXPORT extern const int kBottomSeparatorBottomPaddingFullScreen;
+APP_LIST_EXPORT extern const int kAppsGridLeftRightPadding;
+APP_LIST_EXPORT extern const int kBottomSeparatorLeftRightPadding;
+APP_LIST_EXPORT extern const int kBottomSeparatorBottomPadding;
 APP_LIST_EXPORT extern const int kSearchBoxPadding;
 APP_LIST_EXPORT extern const int kSearchBoxTopPadding;
 APP_LIST_EXPORT extern const int kSearchBoxPeekingBottomPadding;
-APP_LIST_EXPORT extern const int kSearchBoxFullscreenBottomPadding;
-APP_LIST_EXPORT extern const int kSearchBoxBorderCornerRadiusFullscreen;
+APP_LIST_EXPORT extern const int kSearchBoxBottomPadding;
+APP_LIST_EXPORT extern const int kSearchBoxBorderCornerRadius;
 APP_LIST_EXPORT extern const int kSearchBoxPreferredHeight;
 
 APP_LIST_EXPORT extern const int kPeekingAppListHeight;
 APP_LIST_EXPORT extern const int kShelfSize;
 
-APP_LIST_EXPORT extern size_t kMaxFolderItems;
-APP_LIST_EXPORT extern const size_t kNumFolderTopItems;
+APP_LIST_EXPORT extern const size_t kMaxFolderItems;
+APP_LIST_EXPORT extern const size_t kMaxFolderItems;
 APP_LIST_EXPORT extern const size_t kMaxFolderNameChars;
 
 APP_LIST_EXPORT extern const ui::ResourceBundle::FontStyle kItemTextFontStyle;
@@ -186,12 +179,15 @@ enum AppListPageSwitcherSource {
 
 APP_LIST_EXPORT extern const char kAppListAppLaunched[];
 APP_LIST_EXPORT extern const char kAppListAppLaunchedFullscreen[];
+APP_LIST_EXPORT extern const char kAppListCreationTimeHistogram[];
 APP_LIST_EXPORT extern const char kAppListStateTransitionSourceHistogram[];
 APP_LIST_EXPORT extern const char kAppListPageSwitcherSourceHistogram[];
 APP_LIST_EXPORT extern const char kAppListFolderOpenedHistogram[];
 APP_LIST_EXPORT extern const char kAppListPeekingToFullscreenHistogram[];
 APP_LIST_EXPORT extern const char kAppListToggleMethodHistogram[];
 APP_LIST_EXPORT extern const char kPageOpenedHistogram[];
+APP_LIST_EXPORT extern const char kNumberOfAppsInFoldersHistogram[];
+APP_LIST_EXPORT extern const char kNumberOfFoldersHistogram[];
 
 APP_LIST_EXPORT extern const char kSearchResultOpenDisplayTypeHistogram[];
 APP_LIST_EXPORT extern const char kSearchQueryLength[];
@@ -208,7 +204,7 @@ APP_LIST_EXPORT gfx::ShadowValue GetShadowForZHeight(int z_height);
 APP_LIST_EXPORT const gfx::ShadowValues& IconStartShadows();
 APP_LIST_EXPORT const gfx::ShadowValues& IconEndShadows();
 
-APP_LIST_EXPORT const gfx::FontList& FullscreenAppListAppTitleFont();
+APP_LIST_EXPORT const gfx::FontList& AppListAppTitleFont();
 
 }  // namespace app_list
 

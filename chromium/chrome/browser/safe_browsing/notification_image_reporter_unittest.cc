@@ -14,8 +14,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/db/test_database_manager.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -179,9 +179,7 @@ void NotificationImageReporterTest::SetUpOnIO() {
 void NotificationImageReporterTest::SetExtendedReportingLevel(
     ExtendedReportingLevel level) {
   feature_list_ = base::MakeUnique<base::test::ScopedFeatureList>();
-  if (level == SBER_LEVEL_SCOUT)
-    feature_list_->InitWithFeatures({safe_browsing::kOnlyShowScoutOptIn}, {});
-  else
+  if (level != SBER_LEVEL_SCOUT)
     // Explicitly disable CanShowScoutOptIn, which is on by default.
     feature_list_->InitWithFeatures({}, {safe_browsing::kCanShowScoutOptIn});
 

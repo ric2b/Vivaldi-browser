@@ -146,8 +146,8 @@ class StateMachine : public SchedulerStateMachine {
   bool CanDraw() const { return can_draw_; }
   bool Visible() const { return visible_; }
 
-  bool PendingActivationsShouldBeForced() const {
-    return SchedulerStateMachine::PendingActivationsShouldBeForced();
+  bool ShouldAbortCurrentFrame() const {
+    return SchedulerStateMachine::ShouldAbortCurrentFrame();
   }
 
   bool has_pending_tree() const { return has_pending_tree_; }
@@ -159,6 +159,7 @@ class StateMachine : public SchedulerStateMachine {
     return needs_impl_side_invalidation_;
   }
 
+  using SchedulerStateMachine::ShouldPrepareTiles;
   using SchedulerStateMachine::ShouldTriggerBeginImplFrameDeadlineImmediately;
   using SchedulerStateMachine::ProactiveBeginFrameWanted;
   using SchedulerStateMachine::WillCommit;
@@ -1181,6 +1182,12 @@ TEST(SchedulerStateMachineTest, TestFullCycleWithCommitToActive) {
   state.OnBeginImplFrameDeadline();
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_DRAW_IF_POSSIBLE);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
+
+  // When commits are deferred, we don't block the deadline.
+  state.SetDeferCommits(true);
+  state.OnBeginImplFrame(0, 13);
+  EXPECT_NE(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
+            state.CurrentBeginImplFrameDeadlineMode());
 }
 
 TEST(SchedulerStateMachineTest, TestFullCycleWithCommitRequestInbetween) {
@@ -1711,7 +1718,7 @@ TEST(SchedulerStateMachineTest,
 }
 
 TEST(SchedulerStateMachineTest,
-     TestPendingActivationsShouldBeForcedAfterLostLayerTreeFrameSink) {
+     TestShouldAbortCurrentFrameAfterLostLayerTreeFrameSink) {
   SchedulerSettings default_scheduler_settings;
   StateMachine state(default_scheduler_settings);
   SET_UP_STATE(state)
@@ -1726,7 +1733,7 @@ TEST(SchedulerStateMachineTest,
   state.NotifyReadyToCommit();
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_COMMIT);
 
-  EXPECT_TRUE(state.PendingActivationsShouldBeForced());
+  EXPECT_TRUE(state.ShouldAbortCurrentFrame());
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_ACTIVATE_SYNC_TREE);
 
   EXPECT_TRUE(state.PendingDrawsShouldBeAborted());
@@ -1816,7 +1823,7 @@ TEST(SchedulerStateMachineTest,
   // because we are not visible.
   state.NotifyBeginMainFrameStarted();
   state.NotifyReadyToCommit();
-  EXPECT_TRUE(state.PendingActivationsShouldBeForced());
+  EXPECT_TRUE(state.ShouldAbortCurrentFrame());
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_COMMIT);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_ACTIVATE_SYNC_TREE);
   EXPECT_TRUE(state.active_tree_needs_first_draw());
@@ -2066,7 +2073,7 @@ TEST(SchedulerStateMachineTest, TestTriggerDeadlineImmediatelyWhenInvisible) {
 
   state.SetVisible(false);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
-  EXPECT_TRUE(state.PendingActivationsShouldBeForced());
+  EXPECT_TRUE(state.ShouldAbortCurrentFrame());
   EXPECT_TRUE(state.ShouldTriggerBeginImplFrameDeadlineImmediately());
 }
 
@@ -2086,7 +2093,7 @@ TEST(SchedulerStateMachineTest,
 
   state.SetBeginFrameSourcePaused(true);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
-  EXPECT_TRUE(state.PendingActivationsShouldBeForced());
+  EXPECT_TRUE(state.ShouldAbortCurrentFrame());
   EXPECT_TRUE(state.ShouldTriggerBeginImplFrameDeadlineImmediately());
 }
 
@@ -2192,7 +2199,10 @@ TEST(SchedulerStateMachineTest,
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
 }
 
-TEST(SchedulerStateMachineTest, ImplSideInvalidationOnlyInsideDeadline) {
+TEST(SchedulerStateMachineTest,
+     ImplSideInvalidationAndMainFrame_NoMainFrameRequest) {
+  // No main frame request or any update in the last frame, invalidation runs
+  // immediately.
   SchedulerSettings settings;
   StateMachine state(settings);
   SET_UP_STATE(state);
@@ -2200,8 +2210,81 @@ TEST(SchedulerStateMachineTest, ImplSideInvalidationOnlyInsideDeadline) {
   bool needs_first_draw_on_activation = true;
   state.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   state.IssueNextBeginImplFrame();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_PERFORM_IMPL_SIDE_INVALIDATION);
+}
+
+TEST(SchedulerStateMachineTest,
+     ImplSideInvalidationAndMainFrame_MainFrameRequest) {
+  // Main frame request and no abort history from the last frame, invalidation
+  // waits until deadline.
+  SchedulerSettings settings;
+  StateMachine state(settings);
+  SET_UP_STATE(state);
+
+  bool needs_first_draw_on_activation = true;
+  state.SetNeedsBeginMainFrame();
+  state.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
+  state.IssueNextBeginImplFrame();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_SEND_BEGIN_MAIN_FRAME);
+  state.OnBeginImplFrameDeadline();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_PERFORM_IMPL_SIDE_INVALIDATION);
+}
+
+TEST(SchedulerStateMachineTest,
+     ImplSideInvalidationAndMainFrame_LastFrameCommit) {
+  // Main frame committed in the last impl frame, invalidation waits until the
+  // deadline.
+  SchedulerSettings settings;
+  StateMachine state(settings);
+  SET_UP_STATE(state);
+
+  state.SetNeedsBeginMainFrame();
+  state.IssueNextBeginImplFrame();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_SEND_BEGIN_MAIN_FRAME);
+  state.NotifyBeginMainFrameStarted();
+  state.NotifyReadyToCommit();
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_COMMIT);
+  state.NotifyReadyToActivate();
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_ACTIVATE_SYNC_TREE);
+  state.OnBeginImplFrameDeadline();
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_DRAW_IF_POSSIBLE);
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
+
+  bool needs_first_draw_on_activation = true;
+  state.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
+  state.IssueNextBeginImplFrame();
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
   state.OnBeginImplFrameDeadline();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_PERFORM_IMPL_SIDE_INVALIDATION);
+}
+
+TEST(SchedulerStateMachineTest,
+     ImplSideInvalidationAndMainFrame_LastFrameAborted) {
+  // Last main frame was aborted. An invalidation is performed even if a main
+  // frame request is pending.
+  SchedulerSettings settings;
+  StateMachine state(settings);
+  SET_UP_STATE(state);
+
+  state.SetNeedsBeginMainFrame();
+  state.IssueNextBeginImplFrame();
+  EXPECT_ACTION_UPDATE_STATE(
+      SchedulerStateMachine::ACTION_SEND_BEGIN_MAIN_FRAME);
+  state.NotifyBeginMainFrameStarted();
+  state.BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
+  state.OnBeginImplFrameDeadline();
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
+
+  bool needs_first_draw_on_activation = true;
+  state.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
+  state.SetNeedsBeginMainFrame();
+  state.IssueNextBeginImplFrame();
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::ACTION_PERFORM_IMPL_SIDE_INVALIDATION);
 }
@@ -2432,11 +2515,22 @@ TEST(SchedulerStateMachineTest, TestFullPipelineMode) {
   // Start clean and set commit.
   state.SetNeedsBeginMainFrame();
 
+  // While we are waiting for an main frame or pending tree activation, we
+  // should even block while we can't draw.
+  state.SetCanDraw(false);
+
   // Begin the frame.
   state.OnBeginImplFrame(0, 10);
-  // Deadline immediately enters blocking mode, because we need a main frame.
+  // We are blocking because we need a main frame.
   EXPECT_EQ(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
             state.CurrentBeginImplFrameDeadlineMode());
+
+  // Even if main thread defers commits, we still need to wait for it.
+  state.SetDeferCommits(true);
+  EXPECT_EQ(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
+            state.CurrentBeginImplFrameDeadlineMode());
+  state.SetDeferCommits(false);
+
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::ACTION_SEND_BEGIN_MAIN_FRAME);
   EXPECT_MAIN_FRAME_STATE(SchedulerStateMachine::BEGIN_MAIN_FRAME_STATE_SENT);
@@ -2459,14 +2553,28 @@ TEST(SchedulerStateMachineTest, TestFullPipelineMode) {
   // We are blocking on activation.
   EXPECT_EQ(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
             state.CurrentBeginImplFrameDeadlineMode());
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
+
+  // We should prepare tiles even though we are not in the deadline, otherwise
+  // we would get stuck here.
+  EXPECT_FALSE(state.ShouldPrepareTiles());
+  state.SetNeedsPrepareTiles();
+  EXPECT_TRUE(state.ShouldPrepareTiles());
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_PREPARE_TILES);
 
   // Ready to activate, but not draw.
   state.NotifyReadyToActivate();
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_ACTIVATE_SYNC_TREE);
-  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
-  // We are blocking on ready to draw.
+  // We should no longer block, because can_draw is still false, and we are no
+  // longer waiting for activation.
+  EXPECT_EQ(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_IMMEDIATE,
+            state.CurrentBeginImplFrameDeadlineMode());
+
+  // However, we should continue to block on ready to draw if we can draw.
+  state.SetCanDraw(true);
   EXPECT_EQ(SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
             state.CurrentBeginImplFrameDeadlineMode());
+  EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
 
   // Ready to draw triggers immediate deadline.
   state.NotifyReadyToDraw();

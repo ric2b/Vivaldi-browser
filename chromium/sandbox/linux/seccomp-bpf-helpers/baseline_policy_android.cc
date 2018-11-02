@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.h"
+#include "sandbox/linux/seccomp-bpf-helpers/syscall_sets.h"
 #include "sandbox/linux/system_headers/linux_syscalls.h"
 
 #if defined(__x86_64__)
@@ -75,15 +76,17 @@ ResultExpr BaselinePolicyAndroid::EvaluateSyscall(int sysno) const {
     case __NR_flock:
     case __NR_fsync:
     case __NR_ftruncate:
-#if defined(__i386__) || defined(__arm__) || defined(__mips__)
+#if defined(__i386__) || defined(__arm__) || defined(__mips32__)
     case __NR_ftruncate64:
 #endif
 #if defined(__x86_64__) || defined(__aarch64__)
     case __NR_newfstatat:
     case __NR_fstatfs:
-#elif defined(__i386__) || defined(__arm__) || defined(__mips__)
+#elif defined(__i386__) || defined(__arm__) || defined(__mips32__)
     case __NR_fstatat64:
     case __NR_fstatfs64:
+#endif
+#if defined(__i386__) || defined(__arm__) || defined(__mips__)
     case __NR_getdents:
 #endif
     case __NR_getdents64:
@@ -141,6 +144,11 @@ ResultExpr BaselinePolicyAndroid::EvaluateSyscall(int sysno) const {
     case __NR_ptrace:
       override_and_allow = true;
       break;
+  }
+
+  // https://crbug.com/772441 and https://crbug.com/760020.
+  if (SyscallSets::IsEventFd(sysno)) {
+    return Allow();
   }
 
   // https://crbug.com/644759

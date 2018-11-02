@@ -137,13 +137,17 @@ class WebWidgetClient {
                              const WebFloatSize& accumulated_overscroll,
                              const WebFloatPoint& position_in_viewport,
                              const WebFloatSize& velocity_in_viewport,
-                             const WebScrollBoundaryBehavior& behavior) {}
+                             const WebOverscrollBehavior& behavior) {}
 
   // Called to update if touch events should be sent.
   virtual void HasTouchEventHandlers(bool) {}
 
   // Called to update whether low latency input mode is enabled or not.
   virtual void SetNeedsLowLatencyInput(bool) {}
+
+  // Requests unbuffered (ie. low latency) input until a pointerup
+  // event occurs.
+  virtual void RequestUnbufferedInputEvents() {}
 
   // Called during WebWidget::HandleInputEvent for a TouchStart event to inform
   // the embedder of the touch actions that are permitted for this touch.

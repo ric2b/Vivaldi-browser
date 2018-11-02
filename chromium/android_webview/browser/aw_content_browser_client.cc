@@ -36,6 +36,7 @@
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_dump_observer_android.h"
@@ -60,8 +61,6 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_loader_throttle.h"
 #include "content/public/common/web_preferences.h"
-#include "device/geolocation/access_token_store.h"
-#include "device/geolocation/geolocation_delegate.h"
 #include "net/android/network_library.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_info.h"
@@ -78,6 +77,7 @@
 
 using content::BrowserThread;
 using content::ResourceType;
+using content::WebContents;
 
 namespace android_webview {
 namespace {
@@ -86,7 +86,7 @@ namespace {
 // This class filters out incoming aw_contents related IPC messages for the
 // renderer process on the IPC thread.
 class AwContentsMessageFilter : public content::BrowserMessageFilter {
-public:
+ public:
   explicit AwContentsMessageFilter(int process_id);
 
   // BrowserMessageFilter methods.
@@ -102,8 +102,8 @@ public:
                                   bool* ignore_navigation);
   void OnSubFrameCreated(int parent_render_frame_id, int child_render_frame_id);
 
-private:
- ~AwContentsMessageFilter() override;
+ private:
+  ~AwContentsMessageFilter() override;
 
   int process_id_;
 
@@ -295,7 +295,7 @@ std::string AwContentBrowserClient::GetAcceptLangs(
 }
 
 const gfx::ImageSkia* AwContentBrowserClient::GetDefaultFavicon() {
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   // TODO(boliu): Bundle our own default favicon?
   return rb.GetImageSkiaNamed(IDR_DEFAULT_FAVICON);
 }
@@ -325,18 +325,14 @@ bool AwContentBrowserClient::AllowGetCookie(const GURL& url,
 
 bool AwContentBrowserClient::AllowSetCookie(const GURL& url,
                                             const GURL& first_party,
-                                            const std::string& cookie_line,
+                                            const net::CanonicalCookie& cookie,
                                             content::ResourceContext* context,
                                             int render_process_id,
                                             int render_frame_id,
                                             const net::CookieOptions& options) {
-  return AwCookieAccessPolicy::GetInstance()->AllowSetCookie(url,
-                                                             first_party,
-                                                             cookie_line,
-                                                             context,
-                                                             render_process_id,
-                                                             render_frame_id,
-                                                             options);
+  return AwCookieAccessPolicy::GetInstance()->AllowSetCookie(
+      url, first_party, cookie, context, render_process_id, render_frame_id,
+      options);
 }
 
 void AwContentBrowserClient::AllowWorkerFileSystem(
@@ -344,8 +340,7 @@ void AwContentBrowserClient::AllowWorkerFileSystem(
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames,
     base::Callback<void(bool)> callback) {
-  // Android WebView does not yet support web workers.
-  callback.Run(false);
+  callback.Run(true);
 }
 
 bool AwContentBrowserClient::AllowWorkerIndexedDB(
@@ -353,8 +348,7 @@ bool AwContentBrowserClient::AllowWorkerIndexedDB(
     const base::string16& name,
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames) {
-  // Android WebView does not yet support web workers.
-  return false;
+  return true;
 }
 
 content::QuotaPermissionContext*
@@ -376,7 +370,6 @@ void AwContentBrowserClient::AllowCertificateError(
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
     ResourceType resource_type,
-    bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -559,7 +552,7 @@ void AwContentBrowserClient::BindInterfaceRequestFromFrame(
 
 void AwContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
-    content::AssociatedInterfaceRegistry* associated_registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     registry->AddInterface(
@@ -602,6 +595,52 @@ AwContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate() {
   }
 
   return safe_browsing_url_checker_delegate_.get();
+}
+
+bool AwContentBrowserClient::ShouldOverrideUrlLoading(
+    int frame_tree_node_id,
+    bool browser_initiated,
+    const GURL& gurl,
+    const std::string& request_method,
+    bool has_user_gesture,
+    bool is_redirect,
+    bool is_main_frame,
+    ui::PageTransition transition) {
+  // Only GETs can be overridden.
+  if (request_method != "GET")
+    return false;
+
+  bool application_initiated =
+      browser_initiated || transition & ui::PAGE_TRANSITION_FORWARD_BACK;
+
+  // Don't offer application-initiated navigations unless it's a redirect.
+  if (application_initiated && !is_redirect)
+    return false;
+
+  // For HTTP schemes, only top-level navigations can be overridden. Similarly,
+  // WebView Classic lets app override only top level about:blank navigations.
+  // So we filter out non-top about:blank navigations here.
+  //
+  // Note: about:blank navigations are not received in this path at the moment,
+  // they use the old SYNC IPC path as they are not handled by network stack.
+  // However, the old path should be removed in future.
+  if (!is_main_frame &&
+      (gurl.SchemeIs(url::kHttpScheme) || gurl.SchemeIs(url::kHttpsScheme) ||
+       gurl.SchemeIs(url::kAboutScheme)))
+    return false;
+
+  WebContents* web_contents =
+      WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  if (web_contents == nullptr)
+    return false;
+  AwContentsClientBridge* client_bridge =
+      AwContentsClientBridge::FromWebContents(web_contents);
+  if (client_bridge == nullptr)
+    return false;
+
+  base::string16 url = base::UTF8ToUTF16(gurl.possibly_invalid_spec());
+  return client_bridge->ShouldOverrideUrlLoading(url, has_user_gesture,
+                                                 is_redirect, is_main_frame);
 }
 
 }  // namespace android_webview

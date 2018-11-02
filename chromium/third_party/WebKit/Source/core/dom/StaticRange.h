@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Range.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 
@@ -16,8 +16,7 @@ namespace blink {
 class Document;
 class ExceptionState;
 
-class CORE_EXPORT StaticRange final : public GarbageCollected<StaticRange>,
-                                      public ScriptWrappable {
+class CORE_EXPORT StaticRange final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -37,14 +36,7 @@ class CORE_EXPORT StaticRange final : public GarbageCollected<StaticRange>,
                            range->startOffset(), range->endContainer(),
                            range->endOffset());
   }
-  static StaticRange* Create(const EphemeralRange& range) {
-    DCHECK(!range.IsNull());
-    return new StaticRange(range.GetDocument(),
-                           range.StartPosition().ComputeContainerNode(),
-                           range.StartPosition().ComputeOffsetInContainerNode(),
-                           range.EndPosition().ComputeContainerNode(),
-                           range.EndPosition().ComputeOffsetInContainerNode());
-  }
+  static StaticRange* Create(const EphemeralRange&);
 
   Node* startContainer() const { return start_container_.Get(); }
   void setStartContainer(Node* start_container) {
@@ -69,7 +61,7 @@ class CORE_EXPORT StaticRange final : public GarbageCollected<StaticRange>,
 
   Range* toRange(ExceptionState& = ASSERT_NO_EXCEPTION) const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit StaticRange(Document&);

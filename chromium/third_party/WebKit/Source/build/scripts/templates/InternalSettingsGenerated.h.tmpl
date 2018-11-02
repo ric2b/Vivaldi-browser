@@ -8,17 +8,15 @@
 
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class Page;
 
-class InternalSettingsGenerated
-    : public GarbageCollectedFinalized<InternalSettingsGenerated>,
-      public ScriptWrappable {
+class InternalSettingsGenerated : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -29,7 +27,7 @@ class InternalSettingsGenerated
   void set{{setting.name|upper_first}}({{setting.type|to_passing_type}} {{setting.name}});
   {% endfor %}
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(Visitor*);
 
  private:
   Member<Page> m_page;

@@ -17,9 +17,7 @@ namespace payments {
 
 class PaymentRequestErrorMessageTest : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestErrorMessageTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_fail_complete_test.html") {}
+  PaymentRequestErrorMessageTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestErrorMessageTest);
@@ -27,6 +25,7 @@ class PaymentRequestErrorMessageTest : public PaymentRequestBrowserTestBase {
 
 // Testing the use of the complete('fail') JS API and the error message.
 IN_PROC_BROWSER_TEST_F(PaymentRequestErrorMessageTest, CompleteFail) {
+  NavigateTo("/payment_request_fail_complete_test.html");
   autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
   AddAutofillProfile(billing_profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa
@@ -41,12 +40,12 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestErrorMessageTest, CompleteFail) {
   // message should be shown.
   OpenCVCPromptWithCVC(base::ASCIIToUTF16("123"));
 
-  ResetEventObserver(DialogEvent::ERROR_MESSAGE_SHOWN);
+  ResetEventWaiter(DialogEvent::ERROR_MESSAGE_SHOWN);
   ClickOnDialogViewAndWait(DialogViewID::CVC_PROMPT_CONFIRM_BUTTON);
   EXPECT_FALSE(dialog_view()->throbber_overlay_for_testing()->visible());
 
   // The user can only close the dialog at this point.
-  ResetEventObserver(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
   ClickOnDialogViewAndWait(DialogViewID::CANCEL_BUTTON,
                            /*wait_for_animation=*/false);
 }

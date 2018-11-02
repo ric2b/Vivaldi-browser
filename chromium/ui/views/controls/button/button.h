@@ -86,6 +86,7 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   void set_tag(int tag) { tag_ = tag; }
 
   void SetAccessibleName(const base::string16& name);
+  const base::string16& accessible_name() const { return accessible_name_; }
 
   // Get/sets the current display state of the button.
   ButtonState state() const { return state_; }
@@ -190,6 +191,11 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // true of buttons that don't have a listener - e.g. menubuttons where there's
   // no default action and checkboxes.
   explicit Button(ButtonListener* listener);
+
+  // Returns the click action for the given key event.
+  // Subclasses may override this method to support default actions for key
+  // events.
+  virtual KeyClickAction GetKeyClickActionForEvent(const ui::KeyEvent& event);
 
   // Cause the button to notify the listener that a click occurred.
   virtual void NotifyClick(const ui::Event& event);

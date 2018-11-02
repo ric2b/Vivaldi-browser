@@ -5,6 +5,7 @@
 #ifndef MultipartParser_h
 #define MultipartParser_h
 
+#include "base/macros.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/HTTPHeaderMap.h"
@@ -24,8 +25,6 @@ namespace blink {
 //   called anymore.
 class MODULES_EXPORT MultipartParser final
     : public GarbageCollectedFinalized<MultipartParser> {
-  WTF_MAKE_NONCOPYABLE(MultipartParser);
-
  public:
   // Client recieves parsed part header fields and data.
   class MODULES_EXPORT Client : public GarbageCollectedMixin {
@@ -40,7 +39,7 @@ class MODULES_EXPORT MultipartParser final
     virtual void PartDataInMultipartReceived(const char* bytes, size_t) = 0;
     // The method is called whenever all data of a complete part is parsed.
     virtual void PartDataInMultipartFullyReceived() = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    void Trace(blink::Visitor* visitor) override {}
   };
 
   MultipartParser(Vector<char> boundary, Client*);
@@ -50,7 +49,7 @@ class MODULES_EXPORT MultipartParser final
 
   bool IsCancelled() const { return state_ == State::kCancelled; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   class Matcher {
@@ -106,6 +105,8 @@ class MODULES_EXPORT MultipartParser final
     kCancelled,
     kFinished
   } state_;
+
+  DISALLOW_COPY_AND_ASSIGN(MultipartParser);
 };
 
 }  // namespace blink

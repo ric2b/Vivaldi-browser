@@ -48,18 +48,23 @@ class FrameGenerator : public viz::mojom::CompositorFrameSinkClient {
   // viz::mojom::CompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void OnBeginFramePausedChanged(bool paused) override {}
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
 
-  cc::CompositorFrame GenerateCompositorFrame();
+  viz::CompositorFrame GenerateCompositorFrame();
 
   viz::mojom::HitTestRegionListPtr GenerateHitTestRegionList() const;
 
   // DrawWindow creates SurfaceDrawQuad for the window manager and appends it to
-  // the provided cc::RenderPass.
-  void DrawWindow(cc::RenderPass* pass);
+  // the provided viz::RenderPass.
+  void DrawWindow(viz::RenderPass* pass);
 
   void SetNeedsBeginFrame(bool needs_begin_frame);
 

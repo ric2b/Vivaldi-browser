@@ -38,8 +38,8 @@
 
 namespace blink {
 
+class MessagePortChannel;
 class WebString;
-class WebMessagePortChannel;
 class WebSharedWorkerClient;
 class WebURL;
 
@@ -57,20 +57,20 @@ class BLINK_EXPORT WebSharedWorker {
       const WebString& content_security_policy,
       WebContentSecurityPolicyType,
       WebAddressSpace,
-      bool data_saver_enabled,
-      mojo::ScopedMessagePipeHandle content_settings_handle) = 0;
+      const WebString& instrumentation_token,
+      mojo::ScopedMessagePipeHandle content_settings_handle,
+      mojo::ScopedMessagePipeHandle interface_provider) = 0;
 
   // Sends a connect event to the SharedWorker context.
-  virtual void Connect(std::unique_ptr<WebMessagePortChannel>) = 0;
+  virtual void Connect(MessagePortChannel) = 0;
 
   // Invoked to shutdown the worker when there are no more associated documents.
   // This eventually deletes this instance.
   virtual void TerminateWorkerContext() = 0;
 
   virtual void PauseWorkerContextOnStart() = 0;
-  virtual void AttachDevTools(const WebString& host_id, int session_id) = 0;
-  virtual void ReattachDevTools(const WebString& host_id,
-                                int session_id,
+  virtual void AttachDevTools(int session_id) = 0;
+  virtual void ReattachDevTools(int session_id,
                                 const WebString& saved_state) = 0;
   virtual void DetachDevTools(int session_id) = 0;
   virtual void DispatchDevToolsMessage(int session_id,

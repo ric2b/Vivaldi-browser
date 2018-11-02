@@ -35,7 +35,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     Sources.SourcesPanel._instance = this;
     this.registerRequiredCSS('sources/sourcesPanel.css');
     new UI.DropTarget(
-        this.element, [UI.DropTarget.Types.Files], Common.UIString('Drop workspace folder here'),
+        this.element, [UI.DropTarget.Type.Folder], Common.UIString('Drop workspace folder here'),
         this._handleDrop.bind(this));
 
     this._workspace = Workspace.workspace;
@@ -47,6 +47,8 @@ Sources.SourcesPanel = class extends UI.Panel {
     this._stepIntoAction =
         /** @type {!UI.Action }*/ (UI.actionRegistry.action('debugger.step-into'));
     this._stepOutAction = /** @type {!UI.Action }*/ (UI.actionRegistry.action('debugger.step-out'));
+    this._stepIntoAsyncAction =
+        /** @type {!UI.Action }*/ (UI.actionRegistry.action('debugger.step-into-async'));
     this._toggleBreakpointsActiveAction =
         /** @type {!UI.Action }*/ (UI.actionRegistry.action('debugger.toggle-breakpoints-active'));
 
@@ -390,7 +392,7 @@ Sources.SourcesPanel = class extends UI.Panel {
       for (var i = 0; i < objects.length; ++i) {
         var navigatorView = /** @type {!Sources.NavigatorView} */ (objects[i]);
         var viewId = extensions[i].descriptor()['viewId'];
-        if (navigatorView.accept(uiSourceCode)) {
+        if (navigatorView.acceptProject(uiSourceCode.project())) {
           navigatorView.revealUISourceCode(uiSourceCode, true);
           if (skipReveal)
             this._navigatorTabbedLocation.tabbedPane().selectTab(viewId);
@@ -407,8 +409,7 @@ Sources.SourcesPanel = class extends UI.Panel {
   _populateNavigatorMenu(contextMenu) {
     var groupByFolderSetting = Common.moduleSetting('navigatorGroupByFolder');
     contextMenu.appendItemsAtLocation('navigatorMenu');
-    contextMenu.appendSeparator();
-    contextMenu.appendCheckboxItem(
+    contextMenu.viewSection().appendCheckboxItem(
         Common.UIString('Group by folder'), () => groupByFolderSetting.set(!groupByFolderSetting.get()),
         groupByFolderSetting.get());
   }
@@ -473,18 +474,21 @@ Sources.SourcesPanel = class extends UI.Panel {
       this._stepOverAction.setEnabled(false);
       this._stepIntoAction.setEnabled(false);
       this._stepOutAction.setEnabled(false);
+      this._stepIntoAsyncAction.setEnabled(false);
     } else if (this._paused) {
       this._togglePauseAction.setToggled(true);
       this._togglePauseAction.setEnabled(true);
       this._stepOverAction.setEnabled(true);
       this._stepIntoAction.setEnabled(true);
       this._stepOutAction.setEnabled(true);
+      this._stepIntoAsyncAction.setEnabled(true);
     } else {
       this._togglePauseAction.setToggled(false);
       this._togglePauseAction.setEnabled(!currentDebuggerModel.isPausing());
       this._stepOverAction.setEnabled(false);
       this._stepIntoAction.setEnabled(false);
       this._stepOutAction.setEnabled(false);
+      this._stepIntoAsyncAction.setEnabled(false);
     }
 
     var details = currentDebuggerModel ? currentDebuggerModel.debuggerPausedDetails() : null;
@@ -627,6 +631,17 @@ Sources.SourcesPanel = class extends UI.Panel {
   /**
    * @return {boolean}
    */
+  _stepIntoAsync() {
+    var debuggerModel = this._prepareToResume();
+    if (!debuggerModel)
+      return true;
+    debuggerModel.scheduleStepIntoAsync();
+    return true;
+  }
+
+  /**
+   * @return {boolean}
+   */
   _stepOut() {
     var debuggerModel = this._prepareToResume();
     if (!debuggerModel)
@@ -678,6 +693,8 @@ Sources.SourcesPanel = class extends UI.Panel {
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._stepOverAction));
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._stepIntoAction));
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._stepOutAction));
+    if (Runtime.experiments.isEnabled('stepIntoAsync'))
+      debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._stepIntoAsyncAction));
     debugToolbar.appendSeparator();
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._toggleBreakpointsActiveAction));
 
@@ -696,13 +713,6 @@ Sources.SourcesPanel = class extends UI.Panel {
     debugToolbarDrawer.appendChild(UI.SettingsUI.createSettingCheckbox(label, setting, true));
 
     return debugToolbarDrawer;
-  }
-
-  /**
-   * @param {!Workspace.UISourceCode} uiSourceCode
-   */
-  _showLocalHistory(uiSourceCode) {
-    Sources.RevisionHistoryView.showHistory(uiSourceCode);
   }
 
   /**
@@ -770,17 +780,15 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Workspace.UISourceCode} uiSourceCode
    */
   _appendUISourceCodeMappingItems(contextMenu, uiSourceCode) {
-    Sources.NavigatorView.appendAddFolderItem(contextMenu);
-
     if (Runtime.experiments.isEnabled('persistence2'))
       return;
     if (uiSourceCode.project().type() === Workspace.projectTypes.FileSystem) {
       var binding = Persistence.persistence.binding(uiSourceCode);
       if (!binding) {
-        contextMenu.appendItem(
+        contextMenu.debugSection().appendItem(
             Common.UIString('Map to network resource\u2026'), this.mapFileSystemToNetwork.bind(this, uiSourceCode));
       } else {
-        contextMenu.appendItem(
+        contextMenu.debugSection().appendItem(
             Common.UIString('Remove network mapping'), this._removeNetworkMapping.bind(this, binding.network));
       }
     }
@@ -797,7 +805,7 @@ Sources.SourcesPanel = class extends UI.Panel {
       if (!this._workspace.projects().filter(filterProject).length)
         return;
       if (this._workspace.uiSourceCodeForURL(uiSourceCode.url()) === uiSourceCode) {
-        contextMenu.appendItem(
+        contextMenu.debugSection().appendItem(
             Common.UIString('Map to file system resource\u2026'), this.mapNetworkToFileSystem.bind(this, uiSourceCode));
       }
     }
@@ -815,15 +823,10 @@ Sources.SourcesPanel = class extends UI.Panel {
     var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (target);
     if (!uiSourceCode.project().isServiceProject() &&
         !event.target.isSelfOrDescendant(this._navigatorTabbedLocation.widget().element)) {
-      contextMenu.appendItem(
+      contextMenu.revealSection().appendItem(
           Common.UIString('Reveal in navigator'), this._handleContextMenuReveal.bind(this, uiSourceCode));
-      contextMenu.appendSeparator();
     }
     this._appendUISourceCodeMappingItems(contextMenu, uiSourceCode);
-    if (!uiSourceCode.project().canSetFileContent()) {
-      contextMenu.appendItem(
-          Common.UIString('Local modifications\u2026'), this._showLocalHistory.bind(this, uiSourceCode));
-    }
   }
 
   /**
@@ -832,9 +835,9 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Object} target
    */
   _appendUISourceCodeFrameItems(event, contextMenu, target) {
-    if (!(target instanceof SourceFrame.UISourceCodeFrame))
+    if (!(target instanceof Sources.UISourceCodeFrame))
       return;
-    contextMenu.appendAction('debugger.evaluate-selection');
+    contextMenu.debugSection().appendAction('debugger.evaluate-selection');
   }
 
   /**
@@ -851,8 +854,10 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (contentType.hasScripts()) {
       var target = UI.context.flavor(SDK.Target);
       var debuggerModel = target ? target.model(SDK.DebuggerModel) : null;
-      if (debuggerModel && debuggerModel.isPaused())
-        contextMenu.appendItem(Common.UIString('Continue to here'), this._continueToLocation.bind(this, uiLocation));
+      if (debuggerModel && debuggerModel.isPaused()) {
+        contextMenu.debugSection().appendItem(
+            Common.UIString('Continue to here'), this._continueToLocation.bind(this, uiLocation));
+      }
 
       this._callstackPane.appendBlackboxURLContextMenuItems(contextMenu, uiSourceCode);
     }
@@ -874,10 +879,10 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (!(target instanceof SDK.RemoteObject))
       return;
     var remoteObject = /** @type {!SDK.RemoteObject} */ (target);
-    contextMenu.appendItem(
+    contextMenu.debugSection().appendItem(
         Common.UIString('Store as global variable'), this._saveToTempVariable.bind(this, remoteObject));
     if (remoteObject.type === 'function') {
-      contextMenu.appendItem(
+      contextMenu.debugSection().appendItem(
           Common.UIString('Show function definition'), this._showFunctionDefinition.bind(this, remoteObject));
     }
   }
@@ -894,7 +899,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (!uiSourceCode)
       return;
     var openText = Common.UIString('Open in Sources panel');
-    contextMenu.appendItem(openText, this.showUILocation.bind(this, uiSourceCode.uiLocation(0, 0)));
+    contextMenu.revealSection().appendItem(openText, this.showUILocation.bind(this, uiSourceCode.uiLocation(0, 0)));
   }
 
   /**
@@ -1236,6 +1241,9 @@ Sources.SourcesPanel.DebuggingActionDelegate = class {
       case 'debugger.step-into':
         panel._stepInto();
         return true;
+      case 'debugger.step-into-async':
+        panel._stepIntoAsync();
+        return true;
       case 'debugger.step-out':
         panel._stepOut();
         return true;
@@ -1246,7 +1254,7 @@ Sources.SourcesPanel.DebuggingActionDelegate = class {
         panel._toggleBreakpointsActive();
         return true;
       case 'debugger.evaluate-selection':
-        var frame = UI.context.flavor(SourceFrame.UISourceCodeFrame);
+        var frame = UI.context.flavor(Sources.UISourceCodeFrame);
         if (frame) {
           var text = frame.textEditor.text(frame.textEditor.selection());
           var executionContext = UI.context.flavor(SDK.ExecutionContext);

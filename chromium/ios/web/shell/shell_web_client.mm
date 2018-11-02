@@ -59,8 +59,7 @@ ShellWebClient::~ShellWebClient() {
 std::unique_ptr<web::WebMainParts> ShellWebClient::CreateWebMainParts() {
   auto web_main_parts = base::MakeUnique<ShellWebMainParts>();
   web_main_parts_ = web_main_parts.get();
-  // TODO(crbug.com/703565): remove std::move() once Xcode 9.0+ is required.
-  return std::move(web_main_parts);
+  return web_main_parts;
 }
 
 ShellBrowserState* ShellWebClient::browser_state() const {
@@ -79,13 +78,14 @@ std::string ShellWebClient::GetUserAgent(UserAgentType type) const {
 base::StringPiece ShellWebClient::GetDataResource(
     int resource_id,
     ui::ScaleFactor scale_factor) const {
-  return ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
+  return ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
       resource_id, scale_factor);
 }
 
 base::RefCountedMemory* ShellWebClient::GetDataResourceBytes(
     int resource_id) const {
-  return ResourceBundle::GetSharedInstance().LoadDataResourceBytes(resource_id);
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytes(
+      resource_id);
 }
 
 void ShellWebClient::RegisterServices(StaticServiceMap* services) {

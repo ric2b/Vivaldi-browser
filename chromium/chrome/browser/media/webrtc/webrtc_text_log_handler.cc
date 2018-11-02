@@ -24,6 +24,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/webrtc_log.h"
 #include "gpu/config/gpu_info.h"
 #include "media/audio/audio_manager.h"
 #include "net/base/ip_address.h"
@@ -46,6 +47,7 @@ using base::IntToString;
 using content::BrowserThread;
 
 namespace {
+
 std::string FormatMetaDataAsLogMessage(const MetaDataMap& meta_data) {
   std::string message;
   for (auto& kv : meta_data) {
@@ -90,6 +92,14 @@ std::string IPAddressToSensitiveString(const net::IPAddress& address) {
   return address.ToString();
 #endif
 }
+
+net::NetworkInterfaceList GetNetworkInterfaceList() {
+  net::NetworkInterfaceList network_list;
+  net::GetNetworkList(&network_list,
+                      net::EXCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES);
+  return network_list;
+}
+
 }  // namespace
 
 WebRtcLogBuffer::WebRtcLogBuffer()
@@ -125,12 +135,7 @@ void WebRtcLogBuffer::SetComplete() {
 }
 
 WebRtcTextLogHandler::WebRtcTextLogHandler(int render_process_id)
-    : render_process_id_(render_process_id),
-      log_buffer_(),  // Should be created by StartLogging.
-      meta_data_(),   // Should be created by StartLogging.
-      stop_callback_(),
-      logging_state_(CLOSED),
-      logging_started_time_(base::Time()) {}
+    : render_process_id_(render_process_id), logging_state_(CLOSED) {}
 
 WebRtcTextLogHandler::~WebRtcTextLogHandler() {
   // If the log isn't closed that means we haven't decremented the log count
@@ -197,9 +202,10 @@ bool WebRtcTextLogHandler::StartLogging(WebRtcLogUploader* log_uploader,
   if (!meta_data_)
     meta_data_.reset(new MetaDataMap());
 
-  base::PostTaskWithTraits(
+  base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindOnce(&WebRtcTextLogHandler::LogInitialInfoOnFileThread, this,
+      base::BindOnce(&GetNetworkInterfaceList),
+      base::BindOnce(&WebRtcTextLogHandler::LogInitialInfoOnIOThread, this,
                      callback));
   return true;
 }
@@ -239,10 +245,7 @@ bool WebRtcTextLogHandler::StopLogging(const GenericDoneCallback& callback) {
   stop_callback_ = callback;
   logging_state_ = STOPPING;
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(
-          &WebRtcTextLogHandler::DisableBrowserProcessLoggingOnUIThread, this));
+  content::WebRtcLog::ClearLogMessageCallback(render_process_id_);
   return true;
 }
 
@@ -264,16 +267,9 @@ void WebRtcTextLogHandler::StopDone() {
 void WebRtcTextLogHandler::ChannelClosing() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  if (logging_state_ == STARTING || logging_state_ == STARTED) {
-    logging_state_ = LoggingState::CHANNEL_CLOSING;
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(
-            &WebRtcTextLogHandler::DisableBrowserProcessLoggingOnUIThread,
-            this));
-  } else {
-    logging_state_ = LoggingState::CHANNEL_CLOSING;
-  }
+  if (logging_state_ == STARTING || logging_state_ == STARTED)
+    content::WebRtcLog::ClearLogMessageCallback(render_process_id_);
+  logging_state_ = LoggingState::CHANNEL_CLOSING;
 }
 
 void WebRtcTextLogHandler::DiscardLog() {
@@ -291,11 +287,16 @@ void WebRtcTextLogHandler::ReleaseLog(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(logging_state_ == STOPPED || logging_state_ == CHANNEL_CLOSING);
 
-  log_buffer_->SetComplete();
-  *log_buffer = std::move(log_buffer_);
-  *meta_data = std::move(meta_data_);
-  log_buffer_.reset();
-  meta_data_.reset();
+  // Checking log_buffer_ here due to seeing some crashes out in the wild.
+  // See crbug/699960 for more details.
+  if (log_buffer_) {
+    log_buffer_->SetComplete();
+    *log_buffer = std::move(log_buffer_);
+  }
+
+  if (meta_data_)
+    *meta_data = std::move(meta_data_);
+
   if (logging_state_ != CHANNEL_CLOSING)
     logging_state_ = LoggingState::CLOSED;
 }
@@ -377,37 +378,14 @@ void WebRtcTextLogHandler::FireGenericDoneCallback(
       base::BindOnce(callback, success, error_message_with_state));
 }
 
-void WebRtcTextLogHandler::LogInitialInfoOnFileThread(
-    const GenericDoneCallback& callback) {
-  net::NetworkInterfaceList network_list;
-  net::GetNetworkList(&network_list,
-                      net::EXCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES);
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&WebRtcTextLogHandler::LogInitialInfoOnIOThread, this,
-                     network_list, callback));
-}
-
 void WebRtcTextLogHandler::LogInitialInfoOnIOThread(
-    const net::NetworkInterfaceList& network_list,
-    const GenericDoneCallback& callback) {
+    const GenericDoneCallback& callback,
+    const net::NetworkInterfaceList& network_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (logging_state_ != STARTING) {
     FireGenericDoneCallback(callback, false, "Logging cancelled.");
     return;
   }
-
-  // Tell the the browser to enable logging. Log messages are received on the
-  // IO thread, so the initial info will finish to be written first.
-  // TODO(terelius): Once we have moved over to Mojo, we could tell the
-  // renderer to start logging here, but for the time being
-  // WebRtcLoggingHandlerHost::StartLogging will be responsible for sending
-  // that IPC message.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(
-          &WebRtcTextLogHandler::EnableBrowserProcessLoggingOnUIThread, this));
 
   // Log start time (current time). We don't use base/i18n/time_formatting.h
   // here because we don't want the format of the current locale.
@@ -442,13 +420,7 @@ void WebRtcTextLogHandler::LogInitialInfoOnIOThread(
       "." + IntToString(cpu.stepping()) + ", x" +
       IntToString(base::SysInfo::NumberOfProcessors()) + ", " +
       IntToString(base::SysInfo::AmountOfPhysicalMemoryMB()) + "MB");
-  std::string cpu_brand = cpu.cpu_brand();
-  // Workaround for crbug.com/249713.
-  // TODO(grunell): Remove workaround when bug is fixed.
-  size_t null_pos = cpu_brand.find('\0');
-  if (null_pos != std::string::npos)
-    cpu_brand.erase(null_pos);
-  LogToCircularBuffer("Cpu brand: " + cpu_brand);
+  LogToCircularBuffer("Cpu brand: " + cpu.cpu_brand());
 
   // Computer model
   std::string computer_model = "Not available";
@@ -481,7 +453,8 @@ void WebRtcTextLogHandler::LogInitialInfoOnIOThread(
       "Audio manager: %s", media::AudioManager::Get()->GetName()));
 
   // Network interfaces
-  LogToCircularBuffer("Discovered " + base::SizeTToString(network_list.size()) +
+  LogToCircularBuffer("Discovered " +
+                      base::NumberToString(network_list.size()) +
                       " network interfaces:");
   for (const auto& network : network_list) {
     LogToCircularBuffer(
@@ -491,22 +464,12 @@ void WebRtcTextLogHandler::LogInitialInfoOnIOThread(
   }
 
   StartDone(callback);
-}
 
-void WebRtcTextLogHandler::EnableBrowserProcessLoggingOnUIThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  content::RenderProcessHost* host =
-      content::RenderProcessHost::FromID(render_process_id_);
-  if (host) {
-    host->SetWebRtcLogMessageCallback(
-        base::Bind(&WebRtcTextLogHandler::LogMessage, this));
-  }
-}
-
-void WebRtcTextLogHandler::DisableBrowserProcessLoggingOnUIThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  content::RenderProcessHost* host =
-      content::RenderProcessHost::FromID(render_process_id_);
-  if (host)
-    host->ClearWebRtcLogMessageCallback();
+  // After the above data has been written, tell the browser to enable logging.
+  // TODO(terelius): Once we have moved over to Mojo, we could tell the
+  // renderer to start logging here, but for the time being
+  // WebRtcLoggingHandlerHost::StartLogging will be responsible for sending
+  // that IPC message.
+  content::WebRtcLog::SetLogMessageCallback(
+      render_process_id_, base::Bind(&WebRtcTextLogHandler::LogMessage, this));
 }

@@ -4,6 +4,7 @@
 
 #import "chrome/browser/ui/cocoa/harmony_button.h"
 
+#import "base/mac/scoped_cftyperef.h"
 #import "chrome/browser/themes/theme_properties.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -35,12 +36,16 @@ NSColor* GetBackgroundColor(HoverState state, BOOL dark_theme) {
 }
 
 NSColor* GetBorderColor(BOOL dark_theme) {
-  return [NSColor colorWithCalibratedWhite:dark_theme ? 1 : 0 alpha:0.2];
+  return [NSColor colorWithCalibratedWhite:dark_theme ? 1 : 0 alpha:0.3];
 }
 
 NSColor* GetShadowColor() {
   return NSColor.blackColor;
 }
+
+constexpr CGFloat kFontSize = 12;
+
+constexpr CGFloat kTextAlpha = 0x8A / (CGFloat)0xFF;
 
 constexpr CGSize kNormalShadowOffset{0, 0};
 constexpr CGSize kMouseOverShadowOffset{0, 1};
@@ -51,7 +56,7 @@ constexpr CGFloat kMouseOverShadowOpacity = 0.1;
 constexpr CGFloat kNormalShadowRadius = 0;
 constexpr CGFloat kMouseOverShadowRadius = 2;
 
-constexpr CGFloat kCornerRadius = 2;
+constexpr CGFloat kCornerRadius = 3;
 constexpr CGFloat kXPadding = 16;
 constexpr CGFloat kMinWidth = 64;
 constexpr CGFloat kHeight = 28;
@@ -74,6 +79,17 @@ constexpr NSTimeInterval kTransitionDuration = 0.25;
 @end
 
 @implementation HarmonyButton
+
++ (instancetype)buttonWithTitle:(NSString*)title
+                         target:(id)target
+                         action:(SEL)action {
+  HarmonyButton* button = [[[self alloc] initWithFrame:NSZeroRect] autorelease];
+  button.title = title;
+  button.target = target;
+  button.action = action;
+  [button sizeToFit];
+  return button;
+}
 
 + (Class)cellClass {
   return [HarmonyButtonCell class];
@@ -158,8 +174,19 @@ constexpr NSTimeInterval kTransitionDuration = 0.25;
   NSColor* textColor;
   if (const ui::ThemeProvider* themeProvider = [self.window themeProvider]) {
     textColor = themeProvider->GetNSColor(ThemeProperties::COLOR_TAB_TEXT);
+    if (!themeProvider->ShouldIncreaseContrast())
+      textColor = [textColor colorWithAlphaComponent:kTextAlpha];
   } else {
     textColor = [NSColor controlTextColor];
+  }
+
+  NSFont* font;
+  if (@available(macOS 10.11, *)) {
+    font = [NSFont systemFontOfSize:kFontSize weight:NSFontWeightMedium];
+  } else {
+    font = [[NSFontManager sharedFontManager]
+        convertWeight:YES
+               ofFont:[NSFont systemFontOfSize:kFontSize]];
   }
 
   base::scoped_nsobject<NSMutableParagraphStyle> paragraphStyle(
@@ -169,6 +196,7 @@ constexpr NSTimeInterval kTransitionDuration = 0.25;
       [[NSAttributedString alloc]
           initWithString:title
               attributes:@{
+                NSFontAttributeName : font,
                 NSForegroundColorAttributeName : textColor,
                 NSParagraphStyleAttributeName : paragraphStyle,
               }]);
@@ -190,13 +218,14 @@ constexpr NSTimeInterval kTransitionDuration = 0.25;
 
 // NSView overrides.
 
-- (void)viewWillDraw {
+- (void)layout {
   CALayer* layer = self.layer;
-  layer.shadowPath = CGPathCreateWithRoundedRect(
-      layer.bounds, layer.cornerRadius, layer.cornerRadius, nullptr);
+  layer.shadowPath =
+      base::ScopedCFTypeRef<CGPathRef>(CGPathCreateWithRoundedRect(
+          layer.bounds, layer.cornerRadius, layer.cornerRadius, nullptr));
   [self updateHoverButtonAppearanceAnimated:NO];
   self.title = self.title;  // Match the theme.
-  [super viewWillDraw];
+  [super layout];
 }
 
 - (void)drawFocusRingMask {

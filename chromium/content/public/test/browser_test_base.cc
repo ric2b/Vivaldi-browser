@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
@@ -39,6 +40,7 @@
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/platform_window_defaults.h"
 #include "ui/base/test/material_design_controller_test_api.h"
@@ -76,7 +78,9 @@ namespace {
 int g_browser_process_pid;
 
 void DumpStackTraceSignalHandler(int signal) {
-  if (g_browser_process_pid == base::GetCurrentProcId()) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          service_manager::switches::kDisableInProcessStackTraces) &&
+      g_browser_process_pid == base::GetCurrentProcId()) {
     std::string message("BrowserTestBase received signal: ");
     message += strsignal(signal);
     message += ". Backtrace:\n";
@@ -104,7 +108,8 @@ void TraceStopTracingComplete(const base::Closure& quit,
 extern int BrowserMain(const MainFunctionParams&);
 
 BrowserTestBase::BrowserTestBase()
-    : expected_exit_code_(0),
+    : field_trial_list_(std::make_unique<base::FieldTrialList>(nullptr)),
+      expected_exit_code_(0),
       enable_pixel_output_(false),
       use_software_compositing_(false),
       set_up_called_(false),
@@ -124,7 +129,7 @@ BrowserTestBase::BrowserTestBase()
   // called more than once
   base::i18n::AllowMultipleInitializeCallsForTesting();
 
-  embedded_test_server_ = base::MakeUnique<net::EmbeddedTestServer>();
+  embedded_test_server_ = std::make_unique<net::EmbeddedTestServer>();
 
   // SequencedWorkerPool is enabled by default in tests (see
   // base::TestSuite::Initialize). In browser tests, disable it and expect it
@@ -238,11 +243,16 @@ void BrowserTestBase::SetUp() {
   // not affect the results.
   command_line->AppendSwitchASCII(switches::kForceColorProfile, "srgb");
 
-  test_host_resolver_ = base::MakeUnique<TestHostResolver>();
+  test_host_resolver_ = std::make_unique<TestHostResolver>();
 
   ContentBrowserSanityChecker scoped_enable_sanity_checks;
 
   SetUpInProcessBrowserTestFixture();
+
+  // Should not use CommandLine to modify features. Please use ScopedFeatureList
+  // instead.
+  DCHECK(!command_line->HasSwitch(switches::kEnableFeatures));
+  DCHECK(!command_line->HasSwitch(switches::kDisableFeatures));
 
   // At this point, copy features to the command line, since BrowserMain will
   // wipe out the current feature list.
@@ -262,11 +272,27 @@ void BrowserTestBase::SetUp() {
                                     disabled_features);
   }
 
+  // The current global field trial list contains any trials that were activated
+  // prior to main browser startup. That global field trial list is about to be
+  // destroyed below, and will be recreated during the browser_tests browser
+  // process startup code. Pass the currently active trials to the subsequent
+  // list via the command line.
+  std::string field_trial_states;
+  base::FieldTrialList::AllStatesToString(&field_trial_states);
+  if (!field_trial_states.empty()) {
+    // Please use ScopedFeatureList to modify feature and field trials at the
+    // same time.
+    DCHECK(!command_line->HasSwitch(switches::kForceFieldTrials));
+    command_line->AppendSwitchASCII(switches::kForceFieldTrials,
+                                    field_trial_states);
+  }
+  field_trial_list_.reset();
+
   // Need to wipe feature list clean, since BrowserMain calls
   // FeatureList::SetInstance, which expects no instance to exist.
   base::FeatureList::ClearInstanceForTesting();
 
-  auto ui_task = base::MakeUnique<base::Closure>(base::Bind(
+  auto ui_task = std::make_unique<base::Closure>(base::Bind(
       &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this)));
 
 #if defined(OS_ANDROID)
@@ -340,18 +366,16 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     // Wait for tracing to collect results from the renderers.
     base::RunLoop run_loop;
     TracingController::GetInstance()->StopTracing(
-        TracingControllerImpl::CreateFileSink(
-            trace_file,
-            base::Bind(&TraceStopTracingComplete,
-                       run_loop.QuitClosure(),
-                       trace_file)));
+        TracingControllerImpl::CreateFileEndpoint(
+            trace_file, base::Bind(&TraceStopTracingComplete,
+                                   run_loop.QuitClosure(), trace_file)));
     run_loop.Run();
   }
 }
 
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {
   CHECK(!spawned_test_server_.get());
-  spawned_test_server_ = base::MakeUnique<net::SpawnedTestServer>(
+  spawned_test_server_ = std::make_unique<net::SpawnedTestServer>(
       net::SpawnedTestServer::TYPE_HTTP, test_server_base);
   embedded_test_server()->AddDefaultHandlers(test_server_base);
 }

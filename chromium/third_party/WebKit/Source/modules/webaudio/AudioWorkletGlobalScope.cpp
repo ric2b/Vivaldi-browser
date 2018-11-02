@@ -4,18 +4,28 @@
 
 #include "modules/webaudio/AudioWorkletGlobalScope.h"
 
+#include <memory>
+#include <utility>
+
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8ObjectBuilder.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "bindings/modules/v8/V8AudioParamDescriptor.h"
+#include "bindings/modules/v8/V8AudioWorkletProcessor.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/webaudio/CrossThreadAudioWorkletProcessorInfo.h"
+#include "core/dom/MessagePort.h"
+#include "core/typed_arrays/DOMTypedArray.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioParamDescriptor.h"
 #include "modules/webaudio/AudioWorkletProcessor.h"
 #include "modules/webaudio/AudioWorkletProcessorDefinition.h"
+#include "modules/webaudio/CrossThreadAudioWorkletProcessorInfo.h"
+#include "platform/audio/AudioBus.h"
+#include "platform/audio/AudioUtilities.h"
 #include "platform/bindings/V8BindingMacros.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -23,32 +33,26 @@
 namespace blink {
 
 AudioWorkletGlobalScope* AudioWorkletGlobalScope::Create(
-    const KURL& url,
-    const String& user_agent,
-    PassRefPtr<SecurityOrigin> security_origin,
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
     v8::Isolate* isolate,
-    WorkerThread* thread,
-    WorkerClients* worker_clients) {
-  return new AudioWorkletGlobalScope(url, user_agent,
-                                     std::move(security_origin), isolate,
-                                     thread, worker_clients);
+    WorkerThread* thread) {
+  return new AudioWorkletGlobalScope(std::move(creation_params), isolate,
+                                     thread);
 }
 
 AudioWorkletGlobalScope::AudioWorkletGlobalScope(
-    const KURL& url,
-    const String& user_agent,
-    PassRefPtr<SecurityOrigin> security_origin,
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
     v8::Isolate* isolate,
-    WorkerThread* thread,
-    WorkerClients* worker_clients)
-    : ThreadedWorkletGlobalScope(url,
-                                 user_agent,
-                                 std::move(security_origin),
-                                 isolate,
-                                 thread,
-                                 worker_clients) {}
+    WorkerThread* thread)
+    : ThreadedWorkletGlobalScope(std::move(creation_params), isolate, thread) {}
 
 AudioWorkletGlobalScope::~AudioWorkletGlobalScope() {}
+
+void AudioWorkletGlobalScope::Dispose() {
+  DCHECK(IsContextThread());
+  is_closing_ = true;
+  ThreadedWorkletGlobalScope::Dispose();
+}
 
 void AudioWorkletGlobalScope::registerProcessor(
     const String& name,
@@ -79,8 +83,8 @@ void AudioWorkletGlobalScope::registerProcessor(
     return;
   }
 
-  v8::Local<v8::Function> class_definition_local =
-      v8::Local<v8::Function>::Cast(class_definition.V8Value());
+  v8::Local<v8::Object> class_definition_local =
+      v8::Local<v8::Object>::Cast(class_definition.V8Value());
 
   v8::Local<v8::Value> prototype_value_local;
   bool prototype_extracted =
@@ -143,65 +147,185 @@ void AudioWorkletGlobalScope::registerProcessor(
   processor_definition_map_.Set(name, definition);
 }
 
-AudioWorkletProcessor* AudioWorkletGlobalScope::CreateInstance(
-    const String& name) {
+AudioWorkletProcessor* AudioWorkletGlobalScope::CreateProcessor(
+    const String& name,
+    float sample_rate,
+    MessagePortChannel message_port_channel) {
   DCHECK(IsContextThread());
 
+  // TODO(hongchan): do this only once when the association between
+  // BaseAudioContext and AudioWorkletGlobalScope is established.
+  sample_rate_ = sample_rate;
+
+  // The registered definition is already checked by AudioWorkletNode
+  // construction process, so the |definition| here must be valid.
   AudioWorkletProcessorDefinition* definition = FindDefinition(name);
-  if (!definition)
-    return nullptr;
+  DCHECK(definition);
+
+  ScriptState* script_state = ScriptController()->GetScriptState();
+  ScriptState::Scope scope(script_state);
 
   // V8 object instance construction: this construction process is here to make
   // the AudioWorkletProcessor class a thin wrapper of V8::Object instance.
-  v8::Isolate* isolate = ScriptController()->GetScriptState()->GetIsolate();
-  v8::Local<v8::Object> instance_local;
-  if (!V8ObjectConstructor::NewInstance(isolate,
-                                        definition->ConstructorLocal(isolate))
-           .ToLocal(&instance_local)) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::TryCatch block(isolate);
+
+  // Routes errors/exceptions to the dev console.
+  block.SetVerbose(true);
+
+  DCHECK(!processor_creation_params_);
+  processor_creation_params_ = std::make_unique<ProcessorCreationParams>(
+      name, std::move(message_port_channel));
+
+  // This invokes the static constructor of AudioWorkletProcessor. There is no
+  // way to pass additional constructor arguments that are not described in
+  // WebIDL, the static constructor will look up |processor_creation_params_| in
+  // the global scope to perform the construction properly.
+  v8::Local<v8::Value> result;
+  bool did_construct =
+      V8ScriptRunner::CallAsConstructor(isolate,
+                                        definition->ConstructorLocal(isolate),
+                                        ExecutionContext::From(script_state),
+                                        0, nullptr)
+          .ToLocal(&result);
+  processor_creation_params_.reset();
+
+  // If 1) the attempt to call the constructor fails, 2) an error was thrown
+  // by the user-supplied constructor code. The invalid construction process
+  if (!did_construct || block.HasCaught()) {
     return nullptr;
   }
 
-  AudioWorkletProcessor* processor = AudioWorkletProcessor::Create(this, name);
-  DCHECK(processor);
+  // ToImplWithTypeCheck() may return nullptr whenthe type does not match.
+  AudioWorkletProcessor* processor =
+      V8AudioWorkletProcessor::ToImplWithTypeCheck(isolate, result);
 
-  processor->SetInstance(isolate, instance_local);
-  processor_instances_.push_back(processor);
+  if (processor) {
+    processor_instances_.push_back(processor);
+  }
 
   return processor;
 }
 
-bool AudioWorkletGlobalScope::Process(AudioWorkletProcessor* processor,
-                                      AudioBuffer* input_buffer,
-                                      AudioBuffer* output_buffer) {
-  CHECK(input_buffer);
-  CHECK(output_buffer);
+bool AudioWorkletGlobalScope::Process(
+    AudioWorkletProcessor* processor,
+    Vector<AudioBus*>* input_buses,
+    Vector<AudioBus*>* output_buses,
+    HashMap<String, std::unique_ptr<AudioFloatArray>>* param_value_map,
+    double current_time) {
+  CHECK_GE(input_buses->size(), 0u);
+  CHECK_GE(output_buses->size(), 0u);
+
+  // Note that all AudioWorkletProcessors share this method for the processing.
+  // AudioWorkletGlobalScope's |current_time_| must be updated only once per
+  // render quantum.
+  if (current_time_ < current_time) {
+    current_time_ = current_time;
+  }
 
   ScriptState* script_state = ScriptController()->GetScriptState();
   ScriptState::Scope scope(script_state);
 
   v8::Isolate* isolate = script_state->GetIsolate();
   AudioWorkletProcessorDefinition* definition =
-      FindDefinition(processor->GetName());
+      FindDefinition(processor->Name());
   DCHECK(definition);
 
-  v8::Local<v8::Value> argv[] = {
-      ToV8(input_buffer, script_state->GetContext()->Global(), isolate),
-      ToV8(output_buffer, script_state->GetContext()->Global(), isolate)};
+  // To expose AudioBuffer on JS side, we have to repackage |Vector<AudioBus*>|
+  // to |sequence<sequence<Float32Array>>|.
+  HeapVector<HeapVector<Member<DOMFloat32Array>>> inputs;
+  HeapVector<HeapVector<Member<DOMFloat32Array>>> outputs;
 
-  // TODO(hongchan): Catch exceptions thrown in the process method. The verbose
-  // options forces the TryCatch object to save the exception location. The
-  // pending exception should be handled later.
+  for (const auto input_bus : *input_buses) {
+    HeapVector<Member<DOMFloat32Array>> input;
+    for (unsigned channel_index = 0;
+         channel_index < input_bus->NumberOfChannels();
+         ++channel_index) {
+      DOMFloat32Array* channel_data_array =
+          DOMFloat32Array::Create(input_bus->length());
+      memcpy(channel_data_array->Data(),
+             input_bus->Channel(channel_index)->Data(),
+             input_bus->length() * sizeof(float));
+      input.push_back(channel_data_array);
+    }
+    inputs.push_back(input);
+  }
+
+  for (const auto output_bus : *output_buses) {
+    HeapVector<Member<DOMFloat32Array>> output;
+    for (unsigned channel_index = 0;
+         channel_index < output_bus->NumberOfChannels();
+         ++channel_index) {
+      output.push_back(
+          DOMFloat32Array::Create(output_bus->length()));
+    }
+    outputs.push_back(output);
+  }
+
+  V8ObjectBuilder param_values(script_state);
+  for (const auto& param_name : param_value_map->Keys()) {
+    const AudioFloatArray* source_param_array = param_value_map->at(param_name);
+    DOMFloat32Array* param_array =
+        DOMFloat32Array::Create(source_param_array->size());
+    memcpy(param_array->Data(),
+           source_param_array->Data(),
+           sizeof(float) * source_param_array->size());
+    param_values.Add(
+        StringView(param_name.IsolatedCopy()),
+        ToV8(param_array, script_state->GetContext()->Global(), isolate));
+  }
+
+  v8::Local<v8::Value> argv[] = {
+    ToV8(inputs, script_state->GetContext()->Global(), isolate),
+    ToV8(outputs, script_state->GetContext()->Global(), isolate),
+    param_values.V8Value()
+  };
+
   v8::TryCatch block(isolate);
   block.SetVerbose(true);
 
   // Perform JS function process() in AudioWorkletProcessor instance. The actual
   // V8 operation happens here to make the AudioWorkletProcessor class a thin
   // wrapper of v8::Object instance.
-  V8ScriptRunner::CallFunction(
-      definition->ProcessLocal(isolate), ExecutionContext::From(script_state),
-      processor->InstanceLocal(isolate), WTF_ARRAY_LENGTH(argv), argv, isolate);
+  v8::Local<v8::Value> processor_handle =
+      ToV8(processor, script_state->GetContext()->Global(), isolate);
+  v8::Local<v8::Value> local_result;
+  if (!V8ScriptRunner::CallFunction(definition->ProcessLocal(isolate),
+                                    ExecutionContext::From(script_state),
+                                    processor_handle,
+                                    WTF_ARRAY_LENGTH(argv),
+                                    argv,
+                                    isolate).ToLocal(&local_result) ||
+    block.HasCaught()) {
+    // process() method call method call failed for some reason or an exception
+    // was thrown by the user supplied code. Disable the processor to exclude
+    // it from the subsequent rendering task.
+    processor->MarkNonRunnable();
+    return false;
+  }
 
-  return !block.HasCaught();
+  // TODO(hongchan): Sanity check on length, number of channels, and object
+  // type.
+
+  // Copy |sequence<sequence<Float32Array>>| back to the original
+  // |Vector<AudioBus*>|.
+  for (unsigned output_index = 0;
+       output_index < output_buses->size();
+       ++output_index) {
+    HeapVector<Member<DOMFloat32Array>> output = outputs.at(output_index);
+    AudioBus* original_output_bus = output_buses->at(output_index);
+    for (unsigned channel_index = 0;
+         channel_index < original_output_bus->NumberOfChannels();
+         ++channel_index) {
+      memcpy(original_output_bus->Channel(channel_index)->MutableData(),
+             output.at(channel_index)->Data(),
+             sizeof(float) * original_output_bus->length());
+    }
+  }
+
+  // Return the value from the user-supplied |process()| function. It is
+  // used to maintain the lifetime of the node and the processor.
+  return local_result->IsTrue() && !block.HasCaught();
 }
 
 AudioWorkletProcessorDefinition* AudioWorkletGlobalScope::FindDefinition(
@@ -216,7 +340,7 @@ unsigned AudioWorkletGlobalScope::NumberOfRegisteredDefinitions() {
 std::unique_ptr<Vector<CrossThreadAudioWorkletProcessorInfo>>
 AudioWorkletGlobalScope::WorkletProcessorInfoListForSynchronization() {
   auto processor_info_list =
-      WTF::MakeUnique<Vector<CrossThreadAudioWorkletProcessorInfo>>();
+      std::make_unique<Vector<CrossThreadAudioWorkletProcessorInfo>>();
   for (auto definition_entry : processor_definition_map_) {
     if (!definition_entry.value->IsSynchronized()) {
       definition_entry.value->MarkAsSynchronized();
@@ -226,13 +350,18 @@ AudioWorkletGlobalScope::WorkletProcessorInfoListForSynchronization() {
   return processor_info_list;
 }
 
-DEFINE_TRACE(AudioWorkletGlobalScope) {
+ProcessorCreationParams* AudioWorkletGlobalScope::GetProcessorCreationParams() {
+  return processor_creation_params_.get();
+}
+
+void AudioWorkletGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(processor_definition_map_);
   visitor->Trace(processor_instances_);
   ThreadedWorkletGlobalScope::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(AudioWorkletGlobalScope) {
+void AudioWorkletGlobalScope::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (auto definition : processor_definition_map_)
     visitor->TraceWrappers(definition.value);
 

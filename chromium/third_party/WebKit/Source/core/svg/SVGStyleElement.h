@@ -21,8 +21,7 @@
 #ifndef SVGStyleElement_h
 #define SVGStyleElement_h
 
-#include "core/SVGNames.h"
-#include "core/dom/StyleElement.h"
+#include "core/css/StyleElement.h"
 #include "core/svg/SVGElement.h"
 #include "platform/heap/Handle.h"
 
@@ -52,7 +51,7 @@ class SVGStyleElement final : public SVGElement, public StyleElement {
 
   void DispatchPendingEvent();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   SVGStyleElement(Document&, bool created_by_parser);

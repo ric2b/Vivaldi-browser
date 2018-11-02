@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -30,12 +31,10 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiRestriction;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -43,8 +42,7 @@ import java.util.concurrent.TimeoutException;
  * Tests the behavior of the bottom sheet when used with the back button.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({BottomSheetTestRule.ENABLE_CHROME_HOME,
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         BottomSheetTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
 public class BottomSheetBackBehaviorTest {
@@ -82,23 +80,14 @@ public class BottomSheetBackBehaviorTest {
     @Test
     @SmallTest
     public void testBackButton_tabSwitcher() throws InterruptedException, TimeoutException {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mLayoutManager.showOverview(false);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> mLayoutManager.showOverview(false));
 
         assertTrue("Overview mode should be showing.", mLayoutManager.overviewVisible());
 
         pressBackButton();
         endBottomSheetAnimations();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mLayoutManager.getActiveLayout().finishAnimationsForTests();
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mLayoutManager.getActiveLayout().finishAnimationsForTests());
 
         assertFalse("Overview mode should not be showing.", mLayoutManager.overviewVisible());
         assertEquals("The bottom sheet should be peeking.", BottomSheet.SHEET_STATE_PEEK,
@@ -128,7 +117,7 @@ public class BottomSheetBackBehaviorTest {
 
         assertEquals("The bottom sheet should be peeking.", BottomSheet.SHEET_STATE_PEEK,
                 mBottomSheet.getSheetState());
-        assertFalse("Chrome should no longer have focus.", mActivity.hasWindowFocus());
+        waitForClose();
     }
 
     @Test
@@ -164,7 +153,7 @@ public class BottomSheetBackBehaviorTest {
 
         assertEquals("The bottom sheet should be peeking.", BottomSheet.SHEET_STATE_PEEK,
                 mBottomSheet.getSheetState());
-        assertFalse("Chrome should no longer have focus.", mActivity.hasWindowFocus());
+        waitForClose();
     }
 
     @Test
@@ -197,8 +186,8 @@ public class BottomSheetBackBehaviorTest {
             throws ExecutionException, InterruptedException, TimeoutException {
         final Tab tab = mBottomSheet.getActiveTab();
 
-        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        EmbeddedTestServer testServer =
+                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
 
         String testUrl = testServer.getURL(TEST_PAGE);
         ChromeTabUtils.loadUrlOnUiThread(tab, testUrl);
@@ -228,10 +217,11 @@ public class BottomSheetBackBehaviorTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug.com/766350")
     public void testBackButton_backFromExternalNewTab()
             throws InterruptedException, TimeoutException {
-        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        EmbeddedTestServer testServer =
+                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         launchNewTabFromExternalApp(testServer.getURL(TEST_PAGE));
 
         // Back button should send Chrome to the background.
@@ -240,7 +230,7 @@ public class BottomSheetBackBehaviorTest {
 
         assertEquals("The bottom sheet should be peeking.", BottomSheet.SHEET_STATE_PEEK,
                 mBottomSheet.getSheetState());
-        assertFalse("Chrome should no longer have focus.", mActivity.hasWindowFocus());
+        waitForClose();
     }
 
     /**
@@ -254,18 +244,9 @@ public class BottomSheetBackBehaviorTest {
         intent.setData(Uri.parse(url));
 
         final Tab originalTab = mActivity.getActivityTab();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mActivity.onNewIntent(intent);
-            }
-        });
-        CriteriaHelper.pollUiThread(new Criteria("Failed to select different tab") {
-            @Override
-            public boolean isSatisfied() {
-                return mActivity.getActivityTab() != originalTab;
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> mActivity.onNewIntent(intent));
+        CriteriaHelper.pollUiThread(
+                () -> mActivity.getActivityTab() != originalTab, "Failed to select different tab");
         ChromeTabUtils.waitForTabPageLoaded(mActivity.getActivityTab(), url);
     }
 
@@ -274,13 +255,8 @@ public class BottomSheetBackBehaviorTest {
      * @param url The URL to launch in the tab.
      */
     private Tab launchNewTabFromChrome(final String url) throws ExecutionException {
-        return ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
-            @Override
-            public Tab call() {
-                return mActivity.getTabCreator(false).launchUrl(
-                        url, TabLaunchType.FROM_CHROME_UI);
-            }
-        });
+        return ThreadUtils.runOnUiThreadBlocking(
+                () -> mActivity.getTabCreator(false).launchUrl(url, TabLaunchType.FROM_CHROME_UI));
     }
 
     /**
@@ -289,50 +265,35 @@ public class BottomSheetBackBehaviorTest {
      */
     private void hideBrowserControls(final Tab tab) throws ExecutionException {
         // Hide the browser controls.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                tab.getActivity().getFullscreenManager().setHideBrowserControlsAndroidView(true);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> tab.getActivity()
+                                   .getFullscreenManager()
+                                   .setHideBrowserControlsAndroidView(true));
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mBottomSheet.isToolbarAndroidViewHidden();
-            }
-        });
+        CriteriaHelper.pollUiThread(mBottomSheet::isToolbarAndroidViewHidden);
     }
 
     /**
      * Wait for the browser controls to be shown.
      */
     private void waitForShownBrowserControls() throws ExecutionException {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return !mBottomSheet.isToolbarAndroidViewHidden();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> !mBottomSheet.isToolbarAndroidViewHidden());
     }
 
     /** Notify the activity that the hardware back button was pressed. */
     private void pressBackButton() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mActivity.onBackPressed();
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(mActivity::onBackPressed);
     }
 
     /** End bottom sheet animations. */
     private void endBottomSheetAnimations() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mBottomSheet.endAnimations();
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(mBottomSheet::endAnimations);
+    }
+
+    /** Wait until Chrome doesn't have window focus. */
+    private void waitForClose() {
+        // It takes some time for Chrome to completely close.
+        CriteriaHelper.pollUiThread(() -> !mActivity.hasWindowFocus());
     }
 }

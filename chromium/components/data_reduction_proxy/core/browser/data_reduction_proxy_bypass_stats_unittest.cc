@@ -103,7 +103,7 @@ class DataReductionProxyBypassStatsTest : public testing::Test {
     fake_request->Start();
     test_context_->RunUntilIdle();
 
-    EXPECT_TRUE(fake_request->response_headers() != NULL);
+    EXPECT_TRUE(fake_request->response_headers() != nullptr);
     return fake_request;
   }
 
@@ -421,6 +421,7 @@ class DataReductionProxyBypassStatsEndToEndTest : public testing::Test {
 
   void InitializeContext() {
     context_.Init();
+    drp_test_context_->DisableWarmupURLFetch();
     drp_test_context_->EnableDataReductionProxyWithSecureProxyCheckSuccess();
   }
 

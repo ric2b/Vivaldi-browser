@@ -181,7 +181,7 @@ std::vector<uint8_t> MakeJsonVector(const base::DictionaryValue& dict) {
     return result;
 
   // Cast to an ListValue.
-  base::ListValue* list_value = NULL;
+  base::ListValue* list_value = nullptr;
   if (!json->GetAsList(&list_value) || !list_value)
     return ::testing::AssertionFailure() << "The JSON was not a list";
 
@@ -201,7 +201,7 @@ std::vector<uint8_t> MakeJsonVector(const base::DictionaryValue& dict) {
     return result;
 
   // Cast to an DictionaryValue.
-  base::DictionaryValue* dict_value = NULL;
+  base::DictionaryValue* dict_value = nullptr;
   if (!json->GetAsDictionary(&dict_value) || !dict_value)
     return ::testing::AssertionFailure() << "The JSON was not a dictionary";
 
@@ -391,7 +391,7 @@ std::unique_ptr<base::DictionaryValue> GetJwkDictionary(
                                 json.size());
   std::unique_ptr<base::Value> value = base::JSONReader::Read(json_string);
   EXPECT_TRUE(value.get());
-  EXPECT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
+  EXPECT_TRUE(value->is_dict());
 
   return std::unique_ptr<base::DictionaryValue>(
       static_cast<base::DictionaryValue*>(value.release()));

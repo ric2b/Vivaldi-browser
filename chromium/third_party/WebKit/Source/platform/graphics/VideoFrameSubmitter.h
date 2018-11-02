@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef VideoFrameSubmitter_h
+#define VideoFrameSubmitter_h
+
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -13,16 +16,16 @@
 
 namespace blink {
 
-// This class facilitates the communication between the media thread and the
-// mojo thread, providing commpositor frames containing video frames to the
-// |compositor_frame_sink_|. This class should be created from a
-// SequencedTaskRunner, and any methods that call for mojo communication should
-// also be ran from a SequencedTaskRunner.
+// This single-threaded class facilitates the communication between the media
+// stack and mojo, providing compositor frames containing video frames to the
+// |compositor_frame_sink_|. This class has dependencies on classes that use
+// the media thread's OpenGL ContextProvider, and thus, besides construction,
+// should be consistently ran from the same media SingleThreadTaskRunner.
 class PLATFORM_EXPORT VideoFrameSubmitter
     : public WebVideoFrameSubmitter,
       public viz::mojom::blink::CompositorFrameSinkClient {
  public:
-  explicit VideoFrameSubmitter(cc::VideoFrameProvider*);
+  explicit VideoFrameSubmitter(std::unique_ptr<VideoFrameResourceProvider>);
 
   ~VideoFrameSubmitter() override;
 
@@ -31,7 +34,6 @@ class PLATFORM_EXPORT VideoFrameSubmitter
       mojo::Binding<viz::mojom::blink::CompositorFrameSinkClient>*,
       viz::mojom::blink::CompositorFrameSinkPtr*);
 
-  void SubmitFrame(viz::BeginFrameAck);
   bool Rendering() { return is_rendering_; };
   cc::VideoFrameProvider* Provider() { return provider_; }
   mojo::Binding<viz::mojom::blink::CompositorFrameSinkClient>* Binding() {
@@ -48,29 +50,40 @@ class PLATFORM_EXPORT VideoFrameSubmitter
   void DidReceiveFrame() override;
 
   // WebVideoFrameSubmitter implementation.
+  void Initialize(cc::VideoFrameProvider*) override;
   void StartSubmitting(const viz::FrameSinkId&) override;
 
   // cc::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const WTF::Vector<viz::ReturnedResource>& resources) override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 ::mojo::common::mojom::blink::TimeTicksPtr,
+                                 WTF::TimeDelta refresh,
+                                 uint32_t flags) final;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) final;
   void OnBeginFrame(const viz::BeginFrameArgs&) override;
   void OnBeginFramePausedChanged(bool paused) override {}
   void ReclaimResources(
-      const WTF::Vector<viz::ReturnedResource>& resources) override {}
+      const WTF::Vector<viz::ReturnedResource>& resources) override;
 
  private:
-  cc::VideoFrameProvider* provider_;
+  void SubmitFrame(viz::BeginFrameAck, scoped_refptr<media::VideoFrame>);
+
+  cc::VideoFrameProvider* provider_ = nullptr;
   viz::mojom::blink::CompositorFrameSinkPtr compositor_frame_sink_;
   mojo::Binding<viz::mojom::blink::CompositorFrameSinkClient> binding_;
   viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
   viz::LocalSurfaceId current_local_surface_id_;
-  VideoFrameResourceProvider resource_provider_;
+  std::unique_ptr<VideoFrameResourceProvider> resource_provider_;
 
   bool is_rendering_;
+  base::WeakPtrFactory<VideoFrameSubmitter> weak_ptr_factory_;
 
-  THREAD_CHECKER(thread_checker_);
+  THREAD_CHECKER(media_thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(VideoFrameSubmitter);
 };
 
 }  // namespace blink
+
+#endif  // VideoFrameSubmitter_h

@@ -107,6 +107,10 @@ extern const char kBundleRootDir[];
 extern const char kBundleRootDir_HelpShort[];
 extern const char kBundleRootDir_Help[];
 
+extern const char kBundleContentsDir[];
+extern const char kBundleContentsDir_HelpShort[];
+extern const char kBundleContentsDir_Help[];
+
 extern const char kBundleResourcesDir[];
 extern const char kBundleResourcesDir_HelpShort[];
 extern const char kBundleResourcesDir_Help[];
@@ -234,6 +238,10 @@ extern const char kOutputPrefixOverride_Help[];
 extern const char kOutputs[];
 extern const char kOutputs_HelpShort[];
 extern const char kOutputs_Help[];
+
+extern const char kPartialInfoPlist[];
+extern const char kPartialInfoPlist_HelpShort[];
+extern const char kPartialInfoPlist_Help[];
 
 extern const char kPool[];
 extern const char kPool_HelpShort[];

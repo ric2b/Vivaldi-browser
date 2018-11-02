@@ -46,16 +46,17 @@ class SVGInlineTextBox final : public InlineTextBox {
              const LayoutPoint&,
              LayoutUnit line_top,
              LayoutUnit line_bottom) const override;
-  LayoutRect LocalSelectionRect(int start_position,
-                                int end_position,
-                                bool = true) const override;
+  LayoutRect LocalSelectionRect(
+      int start_position,
+      int end_position,
+      bool consider_current_selection = true) const override;
 
   bool MapStartEndPositionsIntoFragmentCoordinates(const SVGTextFragment&,
                                                    int& start_position,
                                                    int& end_position) const;
 
   // Calculate the bounding rect of all text fragments.
-  LayoutRect CalculateBoundaries() const;
+  FloatRect CalculateBoundaries() const;
 
   void ClearTextFragments() { text_fragments_.clear(); }
   Vector<SVGTextFragment>& TextFragments() { return text_fragments_; }

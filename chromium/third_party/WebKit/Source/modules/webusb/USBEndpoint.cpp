@@ -90,8 +90,9 @@ String USBEndpoint::type() const {
   return ConvertTypeToEnum(Info().type);
 }
 
-DEFINE_TRACE(USBEndpoint) {
+void USBEndpoint::Trace(blink::Visitor* visitor) {
   visitor->Trace(alternate_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

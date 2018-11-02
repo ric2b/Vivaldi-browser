@@ -36,6 +36,7 @@ enum UIDisplayDisposition {
   AUTOMATIC_SIGNIN_TOAST,
   MANUAL_WITH_PASSWORD_PENDING_UPDATE,
   AUTOMATIC_WITH_PASSWORD_PENDING_UPDATE,
+  MANUAL_GENERATED_PASSWORD_CONFIRMATION,
   NUM_DISPLAY_DISPOSITIONS
 };
 
@@ -232,6 +233,7 @@ enum class SyncPasswordHashChange {
   SAVED_ON_CHROME_SIGNIN,
   SAVED_IN_CONTENT_AREA,
   CLEARED_ON_CHROME_SIGNOUT,
+  CHANGED_IN_CONTENT_AREA,
   SAVED_SYNC_PASSWORD_CHANGE_COUNT
 };
 
@@ -256,6 +258,8 @@ enum ShowAllSavedPasswordsContext {
   // passwords can be suggested to the user, e.g. because none are saved or
   // because of technical issues.
   SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK,
+  // The "Show all saved  passwords..." fallback is shown in context menu.
+  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_CONTEXT_MENU,
   SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT
 };
 

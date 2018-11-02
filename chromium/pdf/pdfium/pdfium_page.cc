@@ -19,6 +19,7 @@
 #include "pdf/pdfium/pdfium_api_string_buffer_adapter.h"
 #include "pdf/pdfium/pdfium_engine.h"
 #include "printing/units.h"
+#include "third_party/pdfium/public/fpdf_annot.h"
 
 using printing::ConvertUnitDouble;
 using printing::kPointsPerInch;
@@ -74,6 +75,12 @@ bool OverlapsOnYAxis(const pp::FloatRect& a, const pp::FloatRect& b) {
 }  // namespace
 
 namespace chrome_pdf {
+
+PDFiumPage::LinkTarget::LinkTarget() : page(-1) {}
+
+PDFiumPage::LinkTarget::LinkTarget(const LinkTarget& other) = default;
+
+PDFiumPage::LinkTarget::~LinkTarget() = default;
 
 PDFiumPage::PDFiumPage(PDFiumEngine* engine,
                        int i,
@@ -318,8 +325,7 @@ int PDFiumPage::GetCharCount() {
   return FPDFText_CountChars(GetTextPage());
 }
 
-PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link,
-                                           LinkTarget* target) const {
+PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
   FPDF_DEST dest = FPDFLink_GetDest(engine_->doc(), link);
   if (dest)
     return GetDestinationTarget(dest, target);
@@ -333,14 +339,14 @@ PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link,
       FPDF_DEST dest = FPDFAction_GetDest(engine_->doc(), action);
       if (dest)
         return GetDestinationTarget(dest, target);
-      // TODO(thestig): We don't fully support all types of the in-document
-      // links. Need to implement that. There is a bug to track that:
-      // https://crbug.com/55776
+      // TODO(crbug.com/55776): We don't fully support all types of the
+      // in-document links.
       return NONSELECTABLE_AREA;
     }
     case PDFACTION_URI:
       return GetURITarget(action, target);
-    // TODO(thestig): Support remaining types for https://crbug.com/55776
+    // TODO(crbug.com/767191): Support PDFACTION_LAUNCH.
+    // TODO(crbug.com/142344): Support PDFACTION_REMOTEGOTO.
     case PDFACTION_LAUNCH:
     case PDFACTION_REMOTEGOTO:
     default:
@@ -349,10 +355,39 @@ PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link,
 }
 
 PDFiumPage::Area PDFiumPage::GetDestinationTarget(FPDF_DEST destination,
-                                                  LinkTarget* target) const {
-  if (target)
-    target->page = FPDFDest_GetPageIndex(engine_->doc(), destination);
+                                                  LinkTarget* target) {
+  if (!target)
+    return DOCLINK_AREA;
+
+  target->page = FPDFDest_GetPageIndex(engine_->doc(), destination);
+  GetPageYTarget(destination, target);
+
   return DOCLINK_AREA;
+}
+
+void PDFiumPage::GetPageYTarget(FPDF_DEST destination, LinkTarget* target) {
+  if (!available_) {
+    target->y_in_pixels.reset();
+    return;
+  }
+
+  FPDF_BOOL has_x_coord;
+  FPDF_BOOL has_y_coord;
+  FPDF_BOOL has_zoom;
+  FS_FLOAT x;
+  FS_FLOAT y;
+  FS_FLOAT zoom;
+  FPDF_BOOL success = FPDFDest_GetLocationInPage(
+      destination, &has_x_coord, &has_y_coord, &has_zoom, &x, &y, &zoom);
+
+  if (!success || !has_x_coord || !has_y_coord) {
+    target->y_in_pixels.reset();
+    return;
+  }
+
+  pp::FloatRect page_rect(x, y, 0, 0);
+  pp::FloatRect pixel_rect(FloatPageRectToPixelRect(GetPage(), page_rect));
+  target->y_in_pixels = pixel_rect.y();
 }
 
 PDFiumPage::Area PDFiumPage::GetURITarget(FPDF_ACTION uri_action,
@@ -466,10 +501,16 @@ void PDFiumPage::CalculateLinks() {
 
     int rect_count = FPDFLink_CountRects(links, i);
     for (int j = 0; j < rect_count; ++j) {
-      double left, top, right, bottom;
+      double left;
+      double top;
+      double right;
+      double bottom;
       FPDFLink_GetRect(links, i, j, &left, &top, &right, &bottom);
-      link.rects.push_back(
-          PageToScreen(pp::Point(), 1.0, left, top, right, bottom, 0));
+      pp::Rect rect =
+          PageToScreen(pp::Point(), 1.0, left, top, right, bottom, 0);
+      if (rect.IsEmpty())
+        continue;
+      link.rects.push_back(rect);
     }
     links_.push_back(link);
   }
@@ -529,6 +570,27 @@ pp::Rect PDFiumPage::PageToScreen(const pp::Point& offset,
 
   return pp::Rect(new_left, new_top, new_size_x.ValueOrDie(),
                   new_size_y.ValueOrDie());
+}
+
+const PDFEngine::PageFeatures* PDFiumPage::GetPageFeatures() {
+  // If page_features_ is cached, return the cached features.
+  if (page_features_.IsInitialized())
+    return &page_features_;
+
+  FPDF_PAGE page = GetPage();
+  if (!page)
+    return nullptr;
+
+  // Initialize and cache page_features_.
+  page_features_.index = index_;
+  int annotation_count = FPDFPage_GetAnnotCount(page);
+  for (int i = 0; i < annotation_count; ++i) {
+    FPDF_ANNOTATION annotation = FPDFPage_GetAnnot(page, i);
+    FPDF_ANNOTATION_SUBTYPE subtype = FPDFAnnot_GetSubtype(annotation);
+    page_features_.annotation_types.insert(subtype);
+  }
+
+  return &page_features_;
 }
 
 PDFiumPage::ScopedLoadCounter::ScopedLoadCounter(PDFiumPage* page)

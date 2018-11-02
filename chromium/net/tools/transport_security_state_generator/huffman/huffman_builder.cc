@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 
 namespace net {
 
@@ -25,7 +24,7 @@ class HuffmanNode {
         count_(count),
         left_(std::move(left)),
         right_(std::move(right)) {}
-  ~HuffmanNode() {}
+  ~HuffmanNode() = default;
 
   bool IsLeaf() const {
     return left_.get() == nullptr && right_.get() == nullptr;
@@ -50,9 +49,9 @@ bool CompareNodes(const std::unique_ptr<HuffmanNode>& lhs,
 
 }  // namespace
 
-HuffmanBuilder::HuffmanBuilder() {}
+HuffmanBuilder::HuffmanBuilder() = default;
 
-HuffmanBuilder::~HuffmanBuilder() {}
+HuffmanBuilder::~HuffmanBuilder() = default;
 
 void HuffmanBuilder::RecordUsage(uint8_t character) {
   DCHECK(character < 128);

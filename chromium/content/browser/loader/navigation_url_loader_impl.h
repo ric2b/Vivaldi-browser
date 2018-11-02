@@ -28,7 +28,6 @@ class ServiceWorkerNavigationHandle;
 class StreamHandle;
 struct GlobalRequestID;
 struct ResourceResponse;
-struct SSLStatus;
 
 class NavigationURLLoaderImpl : public NavigationURLLoader {
  public:
@@ -45,6 +44,7 @@ class NavigationURLLoaderImpl : public NavigationURLLoader {
   // NavigationURLLoader implementation.
   void FollowRedirect() override;
   void ProceedWithResponse() override;
+  void InterceptNavigation(NavigationInterceptionCB callback) override;
 
  private:
   friend class NavigationURLLoaderImplCore;
@@ -56,7 +56,7 @@ class NavigationURLLoaderImpl : public NavigationURLLoader {
   // Notifies the delegate that the response has started.
   void NotifyResponseStarted(const scoped_refptr<ResourceResponse>& response,
                              std::unique_ptr<StreamHandle> body,
-                             const SSLStatus& ssl_status,
+                             const net::SSLInfo& ssl_info,
                              std::unique_ptr<NavigationData> navigation_data,
                              const GlobalRequestID& request_id,
                              bool is_download,

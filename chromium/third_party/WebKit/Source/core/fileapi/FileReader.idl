@@ -33,7 +33,6 @@
 
 [
     ActiveScriptWrappable,
-    DependentLifetime,
     Constructor,
     ConstructorCallWith=ExecutionContext,
     Exposed=(Window,Worker)
@@ -54,6 +53,7 @@
     [ImplementedAs=getReadyState] readonly attribute unsigned short readyState;
 
     // File or Blob data
+    [CallWith=ScriptState]
     readonly attribute (DOMString or ArrayBuffer)? result;
 
     readonly attribute DOMException? error;

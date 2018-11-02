@@ -126,7 +126,7 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateMouseEvent(
         changed_flag = ui::EF_LEFT_MOUSE_BUTTON;
       else
         changed_flag = ui::EF_RIGHT_MOUSE_BUTTON;
-      id_generator_->MaybeReleaseNumber(pointer_id);
+      id_generator_->ReleaseNumber(pointer_id);
       click_count = 1;
       if (!sent_mouse_down_)
         return nullptr;
@@ -142,14 +142,14 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateMouseEvent(
       break;
     case WM_POINTERLEAVE:
       event_type = ui::ET_MOUSE_EXITED;
-      id_generator_->MaybeReleaseNumber(pointer_id);
+      id_generator_->ReleaseNumber(pointer_id);
       break;
     default:
       NOTREACHED();
   }
-  std::unique_ptr<ui::Event> event = base::MakeUnique<ui::MouseEvent>(
-      event_type, point, point, ui::EventTimeForNow(), flag, changed_flag,
-      pointer_details);
+  std::unique_ptr<ui::Event> event = std::make_unique<ui::MouseEvent>(
+      event_type, point, point, ui::EventTimeForNow(),
+      flag | ui::GetModifiersFromKeyState(), changed_flag, pointer_details);
   event->AsMouseEvent()->SetClickCount(click_count);
   return event;
 }
@@ -170,7 +170,7 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateTouchEvent(
       break;
     case WM_POINTERUP:
       event_type = ui::ET_TOUCH_RELEASED;
-      id_generator_->MaybeReleaseNumber(pointer_id);
+      id_generator_->ReleaseNumber(pointer_id);
       if (!sent_touch_start_)
         return nullptr;
       sent_touch_start_ = false;
@@ -187,8 +187,9 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateTouchEvent(
   int rotation_angle = static_cast<int>(pointer_details.twist) % 180;
   if (rotation_angle < 0)
     rotation_angle += 180;
-  std::unique_ptr<ui::Event> event = base::MakeUnique<ui::TouchEvent>(
-      event_type, point, event_time, pointer_details, flags, rotation_angle);
+  std::unique_ptr<ui::Event> event = std::make_unique<ui::TouchEvent>(
+      event_type, point, event_time, pointer_details,
+      flags | ui::GetModifiersFromKeyState(), rotation_angle);
   event->latency()->AddLatencyNumberWithTimestamp(
       ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, event_time, 1);
   return event;

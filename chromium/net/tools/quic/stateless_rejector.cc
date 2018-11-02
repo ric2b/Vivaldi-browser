@@ -18,7 +18,7 @@ class StatelessRejector::ValidateCallback
       std::unique_ptr<StatelessRejector::ProcessDoneCallback> cb)
       : rejector_(std::move(rejector)), cb_(std::move(cb)) {}
 
-  ~ValidateCallback() override {}
+  ~ValidateCallback() override = default;
 
   void Run(QuicReferenceCountedPointer<Result> result,
            std::unique_ptr<ProofSource::Details> /* proof_source_details */)
@@ -34,8 +34,8 @@ class StatelessRejector::ValidateCallback
 };
 
 StatelessRejector::StatelessRejector(
-    QuicVersion version,
-    const QuicVersionVector& versions,
+    QuicTransportVersion version,
+    const QuicTransportVersionVector& versions,
     const QuicCryptoServerConfig* crypto_config,
     QuicCompressedCertsCache* compressed_certs_cache,
     const QuicClock* clock,
@@ -58,9 +58,9 @@ StatelessRejector::StatelessRejector(
       signed_config_(new QuicSignedServerConfig),
       params_(new QuicCryptoNegotiatedParameters) {}
 
-StatelessRejector::~StatelessRejector() {}
+StatelessRejector::~StatelessRejector() = default;
 
-void StatelessRejector::OnChlo(QuicVersion version,
+void StatelessRejector::OnChlo(QuicTransportVersion version,
                                QuicConnectionId connection_id,
                                QuicConnectionId server_designated_connection_id,
                                const CryptoHandshakeMessage& message) {

@@ -15,7 +15,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "content/browser/fileapi/upload_file_system_file_element_reader.h"
 #include "content/public/common/resource_request_body.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -93,20 +92,11 @@ std::unique_ptr<net::UploadDataStream> UploadDataStreamBuilder::Build(
     switch (element.type()) {
       case ResourceRequestBody::Element::TYPE_BYTES:
         element_readers.push_back(
-            base::MakeUnique<BytesElementReader>(body, element));
+            std::make_unique<BytesElementReader>(body, element));
         break;
       case ResourceRequestBody::Element::TYPE_FILE:
-        element_readers.push_back(base::MakeUnique<FileElementReader>(
+        element_readers.push_back(std::make_unique<FileElementReader>(
             body, file_task_runner, element));
-        break;
-      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
-        // If |body| contains any filesystem URLs, the caller should have
-        // supplied a FileSystemContext.
-        DCHECK(file_system_context);
-        element_readers.push_back(
-            base::MakeUnique<content::UploadFileSystemFileElementReader>(
-                file_system_context, element.filesystem_url(), element.offset(),
-                element.length(), element.expected_modification_time()));
         break;
       case ResourceRequestBody::Element::TYPE_BLOB: {
         DCHECK_EQ(std::numeric_limits<uint64_t>::max(), element.length());
@@ -114,19 +104,24 @@ std::unique_ptr<net::UploadDataStream> UploadDataStreamBuilder::Build(
         std::unique_ptr<storage::BlobDataHandle> handle =
             blob_context->GetBlobDataFromUUID(element.blob_uuid());
         element_readers.push_back(
-            base::MakeUnique<storage::UploadBlobElementReader>(
-                std::move(handle), file_system_context));
+            std::make_unique<storage::UploadBlobElementReader>(
+                std::move(handle)));
         break;
       }
+      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
+        CHECK(false) << "Should never be reached";
+        break;
+      case ResourceRequestBody::Element::TYPE_RAW_FILE:
       case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
       case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
+      case ResourceRequestBody::Element::TYPE_DATA_PIPE:
       case ResourceRequestBody::Element::TYPE_UNKNOWN:
         NOTREACHED();
         break;
     }
   }
 
-  return base::MakeUnique<net::ElementsUploadDataStream>(
+  return std::make_unique<net::ElementsUploadDataStream>(
       std::move(element_readers), body->identifier());
 }
 

@@ -30,8 +30,10 @@ MACHINE_TYPE_AMD64 = 0x8664
 # Please do not add your file here without confirming that it indeed doesn't
 # require /NXCOMPAT and /DYNAMICBASE.  Contact cpu@chromium.org or your local
 # Windows guru for advice.
-EXCLUDED_FILES = ['mini_installer.exe',
-                  'next_version_mini_installer.exe'
+EXCLUDED_FILES = [
+                  'crashpad_util_test_process_info_test_child.exe',
+                  'mini_installer.exe',
+                  'next_version_mini_installer.exe',
                   ]
 
 EXCLUDED_RE_FILES = [re.compile("^"+x+"$") for x in [
@@ -42,7 +44,7 @@ EXCLUDED_RE_FILES = [re.compile("^"+x+"$") for x in [
 def IsPEFile(path):
   return (os.path.isfile(path) and
           os.path.splitext(path)[1].lower() in PE_FILE_EXTENSIONS and
-          os.path.basename(path) not in EXCLUDED_FILES and 
+          os.path.basename(path) not in EXCLUDED_FILES and
           not any([x.match(os.path.basename(path)) for x in EXCLUDED_RE_FILES])
           )
 

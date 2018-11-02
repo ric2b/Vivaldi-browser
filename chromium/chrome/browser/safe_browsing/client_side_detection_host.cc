@@ -20,12 +20,13 @@
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/render_messages.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/db/whitelist_checker_client.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/whitelist_checker_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -225,10 +226,6 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
       return;
     }
 
-    if (database_manager_->IsMalwareKillSwitchOn()) {
-      malware_reason = NO_CLASSIFY_KILLSWITCH;
-    }
-
     // Query the CSD Whitelist asynchronously. We're already on the IO thread so
     // can call WhitelistCheckerClient directly.
     base::Callback<void(bool)> result_callback =
@@ -371,6 +368,8 @@ bool ClientSideDetectionHost::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(ClientSideDetectionHost, message)
     IPC_MESSAGE_HANDLER(SafeBrowsingHostMsg_PhishingDetectionDone,
                         OnPhishingDetectionDone)
+    IPC_MESSAGE_HANDLER(SafeBrowsingHostMsg_SubresourceResponseStarted,
+                        OnSubresourceResponseStarted)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -378,6 +377,17 @@ bool ClientSideDetectionHost::OnMessageReceived(
 
 void ClientSideDetectionHost::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  if (browse_info_.get() && should_extract_malware_features_ &&
+      navigation_handle->HasCommitted() && !navigation_handle->IsDownload()) {
+    content::ResourceType resource_type =
+        navigation_handle->IsInMainFrame() ? content::RESOURCE_TYPE_MAIN_FRAME
+                                           : content::RESOURCE_TYPE_SUB_FRAME;
+    UpdateIPUrlMap(navigation_handle->GetSocketAddress().host() /* ip */,
+                   navigation_handle->GetURL().spec() /* url */,
+                   navigation_handle->IsPost() ? "POST" : "GET",
+                   navigation_handle->GetReferrer().url.spec(), resource_type);
+  }
+
   if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
     return;
 
@@ -398,7 +408,7 @@ void ClientSideDetectionHost::DidFinishNavigation(
   // report request we have to cancel it to make sure we don't display
   // an interstitial for the wrong page.  Note that this won't cancel
   // the server ping back but only cancel the showing of the
-  // interstial.
+  // interstitial.
   weak_factory_.InvalidateWeakPtrs();
 
   if (!csd_service_) {
@@ -571,6 +581,16 @@ void ClientSideDetectionHost::OnPhishingDetectionDone(
   }
 }
 
+void ClientSideDetectionHost::OnSubresourceResponseStarted(
+    const std::string& ip,
+    const GURL& url,
+    const std::string& method,
+    const GURL& referrer,
+    content::ResourceType resource_type) {
+  if (browse_info_.get() && should_extract_malware_features_ && url.is_valid())
+    UpdateIPUrlMap(ip, url.spec(), method, referrer.spec(), resource_type);
+}
+
 void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,
                                                        bool is_phishing) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -591,10 +611,10 @@ void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,
           safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.web_contents_getter = safe_browsing::SafeBrowsingUIManager::
           UnsafeResource::GetWebContentsGetter(
-              web_contents()->GetRenderProcessHost()->GetID(),
+              web_contents()->GetMainFrame()->GetProcess()->GetID(),
               web_contents()->GetMainFrame()->GetRoutingID());
       if (!ui_manager_->IsWhitelisted(resource)) {
-        // We need to stop any pending navigations, otherwise the interstital
+        // We need to stop any pending navigations, otherwise the interstitial
         // might not get created properly.
         web_contents()->GetController().DiscardNonCommittedEntries();
       }
@@ -627,11 +647,11 @@ void ClientSideDetectionHost::MaybeShowMalwareWarning(GURL original_url,
           safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.web_contents_getter = safe_browsing::SafeBrowsingUIManager::
           UnsafeResource::GetWebContentsGetter(
-              web_contents()->GetRenderProcessHost()->GetID(),
+              web_contents()->GetMainFrame()->GetProcess()->GetID(),
               web_contents()->GetMainFrame()->GetRoutingID());
 
       if (!ui_manager_->IsWhitelisted(resource)) {
-        // We need to stop any pending navigations, otherwise the interstital
+        // We need to stop any pending navigations, otherwise the interstitial
         // might not get created properly.
         web_contents()->GetController().DiscardNonCommittedEntries();
       }
@@ -700,18 +720,6 @@ void ClientSideDetectionHost::UpdateIPUrlMap(const std::string& ip,
     }
   } else if (it->second.size() < kMaxUrlsPerIP) {
     it->second.push_back(IPUrlInfo(url, method, referrer, resource_type));
-  }
-}
-
-void ClientSideDetectionHost::DidGetResourceResponseStart(
-    const content::ResourceRequestDetails& details) {
-  if (browse_info_.get() && should_extract_malware_features_ &&
-      details.url.is_valid()) {
-    UpdateIPUrlMap(details.socket_address.host() /* ip */,
-                   details.url.spec() /* url */,
-                   details.method,
-                   details.referrer,
-                   details.resource_type);
   }
 }
 

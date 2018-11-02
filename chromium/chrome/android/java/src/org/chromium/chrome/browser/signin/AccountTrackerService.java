@@ -4,16 +4,16 @@
 
 package org.chromium.chrome.browser.signin;
 
-import android.accounts.Account;
 import android.os.AsyncTask;
 
-import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.components.signin.AccountIdProvider;
 import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountsChangeObserver;
 
 /**
 * Android wrapper of AccountTrackerService which provides access from the java layer.
@@ -28,6 +28,7 @@ public class AccountTrackerService {
     private SystemAccountsSeedingStatus mSystemAccountsSeedingStatus;
     private boolean mSystemAccountsChanged;
     private boolean mSyncForceRefreshedForTest;
+    private AccountsChangeObserver mAccountsChangeObserver;
 
     private enum SystemAccountsSeedingStatus {
         SEEDING_NOT_STARTED,
@@ -106,6 +107,7 @@ public class AccountTrackerService {
         ThreadUtils.assertOnUiThread();
         mSystemAccountsChanged = false;
         mSyncForceRefreshedForTest = false;
+
         final AccountIdProvider accountIdProvider = AccountIdProvider.getInstance();
         if (accountIdProvider.canBeUsed()) {
             mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_IN_PROGRESS;
@@ -113,45 +115,48 @@ public class AccountTrackerService {
             mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_NOT_STARTED;
             return;
         }
-        AccountManagerFacade.get().tryGetGoogleAccounts(new Callback<Account[]>() {
-            @Override
-            public void onResult(final Account[] accounts) {
-                new AsyncTask<Void, Void, String[][]>() {
-                    @Override
-                    public String[][] doInBackground(Void... params) {
-                        Log.d(TAG, "Getting id/email mapping");
-                        String[][] accountIdNameMap = new String[2][accounts.length];
-                        for (int i = 0; i < accounts.length; ++i) {
-                            accountIdNameMap[0][i] =
-                                    accountIdProvider.getAccountId(accounts[i].name);
-                            accountIdNameMap[1][i] = accounts[i].name;
-                        }
-                        return accountIdNameMap;
+
+        if (mAccountsChangeObserver == null) {
+            mAccountsChangeObserver =
+                    () -> invalidateAccountSeedStatus(false /* don't reseed right now */);
+            AccountManagerFacade.get().addObserver(mAccountsChangeObserver);
+        }
+
+        AccountManagerFacade.get().tryGetGoogleAccounts(accounts -> {
+            new AsyncTask<Void, Void, String[][]>() {
+                @Override
+                public String[][] doInBackground(Void... params) {
+                    Log.d(TAG, "Getting id/email mapping");
+                    String[][] accountIdNameMap = new String[2][accounts.length];
+                    for (int i = 0; i < accounts.length; ++i) {
+                        accountIdNameMap[0][i] = accountIdProvider.getAccountId(accounts[i].name);
+                        accountIdNameMap[1][i] = accounts[i].name;
                     }
-                    @Override
-                    public void onPostExecute(String[][] accountIdNameMap) {
-                        if (mSyncForceRefreshedForTest) return;
-                        if (mSystemAccountsChanged) {
-                            seedSystemAccounts();
-                            return;
-                        }
-                        if (areAccountIdsValid(accountIdNameMap[0])) {
-                            nativeSeedAccountsInfo(accountIdNameMap[0], accountIdNameMap[1]);
-                            mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_DONE;
-                            notifyObserversOnSeedingComplete();
-                        } else {
-                            Log.w(TAG, "Invalid mapping of id/email");
-                            seedSystemAccounts();
-                        }
+                    return accountIdNameMap;
+                }
+                @Override
+                public void onPostExecute(String[][] accountIdNameMap) {
+                    if (mSyncForceRefreshedForTest) return;
+                    if (mSystemAccountsChanged) {
+                        seedSystemAccounts();
+                        return;
                     }
-                }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-            }
+                    if (areAccountIdsValid(accountIdNameMap[0])) {
+                        nativeSeedAccountsInfo(accountIdNameMap[0], accountIdNameMap[1]);
+                        mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_DONE;
+                        notifyObserversOnSeedingComplete();
+                    } else {
+                        Log.w(TAG, "Invalid mapping of id/email");
+                        seedSystemAccounts();
+                    }
+                }
+            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         });
     }
 
     private boolean areAccountIdsValid(String[] accountIds) {
-        for (int i = 0; i < accountIds.length; ++i) {
-            if (accountIds[i] == null) return false;
+        for (String accountId : accountIds) {
+            if (accountId == null) return false;
         }
         return true;
     }
@@ -169,6 +174,7 @@ public class AccountTrackerService {
     public void syncForceRefreshForTest(String[] accountIds, String[] accountNames) {
         ThreadUtils.assertOnUiThread();
         mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_IN_PROGRESS;
+        mSystemAccountsChanged = false;
         mSyncForceRefreshedForTest = true;
         nativeSeedAccountsInfo(accountIds, accountNames);
         mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_DONE;
@@ -199,23 +205,20 @@ public class AccountTrackerService {
         }
 
         mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_VALIDATING;
-        AccountManagerFacade.get().tryGetGoogleAccounts(new Callback<Account[]>() {
-            @Override
-            public void onResult(final Account[] accounts) {
-                if (mSystemAccountsChanged
-                        || mSystemAccountsSeedingStatus
-                                != SystemAccountsSeedingStatus.SEEDING_VALIDATING) {
-                    return;
-                }
+        AccountManagerFacade.get().tryGetGoogleAccounts(accounts -> {
+            if (mSystemAccountsChanged
+                    || mSystemAccountsSeedingStatus
+                            != SystemAccountsSeedingStatus.SEEDING_VALIDATING) {
+                return;
+            }
 
-                String[] accountNames = new String[accounts.length];
-                for (int i = 0; i < accounts.length; ++i) {
-                    accountNames[i] = accounts[i].name;
-                }
-                if (nativeAreAccountsSeeded(accountNames)) {
-                    mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_DONE;
-                    notifyObserversOnSeedingComplete();
-                }
+            String[] accountNames = new String[accounts.length];
+            for (int i = 0; i < accounts.length; ++i) {
+                accountNames[i] = accounts[i].name;
+            }
+            if (nativeAreAccountsSeeded(accountNames)) {
+                mSystemAccountsSeedingStatus = SystemAccountsSeedingStatus.SEEDING_DONE;
+                notifyObserversOnSeedingComplete();
             }
         });
     }

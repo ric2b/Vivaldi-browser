@@ -6,22 +6,9 @@
 #define CONTENT_BROWSER_COMPOSITOR_IMAGE_TRANSPORT_FACTORY_H_
 
 #include <memory>
-#include <string>
 
-#include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "gpu/ipc/common/surface_handle.h"
-#include "ui/gfx/native_widget_types.h"
-#include "ui/latency/latency_info.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}
-
-namespace gfx {
-enum class SwapResult;
-}
 
 namespace ui {
 class Compositor;
@@ -31,10 +18,6 @@ class ContextFactoryPrivate;
 
 namespace viz {
 class GLHelper;
-}
-
-namespace gpu {
-class GpuChannelEstablishFactory;
 }
 
 namespace content {
@@ -47,20 +30,19 @@ class CONTENT_EXPORT ImageTransportFactory {
  public:
   virtual ~ImageTransportFactory() {}
 
-  // Initializes the global transport factory.
-  static void Initialize(
-      scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner);
-
-  // Initializes the global transport factory for unit tests using the provided
-  // context factory.
-  static void InitializeForUnitTests(
-      std::unique_ptr<ImageTransportFactory> factory);
+  // Sets the global transport factory.
+  static void SetFactory(std::unique_ptr<ImageTransportFactory> factory);
 
   // Terminates the global transport factory.
   static void Terminate();
 
   // Gets the factory instance.
   static ImageTransportFactory* GetInstance();
+
+  // Whether gpu compositing is being used or is disabled for software
+  // compositing. Clients of the compositor should give resources that match
+  // the appropriate mode.
+  virtual bool IsGpuCompositingDisabled() = 0;
 
   // Gets the image transport factory as a context factory for the compositor.
   virtual ui::ContextFactory* GetContextFactory() = 0;
@@ -74,9 +56,6 @@ class CONTENT_EXPORT ImageTransportFactory {
   // GLHelper will get destroyed whenever the shared context is lost
   // (ImageTransportFactoryObserver::OnLostResources is called).
   virtual viz::GLHelper* GetGLHelper() = 0;
-
-  virtual void SetGpuChannelEstablishFactory(
-      gpu::GpuChannelEstablishFactory* factory) = 0;
 
 #if defined(OS_MACOSX)
   // Called with |suspended| as true when the ui::Compositor has been

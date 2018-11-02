@@ -7,11 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -352,8 +352,8 @@ class ResourceLoaderTest : public testing::Test,
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
         test_url_request_context_(true),
         resource_context_(&test_url_request_context_),
-        raw_ptr_resource_handler_(NULL),
-        raw_ptr_to_request_(NULL) {
+        raw_ptr_resource_handler_(nullptr),
+        raw_ptr_to_request_(nullptr) {
     test_url_request_context_.set_job_factory(&job_factory_);
     test_url_request_context_.set_network_quality_estimator(
         &network_quality_estimator_);
@@ -409,9 +409,9 @@ class ResourceLoaderTest : public testing::Test,
     ResourceRequestInfo::AllocateForTesting(
         request.get(), resource_type, &resource_context_,
         rfh->GetProcess()->GetID(), rfh->GetRenderViewHost()->GetRoutingID(),
-        rfh->GetRoutingID(), belongs_to_main_frame,
-        false /* parent_is_main_frame */, true /* allow_download */,
-        false /* is_async */, PREVIEWS_OFF /* previews_state */);
+        rfh->GetRoutingID(), belongs_to_main_frame, true /* allow_download */,
+        false /* is_async */, PREVIEWS_OFF /* previews_state */,
+        nullptr /* navigation_ui_data */);
     std::unique_ptr<TestResourceHandler> resource_handler(
         new TestResourceHandler(nullptr, nullptr));
     raw_ptr_resource_handler_ = resource_handler.get();
@@ -461,7 +461,7 @@ class ResourceLoaderTest : public testing::Test,
   ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       ResourceLoader* loader,
       net::AuthChallengeInfo* auth_info) override {
-    return NULL;
+    return nullptr;
   }
   bool HandleExternalProtocol(ResourceLoader* loader,
                               const GURL& url) override {
@@ -530,7 +530,7 @@ class ResourceLoaderTest : public testing::Test,
   // Allows controlling the return values of sequential calls to
   // HandleExternalProtocol. Values are removed by the measure they are used
   // but the last one which is used for all following calls.
-  std::deque<bool> handle_external_protocol_results_{false};
+  base::circular_deque<bool> handle_external_protocol_results_{false};
 
   net::URLRequestJobFactoryImpl job_factory_;
   net::TestNetworkQualityEstimator network_quality_estimator_;
@@ -595,6 +595,15 @@ class HTTPSSecurityInfoResourceLoaderTest : public ResourceLoaderTest {
   const GURL test_https_url_;
   const GURL test_https_redirect_url_;
 };
+
+TEST_F(HTTPSSecurityInfoResourceLoaderTest, CertStatusOnResponse) {
+  SetUpResourceLoaderForUrl(test_https_url());
+  loader_->StartRequest();
+  raw_ptr_resource_handler_->WaitUntilResponseComplete();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(kTestCertError,
+            raw_ptr_resource_handler_->resource_response()->head.cert_status);
+}
 
 // Tests that client certificates are requested with ClientCertStore lookup.
 TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
@@ -726,6 +735,19 @@ TEST_F(ClientCertResourceLoaderTest, StoreAsyncCancel) {
 
   // Pump the event loop to ensure nothing asynchronous crashes either.
   base::RunLoop().RunUntilIdle();
+}
+
+// Tests that a RESOURCE_TYPE_PREFETCH request sets the LOAD_PREFETCH flag.
+TEST_F(ResourceLoaderTest, PrefetchFlag) {
+  std::unique_ptr<net::URLRequest> request(
+      resource_context_.GetRequestContext()->CreateRequest(
+          test_async_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */,
+          TRAFFIC_ANNOTATION_FOR_TESTS));
+  SetUpResourceLoader(std::move(request), RESOURCE_TYPE_PREFETCH, true);
+
+  loader_->StartRequest();
+  raw_ptr_resource_handler_->WaitUntilResponseComplete();
+  EXPECT_EQ(test_data(), raw_ptr_resource_handler_->body());
 }
 
 // Test the case the ResourceHandler defers nothing.

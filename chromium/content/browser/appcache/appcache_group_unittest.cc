@@ -20,9 +20,9 @@ namespace {
 class TestAppCacheFrontend : public content::AppCacheFrontend {
  public:
   TestAppCacheFrontend()
-      : last_host_id_(-1), last_cache_id_(-1),
-        last_status_(content::APPCACHE_STATUS_OBSOLETE) {
-  }
+      : last_host_id_(-1),
+        last_cache_id_(-1),
+        last_status_(content::AppCacheStatus::APPCACHE_STATUS_OBSOLETE) {}
 
   void OnCacheSelected(int host_id,
                        const content::AppCacheInfo& info) override {
@@ -51,6 +51,10 @@ class TestAppCacheFrontend : public content::AppCacheFrontend {
                     const std::string& message) override {}
 
   void OnContentBlocked(int host_id, const GURL& manifest_url) override {}
+
+  void OnSetSubresourceFactory(
+      int host_id,
+      mojo::MessagePipeHandle loader_factory_pipe_handle) override {}
 
   int last_host_id_;
   int64_t last_cache_id_;
@@ -188,12 +192,12 @@ TEST_F(AppCacheGroupTest, CleanupUnusedGroup) {
   host1.AssociateCompleteCache(cache1);
   EXPECT_EQ(frontend.last_host_id_, host1.host_id());
   EXPECT_EQ(frontend.last_cache_id_, cache1->cache_id());
-  EXPECT_EQ(frontend.last_status_, APPCACHE_STATUS_IDLE);
+  EXPECT_EQ(frontend.last_status_, AppCacheStatus::APPCACHE_STATUS_IDLE);
 
   host2.AssociateCompleteCache(cache1);
   EXPECT_EQ(frontend.last_host_id_, host2.host_id());
   EXPECT_EQ(frontend.last_cache_id_, cache1->cache_id());
-  EXPECT_EQ(frontend.last_status_, APPCACHE_STATUS_IDLE);
+  EXPECT_EQ(frontend.last_status_, AppCacheStatus::APPCACHE_STATUS_IDLE);
 
   AppCache* cache2 = new AppCache(service.storage(), 222);
   cache2->set_complete(true);
@@ -206,7 +210,7 @@ TEST_F(AppCacheGroupTest, CleanupUnusedGroup) {
   host2.AssociateNoCache(GURL());
   EXPECT_EQ(frontend.last_host_id_, host2.host_id());
   EXPECT_EQ(frontend.last_cache_id_, kAppCacheNoCacheId);
-  EXPECT_EQ(frontend.last_status_, APPCACHE_STATUS_UNCACHED);
+  EXPECT_EQ(frontend.last_status_, AppCacheStatus::APPCACHE_STATUS_UNCACHED);
 }
 
 TEST_F(AppCacheGroupTest, StartUpdate) {
@@ -218,15 +222,16 @@ TEST_F(AppCacheGroupTest, StartUpdate) {
   group->update_status_ = AppCacheGroup::CHECKING;
   group->StartUpdate();
   AppCacheUpdateJob* update = group->update_job_;
-  EXPECT_TRUE(update != NULL);
+  EXPECT_TRUE(update != nullptr);
 
   // Start another update, check that same update job is in use.
-  group->StartUpdateWithHost(NULL);
+  group->StartUpdateWithHost(nullptr);
   EXPECT_EQ(update, group->update_job_);
 
-  // Deleting the update should restore the group to APPCACHE_STATUS_IDLE.
+  // Deleting the update should restore the group to
+  // AppCacheStatus::APPCACHE_STATUS_IDLE.
   delete update;
-  EXPECT_TRUE(group->update_job_ == NULL);
+  EXPECT_TRUE(group->update_job_ == nullptr);
   EXPECT_EQ(AppCacheGroup::IDLE, group->update_status());
 }
 
@@ -239,12 +244,12 @@ TEST_F(AppCacheGroupTest, CancelUpdate) {
   group->update_status_ = AppCacheGroup::CHECKING;
   group->StartUpdate();
   AppCacheUpdateJob* update = group->update_job_;
-  EXPECT_TRUE(update != NULL);
+  EXPECT_TRUE(update != nullptr);
 
   // Deleting the group should cancel the update.
   TestUpdateObserver observer;
   group->AddUpdateObserver(&observer);
-  group = NULL;  // causes group to be deleted
+  group = nullptr;  // causes group to be deleted
   EXPECT_TRUE(observer.update_completed_);
   EXPECT_FALSE(observer.group_has_cache_);
 }

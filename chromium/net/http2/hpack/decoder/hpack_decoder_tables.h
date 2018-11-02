@@ -18,12 +18,12 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "net/http2/hpack/hpack_string.h"
-#include "net/http2/http2_constants.h"
+//#include "net/http2/http2_constants.h"
 #include "net/http2/platform/api/http2_export.h"
 
 namespace net {
@@ -128,11 +128,11 @@ class HTTP2_EXPORT_PRIVATE HpackDecoderDynamicTable {
   // Removes the oldest dynamic table entry.
   void RemoveLastEntry();
 
-  std::deque<HpackDecoderTableEntry> table_;
+  base::circular_deque<HpackDecoderTableEntry> table_;
 
   // The last received DynamicTableSizeUpdate value, initialized to
   // SETTINGS_HEADER_TABLE_SIZE.
-  size_t size_limit_ = Http2SettingsInfo::DefaultHeaderTableSize();
+  size_t size_limit_ = 4096;  // Http2SettingsInfo::DefaultHeaderTableSize();
 
   size_t current_size_ = 0;
 

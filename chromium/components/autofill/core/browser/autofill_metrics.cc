@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
@@ -18,6 +19,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/form_data.h"
@@ -232,13 +234,9 @@ void LogUMAHistogramEnumeration(const std::string& name,
   DCHECK_LT(sample, boundary_value);
 
   // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram =
-      base::LinearHistogram::FactoryGet(
-          name,
-          1,
-          boundary_value,
-          boundary_value + 1,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
+  base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
+      name, 1, boundary_value, boundary_value + 1,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
 }
 
@@ -247,13 +245,9 @@ void LogUMAHistogramEnumeration(const std::string& name,
 void LogUMAHistogramLongTimes(const std::string& name,
                               const base::TimeDelta& duration) {
   // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram =
-      base::Histogram::FactoryTimeGet(
-          name,
-          base::TimeDelta::FromMilliseconds(1),
-          base::TimeDelta::FromHours(1),
-          50,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
+  base::HistogramBase* histogram = base::Histogram::FactoryTimeGet(
+      name, base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1),
+      50, base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->AddTime(duration);
 }
 
@@ -388,6 +382,11 @@ void LogPredictionQualityMetrics(
   // purposes, but remember whether or not it was empty for more precise logging
   // later.
   bool is_empty = (actual_type == EMPTY_TYPE);
+  // TODO(crbug.com/780471): Do not log anything if a field is empty and is not
+  // supposed to be automatically filled for now. Long term solution is add a
+  // server enum to capture this case to accurately collect metrics.
+  if (is_empty && field.only_fill_when_focused())
+    return;
   bool is_ambiguous = (actual_type == AMBIGUOUS_TYPE);
   if (is_empty || is_ambiguous)
     actual_type = UNKNOWN_TYPE;
@@ -476,6 +475,30 @@ void LogPredictionQualityMetrics(
       GetFieldTypeGroupMetric(predicted_type,
                               AutofillMetrics::FALSE_POSITIVE_MISMATCH),
       KMaxFieldTypeGroupMetric);
+}
+
+AutofillMetrics::FormEvent GetCardNumberStatusFormEvent(
+    const AutofillMetrics::CardNumberStatus card_number_status) {
+  switch (card_number_status) {
+    case AutofillMetrics::EMPTY_CARD:
+      return AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD;
+    case AutofillMetrics::WRONG_SIZE_CARD:
+      return AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_WRONG_SIZE_CARD;
+    case AutofillMetrics::FAIL_LUHN_CHECK_CARD:
+      return AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD;
+    case AutofillMetrics::KNOWN_CARD:
+      return AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD;
+    case AutofillMetrics::UNKNOWN_CARD:
+      return AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD;
+  }
+  NOTREACHED();
+  return AutofillMetrics::
+      FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD;
 }
 
 }  // namespace
@@ -701,7 +724,7 @@ void AutofillMetrics::LogServerPredictionQualityMetrics(
     QualityMetricType metric_type) {
   LogPredictionQualityMetrics(
       PREDICTION_SOURCE_SERVER,
-      AutofillType(field.server_type()).GetStorableType(),
+      AutofillType(field.overall_server_type()).GetStorableType(),
       form_interactions_ukm_logger, form, field, metric_type);
 }
 
@@ -723,52 +746,82 @@ void AutofillMetrics::LogServerQueryMetric(ServerQueryMetric metric) {
 }
 
 // static
-void AutofillMetrics::LogUserHappinessMetric(UserHappinessMetric metric) {
+void AutofillMetrics::LogUserHappinessMetric(UserHappinessMetric metric,
+                                             FieldTypeGroup field_type_group) {
+  LogUserHappinessMetric(
+      metric, {FormTypes::FieldTypeGroupToFormType(field_type_group)});
+}
+
+// static
+void AutofillMetrics::LogUserHappinessMetric(
+    UserHappinessMetric metric,
+    const std::set<FormType>& form_types) {
   DCHECK_LT(metric, NUM_USER_HAPPINESS_METRICS);
   UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness", metric,
                             NUM_USER_HAPPINESS_METRICS);
+  if (base::ContainsKey(form_types, CREDIT_CARD_FORM)) {
+    UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.CreditCard", metric,
+                              NUM_USER_HAPPINESS_METRICS);
+  }
+  if (base::ContainsKey(form_types, ADDRESS_FORM)) {
+    UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Address", metric,
+                              NUM_USER_HAPPINESS_METRICS);
+  }
+  if (base::ContainsKey(form_types, PASSWORD_FORM)) {
+    UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Password", metric,
+                              NUM_USER_HAPPINESS_METRICS);
+  }
+  if (base::ContainsKey(form_types, UNKNOWN_FORM_TYPE)) {
+    UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Unknown", metric,
+                              NUM_USER_HAPPINESS_METRICS);
+  }
 }
 
 // static
 void AutofillMetrics::LogFormFillDurationFromLoadWithAutofill(
     const base::TimeDelta& duration) {
-  UMA_HISTOGRAM_CUSTOM_TIMES("Autofill.FillDuration.FromLoad.WithAutofill",
-                             duration,
-                             base::TimeDelta::FromMilliseconds(100),
-                             base::TimeDelta::FromMinutes(10),
-                             50);
+  LogFormFillDuration("Autofill.FillDuration.FromLoad.WithAutofill", duration);
 }
 
 // static
 void AutofillMetrics::LogFormFillDurationFromLoadWithoutAutofill(
     const base::TimeDelta& duration) {
-  UMA_HISTOGRAM_CUSTOM_TIMES("Autofill.FillDuration.FromLoad.WithoutAutofill",
-                             duration,
-                             base::TimeDelta::FromMilliseconds(100),
-                             base::TimeDelta::FromMinutes(10),
-                             50);
+  LogFormFillDuration("Autofill.FillDuration.FromLoad.WithoutAutofill",
+                      duration);
 }
 
 // static
-void AutofillMetrics::LogFormFillDurationFromInteractionWithAutofill(
+void AutofillMetrics::LogFormFillDurationFromInteraction(
+    const std::set<FormType>& form_types,
+    bool used_autofill,
     const base::TimeDelta& duration) {
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-      "Autofill.FillDuration.FromInteraction.WithAutofill",
-      duration,
-      base::TimeDelta::FromMilliseconds(100),
-      base::TimeDelta::FromMinutes(10),
-      50);
+  std::string parent_metric;
+  if (used_autofill) {
+    parent_metric = "Autofill.FillDuration.FromInteraction.WithAutofill";
+  } else {
+    parent_metric = "Autofill.FillDuration.FromInteraction.WithoutAutofill";
+  }
+  LogFormFillDuration(parent_metric, duration);
+  if (base::ContainsKey(form_types, CREDIT_CARD_FORM)) {
+    LogFormFillDuration(parent_metric + ".CreditCard", duration);
+  }
+  if (base::ContainsKey(form_types, ADDRESS_FORM)) {
+    LogFormFillDuration(parent_metric + ".Address", duration);
+  }
+  if (base::ContainsKey(form_types, PASSWORD_FORM)) {
+    LogFormFillDuration(parent_metric + ".Password", duration);
+  }
+  if (base::ContainsKey(form_types, UNKNOWN_FORM_TYPE)) {
+    LogFormFillDuration(parent_metric + ".Unknown", duration);
+  }
 }
 
 // static
-void AutofillMetrics::LogFormFillDurationFromInteractionWithoutAutofill(
-    const base::TimeDelta& duration) {
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-       "Autofill.FillDuration.FromInteraction.WithoutAutofill",
-       duration,
-       base::TimeDelta::FromMilliseconds(100),
-       base::TimeDelta::FromMinutes(10),
-       50);
+void AutofillMetrics::LogFormFillDuration(const std::string& metric,
+                                          const base::TimeDelta& duration) {
+  base::UmaHistogramCustomTimes(metric, duration,
+                                base::TimeDelta::FromMilliseconds(100),
+                                base::TimeDelta::FromMinutes(10), 50);
 }
 
 // static
@@ -797,18 +850,134 @@ void AutofillMetrics::LogStoredProfileDaysSinceLastUse(size_t days) {
 }
 
 // static
-void AutofillMetrics::LogStoredLocalCreditCardCount(size_t num_local_cards) {
-  UMA_HISTOGRAM_COUNTS("Autofill.StoredLocalCreditCardCount", num_local_cards);
-}
+void AutofillMetrics::LogStoredCreditCardMetrics(
+    const std::vector<std::unique_ptr<CreditCard>>& local_cards,
+    const std::vector<std::unique_ptr<CreditCard>>& server_cards,
+    base::TimeDelta disused_data_threshold) {
+  size_t num_local_cards = 0;
+  size_t num_masked_cards = 0;
+  size_t num_unmasked_cards = 0;
+  size_t num_disused_local_cards = 0;
+  size_t num_disused_masked_cards = 0;
+  size_t num_disused_unmasked_cards = 0;
 
-// static
-void AutofillMetrics::LogStoredServerCreditCardCounts(
-    size_t num_masked_cards,
-    size_t num_unmasked_cards) {
+  // Concatenate the local and server cards into one big collection of raw
+  // CreditCard pointers.
+  std::vector<const CreditCard*> credit_cards;
+  credit_cards.reserve(local_cards.size() + server_cards.size());
+  for (const auto* collection : {&local_cards, &server_cards}) {
+    for (const auto& card : *collection) {
+      credit_cards.push_back(card.get());
+    }
+  }
+
+  // Iterate over all of the cards and gather metrics.
+  const base::Time now = AutofillClock::Now();
+  for (const CreditCard* card : credit_cards) {
+    const base::TimeDelta time_since_last_use = now - card->use_date();
+    const int days_since_last_use = time_since_last_use.InDays();
+    const int disused_delta =
+        (time_since_last_use > disused_data_threshold) ? 1 : 0;
+    UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.StoredCreditCard",
+                              days_since_last_use);
+    switch (card->record_type()) {
+      case CreditCard::LOCAL_CARD:
+        UMA_HISTOGRAM_COUNTS_1000(
+            "Autofill.DaysSinceLastUse.StoredCreditCard.Local",
+            days_since_last_use);
+        num_local_cards += 1;
+        num_disused_local_cards += disused_delta;
+        break;
+      case CreditCard::MASKED_SERVER_CARD:
+        UMA_HISTOGRAM_COUNTS_1000(
+            "Autofill.DaysSinceLastUse.StoredCreditCard.Server",
+            days_since_last_use);
+        UMA_HISTOGRAM_COUNTS_1000(
+            "Autofill.DaysSinceLastUse.StoredCreditCard.Server.Masked",
+            days_since_last_use);
+        num_masked_cards += 1;
+        num_disused_masked_cards += disused_delta;
+        break;
+      case CreditCard::FULL_SERVER_CARD:
+        UMA_HISTOGRAM_COUNTS_1000(
+            "Autofill.DaysSinceLastUse.StoredCreditCard.Server",
+            days_since_last_use);
+        UMA_HISTOGRAM_COUNTS_1000(
+            "Autofill.DaysSinceLastUse.StoredCreditCard.Server.Unmasked",
+            days_since_last_use);
+        num_unmasked_cards += 1;
+        num_disused_unmasked_cards += disused_delta;
+        break;
+    }
+  }
+
+  // Calculate some summary info.
+  const size_t num_server_cards = num_masked_cards + num_unmasked_cards;
+  const size_t num_cards = num_local_cards + num_server_cards;
+  const size_t num_disused_server_cards =
+      num_disused_masked_cards + num_disused_unmasked_cards;
+  const size_t num_disused_cards =
+      num_disused_local_cards + num_disused_server_cards;
+
+  // Log the overall counts.
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount", num_cards);
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Local",
+                            num_local_cards);
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server",
+                            num_server_cards);
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server.Masked",
+                            num_masked_cards);
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server.Unmasked",
+                            num_unmasked_cards);
+
+  // For card types held by the user, log how many are disused.
+  if (num_cards) {
+    UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardDisusedCount",
+                              num_disused_cards);
+  }
+  if (num_local_cards) {
+    UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardDisusedCount.Local",
+                              num_disused_local_cards);
+  }
+  if (num_server_cards) {
+    UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardDisusedCount.Server",
+                              num_disused_server_cards);
+  }
+  if (num_masked_cards) {
+    UMA_HISTOGRAM_COUNTS_1000(
+        "Autofill.StoredCreditCardDisusedCount.Server.Masked",
+        num_disused_masked_cards);
+  }
+  if (num_unmasked_cards) {
+    UMA_HISTOGRAM_COUNTS_1000(
+        "Autofill.StoredCreditCardDisusedCount.Server.Unmasked",
+        num_disused_unmasked_cards);
+  }
+
+  // Legacy histogram names.
+  // Validated by:
+  //     AutofillMetricsTest.StoredLocalCreditCardCount
+  //     AutofillMetricsTest.StoredServerCreditCardCount_Masked
+  //     AutofillMetricsTest.StoredServerCreditCardCount_Unmasked
+  // TODO(crbug/762131): Delete these in 2018/Q2 once enough UMA history is
+  // established for the new names.
+  UMA_HISTOGRAM_COUNTS("Autofill.StoredLocalCreditCardCount", num_local_cards);
   UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredServerCreditCardCount.Masked",
                             num_masked_cards);
   UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredServerCreditCardCount.Unmasked",
                             num_unmasked_cards);
+}
+
+// static
+void AutofillMetrics::LogNumberOfCreditCardsSuppressedForDisuse(
+    size_t num_cards) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsSuppressedForDisuse",
+                            num_cards);
+}
+
+// static
+void AutofillMetrics::LogNumberOfCreditCardsDeletedForDisuse(size_t num_cards) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsDeletedForDisuse", num_cards);
 }
 
 // static
@@ -830,6 +999,12 @@ void AutofillMetrics::LogNumberOfAddressesSuppressedForDisuse(
     size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.AddressesSuppressedForDisuse",
                             num_profiles);
+}
+
+// static
+void AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(
+    size_t num_profiles) {
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.AddressesDeletedForDisuse", num_profiles);
 }
 
 // static
@@ -1175,7 +1350,9 @@ void AutofillMetrics::FormEventLogger::OnWillSubmitForm() {
   base::RecordAction(base::UserMetricsAction("Autofill_OnWillSubmitForm"));
 }
 
-void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
+void AutofillMetrics::FormEventLogger::OnFormSubmitted(
+    bool force_logging,
+    const CardNumberStatus card_number_status) {
   // Not logging this kind of form if we haven't logged a user interaction.
   if (!has_logged_interacted_)
     return;
@@ -1196,8 +1373,11 @@ void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
     Log(AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_SUBMITTED_ONCE);
   }
 
-  if (has_logged_suggestions_shown_) {
+  if (has_logged_suggestions_shown_ || force_logging) {
     Log(AutofillMetrics::FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE);
+    if (is_for_credit_card_ && !has_logged_suggestion_filled_) {
+      Log(GetCardNumberStatusFormEvent(card_number_status));
+    }
   }
 }
 
@@ -1284,7 +1464,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogSuggestionsShown(
   ukm::builders::Autofill_SuggestionsShown(source_id_)
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
-      .SetServerType(static_cast<int>(field.server_type()))
+      .SetServerType(static_cast<int>(field.overall_server_type()))
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form_parsed_timestamp))
       .Record(ukm_recorder_);
@@ -1332,7 +1512,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogTextFieldDidChange(
   ukm::builders::Autofill_TextFieldDidChange(source_id_)
       .SetFieldTypeGroup(static_cast<int>(field.Type().group()))
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
-      .SetServerType(static_cast<int>(field.server_type()))
+      .SetServerType(static_cast<int>(field.overall_server_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
       .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
       .SetIsAutofilled(field.is_autofilled)

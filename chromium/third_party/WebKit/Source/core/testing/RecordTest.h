@@ -6,9 +6,9 @@
 #define RecordTest_h
 
 #include <utility>
-#include "bindings/core/v8/BooleanOrByteStringByteStringRecord.h"
-#include "bindings/core/v8/FloatOrStringElementRecord.h"
 #include "bindings/core/v8/Nullable.h"
+#include "bindings/core/v8/boolean_or_byte_string_byte_string_record.h"
+#include "bindings/core/v8/float_or_string_element_record.h"
 #include "core/dom/Element.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
@@ -17,8 +17,7 @@
 
 namespace blink {
 
-class RecordTest final : public GarbageCollectedFinalized<RecordTest>,
-                         public ScriptWrappable {
+class RecordTest final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -52,7 +51,7 @@ class RecordTest final : public GarbageCollectedFinalized<RecordTest>,
 
   void setFloatOrStringElementRecord(const FloatOrStringElementRecord&){};
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   RecordTest();

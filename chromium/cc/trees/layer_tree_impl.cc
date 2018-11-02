@@ -29,11 +29,11 @@
 #include "cc/layers/layer_list_iterator.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
-#include "cc/output/layer_tree_frame_sink.h"
 #include "cc/resources/ui_resource_request.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/mutator_host.h"
@@ -77,7 +77,6 @@ LayerTreeImpl::LayerTreeImpl(
       root_layer_for_testing_(nullptr),
       hud_layer_(nullptr),
       background_color_(0),
-      has_transparent_background_(false),
       last_scrolled_scroll_node_index_(ScrollTree::kInvalidNodeId),
       page_scale_factor_(page_scale_factor),
       min_page_scale_factor_(0),
@@ -304,6 +303,8 @@ void LayerTreeImpl::InvalidateRegionForImages(
   if (images_to_invalidate.empty())
     return;
 
+  // TODO(khushalsagar): It might be better to keep track of layers with images
+  // and only iterate through those here.
   for (auto* picture_layer : picture_layers_)
     picture_layer->InvalidateRegionForImages(images_to_invalidate);
 }
@@ -386,7 +387,7 @@ void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
 
   target_tree->SetPropertyTrees(&property_trees_);
 
-  ScrollNode* scrolling_node = nullptr;
+  const ScrollNode* scrolling_node = nullptr;
   if (scrolling_element_id) {
     auto& scroll_tree = target_tree->property_trees()->scroll_tree;
     scrolling_node = scroll_tree.FindNodeFromElementId(scrolling_element_id);
@@ -425,7 +426,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   target_tree->set_bottom_controls_height(bottom_controls_height_);
   target_tree->PushBrowserControls(nullptr);
 
-  target_tree->set_scroll_boundary_behavior(scroll_boundary_behavior_);
+  target_tree->set_overscroll_behavior(overscroll_behavior_);
 
   // The page scale factor update can affect scrolling which requires that
   // these ids are set, so this must be before PushPageScaleFactorAndLimits.
@@ -453,7 +454,6 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   // LayerTreeHost::finishCommitOnImplThread().
   target_tree->set_source_frame_number(source_frame_number());
   target_tree->set_background_color(background_color());
-  target_tree->set_has_transparent_background(has_transparent_background());
   target_tree->set_have_scroll_event_handlers(have_scroll_event_handlers());
   target_tree->set_event_listener_properties(
       EventListenerClass::kTouchStartOrMove,
@@ -474,7 +474,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
     target_tree->set_hud_layer(static_cast<HeadsUpDisplayLayerImpl*>(
         target_tree->LayerById(hud_layer()->id())));
   else
-    target_tree->set_hud_layer(NULL);
+    target_tree->set_hud_layer(nullptr);
 
   target_tree->has_ever_been_drawn_ = false;
 
@@ -550,7 +550,7 @@ void LayerTreeImpl::AddToElementMap(LayerImpl* layer) {
   if (!element_id)
     return;
 
-  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
+  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("layer-element"),
                "LayerTreeImpl::AddToElementMap", "element",
                element_id.AsValue().release(), "layer_id", layer->id());
 
@@ -572,7 +572,7 @@ void LayerTreeImpl::RemoveFromElementMap(LayerImpl* layer) {
   if (!layer->element_id())
     return;
 
-  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
+  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("layer-element"),
                "LayerTreeImpl::RemoveFromElementMap", "element",
                layer->element_id().AsValue().release(), "layer_id",
                layer->id());
@@ -623,7 +623,7 @@ int LayerTreeImpl::LastScrolledScrollNodeIndex() const {
   return last_scrolled_scroll_node_index_;
 }
 
-void LayerTreeImpl::SetCurrentlyScrollingNode(ScrollNode* node) {
+void LayerTreeImpl::SetCurrentlyScrollingNode(const ScrollNode* node) {
   if (node)
     last_scrolled_scroll_node_index_ = node->id;
 
@@ -820,9 +820,9 @@ void LayerTreeImpl::set_bottom_controls_height(float bottom_controls_height) {
     host_impl_->UpdateViewportContainerSizes();
 }
 
-void LayerTreeImpl::set_scroll_boundary_behavior(
-    const ScrollBoundaryBehavior& behavior) {
-  scroll_boundary_behavior_ = behavior;
+void LayerTreeImpl::set_overscroll_behavior(
+    const OverscrollBehavior& behavior) {
+  overscroll_behavior_ = behavior;
 }
 
 bool LayerTreeImpl::ClampBrowserControlsShownRatio() {
@@ -986,7 +986,8 @@ void LayerTreeImpl::SetElementIdsForTesting() {
   }
 }
 
-bool LayerTreeImpl::UpdateDrawProperties() {
+bool LayerTreeImpl::UpdateDrawProperties(
+    bool update_image_animation_controller) {
   if (!needs_update_draw_properties_)
     return true;
 
@@ -1119,6 +1120,11 @@ bool LayerTreeImpl::UpdateDrawProperties() {
 
     TRACE_EVENT_END1("cc", "LayerTreeImpl::UpdateDrawProperties::UpdateTiles",
                      "layers_updated_count", layers_updated_count);
+  }
+
+  if (update_image_animation_controller && image_animation_controller()) {
+    image_animation_controller()->UpdateStateFromDrivers(
+        CurrentBeginFrameArgs().frame_time);
   }
 
   DCHECK(!needs_update_draw_properties_)
@@ -1330,6 +1336,10 @@ ImageDecodeCache* LayerTreeImpl::image_decode_cache() const {
   return host_impl_->image_decode_cache();
 }
 
+ImageAnimationController* LayerTreeImpl::image_animation_controller() const {
+  return host_impl_->image_animation_controller();
+}
+
 FrameRateCounter* LayerTreeImpl::frame_rate_counter() const {
   return host_impl_->fps_counter();
 }
@@ -1365,14 +1375,14 @@ bool LayerTreeImpl::IsSyncTree() const {
 LayerImpl* LayerTreeImpl::FindActiveTreeLayerById(int id) {
   LayerTreeImpl* tree = host_impl_->active_tree();
   if (!tree)
-    return NULL;
+    return nullptr;
   return tree->LayerById(id);
 }
 
 LayerImpl* LayerTreeImpl::FindPendingTreeLayerById(int id) {
   LayerTreeImpl* tree = host_impl_->pending_tree();
   if (!tree)
-    return NULL;
+    return nullptr;
   return tree->LayerById(id);
 }
 
@@ -1551,7 +1561,7 @@ void LayerTreeImpl::AppendSwapPromises(
   new_swap_promises.clear();
 }
 
-void LayerTreeImpl::FinishSwapPromises(CompositorFrameMetadata* metadata) {
+void LayerTreeImpl::FinishSwapPromises(viz::CompositorFrameMetadata* metadata) {
   for (const auto& swap_promise : swap_promise_list_)
     swap_promise->WillSwap(metadata);
   for (const auto& swap_promise : pinned_swap_promise_list_)
@@ -1803,7 +1813,7 @@ static bool PointIsClippedByAncestorClipNode(
   const TransformTree& transform_tree = property_trees->transform_tree;
   const ClipNode* clip_node = clip_tree.Node(1);
   gfx::Rect clip = gfx::ToEnclosingRect(clip_node->clip);
-  if (!PointHitsRect(screen_space_point, gfx::Transform(), clip, NULL))
+  if (!PointHitsRect(screen_space_point, gfx::Transform(), clip, nullptr))
     return true;
 
   for (const ClipNode* clip_node = clip_tree.Node(layer->clip_tree_index());
@@ -1815,7 +1825,7 @@ static bool PointIsClippedByAncestorClipNode(
       gfx::Transform screen_space_transform =
           transform_tree.ToScreen(clip_node->transform_id);
       if (!PointHitsRect(screen_space_point, screen_space_transform, clip,
-                         NULL)) {
+                         nullptr)) {
         return true;
       }
     }
@@ -1855,7 +1865,7 @@ static bool PointHitsLayer(const LayerImpl* layer,
 
 struct FindClosestMatchingLayerState {
   FindClosestMatchingLayerState()
-      : closest_match(NULL),
+      : closest_match(nullptr),
         closest_distance(-std::numeric_limits<float>::infinity()) {}
   LayerImpl* closest_match;
   // Note that the positive z-axis points towards the camera, so bigger means
@@ -1924,9 +1934,9 @@ struct HitTestVisibleScrollableOrTouchableFunctor {
 LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
   if (layer_list_.empty())
-    return NULL;
+    return nullptr;
   if (!UpdateDrawProperties())
-    return NULL;
+    return nullptr;
   FindClosestMatchingLayerState state;
   FindClosestMatchingLayer(screen_space_point, layer_list_[0],
                            HitTestVisibleScrollableOrTouchableFunctor(),
@@ -1963,9 +1973,9 @@ struct FindTouchEventLayerFunctor {
 LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPointInTouchHandlerRegion(
     const gfx::PointF& screen_space_point) {
   if (layer_list_.empty())
-    return NULL;
+    return nullptr;
   if (!UpdateDrawProperties())
-    return NULL;
+    return nullptr;
   FindTouchEventLayerFunctor func = {screen_space_point};
   FindClosestMatchingLayerState state;
   FindClosestMatchingLayer(screen_space_point, layer_list_[0], func, &state);
@@ -2046,21 +2056,22 @@ static gfx::SelectionBound ComputeViewportSelectionBound(
 }
 
 void LayerTreeImpl::GetViewportSelection(
-    Selection<gfx::SelectionBound>* selection) {
+    viz::Selection<gfx::SelectionBound>* selection) {
   DCHECK(selection);
 
   selection->start = ComputeViewportSelectionBound(
       selection_.start,
-      selection_.start.layer_id ? LayerById(selection_.start.layer_id) : NULL,
-      device_scale_factor());
+      selection_.start.layer_id ? LayerById(selection_.start.layer_id)
+                                : nullptr,
+      device_scale_factor() * painted_device_scale_factor());
   if (selection->start.type() == gfx::SelectionBound::CENTER ||
       selection->start.type() == gfx::SelectionBound::EMPTY) {
     selection->end = selection->start;
   } else {
     selection->end = ComputeViewportSelectionBound(
         selection_.end,
-        selection_.end.layer_id ? LayerById(selection_.end.layer_id) : NULL,
-        device_scale_factor());
+        selection_.end.layer_id ? LayerById(selection_.end.layer_id) : nullptr,
+        device_scale_factor() * painted_device_scale_factor());
   }
 }
 
@@ -2071,6 +2082,12 @@ bool LayerTreeImpl::SmoothnessTakesPriority() const {
 VideoFrameControllerClient* LayerTreeImpl::GetVideoFrameControllerClient()
     const {
   return host_impl_;
+}
+
+void LayerTreeImpl::UpdateImageDecodingHints(
+    base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+        decoding_mode_map) {
+  host_impl_->UpdateImageDecodingHints(std::move(decoding_mode_map));
 }
 
 void LayerTreeImpl::SetPendingPageScaleAnimation(

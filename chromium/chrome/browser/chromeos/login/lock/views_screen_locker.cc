@@ -6,9 +6,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/lock_screen_utils.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
@@ -17,12 +22,16 @@
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/version_info/version_info.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
 
@@ -31,8 +40,10 @@ constexpr char kLockDisplay[] = "lock";
 }  // namespace
 
 ViewsScreenLocker::ViewsScreenLocker(ScreenLocker* screen_locker)
-    : screen_locker_(screen_locker), weak_factory_(this) {
-  LockScreenClient::Get()->SetDelegate(this);
+    : screen_locker_(screen_locker),
+      version_info_updater_(this),
+      weak_factory_(this) {
+  LoginScreenClient::Get()->SetDelegate(this);
   user_selection_screen_proxy_ = base::MakeUnique<UserSelectionScreenProxy>();
   user_selection_screen_ =
       base::MakeUnique<ChromeUserSelectionScreen>(kLockDisplay);
@@ -46,13 +57,15 @@ ViewsScreenLocker::ViewsScreenLocker(ScreenLocker* screen_locker)
 }
 
 ViewsScreenLocker::~ViewsScreenLocker() {
-  LockScreenClient::Get()->SetDelegate(nullptr);
+  if (lock_screen_apps::StateController::IsEnabled())
+    lock_screen_apps::StateController::Get()->SetFocusCyclerDelegate(nullptr);
+  LoginScreenClient::Get()->SetDelegate(nullptr);
 }
 
 void ViewsScreenLocker::Init() {
   lock_time_ = base::TimeTicks::Now();
   user_selection_screen_->Init(screen_locker_->users());
-  LockScreenClient::Get()->LoadUsers(
+  LoginScreenClient::Get()->LoadUsers(
       user_selection_screen_->UpdateAndReturnUserListForMojo(),
       false /* show_guests */);
   if (!ime_state_.get())
@@ -69,6 +82,19 @@ void ViewsScreenLocker::Init() {
       UpdatePinKeyboardState(user->GetAccountId());
     }
   }
+
+  version_info::Channel channel = chrome::GetChannel();
+  bool should_show_version = (channel == version_info::Channel::STABLE ||
+                              channel == version_info::Channel::BETA)
+                                 ? false
+                                 : true;
+  if (should_show_version) {
+#if defined(OFFICIAL_BUILD)
+    version_info_updater_.StartUpdate(true);
+#else
+    version_info_updater_.StartUpdate(false);
+#endif
+  }
 }
 
 void ViewsScreenLocker::OnLockScreenReady() {
@@ -77,6 +103,8 @@ void ViewsScreenLocker::OnLockScreenReady() {
   UMA_HISTOGRAM_TIMES("LockScreen.LockReady",
                       base::TimeTicks::Now() - lock_time_);
   screen_locker_->ScreenLockReady();
+  if (lock_screen_apps::StateController::IsEnabled())
+    lock_screen_apps::StateController::Get()->SetFocusCyclerDelegate(this);
   OnAllowedInputMethodsChanged();
 }
 
@@ -88,13 +116,13 @@ void ViewsScreenLocker::ShowErrorMessage(
     int error_msg_id,
     HelpAppLauncher::HelpTopic help_topic_id) {
   // TODO(xiaoyinh): Complete the implementation here.
-  LockScreenClient::Get()->ShowErrorMessage(0 /* login_attempts */,
-                                            std::string(), std::string(),
-                                            static_cast<int>(help_topic_id));
+  LoginScreenClient::Get()->ShowErrorMessage(0 /* login_attempts */,
+                                             std::string(), std::string(),
+                                             static_cast<int>(help_topic_id));
 }
 
 void ViewsScreenLocker::ClearErrors() {
-  LockScreenClient::Get()->ClearErrors();
+  LoginScreenClient::Get()->ClearErrors();
 }
 
 void ViewsScreenLocker::AnimateAuthenticationSuccess() {
@@ -114,7 +142,29 @@ void ViewsScreenLocker::OnHeaderBarVisible() {
 }
 
 void ViewsScreenLocker::OnAshLockAnimationFinished() {
-  NOTIMPLEMENTED();
+  // Notify session controller that the lock animations are done.
+  // This is used to notify chromeos::PowerEventObserver that lock screen UI
+  // has finished showing. PowerEventObserver uses this notification during
+  // device suspend - device suspend is delayed until lock UI reports it's done
+  // animating. Additionally, PowerEventObserver will not stop root windows
+  // compositors until it receives this notification.
+  // Historically, this was called when Web UI lock implementation reported
+  // that all animations for showing the UI have finished, which gave enough
+  // time to update display's frame buffers with new UI before compositing was
+  // stopped.
+  // This is not the case with views lock implementation.
+  // OnAshLockAnimationFinished() is called too soon, thus the display's frame
+  // buffers might still contain the UI from before the lock window was shown
+  // at this time - see https://crbug.com/807511.
+  // To work around this, add additional delay before notifying
+  // PowerEventObserver lock screen UI is ready.
+  // TODO(tbarzic): Find a more deterministic way to determine when the display
+  //     can be turned off during device suspend.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ViewsScreenLocker::NotifyChromeLockAnimationsComplete,
+                     weak_factory_.GetWeakPtr()),
+      base::TimeDelta::FromMilliseconds(1500));
 }
 
 void ViewsScreenLocker::SetFingerprintState(
@@ -142,8 +192,10 @@ void ViewsScreenLocker::HandleAuthenticateUser(
          !authenticated_by_pin);
 
   UserContext user_context(account_id);
-  user_context.SetKey(Key(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF, std::string(),
-                          hashed_password));
+  Key::KeyType key_type =
+      authenticated_by_pin ? chromeos::Key::KEY_TYPE_SALTED_PBKDF2_AES256_1234
+                           : chromeos::Key::KEY_TYPE_SALTED_SHA256_TOP_HALF;
+  user_context.SetKey(Key(key_type, std::string(), hashed_password));
   user_context.SetIsUsingPin(authenticated_by_pin);
   if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY)
     user_context.SetUserType(user_manager::USER_TYPE_ACTIVE_DIRECTORY);
@@ -181,7 +233,7 @@ void ViewsScreenLocker::HandleOnFocusPod(const AccountId& account_id) {
     lock_screen_utils::SetUserInputMethod(account_id.GetUserEmail(),
                                           ime_state_.get());
     lock_screen_utils::SetKeyboardSettings(account_id);
-    WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
+    WallpaperManager::Get()->ShowUserWallpaper(account_id);
 
     bool use_24hour_clock = false;
     if (user_manager::known_user::GetBooleanPref(
@@ -199,11 +251,56 @@ void ViewsScreenLocker::HandleOnNoPodFocused() {
   lock_screen_utils::EnforcePolicyInputMethods(std::string());
 }
 
+bool ViewsScreenLocker::HandleFocusLockScreenApps(bool reverse) {
+  if (lock_screen_app_focus_handler_.is_null())
+    return false;
+
+  lock_screen_app_focus_handler_.Run(reverse);
+  return true;
+}
+
 void ViewsScreenLocker::SuspendDone(const base::TimeDelta& sleep_duration) {
   for (user_manager::User* user :
        user_manager::UserManager::Get()->GetUnlockUsers()) {
     UpdatePinKeyboardState(user->GetAccountId());
   }
+}
+
+void ViewsScreenLocker::RegisterLockScreenAppFocusHandler(
+    const LockScreenAppFocusCallback& focus_handler) {
+  lock_screen_app_focus_handler_ = focus_handler;
+}
+
+void ViewsScreenLocker::UnregisterLockScreenAppFocusHandler() {
+  lock_screen_app_focus_handler_.Reset();
+}
+
+void ViewsScreenLocker::HandleLockScreenAppFocusOut(bool reverse) {
+  LoginScreenClient::Get()->HandleFocusLeavingLockScreenApps(reverse);
+}
+
+void ViewsScreenLocker::OnOSVersionLabelTextUpdated(
+    const std::string& os_version_label_text) {
+  os_version_label_text_ = os_version_label_text;
+  OnDevChannelInfoUpdated();
+}
+
+void ViewsScreenLocker::OnEnterpriseInfoUpdated(const std::string& message_text,
+                                                const std::string& asset_id) {
+  if (asset_id.empty())
+    return;
+  enterprise_info_text_ = l10n_util::GetStringFUTF8(
+      IDS_OOBE_ASSET_ID_LABEL, base::UTF8ToUTF16(asset_id));
+  OnDevChannelInfoUpdated();
+}
+
+void ViewsScreenLocker::OnDeviceInfoUpdated(const std::string& bluetooth_name) {
+  bluetooth_name_ = bluetooth_name;
+  OnDevChannelInfoUpdated();
+}
+
+void ViewsScreenLocker::NotifyChromeLockAnimationsComplete() {
+  SessionControllerClient::Get()->NotifyChromeLockAnimationsComplete();
 }
 
 void ViewsScreenLocker::UpdatePinKeyboardState(const AccountId& account_id) {
@@ -213,7 +310,7 @@ void ViewsScreenLocker::UpdatePinKeyboardState(const AccountId& account_id) {
     return;
 
   bool is_enabled = quick_unlock_storage->IsPinAuthenticationAvailable();
-  LockScreenClient::Get()->SetPinEnabledForUser(account_id, is_enabled);
+  LoginScreenClient::Get()->SetPinEnabledForUser(account_id, is_enabled);
 }
 
 void ViewsScreenLocker::OnAllowedInputMethodsChanged() {
@@ -227,6 +324,11 @@ void ViewsScreenLocker::OnAllowedInputMethodsChanged() {
   } else {
     lock_screen_utils::EnforcePolicyInputMethods(std::string());
   }
+}
+
+void ViewsScreenLocker::OnDevChannelInfoUpdated() {
+  LoginScreenClient::Get()->SetDevChannelInfo(
+      os_version_label_text_, enterprise_info_text_, bluetooth_name_);
 }
 
 }  // namespace chromeos

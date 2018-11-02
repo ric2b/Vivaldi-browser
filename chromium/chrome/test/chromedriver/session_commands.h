@@ -129,6 +129,10 @@ Status ExecuteSetNetworkConnection(Session* session,
                                    const base::DictionaryValue& params,
                                    std::unique_ptr<base::Value>* value);
 
+Status ExecuteGetWindowRect(Session* session,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value);
+
 Status ExecuteGetWindowPosition(Session* session,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value);
@@ -138,6 +142,10 @@ Status ExecuteSetWindowPosition(Session* session,
                                 std::unique_ptr<base::Value>* value);
 
 Status ExecuteGetWindowSize(Session* session,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value);
+
+Status ExecuteSetWindowRect(Session* session,
                             const base::DictionaryValue& params,
                             std::unique_ptr<base::Value>* value);
 

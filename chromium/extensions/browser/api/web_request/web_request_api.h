@@ -319,6 +319,8 @@ class ExtensionWebRequestEventRouter {
   FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest, AccessRequestBodyData);
   FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest,
                            MinimalAccessRequestBodyData);
+  FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest,
+                           ProperFilteringInPublicSession);
   FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest, NoAccessRequestBodyData);
   FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest, AddAndRemoveListeners);
   FRIEND_TEST_ALL_PREFIXES(ExtensionWebRequestTest, BlockedRequestsAreRemoved);
@@ -405,6 +407,7 @@ class ExtensionWebRequestEventRouter {
   void ClearPendingCallbacks(const net::URLRequest* request);
 
   bool DispatchEvent(void* browser_context,
+                     const InfoMap* extension_info_map,
                      net::URLRequest* request,
                      const RawListeners& listener_ids,
                      ExtensionNavigationUIData* navigation_ui_data,
@@ -412,6 +415,7 @@ class ExtensionWebRequestEventRouter {
 
   void DispatchEventToListeners(
       void* browser_context,
+      const InfoMap* extension_info_map,
       std::unique_ptr<ListenerIDs> listener_ids,
       std::unique_ptr<WebRequestEventDetails> event_details);
 

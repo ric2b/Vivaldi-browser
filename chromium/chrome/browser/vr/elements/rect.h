@@ -21,6 +21,9 @@ class Rect : public UiElement {
   Rect();
   ~Rect() override;
 
+  // Syntactic sugar for setting both the edge and center colors simultaneously.
+  void SetColor(SkColor color);
+
   SkColor center_color() const { return center_color_; }
   void SetCenterColor(SkColor color);
 
@@ -32,7 +35,7 @@ class Rect : public UiElement {
                                  cc::Animation* animation) override;
 
   void Render(UiElementRenderer* renderer,
-              const gfx::Transform& view_proj_matrix) const override;
+              const CameraModel& model) const override;
 
  private:
   SkColor center_color_ = SK_ColorWHITE;

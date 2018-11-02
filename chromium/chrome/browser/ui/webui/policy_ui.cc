@@ -48,6 +48,7 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
                              IDS_POLICY_SHOW_EXPANDED_VALUE);
   source->AddLocalizedString("hideExpandedValue",
                              IDS_POLICY_HIDE_EXPANDED_VALUE);
+  source->AddLocalizedString("policyLearnMore", IDS_POLICY_LEARN_MORE);
   // Add required resources.
 #if !defined(OS_ANDROID)
   source->AddResourcePath("policy_common.css", IDR_POLICY_COMMON_CSS);
@@ -56,6 +57,7 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
   source->AddResourcePath("policy_base.js", IDR_POLICY_BASE_JS);
   source->AddResourcePath("policy.js", IDR_POLICY_JS);
   source->SetDefaultResource(IDR_POLICY_HTML);
+  source->UseGzip();
   return source;
 }
 

@@ -28,6 +28,7 @@
 #include "sandbox/win/src/restricted_token_utils.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/sandbox_utils.h"
+#include "sandbox/win/src/security_capabilities.h"
 #include "sandbox/win/src/sync_policy.h"
 #include "sandbox/win/src/target_process.h"
 #include "sandbox/win/src/top_level_dispatcher.h"
@@ -44,8 +45,8 @@ const size_t kPolMemSize = kOneMemPage * 14;
 // Helper function to allocate space (on the heap) for policy.
 sandbox::PolicyGlobal* MakeBrokerPolicyMemory() {
   const size_t kTotalPolicySz = kPolMemSize;
-  sandbox::PolicyGlobal* policy = static_cast<sandbox::PolicyGlobal*>
-      (::operator new(kTotalPolicySz));
+  sandbox::PolicyGlobal* policy =
+      static_cast<sandbox::PolicyGlobal*>(::operator new(kTotalPolicySz));
   DCHECK(policy);
   memset(policy, 0, kTotalPolicySz);
   policy->data_size = kTotalPolicySz - sizeof(sandbox::PolicyGlobal);
@@ -64,43 +65,6 @@ bool IsInheritableHandle(HANDLE handle) {
   return handle_type == FILE_TYPE_DISK || handle_type == FILE_TYPE_PIPE;
 }
 
-HANDLE CreateLowBoxObjectDirectory(PSID lowbox_sid) {
-  DWORD session_id = 0;
-  if (!::ProcessIdToSessionId(::GetCurrentProcessId(), &session_id))
-    return NULL;
-
-  LPWSTR sid_string = NULL;
-  if (!::ConvertSidToStringSid(lowbox_sid, &sid_string))
-    return NULL;
-
-  base::string16 directory_path = base::StringPrintf(
-                   L"\\Sessions\\%d\\AppContainerNamedObjects\\%ls",
-                   session_id, sid_string).c_str();
-  ::LocalFree(sid_string);
-
-  NtCreateDirectoryObjectFunction CreateObjectDirectory = NULL;
-  ResolveNTFunctionPtr("NtCreateDirectoryObject", &CreateObjectDirectory);
-
-  OBJECT_ATTRIBUTES obj_attr;
-  UNICODE_STRING obj_name;
-  sandbox::InitObjectAttribs(directory_path,
-                             OBJ_CASE_INSENSITIVE | OBJ_OPENIF,
-                             NULL,
-                             &obj_attr,
-                             &obj_name,
-                             NULL);
-
-  HANDLE handle = NULL;
-  NTSTATUS status = CreateObjectDirectory(&handle,
-                                          DIRECTORY_ALL_ACCESS,
-                                          &obj_attr);
-
-  if (!NT_SUCCESS(status))
-    return NULL;
-
-  return handle;
-}
-
 }  // namespace
 
 namespace sandbox {
@@ -116,6 +80,9 @@ HDESK PolicyBase::alternate_desktop_handle_ = nullptr;
 HDESK PolicyBase::alternate_desktop_local_winstation_handle_ = nullptr;
 IntegrityLevel PolicyBase::alternate_desktop_integrity_level_label_ =
     INTEGRITY_LEVEL_SYSTEM;
+IntegrityLevel
+    PolicyBase::alternate_desktop_local_winstation_integrity_level_label_ =
+        INTEGRITY_LEVEL_SYSTEM;
 
 PolicyBase::PolicyBase()
     : ref_count(1),
@@ -135,9 +102,9 @@ PolicyBase::PolicyBase()
       mitigations_(0),
       delayed_mitigations_(0),
       is_csrss_connected_(true),
-      policy_maker_(NULL),
-      policy_(NULL),
-      lowbox_sid_(NULL),
+      policy_maker_(nullptr),
+      policy_(nullptr),
+      lowbox_sid_(nullptr),
       lockdown_default_dacl_(false),
       enable_opm_redirection_(false) {
   ::InitializeCriticalSection(&lock_);
@@ -314,11 +281,6 @@ ResultCode PolicyBase::SetDelayedIntegrityLevel(
   return SBOX_ALL_OK;
 }
 
-ResultCode PolicyBase::SetCapability(const wchar_t* sid) {
-  capabilities_.push_back(sid);
-  return SBOX_ALL_OK;
-}
-
 ResultCode PolicyBase::SetLowBox(const wchar_t* sid) {
   if (base::win::OSInfo::GetInstance()->version() < base::win::VERSION_WIN8)
     return SBOX_ERROR_UNSUPPORTED;
@@ -333,8 +295,7 @@ ResultCode PolicyBase::SetLowBox(const wchar_t* sid) {
   return SBOX_ALL_OK;
 }
 
-ResultCode PolicyBase::SetProcessMitigations(
-    MitigationFlags flags) {
+ResultCode PolicyBase::SetProcessMitigations(MitigationFlags flags) {
   if (!CanSetProcessMitigationsPreStartup(flags))
     return SBOX_ERROR_BAD_PARAMS;
   mitigations_ = flags;
@@ -345,8 +306,7 @@ MitigationFlags PolicyBase::GetProcessMitigations() {
   return mitigations_;
 }
 
-ResultCode PolicyBase::SetDelayedProcessMitigations(
-    MitigationFlags flags) {
+ResultCode PolicyBase::SetDelayedProcessMitigations(MitigationFlags flags) {
   if (!CanSetProcessMitigationsPostStartup(flags))
     return SBOX_ERROR_BAD_PARAMS;
   delayed_mitigations_ = flags;
@@ -379,11 +339,10 @@ ResultCode PolicyBase::AddRule(SubSystem subsystem,
                                Semantics semantics,
                                const wchar_t* pattern) {
   ResultCode result = AddRuleInternal(subsystem, semantics, pattern);
-  LOG_IF(ERROR, result != SBOX_ALL_OK) << "Failed to add sandbox rule."
-                                       << " error = " << result
-                                       << ", subsystem = " << subsystem
-                                       << ", semantics = " << semantics
-                                       << ", pattern = '" << pattern << "'";
+  LOG_IF(ERROR, result != SBOX_ALL_OK)
+      << "Failed to add sandbox rule."
+      << " error = " << result << ", subsystem = " << subsystem
+      << ", semantics = " << semantics << ", pattern = '" << pattern << "'";
   return result;
 }
 
@@ -401,8 +360,8 @@ void PolicyBase::AddHandleToShare(HANDLE handle) {
   CHECK(handle && handle != INVALID_HANDLE_VALUE);
 
   // Ensure the handle can be inherited.
-  BOOL result = SetHandleInformation(handle, HANDLE_FLAG_INHERIT,
-                                     HANDLE_FLAG_INHERIT);
+  bool result =
+      SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
   PCHECK(result);
 
   handles_to_share_.push_back(handle);
@@ -420,8 +379,8 @@ ResultCode PolicyBase::MakeJobObject(base::win::ScopedHandle* job) {
   if (job_level_ != JOB_NONE) {
     // Create the windows job object.
     Job job_obj;
-    DWORD result = job_obj.Init(job_level_, NULL, ui_exceptions_,
-                                memory_limit_);
+    DWORD result =
+        job_obj.Init(job_level_, nullptr, ui_exceptions_, memory_limit_);
     if (ERROR_SUCCESS != result)
       return SBOX_ERROR_GENERIC;
 
@@ -447,54 +406,55 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // integrity label on the object is no higher than the sandboxed process's
   // integrity level. So, we lower the label on the desktop process if it's
   // not already low enough for our process.
-  if (use_alternate_desktop_ && integrity_level_ != INTEGRITY_LEVEL_LAST &&
-      alternate_desktop_integrity_level_label_ < integrity_level_) {
+  if (use_alternate_desktop_ && integrity_level_ != INTEGRITY_LEVEL_LAST) {
     // Integrity label enum is reversed (higher level is a lower value).
     static_assert(INTEGRITY_LEVEL_SYSTEM < INTEGRITY_LEVEL_UNTRUSTED,
                   "Integrity level ordering reversed.");
     HDESK desktop_handle = nullptr;
+    IntegrityLevel desktop_integrity_level_label;
     if (use_alternate_winstation_) {
       desktop_handle = alternate_desktop_handle_;
+      desktop_integrity_level_label = alternate_desktop_integrity_level_label_;
     } else {
       desktop_handle = alternate_desktop_local_winstation_handle_;
+      desktop_integrity_level_label =
+          alternate_desktop_local_winstation_integrity_level_label_;
     }
     // If the desktop_handle hasn't been created for any reason, skip this.
-    if (desktop_handle) {
+    if (desktop_handle && desktop_integrity_level_label < integrity_level_) {
       result =
           SetObjectIntegrityLabel(desktop_handle, SE_WINDOW_OBJECT, L"",
                                   GetIntegrityLevelString(integrity_level_));
       if (ERROR_SUCCESS != result)
         return SBOX_ERROR_GENERIC;
 
-      alternate_desktop_integrity_level_label_ = integrity_level_;
+      if (use_alternate_winstation_) {
+        alternate_desktop_integrity_level_label_ = integrity_level_;
+      } else {
+        alternate_desktop_local_winstation_integrity_level_label_ =
+            integrity_level_;
+      }
     }
   }
 
   if (lowbox_sid_) {
-    NtCreateLowBoxToken CreateLowBoxToken = NULL;
-    ResolveNTFunctionPtr("NtCreateLowBoxToken", &CreateLowBoxToken);
-    OBJECT_ATTRIBUTES obj_attr;
-    InitializeObjectAttributes(&obj_attr, NULL, 0, NULL, NULL);
-    HANDLE token_lowbox = NULL;
-
-    if (!lowbox_directory_.IsValid())
-      lowbox_directory_.Set(CreateLowBoxObjectDirectory(lowbox_sid_));
-    DCHECK(lowbox_directory_.IsValid());
+    if (!lowbox_directory_.IsValid()) {
+      result =
+          CreateLowBoxObjectDirectory(lowbox_sid_, true, &lowbox_directory_);
+      DCHECK(result == ERROR_SUCCESS);
+    }
 
     // The order of handles isn't important in the CreateLowBoxToken call.
     // The kernel will maintain a reference to the object directory handle.
     HANDLE saved_handles[1] = {lowbox_directory_.Get()};
     DWORD saved_handles_count = lowbox_directory_.IsValid() ? 1 : 0;
 
-    NTSTATUS status = CreateLowBoxToken(&token_lowbox, lockdown->Get(),
-                                        TOKEN_ALL_ACCESS, &obj_attr,
-                                        lowbox_sid_, 0, NULL,
-                                        saved_handles_count, saved_handles);
-    if (!NT_SUCCESS(status))
+    Sid package_sid(lowbox_sid_);
+    SecurityCapabilities caps(package_sid);
+    if (CreateLowBoxToken(lockdown->Get(), PRIMARY, &caps, saved_handles,
+                          saved_handles_count, lowbox) != ERROR_SUCCESS) {
       return SBOX_ERROR_GENERIC;
-
-    DCHECK(token_lowbox);
-    lowbox->Set(token_lowbox);
+    }
   }
 
   // Create the 'better' token. We use this token as the one that the main
@@ -514,7 +474,7 @@ PSID PolicyBase::GetLowBoxSid() const {
 }
 
 ResultCode PolicyBase::AddTarget(TargetProcess* target) {
-  if (NULL != policy_)
+  if (policy_)
     policy_maker_->Done();
 
   if (!ApplyProcessMitigationsToSuspendedProcess(target->Process(),
@@ -548,8 +508,8 @@ ResultCode PolicyBase::AddTarget(TargetProcess* target) {
     return ret;
 
   // Add in delayed mitigations and pseudo-mitigations enforced at startup.
-  g_shared_delayed_mitigations = delayed_mitigations_ |
-      FilterPostStartupProcessMitigations(mitigations_);
+  g_shared_delayed_mitigations =
+      delayed_mitigations_ | FilterPostStartupProcessMitigations(mitigations_);
   if (!CanSetProcessMitigationsPostStartup(g_shared_delayed_mitigations))
     return SBOX_ERROR_BAD_PARAMS;
 
@@ -586,7 +546,7 @@ ResultCode PolicyBase::SetDisconnectCsrss() {
 #if defined(_WIN64)
   if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
     is_csrss_connected_ = false;
-    return AddKernelObjectToClose(L"ALPC Port", NULL);
+    return AddKernelObjectToClose(L"ALPC Port", nullptr);
   }
 #endif  // !defined(_WIN64)
   return SBOX_ALL_OK;
@@ -594,22 +554,21 @@ ResultCode PolicyBase::SetDisconnectCsrss() {
 
 EvalResult PolicyBase::EvalPolicy(int service,
                                   CountedParameterSetBase* params) {
-  if (NULL != policy_) {
-    if (NULL == policy_->entry[service]) {
+  if (policy_) {
+    if (!policy_->entry[service]) {
       // There is no policy for this particular service. This is not a big
       // deal.
       return DENY_ACCESS;
     }
-    for (int i = 0; i < params->count; i++) {
+    for (size_t i = 0; i < params->count; i++) {
       if (!params->parameters[i].IsValid()) {
         NOTREACHED();
         return SIGNAL_ALARM;
       }
     }
     PolicyProcessor pol_evaluator(policy_->entry[service]);
-    PolicyResult result =  pol_evaluator.Evaluate(kShortEval,
-                                                  params->parameters,
-                                                  params->count);
+    PolicyResult result =
+        pol_evaluator.Evaluate(kShortEval, params->parameters, params->count);
     if (POLICY_MATCH == result) {
       return pol_evaluator.GetAction();
     }
@@ -673,7 +632,7 @@ bool PolicyBase::SetupHandleCloser(TargetProcess* target) {
 ResultCode PolicyBase::AddRuleInternal(SubSystem subsystem,
                                        Semantics semantics,
                                        const wchar_t* pattern) {
-  if (NULL == policy_) {
+  if (!policy_) {
     policy_ = MakeBrokerPolicyMemory();
     DCHECK(policy_);
     policy_maker_ = new LowLevelPolicy(policy_);

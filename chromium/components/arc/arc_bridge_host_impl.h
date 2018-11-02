@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/common/arc_bridge.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_holder.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 
@@ -43,12 +43,16 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnAppInstanceReady(mojom::AppInstancePtr app_ptr) override;
   void OnAudioInstanceReady(mojom::AudioInstancePtr audio_ptr) override;
   void OnAuthInstanceReady(mojom::AuthInstancePtr auth_ptr) override;
+  void OnBackupSettingsInstanceReady(
+      mojom::BackupSettingsInstancePtr backup_settings_ptr) override;
   void OnBluetoothInstanceReady(
       mojom::BluetoothInstancePtr bluetooth_ptr) override;
   void OnBootPhaseMonitorInstanceReady(
       mojom::BootPhaseMonitorInstancePtr boot_phase_monitor_ptr) override;
   void OnCastReceiverInstanceReady(
       mojom::CastReceiverInstancePtr cast_receiver_ptr) override;
+  void OnCertStoreInstanceReady(
+      mojom::CertStoreInstancePtr instance_ptr) override;
   void OnClipboardInstanceReady(
       mojom::ClipboardInstancePtr clipboard_ptr) override;
   void OnCrashCollectorInstanceReady(
@@ -64,6 +68,7 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnLockScreenInstanceReady(
       mojom::LockScreenInstancePtr lock_screen_ptr) override;
   void OnMetricsInstanceReady(mojom::MetricsInstancePtr metrics_ptr) override;
+  void OnMidisInstanceReady(mojom::MidisInstancePtr midis_ptr) override;
   void OnNetInstanceReady(mojom::NetInstancePtr net_ptr) override;
   void OnNotificationsInstanceReady(
       mojom::NotificationsInstancePtr notifications_ptr) override;
@@ -75,6 +80,8 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnPowerInstanceReady(mojom::PowerInstancePtr power_ptr) override;
   void OnPrintInstanceReady(mojom::PrintInstancePtr print_ptr) override;
   void OnProcessInstanceReady(mojom::ProcessInstancePtr process_ptr) override;
+  void OnRotationLockInstanceReady(
+      mojom::RotationLockInstancePtr rotation_lock_ptr) override;
   void OnStorageManagerInstanceReady(
       mojom::StorageManagerInstancePtr storage_manager_ptr) override;
   void OnTracingInstanceReady(mojom::TracingInstancePtr trace_ptr) override;
@@ -96,8 +103,9 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
 
   // The common implementation to handle ArcBridgeHost overrides.
   // |T| is a ARC Mojo Instance type.
-  template <typename T>
-  void OnInstanceReady(InstanceHolder<T>* holder, mojo::InterfacePtr<T> ptr);
+  template <typename InstanceType, typename HostType>
+  void OnInstanceReady(ConnectionHolder<InstanceType, HostType>* holder,
+                       mojo::InterfacePtr<InstanceType> ptr);
 
   // Called if one of the established channels is closed.
   void OnChannelClosed(MojoChannel* channel);

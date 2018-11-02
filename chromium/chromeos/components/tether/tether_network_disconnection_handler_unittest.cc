@@ -8,18 +8,16 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_task_environment.h"
+#include "base/test/test_simple_task_runner.h"
 #include "chromeos/components/tether/fake_active_host.h"
 #include "chromeos/components/tether/fake_disconnect_tethering_request_sender.h"
+#include "chromeos/components/tether/fake_network_configuration_remover.h"
 #include "chromeos/components/tether/network_configuration_remover.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_test.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
-
-using testing::_;
-using testing::NiceMock;
 
 namespace chromeos {
 
@@ -41,21 +39,12 @@ std::string CreateConnectedWifiConfigurationJsonString() {
   return ss.str();
 }
 
-class MockNetworkConfigurationRemover : public NetworkConfigurationRemover {
- public:
-  MockNetworkConfigurationRemover()
-      : NetworkConfigurationRemover(nullptr, nullptr) {}
-  ~MockNetworkConfigurationRemover() override {}
-
-  MOCK_METHOD1(RemoveNetworkConfiguration, void(const std::string&));
-};
-
 }  // namespace
 
 class TetherNetworkDisconnectionHandlerTest : public NetworkStateTest {
  protected:
   TetherNetworkDisconnectionHandlerTest() : NetworkStateTest() {}
-  ~TetherNetworkDisconnectionHandlerTest() override {}
+  ~TetherNetworkDisconnectionHandlerTest() override = default;
 
   void SetUp() override {
     DBusThreadManager::Initialize();
@@ -66,14 +55,17 @@ class TetherNetworkDisconnectionHandlerTest : public NetworkStateTest {
 
     fake_active_host_ = base::MakeUnique<FakeActiveHost>();
     fake_disconnect_tethering_request_sender_ =
-        base::MakeUnique<FakeDisconnectTetheringRequestSender>();
-    mock_network_configuration_remover_ =
-        base::WrapUnique(new NiceMock<MockNetworkConfigurationRemover>);
+        std::make_unique<FakeDisconnectTetheringRequestSender>();
+    fake_network_configuration_remover_ =
+        std::make_unique<FakeNetworkConfigurationRemover>();
 
     handler_ = base::WrapUnique(new TetherNetworkDisconnectionHandler(
         fake_active_host_.get(), network_state_handler(),
-        mock_network_configuration_remover_.get(),
+        fake_network_configuration_remover_.get(),
         fake_disconnect_tethering_request_sender_.get()));
+
+    test_task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
+    handler_->SetTaskRunnerForTesting(test_task_runner_);
   }
 
   void TearDown() override {
@@ -89,14 +81,45 @@ class TetherNetworkDisconnectionHandlerTest : public NetworkStateTest {
                        base::Value(shill::kStateIdle));
   }
 
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  void SetWiFiTechnologyStateEnabled(bool enabled) {
+    network_state_handler()->SetTechnologyEnabled(
+        chromeos::NetworkTypePattern::WiFi(), enabled,
+        chromeos::network_handler::ErrorCallback());
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void VerifyDisconnectionNotYetHandled() {
+    EXPECT_EQ(
+        std::string(),
+        fake_network_configuration_remover_->last_removed_wifi_network_guid());
+    EXPECT_EQ(
+        std::vector<std::string>(),
+        fake_disconnect_tethering_request_sender_->device_ids_sent_requests());
+    EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTED,
+              fake_active_host_->GetActiveHostStatus());
+  }
+
+  void VerifyDisconnectionHandled() {
+    EXPECT_EQ(
+        kWifiNetworkGuid,
+        fake_network_configuration_remover_->last_removed_wifi_network_guid());
+    EXPECT_EQ(
+        std::vector<std::string>{kDeviceId},
+        fake_disconnect_tethering_request_sender_->device_ids_sent_requests());
+    EXPECT_EQ(ActiveHost::ActiveHostStatus::DISCONNECTED,
+              fake_active_host_->GetActiveHostStatus());
+  }
+
+  const base::test::ScopedTaskEnvironment scoped_task_environment_;
+
   std::string wifi_service_path_;
 
   std::unique_ptr<FakeActiveHost> fake_active_host_;
   std::unique_ptr<FakeDisconnectTetheringRequestSender>
       fake_disconnect_tethering_request_sender_;
-  std::unique_ptr<MockNetworkConfigurationRemover>
-      mock_network_configuration_remover_;
+  std::unique_ptr<FakeNetworkConfigurationRemover>
+      fake_network_configuration_remover_;
+  scoped_refptr<base::TestSimpleTaskRunner> test_task_runner_;
 
   std::unique_ptr<TetherNetworkDisconnectionHandler> handler_;
 
@@ -104,9 +127,9 @@ class TetherNetworkDisconnectionHandlerTest : public NetworkStateTest {
   DISALLOW_COPY_AND_ASSIGN(TetherNetworkDisconnectionHandlerTest);
 };
 
-TEST_F(TetherNetworkDisconnectionHandlerTest, TestConnectAndDisconnect) {
-  EXPECT_CALL(*mock_network_configuration_remover_,
-              RemoveNetworkConfiguration(kWifiNetworkGuid));
+TEST_F(TetherNetworkDisconnectionHandlerTest,
+       TestConnectAndDisconnect_WiFiEnabled) {
+  SetWiFiTechnologyStateEnabled(true);
 
   // Connect to the network. |handler_| should start tracking the connection.
   fake_active_host_->SetActiveHostConnecting(kDeviceId, kTetherNetworkGuid);
@@ -117,12 +140,35 @@ TEST_F(TetherNetworkDisconnectionHandlerTest, TestConnectAndDisconnect) {
   // |fake_active_host_| becoming disconnected.
   NotifyDisconnected();
 
-  EXPECT_EQ(
-      std::vector<std::string>{kDeviceId},
-      fake_disconnect_tethering_request_sender_->device_ids_sent_requests());
+  // Should not be handled until the handler task is run.
+  VerifyDisconnectionNotYetHandled();
 
-  EXPECT_EQ(ActiveHost::ActiveHostStatus::DISCONNECTED,
-            fake_active_host_->GetActiveHostStatus());
+  test_task_runner_->RunUntilIdle();
+  VerifyDisconnectionHandled();
+}
+
+TEST_F(TetherNetworkDisconnectionHandlerTest,
+       TestConnectAndDisconnect_WiFiDisabled) {
+  SetWiFiTechnologyStateEnabled(true);
+
+  // Connect to the network. |handler_| should start tracking the connection.
+  fake_active_host_->SetActiveHostConnecting(kDeviceId, kTetherNetworkGuid);
+  fake_active_host_->SetActiveHostConnected(kDeviceId, kTetherNetworkGuid,
+                                            kWifiNetworkGuid);
+
+  // Now, simulate Wi-Fi being disabled.
+  SetWiFiTechnologyStateEnabled(false);
+
+  std::unique_ptr<NetworkState> network =
+      std::make_unique<NetworkState>(kWifiNetworkGuid);
+  network->SetGuid(kWifiNetworkGuid);
+  handler_->NetworkConnectionStateChanged(network.get());
+
+  // Should not be handled until the handler task is run.
+  VerifyDisconnectionNotYetHandled();
+
+  test_task_runner_->RunUntilIdle();
+  VerifyDisconnectionHandled();
 }
 
 }  // namespace tether

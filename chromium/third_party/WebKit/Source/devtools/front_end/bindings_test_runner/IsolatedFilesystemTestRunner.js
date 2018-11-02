@@ -69,7 +69,7 @@ BindingsTestRunner.TestFileSystem.prototype = {
 
   addFileMapping: function(urlPrefix, pathPrefix) {
     var fileSystemMapping = new Persistence.FileSystemMapping(Persistence.isolatedFileSystemManager);
-    fileSystemMapping.addFileSystem(this.fileSystemPath);
+    fileSystemMapping._addFileSystemPath(this.fileSystemPath);
     fileSystemMapping.addFileMapping(this.fileSystemPath, urlPrefix, pathPrefix);
     fileSystemMapping.dispose();
     Persistence.fileSystemMapping._loadFromSettings();
@@ -231,8 +231,11 @@ BindingsTestRunner.TestFileSystem.Entry.prototype = {
 
     var entry = this;
 
-    for (var token of path.split('/'))
+    for (var token of path.split('/')) {
       entry = entry._childrenMap[token];
+      if (!entry)
+        break;
+    }
 
     (entry ? callback(entry) : errorCallback(new DOMException('Path not found: ' + path, 'NotFoundError')));
   },

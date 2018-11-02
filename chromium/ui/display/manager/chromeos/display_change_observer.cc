@@ -16,7 +16,8 @@
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
-#include "ui/display/manager/chromeos/touchscreen_util.h"
+#include "ui/display/display_switches.h"
+#include "ui/display/manager/chromeos/touch_device_manager.h"
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
@@ -62,11 +63,10 @@ DisplayChangeObserver::GetInternalManagedDisplayModeList(
     const ManagedDisplayInfo& display_info,
     const DisplaySnapshot& output) {
   const DisplayMode* ui_native_mode = output.native_mode();
-  scoped_refptr<ManagedDisplayMode> native_mode = new ManagedDisplayMode(
-      ui_native_mode->size(), ui_native_mode->refresh_rate(),
-      ui_native_mode->is_interlaced(), true, 1.0,
-      display_info.device_scale_factor());
-
+  ManagedDisplayMode native_mode(ui_native_mode->size(),
+                                 ui_native_mode->refresh_rate(),
+                                 ui_native_mode->is_interlaced(), true, 1.0,
+                                 display_info.device_scale_factor());
   return CreateInternalManagedDisplayModeList(native_mode);
 }
 
@@ -74,19 +74,18 @@ DisplayChangeObserver::GetInternalManagedDisplayModeList(
 ManagedDisplayInfo::ManagedDisplayModeList
 DisplayChangeObserver::GetExternalManagedDisplayModeList(
     const DisplaySnapshot& output) {
-  using DisplayModeMap =
-      std::map<std::pair<int, int>, scoped_refptr<ManagedDisplayMode>>;
+  using DisplayModeMap = std::map<std::pair<int, int>, ManagedDisplayMode>;
   DisplayModeMap display_mode_map;
 
-  scoped_refptr<ManagedDisplayMode> native_mode = new ManagedDisplayMode();
+  ManagedDisplayMode native_mode;
   for (const auto& mode_info : output.modes()) {
     const std::pair<int, int> size(mode_info->size().width(),
                                    mode_info->size().height());
-    scoped_refptr<ManagedDisplayMode> display_mode = new ManagedDisplayMode(
+    ManagedDisplayMode display_mode(
         mode_info->size(), mode_info->refresh_rate(),
         mode_info->is_interlaced(), output.native_mode() == mode_info.get(),
         1.0, 1.0);
-    if (display_mode->native())
+    if (display_mode.native())
       native_mode = display_mode;
 
     // Add the display mode if it isn't already present and override interlaced
@@ -94,8 +93,8 @@ DisplayChangeObserver::GetExternalManagedDisplayModeList(
     auto display_mode_it = display_mode_map.find(size);
     if (display_mode_it == display_mode_map.end())
       display_mode_map.insert(std::make_pair(size, display_mode));
-    else if (display_mode_it->second->is_interlaced() &&
-             !display_mode->is_interlaced())
+    else if (display_mode_it->second.is_interlaced() &&
+             !display_mode.is_interlaced())
       display_mode_it->second = std::move(display_mode);
   }
 
@@ -104,23 +103,23 @@ DisplayChangeObserver::GetExternalManagedDisplayModeList(
     display_mode_list.push_back(std::move(display_mode_pair.second));
 
   if (output.native_mode()) {
-    const std::pair<int, int> size(native_mode->size().width(),
-                                   native_mode->size().height());
+    const std::pair<int, int> size(native_mode.size().width(),
+                                   native_mode.size().height());
     auto it = display_mode_map.find(size);
     DCHECK(it != display_mode_map.end())
         << "Native mode must be part of the mode list.";
 
     // If the native mode was replaced re-add it.
-    if (!it->second->native())
+    if (!it->second.native())
       display_mode_list.push_back(native_mode);
   }
 
-  if (native_mode->size().width() >= kMinimumWidthFor4K) {
+  if (native_mode.size().width() >= kMinimumWidthFor4K) {
     for (size_t i = 0; i < arraysize(kAdditionalDeviceScaleFactorsFor4k); ++i) {
-      scoped_refptr<ManagedDisplayMode> mode = new ManagedDisplayMode(
-          native_mode->size(), native_mode->refresh_rate(),
-          native_mode->is_interlaced(), false /* native */,
-          native_mode->ui_scale(), kAdditionalDeviceScaleFactorsFor4k[i]);
+      ManagedDisplayMode mode(native_mode.size(), native_mode.refresh_rate(),
+                              native_mode.is_interlaced(), false /* native */,
+                              native_mode.ui_scale(),
+                              kAdditionalDeviceScaleFactorsFor4k[i]);
       display_mode_list.push_back(mode);
     }
   }
@@ -145,25 +144,30 @@ MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
   UpdateInternalDisplay(display_states);
   if (display_states.size() == 1)
     return MULTIPLE_DISPLAY_STATE_SINGLE;
+  if (!display_manager_->is_multi_mirroring_enabled() &&
+      display_states.size() > 2) {
+    // TODO(weidongg/774795): Remove this condition when multi-mirroring is
+    // enabled by default.
+    // When multi-mirroring is disabled, mirroring across 3+ displays are not
+    // supported, so default to EXTENDED.
+    return MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
+  }
   DisplayIdList list =
       GenerateDisplayIdList(display_states.begin(), display_states.end(),
                             [](const DisplaySnapshot* display_state) {
                               return display_state->display_id();
                             });
-
-  const DisplayLayout& layout =
-      display_manager_->layout_store()->GetRegisteredDisplayLayout(list);
-  return layout.mirrored ? MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
-                         : MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
+  bool mirrored = display_manager_->layout_store()->GetMirrorMode(list);
+  return mirrored ? MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
+                  : MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
 }
 
 bool DisplayChangeObserver::GetResolutionForDisplayId(int64_t display_id,
                                                       gfx::Size* size) const {
-  scoped_refptr<ManagedDisplayMode> mode =
-      display_manager_->GetSelectedModeForDisplayId(display_id);
-  if (!mode)
+  ManagedDisplayMode mode;
+  if (!display_manager_->GetSelectedModeForDisplayId(display_id, &mode))
     return false;
-  *size = mode->size();
+  *size = mode.size();
   return true;
 }
 
@@ -180,7 +184,7 @@ void DisplayChangeObserver::OnDisplayModeChanged(
     displays.emplace_back(CreateManagedDisplayInfo(state, mode_info));
   }
 
-  AssociateTouchscreens(
+  display_manager_->touch_device_manager()->AssociateTouchscreens(
       &displays,
       ui::InputDeviceManager::GetInstance()->GetTouchscreenDevices());
   display_manager_->OnNativeDisplaysChanged(displays);
@@ -216,8 +220,13 @@ void DisplayChangeObserver::OnTouchscreenDeviceConfigurationChanged() {
 
 void DisplayChangeObserver::UpdateInternalDisplay(
     const DisplayConfigurator::DisplayStateList& display_states) {
+  bool force_first_display_internal = ForceFirstDisplayInternal();
+
   for (auto* state : display_states) {
-    if (state->type() == DISPLAY_CONNECTION_TYPE_INTERNAL) {
+    if (state->type() == DISPLAY_CONNECTION_TYPE_INTERNAL ||
+        (force_first_display_internal &&
+         (!Display::HasInternalDisplay() ||
+          state->display_id() == Display::InternalDisplayId()))) {
       if (Display::HasInternalDisplay())
         DCHECK_EQ(Display::InternalDisplayId(), state->display_id());
       Display::SetInternalDisplayId(state->display_id());
@@ -235,6 +244,7 @@ void DisplayChangeObserver::UpdateInternalDisplay(
             CreateManagedDisplayInfo(state, state->native_mode());
         display_manager_->UpdateInternalDisplay(new_info);
       }
+      return;
     }
   }
 }
@@ -253,10 +263,10 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
     if (dpi)
       device_scale_factor = FindDeviceScaleFactor(dpi);
   } else {
-    scoped_refptr<ManagedDisplayMode> mode =
-        display_manager_->GetSelectedModeForDisplayId(state->display_id());
-    if (mode) {
-      device_scale_factor = mode->device_scale_factor();
+    ManagedDisplayMode mode;
+    if (display_manager_->GetSelectedModeForDisplayId(state->display_id(),
+                                                      &mode)) {
+      device_scale_factor = mode.device_scale_factor();
     } else {
       // For monitors that are 40 inches and 4K or above, set
       // |device_scale_factor| to 2x. For margin purposes, 100 is subtracted
@@ -294,6 +304,7 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
       state->is_aspect_preserving_scaling());
   if (dpi)
     new_info.set_device_dpi(dpi);
+  new_info.set_color_space(state->color_space());
 
   ManagedDisplayInfo::ManagedDisplayModeList display_modes =
       (state->type() == DISPLAY_CONNECTION_TYPE_INTERNAL)

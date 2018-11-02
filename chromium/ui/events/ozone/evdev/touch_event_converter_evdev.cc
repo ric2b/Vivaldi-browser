@@ -40,10 +40,10 @@ namespace {
 const int kMaxTrackingId = 0xffff;  // TRKID_MAX in kernel.
 
 struct TouchCalibration {
-  int bezel_left;
-  int bezel_right;
-  int bezel_top;
-  int bezel_bottom;
+  int bezel_left = 0;
+  int bezel_right = 0;
+  int bezel_top = 0;
+  int bezel_bottom = 0;
 };
 
 // Convert tilt from [min, min + num_values) to [-90deg, +90deg)
@@ -94,6 +94,20 @@ ui::EventPointerType GetEventPointerType(int tool_code) {
   }
 }
 
+// This function calculate the touch_major_scale_ and touch_minor_scale_ from
+// resolution.
+float GetFingerSizeScale(int32_t finger_size_res, int32_t screen_size_res) {
+  // If there is no resolution for both events, we assume they are consistent.
+  // Though this is not guaranteed by kernel, we don't have any info to guess.
+  // If there is a resolution (units/mm) for touch_major/minor, but not a
+  // resolution for screen size. We could not get the scale either as we don't
+  // have the dpi.
+  if (!finger_size_res || !screen_size_res) {
+    return 1.0f;
+  }
+  return static_cast<float>(screen_size_res) / finger_size_res;
+}
+
 const int kTrackingIdForUnusedSlot = -1;
 
 }  // namespace
@@ -101,7 +115,7 @@ const int kTrackingIdForUnusedSlot = -1;
 namespace ui {
 
 TouchEventConverterEvdev::TouchEventConverterEvdev(
-    ScopedInputDevice fd,
+    base::ScopedFD fd,
     base::FilePath path,
     int id,
     const EventDeviceInfo& devinfo,
@@ -115,7 +129,6 @@ TouchEventConverterEvdev::TouchEventConverterEvdev(
                           devinfo.product_id()),
       input_device_fd_(std::move(fd)),
       dispatcher_(dispatcher) {
-
   touch_evdev_debug_buffer_.Initialize(devinfo);
 }
 
@@ -125,14 +138,23 @@ TouchEventConverterEvdev::~TouchEventConverterEvdev() {
 void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
   has_mt_ = info.HasMultitouch();
   has_pen_ = info.HasKeyEvent(BTN_TOOL_PEN);
+  int32_t touch_major_res =
+      info.GetAbsInfoByCode(ABS_MT_TOUCH_MAJOR).resolution;
+  int32_t touch_minor_res =
+      info.GetAbsInfoByCode(ABS_MT_TOUCH_MINOR).resolution;
+  int32_t x_res;
+  int32_t y_res;
 
   if (has_mt_) {
     pressure_min_ = info.GetAbsMinimum(ABS_MT_PRESSURE);
     pressure_max_ = info.GetAbsMaximum(ABS_MT_PRESSURE);
     x_min_tuxels_ = info.GetAbsMinimum(ABS_MT_POSITION_X);
     x_num_tuxels_ = info.GetAbsMaximum(ABS_MT_POSITION_X) - x_min_tuxels_ + 1;
+    x_res = info.GetAbsInfoByCode(ABS_MT_POSITION_X).resolution;
     y_min_tuxels_ = info.GetAbsMinimum(ABS_MT_POSITION_Y);
     y_num_tuxels_ = info.GetAbsMaximum(ABS_MT_POSITION_Y) - y_min_tuxels_ + 1;
+    y_res = info.GetAbsInfoByCode(ABS_MT_POSITION_Y).resolution;
+
     touch_points_ =
         std::min<int>(info.GetAbsMaximum(ABS_MT_SLOT) + 1, kNumTouchEvdevSlots);
     major_max_ = info.GetAbsMaximum(ABS_MT_TOUCH_MAJOR);
@@ -142,8 +164,10 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
     pressure_max_ = info.GetAbsMaximum(ABS_PRESSURE);
     x_min_tuxels_ = info.GetAbsMinimum(ABS_X);
     x_num_tuxels_ = info.GetAbsMaximum(ABS_X) - x_min_tuxels_ + 1;
+    x_res = info.GetAbsInfoByCode(ABS_X).resolution;
     y_min_tuxels_ = info.GetAbsMinimum(ABS_Y);
     y_num_tuxels_ = info.GetAbsMaximum(ABS_Y) - y_min_tuxels_ + 1;
+    y_res = info.GetAbsInfoByCode(ABS_Y).resolution;
     tilt_x_min_ = info.GetAbsMinimum(ABS_TILT_X);
     tilt_y_min_ = info.GetAbsMinimum(ABS_TILT_Y);
     tilt_x_range_ = info.GetAbsMaximum(ABS_TILT_X) - tilt_x_min_ + 1;
@@ -154,12 +178,15 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
     current_slot_ = 0;
   }
 
+  touch_major_scale_ = GetFingerSizeScale(touch_major_res, x_res);
+  touch_minor_scale_ = GetFingerSizeScale(touch_minor_res, y_res);
+
   quirk_left_mouse_button_ =
       !has_mt_ && !info.HasKeyEvent(BTN_TOUCH) && info.HasKeyEvent(BTN_LEFT);
 
   // Apply --touch-calibration.
   if (type() == INPUT_DEVICE_INTERNAL) {
-    TouchCalibration cal = {};
+    TouchCalibration cal;
     GetTouchCalibration(&cal);
     x_min_tuxels_ += cal.bezel_left;
     x_num_tuxels_ -= cal.bezel_left + cal.bezel_right;
@@ -191,15 +218,16 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
       // Optional bits.
       int touch_major =
           info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MAJOR, i, 0);
-      events_[i].radius_x = touch_major / 2.0f;
+      events_[i].radius_x = touch_major * touch_major_scale_ / 2.0f;
       events_[i].radius_y =
-          info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MINOR, i, 0) / 2.0f;
+          info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MINOR, i, 0) *
+          touch_minor_scale_ / 2.0f;
       events_[i].pressure = ScalePressure(
           info.GetAbsMtSlotValueWithDefault(ABS_MT_PRESSURE, i, 0));
       int tool_type = info.GetAbsMtSlotValueWithDefault(ABS_MT_TOOL_TYPE, i,
                                                         MT_TOOL_FINGER);
-      events_[i].cancelled = (tool_type == MT_TOOL_PALM) ||
-                             (major_max_ > 0 && touch_major == major_max_);
+      events_[i].tool_type = tool_type;
+      events_[i].major = touch_major;
       if (events_[i].cancelled)
         cancelled_state = true;
     }
@@ -392,16 +420,11 @@ void TouchEventConverterEvdev::ProcessAbs(const input_event& input) {
       // TODO(spang): If we have all of major, minor, and orientation,
       // we can scale the ellipse correctly. However on the Pixel we get
       // neither minor nor orientation, so this is all we can do.
-      events_[current_slot_].radius_x = input.value / 2.0f;
-
-      // The MT protocol communicates that there is palm on the surface
-      // by either sending ABS_MT_TOOL_TYPE/MT_TOOL_PALM, or by setting
-      // touch major to max.
-      if (major_max_ > 0 && input.value == major_max_)
-        events_[current_slot_].cancelled = true;
+      events_[current_slot_].radius_x = input.value * touch_major_scale_ / 2.0f;
+      events_[current_slot_].major = input.value;
       break;
     case ABS_MT_TOUCH_MINOR:
-      events_[current_slot_].radius_y = input.value / 2.0f;
+      events_[current_slot_].radius_y = input.value * touch_major_scale_ / 2.0f;
       break;
     case ABS_MT_POSITION_X:
       events_[current_slot_].x = input.value;
@@ -410,8 +433,7 @@ void TouchEventConverterEvdev::ProcessAbs(const input_event& input) {
       events_[current_slot_].y = input.value;
       break;
     case ABS_MT_TOOL_TYPE:
-      if (input.value == MT_TOOL_PALM)
-        events_[current_slot_].cancelled = true;
+      events_[current_slot_].tool_type = input.value;
       break;
     case ABS_MT_TRACKING_ID:
       UpdateTrackingId(current_slot_, input.value);
@@ -516,6 +538,11 @@ void TouchEventConverterEvdev::CancelAllTouches() {
   }
 }
 
+bool TouchEventConverterEvdev::IsPalm(const InProgressTouchEvdev& touch) {
+  return touch.tool_type == MT_TOOL_PALM ||
+         (major_max_ > 0 && touch.major == major_max_);
+}
+
 void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
   if (dropped_events_) {
     Reinitialize();
@@ -527,6 +554,9 @@ void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
 
   for (size_t i = 0; i < events_.size(); i++) {
     InProgressTouchEvdev* event = &events_[i];
+    if (IsPalm(*event)) {
+      event->cancelled = true;
+    }
     if (event->altered && (event->cancelled ||
                            (false_touch_finder_ &&
                             false_touch_finder_->SlotHasNoise(event->slot)))) {

@@ -98,8 +98,12 @@ Polymer({
    * GUID of the user-selected network. It is remembered after user taps on
    * network entry. After we receive event "connected" on this network,
    * OOBE will proceed.
+   * @private {string}
    */
   networkLastSelectedGuid_: '',
+
+  /** @private {string} GUID of the default network. */
+  defaultNetworkGuid_: '',
 
   /** @override */
   ready: function() {
@@ -127,11 +131,11 @@ Polymer({
           loadTimeData.getString('networkListItemInitializing'),
       networkListItemNotConnected:
           loadTimeData.getString('networkListItemNotConnected'),
+      networkListItemNoNetwork:
+          loadTimeData.getString('networkListItemNoNetwork'),
       vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
 
       // Additional strings for custom items.
-      addMobileNetworkMenuName:
-          loadTimeData.getString('addMobileNetworkMenuName'),
       addWiFiNetworkMenuName: loadTimeData.getString('addWiFiNetworkMenuName'),
       proxySettingsMenuName: loadTimeData.getString('proxySettingsMenuName'),
     };
@@ -210,38 +214,28 @@ Polymer({
    */
   getNetworkCustomItems_: function(isConnected_) {
     var self = this;
-    var items = [
-      {
+    var items = [];
+    if (isConnected_) {
+      items.push({
         customItemName: 'proxySettingsMenuName',
         polymerIcon: 'oobe-welcome-20:add-proxy',
         customData: {
           onTap: function() {
-            self.OpenProxySettingsDialog_();
+            self.OpenInternetDetailDialog_();
           },
         },
-      },
-      {
-        customItemName: 'addWiFiNetworkMenuName',
-        polymerIcon: 'oobe-welcome-20:add-wifi',
-        customData: {
-          onTap: function() {
-            self.OpenAddWiFiNetworkDialog_();
-          },
+      });
+    }
+    items.push({
+      customItemName: 'addWiFiNetworkMenuName',
+      polymerIcon: 'oobe-welcome-20:add-wifi',
+      customData: {
+        onTap: function() {
+          self.OpenAddWiFiNetworkDialog_();
         },
       },
-      {
-        customItemName: 'addMobileNetworkMenuName',
-        polymerIcon: 'oobe-welcome-20:add-cellular',
-        customData: {
-          onTap: function() {
-            self.OpenAddMobileNetworkDialog_();
-          },
-        },
-      },
-    ];
-    if (isConnected_)
-      return items;
-    return items.slice(1);
+    });
+    return items;
   },
 
   /**
@@ -302,8 +296,8 @@ Polymer({
    *
    * @private
    */
-  OpenProxySettingsDialog_: function(item) {
-    chrome.send('launchProxySettingsDialog');
+  OpenInternetDetailDialog_: function(item) {
+    chrome.send('launchInternetDetailDialog');
   },
 
   /**
@@ -313,15 +307,6 @@ Polymer({
    */
   OpenAddWiFiNetworkDialog_: function(item) {
     chrome.send('launchAddWiFiNetworkDialog');
-  },
-
-  /**
-   * Handle Network Setup screen "Add cellular network" button.
-   *
-   * @private
-   */
-  OpenAddMobileNetworkDialog_: function(item) {
-    chrome.send('launchAddMobileNetworkDialog');
   },
 
   /**
@@ -341,6 +326,7 @@ Polymer({
    */
   onDefaultNetworkChanged_: function(event) {
     var state = event.detail;
+    this.defaultNetworkGuid_ = (state ? state.GUID : '');
     this.isConnected_ =
         !!state && state.ConnectionState == CrOnc.ConnectionState.CONNECTED;
     if (!state || state.GUID != this.networkLastSelectedGuid_)
@@ -360,9 +346,11 @@ Polymer({
    */
   onNetworkListNetworkItemSelected_: function(event) {
     var state = event.detail;
-    // If user has not previously made a selection and selected network
-    // is already connected, just continue to the next screen.
+    assert(state);
+    // If the user has not previously made a selection and the default network
+    // is selected and connected, continue to the next screen.
     if (this.networkLastSelectedGuid_ == '' &&
+        state.GUID == this.defaultNetworkGuid_ &&
         state.ConnectionState == CrOnc.ConnectionState.CONNECTED) {
       this.onSelectedNetworkConnected_();
       return;
@@ -372,10 +360,20 @@ Polymer({
     // is pending connection attempt. So even if new selection is currently
     // connected, it may get disconnected at any time.
     // So just send one more connection request to cancel current attempts.
-    this.networkLastSelectedGuid_ = state.GUID;
+    this.networkLastSelectedGuid_ = (state ? state.GUID : '');
+
+    if (!state)
+      return;
 
     var self = this;
     var networkStateCopy = Object.assign({}, state);
+
+    // TODO(stevenjb): Do this when state.Connectable == false once network
+    // configuration is integrated into the Settings UI / details dialog.
+    if (state.Type == chrome.networkingPrivate.NetworkType.CELLULAR) {
+      chrome.send('showNetworkDetails', [state.GUID]);
+      return;
+    }
 
     chrome.networkingPrivate.startConnect(state.GUID, function() {
       var lastError = chrome.runtime.lastError;

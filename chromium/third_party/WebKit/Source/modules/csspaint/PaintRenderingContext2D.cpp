@@ -12,17 +12,18 @@ namespace blink {
 
 PaintRenderingContext2D::PaintRenderingContext2D(
     std::unique_ptr<ImageBuffer> image_buffer,
-    bool has_alpha,
+    const PaintRenderingContext2DSettings& context_settings,
     float zoom)
-    : image_buffer_(std::move(image_buffer)), has_alpha_(has_alpha) {
+    : image_buffer_(std::move(image_buffer)),
+      context_settings_(context_settings) {
   clip_antialiasing_ = kAntiAliased;
   ModifiableState().SetShouldAntialias(true);
 
   // RecordingImageBufferSurface doesn't call ImageBufferSurface::clear
   // explicitly.
   DCHECK(image_buffer_);
-  image_buffer_->Canvas()->clear(has_alpha ? SK_ColorTRANSPARENT
-                                           : SK_ColorBLACK);
+  image_buffer_->Canvas()->clear(context_settings.alpha() ? SK_ColorTRANSPARENT
+                                                          : SK_ColorBLACK);
   image_buffer_->DidDraw(FloatRect(0, 0, Width(), Height()));
 
   image_buffer_->Canvas()->scale(zoom, zoom);
@@ -30,12 +31,12 @@ PaintRenderingContext2D::PaintRenderingContext2D(
 
 int PaintRenderingContext2D::Width() const {
   DCHECK(image_buffer_);
-  return image_buffer_->size().Width();
+  return image_buffer_->Size().Width();
 }
 
 int PaintRenderingContext2D::Height() const {
   DCHECK(image_buffer_);
-  return image_buffer_->size().Height();
+  return image_buffer_->Size().Height();
 }
 
 bool PaintRenderingContext2D::ParseColorOrCurrentColor(
@@ -57,11 +58,6 @@ PaintCanvas* PaintRenderingContext2D::ExistingDrawingCanvas() const {
   return image_buffer_->Canvas();
 }
 
-AffineTransform PaintRenderingContext2D::BaseTransform() const {
-  DCHECK(image_buffer_);
-  return image_buffer_->BaseTransform();
-}
-
 void PaintRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
   DCHECK(image_buffer_);
   return image_buffer_->DidDraw(SkRect::Make(dirty_rect));
@@ -80,7 +76,7 @@ bool PaintRenderingContext2D::StateHasFilter() {
   return GetState().HasFilterForOffscreenCanvas(IntSize(Width(), Height()));
 }
 
-sk_sp<SkImageFilter> PaintRenderingContext2D::StateGetFilter() {
+sk_sp<PaintFilter> PaintRenderingContext2D::StateGetFilter() {
   return GetState().GetFilterForOffscreenCanvas(IntSize(Width(), Height()));
 }
 

@@ -41,7 +41,7 @@ class DummyContext final
  public:
   static DummyContext* Create() { return new DummyContext; }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     LifecycleNotifier<DummyContext, TestingObserver>::Trace(visitor);
   }
 };
@@ -64,7 +64,7 @@ class TestingObserver final
     context_destroyed_called_ = true;
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(observer_to_remove_on_destruct_);
     LifecycleObserver::Trace(visitor);
   }
@@ -99,7 +99,7 @@ TEST(LifecycleContextTest, shouldObserveContextDestroyed) {
   context->NotifyContextDestroyed();
   context = nullptr;
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(0));
+  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(nullptr));
   EXPECT_TRUE(observer->ContextDestroyedCalled());
 }
 
@@ -110,7 +110,7 @@ TEST(LifecycleContextTest, shouldNotObserveContextDestroyedIfUnobserve) {
   context->NotifyContextDestroyed();
   context = nullptr;
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(0));
+  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(nullptr));
   EXPECT_FALSE(observer->ContextDestroyedCalled());
 }
 
@@ -131,7 +131,7 @@ TEST(LifecycleContextTest, observerRemovedDuringNotifyDestroyed) {
   EXPECT_EQ(observer->InnerObserver(), nullptr);
   context = nullptr;
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(0));
+  EXPECT_EQ(observer->LifecycleContext(), static_cast<DummyContext*>(nullptr));
   EXPECT_TRUE(observer->ContextDestroyedCalled());
 }
 

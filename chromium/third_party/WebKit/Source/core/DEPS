@@ -1,17 +1,26 @@
 include_rules = [
+    "+base/atomic_sequence_num.h",
+    "+base/memory/scoped_refptr.h",
+    "+base/unguessable_token.h",
     "+bindings/core",
     "-bindings/modules",
     "+build/mac",
     "+build/win",
+    "+common",
     "+core",
+    "+gpu/config/gpu_feature_info.h",
     "-inspector/v8",
     "+inspector/v8/public",
     "-modules",
     "+mojo/public/cpp/bindings",
+    "+mojo/public/cpp/system",
     "+platform",
     "+public/platform",
     "+public/web",
+    "+services/metrics/public",
     "+services/network/public/interfaces",
+    "+services/resource_coordinator/public/cpp/resource_coordinator_features.h",
+    "+services/service_manager/public/interfaces/interface_provider.mojom-blink.h",
     "+third_party/skia/include",
     "+ui/gfx/geometry",
     "-web",
@@ -22,4 +31,15 @@ include_rules = [
     # we resolve the control layer.
     "!core/frame/WebLocalFrameImpl.h",
     "!core/frame/WebRemoteFrameImpl.h",
+    # We are moving from WTF_MAKE_NONCOPYABLE to DISALLOW_COPY_AND_ASSIGN. Stop
+    # new dependencies on WTF_MAKE_NONCOPYABLE.
+    "!platform/wtf/Noncopyable.h",
 ]
+
+specific_include_rules = {
+    # Allow tests to use Web(Local|Remote)FrameBase.h.
+    ".*Test\.cpp" : [
+        "+core/frame/WebLocalFrameImpl.h",
+        "+core/frame/WebRemoteFrameImpl.h",
+    ]
+}

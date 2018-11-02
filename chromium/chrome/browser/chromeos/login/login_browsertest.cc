@@ -19,7 +19,7 @@
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chromeos/chromeos_switches.h"
@@ -42,7 +41,6 @@
 #include "extensions/browser/extension_system.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/test/rect_test_util.h"
 
 using ::gfx::test::RectContains;
@@ -97,7 +95,7 @@ class LoginSigninTest : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override {
-    LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest();
+    LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest();
   }
 };
 
@@ -108,6 +106,7 @@ class LoginTest : public LoginManagerTest {
 
   void StartGaiaAuthOffline() {
     content::DOMMessageQueue message_queue;
+    // clang-format off
     const std::string js = "(function() {"
       "var authenticator = $('gaia-signin').gaiaAuthHost_;"
       "authenticator.addEventListener('ready',"
@@ -117,6 +116,7 @@ class LoginTest : public LoginManagerTest {
         "});"
       "$('error-offline-login-link').onclick();"
     "})();";
+    // clang-format on
     ASSERT_TRUE(content::ExecuteScript(web_contents(), js));
 
     std::string message;
@@ -182,149 +182,6 @@ class LoginTest : public LoginManagerTest {
     user_context.SetKey(Key(kPassword));
     SetExpectedCredentials(user_context);
   }
-};
-
-const char kDeviceId[] = "device_id";
-const char kTestActiveDirectoryUser[] = "test-user";
-const char kAdMachineInput[] = "machineNameInput";
-const char kAdUserInput[] = "userInput";
-const char kAdPasswordInput[] = "passwordInput";
-const char kAdButton[] = "button";
-const char kAdWelcomMessage[] = "welcomeMsg";
-const char kAdAutocompleteRealm[] = "userInput /deep/ #domainLabel";
-
-class ActiveDirectoryLoginTest : public LoginManagerTest {
- public:
-  ActiveDirectoryLoginTest()
-      : LoginManagerTest(true),
-        // Using the same realm as supervised user domain. Should be treated as
-        // normal realm.
-        test_realm_(user_manager::kSupervisedUserDomain),
-        install_attributes_(
-            ScopedStubInstallAttributes::CreateActiveDirectoryManaged(
-                test_realm_,
-                kDeviceId)) {}
-
-  ~ActiveDirectoryLoginTest() override = default;
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kOobeSkipPostLogin);
-    LoginManagerTest::SetUpCommandLine(command_line);
-  }
-
-  void SetUpOnMainThread() override {
-    LoginManagerTest::SetUpOnMainThread();
-    fake_auth_policy_client()->DisableOperationDelayForTesting();
-  }
-
-  void MarkAsActiveDirectoryEnterprise() {
-    StartupUtils::MarkOobeCompleted();
-    base::RunLoop loop;
-    fake_auth_policy_client()->RefreshDevicePolicy(
-        base::BindOnce(&ActiveDirectoryLoginTest::OnRefreshedPolicy,
-                       base::Unretained(this), loop.QuitClosure()));
-    loop.Run();
-  }
-
-  // Checks if Active Directory login is visible.
-  void TestLoginVisible() {
-    // Checks if Gaia signin is hidden.
-    JSExpect("document.querySelector('#signin-frame').hidden");
-
-    // Checks if Active Directory signin is visible.
-    JSExpect("!document.querySelector('#offline-ad-auth').hidden");
-    JSExpect(JSElement(kAdMachineInput) + ".hidden");
-    JSExpect("!" + JSElement(kAdUserInput) + ".hidden");
-    JSExpect("!" + JSElement(kAdPasswordInput) + ".hidden");
-
-    const std::string innerText(".innerText");
-    // Checks if Active Directory welcome message contains realm.
-    EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_AD_DOMAIN_AUTH_WELCOME_MESSAGE,
-                                        base::UTF8ToUTF16(test_realm_)),
-              js_checker().GetString(JSElement(kAdWelcomMessage) + innerText));
-
-    // Checks if realm is set to autocomplete username.
-    EXPECT_EQ(
-        "@" + test_realm_,
-        js_checker().GetString(JSElement(kAdAutocompleteRealm) + innerText));
-
-    // Checks if bottom bar is visible.
-    JSExpect("!Oobe.getInstance().headerHidden");
-  }
-
-  // Checks if user input is marked as invalid.
-  void TestUserError() {
-    TestLoginVisible();
-    JSExpect(JSElement(kAdUserInput) + ".isInvalid");
-  }
-
-  // Checks if password input is marked as invalid.
-  void TestPasswordError() {
-    TestLoginVisible();
-    JSExpect(JSElement(kAdPasswordInput) + ".isInvalid");
-  }
-
-  // Checks if autocomplete domain is visible for the user input.
-  void TestDomainVisible() {
-    JSExpect("!" + JSElement(kAdAutocompleteRealm) + ".hidden");
-  }
-
-  // Checks if autocomplete domain is hidden for the user input.
-  void TestDomainHidden() {
-    JSExpect(JSElement(kAdAutocompleteRealm) + ".hidden");
-  }
-
-  // Sets username and password for the Active Directory login and submits it.
-  void SubmitActiveDirectoryCredentials(const std::string& username,
-                                        const std::string& password) {
-    js_checker().ExecuteAsync(JSElement(kAdUserInput) + ".value='" + username +
-                              "'");
-    js_checker().ExecuteAsync(JSElement(kAdPasswordInput) + ".value='" +
-                              password + "'");
-    js_checker().Evaluate(JSElement(kAdButton) + ".fire('tap')");
-  }
-
-  void SetupActiveDirectoryJSNotifications() {
-    js_checker().Evaluate(
-        "var testInvalidateAd = login.GaiaSigninScreen.invalidateAd;"
-        "login.GaiaSigninScreen.invalidateAd = function(user, errorState) {"
-        "  testInvalidateAd(user, errorState);"
-        "  window.domAutomationController.send('ShowAuthError');"
-        "}");
-  }
-
-  void WaitForMessage(content::DOMMessageQueue* message_queue,
-                      const std::string& expected_message) {
-    std::string message;
-    do {
-      ASSERT_TRUE(message_queue->WaitForMessage(&message));
-    } while (message != expected_message);
-  }
-
- protected:
-  // Returns string representing element with id=|element_id| inside Active
-  // Directory login element.
-  std::string JSElement(const std::string& element_id) {
-    return "document.querySelector('#offline-ad-auth /deep/ #" + element_id +
-           "')";
-  }
-  FakeAuthPolicyClient* fake_auth_policy_client() {
-    return static_cast<FakeAuthPolicyClient*>(
-        DBusThreadManager::Get()->GetAuthPolicyClient());
-  }
-
-  const std::string test_realm_;
-
- private:
-  // Used for the callback from FakeAuthPolicy::RefreshDevicePolicy.
-  void OnRefreshedPolicy(const base::Closure& closure, bool status) {
-    EXPECT_TRUE(status);
-    closure.Run();
-  }
-
-  ScopedStubInstallAttributes install_attributes_;
-
-  DISALLOW_COPY_AND_ASSIGN(ActiveDirectoryLoginTest);
 };
 
 // Used to make sure that the system tray is visible and within the screen
@@ -408,9 +265,8 @@ IN_PROC_BROWSER_TEST_F(LoginSigninTest, WebUIVisible) {
       .Wait();
 }
 
-
 IN_PROC_BROWSER_TEST_F(LoginTest, PRE_GaiaAuthOffline) {
-  RegisterUser(kTestUser);
+  RegisterUser(AccountId::FromUserEmailGaiaId(kTestUser, kGaiaId));
   StartupUtils::MarkOobeCompleted();
   CrosSettings::Get()->SetBoolean(kAccountsPrefShowUserNamesOnSignIn, false);
 }
@@ -425,66 +281,6 @@ IN_PROC_BROWSER_TEST_F(LoginTest, DISABLED_GaiaAuthOffline) {
   session_start_waiter.Wait();
 
   TestSystemTrayIsVisible(false);
-}
-
-// Marks as Active Directory enterprise device and OOBE as completed.
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, PRE_LoginSuccess) {
-  MarkAsActiveDirectoryEnterprise();
-}
-
-// Test successful Active Directory login.
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, LoginSuccess) {
-  TestLoginVisible();
-  TestDomainVisible();
-
-  content::WindowedNotificationObserver session_start_waiter(
-      chrome::NOTIFICATION_SESSION_STARTED,
-      content::NotificationService::AllSources());
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
-  session_start_waiter.Wait();
-
-  // Uncomment once flakiness is fixed, see http://crbug/692364.
-  // TestSystemTrayIsVisible();
-}
-
-// Marks as Active Directory enterprise device and OOBE as completed.
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, PRE_LoginErrors) {
-  MarkAsActiveDirectoryEnterprise();
-}
-
-// Test different UI errors for Active Directory login.
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, LoginErrors) {
-  SetupActiveDirectoryJSNotifications();
-  TestLoginVisible();
-  TestDomainVisible();
-
-  content::DOMMessageQueue message_queue;
-
-  SubmitActiveDirectoryCredentials("", "");
-  TestUserError();
-  TestDomainVisible();
-
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, "");
-  TestPasswordError();
-  TestDomainVisible();
-
-  SubmitActiveDirectoryCredentials(std::string(kTestActiveDirectoryUser) + "@",
-                                   kPassword);
-  TestUserError();
-  TestDomainHidden();
-
-  fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_BAD_USER_NAME);
-  SubmitActiveDirectoryCredentials(
-      std::string(kTestActiveDirectoryUser) + "@" + test_realm_, kPassword);
-  WaitForMessage(&message_queue, "\"ShowAuthError\"");
-  TestUserError();
-  TestDomainVisible();
-
-  fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_BAD_PASSWORD);
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
-  WaitForMessage(&message_queue, "\"ShowAuthError\"");
-  TestPasswordError();
-  TestDomainVisible();
 }
 
 }  // namespace chromeos

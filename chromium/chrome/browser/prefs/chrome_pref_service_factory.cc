@@ -50,7 +50,7 @@
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engines_pref_names.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync_preferences/pref_model_associator.h"
@@ -177,6 +177,8 @@ const prefs::TrackedPreferenceMetadata kTrackedPrefs[] = {
      EnforcementLevel::ENFORCE_ON_LOAD, PrefTrackingStrategy::ATOMIC,
      ValueType::IMPERSONAL},
 #endif  // defined(OS_WIN)
+    {29, prefs::kMediaStorageIdSalt, EnforcementLevel::ENFORCE_ON_LOAD,
+     PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 
     // See note at top, new items added here also need to be added to
     // histograms.xml's TrackedPreference enum.
@@ -355,8 +357,9 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
 #endif
   std::string seed;
 #if defined(GOOGLE_CHROME_BUILD)
-  seed = ResourceBundle::GetSharedInstance().GetRawDataResource(
-      IDR_PREF_HASH_SEED_BIN).as_string();
+  seed = ui::ResourceBundle::GetSharedInstance()
+             .GetRawDataResource(IDR_PREF_HASH_SEED_BIN)
+             .as_string();
 #endif
   return base::MakeUnique<ProfilePrefStoreManager>(profile_path, seed,
                                                    legacy_device_id);
@@ -376,8 +379,8 @@ void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (supervised_user_settings) {
-    scoped_refptr<PrefStore> supervised_user_prefs = make_scoped_refptr(
-        new SupervisedUserPrefStore(supervised_user_settings));
+    scoped_refptr<PrefStore> supervised_user_prefs =
+        base::MakeRefCounted<SupervisedUserPrefStore>(supervised_user_settings);
     DCHECK(async || supervised_user_prefs->IsInitializationComplete());
     factory->set_supervised_user_prefs(supervised_user_prefs);
   }
@@ -385,8 +388,9 @@ void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
 
   factory->set_async(async);
   factory->set_extension_prefs(extension_prefs);
-  factory->set_command_line_prefs(make_scoped_refptr(
-      new ChromeCommandLinePrefStore(base::CommandLine::ForCurrentProcess())));
+  factory->set_command_line_prefs(
+      base::MakeRefCounted<ChromeCommandLinePrefStore>(
+          base::CommandLine::ForCurrentProcess()));
   factory->set_read_error_callback(base::Bind(&HandleReadError, pref_filename));
   factory->set_user_prefs(user_pref_store);
   factory->SetPrefModelAssociatorClient(

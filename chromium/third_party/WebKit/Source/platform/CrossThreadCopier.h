@@ -32,20 +32,25 @@
 #define CrossThreadCopier_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Functional.h"  // FunctionThreadAffinity
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefPtr.h"
-#include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/TypeTraits.h"
 #include "platform/wtf/WeakPtr.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/WebKit/common/message_port/message_port_channel.h"
+
+namespace base {
+template <typename, typename>
+class RefCountedThreadSafe;
+}
 
 class SkRefCnt;
+template <typename T>
+class sk_sp;
 
 namespace WTF {
 
@@ -94,23 +99,22 @@ struct CrossThreadCopier
 
 // CrossThreadCopier specializations follow.
 template <typename T>
-struct CrossThreadCopier<PassRefPtr<T>> {
+struct CrossThreadCopier<WTF::RetainedRefWrapper<T>> {
   STATIC_ONLY(CrossThreadCopier);
-  typedef PassRefPtr<T> Type;
-  static_assert(WTF::IsSubclassOfTemplate<T, ThreadSafeRefCounted>::value,
-                "PassRefPtr<T> can be passed across threads only if T is "
-                "ThreadSafeRefCounted.");
-  static PassRefPtr<T> Copy(PassRefPtr<T>&& pointer) {
-    return std::move(pointer);
-  }
+  static_assert(WTF::IsSubclassOfTemplate<T, base::RefCountedThreadSafe>::value,
+                "scoped_refptr<T> can be passed across threads only if T is "
+                "WTF::ThreadSafeRefCounted or base::RefCountedThreadSafe.");
+  using Type = WTF::RetainedRefWrapper<T>;
+  static Type Copy(Type pointer) { return pointer; }
 };
 template <typename T>
-struct CrossThreadCopier<RefPtr<T>>
-    : public CrossThreadCopierPassThrough<RefPtr<T>> {
+struct CrossThreadCopier<scoped_refptr<T>> {
   STATIC_ONLY(CrossThreadCopier);
-  static_assert(WTF::IsSubclassOfTemplate<T, ThreadSafeRefCounted>::value,
-                "RefPtr<T> can be passed across threads only if T is "
-                "ThreadSafeRefCounted.");
+  static_assert(WTF::IsSubclassOfTemplate<T, base::RefCountedThreadSafe>::value,
+                "scoped_refptr<T> can be passed across threads only if T is "
+                "WTF::ThreadSafeRefCounted or base::RefCountedThreadSafe.");
+  using Type = scoped_refptr<T>;
+  static scoped_refptr<T> Copy(scoped_refptr<T> pointer) { return pointer; }
 };
 template <typename T>
 struct CrossThreadCopier<sk_sp<T>>
@@ -161,6 +165,13 @@ struct CrossThreadCopier<
   }
 };
 
+template <size_t inlineCapacity, typename Allocator>
+struct CrossThreadCopier<Vector<uint64_t, inlineCapacity, Allocator>> {
+  STATIC_ONLY(CrossThreadCopier);
+  using Type = Vector<uint64_t, inlineCapacity, Allocator>;
+  static Type Copy(Type value) { return value; }
+};
+
 template <typename T>
 struct CrossThreadCopier<CrossThreadPersistent<T>>
     : public CrossThreadCopierPassThrough<CrossThreadPersistent<T>> {
@@ -174,9 +185,9 @@ struct CrossThreadCopier<CrossThreadWeakPersistent<T>>
 };
 
 template <typename T>
-struct CrossThreadCopier<WTF::UnretainedWrapper<T, WTF::kCrossThreadAffinity>>
+struct CrossThreadCopier<WTF::CrossThreadUnretainedWrapper<T>>
     : public CrossThreadCopierPassThrough<
-          WTF::UnretainedWrapper<T, WTF::kCrossThreadAffinity>> {
+          WTF::CrossThreadUnretainedWrapper<T>> {
   STATIC_ONLY(CrossThreadCopier);
 };
 
@@ -196,9 +207,9 @@ struct CrossThreadCopier<WTF::PassedWrapper<T>> {
 };
 
 template <typename Signature>
-struct CrossThreadCopier<WTF::Function<Signature, WTF::kCrossThreadAffinity>> {
+struct CrossThreadCopier<WTF::CrossThreadFunction<Signature>> {
   STATIC_ONLY(CrossThreadCopier);
-  using Type = WTF::Function<Signature, WTF::kCrossThreadAffinity>;
+  using Type = WTF::CrossThreadFunction<Signature>;
   static Type Copy(Type&& value) { return std::move(value); }
 };
 
@@ -255,6 +266,25 @@ struct CrossThreadCopier<mojo::InterfaceRequest<Interface>> {
   using Type = mojo::InterfaceRequest<Interface>;
   static Type Copy(Type request) {
     return request;  // This is in fact a move.
+  }
+};
+
+template <>
+struct CrossThreadCopier<MessagePortChannel> {
+  STATIC_ONLY(CrossThreadCopier);
+  using Type = MessagePortChannel;
+  static Type Copy(Type pointer) {
+    return pointer;  // This is in fact a move.
+  }
+};
+
+template <size_t inlineCapacity, typename Allocator>
+struct CrossThreadCopier<
+    Vector<MessagePortChannel, inlineCapacity, Allocator>> {
+  STATIC_ONLY(CrossThreadCopier);
+  using Type = Vector<MessagePortChannel, inlineCapacity, Allocator>;
+  static Type Copy(Type pointer) {
+    return pointer;  // This is in fact a move.
   }
 };
 

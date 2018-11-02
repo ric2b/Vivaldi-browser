@@ -12,10 +12,9 @@
 
   function startVideoCaptureAndVerifySize() {
     console.log('Calling getUserMediaAndWaitForVideoRendering.');
-    navigator.webkitGetUserMedia(
-        CONSTRAINTS,
-        gotStreamCallback,
-        failedCallback);
+    navigator.mediaDevices.getUserMedia(CONSTRAINTS)
+        .then(gotStreamCallback)
+        .catch(failedCallback);
   }
 
   function failedCallback(error) {
@@ -35,7 +34,7 @@
       hasReceivedTrackEndedEvent = true;
     };
 
-    detectVideoPlaying('local-view', function() {
+    detectVideoPlaying('local-view').then(() => {
       if (localView.videoWidth == WIDTH) {
         reportTestSuccess();
       } else {
@@ -45,7 +44,7 @@
   }
 
   function waitForVideoToTurnBlack() {
-    detectBlackVideo('local-view', function() {
+    detectBlackVideo('local-view').then(() => {
       reportTestSuccess();
     });
   }

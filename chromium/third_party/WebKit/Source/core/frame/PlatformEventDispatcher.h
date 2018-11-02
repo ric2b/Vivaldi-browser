@@ -7,7 +7,6 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Vector.h"
 
 namespace blink {
 class PlatformEventController;
@@ -17,7 +16,7 @@ class CORE_EXPORT PlatformEventDispatcher : public GarbageCollectedMixin {
   void AddController(PlatformEventController*);
   void RemoveController(PlatformEventController*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   PlatformEventDispatcher();

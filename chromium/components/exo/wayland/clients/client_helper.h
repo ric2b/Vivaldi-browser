@@ -13,10 +13,14 @@
 #include <memory>
 
 #include "base/scoped_generic.h"
+#include "components/exo/wayland/aura-shell-client-protocol.h"
 
-#if defined(OZONE_PLATFORM_GBM)
+#if defined(USE_GBM)
 #include <gbm.h>
-#endif
+#if defined(USE_VULKAN)
+#include <vulkan/vulkan.h>
+#endif  // defined(USE_GBM)
+#endif  // defined(USE_VULKAN)
 
 // Default deleters template specialization forward decl.
 #define DEFAULT_DELETER_FDECL(TypeName) \
@@ -42,12 +46,16 @@ DEFAULT_DELETER_FDECL(wl_subcompositor)
 DEFAULT_DELETER_FDECL(wl_subsurface)
 DEFAULT_DELETER_FDECL(wl_surface)
 DEFAULT_DELETER_FDECL(wl_touch)
+DEFAULT_DELETER_FDECL(wl_output)
 DEFAULT_DELETER_FDECL(wp_presentation)
 DEFAULT_DELETER_FDECL(struct wp_presentation_feedback)
+DEFAULT_DELETER_FDECL(zaura_shell)
+DEFAULT_DELETER_FDECL(zaura_surface)
+DEFAULT_DELETER_FDECL(zaura_output)
 DEFAULT_DELETER_FDECL(zwp_linux_buffer_params_v1)
 DEFAULT_DELETER_FDECL(zwp_linux_dmabuf_v1)
 
-#if defined(OZONE_PLATFORM_GBM)
+#if defined(USE_GBM)
 DEFAULT_DELETER_FDECL(gbm_bo)
 DEFAULT_DELETER_FDECL(gbm_device)
 #endif
@@ -56,7 +64,7 @@ namespace exo {
 namespace wayland {
 namespace clients {
 
-#if defined(OZONE_PLATFORM_GBM)
+#if defined(USE_GBM)
 struct DeleteTextureTraits {
   static unsigned InvalidValue();
   static void Free(unsigned texture);
@@ -74,7 +82,70 @@ struct DeleteEglSyncTraits {
   static void Free(void* sync);
 };
 using ScopedEglSync = base::ScopedGeneric<void*, DeleteEglSyncTraits>;
-#endif
+
+#if defined(USE_VULKAN)
+struct DeleteVkInstanceTraits {
+  static VkInstance InvalidValue();
+  static void Free(VkInstance instance);
+};
+using ScopedVkInstance =
+    base::ScopedGeneric<VkInstance, DeleteVkInstanceTraits>;
+
+struct DeleteVkDeviceTraits {
+  static VkDevice InvalidValue();
+  static void Free(VkDevice device);
+};
+using ScopedVkDevice = base::ScopedGeneric<VkDevice, DeleteVkDeviceTraits>;
+
+struct DeleteVkCommandPoolTraits {
+  VkDevice vk_device;
+  static VkCommandPool InvalidValue();
+  void Free(VkCommandPool command_pool);
+};
+using ScopedVkCommandPool =
+    base::ScopedGeneric<VkCommandPool, DeleteVkCommandPoolTraits>;
+
+struct DeleteVkRenderPassTraits {
+  VkDevice vk_device;
+  static VkRenderPass InvalidValue();
+  void Free(VkRenderPass render_pass);
+};
+using ScopedVkRenderPass =
+    base::ScopedGeneric<VkRenderPass, DeleteVkRenderPassTraits>;
+
+struct DeleteVkDeviceMemoryTraits {
+  VkDevice vk_device;
+  static VkDeviceMemory InvalidValue();
+  void Free(VkDeviceMemory device_memory);
+};
+using ScopedVkDeviceMemory =
+    base::ScopedGeneric<VkDeviceMemory, DeleteVkDeviceMemoryTraits>;
+
+struct DeleteVkImageTraits {
+  VkDevice vk_device;
+  static VkImage InvalidValue();
+  void Free(VkImage image);
+};
+using ScopedVkImage = base::ScopedGeneric<VkImage, DeleteVkImageTraits>;
+
+struct DeleteVkImageViewTraits {
+  VkDevice vk_device;
+  static VkImageView InvalidValue();
+  void Free(VkImageView image_view);
+};
+using ScopedVkImageView =
+    base::ScopedGeneric<VkImageView, DeleteVkImageViewTraits>;
+
+struct DeleteVkFramebufferTraits {
+  VkDevice vk_device;
+  static VkFramebuffer InvalidValue();
+  void Free(VkFramebuffer framebuffer);
+};
+using ScopedVkFramebuffer =
+    base::ScopedGeneric<VkFramebuffer, DeleteVkFramebufferTraits>;
+
+#endif  // defined(USE_VULKAN)
+#endif  // defined(USE_GBM)
 
 }  // namespace clients
 }  // namespace wayland

@@ -31,14 +31,23 @@ scoped_refptr<DevToolsAgentHost> DevToolsManagerDelegate::CreateNewTarget(
   return nullptr;
 }
 
-base::DictionaryValue* DevToolsManagerDelegate::HandleCommand(
-      DevToolsAgentHost* agent_host,
-      base::DictionaryValue* command) {
-  return nullptr;
+void DevToolsManagerDelegate::SessionCreated(
+    content::DevToolsAgentHost* agent_host,
+    int session_id) {}
+
+void DevToolsManagerDelegate::SessionDestroyed(
+    content::DevToolsAgentHost* agent_host,
+    int session_id) {}
+
+bool DevToolsManagerDelegate::HandleCommand(DevToolsAgentHost* agent_host,
+                                            int session_id,
+                                            base::DictionaryValue* command) {
+  return false;
 }
 
 bool DevToolsManagerDelegate::HandleAsyncCommand(
     DevToolsAgentHost* agent_host,
+    int session_id,
     base::DictionaryValue* command,
     const CommandCallback& callback) {
   return false;

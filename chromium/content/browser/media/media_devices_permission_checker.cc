@@ -38,20 +38,19 @@ MediaDevicesManager::BoolDeviceTypes DoCheckPermissionsOnUIThread(
     return MediaDevicesManager::BoolDeviceTypes();
 
   RenderFrameHostDelegate* delegate = frame_host->delegate();
-  GURL origin = frame_host->GetLastCommittedOrigin().GetURL();
-
-  MediaDevicesManager::BoolDeviceTypes result;
+  url::Origin origin = frame_host->GetLastCommittedOrigin();
   bool audio_permission =
       delegate->CheckMediaAccessPermission(origin, MEDIA_DEVICE_AUDIO_CAPTURE);
   bool mic_feature_policy = true;
   bool camera_feature_policy = true;
   if (base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions)) {
-    mic_feature_policy = frame_host->IsFeatureEnabled(
-        blink::WebFeaturePolicyFeature::kMicrophone);
+    mic_feature_policy =
+        frame_host->IsFeatureEnabled(blink::FeaturePolicyFeature::kMicrophone);
     camera_feature_policy =
-        frame_host->IsFeatureEnabled(blink::WebFeaturePolicyFeature::kCamera);
+        frame_host->IsFeatureEnabled(blink::FeaturePolicyFeature::kCamera);
   }
 
+  MediaDevicesManager::BoolDeviceTypes result;
   // Speakers.
   // TODO(guidou): use specific permission for audio output when it becomes
   // available. See http://crbug.com/556542.

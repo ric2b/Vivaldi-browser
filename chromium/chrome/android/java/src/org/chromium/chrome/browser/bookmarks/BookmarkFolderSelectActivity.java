@@ -6,7 +6,9 @@ package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -23,6 +25,7 @@ import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.TintedImageView;
@@ -116,8 +119,22 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mModel = new BookmarkModel();
+        List<String> stringList =
+                IntentUtils.safeGetStringArrayListExtra(getIntent(), INTENT_BOOKMARKS_TO_MOVE);
+
+        // If the intent does not contain a list of bookmarks to move, return early. See
+        // crbug.com/728244. If the bookmark model is not loaded, return early to avoid crashing
+        // when trying to access bookmark model methods. The bookmark model should always be
+        // loaded when BookmarkFolderSelectActivity is created unless the entire Chrome process
+        // is being recreated. If we add a loading screen, we could wait for the model to be
+        // loaded but this flow is rare. See crbug.com/704872.
+        if (stringList == null || !mModel.isBookmarkModelLoaded()) {
+            finish();
+            return;
+        }
+
         mModel.addObserver(mBookmarkModelObserver);
-        List<String> stringList = getIntent().getStringArrayListExtra(INTENT_BOOKMARKS_TO_MOVE);
+
         mBookmarksToMove = new ArrayList<>(stringList.size());
         for (String string : stringList) {
             BookmarkId bookmarkId = BookmarkId.getBookmarkIdFromString(string);
@@ -150,7 +167,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
         updateFolderList();
 
-        if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+        if (!FeatureUtilities.isChromeHomeEnabled()) {
             findViewById(R.id.shadow).setVisibility(View.VISIBLE);
             toolbar.setTitleTextAppearance(toolbar.getContext(), R.style.BlackHeadline2);
             toolbar.setBackgroundColor(
@@ -342,32 +359,33 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             TintedImageView startIcon = view.findViewById(R.id.icon_view);
             TintedImageButton endIcon = view.findViewById(R.id.selected_view);
 
-            int iconId = 0;
+            Drawable iconDrawable;
             if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-                iconId = R.drawable.bookmark_folder;
-            } else if (entry.mType == FolderListEntry.TYPE_NEW_FOLDER) {
+                iconDrawable = BookmarkUtils.getFolderIcon(view.getResources());
+            } else {
                 // For new folder, start_icon is different.
-                iconId = R.drawable.bookmark_add_folder;
+                VectorDrawableCompat vectorDrawable = VectorDrawableCompat.create(
+                        view.getResources(), R.drawable.ic_add, view.getContext().getTheme());
+                vectorDrawable.setTintList(ApiCompatibilityUtils.getColorStateList(
+                        view.getResources(), R.color.dark_mode_tint));
+                iconDrawable = vectorDrawable;
             }
 
-            if (FeatureUtilities.isChromeHomeModernEnabled()) {
-                startIcon.setBackgroundResource(R.drawable.selectable_item_icon_modern_bg);
+            if (FeatureUtilities.isChromeHomeEnabled()) {
+                startIcon.setBackgroundResource(R.drawable.list_item_icon_modern_bg);
                 startIcon.setImageDrawable(entry.mIsSelected
                                 ? TintedDrawable.constructTintedDrawable(view.getResources(),
                                           R.drawable.ic_check_googblue_24dp,
                                           R.color.white_mode_tint)
-                                : TintedDrawable.constructTintedDrawable(
-                                          view.getResources(), iconId));
+                                : iconDrawable);
                 startIcon.getBackground().setLevel(entry.mIsSelected
-                                ? view.getResources().getInteger(
-                                          R.integer.selectable_item_level_selected)
+                                ? view.getResources().getInteger(R.integer.list_item_level_selected)
                                 : view.getResources().getInteger(
-                                          R.integer.selectable_item_level_default));
+                                          R.integer.list_item_level_default));
                 endIcon.setVisibility(View.GONE);
             } else {
                 // Selected entry has an end_icon, a blue check mark.
-                startIcon.setImageDrawable(
-                        TintedDrawable.constructTintedDrawable(view.getResources(), iconId));
+                startIcon.setImageDrawable(iconDrawable);
                 endIcon.setVisibility(entry.mIsSelected ? View.VISIBLE : View.GONE);
             }
         }

@@ -90,6 +90,11 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                        GLenum internalformat,
                        GLsizei width,
                        GLsizei height) override;
+  void TexStorage2DImageCHROMIUM(GLenum target,
+                                 GLenum internalformat,
+                                 GLenum bufferusage,
+                                 GLsizei width,
+                                 GLsizei height) override;
   void TexParameteri(GLenum target, GLenum pname, GLint param) override;
 
   void CompressedTexImage2D(GLenum target,
@@ -147,7 +152,6 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
   void ProduceTextureDirectCHROMIUM(GLuint texture,
                                     GLenum target,
                                     const GLbyte* mailbox) override;
-  void ConsumeTextureCHROMIUM(GLenum target, const GLbyte* mailbox) override;
   GLuint CreateAndConsumeTextureCHROMIUM(GLenum target,
                                          const GLbyte* mailbox) override;
 

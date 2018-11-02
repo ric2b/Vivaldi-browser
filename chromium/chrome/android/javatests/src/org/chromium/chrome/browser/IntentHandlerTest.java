@@ -30,7 +30,8 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
 import org.chromium.chrome.browser.test.CommandLineInitRule;
 
-import java.util.Vector;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Tests for IntentHandler.
@@ -49,22 +50,10 @@ public class IntentHandlerTest {
     private static final String VOICE_URL_QUERY = "www.google.com";
     private static final String VOICE_URL_QUERY_URL = "INVALID_URLZ";
 
-    private static final String[] ACCEPTED_INTENT_URLS = {"http://www.google.com",
-            "http://movies.nytimes.com/movie/review?"
-                    + "res=9405EFDB1E3BE23BBC4153DFB7678382659EDE&partner=Rotten Tomatoes",
-            "chrome://newtab", "file://foo.txt", "ftp://www.foo.com", "https://www.gmail.com", "",
-            "http://www.example.com/\u00FCmlat.html&q=name", "http://www.example.com/quotation_\"",
-            "http://www.example.com/lessthansymbol_<", "http://www.example.com/greaterthansymbol_>",
-            "http://www.example.com/poundcharacter_#", "http://www.example.com/percentcharacter_%",
-            "http://www.example.com/leftcurlybrace_{", "http://www.example.com/rightcurlybrace_}",
-            "http://www.example.com/verticalpipe_|", "http://www.example.com/backslash_\\",
-            "http://www.example.com/caret_^", "http://www.example.com/tilde_~",
-            "http://www.example.com/leftsquarebracket_[",
-            "http://www.example.com/rightsquarebracket_]", "http://www.example.com/graveaccent_`",
-            "www.example.com", "www.google.com", "www.bing.com", "notreallyaurl",
-            "://javascript:80/hello", "https:awesome@google.com/haha.gif",
+    private static final String[] ACCEPTED_NON_HTTP_AND_HTTPS_URLS = {"chrome://newtab",
+            "file://foo.txt", "ftp://www.foo.com", "", "://javascript:80/hello",
             "ftp@https://confusing:@something.example:5/goat?sayit", "://www.google.com/",
-            "//www.google.com", "chrome-search://food",
+            "chrome-search://food",
             "java-scr\nipt://alert", // - is significant
             "java.scr\nipt://alert", // . is significant
             "java+scr\nipt://alert", // + is significant
@@ -79,10 +68,26 @@ public class IntentHandlerTest {
             "javascript:http//bar.net:javascript/yes.no", " javascript:://window.open(1)",
             " java script:alert(1)", "~~~javascript://alert"};
 
+    private static final String[] VALID_HTTP_AND_HTTPS_URLS = {"http://www.google.com",
+            "http://movies.nytimes.com/movie/review?"
+                    + "res=9405EFDB1E3BE23BBC4153DFB7678382659EDE&partner=Rotten Tomatoes",
+            "https://www.gmail.com", "http://www.example.com/\u00FCmlat.html&q=name",
+            "http://www.example.com/quotation_\"", "http://www.example.com/lessthansymbol_<",
+            "http://www.example.com/greaterthansymbol_>", "http://www.example.com/poundcharacter_#",
+            "http://www.example.com/percentcharacter_%", "http://www.example.com/leftcurlybrace_{",
+            "http://www.example.com/rightcurlybrace_}", "http://www.example.com/verticalpipe_|",
+            "http://www.example.com/backslash_\\", "http://www.example.com/caret_^",
+            "http://www.example.com/tilde_~", "http://www.example.com/leftsquarebracket_[",
+            "http://www.example.com/rightsquarebracket_]", "http://www.example.com/graveaccent_`",
+            "www.example.com", "www.google.com", "www.bing.com", "notreallyaurl",
+            "https:awesome@google.com/haha.gif", "//www.google.com"};
+
     private static final String[] REJECTED_GOOGLECHROME_URLS = {
             IntentHandler.GOOGLECHROME_SCHEME + "://reddit.com",
             IntentHandler.GOOGLECHROME_SCHEME + "://navigate?reddit.com",
             IntentHandler.GOOGLECHROME_SCHEME + "://navigate?urlreddit.com",
+            IntentHandler.GOOGLECHROME_SCHEME
+                    + "://navigate?url=content://com.android.chrome.FileProvider",
     };
 
     private static final String GOOGLE_URL = "https://www.google.com";
@@ -91,7 +96,7 @@ public class IntentHandlerTest {
     private Intent mIntent;
 
     private void processUrls(String[] urls, boolean isValid) {
-        Vector<String> failedTests = new Vector<String>();
+        List<String> failedTests = new ArrayList<String>();
 
         for (String url : urls) {
             mIntent.setData(Uri.parse(url));
@@ -113,7 +118,8 @@ public class IntentHandlerTest {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testAcceptedUrls() {
-        processUrls(ACCEPTED_INTENT_URLS, true);
+        processUrls(ACCEPTED_NON_HTTP_AND_HTTPS_URLS, true);
+        processUrls(VALID_HTTP_AND_HTTPS_URLS, true);
     }
 
     @Test
@@ -127,11 +133,10 @@ public class IntentHandlerTest {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testAcceptedGoogleChromeSchemeNavigateUrls() {
-        // Test all of the accepted URLs after prepending googlechrome://navigate?url.
-        String[] expectedAccepts = new String[ACCEPTED_INTENT_URLS.length];
-        for (int i = 0; i < ACCEPTED_INTENT_URLS.length; ++i) {
+        String[] expectedAccepts = new String[VALID_HTTP_AND_HTTPS_URLS.length];
+        for (int i = 0; i < VALID_HTTP_AND_HTTPS_URLS.length; ++i) {
             expectedAccepts[i] =
-                    IntentHandler.GOOGLECHROME_NAVIGATE_PREFIX + ACCEPTED_INTENT_URLS[i];
+                    IntentHandler.GOOGLECHROME_NAVIGATE_PREFIX + VALID_HTTP_AND_HTTPS_URLS[i];
         }
         processUrls(expectedAccepts, true);
     }
@@ -153,7 +158,7 @@ public class IntentHandlerTest {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testRejectedGoogleChromeSchemeUrls() {
-        Vector<String> failedTests = new Vector<String>();
+        List<String> failedTests = new ArrayList<String>();
 
         for (String url : REJECTED_GOOGLECHROME_URLS) {
             mIntent.setData(Uri.parse(url));
@@ -335,7 +340,7 @@ public class IntentHandlerTest {
     @SmallTest
     @Feature({"Android-AppBase"})
     public void testGeneratedReferrer() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getTargetContext();
         String packageName = context.getPackageName();
         String referrer = IntentHandler.constructValidReferrerForAuthority(packageName).getUrl();
         Assert.assertEquals("android-app://" + packageName, referrer);

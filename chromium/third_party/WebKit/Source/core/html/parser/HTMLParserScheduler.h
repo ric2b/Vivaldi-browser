@@ -27,10 +27,12 @@
 #define HTMLParserScheduler_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/html/parser/NestingLevelIncrementer.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -63,47 +65,47 @@ class SpeculationsPumpSession : public NestingLevelIncrementer {
 
 class HTMLParserScheduler final
     : public GarbageCollectedFinalized<HTMLParserScheduler> {
-  WTF_MAKE_NONCOPYABLE(HTMLParserScheduler);
-
  public:
   static HTMLParserScheduler* Create(
       HTMLDocumentParser* parser,
-      RefPtr<WebTaskRunner> loading_task_runner) {
+      scoped_refptr<WebTaskRunner> loading_task_runner) {
     return new HTMLParserScheduler(parser, std::move(loading_task_runner));
   }
   ~HTMLParserScheduler();
 
-  bool IsScheduledForResume() const;
-  void ScheduleForResume();
+  bool IsScheduledForUnpause() const;
+  void ScheduleForUnpause();
   bool YieldIfNeeded(const SpeculationsPumpSession&, bool starting_script);
 
   /**
-     * Can only be called if this scheduler is suspended. If this is called,
-     * then after the scheduler is resumed by calling resume(), this call
-     * ensures that HTMLDocumentParser::resumeAfterYield will be called. Used to
-     * signal this scheduler that the background html parser sent chunks to
-     * HTMLDocumentParser while it was suspended.
-     */
-  void ForceResumeAfterYield();
+   * Can only be called if this scheduler is paused. If this is called,
+   * then after the scheduler is resumed by calling resume(), this call
+   * ensures that HTMLDocumentParser::resumeAfterYield will be called. Used to
+   * signal this scheduler that the background html parser sent chunks to
+   * HTMLDocumentParser while it was paused.
+   */
+  void ForceUnpauseAfterYield();
 
-  void Suspend();
-  void Resume();
+  void Pause();
+  void Unpause();
 
   void Detach();  // Clear active tasks if any.
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
-  HTMLParserScheduler(HTMLDocumentParser*, RefPtr<WebTaskRunner>);
+  HTMLParserScheduler(HTMLDocumentParser*, scoped_refptr<WebTaskRunner>);
 
   bool ShouldYield(const SpeculationsPumpSession&, bool starting_script) const;
   void ContinueParsing();
 
   Member<HTMLDocumentParser> parser_;
-  RefPtr<WebTaskRunner> loading_task_runner_;
+  scoped_refptr<WebTaskRunner> loading_task_runner_;
 
   TaskHandle cancellable_continue_parse_task_handle_;
-  bool is_suspended_with_active_timer_;
+  bool is_paused_with_active_timer_;
+
+  DISALLOW_COPY_AND_ASSIGN(HTMLParserScheduler);
 };
 
 }  // namespace blink

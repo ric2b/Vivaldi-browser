@@ -5,7 +5,6 @@ include_rules = [
   "+components/metrics",
   "+components/metrics:single_sample_metrics",
   "+components/payments",
-  "+components/scheduler",
   "+components/url_formatter",
   "+components/viz/client",
   "+components/viz/common",
@@ -24,9 +23,9 @@ include_rules = [
   "+mojo",
   "+services",
   "-storage/browser",
-  "+storage/public/interfaces",
   "+third_party/hyphen/hyphen.h",
   "+third_party/webrtc_overrides",
+  "+third_party/WebKit/common/origin_trials",
   "+v8/include",
   "+v8/src/third_party/vtune",
 ]
@@ -47,5 +46,8 @@ specific_include_rules = {
   # embedded in mus won't be able to talk to the native ozone.
   "renderer_main\.cc": [
     "+ui/ozone/public/client_native_pixmap_factory_ozone.h",
+  ],
+  "service_worker_subresource_loader_unittest\.cc": [
+    "+storage/browser",
   ]
 }

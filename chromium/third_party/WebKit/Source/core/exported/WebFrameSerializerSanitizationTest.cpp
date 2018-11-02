@@ -30,6 +30,7 @@
 
 #include "public/web/WebFrameSerializer.h"
 
+#include "core/dom/ShadowRoot.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/WebLocalFrameImpl.h"
@@ -114,7 +115,7 @@ class WebFrameSerializerSanitizationTest : public ::testing::Test {
   void LoadFrame(const String& url,
                  const String& file_name,
                  const String& mime_type) {
-    KURL parsed_url(kParsedURLString, url);
+    KURL parsed_url(url);
     String file_path("frameserialization/" + file_name);
     RegisterMockedFileURLLoad(parsed_url, file_path, mime_type);
     FrameTestHelpers::LoadFrame(MainFrameImpl(), url.Utf8().data());
@@ -138,7 +139,7 @@ class WebFrameSerializerSanitizationTest : public ::testing::Test {
     mhtml.Append(body_result.Data(), body_result.size());
 
     if (!only_body_parts) {
-      RefPtr<RawData> footer_data = RawData::Create();
+      scoped_refptr<RawData> footer_data = RawData::Create();
       MHTMLArchive::GenerateMHTMLFooterForTesting(boundary,
                                                   *footer_data->MutableData());
       mhtml.Append(footer_data->data(), footer_data->length());
@@ -160,12 +161,21 @@ class WebFrameSerializerSanitizationTest : public ::testing::Test {
                                ShadowRootType shadow_type,
                                const char* shadow_content,
                                bool delegates_focus = false) {
-    ShadowRoot* shadow_root =
-        scope.getElementById(AtomicString::FromUTF8(host))
-            ->CreateShadowRootInternal(shadow_type, ASSERT_NO_EXCEPTION);
+    Element* host_element = scope.getElementById(AtomicString::FromUTF8(host));
+    ShadowRoot* shadow_root;
+    if (shadow_type == ShadowRootType::V0) {
+      DCHECK(!delegates_focus);
+      shadow_root = &host_element->CreateShadowRootInternal();
+    } else if (shadow_type == ShadowRootType::kUserAgent) {
+      DCHECK(!delegates_focus);
+      shadow_root = &host_element->CreateUserAgentShadowRoot();
+    } else {
+      shadow_root =
+          &host_element->AttachShadowRootInternal(shadow_type, delegates_focus);
+    }
     shadow_root->SetDelegatesFocus(delegates_focus);
-    shadow_root->setInnerHTML(String::FromUTF8(shadow_content),
-                              ASSERT_NO_EXCEPTION);
+    shadow_root->SetInnerHTMLFromString(String::FromUTF8(shadow_content),
+                                        ASSERT_NO_EXCEPTION);
     scope.GetDocument().View()->UpdateAllLifecyclePhases();
     return shadow_root;
   }
@@ -220,15 +230,6 @@ TEST_F(WebFrameSerializerSanitizationTest, RemoveOtherAttributes) {
   EXPECT_EQ(WTF::kNotFound, mhtml.Find("ping="));
 }
 
-TEST_F(WebFrameSerializerSanitizationTest, DisableFormElements) {
-  String mhtml = GenerateMHTMLFromHtml("http://www.test.com", "form.html");
-
-  const char kDisabledAttr[] = "disabled=3D\"\"";
-  int matches =
-      MatchSubstring(mhtml, kDisabledAttr, arraysize(kDisabledAttr) - 1);
-  EXPECT_EQ(21, matches);
-}
-
 TEST_F(WebFrameSerializerSanitizationTest, RemoveHiddenElements) {
   String mhtml =
       GenerateMHTMLFromHtml("http://www.test.com", "hidden_elements.html");
@@ -262,6 +263,15 @@ TEST_F(WebFrameSerializerSanitizationTest, RemoveHiddenElements) {
   EXPECT_NE(WTF::kNotFound, mhtml.Find("<div"));
 }
 
+TEST_F(WebFrameSerializerSanitizationTest, RemoveIframeInHead) {
+  String mhtml =
+      GenerateMHTMLFromHtml("http://www.test.com", "iframe_in_head.html");
+
+  // The iframe elements could only be found after body. Any iframes injected to
+  // head should be removed.
+  EXPECT_GT(mhtml.Find("<iframe"), mhtml.Find("<body"));
+}
+
 // Regression test for crbug.com/678893, where in some cases serializing an
 // image document could cause code to pick an element from an empty container.
 TEST_F(WebFrameSerializerSanitizationTest, FromBrokenImageDocument) {
@@ -273,12 +283,10 @@ TEST_F(WebFrameSerializerSanitizationTest, FromBrokenImageDocument) {
 }
 
 TEST_F(WebFrameSerializerSanitizationTest, ImageLoadedFromSrcsetForHiDPI) {
-  RegisterMockedFileURLLoad(
-      KURL(kParsedURLString, "http://www.test.com/1x.png"),
-      "frameserialization/1x.png");
-  RegisterMockedFileURLLoad(
-      KURL(kParsedURLString, "http://www.test.com/2x.png"),
-      "frameserialization/2x.png");
+  RegisterMockedFileURLLoad(KURL("http://www.test.com/1x.png"),
+                            "frameserialization/1x.png");
+  RegisterMockedFileURLLoad(KURL("http://www.test.com/2x.png"),
+                            "frameserialization/2x.png");
 
   // Set high DPR in order to load image from srcset, instead of src.
   WebView()->SetDeviceScaleFactor(2.0f);
@@ -299,12 +307,10 @@ TEST_F(WebFrameSerializerSanitizationTest, ImageLoadedFromSrcsetForHiDPI) {
 }
 
 TEST_F(WebFrameSerializerSanitizationTest, ImageLoadedFromSrcForNormalDPI) {
-  RegisterMockedFileURLLoad(
-      KURL(kParsedURLString, "http://www.test.com/1x.png"),
-      "frameserialization/1x.png");
-  RegisterMockedFileURLLoad(
-      KURL(kParsedURLString, "http://www.test.com/2x.png"),
-      "frameserialization/2x.png");
+  RegisterMockedFileURLLoad(KURL("http://www.test.com/1x.png"),
+                            "frameserialization/1x.png");
+  RegisterMockedFileURLLoad(KURL("http://www.test.com/2x.png"),
+                            "frameserialization/2x.png");
 
   String mhtml =
       GenerateMHTMLFromHtml("http://www.test.com", "img_srcset.html");

@@ -26,7 +26,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 
 namespace {
 
@@ -63,18 +63,15 @@ LowDiskNotification::LowDiskNotification()
       notification_interval_(kNotificationInterval),
       weak_ptr_factory_(this) {
   DCHECK(DBusThreadManager::Get()->GetCryptohomeClient());
-  DBusThreadManager::Get()->GetCryptohomeClient()->SetLowDiskSpaceHandler(
-      base::Bind(&LowDiskNotification::OnLowDiskSpace,
-                 weak_ptr_factory_.GetWeakPtr()));
+  DBusThreadManager::Get()->GetCryptohomeClient()->AddObserver(this);
 }
 
 LowDiskNotification::~LowDiskNotification() {
   DCHECK(DBusThreadManager::Get()->GetCryptohomeClient());
-  DBusThreadManager::Get()->GetCryptohomeClient()->SetLowDiskSpaceHandler(
-      CryptohomeClient::LowDiskSpaceHandler());
+  DBusThreadManager::Get()->GetCryptohomeClient()->RemoveObserver(this);
 }
 
-void LowDiskNotification::OnLowDiskSpace(uint64_t free_disk_bytes) {
+void LowDiskNotification::LowDiskSpace(uint64_t free_disk_bytes) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // We suppress the low-space notifications when there are multiple users on an
   // enterprise managed device. crbug.com/656788.
@@ -131,14 +128,11 @@ LowDiskNotification::CreateNotification(Severity severity) {
       message_center::NotifierId::SYSTEM_COMPONENT,
       ash::system_notifier::kNotifierDisk);
 
-  std::unique_ptr<message_center::Notification> notification =
-      ash::system_notifier::CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, kLowDiskId, title, message,
-          icon, base::string16(), GURL(), notifier_id, optional_fields,
-          new LowDiskNotificationDelegate(), kNotificationStorageFullIcon,
-          warning_level);
-
-  return notification;
+  return ash::system_notifier::CreateSystemNotification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, kLowDiskId, title, message,
+      icon, base::string16(), GURL(), notifier_id, optional_fields,
+      new LowDiskNotificationDelegate(), kNotificationStorageFullIcon,
+      warning_level);
 }
 
 LowDiskNotification::Severity LowDiskNotification::GetSeverity(

@@ -20,6 +20,8 @@ source_set("base") {
     "compound_buffer.h",
     "constants.cc",
     "constants.h",
+    "weighted_samples.cc",
+    "weighted_samples.h",
     "leaky_bucket.cc",
     "leaky_bucket.h",
     "name_value_map.h",
@@ -34,6 +36,8 @@ source_set("base") {
     "scoped_sc_handle_win.h",
     "service_urls.cc",
     "service_urls.h",
+    "session_options.cc",
+    "session_options.h",
     "socket_reader.cc",
     "socket_reader.h",
     "telemetry_log_writer.cc",
@@ -118,9 +122,9 @@ source_set("breakpad") {
   ]
 
   if (is_mac) {
-    deps += [ "//breakpad" ]
+    deps += [ "//third_party/breakpad" ]
   } else if (is_win) {
-    deps += [ "//breakpad:breakpad_handler" ]
+    deps += [ "//third_party/breakpad:breakpad_handler" ]
   }
 }
 
@@ -159,11 +163,13 @@ source_set("unit_tests") {
     "buffered_socket_writer_unittest.cc",
     "capabilities_unittest.cc",
     "compound_buffer_unittest.cc",
+    "weighted_samples_unittest.cc",
     "oauth_helper_unittest.cc",
     "rate_counter_unittest.cc",
     "rsa_key_pair_unittest.cc",
     "run_all_unittests.cc",
     "running_samples_unittest.cc",
+    "session_options_unittest.cc",
     "telemetry_log_writer_unittest.cc",
     "typed_buffer_unittest.cc",
     "util_unittest.cc",
@@ -178,7 +184,7 @@ source_set("unit_tests") {
   ]
 
   if (is_win || is_mac || is_chromeos) {
-    deps += [ "//breakpad:client" ]
+    deps += [ "//third_party/breakpad:client" ]
   }
 
   if (is_win) {

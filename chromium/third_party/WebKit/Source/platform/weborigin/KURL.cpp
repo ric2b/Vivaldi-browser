@@ -37,6 +37,7 @@
 #include "platform/wtf/text/StringStatics.h"
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "platform/wtf/text/TextEncoding.h"
+#include "url/gurl.h"
 #include "url/url_util.h"
 #ifndef NDEBUG
 #include <stdio.h>
@@ -172,8 +173,7 @@ bool ProtocolIsJavaScript(const String& url) {
 }
 
 const KURL& BlankURL() {
-  DEFINE_STATIC_LOCAL(KURL, static_blank_url,
-                      (kParsedURLString, "about:blank"));
+  DEFINE_STATIC_LOCAL(KURL, static_blank_url, ("about:blank"));
   return static_blank_url;
 }
 
@@ -182,8 +182,7 @@ bool KURL::IsAboutBlankURL() const {
 }
 
 const KURL& SrcdocURL() {
-  DEFINE_STATIC_LOCAL(KURL, static_srcdoc_url,
-                      (kParsedURLString, "about:srcdoc"));
+  DEFINE_STATIC_LOCAL(KURL, static_srcdoc_url, ("about:srcdoc"));
   return static_srcdoc_url;
 }
 
@@ -210,9 +209,9 @@ KURL::KURL() : is_valid_(false), protocol_is_in_http_family_(false) {}
 // to a string and then converted back. In this case, the URL is already
 // canonical and in proper escaped form so needs no encoding. We treat it as
 // UTF-8 just in case.
-KURL::KURL(ParsedURLStringTag, const String& url) {
+KURL::KURL(const String& url) {
   if (!url.IsNull())
-    Init(NullURL(), url, 0);
+    Init(NullURL(), url, nullptr);
   else {
     // WebCore expects us to preserve the nullness of strings when this
     // constructor is used. In all other cases, it expects a non-null
@@ -222,16 +221,16 @@ KURL::KURL(ParsedURLStringTag, const String& url) {
   }
 }
 
-KURL KURL::CreateIsolated(ParsedURLStringTag, const String& url) {
+KURL KURL::CreateIsolated(const String& url) {
   // FIXME: We should be able to skip this extra copy and created an
   // isolated KURL more efficiently.
-  return KURL(kParsedURLString, url).Copy();
+  return KURL(url).Copy();
 }
 
 // Constructs a new URL given a base URL and a possibly relative input URL.
 // This assumes UTF-8 encoding.
 KURL::KURL(const KURL& base, const String& relative) {
-  Init(base, relative, 0);
+  Init(base, relative, nullptr);
 }
 
 // Constructs a new URL given a base URL and a possibly relative input URL.
@@ -252,11 +251,6 @@ KURL::KURL(const AtomicString& canonical_string,
   InitProtocolMetadata();
   InitInnerURL();
 }
-
-KURL::KURL(WTF::HashTableDeletedValueType)
-    : is_valid_(false),
-      protocol_is_in_http_family_(false),
-      string_(WTF::kHashTableDeletedValue) {}
 
 KURL::KURL(const KURL& other)
     : is_valid_(other.is_valid_),
@@ -729,11 +723,12 @@ bool ProtocolIs(const String& url, const char* protocol) {
 #endif
   if (url.IsNull())
     return false;
-  if (url.Is8Bit())
+  if (url.Is8Bit()) {
     return url::FindAndCompareScheme(AsURLChar8Subtle(url), url.length(),
-                                     protocol, 0);
+                                     protocol, nullptr);
+  }
   return url::FindAndCompareScheme(url.Characters16(), url.length(), protocol,
-                                   0);
+                                   nullptr);
 }
 
 void KURL::Init(const KURL& base,
@@ -752,7 +747,7 @@ void KURL::Init(const KURL& base,
   KURLCharsetConverter charset_converter_object(query_encoding);
   KURLCharsetConverter* charset_converter =
       (!query_encoding || IsUnicodeEncoding(query_encoding))
-          ? 0
+          ? nullptr
           : &charset_converter_object;
 
   // Clamp to int max to avoid overflow.
@@ -798,13 +793,13 @@ void KURL::InitInnerURL() {
     inner_url_.reset();
     return;
   }
-  if (url::Parsed* inner_parsed = parsed_.inner_parsed())
-    inner_url_ = WTF::WrapUnique(new KURL(
-        kParsedURLString, string_.Substring(inner_parsed->scheme.begin,
-                                            inner_parsed->Length() -
-                                                inner_parsed->scheme.begin)));
-  else
+  if (url::Parsed* inner_parsed = parsed_.inner_parsed()) {
+    inner_url_ = WTF::WrapUnique(new KURL(string_.Substring(
+        inner_parsed->scheme.begin,
+        inner_parsed->Length() - inner_parsed->scheme.begin)));
+  } else {
     inner_url_.reset();
+  }
 }
 
 void KURL::InitProtocolMetadata() {
@@ -873,8 +868,9 @@ void KURL::ReplaceComponents(const url::Replacements<CHAR>& replacements) {
   url::Parsed new_parsed;
 
   StringUTF8Adaptor utf8(string_);
-  is_valid_ = url::ReplaceComponents(utf8.Data(), utf8.length(), parsed_,
-                                     replacements, 0, &output, &new_parsed);
+  is_valid_ =
+      url::ReplaceComponents(utf8.Data(), utf8.length(), parsed_, replacements,
+                             nullptr, &output, &new_parsed);
 
   parsed_ = new_parsed;
   string_ = AtomicString::FromUTF8(output.data(), output.length());
@@ -884,6 +880,10 @@ void KURL::ReplaceComponents(const url::Replacements<CHAR>& replacements) {
 bool KURL::IsSafeToSendToAnotherThread() const {
   return string_.IsSafeToSendToAnotherThread() &&
          (!inner_url_ || inner_url_->IsSafeToSendToAnotherThread());
+}
+
+KURL::operator GURL() const {
+  return GURL(string_.Utf8().data(), parsed_, is_valid_);
 }
 
 }  // namespace blink

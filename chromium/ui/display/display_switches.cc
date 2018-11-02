@@ -10,8 +10,17 @@ namespace switches {
 // TODO(rjkroege): Some of these have an "ash" prefix. When ChromeOS startup
 // scripts have been updated, the leading "ash" prefix should be removed.
 
+// Enables mirroring across multiple displays.
+const char kEnableMultiMirroring[] = "enable-multi-mirroring";
+
 // Enables software based mirroring.
 const char kEnableSoftwareMirroring[] = "ash-enable-software-mirroring";
+
+// Crash the browser at startup if the display's color profile does not match
+// the forced color profile. This is necessary on Mac because Chrome's pixel
+// output is always subject to the color conversion performed by the operating
+// system. On all other platforms, this is a no-op.
+const char kEnsureForcedColorProfile[] = "ensure-forced-color-profile";
 
 // Force all monitors to be treated as though they have the specified color
 // profile. Accepted values are "srgb" and "generic-rgb" (currently used by Mac
@@ -47,6 +56,9 @@ const char kUseFirstDisplayAsInternal[] = "use-first-display-as-internal";
 
 // Enables unified desktop mode.
 const char kEnableUnifiedDesktop[] = "ash-enable-unified-desktop";
+
+// Enables using the monitor's provided color space information when rendering.
+const char kUseMonitorColorSpace[] = "use-monitor-color-space";
 #endif
 
 }  // namespace switches
@@ -54,6 +66,6 @@ const char kEnableUnifiedDesktop[] = "ash-enable-unified-desktop";
 namespace features {
 
 const base::Feature kHighDynamicRange{"HighDynamicRange",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features

@@ -10,13 +10,13 @@
 #include <map>
 #include <memory>
 #include <numeric>
-#include <queue>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -78,17 +78,15 @@ void ExpectResultAndThen(bool expected_result,
   continuation.Run();
 }
 
-void ExpectTransferInAndThen(
-    mojom::UsbTransferStatus expected_status,
-    const std::vector<uint8_t>& expected_bytes,
-    const base::Closure& continuation,
-    mojom::UsbTransferStatus actual_status,
-    const base::Optional<std::vector<uint8_t>>& actual_bytes) {
+void ExpectTransferInAndThen(mojom::UsbTransferStatus expected_status,
+                             const std::vector<uint8_t>& expected_bytes,
+                             const base::Closure& continuation,
+                             mojom::UsbTransferStatus actual_status,
+                             const std::vector<uint8_t>& actual_bytes) {
   EXPECT_EQ(expected_status, actual_status);
-  ASSERT_TRUE(actual_bytes);
-  ASSERT_EQ(expected_bytes.size(), actual_bytes->size());
-  for (size_t i = 0; i < actual_bytes->size(); ++i) {
-    EXPECT_EQ(expected_bytes[i], (*actual_bytes)[i])
+  ASSERT_EQ(expected_bytes.size(), actual_bytes.size());
+  for (size_t i = 0; i < actual_bytes.size(); ++i) {
+    EXPECT_EQ(expected_bytes[i], actual_bytes[i])
         << "Contents differ at index: " << i;
   }
   continuation.Run();
@@ -112,7 +110,7 @@ void ExpectPacketsInAndThen(
     const std::vector<uint8_t>& expected_bytes,
     const std::vector<uint32_t>& expected_packets,
     const base::Closure& continuation,
-    const base::Optional<std::vector<uint8_t>>& actual_bytes,
+    const std::vector<uint8_t>& actual_bytes,
     std::vector<UsbIsochronousPacketPtr> actual_packets) {
   ASSERT_EQ(expected_packets.size(), actual_packets.size());
   for (size_t i = 0; i < expected_packets.size(); ++i) {
@@ -121,10 +119,9 @@ void ExpectPacketsInAndThen(
     EXPECT_EQ(mojom::UsbTransferStatus::COMPLETED, actual_packets[i]->status)
         << "Packet at index " << i << " not completed.";
   }
-  ASSERT_TRUE(actual_bytes);
-  ASSERT_EQ(expected_bytes.size(), actual_bytes->size());
-  for (size_t i = 0; i < actual_bytes->size(); ++i) {
-    EXPECT_EQ(expected_bytes[i], (*actual_bytes)[i])
+  ASSERT_EQ(expected_bytes.size(), actual_bytes.size());
+  for (size_t i = 0; i < actual_bytes.size(); ++i) {
+    EXPECT_EQ(expected_bytes[i], actual_bytes[i])
         << "Contents differ at index: " << i;
   }
   continuation.Run();
@@ -144,7 +141,7 @@ class USBDeviceImplTest : public testing::Test {
         is_device_open_(false),
         allow_reset_(false) {}
 
-  ~USBDeviceImplTest() override {}
+  ~USBDeviceImplTest() override = default;
 
   void TearDown() override { base::RunLoop().RunUntilIdle(); }
 
@@ -415,11 +412,11 @@ class USBDeviceImplTest : public testing::Test {
 
   std::map<uint8_t, UsbConfigDescriptor> mock_configs_;
 
-  std::queue<std::vector<uint8_t>> mock_inbound_data_;
-  std::queue<std::vector<uint8_t>> mock_outbound_data_;
-  std::queue<std::vector<UsbDeviceHandle::IsochronousPacket>>
+  base::queue<std::vector<uint8_t>> mock_inbound_data_;
+  base::queue<std::vector<uint8_t>> mock_outbound_data_;
+  base::queue<std::vector<UsbDeviceHandle::IsochronousPacket>>
       mock_inbound_packets_;
-  std::queue<std::vector<UsbDeviceHandle::IsochronousPacket>>
+  base::queue<std::vector<UsbDeviceHandle::IsochronousPacket>>
       mock_outbound_packets_;
 
   std::set<uint8_t> claimed_interfaces_;

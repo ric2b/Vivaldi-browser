@@ -5,6 +5,7 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 
 #include "core/testing/DummyPageHolder.h"
+#include "platform/heap/Handle.h"
 #include "platform/heap/ThreadState.h"
 #include "platform/testing/BlinkFuzzerTestSupport.h"
 #include "platform/wtf/text/WTFString.h"
@@ -17,6 +18,9 @@ DummyPageHolder* g_page_holder = nullptr;
 
 int LLVMFuzzerInitialize(int* argc, char*** argv) {
   static BlinkFuzzerTestSupport test_support = BlinkFuzzerTestSupport();
+  // Scope cannot be created before BlinkFuzzerTestSupport because it requires
+  // that Oilpan be initialized to access blink::ThreadState::Current.
+  LEAK_SANITIZER_DISABLED_SCOPE;
   g_page_holder = DummyPageHolder::Create().release();
   return 0;
 }

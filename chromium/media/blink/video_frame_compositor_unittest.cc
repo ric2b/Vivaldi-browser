@@ -30,6 +30,7 @@ class MockWebVideoFrameSubmitter : public blink::WebVideoFrameSubmitter {
   MOCK_METHOD1(StartSubmitting, void(const viz::FrameSinkId&));
   MOCK_METHOD0(StartRendering, void());
   MOCK_METHOD0(StopRendering, void());
+  MOCK_METHOD1(Initialize, void(cc::VideoFrameProvider*));
   void DidReceiveFrame() override { ++did_receive_frame_count_; }
 
   int did_receive_frame_count() { return did_receive_frame_count_; }
@@ -50,19 +51,22 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
       feature_list_.InitFromCommandLine("UseSurfaceLayerForVideo", "");
 
       // When SurfaceLayerForVideo is enabled, |compositor_| owns the
-      // |submitter_|. Otherwise, the |compositor_| treats the |submitter_| if
-      // were a VideoFrameProviderClient in the VideoLayer code path, holding
-      // only a bare pointer.
+      // |submitter_|. Otherwise, the |compositor_| treats the |submitter_| as
+      // if it were a VideoFrameProviderClient in the VideoLayer code path,
+      // holding only a bare pointer.
     }
     submitter_ = client_.get();
-    compositor_ =
-        base::MakeUnique<VideoFrameCompositor>(message_loop.task_runner());
 
     if (!IsSurfaceLayerForVideoEnabled()) {
+      compositor_ = base::MakeUnique<VideoFrameCompositor>(
+          message_loop.task_runner(), nullptr);
       compositor_->SetVideoFrameProviderClient(client_.get());
     } else {
+      EXPECT_CALL(*submitter_, Initialize(_));
+      compositor_ = base::MakeUnique<VideoFrameCompositor>(
+          message_loop.task_runner(), std::move(client_));
+      base::RunLoop().RunUntilIdle();
       EXPECT_CALL(*submitter_, StartSubmitting(_));
-      compositor_->set_submitter_for_test(std::move(client_));
       compositor_->EnableSubmission(viz::FrameSinkId(1, 1));
     }
 
@@ -244,33 +248,21 @@ TEST_P(VideoFrameCompositorTest,
   StopVideoRendererSink(true);
 }
 
-TEST_P(VideoFrameCompositorTest, GetCurrentFrameAndUpdateIfStale) {
+TEST_P(VideoFrameCompositorTest, UpdateCurrentFrameIfStale) {
   scoped_refptr<VideoFrame> opaque_frame_1 = CreateOpaqueFrame();
   scoped_refptr<VideoFrame> opaque_frame_2 = CreateOpaqueFrame();
   compositor_->set_background_rendering_for_testing(true);
 
-  // |current_frame_| should be null at this point since we don't have a client
-  // or a callback.
-  ASSERT_FALSE(compositor()->GetCurrentFrameAndUpdateIfStale());
-
   // Starting the video renderer should return a single frame.
   EXPECT_CALL(*this, Render(_, _, true)).WillOnce(Return(opaque_frame_1));
   StartVideoRendererSink();
+  EXPECT_EQ(opaque_frame_1, compositor()->GetCurrentFrame());
 
   // Since we have a client, this call should not call background render, even
   // if a lot of time has elapsed between calls.
   tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
-  ASSERT_EQ(opaque_frame_1, compositor()->GetCurrentFrameAndUpdateIfStale());
-
-  // An update current frame call should stop background rendering.
-  EXPECT_CALL(*this, Render(_, _, false)).WillOnce(Return(opaque_frame_2));
-  EXPECT_TRUE(
-      compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
-
-  // This call should still not call background render.
-  ASSERT_EQ(opaque_frame_2, compositor()->GetCurrentFrameAndUpdateIfStale());
-
-  testing::Mock::VerifyAndClearExpectations(this);
+  EXPECT_CALL(*this, Render(_, _, _)).Times(0);
+  compositor()->UpdateCurrentFrameIfStale();
 
   if (IsSurfaceLayerForVideoEnabled()) {
     compositor()->set_submitter_for_test(nullptr);
@@ -279,25 +271,24 @@ TEST_P(VideoFrameCompositorTest, GetCurrentFrameAndUpdateIfStale) {
     compositor()->SetVideoFrameProviderClient(nullptr);
   }
 
-  // This call should still not call background render, because we aren't in the
-  // background rendering state yet.
-  ASSERT_EQ(opaque_frame_2, compositor()->GetCurrentFrameAndUpdateIfStale());
-
-  // Wait for background rendering to tick again.
+  // Wait for background rendering to tick.
   base::RunLoop run_loop;
   EXPECT_CALL(*this, Render(_, _, true))
       .WillOnce(
-           DoAll(RunClosure(run_loop.QuitClosure()), Return(opaque_frame_1)))
-      .WillOnce(Return(opaque_frame_2));
+          DoAll(RunClosure(run_loop.QuitClosure()), Return(opaque_frame_2)));
   run_loop.Run();
 
   // This call should still not call background render, because not enough time
   // has elapsed since the last background render call.
-  ASSERT_EQ(opaque_frame_1, compositor()->GetCurrentFrameAndUpdateIfStale());
+  EXPECT_CALL(*this, Render(_, _, true)).Times(0);
+  compositor()->UpdateCurrentFrameIfStale();
+  EXPECT_EQ(opaque_frame_2, compositor()->GetCurrentFrame());
 
   // Advancing the tick clock should allow a new frame to be requested.
   tick_clock_->Advance(base::TimeDelta::FromMilliseconds(10));
-  ASSERT_EQ(opaque_frame_2, compositor()->GetCurrentFrameAndUpdateIfStale());
+  EXPECT_CALL(*this, Render(_, _, true)).WillOnce(Return(opaque_frame_1));
+  compositor()->UpdateCurrentFrameIfStale();
+  EXPECT_EQ(opaque_frame_1, compositor()->GetCurrentFrame());
 
   // Background rendering should tick another render callback.
   StopVideoRendererSink(false);

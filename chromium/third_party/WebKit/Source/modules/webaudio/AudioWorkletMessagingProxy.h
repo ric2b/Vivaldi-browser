@@ -10,9 +10,13 @@
 
 namespace blink {
 
+class AudioWorklet;
+class AudioWorkletHandler;
 class CrossThreadAudioParamInfo;
 class CrossThreadAudioWorkletProcessorInfo;
 class ExecutionContext;
+class MessagePortChannel;
+class WebThread;
 class WorkerThread;
 
 // AudioWorkletMessagingProxy is a main thread interface for
@@ -20,7 +24,19 @@ class WorkerThread;
 // scope via AudioWorkletObjectProxy.
 class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
  public:
-  AudioWorkletMessagingProxy(ExecutionContext*, WorkerClients*);
+  AudioWorkletMessagingProxy(ExecutionContext*, WorkerClients*, AudioWorklet*);
+
+  // Since the creation of AudioWorkletProcessor needs to be done in the
+  // different thread, this method is a wrapper for cross-thread task posting.
+  void CreateProcessor(AudioWorkletHandler*, MessagePortChannel);
+
+  // Invokes AudioWorkletGlobalScope to create an instance of
+  // AudioWorkletProcessor.
+  void CreateProcessorOnRenderingThread(WorkerThread*,
+                                        AudioWorkletHandler*,
+                                        const String& name,
+                                        float sample_rate,
+                                        MessagePortChannel);
 
   // Invoked by AudioWorkletObjectProxy on AudioWorkletThread to fetch the
   // information from AudioWorkletGlobalScope to AudioWorkletMessagingProxy
@@ -37,9 +53,11 @@ class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
   const Vector<CrossThreadAudioParamInfo> GetParamInfoListForProcessor(
       const String& name) const;
 
- private:
-  ~AudioWorkletMessagingProxy() override;
+  WebThread* GetWorkletBackingThread();
 
+  void Trace(Visitor*);
+
+ private:
   // Implements ThreadedWorkletMessagingProxy.
   std::unique_ptr<ThreadedWorkletObjectProxy> CreateObjectProxy(
       ThreadedWorkletMessagingProxy*,
@@ -49,6 +67,8 @@ class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
 
   // Each entry consists of processor name and associated AudioParam list.
   HashMap<String, Vector<CrossThreadAudioParamInfo>> processor_info_map_;
+
+  Member<AudioWorklet> worklet_;
 };
 
 }  // namespace blink

@@ -11,27 +11,14 @@
 #include <utility>
 
 #include "base/strings/string16.h"
+#include "base/time/time.h"
 #include "components/ntp_tiles/tile_source.h"
+#include "components/ntp_tiles/tile_title_source.h"
 #include "url/gurl.h"
 
 // ID used by Instant code to refer to objects (e.g. Autocomplete results, Most
 // Visited items) that the Instant page needs access to.
 typedef int InstantRestrictedID;
-
-// A wrapper to hold Instant suggested text and its metadata. Used to tell the
-// server what suggestion to prefetch.
-struct InstantSuggestion {
-  InstantSuggestion();
-  InstantSuggestion(const base::string16& in_text,
-                    const std::string& in_metadata);
-  ~InstantSuggestion();
-
-  // Full suggested text.
-  base::string16 text;
-
-  // JSON metadata from the server response which produced this suggestion.
-  std::string metadata;
-};
 
 // The alignment of the theme background image.
 enum ThemeBackgroundImageAlignment {
@@ -142,48 +129,19 @@ struct InstantMostVisitedItem {
   // The external URL of the favicon associated with this page.
   GURL favicon;
 
+  // The source of the item's |title|.
+  ntp_tiles::TileTitleSource title_source;
+
   // The source of the item, e.g. server-side or client-side.
   ntp_tiles::TileSource source;
+
+  // The timestamp representing when the tile data (e.g. URL) was generated
+  // originally, regardless of the impression timestamp.
+  base::Time data_generation_time;
 };
 
 // An InstantMostVisitedItem along with its assigned restricted ID.
 typedef std::pair<InstantRestrictedID, InstantMostVisitedItem>
     InstantMostVisitedItemIDPair;
 
-// Embedded search request logging stats params.
-extern const char kSearchQueryKey[];
-extern const char kOriginalQueryKey[];
-extern const char kRLZParameterKey[];
-extern const char kInputEncodingKey[];
-extern const char kAssistedQueryStatsKey[];
-
-// A wrapper to hold embedded search request params. Used to tell the server
-// about the search query logging stats at the query submission time.
-struct EmbeddedSearchRequestParams {
-  EmbeddedSearchRequestParams();
-  // Extracts the request params from the |url| and initializes the member
-  // variables.
-  explicit EmbeddedSearchRequestParams(const GURL& url);
-  ~EmbeddedSearchRequestParams();
-
-  // Submitted search query.
-  base::string16 search_query;
-
-  // User typed query.
-  base::string16 original_query;
-
-  // RLZ parameter.
-  base::string16 rlz_parameter_value;
-
-  // Character input encoding type.
-  base::string16 input_encoding;
-
-  // The optional assisted query stats, aka AQS, used for logging purposes.
-  // This string contains impressions of all autocomplete matches shown
-  // at the query submission time.  For privacy reasons, we require the
-  // search provider to support HTTPS protocol in order to receive the AQS
-  // param.
-  // For more details, see http://goto.google.com/binary-clients-logging.
-  base::string16 assisted_query_stats;
-};
 #endif  // CHROME_COMMON_SEARCH_INSTANT_TYPES_H_

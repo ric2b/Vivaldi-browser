@@ -31,18 +31,16 @@
 #include "core/svg/SVGURIReference.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/filters/Filter.h"
-#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
+#include "platform/graphics/filters/PaintFilterBuilder.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/text/TextStream.h"
 #include "platform/transforms/AffineTransform.h"
-#include "third_party/skia/include/effects/SkImageSource.h"
-#include "third_party/skia/include/effects/SkPictureImageFilter.h"
 
 namespace blink {
 
 FEImage::FEImage(Filter* filter,
-                 RefPtr<Image> image,
+                 scoped_refptr<Image> image,
                  SVGPreserveAspectRatio* preserve_aspect_ratio)
     : FilterEffect(filter),
       image_(std::move(image)),
@@ -62,7 +60,7 @@ FEImage::FEImage(Filter* filter,
   FilterEffect::SetOperatingInterpolationSpace(kInterpolationSpaceSRGB);
 }
 
-DEFINE_TRACE(FEImage) {
+void FEImage::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_scope_);
   visitor->Trace(preserve_aspect_ratio_);
   FilterEffect::Trace(visitor);
@@ -70,7 +68,7 @@ DEFINE_TRACE(FEImage) {
 
 FEImage* FEImage::CreateWithImage(
     Filter* filter,
-    RefPtr<Image> image,
+    scoped_refptr<Image> image,
     SVGPreserveAspectRatio* preserve_aspect_ratio) {
   return new FEImage(filter, std::move(image), preserve_aspect_ratio);
 }
@@ -158,7 +156,7 @@ TextStream& FEImage::ExternalRepresentation(TextStream& ts, int indent) const {
   return ts;
 }
 
-sk_sp<SkImageFilter> FEImage::CreateImageFilterForLayoutObject(
+sk_sp<PaintFilter> FEImage::CreateImageFilterForLayoutObject(
     const LayoutObject& layout_object) {
   FloatRect dst_rect = FilterPrimitiveSubregion();
 
@@ -180,9 +178,7 @@ sk_sp<SkImageFilter> FEImage::CreateImageFilterForLayoutObject(
     transform.Translate(dst_rect.X(), dst_rect.Y());
   }
 
-  // TODO(chrishtr): use tighter bounds for this.
-  FloatRect bounds(LayoutRect::InfiniteIntRect());
-  PaintRecordBuilder builder(bounds);
+  PaintRecordBuilder builder;
   SVGPaintContext::PaintResourceSubtree(builder.Context(), &layout_object);
 
   PaintRecorder paint_recorder;
@@ -190,16 +186,16 @@ sk_sp<SkImageFilter> FEImage::CreateImageFilterForLayoutObject(
   canvas->concat(AffineTransformToSkMatrix(transform));
   builder.EndRecording(*canvas);
 
-  return SkPictureImageFilter::Make(
-      ToSkPicture(paint_recorder.finishRecordingAsPicture(), dst_rect));
+  return sk_make_sp<RecordPaintFilter>(
+      paint_recorder.finishRecordingAsPicture(), dst_rect);
 }
 
-sk_sp<SkImageFilter> FEImage::CreateImageFilter() {
+sk_sp<PaintFilter> FEImage::CreateImageFilter() {
   if (auto* layout_object = ReferencedLayoutObject())
     return CreateImageFilterForLayoutObject(*layout_object);
 
-  sk_sp<SkImage> image =
-      image_ ? image_->PaintImageForCurrentFrame().GetSkImage() : nullptr;
+  PaintImage image =
+      image_ ? image_->PaintImageForCurrentFrame() : PaintImage();
   if (!image) {
     // "A href reference that is an empty image (zero width or zero height),
     //  that fails to download, is non-existent, or that cannot be displayed
@@ -213,8 +209,8 @@ sk_sp<SkImageFilter> FEImage::CreateImageFilter() {
 
   preserve_aspect_ratio_->TransformRect(dst_rect, src_rect);
 
-  return SkImageSource::Make(std::move(image), src_rect, dst_rect,
-                             kHigh_SkFilterQuality);
+  return sk_make_sp<ImagePaintFilter>(std::move(image), src_rect, dst_rect,
+                                      kHigh_SkFilterQuality);
 }
 
 }  // namespace blink

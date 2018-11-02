@@ -4,22 +4,32 @@
 
 #include "sandbox/mac/seatbelt_exec.h"
 
+#include <fcntl.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
 #include <vector>
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/strings/stringprintf.h"
+#include "sandbox/mac/sandbox_logging.h"
 #include "sandbox/mac/seatbelt.h"
 
 namespace sandbox {
 
 SeatbeltExecClient::SeatbeltExecClient() {
-  PCHECK(pipe(pipe_) == 0) << "pipe";
+  if (pipe(pipe_) != 0)
+    logging::PFatal("SeatbeltExecClient: pipe failed");
+
+  int pipe_flags = fcntl(pipe_[1], F_GETFL);
+  if (pipe_flags == -1)
+    logging::PFatal("SeatbeltExecClient: fctnl(F_GETFL) failed");
+
+  if (fcntl(pipe_[1], F_SETFL, pipe_flags | O_NONBLOCK) == -1)
+    logging::PFatal("SeatbeltExecClient: fcntl(F_SETFL) failed");
 }
 
 SeatbeltExecClient::~SeatbeltExecClient() {
@@ -30,22 +40,21 @@ SeatbeltExecClient::~SeatbeltExecClient() {
   IGNORE_EINTR(close(pipe_[0]));
 }
 
-bool SeatbeltExecClient::SetBooleanParameter(const base::StringPiece key,
+bool SeatbeltExecClient::SetBooleanParameter(const std::string& key,
                                              bool value) {
   google::protobuf::MapPair<std::string, std::string> pair(
-      key.as_string(), value ? "TRUE" : "FALSE");
+      key, value ? "TRUE" : "FALSE");
   return policy_.mutable_params()->insert(pair).second;
 }
 
-bool SeatbeltExecClient::SetParameter(const base::StringPiece key,
-                                      const base::StringPiece value) {
-  google::protobuf::MapPair<std::string, std::string> pair(key.as_string(),
-                                                           value.as_string());
+bool SeatbeltExecClient::SetParameter(const std::string& key,
+                                      const std::string& value) {
+  google::protobuf::MapPair<std::string, std::string> pair(key, value);
   return policy_.mutable_params()->insert(pair).second;
 }
 
-void SeatbeltExecClient::SetProfile(const base::StringPiece policy) {
-  policy_.set_profile(policy.as_string());
+void SeatbeltExecClient::SetProfile(const std::string& policy) {
+  policy_.set_profile(policy);
 }
 
 int SeatbeltExecClient::SendProfileAndGetFD() {
@@ -69,7 +78,7 @@ bool SeatbeltExecClient::WriteString(std::string* str) {
 
   ssize_t written = HANDLE_EINTR(writev(pipe_[1], iov, arraysize(iov)));
   if (written < 0) {
-    PLOG(ERROR) << "writev";
+    logging::PError("SeatbeltExecClient: writev failed");
     return false;
   }
   return static_cast<uint64_t>(written) == str->size();
@@ -77,7 +86,9 @@ bool SeatbeltExecClient::WriteString(std::string* str) {
 
 SeatbeltExecServer::SeatbeltExecServer(int fd) : fd_(fd), extra_params_() {}
 
-SeatbeltExecServer::~SeatbeltExecServer() {}
+SeatbeltExecServer::~SeatbeltExecServer() {
+  close(fd_);
+}
 
 bool SeatbeltExecServer::InitializeSandbox() {
   std::string policy_string;
@@ -86,7 +97,7 @@ bool SeatbeltExecServer::InitializeSandbox() {
 
   mac::SandboxPolicy policy;
   if (!policy.ParseFromString(policy_string)) {
-    LOG(ERROR) << "ParseFromString failed";
+    logging::Error("SeatbeltExecServer: ParseFromString failed");
     return false;
   }
 
@@ -109,7 +120,8 @@ bool SeatbeltExecServer::ApplySandboxProfile(const mac::SandboxPolicy& policy) {
   int rv = Seatbelt::InitWithParams(policy.profile().c_str(), 0,
                                     weak_params.data(), &error);
   if (error) {
-    LOG(ERROR) << "Failed to initialize sandbox: " << rv << " " << error;
+    logging::Error("SeatbeltExecServer: Failed to initialize sandbox: %d %s",
+                   rv, error);
     Seatbelt::FreeError(error);
     return false;
   }
@@ -125,20 +137,18 @@ bool SeatbeltExecServer::ReadString(std::string* str) {
   iov[0].iov_base = buffer.data();
   iov[0].iov_len = buffer.size();
 
-  ssize_t read_length = HANDLE_EINTR(readv(fd_.get(), iov, arraysize(iov)));
+  ssize_t read_length = HANDLE_EINTR(readv(fd_, iov, arraysize(iov)));
   if (read_length < 0) {
-    PLOG(ERROR) << "readv";
+    logging::PError("SeatbeltExecServer: readv failed");
     return false;
   }
   str->assign(buffer.data());
   return true;
 }
 
-bool SeatbeltExecServer::SetParameter(const base::StringPiece key,
-                                      const base::StringPiece value) {
-  return extra_params_
-      .insert(std::make_pair(key.as_string(), value.as_string()))
-      .second;
+bool SeatbeltExecServer::SetParameter(const std::string& key,
+                                      const std::string& value) {
+  return extra_params_.insert(std::make_pair(key, value)).second;
 }
 
 }  // namespace sandbox

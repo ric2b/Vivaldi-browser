@@ -12,7 +12,7 @@ static_library("discovery") {
     "//base:i18n",
     "//chrome/app:generated_resources",
     "//chrome/common:constants",
-    "//chrome/common/media_router/mojo:dial_utility_interfaces",
+    "//chrome/common/media_router:router",
     "//components/cast_channel",
     "//components/version_info",
     "//content/public/browser",
@@ -25,10 +25,10 @@ static_library("discovery") {
     "dial/device_description_service.h",
     "dial/dial_device_data.cc",
     "dial/dial_device_data.h",
+    "dial/dial_media_sink_service.cc",
+    "dial/dial_media_sink_service.h",
     "dial/dial_media_sink_service_impl.cc",
     "dial/dial_media_sink_service_impl.h",
-    "dial/dial_media_sink_service_proxy.cc",
-    "dial/dial_media_sink_service_proxy.h",
     "dial/dial_registry.cc",
     "dial/dial_registry.h",
     "dial/dial_service.cc",
@@ -49,8 +49,6 @@ static_library("discovery") {
     "mdns/dns_sd_registry.h",
     "media_sink_discovery_metrics.cc",
     "media_sink_discovery_metrics.h",
-    "media_sink_service_base.cc",
-    "media_sink_service_base.h",
   ]
 
   if (!is_android) {
@@ -65,6 +63,10 @@ static_library("discovery") {
       "discovery_network_list_win.cc",
       "discovery_network_monitor.cc",
       "discovery_network_monitor.h",
+      "discovery_network_monitor_metric_observer.cc",
+      "discovery_network_monitor_metric_observer.h",
+      "discovery_network_monitor_metrics.cc",
+      "discovery_network_monitor_metrics.h",
     ]
   }
 

@@ -6,11 +6,6 @@
 
 #include <stddef.h>
 #include <string.h>
-#include <X11/extensions/XInput.h>
-#include <X11/extensions/XInput2.h>
-#include <X11/XKBlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <cmath>
 
 #include "base/logging.h"
@@ -27,6 +22,7 @@
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 
 namespace {
@@ -743,6 +739,13 @@ float GetTouchForceFromXEvent(const XEvent& xev) {
   return force;
 }
 
+EventPointerType GetTouchPointerTypeFromXEvent(const XEvent& xev) {
+  XIDeviceEvent* event = static_cast<XIDeviceEvent*>(xev.xcookie.data);
+  DCHECK(ui::TouchFactory::GetInstance()->IsTouchDevice(event->sourceid));
+  return ui::TouchFactory::GetInstance()->GetTouchDevicePointerType(
+      event->sourceid);
+}
+
 bool GetScrollOffsetsFromXEvent(const XEvent& xev,
                                 float* x_offset,
                                 float* y_offset,
@@ -809,6 +812,10 @@ bool GetFlingDataFromXEvent(const XEvent& xev,
   DeviceDataManagerX11::GetInstance()->GetFlingData(xev, vx, vy, vx_ordinal,
                                                     vy_ordinal, is_cancel);
   return true;
+}
+
+bool IsAltPressed() {
+  return XModifierStateWatcher::GetInstance()->state() & Mod1Mask;
 }
 
 void ResetTimestampRolloverCountersForTesting(

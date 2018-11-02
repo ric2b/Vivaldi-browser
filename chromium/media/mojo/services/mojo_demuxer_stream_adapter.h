@@ -6,7 +6,6 @@
 #define MEDIA_MOJO_SERVICES_MOJO_DEMUXER_STREAM_ADAPTER_H_
 
 #include <memory>
-#include <queue>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -44,7 +43,6 @@ class MojoDemuxerStreamAdapter : public DemuxerStream {
   Type type() const override;
   void EnableBitstreamConverter() override;
   bool SupportsConfigChanges() override;
-  VideoRotation video_rotation() override;
 
  private:
   void OnStreamReady(Type type,

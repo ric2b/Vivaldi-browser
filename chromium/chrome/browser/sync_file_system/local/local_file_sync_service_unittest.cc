@@ -36,8 +36,7 @@
 #include "storage/browser/fileapi/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
-#include "third_party/leveldatabase/src/include/leveldb/env.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 
 using content::BrowserThread;
 using storage::FileSystemURL;
@@ -52,7 +51,7 @@ namespace {
 
 const char kOrigin[] = "http://example.com";
 
-void DidPrepareForProcessRemoteChange(const tracked_objects::Location& where,
+void DidPrepareForProcessRemoteChange(const base::Location& where,
                                       const base::Closure& oncompleted,
                                       SyncStatusCode expected_status,
                                       const SyncFileMetadata& expected_metadata,
@@ -67,7 +66,7 @@ void DidPrepareForProcessRemoteChange(const tracked_objects::Location& where,
   oncompleted.Run();
 }
 
-void OnSyncCompleted(const tracked_objects::Location& where,
+void OnSyncCompleted(const base::Location& where,
                      const base::Closure& oncompleted,
                      SyncStatusCode expected_status,
                      const FileSystemURL& expected_url,
@@ -79,7 +78,7 @@ void OnSyncCompleted(const tracked_objects::Location& where,
   oncompleted.Run();
 }
 
-void OnGetFileMetadata(const tracked_objects::Location& where,
+void OnGetFileMetadata(const base::Location& where,
                        const base::Closure& oncompleted,
                        SyncStatusCode* status_out,
                        SyncFileMetadata* metadata_out,
@@ -114,7 +113,7 @@ class LocalFileSyncServiceTest
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    in_memory_env_.reset(leveldb::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
 
     file_system_.reset(new CannedSyncableFileSystem(
         GURL(kOrigin), in_memory_env_.get(),
@@ -157,7 +156,7 @@ class LocalFileSyncServiceTest
 
   void PrepareForProcessRemoteChange(
       const FileSystemURL& url,
-      const tracked_objects::Location& where,
+      const base::Location& where,
       SyncStatusCode expected_status,
       const SyncFileMetadata& expected_metadata) {
     base::RunLoop run_loop;

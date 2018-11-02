@@ -58,7 +58,7 @@ class CORE_EXPORT PerformanceNavigationTiming final
   DOMHighResTimeStamp redirectEnd() const override;
   DOMHighResTimeStamp responseEnd() const override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   void BuildJSONValue(ScriptState*, V8ObjectBuilder&) const override;
@@ -84,7 +84,7 @@ class CORE_EXPORT PerformanceNavigationTiming final
   AtomicString AlpnNegotiatedProtocol() const override;
   AtomicString ConnectionInfo() const override;
 
-  RefPtr<ResourceTimingInfo> resource_timing_info_;
+  scoped_refptr<ResourceTimingInfo> resource_timing_info_;
 };
 }  // namespace blink
 

@@ -26,11 +26,14 @@
 #include <initializer_list>
 #include <iterator>
 #include <utility>
+
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "platform/wtf/Alignment.h"
 #include "platform/wtf/ConditionalDestructor.h"
 #include "platform/wtf/ContainerAnnotations.h"
-#include "platform/wtf/Noncopyable.h"
+#include "platform/wtf/Forward.h"  // For default Vector template parameters.
+#include "platform/wtf/HashTableDeletedValueType.h"
 #include "platform/wtf/NotFound.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/VectorTraits.h"
@@ -361,7 +364,6 @@ struct VectorTypeOperations {
 
 template <typename T, bool hasInlineCapacity, typename Allocator>
 class VectorBufferBase {
-  WTF_MAKE_NONCOPYABLE(VectorBufferBase);
   DISALLOW_NEW();
 
  public:
@@ -436,9 +438,17 @@ class VectorBufferBase {
   VectorBufferBase(T* buffer, size_t capacity)
       : buffer_(buffer), capacity_(capacity) {}
 
+  VectorBufferBase(HashTableDeletedValueType value)
+      : buffer_(reinterpret_cast<T*>(-1)) {}
+  bool IsHashTableDeletedValue() const {
+    return buffer_ == reinterpret_cast<T*>(-1);
+  }
+
   T* buffer_;
   unsigned capacity_;
   unsigned size_;
+
+  DISALLOW_COPY_AND_ASSIGN(VectorBufferBase);
 };
 
 template <typename T,
@@ -538,8 +548,6 @@ class VectorBuffer<T, 0, Allocator>
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
-  WTF_MAKE_NONCOPYABLE(VectorBuffer);
-
  private:
   using Base = VectorBufferBase<T, true, Allocator>;
 
@@ -547,6 +555,11 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   using OffsetRange = typename Base::OffsetRange;
 
   VectorBuffer() : Base(InlineBuffer(), inlineCapacity) {}
+
+  VectorBuffer(HashTableDeletedValueType value) : Base(value) {}
+  bool IsHashTableDeletedValue() const {
+    return Base::IsHashTableDeletedValue();
+  }
 
   explicit VectorBuffer(size_t capacity)
       : Base(InlineBuffer(), inlineCapacity) {
@@ -817,14 +830,18 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
   using Base::capacity_;
 
   static const size_t kInlineBufferSize = inlineCapacity * sizeof(T);
-  T* InlineBuffer() { return reinterpret_cast_ptr<T*>(inline_buffer_.buffer); }
+  T* InlineBuffer() {
+    return unsafe_reinterpret_cast_ptr<T*>(inline_buffer_.buffer);
+  }
   const T* InlineBuffer() const {
-    return reinterpret_cast_ptr<const T*>(inline_buffer_.buffer);
+    return unsafe_reinterpret_cast_ptr<const T*>(inline_buffer_.buffer);
   }
 
   AlignedBuffer<kInlineBufferSize, WTF_ALIGN_OF(T)> inline_buffer_;
   template <typename U, size_t inlineBuffer, typename V>
   friend class Deque;
+
+  DISALLOW_COPY_AND_ASSIGN(VectorBuffer);
 };
 
 //
@@ -933,9 +950,7 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
 // allocate an iterator on stack (as a local variable), and you should not
 // store iterators in another heap object.
 
-template <typename T,
-          size_t inlineCapacity = 0,
-          typename Allocator = PartitionAllocator>
+template <typename T, size_t inlineCapacity, typename Allocator>
 class Vector
     : private VectorBuffer<T, INLINE_CAPACITY, Allocator>,
       // Heap-allocated vectors with no inlineCapacity never need a destructor.
@@ -964,6 +979,12 @@ class Vector
   // Create a vector containing the specified number of elements, each of which
   // is copy initialized from the specified value.
   inline Vector(size_t, const T&);
+
+  // HashTable support
+  Vector(HashTableDeletedValueType value) : Base(value) {}
+  bool IsHashTableDeletedValue() const {
+    return Base::IsHashTableDeletedValue();
+  }
 
   // Copying.
   Vector(const Vector&);
@@ -1173,8 +1194,9 @@ class Vector
   // take O(size())-time. All of the elements after the removed ones will be
   // moved to the new locations. All the iterators pointing to any element
   // after |position| will be invalidated.
-  void erase(size_t position);
-  void erase(size_t position, size_t length);
+  void EraseAt(size_t position);
+  void EraseAt(size_t position, size_t length);
+  iterator erase(iterator position);
 
   // Remove the last element. Unlike remove(), (1) this function is fast, and
   // (2) only iterators pointing to the last element will be invalidated. Other
@@ -1257,6 +1279,9 @@ class Vector
   void ShrinkCapacity(size_t new_capacity);
   template <typename U>
   void AppendSlowCase(U&&);
+
+  // This is to prevent compilation of deprecated calls like 'vector.erase(0)'.
+  void erase(std::nullptr_t) = delete;
 
   using Base::size_;
   using Base::Buffer;
@@ -1661,9 +1686,7 @@ void Vector<T, inlineCapacity, Allocator>::ShrinkCapacity(size_t new_capacity) {
 }
 
 // Templatizing these is better than just letting the conversion happen
-// implicitly, because for instance it allows a PassRefPtr to be appended to a
-// RefPtr vector without refcount thrash.
-
+// implicitly.
 template <typename T, size_t inlineCapacity, typename Allocator>
 template <typename U>
 ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::push_back(U&& val) {
@@ -1824,7 +1847,7 @@ inline void Vector<T, inlineCapacity, Allocator>::PrependVector(
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline void Vector<T, inlineCapacity, Allocator>::erase(size_t position) {
+inline void Vector<T, inlineCapacity, Allocator>::EraseAt(size_t position) {
   CHECK_LT(position, size());
   T* spot = begin() + position;
   spot->~T();
@@ -1835,8 +1858,16 @@ inline void Vector<T, inlineCapacity, Allocator>::erase(size_t position) {
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline void Vector<T, inlineCapacity, Allocator>::erase(size_t position,
-                                                        size_t length) {
+inline auto Vector<T, inlineCapacity, Allocator>::erase(iterator position)
+    -> iterator {
+  size_t index = position - begin();
+  EraseAt(index);
+  return begin() + index;
+}
+
+template <typename T, size_t inlineCapacity, typename Allocator>
+inline void Vector<T, inlineCapacity, Allocator>::EraseAt(size_t position,
+                                                          size_t length) {
   SECURITY_DCHECK(position <= size());
   if (!length)
     return;

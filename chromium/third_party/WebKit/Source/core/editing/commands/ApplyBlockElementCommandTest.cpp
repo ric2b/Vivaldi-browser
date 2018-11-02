@@ -3,17 +3,17 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/QualifiedName.h"
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/Position.h"
 #include "core/editing/SelectionTemplate.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/commands/FormatBlockCommand.h"
 #include "core/editing/commands/IndentOutdentCommand.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/html/HTMLHeadElement.h"
+#include "core/html_names.h"
 
 #include <memory>
 
@@ -51,7 +51,7 @@ TEST_F(ApplyBlockElementCommandTest, selectionCrossingOverBody) {
   EXPECT_EQ(
       "<body contenteditable=\"false\">\n"
       "<pre><var id=\"va\" class=\"CLASS13\">\nC\n</var></pre><input></body>",
-      GetDocument().documentElement()->innerHTML());
+      GetDocument().documentElement()->InnerHTMLAsString());
 }
 
 // This is a regression test for https://crbug.com/660801
@@ -75,7 +75,7 @@ TEST_F(ApplyBlockElementCommandTest, visibilityChangeDuringCommand) {
   EXPECT_EQ(
       "<head><style>li:first-child { visibility:visible; }</style></head>"
       "<body><ul style=\"visibility:hidden\"><ul></ul><li>xyz</li></ul></body>",
-      GetDocument().documentElement()->innerHTML());
+      GetDocument().documentElement()->InnerHTMLAsString());
 }
 
 // This is a regression test for https://crbug.com/712510
@@ -106,7 +106,7 @@ TEST_F(ApplyBlockElementCommandTest, IndentHeadingIntoBlockquote) {
       "<h6><button></button></h6><br>"
       "<object></object>"
       "</div>",
-      GetDocument().body()->innerHTML());
+      GetDocument().body()->InnerHTMLAsString());
 }
 
 }  // namespace blink

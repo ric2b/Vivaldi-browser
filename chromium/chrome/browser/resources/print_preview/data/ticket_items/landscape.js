@@ -5,59 +5,55 @@
 cr.define('print_preview.ticket_items', function() {
   'use strict';
 
-  /**
-   * Landscape ticket item whose value is a {@code boolean} that indicates
-   * whether the document should be printed in landscape orientation.
-   * @param {!print_preview.AppState} appState App state object used to persist
-   *     ticket item values.
-   * @param {!print_preview.DestinationStore} destinationStore Destination store
-   *     used to determine the default landscape value and if landscape
-   *     printing is available.
-   * @param {!print_preview.DocumentInfo} documentInfo Information about the
-   *     document to print.
-   * @param {!print_preview.ticket_items.MarginsType} marginsType Reset when
-   *     landscape value changes.
-   * @param {!print_preview.ticket_items.CustomMargins} customMargins Reset when
-   *     landscape value changes.
-   * @constructor
-   * @extends {print_preview.ticket_items.TicketItem}
-   */
-  function Landscape(
-      appState, destinationStore, documentInfo, marginsType, customMargins) {
-    print_preview.ticket_items.TicketItem.call(
-        this, appState, print_preview.AppStateField.IS_LANDSCAPE_ENABLED,
-        destinationStore, documentInfo);
-
+  class Landscape extends print_preview.ticket_items.TicketItem {
     /**
-     * Margins ticket item. Reset when landscape ticket item changes.
-     * @type {!print_preview.ticket_items.MarginsType}
-     * @private
+     * Landscape ticket item whose value is a {@code boolean} that indicates
+     * whether the document should be printed in landscape orientation.
+     * @param {!print_preview.AppState} appState App state object used to
+     *     persist ticket item values.
+     * @param {!print_preview.DestinationStore} destinationStore Destination
+     *     store used to determine the default landscape value and if landscape
+     *     printing is available.
+     * @param {!print_preview.DocumentInfo} documentInfo Information about the
+     *     document to print.
+     * @param {!print_preview.ticket_items.MarginsType} marginsType Reset when
+     *     landscape value changes.
+     * @param {!print_preview.ticket_items.CustomMargins} customMargins Reset
+     *     when landscape value changes.
      */
-    this.marginsType_ = marginsType;
+    constructor(
+        appState, destinationStore, documentInfo, marginsType, customMargins) {
+      super(
+          appState, print_preview.AppStateField.IS_LANDSCAPE_ENABLED,
+          destinationStore, documentInfo);
 
-    /**
-     * Custom margins ticket item. Reset when landscape ticket item changes.
-     * @type {!print_preview.ticket_items.CustomMargins}
-     * @private
-     */
-    this.customMargins_ = customMargins;
-  }
+      /**
+       * Margins ticket item. Reset when landscape ticket item changes.
+       * @type {!print_preview.ticket_items.MarginsType}
+       * @private
+       */
+      this.marginsType_ = marginsType;
 
-  Landscape.prototype = {
-    __proto__: print_preview.ticket_items.TicketItem.prototype,
+      /**
+       * Custom margins ticket item. Reset when landscape ticket item changes.
+       * @type {!print_preview.ticket_items.CustomMargins}
+       * @private
+       */
+      this.customMargins_ = customMargins;
+    }
 
     /** @override */
-    wouldValueBeValid: function(value) {
+    wouldValueBeValid(value) {
       return true;
-    },
+    }
 
     /** @override */
-    isCapabilityAvailable: function() {
-      var cap = this.getPageOrientationCapability_();
+    isCapabilityAvailable() {
+      const cap = this.getPageOrientationCapability_();
       if (!cap)
         return false;
-      var hasAutoOrPortraitOption = false;
-      var hasLandscapeOption = false;
+      let hasAutoOrPortraitOption = false;
+      let hasLandscapeOption = false;
       cap.option.forEach(function(option) {
         hasAutoOrPortraitOption = hasAutoOrPortraitOption ||
             option.type == 'AUTO' || option.type == 'PORTRAIT';
@@ -70,29 +66,29 @@ cr.define('print_preview.ticket_items', function() {
       return this.getDocumentInfoInternal().isModifiable &&
           !this.getDocumentInfoInternal().hasCssMediaStyles &&
           hasAutoOrPortraitOption && hasLandscapeOption;
-    },
+    }
 
     /** @override */
-    getDefaultValueInternal: function() {
-      var cap = this.getPageOrientationCapability_();
-      var defaultOptions = cap.option.filter(function(option) {
+    getDefaultValueInternal() {
+      const cap = this.getPageOrientationCapability_();
+      const defaultOptions = cap.option.filter(function(option) {
         return option.is_default;
       });
       return defaultOptions.length == 0 ? false :
                                           defaultOptions[0].type == 'LANDSCAPE';
-    },
+    }
 
     /** @override */
-    getCapabilityNotAvailableValueInternal: function() {
-      var doc = this.getDocumentInfoInternal();
+    getCapabilityNotAvailableValueInternal() {
+      const doc = this.getDocumentInfoInternal();
       return doc.hasCssMediaStyles ?
           (doc.pageSize.width > doc.pageSize.height) :
           false;
-    },
+    }
 
     /** @override */
-    updateValueInternal: function(value) {
-      var updateMargins = !this.isValueEqual(value);
+    updateValueInternal(value) {
+      const updateMargins = !this.isValueEqual(value);
       print_preview.ticket_items.TicketItem.prototype.updateValueInternal.call(
           this, value);
       if (updateMargins) {
@@ -101,32 +97,32 @@ cr.define('print_preview.ticket_items', function() {
             print_preview.ticket_items.MarginsTypeValue.DEFAULT);
         this.customMargins_.updateValue(null);
       }
-    },
+    }
 
     /**
      * @return {boolean} Whether capability contains the |value|.
      * @param {string} value Option to check.
      */
-    hasOption: function(value) {
-      var cap = this.getPageOrientationCapability_();
+    hasOption(value) {
+      const cap = this.getPageOrientationCapability_();
       if (!cap)
         return false;
       return cap.option.some(function(option) {
         return option.type == value;
       });
-    },
+    }
 
     /**
      * @return {Object} Page orientation capability of the selected destination.
      * @private
      */
-    getPageOrientationCapability_: function() {
-      var dest = this.getSelectedDestInternal();
+    getPageOrientationCapability_() {
+      const dest = this.getSelectedDestInternal();
       return (dest && dest.capabilities && dest.capabilities.printer &&
               dest.capabilities.printer.page_orientation) ||
           null;
     }
-  };
+  }
 
   // Export
   return {Landscape: Landscape};

@@ -9,9 +9,11 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
@@ -39,6 +41,7 @@ api::passwords_private::PasswordUiEntry CreateEntry(size_t num) {
   entry.login_pair.urls.link = entry.login_pair.urls.origin;
   entry.login_pair.username = "testName" + std::to_string(num);
   entry.num_characters_in_password = kNumCharactersInPassword;
+  entry.index = num;
   return entry;
 }
 
@@ -47,6 +50,7 @@ api::passwords_private::ExceptionEntry CreateException(size_t num) {
   exception.urls.shown = "exception" + std::to_string(num) + ".com";
   exception.urls.origin = "http://" + exception.urls.shown + "/login";
   exception.urls.link = exception.urls.origin;
+  exception.index = num;
   return exception;
 }
 
@@ -88,40 +92,73 @@ class TestDelegate : public PasswordsPrivateDelegate {
     callback.Run(current_exceptions_);
   }
 
-  void RemoveSavedPassword(const std::string& origin,
-                           const std::string& username) override {
+  void RemoveSavedPassword(size_t index) override {
     if (current_entries_.empty())
       return;
 
     // Since this is just mock data, remove the first entry regardless of
     // the data contained.
+    last_deleted_entry_ = std::move(current_entries_.front());
     current_entries_.erase(current_entries_.begin());
     SendSavedPasswordsList();
   }
 
-  void RemovePasswordException(const std::string& exception_url) override {
-    if (current_exceptions_.empty())
+  void RemovePasswordException(size_t index) override {
+    if (index >= current_exceptions_.size())
       return;
 
     // Since this is just mock data, remove the first entry regardless of
     // the data contained.
+    last_deleted_exception_ = std::move(current_exceptions_.front());
     current_exceptions_.erase(current_exceptions_.begin());
     SendPasswordExceptionsList();
   }
 
-  void RequestShowPassword(const std::string& origin,
-                           const std::string& username,
+  // Simplified version of undo logic, only use for testing.
+  void UndoRemoveSavedPasswordOrException() override {
+    if (last_deleted_entry_) {
+      current_entries_.insert(current_entries_.begin(),
+                              std::move(*last_deleted_entry_));
+      last_deleted_entry_ = base::nullopt;
+      SendSavedPasswordsList();
+    } else if (last_deleted_exception_) {
+      current_exceptions_.insert(current_exceptions_.begin(),
+                                 std::move(*last_deleted_exception_));
+      last_deleted_exception_ = base::nullopt;
+      SendPasswordExceptionsList();
+    }
+  }
+
+  void RequestShowPassword(size_t index,
                            content::WebContents* web_contents) override {
     // Return a mocked password value.
     std::string plaintext_password(kPlaintextPassword);
     PasswordsPrivateEventRouter* router =
         PasswordsPrivateEventRouterFactory::GetForProfile(profile_);
     if (router) {
-      router->OnPlaintextPasswordFetched(origin, username, plaintext_password);
+      if (index >= current_entries_.size())
+        return;
+      router->OnPlaintextPasswordFetched(index, plaintext_password);
     }
   }
 
   void SetProfile(Profile* profile) { profile_ = profile; }
+
+  void ImportPasswords(content::WebContents* web_contents) override {
+    // The testing of password importing itself should be handled via
+    // |PasswordManagerPorter|.
+    importPasswordsTriggered = true;
+  }
+
+  void ExportPasswords(content::WebContents* web_contents) override {
+    // The testing of password exporting itself should be handled via
+    // |PasswordManagerPorter|.
+    exportPasswordsTriggered = true;
+  }
+
+  // Flags for detecting whether import/export operations have been invoked.
+  bool importPasswordsTriggered = false;
+  bool exportPasswordsTriggered = false;
 
  private:
   // The current list of entries/exceptions. Cached here so that when new
@@ -129,6 +166,11 @@ class TestDelegate : public PasswordsPrivateDelegate {
   // having to request them from |password_manager_presenter_| again.
   std::vector<api::passwords_private::PasswordUiEntry> current_entries_;
   std::vector<api::passwords_private::ExceptionEntry> current_exceptions_;
+  // Simplified version of a undo manager that only allows undoing and redoing
+  // the very last deletion.
+  base::Optional<api::passwords_private::PasswordUiEntry> last_deleted_entry_;
+  base::Optional<api::passwords_private::ExceptionEntry>
+      last_deleted_exception_;
   Profile* profile_;
 };
 
@@ -170,6 +212,14 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
                                kFlagLoadAsComponent);
   }
 
+  bool importPasswordsWasTriggered() {
+    return s_test_delegate_->importPasswordsTriggered;
+  }
+
+  bool exportPasswordsWasTriggered() {
+    return s_test_delegate_->exportPasswordsTriggered;
+  }
+
  private:
   static TestDelegate* s_test_delegate_;
 
@@ -181,12 +231,16 @@ TestDelegate* PasswordsPrivateApiTest::s_test_delegate_ = nullptr;
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RemoveSavedPassword) {
-  EXPECT_TRUE(RunPasswordsSubtest("removeSavedPassword")) << message_;
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       RemoveAndUndoRemoveSavedPassword) {
+  EXPECT_TRUE(RunPasswordsSubtest("removeAndUndoRemoveSavedPassword"))
+      << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RemovePasswordException) {
-  EXPECT_TRUE(RunPasswordsSubtest("removePasswordException")) << message_;
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       RemoveAndUndoRemovePasswordException) {
+  EXPECT_TRUE(RunPasswordsSubtest("removeAndUndoRemovePasswordException"))
+      << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestPlaintextPassword) {
@@ -199,6 +253,32 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetSavedPasswordList) {
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetPasswordExceptionList) {
   EXPECT_TRUE(RunPasswordsSubtest("getPasswordExceptionList")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ImportPasswords) {
+  EXPECT_FALSE(importPasswordsWasTriggered());
+  EXPECT_TRUE(RunPasswordsSubtest("importPasswords")) << message_;
+
+  // TODO(crbug.com/177163): Extension subtests are currently skipped on
+  // Windows, which leads to the import passwords function never being
+  // triggered, causing the test to fail, so the check is currently skipped in
+  // this case.
+  if (!ExtensionApiTest::ExtensionSubtestsAreSkipped()) {
+    EXPECT_TRUE(importPasswordsWasTriggered());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ExportPasswords) {
+  EXPECT_FALSE(exportPasswordsWasTriggered());
+  EXPECT_TRUE(RunPasswordsSubtest("exportPasswords")) << message_;
+
+  // TODO(crbug.com/177163): Extension subtests are currently skipped on
+  // Windows, which leads to the import passwords function never being
+  // triggered, causing the test to fail, so the check is currently skipped in
+  // this case.
+  if (!ExtensionApiTest::ExtensionSubtestsAreSkipped()) {
+    EXPECT_TRUE(exportPasswordsWasTriggered());
+  }
 }
 
 }  // namespace extensions

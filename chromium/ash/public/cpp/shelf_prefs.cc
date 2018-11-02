@@ -4,8 +4,9 @@
 
 #include "ash/public/cpp/shelf_prefs.h"
 
+#include <memory>
+
 #include "ash/public/cpp/ash_pref_names.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "components/prefs/pref_service.h"
@@ -77,9 +78,8 @@ std::string GetPerDisplayPref(PrefService* prefs,
   if (local_pref->IsRecommended() || !has_per_display_prefs)
     return value;
 
-  const base::Value* default_value = prefs->GetDefaultPrefValue(local_path);
   std::string default_string;
-  default_value->GetAsString(&default_string);
+  prefs->GetDefaultPrefValue(local_path)->GetAsString(&default_string);
   return default_string;
 }
 
@@ -108,7 +108,7 @@ void SetPerDisplayPref(PrefService* prefs,
   base::DictionaryValue* shelf_prefs = update.Get();
   base::DictionaryValue* display_prefs_weak = nullptr;
   if (!shelf_prefs->GetDictionary(display_key, &display_prefs_weak)) {
-    auto display_prefs = base::MakeUnique<base::DictionaryValue>();
+    auto display_prefs = std::make_unique<base::DictionaryValue>();
     display_prefs_weak = display_prefs.get();
     shelf_prefs->Set(display_key, std::move(display_prefs));
   }
@@ -160,7 +160,7 @@ const char* AutoHideBehaviorToPref(ShelfAutoHideBehavior behavior) {
     case SHELF_AUTO_HIDE_ALWAYS_HIDDEN:
       // This should not be a valid preference option for now. We only want to
       // completely hide it when we run in app mode - or while we temporarily
-      // hide the shelf as part of an animation (e.g. the multi user change).
+      // hide the shelf (e.g. SessionAbortedDialog).
       return nullptr;
   }
   NOTREACHED();

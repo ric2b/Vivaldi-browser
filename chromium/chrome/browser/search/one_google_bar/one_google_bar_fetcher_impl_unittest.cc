@@ -7,7 +7,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -16,12 +15,14 @@
 #include "base/time/time.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "components/google/core/browser/google_url_tracker.h"
-#include "components/safe_json/testing_json_parser.h"
+#include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/data_decoder/public/cpp/testing_json_parser.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -108,10 +109,11 @@ class OneGoogleBarFetcherImplTest : public testing::Test {
 
  private:
   // variations::AppendVariationHeaders and SafeJsonParser require a
-  // ThreadTaskRunnerHandle to be set.
-  base::MessageLoop message_loop_;
+  // threads and a ServiceManagerConnection to be set.
+  content::TestBrowserThreadBundle thread_bundle_;
+  content::TestServiceManagerContext service_manager_context_;
 
-  safe_json::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
 
   net::TestURLFetcherFactory url_fetcher_factory_;
 
@@ -131,7 +133,8 @@ TEST_F(OneGoogleBarFetcherImplTest, RequestUrlContainsLanguage) {
   GURL request_url = fetcher->GetOriginalURL();
 
   // Make sure the request URL contains the "hl=" query param.
-  std::string expected_query = base::StringPrintf("hl=%s", kApplicationLocale);
+  std::string expected_query =
+      base::StringPrintf("hl=%s&async=fixed:0", kApplicationLocale);
   EXPECT_EQ(expected_query, request_url.query());
 }
 
@@ -307,7 +310,7 @@ TEST_F(OneGoogleBarFetcherImplWithRelativeApiUrlOverrideTest,
   GURL request_url = GetRunningURLFetcher()->GetOriginalURL();
   EXPECT_EQ("/testapi", request_url.path());
   std::string expected_query =
-      base::StringPrintf("q=a&hl=%s", kApplicationLocale);
+      base::StringPrintf("q=a&hl=%s&async=fixed:0", kApplicationLocale);
   EXPECT_EQ(expected_query, request_url.query());
 }
 
@@ -327,7 +330,7 @@ TEST_F(OneGoogleBarFetcherImplWithAbsoluteApiUrlOverrideTest,
   // Make sure the request URL corresponds to the override, but also contains
   // the "hl=" query param.
   GURL request_url = GetRunningURLFetcher()->GetOriginalURL();
-  GURL expected_url = GURL(
-      base::StringPrintf("http://test.com/path?q=a&hl=%s", kApplicationLocale));
+  GURL expected_url = GURL(base::StringPrintf(
+      "http://test.com/path?q=a&hl=%s&async=fixed:0", kApplicationLocale));
   EXPECT_EQ(expected_url, request_url);
 }

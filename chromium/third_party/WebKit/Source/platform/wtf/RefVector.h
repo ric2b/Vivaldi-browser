@@ -7,8 +7,8 @@
 
 #include <utility>
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -16,14 +16,16 @@ namespace blink {
 template <typename T>
 class RefVector : public RefCounted<RefVector<T>> {
  public:
-  static RefPtr<RefVector> Create() { return AdoptRef(new RefVector<T>); }
-  static RefPtr<RefVector> Create(const Vector<T>& vector) {
-    return AdoptRef(new RefVector<T>(vector));
+  static scoped_refptr<RefVector> Create() {
+    return base::AdoptRef(new RefVector<T>);
   }
-  static RefPtr<RefVector> Create(Vector<T>&& vector) {
-    return AdoptRef(new RefVector<T>(std::move(vector)));
+  static scoped_refptr<RefVector> Create(const Vector<T>& vector) {
+    return base::AdoptRef(new RefVector<T>(vector));
   }
-  RefPtr<RefVector> Copy() { return Create(GetVector()); }
+  static scoped_refptr<RefVector> Create(Vector<T>&& vector) {
+    return base::AdoptRef(new RefVector<T>(std::move(vector)));
+  }
+  scoped_refptr<RefVector> Copy() { return Create(GetVector()); }
 
   const T& operator[](size_t i) const { return vector_[i]; }
   T& operator[](size_t i) { return vector_[i]; }

@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2015 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
@@ -30,7 +31,7 @@ namespace media {
 
 namespace {
 
-const SampleFormat kOutputSampleFormat = kSampleFormatF32;
+const SampleFormat kOutputSampleFormat = SampleFormat::kSampleFormatF32;
 
 // Custom error codes returned from ProvideData() and passed on to the caller
 // of AudioConverterFillComplexBuffer().
@@ -123,9 +124,9 @@ OSStatus ProvideData(AudioConverterRef inAudioConverter,
 
 std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
   switch (codec) {
-    case kCodecAAC:
+    case AudioCodec::kCodecAAC:
       return base::WrapUnique(new ATAACHelper);
-    case kCodecMP3:
+    case AudioCodec::kCodecMP3:
       return base::WrapUnique(new ATMP3Helper);
     default:
       LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -280,10 +281,10 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                             const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  const media::DecodeStatus status =
-      codec_helper_->ProcessBuffer(buffer) ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR;
+  const DecodeStatus status =
+      codec_helper_->ProcessBuffer(buffer) ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR;
 
-  if (status == media::DecodeStatus::DECODE_ERROR) {
+  if (status == DecodeStatus::DECODE_ERROR) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " ProcessBuffer failed : DECODE_ERROR";
   }
@@ -389,7 +390,7 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   output_buffers.mBuffers[0].mDataByteSize =
       output->frame_count() * output->channel_count() *
       SampleFormatToBytesPerChannel(kOutputSampleFormat);
-  // Will put decoded data in the |output| media::AudioBuffer directly.
+  // Will put decoded data in the |output| AudioBuffer directly.
   output_buffers.mBuffers[0].mData = output->channel_data()[0];
 
   AudioStreamPacketDescription

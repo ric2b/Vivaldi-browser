@@ -4,6 +4,7 @@
 
 #include "content/renderer/webclipboard_impl.h"
 
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -29,6 +30,8 @@ IN_PROC_BROWSER_TEST_F(WebClipboardImplTest, PasteRTF) {
 
   // paste_listener.html takes RTF from the clipboard and sets the title.
   NavigateToURL(shell(), GetTestUrl(".", "paste_listener.html"));
+  FrameFocusedObserver focus_observer(shell()->web_contents()->GetMainFrame());
+  focus_observer.Wait();
 
   const base::string16 expected_title = base::UTF8ToUTF16(rtf_content);
   content::TitleWatcher title_watcher(shell()->web_contents(), expected_title);

@@ -39,6 +39,11 @@ class TestTextInputClient : public ui::mojom::TextInputClient {
     if (run_loop_)
       run_loop_->Quit();
   }
+  void DispatchKeyEventPostIME(
+      std::unique_ptr<ui::Event> event,
+      DispatchKeyEventPostIMECallback callback) override {
+    std::move(callback).Run(false);
+  }
 
   mojo::Binding<ui::mojom::TextInputClient> binding_;
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -89,13 +94,10 @@ class IMEAppTest : public service_manager::test::ServiceTest {
 
 // Tests sending a KeyEvent to the IMEDriver through the Mus IMEDriver.
 TEST_F(IMEAppTest, ProcessKeyEvent) {
-  ui::mojom::TextInputClientPtr client_ptr;
-  TestTextInputClient client(MakeRequest(&client_ptr));
-
   ui::mojom::InputMethodPtr input_method;
   ui::mojom::StartSessionDetailsPtr details =
       ui::mojom::StartSessionDetails::New();
-  details->client = std::move(client_ptr);
+  TestTextInputClient client(MakeRequest(&details->client));
   details->input_method_request = MakeRequest(&input_method);
   ime_driver_->StartSession(std::move(details));
 

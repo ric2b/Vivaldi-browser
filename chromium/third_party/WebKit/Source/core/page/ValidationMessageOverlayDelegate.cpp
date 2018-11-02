@@ -28,7 +28,7 @@ class ValidationMessageChromeClient : public EmptyChromeClient {
         anchor_view_(anchor_view),
         overlay_(overlay) {}
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(main_chrome_client_);
     visitor->Trace(anchor_view_);
     EmptyChromeClient::Trace(visitor);
@@ -98,7 +98,9 @@ void ValidationMessageOverlayDelegate::PaintPageOverlay(
   const_cast<ValidationMessageOverlayDelegate*>(this)->UpdateFrameViewState(
       overlay, view_size);
   LocalFrameView& view = FrameView();
-  view.Paint(context, CullRect(IntRect(0, 0, view.Width(), view.Height())));
+  view.PaintWithLifecycleUpdate(
+      context, kGlobalPaintNormalPhase,
+      CullRect(IntRect(0, 0, view.Width(), view.Height())));
 }
 
 void ValidationMessageOverlayDelegate::UpdateFrameViewState(
@@ -145,17 +147,14 @@ void ValidationMessageOverlayDelegate::EnsurePage(const PageOverlay& overlay,
   frame->View()->SetBaseBackgroundColor(Color::kTransparent);
   page_->GetVisualViewport().SetSize(view_size);
 
-  RefPtr<SharedBuffer> data = SharedBuffer::Create();
-  WriteDocument(data.Get());
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
+  WriteDocument(data.get());
   float zoom_factor = anchor_->GetDocument().GetFrame()->PageZoomFactor();
   frame->SetPageZoomFactor(zoom_factor);
   // Propagate deprecated DSF for platforms without use-zoom-for-dsf.
   page_->SetDeviceScaleFactorDeprecated(
       main_page_->DeviceScaleFactorDeprecated());
-  frame->Loader().Load(
-      FrameLoadRequest(nullptr, ResourceRequest(BlankURL()),
-                       SubstituteData(data, "text/html", "UTF-8", KURL(),
-                                      kForceSynchronousLoad)));
+  frame->ForceSynchronousDocumentInstall("text/html", data);
 
   Element& container = GetElementById("container");
   if (LayoutTestSupport::IsRunningLayoutTest()) {

@@ -36,13 +36,15 @@ Audits2.Audits2Panel = class extends UI.Panel {
 
     this._auditResultsElement = this.contentElement.createChild('div', 'audits2-results-container');
     this._dropTarget = new UI.DropTarget(
-        this.contentElement, [UI.DropTarget.Types.Files], Common.UIString('Drop audit file here'),
+        this.contentElement, [UI.DropTarget.Type.File], Common.UIString('Drop audit file here'),
         this._handleDrop.bind(this));
 
     for (var preset of Audits2.Audits2Panel.Presets)
       preset.setting.addChangeListener(this._updateStartButtonEnabled.bind(this));
     this._showLandingPage();
     SDK.targetManager.observeModels(SDK.ServiceWorkerManager, this);
+    SDK.targetManager.addEventListener(
+        SDK.TargetManager.Events.InspectedURLChanged, this._updateStartButtonEnabled, this);
   }
 
   /**
@@ -85,7 +87,11 @@ Audits2.Audits2Panel = class extends UI.Panel {
     if (!this._manager)
       return false;
 
-    var inspectedURL = SDK.targetManager.mainTarget().inspectedURL().asParsedURL();
+    var mainTarget = SDK.targetManager.mainTarget();
+    if (!mainTarget)
+      return false;
+
+    var inspectedURL = mainTarget.inspectedURL().asParsedURL();
     var inspectedOrigin = inspectedURL && inspectedURL.securityOrigin();
     for (var registration of this._manager.registrations().values()) {
       if (registration.securityOrigin !== inspectedOrigin)
@@ -114,11 +120,18 @@ Audits2.Audits2Panel = class extends UI.Panel {
     if (!this._manager)
       return null;
 
-    var inspectedURL = SDK.targetManager.mainTarget().inspectedURL();
-    if (/^about:/.test(inspectedURL))
-      return Common.UIString('Cannot audit about:* pages. Navigate to a different page to start an audit.');
+    var mainTarget = SDK.targetManager.mainTarget();
+    var inspectedURL = mainTarget && mainTarget.inspectedURL();
+    if (inspectedURL && !/^(http|chrome-extension)/.test(inspectedURL)) {
+      return Common.UIString(
+          'Can only audit HTTP/HTTPS pages and Chrome extensions. ' +
+          'Navigate to a different page to start an audit.');
+    }
 
-    if (!Runtime.queryParam('can_dock'))
+    // Audits don't work on most undockable targets (extension popup pages, remote debugging, etc).
+    // However, the tests run in a content shell which is not dockable yet audits just fine,
+    // so disable this check when under test.
+    if (!Host.isUnderTest() && !Runtime.queryParam('can_dock'))
       return Common.UIString('Can only audit tabs. Navigate to this page in a separate tab to start an audit.');
 
     return null;
@@ -411,7 +424,14 @@ Audits2.Audits2Panel = class extends UI.Panel {
     this._statusIcon.classList.add('error');
     this._statusElement.createTextChild(Common.UIString('Ah, sorry! We ran into an error: '));
     this._statusElement.createChild('em').createTextChild(err.message);
-    this._createBugReportLink(err, this._statusElement);
+    if (Audits2.Audits2Panel.KnownBugPatterns.some(pattern => pattern.test(err.message))) {
+      var message = Common.UIString(
+          'Try to navigate to the URL in a fresh Chrome profile without any other tabs or ' +
+          'extensions open and try again.');
+      this._statusElement.createChild('p').createTextChild(message);
+    } else {
+      this._createBugReportLink(err, this._statusElement);
+    }
   }
 
   /**
@@ -431,7 +451,7 @@ Audits2.Audits2Panel = class extends UI.Panel {
 ${err.stack}
 \`\`\`
     `;
-    var body = '&body=' + encodeURI(issueBody.trim());
+    var body = '&body=' + encodeURIComponent(issueBody.trim());
     var reportErrorEl = parentElem.createChild('a', 'audits2-link audits2-report-error');
     reportErrorEl.href = baseURI + title + body;
     reportErrorEl.textContent = Common.UIString('Report this bug');
@@ -499,6 +519,14 @@ class ReportUIFeatures {
   initFeatures(report) {
   }
 }
+
+/** @type {!Array.<!RegExp>} */
+Audits2.Audits2Panel.KnownBugPatterns = [
+  /Tracing already started/,
+  /^Unable to load the page/,
+  /^You must provide a url to the runner/,
+  /^You probably have multiple tabs open/,
+];
 
 /** @typedef {{setting: !Common.Setting, configID: string, title: string, description: string}} */
 Audits2.Audits2Panel.Preset;

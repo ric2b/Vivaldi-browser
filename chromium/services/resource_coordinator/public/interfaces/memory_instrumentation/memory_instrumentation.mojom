@@ -12,13 +12,13 @@ enum DumpType {
   PERIODIC_INTERVAL,
   EXPLICITLY_TRIGGERED,
   PEAK_MEMORY_USAGE,
-  SUMMARY_ONLY,
-  VM_REGIONS_ONLY
+  SUMMARY_ONLY
 };
 
 enum LevelOfDetail {
   BACKGROUND,
   LIGHT,
+  VM_REGIONS_ONLY_FOR_HEAP_PROFILER,
   DETAILED
 };
 
@@ -31,10 +31,12 @@ enum ProcessType {
   PLUGIN
 };
 
-struct RequestArgs {
-  uint64 dump_guid;
-  DumpType dump_type;
-  LevelOfDetail level_of_detail;
+enum HeapProfilingMode {
+  DISABLED,
+  TASK_PROFILER,
+  BACKGROUND,
+  PSEUDO_STACK,
+  NATIVE_STACK
 };
 
 struct ChromeMemDump {
@@ -46,7 +48,46 @@ struct ChromeMemDump {
 };
 
 // These structs are internal only (only for the communication between
-// the service and the ClientProcess library)
+// the service and the ClientProcess library).
+// See corresponding types in //base/trace_event for comments.
+
+struct RequestArgs {
+  uint64 dump_guid;
+  DumpType dump_type;
+  LevelOfDetail level_of_detail;
+};
+
+struct RawAllocatorDumpEdge {
+  uint64 source_id;
+  uint64 target_id;
+  int64 importance;
+  bool overridable;
+};
+
+union RawAllocatorDumpEntryValue {
+  uint64 value_uint64;
+  string value_string;
+};
+
+struct RawAllocatorDumpEntry {
+  string name;
+  string units;
+  RawAllocatorDumpEntryValue value;
+};
+
+struct RawAllocatorDump {
+  uint64 id;
+  string absolute_name;
+  bool weak;
+  LevelOfDetail level_of_detail;
+  array<RawAllocatorDumpEntry> entries;
+};
+
+struct RawProcessMemoryDump {
+  LevelOfDetail level_of_detail;
+  array<RawAllocatorDumpEdge> allocator_dump_edges;
+  array<RawAllocatorDump> allocator_dumps;
+};
 
 struct VmRegion {
   const uint32 kProtectionFlagsRead = 4;
@@ -103,6 +144,11 @@ struct RawOSMemDump {
 
 // These structs are public:
 
+struct GlobalRequestArgs {
+  DumpType dump_type;
+  LevelOfDetail level_of_detail;
+};
+
 struct OSMemDump {
   uint32 resident_set_kb = 0;
 
@@ -110,10 +156,20 @@ struct OSMemDump {
   // memory in kilobytes. For more details, see https://goo.gl/3kPb9S.
   uint32 private_footprint_kb = 0;
 
+  // This is roughly non-private, anonymous, non-discardable, resident memory
+  // in kilobytes. For more details, see https://goo.gl/3kPb9S.
+  uint32 shared_footprint_kb = 0;
+
   // This field is present only when the dump is obtained through
   // Coordinator.GetVmRegionsForHeapProfiler(), empty in the generic case of
   // RequestGlobalMemoryDump().
   array<VmRegion> memory_maps_for_heap_profiler;
+
+  // This is private swapped memory in kilobytes reported on Linux and Android
+  // only.
+  // TODO(crbug.com/676224): add platform restrictions when preprocessing in
+  // mojoms is supported.
+  uint32 private_footprint_swap_kb = 0;
 };
 
 // This struct is used for the public-facing API
@@ -146,7 +202,11 @@ interface ClientProcess {
   // buffer of the target process and an ACK. A summary of the dump is also
   // returned in case of success.
   RequestChromeMemoryDump(RequestArgs args) =>
-      (bool success, uint64 dump_id, ChromeMemDump? chrome_memory_dump);
+      (bool success, uint64 dump_id, RawProcessMemoryDump? raw_process_memory_dump);
+
+  // Enable heap profiler in the client process.
+  EnableHeapProfiling(HeapProfilingMode mode) =>
+      (bool success);
 
   // Requests an OSMemDump for each pid in |pids|.
   // The Memory-infra service deals with two kinds of information:
@@ -172,11 +232,15 @@ interface Coordinator {
   // Registers a client process.
   RegisterClientProcess(ClientProcess client_process, ProcessType process_type);
 
-  // Broadcasts a dump request to all registered client processes, injects the
-  // dump in the trace buffer (if tracing is enabled) and returns a summarized
-  // dump back (if args.dump_type == SUMMARY_ONLY).
-  RequestGlobalMemoryDump(RequestArgs args) =>
-      (bool success, uint64 dump_id, GlobalMemoryDump? global_memory_dump);
+  // Broadcasts a dump request to all registered client processes and returns a
+  // summarized dump back (if args.dump_type == SUMMARY_ONLY).
+  RequestGlobalMemoryDump(GlobalRequestArgs args) =>
+      (bool success, GlobalMemoryDump? global_memory_dump);
+
+  // Broadcasts a dump request to all registered client processes and injects the
+  // dump in the trace buffer (if tracing is enabled).
+  RequestGlobalMemoryDumpAndAppendToTrace(GlobalRequestArgs args) =>
+      (bool success, uint64 dump_id);
 
   // Broadcasts a RequestOSMemoryDump-only request for all registered client
   // processes, retrieves only their memory maps and returns them in the field

@@ -31,6 +31,11 @@ def _ParseOptions(args):
   parser.add_option('--output-path', help='Path to the generated .jar file.')
   parser.add_option('--proguard-configs', action='append',
                     help='Paths to proguard configuration files.')
+  parser.add_option('--proguard-config-exclusions',
+                    default='',
+                    help='GN list of paths to proguard configuration files '
+                         'included by --proguard-configs, but that should '
+                         'not actually be included.')
   parser.add_option('--mapping', help='Path to proguard mapping to apply.')
   parser.add_option('--is-test', action='store_true',
       help='If true, extra proguard options for instrumentation tests will be '
@@ -56,6 +61,8 @@ def _ParseOptions(args):
   for arg in options.proguard_configs:
     configs += build_utils.ParseGnList(arg)
   options.proguard_configs = configs
+  options.proguard_config_exclusions = (
+      build_utils.ParseGnList(options.proguard_config_exclusions))
 
   options.input_paths = build_utils.ParseGnList(options.input_paths)
 
@@ -66,21 +73,10 @@ def main(args):
   args = build_utils.ExpandFileArgs(args)
   options = _ParseOptions(args)
 
-  # Work around cases where we switch from a non-proguard setup
-  # to proguard. The output jar might exist and might be a hardlink
-  # to the input jar, so remove the output before doing anything
-  # in that case to avoid an incremental build failure.
-  try:
-    out_inode = os.stat(options.output_path).st_ino
-  except OSError:
-    out_inode = None
-  if (out_inode and
-      out_inode in (os.stat(injar).st_ino for injar in options.input_paths)):
-    os.unlink(options.output_path)
-
   proguard = proguard_util.ProguardCmdBuilder(options.proguard_path)
   proguard.injars(options.input_paths)
   proguard.configs(options.proguard_configs)
+  proguard.config_exclusions(options.proguard_config_exclusions)
   proguard.outjar(options.output_path)
 
   if options.mapping:
@@ -95,14 +91,12 @@ def main(args):
   if not options.enable_dangerous_optimizations:
     proguard.disable_optimizations(_DANGEROUS_OPTIMIZATIONS)
 
-  input_paths = proguard.GetInputs()
-
   build_utils.CallAndWriteDepfileIfStale(
       proguard.CheckOutput,
       options,
-      input_paths=input_paths,
+      input_paths=proguard.GetInputs(),
       input_strings=proguard.build(),
-      output_paths=[options.output_path],
+      output_paths=proguard.GetOutputs(),
       depfile_deps=proguard.GetDepfileDeps())
 
 

@@ -35,7 +35,6 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/CoreInitializer.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/MessageEvent.h"
@@ -52,9 +51,11 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFrameElementBase.h"
-#include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
 #include "core/loader/DocumentLoader.h"
@@ -63,7 +64,6 @@
 #include "core/loader/HistoryItem.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
@@ -71,6 +71,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/plugins/PluginData.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StringExtras.h"
 #include "platform/wtf/text/CString.h"
@@ -99,6 +100,10 @@
 namespace blink {
 
 namespace {
+
+// Print up to |kMaxCertificateWarningMessages| console messages per frame
+// about certificates that will be distrusted in future.
+const uint32_t kMaxCertificateWarningMessages = 10;
 
 // Convenience helper for frame tree helpers in FrameClient to reduce the amount
 // of null-checking boilerplate code. Since the frame tree is maintained in the
@@ -138,7 +143,7 @@ bool IsBackForwardNavigationInProgress(LocalFrame* local_frame) {
 }  // namespace
 
 LocalFrameClientImpl::LocalFrameClientImpl(WebLocalFrameImpl* frame)
-    : web_frame_(frame) {}
+    : web_frame_(frame), num_certificate_warning_messages_(0) {}
 
 LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameImpl* frame) {
   return new LocalFrameClientImpl(frame);
@@ -146,7 +151,7 @@ LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameImpl* frame) {
 
 LocalFrameClientImpl::~LocalFrameClientImpl() {}
 
-DEFINE_TRACE(LocalFrameClientImpl) {
+void LocalFrameClientImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_frame_);
   LocalFrameClient::Trace(visitor);
 }
@@ -227,7 +232,8 @@ function createShadowRootWithin(node) {
 createShadowRootWithin(document.body);
 )";
     web_frame_->GetFrame()->GetScriptController().ExecuteScriptInMainWorld(
-        script, ScriptController::kExecuteScriptWhenScriptsDisabled);
+        script, ScriptSourceLocationType::kInternal,
+        ScriptController::kExecuteScriptWhenScriptsDisabled);
   }
 
   if (web_frame_->Client()) {
@@ -330,7 +336,7 @@ void LocalFrameClientImpl::Detached(FrameDetachType type) {
 
   // Signal that no further communication with WebFrameClient should take
   // place at this point since we are no longer associated with the Page.
-  web_frame_->SetClient(0);
+  web_frame_->SetClient(nullptr);
 
   client->FrameDetached(static_cast<WebFrameClient::DetachType>(type));
 
@@ -400,6 +406,7 @@ void LocalFrameClientImpl::DispatchDidNavigateWithinPage(
         WebHistoryItem(item), static_cast<WebHistoryCommitType>(commit_type),
         content_initiated);
   }
+  virtual_time_pauser_.PauseVirtualTime(false);
 }
 
 void LocalFrameClientImpl::DispatchWillCommitProvisionalLoad() {
@@ -417,6 +424,7 @@ void LocalFrameClientImpl::DispatchDidStartProvisionalLoad(
   }
   if (WebDevToolsAgentImpl* dev_tools = DevToolsAgent())
     dev_tools->DidStartProvisionalLoad(web_frame_->GetFrame());
+  virtual_time_pauser_.PauseVirtualTime(true);
 }
 
 void LocalFrameClientImpl::DispatchDidReceiveTitle(const String& title) {
@@ -445,12 +453,19 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
   }
   if (WebDevToolsAgentImpl* dev_tools = DevToolsAgent())
     dev_tools->DidCommitLoadForLocalFrame(web_frame_->GetFrame());
+
+  virtual_time_pauser_.PauseVirtualTime(false);
+
+  // Reset certificate warning state that prevents log spam.
+  num_certificate_warning_messages_ = 0;
+  certificate_warning_hosts_.clear();
 }
 
 void LocalFrameClientImpl::DispatchDidFailProvisionalLoad(
     const ResourceError& error,
     HistoryCommitType commit_type) {
   web_frame_->DidFail(error, true, commit_type);
+  virtual_time_pauser_.PauseVirtualTime(false);
 }
 
 void LocalFrameClientImpl::DispatchDidFailLoad(const ResourceError& error,
@@ -648,7 +663,6 @@ bool LocalFrameClientImpl::NavigateBackForward(int offset) const {
     return false;
   if (offset < -webview->Client()->HistoryBackListCount())
     return false;
-  web_frame_->Scheduler()->WillNavigateBackForwardSoon();
   webview->Client()->NavigateBackForwardSoon(offset);
   return true;
 }
@@ -698,6 +712,56 @@ void LocalFrameClientImpl::DidRunContentWithCertificateErrors(const KURL& url) {
     web_frame_->Client()->DidRunContentWithCertificateErrors(url);
 }
 
+void LocalFrameClientImpl::ReportLegacySymantecCert(const KURL& url,
+                                                    Time cert_validity_start) {
+  // To prevent log spam, only log the message once per hostname.
+  if (certificate_warning_hosts_.Contains(url.Host()))
+    return;
+
+  // After |kMaxCertificateWarningMessages| warnings, stop printing messages to
+  // the console. At exactly |kMaxCertificateWarningMessages| warnings, print a
+  // message that additional resources on the page use legacy certificates
+  // without specifying which exact resources. Before
+  // |kMaxCertificateWarningMessages| messages, print the exact resource URL in
+  // the message to help the developer pinpoint the problematic resources.
+
+  if (num_certificate_warning_messages_ > kMaxCertificateWarningMessages)
+    return;
+
+  WebString console_message;
+
+  if (num_certificate_warning_messages_ == kMaxCertificateWarningMessages) {
+    console_message =
+        WebString(String("Additional resources on this page were loaded with "
+                         "SSL certificates that will be "
+                         "distrusted in the future. "
+                         "Once distrusted, users will be prevented from "
+                         "loading these resources. See "
+                         "https://g.co/chrome/symantecpkicerts for "
+                         "more information."));
+  } else if (!web_frame_->Client()->OverrideLegacySymantecCertConsoleMessage(
+                 url, cert_validity_start, &console_message)) {
+    console_message = WebString(
+        String::Format("The SSL certificate used to load resources from %s"
+                       " will be "
+                       "distrusted in the future. "
+                       "Once distrusted, users will be prevented from "
+                       "loading these resources. See "
+                       "https://g.co/chrome/symantecpkicerts for "
+                       "more information.",
+                       SecurityOrigin::Create(url)->ToString().Utf8().data()));
+  }
+  num_certificate_warning_messages_++;
+  certificate_warning_hosts_.insert(url.Host());
+  // To avoid spamming the console, use Verbose message level for subframe
+  // resources and only use the warning level for main-frame resources.
+  web_frame_->GetFrame()->GetDocument()->AddConsoleMessage(
+      ConsoleMessage::Create(
+          kSecurityMessageSource,
+          web_frame_->Parent() ? kVerboseMessageLevel : kWarningMessageLevel,
+          console_message));
+}
+
 void LocalFrameClientImpl::DidChangePerformanceTiming() {
   if (web_frame_->Client())
     web_frame_->Client()->DidChangePerformanceTiming();
@@ -715,6 +779,12 @@ void LocalFrameClientImpl::DidObserveNewFeatureUsage(
     web_frame_->Client()->DidObserveNewFeatureUsage(feature);
 }
 
+bool LocalFrameClientImpl::ShouldTrackUseCounter(const KURL& url) {
+  if (web_frame_->Client())
+    return web_frame_->Client()->ShouldTrackUseCounter(url);
+  return false;
+}
+
 void LocalFrameClientImpl::SelectorMatchChanged(
     const Vector<String>& added_selectors,
     const Vector<String>& removed_selectors) {
@@ -728,11 +798,12 @@ DocumentLoader* LocalFrameClientImpl::CreateDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
     const SubstituteData& data,
-    ClientRedirectPolicy client_redirect_policy) {
+    ClientRedirectPolicy client_redirect_policy,
+    const base::UnguessableToken& devtools_navigation_token) {
   DCHECK(frame);
 
   WebDocumentLoaderImpl* document_loader = WebDocumentLoaderImpl::Create(
-      frame, request, data, client_redirect_policy);
+      frame, request, data, client_redirect_policy, devtools_navigation_token);
   if (web_frame_->Client())
     web_frame_->Client()->DidCreateDocumentLoader(document_loader);
   return document_loader;
@@ -834,7 +905,7 @@ WebRemotePlaybackClient* LocalFrameClientImpl::CreateWebRemotePlaybackClient(
 
 WebCookieJar* LocalFrameClientImpl::CookieJar() const {
   if (!web_frame_->Client())
-    return 0;
+    return nullptr;
   return web_frame_->Client()->CookieJar();
 }
 
@@ -867,7 +938,7 @@ void LocalFrameClientImpl::DidUpdateToUniqueOrigin() {
 void LocalFrameClientImpl::DidChangeFramePolicy(
     Frame* child_frame,
     SandboxFlags flags,
-    const WebParsedFeaturePolicy& container_policy) {
+    const ParsedFeaturePolicy& container_policy) {
   if (!web_frame_->Client())
     return;
   web_frame_->Client()->DidChangeFramePolicy(
@@ -875,10 +946,13 @@ void LocalFrameClientImpl::DidChangeFramePolicy(
       container_policy);
 }
 
-void LocalFrameClientImpl::DidSetFeaturePolicyHeader(
-    const WebParsedFeaturePolicy& parsed_header) {
-  if (web_frame_->Client())
-    web_frame_->Client()->DidSetFeaturePolicyHeader(parsed_header);
+void LocalFrameClientImpl::DidSetFramePolicyHeaders(
+    SandboxFlags sandbox_flags,
+    const ParsedFeaturePolicy& parsed_header) {
+  if (web_frame_->Client()) {
+    web_frame_->Client()->DidSetFramePolicyHeaders(
+        static_cast<WebSandboxFlags>(sandbox_flags), parsed_header);
+  }
 }
 
 void LocalFrameClientImpl::DidAddContentSecurityPolicies(
@@ -907,11 +981,9 @@ void LocalFrameClientImpl::DispatchWillStartUsingPeerConnectionHandler(
   web_frame_->Client()->WillStartUsingPeerConnectionHandler(handler);
 }
 
-bool LocalFrameClientImpl::AllowWebGL(bool enabled_per_settings) {
-  if (web_frame_->Client())
-    return web_frame_->Client()->AllowWebGL(enabled_per_settings);
-
-  return enabled_per_settings;
+bool LocalFrameClientImpl::ShouldBlockWebGL() {
+  DCHECK(web_frame_->Client());
+  return web_frame_->Client()->ShouldBlockWebGL();
 }
 
 void LocalFrameClientImpl::DispatchWillInsertBody() {
@@ -976,6 +1048,12 @@ WebEffectiveConnectionType LocalFrameClientImpl::GetEffectiveConnectionType() {
   return WebEffectiveConnectionType::kTypeUnknown;
 }
 
+void LocalFrameClientImpl::SetEffectiveConnectionTypeForTesting(
+    WebEffectiveConnectionType type) {
+  if (web_frame_->Client())
+    return web_frame_->Client()->SetEffectiveConnectionTypeForTesting(type);
+}
+
 bool LocalFrameClientImpl::IsClientLoFiActiveForFrame() {
   if (web_frame_->Client())
     return web_frame_->Client()->IsClientLoFiActiveForFrame();
@@ -1003,6 +1081,9 @@ KURL LocalFrameClientImpl::OverrideFlashEmbedWithHTML(const KURL& url) {
 void LocalFrameClientImpl::SetHasReceivedUserGesture(bool received_previously) {
   // The client potentially needs to dispatch the event to other processes only
   // for the first time.
+  //
+  // TODO(mustaq): Can we remove |received_previously|, specially when
+  // autofill-client below ignores it already? crbug.com/775930
   if (!received_previously && web_frame_->Client())
     web_frame_->Client()->SetHasReceivedUserGesture();
   // WebAutofillClient reacts only to the user gestures for this particular
@@ -1010,11 +1091,6 @@ void LocalFrameClientImpl::SetHasReceivedUserGesture(bool received_previously) {
   // event in a child frame.
   if (WebAutofillClient* autofill_client = web_frame_->AutofillClient())
     autofill_client->UserGestureObserved();
-}
-
-void LocalFrameClientImpl::SetDevToolsFrameId(const String& devtools_frame_id) {
-  if (web_frame_->Client())
-    web_frame_->Client()->SetDevToolsFrameId(devtools_frame_id);
 }
 
 void LocalFrameClientImpl::AbortClientNavigation() {
@@ -1027,21 +1103,23 @@ WebSpellCheckPanelHostClient* LocalFrameClientImpl::SpellCheckPanelHostClient()
   return web_frame_->SpellCheckPanelHostClient();
 }
 
-TextCheckerClient& LocalFrameClientImpl::GetTextCheckerClient() const {
+WebTextCheckClient* LocalFrameClientImpl::GetTextCheckerClient() const {
   return web_frame_->GetTextCheckerClient();
 }
 
-std::unique_ptr<blink::WebURLLoader> LocalFrameClientImpl::CreateURLLoader(
-    const ResourceRequest& request,
-    WebTaskRunner* task_runner) {
-  WrappedResourceRequest wrapped(request);
-  return web_frame_->CreateURLLoader(wrapped,
-                                     task_runner->ToSingleThreadTaskRunner());
+std::unique_ptr<blink::WebURLLoaderFactory>
+LocalFrameClientImpl::CreateURLLoaderFactory() {
+  return web_frame_->CreateURLLoaderFactory();
 }
 
 service_manager::InterfaceProvider*
 LocalFrameClientImpl::GetInterfaceProvider() {
   return web_frame_->Client()->GetInterfaceProvider();
+}
+
+AssociatedInterfaceProvider*
+LocalFrameClientImpl::GetRemoteNavigationAssociatedInterfaces() {
+  return web_frame_->Client()->GetRemoteNavigationAssociatedInterfaces();
 }
 
 void LocalFrameClientImpl::AnnotatedRegionsChanged() {
@@ -1050,6 +1128,22 @@ void LocalFrameClientImpl::AnnotatedRegionsChanged() {
 
 void LocalFrameClientImpl::DidBlockFramebust(const KURL& url) {
   web_frame_->Client()->DidBlockFramebust(url);
+}
+
+String LocalFrameClientImpl::GetInstrumentationToken() {
+  return web_frame_->Client()->GetInstrumentationToken();
+}
+
+void LocalFrameClientImpl::ScrollRectToVisibleInParentFrame(
+    const WebRect& rect_to_scroll,
+    const WebRemoteScrollProperties& properties) {
+  web_frame_->Client()->ScrollRectToVisibleInParentFrame(rect_to_scroll,
+                                                         properties);
+}
+
+void LocalFrameClientImpl::SetVirtualTimePauser(
+    WebScopedVirtualTimePauser virtual_time_pauser) {
+  virtual_time_pauser_ = std::move(virtual_time_pauser);
 }
 
 // VB-6063:

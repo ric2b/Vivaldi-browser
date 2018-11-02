@@ -36,6 +36,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -496,7 +497,7 @@ bool WifiConfigView::CaCertActive() const {
 }
 
 void WifiConfigView::UpdateDialogButtons() {
-  parent_->GetDialogClientView()->UpdateDialogButtons();
+  parent_->DialogModelChanged();
 }
 
 void WifiConfigView::RefreshEapFields() {
@@ -661,7 +662,7 @@ void WifiConfigView::OnPerformAction(views::Combobox* combobox) {
   UpdateErrorLabel();
 }
 
-void WifiConfigView::OnCertificatesLoaded(bool initial_load) {
+void WifiConfigView::OnCertificatesLoaded() {
   RefreshEapFields();
   UpdateDialogButtons();
   UpdateErrorLabel();
@@ -904,6 +905,10 @@ void WifiConfigView::Cancel() {
 }
 
 void WifiConfigView::Init(bool show_8021x) {
+  views::LayoutProvider* provider = views::LayoutProvider::Get();
+  SetBorder(views::CreateEmptyBorder(
+      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT)));
+
   const NetworkState* network = GetNetworkState();
   if (network) {
     if (network->type() == shill::kTypeWifi) {
@@ -938,8 +943,7 @@ void WifiConfigView::Init(bool show_8021x) {
       ParseUIProperty(&passphrase_ui_data_, network, ::onc::wifi::kPassphrase);
   }
 
-  views::GridLayout* layout = views::GridLayout::CreatePanel(this);
-  views::LayoutProvider* provider = views::LayoutProvider::Get();
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
   const int column_view_set_id = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(column_view_set_id);
@@ -1199,19 +1203,19 @@ void WifiConfigView::Init(bool show_8021x) {
             IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_PASSPHRASE_HIDE));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_NORMAL,
-        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_SHOW_PASSWORD));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_HOVERED,
-        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_SHOW_PASSWORD_HOVER));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_NORMAL,
-        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_HIDE_PASSWORD));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_HOVERED,
-        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_HIDE_PASSWORD_HOVER));
     passphrase_visible_button_->SetImageAlignment(
         views::ImageButton::ALIGN_CENTER, views::ImageButton::ALIGN_MIDDLE);

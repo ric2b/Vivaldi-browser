@@ -97,22 +97,8 @@ public class AutocompleteController {
      * @param profile The profile to use for starting the AutocompleteController
      * @param url The URL of the current tab, used to suggest query refinements.
      * @param text The text to query autocomplete suggestions for.
-     * @param preventInlineAutocomplete Whether autocomplete suggestions should be prevented.
-     * @param focusedFromFakebox Whether the user entered the omnibox by tapping the fakebox on the
-     *                           native NTP. This should be false on all other pages.
-     */
-    public void start(Profile profile, String url, String text, boolean preventInlineAutocomplete,
-            boolean focusedFromFakebox) {
-        start(profile, url, text, -1, preventInlineAutocomplete, focusedFromFakebox);
-    }
-
-    /**
-     * Starts querying for omnibox suggestions for a given text.
-     *
-     * @param profile The profile to use for starting the AutocompleteController
-     * @param url The URL of the current tab, used to suggest query refinements.
-     * @param text The text to query autocomplete suggestions for.
-     * @param cursorPosition The position of the cursor within the text.
+     * @param cursorPosition The position of the cursor within the text.  Set to -1 if the cursor is
+     *                     not focussed on the text.
      * @param preventInlineAutocomplete Whether autocomplete suggestions should be prevented.
      * @param focusedFromFakebox Whether the user entered the omnibox by tapping the fakebox on the
      *                           native NTP. This should be false on all other pages.
@@ -161,10 +147,11 @@ public class AutocompleteController {
      * @param profile The profile to use for starting the AutocompleteController.
      * @param omniboxText The text displayed in the omnibox.
      * @param url The url of the currently loaded web page.
+     * @param url The title of the currently loaded web page.
      * @param focusedFromFakebox Whether the user entered the omnibox by tapping the fakebox on the
      *                           native NTP. This should be false on all other pages.
      */
-    public void startZeroSuggest(Profile profile, String omniboxText, String url,
+    public void startZeroSuggest(Profile profile, String omniboxText, String url, String title,
             boolean focusedFromFakebox) {
         if (profile == null || TextUtils.isEmpty(url)) return;
 
@@ -176,8 +163,8 @@ public class AutocompleteController {
         mNativeAutocompleteControllerAndroid = nativeInit(profile);
         if (mNativeAutocompleteControllerAndroid != 0) {
             if (mUseCachedZeroSuggestResults) mWaitingForSuggestionsToCache = true;
-            nativeOnOmniboxFocused(
-                    mNativeAutocompleteControllerAndroid, omniboxText, url, focusedFromFakebox);
+            nativeOnOmniboxFocused(mNativeAutocompleteControllerAndroid, omniboxText, url, title,
+                    focusedFromFakebox);
         }
     }
 
@@ -370,7 +357,7 @@ public class AutocompleteController {
             boolean focusedFromFakebox, long elapsedTimeSinceModified,
             int completedLength, WebContents webContents);
     private native void nativeOnOmniboxFocused(long nativeAutocompleteControllerAndroid,
-            String omniboxText, String currentUrl, boolean focusedFromFakebox);
+            String omniboxText, String currentUrl, String currentTitle, boolean focusedFromFakebox);
     private native void nativeDeleteSuggestion(long nativeAutocompleteControllerAndroid,
             int selectedIndex);
     private native String nativeUpdateMatchDestinationURLWithQueryFormulationTime(

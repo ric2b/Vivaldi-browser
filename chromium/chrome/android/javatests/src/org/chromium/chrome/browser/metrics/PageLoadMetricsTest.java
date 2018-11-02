@@ -51,8 +51,7 @@ public class PageLoadMetricsTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mTestPage = mTestServer.getURL(TEST_PAGE);
 
         mMetricsObserver =
@@ -104,6 +103,15 @@ public class PageLoadMetricsTest {
         public boolean waitForLoadEventStartEvent() throws InterruptedException {
             return mLoadEventStartLatch.await(PAGE_LOAD_METRICS_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         }
+
+        @Override
+        public void onLoadedMainResource(WebContents webContents, long dnsStartMs, long dnsEndMs,
+                long connectStartMs, long connectEndMs, long requestStartMs, long sendStartMs,
+                long sendEndMs) {}
+
+        @Override
+        public void onNetworkQualityEstimate(WebContents webContents, int effectiveConnectionType,
+                long httpRttMs, long transportRttMs) {}
     }
 
     @Test

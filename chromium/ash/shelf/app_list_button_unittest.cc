@@ -4,13 +4,19 @@
 
 #include "ash/shelf/app_list_button.h"
 
+#include <memory>
+#include <string>
+
+#include "ash/public/cpp/config.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
@@ -19,6 +25,7 @@
 #include "ui/app_list/presenter/app_list.h"
 #include "ui/app_list/presenter/test/test_app_list_presenter.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/test/event_generator.h"
 
 namespace ash {
 
@@ -28,13 +35,11 @@ ui::GestureEvent CreateGestureEvent(ui::GestureEventDetails details) {
 
 class AppListButtonTest : public AshTestBase {
  public:
-  AppListButtonTest() {}
-  ~AppListButtonTest() override {}
+  AppListButtonTest() = default;
+  ~AppListButtonTest() override = default;
 
   // AshTestBase:
   void SetUp() override {
-    command_line_ = base::MakeUnique<base::test::ScopedCommandLine>();
-    SetupCommandLine(command_line_->GetProcessCommandLine());
     AshTestBase::SetUp();
     app_list_button_ =
         GetPrimaryShelf()->GetShelfViewForTesting()->GetAppListButton();
@@ -42,21 +47,22 @@ class AppListButtonTest : public AshTestBase {
         test_app_list_presenter.CreateInterfacePtrAndBind());
   }
 
-  virtual void SetupCommandLine(base::CommandLine* command_line) {}
-
   void SendGestureEvent(ui::GestureEvent* event) {
     app_list_button_->OnGestureEvent(event);
+    Shell::Get()->app_list()->FlushForTesting();
+    RunAllPendingInMessageLoop();
   }
 
   void SendGestureEventToSecondaryDisplay(ui::GestureEvent* event) {
     // Add secondary display.
     UpdateDisplay("1+1-1000x600,1002+0-600x400");
     // Send the gesture event to the secondary display.
-    Shell::GetRootWindowControllerWithDisplayId(GetSecondaryDisplay().id())
-        ->shelf()
+    Shelf::ForWindow(Shell::GetAllRootWindows()[1])
         ->GetShelfViewForTesting()
         ->GetAppListButton()
         ->OnGestureEvent(event);
+    Shell::Get()->app_list()->FlushForTesting();
+    RunAllPendingInMessageLoop();
   }
 
   const AppListButton* app_list_button() const { return app_list_button_; }
@@ -65,9 +71,7 @@ class AppListButtonTest : public AshTestBase {
   app_list::test::TestAppListPresenter test_app_list_presenter;
 
  private:
-  AppListButton* app_list_button_;
-
-  std::unique_ptr<base::test::ScopedCommandLine> command_line_;
+  AppListButton* app_list_button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AppListButtonTest);
 };
@@ -77,137 +81,146 @@ TEST_F(AppListButtonTest, LongPressGestureWithoutVoiceInteractionFlag) {
   CreateUserSessions(2);
 
   // Enable voice interaction in system settings.
-  Shell::Get()->NotifyVoiceInteractionEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
 
   // Test long press gesture on secondary display.
   SendGestureEventToSecondaryDisplay(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
+}
+
+TEST_F(AppListButtonTest, SwipeUpToOpenFullscreenAppList) {
+  Shelf* shelf = GetPrimaryShelf();
+  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+
+  // Start the drags from the center of the app list button.
+  gfx::Point start = app_list_button()->GetAppListButtonCenterPoint();
+  views::View::ConvertPointToScreen(app_list_button(), &start);
+  // Swiping up less than the threshold should trigger a peeking app list.
+  gfx::Point end = start;
+  end.set_y(shelf->GetIdealBounds().bottom() -
+            ShelfLayoutManager::kAppListDragSnapToPeekingThreshold + 10);
+  GetEventGenerator().GestureScrollSequence(
+      start, end, base::TimeDelta::FromMilliseconds(100), 4 /* steps */);
+  RunAllPendingInMessageLoop();
+  Shell::Get()->app_list()->FlushForTesting();
+  EXPECT_EQ(1u, test_app_list_presenter.show_count());
+  EXPECT_GE(test_app_list_presenter.set_y_position_count(), 1u);
+  EXPECT_EQ(app_list::mojom::AppListState::PEEKING,
+            test_app_list_presenter.app_list_state());
+
+  // Swiping above the threshold should trigger a fullscreen app list.
+  end.set_y(shelf->GetIdealBounds().bottom() -
+            ShelfLayoutManager::kAppListDragSnapToPeekingThreshold - 10);
+  GetEventGenerator().GestureScrollSequence(
+      start, end, base::TimeDelta::FromMilliseconds(100), 4 /* steps */);
+  RunAllPendingInMessageLoop();
+  Shell::Get()->app_list()->FlushForTesting();
+  EXPECT_EQ(2u, test_app_list_presenter.show_count());
+  EXPECT_GE(test_app_list_presenter.set_y_position_count(), 1u);
+  EXPECT_EQ(app_list::mojom::AppListState::FULLSCREEN_ALL_APPS,
+            test_app_list_presenter.app_list_state());
 }
 
 class VoiceInteractionAppListButtonTest : public AppListButtonTest {
  public:
-  VoiceInteractionAppListButtonTest() {}
+  VoiceInteractionAppListButtonTest() = default;
 
-  void SetupCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kEnableVoiceInteraction);
+  // AppListButtonTest:
+  void SetUp() override {
+    command_line_ = std::make_unique<base::test::ScopedCommandLine>();
+    command_line_->GetProcessCommandLine()->AppendSwitch(
+        chromeos::switches::kEnableVoiceInteraction);
+    EXPECT_TRUE(chromeos::switches::IsVoiceInteractionFlagsEnabled());
+    AppListButtonTest::SetUp();
   }
 
  private:
+  std::unique_ptr<base::test::ScopedCommandLine> command_line_;
   DISALLOW_COPY_AND_ASSIGN(VoiceInteractionAppListButtonTest);
 };
 
 TEST_F(VoiceInteractionAppListButtonTest,
        LongPressGestureWithVoiceInteractionFlag) {
-  EXPECT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableVoiceInteraction));
-
   // Simulate two user with primary user as active.
   CreateUserSessions(2);
 
   // Enable voice interaction in system settings.
-  Shell::Get()->NotifyVoiceInteractionEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(1u, test_app_list_presenter.voice_session_count());
 
   // Test long press gesture on secondary display.
   SendGestureEventToSecondaryDisplay(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(2u, test_app_list_presenter.voice_session_count());
 }
 
 TEST_F(VoiceInteractionAppListButtonTest, LongPressGestureWithSecondaryUser) {
-  EXPECT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableVoiceInteraction));
-
-  // Simulate two user with secondary user as active.
-  SimulateUserLogin("user1@test.com");
-  SimulateUserLogin("user2@test.com");
+  // Disallowed by secondary user.
+  Shell::Get()->voice_interaction_controller()->NotifyFeatureAllowed(
+      mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER);
 
   // Enable voice interaction in system settings.
-  Shell::Get()->NotifyVoiceInteractionEnabled(true);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  RunAllPendingInMessageLoop();
   // Voice interaction is disabled for secondary user, so the count here should
   // be 0.
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
 
   // Test long press gesture on secondary display.
   SendGestureEventToSecondaryDisplay(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
 }
 
 TEST_F(VoiceInteractionAppListButtonTest,
        LongPressGestureWithSettingsDisabled) {
-  app_list::test::TestAppListPresenter test_app_list_presenter;
-  Shell::Get()->app_list()->SetAppListPresenter(
-      test_app_list_presenter.CreateInterfacePtrAndBind());
-
-  EXPECT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableVoiceInteraction));
-
   // Simulate two user with primary user as active.
   CreateUserSessions(2);
 
   // Simulate a user who has already completed setup flow, but disabled voice
   // interaction in settings.
-  Shell::Get()->NotifyVoiceInteractionEnabled(false);
-  Shell::Get()->NotifyVoiceInteractionSetupCompleted(true);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(false);
+  Shell::Get()->voice_interaction_controller()->NotifySetupCompleted(true);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  RunAllPendingInMessageLoop();
   // After value prop has been accepted, if voice interaction is disalbed in
   // settings we should not handle long press action in app list button.
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
 
   // Test long press gesture on secondary display.
   SendGestureEventToSecondaryDisplay(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(0u, test_app_list_presenter.voice_session_count());
 }
 
 TEST_F(VoiceInteractionAppListButtonTest,
        LongPressGestureBeforeSetupCompleted) {
-  app_list::test::TestAppListPresenter test_app_list_presenter;
-  Shell::Get()->app_list()->SetAppListPresenter(
-      test_app_list_presenter.CreateInterfacePtrAndBind());
-
-  EXPECT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableVoiceInteraction));
-
   // Simulate two user with primary user as active.
   CreateUserSessions(2);
 
   // Disable voice interaction in system settings.
-  Shell::Get()->NotifyVoiceInteractionEnabled(false);
+  Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(false);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  RunAllPendingInMessageLoop();
   // Before setup flow completed we should show the animation even if the
   // settings are disabled.
   EXPECT_EQ(1u, test_app_list_presenter.voice_session_count());
 
   // Test long press gesture on secondary display.
   SendGestureEventToSecondaryDisplay(&long_press);
-  RunAllPendingInMessageLoop();
   EXPECT_EQ(2u, test_app_list_presenter.voice_session_count());
 }
 
@@ -217,7 +230,7 @@ class BackButtonAppListButtonTest : public AppListButtonTest,
                                     public testing::WithParamInterface<bool> {
  public:
   BackButtonAppListButtonTest() : is_rtl_(GetParam()) {}
-  ~BackButtonAppListButtonTest() override {}
+  ~BackButtonAppListButtonTest() override = default;
 
   void SetUp() override {
     if (is_rtl_) {

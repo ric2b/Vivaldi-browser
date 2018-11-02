@@ -63,7 +63,7 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
     return image_resource_.Get();
   }
   ImageResourceContent* CachedImage() const {
-    return image_resource_ ? image_resource_->CachedImage() : 0;
+    return image_resource_ ? image_resource_->CachedImage() : nullptr;
   }
 
   HTMLMapElement* ImageMap() const;
@@ -82,7 +82,7 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
 
   void IntrinsicSizeChanged() override {
     if (image_resource_)
-      ImageChanged(image_resource_->ImagePtr());
+      ImageChanged(image_resource_->ImagePtr(), CanDeferInvalidation::kNo);
   }
 
   const char* GetName() const override { return "LayoutImage"; }
@@ -92,7 +92,9 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
   LayoutReplaced* EmbeddedReplacedContent() const final;
   void ComputeIntrinsicSizingInfo(IntrinsicSizingInfo&) const final;
 
-  void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) override;
+  void ImageChanged(WrappedImagePtr,
+                    CanDeferInvalidation,
+                    const IntRect* = nullptr) override;
 
   void Paint(const PaintInfo&, const LayoutPoint&) const final;
 
@@ -103,6 +105,8 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
   void WillBeDestroyed() override;
 
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
+
+  bool CanBeSelectionLeafInternal() const final { return true; }
 
  private:
   bool IsImage() const override { return true; }
@@ -124,7 +128,7 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
                    const LayoutPoint& accumulated_offset,
                    HitTestAction) final;
 
-  void InvalidatePaintAndMarkForLayoutIfNeeded();
+  void InvalidatePaintAndMarkForLayoutIfNeeded(CanDeferInvalidation);
   void UpdateIntrinsicSizeIfNeeded(const LayoutSize&);
 
   // This member wraps the associated decoded image.

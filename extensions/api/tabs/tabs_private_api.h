@@ -22,7 +22,7 @@
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 
-typedef std::map<base::string16, base::string16> TabDragDataCollection;
+typedef std::unordered_map<base::string16, base::string16> TabDragDataCollection;
 typedef base::Callback<void(base::SharedMemoryHandle handle,
                             const gfx::Size image_size,
                             int callback_id,

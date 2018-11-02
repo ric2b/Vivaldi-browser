@@ -8,10 +8,8 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/printing/print_job_worker_owner.h"
-#include "printing/print_job_constants.h"
 
 namespace base {
 class DictionaryValue;
@@ -30,6 +28,7 @@ class PrinterQuery : public PrintJobWorkerOwner {
     ASK_USER,
   };
 
+  // Can only be called on the IO thread.
   PrinterQuery(int render_process_id, int render_frame_id);
 
   // PrintJobWorkerOwner implementation.
@@ -50,11 +49,11 @@ class PrinterQuery : public PrintJobWorkerOwner {
                    MarginType margin_type,
                    bool is_scripted,
                    bool is_modifiable,
-                   const base::Closure& callback);
+                   base::OnceClosure callback);
 
   // Updates the current settings with |new_settings| dictionary values.
   void SetSettings(std::unique_ptr<base::DictionaryValue> new_settings,
-                   const base::Closure& callback);
+                   base::OnceClosure callback);
 
   // Stops the worker thread since the client is done with this object.
   void StopWorker();
@@ -68,10 +67,11 @@ class PrinterQuery : public PrintJobWorkerOwner {
   bool is_valid() const;
 
  private:
+  // Refcounted class.
   ~PrinterQuery() override;
 
   // Lazy create the worker thread. There is one worker thread per print job.
-  void StartWorker(const base::Closure& callback);
+  void StartWorker(base::OnceClosure callback);
 
   // All the UI is done in a worker thread because many Win32 print functions
   // are blocking and enters a message loop without your consent. There is one
@@ -82,16 +82,16 @@ class PrinterQuery : public PrintJobWorkerOwner {
   PrintSettings settings_;
 
   // Is the Print... dialog box currently shown.
-  bool is_print_dialog_box_shown_;
+  bool is_print_dialog_box_shown_ = false;
 
   // Cookie that make this instance unique.
   int cookie_;
 
   // Results from the last GetSettingsDone() callback.
-  PrintingContext::Result last_status_;
+  PrintingContext::Result last_status_ = PrintingContext::FAILED;
 
   // Callback waiting to be run.
-  base::Closure callback_;
+  base::OnceClosure callback_;
 
   DISALLOW_COPY_AND_ASSIGN(PrinterQuery);
 };

@@ -59,10 +59,11 @@ XPathResult::XPathResult(EvaluationContext& context, const Value& value)
   NOTREACHED();
 }
 
-DEFINE_TRACE(XPathResult) {
+void XPathResult::Trace(blink::Visitor* visitor) {
   visitor->Trace(value_);
   visitor->Trace(node_set_);
   visitor->Trace(document_);
+  ScriptWrappable::Trace(visitor);
 }
 
 void XPathResult::ConvertTo(unsigned short type,
@@ -112,7 +113,7 @@ void XPathResult::ConvertTo(unsigned short type,
             "to the desired type.");
         return;
       }
-      value_.ToNodeSet(0).Sort();
+      value_.ToNodeSet(nullptr).Sort();
       result_type_ = type;
       break;
   }
@@ -153,7 +154,7 @@ Node* XPathResult::singleNodeValue(ExceptionState& exception_state) const {
     return nullptr;
   }
 
-  const NodeSet& nodes = value_.ToNodeSet(0);
+  const NodeSet& nodes = value_.ToNodeSet(nullptr);
   if (resultType() == kFirstOrderedNodeType)
     return nodes.FirstNode();
   return nodes.AnyNode();
@@ -175,7 +176,7 @@ unsigned XPathResult::snapshotLength(ExceptionState& exception_state) const {
     return 0;
   }
 
-  return value_.ToNodeSet(0).size();
+  return value_.ToNodeSet(nullptr).size();
 }
 
 Node* XPathResult::iterateNext(ExceptionState& exception_state) {
@@ -210,7 +211,7 @@ Node* XPathResult::snapshotItem(unsigned index,
     return nullptr;
   }
 
-  const NodeSet& nodes = value_.ToNodeSet(0);
+  const NodeSet& nodes = value_.ToNodeSet(nullptr);
   if (index >= nodes.size())
     return nullptr;
 

@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_BROWSER_RENDER_FRAME_HOST_H_
 
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "build/build_config.h"
@@ -14,7 +15,7 @@
 #include "content/public/common/file_chooser_params.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -22,15 +23,17 @@
 #include "url/origin.h"
 
 namespace blink {
-enum class WebFeaturePolicyFeature;
+class AssociatedInterfaceProvider;
+enum class FeaturePolicyFeature;
 }
 
 namespace base {
+class UnguessableToken;
 class Value;
 }
 
 namespace resource_coordinator {
-class ResourceCoordinatorInterface;
+class FrameResourceCoordinator;
 }
 
 namespace service_manager {
@@ -43,7 +46,6 @@ struct AXActionData;
 
 namespace content {
 
-class AssociatedInterfaceProvider;
 class RenderProcessHost;
 class RenderViewHost;
 class RenderWidgetHostView;
@@ -96,7 +98,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Returns the interface for the Global Resource Coordinator
   // for this frame.
-  virtual resource_coordinator::ResourceCoordinatorInterface*
+  virtual resource_coordinator::FrameResourceCoordinator*
   GetFrameResourceCoordinator() = 0;
 
   // Returns the process for this frame.
@@ -121,6 +123,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // the same FrameTreeNode ID may refer to a different RenderFrameHost after a
   // navigation.
   virtual int GetFrameTreeNodeId() = 0;
+
+  // Used for devtools instrumentation and trace-ability. The token is
+  // propagated to Blink's LocalFrame and both Blink and content/
+  // can tag calls and requests with this token in order to attribute them
+  // to the context frame. The token is only defined by the browser process and
+  // is never sent back from the renderer in the control calls. It should be
+  // never used to look up the FrameTreeNode instance.
+  virtual base::UnguessableToken GetDevToolsFrameToken() = 0;
 
   // Returns the assigned name of the frame, the name of the iframe tag
   // declaring it. For example, <iframe name="framename">[...]</iframe>. It is
@@ -207,11 +217,12 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Returns the AssociatedInterfaceProvider that this process can use to access
   // remote frame-specific Channel-associated interfaces for this frame.
-  virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
+  virtual blink::AssociatedInterfaceProvider*
+  GetRemoteAssociatedInterfaces() = 0;
 
   // Returns the visibility state of the frame. The different visibility states
   // of a frame are defined in Blink.
-  virtual blink::WebPageVisibilityState GetVisibilityState() = 0;
+  virtual blink::mojom::PageVisibilityState GetVisibilityState() = 0;
 
   // Returns whether the RenderFrame in the renderer process has been created
   // and still has a connection.  This is valid for all frames.
@@ -288,7 +299,11 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns true if the given Feature Policy |feature| is enabled for this
   // RenderFrameHost and is allowed to be used by it. Use this in the browser
   // process to determine whether access to a feature is allowed.
-  virtual bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) = 0;
+  virtual bool IsFeatureEnabled(blink::FeaturePolicyFeature feature) = 0;
+
+  // Opens view-source tab for the document last committed in this
+  // RenderFrameHost.
+  virtual void ViewSource() = 0;
 
  private:
   // This interface should only be implemented inside content.

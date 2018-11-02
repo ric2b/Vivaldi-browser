@@ -106,7 +106,7 @@ assigned files by:
 * base::ThreadLocalStorage::Slot -> base::SequenceLocalStorageSlot
 * BrowserThread::PostTaskAndReplyWithResult() -> base::PostTaskAndReplyWithResult()
   (from post_task.h or from task_runner_util.h (if you need to feed a TaskRunner))
-* BrowserThread::DeleteOnThread -> base::DeleteOnTaskRunner / base::RefCountedDeleteOnSequence
+* BrowserThread::DeleteOnThread -> base::OnTaskRunnerDeleter / base::RefCountedDeleteOnSequence
 * BrowserMessageFilter::OverrideThreadForMessage() -> BrowserMessageFilter::OverrideTaskRunnerForMessage()
 * CreateSingleThreadTaskRunnerWithTraits() -> CreateSequencedTaskRunnerWithTraits()
    * Every CreateSingleThreadTaskRunnerWithTraits() usage should be accompanied
@@ -120,7 +120,7 @@ assigned files by:
 * base::MessageLoop -> base::test::ScopedTaskEnvironment
 * content::TestBrowserThread -> content::TestBrowserThreadBundle (if you still
   need other BrowserThreads and ScopedTaskEnvironment if you don't)
-* base::RunLoop().Run() -(maybe)> content::RunAllBlockingPoolTasksUntilIdle()
+* base::RunLoop().Run() -(maybe)> content::RunAllTasksUntilIdle()
    * If test code was previously using RunLoop to execute things off the main
      thread (as TestBrowserThreadBundle grouped everything under a single
      MessageLoop), flushing tasks will now require asking for that explicitly.

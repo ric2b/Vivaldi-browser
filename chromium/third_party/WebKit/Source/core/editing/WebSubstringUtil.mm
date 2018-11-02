@@ -37,8 +37,11 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
+#include "core/editing/SelectionTemplate.h"
+#include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/frame/LocalFrame.h"
@@ -83,7 +86,7 @@ NSAttributedString* AttributedSubstringFromRange(const EphemeralRange& range,
     if (!num_characters)
       continue;
 
-    Node* container = it.CurrentContainer();
+    const Node* container = it.CurrentContainer();
     LayoutObject* layout_object = container->GetLayoutObject();
     DCHECK(layout_object);
     if (!layout_object)

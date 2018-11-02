@@ -10,8 +10,10 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #include "components/prefs/pref_member.h"
 #include "components/translate/core/browser/translate_pref_names.h"
+#include "components/translate/core/common/language_detection_details.h"
 #include "components/translate/core/language_detection/language_detection_util.h"
 #import "components/translate/ios/browser/js_language_detection_manager.h"
 #include "components/translate/ios/browser/string_clipping_util.h"
@@ -38,41 +40,31 @@ LanguageDetectionController::LanguageDetectionController(
     web::WebState* web_state,
     JsLanguageDetectionManager* manager,
     PrefService* prefs)
-    : web::WebStateObserver(web_state),
-      js_manager_(manager),
-      weak_method_factory_(this) {
-  DCHECK(web::WebStateObserver::web_state());
+    : web_state_(web_state), js_manager_(manager), weak_method_factory_(this) {
+  DCHECK(web_state_);
   DCHECK(js_manager_);
-  translate_enabled_.Init(prefs::kEnableTranslate, prefs);
-  web_state->AddScriptCommandCallback(
+
+  translate_enabled_.Init(prefs::kOfferTranslateEnabled, prefs);
+  web_state_->AddObserver(this);
+  web_state_->AddScriptCommandCallback(
       base::Bind(&LanguageDetectionController::OnTextCaptured,
                  base::Unretained(this)),
       kCommandPrefix);
 }
 
 LanguageDetectionController::~LanguageDetectionController() {
-}
-
-LanguageDetectionController::DetectionDetails::DetectionDetails()
-    : is_cld_reliable(false) {}
-
-LanguageDetectionController::DetectionDetails::DetectionDetails(
-    const DetectionDetails& other) = default;
-
-LanguageDetectionController::DetectionDetails::~DetectionDetails() = default;
-
-std::unique_ptr<LanguageDetectionController::CallbackList::Subscription>
-LanguageDetectionController::RegisterLanguageDetectionCallback(
-    const Callback& callback) {
-  return language_detection_callbacks_.Add(callback);
+  if (web_state_) {
+    web_state_->RemoveObserver(this);
+    web_state_ = nullptr;
+  }
 }
 
 void LanguageDetectionController::StartLanguageDetection() {
   if (!translate_enabled_.GetValue())
     return;  // Translate disabled in preferences.
-  DCHECK(web_state());
-  const GURL& url = web_state()->GetVisibleURL();
-  if (!web::UrlHasWebScheme(url) || !web_state()->ContentIsHTML())
+  DCHECK(web_state_);
+  const GURL& url = web_state_->GetVisibleURL();
+  if (!web::UrlHasWebScheme(url) || !web_state_->ContentIsHTML())
     return;
   [js_manager_ inject];
   [js_manager_ startLanguageDetection];
@@ -116,13 +108,14 @@ bool LanguageDetectionController::OnTextCaptured(
   [js_manager_ retrieveBufferedTextContent:
                    base::Bind(&LanguageDetectionController::OnTextRetrieved,
                               weak_method_factory_.GetWeakPtr(),
-                              http_content_language, html_lang)];
+                              http_content_language, html_lang, url)];
   return true;
 }
 
 void LanguageDetectionController::OnTextRetrieved(
     const std::string& http_content_language,
     const std::string& html_lang,
+    const GURL& url,
     const base::string16& text_content) {
   std::string cld_language;
   bool is_cld_reliable;
@@ -134,13 +127,20 @@ void LanguageDetectionController::OnTextRetrieved(
   if (language.empty())
     return;  // No language detected.
 
-  DetectionDetails details;
+  // Avoid an unnecessary copy of the full text content (which can be
+  // ~64kB) until we need it on iOS (e.g. for the translate internals
+  // page).
+  LanguageDetectionDetails details;
+  details.time = base::Time::Now();
+  details.url = url;
   details.content_language = http_content_language;
-  details.html_root_language = html_lang;
-  details.adopted_language = language;
   details.cld_language = cld_language;
   details.is_cld_reliable = is_cld_reliable;
-  language_detection_callbacks_.Notify(details);
+  details.html_root_language = html_lang;
+  details.adopted_language = language;
+
+  language::IOSLanguageDetectionTabHelper::FromWebState(web_state_)
+      ->OnLanguageDetermined(details);
 }
 
 void LanguageDetectionController::ExtractContentLanguageHeader(
@@ -160,13 +160,17 @@ void LanguageDetectionController::ExtractContentLanguageHeader(
 // web::WebStateObserver implementation:
 
 void LanguageDetectionController::PageLoaded(
+    web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
+  DCHECK_EQ(web_state_, web_state);
   if (load_completion_status == web::PageLoadCompletionStatus::SUCCESS)
     StartLanguageDetection();
 }
 
 void LanguageDetectionController::DidFinishNavigation(
+    web::WebState* web_state,
     web::NavigationContext* navigation_context) {
+  DCHECK_EQ(web_state_, web_state);
   if (navigation_context->IsSameDocument()) {
     StartLanguageDetection();
   } else {
@@ -174,8 +178,11 @@ void LanguageDetectionController::DidFinishNavigation(
   }
 }
 
-void LanguageDetectionController::WebStateDestroyed() {
-  web_state()->RemoveScriptCommandCallback(kCommandPrefix);
+void LanguageDetectionController::WebStateDestroyed(web::WebState* web_state) {
+  DCHECK_EQ(web_state_, web_state);
+  web_state_->RemoveScriptCommandCallback(kCommandPrefix);
+  web_state_->RemoveObserver(this);
+  web_state_ = nullptr;
 }
 
 }  // namespace translate

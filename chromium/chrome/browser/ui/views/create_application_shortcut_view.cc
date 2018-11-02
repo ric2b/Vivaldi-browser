@@ -19,7 +19,6 @@
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_WIN)
 #include "base/win/shortcut.h"
@@ -46,11 +45,12 @@ CreateChromeApplicationShortcutView::CreateChromeApplicationShortcutView(
     const base::Callback<void(bool)>& close_callback)
     : profile_(profile),
       close_callback_(close_callback),
-      create_shortcuts_label_(nullptr),
       desktop_check_box_(nullptr),
       menu_check_box_(nullptr),
       quick_launch_check_box_(nullptr),
       weak_ptr_factory_(this) {
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::TEXT, views::CONTROL));
   InitControls();
 
   // Get shortcut and icon information; needed for creating the shortcut.
@@ -65,10 +65,10 @@ CreateChromeApplicationShortcutView::CreateChromeApplicationShortcutView(
 CreateChromeApplicationShortcutView::~CreateChromeApplicationShortcutView() {}
 
 void CreateChromeApplicationShortcutView::InitControls() {
-  create_shortcuts_label_ = new views::Label(
-      l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_LABEL));
-  create_shortcuts_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  create_shortcuts_label_->SetMultiLine(true);
+  views::Label* create_shortcuts_label =
+      new views::Label(l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_LABEL));
+  create_shortcuts_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  create_shortcuts_label->SetMultiLine(true);
 
   desktop_check_box_ = AddCheckbox(
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_DESKTOP_CHKBOX),
@@ -106,7 +106,7 @@ void CreateChromeApplicationShortcutView::InitControls() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   // Layout controls
-  views::GridLayout* layout = views::GridLayout::CreatePanel(this);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
   static const int kHeaderColumnSetId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kHeaderColumnSetId);
@@ -121,7 +121,7 @@ void CreateChromeApplicationShortcutView::InitControls() {
                         100.0f, views::GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, kHeaderColumnSetId);
-  layout->AddView(create_shortcuts_label_);
+  layout->AddView(create_shortcuts_label);
 
   layout->AddPaddingRow(0, provider->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_VERTICAL));
@@ -233,7 +233,7 @@ void CreateChromeApplicationShortcutView::ButtonPressed(
   }
 
   // When no checkbox is checked we should not have the action button enabled.
-  GetDialogClientView()->UpdateDialogButtons();
+  DialogModelChanged();
 }
 
 views::Checkbox* CreateChromeApplicationShortcutView::AddCheckbox(

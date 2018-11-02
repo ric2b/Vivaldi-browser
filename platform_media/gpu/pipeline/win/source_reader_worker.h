@@ -1,12 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
 
 #ifndef PLATFORM_MEDIA_GPU_PIPELINE_WIN_SOURCE_READER_WORKER_H
 #define PLATFORM_MEDIA_GPU_PIPELINE_WIN_SOURCE_READER_WORKER_H
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <mfidl.h>
 #include <d3d9.h>  // if included before |mfidl.h| breaks <propvarutil.h>
@@ -17,9 +19,9 @@
 #include <dxva2api.h>  // if included before |mfidl.h| breaks <propvarutil.h>
 #pragma warning(pop)
 #include <mfreadwrite.h>
+#include <wrl/client.h>
 
 #include "base/time/time.h"
-#include "base/win/scoped_comptr.h"
 
 namespace platform_media {
 
@@ -41,23 +43,26 @@ class AutoPropVariant {
 class SourceReaderWorker
 {
 public:
+  explicit SourceReaderWorker();
+  ~SourceReaderWorker();
+
   bool hasReader() { return !!source_reader_.Get(); }
 
-  void SetReader(const base::win::ScopedComPtr<IMFSourceReader>& source_reader);
+  void SetReader(const Microsoft::WRL::ComPtr<IMFSourceReader>& source_reader);
 
   HRESULT ReadSampleAsync(DWORD index);
 
   HRESULT SetCurrentPosition(AutoPropVariant & position);
   HRESULT SetCurrentMediaType(
       DWORD index,
-      base::win::ScopedComPtr<IMFMediaType> & media_type);
+      Microsoft::WRL::ComPtr<IMFMediaType> & media_type);
 
   HRESULT GetCurrentMediaType(
       DWORD index,
-      base::win::ScopedComPtr<IMFMediaType> & media_type);
+      Microsoft::WRL::ComPtr<IMFMediaType> & media_type);
   HRESULT GetNativeMediaType(
       DWORD index,
-      base::win::ScopedComPtr<IMFMediaType> & media_type);
+      Microsoft::WRL::ComPtr<IMFMediaType> & media_type);
   HRESULT GetDuration(AutoPropVariant & var);
   HRESULT GetAudioBitrate(AutoPropVariant & var);
   HRESULT GetVideoBitrate(AutoPropVariant & var);
@@ -65,7 +70,7 @@ public:
 
 private:
 
-  base::win::ScopedComPtr<IMFSourceReader> source_reader_;
+  Microsoft::WRL::ComPtr<IMFSourceReader> source_reader_;
 };
 
 }

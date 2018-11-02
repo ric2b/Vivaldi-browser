@@ -55,11 +55,8 @@ void InstantUnitTestBase::SetUserSelectedDefaultSearchProvider(
   data.SetShortName(base::UTF8ToUTF16(base_url));
   data.SetKeyword(base::UTF8ToUTF16(base_url));
   data.SetURL(base_url + "url?bar={searchTerms}");
-  data.instant_url =
-      base_url + "instant?{google:forceInstantResults}foo=foo#foo=foo&strk";
   data.new_tab_url = base_url + "newtab";
   data.alternate_urls.push_back(base_url + "alt#quux={searchTerms}");
-  data.search_terms_replacement_key = "strk";
 
   TemplateURL* template_url =
       template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
@@ -75,11 +72,6 @@ void InstantUnitTestBase::NotifyGoogleBaseURLUpdate(
   // For simulating test behavior, this is overridden below.
   UIThreadSearchTermsData::SetGoogleBaseURL(new_google_base_url);
   TemplateURLServiceFactory::GetForProfile(profile())->GoogleBaseURLChanged();
-}
-
-bool InstantUnitTestBase::IsInstantServiceObserver(
-    const InstantServiceObserver* observer) const {
-  return instant_service_->observers_.HasObserver(observer);
 }
 
 TestingProfile* InstantUnitTestBase::CreateProfile() {

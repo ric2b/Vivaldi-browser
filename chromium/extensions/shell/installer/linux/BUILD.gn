@@ -11,6 +11,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/sysroot.gni")
 import("//build/util/version.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
+import("//components/nacl/features.gni")
 import("//extensions/features/features.gni")
 
 assert(is_desktop_linux)
@@ -18,18 +19,6 @@ assert(current_cpu == "x64")
 assert(enable_extensions,
        "Cannot depend on extensions because enable_extensions=false.")
 
-# The packages list the exact versions of each library used. The versions used
-# on the bots are likely different than those on your workstation, so you'll
-# get a stream of errors like:
-#   < libasound2 (>= 1.0.23)
-#   ---
-#   > libasound2 (>= 1.0.16)
-#
-# To avoid these warnings for testing purposes, do:
-#
-#   export IGNORE_DEPS_CHANGES=1
-#
-# before you build.
 group("linux") {
   # See the "app_shell_lib" definition for why testonly is needed.
   testonly = true
@@ -41,6 +30,32 @@ group("linux") {
 }
 
 branding_dir = "//chrome/app/theme/$branding_path_component"
+
+action("strip_app_shell_binary") {
+  testonly = true
+  prog_name = "$root_out_dir/app_shell"
+  debug_file = prog_name + ".debug"
+  stripped_file = prog_name + ".stripped"
+  deps = [
+    "//extensions/shell:app_shell",
+  ]
+  script = "//build/gn_run_binary.py"
+  sources = [
+    prog_name,
+  ]
+  outputs = [
+    debug_file,
+    stripped_file,
+  ]
+  args = [
+    rebase_path("//third_party/eu-strip/bin/eu-strip", root_build_dir),
+    "-o",
+    rebase_path(stripped_file, root_build_dir),
+    "-f",
+    rebase_path(debug_file, root_build_dir),
+    rebase_path(prog_name, root_build_dir),
+  ]
+}
 
 copy("common_packaging_files") {
   visibility = [ ":*" ]
@@ -71,7 +86,6 @@ copy("deb_packaging_files") {
     "//chrome/installer/linux/debian/changelog.template",
     "//chrome/installer/linux/debian/control.template",
     "debian/build.sh",
-    "debian/expected_deps_x64",
     "debian/postinst",
     "debian/postrm",
   ]
@@ -165,7 +179,7 @@ template("linux_package") {
   deb_target_name = "${target_name}_deb"
   action(deb_target_name) {
     visibility = [ ":*" ]
-    script = "//chrome/installer/linux/flock_make_package.py"
+    script = "//build/gn_run_binary.py"
     deb_arch = "amd64"
 
     inputs = packaging_files_binaries
@@ -174,24 +188,27 @@ template("linux_package") {
     ]
 
     args = [
-      rebase_path("$root_out_dir/linux_package.lock", root_build_dir),
       rebase_path("$root_out_dir/app_shell_installer/debian/build.sh",
                   root_build_dir),
-      "-o",
-      rebase_path(root_out_dir, root_build_dir),
-      "-b",
-      rebase_path(root_out_dir, root_build_dir),
       "-a",
       current_cpu,
+      "-b",
+      rebase_path(root_out_dir, root_build_dir),
       "-c",
       invoker.channel,
       "-d",
       branding_path_component,
+      "-o",
+      rebase_path(root_out_dir, root_build_dir),
       "-s",
-      rebase_path(sysroot),
+      rebase_path(sysroot, root_build_dir),
     ]
+    if (is_official_build) {
+      args += [ "-f" ]
+    }
     deps = [
       ":installer_deps",
+      ":strip_app_shell_binary",
     ]
   }
 
@@ -205,21 +222,4 @@ template("linux_package") {
 # Standard packages.
 linux_package("unstable") {
   channel = "unstable"
-}
-linux_package("stable") {
-  channel = "stable"
-}
-linux_package("beta") {
-  channel = "beta"
-}
-
-# Other packages that we support that aren't included in the default "linux"
-# target.
-linux_package("trunk") {
-  channel = "trunk"
-}
-if (is_asan) {
-  linux_package("asan") {
-    channel = "asan"
-  }
 }

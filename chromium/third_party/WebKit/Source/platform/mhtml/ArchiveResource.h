@@ -29,18 +29,18 @@
 #ifndef ArchiveResource_h
 #define ArchiveResource_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class PLATFORM_EXPORT ArchiveResource final
     : public GarbageCollectedFinalized<ArchiveResource> {
  public:
-  static ArchiveResource* Create(PassRefPtr<SharedBuffer>,
+  static ArchiveResource* Create(scoped_refptr<SharedBuffer>,
                                  const KURL&,
                                  const String& content_id,
                                  const AtomicString& mime_type,
@@ -50,14 +50,14 @@ class PLATFORM_EXPORT ArchiveResource final
 
   const KURL& Url() const { return url_; }
   const String& ContentID() const { return content_id_; }
-  SharedBuffer* Data() const { return data_.Get(); }
+  SharedBuffer* Data() const { return data_.get(); }
   const AtomicString& MimeType() const { return mime_type_; }
   const AtomicString& TextEncoding() const { return text_encoding_; }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  private:
-  ArchiveResource(PassRefPtr<SharedBuffer>,
+  ArchiveResource(scoped_refptr<SharedBuffer>,
                   const KURL&,
                   const String& content_id,
                   const AtomicString& mime_type,
@@ -65,7 +65,7 @@ class PLATFORM_EXPORT ArchiveResource final
 
   KURL url_;
   String content_id_;
-  RefPtr<SharedBuffer> data_;
+  scoped_refptr<SharedBuffer> data_;
   AtomicString mime_type_;
   AtomicString text_encoding_;
 };

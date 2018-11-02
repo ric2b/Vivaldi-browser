@@ -125,6 +125,14 @@ SDK.Script = class {
 
   /**
    * @override
+   * @return {!Promise<boolean>}
+   */
+  contentEncoded() {
+    return Promise.resolve(false);
+  }
+
+  /**
+   * @override
    * @return {!Promise<?string>}
    */
   async requestContent() {
@@ -179,7 +187,7 @@ SDK.Script = class {
 
   /**
    * @param {string} newSource
-   * @param {function(?Protocol.Error, !Protocol.Runtime.ExceptionDetails=, !Array.<!Protocol.Debugger.CallFrame>=, !Protocol.Runtime.StackTrace=, boolean=)} callback
+   * @param {function(?Protocol.Error, !Protocol.Runtime.ExceptionDetails=, !Array.<!Protocol.Debugger.CallFrame>=, !Protocol.Runtime.StackTrace=, !Protocol.Runtime.StackTraceId=, boolean=)} callback
    */
   async editSource(newSource, callback) {
     newSource = SDK.Script._trimSourceURLComment(newSource);
@@ -201,7 +209,7 @@ SDK.Script = class {
     var needsStepIn = !!response.stackChanged;
     callback(
         response[Protocol.Error], response.exceptionDetails, response.callFrames, response.asyncStackTrace,
-        needsStepIn);
+        response.asyncStackTraceId, needsStepIn);
   }
 
   /**

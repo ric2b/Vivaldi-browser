@@ -44,7 +44,6 @@ bool CompareByWeight(const ShelfItem& a, const ShelfItem& b) {
 }  // namespace
 
 const char kAppListId[] = "jlfapfmkapbjlfbpjedlinehodkccjee";
-const char kChromeAppId[] = "mgndgikekgjfcpckkfioiadnlibdjbkf";
 
 ShelfModel::ShelfModel() {
   // Add the app list item; its title and delegate are set in ShelfController.
@@ -52,15 +51,8 @@ ShelfModel::ShelfModel() {
   ShelfItem item;
   item.type = TYPE_APP_LIST;
   item.id = ShelfID(kAppListId);
-  int index = Add(item);
+  const int index = Add(item);
   DCHECK_EQ(0, index);
-  // Add a Chrome browser shortcut placeholder; its details are set by Chrome.
-  // This avoids flaky conflicts between ChromeLauncherController adding the
-  // shortcut, and ShelfWindowWatcher observing the first Chrome window.
-  item.type = TYPE_BROWSER_SHORTCUT;
-  item.id = ShelfID(kChromeAppId);
-  index = Add(item);
-  DCHECK_EQ(1, index);
 }
 
 ShelfModel::~ShelfModel() = default;
@@ -231,10 +223,13 @@ void ShelfModel::SetShelfItemDelegate(
     item_delegate->set_shelf_id(safe_shelf_id);
   // This assignment replaces any ShelfItemDelegate already registered for
   // |shelf_id|.
+  std::unique_ptr<ShelfItemDelegate> old_item_delegate =
+      std::move(id_to_item_delegate_map_[safe_shelf_id]);
   id_to_item_delegate_map_[safe_shelf_id] = std::move(item_delegate);
   for (auto& observer : observers_) {
     observer.ShelfItemDelegateChanged(
-        safe_shelf_id, id_to_item_delegate_map_[safe_shelf_id].get());
+        safe_shelf_id, old_item_delegate.get(),
+        id_to_item_delegate_map_[safe_shelf_id].get());
   }
 }
 

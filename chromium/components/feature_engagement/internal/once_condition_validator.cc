@@ -18,6 +18,7 @@ ConditionValidator::Result OnceConditionValidator::MeetsConditions(
     const FeatureConfig& config,
     const EventModel& event_model,
     const AvailabilityModel& availability_model,
+    const DisplayLockController& display_lock_controller,
     uint32_t current_day) const {
   ConditionValidator::Result result(true);
   result.event_model_ready_ok = event_model.IsReady();
@@ -34,7 +35,10 @@ ConditionValidator::Result OnceConditionValidator::MeetsConditions(
   return result;
 }
 
-void OnceConditionValidator::NotifyIsShowing(const base::Feature& feature) {
+void OnceConditionValidator::NotifyIsShowing(
+    const base::Feature& feature,
+    const FeatureConfig& config,
+    const std::vector<std::string>& all_feature_names) {
   DCHECK(currently_showing_feature_.empty());
   DCHECK(shown_features_.find(feature.name) == shown_features_.end());
   shown_features_.insert(feature.name);

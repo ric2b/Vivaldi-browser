@@ -42,6 +42,9 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   void OnJavascriptAllowed() override;
   void OnJavascriptDisallowed() override;
 
+  // Calls |HandleClearBrowsingData| with test data for browser test.
+  void HandleClearBrowsingDataForTest();
+
  private:
   // Clears browsing data, called by Javascript.
   void HandleClearBrowsingData(const base::ListValue* value);
@@ -87,11 +90,15 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   void UpdateHistoryDeletionDialog(bool show);
 
   // Adds a browsing data |counter|.
-  void AddCounter(std::unique_ptr<browsing_data::BrowsingDataCounter> counter);
+  void AddCounter(std::unique_ptr<browsing_data::BrowsingDataCounter> counter,
+                  browsing_data::ClearBrowsingDataTab tab);
 
   // Updates a counter text according to the |result|.
   void UpdateCounterText(
       std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result);
+
+  // Record changes to the time period preferences.
+  void HandleTimePeriodChanged(const std::string& pref_name);
 
   // Cached profile corresponding to the WebUI of this handler.
   Profile* profile_;
@@ -112,6 +119,10 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   // Whether we should show a dialog informing the user about other forms of
   // history stored in their account after the history deletion is finished.
   bool show_history_deletion_dialog_;
+
+  // The TimePeriod preferences.
+  std::unique_ptr<IntegerPrefMember> period_;
+  std::unique_ptr<IntegerPrefMember> periodBasic_;
 
   // A weak pointer factory for asynchronous calls referencing this class.
   // The weak pointers are invalidated in |OnJavascriptDisallowed()| and

@@ -17,11 +17,15 @@ NormalizingInputFilterMac::NormalizingInputFilterMac(
     protocol::InputStub* input_stub)
     : protocol::InputFilter(input_stub) {}
 
-NormalizingInputFilterMac::~NormalizingInputFilterMac() {}
+NormalizingInputFilterMac::~NormalizingInputFilterMac() = default;
 
 void NormalizingInputFilterMac::InjectKeyEvent(
-    const protocol::KeyEvent& event) {
-  DCHECK(event.has_usb_keycode());
+    const protocol::KeyEvent& event_arg) {
+  DCHECK(event_arg.has_usb_keycode());
+
+  // Mac OS X doesn't have a concept of num lock, so unset the field.
+  protocol::KeyEvent event(event_arg);
+  event.clear_num_lock_state();
 
   ui::DomCode dom_code = static_cast<ui::DomCode>(event.usb_keycode());
 

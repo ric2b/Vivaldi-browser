@@ -26,6 +26,10 @@ class CrashHandler {
 
   // Returns the directory location for crash dumps.
   static bool GetCrashDumpLocation(base::FilePath* crash_dir);
+  static void UploadDumps(const base::FilePath& crash_dump_path,
+                          const std::string& uuid,
+                          const std::string& application_feedback,
+                          bool periodic_upload);
 
  private:
   CrashHandler(const std::string& process_type,

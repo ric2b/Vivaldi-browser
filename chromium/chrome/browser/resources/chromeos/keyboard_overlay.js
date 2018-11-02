@@ -290,6 +290,15 @@ function isVoiceInteractionEnabled() {
 }
 
 /**
+ * Tests if accelerators for moving window between displays are enabled.
+ * @return {boolean} True if accelerators for moving window between displays
+ * feature is enabled.
+ */
+function isDisplayMoveWindowAccelsEnabled() {
+  return loadTimeData.getBoolean('displayMoveWindowAccelsEnabled');
+}
+
+/**
  * Converts a single hex number to a character.
  * @param {string} hex Hexadecimal string.
  * @return {string} Unicode values of hexadecimal string.
@@ -595,7 +604,18 @@ function update(modifiers, normModifiers) {
     classes.push('keyboard-overlay-key-background');
 
     if (shortcutId == 'keyboardOverlayVoiceInteraction' &&
-        !isVoiceInteractionEnabled()) {
+        (!isVoiceInteractionEnabled() || hasKeyboardLayout2())) {
+      // The shortcut should be disabled either voice interaction is disabled or
+      // keyboard layout 2 is in use (in which case a dedicated key for voice
+      // interaction exists).
+      continue;
+    }
+
+    if ((shortcutId == 'keyboardOverlayMoveWindowToBelowDisplay' ||
+         shortcutId == 'keyboardOverlayMoveWindowToLeftDisplay' ||
+         shortcutId == 'keyboardOverlayMoveWindowToRightDisplay' ||
+         shortcutId == 'keyboardOverlayMoveWindowToAboveDisplay') &&
+        !isDisplayMoveWindowAccelsEnabled()) {
       continue;
     }
 

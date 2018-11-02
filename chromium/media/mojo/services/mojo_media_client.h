@@ -7,9 +7,12 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
+#include "media/base/overlay_info.h"
+#include "media/media_features.h"
 #include "media/mojo/interfaces/video_decoder.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
 
@@ -39,11 +42,12 @@ class RendererFactory;
 class VideoDecoder;
 class VideoFrame;
 class VideoRendererSink;
+struct CdmHostFilePath;
 
 class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
-  // Currently using the same signature as VideoFrame::ReleaseMailboxCB.
-  using ReleaseMailboxCB = base::Callback<void(const gpu::SyncToken&)>;
+  // Similar to VideoFrame::ReleaseMailboxCB for now.
+  using ReleaseMailboxCB = base::OnceCallback<void(const gpu::SyncToken&)>;
 
   using OutputWithReleaseMailboxCB =
       base::Callback<void(ReleaseMailboxCB, const scoped_refptr<VideoFrame>&)>;
@@ -59,6 +63,10 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
       service_manager::Connector* connector,
       service_manager::ServiceContextRefFactory* context_ref_factory);
 
+  // Called by the MediaService to ensure the process is sandboxed. It could be
+  // a no-op if the process is already sandboxed.
+  virtual void EnsureSandboxed();
+
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
@@ -68,7 +76,8 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
       mojom::CommandBufferIdPtr command_buffer_id,
-      OutputWithReleaseMailboxCB output_cb);
+      OutputWithReleaseMailboxCB output_cb,
+      RequestOverlayInfoCB request_overlay_info_cb);
 
   // Returns the output sink used for rendering audio on |audio_device_id|.
   // May be null if the RendererFactory doesn't need an audio sink.
@@ -89,6 +98,12 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   // nullptr if the host chose not to bind the InterfacePtr.
   virtual std::unique_ptr<CdmFactory> CreateCdmFactory(
       service_manager::mojom::InterfaceProvider* host_interfaces);
+
+#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
+  // Gets a list of CDM host file paths and put them in |cdm_host_file_paths|.
+  virtual void AddCdmHostFilePaths(
+      std::vector<CdmHostFilePath>* cdm_host_file_paths);
+#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
  protected:
   MojoMediaClient();

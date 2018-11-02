@@ -40,6 +40,7 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/native_widget_private.h"
+#include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
 
 // Donates an implementation of -[NSAnimation stopAnimation] which calls the
@@ -103,6 +104,11 @@ class BridgedNativeWidgetTestApi {
     bridge_->compositor_widget_->GotIOSurfaceFrame(
         base::ScopedCFTypeRef<IOSurfaceRef>(), size, kScaleFactor);
     bridge_->AcceleratedWidgetSwapCompleted();
+  }
+
+  NSAnimation* show_animation() {
+    return base::mac::ObjCCastStrict<NSAnimation>(
+        bridge_->show_animation_.get());
   }
 
  private:
@@ -798,6 +804,32 @@ TEST_F(NativeWidgetMacTest, VisibleAfterNativeParentShow) {
   [native_parent close];
 }
 
+// Tests visibility for a child of a native NSWindow, reshowing after a
+// deminiaturize on the parent window (after attempting to show the child while
+// the parent was miniaturized).
+TEST_F(NativeWidgetMacTest, VisibleAfterNativeParentDeminiaturize) {
+  // Disabled on 10.10 due to flakes. See http://crbug.com/777247.
+  if (base::mac::IsOS10_10())
+    return;
+
+  NSWindow* native_parent = MakeNativeParent();
+  [native_parent makeKeyAndOrderFront:nil];
+  [native_parent miniaturize:nil];
+  Widget* child = AttachPopupToNativeParent(native_parent);
+
+  child->Show();
+  EXPECT_FALSE([native_parent isVisible]);
+  EXPECT_FALSE(child->IsVisible());  // Parent is hidden so child is also.
+
+  [native_parent deminiaturize:nil];
+  EXPECT_TRUE([native_parent isVisible]);
+  // Don't WaitForVisibleCounts() here: deminiaturize is synchronous, so any
+  // spurious _occlusion_ state change would have already occurred. Further
+  // occlusion changes are not guaranteed to be triggered by the deminiaturize.
+  EXPECT_TRUE(child->IsVisible());
+  [native_parent close];
+}
+
 // Use Native APIs to query the tooltip text that would be shown once the
 // tooltip delay had elapsed.
 base::string16 TooltipTextForWidget(Widget* widget) {
@@ -916,16 +948,17 @@ class ModalDialogDelegate : public DialogDelegateView {
       : modal_type_(modal_type) {}
 
   void set_can_close(bool value) { can_close_ = value; }
+  void set_buttons(int buttons) { buttons_ = buttons; }
 
-  // WidgetDelegate:
+  // DialogDelegateView:
+  int GetDialogButtons() const override { return buttons_; }
   ui::ModalType GetModalType() const override { return modal_type_; }
-
-  // DialogDelegate:
   bool Close() override { return can_close_; }
 
  private:
   const ui::ModalType modal_type_;
   bool can_close_ = true;
+  int buttons_ = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
 
   DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
 };
@@ -994,14 +1027,23 @@ Widget* ShowChildModalWidgetAndWait(NSWindow* native_parent) {
   EXPECT_FALSE(modal_dialog_widget->IsVisible());
   ScopedSwizzleWaiter show_waiter([ConstrainedWindowAnimationShow class]);
 
+  BridgedNativeWidgetTestApi test_api(modal_dialog_widget->GetNativeWindow());
+  EXPECT_FALSE(test_api.show_animation());
+
   modal_dialog_widget->Show();
   // Visible immediately (although it animates from transparent).
   EXPECT_TRUE(modal_dialog_widget->IsVisible());
+  base::scoped_nsobject<NSAnimation> retained_animation(
+      test_api.show_animation(), base::scoped_policy::RETAIN);
+  EXPECT_TRUE(retained_animation);
+  EXPECT_TRUE([retained_animation isAnimating]);
 
   // Run the animation.
   show_waiter.WaitForMethod();
   EXPECT_TRUE(modal_dialog_widget->IsVisible());
   EXPECT_TRUE(show_waiter.method_called());
+  EXPECT_FALSE([retained_animation isAnimating]);
+  EXPECT_FALSE(test_api.show_animation());
   return modal_dialog_widget;
 }
 
@@ -1068,6 +1110,53 @@ TEST_F(NativeWidgetMacTest, NativeWindowChildModalShowHide) {
     hide_waiter.WaitForMethod();
     EXPECT_TRUE(hide_waiter.method_called());
   }
+}
+
+// Tests that calls to Hide() a Widget cancel any in-progress show animation,
+// and that clients can control the triggering of the animation.
+TEST_F(NativeWidgetMacTest, ShowAnimationControl) {
+  NSWindow* native_parent = MakeNativeParent();
+  Widget* modal_dialog_widget = views::DialogDelegate::CreateDialogWidget(
+      new ModalDialogDelegate(ui::MODAL_TYPE_CHILD), nullptr,
+      [native_parent contentView]);
+
+  modal_dialog_widget->SetBounds(gfx::Rect(50, 50, 200, 150));
+  EXPECT_FALSE(modal_dialog_widget->IsVisible());
+
+  BridgedNativeWidgetTestApi test_api(modal_dialog_widget->GetNativeWindow());
+  EXPECT_FALSE(test_api.show_animation());
+  modal_dialog_widget->Show();
+
+  EXPECT_TRUE(modal_dialog_widget->IsVisible());
+  base::scoped_nsobject<NSAnimation> retained_animation(
+      test_api.show_animation(), base::scoped_policy::RETAIN);
+  EXPECT_TRUE(retained_animation);
+  EXPECT_TRUE([retained_animation isAnimating]);
+
+  // Hide without waiting for the animation to complete. Animation should cancel
+  // and clear references from BridgedNativeWidget.
+  modal_dialog_widget->Hide();
+  EXPECT_FALSE([retained_animation isAnimating]);
+  EXPECT_FALSE(test_api.show_animation());
+  retained_animation.reset();
+
+  // Disable animations and show again.
+  modal_dialog_widget->SetVisibilityChangedAnimationsEnabled(false);
+  modal_dialog_widget->Show();
+  EXPECT_FALSE(test_api.show_animation());  // No animation this time.
+  modal_dialog_widget->Hide();
+
+  // Test after re-enabling.
+  modal_dialog_widget->SetVisibilityChangedAnimationsEnabled(true);
+  modal_dialog_widget->Show();
+  EXPECT_TRUE(test_api.show_animation());
+  retained_animation.reset(test_api.show_animation(),
+                           base::scoped_policy::RETAIN);
+
+  // Closing should also cancel the animation.
+  EXPECT_TRUE([retained_animation isAnimating]);
+  [native_parent close];
+  EXPECT_FALSE([retained_animation isAnimating]);
 }
 
 // Tests behavior of window-modal dialogs, displayed as sheets.
@@ -1968,6 +2057,85 @@ TEST_F(NativeWidgetMacTest, CanClose) {
   delegate->set_can_close(true);
   EXPECT_TRUE([[window delegate] windowShouldClose:window]);
   widget->CloseNow();
+}
+
+namespace {
+
+// Returns an array of NSTouchBarItemIdentifier (i.e. NSString), extracted from
+// the principal of |view|'s touch bar, which must be a NSGroupTouchBarItem.
+// Also verifies that the touch bar's delegate returns non-nil for all items.
+NSArray* ExtractTouchBarGroupIdentifiers(NSView* view) {
+  NSArray* result = nil;
+  if (@available(macOS 10.12.2, *)) {
+    NSTouchBar* touch_bar = [view touchBar];
+    NSTouchBarItemIdentifier principal = [touch_bar principalItemIdentifier];
+    EXPECT_TRUE(principal);
+    NSGroupTouchBarItem* group = base::mac::ObjCCastStrict<NSGroupTouchBarItem>(
+        [[touch_bar delegate] touchBar:touch_bar
+                 makeItemForIdentifier:principal]);
+    EXPECT_TRUE(group);
+    NSTouchBar* nested_touch_bar = [group groupTouchBar];
+    result = [nested_touch_bar itemIdentifiers];
+
+    for (NSTouchBarItemIdentifier item in result) {
+      EXPECT_TRUE([[touch_bar delegate] touchBar:nested_touch_bar
+                           makeItemForIdentifier:item]);
+    }
+  }
+  return result;
+}
+
+}  // namespace
+
+// Test TouchBar integration.
+TEST_F(NativeWidgetMacTest, TouchBar) {
+  ModalDialogDelegate* delegate = new ModalDialogDelegate(ui::MODAL_TYPE_NONE);
+  views::DialogDelegate::CreateDialogWidget(delegate, nullptr, nullptr);
+  DialogClientView* client_view = delegate->GetDialogClientView();
+  NSView* content = [delegate->GetWidget()->GetNativeWindow() contentView];
+
+  NSString* principal = nil;
+  NSObject* old_touch_bar = nil;
+
+  // Constants from bridged_content_view_touch_bar.mm.
+  NSString* const kTouchBarOKId = @"com.google.chrome-OK";
+  NSString* const kTouchBarCancelId = @"com.google.chrome-CANCEL";
+
+  EXPECT_TRUE(content);
+  EXPECT_TRUE(client_view->ok_button());
+  EXPECT_TRUE(client_view->cancel_button());
+
+  if (@available(macOS 10.12.2, *)) {
+    NSTouchBar* touch_bar = [content touchBar];
+    EXPECT_TRUE([touch_bar delegate]);
+    EXPECT_TRUE([[touch_bar delegate] touchBar:touch_bar
+                         makeItemForIdentifier:kTouchBarOKId]);
+    EXPECT_TRUE([[touch_bar delegate] touchBar:touch_bar
+                         makeItemForIdentifier:kTouchBarCancelId]);
+
+    principal = [touch_bar principalItemIdentifier];
+    EXPECT_NSEQ(@"com.google.chrome-DIALOG-BUTTONS-GROUP", principal);
+    EXPECT_NSEQ((@[ kTouchBarCancelId, kTouchBarOKId ]),
+                ExtractTouchBarGroupIdentifiers(content));
+
+    // Ensure the touchBar is recreated by comparing pointers.
+    old_touch_bar = touch_bar;
+    EXPECT_NSEQ(old_touch_bar, [content touchBar]);
+  }
+
+  // Remove the cancel button.
+  delegate->set_buttons(ui::DIALOG_BUTTON_OK);
+  delegate->DialogModelChanged();
+  EXPECT_TRUE(client_view->ok_button());
+  EXPECT_FALSE(client_view->cancel_button());
+
+  if (@available(macOS 10.12.2, *)) {
+    NSTouchBar* touch_bar = [content touchBar];
+    EXPECT_NSNE(old_touch_bar, touch_bar);
+    EXPECT_NSEQ((@[ kTouchBarOKId ]), ExtractTouchBarGroupIdentifiers(content));
+  }
+
+  delegate->GetWidget()->CloseNow();
 }
 
 }  // namespace test

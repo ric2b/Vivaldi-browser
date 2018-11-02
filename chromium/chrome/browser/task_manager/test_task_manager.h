@@ -26,9 +26,10 @@ class TestTaskManager : public TaskManagerInterface {
   void ActivateTask(TaskId task_id) override;
   bool IsTaskKillable(TaskId task_id) override;
   void KillTask(TaskId task_id) override;
-  double GetCpuUsage(TaskId task_id) const override;
+  double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
   base::Time GetStartTime(TaskId task_id) const override;
   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+  int64_t GetMemoryFootprintUsage(TaskId task_id) const override;
   int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
   int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
   int64_t GetSharedMemoryUsage(TaskId task_id) const override;
@@ -37,6 +38,7 @@ class TestTaskManager : public TaskManagerInterface {
                             bool* has_duplicates) const override;
   base::MemoryState GetMemoryState(TaskId task_id) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
+  int GetHardFaultsPerSecond(TaskId task_id) const override;
   int GetNaClDebugStubPort(TaskId task_id) const override;
   void GetGDIHandles(TaskId task_id,
                      int64_t* current,

@@ -39,6 +39,8 @@ struct RenderPassQuadState {
   gfx.mojom.PointF filters_origin;
   // Render surface's non-normalized texture rect.
   gfx.mojom.RectF tex_coord_rect;
+
+  bool force_anti_aliasing_off;
 };
 
 struct SolidColorQuadState {
@@ -52,14 +54,11 @@ struct StreamVideoQuadState {
   gfx.mojom.Transform matrix;
 };
 
-enum SurfaceDrawQuadType {
-  PRIMARY,
-  FALLBACK,
-};
-
 struct SurfaceQuadState {
-  SurfaceId surface;
-  SurfaceDrawQuadType surface_draw_quad_type;
+  SurfaceId primary_surface_id;
+  SurfaceId? fallback_surface_id;
+  uint32 default_background_color;
+  bool stretch_content_to_fill_bounds;
 };
 
 struct TextureQuadState {
@@ -81,12 +80,7 @@ struct TileQuadState {
   bool swizzle_contents;
   uint32 resource_id;
   bool nearest_neighbor;
-};
-
-enum YUVColorSpace {
-  REC_601,       // SDTV standard with restricted "studio swing" color range.
-  REC_709,       // HDTV standard with restricted "studio swing" color range.
-  JPEG,          // Full color range [0, 255] JPEG color space.
+  bool force_anti_aliasing_off;
 };
 
 struct YUVVideoQuadState {
@@ -98,7 +92,6 @@ struct YUVVideoQuadState {
   uint32 u_plane_resource_id;
   uint32 v_plane_resource_id;
   uint32 a_plane_resource_id;
-  YUVColorSpace color_space;
   float resource_offset;
   float resource_multiplier;
   uint32 bits_per_channel;

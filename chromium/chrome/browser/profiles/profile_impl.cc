@@ -35,6 +35,8 @@
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
+#include "chrome/browser/background_fetch/background_fetch_delegate_factory.h"
+#include "chrome/browser/background_fetch/background_fetch_delegate_impl.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
 #include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -108,7 +110,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/url_formatter/url_fixer.h"
@@ -210,7 +212,7 @@ const char kPrefExitTypeCrashed[] = "Crashed";
 const char kPrefExitTypeSessionEnded[] = "SessionEnded";
 
 void CreateProfileReadme(const base::FilePath& profile_path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   base::FilePath readme_path = profile_path.Append(chrome::kReadmeFilename);
   std::string product_name = l10n_util::GetStringUTF8(IDS_PRODUCT_NAME);
   std::string readme_text = base::StringPrintf(
@@ -340,7 +342,7 @@ void ProfileImpl::RegisterProfilePrefs(
 #if defined(OS_ANDROID)
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
   registry->RegisterIntegerPref(
-      vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, 90,
+      vivaldiprefs::kOldVivaldiNumberOfDaysToKeepVisits, 90,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   // The following prefs don't need to be sync'd to mobile. This file isn't
@@ -486,10 +488,10 @@ ProfileImpl::ProfileImpl(
 
 #if defined(OS_CHROMEOS)
   if (chromeos::ProfileHelper::IsSigninProfile(this))
-    chrome::RegisterLoginProfilePrefs(pref_registry_.get());
+    RegisterLoginProfilePrefs(pref_registry_.get());
   else
 #endif
-  chrome::RegisterUserProfilePrefs(pref_registry_.get());
+    RegisterUserProfilePrefs(pref_registry_.get());
 
   BrowserContextDependencyManager::GetInstance()->
       RegisterProfilePrefsForServices(this, pref_registry_.get());
@@ -832,6 +834,10 @@ Profile* ProfileImpl::GetOriginalProfile() {
   return this;
 }
 
+const Profile* ProfileImpl::GetOriginalProfile() const {
+  return this;
+}
+
 bool ProfileImpl::IsSupervised() const {
   return !GetPrefs()->GetString(prefs::kSupervisedUserId).empty();
 }
@@ -868,8 +874,8 @@ void ProfileImpl::OnLocaleReady() {
   SCOPED_UMA_HISTOGRAM_TIMER("Profile.OnLocaleReadyTime");
   // Migrate obsolete prefs.
   if (g_browser_process->local_state())
-    chrome::MigrateObsoleteBrowserPrefs(this, g_browser_process->local_state());
-  chrome::MigrateObsoleteProfilePrefs(this);
+    MigrateObsoleteBrowserPrefs(this, g_browser_process->local_state());
+  MigrateObsoleteProfilePrefs(this);
 
   // |kSessionExitType| was added after |kSessionExitedCleanly|. If the pref
   // value is empty fallback to checking for |kSessionExitedCleanly|.
@@ -1070,6 +1076,10 @@ content::PermissionManager* ProfileImpl::GetPermissionManager() {
   return PermissionManagerFactory::GetForProfile(this);
 }
 
+content::BackgroundFetchDelegate* ProfileImpl::GetBackgroundFetchDelegate() {
+  return BackgroundFetchDelegateFactory::GetForProfile(this);
+}
+
 content::BackgroundSyncController* ProfileImpl::GetBackgroundSyncController() {
   return BackgroundSyncControllerFactory::GetForProfile(this);
 }
@@ -1262,17 +1272,6 @@ chrome_browser_net::Predictor* ProfileImpl::GetNetworkPredictor() {
   return predictor_;
 }
 
-DevToolsNetworkControllerHandle*
-ProfileImpl::GetDevToolsNetworkControllerHandle() {
-  return io_data_.GetDevToolsNetworkControllerHandle();
-}
-
-void ProfileImpl::ClearNetworkingHistorySince(
-    base::Time time,
-    const base::Closure& completion) {
-  io_data_.ClearNetworkingHistorySince(time, completion);
-}
-
 GURL ProfileImpl::GetHomePage() {
   // --homepage overrides any preferences.
   const base::CommandLine& command_line =
@@ -1383,6 +1382,7 @@ ProfileImpl::CreateDomainReliabilityMonitor(PrefService* local_state) {
     return std::unique_ptr<domain_reliability::DomainReliabilityMonitor>();
 
   return service->CreateMonitor(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 }
 

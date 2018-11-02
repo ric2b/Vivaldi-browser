@@ -9,11 +9,11 @@
 #include "base/memory/ptr_util.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/layer.h"
-#include "cc/quads/solid_color_draw_quad.h"
-#include "cc/quads/texture_draw_quad.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
+#include "components/viz/common/quads/texture_draw_quad.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -77,14 +77,15 @@ void PaintedScrollbarLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   scrollbar_layer->set_thumb_opacity(thumb_opacity_);
 }
 
-bool PaintedScrollbarLayerImpl::WillDraw(DrawMode draw_mode,
-                                  ResourceProvider* resource_provider) {
+bool PaintedScrollbarLayerImpl::WillDraw(
+    DrawMode draw_mode,
+    LayerTreeResourceProvider* resource_provider) {
   DCHECK(draw_mode != DRAW_MODE_RESOURCELESS_SOFTWARE);
   return LayerImpl::WillDraw(draw_mode, resource_provider);
 }
 
 void PaintedScrollbarLayerImpl::AppendQuads(
-    RenderPass* render_pass,
+    viz::RenderPass* render_pass,
     AppendQuadsData* append_quads_data) {
   bool premultipled_alpha = true;
   bool flipped = false;
@@ -95,9 +96,9 @@ void PaintedScrollbarLayerImpl::AppendQuads(
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   PopulateScaledSharedQuadState(shared_quad_state, internal_contents_scale_,
-                                internal_contents_scale_);
+                                internal_contents_scale_, contents_opaque());
 
-  AppendDebugBorderQuad(render_pass, internal_content_bounds_,
+  AppendDebugBorderQuad(render_pass, gfx::Rect(internal_content_bounds_),
                         shared_quad_state, append_quads_data);
 
   gfx::Rect thumb_quad_rect = ComputeThumbQuadRect();
@@ -118,8 +119,7 @@ void PaintedScrollbarLayerImpl::AppendQuads(
     bool needs_blending = true;
     const float opacity[] = {thumb_opacity_, thumb_opacity_, thumb_opacity_,
                              thumb_opacity_};
-    TextureDrawQuad* quad =
-        render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+    auto* quad = render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
     quad->SetNew(shared_quad_state, scaled_thumb_quad_rect,
                  scaled_visible_thumb_quad_rect, needs_blending,
                  thumb_resource_id, premultipled_alpha, uv_top_left,
@@ -138,8 +138,7 @@ void PaintedScrollbarLayerImpl::AppendQuads(
   if (track_resource_id && !visible_track_quad_rect.IsEmpty()) {
     bool needs_blending = !contents_opaque();
     const float opacity[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    TextureDrawQuad* quad =
-        render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+    auto* quad = render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
     quad->SetNew(shared_quad_state, scaled_track_quad_rect,
                  scaled_visible_track_quad_rect, needs_blending,
                  track_resource_id, premultipled_alpha, uv_top_left,

@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -31,7 +30,7 @@ CookieStoreCommand::CookieStoreCommand(Type type, const CanonicalCookie& cookie)
 CookieStoreCommand::CookieStoreCommand(const CookieStoreCommand& other) =
     default;
 
-CookieStoreCommand::~CookieStoreCommand() {}
+CookieStoreCommand::~CookieStoreCommand() = default;
 
 MockPersistentCookieStore::MockPersistentCookieStore()
     : store_load_commands_(false), load_return_value_(true), loaded_(false) {}
@@ -99,8 +98,7 @@ void MockPersistentCookieStore::Flush(base::OnceClosure callback) {
 void MockPersistentCookieStore::SetForceKeepSessionState() {
 }
 
-MockPersistentCookieStore::~MockPersistentCookieStore() {
-}
+MockPersistentCookieStore::~MockPersistentCookieStore() = default;
 
 std::unique_ptr<CanonicalCookie> BuildCanonicalCookie(
     const GURL& url,
@@ -243,7 +241,6 @@ std::unique_ptr<CookieMonster> CreateMonsterFromStoreForGC(
   return std::make_unique<CookieMonster>(store.get());
 }
 
-MockSimplePersistentCookieStore::~MockSimplePersistentCookieStore() {
-}
+MockSimplePersistentCookieStore::~MockSimplePersistentCookieStore() = default;
 
 }  // namespace net

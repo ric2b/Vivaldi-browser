@@ -20,7 +20,6 @@
 <translation id="1187722533808055681">Έξοδος από την κατάσταση αδράνειας</translation>
 <translation id="119944043368869598">Διαγραφή όλων</translation>
 <translation id="1221825588892235038">Μόνο επιλογή</translation>
-<translation id="1238150413700645698">Προστατευμένο Περιεχόμενο</translation>
 <translation id="1244303850296295656">Σφάλμα επέκτασης</translation>
 <translation id="1274977772557788323">Ρυθμίσεις αποθήκευσης του Adobe Flash Player</translation>
 <translation id="1278049586634282054">Εξέταση προβολών:</translation>
@@ -43,11 +42,9 @@
 <translation id="159359590073980872">Προσωρινή Μνήμη Εικόνας</translation>
 <translation id="1601560923496285236">Εφαρμογή</translation>
 <translation id="1603914832182249871">(Ανώνυμη περιήγηση)</translation>
-<translation id="1616206807336925449">Αυτή η επέκταση δεν απαιτεί ειδικά δικαιώματα.</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
 <translation id="1627276047960621195">Περιγραφές Αρχείων</translation>
 <translation id="1635033183663317347">Εγκαταστάθηκε από τον κηδεμόνα σας.</translation>
-<translation id="1681120471812444678">Ρύθμιση για την προσθήκη εκτυπωτών…</translation>
 <translation id="1682548588986054654">Νέο Παράθυρο Ανώνυμης Περιήγησης</translation>
 <translation id="1698122934742150150">Μόνο για την τρέχουσα περίοδο λειτουργίας σε κατάσταση ανώνυμης περιήγησης</translation>
 <translation id="1706625117072057435">Επίπεδα εστίασης</translation>
@@ -63,7 +60,6 @@
 <translation id="1789575671122666129">Αναδυόμενα παράθυρα</translation>
 <translation id="1815083418640426271">Επικόλληση ως Απλό Κείμενο</translation>
 <translation id="1828901632669367785">Εκτύπωση με χρήση του παραθύρου διαλόγου του συστήματος...</translation>
-<translation id="1838288018605456492">Κάντε κλικ για ρύθμιση</translation>
 <translation id="1846308012215045257">Κάντε κλικ για εκτέλεση της προσθήκης <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Περιστροφή &amp;προς τα δεξιά</translation>
 <translation id="1859234291848436338">Κατεύθυνση γραφής</translation>
@@ -146,11 +142,9 @@
 <translation id="2902127500170292085">Δεν ήταν δυνατή η επικοινωνία της επέκτασης <ph name="EXTENSION_NAME" /> με αυτόν τον εκτυπωτή. Βεβαιωθείτε ότι ο εκτυπωτής είναι συνδεδεμένος και δοκιμάστε ξανά.</translation>
 <translation id="2904456025988372123">Να γίνεται ερώτηση όταν ένας ιστότοπος προσπαθεί να κατεβάσει αρχεία αυτόματα μετά το πρώτο αρχείο</translation>
 <translation id="2913331724188855103">Να επιτρέπεται στους ιστότοπους η αποθήκευση και η ανάγνωση δεδομένων cookie (συνιστάται)</translation>
-<translation id="2914303854539667666">Δημιουργία κωδικού πρόσβασης</translation>
 <translation id="2916745397441987255">Αναζήτηση επεκτάσεων</translation>
 <translation id="2932883381142163287">Αναφορά κατάχρησης</translation>
 <translation id="2941112035454246133">Χαμηλή</translation>
-<translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">&amp;Επανάληψη ενέργειας</translation>
 <translation id="299483336428448530">Εγκαταστάθηκε από το γονέα σας.</translation>
 <translation id="3003623123441819449">Προσωρινή μνήμη CSS</translation>
@@ -170,7 +164,6 @@
 <translation id="3127156390846601284">Με αυτόν τον τρόπο, θα διαγραφούν όλα τα δεδομένα που έχουν αποθηκευτεί στη συσκευή σας για όλους τους εμφανιζόμενους ιστότοπους. Θέλετε να συνεχίσετε;</translation>
 <translation id="3129173833825111527">Αριστερό περιθώριο</translation>
 <translation id="3144647712221361880">Άνοιγμα συνδέσμου ως</translation>
-<translation id="3149510190863420837">Εφαρμογές Vivaldi</translation>
 <translation id="3154429428035006212">Εκτός σύνδεσης για περισσότερο από έναν μήνα</translation>
 <translation id="3222066309010235055">Απόδοση λειτουργίας εκ των προτέρων: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Μικρόφωνο</translation>
@@ -198,7 +191,6 @@
 <translation id="3396331542604645348">Ο επιλεγμένος εκτυπωτής δεν είναι διαθέσιμος ή δεν έχει εγκατασταθεί σωστά. Ελέγξτε τον εκτυπωτή σας ή δοκιμάστε να επιλέξετε άλλον εκτυπωτή.</translation>
 <translation id="3432227430032737297">Κατάργηση όλων όσων εμφανίζονται</translation>
 <translation id="3435896845095436175">Ενεργοποίηση</translation>
-<translation id="3439970425423980614">Άνοιγμα PDF σε προεπισκόπηση</translation>
 <translation id="3440761377721825626">Να γίνεται ερώτηση κάθε φορά που ένας ιστότοπος επιθυμεί να χρησιμοποιήσει μια προσθήκη, για να αποκτήσει πρόσβαση στον υπολογιστή σας</translation>
 <translation id="345693547134384690">Άνοιγμα ε&amp;ικόνας σε νέα καρτέλα</translation>
 <translation id="3467267818798281173">Ρωτήστε την Google για προτάσεις</translation>
@@ -212,14 +204,12 @@
 <translation id="3587482841069643663">Όλες</translation>
 <translation id="3618849550573277856">Αναζήτηση "<ph name="LOOKUP_STRING" />"</translation>
 <translation id="3627588569887975815">Άνοιγμα συνδέσμου σε παράθυρο inco&amp;gnito</translation>
-<translation id="3640006360782160348">Ακύρωση ρύθμισης εκτυπωτή</translation>
 <translation id="3668823961463113931">Προγράμματα χειρισμού</translation>
 <translation id="3678156199662914018">Επέκταση: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Αίτημα κοινής χρήσης οθόνης από την εφαρμογή <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">Φόρτωση...</translation>
 <translation id="3725367690636977613">σελίδες</translation>
 <translation id="3727187387656390258">Έλεγχος αναδυόμενου παραθύρου</translation>
-<translation id="3730639321086573427">Τοπικοί Προορισμοί</translation>
 <translation id="3744111561329211289">Συγχρονισμός παρασκηνίου</translation>
 <translation id="3760460896538743390">Έλεγχος &amp;Σελίδας Παρασκηνίου</translation>
 <translation id="3763401818161139108">Να εκτελείται πάντα στο <ph name="ORIGIN" /></translation>
@@ -256,6 +246,7 @@
 <translation id="4091434297613116013">φύλλα χαρτιού</translation>
 <translation id="4096508467498758490">Απενεργοποίηση επεκτάσεων λειτουργίας προγραμματιστή</translation>
 <translation id="4100839878934973028">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια εφαρμογή, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
+<translation id="4109898769411476438">Κλείσιμο Προγράμματος Περιήγησης Πριν από την Εισαγωγή</translation>
 <translation id="4115080753528843955">Ορισμένες υπηρεσίες περιεχομένου χρησιμοποιούν μοναδικά αναγνωριστικά για τους σκοπούς της εξουσιοδότησης πρόσβασης σε προστατευμένο περιεχόμενο</translation>
 <translation id="411666854932687641">Ιδιωτική Μνήμη</translation>
 <translation id="4130207949184424187">Αυτή η επέκταση άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
@@ -287,7 +278,6 @@
 <translation id="4593021220803146968">&amp;Μετάβαση σε <ph name="URL" /></translation>
 <translation id="4595560905247879544">Οι εφαρμογές και οι επεκτάσεις μπορούν να τροποποιηθούν μόνο από τον διαχειριστή(<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Κάποια επέκταση άλλαξε το περιεχόμενο της σελίδας όταν ανοίγετε μια νέα καρτέλα.</translation>
-<translation id="4624768044135598934">Ολοκληρώθηκε με επιτυχία!</translation>
 <translation id="4628314759732363424">Αλλαγή…</translation>
 <translation id="4643612240819915418">&amp;Άνοιγμα Βίντεο σε Νέα Καρτέλα</translation>
 <translation id="4677772697204437347">Μνήμη GPU</translation>
@@ -359,9 +349,9 @@
 <translation id="5623842676595125836">Αρχείο Καταγραφής</translation>
 <translation id="5627086634964711283">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
 <translation id="563535393368633106">Ερώτηση πριν από την πρόσβαση (συνιστάται)</translation>
-<translation id="5646376287012673985">Τοποθεσία</translation>
 <translation id="5649053991847567735">Αυτόματες λήψεις</translation>
 <translation id="5677928146339483299">Αποκλεισμένος</translation>
+<translation id="5689516760719285838">Τοποθεσία</translation>
 <translation id="5707185214361380026">Αποτυχία φόρτωσης επέκτασης από:</translation>
 <translation id="5715711091495208045">Μεσάζων προσθηκών: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Συγγνώμη, δεν μπορούμε να δείξουμε τον κώδικα για αυτό το σφάλμα.</translation>
@@ -375,7 +365,6 @@
 <translation id="5829401023154985950">Διαχείριση...</translation>
 <translation id="583281660410589416">Άγνωστο</translation>
 <translation id="5838456317242088717">Τρέχουσα περίοδος λειτουργίας σε κατάσταση ανώνυμης περιήγησης</translation>
-<translation id="5848934677402291689">Η αποθήκευση σε PDF βρίσκεται σε εξέλιξη</translation>
 <translation id="5849869942539715694">Πακετάρισμα επέκτασης...</translation>
 <translation id="5908769186679515905">Αποκλεισμός ιστοτόπων από την εκτέλεση Flash</translation>
 <translation id="5910363049092958439">Αποθήκευση Εικόνας &amp;ως...</translation>
@@ -418,7 +407,6 @@
 <translation id="6308937455967653460">Αποθήκευση συν&amp;δέσμου ως...</translation>
 <translation id="6314335155547195432">Δημιουργία Κωδικού Πρόσβασης</translation>
 <translation id="6326855256003666642">Πλήθος Keepalive</translation>
-<translation id="6348109281845364640">Η ρύθμιση του εκτυπωτή απέτυχε</translation>
 <translation id="6370021412472292592">Δεν ήταν δυνατή η φόρτωση της δήλωσης (manifest).</translation>
 <translation id="6385543213911723544">Οι ιστότοποι ενδέχεται να αποθηκεύουν και να διαβάζουν δεδομένα cookie</translation>
 <translation id="6398765197997659313">Έξοδος από πλήρη οθόνη</translation>
@@ -430,7 +418,6 @@
 <translation id="6452181791372256707">Απόρριψη</translation>
 <translation id="6498249116389603658">&amp;Όλες οι γλώσσες σας</translation>
 <translation id="6503077044568424649">Πιο δημοφιλή</translation>
-<translation id="650584126816009598">Ο εκτυπωτής σας είναι έτοιμος.</translation>
 <translation id="6508261954199872201">Εφαρμογή: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Αντι&amp;γραφή εικόνας</translation>
 <translation id="6550675742724504774">Επιλογές</translation>
@@ -461,7 +448,6 @@
 <translation id="6955446738988643816">Έλεγχος Αναδυόμενου Παραθύρου</translation>
 <translation id="6970856801391541997">Εκτύπωση Συγκεκριμένων Σελίδων</translation>
 <translation id="6974053822202609517">Από δεξιά προς τα αριστερά</translation>
-<translation id="6982896539684144327">Εκτυπωτής από <ph name="VENDOR_NAME" /> εντοπίστηκε</translation>
 <translation id="6985276906761169321">ID:</translation>
 <translation id="6991665348624301627">Επιλογή προορισμού</translation>
 <translation id="7005848115657603926">Μη έγκυρο εύρος σελίδας, χρησιμοποιήστε το <ph name="EXAMPLE_PAGE_RANGE" /></translation>
@@ -491,7 +477,6 @@
 <translation id="7421925624202799674">&amp;Προβολή Κώδικα Σελίδας</translation>
 <translation id="7423098979219808738">Να γίνεται ερώτηση πρώτα</translation>
 <translation id="7427348830195639090">Σελίδα παρασκηνίου: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7438940380767210568">Ρύθμιση εκτυπωτή...</translation>
 <translation id="7453008956351770337">Με την επιλογή αυτού του εκτυπωτή, δίνετε στην παρακάτω επέκταση άδεια πρόσβασης στον εκτυπωτή σας:</translation>
 <translation id="7473891865547856676">Όχι, ευχαριστώ</translation>
 <translation id="749028671485790643">Άτομο <ph name="VALUE" /></translation>
@@ -522,7 +507,6 @@
 <translation id="7814458197256864873">&amp;Αντιγραφή</translation>
 <translation id="7818135753970109980">Προστέθηκε νέο θέμα (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Α&amp;ντιγραφή διεύθυνσης βίντεο</translation>
-<translation id="7831493768366098287">Google Print</translation>
 <translation id="7849264908733290972">Άνοιγμα Ε&amp;ικόνας σε Νέα Καρτέλα</translation>
 <translation id="7857949311770343000">Είναι αυτή η σελίδα νέας καρτέλας που περιμένατε να δείτε;</translation>
 <translation id="786073089922909430">Υπηρεσία: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -534,7 +518,6 @@
 <translation id="7947962633355574091">Α&amp;ντιγραφή Διεύθυνσης Βίντεο</translation>
 <translation id="7965010376480416255">Κοινόχρηστη μνήμη</translation>
 <translation id="7966241909927244760">Α&amp;ντιγραφή της Διεύθυνσης Εικόνας</translation>
-<translation id="7967437925638594022">Επεκτάσεις και εφαρμογές</translation>
 <translation id="7978412674231730200">Ιδιωτικό κλειδί</translation>
 <translation id="7982789257301363584">Δίκτυο</translation>
 <translation id="7997826902155442747">Προτεραιότητα Διεργασίας</translation>
@@ -548,13 +531,11 @@
 <translation id="8018313076035239964">Ελέγξτε τι πληροφορίες μπορούν να χρησιμοποιήσουν οι ιστότοποι και τι περιεχόμενο μπορούν να προβάλλουν σε εσάς</translation>
 <translation id="8023801379949507775">Ενημέρωση επεκτάσεων τώρα</translation>
 <translation id="8032244173881942855">Δεν είναι δυνατή η μετάδοση της καρτέλας.</translation>
-<translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Εκτύπωση ως εικόνα</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Διαχείριση επεκτάσεων</translation>
 <translation id="8180239481735238521">σελίδα</translation>
 <translation id="8188120771410500975">&amp;Ορθογραφικός έλεγχος στα πεδία κειμένου</translation>
-<translation id="8259581864063078725">Κάντε κλικ για να βρείτε μια εφαρμογή εκτύπωσης για να χρησιμοποιήσετε αυτόν τον εκτυπωτή.</translation>
 <translation id="8261378640211443080">Αυτή η επέκταση δεν αναφέρεται στο <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> και ενδέχεται να έχει προστεθεί εν αγνοία σας.</translation>
 <translation id="8261506727792406068">Διαγραφή</translation>
 <translation id="8270242299912238708">Έγγραφα PDF</translation>
@@ -611,7 +592,6 @@
 <translation id="8916476537757519021">Υποπλαίσιο ανώνυμης περιήγησης: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8926518602592448999">Απενεργοποίηση Επεκτάσεων Λειτουργίας Προγραμματιστή</translation>
 <translation id="8938356204940892126">Τα παρατάω</translation>
-<translation id="8944779739948852228">Εκτυπωτής εντοπίστηκε</translation>
 <translation id="895944840846194039">Μνήμη JavaScript</translation>
 <translation id="8962083179518285172">Απόκρυψη λεπτομερειών</translation>
 <translation id="8973557916016709913">Κατάργηση επιπέδου εστίασης</translation>

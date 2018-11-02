@@ -20,7 +20,6 @@
 
 #include <limits>
 #include <utility>
-#include <vector>
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
@@ -274,7 +273,7 @@ bool MachOImageReader::Initialize(ProcessReader* process_reader,
   }
 
   // Now that the slide is known, push it into the segments.
-  for (MachOImageSegmentReader* segment : segments_) {
+  for (const auto& segment : segments_) {
     segment->SetSlide(slide_);
 
     // This was already checked for the unslid values while the segments were
@@ -321,8 +320,7 @@ const MachOImageSegmentReader* MachOImageReader::GetSegmentByName(
     return nullptr;
   }
 
-  const MachOImageSegmentReader* segment = segments_[iterator->second];
-  return segment;
+  return segments_[iterator->second].get();
 }
 
 const process_types::section* MachOImageReader::GetSectionByName(
@@ -354,14 +352,14 @@ const process_types::section* MachOImageReader::GetSectionAtIndex(
   // Switch to a more comfortable 0-based index.
   size_t local_index = index - 1;
 
-  for (const MachOImageSegmentReader* segment : segments_) {
+  for (const auto& segment : segments_) {
     size_t nsects = segment->nsects();
     if (local_index < nsects) {
       const process_types::section* section =
           segment->GetSectionAtIndex(local_index, address);
 
       if (containing_segment) {
-        *containing_segment = segment;
+        *containing_segment = segment.get();
       }
 
       return section;
@@ -483,22 +481,41 @@ bool MachOImageReader::GetCrashpadInfo(
   }
 
   if (crashpad_info_section->size <
-      crashpad_info->ExpectedSize(process_reader_)) {
+      crashpad_info->MinimumSize(process_reader_)) {
     LOG(WARNING) << "small crashpad info section size "
                  << crashpad_info_section->size << module_info_;
     return false;
   }
 
+  // This Read() will zero out anything beyond the structure’s declared size.
   if (!crashpad_info->Read(process_reader_, crashpad_info_address)) {
     LOG(WARNING) << "could not read crashpad info" << module_info_;
     return false;
   }
 
   if (crashpad_info->signature != CrashpadInfo::kSignature ||
-      crashpad_info->size != crashpad_info_section->size ||
-      crashpad_info->version < 1) {
-    LOG(WARNING) << "unexpected crashpad info data" << module_info_;
+      crashpad_info->version != 1) {
+    LOG(WARNING) << base::StringPrintf(
+        "unexpected crashpad info signature 0x%x, version %u%s",
+        crashpad_info->signature,
+        crashpad_info->version,
+        module_info_.c_str());
     return false;
+  }
+
+  // Don’t require strict equality, to leave wiggle room for sloppy linkers.
+  if (crashpad_info->size > crashpad_info_section->size) {
+    LOG(WARNING) << "crashpad info struct size " << crashpad_info->size
+                 << " large for section size " << crashpad_info_section->size
+                 << module_info_;
+    return false;
+  }
+
+  if (crashpad_info->size > crashpad_info->ExpectedSize(process_reader_)) {
+    // This isn’t strictly a problem, because unknown fields will simply be
+    // ignored, but it may be of diagnostic interest.
+    LOG(INFO) << "large crashpad info size " << crashpad_info->size
+              << module_info_;
   }
 
   return true;
@@ -522,9 +539,9 @@ bool MachOImageReader::ReadLoadCommand(mach_vm_address_t load_command_address,
 bool MachOImageReader::ReadSegmentCommand(
     mach_vm_address_t load_command_address,
     const std::string& load_command_info) {
-  MachOImageSegmentReader* segment = new MachOImageSegmentReader();
   size_t segment_index = segments_.size();
-  segments_.push_back(segment);  // Takes ownership.
+  segments_.push_back(std::make_unique<MachOImageSegmentReader>());
+  MachOImageSegmentReader* segment = segments_.back().get();
 
   if (!segment->Initialize(process_reader_,
                            load_command_address,

@@ -474,6 +474,9 @@ static void GL_BINDING_CALL Mock_glFlush(void);
 static void GL_BINDING_CALL Mock_glFlushMappedBufferRange(GLenum target,
                                                           GLintptr offset,
                                                           GLsizeiptr length);
+static void GL_BINDING_CALL Mock_glFlushMappedBufferRangeEXT(GLenum target,
+                                                             GLintptr offset,
+                                                             GLsizeiptr length);
 static void GL_BINDING_CALL
 Mock_glFramebufferRenderbuffer(GLenum target,
                                GLenum attachment,
@@ -1720,3 +1723,6 @@ static void GL_BINDING_CALL Mock_glViewport(GLint x,
 static void GL_BINDING_CALL Mock_glWaitSync(GLsync sync,
                                             GLbitfield flags,
                                             GLuint64 timeout);
+static void GL_BINDING_CALL Mock_glWindowRectanglesEXT(GLenum mode,
+                                                       GLsizei n,
+                                                       const GLint* box);

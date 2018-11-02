@@ -59,16 +59,12 @@ class MediaRouterAndroid : public MediaRouterBase {
   void SendRouteBinaryMessage(const MediaRoute::Id& route_id,
                               std::unique_ptr<std::vector<uint8_t>> data,
                               SendRouteMessageCallback callback) override;
-  void AddIssue(const IssueInfo& issue_info) override;
-  void ClearIssue(const Issue::Id& issue_id) override;
   void OnUserGesture() override;
   void SearchSinks(const MediaSink::Id& sink_id,
                    const MediaSource::Id& source_id,
                    const std::string& search_input,
                    const std::string& domain,
                    MediaSinkSearchResponseCallback sink_callback) override;
-  void ProvideSinks(const std::string& provider_name,
-                    std::vector<MediaSinkInternal> sinks) override;
 
   // The methods called by the Java bridge.
   // Notifies the media router that information about sinks is received for
@@ -113,8 +109,6 @@ class MediaRouterAndroid : public MediaRouterBase {
   void UnregisterMediaSinksObserver(MediaSinksObserver* observer) override;
   void RegisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
   void UnregisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
-  void RegisterIssuesObserver(IssuesObserver* observer) override;
-  void UnregisterIssuesObserver(IssuesObserver* observer) override;
   void RegisterRouteMessageObserver(RouteMessageObserver* observer) override;
   void UnregisterRouteMessageObserver(RouteMessageObserver* observer) override;
 

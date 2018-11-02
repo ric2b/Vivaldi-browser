@@ -33,18 +33,18 @@ namespace blink {
 class PLATFORM_EXPORT MatrixTransformOperation final
     : public TransformOperation {
  public:
-  static PassRefPtr<MatrixTransformOperation> Create(double a,
-                                                     double b,
-                                                     double c,
-                                                     double d,
-                                                     double e,
-                                                     double f) {
-    return AdoptRef(new MatrixTransformOperation(a, b, c, d, e, f));
+  static scoped_refptr<MatrixTransformOperation> Create(double a,
+                                                        double b,
+                                                        double c,
+                                                        double d,
+                                                        double e,
+                                                        double f) {
+    return base::AdoptRef(new MatrixTransformOperation(a, b, c, d, e, f));
   }
 
-  static PassRefPtr<MatrixTransformOperation> Create(
+  static scoped_refptr<MatrixTransformOperation> Create(
       const TransformationMatrix& t) {
-    return AdoptRef(new MatrixTransformOperation(t));
+    return base::AdoptRef(new MatrixTransformOperation(t));
   }
 
   TransformationMatrix Matrix() const {
@@ -73,10 +73,11 @@ class PLATFORM_EXPORT MatrixTransformOperation final
     transform.Multiply(matrix);
   }
 
-  PassRefPtr<TransformOperation> Blend(const TransformOperation* from,
-                                       double progress,
-                                       bool blend_to_identity = false) override;
-  PassRefPtr<TransformOperation> Zoom(double factor) final;
+  scoped_refptr<TransformOperation> Blend(
+      const TransformOperation* from,
+      double progress,
+      bool blend_to_identity = false) override;
+  scoped_refptr<TransformOperation> Zoom(double factor) final;
 
   MatrixTransformOperation(double a,
                            double b,

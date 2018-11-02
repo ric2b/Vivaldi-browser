@@ -24,14 +24,13 @@ class GpuOutputSurfaceMac
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
   ~GpuOutputSurfaceMac() override;
 
-  // cc::OutputSurface implementation.
-  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
+  // viz::OutputSurface implementation.
+  void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   bool SurfaceIsSuspendForRecycle() const override;
 
   // BrowserCompositorOutputSurface implementation.
   void OnGpuSwapBuffersCompleted(
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result,
+      const gfx::SwapResponse& response,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
 

@@ -79,6 +79,8 @@ class CONTENT_EXPORT AudioStreamMonitor {
     was_recently_audible_ = value;
   }
 
+  void set_is_currently_audible_for_testing(bool value) { is_audible_ = value; }
+
  private:
   friend class AudioStreamMonitorTest;
 
@@ -140,9 +142,8 @@ class CONTENT_EXPORT AudioStreamMonitor {
   // pointer should be valid for the lifetime of AudioStreamMonitor.
   WebContents* const web_contents_;
 
-  // Note: |clock_| is always |&default_tick_clock_|, except during unit
+  // Note: |clock_| is always a DefaultTickClock, except during unit
   // testing.
-  base::DefaultTickClock default_tick_clock_;
   base::TickClock* const clock_;
 
   // Confirms single-threaded access in debug builds.

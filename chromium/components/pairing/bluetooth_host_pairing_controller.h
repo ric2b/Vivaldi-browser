@@ -19,10 +19,10 @@
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_socket.h"
-#include "device/hid/input_service_linux.h"
+#include "services/device/public/interfaces/input_service.mojom.h"
 
-namespace base {
-class TaskRunner;
+namespace service_manager {
+class Connector;
 }
 
 namespace device {
@@ -46,7 +46,7 @@ class BluetoothHostPairingController
       public device::BluetoothDevice::PairingDelegate {
  public:
   using Observer = HostPairingController::Observer;
-  using InputDeviceInfo = device::InputServiceLinux::InputDeviceInfo;
+  using InputDeviceInfoPtr = device::mojom::InputDeviceInfoPtr;
 
   // An interface that is used for testing purpose.
   class TestDelegate {
@@ -62,7 +62,7 @@ class BluetoothHostPairingController
   };
 
   explicit BluetoothHostPairingController(
-      scoped_refptr<base::TaskRunner> input_service_task_runner);
+      service_manager::Connector* connector);
   ~BluetoothHostPairingController() override;
 
   // These functions should be only used in tests.
@@ -92,7 +92,7 @@ class BluetoothHostPairingController
   void OnSendError(const std::string& error_message);
   void OnReceiveError(device::BluetoothSocket::ErrorReason reason,
                       const std::string& error_message);
-  void PowerOffAdapterIfApplicable(const std::vector<InputDeviceInfo>& devices);
+  void PowerOffAdapterIfApplicable(std::vector<InputDeviceInfoPtr> devices);
   void ResetAdapter();
   void OnForget();
 
@@ -168,7 +168,7 @@ class BluetoothHostPairingController
   std::unique_ptr<ProtoDecoder> proto_decoder_;
   TestDelegate* delegate_ = nullptr;
 
-  scoped_refptr<base::TaskRunner> input_service_task_runner_;
+  device::mojom::InputDeviceManagerPtr input_device_manager_;
   THREAD_CHECKER(thread_checker_);
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<BluetoothHostPairingController> ptr_factory_{this};

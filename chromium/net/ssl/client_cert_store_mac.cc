@@ -11,6 +11,7 @@
 #include <Security/Security.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -19,7 +20,6 @@
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner_util.h"
@@ -142,9 +142,10 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
 bool ExtendedKeyUsageAllows(const CE_ExtendedKeyUsage* usage,
                             const CSSM_OID* purpose) {
   for (unsigned p = 0; p < usage->numPurposes; ++p) {
-    if (CSSMOIDEqual(&usage->purposes[p], purpose))
+    if (x509_util::CSSMOIDEqual(&usage->purposes[p], purpose))
       return true;
-    if (CSSMOIDEqual(&usage->purposes[p], &CSSMOID_ExtendedKeyUsageAny))
+    if (x509_util::CSSMOIDEqual(&usage->purposes[p],
+                                &CSSMOID_ExtendedKeyUsageAny))
       return true;
   }
   return false;

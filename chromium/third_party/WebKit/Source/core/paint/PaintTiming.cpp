@@ -12,12 +12,14 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/loader/DocumentLoader.h"
+#include "core/loader/InteractiveDetector.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -108,6 +110,12 @@ void PaintTiming::SetFirstMeaningfulPaint(
       TraceEvent::ToTraceTimestamp(swap_stamp), "frame", GetFrame(),
       "afterUserInput", had_input);
 
+  InteractiveDetector* interactive_detector(
+      InteractiveDetector::From(*GetSupplementable()));
+  if (interactive_detector) {
+    interactive_detector->OnFirstMeaningfulPaintDetected(swap_stamp);
+  }
+
   // Notify FMP for UMA only if there's no user input before FMP, so that layout
   // changes caused by user interactions wouldn't be considered as FMP.
   if (had_input == FirstMeaningfulPaintDetector::kNoUserInput) {
@@ -144,7 +152,7 @@ void PaintTiming::NotifyPaint(bool is_first_paint,
   fmp_detector_->NotifyPaint();
 }
 
-DEFINE_TRACE(PaintTiming) {
+void PaintTiming::Trace(blink::Visitor* visitor) {
   visitor->Trace(fmp_detector_);
   Supplement<Document>::Trace(visitor);
 }
@@ -178,9 +186,9 @@ void PaintTiming::SetFirstContentfulPaint(double stamp) {
 }
 
 void PaintTiming::RegisterNotifySwapTime(PaintEvent event) {
-  RegisterNotifySwapTime(event,
-                         WTF::Bind(&PaintTiming::ReportSwapTime,
-                                   WrapCrossThreadWeakPersistent(this), event));
+  RegisterNotifySwapTime(
+      event, CrossThreadBind(&PaintTiming::ReportSwapTime,
+                             WrapCrossThreadWeakPersistent(this), event));
 }
 
 void PaintTiming::RegisterNotifySwapTime(PaintEvent event,

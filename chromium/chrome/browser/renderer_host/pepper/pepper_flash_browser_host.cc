@@ -38,8 +38,6 @@ using content::BrowserThread;
 using content::RenderProcessHost;
 using content::ServiceManagerConnection;
 
-namespace chrome {
-
 namespace {
 
 // Get the CookieSettings on the UI thread for the given render process ID.
@@ -204,10 +202,8 @@ device::mojom::WakeLock* PepperFlashBrowserHost::GetWakeLock() {
   connector->BindInterface(device::mojom::kServiceName,
                            mojo::MakeRequest(&wake_lock_provider));
   wake_lock_provider->GetWakeLockWithoutContext(
-      device::mojom::WakeLockType::PreventDisplaySleep,
-      device::mojom::WakeLockReason::ReasonOther, "Requested By PepperFlash",
+      device::mojom::WakeLockType::kPreventDisplaySleep,
+      device::mojom::WakeLockReason::kOther, "Requested By PepperFlash",
       std::move(request));
   return wake_lock_.get();
 }
-
-}  // namespace chrome

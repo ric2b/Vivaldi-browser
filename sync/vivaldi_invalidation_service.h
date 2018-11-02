@@ -24,6 +24,7 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
   ~VivaldiInvalidationService() override;
 
   void PerformInvalidation(const syncer::ObjectIdInvalidationMap&);
+  void UpdateInvalidatorState(syncer::InvalidatorState state);
 
   // InvalidationService
   void RegisterInvalidationHandler(

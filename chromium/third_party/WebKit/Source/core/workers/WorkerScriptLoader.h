@@ -29,6 +29,7 @@
 #define WorkerScriptLoader_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/ThreadableLoader.h"
@@ -38,10 +39,10 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -56,8 +57,8 @@ class CORE_EXPORT WorkerScriptLoader final
   USING_FAST_MALLOC(WorkerScriptLoader);
 
  public:
-  static RefPtr<WorkerScriptLoader> Create() {
-    return AdoptRef(new WorkerScriptLoader());
+  static scoped_refptr<WorkerScriptLoader> Create() {
+    return base::AdoptRef(new WorkerScriptLoader());
   }
 
   void LoadSynchronously(ExecutionContext&,
@@ -69,8 +70,8 @@ class CORE_EXPORT WorkerScriptLoader final
   void LoadAsynchronously(ExecutionContext&,
                           const KURL&,
                           WebURLRequest::RequestContext,
-                          WebURLRequest::FetchRequestMode,
-                          WebURLRequest::FetchCredentialsMode,
+                          network::mojom::FetchRequestMode,
+                          network::mojom::FetchCredentialsMode,
                           WebAddressSpace,
                           WTF::Closure response_callback,
                           WTF::Closure finished_callback);
@@ -99,7 +100,7 @@ class CORE_EXPORT WorkerScriptLoader final
     return content_security_policy_.Release();
   }
 
-  String GetReferrerPolicy() { return referrer_policy_; }
+  const String& GetReferrerPolicy() const { return referrer_policy_; }
 
   WebAddressSpace ResponseAddressSpace() const {
     return response_address_space_;

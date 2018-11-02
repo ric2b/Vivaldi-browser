@@ -111,8 +111,6 @@ struct EnumTraits<ash::mojom::ShelfItemStatus, ash::ShelfItemStatus> {
         return ash::mojom::ShelfItemStatus::CLOSED;
       case ash::STATUS_RUNNING:
         return ash::mojom::ShelfItemStatus::RUNNING;
-      case ash::STATUS_ACTIVE:
-        return ash::mojom::ShelfItemStatus::ACTIVE;
       case ash::STATUS_ATTENTION:
         return ash::mojom::ShelfItemStatus::ATTENTION;
     }
@@ -128,9 +126,6 @@ struct EnumTraits<ash::mojom::ShelfItemStatus, ash::ShelfItemStatus> {
         return true;
       case ash::mojom::ShelfItemStatus::RUNNING:
         *out = ash::STATUS_RUNNING;
-        return true;
-      case ash::mojom::ShelfItemStatus::ACTIVE:
-        *out = ash::STATUS_ACTIVE;
         return true;
       case ash::mojom::ShelfItemStatus::ATTENTION:
         *out = ash::STATUS_ATTENTION;
@@ -241,7 +236,7 @@ template <>
 struct ASH_PUBLIC_EXPORT
     StructTraits<ash::mojom::ShelfItemDataView, ShelfItem> {
   static ash::ShelfItemType type(const ShelfItem& i) { return i.type; }
-  static const SkBitmap& image(const ShelfItem& i);
+  static const gfx::ImageSkia& image(const ShelfItem& i) { return i.image; }
   static ash::ShelfItemStatus status(const ShelfItem& i) { return i.status; }
   static const ash::ShelfID& shelf_id(const ShelfItem& i) { return i.id; }
   static const base::string16& title(const ShelfItem& i) { return i.title; }

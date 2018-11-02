@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -80,7 +81,7 @@ class MockAudioOutputStream : public AudioOutputStream {
     fake_output_stream_->Stop();
   }
 
-  ~MockAudioOutputStream() {}
+  ~MockAudioOutputStream() = default;
 
   bool start_called() { return start_called_; }
   bool stop_called() { return stop_called_; }
@@ -139,7 +140,6 @@ class MockAudioManager : public AudioManagerBase {
  protected:
   MOCK_METHOD0(HasAudioOutputDevices, bool());
   MOCK_METHOD0(HasAudioInputDevices, bool());
-  MOCK_METHOD0(GetAudioInputDeviceModel, base::string16());
   MOCK_METHOD1(GetAudioInputDeviceNames,
                void(media::AudioDeviceNames* device_name));
   MOCK_METHOD2(GetPreferredOutputStreamParameters, AudioParameters(
@@ -488,8 +488,8 @@ class AudioOutputProxyTest : public testing::Test {
   }
 
   base::MessageLoop message_loop_;
-  std::unique_ptr<AudioOutputDispatcherImpl> dispatcher_impl_;
   MockAudioManager manager_;
+  std::unique_ptr<AudioOutputDispatcherImpl> dispatcher_impl_;
   MockAudioSourceCallback callback_;
   AudioParameters params_;
 };

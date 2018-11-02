@@ -47,6 +47,7 @@ static_library("lib") {
     "event_dispatcher.cc",
     "event_dispatcher.h",
     "event_dispatcher_delegate.h",
+    "event_location.h",
     "event_matcher.cc",
     "event_matcher.h",
     "event_targeter.cc",
@@ -72,6 +73,8 @@ static_library("lib") {
     "platform_display_default.h",
     "platform_display_delegate.h",
     "platform_display_factory.h",
+    "remote_event_dispatcher.cc",
+    "remote_event_dispatcher.h",
     "server_window.cc",
     "server_window.h",
     "server_window_delegate.h",
@@ -92,6 +95,8 @@ static_library("lib") {
     "user_id_tracker.cc",
     "user_id_tracker.h",
     "user_id_tracker_observer.h",
+    "video_detector_impl.cc",
+    "video_detector_impl.h",
     "window_coordinate_conversions.cc",
     "window_coordinate_conversions.h",
     "window_finder.cc",
@@ -122,18 +127,17 @@ static_library("lib") {
   ]
 
   deps = [
+    "//components/viz/service/main",  # TODO(sad): Temporary until GPU process split.
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc/client",
     "//gpu/ipc/common",
-    "//services/ui/gpu",  # TODO(sad): Temporary until GPU process split.
-    "//services/ui/gpu/interfaces",
+    "//services/viz/privileged/interfaces",
   ]
 
   public_deps = [
     "//base",
     "//cc",
-    "//cc/ipc:interfaces",
     "//components/viz/common",
     "//components/viz/host",
     "//components/viz/service",
@@ -163,6 +167,10 @@ static_library("lib") {
     public_deps += [ "//ui/ozone" ]
   }
   if (is_chromeos) {
+    sources += [
+      "arc_client.cc",
+      "arc_client.h",
+    ]
     public_deps += [ "//ui/chromeos/events" ]
     if (use_ozone) {
       public_deps += [ "//ui/events/ozone:events_ozone" ]
@@ -231,6 +239,10 @@ static_library("test_support") {
     "//ui/gl",
     "//ui/wm",
   ]
+
+  data_deps = [
+    "//services/ui/ime/test_ime_driver",
+  ]
 }
 
 source_set("tests") {
@@ -285,6 +297,7 @@ source_set("tests") {
     "//base/test:test_support",
     "//cc:cc",
     "//cc:test_support",
+    "//components/viz/service/main",
     "//components/viz/test:test_support",
     "//gpu/ipc/client",
     "//mojo/public/cpp/bindings:bindings",
@@ -293,7 +306,6 @@ source_set("tests") {
     "//services/service_manager/public/interfaces",
     "//services/ui/common:mus_common",
     "//services/ui/common:task_runner_test_base",
-    "//services/ui/gpu:gpu",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
     "//testing/gtest",

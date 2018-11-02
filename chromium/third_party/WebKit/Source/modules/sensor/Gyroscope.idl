@@ -6,10 +6,11 @@
 // https://w3c.github.io/gyroscope/#gyroscope-interface
 
 [
-    RuntimeEnabled=Sensor,
+    OriginTrialEnabled=Sensor,
     Constructor(optional SensorOptions sensorOptions),
     ConstructorCallWith=ExecutionContext,
     RaisesException=Constructor,
+    SecureContext,
     MeasureAs=GyroscopeConstructor
 ] interface Gyroscope : Sensor {
     readonly attribute unrestricted double? x;

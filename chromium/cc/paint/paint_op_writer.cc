@@ -11,6 +11,15 @@
 
 namespace cc {
 
+PaintOpWriter::PaintOpWriter(void* memory, size_t size)
+    : memory_(static_cast<char*>(memory) + HeaderBytes()),
+      size_(size),
+      remaining_bytes_(size - HeaderBytes()) {
+  // Leave space for header of type/skip.
+  DCHECK_GE(size, HeaderBytes());
+}
+PaintOpWriter::~PaintOpWriter() = default;
+
 template <typename T>
 void PaintOpWriter::WriteSimple(const T& val) {
   static_assert(base::is_trivially_copyable<T>::value, "");
@@ -28,19 +37,24 @@ void PaintOpWriter::WriteSimple(const T& val) {
 }
 
 void PaintOpWriter::WriteFlattenable(const SkFlattenable* val) {
+  if (!val) {
+    WriteSize(static_cast<size_t>(0u));
+    return;
+  }
+
   DCHECK(SkIsAlign4(reinterpret_cast<uintptr_t>(memory_)))
       << "Flattenable must start writing at 4 byte alignment.";
   // TODO(enne): change skia API to make this a const parameter.
   sk_sp<SkData> data(
       SkValidatingSerializeFlattenable(const_cast<SkFlattenable*>(val)));
 
-  Write(data->size());
+  WriteSize(data->size());
   if (!data->isEmpty())
     WriteData(data->size(), data->data());
 }
 
-void PaintOpWriter::Write(size_t data) {
-  WriteSimple(data);
+void PaintOpWriter::WriteSize(size_t size) {
+  WriteSimple(size);
 }
 
 void PaintOpWriter::Write(SkScalar data) {
@@ -48,6 +62,18 @@ void PaintOpWriter::Write(SkScalar data) {
 }
 
 void PaintOpWriter::Write(uint8_t data) {
+  WriteSimple(data);
+}
+
+void PaintOpWriter::Write(uint32_t data) {
+  WriteSimple(data);
+}
+
+void PaintOpWriter::Write(uint64_t data) {
+  WriteSimple(data);
+}
+
+void PaintOpWriter::Write(int32_t data) {
   WriteSimple(data);
 }
 
@@ -91,29 +117,83 @@ void PaintOpWriter::Write(const PaintFlags& flags) {
   WriteFlattenable(flags.mask_filter_.get());
   WriteFlattenable(flags.color_filter_.get());
   WriteFlattenable(flags.draw_looper_.get());
-  WriteFlattenable(flags.image_filter_.get());
 
   Write(flags.shader_.get());
 }
 
-void PaintOpWriter::Write(const PaintImage& image, ImageDecodeCache* cache) {
+void PaintOpWriter::Write(const PaintImage& image,
+                          ImageProvider* image_provider) {
   // TODO(enne): implement PaintImage serialization: http://crbug.com/737629
 }
 
 void PaintOpWriter::Write(const sk_sp<SkData>& data) {
   if (data.get() && data->size()) {
-    Write(data->size());
+    WriteSize(data->size());
     WriteData(data->size(), data->data());
   } else {
     // Differentiate between nullptr and valid but zero size.  It's not clear
     // that this happens in practice, but seems better to be consistent.
-    Write(static_cast<size_t>(0));
+    WriteSize(static_cast<size_t>(0));
     Write(!!data.get());
   }
 }
 
+void PaintOpWriter::Write(const std::vector<PaintTypeface>& typefaces) {
+  WriteSimple(static_cast<uint32_t>(typefaces.size()));
+  for (const auto& typeface : typefaces) {
+    DCHECK(typeface);
+    WriteSimple(typeface.sk_id());
+    WriteSimple(static_cast<uint8_t>(typeface.type()));
+    switch (typeface.type()) {
+      case PaintTypeface::Type::kTestTypeface:
+        // Nothing to serialize here.
+        break;
+      case PaintTypeface::Type::kSkTypeface:
+        // Nothing to do here. This should never be the case when everything is
+        // implemented. This should be a NOTREACHED() eventually.
+        break;
+      case PaintTypeface::Type::kFontConfigInterfaceIdAndTtcIndex:
+        WriteSimple(typeface.font_config_interface_id());
+        WriteSimple(typeface.ttc_index());
+        break;
+      case PaintTypeface::Type::kFilenameAndTtcIndex:
+        WriteSimple(typeface.filename().size());
+        WriteData(typeface.filename().size(), typeface.filename().data());
+        WriteSimple(typeface.ttc_index());
+        break;
+      case PaintTypeface::Type::kFamilyNameAndFontStyle:
+        WriteSimple(typeface.family_name().size());
+        WriteData(typeface.family_name().size(), typeface.family_name().data());
+        WriteSimple(typeface.font_style().weight());
+        WriteSimple(typeface.font_style().width());
+        WriteSimple(typeface.font_style().slant());
+        break;
+    }
+#if DCHECK_IS_ON()
+    if (typeface)
+      last_serialized_typeface_ids_.insert(typeface.sk_id());
+#endif
+  }
+}
+
+// static
+void PaintOpWriter::TypefaceCataloger(SkTypeface* typeface, void* ctx) {
+  DCHECK(static_cast<PaintOpWriter*>(ctx)->last_serialized_typeface_ids_.count(
+             typeface->uniqueID()) != 0);
+}
+
 void PaintOpWriter::Write(const sk_sp<SkTextBlob>& blob) {
-  // TODO(enne): implement SkTextBlob serialization: http://crbug.com/737629
+  auto data = blob->serialize(&PaintOpWriter::TypefaceCataloger, this);
+  Write(data);
+
+#if DCHECK_IS_ON()
+  last_serialized_typeface_ids_.clear();
+#endif
+}
+
+void PaintOpWriter::Write(const scoped_refptr<PaintTextBlob>& blob) {
+  Write(blob->typefaces());
+  Write(blob->ToSkTextBlob());
 }
 
 void PaintOpWriter::Write(const PaintShader* shader) {
@@ -156,6 +236,10 @@ void PaintOpWriter::Write(const PaintShader* shader) {
             shader->positions_.data());
   // Explicitly don't write the cached_shader_ because that can be regenerated
   // using other fields.
+}
+
+void PaintOpWriter::Write(SkColorType color_type) {
+  WriteSimple(static_cast<uint32_t>(color_type));
 }
 
 void PaintOpWriter::WriteData(size_t bytes, const void* input) {

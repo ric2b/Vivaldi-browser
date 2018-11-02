@@ -38,9 +38,7 @@
 
 namespace blink {
 
-class CORE_EXPORT DOMException final
-    : public GarbageCollectedFinalized<DOMException>,
-      public ScriptWrappable {
+class CORE_EXPORT DOMException final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -68,8 +66,6 @@ class CORE_EXPORT DOMException final
 
   static String GetErrorName(ExceptionCode);
   static String GetErrorMessage(ExceptionCode);
-
-  DEFINE_INLINE_TRACE() {}
 
  private:
   DOMException(unsigned short code,

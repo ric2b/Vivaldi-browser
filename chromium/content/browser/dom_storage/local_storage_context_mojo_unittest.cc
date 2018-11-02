@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
@@ -21,7 +22,7 @@
 #include "content/public/browser/local_storage_usage_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
-#include "content/test/mock_leveldb_database.h"
+#include "content/test/fake_leveldb_database.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -45,6 +46,14 @@ namespace content {
 namespace {
 
 void NoOpSuccess(bool success) {}
+
+void SuccessCallback(base::OnceClosure callback,
+                     bool* success_out,
+                     bool success) {
+  if (success_out)
+    *success_out = success;
+  std::move(callback).Run();
+}
 
 void GetStorageUsageCallback(const base::Closure& callback,
                              std::vector<LocalStorageUsageInfo>* out_result,
@@ -109,6 +118,7 @@ class TestLevelDBObserver : public mojom::LevelDBObserver {
   void AllDeleted(const std::string& source) override {
     observations_.push_back({Observation::kDeleteAll, "", "", "", source});
   }
+  void ShouldSendOldValueOnMutations(bool value) override {}
 
   std::vector<Observation> observations_;
   mojo::AssociatedBinding<mojom::LevelDBObserver> binding_;
@@ -116,17 +126,25 @@ class TestLevelDBObserver : public mojom::LevelDBObserver {
 
 class GetAllCallback : public mojom::LevelDBWrapperGetAllCallback {
  public:
-  static mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo CreateAndBind() {
+  static mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo CreateAndBind(
+      base::OnceClosure callback) {
     mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo ptr_info;
     auto request = mojo::MakeRequest(&ptr_info);
-    mojo::MakeStrongAssociatedBinding(base::WrapUnique(new GetAllCallback),
-                                      std::move(request));
+    mojo::MakeStrongAssociatedBinding(
+        base::WrapUnique(new GetAllCallback(std::move(callback))),
+        std::move(request));
     return ptr_info;
   }
 
  private:
-  GetAllCallback() {}
-  void Complete(bool success) override {}
+  GetAllCallback(base::OnceClosure callback) : callback_(std::move(callback)) {}
+
+  void Complete(bool success) override {
+    EXPECT_TRUE(success);
+    std::move(callback_).Run();
+  }
+
+  base::OnceClosure callback_;
 };
 
 }  // namespace
@@ -159,7 +177,7 @@ class LocalStorageContextMojoTest : public testing::Test {
           special_storage_policy());
       leveldb::mojom::LevelDBDatabaseAssociatedPtr database_ptr;
       leveldb::mojom::LevelDBDatabaseAssociatedRequest request =
-          MakeIsolatedRequest(&database_ptr);
+          MakeRequestAssociatedWithDedicatedPipe(&database_ptr);
       context_->SetDatabaseForTesting(std::move(database_ptr));
       db_binding_.Bind(std::move(request));
     }
@@ -205,11 +223,28 @@ class LocalStorageContextMojoTest : public testing::Test {
     return result;
   }
 
+  base::Optional<std::vector<uint8_t>> DoTestGet(
+      const std::vector<uint8_t>& key) {
+    const url::Origin kOrigin = url::Origin::Create(GURL("http://foobar.com"));
+    mojom::LevelDBWrapperPtr wrapper;
+    mojom::LevelDBWrapperPtr dummy_wrapper;  // To make sure values are cached.
+    context()->OpenLocalStorage(kOrigin, MakeRequest(&wrapper));
+    context()->OpenLocalStorage(kOrigin, MakeRequest(&dummy_wrapper));
+    base::RunLoop run_loop;
+    bool success = false;
+    std::vector<uint8_t> result;
+    wrapper->Get(key, base::BindOnce(&GetCallback, run_loop.QuitClosure(),
+                                     &success, &result));
+    run_loop.Run();
+    return success ? base::Optional<std::vector<uint8_t>>(result)
+                   : base::nullopt;
+  }
+
  private:
   TestBrowserThreadBundle thread_bundle_;
   base::ScopedTempDir temp_path_;
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> mock_data_;
-  MockLevelDBDatabase db_;
+  FakeLevelDBDatabase db_;
   mojo::AssociatedBinding<leveldb::mojom::LevelDBDatabase> db_binding_;
 
   scoped_refptr<MockDOMStorageTaskRunner> task_runner_;
@@ -227,9 +262,10 @@ TEST_F(LocalStorageContextMojoTest, Basic) {
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context()->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   base::RunLoop().RunUntilIdle();
@@ -240,19 +276,21 @@ TEST_F(LocalStorageContextMojoTest, Basic) {
 }
 
 TEST_F(LocalStorageContextMojoTest, OriginsAreIndependent) {
-  url::Origin origin1(GURL("http://foobar.com:123"));
-  url::Origin origin2(GURL("http://foobar.com:1234"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com:123"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://foobar.com:1234"));
   auto key1 = StdStringToUint8Vector("4key");
   auto key2 = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key1, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key1, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key2, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key2, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   base::RunLoop().RunUntilIdle();
@@ -265,10 +303,14 @@ TEST_F(LocalStorageContextMojoTest, WrapperOutlivesMojoConnection) {
 
   // Write some data to the DB.
   mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                              MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  mojom::LevelDBWrapperPtr dummy_wrapper;  // To make sure values are cached.
+  const url::Origin kOrigin(url::Origin::Create(GURL("http://foobar.com")));
+  context()->OpenLocalStorage(kOrigin, MakeRequest(&wrapper));
+  context()->OpenLocalStorage(kOrigin, MakeRequest(&dummy_wrapper));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
+  dummy_wrapper.reset();
   base::RunLoop().RunUntilIdle();
 
   // Clear all the data from the backing database.
@@ -277,36 +319,13 @@ TEST_F(LocalStorageContextMojoTest, WrapperOutlivesMojoConnection) {
 
   // Data should still be readable, because despite closing the wrapper
   // connection above, the actual wrapper instance should have been kept alive.
-  {
-    base::RunLoop run_loop;
-    bool success = false;
-    std::vector<uint8_t> result;
-    context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                                MakeRequest(&wrapper));
-    wrapper->Get(key, base::BindOnce(&GetCallback, run_loop.QuitClosure(),
-                                     &success, &result));
-    run_loop.Run();
-    EXPECT_TRUE(success);
-    EXPECT_EQ(value, result);
-    wrapper.reset();
-  }
+  EXPECT_EQ(value, DoTestGet(key));
 
   // Now purge memory.
   context()->PurgeMemory();
 
   // And make sure caches were actually cleared.
-  {
-    base::RunLoop run_loop;
-    bool success = false;
-    std::vector<uint8_t> result;
-    context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                                MakeRequest(&wrapper));
-    wrapper->Get(key, base::BindOnce(&GetCallback, run_loop.QuitClosure(),
-                                     &success, &result));
-    run_loop.Run();
-    EXPECT_FALSE(success);
-    wrapper.reset();
-  }
+  EXPECT_EQ(base::nullopt, DoTestGet(key));
 }
 
 TEST_F(LocalStorageContextMojoTest, OpeningWrappersPurgesInactiveWrappers) {
@@ -315,9 +334,10 @@ TEST_F(LocalStorageContextMojoTest, OpeningWrappersPurgesInactiveWrappers) {
 
   // Write some data to the DB.
   mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context()->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
   base::RunLoop().RunUntilIdle();
 
@@ -327,77 +347,33 @@ TEST_F(LocalStorageContextMojoTest, OpeningWrappersPurgesInactiveWrappers) {
 
   // Now open many new wrappers (for different origins) to trigger clean up.
   for (int i = 1; i <= 100; ++i) {
-    context()->OpenLocalStorage(
-        url::Origin::UnsafelyCreateOriginWithoutNormalization(
-            "http", "example.com", i, ""),
-        MakeRequest(&wrapper));
+    context()->OpenLocalStorage(url::Origin::Create(GURL(base::StringPrintf(
+                                    "http://example.com:%d", i))),
+                                MakeRequest(&wrapper));
     wrapper.reset();
   }
 
   // And make sure caches were actually cleared.
-  base::RunLoop run_loop;
-  bool success = true;
-  std::vector<uint8_t> result;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                              MakeRequest(&wrapper));
-  wrapper->Get(key, base::BindOnce(&GetCallback, run_loop.QuitClosure(),
-                                   &success, &result));
-  run_loop.Run();
-  EXPECT_FALSE(success);
-  wrapper.reset();
+  EXPECT_EQ(base::nullopt, DoTestGet(key));
 }
 
 TEST_F(LocalStorageContextMojoTest, ValidVersion) {
   set_mock_data("VERSION", "1");
   set_mock_data(std::string("_http://foobar.com") + '\x00' + "key", "value");
 
-  mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                              MakeRequest(&wrapper));
-
-  base::RunLoop run_loop;
-  bool success = false;
-  std::vector<uint8_t> result;
-  wrapper->Get(
-      StdStringToUint8Vector("key"),
-      base::BindOnce(&GetCallback, run_loop.QuitClosure(), &success, &result));
-  run_loop.Run();
-  EXPECT_TRUE(success);
-  EXPECT_EQ(StdStringToUint8Vector("value"), result);
+  EXPECT_EQ(StdStringToUint8Vector("value"),
+            DoTestGet(StdStringToUint8Vector("key")));
 }
 
 TEST_F(LocalStorageContextMojoTest, InvalidVersion) {
   set_mock_data("VERSION", "foobar");
   set_mock_data(std::string("_http://foobar.com") + '\x00' + "key", "value");
 
-  mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                              MakeRequest(&wrapper));
-
-  base::RunLoop run_loop;
-  bool success = false;
-  std::vector<uint8_t> result;
-  wrapper->Get(
-      StdStringToUint8Vector("key"),
-      base::BindOnce(&GetCallback, run_loop.QuitClosure(), &success, &result));
-  run_loop.Run();
-  EXPECT_FALSE(success);
+  EXPECT_EQ(base::nullopt, DoTestGet(StdStringToUint8Vector("key")));
 }
 
 TEST_F(LocalStorageContextMojoTest, VersionOnlyWrittenOnCommit) {
-  mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
-                              MakeRequest(&wrapper));
-
-  base::RunLoop run_loop;
-  bool success = false;
-  std::vector<uint8_t> result;
-  wrapper->Get(
-      StdStringToUint8Vector("key"),
-      base::BindOnce(&GetCallback, run_loop.QuitClosure(), &success, &result));
-  run_loop.Run();
-  EXPECT_FALSE(success);
-  wrapper.reset();
+  EXPECT_EQ(base::nullopt, DoTestGet(StdStringToUint8Vector("key")));
 
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(mock_data().empty());
@@ -409,8 +385,8 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_NoData) {
 }
 
 TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key1 = StdStringToUint8Vector("key1");
   auto key2 = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
@@ -419,22 +395,25 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key1, value, "source", base::BindOnce(&NoOpSuccess));
-  wrapper->Put(key2, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key1, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key2, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key2, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key2, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // GetStorageUsage only includes committed data, but still returns all origins
   // that used localstorage with zero size.
   std::vector<LocalStorageUsageInfo> info = GetStorageUsageSync();
   ASSERT_EQ(2u, info.size());
-  if (url::Origin(info[0].origin) == origin2)
+  if (url::Origin::Create(info[0].origin) == origin2)
     std::swap(info[0], info[1]);
-  EXPECT_EQ(origin1, url::Origin(info[0].origin));
-  EXPECT_EQ(origin2, url::Origin(info[1].origin));
+  EXPECT_EQ(origin1, url::Origin::Create(info[0].origin));
+  EXPECT_EQ(origin2, url::Origin::Create(info[1].origin));
   EXPECT_LE(before_write, info[0].last_modified);
   EXPECT_LE(before_write, info[1].last_modified);
   EXPECT_EQ(0u, info[0].data_size);
@@ -447,10 +426,10 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
 
   info = GetStorageUsageSync();
   ASSERT_EQ(2u, info.size());
-  if (url::Origin(info[0].origin) == origin2)
+  if (url::Origin::Create(info[0].origin) == origin2)
     std::swap(info[0], info[1]);
-  EXPECT_EQ(origin1, url::Origin(info[0].origin));
-  EXPECT_EQ(origin2, url::Origin(info[1].origin));
+  EXPECT_EQ(origin1, url::Origin::Create(info[0].origin));
+  EXPECT_EQ(origin2, url::Origin::Create(info[1].origin));
   EXPECT_LE(before_write, info[0].last_modified);
   EXPECT_LE(before_write, info[1].last_modified);
   EXPECT_GE(after_write, info[0].last_modified);
@@ -459,20 +438,22 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
 }
 
 TEST_F(LocalStorageContextMojoTest, MetaDataClearedOnDelete) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Delete(key, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Delete(key, value, "source", base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to disk.
@@ -492,17 +473,19 @@ TEST_F(LocalStorageContextMojoTest, MetaDataClearedOnDelete) {
 }
 
 TEST_F(LocalStorageContextMojoTest, MetaDataClearedOnDeleteAll) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
@@ -529,24 +512,26 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorage) {
   set_mock_data("VERSION", "1");
   set_mock_data(std::string("_http://foobar.com") + '\x00' + "key", "value");
 
-  context()->DeleteStorage(url::Origin(GURL("http://foobar.com")));
+  context()->DeleteStorage(url::Origin::Create(GURL("http://foobar.com")));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, mock_data().size());
 }
 
 TEST_F(LocalStorageContextMojoTest, DeleteStorageWithoutConnection) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to disk.
@@ -570,18 +555,20 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorageWithoutConnection) {
 }
 
 TEST_F(LocalStorageContextMojoTest, DeleteStorageNotifiesWrapper) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to disk.
@@ -614,18 +601,20 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorageNotifiesWrapper) {
 }
 
 TEST_F(LocalStorageContextMojoTest, DeleteStorageWithPendingWrites) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to disk.
@@ -635,7 +624,7 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorageWithPendingWrites) {
   TestLevelDBObserver observer;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
   wrapper->AddObserver(observer.Bind());
-  wrapper->Put(StdStringToUint8Vector("key2"), value, "source",
+  wrapper->Put(StdStringToUint8Vector("key2"), value, base::nullopt, "source",
                base::BindOnce(&NoOpSuccess));
   base::RunLoop().RunUntilIdle();
 
@@ -662,22 +651,26 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorageWithPendingWrites) {
 }
 
 TEST_F(LocalStorageContextMojoTest, DeleteStorageForPhysicalOrigin) {
-  url::Origin origin1a(GURL("http://foobar.com"));
-  url::Origin origin1b(GURL("http-so://suborigin.foobar.com"));
-  url::Origin origin2(GURL("https://foobar.com"));
+  url::Origin origin1a = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin1b =
+      url::Origin::Create(GURL("http-so://suborigin.foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("https://foobar.com"));
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1a, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
   context()->OpenLocalStorage(origin1b, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to disk.
@@ -703,8 +696,8 @@ TEST_F(LocalStorageContextMojoTest, DeleteStorageForPhysicalOrigin) {
 }
 
 TEST_F(LocalStorageContextMojoTest, Migration) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   base::string16 key = base::ASCIIToUTF16("key");
   base::string16 value = base::ASCIIToUTF16("value");
   base::string16 key2 = base::ASCIIToUTF16("key2");
@@ -714,21 +707,25 @@ TEST_F(LocalStorageContextMojoTest, Migration) {
   DOMStorageNamespace* local = local_storage_namespace();
   DOMStorageArea* area = local->OpenStorageArea(origin1.GetURL());
   base::NullableString16 dummy;
-  area->SetItem(key, value, &dummy);
-  area->SetItem(key2, value, &dummy);
+  area->SetItem(key, value, dummy, &dummy);
+  area->SetItem(key2, value, dummy, &dummy);
   local->CloseStorageArea(area);
   FlushAndPurgeDOMStorageMemory();
 
   // Opening origin2 and accessing its data should not migrate anything.
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
+  mojom::LevelDBWrapperPtr dummy_wrapper;  // To make sure values are cached.
+  context()->OpenLocalStorage(origin2, MakeRequest(&dummy_wrapper));
   wrapper->Get(std::vector<uint8_t>(), base::BindOnce(&NoOpGet));
   wrapper.reset();
+  dummy_wrapper.reset();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(mock_data().empty());
 
   // Opening origin1 and accessing its data should migrate its storage.
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
+  context()->OpenLocalStorage(origin1, MakeRequest(&dummy_wrapper));
   wrapper->Get(std::vector<uint8_t>(), base::BindOnce(&NoOpGet));
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(mock_data().empty());
@@ -791,8 +788,11 @@ TEST_F(LocalStorageContextMojoTest, FixUp) {
       "value3");
 
   mojom::LevelDBWrapperPtr wrapper;
-  context()->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  mojom::LevelDBWrapperPtr dummy_wrapper;  // To make sure values are cached.
+  context()->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
+  context()->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
+                              MakeRequest(&dummy_wrapper));
 
   {
     base::RunLoop run_loop;
@@ -828,20 +828,23 @@ TEST_F(LocalStorageContextMojoTest, FixUp) {
 }
 
 TEST_F(LocalStorageContextMojoTest, ShutdownClearsData) {
-  url::Origin origin1(GURL("http://foobar.com"));
-  url::Origin origin2(GURL("http://example.com"));
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  url::Origin origin2 = url::Origin::Create(GURL("http://example.com"));
   auto key1 = StdStringToUint8Vector("key1");
   auto key2 = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
   context()->OpenLocalStorage(origin1, MakeRequest(&wrapper));
-  wrapper->Put(key1, value, "source", base::BindOnce(&NoOpSuccess));
-  wrapper->Put(key2, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key1, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key2, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   context()->OpenLocalStorage(origin2, MakeRequest(&wrapper));
-  wrapper->Put(key2, value, "source", base::BindOnce(&NoOpSuccess));
+  wrapper->Put(key2, value, base::nullopt, "source",
+               base::BindOnce(&NoOpSuccess));
   wrapper.reset();
 
   // Make sure all data gets committed to the DB.
@@ -907,8 +910,7 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
 class LocalStorageContextMojoTestWithService
     : public service_manager::test::ServiceTest {
  public:
-  LocalStorageContextMojoTestWithService()
-      : ServiceTest("content_unittests", false) {}
+  LocalStorageContextMojoTestWithService() : ServiceTest("content_unittests") {}
   ~LocalStorageContextMojoTestWithService() override {}
 
  protected:
@@ -926,7 +928,7 @@ class LocalStorageContextMojoTestWithService
   }
 
   std::unique_ptr<service_manager::Service> CreateService() override {
-    return base::MakeUnique<ServiceTestClient>(this);
+    return std::make_unique<ServiceTestClient>(this);
   }
 
   const base::FilePath& temp_path() { return temp_path_.GetPath(); }
@@ -942,9 +944,15 @@ class LocalStorageContextMojoTestWithService
                  const std::vector<uint8_t>& key,
                  const std::vector<uint8_t>& value) {
     mojom::LevelDBWrapperPtr wrapper;
-    context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+    bool success = false;
+    base::RunLoop run_loop;
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
-    wrapper->Put(key, value, "source", base::BindOnce(&NoOpSuccess));
+    wrapper->Put(
+        key, value, base::nullopt, "source",
+        base::BindOnce(&SuccessCallback, run_loop.QuitClosure(), &success));
+    run_loop.Run();
+    EXPECT_TRUE(success);
     wrapper.reset();
     base::RunLoop().RunUntilIdle();
   }
@@ -953,14 +961,29 @@ class LocalStorageContextMojoTestWithService
                  const std::vector<uint8_t>& key,
                  std::vector<uint8_t>* result) {
     mojom::LevelDBWrapperPtr wrapper;
-    context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
+
     base::RunLoop run_loop;
-    bool success = false;
-    wrapper->Get(key, base::BindOnce(&GetCallback, run_loop.QuitClosure(),
-                                     &success, result));
+    std::vector<content::mojom::KeyValuePtr> data;
+    auto callback = [](std::vector<content::mojom::KeyValuePtr>* data_out,
+                       leveldb::mojom::DatabaseError status,
+                       std::vector<content::mojom::KeyValuePtr> data) {
+      EXPECT_EQ(status, leveldb::mojom::DatabaseError::OK);
+      data_out->swap(data);
+    };
+    wrapper->GetAll(GetAllCallback::CreateAndBind(run_loop.QuitClosure()),
+                    base::BindOnce(callback, &data));
     run_loop.Run();
-    return success;
+
+    for (auto& entry : data) {
+      if (key == entry->key) {
+        *result = std::move(entry->value);
+        return true;
+      }
+    }
+    result->clear();
+    return false;
   }
 
  private:
@@ -977,7 +1000,7 @@ TEST_F(LocalStorageContextMojoTestWithService, InMemory) {
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
-  context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                             MakeRequest(&wrapper));
   DoTestPut(context, key, value);
   std::vector<uint8_t> result;
@@ -1007,7 +1030,7 @@ TEST_F(LocalStorageContextMojoTestWithService, InMemoryInvalidPath) {
   auto value = StdStringToUint8Vector("value");
 
   mojom::LevelDBWrapperPtr wrapper;
-  context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                             MakeRequest(&wrapper));
 
   DoTestPut(context, key, value);
@@ -1052,13 +1075,7 @@ TEST_F(LocalStorageContextMojoTestWithService, OnDisk) {
   context->ShutdownAndDelete();
 }
 
-// Flaky on Android. https://crbug.com/756550
-#if defined(OS_ANDROID)
-#define MAYBE_InvalidVersionOnDisk DISABLED_InvalidVersionOnDisk
-#else
-#define MAYBE_InvalidVersionOnDisk InvalidVersionOnDisk
-#endif
-TEST_F(LocalStorageContextMojoTestWithService, MAYBE_InvalidVersionOnDisk) {
+TEST_F(LocalStorageContextMojoTestWithService, InvalidVersionOnDisk) {
   base::FilePath test_path(FILE_PATH_LITERAL("test_path"));
 
   // Create context and add some data to it.
@@ -1130,7 +1147,7 @@ TEST_F(LocalStorageContextMojoTestWithService, CorruptionOnDisk) {
   context = nullptr;
   base::RunLoop().RunUntilIdle();
   // Also flush Task Scheduler tasks to make sure the leveldb is fully closed.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Delete manifest files to mess up opening DB.
   base::FilePath db_path =
@@ -1166,7 +1183,7 @@ TEST_F(LocalStorageContextMojoTestWithService, CorruptionOnDisk) {
 
 namespace {
 
-class MockLevelDBService : public leveldb::mojom::LevelDBService {
+class FakeLevelDBService : public leveldb::mojom::LevelDBService {
  public:
   void Open(filesystem::mojom::DirectoryPtr,
             const std::string& dbname,
@@ -1181,7 +1198,7 @@ class MockLevelDBService : public leveldb::mojom::LevelDBService {
   }
 
   void OpenWithOptions(
-      leveldb::mojom::OpenOptionsPtr options,
+      const leveldb_env::Options& options,
       filesystem::mojom::DirectoryPtr,
       const std::string& dbname,
       const base::Optional<base::trace_event::MemoryAllocatorDumpGuid>&
@@ -1237,11 +1254,11 @@ class MockLevelDBService : public leveldb::mojom::LevelDBService {
   mojo::BindingSet<leveldb::mojom::LevelDBService> bindings_;
 };
 
-class MockLevelDBDatabaseErrorOnWrite : public MockLevelDBDatabase {
+class FakeLevelDBDatabaseErrorOnWrite : public FakeLevelDBDatabase {
  public:
-  explicit MockLevelDBDatabaseErrorOnWrite(
+  explicit FakeLevelDBDatabaseErrorOnWrite(
       std::map<std::vector<uint8_t>, std::vector<uint8_t>>* mock_data)
-      : MockLevelDBDatabase(mock_data) {}
+      : FakeLevelDBDatabase(mock_data) {}
 
   void Write(std::vector<leveldb::mojom::BatchedOperationPtr> operations,
              WriteCallback callback) override {
@@ -1252,10 +1269,10 @@ class MockLevelDBDatabaseErrorOnWrite : public MockLevelDBDatabase {
 }  // namespace
 
 TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
-  MockLevelDBService mock_leveldb_service;
+  FakeLevelDBService mock_leveldb_service;
   service_manager::ServiceContext::SetGlobalBinderForTesting(
       file::mojom::kServiceName, leveldb::mojom::LevelDBService::Name_,
-      base::Bind(&MockLevelDBService::Bind,
+      base::Bind(&FakeLevelDBService::Bind,
                  base::Unretained(&mock_leveldb_service)));
 
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> test_data;
@@ -1276,11 +1293,11 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   {
     base::RunLoop loop;
     mock_leveldb_service.on_open_callback_ = loop.QuitClosure();
-    context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper1));
-    context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper2));
-    context->OpenLocalStorage(url::Origin(GURL("http://example.com")),
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://example.com")),
                               MakeRequest(&wrapper3));
     loop.Run();
   }
@@ -1296,7 +1313,7 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   ASSERT_EQ(1u, mock_leveldb_service.open_requests_.size());
   auto& open_request = mock_leveldb_service.open_requests_[0];
   auto mock_db = mojo::MakeStrongAssociatedBinding(
-      base::MakeUnique<MockLevelDBDatabaseErrorOnWrite>(&test_data),
+      std::make_unique<FakeLevelDBDatabaseErrorOnWrite>(&test_data),
       std::move(open_request.request));
   std::move(open_request.callback).Run(leveldb::mojom::DatabaseError::OK);
   mock_leveldb_service.open_requests_.clear();
@@ -1311,7 +1328,7 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   // a lot of data on the first origin. This put operation should result in a
   // pending commit that will get cancelled when the database connection is
   // closed.
-  wrapper3->Put(key, value, "source",
+  wrapper3->Put(key, value, base::nullopt, "source",
                 base::BindOnce([](bool success) { EXPECT_TRUE(success); }));
 
   // Repeatedly write data to the database, to trigger enough commit errors.
@@ -1322,7 +1339,7 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
     // change to commit.
     value[0]++;
     wrapper1.set_connection_error_handler(put_loop.QuitClosure());
-    wrapper1->Put(key, value, "source",
+    wrapper1->Put(key, value, base::nullopt, "source",
                   base::BindOnce(
                       [](base::Closure quit_closure, bool success) {
                         EXPECT_TRUE(success);
@@ -1333,7 +1350,8 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
     values_written++;
     // And we need to flush after every change. Otherwise changes get batched up
     // and only one commit is done some time later.
-    context->FlushOriginForTesting(url::Origin(GURL("http://foobar.com")));
+    context->FlushOriginForTesting(
+        url::Origin::Create(GURL("http://foobar.com")));
   }
   // Make sure all messages to the DB have been processed (Flush above merely
   // schedules a commit, but there is no guarantee about those having been
@@ -1351,13 +1369,20 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   EXPECT_EQ(1u, mock_leveldb_service.destroy_requests_.size());
 
   // Reconnect wrapper1 to the database, and try to read a value.
-  context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                             MakeRequest(&wrapper1));
-  base::RunLoop get_loop;
-  std::vector<uint8_t> result;
+  base::RunLoop delete_loop;
   bool success = true;
-  wrapper1->Get(key, base::BindOnce(&GetCallback, get_loop.QuitClosure(),
-                                    &success, &result));
+  auto callback = [](bool* success_out, const base::Closure& callback,
+                     bool success) {
+    *success_out = success;
+    callback.Run();
+  };
+  TestLevelDBObserver observer3;
+  wrapper1->AddObserver(observer3.Bind());
+  wrapper1->Delete(
+      key, base::nullopt, "source",
+      base::BindOnce(callback, &success, delete_loop.QuitClosure()));
 
   // Wait for LocalStorageContextMojo to try to reconnect to the database, and
   // connect that new request to a properly functioning database.
@@ -1365,15 +1390,15 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   ASSERT_EQ(1u, mock_leveldb_service.open_requests_.size());
   auto& reopen_request = mock_leveldb_service.open_requests_[0];
   mock_db = mojo::MakeStrongAssociatedBinding(
-      base::MakeUnique<MockLevelDBDatabase>(&test_data),
+      std::make_unique<FakeLevelDBDatabase>(&test_data),
       std::move(reopen_request.request));
   std::move(reopen_request.callback).Run(leveldb::mojom::DatabaseError::OK);
   mock_leveldb_service.open_requests_.clear();
 
-  // And reading the value from the new wrapper should have failed (as the
+  // And deleting the value from the new wrapper should have failed (as the
   // database is empty).
-  get_loop.Run();
-  EXPECT_FALSE(success);
+  delete_loop.Run();
+  EXPECT_EQ(0u, observer3.observations().size());
   wrapper1 = nullptr;
 
   {
@@ -1398,10 +1423,10 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
 
 TEST_F(LocalStorageContextMojoTestWithService,
        DontRecreateOnRepeatedCommitFailure) {
-  MockLevelDBService mock_leveldb_service;
+  FakeLevelDBService mock_leveldb_service;
   service_manager::ServiceContext::SetGlobalBinderForTesting(
       file::mojom::kServiceName, leveldb::mojom::LevelDBService::Name_,
-      base::Bind(&MockLevelDBService::Bind,
+      base::Bind(&FakeLevelDBService::Bind,
                  base::Unretained(&mock_leveldb_service)));
 
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> test_data;
@@ -1419,7 +1444,7 @@ TEST_F(LocalStorageContextMojoTestWithService,
   {
     base::RunLoop loop;
     mock_leveldb_service.on_open_callback_ = loop.QuitClosure();
-    context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+    context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                               MakeRequest(&wrapper));
     loop.Run();
   }
@@ -1429,7 +1454,7 @@ TEST_F(LocalStorageContextMojoTestWithService,
   ASSERT_EQ(1u, mock_leveldb_service.open_requests_.size());
   auto& open_request = mock_leveldb_service.open_requests_[0];
   auto mock_db = mojo::MakeStrongAssociatedBinding(
-      base::MakeUnique<MockLevelDBDatabaseErrorOnWrite>(&test_data),
+      std::make_unique<FakeLevelDBDatabaseErrorOnWrite>(&test_data),
       std::move(open_request.request));
   std::move(open_request.callback).Run(leveldb::mojom::DatabaseError::OK);
   mock_leveldb_service.open_requests_.clear();
@@ -1441,23 +1466,26 @@ TEST_F(LocalStorageContextMojoTestWithService,
   mock_leveldb_service.on_open_callback_ = reopen_loop.QuitClosure();
 
   // Repeatedly write data to the database, to trigger enough commit errors.
+  base::Optional<std::vector<uint8_t>> old_value;
   while (!wrapper.encountered_error()) {
     base::RunLoop put_loop;
     // Every write needs to be different to make sure there actually is a
     // change to commit.
     value[0]++;
     wrapper.set_connection_error_handler(put_loop.QuitClosure());
-    wrapper->Put(key, value, "source",
+    wrapper->Put(key, value, old_value, "source",
                  base::BindOnce(
                      [](base::Closure quit_closure, bool success) {
                        EXPECT_TRUE(success);
                        quit_closure.Run();
                      },
                      put_loop.QuitClosure()));
+    old_value = std::vector<uint8_t>(value);
     put_loop.RunUntilIdle();
     // And we need to flush after every change. Otherwise changes get batched up
     // and only one commit is done some time later.
-    context->FlushOriginForTesting(url::Origin(GURL("http://foobar.com")));
+    context->FlushOriginForTesting(
+        url::Origin::Create(GURL("http://foobar.com")));
   }
   // Make sure all messages to the DB have been processed (Flush above merely
   // schedules a commit, but there is no guarantee about those having been
@@ -1475,7 +1503,7 @@ TEST_F(LocalStorageContextMojoTestWithService,
   ASSERT_EQ(1u, mock_leveldb_service.open_requests_.size());
   auto& reopen_request = mock_leveldb_service.open_requests_[0];
   mock_db = mojo::MakeStrongAssociatedBinding(
-      base::MakeUnique<MockLevelDBDatabaseErrorOnWrite>(&test_data),
+      std::make_unique<FakeLevelDBDatabaseErrorOnWrite>(&test_data),
       std::move(reopen_request.request));
   std::move(reopen_request.callback).Run(leveldb::mojom::DatabaseError::OK);
   mock_leveldb_service.open_requests_.clear();
@@ -1486,15 +1514,16 @@ TEST_F(LocalStorageContextMojoTestWithService,
   // Reconnect a wrapper to the database, and repeatedly write data to it again.
   // This time all should just keep getting written, and commit errors are
   // getting ignored.
-  context->OpenLocalStorage(url::Origin(GURL("http://foobar.com")),
+  context->OpenLocalStorage(url::Origin::Create(GURL("http://foobar.com")),
                             MakeRequest(&wrapper));
+  old_value = base::nullopt;
   for (int i = 0; i < 64; ++i) {
     base::RunLoop put_loop;
     // Every write needs to be different to make sure there actually is a
     // change to commit.
     value[0]++;
     wrapper.set_connection_error_handler(put_loop.QuitClosure());
-    wrapper->Put(key, value, "source",
+    wrapper->Put(key, value, old_value, "source",
                  base::BindOnce(
                      [](base::Closure quit_closure, bool success) {
                        EXPECT_TRUE(success);
@@ -1502,9 +1531,11 @@ TEST_F(LocalStorageContextMojoTestWithService,
                      },
                      put_loop.QuitClosure()));
     put_loop.RunUntilIdle();
+    old_value = value;
     // And we need to flush after every change. Otherwise changes get batched up
     // and only one commit is done some time later.
-    context->FlushOriginForTesting(url::Origin(GURL("http://foobar.com")));
+    context->FlushOriginForTesting(
+        url::Origin::Create(GURL("http://foobar.com")));
   }
   // Make sure all messages to the DB have been processed (Flush above merely
   // schedules a commit, but there is no guarantee about those having been

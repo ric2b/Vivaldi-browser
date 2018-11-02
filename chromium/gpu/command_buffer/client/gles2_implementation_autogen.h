@@ -986,8 +986,6 @@ void ProduceTextureDirectCHROMIUM(GLuint texture,
                                   GLenum target,
                                   const GLbyte* mailbox) override;
 
-void ConsumeTextureCHROMIUM(GLenum target, const GLbyte* mailbox) override;
-
 GLuint CreateAndConsumeTextureCHROMIUM(GLenum target,
                                        const GLbyte* mailbox) override;
 
@@ -1053,9 +1051,6 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLuint edge_aa_mask,
                              const GLfloat* bounds_rect,
                              GLuint filter) override;
-
-void SetColorSpaceForScanoutCHROMIUM(GLuint texture_id,
-                                     GLColorSpace color_space) override;
 
 void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                        const GLuint* textures) override;
@@ -1252,11 +1247,37 @@ void BeginRasterCHROMIUM(GLuint texture_id,
                          GLint pixel_config) override;
 
 void RasterCHROMIUM(const cc::DisplayItemList* list,
-                    GLint x,
-                    GLint y,
-                    GLint w,
-                    GLint h) override;
+                    GLint translate_x,
+                    GLint translate_y,
+                    GLint clip_x,
+                    GLint clip_y,
+                    GLint clip_w,
+                    GLint clip_h,
+                    GLfloat post_translate_x,
+                    GLfloat post_translate_y,
+                    GLfloat post_scale) override;
 
 void EndRasterCHROMIUM() override;
+
+void CreateTransferCacheEntryCHROMIUM(
+    GLuint64 handle_id,
+    GLuint handle_shm_id,
+    GLuint handle_shm_offset,
+    const cc::ClientTransferCacheEntry& entry) override;
+
+void DeleteTransferCacheEntryCHROMIUM(GLuint64 handle_id) override;
+
+void UnlockTransferCacheEntryCHROMIUM(GLuint64 handle_id) override;
+
+void TexStorage2DImageCHROMIUM(GLenum target,
+                               GLenum internalFormat,
+                               GLenum bufferUsage,
+                               GLsizei width,
+                               GLsizei height) override;
+
+void SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
+                                   GLColorSpace color_space) override;
+
+void WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint* box) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

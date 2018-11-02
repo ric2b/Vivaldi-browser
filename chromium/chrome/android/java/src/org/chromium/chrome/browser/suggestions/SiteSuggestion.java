@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.suggestions;
 
+import java.util.Date;
+
 /**
  * Data class that holds the site suggestion data provided by the tiles component.
  */
@@ -17,6 +19,10 @@ public class SiteSuggestion {
     /** The path to the icon image file for whitelisted tile, empty string otherwise. */
     public final String whitelistIconPath;
 
+    /** The generated tile's title originated from this {@code TileTitleSource}. */
+    @TileTitleSource
+    public final int titleSource;
+
     /** the {@code TileSource} that generated the tile. */
     @TileSource
     public final int source;
@@ -25,13 +31,19 @@ public class SiteSuggestion {
     @TileSectionType
     public final int sectionType;
 
-    public SiteSuggestion(
-            String title, String url, String whitelistIconPath, int source, int sectionType) {
+    /** The instant in time representing when the tile was originally generated
+        (produced by a ranking algorithm). */
+    public final Date dataGenerationTime;
+
+    public SiteSuggestion(String title, String url, String whitelistIconPath, int titleSource,
+            int source, int sectionType, Date dataGenerationTime) {
         this.title = title;
         this.url = url;
         this.whitelistIconPath = whitelistIconPath;
         this.source = source;
+        this.titleSource = titleSource;
         this.sectionType = sectionType;
+        this.dataGenerationTime = (Date) dataGenerationTime.clone();
     }
 
     @Override
@@ -42,6 +54,8 @@ public class SiteSuggestion {
         SiteSuggestion that = (SiteSuggestion) o;
 
         if (source != that.source) return false;
+        if (titleSource != that.titleSource) return false;
+        if (sectionType != that.sectionType) return false;
         if (!title.equals(that.title)) return false;
         if (!url.equals(that.url)) return false;
         return whitelistIconPath.equals(that.whitelistIconPath);
@@ -53,6 +67,8 @@ public class SiteSuggestion {
         result = 31 * result + url.hashCode();
         result = 31 * result + whitelistIconPath.hashCode();
         result = 31 * result + source;
+        result = 31 * result + sectionType;
+        result = 31 * result + titleSource;
         return result;
     }
 }

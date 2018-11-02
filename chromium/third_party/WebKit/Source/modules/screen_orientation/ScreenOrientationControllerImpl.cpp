@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -17,6 +16,7 @@
 #include "modules/screen_orientation/ScreenOrientationDispatcher.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/ScopedOrientationChangeIndicator.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationClient.h"
 
@@ -42,10 +42,10 @@ ScreenOrientationControllerImpl::ScreenOrientationControllerImpl(
     WebScreenOrientationClient* client)
     : ScreenOrientationController(frame),
       ContextLifecycleObserver(frame.GetDocument()),
-      PlatformEventController(&frame),
+      PlatformEventController(frame.GetDocument()),
       client_(client),
       dispatch_event_timer_(
-          TaskRunnerHelper::Get(TaskType::kMiscPlatformAPI, &frame),
+          frame.GetTaskRunner(TaskType::kMiscPlatformAPI),
           this,
           &ScreenOrientationControllerImpl::DispatchEventTimerFired) {}
 
@@ -164,7 +164,7 @@ void ScreenOrientationControllerImpl::NotifyOrientationChanged() {
 
   // Notify current orientation object.
   if (IsActive() && !dispatch_event_timer_.IsActive())
-    dispatch_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    dispatch_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 
   // ... and child frames, if they have a ScreenOrientationControllerImpl.
   for (size_t i = 0; i < child_frames.size(); ++i) {
@@ -242,7 +242,7 @@ void ScreenOrientationControllerImpl::NotifyDispatcher() {
     StopUpdating();
 }
 
-DEFINE_TRACE(ScreenOrientationControllerImpl) {
+void ScreenOrientationControllerImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(orientation_);
   ContextLifecycleObserver::Trace(visitor);
   Supplement<LocalFrame>::Trace(visitor);

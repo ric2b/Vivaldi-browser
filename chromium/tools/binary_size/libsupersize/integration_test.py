@@ -30,14 +30,16 @@ _TEST_TOOL_PREFIX = os.path.join(
     os.path.abspath(_TEST_DATA_DIR), 'mock_toolchain', '')
 _TEST_MAP_PATH = os.path.join(_TEST_DATA_DIR, 'test.map')
 _TEST_ELF_PATH = os.path.join(_TEST_OUTPUT_DIR, 'elf')
+_TEST_PAK_PATH = os.path.join(_TEST_OUTPUT_DIR, 'en-US.pak')
+_TEST_PAK_INFO_PATH = os.path.join(_TEST_OUTPUT_DIR, 'en-US.pak.info')
 
 update_goldens = False
 
 
-def _AssertGolden(expected_lines, actual_lines):
+def _AssertGolden(expected_lines, actual_lines, golden_path):
   expected = list(expected_lines)
   actual = list(l + '\n' for l in actual_lines)
-  assert actual == expected, ('Did not match .golden.\n' +
+  assert actual == expected, (('Did not match %s.\n' % golden_path) +
       ''.join(difflib.unified_diff(expected, actual, 'expected', 'actual')))
 
 
@@ -61,7 +63,7 @@ def _CompareWithGolden(name=None):
         logging.info('Wrote %s', golden_path)
       else:
         with open(golden_path) as file_obj:
-          _AssertGolden(file_obj, actual_lines)
+          _AssertGolden(file_obj, actual_lines, golden_path)
     return inner
   return real_decorator
 
@@ -96,46 +98,63 @@ def _DiffCounts(sym):
 
 class IntegrationTest(unittest.TestCase):
   maxDiff = None  # Don't trucate diffs in errors.
-  cached_size_info = [None, None, None]
+  cached_size_info = {}
 
-  def _CloneSizeInfo(self, use_output_directory=True, use_elf=True):
+  def _CloneSizeInfo(self, use_output_directory=True, use_elf=True,
+                     use_pak=False):
     assert not use_elf or use_output_directory
-    i = int(use_output_directory) + int(use_elf)
-    if not IntegrationTest.cached_size_info[i]:
+    cache_key = (use_output_directory, use_elf, use_pak)
+    if cache_key not in IntegrationTest.cached_size_info:
       elf_path = _TEST_ELF_PATH if use_elf else None
       output_directory = _TEST_OUTPUT_DIR if use_output_directory else None
-      IntegrationTest.cached_size_info[i] = archive.CreateSizeInfo(
+      section_sizes, raw_symbols = archive.CreateSectionSizesAndSymbols(
           _TEST_MAP_PATH, elf_path, _TEST_TOOL_PREFIX, output_directory)
+      if use_pak:
+        archive.AddPakSymbolsFromFiles(
+            section_sizes, raw_symbols, [_TEST_PAK_PATH], _TEST_PAK_INFO_PATH)
+      metadata = None
       if use_elf:
         with _AddMocksToPath():
-          IntegrationTest.cached_size_info[i].metadata = archive.CreateMetadata(
+          metadata = archive.CreateMetadata(
               _TEST_MAP_PATH, elf_path, None, _TEST_TOOL_PREFIX,
               output_directory)
-    return copy.deepcopy(IntegrationTest.cached_size_info[i])
+      IntegrationTest.cached_size_info[cache_key] = archive.CreateSizeInfo(
+          section_sizes, raw_symbols, metadata=metadata)
+    return copy.deepcopy(IntegrationTest.cached_size_info[cache_key])
+
+  def _DoArchive(self, archive_path, use_output_directory=True, use_elf=True,
+                 use_pak=False, debug_measures=False):
+    args = [archive_path, '--map-file', _TEST_MAP_PATH]
+    if use_output_directory:
+      # Let autodetection find output_directory when --elf-file is used.
+      if not use_elf:
+        args += ['--output-directory', _TEST_OUTPUT_DIR]
+    else:
+      args += ['--no-source-paths']
+    if use_elf:
+      args += ['--elf-file', _TEST_ELF_PATH]
+    if use_pak:
+      args += ['--pak-file', _TEST_PAK_PATH,
+               '--pak-info-file', _TEST_PAK_INFO_PATH]
+    _RunApp('archive', args, debug_measures=debug_measures)
 
   def _DoArchiveTest(self, use_output_directory=True, use_elf=True,
-                     debug_measures=False):
+                     use_pak=False, debug_measures=False):
     with tempfile.NamedTemporaryFile(suffix='.size') as temp_file:
-      args = [temp_file.name, '--map-file', _TEST_MAP_PATH]
-      if use_output_directory:
-        # Let autodetection find output_directory when --elf-file is used.
-        if not use_elf:
-          args += ['--output-directory', _TEST_OUTPUT_DIR]
-      else:
-        args += ['--no-source-paths']
-      if use_elf:
-        args += ['--elf-file', _TEST_ELF_PATH]
-      _RunApp('archive', args, debug_measures=debug_measures)
+      self._DoArchive(
+          temp_file.name, use_output_directory=use_output_directory,
+          use_elf=use_elf, use_pak=use_pak, debug_measures=debug_measures)
       size_info = archive.LoadAndPostProcessSizeInfo(temp_file.name)
-    # Check that saving & loading is the same as directly parsing the .map.
+    # Check that saving & loading is the same as directly parsing.
     expected_size_info = self._CloneSizeInfo(
-        use_output_directory=use_output_directory, use_elf=use_elf)
+        use_output_directory=use_output_directory, use_elf=use_elf,
+        use_pak=use_pak)
     self.assertEquals(expected_size_info.metadata, size_info.metadata)
     # Don't cluster.
     expected_size_info.symbols = expected_size_info.raw_symbols
     size_info.symbols = size_info.raw_symbols
-    expected = list(describe.GenerateLines(expected_size_info))
-    actual = list(describe.GenerateLines(size_info))
+    expected = list(describe.GenerateLines(expected_size_info, verbose=True))
+    actual = list(describe.GenerateLines(size_info, verbose=True))
     self.assertEquals(expected, actual)
 
     sym_strs = (repr(sym) for sym in size_info.symbols)
@@ -158,6 +177,10 @@ class IntegrationTest(unittest.TestCase):
   def test_Archive_Elf(self):
     return self._DoArchiveTest()
 
+  @_CompareWithGolden()
+  def test_Archive_Pak(self):
+    return self._DoArchiveTest(use_pak=True)
+
   @_CompareWithGolden(name='Archive_Elf')
   def test_Archive_Elf_DebugMeasures(self):
     return self._DoArchiveTest(debug_measures=True)
@@ -173,7 +196,21 @@ class IntegrationTest(unittest.TestCase):
           'canned_queries.CategorizeGenerated()',
           'canned_queries.CategorizeByChromeComponent()',
           'canned_queries.TemplatesByName()',
+          'Print(ReadStringLiterals(elf_path={}))'.format(repr(_TEST_ELF_PATH)),
           'Print(size_info, to_file=%r)' % output_file.name,
+      ]
+      ret = _RunApp('console', [size_file.name, '--query', '; '.join(query)])
+      with open(output_file.name) as f:
+        ret.extend(l.rstrip() for l in f)
+      return ret
+
+  @_CompareWithGolden()
+  def test_Csv(self):
+    with tempfile.NamedTemporaryFile(suffix='.size') as size_file, \
+         tempfile.NamedTemporaryFile(suffix='.txt') as output_file:
+      file_format.SaveSizeInfo(self._CloneSizeInfo(), size_file.name)
+      query = [
+          'Csv(size_info, to_file=%r)' % output_file.name,
       ]
       ret = _RunApp('console', [size_file.name, '--query', '; '.join(query)])
       with open(output_file.name) as f:
@@ -185,6 +222,16 @@ class IntegrationTest(unittest.TestCase):
     with tempfile.NamedTemporaryFile(suffix='.size') as temp_file:
       file_format.SaveSizeInfo(self._CloneSizeInfo(), temp_file.name)
       return _RunApp('diff', [temp_file.name, temp_file.name])
+
+  # Runs archive 3 times, and asserts the contents are the same each time.
+  def test_Idempotent(self):
+    prev_contents = None
+    for _ in xrange(3):
+      with tempfile.NamedTemporaryFile(suffix='.size') as temp_file:
+        self._DoArchive(temp_file.name)
+        contents = temp_file.read()
+        self.assertTrue(prev_contents is None or contents == prev_contents)
+        prev_contents = contents
 
   @_CompareWithGolden()
   def test_Diff_Basic(self):
@@ -204,8 +251,8 @@ class IntegrationTest(unittest.TestCase):
     size_info2 = self._CloneSizeInfo()
 
     # Removing 1 alias should not change the size.
-    a1, _, _ = (
-        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 3)[0].aliases)
+    a1, _, _, _ = (
+        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 4)[0].aliases)
     size_info2.raw_symbols -= [a1]
     a1.aliases.remove(a1)
     d = diff.Diff(size_info1, size_info2)
@@ -225,8 +272,8 @@ class IntegrationTest(unittest.TestCase):
     size_info2 = self._CloneSizeInfo()
 
     # Removing 2 aliases should not change the size.
-    a1, a2, _ = (
-        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 3)[0].aliases)
+    a1, _, a2, _ = (
+        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 4)[0].aliases)
     size_info2.raw_symbols -= [a1, a2]
     a1.aliases.remove(a1)
     a1.aliases.remove(a2)
@@ -241,28 +288,28 @@ class IntegrationTest(unittest.TestCase):
     self.assertEquals((0, 2, 0), _DiffCounts(d.raw_symbols))
     self.assertEquals((1, 1, 0), _DiffCounts(d.symbols.GroupedByFullName()))
 
-  def test_Diff_Aliases3(self):
+  def test_Diff_Aliases4(self):
     size_info1 = self._CloneSizeInfo()
     size_info2 = self._CloneSizeInfo()
 
-    # Removing all 3 aliases should change the size.
-    a1, a2, a3 = (
-        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 3)[0].aliases)
-    size_info2.raw_symbols -= [a1, a2, a3]
+    # Removing all 4 aliases should change the size.
+    a1, a2, a3, a4 = (
+        size_info2.raw_symbols.Filter(lambda s: s.num_aliases == 4)[0].aliases)
+    size_info2.raw_symbols -= [a1, a2, a3, a4]
     d = diff.Diff(size_info1, size_info2)
-    self.assertEquals((0, 0, 3), _DiffCounts(d.raw_symbols))
+    self.assertEquals((0, 0, 4), _DiffCounts(d.raw_symbols))
     self.assertEquals((1, 0, 2), _DiffCounts(d.symbols.GroupedByFullName()))
 
-    # Adding all 3 aliases should change size.
+    # Adding all 4 aliases should change size.
     d = diff.Diff(size_info2, size_info1)
     self.assertEquals(d.raw_symbols.pss, a1.size)
-    self.assertEquals((0, 3, 0), _DiffCounts(d.raw_symbols))
+    self.assertEquals((0, 4, 0), _DiffCounts(d.raw_symbols))
     self.assertEquals((1, 2, 0), _DiffCounts(d.symbols.GroupedByFullName()))
 
   def test_Diff_Clustering(self):
     size_info1 = self._CloneSizeInfo()
     size_info2 = self._CloneSizeInfo()
-    S = '.text'
+    S = models.SECTION_TEXT
     size_info1.symbols += [
         models.Symbol(S, 11, name='.L__unnamed_1193', object_path='a'), # 1
         models.Symbol(S, 22, name='.L__unnamed_1194', object_path='a'), # 2

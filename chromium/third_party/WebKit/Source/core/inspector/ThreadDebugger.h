@@ -52,6 +52,11 @@ class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
   void PromiseRejectionRevoked(v8::Local<v8::Context>,
                                unsigned promise_rejection_id);
 
+  v8_inspector::V8StackTraceId StoreCurrentStackTrace(
+      const String& description);
+  void ExternalAsyncTaskStarted(const v8_inspector::V8StackTraceId& parent);
+  void ExternalAsyncTaskFinished(const v8_inspector::V8StackTraceId& parent);
+
  protected:
   virtual int ContextGroupId(ExecutionContext*) = 0;
   virtual void ReportConsoleMessage(ExecutionContext*,
@@ -110,6 +115,12 @@ class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
   Vector<v8_inspector::V8InspectorClient::TimerCallback> timer_callbacks_;
   Vector<void*> timer_data_;
   std::unique_ptr<UserGestureIndicator> user_gesture_indicator_;
+};
+
+template <>
+struct CrossThreadCopier<v8_inspector::V8StackTraceId> {
+  typedef v8_inspector::V8StackTraceId Type;
+  static Type Copy(const Type& id) { return id; }
 };
 
 }  // namespace blink

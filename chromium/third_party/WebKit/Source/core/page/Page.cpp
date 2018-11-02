@@ -22,9 +22,9 @@
 #include "core/page/Page.h"
 
 #include "bindings/core/v8/ScriptController.h"
+#include "core/css/StyleChangeReason.h"
+#include "core/css/StyleEngine.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
-#include "core/dom/StyleChangeReason.h"
-#include "core/dom/StyleEngine.h"
 #include "core/dom/VisitedLinkState.h"
 #include "core/dom/events/Event.h"
 #include "core/editing/DragCaret.h"
@@ -33,6 +33,7 @@
 #include "core/frame/DOMTimer.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/PageScaleConstraints.h"
 #include "core/frame/PageScaleConstraintsSet.h"
@@ -41,7 +42,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/geometry/DOMRectList.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/AutoscrollController.h"
@@ -51,7 +52,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/PluginsChangedObserver.h"
 #include "core/page/PointerLockController.h"
-#include "core/page/ScopedPageSuspender.h"
+#include "core/page/ScopedPagePauser.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/OverscrollController.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
@@ -62,6 +63,8 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/plugins/PluginData.h"
+#include "platform/scroll/ScrollbarTheme.h"
+#include "platform/scroll/ScrollbarThemeOverlay.h"
 #include "platform/scroll/SmoothScrollSequencer.h"
 #include "public/platform/Platform.h"
 #include "public/web/WebKit.h"
@@ -99,7 +102,7 @@ float DeviceScaleFactorDeprecated(LocalFrame* frame) {
 Page* Page::CreateOrdinary(PageClients& page_clients) {
   Page* page = Create(page_clients);
   OrdinaryPages().insert(page);
-  if (ScopedPageSuspender::IsActive())
+  if (ScopedPagePauser::IsActive())
     page->SetPaused(true);
   return page;
 }
@@ -128,7 +131,6 @@ Page::Page(PageClients& page_clients)
       main_frame_(nullptr),
       plugin_data_(nullptr),
       editor_client_(page_clients.editor_client),
-      spell_checker_client_(page_clients.spell_checker_client),
       use_counter_(page_clients.chrome_client &&
                            page_clients.chrome_client->IsSVGImageChromeClient()
                        ? UseCounter::kSVGImageContext
@@ -137,7 +139,8 @@ Page::Page(PageClients& page_clients)
       tab_key_cycles_through_elements_(true),
       paused_(false),
       device_scale_factor_(1),
-      visibility_state_(kPageVisibilityStateVisible),
+      visibility_state_(mojom::PageVisibilityState::kVisible),
+      page_lifecycle_state_(PageLifecycleState::kUnknown),
       is_cursor_visible_(true),
       subframe_count_(0) {
   DCHECK(editor_client_);
@@ -242,7 +245,7 @@ DOMRectList* Page::NonFastScrollableRects(const LocalFrame* frame) {
   if (ScrollingCoordinator* scrolling_coordinator =
           this->GetScrollingCoordinator()) {
     // Hits in compositing/iframes/iframe-composited-scrolling.html
-    scrolling_coordinator->UpdateAfterCompositingChangeIfNeeded();
+    scrolling_coordinator->UpdateAfterCompositingChangeIfNeeded(frame->View());
   }
 
   GraphicsLayer* layer =
@@ -425,7 +428,7 @@ void Page::VisitedStateChanged(LinkHash link_hash) {
   }
 }
 
-void Page::SetVisibilityState(PageVisibilityState visibility_state,
+void Page::SetVisibilityState(mojom::PageVisibilityState visibility_state,
                               bool is_initial_state) {
   if (visibility_state_ == visibility_state)
     return;
@@ -438,12 +441,22 @@ void Page::SetVisibilityState(PageVisibilityState visibility_state,
     main_frame_->DidChangeVisibilityState();
 }
 
-PageVisibilityState Page::VisibilityState() const {
+mojom::PageVisibilityState Page::VisibilityState() const {
   return visibility_state_;
 }
 
 bool Page::IsPageVisible() const {
-  return VisibilityState() == kPageVisibilityStateVisible;
+  return VisibilityState() == mojom::PageVisibilityState::kVisible;
+}
+
+void Page::SetLifecycleState(PageLifecycleState state) {
+  if (state == page_lifecycle_state_)
+    return;
+  page_lifecycle_state_ = state;
+}
+
+PageLifecycleState Page::LifecycleState() const {
+  return page_lifecycle_state_;
 }
 
 bool Page::IsCursorVisible() const {
@@ -536,7 +549,7 @@ void Page::SettingsChanged(SettingsDelegate::ChangeType change_type) {
         break;
       DeprecatedLocalMainFrame()
           ->GetDocument()
-          ->AxObjectCacheOwner()
+          ->AXObjectCacheOwner()
           .ClearAXObjectCache();
       break;
     case SettingsDelegate::kViewportRuleChange: {
@@ -618,7 +631,8 @@ void Page::DidCommitLoad(LocalFrame* frame) {
     // TODO(rbyers): Most of this doesn't appear to take into account that each
     // SVGImage gets it's own Page instance.
     GetConsoleMessageStorage().Clear();
-    GetUseCounter().DidCommitLoad(url);
+    if (frame->Client() && frame->Client()->ShouldTrackUseCounter(url))
+      GetUseCounter().DidCommitLoad(url);
     GetDeprecation().ClearSuppression();
     GetVisualViewport().SendUMAMetrics();
 
@@ -646,7 +660,7 @@ void Page::AcceptLanguagesChanged() {
     frames[i]->DomWindow()->AcceptLanguagesChanged();
 }
 
-DEFINE_TRACE(Page) {
+void Page::Trace(blink::Visitor* visitor) {
   visitor->Trace(animator_);
   visitor->Trace(autoscroll_controller_);
   visitor->Trace(chrome_client_);
@@ -711,11 +725,16 @@ void Page::RegisterPluginsChangedObserver(PluginsChangedObserver* observer) {
   plugins_changed_observers_.insert(observer);
 }
 
+ScrollbarTheme& Page::GetScrollbarTheme() const {
+  if (settings_->GetForceAndroidOverlayScrollbar())
+    return ScrollbarThemeOverlay::MobileTheme();
+  return ScrollbarTheme::DeprecatedStaticGetTheme();
+}
+
 Page::PageClients::PageClients()
     : chrome_client(nullptr),
       context_menu_client(nullptr),
-      editor_client(nullptr),
-      spell_checker_client(nullptr) {}
+      editor_client(nullptr) {}
 
 Page::PageClients::~PageClients() {}
 

@@ -10,30 +10,10 @@
 Polymer({
   is: 'settings-change-password-page',
 
-  properties: {
-    /**
-     * Preferences state.
-     */
-    prefs: {
-      type: Object,
-      notify: true,
-    },
-  },
-
-  /** @private {?settings.ChangePasswordBrowserProxy} */
-  browserProxy_: null,
-
-  /** @override */
-  attached: function() {
-    this.browserProxy_ = settings.ChangePasswordBrowserProxyImpl.getInstance();
-    this.browserProxy_.onChangePasswordPageShown();
-  },
-
   /** @private */
   changePassword_: function() {
     listenOnce(this, 'transitionend', () => {
-      this.browserProxy_.changePassword();
+      settings.ChangePasswordBrowserProxyImpl.getInstance().changePassword();
     });
-    this.fire('change-password-clicked');
   },
 });

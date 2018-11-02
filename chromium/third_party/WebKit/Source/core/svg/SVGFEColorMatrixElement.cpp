@@ -20,8 +20,8 @@
 
 #include "core/svg/SVGFEColorMatrixElement.h"
 
-#include "core/SVGNames.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
+#include "core/svg_names.h"
 
 namespace blink {
 
@@ -53,7 +53,7 @@ inline SVGFEColorMatrixElement::SVGFEColorMatrixElement(Document& document)
   AddToPropertyMap(type_);
 }
 
-DEFINE_TRACE(SVGFEColorMatrixElement) {
+void SVGFEColorMatrixElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(values_);
   visitor->Trace(in1_);
   visitor->Trace(type_);

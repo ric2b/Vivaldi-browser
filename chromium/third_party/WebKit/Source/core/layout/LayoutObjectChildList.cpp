@@ -182,19 +182,26 @@ void LayoutObjectChildList::InsertChildNode(LayoutObject* owner,
   if (new_child->WasNotifiedOfSubtreeChange())
     owner->NotifyAncestorsOfSubtreeChange();
 
+  // Clear NeedsCollectInlines to ensure the marking doesn't stop on
+  // |new_child|.
+  new_child->ClearNeedsCollectInlines();
+
   new_child->SetNeedsLayoutAndPrefWidthsRecalc(
       LayoutInvalidationReason::kAddedToLayout);
   new_child->SetShouldDoFullPaintInvalidation(
       PaintInvalidationReason::kAppeared);
   new_child->SetSubtreeNeedsPaintPropertyUpdate();
-  if (!owner->NormalChildNeedsLayout())
+  if (!owner->NormalChildNeedsLayout()) {
     owner->SetChildNeedsLayout();  // We may supply the static position for an
                                    // absolute positioned child.
+  } else {
+    owner->MarkContainerNeedsCollectInlines();
+  }
 
   if (!owner->DocumentBeingDestroyed())
     owner->NotifyOfSubtreeChange();
 
-  if (AXObjectCache* cache = owner->GetDocument().AxObjectCache())
+  if (AXObjectCache* cache = owner->GetDocument().GetOrCreateAXObjectCache())
     cache->ChildrenChanged(owner);
 }
 
@@ -206,8 +213,8 @@ void LayoutObjectChildList::InvalidatePaintOnRemoval(LayoutObject& old_child) {
   ObjectPaintInvalidator paint_invalidator(old_child);
   paint_invalidator.SlowSetPaintingLayerNeedsRepaint();
 
-  // For SPv2 raster invalidation will be done in PaintController.
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+  // For SPv175 raster invalidation will be done in PaintController.
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
     return;
 
   paint_invalidator.InvalidatePaintOfPreviousVisualRect(

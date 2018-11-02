@@ -30,7 +30,7 @@
 
 #include "core/css/resolver/MatchedPropertiesCache.h"
 
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/style/ComputedStyle.h"
 
@@ -54,7 +54,7 @@ void CachedMatchedProperties::Clear() {
   parent_computed_style = nullptr;
 }
 
-MatchedPropertiesCache::MatchedPropertiesCache() {}
+MatchedPropertiesCache::MatchedPropertiesCache() = default;
 
 const CachedMatchedProperties* MatchedPropertiesCache::Find(
     unsigned hash,
@@ -121,10 +121,11 @@ bool MatchedPropertiesCache::IsStyleCacheable(const ComputedStyle& style) {
   // unique() styles are not cacheable.
   if (style.Unique())
     return false;
-  if (style.Zoom() != ComputedStyle::InitialZoom())
+  if (style.Zoom() != ComputedStyleInitialValues::InitialZoom())
     return false;
-  if (style.GetWritingMode() != ComputedStyle::InitialWritingMode() ||
-      style.Direction() != ComputedStyle::InitialDirection())
+  if (style.GetWritingMode() !=
+          ComputedStyleInitialValues::InitialWritingMode() ||
+      style.Direction() != ComputedStyleInitialValues::InitialDirection())
     return false;
   // styles with non inherited properties that reference variables are not
   // cacheable.
@@ -149,7 +150,7 @@ bool MatchedPropertiesCache::IsCacheable(const StyleResolverState& state) {
   return true;
 }
 
-DEFINE_TRACE(MatchedPropertiesCache) {
+void MatchedPropertiesCache::Trace(blink::Visitor* visitor) {
   visitor->Trace(cache_);
 }
 

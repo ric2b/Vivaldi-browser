@@ -94,19 +94,9 @@ std::unique_ptr<Commit> Commit::Init(ModelTypeSet requested_types,
   commit_util::AddClientConfigParamsToMessage(
       enabled_types, cookie_jar_mismatch, commit_message);
 
-  int previous_message_size = message.ByteSize();
   // Finally, serialize all our contributions.
   for (const auto& contribution : contributions) {
     contribution.second->AddToCommitMessage(&message);
-    int current_entry_size = message.ByteSize() - previous_message_size;
-    previous_message_size = message.ByteSize();
-    int local_integer_model_type = ModelTypeToHistogramInt(contribution.first);
-    if (current_entry_size > 0) {
-      SyncRecordDatatypeBin("DataUse.Sync.Upload.Bytes",
-                            local_integer_model_type, current_entry_size);
-    }
-    UMA_HISTOGRAM_SPARSE_SLOWLY("DataUse.Sync.Upload.Count",
-                                local_integer_model_type);
   }
 
   // If we made it this far, then we've successfully prepared a commit message.
@@ -139,12 +129,13 @@ SyncerError Commit::PostAndProcessResponse(
   cycle->SendProtocolEvent(request_event);
 
   TRACE_EVENT_BEGIN0("sync", "PostCommit");
+  sync_pb::ClientToServerResponse response;
   const SyncerError post_result = SyncerProtoUtil::PostClientToServerMessage(
-      &message_, &response_, cycle, nullptr);
+      &message_, &response, cycle, nullptr);
   TRACE_EVENT_END0("sync", "PostCommit");
 
   // TODO(rlarocque): Use result that includes errors captured later?
-  CommitResponseEvent response_event(base::Time::Now(), post_result, response_);
+  CommitResponseEvent response_event(base::Time::Now(), post_result, response);
   cycle->SendProtocolEvent(response_event);
 
   if (post_result != SYNCER_OK) {
@@ -152,13 +143,13 @@ SyncerError Commit::PostAndProcessResponse(
     return post_result;
   }
 
-  if (!response_.has_commit()) {
+  if (!response.has_commit()) {
     LOG(WARNING) << "Commit response has no commit body!";
     return SERVER_RESPONSE_VALIDATION_FAILED;
   }
 
   size_t message_entries = message_.commit().entries_size();
-  size_t response_entries = response_.commit().entryresponse_size();
+  size_t response_entries = response.commit().entryresponse_size();
   if (message_entries != response_entries) {
     LOG(ERROR) << "Commit response has wrong number of entries! "
                << "Expected: " << message_entries << ", "
@@ -179,7 +170,7 @@ SyncerError Commit::PostAndProcessResponse(
     TRACE_EVENT1("sync", "ProcessCommitResponse", "type",
                  ModelTypeToString(it->first));
     SyncerError type_result =
-        it->second->ProcessCommitResponse(response_, status);
+        it->second->ProcessCommitResponse(response, status);
     if (type_result == SERVER_RETURN_CONFLICT) {
       nudge_tracker->RecordCommitConflict(it->first);
     }

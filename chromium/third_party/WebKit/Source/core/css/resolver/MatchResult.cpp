@@ -30,26 +30,26 @@
 
 #include "core/css/resolver/MatchResult.h"
 
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/StyleRule.h"
 
 namespace blink {
 
 MatchedProperties::MatchedProperties() : possibly_padded_member(nullptr) {}
 
-MatchedProperties::~MatchedProperties() {}
+MatchedProperties::~MatchedProperties() = default;
 
-DEFINE_TRACE(MatchedProperties) {
+void MatchedProperties::Trace(blink::Visitor* visitor) {
   visitor->Trace(properties);
 }
 
 void MatchResult::AddMatchedProperties(
-    const StylePropertySet* properties,
+    const CSSPropertyValueSet* properties,
     unsigned link_match_type,
     PropertyWhitelistType property_whitelist_type) {
   matched_properties_.Grow(matched_properties_.size() + 1);
   MatchedProperties& new_properties = matched_properties_.back();
-  new_properties.properties = const_cast<StylePropertySet*>(properties);
+  new_properties.properties = const_cast<CSSPropertyValueSet*>(properties);
   new_properties.types_.link_match_type = link_match_type;
   new_properties.types_.whitelist_type = property_whitelist_type;
 }
@@ -58,10 +58,24 @@ void MatchResult::FinishAddingUARules() {
   ua_range_end_ = matched_properties_.size();
 }
 
+void MatchResult::FinishAddingUserRules() {
+  // Don't add empty ranges.
+  if (user_range_ends_.IsEmpty() &&
+      ua_range_end_ == matched_properties_.size())
+    return;
+  if (!user_range_ends_.IsEmpty() &&
+      user_range_ends_.back() == matched_properties_.size())
+    return;
+  user_range_ends_.push_back(matched_properties_.size());
+}
+
 void MatchResult::FinishAddingAuthorRulesForTreeScope() {
   // Don't add empty ranges.
-  if (author_range_ends_.IsEmpty() &&
+  if (author_range_ends_.IsEmpty() && user_range_ends_.IsEmpty() &&
       ua_range_end_ == matched_properties_.size())
+    return;
+  if (author_range_ends_.IsEmpty() && !user_range_ends_.IsEmpty() &&
+      user_range_ends_.back() == matched_properties_.size())
     return;
   if (!author_range_ends_.IsEmpty() &&
       author_range_ends_.back() == matched_properties_.size())

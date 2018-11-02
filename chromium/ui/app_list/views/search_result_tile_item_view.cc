@@ -4,19 +4,24 @@
 
 #include "ui/app_list/views/search_result_tile_item_view.h"
 
+#include "ash/app_list/model/search_result.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_view_delegate.h"
-#include "ui/app_list/search_result.h"
+#include "ui/app_list/pagination_model.h"
 #include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/search_result_container_view.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/focus/focus_manager.h"
 
 namespace app_list {
 
@@ -45,19 +50,19 @@ constexpr SkColor kSearchRatingStarColor =
 SearchResultTileItemView::SearchResultTileItemView(
     SearchResultContainerView* result_container,
     AppListViewDelegate* view_delegate,
+    PaginationModel* pagination_model,
     bool is_suggested_app,
-    bool is_fullscreen_app_list_enabled,
     bool is_play_store_search_enabled)
     : is_suggested_app_(is_suggested_app),
       result_container_(result_container),
       view_delegate_(view_delegate),
-      is_fullscreen_app_list_enabled_(is_fullscreen_app_list_enabled) {
+      pagination_model_(pagination_model) {
   // When |item_| is null, the tile is invisible. Calling SetSearchResult with a
   // non-null item makes the tile visible.
   SetVisible(false);
 
   if (is_play_store_search_enabled) {
-    const gfx::FontList& font = FullscreenAppListAppTitleFont();
+    const gfx::FontList& font = AppListAppTitleFont();
     rating_ = new views::Label;
     rating_->SetEnabledColor(kSearchAppRatingColor);
     rating_->SetFontList(font);
@@ -113,36 +118,32 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   SetRating(item_->rating());
   SetPrice(item_->formatted_price());
 
-  if (is_fullscreen_app_list_enabled_) {
-    const gfx::FontList& font = FullscreenAppListAppTitleFont();
-    if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION) {
-      set_is_recommendation(true);
+  const gfx::FontList& font = AppListAppTitleFont();
+  if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION) {
+    set_is_recommendation(true);
 
-      title()->SetFontList(font);
-      title()->SetLineHeight(font.GetHeight());
-      title()->SetEnabledColor(kGridTitleColorFullscreen);
-    } else if (item_->display_type() == SearchResult::DISPLAY_TILE) {
-      // Set solid color background to avoid broken text. See crbug.com/746563.
-      if (rating_) {
-        rating_->SetBackground(
-            views::CreateSolidBackground(kCardBackgroundColorFullscreen));
-      }
-      if (price_) {
-        price_->SetBackground(
-            views::CreateSolidBackground(kCardBackgroundColorFullscreen));
-      }
-      title()->SetBackground(
-          views::CreateSolidBackground(kCardBackgroundColorFullscreen));
-      title()->SetFontList(font);
-      title()->SetLineHeight(font.GetHeight());
-      title()->SetEnabledColor(kSearchTitleColor);
+    title()->SetFontList(font);
+    title()->SetLineHeight(font.GetHeight());
+    title()->SetEnabledColor(kGridTitleColor);
+  } else if (item_->display_type() == SearchResult::DISPLAY_TILE) {
+    // Set solid color background to avoid broken text. See crbug.com/746563.
+    if (rating_) {
+      rating_->SetBackground(
+          views::CreateSolidBackground(kCardBackgroundColor));
     }
-
-    title()->SetMaxLines(2);
-    title()->SetMultiLine(item_->display_type() == SearchResult::DISPLAY_TILE &&
-                          item_->result_type() ==
-                              SearchResult::RESULT_INSTALLED_APP);
+    if (price_) {
+      price_->SetBackground(views::CreateSolidBackground(kCardBackgroundColor));
+    }
+    title()->SetBackground(views::CreateSolidBackground(kCardBackgroundColor));
+    title()->SetFontList(font);
+    title()->SetLineHeight(font.GetHeight());
+    title()->SetEnabledColor(kSearchTitleColor);
   }
+
+  title()->SetMaxLines(2);
+  title()->SetMultiLine(item_->display_type() == SearchResult::DISPLAY_TILE &&
+                        item_->result_type() ==
+                            SearchResult::RESULT_INSTALLED_APP);
 
   // Only refresh the icon if it's different from the old one. This prevents
   // flickering.
@@ -158,8 +159,12 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   }
 
   base::string16 accessible_name = title()->text();
-  if (rating_ && rating_->visible())
-    accessible_name += base::UTF8ToUTF16(", ") + rating_->text();
+  if (rating_ && rating_->visible()) {
+    accessible_name +=
+        base::UTF8ToUTF16(", ") +
+        l10n_util::GetStringFUTF16(IDS_APP_ACCESSIBILITY_STAR_RATING_ARC,
+                                   rating_->text());
+  }
   if (price_ && price_->visible())
     accessible_name += base::UTF8ToUTF16(", ") + price_->text();
   SetAccessibleName(accessible_name);
@@ -198,26 +203,38 @@ void SearchResultTileItemView::LogAppLaunch() const {
   if (!is_suggested_app_)
     return;
 
-  UMA_HISTOGRAM_BOOLEAN(is_fullscreen_app_list_enabled_
-                            ? kAppListAppLaunchedFullscreen
-                            : kAppListAppLaunched,
-                        is_suggested_app_);
+  UMA_HISTOGRAM_BOOLEAN(kAppListAppLaunchedFullscreen, is_suggested_app_);
 }
 
 void SearchResultTileItemView::ButtonPressed(views::Button* sender,
                                              const ui::Event& event) {
-  LogAppLaunch();
+  if (is_suggested_app_)
+    LogAppLaunch();
+
   view_delegate_->OpenSearchResult(item_, false, event.flags());
 }
 
 bool SearchResultTileItemView::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_RETURN) {
-    LogAppLaunch();
+    if (is_suggested_app_)
+      LogAppLaunch();
+
     view_delegate_->OpenSearchResult(item_, false, event.flags());
     return true;
   }
 
   return false;
+}
+
+void SearchResultTileItemView::OnFocus() {
+  if (pagination_model_ && is_recommendation() &&
+      view_delegate_->GetModel()->state() == AppListModel::STATE_APPS) {
+    // Go back to first page when app in suggestions container is focused.
+    pagination_model_->SelectPage(0, false);
+  } else if (!is_recommendation()) {
+    ScrollRectToVisible(GetLocalBounds());
+  }
+  TileItemView::OnFocus();
 }
 
 void SearchResultTileItemView::OnIconChanged() {
@@ -275,7 +292,7 @@ void SearchResultTileItemView::Layout() {
   if (rect.IsEmpty())
     return;
 
-  if (!is_fullscreen_app_list_enabled_ || !item_) {
+  if (!item_) {
     TileItemView::Layout();
     return;
   }
@@ -338,7 +355,7 @@ void SearchResultTileItemView::Layout() {
 }
 
 gfx::Size SearchResultTileItemView::CalculatePreferredSize() const {
-  if (is_fullscreen_app_list_enabled_ && item_) {
+  if (item_) {
     if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION)
       return gfx::Size(kGridTileWidth, kGridTileHeight);
     if (item_->display_type() == SearchResult::DISPLAY_TILE)
@@ -346,6 +363,24 @@ gfx::Size SearchResultTileItemView::CalculatePreferredSize() const {
   }
 
   return TileItemView::CalculatePreferredSize();
+}
+
+void SearchResultTileItemView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  TileItemView::GetAccessibleNodeData(node_data);
+  // Specify |ui::AX_ATTR_DESCRIPTION| with an empty string, so that long
+  // truncated names are not read twice.
+  // Details of this issue:
+  // - The Play Store app's name is shown in a label |TileItemView::title_|.
+  // - If the name is too long, it'll get truncated and the full name will
+  //   go to the label's tooltip.
+  // - |app_list::TileItemView| uses that label's tooltip as its tooltip.
+  // - If a view doesn't have |ui::AX_ATTR_DESCRIPTION| defined in the
+  //   |AXNodeData|, |AXViewObjWrapper::Serialize| will use the tooltip text
+  //   as its description.
+  // - We're customizing this view's accessible name, so it get focused
+  //   ChromeVox will read its accessible name and then its description.
+  node_data->AddStringAttribute(ui::AX_ATTR_DESCRIPTION, "");
 }
 
 }  // namespace app_list

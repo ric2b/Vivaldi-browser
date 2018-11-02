@@ -27,12 +27,12 @@
 
 #include "core/html/parser/HTMLTokenizer.h"
 
-#include "core/HTMLNames.h"
-#include "core/HTMLTokenizerNames.h"
 #include "core/html/parser/HTMLEntityParser.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLTreeBuilder.h"
 #include "core/html/parser/MarkupTokenizerInlines.h"
+#include "core/html_names.h"
+#include "core/html_tokenizer_names.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/text/Unicode.h"
 
@@ -74,7 +74,7 @@ HTMLTokenizer::~HTMLTokenizer() {}
 
 void HTMLTokenizer::Reset() {
   state_ = HTMLTokenizer::kDataState;
-  token_ = 0;
+  token_ = nullptr;
   force_null_character_replacement_ = false;
   should_allow_cdata_ = false;
   additional_allowed_character_ = '\0';

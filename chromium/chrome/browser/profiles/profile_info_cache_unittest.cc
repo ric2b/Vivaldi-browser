@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
-#include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -28,7 +27,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -111,7 +110,7 @@ void ProfileInfoCacheTest::SetUp() {
 void ProfileInfoCacheTest::TearDown() {
   // Drain remaining tasks to make sure all tasks are completed. This prevents
   // memory leaks.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 }
 
 ProfileInfoCache* ProfileInfoCacheTest::GetCache() {
@@ -368,7 +367,7 @@ TEST_F(ProfileInfoCacheTest, GAIAPicture) {
   int default_avatar_id =
       profiles::GetDefaultAvatarIconResourceIDAtIndex(kDefaultAvatarIndex);
   const gfx::Image& default_avatar_image(
-      ResourceBundle::GetSharedInstance().GetImageNamed(default_avatar_id));
+      ui::ResourceBundle::GetSharedInstance().GetImageNamed(default_avatar_id));
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       default_avatar_image, GetCache()->GetAvatarIconOfProfileAtIndex(1)));
 
@@ -394,7 +393,7 @@ TEST_F(ProfileInfoCacheTest, GAIAPicture) {
   int other_avatar_id =
       profiles::GetDefaultAvatarIconResourceIDAtIndex(kOtherAvatarIndex);
   const gfx::Image& other_avatar_image(
-      ResourceBundle::GetSharedInstance().GetImageNamed(other_avatar_id));
+      ui::ResourceBundle::GetSharedInstance().GetImageNamed(other_avatar_id));
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       other_avatar_image, GetCache()->GetAvatarIconOfProfileAtIndex(1)));
 
@@ -425,7 +424,7 @@ TEST_F(ProfileInfoCacheTest, PersistGAIAPicture) {
   GetCache()->SetGAIAPictureOfProfileAtIndex(0, &gaia_image);
 
   // Make sure everything has completed, and the file has been written to disk.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       gaia_image, *GetCache()->GetGAIAPictureOfProfileAtIndex(0)));
@@ -434,7 +433,7 @@ TEST_F(ProfileInfoCacheTest, PersistGAIAPicture) {
   // Try to get the GAIA picture. This should return NULL until the read from
   // disk is done.
   EXPECT_EQ(NULL, GetCache()->GetGAIAPictureOfProfileAtIndex(0));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   EXPECT_TRUE(gfx::test::AreImagesEqual(
     gaia_image, *GetCache()->GetGAIAPictureOfProfileAtIndex(0)));
@@ -462,7 +461,7 @@ TEST_F(ProfileInfoCacheTest, EmptyGAIAInfo) {
   base::string16 profile_name = ASCIIToUTF16("name_1");
   int id = profiles::GetDefaultAvatarIconResourceIDAtIndex(0);
   const gfx::Image& profile_image(
-      ResourceBundle::GetSharedInstance().GetImageNamed(id));
+      ui::ResourceBundle::GetSharedInstance().GetImageNamed(id));
 
   GetCache()->AddProfileToCache(
       GetProfilePath("path_1"), profile_name, std::string(), base::string16(),
@@ -622,95 +621,7 @@ TEST_F(ProfileInfoCacheTest, EntriesInAttributesStorage) {
   }
 }
 
-// High res avatar downloading is only supported on desktop.
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-TEST_F(ProfileInfoCacheTest, DownloadHighResAvatarTest) {
-  // The TestingProfileManager's ProfileInfoCache doesn't download avatars.
-  ProfileInfoCache profile_info_cache(g_browser_process->local_state(),
-      testing_profile_manager_.profile_manager()->user_data_dir());
-
-  // Make sure there are no avatars already on disk.
-  const size_t kIconIndex = 0;
-  base::FilePath icon_path =
-      profiles::GetPathOfHighResAvatarAtIndex(kIconIndex);
-  EXPECT_FALSE(base::PathExists(icon_path));
-
-  EXPECT_EQ(0U, profile_info_cache.GetNumberOfProfiles());
-  base::FilePath path_1 = GetProfilePath("path_1");
-  profile_info_cache.AddProfileToCache(path_1, ASCIIToUTF16("name_1"),
-      std::string(), base::string16(), kIconIndex, std::string());
-  EXPECT_EQ(1U, profile_info_cache.GetNumberOfProfiles());
-  content::RunAllBlockingPoolTasksUntilIdle();
-
-  // We haven't downloaded any high-res avatars yet.
-  EXPECT_EQ(0U, profile_info_cache.cached_avatar_images_.size());
-
-  // After adding a new profile, the download of high-res avatar will be
-  // triggered if the flag kNewAvatarMenu has been set. But the downloader
-  // won't ever call OnFetchComplete in the test.
-  EXPECT_EQ(1U, profile_info_cache.avatar_images_downloads_in_progress_.size());
-
-  EXPECT_FALSE(profile_info_cache.GetHighResAvatarOfProfileAtIndex(0));
-
-  // Simulate downloading a high-res avatar.
-  ProfileAvatarDownloader avatar_downloader(
-      kIconIndex,
-      base::Bind(&ProfileInfoCache::SaveAvatarImageAtPath,
-                 base::Unretained(&profile_info_cache),
-                 profile_info_cache.GetPathOfProfileAtIndex(0)));
-
-  // Put a real bitmap into "bitmap".  2x2 bitmap of green 32 bit pixels.
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(2, 2);
-  bitmap.eraseColor(SK_ColorGREEN);
-
-  avatar_downloader.OnFetchComplete(
-      GURL("http://www.google.com/avatar.png"), &bitmap);
-
-  // Now the download should not be in progress anymore.
-  EXPECT_EQ(0U, profile_info_cache.avatar_images_downloads_in_progress_.size());
-
-  std::string file_name =
-      profiles::GetDefaultAvatarIconFileNameAtIndex(kIconIndex);
-
-  // The file should have been cached and saved.
-  EXPECT_EQ(1U, profile_info_cache.cached_avatar_images_.size());
-  EXPECT_TRUE(profile_info_cache.GetHighResAvatarOfProfileAtIndex(0));
-  EXPECT_EQ(profile_info_cache.cached_avatar_images_[file_name].get(),
-      profile_info_cache.GetHighResAvatarOfProfileAtIndex(0));
-
-  // Make sure everything has completed, and the file has been written to disk.
-  content::RunAllBlockingPoolTasksUntilIdle();
-
-  // Clean up.
-  EXPECT_NE(std::string::npos, icon_path.MaybeAsASCII().find(file_name));
-  EXPECT_TRUE(base::PathExists(icon_path));
-  EXPECT_TRUE(base::DeleteFile(icon_path, false));
-  EXPECT_FALSE(base::PathExists(icon_path));
-}
-
-TEST_F(ProfileInfoCacheTest, NothingToDownloadHighResAvatarTest) {
-  // The TestingProfileManager's ProfileInfoCache doesn't download avatars.
-  ProfileInfoCache profile_info_cache(
-      g_browser_process->local_state(),
-      testing_profile_manager_.profile_manager()->user_data_dir());
-
-  const size_t kIconIndex = profiles::GetPlaceholderAvatarIndex();
-
-  EXPECT_EQ(0U, profile_info_cache.GetNumberOfProfiles());
-  base::FilePath path_1 = GetProfilePath("path_1");
-  profile_info_cache.AddProfileToCache(path_1, ASCIIToUTF16("name_1"),
-                                       std::string(), base::string16(),
-                                       kIconIndex, std::string());
-  EXPECT_EQ(1U, profile_info_cache.GetNumberOfProfiles());
-  content::RunAllBlockingPoolTasksUntilIdle();
-
-  // We haven't tried to download any high-res avatars as the specified icon is
-  // just a placeholder.
-  EXPECT_EQ(0U, profile_info_cache.cached_avatar_images_.size());
-  EXPECT_EQ(0U, profile_info_cache.avatar_images_downloads_in_progress_.size());
-}
-
 TEST_F(ProfileInfoCacheTest, MigrateLegacyProfileNamesWithNewAvatarMenu) {
   EXPECT_EQ(0U, GetCache()->GetNumberOfProfiles());
 
@@ -744,11 +655,22 @@ TEST_F(ProfileInfoCacheTest, MigrateLegacyProfileNamesWithNewAvatarMenu) {
   ResetCache();
 
   // Legacy profile names like "Default Profile" and "First user" should be
-  // migrated to "Person %n" type names.
-  EXPECT_EQ(ASCIIToUTF16("Person 1"), GetCache()->GetNameOfProfileAtIndex(
-      GetCache()->GetIndexOfProfileWithPath(path_1)));
-  EXPECT_EQ(ASCIIToUTF16("Person 3"), GetCache()->GetNameOfProfileAtIndex(
-      GetCache()->GetIndexOfProfileWithPath(path_2)));
+  // migrated to "Person %n" type names, i.e. any permutation of "Person 1" and
+  // "Person 3".
+  if (ASCIIToUTF16("Person 1") ==
+      GetCache()->GetNameOfProfileAtIndex(
+          GetCache()->GetIndexOfProfileWithPath(path_1))) {
+    EXPECT_EQ(ASCIIToUTF16("Person 3"),
+              GetCache()->GetNameOfProfileAtIndex(
+                  GetCache()->GetIndexOfProfileWithPath(path_2)));
+  } else {
+    EXPECT_EQ(ASCIIToUTF16("Person 3"),
+              GetCache()->GetNameOfProfileAtIndex(
+                  GetCache()->GetIndexOfProfileWithPath(path_1)));
+    EXPECT_EQ(ASCIIToUTF16("Person 1"),
+              GetCache()->GetNameOfProfileAtIndex(
+                  GetCache()->GetIndexOfProfileWithPath(path_2)));
+  }
 
   // Other profile names should not be migrated even if they're the old
   // default cartoon profile names.
@@ -776,7 +698,7 @@ TEST_F(ProfileInfoCacheTest, GetGaiaImageForAvatarMenu) {
   GetCache()->SetGAIAPictureOfProfileAtIndex(0, &gaia_image);
 
   // Make sure everything has completed, and the file has been written to disk.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Make sure this profile is using GAIA picture.
   EXPECT_TRUE(GetCache()->IsUsingGAIAPictureOfProfileAtIndex(0));
@@ -796,7 +718,7 @@ TEST_F(ProfileInfoCacheTest, GetGaiaImageForAvatarMenu) {
   EXPECT_FALSE(gfx::test::AreImagesEqual(gaia_image, image_loaded));
 
   // Wait until the async image load finishes.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
 
   // Since the GAIA image is loaded now, we can get it this time.
   EXPECT_EQ(AvatarMenu::ImageLoadStatus::LOADED,

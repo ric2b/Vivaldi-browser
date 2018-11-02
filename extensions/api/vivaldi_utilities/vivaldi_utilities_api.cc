@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/power_monitor/power_monitor.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -76,6 +77,10 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
                                  vivaldi::utilities::OnScroll::kEventName);
+
+  base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
+  if (power_monitor)
+    power_monitor->AddObserver(this);
 }
 
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
@@ -85,6 +90,9 @@ void VivaldiUtilitiesAPI::Shutdown() {
     // Get rid of the allocated items
     delete it.second;
   }
+  base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
+  if (power_monitor)
+    power_monitor->RemoveObserver(this);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >::
@@ -133,6 +141,24 @@ const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
     return it->second;
   }
   return nullptr;
+}
+
+void VivaldiUtilitiesAPI::OnPowerStateChange(bool on_battery_power) {
+  // Implement if needed
+}
+
+void VivaldiUtilitiesAPI::OnSuspend() {
+  if (event_router_) {
+    event_router_->DispatchEvent(vivaldi::utilities::OnSuspend::kEventName,
+                                 vivaldi::utilities::OnSuspend::Create());
+  }
+}
+
+void VivaldiUtilitiesAPI::OnResume() {
+  if (event_router_) {
+    event_router_->DispatchEvent(vivaldi::utilities::OnResume::kEventName,
+                                 vivaldi::utilities::OnResume::Create());
+  }
 }
 
 namespace ClearAllRecentlyClosedSessions =
@@ -461,6 +487,18 @@ bool UtilitiesSetSharedDataFunction::RunAsync() {
   results_ = vivaldi::utilities::SetSharedData::Results::Create(found);
 
   SendResponse(true);
+
+  EventRouter* event_router = EventRouter::Get(GetProfile());
+  if (event_router) {
+    std::unique_ptr<base::ListValue> event_args(
+        vivaldi::utilities::OnSharedDataUpdated::Create(
+            params->key_value_pair.key, *params->key_value_pair.value));
+
+    event_router->BroadcastEvent(base::WrapUnique(new extensions::Event(
+        extensions::events::VIVALDI_EXTENSION_EVENT,
+        vivaldi::utilities::OnSharedDataUpdated::kEventName,
+        std::move(event_args))));
+  }
   return true;
 }
 

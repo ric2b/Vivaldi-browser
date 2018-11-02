@@ -34,7 +34,6 @@ namespace blink {
 
 class Document;
 class DocumentParserClient;
-class SegmentedString;
 class ScriptableDocumentParser;
 class TextResourceDecoder;
 
@@ -43,7 +42,7 @@ class CORE_EXPORT DocumentParser
       public TraceWrapperBase {
  public:
   virtual ~DocumentParser();
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   virtual ScriptableDocumentParser* AsScriptableDocumentParser() {
     return nullptr;
@@ -53,7 +52,7 @@ class CORE_EXPORT DocumentParser
   virtual bool HasInsertionPoint() { return true; }
 
   // insert is used by document.write.
-  virtual void insert(const SegmentedString&) = 0;
+  virtual void insert(const String&) = 0;
 
   // The below functions are used by DocumentWriter (the loader).
   virtual void AppendBytes(const char* bytes, size_t length) = 0;
@@ -109,8 +108,8 @@ class CORE_EXPORT DocumentParser
   }
 
   // FIXME: The names are not very accurate :(
-  virtual void SuspendScheduledTasks();
-  virtual void ResumeScheduledTasks();
+  virtual void PauseScheduledTasks();
+  virtual void UnpauseScheduledTasks();
 
   void AddClient(DocumentParserClient*);
   void RemoveClient(DocumentParserClient*);

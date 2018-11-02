@@ -45,7 +45,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/HTMLFormElement.h"
+#include "core/html/forms/HTMLFormElement.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -179,8 +179,8 @@ void V8LazyEventListener::CompileScript(ScriptState* script_state,
   v8::Local<v8::Object> scopes[3];
   scopes[2] = ToObjectWrapper<Node>(node_, script_state);
   scopes[1] = ToObjectWrapper<HTMLFormElement>(form_element, script_state);
-  scopes[0] = ToObjectWrapper<Document>(node_ ? node_->ownerDocument() : 0,
-                                        script_state);
+  scopes[0] = ToObjectWrapper<Document>(
+      node_ ? node_->ownerDocument() : nullptr, script_state);
 
   v8::Local<v8::String> parameter_name =
       V8String(GetIsolate(), event_parameter_name_);

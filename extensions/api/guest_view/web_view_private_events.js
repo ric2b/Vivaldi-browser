@@ -26,10 +26,6 @@ var EVENTS_PRIVATE = {
     evt: CreateEvent('webViewPrivate.onCreateSearch'),
     fields: ['Name','Url']
   },
-  'requestpageinfo': {
-    evt: CreateEvent('webViewPrivate.onRequestPageInfo'),
-    fields: ['url']
-  },
   'pasteandgo': {
     evt: CreateEvent('webViewPrivate.onPasteAndGo'),
     fields: ['clipBoardText', 'pasteTarget', 'modifiers']

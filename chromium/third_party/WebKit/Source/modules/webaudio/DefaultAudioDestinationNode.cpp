@@ -28,7 +28,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/webaudio/AudioWorkletThread.h"
+#include "modules/webaudio/AudioWorklet.h"
 #include "modules/webaudio/BaseAudioContext.h"
 
 namespace blink {
@@ -45,11 +45,11 @@ DefaultAudioDestinationHandler::DefaultAudioDestinationHandler(
   SetInternalChannelInterpretation(AudioBus::kSpeakers);
 }
 
-PassRefPtr<DefaultAudioDestinationHandler>
+scoped_refptr<DefaultAudioDestinationHandler>
 DefaultAudioDestinationHandler::Create(
     AudioNode& node,
     const WebAudioLatencyHint& latency_hint) {
-  return AdoptRef(new DefaultAudioDestinationHandler(node, latency_hint));
+  return base::AdoptRef(new DefaultAudioDestinationHandler(node, latency_hint));
 }
 
 DefaultAudioDestinationHandler::~DefaultAudioDestinationHandler() {
@@ -75,7 +75,9 @@ void DefaultAudioDestinationHandler::Uninitialize() {
   if (!IsInitialized())
     return;
 
-  StopDestination();
+  if (destination_->IsPlaying())
+    StopDestination();
+
   number_of_input_channels_ = 0;
   AudioHandler::Uninitialize();
 }
@@ -86,35 +88,44 @@ void DefaultAudioDestinationHandler::CreateDestination() {
 }
 
 void DefaultAudioDestinationHandler::StartDestination() {
-  // Use Experimental AudioWorkletThread only when AudioWorklet is enabled.
-  if (RuntimeEnabledFeatures::AudioWorkletEnabled()) {
-    AudioWorkletThread::EnsureSharedBackingThread();
-    DCHECK(AudioWorkletThread::GetSharedBackingThread());
+  DCHECK(!destination_->IsPlaying());
+
+  // Use Experimental AudioWorkletThread only when AudioWorklet is enabled, and
+  // the worklet thread and the global scope are ready.
+  if (Context()->audioWorklet() && Context()->audioWorklet()->IsReady()) {
     destination_->StartWithWorkletThread(
-        AudioWorkletThread::GetSharedBackingThread());
+        Context()->audioWorklet()->GetBackingThread());
   } else {
     destination_->Start();
   }
 }
 
 void DefaultAudioDestinationHandler::StopDestination() {
+  DCHECK(destination_->IsPlaying());
   destination_->Stop();
 }
 
 void DefaultAudioDestinationHandler::StartRendering() {
   DCHECK(IsInitialized());
-  if (IsInitialized()) {
-    DCHECK(!destination_->IsPlaying());
+  // Context might try to start rendering again while the destination is
+  // running. Ignore it when that happens.
+  if (IsInitialized() && !destination_->IsPlaying()) {
     StartDestination();
   }
 }
 
 void DefaultAudioDestinationHandler::StopRendering() {
   DCHECK(IsInitialized());
-  if (IsInitialized()) {
-    DCHECK(destination_->IsPlaying());
+  // Context might try to stop rendering again while the destination is stopped.
+  // Ignore it when that happens.
+  if (IsInitialized() && destination_->IsPlaying()) {
     StopDestination();
   }
+}
+
+void DefaultAudioDestinationHandler::RestartRendering() {
+  StopRendering();
+  StartRendering();
 }
 
 unsigned long DefaultAudioDestinationHandler::MaxChannelCount() const {

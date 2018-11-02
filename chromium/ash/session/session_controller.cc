@@ -9,10 +9,14 @@
 
 #include "ash/public/interfaces/pref_connector.mojom.h"
 #include "ash/public/interfaces/user_info.mojom.h"
-#include "ash/session/session_observer.h"
+#include "ash/session/multiprofiles_intro_dialog.h"
+#include "ash/session/session_aborted_dialog.h"
+#include "ash/session/teleport_warning_dialog.h"
 #include "ash/shell.h"
 #include "ash/system/power/power_event_observer.h"
+#include "ash/system/tray/system_tray.h"
 #include "ash/wm/lock_state_controller.h"
+#include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
@@ -199,18 +203,14 @@ bool SessionController::IsUserFirstLogin() const {
   return GetUserSession(0)->user_info->is_new_profile;
 }
 
-bool SessionController::IsKioskSession() const {
-  if (!IsActiveUserSessionStarted())
-    return false;
-
-  user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
-  return active_user_type == user_manager::USER_TYPE_KIOSK_APP ||
-         active_user_type == user_manager::USER_TYPE_ARC_KIOSK_APP;
-}
-
 void SessionController::LockScreen() {
   if (client_)
     client_->RequestLockScreen();
+}
+
+void SessionController::RequestSignOut() {
+  if (client_)
+    client_->RequestSignOut();
 }
 
 void SessionController::SwitchActiveUser(const AccountId& account_id) {
@@ -241,8 +241,16 @@ PrefService* SessionController::GetUserPrefServiceForUser(
   return nullptr;
 }
 
-PrefService* SessionController::GetLastActiveUserPrefService() {
+PrefService* SessionController::GetLastActiveUserPrefService() const {
   return last_active_user_prefs_;
+}
+
+PrefService* SessionController::GetActivePrefService() const {
+  // Use the active user prefs once they become available. Check the PrefService
+  // object instead of session state because prefs load is async after login.
+  if (last_active_user_prefs_)
+    return last_active_user_prefs_;
+  return signin_screen_prefs_.get();
 }
 
 void SessionController::AddObserver(SessionObserver* observer) {
@@ -335,7 +343,7 @@ void SessionController::PrepareForLock(PrepareForLockCallback callback) {
   // page or app to mimick the lock screen.
   wm::WindowState* active_window_state = wm::GetActiveWindowState();
   if (active_window_state && active_window_state->IsFullscreen() &&
-      active_window_state->hide_shelf_when_fullscreen()) {
+      active_window_state->GetHideShelfWhenFullscreen()) {
     const wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
     active_window_state->OnWMEvent(&event);
   }
@@ -381,6 +389,33 @@ void SessionController::SetSessionLengthLimit(base::TimeDelta length_limit,
   session_start_time_ = start_time;
   for (auto& observer : observers_)
     observer.OnSessionLengthLimitChanged();
+}
+
+void SessionController::CanSwitchActiveUser(
+    CanSwitchActiveUserCallback callback) {
+  // Cancel overview mode when switching user profiles.
+  WindowSelectorController* controller =
+      Shell::Get()->window_selector_controller();
+  if (controller->IsSelecting())
+    controller->ToggleOverview();
+
+  ash::Shell::Get()->GetPrimarySystemTray()->CanSwitchAwayFromActiveUser(
+      std::move(callback));
+}
+
+void SessionController::ShowMultiprofilesIntroDialog(
+    ShowMultiprofilesIntroDialogCallback callback) {
+  MultiprofilesIntroDialog::Show(std::move(callback));
+}
+
+void SessionController::ShowTeleportWarningDialog(
+    ShowTeleportWarningDialogCallback callback) {
+  TeleportWarningDialog::Show(std::move(callback));
+}
+
+void SessionController::ShowMultiprofilesSessionAbortedDialog(
+    const std::string& user_email) {
+  SessionAbortedDialog::Show(user_email);
 }
 
 void SessionController::ClearUserSessionsForTest() {

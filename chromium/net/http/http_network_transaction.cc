@@ -16,7 +16,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -225,6 +224,13 @@ void HttpNetworkTransaction::PrepareForAuthRestart(HttpAuth::Target target) {
   DCHECK(HaveAuth(target));
   DCHECK(!stream_request_.get());
 
+  // Authorization schemes incompatible with HTTP/2 are unsupported for proxies.
+  if (target == HttpAuth::AUTH_SERVER &&
+      auth_controllers_[target]->NeedsHTTP11()) {
+    session_->http_server_properties()->SetHTTP11Required(
+        HostPortPair::FromURL(request_->url));
+  }
+
   bool keep_alive = false;
   // Even if the server says the connection is keep-alive, we have to be
   // able to find the end of each response in order to reuse the connection.
@@ -309,17 +315,6 @@ int HttpNetworkTransaction::Read(IOBuffer* buf, int buf_len,
 
   // Are we using SPDY or HTTP?
   next_state_ = STATE_READ_BODY;
-
-  // We have reached the end of Start state machine, reset the requestinfo to
-  // null.
-  // RequestInfo is a member of the HttpTransaction's consumer and is useful
-  // only till final response headers are received. A reset will ensure that
-  // HttpRequestInfo is only used up until final response headers are received.
-  // Resetting is allowed so that the transaction can be disassociated from its
-  // creating consumer in cases where it is shared for writing to the cache.
-  // It is also safe to reset it to null at this point since upload_data_stream
-  // is also not used in the Read state machine.
-  request_ = nullptr;
 
   read_buf_ = buf;
   read_buf_len_ = buf_len;
@@ -853,11 +848,6 @@ int HttpNetworkTransaction::DoNotifyBeforeCreateStream() {
 }
 
 int HttpNetworkTransaction::DoCreateStream() {
-  // TODO(mmenke): Remove ScopedTracker below once crbug.com/424359 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "424359 HttpNetworkTransaction::DoCreateStream"));
-
   response_.network_accessed = true;
 
   next_state_ = STATE_CREATE_STREAM_COMPLETE;
@@ -1187,11 +1177,6 @@ int HttpNetworkTransaction::DoBuildRequestComplete(int result) {
 }
 
 int HttpNetworkTransaction::DoSendRequest() {
-  // TODO(mmenke): Remove ScopedTracker below once crbug.com/424359 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "424359 HttpNetworkTransaction::DoSendRequest"));
-
   send_start_time_ = base::TimeTicks::Now();
   next_state_ = STATE_SEND_REQUEST_COMPLETE;
 
@@ -1337,6 +1322,19 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     return rv;
 
   headers_valid_ = true;
+
+  // We have reached the end of Start state machine, set the RequestInfo to
+  // null.
+  // RequestInfo is a member of the HttpTransaction's consumer and is useful
+  // only until the final response headers are received. Clearing it will ensure
+  // that HttpRequestInfo is only used up until final response headers are
+  // received. Clearing is allowed so that the transaction can be disassociated
+  // from its creating consumer in cases where it is shared for writing to the
+  // cache. It is also safe to set it to null at this point since
+  // upload_data_stream is also not used in the Read state machine.
+  if (pending_auth_target_ == HttpAuth::AUTH_NONE)
+    request_ = nullptr;
+
   return OK;
 }
 

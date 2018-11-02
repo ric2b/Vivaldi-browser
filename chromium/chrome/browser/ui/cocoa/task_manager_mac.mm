@@ -11,6 +11,7 @@
 
 #include "base/feature_list.h"
 #include "base/mac/bundle_locations.h"
+#import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -186,7 +187,7 @@ bool ShouldUseViewsTaskManager() {
 - (BOOL)visibilityOfColumnWithId:(int)columnId {
   NSTableColumn* column =
       [tableView_ tableColumnWithIdentifier:ColumnIdentifier(columnId)];
-  return ![column isHidden];
+  return column ? ![column isHidden] : NO;
 }
 
 - (void)setColumnWithId:(int)columnId toVisibility:(BOOL)visibility {
@@ -225,6 +226,8 @@ bool ShouldUseViewsTaskManager() {
 }
 
 - (void)dealloc {
+  // Paranoia. These should have been nilled out in -windowWillClose: but let's
+  // make sure we have no dangling references.
   [tableView_ setDelegate:nil];
   [tableView_ setDataSource:nil];
   [super dealloc];
@@ -246,7 +249,14 @@ bool ShouldUseViewsTaskManager() {
   [[column.get() headerCell] setAlignment:textAlignment];
   [[column.get() dataCell] setAlignment:textAlignment];
 
-  NSFont* font = [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
+  const CGFloat smallSystemFontSize = [NSFont smallSystemFontSize];
+  NSFont* font = nil;
+  if (@available(macOS 10.11, *)) {
+    font = [NSFont monospacedDigitSystemFontOfSize:smallSystemFontSize
+                                            weight:NSFontWeightRegular];
+  } else {
+    font = [NSFont systemFontOfSize:smallSystemFontSize];
+  }
   [[column.get() dataCell] setFont:font];
 
   [column.get() setHidden:!columnData.default_visibility];
@@ -318,7 +328,7 @@ bool ShouldUseViewsTaskManager() {
 
 // Callback for the table header context menu. Toggles visibility of the table
 // column associated with the clicked menu item.
-- (void)toggleColumn:(id)item {
+- (void)toggleColumn:(NSMenuItem*)item {
   DCHECK([item isKindOfClass:[NSMenuItem class]]);
   if (![item isKindOfClass:[NSMenuItem class]])
     return;
@@ -423,6 +433,12 @@ bool ShouldUseViewsTaskManager() {
     taskManagerMac_->WindowWasClosed();
     taskManagerMac_ = nullptr;
     tableModel_ = nullptr;
+
+    // Now that there is no model, ensure that this object gets no data requests
+    // in the window of time between the autorelease and the actual dealloc.
+    // https://crbug.com/763367
+    [tableView_ setDelegate:nil];
+    [tableView_ setDataSource:nil];
   }
   [self autorelease];
 }
@@ -532,14 +548,12 @@ namespace task_manager {
 // TaskManagerMac implementation:
 
 TaskManagerMac::TaskManagerMac()
-    : table_model_(new TaskManagerTableModel(
-          REFRESH_TYPE_CPU | REFRESH_TYPE_MEMORY | REFRESH_TYPE_NETWORK_USAGE,
-          this)),
+    : table_model_(this),
       window_controller_([[TaskManagerWindowController alloc]
           initWithTaskManagerMac:this
-                      tableModel:table_model_.get()]) {
-  table_model_->SetObserver(this);  // Hook up the ui::TableModelObserver.
-  table_model_->RetrieveSavedColumnsSettingsAndUpdateTable();
+                      tableModel:&table_model_]) {
+  table_model_.SetObserver(this);  // Hook up the ui::TableModelObserver.
+  table_model_.RetrieveSavedColumnsSettingsAndUpdateTable();
 
   registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                  content::NotificationService::AllSources());
@@ -549,7 +563,7 @@ TaskManagerMac::TaskManagerMac()
 TaskManagerMac* TaskManagerMac::instance_ = nullptr;
 
 TaskManagerMac::~TaskManagerMac() {
-  table_model_->SetObserver(nullptr);
+  table_model_.SetObserver(nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -605,7 +619,7 @@ void TaskManagerMac::WindowWasClosed() {
 
 NSImage* TaskManagerMac::GetImageForRow(int row) {
   const NSSize kImageSize = NSMakeSize(16.0, 16.0);
-  NSImage* image = gfx::NSImageFromImageSkia(table_model_->GetIcon(row));
+  NSImage* image = gfx::NSImageFromImageSkia(table_model_.GetIcon(row));
   if (image)
     image.size = kImageSize;
   else
@@ -630,7 +644,7 @@ TaskManagerTableModel* TaskManagerMac::Show() {
     instance_ = new TaskManagerMac();
   }
 
-  return instance_->table_model_.get();
+  return &instance_->table_model_;
 }
 
 // static

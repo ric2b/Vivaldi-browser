@@ -21,12 +21,6 @@ const Dialog = {
   OPTIONS: 'options',
 };
 
-/** @enum {number} */
-extensions.ShowingType = {
-  EXTENSIONS: 0,
-  APPS: 1,
-};
-
 /** @typedef {{page: Page,
                extensionId: (string|undefined),
                subpage: (!Dialog|undefined)}} */
@@ -36,18 +30,66 @@ cr.define('extensions', function() {
   'use strict';
 
   /**
+   * @param {!PageState} a
+   * @param {!PageState} b
+   * @return {boolean} Whether a and b are equal.
+   */
+  function isPageStateEqual(a, b) {
+    return a.page == b.page && a.subpage == b.subpage &&
+        a.extensionId == b.extensionId;
+  }
+
+  /**
+   * Regular expression that captures the leading slash, the content and the
+   * trailing slash in three different groups.
+   * @const {!RegExp}
+   */
+  const CANONICAL_PATH_REGEX = /(^\/)([\/-\w]+)(\/$)/;
+
+  /**
    * A helper object to manage in-page navigations. Since the extensions page
    * needs to support different urls for different subpages (like the details
    * page), we use this object to manage the history and url conversions.
    */
   class NavigationHelper {
     constructor() {
-      /** @private {!Array<function(!PageState)>} */
-      this.listeners_ = [];
+      this.processRoute_();
+
+      /** @private {number} */
+      this.nextListenerId_ = 1;
+
+      /** @private {!Map<number, function(!PageState)>} */
+      this.listeners_ = new Map();
+
+      /** @private {!PageState} */
+      this.previousPage_;
 
       window.addEventListener('popstate', () => {
         this.notifyRouteChanged_(this.getCurrentPage());
       });
+    }
+
+    /** @private */
+    get currentPath_() {
+      return location.pathname.replace(CANONICAL_PATH_REGEX, '$1$2');
+    }
+
+    /**
+     * If you're not a guest, going to /configureCommands and /shortcuts should
+     * land you on /shortcuts. These are the only two supported routes, so all
+     * other cases (guest or not) will redirect you to root path if not already
+     * on it.
+     * @private
+     */
+    processRoute_() {
+      if (!loadTimeData.getBoolean('isGuest') &&
+          (this.currentPath_ == '/configureCommands' ||
+           this.currentPath_ == '/shortcuts')) {
+        window.history.replaceState(
+            undefined /* stateObject */, '', '/shortcuts');
+      } else if (this.currentPath_ !== '/') {
+        window.history.replaceState(undefined /* stateObject */, '', '/');
+      }
     }
 
     /**
@@ -66,21 +108,31 @@ cr.define('extensions', function() {
       if (id)
         return {page: Page.ERRORS, extensionId: id};
 
-      if (location.pathname == '/shortcuts')
+      if (this.currentPath_ == '/shortcuts')
         return {page: Page.SHORTCUTS};
 
-      if (location.pathname == '/apps')
-        return {page: Page.LIST, type: extensions.ShowingType.APPS};
-
-      return {page: Page.LIST, type: extensions.ShowingType.EXTENSIONS};
+      return {page: Page.LIST};
     }
 
     /**
      * Function to add subscribers.
      * @param {!function(!PageState)} listener
+     * @return {number} A numerical ID to be used for removing the listener.
      */
-    onRouteChanged(listener) {
-      this.listeners_.push(listener);
+    addListener(listener) {
+      const nextListenerId = this.nextListenerId_++;
+      this.listeners_.set(nextListenerId, listener);
+      return nextListenerId;
+    }
+
+    /**
+     * Remove a previously registered listener.
+     * @param {number} id
+     * @return {boolean} Whether a listener with the given ID was actually found
+     *     and removed.
+     */
+    removeListener(id) {
+      return this.listeners_.delete(id);
     }
 
     /**
@@ -88,9 +140,9 @@ cr.define('extensions', function() {
      * @private
      */
     notifyRouteChanged_(newPage) {
-      for (const listener of this.listeners_) {
+      this.listeners_.forEach((listener, id) => {
         listener(newPage);
-      }
+      });
     }
 
     /**
@@ -98,28 +150,36 @@ cr.define('extensions', function() {
      */
     navigateTo(newPage) {
       let currentPage = this.getCurrentPage();
-      if (currentPage && currentPage.page == newPage.page &&
-          currentPage.type == newPage.type &&
-          currentPage.subpage == newPage.subpage &&
-          currentPage.extensionId == newPage.extensionId) {
+      if (currentPage && isPageStateEqual(currentPage, newPage)) {
         return;
       }
 
-      this.updateHistory(newPage);
+      this.updateHistory(newPage, false /* replaceState */);
+      this.notifyRouteChanged_(newPage);
+    }
+
+    /**
+     * @param {!PageState} newPage the page to replace the current page with.
+     */
+    replaceWith(newPage) {
+      this.updateHistory(newPage, true /* replaceState */);
+      if (this.previousPage_ && isPageStateEqual(this.previousPage_, newPage)) {
+        // Skip the duplicate history entry.
+        history.back();
+        return;
+      }
       this.notifyRouteChanged_(newPage);
     }
 
     /**
      * Called when a page changes, and pushes state to history to reflect it.
      * @param {!PageState} entry
+     * @param {boolean} replaceState
      */
-    updateHistory(entry) {
+    updateHistory(entry, replaceState) {
       let path;
       switch (entry.page) {
         case Page.LIST:
-          if (entry.type && entry.type == extensions.ShowingType.APPS)
-            path = '/apps';
-          else
             path = '/';
           break;
         case Page.DETAILS:
@@ -141,22 +201,25 @@ cr.define('extensions', function() {
       const state = {url: path};
       const currentPage = this.getCurrentPage();
       const isDialogNavigation = currentPage.page == entry.page &&
-          currentPage.extensionId == entry.extensionId &&
-          currentPage.type == entry.type;
+          currentPage.extensionId == entry.extensionId;
       // Navigating to a dialog doesn't visually change pages; it just opens
       // a dialog. As such, we replace state rather than pushing a new state
       // on the stack so that hitting the back button doesn't just toggle the
       // dialog.
-      if (isDialogNavigation)
+      if (replaceState || isDialogNavigation) {
         history.replaceState(state, '', path);
-      else
+      } else {
+        this.previousPage_ = currentPage;
         history.pushState(state, '', path);
+      }
     }
   }
 
   const navigation = new NavigationHelper();
 
   return {
+    // Constructor exposed for testing purposes.
+    NavigationHelper: NavigationHelper,
     navigation: navigation,
   };
 });

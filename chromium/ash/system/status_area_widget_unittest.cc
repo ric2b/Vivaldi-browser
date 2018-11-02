@@ -4,8 +4,8 @@
 
 #include "ash/system/status_area_widget.h"
 
-#include "ash/ash_switches.h"
 #include "ash/focus_cycler.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
@@ -13,8 +13,8 @@
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/session/logout_button_tray.h"
-#include "ash/system/status_area_focus_observer.h"
 #include "ash/system/status_area_widget_test_helper.h"
+#include "ash/system/system_tray_focus_observer.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
@@ -22,7 +22,6 @@
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
 #include "components/session_manager/session_manager_types.h"
-#include "ui/aura/env.h"
 
 using session_manager::SessionState;
 
@@ -65,17 +64,17 @@ TEST_F(StatusAreaWidgetTest, Basics) {
   EXPECT_FALSE(status->virtual_keyboard_tray_for_testing()->visible());
 }
 
-class StatusAreaFocusTestObserver : public StatusAreaFocusObserver {
+class SystemTrayFocusTestObserver : public SystemTrayFocusObserver {
  public:
-  StatusAreaFocusTestObserver() {}
-  ~StatusAreaFocusTestObserver() override {}
+  SystemTrayFocusTestObserver() = default;
+  ~SystemTrayFocusTestObserver() override = default;
 
   int focus_out_count() { return focus_out_count_; }
   int reverse_focus_out_count() { return reverse_focus_out_count_; }
 
  protected:
-  // StatusAreaFocusObserver:
-  void OnFocusOut(bool reverse) override {
+  // SystemTrayFocusObserver:
+  void OnFocusLeavingSystemTray(bool reverse) override {
     reverse ? ++reverse_focus_out_count_ : ++focus_out_count_;
   }
 
@@ -83,25 +82,28 @@ class StatusAreaFocusTestObserver : public StatusAreaFocusObserver {
   int focus_out_count_ = 0;
   int reverse_focus_out_count_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(StatusAreaFocusTestObserver);
+  DISALLOW_COPY_AND_ASSIGN(SystemTrayFocusTestObserver);
 };
 
 class StatusAreaWidgetFocusTest : public AshTestBase {
  public:
-  StatusAreaWidgetFocusTest() {}
-  ~StatusAreaWidgetFocusTest() override {}
+  StatusAreaWidgetFocusTest() = default;
+  ~StatusAreaWidgetFocusTest() override = default;
 
   // AshTestBase:
   void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kShowWebUiLock);
+
     AshTestBase::SetUp();
-    test_observer_.reset(new StatusAreaFocusTestObserver);
-    Shell::Get()->system_tray_notifier()->AddStatusAreaFocusObserver(
+    test_observer_.reset(new SystemTrayFocusTestObserver);
+    Shell::Get()->system_tray_notifier()->AddSystemTrayFocusObserver(
         test_observer_.get());
   }
 
   // AshTestBase:
   void TearDown() override {
-    Shell::Get()->system_tray_notifier()->RemoveStatusAreaFocusObserver(
+    Shell::Get()->system_tray_notifier()->RemoveSystemTrayFocusObserver(
         test_observer_.get());
     test_observer_.reset();
     AshTestBase::TearDown();
@@ -114,7 +116,7 @@ class StatusAreaWidgetFocusTest : public AshTestBase {
   }
 
  protected:
-  std::unique_ptr<StatusAreaFocusTestObserver> test_observer_;
+  std::unique_ptr<SystemTrayFocusTestObserver> test_observer_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StatusAreaWidgetFocusTest);
@@ -179,32 +181,23 @@ TEST_F(StatusAreaWidgetFocusTest, FocusOutObserver) {
 
 class StatusAreaWidgetPaletteTest : public AshTestBase {
  public:
-  StatusAreaWidgetPaletteTest() {}
-  ~StatusAreaWidgetPaletteTest() override {}
+  StatusAreaWidgetPaletteTest() = default;
+  ~StatusAreaWidgetPaletteTest() override = default;
 
   // testing::Test:
   void SetUp() override {
-    // TODO(erg): The implementation of PaletteTray assumes it can talk directly
-    // to ui::InputDeviceManager in a mus environment, which it can't.
-    if (aura::Env::GetInstance()->mode() != aura::Env::Mode::MUS) {
-      base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-      cmd->AppendSwitch(switches::kAshForceEnableStylusTools);
-      // It's difficult to write a test that marks the primary display as
-      // internal before the status area is constructed. Just force the palette
-      // for all displays.
-      cmd->AppendSwitch(switches::kAshEnablePaletteOnAllDisplays);
-    }
+    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+    cmd->AppendSwitch(switches::kAshForceEnableStylusTools);
+    // It's difficult to write a test that marks the primary display as
+    // internal before the status area is constructed. Just force the palette
+    // for all displays.
+    cmd->AppendSwitch(switches::kAshEnablePaletteOnAllDisplays);
     AshTestBase::SetUp();
   }
 };
 
 // Tests that the stylus palette tray is constructed.
 TEST_F(StatusAreaWidgetPaletteTest, Basics) {
-  // TODO(erg): The implementation of PaletteTray assumes it can talk directly
-  // to ui::InputDeviceManager in a mus environment, which it can't.
-  if (aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS)
-    return;
-
   StatusAreaWidget* status = StatusAreaWidgetTestHelper::GetStatusAreaWidget();
   EXPECT_TRUE(status->palette_tray());
 

@@ -23,6 +23,7 @@
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/test/test_ukm_recorder_factory.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/scroll_node.h"
@@ -678,8 +679,8 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
         root_scroll_layer_impl->layer_tree_impl()->LayerById(
             child_layer_->id()));
 
-    LayerImpl* expected_scroll_layer_impl = NULL;
-    LayerImpl* expected_no_scroll_layer_impl = NULL;
+    LayerImpl* expected_scroll_layer_impl = nullptr;
+    LayerImpl* expected_no_scroll_layer_impl = nullptr;
     if (scroll_child_layer_) {
       expected_scroll_layer_impl = child_layer_impl;
       expected_no_scroll_layer_impl = root_scroll_layer_impl;
@@ -1008,7 +1009,7 @@ class LayerTreeHostScrollTestImplOnlyScroll : public LayerTreeHostScrollTest {
     // the second commit.
     LayerImpl* active_root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* active_scroll_layer =
-        active_root ? impl->OuterViewportScrollLayer() : NULL;
+        active_root ? impl->OuterViewportScrollLayer() : nullptr;
     LayerImpl* pending_root = impl->pending_tree()->root_layer_for_testing();
     LayerImpl* pending_scroll_layer =
         impl->pending_tree()->OuterViewportScrollLayer();
@@ -1361,6 +1362,7 @@ TEST(LayerTreeHostFlingTest, DidStopFlingingThread) {
   params.settings = &settings;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
   params.mutator_host = animation_host.get();
+  params.ukm_recorder_factory = std::make_unique<TestUkmRecorderFactory>();
   std::unique_ptr<LayerTreeHost> layer_tree_host =
       LayerTreeHost::CreateThreaded(impl_thread.task_runner(), &params);
 
@@ -1439,7 +1441,7 @@ class LayerTreeHostScrollTestLayerStructureChange
     if (scroll_destroy_whole_tree_) {
       layer_tree_host()->RegisterViewportLayers(
           LayerTreeHost::ViewportLayers());
-      layer_tree_host()->SetRootLayer(NULL);
+      layer_tree_host()->SetRootLayer(nullptr);
       EndTest();
       return;
     }

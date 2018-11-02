@@ -6,8 +6,8 @@
 #include "browser/vivaldi_download_status.h"
 
 #include <shobjidl.h>
+#include <wrl/client.h>
 
-#include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_win.h"
 #include "ui/views/win/hwnd_util.h"
@@ -28,7 +28,7 @@ void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
   if (base::win::GetVersion() < base::win::VERSION_WIN7)
     return;
 
-  base::win::ScopedComPtr<ITaskbarList3> taskbar;
+  Microsoft::WRL::ComPtr<ITaskbarList3> taskbar;
   HRESULT result =
       CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER,
                        IID_PPV_ARGS(&taskbar));

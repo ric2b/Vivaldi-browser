@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "components/security_state/core/insecure_input_event_data.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -56,10 +57,11 @@ enum SecurityLevel {
   // HTTPS (non-EV) with valid cert.
   SECURE,
 
-  // HTTPS, but the certificate verification chain is anchored on a
-  // certificate that was installed by the system administrator.
+  // HTTPS, but a certificate chain anchored to a root certificate installed
+  // by the system administrator has been observed in this profile, suggesting
+  // a MITM was present.
   //
-  // Currently used only on ChromeOS.
+  // Used only on ChromeOS, this status is unreached on other platforms.
   SECURE_WITH_POLICY_INSTALLED_CERT,
 
   // Attempted HTTPS and failed, page not authenticated, HTTPS with
@@ -133,10 +135,6 @@ struct SecurityInfo {
   int obsolete_ssl_status;
   // True if pinning was bypassed due to a local trust anchor.
   bool pkp_bypassed;
-  // True if the page displayed password field on an HTTP page.
-  bool displayed_password_field_on_http;
-  // True if the page displayed credit card field on an HTTP page.
-  bool displayed_credit_card_field_on_http;
   // True if the secure page contained a form with a nonsecure target.
   bool contained_mixed_form;
   // True if the server's certificate does not contain a
@@ -187,12 +185,13 @@ struct VisibleSecurityState {
   bool ran_content_with_cert_errors;
   // True if PKP was bypassed due to a local trust anchor.
   bool pkp_bypassed;
-  // True if the page was an HTTP page that displayed a password field.
-  bool displayed_password_field_on_http;
-  // True if the page was an HTTP page that displayed a credit card field.
-  bool displayed_credit_card_field_on_http;
   // True if the page was displayed in an Incognito context.
   bool is_incognito;
+  // True if the page was an error page.
+  // TODO(estark): this field is not populated on iOS. https://crbug.com/760647
+  bool is_error_page;
+  // True if the page is a view-source page.
+  bool is_view_source;
   // Contains information about input events that may impact the security
   // level of the page.
   InsecureInputEventData insecure_input_events;
@@ -223,6 +222,17 @@ void GetSecurityInfo(
 // and credit cards is enabled. This warning UI can be enabled with the
 // |kHttpFormWarningFeature| feature.
 bool IsHttpWarningInFormEnabled();
+
+// Returns true for a valid |url| with a cryptographic scheme, e.g., HTTPS,
+// HTTPS-SO, WSS.
+bool IsSchemeCryptographic(const GURL& url);
+
+// Returns true for a valid |url| with localhost or file:// scheme origin.
+bool IsOriginLocalhostOrFile(const GURL& url);
+
+// Returns true if the page has a valid SSL certificate. Only EV_SECURE,
+// SECURE, and SECURE_WITH_POLICY_INSTALLED_CERT are considered valid.
+bool IsSslCertificateValid(security_state::SecurityLevel security_level);
 
 }  // namespace security_state
 

@@ -49,8 +49,8 @@
 #include "platform/ContextMenu.h"
 #include "platform/ContextMenuItem.h"
 #include "platform/PlatformChromeClient.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/SharedBuffer.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -71,7 +71,7 @@ class FrontendMenuProvider final : public ContextMenuProvider {
     DCHECK(!devtools_host_);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(devtools_host_);
     ContextMenuProvider::Trace(visitor);
   }
@@ -119,9 +119,10 @@ DevToolsHost::~DevToolsHost() {
   DCHECK(!client_);
 }
 
-DEFINE_TRACE(DevToolsHost) {
+void DevToolsHost::Trace(blink::Visitor* visitor) {
   visitor->Trace(frontend_frame_);
   visitor->Trace(menu_provider_);
+  ScriptWrappable::Trace(visitor);
 }
 
 void DevToolsHost::EvaluateScript(const String& expression) {
@@ -134,7 +135,7 @@ void DevToolsHost::EvaluateScript(const String& expression) {
     return;
   ScriptState::Scope scope(script_state);
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(frontend_frame_);
+      Frame::NotifyUserActivation(frontend_frame_);
   v8::MicrotasksScope microtasks(script_state->GetIsolate(),
                                  v8::MicrotasksScope::kRunMicrotasks);
   v8::Local<v8::String> source =
@@ -145,7 +146,7 @@ void DevToolsHost::EvaluateScript(const String& expression) {
 }
 
 void DevToolsHost::DisconnectClient() {
-  client_ = 0;
+  client_ = nullptr;
   if (menu_provider_) {
     menu_provider_->Disconnect();
     menu_provider_ = nullptr;

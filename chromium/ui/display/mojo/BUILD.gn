@@ -6,6 +6,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("interfaces") {
   sources = [
+    "dev_display_controller.mojom",
     "display.mojom",
     "display_constants.mojom",
     "display_layout.mojom",
@@ -18,6 +19,7 @@ mojom("interfaces") {
   public_deps = [
     "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
   ]
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.

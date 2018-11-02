@@ -60,13 +60,14 @@ Workspace.UISourceCode = class extends Common.Object {
     this._requestContentPromise = null;
     /** @type {?Multimap<string, !Workspace.UISourceCode.LineMarker>} */
     this._decorations = null;
-    /** @type {?Array.<!Workspace.Revision>} */
-    this._history = null;
+    this._hasCommits = false;
     /** @type {?Set<!Workspace.UISourceCode.Message>} */
     this._messages = null;
     this._contentLoaded = false;
     /** @type {?string} */
     this._content = null;
+    /** @type {boolean|undefined} */
+    this._contentEncoded;
     this._forceLoadOnCheckContent = false;
     this._checkingContent = false;
     /** @type {?string} */
@@ -135,7 +136,10 @@ Workspace.UISourceCode = class extends Common.Object {
       return Common.UIString('(index)');
     var name = this._name;
     try {
-      name = decodeURI(name);
+      if (this.project().type() === Workspace.projectTypes.FileSystem)
+        name = unescape(name);
+      else
+        name = decodeURI(name);
     } catch (e) {
     }
     return skipTrim ? name : name.trimEnd(100);
@@ -214,6 +218,15 @@ Workspace.UISourceCode = class extends Common.Object {
   }
 
   /**
+   * @override
+   * @return {!Promise<boolean>}
+   */
+  async contentEncoded() {
+    await this.requestContent();
+    return this._contentEncoded || false;
+  }
+
+  /**
    * @return {!Workspace.Project}
    */
   project() {
@@ -233,9 +246,12 @@ Workspace.UISourceCode = class extends Common.Object {
     } else {
       var fulfill;
       this._requestContentPromise = new Promise(x => fulfill = x);
-      this._project.requestFileContent(this, content => {
-        this._contentLoaded = true;
-        this._content = content;
+      this._project.requestFileContent(this, (content, encoded) => {
+        if (!this._contentLoaded) {
+          this._contentLoaded = true;
+          this._content = content;
+          this._contentEncoded = encoded;
+        }
         fulfill(content);
       });
     }
@@ -254,9 +270,10 @@ Workspace.UISourceCode = class extends Common.Object {
 
     /**
      * @param {?string} updatedContent
+     * @param {boolean} encoded
      * @this {Workspace.UISourceCode}
      */
-    function contentLoaded(updatedContent) {
+    function contentLoaded(updatedContent, encoded) {
       this._checkingContent = false;
       if (updatedContent === null) {
         var workingCopy = this.workingCopy();
@@ -291,25 +308,11 @@ Workspace.UISourceCode = class extends Common.Object {
   }
 
   /**
-   * @return {!Promise<?string>}
-   */
-  requestOriginalContent() {
-    var callback;
-    var promise = new Promise(fulfill => callback = fulfill);
-    this._project.requestFileContent(this, callback);
-    return promise;
-  }
-
-  /**
    * @param {string} content
    */
   _commitContent(content) {
-    if (this._project.canSetFileContent()) {
-      this._project.setFileContent(this, content, function() {});
-    } else if (this._url && Workspace.fileManager.isURLSaved(this._url)) {
-      Workspace.fileManager.save(this._url, content, false);
-      Workspace.fileManager.close(this._url);
-    }
+    if (this._project.canSetFileContent())
+      this._project.setFileContent(this, content, false, function() {});
     this._contentCommitted(content, true);
   }
 
@@ -323,15 +326,7 @@ Workspace.UISourceCode = class extends Common.Object {
     this._contentLoaded = true;
     this._requestContentPromise = null;
 
-
-    if (!this._history)
-      this._history = [];
-
-    var lastRevision = this._history.length ? this._history[this._history.length - 1] : null;
-    if (!lastRevision || lastRevision._content !== this._content) {
-      var revision = new Workspace.Revision(this, this._content, new Date());
-      this._history.push(revision);
-    }
+    this._hasCommits = true;
 
     this._innerResetWorkingCopy();
     this.dispatchEventToListeners(
@@ -344,14 +339,6 @@ Workspace.UISourceCode = class extends Common.Object {
     }
   }
 
-  saveAs() {
-    Workspace.fileManager.save(this._url, this.workingCopy(), true).then(accepted => {
-      if (accepted)
-        this._contentCommitted(this.workingCopy(), true);
-    });
-    Workspace.fileManager.close(this._url);
-  }
-
   /**
    * @param {string} content
    */
@@ -360,52 +347,10 @@ Workspace.UISourceCode = class extends Common.Object {
   }
 
   /**
-   * @return {!Promise}
+   * @return {boolean}
    */
-  revertToOriginal() {
-    /**
-     * @this {Workspace.UISourceCode}
-     * @param {?string} content
-     */
-    function callback(content) {
-      if (typeof content !== 'string')
-        return;
-
-      this.addRevision(content);
-    }
-
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
-    return this.requestOriginalContent().then(callback.bind(this));
-  }
-
-  /**
-   * @param {function(!Workspace.UISourceCode)} callback
-   */
-  revertAndClearHistory(callback) {
-    /**
-     * @this {Workspace.UISourceCode}
-     * @param {?string} content
-     */
-    function revert(content) {
-      if (typeof content !== 'string')
-        return;
-
-      this.addRevision(content);
-      this._history = null;
-      callback(this);
-    }
-
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
-    this.requestOriginalContent().then(revert.bind(this));
-  }
-
-  /**
-   * @return {!Array<!Workspace.Revision>}
-   */
-  history() {
-    if (!this._history)
-      this._history = [];
-    return this._history;
+  hasCommits() {
+    return this._hasCommits;
   }
 
   /**
@@ -438,6 +383,16 @@ Workspace.UISourceCode = class extends Common.Object {
     this._workingCopy = newWorkingCopy;
     this._workingCopyGetter = null;
     this._workingCopyChanged();
+  }
+
+  /**
+   * @param {string} content
+   * @param {boolean} isBase64
+   */
+  setContent(content, isBase64) {
+    if (this._project.canSetFileContent())
+      this._project.setFileContent(this, content, isBase64, function() {});
+    this._contentCommitted(content, true);
   }
 
   /**
@@ -701,95 +656,6 @@ Workspace.UILocation = class {
     if (this.lineNumber !== other.lineNumber)
       return this.lineNumber - other.lineNumber;
     return this.columnNumber - other.columnNumber;
-  }
-};
-
-/**
- * @implements {Common.ContentProvider}
- * @unrestricted
- */
-Workspace.Revision = class {
-  /**
-   * @param {!Workspace.UISourceCode} uiSourceCode
-   * @param {?string|undefined} content
-   * @param {!Date} timestamp
-   */
-  constructor(uiSourceCode, content, timestamp) {
-    this._uiSourceCode = uiSourceCode;
-    this._content = content;
-    this._timestamp = timestamp;
-  }
-
-  /**
-   * @return {!Workspace.UISourceCode}
-   */
-  get uiSourceCode() {
-    return this._uiSourceCode;
-  }
-
-  /**
-   * @return {!Date}
-   */
-  get timestamp() {
-    return this._timestamp;
-  }
-
-  /**
-   * @return {?string}
-   */
-  get content() {
-    return this._content || null;
-  }
-
-  /**
-   * @return {!Promise}
-   */
-  revertToThis() {
-    /**
-     * @param {?string} content
-     * @this {Workspace.Revision}
-     */
-    function revert(content) {
-      if (content && this._uiSourceCode._content !== content)
-        this._uiSourceCode.addRevision(content);
-    }
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
-    return this.requestContent().then(revert.bind(this));
-  }
-
-  /**
-   * @override
-   * @return {string}
-   */
-  contentURL() {
-    return this._uiSourceCode.url();
-  }
-
-  /**
-   * @override
-   * @return {!Common.ResourceType}
-   */
-  contentType() {
-    return this._uiSourceCode.contentType();
-  }
-
-  /**
-   * @override
-   * @return {!Promise<?string>}
-   */
-  requestContent() {
-    return Promise.resolve(/** @type {?string} */ (this._content || ''));
-  }
-
-  /**
-   * @override
-   * @param {string} query
-   * @param {boolean} caseSensitive
-   * @param {boolean} isRegex
-   * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
-   */
-  searchInContent(query, caseSensitive, isRegex) {
-    return Promise.resolve([]);
   }
 };
 

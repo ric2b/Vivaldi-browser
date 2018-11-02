@@ -6,20 +6,76 @@
 
 #include "base/callback.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/env.h"
 #include "ui/aura/mus/in_flight_change.h"
 #include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/test/env_test_helper.h"
+#include "ui/aura/test/mus/window_tree_client_private.h"
 
 namespace aura {
 namespace test {
+namespace {
 
-ChangeCompletionWaiter::ChangeCompletionWaiter(WindowTreeClient* client,
-                                               ChangeType type,
-                                               bool success)
+WindowTreeClient* GetWindowTreeClient() {
+  return EnvTestHelper().GetWindowTreeClient();
+}
+
+// A class which will Wait until there are no more in-flight-changes. That is,
+// all changes sent to mus have been acked.
+class AllChangesCompletedWaiter : public WindowTreeClientTestObserver {
+ public:
+  AllChangesCompletedWaiter();
+  ~AllChangesCompletedWaiter() override;
+
+  void Wait();
+
+ private:
+  // WindowTreeClientTestObserver:
+  void OnChangeStarted(uint32_t change_id, aura::ChangeType type) override;
+  void OnChangeCompleted(uint32_t change_id,
+                         aura::ChangeType type,
+                         bool success) override;
+
+  base::RunLoop run_loop_;
+  base::Closure quit_closure_;
+  WindowTreeClient* client_;
+
+  DISALLOW_COPY_AND_ASSIGN(AllChangesCompletedWaiter);
+};
+
+AllChangesCompletedWaiter::AllChangesCompletedWaiter()
+    : client_(GetWindowTreeClient()) {}
+
+AllChangesCompletedWaiter::~AllChangesCompletedWaiter() = default;
+
+void AllChangesCompletedWaiter::Wait() {
+  if (!WindowTreeClientPrivate(client_).HasInFlightChanges())
+    return;
+
+  client_->AddTestObserver(this);
+  quit_closure_ = run_loop_.QuitClosure();
+  run_loop_.Run();
+  client_->RemoveTestObserver(this);
+}
+
+void AllChangesCompletedWaiter::OnChangeStarted(uint32_t change_id,
+                                                aura::ChangeType type) {}
+
+void AllChangesCompletedWaiter::OnChangeCompleted(uint32_t change_id,
+                                                  aura::ChangeType type,
+                                                  bool success) {
+  if (!WindowTreeClientPrivate(client_).HasInFlightChanges())
+    quit_closure_.Run();
+}
+
+}  // namespace
+
+ChangeCompletionWaiter::ChangeCompletionWaiter(ChangeType type, bool success)
     : state_(WaitState::NOT_STARTED),
-      client_(client),
+      client_(GetWindowTreeClient()),
       type_(type),
       success_(success) {
-  client->AddTestObserver(this);
+  client_->AddTestObserver(this);
 }
 
 ChangeCompletionWaiter::~ChangeCompletionWaiter() {
@@ -52,6 +108,12 @@ void ChangeCompletionWaiter::OnChangeCompleted(uint32_t change_id,
     if (quit_closure_)
       quit_closure_.Run();
   }
+}
+
+void WaitForAllChangesToComplete() {
+  if (Env::GetInstance()->mode() == Env::Mode::LOCAL)
+    return;
+  AllChangesCompletedWaiter().Wait();
 }
 
 }  // namespace test

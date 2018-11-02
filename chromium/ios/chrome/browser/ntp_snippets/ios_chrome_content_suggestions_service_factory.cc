@@ -7,10 +7,13 @@
 #include "base/memory/singleton.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "ios/chrome/app/tests_hook.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory_util.h"
+#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
@@ -32,6 +35,12 @@ IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
       GetInstance()->GetServiceForBrowserState(browser_state, true));
 }
 
+// static
+BrowserStateKeyedServiceFactory::TestingFactoryFunction
+IOSChromeContentSuggestionsServiceFactory::GetDefaultFactory() {
+  return &ntp_snippets::CreateChromeContentSuggestionsServiceWithProviders;
+}
+
 IOSChromeContentSuggestionsServiceFactory::
     IOSChromeContentSuggestionsServiceFactory()
     : BrowserStateKeyedServiceFactory(
@@ -50,6 +59,17 @@ IOSChromeContentSuggestionsServiceFactory::
 std::unique_ptr<KeyedService>
 IOSChromeContentSuggestionsServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* browser_state) const {
-  return ntp_snippets::CreateChromeContentSuggestionsServiceWithProviders(
-      browser_state);
+  if (tests_hook::DisableContentSuggestions()) {
+    return ntp_snippets::CreateChromeContentSuggestionsService(browser_state);
+  } else {
+    return ntp_snippets::CreateChromeContentSuggestionsServiceWithProviders(
+        browser_state);
+  }
+}
+
+void IOSChromeContentSuggestionsServiceFactory::RegisterBrowserStatePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(
+      prefs::kArticlesForYouEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }

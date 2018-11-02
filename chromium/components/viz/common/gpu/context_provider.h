@@ -12,8 +12,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
+#include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/viz_common_export.h"
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/context_result.h"
 
 class GrContext;
 
@@ -23,6 +25,7 @@ class Lock;
 
 namespace gpu {
 class ContextSupport;
+struct GpuFeatureInfo;
 namespace gles2 {
 class GLES2Interface;
 }
@@ -59,7 +62,7 @@ class VIZ_COMMON_EXPORT ContextProvider
   // from the same thread unless the function has some explicitly specified
   // rules for access on a different thread. See SetupLockOnMainThread(), which
   // can be used to provide access from multiple threads.
-  virtual bool BindToCurrentThread() = 0;
+  virtual gpu::ContextResult BindToCurrentThread() = 0;
 
   virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
   virtual gpu::ContextSupport* ContextSupport() = 0;
@@ -71,18 +74,18 @@ class VIZ_COMMON_EXPORT ContextProvider
   virtual void InvalidateGrContext(uint32_t state) = 0;
 
   // Returns the capabilities of the currently bound 3d context.
-  virtual gpu::Capabilities ContextCapabilities() = 0;
+  virtual const gpu::Capabilities& ContextCapabilities() const = 0;
 
-  // Sets a callback to be called when the context is lost. This should be
-  // called from the same thread that the context is bound to. To avoid races,
-  // it should be called before BindToCurrentThread().
-  // Implementation note: Implementations must avoid post-tasking the provided
-  // |lost_context_callback| directly as clients expect the method to not be
-  // called once they call SetLostContextCallback() again with a different
-  // callback.
-  typedef base::Closure LostContextCallback;
-  virtual void SetLostContextCallback(
-      const LostContextCallback& lost_context_callback) = 0;
+  // Returns feature blacklist decisions and driver bug workarounds info.
+  virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const = 0;
+
+  // Adds/removes an observer to be called when the context is lost. This should
+  // be called from the same thread that the context is bound to. To avoid
+  // races, it should be called before BindToCurrentThread().
+  // Implementation note: Implementations must avoid post-tasking the to the
+  // observer directly as the observer may remove itself before the task runs.
+  virtual void AddObserver(ContextLostObserver* obs) = 0;
+  virtual void RemoveObserver(ContextLostObserver* obs) = 0;
 
   // Below are helper methods for ScopedContextLock. Use that instead of calling
   // these directly.

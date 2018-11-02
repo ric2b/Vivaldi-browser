@@ -64,7 +64,7 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
                      const std::string& name) override {
     if (name == mojom::kServiceName) {
       identity_service_context_.reset(new service_manager::ServiceContext(
-          base::MakeUnique<IdentityService>(account_tracker_, signin_manager_,
+          std::make_unique<IdentityService>(account_tracker_, signin_manager_,
                                             token_service_),
           std::move(request)));
     }
@@ -87,7 +87,7 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
 class IdentityManagerTest : public service_manager::test::ServiceTest {
  public:
   IdentityManagerTest()
-      : ServiceTest("identity_unittests", false),
+      : ServiceTest("identity_unittests"),
         signin_client_(&pref_service_),
 #if defined(OS_CHROMEOS)
         signin_manager_(&signin_client_, &account_tracker_) {
@@ -178,7 +178,7 @@ class IdentityManagerTest : public service_manager::test::ServiceTest {
 
   // service_manager::test::ServiceTest:
   std::unique_ptr<service_manager::Service> CreateService() override {
-    return base::MakeUnique<ServiceTestClient>(
+    return std::make_unique<ServiceTestClient>(
         this, &account_tracker_, &signin_manager_, &token_service_);
   }
 
@@ -244,6 +244,32 @@ TEST_F(IdentityManagerTest, SigninManagerShutdownAfterConnection) {
   // invoking SigninManagerBase::Shutdown(), since otherwise this test will
   // spin forever.
   FlushIdentityManagerForTesting();
+  signin_manager()->Shutdown();
+  run_loop.Run();
+}
+
+// Tests that the Identity Manager properly handles its own destruction in the
+// case where there is an active consumer request (i.e., a pending callback from
+// a Mojo call). In particular, this flow should not cause a DCHECK to fire in
+// debug mode.
+TEST_F(IdentityManagerTest, IdentityManagerShutdownWithActiveRequest) {
+  base::RunLoop run_loop;
+  SetIdentityManagerConnectionErrorHandler(run_loop.QuitClosure());
+
+  // Call a method on the IdentityManager that will cause it to store a pending
+  // callback. This callback will never be invoked, so just pass dummy arguments
+  // to it.
+  GetIdentityManager()->GetPrimaryAccountWhenAvailable(
+      base::Bind(&IdentityManagerTest::OnPrimaryAccountAvailable,
+                 base::Unretained(this), base::Closure(), nullptr, nullptr));
+
+  // Ensure that the IdentityManager has received the above call before
+  // invoking SigninManagerBase::Shutdown(), as otherwise this test is
+  // pointless.
+  FlushIdentityManagerForTesting();
+
+  // This flow is what would cause a DCHECK to fire if IdentityManager is not
+  // properly closing its binding on shutdown.
   signin_manager()->Shutdown();
   run_loop.Run();
 }

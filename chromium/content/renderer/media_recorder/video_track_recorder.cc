@@ -23,7 +23,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/filters/context_3d.h"
-#include "media/renderers/skcanvas_video_renderer.h"
+#include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -216,8 +216,8 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
 
   if (video_frame->HasTextures()) {
     main_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Encoder::RetrieveFrameOnMainThread, this,
-                              video_frame, capture_timestamp));
+        FROM_HERE, base::BindOnce(&Encoder::RetrieveFrameOnMainThread, this,
+                                  video_frame, capture_timestamp));
     return;
   }
 
@@ -236,8 +236,8 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
   ++num_frames_in_encode_;
 
   encoding_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this,
-                            wrapped_frame, capture_timestamp));
+      FROM_HERE, base::BindOnce(&Encoder::EncodeOnEncodingTaskRunner, this,
+                                wrapped_frame, capture_timestamp));
 }
 
 void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
@@ -257,7 +257,7 @@ void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
         video_frame->timestamp());
   } else {
     // Accelerated decoders produce ARGB/ABGR texture-backed frames (see
-    // https://crbug.com/585242), fetch them using a SkCanvasVideoRenderer.
+    // https://crbug.com/585242), fetch them using a PaintCanvasVideoRenderer.
     DCHECK(video_frame->HasTextures());
     DCHECK_EQ(media::PIXEL_FORMAT_ARGB, video_frame->format());
 
@@ -285,10 +285,10 @@ void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
     if (!canvas_ || canvas_->imageInfo().width() != info.width() ||
         canvas_->imageInfo().height() != info.height()) {
       bitmap_.allocPixels(info);
-      canvas_ = base::MakeUnique<cc::SkiaPaintCanvas>(bitmap_);
+      canvas_ = std::make_unique<cc::SkiaPaintCanvas>(bitmap_);
     }
     if (!video_renderer_)
-      video_renderer_.reset(new media::SkCanvasVideoRenderer);
+      video_renderer_.reset(new media::PaintCanvasVideoRenderer);
 
     DCHECK(context_provider->ContextGL());
     video_renderer_->Copy(video_frame.get(), canvas_.get(),
@@ -304,26 +304,27 @@ void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
     const uint32 source_pixel_format =
         (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
                                                      : libyuv::FOURCC_ARGB;
-    if (libyuv::ConvertToI420(
-            static_cast<uint8*>(pixmap.writable_addr()), pixmap.getSafeSize(),
-            frame->visible_data(media::VideoFrame::kYPlane),
-            frame->stride(media::VideoFrame::kYPlane),
-            frame->visible_data(media::VideoFrame::kUPlane),
-            frame->stride(media::VideoFrame::kUPlane),
-            frame->visible_data(media::VideoFrame::kVPlane),
-            frame->stride(media::VideoFrame::kVPlane), 0 /* crop_x */,
-            0 /* crop_y */, pixmap.width(), pixmap.height(),
-            old_visible_size.width(), old_visible_size.height(),
-            MediaVideoRotationToRotationMode(video_rotation),
-            source_pixel_format) != 0) {
+    if (libyuv::ConvertToI420(static_cast<uint8*>(pixmap.writable_addr()),
+                              pixmap.computeByteSize(),
+                              frame->visible_data(media::VideoFrame::kYPlane),
+                              frame->stride(media::VideoFrame::kYPlane),
+                              frame->visible_data(media::VideoFrame::kUPlane),
+                              frame->stride(media::VideoFrame::kUPlane),
+                              frame->visible_data(media::VideoFrame::kVPlane),
+                              frame->stride(media::VideoFrame::kVPlane),
+                              0 /* crop_x */, 0 /* crop_y */, pixmap.width(),
+                              pixmap.height(), old_visible_size.width(),
+                              old_visible_size.height(),
+                              MediaVideoRotationToRotationMode(video_rotation),
+                              source_pixel_format) != 0) {
       DLOG(ERROR) << "Error converting frame to I420";
       return;
     }
   }
 
   encoding_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this, frame,
-                            capture_timestamp));
+      FROM_HERE, base::BindOnce(&Encoder::EncodeOnEncodingTaskRunner, this,
+                                frame, capture_timestamp));
 }
 
 // static
@@ -343,7 +344,7 @@ void VideoTrackRecorder::Encoder::OnFrameEncodeCompleted(
 void VideoTrackRecorder::Encoder::SetPaused(bool paused) {
   if (!encoding_task_runner_->BelongsToCurrentThread()) {
     encoding_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Encoder::SetPaused, this, paused));
+        FROM_HERE, base::BindOnce(&Encoder::SetPaused, this, paused));
     return;
   }
   paused_ = paused;

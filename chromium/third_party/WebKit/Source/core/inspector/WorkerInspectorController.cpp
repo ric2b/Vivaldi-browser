@@ -43,8 +43,8 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/LayoutTestSupport.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebThreadSupportingGC.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -66,20 +66,23 @@ WorkerInspectorController::~WorkerInspectorController() {
   DCHECK(!thread_);
 }
 
-void WorkerInspectorController::ConnectFrontend(int session_id) {
+void WorkerInspectorController::ConnectFrontend(
+    int session_id,
+    const String& parent_instrumentation_token) {
   if (sessions_.find(session_id) != sessions_.end())
     return;
 
   InspectorSession* session = new InspectorSession(
       this, probe_sink_.Get(), session_id, debugger_->GetV8Inspector(),
       debugger_->ContextGroupId(thread_), nullptr);
-  session->Append(
-      new InspectorLogAgent(thread_->GetConsoleMessageStorage(), nullptr));
+  session->Append(new InspectorLogAgent(thread_->GetConsoleMessageStorage(),
+                                        nullptr, session->V8Session()));
   if (thread_->GlobalScope()->IsWorkerGlobalScope() &&
       RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
-    DCHECK(ToWorkerGlobalScope(thread_->GlobalScope())->GetResourceFetcher());
-    session->Append(InspectorNetworkAgent::CreateForWorker(
-        ToWorkerGlobalScope(thread_->GlobalScope())));
+    DCHECK(ToWorkerGlobalScope(thread_->GlobalScope())->EnsureFetcher());
+    session->Append(new InspectorNetworkAgent(
+        new InspectedFrames(nullptr, parent_instrumentation_token),
+        ToWorkerGlobalScope(thread_->GlobalScope()), session->V8Session()));
   }
   if (sessions_.IsEmpty())
     thread_->GetWorkerBackingThread().BackingThread().AddTaskObserver(this);
@@ -102,10 +105,7 @@ void WorkerInspectorController::DispatchMessageFromFrontend(
   auto it = sessions_.find(session_id);
   if (it == sessions_.end())
     return;
-  String method;
-  if (!protocol::DispatcherBase::getCommandName(message, &method))
-    return;
-  it->value->DispatchProtocolMessage(method, message);
+  it->value->DispatchProtocolMessage(message);
 }
 
 void WorkerInspectorController::Dispose() {
@@ -141,7 +141,7 @@ void WorkerInspectorController::DidProcessTask() {
     it.value->flushProtocolNotifications();
 }
 
-DEFINE_TRACE(WorkerInspectorController) {
+void WorkerInspectorController::Trace(blink::Visitor* visitor) {
   visitor->Trace(probe_sink_);
   visitor->Trace(sessions_);
 }

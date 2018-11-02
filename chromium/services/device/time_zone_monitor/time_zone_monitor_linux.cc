@@ -79,7 +79,7 @@ class TimeZoneMonitorLinuxImpl
   ~TimeZoneMonitorLinuxImpl() { DCHECK(!owner_); }
 
   void StartWatchingOnFileThread() {
-    base::ThreadRestrictions::AssertIOAllowed();
+    base::AssertBlockingAllowed();
     DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
 
     // There is no true standard for where time zone information is actually
@@ -94,7 +94,7 @@ class TimeZoneMonitorLinuxImpl
     };
 
     for (size_t index = 0; index < arraysize(kFilesToWatch); ++index) {
-      file_path_watchers_.push_back(base::MakeUnique<base::FilePathWatcher>());
+      file_path_watchers_.push_back(std::make_unique<base::FilePathWatcher>());
       file_path_watchers_.back()->Watch(
           base::FilePath(kFilesToWatch[index]), false,
           base::Bind(&TimeZoneMonitorLinuxImpl::OnTimeZoneFileChanged, this));

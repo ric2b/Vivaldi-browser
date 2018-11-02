@@ -29,7 +29,7 @@ QuicSpdyClientSession::QuicSpdyClientSession(
       crypto_config_(crypto_config),
       respect_goaway_(true) {}
 
-QuicSpdyClientSession::~QuicSpdyClientSession() {}
+QuicSpdyClientSession::~QuicSpdyClientSession() = default;
 
 void QuicSpdyClientSession::Initialize() {
   crypto_stream_ = CreateQuicCryptoStream();
@@ -60,13 +60,11 @@ bool QuicSpdyClientSession::ShouldCreateOutgoingDynamicStream() {
   return true;
 }
 
-QuicSpdyClientStream* QuicSpdyClientSession::CreateOutgoingDynamicStream(
-    SpdyPriority priority) {
+QuicSpdyClientStream* QuicSpdyClientSession::CreateOutgoingDynamicStream() {
   if (!ShouldCreateOutgoingDynamicStream()) {
     return nullptr;
   }
   std::unique_ptr<QuicSpdyClientStream> stream = CreateClientStream();
-  stream->SetPriority(priority);
   QuicSpdyClientStream* stream_ptr = stream.get();
   ActivateStream(std::move(stream));
   return stream_ptr;

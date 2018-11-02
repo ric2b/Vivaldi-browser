@@ -28,33 +28,29 @@
 #define MessagePort_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventListener.h"
 #include "core/dom/events/EventTarget.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
-#include "public/platform/WebMessagePortChannel.h"
-#include "public/platform/WebMessagePortChannelClient.h"
+#include "public/platform/WebVector.h"
+#include "third_party/WebKit/common/message_port/message_port_channel.h"
 
 namespace blink {
 
+struct BlinkTransferableMessage;
 class ExceptionState;
 class ExecutionContext;
-class MessagePort;
 class ScriptState;
 class SerializedScriptValue;
 
-typedef Vector<std::unique_ptr<WebMessagePortChannel>, 1>
-    MessagePortChannelArray;
-
 class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
                                 public ActiveScriptWrappable<MessagePort>,
-                                public ContextLifecycleObserver,
-                                public WebMessagePortChannelClient {
+                                public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
 
@@ -63,7 +59,7 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
   ~MessagePort() override;
 
   void postMessage(ScriptState*,
-                   RefPtr<SerializedScriptValue> message,
+                   scoped_refptr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
   static bool CanTransferArrayBuffersAndImageBitmaps() { return false; }
@@ -71,25 +67,21 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
   void start();
   void close();
 
-  void Entangle(std::unique_ptr<WebMessagePortChannel>);
-  std::unique_ptr<WebMessagePortChannel> Disentangle();
-
-  static WebMessagePortChannelArray ToWebMessagePortChannelArray(
-      MessagePortChannelArray);
-
-  // Returns an empty array if the passed array is empty.
-  static MessagePortArray* ToMessagePortArray(ExecutionContext*,
-                                              WebMessagePortChannelArray);
+  void Entangle(mojo::ScopedMessagePipeHandle);
+  void Entangle(MessagePortChannel);
+  MessagePortChannel Disentangle();
 
   // Returns an empty array if there is an exception, or if the passed array is
-  // nullptr/empty.
-  static MessagePortChannelArray DisentanglePorts(ExecutionContext*,
-                                                  const MessagePortArray&,
-                                                  ExceptionState&);
+  // empty.
+  static Vector<MessagePortChannel> DisentanglePorts(ExecutionContext*,
+                                                     const MessagePortArray&,
+                                                     ExceptionState&);
 
   // Returns an empty array if the passed array is empty.
   static MessagePortArray* EntanglePorts(ExecutionContext&,
-                                         MessagePortChannelArray);
+                                         Vector<MessagePortChannel>);
+  static MessagePortArray* EntanglePorts(ExecutionContext&,
+                                         WebVector<MessagePortChannel>);
 
   bool Started() const { return started_; }
 
@@ -127,32 +119,28 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
 
   // A port gets neutered when it is transferred to a new owner via
   // postMessage().
-  bool IsNeutered() const { return !entangled_channel_; }
+  bool IsNeutered() const { return !channel_.GetHandle().is_valid(); }
 
   // For testing only: allows inspection of the entangled channel.
-  WebMessagePortChannel* EntangledChannelForTesting() const {
-    return entangled_channel_.get();
-  }
+  MojoHandle EntangledHandleForTesting() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   explicit MessagePort(ExecutionContext&);
-  bool TryGetMessage(RefPtr<SerializedScriptValue>& message,
-                     MessagePortChannelArray& channels);
+  bool TryGetMessage(BlinkTransferableMessage&);
 
  private:
-  // WebMessagePortChannelClient implementation.
-  void MessageAvailable() override;
+  void MessageAvailable();
   void DispatchMessages();
 
-  std::unique_ptr<WebMessagePortChannel> entangled_channel_;
+  MessagePortChannel channel_;
 
   int pending_dispatch_task_ = 0;
   bool started_ = false;
   bool closed_ = false;
 
-  RefPtr<WebTaskRunner> task_runner_;
+  scoped_refptr<WebTaskRunner> task_runner_;
 };
 
 }  // namespace blink

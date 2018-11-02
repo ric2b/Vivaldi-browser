@@ -29,8 +29,8 @@
 #ifndef AudioFileReader_h
 #define AudioFileReader_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -42,13 +42,13 @@ class AudioBus;
 // doesn't already match the file's sample-rate).  The created buffer will have
 // its sample-rate set correctly to the result.
 
-PLATFORM_EXPORT PassRefPtr<AudioBus> CreateBusFromInMemoryAudioFile(
+PLATFORM_EXPORT scoped_refptr<AudioBus> CreateBusFromInMemoryAudioFile(
     const void* data,
     size_t data_size,
     bool mix_to_mono,
     float sample_rate);
 
-PLATFORM_EXPORT PassRefPtr<AudioBus> CreateBusFromAudioFile(
+PLATFORM_EXPORT scoped_refptr<AudioBus> CreateBusFromAudioFile(
     const char* file_path,
     bool mix_to_mono,
     float sample_rate);

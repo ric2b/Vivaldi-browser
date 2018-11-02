@@ -16,9 +16,7 @@ namespace payments {
 class PaymentRequestOrderSummaryViewControllerTest
     : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestOrderSummaryViewControllerTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_dynamic_shipping_test.html") {}
+  PaymentRequestOrderSummaryViewControllerTest() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestOrderSummaryViewControllerTest);
@@ -26,6 +24,7 @@ class PaymentRequestOrderSummaryViewControllerTest
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
                        OrderSummaryReflectsShippingOption) {
+  NavigateTo("/payment_request_dynamic_shipping_test.html");
   // In MI state, shipping is $5.00.
   autofill::AutofillProfile michigan = autofill::test::GetFullProfile2();
   michigan.set_use_count(100U);
@@ -54,7 +53,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
   // Go to the shipping address screen and select the first address (MI state).
   ClickOnBackArrow();
   OpenShippingAddressSectionScreen();
-  ResetEventObserverForSequence(std::list<DialogEvent>{
+  ResetEventWaiterForSequence(std::list<DialogEvent>{
       DialogEvent::SPEC_DONE_UPDATING, DialogEvent::BACK_NAVIGATION});
   ClickOnChildInListViewAndWait(
       /* child_index=*/0, /*total_num_children=*/2,
@@ -98,7 +97,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestOrderSummaryViewControllerTest,
   // Go to the shipping address screen and select the second address (CA state).
   ClickOnBackArrow();
   OpenShippingAddressSectionScreen();
-  ResetEventObserverForSequence(std::list<DialogEvent>{
+  ResetEventWaiterForSequence(std::list<DialogEvent>{
       DialogEvent::SPEC_DONE_UPDATING, DialogEvent::BACK_NAVIGATION});
   ClickOnChildInListViewAndWait(
       /* child_index=*/1, /*total_num_children=*/2,

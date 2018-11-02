@@ -23,9 +23,6 @@ namespace {
 
 const int kTrayItemAnimationDurationMS = 200;
 
-// Animations can be disabled for testing.
-bool animations_enabled = true;
-
 }  // namespace
 
 TrayItemView::TrayItemView(SystemTrayItem* owner)
@@ -35,12 +32,7 @@ TrayItemView::TrayItemView(SystemTrayItem* owner)
   SetLayoutManager(new views::FillLayout());
 }
 
-TrayItemView::~TrayItemView() {}
-
-// static
-void TrayItemView::DisableAnimationsForTest() {
-  animations_enabled = false;
-}
+TrayItemView::~TrayItemView() = default;
 
 void TrayItemView::CreateLabel() {
   label_ = new views::Label;
@@ -55,9 +47,9 @@ void TrayItemView::CreateImageView() {
 }
 
 void TrayItemView::SetVisible(bool set_visible) {
-  if (!GetWidget() || !animations_enabled ||
-      (ui::ScopedAnimationDurationScaleMode::duration_scale_mode() ==
-       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION)) {
+  if (!GetWidget() ||
+      ui::ScopedAnimationDurationScaleMode::duration_scale_mode() ==
+          ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {
     views::View::SetVisible(set_visible);
     return;
   }

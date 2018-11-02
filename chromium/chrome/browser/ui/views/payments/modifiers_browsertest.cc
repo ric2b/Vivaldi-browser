@@ -19,10 +19,7 @@ namespace payments {
 
 class PaymentRequestModifiersTest : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestModifiersTest()
-      : PaymentRequestBrowserTestBase(
-            "/payment_request_bobpay_and_basic_card_with_modifiers_test.html") {
-  }
+  PaymentRequestModifiersTest() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PaymentRequestBrowserTestBase::SetUpCommandLine(command_line);
@@ -45,6 +42,7 @@ class PaymentRequestModifiersTest : public PaymentRequestBrowserTestBase {
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
                        NoModifierAppliedIfNoSelectedInstrument) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   InvokePaymentRequestUI();
   OpenOrderSummaryScreen();
 
@@ -61,6 +59,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestModifiersTest,
     ModifierAppliedIfApplicableSelectedInstrumentWithoutTypeOrNetwork) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(
@@ -85,6 +84,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestModifiersTest,
     ModifierAppliedIfApplicableSelectedInstrumentWithCreditSupportedType) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(
@@ -93,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(
   card.set_card_type(autofill::CreditCard::CardType::CARD_TYPE_CREDIT);
   AddCreditCard(card);
 
-  ResetEventObserver(DialogEvent::DIALOG_OPENED);
+  ResetEventWaiter(DialogEvent::DIALOG_OPENED);
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
       "(function() { "
@@ -121,6 +121,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestModifiersTest,
     ModifierNotAppliedIfSelectedInstrumentWithDebitSupportedType) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(
@@ -129,7 +130,7 @@ IN_PROC_BROWSER_TEST_F(
   card.set_card_type(autofill::CreditCard::CardType::CARD_TYPE_CREDIT);
   AddCreditCard(card);
 
-  ResetEventObserver(DialogEvent::DIALOG_OPENED);
+  ResetEventWaiter(DialogEvent::DIALOG_OPENED);
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
       "(function() { "
@@ -157,6 +158,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestModifiersTest,
     ModifierAppliedIfApplicableSelectedInstrumentWithMatchingNetwork) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(
@@ -165,7 +167,7 @@ IN_PROC_BROWSER_TEST_F(
   card.set_card_type(autofill::CreditCard::CardType::CARD_TYPE_CREDIT);
   AddCreditCard(card);
 
-  ResetEventObserver(DialogEvent::DIALOG_OPENED);
+  ResetEventWaiter(DialogEvent::DIALOG_OPENED);
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
       "(function() { "
@@ -193,6 +195,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     PaymentRequestModifiersTest,
     ModifierNotAppliedIfSelectedInstrumentWithoutMatchingNetwork) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(
@@ -201,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(
   card.set_card_type(autofill::CreditCard::CardType::CARD_TYPE_CREDIT);
   AddCreditCard(card);
 
-  ResetEventObserver(DialogEvent::DIALOG_OPENED);
+  ResetEventWaiter(DialogEvent::DIALOG_OPENED);
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
       "(function() { "
@@ -228,6 +231,7 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
                        ModifierAppliedToBasicCardWithoutTypeOrNetwork) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -249,6 +253,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
                        ModifierAppliedToUnknownTypeWithMatchingNetwork) {
+  NavigateTo("/payment_request_bobpay_and_basic_card_with_modifiers_test.html");
   autofill::AutofillProfile profile(autofill::test::GetFullProfile());
   AddAutofillProfile(profile);
   autofill::CreditCard card(autofill::test::GetCreditCard());  // Visa card.
@@ -258,7 +263,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestModifiersTest,
   card.set_billing_address_id(profile.guid());
   AddCreditCard(card);
 
-  ResetEventObserver(DialogEvent::DIALOG_OPENED);
+  ResetEventWaiter(DialogEvent::DIALOG_OPENED);
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_buy_button_js =
       "(function() { "

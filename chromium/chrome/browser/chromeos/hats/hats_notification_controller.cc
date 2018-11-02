@@ -4,40 +4,40 @@
 
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
 
-#include "ash/strings/grit/ash_strings.h"
-#include "ash/system/system_notifier.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/hats/hats_dialog.h"
 #include "chrome/browser/chromeos/hats/hats_finch_helper.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/suggestions/image_decoder_impl.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
-#include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/prefs/pref_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/strings/grit/ui_strings.h"
 
 namespace {
 
 const char kNotificationOriginUrl[] = "chrome://hats";
-const float kScale_1x = 1.0f;
-const float kScale_2x = 2.0f;
+
+const char kNotifierHats[] = "ash.hats";
 
 // Minimum amount of time before the notification is displayed again after a
 // user has interacted with it.
@@ -86,33 +86,10 @@ bool IsTestingEnabled() {
 namespace chromeos {
 
 // static
-const char HatsNotificationController::kDelegateId[] = "hats_delegate";
-
-// static
 const char HatsNotificationController::kNotificationId[] = "hats_notification";
 
-// static
-const char HatsNotificationController::kImageFetcher1xId[] =
-    "hats_notification_icon_fetcher_1x";
-
-// static
-const char HatsNotificationController::kImageFetcher2xId[] =
-    "hats_notification_icon_fetcher_2x";
-
-// static
-const char HatsNotificationController::kGoogleIcon1xUrl[] =
-    "https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png";
-
-// static
-const char HatsNotificationController::kGoogleIcon2xUrl[] =
-    "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png";
-
-HatsNotificationController::HatsNotificationController(
-    Profile* profile,
-    image_fetcher::ImageFetcher* image_fetcher)
-    : profile_(profile),
-      image_fetcher_(image_fetcher),
-      weak_pointer_factory_(this) {
+HatsNotificationController::HatsNotificationController(Profile* profile)
+    : profile_(profile), weak_pointer_factory_(this) {
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::Bind(&IsNewDevice, kHatsNewDeviceThresholdDays),
@@ -182,11 +159,6 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   return true;
 }
 
-// NotificationDelegate override:
-std::string HatsNotificationController::id() const {
-  return kDelegateId;
-}
-
 // message_center::NotificationDelegate override:
 void HatsNotificationController::Click() {
   ButtonClick(0 /* unused */);
@@ -200,8 +172,8 @@ void HatsNotificationController::ButtonClick(int /* button_index */) {
   HatsDialog::CreateAndShow(IsGoogleUser(profile_->GetProfileUserName()));
 
   // Remove the notification.
-  g_browser_process->notification_ui_manager()->CancelById(
-      id(), NotificationUIManager::GetProfileID(profile_));
+  NotificationDisplayService::GetForProfile(profile_)->Close(
+      NotificationHandler::Type::TRANSIENT, kNotificationId);
 }
 
 // message_center::NotificationDelegate override:
@@ -224,65 +196,36 @@ void HatsNotificationController::OnPortalDetectionCompleted(
   // Remove self as an observer to no longer receive network change updates.
   network_portal_detector::GetInstance()->RemoveObserver(this);
 
-  if (!image_fetcher_)
-    image_fetcher_.reset(new image_fetcher::ImageFetcherImpl(
-        base::MakeUnique<suggestions::ImageDecoderImpl>(),
-        profile_->GetRequestContext()));
-
-  completed_requests_ = 0;
-
-  image_fetcher_->StartOrQueueNetworkRequest(
-      kImageFetcher1xId, GURL(kGoogleIcon1xUrl),
-      base::Bind(&HatsNotificationController::OnImageFetched,
-                 weak_pointer_factory_.GetWeakPtr()),
-      NO_TRAFFIC_ANNOTATION_YET);
-  image_fetcher_->StartOrQueueNetworkRequest(
-      kImageFetcher2xId, GURL(kGoogleIcon2xUrl),
-      base::Bind(&HatsNotificationController::OnImageFetched,
-                 weak_pointer_factory_.GetWeakPtr()),
-      NO_TRAFFIC_ANNOTATION_YET);
-}
-
-void HatsNotificationController::OnImageFetched(
-    const std::string& id,
-    const gfx::Image& image,
-    const image_fetcher::RequestMetadata& metadata) {
-  DCHECK(id == kImageFetcher1xId || id == kImageFetcher2xId);
-
-  completed_requests_++;
-  if (!image.IsEmpty()) {
-    float scale = id == kImageFetcher1xId ? kScale_1x : kScale_2x;
-    icon_.AddRepresentation(gfx::ImageSkiaRep(image.AsBitmap(), scale));
+  // Create and display the notification for the user.
+  message_center::RichNotificationData optional;
+  if (!message_center::IsNewStyleNotificationEnabled()) {
+    optional.buttons.push_back(message_center::ButtonInfo(
+        l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON)));
   }
 
-  // Wait for both image fetcher requests to complete.
-  if (completed_requests_ < 2)
-    return;
-
-  // There needs to be an icon of atleast one scale to display the notification.
-  if (!icon_.HasRepresentation(kScale_1x) &&
-      !icon_.HasRepresentation(kScale_2x))
-    return;
-
-  // Create and display the notification for the user.
-  std::unique_ptr<Notification> notification(CreateNotification());
-  g_browser_process->notification_ui_manager()->Add(*notification, profile_);
-}
-
-Notification* HatsNotificationController::CreateNotification() {
-  message_center::RichNotificationData optional;
-  optional.buttons.push_back(message_center::ButtonInfo(
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON)));
-
-  return new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_TITLE),
-      l10n_util::GetStringUTF16(IDS_ASH_HATS_NOTIFICATION_BODY),
-      gfx::Image(icon_),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 ash::system_notifier::kNotifierHats),
+  message_center::Notification notification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
+      l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_TITLE),
+      l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_BODY),
+      gfx::Image(
+          gfx::CreateVectorIcon(kGoogleGLogoIcon, gfx::kPlaceholderColor)),
       l10n_util::GetStringUTF16(IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME),
-      GURL(kNotificationOriginUrl), kNotificationId, optional, this);
+      GURL(kNotificationOriginUrl),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 kNotifierHats),
+      optional, this);
+  if (message_center::IsNewStyleNotificationEnabled()) {
+    notification.set_icon(gfx::Image());
+    notification.set_accent_color(
+        message_center::kSystemNotificationColorNormal);
+    notification.set_small_image(gfx::Image(gfx::CreateVectorIcon(
+        kNotificationGoogleIcon, message_center::kSmallImageSizeMD,
+        message_center::kSystemNotificationColorNormal)));
+    notification.set_vector_small_image(kNotificationGoogleIcon);
+  }
+
+  NotificationDisplayService::GetForProfile(profile_)->Display(
+      NotificationHandler::Type::TRANSIENT, notification);
 }
 
 void HatsNotificationController::UpdateLastInteractionTime() {

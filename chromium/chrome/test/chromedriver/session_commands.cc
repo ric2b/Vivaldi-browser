@@ -446,8 +446,13 @@ Status ExecuteSwitchToWindow(Session* session,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value) {
   std::string name;
-  if (!params.GetString("name", &name))
-    return Status(kUnknownError, "'name' must be a string");
+  if (session->w3c_compliant) {
+    if (!params.GetString("handle", &name))
+      return Status(kInvalidArgument, "'handle' must be a string");
+  } else {
+    if (!params.GetString("name", &name))
+      return Status(kUnknownError, "'name' must be a string");
+  }
 
   std::list<std::string> web_view_ids;
   Status status = session->chrome->GetWebViewIds(&web_view_ids,
@@ -745,6 +750,46 @@ Status ExecuteSetNetworkConnection(Session* session,
   return Status(kOk);
 }
 
+Status ExecuteGetWindowRect(Session* session,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value) {
+  ChromeDesktopImpl* desktop = NULL;
+  Status status = session->chrome->GetAsDesktop(&desktop);
+  if (status.IsError())
+    return status;
+
+  int x, y;
+  int width, height;
+
+  if (desktop->GetBrowserInfo()->build_no >= kBrowserWindowDevtoolsBuildNo) {
+    status = desktop->GetWindowPosition(session->window, &x, &y);
+    if (status.IsError())
+      return status;
+    status = desktop->GetWindowSize(session->window, &width, &height);
+  } else {
+    AutomationExtension* extension = NULL;
+    status =
+        desktop->GetAutomationExtension(&extension, session->w3c_compliant);
+    if (status.IsError())
+      return status;
+
+    status = extension->GetWindowPosition(&x, &y);
+    if (status.IsError())
+      return status;
+    status = extension->GetWindowSize(&width, &height);
+  }
+  if (status.IsError())
+    return status;
+
+  base::DictionaryValue rect;
+  rect.SetInteger("x", x);
+  rect.SetInteger("y", y);
+  rect.SetInteger("width", width);
+  rect.SetInteger("height", height);
+  value->reset(rect.DeepCopy());
+  return Status(kOk);
+}
+
 Status ExecuteGetWindowPosition(Session* session,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
@@ -831,6 +876,40 @@ Status ExecuteGetWindowSize(Session* session,
   size.SetInteger("height", height);
   value->reset(size.DeepCopy());
   return Status(kOk);
+}
+
+Status ExecuteSetWindowRect(Session* session,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value) {
+  double width = 0;
+  double height = 0;
+  double x = 0;
+  double y = 0;
+
+  ChromeDesktopImpl* desktop = NULL;
+  Status status = session->chrome->GetAsDesktop(&desktop);
+  if (status.IsError())
+    return status;
+
+  // to pass to the set window rect command
+  base::DictionaryValue rect_params;
+
+  // only set position if both x and y are given
+  if (params.GetDouble("x", &x) && params.GetDouble("y", &y)) {
+    rect_params.SetInteger("x", static_cast<int>(x));
+    rect_params.SetInteger("y", static_cast<int>(y));
+  }  // only set size if both height and width are given
+  if (params.GetDouble("width", &width) &&
+      params.GetDouble("height", &height)) {
+    rect_params.SetInteger("width", static_cast<int>(width));
+    rect_params.SetInteger("height", static_cast<int>(height));
+  }
+  status = desktop->SetWindowRect(session->window, rect_params);
+  if (status.IsError())
+    return status;
+
+  // return the current window rect
+  return ExecuteGetWindowRect(session, params, value);
 }
 
 Status ExecuteSetWindowSize(Session* session,

@@ -7,17 +7,15 @@
 
 #include "content/common/content_export.h"
 #include "device/geolocation/public/interfaces/geolocation.mojom.h"
+#include "device/geolocation/public/interfaces/geolocation_context.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "third_party/WebKit/public/platform/modules/geolocation/geolocation_service.mojom.h"
 
 namespace blink {
 namespace mojom {
 enum class PermissionStatus;
 }
 }  // namespace blink
-
-namespace device {
-class GeolocationContext;
-}
 
 namespace content {
 class RenderFrameHost;
@@ -31,7 +29,6 @@ class GeolocationServiceImplContext {
       RenderFrameHost* render_frame_host,
       bool user_gesture,
       const base::Callback<void(blink::mojom::PermissionStatus)>& callback);
-  void CancelPermissionRequest();
 
  private:
   PermissionManager* permission_manager_;
@@ -44,15 +41,15 @@ class GeolocationServiceImplContext {
 };
 
 class CONTENT_EXPORT GeolocationServiceImpl
-    : public device::mojom::GeolocationService {
+    : public blink::mojom::GeolocationService {
  public:
-  GeolocationServiceImpl(device::GeolocationContext* geolocation_context,
+  GeolocationServiceImpl(device::mojom::GeolocationContext* geolocation_context,
                          PermissionManager* permission_manager,
                          RenderFrameHost* render_frame_host);
   ~GeolocationServiceImpl() override;
 
   // Binds to the GeolocationService.
-  void Bind(device::mojom::GeolocationServiceRequest request);
+  void Bind(blink::mojom::GeolocationServiceRequest request);
 
   // Creates a Geolocation instance.
   // This may not be called a second time until the Geolocation instance has
@@ -66,14 +63,14 @@ class CONTENT_EXPORT GeolocationServiceImpl
       device::mojom::GeolocationRequest request,
       blink::mojom::PermissionStatus permission_status);
 
-  device::GeolocationContext* geolocation_context_;
+  device::mojom::GeolocationContext* geolocation_context_;
   PermissionManager* permission_manager_;
   RenderFrameHost* render_frame_host_;
 
   // Along with each GeolocationService, we store a
   // GeolocationServiceImplContext which primarily exists to manage a
   // Permission Request ID.
-  mojo::BindingSet<device::mojom::GeolocationService,
+  mojo::BindingSet<blink::mojom::GeolocationService,
                    std::unique_ptr<GeolocationServiceImplContext>>
       binding_set_;
 

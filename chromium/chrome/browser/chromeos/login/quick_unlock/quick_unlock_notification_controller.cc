@@ -4,35 +4,31 @@
 
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_notification_controller.h"
 
-#include "ash/strings/grit/ash_strings.h"
 #include "ash/system/system_notifier.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
-#include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/strings/grit/ui_strings.h"
+#include "ui/message_center/notification.h"
 
 namespace chromeos {
 namespace quick_unlock {
 namespace {
 
-constexpr char kPinDelegateId[] = "pinunlock_delegate";
 constexpr char kPinNotificationId[] = "pinunlock_notification";
 constexpr char kPinSetupUrl[] = "chrome://settings/lockScreen";
-constexpr char kFingerprintDelegateId[] = "fingerprintunlock_delegate";
 constexpr char kFingerprintNotificationId[] = "fingerprintunlock_notification";
 constexpr char kFingerprintSetupUrl[] =
     "chrome://settings/lockScreen/fingerprint";
@@ -57,18 +53,15 @@ QuickUnlockNotificationController::CreateForPin(Profile* profile) {
       new QuickUnlockNotificationController(profile);
 
   // Set the PIN notification parameters.
-  controller->params_.delegate_id = kPinDelegateId;
-  controller->params_.title_message_id =
-      IDS_ASH_QUICK_UNLOCK_NOTIFICATION_TITLE;
-  controller->params_.body_message_id = IDS_ASH_QUICK_UNLOCK_NOTIFICATION_BODY;
-  controller->params_.icon_id = IDR_SCREENSHOT_NOTIFICATION_ICON;
-  controller->params_.notifier = ash::system_notifier::kNotifierPinUnlock;
-  controller->params_.feature_name_id =
-      IDS_MESSAGE_CENTER_NOTIFIER_PIN_UNLOCK_FEATURE_NAME;
-  controller->params_.notification_id = kPinNotificationId;
-  controller->params_.url = GURL(kPinSetupUrl);
-  controller->params_.was_shown_pref_id =
-      prefs::kPinUnlockFeatureNotificationShown;
+  NotificationParams* params = &controller->params_;
+  params->title_message_id = IDS_QUICK_UNLOCK_NOTIFICATION_TITLE;
+  params->body_message_id = IDS_QUICK_UNLOCK_NOTIFICATION_BODY;
+  params->icon_id = IDR_SCREENSHOT_NOTIFICATION_ICON;
+  params->notifier = ash::system_notifier::kNotifierPinUnlock;
+  params->feature_name_id = IDS_PIN_UNLOCK_FEATURE_NOTIFIER_NAME;
+  params->notification_id = kPinNotificationId;
+  params->url = GURL(kPinSetupUrl);
+  params->was_shown_pref_id = prefs::kPinUnlockFeatureNotificationShown;
 
   controller->should_show_notification_callback_ =
       base::Bind(&QuickUnlockNotificationController::ShouldShowPinNotification);
@@ -113,18 +106,15 @@ QuickUnlockNotificationController::CreateForFingerprint(Profile* profile) {
       new QuickUnlockNotificationController(profile);
 
   // Set the fingerprint notification parameters.
-  controller->params_.delegate_id = kFingerprintDelegateId;
-  controller->params_.title_message_id = IDS_ASH_FINGERPRINT_NOTIFICATION_TITLE;
-  controller->params_.body_message_id = IDS_ASH_FINGERPRINT_NOTIFICATION_BODY;
-  controller->params_.icon_id = IDR_NOTIFICATION_FINGERPRINT;
-  controller->params_.notifier =
-      ash::system_notifier::kNotifierFingerprintUnlock;
-  controller->params_.feature_name_id =
-      IDS_MESSAGE_CENTER_NOTIFIER_FINGERPRINT_UNLOCK_FEATURE_NAME;
-  controller->params_.notification_id = kFingerprintNotificationId;
-  controller->params_.url = GURL(kFingerprintSetupUrl);
-  controller->params_.was_shown_pref_id =
-      prefs::kFingerprintUnlockFeatureNotificationShown;
+  NotificationParams* params = &controller->params_;
+  params->title_message_id = IDS_FINGERPRINT_NOTIFICATION_TITLE;
+  params->body_message_id = IDS_FINGERPRINT_NOTIFICATION_BODY;
+  params->icon_id = IDR_NOTIFICATION_FINGERPRINT;
+  params->notifier = ash::system_notifier::kNotifierFingerprintUnlock;
+  params->feature_name_id = IDS_FINGERPRINT_UNLOCK_FEATURE_NOTIFIER_NAME;
+  params->notification_id = kFingerprintNotificationId;
+  params->url = GURL(kFingerprintSetupUrl);
+  params->was_shown_pref_id = prefs::kFingerprintUnlockFeatureNotificationShown;
 
   controller->should_show_notification_callback_ = base::Bind(
       &QuickUnlockNotificationController::ShouldShowFingerprintNotification);
@@ -154,10 +144,6 @@ bool QuickUnlockNotificationController::ShouldShowFingerprintNotification(
 }
 
 // NotificationDelegate override:
-std::string QuickUnlockNotificationController::id() const {
-  return params_.delegate_id;
-}
-
 void QuickUnlockNotificationController::Observe(
     int type,
     const content::NotificationSource& source,
@@ -182,8 +168,10 @@ void QuickUnlockNotificationController::Observe(
     return;
   }
 
-  std::unique_ptr<Notification> notification = CreateNotification();
-  g_browser_process->notification_ui_manager()->Add(*notification, profile_);
+  std::unique_ptr<message_center::Notification> notification =
+      CreateNotification();
+  NotificationDisplayService::GetForProfile(profile_)->Display(
+      NotificationHandler::Type::TRANSIENT, *notification);
 }
 
 // message_center::NotificationDelegate override:
@@ -203,8 +191,8 @@ void QuickUnlockNotificationController::Click() {
   SetNotificationPreferenceWasShown();
 
   // Remove the notification from tray.
-  g_browser_process->notification_ui_manager()->CancelById(
-      id(), NotificationUIManager::GetProfileID(profile_));
+  NotificationDisplayService::GetForProfile(profile_)->Close(
+      NotificationHandler::Type::TRANSIENT, params_.notification_id);
 }
 
 void QuickUnlockNotificationController::SetNotificationPreferenceWasShown() {
@@ -221,19 +209,19 @@ void QuickUnlockNotificationController::UnregisterObserver() {
   }
 }
 
-std::unique_ptr<Notification>
+std::unique_ptr<message_center::Notification>
 QuickUnlockNotificationController::CreateNotification() {
-  return base::MakeUnique<Notification>(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
+  return std::make_unique<message_center::Notification>(
+      message_center::NOTIFICATION_TYPE_SIMPLE, params_.notification_id,
       l10n_util::GetStringUTF16(params_.title_message_id),
       l10n_util::GetStringUTF16(params_.body_message_id),
       // TODO(http://crbug.com/291747): Change this to actual icon for
       // quick unlock feature notification.
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(params_.icon_id),
+      l10n_util::GetStringUTF16(params_.feature_name_id), GURL(),
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
                                  params_.notifier),
-      l10n_util::GetStringUTF16(params_.feature_name_id), GURL(),
-      params_.notification_id, message_center::RichNotificationData(), this);
+      message_center::RichNotificationData(), this);
 }
 
 QuickUnlockNotificationController::NotificationParams::NotificationParams() {}

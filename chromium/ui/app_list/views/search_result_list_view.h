@@ -60,6 +60,9 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   void NotifyFirstResultYIndex(int y_index) override;
   int GetYSize() override;
   views::View* GetSelectedView() const override;
+  views::View* SetFirstResultSelected(bool selected) override;
+
+  views::View* results_container_for_test() const { return results_container_; }
 
  private:
   friend class test::SearchResultListViewTest;
@@ -93,9 +96,6 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   views::View* results_container_;
   views::View* auto_launch_indicator_;
   std::unique_ptr<gfx::LinearAnimation> auto_launch_animation_;
-
-  // True if the fullscreen app list feature is enabled.
-  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultListView);
 };

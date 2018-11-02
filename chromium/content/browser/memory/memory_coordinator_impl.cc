@@ -128,12 +128,12 @@ MemoryCoordinatorImpl::MemoryCoordinatorImpl(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     std::unique_ptr<MemoryMonitor> memory_monitor)
     : task_runner_(task_runner),
-      policy_(base::MakeUnique<MemoryCoordinatorDefaultPolicy>(this)),
+      policy_(std::make_unique<MemoryCoordinatorDefaultPolicy>(this)),
       delegate_(GetContentClient()->browser()->GetMemoryCoordinatorDelegate()),
       memory_monitor_(std::move(memory_monitor)),
       condition_observer_(
-          base::MakeUnique<MemoryConditionObserver>(this, task_runner)),
-      tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+          std::make_unique<MemoryConditionObserver>(this, task_runner)),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       minimum_state_transition_period_(base::TimeDelta::FromSeconds(
           kDefaultMinimumTransitionPeriodSeconds)) {
   DCHECK(memory_monitor_.get());
@@ -174,8 +174,8 @@ void MemoryCoordinatorImpl::CreateHandle(
       new MemoryCoordinatorHandleImpl(std::move(request), this,
                                       render_process_id));
   handle->binding().set_connection_error_handler(
-      base::Bind(&MemoryCoordinatorImpl::OnConnectionError,
-                 base::Unretained(this), render_process_id));
+      base::BindOnce(&MemoryCoordinatorImpl::OnConnectionError,
+                     base::Unretained(this), render_process_id));
   CreateChildInfoMapEntry(render_process_id, std::move(handle));
 }
 
@@ -244,7 +244,7 @@ bool MemoryCoordinatorImpl::TryToPurgeMemoryFromBrowser() {
   auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
   size_t before = metrics->GetWorkingSetSize();
   task_runner_->PostDelayedTask(FROM_HERE,
-                                base::Bind(&RecordBrowserPurge, before),
+                                base::BindOnce(&RecordBrowserPurge, before),
                                 base::TimeDelta::FromSeconds(2));
 
   // Suppress purging in the browser process until a certain period of time is
@@ -363,8 +363,8 @@ void MemoryCoordinatorImpl::AddChildForTesting(
 }
 
 void MemoryCoordinatorImpl::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> tick_clock) {
-  tick_clock_ = std::move(tick_clock);
+    base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
 }
 
 void MemoryCoordinatorImpl::OnConnectionError(int render_process_id) {

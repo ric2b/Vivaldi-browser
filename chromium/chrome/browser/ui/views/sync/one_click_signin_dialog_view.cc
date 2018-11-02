@@ -75,8 +75,8 @@ OneClickSigninDialogView::OneClickSigninDialogView(
       advanced_link_(nullptr),
       learn_more_link_(nullptr) {
   DCHECK(!start_sync_callback_.is_null());
-  set_margins(ChromeLayoutProvider::Get()->GetInsetsMetric(
-      views::INSETS_DIALOG_CONTENTS));
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::TEXT, views::TEXT));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::ONE_CLICK_SIGNIN);
 }
 
@@ -88,8 +88,7 @@ OneClickSigninDialogView::~OneClickSigninDialogView() {
 }
 
 void OneClickSigninDialogView::Init() {
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
 
   // Column set for descriptive text and link.
   views::ColumnSet* cs = layout->AddColumnSet(0);

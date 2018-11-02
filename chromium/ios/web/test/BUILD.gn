@@ -57,17 +57,17 @@ source_set("test_support") {
     "//base",
     "//base/test:test_support",
     "//ios/web:web",
+    "//ios/web/navigation:core",
     "//ios/web/public/test/fakes",
     "//ios/web/public/test/http_server",
     "//ios/web/test/fakes",
+    "//net",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",
   ]
 
   sources = [
-    "crw_fake_web_controller_observer.h",
-    "crw_fake_web_controller_observer.mm",
     "test_web_thread.cc",
     "test_web_thread_bundle.cc",
     "url_test_util.mm",

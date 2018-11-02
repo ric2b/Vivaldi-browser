@@ -24,18 +24,21 @@
 #define LayoutText_h
 
 #include <iterator>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/Text.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/TextRunConstructor.h"
 #include "platform/LengthFunctions.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class AbstractInlineTextBox;
 class InlineTextBox;
+class NGOffsetMapping;
+
+enum class OnlyWhitespaceOrNbsp : unsigned { kUnknown = 0, kNo = 1, kYes = 2 };
 
 // LayoutText is the root class for anything that represents
 // a text node (see core/dom/Text.h).
@@ -72,7 +75,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // FIXME: If the node argument is not a Text node or the string argument is
   // not the content of the Text node, updating text-transform property
   // doesn't re-transform the string.
-  LayoutText(Node*, RefPtr<StringImpl>);
+  LayoutText(Node*, scoped_refptr<StringImpl>);
 #if DCHECK_IS_ON()
   ~LayoutText() override;
 #endif
@@ -84,7 +87,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   virtual bool IsTextFragment() const;
   virtual bool IsWordBreak() const;
 
-  virtual RefPtr<StringImpl> OriginalText() const;
+  virtual scoped_refptr<StringImpl> OriginalText() const;
 
   void ExtractTextBox(InlineTextBox*);
   void AttachTextBox(InlineTextBox*);
@@ -174,36 +177,64 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   float FirstRunX() const;
   float FirstRunY() const;
 
-  virtual void SetText(RefPtr<StringImpl>, bool force = false);
-  void SetTextWithOffset(RefPtr<StringImpl>,
+  virtual void SetText(scoped_refptr<StringImpl>, bool force = false);
+  void SetTextWithOffset(scoped_refptr<StringImpl>,
                          unsigned offset,
                          unsigned len,
                          bool force = false);
 
   // TODO(kojii): setTextInternal() is temporarily public for NGInlineNode.
   // This will be back to protected when NGInlineNode can paint directly.
-  virtual void SetTextInternal(RefPtr<StringImpl>);
+  virtual void SetTextInternal(scoped_refptr<StringImpl>);
 
   virtual void TransformText();
 
-  bool CanBeSelectionLeaf() const override { return true; }
   void SetSelectionState(SelectionState) final;
   LayoutRect LocalSelectionRect() const final;
   LayoutRect LocalCaretRect(
-      InlineBox*,
+      const InlineBox*,
       int caret_offset,
-      LayoutUnit* extra_width_to_end_of_line = nullptr) override;
+      LayoutUnit* extra_width_to_end_of_line = nullptr) const override;
 
   InlineTextBox* FirstTextBox() const { return first_text_box_; }
   InlineTextBox* LastTextBox() const { return last_text_box_; }
+
+  // Returns upper left corner point in local coordinate if this object has
+  // rendered text.
+  Optional<FloatPoint> GetUpperLeftCorner() const;
 
   // True if we have inline text box children which implies rendered text (or
   // whitespace) output.
   bool HasTextBoxes() const { return FirstTextBox(); }
 
+  // Returns the Position in DOM that corresponds to the given offset in the
+  // |text_| string.
+  // TODO(layout-dev): Fix it when text-transform changes text length.
+  virtual Position PositionForCaretOffset(unsigned) const;
+
+  // Returns the offset in the |text_| string that corresponds to the given
+  // position in DOM; Returns nullopt is the position is not in this LayoutText.
+  // TODO(layout-dev): Fix it when text-transform changes text length.
+  virtual Optional<unsigned> CaretOffsetForPosition(const Position&) const;
+
+  // Returns true if the offset (0-based in the |text_| string) is next to a
+  // non-collapsed non-linebreak character, or before a forced linebreak (<br>,
+  // or segment break in node with style white-space: pre/pre-line/pre-wrap).
+  // TODO(editing-dev): The behavior is introduced by crrev.com/e3eb4e in
+  // InlineTextBox::ContainsCaretOffset(). Try to understand it.
+  bool ContainsCaretOffset(int) const;
+
+  // Return true if the offset (0-based in the |text_| string) is before/after a
+  // non-collapsed character in this LayoutText, respectively.
+  bool IsBeforeNonCollapsedCharacter(unsigned) const;
+  bool IsAfterNonCollapsedCharacter(unsigned) const;
+
   int CaretMinOffset() const override;
   int CaretMaxOffset() const override;
   unsigned ResolvedTextLength() const;
+
+  // True if any character remains after CSS white-space collapsing.
+  bool HasNonCollapsedText() const;
 
   bool ContainsReversedText() const { return contains_reversed_text_; }
 
@@ -214,11 +245,10 @@ class CORE_EXPORT LayoutText : public LayoutObject {
       unsigned last_typed_character_offset);
 
   bool IsAllCollapsibleWhitespace() const;
-  bool IsRenderedCharacter(int offset_in_node) const;
 
   void RemoveAndDestroyTextBoxes();
 
-  RefPtr<AbstractInlineTextBox> FirstAbstractInlineTextBox();
+  scoped_refptr<AbstractInlineTextBox> FirstAbstractInlineTextBox();
 
   float HyphenWidth(const Font&, TextDirection);
 
@@ -228,6 +258,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
     known_to_have_no_overflow_and_no_fallback_fonts_ = false;
   }
 
+  OnlyWhitespaceOrNbsp ContainsOnlyWhitespaceOrNbsp() const;
+
   virtual UChar PreviousCharacter() const;
 
  protected:
@@ -236,16 +268,27 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   void StyleWillChange(StyleDifference, const ComputedStyle&) final {}
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
-  void AddLayerHitTestRects(LayerHitTestRects&,
-                            const PaintLayer* current_layer,
-                            const LayoutPoint& layer_offset,
-                            const LayoutRect& container_rect) const override;
+  void AddLayerHitTestRects(
+      LayerHitTestRects&,
+      const PaintLayer* current_layer,
+      const LayoutPoint& layer_offset,
+      TouchAction supported_fast_actions,
+      const LayoutRect& container_rect,
+      TouchAction container_whitelisted_touch_action) const override;
 
   virtual InlineTextBox* CreateTextBox(
       int start,
       unsigned short length);  // Subclassed by SVG.
 
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
+
+  // Returns the NGOffsetMapping object when the current text is laid out with
+  // LayoutNG, and flag LayoutNGPaintFragments is set.
+  // Note that the text can be in legacy layout even when LayoutNG is enabled,
+  // so we can't simply check the RuntimeEnabledFeature.
+  const NGOffsetMapping* GetNGOffsetMapping() const;
+
+  bool CanBeSelectionLeafInternal() const final { return true; }
 
  private:
   void ComputePreferredLogicalWidths(float lead_width);
@@ -291,22 +334,23 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // We put the bitfield first to minimize padding on 64-bit.
 
   // Whether or not we can be broken into multiple lines.
-  bool has_breakable_char_ : 1;
+  unsigned has_breakable_char_ : 1;
   // Whether or not we have a hard break (e.g., <pre> with '\n').
-  bool has_break_ : 1;
+  unsigned has_break_ : 1;
   // Whether or not we have a variable width tab character (e.g., <pre> with
   // '\t').
-  bool has_tab_ : 1;
-  bool has_breakable_start_ : 1;
-  bool has_breakable_end_ : 1;
-  bool has_end_white_space_ : 1;
+  unsigned has_tab_ : 1;
+  unsigned has_breakable_start_ : 1;
+  unsigned has_breakable_end_ : 1;
+  unsigned has_end_white_space_ : 1;
   // This bit indicates that the text run has already dirtied specific line
   // boxes, and this hint will enable layoutInlineChildren to avoid just
   // dirtying everything when character data is modified (e.g., appended/
   // inserted or removed).
-  bool lines_dirty_ : 1;
-  bool contains_reversed_text_ : 1;
-  mutable bool known_to_have_no_overflow_and_no_fallback_fonts_ : 1;
+  unsigned lines_dirty_ : 1;
+  unsigned contains_reversed_text_ : 1;
+  mutable unsigned known_to_have_no_overflow_and_no_fallback_fonts_ : 1;
+  unsigned contains_only_whitespace_or_nbsp_ : 2;
 
   float min_width_;
   float max_width_;

@@ -5,8 +5,8 @@
 // https://drafts.css-houdini.org/worklets/#worklet
 
 [
-    DependentLifetime,
-    RuntimeEnabled=Worklet
+    RuntimeEnabled=Worklet,
+    SecureContext
 ] interface Worklet {
-    [CallWith=ScriptState] Promise<void> addModule(DOMString url, optional WorkletOptions options);
+    [CallWith=ScriptState] Promise<void> addModule(USVString moduleURL, optional WorkletOptions options);
 };

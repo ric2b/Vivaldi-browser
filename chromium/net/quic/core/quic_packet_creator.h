@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "net/quic/core/quic_connection_close_delegate_interface.h"
 #include "net/quic/core/quic_framer.h"
-#include "net/quic/core/quic_iovector.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_pending_retransmission.h"
 #include "net/quic/platform/api/quic_export.h"
@@ -53,7 +52,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   QuicPacketCreator(QuicConnectionId connection_id,
                     QuicFramer* framer,
-                    QuicBufferAllocator* buffer_allocator,
                     DelegateInterface* delegate);
 
   ~QuicPacketCreator();
@@ -75,7 +73,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // The overhead the framing will add for a packet with one frame.
   static size_t StreamFramePacketOverhead(
-      QuicVersion version,
+      QuicTransportVersion version,
       QuicConnectionIdLength connection_id_length,
       bool include_version,
       bool include_diversification_nonce,
@@ -84,11 +82,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Returns false and flushes all pending frames if current open packet is
   // full.
-  // If current packet is not full, converts a raw payload into a stream frame
-  // that fits into the open packet and adds it to the packet.
-  // The payload begins at |iov_offset| into the |iov|.
+  // If current packet is not full, creates a stream frame that fits into the
+  // open packet and adds it to the packet.
   bool ConsumeData(QuicStreamId id,
-                   QuicIOVector iov,
+                   size_t write_length,
                    size_t iov_offset,
                    QuicStreamOffset offset,
                    bool fin,
@@ -113,20 +110,21 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // QuicStreamFrame to the returned SerializedPacket.  Sets
   // |num_bytes_consumed| to the number of bytes consumed to create the
   // QuicStreamFrame.
-  void CreateAndSerializeStreamFrame(
-      QuicStreamId id,
-      const QuicIOVector& iov,
-      QuicStreamOffset iov_offset,
-      QuicStreamOffset stream_offset,
-      bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> listener,
-      size_t* num_bytes_consumed);
+  void CreateAndSerializeStreamFrame(QuicStreamId id,
+                                     size_t write_length,
+                                     QuicStreamOffset iov_offset,
+                                     QuicStreamOffset stream_offset,
+                                     bool fin,
+                                     size_t* num_bytes_consumed);
 
   // Returns true if there are frames pending to be serialized.
   bool HasPendingFrames() const;
 
   // Returns true if there are retransmittable frames pending to be serialized.
   bool HasPendingRetransmittableFrames() const;
+
+  // Returns true if there are stream frames for |id| pending to be serialized.
+  bool HasPendingStreamFramesOfStream(QuicStreamId id) const;
 
   // Returns the number of bytes which are available to be used by additional
   // frames in the packet.  Since stream frames are slightly smaller when they
@@ -154,15 +152,12 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Identical to AddSavedFrame, but allows the frame to be padded.
   bool AddPaddedSavedFrame(const QuicFrame& frame);
 
-  // Adds |listener| to the next serialized packet and notifies the listener
-  // with |length| as the number of acked bytes.
-  void AddAckListener(
-      QuicReferenceCountedPointer<QuicAckListenerInterface> listener,
-      QuicPacketLength length);
-
   // Creates a version negotiation packet which supports |supported_versions|.
   std::unique_ptr<QuicEncryptedPacket> SerializeVersionNegotiationPacket(
-      const QuicVersionVector& supported_versions);
+      const QuicTransportVersionVector& supported_versions);
+
+  // Creates a connectivity probing packet.
+  std::unique_ptr<QuicEncryptedPacket> SerializeConnectivityProbingPacket();
 
   // Returns a dummy packet that is valid but contains no useful information.
   static SerializedPacket NoPacket();
@@ -180,9 +175,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
     return connection_id_length_;
   }
 
-  void set_connection_id_length(QuicConnectionIdLength length) {
-    connection_id_length_ = length;
-  }
+  void SetConnectionIdLength(QuicConnectionIdLength length);
 
   QuicByteCount max_packet_length() const { return max_packet_length_; }
 
@@ -209,10 +202,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
     debug_delegate_ = debug_delegate;
   }
 
-  bool latched_flag_no_stop_waiting_frames() const {
-    return latched_flag_no_stop_waiting_frames_;
-  }
-
   QuicByteCount pending_padding_bytes() const { return pending_padding_bytes_; }
 
  private:
@@ -220,13 +209,11 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   static bool ShouldRetransmit(const QuicFrame& frame);
 
-  // Converts a raw payload to a frame which fits into the current open
-  // packet.  The payload begins at |iov_offset| into the |iov|.
-  // If data is empty and fin is true, the expected behavior is to consume the
-  // fin but return 0.  If any data is consumed, it will be copied into a
-  // new buffer that |frame| will point to and own.
+  // Creates a stream frame which fits into the current open packet. If
+  // |write_length| is 0 and fin is true, the expected behavior is to consume
+  // the fin but return 0.
   void CreateStreamFrame(QuicStreamId id,
-                         QuicIOVector iov,
+                         size_t write_length,
                          size_t iov_offset,
                          QuicStreamOffset offset,
                          bool fin,
@@ -257,30 +244,21 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   void ClearPacket();
 
   // Returns true if a diversification nonce should be included in the current
-  // packet's public header.
+  // packet's header.
   bool IncludeNonceInPublicHeader();
 
   // Returns true if |frame| starts with CHLO.
-  bool StreamFrameStartsWithChlo(QuicIOVector iov,
-                                 size_t iov_offset,
-                                 const QuicStreamFrame& frame) const;
+  bool StreamFrameStartsWithChlo(const QuicStreamFrame& frame) const;
 
   // Does not own these delegates or the framer.
   DelegateInterface* delegate_;
   DebugDelegate* debug_delegate_;
   QuicFramer* framer_;
 
-  QuicBufferAllocator* const buffer_allocator_;
-
   // Controls whether version should be included while serializing the packet.
   bool send_version_in_packet_;
-  // Staging variable to hold next packet number length. When sequence
-  // number length is to be changed, this variable holds the new length until
-  // a packet boundary, when the creator's packet_number_length_ can be changed
-  // to this new value.
-  QuicPacketNumberLength next_packet_number_length_;
-  // If true, then |nonce_for_public_header_| will be included in the public
-  // header of all packets created at the initial encryption level.
+  // If true, then |diversification_nonce_| will be included in the header of
+  // all packets created at the initial encryption level.
   bool have_diversification_nonce_;
   DiversificationNonce diversification_nonce_;
   // Maximum length including headers and encryption (UDP payload length.)
@@ -300,9 +278,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Packet used to invoke OnSerializedPacket.
   SerializedPacket packet_;
-
-  // The latched value of FLAGS_quic_reloadable_flag_quic_no_stop_waiting_frames
-  bool latched_flag_no_stop_waiting_frames_;
 
   // Pending padding bytes to send. Pending padding bytes will be sent in next
   // packet(s) (after all other frames) if current constructed packet does not

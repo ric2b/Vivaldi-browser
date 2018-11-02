@@ -4,21 +4,11 @@
 
 #include "content/app/android/library_loader_hooks.h"
 
-#include "base/android/command_line_android.h"
-#include "base/android/jni_android.h"
-#include "base/android/jni_string.h"
 #include "base/android/library_loader/library_loader_hooks.h"
-#include "base/base_switches.h"
-#include "base/command_line.h"
-#include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
-#include "base/tracked_objects.h"
 #include "components/tracing/common/trace_startup.h"
 #include "content/common/content_constants_internal.h"
-#include "content/public/common/content_switches.h"
-#include "content/public/common/result_codes.h"
 
 namespace content {
 
@@ -28,7 +18,7 @@ bool LibraryLoaded(JNIEnv* env, jclass clazz) {
 
   // Android's main browser loop is custom so we set the browser
   // name here as early as possible.
-  base::trace_event::TraceLog::GetInstance()->SetProcessName("Browser");
+  base::trace_event::TraceLog::GetInstance()->set_process_name("Browser");
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventBrowserProcessSortIndex);
 

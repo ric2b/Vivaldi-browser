@@ -196,6 +196,23 @@
         }
       },
       {
+        "id": "CreateEventsResults",
+        "type": "object",
+        "description": "Object stating how many events were created successfully and how many creations resulted in errors",
+        "properties": {
+          "created_count": {
+            "description": "Number of events created",
+            "type": "integer",
+            "optional": true
+          },
+          "failed_count": {
+            "description": "Number of failed event creation attempts",
+            "type": "integer",
+            "optional": true
+          }
+        }
+      },
+      {
         "id": "CreateCalendarDetails",
         "description": "Object passed to the createCalendar() function.",
         "inline_doc": true,
@@ -309,6 +326,33 @@
               {
                 "name": "result",
                 "$ref": "CalendarEvent"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "eventsCreate",
+          "type": "function",
+          "description": "Creates multiple events.",
+          "parameters": [
+            {
+              "name": "eventsList",
+              "type": "array",
+              "items": {
+                "$ref": "CreateDetails"
+              },
+              "minItems": 1
+            },
+            {
+              "type": "function",
+              "name": "callback",
+              "optional": true,
+              "parameters": [
+                {
+                  "name": "result",
+                  "description": "Object stating how many creation attempt succeeded and how many failed",
+                  "$ref": "CreateEventsResults"
               }
             ]
           }

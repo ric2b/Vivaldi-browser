@@ -21,6 +21,7 @@
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 
 namespace net {
 class NetworkDelegate;
@@ -63,7 +64,7 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
       scoped_refptr<ResourceRequestBody> body,
       const base::Callback<WebContents*(void)>& web_contents_getter);
 
-  // PlzNavigate and --enable-network-service.
+  // S13nServiceWorker:
   // Same as InitializeForNavigation() but instead of attaching to a URLRequest,
   // just creates a URLLoaderRequestHandler and returns it.
   static std::unique_ptr<URLLoaderRequestHandler>
@@ -93,10 +94,11 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
       int process_id,
       int provider_id,
       bool skip_service_worker,
-      FetchRequestMode request_mode,
-      FetchCredentialsMode credentials_mode,
+      network::mojom::FetchRequestMode request_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
       const std::string& integrity,
+      bool keepalive,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -162,6 +164,8 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
   std::unique_ptr<ServiceWorkerProviderHost> host_for_cross_site_transfer_;
   int old_process_id_;
   int old_provider_id_;
+
+  static int user_data_key_;  // Only address is used.
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRequestHandler);
 };

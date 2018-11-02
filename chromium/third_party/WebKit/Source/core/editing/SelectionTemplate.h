@@ -8,9 +8,8 @@
 #include <iosfwd>
 #include "base/macros.h"
 #include "core/CoreExport.h"
-#include "core/editing/EphemeralRange.h"
+#include "core/editing/Forward.h"
 #include "core/editing/Position.h"
-#include "core/editing/PositionWithAffinity.h"
 #include "core/editing/SelectionType.h"
 #include "core/editing/TextAffinity.h"
 #include "platform/wtf/Allocator.h"
@@ -86,7 +85,7 @@ class CORE_EXPORT SelectionTemplate final {
     explicit InvalidSelectionResetter(const SelectionTemplate&);
     ~InvalidSelectionResetter();
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
    private:
     const Member<const Document> document_;
@@ -103,8 +102,8 @@ class CORE_EXPORT SelectionTemplate final {
   bool operator==(const SelectionTemplate&) const;
   bool operator!=(const SelectionTemplate&) const;
 
-  const PositionTemplate<Strategy>& Base() const;
-  const PositionTemplate<Strategy>& Extent() const;
+  PositionTemplate<Strategy> Base() const;
+  PositionTemplate<Strategy> Extent() const;
   TextAffinity Affinity() const { return affinity_; }
   bool IsBaseFirst() const;
   bool IsCaret() const;
@@ -117,13 +116,13 @@ class CORE_EXPORT SelectionTemplate final {
   bool AssertValid() const;
   bool AssertValidFor(const Document&) const;
 
-  const PositionTemplate<Strategy>& ComputeEndPosition() const;
-  const PositionTemplate<Strategy>& ComputeStartPosition() const;
+  PositionTemplate<Strategy> ComputeEndPosition() const;
+  PositionTemplate<Strategy> ComputeStartPosition() const;
 
   // Returns |SelectionType| for |this| based on |base_| and |extent_|.
   SelectionType Type() const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void PrintTo(std::ostream*, const char* type) const;
 #ifndef NDEBUG
@@ -160,6 +159,11 @@ extern template class CORE_EXTERN_TEMPLATE_EXPORT
 
 using SelectionInDOMTree = SelectionTemplate<EditingStrategy>;
 using SelectionInFlatTree = SelectionTemplate<EditingInFlatTreeStrategy>;
+
+CORE_EXPORT SelectionInDOMTree
+ConvertToSelectionInDOMTree(const SelectionInFlatTree&);
+CORE_EXPORT SelectionInFlatTree
+ConvertToSelectionInFlatTree(const SelectionInDOMTree&);
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const SelectionInDOMTree&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const SelectionInFlatTree&);

@@ -109,7 +109,8 @@ SBOX_TESTS_COMMAND int Lpc_GetUserDefaultLocaleName(int argc, wchar_t** argv) {
   if (argc != 1)
     return SBOX_TEST_FAILED_TO_EXECUTE_COMMAND;
   std::wstring expected_locale_name(argv[0]);
-  static GetUserDefaultLocaleNameFunction GetUserDefaultLocaleName_func = NULL;
+  static GetUserDefaultLocaleNameFunction GetUserDefaultLocaleName_func =
+      nullptr;
   if (!GetUserDefaultLocaleName_func) {
     // GetUserDefaultLocaleName is not available on WIN XP.  So we'll
     // load it on-the-fly.
@@ -142,7 +143,8 @@ SBOX_TESTS_COMMAND int Lpc_GetUserDefaultLocaleName(int argc, wchar_t** argv) {
 }
 
 TEST(LpcPolicyTest, GetUserDefaultLocaleName) {
-  static GetUserDefaultLocaleNameFunction GetUserDefaultLocaleName_func = NULL;
+  static GetUserDefaultLocaleNameFunction GetUserDefaultLocaleName_func =
+      nullptr;
   if (!GetUserDefaultLocaleName_func) {
     // GetUserDefaultLocaleName is not available on WIN XP.  So we'll
     // load it on-the-fly.
@@ -169,7 +171,7 @@ SBOX_TESTS_COMMAND int Lpc_TestValidProcessHeaps(int argc, wchar_t** argv) {
   if (argc != 0)
     return SBOX_TEST_FAILED_TO_EXECUTE_COMMAND;
   // Retrieves the number of heaps in the current process.
-  DWORD number_of_heaps = ::GetProcessHeaps(0, NULL);
+  DWORD number_of_heaps = ::GetProcessHeaps(0, nullptr);
   // Try to retrieve a handle to all the heaps owned by this process. Returns
   // false if the number of heaps has changed.
   //
@@ -177,17 +179,16 @@ SBOX_TESTS_COMMAND int Lpc_TestValidProcessHeaps(int argc, wchar_t** argv) {
   // in Chrome, the heaps tend to be created at startup only.
   std::unique_ptr<HANDLE[]> all_heaps(new HANDLE[number_of_heaps]);
   if (::GetProcessHeaps(number_of_heaps, all_heaps.get()) != number_of_heaps)
-    return SBOX_TEST_FAILED;
+    return SBOX_TEST_FIRST_ERROR;
 
   for (size_t i = 0; i < number_of_heaps; ++i) {
     HANDLE handle = all_heaps[i];
-    if (!HeapLock(handle)) {
-      return SBOX_TEST_FAILED;
-    }
-
-    if (!HeapUnlock(handle)) {
-      return SBOX_TEST_FAILED;
-    }
+    ULONG HeapInformation;
+    bool result = HeapQueryInformation(handle, HeapCompatibilityInformation,
+                                       &HeapInformation,
+                                       sizeof(HeapInformation), nullptr);
+    if (!result)
+      return SBOX_TEST_SECOND_ERROR;
   }
   return SBOX_TEST_SUCCEEDED;
 }

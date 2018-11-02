@@ -42,7 +42,7 @@ namespace blink {
 
 static WebCookieJar* ToCookieJar(const Document* document) {
   if (!document || !document->GetFrame())
-    return 0;
+    return nullptr;
   return document->GetFrame()->Client()->CookieJar();
 }
 
@@ -61,6 +61,7 @@ void SetCookies(Document* document,
   WebCookieJar* cookie_jar = ToCookieJar(document);
   if (!cookie_jar)
     return;
+  SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.CookieJar.SyncCookiesSetTime");
   cookie_jar->SetCookie(url, document->SiteForCookies(), cookie_string);
 }
 

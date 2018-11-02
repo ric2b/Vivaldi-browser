@@ -10,12 +10,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/switches.h"
-#include "cc/output/texture_mailbox_deleter.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/in_process_context_provider.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
+#include "components/viz/service/display_embedder/compositing_mode_reporter_impl.h"
 #include "components/viz/service/display_embedder/display_output_surface.h"
 #include "components/viz/service/display_embedder/in_process_gpu_memory_buffer_manager.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -42,14 +42,20 @@ gpu::ImageFactory* GetImageFactory(gpu::GpuChannelManager* channel_manager) {
 namespace viz {
 
 GpuDisplayProvider::GpuDisplayProvider(
+    uint32_t restart_id,
     scoped_refptr<gpu::InProcessCommandBuffer::Service> gpu_service,
-    gpu::GpuChannelManager* gpu_channel_manager)
-    : gpu_service_(std::move(gpu_service)),
+    gpu::GpuChannelManager* gpu_channel_manager,
+    CompositingModeReporterImpl* compositing_mode_reporter)
+    : restart_id_(restart_id),
+      gpu_service_(std::move(gpu_service)),
       gpu_memory_buffer_manager_(
           base::MakeUnique<InProcessGpuMemoryBufferManager>(
               gpu_channel_manager)),
       image_factory_(GetImageFactory(gpu_channel_manager)),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+      compositing_mode_reporter_(compositing_mode_reporter),
+      task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+  DCHECK_NE(restart_id_, BeginFrameSource::kNotRestartableId);
+}
 
 GpuDisplayProvider::~GpuDisplayProvider() = default;
 
@@ -57,10 +63,15 @@ std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
     const FrameSinkId& frame_sink_id,
     gpu::SurfaceHandle surface_handle,
     const RendererSettings& renderer_settings,
-    std::unique_ptr<BeginFrameSource>* begin_frame_source) {
+    std::unique_ptr<SyntheticBeginFrameSource>* out_begin_frame_source) {
   auto synthetic_begin_frame_source =
       base::MakeUnique<DelayBasedBeginFrameSource>(
-          base::MakeUnique<DelayBasedTimeSource>(task_runner_.get()));
+          base::MakeUnique<DelayBasedTimeSource>(task_runner_.get()),
+          restart_id_);
+
+  // TODO(crbug.com/730660): Fallback to software if gpu doesn't work with
+  // compositing_mode_reporter_->SetUsingSoftwareCompositing();
+  (void)compositing_mode_reporter_;
 
   scoped_refptr<InProcessContextProvider> context_provider =
       new InProcessContextProvider(gpu_service_, surface_handle,
@@ -69,9 +80,11 @@ std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
                                    nullptr /* shared_context */);
 
   // TODO(rjkroege): If there is something better to do than CHECK, add it.
-  CHECK(context_provider->BindToCurrentThread());
+  // TODO(danakj): Should retry if the result is kTransientFailure.
+  auto result = context_provider->BindToCurrentThread();
+  CHECK_EQ(result, gpu::ContextResult::kSuccess);
 
-  std::unique_ptr<cc::OutputSurface> display_output_surface;
+  std::unique_ptr<OutputSurface> display_output_surface;
   if (context_provider->ContextCapabilities().surfaceless) {
 #if defined(USE_OZONE)
     display_output_surface = base::MakeUnique<DisplayOutputSurfaceOzone>(
@@ -95,13 +108,12 @@ std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
       max_frames_pending);
 
   // The ownership of the BeginFrameSource is transfered to the caller.
-  *begin_frame_source = std::move(synthetic_begin_frame_source);
+  *out_begin_frame_source = std::move(synthetic_begin_frame_source);
 
   return base::MakeUnique<Display>(
       ServerSharedBitmapManager::current(), gpu_memory_buffer_manager_.get(),
       renderer_settings, frame_sink_id, std::move(display_output_surface),
-      std::move(scheduler),
-      base::MakeUnique<cc::TextureMailboxDeleter>(task_runner_.get()));
+      std::move(scheduler), task_runner_);
 }
 
 }  // namespace viz

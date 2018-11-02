@@ -186,7 +186,7 @@ void GetClientCertFromShillProperties(
 void SetShillProperties(const ConfigType cert_config_type,
                         const int tpm_slot,
                         const std::string& pkcs11_id,
-                        base::DictionaryValue* properties) {
+                        base::Value* properties) {
   switch (cert_config_type) {
     case CONFIG_TYPE_NONE: {
       return;
@@ -194,6 +194,7 @@ void SetShillProperties(const ConfigType cert_config_type,
     case CONFIG_TYPE_OPENVPN: {
       properties->SetKey(shill::kOpenVPNPinProperty,
                          base::Value(kDefaultTPMPin));
+      // Note: OpemVPN does not have a slot property, see crbug.com/769550.
       properties->SetKey(shill::kOpenVPNClientCertIdProperty,
                          base::Value(pkcs11_id));
       break;
@@ -223,7 +224,7 @@ void SetShillProperties(const ConfigType cert_config_type,
 }
 
 void SetEmptyShillProperties(const ConfigType cert_config_type,
-                             base::DictionaryValue* properties) {
+                             base::Value* properties) {
   switch (cert_config_type) {
     case CONFIG_TYPE_NONE: {
       return;

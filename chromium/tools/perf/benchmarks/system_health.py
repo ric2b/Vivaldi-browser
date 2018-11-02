@@ -16,8 +16,9 @@ from telemetry.web_perf import timeline_based_measurement
 import page_sets
 
 
-# See tr.v.Numeric.getSummarizedScalarNumericsWithNames()
-# https://github.com/catapult-project/catapult/blob/master/tracing/tracing/value/numeric.html#L323
+# Regex to filter out a few names of statistics supported by
+# Histogram.getStatisticScalar(), see:
+#   https://github.com/catapult-project/catapult/blob/d4179a05/tracing/tracing/value/histogram.html#L645  pylint: disable=line-too-long
 _IGNORED_STATS_RE = re.compile(r'_(std|count|max|min|sum|pct_\d{4}(_\d+)?)$')
 
 
@@ -35,9 +36,11 @@ class _CommonSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """
 
   def CreateCoreTimelineBasedMeasurementOptions(self):
-    options = timeline_based_measurement.Options(
-        chrome_trace_category_filter.ChromeTraceCategoryFilter(
-            filter_string='rail,toplevel'))
+    cat_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(
+        filter_string='rail,toplevel')
+    cat_filter.AddIncludedCategory('accessibility')
+
+    options = timeline_based_measurement.Options(cat_filter)
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = True
     options.config.enable_cpu_trace = True
@@ -45,7 +48,8 @@ class _CommonSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
         'clockSyncLatencyMetric',
         'cpuTimeMetric',
         'powerMetric',
-        'tracingMetric'
+        'tracingMetric',
+        'accessibilityMetric',
     ])
     loading_metrics_category.AugmentOptionsForLoadingMetrics(options)
     # The EQT metric depends on the same categories as the loading metric.

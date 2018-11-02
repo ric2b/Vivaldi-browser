@@ -43,7 +43,7 @@ void TreeOrderedList::Add(Node* node) {
   iterator begin = nodes_.begin();
   iterator end = nodes_.end();
   iterator it = end;
-  Node* following_node = 0;
+  Node* following_node = nullptr;
   do {
     --it;
     Node* n = *it;
@@ -63,7 +63,7 @@ void TreeOrderedList::Remove(const Node* node) {
   nodes_.erase(const_cast<Node*>(node));
 }
 
-DEFINE_TRACE(TreeOrderedList) {
+void TreeOrderedList::Trace(blink::Visitor* visitor) {
   visitor->Trace(nodes_);
 }
 

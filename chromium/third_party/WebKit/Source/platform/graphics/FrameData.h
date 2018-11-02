@@ -28,11 +28,12 @@
 #ifndef FrameData_h
 #define FrameData_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/paint/PaintImage.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/VectorTraits.h"
 
 namespace blink {
@@ -50,13 +51,11 @@ struct FrameData {
   void Clear(bool clear_metadata);
 
   ImageOrientation orientation_;
-  float duration_;
+  TimeDelta duration_;
   bool have_metadata_ : 1;
   bool is_complete_ : 1;
   bool has_alpha_ : 1;
   size_t frame_bytes_;
-  SkAlphaType alpha_type_ = kUnknown_SkAlphaType;
-  uint32_t sk_image_unique_id_ = SkiaPaintImageGenerator::kNeedNewImageUniqueID;
 };
 
 }  // namespace blink

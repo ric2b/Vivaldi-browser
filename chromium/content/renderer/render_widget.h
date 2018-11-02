@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <queue>
@@ -246,7 +245,6 @@ class CONTENT_EXPORT RenderWidget
                                          bool has_scrolled_by_touch) override;
   void BeginMainFrame(double frame_time_sec) override;
   void RequestNewLayerTreeFrameSink(
-      bool fallback,
       const LayerTreeFrameSinkCallback& callback) override;
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
@@ -261,7 +259,6 @@ class CONTENT_EXPORT RenderWidget
 
   // RenderWidgetInputHandlerDelegate
   void FocusChangeComplete() override;
-  bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
   void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
                                     const gfx::Vector2dF& unused_delta,
                                     bool event_processed) override;
@@ -275,7 +272,7 @@ class CONTENT_EXPORT RenderWidget
   bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
   bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
 
-  // RenderWidgetScreenMetricsDelegate
+  // RenderWidgetScreenMetricsEmulatorDelegate
   void Redraw() override;
   void Resize(const ResizeParams& resize_params) override;
   void SetScreenMetricsEmulationParameters(
@@ -305,7 +302,7 @@ class CONTENT_EXPORT RenderWidget
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& position,
                      const blink::WebFloatSize& velocity,
-                     const blink::WebScrollBoundaryBehavior& behavior) override;
+                     const blink::WebOverscrollBehavior& behavior) override;
   void ShowVirtualKeyboardOnElementFocus() override;
   void ConvertViewportToWindow(blink::WebRect* rect) override;
   void ConvertWindowToViewport(blink::WebFloatRect* rect) override;
@@ -400,6 +397,7 @@ class CONTENT_EXPORT RenderWidget
   float GetOriginalDeviceScaleFactor() const;
 
   // Helper to convert |point| using ConvertWindowToViewport().
+  gfx::PointF ConvertWindowPointToViewport(const gfx::PointF& point);
   gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
 
   void TransferActiveWheelFlingAnimation(
@@ -413,10 +411,14 @@ class CONTENT_EXPORT RenderWidget
   // Requests a BeginMainFrame callback from the compositor.
   void SetNeedsMainFrame() override;
 
+  int GetWidgetRoutingIdAtPoint(const gfx::Point& point);
+
   void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
                         const ui::LatencyInfo& latency_info,
                         HandledEventCallback callback) override;
-  void GetWidgetInputHandler(mojom::WidgetInputHandlerRequest request) override;
+
+  void SetupWidgetInputHandler(mojom::WidgetInputHandlerRequest request,
+                               mojom::WidgetInputHandlerHostPtr host) override;
 
   scoped_refptr<MainThreadEventQueue> GetInputEventQueue();
 
@@ -455,6 +457,8 @@ class CONTENT_EXPORT RenderWidget
     TTFAP_AFTER_PURGED,
     TTFAP_5MIN_AFTER_BACKGROUNDED,
   };
+
+  void DidResizeOrRepaintAck();
 
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
@@ -513,6 +517,11 @@ class CONTENT_EXPORT RenderWidget
       RenderWidgetScreenMetricsEmulator* emulator);
 #endif
 
+  void SetLocalSurfaceIdForAutoResize(
+      uint64_t sequence_number,
+      const content::ScreenInfo& screen_info,
+      const viz::LocalSurfaceId& local_surface_id);
+
   // RenderWidget IPC message handlers
   void OnHandleInputEvent(
       const blink::WebInputEvent* event,
@@ -522,6 +531,12 @@ class CONTENT_EXPORT RenderWidget
   void OnClose();
   void OnCreatingNewAck();
   virtual void OnResize(const ResizeParams& params);
+  void OnSetLocalSurfaceIdForAutoResize(
+      uint64_t sequence_number,
+      const gfx::Size& min_size,
+      const gfx::Size& max_size,
+      const content::ScreenInfo& screen_info,
+      const viz::LocalSurfaceId& local_surface_id);
   void OnEnableDeviceEmulation(const blink::WebDeviceEmulationParams& params);
   void OnDisableDeviceEmulation();
   virtual void OnWasHidden();
@@ -545,34 +560,34 @@ class CONTENT_EXPORT RenderWidget
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnSetViewportIntersection(const gfx::Rect& viewport_intersection);
   void OnSetIsInert(bool);
+  void OnUpdateRenderThrottlingStatus(bool is_throttled,
+                                      bool subtree_throttled);
   // Real data that is dragged is not included at DragEnter time.
   void OnDragTargetDragEnter(
       const std::vector<DropData::Metadata>& drop_meta_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers);
-  void OnDragTargetDragOver(const gfx::Point& client_pt,
-                            const gfx::Point& screen_pt,
+  void OnDragTargetDragOver(const gfx::PointF& client_pt,
+                            const gfx::PointF& screen_pt,
                             blink::WebDragOperationsMask operations_allowed,
                             int key_modifiers);
-  void OnDragTargetDragLeave(const gfx::Point& client_point,
-                             const gfx::Point& screen_point);
+  void OnDragTargetDragLeave(const gfx::PointF& client_point,
+                             const gfx::PointF& screen_point);
   void OnDragTargetDrop(const DropData& drop_data,
-                        const gfx::Point& client_pt,
-                        const gfx::Point& screen_pt,
+                        const gfx::PointF& client_pt,
+                        const gfx::PointF& screen_pt,
                         int key_modifiers);
-  void OnDragSourceEnded(const gfx::Point& client_point,
-                         const gfx::Point& screen_point,
+  void OnDragSourceEnded(const gfx::PointF& client_point,
+                         const gfx::PointF& screen_point,
                          blink::WebDragOperation drag_operation);
   void OnDragSourceSystemDragEnded();
 
   // Notify the compositor about a change in viewport size. This should be
   // used only with auto resize mode WebWidgets, as normal WebWidgets should
   // go through OnResize.
-  void AutoResizeCompositor();
-
-  virtual void OnSetDeviceScaleFactor(float device_scale_factor);
+  void AutoResizeCompositor(const viz::LocalSurfaceId& local_surface_id);
 
   void OnOrientationChange();
 
@@ -638,6 +653,10 @@ class CONTENT_EXPORT RenderWidget
   // Called to update whether low latency input mode is enabled or not.
   void SetNeedsLowLatencyInput(bool) override;
 
+  // Requests unbuffered (ie. low latency) input until a pointerup
+  // event occurs.
+  void RequestUnbufferedInputEvents() override;
+
   // Tell the browser about the actions permitted for a new touch point.
   void SetTouchAction(cc::TouchAction touch_action) override;
 
@@ -679,16 +698,19 @@ class CONTENT_EXPORT RenderWidget
   // The size of the visible viewport in DPI-adjusted pixels.
   gfx::Size visible_viewport_size_;
 
-  // Flags for the next ViewHostMsg_UpdateRect message.
+  // Flags for the next ViewHostMsg_ResizeOrRepaint_ACK message.
   int next_paint_flags_;
 
   // Whether the WebWidget is in auto resize mode, which is used for example
   // by extension popups.
   bool auto_resize_mode_;
 
-  // True if we need to send an UpdateRect message to notify the browser about
-  // an already-completed auto-resize.
-  bool need_update_rect_for_auto_resize_;
+  // True if we need to send a ViewHsotMsg_ResizeOrRepaint_ACK message to notify
+  // the browser about an already-completed auto-resize.
+  bool need_resize_ack_for_auto_resize_;
+
+  // The sequence number used for ViewHostMsg_UpdateRect.
+  uint64_t resize_or_repaint_ack_num_ = 0;
 
   // Set to true if we should ignore RenderWidget::Show calls.
   bool did_show_;
@@ -857,6 +879,16 @@ class CONTENT_EXPORT RenderWidget
   PepperPluginInstanceImpl* GetFocusedPepperPluginInsideWidget();
 #endif
   void RecordTimeToFirstActivePaint();
+
+  // Updates the URL used by the compositor for keying UKM metrics.
+  // Note that this uses the main frame's URL and only if its available in the
+  // current process. In the case where it is not available, no metrics will be
+  // recorded.
+  void UpdateURLForCompositorUkm();
+
+  // This method returns the WebLocalFrame which is currently focused and
+  // belongs to the frame tree associated with this RenderWidget.
+  blink::WebLocalFrame* GetFocusedWebLocalFrameInWidget() const;
 
   // Indicates whether this widget has focus.
   bool has_focus_;

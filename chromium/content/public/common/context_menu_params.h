@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/menu_item.h"
-#include "content/public/common/page_state.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "ui/base/ui_base_types.h"
@@ -87,15 +86,8 @@ struct CONTENT_EXPORT ContextMenuParams {
   // on.
   GURL page_url;
 
-  // This is the absolute keyword search URL including the %s search tag when
-  // the "Add as search engine..." option is clicked (left empty if not used).
-  GURL keyword_url;
-
   // This is the URL of the subframe that the context menu was invoked on.
   GURL frame_url;
-
-  // This is the page state of the frame on which the context menu was invoked.
-  PageState frame_page_state;
 
   // These are the parameters for the media element that the context menu
   // was invoked on.
@@ -111,6 +103,10 @@ struct CONTENT_EXPORT ContextMenuParams {
   // This is the suggested filename to be used when saving file through "Save
   // Link As" option of context menu.
   base::string16 suggested_filename;
+
+  // This is the absolute keyword search URL including the %s search tag when
+  // the "Add as search engine..." option is clicked (left empty if not used).
+  GURL vivaldi_keyword_url;
 
   // Field that identifies special input types used in Vivaldi.
   std::string vivaldi_input_type;
@@ -160,6 +156,9 @@ struct CONTENT_EXPORT ContextMenuParams {
 
   // Rect representing the coordinates in the document space of the selection.
   gfx::Rect selection_rect;
+
+  // Start position of the selection text.
+  int selection_start_offset;
 };
 
 }  // namespace content

@@ -1,0 +1,48 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+source_set("contact") {
+  sources = [
+    "email_table.cc",
+    "email_table.h",
+    "email_type.cc",
+    "email_type.h",
+    "contact_backend.cc",
+    "contact_backend.h",
+    "contact_backend_notifier.h",
+    "contact_constants.h",
+    "contact_constants.cc",
+    "contact_database.cc",
+    "contact_database.h",
+    "contact_database_params.cc",
+    "contact_database_params.h",
+    "contact_model_loaded_observer.cc",
+    "contact_model_loaded_observer.h",
+    "contact_model_observer.h",
+    "contact_service.cc",
+    "contact_service.h",
+    "contact_service_factory.cc",
+    "contact_service_factory.h",
+    "contact_type.cc",
+    "contact_type.h",
+    "contact_table.cc",
+    "contact_table.h",
+    "contact_typedefs.h",
+    "phonenumber_table.cc",
+    "phonenumber_table.h",
+    "phonenumber_type.cc",
+    "phonenumber_type.h",
+  ]
+  deps = [
+    "//base:base",
+    "//chrome:strings",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//content/public/browser",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+  public_deps = [
+    #"//components/sync/protocol",
+    #"//vivaldi/sync",
+  ]
+}

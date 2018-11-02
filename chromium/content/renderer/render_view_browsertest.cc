@@ -22,8 +22,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/trees/layer_tree_host.h"
-#include "content/child/request_extra_data.h"
-#include "content/child/service_worker/service_worker_network_provider.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -53,10 +51,12 @@
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_entry.h"
 #include "content/renderer/history_serialization.h"
+#include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/navigation_state_impl.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_view_impl.h"
+#include "content/renderer/service_worker/service_worker_network_provider.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/test/mock_keyboard.h"
@@ -70,6 +70,7 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "third_party/WebKit/public/web/WebDevToolsAgent.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
 #include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebFrameContentDumper.h"
@@ -95,12 +96,12 @@
 #endif
 
 #if defined(USE_AURA) && defined(USE_X11)
-#include <X11/Xlib.h>
 #include "base/memory/ptr_util.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/events_test_utils_x11.h"
+#include "ui/gfx/x/x11.h"
 #endif
 
 #if defined(USE_OZONE)
@@ -155,7 +156,7 @@ class WebUITestWebUIControllerFactory : public WebUIControllerFactory {
  public:
   WebUIController* CreateWebUIControllerForURL(WebUI* web_ui,
                                                const GURL& url) const override {
-    return NULL;
+    return nullptr;
   }
   WebUI::TypeID GetWebUIType(BrowserContext* browser_context,
                              const GURL& url) const override {
@@ -194,7 +195,7 @@ FrameReplicationState ReconstructReplicationStateForTesting(
   // blink API...
   result.name = frame->AssignedName().Utf8();
   result.unique_name = test_render_frame->unique_name();
-  result.sandbox_flags = frame->EffectiveSandboxFlags();
+  result.frame_policy.sandbox_flags = frame->EffectiveSandboxFlags();
   // result.should_enforce_strict_mixed_content_checking is calculated in the
   // browser...
   result.origin = frame->GetSecurityOrigin();
@@ -419,15 +420,14 @@ class DevToolsAgentTest : public RenderViewImplTest {
   void Attach() {
     notifications_ = std::vector<std::string>();
     expecting_pause_ = false;
-    std::string host_id = "host_id";
-    agent()->OnAttach(host_id, 17);
+    agent()->GetWebAgent()->Attach(17);
     agent()->send_protocol_message_callback_for_test_ = base::Bind(
        &DevToolsAgentTest::OnDevToolsMessage, base::Unretained(this));
   }
 
   void Detach() {
     agent()->send_protocol_message_callback_for_test_.Reset();
-    agent()->DetachAllSessions();
+    agent()->GetWebAgent()->Detach(17);
   }
 
   bool IsPaused() {
@@ -436,7 +436,7 @@ class DevToolsAgentTest : public RenderViewImplTest {
 
   void DispatchDevToolsMessage(const std::string& method,
                                const std::string& message) {
-    agent()->OnDispatchOnInspectorBackend(17, 1, method, message);
+    agent()->DispatchOnInspectorBackend(17, 1, method, message);
   }
 
   void CloseWhilePaused() {
@@ -444,8 +444,10 @@ class DevToolsAgentTest : public RenderViewImplTest {
     view()->NotifyOnClose();
   }
 
-  void OnDevToolsMessage(
-      int, int, const std::string& message, const std::string&) {
+  void OnDevToolsMessage(int,
+                         int,
+                         const std::string& message,
+                         const std::string&) {
     last_message_ = base::WrapUnique(static_cast<base::DictionaryValue*>(
         base::JSONReader::Read(message).release()));
     int id;
@@ -464,10 +466,15 @@ class DevToolsAgentTest : public RenderViewImplTest {
         expecting_pause_ = false;
         base::ThreadTaskRunnerHandle::Get()->PostTask(
             FROM_HERE,
-            base::Bind(&DevToolsAgentTest::DispatchDevToolsMessage,
-                       base::Unretained(this),
-                       "Debugger.resume",
-                       "{\"id\":100,\"method\":\"Debugger.resume\"}"));
+            base::BindOnce(&DevToolsAgentTest::DispatchDevToolsMessage,
+                           base::Unretained(this), "Debugger.resume",
+                           "{\"id\":100,\"method\":\"Debugger.resume\"}"));
+      }
+
+      if (notification == "Page.windowOpen") {
+        window_open_notification_ =
+            base::WrapUnique(static_cast<base::DictionaryValue*>(
+                base::JSONReader::Read(message).release()));
       }
     }
   }
@@ -490,6 +497,10 @@ class DevToolsAgentTest : public RenderViewImplTest {
     call_frames_count_ = call_frames_count;
   }
 
+  base::DictionaryValue* WindowOpenNotification() {
+    return window_open_notification_.get();
+  }
+
  private:
   DevToolsAgent* agent() {
     return frame()->devtools_agent();
@@ -497,6 +508,7 @@ class DevToolsAgentTest : public RenderViewImplTest {
 
   std::vector<std::string> notifications_;
   std::unique_ptr<base::DictionaryValue> last_message_;
+  std::unique_ptr<base::DictionaryValue> window_open_notification_;
   int call_frames_count_;
   bool expecting_pause_;
 };
@@ -618,20 +630,14 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   frame()->Navigate(common_params, start_params, request_params);
   base::RunLoop().RunUntilIdle();
 
-  const IPC::Message* frame_navigate_msg =
-      render_thread_->sink().GetUniqueMessageMatching(
-          FrameHostMsg_DidCommitProvisionalLoad::ID);
-  EXPECT_TRUE(frame_navigate_msg);
-
-  FrameHostMsg_DidCommitProvisionalLoad::Param host_nav_params;
-  FrameHostMsg_DidCommitProvisionalLoad::Read(frame_navigate_msg,
-                                              &host_nav_params);
-  EXPECT_EQ("POST", std::get<0>(host_nav_params).method);
+  auto last_commit_params = frame()->TakeLastCommitParams();
+  ASSERT_TRUE(last_commit_params);
+  EXPECT_EQ("POST", last_commit_params->method);
 
   // Check post data sent to browser matches
-  EXPECT_TRUE(std::get<0>(host_nav_params).page_state.IsValid());
+  EXPECT_TRUE(last_commit_params->page_state.IsValid());
   std::unique_ptr<HistoryEntry> entry =
-      PageStateToHistoryEntry(std::get<0>(host_nav_params).page_state);
+      PageStateToHistoryEntry(last_commit_params->page_state);
   blink::WebHTTPBody body = entry->root().HttpBody();
   blink::WebHTTPBody::Element element;
   bool successful = body.ElementAt(0, element);
@@ -662,6 +668,7 @@ TEST_F(RenderViewImplTest, OnNavigationLoadDataWithBaseURL) {
   request_params.data_url_as_string =
       "data:text/html,<html><head><title>Data page</title></head></html>";
 
+  render_thread_->sink().ClearMessages();
   frame()->Navigate(common_params, StartNavigationParams(),
                     request_params);
   const IPC::Message* frame_title_msg = nullptr;
@@ -687,9 +694,9 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
 
   // Navigations to normal HTTP URLs can be handled locally.
   blink::WebURLRequest request(GURL("http://foo.com"));
-  request.SetFetchRequestMode(blink::WebURLRequest::kFetchRequestModeNavigate);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kNavigate);
   request.SetFetchCredentialsMode(
-      blink::WebURLRequest::kFetchCredentialsModeInclude);
+      network::mojom::FetchCredentialsMode::kInclude);
   request.SetFetchRedirectMode(blink::WebURLRequest::kFetchRedirectModeManual);
   request.SetFrameType(blink::WebURLRequest::kFrameTypeTopLevel);
   request.SetRequestContext(blink::WebURLRequest::kRequestContextInternal);
@@ -834,7 +841,7 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
   // WebRemoteFrame.
   content::FrameReplicationState replication_state =
       ReconstructReplicationStateForTesting(child_frame);
-  replication_state.origin = url::Origin(GURL("http://foo.com"));
+  replication_state.origin = url::Origin::Create(GURL("http://foo.com"));
   child_frame->SwapOut(kProxyRoutingId, true, replication_state);
 
   // The child frame should now be a WebRemoteFrame.
@@ -856,6 +863,59 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
   EXPECT_TRUE(web_frame->FirstChild()->NextSibling()->IsWebRemoteFrame());
   EXPECT_TRUE(
       web_frame->FirstChild()->NextSibling()->GetSecurityOrigin().IsUnique());
+}
+
+// When we enable --use-zoom-for-dsf, visiting the first web page after opening
+// a new tab looks fine, but visiting the second web page renders smaller DOM
+// elements. We can solve this by updating DSF after swapping in the main frame.
+// See crbug.com/737777#c37.
+TEST_F(RenderViewImplScaleFactorTest, UpdateDSFAfterSwapIn) {
+  DoSetUp();
+  // The bug reproduces if zoom is used for devices scale factor.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableUseZoomForDSF);
+  const float device_scale = 3.0f;
+  SetDeviceScaleFactor(device_scale);
+  EXPECT_EQ(device_scale, view()->GetDeviceScaleFactor());
+
+  LoadHTML("Hello world!");
+
+  // Swap the main frame out after which it should become a WebRemoteFrame.
+  content::FrameReplicationState replication_state =
+      ReconstructReplicationStateForTesting(frame());
+  // replication_state.origin = url::Origin(GURL("http://foo.com"));
+  frame()->SwapOut(kProxyRoutingId, true, replication_state);
+  EXPECT_TRUE(view()->webview()->MainFrame()->IsWebRemoteFrame());
+
+  // Do the remote-to-local transition for the proxy, which is to create a
+  // provisional local frame.
+  int routing_id = kProxyRoutingId + 1;
+  service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
+  mojo::MakeRequest(&stub_interface_provider);
+  mojom::CreateFrameWidgetParams widget_params;
+  widget_params.routing_id = view()->GetRoutingID();
+  widget_params.hidden = false;
+  RenderFrameImpl::CreateFrame(
+      routing_id, std::move(stub_interface_provider), kProxyRoutingId,
+      MSG_ROUTING_NONE, MSG_ROUTING_NONE, MSG_ROUTING_NONE,
+      base::UnguessableToken::Create(), replication_state, nullptr,
+      widget_params, FrameOwnerProperties());
+  TestRenderFrame* provisional_frame =
+      static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
+  EXPECT_TRUE(provisional_frame);
+
+  // Navigate to other page, which triggers the swap in.
+  CommonNavigationParams common_params;
+  StartNavigationParams start_params;
+  RequestNavigationParams request_params;
+  common_params.url = GURL("data:text/html,<div>Page</div>");
+  common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
+  common_params.transition = ui::PAGE_TRANSITION_TYPED;
+
+  provisional_frame->Navigate(common_params, start_params, request_params);
+
+  EXPECT_EQ(device_scale, view()->GetDeviceScaleFactor());
+  EXPECT_EQ(device_scale, view()->webview()->ZoomFactorForDeviceScaleFactor());
 }
 
 // Test that when a parent detaches a remote child after the provisional
@@ -881,13 +941,16 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
   // Do the first step of a remote-to-local transition for the child proxy,
   // which is to create a provisional local frame.
   int routing_id = kProxyRoutingId + 1;
+  service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
+  mojo::MakeRequest(&stub_interface_provider);
   mojom::CreateFrameWidgetParams widget_params;
   widget_params.routing_id = MSG_ROUTING_NONE;
   widget_params.hidden = false;
-  RenderFrameImpl::CreateFrame(routing_id, kProxyRoutingId, MSG_ROUTING_NONE,
-                               frame()->GetRoutingID(), MSG_ROUTING_NONE,
-                               replication_state, nullptr, widget_params,
-                               FrameOwnerProperties());
+  RenderFrameImpl::CreateFrame(
+      routing_id, std::move(stub_interface_provider), kProxyRoutingId,
+      MSG_ROUTING_NONE, frame()->GetRoutingID(), MSG_ROUTING_NONE,
+      base::UnguessableToken::Create(), replication_state, nullptr,
+      widget_params, FrameOwnerProperties());
   {
     TestRenderFrame* provisional_frame = static_cast<TestRenderFrame*>(
         RenderFrameImpl::FromRoutingID(routing_id));
@@ -1098,7 +1161,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
     // to activate IMEs.
     view()->UpdateTextInputState();
     const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
-    EXPECT_TRUE(msg != NULL);
+    EXPECT_TRUE(msg != nullptr);
     EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
     ViewHostMsg_TextInputStateChanged::Param params;
     ViewHostMsg_TextInputStateChanged::Read(msg, &params);
@@ -1119,7 +1182,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
     // to de-activate IMEs.
     view()->UpdateTextInputState();
     msg = render_thread_->sink().GetMessageAt(0);
-    EXPECT_TRUE(msg != NULL);
+    EXPECT_TRUE(msg != nullptr);
     EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
     ViewHostMsg_TextInputStateChanged::Read(msg, &params);
     p = std::get<0>(params);
@@ -1134,7 +1197,8 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
                              test_case->input_id);
       // Move the input focus to the target <input> element, where we should
       // activate IMEs.
-      ExecuteJavaScriptAndReturnIntValue(base::ASCIIToUTF16(javascript), NULL);
+      ExecuteJavaScriptAndReturnIntValue(base::ASCIIToUTF16(javascript),
+                                         nullptr);
       base::RunLoop().RunUntilIdle();
       render_thread_->sink().ClearMessages();
 
@@ -1143,7 +1207,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
       view()->UpdateTextInputState();
       base::RunLoop().RunUntilIdle();
       const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
-      EXPECT_TRUE(msg != NULL);
+      EXPECT_TRUE(msg != nullptr);
       EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
       ViewHostMsg_TextInputStateChanged::Read(msg, &params);
       p = std::get<0>(params);
@@ -1185,9 +1249,9 @@ TEST_F(RenderViewImplTest, ImeComposition) {
   };
   static const ImeMessage kImeMessages[] = {
       // Scenario 1: input a Chinese word with Microsoft IME.
-      {IME_INITIALIZE, true, 0, 0, NULL, NULL},
-      {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
-      {IME_SETFOCUS, true, 0, 0, NULL, NULL},
+      {IME_INITIALIZE, true, 0, 0, nullptr, nullptr},
+      {IME_SETINPUTMODE, true, 0, 0, nullptr, nullptr},
+      {IME_SETFOCUS, true, 0, 0, nullptr, nullptr},
       {IME_SETCOMPOSITION, false, 1, 1, L"n", L"n"},
       {IME_SETCOMPOSITION, false, 2, 2, L"ni", L"ni"},
       {IME_SETCOMPOSITION, false, 3, 3, L"nih", L"nih"},
@@ -1195,9 +1259,9 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       {IME_SETCOMPOSITION, false, 5, 5, L"nihao", L"nihao"},
       {IME_COMMITTEXT, false, -1, -1, L"\x4F60\x597D", L"\x4F60\x597D"},
       // Scenario 2: input a Japanese word with Microsoft IME.
-      {IME_INITIALIZE, true, 0, 0, NULL, NULL},
-      {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
-      {IME_SETFOCUS, true, 0, 0, NULL, NULL},
+      {IME_INITIALIZE, true, 0, 0, nullptr, nullptr},
+      {IME_SETINPUTMODE, true, 0, 0, nullptr, nullptr},
+      {IME_SETFOCUS, true, 0, 0, nullptr, nullptr},
       {IME_SETCOMPOSITION, false, 0, 1, L"\xFF4B", L"\xFF4B"},
       {IME_SETCOMPOSITION, false, 0, 1, L"\x304B", L"\x304B"},
       {IME_SETCOMPOSITION, false, 0, 2, L"\x304B\xFF4E", L"\x304B\xFF4E"},
@@ -1210,9 +1274,9 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       {IME_FINISHCOMPOSINGTEXT, false, -1, -1, L"", L"\x6F22\x5B57"},
       {IME_CANCELCOMPOSITION, false, -1, -1, L"", L"\x6F22\x5B57"},
       // Scenario 3: input a Korean word with Microsot IME.
-      {IME_INITIALIZE, true, 0, 0, NULL, NULL},
-      {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
-      {IME_SETFOCUS, true, 0, 0, NULL, NULL},
+      {IME_INITIALIZE, true, 0, 0, nullptr, nullptr},
+      {IME_SETINPUTMODE, true, 0, 0, nullptr, nullptr},
+      {IME_SETFOCUS, true, 0, 0, nullptr, nullptr},
       {IME_SETCOMPOSITION, false, 0, 1, L"\x3147", L"\x3147"},
       {IME_SETCOMPOSITION, false, 0, 1, L"\xC544", L"\xC544"},
       {IME_SETCOMPOSITION, false, 0, 1, L"\xC548", L"\xC548"},
@@ -1313,12 +1377,8 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
     WebTextDirection direction;
     const wchar_t* expected_result;
   } kTextDirection[] = {
-      {blink::kWebTextDirectionRightToLeft,
-       L"\x000A"
-       L"rtl,rtl"},
-      {blink::kWebTextDirectionLeftToRight,
-       L"\x000A"
-       L"ltr,ltr"},
+      {blink::kWebTextDirectionRightToLeft, L"rtl,rtl"},
+      {blink::kWebTextDirectionLeftToRight, L"ltr,ltr"},
   };
   for (size_t i = 0; i < arraysize(kTextDirection); ++i) {
     // Set the text direction of the <textarea> element.
@@ -1348,10 +1408,7 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
 // Crashy, http://crbug.com/53247.
 TEST_F(RenderViewImplTest, DISABLED_DidFailProvisionalLoadWithErrorForError) {
   GetMainFrame()->EnableViewSourceMode(true);
-  WebURLError error;
-  error.domain = WebURLError::Domain::kNet;
-  error.reason = net::ERR_FILE_NOT_FOUND;
-  error.unreachable_url = GURL("http://foo");
+  WebURLError error(net::ERR_FILE_NOT_FOUND, GURL("http://foo"));
   WebLocalFrame* web_frame = GetMainFrame();
 
   // Start a load that will reach provisional state synchronously,
@@ -1371,10 +1428,7 @@ TEST_F(RenderViewImplTest, DISABLED_DidFailProvisionalLoadWithErrorForError) {
 
 TEST_F(RenderViewImplTest, DidFailProvisionalLoadWithErrorForCancellation) {
   GetMainFrame()->EnableViewSourceMode(true);
-  WebURLError error;
-  error.domain = WebURLError::Domain::kNet;
-  error.reason = net::ERR_ABORTED;
-  error.unreachable_url = GURL("http://foo");
+  WebURLError error(net::ERR_ABORTED, GURL("http://foo"));
   WebLocalFrame* web_frame = GetMainFrame();
 
   // Start a load that will reach provisional state synchronously,
@@ -1854,10 +1908,8 @@ class RendererErrorPageTest : public RenderViewImplTest {
 #endif
 
 TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
-  WebURLError error;
-  error.domain = WebURLError::Domain::kNet;
-  error.reason = net::ERR_FILE_NOT_FOUND;
-  error.unreachable_url = GURL("http://example.com/suppress");
+  WebURLError error(net::ERR_FILE_NOT_FOUND,
+                    GURL("http://example.com/suppress"));
 
   // Start a load that will reach provisional state synchronously,
   // but won't complete synchronously.
@@ -1884,10 +1936,8 @@ TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
 #endif
 
 TEST_F(RendererErrorPageTest, MAYBE_DoesNotSuppress) {
-  WebURLError error;
-  error.domain = WebURLError::Domain::kNet;
-  error.reason = net::ERR_FILE_NOT_FOUND;
-  error.unreachable_url = GURL("http://example.com/dont-suppress");
+  WebURLError error(net::ERR_FILE_NOT_FOUND,
+                    GURL("http://example.com/dont-suppress"));
 
   // Start a load that will reach provisional state synchronously,
   // but won't complete synchronously.
@@ -2565,8 +2615,8 @@ TEST_F(DevToolsAgentTest, DevToolsResumeOnClose) {
   // Executing javascript will pause the thread and create nested run loop.
   // Posting task simulates message coming from browser.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&DevToolsAgentTest::CloseWhilePaused, base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&DevToolsAgentTest::CloseWhilePaused,
+                                base::Unretained(this)));
   ExecuteJavaScriptForTests("debugger;");
 
   // CloseWhilePaused should resume execution and continue here.
@@ -2658,6 +2708,64 @@ TEST_F(DevToolsAgentTest, CallFramesInIsolatedWorld) {
 
   EXPECT_FALSE(IsPaused());
   Detach();
+}
+
+TEST_F(DevToolsAgentTest, WindowOpenWithEmptyURL) {
+  Attach();
+  DispatchDevToolsMessage("Page.enable",
+                          "{\"id\":1,\"method\":\"Page.enable\"}");
+  LoadHTMLWithUrlOverride("<script>window.open()</script>",
+                          "https://www.example.com");
+
+  base::DictionaryValue* notification = WindowOpenNotification();
+  EXPECT_TRUE(notification);
+  const base::Value* params_value = notification->FindKey("params");
+  EXPECT_TRUE(params_value && params_value->is_dict());
+  const base::Value* url_value = params_value->FindKey("url");
+  EXPECT_TRUE(url_value);
+  EXPECT_EQ(url::kAboutBlankURL, url_value->GetString());
+}
+
+TEST_F(DevToolsAgentTest, WindowOpenWithRelativeURL) {
+  // Enable browser side navigation to avoid actually load url for the new
+  // window.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableBrowserSideNavigation);
+  Attach();
+  DispatchDevToolsMessage("Page.enable",
+                          "{\"id\":1,\"method\":\"Page.enable\"}");
+  LoadHTMLWithUrlOverride("<script>window.open('path')</script>",
+                          "https://www.example.com");
+
+  base::DictionaryValue* notification = WindowOpenNotification();
+  EXPECT_TRUE(notification);
+  const base::Value* params_value = notification->FindKey("params");
+  EXPECT_TRUE(params_value && params_value->is_dict());
+  const base::Value* url_value = params_value->FindKey("url");
+  EXPECT_TRUE(url_value);
+  EXPECT_EQ("https://www.example.com/path", url_value->GetString());
+}
+
+TEST_F(DevToolsAgentTest, WindowOpenFromClick) {
+  // Enable browser side navigation to avoid actually load url for the new
+  // window.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableBrowserSideNavigation);
+  Attach();
+  DispatchDevToolsMessage("Page.enable",
+                          "{\"id\":1,\"method\":\"Page.enable\"}");
+  LoadHTMLWithUrlOverride(
+      "<a id='my_anchor' href='/anchor' target='_blank'> </a>\n"
+      "<script>document.getElementById('my_anchor').click();</script>",
+      "https://www.example.com");
+
+  base::DictionaryValue* notification = WindowOpenNotification();
+  EXPECT_TRUE(notification);
+  const base::Value* params_value = notification->FindKey("params");
+  EXPECT_TRUE(params_value && params_value->is_dict());
+  const base::Value* url_value = params_value->FindKey("url");
+  EXPECT_TRUE(url_value);
+  EXPECT_EQ("https://www.example.com/anchor", url_value->GetString());
 }
 
 }  // namespace content

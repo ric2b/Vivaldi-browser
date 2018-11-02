@@ -44,6 +44,11 @@ bool ExtensionsAPIClient::ShouldHideResponseHeader(
   return false;
 }
 
+bool ExtensionsAPIClient::ShouldHideBrowserNetworkRequest(
+    const GURL& url) const {
+  return false;
+}
+
 AppViewGuestDelegate* ExtensionsAPIClient::CreateAppViewGuestDelegate() const {
   return NULL;
 }
@@ -96,7 +101,8 @@ ExtensionsAPIClient::CreateDevicePermissionsPrompt(
 }
 
 std::unique_ptr<VirtualKeyboardDelegate>
-ExtensionsAPIClient::CreateVirtualKeyboardDelegate() const {
+ExtensionsAPIClient::CreateVirtualKeyboardDelegate(
+    content::BrowserContext* context) const {
   return nullptr;
 }
 
@@ -129,6 +135,11 @@ FeedbackPrivateDelegate* ExtensionsAPIClient::GetFeedbackPrivateDelegate() {
 #if defined(OS_CHROMEOS)
 NonNativeFileSystemDelegate*
 ExtensionsAPIClient::GetNonNativeFileSystemDelegate() {
+  return nullptr;
+}
+
+MediaPerceptionAPIDelegate*
+ExtensionsAPIClient::GetMediaPerceptionAPIDelegate() {
   return nullptr;
 }
 

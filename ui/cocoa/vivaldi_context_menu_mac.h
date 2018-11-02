@@ -20,7 +20,7 @@
 
 class ToolkitDelegateMac;
 
-@class MenuController;
+@class MenuControllerCocoa;
 
 // Mac implementation of the context menu display code. Uses a Cocoa NSMenu
 // to display the context menu. Internally uses an obj-c object as the
@@ -37,7 +37,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
  private:
   NSView* GetActiveNativeView();
   // The Cocoa menu controller for this menu.
-  base::scoped_nsobject<MenuController> menu_controller_;
+  base::scoped_nsobject<MenuControllerCocoa> menu_controller_;
   content::RenderFrameHost* render_frame_host_;
   ui::SimpleMenuModel* menu_model_;
   content::ContextMenuParams params_;

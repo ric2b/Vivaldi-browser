@@ -40,7 +40,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/events/Event.h"
 #include "core/events/BeforeUnloadEvent.h"
-#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "platform/InstanceCounters.h"
 #include "platform/bindings/V8PrivateProperty.h"
 
@@ -52,15 +52,15 @@ V8AbstractEventListener::V8AbstractEventListener(bool is_attribute,
     : EventListener(kJSEventListenerType),
       listener_(nullptr),
       is_attribute_(is_attribute),
-      world_(world),
+      world_(&world),
       isolate_(isolate),
-      worker_global_scope_(nullptr) {
+      worker_or_worklet_global_scope_(nullptr) {
   if (IsMainThread())
     InstanceCounters::IncrementCounter(
         InstanceCounters::kJSEventListenerCounter);
   else
-    worker_global_scope_ =
-        ToWorkerGlobalScope(CurrentExecutionContext(isolate));
+    worker_or_worklet_global_scope_ =
+        ToWorkerOrWorkletGlobalScope(CurrentExecutionContext(isolate));
 }
 
 V8AbstractEventListener::~V8AbstractEventListener() {
@@ -108,9 +108,9 @@ void V8AbstractEventListener::HandleEvent(ScriptState* script_state,
 void V8AbstractEventListener::SetListenerObject(
     v8::Local<v8::Object> listener) {
   DCHECK(listener_.IsEmpty());
-  // Balanced in wrapperCleared xor clearListenerObject.
-  if (worker_global_scope_) {
-    worker_global_scope_->RegisterEventListener(this);
+  // Balanced in WrapperCleared xor ClearListenerObject.
+  if (worker_or_worklet_global_scope_) {
+    worker_or_worklet_global_scope_->RegisterEventListener(this);
   } else {
     keep_alive_ = this;
   }
@@ -139,9 +139,15 @@ void V8AbstractEventListener::InvokeEventHandler(
     v8::Local<v8::Value> saved_event = event_symbol.GetOrUndefined(global);
     try_catch.Reset();
 
-    // Make the event available in the global object, so LocalDOMWindow can
-    // expose it.
-    event_symbol.Set(global, js_event);
+    // Expose the event object as |window.event|, except when the event's target
+    // is in a V1 shadow tree, in which case |window.event| should be
+    // |undefined|.
+    Node* target_node = event->target()->ToNode();
+    if (target_node && target_node->IsInV1ShadowTree()) {
+      event_symbol.Set(global, v8::Undefined(GetIsolate()));
+    } else {
+      event_symbol.Set(global, js_event);
+    }
     try_catch.Reset();
 
     return_value = CallListenerFunction(script_state, js_event, event);
@@ -150,8 +156,8 @@ void V8AbstractEventListener::InvokeEventHandler(
 
     if (!try_catch.CanContinue()) {  // Result of TerminateExecution().
       ExecutionContext* execution_context = ToExecutionContext(context);
-      if (execution_context->IsWorkerGlobalScope())
-        ToWorkerGlobalScope(execution_context)
+      if (execution_context->IsWorkerOrWorkletGlobalScope())
+        ToWorkerOrWorkletGlobalScope(execution_context)
             ->ScriptController()
             ->ForbidExecution();
       return;
@@ -167,14 +173,30 @@ void V8AbstractEventListener::InvokeEventHandler(
   if (return_value.IsEmpty())
     return;
 
-  if (is_attribute_ && !return_value->IsNull() &&
-      !return_value->IsUndefined() && event->IsBeforeUnloadEvent()) {
-    TOSTRING_VOID(V8StringResource<>, string_return_value, return_value);
-    ToBeforeUnloadEvent(event)->setReturnValue(string_return_value);
+  // Because OnBeforeUnloadEventHandler is currently not implemented, the
+  // following special handling of BeforeUnloadEvents and events with the type
+  // beforeunload is needed in accordance with the spec at
+  // https://html.spec.whatwg.org/multipage/webappapis.html#the-event-handler-processing-algorithm
+  // TODO(rakina): remove special handling after OnBeforeUnloadEventHandler
+  // is implemented
+
+  if (!is_attribute_) {
+    return;
   }
 
-  if (is_attribute_ && ShouldPreventDefault(return_value))
+  if (event->IsBeforeUnloadEvent() &&
+      event->type() == EventTypeNames::beforeunload) {
+    if (!return_value->IsUndefined() && !return_value->IsNull()) {
+      event->preventDefault();
+      if (ToBeforeUnloadEvent(event)->returnValue().IsEmpty()) {
+        TOSTRING_VOID(V8StringResource<>, string_return_value, return_value);
+        ToBeforeUnloadEvent(event)->setReturnValue(string_return_value);
+      }
+    }
+  } else if (ShouldPreventDefault(return_value) &&
+             event->type() != EventTypeNames::beforeunload) {
     event->preventDefault();
+  }
 }
 
 bool V8AbstractEventListener::ShouldPreventDefault(
@@ -220,8 +242,8 @@ void V8AbstractEventListener::ClearListenerObject() {
   if (!HasExistingListenerObject())
     return;
   listener_.Clear();
-  if (worker_global_scope_) {
-    worker_global_scope_->DeregisterEventListener(this);
+  if (worker_or_worklet_global_scope_) {
+    worker_or_worklet_global_scope_->DeregisterEventListener(this);
   } else {
     keep_alive_.Clear();
   }
@@ -232,12 +254,13 @@ void V8AbstractEventListener::WrapperCleared(
   data.GetParameter()->ClearListenerObject();
 }
 
-DEFINE_TRACE(V8AbstractEventListener) {
-  visitor->Trace(worker_global_scope_);
+void V8AbstractEventListener::Trace(blink::Visitor* visitor) {
+  visitor->Trace(worker_or_worklet_global_scope_);
   EventListener::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(V8AbstractEventListener) {
+void V8AbstractEventListener::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(listener_.Cast<v8::Value>());
 }
 

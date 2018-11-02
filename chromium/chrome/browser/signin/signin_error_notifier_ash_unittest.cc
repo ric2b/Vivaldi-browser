@@ -9,47 +9,43 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
-#include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_error_notifier_factory_ash.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/notification.h"
 
 namespace {
 
-static const char kTestAccountId[] = "testuser@test.com";
+static const char kTestAccountId[] = "testing_profile";
 
 // Notification ID corresponding to kProfileSigninNotificationId +
 // kTestAccountId.
 static const char kNotificationId[] =
-    "chrome://settings/signin/testuser@test.com";
+    "chrome://settings/signin/testing_profile";
 
 class SigninErrorNotifierTest : public BrowserWithTestWindowTest {
  public:
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
-    profile_manager_.reset(
-        new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
-    ASSERT_TRUE(profile_manager_->SetUp());
 
     mock_user_manager_ = new chromeos::MockUserManager();
-    user_manager_enabler_.reset(
-        new chromeos::ScopedUserManagerEnabler(mock_user_manager_));
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        base::WrapUnique(mock_user_manager_));
 
     error_controller_ =
         SigninErrorControllerFactory::GetForProfile(GetProfile());
@@ -57,35 +53,23 @@ class SigninErrorNotifierTest : public BrowserWithTestWindowTest {
     notification_ui_manager_ = g_browser_process->notification_ui_manager();
   }
 
-  void TearDown() override {
-    profile_manager_.reset();
-    BrowserWithTestWindowTest::TearDown();
-  }
-
-  TestingProfile* CreateProfile() override {
-    // Create a signed-in profile.
-    TestingProfile::Builder builder;
-    builder.AddTestingFactory(SigninManagerFactory::GetInstance(),
-                              BuildFakeSigninManagerBase);
-    std::unique_ptr<TestingProfile> profile = builder.Build();
-    profile->set_profile_name(kTestAccountId);
-    return profile.release();
+  TestingProfile::TestingFactories GetTestingFactories() override {
+    return {{SigninManagerFactory::GetInstance(), BuildFakeSigninManagerBase}};
   }
 
  protected:
   void GetMessage(base::string16* message) {
-    const Notification* notification =
+    const message_center::Notification* notification =
         g_browser_process->notification_ui_manager()->FindById(
             kNotificationId, NotificationUIManager::GetProfileID(GetProfile()));
     ASSERT_FALSE(notification == NULL);
     *message = notification->message();
   }
 
-  std::unique_ptr<TestingProfileManager> profile_manager_;
   SigninErrorController* error_controller_;
   NotificationUIManager* notification_ui_manager_;
   chromeos::MockUserManager* mock_user_manager_;  // Not owned.
-  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 };
 
 TEST_F(SigninErrorNotifierTest, NoErrorAuthStatusProviders) {
@@ -196,8 +180,9 @@ TEST_F(SigninErrorNotifierTest, AuthStatusEnumerateAllErrors) {
     FakeAuthStatusProvider provider(error_controller_);
     provider.SetAuthError(kTestAccountId,
                           GoogleServiceAuthError(table[i].error_state));
-    const Notification* notification = notification_ui_manager_->FindById(
-        kNotificationId, NotificationUIManager::GetProfileID(GetProfile()));
+    const message_center::Notification* notification =
+        notification_ui_manager_->FindById(
+            kNotificationId, NotificationUIManager::GetProfileID(GetProfile()));
     ASSERT_EQ(table[i].is_error, notification != NULL);
     if (table[i].is_error) {
       EXPECT_FALSE(notification->title().empty());

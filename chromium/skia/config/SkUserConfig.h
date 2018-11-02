@@ -200,33 +200,46 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 // Remove this after we fixed all the issues related to the new SDF algorithm
 // (https://codereview.chromium.org/1643143002)
-#ifndef    SK_USE_LEGACY_DISTANCE_FIELDS
-#   define SK_USE_LEGACY_DISTANCE_FIELDS
+#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
+#define SK_USE_LEGACY_DISTANCE_FIELDS
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_STREAM_API
-#define SK_SUPPORT_LEGACY_STREAM_API
+#ifndef SK_SUPPORT_LEGACY_BLUR_IMAGE
+#define SK_SUPPORT_LEGACY_BLUR_IMAGE
 #endif
 
-#ifndef SK_DISABLE_DEFERRED_PROXIES
-#define SK_DISABLE_DEFERRED_PROXIES
+// Skia is enabling this feature soon. Chrome probably does
+// not want it for M64
+#ifndef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
+#define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
+#endif
+
+// Skia is enabling this feature soon. Chrome probably does
+// not want it for M64
+#ifndef SK_DISABLE_RENDER_TARGET_SORTING
+#define SK_DISABLE_RENDER_TARGET_SORTING
 #endif
 
 #ifndef SK_SUPPORT_LEGACY_DELTA_AA
 #define SK_SUPPORT_LEGACY_DELTA_AA
 #endif
 
+#ifndef SK_USE_LEGACY_INTERP_BLUR
+#define SK_USE_LEGACY_INTERP_BLUR
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_SMALLRECT_AA
+#define SK_SUPPORT_LEGACY_SMALLRECT_AA
+#endif
+
 #ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
 #define SK_SUPPORT_LEGACY_TILED_BITMAPS
 #endif
 
-#ifndef SK_JUMPER_LEGACY_X86_8BIT
-#define SK_JUMPER_LEGACY_X86_8BIT
+#ifndef SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
+#define SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
 #endif
 
-#ifndef SK_LEGACY_SUPPORT_INTEGER_SMALL_RADII
-#define SK_LEGACY_SUPPORT_INTEGER_SMALL_RADII
-#endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 
@@ -234,10 +247,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
  *  or fall back to lazy runtime initialization. Chrome always wants the latter.
  */
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
-
-/* This flag forces Skia not to use typographic metrics with GDI.
- */
-#define SK_GDI_ALWAYS_USE_TEXTMETRICS_FOR_FONT_METRICS
 
 /* Restrict formats for Skia font matching to SFNT type fonts. */
 #define SK_FONT_CONFIG_INTERFACE_ONLY_ALLOW_SFNT_FONTS

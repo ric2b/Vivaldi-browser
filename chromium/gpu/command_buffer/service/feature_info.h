@@ -33,14 +33,13 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   struct FeatureFlags {
     FeatureFlags();
 
+    // Use glBlitFramebuffer() and glRenderbufferStorageMultisample() with
+    // GL_EXT_framebuffer_multisample-style semantics (as opposed to
+    // GL_EXT_multisampled_render_to_texture semantics).
     bool chromium_framebuffer_multisample = false;
     bool chromium_sync_query = false;
-    // Use glBlitFramebuffer() and glRenderbufferStorageMultisample() with
-    // GL_EXT_framebuffer_multisample-style semantics, since they are exposed
-    // as core GL functions on this implementation.
-    bool use_core_framebuffer_multisample = false;
     bool multisampled_render_to_texture = false;
-    // Use the IMG GLenum values and functions rather than EXT.
+    // Use the IMG GLenum values rather than EXT.
     bool use_img_for_multisampled_render_to_texture = false;
     bool chromium_screen_space_antialiasing = false;
     bool use_chromium_screen_space_antialiasing_via_shaders = false;
@@ -110,7 +109,6 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_srgb = false;
     bool chromium_copy_texture = false;
     bool chromium_copy_compressed_texture = false;
-    bool angle_framebuffer_multisample = false;
     bool ext_disjoint_timer_query = false;
     bool angle_client_arrays = false;
     bool angle_request_extension = false;
@@ -119,6 +117,11 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool khr_robustness = false;
     bool ext_robustness = false;
     bool ext_pixel_buffer_object = false;
+    bool oes_rgb8_rgba8 = false;
+    bool angle_robust_resource_initialization = false;
+    bool nv_fence = false;
+    bool chromium_texture_storage_image = false;
+    bool ext_window_rectangles = false;
   };
 
   FeatureInfo();
@@ -128,15 +131,15 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
       const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds);
 
   // Initializes the feature information. Needs a current GL context.
-  bool Initialize(ContextType context_type,
+  void Initialize(ContextType context_type,
                   const DisallowedFeatures& disallowed_features);
 
   // Helper that defaults to no disallowed features and a GLES2 context.
-  bool InitializeForTesting();
+  void InitializeForTesting();
   // Helper that defaults to no disallowed Features.
-  bool InitializeForTesting(ContextType context_type);
+  void InitializeForTesting(ContextType context_type);
   // Helper that defaults to a GLES2 context.
-  bool InitializeForTesting(const DisallowedFeatures& disallowed_features);
+  void InitializeForTesting(const DisallowedFeatures& disallowed_features);
 
   const Validators* validators() const {
     return &validators_;
@@ -144,9 +147,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   ContextType context_type() const { return context_type_; }
 
-  const std::string& extensions() const {
-    return extensions_;
-  }
+  const gl::ExtensionSet& extensions() const { return extensions_; }
 
   const FeatureFlags& feature_flags() const {
     return feature_flags_;
@@ -183,8 +184,16 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     return ext_color_buffer_float_available_;
   }
 
+  bool ext_color_buffer_half_float_available() const {
+    return ext_color_buffer_half_float_available_;
+  }
+
   bool oes_texture_float_linear_available() const {
     return oes_texture_float_linear_available_;
+  }
+
+  bool oes_texture_half_float_linear_available() const {
+    return oes_texture_half_float_linear_available_;
   }
 
  private:
@@ -193,7 +202,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   ~FeatureInfo();
 
-  void AddExtensionString(const char* s);
+  void AddExtensionString(const base::StringPiece& s);
   void InitializeBasicState(const base::CommandLine* command_line);
   void InitializeFeatures();
   void InitializeFloatAndHalfFloatFeatures(const gl::ExtensionSet& extensions);
@@ -202,10 +211,10 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   DisallowedFeatures disallowed_features_;
 
-  ContextType context_type_;
+  ContextType context_type_ = CONTEXT_TYPE_OPENGLES2;
 
-  // The extensions string returned by glGetString(GL_EXTENSIONS);
-  std::string extensions_;
+  // The set of extensions returned by glGetString(GL_EXTENSIONS);
+  gl::ExtensionSet extensions_;
 
   // Flags for some features
   FeatureFlags feature_flags_;
@@ -213,9 +222,10 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   // Flags for Workarounds.
   const GpuDriverBugWorkarounds workarounds_;
 
-  bool ext_color_buffer_float_available_;
-  bool oes_texture_float_linear_available_;
-  bool oes_texture_half_float_linear_available_;
+  bool ext_color_buffer_float_available_ = false;
+  bool ext_color_buffer_half_float_available_ = false;
+  bool oes_texture_float_linear_available_ = false;
+  bool oes_texture_half_float_linear_available_ = false;
 
   bool disable_shader_translator_;
   std::unique_ptr<gl::GLVersionInfo> gl_version_info_;

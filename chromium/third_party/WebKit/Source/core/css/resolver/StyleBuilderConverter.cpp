@@ -30,7 +30,6 @@
 
 #include "build/build_config.h"
 #include "core/css/BasicShapeFunctions.h"
-#include "core/css/CSSBasicShapeValues.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSContentDistributionValue.h"
 #include "core/css/CSSCustomIdentValue.h"
@@ -38,29 +37,20 @@
 #include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSFontStyleRangeValue.h"
 #include "core/css/CSSFontVariationValue.h"
-#include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSGridAutoRepeatValue.h"
-#include "core/css/CSSGridLineNamesValue.h"
-#include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSQuadValue.h"
 #include "core/css/CSSReflectValue.h"
 #include "core/css/CSSShadowValue.h"
-#include "core/css/CSSStringValue.h"
 #include "core/css/CSSURIValue.h"
-#include "core/css/CSSValuePair.h"
 #include "core/css/resolver/FilterOperationResolver.h"
+#include "core/css/resolver/StyleResolverState.h"
 #include "core/css/resolver/TransformBuilder.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
-#include "core/style/ClipPathOperation.h"
-#include "core/style/TextSizeAdjust.h"
+#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGURIReference.h"
-#include "platform/fonts/FontCache.h"
-#include "platform/transforms/RotateTransformOperation.h"
-#include "platform/transforms/ScaleTransformOperation.h"
-#include "platform/transforms/TranslateTransformOperation.h"
 
 namespace blink {
 
@@ -87,16 +77,16 @@ static GridLength ConvertGridTrackBreadth(const StyleResolverState& state,
 
 }  // namespace
 
-RefPtr<StyleReflection> StyleBuilderConverter::ConvertBoxReflect(
+scoped_refptr<StyleReflection> StyleBuilderConverter::ConvertBoxReflect(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsIdentifierValue()) {
     DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueNone);
-    return ComputedStyle::InitialBoxReflect();
+    return ComputedStyleInitialValues::InitialBoxReflect();
   }
 
   const CSSReflectValue& reflect_value = ToCSSReflectValue(value);
-  RefPtr<StyleReflection> reflection = StyleReflection::Create();
+  scoped_refptr<StyleReflection> reflection = StyleReflection::Create();
   reflection->SetDirection(
       reflect_value.Direction()->ConvertTo<CSSReflectionDirection>());
   if (reflect_value.Offset())
@@ -138,7 +128,7 @@ LengthBox StyleBuilderConverter::ConvertClip(StyleResolverState& state,
                    ConvertLengthOrAuto(state, *rect.Left()));
 }
 
-RefPtr<ClipPathOperation> StyleBuilderConverter::ConvertClipPath(
+scoped_refptr<ClipPathOperation> StyleBuilderConverter::ConvertClipPath(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsBasicShapeValue())
@@ -233,9 +223,9 @@ FontDescription::FamilyDescription StyleBuilderConverterBase::ConvertFontFamily(
     if (!curr_family) {
       curr_family = &desc.family;
     } else {
-      RefPtr<SharedFontFamily> new_family = SharedFontFamily::Create();
+      scoped_refptr<SharedFontFamily> new_family = SharedFontFamily::Create();
       curr_family->AppendFamily(new_family);
-      curr_family = new_family.Get();
+      curr_family = new_family.get();
     }
 
     curr_family->SetFamily(family_name);
@@ -256,15 +246,15 @@ FontDescription::FamilyDescription StyleBuilderConverter::ConvertFontFamily(
       &state.GetDocument());
 }
 
-RefPtr<FontFeatureSettings> StyleBuilderConverter::ConvertFontFeatureSettings(
-    StyleResolverState& state,
-    const CSSValue& value) {
+scoped_refptr<FontFeatureSettings>
+StyleBuilderConverter::ConvertFontFeatureSettings(StyleResolverState& state,
+                                                  const CSSValue& value) {
   if (value.IsIdentifierValue() &&
       ToCSSIdentifierValue(value).GetValueID() == CSSValueNormal)
     return FontBuilder::InitialFeatureSettings();
 
   const CSSValueList& list = ToCSSValueList(value);
-  RefPtr<FontFeatureSettings> settings = FontFeatureSettings::Create();
+  scoped_refptr<FontFeatureSettings> settings = FontFeatureSettings::Create();
   int len = list.length();
   for (int i = 0; i < len; ++i) {
     const CSSFontFeatureValue& feature = ToCSSFontFeatureValue(list.Item(i));
@@ -273,7 +263,7 @@ RefPtr<FontFeatureSettings> StyleBuilderConverter::ConvertFontFeatureSettings(
   return settings;
 }
 
-RefPtr<FontVariationSettings>
+scoped_refptr<FontVariationSettings>
 StyleBuilderConverter::ConvertFontVariationSettings(StyleResolverState& state,
                                                     const CSSValue& value) {
   if (value.IsIdentifierValue() &&
@@ -281,7 +271,8 @@ StyleBuilderConverter::ConvertFontVariationSettings(StyleResolverState& state,
     return FontBuilder::InitialVariationSettings();
 
   const CSSValueList& list = ToCSSValueList(value);
-  RefPtr<FontVariationSettings> settings = FontVariationSettings::Create();
+  scoped_refptr<FontVariationSettings> settings =
+      FontVariationSettings::Create();
   int len = list.length();
   for (int i = 0; i < len; ++i) {
     const CSSFontVariationValue& feature =
@@ -311,9 +302,10 @@ FontDescription::Size StyleBuilderConverterBase::ConvertFontSize(
     FontDescription::Size parent_size) {
   if (value.IsIdentifierValue()) {
     CSSValueID value_id = ToCSSIdentifierValue(value).GetValueID();
-    if (FontSize::IsValidValueID(value_id))
-      return FontDescription::Size(FontSize::KeywordSize(value_id), 0.0f,
-                                   false);
+    if (FontSizeFunctions::IsValidValueID(value_id)) {
+      return FontDescription::Size(FontSizeFunctions::KeywordSize(value_id),
+                                   0.0f, false);
+    }
     if (value_id == CSSValueSmaller)
       return FontDescription::SmallerSize(parent_size);
     if (value_id == CSSValueLarger)
@@ -638,10 +630,57 @@ FontVariantNumeric StyleBuilderConverter::ConvertFontVariantNumeric(
   return variant_numeric;
 }
 
+FontVariantEastAsian StyleBuilderConverter::ConvertFontVariantEastAsian(
+    StyleResolverState&,
+    const CSSValue& value) {
+  if (value.IsIdentifierValue()) {
+    DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueNormal);
+    return FontVariantEastAsian();
+  }
+
+  FontVariantEastAsian variant_east_asian;
+  for (const CSSValue* feature : ToCSSValueList(value)) {
+    switch (ToCSSIdentifierValue(feature)->GetValueID()) {
+      case CSSValueJis78:
+        variant_east_asian.SetForm(FontVariantEastAsian::kJis78);
+        break;
+      case CSSValueJis83:
+        variant_east_asian.SetForm(FontVariantEastAsian::kJis83);
+        break;
+      case CSSValueJis90:
+        variant_east_asian.SetForm(FontVariantEastAsian::kJis90);
+        break;
+      case CSSValueJis04:
+        variant_east_asian.SetForm(FontVariantEastAsian::kJis04);
+        break;
+      case CSSValueSimplified:
+        variant_east_asian.SetForm(FontVariantEastAsian::kSimplified);
+        break;
+      case CSSValueTraditional:
+        variant_east_asian.SetForm(FontVariantEastAsian::kTraditional);
+        break;
+      case CSSValueFullWidth:
+        variant_east_asian.SetWidth(FontVariantEastAsian::kFullWidth);
+        break;
+      case CSSValueProportionalWidth:
+        variant_east_asian.SetWidth(FontVariantEastAsian::kProportionalWidth);
+        break;
+      case CSSValueRuby:
+        variant_east_asian.SetRuby(true);
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
+  }
+  return variant_east_asian;
+}
+
 StyleSelfAlignmentData StyleBuilderConverter::ConvertSelfOrDefaultAlignmentData(
     StyleResolverState&,
     const CSSValue& value) {
-  StyleSelfAlignmentData alignment_data = ComputedStyle::InitialSelfAlignment();
+  StyleSelfAlignmentData alignment_data =
+      ComputedStyleInitialValues::InitialAlignSelf();
   if (value.IsValuePair()) {
     const CSSValuePair& pair = ToCSSValuePair(value);
     if (ToCSSIdentifierValue(pair.First()).GetValueID() == CSSValueLegacy) {
@@ -671,27 +710,7 @@ StyleContentAlignmentData StyleBuilderConverter::ConvertContentAlignmentData(
     StyleResolverState&,
     const CSSValue& value) {
   StyleContentAlignmentData alignment_data =
-      ComputedStyle::InitialContentAlignment();
-  if (!RuntimeEnabledFeatures::CSSGridLayoutEnabled()) {
-    const CSSIdentifierValue& identifier_value = ToCSSIdentifierValue(value);
-    switch (identifier_value.GetValueID()) {
-      case CSSValueStretch:
-      case CSSValueSpaceBetween:
-      case CSSValueSpaceAround:
-        alignment_data.SetDistribution(
-            identifier_value.ConvertTo<ContentDistributionType>());
-        break;
-      case CSSValueFlexStart:
-      case CSSValueFlexEnd:
-      case CSSValueCenter:
-        alignment_data.SetPosition(
-            identifier_value.ConvertTo<ContentPosition>());
-        break;
-      default:
-        NOTREACHED();
-    }
-    return alignment_data;
-  }
+      ComputedStyleInitialValues::InitialContentAlignment();
   const CSSContentDistributionValue& content_value =
       ToCSSContentDistributionValue(value);
   if (content_value.Distribution()->GetValueID() != CSSValueInvalid)
@@ -731,7 +750,7 @@ GridAutoFlow StyleBuilderConverter::ConvertGridAutoFlow(StyleResolverState&,
       return kAutoFlowRowDense;
     default:
       NOTREACHED();
-      return ComputedStyle::InitialGridAutoFlow();
+      return ComputedStyleInitialValues::InitialGridAutoFlow();
   }
 }
 
@@ -1076,7 +1095,7 @@ Length StyleBuilderConverter::ConvertLineHeight(StyleResolverState& state,
   }
 
   DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueNormal);
-  return ComputedStyle::InitialLineHeight();
+  return ComputedStyleInitialValues::InitialLineHeight();
 }
 
 float StyleBuilderConverter::ConvertNumberOrPercentage(
@@ -1148,7 +1167,7 @@ float StyleBuilderConverter::ConvertPerspective(StyleResolverState& state,
                                                 const CSSValue& value) {
   if (value.IsIdentifierValue() &&
       ToCSSIdentifierValue(value).GetValueID() == CSSValueNone)
-    return ComputedStyle::InitialPerspective();
+    return ComputedStyleInitialValues::InitialPerspective();
   return ConvertPerspectiveLength(state, ToCSSPrimitiveValue(value));
 }
 
@@ -1185,11 +1204,12 @@ Length StyleBuilderConverter::ConvertQuirkyLength(StyleResolverState& state,
   return length;
 }
 
-RefPtr<QuotesData> StyleBuilderConverter::ConvertQuotes(StyleResolverState&,
-                                                        const CSSValue& value) {
+scoped_refptr<QuotesData> StyleBuilderConverter::ConvertQuotes(
+    StyleResolverState&,
+    const CSSValue& value) {
   if (value.IsValueList()) {
     const CSSValueList& list = ToCSSValueList(value);
-    RefPtr<QuotesData> quotes = QuotesData::Create();
+    scoped_refptr<QuotesData> quotes = QuotesData::Create();
     for (size_t i = 0; i < list.length(); i += 2) {
       String start_quote = ToCSSStringValue(list.Item(i)).Value();
       String end_quote = ToCSSStringValue(list.Item(i + 1)).Value();
@@ -1257,12 +1277,12 @@ ShadowData StyleBuilderConverter::ConvertShadow(
   return ShadowData(FloatPoint(x, y), blur, spread, shadow_style, color);
 }
 
-RefPtr<ShadowList> StyleBuilderConverter::ConvertShadowList(
+scoped_refptr<ShadowList> StyleBuilderConverter::ConvertShadowList(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsIdentifierValue()) {
     DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueNone);
-    return RefPtr<ShadowList>();
+    return scoped_refptr<ShadowList>();
   }
 
   ShadowDataVector shadows;
@@ -1286,7 +1306,7 @@ ShapeValue* StyleBuilderConverter::ConvertShapeValue(StyleResolverState& state,
     return ShapeValue::CreateImageValue(
         state.GetStyleImage(CSSPropertyShapeOutside, value));
 
-  RefPtr<BasicShape> shape;
+  scoped_refptr<BasicShape> shape;
   CSSBoxType css_box = kBoxMissing;
   const CSSValueList& value_list = ToCSSValueList(value);
   for (unsigned i = 0; i < value_list.length(); ++i) {
@@ -1314,7 +1334,7 @@ float StyleBuilderConverter::ConvertSpacing(StyleResolverState& state,
       state.CssToLengthConversionData());
 }
 
-RefPtr<SVGDashArray> StyleBuilderConverter::ConvertStrokeDasharray(
+scoped_refptr<SVGDashArray> StyleBuilderConverter::ConvertStrokeDasharray(
     StyleResolverState& state,
     const CSSValue& value) {
   if (!value.IsValueList())
@@ -1322,7 +1342,7 @@ RefPtr<SVGDashArray> StyleBuilderConverter::ConvertStrokeDasharray(
 
   const CSSValueList& dashes = ToCSSValueList(value);
 
-  RefPtr<SVGDashArray> array = SVGDashArray::Create();
+  scoped_refptr<SVGDashArray> array = SVGDashArray::Create();
   size_t length = dashes.length();
   for (size_t i = 0; i < length; ++i) {
     array->push_back(ConvertLength(state, ToCSSPrimitiveValue(dashes.Item(i))));
@@ -1423,7 +1443,7 @@ TransformOrigin StyleBuilderConverter::ConvertTransformOrigin(
 
 ScrollSnapType StyleBuilderConverter::ConvertSnapType(StyleResolverState&,
                                                       const CSSValue& value) {
-  ScrollSnapType snapType = ComputedStyle::InitialScrollSnapType();
+  ScrollSnapType snapType = ComputedStyleInitialValues::InitialScrollSnapType();
   if (value.IsValuePair()) {
     const CSSValuePair& pair = ToCSSValuePair(value);
     snapType.is_none = false;
@@ -1445,7 +1465,8 @@ ScrollSnapType StyleBuilderConverter::ConvertSnapType(StyleResolverState&,
 
 ScrollSnapAlign StyleBuilderConverter::ConvertSnapAlign(StyleResolverState&,
                                                         const CSSValue& value) {
-  ScrollSnapAlign snapAlign = ComputedStyle::InitialScrollSnapAlign();
+  ScrollSnapAlign snapAlign =
+      ComputedStyleInitialValues::InitialScrollSnapAlign();
   if (value.IsValuePair()) {
     const CSSValuePair& pair = ToCSSValuePair(value);
     snapAlign.alignmentX =
@@ -1460,9 +1481,9 @@ ScrollSnapAlign StyleBuilderConverter::ConvertSnapAlign(StyleResolverState&,
   return snapAlign;
 }
 
-RefPtr<TranslateTransformOperation> StyleBuilderConverter::ConvertTranslate(
-    StyleResolverState& state,
-    const CSSValue& value) {
+scoped_refptr<TranslateTransformOperation>
+StyleBuilderConverter::ConvertTranslate(StyleResolverState& state,
+                                        const CSSValue& value) {
   if (value.IsIdentifierValue()) {
     DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueNone);
     return nullptr;
@@ -1503,7 +1524,7 @@ Rotation StyleBuilderConverter::ConvertRotation(const CSSValue& value) {
   return Rotation(FloatPoint3D(x, y, z), angle);
 }
 
-RefPtr<RotateTransformOperation> StyleBuilderConverter::ConvertRotate(
+scoped_refptr<RotateTransformOperation> StyleBuilderConverter::ConvertRotate(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsIdentifierValue()) {
@@ -1515,7 +1536,7 @@ RefPtr<RotateTransformOperation> StyleBuilderConverter::ConvertRotate(
                                           TransformOperation::kRotate3D);
 }
 
-RefPtr<ScaleTransformOperation> StyleBuilderConverter::ConvertScale(
+scoped_refptr<ScaleTransformOperation> StyleBuilderConverter::ConvertScale(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsIdentifierValue()) {
@@ -1546,7 +1567,7 @@ RespectImageOrientationEnum StyleBuilderConverter::ConvertImageOrientation(
              : kDoNotRespectImageOrientation;
 }
 
-RefPtr<StylePath> StyleBuilderConverter::ConvertPathOrNone(
+scoped_refptr<StylePath> StyleBuilderConverter::ConvertPathOrNone(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsPathValue())
@@ -1555,7 +1576,7 @@ RefPtr<StylePath> StyleBuilderConverter::ConvertPathOrNone(
   return nullptr;
 }
 
-RefPtr<BasicShape> StyleBuilderConverter::ConvertOffsetPath(
+scoped_refptr<BasicShape> StyleBuilderConverter::ConvertOffsetPath(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsRayValue())
@@ -1613,6 +1634,11 @@ const CSSValue& StyleBuilderConverter::ConvertRegisteredPropertyValue(
     const CSSValue& value) {
   return ComputeRegisteredPropertyValue(state.CssToLengthConversionData(),
                                         value);
+}
+
+const CSSToLengthConversionData&
+StyleBuilderConverter::CssToLengthConversionData(StyleResolverState& state) {
+  return state.CssToLengthConversionData();
 }
 
 }  // namespace blink

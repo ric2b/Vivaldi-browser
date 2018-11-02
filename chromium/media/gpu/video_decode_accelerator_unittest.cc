@@ -21,7 +21,6 @@
 #include <sys/types.h>
 
 #include <algorithm>
-#include <deque>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -62,6 +61,7 @@
 #include "media/base/test_data_util.h"
 #include "media/gpu/fake_video_decode_accelerator.h"
 #include "media/gpu/features.h"
+#include "media/gpu/format_utils.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/rendering_helper.h"
 #include "media/gpu/video_accelerator_unittest_helpers.h"
@@ -117,9 +117,6 @@ const base::FilePath::CharType* g_output_log = NULL;
 
 // The value is set by the switch "--rendering_fps".
 double g_rendering_fps = 60;
-
-// The value is set by the switch "--rendering_warm_up".
-int g_rendering_warm_up = 0;
 
 // The value is set by the switch "--num_play_throughs". The video will play
 // the specified number of times. In different test cases, we have different
@@ -277,14 +274,6 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
     // This also needs to be done in the test environment since this shouldn't
     // be initialized multiple times for the same Ozone platform.
     gpu_helper_->Initialize(base::ThreadTaskRunnerHandle::Get());
-    // Flush the message loop for the current thread (UI) as the rendering
-    // thread will make calls to it during initialization.
-    {
-        base::MessageLoop::ScopedNestableTaskAllower nest_loop(
-            base::MessageLoop::current());
-        base::RunLoop flush_ui_loop;
-        flush_ui_loop.RunUntilIdle();
-    }
 #endif
   }
 
@@ -349,25 +338,8 @@ TextureRef::~TextureRef() {
 scoped_refptr<TextureRef> TextureRef::Create(
     uint32_t texture_id,
     const base::Closure& no_longer_needed_cb) {
-  return make_scoped_refptr(new TextureRef(texture_id, no_longer_needed_cb));
+  return base::WrapRefCounted(new TextureRef(texture_id, no_longer_needed_cb));
 }
-
-#if defined(OS_CHROMEOS)
-gfx::BufferFormat VideoPixelFormatToGfxBufferFormat(
-    VideoPixelFormat pixel_format) {
-  switch (pixel_format) {
-    case VideoPixelFormat::PIXEL_FORMAT_ARGB:
-      return gfx::BufferFormat::BGRA_8888;
-    case VideoPixelFormat::PIXEL_FORMAT_XRGB:
-      return gfx::BufferFormat::BGRX_8888;
-    case VideoPixelFormat::PIXEL_FORMAT_NV12:
-      return gfx::BufferFormat::YUV_420_BIPLANAR;
-    default:
-      LOG_ASSERT(false) << "Unknown VideoPixelFormat";
-      return gfx::BufferFormat::BGRX_8888;
-  }
-}
-#endif
 
 // static
 scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
@@ -757,7 +729,8 @@ void GLRenderingVDAClient::PictureReady(const Picture& picture) {
     return;
 
   gfx::Rect visible_rect = picture.visible_rect();
-  EXPECT_TRUE(visible_rect.IsEmpty() || visible_rect == gfx::Rect(frame_size_));
+  if (!visible_rect.IsEmpty())
+    EXPECT_EQ(gfx::Rect(frame_size_), visible_rect);
 
   base::TimeTicks now = base::TimeTicks::Now();
 
@@ -1213,8 +1186,6 @@ void VideoDecodeAcceleratorTest::TearDown() {
       FROM_HERE, base::Bind(&RenderingHelper::UnInitialize,
                             base::Unretained(&rendering_helper_), &done));
   done.Wait();
-
-  rendering_helper_.TearDown();
 }
 
 void VideoDecodeAcceleratorTest::ParseAndReadTestVideoData(
@@ -1286,8 +1257,6 @@ void VideoDecodeAcceleratorTest::UpdateTestVideoFileParams(
 
 void VideoDecodeAcceleratorTest::InitializeRenderingHelper(
     const RenderingHelperParams& helper_params) {
-  rendering_helper_.Setup();
-
   base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_env->GetRenderingTaskRunner()->PostTask(
@@ -1400,7 +1369,6 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
 
   RenderingHelperParams helper_params;
   helper_params.rendering_fps = g_rendering_fps;
-  helper_params.warm_up_iterations = g_rendering_warm_up;
   helper_params.render_as_thumbnails = render_as_thumbnails;
   if (render_as_thumbnails) {
     // Only one decoder is supported with thumbnail rendering
@@ -1409,6 +1377,7 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
     helper_params.thumbnail_size = kThumbnailSize;
   }
 
+  helper_params.num_windows = num_concurrent_decoders;
   // First kick off all the decoders.
   for (size_t index = 0; index < num_concurrent_decoders; ++index) {
     TestVideoFile* video_file =
@@ -1433,10 +1402,6 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
             render_as_thumbnails);
 
     clients_[index] = std::move(client);
-    helper_params.window_sizes.push_back(
-        render_as_thumbnails
-            ? kThumbnailsPageSize
-            : gfx::Size(video_file->width, video_file->height));
   }
 
   InitializeRenderingHelper(helper_params);
@@ -1780,8 +1745,7 @@ TEST_F(VideoDecodeAcceleratorTest, TestDecodeTimeMedian) {
       test_video_files_[0]->profile, g_fake_decoder, true,
       std::numeric_limits<int>::max(), kWebRtcDecodeCallsPerSecond, false));
   RenderingHelperParams helper_params;
-  helper_params.window_sizes.push_back(
-      gfx::Size(test_video_files_[0]->width, test_video_files_[0]->height));
+  helper_params.num_windows = 1;
   InitializeRenderingHelper(helper_params);
   CreateAndStartDecoder(clients_[0].get(), notes_[0].get());
   ClientState last_state = WaitUntilDecodeFinish(notes_[0].get());
@@ -1809,8 +1773,7 @@ TEST_F(VideoDecodeAcceleratorTest, NoCrash) {
       test_video_files_[0]->profile, g_fake_decoder, true,
       std::numeric_limits<int>::max(), 0, false));
   RenderingHelperParams helper_params;
-  helper_params.window_sizes.push_back(
-      gfx::Size(test_video_files_[0]->width, test_video_files_[0]->height));
+  helper_params.num_windows = 1;
   InitializeRenderingHelper(helper_params);
   CreateAndStartDecoder(clients_[0].get(), notes_[0].get());
   WaitUntilDecodeFinish(notes_[0].get());
@@ -1844,7 +1807,9 @@ class VDATestSuite : public base::TestSuite {
                 new media::VideoDecodeAcceleratorTestEnvironment()));
 
 #if defined(OS_CHROMEOS)
-    ui::OzonePlatform::InitializeForUI();
+    ui::OzonePlatform::InitParams params;
+    params.single_process = false;
+    ui::OzonePlatform::InitializeForUI(params);
 #endif
 
 #if BUILDFLAG(USE_VAAPI)
@@ -1890,8 +1855,7 @@ int main(int argc, char** argv) {
       continue;
     }
     if (it->first == "rendering_warm_up") {
-      std::string input(it->second.begin(), it->second.end());
-      LOG_ASSERT(base::StringToInt(input, &media::g_rendering_warm_up));
+      // TODO(owenlin): Remove this after autotest stop using it.
       continue;
     }
     // TODO(owenlin): Remove this flag once it is not used in autotest.

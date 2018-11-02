@@ -1,3 +1,7 @@
+config("prefs_include_dirs") {
+  include_dirs=["$root_gen_dir/vivaldi"]
+}
+
 action("prefs_files_generator") {
   prefs_definitions_json = "//vivaldi/vivapp/src/prefs_definitions.json"
 
@@ -24,12 +28,15 @@ action("prefs_files_generator") {
     "--prefs-enums-h=" + rebase_path(vivaldi_gen_pref_enums_h, root_build_dir),
     "--root="+rebase_path(root_gen_dir, root_build_dir)
   ]
+
+  all_dependent_configs = [":prefs_include_dirs"]
 }
 
 static_library("prefs") {
   sources = [
     "vivaldi_browser_prefs.h",
     "vivaldi_browser_prefs.cc",
+    "vivaldi_browser_prefs_android.cc",
     "vivaldi_browser_prefs_linux.cc",
     "vivaldi_browser_prefs_mac.mm",
     "vivaldi_browser_prefs_win.cc",
@@ -58,6 +65,7 @@ static_library("browser_prefs") {
     "vivaldi_tab_zoom_pref.h",
   ]
   deps = [
+    ":prefs_files_generator",
     "//content/public/browser",
     "//skia",
   ]

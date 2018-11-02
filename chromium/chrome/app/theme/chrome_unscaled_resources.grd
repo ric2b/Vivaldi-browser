@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- This grd file contains images that are not pre-scaled for device
      scale factors. The image returned by
-     |base::ResourceBundle::GetImageNamed| only contains 100P, and
+     ui::ResourceBundle::GetImageNamed() only contains 100P, and
      it is the caller's responsibility to do the right thing when the
      display is not at 100P device scale factor.
   -->
@@ -18,6 +18,10 @@
         <include name="IDR_PRODUCT_LOGO_64" file="google_chrome/product_logo_64.png" type="BINDATA" />
         <include name="IDR_PRODUCT_LOGO_128" file="google_chrome/product_logo_128.png" type="BINDATA" />
         <include name="IDR_PRODUCT_LOGO_256" file="google_chrome/product_logo_256.png" type="BINDATA" />
+        <if expr="is_linux">
+          <include name="IDR_PRODUCT_LOGO_128_BETA" file="google_chrome/product_logo_128_beta.png" type="BINDATA" />
+          <include name="IDR_PRODUCT_LOGO_128_DEV" file="google_chrome/product_logo_128_dev.png" type="BINDATA" />
+        </if>
         <if expr="is_win">
           <!-- External company logo, displayed in the Chrome Cleanup WebUI if
                cleanup functionality is powered by an external company. -->

@@ -13,16 +13,14 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/safe_search_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
-#include "chrome/browser/supervised_user/supervised_user_bookmarks_handler.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/prefs/pref_value_map.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/notification_source.h"
 
 namespace {
@@ -33,34 +31,40 @@ struct SupervisedUserSettingsPrefMappingEntry {
 };
 
 SupervisedUserSettingsPrefMappingEntry kSupervisedUserSettingsPrefMapping[] = {
-  {
-    supervised_users::kApprovedExtensions,
-    prefs::kSupervisedUserApprovedExtensions,
-  },
-  {
-    supervised_users::kContentPackDefaultFilteringBehavior,
-    prefs::kDefaultSupervisedUserFilteringBehavior,
-  },
-  {
-    supervised_users::kContentPackManualBehaviorHosts,
-    prefs::kSupervisedUserManualHosts,
-  },
-  {
-    supervised_users::kContentPackManualBehaviorURLs,
-    prefs::kSupervisedUserManualURLs,
-  },
-  {
-    supervised_users::kForceSafeSearch, prefs::kForceGoogleSafeSearch,
-  },
-  {
-    supervised_users::kSafeSitesEnabled, prefs::kSupervisedUserSafeSites,
-  },
-  {
-    supervised_users::kSigninAllowed, prefs::kSigninAllowed,
-  },
-  {
-    supervised_users::kUserName, prefs::kProfileName,
-  },
+#if defined(OS_CHROMEOS)
+    {
+        supervised_users::kAccountConsistencyMirrorRequired,
+        prefs::kAccountConsistencyMirrorRequired,
+    },
+#endif
+    {
+        supervised_users::kApprovedExtensions,
+        prefs::kSupervisedUserApprovedExtensions,
+    },
+    {
+        supervised_users::kContentPackDefaultFilteringBehavior,
+        prefs::kDefaultSupervisedUserFilteringBehavior,
+    },
+    {
+        supervised_users::kContentPackManualBehaviorHosts,
+        prefs::kSupervisedUserManualHosts,
+    },
+    {
+        supervised_users::kContentPackManualBehaviorURLs,
+        prefs::kSupervisedUserManualURLs,
+    },
+    {
+        supervised_users::kForceSafeSearch, prefs::kForceGoogleSafeSearch,
+    },
+    {
+        supervised_users::kSafeSitesEnabled, prefs::kSupervisedUserSafeSites,
+    },
+    {
+        supervised_users::kSigninAllowed, prefs::kSigninAllowed,
+    },
+    {
+        supervised_users::kUserName, prefs::kProfileName,
+    },
 };
 
 }  // namespace
@@ -117,6 +121,9 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
   prefs_.reset(new PrefValueMap);
   if (settings) {
     // Set hardcoded prefs and defaults.
+#if defined(OS_CHROMEOS)
+    prefs_->SetBoolean(prefs::kAccountConsistencyMirrorRequired, false);
+#endif
     prefs_->SetInteger(prefs::kDefaultSupervisedUserFilteringBehavior,
                        SupervisedUserURLFilter::ALLOW);
     prefs_->SetBoolean(prefs::kForceGoogleSafeSearch, true);
@@ -161,14 +168,6 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
           prefs::kForceYouTubeRestrict,
           force_safe_search ? safe_search_util::YOUTUBE_RESTRICT_MODERATE
                             : safe_search_util::YOUTUBE_RESTRICT_OFF);
-    }
-
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableSupervisedUserManagedBookmarksFolder)) {
-      // Reconstruct bookmarks from split settings.
-      prefs_->SetValue(
-          bookmarks::prefs::kSupervisedBookmarks,
-          SupervisedUserBookmarksHandler::BuildBookmarksTree(*settings));
     }
   }
 

@@ -12,8 +12,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "prefs/native_settings_observer.h"
-#include "prefs/vivaldi_gen_prefs.h"
-#include "prefs/vivaldi_pref_names.h"
 
 namespace extensions {
 
@@ -82,13 +80,7 @@ VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
   // DCHECK. See VB-27642.
   ExtensionPrefs::Get(profile);
 
-  PrefService* prefs = profile_->GetPrefs();
-
-  const base::Value* old_mouse_gesture_pref =
-      prefs->GetUserPrefValue(vivaldiprefs::kOldMousegesturesEnabled);
-  if (old_mouse_gesture_pref)
-    prefs->Set(vivaldiprefs::kMouseGesturesEnabled, *old_mouse_gesture_pref);
-  prefs->ClearPref(vivaldiprefs::kOldMousegesturesEnabled);
+  ::vivaldi::MigrateOldPrefs(profile_->GetPrefs());
 
   native_settings_observer_.reset(
       ::vivaldi::NativeSettingsObserver::Create(profile));
@@ -172,33 +164,10 @@ VivaldiPrefsApiNotificationFactory::GetBrowserContextToUse(
 void VivaldiPrefsApiNotificationFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   // We need to register the old version of prefs for which the name has changed
-  // in order rto be able to migrate them
-  registry->RegisterBooleanPref(
-      vivaldiprefs::kOldMousegesturesEnabled, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  // in order to be able to migrate them
+  ::vivaldi::RegisterOldPrefs(registry);
 
   prefs_properties_ = ::vivaldi::RegisterBrowserPrefs(registry);
-}
-
-bool PrefsToggleFunction::RunAsync() {
-  std::unique_ptr<vivaldi::prefs::Toggle::Params> params(
-      vivaldi::prefs::Toggle::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  const std::string& path = params->path;
-  if (!GetPrefProperties(GetProfile(), path, &error_))
-    return false;
-
-  PrefService* prefs = GetProfile()->GetPrefs();
-  if (prefs->FindPreference(path)->GetType() != base::Value::Type::BOOLEAN) {
-    error_ = std::string("Cannot toggle a non-boolean pref: ") + path;
-    return false;
-  }
-  bool currentValue = prefs->GetBoolean(path);
-
-  prefs->SetBoolean(path, !currentValue);
-  results_ = vivaldi::prefs::Toggle::Results::Create(!currentValue);
-  SendResponse(true);
-  return true;
 }
 
 bool PrefsGetFunction::RunAsync() {
@@ -236,13 +205,16 @@ bool PrefsSetFunction::RunAsync() {
     return false;
   }
 
+  DCHECK(!base::StartsWith(path, "vivaldi.system",
+                           base::CompareCase::INSENSITIVE_ASCII));
+
   PrefService* prefs = GetProfile()->GetPrefs();
 
   if (!properties->enum_properties) {
     const PrefService::Preference* pref = prefs->FindPreference(path);
-    if (pref->GetType() != value->GetType()) {
+    if (pref->GetType() != value->type()) {
       error_ = std::string("Cannot assign a ") +
-               base::Value::GetTypeName(value->GetType()) + " value to a " +
+               base::Value::GetTypeName(value->type()) + " value to a " +
                base::Value::GetTypeName(pref->GetType()) +
                " preference: " + path;
       return false;
@@ -252,7 +224,7 @@ bool PrefsSetFunction::RunAsync() {
   } else {
     if (!value->is_string()) {
       error_ = std::string("Cannot assign a ") +
-               base::Value::GetTypeName(value->GetType()) +
+               base::Value::GetTypeName(value->type()) +
                " value to an enumerated preference: " + path;
       return false;
     }

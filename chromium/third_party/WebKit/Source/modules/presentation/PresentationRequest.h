@@ -5,12 +5,12 @@
 #ifndef PresentationRequest_h
 #define PresentationRequest_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "modules/presentation/PresentationPromiseProperty.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/weborigin/KURL.h"
@@ -54,7 +54,8 @@ class MODULES_EXPORT PresentationRequest final
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(connectionavailable);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
+
  protected:
   // EventTarget implementation.
   void AddedEventListener(const AtomicString& event_type,

@@ -24,15 +24,16 @@
 #ifndef MatchResult_h
 #define MatchResult_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/css/RuleSet.h"
 #include "core/css/SelectorChecker.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
 
-class StylePropertySet;
+class CSSPropertyValueSet;
 
 struct CORE_EXPORT MatchedProperties {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -41,9 +42,9 @@ struct CORE_EXPORT MatchedProperties {
   MatchedProperties();
   ~MatchedProperties();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
-  Member<StylePropertySet> properties;
+  Member<CSSPropertyValueSet> properties;
 
   union {
     struct {
@@ -87,18 +88,18 @@ class MatchedPropertiesRange {
 };
 
 class CORE_EXPORT MatchResult {
-  WTF_MAKE_NONCOPYABLE(MatchResult);
   STACK_ALLOCATED();
 
  public:
-  MatchResult() {}
+  MatchResult() = default;
 
-  void AddMatchedProperties(const StylePropertySet* properties,
+  void AddMatchedProperties(const CSSPropertyValueSet* properties,
                             unsigned link_match_type = CSSSelector::kMatchAll,
                             PropertyWhitelistType = kPropertyWhitelistNone);
   bool HasMatchedProperties() const { return matched_properties_.size(); }
 
   void FinishAddingUARules();
+  void FinishAddingUserRules();
   void FinishAddingAuthorRulesForTreeScope();
 
   void SetIsCacheable(bool cacheable) { is_cacheable_ = cacheable; }
@@ -109,12 +110,27 @@ class CORE_EXPORT MatchResult {
                                   matched_properties_.end());
   }
   MatchedPropertiesRange UaRules() const {
-    return MatchedPropertiesRange(matched_properties_.begin(),
-                                  matched_properties_.begin() + ua_range_end_);
+    MatchedPropertiesVector::const_iterator begin = matched_properties_.begin();
+    MatchedPropertiesVector::const_iterator end =
+        matched_properties_.begin() + ua_range_end_;
+    return MatchedPropertiesRange(begin, end);
+  }
+  MatchedPropertiesRange UserRules() const {
+    MatchedPropertiesVector::const_iterator begin =
+        matched_properties_.begin() + ua_range_end_;
+    MatchedPropertiesVector::const_iterator end =
+        matched_properties_.begin() + (user_range_ends_.IsEmpty()
+                                           ? ua_range_end_
+                                           : user_range_ends_.back());
+    return MatchedPropertiesRange(begin, end);
   }
   MatchedPropertiesRange AuthorRules() const {
-    return MatchedPropertiesRange(matched_properties_.begin() + ua_range_end_,
-                                  matched_properties_.end());
+    MatchedPropertiesVector::const_iterator begin =
+        matched_properties_.begin() + (user_range_ends_.IsEmpty()
+                                           ? ua_range_end_
+                                           : user_range_ends_.back());
+    MatchedPropertiesVector::const_iterator end = matched_properties_.end();
+    return MatchedPropertiesRange(begin, end);
   }
 
   const MatchedPropertiesVector& GetMatchedProperties() const {
@@ -122,13 +138,69 @@ class CORE_EXPORT MatchResult {
   }
 
  private:
+  friend class ImportantUserRanges;
+  friend class ImportantUserRangeIterator;
   friend class ImportantAuthorRanges;
   friend class ImportantAuthorRangeIterator;
 
   MatchedPropertiesVector matched_properties_;
+  Vector<unsigned, 16> user_range_ends_;
   Vector<unsigned, 16> author_range_ends_;
   unsigned ua_range_end_ = 0;
   bool is_cacheable_ = true;
+  DISALLOW_COPY_AND_ASSIGN(MatchResult);
+};
+
+class ImportantUserRangeIterator {
+  STACK_ALLOCATED();
+
+ public:
+  ImportantUserRangeIterator(const MatchResult& result, int end_index)
+      : result_(result), end_index_(end_index) {}
+
+  MatchedPropertiesRange operator*() const {
+    unsigned range_end = result_.user_range_ends_[end_index_];
+    unsigned range_begin = end_index_
+                               ? result_.user_range_ends_[end_index_ - 1]
+                               : result_.ua_range_end_;
+    return MatchedPropertiesRange(
+        result_.GetMatchedProperties().begin() + range_begin,
+        result_.GetMatchedProperties().begin() + range_end);
+  }
+
+  ImportantUserRangeIterator& operator++() {
+    --end_index_;
+    return *this;
+  }
+
+  bool operator==(const ImportantUserRangeIterator& other) const {
+    return end_index_ == other.end_index_ && &result_ == &other.result_;
+  }
+  bool operator!=(const ImportantUserRangeIterator& other) const {
+    return !(*this == other);
+  }
+
+ private:
+  const MatchResult& result_;
+  unsigned end_index_;
+};
+
+class ImportantUserRanges {
+  STACK_ALLOCATED();
+
+ public:
+  explicit ImportantUserRanges(const MatchResult& result) : result_(result) {}
+
+  ImportantUserRangeIterator begin() const {
+    return ImportantUserRangeIterator(result_,
+                                        result_.user_range_ends_.size() - 1);
+  }
+  ImportantUserRangeIterator end() const {
+    return ImportantUserRangeIterator(result_, -1);
+  }
+
+ private:
+  const MatchResult& result_;
 };
 
 class ImportantAuthorRangeIterator {
@@ -142,7 +214,9 @@ class ImportantAuthorRangeIterator {
     unsigned range_end = result_.author_range_ends_[end_index_];
     unsigned range_begin = end_index_
                                ? result_.author_range_ends_[end_index_ - 1]
-                               : result_.ua_range_end_;
+                               : (result_.user_range_ends_.IsEmpty()
+                                      ? result_.ua_range_end_
+                                      : result_.user_range_ends_.back());
     return MatchedPropertiesRange(
         result_.GetMatchedProperties().begin() + range_begin,
         result_.GetMatchedProperties().begin() + range_end);

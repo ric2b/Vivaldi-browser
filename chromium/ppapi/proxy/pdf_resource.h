@@ -37,7 +37,7 @@ class PPAPI_PROXY_EXPORT PDFResource
                     const unsigned short* input_term,
                     bool case_sensitive,
                     PP_PrivateFindResult** results,
-                    int* count) override;
+                    uint32_t* count) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void SetContentRestriction(int restrictions) override;
@@ -65,6 +65,7 @@ class PPAPI_PROXY_EXPORT PDFResource
                         int32_t left_height,
                         const PP_FloatPoint& right,
                         int32_t right_height) override;
+  void DidScroll() override;
 
  private:
   std::string locale_;

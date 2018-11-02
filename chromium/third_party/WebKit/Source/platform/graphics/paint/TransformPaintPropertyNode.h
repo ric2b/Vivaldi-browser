@@ -34,15 +34,15 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // space.
   static TransformPaintPropertyNode* Root();
 
-  static PassRefPtr<TransformPaintPropertyNode> Create(
-      PassRefPtr<const TransformPaintPropertyNode> parent,
+  static scoped_refptr<TransformPaintPropertyNode> Create(
+      scoped_refptr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
       bool flattens_inherited_transform = false,
       unsigned rendering_context_id = 0,
       CompositingReasons direct_compositing_reasons = kCompositingReasonNone,
       const CompositorElementId& compositor_element_id = CompositorElementId(),
-      PassRefPtr<const ScrollPaintPropertyNode> scroll = nullptr) {
+      scoped_refptr<const ScrollPaintPropertyNode> scroll = nullptr) {
     if (scroll) {
       // If there is an associated scroll node, this can only be a 2d
       // translation for scroll offset.
@@ -50,21 +50,21 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       // The scroll compositor element id should be stored on the scroll node.
       DCHECK(!compositor_element_id);
     }
-    return AdoptRef(new TransformPaintPropertyNode(
+    return base::AdoptRef(new TransformPaintPropertyNode(
         std::move(parent), matrix, origin, flattens_inherited_transform,
         rendering_context_id, direct_compositing_reasons, compositor_element_id,
         std::move(scroll)));
   }
 
   bool Update(
-      PassRefPtr<const TransformPaintPropertyNode> parent,
+      scoped_refptr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
       bool flattens_inherited_transform = false,
       unsigned rendering_context_id = 0,
       CompositingReasons direct_compositing_reasons = kCompositingReasonNone,
       CompositorElementId compositor_element_id = CompositorElementId(),
-      PassRefPtr<const ScrollPaintPropertyNode> scroll = nullptr) {
+      scoped_refptr<const ScrollPaintPropertyNode> scroll = nullptr) {
     bool parent_changed = PaintPropertyNode::Update(std::move(parent));
 
     if (scroll) {
@@ -97,7 +97,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   const FloatPoint3D& Origin() const { return origin_; }
 
   // The associated scroll node, or nullptr otherwise.
-  const ScrollPaintPropertyNode* ScrollNode() const { return scroll_.Get(); }
+  const ScrollPaintPropertyNode* ScrollNode() const { return scroll_.get(); }
 
   // If this is a scroll offset translation (i.e., has an associated scroll
   // node), returns this. Otherwise, returns the transform node that this node
@@ -131,8 +131,8 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
 #if DCHECK_IS_ON()
   // The clone function is used by FindPropertiesNeedingUpdate.h for recording
   // a transform node before it has been updated, to later detect changes.
-  PassRefPtr<TransformPaintPropertyNode> Clone() const {
-    return AdoptRef(new TransformPaintPropertyNode(
+  scoped_refptr<TransformPaintPropertyNode> Clone() const {
+    return base::AdoptRef(new TransformPaintPropertyNode(
         Parent(), matrix_, origin_, flattens_inherited_transform_,
         rendering_context_id_, direct_compositing_reasons_,
         compositor_element_id_, scroll_));
@@ -153,18 +153,18 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   String ToTreeString() const;
 #endif
 
-  String ToString() const;
+  std::unique_ptr<JSONObject> ToJSON() const;
 
  private:
   TransformPaintPropertyNode(
-      PassRefPtr<const TransformPaintPropertyNode> parent,
+      scoped_refptr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
       bool flattens_inherited_transform,
       unsigned rendering_context_id,
       CompositingReasons direct_compositing_reasons,
       CompositorElementId compositor_element_id,
-      PassRefPtr<const ScrollPaintPropertyNode> scroll = nullptr)
+      scoped_refptr<const ScrollPaintPropertyNode> scroll = nullptr)
       : PaintPropertyNode(std::move(parent)),
         matrix_(matrix),
         origin_(origin),
@@ -192,7 +192,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   unsigned rendering_context_id_;
   CompositingReasons direct_compositing_reasons_;
   CompositorElementId compositor_element_id_;
-  RefPtr<const ScrollPaintPropertyNode> scroll_;
+  scoped_refptr<const ScrollPaintPropertyNode> scroll_;
 
   mutable std::unique_ptr<GeometryMapperTransformCache> transform_cache_;
 };

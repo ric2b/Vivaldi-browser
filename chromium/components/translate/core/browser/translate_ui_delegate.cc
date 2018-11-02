@@ -7,7 +7,6 @@
 #include "base/i18n/string_compare.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/metrics/proto/translate_event.pb.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -17,6 +16,7 @@
 #include "components/translate/core/common/translate_constants.h"
 #include "components/variations/variations_associated_data.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
+#include "third_party/metrics_proto/translate_event.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -60,12 +60,14 @@ TranslateUIDelegate::TranslateUIDelegate(
       translate_manager_(translate_manager),
       original_language_index_(kNoIndex),
       initial_original_language_index_(kNoIndex),
-      target_language_index_(kNoIndex) {
+      target_language_index_(kNoIndex),
+      prefs_(translate_manager_->translate_client()->GetTranslatePrefs()) {
   DCHECK(translate_driver_);
   DCHECK(translate_manager_);
 
   std::vector<std::string> language_codes;
-  TranslateDownloadManager::GetSupportedLanguages(&language_codes);
+  TranslateDownloadManager::GetSupportedLanguages(
+      prefs_->IsTranslateAllowedByPolicy(), &language_codes);
 
   // Preparing for the alphabetical order in the locale.
   std::string locale =
@@ -109,7 +111,6 @@ TranslateUIDelegate::TranslateUIDelegate(
       target_language_index_ = iter - languages_.begin();
   }
 
-  prefs_ = translate_manager_->translate_client()->GetTranslatePrefs();
 }
 
 TranslateUIDelegate::~TranslateUIDelegate() {}
@@ -213,6 +214,7 @@ void TranslateUIDelegate::Translate() {
     prefs_->ResetTranslationDeniedCount(GetOriginalLanguageCode());
     prefs_->ResetTranslationIgnoredCount(GetOriginalLanguageCode());
     prefs_->IncrementTranslationAcceptedCount(GetOriginalLanguageCode());
+    prefs_->SetRecentTargetLanguage(GetTargetLanguageCode());
   }
 
   if (translate_manager_) {
@@ -269,7 +271,8 @@ bool TranslateUIDelegate::IsLanguageBlocked() {
 
 void TranslateUIDelegate::SetLanguageBlocked(bool value) {
   if (value) {
-    prefs_->BlockLanguage(GetOriginalLanguageCode());
+    prefs_->AddToLanguageList(GetOriginalLanguageCode(),
+                              /*force_blocked=*/true);
     if (translate_manager_) {
       translate_manager_->GetLanguageState().SetTranslateEnabled(false);
       // Translation has been blocked for this language. Capture that in the
@@ -288,6 +291,10 @@ void TranslateUIDelegate::SetLanguageBlocked(bool value) {
 bool TranslateUIDelegate::IsSiteBlacklisted() {
   std::string host = GetPageHost();
   return !host.empty() && prefs_->IsSiteBlacklisted(host);
+}
+
+bool TranslateUIDelegate::CanBlacklistSite() {
+  return !GetPageHost().empty();
 }
 
 void TranslateUIDelegate::SetSiteBlacklist(bool value) {

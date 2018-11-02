@@ -42,9 +42,9 @@
 #ifndef WTF_ThreadSpecific_h
 #define WTF_ThreadSpecific_h
 
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/StackUtil.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/WTF.h"
@@ -70,7 +70,6 @@ WTF_EXPORT void ThreadSpecificThreadExit();
 template <typename T>
 class ThreadSpecific {
   USING_FAST_MALLOC(ThreadSpecific);
-  WTF_MAKE_NONCOPYABLE(ThreadSpecific);
 
  public:
   ThreadSpecific();
@@ -98,8 +97,6 @@ class ThreadSpecific {
   void static Destroy(void* ptr);
 
   struct Data {
-    WTF_MAKE_NONCOPYABLE(Data);
-
    public:
     Data(T* value, ThreadSpecific<T>* owner) : value(value), owner(owner) {}
 
@@ -108,6 +105,8 @@ class ThreadSpecific {
 #if defined(OS_WIN)
     void (*destructor)(void*);
 #endif
+
+    DISALLOW_COPY_AND_ASSIGN(Data);
   };
 
 #if defined(OS_POSIX)
@@ -117,6 +116,8 @@ class ThreadSpecific {
 #endif
   // This member must only be accessed or modified on the main thread.
   T* main_thread_storage_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(ThreadSpecific);
 };
 
 #if defined(OS_POSIX)
@@ -151,7 +152,7 @@ inline ThreadSpecific<T>::ThreadSpecific() {
 template <typename T>
 inline T* ThreadSpecific<T>::Get() {
   Data* data = static_cast<Data*>(pthread_getspecific(key_));
-  return data ? data->value : 0;
+  return data ? data->value : nullptr;
 }
 
 template <typename T>
@@ -243,7 +244,7 @@ inline void ThreadSpecific<T>::Destroy(void* ptr) {
   Partitions::FastFree(data->value);
 
 #if defined(OS_POSIX)
-  pthread_setspecific(data->owner->key_, 0);
+  pthread_setspecific(data->owner->key_, nullptr);
 #elif defined(OS_WIN)
   TlsSetValue(TlsKeys()[data->owner->index_], 0);
 #else

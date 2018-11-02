@@ -50,6 +50,7 @@
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerPositionConstraint.h"
 #include "public/platform/WebLayerTreeView.h"
+#include "public/platform/WebRect.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
@@ -190,9 +191,7 @@ TEST_P(ScrollingCoordinatorTest, fastScrollingCanBeDisabledWithSetting) {
 }
 
 TEST_P(ScrollingCoordinatorTest, fastFractionalScrollingDiv) {
-  bool orig_fractional_offsets_enabled =
-      RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled();
-  RuntimeEnabledFeatures::SetFractionalScrollOffsetsEnabled(true);
+  ScopedFractionalScrollOffsetsForTest fractional_scroll_offsets(true);
 
   RegisterMockedHttpURLLoad("fractional-scroll-div.html");
   NavigateTo(base_url_ + "fractional-scroll-div.html");
@@ -225,27 +224,24 @@ TEST_P(ScrollingCoordinatorTest, fastFractionalScrollingDiv) {
   ASSERT_TRUE(web_scroll_layer);
   ASSERT_NEAR(1.2f, web_scroll_layer->ScrollPosition().x, 0.01f);
   ASSERT_NEAR(1.2f, web_scroll_layer->ScrollPosition().y, 0.01f);
-
-  RuntimeEnabledFeatures::SetFractionalScrollOffsetsEnabled(
-      orig_fractional_offsets_enabled);
 }
 
 static WebLayer* WebLayerFromElement(Element* element) {
   if (!element)
-    return 0;
+    return nullptr;
   LayoutObject* layout_object = element->GetLayoutObject();
   if (!layout_object || !layout_object->IsBoxModelObject())
-    return 0;
+    return nullptr;
   PaintLayer* layer = ToLayoutBoxModelObject(layout_object)->Layer();
   if (!layer)
-    return 0;
+    return nullptr;
   if (!layer->HasCompositedLayerMapping())
-    return 0;
+    return nullptr;
   CompositedLayerMapping* composited_layer_mapping =
       layer->GetCompositedLayerMapping();
   GraphicsLayer* graphics_layer = composited_layer_mapping->MainGraphicsLayer();
   if (!graphics_layer)
-    return 0;
+    return nullptr;
   return graphics_layer->PlatformLayer();
 }
 
@@ -544,14 +540,7 @@ TEST_P(ScrollingCoordinatorTest, touchAction) {
 
   Element* scrollable_element =
       GetFrame()->GetDocument()->getElementById("scrollable");
-  DCHECK(scrollable_element);
-  ForceFullCompositingUpdate();
-
-  LayoutObject* layout_object = scrollable_element->GetLayoutObject();
-  ASSERT_TRUE(layout_object->IsBox());
-  ASSERT_TRUE(layout_object->HasLayer());
-
-  LayoutBox* box = ToLayoutBox(layout_object);
+  LayoutBox* box = ToLayoutBox(scrollable_element->GetLayoutObject());
   ASSERT_TRUE(box->UsesCompositedScrolling());
   ASSERT_EQ(kPaintsIntoOwnBacking, box->Layer()->GetCompositingState());
 
@@ -563,7 +552,71 @@ TEST_P(ScrollingCoordinatorTest, touchAction) {
   WebVector<WebRect> rects =
       web_layer->TouchEventHandlerRegionForTouchActionForTesting(
           TouchAction::kTouchActionPanX | TouchAction::kTouchActionPanDown);
-  DCHECK_EQ(rects.size(), 1u);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 0, 1000, 1000));
+}
+
+TEST_P(ScrollingCoordinatorTest, touchActionRegions) {
+  RegisterMockedHttpURLLoad("touch-action-regions.html");
+  NavigateTo(base_url_ + "touch-action-regions.html");
+  ForceFullCompositingUpdate();
+
+  Element* scrollable_element =
+      GetFrame()->GetDocument()->getElementById("scrollable");
+  LayoutBox* box = ToLayoutBox(scrollable_element->GetLayoutObject());
+  ASSERT_TRUE(box->UsesCompositedScrolling());
+  ASSERT_EQ(kPaintsIntoOwnBacking, box->Layer()->GetCompositingState());
+
+  CompositedLayerMapping* composited_layer_mapping =
+      box->Layer()->GetCompositedLayerMapping();
+
+  GraphicsLayer* graphics_layer = composited_layer_mapping->MainGraphicsLayer();
+  WebLayer* web_layer = graphics_layer->PlatformLayer();
+
+  WebVector<WebRect> rects =
+      web_layer->TouchEventHandlerRegionForTouchActionForTesting(
+          TouchAction::kTouchActionPanDown | TouchAction::kTouchActionPanX);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 0, 100, 100));
+
+  rects = web_layer->TouchEventHandlerRegionForTouchActionForTesting(
+      TouchAction::kTouchActionPanDown | TouchAction::kTouchActionPanRight);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 0, 50, 50));
+
+  rects = web_layer->TouchEventHandlerRegionForTouchActionForTesting(
+      TouchAction::kTouchActionPanDown);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 100, 100, 100));
+}
+
+TEST_P(ScrollingCoordinatorTest, touchActionBlockingHandler) {
+  RegisterMockedHttpURLLoad("touch-action-blocking-handler.html");
+  NavigateTo(base_url_ + "touch-action-blocking-handler.html");
+  ForceFullCompositingUpdate();
+
+  Element* scrollable_element =
+      GetFrame()->GetDocument()->getElementById("scrollable");
+  LayoutBox* box = ToLayoutBox(scrollable_element->GetLayoutObject());
+  ASSERT_TRUE(box->UsesCompositedScrolling());
+  ASSERT_EQ(kPaintsIntoOwnBacking, box->Layer()->GetCompositingState());
+
+  CompositedLayerMapping* composited_layer_mapping =
+      box->Layer()->GetCompositedLayerMapping();
+
+  GraphicsLayer* graphics_layer = composited_layer_mapping->MainGraphicsLayer();
+  WebLayer* web_layer = graphics_layer->PlatformLayer();
+
+  WebVector<WebRect> rects =
+      web_layer->TouchEventHandlerRegionForTouchActionForTesting(
+          TouchAction::kTouchActionNone);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 0, 100, 100));
+
+  rects = web_layer->TouchEventHandlerRegionForTouchActionForTesting(
+      TouchAction::kTouchActionPanY);
+  EXPECT_EQ(rects.size(), 1u);
+  EXPECT_EQ(IntRect(rects[0]), IntRect(0, 0, 1000, 1000));
 }
 
 TEST_P(ScrollingCoordinatorTest, overflowScrolling) {
@@ -948,7 +1001,7 @@ TEST_P(ScrollingCoordinatorTest,
 
   // Remove fixed background-attachment should make the iframe
   // scroll on cc.
-  auto* iframe_doc = toHTMLIFrameElement(iframe)->contentDocument();
+  auto* iframe_doc = ToHTMLIFrameElement(iframe)->contentDocument();
   iframe = iframe_doc->getElementById("scrollable");
   ASSERT_TRUE(iframe);
 

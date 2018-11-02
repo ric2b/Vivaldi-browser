@@ -30,6 +30,7 @@
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -45,7 +46,7 @@ StyleRuleKeyframes::StyleRuleKeyframes(const StyleRuleKeyframes& o)
       version_(o.version_),
       is_prefixed_(o.is_prefixed_) {}
 
-StyleRuleKeyframes::~StyleRuleKeyframes() {}
+StyleRuleKeyframes::~StyleRuleKeyframes() = default;
 
 void StyleRuleKeyframes::ParserAppendKeyframe(StyleRuleKeyframe* keyframe) {
   if (!keyframe)
@@ -59,7 +60,7 @@ void StyleRuleKeyframes::WrapperAppendKeyframe(StyleRuleKeyframe* keyframe) {
 }
 
 void StyleRuleKeyframes::WrapperRemoveKeyframe(unsigned index) {
-  keyframes_.erase(index);
+  keyframes_.EraseAt(index);
   StyleChanged();
 }
 
@@ -74,7 +75,7 @@ int StyleRuleKeyframes::FindKeyframeIndex(const String& key) const {
   return -1;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(StyleRuleKeyframes) {
+void StyleRuleKeyframes::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(keyframes_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
@@ -86,7 +87,7 @@ CSSKeyframesRule::CSSKeyframesRule(StyleRuleKeyframes* keyframes_rule,
       child_rule_cssom_wrappers_(keyframes_rule->Keyframes().size()),
       is_prefixed_(keyframes_rule->IsVendorPrefixed()) {}
 
-CSSKeyframesRule::~CSSKeyframesRule() {}
+CSSKeyframesRule::~CSSKeyframesRule() = default;
 
 void CSSKeyframesRule::setName(const String& name) {
   CSSStyleSheet::RuleMutationScope mutation_scope(this);
@@ -94,13 +95,14 @@ void CSSKeyframesRule::setName(const String& name) {
   keyframes_rule_->SetName(name);
 }
 
-void CSSKeyframesRule::appendRule(const String& rule_text) {
+void CSSKeyframesRule::appendRule(const ExecutionContext* execution_context,
+                                  const String& rule_text) {
   DCHECK_EQ(child_rule_cssom_wrappers_.size(),
             keyframes_rule_->Keyframes().size());
 
   CSSStyleSheet* style_sheet = parentStyleSheet();
-  CSSParserContext* context =
-      CSSParserContext::CreateWithStyleSheet(ParserContext(), style_sheet);
+  CSSParserContext* context = CSSParserContext::CreateWithStyleSheet(
+      ParserContext(execution_context->GetSecureContextMode()), style_sheet);
   StyleRuleKeyframe* keyframe =
       CSSParser::ParseKeyframeRule(context, rule_text);
   if (!keyframe)
@@ -126,8 +128,8 @@ void CSSKeyframesRule::deleteRule(const String& s) {
   keyframes_rule_->WrapperRemoveKeyframe(i);
 
   if (child_rule_cssom_wrappers_[i])
-    child_rule_cssom_wrappers_[i]->SetParentRule(0);
-  child_rule_cssom_wrappers_.erase(i);
+    child_rule_cssom_wrappers_[i]->SetParentRule(nullptr);
+  child_rule_cssom_wrappers_.EraseAt(i);
 }
 
 CSSKeyframeRule* CSSKeyframesRule::findRule(const String& s) {
@@ -195,7 +197,7 @@ void CSSKeyframesRule::Reattach(StyleRuleBase* rule) {
   keyframes_rule_ = ToStyleRuleKeyframes(rule);
 }
 
-DEFINE_TRACE(CSSKeyframesRule) {
+void CSSKeyframesRule::Trace(blink::Visitor* visitor) {
   CSSRule::Trace(visitor);
   visitor->Trace(child_rule_cssom_wrappers_);
   visitor->Trace(keyframes_rule_);

@@ -76,11 +76,11 @@ XSSAuditorDelegate::XSSAuditorDelegate(Document* document)
   DCHECK(document_);
 }
 
-DEFINE_TRACE(XSSAuditorDelegate) {
+void XSSAuditorDelegate::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
 }
 
-RefPtr<EncodedFormData> XSSAuditorDelegate::GenerateViolationReport(
+scoped_refptr<EncodedFormData> XSSAuditorDelegate::GenerateViolationReport(
     const XSSInfo& xss_info) {
   DCHECK(IsMainThread());
 
@@ -131,7 +131,7 @@ void XSSAuditorDelegate::DidBlockScript(const XSSInfo& xss_info) {
 
   if (xss_info.did_block_entire_page_) {
     local_frame->GetNavigationScheduler().SchedulePageBlock(
-        document_, ResourceError::BLOCKED_BY_XSS_AUDITOR);
+        document_, ResourceError::BlockedByXSSAuditorErrorCode());
   }
 }
 

@@ -19,6 +19,7 @@
 #include "content/public/common/console_message_level.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_private_key.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace api_cp = extensions::api::certificate_provider;
 namespace api_cpi = extensions::api::certificate_provider_internal;
@@ -124,8 +125,12 @@ bool CertificateProviderInternalReportCertificatesFunction::
     return false;
   }
 
-  out_info->certificate =
-      net::X509Certificate::CreateFromBytes(cert_der.data(), cert_der.size());
+  // Allow UTF-8 inside PrintableStrings in client certificates. See
+  // crbug.com/770323 and crbug.com/788655.
+  net::X509Certificate::UnsafeCreateOptions options;
+  options.printable_string_is_utf8 = true;
+  out_info->certificate = net::X509Certificate::CreateFromBytesUnsafeOptions(
+      cert_der.data(), cert_der.size(), options);
   if (!out_info->certificate) {
     WriteToConsole(content::CONSOLE_MESSAGE_LEVEL_ERROR, kErrorInvalidX509Cert);
     return false;
@@ -154,20 +159,19 @@ bool CertificateProviderInternalReportCertificatesFunction::
   for (const api_cp::Hash hash : info.supported_hashes) {
     switch (hash) {
       case api_cp::HASH_MD5_SHA1:
-        out_info->supported_hashes.push_back(
-            net::SSLPrivateKey::Hash::MD5_SHA1);
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_MD5_SHA1);
         break;
       case api_cp::HASH_SHA1:
-        out_info->supported_hashes.push_back(net::SSLPrivateKey::Hash::SHA1);
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA1);
         break;
       case api_cp::HASH_SHA256:
-        out_info->supported_hashes.push_back(net::SSLPrivateKey::Hash::SHA256);
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA256);
         break;
       case api_cp::HASH_SHA384:
-        out_info->supported_hashes.push_back(net::SSLPrivateKey::Hash::SHA384);
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA384);
         break;
       case api_cp::HASH_SHA512:
-        out_info->supported_hashes.push_back(net::SSLPrivateKey::Hash::SHA512);
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA512);
         break;
       case api_cp::HASH_NONE:
         NOTREACHED();

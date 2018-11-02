@@ -96,7 +96,7 @@ void DrmThread::Init() {
       switches::kEnableDrmAtomic);
 
   device_manager_.reset(
-      new DrmDeviceManager(base::MakeUnique<GbmDeviceGenerator>(use_atomic)));
+      new DrmDeviceManager(std::make_unique<GbmDeviceGenerator>(use_atomic)));
   buffer_generator_.reset(new GbmBufferGenerator());
   screen_manager_.reset(new ScreenManager(buffer_generator_.get()));
 
@@ -189,10 +189,12 @@ void DrmThread::SchedulePageFlip(gfx::AcceleratedWidget widget,
                                  const std::vector<OverlayPlane>& planes,
                                  SwapCompletionOnceCallback callback) {
   DrmWindow* window = screen_manager_->GetWindow(widget);
-  if (window)
-    window->SchedulePageFlip(planes, std::move(callback));
-  else
+  if (window) {
+    bool result = window->SchedulePageFlip(planes, std::move(callback));
+    CHECK(result) << "DrmThread::SchedulePageFlip failed.";
+  } else {
     std::move(callback).Run(gfx::SwapResult::SWAP_ACK);
+  }
 }
 
 void DrmThread::GetVSyncParameters(
@@ -253,9 +255,7 @@ void DrmThread::CheckOverlayCapabilities(
 
 void DrmThread::RefreshNativeDisplays(
     base::OnceCallback<void(MovableDisplaySnapshots)> callback) {
-  auto snapshots =
-      CreateMovableDisplaySnapshotsFromParams(display_manager_->GetDisplays());
-  std::move(callback).Run(std::move(snapshots));
+  std::move(callback).Run(display_manager_->GetDisplays());
 }
 
 void DrmThread::ConfigureNativeDisplay(

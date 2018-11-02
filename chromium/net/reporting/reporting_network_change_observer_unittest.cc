@@ -5,7 +5,6 @@
 #include "net/reporting/reporting_network_change_observer.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
@@ -46,7 +45,7 @@ class ReportingNetworkChangeObserverTest : public ReportingTestBase {
   }
 
   const GURL kUrl_ = GURL("https://origin/path");
-  const url::Origin kOrigin_ = url::Origin(kUrl_);
+  const url::Origin kOrigin_ = url::Origin::Create(kUrl_);
   const GURL kEndpoint_ = GURL("https://endpoint/");
   const std::string kGroup_ = "group";
   const std::string kType_ = "default";

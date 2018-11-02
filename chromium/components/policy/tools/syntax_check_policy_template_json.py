@@ -185,7 +185,8 @@ class PolicyTemplateChecker(object):
                      'supported_on', 'label', 'policies', 'items',
                      'example_value', 'features', 'deprecated', 'future',
                      'id', 'schema', 'max_size', 'tags',
-                     'default_for_enterprise_users', 'arc_support'):
+                     'default_for_enterprise_users', 'arc_support',
+                     'supported_chrome_os_management'):
         self.warning_count += 1
         print ('In policy %s: Warning: Unknown key: %s' %
                (policy.get('name'), key))
@@ -228,10 +229,10 @@ class PolicyTemplateChecker(object):
       # Each policy group must have a list of policies.
       policies = self._CheckContains(policy, 'policies', list)
 
-      # Check sub-policies.
-      if policies is not None:
-        for nested_policy in policies:
-          self._CheckPolicy(nested_policy, True, policy_ids)
+      # Policy list should not be empty
+      if isinstance(policies, list) and len(policies) == 0:
+        self._Error('Policy list should not be empty.', 'policies', None,
+                    policy)
 
       # Groups must not have an |id|.
       if 'id' in policy:
@@ -291,6 +292,27 @@ class PolicyTemplateChecker(object):
       self._CheckContains(features, 'dynamic_refresh', bool,
                           container_name='features',
                           identifier=policy.get('name'))
+
+      # Chrome OS policies may have a non-empty supported_chrome_os_management
+      # list with either 'active_directory' or 'google_cloud' or both.
+      supported_chrome_os_management = self._CheckContains(
+          policy, 'supported_chrome_os_management', list, True)
+      if supported_chrome_os_management is not None:
+        # Must be on Chrome OS.
+        if (supported_on is not None and
+            not any('chrome_os:' in str for str in supported_on)):
+          self._Error('"supported_chrome_os_management" is only supported on '
+                      'Chrome OS', 'policy', policy, supported_on)
+        # Must be non-empty.
+        if len(supported_chrome_os_management) == 0:
+          self._Error('"supported_chrome_os_management" must be non-empty',
+                      'policy', policy)
+        # Must be either 'active_directory' or 'google_cloud'.
+        if (any(str != 'google_cloud' and str != 'active_directory'
+                for str in supported_chrome_os_management)):
+          self._Error('Values in "supported_chrome_os_management" must be '
+                      'either "active_directory" or "google_cloud"', 'policy',
+                      policy, supported_chrome_os_management)
 
       # Each policy must have an 'example_value' of appropriate type.
       if policy_type == 'main':
@@ -390,6 +412,11 @@ class PolicyTemplateChecker(object):
   def _CheckFormat(self, filename):
     if self.options.fix:
       fixed_lines = []
+    # Three quotes open and close multiple lines strings. Odd means currently
+    # inside a multiple line strings. We don't change indentation for those
+    # strings. It changes hash of the string and grit can't find translation in
+    # the file.
+    three_quotes_cnt = 0
     with open(filename) as f:
       indent = 0
       line_number = 0
@@ -423,7 +450,8 @@ class PolicyTemplateChecker(object):
             self._LineError('Tab character found.', line_number)
         if line[len(leading_whitespace)] in (']', '}'):
           indent -= 2
-        if line[0] != '#':  # Ignore 0-indented comments.
+        # Ignore 0-indented comments and multiple string literals.
+        if line[0] != '#' and three_quotes_cnt % 2 == 0:
           if len(leading_whitespace) != indent:
             if self.options.fix:
               line = ' ' * indent + line.lstrip()
@@ -432,11 +460,13 @@ class PolicyTemplateChecker(object):
             else:
               self._LineError('Bad indentation. Should be ' + str(indent) +
                               ' spaces.', line_number)
+        three_quotes_cnt += line.count("'''")
         if line[-1] in ('[', '{'):
           indent += 2
         if self.options.fix:
           fixed_lines.append(line + '\n')
 
+    assert three_quotes_cnt % 2 == 0
     # If --fix is specified: backup the file (deleting any existing backup),
     # then write the fixed version with the old filename.
     if self.options.fix:
@@ -485,6 +515,21 @@ class PolicyTemplateChecker(object):
       for policy in policy_definitions:
         self._CheckPolicy(policy, False, policy_ids)
       self._CheckPolicyIDs(policy_ids)
+
+
+    # Made it as a dict (policy_name -> True) to reuse _CheckContains.
+    policy_names = {policy['name']: True for policy in policy_definitions
+                    if policy['type'] != 'group'}
+    policy_in_groups = set()
+    for group in [policy for policy in policy_definitions
+                  if policy['type'] == 'group']:
+      for policy_name in group['policies']:
+        self._CheckContains(policy_names, policy_name, bool,
+                            parent_element='policy_definitions')
+        if policy_name in policy_in_groups:
+          self._Error('Policy %s defined in several groups.' % (policy_name))
+        else:
+          policy_in_groups.add(policy_name)
 
     # Second part: check formatting.
     self._CheckFormat(filename)

@@ -6,14 +6,19 @@ import argparse
 import json
 import logging
 import os
+import random
 import re
 import socket
 import shlex
+import subprocess
 import sys
+import tempfile
 import time
 import traceback
 import unittest
 import urlparse
+
+from emulation_server import LocalEmulationServer
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir,
   os.pardir, 'third_party', 'webdriver', 'pylib'))
@@ -148,6 +153,28 @@ def GetLogger(name='common'):
   logger.initialized = True
   return logger
 
+def _RunAdbCmd(args):
+  """Runs an adb command with the given arguments.
+
+  Args:
+    args: an array of string arguments
+  """
+  proc = subprocess.Popen(['adb'] + args, stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE)
+  stdout, stderr = proc.communicate()
+  if proc.returncode:
+    raise Exception("ADB command failed. Output: %s" % (stdout + stderr))
+
+def GetOpenPort():
+    """Returns an open port on the host machine.
+
+    Return:
+      an open port number as an int
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('', 0))
+    return int(sock.getsockname()[1])
+
 class TestDriver:
   """The main driver for an integration test.
 
@@ -167,6 +194,9 @@ class TestDriver:
       was meant to support network connection control, and thus had to enable
       mobile emulation
     _network_connection: The connection type to use on start up
+    _emulation_server: A reference to the emulation server being used
+    _emulation_server_port: If this is not set to -1, the emulation server is
+      being used for the test and is available on this port
   """
 
   def __init__(self, control_network_connection=False):
@@ -177,7 +207,10 @@ class TestDriver:
     self._logger = GetLogger(name='TestDriver')
     self._has_logs = False
     self._control_network_connection = control_network_connection
+    self._net_log = None
     self._network_connection = None
+    self._emulation_server = None
+    self._emulation_server_port = -1
 
   def __enter__(self):
     return self
@@ -185,6 +218,26 @@ class TestDriver:
   def __exit__(self, exc_type, exc_value, tb):
     if self._driver:
       self._StopDriver()
+    if self._emulation_server:
+      self._emulation_server.Shutdown()
+      if self._flags.android:
+        # Remove the Android port forwarding to the host machine.
+        _RunAdbCmd(['reverse', '--remove',
+          'tcp:%d' % self._emulation_server_port])
+      self._emulation_server = None
+      self._emulation_server_port = -1
+    if self._net_log and self._flags.android:
+      try:
+        _RunAdbCmd('shell', 'rm', '-f', self._net_log)
+      except:
+        # Ignore errors, give only an attempt to rm the temp file
+        pass
+    if self._net_log and not self._flags.android:
+      try:
+        os.remove(self._net_log)
+      except:
+        # Ignore errors, give only an attempt to rm the temp file
+        pass
 
   def _OverrideChromeArgs(self):
     """Overrides any given arguments in the code with those given on the command
@@ -219,6 +272,13 @@ class TestDriver:
     If running Android, the Android package name is passed to ChromeDriver here.
     """
     self._OverrideChromeArgs()
+    if self._emulation_server:
+      self.AddChromeArg('--ignore-certificate-errors')
+      self._emulation_server.StartAndReturn()
+      if self._flags.android:
+        # Forward the Android port to the host machine.
+        address = 'tcp:%d' % self._emulation_server_port
+        _RunAdbCmd(['reverse', address, address])
     capabilities = {
       'loggingPrefs': {'performance': 'INFO'},
     }
@@ -323,6 +383,33 @@ class TestDriver:
       'chrome.benchmarking.clearPredictorCache();chrome.benchmarking.'
       'clearHostResolverCache();}')
     self._logger.info('Cleared browser cache. Returned=%s', str(res))
+
+  def UseNetLog(self):
+    """Requests that a Chrome netlog be available for test evaluation.
+    """
+    if self._driver:
+      raise Exception("UseNetLog() must be called before LoadURL()")
+    temp_basename = "chrome.netlog.%05d.json" % random.randint(1, 100000)
+    temp_dir = tempfile.gettempdir()
+    if self._flags.android:
+      temp_dir = '/data/local/tmp'
+    temp_file = os.path.join(temp_dir, temp_basename)
+    if self._flags.android:
+      _RunAdbCmd(['shell', 'touch', temp_file])
+    self.AddChromeArg('--log-net-log=%s' % temp_file)
+    self._net_log = temp_file
+
+  def UseEmulationServer(self, handler, port=None):
+    """Requests the test driver to use the emulation server.
+
+    Args:
+      port: The port to run the server on.
+      handler: The handler to use, subclassed from BaseRequestHandler.
+    """
+    if not port:
+      port = GetOpenPort()
+    self._emulation_server = LocalEmulationServer(port, handler)
+    self._emulation_server_port = port
 
   def SetNetworkConnection(self, connection_type):
     """Changes the emulated connection type.
@@ -452,6 +539,38 @@ class TestDriver:
       self._logger.error('%s not true after %f seconds' % (expression, timeout))
       raise Exception('%s not true after %f seconds' % (expression, timeout))
     return result
+
+  def StopAndGetNetLog(self):
+    """Stops the browser and returns the parsed net log.
+
+    Must be called after UseNetLog(). Will attempt to fix an unfinished netlog
+    dump if initial parse fails.
+
+    Returns: the parsed netlog dict object
+    """
+    if self._driver:
+      self._StopDriver()
+      # Give a moment for Chrome to close and finish writing the netlog.
+    if not self._net_log:
+      raise Exception('GetParsedNetLog() cannot be called before UseNetLog()')
+    temp_file = self._net_log
+    if self._flags.android:
+      temp_file = os.path.join(tempfile.gettempdir(), 'pulled_netlog.json')
+      _RunAdbCmd(['pull', self._net_log, temp_file])
+    json_file_content = ''
+    with open(temp_file) as f:
+      json_file_content = f.read()
+    try:
+      return json.loads(json_file_content)
+    except:
+      # Using --log-net-log does not guarantee a valid json file. Workaround
+      # copied from
+      # https://cs.chromium.org/chromium/src/third_party/catapult/netlog_viewer/netlog_viewer/log_util.js?l=275&rcl=017fd5cf4ccbcbed7bba20760f1b3d923a7cd3ca
+      end = max(json_file_content.rfind(',\n'), json_file_content.rfind(',\r'))
+      if end == -1:
+        raise Exception('unable to parse netlog json file')
+      json_file_content = json_file_content[:end] + ']}'
+      return json.loads(json_file_content)
 
   def GetPerformanceLogs(self, method_filter=r'Network\.responseReceived'):
     """Returns all logged Performance events from Chrome. Raises an Exception if

@@ -45,22 +45,16 @@ namespace content {
 
 namespace {
 
-const char kAcceptHeader[] = "Accept";
-const char kFrameAcceptHeader[] =
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,"
-    "image/apng,*/*;q=0.8";
-const char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
-const char kImageAcceptHeader[] = "image/webp,image/apng,image/*,*/*;q=0.8";
-const char kDefaultAcceptHeader[] = "*/*";
-
-// Used to write into an existing IOBuffer at a given offset.
-class DependentIOBuffer : public net::WrappedIOBuffer {
+// Used to write into an existing IOBuffer at a given offset. This is
+// very similar to DependentIOBufferForRedirectToFile and
+// DependentIOBufferForAsyncLoading but not identical.
+class DependentIOBufferForMimeSniffing : public net::WrappedIOBuffer {
  public:
-  DependentIOBuffer(net::IOBuffer* buf, int offset)
+  DependentIOBufferForMimeSniffing(net::IOBuffer* buf, int offset)
       : net::WrappedIOBuffer(buf->data() + offset), buf_(buf) {}
 
  private:
-  ~DependentIOBuffer() override {}
+  ~DependentIOBufferForMimeSniffing() override {}
 
   scoped_refptr<net::IOBuffer> buf_;
 };
@@ -137,42 +131,7 @@ void MimeSniffingResourceHandler::OnWillStart(
     std::unique_ptr<ResourceController> controller) {
   DCHECK(!has_controller());
 
-  const char* accept_value = nullptr;
-  switch (GetRequestInfo()->GetResourceType()) {
-    case RESOURCE_TYPE_MAIN_FRAME:
-    case RESOURCE_TYPE_SUB_FRAME:
-      accept_value = kFrameAcceptHeader;
-      break;
-    case RESOURCE_TYPE_STYLESHEET:
-      accept_value = kStylesheetAcceptHeader;
-      break;
-    case RESOURCE_TYPE_FAVICON:
-    case RESOURCE_TYPE_IMAGE:
-      accept_value = kImageAcceptHeader;
-      break;
-    case RESOURCE_TYPE_SCRIPT:
-    case RESOURCE_TYPE_FONT_RESOURCE:
-    case RESOURCE_TYPE_SUB_RESOURCE:
-    case RESOURCE_TYPE_OBJECT:
-    case RESOURCE_TYPE_MEDIA:
-    case RESOURCE_TYPE_WORKER:
-    case RESOURCE_TYPE_SHARED_WORKER:
-    case RESOURCE_TYPE_PREFETCH:
-    case RESOURCE_TYPE_XHR:
-    case RESOURCE_TYPE_PING:
-    case RESOURCE_TYPE_SERVICE_WORKER:
-    case RESOURCE_TYPE_CSP_REPORT:
-    case RESOURCE_TYPE_PLUGIN_RESOURCE:
-      accept_value = kDefaultAcceptHeader;
-      break;
-    case RESOURCE_TYPE_LAST_TYPE:
-      NOTREACHED();
-      break;
-  }
-
-  // The false parameter prevents overwriting an existing accept header value,
-  // which is needed because JS can manually set an accept header on an XHR.
-  request()->SetExtraRequestHeaderByName(kAcceptHeader, accept_value, false);
+  AttachAcceptHeader(GetRequestInfo()->GetResourceType(), request());
   next_handler_->OnWillStart(url, std::move(controller));
 }
 
@@ -241,7 +200,8 @@ void MimeSniffingResourceHandler::OnWillRead(
 
   if (read_buffer_.get()) {
     CHECK_LT(bytes_read_, read_buffer_size_);
-    *buf = new DependentIOBuffer(read_buffer_.get(), bytes_read_);
+    *buf =
+        new DependentIOBufferForMimeSniffing(read_buffer_.get(), bytes_read_);
     *buf_size = read_buffer_size_ - bytes_read_;
     controller->Resume();
     return;
@@ -383,7 +343,7 @@ void MimeSniffingResourceHandler::CallOnWillRead() {
 
   state_ = STATE_WAITING_FOR_BUFFER;
   next_handler_->OnWillRead(&read_buffer_, &read_buffer_size_,
-                            base::MakeUnique<Controller>(this));
+                            std::make_unique<Controller>(this));
 }
 
 void MimeSniffingResourceHandler::BufferReceived() {
@@ -408,7 +368,7 @@ void MimeSniffingResourceHandler::ReplayResponseReceived() {
   DCHECK_EQ(STATE_INTERCEPTION_CHECK_DONE, state_);
   state_ = STATE_REPLAYING_RESPONSE_RECEIVED;
   next_handler_->OnResponseStarted(response_.get(),
-                                   base::MakeUnique<Controller>(this));
+                                   std::make_unique<Controller>(this));
 }
 
 void MimeSniffingResourceHandler::ReplayReadCompleted() {
@@ -428,7 +388,7 @@ void MimeSniffingResourceHandler::ReplayReadCompleted() {
   bytes_read_ = 0;
 
   next_handler_->OnReadCompleted(bytes_read,
-                                 base::MakeUnique<Controller>(this));
+                                 std::make_unique<Controller>(this));
 }
 
 bool MimeSniffingResourceHandler::MaybeStartInterception() {
@@ -498,7 +458,7 @@ bool MimeSniffingResourceHandler::CheckForPluginHandler(
   bool has_plugin = plugin_service_->GetPluginInfo(
       info->GetChildID(), info->GetRenderFrameID(), info->GetContext(),
       request()->url(), url::Origin(), response_->head.mime_type,
-      allow_wildcard, &stale, &plugin, NULL);
+      allow_wildcard, &stale, &plugin, nullptr);
 
   if (stale) {
     // Refresh the plugins asynchronously.
@@ -571,6 +531,14 @@ bool MimeSniffingResourceHandler::MustDownload() {
   } else if (host_->delegate() &&
              host_->delegate()->ShouldForceDownloadResource(
                  request()->url(), response_->head.mime_type)) {
+    must_download_ = true;
+  } else if (request()->url().SchemeIsHTTPOrHTTPS() &&
+             // The MHTML mime type should be same as the one we check in
+             // Blink's DocumentLoader.
+             response_->head.mime_type == "multipart/related" &&
+             !host_->delegate()->AllowRenderingMhtmlOverHttp(request())) {
+    // Force to download the MHTML page from the remote server, instead of
+    // loading it.
     must_download_ = true;
   } else {
     must_download_ = false;

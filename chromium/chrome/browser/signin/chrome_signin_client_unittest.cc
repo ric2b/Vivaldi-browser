@@ -5,8 +5,10 @@
 #include "chrome/browser/signin/chrome_signin_client.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
@@ -18,8 +20,8 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "content/public/common/network_connection_tracker.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,31 +30,52 @@
 
 namespace {
 
-class MockNetworkChangeNotifierNeverOffline :
-    public net::NetworkChangeNotifier {
+class MockNetworkConnectionTrackerNeverOffline
+    : public content::NetworkConnectionTracker {
  public:
-  net::NetworkChangeNotifier::ConnectionType GetCurrentConnectionType() const
-      override {
-    return NetworkChangeNotifier::CONNECTION_3G;
+  MockNetworkConnectionTrackerNeverOffline()
+      : content::NetworkConnectionTracker() {}
+  ~MockNetworkConnectionTrackerNeverOffline() override {}
+
+  bool GetConnectionType(network::mojom::ConnectionType* type,
+                         ConnectionTypeCallback callback) override {
+    *type = network::mojom::ConnectionType::CONNECTION_3G;
+    return true;
   }
 };
 
-class MockNetworkChangeNotifierOfflineUntilChange :
-    public net::NetworkChangeNotifier {
+class MockNetworkConnectionTrackerGetConnectionTypeAsync
+    : public content::NetworkConnectionTracker {
  public:
-  MockNetworkChangeNotifierOfflineUntilChange() : online_(false) {}
-  net::NetworkChangeNotifier::ConnectionType GetCurrentConnectionType() const
-      override {
-    return online_ ? net::NetworkChangeNotifier::CONNECTION_3G
-                   : net::NetworkChangeNotifier::CONNECTION_NONE;
-  }
+  MockNetworkConnectionTrackerGetConnectionTypeAsync()
+      : content::NetworkConnectionTracker() {}
+  ~MockNetworkConnectionTrackerGetConnectionTypeAsync() override {}
 
+  void CompleteCallback() {
+    OnInitialConnectionType(network::mojom::ConnectionType::CONNECTION_3G);
+  }
+};
+
+class MockNetworkConnectionTrackerOfflineUntilChange
+    : public content::NetworkConnectionTracker {
+ public:
+  MockNetworkConnectionTrackerOfflineUntilChange()
+      : content::NetworkConnectionTracker(), online_(false) {}
+  ~MockNetworkConnectionTrackerOfflineUntilChange() override {}
+
+  bool GetConnectionType(network::mojom::ConnectionType* type,
+                         ConnectionTypeCallback callback) override {
+    if (online_) {
+      *type = network::mojom::ConnectionType::CONNECTION_3G;
+    } else {
+      *type = network::mojom::ConnectionType::CONNECTION_NONE;
+    }
+    return true;
+  }
   void GoOnline() {
     online_ = true;
-    net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
-        net::NetworkChangeNotifier::CONNECTION_3G);
+    OnNetworkChanged(network::mojom::ConnectionType::CONNECTION_3G);
   }
-
  private:
   bool online_;
 };
@@ -81,7 +104,16 @@ bool CallbackTester::WasCalledExactlyOnce() {
 class ChromeSigninClientTest : public testing::Test {
  public:
   ChromeSigninClientTest() {}
-  void SetUp() override;
+
+  void Initialize(std::unique_ptr<content::NetworkConnectionTracker> tracker) {
+    TestingBrowserProcess::GetGlobal()->SetNetworkConnectionTracker(
+        std::move(tracker));
+    // Create a signed-in profile.
+    TestingProfile::Builder builder;
+    profile_ = builder.Build();
+
+    signin_client_ = ChromeSigninClientFactory::GetForProfile(profile());
+  }
 
   Profile* profile() { return profile_.get(); }
   SigninClient* signin_client() { return signin_client_; }
@@ -92,28 +124,34 @@ class ChromeSigninClientTest : public testing::Test {
   SigninClient* signin_client_;
 };
 
-void ChromeSigninClientTest::SetUp() {
-  // Create a signed-in profile.
-  TestingProfile::Builder builder;
-  profile_ = builder.Build();
-
-  signin_client_ = ChromeSigninClientFactory::GetForProfile(profile());
-}
-
 TEST_F(ChromeSigninClientTest, DelayNetworkCallRunsImmediatelyWithNetwork) {
-  std::unique_ptr<net::NetworkChangeNotifier> mock(
-      new MockNetworkChangeNotifierNeverOffline);
+  Initialize(std::make_unique<MockNetworkConnectionTrackerNeverOffline>());
   CallbackTester tester;
-  signin_client()->DelayNetworkCall(base::Bind(&CallbackTester::Increment,
-                                               base::Unretained(&tester)));
+  signin_client()->DelayNetworkCall(
+      base::Bind(&CallbackTester::Increment, base::Unretained(&tester)));
   ASSERT_TRUE(tester.WasCalledExactlyOnce());
 }
 
-TEST_F(ChromeSigninClientTest, DelayNetworkCallRunsAfterNetworkFound) {
-  std::unique_ptr<MockNetworkChangeNotifierOfflineUntilChange> mock(
-      new MockNetworkChangeNotifierOfflineUntilChange());
-  // Install a SigninClient after the NetworkChangeNotifier's created.
-  SetUp();
+TEST_F(ChromeSigninClientTest, DelayNetworkCallRunsAfterGetConnectionType) {
+  auto tracker =
+      std::make_unique<MockNetworkConnectionTrackerGetConnectionTypeAsync>();
+  MockNetworkConnectionTrackerGetConnectionTypeAsync* mock = tracker.get();
+  Initialize(std::move(tracker));
+
+  CallbackTester tester;
+  signin_client()->DelayNetworkCall(base::Bind(&CallbackTester::Increment,
+                                               base::Unretained(&tester)));
+  ASSERT_FALSE(tester.WasCalledExactlyOnce());
+  mock->CompleteCallback();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(tester.WasCalledExactlyOnce());
+}
+
+TEST_F(ChromeSigninClientTest, DelayNetworkCallRunsAfterNetworkChange) {
+  auto tracker =
+      std::make_unique<MockNetworkConnectionTrackerOfflineUntilChange>();
+  MockNetworkConnectionTrackerOfflineUntilChange* mock = tracker.get();
+  Initialize(std::move(tracker));
 
   CallbackTester tester;
   signin_client()->DelayNetworkCall(base::Bind(&CallbackTester::Increment,
@@ -137,12 +175,20 @@ class MockChromeSigninClient : public ChromeSigninClient {
 
 class MockSigninManager : public SigninManager {
  public:
-  explicit MockSigninManager(SigninClient* client)
-      : SigninManager(client, nullptr, &fake_service_, nullptr) {}
+  explicit MockSigninManager(SigninClient* client,
+                             SigninErrorController* signin_error_controller)
+      : SigninManager(client,
+                      nullptr,
+                      &fake_service_,
+                      nullptr,
+                      signin_error_controller) {
+    DCHECK(signin_error_controller);
+  }
 
-  MOCK_METHOD2(DoSignOut,
+  MOCK_METHOD3(DoSignOut,
                void(signin_metrics::ProfileSignout,
-                    signin_metrics::SignoutDelete));
+                    signin_metrics::SignoutDelete,
+                    bool revoke_all_tokens));
 
   AccountTrackerService fake_service_;
 };
@@ -154,7 +200,8 @@ class ChromeSigninClientSignoutTest : public BrowserWithTestWindowTest {
 
     signin_util::SetForceSigninForTesting(true);
     CreateClient(browser()->profile());
-    manager_.reset(new MockSigninManager(client_.get()));
+    manager_ = std::make_unique<MockSigninManager>(client_.get(),
+                                                   fake_controller_.get());
   }
 
   void TearDown() override {
@@ -163,7 +210,8 @@ class ChromeSigninClientSignoutTest : public BrowserWithTestWindowTest {
   }
 
   void CreateClient(Profile* profile) {
-    SigninErrorController* controller = new SigninErrorController();
+    SigninErrorController* controller = new SigninErrorController(
+        SigninErrorController::AccountMode::ANY_ACCOUNT);
     client_.reset(new MockChromeSigninClient(profile, controller));
     fake_controller_.reset(controller);
   }
@@ -183,7 +231,8 @@ TEST_F(ChromeSigninClientSignoutTest, SignOut) {
       .Times(1);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric)).Times(1);
+  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+      .Times(1);
 
   manager_->SignOut(source_metric, delete_metric);
 }
@@ -194,14 +243,15 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutManager) {
   signin_metrics::SignoutDelete delete_metric =
       signin_metrics::SignoutDelete::IGNORE_METRIC;
 
-  MockSigninManager other_manager(client_.get());
+  MockSigninManager other_manager(client_.get(), fake_controller_.get());
   other_manager.CopyCredentialsFrom(*manager_.get());
 
   EXPECT_CALL(*client_, ShowUserManager(browser()->profile()->GetPath()))
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric)).Times(1);
+  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+      .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 
   ::testing::Mock::VerifyAndClearExpectations(manager_.get());
@@ -210,14 +260,16 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutManager) {
       .Times(1);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(1);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric)).Times(1);
+  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+      .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }
 
 TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutForceSignin) {
   signin_util::SetForceSigninForTesting(false);
   CreateClient(browser()->profile());
-  manager_.reset(new MockSigninManager(client_.get()));
+  manager_ = std::make_unique<MockSigninManager>(client_.get(),
+                                                 fake_controller_.get());
 
   signin_metrics::ProfileSignout source_metric =
       signin_metrics::ProfileSignout::ABORT_SIGNIN;
@@ -228,7 +280,8 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutWithoutForceSignin) {
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(0);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric)).Times(1);
+  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+      .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }
 
@@ -238,7 +291,8 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutGuestSession) {
   std::unique_ptr<TestingProfile> profile = builder.Build();
 
   CreateClient(profile.get());
-  manager_.reset(new MockSigninManager(client_.get()));
+  manager_ = std::make_unique<MockSigninManager>(client_.get(),
+                                                 fake_controller_.get());
 
   signin_metrics::ProfileSignout source_metric =
       signin_metrics::ProfileSignout::ABORT_SIGNIN;
@@ -249,7 +303,8 @@ TEST_F(ChromeSigninClientSignoutTest, SignOutGuestSession) {
       .Times(0);
   EXPECT_CALL(*client_, LockForceSigninProfile(browser()->profile()->GetPath()))
       .Times(0);
-  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric)).Times(1);
+  EXPECT_CALL(*manager_, DoSignOut(source_metric, delete_metric, true))
+      .Times(1);
   manager_->SignOut(source_metric, delete_metric);
 }
 

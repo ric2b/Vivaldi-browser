@@ -32,12 +32,12 @@
 #define VTTParser_h
 
 #include <memory>
-#include "core/HTMLNames.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/track/vtt/BufferedLineReader.h"
 #include "core/html/track/vtt/VTTCue.h"
 #include "core/html/track/vtt/VTTTokenizer.h"
+#include "core/html_names.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -53,7 +53,7 @@ class VTTParserClient : public GarbageCollectedMixin {
   virtual void NewCuesParsed() = 0;
   virtual void FileFailedToParse() = 0;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 // Implementation of the WebVTT parser algorithm.
@@ -109,7 +109,7 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   // Transfers ownership of last parsed cues to caller.
   void GetNewCues(HeapVector<Member<TextTrackCue>>&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   VTTParser(VTTParserClient*, Document&);

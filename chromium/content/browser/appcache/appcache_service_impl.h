@@ -39,7 +39,6 @@ class SpecialStoragePolicy;
 namespace content {
 FORWARD_DECLARE_TEST(AppCacheServiceImplTest, ScheduleReinitialize);
 class AppCacheBackendImpl;
-class AppCacheExecutableHandlerFactory;
 class AppCacheQuotaClient;
 class AppCachePolicy;
 class AppCacheServiceImplTest;
@@ -103,7 +102,7 @@ class CONTENT_EXPORT AppCacheServiceImpl
 
   // AppCacheService implementation:
   void GetAllAppCacheInfo(AppCacheInfoCollection* collection,
-                          const net::CompletionCallback& callback) override;
+                          OnceCompletionCallback callback) override;
   void DeleteAppCacheGroup(const GURL& manifest_url,
                            const net::CompletionCallback& callback) override;
 
@@ -134,18 +133,6 @@ class CONTENT_EXPORT AppCacheServiceImpl
   AppCachePolicy* appcache_policy() const { return appcache_policy_; }
   void set_appcache_policy(AppCachePolicy* policy) {
     appcache_policy_ = policy;
-  }
-
-  // The factory may be null, in which case invocations of exe handlers
-  // will result in an error response.
-  // The service does NOT assume ownership of the factory, it is the callers
-  // responsibility to ensure that the pointer remains valid while set.
-  AppCacheExecutableHandlerFactory* handler_factory() const {
-    return handler_factory_;
-  }
-  void set_handler_factory(
-      AppCacheExecutableHandlerFactory* factory) {
-    handler_factory_ = factory;
   }
 
   storage::SpecialStoragePolicy* special_storage_policy() const {
@@ -214,7 +201,6 @@ class CONTENT_EXPORT AppCacheServiceImpl
   scoped_refptr<base::SequencedTaskRunner> db_task_runner_;
   AppCachePolicy* appcache_policy_;
   AppCacheQuotaClient* quota_client_;
-  AppCacheExecutableHandlerFactory* handler_factory_;
   std::unique_ptr<AppCacheStorage> storage_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;

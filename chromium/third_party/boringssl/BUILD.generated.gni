@@ -80,8 +80,6 @@ crypto_sources = [
   "src/crypto/cpu-intel.c",
   "src/crypto/cpu-ppc64le.c",
   "src/crypto/crypto.c",
-  "src/crypto/curve25519/curve25519.c",
-  "src/crypto/curve25519/internal.h",
   "src/crypto/curve25519/spake25519.c",
   "src/crypto/curve25519/x25519-x86_64.c",
   "src/crypto/dh/check.c",
@@ -89,7 +87,6 @@ crypto_sources = [
   "src/crypto/dh/dh_asn1.c",
   "src/crypto/dh/params.c",
   "src/crypto/digest_extra/digest_extra.c",
-  "src/crypto/digest_extra/internal.h",
   "src/crypto/dsa/dsa.c",
   "src/crypto/dsa/dsa_asn1.c",
   "src/crypto/ec_extra/ec_asn1.c",
@@ -97,6 +94,7 @@ crypto_sources = [
   "src/crypto/ecdsa_extra/ecdsa_asn1.c",
   "src/crypto/engine/engine.c",
   "src/crypto/err/err.c",
+  "src/crypto/err/internal.h",
   "src/crypto/evp/digestsign.c",
   "src/crypto/evp/evp.c",
   "src/crypto/evp/evp_asn1.c",
@@ -327,6 +325,8 @@ crypto_sources = [
   "src/include/openssl/x509.h",
   "src/include/openssl/x509_vfy.h",
   "src/include/openssl/x509v3.h",
+  "src/third_party/fiat/curve25519.c",
+  "src/third_party/fiat/internal.h",
 ]
 
 ssl_sources = [
@@ -342,6 +342,7 @@ ssl_sources = [
   "src/ssl/d1_srtp.cc",
   "src/ssl/dtls_method.cc",
   "src/ssl/dtls_record.cc",
+  "src/ssl/handshake.cc",
   "src/ssl/handshake_client.cc",
   "src/ssl/handshake_server.cc",
   "src/ssl/internal.h",
@@ -536,8 +537,12 @@ crypto_sources_win_x86_64 = [
 ]
 
 fuzzers = [
+  "bn_div",
+  "bn_mod_exp",
   "cert",
   "client",
+  "dtls_client",
+  "dtls_server",
   "pkcs8",
   "privkey",
   "read_pem",

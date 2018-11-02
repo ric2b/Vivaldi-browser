@@ -6,7 +6,7 @@
 #define BlobBytesProvider_h
 
 #include "platform/blob/BlobData.h"
-#include "storage/public/interfaces/blobs.mojom-blink.h"
+#include "third_party/WebKit/common/blob/blob_registry.mojom-blink.h"
 
 namespace blink {
 
@@ -17,13 +17,12 @@ namespace blink {
 // then transfers ownership of the class to a different thread where it will be
 // bound to a mojo pipe, such that the various Request* methods are called on a
 // thread that is allowed to do File IO.
-class PLATFORM_EXPORT BlobBytesProvider
-    : public storage::mojom::blink::BytesProvider {
+class PLATFORM_EXPORT BlobBytesProvider : public mojom::blink::BytesProvider {
  public:
-  explicit BlobBytesProvider(RefPtr<RawData>);
+  explicit BlobBytesProvider(scoped_refptr<RawData>);
   ~BlobBytesProvider() override;
 
-  void AppendData(RefPtr<RawData>);
+  void AppendData(scoped_refptr<RawData>);
 
   // BytesProvider implementation:
   void RequestAsReply(RequestAsReplyCallback) override;
@@ -35,7 +34,7 @@ class PLATFORM_EXPORT BlobBytesProvider
                      RequestAsFileCallback) override;
 
  private:
-  Vector<RefPtr<RawData>> data_;
+  Vector<scoped_refptr<RawData>> data_;
 };
 
 }  // namespace blink

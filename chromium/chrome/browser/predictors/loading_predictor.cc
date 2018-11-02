@@ -4,6 +4,7 @@
 
 #include "chrome/browser/predictors/loading_predictor.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "base/memory/ptr_util.h"
@@ -14,6 +15,38 @@
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
 
 namespace predictors {
+
+namespace {
+
+const base::TimeDelta kMinDelayBetweenPreresolveRequests =
+    base::TimeDelta::FromSeconds(60);
+const base::TimeDelta kMinDelayBetweenPreconnectRequests =
+    base::TimeDelta::FromSeconds(10);
+
+// Returns true iff |prediction| is not empty.
+bool AddInitialUrlToPreconnectPrediction(const GURL& initial_url,
+                                         PreconnectPrediction* prediction) {
+  GURL initial_origin = initial_url.GetOrigin();
+  // Open minimum 2 sockets to the main frame host to speed up the loading if a
+  // main page has a redirect to the same host. This is because there can be a
+  // race between reading the server redirect response and sending a new request
+  // while the connection is still in use.
+  static const int kMinSockets = 2;
+
+  if (!prediction->requests.empty() &&
+      prediction->requests.front().origin == initial_origin) {
+    prediction->requests.front().num_sockets =
+        std::max(prediction->requests.front().num_sockets, kMinSockets);
+  } else if (initial_origin.is_valid() &&
+             initial_origin.SchemeIsHTTPOrHTTPS()) {
+    prediction->requests.emplace(prediction->requests.begin(), initial_origin,
+                                 kMinSockets);
+  }
+
+  return !prediction->requests.empty();
+}
+
+}  // namespace
 
 LoadingPredictor::LoadingPredictor(const LoadingPredictorConfig& config,
                                    Profile* profile)
@@ -35,8 +68,19 @@ LoadingPredictor::~LoadingPredictor() {
   DCHECK(shutdown_);
 }
 
-void LoadingPredictor::PrepareForPageLoad(const GURL& url, HintOrigin origin) {
-  if (shutdown_ || active_hints_.find(url) != active_hints_.end())
+void LoadingPredictor::PrepareForPageLoad(const GURL& url,
+                                          HintOrigin origin,
+                                          bool preconnectable) {
+  if (shutdown_)
+    return;
+
+  if (origin == HintOrigin::OMNIBOX) {
+    // Omnibox hints are lightweight and need a special treatment.
+    HandleOmniboxHint(url, preconnectable);
+    return;
+  }
+
+  if (active_hints_.find(url) != active_hints_.end())
     return;
 
   bool has_prefetch_prediction = false;
@@ -59,10 +103,13 @@ void LoadingPredictor::PrepareForPageLoad(const GURL& url, HintOrigin origin) {
     has_preconnect_prediction =
         resource_prefetch_predictor_->PredictPreconnectOrigins(url,
                                                                &prediction);
+    // Try to preconnect to the |url| even if the predictor has no
+    // prediction.
+    has_preconnect_prediction =
+        AddInitialUrlToPreconnectPrediction(url, &prediction);
     if (has_preconnect_prediction &&
         config_.IsPreconnectEnabledForOrigin(profile_, origin)) {
-      MaybeAddPreconnect(url, prediction.preconnect_origins,
-                         prediction.preresolve_hosts, origin);
+      MaybeAddPreconnect(url, std::move(prediction.requests), origin);
       hint_activated = true;
     }
   }
@@ -292,15 +339,14 @@ void LoadingPredictor::ResourcePrefetcherFinished(
 
 void LoadingPredictor::MaybeAddPreconnect(
     const GURL& url,
-    const std::vector<GURL>& preconnect_origins,
-    const std::vector<GURL>& preresolve_hosts,
+    std::vector<PreconnectRequest>&& requests,
     HintOrigin origin) {
   DCHECK(!shutdown_);
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::BindOnce(&PreconnectManager::Start,
                      base::Unretained(preconnect_manager()), url,
-                     preconnect_origins, preresolve_hosts));
+                     std::move(requests)));
 }
 
 void LoadingPredictor::MaybeRemovePreconnect(const GURL& url) {
@@ -312,6 +358,38 @@ void LoadingPredictor::MaybeRemovePreconnect(const GURL& url) {
       content::BrowserThread::IO, FROM_HERE,
       base::BindOnce(&PreconnectManager::Stop,
                      base::Unretained(preconnect_manager_.get()), url));
+}
+
+void LoadingPredictor::HandleOmniboxHint(const GURL& url, bool preconnectable) {
+  if (!url.is_valid() || !url.has_host() ||
+      !config_.IsPreconnectEnabledForOrigin(profile_, HintOrigin::OMNIBOX)) {
+    return;
+  }
+
+  GURL origin = url.GetOrigin();
+  bool is_new_origin = origin != last_omnibox_origin_;
+  last_omnibox_origin_ = origin;
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (preconnectable) {
+    if (is_new_origin || now - last_omnibox_preconnect_time_ >=
+                             kMinDelayBetweenPreconnectRequests) {
+      last_omnibox_preconnect_time_ = now;
+      content::BrowserThread::PostTask(
+          content::BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&PreconnectManager::StartPreconnectUrl,
+                         base::Unretained(preconnect_manager()), url, true));
+    }
+    return;
+  }
+
+  if (is_new_origin || now - last_omnibox_preresolve_time_ >=
+                           kMinDelayBetweenPreresolveRequests) {
+    last_omnibox_preresolve_time_ = now;
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&PreconnectManager::StartPreresolveHost,
+                       base::Unretained(preconnect_manager()), url));
+  }
 }
 
 void LoadingPredictor::PreconnectFinished(

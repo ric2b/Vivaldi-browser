@@ -5,8 +5,8 @@
 #ifndef SequenceTest_h
 #define SequenceTest_h
 
-#include "bindings/core/v8/DoubleOrDoubleSequence.h"
 #include "bindings/core/v8/Nullable.h"
+#include "bindings/core/v8/double_or_double_sequence.h"
 #include "core/dom/Element.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
@@ -15,8 +15,7 @@
 
 namespace blink {
 
-class SequenceTest final : public GarbageCollectedFinalized<SequenceTest>,
-                           public ScriptWrappable {
+class SequenceTest final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -36,7 +35,7 @@ class SequenceTest final : public GarbageCollectedFinalized<SequenceTest>,
 
   bool unionReceivedSequence(const DoubleOrDoubleSequence& arg);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   SequenceTest();

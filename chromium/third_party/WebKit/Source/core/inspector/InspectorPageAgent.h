@@ -35,6 +35,7 @@
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Page.h"
 #include "core/page/ChromeClient.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8-inspector.h"
@@ -66,7 +67,7 @@ class CORE_EXPORT InspectorPageAgent final
    public:
     virtual ~Client() {}
     virtual void PageLayoutInvalidated(bool resized) {}
-    virtual void WaitForCreateWindow(LocalFrame*) {}
+    virtual void WaitForCreateWindow(InspectorPageAgent*, LocalFrame*) {}
   };
 
   enum ResourceType {
@@ -94,14 +95,14 @@ class CORE_EXPORT InspectorPageAgent final
   static bool CachedResourceContent(Resource*,
                                     String* result,
                                     bool* base64_encoded);
-  static bool SharedBufferContent(RefPtr<const SharedBuffer>,
+  static bool SharedBufferContent(scoped_refptr<const SharedBuffer>,
                                   const String& mime_type,
                                   const String& text_encoding_name,
                                   String* result,
                                   bool* base64_encoded);
 
   static String ResourceTypeJson(ResourceType);
-  static ResourceType CachedResourceType(const Resource&);
+  static ResourceType ToResourceType(const Resource::Type);
   static String CachedResourceTypeJson(const Resource&);
 
   // Page API for frontend
@@ -117,16 +118,21 @@ class CORE_EXPORT InspectorPageAgent final
   protocol::Response removeScriptToEvaluateOnNewDocument(
       const String& identifier) override;
   protocol::Response setAutoAttachToCreatedPages(bool) override;
+  protocol::Response setLifecycleEventsEnabled(bool) override;
   protocol::Response reload(Maybe<bool> bypass_cache,
                             Maybe<String> script_to_evaluate_on_load) override;
   protocol::Response navigate(const String& url,
                               Maybe<String> referrer,
                               Maybe<String> transitionType,
-                              String* frame_id) override;
+                              String* frame_id,
+                              Maybe<String>* loader_id,
+                              Maybe<String>* errorText) override;
   protocol::Response stopLoading() override;
   protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
       std::unique_ptr<protocol::Page::FrameResourceTree>* frame_tree) override;
+  protocol::Response getFrameTree(
+      std::unique_ptr<protocol::Page::FrameTree>*) override;
   void getResourceContent(const String& frame_id,
                           const String& url,
                           std::unique_ptr<GetResourceContentCallback>) override;
@@ -168,19 +174,27 @@ class CORE_EXPORT InspectorPageAgent final
   void DidRunJavaScriptDialog();
   void DidResizeMainFrame();
   void DidChangeViewport();
-  void LifecycleEvent(const char* name, double timestamp);
+  void LifecycleEvent(LocalFrame*,
+                      DocumentLoader*,
+                      const char* name,
+                      double timestamp);
   void PaintTiming(Document*, const char* name, double timestamp);
   void Will(const probe::UpdateLayout&);
   void Did(const probe::UpdateLayout&);
   void Will(const probe::RecalculateStyle&);
   void Did(const probe::RecalculateStyle&);
   void WindowCreated(LocalFrame*);
+  void WindowOpen(Document*,
+                  const String&,
+                  const AtomicString&,
+                  const WebWindowFeatures&,
+                  bool);
 
   // Inspector Controller API
   void Restore() override;
   bool ScreencastEnabled();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   InspectorPageAgent(InspectedFrames*,
@@ -210,7 +224,9 @@ class CORE_EXPORT InspectorPageAgent final
   void PageLayoutInvalidated(bool resized);
 
   std::unique_ptr<protocol::Page::Frame> BuildObjectForFrame(LocalFrame*);
-  std::unique_ptr<protocol::Page::FrameResourceTree> BuildObjectForFrameTree(
+  std::unique_ptr<protocol::Page::FrameTree> BuildObjectForFrameTree(
+      LocalFrame*);
+  std::unique_ptr<protocol::Page::FrameResourceTree> BuildObjectForResourceTree(
       LocalFrame*);
   Member<InspectedFrames> inspected_frames_;
   v8_inspector::V8InspectorSession* v8_session_;

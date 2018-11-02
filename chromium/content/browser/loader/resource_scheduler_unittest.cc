@@ -165,8 +165,8 @@ class CancelingTestRequest : public TestRequest {
 
 class FakeResourceContext : public ResourceContext {
  private:
-  net::HostResolver* GetHostResolver() override { return NULL; }
-  net::URLRequestContext* GetRequestContext() override { return NULL; }
+  net::HostResolver* GetHostResolver() override { return nullptr; }
+  net::URLRequestContext* GetRequestContext() override { return nullptr; }
 };
 
 class ResourceSchedulerTest : public testing::Test {
@@ -183,12 +183,12 @@ class ResourceSchedulerTest : public testing::Test {
 
   // Done separately from construction to allow for modification of command
   // line flags in tests.
-  void InitializeScheduler() {
+  void InitializeScheduler(bool enabled = true) {
     CleanupScheduler();
 
     // Destroys previous scheduler, also destroys any previously created
     // mock_timer_.
-    scheduler_.reset(new ResourceScheduler());
+    scheduler_.reset(new ResourceScheduler(enabled));
 
     scheduler_->OnClientCreated(kChildId, kRouteId,
                                 &network_quality_estimator_);
@@ -275,7 +275,7 @@ class ResourceSchedulerTest : public testing::Test {
         NewURLRequestWithChildAndRoute(url, priority, child_id, route_id));
     std::unique_ptr<ResourceThrottle> throttle(scheduler_->ScheduleRequest(
         child_id, route_id, is_async, url_request.get()));
-    auto request = base::MakeUnique<TestRequest>(
+    auto request = std::make_unique<TestRequest>(
         std::move(url_request), std::move(throttle), scheduler());
     request->Start();
     return request;
@@ -382,7 +382,7 @@ class ResourceSchedulerTest : public testing::Test {
     if (non_delayable_weight > 0.0) {
       experiment_enabled = true;
       params["MaxEffectiveConnectionType"] = "2G";
-      params["NonDelayableWeight"] = base::DoubleToString(non_delayable_weight);
+      params["NonDelayableWeight"] = base::NumberToString(non_delayable_weight);
     }
 
     base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
@@ -396,7 +396,7 @@ class ResourceSchedulerTest : public testing::Test {
     ASSERT_TRUE(field_trial);
 
     std::unique_ptr<base::FeatureList> feature_list(
-        base::MakeUnique<base::FeatureList>());
+        std::make_unique<base::FeatureList>());
     feature_list->RegisterFieldTrialOverride(
         "ThrottleDelayable",
         experiment_enabled ? base::FeatureList::OVERRIDE_ENABLE_FEATURE
@@ -418,7 +418,7 @@ class ResourceSchedulerTest : public testing::Test {
     params["MaxEffectiveConnectionType"] = max_ect_string;
     for (size_t bdp_range_index = 1; bdp_range_index <= num_bdp_ranges;
          bdp_range_index++) {
-      std::string index_str = base::SizeTToString(bdp_range_index);
+      std::string index_str = base::NumberToString(bdp_range_index);
       params["MaxBDPKbits" + index_str] = index_str + "00";
       params["MaxDelayableRequests" + index_str] = index_str + "0";
     }
@@ -427,7 +427,7 @@ class ResourceSchedulerTest : public testing::Test {
     base::FieldTrial* field_trial =
         base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
     std::unique_ptr<base::FeatureList> feature_list(
-        base::MakeUnique<base::FeatureList>());
+        std::make_unique<base::FeatureList>());
     feature_list->RegisterFieldTrialOverride(
         kThrottleDelayable, base::FeatureList::OVERRIDE_ENABLE_FEATURE,
         field_trial);
@@ -1803,7 +1803,7 @@ TEST_F(ResourceSchedulerTest, ReadInvalidConfigTest) {
   base::FieldTrial* field_trial =
       base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
   std::unique_ptr<base::FeatureList> feature_list(
-      base::MakeUnique<base::FeatureList>());
+      std::make_unique<base::FeatureList>());
   feature_list->RegisterFieldTrialOverride(
       kThrottleDelayable, base::FeatureList::OVERRIDE_ENABLE_FEATURE,
       field_trial);
@@ -1966,6 +1966,32 @@ TEST_F(ResourceSchedulerTest, NumDelayableAtStartOfNonDelayableUMA) {
   histogram_tester->ExpectUniqueSample(
       "ResourceScheduler.NumDelayableRequestsInFlightAtStart.NonDelayable", 2,
       1);
+}
+
+TEST_F(ResourceSchedulerTest, SchedulerEnabled) {
+  std::unique_ptr<TestRequest> high(
+      NewRequest("http://host/high", net::HIGHEST));
+  std::unique_ptr<TestRequest> low(NewRequest("http://host/req", net::LOWEST));
+
+  std::unique_ptr<TestRequest> request(
+      NewRequest("http://host/req", net::LOWEST));
+
+  EXPECT_FALSE(request->started());
+}
+
+TEST_F(ResourceSchedulerTest, SchedulerDisabled) {
+  InitializeScheduler(false);
+
+  std::unique_ptr<TestRequest> high(
+      NewRequest("http://host/high", net::HIGHEST));
+  std::unique_ptr<TestRequest> low(NewRequest("http://host/req", net::LOWEST));
+
+  std::unique_ptr<TestRequest> request(
+      NewRequest("http://host/req", net::LOWEST));
+
+  // Normally |request| wouldn't start immediately due to the |high| priority
+  // request, but when the scheduler is disabled it starts immediately.
+  EXPECT_TRUE(request->started());
 }
 
 }  // unnamed namespace

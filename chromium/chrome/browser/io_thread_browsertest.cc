@@ -4,20 +4,30 @@
 
 #include "chrome/browser/io_thread.h"
 
+#include <map>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/prefs/pref_service.h"
+#include "components/variations/variations_associated_data.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/base/filename_util.h"
 #include "net/base/host_port_pair.h"
+#include "net/http/http_auth_preferences.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/simple_connection_listener.h"
 #include "net/url_request/url_fetcher.h"
@@ -59,6 +69,46 @@ class TestURLFetcherDelegate : public net::URLFetcherDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestURLFetcherDelegate);
 };
 
+// Runs a task on the IOThread and waits for it to complete.
+void RunOnIOThreadBlocking(const base::Closure& task) {
+  base::RunLoop run_loop;
+  content::BrowserThread::PostTaskAndReply(
+      content::BrowserThread::IO, FROM_HERE, task, run_loop.QuitClosure());
+  run_loop.Run();
+}
+
+void CheckCnameLookup(IOThread* io_thread, bool expected) {
+  EXPECT_EQ(expected,
+            io_thread->globals()
+                ->http_auth_preferences->NegotiateDisableCnameLookup());
+}
+
+void CheckNegotiateEnablePort(IOThread* io_thread, bool expected) {
+  EXPECT_EQ(expected,
+            io_thread->globals()->http_auth_preferences->NegotiateEnablePort());
+}
+
+void CheckCanUseDefaultCredentials(IOThread* io_thread,
+                                   bool expected,
+                                   const GURL& url) {
+  EXPECT_EQ(
+      expected,
+      io_thread->globals()->http_auth_preferences->CanUseDefaultCredentials(
+          url));
+}
+
+void CheckCanDelegate(IOThread* io_thread, bool expected, const GURL& url) {
+  EXPECT_EQ(expected,
+            io_thread->globals()->http_auth_preferences->CanDelegate(url));
+}
+
+void CheckEffectiveConnectionType(IOThread* io_thread,
+                                  net::EffectiveConnectionType expected) {
+  EXPECT_EQ(expected,
+            io_thread->globals()
+                ->network_quality_estimator->GetEffectiveConnectionType());
+}
+
 class IOThreadBrowserTest : public InProcessBrowserTest {
  public:
   IOThreadBrowserTest() {}
@@ -82,32 +132,129 @@ class IOThreadBrowserTest : public InProcessBrowserTest {
   }
 };
 
-// Make sure that the system URLRequestContext does not cache responses. Main
-// reason for this test is that caching requires memory, so this guards against
-// accidentally hooking up a cache.
-IN_PROC_BROWSER_TEST_F(IOThreadBrowserTest, NoCache) {
-  GURL cacheable_url = embedded_test_server()->GetURL("/cachetime");
-  // Request a cacheable resource. Request should succeed.
-  TestURLFetcherDelegate fetcher_delegate;
-  std::unique_ptr<net::URLFetcher> fetcher = net::URLFetcher::Create(
-      cacheable_url, net::URLFetcher::GET, &fetcher_delegate);
-  fetcher->SetRequestContext(
-      g_browser_process->io_thread()->system_url_request_context_getter());
-  fetcher->Start();
-  fetcher_delegate.WaitForCompletion();
-  EXPECT_EQ(200, fetcher->GetResponseCode());
+// This test uses the kDisableAuthNegotiateCnameLookup to check that
+// the HttpAuthPreferences are correctly initialized and running on the
+// IO thread. The other preferences are tested by the HttpAuthPreferences
+// unit tests.
+IN_PROC_BROWSER_TEST_F(IOThreadBrowserTest, UpdateNegotiateDisableCnameLookup) {
+  g_browser_process->local_state()->SetBoolean(
+      prefs::kDisableAuthNegotiateCnameLookup, false);
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCnameLookup,
+                 base::Unretained(g_browser_process->io_thread()), false));
+  g_browser_process->local_state()->SetBoolean(
+      prefs::kDisableAuthNegotiateCnameLookup, true);
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCnameLookup,
+                 base::Unretained(g_browser_process->io_thread()), true));
+}
 
-  // Shut down server and re-request resource.  Request should fail.
-  TestURLFetcherDelegate failed_fetcher_delegate;
-  EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
-  fetcher = net::URLFetcher::Create(cacheable_url, net::URLFetcher::GET,
-                                    &failed_fetcher_delegate);
-  fetcher->SetRequestContext(
-      g_browser_process->io_thread()->system_url_request_context_getter());
-  fetcher->Start();
-  failed_fetcher_delegate.WaitForCompletion();
-  EXPECT_FALSE(fetcher->GetStatus().is_success());
-  EXPECT_EQ(net::ERR_CONNECTION_REFUSED, fetcher->GetStatus().error());
+IN_PROC_BROWSER_TEST_F(IOThreadBrowserTest, UpdateEnableAuthNegotiatePort) {
+  g_browser_process->local_state()->SetBoolean(prefs::kEnableAuthNegotiatePort,
+                                               false);
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckNegotiateEnablePort,
+                 base::Unretained(g_browser_process->io_thread()), false));
+  g_browser_process->local_state()->SetBoolean(prefs::kEnableAuthNegotiatePort,
+                                               true);
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckNegotiateEnablePort,
+                 base::Unretained(g_browser_process->io_thread()), true));
+}
+
+IN_PROC_BROWSER_TEST_F(IOThreadBrowserTest, UpdateServerWhitelist) {
+  GURL url("http://test.example.com");
+
+  g_browser_process->local_state()->SetString(prefs::kAuthServerWhitelist,
+                                              "xxx");
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCanUseDefaultCredentials,
+                 base::Unretained(g_browser_process->io_thread()), false, url));
+
+  g_browser_process->local_state()->SetString(prefs::kAuthServerWhitelist, "*");
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCanUseDefaultCredentials,
+                 base::Unretained(g_browser_process->io_thread()), true, url));
+}
+
+IN_PROC_BROWSER_TEST_F(IOThreadBrowserTest, UpdateDelegateWhitelist) {
+  GURL url("http://test.example.com");
+
+  g_browser_process->local_state()->SetString(
+      prefs::kAuthNegotiateDelegateWhitelist, "");
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCanDelegate,
+                 base::Unretained(g_browser_process->io_thread()), false, url));
+
+  g_browser_process->local_state()->SetString(
+      prefs::kAuthNegotiateDelegateWhitelist, "*");
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckCanDelegate,
+                 base::Unretained(g_browser_process->io_thread()), true, url));
+}
+
+class IOThreadEctCommandLineBrowserTest : public IOThreadBrowserTest {
+ public:
+  IOThreadEctCommandLineBrowserTest() {}
+  ~IOThreadEctCommandLineBrowserTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII("--force-effective-connection-type",
+                                    "Slow-2G");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(IOThreadEctCommandLineBrowserTest,
+                       ForceECTFromCommandLine) {
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckEffectiveConnectionType,
+                 base::Unretained(g_browser_process->io_thread()),
+                 net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G));
+}
+
+class IOThreadEctFieldTrialBrowserTest : public IOThreadBrowserTest {
+ public:
+  IOThreadEctFieldTrialBrowserTest() {}
+  ~IOThreadEctFieldTrialBrowserTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    variations::testing::ClearAllVariationParams();
+    std::map<std::string, std::string> variation_params;
+    variation_params["force_effective_connection_type"] = "2G";
+    ASSERT_TRUE(variations::AssociateVariationParams(
+        "NetworkQualityEstimator", "Enabled", variation_params));
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        "NetworkQualityEstimator", "Enabled"));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(IOThreadEctFieldTrialBrowserTest,
+                       ForceECTUsingFieldTrial) {
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckEffectiveConnectionType,
+                 base::Unretained(g_browser_process->io_thread()),
+                 net::EFFECTIVE_CONNECTION_TYPE_2G));
+}
+
+class IOThreadEctFieldTrialAndCommandLineBrowserTest
+    : public IOThreadEctFieldTrialBrowserTest {
+ public:
+  IOThreadEctFieldTrialAndCommandLineBrowserTest() {}
+  ~IOThreadEctFieldTrialAndCommandLineBrowserTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    IOThreadEctFieldTrialBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII("--force-effective-connection-type",
+                                    "Slow-2G");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(IOThreadEctFieldTrialAndCommandLineBrowserTest,
+                       ECTFromCommandLineOverridesFieldTrial) {
+  RunOnIOThreadBlocking(
+      base::Bind(&CheckEffectiveConnectionType,
+                 base::Unretained(g_browser_process->io_thread()),
+                 net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G));
 }
 
 class IOThreadBrowserTestWithHangingPacRequest : public IOThreadBrowserTest {
@@ -189,7 +336,7 @@ class IOThreadBrowserTestWithPacFileURL : public IOThreadBrowserTest {
 IN_PROC_BROWSER_TEST_F(IOThreadBrowserTestWithPacFileURL, FilePac) {
   TestURLFetcherDelegate fetcher_delegate;
   std::unique_ptr<net::URLFetcher> fetcher =
-      net::URLFetcher::Create(GURL("http://foo:12345/echoheader?Foo"),
+      net::URLFetcher::Create(GURL("http://foo.test:12345/echoheader?Foo"),
                               net::URLFetcher::GET, &fetcher_delegate);
   fetcher->AddExtraRequestHeader("Foo: Bar");
   fetcher->SetRequestContext(

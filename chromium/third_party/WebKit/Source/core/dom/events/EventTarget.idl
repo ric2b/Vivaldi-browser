@@ -22,7 +22,9 @@
 
 [
     CheckSecurity=Receiver,
-    Exposed=(Window,Worker),
+    Constructor(),
+    ConstructorCallWith=ScriptState,
+    Exposed=(Window,Worker,AudioWorklet),
     ImmutablePrototype
 ] interface EventTarget {
     [Custom=CallPrologue] void addEventListener(DOMString type, EventListener? listener, optional (AddEventListenerOptions or boolean) options);

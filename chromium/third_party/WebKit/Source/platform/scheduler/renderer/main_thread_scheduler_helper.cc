@@ -4,29 +4,31 @@
 
 #include "platform/scheduler/renderer/main_thread_scheduler_helper.h"
 
-#include "platform/scheduler/child/scheduler_tqm_delegate.h"
 #include "platform/scheduler/renderer/main_thread_task_queue.h"
 
 namespace blink {
 namespace scheduler {
 
 MainThreadSchedulerHelper::MainThreadSchedulerHelper(
-    scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate,
+    std::unique_ptr<TaskQueueManager> task_queue_manager,
     RendererSchedulerImpl* renderer_scheduler)
-    : SchedulerHelper(task_queue_manager_delegate),
+    : SchedulerHelper(std::move(task_queue_manager)),
       renderer_scheduler_(renderer_scheduler),
       default_task_queue_(
           NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
-                           MainThreadTaskQueue::QueueType::DEFAULT)
+                           MainThreadTaskQueue::QueueType::kDefault)
                            .SetShouldMonitorQuiescence(true))),
       control_task_queue_(
           NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
-                           MainThreadTaskQueue::QueueType::CONTROL)
+                           MainThreadTaskQueue::QueueType::kControl)
                            .SetShouldNotifyObservers(false))) {
   InitDefaultQueues(default_task_queue_, control_task_queue_);
 }
 
-MainThreadSchedulerHelper::~MainThreadSchedulerHelper() {}
+MainThreadSchedulerHelper::~MainThreadSchedulerHelper() {
+  control_task_queue_->ShutdownTaskQueue();
+  default_task_queue_->ShutdownTaskQueue();
+}
 
 scoped_refptr<MainThreadTaskQueue>
 MainThreadSchedulerHelper::DefaultMainThreadTaskQueue() {
@@ -44,18 +46,6 @@ MainThreadSchedulerHelper::ControlMainThreadTaskQueue() {
 
 scoped_refptr<TaskQueue> MainThreadSchedulerHelper::ControlTaskQueue() {
   return control_task_queue_;
-}
-
-scoped_refptr<MainThreadTaskQueue>
-MainThreadSchedulerHelper::BestEffortMainThreadTaskQueue() {
-  if (!best_effort_task_queue_) {
-    best_effort_task_queue_ =
-        NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
-                         MainThreadTaskQueue::QueueType::BEST_EFFORT)
-                         .SetShouldMonitorQuiescence(true));
-    best_effort_task_queue_->SetQueuePriority(TaskQueue::BEST_EFFORT_PRIORITY);
-  }
-  return best_effort_task_queue_;
 }
 
 scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerHelper::NewTaskQueue(

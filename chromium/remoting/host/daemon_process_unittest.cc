@@ -80,7 +80,7 @@ class MockDaemonProcess : public DaemonProcess {
                bool(int, int, const IPC::ChannelHandle&));
 
   MOCK_METHOD1(DoCreateDesktopSessionPtr, DesktopSession*(int));
-  MOCK_METHOD1(DoCrashNetworkProcess, void(const tracked_objects::Location&));
+  MOCK_METHOD1(DoCrashNetworkProcess, void(const base::Location&));
   MOCK_METHOD0(LaunchNetworkProcess, void());
 
  private:
@@ -91,8 +91,7 @@ FakeDesktopSession::FakeDesktopSession(DaemonProcess* daemon_process, int id)
     : DesktopSession(daemon_process, id) {
 }
 
-FakeDesktopSession::~FakeDesktopSession() {
-}
+FakeDesktopSession::~FakeDesktopSession() = default;
 
 MockDaemonProcess::MockDaemonProcess(
     scoped_refptr<AutoThreadTaskRunner> caller_task_runner,
@@ -101,8 +100,7 @@ MockDaemonProcess::MockDaemonProcess(
     : DaemonProcess(caller_task_runner, io_task_runner, stopped_callback) {
 }
 
-MockDaemonProcess::~MockDaemonProcess() {
-}
+MockDaemonProcess::~MockDaemonProcess() = default;
 
 std::unique_ptr<DesktopSession> MockDaemonProcess::DoCreateDesktopSession(
     int terminal_id,
@@ -137,7 +135,7 @@ class DaemonProcessTest : public testing::Test {
 
   // DaemonProcess mocks
   DesktopSession* DoCreateDesktopSession(int terminal_id);
-  void DoCrashNetworkProcess(const tracked_objects::Location& location);
+  void DoCrashNetworkProcess(const base::Location& location);
   void LaunchNetworkProcess();
 
   // Deletes |daemon_process_|.
@@ -162,8 +160,7 @@ class DaemonProcessTest : public testing::Test {
 DaemonProcessTest::DaemonProcessTest() : terminal_id_(0) {
 }
 
-DaemonProcessTest::~DaemonProcessTest() {
-}
+DaemonProcessTest::~DaemonProcessTest() = default;
 
 void DaemonProcessTest::SetUp() {
   scoped_refptr<AutoThreadTaskRunner> task_runner = new AutoThreadTaskRunner(
@@ -196,8 +193,7 @@ DesktopSession* DaemonProcessTest::DoCreateDesktopSession(int terminal_id) {
   return new FakeDesktopSession(daemon_process_.get(), terminal_id);
 }
 
-void DaemonProcessTest::DoCrashNetworkProcess(
-    const tracked_objects::Location& location) {
+void DaemonProcessTest::DoCrashNetworkProcess(const base::Location& location) {
   daemon_process_->SendToNetwork(
       new ChromotingDaemonMsg_Crash(location.function_name(),
                                     location.file_name(),

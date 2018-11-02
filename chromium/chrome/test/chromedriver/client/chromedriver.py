@@ -460,10 +460,19 @@ class ChromeDriver(object):
                                {'windowHandle': 'current'})
     return [size['width'], size['height']]
 
+  def GetWindowRect(self):
+    rect = self.ExecuteCommand(Command.GET_WINDOW_RECT)
+    return [rect['width'], rect['height'], rect['x'], rect['y']]
+
   def SetWindowSize(self, width, height):
     self.ExecuteCommand(
         Command.SET_WINDOW_SIZE,
         {'windowHandle': 'current', 'width': width, 'height': height})
+
+  def SetWindowRect(self, width, height, x, y):
+    self.ExecuteCommand(
+        Command.SET_WINDOW_SIZE,
+        {'width': width, 'height': height, 'x': x, 'y': y})
 
   def MaximizeWindow(self):
     self.ExecuteCommand(Command.MAXIMIZE_WINDOW, {'windowHandle': 'current'})

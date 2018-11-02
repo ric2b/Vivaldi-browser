@@ -31,13 +31,12 @@
 #ifndef HarfBuzzFace_h
 #define HarfBuzzFace_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/fonts/UnicodeRangeSet.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/CharacterNames.h"
 
 #include <hb.h>
@@ -51,16 +50,19 @@ class HarfBuzzFace : public RefCounted<HarfBuzzFace> {
   WTF_MAKE_NONCOPYABLE(HarfBuzzFace);
 
  public:
-  static PassRefPtr<HarfBuzzFace> Create(FontPlatformData* platform_data,
-                                         uint64_t unique_id) {
-    return AdoptRef(new HarfBuzzFace(platform_data, unique_id));
+  static scoped_refptr<HarfBuzzFace> Create(FontPlatformData* platform_data,
+                                     uint64_t unique_id) {
+    return base::AdoptRef(new HarfBuzzFace(platform_data, unique_id));
   }
   ~HarfBuzzFace();
+
+  enum VerticalLayoutCallbacks { PrepareForVerticalLayout, NoVerticalLayout };
 
   // In order to support the restricting effect of unicode-range optionally a
   // range restriction can be passed in, which will restrict which glyphs we
   // return in the harfBuzzGetGlyph function.
-  hb_font_t* GetScaledFont(PassRefPtr<UnicodeRangeSet> = nullptr) const;
+  hb_font_t* GetScaledFont(scoped_refptr<UnicodeRangeSet>,
+                           VerticalLayoutCallbacks) const;
 
  private:
   HarfBuzzFace(FontPlatformData*, uint64_t);

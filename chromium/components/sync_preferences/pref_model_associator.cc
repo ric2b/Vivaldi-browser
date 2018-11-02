@@ -60,7 +60,7 @@ PrefModelAssociator::PrefModelAssociator(
     syncer::ModelType type)
     : models_associated_(false),
       processing_syncer_changes_(false),
-      pref_service_(NULL),
+      pref_service_(nullptr),
       type_(type),
       client_(client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -69,7 +69,7 @@ PrefModelAssociator::PrefModelAssociator(
 
 PrefModelAssociator::~PrefModelAssociator() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  pref_service_ = NULL;
+  pref_service_ = nullptr;
 
   synced_pref_observers_.clear();
 }
@@ -103,14 +103,14 @@ void PrefModelAssociator::InitPrefAndAssociate(
       // Update the local preference based on what we got from the
       // sync server. Note: this only updates the user value store, which is
       // ignored if the preference is policy controlled.
-      if (new_value->IsType(base::Value::Type::NONE)) {
+      if (new_value->is_none()) {
         LOG(WARNING) << "Sync has null value for pref " << pref_name.c_str();
         pref_service_->ClearPref(pref_name);
-      } else if (!new_value->IsType(user_pref_value->GetType())) {
+      } else if (new_value->type() != user_pref_value->type()) {
         LOG(WARNING) << "Synced value for " << preference.name()
-                     << " is of type " << new_value->GetType()
+                     << " is of type " << new_value->type()
                      << " which doesn't match pref type "
-                     << user_pref_value->GetType();
+                     << user_pref_value->type();
       } else if (!user_pref_value->Equals(new_value.get())) {
         pref_service_->Set(pref_name, *new_value);
       }
@@ -126,7 +126,7 @@ void PrefModelAssociator::InitPrefAndAssociate(
         sync_changes->push_back(syncer::SyncChange(
             FROM_HERE, syncer::SyncChange::ACTION_UPDATE, sync_data));
       }
-    } else if (!sync_value->IsType(base::Value::Type::NONE)) {
+    } else if (!sync_value->is_none()) {
       // Only a server value exists. Just set the local user value.
       pref_service_->Set(pref_name, *sync_value);
     } else {
@@ -255,7 +255,7 @@ bool PrefModelAssociator::CreatePrefSyncData(
     const std::string& name,
     const base::Value& value,
     syncer::SyncData* sync_data) const {
-  if (value.IsType(base::Value::Type::NONE)) {
+  if (value.is_none()) {
     LOG(ERROR) << "Attempting to sync a null pref value for " << name;
     return false;
   }
@@ -282,13 +282,13 @@ bool PrefModelAssociator::CreatePrefSyncData(
 std::unique_ptr<base::Value> PrefModelAssociator::MergeListValues(
     const base::Value& from_value,
     const base::Value& to_value) {
-  if (from_value.GetType() == base::Value::Type::NONE)
-    return base::MakeUnique<base::Value>(to_value.Clone());
-  if (to_value.GetType() == base::Value::Type::NONE)
-    return base::MakeUnique<base::Value>(from_value.Clone());
+  if (from_value.is_none())
+    return base::Value::ToUniquePtrValue(to_value.Clone());
+  if (to_value.is_none())
+    return base::Value::ToUniquePtrValue(from_value.Clone());
 
-  DCHECK(from_value.GetType() == base::Value::Type::LIST);
-  DCHECK(to_value.GetType() == base::Value::Type::LIST);
+  DCHECK(from_value.type() == base::Value::Type::LIST);
+  DCHECK(to_value.type() == base::Value::Type::LIST);
 
   base::Value result = to_value.Clone();
   base::Value::ListStorage& list = result.GetList();
@@ -297,7 +297,7 @@ std::unique_ptr<base::Value> PrefModelAssociator::MergeListValues(
       list.emplace_back(value.Clone());
   }
 
-  return base::MakeUnique<base::Value>(std::move(result));
+  return base::Value::ToUniquePtrValue(std::move(result));
 }
 
 base::Value PrefModelAssociator::MergeDictionaryValues(
@@ -353,7 +353,7 @@ syncer::SyncDataList PrefModelAssociator::GetAllSyncData(
 }
 
 syncer::SyncError PrefModelAssociator::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   if (!models_associated_) {
     syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
@@ -413,7 +413,7 @@ base::Value* PrefModelAssociator::ReadPreferenceSpecifics(
     std::string err =
         "Failed to deserialize preference value: " + reader.GetErrorMessage();
     LOG(ERROR) << err;
-    return NULL;
+    return nullptr;
   }
   return value.release();
 }
@@ -512,7 +512,7 @@ void PrefModelAssociator::ProcessPrefChange(const std::string& name) {
 }
 
 void PrefModelAssociator::SetPrefService(PrefServiceSyncable* pref_service) {
-  DCHECK(pref_service_ == NULL);
+  DCHECK(pref_service_ == nullptr);
   pref_service_ = pref_service;
 }
 

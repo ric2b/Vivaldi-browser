@@ -5,21 +5,19 @@
 #include "ui/message_center/views/message_view_context_menu_controller.h"
 
 #include "ui/base/models/menu_model.h"
-#include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/message_center.h"
 #include "ui/message_center/views/message_view.h"
+#include "ui/message_center/views/message_view_delegate.h"
+#include "ui/message_center/views/notification_menu_model.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 
 namespace message_center {
 
-MessageViewContextMenuController::MessageViewContextMenuController(
-    MessageCenterController* controller)
-    : controller_(controller) {
-}
+MessageViewContextMenuController::MessageViewContextMenuController() = default;
 
-MessageViewContextMenuController::~MessageViewContextMenuController() {
-}
+MessageViewContextMenuController::~MessageViewContextMenuController() = default;
 
 void MessageViewContextMenuController::ShowContextMenuForView(
     views::View* source,
@@ -27,8 +25,10 @@ void MessageViewContextMenuController::ShowContextMenuForView(
     ui::MenuSourceType source_type) {
   // Assumes that the target view has to be MessageView.
   MessageView* message_view = static_cast<MessageView*>(source);
-  menu_model_ = controller_->CreateMenuModel(message_view->notifier_id(),
-                                             message_view->display_source());
+  Notification* notification =
+      MessageCenter::Get()->FindVisibleNotificationById(
+          message_view->notification_id());
+  menu_model_ = std::make_unique<NotificationMenuModel>(*notification);
 
   if (!menu_model_ || menu_model_->GetItemCount() == 0)
     return;

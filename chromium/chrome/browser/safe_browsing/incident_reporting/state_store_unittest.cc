@@ -113,7 +113,7 @@ class StateStoreTest : public PlatformStateStoreTestBase {
     factory.SetUserPrefsFile(GetPrefsPath(), task_runner_.get());
     user_prefs::PrefRegistrySyncable* pref_registry =
         new user_prefs::PrefRegistrySyncable();
-    chrome::RegisterUserProfilePrefs(pref_registry);
+    RegisterUserProfilePrefs(pref_registry);
     profile_ = profile_manager_.CreateTestingProfile(
         kProfileName_, factory.CreateSyncable(pref_registry),
         base::UTF8ToUTF16(kProfileName_), 0, std::string(),
@@ -146,7 +146,6 @@ const StateStoreTest::TestData StateStoreTest::kTestData_[] = {
     {IncidentType::TRACKED_PREFERENCE, "tp_two", 2},
     {IncidentType::TRACKED_PREFERENCE, "tp_three", 3},
     {IncidentType::BINARY_INTEGRITY, "bi", 0},
-    {IncidentType::BLACKLIST_LOAD, "bl", 0x47},
 };
 
 TEST_F(StateStoreTest, MarkAsAndHasBeenReported) {

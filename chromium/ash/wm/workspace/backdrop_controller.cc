@@ -4,7 +4,9 @@
 
 #include "ash/wm/workspace/backdrop_controller.h"
 
-#include "ash/accessibility_delegate.h"
+#include <memory>
+
+#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -12,7 +14,6 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace/backdrop_delegate.h"
 #include "base/auto_reset.h"
-#include "base/memory/ptr_util.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/aura/client/aura_constants.h"
@@ -95,7 +96,7 @@ void BackdropController::OnWindowStackingChanged(aura::Window* window) {
 
 void BackdropController::OnPostWindowStateTypeChange(
     wm::WindowState* window_state,
-    wm::WindowStateType old_type) {
+    mojom::WindowStateType old_type) {
   UpdateBackdrop();
 }
 
@@ -144,22 +145,10 @@ void BackdropController::OnOverviewModeEnded() {
   RemoveForceHidden();
 }
 
-void BackdropController::OnSplitViewModeStarting() {
-  AddForceHidden();
-}
-
-void BackdropController::OnSplitViewModeEnded() {
-  RemoveForceHidden();
-}
-
 void BackdropController::OnAppListVisibilityChanged(bool shown,
                                                     aura::Window* root_window) {
   // Ignore the notification if it is not for this display.
   if (container_->GetRootWindow() != root_window)
-    return;
-
-  // Hide or update backdrop only for fullscreen app list.
-  if (!app_list::features::IsFullscreenAppListEnabled())
     return;
 
   if (shown)
@@ -204,7 +193,7 @@ void BackdropController::UpdateAccessibilityMode() {
       Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
   if (enabled) {
     if (!backdrop_event_handler_) {
-      backdrop_event_handler_ = base::MakeUnique<BackdropEventHandler>();
+      backdrop_event_handler_ = std::make_unique<BackdropEventHandler>();
       original_event_handler_ =
           backdrop_window_->SetTargetHandler(backdrop_event_handler_.get());
     }
@@ -215,16 +204,6 @@ void BackdropController::UpdateAccessibilityMode() {
 }
 
 aura::Window* BackdropController::GetTopmostWindowWithBackdrop() {
-  // ARC app should always have a backdrop when spoken feedback is enabled.
-  if (Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled()) {
-    aura::Window* active_window = wm::GetActiveWindow();
-    if (active_window && active_window->parent() == container_ &&
-        active_window->GetProperty(aura::client::kAppType) ==
-            static_cast<int>(AppType::ARC_APP)) {
-      return active_window;
-    }
-  }
-
   const aura::Window::Windows windows = container_->children();
   for (auto window_iter = windows.rbegin(); window_iter != windows.rend();
        ++window_iter) {
@@ -243,6 +222,16 @@ bool BackdropController::WindowShouldHaveBackdrop(aura::Window* window) {
       window->GetProperty(aura::client::kHasBackdrop)) {
     return true;
   }
+
+  // If |window| is the current active window and is an ARC app window, |window|
+  // should have a backdrop when spoken feedback is enabled.
+  if (window->GetProperty(aura::client::kAppType) ==
+          static_cast<int>(AppType::ARC_APP) &&
+      wm::IsActiveWindow(window) &&
+      Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled()) {
+    return true;
+  }
+
   return delegate_ ? delegate_->HasBackdrop(window) : false;
 }
 

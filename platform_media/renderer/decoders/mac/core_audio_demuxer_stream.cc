@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -174,8 +175,8 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
     channel_layout = CHANNEL_LAYOUT_MONO;
 
   std::vector<uint8> extra_data;
-  audio_config_.Initialize(kCodecPCM,
-                           kSampleFormatS16,
+  audio_config_.Initialize(AudioCodec::kCodecPCM,
+                           SampleFormat::kSampleFormatS16,
                            channel_layout,
                            input_format_.mSampleRate,
                            extra_data,
@@ -256,10 +257,6 @@ AudioDecoderConfig CoreAudioDemuxerStream::audio_decoder_config() {
 VideoDecoderConfig CoreAudioDemuxerStream::video_decoder_config() {
   NOTREACHED();
   return VideoDecoderConfig();
-}
-
-VideoRotation CoreAudioDemuxerStream::video_rotation() {
-  return VIDEO_ROTATION_0;
 }
 
 DemuxerStream::Type CoreAudioDemuxerStream::type() const {

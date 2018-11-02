@@ -35,13 +35,13 @@
 #include "base/logging.h"
 
 #if INSIDE_BLINK
+#include "base/memory/scoped_refptr.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/TypeTraits.h"
 #endif
 
 namespace WTF {
-template <class T>
+template <class T, typename Traits>
 class ThreadSafeRefCounted;
 }
 
@@ -95,7 +95,7 @@ class PtrStorageImpl<T,
                      strongOrWeak,
                      kRefCountedLifetime> {
  public:
-  typedef PassRefPtr<T> BlinkPtrType;
+  typedef scoped_refptr<T> BlinkPtrType;
 
   void Assign(BlinkPtrType&& val) {
     static_assert(
@@ -107,7 +107,10 @@ class PtrStorageImpl<T,
         strongOrWeak == WebPrivatePtrStrength::kNormal,
         "Ref-counted classes do not support weak WebPrivatePtr<> references");
     Release();
-    ptr_ = val.LeakRef();
+    if (val)
+      val->AddRef();
+    ptr_ = val.get();
+    val = nullptr;
   }
 
   void Assign(const PtrStorageImpl& other) {
@@ -115,15 +118,17 @@ class PtrStorageImpl<T,
     if (ptr_ == val)
       return;
     Release();
-    WTF::RefIfNotNull(val);
+    if (val)
+      val->AddRef();
     ptr_ = val;
   }
 
   T* Get() const { return ptr_; }
 
   void Release() {
-    WTF::DerefIfNotNull(ptr_);
-    ptr_ = 0;
+    if (ptr_)
+      ptr_->Release();
+    ptr_ = nullptr;
   }
 
  private:
@@ -255,7 +260,7 @@ class PtrStorage : public PtrStorageImpl<T,
 //        // Methods that are used only by other Blink classes should only be
 //        // declared when INSIDE_BLINK is set.
 //    #if INSIDE_BLINK
-//        WebFoo(WTF::PassRefPtr<Foo>);
+//        WebFoo(scoped_refptr<Foo>);
 //    #endif
 //
 //    private:

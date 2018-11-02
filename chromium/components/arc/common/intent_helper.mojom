@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 17
+// Next MinVersion: 20
 
 module arc.mojom;
 
@@ -82,9 +82,49 @@ struct UrlWithMimeType {
   string mime_type;
 };
 
+// Describes a specific page in chrome://, about:blank, about:downloads and about:history.
+[Extensible]
+enum ChromePage {
+  MULTIDEVICE,
+  MAIN,
+  POWER,
+  BLUETOOTH,
+  DATETIME,
+  DISPLAY,
+  WIFI,
+  LANGUAGES,
+  PRIVACY,
+  HELP,
+  ACCOUNTS,
+  APPEARANCE,
+  AUTOFILL,
+  BLUETOOTHDEVICES,
+  CHANGEPICTURE,
+  CLEARBROWSERDATA,
+  CLOUDPRINTERS,
+  CUPSPRINTERS,
+  DOWNLOADS,
+  KEYBOARDOVERLAY,
+  LOCKSCREEN,
+  MANAGEACCESSIBILITY,
+  NETWORKSTYPEVPN,
+  ONSTARTUP,
+  PASSWORDS,
+  POINTEROVERLAY,
+  RESET,
+  SEARCH,
+  STORAGE,
+  SYNCSETUP,
+  ABOUTBLANK,
+  ABOUTDOWNLOADS,
+  ABOUTHISTORY,
+
+  LAST = ABOUTHISTORY,
+};
+
 // Handles intents from ARC in Chrome.
 // Deprecated method ID: 4
-// Next method ID: 7
+// Next method ID: 8
 interface IntentHelperHost {
   // Called when icons associated with the package are no longer up to date.
   [MinVersion=3] OnIconInvalidated@1(string package_name);
@@ -97,6 +137,8 @@ interface IntentHelperHost {
   [MinVersion=5] OnOpenDownloads@2();
 
   // Opens the url with Chrome for Chrome OS.
+  // This function is intended to only open URLs that other web content in Chrome would be able to
+  // navigate to as well. No special URLs that allow access to privileged functions are allowed.
   OnOpenUrl@0(string url);
 
   // Opens the wallpaper picker dialog.
@@ -108,10 +150,13 @@ interface IntentHelperHost {
 
   // Opens the volume control.
   [MinVersion=16] OpenVolumeControl@6();
+
+  // Opens the specified Chrome page in the Chrome browser.
+  [MinVersion=17] OnOpenChromePage@7([MinVersion=18] ChromePage page);
 };
 
 // Sends intents to ARC on behalf of Chrome.
-// Next method ID: 13
+// Next method ID: 14
 interface IntentHelperInstance {
   // Sets the given package as a preferred package. The next time an ACTION_VIEW
   // intent is sent with a URL that requires disambiguation, instead of opening
@@ -134,8 +179,11 @@ interface IntentHelperInstance {
                                  ActivityName activity,
                                  ActionType action_type);
 
+  // DEPRECATED: Please use Init@13 instead.
+  InitDeprecated@0(IntentHelperHost host_ptr);
+
   // Establishes full-duplex communication with the host.
-  Init@0(IntentHelperHost host_ptr);
+  [MinVersion=19] Init@13(IntentHelperHost host_ptr) => ();
 
   // DEPRECATED. Use FileSystemInstance.OpenFileToRead() instead.
   [MinVersion=15] OpenFileToReadDeprecated@12(string url) => (handle? fd);

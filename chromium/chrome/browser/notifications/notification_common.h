@@ -6,13 +6,8 @@
 #define CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_COMMON_H_
 
 #include "base/feature_list.h"
-
-namespace features {
-
-// TODO(miguelg) We can probably get rid of this altogether.
-extern const base::Feature kAllowFullscreenWebNotificationsFeature;
-
-}  // namespace features
+#include "chrome/browser/notifications/notification_handler.h"
+#include "url/gurl.h"
 
 namespace content {
 class BrowserContext;
@@ -33,13 +28,12 @@ class NotificationCommon {
     OPERATION_MAX = SETTINGS
   };
 
-  // Possible kinds of notifications
-  // TODO(peter): Prefix these options with TYPE_.
-  enum Type {
-    PERSISTENT = 0,
-    NON_PERSISTENT = 1,
-    EXTENSION = 2,
-    TYPE_MAX = EXTENSION
+  // A struct that contains extra data about a notification specific to one of
+  // the above types.
+  struct Metadata {
+    virtual ~Metadata();
+
+    NotificationHandler::Type type;
   };
 
   // Open the Notification settings screen when clicking the right button.
@@ -47,10 +41,16 @@ class NotificationCommon {
   // is updated.
   static void OpenNotificationSettings(
       content::BrowserContext* browser_context);
+};
 
-  // Whether a web notification should be displayed when chrome is in full
-  // screen mode.
-  static bool ShouldDisplayOnFullScreen(Profile* profile, const GURL& origin);
+// Metadata for PERSISTENT notifications.
+struct PersistentNotificationMetadata : public NotificationCommon::Metadata {
+  PersistentNotificationMetadata();
+  ~PersistentNotificationMetadata() override;
+
+  static const PersistentNotificationMetadata* From(const Metadata* metadata);
+
+  GURL service_worker_scope;
 };
 
 #endif  // CHROME_BROWSER_NOTIFICATIONS_NOTIFICATION_COMMON_H_

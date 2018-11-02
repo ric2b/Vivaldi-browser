@@ -18,8 +18,6 @@
 #include "cc/base/math_util.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/picture_layer.h"
-#include "cc/quads/draw_quad.h"
-#include "cc/quads/tile_draw_quad.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
@@ -31,17 +29,21 @@
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_test_common.h"
+#include "cc/test/skia_common.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/tiles/tiling_set_raster_queue_required.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/common/quads/draw_quad.h"
+#include "components/viz/common/quads/tile_draw_quad.h"
 #include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/test/gfx_util.h"
 
 namespace cc {
 namespace {
@@ -84,6 +86,7 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
     settings.create_low_res_tiling = true;
     settings.resource_settings.buffer_to_texture_target_map =
         viz::DefaultBufferToTextureTargetMapForTesting();
+    settings.enable_image_animations = true;
     return settings;
   }
 
@@ -738,8 +741,9 @@ TEST_F(PictureLayerImplTest, ScaledBoundsOverflowInt) {
   active_layer()->draw_properties().visible_layer_rect =
       gfx::Rect(layer_bounds);
   viz::SharedQuadState state;
-  active_layer()->PopulateScaledSharedQuadState(&state, adjusted_scale,
-                                                adjusted_scale);
+  active_layer()->PopulateScaledSharedQuadState(
+      &state, adjusted_scale, adjusted_scale,
+      active_layer()->contents_opaque());
 }
 
 TEST_F(PictureLayerImplTest, PinchGestureTilings) {
@@ -806,7 +810,7 @@ TEST_F(PictureLayerImplTest, PinchGestureTilings) {
   EXPECT_NE(LOW_RESOLUTION, low_res_tiling->resolution());
 
   // Stop a pinch gesture.
-  host_impl()->PinchGestureEnd();
+  host_impl()->PinchGestureEnd(gfx::Point(), true);
 
   // Ensure UpdateTiles won't remove any tilings.
   active_layer()->MarkAllTilingsUsed();
@@ -936,7 +940,7 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
       1.f * low_res_factor,
       active_layer()->tilings()->tiling_at(1)->contents_scale_key());
 
-  host_impl()->PinchGestureEnd();
+  host_impl()->PinchGestureEnd(gfx::Point(), true);
 
   // Create a 1.2 scale tiling. Now we have 1.0 and 1.2 tilings. Ideal = 1.2.
   scale = 1.2f;
@@ -1506,7 +1510,7 @@ TEST_F(PictureLayerImplTest, ClampSingleTileToToMaxTileSize) {
 }
 
 TEST_F(PictureLayerImplTest, DisallowTileDrawQuads) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   gfx::Size layer_bounds(1300, 1900);
   gfx::Rect layer_rect(layer_bounds);
@@ -1524,17 +1528,18 @@ TEST_F(PictureLayerImplTest, DisallowTileDrawQuads) {
   active_layer()->DidDraw(nullptr);
 
   ASSERT_EQ(1u, render_pass->quad_list.size());
-  EXPECT_EQ(DrawQuad::PICTURE_CONTENT,
+  EXPECT_EQ(viz::DrawQuad::PICTURE_CONTENT,
             render_pass->quad_list.front()->material);
   EXPECT_EQ(render_pass->quad_list.front()->rect, layer_rect);
   EXPECT_FALSE(render_pass->quad_list.front()->needs_blending);
+  EXPECT_TRUE(
+      render_pass->quad_list.front()->shared_quad_state->are_contents_opaque);
   EXPECT_EQ(render_pass->quad_list.front()->visible_rect, layer_rect);
 }
 
 TEST_F(PictureLayerImplTest, ResourcelessPartialRecording) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
-  gfx::Size tile_size(400, 400);
   gfx::Size layer_bounds(700, 650);
   gfx::Rect layer_rect(layer_bounds);
   SetInitialDeviceScaleFactor(2.f);
@@ -1560,16 +1565,17 @@ TEST_F(PictureLayerImplTest, ResourcelessPartialRecording) {
   gfx::Rect quad_visible = gfx::IntersectRects(scaled_visible, scaled_recorded);
 
   ASSERT_EQ(1U, render_pass->quad_list.size());
-  EXPECT_EQ(DrawQuad::PICTURE_CONTENT,
+  EXPECT_EQ(viz::DrawQuad::PICTURE_CONTENT,
             render_pass->quad_list.front()->material);
-  const DrawQuad* quad = render_pass->quad_list.front();
+  const viz::DrawQuad* quad = render_pass->quad_list.front();
   EXPECT_EQ(quad_visible, quad->rect);
+  EXPECT_TRUE(quad->shared_quad_state->are_contents_opaque);
   EXPECT_EQ(quad_visible, quad->visible_rect);
   EXPECT_FALSE(quad->needs_blending);
 }
 
 TEST_F(PictureLayerImplTest, ResourcelessEmptyRecording) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   gfx::Size layer_bounds(700, 650);
   scoped_refptr<FakeRasterSource> active_raster_source =
@@ -1589,8 +1595,163 @@ TEST_F(PictureLayerImplTest, ResourcelessEmptyRecording) {
   EXPECT_EQ(0U, render_pass->quad_list.size());
 }
 
+TEST_F(PictureLayerImplTest, FarScrolledQuadsShifted) {
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
+
+  gfx::Size layer_bounds(1000, 10000);
+  scoped_refptr<FakeRasterSource> active_raster_source =
+      FakeRasterSource::CreateFilled(layer_bounds);
+  SetupPendingTree(active_raster_source);
+  ActivateTree();
+
+  active_layer()->SetContentsOpaque(true);
+  active_layer()->draw_properties().visible_layer_rect =
+      gfx::Rect(0, 5000, 1000, 1000);
+  active_layer()->UpdateTiles();
+
+  auto* high_res_tiling = active_layer()->HighResTiling();
+  ASSERT_TRUE(high_res_tiling);
+  const std::vector<Tile*>& tiles = high_res_tiling->AllTilesForTesting();
+  ASSERT_GT(tiles.size(), 0u);
+
+  host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(tiles);
+
+  AppendQuadsData data;
+  active_layer()->WillDraw(DRAW_MODE_HARDWARE, nullptr);
+  active_layer()->AppendQuads(render_pass.get(), &data);
+  active_layer()->DidDraw(nullptr);
+
+  EXPECT_EQ(20u, render_pass->quad_list.size());
+  int last_y = -1;
+  int last_height = -1;
+  int min_y = std::numeric_limits<int>::max();
+  float min_transformed_y = std::numeric_limits<float>::max();
+  float max_transformed_y = -1;
+  for (auto* draw_quad : render_pass->quad_list) {
+    if (last_y == -1) {
+      last_y = draw_quad->rect.y();
+      min_y = last_y;
+      last_height = draw_quad->rect.height();
+    }
+
+    if (last_y != draw_quad->rect.y()) {
+      EXPECT_EQ(last_y + last_height, draw_quad->rect.y());
+      last_y = draw_quad->rect.y();
+      min_y = std::min(min_y, last_y);
+      last_height = draw_quad->rect.height();
+    }
+    EXPECT_LT(last_y, 5000);
+    EXPECT_EQ(draw_quad->material, viz::DrawQuad::TILED_CONTENT);
+
+    auto transform = [draw_quad](const gfx::Rect& rect) {
+      gfx::RectF result(rect);
+      draw_quad->shared_quad_state->quad_to_target_transform.TransformRect(
+          &result);
+      return result;
+    };
+
+    gfx::RectF transformed_rect = transform(draw_quad->rect);
+    EXPECT_GT(transformed_rect.y(), 0);
+    if (min_transformed_y < 0 || transformed_rect.y() < min_transformed_y)
+      min_transformed_y = transformed_rect.y();
+    if (transformed_rect.bottom() > max_transformed_y)
+      max_transformed_y = transformed_rect.bottom();
+
+    gfx::RectF transformed_quad_layer_rect =
+        transform(draw_quad->shared_quad_state->quad_layer_rect);
+    EXPECT_RECTF_EQ(transformed_quad_layer_rect,
+                    gfx::RectF(0.f, 0.f, 1000.f, 10000.f));
+
+    gfx::RectF transformed_visible_quad_layer_rect =
+        transform(draw_quad->shared_quad_state->visible_quad_layer_rect);
+    EXPECT_RECTF_EQ(transformed_visible_quad_layer_rect,
+                    gfx::RectF(0.f, 5000.f, 1000.f, 1000.f));
+  }
+  EXPECT_EQ(min_y, 0);
+  EXPECT_FLOAT_EQ(min_transformed_y, 5000.f);
+  EXPECT_FLOAT_EQ(max_transformed_y, 6000.f);
+}
+
+TEST_F(PictureLayerImplTest, FarScrolledSolidColorQuadsShifted) {
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
+
+  gfx::Size layer_bounds(1000, 10000);
+  scoped_refptr<FakeRasterSource> active_raster_source =
+      FakeRasterSource::CreateFilled(layer_bounds);
+  SetupPendingTree(active_raster_source);
+  ActivateTree();
+
+  active_layer()->SetContentsOpaque(true);
+  active_layer()->draw_properties().visible_layer_rect =
+      gfx::Rect(0, 9000, 1000, 1000);
+  active_layer()->UpdateTiles();
+
+  auto* high_res_tiling = active_layer()->HighResTiling();
+  ASSERT_TRUE(high_res_tiling);
+  const std::vector<Tile*>& tiles = high_res_tiling->AllTilesForTesting();
+  ASSERT_GT(tiles.size(), 0u);
+
+  for (auto* tile : tiles)
+    tile->draw_info().SetSolidColorForTesting(SK_ColorBLUE);
+
+  AppendQuadsData data;
+  active_layer()->WillDraw(DRAW_MODE_HARDWARE, nullptr);
+  active_layer()->AppendQuads(render_pass.get(), &data);
+  active_layer()->DidDraw(nullptr);
+
+  EXPECT_EQ(20u, render_pass->quad_list.size());
+  int last_y = -1;
+  int last_height = -1;
+  int min_y = std::numeric_limits<int>::max();
+  float min_transformed_y = std::numeric_limits<float>::max();
+  float max_transformed_y = -1;
+  for (auto* draw_quad : render_pass->quad_list) {
+    if (last_y == -1) {
+      last_y = draw_quad->rect.y();
+      min_y = last_y;
+      last_height = draw_quad->rect.height();
+    }
+
+    if (last_y != draw_quad->rect.y()) {
+      EXPECT_EQ(last_y + last_height, draw_quad->rect.y());
+      last_y = draw_quad->rect.y();
+      min_y = std::min(min_y, last_y);
+      last_height = draw_quad->rect.height();
+    }
+    EXPECT_LT(last_y, 5000);
+    EXPECT_EQ(draw_quad->material, viz::DrawQuad::SOLID_COLOR);
+
+    auto transform = [draw_quad](const gfx::Rect& rect) {
+      gfx::RectF result(rect);
+      draw_quad->shared_quad_state->quad_to_target_transform.TransformRect(
+          &result);
+      return result;
+    };
+
+    gfx::RectF transformed_rect = transform(draw_quad->rect);
+    EXPECT_GT(transformed_rect.y(), 0);
+    if (transformed_rect.y() < min_transformed_y)
+      min_transformed_y = transformed_rect.y();
+    if (transformed_rect.bottom() > max_transformed_y)
+      max_transformed_y = transformed_rect.bottom();
+
+    gfx::RectF transformed_quad_layer_rect =
+        transform(draw_quad->shared_quad_state->quad_layer_rect);
+    EXPECT_RECTF_EQ(transformed_quad_layer_rect,
+                    gfx::RectF(0.f, 0.f, 1000.f, 10000.f));
+
+    gfx::RectF transformed_visible_quad_layer_rect =
+        transform(draw_quad->shared_quad_state->visible_quad_layer_rect);
+    EXPECT_RECTF_EQ(transformed_visible_quad_layer_rect,
+                    gfx::RectF(0.f, 9000.f, 1000.f, 1000.f));
+  }
+  EXPECT_EQ(min_y, 0);
+  EXPECT_FLOAT_EQ(min_transformed_y, 9000.f);
+  EXPECT_FLOAT_EQ(max_transformed_y, 10000.f);
+}
+
 TEST_F(PictureLayerImplTest, SolidColorLayerHasVisibleFullCoverage) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   gfx::Size layer_bounds(1500, 1500);
   gfx::Rect visible_rect(250, 250, 1000, 1000);
@@ -1655,7 +1816,6 @@ TEST_F(NoLowResPictureLayerImplTest, MarkRequiredOffscreenTiles) {
       viewport,
       pending_layer()->viewport_rect_for_tile_priority_in_content_space());
 
-  base::TimeTicks time_ticks;
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   pending_layer()->UpdateTiles();
 
@@ -1743,7 +1903,7 @@ TEST_F(NoLowResPictureLayerImplTest,
   host_impl()->active_tree()->UpdateDrawProperties();
   active_layer()->draw_properties().visible_layer_rect = visible_layer_rect;
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1772,7 +1932,7 @@ TEST_F(PictureLayerImplTest, HighResTileIsComplete) {
       active_layer()->tilings()->tiling_at(0)->AllTilesForTesting();
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(tiles);
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1796,7 +1956,7 @@ TEST_F(PictureLayerImplTest, HighResTileIsIncomplete) {
   SetupPendingTreeWithFixedTileSize(pending_raster_source, tile_size, Region());
   ActivateTree();
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1824,7 +1984,7 @@ TEST_F(PictureLayerImplTest, HighResTileIsIncompleteLowResComplete) {
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(
       low_tiles);
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1860,7 +2020,7 @@ TEST_F(PictureLayerImplTest, LowResTileIsIncomplete) {
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(
       low_tiles);
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1915,7 +2075,7 @@ TEST_F(PictureLayerImplTest,
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(
       high_tiles);
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -1925,12 +2085,12 @@ TEST_F(PictureLayerImplTest,
   ASSERT_GT(render_pass->quad_list.size(), 9u);
   EXPECT_EQ(gfx::Rect(0, 0, 99, 99), render_pass->quad_list.front()->rect);
   EXPECT_EQ(gfx::RectF(0.f, 0.f, 99.f, 99.f),
-            TileDrawQuad::MaterialCast(render_pass->quad_list.front())
+            viz::TileDrawQuad::MaterialCast(render_pass->quad_list.front())
                 ->tex_coord_rect);
   EXPECT_EQ(gfx::Rect(99, 0, 100, 99),
             render_pass->quad_list.ElementAt(1)->rect);
   EXPECT_EQ(gfx::RectF(49.5f, 0.f, 50.f, 49.5f),
-            TileDrawQuad::MaterialCast(render_pass->quad_list.ElementAt(1))
+            viz::TileDrawQuad::MaterialCast(render_pass->quad_list.ElementAt(1))
                 ->tex_coord_rect);
 
   // Neither the high res nor the ideal tiles were considered as incomplete.
@@ -1951,7 +2111,7 @@ TEST_F(PictureLayerImplTest, AppendQuadsDataForCheckerboard) {
   SetupPendingTreeWithFixedTileSize(pending_raster_source, tile_size, Region());
   ActivateTree();
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -2736,6 +2896,63 @@ TEST_F(PictureLayerImplTest, HighResTilingDuringAnimation) {
   EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 11.f);
 }
 
+TEST_F(PictureLayerImplTest, HighResTilingDuringAnimationAspectRatio) {
+  gfx::Size viewport_size(2000, 1000);
+  host_impl()->SetViewportSize(viewport_size);
+
+  gfx::Size layer_bounds(100, 100);
+  SetupDefaultTrees(layer_bounds);
+
+  float contents_scale = 1.f;
+  float device_scale = 1.f;
+  float page_scale = 1.f;
+  float maximum_animation_scale = 1.f;
+  float starting_animation_scale = 0.f;
+  bool animating_transform = false;
+
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 1.f);
+
+  // Allow rastering at maximum scale if the animation size is smaller than
+  // the square of the maximum viewporrt dimension.
+  animating_transform = true;
+  contents_scale = 2.f;
+  maximum_animation_scale = 15.f;
+
+  SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
+                               maximum_animation_scale,
+                               starting_animation_scale, animating_transform);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 15.f);
+}
+
+TEST_F(PictureLayerImplTest, HighResTilingDuringAnimationAspectRatioTooLarge) {
+  gfx::Size viewport_size(2000, 1000);
+  host_impl()->SetViewportSize(viewport_size);
+
+  gfx::Size layer_bounds(100, 100);
+  SetupDefaultTrees(layer_bounds);
+
+  float contents_scale = 1.f;
+  float device_scale = 1.f;
+  float page_scale = 1.f;
+  float maximum_animation_scale = 1.f;
+  float starting_animation_scale = 0.f;
+  bool animating_transform = false;
+
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 1.f);
+
+  // The maximum animation scale exceeds the squared size of the maximum
+  // viewport dimension, so raster scale should fall back to 1.
+  animating_transform = true;
+  contents_scale = 2.f;
+  maximum_animation_scale = 21.f;
+
+  SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
+                               maximum_animation_scale,
+                               starting_animation_scale, animating_transform);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(),
+                 page_scale * device_scale);
+}
+
 TEST_F(PictureLayerImplTest, TilingSetRasterQueue) {
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
@@ -3113,6 +3330,34 @@ TEST_F(PictureLayerImplTest, Occlusion) {
   }
 }
 
+TEST_F(PictureLayerImplTest, OcclusionOnSolidColorPictureLayer) {
+  gfx::Size layer_bounds(1000, 1000);
+  gfx::Size viewport_size(1000, 1000);
+
+  LayerTestCommon::LayerImplTest impl;
+  host_impl()->SetViewportSize(viewport_size);
+
+  scoped_refptr<FakeRasterSource> pending_raster_source =
+      FakeRasterSource::CreateFilledSolidColor(layer_bounds);
+  SetupPendingTree(pending_raster_source);
+  host_impl()->pending_tree()->SetDeviceScaleFactor(2.f);
+  ActivateTree();
+
+  {
+    SCOPED_TRACE("Scaled occlusion");
+    gfx::Rect occluded(150, 0, 200, 1000);
+    impl.AppendQuadsWithOcclusion(active_layer(), occluded);
+
+    size_t partial_occluded_count = 0;
+    LayerTestCommon::VerifyQuadsAreOccluded(impl.quad_list(), occluded,
+                                            &partial_occluded_count);
+    // None of the quads shall be occluded and half of them are partially
+    // occluded.
+    EXPECT_EQ(16u, impl.quad_list().size());
+    EXPECT_EQ(8u, partial_occluded_count);
+  }
+}
+
 TEST_F(PictureLayerImplTest, RasterScaleChangeWithoutAnimation) {
   gfx::Size tile_size(host_impl()->settings().default_tile_size);
   SetupDefaultTrees(tile_size);
@@ -3465,7 +3710,7 @@ TEST_F(NoLowResPictureLayerImplTest, CleanUpTilings) {
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(1u, active_layer()->tilings()->num_tilings());
 
-  host_impl()->PinchGestureEnd();
+  host_impl()->PinchGestureEnd(gfx::Point(), true);
 
   // Create a 1.2 scale tiling. Now we have 1.0 and 1.2 tilings. Ideal = 1.2.
   scale /= 4.f;
@@ -3560,7 +3805,7 @@ TEST_F(NoLowResPictureLayerImplTest, ReleaseTileResources) {
 }
 
 TEST_F(PictureLayerImplTest, SharedQuadStateContainsMaxTilingScale) {
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
   gfx::Size layer_bounds(1000, 2000);
   host_impl()->SetViewportSize(gfx::Size(10000, 20000));
@@ -3639,7 +3884,7 @@ TEST_F(PictureLayerImplTestWithDelegatingRenderer,
   host_impl()->SetTreePriority(SAME_PRIORITY_FOR_BOTH_TREES);
   host_impl()->PrepareTiles();
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_HARDWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -3648,9 +3893,9 @@ TEST_F(PictureLayerImplTestWithDelegatingRenderer,
   // Even when OOM, quads should be produced, and should be different material
   // from quads with resource.
   EXPECT_LT(max_tiles, render_pass->quad_list.size());
-  EXPECT_EQ(DrawQuad::Material::TILED_CONTENT,
+  EXPECT_EQ(viz::DrawQuad::Material::TILED_CONTENT,
             render_pass->quad_list.front()->material);
-  EXPECT_EQ(DrawQuad::Material::SOLID_COLOR,
+  EXPECT_EQ(viz::DrawQuad::Material::SOLID_COLOR,
             render_pass->quad_list.back()->material);
 }
 
@@ -4295,7 +4540,8 @@ void GetClientDataAndUpdateInvalidation(RecordingSource* recording_source,
   recording_source->UpdateAndExpandInvalidation(&invalidation, layer_bounds,
                                                 new_recorded_viewport);
   recording_source->UpdateDisplayItemList(display_list,
-                                          painter_reported_memory_usage);
+                                          painter_reported_memory_usage,
+                                          1.f /** recording_scale_factor */);
 }
 
 void PictureLayerImplTest::TestQuadsForSolidColor(bool test_for_solid,
@@ -4357,7 +4603,7 @@ void PictureLayerImplTest::TestQuadsForSolidColor(bool test_for_solid,
     }
   }
 
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -4367,9 +4613,9 @@ void PictureLayerImplTest::TestQuadsForSolidColor(bool test_for_solid,
   if (partial_opaque)
     EXPECT_EQ(4u, render_pass->quad_list.size());
 
-  DrawQuad::Material expected = test_for_solid
-                                    ? DrawQuad::Material::SOLID_COLOR
-                                    : DrawQuad::Material::TILED_CONTENT;
+  viz::DrawQuad::Material expected =
+      test_for_solid ? viz::DrawQuad::Material::SOLID_COLOR
+                     : viz::DrawQuad::Material::TILED_CONTENT;
   EXPECT_EQ(expected, render_pass->quad_list.front()->material);
 }
 
@@ -4388,7 +4634,6 @@ TEST_F(PictureLayerImplTest, DrawTransparentQuads) {
 TEST_F(PictureLayerImplTest, NonSolidToSolidNoTilings) {
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
-  gfx::Size tile_size(100, 100);
   gfx::Size layer_bounds(200, 200);
   gfx::Rect layer_rect(layer_bounds);
 
@@ -4989,14 +5234,15 @@ TEST_F(PictureLayerImplTest, CompositedImageIgnoreIdealContentsScale) {
       active_layer->tilings()->tiling_at(0)->AllTilesForTesting());
 
   // Draw.
-  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   AppendQuadsData data;
   active_layer->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   active_layer->AppendQuads(render_pass.get(), &data);
   active_layer->DidDraw(nullptr);
 
   ASSERT_FALSE(render_pass->quad_list.empty());
-  EXPECT_EQ(DrawQuad::TILED_CONTENT, render_pass->quad_list.front()->material);
+  EXPECT_EQ(viz::DrawQuad::TILED_CONTENT,
+            render_pass->quad_list.front()->material);
 
   // Tiles are ready at correct scale, so should not set had_incomplete_tile.
   EXPECT_EQ(0, data.num_incomplete_tiles);
@@ -5192,6 +5438,60 @@ TEST_F(PictureLayerImplTest, ChangeRasterTranslationNukeActiveLayerTiles) {
     for (auto* tile : tiling->AllTilesForTesting())
       EXPECT_EQ(tile->raster_transform(), tiling->raster_transform());
   }
+}
+
+TEST_F(PictureLayerImplTest, AnimatedImages) {
+  gfx::Size layer_bounds(1000, 1000);
+
+  // Set up a raster source with 2 animated images.
+  auto recording_source = FakeRecordingSource::CreateRecordingSource(
+      gfx::Rect(layer_bounds), layer_bounds);
+  std::vector<FrameMetadata> frames = {
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(1)),
+      FrameMetadata(true, base::TimeDelta::FromMilliseconds(1))};
+  PaintImage image1 = CreateAnimatedImage(gfx::Size(200, 200), frames);
+  PaintImage image2 = CreateAnimatedImage(gfx::Size(200, 200), frames);
+  recording_source->add_draw_image(image1, gfx::Point(100, 100));
+  recording_source->add_draw_image(image2, gfx::Point(500, 500));
+  recording_source->Rerecord();
+  scoped_refptr<RasterSource> raster_source =
+      recording_source->CreateRasterSource();
+
+  // All images should be registered on the pending layer.
+  SetupPendingTree(raster_source, gfx::Size(), Region(gfx::Rect(layer_bounds)));
+  auto* controller = host_impl()->image_animation_controller();
+  EXPECT_EQ(controller->GetDriversForTesting(image1.stable_id())
+                .count(pending_layer()),
+            1u);
+  EXPECT_EQ(controller->GetDriversForTesting(image2.stable_id())
+                .count(pending_layer()),
+            1u);
+
+  // Make only the first image visible and verify that only this image is
+  // animated.
+  gfx::Rect visible_rect(0, 0, 300, 300);
+  pending_layer()->set_visible_layer_rect(visible_rect);
+  EXPECT_TRUE(pending_layer()->ShouldAnimate(image1.stable_id()));
+  EXPECT_FALSE(pending_layer()->ShouldAnimate(image2.stable_id()));
+
+  // Now activate and make sure the active layer is registered as well.
+  ActivateTree();
+  active_layer()->set_visible_layer_rect(visible_rect);
+  EXPECT_EQ(controller->GetDriversForTesting(image1.stable_id())
+                .count(active_layer()),
+            1u);
+  EXPECT_EQ(controller->GetDriversForTesting(image2.stable_id())
+                .count(active_layer()),
+            1u);
+
+  // Once activated, only the active layer should drive animations for these
+  // images. Since DrawProperties are not updated on the recycle tree, it has
+  // stale state for visibility of images.
+  ASSERT_EQ(old_pending_layer()->visible_layer_rect(), visible_rect);
+  EXPECT_FALSE(old_pending_layer()->ShouldAnimate(image1.stable_id()));
+  EXPECT_FALSE(old_pending_layer()->ShouldAnimate(image2.stable_id()));
+  EXPECT_TRUE(active_layer()->ShouldAnimate(image1.stable_id()));
+  EXPECT_FALSE(active_layer()->ShouldAnimate(image2.stable_id()));
 }
 
 }  // namespace

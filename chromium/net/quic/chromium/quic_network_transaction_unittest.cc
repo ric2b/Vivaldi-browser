@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <algorithm>
-#include <memory>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -11,7 +10,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -44,6 +42,7 @@
 #include "net/quic/chromium/mock_crypto_client_stream_factory.h"
 #include "net/quic/chromium/mock_quic_data.h"
 #include "net/quic/chromium/quic_chromium_alarm_factory.h"
+#include "net/quic/chromium/quic_http_stream.h"
 #include "net/quic/chromium/quic_http_utils.h"
 #include "net/quic/chromium/quic_stream_factory_peer.h"
 #include "net/quic/chromium/quic_test_packet_maker.h"
@@ -124,14 +123,14 @@ struct PoolingTestParams {
     return os;
   }
 
-  QuicVersion version;
+  QuicTransportVersion version;
   DestinationType destination_type;
 };
 
 std::string GenerateQuicVersionsListForAltSvcHeader(
-    const QuicVersionVector& versions) {
+    const QuicTransportVersionVector& versions) {
   std::string result = "";
-  for (const QuicVersion& version : versions) {
+  for (const QuicTransportVersion& version : versions) {
     if (!result.empty())
       result.append(",");
     result.append(base::IntToString(version));
@@ -141,8 +140,9 @@ std::string GenerateQuicVersionsListForAltSvcHeader(
 
 std::vector<PoolingTestParams> GetPoolingTestParams() {
   std::vector<PoolingTestParams> params;
-  QuicVersionVector all_supported_versions = AllSupportedVersions();
-  for (const QuicVersion version : all_supported_versions) {
+  QuicTransportVersionVector all_supported_versions =
+      AllSupportedTransportVersions();
+  for (const QuicTransportVersion version : all_supported_versions) {
     params.push_back(PoolingTestParams{version, SAME_AS_FIRST});
     params.push_back(PoolingTestParams{version, SAME_AS_SECOND});
     params.push_back(PoolingTestParams{version, DIFFERENT});
@@ -236,11 +236,11 @@ class TestSocketPerformanceWatcherFactory
 
 class QuicNetworkTransactionTest
     : public PlatformTest,
-      public ::testing::WithParamInterface<QuicVersion> {
+      public ::testing::WithParamInterface<QuicTransportVersion> {
  protected:
   QuicNetworkTransactionTest()
       : version_(GetParam()),
-        supported_versions_(SupportedVersions(version_)),
+        supported_versions_(SupportedTransportVersions(version_)),
         client_maker_(version_,
                       0,
                       &clock_,
@@ -513,7 +513,7 @@ class QuicNetworkTransactionTest
         std::move(headers), offset);
   }
 
-  void CreateSession(const QuicVersionVector& supported_versions) {
+  void CreateSession(const QuicTransportVersionVector& supported_versions) {
     session_params_.enable_quic = true;
     session_params_.quic_supported_versions = supported_versions;
 
@@ -748,13 +748,13 @@ class QuicNetworkTransactionTest
   }
 
   static void AddCertificate(SSLSocketDataProvider* ssl_data) {
-    ssl_data->cert =
+    ssl_data->ssl_info.cert =
         ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-    ASSERT_TRUE(ssl_data->cert);
+    ASSERT_TRUE(ssl_data->ssl_info.cert);
   }
 
-  const QuicVersion version_;
-  QuicVersionVector supported_versions_;
+  const QuicTransportVersion version_;
+  QuicTransportVersionVector supported_versions_;
   QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   MockClock clock_;
   QuicTestPacketMaker client_maker_;
@@ -806,7 +806,69 @@ class QuicNetworkTransactionTest
 
 INSTANTIATE_TEST_CASE_P(Version,
                         QuicNetworkTransactionTest,
-                        ::testing::ValuesIn(AllSupportedVersions()));
+                        ::testing::ValuesIn(AllSupportedTransportVersions()));
+
+TEST_P(QuicNetworkTransactionTest, WriteErrorHandshakeConfirmed) {
+  base::HistogramTester histograms;
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+  crypto_client_stream_factory_.set_handshake_mode(
+      MockCryptoClientStream::CONFIRM_HANDSHAKE);
+
+  MockQuicData mock_quic_data;
+  QuicStreamOffset header_stream_offset = 0;
+  mock_quic_data.AddWrite(
+      ConstructInitialSettingsPacket(1, &header_stream_offset));
+  mock_quic_data.AddWrite(SYNCHRONOUS, ERR_INTERNET_DISCONNECTED);
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
+  mock_quic_data.AddRead(ASYNC, OK);              // No more data to read
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+
+  histograms.ExpectBucketCount("Net.QuicSession.WriteError",
+                               -ERR_INTERNET_DISCONNECTED, 1);
+  histograms.ExpectBucketCount("Net.QuicSession.WriteError.HandshakeConfirmed",
+                               -ERR_INTERNET_DISCONNECTED, 1);
+}
+
+TEST_P(QuicNetworkTransactionTest, WriteErrorHandshakeConfirmedAsync) {
+  base::HistogramTester histograms;
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+  crypto_client_stream_factory_.set_handshake_mode(
+      MockCryptoClientStream::CONFIRM_HANDSHAKE);
+
+  MockQuicData mock_quic_data;
+  QuicStreamOffset header_stream_offset = 0;
+  mock_quic_data.AddWrite(
+      ConstructInitialSettingsPacket(1, &header_stream_offset));
+  mock_quic_data.AddWrite(ASYNC, ERR_INTERNET_DISCONNECTED);
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
+  mock_quic_data.AddRead(ASYNC, OK);              // No more data to read
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+
+  histograms.ExpectBucketCount("Net.QuicSession.WriteError",
+                               -ERR_INTERNET_DISCONNECTED, 1);
+  histograms.ExpectBucketCount("Net.QuicSession.WriteError.HandshakeConfirmed",
+                               -ERR_INTERNET_DISCONNECTED, 1);
+}
 
 TEST_P(QuicNetworkTransactionTest, SocketWatcherEnabled) {
   session_params_.origins_to_force_quic_on.insert(
@@ -1155,6 +1217,7 @@ TEST_P(QuicNetworkTransactionTest, QuicProxyWithCert) {
 }
 
 TEST_P(QuicNetworkTransactionTest, AlternativeServicesDifferentHost) {
+  session_params_.quic_allow_remote_alt_svc = true;
   HostPortPair origin("www.example.org", 443);
   HostPortPair alternative("mail.example.org", 443);
 
@@ -1198,10 +1261,10 @@ TEST_P(QuicNetworkTransactionTest, AlternativeServicesDifferentHost) {
 }
 
 TEST_P(QuicNetworkTransactionTest, DoNotUseQuicForUnsupportedVersion) {
-  QuicVersion unsupported_version = QUIC_VERSION_UNSUPPORTED;
+  QuicTransportVersion unsupported_version = QUIC_VERSION_UNSUPPORTED;
   // Add support for another QUIC version besides |version_|. Also find a
   // unsupported version.
-  for (const QuicVersion& version : AllSupportedVersions()) {
+  for (const QuicTransportVersion& version : AllSupportedTransportVersions()) {
     if (version == version_)
       continue;
     if (supported_versions_.size() != 2) {
@@ -1235,7 +1298,7 @@ TEST_P(QuicNetworkTransactionTest, DoNotUseQuicForUnsupportedVersion) {
   // the response from the server will advertise new Alt-Svc with supported
   // versions.
   std::string advertised_versions_list_str =
-      GenerateQuicVersionsListForAltSvcHeader(AllSupportedVersions());
+      GenerateQuicVersionsListForAltSvcHeader(AllSupportedTransportVersions());
   std::string altsvc_header =
       base::StringPrintf("Alt-Svc: quic=\":443\"; v=\"%s\"\r\n\r\n",
                          advertised_versions_list_str.c_str());
@@ -1473,8 +1536,8 @@ TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceWithVersionForQuic1) {
 
   // Add support for another QUIC version besides |version_| on the client side.
   // Also find a different version advertised by the server.
-  QuicVersion advertised_version_2 = QUIC_VERSION_UNSUPPORTED;
-  for (const QuicVersion& version : AllSupportedVersions()) {
+  QuicTransportVersion advertised_version_2 = QUIC_VERSION_UNSUPPORTED;
+  for (const QuicTransportVersion& version : AllSupportedTransportVersions()) {
     if (version == version_)
       continue;
     if (supported_versions_.size() != 2) {
@@ -1532,8 +1595,8 @@ TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceWithVersionForQuic2) {
   // The QuicStreamFactoy will pick the preferred QUIC_VERSION: |version_|,
   // which is verified as the PacketMakers are using |version_|.
 
-  QuicVersion common_version_2 = QUIC_VERSION_UNSUPPORTED;
-  for (const QuicVersion& version : AllSupportedVersions()) {
+  QuicTransportVersion common_version_2 = QUIC_VERSION_UNSUPPORTED;
+  for (const QuicTransportVersion& version : AllSupportedTransportVersions()) {
     if (version == version_)
       continue;
     common_version_2 = version;
@@ -1695,7 +1758,7 @@ TEST_P(QuicNetworkTransactionTest, DoNotGetAltSvcForDifferentOrigin) {
 TEST_P(QuicNetworkTransactionTest,
        StoreMutuallySupportedVersionsWhenProcessAltSvc) {
   // Add support for another QUIC version besides |version_|.
-  for (const QuicVersion& version : AllSupportedVersions()) {
+  for (const QuicTransportVersion& version : AllSupportedTransportVersions()) {
     if (version == version_)
       continue;
     supported_versions_.push_back(version);
@@ -1703,7 +1766,7 @@ TEST_P(QuicNetworkTransactionTest,
   }
 
   std::string advertised_versions_list_str =
-      GenerateQuicVersionsListForAltSvcHeader(AllSupportedVersions());
+      GenerateQuicVersionsListForAltSvcHeader(AllSupportedTransportVersions());
   std::string altsvc_header =
       base::StringPrintf("Alt-Svc: quic=\":443\"; v=\"%s\"\r\n\r\n",
                          advertised_versions_list_str.c_str());
@@ -2989,6 +3052,7 @@ TEST_P(QuicNetworkTransactionTest, ResetAfterHandshakeConfirmedThenBroken) {
 // This is a regression tests for crbug/731303.
 TEST_P(QuicNetworkTransactionTest,
        ResetPooledAfterHandshakeConfirmedThenBroken) {
+  session_params_.quic_allow_remote_alt_svc = true;
   session_params_.retry_without_alt_svc_on_quic_errors = true;
 
   GURL origin1 = request_.url;
@@ -3101,6 +3165,7 @@ TEST_P(QuicNetworkTransactionTest,
       url::SchemeHostPort(origin2),
       AlternativeService(kProtoQUIC, "www.example.com", 443), expiration,
       supported_versions_);
+
   // First request opens connection to |destination1|
   // with QuicServerId.host() == origin1.host().
   SendRequestAndExpectQuicResponse("hello!");
@@ -3144,6 +3209,7 @@ TEST_P(QuicNetworkTransactionTest,
 // service which uses existing QUIC session if available. If no existing QUIC
 // session can be used, use the first alternative service from the list.
 TEST_P(QuicNetworkTransactionTest, UseExistingAlternativeServiceForQuic) {
+  session_params_.quic_allow_remote_alt_svc = true;
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n"),
       MockRead("Alt-Svc: quic=\"foo.example.org:443\", quic=\":444\"\r\n\r\n"),
@@ -3279,6 +3345,7 @@ TEST_P(QuicNetworkTransactionTest, UseExistingQUICAlternativeProxy) {
 // Pool to existing session with matching QuicServerId
 // even if alternative service destination is different.
 TEST_P(QuicNetworkTransactionTest, PoolByOrigin) {
+  session_params_.quic_allow_remote_alt_svc = true;
   MockQuicData mock_quic_data;
   QuicStreamOffset request_header_offset(0);
   QuicStreamOffset response_header_offset(0);
@@ -3343,6 +3410,7 @@ TEST_P(QuicNetworkTransactionTest, PoolByOrigin) {
 // even if origin is different, and even if the alternative service with
 // matching destination is not the first one on the list.
 TEST_P(QuicNetworkTransactionTest, PoolByDestination) {
+  session_params_.quic_allow_remote_alt_svc = true;
   GURL origin1 = request_.url;
   GURL origin2("https://www.example.org/");
   ASSERT_NE(origin1.host(), origin2.host());
@@ -3433,6 +3501,7 @@ TEST_P(QuicNetworkTransactionTest, PoolByDestination) {
 // if this is also the first existing QUIC session.
 TEST_P(QuicNetworkTransactionTest,
        UseSharedExistingAlternativeServiceForQuicWithValidCert) {
+  session_params_.quic_allow_remote_alt_svc = true;
   // Default cert is valid for *.example.org
 
   // HTTP data for request to www.example.org.
@@ -4715,6 +4784,134 @@ TEST_P(QuicNetworkTransactionTest, QuicUploadWriteError) {
   session_.reset();
 }
 
+TEST_P(QuicNetworkTransactionTest, RetryAfterAsyncNoBufferSpace) {
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData socket_data;
+  QuicStreamOffset offset = 0;
+  socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
+  socket_data.AddWrite(ASYNC, ERR_NO_BUFFER_SPACE);
+  socket_data.AddWrite(ConstructClientRequestHeadersPacket(
+      2, GetNthClientInitiatedStreamId(0), true, true,
+      GetRequestHeaders("GET", "https", "/"), &offset));
+  socket_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, GetNthClientInitiatedStreamId(0), false, false,
+      GetResponseHeaders("200 OK")));
+  socket_data.AddRead(ConstructServerDataPacket(
+      2, GetNthClientInitiatedStreamId(0), false, true, 0, "hello!"));
+  socket_data.AddWrite(ConstructClientAckPacket(3, 2, 1, 1));
+  socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+
+  socket_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  SendRequestAndExpectQuicResponse("hello!");
+  session_.reset();
+}
+
+TEST_P(QuicNetworkTransactionTest, RetryAfterSynchronousNoBufferSpace) {
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData socket_data;
+  QuicStreamOffset offset = 0;
+  socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
+  socket_data.AddWrite(SYNCHRONOUS, ERR_NO_BUFFER_SPACE);
+  socket_data.AddWrite(ConstructClientRequestHeadersPacket(
+      2, GetNthClientInitiatedStreamId(0), true, true,
+      GetRequestHeaders("GET", "https", "/"), &offset));
+  socket_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, GetNthClientInitiatedStreamId(0), false, false,
+      GetResponseHeaders("200 OK")));
+  socket_data.AddRead(ConstructServerDataPacket(
+      2, GetNthClientInitiatedStreamId(0), false, true, 0, "hello!"));
+  socket_data.AddWrite(ConstructClientAckPacket(3, 2, 1, 1));
+  socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+
+  socket_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  SendRequestAndExpectQuicResponse("hello!");
+  session_.reset();
+}
+
+TEST_P(QuicNetworkTransactionTest, MaxRetriesAfterAsyncNoBufferSpace) {
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData socket_data;
+  QuicStreamOffset offset = 0;
+  socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+  socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
+  for (int i = 0; i < 13; ++i) {  // 12 retries then one final failure.
+    socket_data.AddWrite(ASYNC, ERR_NO_BUFFER_SPACE);
+  }
+  socket_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+  // Use a TestTaskRunner to avoid waiting in real time for timeouts.
+  scoped_refptr<TestTaskRunner> quic_task_runner_(new TestTaskRunner(&clock_));
+  QuicStreamFactoryPeer::SetTaskRunner(session_->quic_stream_factory(),
+                                       quic_task_runner_.get());
+
+  QuicTime start = clock_.Now();
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  while (!callback.have_result()) {
+    base::RunLoop().RunUntilIdle();
+    quic_task_runner_->RunUntilIdle();
+  }
+  ASSERT_TRUE(callback.have_result());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+  EXPECT_TRUE(socket_data.AllReadDataConsumed());
+  EXPECT_TRUE(socket_data.AllWriteDataConsumed());
+  // Backoff should take between 4 - 5 seconds.
+  EXPECT_TRUE(clock_.Now() - start > QuicTime::Delta::FromSeconds(4));
+  EXPECT_TRUE(clock_.Now() - start < QuicTime::Delta::FromSeconds(5));
+}
+
+TEST_P(QuicNetworkTransactionTest, MaxRetriesAfterSynchronousNoBufferSpace) {
+  session_params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData socket_data;
+  QuicStreamOffset offset = 0;
+  socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+  socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
+  for (int i = 0; i < 13; ++i) {  // 12 retries then one final failure.
+    socket_data.AddWrite(ASYNC, ERR_NO_BUFFER_SPACE);
+  }
+  socket_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+  // Use a TestTaskRunner to avoid waiting in real time for timeouts.
+  scoped_refptr<TestTaskRunner> quic_task_runner_(new TestTaskRunner(&clock_));
+  QuicStreamFactoryPeer::SetTaskRunner(session_->quic_stream_factory(),
+                                       quic_task_runner_.get());
+
+  QuicTime start = clock_.Now();
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  while (!callback.have_result()) {
+    base::RunLoop().RunUntilIdle();
+    quic_task_runner_->RunUntilIdle();
+  }
+  ASSERT_TRUE(callback.have_result());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+  EXPECT_TRUE(socket_data.AllReadDataConsumed());
+  EXPECT_TRUE(socket_data.AllWriteDataConsumed());
+  // Backoff should take between 4 - 5 seconds.
+  EXPECT_TRUE(clock_.Now() - start > QuicTime::Delta::FromSeconds(4));
+  EXPECT_TRUE(clock_.Now() - start < QuicTime::Delta::FromSeconds(5));
+}
+
 // Adds coverage to catch regression such as https://crbug.com/622043
 TEST_P(QuicNetworkTransactionTest, QuicServerPush) {
   session_params_.origins_to_force_quic_on.insert(
@@ -4846,7 +5043,6 @@ TEST_P(QuicNetworkTransactionTest, CancelServerPushAfterConnectionClose) {
 }
 
 TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
-  session_params_.quic_force_hol_blocking = true;
   session_params_.origins_to_force_quic_on.insert(
       HostPortPair::FromString("mail.example.org:443"));
 
@@ -4859,13 +5055,8 @@ TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
       GetRequestHeaders("POST", "https", "/"), &offset));
 
   std::unique_ptr<QuicEncryptedPacket> packet;
-  if (version_ == QUIC_VERSION_36) {
-    packet = ConstructClientForceHolDataPacket(
-        3, GetNthClientInitiatedStreamId(0), true, true, &offset, "1");
-  } else {
-    packet = ConstructClientDataPacket(3, GetNthClientInitiatedStreamId(0),
-                                       true, true, 0, "1");
-  }
+  packet = ConstructClientDataPacket(3, GetNthClientInitiatedStreamId(0), true,
+                                     true, 0, "1");
   mock_quic_data.AddWrite(std::move(packet));
 
   mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
@@ -4903,20 +5094,20 @@ class QuicURLRequestContext : public URLRequestContext {
     socket_factory_ = socket_factory;
     storage_.set_host_resolver(
         std::unique_ptr<HostResolver>(new MockHostResolver));
-    storage_.set_cert_verifier(base::WrapUnique(new MockCertVerifier));
+    storage_.set_cert_verifier(std::make_unique<MockCertVerifier>());
     storage_.set_transport_security_state(
-        base::WrapUnique(new TransportSecurityState));
+        std::make_unique<TransportSecurityState>());
     storage_.set_proxy_service(ProxyService::CreateDirect());
     storage_.set_ssl_config_service(new SSLConfigServiceDefaults);
     storage_.set_http_auth_handler_factory(
         HttpAuthHandlerFactory::CreateDefault(host_resolver()));
     storage_.set_http_server_properties(
         std::unique_ptr<HttpServerProperties>(new HttpServerPropertiesImpl()));
-    storage_.set_job_factory(base::WrapUnique(new URLRequestJobFactoryImpl()));
+    storage_.set_job_factory(std::make_unique<URLRequestJobFactoryImpl>());
     storage_.set_http_network_session(std::move(session));
-    storage_.set_http_transaction_factory(base::WrapUnique(
-        new HttpCache(storage_.http_network_session(),
-                      HttpCache::DefaultBackend::InMemory(0), false)));
+    storage_.set_http_transaction_factory(std::make_unique<HttpCache>(
+        storage_.http_network_session(), HttpCache::DefaultBackend::InMemory(0),
+        false));
   }
 
   ~QuicURLRequestContext() override { AssertNoURLRequests(); }
@@ -5065,13 +5256,78 @@ TEST_P(QuicNetworkTransactionTest, RawHeaderSizeSuccessfullPushHeadersFirst) {
   EXPECT_TRUE(mock_quic_data.AllWriteDataConsumed());
 }
 
+TEST_P(QuicNetworkTransactionTest, HostInWhitelist) {
+  session_params_.quic_host_whitelist.insert("mail.example.org");
+
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  MockQuicData mock_quic_data;
+  QuicStreamOffset header_stream_offset = 0;
+  mock_quic_data.AddWrite(
+      ConstructInitialSettingsPacket(1, &header_stream_offset));
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      2, GetNthClientInitiatedStreamId(0), true, true,
+      GetRequestHeaders("GET", "https", "/"), &header_stream_offset));
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, GetNthClientInitiatedStreamId(0), false, false,
+      GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(ConstructServerDataPacket(
+      2, GetNthClientInitiatedStreamId(0), false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(3, 2, 1, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  AddHangingNonAlternateProtocolSocketData();
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectQuicResponse("hello!");
+}
+
+TEST_P(QuicNetworkTransactionTest, HostNotInWhitelist) {
+  session_params_.quic_host_whitelist.insert("mail.example.com");
+
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  AddHangingNonAlternateProtocolSocketData();
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectHttpResponse("hello world");
+}
+
 class QuicNetworkTransactionWithDestinationTest
     : public PlatformTest,
       public ::testing::WithParamInterface<PoolingTestParams> {
  protected:
   QuicNetworkTransactionWithDestinationTest()
       : version_(GetParam().version),
-        supported_versions_(SupportedVersions(version_)),
+        supported_versions_(SupportedTransportVersions(version_)),
         destination_type_(GetParam().destination_type),
         cert_transparency_verifier_(new MultiLogCTVerifier()),
         ssl_config_service_(new SSLConfigServiceDefaults),
@@ -5087,6 +5343,7 @@ class QuicNetworkTransactionWithDestinationTest
 
     HttpNetworkSession::Params session_params;
     session_params.enable_quic = true;
+    session_params.quic_allow_remote_alt_svc = true;
     session_params.quic_supported_versions = supported_versions_;
 
     HttpNetworkSession::Context session_context;
@@ -5275,8 +5532,8 @@ class QuicNetworkTransactionWithDestinationTest
   }
 
   MockClock clock_;
-  QuicVersion version_;
-  QuicVersionVector supported_versions_;
+  QuicTransportVersion version_;
+  QuicTransportVersionVector supported_versions_;
   DestinationType destination_type_;
   std::string origin1_;
   std::string origin2_;

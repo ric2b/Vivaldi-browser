@@ -31,6 +31,8 @@
 #include "core/editing/commands/CompositeEditCommand.h"
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutText.h"
+#include "core/layout/line/InlineTextBox.h"
+#include "core/layout/ng/inline/ng_offset_mapping.h"
 
 namespace blink {
 
@@ -54,15 +56,36 @@ bool EditCommand::IsRenderedCharacter(const Position& position) {
   if (position.IsNull())
     return false;
   DCHECK(position.IsOffsetInAnchor()) << position;
-  if (!position.AnchorNode()->IsTextNode())
+
+  const Node& node = *position.AnchorNode();
+  if (!node.IsTextNode())
     return false;
 
-  LayoutObject* layout_object = position.AnchorNode()->GetLayoutObject();
-  if (!layout_object)
+  LayoutObject* layout_object = node.GetLayoutObject();
+  if (!layout_object || !layout_object->IsText())
     return false;
 
-  return ToLayoutText(layout_object)
-      ->IsRenderedCharacter(position.OffsetInContainerNode());
+  // Use NG offset mapping when LayoutNG is enabled.
+  if (auto* mapping = NGOffsetMapping::GetFor(position)) {
+    return mapping->IsBeforeNonCollapsedContent(position);
+  }
+
+  // TODO(editing-dev): This doesn't handle first-letter correctly. Fix it.
+  const LayoutText* layout_text = ToLayoutText(layout_object);
+  const int offset_in_node = position.OffsetInContainerNode();
+  for (InlineTextBox* box : InlineTextBoxesOf(*layout_text)) {
+    if (offset_in_node < static_cast<int>(box->Start()) &&
+        !layout_text->ContainsReversedText()) {
+      // The offset we're looking for is before this node this means the offset
+      // must be in content that is not laid out. Return false.
+      return false;
+    }
+    if (offset_in_node >= static_cast<int>(box->Start()) &&
+        offset_in_node < static_cast<int>(box->Start() + box->Len()))
+      return true;
+  }
+
+  return false;
 }
 
 void EditCommand::SetParent(CompositeEditCommand* parent) {
@@ -77,7 +100,7 @@ void SimpleEditCommand::DoReapply() {
   DoApply(&editing_state);
 }
 
-DEFINE_TRACE(EditCommand) {
+void EditCommand::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(parent_);
 }

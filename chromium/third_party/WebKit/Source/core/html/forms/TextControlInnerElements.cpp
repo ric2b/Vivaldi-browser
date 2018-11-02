@@ -26,7 +26,7 @@
 
 #include "core/html/forms/TextControlInnerElements.h"
 
-#include "core/HTMLNames.h"
+#include "core/css/StyleChangeReason.h"
 #include "core/css/resolver/StyleAdjuster.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeComputedStyle.h"
@@ -35,8 +35,9 @@
 #include "core/events/TextEvent.h"
 #include "core/events/TextEventInputType.h"
 #include "core/frame/LocalFrame.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/api/LayoutTextControlItem.h"
@@ -73,10 +74,11 @@ EditingViewPortElement* EditingViewPortElement::Create(Document& document) {
   return element;
 }
 
-RefPtr<ComputedStyle> EditingViewPortElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle>
+EditingViewPortElement::CustomStyleForLayoutObject() {
   // FXIME: Move these styles to html.css.
 
-  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->InheritFrom(OwnerShadowHost()->ComputedStyleRef());
 
   style->SetFlexGrow(1);
@@ -102,10 +104,7 @@ inline TextControlInnerEditorElement::TextControlInnerEditorElement(
 
 TextControlInnerEditorElement* TextControlInnerEditorElement::Create(
     Document& document) {
-  TextControlInnerEditorElement* element =
-      new TextControlInnerEditorElement(document);
-  element->setAttribute(idAttr, ShadowElementNames::InnerEditor());
-  return element;
+  return new TextControlInnerEditorElement(document);
 }
 
 void TextControlInnerEditorElement::DefaultEventHandler(Event* event) {
@@ -128,24 +127,35 @@ void TextControlInnerEditorElement::DefaultEventHandler(Event* event) {
     HTMLDivElement::DefaultEventHandler(event);
 }
 
+void TextControlInnerEditorElement::SetVisibility(bool is_visible) {
+  if (is_visible_ != is_visible) {
+    is_visible_ = is_visible;
+    SetNeedsStyleRecalc(
+        kLocalStyleChange,
+        StyleChangeReasonForTracing::Create(StyleChangeReason::kControlValue));
+  }
+}
+
 LayoutObject* TextControlInnerEditorElement::CreateLayoutObject(
     const ComputedStyle&) {
   return new LayoutTextControlInnerEditor(this);
 }
 
-RefPtr<ComputedStyle>
+scoped_refptr<ComputedStyle>
 TextControlInnerEditorElement::CustomStyleForLayoutObject() {
   LayoutObject* parent_layout_object = OwnerShadowHost()->GetLayoutObject();
   if (!parent_layout_object || !parent_layout_object->IsTextControl())
     return OriginalStyleForLayoutObject();
   LayoutTextControlItem text_control_layout_item =
       LayoutTextControlItem(ToLayoutTextControl(parent_layout_object));
-  RefPtr<ComputedStyle> inner_editor_style =
+  scoped_refptr<ComputedStyle> inner_editor_style =
       text_control_layout_item.CreateInnerEditorStyle(
           text_control_layout_item.StyleRef());
   // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
   // to apply only editing-related and alignment-related.
   StyleAdjuster::AdjustStyleForEditing(*inner_editor_style);
+  if (!is_visible_)
+    inner_editor_style->SetOpacity(0);
   return inner_editor_style;
 }
 
@@ -175,7 +185,7 @@ void SearchFieldCancelButtonElement::DetachLayoutTree(
 
 void SearchFieldCancelButtonElement::DefaultEventHandler(Event* event) {
   // If the element is visible, on mouseup, clear the value, and set selection
-  HTMLInputElement* input(toHTMLInputElement(OwnerShadowHost()));
+  HTMLInputElement* input(ToHTMLInputElement(OwnerShadowHost()));
   if (!input || input->IsDisabledOrReadOnly()) {
     if (!event->DefaultHandled())
       HTMLDivElement::DefaultEventHandler(event);
@@ -196,7 +206,7 @@ void SearchFieldCancelButtonElement::DefaultEventHandler(Event* event) {
 }
 
 bool SearchFieldCancelButtonElement::WillRespondToMouseClickEvents() {
-  const HTMLInputElement* input = toHTMLInputElement(OwnerShadowHost());
+  const HTMLInputElement* input = ToHTMLInputElement(OwnerShadowHost());
   if (input && !input->IsDisabledOrReadOnly())
     return true;
 

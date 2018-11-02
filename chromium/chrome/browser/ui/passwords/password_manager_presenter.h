@@ -13,20 +13,17 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/ui/credential_provider_interface.h"
 #include "components/prefs/pref_member.h"
+#include "components/undo/undo_manager.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace autofill {
 struct PasswordForm;
 }
-
-// Multimap from sort key to password forms.
-using DuplicatesMap =
-    std::multimap<std::string, std::unique_ptr<autofill::PasswordForm>>;
-
-enum class PasswordEntryType { SAVED, BLACKLISTED };
 
 class PasswordUIView;
 
@@ -34,7 +31,8 @@ class PasswordUIView;
 // interact with PasswordStore. It provides completion callbacks for
 // PasswordStore operations and updates the view on PasswordStore changes.
 class PasswordManagerPresenter
-    : public password_manager::PasswordStore::Observer {
+    : public password_manager::PasswordStore::Observer,
+      public password_manager::CredentialProviderInterface {
  public:
   // |password_view| the UI view that owns this presenter, must not be NULL.
   explicit PasswordManagerPresenter(PasswordUIView* password_view);
@@ -52,8 +50,9 @@ class PasswordManagerPresenter
   // Gets the password entry at |index|.
   const autofill::PasswordForm* GetPassword(size_t index);
 
-  // Gets all password entries.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllPasswords();
+  // password::manager::CredentialProviderInterface:
+  std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllPasswords()
+      override;
 
   // Gets the password exception entry at |index|.
   const autofill::PasswordForm* GetPasswordException(size_t index);
@@ -66,12 +65,20 @@ class PasswordManagerPresenter
   // |index| the entry index to be removed.
   void RemovePasswordException(size_t index);
 
+  // Undoes the last saved password or exception removal.
+  void UndoRemoveSavedPasswordOrException();
+
   // Requests the plain text password for entry at |index| to be revealed.
   // |index| The index of the entry.
   void RequestShowPassword(size_t index);
 
-  // Returns true if the user is authenticated.
-  virtual bool IsUserAuthenticated();
+  // Wrapper around |PasswordStore::AddLogin| that adds the corresponding undo
+  // action to |undo_manager_|.
+  void AddLogin(const autofill::PasswordForm& form);
+
+  // Wrapper around |PasswordStore::RemoveLogin| that adds the corresponding
+  // undo action to |undo_manager_|.
+  void RemoveLogin(const autofill::PasswordForm& form);
 
  private:
   friend class PasswordManagerPresenterTest;
@@ -79,17 +86,6 @@ class PasswordManagerPresenter
   // Sets the password and exception list of the UI view.
   void SetPasswordList();
   void SetPasswordExceptionList();
-
-  // Sort entries of |list| based on sort key. The key is the concatenation of
-  // origin, entry type (non-Android credential, Android w/ affiliated web realm
-  // or Android w/o affiliated web realm). If |entry_type == SAVED|,
-  // username, password and federation are also included in sort key. If there
-  // are several forms with the same key, all such forms but the first one are
-  // stored in |duplicates| instead of |list|.
-  void SortEntriesAndHideDuplicates(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* list,
-      DuplicatesMap* duplicates,
-      PasswordEntryType entry_type);
 
   // Returns the password store associated with the currently active profile.
   password_manager::PasswordStore* GetPasswordStore();
@@ -139,15 +135,13 @@ class PasswordManagerPresenter
 
   std::vector<std::unique_ptr<autofill::PasswordForm>> password_list_;
   std::vector<std::unique_ptr<autofill::PasswordForm>> password_exception_list_;
-  DuplicatesMap password_duplicates_;
-  DuplicatesMap password_exception_duplicates_;
+  password_manager::DuplicatesMap password_duplicates_;
+  password_manager::DuplicatesMap password_exception_duplicates_;
+
+  UndoManager undo_manager_;
 
   // Whether to show stored passwords or not.
   BooleanPrefMember show_passwords_;
-
-  // The last time the user was successfully authenticated.
-  // Used to determine whether or not to reveal plaintext passwords.
-  base::TimeTicks last_authentication_time_;
 
   // UI view that owns this presenter.
   PasswordUIView* password_view_;

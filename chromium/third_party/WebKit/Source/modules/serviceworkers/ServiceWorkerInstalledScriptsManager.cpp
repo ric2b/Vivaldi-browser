@@ -4,6 +4,9 @@
 
 #include "modules/serviceworkers/ServiceWorkerInstalledScriptsManager.h"
 
+#include <memory>
+#include <utility>
+
 #include "core/html/parser/TextResourceDecoder.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -29,21 +32,19 @@ ServiceWorkerInstalledScriptsManager::GetScriptData(
   // This blocks until the script is received from the browser.
   std::unique_ptr<WebServiceWorkerInstalledScriptsManager::RawScriptData>
       raw_script_data = manager_->GetRawScriptData(script_url);
-  if (!raw_script_data)
-    return ScriptStatus::kTaken;
-  if (!raw_script_data->IsValid())
+  DCHECK(raw_script_data);
+  if (!raw_script_data->IsValid()) {
+    *out_script_data = InstalledScriptsManager::ScriptData();
     return ScriptStatus::kFailed;
+  }
 
   // This is from WorkerScriptLoader::DidReceiveData.
-  std::unique_ptr<TextResourceDecoder> decoder;
-  if (!raw_script_data->Encoding().IsEmpty()) {
-    decoder = TextResourceDecoder::Create(TextResourceDecoderOptions(
-        TextResourceDecoderOptions::kPlainTextContent,
-        WTF::TextEncoding(raw_script_data->Encoding())));
-  } else {
-    decoder = TextResourceDecoder::Create(TextResourceDecoderOptions(
-        TextResourceDecoderOptions::kPlainTextContent));
-  }
+  std::unique_ptr<TextResourceDecoder> decoder =
+      TextResourceDecoder::Create(TextResourceDecoderOptions(
+          TextResourceDecoderOptions::kPlainTextContent,
+          raw_script_data->Encoding().IsEmpty()
+              ? UTF8Encoding()
+              : WTF::TextEncoding(raw_script_data->Encoding())));
 
   StringBuilder source_text_builder;
   for (const auto& chunk : raw_script_data->ScriptTextChunks())
@@ -54,7 +55,7 @@ ServiceWorkerInstalledScriptsManager::GetScriptData(
     size_t total_metadata_size = 0;
     for (const auto& chunk : raw_script_data->MetaDataChunks())
       total_metadata_size += chunk.size();
-    meta_data = WTF::MakeUnique<Vector<char>>();
+    meta_data = std::make_unique<Vector<char>>();
     meta_data->ReserveInitialCapacity(total_metadata_size);
     for (const auto& chunk : raw_script_data->MetaDataChunks())
       meta_data->Append(chunk.Data(), chunk.size());

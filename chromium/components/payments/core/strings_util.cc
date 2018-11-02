@@ -40,7 +40,7 @@ base::string16 GetShippingAddressLabelFormAutofillProfile(
     const std::string& locale) {
   // Name, phone number, and country are not included in the shipping address
   // label.
-  static const std::vector<autofill::ServerFieldType> label_fields{
+  static constexpr autofill::ServerFieldType kLabelFields[] = {
       autofill::COMPANY_NAME,
       autofill::ADDRESS_HOME_STREET_ADDRESS,
       autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
@@ -50,8 +50,8 @@ base::string16 GetShippingAddressLabelFormAutofillProfile(
       autofill::ADDRESS_HOME_SORTING_CODE,
   };
 
-  return profile.ConstructInferredLabel(label_fields, label_fields.size(),
-                                        locale);
+  return profile.ConstructInferredLabel(kLabelFields, arraysize(kLabelFields),
+                                        arraysize(kLabelFields), locale);
 }
 
 base::string16 GetBillingAddressLabelFromAutofillProfile(
@@ -59,7 +59,7 @@ base::string16 GetBillingAddressLabelFromAutofillProfile(
     const std::string& locale) {
   // Name, company, phone number, and country are not included in the billing
   // address label.
-  static const std::vector<autofill::ServerFieldType> label_fields{
+  static constexpr autofill::ServerFieldType kLabelFields[] = {
       autofill::ADDRESS_HOME_STREET_ADDRESS,
       autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
       autofill::ADDRESS_HOME_CITY,
@@ -68,8 +68,8 @@ base::string16 GetBillingAddressLabelFromAutofillProfile(
       autofill::ADDRESS_HOME_SORTING_CODE,
   };
 
-  return profile.ConstructInferredLabel(label_fields, label_fields.size(),
-                                        locale);
+  return profile.ConstructInferredLabel(kLabelFields, arraysize(kLabelFields),
+                                        arraysize(kLabelFields), locale);
 }
 
 base::string16 GetShippingAddressSelectorInfoMessage(
@@ -104,6 +104,58 @@ base::string16 GetShippingAddressSectionString(
       return base::string16();
   }
 }
+
+#if defined(OS_IOS)
+base::string16 GetChooseShippingAddressButtonLabel(
+    PaymentShippingType shipping_type) {
+  switch (shipping_type) {
+    case PaymentShippingType::DELIVERY:
+      return l10n_util::GetStringUTF16(
+          IDS_PAYMENTS_CHOOSE_DELIVERY_ADDRESS_LABEL);
+    case PaymentShippingType::PICKUP:
+      return l10n_util::GetStringUTF16(
+          IDS_PAYMENTS_CHOOSE_PICKUP_ADDRESS_LABEL);
+    case PaymentShippingType::SHIPPING:
+      return l10n_util::GetStringUTF16(
+          IDS_PAYMENTS_CHOOSE_SHIPPING_ADDRESS_LABEL);
+    default:
+      NOTREACHED();
+      return base::string16();
+  }
+}
+
+base::string16 GetAddShippingAddressButtonLabel(
+    PaymentShippingType shipping_type) {
+  switch (shipping_type) {
+    case PaymentShippingType::DELIVERY:
+      return l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_DELIVERY_ADDRESS_LABEL);
+    case PaymentShippingType::PICKUP:
+      return l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_PICKUP_ADDRESS_LABEL);
+    case PaymentShippingType::SHIPPING:
+      return l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_SHIPPING_ADDRESS_LABEL);
+    default:
+      NOTREACHED();
+      return base::string16();
+  }
+}
+
+base::string16 GetChooseShippingOptionButtonLabel(
+    PaymentShippingType shipping_type) {
+  switch (shipping_type) {
+    case PaymentShippingType::DELIVERY:
+      return l10n_util::GetStringUTF16(
+          IDS_PAYMENTS_CHOOSE_DELIVERY_OPTION_LABEL);
+    case PaymentShippingType::PICKUP:
+      return l10n_util::GetStringUTF16(IDS_PAYMENTS_CHOOSE_PICKUP_OPTION_LABEL);
+    case PaymentShippingType::SHIPPING:
+      return l10n_util::GetStringUTF16(
+          IDS_PAYMENTS_CHOOSE_SHIPPING_OPTION_LABEL);
+    default:
+      NOTREACHED();
+      return base::string16();
+  }
+}
+#endif  // defined(OS_IOS)
 
 base::string16 GetShippingOptionSectionString(
     PaymentShippingType shipping_type) {

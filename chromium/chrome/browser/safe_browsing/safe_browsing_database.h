@@ -21,7 +21,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/safe_browsing/safe_browsing_store.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
-#include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing/db/util.h"
 
 class GURL;
 
@@ -43,8 +43,7 @@ class SafeBrowsingDatabaseFactory {
       bool enable_download_whitelist,
       bool enable_extension_blacklist,
       bool enable_ip_blacklist,
-      bool enable_unwanted_software_list,
-      bool enable_module_whitelist) = 0;
+      bool enable_unwanted_software_list) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingDatabaseFactory);
@@ -75,8 +74,7 @@ class SafeBrowsingDatabase {
       bool enable_download_whitelist,
       bool enable_extension_blacklist,
       bool enable_ip_blacklist,
-      bool enable_unwanted_software_list,
-      bool enable_module_whitelist);
+      bool enable_unwanted_software_list);
 
   // Makes the passed |factory| the factory used to instantiate
   // a SafeBrowsingDatabase. This is used for tests.
@@ -158,9 +156,6 @@ class SafeBrowsingDatabase {
   virtual bool ContainsDownloadWhitelistedUrl(const GURL& url) = 0;
   virtual bool ContainsDownloadWhitelistedString(const std::string& str) = 0;
 
-  // Returns true if the given module is on the module whitelist.
-  virtual bool ContainsModuleWhitelistedString(const std::string& str) = 0;
-
   // Populates |prefix_hits| with any prefixes in |prefixes| that have matches
   // in the database, returning true if there were any matches.
   //
@@ -219,14 +214,6 @@ class SafeBrowsingDatabase {
       const std::vector<SBFullHashResult>& full_hits,
       const base::TimeDelta& cache_lifetime) = 0;
 
-  // Returns true if the malware IP blacklisting killswitch URL is present
-  // in the csd whitelist. This function is safe to call from any thread.
-  virtual bool IsMalwareIPMatchKillSwitchOn() = 0;
-
-  // Returns true if the whitelist killswitch URL is present in the csd
-  // whitelist. This function is safe to call from any thread.
-  virtual bool IsCsdWhitelistKillSwitchOn() = 0;
-
   // The name of the bloom-filter file for the given database file.
   // NOTE(shess): OBSOLETE.  Present for deleting stale files.
   static base::FilePath BloomFilterForFilename(
@@ -251,19 +238,9 @@ class SafeBrowsingDatabase {
   static base::FilePath DownloadWhitelistDBFilename(
       const base::FilePath& download_whitelist_base_filename);
 
-  // Filename for the off-domain inclusion whitelist databsae.  This database no
-  // longer exists, but the filename is retained so the database may be deleted.
-  static base::FilePath InclusionWhitelistDBFilename(
-      const base::FilePath& inclusion_whitelist_base_filename);
-
   // Filename for extension blacklist database.
   static base::FilePath ExtensionBlacklistDBFilename(
       const base::FilePath& extension_blacklist_base_filename);
-
-  // Filename for side-effect free whitelist database. This database no longer
-  // exists, but the filename is retained so the database may be deleted.
-  static base::FilePath SideEffectFreeWhitelistDBFilename(
-      const base::FilePath& side_effect_free_whitelist_base_filename);
 
   // Filename for the csd malware IP blacklist database.
   static base::FilePath IpBlacklistDBFilename(
@@ -273,10 +250,7 @@ class SafeBrowsingDatabase {
   static base::FilePath UnwantedSoftwareDBFilename(
       const base::FilePath& db_filename);
 
-  // Filename for the module whitelist database.
-  static base::FilePath ModuleWhitelistDBFilename(
-      const base::FilePath& db_filename);
-
+  // Filename for the resource blacklist database.
   static base::FilePath ResourceBlacklistDBFilename(
       const base::FilePath& db_filename);
 
@@ -326,7 +300,7 @@ class SafeBrowsingDatabase {
     FAILURE_RESOURCE_BLACKLIST_UPDATE_BEGIN = 35,
     FAILURE_RESOURCE_BLACKLIST_UPDATE_FINISH = 36,
     FAILURE_RESOURCE_BLACKLIST_DELETE = 37,
-    FAILURE_MODULE_WHITELIST_DELETE = 38,
+    // Obsolete: FAILURE_MODULE_WHITELIST_DELETE = 38,
 
     // Memory space for histograms is determined by the max.  ALWAYS
     // ADD NEW VALUES BEFORE THIS ONE.
@@ -356,7 +330,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
       SafeBrowsingStore* extension_blacklist_store,
       SafeBrowsingStore* ip_blacklist_store,
       SafeBrowsingStore* unwanted_software_store,
-      SafeBrowsingStore* module_whitelist_store,
       SafeBrowsingStore* resource_blacklist_store);
 
   ~SafeBrowsingDatabaseNew() override;
@@ -383,7 +356,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   bool ContainsCsdWhitelistedUrl(const GURL& url) override;
   bool ContainsDownloadWhitelistedUrl(const GURL& url) override;
   bool ContainsDownloadWhitelistedString(const std::string& str) override;
-  bool ContainsModuleWhitelistedString(const std::string& str) override;
   bool ContainsExtensionPrefixes(const std::vector<SBPrefix>& prefixes,
                                  std::vector<SBPrefix>* prefix_hits) override;
   bool ContainsMalwareIP(const std::string& ip_address) override;
@@ -399,12 +371,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   void CacheHashResults(const std::vector<SBPrefix>& prefixes,
                         const std::vector<SBFullHashResult>& full_hits,
                         const base::TimeDelta& cache_lifetime) override;
-
-  // Returns the value of malware_kill_switch_;
-  bool IsMalwareIPMatchKillSwitchOn() override;
-
-  // Returns true if the CSD whitelist has everything whitelisted.
-  bool IsCsdWhitelistKillSwitchOn() override;
 
  private:
   friend class SafeBrowsingDatabaseTest;
@@ -444,7 +410,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
     enum class SBWhitelistId {
       CSD,
       DOWNLOAD,
-      MODULE,
     };
     enum class PrefixSetId {
       BROWSE,
@@ -486,7 +451,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
     SBWhitelist csd_whitelist_;
     SBWhitelist download_whitelist_;
     SBWhitelist inclusion_whitelist_;
-    SBWhitelist module_whitelist_;
 
     // The IP blacklist should be small.  At most a couple hundred IPs.
     IPBlacklist ip_blacklist_;
@@ -708,8 +672,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   //   - |ip_blacklist_store_|: For IP blacklist.
   //   - |unwanted_software_store_|: For unwanted software list (format
   //     identical to browsing lists).
-  //   - |module_whitelist_store_|: For module whitelist. This list only
-  //     contains 256 bit hashes.
   //   - |resource_blacklist_store_|: For script resource list (format identical
   //     to browsing lists).
   //
@@ -726,7 +688,6 @@ class SafeBrowsingDatabaseNew : public SafeBrowsingDatabase {
   const std::unique_ptr<SafeBrowsingStore> extension_blacklist_store_;
   const std::unique_ptr<SafeBrowsingStore> ip_blacklist_store_;
   const std::unique_ptr<SafeBrowsingStore> unwanted_software_store_;
-  const std::unique_ptr<SafeBrowsingStore> module_whitelist_store_;
   const std::unique_ptr<SafeBrowsingStore> resource_blacklist_store_;
 
   // Used to schedule resetting the database because of corruption. This factory

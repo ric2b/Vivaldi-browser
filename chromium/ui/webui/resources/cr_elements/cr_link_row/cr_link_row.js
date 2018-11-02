@@ -8,10 +8,13 @@
  * button (taking up the whole 'row'). The name link comes from the intended use
  * of this element to take the user to another page in the app or to an external
  * page (somewhat like an HTML link).
+ * Note: the ripple handling was taken from Polymer v1 paper-icon-button-light.
  */
 Polymer({
   is: 'cr-link-row',
   extends: 'button',
+
+  behaviors: [Polymer.PaperRippleBehavior],
 
   properties: {
     iconClass: String,
@@ -23,5 +26,29 @@ Polymer({
       /* Value used for noSubLabel attribute. */
       value: '',
     },
+  },
+
+  listeners: {
+    'down': '_rippleDown',
+    'up': '_rippleUp',
+    'focus': '_rippleDown',
+    'blur': '_rippleUp',
+  },
+
+  _rippleDown: function() {
+    this.getRipple().uiDownAction();
+  },
+
+  _rippleUp: function() {
+    this.getRipple().uiUpAction();
+  },
+
+  _createRipple: function() {
+    this._rippleContainer = this.$.icon;
+    var ripple = Polymer.PaperRippleBehavior._createRipple();
+    ripple.id = 'ink';
+    ripple.setAttribute('recenters', '');
+    ripple.classList.add('circle');
+    return ripple;
   },
 });

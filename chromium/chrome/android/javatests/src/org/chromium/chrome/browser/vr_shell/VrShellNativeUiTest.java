@@ -38,8 +38,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-features=VrShell",
-        "enable-webvr"})
+        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-webvr"})
 @Restriction(RESTRICTION_TYPE_DEVICE_DAYDREAM)
 public class VrShellNativeUiTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
@@ -65,25 +64,25 @@ public class VrShellNativeUiTest {
             throws IllegalArgumentException, InterruptedException, TimeoutException {
         mVrTestRule.loadUrl(BOOKMARKS_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(BOOKMARKS_FOLDER_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(BOOKMARKS_UNCATEGORIZED_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(DOWNLOADS_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(NTP_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(NATIVE_HISTORY_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
         mVrTestRule.loadUrl(RECENT_TABS_URL, PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse(
-                "Should not be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+                "Should not be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
     }
 
     /**
@@ -94,6 +93,6 @@ public class VrShellNativeUiTest {
     public void testUrlOnNonNativeUi()
             throws IllegalArgumentException, InterruptedException, TimeoutException {
         mVrTestRule.loadUrl(TEST_PAGE_2D_URL, PAGE_LOAD_TIMEOUT_S);
-        Assert.assertTrue("Should be showing URL", VrShellDelegate.isDisplayingUrlForTesting());
+        Assert.assertTrue("Should be showing URL", TestVrShellDelegate.isDisplayingUrlForTesting());
     }
 }

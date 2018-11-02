@@ -10,14 +10,11 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "ios/chrome/browser/ios_chrome_field_trials.h"
 #include "ios/web/public/app/web_main_parts.h"
 
 class ApplicationContextImpl;
 class PrefService;
-
-namespace metrics {
-class TrackingSynchronizer;
-}
 
 namespace ios {
 class FieldTrialSynchronizer;
@@ -50,7 +47,6 @@ class IOSChromeMainParts : public web::WebMainParts {
   const base::CommandLine& parsed_command_line_;
 
   std::unique_ptr<ApplicationContextImpl> application_context_;
-  scoped_refptr<metrics::TrackingSynchronizer> tracking_synchronizer_;
 
   // Statistical testing infrastructure for the entire browser. NULL until
   // SetUpMetricsAndFieldTrials is called.
@@ -60,6 +56,8 @@ class IOSChromeMainParts : public web::WebMainParts {
 
   // Initialized in SetupMetricsAndFieldTrials.
   std::unique_ptr<ios::FieldTrialSynchronizer> field_trial_synchronizer_;
+
+  IOSChromeFieldTrials ios_field_trials_;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromeMainParts);
 };

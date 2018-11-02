@@ -9,7 +9,7 @@
 namespace echo {
 
 std::unique_ptr<service_manager::Service> CreateEchoService() {
-  return base::MakeUnique<EchoService>();
+  return std::make_unique<EchoService>();
 }
 
 EchoService::EchoService() {
@@ -35,6 +35,10 @@ void EchoService::BindEchoRequest(mojom::EchoRequest request) {
 void EchoService::EchoString(const std::string& input,
                              EchoStringCallback callback) {
   std::move(callback).Run(input);
+}
+
+void EchoService::Quit() {
+  context()->RequestQuit();
 }
 
 }  // namespace echo

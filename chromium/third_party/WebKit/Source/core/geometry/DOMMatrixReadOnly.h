@@ -7,7 +7,8 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/StringOrUnrestrictedDoubleSequence.h"
+#include "bindings/core/v8/string_or_unrestricted_double_sequence.h"
+#include "core/geometry/DOMMatrix2DInit.h"
 #include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -21,9 +22,7 @@ class DOMMatrixInit;
 class DOMPoint;
 class DOMPointInit;
 
-class CORE_EXPORT DOMMatrixReadOnly
-    : public GarbageCollectedFinalized<DOMMatrixReadOnly>,
-      public ScriptWrappable {
+class CORE_EXPORT DOMMatrixReadOnly : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -36,6 +35,7 @@ class CORE_EXPORT DOMMatrixReadOnly
   static DOMMatrixReadOnly* fromFloat64Array(NotShared<DOMFloat64Array>,
                                              ExceptionState&);
   static DOMMatrixReadOnly* fromMatrix(DOMMatrixInit&, ExceptionState&);
+  static DOMMatrixReadOnly* fromMatrix2D(DOMMatrix2DInit&, ExceptionState&);
   static DOMMatrixReadOnly* CreateForSerialization(double[], int size);
   virtual ~DOMMatrixReadOnly();
 
@@ -104,8 +104,6 @@ class CORE_EXPORT DOMMatrixReadOnly
 
   const TransformationMatrix& Matrix() const { return *matrix_; }
 
-  DEFINE_INLINE_TRACE() {}
-
  protected:
   DOMMatrixReadOnly() {}
   DOMMatrixReadOnly(const String&, ExceptionState&);
@@ -130,8 +128,11 @@ class CORE_EXPORT DOMMatrixReadOnly
     }
   }
 
-  void SetMatrixValueFromString(const String&, ExceptionState&);
+  void SetMatrixValueFromString(const ExecutionContext*,
+                                const String&,
+                                ExceptionState&);
 
+  static bool ValidateAndFixup2D(DOMMatrix2DInit&, ExceptionState&);
   static bool ValidateAndFixup(DOMMatrixInit&, ExceptionState&);
   // TransformationMatrix needs to be 16-byte aligned. PartitionAlloc
   // supports 16-byte alignment but Oilpan doesn't. So we use an std::unique_ptr

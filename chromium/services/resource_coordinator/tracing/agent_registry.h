@@ -11,6 +11,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/resource_coordinator/public/interfaces/tracing/tracing.mojom.h"
@@ -24,7 +25,7 @@ namespace tracing {
 
 class AgentRegistry : public mojom::AgentRegistry {
  public:
-  class AgentEntry {
+  class AgentEntry : public base::SupportsWeakPtr<AgentEntry> {
    public:
     AgentEntry(size_t id,
                AgentRegistry* agent_registry,
@@ -48,6 +49,8 @@ class AgentRegistry : public mojom::AgentRegistry {
     bool supports_explicit_clock_sync() const {
       return supports_explicit_clock_sync_;
     }
+    bool is_tracing() const { return is_tracing_; }
+    void set_is_tracing(bool is_tracing) { is_tracing_ = is_tracing; }
 
    private:
     void OnConnectionError();
@@ -59,6 +62,7 @@ class AgentRegistry : public mojom::AgentRegistry {
     const mojom::TraceDataType type_;
     const bool supports_explicit_clock_sync_;
     std::map<const void*, base::OnceClosure> closures_;
+    bool is_tracing_;
 
     DISALLOW_COPY_AND_ASSIGN(AgentEntry);
   };

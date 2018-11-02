@@ -150,7 +150,7 @@ bool DOMWindow::IsInsecureScriptAccess(LocalDOMWindow& calling_window,
   return true;
 }
 
-void DOMWindow::postMessage(RefPtr<SerializedScriptValue> message,
+void DOMWindow::postMessage(scoped_refptr<SerializedScriptValue> message,
                             const MessagePortArray& ports,
                             const String& target_origin,
                             LocalDOMWindow* source,
@@ -162,7 +162,7 @@ void DOMWindow::postMessage(RefPtr<SerializedScriptValue> message,
 
   // Compute the target origin.  We need to do this synchronously in order
   // to generate the SyntaxError exception correctly.
-  RefPtr<SecurityOrigin> target;
+  scoped_refptr<SecurityOrigin> target;
   if (target_origin == "/") {
     if (!source_document)
       return;
@@ -179,8 +179,8 @@ void DOMWindow::postMessage(RefPtr<SerializedScriptValue> message,
     }
   }
 
-  MessagePortChannelArray channels = MessagePort::DisentanglePorts(
-      GetExecutionContext(), ports, exception_state);
+  auto channels = MessagePort::DisentanglePorts(GetExecutionContext(), ports,
+                                                exception_state);
   if (exception_state.HadException())
     return;
 
@@ -445,7 +445,7 @@ InputDeviceCapabilitiesConstants* DOMWindow::GetInputDeviceCapabilities() {
   return input_capabilities_;
 }
 
-DEFINE_TRACE(DOMWindow) {
+void DOMWindow::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(window_proxy_manager_);
   visitor->Trace(input_capabilities_);
@@ -453,7 +453,7 @@ DEFINE_TRACE(DOMWindow) {
   EventTargetWithInlineData::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(DOMWindow) {
+void DOMWindow::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(location_);
   EventTargetWithInlineData::TraceWrappers(visitor);
 }

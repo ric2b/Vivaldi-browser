@@ -4,17 +4,17 @@
 
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 
-#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/ScreenOrientationController.h"
 #include "core/fullscreen/Fullscreen.h"
-#include "core/html/HTMLAudioElement.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/media/HTMLAudioElement.h"
+#include "core/html/media/HTMLVideoElement.h"
+#include "core/html_names.h"
 #include "core/loader/EmptyClients.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "modules/device_orientation/DeviceOrientationController.h"
 #include "modules/device_orientation/DeviceOrientationData.h"
 #include "modules/media_controls/MediaControlsImpl.h"
@@ -22,6 +22,7 @@
 #include "platform/LayoutTestSupport.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/modules/screen_orientation/WebLockOrientationCallback.h"
@@ -121,13 +122,25 @@ class StubLocalFrameClientForOrientationLockDelegate final
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*,
       WebLayerTreeView*) override {
-    return WTF::MakeUnique<MockWebMediaPlayerForOrientationLockDelegate>();
+    return std::make_unique<MockWebMediaPlayerForOrientationLockDelegate>();
   }
 };
 
 }  // anonymous namespace
 
-class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
+class MediaControlsOrientationLockDelegateTest
+    : public PageTestBase,
+      private ScopedVideoFullscreenOrientationLockForTest,
+      private ScopedVideoRotateToFullscreenForTest {
+ public:
+  MediaControlsOrientationLockDelegateTest()
+      : ScopedVideoFullscreenOrientationLockForTest(true),
+        ScopedVideoRotateToFullscreenForTest(false) {}
+
+  MediaControlsOrientationLockDelegateTest(bool video_rotate_to_fullscreen)
+      : ScopedVideoFullscreenOrientationLockForTest(true),
+        ScopedVideoRotateToFullscreenForTest(video_rotate_to_fullscreen) {}
+
  protected:
   using DeviceOrientationType =
       MediaControlsOrientationLockDelegate::DeviceOrientationType;
@@ -143,35 +156,17 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
     FillWithEmptyClients(clients);
     clients.chrome_client = chrome_client_.Get();
 
-    page_holder_ = DummyPageHolder::Create(
-        IntSize(800, 600), &clients,
-        StubLocalFrameClientForOrientationLockDelegate::Create());
-
+    SetupPageWithClients(
+        &clients, StubLocalFrameClientForOrientationLockDelegate::Create());
     previous_orientation_event_value_ =
         RuntimeEnabledFeatures::OrientationEventEnabled();
-    previous_video_fullscreen_orientation_lock_value_ =
-        RuntimeEnabledFeatures::VideoFullscreenOrientationLockEnabled();
-    previous_video_rotate_to_fullscreen_value_ =
-        RuntimeEnabledFeatures::VideoRotateToFullscreenEnabled();
-    RuntimeEnabledFeatures::SetVideoFullscreenOrientationLockEnabled(true);
-    // Turn off rotate-to-fullscreen. Tests covering the intersection of the two
-    // can use the MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
-    // subclass.
-    RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(false);
 
     GetDocument().write("<body><video></body>");
-    video_ = toHTMLVideoElement(*GetDocument().QuerySelector("video"));
+    video_ = ToHTMLVideoElement(*GetDocument().QuerySelector("video"));
   }
 
   void TearDown() override {
     ::testing::Mock::VerifyAndClear(&ScreenOrientationClient());
-
-    RuntimeEnabledFeatures::SetOrientationEventEnabled(
-        previous_orientation_event_value_);
-    RuntimeEnabledFeatures::SetVideoFullscreenOrientationLockEnabled(
-        previous_video_fullscreen_orientation_lock_value_);
-    RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(
-        previous_video_rotate_to_fullscreen_value_);
   }
 
   static bool HasDelegate(const MediaControls& media_controls) {
@@ -181,7 +176,7 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
 
   void SimulateEnterFullscreen() {
     std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
+        Frame::NotifyUserActivation(GetDocument().GetFrame());
     Fullscreen::RequestFullscreen(Video());
     testing::RunPendingTasks();
   }
@@ -246,7 +241,6 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
   }
 
   HTMLVideoElement& Video() const { return *video_; }
-  Document& GetDocument() const { return page_holder_->GetDocument(); }
   MockWebScreenOrientationClient& ScreenOrientationClient() const {
     return ChromeClient().WebScreenOrientationClient();
   }
@@ -259,15 +253,18 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
   friend class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest;
 
   bool previous_orientation_event_value_;
-  bool previous_video_fullscreen_orientation_lock_value_;
-  bool previous_video_rotate_to_fullscreen_value_;
-  std::unique_ptr<DummyPageHolder> page_holder_;
   Persistent<HTMLVideoElement> video_;
   Persistent<MockChromeClientForOrientationLockDelegate> chrome_client_;
 };
 
 class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
-    : public MediaControlsOrientationLockDelegateTest {
+    : public MediaControlsOrientationLockDelegateTest,
+      private ScopedOrientationEventForTest {
+ public:
+  MediaControlsOrientationLockAndRotateToFullscreenDelegateTest()
+      : MediaControlsOrientationLockDelegateTest(true),
+        ScopedOrientationEventForTest(true) {}
+
  protected:
   enum DeviceNaturalOrientation { kNaturalIsPortrait, kNaturalIsLandscape };
 
@@ -278,9 +275,6 @@ class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
     LayoutTestSupport::SetIsRunningLayoutTest(false);
 
     MediaControlsOrientationLockDelegateTest::SetUp();
-
-    RuntimeEnabledFeatures::SetOrientationEventEnabled(true);
-    RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(true);
 
     // Reset the <video> element now we've enabled the runtime feature.
     video_->parentElement()->RemoveChild(video_);
@@ -385,7 +379,7 @@ class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
   void PlayVideo() {
     {
       std::unique_ptr<UserGestureIndicator> gesture =
-          LocalFrame::CreateUserGesture(GetDocument().GetFrame());
+          Frame::NotifyUserActivation(GetDocument().GetFrame());
       Video().Play();
     }
     testing::RunPendingTasks();
@@ -412,7 +406,8 @@ TEST_F(MediaControlsOrientationLockDelegateTest, DelegateRequiresFlag) {
   EXPECT_TRUE(HasDelegate(*Video().GetMediaControls()));
 
   // Same with flag off.
-  RuntimeEnabledFeatures::SetVideoFullscreenOrientationLockEnabled(false);
+  ScopedVideoFullscreenOrientationLockForTest video_fullscreen_orientation_lock(
+      false);
   HTMLVideoElement* video = HTMLVideoElement::Create(GetDocument());
   GetDocument().body()->AppendChild(video);
   EXPECT_FALSE(HasDelegate(*video->GetMediaControls()));

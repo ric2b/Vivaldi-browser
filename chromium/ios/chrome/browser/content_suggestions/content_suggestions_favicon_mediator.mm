@@ -8,8 +8,6 @@
 #include "components/favicon/core/large_icon_service.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/ntp_tiles/metrics.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
@@ -17,6 +15,8 @@
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
 #import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
+#import "ios/chrome/browser/ui/favicon/favicon_attributes_with_payload.h"
+#include "ios/chrome/browser/ui/ntp/metrics.h"
 #include "ui/gfx/image/image.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -45,12 +45,13 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
 @property(nonatomic, assign)
     ntp_snippets::ContentSuggestionsService* contentService;
 
-// FaviconAttributesProvider to fetch the favicon for the most visited tiles.
-@property(nonatomic, nullable, strong)
-    FaviconAttributesProvider* mostVisitedAttributesProvider;
 // FaviconAttributesProvider to fetch the favicon for the suggestions.
 @property(nonatomic, nullable, strong)
     FaviconAttributesProvider* suggestionsAttributesProvider;
+
+// Redefined as readwrite
+@property(nonatomic, nullable, strong, readwrite)
+    FaviconAttributesProvider* mostVisitedAttributesProvider;
 
 @end
 
@@ -157,8 +158,8 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     if (!strongSelf || !strongItem || image.IsEmpty())
       return;
 
-    strongItem.attributes =
-        [FaviconAttributes attributesWithImage:[image.ToUIImage() copy]];
+    strongItem.attributes = [FaviconAttributesWithPayload
+        attributesWithImage:[image.ToUIImage() copy]];
     [strongSelf.dataSink itemHasChanged:strongItem];
   };
 
@@ -180,9 +181,9 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
   for (size_t i = 0; i < _mostVisitedDataForLogging.size(); ++i) {
     ntp_tiles::NTPTile& ntpTile = _mostVisitedDataForLogging[i];
     if (ntpTile.url == item.URL) {
-      ntp_tiles::metrics::RecordTileImpression(
-          i, ntpTile.source, [item tileType], item.URL,
-          GetApplicationContext()->GetRapporServiceImpl());
+      RecordNTPTileImpression(i, ntpTile.source, ntpTile.title_source,
+                              item.attributes, ntpTile.data_generation_time,
+                              ntpTile.url);
       // Reset the URL to be sure to log the impression only once.
       ntpTile.url = GURL();
       break;

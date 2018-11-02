@@ -10,6 +10,7 @@
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
 #include "chrome/test/chromedriver/chrome/status.h"
+#include "chrome/test/chromedriver/net/timeout.h"
 
 namespace {
 
@@ -221,6 +222,10 @@ void NavigationTracker::set_timed_out(bool timed_out) {
   timed_out_ = timed_out;
 }
 
+bool NavigationTracker::IsNonBlocking() const {
+  return false;
+}
+
 Status NavigationTracker::OnConnected(DevToolsClient* client) {
   ResetLoadingState(kUnknown);
 
@@ -238,6 +243,24 @@ Status NavigationTracker::OnEvent(DevToolsClient* client,
       return Status(kUnknownError, "missing or invalid 'frameId'");
     pending_frame_set_.insert(frame_id);
     loading_state_ = kLoading;
+
+    if (browser_info_->major_version >= 63) {
+      // Check if the document is really loading.
+      base::DictionaryValue params;
+      params.SetString("expression", "document.readyState");
+      std::unique_ptr<base::DictionaryValue> result;
+      Status status =
+          client_->SendCommandAndGetResult("Runtime.evaluate", params, &result);
+      std::string value;
+      if (status.IsError() || !result->GetString("result.value", &value)) {
+        LOG(ERROR) << "Unable to retrieve document state " << status.message();
+        return status;
+      }
+      if (value == "complete") {
+        pending_frame_set_.erase(frame_id);
+        loading_state_ = kNotLoading;
+      }
+    }
   } else if (method == "Page.frameStoppedLoading") {
     // Versions of Blink before revision 170248 sent a single
     // Page.frameStoppedLoading event per page, but 170248 and newer revisions
@@ -405,8 +428,11 @@ Status NavigationTracker::OnCommandSuccess(
     const std::string& method,
     const base::DictionaryValue& result,
     const Timeout& command_timeout) {
+  // Check for start of navigation. In some case response to navigate is delayed
+  // until after the command has already timed out, in which case it has already
+  // been cancelled or will be cancelled soon, and should be ignored.
   if ((method == "Page.navigate" || method == "Page.navigateToHistoryEntry") &&
-      loading_state_ != kLoading) {
+      loading_state_ != kLoading && !command_timeout.IsExpired()) {
     // At this point the browser has initiated the navigation, but besides that,
     // it is unknown what will happen.
     //

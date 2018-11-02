@@ -4,10 +4,10 @@
 
 #include "modules/media_controls/elements/MediaControlFullscreenButtonElement.h"
 
-#include "core/InputTypeNames.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLMediaElement.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/input_type_names.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "public/platform/Platform.h"
 
@@ -16,7 +16,6 @@ namespace blink {
 MediaControlFullscreenButtonElement::MediaControlFullscreenButtonElement(
     MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaEnterFullscreenButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-webkit-media-controls-fullscreen-button"));
   SetIsFullscreen(MediaElement().IsFullscreen());
@@ -26,6 +25,7 @@ MediaControlFullscreenButtonElement::MediaControlFullscreenButtonElement(
 void MediaControlFullscreenButtonElement::SetIsFullscreen(bool is_fullscreen) {
   SetDisplayType(is_fullscreen ? kMediaExitFullscreenButton
                                : kMediaEnterFullscreenButton);
+  SetClass("fullscreen", is_fullscreen);
 }
 
 bool MediaControlFullscreenButtonElement::WillRespondToMouseClickEvents() {

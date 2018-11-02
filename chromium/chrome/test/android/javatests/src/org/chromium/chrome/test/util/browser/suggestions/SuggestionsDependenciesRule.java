@@ -7,15 +7,16 @@ package org.chromium.chrome.test.util.browser.suggestions;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.chrome.browser.download.ui.ThumbnailProvider;
+import org.chromium.base.DiscardableReferencePool;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.MostVisitedSites;
 import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
+import org.chromium.chrome.browser.widget.ThumbnailProvider;
 
 /**
  * Rule that allows mocking native dependencies of the suggestions package.
@@ -53,9 +54,6 @@ public class SuggestionsDependenciesRule extends TestWatcher {
     /**
      * SuggestionsDependencyFactory that exposes and allows modifying the instances to be injected.
      */
-    // TODO(dgn): Warning emitted while all the exposed fields are not used, this should become
-    // unnecessary as we start using the rule.
-    @SuppressFBWarnings("UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
     public static class TestFactory extends SuggestionsDependencyFactory {
         public SuggestionsSource suggestionsSource;
         public MostVisitedSites mostVisitedSites;
@@ -63,6 +61,7 @@ public class SuggestionsDependenciesRule extends TestWatcher {
         public SuggestionsEventReporter eventReporter;
         public ThumbnailProvider thumbnailProvider;
         public FaviconHelper faviconHelper;
+        public OfflinePageBridge offlinePageBridge;
 
         @Override
         public SuggestionsSource createSuggestionSource(Profile profile) {
@@ -89,15 +88,21 @@ public class SuggestionsDependenciesRule extends TestWatcher {
         }
 
         @Override
-        public ThumbnailProvider createThumbnailProvider() {
+        public ThumbnailProvider createThumbnailProvider(DiscardableReferencePool referencePool) {
             if (thumbnailProvider != null) return thumbnailProvider;
-            return super.createThumbnailProvider();
+            return super.createThumbnailProvider(referencePool);
         }
 
         @Override
         public FaviconHelper createFaviconHelper() {
             if (faviconHelper != null) return faviconHelper;
             return super.createFaviconHelper();
+        }
+
+        @Override
+        public OfflinePageBridge getOfflinePageBridge(Profile profile) {
+            if (offlinePageBridge != null) return offlinePageBridge;
+            return super.getOfflinePageBridge(profile);
         }
     }
 }

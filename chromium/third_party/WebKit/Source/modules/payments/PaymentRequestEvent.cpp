@@ -4,6 +4,9 @@
 
 #include "modules/payments/PaymentRequestEvent.h"
 
+#include <memory>
+#include <utility>
+
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -81,7 +84,7 @@ ScriptPromise PaymentRequestEvent::openWindow(ScriptState* script_state,
   }
 
   if (!context->GetSecurityOrigin()->IsSameSchemeHostPortAndSuborigin(
-          SecurityOrigin::Create(parsed_url_to_open).Get())) {
+          SecurityOrigin::Create(parsed_url_to_open).get())) {
     resolver->Resolve(v8::Null(script_state->GetIsolate()));
     return promise;
   }
@@ -94,7 +97,7 @@ ScriptPromise PaymentRequestEvent::openWindow(ScriptState* script_state,
   context->ConsumeWindowInteraction();
 
   ServiceWorkerGlobalScopeClient::From(context)->OpenWindowForPaymentHandler(
-      parsed_url_to_open, WTF::MakeUnique<NavigateClientCallback>(resolver));
+      parsed_url_to_open, std::make_unique<NavigateClientCallback>(resolver));
   return promise;
 }
 
@@ -107,7 +110,7 @@ void PaymentRequestEvent::respondWith(ScriptState* script_state,
   }
 }
 
-DEFINE_TRACE(PaymentRequestEvent) {
+void PaymentRequestEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(method_data_);
   visitor->Trace(modifiers_);
   visitor->Trace(observer_);

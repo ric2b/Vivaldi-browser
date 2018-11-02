@@ -10,14 +10,15 @@ namespace blink {
 
 NGConstraintSpaceBuilder::NGConstraintSpaceBuilder(
     const NGConstraintSpace& parent_space)
-    : NGConstraintSpaceBuilder(parent_space.WritingMode(),
+    : NGConstraintSpaceBuilder(parent_space.GetWritingMode(),
                                parent_space.InitialContainingBlockSize()) {}
 
-NGConstraintSpaceBuilder::NGConstraintSpaceBuilder(NGWritingMode writing_mode,
+NGConstraintSpaceBuilder::NGConstraintSpaceBuilder(WritingMode writing_mode,
                                                    NGPhysicalSize icb_size)
     : initial_containing_block_size_(icb_size),
-      fragmentainer_space_available_(NGSizeIndefinite),
-      parent_writing_mode_(writing_mode),
+      fragmentainer_block_size_(NGSizeIndefinite),
+      fragmentainer_space_at_bfc_start_(NGSizeIndefinite),
+      parent_writing_mode_(static_cast<unsigned>(writing_mode)),
       is_fixed_size_inline_(false),
       is_fixed_size_block_(false),
       is_shrink_to_fit_(false),
@@ -26,6 +27,7 @@ NGConstraintSpaceBuilder::NGConstraintSpaceBuilder(NGWritingMode writing_mode,
       fragmentation_type_(kFragmentNone),
       is_new_fc_(false),
       is_anonymous_(false),
+      use_first_line_sytle_(false),
       text_direction_(static_cast<unsigned>(TextDirection::kLtr)),
       exclusion_space_(nullptr) {}
 
@@ -129,8 +131,14 @@ NGConstraintSpaceBuilder& NGConstraintSpaceBuilder::SetIsAnonymous(
   return *this;
 }
 
+NGConstraintSpaceBuilder& NGConstraintSpaceBuilder::SetUseFirstLineStyle(
+    bool use_first_line_sytle) {
+  use_first_line_sytle_ = use_first_line_sytle;
+  return *this;
+}
+
 NGConstraintSpaceBuilder& NGConstraintSpaceBuilder::SetUnpositionedFloats(
-    Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats) {
+    Vector<scoped_refptr<NGUnpositionedFloat>>& unpositioned_floats) {
   unpositioned_floats_ = unpositioned_floats;
   return *this;
 }
@@ -151,12 +159,12 @@ NGConstraintSpaceBuilder& NGConstraintSpaceBuilder::AddBaselineRequest(
   return *this;
 }
 
-RefPtr<NGConstraintSpace> NGConstraintSpaceBuilder::ToConstraintSpace(
-    NGWritingMode out_writing_mode) {
+scoped_refptr<NGConstraintSpace> NGConstraintSpaceBuilder::ToConstraintSpace(
+    WritingMode out_writing_mode) {
   // Whether the child and the containing block are parallel to each other.
   // Example: vertical-rl and vertical-lr
   bool is_in_parallel_flow = IsParallelWritingMode(
-      static_cast<NGWritingMode>(parent_writing_mode_), out_writing_mode);
+      static_cast<WritingMode>(parent_writing_mode_), out_writing_mode);
 
   NGLogicalSize available_size = available_size_;
   NGLogicalSize percentage_resolution_size = percentage_resolution_size_;
@@ -173,7 +181,7 @@ RefPtr<NGConstraintSpace> NGConstraintSpaceBuilder::ToConstraintSpace(
   // https://www.w3.org/TR/css-writing-modes-3/#orthogonal-auto
   if (available_size.inline_size == NGSizeIndefinite) {
     DCHECK(!is_in_parallel_flow);
-    if (out_writing_mode == kHorizontalTopBottom) {
+    if (out_writing_mode == WritingMode::kHorizontalTb) {
       available_size.inline_size = initial_containing_block_size_.width;
     } else {
       available_size.inline_size = initial_containing_block_size_.height;
@@ -181,7 +189,7 @@ RefPtr<NGConstraintSpace> NGConstraintSpaceBuilder::ToConstraintSpace(
   }
   if (percentage_resolution_size.inline_size == NGSizeIndefinite) {
     DCHECK(!is_in_parallel_flow);
-    if (out_writing_mode == kHorizontalTopBottom) {
+    if (out_writing_mode == WritingMode::kHorizontalTb) {
       percentage_resolution_size.inline_size =
           initial_containing_block_size_.width;
     } else {
@@ -218,31 +226,32 @@ RefPtr<NGConstraintSpace> NGConstraintSpaceBuilder::ToConstraintSpace(
   }
 
   if (is_in_parallel_flow) {
-    return AdoptRef(new NGConstraintSpace(
-        static_cast<NGWritingMode>(out_writing_mode),
+    return base::AdoptRef(new NGConstraintSpace(
+        static_cast<WritingMode>(out_writing_mode), false,
         static_cast<TextDirection>(text_direction_), available_size,
         percentage_resolution_size, parent_percentage_resolution_inline_size,
-        initial_containing_block_size_, fragmentainer_space_available_,
-        is_fixed_size_inline_, is_fixed_size_block_, is_shrink_to_fit_,
+        initial_containing_block_size_, fragmentainer_block_size_,
+        fragmentainer_space_at_bfc_start_, is_fixed_size_inline_,
+        is_fixed_size_block_, is_shrink_to_fit_,
         is_inline_direction_triggers_scrollbar_,
         is_block_direction_triggers_scrollbar_,
         static_cast<NGFragmentationType>(fragmentation_type_), is_new_fc_,
-        is_anonymous_, margin_strut, bfc_offset, floats_bfc_offset,
-        exclusion_space, unpositioned_floats_, clearance_offset,
-        baseline_requests_));
+        is_anonymous_, use_first_line_sytle_, margin_strut, bfc_offset,
+        floats_bfc_offset, exclusion_space, unpositioned_floats_,
+        clearance_offset, baseline_requests_));
   }
-  return AdoptRef(new NGConstraintSpace(
-      out_writing_mode, static_cast<TextDirection>(text_direction_),
+  return base::AdoptRef(new NGConstraintSpace(
+      out_writing_mode, true, static_cast<TextDirection>(text_direction_),
       available_size, percentage_resolution_size,
       parent_percentage_resolution_inline_size, initial_containing_block_size_,
-      fragmentainer_space_available_, is_fixed_size_block_,
-      is_fixed_size_inline_, is_shrink_to_fit_,
+      fragmentainer_block_size_, fragmentainer_space_at_bfc_start_,
+      is_fixed_size_block_, is_fixed_size_inline_, is_shrink_to_fit_,
       is_block_direction_triggers_scrollbar_,
       is_inline_direction_triggers_scrollbar_,
       static_cast<NGFragmentationType>(fragmentation_type_), is_new_fc_,
-      is_anonymous_, margin_strut, bfc_offset, floats_bfc_offset,
-      exclusion_space, unpositioned_floats_, clearance_offset,
-      baseline_requests_));
+      is_anonymous_, use_first_line_sytle_, margin_strut, bfc_offset,
+      floats_bfc_offset, exclusion_space, unpositioned_floats_,
+      clearance_offset, baseline_requests_));
 }
 
 }  // namespace blink

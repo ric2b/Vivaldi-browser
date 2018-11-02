@@ -42,11 +42,11 @@ namespace {
 // Limits on the cache size and number of areas in memory, over which the areas
 // are purged.
 #if defined(OS_ANDROID)
-const unsigned kMaxStorageAreaCount = 20;
-const size_t kMaxCacheSize = 2 * 1024 * 1024;
+const unsigned kMaxDomStorageAreaCount = 20;
+const size_t kMaxDomStorageCacheSize = 2 * 1024 * 1024;
 #else
-const unsigned kMaxStorageAreaCount = 100;
-const size_t kMaxCacheSize = 20 * 1024 * 1024;
+const unsigned kMaxDomStorageAreaCount = 100;
+const size_t kMaxDomStorageCacheSize = 20 * 1024 * 1024;
 #endif
 
 const int kSessionStoraceScavengingSeconds = 60;
@@ -107,7 +107,7 @@ DOMStorageContextImpl::~DOMStorageContextImpl() {
     // shouldn't happen on this thread.
     SessionStorageDatabase* to_release = session_storage_database_.get();
     to_release->AddRef();
-    session_storage_database_ = NULL;
+    session_storage_database_ = nullptr;
     task_runner_->PostShutdownBlockingTask(
         FROM_HERE, DOMStorageTaskRunner::COMMIT_SEQUENCE,
         base::BindOnce(&SessionStorageDatabase::Release,
@@ -118,7 +118,7 @@ DOMStorageContextImpl::~DOMStorageContextImpl() {
 DOMStorageNamespace* DOMStorageContextImpl::GetStorageNamespace(
     int64_t namespace_id) {
   if (is_shutdown_)
-    return NULL;
+    return nullptr;
   StorageNamespaceMap::iterator found = namespaces_.find(namespace_id);
   if (found == namespaces_.end()) {
     if (namespace_id == kLocalStorageNamespaceId) {
@@ -134,7 +134,7 @@ DOMStorageNamespace* DOMStorageContextImpl::GetStorageNamespace(
       namespaces_[kLocalStorageNamespaceId] = local;
       return local;
     }
-    return NULL;
+    return nullptr;
   }
   return found->second.get();
 }
@@ -206,7 +206,7 @@ void DOMStorageContextImpl::GetSessionStorageUsage(
 void DOMStorageContextImpl::DeleteLocalStorageForPhysicalOrigin(
     const GURL& origin_url) {
   DCHECK(!is_shutdown_);
-  url::Origin origin(origin_url);
+  url::Origin origin = url::Origin::Create(origin_url);
   DOMStorageNamespace* local = GetStorageNamespace(kLocalStorageNamespaceId);
   std::vector<GURL> origins;
   local->GetOriginsWithAreas(&origins);
@@ -214,7 +214,7 @@ void DOMStorageContextImpl::DeleteLocalStorageForPhysicalOrigin(
   // deleted as well.
   // https://w3c.github.io/webappsec-suborigins/
   for (const auto& origin_candidate_url : origins) {
-    url::Origin origin_candidate(origin_candidate_url);
+    url::Origin origin_candidate = url::Origin::Create(origin_candidate_url);
     // |origin| is guaranteed to be deleted below, so don't delete it until
     // then. That is, only suborigins at the same physical origin as |origin|
     // should be deleted at this point.
@@ -243,7 +243,7 @@ void DOMStorageContextImpl::DeleteLocalStorage(const GURL& origin_url) {
 void DOMStorageContextImpl::DeleteSessionStorage(
     const SessionStorageUsageInfo& usage_info) {
   DCHECK(!is_shutdown_);
-  DOMStorageNamespace* dom_storage_namespace = NULL;
+  DOMStorageNamespace* dom_storage_namespace = nullptr;
   std::map<std::string, int64_t>::const_iterator it =
       persistent_namespace_id_to_namespace_id_.find(
           usage_info.persistent_namespace_id);
@@ -493,9 +493,9 @@ void DOMStorageContextImpl::PurgeMemory(PurgeOption purge_option) {
     // Purging is done based on the cache sizes without including the database
     // size since it can be expensive trying to estimate the sqlite usage for
     // all databases. For low end devices purge all inactive areas.
-    if (initial_stats.total_cache_size > kMaxCacheSize)
+    if (initial_stats.total_cache_size > kMaxDomStorageCacheSize)
       purge_reason = "SizeLimitExceeded";
-    else if (initial_stats.total_area_count > kMaxStorageAreaCount)
+    else if (initial_stats.total_area_count > kMaxDomStorageAreaCount)
       purge_reason = "AreaCountLimitExceeded";
     else if (is_low_end_device_)
       purge_reason = "InactiveOnLowEndDevice";
@@ -544,9 +544,9 @@ bool DOMStorageContextImpl::OnMemoryDump(
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
     DOMStorageNamespace::UsageStatistics total_stats =
         GetTotalNamespaceStatistics(namespaces_);
-    auto* mad = pmd->CreateAllocatorDump(
-        base::StringPrintf("dom_storage/0x%" PRIXPTR "/cache_size",
-                           reinterpret_cast<uintptr_t>(this)));
+    auto* mad = pmd->CreateAllocatorDump(base::StringPrintf(
+        "site_storage/session_storage_0x%" PRIXPTR "/cache_size",
+        reinterpret_cast<uintptr_t>(this)));
     mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                    total_stats.total_cache_size);

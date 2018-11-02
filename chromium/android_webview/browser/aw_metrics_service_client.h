@@ -44,9 +44,6 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
  public:
   static AwMetricsServiceClient* GetInstance();
 
-  // Return true if running on an sdk version metrics should be enabled for.
-  static bool CheckSDKVersionForMetrics();
-
   // Retrieve the client ID or generate one if none exists.
   static void LoadOrCreateClientId();
 
@@ -58,11 +55,12 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
 
   // metrics::EnabledStateProvider implementation
   bool IsConsentGiven() override;
+  bool IsReportingEnabled() override;
 
   // The below functions must not be called until initialization has
   // asynchronously finished.
 
-  void SetMetricsEnabled(bool enabled);
+  void SetHaveMetricsConsent(bool consent);
 
   // metrics::MetricsServiceClient implementation
   metrics::MetricsService* GetMetricsService() override;
@@ -75,6 +73,7 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       base::StringPiece server_url,
+      base::StringPiece insecure_server_url,
       base::StringPiece mime_type,
       metrics::MetricsLogUploader::MetricServiceType service_type,
       const metrics::MetricsLogUploader::UploadCallback& on_upload_complete)
@@ -87,12 +86,13 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
 
   void InitializeWithClientId();
 
-  bool is_enabled_;
-  PrefService* pref_service_;
-  net::URLRequestContextGetter* request_context_;
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
   std::unique_ptr<metrics::MetricsService> metrics_service_;
+  PrefService* pref_service_;
+  net::URLRequestContextGetter* request_context_;
   version_info::Channel channel_;
+  bool consent_;    // = (user has consented) && !(app has opted out)
+  bool in_sample_;  // Is this client enabled by sampling?
 
   DISALLOW_COPY_AND_ASSIGN(AwMetricsServiceClient);
 };

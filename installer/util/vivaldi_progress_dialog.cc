@@ -14,11 +14,11 @@ namespace installer {
 VivaldiProgressDialog* VivaldiProgressDialog::this_ = NULL;
 
 VivaldiProgressDialog::VivaldiProgressDialog(HINSTANCE instance)
-    : hdlg_(NULL),
+    : instance_(instance),
+      hdlg_(NULL),
       hwnd_progress_(NULL),
       thread_handle_(NULL),
-      thread_id_(0),
-      instance_(instance) {
+      thread_id_(0) {
   this_ = this;
   dlg_event_ = CreateEvent(NULL, FALSE, FALSE, NULL);
   DCHECK(dlg_event_);

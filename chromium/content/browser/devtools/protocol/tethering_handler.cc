@@ -25,10 +25,10 @@ using UnbindCallback = Tethering::Backend::UnbindCallback;
 namespace {
 
 const int kListenBacklog = 5;
-const int kBufferSize = 16 * 1024;
+const int kSocketPumpBufferSize = 16 * 1024;
 
 const int kMinTetheringPort = 1024;
-const int kMaxTetheringPort = 32767;
+const int kMaxTetheringPort = 65535;
 
 using CreateServerSocketCallback =
     base::Callback<std::unique_ptr<net::ServerSocket>(std::string*)>;
@@ -75,12 +75,12 @@ class SocketPump {
   }
 
   void Pump(net::StreamSocket* from, net::StreamSocket* to) {
-    scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(kBufferSize);
-    int result = from->Read(
-        buffer.get(),
-        kBufferSize,
-        base::Bind(
-            &SocketPump::OnRead, base::Unretained(this), from, to, buffer));
+    scoped_refptr<net::IOBuffer> buffer =
+        new net::IOBuffer(kSocketPumpBufferSize);
+    int result =
+        from->Read(buffer.get(), kSocketPumpBufferSize,
+                   base::Bind(&SocketPump::OnRead, base::Unretained(this), from,
+                              to, buffer));
     if (result != net::ERR_IO_PENDING)
       OnRead(from, to, buffer, result);
   }
@@ -167,9 +167,8 @@ class BoundSocket {
               const CreateServerSocketCallback& socket_callback)
       : accepted_callback_(accepted_callback),
         socket_callback_(socket_callback),
-        socket_(new net::TCPServerSocket(NULL, net::NetLogSource())),
-        port_(0) {
-  }
+        socket_(new net::TCPServerSocket(nullptr, net::NetLogSource())),
+        port_(0) {}
 
   virtual ~BoundSocket() {
   }
@@ -272,7 +271,7 @@ void TetheringHandler::TetheringImpl::Bind(
   BoundSocket::AcceptedCallback accepted = base::Bind(
       &TetheringHandler::TetheringImpl::Accepted, base::Unretained(this));
   std::unique_ptr<BoundSocket> bound_socket =
-      base::MakeUnique<BoundSocket>(accepted, socket_callback_);
+      std::make_unique<BoundSocket>(accepted, socket_callback_);
   if (!bound_socket->Listen(port)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,

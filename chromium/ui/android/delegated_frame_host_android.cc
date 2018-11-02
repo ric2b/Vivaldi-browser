@@ -9,8 +9,8 @@
 #include "base/memory/ptr_util.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
-#include "cc/output/compositor_frame.h"
-#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -31,8 +31,8 @@ scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
     bool surface_opaque) {
   // manager must outlive compositors using it.
   auto layer = cc::SurfaceLayer::Create(surface_manager->reference_factory());
-  layer->SetPrimarySurfaceInfo(surface_info);
-  layer->SetFallbackSurfaceInfo(surface_info);
+  layer->SetPrimarySurfaceId(surface_info.id());
+  layer->SetFallbackSurfaceId(surface_info.id());
   layer->SetBounds(surface_info.size_in_pixels());
   layer->SetIsDrawable(true);
   layer->SetContentsOpaque(surface_opaque);
@@ -66,6 +66,10 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
   DCHECK(client_);
 
   host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
+#if DCHECK_IS_ON()
+  host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_,
+                                                   "DelegatedFrameHostAndroid");
+#endif
   CreateNewCompositorFrameSinkSupport();
 }
 
@@ -78,12 +82,12 @@ DelegatedFrameHostAndroid::~DelegatedFrameHostAndroid() {
 
 void DelegatedFrameHostAndroid::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    viz::CompositorFrame frame) {
   if (local_surface_id != surface_info_.id().local_surface_id()) {
     DestroyDelegatedContent();
     DCHECK(!content_layer_);
 
-    cc::RenderPass* root_pass = frame.render_pass_list.back().get();
+    viz::RenderPass* root_pass = frame.render_pass_list.back().get();
     gfx::Size frame_size = root_pass->output_rect.size();
     surface_info_ = viz::SurfaceInfo(
         viz::SurfaceId(frame_sink_id_, local_surface_id), 1.f, frame_size);
@@ -124,7 +128,8 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
   readback_layer->SetHideLayerAndSubtree(true);
   compositor->AttachLayerForReadback(readback_layer);
   std::unique_ptr<viz::CopyOutputRequest> copy_output_request =
-      viz::CopyOutputRequest::CreateRequest(
+      std::make_unique<viz::CopyOutputRequest>(
+          viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
           base::BindOnce(&CopyOutputRequestCallback, readback_layer,
                          std::move(result_callback)));
 
@@ -181,6 +186,15 @@ void DelegatedFrameHostAndroid::DidReceiveCompositorFrameAck(
   client_->DidReceiveCompositorFrameAck();
 }
 
+void DelegatedFrameHostAndroid::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {}
+
+void DelegatedFrameHostAndroid::DidDiscardCompositorFrame(
+    uint32_t presentation_token) {}
+
 void DelegatedFrameHostAndroid::OnBeginFrame(const viz::BeginFrameArgs& args) {
   begin_frame_source_.OnBeginFrame(args);
 }
@@ -189,10 +203,6 @@ void DelegatedFrameHostAndroid::ReclaimResources(
     const std::vector<viz::ReturnedResource>& resources) {
   client_->ReclaimResources(resources);
 }
-
-void DelegatedFrameHostAndroid::WillDrawSurface(
-    const viz::LocalSurfaceId& local_surface_id,
-    const gfx::Rect& damage_rect) {}
 
 void DelegatedFrameHostAndroid::OnBeginFramePausedChanged(bool paused) {
   begin_frame_source_.OnSetBeginFrameSourcePaused(paused);
@@ -206,6 +216,10 @@ void DelegatedFrameHostAndroid::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   // TODO(fsamuel): Once surface synchronization is turned on, the fallback
   // surface should be set here.
+}
+
+void DelegatedFrameHostAndroid::OnFrameTokenChanged(uint32_t frame_token) {
+  client_->OnFrameTokenChanged(frame_token);
 }
 
 void DelegatedFrameHostAndroid::CreateNewCompositorFrameSinkSupport() {

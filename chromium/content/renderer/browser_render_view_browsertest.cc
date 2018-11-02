@@ -59,8 +59,8 @@ class TestShellContentRendererClient : public ShellContentRendererClient {
     if (error_html)
       *error_html = "A suffusion of yellow.";
     latest_error_valid_ = true;
-    latest_error_reason_ = error.reason;
-    latest_error_stale_copy_in_cache_ = error.stale_copy_in_cache;
+    latest_error_reason_ = error.reason();
+    latest_error_stale_copy_in_cache_ = error.has_copy_in_cache();
   }
 
   bool GetLatestError(int* error_code, bool* stale_cache_entry_present) {
@@ -199,19 +199,23 @@ IN_PROC_BROWSER_TEST_F(RenderViewBrowserTest, ConfirmCacheInformationPlumbed) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Load URL with "nocache" set, to create stale cache.
-  GURL test_url(embedded_test_server()->GetURL("/nocache.html"));
+  GURL test_url(embedded_test_server()->GetURL("/nocache-with-etag.html"));
   NavigateToURLAndWaitForTitle(test_url, "Nocache Test Page", 1);
 
   // Reload same URL after forcing an error from the the network layer;
   // confirm that the error page is told the cached copy exists.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter =
-      shell()->web_contents()->GetRenderProcessHost()->GetStoragePartition()->
-          GetURLRequestContext();
+      shell()
+          ->web_contents()
+          ->GetMainFrame()
+          ->GetProcess()
+          ->GetStoragePartition()
+          ->GetURLRequestContext();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InterceptNetworkTransactions,
-                 base::RetainedRef(url_request_context_getter),
-                 net::ERR_FAILED));
+      base::BindOnce(&InterceptNetworkTransactions,
+                     base::RetainedRef(url_request_context_getter),
+                     net::ERR_FAILED));
 
   // An error results in one completed navigation.
   NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
@@ -226,8 +230,8 @@ IN_PROC_BROWSER_TEST_F(RenderViewBrowserTest, ConfirmCacheInformationPlumbed) {
   scoped_refptr<MessageLoopRunner> runner = new MessageLoopRunner;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ClearCache, base::RetainedRef(url_request_context_getter),
-                 runner->QuitClosure()));
+      base::BindOnce(&ClearCache, base::RetainedRef(url_request_context_getter),
+                     runner->QuitClosure()));
   runner->Run();
 
   content::NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);

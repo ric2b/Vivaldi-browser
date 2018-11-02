@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/features.gni")
+import("//build/buildflag_header.gni")
+import("//components/nacl/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 if (enable_nacl) {
@@ -16,7 +17,6 @@ if (enable_nacl) {
       "nacl_messages.cc",
       "nacl_messages.h",
       "nacl_process_type.h",
-      "nacl_sandbox_type.h",
       "nacl_service.cc",
       "nacl_service.h",
       "nacl_types.cc",
@@ -29,6 +29,7 @@ if (enable_nacl) {
       ":minimal_content_dummy",
       ":switches",
       "//ipc",
+      "//services/service_manager/sandbox",
     ]
 
     deps = [
@@ -52,7 +53,6 @@ if (enable_nacl) {
       "//content/public/common/content_switches.h",
       "//content/public/common/mojo_channel_switches.h",
       "//content/public/common/process_type.h",
-      "//content/public/common/sandbox_type.h",
     ]
 
     # Deps required by the above headers.
@@ -135,4 +135,9 @@ static_library("switches") {
     "nacl_switches.cc",
     "nacl_switches.h",
   ]
+}
+
+buildflag_header("features") {
+  header = "features.h"
+  flags = [ "ENABLE_NACL=$enable_nacl" ]
 }

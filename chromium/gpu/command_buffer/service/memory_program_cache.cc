@@ -48,7 +48,7 @@ void FillShaderVariableProto(
   proto->set_precision(variable.precision);
   proto->set_name(variable.name);
   proto->set_mapped_name(variable.mappedName);
-  proto->set_array_size(variable.arraySize);
+  proto->set_array_size(variable.getOutermostArraySize());
   proto->set_static_use(variable.staticUse);
   for (size_t ii = 0; ii < variable.fields.size(); ++ii) {
     ShaderVariableProto* field = proto->add_fields();
@@ -140,7 +140,7 @@ void RetrieveShaderVariableInfo(
   variable->precision = proto.precision();
   variable->name = proto.name();
   variable->mappedName = proto.mapped_name();
-  variable->arraySize = proto.array_size();
+  variable->setArraySize(proto.array_size());
   variable->staticUse = proto.static_use();
   variable->fields.resize(proto.fields_size());
   for (int ii = 0; ii < proto.fields_size(); ++ii)
@@ -288,7 +288,7 @@ MemoryProgramCache::MemoryProgramCache(
     bool disable_gpu_shader_disk_cache,
     bool disable_program_caching_for_transform_feedback,
     GpuProcessActivityFlags* activity_flags)
-    : max_size_bytes_(max_cache_size_bytes),
+    : ProgramCache(max_cache_size_bytes),
       disable_gpu_shader_disk_cache_(disable_gpu_shader_disk_cache),
       disable_program_caching_for_transform_feedback_(
           disable_program_caching_for_transform_feedback),
@@ -343,7 +343,7 @@ ProgramCache::ProgramLoadResult MemoryProgramCache::LoadLinkedProgram(
   const std::vector<uint8_t>& decoded =
       value->is_compressed()
           ? DecompressData(value->data(), value->decompressed_length(),
-                           max_size_bytes_)
+                           max_size_bytes())
           : value->data();
   if (decoded.empty()) {
     // Decompression failure.
@@ -410,7 +410,7 @@ void MemoryProgramCache::SaveLinkedProgram(
   GLenum format;
   GLsizei length = 0;
   glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &length);
-  if (length == 0 || static_cast<unsigned int>(length) > max_size_bytes_) {
+  if (length == 0 || static_cast<unsigned int>(length) > max_size_bytes()) {
     return;
   }
   std::vector<uint8_t> binary(length);
@@ -454,7 +454,7 @@ void MemoryProgramCache::SaveLinkedProgram(
   if(existing != store_.end())
     store_.Erase(existing);
 
-  while (curr_size_bytes_ + binary.size() > max_size_bytes_) {
+  while (curr_size_bytes_ + binary.size() > max_size_bytes()) {
     DCHECK(!store_.empty());
     store_.Erase(store_.rbegin());
   }

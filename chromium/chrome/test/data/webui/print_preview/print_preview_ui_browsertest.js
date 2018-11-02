@@ -68,6 +68,7 @@ PrintPreviewUIBrowserTest.prototype = {
   'PrinterListCloudEmpty',
   'RestoreLocalDestination',
   'RestoreMultipleDestinations',
+  'SaveAppState',
   'DefaultDestinationSelectionRules',
   'SystemDialogLinkIsHiddenInAppKioskMode',
   'SectionsDisabled',
@@ -102,36 +103,47 @@ PrintPreviewUIBrowserTest.prototype = {
   'DISABLED_GenerateDraft',
 ].forEach(function(testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
-    mocha.grep(new RegExp(testName + '\\b')).run();
+    runMochaTest(print_preview_test.suiteName, testName);
   });
 });
 
 // Disable accessibility errors for some tests.
 [
+  'RestoreAppState',
   'AdvancedSettings1Option',
   'AdvancedSettings2Options',
 ].forEach(function(testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
     this.accessibilityIssuesAreErrors = false;
-    mocha.grep(new RegExp(testName + '\\b')).run();
+    runMochaTest(print_preview_test.suiteName, testName);
   });
 });
 
 GEN('#if !defined(OS_CHROMEOS)');
 TEST_F('PrintPreviewUIBrowserTest', 'SystemDefaultPrinterPolicy', function() {
   loadTimeData.overrideValues({useSystemDefaultPrinter: true});
-  mocha.grep(new RegExp('SystemDefaultPrinterPolicy' + '\\b')).run();
+  runMochaTest(print_preview_test.suiteName, 'SystemDefaultPrinterPolicy');
 });
 GEN('#endif');
 
 GEN('#if defined(OS_MACOSX)');
-TEST_F('PrintPreviewUIBrowserTest', 'MacOpenPDFInPreview', function() {
-  mocha.grep(new RegExp('MacOpenPDFInPreview' + '\\b')).run();
+[
+  'MacOpenPDFInPreview',
+  'MacOpenPDFInPreviewBadPrintTicket',
+].forEach(function(testName) {
+  TEST_F('PrintPreviewUIBrowserTest', testName, function() {
+    runMochaTest(print_preview_test.suiteName, testName);
+  });
 });
 GEN('#endif');
 
 GEN('#if defined(OS_WIN)');
-TEST_F('PrintPreviewUIBrowserTest', 'WinSystemDialogLink', function() {
-  mocha.grep(new RegExp('WinSystemDialogLink' + '\\b')).run();
+[
+  'WinSystemDialogLink',
+  'WinSystemDialogLinkBadPrintTicket',
+].forEach(function(testName) {
+  TEST_F('PrintPreviewUIBrowserTest', testName, function() {
+    runMochaTest(print_preview_test.suiteName, testName);
+  });
 });
 GEN('#endif');

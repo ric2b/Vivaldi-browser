@@ -10,10 +10,10 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 using base::ASCIIToUTF16;
@@ -60,14 +60,23 @@ TEST(AutocompleteInputTest, InputType) {
     {ASCIIToUTF16("1.2.3.4:abc"), metrics::OmniboxInputType::QUERY},
     {ASCIIToUTF16("user@foo"), metrics::OmniboxInputType::UNKNOWN},
     {ASCIIToUTF16("user@foo.com"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("user@foo/"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user@foo/z"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user@foo/z z"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user@foo.com/z"), metrics::OmniboxInputType::URL},
+    {ASCIIToUTF16("user @foo/"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("us er@foo/z"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("u ser@foo/z z"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("us er@foo.com/z"), metrics::OmniboxInputType::UNKNOWN},
     {ASCIIToUTF16("user:pass@"), metrics::OmniboxInputType::UNKNOWN},
     {ASCIIToUTF16("user:pass@!foo.com"), metrics::OmniboxInputType::UNKNOWN},
     {ASCIIToUTF16("user:pass@foo"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user:pass@foo.c"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user:pass@foo.com"), metrics::OmniboxInputType::URL},
+    {ASCIIToUTF16("space user:pass@foo"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("space user:pass@foo.c"), metrics::OmniboxInputType::UNKNOWN},
+    {ASCIIToUTF16("space user:pass@foo.com"),
+     metrics::OmniboxInputType::UNKNOWN},
     {ASCIIToUTF16("user:pass@foo.com:81"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("user:pass@foo:81"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16(".1"), metrics::OmniboxInputType::QUERY},
@@ -126,7 +135,11 @@ TEST(AutocompleteInputTest, InputType) {
     {ASCIIToUTF16("http://1.2.3.4:abc"), metrics::OmniboxInputType::QUERY},
     {ASCIIToUTF16("http:user@foo.com"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("http://user@foo.com"), metrics::OmniboxInputType::URL},
+    {ASCIIToUTF16("http://space user@foo.com"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("http://user:pass@foo"), metrics::OmniboxInputType::URL},
+    {ASCIIToUTF16("http://space user:pass@foo"),
+     metrics::OmniboxInputType::URL},
+    {ASCIIToUTF16("http:space user:pass@foo"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("http:user:pass@foo.com"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("http://user:pass@foo.com"), metrics::OmniboxInputType::URL},
     {ASCIIToUTF16("http://1.2"), metrics::OmniboxInputType::URL},
@@ -165,10 +178,10 @@ TEST(AutocompleteInputTest, InputType) {
 
   for (size_t i = 0; i < arraysize(input_cases); ++i) {
     SCOPED_TRACE(input_cases[i].input);
-    AutocompleteInput input(input_cases[i].input, base::string16::npos,
-                            std::string(), GURL(), base::string16(),
-                            OmniboxEventProto::INVALID_SPEC, true, false, true,
-                            true, false, TestSchemeClassifier());
+    AutocompleteInput input(input_cases[i].input,
+                            metrics::OmniboxEventProto::OTHER,
+                            TestSchemeClassifier());
+    input.set_prevent_inline_autocomplete(true);
     EXPECT_EQ(input_cases[i].type, input.type());
   }
 }
@@ -195,6 +208,8 @@ TEST(AutocompleteInputTest, InputTypeWithDesiredTLD) {
        std::string("http://x@www.y.com/")},
       {ASCIIToUTF16("x@y.com"), metrics::OmniboxInputType::URL,
        std::string("http://x@y.com/")},
+      {ASCIIToUTF16("space user@y"), metrics::OmniboxInputType::UNKNOWN,
+       std::string()},
       {ASCIIToUTF16("y/z z"), metrics::OmniboxInputType::URL,
        std::string("http://www.y.com/z%20z")},
       {ASCIIToUTF16("abc.com"), metrics::OmniboxInputType::URL,
@@ -206,9 +221,9 @@ TEST(AutocompleteInputTest, InputTypeWithDesiredTLD) {
   for (size_t i = 0; i < arraysize(input_cases); ++i) {
     SCOPED_TRACE(input_cases[i].input);
     AutocompleteInput input(input_cases[i].input, base::string16::npos, "com",
-                            GURL(), base::string16(),
-                            OmniboxEventProto::INVALID_SPEC, true, false, true,
-                            true, false, TestSchemeClassifier());
+                            metrics::OmniboxEventProto::OTHER,
+                            TestSchemeClassifier());
+    input.set_prevent_inline_autocomplete(true);
     EXPECT_EQ(input_cases[i].type, input.type());
     if (input_cases[i].type == metrics::OmniboxInputType::URL)
       EXPECT_EQ(input_cases[i].spec, input.canonicalized_url().spec());
@@ -218,10 +233,11 @@ TEST(AutocompleteInputTest, InputTypeWithDesiredTLD) {
 // This tests for a regression where certain input in the omnibox caused us to
 // crash. As long as the test completes without crashing, we're fine.
 TEST(AutocompleteInputTest, InputCrash) {
-  AutocompleteInput input(base::WideToUTF16(L"\uff65@s"), base::string16::npos,
-                          std::string(), GURL(), base::string16(),
-                          OmniboxEventProto::INVALID_SPEC, true, false, true,
-                          true, false, TestSchemeClassifier());
+  AutocompleteInput input(base::WideToUTF16(L"\uff65@s"),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  // Not strictly necessary, but let's be thorough.
+  input.set_prevent_inline_autocomplete(true);
 }
 
 TEST(AutocompleteInputTest, ParseForEmphasizeComponent) {
@@ -263,10 +279,6 @@ TEST(AutocompleteInputTest, ParseForEmphasizeComponent) {
                                                    TestSchemeClassifier(),
                                                    &scheme,
                                                    &host);
-    AutocompleteInput input(input_cases[i].input, base::string16::npos,
-                            std::string(), GURL(), base::string16(),
-                            OmniboxEventProto::INVALID_SPEC, true, false, true,
-                            true, false, TestSchemeClassifier());
     EXPECT_EQ(input_cases[i].scheme.begin, scheme.begin);
     EXPECT_EQ(input_cases[i].scheme.len, scheme.len);
     EXPECT_EQ(input_cases[i].host.begin, host.begin);
@@ -305,9 +317,9 @@ TEST(AutocompleteInputTest, InputTypeWithCursorPosition) {
   for (size_t i = 0; i < arraysize(input_cases); ++i) {
     SCOPED_TRACE(input_cases[i].input);
     AutocompleteInput input(
-        input_cases[i].input, input_cases[i].cursor_position, std::string(),
-        GURL(), base::string16(), OmniboxEventProto::INVALID_SPEC, true, false,
-        true, true, false, TestSchemeClassifier());
+        input_cases[i].input, input_cases[i].cursor_position,
+        metrics::OmniboxEventProto::OTHER, TestSchemeClassifier());
+    input.set_prevent_inline_autocomplete(true);
     EXPECT_EQ(input_cases[i].normalized_input, input.text());
     EXPECT_EQ(input_cases[i].normalized_cursor_position,
               input.cursor_position());

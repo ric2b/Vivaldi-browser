@@ -12,10 +12,10 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <list>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -29,34 +29,43 @@
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/text_track_config.h"
 #include "media/base/video_decoder_config.h"
+#include "media/filters/source_buffer_range.h"
 
 namespace media {
 
-class SourceBufferRange;
+// Status returned by GetNextBuffer().
+// kSuccess: Indicates that the next buffer was returned.
+// kNeedBuffer: Indicates that we need more data before a buffer can be
+//              returned.
+// kConfigChange: Indicates that the next buffer requires a config change.
+enum class SourceBufferStreamStatus {
+  kSuccess,
+  kNeedBuffer,
+  kConfigChange,
+  kEndOfStream
+};
+
+enum class SourceBufferStreamType { kAudio, kVideo, kText };
 
 // See file-level comment for complete description.
+// Template parameter determines which kind of buffering behavior is used. See
+// https://crbug.com/718641 and media::MseBufferByPts feature.
+template <typename RangeClass>
 class MEDIA_EXPORT SourceBufferStream {
  public:
-  typedef StreamParser::BufferQueue BufferQueue;
-  typedef std::list<std::unique_ptr<SourceBufferRange>> RangeList;
+  static_assert(
+      std::is_base_of<SourceBufferRange, RangeClass>::value &&
+          !std::is_abstract<RangeClass>::value,
+      "RangeClass must be a concrete class having SourceBufferRange as base");
 
-  // Status returned by GetNextBuffer().
-  // kSuccess: Indicates that the next buffer was returned.
-  // kNeedBuffer: Indicates that we need more data before a buffer can be
-  //              returned.
-  // kConfigChange: Indicates that the next buffer requires a config change.
-  enum Status {
-    kSuccess,
-    kNeedBuffer,
-    kConfigChange,
-    kEndOfStream
-  };
+  using BufferQueue = StreamParser::BufferQueue;
+  using RangeList = std::list<std::unique_ptr<RangeClass>>;
 
-  enum Type {
-    kAudio,
-    kVideo,
-    kText
-  };
+  // Helper for PrepareRangesForNextAppend and BufferQueueToLogString that
+  // populates |start| and |end| with the presentation interval of |buffers|.
+  static void GetTimestampInterval(const BufferQueue& buffers,
+                                   DecodeTimestamp* start,
+                                   DecodeTimestamp* end);
 
   SourceBufferStream(const AudioDecoderConfig& audio_config,
                      MediaLog* media_log);
@@ -67,10 +76,10 @@ class MEDIA_EXPORT SourceBufferStream {
   ~SourceBufferStream();
 
   // Signals that the next buffers appended are part of a new coded frame group
-  // starting at |coded_frame_group_start_time|.
-  // TODO(acolwell/wolenetz): This should be changed to a presentation
-  // timestamp. See http://crbug.com/402502
-  void OnStartOfCodedFrameGroup(DecodeTimestamp coded_frame_group_start_time);
+  // starting at |coded_frame_group_start_{dts,pts}|, differentiated in impl
+  // based on SBRByDts/Pts respectively.
+  void OnStartOfCodedFrameGroup(DecodeTimestamp coded_frame_group_start_dts,
+                                base::TimeDelta coded_frame_group_start_pts);
 
   // Add the |buffers| to the SourceBufferStream. Buffers within the queue are
   // expected to be in order, but multiple calls to Append() may add buffers out
@@ -125,7 +134,8 @@ class MEDIA_EXPORT SourceBufferStream {
   // Returns kSuccess if |out_buffer| is filled with a valid buffer, kNeedBuffer
   // if there is not enough data buffered to fulfill the request, and
   // kConfigChange if the next buffer requires a config change.
-  Status GetNextBuffer(scoped_refptr<StreamParserBuffer>* out_buffer);
+  SourceBufferStreamStatus GetNextBuffer(
+      scoped_refptr<StreamParserBuffer>* out_buffer);
 
   // Returns a list of the buffered time ranges.
   Ranges<base::TimeDelta> GetBufferedTime() const;
@@ -172,6 +182,11 @@ class MEDIA_EXPORT SourceBufferStream {
  private:
   friend class SourceBufferStreamTest;
 
+  // Helper that does the bulk of OnStartOfCodedFrameGroup() processing,
+  // where caller differentiates ByPts or ByDts.
+  void OnStartOfCodedFrameGroupInternal(
+      DecodeTimestamp coded_frame_group_start_time);
+
   // Attempts to delete approximately |total_bytes_to_free| amount of data
   // |ranges_|, starting at the front of |ranges_| and moving linearly forward
   // through the buffers. Deletes starting from the back if |reverse_direction|
@@ -182,8 +197,9 @@ class MEDIA_EXPORT SourceBufferStream {
                      bool reverse_direction);
 
   // Attempts to delete approximately |total_bytes_to_free| amount of data from
-  // |ranges_|, starting after the last appended buffer before the current
-  // playback position |media_time|.
+  // |ranges_|, starting after the last appended media
+  // (|highest_timestamp_in_append_sequence_|) but before the current playback
+  // position |media_time|.
   size_t FreeBuffersAfterLastAppended(size_t total_bytes_to_free,
                                       DecodeTimestamp media_time);
 
@@ -211,12 +227,12 @@ class MEDIA_EXPORT SourceBufferStream {
   // Checks to see if |range_with_new_buffers_itr| can be merged with the range
   // next to it, and merges them if so.
   void MergeWithAdjacentRangeIfNecessary(
-      const RangeList::iterator& range_with_new_buffers_itr);
+      const typename RangeList::iterator& range_with_new_buffers_itr);
 
-  // Returns true if |second_timestamp| is the timestamp of the next buffer in
-  // sequence after |first_timestamp|, false otherwise.
-  bool AreAdjacentInSequence(
-      DecodeTimestamp first_timestamp, DecodeTimestamp second_timestamp) const;
+  // Returns true if |next_gop_timestamp| follows
+  // |highest_timestamp_in_append_sequence_| within fudge room.
+  bool IsNextGopAdjacentToEndOfCurrentAppendSequence(
+      DecodeTimestamp next_gop_timestamp) const;
 
   // Helper method that returns the timestamp for the next buffer that
   // |selected_range_| will return from GetNextBuffer() call, or kNoTimestamp
@@ -226,24 +242,26 @@ class MEDIA_EXPORT SourceBufferStream {
   // Finds the range that should contain a coded frame group that begins with
   // |start_timestamp| and returns the iterator pointing to it. Returns
   // |ranges_.end()| if there's no such existing range.
-  RangeList::iterator FindExistingRangeFor(DecodeTimestamp start_timestamp);
+  typename RangeList::iterator FindExistingRangeFor(
+      DecodeTimestamp start_timestamp);
 
   // Inserts |new_range| into |ranges_| preserving sorted order. Returns an
   // iterator in |ranges_| that points to |new_range|. |new_range| becomes owned
   // by |ranges_|.
-  RangeList::iterator AddToRanges(std::unique_ptr<SourceBufferRange> new_range);
+  typename RangeList::iterator AddToRanges(
+      std::unique_ptr<RangeClass> new_range);
 
   // Returns an iterator that points to the place in |ranges_| where
   // |selected_range_| lives.
-  RangeList::iterator GetSelectedRangeItr();
+  typename RangeList::iterator GetSelectedRangeItr();
 
   // Sets the |selected_range_| to |range| and resets the next buffer position
   // for the previous |selected_range_|.
-  void SetSelectedRange(SourceBufferRange* range);
+  void SetSelectedRange(RangeClass* range);
 
   // Seeks |range| to |seek_timestamp| and then calls SetSelectedRange() with
   // |range|.
-  void SeekAndSetSelectedRange(SourceBufferRange* range,
+  void SeekAndSetSelectedRange(RangeClass* range,
                                DecodeTimestamp seek_timestamp);
 
   // Resets this stream back to an unseeked state.
@@ -256,16 +274,19 @@ class MEDIA_EXPORT SourceBufferStream {
   // in |ranges_|, false otherwise or if |ranges_| is empty.
   bool ShouldSeekToStartOfBuffered(base::TimeDelta seek_timestamp) const;
 
-  // Returns true if the timestamps of |buffers| are monotonically increasing
-  // since the previous append to the coded frame group, false otherwise.
-  bool IsMonotonicallyIncreasing(const BufferQueue& buffers);
+  // Returns true if the decode timestamps of |buffers| are monotonically
+  // increasing since the previous append to the coded frame group, false
+  // otherwise.
+  bool IsDtsMonotonicallyIncreasing(const BufferQueue& buffers);
 
   // Returns true if |selected_range_| is the only range in |ranges_| that
   // HasNextBufferPosition().
   bool OnlySelectedRangeIsSeeked() const;
 
-  // Measures the distances between buffer timestamps and tracks the max.
-  void UpdateMaxInterbufferDistance(const BufferQueue& buffers);
+  // Measures the distances between buffer decode timestamps and tracks the max.
+  // This enables a reasonable approximation of adjacency fudge room, even for
+  // out-of-order PTS vs DTS sequences.
+  void UpdateMaxInterbufferDtsDistance(const BufferQueue& buffers);
 
   // Sets the config ID for each buffer to |append_config_index_|.
   void SetConfigIds(const BufferQueue& buffers);
@@ -313,7 +334,7 @@ class MEDIA_EXPORT SourceBufferStream {
   // If |*itr| points to |selected_range_|, then |selected_range_| is set to
   // NULL. After the range is removed, |*itr| is to the range after the one that
   // was removed or to |ranges_.end()| if the last range was removed.
-  void DeleteAndRemoveRange(RangeList::iterator* itr);
+  void DeleteAndRemoveRange(typename RangeList::iterator* itr);
 
   // Helper function used when updating |range_for_next_append_|.
   // Returns a guess of what the next append timestamp will be based on
@@ -345,17 +366,18 @@ class MEDIA_EXPORT SourceBufferStream {
                                       DecodeTimestamp remove_end,
                                       bool exclude_start);
 
-  Type GetType() const;
+  SourceBufferStreamType GetType() const;
 
   // See GetNextBuffer() for additional details.  This method handles preroll
   // frame processing.
-  Status HandleNextBufferWithPreroll(
+  SourceBufferStreamStatus HandleNextBufferWithPreroll(
       scoped_refptr<StreamParserBuffer>* out_buffer);
 
   // See GetNextBuffer() for additional details.  The internal method hands out
   // single buffers from the |track_buffer_| and |selected_range_| without
   // additional processing for preroll buffers.
-  Status GetNextBufferInternal(scoped_refptr<StreamParserBuffer>* out_buffer);
+  SourceBufferStreamStatus GetNextBufferInternal(
+      scoped_refptr<StreamParserBuffer>* out_buffer);
 
   // If the next buffer's timestamp is significantly beyond the last output
   // buffer, and if we just exhausted |track_buffer_| on the previous read, this
@@ -368,6 +390,52 @@ class MEDIA_EXPORT SourceBufferStream {
   // If |out_buffer| has preroll, sets |pending_buffer_| to feed out preroll and
   // returns true.  Otherwise returns false.
   bool SetPendingBuffer(scoped_refptr<StreamParserBuffer>* out_buffer);
+
+  // Helpers that adapt StreamParserBuffer, SBRByPts and SBRByDts to a common
+  // internal interface until SBRByDts can be dropped. See
+  // https://crbug.com/718641.
+  // TODO(wolenetz): Consider refactoring to reference a "buffering timestamp"
+  // type (DTS for ByDts, PTS for ByPts) defined in RangeClass to reduce the
+  // need for some of these helpers. See https://crbug.com/718641.
+  static constexpr bool BufferingByPts();
+  DecodeTimestamp BufferGetTimestamp(
+      const scoped_refptr<StreamParserBuffer>& buffer);
+  void RangeAppendBuffersToEnd(RangeClass* range,
+                               const BufferQueue& buffers,
+                               DecodeTimestamp group_start_time);
+  DecodeTimestamp RangeGetBufferedEndTimestamp(RangeClass* range) const;
+  DecodeTimestamp RangeGetEndTimestamp(RangeClass* range) const;
+  DecodeTimestamp RangeGetStartTimestamp(RangeClass* range) const;
+  bool RangeCanSeekTo(RangeClass* range, DecodeTimestamp seek_time) const;
+  int RangeGetConfigIdAtTime(RangeClass* range, DecodeTimestamp config_time);
+  bool RangeSameConfigThruRange(RangeClass* range,
+                                DecodeTimestamp start,
+                                DecodeTimestamp end);
+  bool RangeFirstGOPEarlierThanMediaTime(RangeClass* range,
+                                         DecodeTimestamp media_time) const;
+  size_t RangeGetRemovalGOP(RangeClass* range,
+                            DecodeTimestamp start_timestamp,
+                            DecodeTimestamp end_timestamp,
+                            size_t bytes_to_free,
+                            DecodeTimestamp* end_removal_timestamp);
+  bool RangeBelongsToRange(RangeClass* range, DecodeTimestamp timestamp) const;
+  void RangeSeek(RangeClass* range, DecodeTimestamp timestamp);
+  DecodeTimestamp RangeNextKeyframeTimestamp(RangeClass* range,
+                                             DecodeTimestamp timestamp);
+  bool RangeGetBuffersInRange(RangeClass* range,
+                              DecodeTimestamp start,
+                              DecodeTimestamp end,
+                              BufferQueue* buffers);
+  std::unique_ptr<RangeClass> RangeSplitRange(RangeClass* range,
+                                              DecodeTimestamp timestamp);
+  bool RangeTruncateAt(RangeClass* range,
+                       DecodeTimestamp timestamp,
+                       BufferQueue* deleted_buffers,
+                       bool is_exclusive);
+  DecodeTimestamp RangeKeyframeBeforeTimestamp(RangeClass* range,
+                                               DecodeTimestamp timestamp);
+  std::unique_ptr<RangeClass> RangeNew(const BufferQueue& new_buffers,
+                                       DecodeTimestamp range_start_time);
 
   // Used to report log messages that can help the web developer figure out what
   // is wrong with the content.
@@ -408,7 +476,7 @@ class MEDIA_EXPORT SourceBufferStream {
   // Pointer to the seeked-to Range. This is the range from which
   // GetNextBuffer() calls are fulfilled after the |track_buffer_| has been
   // emptied.
-  SourceBufferRange* selected_range_ = nullptr;
+  RangeClass* selected_range_ = nullptr;
 
   // Queue of the next buffers to be returned from calls to GetNextBuffer(). If
   // |track_buffer_| is empty, return buffers from |selected_range_|.
@@ -419,11 +487,14 @@ class MEDIA_EXPORT SourceBufferStream {
   bool just_exhausted_track_buffer_ = false;
 
   // The start time of the current coded frame group being appended.
+  // When ByDts, this is DTS; when ByPts, this is PTS converted to DTS type.
+  // TODO(wolenetz): Make this pure PTS when ByPts ships always-on. See
+  // https://crbug.com/718641.
   DecodeTimestamp coded_frame_group_start_time_;
 
   // Points to the range containing the current coded frame group being
   // appended.
-  RangeList::iterator range_for_next_append_;
+  typename RangeList::iterator range_for_next_append_;
 
   // True when the next call to Append() begins a new coded frame group.
   // TODO(wolenetz): Simplify by passing this flag into Append().
@@ -435,10 +506,30 @@ class MEDIA_EXPORT SourceBufferStream {
   base::TimeDelta last_appended_buffer_duration_ = kNoTimestamp;
   bool last_appended_buffer_is_keyframe_ = false;
 
-  // The decode timestamp on the last buffer returned by the most recent
-  // GetNextBuffer() call. Set to kNoDecodeTimestamp() if GetNextBuffer() hasn't
-  // been called yet or a seek has happened since the last GetNextBuffer() call.
-  DecodeTimestamp last_output_buffer_timestamp_;
+  // When buffering ByPts, yet needing still to verify coded frame group is
+  // monotically increasing in DTS sequence and to update max interbuffer
+  // distance also by DTS deltas within a coded frame group, the following is
+  // needed.
+  DecodeTimestamp last_appended_buffer_decode_timestamp_ = kNoDecodeTimestamp();
+
+  // The following is the highest timestamp appended so far in this coded frame
+  // group. In ByPts buffering, this is a PTS in DTS type, and isn't necessarily
+  // the most recently appended frame. This is used as the lower bound of
+  // removing previously buffered media when processing new appends.
+  DecodeTimestamp highest_timestamp_in_append_sequence_ = kNoDecodeTimestamp();
+
+  // The following is used in determining if FreeBuffersAfterLastAppended() is
+  // allowed during garbage collection. In ByPts buffering, this is a PTS in DTS
+  // type, and isn't necessarily the end time of the most recently appended
+  // frame.
+  DecodeTimestamp highest_buffered_end_time_in_append_sequence_ =
+      kNoDecodeTimestamp();
+
+  // The highest timestamp (DTS if ByDts, PTS as DTS type if ByPts) for buffers
+  // returned by recent GetNextBuffer() calls. Set to kNoDecodeTimestamp() if
+  // GetNextBuffer() hasn't been called yet or a seek has happened since the
+  // last GetNextBuffer() call.
+  DecodeTimestamp highest_output_buffer_timestamp_;
 
   // Stores the largest distance between two adjacent buffers in this stream.
   base::TimeDelta max_interbuffer_distance_;
@@ -468,7 +559,7 @@ class MEDIA_EXPORT SourceBufferStream {
   int num_garbage_collect_algorithm_logs_ = 0;
   int num_strange_same_timestamps_logs_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(SourceBufferStream);
+  DISALLOW_COPY_AND_ASSIGN(SourceBufferStream<RangeClass>);
 };
 
 }  // namespace media

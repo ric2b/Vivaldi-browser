@@ -114,10 +114,8 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
 #if DCHECK_IS_ON()
     for (auto& entry : ports_) {
       DVLOG(2) << "Port " << entry.first << " referencing node "
-               << entry.second.port->peer_node_name
-               << " is blocking shutdown of "
-               << "node " << name_ << " (state=" << entry.second.port->state
-               << ")";
+               << entry.second->peer_node_name << " is blocking shutdown of "
+               << "node " << name_ << " (state=" << entry.second->state << ")";
     }
 #endif
     return ports_.empty();
@@ -130,7 +128,7 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
   // need to be blazingly fast.
   bool can_shutdown = true;
   for (auto& entry : ports_) {
-    PortRef port_ref(entry.first, entry.second.port);
+    PortRef port_ref(entry.first, entry.second);
     SinglePortLocker locker(&port_ref);
     auto* port = locker.port();
     if (port->peer_node_name != name_ && port->state != Port::kReceiving) {
@@ -161,7 +159,7 @@ int Node::GetPort(const PortName& port_name, PortRef* port_ref) {
   base::subtle::MemoryBarrier();
 #endif
 
-  *port_ref = PortRef(port_name, iter->second.port);
+  *port_ref = PortRef(port_name, iter->second);
   return OK;
 }
 
@@ -171,14 +169,8 @@ int Node::CreateUninitializedPort(PortRef* port_ref) {
 
   scoped_refptr<Port> port(new Port(kInitialSequenceNum, kInitialSequenceNum));
   int rv = AddPortWithName(port_name, port);
-  if (rv != OK) {
-    // TODO(crbug.com/725605): Remove this CHECK. This is testing whether or not
-    // random port name generation is somehow resulting in insufficiently random
-    // and thus colliding names in the wild, which would be one explanation for
-    // some of the weird behavior we're seeing.
-    CHECK(false);
+  if (rv != OK)
     return rv;
-  }
 
   *port_ref = PortRef(port_name, std::move(port));
   return OK;
@@ -789,7 +781,7 @@ int Node::OnMergePort(std::unique_ptr<MergePortEvent> event) {
 int Node::AddPortWithName(const PortName& port_name, scoped_refptr<Port> port) {
   PortLocker::AssertNoPortsLockedOnCurrentThread();
   base::AutoLock lock(ports_lock_);
-  if (!ports_.emplace(port_name, PortTableEntry(std::move(port))).second)
+  if (!ports_.emplace(port_name, std::move(port)).second)
     return OOPS(ERROR_PORT_EXISTS);  // Suggests a bad UUID generator.
   DVLOG(2) << "Created port " << port_name << "@" << name_;
   return OK;
@@ -803,7 +795,7 @@ void Node::ErasePort(const PortName& port_name) {
     auto it = ports_.find(port_name);
     if (it == ports_.end())
       return;
-    port = std::move(it->second.port);
+    port = std::move(it->second);
     ports_.erase(it);
   }
   // NOTE: We are careful not to release the port's messages while holding any
@@ -1001,9 +993,9 @@ void Node::ConvertToProxy(Port* port,
 
 int Node::AcceptPort(const PortName& port_name,
                      const Event::PortDescriptor& port_descriptor) {
-  scoped_refptr<Port> port = make_scoped_refptr(
-      new Port(port_descriptor.next_sequence_num_to_send,
-               port_descriptor.next_sequence_num_to_receive));
+  scoped_refptr<Port> port =
+      base::MakeRefCounted<Port>(port_descriptor.next_sequence_num_to_send,
+                                 port_descriptor.next_sequence_num_to_receive);
   port->state = Port::kReceiving;
   port->peer_node_name = port_descriptor.peer_node_name;
   port->peer_port_name = port_descriptor.peer_port_name;
@@ -1299,7 +1291,7 @@ void Node::DestroyAllPortsWithPeer(const NodeName& node_name,
     base::AutoLock ports_lock(ports_lock_);
 
     for (auto iter = ports_.begin(); iter != ports_.end(); ++iter) {
-      PortRef port_ref(iter->first, iter->second.port);
+      PortRef port_ref(iter->first, iter->second);
       {
         SinglePortLocker locker(&port_ref);
         auto* port = locker.port();
@@ -1329,7 +1321,7 @@ void Node::DestroyAllPortsWithPeer(const NodeName& node_name,
           if (port->state != Port::kReceiving) {
             dead_proxies_to_broadcast.push_back(iter->first);
             std::vector<std::unique_ptr<UserMessageEvent>> messages;
-            iter->second.port->message_queue.TakeAllMessages(&messages);
+            iter->second->message_queue.TakeAllMessages(&messages);
             for (auto& message : messages)
               undelivered_messages.emplace_back(std::move(message));
           }
@@ -1383,23 +1375,6 @@ void Node::DelegateHolder::EnsureSafeDelegateAccess() const {
   base::AutoLock lock(node_->ports_lock_);
 }
 #endif
-
-Node::PortTableEntry::PortTableEntry(scoped_refptr<Port> port)
-    : port(std::move(port)) {}
-
-Node::PortTableEntry::PortTableEntry(PortTableEntry&& other) = default;
-
-Node::PortTableEntry::~PortTableEntry() {
-  // We don't really anticipate hitting this CHECK given that we should be
-  // effectively working around memory corruption. Still it's a potentially
-  // useful signal if anything continues to go wrong, and it forces the value to
-  // be used.
-  CHECK_EQ(0x1827364554637281ULL, sentinel_value_);
-  sentinel_value_ = 0x8127364554637281ULL;
-}
-
-Node::PortTableEntry& Node::PortTableEntry::operator=(PortTableEntry&& other) =
-    default;
 
 }  // namespace ports
 }  // namespace edk

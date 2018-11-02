@@ -24,8 +24,8 @@
 #include <stdint.h>
 #include <memory>
 #include <type_traits>
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 
 namespace WTF {
@@ -57,32 +57,6 @@ struct IntTypes<8> {
 
 // Thomas Wang's 32 Bit Mix Function:
 // http://www.cris.com/~Ttwang/tech/inthash.htm
-inline unsigned HashInt(uint8_t key8) {
-  unsigned key = key8;
-  key += ~(key << 15);
-  key ^= (key >> 10);
-  key += (key << 3);
-  key ^= (key >> 6);
-  key += ~(key << 11);
-  key ^= (key >> 16);
-  return key;
-}
-
-// Thomas Wang's 32 Bit Mix Function:
-// http://www.cris.com/~Ttwang/tech/inthash.htm
-inline unsigned HashInt(uint16_t key16) {
-  unsigned key = key16;
-  key += ~(key << 15);
-  key ^= (key >> 10);
-  key += (key << 3);
-  key ^= (key >> 6);
-  key += ~(key << 11);
-  key ^= (key >> 16);
-  return key;
-}
-
-// Thomas Wang's 32 Bit Mix Function:
-// http://www.cris.com/~Ttwang/tech/inthash.htm
 inline unsigned HashInt(uint32_t key) {
   key += ~(key << 15);
   key ^= (key >> 10);
@@ -91,6 +65,16 @@ inline unsigned HashInt(uint32_t key) {
   key += ~(key << 11);
   key ^= (key >> 16);
   return key;
+}
+
+inline unsigned HashInt(uint16_t key16) {
+  uint32_t key = key16;
+  return HashInt(key);
+}
+
+inline unsigned HashInt(uint8_t key8) {
+  uint32_t key = key8;
+  return HashInt(key);
 }
 
 // Thomas Wang's 64 bit Mix Function:
@@ -165,17 +149,15 @@ struct PtrHash {
 template <typename T>
 struct RefPtrHash : PtrHash<T> {
   using PtrHash<T>::GetHash;
-  static unsigned GetHash(const RefPtr<T>& key) { return GetHash(key.Get()); }
-  static unsigned GetHash(const PassRefPtr<T>& key) {
-    return GetHash(key.Get());
+  static unsigned GetHash(const scoped_refptr<T>& key) {
+    return GetHash(key.get());
   }
   using PtrHash<T>::Equal;
-  static bool Equal(const RefPtr<T>& a, const RefPtr<T>& b) { return a == b; }
-  static bool Equal(T* a, const RefPtr<T>& b) { return a == b; }
-  static bool Equal(const RefPtr<T>& a, T* b) { return a == b; }
-  static bool Equal(const RefPtr<T>& a, const PassRefPtr<T>& b) {
+  static bool Equal(const scoped_refptr<T>& a, const scoped_refptr<T>& b) {
     return a == b;
   }
+  static bool Equal(T* a, const scoped_refptr<T>& b) { return a == b; }
+  static bool Equal(const scoped_refptr<T>& a, T* b) { return a == b; }
 };
 
 template <typename T>
@@ -193,6 +175,15 @@ struct UniquePtrHash : PtrHash<T> {
   static bool Equal(const T* a, const std::unique_ptr<T>& b) {
     return a == b.get();
   }
+};
+
+// Useful compounding hash functions.
+inline void AddIntToHash(unsigned& hash, unsigned key) {
+  hash = ((hash << 5) + hash) + key;  // Djb2
+};
+
+inline void AddFloatToHash(unsigned& hash, float value) {
+  AddIntToHash(hash, FloatHash<float>::GetHash(value));
 };
 
 // Default hash function for each type.
@@ -235,7 +226,7 @@ struct DefaultHash<T*> {
   using Hash = PtrHash<T>;
 };
 template <typename T>
-struct DefaultHash<RefPtr<T>> {
+struct DefaultHash<scoped_refptr<T>> {
   using Hash = RefPtrHash<T>;
 };
 template <typename T>

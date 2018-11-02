@@ -68,13 +68,13 @@ ClipStrategy DetermineClipStrategy(const SVGGraphicsElement& element) {
 ClipStrategy DetermineClipStrategy(const SVGElement& element) {
   // <use> within <clipPath> have a restricted content model.
   // (https://drafts.fxtf.org/css-masking-1/#ClipPathElement)
-  if (isSVGUseElement(element)) {
+  if (IsSVGUseElement(element)) {
     const LayoutObject* use_layout_object = element.GetLayoutObject();
     if (!use_layout_object ||
         use_layout_object->StyleRef().Display() == EDisplay::kNone)
       return ClipStrategy::kNone;
     const SVGGraphicsElement* shape_element =
-        toSVGUseElement(element).VisibleTargetGraphicsElementForClipping();
+        ToSVGUseElement(element).VisibleTargetGraphicsElementForClipping();
     if (!shape_element)
       return ClipStrategy::kNone;
     ClipStrategy shape_strategy = DetermineClipStrategy(*shape_element);
@@ -91,10 +91,10 @@ bool ContributesToClip(const SVGElement& element) {
 }
 
 void PathFromElement(const SVGElement& element, Path& clip_path) {
-  if (IsSVGGeometryElement(element))
-    ToSVGGeometryElement(element).ToClipPath(clip_path);
-  else if (isSVGUseElement(element))
-    toSVGUseElement(element).ToClipPath(clip_path);
+  if (auto* geometry = ToSVGGeometryElementOrNull(element))
+    geometry->ToClipPath(clip_path);
+  else if (auto* use = ToSVGUseElementOrNull(element))
+    use->ToClipPath(clip_path);
 }
 
 }  // namespace
@@ -210,13 +210,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceClipper::CreatePaintRecord() {
   if (cached_paint_record_)
     return cached_paint_record_;
 
-  // Using strokeBoundingBox (instead of visualRectInLocalSVGCoordinates) to
-  // avoid the intersection with local clips/mask, which may yield incorrect
-  // results when mixing objectBoundingBox and userSpaceOnUse units
-  // (http://crbug.com/294900).
-  FloatRect bounds = StrokeBoundingBox();
-
-  PaintRecordBuilder builder(bounds, nullptr, nullptr);
+  PaintRecordBuilder builder(nullptr, nullptr);
   // Switch to a paint behavior where all children of this <clipPath> will be
   // laid out using special constraints:
   // - fill-opacity/stroke-opacity/opacity set to 1
@@ -224,7 +218,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceClipper::CreatePaintRecord() {
   // - fill is set to the initial fill paint server (solid, black)
   // - stroke is set to the initial stroke paint server (none)
   PaintInfo info(builder.Context(), LayoutRect::InfiniteIntRect(),
-                 kPaintPhaseForeground, kGlobalPaintNormalPhase,
+                 PaintPhase::kForeground, kGlobalPaintNormalPhase,
                  kPaintLayerPaintingRenderingClipPathAsMask |
                      kPaintLayerPaintingRenderingResourceSubtree);
 
@@ -271,7 +265,7 @@ bool LayoutSVGResourceClipper::HitTestClipContent(
   }
 
   AffineTransform animated_local_transform =
-      toSVGClipPathElement(GetElement())
+      ToSVGClipPathElement(GetElement())
           ->CalculateTransform(SVGElement::kIncludeMotionTransform);
   if (!animated_local_transform.IsInvertible())
     return false;
@@ -301,7 +295,7 @@ FloatRect LayoutSVGResourceClipper::ResourceBoundingBox(
     CalculateLocalClipBounds();
 
   AffineTransform transform =
-      toSVGClipPathElement(GetElement())
+      ToSVGClipPathElement(GetElement())
           ->CalculateTransform(SVGElement::kIncludeMotionTransform);
   if (ClipPathUnits() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
     transform.Translate(reference_box.X(), reference_box.Y());

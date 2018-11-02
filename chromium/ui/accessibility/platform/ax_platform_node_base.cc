@@ -9,6 +9,7 @@
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -261,43 +262,20 @@ bool AXPlatformNodeBase::IsTextOnlyObject() const {
          GetData().role == AX_ROLE_INLINE_TEXT_BOX;
 }
 
-bool AXPlatformNodeBase::IsNativeTextControl() const {
-  const std::string& html_tag = GetStringAttribute(AX_ATTR_HTML_TAG);
-  if (html_tag == "input") {
-    std::string input_type;
-    if (!GetData().GetHtmlAttribute("type", &input_type))
-      return true;
-    return input_type.empty() || input_type == "email" ||
-           input_type == "password" || input_type == "search" ||
-           input_type == "tel" || input_type == "text" || input_type == "url" ||
-           input_type == "number";
-  }
-  return html_tag == "textarea";
+bool AXPlatformNodeBase::IsPlainTextField() const {
+  // We need to check both the role and editable state, because some ARIA text
+  // fields may in fact not be editable, whilst some editable fields might not
+  // have the role.
+  return !GetData().HasState(AX_STATE_RICHLY_EDITABLE) &&
+         (GetData().role == AX_ROLE_TEXT_FIELD ||
+          GetData().role == AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX ||
+          GetData().role == AX_ROLE_SEARCH_BOX ||
+          GetBoolAttribute(AX_ATTR_EDITABLE_ROOT));
 }
 
-bool AXPlatformNodeBase::IsSimpleTextControl() const {
-  // Time fields, color wells and spinner buttons might also use text fields as
-  // constituent parts, but they are not considered text fields as a whole.
-  switch (GetData().role) {
-    case AX_ROLE_COMBO_BOX:
-    case AX_ROLE_SEARCH_BOX:
-      return true;
-    case AX_ROLE_TEXT_FIELD:
-      return !GetData().HasState(AX_STATE_RICHLY_EDITABLE);
-    default:
-      return false;
-  }
-}
-
-// Indicates if this object is at the root of a rich edit text control.
-bool AXPlatformNodeBase::IsRichTextControl() {
-  gfx::NativeViewAccessible parent_accessible = GetParent();
-  AXPlatformNodeBase* parent = FromNativeViewAccessible(parent_accessible);
-  if (!parent)
-    return false;
-
-  return GetData().HasState(AX_STATE_RICHLY_EDITABLE) &&
-         (!parent || !parent->GetData().HasState(AX_STATE_RICHLY_EDITABLE));
+bool AXPlatformNodeBase::IsRichTextField() const {
+  return GetBoolAttribute(AX_ATTR_EDITABLE_ROOT) &&
+         GetData().HasState(AX_STATE_RICHLY_EDITABLE);
 }
 
 base::string16 AXPlatformNodeBase::GetInnerText() {
@@ -318,6 +296,7 @@ base::string16 AXPlatformNodeBase::GetInnerText() {
 
 bool AXPlatformNodeBase::IsRangeValueSupported() const {
   switch (GetData().role) {
+    case AX_ROLE_METER:
     case AX_ROLE_PROGRESS_INDICATOR:
     case AX_ROLE_SLIDER:
     case AX_ROLE_SPIN_BUTTON:
@@ -335,7 +314,7 @@ base::string16 AXPlatformNodeBase::GetRangeValueText() {
   base::string16 value = GetString16Attribute(AX_ATTR_VALUE);
 
   if (value.empty() && GetFloatAttribute(AX_ATTR_VALUE_FOR_RANGE, &fval)) {
-    value = base::UTF8ToUTF16(base::DoubleToString(fval));
+    value = base::NumberToString16(fval);
   }
   return value;
 }
@@ -461,6 +440,100 @@ int AXPlatformNodeBase::GetTableRowSpan() const {
   if (GetIntAttribute(AX_ATTR_TABLE_CELL_ROW_SPAN, &row_span))
     return row_span;
   return 1;
+}
+
+bool AXPlatformNodeBase::HasCaret() {
+  if (IsPlainTextField() && HasIntAttribute(ui::AX_ATTR_TEXT_SEL_START) &&
+      HasIntAttribute(ui::AX_ATTR_TEXT_SEL_END)) {
+    return true;
+  }
+
+  // The caret is always at the focus of the selection.
+  int32_t focus_id = delegate_->GetTreeData().sel_focus_object_id;
+  AXPlatformNodeBase* focus_object =
+      static_cast<AXPlatformNodeBase*>(delegate_->GetFromNodeID(focus_id));
+
+  if (!focus_object)
+    return false;
+
+  return focus_object->IsDescendantOf(this);
+}
+
+bool AXPlatformNodeBase::IsDescendantOf(AXPlatformNodeBase* ancestor) {
+  if (!ancestor)
+    return false;
+
+  if (this == ancestor)
+    return true;
+
+  AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
+  if (!parent)
+    return false;
+
+  return parent->IsDescendantOf(ancestor);
+}
+
+bool AXPlatformNodeBase::IsLeaf() {
+  if (GetChildCount() == 0)
+    return true;
+
+  // These types of objects may have children that we use as internal
+  // implementation details, but we want to expose them as leaves to platform
+  // accessibility APIs because screen readers might be confused if they find
+  // any children.
+  if (IsPlainTextField() || IsTextOnlyObject())
+    return true;
+
+  // Roles whose children are only presentational according to the ARIA and
+  // HTML5 Specs should be hidden from screen readers.
+  // (Note that whilst ARIA buttons can have only presentational children, HTML5
+  // buttons are allowed to have content.)
+  switch (GetData().role) {
+    case ui::AX_ROLE_IMAGE:
+    case ui::AX_ROLE_METER:
+    case ui::AX_ROLE_SCROLL_BAR:
+    case ui::AX_ROLE_SLIDER:
+    case ui::AX_ROLE_SPLITTER:
+    case ui::AX_ROLE_PROGRESS_INDICATOR:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool AXPlatformNodeBase::IsChildOfLeaf() {
+  AXPlatformNodeBase* ancestor = FromNativeViewAccessible(GetParent());
+
+  while (ancestor) {
+    if (ancestor->IsLeaf())
+      return true;
+    ancestor = FromNativeViewAccessible(ancestor->GetParent());
+  }
+
+  return false;
+}
+
+base::string16 AXPlatformNodeBase::GetText() {
+  return GetInnerText();
+}
+
+base::string16 AXPlatformNodeBase::GetValue() {
+  // Expose slider value.
+  if (IsRangeValueSupported()) {
+    return GetRangeValueText();
+  } else if (ui::IsDocument(GetData().role)) {
+    // On Windows, the value of a document should be its URL.
+    return base::UTF8ToUTF16(delegate_->GetTreeData().url);
+  }
+  base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+
+  // Some screen readers like Jaws and VoiceOver require a
+  // value to be set in text fields with rich content, even though the same
+  // information is available on the children.
+  if (value.empty() && IsRichTextField())
+    return GetInnerText();
+
+  return value;
 }
 
 }  // namespace ui

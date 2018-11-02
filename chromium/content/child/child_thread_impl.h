@@ -17,10 +17,10 @@
 #include "base/metrics/field_trial.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/single_thread_task_runner.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/variations/child_process_field_trial_syncer.h"
 #include "content/common/associated_interfaces.mojom.h"
+#include "content/common/child_control.mojom.h"
 #include "content/common/content_export.h"
 #include "content/public/child/child_thread.h"
 #include "ipc/ipc.mojom.h"
@@ -29,6 +29,7 @@
 #include "ipc/message_router.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
+#include "services/resource_coordinator/public/cpp/tracing/chrome_trace_event_agent.h"
 
 namespace base {
 class MessageLoop;
@@ -49,20 +50,8 @@ class ScopedIPCSupport;
 }  // namespace mojo
 
 namespace content {
-class ChildHistogramMessageFilter;
-class ChildResourceMessageFilter;
-class FileSystemDispatcher;
 class InProcessChildThreadParams;
-class NotificationDispatcher;
-class ServiceWorkerMessageFilter;
-class QuotaDispatcher;
-class QuotaMessageFilter;
-class ResourceDispatcher;
 class ThreadSafeSender;
-
-#if defined(OS_MACOSX)
-class AppNapActivity;
-#endif
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
@@ -70,7 +59,8 @@ class CONTENT_EXPORT ChildThreadImpl
       virtual public ChildThread,
       private base::FieldTrialList::Observer,
       public mojom::RouteProvider,
-      public mojom::AssociatedInterfaceProvider {
+      public mojom::AssociatedInterfaceProvider,
+      public mojom::ChildControl {
  public:
   struct CONTENT_EXPORT Options;
 
@@ -120,27 +110,6 @@ class CONTENT_EXPORT ChildThreadImpl
   static std::unique_ptr<base::SharedMemory> AllocateSharedMemory(
       size_t buf_size);
 
-#if defined(OS_LINUX)
-  void SetThreadPriority(base::PlatformThreadId id,
-                         base::ThreadPriority priority);
-#endif
-
-  ResourceDispatcher* resource_dispatcher() const {
-    return resource_dispatcher_.get();
-  }
-
-  FileSystemDispatcher* file_system_dispatcher() const {
-    return file_system_dispatcher_.get();
-  }
-
-  QuotaDispatcher* quota_dispatcher() const {
-    return quota_dispatcher_.get();
-  }
-
-  NotificationDispatcher* notification_dispatcher() const {
-    return notification_dispatcher_.get();
-  }
-
   IPC::SyncMessageFilter* sync_message_filter() const {
     return sync_message_filter_.get();
   }
@@ -150,22 +119,6 @@ class CONTENT_EXPORT ChildThreadImpl
   // the main thread.
   ThreadSafeSender* thread_safe_sender() const {
     return thread_safe_sender_.get();
-  }
-
-  ChildHistogramMessageFilter* child_histogram_message_filter() const {
-    return histogram_message_filter_.get();
-  }
-
-  ServiceWorkerMessageFilter* service_worker_message_filter() const {
-    return service_worker_message_filter_.get();
-  }
-
-  QuotaMessageFilter* quota_message_filter() const {
-    return quota_message_filter_.get();
-  }
-
-  ChildResourceMessageFilter* child_resource_message_filter() const {
-    return resource_message_filter_.get();
   }
 
   base::MessageLoop* message_loop() const { return message_loop_; }
@@ -183,7 +136,7 @@ class CONTENT_EXPORT ChildThreadImpl
   friend class ChildProcess;
 
   // Called when the process refcount is 0.
-  void OnProcessFinalRelease();
+  virtual void OnProcessFinalRelease();
 
   // Called by subclasses to manually start the ServiceManagerConnection. Must
   // only be called if
@@ -191,11 +144,12 @@ class CONTENT_EXPORT ChildThreadImpl
   // |false| on ChildThreadImpl construction.
   void StartServiceManagerConnection();
 
-  virtual bool OnControlMessageReceived(const IPC::Message& msg);
-  virtual void OnProcessBackgrounded(bool backgrounded);
-  virtual void OnProcessPurgeAndSuspend();
-  virtual void OnProcessResume();
+  // mojom::ChildControl
+  void ProcessShutdown() override;
+  void SetIPCLoggingEnabled(bool enable) override;
+  void OnChildControlRequest(mojom::ChildControlRequest);
 
+  virtual bool OnControlMessageReceived(const IPC::Message& msg);
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
   void OnAssociatedInterfaceRequest(
@@ -203,6 +157,7 @@ class CONTENT_EXPORT ChildThreadImpl
       mojo::ScopedInterfaceEndpointHandle handle) override;
   void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
+  bool on_channel_error_called() const { return on_channel_error_called_; }
 
   bool IsInBrowserProcess() const;
 
@@ -222,18 +177,14 @@ class CONTENT_EXPORT ChildThreadImpl
 
   void Init(const Options& options);
 
+  // Sets chrome_trace_event_agent_ if necessary.
+  void InitTracing();
+
   // We create the channel first without connecting it so we can add filters
   // prior to any messages being received, then connect it afterwards.
   void ConnectChannel(mojo::edk::IncomingBrokerClientInvitation* invitation);
 
   // IPC message handlers.
-  void OnShutdown();
-  void OnSetProfilerStatus(tracked_objects::ThreadData::Status status);
-  void OnGetChildProfilerData(int sequence_number, int current_profiling_phase);
-  void OnProfilingPhaseCompleted(int profiling_phase);
-#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
-  void OnSetIPCLoggingEnabled(bool enable);
-#endif
 
   void EnsureConnected();
 
@@ -250,6 +201,7 @@ class CONTENT_EXPORT ChildThreadImpl
   std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
   std::unique_ptr<ServiceManagerConnection> service_manager_connection_;
 
+  mojo::BindingSet<mojom::ChildControl> child_control_bindings_;
   mojo::AssociatedBinding<mojom::RouteProvider> route_provider_binding_;
   mojo::AssociatedBindingSet<mojom::AssociatedInterfaceProvider, int32_t>
       associated_interface_provider_bindings_;
@@ -266,41 +218,24 @@ class CONTENT_EXPORT ChildThreadImpl
   // ChildThreadImpl.
   ChildThreadMessageRouter router_;
 
-  // Handles resource loads for this process.
-  std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
-
   // The OnChannelError() callback was invoked - the channel is dead, don't
   // attempt to communicate.
   bool on_channel_error_called_;
 
   base::MessageLoop* message_loop_;
 
-  std::unique_ptr<FileSystemDispatcher> file_system_dispatcher_;
-
-  std::unique_ptr<QuotaDispatcher> quota_dispatcher_;
-
-  scoped_refptr<ChildHistogramMessageFilter> histogram_message_filter_;
-
-  scoped_refptr<ChildResourceMessageFilter> resource_message_filter_;
-
-  scoped_refptr<ServiceWorkerMessageFilter> service_worker_message_filter_;
-
-  scoped_refptr<QuotaMessageFilter> quota_message_filter_;
-
-  scoped_refptr<NotificationDispatcher> notification_dispatcher_;
-
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 
   scoped_refptr<base::SingleThreadTaskRunner> browser_process_io_runner_;
 
-#if defined(OS_MACOSX)
-  std::unique_ptr<AppNapActivity> app_nap_activity_;
-#endif  // defined(OS_MACOSX)
+  std::unique_ptr<tracing::ChromeTraceEventAgent> chrome_trace_event_agent_;
 
   std::unique_ptr<variations::ChildProcessFieldTrialSyncer> field_trial_syncer_;
 
   std::unique_ptr<base::WeakPtrFactory<ChildThreadImpl>>
       channel_connected_factory_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner_;
 
   base::WeakPtrFactory<ChildThreadImpl> weak_factory_;
 
@@ -319,6 +254,7 @@ struct ChildThreadImpl::Options {
   std::vector<IPC::MessageFilter*> startup_filters;
   mojo::edk::OutgoingBrokerClientInvitation* broker_client_invitation;
   std::string in_process_service_request_token;
+  scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner;
 
  private:
   Options();
@@ -332,6 +268,8 @@ class ChildThreadImpl::Options::Builder {
   Builder& AutoStartServiceManagerConnection(bool auto_start);
   Builder& ConnectToBrowser(bool connect_to_browser);
   Builder& AddStartupFilter(IPC::MessageFilter* filter);
+  Builder& IPCTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner);
 
   Options Build();
 

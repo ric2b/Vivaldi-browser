@@ -21,6 +21,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_client_view.h"
+#include "ui/views/window/dialog_observer.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
@@ -212,7 +213,7 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   BubbleFrameView* frame = new BubbleFrameView(
       LayoutProvider::Get()->GetInsetsMetric(INSETS_DIALOG_TITLE),
       gfx::Insets());
-  const BubbleBorder::Shadow kShadow = BubbleBorder::SMALL_SHADOW;
+  const BubbleBorder::Shadow kShadow = BubbleBorder::DIALOG_SHADOW;
   std::unique_ptr<BubbleBorder> border(
       new BubbleBorder(BubbleBorder::FLOAT, kShadow, gfx::kPlaceholderColor));
   border->set_use_theme_background_color(true);
@@ -233,6 +234,19 @@ const DialogClientView* DialogDelegate::GetDialogClientView() const {
 
 DialogClientView* DialogDelegate::GetDialogClientView() {
   return GetWidget()->client_view()->AsDialogClientView();
+}
+
+void DialogDelegate::AddObserver(DialogObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void DialogDelegate::RemoveObserver(DialogObserver* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void DialogDelegate::DialogModelChanged() {
+  for (DialogObserver& observer : observer_list_)
+    observer.OnDialogModelChanged();
 }
 
 ui::AXRole DialogDelegate::GetAccessibleWindowRole() const {

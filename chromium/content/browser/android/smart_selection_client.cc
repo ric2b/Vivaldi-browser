@@ -35,9 +35,10 @@ class UserData : public base::SupportsUserData::Data {
 };
 }
 
-jlong Init(JNIEnv* env,
-           const JavaParamRef<jobject>& obj,
-           const JavaParamRef<jobject>& jweb_contents) {
+jlong JNI_SmartSelectionClient_Init(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jweb_contents) {
   WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
   CHECK(web_contents)
       << "A SmartSelectionClient should be created with a valid WebContents.";
@@ -55,7 +56,7 @@ SmartSelectionClient::SmartSelectionClient(
       weak_ptr_factory_(this) {
   DCHECK(!web_contents_->GetUserData(kSmartSelectionClientUDKey));
   web_contents_->SetUserData(kSmartSelectionClientUDKey,
-                             base::MakeUnique<UserData>(this));
+                             std::make_unique<UserData>(this));
 }
 
 SmartSelectionClient::~SmartSelectionClient() {

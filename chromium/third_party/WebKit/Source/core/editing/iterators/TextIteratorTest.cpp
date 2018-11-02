@@ -31,13 +31,13 @@
 #include "core/editing/iterators/TextIterator.h"
 
 #include "core/dom/Document.h"
-#include "core/editing/EditingTestBase.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/testing/EditingTestBase.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 
 namespace blink {
-
-namespace {
+namespace text_iterator_test {
 
 TextIteratorBehavior CollapseTrailingSpaceBehavior() {
   return TextIteratorBehavior::Builder().SetCollapseTrailingSpace(true).Build();
@@ -61,7 +61,11 @@ TextIteratorBehavior EmitsObjectReplacementCharacterBehavior() {
       .Build();
 }
 
-}  // namespace
+TextIteratorBehavior EmitsSmallXForTextSecurityBehavior() {
+  return TextIteratorBehavior::Builder()
+      .SetEmitsSmallXForTextSecurity(true)
+      .Build();
+}
 
 struct DOMTree : NodeTraversal {
   using PositionType = Position;
@@ -149,6 +153,20 @@ TEST_F(TextIteratorTest, BasicIteration) {
   EXPECT_EQ("[Hello, ][text][\n][\n][iterator.]", Iterate<FlatTree>());
 }
 
+TEST_F(TextIteratorTest, EmitsSmallXForTextSecurity) {
+  InsertStyleElement("s {-webkit-text-security:disc;}");
+  SetBodyContent("abc<s>foo</s>baz");
+  // E2 80 A2 is U+2022 BULLET
+  EXPECT_EQ("[abc][xxx][baz]",
+            Iterate<DOMTree>(EmitsSmallXForTextSecurityBehavior()));
+  EXPECT_EQ("[abc][\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2][baz]",
+            Iterate<DOMTree>(TextIteratorBehavior()));
+  EXPECT_EQ("[abc][xxx][baz]",
+            Iterate<FlatTree>(EmitsSmallXForTextSecurityBehavior()));
+  EXPECT_EQ("[abc][\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2][baz]",
+            Iterate<FlatTree>(TextIteratorBehavior()));
+}
+
 TEST_F(TextIteratorTest, IgnoreAltTextInTextControls) {
   static const char* input = "<p>Hello <input type='text' value='value'>!</p>";
   SetBodyContent(input);
@@ -207,20 +225,6 @@ TEST_F(TextIteratorTest, NotEnteringShadowTree) {
   EXPECT_EQ("[Hello, ][shadow][ iterator.]", Iterate<FlatTree>());
 }
 
-TEST_F(TextIteratorTest, NotEnteringShadowTreeWithMultipleShadowTrees) {
-  static const char* body_content =
-      "<div>Hello, <span id='host'>text</span> iterator.</div>";
-  static const char* shadow_content1 = "<span>first shadow</span>";
-  static const char* shadow_content2 = "<span>second shadow</span>";
-  SetBodyContent(body_content);
-  CreateShadowRootForElementWithIDAndSetInnerHTML(GetDocument(), "host",
-                                                  shadow_content1);
-  CreateShadowRootForElementWithIDAndSetInnerHTML(GetDocument(), "host",
-                                                  shadow_content2);
-  EXPECT_EQ("[Hello, ][ iterator.]", Iterate<DOMTree>());
-  EXPECT_EQ("[Hello, ][second shadow][ iterator.]", Iterate<FlatTree>());
-}
-
 TEST_F(TextIteratorTest, NotEnteringShadowTreeWithNestedShadowTrees) {
   static const char* body_content =
       "<div>Hello, <span id='host-in-document'>text</span> iterator.</div>";
@@ -262,24 +266,6 @@ TEST_F(TextIteratorTest, EnteringShadowTreeWithOption) {
   EXPECT_EQ("[Hello, ][shadow][ iterator.]",
             Iterate<DOMTree>(EntersOpenShadowRootsBehavior()));
   EXPECT_EQ("[Hello, ][shadow][ iterator.]",
-            Iterate<FlatTree>(EntersOpenShadowRootsBehavior()));
-}
-
-TEST_F(TextIteratorTest, EnteringShadowTreeWithMultipleShadowTreesWithOption) {
-  static const char* body_content =
-      "<div>Hello, <span id='host'>text</span> iterator.</div>";
-  static const char* shadow_content1 = "<span>first shadow</span>";
-  static const char* shadow_content2 = "<span>second shadow</span>";
-  SetBodyContent(body_content);
-  CreateShadowRootForElementWithIDAndSetInnerHTML(GetDocument(), "host",
-                                                  shadow_content1);
-  CreateShadowRootForElementWithIDAndSetInnerHTML(GetDocument(), "host",
-                                                  shadow_content2);
-  // The first isn't emitted because a layoutObject for the first is not
-  // created.
-  EXPECT_EQ("[Hello, ][second shadow][ iterator.]",
-            Iterate<DOMTree>(EntersOpenShadowRootsBehavior()));
-  EXPECT_EQ("[Hello, ][second shadow][ iterator.]",
             Iterate<FlatTree>(EntersOpenShadowRootsBehavior()));
 }
 
@@ -1027,4 +1013,5 @@ TEST_F(TextIteratorTest, BasicIterationInputiWithBr) {
   EXPECT_EQ("[b]", IteratePartial<DOMTree>(start, end));
 }
 
+}  // namespace text_iterator_test
 }  // namespace blink

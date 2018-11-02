@@ -5,6 +5,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 
 #include <algorithm>
+#include <memory>
 #include <ostream>
 #include <string>
 
@@ -19,7 +20,7 @@ namespace password_manager {
 
 std::unique_ptr<PasswordForm> PasswordFormFromData(
     const PasswordFormData& form_data) {
-  auto form = base::MakeUnique<PasswordForm>();
+  auto form = std::make_unique<PasswordForm>();
   form->scheme = form_data.scheme;
   form->preferred = form_data.preferred;
   form->date_created = base::Time::FromDoubleT(form_data.creation_time);
@@ -55,7 +56,7 @@ std::unique_ptr<PasswordForm> FillPasswordFormWithData(
   if (use_federated_login) {
     form->password_value.clear();
     form->federation_origin =
-        url::Origin(GURL("https://accounts.google.com/login"));
+        url::Origin::Create(GURL("https://accounts.google.com/login"));
   }
   return form;
 }
@@ -66,7 +67,7 @@ std::vector<std::unique_ptr<PasswordForm>> WrapForms(
   results.reserve(forms.size());
   std::transform(forms.begin(), forms.end(), std::back_inserter(results),
                  [](PasswordForm& form) {
-                   return base::MakeUnique<PasswordForm>(std::move(form));
+                   return std::make_unique<PasswordForm>(std::move(form));
                  });
   return results;
 }

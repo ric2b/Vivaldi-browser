@@ -43,10 +43,11 @@
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -87,16 +88,23 @@ class PLATFORM_EXPORT FetchContext
 
   virtual ~FetchContext() {}
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   virtual bool IsFrameFetchContext() { return false; }
 
   virtual void AddAdditionalRequestHeaders(ResourceRequest&, FetchResourceType);
 
+  // Called when the ResourceFetcher observes a data: URI load that contains an
+  // octothorpe ('#') character. This is a temporary method to support an Intent
+  // to Deprecate for spec incompliant handling of '#' characters in data URIs.
+  //
+  // TODO(crbug.com/123004): Remove once we have enough data for the I2D.
+  virtual void RecordDataUriWithOctothorpe() {}
+
   // Returns the cache policy for the resource. ResourceRequest is not passed as
   // a const reference as a header needs to be added for doc.write blocking
   // intervention.
-  virtual WebCachePolicy ResourceRequestCachePolicy(
+  virtual mojom::FetchCacheMode ResourceRequestCachePolicy(
       const ResourceRequest&,
       Resource::Type,
       FetchParameters::DeferOption) const;
@@ -117,6 +125,7 @@ class PLATFORM_EXPORT FetchContext
       unsigned long identifier,
       ResourceRequest&,
       const ResourceResponse& redirect_response,
+      Resource::Type,
       const FetchInitiatorInfo& = FetchInitiatorInfo());
   virtual void DispatchDidLoadResourceFromMemoryCache(unsigned long identifier,
                                                       const ResourceRequest&,
@@ -149,8 +158,7 @@ class PLATFORM_EXPORT FetchContext
 
   // Called when a resource load is first requested, which may not be when the
   // load actually begins.
-  virtual void RecordLoadingActivity(unsigned long identifier,
-                                     const ResourceRequest&,
+  virtual void RecordLoadingActivity(const ResourceRequest&,
                                      Resource::Type,
                                      const AtomicString& fetch_initiator_name);
 
@@ -174,6 +182,11 @@ class PLATFORM_EXPORT FetchContext
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
       ResourceRequest::RedirectStatus) const {
+    return ResourceRequestBlockedReason::kOther;
+  }
+  virtual ResourceRequestBlockedReason CheckResponseNosniff(
+      WebURLRequest::RequestContext,
+      const ResourceResponse&) const {
     return ResourceRequestBlockedReason::kOther;
   }
 
@@ -215,7 +228,8 @@ class PLATFORM_EXPORT FetchContext
   }
 
   virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const ResourceRequest&) {
+      const ResourceRequest&,
+      scoped_refptr<WebTaskRunner>) {
     NOTREACHED();
     return nullptr;
   }
@@ -225,6 +239,15 @@ class PLATFORM_EXPORT FetchContext
   // Obtains WebFrameScheduler instance that is used in the attached frame.
   // May return nullptr if a frame is not attached or detached.
   virtual WebFrameScheduler* GetFrameScheduler() { return nullptr; }
+
+  // Returns a task runner intended for loading tasks. Should work even in a
+  // worker context, where WebFrameScheduler doesn't exist, but the returned
+  // WebTaskRunner will not work after the context detaches (after Detach() is
+  // called, this will return a generic timer suitable for post-detach actions
+  // like keepalive requests.
+  virtual scoped_refptr<WebTaskRunner> GetLoadingTaskRunner() {
+    return Platform::Current()->CurrentThread()->GetWebTaskRunner();
+  }
 
   // Called when the underlying context is detached. Note that some
   // FetchContexts continue working after detached (e.g., for fetch() operations

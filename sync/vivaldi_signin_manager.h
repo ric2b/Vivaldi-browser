@@ -57,7 +57,8 @@ class VivaldiSigninManager : public SigninManagerBase,
   static const char kChromeSigninEffectiveSite[];
 
   VivaldiSigninManager(SigninClient* client,
-                       AccountTrackerService* account_tracker_service);
+                       AccountTrackerService* account_tracker_service,
+                       SigninErrorController* signin_error_controller);
   ~VivaldiSigninManager() override;
 
   // Sign a user out, removing the preference, erasing all keys

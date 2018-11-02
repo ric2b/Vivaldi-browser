@@ -36,7 +36,6 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
   // Caller must provide an underlying buffer to work on.
   QuicDataReader(const char* data,
                  const size_t len,
-                 Perspective perspective,
                  Endianness endianness);
 
   // Empty destructor.
@@ -50,8 +49,8 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
   bool ReadUInt32(uint32_t* result);
   bool ReadUInt64(uint64_t* result);
 
-  // Reads |num_bytes| bytes in the correct byte order into least significant
-  // bytes of |result|.
+  // Set |result| to 0, then read |num_bytes| bytes in the correct byte order
+  // into least significant bytes of |result|.
   bool ReadBytesToUInt64(size_t num_bytes, uint64_t* result);
 
   // Reads a 16-bit unsigned float into the given output parameter.
@@ -143,12 +142,6 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
 
   // The location of the next read from our data buffer.
   size_t pos_;
-
-  // TODO(zhongyi): remove this field as it is no longer used.
-  // Perspective of this data reader. Please note, although client and server
-  // may have different in-memory representation of the same field, the on wire
-  // representation must be consistent.
-  Perspective perspective_;
 
   // The endianness to read integers and floating numbers.
   Endianness endianness_;

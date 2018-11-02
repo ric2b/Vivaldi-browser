@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/app_list/model/search_result.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/ui/app_list/search/webstore/webstore_result.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/extension_urls.h"
@@ -27,7 +29,6 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "ui/app_list/app_list_switches.h"
-#include "ui/app_list/search_result.h"
 
 using content::BrowserThread;
 using extensions::Manifest;
@@ -171,9 +172,8 @@ class WebstoreProviderTest : public InProcessBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
     // Minor hack: the gallery URL is expected not to end with a slash. Just
     // append "path" to maintain this.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        ::switches::kAppsGalleryURL,
-        embedded_test_server()->base_url().spec() + "path");
+    const GURL gallery_url(embedded_test_server()->base_url().spec() + "path");
+    extension_test_util::SetGalleryURL(gallery_url);
 
     mock_controller_.reset(new AppListControllerDelegateForTest);
     webstore_provider_.reset(new WebstoreProvider(
@@ -198,8 +198,6 @@ class WebstoreProviderTest : public InProcessBrowserTest {
 
       mock_server_response_.clear();
     }
-
-    webstore_provider_->Stop();
   }
 
   std::string GetResultTitles() const {

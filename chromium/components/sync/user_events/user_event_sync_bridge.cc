@@ -75,6 +75,7 @@ UserEventSyncBridge::UserEventSyncBridge(
       global_id_mapper_(global_id_mapper) {
   DCHECK(global_id_mapper_);
   store_factory.Run(
+      USER_EVENTS,
       base::Bind(&UserEventSyncBridge::OnStoreCreated, base::AsWeakPtr(this)));
   global_id_mapper_->AddGlobalIdChangeObserver(base::Bind(
       &UserEventSyncBridge::HandleGlobalIdChange, base::AsWeakPtr(this)));
@@ -155,6 +156,14 @@ void UserEventSyncBridge::RecordUserEvent(
   if (!store_) {
     return;
   }
+  // TODO(skym): Remove this when the processor can handle Put() calls before
+  // being given metadata, see crbug.com/761485. Dropping data on the floor here
+  // is better than just writing to the store, because it will be lost if sent
+  // to just the store, and bloat persistent storage indefinitely.
+  if (!change_processor()->IsTrackingMetadata()) {
+    return;
+  }
+
   std::string storage_key = GetStorageKeyFromSpecifics(*specifics);
 
   // There are two scenarios we need to guard against here. First, the given

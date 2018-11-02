@@ -37,6 +37,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
+#include "ui/base/win/hidden_window.h"
 #endif
 
 namespace system_logs {
@@ -114,7 +115,7 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!callback.is_null());
 
-  std::unique_ptr<SystemLogsResponse> response(new SystemLogsResponse());
+  auto response = std::make_unique<SystemLogsResponse>();
 
   response->emplace(kChromeVersionTag, chrome::GetVersionString());
 
@@ -151,14 +152,14 @@ void ChromeInternalLogSource::Fetch(const SysLogsSourceCallback& callback) {
 
   // Get the entries that should be retrieved on the blocking pool and invoke
   // the callback later when done.
-  SystemLogsResponse* response_ptr = response.release();
+  SystemLogsResponse* response_ptr = response.get();
   base::PostTaskWithTraitsAndReply(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::Bind(&GetEntriesAsync, response_ptr),
-      base::Bind(callback, base::Owned(response_ptr)));
+      base::BindOnce(&GetEntriesAsync, response_ptr),
+      base::BindOnce(callback, std::move(response)));
 #else
   // On other platforms, we're done. Invoke the callback.
-  callback.Run(response.get());
+  callback.Run(std::move(response));
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -172,8 +173,8 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> sync_logs(
-      syncer::sync_ui_util::ConstructAboutInformation(service,
-                                                      chrome::GetChannel()));
+      syncer::sync_ui_util::ConstructAboutInformation_DEPRECATED(
+          service, chrome::GetChannel()));
 
   // Remove identity section.
   base::ListValue* details = NULL;
@@ -282,7 +283,8 @@ void ChromeInternalLogSource::PopulateLocalStateSettings(
 void ChromeInternalLogSource::PopulateUsbKeyboardDetected(
     SystemLogsResponse* response) {
   std::string reason;
-  bool result = base::win::IsKeyboardPresentOnSlate(&reason);
+  bool result =
+      base::win::IsKeyboardPresentOnSlate(&reason, ui::GetHiddenWindow());
   reason.insert(0, result ? "Keyboard Detected:\n" : "No Keyboard:\n");
   response->emplace(kUsbKeyboardDetected, reason);
 }

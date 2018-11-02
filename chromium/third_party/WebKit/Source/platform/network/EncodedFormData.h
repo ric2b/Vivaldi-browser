@@ -50,28 +50,18 @@ class PLATFORM_EXPORT FormDataElement final {
         file_length_(file_length),
         expected_file_modification_time_(expected_file_modification_time) {}
   explicit FormDataElement(const String& blob_uuid,
-                           PassRefPtr<BlobDataHandle> optional_handle)
+                           scoped_refptr<BlobDataHandle> optional_handle)
       : type_(kEncodedBlob),
         blob_uuid_(blob_uuid),
         optional_blob_data_handle_(std::move(optional_handle)) {}
-  FormDataElement(const KURL& file_system_url,
-                  long long start,
-                  long long length,
-                  double expected_file_modification_time)
-      : type_(kEncodedFileSystemURL),
-        file_system_url_(file_system_url),
-        file_start_(start),
-        file_length_(length),
-        expected_file_modification_time_(expected_file_modification_time) {}
 
   bool IsSafeToSendToAnotherThread() const;
 
-  enum Type { kData, kEncodedFile, kEncodedBlob, kEncodedFileSystemURL } type_;
+  enum Type { kData, kEncodedFile, kEncodedBlob } type_;
   Vector<char> data_;
   String filename_;
   String blob_uuid_;
-  RefPtr<BlobDataHandle> optional_blob_data_handle_;
-  KURL file_system_url_;
+  scoped_refptr<BlobDataHandle> optional_blob_data_handle_;
   long long file_start_;
   long long file_length_;
   double expected_file_modification_time_;
@@ -92,8 +82,6 @@ inline bool operator==(const FormDataElement& a, const FormDataElement& b) {
                b.expected_file_modification_time_;
   if (a.type_ == FormDataElement::kEncodedBlob)
     return a.blob_uuid_ == b.blob_uuid_;
-  if (a.type_ == FormDataElement::kEncodedFileSystemURL)
-    return a.file_system_url_ == b.file_system_url_;
 
   return true;
 }
@@ -110,12 +98,12 @@ class PLATFORM_EXPORT EncodedFormData : public RefCounted<EncodedFormData> {
     kMultipartFormData  // for multipart/form-data
   };
 
-  static PassRefPtr<EncodedFormData> Create();
-  static PassRefPtr<EncodedFormData> Create(const void*, size_t);
-  static PassRefPtr<EncodedFormData> Create(const CString&);
-  static PassRefPtr<EncodedFormData> Create(const Vector<char>&);
-  PassRefPtr<EncodedFormData> Copy() const;
-  PassRefPtr<EncodedFormData> DeepCopy() const;
+  static scoped_refptr<EncodedFormData> Create();
+  static scoped_refptr<EncodedFormData> Create(const void*, size_t);
+  static scoped_refptr<EncodedFormData> Create(const CString&);
+  static scoped_refptr<EncodedFormData> Create(const Vector<char>&);
+  scoped_refptr<EncodedFormData> Copy() const;
+  scoped_refptr<EncodedFormData> DeepCopy() const;
   ~EncodedFormData();
 
   void AppendData(const void* data, size_t);
@@ -125,12 +113,7 @@ class PLATFORM_EXPORT EncodedFormData : public RefCounted<EncodedFormData> {
                        long long length,
                        double expected_modification_time);
   void AppendBlob(const String& blob_uuid,
-                  PassRefPtr<BlobDataHandle> optional_handle);
-  void AppendFileSystemURL(const KURL&);
-  void AppendFileSystemURLRange(const KURL&,
-                                long long start,
-                                long long length,
-                                double expected_modification_time);
+                  scoped_refptr<BlobDataHandle> optional_handle);
 
   void Flatten(Vector<char>&) const;  // omits files
   String FlattenToString() const;     // omits files

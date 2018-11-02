@@ -7,7 +7,7 @@
 
 #include "core/paint/ClipRects.h"
 #include "core/paint/ObjectPaintProperties.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/paint/RarePaintData.h"
 
 namespace blink {
 
@@ -23,49 +23,54 @@ class CORE_EXPORT FragmentData {
     return WTF::WrapUnique(new FragmentData());
   }
 
-  ObjectPaintProperties* PaintProperties() const {
-    return paint_properties_.get();
+  FragmentData* NextFragment() const { return next_fragment_.get(); }
+  FragmentData& EnsureNextFragment();
+  void ClearNextFragment() { next_fragment_.reset(); }
+
+  // Visual offset of this fragment's top-left position from the
+  // "paint offset root":
+  // - In SPv1 mode, this is the containing composited PaintLayer, or
+  //   PaintLayer with a transform, whichever is nearer along the containing
+  //   block chain.
+  // - In SPv2 mode, this is the containing root PaintLayer of the
+  //   root LocalFrameView, or PaintLayer with a transform, whichever is nearer
+  //   along the containing block chain.
+  LayoutPoint PaintOffset() const { return paint_offset_; }
+  void SetPaintOffset(const LayoutPoint& paint_offset) {
+    paint_offset_ = paint_offset;
   }
-  ObjectPaintProperties& EnsurePaintProperties();
-  void ClearPaintProperties();
 
-  // The complete set of property nodes that should be used as a
-  // starting point to paint this fragment. See also the comment for
-  // |local_border_box_properties_|.
-  PropertyTreeState* LocalBorderBoxProperties() const {
-    return local_border_box_properties_.get();
+  LayoutRect VisualRect() const { return visual_rect_; }
+  void SetVisualRect(const LayoutRect& rect) { visual_rect_ = rect; }
+
+  RarePaintData& EnsureRarePaintData();
+  RarePaintData* GetRarePaintData() const { return rare_paint_data_.get(); }
+  void ClearRarePaintData() { rare_paint_data_.reset(); }
+
+  LayoutPoint LocationInBacking() const {
+    return rare_paint_data_ ? rare_paint_data_->LocationInBacking()
+                            : VisualRect().Location();
   }
 
-  void ClearLocalBorderBoxProperties();
-  void SetLocalBorderBoxProperties(PropertyTreeState&);
+  void SetLocationInBacking(const LayoutPoint&);
 
-  // This is the complete set of property nodes that can be used to
-  // paint the contents of this fragment. It is similar to
-  // |local_border_box_properties_| but includes properties (e.g.,
-  // overflow clip, scroll translation) that apply to contents.
-  PropertyTreeState ContentsProperties() const;
+  const ObjectPaintProperties* PaintProperties() const {
+    return rare_paint_data_ ? rare_paint_data_->PaintProperties() : nullptr;
+  }
 
-  FragmentData* NextFragment() { return next_fragment_.get(); }
+  const PropertyTreeState* LocalBorderBoxProperties() const {
+    return rare_paint_data_ ? rare_paint_data_->LocalBorderBoxProperties()
+                            : nullptr;
+  }
 
  private:
-  // Holds references to the paint property nodes created by this object.
-  std::unique_ptr<ObjectPaintProperties> paint_properties_;
+  // This stores the visual rect computed by the latest paint invalidation.
+  // This rect does *not* account for composited scrolling. See
+  // adjustVisualRectForCompositedScrolling().
+  LayoutRect visual_rect_;
+  LayoutPoint paint_offset_;
 
-  // These are used to detect changes to clipping that might invalidate
-  // subsequence caching or paint phase optimizations.
-  RefPtr<ClipRects> previous_clip_rects_;
-
-  // This is a complete set of property nodes that should be used as a
-  // starting point to paint a LayoutObject. This data is cached because some
-  // properties inherit from the containing block chain instead of the
-  // painting parent and cannot be derived in O(1) during the paint walk.
-  //
-  // For example: <div style='opacity: 0.3;'/>
-  //   The div's local border box properties would have an opacity 0.3 effect
-  //   node. Even though the div has no transform, its local border box
-  //   properties would have a transform node that points to the div's
-  //   ancestor transform space.
-  std::unique_ptr<PropertyTreeState> local_border_box_properties_;
+  std::unique_ptr<RarePaintData> rare_paint_data_;
 
   std::unique_ptr<FragmentData> next_fragment_;
 };

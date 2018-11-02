@@ -16,15 +16,14 @@ class ImageBufferTest : public ::testing::Test {};
 // V8 is denied by ImageBuffer. This prevents V8 from crashing the renderer if
 // the user asks to get back the ImageData.
 TEST_F(ImageBufferTest, GetImageDataTooBigToAllocateDoesNotCrash) {
-  std::unique_ptr<ImageBuffer> image_buffer = ImageBuffer::Create(
-      IntSize(1, 1), kNonOpaque, kDoNotInitializeImagePixels);
+  std::unique_ptr<ImageBuffer> image_buffer =
+      ImageBuffer::Create(IntSize(1, 1), kDoNotInitializeImagePixels);
   EXPECT_TRUE(image_buffer->IsSurfaceValid());
 
   IntRect too_big_rect(IntPoint(0, 0),
                        IntSize(1, (v8::TypedArray::kMaxLength / 4) + 1));
   WTF::ArrayBufferContents contents;
-  EXPECT_FALSE(
-      image_buffer->GetImageData(kUnmultiplied, too_big_rect, contents));
+  EXPECT_FALSE(image_buffer->GetImageData(too_big_rect, contents));
 }
 
 }  // namespace blink

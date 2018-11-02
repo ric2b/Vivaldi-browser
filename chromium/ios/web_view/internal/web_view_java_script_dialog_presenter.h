@@ -5,7 +5,6 @@
 #ifndef IOS_WEB_VIEW_INTERNAL_WEB_VIEW_JAVA_SCRIPT_DIALOG_PRESENTER_H_
 #define IOS_WEB_VIEW_INTERNAL_WEB_VIEW_JAVA_SCRIPT_DIALOG_PRESENTER_H_
 
-#import "base/ios/weak_nsobject.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
 
 @class CWVWebView;
@@ -15,7 +14,8 @@ namespace ios_web_view {
 
 // WebView implementation of JavaScriptDialogPresenter. Passes JavaScript alert
 // handling to |ui_delegate_|.
-class WebViewJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
+class WebViewJavaScriptDialogPresenter final
+    : public web::JavaScriptDialogPresenter {
  public:
   WebViewJavaScriptDialogPresenter(CWVWebView* web_view,
                                    id<CWVUIDelegate> ui_delegate);
@@ -50,9 +50,9 @@ class WebViewJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
                                   const web::DialogClosedCallback& callback);
 
   // The underlying delegate handling the dialog UI.
-  base::WeakNSProtocol<id<CWVUIDelegate>> ui_delegate_;
+  __weak id<CWVUIDelegate> ui_delegate_ = nil;
   // The web view which originated the dialogs.
-  base::WeakNSObject<CWVWebView> web_view_;
+  __weak CWVWebView* web_view_ = nil;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewJavaScriptDialogPresenter);
 };

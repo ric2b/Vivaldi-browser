@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
@@ -43,6 +44,7 @@
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
@@ -237,7 +239,7 @@ class DownloadsEventsListener : public content::NotificationObserver {
   base::Time last_wait_;
   std::unique_ptr<Event> waiting_for_;
   content::NotificationRegistrar registrar_;
-  std::deque<std::unique_ptr<Event>> events_;
+  base::circular_deque<std::unique_ptr<Event>> events_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadsEventsListener);
 };
@@ -278,16 +280,13 @@ class DownloadExtensionTest : public ExtensionApiTest {
         ui::PAGE_TRANSITION_LINK);
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnCreated::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnChanged::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnErased::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
   }
 
   content::RenderProcessHost* AddFilenameDeterminer() {
@@ -299,9 +298,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
         ui::PAGE_TRANSITION_LINK);
     EventRouter::Get(current_browser()->profile())
         ->AddEventListener(downloads::OnDeterminingFilename::kEventName,
-                           tab->GetRenderProcessHost(),
-                           GetExtensionId());
-    return tab->GetRenderProcessHost();
+                           tab->GetMainFrame()->GetProcess(), GetExtensionId());
+    return tab->GetMainFrame()->GetProcess();
   }
 
   void RemoveFilenameDeterminer(content::RenderProcessHost* host) {
@@ -696,7 +694,7 @@ class HTML5FileWriter {
                                    const storage::FileSystemURL& path,
                                    const char* data,
                                    int length) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     // Create a temp file.
     base::FilePath temp_file;
     if (!base::CreateTemporaryFile(&temp_file) ||
@@ -1004,7 +1002,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   download_item->Cancel(true);
   ASSERT_FALSE(download_item->GetTargetFilePath().empty());
   // Let cleanup complete on blocking threads.
-  content::RunAllBlockingPoolTasksUntilIdle();
+  content::RunAllTasksUntilIdle();
   // Check the path passed to the icon extractor post-cancellation.
   EXPECT_TRUE(RunFunctionAndReturnString(MockedGetFileIconFunction(
           download_item->GetTargetFilePath(), IconLoader::NORMAL, "foo"),
@@ -1053,7 +1051,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   base::FilePath fake_path = all_downloads[1]->GetTargetFilePath();
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     EXPECT_EQ(0, base::WriteFile(real_path, "", 0));
     ASSERT_TRUE(base::PathExists(real_path));
     ASSERT_FALSE(base::PathExists(fake_path));
@@ -2587,7 +2585,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "    \"previous\": \"in_progress\","
                           "    \"current\": \"complete\"}}]",
                           result_id)));
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   std::string disk_data;
   EXPECT_TRUE(base::ReadFileToString(item->GetTargetFilePath(), &disk_data));
   EXPECT_STREQ(kPayloadData, disk_data.c_str());

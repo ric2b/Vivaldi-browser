@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.preferences.website;
 
 import android.content.DialogInterface;
 import android.content.res.Resources;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
@@ -28,7 +29,6 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
@@ -238,6 +238,8 @@ public class SingleCategoryPreferences extends PreferenceFragment
             return website.site().getPopupPermission() == ContentSetting.BLOCK;
         } else if (mCategory.showProtectedMediaSites()) {
             return website.site().getProtectedMediaIdentifierPermission() == ContentSetting.BLOCK;
+        } else if (mCategory.showSoundSites()) {
+            return website.site().getSoundPermission() == ContentSetting.BLOCK;
         }
 
         return false;
@@ -281,7 +283,10 @@ public class SingleCategoryPreferences extends PreferenceFragment
         if (!mGroupByAllowBlock) return;
 
         // Set the title and arrow icons for the header.
-        blockedGroup.setGroupTitle(R.string.website_settings_blocked_group_heading, numBlocked);
+        int resourceId = mCategory.showSoundSites()
+                ? R.string.website_settings_blocked_group_heading_sound
+                : R.string.website_settings_blocked_group_heading;
+        blockedGroup.setGroupTitle(resourceId, numBlocked);
         TintedDrawable icon = TintedDrawable.constructTintedDrawable(getResources(),
                 mBlockListExpanded ? R.drawable.ic_expanded : R.drawable.ic_collapsed);
         blockedGroup.setExpanded(mBlockListExpanded);
@@ -443,7 +448,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
         if (preference instanceof WebsitePreference) {
             WebsitePreference website = (WebsitePreference) preference;
             website.setFragment(SingleWebsitePreferences.class.getName());
-            website.putSiteIntoExtras(SingleWebsitePreferences.EXTRA_SITE);
+            // EXTRA_SITE re-uses already-fetched permissions, which we can only use if the Website
+            // was populated with data for all permission types.
+            if (mCategory.showAllSites()) {
+                website.putSiteIntoExtras(SingleWebsitePreferences.EXTRA_SITE);
+            } else {
+                website.putSiteAddressIntoExtras(SingleWebsitePreferences.EXTRA_SITE_ADDRESS);
+            }
         }
 
         return super.onPreferenceTreeClick(screen, preference);
@@ -509,11 +520,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
             } else if (mCategory.showProtectedMediaSites()) {
                 PrefServiceBridge.getInstance().setProtectedMediaIdentifierEnabled(
                         (boolean) newValue);
+            } else if (mCategory.showSoundSites()) {
+                PrefServiceBridge.getInstance().setSoundEnabled((boolean) newValue);
             }
 
             // Categories that support adding exceptions also manage the 'Add site' preference.
             if (mCategory.showAutoplaySites() || mCategory.showBackgroundSyncSites()
-                    || mCategory.showJavaScriptSites()) {
+                    || mCategory.showJavaScriptSites() || mCategory.showSoundSites()) {
                 if ((boolean) newValue) {
                     Preference addException = getPreferenceScreen().findPreference(
                             ADD_EXCEPTION_KEY);
@@ -548,6 +561,10 @@ public class SingleCategoryPreferences extends PreferenceFragment
             resource = R.string.website_settings_add_site_description_background_sync;
         } else if (mCategory.showJavaScriptSites()) {
             resource = R.string.website_settings_add_site_description_javascript;
+        } else if (mCategory.showSoundSites()) {
+            resource = PrefServiceBridge.getInstance().isSoundEnabled()
+                    ? R.string.website_settings_add_site_description_sound_block
+                    : R.string.website_settings_add_site_description_sound_allow;
         }
         assert resource > 0;
         return getResources().getString(resource);
@@ -575,9 +592,14 @@ public class SingleCategoryPreferences extends PreferenceFragment
     // AddExceptionPreference.SiteAddedCallback:
     @Override
     public void onAddSite(String hostname) {
+        // The Sound content setting has exception lists for both BLOCK and ALLOW (others just
+        // have exceptions to ALLOW).
+        int setting =
+                (mCategory.showSoundSites() && PrefServiceBridge.getInstance().isSoundEnabled())
+                ? ContentSetting.BLOCK.toInt()
+                : ContentSetting.ALLOW.toInt();
         PrefServiceBridge.getInstance().nativeSetContentSettingForPattern(
-                    mCategory.toContentSettingsType(), hostname,
-                    ContentSetting.ALLOW.toInt());
+                mCategory.toContentSettingsType(), hostname, setting);
 
         Toast.makeText(getActivity(),
                 String.format(getActivity().getString(
@@ -586,6 +608,14 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 Toast.LENGTH_SHORT).show();
 
         getInfoForOrigins();
+
+        if (mCategory.showSoundSites()) {
+            if (setting == ContentSetting.BLOCK.toInt()) {
+                RecordUserAction.record("SoundContentSetting.MuteBy.PatternException");
+            } else {
+                RecordUserAction.record("SoundContentSetting.UnmuteBy.PatternException");
+            }
+        }
     }
 
     /**
@@ -599,10 +629,10 @@ public class SingleCategoryPreferences extends PreferenceFragment
 
         configureGlobalToggles();
 
-        if ((mCategory.showAutoplaySites()
-                    && !PrefServiceBridge.getInstance().isAutoplayEnabled())
+        if ((mCategory.showAutoplaySites() && !PrefServiceBridge.getInstance().isAutoplayEnabled())
                 || (mCategory.showJavaScriptSites()
-                    && !PrefServiceBridge.getInstance().javaScriptEnabled())
+                           && !PrefServiceBridge.getInstance().javaScriptEnabled())
+                || mCategory.showSoundSites()
                 || (mCategory.showBackgroundSyncSites()
                            && !PrefServiceBridge.getInstance().isBackgroundSyncAllowed())) {
             getPreferenceScreen().addPreference(
@@ -629,7 +659,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         // Configure/hide the notifications vibrate toggle, as needed.
         Preference notificationsVibrate =
                 getPreferenceScreen().findPreference(NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
-        if (mCategory.showNotificationsSites() && !BuildInfo.isAtLeastO()) {
+        if (mCategory.showNotificationsSites() && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             notificationsVibrate.setOnPreferenceChangeListener(this);
             updateNotificationsVibrateCheckBox();
         } else {
@@ -738,6 +768,8 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 } else if (mCategory.showProtectedMediaSites()) {
                     globalToggle.setChecked(
                             PrefServiceBridge.getInstance().isProtectedMediaIdentifierEnabled());
+                } else if (mCategory.showSoundSites()) {
+                    globalToggle.setChecked(PrefServiceBridge.getInstance().isSoundEnabled());
                 }
             }
         }

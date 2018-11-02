@@ -4,7 +4,9 @@
 
 #include "ash/system/tray_caps_lock.h"
 
-#include "ash/accessibility_delegate.h"
+#include <memory>
+
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/ime/ime_controller.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/config.h"
@@ -22,14 +24,15 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/events/modifier_key.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/message_center_switches.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -64,7 +67,7 @@ bool IsSearchKeyMappedToCapsLock() {
   // to worry about sync changing the pref while the menu or notification is
   // visible.
   return prefs->GetInteger(prefs::kLanguageRemapSearchKeyTo) ==
-         chromeos::input_method::kCapsLockKey;
+         static_cast<int>(ui::chromeos::ModifierKey::kCapsLockKey);
 }
 
 std::unique_ptr<Notification> CreateNotification() {
@@ -73,7 +76,7 @@ std::unique_ptr<Notification> CreateNotification() {
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
   std::unique_ptr<Notification> notification;
-  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+  if (message_center::IsNewStyleNotificationEnabled()) {
     notification = Notification::CreateSystemNotification(
         message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
@@ -85,7 +88,7 @@ std::unique_ptr<Notification> CreateNotification() {
         kNotificationCapslockIcon,
         message_center::SystemNotificationWarningLevel::NORMAL);
   } else {
-    notification = base::MakeUnique<Notification>(
+    notification = std::make_unique<Notification>(
         message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
         l10n_util::GetStringUTF16(string_id),
@@ -137,7 +140,7 @@ class CapsLockDefaultView : public ActionableView {
             0, 0, 0, kCaptionRightPadding + kTrayPopupLabelRightPadding));
   }
 
-  ~CapsLockDefaultView() override {}
+  ~CapsLockDefaultView() override = default;
 
   // Updates the label text and the shortcut text.
   void Update(bool caps_lock_enabled) {
@@ -206,8 +209,9 @@ void TrayCapsLock::RegisterProfilePrefs(PrefRegistrySimple* registry,
                                         bool for_test) {
   if (for_test) {
     // There is no remote pref service, so pretend that ash owns the pref.
-    registry->RegisterIntegerPref(prefs::kLanguageRemapSearchKeyTo,
-                                  chromeos::input_method::kSearchKey);
+    registry->RegisterIntegerPref(
+        prefs::kLanguageRemapSearchKeyTo,
+        static_cast<int>(ui::chromeos::ModifierKey::kSearchKey));
     return;
   }
   // Pref is owned by chrome and flagged as PUBLIC.
@@ -218,8 +222,9 @@ void TrayCapsLock::OnCapsLockChanged(bool enabled) {
   caps_lock_enabled_ = enabled;
 
   // Send an a11y alert.
-  Shell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
-      enabled ? A11Y_ALERT_CAPS_ON : A11Y_ALERT_CAPS_OFF);
+  Shell::Get()->accessibility_controller()->TriggerAccessibilityAlert(
+      enabled ? mojom::AccessibilityAlert::CAPS_ON
+              : mojom::AccessibilityAlert::CAPS_OFF);
 
   if (tray_view())
     tray_view()->SetVisible(caps_lock_enabled_);

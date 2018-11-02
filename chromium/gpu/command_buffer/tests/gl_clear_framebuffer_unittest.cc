@@ -15,8 +15,10 @@
 
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
+#include "gpu/config/gpu_test_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/extension_set.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -54,9 +56,6 @@ class GLClearFramebufferTest : public testing::TestWithParam<bool> {
   void SetDrawDepth(GLfloat depth);
   void DrawQuad();
 
-  void SetupFramebufferWithDepthStencil();
-  void DestroyFramebuffer();
-
   void TearDown() override {
     GLTestHelper::CheckGLError("no errors", __LINE__);
     gl_.Destroy();
@@ -66,10 +65,6 @@ class GLClearFramebufferTest : public testing::TestWithParam<bool> {
   GLManager gl_;
   GLuint color_handle_;
   GLuint depth_handle_;
-
-  GLuint framebuffer_handle_;
-  GLuint color_buffer_handle_;
-  GLuint depth_stencil_handle_;
 };
 
 void GLClearFramebufferTest::InitDraw() {
@@ -114,40 +109,6 @@ void GLClearFramebufferTest::SetDrawDepth(GLfloat depth) {
 
 void GLClearFramebufferTest::DrawQuad() {
   glDrawArrays(GL_TRIANGLES, 0, 6);
-}
-
-void GLClearFramebufferTest::SetupFramebufferWithDepthStencil() {
-  glGenFramebuffers(1, &framebuffer_handle_);
-  DCHECK_NE(0u, framebuffer_handle_);
-  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_handle_);
-
-  static const int kFramebufferSize = 4;
-
-  glGenRenderbuffers(1, &color_buffer_handle_);
-  DCHECK_NE(0u, color_buffer_handle_);
-  glBindRenderbuffer(GL_RENDERBUFFER, color_buffer_handle_);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8_OES, kFramebufferSize,
-                        kFramebufferSize);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            GL_RENDERBUFFER, color_buffer_handle_);
-
-  glGenRenderbuffers(1, &depth_stencil_handle_);
-  DCHECK_NE(0u, depth_stencil_handle_);
-  glBindRenderbuffer(GL_RENDERBUFFER, depth_stencil_handle_);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES,
-                        kFramebufferSize, kFramebufferSize);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                            GL_RENDERBUFFER, depth_stencil_handle_);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
-                            GL_RENDERBUFFER, depth_stencil_handle_);
-
-  glViewport(0, 0, kFramebufferSize, kFramebufferSize);
-}
-
-void GLClearFramebufferTest::DestroyFramebuffer() {
-  glDeleteRenderbuffers(1, &color_buffer_handle_);
-  glDeleteRenderbuffers(1, &depth_stencil_handle_);
-  glDeleteFramebuffers(1, &framebuffer_handle_);
 }
 
 INSTANTIATE_TEST_CASE_P(GLClearFramebufferTestWithParam,
@@ -213,8 +174,10 @@ TEST_P(GLClearFramebufferTest, ClearDepthStencil) {
   if (!IsApplicable()) {
     return;
   }
-
-  SetupFramebufferWithDepthStencil();
+  // TODO(kainino): https://crbug.com/782317
+  if (GPUTestBotConfig::CurrentConfigMatches("Intel")) {
+    return;
+  }
 
   const GLuint kStencilRef = 1 << 2;
   InitDraw();
@@ -261,8 +224,54 @@ TEST_P(GLClearFramebufferTest, ClearDepthStencil) {
   // Verify - depth test should have passed, so red.
   EXPECT_TRUE(
       GLTestHelper::CheckPixels(0, 0, 1, 1, 0 /* tolerance */, kRed, nullptr));
+}
 
-  DestroyFramebuffer();
+TEST_P(GLClearFramebufferTest, SeparateFramebufferClear) {
+  const char* extension_string =
+      reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+  gl::ExtensionSet extensions = gl::MakeExtensionSet(extension_string);
+  bool has_separate_framebuffer =
+      gl::HasExtension(extensions, "GL_CHROMIUM_framebuffer_multisample");
+  if (!IsApplicable() || !has_separate_framebuffer) {
+    return;
+  }
+
+  glClearColor(0.f, 0.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  // Bind incomplete read framebuffer, should not affect clear.
+  GLuint fbo;
+  glGenFramebuffers(1, &fbo);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+  EXPECT_NE(glCheckFramebufferStatus(GL_READ_FRAMEBUFFER),
+            static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE));
+
+  glClearColor(1.f, 0.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+  const uint8_t kRed[] = {255, 0, 0, 255};
+  EXPECT_TRUE(GLTestHelper::CheckPixels(0, 0, 1, 1, 0, kRed, nullptr));
+
+  // Bind complete, but smaller read framebuffer, should not affect clear.
+  GLuint texture;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+               nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+  glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                         GL_TEXTURE_2D, texture, 0);
+  EXPECT_EQ(glCheckFramebufferStatus(GL_READ_FRAMEBUFFER),
+            static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE));
+
+  glClearColor(0.f, 1.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+  const uint8_t kGreen[] = {0, 255, 0, 255};
+  EXPECT_TRUE(GLTestHelper::CheckPixels(3, 3, 1, 1, 0, kGreen, nullptr));
 }
 
 }  // namespace gpu

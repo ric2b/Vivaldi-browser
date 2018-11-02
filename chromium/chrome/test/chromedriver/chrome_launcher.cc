@@ -76,7 +76,6 @@ const char* const kDesktopSwitches[] = {
     "no-first-run",
     "disable-background-networking",
     "disable-web-resources",
-    "safebrowsing-disable-auto-update",
     "disable-client-side-phishing-detection",
     "disable-default-apps",
     "enable-logging",
@@ -144,6 +143,8 @@ Status PrepareCommandLine(uint16_t port,
   }
   switches.SetFromSwitches(capabilities.switches);
 
+  if (capabilities.exclude_switches.count("user-data-dir") > 0)
+    LOG(WARNING) << "excluding user-data-dir switch is not supported";
   base::FilePath user_data_dir_path;
   if (switches.HasSwitch("user-data-dir")) {
     user_data_dir_path = base::FilePath(
@@ -162,15 +163,22 @@ Status PrepareCommandLine(uint16_t port,
   if (status.IsError())
     return status;
 
-  if (!extension_dir->CreateUniqueTempDir()) {
-    return Status(kUnknownError,
-                  "cannot create temp dir for unpacking extensions");
+  if (capabilities.exclude_switches.count("load-extension") > 0) {
+    if (capabilities.extensions.size() > 0)
+      return Status(
+          kUnknownError,
+          "cannot exclude load-extension switch when extensions are specified");
+  } else {
+    if (!extension_dir->CreateUniqueTempDir()) {
+      return Status(kUnknownError,
+                    "cannot create temp dir for unpacking extensions");
+    }
+    status = internal::ProcessExtensions(
+        capabilities.extensions, extension_dir->GetPath(),
+        capabilities.use_automation_extension, &switches, extension_bg_pages);
+    if (status.IsError())
+      return status;
   }
-  status = internal::ProcessExtensions(
-      capabilities.extensions, extension_dir->GetPath(),
-      capabilities.use_automation_extension, &switches, extension_bg_pages);
-  if (status.IsError())
-    return status;
   switches.AppendToCommandLine(&command);
   *prepared_command = command;
   return Status(kOk);
@@ -251,11 +259,15 @@ Status CreateBrowserwideDevToolsClientAndConnect(
     const SyncWebSocketFactory& socket_factory,
     const std::vector<std::unique_ptr<DevToolsEventListener>>&
         devtools_event_listeners,
+    const std::string& web_socket_url,
     std::unique_ptr<DevToolsClient>* browser_client) {
+  std::string url(web_socket_url);
+  if (url.length() == 0) {
+    url = base::StringPrintf("ws://%s/devtools/browser/",
+                             address.ToString().c_str());
+  }
   std::unique_ptr<DevToolsClient> client(new DevToolsClientImpl(
-      socket_factory, base::StringPrintf("ws://%s/devtools/browser/",
-                                         address.ToString().c_str()),
-      DevToolsClientImpl::kBrowserwideDevToolsClientId));
+      socket_factory, url, DevToolsClientImpl::kBrowserwideDevToolsClientId));
   for (const auto& listener : devtools_event_listeners) {
     // Only add listeners that subscribe to the browser-wide |DevToolsClient|.
     // Otherwise, listeners will think this client is associated with a webview,
@@ -298,7 +310,9 @@ Status LaunchRemoteChromeSession(
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       capabilities.debugger_address, capabilities.perf_logging_prefs,
-      socket_factory, devtools_event_listeners, &devtools_websocket_client);
+      socket_factory, devtools_event_listeners,
+      devtools_http_client->browser_info()->web_socket_url,
+      &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();
@@ -434,7 +448,9 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       NetAddress(port), capabilities.perf_logging_prefs, socket_factory,
-      devtools_event_listeners, &devtools_websocket_client);
+      devtools_event_listeners,
+      devtools_http_client->browser_info()->web_socket_url,
+      &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();
@@ -514,7 +530,9 @@ Status LaunchAndroidChrome(URLRequestContextGetter* context_getter,
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       NetAddress(port), capabilities.perf_logging_prefs, socket_factory,
-      devtools_event_listeners, &devtools_websocket_client);
+      devtools_event_listeners,
+      devtools_http_client->browser_info()->web_socket_url,
+      &devtools_websocket_client);
   if (status.IsError()) {
     LOG(WARNING) << "Browser-wide DevTools client failed to connect: "
                  << status.message();

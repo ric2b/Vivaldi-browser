@@ -5,10 +5,9 @@
 #ifndef UI_GL_GL_BINDINGS_H_
 #define UI_GL_GL_BINDINGS_H_
 
+#include "build/build_config.h"
+
 // Includes the platform independent and platform dependent GL headers.
-// Only include this in cc files. It pulls in system headers, including
-// the X11 headers on linux, which define all kinds of macros that are
-// liable to cause conflicts.
 
 // GL headers may include inttypes.h and so we need to ensure that
 // __STDC_FORMAT_MACROS is defined in order for //base/format_macros.h to
@@ -17,6 +16,17 @@
 #if defined(OS_POSIX) && !defined(__STDC_FORMAT_MACROS)
 #define __STDC_FORMAT_MACROS
 #endif
+#if defined(USE_GLX)
+// Must be included before GL headers or they might pollute the global
+// namespace with X11 macros indirectly.
+#include "ui/gfx/x/x11.h"
+
+// GL headers expect Bool and Status this to be defined but we avoid
+// defining them since they clash with too much code. Instead we have
+// to add them temporarily here and undef them again below.
+#define Bool int
+#define Status int
+#endif  // USE_GLX
 
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -40,14 +50,11 @@
 #elif defined(USE_GLX)
 #include <GL/glx.h>
 #include <GL/glxext.h>
-#endif
 
-// Undefine some macros defined by X headers. This is why this file should only
-// be included in .cc files.
+// Done with these temporary macros now
 #undef Bool
-#undef None
 #undef Status
-
+#endif
 
 // GLES2 defines not part of Desktop GL
 // Shader Precision-Specified Types
@@ -114,6 +121,9 @@
 // GL_ANGLE_client_arrays
 #define GL_CLIENT_ARRAYS_ANGLE 0x93AA
 
+// GL_ANGLE_robust_resource_initialization
+#define GL_ROBUST_RESOURCE_INITIALIZATION_ANGLE 0x93AB
+
 // GL_ANGLE_request_extension
 #define GL_REQUESTABLE_EXTENSIONS_ANGLE 0x93A8
 #define GL_NUM_REQUESTABLE_EXTENSIONS_ANGLE 0x93A8
@@ -172,6 +182,9 @@
 #define GL_COLOR_SPACE_SCRGB_LINEAR_CHROMIUM 0x8AF2
 #define GL_COLOR_SPACE_SRGB_CHROMIUM 0x8AF3
 #define GL_COLOR_SPACE_DISPLAY_P3_CHROMIUM 0x8AF4
+
+// GL_CHROMIUM_texture_storage_image
+#define GL_SCANOUT_CHROMIUM 0x6000
 
 // GL_OES_texure_3D
 #define GL_SAMPLER_3D_OES                                0x8B5F
@@ -381,6 +394,16 @@
 #define GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT 0x88FC
 #endif /* GL_EXT_blend_func_extended */
 
+#ifndef GL_EXT_window_rectangles
+#define GL_EXT_window_rectangles 1
+#define GL_INCLUSIVE_EXT 0x8F10
+#define GL_EXCLUSIVE_EXT 0x8F11
+#define GL_WINDOW_RECTANGLE_EXT 0x8F12
+#define GL_WINDOW_RECTANGLE_MODE_EXT 0x8F13
+#define GL_MAX_WINDOW_RECTANGLES_EXT 0x8F14
+#define GL_NUM_WINDOW_RECTANGLES_EXT 0x8F15
+#endif /* GL_EXT_window_rectangles */
+
 #define GL_GLEXT_PROTOTYPES 1
 
 #if defined(OS_WIN)
@@ -430,6 +453,11 @@ struct GL_EXPORT DriverGL {
 
   ProcsGL fn;
   ExtensionsGL ext;
+
+  DriverGL() {
+    // InitializeStaticBindings() requires that fn is null-initialized.
+    ClearBindings();
+  }
 };
 
 struct GL_EXPORT CurrentGL {

@@ -25,12 +25,14 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 
 using base::ASCIIToUTF16;
+using content::NavigationSimulator;
 using content::WebContentsTester;
 
 namespace {
@@ -93,16 +95,6 @@ class BackFwdMenuModelTest : public ChromeRenderViewHostTestHarness {
   // Same as NavigateToOffset but goes to an absolute index.
   void NavigateToIndex(int index) {
     controller().GoToIndex(index);
-    WebContentsTester::For(web_contents())->CommitPendingNavigation();
-  }
-
-  // Goes back/forward and commits the load.
-  void GoBack() {
-    controller().GoBack();
-    WebContentsTester::For(web_contents())->CommitPendingNavigation();
-  }
-  void GoForward() {
-    controller().GoForward();
     WebContentsTester::For(web_contents())->CommitPendingNavigation();
   }
 };
@@ -361,18 +353,18 @@ TEST_F(BackFwdMenuModelTest, ChapterStops) {
             back_model->GetLabelAt(index + 2));
 
   // If we go back two we should still see the same chapter stop at the end.
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   EXPECT_EQ(ASCIIToUTF16("B3"), back_model->GetLabelAt(index));
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   EXPECT_EQ(ASCIIToUTF16("B3"), back_model->GetLabelAt(index));
   // But if we go back again, it should change.
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   EXPECT_EQ(ASCIIToUTF16("A3"), back_model->GetLabelAt(index));
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   EXPECT_EQ(ASCIIToUTF16("A3"), back_model->GetLabelAt(index));
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   EXPECT_EQ(ASCIIToUTF16("A3"), back_model->GetLabelAt(index));
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
   // It is now a separator.
   EXPECT_EQ(base::string16(), back_model->GetLabelAt(index));
   // Undo our position change.
@@ -382,12 +374,12 @@ TEST_F(BackFwdMenuModelTest, ChapterStops) {
   NavigateToOffset(-BackForwardMenuModel::kMaxHistoryItems);
   ValidateModel(forward_model.get(), BackForwardMenuModel::kMaxHistoryItems, 0);
   // Go forward (still no chapter stop)
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   ValidateModel(forward_model.get(),
                 BackForwardMenuModel::kMaxHistoryItems - 1, 0);
   // Go back two (one chapter stop should show up)
-  GoBack();
-  GoBack();
+  NavigationSimulator::GoBack(web_contents());
+  NavigationSimulator::GoBack(web_contents());
   ValidateModel(forward_model.get(),
                 BackForwardMenuModel::kMaxHistoryItems, 1);
 
@@ -410,16 +402,16 @@ TEST_F(BackFwdMenuModelTest, ChapterStops) {
       forward_model->GetLabelAt(index + 2));
 
   // If we advance one we should still see the same chapter stop at the end.
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   EXPECT_EQ(ASCIIToUTF16("I3"), forward_model->GetLabelAt(index));
   // But if we advance one again, it should change.
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   EXPECT_EQ(ASCIIToUTF16("J3"), forward_model->GetLabelAt(index));
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   EXPECT_EQ(ASCIIToUTF16("J3"), forward_model->GetLabelAt(index));
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   EXPECT_EQ(ASCIIToUTF16("J3"), forward_model->GetLabelAt(index));
-  GoForward();
+  NavigationSimulator::GoForward(web_contents());
   EXPECT_EQ(ASCIIToUTF16("K3"), forward_model->GetLabelAt(index));
 
   // Now test the boundary cases by using the chapter stop function directly.
@@ -504,7 +496,7 @@ TEST_F(BackFwdMenuModelTest, FaviconLoadTest) {
   profile()->CreateFaviconService();
   Browser::CreateParams native_params(profile(), true);
   std::unique_ptr<Browser> browser(
-      chrome::CreateBrowserWithTestWindowForParams(&native_params));
+      CreateBrowserWithTestWindowForParams(&native_params));
   FaviconDelegate favicon_delegate;
 
   BackForwardMenuModel back_model(
@@ -528,7 +520,7 @@ TEST_F(BackFwdMenuModelTest, FaviconLoadTest) {
       ->AddPage(url1, base::Time::Now(), history::SOURCE_BROWSED);
   FaviconServiceFactory::GetForProfile(profile(),
                                        ServiceAccessType::EXPLICIT_ACCESS)
-      ->SetFavicons(url1, url1_favicon, favicon_base::FAVICON,
+      ->SetFavicons({url1}, url1_favicon, favicon_base::IconType::kFavicon,
                     gfx::Image::CreateFrom1xBitmap(new_icon_bitmap));
 
   // Will return the current icon (default) but start an anync call
@@ -552,13 +544,13 @@ TEST_F(BackFwdMenuModelTest, FaviconLoadTest) {
   SkBitmap valid_icon_bitmap = *valid_icon.ToSkBitmap();
 
   // Verify we did not get the default favicon.
-  EXPECT_NE(0, memcmp(default_icon_bitmap.getPixels(),
-                      valid_icon_bitmap.getPixels(),
-                      default_icon_bitmap.getSize()));
+  EXPECT_NE(
+      0, memcmp(default_icon_bitmap.getPixels(), valid_icon_bitmap.getPixels(),
+                default_icon_bitmap.computeByteSize()));
   // Verify we did get the expected favicon.
-  EXPECT_EQ(0, memcmp(new_icon_bitmap.getPixels(),
-                      valid_icon_bitmap.getPixels(),
-                      new_icon_bitmap.getSize()));
+  EXPECT_EQ(0,
+            memcmp(new_icon_bitmap.getPixels(), valid_icon_bitmap.getPixels(),
+                   new_icon_bitmap.computeByteSize()));
 
   // Make sure the browser deconstructor doesn't have problems.
   browser->tab_strip_model()->CloseAllTabs();

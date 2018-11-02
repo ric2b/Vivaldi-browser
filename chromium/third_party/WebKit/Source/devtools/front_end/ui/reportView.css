@@ -14,6 +14,10 @@
     overflow: auto;
 }
 
+.report-content-box.no-scroll {
+    overflow: visible;
+}
+
 .report-header {
     border-bottom: 1px solid rgb(230, 230, 230);
     padding: 12px 24px;
@@ -62,7 +66,7 @@
 .report-field {
     margin-top: 8px;
     display: flex;
-    line-height: 20px;
+    line-height: 28px;
 }
 
 .report-row {
@@ -78,10 +82,8 @@
 }
 
 .report-field-value {
-    flex: none;
+    flex: auto;
     padding: 0 6px;
-    text-overflow: ellipsis;
-    overflow: hidden;
     white-space: pre;
 }
 

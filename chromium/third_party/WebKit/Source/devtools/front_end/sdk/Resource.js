@@ -160,13 +160,6 @@ SDK.Resource = class {
   }
 
   /**
-   * @return {boolean}
-   */
-  get contentEncoded() {
-    return this._contentEncoded;
-  }
-
-  /**
    * @override
    * @return {string}
    */
@@ -182,6 +175,15 @@ SDK.Resource = class {
     if (this.resourceType() === Common.resourceTypes.Document && this.mimeType.indexOf('javascript') !== -1)
       return Common.resourceTypes.Script;
     return this.resourceType();
+  }
+
+  /**
+   * @override
+   * @return {!Promise<boolean>}
+   */
+  async contentEncoded() {
+    await this.requestContent();
+    return this._contentEncoded;
   }
 
   /**
@@ -217,6 +219,8 @@ SDK.Resource = class {
   async searchInContent(query, caseSensitive, isRegex) {
     if (!this.frameId)
       return [];
+    if (this.request)
+      return this.request.searchInContent(query, caseSensitive, isRegex);
     var result = await this._resourceTreeModel.target().pageAgent().searchInResource(
         this.frameId, this.url, query, caseSensitive, isRegex);
     return result || [];

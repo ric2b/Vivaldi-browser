@@ -46,6 +46,9 @@ struct Manifest {
   // A 32 bit color value or kInvalidOrMissingColor if not set.
   int64 background_color;
 
+  // A URL of the HTML splash screen.
+  url.mojom.Url? splash_screen_url;
+
   mojo.common.mojom.String16? gcm_sender_id;
 
   url.mojom.Url? scope;
@@ -96,4 +99,19 @@ struct ManifestShareTarget {
   // The URL template that contains placeholders to be replaced with shared
   // data. Null if the parsing failed.
   mojo.common.mojom.String16? url_template;
+};
+
+// Debug information for a parsed manifest.
+struct ManifestDebugInfo {
+  array<ManifestError> errors;
+
+  string raw_manifest;
+};
+
+// An individual manifest parsing error.
+struct ManifestError {
+  string message;
+  bool critical;
+  uint32 line;
+  uint32 column;
 };

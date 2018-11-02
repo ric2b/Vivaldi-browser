@@ -26,9 +26,10 @@
 #ifndef HTMLFormattingElementList_h
 #define HTMLFormattingElementList_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/html/parser/HTMLStackItem.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -37,7 +38,6 @@ class Element;
 
 // This may end up merged into HTMLElementStack.
 class HTMLFormattingElementList {
-  WTF_MAKE_NONCOPYABLE(HTMLFormattingElementList);
   DISALLOW_NEW();
 
  public:
@@ -76,7 +76,7 @@ class HTMLFormattingElementList {
       return !item_ ? !!element : item_->GetElement() != element;
     }
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(item_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(item_); }
 
    private:
     Member<HTMLStackItem> item_;
@@ -121,7 +121,7 @@ class HTMLFormattingElementList {
   const Entry& at(size_t i) const { return entries_[i]; }
   Entry& at(size_t i) { return entries_[i]; }
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(entries_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(entries_); }
 
 #ifndef NDEBUG
   void Show();
@@ -139,6 +139,8 @@ class HTMLFormattingElementList {
   void EnsureNoahsArkCondition(HTMLStackItem*);
 
   HeapVector<Entry> entries_;
+
+  DISALLOW_COPY_AND_ASSIGN(HTMLFormattingElementList);
 };
 
 }  // namespace blink

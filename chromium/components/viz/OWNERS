@@ -12,6 +12,9 @@ piman@chromium.org
 vmpstr@chromium.org
 weiliangc@chromium.org
 
+# CopyOutputRequests/Results
+miu@chromium.org
+
 # display_embedder / ozone
 reveman@chromium.org
 rjkroege@chromium.org
@@ -37,6 +40,7 @@ flackr@chromium.org
 vollick@chromium.org
 
 # overlays
+ccameron@chromium.org
 dcastagna@chromium.org
 reveman@chromium.org
 

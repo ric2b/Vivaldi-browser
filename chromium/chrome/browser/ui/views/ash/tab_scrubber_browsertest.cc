@@ -12,27 +12,23 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "build/build_config.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tabs/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
-#include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "chromeos/chromeos_switches.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/test_utils.h"
 #include "ui/aura/window.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/chromeos_switches.h"
-#endif
 
 namespace {
 
@@ -89,10 +85,7 @@ class TabScrubberTest : public InProcessBrowserTest,
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if defined(OS_CHROMEOS)
     command_line->AppendSwitch(chromeos::switches::kNaturalScrollDefault);
-#endif
-    command_line->AppendSwitch(switches::kOpenAsh);
   }
 
   void SetUpOnMainThread() override {
@@ -108,9 +101,15 @@ class TabScrubberTest : public InProcessBrowserTest,
     browser()->tab_strip_model()->RemoveObserver(this);
   }
 
-  TabStrip* GetTabStrip(Browser* browser) {
+  TabStripImpl* GetTabStrip(Browser* browser) {
     aura::Window* window = browser->window()->GetNativeWindow();
-    return BrowserView::GetBrowserViewForNativeWindow(window)->tabstrip();
+    // This test depends on TabStrip impl.
+    TabStripImpl* tab_strip_impl =
+        BrowserView::GetBrowserViewForNativeWindow(window)
+            ->tabstrip()
+            ->AsTabStripImpl();
+    DCHECK(tab_strip_impl);
+    return tab_strip_impl;
   }
 
   float GetStartX(Browser* browser,
@@ -236,7 +235,7 @@ class TabScrubberTest : public InProcessBrowserTest,
   }
 
   void AddTabs(Browser* browser, int num_tabs) {
-    TabStrip* tab_strip = GetTabStrip(browser);
+    TabStripImpl* tab_strip = GetTabStrip(browser);
     for (int i = 0; i < num_tabs; ++i)
       AddBlankTabAndShow(browser);
     ASSERT_EQ(num_tabs + 1, browser->tab_strip_model()->count());
@@ -277,7 +276,6 @@ class TabScrubberTest : public InProcessBrowserTest,
 
 }  // namespace
 
-#if defined(OS_CHROMEOS)
 // Swipe a single tab in each direction.
 IN_PROC_BROWSER_TEST_F(TabScrubberTest, Single) {
   AddTabs(browser(), 1);
@@ -552,5 +550,3 @@ IN_PROC_BROWSER_TEST_F(TabScrubberTest, RTLMoveBefore) {
   browser()->tab_strip_model()->MoveSelectedTabsTo(2);
   EXPECT_EQ(0, TabScrubber::GetInstance()->highlighted_tab());
 }
-
-#endif  // defined(OS_CHROMEOS)

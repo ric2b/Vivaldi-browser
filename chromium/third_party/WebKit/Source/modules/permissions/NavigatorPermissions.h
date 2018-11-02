@@ -23,7 +23,7 @@ class NavigatorPermissions final
   static NavigatorPermissions& From(Navigator&);
   static Permissions* permissions(Navigator&);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   NavigatorPermissions();

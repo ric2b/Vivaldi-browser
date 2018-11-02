@@ -50,16 +50,15 @@ class CORE_EXPORT CSSStyleSheetResource final : public StyleSheetResource {
                                               const WTF::TextEncoding&);
 
   ~CSSStyleSheetResource() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
-  const String SheetText(MIMETypeCheck = MIMETypeCheck::kStrict) const;
+  const String SheetText(const CSSParserContext*,
+                         MIMETypeCheck = MIMETypeCheck::kStrict) const;
 
   void DidAddClient(ResourceClient*) override;
 
-  StyleSheetContents* RestoreParsedStyleSheet(const CSSParserContext*);
+  StyleSheetContents* CreateParsedStyleSheetFromCache(const CSSParserContext*);
   void SaveParsedStyleSheet(StyleSheetContents*);
-
-  void AppendData(const char* data, size_t length) override;
 
  private:
   class CSSStyleSheetResourceFactory : public ResourceFactory {
@@ -79,7 +78,7 @@ class CORE_EXPORT CSSStyleSheetResource final : public StyleSheetResource {
                         const ResourceLoaderOptions&,
                         const TextResourceDecoderOptions&);
 
-  bool CanUseSheet(MIMETypeCheck) const;
+  bool CanUseSheet(const CSSParserContext*, MIMETypeCheck) const;
   void NotifyFinished() override;
 
   void SetParsedStyleSheetCache(StyleSheetContents*);
@@ -94,8 +93,6 @@ class CORE_EXPORT CSSStyleSheetResource final : public StyleSheetResource {
   String decoded_sheet_text_;
 
   Member<StyleSheetContents> parsed_style_sheet_cache_;
-
-  bool did_notify_first_data_;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(CSSStyleSheet);

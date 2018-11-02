@@ -10,11 +10,11 @@
 cr.define('bookmarks.ApiListener', function() {
 
   /** @type {boolean} */
-  var trackUpdates = false;
+  let trackUpdates = false;
   /** @type {!Array<string>} */
-  var updatedItems = [];
+  let updatedItems = [];
 
-  var debouncer;
+  let debouncer;
 
   /**
    * Batches UI updates so that no changes will be made to UI until the next
@@ -22,13 +22,17 @@ cr.define('bookmarks.ApiListener', function() {
    * can be called in a tight loop by UI actions.
    */
   function batchUIUpdates() {
-    if (!debouncer || debouncer.done()) {
-      bookmarks.Store.getInstance().beginBatchUpdate();
+    if (!debouncer) {
       debouncer = new bookmarks.Debouncer(
           () => bookmarks.Store.getInstance().endBatchUpdate());
     }
 
-    debouncer.resetTimeout();
+    if (debouncer.done()) {
+      bookmarks.Store.getInstance().beginBatchUpdate();
+      debouncer.reset();
+    }
+
+    debouncer.restartTimeout();
   }
 
   /**
@@ -91,7 +95,7 @@ cr.define('bookmarks.ApiListener', function() {
    */
   function onBookmarkRemoved(id, removeInfo) {
     batchUIUpdates();
-    var nodes = bookmarks.Store.getInstance().data.nodes;
+    const nodes = bookmarks.Store.getInstance().data.nodes;
     dispatch(bookmarks.actions.removeBookmark(
         id, removeInfo.parentId, removeInfo.index, nodes));
   }
@@ -152,7 +156,7 @@ cr.define('bookmarks.ApiListener', function() {
     dispatch(bookmarks.actions.setCanEditBookmarks(canEdit));
   }
 
-  var listeners = [
+  const listeners = [
     {api: chrome.bookmarks.onChanged, fn: onBookmarkChanged},
     {api: chrome.bookmarks.onChildrenReordered, fn: onChildrenReordered},
     {api: chrome.bookmarks.onCreated, fn: onBookmarkCreated},

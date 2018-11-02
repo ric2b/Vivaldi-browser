@@ -12,6 +12,7 @@
 #include "gin/public/isolate_holder.h"
 #include "services/data_decoder/image_decoder_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/InterfaceRegistry.h"
 #include "third_party/WebKit/public/platform/scheduler/child/webthread_base.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -75,7 +76,8 @@ class BlinkInitializer : public blink::Platform {
     gin::V8Initializer::LoadV8Natives();
 #endif
 
-    blink::Initialize(this);
+    blink::Initialize(this,
+                      blink::InterfaceRegistry::GetEmptyInterfaceRegistry());
   }
 
   ~BlinkInitializer() override {}
@@ -128,8 +130,8 @@ TEST_F(ImageDecoderImplTest, DecodeImageSizeLimit) {
     ASSERT_FALSE(request.bitmap().isNull());
 
     // Check that image has been shrunk appropriately
-    EXPECT_LT(request.bitmap().computeSize64() + base_msg_size,
-              kTestMaxImageSize);
+    EXPECT_LT(request.bitmap().computeByteSize() + base_msg_size,
+              static_cast<uint64_t>(kTestMaxImageSize));
 // Android does its own image shrinking for memory conservation deeper in
 // the decode, so more specific tests here won't work.
 #if !defined(OS_ANDROID)

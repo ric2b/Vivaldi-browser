@@ -75,23 +75,23 @@ void SettingsFunction::AsyncRunWithStorage(ValueStore* storage) {
 
 ExtensionFunction::ResponseValue SettingsFunction::UseReadResult(
     ValueStore::ReadResult result) {
-  if (!result->status().ok())
-    return Error(result->status().message);
+  if (!result.status().ok())
+    return Error(result.status().message);
 
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->Swap(&result->settings());
+  dict->Swap(&result.settings());
   return OneArgument(std::move(dict));
 }
 
 ExtensionFunction::ResponseValue SettingsFunction::UseWriteResult(
     ValueStore::WriteResult result) {
-  if (!result->status().ok())
-    return Error(result->status().message);
+  if (!result.status().ok())
+    return Error(result.status().message);
 
-  if (!result->changes().empty()) {
+  if (!result.changes().empty()) {
     observers_->Notify(FROM_HERE, &SettingsObserver::OnSettingsChanged,
                        extension_id(), settings_namespace_,
-                       ValueStoreChange::ToJson(result->changes()));
+                       ValueStoreChange::ToJson(result.changes()));
   }
 
   return NoArguments();
@@ -148,7 +148,7 @@ ExtensionFunction::ResponseValue StorageStorageAreaGetFunction::RunWithStorage(
   if (!args_->Get(0, &input))
     return BadMessage();
 
-  switch (input->GetType()) {
+  switch (input->type()) {
     case base::Value::Type::NONE:
       return UseReadResult(storage->Get());
 
@@ -169,14 +169,14 @@ ExtensionFunction::ResponseValue StorageStorageAreaGetFunction::RunWithStorage(
       base::DictionaryValue* as_dict =
           static_cast<base::DictionaryValue*>(input);
       ValueStore::ReadResult result = storage->Get(GetKeys(*as_dict));
-      if (!result->status().ok()) {
+      if (!result.status().ok()) {
         return UseReadResult(std::move(result));
       }
 
       base::DictionaryValue* with_default_values = as_dict->DeepCopy();
-      with_default_values->MergeDictionary(&result->settings());
-      return UseReadResult(ValueStore::MakeReadResult(
-          base::WrapUnique(with_default_values), result->status()));
+      with_default_values->MergeDictionary(&result.settings());
+      return UseReadResult(ValueStore::ReadResult(
+          base::WrapUnique(with_default_values), result.PassStatus()));
     }
 
     default:
@@ -192,7 +192,7 @@ StorageStorageAreaGetBytesInUseFunction::RunWithStorage(ValueStore* storage) {
 
   size_t bytes_in_use = 0;
 
-  switch (input->GetType()) {
+  switch (input->type()) {
     case base::Value::Type::NONE:
       bytes_in_use = storage->GetBytesInUse();
       break;
@@ -239,7 +239,7 @@ StorageStorageAreaRemoveFunction::RunWithStorage(ValueStore* storage) {
   if (!args_->Get(0, &input))
     return BadMessage();
 
-  switch (input->GetType()) {
+  switch (input->type()) {
     case base::Value::Type::STRING: {
       std::string as_string;
       input->GetAsString(&as_string);

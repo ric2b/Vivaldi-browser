@@ -7,14 +7,14 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/output/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
-#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -34,22 +34,20 @@ class TestLayerTreeFrameSinkClient {
 
   // This passes the ContextProvider being used by LayerTreeHostImpl which
   // can be used for the OutputSurface optionally.
-  virtual std::unique_ptr<cc::OutputSurface> CreateDisplayOutputSurface(
+  virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurface(
       scoped_refptr<ContextProvider> compositor_context_provider) = 0;
 
   virtual void DisplayReceivedLocalSurfaceId(
       const LocalSurfaceId& local_surface_id) = 0;
-  virtual void DisplayReceivedCompositorFrame(
-      const cc::CompositorFrame& frame) = 0;
-  virtual void DisplayWillDrawAndSwap(
-      bool will_draw_and_swap,
-      const cc::RenderPassList& render_passes) = 0;
+  virtual void DisplayReceivedCompositorFrame(const CompositorFrame& frame) = 0;
+  virtual void DisplayWillDrawAndSwap(bool will_draw_and_swap,
+                                      const RenderPassList& render_passes) = 0;
   virtual void DisplayDidDrawAndSwap() = 0;
 };
 
 // LayerTreeFrameSink that owns and forwards frames to a Display.
 class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
-                               public CompositorFrameSinkSupportClient,
+                               public mojom::CompositorFrameSinkClient,
                                public DisplayClient,
                                public ExternalBeginFrameSourceClient {
  public:
@@ -75,6 +73,11 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
     enlarge_pass_texture_amount_ = s;
   }
 
+  // Forward the color space to the existant Display, or the new one when it is
+  // created.
+  void SetDisplayColorSpace(const gfx::ColorSpace& blending_color_space,
+                            const gfx::ColorSpace& output_color_space);
+
   Display* display() const { return display_.get(); }
 
   // Will be included with the next SubmitCompositorFrame.
@@ -84,23 +87,26 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) override;
-  void SubmitCompositorFrame(cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(CompositorFrame frame) override;
   void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
-  // CompositorFrameSinkSupportClient implementation.
+  // mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<ReturnedResource>& resources) override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
   void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<ReturnedResource>& resources) override;
-  void WillDrawSurface(const LocalSurfaceId& local_surface_id,
-                       const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
   // DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              const cc::RenderPassList& render_passes) override;
+                              const RenderPassList& render_passes) override;
   void DisplayDidDrawAndSwap() override;
 
  private:
@@ -124,6 +130,8 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   LocalSurfaceId local_surface_id_;
   gfx::Size display_size_;
   float device_scale_factor_ = 0;
+  gfx::ColorSpace blending_color_space_ = gfx::ColorSpace::CreateSRGB();
+  gfx::ColorSpace output_color_space_ = gfx::ColorSpace::CreateSRGB();
 
   // Uses surface_manager_.
   std::unique_ptr<CompositorFrameSinkSupport> support_;

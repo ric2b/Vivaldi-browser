@@ -17,10 +17,10 @@
 #include "base/threading/thread_checker.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_service_client.h"
-#include "components/metrics/profiler/tracking_synchronizer_observer.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/ukm/observers/history_delete_observer.h"
 #include "components/ukm/observers/sync_disable_observer.h"
+#import "ios/chrome/browser/metrics/incognito_web_state_observer.h"
 #include "ios/web/public/web_state/global_web_state_observer.h"
 
 class IOSChromeStabilityMetricsProvider;
@@ -33,7 +33,6 @@ class ChromeBrowserState;
 namespace metrics {
 class MetricsService;
 class MetricsStateManager;
-class ProfilerMetricsProvider;
 }  // namespace metrics
 
 namespace ukm {
@@ -42,12 +41,11 @@ class UkmService;
 
 // IOSChromeMetricsServiceClient provides an implementation of
 // MetricsServiceClient that depends on //ios/chrome/.
-class IOSChromeMetricsServiceClient
-    : public metrics::MetricsServiceClient,
-      public metrics::TrackingSynchronizerObserver,
-      public ukm::HistoryDeleteObserver,
-      public ukm::SyncDisableObserver,
-      public web::GlobalWebStateObserver {
+class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
+                                      public metrics::MetricsServiceClient,
+                                      public ukm::HistoryDeleteObserver,
+                                      public ukm::SyncDisableObserver,
+                                      public web::GlobalWebStateObserver {
  public:
   ~IOSChromeMetricsServiceClient() override;
 
@@ -70,6 +68,7 @@ class IOSChromeMetricsServiceClient
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       base::StringPiece server_url,
+      base::StringPiece insecure_server_url,
       base::StringPiece mime_type,
       metrics::MetricsLogUploader::MetricServiceType service_type,
       const metrics::MetricsLogUploader::UploadCallback& on_upload_complete)
@@ -88,6 +87,10 @@ class IOSChromeMetricsServiceClient
   void WebStateDidStartLoading(web::WebState* web_state) override;
   void WebStateDidStopLoading(web::WebState* web_state) override;
 
+  // IncognitoWebStateObserver:
+  void OnIncognitoWebStateAdded() override;
+  void OnIncognitoWebStateRemoved() override;
+
   metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
 
  private:
@@ -96,18 +99,6 @@ class IOSChromeMetricsServiceClient
 
   // Completes the two-phase initialization of IOSChromeMetricsServiceClient.
   void Initialize();
-
-  // Returns true iff profiler data should be included in the next metrics log.
-  // NOTE: This method is probabilistic and also updates internal state as a
-  // side-effect when called, so it should only be called once per log.
-  bool ShouldIncludeProfilerDataInLog();
-
-  // TrackingSynchronizerObserver:
-  void ReceivedProfilerData(
-      const metrics::ProfilerDataAttributes& attributes,
-      const tracked_objects::ProcessDataPhaseSnapshot& process_data_phase,
-      const metrics::ProfilerEvents& past_profiler_events) override;
-  void FinishedReceivingProfilerData() override;
 
   // Callbacks for various stages of final log info collection. Do not call
   // these directly.
@@ -146,15 +137,8 @@ class IOSChromeMetricsServiceClient
   // Saved callback received from CollectFinalMetricsForLog().
   base::Closure collect_final_metrics_done_callback_;
 
-  // The ProfilerMetricsProvider instance that was registered with
-  // MetricsService. Has the same lifetime as |metrics_service_|.
-  metrics::ProfilerMetricsProvider* profiler_metrics_provider_;
-
   // Callback that is called when initial metrics gathering is complete.
   base::Closure finished_init_task_callback_;
-
-  // Time of this object's creation.
-  const base::TimeTicks start_time_;
 
   // Subscription for receiving callbacks that a tab was parented.
   std::unique_ptr<base::CallbackList<void(web::WebState*)>::Subscription>
@@ -164,10 +148,6 @@ class IOSChromeMetricsServiceClient
   // omnibox.
   std::unique_ptr<base::CallbackList<void(OmniboxLog*)>::Subscription>
       omnibox_url_opened_subscription_;
-
-  // Whether this client has already uploaded profiler data during this session.
-  // Profiler data is uploaded at most once per session.
-  bool has_uploaded_profiler_data_;
 
   base::WeakPtrFactory<IOSChromeMetricsServiceClient> weak_ptr_factory_;
 

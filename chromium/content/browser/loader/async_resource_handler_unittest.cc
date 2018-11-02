@@ -50,6 +50,7 @@
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -158,47 +159,47 @@ class AsyncResourceHandlerTest : public ::testing::Test,
 
   void CreateRequestWithResponseDataSize(size_t response_data_size) {
     test_job_factory_.SetProtocolHandler(
-        "test", base::MakeUnique<TestProtocolHandler>(response_data_size));
+        "test", std::make_unique<TestProtocolHandler>(response_data_size));
     context_.set_job_factory(&test_job_factory_);
     context_.Init();
     std::unique_ptr<net::URLRequest> request =
         context_.CreateRequest(GURL("test:test"), net::DEFAULT_PRIORITY,
                                nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
-    resource_context_ = base::MakeUnique<MockResourceContext>(&context_);
+    resource_context_ = std::make_unique<MockResourceContext>(&context_);
     filter_ =
         new RecordingResourceMessageFilter(resource_context_.get(), &context_);
     ResourceRequestInfoImpl* info = new ResourceRequestInfoImpl(
         filter_->requester_info_for_test(),
-        0,                                      // route_id
-        -1,                                     // frame_tree_node_id
-        0,                                      // origin_pid
-        0,                                      // request_id
-        0,                                      // render_frame_id
-        false,                                  // is_main_frame
-        false,                                  // parent_is_main_frame
-        RESOURCE_TYPE_IMAGE,                    // resource_type
-        ui::PAGE_TRANSITION_LINK,               // transition_type
-        false,                                  // should_replace_current_entry
-        false,                                  // is_download
-        false,                                  // is_stream
-        false,                                  // allow_download
-        false,                                  // has_user_gesture
-        false,                                  // enable load timing
-        false,                                  // enable upload progress
-        false,                                  // do_not_prompt_for_login
-        blink::kWebReferrerPolicyDefault,       // referrer_policy
-        blink::kWebPageVisibilityStateVisible,  // visibility_state
-        resource_context_.get(),                // context
-        false,                                  // report_raw_headers
-        true,                                   // is_async
-        PREVIEWS_OFF,                           // previews_state
-        nullptr,                                // body
-        false);                                 // initiated_in_secure_context
+        0,                                 // route_id
+        -1,                                // frame_tree_node_id
+        0,                                 // origin_pid
+        0,                                 // request_id
+        0,                                 // render_frame_id
+        false,                             // is_main_frame
+        RESOURCE_TYPE_IMAGE,               // resource_type
+        ui::PAGE_TRANSITION_LINK,          // transition_type
+        false,                             // should_replace_current_entry
+        false,                             // is_download
+        false,                             // is_stream
+        false,                             // allow_download
+        false,                             // has_user_gesture
+        false,                             // enable load timing
+        false,                             // enable upload progress
+        false,                             // do_not_prompt_for_login
+        false,                             // keep_alive
+        blink::kWebReferrerPolicyDefault,  // referrer_policy
+        blink::mojom::PageVisibilityState::kVisible,  // visibility_state
+        resource_context_.get(),                      // context
+        false,                                        // report_raw_headers
+        true,                                         // is_async
+        PREVIEWS_OFF,                                 // previews_state
+        nullptr,                                      // body
+        false);  // initiated_in_secure_context
     info->AssociateWithRequest(request.get());
     std::unique_ptr<AsyncResourceHandler> handler =
-        base::MakeUnique<AsyncResourceHandler>(request.get(), &rdh_);
-    loader_ = base::MakeUnique<ResourceLoader>(
-        std::move(request), std::move(handler), this);
+        std::make_unique<AsyncResourceHandler>(request.get(), &rdh_);
+    loader_ = std::make_unique<ResourceLoader>(std::move(request),
+                                               std::move(handler), this);
   }
 
   void StartRequestAndWaitWithResponseDataSize(size_t response_data_size) {
@@ -267,12 +268,10 @@ TEST_F(AsyncResourceHandlerTest, OneChunkLengths) {
   ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[3]->type());
   ResourceMsg_RequestComplete::Param completion_params;
   ResourceMsg_RequestComplete::Read(messages[3].get(), &completion_params);
-  ResourceRequestCompletionStatus completion_status =
-      std::get<1>(completion_params);
+  network::URLLoaderCompletionStatus status = std::get<1>(completion_params);
 
-  EXPECT_EQ(TotalReceivedBytes(kDataSize),
-            completion_status.encoded_data_length);
-  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
+  EXPECT_EQ(TotalReceivedBytes(kDataSize), status.encoded_data_length);
+  EXPECT_EQ(kDataSize, status.encoded_body_length);
 }
 
 TEST_F(AsyncResourceHandlerTest, TwoChunksLengths) {
@@ -297,11 +296,9 @@ TEST_F(AsyncResourceHandlerTest, TwoChunksLengths) {
   ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[4]->type());
   ResourceMsg_RequestComplete::Param completion_params;
   ResourceMsg_RequestComplete::Read(messages[4].get(), &completion_params);
-  ResourceRequestCompletionStatus completion_status =
-      std::get<1>(completion_params);
-  EXPECT_EQ(TotalReceivedBytes(kDataSize),
-            completion_status.encoded_data_length);
-  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
+  network::URLLoaderCompletionStatus status = std::get<1>(completion_params);
+  EXPECT_EQ(TotalReceivedBytes(kDataSize), status.encoded_data_length);
+  EXPECT_EQ(kDataSize, status.encoded_body_length);
 }
 
 }  // namespace

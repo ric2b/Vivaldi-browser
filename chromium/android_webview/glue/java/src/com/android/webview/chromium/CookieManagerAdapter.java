@@ -12,14 +12,12 @@ import android.webkit.WebView;
 
 import org.chromium.android_webview.AwCookieManager;
 import org.chromium.base.Log;
-import org.chromium.base.annotations.SuppressFBWarnings;
 
 /**
  * Chromium implementation of CookieManager -- forwards calls to the
  * chromium internal implementation.
  */
-@SuppressWarnings("deprecation")
-@SuppressFBWarnings("CHROMIUM_SYNCHRONIZED_METHOD")
+@SuppressWarnings({"deprecation", "NoSynchronizedMethodCheck"})
 public class CookieManagerAdapter extends CookieManager {
     private static final String TAG = "CookieManager";
 
@@ -71,7 +69,8 @@ public class CookieManagerAdapter extends CookieManager {
         }
 
         try {
-            mChromeCookieManager.setCookie(fixupUrl(url), value, callback);
+            mChromeCookieManager.setCookie(
+                    fixupUrl(url), value, CallbackConverter.fromValueCallback(callback));
         } catch (ParseException e) {
             Log.e(TAG, "Not setting cookie due to error parsing URL: %s", url, e);
         }
@@ -109,8 +108,8 @@ public class CookieManagerAdapter extends CookieManager {
     }
 
     @Override
-    public void removeSessionCookies(ValueCallback<Boolean> callback) {
-        mChromeCookieManager.removeSessionCookies(callback);
+    public void removeSessionCookies(final ValueCallback<Boolean> callback) {
+        mChromeCookieManager.removeSessionCookies(CallbackConverter.fromValueCallback(callback));
     }
 
     @Override
@@ -119,8 +118,8 @@ public class CookieManagerAdapter extends CookieManager {
     }
 
     @Override
-    public void removeAllCookies(ValueCallback<Boolean> callback) {
-        mChromeCookieManager.removeAllCookies(callback);
+    public void removeAllCookies(final ValueCallback<Boolean> callback) {
+        mChromeCookieManager.removeAllCookies(CallbackConverter.fromValueCallback(callback));
     }
 
     @Override

@@ -14,6 +14,7 @@
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_record.h"
+#include "cc/paint/paint_text_blob.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
 namespace cc {
@@ -58,8 +59,6 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
                  SkClipOp op,
                  bool do_anti_alias) override;
   void clipPath(const SkPath& path, SkClipOp op, bool do_anti_alias) override;
-  bool quickReject(const SkRect& rect) const override;
-  bool quickReject(const SkPath& path) const override;
   SkRect getLocalClipBounds() const override;
   bool getLocalClipBounds(SkRect* bounds) const override;
   SkIRect getDeviceClipBounds() const override;
@@ -98,7 +97,7 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
                   SkScalar top,
                   const PaintFlags* flags) override;
 
-  void drawTextBlob(sk_sp<SkTextBlob> blob,
+  void drawTextBlob(scoped_refptr<PaintTextBlob> blob,
                     SkScalar x,
                     SkScalar y,
                     const PaintFlags& flags) override;

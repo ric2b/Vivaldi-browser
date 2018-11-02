@@ -4,11 +4,15 @@
 
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
 
+#include <string>
+
 namespace subresource_filter {
 
 ActivationList GetListForThreatTypeAndMetadata(
     safe_browsing::SBThreatType threat_type,
-    const safe_browsing::ThreatMetadata& threat_type_metadata) {
+    const safe_browsing::ThreatMetadata& threat_type_metadata,
+    bool* warning) {
+  DCHECK(warning);
   bool is_phishing_interstitial =
       (threat_type == safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
   bool is_soc_engineering_ads_interstitial =
@@ -22,18 +26,16 @@ ActivationList GetListForThreatTypeAndMetadata(
     }
     return ActivationList::PHISHING_INTERSTITIAL;
   } else if (subresource_filter) {
-    switch (threat_type_metadata.threat_pattern_type) {
-      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_BETTER_ADS:
-        return ActivationList::BETTER_ADS;
-      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ABUSIVE_ADS:
-        return ActivationList::ABUSIVE_ADS;
-      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ALL_ADS:
-        return ActivationList::ALL_ADS;
-      case safe_browsing::ThreatPatternType::NONE:
-        return ActivationList::SUBRESOURCE_FILTER;
-      default:
-        break;
+    auto it = threat_type_metadata.subresource_filter_match.find(
+        safe_browsing::SubresourceFilterType::BETTER_ADS);
+    if (it != threat_type_metadata.subresource_filter_match.end()) {
+      *warning = it->second == safe_browsing::SubresourceFilterLevel::WARN;
+      return ActivationList::BETTER_ADS;
     }
+    // Keep a generic subresource_filter list without warning implemented, for
+    // subresource filter matches with no metadata.
+    if (threat_type_metadata.subresource_filter_match.empty())
+      return ActivationList::SUBRESOURCE_FILTER;
   }
 
   return ActivationList::NONE;

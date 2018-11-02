@@ -5,6 +5,7 @@
 #ifndef V0CustomElementMicrotaskQueueBase_h
 #define V0CustomElementMicrotaskQueueBase_h
 
+#include "base/macros.h"
 #include "core/html/custom/V0CustomElementMicrotaskStep.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
@@ -13,15 +14,13 @@ namespace blink {
 
 class V0CustomElementMicrotaskQueueBase
     : public GarbageCollectedFinalized<V0CustomElementMicrotaskQueueBase> {
-  WTF_MAKE_NONCOPYABLE(V0CustomElementMicrotaskQueueBase);
-
  public:
   virtual ~V0CustomElementMicrotaskQueueBase() {}
 
   bool IsEmpty() const { return queue_.IsEmpty(); }
   void Dispatch();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
 #if !defined(NDEBUG)
   void Show(unsigned indent);
@@ -33,6 +32,8 @@ class V0CustomElementMicrotaskQueueBase
 
   HeapVector<Member<V0CustomElementMicrotaskStep>> queue_;
   bool in_dispatch_;
+
+  DISALLOW_COPY_AND_ASSIGN(V0CustomElementMicrotaskQueueBase);
 };
 
 }  // namespace blink

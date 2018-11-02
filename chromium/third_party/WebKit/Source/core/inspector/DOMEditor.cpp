@@ -30,8 +30,10 @@
 
 #include "core/inspector/DOMEditor.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMException.h"
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
 #include "core/dom/Text.h"
@@ -39,7 +41,6 @@
 #include "core/inspector/DOMPatchSupport.h"
 #include "core/inspector/InspectorHistory.h"
 #include "core/inspector/protocol/Protocol.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -70,7 +71,7 @@ class DOMEditor::RemoveChildAction final : public InspectorHistory::Action {
     return !exception_state.HadException();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(parent_node_);
     visitor->Trace(node_);
     visitor->Trace(anchor_node_);
@@ -122,7 +123,7 @@ class DOMEditor::InsertBeforeAction final : public InspectorHistory::Action {
     return !exception_state.HadException();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(parent_node_);
     visitor->Trace(node_);
     visitor->Trace(anchor_node_);
@@ -161,7 +162,7 @@ class DOMEditor::RemoveAttributeAction final : public InspectorHistory::Action {
     return true;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(element_);
     InspectorHistory::Action::Trace(visitor);
   }
@@ -206,7 +207,7 @@ class DOMEditor::SetAttributeAction final : public InspectorHistory::Action {
     return true;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(element_);
     InspectorHistory::Action::Trace(visitor);
   }
@@ -234,9 +235,12 @@ class DOMEditor::SetOuterHTMLAction final : public InspectorHistory::Action {
 
   bool Perform(ExceptionState& exception_state) override {
     old_html_ = CreateMarkup(node_.Get());
-    DCHECK(node_->ownerDocument());
-    DOMPatchSupport dom_patch_support(dom_editor_.Get(),
-                                      *node_->ownerDocument());
+    Document* document =
+        node_->IsDocumentNode() ? ToDocument(node_) : node_->ownerDocument();
+    DCHECK(document);
+    if (!document->documentElement())
+      return false;
+    DOMPatchSupport dom_patch_support(dom_editor_.Get(), *document);
     new_node_ =
         dom_patch_support.PatchNode(node_.Get(), html_, exception_state);
     return !exception_state.HadException();
@@ -252,7 +256,7 @@ class DOMEditor::SetOuterHTMLAction final : public InspectorHistory::Action {
 
   Node* NewNode() { return new_node_; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(node_);
     visitor->Trace(next_sibling_);
     visitor->Trace(new_node_);
@@ -296,7 +300,7 @@ class DOMEditor::ReplaceWholeTextAction final
     return true;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(text_node_);
     InspectorHistory::Action::Trace(visitor);
   }
@@ -334,7 +338,7 @@ class DOMEditor::ReplaceChildNodeAction final
     return !exception_state.HadException();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(parent_node_);
     visitor->Trace(new_node_);
     visitor->Trace(old_node_);
@@ -369,7 +373,7 @@ class DOMEditor::SetNodeValueAction final : public InspectorHistory::Action {
     return true;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(node_);
     InspectorHistory::Action::Trace(visitor);
   }
@@ -497,7 +501,7 @@ Response DOMEditor::ReplaceWholeText(Text* text_node, const String& text) {
   return ToResponse(exception_state);
 }
 
-DEFINE_TRACE(DOMEditor) {
+void DOMEditor::Trace(blink::Visitor* visitor) {
   visitor->Trace(history_);
 }
 

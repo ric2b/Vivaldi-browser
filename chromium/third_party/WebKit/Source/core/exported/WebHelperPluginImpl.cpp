@@ -34,6 +34,7 @@
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLObjectElement.h"
+#include "public/platform/TaskType.h"
 #include "public/web/WebPlugin.h"
 
 namespace blink {
@@ -45,12 +46,9 @@ WebHelperPlugin* WebHelperPlugin::Create(const WebString& plugin_type,
   WebHelperPluginUniquePtr plugin(new WebHelperPluginImpl());
   if (!ToWebHelperPluginImpl(plugin.get())
            ->Initialize(plugin_type, ToWebLocalFrameImpl(frame)))
-    return 0;
+    return nullptr;
   return plugin.release();
 }
-
-WebHelperPluginImpl::WebHelperPluginImpl()
-    : destruction_timer_(this, &WebHelperPluginImpl::ReallyDestroy) {}
 
 bool WebHelperPluginImpl::Initialize(const String& plugin_type,
                                      WebLocalFrameImpl* frame) {
@@ -77,7 +75,7 @@ bool WebHelperPluginImpl::Initialize(const String& plugin_type,
   return !GetPlugin()->IsPlaceholder();
 }
 
-void WebHelperPluginImpl::ReallyDestroy(TimerBase*) {
+void WebHelperPluginImpl::ReallyDestroy() {
   if (plugin_container_)
     plugin_container_->Dispose();
   delete this;
@@ -85,12 +83,15 @@ void WebHelperPluginImpl::ReallyDestroy(TimerBase*) {
 
 void WebHelperPluginImpl::Destroy() {
   // Defer deletion so we don't do too much work when called via
-  // stopSuspendableObjects().
+  // stopPausableObjects().
   // FIXME: It's not clear why we still need this. The original code held a
   // Page and a WebFrame, and destroying it would cause JavaScript triggered by
-  // frame detach to run, which isn't allowed inside stopSuspendableObjects().
+  // frame detach to run, which isn't allowed inside stopPausableObjects().
   // Removing this causes one Chrome test to fail with a timeout.
-  destruction_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  object_element_->GetDocument()
+      .GetTaskRunner(TaskType::kUnspecedTimer)
+      ->PostTask(BLINK_FROM_HERE, WTF::Bind(&WebHelperPluginImpl::ReallyDestroy,
+                                            WTF::Unretained(this)));
 }
 
 WebPlugin* WebHelperPluginImpl::GetPlugin() {

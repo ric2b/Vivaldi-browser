@@ -12,6 +12,7 @@
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/LengthFunctions.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -138,7 +139,7 @@ void CSSLengthInterpolationType::Composite(
   LengthInterpolationFunctions::Composite(
       underlying.interpolable_value, underlying.non_interpolable_value,
       underlying_fraction, *value.interpolable_value,
-      value.non_interpolable_value.Get());
+      value.non_interpolable_value.get());
 }
 
 void CSSLengthInterpolationType::ApplyStandardPropertyValue(
@@ -158,7 +159,7 @@ void CSSLengthInterpolationType::ApplyStandardPropertyValue(
     Length before;
     Length after;
     DCHECK(LengthPropertyFunctions::GetLength(CssProperty(), style, before));
-    StyleBuilder::ApplyProperty(CssProperty(), state,
+    StyleBuilder::ApplyProperty(GetProperty().GetCSSProperty(), state,
                                 *CSSValue::Create(length, zoom));
     DCHECK(LengthPropertyFunctions::GetLength(CssProperty(), style, after));
     DCHECK(before.IsSpecified());
@@ -170,7 +171,7 @@ void CSSLengthInterpolationType::ApplyStandardPropertyValue(
 #endif
     return;
   }
-  StyleBuilder::ApplyProperty(CssProperty(), state,
+  StyleBuilder::ApplyProperty(GetProperty().GetCSSProperty(), state,
                               *CSSValue::Create(length, zoom));
 }
 

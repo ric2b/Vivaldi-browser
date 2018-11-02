@@ -11,24 +11,19 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/plugins/plugin_installer.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
-#include "chrome/common/features.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/browser_resources.h"
-#include "components/prefs/pref_registry_simple.h"
-#include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/plugin_service.h"
+#include "content/public/common/webplugininfo.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
 using base::DictionaryValue;
-using content::PluginService;
 
 namespace {
 
@@ -148,23 +143,17 @@ void RecordBuiltInPluginListError(PluginListError error_code) {
 }  // namespace
 
 // static
-void PluginFinder::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kDisablePluginFinder, false);
-}
-
-// static
 PluginFinder* PluginFinder::GetInstance() {
-  // PluginFinder::GetInstance() is the only method that's allowed to call
-  // base::Singleton<PluginFinder>::get().
-  return base::Singleton<PluginFinder>::get();
+  static PluginFinder* instance = new PluginFinder();
+  return instance;
 }
 
 PluginFinder::PluginFinder() : version_(-1) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void PluginFinder::Init() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Load the built-in plugin list first. If we have a newer version stored
   // locally or download one, we will replace this one with it.
   std::unique_ptr<base::DictionaryValue> plugin_list(LoadBuiltInPluginList());
@@ -179,9 +168,9 @@ void PluginFinder::Init() {
 }
 
 // static
-base::DictionaryValue* PluginFinder::LoadBuiltInPluginList() {
+std::unique_ptr<base::DictionaryValue> PluginFinder::LoadBuiltInPluginList() {
   base::StringPiece json_resource(
-      ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           IDR_PLUGIN_DB_JSON));
   std::string error_str;
   int error_code = base::JSONReader::JSON_NO_ERROR;
@@ -225,7 +214,7 @@ base::DictionaryValue* PluginFinder::LoadBuiltInPluginList() {
     return nullptr;
   }
 
-  if (value->GetType() != base::Value::Type::DICTIONARY) {
+  if (value->type() != base::Value::Type::DICTIONARY) {
     // JSONReader::JSON_PARSE_ERROR_COUNT is used for the case where the JSON
     // value has the wrong type.
     RecordBuiltInPluginListError(PluginListError::SCHEMA_ERROR);
@@ -234,34 +223,10 @@ base::DictionaryValue* PluginFinder::LoadBuiltInPluginList() {
 
   DCHECK_EQ(base::JSONReader::JSON_NO_ERROR, error_code);
   RecordBuiltInPluginListError(PluginListError::PLUGIN_LIST_NO_ERROR);
-  return static_cast<base::DictionaryValue*>(value.release());
+  return base::DictionaryValue::From(std::move(value));
 }
 
 PluginFinder::~PluginFinder() {
-}
-
-bool PluginFinder::FindPlugin(
-    const std::string& mime_type,
-    const std::string& language,
-    PluginInstaller** installer,
-    std::unique_ptr<PluginMetadata>* plugin_metadata) {
-  if (g_browser_process->local_state()->GetBoolean(prefs::kDisablePluginFinder))
-    return false;
-
-  base::AutoLock lock(mutex_);
-  auto metadata_it = identifier_plugin_.begin();
-  for (; metadata_it != identifier_plugin_.end(); ++metadata_it) {
-    if (language == metadata_it->second->language() &&
-        metadata_it->second->HasMimeType(mime_type)) {
-      *plugin_metadata = metadata_it->second->Clone();
-
-      auto installer_it = installers_.find(metadata_it->second->identifier());
-      DCHECK(installer_it != installers_.end());
-      *installer = installer_it->second.get();
-      return true;
-    }
-  }
-  return false;
 }
 
 bool PluginFinder::FindPluginWithIdentifier(
@@ -293,16 +258,14 @@ void PluginFinder::ReinitializePlugins(
     return;
 
   version_ = version;
-  // NOTE(andre@vivald.com) : This is built below and should be cleared
-  // beforehand.
   identifier_plugin_.clear();
 
   for (base::DictionaryValue::Iterator plugin_it(*plugin_list);
       !plugin_it.IsAtEnd(); plugin_it.Advance()) {
-    const base::DictionaryValue* plugin = NULL;
+    const base::DictionaryValue* plugin = nullptr;
     const std::string& identifier = plugin_it.key();
     if (plugin_list->GetDictionaryWithoutPathExpansion(identifier, &plugin)) {
-      DCHECK(identifier_plugin_.find(identifier) == identifier_plugin_.end());
+      //DCHECK(identifier_plugin_.find(identifier) == identifier_plugin_.end());
       identifier_plugin_[identifier] = CreatePluginMetadata(identifier, plugin);
 
       if (installers_.find(identifier) == installers_.end())

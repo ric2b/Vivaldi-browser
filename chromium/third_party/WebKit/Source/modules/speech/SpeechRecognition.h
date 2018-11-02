@@ -26,12 +26,12 @@
 #ifndef SpeechRecognition_h
 #define SpeechRecognition_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "modules/speech/SpeechGrammarList.h"
 #include "modules/speech/SpeechRecognitionResult.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Compiler.h"
 #include "platform/wtf/text/WTFString.h"
@@ -41,7 +41,6 @@ namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
-class MediaStreamTrack;
 class Page;
 class SpeechRecognitionController;
 class SpeechRecognitionError;
@@ -72,10 +71,6 @@ class MODULES_EXPORT SpeechRecognition final
   unsigned maxAlternatives() { return max_alternatives_; }
   void setMaxAlternatives(unsigned max_alternatives) {
     max_alternatives_ = max_alternatives;
-  }
-  MediaStreamTrack* audioTrack() { return audio_track_; }
-  void setAudioTrack(MediaStreamTrack* audio_track) {
-    audio_track_ = audio_track;
   }
 
   // Callable by the user.
@@ -121,13 +116,12 @@ class MODULES_EXPORT SpeechRecognition final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(start);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(end);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   SpeechRecognition(Page*, ExecutionContext*);
 
   Member<SpeechGrammarList> grammars_;
-  Member<MediaStreamTrack> audio_track_;
   String lang_;
   bool continuous_;
   bool interim_results_;

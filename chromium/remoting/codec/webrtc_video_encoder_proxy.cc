@@ -15,7 +15,7 @@ class WebrtcVideoEncoderProxy::Core {
   Core(std::unique_ptr<WebrtcVideoEncoder> encoder)
       : encoder_(std::move(encoder)),
         main_task_runner_(base::SequencedTaskRunnerHandle::Get()) {}
-  ~Core() {}
+  ~Core() = default;
 
   void Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
               const FrameParams& params,
@@ -27,9 +27,10 @@ class WebrtcVideoEncoderProxy::Core {
 
  private:
   void OnEncoded(EncodeCallback done,
+                 EncodeResult result,
                  std::unique_ptr<WebrtcVideoEncoder::EncodedFrame> frame) {
     main_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(std::move(done), std::move(frame)));
+        FROM_HERE, base::BindOnce(std::move(done), result, std::move(frame)));
   }
 
   std::unique_ptr<WebrtcVideoEncoder> encoder_;
@@ -62,8 +63,9 @@ void WebrtcVideoEncoderProxy::Encode(
 
 void WebrtcVideoEncoderProxy::OnEncoded(
     EncodeCallback done,
+    EncodeResult result,
     std::unique_ptr<WebrtcVideoEncoder::EncodedFrame> frame) {
-  std::move(done).Run(std::move(frame));
+  std::move(done).Run(result, std::move(frame));
 }
 
 }  // namespace remoting

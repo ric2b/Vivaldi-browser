@@ -15,6 +15,7 @@ dictionary TestDictionary {
     TestInterfaceGarbageCollected testInterfaceGarbageCollectedMember;
     TestInterfaceGarbageCollected? testInterfaceGarbageCollectedOrNullMember;
     sequence<DOMString> stringSequenceMember = [];
+    sequence<[TreatNullAs=EmptyString] DOMString> treatNullAsStringSequenceMember = [];
     sequence<TestInterface> testInterfaceSequenceMember = [];
     sequence<TestObject> testObjectSequenceMember;
     sequence<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedSequenceMember = [];
@@ -37,10 +38,14 @@ dictionary TestDictionary {
     any anyMember = null;
     Dictionary dictionaryMember;
     [RuntimeEnabled=RuntimeFeature] boolean runtimeMember;
-    [PrefixGet] object prefixGetMember;
+    [RuntimeEnabled=RuntimeFeature] boolean runtimeSecondMember;
+    [OriginTrialEnabled=FeatureName] boolean originTrialMember;
+    [OriginTrialEnabled=FeatureName1] boolean originTrialSecondMember;
     record<ByteString, byte> recordMember;
     record<USVString, TestObject> garbageCollectedRecordMember;
     record<ByteString, (long or boolean)> unionInRecordMember;
     record<DOMString, any> anyInRecordMember;
     (Float or BooleanType) unionWithTypedefs;
+    [Clamp] long applicableToTypeLongMember;
+    [TreatNullAs=EmptyString] DOMString applicableToTypeStringMember;
 };

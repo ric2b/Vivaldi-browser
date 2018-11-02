@@ -30,9 +30,9 @@ class CONTENT_EXPORT DOMStorageMap
   unsigned Length() const;
   base::NullableString16 Key(unsigned index);
 
-  // Sets and removes items from the storage. |old_value| is only valid if
-  // |has_only_keys| is false. |old_value| is not accessed or modified when
-  // |has_only_keys|.
+  // Sets and removes items from the storage. Old value is wriiten into
+  // |old_value| if it's not null and |has_only_keys| is false. |old_value| is
+  // not accessed or modified when |has_only_keys|.
   bool SetItem(const base::string16& key, const base::string16& value,
                base::NullableString16* old_value);
   bool RemoveItem(const base::string16& key, base::string16* old_value);
@@ -52,14 +52,15 @@ class CONTENT_EXPORT DOMStorageMap
 
   // Stores the keys and sizes of values from |map| to |keys_only_|. Use only
   // when |has_only_keys| is true. This method does not do quota checking.
-  void TakeKeysFrom(const DOMStorageValuesMap* map);
+  void TakeKeysFrom(const DOMStorageValuesMap& map);
 
   // Creates a new instance of DOMStorageMap containing
   // a deep copy of the map.
   DOMStorageMap* DeepCopy() const;
 
-  size_t bytes_used() const { return bytes_used_; }
-  size_t memory_usage() const { return memory_usage_; }
+  const DOMStorageValuesMap& keys_values() const { return keys_values_; }
+  size_t storage_used() const { return storage_used_; }
+  size_t memory_used() const { return memory_used_; }
   size_t quota() const { return quota_; }
   void set_quota(size_t quota) { quota_ = quota; }
   bool has_only_keys() const { return has_only_keys_; }
@@ -77,7 +78,7 @@ class CONTENT_EXPORT DOMStorageMap
   template <typename MapType>
   bool SetItemInternal(MapType* map_type,
                        const base::string16& key,
-                       typename MapType::mapped_type value,
+                       const typename MapType::mapped_type& value,
                        typename MapType::mapped_type* old_value);
   template <typename MapType>
   bool RemoveItemInternal(MapType* map_type,
@@ -94,8 +95,8 @@ class CONTENT_EXPORT DOMStorageMap
   DOMStorageValuesMap::const_iterator keys_values_iterator_;
   KeysMap::const_iterator keys_only_iterator_;
   unsigned last_key_index_;
-  size_t bytes_used_;
-  size_t memory_usage_;
+  size_t storage_used_;
+  size_t memory_used_;
   size_t quota_;
   const bool has_only_keys_;
 };

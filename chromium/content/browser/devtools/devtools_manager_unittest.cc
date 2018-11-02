@@ -39,10 +39,7 @@ namespace {
 
 class TestDevToolsClientHost : public DevToolsAgentHostClient {
  public:
-  TestDevToolsClientHost()
-      : last_sent_message(NULL),
-        closed_(false) {
-  }
+  TestDevToolsClientHost() : last_sent_message(nullptr), closed_(false) {}
 
   ~TestDevToolsClientHost() override { EXPECT_TRUE(closed_); }
 
@@ -53,9 +50,7 @@ class TestDevToolsClientHost : public DevToolsAgentHostClient {
     closed_ = true;
   }
 
-  void AgentHostClosed(DevToolsAgentHost* agent_host, bool replaced) override {
-    FAIL();
-  }
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override { FAIL(); }
 
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {
@@ -171,7 +166,7 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   base::RunLoop().Run();
   EXPECT_TRUE(delegate.renderer_unresponsive_received());
 
-  contents()->SetDelegate(NULL);
+  contents()->SetDelegate(nullptr);
 }
 
 TEST_F(DevToolsManagerTest, ReattachOnCancelPendingNavigation) {
@@ -233,7 +228,9 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
     recordEvent("Attach");
   };
 
-  void Detach() override { recordEvent("Detach"); };
+  void Detach(DevToolsExternalAgentProxy* proxy) override {
+    recordEvent("Detach");
+  };
 
   std::string GetType() override { return std::string(); }
   std::string GetTitle() override { return std::string(); }
@@ -246,7 +243,8 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
   bool Close() override { return false; };
   base::TimeTicks GetLastActivityTime() override { return base::TimeTicks(); }
 
-  void SendMessageToBackend(const std::string& message) override {
+  void SendMessageToBackend(DevToolsExternalAgentProxy* proxy,
+                            const std::string& message) override {
     recordEvent(std::string("SendMessageToBackend.") + message);
   };
 

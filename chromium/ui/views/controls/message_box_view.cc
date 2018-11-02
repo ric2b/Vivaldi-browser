@@ -14,12 +14,14 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/widget/widget.h"
@@ -123,10 +125,11 @@ void MessageBoxView::SetLink(const base::string16& text,
   } else {
     DCHECK(listener);
     if (!link_) {
-      link_ = new Link();
+      link_ = new Link(text);
       link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    } else {
+      link_->SetText(text);
     }
-    link_->SetText(text);
     link_->set_listener(listener);
   }
   ResetLayoutManager();
@@ -182,7 +185,8 @@ void MessageBoxView::Init(const InitParams& params) {
     std::vector<base::string16> texts;
     SplitStringIntoParagraphs(params.message, &texts);
     for (size_t i = 0; i < texts.size(); ++i) {
-      Label* message_label = new Label(texts[i]);
+      Label* message_label =
+          new Label(texts[i], style::CONTEXT_MESSAGE_BOX_BODY_TEXT);
       // Avoid empty multi-line labels, which have a height of 0.
       message_label->SetMultiLine(!texts[i].empty());
       message_label->SetAllowCharacterBreak(true);
@@ -190,7 +194,8 @@ void MessageBoxView::Init(const InitParams& params) {
       message_labels_.push_back(message_label);
     }
   } else {
-    Label* message_label = new Label(params.message);
+    Label* message_label =
+        new Label(params.message, style::CONTEXT_MESSAGE_BOX_BODY_TEXT);
     message_label->SetMultiLine(true);
     message_label->SetAllowCharacterBreak(true);
     message_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -213,52 +218,74 @@ void MessageBoxView::Init(const InitParams& params) {
 
 void MessageBoxView::ResetLayoutManager() {
   // Initialize the Grid Layout Manager used for this dialog box.
-  GridLayout* layout = GridLayout::CreatePanel(this);
-  SetLayoutManager(layout);
+  GridLayout* layout = GridLayout::CreateAndInstall(this);
 
   // Add the column set for the message displayed at the top of the dialog box.
-  const int message_column_view_set_id = 0;
-  ColumnSet* column_set = layout->AddColumnSet(message_column_view_set_id);
+  constexpr int kMessageViewColumnSetId = 0;
+  ColumnSet* column_set = layout->AddColumnSet(kMessageViewColumnSetId);
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1,
                         GridLayout::FIXED, message_width_, 0);
 
+  gfx::Insets horizontal_insets =
+      views::LayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG);
+  horizontal_insets.Set(0, horizontal_insets.left(), 0,
+                        horizontal_insets.right());
+
   // Column set for extra elements, if any.
-  const int extra_column_view_set_id = 1;
+  constexpr int kExtraViewColumnSetId = 1;
   if (prompt_field_ || checkbox_ || link_) {
-    column_set = layout->AddColumnSet(extra_column_view_set_id);
+    column_set = layout->AddColumnSet(kExtraViewColumnSetId);
+    column_set->AddPaddingColumn(0, horizontal_insets.left());
     column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1,
                           GridLayout::USE_PREF, 0, 0);
+    column_set->AddPaddingColumn(0, horizontal_insets.right());
   }
 
-  const int kMaxScrollViewHeight = 400;
+  constexpr int kMaxScrollViewHeight = 160;
   views::View* message_contents = new views::View();
+  // We explicitly set insets on the message contents instead of the scroll view
+  // so that the scroll view borders are not capped by dialog insets.
+  message_contents->SetBorder(CreateEmptyBorder(horizontal_insets));
   message_contents->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical));
   for (size_t i = 0; i < message_labels_.size(); ++i)
     message_contents->AddChildView(message_labels_[i]);
   ScrollView* scroll_view = new views::ScrollView();
   scroll_view->ClipHeightTo(0, kMaxScrollViewHeight);
+
   scroll_view->SetContents(message_contents);
-  layout->StartRow(0, message_column_view_set_id);
+  layout->StartRow(0, kMessageViewColumnSetId);
   layout->AddView(scroll_view);
 
+  views::DialogContentType trailing_content_type = views::TEXT;
   if (prompt_field_) {
     layout->AddPaddingRow(0, inter_row_vertical_spacing_);
-    layout->StartRow(0, extra_column_view_set_id);
+    layout->StartRow(0, kExtraViewColumnSetId);
     layout->AddView(prompt_field_);
+    trailing_content_type = views::CONTROL;
   }
 
   if (checkbox_) {
     layout->AddPaddingRow(0, inter_row_vertical_spacing_);
-    layout->StartRow(0, extra_column_view_set_id);
+    layout->StartRow(0, kExtraViewColumnSetId);
     layout->AddView(checkbox_);
+    trailing_content_type = views::CONTROL;
   }
 
   if (link_) {
     layout->AddPaddingRow(0, inter_row_vertical_spacing_);
-    layout->StartRow(0, extra_column_view_set_id);
+    layout->StartRow(0, kExtraViewColumnSetId);
     layout->AddView(link_);
+    trailing_content_type = views::TEXT;
   }
+
+  gfx::Insets border_insets =
+      LayoutProvider::Get()->GetDialogInsetsForContentType(
+          views::TEXT, trailing_content_type);
+  // Horizontal insets have already been applied to the message contents and
+  // controls as padding columns. Only apply the missing vertical insets.
+  border_insets.Set(border_insets.top(), 0, border_insets.bottom(), 0);
+  SetBorder(CreateEmptyBorder(border_insets));
 }
 
 }  // namespace views

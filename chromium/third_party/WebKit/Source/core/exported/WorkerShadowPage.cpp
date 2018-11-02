@@ -10,31 +10,27 @@
 #include "platform/loader/fetch/SubstituteData.h"
 #include "public/platform/Platform.h"
 #include "public/web/WebSettings.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace blink {
 
 WorkerShadowPage::WorkerShadowPage(Client* client)
-    : web_view_(WebViewImpl::Create(nullptr, kWebPageVisibilityStateVisible)),
+    : client_(client),
+      web_view_(
+          WebViewImpl::Create(nullptr, mojom::PageVisibilityState::kVisible)),
       main_frame_(WebLocalFrameImpl::CreateMainFrame(web_view_,
                                                      this,
                                                      nullptr,
                                                      nullptr,
                                                      g_empty_atom,
-                                                     WebSandboxFlags::kNone)),
-      client_(client) {
+                                                     WebSandboxFlags::kNone)) {
   DCHECK(IsMainThread());
+
   // TODO(http://crbug.com/363843): This needs to find a better way to
   // not create graphics layers.
   web_view_->GetSettings()->SetAcceleratedCompositingEnabled(false);
 
   main_frame_->SetDevToolsAgentClient(client_);
-
-  // Create an empty InterfaceProvider because WebFrameClient subclasses are
-  // required to do it even if it's not used.
-  // See https://chromium-review.googlesource.com/c/576370
-  service_manager::mojom::InterfaceProviderPtr provider;
-  mojo::MakeRequest(&provider);
-  interface_provider_.Bind(std::move(provider));
 }
 
 WorkerShadowPage::~WorkerShadowPage() {
@@ -52,10 +48,10 @@ void WorkerShadowPage::Initialize(const KURL& script_url) {
   // Construct substitute data source. We only need it to have same origin as
   // the worker so the loading checks work correctly.
   CString content("");
-  RefPtr<SharedBuffer> buffer(
+  scoped_refptr<SharedBuffer> buffer(
       SharedBuffer::Create(content.data(), content.length()));
-  main_frame_->GetFrame()->Loader().Load(
-      FrameLoadRequest(0, ResourceRequest(script_url), SubstituteData(buffer)));
+  main_frame_->GetFrame()->Loader().Load(FrameLoadRequest(
+      nullptr, ResourceRequest(script_url), SubstituteData(buffer)));
 }
 
 void WorkerShadowPage::SetContentSecurityPolicyAndReferrerPolicy(
@@ -81,17 +77,17 @@ WorkerShadowPage::CreateApplicationCacheHost(
   return client_->CreateApplicationCacheHost(appcache_host_client);
 }
 
-service_manager::InterfaceProvider* WorkerShadowPage::GetInterfaceProvider() {
+std::unique_ptr<blink::WebURLLoaderFactory>
+WorkerShadowPage::CreateURLLoaderFactory() {
   DCHECK(IsMainThread());
-  return &interface_provider_;
+  return Platform::Current()->CreateDefaultURLLoaderFactory();
 }
 
-std::unique_ptr<blink::WebURLLoader> WorkerShadowPage::CreateURLLoader(
-    const WebURLRequest& request,
-    SingleThreadTaskRunner* task_runner) {
-  DCHECK(IsMainThread());
-  // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-  return Platform::Current()->CreateURLLoader(request, task_runner);
+WebString WorkerShadowPage::GetInstrumentationToken() {
+  // TODO(dgozman): instrumentation token will have to be passed directly to
+  // DevTools once we stop using a frame for workers. Currently, we rely on
+  // the frame's instrumentation token to match the worker.
+  return client_->GetInstrumentationToken();
 }
 
 bool WorkerShadowPage::WasInitialized() const {

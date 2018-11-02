@@ -6,14 +6,14 @@
 #define CHROME_COMMON_PROFILING_MEMLOG_ALLOCATOR_SHIM_H_
 
 #include "chrome/common/profiling/memlog_sender_pipe.h"
-
-// This is a temporary allocator shim for testing out-of-process heap
-// profiling.
-//
-// TODO(brettw) replace this with the base allocator shim, plus a way to get
-// the events at the Chrome layer.
+#include "chrome/common/profiling/memlog_stream.h"
 
 namespace profiling {
+
+// Initializes the TLS slot globally. This will be called early in Chrome's
+// lifecycle to prevent re-entrancy from occurring while trying to set up the
+// TLS slot, which is the entity that's supposed to prevent re-entrancy.
+void InitTLSSlot();
 
 // Begin profiling all allocations in the process. Send the results to
 // |sender_pipe|.
@@ -29,8 +29,30 @@ void InitAllocatorShim(MemlogSenderPipe* sender_pipe);
 // the process of forming a message.
 void StopAllocatorShimDangerous();
 
-void AllocatorShimLogAlloc(void* address, size_t sz);
+// Logs an allocation. The context is a null-terminated string of
+// allocator-specific context information. It can be null if there is no
+// context.
+void AllocatorShimLogAlloc(AllocatorType type,
+                           void* address,
+                           size_t sz,
+                           const char* context);
+
 void AllocatorShimLogFree(void* address);
+
+// Ensures all send buffers are flushed. The given barrier ID is sent to the
+// logging process so it knows when this operation is complete.
+void AllocatorShimFlushPipe(uint32_t barrier_id);
+
+// Sets the functions that can be called to hook GC heap allocations. These
+// must be set externally since GC heap only exists in renderer processes. If
+// set, these functions functions will be called to enable logging of the GC
+// heap.
+using SetGCAllocHookFunction = void (*)(void (*)(uint8_t*,
+                                                 size_t,
+                                                 const char*));
+using SetGCFreeHookFunction = void (*)(void (*)(uint8_t*));
+void SetGCHeapAllocationHookFunctions(SetGCAllocHookFunction hook_alloc,
+                                      SetGCFreeHookFunction hook_free);
 
 }  // namespace profiling
 

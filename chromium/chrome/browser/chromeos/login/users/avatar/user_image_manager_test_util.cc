@@ -33,8 +33,8 @@ bool AreImagesEqual(const gfx::ImageSkia& first, const gfx::ImageSkia& second) {
   if (!first_bitmap || !second_bitmap)
     return false;
 
-  const size_t size = first_bitmap->getSize();
-  if (second_bitmap->getSize() != size)
+  const size_t size = first_bitmap->computeByteSize();
+  if (second_bitmap->computeByteSize() != size)
     return false;
 
   uint8_t* first_data = reinterpret_cast<uint8_t*>(first_bitmap->getPixels());
@@ -46,11 +46,9 @@ bool AreImagesEqual(const gfx::ImageSkia& first, const gfx::ImageSkia& second) {
   return true;
 }
 
-ImageLoader::ImageLoader(const base::FilePath& path) : path_(path) {
-}
+ImageLoader::ImageLoader(const base::FilePath& path) : path_(path) {}
 
-ImageLoader::~ImageLoader() {
-}
+ImageLoader::~ImageLoader() {}
 
 std::unique_ptr<gfx::ImageSkia> ImageLoader::Load() {
   std::string image_data;

@@ -11,15 +11,16 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
-#include "chromeos/components/tether/initializer.h"
+#include "chromeos/components/tether/tether_component.h"
 #include "chromeos/dbus/power_manager_client.h"
-#include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+
+class Profile;
 
 namespace chromeos {
 class NetworkStateHandler;
@@ -32,20 +33,19 @@ namespace cryptauth {
 class CryptAuthService;
 }  // namespace cryptauth
 
-class PrefRegistrySimple;
-class Profile;
+namespace user_prefs {
+class PrefRegistrySyncable;
+}  // namespace user_prefs
 
 class TetherService : public KeyedService,
                       public chromeos::PowerManagerClient::Observer,
-                      public chromeos::SessionManagerClient::Observer,
                       public cryptauth::CryptAuthDeviceManager::Observer,
                       public device::BluetoothAdapter::Observer,
                       public chromeos::NetworkStateHandlerObserver,
-                      public chromeos::tether::Initializer::Observer {
+                      public chromeos::tether::TetherComponent::Observer {
  public:
   TetherService(Profile* profile,
                 chromeos::PowerManagerClient* power_manager_client,
-                chromeos::SessionManagerClient* session_manager_client,
                 cryptauth::CryptAuthService* cryptauth_service,
                 chromeos::NetworkStateHandler* network_state_handler);
   ~TetherService() override;
@@ -53,7 +53,7 @@ class TetherService : public KeyedService,
   // Gets TetherService instance.
   static TetherService* Get(Profile* profile);
 
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Whether the Tether feature has been enabled via a chrome://about or
   // command line flag.
@@ -69,12 +69,8 @@ class TetherService : public KeyedService,
   void Shutdown() override;
 
   // chromeos::PowerManagerClient::Observer:
-  void SuspendImminent() override;
+  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
-
-  // chromeos::SessionManagerClient::Observer:
-  void ScreenIsLocked() override;
-  void ScreenIsUnlocked() override;
 
   // cryptauth::CryptAuthDeviceManager::Observer
   void OnSyncFinished(cryptauth::CryptAuthDeviceManager::SyncResult sync_result,
@@ -88,7 +84,7 @@ class TetherService : public KeyedService,
   // chromeos::NetworkStateHandlerObserver:
   void DeviceListChanged() override;
 
-  // chromeos::tether::Initializer::Observer:
+  // chromeos::tether::TetherComponent::Observer:
   void OnShutdownComplete() override;
 
   // Callback when the controlling pref changes.
@@ -120,15 +116,7 @@ class TetherService : public KeyedService,
       TestBleAdvertisingNotSupportedAndRecorded_BluetoothIsInitiallyNotPowered);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
                            TestBleAdvertisingSupportedButIncorrectlyRecorded);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestScreenLock);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
-                           TestFeatureFlagDisabled_CommandLineDisabled);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
-                           TestFeatureFlagDisabled_CommandLineEnabled);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
-                           TestFeatureFlagEnabled_CommandLineDisabled);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
-                           TestFeatureFlagEnabled_CommandLineEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestFeatureFlagEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestNoTetherHosts);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestProhibitedByPolicy);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestIsBluetoothPowered);
@@ -147,6 +135,7 @@ class TetherService : public KeyedService,
   enum TetherFeatureState {
     OTHER_OR_UNKNOWN = 0,
     BLE_ADVERTISING_NOT_SUPPORTED = 1,
+    // Note: SCREEN_LOCKED is an obsolete value, and should not be used.
     SCREEN_LOCKED = 2,
     NO_AVAILABLE_HOSTS = 3,
     CELLULAR_DISABLED = 4,
@@ -229,12 +218,11 @@ class TetherService : public KeyedService,
 
   Profile* profile_;
   chromeos::PowerManagerClient* power_manager_client_;
-  chromeos::SessionManagerClient* session_manager_client_;
   cryptauth::CryptAuthService* cryptauth_service_;
   chromeos::NetworkStateHandler* network_state_handler_;
   std::unique_ptr<chromeos::tether::NotificationPresenter>
       notification_presenter_;
-  std::unique_ptr<chromeos::tether::Initializer> initializer_;
+  std::unique_ptr<chromeos::tether::TetherComponent> tether_component_;
 
   PrefChangeRegistrar registrar_;
   scoped_refptr<device::BluetoothAdapter> adapter_;

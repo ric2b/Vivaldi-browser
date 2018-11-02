@@ -39,8 +39,8 @@ namespace ArenaTestHelpers {
 // been allocated.
 class TrackedAllocator final : public PODArena::FastMallocAllocator {
  public:
-  static PassRefPtr<TrackedAllocator> Create() {
-    return AdoptRef(new TrackedAllocator);
+  static scoped_refptr<TrackedAllocator> Create() {
+    return base::AdoptRef(new TrackedAllocator);
   }
 
   void* Allocate(size_t size) override {
@@ -52,7 +52,7 @@ class TrackedAllocator final : public PODArena::FastMallocAllocator {
   void Free(void* ptr) override {
     size_t slot = allocated_regions_.Find(ptr);
     ASSERT_NE(slot, kNotFound);
-    allocated_regions_.erase(slot);
+    allocated_regions_.EraseAt(slot);
     PODArena::FastMallocAllocator::Free(ptr);
   }
 

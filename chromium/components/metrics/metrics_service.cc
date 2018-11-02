@@ -141,11 +141,9 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
-#include "components/metrics/daily_event.h"
 #include "components/metrics/environment_recorder.h"
 #include "components/metrics/field_trials_provider.h"
 #include "components/metrics/metrics_log.h"
@@ -207,12 +205,6 @@ void MetricsService::RegisterPrefs(PrefRegistrySimple* registry) {
 
   registry->RegisterInt64Pref(prefs::kUninstallLaunchCount, 0);
   registry->RegisterInt64Pref(prefs::kUninstallMetricsUptimeSec, 0);
-
-  // Register the tab stats metrics.
-  registry->RegisterIntegerPref(prefs::kTabStatsTotalTabCountMax, 0);
-  registry->RegisterIntegerPref(prefs::kTabStatsMaxTabsPerWindow, 0);
-  registry->RegisterIntegerPref(prefs::kTabStatsWindowCountMax, 0);
-  metrics::DailyEvent::RegisterPref(registry, prefs::kTabStatsDailySample);
 }
 
 MetricsService::MetricsService(MetricsStateManager* state_manager,
@@ -229,7 +221,7 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
       idle_since_last_transmission_(false),
       session_id_(-1),
       self_ptr_factory_(this) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(state_manager_);
   DCHECK(client_);
   DCHECK(local_state_);
@@ -307,7 +299,7 @@ bool MetricsService::WasLastShutdownClean() const {
 }
 
 void MetricsService::EnableRecording() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (recording_state_ == ACTIVE)
     return;
@@ -333,7 +325,7 @@ void MetricsService::EnableRecording() {
 }
 
 void MetricsService::DisableRecording() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (recording_state_ == INACTIVE)
     return;
@@ -347,12 +339,12 @@ void MetricsService::DisableRecording() {
 }
 
 bool MetricsService::recording_active() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return recording_state_ == ACTIVE;
 }
 
 bool MetricsService::reporting_active() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return reporting_service_.reporting_active();
 }
 
@@ -362,10 +354,8 @@ bool MetricsService::has_unsent_logs() const {
 
 void MetricsService::RecordDelta(const base::HistogramBase& histogram,
                                  const base::HistogramSamples& snapshot) {
-  histogram.ValidateHistogramContents(true, -1);
   log_manager_.current_log()->RecordHistogramDelta(histogram.histogram_name(),
                                                    snapshot);
-  histogram.ValidateHistogramContents(true, -2);
 }
 
 void MetricsService::HandleIdleSinceLastTransmission(bool in_idle) {
@@ -454,7 +444,7 @@ void MetricsService::PushExternalLog(const std::string& log) {
 void MetricsService::UpdateMetricsUsagePrefs(const std::string& service_name,
                                              int message_size,
                                              bool is_cellular) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   reporting_service_.UpdateMetricsUsagePrefs(service_name, message_size,
                                              is_cellular);
 }
@@ -603,12 +593,13 @@ void MetricsService::OpenNewLog() {
     // We only need to schedule that run once.
     state_ = INIT_TASK_SCHEDULED;
 
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&MetricsService::StartInitTask,
-                              self_ptr_factory_.GetWeakPtr()),
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&MetricsService::StartInitTask,
+                   self_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(kInitializationDelaySeconds));
 
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&MetricsService::PrepareProviderMetricsTask,
                    self_ptr_factory_.GetWeakPtr()),
@@ -868,7 +859,7 @@ void MetricsService::RecordCurrentStabilityHistograms() {
 }
 
 bool MetricsService::PrepareProviderMetricsLog() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Create a new log. This will have some defaut values injected in it but
   // those will be overwritten when an embedded profile is extracted.
@@ -887,11 +878,11 @@ bool MetricsService::PrepareProviderMetricsLog() {
 }
 
 void MetricsService::PrepareProviderMetricsTask() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool found = PrepareProviderMetricsLog();
   base::TimeDelta next_check = found ? base::TimeDelta::FromSeconds(5)
                                      : base::TimeDelta::FromMinutes(15);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&MetricsService::PrepareProviderMetricsTask,
                  self_ptr_factory_.GetWeakPtr()),
@@ -899,7 +890,7 @@ void MetricsService::PrepareProviderMetricsTask() {
 }
 
 void MetricsService::LogCleanShutdown(bool end_completed) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Redundant setting to assure that we always reset this value at shutdown
   // (and that we don't use some alternate path, and not call LogCleanShutdown).
   clean_shutdown_status_ = CLEANLY_SHUTDOWN;

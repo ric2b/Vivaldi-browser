@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/strings/string_number_conversions.h"
-#include "content/browser/accessibility/accessibility_tree_formatter.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_browser.h"
 
 namespace content {
 
-class AccessibilityTreeFormatterStub : public AccessibilityTreeFormatter {
+class AccessibilityTreeFormatterStub
+    : public AccessibilityTreeFormatterBrowser {
  public:
   explicit AccessibilityTreeFormatterStub();
   ~AccessibilityTreeFormatterStub() override;
@@ -19,7 +20,9 @@ class AccessibilityTreeFormatterStub : public AccessibilityTreeFormatter {
   const std::string GetDenyString() override;
   void AddProperties(const BrowserAccessibility& node,
                      base::DictionaryValue* dict) override;
-  base::string16 ToString(const base::DictionaryValue& node) override;
+  base::string16 ProcessTreeForOutput(
+      const base::DictionaryValue& node,
+      base::DictionaryValue* filtered_dict_result = nullptr) override;
 };
 
 #if !defined(PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL)
@@ -30,8 +33,7 @@ AccessibilityTreeFormatter* AccessibilityTreeFormatter::Create() {
 #endif
 
 AccessibilityTreeFormatterStub::AccessibilityTreeFormatterStub()
-    : AccessibilityTreeFormatter() {
-}
+    : AccessibilityTreeFormatterBrowser() {}
 
 AccessibilityTreeFormatterStub::~AccessibilityTreeFormatterStub() {
 }
@@ -42,8 +44,9 @@ void AccessibilityTreeFormatterStub::AddProperties(
   dict->SetInteger("id", node.GetId());
 }
 
-base::string16 AccessibilityTreeFormatterStub::ToString(
-    const base::DictionaryValue& node) {
+base::string16 AccessibilityTreeFormatterStub::ProcessTreeForOutput(
+    const base::DictionaryValue& node,
+    base::DictionaryValue* filtered_dict_result) {
   int id_value;
   node.GetInteger("id", &id_value);
   return base::IntToString16(id_value);

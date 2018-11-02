@@ -4,7 +4,6 @@
 
 #include "content/browser/devtools/shared_worker_devtools_agent_host.h"
 
-#include "base/strings/utf_string_conversions.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/shared_worker/shared_worker_instance.h"
 #include "content/browser/shared_worker/shared_worker_service_impl.h"
@@ -12,20 +11,10 @@
 
 namespace content {
 
-namespace {
-
-void TerminateSharedWorkerOnIO(
-    WorkerDevToolsAgentHost::WorkerId worker_id) {
-  SharedWorkerServiceImpl::GetInstance()->TerminateWorker(
-      worker_id.first, worker_id.second);
-}
-
-}  // namespace
-
 SharedWorkerDevToolsAgentHost::SharedWorkerDevToolsAgentHost(
     WorkerId worker_id,
     const SharedWorkerInstance& shared_worker)
-    : WorkerDevToolsAgentHost(worker_id),
+    : WorkerDevToolsAgentHost(shared_worker.devtools_worker_token(), worker_id),
       shared_worker_(new SharedWorkerInstance(shared_worker)) {
   NotifyCreated();
 }
@@ -35,7 +24,7 @@ std::string SharedWorkerDevToolsAgentHost::GetType() {
 }
 
 std::string SharedWorkerDevToolsAgentHost::GetTitle() {
-  return base::UTF16ToUTF8(shared_worker_->name());
+  return shared_worker_->name();
 }
 
 GURL SharedWorkerDevToolsAgentHost::GetURL() {
@@ -50,9 +39,8 @@ void SharedWorkerDevToolsAgentHost::Reload() {
 }
 
 bool SharedWorkerDevToolsAgentHost::Close() {
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&TerminateSharedWorkerOnIO, worker_id()));
+  static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
+      ->TerminateWorkerById(worker_id().first, worker_id().second);
   return true;
 }
 

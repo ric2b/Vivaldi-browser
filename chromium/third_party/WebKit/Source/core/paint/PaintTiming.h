@@ -29,7 +29,7 @@ class CORE_EXPORT PaintTiming final
   USING_GARBAGE_COLLECTED_MIXIN(PaintTiming);
   friend class FirstMeaningfulPaintDetector;
   using ReportTimeCallback =
-      WTF::Function<void(WebLayerTreeView::SwapResult, double)>;
+      WTF::CrossThreadFunction<void(WebLayerTreeView::SwapResult, double)>;
 
  public:
   virtual ~PaintTiming() {}
@@ -60,7 +60,7 @@ class CORE_EXPORT PaintTiming final
 
   // The getters below return monotonically-increasing seconds, or zero if the
   // given paint event has not yet occurred. See the comments for
-  // monotonicallyIncreasingTime in wtf/CurrentTime.h for additional details.
+  // monotonicallyIncreasingTime in wtf/Time.h for additional details.
 
   // FirstPaint returns the first time that anything was painted for the
   // current document.
@@ -100,7 +100,7 @@ class CORE_EXPORT PaintTiming final
 
   void ReportSwapResultHistogram(const WebLayerTreeView::SwapResult);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   explicit PaintTiming(Document&);

@@ -4,6 +4,7 @@
 
 #include "core/frame/WebFrameWidgetBase.h"
 
+#include "core/dom/Element.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/events/WheelEvent.h"
@@ -26,6 +27,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebGestureCurve.h"
 #include "public/web/WebActiveWheelFlingParameters.h"
+#include "public/web/WebLocalFrame.h"
 #include "public/web/WebWidgetClient.h"
 
 namespace blink {
@@ -61,8 +63,8 @@ WebFrameWidgetBase::~WebFrameWidgetBase() {}
 
 WebDragOperation WebFrameWidgetBase::DragTargetDragEnter(
     const WebDragData& web_drag_data,
-    const WebPoint& point_in_viewport,
-    const WebPoint& screen_point,
+    const WebFloatPoint& point_in_viewport,
+    const WebFloatPoint& screen_point,
     WebDragOperationsMask operations_allowed,
     int modifiers) {
   DCHECK(!current_drag_data_);
@@ -75,8 +77,8 @@ WebDragOperation WebFrameWidgetBase::DragTargetDragEnter(
 }
 
 WebDragOperation WebFrameWidgetBase::DragTargetDragOver(
-    const WebPoint& point_in_viewport,
-    const WebPoint& screen_point,
+    const WebFloatPoint& point_in_viewport,
+    const WebFloatPoint& screen_point,
     WebDragOperationsMask operations_allowed,
     int modifiers) {
   operations_allowed_ = operations_allowed;
@@ -85,8 +87,9 @@ WebDragOperation WebFrameWidgetBase::DragTargetDragOver(
                                    modifiers);
 }
 
-void WebFrameWidgetBase::DragTargetDragLeave(const WebPoint& point_in_viewport,
-                                             const WebPoint& screen_point) {
+void WebFrameWidgetBase::DragTargetDragLeave(
+    const WebFloatPoint& point_in_viewport,
+    const WebFloatPoint& screen_point) {
   DCHECK(current_drag_data_);
 
   // TODO(paulmeyer): It shouldn't be possible for |m_currentDragData| to be
@@ -99,7 +102,7 @@ void WebFrameWidgetBase::DragTargetDragLeave(const WebPoint& point_in_viewport,
     return;
   }
 
-  WebPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
+  WebFloatPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
   DragData drag_data(current_drag_data_.Get(), point_in_root_frame,
                      screen_point,
                      static_cast<DragOperation>(operations_allowed_));
@@ -114,10 +117,10 @@ void WebFrameWidgetBase::DragTargetDragLeave(const WebPoint& point_in_viewport,
 }
 
 void WebFrameWidgetBase::DragTargetDrop(const WebDragData& web_drag_data,
-                                        const WebPoint& point_in_viewport,
-                                        const WebPoint& screen_point,
+                                        const WebFloatPoint& point_in_viewport,
+                                        const WebFloatPoint& screen_point,
                                         int modifiers) {
-  WebPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
+  WebFloatPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
 
   DCHECK(current_drag_data_);
   current_drag_data_ = DataObject::Create(web_drag_data);
@@ -148,9 +151,16 @@ void WebFrameWidgetBase::DragTargetDrop(const WebDragData& web_drag_data,
   current_drag_data_ = nullptr;
 }
 
-void WebFrameWidgetBase::DragSourceEndedAt(const WebPoint& point_in_viewport,
-                                           const WebPoint& screen_point,
-                                           WebDragOperation operation) {
+void WebFrameWidgetBase::DragSourceEndedAt(
+    const WebFloatPoint& point_in_viewport,
+    const WebFloatPoint& screen_point,
+    WebDragOperation operation) {
+  if (!LocalRoot()) {
+    // We should figure out why |local_root_| could be nullptr
+    // (https://crbug.com/792345).
+    return;
+  }
+
   if (IgnoreInputEvents()) {
     CancelDrag();
     return;
@@ -158,11 +168,10 @@ void WebFrameWidgetBase::DragSourceEndedAt(const WebPoint& point_in_viewport,
   WebFloatPoint point_in_root_frame(
       GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport));
 
-  WebMouseEvent fake_mouse_move(WebInputEvent::kMouseMove, point_in_root_frame,
-                                WebFloatPoint(screen_point.x, screen_point.y),
-                                WebPointerProperties::Button::kLeft, 0,
-                                WebInputEvent::kNoModifiers,
-                                TimeTicks::Now().InSeconds());
+  WebMouseEvent fake_mouse_move(
+      WebInputEvent::kMouseMove, point_in_root_frame, screen_point,
+      WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
+      TimeTicks::Now().InSeconds());
   fake_mouse_move.SetFrameScale(1);
   ToCoreFrame(LocalRoot())
       ->GetEventHandler()
@@ -193,8 +202,8 @@ void WebFrameWidgetBase::StartDragging(WebReferrerPolicy policy,
 }
 
 WebDragOperation WebFrameWidgetBase::DragTargetDragEnterOrOver(
-    const WebPoint& point_in_viewport,
-    const WebPoint& screen_point,
+    const WebFloatPoint& point_in_viewport,
+    const WebFloatPoint& screen_point,
     DragAction drag_action,
     int modifiers) {
   DCHECK(current_drag_data_);
@@ -208,7 +217,7 @@ WebDragOperation WebFrameWidgetBase::DragTargetDragEnterOrOver(
     return kWebDragOperationNone;
   }
 
-  WebPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
+  WebFloatPoint point_in_root_frame(ViewportToRootFrame(point_in_viewport));
 
   current_drag_data_->SetModifiers(modifiers);
   DragData drag_data(current_drag_data_.Get(), point_in_root_frame,
@@ -231,8 +240,8 @@ WebDragOperation WebFrameWidgetBase::DragTargetDragEnterOrOver(
   return drag_operation_;
 }
 
-WebPoint WebFrameWidgetBase::ViewportToRootFrame(
-    const WebPoint& point_in_viewport) const {
+WebFloatPoint WebFrameWidgetBase::ViewportToRootFrame(
+    const WebFloatPoint& point_in_viewport) const {
   return GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport);
 }
 
@@ -258,16 +267,23 @@ void WebFrameWidgetBase::DidNotAcquirePointerLock() {
 }
 
 void WebFrameWidgetBase::DidLosePointerLock() {
-  pointer_lock_gesture_token_.Clear();
+  pointer_lock_gesture_token_ = nullptr;
   GetPage()->GetPointerLockController().DidLosePointerLock();
 }
 
 void WebFrameWidgetBase::RequestDecode(const PaintImage& image,
                                        WTF::Function<void(bool)> callback) {
-  View()->RequestDecode(image, std::move(callback));
+  // If we have a LayerTreeView, propagate the request, otherwise fail it since
+  // otherwise it would remain in a unresolved and unrejected state.
+  if (WebLayerTreeView* layer_tree_view = GetLayerTreeView()) {
+    layer_tree_view->RequestDecode(image,
+                                   ConvertToBaseCallback(std::move(callback)));
+  } else {
+    std::move(callback).Run(false);
+  }
 }
 
-DEFINE_TRACE(WebFrameWidgetBase) {
+void WebFrameWidgetBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(current_drag_data_);
 }
 
@@ -295,12 +311,12 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
       if (!GetPage() || !GetPage()->GetPointerLockController().GetElement())
         break;
       gesture_indicator =
-          LocalFrame::CreateUserGesture(GetPage()
-                                            ->GetPointerLockController()
-                                            .GetElement()
-                                            ->GetDocument()
-                                            .GetFrame(),
-                                        UserGestureToken::kNewGesture);
+          Frame::NotifyUserActivation(GetPage()
+                                          ->GetPointerLockController()
+                                          .GetElement()
+                                          ->GetDocument()
+                                          .GetFrame(),
+                                      UserGestureToken::kNewGesture);
       pointer_lock_gesture_token_ = gesture_indicator->CurrentToken();
       break;
     case WebInputEvent::kMouseUp:
@@ -337,6 +353,14 @@ void WebFrameWidgetBase::ShowContextMenu(WebMenuSourceType source_type) {
 }
 
 LocalFrame* WebFrameWidgetBase::FocusedLocalFrameInWidget() const {
+  if (!LocalRoot()) {
+    // WebFrameWidget is created in the call to CreateFrame. The corresponding
+    // RenderWidget, however, might not swap in right away (InstallNewDocument()
+    // will lead to it swapping in). During this interval LocalRoot() is nullptr
+    // (see https://crbug.com/792345).
+    return nullptr;
+  }
+
   LocalFrame* frame = GetPage()->GetFocusController().FocusedFrame();
   return (frame && frame->LocalFrameRoot() == ToCoreFrame(LocalRoot()))
              ? frame
@@ -420,7 +444,6 @@ bool WebFrameWidgetBase::ScrollBy(const WebFloatSize& delta,
 
   WebGestureEvent synthetic_gesture_event = CreateGestureScrollEventFromFling(
       WebInputEvent::kGestureScrollUpdate, fling_source_device_);
-  synthetic_gesture_event.data.scroll_update.prevent_propagation = true;
   synthetic_gesture_event.data.scroll_update.delta_x = delta.width;
   synthetic_gesture_event.data.scroll_update.delta_y = delta.height;
   synthetic_gesture_event.data.scroll_update.velocity_x = velocity.width;
@@ -498,6 +521,10 @@ void WebFrameWidgetBase::TransferActiveWheelFlingAnimation(
   DCHECK_NE(parameters.source_device, kWebGestureDeviceUninitialized);
   fling_source_device_ = parameters.source_device;
   ScheduleAnimation();
+}
+
+WebLocalFrame* WebFrameWidgetBase::FocusedWebLocalFrameInWidget() const {
+  return WebLocalFrameImpl::FromFrame(FocusedLocalFrameInWidget());
 }
 
 WebGestureEvent WebFrameWidgetBase::CreateGestureScrollEventFromFling(

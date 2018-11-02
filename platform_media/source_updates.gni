@@ -1,29 +1,24 @@
 import("//build/config/features.gni")
 import("//vivaldi/gn/config/features.gni")
 
-# ------------------
-# Blink : /media/blink/BUILD.gn
-# ------------------
-
 if (system_proprietary_codecs) {
 
 # ------------------
-# Content Unittests : /content/test/BUILD.gn
+# Media Unittests : /media/test/BUILD.gn
 # ------------------
 
 post_process_target("//media/test:pipeline_integration_test_base") {
   sources += [
+    "//vivaldi/platform_media/gpu/test/ipc_audio_decoder_unittest.cc",
+#    "//vivaldi/platform_media/gpu/test/ipc_video_decoder_unittest.cc",
+#    "//vivaldi/platform_media/gpu/test/ipc_pipeline_buffer_source_unittest.cc",
+    "//vivaldi/platform_media/gpu/test/platform_media_pipeline_integration_test.cc",
     "//vivaldi/platform_media/gpu/test/platform_pipeline_test_base.cc",
     "//vivaldi/platform_media/gpu/test/platform_pipeline_test_base.h",
+    "//vivaldi/platform_media/gpu/test/test_ipc_data_source.cc",
+    "//vivaldi/platform_media/gpu/test/test_ipc_data_source.h",
     "//vivaldi/platform_media/gpu/test/test_pipeline_host.cc",
     "//vivaldi/platform_media/gpu/test/test_pipeline_host.h",
-  ]
-}
-
-post_process_target("//content/test:content_unittests") {
-  sources += [
-    "//vivaldi/platform_media/gpu/test/ipc_audio_decoder_unittest.cc",
-    "//vivaldi/platform_media/gpu/test/platform_media_pipeline_integration_test.cc",
   ]
 
   if (is_mac) {
@@ -35,7 +30,9 @@ post_process_target("//content/test:content_unittests") {
     cflags = [ "-Wno-deprecated-declarations" ]
   }
 
-  deps += [ "//media/test:pipeline_integration_test_base" ]
+  deps += [
+    "//media/gpu/ipc/service:service"
+  ]
 }
 
 # ------------------
@@ -46,6 +43,13 @@ post_process_target("//media/gpu/ipc/service:service") {
   sources += [
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.cc",
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.h",
+  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data.cc",
+  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data.h",
+  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_source.h",
+  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data_source.cc",
+  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data_source.h",
+#  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.cc",
+#  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.h",
   "//vivaldi/platform_media/gpu/data_source/ipc_data_source_impl.cc",
   "//vivaldi/platform_media/gpu/data_source/ipc_data_source_impl.h",
   "//vivaldi/platform_media/gpu/pipeline/ipc_media_pipeline.cc",
@@ -64,10 +68,16 @@ post_process_target("//media/gpu/ipc/service:service") {
 # Gpu Ipc (Media) : /media/gpu/ipc/common/BUILD.gn
 # ------------------
 
-post_process_target("//media/gpu/ipc/common:common") {
+post_process_target("//media/base:base") {
+
+  visibility += [ "//media/gpu/ipc/service:service" ]
+
   sources += [
+  "//vivaldi/platform_media/common/feature_toggles.h",
   "//vivaldi/platform_media/common/platform_media_pipeline_types.h",
   "//vivaldi/platform_media/common/media_pipeline_messages.h",
+  "//vivaldi/platform_media/common/video_frame_transformer.cc",
+  "//vivaldi/platform_media/common/video_frame_transformer.h",
   ]
 }
 
@@ -96,6 +106,8 @@ post_process_target("//content/common:common") {
     sources += [
       "//vivaldi/platform_media/common/mac/at_init.cc",
       "//vivaldi/platform_media/common/mac/at_init.h",
+      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader_warmup.h",
+      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader_warmup.mm",
     ]
 
     # VB-24641 dispatch_get_current_queue is deprecated
@@ -213,6 +225,12 @@ post_process_target("//media:media") {
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.h",
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.cc",
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.h",
+    "//vivaldi/platform_media/renderer/decoders/ipc_factory.cc",
+    "//vivaldi/platform_media/renderer/decoders/ipc_factory.h",
+#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.cc",
+#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.h",
+#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.cc",
+#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.h",
     "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.cc",
     "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.h",
     "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.cc",
@@ -227,6 +245,12 @@ post_process_target("//media:media") {
    ]
 
    deps += [ "//net" ]  # For GetMimeTypeFromFile
+
+   if (is_linux) {
+      defines = [
+        "MEDIA_IMPLEMENTATION",
+      ]
+   }
 
    if (is_mac) {
       defines += [

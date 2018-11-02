@@ -14,8 +14,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
-#include "components/prefs/base_prefs_export.h"
 #include "components/prefs/pref_store.h"
+#include "components/prefs/prefs_export.h"
 
 class PersistentPrefStore;
 class PrefNotifier;
@@ -49,8 +49,10 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
                       PrefStore* default_prefs,
                       PrefNotifier* pref_notifier) = 0;
 
-    virtual void InitIncognitoUnderlay(
-        PersistentPrefStore* incognito_user_prefs_underlay) = 0;
+    virtual void InitIncognitoUserPrefs(
+        scoped_refptr<PersistentPrefStore> incognito_user_prefs_overlay,
+        scoped_refptr<PersistentPrefStore> incognito_user_prefs_underlay,
+        const std::vector<const char*>& overlay_pref_names) = 0;
 
     virtual void InitPrefRegistry(PrefRegistry* pref_registry) = 0;
 

@@ -27,7 +27,6 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
@@ -37,6 +36,7 @@
 #include "core/frame/RemoteFrameView.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/html_names.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
@@ -164,7 +164,8 @@ void HTMLFrameElementBase::ParseAttribute(
   }
 }
 
-RefPtr<SecurityOrigin> HTMLFrameElementBase::GetOriginForFeaturePolicy() const {
+scoped_refptr<SecurityOrigin> HTMLFrameElementBase::GetOriginForFeaturePolicy()
+    const {
   // Sandboxed frames have a unique origin.
   if (GetSandboxFlags() & kSandboxOrigin)
     return SecurityOrigin::CreateUnique();

@@ -26,8 +26,6 @@ bool MediaCapabilitiesInfo::powerEfficient() const {
   return web_media_capabilities_info_->power_efficient;
 }
 
-DEFINE_TRACE(MediaCapabilitiesInfo) {}
-
 MediaCapabilitiesInfo::MediaCapabilitiesInfo(
     std::unique_ptr<WebMediaCapabilitiesInfo> web_media_capabilities_info)
     : web_media_capabilities_info_(std::move(web_media_capabilities_info)) {}

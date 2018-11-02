@@ -20,6 +20,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/unique_notifier.h"
+#include "cc/paint/draw_image.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
@@ -58,7 +59,6 @@ enum RasterBufferProviderType {
 class TestRasterTaskCompletionHandler {
  public:
   virtual void OnRasterTaskCompleted(
-      std::unique_ptr<RasterBuffer> raster_buffer,
       unsigned id,
       bool was_canceled) = 0;
 };
@@ -87,8 +87,8 @@ class TestRasterTaskImpl : public TileTask {
 
   // Overridden from TileTask:
   void OnTaskCompleted() override {
-    completion_handler_->OnRasterTaskCompleted(std::move(raster_buffer_), id_,
-                                               state().IsCanceled());
+    raster_buffer_ = nullptr;
+    completion_handler_->OnRasterTaskCompleted(id_, state().IsCanceled());
   }
 
  protected:
@@ -236,11 +236,21 @@ class RasterBufferProviderTest
     tile_task_manager_->ScheduleTasks(&graph_);
   }
 
-  void AppendTask(unsigned id, const gfx::Size& size) {
+  std::unique_ptr<ScopedResource> AllocateResource(const gfx::Size& size) {
     auto resource = std::make_unique<ScopedResource>(resource_provider_.get());
-    resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                       viz::RGBA_8888, gfx::ColorSpace());
+    if (GetParam() == RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY) {
+      resource->AllocateWithGpuMemoryBuffer(
+          size, viz::RGBA_8888, gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
+          gfx::ColorSpace());
+    } else {
+      resource->Allocate(size, viz::ResourceTextureHint::kDefault,
+                         viz::RGBA_8888, gfx::ColorSpace());
+    }
+    return resource;
+  }
 
+  void AppendTask(unsigned id, const gfx::Size& size) {
+    auto resource = AllocateResource(size);
     // The raster buffer has no tile ids associated with it for partial update,
     // so doesn't need to provide a valid dirty rect.
     std::unique_ptr<RasterBuffer> raster_buffer =
@@ -254,12 +264,7 @@ class RasterBufferProviderTest
   void AppendTask(unsigned id) { AppendTask(id, gfx::Size(1, 1)); }
 
   void AppendBlockingTask(unsigned id, base::Lock* lock) {
-    const gfx::Size size(1, 1);
-
-    auto resource = std::make_unique<ScopedResource>(resource_provider_.get());
-    resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                       viz::RGBA_8888, gfx::ColorSpace());
-
+    auto resource = AllocateResource(gfx::Size(1, 1));
     std::unique_ptr<RasterBuffer> raster_buffer =
         raster_buffer_provider_->AcquireBufferForRaster(resource.get(), 0, 0);
     TileTask::Vector empty;
@@ -275,15 +280,13 @@ class RasterBufferProviderTest
   void LoseContext(viz::ContextProvider* context_provider) {
     if (!context_provider)
       return;
+    viz::ContextProvider::ScopedContextLock lock(context_provider);
     context_provider->ContextGL()->LoseContextCHROMIUM(
         GL_GUILTY_CONTEXT_RESET_ARB, GL_INNOCENT_CONTEXT_RESET_ARB);
     context_provider->ContextGL()->Flush();
   }
 
-  void OnRasterTaskCompleted(std::unique_ptr<RasterBuffer> raster_buffer,
-                             unsigned id,
-                             bool was_canceled) override {
-    raster_buffer_provider_->ReleaseBufferForRaster(std::move(raster_buffer));
+  void OnRasterTaskCompleted(unsigned id, bool was_canceled) override {
     RasterTaskResult result;
     result.id = id;
     result.canceled = was_canceled;
@@ -297,16 +300,14 @@ class RasterBufferProviderTest
     worker_context_provider_ = TestContextProvider::CreateWorker();
     TestWebGraphicsContext3D* context3d = context_provider_->TestContext3d();
     context3d->set_support_sync_query(true);
-    resource_provider_ =
-        FakeResourceProvider::Create<LayerTreeResourceProvider>(
-            context_provider_.get(), &shared_bitmap_manager_,
-            &gpu_memory_buffer_manager_);
+    resource_provider_ = FakeResourceProvider::CreateLayerTreeResourceProvider(
+        context_provider_.get(), &shared_bitmap_manager_,
+        &gpu_memory_buffer_manager_);
   }
 
   void CreateSoftwareResourceProvider() {
-    resource_provider_ =
-        FakeResourceProvider::Create<LayerTreeResourceProvider>(
-            nullptr, &shared_bitmap_manager_, &gpu_memory_buffer_manager_);
+    resource_provider_ = FakeResourceProvider::CreateLayerTreeResourceProvider(
+        nullptr, &shared_bitmap_manager_, &gpu_memory_buffer_manager_);
   }
 
   void OnTimeout() {

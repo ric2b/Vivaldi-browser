@@ -51,20 +51,6 @@ using extensions::SyncBundle;
 
 namespace {
 
-void OnWebApplicationInfoLoaded(
-    WebApplicationInfo synced_info,
-    base::WeakPtr<ExtensionService> extension_service,
-    const WebApplicationInfo& loaded_info) {
-  DCHECK_EQ(synced_info.app_url, loaded_info.app_url);
-
-  if (!extension_service)
-    return;
-
-  // Use the old icons if they exist.
-  synced_info.icons = loaded_info.icons;
-  CreateOrUpdateBookmarkApp(extension_service.get(), &synced_info);
-}
-
 // Returns the pref value for "all urls enabled" for the given extension id.
 ExtensionSyncData::OptionalBoolean GetAllowedOnAllUrlsOptionalBoolean(
     const Extension& extension,
@@ -252,7 +238,7 @@ syncer::SyncDataList ExtensionSyncService::GetAllSyncData(
 }
 
 syncer::SyncError ExtensionSyncService::ProcessSyncChanges(
-    const tracked_objects::Location& from_here,
+    const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   for (const syncer::SyncChange& sync_change : change_list) {
     std::unique_ptr<ExtensionSyncData> extension_sync_data(
@@ -315,10 +301,6 @@ ExtensionSyncData ExtensionSyncService::CreateSyncData(
     // to sync.
     if (it->second.grant_permissions_and_reenable)
       result.set_enabled(true);
-  }
-  if (extension.from_bookmark()) {
-    VLOG(1) << "Created bookmark app sync data";
-    VLOG(1) << result.GetSyncData().ToString();
   }
   return result;
 }
@@ -555,8 +537,6 @@ void ExtensionSyncService::ApplySyncData(
 
 void ExtensionSyncService::ApplyBookmarkAppSyncData(
     const ExtensionSyncData& extension_sync_data) {
-  VLOG(1) << "Applying bookmark app sync data";
-  VLOG(1) << extension_sync_data.GetSyncData().ToString();
   DCHECK(extension_sync_data.is_app());
 
   // Process bookmark app sync if necessary.
@@ -583,6 +563,7 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
   web_app_info.description =
       base::UTF8ToUTF16(extension_sync_data.bookmark_app_description());
   web_app_info.scope = GURL(extension_sync_data.bookmark_app_scope());
+  web_app_info.theme_color = extension_sync_data.bookmark_app_theme_color();
   if (!extension_sync_data.bookmark_app_icon_color().empty()) {
     extensions::image_util::ParseHexColorString(
         extension_sync_data.bookmark_app_icon_color(),
@@ -594,22 +575,9 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
     icon_info.width = icon.size;
     icon_info.height = icon.size;
     web_app_info.icons.push_back(icon_info);
-    VLOG(1) << "Adding linked icon of size " << icon.size << ": "
-            << icon.url.spec();
   }
 
-  // If the bookmark app already exists, keep the old icons.
-  if (!extension) {
-    VLOG(1) << "Extension did not exist; calling create or update";
-    CreateOrUpdateBookmarkApp(extension_service(), &web_app_info);
-  } else {
-    VLOG(1) << "Extension already existed, updating it";
-    GetWebApplicationInfoFromApp(profile_,
-                                 extension,
-                                 base::Bind(&OnWebApplicationInfoLoaded,
-                                            web_app_info,
-                                            extension_service()->AsWeakPtr()));
-  }
+  CreateOrUpdateBookmarkApp(extension_service(), &web_app_info);
 }
 
 void ExtensionSyncService::SetSyncStartFlareForTesting(

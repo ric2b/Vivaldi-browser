@@ -22,21 +22,22 @@ class PaintRenderingContext2DTest : public ::testing::Test {
 };
 
 void PaintRenderingContext2DTest::SetUp() {
+  PaintRenderingContext2DSettings context_settings;
+  context_settings.setAlpha(false);
   ctx_ = PaintRenderingContext2D::Create(
-      ImageBuffer::Create(IntSize(kWidth, kHeight)), false /* hasAlpha */,
-      kZoom);
+      ImageBuffer::Create(IntSize(kWidth, kHeight)), context_settings, kZoom);
 }
 
 void TrySettingStrokeStyle(PaintRenderingContext2D* ctx,
                            const String& expected,
                            const String& value) {
   StringOrCanvasGradientOrCanvasPattern result, arg, dummy;
-  dummy.setString("red");
-  arg.setString(value);
+  dummy.SetString("red");
+  arg.SetString(value);
   ctx->setStrokeStyle(dummy);
   ctx->setStrokeStyle(arg);
   ctx->strokeStyle(result);
-  EXPECT_EQ(expected, result.getAsString());
+  EXPECT_EQ(expected, result.GetAsString());
 }
 
 TEST_F(PaintRenderingContext2DTest, testParseColorOrCurrentColor) {

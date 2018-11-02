@@ -28,8 +28,8 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
-#include "bindings/modules/v8/IDBObserverCallback.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
+#include "bindings/modules/v8/v8_idb_observer_callback.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/events/EventQueue.h"
@@ -116,7 +116,7 @@ IDBDatabase::~IDBDatabase() {
     backend_->Close();
 }
 
-DEFINE_TRACE(IDBDatabase) {
+void IDBDatabase::Trace(blink::Visitor* visitor) {
   visitor->Trace(version_change_transaction_);
   visitor->Trace(transactions_);
   visitor->Trace(observers_);
@@ -126,7 +126,7 @@ DEFINE_TRACE(IDBDatabase) {
   ContextLifecycleObserver::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(IDBDatabase) {
+void IDBDatabase::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& observer : observers_.Values()) {
     visitor->TraceWrappers(observer);
   }
@@ -212,7 +212,7 @@ void IDBDatabase::OnChanges(
             GetExecutionContext(), obs_txn.first, stores, this);
       }
 
-      observer->Callback()->call(
+      observer->Callback()->InvokeAndReportException(
           observer, IDBObserverChanges::Create(this, transaction, observations,
                                                map_entry.second, isolate_));
       if (transaction)
@@ -308,10 +308,10 @@ IDBObjectStore* IDBDatabase::createObjectStore(
   backend_->CreateObjectStore(version_change_transaction_->Id(),
                               object_store_id, name, key_path, auto_increment);
 
-  RefPtr<IDBObjectStoreMetadata> store_metadata =
-      AdoptRef(new IDBObjectStoreMetadata(name, object_store_id, key_path,
-                                          auto_increment,
-                                          WebIDBDatabase::kMinimumIndexId));
+  scoped_refptr<IDBObjectStoreMetadata> store_metadata =
+      base::AdoptRef(new IDBObjectStoreMetadata(
+          name, object_store_id, key_path, auto_increment,
+          WebIDBDatabase::kMinimumIndexId));
   IDBObjectStore* object_store =
       IDBObjectStore::Create(store_metadata, version_change_transaction_.Get());
   version_change_transaction_->ObjectStoreCreated(name, object_store);
@@ -366,10 +366,10 @@ IDBTransaction* IDBDatabase::transaction(
   RecordApiCallsHistogram(kIDBTransactionCall);
 
   HashSet<String> scope;
-  if (store_names.isString()) {
-    scope.insert(store_names.getAsString());
-  } else if (store_names.isStringSequence()) {
-    for (const String& name : store_names.getAsStringSequence())
+  if (store_names.IsString()) {
+    scope.insert(store_names.GetAsString());
+  } else if (store_names.IsStringSequence()) {
+    for (const String& name : store_names.GetAsStringSequence())
       scope.insert(name);
   } else {
     NOTREACHED();
@@ -507,7 +507,7 @@ DispatchEventResult IDBDatabase::DispatchEventInternal(Event* event) {
          event->type() == EventTypeNames::close);
   for (size_t i = 0; i < enqueued_events_.size(); ++i) {
     if (enqueued_events_[i].Get() == event)
-      enqueued_events_.erase(i);
+      enqueued_events_.EraseAt(i);
   }
 
   DispatchEventResult dispatch_result =
@@ -559,14 +559,14 @@ void IDBDatabase::RevertObjectStoreCreation(int64_t object_store_id) {
 }
 
 void IDBDatabase::RevertObjectStoreMetadata(
-    RefPtr<IDBObjectStoreMetadata> old_metadata) {
+    scoped_refptr<IDBObjectStoreMetadata> old_metadata) {
   DCHECK(version_change_transaction_) << "Object store metadata reverted on "
                                          "database without a versionchange "
                                          "transaction";
   DCHECK(!version_change_transaction_->IsActive())
       << "Object store metadata reverted when versionchange transaction is "
          "still active";
-  DCHECK(old_metadata.Get());
+  DCHECK(old_metadata.get());
   metadata_.object_stores.Set(old_metadata->id, std::move(old_metadata));
 }
 

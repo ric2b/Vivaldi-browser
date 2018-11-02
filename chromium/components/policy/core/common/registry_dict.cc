@@ -42,7 +42,7 @@ std::unique_ptr<base::Value> ConvertValue(const base::Value& value,
     return value.CreateDeepCopy();
 
   // If the type is good already, go with it.
-  if (value.IsType(schema.type())) {
+  if (value.type() == schema.type()) {
     // Recurse for complex types.
     const base::DictionaryValue* dict = nullptr;
     const base::ListValue* list = nullptr;
@@ -129,7 +129,7 @@ std::unique_ptr<base::Value> ConvertValue(const base::Value& value,
       if (value.GetAsString(&string_value)) {
         std::unique_ptr<base::Value> result =
             base::JSONReader::Read(string_value);
-        if (result && result->IsType(schema.type()))
+        if (result && result->type() == schema.type())
           return result;
       }
       break;
@@ -140,8 +140,8 @@ std::unique_ptr<base::Value> ConvertValue(const base::Value& value,
       break;
   }
 
-  LOG(WARNING) << "Failed to convert " << value.GetType()
-               << " to " << schema.type();
+  LOG(WARNING) << "Failed to convert " << value.type() << " to "
+               << schema.type();
   return nullptr;
 }
 #endif  // #if defined(OS_WIN)

@@ -26,14 +26,15 @@ class DRTSurfaceOSMesa : public gl::GLSurfaceOSMesa {
           gfx::Size(1, 1)) {}
 
   // Implement a subset of GLSurface.
-  gfx::SwapResult SwapBuffers() override;
+  gfx::SwapResult SwapBuffers(const PresentationCallback& callback) override;
 
  private:
   ~DRTSurfaceOSMesa() override {}
   DISALLOW_COPY_AND_ASSIGN(DRTSurfaceOSMesa);
 };
 
-gfx::SwapResult DRTSurfaceOSMesa::SwapBuffers() {
+gfx::SwapResult DRTSurfaceOSMesa::SwapBuffers(
+    const PresentationCallback& callback) {
   return gfx::SwapResult::SWAP_ACK;
 }
 
@@ -52,11 +53,11 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
     case gl::kGLImplementationDesktopGL:
     case gl::kGLImplementationDesktopGLCoreProfile:
     case gl::kGLImplementationAppleGL:
-      return make_scoped_refptr<gl::GLSurface>(
+      return base::WrapRefCounted<gl::GLSurface>(
           new ImageTransportSurfaceOverlayMac(delegate));
     case gl::kGLImplementationMockGL:
     case gl::kGLImplementationStubGL:
-      return make_scoped_refptr<gl::GLSurface>(new gl::GLSurfaceStub);
+      return base::WrapRefCounted<gl::GLSurface>(new gl::GLSurfaceStub);
     default:
       // Content shell in DRT mode spins up a gpu process which needs an
       // image transport surface, but that surface isn't used to read pixel
@@ -68,7 +69,7 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
       scoped_refptr<gl::GLSurface> surface(new DRTSurfaceOSMesa());
       if (!surface.get() || !surface->Initialize(format))
         return surface;
-      return make_scoped_refptr<gl::GLSurface>(
+      return base::WrapRefCounted<gl::GLSurface>(
           new PassThroughImageTransportSurface(
               delegate, surface.get(), kMultiWindowSwapIntervalDefault));
   }

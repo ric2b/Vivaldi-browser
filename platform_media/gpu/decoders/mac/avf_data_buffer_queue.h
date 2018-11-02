@@ -1,11 +1,14 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA.
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_AVF_DATA_BUFFER_QUEUE_H_
-#define CONTENT_COMMON_GPU_MEDIA_AVF_DATA_BUFFER_QUEUE_H_
+#ifndef PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_DATA_BUFFER_QUEUE_H_
+#define PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_DATA_BUFFER_QUEUE_H_
+
+#include "platform_media/common/feature_toggles.h"
 
 #include <string>
 
@@ -18,14 +21,14 @@ namespace media {
 class DataBuffer;
 }
 
-namespace content {
+namespace media {
 
 class MEDIA_EXPORT AVFDataBufferQueue {
  public:
   // Used for debugging only.
   enum Type { AUDIO, VIDEO };
 
-  using ReadCB = base::Callback<void(const scoped_refptr<media::DataBuffer>&)>;
+  using ReadCB = base::Callback<void(const scoped_refptr<DataBuffer>&)>;
 
   AVFDataBufferQueue(Type type,
                      const base::TimeDelta& capacity,
@@ -35,7 +38,7 @@ class MEDIA_EXPORT AVFDataBufferQueue {
 
   void Read(const ReadCB& read_cb);
 
-  void BufferReady(const scoped_refptr<media::DataBuffer>& buffer);
+  void BufferReady(const scoped_refptr<DataBuffer>& buffer);
 
   void SetEndOfStream();
 
@@ -68,6 +71,6 @@ class MEDIA_EXPORT AVFDataBufferQueue {
   base::ThreadChecker thread_checker_;
 };
 
-}  // namespace content
+}  // namespace media
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_AVF_DATA_BUFFER_QUEUE_H_
+#endif  // PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_DATA_BUFFER_QUEUE_H_

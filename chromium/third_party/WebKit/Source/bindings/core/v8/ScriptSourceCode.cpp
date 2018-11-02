@@ -9,10 +9,18 @@ namespace blink {
 ScriptSourceCode::ScriptSourceCode()
     : start_position_(TextPosition::MinimumPosition()) {}
 
-ScriptSourceCode::ScriptSourceCode(const String& source,
-                                   const KURL& url,
-                                   const TextPosition& start_position)
-    : source_(source), url_(url), start_position_(start_position) {
+ScriptSourceCode::ScriptSourceCode(
+    const String& source,
+    ScriptSourceLocationType source_location_type,
+    const KURL& url,
+    const TextPosition& start_position)
+    : source_(source),
+      url_(url),
+      start_position_(start_position),
+      source_location_type_(source_location_type) {
+  // External files should use a ScriptResource.
+  DCHECK(source_location_type != ScriptSourceLocationType::kExternalFile);
+
   TreatNullSourceAsEmpty();
   if (!url_.IsEmpty())
     url_.RemoveFragmentIdentifier();
@@ -26,13 +34,14 @@ ScriptSourceCode::ScriptSourceCode(ScriptStreamer* streamer,
     : source_(resource->SourceText()),
       resource_(resource),
       streamer_(streamer),
-      start_position_(TextPosition::MinimumPosition()) {
+      start_position_(TextPosition::MinimumPosition()),
+      source_location_type_(ScriptSourceLocationType::kExternalFile) {
   TreatNullSourceAsEmpty();
 }
 
 ScriptSourceCode::~ScriptSourceCode() {}
 
-DEFINE_TRACE(ScriptSourceCode) {
+void ScriptSourceCode::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_);
   visitor->Trace(streamer_);
 }
